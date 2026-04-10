@@ -1,0 +1,22 @@
+{
+  "name": "랄프톤 Voice Terminal",
+  "short_name": "랄프톤",
+  "description": "음성으로 터미널을 제어하는 웹앱",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1e1e2e",
+  "theme_color": "#181825",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

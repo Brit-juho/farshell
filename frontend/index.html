@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>랄프톤 Terminal</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#181825">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      background: #1e1e2e; color: #cdd6f4; font-family: system-ui, sans-serif;
+      display: flex; flex-direction: column;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* 탭 바 */
+    #tabs {
+      display: flex; gap: 4px; padding: 6px 8px; background: #181825;
+      overflow-x: auto; align-items: center; flex-shrink: 0;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tab {
+      padding: 8px 14px; border-radius: 8px; background: #313244;
+      cursor: pointer; font-size: 13px; white-space: nowrap;
+      touch-action: manipulation;
+    }
+    .tab.active { background: #585b70; color: #f5e0dc; }
+    .tab .close { margin-left: 8px; opacity: 0.5; font-size: 16px; }
+    #add-btn {
+      padding: 8px 14px; border-radius: 8px; background: #45475a;
+      cursor: pointer; font-size: 13px; flex-shrink: 0;
+    }
+
+    /* 터미널 */
+    #terminal-container { flex: 1; min-height: 0; padding: 2px; }
+    #terminal-container .xterm { height: 100%; }
+
+    /* 보이스 바 */
+    #voice-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; background: #181825; flex-shrink: 0;
+    }
+    #mic-btn {
+      width: 48px; height: 48px; border-radius: 50%; border: none;
+      background: #45475a; color: #cdd6f4; font-size: 22px;
+      cursor: pointer; transition: background 0.2s;
+      touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    }
+    #mic-btn.recording { background: #f38ba8; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    #mic-status { font-size: 13px; color: #a6adc8; flex: 1; }
+
+    /* 연결 상태 */
+    #conn-status {
+      position: fixed; top: 8px; right: 8px; padding: 4px 10px;
+      border-radius: 12px; font-size: 11px; display: none; z-index: 100;
+    }
+    #conn-status.disconnected { display: block; background: #f38ba8; color: #1e1e2e; }
+  </style>
+</head>
+<body>
+  <div id="conn-status"></div>
+  <div id="tabs">
+    <div id="add-btn" onclick="createSession()">+ New</div>
+    <div id="tmux-btn" onclick="showTmuxSessions()" style="padding:8px 14px;border-radius:8px;background:#45475a;cursor:pointer;font-size:13px;flex-shrink:0;">tmux</div>
+  </div>
+  <div id="terminal-container"></div>
+  <div id="voice-bar">
+    <button id="mic-btn">🎤</button>
+    <span id="mic-status"></span>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script>
+    const sessions = {};
+    let activeId = null;
+    const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+    const API_BASE = `${location.protocol}//${location.host}`;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const termFontSize = isMobile ? 12 : 14;
+
+    async function createSession() {
+      const res = await fetch(`${API_BASE}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const { id } = await res.json();
+      addSession(id);
+    }
+
+    function addSession(id) {
+      const tab = document.createElement('div');
+      tab.className = 'tab';
+      tab.innerHTML = `<span>${id}</span><span class="close" onclick="event.stopPropagation(); removeSession('${id}')">×</span>`;
+      tab.onclick = () => switchTo(id);
+      document.getElementById('tabs').insertBefore(tab, document.getElementById('add-btn'));
+
+      const term = new Terminal({
+        cursorBlink: true,
+        fontSize: termFontSize,
+        theme: { background: '#1e1e2e' },
+        allowProposedApi: true,
+      });
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+
+      // 각 세션에 고유 wrapper div 생성 (show/hide로 탭 전환)
+      const wrapper = document.createElement('div');
+      wrapper.id = `term-${id}`;
+      wrapper.style.cssText = 'height:100%;display:none;';
+      document.getElementById('terminal-container').appendChild(wrapper);
+      term.open(wrapper);
+
+      const ws = new WebSocket(`${WS_BASE}/ws/${id}`);
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        fitAddon.fit();
+        sendResize(ws, term);
+        updateConnStatus(id, true);
+      };
+      ws.onmessage = (e) => {
+        if (e.data instanceof ArrayBuffer) {
+          term.write(new Uint8Array(e.data));
+        }
+      };
+      ws.onclose = () => {
+        updateConnStatus(id, false);
+        // [M1] 자동 재연결 (지수 백오프)
+        let retries = 0;
+        const reconnect = () => {
+          if (retries >= 15 || !(id in sessions)) return;
+          retries++;
+          const delay = Math.min(1000 * Math.pow(2, retries), 30000);
+          term.write(`\r\n\x1b[33m[재연결 중... ${retries}회]\x1b[0m\r\n`);
+          setTimeout(() => {
+            const newWs = new WebSocket(`${WS_BASE}/ws/${id}`);
+            newWs.binaryType = 'arraybuffer';
+            newWs.onopen = () => {
+              retries = 0;
+              sessions[id].ws = newWs;
+              fitAddon.fit();
+              sendResize(newWs, term);
+              updateConnStatus(id, true);
+              term.write('\r\n\x1b[32m[재연결됨]\x1b[0m\r\n');
+            };
+            newWs.onmessage = (e) => {
+              if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
+            };
+            newWs.onclose = reconnect;
+            newWs.onerror = () => newWs.close();
+          }, delay);
+        };
+        reconnect();
+      };
+
+      term.onData((data) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(new Blob([new TextEncoder().encode(data)]));
+        }
+      });
+
+      const onResize = () => { fitAddon.fit(); sendResize(ws, term); };
+      window.addEventListener('resize', onResize);
+
+      // 모바일: visualViewport resize (키보드 나타날 때)
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', onResize);
+      }
+
+      sessions[id] = { term, ws, tabEl: tab, fitAddon, onResize, wrapper };
+      switchTo(id);
+    }
+
+    function sendResize(ws, term) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      }
+    }
+
+    function switchTo(id) {
+      if (activeId && sessions[activeId]) {
+        sessions[activeId].wrapper.style.display = 'none';
+        sessions[activeId].tabEl.classList.remove('active');
+      }
+      activeId = id;
+      const s = sessions[id];
+      s.tabEl.classList.add('active');
+      s.wrapper.style.display = 'block';
+      s.fitAddon.fit();
+      s.term.focus();
+      if (typeof notifyActiveSession === 'function') notifyActiveSession(id);
+    }
+
+    async function removeSession(id) {
+      const s = sessions[id];
+      if (!s) return;
+      s.ws.close();
+      s.term.dispose();
+      s.wrapper.remove();
+      s.tabEl.remove();
+      window.removeEventListener('resize', s.onResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', s.onResize);
+      }
+      delete sessions[id];
+      await fetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' });
+      if (activeId === id) {
+        const remaining = Object.keys(sessions);
+        if (remaining.length > 0) switchTo(remaining[0]);
+        else { activeId = null; document.getElementById('terminal-container').innerHTML = ''; }
+      }
+    }
+
+    function updateConnStatus(id, connected) {
+      const el = document.getElementById('conn-status');
+      if (!connected && id === activeId) {
+        el.textContent = '서버 연결 끊김';
+        el.className = 'disconnected';
+      } else {
+        el.className = '';
+      }
+    }
+
+    // --- tmux 세션 연결 ---
+    async function showTmuxSessions() {
+      const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+      const tmuxList = await res.json();
+
+      if (tmuxList.length === 0) {
+        alert('실행 중인 tmux 세션이 없습니다.\n터미널에서 tmux new -s work 로 먼저 생성하세요.');
+        return;
+      }
+
+      // 드롭다운 표시
+      let menu = document.getElementById('tmux-menu');
+      if (menu) { menu.remove(); return; }
+
+      menu = document.createElement('div');
+      menu.id = 'tmux-menu';
+      menu.style.cssText = `
+        position: absolute; top: 44px; right: 8px; background: #313244;
+        border-radius: 8px; padding: 4px; z-index: 300;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      `;
+
+      for (const s of tmuxList) {
+        const item = document.createElement('div');
+        item.style.cssText = 'padding:8px 16px;cursor:pointer;font-size:13px;border-radius:4px;white-space:nowrap;';
+        item.textContent = `${s.name} (${s.windows}win, ${s.attached > 0 ? 'attached' : 'detached'})`;
+        item.onmouseover = () => item.style.background = '#45475a';
+        item.onmouseout = () => item.style.background = 'transparent';
+        item.onclick = async () => {
+          menu.remove();
+          await attachTmux(s.name);
+        };
+        menu.appendChild(item);
+      }
+      document.body.appendChild(menu);
+      // 바깥 클릭 시 닫기
+      setTimeout(() => {
+        document.addEventListener('click', function _close(e) {
+          if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close); }
+        });
+      }, 100);
+    }
+
+    async function attachTmux(tmuxName) {
+      const res = await fetch(`${API_BASE}/api/tmux/attach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tmuxName }),
+      });
+      const { id } = await res.json();
+      addSession(id);
+    }
+
+    // 시작 시 기존 세션 복원, 없으면 새 세션 생성
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/sessions`);
+        const existing = await res.json();
+        if (existing.length > 0) {
+          for (const s of existing) addSession(s.id);
+        } else {
+          createSession();
+        }
+      } catch (e) {
+        createSession();
+      }
+    })();
+  </script>
+  <script src="/static/voice.js"></script>
+</body>
+</html>
