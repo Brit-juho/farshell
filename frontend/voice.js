@@ -45,7 +45,7 @@ async function startRecording() {
     isRecording = true;
     micBtn.classList.add('recording');
     micBtn.querySelector('.label').textContent = '녹음 중...';
-    micStatus.textContent = '🔴 녹음 중 — 탭하여 중지';
+    micStatus.textContent = '녹음 중 — 탭하여 중지';
   } catch (err) {
     console.error('마이크 접근 실패:', err);
     micStatus.textContent = '마이크 권한 필요';
@@ -128,7 +128,7 @@ function showPlayButton() {
   if (!btn) {
     btn = document.createElement('button');
     btn.id = 'play-pending-btn';
-    btn.textContent = '🔊 터치하여 재생';
+    btn.textContent = '터치하여 재생';
     btn.style.cssText = `
       padding: 8px 16px; border-radius: 8px; border: none;
       background: #a6e3a1; color: #1e1e2e; font-size: 13px;
@@ -155,7 +155,7 @@ function toggleHandsFree() {
     btn.classList.toggle('active', handsFreeModeOn);
   }
   if (handsFreeModeOn) {
-    micStatus.textContent = '🔄 핸즈프리 모드 — 자동으로 계속 녹음합니다';
+    micStatus.textContent = '핸즈프리 모드 — 자동으로 계속 녹음합니다';
     if (!isRecording) startRecording();
   } else {
     micStatus.textContent = '';
@@ -172,7 +172,7 @@ function toggleVoiceOnly() {
   if (btn) {
     btn.classList.toggle('active', isOn);
   }
-  micStatus.textContent = isOn ? '🎧 음성 전용 모드 — 터미널 숨김' : '';
+  micStatus.textContent = isOn ? '음성 전용 모드 — 터미널 숨김' : '';
 }
 
 // --- 활성 세션 동기화 (하위 호환) ---

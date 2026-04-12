@@ -10,6 +10,7 @@
   <meta name="theme-color" content="#181825">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.469.0/font/lucide.min.css" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overflow: hidden; }
@@ -58,7 +59,9 @@
       width: 46px; height: 46px; border-radius: 50%;
       background: #313244; display: flex; align-items: center; justify-content: center;
       font-size: 20px; transition: background 0.2s, transform 0.15s;
+      color: #cdd6f4;
     }
+    .voice-action .icon i { font-size: 20px; }
     .voice-action .label {
       font-size: 10px; color: #6c7086; white-space: nowrap; letter-spacing: -0.3px;
       line-height: 1;
@@ -123,27 +126,27 @@
     <button onclick="closeSearch()">✕</button>
   </div>
   <div id="tabs">
-    <div id="add-btn" onclick="createSession()">+ New</div>
-    <div id="tmux-btn" onclick="showTmuxSessions()" style="padding:8px 14px;border-radius:8px;background:#45475a;cursor:pointer;font-size:13px;flex-shrink:0;">tmux</div>
+    <div id="add-btn" onclick="createSession()"><i class="icon-plus" style="font-size:14px;vertical-align:middle;margin-right:2px"></i> New</div>
+    <div id="tmux-btn" onclick="showTmuxSessions()" style="padding:8px 14px;border-radius:8px;background:#45475a;cursor:pointer;font-size:13px;flex-shrink:0;"><i class="icon-terminal" style="font-size:13px;vertical-align:middle;margin-right:3px"></i>tmux</div>
   </div>
   <div id="terminal-container"></div>
   <div id="mic-status"></div>
   <div id="voice-bar">
     <select id="voice-session-picker" onchange="if(this.value)switchTo(this.value)"></select>
     <button id="mic-btn-wrap" class="voice-action" onclick="toggleRecording()">
-      <div class="icon">🎤</div>
+      <div class="icon"><i class="icon-mic"></i></div>
       <span class="label">음성 입력</span>
     </button>
     <button id="handsfree-btn" class="voice-action" onclick="toggleHandsFree()">
-      <div class="icon">🔄</div>
+      <div class="icon"><i class="icon-refresh-cw"></i></div>
       <span class="label">핸즈프리</span>
     </button>
     <button id="voiceonly-btn" class="voice-action" onclick="toggleVoiceOnly()">
-      <div class="icon">🎧</div>
+      <div class="icon"><i class="icon-headphones"></i></div>
       <span class="label">음성 전용</span>
     </button>
     <label class="voice-action" id="upload-btn">
-      <div class="icon">📎</div>
+      <div class="icon"><i class="icon-paperclip"></i></div>
       <span class="label">파일</span>
       <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" />
     </label>
@@ -280,12 +283,13 @@
       };
 
       term.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(new Blob([new TextEncoder().encode(data)]));
+        const curWs = sessions[id]?.ws;
+        if (curWs && curWs.readyState === WebSocket.OPEN) {
+          curWs.send(new Blob([new TextEncoder().encode(data)]));
         }
       });
 
-      const onResize = () => { fitAddon.fit(); sendResize(ws, term); };
+      const onResize = () => { fitAddon.fit(); const curWs = sessions[id]?.ws; if (curWs) sendResize(curWs, term); };
       window.addEventListener('resize', onResize);
 
       // 모바일: visualViewport resize (키보드 나타날 때)
@@ -354,7 +358,7 @@
             display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
           `;
           overlay.innerHTML = `
-            <div style="font-size:40px">📡</div>
+            <div><i class="icon-wifi-off" style="font-size:40px;color:#f38ba8"></i></div>
             <div style="color:#f38ba8;font-size:16px;font-weight:bold">서버 연결 끊김</div>
             <div style="color:#a6adc8;font-size:13px">자동 재연결 시도 중...</div>
           `;
@@ -486,7 +490,7 @@
         gap:20px;padding:40px;text-align:center;
       `;
       el.innerHTML = `
-        <div style="font-size:48px">🎤</div>
+        <div><i class="icon-mic" style="font-size:48px;color:#a6e3a1"></i></div>
         <h2 style="color:#cdd6f4;font-size:20px;margin:0">랄프톤 Voice Terminal</h2>
         <p style="color:#a6adc8;font-size:14px;max-width:300px;line-height:1.6">
           음성으로 터미널을 조작하세요.<br>
@@ -503,7 +507,7 @@
           </button>
         </div>
         <p style="color:#585b70;font-size:11px;margin-top:20px">
-          💡 맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)
+          맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)
         </p>
       `;
       document.body.appendChild(el);
@@ -597,6 +601,24 @@
       input.value = '';
     }
   </script>
-  <script src="/static/voice.js"></script>
+  <script>
+    // 음성 기능 설치 여부 확인 → 미설치 시 voice UI 숨김
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/capabilities`);
+        const caps = await res.json();
+        if (!caps.voice) {
+          document.getElementById('voice-bar').style.display = 'none';
+          document.getElementById('mic-status').style.display = 'none';
+          return; // voice.js 로드 안 함
+        }
+      } catch (e) {
+        // 서버 통신 실패 시 기본 표시
+      }
+      const s = document.createElement('script');
+      s.src = '/static/voice.js';
+      document.body.appendChild(s);
+    })();
+  </script>
 </body>
 </html>

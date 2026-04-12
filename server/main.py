@@ -92,6 +92,18 @@ async def manifest():
     return FileResponse(str(Path(FRONTEND_DIR) / "manifest.json"))
 
 
+@app.get("/api/capabilities")
+async def capabilities():
+    """설치된 기능 반환 — 프론트엔드가 UI를 조건부로 표시."""
+    stt = voice_handler._init_stt()
+    tts = voice_handler._init_tts()
+    return {
+        "voice": stt != "none" or tts != "none",
+        "stt": stt,
+        "tts": tts,
+    }
+
+
 @app.get("/api/sessions")
 async def list_sessions():
     return [
