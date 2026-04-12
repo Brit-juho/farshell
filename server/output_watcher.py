@@ -34,7 +34,7 @@ PROMPT_PATTERNS = [
 @dataclass
 class SessionWatcher:
     session_id: str
-    enabled: bool = True
+    enabled: bool = False  # 기본 비활성. Claude Code Stop hook으로만 TTS 알림
     idle_timeout: float = 3.0  # 초 — 이 시간 동안 출력 없으면 완료로 판단
     min_output_lines: int = 3  # 최소 이 줄 수 이상의 출력이 있어야 알림
     output_buffer: list[bytes] = field(default_factory=list)
@@ -171,10 +171,10 @@ class OutputWatcher:
             audio = await voice_handler.synthesize(summary)
         except Exception as e:
             logger.warning(f"TTS failed for notification: {e}")
-            # macOS say fallback (직접 재생)
+            # TTS fallback (직접 재생)
             try:
-                short = summary[:200]
-                subprocess.Popen(["say", "-v", "Yuna", short])
+                import platform_utils
+                platform_utils.tts_speak(summary)
             except Exception:
                 pass
             audio = b""

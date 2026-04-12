@@ -3,13 +3,16 @@
  */
 
 const API = `${location.protocol}//${location.host}`;
-const WS_NOTIFY = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-notify`;
+const _vToken = new URLSearchParams(location.search).get('token') || '';
+const _vTokenQ = _vToken ? `?token=${_vToken}` : '';
+const WS_NOTIFY = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-notify${_vTokenQ}`;
 
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
+let handsFreeModeOn = false;
 
-const micBtn = document.getElementById('mic-btn');
+const micBtn = document.getElementById('mic-btn-wrap');
 const micStatus = document.getElementById('mic-status');
 
 // --- 마이크 녹음 ---
@@ -41,7 +44,8 @@ async function startRecording() {
     mediaRecorder.start();
     isRecording = true;
     micBtn.classList.add('recording');
-    micStatus.textContent = '녹음 중...';
+    micBtn.querySelector('.label').textContent = '녹음 중...';
+    micStatus.textContent = '🔴 녹음 중 — 탭하여 중지';
   } catch (err) {
     console.error('마이크 접근 실패:', err);
     micStatus.textContent = '마이크 권한 필요';
@@ -54,6 +58,7 @@ function stopRecording() {
   }
   isRecording = false;
   micBtn.classList.remove('recording');
+  micBtn.querySelector('.label').textContent = '음성 입력';
   micStatus.textContent = '처리 중...';
 }
 
@@ -68,7 +73,12 @@ async function sendAudio(blob) {
     });
     const data = await res.json();
     micStatus.textContent = data.text ? `"${data.text}"` : '인식 실패';
-    setTimeout(() => { micStatus.textContent = ''; }, 3000);
+    // 핸즈프리: STT 처리 후 자동으로 다음 녹음 시작
+    if (handsFreeModeOn) {
+      setTimeout(() => startRecording(), 500);
+    } else {
+      setTimeout(() => { micStatus.textContent = ''; }, 3000);
+    }
   } catch (err) {
     console.error('음성 전송 실패:', err);
     micStatus.textContent = '전송 실패';
@@ -122,7 +132,7 @@ function showPlayButton() {
     btn.style.cssText = `
       padding: 8px 16px; border-radius: 8px; border: none;
       background: #a6e3a1; color: #1e1e2e; font-size: 13px;
-      cursor: pointer; margin-left: 8px;
+      cursor: pointer; display: block; margin: 0 auto;
     `;
     btn.onclick = () => {
       if (_pendingAudioUrl) {
@@ -132,8 +142,37 @@ function showPlayButton() {
       }
       btn.remove();
     };
-    document.getElementById('voice-bar').appendChild(btn);
+    document.getElementById('mic-status').appendChild(btn);
   }
+}
+
+// --- 핸즈프리 모드 ---
+
+function toggleHandsFree() {
+  handsFreeModeOn = !handsFreeModeOn;
+  const btn = document.getElementById('handsfree-btn');
+  if (btn) {
+    btn.classList.toggle('active', handsFreeModeOn);
+  }
+  if (handsFreeModeOn) {
+    micStatus.textContent = '🔄 핸즈프리 모드 — 자동으로 계속 녹음합니다';
+    if (!isRecording) startRecording();
+  } else {
+    micStatus.textContent = '';
+    if (isRecording) stopRecording();
+  }
+}
+
+// --- 음성 전용 모드 ---
+
+function toggleVoiceOnly() {
+  document.body.classList.toggle('voice-only-mode');
+  const btn = document.getElementById('voiceonly-btn');
+  const isOn = document.body.classList.contains('voice-only-mode');
+  if (btn) {
+    btn.classList.toggle('active', isOn);
+  }
+  micStatus.textContent = isOn ? '🎧 음성 전용 모드 — 터미널 숨김' : '';
 }
 
 // --- 활성 세션 동기화 (하위 호환) ---
@@ -190,7 +229,7 @@ function showNotification(summary, sessionId) {
   // 화면 상단에 토스트 알림
   const toast = document.createElement('div');
   toast.style.cssText = `
-    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
     background: #313244; color: #cdd6f4; padding: 10px 20px;
     border-radius: 10px; font-size: 13px; z-index: 200;
     max-width: 90vw; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
@@ -213,8 +252,7 @@ function showNotification(summary, sessionId) {
   }
 }
 
-// 이벤트 바인딩
-micBtn.addEventListener('click', toggleRecording);
+// 이벤트 바인딩 (mic-btn-wrap의 onclick="toggleRecording()"으로 처리)
 
 // 알림 WebSocket 연결
 connectNotify();

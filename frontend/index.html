@@ -43,18 +43,38 @@
 
     /* 보이스 바 */
     #voice-bar {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 12px; background: #181825; flex-shrink: 0;
+      display: flex; align-items: flex-end; gap: 0;
+      padding: 8px 8px 10px; background: #181825; flex-shrink: 0;
+      justify-content: space-around;
+      border-top: 1px solid #313244;
     }
-    #mic-btn {
-      width: 48px; height: 48px; border-radius: 50%; border: none;
-      background: #45475a; color: #cdd6f4; font-size: 22px;
-      cursor: pointer; transition: background 0.2s;
-      touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    .voice-action {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      padding: 4px 4px 0; border: none; background: transparent;
+      cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+      flex: 1; min-width: 0;
     }
-    #mic-btn.recording { background: #f38ba8; animation: pulse 1s infinite; }
+    .voice-action .icon {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: #313244; display: flex; align-items: center; justify-content: center;
+      font-size: 20px; transition: background 0.2s, transform 0.15s;
+    }
+    .voice-action .label {
+      font-size: 10px; color: #6c7086; white-space: nowrap; letter-spacing: -0.3px;
+      line-height: 1;
+    }
+    .voice-action.active .icon { background: #a6e3a1; color: #1e1e2e; }
+    .voice-action.active .label { color: #a6e3a1; }
+    #mic-btn-wrap .icon { background: #45475a; }
+    #mic-btn-wrap.recording .icon { background: #f38ba8; animation: pulse 1s infinite; }
+    #mic-btn-wrap.recording .label { color: #f38ba8; }
     @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-    #mic-status { font-size: 13px; color: #a6adc8; flex: 1; }
+    #mic-status {
+      font-size: 12px; color: #a6adc8; text-align: center;
+      padding: 5px 8px; background: #181825;
+      min-height: 0; flex-shrink: 0;
+    }
+    #mic-status:empty { padding: 0; }
 
     /* 연결 상태 */
     #conn-status {
@@ -62,29 +82,97 @@
       border-radius: 12px; font-size: 11px; display: none; z-index: 100;
     }
     #conn-status.disconnected { display: block; background: #f38ba8; color: #1e1e2e; }
+
+    /* 음성 전용 모드 */
+    body.voice-only-mode #tabs { display: none; }
+    body.voice-only-mode #terminal-container { display: none; }
+    body.voice-only-mode #voice-bar {
+      flex: 1; flex-direction: column; justify-content: center; align-items: center; gap: 20px;
+    }
+    body.voice-only-mode #mic-btn-wrap .icon { width: 120px; height: 120px; font-size: 48px; }
+    body.voice-only-mode #mic-status { font-size: 18px; text-align: center; }
+    body.voice-only-mode #voice-session-picker { display: block; }
+    #voice-session-picker {
+      display: none; background: #313244; border-radius: 8px; padding: 8px 16px;
+      color: #cdd6f4; font-size: 14px; border: 1px solid #45475a; cursor: pointer;
+    }
+
+    /* 터미널 검색 바 */
+    #search-bar {
+      display: none; position: fixed; top: 50px; right: 12px; z-index: 200;
+      background: #313244; border-radius: 8px; padding: 6px 10px;
+      gap: 6px; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #search-bar.visible { display: flex; }
+    #search-bar input {
+      background: #1e1e2e; border: 1px solid #585b70; border-radius: 4px;
+      color: #cdd6f4; padding: 4px 8px; font-size: 13px; width: 200px; outline: none;
+    }
+    #search-bar button {
+      background: #45475a; border: none; border-radius: 4px; color: #cdd6f4;
+      padding: 4px 8px; cursor: pointer; font-size: 12px;
+    }
   </style>
 </head>
 <body>
   <div id="conn-status"></div>
+  <div id="search-bar">
+    <input id="search-input" type="text" placeholder="검색..." />
+    <button onclick="searchPrev()">▲</button>
+    <button onclick="searchNext()">▼</button>
+    <button onclick="closeSearch()">✕</button>
+  </div>
   <div id="tabs">
     <div id="add-btn" onclick="createSession()">+ New</div>
     <div id="tmux-btn" onclick="showTmuxSessions()" style="padding:8px 14px;border-radius:8px;background:#45475a;cursor:pointer;font-size:13px;flex-shrink:0;">tmux</div>
   </div>
   <div id="terminal-container"></div>
+  <div id="mic-status"></div>
   <div id="voice-bar">
-    <button id="mic-btn">🎤</button>
-    <span id="mic-status"></span>
+    <select id="voice-session-picker" onchange="if(this.value)switchTo(this.value)"></select>
+    <button id="mic-btn-wrap" class="voice-action" onclick="toggleRecording()">
+      <div class="icon">🎤</div>
+      <span class="label">음성 입력</span>
+    </button>
+    <button id="handsfree-btn" class="voice-action" onclick="toggleHandsFree()">
+      <div class="icon">🔄</div>
+      <span class="label">핸즈프리</span>
+    </button>
+    <button id="voiceonly-btn" class="voice-action" onclick="toggleVoiceOnly()">
+      <div class="icon">🎧</div>
+      <span class="label">음성 전용</span>
+    </button>
+    <label class="voice-action" id="upload-btn">
+      <div class="icon">📎</div>
+      <span class="label">파일</span>
+      <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" />
+    </label>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js"></script>
   <script>
     const sessions = {};
     let activeId = null;
+    const _urlParams = new URLSearchParams(location.search);
+    const RALPH_TOKEN = _urlParams.get('token') || '';
+    const _tokenQuery = RALPH_TOKEN ? `?token=${RALPH_TOKEN}` : '';
+    const _tokenParam = RALPH_TOKEN ? `&token=${RALPH_TOKEN}` : '';
     const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
     const API_BASE = `${location.protocol}//${location.host}`;
+    const _authHeaders = RALPH_TOKEN ? {'Authorization': `Bearer ${RALPH_TOKEN}`} : {};
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const termFontSize = isMobile ? 12 : 14;
+
+    // 인증 토큰 자동 첨부 fetch 래퍼
+    const _origFetch = window.fetch;
+    window.fetch = (url, opts = {}) => {
+      if (RALPH_TOKEN && typeof url === 'string' && url.startsWith(API_BASE)) {
+        opts.headers = { ...(opts.headers || {}), ..._authHeaders };
+      }
+      return _origFetch(url, opts);
+    };
 
     async function createSession() {
       const res = await fetch(`${API_BASE}/api/sessions`, {
@@ -96,11 +184,38 @@
       addSession(id);
     }
 
-    function addSession(id) {
+    function addSession(id, displayName) {
       const tab = document.createElement('div');
       tab.className = 'tab';
-      tab.innerHTML = `<span>${id}</span><span class="close" onclick="event.stopPropagation(); removeSession('${id}')">×</span>`;
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'tab-name';
+      nameSpan.textContent = displayName || id.slice(0, 8);
+      const closeSpan = document.createElement('span');
+      closeSpan.className = 'close';
+      closeSpan.textContent = '×';
+      closeSpan.onclick = (e) => { e.stopPropagation(); removeSession(id); };
+      tab.appendChild(nameSpan);
+      tab.appendChild(closeSpan);
       tab.onclick = () => switchTo(id);
+      // 더블클릭으로 이름 편집
+      nameSpan.ondblclick = (e) => {
+        e.stopPropagation();
+        nameSpan.contentEditable = 'true';
+        nameSpan.focus();
+        const finishEdit = async () => {
+          nameSpan.contentEditable = 'false';
+          const newName = nameSpan.textContent.trim();
+          if (newName) {
+            fetch(`${API_BASE}/api/sessions/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: newName }),
+            });
+          }
+        };
+        nameSpan.onblur = finishEdit;
+        nameSpan.onkeydown = (ke) => { if (ke.key === 'Enter') { ke.preventDefault(); nameSpan.blur(); } };
+      };
       document.getElementById('tabs').insertBefore(tab, document.getElementById('add-btn'));
 
       const term = new Terminal({
@@ -111,6 +226,8 @@
       });
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
+      const searchAddon = new SearchAddon.SearchAddon();
+      term.loadAddon(searchAddon);
 
       // 각 세션에 고유 wrapper div 생성 (show/hide로 탭 전환)
       const wrapper = document.createElement('div');
@@ -119,7 +236,7 @@
       document.getElementById('terminal-container').appendChild(wrapper);
       term.open(wrapper);
 
-      const ws = new WebSocket(`${WS_BASE}/ws/${id}`);
+      const ws = new WebSocket(`${WS_BASE}/ws/${id}${_tokenQuery}`);
       ws.binaryType = 'arraybuffer';
 
       ws.onopen = () => {
@@ -142,7 +259,7 @@
           const delay = Math.min(1000 * Math.pow(2, retries), 30000);
           term.write(`\r\n\x1b[33m[재연결 중... ${retries}회]\x1b[0m\r\n`);
           setTimeout(() => {
-            const newWs = new WebSocket(`${WS_BASE}/ws/${id}`);
+            const newWs = new WebSocket(`${WS_BASE}/ws/${id}${_tokenQuery}`);
             newWs.binaryType = 'arraybuffer';
             newWs.onopen = () => {
               retries = 0;
@@ -176,7 +293,7 @@
         window.visualViewport.addEventListener('resize', onResize);
       }
 
-      sessions[id] = { term, ws, tabEl: tab, fitAddon, onResize, wrapper };
+      sessions[id] = { term, ws, tabEl: tab, fitAddon, searchAddon, onResize, wrapper };
       switchTo(id);
     }
 
@@ -198,6 +315,7 @@
       s.fitAddon.fit();
       s.term.focus();
       if (typeof notifyActiveSession === 'function') notifyActiveSession(id);
+      updateSessionPicker();
     }
 
     async function removeSession(id) {
@@ -218,15 +336,33 @@
         if (remaining.length > 0) switchTo(remaining[0]);
         else { activeId = null; document.getElementById('terminal-container').innerHTML = ''; }
       }
+      updateSessionPicker();
     }
 
     function updateConnStatus(id, connected) {
       const el = document.getElementById('conn-status');
+      let overlay = document.getElementById('conn-overlay');
       if (!connected && id === activeId) {
         el.textContent = '서버 연결 끊김';
         el.className = 'disconnected';
+        // 전체 화면 연결 끊김 오버레이
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'conn-overlay';
+          overlay.style.cssText = `
+            position:fixed;inset:0;background:rgba(30,30,46,0.85);z-index:400;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+          `;
+          overlay.innerHTML = `
+            <div style="font-size:40px">📡</div>
+            <div style="color:#f38ba8;font-size:16px;font-weight:bold">서버 연결 끊김</div>
+            <div style="color:#a6adc8;font-size:13px">자동 재연결 시도 중...</div>
+          `;
+          document.body.appendChild(overlay);
+        }
       } else {
         el.className = '';
+        if (overlay) overlay.remove();
       }
     }
 
@@ -236,7 +372,7 @@
       const tmuxList = await res.json();
 
       if (tmuxList.length === 0) {
-        alert('실행 중인 tmux 세션이 없습니다.\n터미널에서 tmux new -s work 로 먼저 생성하세요.');
+        showToast('실행 중인 tmux 세션이 없습니다. 터미널에서 tmux new -s work 로 먼저 생성하세요.');
         return;
       }
 
@@ -255,7 +391,9 @@
       for (const s of tmuxList) {
         const item = document.createElement('div');
         item.style.cssText = 'padding:8px 16px;cursor:pointer;font-size:13px;border-radius:4px;white-space:nowrap;';
-        item.textContent = `${s.name} (${s.windows}win, ${s.attached > 0 ? 'attached' : 'detached'})`;
+        const status = s.web_session_id ? '🟢 web' : (s.attached > 0 ? 'attached' : 'detached');
+        const cmdInfo = s.command ? ` [${s.command}]` : '';
+        item.textContent = `${s.name} (${s.windows}win, ${status})${cmdInfo}`;
         item.onmouseover = () => item.style.background = '#45475a';
         item.onmouseout = () => item.style.background = 'transparent';
         item.onclick = async () => {
@@ -264,8 +402,23 @@
         };
         menu.appendChild(item);
       }
+
+      // Kill all 옵션은 별도 구분
+      const sep = document.createElement('div');
+      sep.style.cssText = 'border-top:1px solid #45475a;margin:4px 0;';
+      menu.appendChild(sep);
+      const newItem = document.createElement('div');
+      newItem.style.cssText = 'padding:8px 16px;cursor:pointer;font-size:13px;border-radius:4px;color:#a6e3a1;';
+      newItem.textContent = '+ 새 tmux 세션';
+      newItem.onmouseover = () => newItem.style.background = '#45475a';
+      newItem.onmouseout = () => newItem.style.background = 'transparent';
+      newItem.onclick = async () => {
+        menu.remove();
+        await createTmuxSession();
+      };
+      menu.appendChild(newItem);
+
       document.body.appendChild(menu);
-      // 바깥 클릭 시 닫기
       setTimeout(() => {
         document.addEventListener('click', function _close(e) {
           if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close); }
@@ -279,24 +432,170 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: tmuxName }),
       });
-      const { id } = await res.json();
-      addSession(id);
+      const data = await res.json();
+      // 이미 웹에 열려 있으면 해당 탭으로 전환
+      if (data.id in sessions) {
+        switchTo(data.id);
+      } else {
+        addSession(data.id, data.name?.replace('tmux:', '') || data.id);
+      }
     }
 
-    // 시작 시 기존 세션 복원, 없으면 새 세션 생성
+    async function createTmuxSession() {
+      const res = await fetch(`${API_BASE}/api/tmux/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      addSession(data.id, data.name?.replace('tmux:', '') || data.id);
+    }
+
+    // 시작 시: 기존 웹 세션 복원 → 없으면 tmux 세션 자동 attach → 없으면 새 tmux 생성
     (async () => {
       try {
+        // 1. 기존 웹 세션 복원
         const res = await fetch(`${API_BASE}/api/sessions`);
         const existing = await res.json();
         if (existing.length > 0) {
-          for (const s of existing) addSession(s.id);
-        } else {
-          createSession();
+          for (const s of existing) addSession(s.id, s.name || s.id);
+          return;
         }
+
+        // 2. tmux 세션이 있으면 첫 번째 자동 attach
+        const tmuxRes = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const tmuxList = await tmuxRes.json();
+        if (tmuxList.length > 0) {
+          await attachTmux(tmuxList[0].name);
+          return;
+        }
+
+        // 3. 아무것도 없으면 온보딩 표시
+        showOnboarding();
       } catch (e) {
         createSession();
       }
     })();
+
+    function showOnboarding() {
+      const el = document.createElement('div');
+      el.id = 'onboarding';
+      el.style.cssText = `
+        position:fixed;inset:0;background:#1e1e2e;z-index:500;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:20px;padding:40px;text-align:center;
+      `;
+      el.innerHTML = `
+        <div style="font-size:48px">🎤</div>
+        <h2 style="color:#cdd6f4;font-size:20px;margin:0">랄프톤 Voice Terminal</h2>
+        <p style="color:#a6adc8;font-size:14px;max-width:300px;line-height:1.6">
+          음성으로 터미널을 조작하세요.<br>
+          tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.
+        </p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+          <button onclick="document.getElementById('onboarding').remove();createTmuxSession()"
+            style="padding:12px 24px;border-radius:8px;border:none;background:#a6e3a1;color:#1e1e2e;font-size:14px;cursor:pointer;">
+            tmux 세션 시작
+          </button>
+          <button onclick="document.getElementById('onboarding').remove();createSession()"
+            style="padding:12px 24px;border-radius:8px;border:none;background:#45475a;color:#cdd6f4;font-size:14px;cursor:pointer;">
+            일반 터미널
+          </button>
+        </div>
+        <p style="color:#585b70;font-size:11px;margin-top:20px">
+          💡 맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)
+        </p>
+      `;
+      document.body.appendChild(el);
+    }
+  </script>
+  <script>
+    // --- 터미널 검색 (Ctrl+F / Cmd+F) ---
+    const searchBar = document.getElementById('search-bar');
+    const searchInput = document.getElementById('search-input');
+
+    function toggleSearch() {
+      searchBar.classList.toggle('visible');
+      if (searchBar.classList.contains('visible')) {
+        searchInput.focus();
+        searchInput.select();
+      }
+    }
+    function closeSearch() {
+      searchBar.classList.remove('visible');
+      if (activeId && sessions[activeId]) sessions[activeId].term.focus();
+    }
+    function searchNext() {
+      if (!activeId || !sessions[activeId]) return;
+      sessions[activeId].searchAddon.findNext(searchInput.value);
+    }
+    function searchPrev() {
+      if (!activeId || !sessions[activeId]) return;
+      sessions[activeId].searchAddon.findPrevious(searchInput.value);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        toggleSearch();
+      }
+      if (e.key === 'Escape' && searchBar.classList.contains('visible')) {
+        closeSearch();
+      }
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.shiftKey ? searchPrev() : searchNext();
+      }
+    });
+  </script>
+  <script>
+    // --- 토스트 유틸리티 ---
+    function updateSessionPicker() {
+      const picker = document.getElementById('voice-session-picker');
+      if (!picker) return;
+      picker.innerHTML = '';
+      for (const [id, s] of Object.entries(sessions)) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = s.tabEl?.querySelector('.tab-name')?.textContent || id.slice(0, 8);
+        if (id === activeId) opt.selected = true;
+        picker.appendChild(opt);
+      }
+    }
+
+    function showToast(msg, type = 'info') {
+      const colors = { info: '#89b4fa', error: '#f38ba8', success: '#a6e3a1' };
+      const toast = document.createElement('div');
+      toast.style.cssText = `
+        position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+        background:#313244;color:${colors[type] || '#cdd6f4'};padding:10px 20px;
+        border-radius:10px;font-size:13px;z-index:200;max-width:90vw;
+        box-shadow:0 4px 12px rgba(0,0,0,0.4);
+      `;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // --- 파일 업로드 ---
+    async function uploadFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      const sid = activeId || '';
+      try {
+        const res = await fetch(`${API_BASE}/api/upload?session_id=${sid}`, { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.ok && activeId && sessions[activeId]) {
+          sessions[activeId].term.write(`\r\n\x1b[32m[업로드 완료: ${data.path}]\x1b[0m\r\n`);
+        }
+      } catch (e) {
+        showToast('업로드 실패: ' + e.message, 'error');
+      }
+      input.value = '';
+    }
   </script>
   <script src="/static/voice.js"></script>
 </body>

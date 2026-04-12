@@ -1,0 +1,292 @@
+#!/bin/bash
+# ralph — Voice Terminal 통합 CLI
+# 어디서든 실행 가능. 노션 작업 중에도 음성으로 코딩.
+#
+# 사용법:
+#   ralph voice    — 음성 모드 (백그라운드, 작업 방해 없음)
+#   ralph mobile   — 모바일 접속 URL 제공 (서버 자동 시작)
+#   ralph start    — 서버 + 터널 시작
+#   ralph stop     — 모든 ralph 프로세스 종료
+#   ralph status   — 현재 상태 확인
+
+set -uo pipefail
+
+# 심링크를 따라가서 실제 경로 찾기
+_SELF="$0"
+[ -L "$_SELF" ] && _SELF="$(readlink "$_SELF")"
+RALPH_DIR="$(cd "$(dirname "$_SELF")/.." && pwd)"
+RALPH_CONFIG="$HOME/.ralph.env"
+
+# 설정 파일 로드 (있으면)
+[ -f "$RALPH_CONFIG" ] && source "$RALPH_CONFIG"
+
+# 설정 가능한 변수 (환경변수 또는 ~/.ralph.env로 오버라이드)
+RALPH_PORT="${RALPH_PORT:-7777}"
+if [ "$(uname)" = "Darwin" ]; then
+  _DEFAULT_PY="/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python"
+else
+  _DEFAULT_PY="$(which python3 2>/dev/null || echo python3)"
+fi
+RALPH_PYTHON="${RALPH_PYTHON:-$_DEFAULT_PY}"
+SERVER_LOG="/tmp/ralphton-server.log"
+TUNNEL_LOG="/tmp/cloudflared.log"
+DAEMON_LOG="/tmp/ralph-voice-daemon.log"
+PID_DIR="/tmp/ralph-pids"
+mkdir -p "$PID_DIR"
+
+_is_running() {
+  local pidfile="$PID_DIR/$1.pid"
+  [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null
+}
+
+_port_in_use() {
+  "$RALPH_PYTHON" -c "import socket;s=socket.socket();s.settimeout(1);exit(0 if s.connect_ex(('127.0.0.1',$1))==0 else 1)" 2>/dev/null
+}
+
+_start_server() {
+  if _port_in_use $RALPH_PORT; then
+    echo "✓ 서버 이미 실행 중 (port $RALPH_PORT)"
+    return 0
+  fi
+  echo "▸ 서버 시작 중..."
+  cd "$RALPH_DIR/server"
+  nohup "$RALPH_PYTHON" -m uvicorn main:app --host 0.0.0.0 --port $RALPH_PORT > "$SERVER_LOG" 2>&1 &
+  echo $! > "$PID_DIR/server.pid"
+  sleep 2
+  if curl -sf http://localhost:$RALPH_PORT/ -o /dev/null 2>/dev/null; then
+    echo "✓ 서버 시작 완료 (http://localhost:$RALPH_PORT)"
+  else
+    echo "✗ 서버 시작 실패. 로그: $SERVER_LOG"
+    return 1
+  fi
+}
+
+_start_tunnel() {
+  if _is_running tunnel; then
+    local url
+    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+    echo "✓ 터널 이미 실행 중: $url"
+    return 0
+  fi
+  echo "▸ Cloudflare Tunnel 시작 중..."
+  : > "$TUNNEL_LOG"
+  nohup cloudflared tunnel --url http://localhost:$RALPH_PORT > "$TUNNEL_LOG" 2>&1 &
+  echo $! > "$PID_DIR/tunnel.pid"
+  # URL 추출 대기
+  for i in $(seq 1 30); do
+    local url
+    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+    if [ -n "$url" ]; then
+      echo "✓ 터널: $url"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "✗ 터널 URL 대기 시간 초과. 로그: $TUNNEL_LOG"
+  return 1
+}
+
+_start_voice_daemon() {
+  if _is_running voice; then
+    echo "✓ Voice Daemon 이미 실행 중"
+    return 0
+  fi
+  echo "▸ Voice Daemon 시작 중..."
+  nohup "$RALPH_PYTHON" "$RALPH_DIR/server/voice_daemon.py" > "$DAEMON_LOG" 2>&1 &
+  echo $! > "$PID_DIR/voice.pid"
+  sleep 1
+  if _is_running voice; then
+    echo "✓ Voice Daemon 시작 (Ctrl+Shift+V 로 녹음)"
+  else
+    echo "✗ Voice Daemon 실패. 로그: $DAEMON_LOG"
+    return 1
+  fi
+}
+
+_ensure_tmux() {
+  if ! tmux list-sessions 2>/dev/null | grep -q .; then
+    tmux new-session -d -s dev
+    echo "✓ tmux 세션 'dev' 생성"
+  else
+    echo "✓ tmux 세션 존재: $(tmux list-sessions -F '#{session_name}' | tr '\n' ' ')"
+  fi
+}
+
+cmd_voice() {
+  echo ""
+  echo "  🎤 ralph voice — 음성 모드"
+  echo "  노션/브라우저 작업을 계속하면서 음성으로 코딩"
+  echo ""
+
+  _ensure_tmux
+  _start_server
+  _start_voice_daemon
+
+  echo ""
+  echo "  ┌─────────────────────────────────────────┐"
+  echo "  │  음성 모드 활성화 완료                      │"
+  echo "  │                                         │"
+  echo "  │  Ctrl+Shift+V → 녹음 시작/종료           │"
+  echo "  │  말한 내용 → STT → tmux에 자동 입력       │"
+  echo "  │  결과 → TTS로 음성 확인                   │"
+  echo "  │                                         │"
+  echo "  │  작업을 계속하세요. 음성이 백그라운드에서    │"
+  echo "  │  동작합니다.                              │"
+  echo "  │                                         │"
+  echo "  │  종료: ralph stop                        │"
+  echo "  └─────────────────────────────────────────┘"
+  echo ""
+}
+
+cmd_mobile() {
+  echo ""
+  echo "  📱 ralph mobile — 모바일 접속"
+  echo ""
+
+  _ensure_tmux
+  _start_server
+  _start_tunnel
+
+  local url
+  url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+  local token=${RALPH_TOKEN:-}
+
+  echo ""
+  echo "  ┌─────────────────────────────────────────┐"
+  echo "  │  모바일 접속 준비 완료                     │"
+  echo "  │                                         │"
+  if [ -n "$token" ]; then
+  echo "  │  URL: ${url}?token=${token}"
+  else
+  echo "  │  URL: $url"
+  fi
+  echo "  │                                         │"
+  echo "  │  폰 브라우저에서 위 URL을 열면             │"
+  echo "  │  tmux 세션에 자동 연결됩니다               │"
+  echo "  │                                         │"
+  echo "  │  🎧 음성 전용 모드: 🎧 버튼 탭            │"
+  echo "  │  🔄 핸즈프리: 🔄 버튼 탭                  │"
+  echo "  │                                         │"
+  echo "  │  종료: ralph stop                        │"
+  echo "  └─────────────────────────────────────────┘"
+  echo ""
+
+  # QR 코드 (qrencode 설치 시)
+  if command -v qrencode >/dev/null 2>&1; then
+    local full_url="$url"
+    [ -n "$token" ] && full_url="${url}?token=${token}"
+    echo "  QR 코드:"
+    qrencode -t UTF8 "$full_url" 2>/dev/null || true
+  fi
+
+  # adb 연결 시 자동 열기
+  if adb devices 2>/dev/null | grep -q "device$"; then
+    echo "  📱 Android 기기 감지. Chrome에서 열기..."
+    local open_url="$url"
+    [ -n "$token" ] && open_url="${url}?token=${token}"
+    adb shell am start -a android.intent.action.VIEW -d "$open_url" com.android.chrome 2>/dev/null || true
+  fi
+}
+
+cmd_start() {
+  echo ""
+  echo "  🚀 ralph start — 전체 시작"
+  echo ""
+
+  _ensure_tmux
+  _start_server
+  _start_tunnel
+  _start_voice_daemon
+
+  echo ""
+  echo "  모든 서비스 시작 완료."
+  echo "  ralph status 로 상태 확인"
+  echo ""
+}
+
+cmd_stop() {
+  echo ""
+  echo "  ⏹  ralph stop"
+  echo ""
+
+  for svc in voice tunnel server; do
+    local pidfile="$PID_DIR/$svc.pid"
+    if [ -f "$pidfile" ]; then
+      local pid
+      pid=$(cat "$pidfile")
+      if kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null
+        echo "  ✓ $svc 종료 (PID $pid)"
+      fi
+      rm -f "$pidfile"
+    fi
+  done
+
+  # 혹시 남은 프로세스 정리
+  pkill -f "voice_daemon.py" 2>/dev/null || true
+  pkill -f "cloudflared tunnel" 2>/dev/null || true
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -i :$RALPH_PORT -t 2>/dev/null | xargs kill 2>/dev/null || true
+  elif command -v fuser >/dev/null 2>&1; then
+    fuser -k $RALPH_PORT/tcp 2>/dev/null || true
+  fi
+
+  echo "  ✓ 모든 ralph 프로세스 종료"
+  echo ""
+}
+
+cmd_status() {
+  echo ""
+  echo "  📊 ralph status"
+  echo ""
+
+  local server_status="✗ 중지"
+  local tunnel_status="✗ 중지"
+  local voice_status="✗ 중지"
+  local tmux_status="✗ 없음"
+
+  if _port_in_use $RALPH_PORT; then
+    server_status="✓ 실행 중 (port $RALPH_PORT)"
+  fi
+
+  if _is_running tunnel; then
+    local url
+    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+    tunnel_status="✓ $url"
+  fi
+
+  if _is_running voice; then
+    voice_status="✓ 실행 중 (Ctrl+Shift+V)"
+  fi
+
+  if tmux list-sessions 2>/dev/null | grep -q .; then
+    tmux_status="✓ $(tmux list-sessions -F '#{session_name}' | tr '\n' ' ')"
+  fi
+
+  echo "  서버:        $server_status"
+  echo "  터널:        $tunnel_status"
+  echo "  Voice Daemon: $voice_status"
+  echo "  tmux:        $tmux_status"
+  echo ""
+}
+
+# --- Main ---
+case "${1:-help}" in
+  voice)  cmd_voice ;;
+  mobile) cmd_mobile ;;
+  start)  cmd_start ;;
+  stop)   cmd_stop ;;
+  status) cmd_status ;;
+  *)
+    echo ""
+    echo "  ralph — Voice Terminal CLI"
+    echo ""
+    echo "  사용법:"
+    echo "    ralph voice    음성 모드 (백그라운드, 작업 방해 없음)"
+    echo "    ralph mobile   모바일 접속 URL 제공"
+    echo "    ralph start    전체 시작 (서버+터널+음성)"
+    echo "    ralph stop     모든 프로세스 종료"
+    echo "    ralph status   현재 상태 확인"
+    echo ""
+    ;;
+esac

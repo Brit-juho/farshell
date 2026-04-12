@@ -14,6 +14,7 @@ class SessionInfo:
     name: str = ""
     created_at: float = field(default_factory=time.time)
     cmd: str = "/bin/bash"
+    tmux_name: str | None = None
 
 
 class SessionStore:
@@ -30,6 +31,12 @@ class SessionStore:
 
     def remove(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
+
+    def find_by_tmux_name(self, tmux_name: str) -> SessionInfo | None:
+        for info in self._sessions.values():
+            if info.tmux_name == tmux_name:
+                return info
+        return None
 
     def list_all(self) -> list[SessionInfo]:
         return list(self._sessions.values())

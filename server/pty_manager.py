@@ -12,16 +12,18 @@ import fcntl
 import logging
 import os
 import pty
+import shutil
 import signal
 import struct
 import termios
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_SHELLS = {"/bin/bash", "/bin/zsh", "/bin/sh", "/bin/fish"}
+ALLOWED_SHELLS = {"/bin/bash", "/bin/zsh", "/bin/sh", "/bin/fish", "/usr/bin/bash"}
 
 
 @dataclass
@@ -34,6 +36,8 @@ class PTYSession:
     # [C1] broadcast: 여러 subscriber에 데이터 전달
     _subscribers: set = field(default_factory=set, repr=False)  # set[Callable[[bytes], None]]
     _read_task: Optional[asyncio.Task] = field(default=None, repr=False)
+    # scrollback 버퍼 — 재접속 시 이전 출력 복원
+    _scrollback: deque = field(default_factory=lambda: deque(maxlen=5000), repr=False)
 
 
 class PTYManager:
@@ -45,7 +49,10 @@ class PTYManager:
         return dict(self._sessions)
 
     # tmux 등 허용 명령
-    ALLOWED_COMMANDS = {"/opt/homebrew/bin/tmux", "/usr/bin/tmux", "/usr/local/bin/tmux"}
+    ALLOWED_COMMANDS = {p for p in [
+        shutil.which("tmux"),
+        "/opt/homebrew/bin/tmux", "/usr/bin/tmux", "/usr/local/bin/tmux",
+    ] if p}
 
     def create_session(
         self,
@@ -60,7 +67,8 @@ class PTYManager:
             raise ValueError(f"Session {session_id!r} already exists")
 
         if not cmd:
-            cmd = os.environ.get("SHELL", "/bin/zsh")
+            from platform_utils import get_default_shell
+            cmd = get_default_shell()
         if cmd not in ALLOWED_SHELLS and cmd not in self.ALLOWED_COMMANDS:
             cmd = "/bin/zsh"
 
@@ -152,7 +160,16 @@ class PTYManager:
         while session_id in self._sessions:
             data = await loop.run_in_executor(None, _blocking_read)
             if data is None or len(data) == 0:
+                # EOF — tmux detach 등으로 프로세스 종료
+                eof_msg = b"\r\n[process exited]\r\n"
+                for cb in list(session._subscribers):
+                    try:
+                        cb(eof_msg)
+                    except Exception:
+                        pass
                 break
+            # scrollback에 저장
+            session._scrollback.append(data)
             # broadcast to all subscribers
             dead = set()
             for cb in list(session._subscribers):
@@ -215,6 +232,11 @@ class PTYManager:
     def destroy_all(self) -> None:
         for sid in list(self._sessions):
             self.destroy_session(sid)
+
+    def get_scrollback(self, session_id: str) -> list[bytes]:
+        """재접속 시 이전 출력을 전송하기 위한 scrollback 데이터 반환."""
+        session = self._get(session_id)
+        return list(session._scrollback)
 
     def _get(self, session_id: str) -> PTYSession:
         try:

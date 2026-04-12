@@ -6,9 +6,13 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$SCRIPT_DIR/server"
-PYTHON="/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python"
+if [ "$(uname)" = "Darwin" ]; then
+  PYTHON="/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python"
+else
+  PYTHON="$(which python3 2>/dev/null || echo python3)"
+fi
 
-if [ ! -f "$PYTHON" ]; then
+if [ ! -f "$PYTHON" ] && ! command -v "$PYTHON" >/dev/null 2>&1; then
     echo "whisper conda 환경이 없습니다."
     echo "conda create -n whisper python=3.10"
     echo "conda activate whisper"
@@ -16,12 +20,21 @@ if [ ! -f "$PYTHON" ]; then
     exit 1
 fi
 
+# ~/.ralph.env 설정 로드
+[ -f "$HOME/.ralph.env" ] && source "$HOME/.ralph.env"
+
 HOST="${HOST:-0.0.0.0}"
-PORT="${PORT:-8000}"
+PORT="${RALPH_PORT:-${PORT:-7777}}"
+PYTHON="${RALPH_PYTHON:-$PYTHON}"
 
 echo "랄프톤 Voice Terminal Server"
 echo "  http://localhost:${PORT}"
-echo "  http://$(ipconfig getifaddr en0 2>/dev/null || echo '0.0.0.0'):${PORT}"
+if [ "$(uname)" = "Darwin" ]; then
+  _IP=$(ipconfig getifaddr en0 2>/dev/null || echo '0.0.0.0')
+else
+  _IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo '0.0.0.0')
+fi
+echo "  http://${_IP}:${PORT}"
 echo ""
 
 cd "$SERVER_DIR"

@@ -1,139 +1,199 @@
 # 랄프톤 — Voice Terminal
 
-맥북을 서버로 두고, 어디서든 브라우저로 터미널에 접속하여 음성으로 작업하는 시스템.
+맥북(또는 WSL2)을 서버로 두고, 어디서든 음성으로 터미널을 조작하는 시스템.
 
-- 키보드 없이 이어폰만으로 Claude Code 포함 터미널 작업
-- 모바일 브라우저에서 실시간 터미널 접속
-- 기존 iTerm2 tmux 세션도 웹에서 이어서 작업
-- 작업 완료 시 TTS로 결과 요약 알림
+- **노션 작업 중에도** 핫키(Ctrl+Shift+V)로 음성 코딩 — 작업 방해 없음
+- 모바일 브라우저에서 실시간 터미널 접속 + 음성 전용 모드
+- iTerm2 tmux 세션을 웹/모바일에서 이어서 작업
+- Claude Code 작업 완료 시 TTS로 결과 요약 알림
 
 ---
 
 ## 빠른 시작
 
-### 1. 필수 요구사항
-
-- macOS (Apple Silicon 권장)
-- Python 3.10+ (conda `whisper` 환경 권장)
-- ffmpeg (`brew install ffmpeg`)
-- tmux (`brew install tmux`) — 기존 세션 연결용, 선택사항
-
-### 2. 설치
+### macOS
 
 ```bash
-git clone <repo-url> 랄프톤
-cd 랄프톤
+# 1. 레포 클론
+git clone <repo-url> ~/ralphton && cd ~/ralphton
 
-# Python 의존성 설치 (conda 환경 사용 시)
+# 2. 설치 (conda 환경 생성, 의존성 설치, CLI 등록)
+./setup.sh
+
+# 3. 사용
+ralph voice    # 음성 모드 — 백그라운드 실행, 다른 작업 계속
+ralph mobile   # 모바일 접속 — URL + QR코드
+ralph start    # 전체 시작 (서버 + 터널 + 음성)
+ralph stop     # 종료
+ralph status   # 상태 확인
+```
+
+### Windows (WSL2)
+
+```powershell
+# 1. WSL2 설치 (PowerShell 관리자)
+wsl --install
+
+# 2. WSL2 Ubuntu 터미널에서
+git clone <repo-url> ~/ralphton
+cd ~/ralphton && ./setup.sh
+
+# 3. Windows PowerShell에서 사용
+.\bin\ralph.ps1 voice    # 음성 모드
+.\bin\ralph.ps1 mobile   # 모바일 접속 (브라우저 자동 열림)
+.\bin\ralph.ps1 stop     # 종료
+```
+
+> **Windows 동작 방식:**
+> - 서버 + tmux는 WSL2 내부에서 실행
+> - 브라우저는 Windows에서 `localhost:7777`로 접속 (WSL2 포트 포워딩 자동)
+> - TTS는 Windows Speech API 사용 (추가 설치 불필요)
+> - 음성 핫키(Ctrl+Shift+V)는 WSLg 필요 (Windows 11)
+> - WSLg 없으면 브라우저 음성 입력(🎤 버튼) 사용
+
+---
+
+## 사용 시나리오
+
+### 1. 노션 작업 중 음성 코딩 (macOS)
+
+```
+1. ralph voice              ← 터미널 어디서든 실행
+2. 노션으로 돌아가서 작업 계속
+3. Ctrl+Shift+V → "git status"  ← 말하면 tmux에 자동 입력
+4. 결과를 TTS로 이어폰에서 들음
+5. ralph stop               ← 끝나면 종료
+```
+
+Voice Daemon은 **백그라운드 프로세스**로 동작합니다.
+- Claude 세션이나 터미널을 닫아도 계속 실행
+- `ralph stop` 또는 맥 재시작 전까지 유지
+- 아무 터미널에서나 `ralph stop`으로 종료 가능
+
+### 2. 모바일에서 터미널 조작
+
+```
+1. ralph mobile             ← URL + QR코드 출력
+2. 폰 카메라로 QR 스캔 (또는 URL 직접 입력)
+3. tmux 세션에 자동 연결
+4. 하단 버튼으로 조작:
+   🎤 음성 입력  — 탭하여 녹음/중지
+   🔄 핸즈프리  — 연속 음성 인식 (자동 반복)
+   🎧 음성 전용 — 터미널 숨기고 큰 마이크만 표시
+   📎 파일      — 파일 업로드
+```
+
+### 3. Claude Code + TTS 알림
+
+Claude Code 작업이 완료되면 자동으로 TTS 요약을 읽어줍니다.
+이어폰 착용 시 눈을 떼지 않고도 결과를 들을 수 있습니다.
+
+- `tts_hook.sh`가 Claude Code Stop hook으로 등록됨
+- 마지막 assistant 응답(최대 200자)을 추출 → TTS 재생
+- 서버 미실행 시 macOS `say -v Yuna`로 fallback
+
+### 4. iTerm2 + tmux 연동
+
+iTerm2에서 tmux Control Mode를 사용하면 네이티브 탭/스크롤을 유지하면서 모바일에서도 같은 세션에 접속할 수 있습니다.
+
+```bash
+# iTerm2에서 tmux 세션에 연결
+tmux -CC new -A -s dev
+
+# .zshrc에 추가하면 자동 연결
+if [[ "$TERM_PROGRAM" == "iTerm.app" && -z "$TMUX" && -z "$CLAUDE_CODE" && "$-" == *i* ]]; then
+  tmux -CC new -A -s dev
+fi
+```
+
+---
+
+## 설정
+
+`~/.ralph.env`:
+
+```bash
+RALPH_PORT=7777                    # 포트 (기본 7777, 충돌 시 변경)
+RALPH_PYTHON=/path/to/python       # Python 경로 (setup.sh가 자동 설정)
+RALPH_TOKEN=my-secret-token        # 원격 접속 시 인증 토큰 (선택사항)
+```
+
+### 수동 환경 설정 (setup.sh 없이)
+
+```bash
+# macOS
 conda create -n whisper python=3.10
 conda activate whisper
-pip install -r requirements.txt
+pip install fastapi uvicorn faster-whisper edge-tts sounddevice numpy pynput python-multipart websockets
 
-# 또는 기존 환경에 설치
-pip install fastapi 'uvicorn[standard]' faster-whisper edge-tts sounddevice numpy
-```
-
-### 3. 서버 실행
-
-```bash
-./run_server.sh
-```
-
-또는 직접:
-
-```bash
+# 서버 직접 실행
 cd server
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python -m uvicorn main:app --host 0.0.0.0 --port 7777
 ```
 
-시작하면 다음 URL이 표시됩니다:
+---
 
-```
-랄프톤 Voice Terminal Server
-  http://localhost:8000
-  http://192.168.x.x:8000
-```
-
-### 4. 접속
+## 접속 방법
 
 | 환경 | 방법 |
 |------|------|
-| **같은 맥북** | `http://localhost:8000` |
-| **같은 WiFi 모바일** | `http://맥북-IP:8000` |
-| **USB 연결 Android** | `adb reverse tcp:8000 tcp:8000` → `http://localhost:8000` |
-| **어디서든 (원격)** | 아래 Cloudflare Tunnel 참고 |
+| 데스크톱 | `http://localhost:7777` |
+| 같은 네트워크 모바일 | `http://<맥북IP>:7777` (`ipconfig getifaddr en0`으로 IP 확인) |
+| adb 연결 Android | `adb reverse tcp:7777 tcp:7777` → `http://localhost:7777` |
+| 원격 (어디서든) | `ralph mobile` → Cloudflare Tunnel HTTPS URL 사용 |
 
 ---
 
-## 주요 기능
+## 아키텍처
 
-### 웹 터미널
-
-브라우저에서 실제 터미널이 동작합니다. xterm.js 기반.
-
-- **멀티 탭**: `+ New` 버튼으로 여러 터미널 동시 사용
-- **세션 유지**: 같은 세션에 데스크톱 + 모바일 동시 접속 가능
-- **자동 재연결**: 네트워크 끊겨도 자동 복구
-
-### tmux 세션 연결
-
-iTerm2나 터미널에서 tmux로 시작한 작업을 웹에서 이어갈 수 있습니다.
-
-```bash
-# 맥북 터미널에서 tmux 세션 시작
-tmux new -s work
-
-# 작업 후 detach (Ctrl+B, D)
-# → 웹 UI에서 [tmux] 버튼 클릭 → "work" 세션 선택 → 이어서 작업
+```
+                  ┌──────────────────────────────────────┐
+                  │  MacBook / WSL2 (서버)                 │
+                  │                                      │
+  [ralph voice]   │  ┌────────────────┐  ┌────────────┐  │
+  Ctrl+Shift+V ──►│  │ Voice Daemon   │  │ FastAPI     │  │
+  → STT → tmux   │  │ (독립, 서버무관) │  │ :7777       │  │
+                  │  └────────────────┘  └─────┬──────┘  │
+                  │                            │         │
+                  │  ┌────────────────┐  ┌─────┴──────┐  │
+                  │  │ tmux sessions  │◄─┤ PTY Manager │  │
+                  │  │ (세션 공유)     │  │ + Scrollback│  │
+                  │  └────────────────┘  └────────────┘  │
+                  └──────────────┬───────────────────────┘
+                                 │ Cloudflare Tunnel (HTTPS)
+                  ┌──────────────┴───────────────────────┐
+                  │  모바일 / 원격 브라우저                  │
+                  │                                      │
+                  │  xterm.js 터미널 + 음성 전용 모드       │
+                  │  🎤 STT → 서버 → tmux                 │
+                  └──────────────────────────────────────┘
 ```
 
-### 음성 입력 (STT)
+### 음성 입력 흐름
 
-마이크 버튼(🎤)을 눌러 음성으로 터미널에 명령 입력.
-
-- **브라우저 마이크**: 모바일/데스크톱 모두 지원
-- **로컬 마이크**: MacBook 마이크 직접 사용 (API 호출)
-- **엔진**: faster-whisper (로컬 처리, 네트워크 불필요)
-
-### 작업 완료 TTS 알림
-
-터미널 명령이 끝나면 자동으로 결과를 음성으로 알려줍니다.
-
-- 3초간 출력이 없으면 "작업 완료"로 판단
-- 출력 내용을 요약해서 TTS 생성
-- 데스크톱: 스피커로 직접 재생
-- 모바일: WebSocket으로 push + 토스트 알림
-
-### 이어폰 터치 컨트롤
-
-무선 이어폰의 미디어 컨트롤로 음성 입력을 조작합니다. (Media Session API)
-
-- **한 번 탭** (play/pause): 녹음 시작/중지
-- **더블 탭** (next track): 녹음 토글
-
-### PWA 설치
-
-모바일 Chrome에서 "홈 화면에 추가"로 앱처럼 사용 가능합니다.
-HTTPS 환경(Cloudflare Tunnel)에서만 설치 가능.
-
----
-
-## 원격 접속 (Cloudflare Tunnel)
-
-같은 네트워크가 아닌 곳에서도 접속할 수 있습니다. **무료, 계정 불필요.**
-
-```bash
-# 설치 (한 번만)
-brew install cloudflared
-
-# 터널 시작 (서버 실행 후)
-cloudflared tunnel --url http://localhost:8000
+**데스크톱 (Voice Daemon):**
+```
+핫키 Ctrl+Shift+V (또는 이어폰 Play/Pause)
+  → sounddevice 마이크 녹음 (16kHz)
+  → mlx-whisper / faster-whisper STT
+  → tmux send-keys (활성 pane에 직접 주입)
 ```
 
-출력되는 `https://xxx.trycloudflare.com` URL로 어디서든 접속.
+**모바일 (웹 브라우저):**
+```
+🎤 버튼 탭
+  → MediaRecorder (webm/opus)
+  → POST /voice/input → 서버 STT
+  → PTY write (터미널에 입력)
+```
 
-> 주의: Quick Tunnel은 서버 재시작마다 URL이 바뀝니다.
-> 고정 URL이 필요하면 Cloudflare 계정으로 Named Tunnel을 설정하세요.
+### STT/TTS 엔진 우선순위
+
+| STT | TTS |
+|-----|-----|
+| 1. mlx-whisper (Apple Silicon, 가장 빠름) | 1. Kokoro (최고 품질) |
+| 2. faster-whisper (범용) | 2. edge-tts (온라인, 다양한 음성) |
+| | 3. macOS `say` / Windows Speech API (fallback) |
 
 ---
 
@@ -141,22 +201,29 @@ cloudflared tunnel --url http://localhost:8000
 
 ```
 랄프톤/
+├── bin/
+│   ├── ralph              # CLI 진입점 (bash, macOS/Linux)
+│   └── ralph.ps1          # CLI 진입점 (PowerShell, Windows)
+├── setup.sh               # 원클릭 설치 스크립트
 ├── server/
-│   ├── main.py            # FastAPI 서버 (WS + REST + Voice)
-│   ├── pty_manager.py     # PTY 세션 관리 (broadcast 패턴)
-│   ├── voice_handler.py   # STT (faster-whisper) + TTS (edge-tts)
-│   ├── output_watcher.py  # 출력 감시 → 작업 완료 TTS 알림
-│   ├── local_mic.py       # MacBook 로컬 마이크 (sounddevice)
-│   └── session_store.py   # 세션 메타데이터
+│   ├── main.py            # FastAPI (WS + REST + Voice + 토큰 인증)
+│   ├── pty_manager.py     # PTY 세션 (broadcast, scrollback, EOF 감지)
+│   ├── voice_handler.py   # STT (faster-whisper) + TTS (edge-tts/Kokoro)
+│   ├── voice_daemon.py    # macOS 핫키 음성 데몬 (독립 실행)
+│   ├── tts_hook.sh        # Claude Code Stop hook (TTS 요약)
+│   ├── output_watcher.py  # 출력 감시 (기본 비활성, API로 토글)
+│   ├── local_mic.py       # MacBook 마이크 (sounddevice)
+│   ├── session_store.py   # 세션 메타데이터
+│   └── platform_utils.py  # 크로스 플랫폼 유틸리티 (macOS/Linux/WSL2)
 ├── frontend/
-│   ├── index.html         # xterm.js 멀티 탭 UI
-│   ├── voice.js           # 마이크 + TTS + 알림 + Media Session
+│   ├── index.html         # xterm.js UI (탭, 검색, 온보딩, 음성 바)
+│   ├── voice.js           # 마이크 + TTS + 핸즈프리 + Media Session
 │   ├── manifest.json      # PWA manifest
 │   └── sw.js              # Service Worker
-├── requirements.txt
-├── run_server.sh          # 서버 실행 스크립트
-├── CLAUDE.md              # Claude Code 가이드라인
-└── README.md              # 이 파일
+├── .claude/skills/        # Claude Code 프로젝트 스킬
+├── CLAUDE.md              # Claude Code 가이드
+├── DESIGN.md              # 디자인 시스템 (Catppuccin Mocha)
+└── README.md
 ```
 
 ---
@@ -166,66 +233,93 @@ cloudflared tunnel --url http://localhost:8000
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
 | GET | `/api/sessions` | 세션 목록 |
-| POST | `/api/sessions` | 새 터미널 세션 생성 |
-| DELETE | `/api/sessions/{id}` | 세션 삭제 |
+| POST | `/api/sessions` | 새 터미널 생성 |
+| DELETE | `/api/sessions/{id}` | 세션 삭제 (tmux는 detach만) |
+| PATCH | `/api/sessions/{id}` | 세션 이름 변경 |
 | WS | `/ws/{id}` | 터미널 WebSocket |
-| WS | `/ws-notify` | 작업 완료 알림 수신 |
+| WS | `/ws-notify` | 작업 완료 알림 |
+| POST | `/api/tmux/create` | tmux 세션 생성 + attach |
+| POST | `/api/tmux/attach` | 기존 tmux 세션 attach |
 | GET | `/api/tmux/sessions` | tmux 세션 목록 |
-| POST | `/api/tmux/attach` | tmux 세션에 attach |
-| POST | `/voice/input?session_id=X` | 음성 → STT → 터미널 입력 |
-| POST | `/voice/output` | 텍스트 → TTS → 오디오 |
-| POST | `/voice/local/start` | MacBook 마이크 녹음 시작 |
-| POST | `/voice/local/stop?session_id=X` | 녹음 중지 → STT |
-| POST | `/api/watch/{id}` | 출력 감시 설정 |
+| DELETE | `/api/tmux/kill/{name}` | tmux 세션 완전 종료 |
+| POST | `/voice/input?session_id=X` | 음성 → STT → 터미널 |
+| POST | `/voice/output` | 텍스트 → TTS |
+| POST | `/api/upload?session_id=X` | 파일 업로드 |
+| GET | `/api/download?path=X` | 파일 다운로드 |
+| POST | `/api/watch/{session_id}` | 출력 감시 ON/OFF (기본 OFF) |
+
+인증: `RALPH_TOKEN` 설정 시 `?token=xxx` 또는 `Authorization: Bearer xxx` 필요.
 
 ---
 
-## 설정
-
-### 환경 변수
+## 모바일 테스트 (adb)
 
 ```bash
-HOST=0.0.0.0     # 바인드 주소 (기본값)
-PORT=8000         # 포트 (기본값)
+# 포트 포워딩
+adb reverse tcp:7777 tcp:7777
+
+# Chrome 열기
+adb shell am start -a android.intent.action.VIEW -d "http://localhost:7777" com.android.chrome
+
+# 스크린샷 캡처
+adb shell screencap -p /sdcard/test.png && adb pull /sdcard/test.png /tmp/test.png
 ```
 
-### STT 엔진 우선순위
+---
 
-1. mlx-whisper (Apple Silicon, 가장 빠름)
-2. faster-whisper (범용)
+## 주요 기능
 
-### TTS 엔진 우선순위
-
-1. Kokoro (로컬, 설치 필요)
-2. edge-tts (Microsoft, 네트워크 필요)
-3. macOS say (항상 사용 가능, 한국어: Yuna 음성)
+| 기능 | 설명 |
+|------|------|
+| Voice Daemon | macOS 핫키(Ctrl+Shift+V) 또는 이어폰 Play/Pause → STT → tmux 직접 입력 |
+| 핸즈프리 모드 | 모바일 🔄 버튼 → 연속 녹음/STT 자동 반복 |
+| 음성 전용 모드 | 🎧 버튼 → 터미널 숨기고 큰 마이크만 표시 (이어폰 조작용) |
+| Claude Code TTS | 작업 완료 시 Stop hook으로 결과 요약 TTS 재생 |
+| API 토큰 인증 | `RALPH_TOKEN` 환경변수 설정 시 활성화 |
+| tmux 세션 관리 | 웹에서 tmux 생성/attach/detach/kill |
+| Scrollback 버퍼 | WebSocket 재접속 시 이전 출력 복원 (최대 5000 청크) |
+| 터미널 검색 | Ctrl+F / Cmd+F → xterm.js 검색 |
+| 세션 이름 편집 | 탭 더블클릭 → 이름 변경 |
+| 파일 업로드 | 보이스바 📎 버튼 → `/tmp/ralphton_uploads/`에 저장 |
+| Media Session | 무선 이어폰 Play/Pause로 녹음 토글 (모바일) |
+| PWA | 홈 화면에 추가하여 앱처럼 사용 |
 
 ---
 
 ## 트러블슈팅
 
-### "서버 연결 끊김" 표시
+### macOS
 
-서버가 재시작되었습니다. 브라우저가 자동 재연결합니다 (최대 15회).
+| 문제 | 해결 |
+|------|------|
+| `ralph: command not found` | `source ~/.zshrc` 또는 새 터미널 열기. `~/.local/bin`이 PATH에 있는지 확인 |
+| 핫키 안 먹힘 | 시스템 설정 → 개인정보 → 접근성 → 터미널 앱 허용 |
+| 포트 충돌 | `~/.ralph.env`에서 `RALPH_PORT` 변경 |
+| 모바일 소리 안 남 | 화면 한 번 터치 (브라우저 autoplay 정책) |
+| tmux 세션 없음 | `tmux new -s dev` 먼저 실행 |
+| 서버 시작 실패 | `cat /tmp/ralphton-server.log` 확인 |
+| 터널 URL 안 뜸 | `cat /tmp/cloudflared.log` 확인. `brew install cloudflared` |
 
-### 모바일에서 소리가 안 남
+### Windows (WSL2)
 
-브라우저 autoplay 정책 때문입니다. 화면을 한 번 터치하면 이후 자동 재생됩니다.
-"터치하여 재생" 버튼이 표시되면 클릭하세요.
+| 문제 | 해결 |
+|------|------|
+| 핫키 안 먹힘 | WSLg 필요 (Windows 11). 없으면 브라우저 🎤 사용 |
+| localhost 접속 안 됨 | `wsl --shutdown` 후 WSL 재시작 |
+| 사운드 안 됨 | WSLg 설정 확인 또는 브라우저 TTS 사용 |
+| conda 못 찾음 | WSL2 내에서 Miniforge 설치: `wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh` |
 
-### tmux 버튼 눌렀는데 "세션 없음"
+---
 
-먼저 터미널에서 `tmux new -s 이름`으로 세션을 생성해야 합니다.
+## 지원 플랫폼
 
-### 음성 인식이 안 됨
-
-- 마이크 권한 확인 (브라우저 설정)
-- ffmpeg 설치 확인: `which ffmpeg`
-- faster-whisper 설치 확인: `python -c "import faster_whisper"`
-
-### 원격에서 WebSocket 연결 안 됨
-
-Cloudflare Tunnel을 사용하세요. 일반 HTTP 포워딩은 WebSocket을 지원하지 않을 수 있습니다.
+| 플랫폼 | 서버 | Voice Daemon | 브라우저 접속 |
+|--------|------|-------------|-------------|
+| macOS (Terminal/iTerm2/Warp) | ✅ | ✅ 핫키 + 이어폰 | ✅ |
+| Windows (WSL2) | ✅ | ✅ WSLg 필요 | ✅ |
+| Linux | ✅ | ✅ X11 필요 | ✅ |
+| iOS (Safari/Chrome) | — | — | ✅ 음성 전용 + Media Session |
+| Android (Chrome) | — | — | ✅ 음성 전용 + 핸즈프리 |
 
 ---
 
