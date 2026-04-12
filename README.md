@@ -11,20 +11,22 @@
 
 ## 설치
 
-Claude Code에서 아래 명령어를 붙여넣으세요. Claude가 OS를 감지하고 환경에 맞게 설치합니다.
+Claude Code에서 아래 명령어를 붙여넣으세요:
 
 ```
-랄프톤 설치해줘: git clone https://github.com/NeTrioGit/ralphton.git ~/ralphton && cd ~/ralphton && ./setup.sh
+랄프톤 설치해줘: git clone https://github.com/NeTrioGit/ralphton.git ~/ralphton && cd ~/ralphton
 ```
 
-Claude가 설치 과정에서 물어봅니다:
+Claude가 CLAUDE.md를 읽고 대화형으로 설치를 진행합니다:
+
 1. **OS 감지** — macOS / WSL2 / Linux 자동 판별
-2. **설치 구성 선택**
-   - 터미널만 (모바일 연동) — ~500 MB
-   - 터미널 + 음성 모드 — ~3 GB (Whisper STT + TTS 포함)
-3. **완료** — `ralph` CLI 등록, 설정 파일 생성
+2. **설치 구성 선택** — 필요한 기능만 골라서 설치
+   - **터미널만** (모바일 연동) — ~500 MB
+   - **터미널 + 음성 모드** — ~3 GB (Whisper STT + TTS 포함)
+3. **환경 설정** — conda, 패키지, CLI 등록, 설정 파일 생성
 
-> Claude Code 없이 수동 설치도 가능합니다. [수동 설치 가이드](#수동-설치) 참고.
+> Whisper 모델은 첫 실행 시 Hugging Face에서 자동 다운로드됩니다 (~141MB).
+> STT/TTS 모두 무료 오픈소스이며, API 키나 구독이 필요 없습니다.
 
 ---
 

@@ -56,29 +56,119 @@ ralph status   # 현재 상태 확인
 | `/ralph-mobile` | 모바일 테스트 (adb 포트포워딩, Chrome 열기, 스크린샷) |
 | `/ralph-voice` | Voice Daemon 설치/실행 (핫키 → STT → tmux 주입) |
 
-### 동료 개발자 퀵스타트
+### 신규 사용자 설치 (Claude 주도 인터랙티브)
+
+사용자가 이 레포를 클론하고 Claude Code를 열면, 아래 절차에 따라 **대화형으로 설치를 안내**하세요.
+setup.sh를 실행하지 말고, 아래 단계를 하나씩 질문하며 진행합니다.
+
+#### Step 1: OS 감지
 
 ```bash
-# 1. 레포 클론
-git clone <repo-url> && cd 랄프톤
-
-# 2. conda 환경 설정
-conda create -n whisper python=3.10
-conda activate whisper
-pip install fastapi uvicorn faster-whisper edge-tts sounddevice numpy pynput python-multipart websockets
-
-# 3. 서버 시작 (ralph CLI 권장)
-ralph start    # 서버 + 터널 + 음성 데몬 전체 시작
-ralph voice    # 음성 모드만 (노션 작업 중 사용)
-ralph mobile   # 모바일 접속 URL + QR
-
-# 또는 직접 실행
-cd server && python -m uvicorn main:app --host 0.0.0.0 --port 7777
-
-# 4. Windows (WSL2)
-# WSL2 Ubuntu에서 ./setup.sh 후 ralph 사용
-# Windows PowerShell: .\bin\ralph.ps1 voice
+uname -s  # Darwin=macOS, Linux=Linux/WSL2
+grep -qi microsoft /proc/version 2>/dev/null && echo "WSL2" || echo "Native"
 ```
+
+사용자에게 확인: "macOS / WSL2 / Linux 환경이 맞나요?"
+
+#### Step 2: 설치 구성 선택
+
+사용자에게 물어보세요:
+
+> 어떤 기능을 설치할까요?
+>
+> 1. **터미널만** — 모바일에서 터미널 접속 (~500MB)
+>    - FastAPI 서버 + xterm.js 웹 터미널 + Cloudflare Tunnel
+>    - 음성 기능 없음
+>
+> 2. **터미널 + 음성 모드** — 음성으로 코딩 (~3GB)
+>    - 위 기능 + Whisper STT + edge-tts TTS + Voice Daemon
+>    - macOS 핫키(Ctrl+Shift+V), 모바일 음성 입력
+
+#### Step 3: conda 환경 생성
+
+```bash
+conda create -n whisper python=3.10 -y
+```
+
+conda가 없으면:
+- macOS: `brew install --cask miniforge`
+- Linux/WSL2: `wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh && bash Miniforge3-Linux-x86_64.sh`
+
+#### Step 4: 패키지 설치 (선택에 따라)
+
+**터미널만 (옵션 1):**
+```bash
+conda run -n whisper pip install fastapi uvicorn python-multipart websockets
+```
+
+**터미널 + 음성 (옵션 2):**
+```bash
+conda run -n whisper pip install fastapi uvicorn faster-whisper edge-tts sounddevice numpy pynput python-multipart websockets
+```
+
+macOS 추가:
+```bash
+conda run -n whisper pip install pyobjc-framework-Cocoa
+```
+
+#### Step 5: ralph CLI 등록
+
+```bash
+mkdir -p ~/.local/bin
+ln -sf "$(pwd)/bin/ralph" ~/.local/bin/ralph
+chmod +x bin/ralph
+```
+
+PATH 확인:
+```bash
+echo "$PATH" | grep -q "$HOME/.local/bin" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+```
+
+#### Step 6: 설정 파일 생성
+
+```bash
+# RALPH_PYTHON 경로를 감지
+WHISPER_PY="$(conda info --base)/envs/whisper/bin/python"
+
+cat > ~/.ralph.env << EOF
+RALPH_PORT=7777
+RALPH_PYTHON=$WHISPER_PY
+# RALPH_TOKEN=my-secret-token  # 원격 접속 시 인증 (선택사항)
+EOF
+```
+
+#### Step 7: cloudflared 설치 (모바일 원격 접속용)
+
+```bash
+# macOS
+brew install cloudflared
+
+# Linux/WSL2
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/.local/bin/cloudflared && chmod +x ~/.local/bin/cloudflared
+```
+
+#### Step 8: Claude Code 스킬 등록 (선택)
+
+```bash
+mkdir -p ~/.claude/skills/ralph
+cp .claude/skills/ralph/SKILL.md ~/.claude/skills/ralph/SKILL.md 2>/dev/null || true
+```
+
+#### Step 9: 설치 확인
+
+```bash
+ralph status
+```
+
+사용자에게 안내:
+- `ralph mobile` — 모바일 접속 (QR코드)
+- `ralph voice` — 음성 모드 (옵션 2 선택 시)
+- `ralph stop` — 종료
+
+#### 플랫폼별 참고
+
+**macOS:** 음성 모드 시 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 필요
+**WSL2:** 음성 핫키는 WSLg 필요 (Windows 11). 없으면 브라우저 🎤 사용. PowerShell: `.\bin\ralph.ps1 voice`
 
 ---
 
