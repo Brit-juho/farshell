@@ -14,7 +14,7 @@
 Claude Code에서 아래 명령어를 붙여넣으세요. Claude가 OS를 감지하고 환경에 맞게 설치합니다.
 
 ```
-랄프톤 설치해줘: git clone https://github.com/NeTrioGit/-.git ~/ralphton && cd ~/ralphton && ./setup.sh
+랄프톤 설치해줘: git clone https://github.com/NeTrioGit/ralphton.git ~/ralphton && cd ~/ralphton && ./setup.sh
 ```
 
 Claude가 설치 과정에서 물어봅니다:
