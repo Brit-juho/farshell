@@ -2,27 +2,37 @@
 
 맥북(또는 WSL2)을 서버로 두고, 어디서든 음성으로 터미널을 조작하는 시스템.
 
-- **노션 작업 중에도** 핫키(Ctrl+Shift+V)로 음성 코딩 — 작업 방해 없음
-- 모바일 브라우저에서 실시간 터미널 접속 + 음성 전용 모드
-- iTerm2 tmux 세션을 웹/모바일에서 이어서 작업
-- Claude Code 작업 완료 시 TTS로 결과 요약 알림
+- **모바일에서 터미널 접속** — QR 스캔하면 바로 연결
+- **음성으로 코딩** — 노션 작업 중에도 핫키(Ctrl+Shift+V)로 음성 입력
+- **Claude Code 연동** — 작업 완료 시 TTS로 결과 요약 알림
+- **전부 무료** — API 키, 구독 없음. 오픈소스 STT/TTS
 
 ---
 
-## 빠른 시작
+## 설치
 
-### macOS
+Claude Code에서 아래 명령어를 붙여넣으세요. Claude가 OS를 감지하고 환경에 맞게 설치합니다.
+
+```
+랄프톤 설치해줘: git clone https://github.com/NeTrioGit/-.git ~/ralphton && cd ~/ralphton && ./setup.sh
+```
+
+Claude가 설치 과정에서 물어봅니다:
+1. **OS 감지** — macOS / WSL2 / Linux 자동 판별
+2. **설치 구성 선택**
+   - 터미널만 (모바일 연동) — ~500 MB
+   - 터미널 + 음성 모드 — ~3 GB (Whisper STT + TTS 포함)
+3. **완료** — `ralph` CLI 등록, 설정 파일 생성
+
+> Claude Code 없이 수동 설치도 가능합니다. [수동 설치 가이드](#수동-설치) 참고.
+
+---
+
+## 사용법
 
 ```bash
-# 1. 레포 클론
-git clone <repo-url> ~/ralphton && cd ~/ralphton
-
-# 2. 설치 (conda 환경 생성, 의존성 설치, CLI 등록)
-./setup.sh
-
-# 3. 사용
-ralph voice    # 음성 모드 — 백그라운드 실행, 다른 작업 계속
-ralph mobile   # 모바일 접속 — URL + QR코드
+ralph mobile   # 모바일 접속 — QR코드 + URL
+ralph voice    # 음성 모드 — 백그라운드 실행
 ralph start    # 전체 시작 (서버 + 터널 + 음성)
 ralph stop     # 종료
 ralph status   # 상태 확인
@@ -31,25 +41,16 @@ ralph status   # 상태 확인
 ### Windows (WSL2)
 
 ```powershell
-# 1. WSL2 설치 (PowerShell 관리자)
-wsl --install
-
-# 2. WSL2 Ubuntu 터미널에서
-git clone <repo-url> ~/ralphton
-cd ~/ralphton && ./setup.sh
-
-# 3. Windows PowerShell에서 사용
-.\bin\ralph.ps1 voice    # 음성 모드
-.\bin\ralph.ps1 mobile   # 모바일 접속 (브라우저 자동 열림)
-.\bin\ralph.ps1 stop     # 종료
+# PowerShell에서
+.\bin\ralph.ps1 voice
+.\bin\ralph.ps1 mobile
+.\bin\ralph.ps1 stop
 ```
 
-> **Windows 동작 방식:**
 > - 서버 + tmux는 WSL2 내부에서 실행
-> - 브라우저는 Windows에서 `localhost:7777`로 접속 (WSL2 포트 포워딩 자동)
-> - TTS는 Windows Speech API 사용 (추가 설치 불필요)
+> - 브라우저는 Windows에서 `localhost:7777`로 접속 (포트 포워딩 자동)
 > - 음성 핫키(Ctrl+Shift+V)는 WSLg 필요 (Windows 11)
-> - WSLg 없으면 브라우저 음성 입력(🎤 버튼) 사용
+> - WSLg 없으면 브라우저 🎤 버튼 사용
 
 ---
 
@@ -118,7 +119,7 @@ RALPH_PYTHON=/path/to/python       # Python 경로 (setup.sh가 자동 설정)
 RALPH_TOKEN=my-secret-token        # 원격 접속 시 인증 토큰 (선택사항)
 ```
 
-### 수동 환경 설정 (setup.sh 없이)
+### 수동 설치
 
 ```bash
 # macOS
