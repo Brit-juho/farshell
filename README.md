@@ -117,7 +117,7 @@ fi
 
 ```bash
 RALPH_PORT=7777                    # 포트 (기본 7777, 충돌 시 변경)
-RALPH_PYTHON=/path/to/python       # Python 경로 (setup.sh가 자동 설정)
+RALPH_PYTHON=/path/to/python       # Python 경로 (설치 시 자동 설정)
 RALPH_TOKEN=my-secret-token        # 원격 접속 시 인증 토큰 (선택사항)
 ```
 
@@ -207,7 +207,6 @@ cd server
 ├── bin/
 │   ├── ralph              # CLI 진입점 (bash, macOS/Linux)
 │   └── ralph.ps1          # CLI 진입점 (PowerShell, Windows)
-├── setup.sh               # 원클릭 설치 스크립트
 ├── server/
 │   ├── main.py            # FastAPI (WS + REST + Voice + 토큰 인증)
 │   ├── pty_manager.py     # PTY 세션 (broadcast, scrollback, EOF 감지)

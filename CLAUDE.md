@@ -1,29 +1,3 @@
-## gstack (REQUIRED — global install)
-
-**Before doing ANY work, verify gstack is installed:**
-
-```bash
-test -d ~/.claude/skills/gstack/bin && echo "GSTACK_OK" || echo "GSTACK_MISSING"
-```
-
-If GSTACK_MISSING: STOP. Do not proceed. Tell the user:
-
-> gstack is required for all AI-assisted work in this repo.
-> Install it:
-> ```bash
-> git clone --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack
-> cd ~/.claude/skills/gstack && ./setup --team
-> ```
-> Then restart your AI coding tool.
-
-Do not skip skills, ignore gstack errors, or work around missing gstack.
-
-Using gstack skills: After install, skills like /qa, /ship, /review, /investigate,
-and /browse are available. Use /browse for all web browsing.
-Use ~/.claude/skills/gstack/... for gstack file paths (the global path).
-
----
-
 ## ralph CLI (어디서든 실행)
 
 터미널 어디서든 `ralph` 명령으로 Voice Terminal을 제어합니다:
@@ -193,7 +167,7 @@ cd server
 | 환경 | URL |
 |------|-----|
 | 데스크톱 | `http://localhost:7777` |
-| 같은 네트워크 모바일 | `http://맥북-IP:8000` (IP는 `ipconfig getifaddr en0`) |
+| 같은 네트워크 모바일 | `http://맥북-IP:7777` (IP는 `ipconfig getifaddr en0`) |
 | adb 연결 모바일 | `adb reverse tcp:7777 tcp:7777` → `http://localhost:7777` |
 | 원격 (어디서든) | `cloudflared tunnel --url http://localhost:7777` → 생성된 HTTPS URL 사용 |
 
