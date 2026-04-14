@@ -31,10 +31,10 @@ adb devices 2>&1
 
 ```bash
 # 포트 포워딩
-adb reverse tcp:8000 tcp:8000
+adb reverse tcp:7777 tcp:7777
 
 # Chrome에서 열기
-adb shell am start -a android.intent.action.VIEW -d "http://localhost:8000" com.android.chrome
+adb shell am start -a android.intent.action.VIEW -d "http://localhost:7777" com.android.chrome
 ```
 
 #### B. 원격 (USB 불필요, Wi-Fi만 있으면 됨)
@@ -50,7 +50,7 @@ adb shell am start -a android.intent.action.VIEW -d "$TUNNEL_URL" com.android.ch
 
 원격 모드에서는 포트 포워딩이 필요 없습니다:
 ```bash
-adb reverse --remove tcp:8000 2>/dev/null
+adb reverse --remove tcp:7777 2>/dev/null
 ```
 
 ### 3. 스크린샷 캡처

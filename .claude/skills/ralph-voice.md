@@ -15,23 +15,35 @@ allowed-tools:
 macOS에서 글로벌 핫키로 음성 → STT → tmux 주입하는 데몬을 설정하고 실행합니다.
 **서버 없이 독립 동작** — tmux만 있으면 됩니다.
 
-### 1. 의존성 확인
+### 1. Python 경로 확인
+
+사용자의 `~/.ralph.env`에서 `RALPH_PYTHON` 값을 읽으세요 (install.sh가 설정):
 
 ```bash
-/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python -c "
-import pynput, sounddevice, numpy
-print('DEPS_OK')
-" 2>/dev/null || echo "DEPS_MISSING"
+source ~/.ralph.env 2>/dev/null
+PY="${RALPH_PYTHON:-$(which python3)}"
+echo "Python: $PY"
 ```
 
-없으면 설치:
+### 1-1. 의존성 확인
+
 ```bash
-/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/pip install pynput sounddevice numpy
+"$PY" -c "import pynput, sounddevice, numpy; print('DEPS_OK')" 2>/dev/null || echo "DEPS_MISSING"
+```
+
+없으면 설치 (install.sh 권장):
+```bash
+cd "$CLAUDE_PROJECT_DIR" && ./install.sh voice
+```
+
+또는 수동:
+```bash
+"$PY" -m pip install pynput sounddevice numpy faster-whisper
 ```
 
 STT 엔진 확인:
 ```bash
-/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python -c "
+"$PY" -c "
 try:
     import mlx_whisper; print('STT: mlx-whisper')
 except:
