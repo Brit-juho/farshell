@@ -65,4 +65,23 @@ try:
     subprocess.Popen(["afplay", TMP_AUDIO])
 except Exception:
     subprocess.Popen(["say", "-v", "Yuna", text])
+
+# 모바일 푸시 (ntfy) — RALPH_NOTIFY_URL 설정돼 있을 때만
+notify_url = os.environ.get("RALPH_NOTIFY_URL", "").strip()
+if notify_url:
+    try:
+        push_req = urllib.request.Request(
+            notify_url,
+            data=text.encode("utf-8"),
+            headers={
+                "Title": "Claude 완료".encode("utf-8"),
+                "Priority": "default",
+                "Tags": "robot",
+                "Content-Type": "text/plain; charset=utf-8",
+            },
+            method="POST",
+        )
+        urllib.request.urlopen(push_req, timeout=3)
+    except Exception:
+        pass
 PYEOF

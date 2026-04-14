@@ -14,11 +14,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from pty_manager import PTYManager
-from session_store import SessionStore
+from session_store import SessionStore, new_session_id
 from output_watcher import OutputWatcher
 import voice_handler
 import local_mic
 import platform_utils
+import notify
+import crypto_channel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -127,7 +129,7 @@ async def create_session(request: Request):
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
     name = body.get("name", "")
-    session_id = str(uuid.uuid4())[:8]
+    session_id = new_session_id()
     pty_mgr.create_session(session_id, cols=cols, rows=rows)
     session_store.add(session_id, name=name)
     output_watcher.add_session(session_id)
@@ -196,18 +198,35 @@ async def list_tmux_sessions():
 
 @app.post("/api/tmux/create")
 async def create_tmux_session(request: Request):
-    """tmux 세션을 새로 생성하고 웹에서 attach."""
+    """tmux 세션을 새로 생성하고 웹에서 attach.
+
+    body.auto_open_on_mac=True이면 macOS에서 iTerm 새 창을 열어
+    같은 tmux 세션에 자동 attach (모바일↔맥북 동시 작업용).
+    """
+    import re
     import subprocess
     body = await request.json()
     tmux_name = body.get("name", f"web-{str(uuid.uuid4())[:4]}")
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
+    auto_open = bool(body.get("auto_open_on_mac", False))
 
     # tmux 세션 생성
     subprocess.run(
         ["tmux", "new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows)],
         timeout=5,
     )
+
+    # 맥북 터미널 자동 오픈 — AppleScript 인젝션 방지를 위해 세션명 화이트리스트 검증
+    # 지원 터미널 우선순위: iTerm2 → Ghostty → WezTerm → Kitty → Alacritty → Terminal.app
+    if auto_open and platform_utils.IS_MACOS and re.fullmatch(r"[A-Za-z0-9_\-]+", tmux_name):
+        attach_cmd = f"tmux attach -t {tmux_name}"
+        try:
+            ok = platform_utils.spawn_mac_terminal(attach_cmd)
+            if not ok:
+                logger.info("맥 터미널 자동 오픈 — 지원 앱 없음")
+        except Exception as e:
+            logger.warning(f"맥 터미널 자동 오픈 실패: {e}")
 
     # 자동 attach
     return await _attach_tmux(tmux_name, cols, rows)
@@ -249,7 +268,7 @@ async def kill_tmux_session(tmux_name: str):
 
 async def _attach_tmux(tmux_name: str, cols: int, rows: int) -> dict:
     """내부 헬퍼: tmux 세션에 PTY로 attach."""
-    session_id = str(uuid.uuid4())[:8]
+    session_id = new_session_id()
     pty_mgr.create_session(
         session_id,
         cmd=platform_utils.find_tmux(),
@@ -317,18 +336,54 @@ async def ws_terminal(ws: WebSocket, session_id: str):
 
     loop = asyncio.get_running_loop()
 
+    # [E2E] E2E 모드 협상 — 쿼리 파라미터 ?e2e=1 또는 환경변수로 opt-in
+    # 요청 시 서버가 ephemeral X25519 공개키를 텍스트 JSON으로 전송,
+    # 클라이언트가 자기 공개키로 응답하면 이후 바이트 메시지 전부 암호화.
+    e2e_requested = (
+        ws.query_params.get("e2e", "") in ("1", "true", "yes")
+        or crypto_channel.is_enabled()
+    )
+    channel: "crypto_channel.Channel | None" = None
+    if e2e_requested and crypto_channel.is_available():
+        server_kp = crypto_channel.new_server_keypair()
+        if server_kp is None:
+            await ws.close(code=4500, reason="E2E unavailable")
+            return
+        await ws.send_text(json.dumps({
+            "type": "e2e-hello",
+            "pub": server_kp.public_b64,
+        }))
+        # 클라이언트 공개키 수신 대기 (첫 텍스트 메시지)
+        try:
+            first = await asyncio.wait_for(ws.receive_text(), timeout=10.0)
+            handshake = json.loads(first)
+            if handshake.get("type") == "e2e-ack" and handshake.get("pub"):
+                channel = crypto_channel.Channel.derive(
+                    server_kp.private, handshake["pub"]
+                )
+                logger.info(f"[E2E] 핸드셰이크 성공 sid={session_id}")
+            else:
+                await ws.close(code=4400, reason="E2E handshake invalid")
+                return
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"[E2E] 핸드셰이크 실패: {e}")
+            await ws.close(code=4400, reason="E2E handshake failed")
+            return
+
     # [C1] broadcast 패턴 — subscribe/unsubscribe
     def on_data(data: bytes):
         output_watcher.feed_output(session_id, data)
+        out = channel.encrypt_simple(data) if channel else data
         asyncio.run_coroutine_threadsafe(
-            _safe_send(ws, data), loop
+            _safe_send(ws, out), loop
         )
 
     pty_mgr.subscribe(session_id, on_data)
 
-    # 재접속 시 scrollback 전송
+    # 재접속 시 scrollback 전송 (E2E면 암호화)
     for chunk in pty_mgr.get_scrollback(session_id):
-        await _safe_send(ws, chunk)
+        out = channel.encrypt_simple(chunk) if channel else chunk
+        await _safe_send(ws, out)
 
     try:
         while True:
@@ -339,7 +394,14 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                     if data.get("type") == "resize":
                         pty_mgr.resize(session_id, data["cols"], data["rows"])
                 elif "bytes" in msg:
-                    pty_mgr.write(session_id, msg["bytes"])
+                    payload = msg["bytes"]
+                    if channel:
+                        try:
+                            payload = channel.decrypt(payload)
+                        except Exception as e:
+                            logger.warning(f"[E2E] 복호화 실패: {e}")
+                            continue
+                    pty_mgr.write(session_id, payload)
             elif msg["type"] == "websocket.disconnect":
                 break
     except WebSocketDisconnect:
@@ -414,9 +476,43 @@ async def _on_task_complete(session_id: str, summary: str, audio: bytes):
 # Voice endpoints — [H2] session_id를 요청에서 직접 받기
 # ---------------------------------------------------------------------------
 
+def _cancel_tts_playback() -> int:
+    """재생 중인 TTS 프로세스 종료 (barge-in).
+
+    macOS: afplay + say 프로세스 종료
+    Linux: aplay / paplay 종료
+    Returns: 종료된 프로세스 수 (디버깅용).
+    """
+    import subprocess
+    killed = 0
+    targets = ["afplay", "say"] if platform_utils.IS_MACOS else ["aplay", "paplay", "ffplay"]
+    for tgt in targets:
+        try:
+            r = subprocess.run(["pkill", "-x", tgt], capture_output=True, timeout=2)
+            if r.returncode == 0:
+                killed += 1
+        except Exception:
+            pass
+    return killed
+
+
+@app.post("/voice/cancel")
+async def voice_cancel():
+    """재생 중인 TTS 중단 (barge-in). 프론트에서 녹음 시작 시 호출."""
+    n = _cancel_tts_playback()
+    return {"cancelled": n}
+
+
 @app.post("/voice/input")
 async def voice_input(request: Request):
-    """음성 → STT → 지정된 세션 PTY 입력."""
+    """음성 → STT → 지정된 세션 PTY 입력.
+
+    [D8 barge-in] 음성 입력이 시작되면 재생 중인 TTS를 먼저 중단.
+    사용자가 Claude 응답을 듣다가 말하기 시작하면 자연스럽게 말이 끊김.
+    """
+    # barge-in: 재생 중인 afplay/say 프로세스 종료
+    _cancel_tts_playback()
+
     content_type = request.headers.get("content-type", "")
     audio_bytes = await request.body()
 
@@ -430,7 +526,9 @@ async def voice_input(request: Request):
         fmt = "webm"
 
     try:
-        text = await voice_handler.transcribe(audio_bytes, input_format=fmt)
+        # 언어는 body?lang / 쿼리?lang / 자동감지 순
+        lang = request.query_params.get("lang", "") or None
+        text = await voice_handler.transcribe(audio_bytes, input_format=fmt, language=lang)
     except Exception as e:
         logger.error(f"STT failed: {e}")
         return {"text": "", "error": str(e), "injected": False}
@@ -477,6 +575,38 @@ async def toggle_watch(session_id: str, request: Request):
     output_watcher.set_enabled(session_id, enabled)
     output_watcher.set_idle_timeout(session_id, timeout)
     return {"session_id": session_id, "enabled": enabled, "timeout": timeout}
+
+
+# ---------------------------------------------------------------------------
+# Push notifications (ntfy / Telegram)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/notify/status")
+async def notify_status():
+    """현재 알림 채널 설정 상태."""
+    return {
+        "configured": notify.is_configured(),
+        "ntfy": bool(os.environ.get("RALPH_NOTIFY_URL", "").strip()),
+        "telegram": bool(
+            os.environ.get("RALPH_TELEGRAM_TOKEN", "").strip()
+            and os.environ.get("RALPH_TELEGRAM_CHAT_ID", "").strip()
+        ),
+    }
+
+
+@app.post("/api/notify/test")
+async def notify_test(request: Request):
+    """테스트 푸시 전송. body: {title?, message?, priority?}"""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    title = body.get("title", "랄프톤 테스트")
+    message = body.get("message", "푸시 알림이 정상 작동합니다 🎉")
+    priority = body.get("priority", "default")
+    ok = await notify.send(title, message, priority=priority, tags="mega")
+    return {"ok": ok, "configured": notify.is_configured()}
 
 
 # ---------------------------------------------------------------------------

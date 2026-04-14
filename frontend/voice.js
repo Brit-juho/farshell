@@ -27,6 +27,16 @@ async function toggleRecording() {
 
 async function startRecording() {
   try {
+    // [D8 barge-in] 재생 중인 TTS 중단 — 사용자가 말하기 시작하면 즉시 정지
+    try {
+      fetch(`${API_BASE}/voice/cancel`, { method: 'POST' }).catch(() => {});
+      // 브라우저에서 TTS로 재생 중인 Audio 요소도 중단
+      if (window._currentTTSAudio) {
+        try { window._currentTTSAudio.pause(); } catch {}
+        window._currentTTSAudio = null;
+      }
+    } catch {}
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
     audioChunks = [];
@@ -106,10 +116,23 @@ let _pendingAudioUrl = null;
 
 function playAudioBlob(blob) {
   console.log('[TTS] playAudioBlob called,', blob.size, 'bytes');
+  // [D8 barge-in] 기존 재생 중이던 오디오가 있으면 먼저 중단
+  if (window._currentTTSAudio) {
+    try { window._currentTTSAudio.pause(); } catch {}
+  }
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
-  audio.onended = () => { console.log('[TTS] 재생 완료'); URL.revokeObjectURL(url); };
-  audio.onerror = (e) => { console.error('[TTS] 재생 에러:', e); URL.revokeObjectURL(url); };
+  window._currentTTSAudio = audio;
+  audio.onended = () => {
+    console.log('[TTS] 재생 완료');
+    URL.revokeObjectURL(url);
+    if (window._currentTTSAudio === audio) window._currentTTSAudio = null;
+  };
+  audio.onerror = (e) => {
+    console.error('[TTS] 재생 에러:', e);
+    URL.revokeObjectURL(url);
+    if (window._currentTTSAudio === audio) window._currentTTSAudio = null;
+  };
 
   const playPromise = audio.play();
   if (playPromise) {

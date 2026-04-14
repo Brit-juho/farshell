@@ -36,7 +36,8 @@ ralph status
 #### 음성 모드 ("음성 모드", "voice mode", "음성으로 코딩")
 
 노션/브라우저 작업을 계속하면서 음성으로 코딩하는 모드.
-서버 + tmux + Voice Daemon을 백그라운드로 시작합니다.
+서버 + tmux + Voice Daemon을 백그라운드로 시작하고,
+**새 iTerm 창에 `tmux dev` + `claude --resume`이 자동으로 열립니다**(macOS).
 
 ```bash
 ralph voice
@@ -46,10 +47,13 @@ ralph voice
 - Ctrl+Shift+V로 녹음 시작/종료
 - 말한 내용이 자동으로 tmux 터미널에 입력됨
 - 다른 작업을 계속해도 됨 (백그라운드 동작)
+- **새로 열린 iTerm 창에서 resume 목록의 현재 대화 선택** → 이후 음성/모바일이 그 Claude로 연결됨
+- 이미 tmux 안이면 새 창을 열지 않음 (`$TMUX` 체크)
 
 #### 모바일 모드 ("모바일", "mobile", "폰에서 접속")
 
 모바일 브라우저에서 터미널에 접속할 수 있는 URL을 제공합니다.
+음성 모드와 마찬가지로 **새 iTerm 창에 `tmux dev` + `claude --resume`이 자동으로 열립니다**.
 
 ```bash
 ralph mobile
@@ -58,13 +62,43 @@ ralph mobile
 - Cloudflare Tunnel URL이 생성됨
 - adb 연결 시 자동으로 Chrome에서 열림
 - QR 코드도 표시 (qrencode 설치 시)
+- 폰이 attach하는 `dev` 세션 = 새 iTerm 창의 Claude가 동작하는 세션 (단일 진실의 원천)
 
 #### 전체 시작 ("ralph 시작", "전부 시작")
 
-서버 + 터널 + 음성 데몬 전체를 시작합니다.
+서버 + 터널 + 음성 데몬 전체를 시작하고, 새 터미널 창(iTerm/Ghostty/WezTerm/Kitty/Alacritty/Warp/Terminal.app 중 감지된 앱)에 tmux + Claude를 자동 오픈.
 
 ```bash
 ralph start
+```
+
+#### Claude 시작 ("클로드 시작", "claude 실행")
+
+tmux dev 세션 안에서 `claude --resume`을 즉시 실행.
+
+```bash
+ralph claude
+```
+
+#### 기기 간 핸드오프 ("폰으로 넘겨", "맥으로 가져와")
+
+```bash
+ralph handoff mobile    # 현재 tmux 세션을 폰으로 (QR + URL hash)
+ralph handoff desktop   # 폰 세션을 맥 터미널로
+```
+
+#### 진단 ("진단", "ralph 점검", "설치 확인")
+
+13개 항목 체크 (Python · venv · 패키지 · tmux · cloudflared · ffmpeg · 포트 · PATH · 토큰 · 알림 · 터미널 앱).
+
+```bash
+ralph doctor
+```
+
+#### 모바일 접속 (E2E)
+
+```bash
+ralph mobile --e2e      # cloudflared 터널 너머 페이로드 암호화
 ```
 
 #### 상태 확인
@@ -94,6 +128,8 @@ ralph stop
 | Voice Daemon 핫키 안 먹힘 | macOS 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 |
 | 서버 시작 실패 | `cat /tmp/ralphton-server.log` 확인 |
 | 터널 URL 안 뜸 | `cat /tmp/cloudflared.log` 확인. cloudflared 설치: `brew install cloudflared` |
+| 새 iTerm 창이 안 열림 | iTerm2 미설치이거나 osascript 권한 없음. 출력된 수동 명령(`tmux new -A -s dev 'claude --resume'`)을 다른 터미널에서 실행 |
+| `claude --resume`에서 대화 못 찾음 | resume 목록은 시간순. 가장 최근 항목을 고르거나, ID로 직접: `claude --resume <conversation-id>` |
 
 ### 사용자 시나리오: 노션 작업 중 음성 코딩
 

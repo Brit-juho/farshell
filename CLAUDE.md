@@ -3,18 +3,28 @@
 터미널 어디서든 `ralph` 명령으로 Voice Terminal을 제어합니다:
 
 ```bash
-ralph voice    # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
-ralph mobile   # 모바일 접속 URL + QR코드 + 자동 Chrome 열기
-ralph start    # 전체 시작 (서버+터널+음성)
-ralph stop     # 모든 프로세스 종료
-ralph status   # 현재 상태 확인
+ralph voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
+ralph mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
+ralph start              # 전체 시작 (서버+터널+음성)
+ralph stop               # 모든 프로세스 종료
+ralph status             # 현재 상태 확인
+ralph claude             # 새 터미널 창에 tmux dev + claude --resume
+ralph handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
+ralph handoff desktop    # 폰 세션을 맥 터미널로 가져옴
+ralph doctor             # 설치/환경 진단 (13개 항목)
 ```
 
+**`voice` / `mobile` / `start` 실행 시 자동 동작:** 현재 쓰는 터미널 앱(iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app)에 새 창이 열리고 그 안에서 `tmux new -A -s dev 'claude --resume'`이 실행됩니다. 이미 tmux 안이면 새 창을 열지 않습니다.
+
 **노션 작업 중 음성 코딩 워크플로:**
-1. `ralph voice` → 백그라운드 시작
-2. 노션으로 돌아가서 작업
-3. Ctrl+Shift+V → 말하기 ("git status") → tmux에 자동 입력
-4. `ralph stop` → 종료
+1. `ralph voice` → 백그라운드 시작 (+ 새 iTerm 창에 `tmux dev` + `claude --resume` 자동 오픈)
+2. 새 창의 resume 목록에서 현재 대화 선택 → 이후 음성/모바일이 그 Claude로 연결됨
+3. 원래 창은 그대로 두고 노션으로 돌아가서 작업
+4. Ctrl+Shift+V → 말하기 ("git status") → tmux dev에 자동 입력
+5. `ralph stop` → 종료
+
+> 이미 tmux 안에서 `ralph` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
+> 자동 오픈은 macOS + iTerm 환경 한정. 그 외에는 수동 명령(`tmux new -A -s dev 'claude --resume'`) 안내가 출력됩니다.
 
 ### Claude 전역 스킬
 
@@ -30,10 +40,23 @@ ralph status   # 현재 상태 확인
 | `/ralph-mobile` | 모바일 테스트 (adb 포트포워딩, Chrome 열기, 스크린샷) |
 | `/ralph-voice` | Voice Daemon 설치/실행 (핫키 → STT → tmux 주입) |
 
-### 신규 사용자 설치 (Claude 주도 인터랙티브)
+### 신규 사용자 설치
 
-사용자가 이 레포를 클론하고 Claude Code를 열면, 아래 절차에 따라 **대화형으로 설치를 안내**하세요.
-setup.sh를 실행하지 말고, 아래 단계를 하나씩 질문하며 진행합니다.
+**기본 경로는 `./install.sh`** (원라인 설치, 2026-04-14 추가). 아래는 대화형 안내가 필요한 경우에만 사용.
+
+```bash
+# 원라인 설치 (추천)
+./install.sh            # 터미널만 (~50MB)
+./install.sh voice      # 터미널 + 음성 모드 (~1.5GB)
+```
+
+`install.sh`가 자동으로: Python venv 생성 → 프로필별 패키지 설치 → ralph CLI 심링크 → `~/.ralph.env` 생성 → PATH 갱신.
+
+---
+
+### 레거시: 대화형 설치 (수동)
+
+install.sh가 작동하지 않거나 conda 환경을 선호하는 경우에만 아래 절차를 따르세요.
 
 #### Step 1: OS 감지
 

@@ -4,8 +4,18 @@ PTYManager가 프로세스/fd를 관리하고, 이 모듈은 세션의 이름, �
 메타데이터를 관리한다. 서버 재시작 시 PTY 프로세스는 소멸되므로 메모리 저장.
 """
 
+import secrets
 import time
 from dataclasses import dataclass, field
+
+
+def new_session_id() -> str:
+    """추측 불가능한 세션 ID 생성.
+
+    secrets.token_urlsafe(12) → 16자 URL-safe 문자열 (~96비트 엔트로피).
+    기존 uuid4()[:8] (~32비트)보다 훨씬 안전. URL hash/WebSocket path에 그대로 사용.
+    """
+    return secrets.token_urlsafe(12)
 
 
 @dataclass

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 import voice_handler
+import notify
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +185,19 @@ class OutputWatcher:
                 await cb(session_id, summary, audio)
             except Exception as e:
                 logger.warning(f"Notification callback error: {e}")
+
+        # 모바일 푸시 알림 (ntfy/Telegram) — 설정돼 있으면 병렬로 전송
+        if notify.is_configured():
+            try:
+                push_msg = summary[:300] if summary else "세션이 idle 상태입니다"
+                await notify.send(
+                    f"랄프톤: {session_id[:8]}",
+                    push_msg,
+                    priority="default",
+                    tags="white_check_mark",
+                )
+            except Exception as e:
+                logger.warning(f"Push 알림 실패: {e}")
 
     def set_enabled(self, session_id: str, enabled: bool) -> None:
         watcher = self._watchers.get(session_id)
