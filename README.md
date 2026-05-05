@@ -43,6 +43,36 @@ cd ~/voice-terminal
 
 ---
 
+## 설치 후 통합 (선택)
+
+새 터미널 창을 열면 자동으로 `tmux -L vt new -A -s dev` 진입하도록 통합. 둘 중 하나를 선택.
+
+### 방식 A — 터미널 profile 자동 등록 (권장)
+
+```bash
+vt install-profiles --dry-run   # 변경 미리보기
+vt install-profiles             # 실제 적용
+```
+
+iTerm2는 Dynamic Profile 자동 등록. Ghostty / WezTerm / Kitty / Alacritty / Windows Terminal / Terminal.app은 config snippet 안내 출력 (사용자가 복사·붙여넣기). p10k instant prompt와 충돌 없음.
+
+### 방식 B — 셸 init (SSH 원격, profile 불가 환경)
+
+```bash
+echo 'eval "$(vt shell-init zsh)"' >> ~/.zshrc      # zsh
+echo 'eval "$(vt shell-init bash)"' >> ~/.bashrc    # bash
+vt shell-init fish >> ~/.config/fish/config.fish    # fish
+vt shell-init pwsh >> $PROFILE                       # PowerShell
+```
+
+생성되는 스니펫은 5중 TTY 가드 포함 (`interactive` + TTY + `$TMUX` 비어있음 + IDE 임베디드 셸 차단 + tmux 존재). p10k instant prompt 활성 zsh에서도 콘솔 출력 0건.
+
+### 단일 tmux 서버 원칙
+
+`vt` CLI · server · Voice Daemon · hook이 모두 `-L vt` 격리 소켓을 사용 → 모든 클라이언트(데스크톱·모바일·Voice Daemon)가 같은 세션 공유. 사용자의 기존 `tmux ls` 세션과는 자동 분리.
+
+---
+
 ## vt CLI
 
 어디서든 `vt` 명령으로 Voice Terminal을 제어합니다.
@@ -63,6 +93,8 @@ cd ~/voice-terminal
 | `vt popup <action>` | tmux 3.2+ popup으로 빠른 호출 |
 | `vt run "..."` | headless `claude -p` 백그라운드 + TTS 알림 |
 | `vt doctor` | 설치·환경 진단 (13개 항목 자동 점검) |
+| `vt install-profiles [--dry-run]` | 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile 등) |
+| `vt shell-init [zsh\|bash\|fish\|pwsh]` | 셸별 안전 통합 스니펫 출력 (TTY 5중 가드) |
 
 ### 옵션
 

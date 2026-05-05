@@ -101,6 +101,10 @@ SAMPLE_RATE = 16000
 HOTKEY = {keyboard.Key.ctrl_l, keyboard.Key.shift, keyboard.KeyCode.from_char("v")}
 TTS_CONFIRM = True  # STT 결과를 macOS say로 읽어줄지
 
+# Phase 6 R5: 단일 tmux 서버 원칙 — vt CLI / server / daemon이 모두 같은 소켓 공유
+TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "vt")
+TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]
+
 # ---------------------------------------------------------------------------
 # STT 엔진 (faster-whisper)
 # ---------------------------------------------------------------------------
@@ -159,7 +163,7 @@ def get_active_tmux_pane() -> str | None:
     """현재 활성 tmux pane ID를 반환. tmux 밖이면 None."""
     try:
         result = subprocess.run(
-            ["tmux", "display-message", "-p", "#{pane_id}"],
+            TMUX_BASE + ["display-message", "-p", "#{pane_id}"],
             capture_output=True, text=True, timeout=2,
         )
         pane_id = result.stdout.strip()
@@ -172,7 +176,7 @@ def get_any_tmux_pane() -> str | None:
     """아무 tmux 세션의 첫 번째 pane을 반환."""
     try:
         result = subprocess.run(
-            ["tmux", "list-panes", "-a", "-F", "#{pane_id}"],
+            TMUX_BASE + ["list-panes", "-a", "-F", "#{pane_id}"],
             capture_output=True, text=True, timeout=2,
         )
         panes = result.stdout.strip().split("\n")
@@ -185,7 +189,7 @@ def send_to_tmux(pane_id: str, text: str) -> bool:
     """tmux pane에 텍스트 전송."""
     try:
         subprocess.run(
-            ["tmux", "send-keys", "-t", pane_id, "--", text, "Enter"],
+            TMUX_BASE + ["send-keys", "-t", pane_id, "--", text, "Enter"],
             timeout=2, check=True,
         )
         return True

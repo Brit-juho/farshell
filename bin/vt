@@ -117,13 +117,49 @@ _start_voice_daemon() {
   fi
 }
 
-_ensure_tmux() {
-  if ! "${TMUX_BASE[@]}" list-sessions 2>/dev/null | grep -q .; then
-    # -x/-y로 윈도우 크기를 명시 → detached 상태에서 tcgetattr 실패 방지
-    "${TMUX_BASE[@]}" new-session -d -s dev -x 200 -y 50
-    echo "✓ tmux 세션 'dev' 생성 (소켓: $VT_TMUX_SOCKET)"
+# Phase 6 #6-4: detached → optional populate → attach 3단계 분리
+# 비-TTY 컨텍스트(CI·백그라운드)에서도 tcgetattr 경고 없이 동작.
+
+# 1단계: detached 세션 보장 (TTY 불필요).
+# 이미 있으면 0, 없으면 생성. -x/-y는 detached에서 tcgetattr 실패 회피.
+_ensure_tmux_session() {
+  local name="${1:-dev}"
+  if "${TMUX_BASE[@]}" has-session -t "$name" 2>/dev/null; then
+    return 0
+  fi
+  "${TMUX_BASE[@]}" new-session -d -s "$name" -x 200 -y 50 2>/dev/null
+}
+
+# 2단계: 옵션 명령 주입 (TTY 불필요).
+_tmux_populate() {
+  local name="$1"; local cmd="${2:-}"
+  [ -z "$cmd" ] && return 0
+  "${TMUX_BASE[@]}" send-keys -t "$name" "$cmd" C-m 2>/dev/null
+}
+
+# 3단계: attach (호출자가 TTY 컨텍스트 보장).
+# tmux 안이면 switch-client, 밖이면 exec attach.
+_tmux_attach_or_switch() {
+  local name="${1:-dev}"
+  if [ -n "${TMUX:-}" ]; then
+    "${TMUX_BASE[@]}" switch-client -t "$name"
   else
+    exec "${TMUX_BASE[@]}" attach-session -t "$name"
+  fi
+}
+
+# 기존 _ensure_tmux는 wrapper로 유지 (회귀 호환).
+_ensure_tmux() {
+  local name="${1:-dev}"
+  if "${TMUX_BASE[@]}" has-session -t "$name" 2>/dev/null; then
     echo "✓ tmux 세션 존재 (소켓: $VT_TMUX_SOCKET): $("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' | tr '\n' ' ')"
+    return 0
+  fi
+  if _ensure_tmux_session "$name"; then
+    echo "✓ tmux 세션 '$name' 생성 (소켓: $VT_TMUX_SOCKET)"
+  else
+    echo "✗ tmux 세션 '$name' 생성 실패"
+    return 1
   fi
 }
 
@@ -802,6 +838,252 @@ cmd_handoff() {
   echo ""
 }
 
+cmd_install_profiles() {
+  # Phase 6 #6-2: 터미널 앱 profile 자동 등록
+  # --dry-run: 변경 없이 미리보기만
+  local dry_run=0
+  for arg in "$@"; do
+    [ "$arg" = "--dry-run" ] && dry_run=1
+  done
+
+  echo ""
+  echo "  📦 vt install-profiles — 터미널 앱 profile 자동 등록"
+  if [ $dry_run -eq 1 ]; then
+    echo "  (dry-run: 실제 변경 없음)"
+  fi
+  echo ""
+
+  local installed=0 skipped=0 hinted=0
+
+  # iTerm2 Dynamic Profile (자동 등록)
+  if [ -d "/Applications/iTerm.app" ]; then
+    if _install_iterm_profile "$dry_run"; then
+      installed=$((installed+1))
+    else
+      skipped=$((skipped+1))
+    fi
+  fi
+
+  # Ghostty (config 주석 추가 — 사용자가 # 제거하여 활성화)
+  if [ -d "/Applications/Ghostty.app" ] || command -v ghostty >/dev/null 2>&1; then
+    if _install_ghostty_profile "$dry_run"; then
+      installed=$((installed+1))
+    else
+      skipped=$((skipped+1))
+    fi
+  fi
+
+  # WezTerm / Kitty / Alacritty / Windows Terminal — snippet 안내 (자동 편집은 위험)
+  if command -v wezterm >/dev/null 2>&1 || [ -d "/Applications/WezTerm.app" ]; then
+    _print_wezterm_snippet
+    hinted=$((hinted+1))
+  fi
+  if command -v kitty >/dev/null 2>&1 || [ -d "/Applications/kitty.app" ]; then
+    _print_kitty_snippet
+    hinted=$((hinted+1))
+  fi
+  if command -v alacritty >/dev/null 2>&1 || [ -d "/Applications/Alacritty.app" ]; then
+    _print_alacritty_snippet
+    hinted=$((hinted+1))
+  fi
+  # Windows Terminal (WSL2)
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    _print_windows_terminal_snippet
+    hinted=$((hinted+1))
+  fi
+
+  # macOS Terminal.app — 가이드만
+  if [ "$(uname)" = "Darwin" ]; then
+    _print_terminal_app_snippet
+    hinted=$((hinted+1))
+  fi
+
+  echo ""
+  echo "  결과: ✓ ${installed}개 자동 등록, ⓘ ${skipped}개 건너뜀, 📋 ${hinted}개 snippet 안내"
+  echo ""
+  if [ $dry_run -eq 1 ]; then
+    echo "  실제 적용: vt install-profiles (옵션 없이 재실행)"
+    echo ""
+  fi
+}
+
+_install_iterm_profile() {
+  local dry_run="$1"
+  local DIR="$HOME/Library/Application Support/iTerm2/DynamicProfiles"
+  local FILE="$DIR/vt.json"
+  local cmd="tmux -L $VT_TMUX_SOCKET new -A -s dev"
+
+  if [ "$dry_run" = "1" ]; then
+    echo "  [dry-run] iTerm2 → $FILE 생성/갱신"
+    return 0
+  fi
+
+  mkdir -p "$DIR"
+  cat > "$FILE" <<EOF
+{
+  "Profiles": [{
+    "Name": "vt (Voice Terminal)",
+    "Guid": "vt-voice-terminal",
+    "Custom Command": "Custom Shell",
+    "Command": "/bin/zsh -c '$cmd'",
+    "Working Directory Type": "Recycle"
+  }]
+}
+EOF
+  echo "  ✓ iTerm2 Dynamic Profile → $FILE"
+  echo "    iTerm2 재시작 후 Profiles 메뉴에서 'vt (Voice Terminal)' 선택"
+  return 0
+}
+
+_install_ghostty_profile() {
+  local dry_run="$1"
+  local CFG="$HOME/.config/ghostty/config"
+  local snippet="# vt (Voice Terminal) — auto-attach (활성화 원하면 아래 # 제거)
+# command = tmux -L $VT_TMUX_SOCKET new -A -s dev"
+
+  if grep -q "vt (Voice Terminal)" "$CFG" 2>/dev/null; then
+    echo "  ⓘ Ghostty 이미 등록됨: $CFG"
+    return 1
+  fi
+
+  if [ "$dry_run" = "1" ]; then
+    echo "  [dry-run] Ghostty → $CFG 에 다음 추가:"
+    echo "$snippet" | sed 's/^/      /'
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$CFG")"
+  printf '\n%s\n' "$snippet" >> "$CFG"
+  echo "  ✓ Ghostty config 주석 추가 → $CFG"
+  echo "    활성화: $CFG 열어 'command =' 라인의 # 제거"
+  return 0
+}
+
+_print_wezterm_snippet() {
+  cat <<EOF
+
+  📋 WezTerm — ~/.config/wezterm/wezterm.lua 에 추가:
+
+      config.default_prog = { 'tmux', '-L', '$VT_TMUX_SOCKET', 'new', '-A', '-s', 'dev' }
+
+EOF
+}
+
+_print_kitty_snippet() {
+  cat <<EOF
+
+  📋 Kitty — ~/.config/kitty/kitty.conf 에 추가:
+
+      shell tmux -L $VT_TMUX_SOCKET new -A -s dev
+
+EOF
+}
+
+_print_alacritty_snippet() {
+  cat <<EOF
+
+  📋 Alacritty — ~/.config/alacritty/alacritty.toml 에 추가:
+
+      [shell]
+      program = "tmux"
+      args = ["-L", "$VT_TMUX_SOCKET", "new", "-A", "-s", "dev"]
+
+EOF
+}
+
+_print_windows_terminal_snippet() {
+  cat <<EOF
+
+  📋 Windows Terminal (WSL2) — settings.json profile에 추가:
+     %LOCALAPPDATA%/Packages/Microsoft.WindowsTerminal_*/LocalState/settings.json
+
+      "commandline": "wsl.exe -e tmux -L $VT_TMUX_SOCKET new -A -s dev"
+
+EOF
+}
+
+_print_terminal_app_snippet() {
+  cat <<EOF
+
+  📋 macOS Terminal.app — Profiles → Shell → "Run command":
+
+      tmux -L $VT_TMUX_SOCKET new -A -s dev
+
+      (체크: "Run command in shell")
+
+EOF
+}
+
+cmd_shell_init() {
+  # Phase 6 #6-3: 셸별 안전 통합 스니펫 출력
+  # 사용법: eval "$(vt shell-init zsh)" >> ~/.zshrc 형태로 한 줄 통합
+  local shell="${1:-zsh}"
+  case "$shell" in
+    zsh)             _print_zsh_init ;;
+    bash)            _print_bash_init ;;
+    fish)            _print_fish_init ;;
+    pwsh|powershell) _print_pwsh_init ;;
+    *)
+      echo "사용법: vt shell-init [zsh|bash|fish|pwsh]" >&2
+      return 1
+      ;;
+  esac
+}
+
+_print_zsh_init() {
+  cat <<EOF
+# vt shell-init zsh — instant prompt 위에 배치 (p10k와 함께 쓰는 경우 ~/.zshrc 최상단)
+if [[ -o interactive ]] \\
+   && [[ -t 0 && -t 1 ]] \\
+   && [[ -z "\$TMUX" ]] \\
+   && [[ -z "\$INSIDE_EMACS\$VSCODE_INJECTION\$ZED_TERM\$INTELLIJ_ENVIRONMENT_READER" ]] \\
+   && command -v tmux >/dev/null; then
+  exec tmux -L $VT_TMUX_SOCKET new -A -s dev
+fi
+EOF
+}
+
+_print_bash_init() {
+  cat <<EOF
+# vt shell-init bash — ~/.bashrc 또는 ~/.bash_profile 상단에 추가
+case \$- in *i*) ;; *) return ;; esac
+if [ -t 0 ] && [ -t 1 ] && [ -z "\$TMUX" ] \\
+   && [ -z "\$INSIDE_EMACS\$VSCODE_INJECTION\$ZED_TERM" ] \\
+   && command -v tmux >/dev/null; then
+  exec tmux -L $VT_TMUX_SOCKET new -A -s dev
+fi
+EOF
+}
+
+_print_fish_init() {
+  cat <<EOF
+# vt shell-init fish — ~/.config/fish/config.fish에 추가
+if status is-interactive
+  and not set -q TMUX
+  and isatty stdin
+  and isatty stdout
+  and not set -q INSIDE_EMACS
+  and not set -q VSCODE_INJECTION
+  and not set -q ZED_TERM
+  and command -v tmux >/dev/null
+  exec tmux -L $VT_TMUX_SOCKET new -A -s dev
+end
+EOF
+}
+
+_print_pwsh_init() {
+  cat <<EOF
+# vt shell-init pwsh — \$PROFILE에 추가 (WSL2 PowerShell용)
+# Windows Terminal profile에 직접 등록을 더 권장
+if (-not \$env:TMUX -and -not \$env:INSIDE_EMACS) {
+  if (Get-Command tmux -ErrorAction SilentlyContinue) {
+    & tmux -L $VT_TMUX_SOCKET new -A -s dev
+    exit
+  }
+}
+EOF
+}
+
 cmd_status() {
   echo ""
   echo "  📊 vt status"
@@ -848,6 +1130,8 @@ case "${1:-help}" in
   agent)    shift; cmd_agent "$@" ;;
   handoff)  shift; cmd_handoff "$@" ;;
   doctor)   cmd_doctor ;;
+  shell-init) shift; cmd_shell_init "$@" ;;
+  install-profiles) shift; cmd_install_profiles "$@" ;;
   template) shift; cmd_template "$@" ;;
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;
@@ -871,6 +1155,10 @@ case "${1:-help}" in
     echo "    vt handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
     echo "    vt handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
     echo "    vt doctor             설치/환경 진단"
+    echo "    vt install-profiles [--dry-run]"
+    echo "                          터미널 앱 profile 자동 등록 (iTerm2 등)"
+    echo "    vt shell-init [zsh|bash|fish|pwsh]"
+    echo "                          셸별 안전 통합 스니펫 출력"
     echo ""
     ;;
 esac

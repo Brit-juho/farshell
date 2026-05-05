@@ -12,7 +12,11 @@ vt claude             # 새 터미널 창에 tmux dev + claude --resume
 vt handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
 vt handoff desktop    # 폰 세션을 맥 터미널로 가져옴
 vt doctor             # 설치/환경 진단 (13개 항목)
+vt install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
+vt shell-init zsh     # 셸 init 스니펫 출력 (eval "$(vt shell-init zsh)" >> ~/.zshrc)
 ```
+
+**Phase 6 — 단일 tmux 서버 원칙:** vt CLI · server · Voice Daemon · hook이 모두 `-L vt` 격리 소켓 사용. Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
 
 **`voice` / `mobile` / `start` 실행 시 자동 동작:** 현재 쓰는 터미널 앱(iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app)에 새 창이 열리고 그 안에서 `tmux new -A -s dev 'claude --resume'`이 실행됩니다. 이미 tmux 안이면 새 창을 열지 않습니다.
 
