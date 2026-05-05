@@ -1,44 +1,44 @@
-## ralph CLI (어디서든 실행)
+## vt CLI (어디서든 실행)
 
-터미널 어디서든 `ralph` 명령으로 Voice Terminal을 제어합니다:
+터미널 어디서든 `vt` 명령으로 Voice Terminal을 제어합니다:
 
 ```bash
-ralph voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
-ralph mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
-ralph start              # 전체 시작 (서버+터널+음성)
-ralph stop               # 모든 프로세스 종료
-ralph status             # 현재 상태 확인
-ralph claude             # 새 터미널 창에 tmux dev + claude --resume
-ralph handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
-ralph handoff desktop    # 폰 세션을 맥 터미널로 가져옴
-ralph doctor             # 설치/환경 진단 (13개 항목)
+vt voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
+vt mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
+vt start              # 전체 시작 (서버+터널+음성)
+vt stop               # 모든 프로세스 종료
+vt status             # 현재 상태 확인
+vt claude             # 새 터미널 창에 tmux dev + claude --resume
+vt handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
+vt handoff desktop    # 폰 세션을 맥 터미널로 가져옴
+vt doctor             # 설치/환경 진단 (13개 항목)
 ```
 
 **`voice` / `mobile` / `start` 실행 시 자동 동작:** 현재 쓰는 터미널 앱(iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app)에 새 창이 열리고 그 안에서 `tmux new -A -s dev 'claude --resume'`이 실행됩니다. 이미 tmux 안이면 새 창을 열지 않습니다.
 
 **노션 작업 중 음성 코딩 워크플로:**
-1. `ralph voice` → 백그라운드 시작 (+ 새 iTerm 창에 `tmux dev` + `claude --resume` 자동 오픈)
+1. `vt voice` → 백그라운드 시작 (+ 새 iTerm 창에 `tmux dev` + `claude --resume` 자동 오픈)
 2. 새 창의 resume 목록에서 현재 대화 선택 → 이후 음성/모바일이 그 Claude로 연결됨
 3. 원래 창은 그대로 두고 노션으로 돌아가서 작업
 4. Ctrl+Shift+V → 말하기 ("git status") → tmux dev에 자동 입력
-5. `ralph stop` → 종료
+5. `vt stop` → 종료
 
-> 이미 tmux 안에서 `ralph` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
+> 이미 tmux 안에서 `vt` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
 > 자동 오픈은 macOS + iTerm 환경 한정. 그 외에는 수동 명령(`tmux new -A -s dev 'claude --resume'`) 안내가 출력됩니다.
 
 ### Claude 전역 스킬
 
 | 커맨드 | 설명 |
 |--------|------|
-| `/ralph` | 전역 스킬. 어디서든 "음성 모드", "모바일 접속" 등으로 호출 |
+| `/vt` | 전역 스킬. 어디서든 "음성 모드", "모바일 접속" 등으로 호출 |
 
 ### 프로젝트 스킬
 
 | 커맨드 | 설명 |
 |--------|------|
-| `/ralph-start` | 서버 시작 + tmux 준비 + Cloudflare Tunnel 원격 접속 |
-| `/ralph-mobile` | 모바일 테스트 (adb 포트포워딩, Chrome 열기, 스크린샷) |
-| `/ralph-voice` | Voice Daemon 설치/실행 (핫키 → STT → tmux 주입) |
+| `/vt-start` | 서버 시작 + tmux 준비 + Cloudflare Tunnel 원격 접속 |
+| `/vt-mobile` | 모바일 테스트 (adb 포트포워딩, Chrome 열기, 스크린샷) |
+| `/vt-voice` | Voice Daemon 설치/실행 (핫키 → STT → tmux 주입) |
 
 ### 신규 사용자 설치
 
@@ -50,7 +50,7 @@ ralph doctor             # 설치/환경 진단 (13개 항목)
 ./install.sh voice      # 터미널 + 음성 모드 (~1.5GB)
 ```
 
-`install.sh`가 자동으로: Python venv 생성 → 프로필별 패키지 설치 → ralph CLI 심링크 → `~/.ralph.env` 생성 → PATH 갱신.
+`install.sh`가 자동으로: Python venv 생성 → 프로필별 패키지 설치 → vt CLI 심링크 → `~/.vt.env` 생성 → PATH 갱신.
 
 ---
 
@@ -108,12 +108,12 @@ macOS 추가:
 conda run -n whisper pip install pyobjc-framework-Cocoa
 ```
 
-#### Step 5: ralph CLI 등록
+#### Step 5: vt CLI 등록
 
 ```bash
 mkdir -p ~/.local/bin
-ln -sf "$(pwd)/bin/ralph" ~/.local/bin/ralph
-chmod +x bin/ralph
+ln -sf "$(pwd)/bin/vt" ~/.local/bin/vt
+chmod +x bin/vt
 ```
 
 PATH 확인:
@@ -124,13 +124,13 @@ echo "$PATH" | grep -q "$HOME/.local/bin" || echo 'export PATH="$HOME/.local/bin
 #### Step 6: 설정 파일 생성
 
 ```bash
-# RALPH_PYTHON 경로를 감지
+# VT_PYTHON 경로를 감지
 WHISPER_PY="$(conda info --base)/envs/whisper/bin/python"
 
-cat > ~/.ralph.env << EOF
-RALPH_PORT=7777
-RALPH_PYTHON=$WHISPER_PY
-# RALPH_TOKEN=my-secret-token  # 원격 접속 시 인증 (선택사항)
+cat > ~/.vt.env << EOF
+VT_PORT=7777
+VT_PYTHON=$WHISPER_PY
+# VT_TOKEN=my-secret-token  # 원격 접속 시 인증 (선택사항)
 EOF
 ```
 
@@ -147,29 +147,29 @@ curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloud
 #### Step 8: Claude Code 스킬 등록 (선택)
 
 ```bash
-mkdir -p ~/.claude/skills/ralph
-cp .claude/skills/ralph/SKILL.md ~/.claude/skills/ralph/SKILL.md 2>/dev/null || true
+mkdir -p ~/.claude/skills/vt
+cp .claude/skills/vt/SKILL.md ~/.claude/skills/vt/SKILL.md 2>/dev/null || true
 ```
 
 #### Step 9: 설치 확인
 
 ```bash
-ralph status
+vt status
 ```
 
 사용자에게 안내:
-- `ralph mobile` — 모바일 접속 (QR코드)
-- `ralph voice` — 음성 모드 (옵션 2 선택 시)
-- `ralph stop` — 종료
+- `vt mobile` — 모바일 접속 (QR코드)
+- `vt voice` — 음성 모드 (옵션 2 선택 시)
+- `vt stop` — 종료
 
 #### 플랫폼별 참고
 
 **macOS:** 음성 모드 시 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 필요
-**WSL2:** 음성 핫키는 WSLg 필요 (Windows 11). 없으면 브라우저 🎤 사용. PowerShell: `.\bin\ralph.ps1 voice`
+**WSL2:** 음성 핫키는 WSLg 필요 (Windows 11). 없으면 브라우저 🎤 사용. PowerShell: `.\bin\vt.ps1 voice`
 
 ---
 
-## 랄프톤 프로젝트 가이드
+## voice-terminal 프로젝트 가이드
 
 ### 서버 실행
 
@@ -315,12 +315,12 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | Voice Daemon | macOS 핫키(Ctrl+Shift+V) → STT → tmux 직접 입력 |
 | 핸즈프리 모드 | 모바일 🔄 버튼 → 연속 녹음/STT 자동 반복 |
 | 음성 전용 모드 | 🎧 버튼 → 터미널 숨기고 큰 마이크만 표시 (이어폰 조작용) |
-| API 토큰 인증 | `RALPH_TOKEN` 환경변수 설정 시 활성화. URL `?token=xxx` 또는 `Authorization: Bearer xxx` |
+| API 토큰 인증 | `VT_TOKEN` 환경변수 설정 시 활성화. URL `?token=xxx` 또는 `Authorization: Bearer xxx` |
 | tmux 세션 관리 | 웹에서 tmux 생성/attach/detach/kill |
 | Scrollback 버퍼 | WS 재접속 시 이전 출력 복원 (최대 5000 청크) |
 | 터미널 검색 | Ctrl+F / Cmd+F → xterm.js search addon |
 | 세션 이름 편집 | 탭 더블클릭 → 이름 변경 (PATCH API) |
-| 파일 업로드 | 보이스바 📎 버튼 → `/tmp/ralphton_uploads/`에 저장 |
+| 파일 업로드 | 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장 |
 | 파일 다운로드 | `GET /api/download?path=...` |
 | tmux detach 감지 | PTY EOF 시 `[process exited]` 표시 |
 

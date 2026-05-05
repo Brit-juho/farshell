@@ -35,46 +35,46 @@ cd ~/voice-terminal
 `install.sh`가 하는 일:
 1. Python `venv` 생성 (`.venv/`, conda 불필요)
 2. 선택 프로필에 맞는 패키지 설치
-3. `~/.local/bin/ralph` 심링크 등록
-4. `~/.ralph.env` 설정 파일 자동 생성
+3. `~/.local/bin/vt` 심링크 등록
+4. `~/.vt.env` 설정 파일 자동 생성
 5. PATH 갱신 (zsh/bash)
 
 > Whisper 모델은 첫 실행 시 Hugging Face에서 자동 다운로드됩니다 (~141MB).
 
 ---
 
-## ralph CLI
+## vt CLI
 
-어디서든 `ralph` 명령으로 Voice Terminal을 제어합니다.
+어디서든 `vt` 명령으로 Voice Terminal을 제어합니다.
 
 ### 명령 일람
 
 | 명령 | 설명 |
 |------|------|
-| `ralph voice` | 음성 모드 — 서버 + Voice Daemon 백그라운드 시작 |
-| `ralph mobile [--e2e]` | 모바일 접속 — Cloudflare Tunnel URL + QR 코드 출력 |
-| `ralph start` | 전체 시작 — 서버 + 터널 + 음성 데몬 |
-| `ralph stop` | 모든 ralph 프로세스 종료 |
-| `ralph status` | 서버·터널·Voice Daemon·tmux 상태 확인 |
-| `ralph claude` | 새 터미널 창에 `tmux dev` + `claude --resume` 오픈 |
-| `ralph handoff mobile` | 현재 tmux 세션을 폰으로 넘김 (QR + `#tmux=<name>`) |
-| `ralph handoff desktop` | 폰 세션을 맥 터미널로 가져옴 |
-| `ralph doctor` | 설치·환경 진단 (13개 항목 자동 점검) |
+| `vt voice` | 음성 모드 — 서버 + Voice Daemon 백그라운드 시작 |
+| `vt mobile [--e2e]` | 모바일 접속 — Cloudflare Tunnel URL + QR 코드 출력 |
+| `vt start` | 전체 시작 — 서버 + 터널 + 음성 데몬 |
+| `vt stop` | 모든 vt 프로세스 종료 |
+| `vt status` | 서버·터널·Voice Daemon·tmux 상태 확인 |
+| `vt claude` | 새 터미널 창에 `tmux dev` + `claude --resume` 오픈 |
+| `vt handoff mobile` | 현재 tmux 세션을 폰으로 넘김 (QR + `#tmux=<name>`) |
+| `vt handoff desktop` | 폰 세션을 맥 터미널로 가져옴 |
+| `vt doctor` | 설치·환경 진단 (13개 항목 자동 점검) |
 
 ### 옵션
 
 ```bash
-ralph mobile --e2e      # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
+vt mobile --e2e      # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
 ```
 
 ### 자동 동작
 
-`ralph voice` / `mobile` / `start` 실행 시:
+`vt voice` / `mobile` / `start` 실행 시:
 - 현재 쓰는 터미널 앱 자동 감지 → 새 창 오픈 → `tmux new -A -s dev 'claude --resume'` 실행
 - 지원 앱: **iTerm2**, **Ghostty**, **WezTerm**, **Kitty**, **Alacritty**, **Warp**, **Terminal.app**
 - 이미 tmux 안에 있으면 새 창 없이 현재 창에서 계속 (`$TMUX` 체크, 멱등성 보장)
 
-### `ralph doctor` 점검 항목 (13개)
+### `vt doctor` 점검 항목 (13개)
 
 | # | 항목 | 내용 |
 |---|------|------|
@@ -85,37 +85,37 @@ ralph mobile --e2e      # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
 | 5 | tmux | 설치 여부 및 버전 |
 | 6 | cloudflared | 원격 접속 도구 |
 | 7 | ffmpeg | 모바일 음성 디코딩 |
-| 8 | port | RALPH_PORT 사용 상태 |
-| 9 | ralph CLI | `~/.local/bin/ralph` 심링크 |
+| 8 | port | VT_PORT 사용 상태 |
+| 9 | vt CLI | `~/.local/bin/vt` 심링크 |
 | 10 | PATH | `~/.local/bin` 포함 여부 |
-| 11 | .ralph.env | 설정 파일 존재 여부 |
-| 12 | RALPH_TOKEN | 인증 토큰 설정 여부 |
+| 11 | .vt.env | 설정 파일 존재 여부 |
+| 12 | VT_TOKEN | 인증 토큰 설정 여부 |
 | 13 | 터미널 앱 | 감지된 앱 목록 + 현재 `TERM_PROGRAM` |
 
 ---
 
-## 설정 (`~/.ralph.env`)
+## 설정 (`~/.vt.env`)
 
 `install.sh`가 자동 생성. 원하는 항목만 추가하면 됩니다.
 
 ```bash
 # 기본
-RALPH_PORT=7777                              # 서버 포트 (기본값)
-RALPH_PYTHON=~/voice-terminal/.venv/bin/python  # Python 경로 (자동 감지)
+VT_PORT=7777                              # 서버 포트 (기본값)
+VT_PYTHON=~/voice-terminal/.venv/bin/python  # Python 경로 (자동 감지)
 
 # 원격 인증 (공개 터널 사용 시 강력 권장)
-RALPH_TOKEN=my-secret-token                  # ?token=xxx 또는 Bearer 헤더
+VT_TOKEN=my-secret-token                  # ?token=xxx 또는 Bearer 헤더
 
 # 푸시 알림 (ntfy / Telegram, 병렬 가능)
-RALPH_NOTIFY_URL=https://ntfy.sh/your-topic  # ntfy.sh 토픽 URL
-RALPH_TELEGRAM_TOKEN=...                     # Telegram Bot 토큰
-RALPH_TELEGRAM_CHAT_ID=...                   # Telegram 수신 채팅 ID
+VT_NOTIFY_URL=https://ntfy.sh/your-topic  # ntfy.sh 토픽 URL
+VT_TELEGRAM_TOKEN=...                     # Telegram Bot 토큰
+VT_TELEGRAM_CHAT_ID=...                   # Telegram 수신 채팅 ID
 
 # 보안
-RALPH_E2E=1                                  # 모든 WebSocket 강제 E2E (기본: opt-in)
+VT_E2E=1                                  # 모든 WebSocket 강제 E2E (기본: opt-in)
 
 # 음성
-RALPH_STT_LANG=ko                            # STT 언어 고정 (미설정 시 자동 감지)
+VT_STT_LANG=ko                            # STT 언어 고정 (미설정 시 자동 감지)
 ```
 
 ---
@@ -124,21 +124,21 @@ RALPH_STT_LANG=ko                            # STT 언어 고정 (미설정 시 
 
 `.claude/skills/` 에 등록된 프로젝트 전용 스킬.
 
-### `/ralph` (전역 스킬)
+### `/vt` (전역 스킬)
 
-`~/.claude/skills/ralph/SKILL.md` — **어느 프로젝트에서든 호출 가능**.
+`~/.claude/skills/vt/SKILL.md` — **어느 프로젝트에서든 호출 가능**.
 
 | 트리거 | 예시 발화 |
 |--------|-----------|
 | 음성 모드 | "음성 모드", "voice mode", "음성으로 코딩" |
 | 모바일 | "모바일 접속", "mobile mode", "폰에서 접속" |
-| 시작/종료 | "ralph 시작", "ralph 중지" |
-| 진단 | "ralph 점검", "진단 실행" |
+| 시작/종료 | "vt 시작", "vt 중지" |
+| 진단 | "vt 점검", "진단 실행" |
 | 핸드오프 | "폰으로 넘겨", "맥으로 가져와" |
 
-실행 전 `ralph status`로 중복 시작 여부 자동 체크.
+실행 전 `vt status`로 중복 시작 여부 자동 체크.
 
-### `/ralph-start` (프로젝트 스킬)
+### `/vt-start` (프로젝트 스킬)
 
 `서버 시작 + Cloudflare Tunnel 원격 접속` 원스텝 처리.
 
@@ -148,7 +148,7 @@ RALPH_STT_LANG=ko                            # STT 언어 고정 (미설정 시 
 4. cloudflared 터널 시작 → URL 추출 대기 (최대 30초)
 5. 접속 정보 출력 (로컬/네트워크/원격)
 
-### `/ralph-mobile` (프로젝트 스킬)
+### `/vt-mobile` (프로젝트 스킬)
 
 Android adb 연결 + 모바일 테스트 자동화.
 
@@ -167,11 +167,11 @@ Android adb 연결 + 모바일 테스트 자동화.
 - [ ] 핸즈프리 모드 토글
 - [ ] 파일 업로드 (📎)
 
-### `/ralph-voice` (프로젝트 스킬)
+### `/vt-voice` (프로젝트 스킬)
 
 Voice Daemon 의존성 확인·설치·실행.
 
-1. `~/.ralph.env`에서 `RALPH_PYTHON` 읽기
+1. `~/.vt.env`에서 `VT_PYTHON` 읽기
 2. pynput · sounddevice · numpy 의존성 확인
 3. STT 엔진 감지 (mlx-whisper 우선 → faster-whisper fallback)
 4. tmux 세션 준비
@@ -193,7 +193,7 @@ Claude 응답 완료
   → transcript_path에서 마지막 assistant 메시지 추출 (최대 200자)
   → POST /voice/output → TTS 오디오 → afplay 재생
   → fallback: 서버 미실행 시 macOS say -v Yuna
-  → (RALPH_NOTIFY_URL 설정 시) ntfy.sh 푸시 알림 병행
+  → (VT_NOTIFY_URL 설정 시) ntfy.sh 푸시 알림 병행
 ```
 
 **테스트:**
@@ -220,12 +220,12 @@ echo '{"transcript_path":"/tmp/test.jsonl"}' | ./server/tts_hook.sh
 | **Claude Code TTS** | Stop 훅 → 응답 완료 시 요약 TTS 자동 재생 |
 | **E2E 암호화** | `--e2e` 플래그 → X25519 키교환 + NaCl SecretBox WebSocket 암호화 |
 | **푸시 알림** | ntfy.sh / Telegram 병렬 브릿지, 작업 완료·세션 idle 시 자동 발송 |
-| **API 토큰 인증** | `RALPH_TOKEN` 설정 시 쿼리스트링·Bearer 헤더 인증 |
+| **API 토큰 인증** | `VT_TOKEN` 설정 시 쿼리스트링·Bearer 헤더 인증 |
 | **tmux 세션 관리** | 웹에서 생성/attach/detach/kill. 데스크톱과 동시 접속 가능 |
 | **Scrollback 버퍼** | WebSocket 재접속 시 이전 출력 복원 (최대 5000 청크) |
 | **터미널 검색** | Ctrl+F / Cmd+F → xterm.js 검색 addon |
 | **세션 이름 편집** | 탭 더블클릭 → 이름 변경 (PATCH API) |
-| **파일 업로드/다운로드** | 보이스바 📎 → `/tmp/ralphton_uploads/` 저장. GET /api/download 다운로드 |
+| **파일 업로드/다운로드** | 보이스바 📎 → `/tmp/vt-uploads/` 저장. GET /api/download 다운로드 |
 | **Media Session** | 무선 이어폰 Play/Pause로 녹음 토글 (iOS·Android) |
 | **PWA** | manifest + Service Worker → 홈 화면 추가 후 앱처럼 사용 |
 | **세션 ID 96비트** | 추측 난이도 2^64배 (기존 32비트 대비) |
@@ -234,7 +234,7 @@ echo '{"transcript_path":"/tmp/test.jsonl"}' | ./server/tts_hook.sh
 
 ## API 레퍼런스
 
-인증: `RALPH_TOKEN` 설정 시 `?token=xxx` 또는 `Authorization: Bearer xxx` 필요.
+인증: `VT_TOKEN` 설정 시 `?token=xxx` 또는 `Authorization: Bearer xxx` 필요.
 
 ### 세션
 
@@ -292,7 +292,7 @@ echo '{"transcript_path":"/tmp/test.jsonl"}' | ./server/tts_hook.sh
                   ┌──────────────────────────────────────┐
                   │  MacBook / WSL2 (서버)                 │
                   │                                      │
-  [ralph voice]   │  ┌────────────────┐  ┌────────────┐  │
+  [vt voice]      │  ┌────────────────┐  ┌────────────┐  │
   Ctrl+Shift+V ──►│  │ Voice Daemon   │  │ FastAPI     │  │
   → STT → tmux   │  │ (독립, 서버무관) │  │ :7777       │  │
                   │  └────────────────┘  └─────┬──────┘  │
@@ -329,8 +329,8 @@ echo '{"transcript_path":"/tmp/test.jsonl"}' | ./server/tts_hook.sh
 ```
 voice-terminal/
 ├── bin/
-│   ├── ralph              # CLI 진입점 (bash, macOS/Linux)
-│   └── ralph.ps1          # CLI 진입점 (PowerShell, Windows)
+│   ├── vt                 # CLI 진입점 (bash, macOS/Linux)
+│   └── vt.ps1             # CLI 진입점 (PowerShell, Windows)
 ├── server/
 │   ├── main.py            # FastAPI (WS + REST + Voice + 토큰 인증)
 │   ├── pty_manager.py     # PTY 세션 (broadcast, scrollback, EOF 감지)
@@ -354,10 +354,10 @@ voice-terminal/
 │   ├── hooks/
 │   │   └── check-gstack.sh  # PreToolUse 훅: gstack 설치 여부 확인
 │   └── skills/
-│       ├── ralph/SKILL.md   # 전역 ralph 스킬
-│       ├── ralph-start.md   # 서버 시작 스킬
-│       ├── ralph-mobile.md  # 모바일 테스트 스킬
-│       └── ralph-voice.md   # Voice Daemon 스킬
+│       ├── vt/SKILL.md      # 전역 vt 스킬
+│       ├── vt-start.md      # 서버 시작 스킬
+│       ├── vt-mobile.md     # 모바일 테스트 스킬
+│       └── vt-voice.md      # Voice Daemon 스킬
 ├── install.sh             # 원라인 설치 스크립트
 ├── requirements-core.txt  # FastAPI, uvicorn 등
 ├── requirements-voice.txt # faster-whisper, edge-tts, sounddevice 등
@@ -375,7 +375,7 @@ voice-terminal/
 | 데스크톱 | `http://localhost:7777` |
 | 같은 네트워크 | `http://<맥북IP>:7777` (`ipconfig getifaddr en0`으로 IP 확인) |
 | adb 연결 Android | `adb reverse tcp:7777 tcp:7777` → `http://localhost:7777` |
-| 원격 (어디서든) | `ralph mobile` → Cloudflare Tunnel HTTPS URL |
+| 원격 (어디서든) | `vt mobile` → Cloudflare Tunnel HTTPS URL |
 
 ---
 
@@ -384,18 +384,18 @@ voice-terminal/
 ### 노션 작업 중 음성 코딩 (macOS)
 
 ```
-1. ralph voice              ← 어느 터미널에서나 실행
+1. vt voice              ← 어느 터미널에서나 실행
 2. 새로 열린 iTerm 창에서 claude --resume으로 대화 선택
 3. 노션으로 돌아가서 작업 계속
 4. Ctrl+Shift+V → "git status" → tmux에 자동 입력
 5. 결과를 TTS로 이어폰에서 들음
-6. ralph stop               ← 끝나면 종료
+6. vt stop               ← 끝나면 종료
 ```
 
 ### 모바일에서 터미널 조작
 
 ```
-1. ralph mobile             ← URL + QR 코드 출력
+1. vt mobile             ← URL + QR 코드 출력
 2. 폰 카메라로 QR 스캔
 3. tmux 세션에 자동 연결
 4. 🎤 STT 입력  🔄 핸즈프리  🎧 음성 전용  📎 파일 업로드
@@ -404,16 +404,16 @@ voice-terminal/
 ### Claude Code + TTS 알림
 
 Claude 작업이 완료되면 `tts_hook.sh`가 자동으로 결과를 TTS로 읽어줍니다.
-`RALPH_NOTIFY_URL` 설정 시 ntfy.sh로 푸시 알림도 함께 발송됩니다.
+`VT_NOTIFY_URL` 설정 시 ntfy.sh로 푸시 알림도 함께 발송됩니다.
 
 ---
 
 ## Windows (WSL2)
 
 ```powershell
-.\bin\ralph.ps1 voice
-.\bin\ralph.ps1 mobile
-.\bin\ralph.ps1 stop
+.\bin\vt.ps1 voice
+.\bin\vt.ps1 mobile
+.\bin\vt.ps1 stop
 ```
 
 - 서버·tmux는 WSL2 내부 실행, 브라우저는 Windows에서 `localhost:7777` 접속
@@ -427,11 +427,11 @@ Claude 작업이 완료되면 `tts_hook.sh`가 자동으로 결과를 TTS로 읽
 
 | 문제 | 해결 |
 |------|------|
-| `ralph: command not found` | `source ~/.zshrc` 또는 새 터미널. `~/.local/bin` PATH 확인 |
+| `vt: command not found` | `source ~/.zshrc` 또는 새 터미널. `~/.local/bin` PATH 확인 |
 | 핫키 안 먹힘 | 시스템 설정 → 개인정보 → 접근성 → 터미널 앱 허용 |
-| 포트 충돌 | `~/.ralph.env`에서 `RALPH_PORT` 변경 |
+| 포트 충돌 | `~/.vt.env`에서 `VT_PORT` 변경 |
 | 모바일 소리 안 남 | 화면 한 번 터치 (브라우저 autoplay 정책) |
-| 서버 시작 실패 | `cat /tmp/ralphton-server.log` |
+| 서버 시작 실패 | `cat /tmp/vt-server.log` |
 | 터널 URL 안 뜸 | `cat /tmp/cloudflared.log` · `brew install cloudflared` |
 | 새 창 안 열림 | osascript 권한 부족. 수동: `tmux new -A -s dev 'claude --resume'` |
 
@@ -443,7 +443,7 @@ Claude 작업이 완료되면 `tts_hook.sh`가 자동으로 결과를 TTS로 읽
 | localhost 접속 안 됨 | `wsl --shutdown` 후 재시작 |
 | 사운드 안 됨 | WSLg 설정 확인 또는 브라우저 TTS 사용 |
 
-모든 항목 한 번에 진단: `ralph doctor`
+모든 항목 한 번에 진단: `vt doctor`
 
 ---
 

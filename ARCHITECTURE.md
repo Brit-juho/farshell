@@ -1,4 +1,4 @@
-# 랄프톤 아키텍처
+# voice-terminal 아키텍처
 
 이 문서는 기여자와 LLM이 레포 구조를 빠르게 이해하기 위한 지도입니다. 모노레포 전환 대신 **논리적 경계**만 명시합니다.
 
@@ -9,7 +9,7 @@
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Control Plane — 시작/정지/진단 (사용자 한정 동작)              │
-│   bin/ralph, install.sh, ~/.ralph.env                       │
+│   bin/vt, install.sh, ~/.vt.env                 │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -39,8 +39,8 @@
 ### `bin/` — CLI 진입점 (Control Plane)
 | 파일 | 책임 |
 |---|---|
-| `ralph` | macOS/Linux. 서브커맨드 라우팅, 프로세스 수명 관리 (서버·터널·음성 데몬), iTerm 자동 오픈, 진단 |
-| `ralph.ps1` | Windows PowerShell 버전 |
+| `vt` | macOS/Linux. CLI — 서브커맨드 라우팅, 프로세스 수명 관리 (서버·터널·음성 데몬), iTerm 자동 오픈, 진단 |
+| `vt.ps1` | Windows PowerShell 버전 |
 
 서브커맨드: `voice` · `mobile` · `start` · `stop` · `status` · `claude` · `handoff` · `doctor`
 
@@ -69,7 +69,7 @@
 ### 루트
 | 파일 | 책임 |
 |---|---|
-| `install.sh` | Python venv 생성, 프로필별 패키지 설치, ralph 심링크, ~/.ralph.env 초기화 |
+| `install.sh` | Python venv 생성, 프로필별 패키지 설치, vt 심링크, ~/.vt.env 초기화 |
 | `requirements-core.txt` | 터미널 전용 (~50MB) |
 | `requirements-voice.txt` | 음성 추가 의존성 (~1.5GB) |
 | `requirements.txt` | 위 둘 합침 (하위 호환) |
@@ -77,10 +77,10 @@
 ### `.claude/skills/` — Claude Code 스킬
 | 파일 | 트리거 |
 |---|---|
-| `ralph/SKILL.md` | 전역: "음성 모드", "모바일 접속" 등 |
-| `ralph-voice.md` | Voice Daemon 수동 설치/실행 |
-| `ralph-mobile.md` | 모바일 adb 테스트 |
-| `ralph-start.md` | 서버 수동 시작 |
+| `vt/SKILL.md` | 전역: "음성 모드", "모바일 접속" 등 |
+| `vt-voice.md` | Voice Daemon 수동 설치/실행 |
+| `vt-mobile.md` | 모바일 adb 테스트 |
+| `vt-start.md` | 서버 수동 시작 |
 
 ---
 
@@ -108,12 +108,12 @@ Ctrl+Shift+V (pynput)
 Claude Code Stop hook → server/tts_hook.sh
   ├─ transcript에서 마지막 assistant 응답 추출
   ├─ POST /voice/output → edge-tts → afplay (로컬 재생)
-  └─ POST ntfy (RALPH_NOTIFY_URL 설정 시) → 폰 푸시
+  └─ POST ntfy (VT_NOTIFY_URL 설정 시) → 폰 푸시
 ```
 
 ### 3.4 모바일 ↔ 데스크톱 핸드오프
 ```
-데스크톱:  tmux 세션 'dev' 생성 (bin/ralph)
+데스크톱:  tmux 세션 'dev' 생성 (bin/vt)
   ↓ (같은 OS의 tmux server에 등록됨)
 데스크톱 iTerm:  tmux attach -t dev
 모바일 브라우저:  GET /?...#tmux=dev
@@ -151,10 +151,10 @@ PTY 출력 → output_watcher.feed_output()
 ### 4.3 새 푸시 알림 채널 (예: Discord, Slack)
 - `server/notify.py`에 `_send_xxx()` 함수 추가
 - `is_configured()` 및 `send()`에서 병렬 task 리스트에 포함
-- 환경변수 규칙: `RALPH_XXX_TOKEN` / `RALPH_XXX_WEBHOOK`
+- 환경변수 규칙: `VT_XXX_TOKEN` / `VT_XXX_WEBHOOK`
 
 ### 4.4 새 CLI 서브커맨드
-- `bin/ralph`의 main switch에 케이스 추가
+- `bin/vt`의 main switch에 케이스 추가
 - 함수명 규칙: `cmd_<이름>()`
 - help 섹션 문자열에 한 줄 추가
 
@@ -172,7 +172,7 @@ PTY 출력 → output_watcher.feed_output()
 ## 5. 실행 시 프로세스 맵
 
 ```
-$ ralph start
+$ vt start
   ├─ uvicorn server.main:app  (port 7777)                [서버]
   ├─ cloudflared tunnel --url ...                        [터널]
   ├─ python server/voice_daemon.py                       [음성 데몬]
@@ -180,7 +180,7 @@ $ ralph start
       └─ zsh (또는 claude --resume)                      [작업 셸]
 ```
 
-PID는 `/tmp/ralph-pids/{server,tunnel,voice}.pid`에 저장됨. `ralph stop`이 모두 정리.
+PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `vt stop`이 모두 정리.
 
 ---
 
@@ -189,11 +189,11 @@ PID는 `/tmp/ralph-pids/{server,tunnel,voice}.pid`에 저장됨. `ralph stop`이
 | 계층 | 메커니즘 | 한계 |
 |---|---|---|
 | 전송 | cloudflared HTTPS 터널 | — |
-| 인증 | `RALPH_TOKEN` 쿼리/Bearer 헤더 | 평문 토큰, QR에 노출 |
+| 인증 | `VT_TOKEN` 쿼리/Bearer 헤더 | 평문 토큰, QR에 노출 |
 | WebSocket 인증 | 미들웨어가 accept 전 검증 | — |
 | 세션 ID | `secrets.token_urlsafe(12)` — 16자, ~96비트 | — |
 | E2E | **없음** (서버가 평문 봄) | TODO: D3 |
-| 업로드 | `/tmp/ralphton_uploads/` 격리 | 디스크 쿼터 없음 |
+| 업로드 | `/tmp/vt-uploads/` 격리 | 디스크 쿼터 없음 |
 
 **D3 (E2E 라이트)**가 구현되면 `libsodium SecretBox`로 WebSocket 페이로드 자체를 암호화하여 cloudflared URL이 노출돼도 코드 평문 유출을 막을 계획.
 
@@ -204,10 +204,10 @@ PID는 `/tmp/ralph-pids/{server,tunnel,voice}.pid`에 저장됨. `ralph stop`이
 `/Users/neo/.claude/plans/adaptive-leaping-cray.md`에 상세. 현재 완료된 개선:
 - ✅ D1 원라인 설치 스크립트
 - ✅ D2 ntfy/Telegram 푸시 브릿지
-- ✅ D4 `ralph claude` / `ralph handoff` 서브커맨드
+- ✅ D4 `vt claude` / `vt handoff` 서브커맨드
 - ✅ D5 세션 ID 확장 (`secrets.token_urlsafe(12)`)
 - ✅ D6 본 문서
-- ✅ D7 `ralph doctor` 진단
+- ✅ D7 `vt doctor` 진단
 
 남은 작업:
 - ⏳ D3 터널 페이로드 E2E 암호화

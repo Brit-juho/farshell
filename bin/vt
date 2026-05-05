@@ -1,47 +1,47 @@
 #!/bin/bash
-# ralph — Voice Terminal 통합 CLI
+# vt — Voice Terminal 통합 CLI
 # 어디서든 실행 가능. 노션 작업 중에도 음성으로 코딩.
 #
 # 사용법:
-#   ralph voice    — 음성 모드 (백그라운드, 작업 방해 없음)
-#   ralph mobile   — 모바일 접속 URL 제공 (서버 자동 시작)
-#   ralph start    — 서버 + 터널 시작
-#   ralph stop     — 모든 ralph 프로세스 종료
-#   ralph status   — 현재 상태 확인
+#   vt voice    — 음성 모드 (백그라운드, 작업 방해 없음)
+#   vt mobile   — 모바일 접속 URL 제공 (서버 자동 시작)
+#   vt start    — 서버 + 터널 시작
+#   vt stop     — 모든 vt 프로세스 종료
+#   vt status   — 현재 상태 확인
 
 set -uo pipefail
 
 # 심링크를 따라가서 실제 경로 찾기
 _SELF="$0"
 [ -L "$_SELF" ] && _SELF="$(readlink "$_SELF")"
-RALPH_DIR="$(cd "$(dirname "$_SELF")/.." && pwd)"
-RALPH_CONFIG="$HOME/.ralph.env"
+VT_DIR="$(cd "$(dirname "$_SELF")/.." && pwd)"
+VT_CONFIG="$HOME/.vt.env"
 
 # 설정 파일 로드 (있으면)
-[ -f "$RALPH_CONFIG" ] && source "$RALPH_CONFIG"
+[ -f "$VT_CONFIG" ] && source "$VT_CONFIG"
 
-# 설정 가능한 변수 (환경변수 또는 ~/.ralph.env로 오버라이드)
-RALPH_PORT="${RALPH_PORT:-7777}"
+# 설정 가능한 변수 (환경변수 또는 ~/.vt.env로 오버라이드)
+VT_PORT="${VT_PORT:-7777}"
 
 # Python 자동 감지 — 우선순위:
-#   1) 환경변수 RALPH_PYTHON / ~/.ralph.env
+#   1) 환경변수 VT_PYTHON / ~/.vt.env
 #   2) 프로젝트 .venv (install.sh로 만든 것)
 #   3) legacy whisper conda env (기존 사용자 호환)
 #   4) 시스템 python3
 _detect_python() {
-  if [ -x "$RALPH_DIR/.venv/bin/python" ]; then
-    echo "$RALPH_DIR/.venv/bin/python"
+  if [ -x "$VT_DIR/.venv/bin/python" ]; then
+    echo "$VT_DIR/.venv/bin/python"
   elif [ -x "/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python" ]; then
     echo "/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python"
   else
     command -v python3 2>/dev/null || echo python3
   fi
 }
-RALPH_PYTHON="${RALPH_PYTHON:-$(_detect_python)}"
-SERVER_LOG="/tmp/ralphton-server.log"
+VT_PYTHON="${VT_PYTHON:-$(_detect_python)}"
+SERVER_LOG="/tmp/vt-server.log"
 TUNNEL_LOG="/tmp/cloudflared.log"
-DAEMON_LOG="/tmp/ralph-voice-daemon.log"
-PID_DIR="/tmp/ralph-pids"
+DAEMON_LOG="/tmp/vt-voice-daemon.log"
+PID_DIR="/tmp/vt-pids"
 mkdir -p "$PID_DIR"
 
 _is_running() {
@@ -50,21 +50,21 @@ _is_running() {
 }
 
 _port_in_use() {
-  "$RALPH_PYTHON" -c "import socket;s=socket.socket();s.settimeout(1);exit(0 if s.connect_ex(('127.0.0.1',$1))==0 else 1)" 2>/dev/null
+  "$VT_PYTHON" -c "import socket;s=socket.socket();s.settimeout(1);exit(0 if s.connect_ex(('127.0.0.1',$1))==0 else 1)" 2>/dev/null
 }
 
 _start_server() {
-  if _port_in_use $RALPH_PORT; then
-    echo "✓ 서버 이미 실행 중 (port $RALPH_PORT)"
+  if _port_in_use $VT_PORT; then
+    echo "✓ 서버 이미 실행 중 (port $VT_PORT)"
     return 0
   fi
   echo "▸ 서버 시작 중..."
-  cd "$RALPH_DIR/server"
-  nohup "$RALPH_PYTHON" -m uvicorn main:app --host 0.0.0.0 --port $RALPH_PORT > "$SERVER_LOG" 2>&1 &
+  cd "$VT_DIR/server"
+  nohup "$VT_PYTHON" -m uvicorn main:app --host 0.0.0.0 --port $VT_PORT > "$SERVER_LOG" 2>&1 &
   echo $! > "$PID_DIR/server.pid"
   sleep 2
-  if curl -sf http://localhost:$RALPH_PORT/ -o /dev/null 2>/dev/null; then
-    echo "✓ 서버 시작 완료 (http://localhost:$RALPH_PORT)"
+  if curl -sf http://localhost:$VT_PORT/ -o /dev/null 2>/dev/null; then
+    echo "✓ 서버 시작 완료 (http://localhost:$VT_PORT)"
   else
     echo "✗ 서버 시작 실패. 로그: $SERVER_LOG"
     return 1
@@ -80,7 +80,7 @@ _start_tunnel() {
   fi
   echo "▸ Cloudflare Tunnel 시작 중..."
   : > "$TUNNEL_LOG"
-  nohup cloudflared tunnel --url http://localhost:$RALPH_PORT > "$TUNNEL_LOG" 2>&1 &
+  nohup cloudflared tunnel --url http://localhost:$VT_PORT > "$TUNNEL_LOG" 2>&1 &
   echo $! > "$PID_DIR/tunnel.pid"
   # URL 추출 대기
   for i in $(seq 1 30); do
@@ -102,7 +102,7 @@ _start_voice_daemon() {
     return 0
   fi
   echo "▸ Voice Daemon 시작 중..."
-  nohup "$RALPH_PYTHON" "$RALPH_DIR/server/voice_daemon.py" > "$DAEMON_LOG" 2>&1 &
+  nohup "$VT_PYTHON" "$VT_DIR/server/voice_daemon.py" > "$DAEMON_LOG" 2>&1 &
   echo $! > "$PID_DIR/voice.pid"
   sleep 1
   if _is_running voice; then
@@ -229,7 +229,7 @@ _print_attach_guide() {
 
 cmd_voice() {
   echo ""
-  echo "  🎤 ralph voice — 음성 모드"
+  echo "  🎤 vt voice — 음성 모드"
   echo "  노션/브라우저 작업을 계속하면서 음성으로 코딩"
   echo ""
 
@@ -248,7 +248,7 @@ cmd_voice() {
   echo "  │  작업을 계속하세요. 음성이 백그라운드에서    │"
   echo "  │  동작합니다.                              │"
   echo "  │                                         │"
-  echo "  │  종료: ralph stop                        │"
+  echo "  │  종료: vt stop                           │"
   echo "  └─────────────────────────────────────────┘"
 
   _print_attach_guide
@@ -263,7 +263,7 @@ cmd_mobile() {
   done
 
   echo ""
-  echo "  📱 ralph mobile — 모바일 접속$([ $want_e2e -eq 1 ] && echo ' (E2E 암호화)')"
+  echo "  📱 vt mobile — 모바일 접속$([ $want_e2e -eq 1 ] && echo ' (E2E 암호화)')"
   echo ""
 
   _ensure_tmux
@@ -272,7 +272,7 @@ cmd_mobile() {
 
   local url
   url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-  local token=${RALPH_TOKEN:-}
+  local token=${VT_TOKEN:-}
   # E2E 활성화 시 URL hash fragment에 #e2e=1 추가 (서버 로그에 안 남음)
   local e2e_frag=""
   [ $want_e2e -eq 1 ] && e2e_frag="#e2e=1"
@@ -299,7 +299,7 @@ cmd_mobile() {
   echo "  │  🎧 음성 전용 모드: 🎧 버튼 탭            │"
   echo "  │  🔄 핸즈프리: 🔄 버튼 탭                  │"
   echo "  │                                         │"
-  echo "  │  종료: ralph stop                        │"
+  echo "  │  종료: vt stop                           │"
   echo "  └─────────────────────────────────────────┘"
   echo ""
 
@@ -320,7 +320,7 @@ cmd_mobile() {
 
 cmd_start() {
   echo ""
-  echo "  🚀 ralph start — 전체 시작"
+  echo "  🚀 vt start — 전체 시작"
   echo ""
 
   _ensure_tmux
@@ -330,7 +330,7 @@ cmd_start() {
 
   echo ""
   echo "  모든 서비스 시작 완료."
-  echo "  ralph status 로 상태 확인"
+  echo "  vt status 로 상태 확인"
 
   _print_attach_guide
   echo ""
@@ -338,7 +338,7 @@ cmd_start() {
 
 cmd_stop() {
   echo ""
-  echo "  ⏹  ralph stop"
+  echo "  ⏹  vt stop"
   echo ""
 
   for svc in voice tunnel server; do
@@ -358,19 +358,19 @@ cmd_stop() {
   pkill -f "voice_daemon.py" 2>/dev/null || true
   pkill -f "cloudflared tunnel" 2>/dev/null || true
   if command -v lsof >/dev/null 2>&1; then
-    lsof -i :$RALPH_PORT -t 2>/dev/null | xargs kill 2>/dev/null || true
+    lsof -i :$VT_PORT -t 2>/dev/null | xargs kill 2>/dev/null || true
   elif command -v fuser >/dev/null 2>&1; then
-    fuser -k $RALPH_PORT/tcp 2>/dev/null || true
+    fuser -k $VT_PORT/tcp 2>/dev/null || true
   fi
 
-  echo "  ✓ 모든 ralph 프로세스 종료"
+  echo "  ✓ 모든 vt 프로세스 종료"
   echo ""
 }
 
 cmd_doctor() {
   # 설치 상태 및 실행 환경 진단
   echo ""
-  echo "  🩺 ralph doctor — 설치/환경 진단"
+  echo "  🩺 vt doctor — 설치/환경 진단"
   echo ""
 
   local ok=0 warn=0 fail=0
@@ -384,16 +384,16 @@ cmd_doctor() {
   }
 
   # 1. Python
-  if [ -x "$RALPH_PYTHON" ]; then
-    local pyver; pyver="$("$RALPH_PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "?")"
-    _check "Python" ok "$RALPH_PYTHON (v$pyver)"
+  if [ -x "$VT_PYTHON" ]; then
+    local pyver; pyver="$("$VT_PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "?")"
+    _check "Python" ok "$VT_PYTHON (v$pyver)"
   else
-    _check "Python" fail "$RALPH_PYTHON — 실행 불가. install.sh 재실행"
+    _check "Python" fail "$VT_PYTHON — 실행 불가. install.sh 재실행"
   fi
 
   # 2. venv
-  if [ -d "$RALPH_DIR/.venv" ]; then
-    _check "venv" ok "$RALPH_DIR/.venv"
+  if [ -d "$VT_DIR/.venv" ]; then
+    _check "venv" ok "$VT_DIR/.venv"
   elif [ -d "/opt/homebrew/Caskroom/miniforge/base/envs/whisper" ]; then
     _check "venv" warn "legacy conda whisper env 사용 중 (install.sh로 venv 전환 권장)"
   else
@@ -401,12 +401,12 @@ cmd_doctor() {
   fi
 
   # 3. 핵심 Python 패키지
-  if "$RALPH_PYTHON" -c "import fastapi, uvicorn" 2>/dev/null; then
+  if "$VT_PYTHON" -c "import fastapi, uvicorn" 2>/dev/null; then
     _check "core packages" ok "fastapi, uvicorn 설치됨"
   else
     _check "core packages" fail "pip install -r requirements-core.txt"
   fi
-  if "$RALPH_PYTHON" -c "import faster_whisper, edge_tts, sounddevice" 2>/dev/null; then
+  if "$VT_PYTHON" -c "import faster_whisper, edge_tts, sounddevice" 2>/dev/null; then
     _check "voice packages" ok "faster-whisper, edge-tts, sounddevice"
   else
     _check "voice packages" warn "음성 기능 미설치 ('./install.sh voice'로 추가)"
@@ -434,19 +434,19 @@ cmd_doctor() {
   fi
 
   # 7. 포트 사용 상태
-  if _port_in_use "$RALPH_PORT"; then
-    _check "port $RALPH_PORT" warn "사용 중 (서버 이미 실행 중일 수 있음)"
+  if _port_in_use "$VT_PORT"; then
+    _check "port $VT_PORT" warn "사용 중 (서버 이미 실행 중일 수 있음)"
   else
-    _check "port $RALPH_PORT" ok "사용 가능"
+    _check "port $VT_PORT" ok "사용 가능"
   fi
 
-  # 8. ralph CLI 심링크
-  if [ -L "$HOME/.local/bin/ralph" ]; then
-    _check "ralph CLI" ok "~/.local/bin/ralph"
-  elif [ -f "$HOME/.local/bin/ralph" ]; then
-    _check "ralph CLI" warn "심링크 아닌 파일 (install.sh 재실행 권장)"
+  # 8. vt CLI 심링크
+  if [ -L "$HOME/.local/bin/vt" ]; then
+    _check "vt CLI" ok "~/.local/bin/vt"
+  elif [ -f "$HOME/.local/bin/vt" ]; then
+    _check "vt CLI" warn "심링크 아닌 파일 (install.sh 재실행 권장)"
   else
-    _check "ralph CLI" warn "~/.local/bin/ralph 없음 (현재 $0로 실행 중)"
+    _check "vt CLI" warn "~/.local/bin/vt 없음 (현재 $0로 실행 중)"
   fi
 
   # 9. PATH
@@ -457,26 +457,26 @@ cmd_doctor() {
   fi
 
   # 10. 설정 파일
-  if [ -f "$HOME/.ralph.env" ]; then
-    _check ".ralph.env" ok "$HOME/.ralph.env"
+  if [ -f "$HOME/.vt.env" ]; then
+    _check ".vt.env" ok "$HOME/.vt.env"
   else
-    _check ".ralph.env" warn "없음. install.sh가 자동 생성"
+    _check ".vt.env" warn "없음. install.sh가 자동 생성"
   fi
 
   # 11. 인증 토큰
-  if [ -n "${RALPH_TOKEN:-}" ]; then
-    _check "RALPH_TOKEN" ok "설정됨 (원격 인증 활성)"
+  if [ -n "${VT_TOKEN:-}" ]; then
+    _check "VT_TOKEN" ok "설정됨 (원격 인증 활성)"
   else
-    _check "RALPH_TOKEN" warn "미설정 (공개 터널에선 누구나 접속 가능)"
+    _check "VT_TOKEN" warn "미설정 (공개 터널에선 누구나 접속 가능)"
   fi
 
   # 12. 푸시 알림
-  if [ -n "${RALPH_NOTIFY_URL:-}" ]; then
-    _check "RALPH_NOTIFY_URL" ok "$(echo "$RALPH_NOTIFY_URL" | sed 's|https://||;s|/.*|/...|')"
-  elif [ -n "${RALPH_TELEGRAM_TOKEN:-}" ]; then
+  if [ -n "${VT_NOTIFY_URL:-}" ]; then
+    _check "VT_NOTIFY_URL" ok "$(echo "$VT_NOTIFY_URL" | sed 's|https://||;s|/.*|/...|')"
+  elif [ -n "${VT_TELEGRAM_TOKEN:-}" ]; then
     _check "Telegram" ok "토큰 설정됨"
   else
-    _check "push 알림" warn "미설정 (작업 완료 알림 받으려면 RALPH_NOTIFY_URL=https://ntfy.sh/your-topic)"
+    _check "push 알림" warn "미설정 (작업 완료 알림 받으려면 VT_NOTIFY_URL=https://ntfy.sh/your-topic)"
   fi
 
   # 13. macOS 터미널 앱 감지 (자동 창 오픈용)
@@ -508,10 +508,10 @@ cmd_doctor() {
 }
 
 cmd_claude() {
-  # ralph claude — 새 터미널 창에 tmux dev + claude --resume 즉시 실행
+  # vt claude — 새 터미널 창에 tmux dev + claude --resume 즉시 실행
   # 이미 tmux 안이면 현재 창에서 바로 claude 실행
   echo ""
-  echo "  🤖 ralph claude — Claude Code 시작 (tmux dev)"
+  echo "  🤖 vt claude — Claude Code 시작 (tmux dev)"
   echo ""
   _ensure_tmux
   if [ -n "${TMUX:-}" ]; then
@@ -528,14 +528,14 @@ cmd_claude() {
 }
 
 cmd_handoff() {
-  # ralph handoff mobile  — 폰으로 현재 tmux 세션 넘기기 (QR + 좌표)
-  # ralph handoff desktop — 맥북 iTerm으로 tmux 가져오기
+  # vt handoff mobile  — 폰으로 현재 tmux 세션 넘기기 (QR + 좌표)
+  # vt handoff desktop — 맥북 iTerm으로 tmux 가져오기
   local target="${1:-mobile}"
 
   case "$target" in
     mobile)
       echo ""
-      echo "  📱 ralph handoff mobile — 현재 tmux 세션을 폰으로"
+      echo "  📱 vt handoff mobile — 현재 tmux 세션을 폰으로"
       echo ""
       _ensure_tmux
       _start_server
@@ -551,7 +551,7 @@ cmd_handoff() {
 
       local url
       url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-      local token=${RALPH_TOKEN:-}
+      local token=${VT_TOKEN:-}
       local full_url="$url"
       [ -n "$token" ] && full_url="${url}?token=${token}"
       # 폰이 접속하면 이 tmux 세션을 기본으로 보도록 hash 파라미터 추가
@@ -575,7 +575,7 @@ cmd_handoff() {
       ;;
     desktop|mac)
       echo ""
-      echo "  🖥  ralph handoff desktop — 맥북 터미널로 tmux"
+      echo "  🖥  vt handoff desktop — 맥북 터미널로 tmux"
       echo ""
       _ensure_tmux
       if [ -n "${TMUX:-}" ]; then
@@ -589,7 +589,7 @@ cmd_handoff() {
       fi
       ;;
     *)
-      echo "사용법: ralph handoff [mobile|desktop]"
+      echo "사용법: vt handoff [mobile|desktop]"
       return 1
       ;;
   esac
@@ -598,7 +598,7 @@ cmd_handoff() {
 
 cmd_status() {
   echo ""
-  echo "  📊 ralph status"
+  echo "  📊 vt status"
   echo ""
 
   local server_status="✗ 중지"
@@ -606,8 +606,8 @@ cmd_status() {
   local voice_status="✗ 중지"
   local tmux_status="✗ 없음"
 
-  if _port_in_use $RALPH_PORT; then
-    server_status="✓ 실행 중 (port $RALPH_PORT)"
+  if _port_in_use $VT_PORT; then
+    server_status="✓ 실행 중 (port $VT_PORT)"
   fi
 
   if _is_running tunnel; then
@@ -643,18 +643,18 @@ case "${1:-help}" in
   doctor)  cmd_doctor ;;
   *)
     echo ""
-    echo "  ralph — Voice Terminal CLI"
+    echo "  vt — Voice Terminal CLI"
     echo ""
     echo "  사용법:"
-    echo "    ralph voice              음성 모드 (백그라운드)"
-    echo "    ralph mobile [--e2e]     모바일 접속 URL + QR (--e2e: 페이로드 암호화)"
-    echo "    ralph start              전체 시작 (서버+터널+음성)"
-    echo "    ralph stop               모든 프로세스 종료"
-    echo "    ralph status             상태 확인"
-    echo "    ralph claude             tmux dev 안에서 claude --resume 시작"
-    echo "    ralph handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
-    echo "    ralph handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
-    echo "    ralph doctor             설치/환경 진단"
+    echo "    vt voice              음성 모드 (백그라운드)"
+    echo "    vt mobile [--e2e]     모바일 접속 URL + QR (--e2e: 페이로드 암호화)"
+    echo "    vt start              전체 시작 (서버+터널+음성)"
+    echo "    vt stop               모든 프로세스 종료"
+    echo "    vt status             상태 확인"
+    echo "    vt claude             tmux dev 안에서 claude --resume 시작"
+    echo "    vt handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
+    echo "    vt handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
+    echo "    vt doctor             설치/환경 진단"
     echo ""
     ;;
 esac

@@ -1,9 +1,9 @@
 """Push Notification — ntfy.sh / Telegram Bot 브릿지.
 
 환경변수:
-  RALPH_NOTIFY_URL       — ntfy 토픽 URL (예: https://ntfy.sh/your-topic)
-  RALPH_TELEGRAM_TOKEN   — Telegram Bot 토큰 (선택)
-  RALPH_TELEGRAM_CHAT_ID — Telegram 채팅 ID (선택)
+  VT_NOTIFY_URL       — ntfy 토픽 URL (예: https://ntfy.sh/your-topic)
+  VT_TELEGRAM_TOKEN   — Telegram Bot 토큰 (선택)
+  VT_TELEGRAM_CHAT_ID — Telegram 채팅 ID (선택)
 
 사용:
   await notify.send("Claude 완료", "리팩토링 끝났어요", priority="default")
@@ -28,8 +28,8 @@ def _env(name: str) -> str:
 
 
 def is_configured() -> bool:
-    return bool(_env("RALPH_NOTIFY_URL") or
-                (_env("RALPH_TELEGRAM_TOKEN") and _env("RALPH_TELEGRAM_CHAT_ID")))
+    return bool(_env("VT_NOTIFY_URL") or
+                (_env("VT_TELEGRAM_TOKEN") and _env("VT_TELEGRAM_CHAT_ID")))
 
 
 async def send(title: str, message: str, priority: Priority = "default",
@@ -39,9 +39,9 @@ async def send(title: str, message: str, priority: Priority = "default",
     Returns: 하나라도 성공하면 True, 모두 실패하면 False.
     """
     tasks = []
-    if _env("RALPH_NOTIFY_URL"):
+    if _env("VT_NOTIFY_URL"):
         tasks.append(_send_ntfy(title, message, priority, tags))
-    if _env("RALPH_TELEGRAM_TOKEN") and _env("RALPH_TELEGRAM_CHAT_ID"):
+    if _env("VT_TELEGRAM_TOKEN") and _env("VT_TELEGRAM_CHAT_ID"):
         tasks.append(_send_telegram(title, message))
     if not tasks:
         return False
@@ -50,7 +50,7 @@ async def send(title: str, message: str, priority: Priority = "default",
 
 
 async def _send_ntfy(title: str, message: str, priority: Priority, tags: str) -> bool:
-    url = _env("RALPH_NOTIFY_URL")
+    url = _env("VT_NOTIFY_URL")
 
     def _post():
         headers = {
@@ -73,8 +73,8 @@ async def _send_ntfy(title: str, message: str, priority: Priority, tags: str) ->
 
 
 async def _send_telegram(title: str, message: str) -> bool:
-    token = _env("RALPH_TELEGRAM_TOKEN")
-    chat_id = _env("RALPH_TELEGRAM_CHAT_ID")
+    token = _env("VT_TELEGRAM_TOKEN")
+    chat_id = _env("VT_TELEGRAM_CHAT_ID")
     text = f"*{title}*\n{message}" if title else message
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     data = urllib.parse.urlencode({

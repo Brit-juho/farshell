@@ -1,5 +1,5 @@
 ---
-name: ralph-voice
+name: vt-voice
 description: |
   Voice Daemon 설치 및 실행. macOS에서 핫키(Ctrl+Shift+V)로 음성 입력 → STT → tmux 주입.
   서버 없이 독립 동작. Use when asked to "음성 모드", "voice daemon", "음성 데몬",
@@ -17,11 +17,11 @@ macOS에서 글로벌 핫키로 음성 → STT → tmux 주입하는 데몬을 �
 
 ### 1. Python 경로 확인
 
-사용자의 `~/.ralph.env`에서 `RALPH_PYTHON` 값을 읽으세요 (install.sh가 설정):
+사용자의 `~/.vt.env`에서 `VT_PYTHON` 값을 읽으세요 (install.sh가 설정):
 
 ```bash
-source ~/.ralph.env 2>/dev/null
-PY="${RALPH_PYTHON:-$(which python3)}"
+source ~/.vt.env 2>/dev/null
+PY="${VT_PYTHON:-$(which python3)}"
 echo "Python: $PY"
 ```
 

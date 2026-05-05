@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent
 FRONTEND_DIR = str(BASE_DIR / "frontend")
 
-# 토큰 인증 — RALPH_TOKEN 환경변수가 설정되면 활성화
-RALPH_TOKEN = os.environ.get("RALPH_TOKEN", "")
+# 토큰 인증 — VT_TOKEN 환경변수가 설정되면 활성화
+VT_TOKEN = os.environ.get("VT_TOKEN", "")
 
 
 class TokenAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if not RALPH_TOKEN:
+        if not VT_TOKEN:
             return await call_next(request)
         # 정적 파일, 헬스체크는 인증 불필요
         path = request.url.path
@@ -47,7 +47,7 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
             auth = request.headers.get("authorization", "")
             if auth.startswith("Bearer "):
                 token = auth[7:]
-        if token != RALPH_TOKEN:
+        if token != VT_TOKEN:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         return await call_next(request)
 
@@ -286,12 +286,12 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int) -> dict:
 # 파일 업로드 / 다운로드
 # ---------------------------------------------------------------------------
 
-UPLOAD_DIR = Path("/tmp/ralphton_uploads")
+UPLOAD_DIR = Path("/tmp/vt-uploads")
 
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), session_id: str = Query("")):
-    """모바일에서 파일을 업로드하여 /tmp/ralphton_uploads/에 저장."""
+    """모바일에서 파일을 업로드하여 /tmp/vt-uploads/에 저장."""
     UPLOAD_DIR.mkdir(exist_ok=True)
     # 파일명 sanitize — 경로 구분자 제거, basename만 사용
     safe_name = Path(file.filename).name.replace("..", "").strip()
@@ -316,11 +316,11 @@ async def download_file(path: str = Query(...)):
 
 
 def _ws_auth(ws: WebSocket) -> bool:
-    """WebSocket 토큰 인증. RALPH_TOKEN 미설정이면 항상 통과."""
-    if not RALPH_TOKEN:
+    """WebSocket 토큰 인증. VT_TOKEN 미설정이면 항상 통과."""
+    if not VT_TOKEN:
         return True
     token = ws.query_params.get("token", "")
-    return token == RALPH_TOKEN
+    return token == VT_TOKEN
 
 
 @app.websocket("/ws/{session_id}")
@@ -586,10 +586,10 @@ async def notify_status():
     """현재 알림 채널 설정 상태."""
     return {
         "configured": notify.is_configured(),
-        "ntfy": bool(os.environ.get("RALPH_NOTIFY_URL", "").strip()),
+        "ntfy": bool(os.environ.get("VT_NOTIFY_URL", "").strip()),
         "telegram": bool(
-            os.environ.get("RALPH_TELEGRAM_TOKEN", "").strip()
-            and os.environ.get("RALPH_TELEGRAM_CHAT_ID", "").strip()
+            os.environ.get("VT_TELEGRAM_TOKEN", "").strip()
+            and os.environ.get("VT_TELEGRAM_CHAT_ID", "").strip()
         ),
     }
 
@@ -602,7 +602,7 @@ async def notify_test(request: Request):
         body = await request.json()
     except Exception:
         pass
-    title = body.get("title", "랄프톤 테스트")
+    title = body.get("title", "voice-terminal 테스트")
     message = body.get("message", "푸시 알림이 정상 작동합니다 🎉")
     priority = body.get("priority", "default")
     ok = await notify.send(title, message, priority=priority, tags="mega")
