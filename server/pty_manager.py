@@ -129,8 +129,45 @@ class PTYManager:
         except (OSError, ProcessLookupError):
             pass
 
+    # 안전 모드 — 라인 버퍼 (Enter 입력 시 검사)
+    _line_buffer: dict[str, bytes] = {}
+
     def write(self, session_id: str, data: bytes) -> None:
         session = self._get(session_id)
+
+        # 안전 모드 검사 — Enter 입력 시 누적 라인 검사
+        try:
+            import safe_mode
+            if safe_mode.is_enabled():
+                buf = self._line_buffer.get(session_id, b"") + data
+                if b"\r" in buf or b"\n" in buf:
+                    # 첫 개행 이전까지가 검사 대상 라인
+                    line_bytes = buf.split(b"\r", 1)[0].split(b"\n", 1)[0]
+                    cmd = line_bytes.decode("utf-8", errors="ignore")
+                    ok, reason = safe_mode.check(cmd)
+                    if not ok:
+                        # 차단 메시지를 PTY 출력으로 broadcast
+                        block_msg = (
+                            f"\r\n\x1b[31m[안전모드 차단] {reason}: {cmd}\x1b[0m\r\n"
+                        ).encode()
+                        for cb in list(session._subscribers):
+                            try:
+                                cb(block_msg)
+                            except Exception:
+                                pass
+                        # 입력 무효화 — Ctrl+C로 라인 비움
+                        try:
+                            os.write(session.fd, b"\x03")
+                        except OSError:
+                            pass
+                        self._line_buffer[session_id] = b""
+                        return
+                    self._line_buffer[session_id] = b""
+                else:
+                    self._line_buffer[session_id] = buf
+        except ImportError:
+            pass
+
         try:
             os.write(session.fd, data)
         except OSError as e:

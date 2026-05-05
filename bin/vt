@@ -23,6 +23,10 @@ VT_CONFIG="$HOME/.vt.env"
 # 설정 가능한 변수 (환경변수 또는 ~/.vt.env로 오버라이드)
 VT_PORT="${VT_PORT:-7777}"
 
+# 격리된 tmux 소켓 — 사용자 기존 tmux 세션과 분리
+VT_TMUX_SOCKET="${VT_TMUX_SOCKET:-vt}"
+TMUX_BASE=(tmux -L "$VT_TMUX_SOCKET")
+
 # Python 자동 감지 — 우선순위:
 #   1) 환경변수 VT_PYTHON / ~/.vt.env
 #   2) 프로젝트 .venv (install.sh로 만든 것)
@@ -114,12 +118,12 @@ _start_voice_daemon() {
 }
 
 _ensure_tmux() {
-  if ! tmux list-sessions 2>/dev/null | grep -q .; then
+  if ! "${TMUX_BASE[@]}" list-sessions 2>/dev/null | grep -q .; then
     # -x/-y로 윈도우 크기를 명시 → detached 상태에서 tcgetattr 실패 방지
-    tmux new-session -d -s dev -x 200 -y 50
-    echo "✓ tmux 세션 'dev' 생성"
+    "${TMUX_BASE[@]}" new-session -d -s dev -x 200 -y 50
+    echo "✓ tmux 세션 'dev' 생성 (소켓: $VT_TMUX_SOCKET)"
   else
-    echo "✓ tmux 세션 존재: $(tmux list-sessions -F '#{session_name}' | tr '\n' ' ')"
+    echo "✓ tmux 세션 존재 (소켓: $VT_TMUX_SOCKET): $("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' | tr '\n' ' ')"
   fi
 }
 
@@ -130,7 +134,7 @@ _ensure_tmux() {
 _open_tmux_terminal() {
   [ "$(uname)" = "Darwin" ] || return 1
 
-  local cmd='tmux new -A -s dev "claude --resume"'
+  local cmd="tmux -L $VT_TMUX_SOCKET new -A -s dev \"claude --resume\""
   local term="${TERM_PROGRAM:-}"
   # 소문자 정규화 (kitty 등 일부 터미널은 소문자로 설정)
   local term_lc
@@ -223,7 +227,7 @@ _print_attach_guide() {
     echo "    → resume 목록에서 현재 대화를 고르면 음성/모바일이 그 Claude로 연결됩니다."
   else
     echo "  ⓘ 자동 오픈 실패. 다른 터미널에서 다음 명령을 실행하세요:"
-    echo "      tmux new -A -s dev 'claude --resume'"
+    echo "      tmux -L $VT_TMUX_SOCKET new -A -s dev 'claude --resume'"
   fi
 }
 
@@ -256,14 +260,24 @@ cmd_voice() {
 }
 
 cmd_mobile() {
-  # 옵션: --e2e 로 E2E 암호화 모드 (D3)
+  # 옵션: --e2e (E2E 암호화), --safe (위험 명령 차단)
   local want_e2e=0
+  local want_safe=0
   for arg in "$@"; do
     [ "$arg" = "--e2e" ] && want_e2e=1
+    [ "$arg" = "--safe" ] && want_safe=1
   done
 
+  # --safe 플래그 → 환경변수로 서버에 전달 (서버 시작 전 export)
+  if [ $want_safe -eq 1 ]; then
+    export VT_SAFE_MODE=1
+  fi
+
   echo ""
-  echo "  📱 vt mobile — 모바일 접속$([ $want_e2e -eq 1 ] && echo ' (E2E 암호화)')"
+  local mode_tag=""
+  [ $want_e2e -eq 1 ] && mode_tag="${mode_tag} (E2E)"
+  [ $want_safe -eq 1 ] && mode_tag="${mode_tag} (SAFE)"
+  echo "  📱 vt mobile — 모바일 접속${mode_tag}"
   echo ""
 
   _ensure_tmux
@@ -507,23 +521,214 @@ cmd_doctor() {
   echo ""
 }
 
-cmd_claude() {
-  # vt claude — 새 터미널 창에 tmux dev + claude --resume 즉시 실행
-  # 이미 tmux 안이면 현재 창에서 바로 claude 실행
+cmd_agent() {
+  # vt agent <claude|codex|aider|gemini> — 지정한 AI CLI를 tmux dev에서 시작
+  local agent="${1:-claude}"
+  shift || true
+
+  local exec_cmd bin_name icon label
+  case "$agent" in
+    claude) exec_cmd="claude --resume"; bin_name="claude"; icon="🟣"; label="Claude" ;;
+    codex)  exec_cmd="codex"; bin_name="codex"; icon="🟢"; label="Codex" ;;
+    aider)  exec_cmd="aider"; bin_name="aider"; icon="🔵"; label="Aider" ;;
+    gemini) exec_cmd="gemini"; bin_name="gemini"; icon="🟡"; label="Gemini" ;;
+    *)
+      echo "  ✗ 지원되지 않는 agent: $agent"
+      echo "  사용법: vt agent <claude|codex|aider|gemini>"
+      return 1
+      ;;
+  esac
+
+  if ! command -v "$bin_name" >/dev/null 2>&1; then
+    echo "  ✗ $label CLI 미설치: '$bin_name' 명령을 찾을 수 없습니다"
+    return 1
+  fi
+
   echo ""
-  echo "  🤖 vt claude — Claude Code 시작 (tmux dev)"
+  echo "  $icon vt agent $agent — $label 시작 (tmux dev)"
   echo ""
+
   _ensure_tmux
   if [ -n "${TMUX:-}" ]; then
-    echo "  ✓ 이미 tmux 안. 현재 창에서 claude 실행."
-    exec claude "$@"
+    echo "  ✓ 이미 tmux 안. 현재 창에서 $label 실행."
+    exec $exec_cmd "$@"
   fi
-  if _open_tmux_terminal; then
-    echo "  ✓ 새 ${TERM_PROGRAM:-터미널} 창에서 'tmux dev' + 'claude --resume' 시작"
+
+  # 새 터미널 창에서 실행 — _open_tmux_terminal은 'claude --resume' 하드코딩이므로
+  # 이 경로에선 직접 명령 빌드 후 동등한 로직 사용
+  local cmd="tmux -L $VT_TMUX_SOCKET new -A -s dev \"$exec_cmd\""
+  if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/iTerm.app" ]; then
+    osascript <<APPLESCRIPT 2>/dev/null
+tell application "iTerm"
+  activate
+  create window with default profile
+  tell current session of current window
+    write text "$cmd"
+  end tell
+end tell
+APPLESCRIPT
+    echo "  ✓ 새 iTerm 창에서 '$exec_cmd' 시작"
   else
     echo "  ⓘ 터미널 자동 오픈 실패. 수동으로:"
-    echo "      tmux new -A -s dev 'claude --resume'"
+    echo "      $cmd"
   fi
+  echo ""
+}
+
+# 하위 호환: vt claude → vt agent claude
+cmd_claude() { cmd_agent claude "$@"; }
+
+cmd_template() {
+  # vt template [save|apply|list|rm] <name>
+  local action="${1:-list}"
+  local name="${2:-default}"
+  local DIR="$HOME/.config/vt/templates"
+  mkdir -p "$DIR"
+
+  case "$action" in
+    save)
+      if [ ! -f "CLAUDE.md" ]; then
+        echo "  ✗ 현재 디렉토리에 CLAUDE.md가 없습니다"
+        return 1
+      fi
+      cp "CLAUDE.md" "$DIR/$name.md"
+      echo "  ✓ '$name' 템플릿으로 저장됨 → $DIR/$name.md"
+      ;;
+    apply)
+      if [ ! -f "$DIR/$name.md" ]; then
+        echo "  ✗ 템플릿 '$name'을 찾을 수 없습니다"
+        echo "  사용 가능한 템플릿: $(ls -1 "$DIR" 2>/dev/null | sed 's/\.md$//' | tr '\n' ' ')"
+        return 1
+      fi
+      if [ -f "CLAUDE.md" ]; then
+        cp "CLAUDE.md" "CLAUDE.md.bak"
+        echo "  ⓘ 기존 CLAUDE.md → CLAUDE.md.bak으로 백업"
+      fi
+      cp "$DIR/$name.md" "CLAUDE.md"
+      echo "  ✓ '$name' 템플릿 적용 → ./CLAUDE.md"
+      ;;
+    list)
+      echo ""
+      echo "  📋 vt template — 사용 가능한 템플릿"
+      echo "  저장 위치: $DIR"
+      echo ""
+      if [ -d "$DIR" ] && [ "$(ls -A "$DIR" 2>/dev/null)" ]; then
+        for t in "$DIR"/*.md; do
+          [ -f "$t" ] || continue
+          local base
+          base="$(basename "$t" .md)"
+          local size
+          size="$(wc -c < "$t" | tr -d ' ')"
+          printf "    • %-20s (%s bytes)\n" "$base" "$size"
+        done
+      else
+        echo "    (템플릿 없음. 'vt template save <이름>' 으로 저장)"
+      fi
+      echo ""
+      ;;
+    rm|remove|delete)
+      if [ ! -f "$DIR/$name.md" ]; then
+        echo "  ✗ 템플릿 '$name'을 찾을 수 없습니다"
+        return 1
+      fi
+      rm "$DIR/$name.md"
+      echo "  ✓ '$name' 템플릿 삭제"
+      ;;
+    *)
+      echo "사용법: vt template [save|apply|list|rm] <name>"
+      return 1
+      ;;
+  esac
+}
+
+cmd_popup() {
+  # vt popup <action> — tmux 3.2+ display-popup으로 빠른 호출
+  local action="${1:-status}"
+
+  if [ -z "${TMUX:-}" ]; then
+    # tmux 밖이면 그냥 직접 실행
+    cmd_${action} 2>/dev/null || {
+      echo "  ⓘ tmux 안에서만 popup으로 띄울 수 있습니다."
+      echo "  대신 직접 실행: vt $action"
+    }
+    return
+  fi
+
+  # tmux 3.2+ 확인
+  local tmux_ver
+  tmux_ver="$(tmux -V | awk '{print $2}')"
+  local first_ver
+  first_ver="$(printf '3.2\n%s' "$tmux_ver" | sort -V | head -1)"
+
+  if [ "$first_ver" = "3.2" ]; then
+    "${TMUX_BASE[@]}" display-popup -E -w 80% -h 70% \
+      "$0 $action; echo; echo '엔터를 눌러 닫기'; read -r"
+  else
+    echo "  ⓘ tmux 3.2+ 필요 (현재: $tmux_ver). 직접 실행:"
+    cmd_${action} 2>/dev/null
+  fi
+}
+
+cmd_run() {
+  # vt run "..." — headless claude -p 백그라운드 실행 + 완료 시 TTS/푸시
+  local prompt="$*"
+  if [ -z "$prompt" ]; then
+    echo "사용법: vt run \"명령어\""
+    echo "  예: vt run \"오늘 git 변경사항 요약해줘\""
+    return 1
+  fi
+
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "  ✗ claude CLI 미설치"
+    return 1
+  fi
+
+  local LOG="/tmp/vt-run-$$-$(date +%s).log"
+  local TIMEOUT="${VT_RUN_TIMEOUT:-3600}"
+
+  echo ""
+  echo "  🚀 vt run — 백그라운드 dispatch"
+  echo "    프롬프트: $prompt"
+  echo "    타임아웃: ${TIMEOUT}초"
+  echo "    로그: $LOG"
+  echo ""
+
+  (
+    if command -v timeout >/dev/null 2>&1; then
+      timeout "$TIMEOUT" claude -p "$prompt" > "$LOG" 2>&1
+    else
+      # macOS는 gtimeout 또는 fallback
+      claude -p "$prompt" > "$LOG" 2>&1
+    fi
+
+    local result
+    result="$(tail -c 400 "$LOG" 2>/dev/null)"
+    [ -z "$result" ] && result="(빈 응답 또는 실패)"
+
+    # TTS — 서버 실행 중이면
+    if curl -sf "http://localhost:${VT_PORT}/" -o /dev/null 2>/dev/null; then
+      curl -sf -X POST "http://localhost:${VT_PORT}/voice/output" \
+        -H 'Content-Type: application/json' \
+        -d "$(python3 -c "import json,sys; print(json.dumps({'text': sys.argv[1][:200]}))" "$result")" \
+        -o /tmp/vt-run-tts.mp3 2>/dev/null && \
+        afplay /tmp/vt-run-tts.mp3 2>/dev/null
+    else
+      # fallback: macOS say
+      command -v say >/dev/null && say -v Yuna "${result:0:200}" 2>/dev/null
+    fi
+
+    # ntfy 푸시
+    if [ -n "${VT_NOTIFY_URL:-}" ]; then
+      curl -sf -d "$result" \
+        -H "Title: vt run 완료" \
+        -H "Tags: white_check_mark" \
+        "$VT_NOTIFY_URL" >/dev/null 2>&1
+    fi
+  ) &
+
+  local bg_pid=$!
+  echo "  ✓ PID $bg_pid — 완료 시 TTS·푸시 알림"
+  echo "    실시간 확인: tail -f $LOG"
   echo ""
 }
 
@@ -542,9 +747,9 @@ cmd_handoff() {
       _start_tunnel
 
       # 현재 tmux 세션 결정 (TMUX 안이면 그 세션, 아니면 dev)
-      local session
+      local session=""
       if [ -n "${TMUX:-}" ]; then
-        session="$(tmux display -p '#S')"
+        session="$("${TMUX_BASE[@]}" display -p '#S' 2>/dev/null || tmux display -p '#S')"
       else
         session="dev"
       fi
@@ -582,6 +787,7 @@ cmd_handoff() {
         echo "  ⓘ 이미 tmux 안 ($(tmux display -p '#S')). 추가 동작 없음."
         return
       fi
+      _ensure_tmux
       if _open_tmux_terminal; then
         echo "  ✓ 새 ${TERM_PROGRAM:-터미널} 창에 tmux 'dev' + claude --resume 열림"
       else
@@ -620,8 +826,8 @@ cmd_status() {
     voice_status="✓ 실행 중 (Ctrl+Shift+V)"
   fi
 
-  if tmux list-sessions 2>/dev/null | grep -q .; then
-    tmux_status="✓ $(tmux list-sessions -F '#{session_name}' | tr '\n' ' ')"
+  if "${TMUX_BASE[@]}" list-sessions 2>/dev/null | grep -q .; then
+    tmux_status="✓ $("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' | tr '\n' ' ')"
   fi
 
   echo "  서버:        $server_status"
@@ -638,20 +844,30 @@ case "${1:-help}" in
   start)   cmd_start ;;
   stop)    cmd_stop ;;
   status)  cmd_status ;;
-  claude)  shift; cmd_claude "$@" ;;
-  handoff) shift; cmd_handoff "$@" ;;
-  doctor)  cmd_doctor ;;
+  claude)   shift; cmd_claude "$@" ;;
+  agent)    shift; cmd_agent "$@" ;;
+  handoff)  shift; cmd_handoff "$@" ;;
+  doctor)   cmd_doctor ;;
+  template) shift; cmd_template "$@" ;;
+  popup)    shift; cmd_popup "$@" ;;
+  run)      shift; cmd_run "$@" ;;
   *)
     echo ""
     echo "  vt — Voice Terminal CLI"
     echo ""
     echo "  사용법:"
     echo "    vt voice              음성 모드 (백그라운드)"
-    echo "    vt mobile [--e2e]     모바일 접속 URL + QR (--e2e: 페이로드 암호화)"
+    echo "    vt mobile [--e2e] [--safe]"
+    echo "                          모바일 접속 (--e2e: 암호화, --safe: 위험명령 차단)"
     echo "    vt start              전체 시작 (서버+터널+음성)"
     echo "    vt stop               모든 프로세스 종료"
     echo "    vt status             상태 확인"
     echo "    vt claude             tmux dev 안에서 claude --resume 시작"
+    echo "    vt agent <name>       claude/codex/aider/gemini 시작"
+    echo "    vt template [save|apply|list|rm] <이름>"
+    echo "                          CLAUDE.md 템플릿 관리"
+    echo "    vt popup <action>     tmux 3.2+ popup으로 빠른 호출"
+    echo "    vt run \"명령\"          headless claude -p 백그라운드 실행"
     echo "    vt handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
     echo "    vt handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
     echo "    vt doctor             설치/환경 진단"
