@@ -466,12 +466,12 @@ vt shell-init pwsh >> $PROFILE                    # PowerShell
 
 | Step | 항목 | 상태 |
 |------|------|------|
-| 1 | #6-1 voice_daemon `-L vt` 통일 | ☐ |
-| 2 | #6-4 `_ensure_tmux` 3단계 분리 | ☐ |
-| 3 | #6-3 `vt shell-init` 명령 | ☐ |
-| 4 | #6-2 `vt install-profiles` 명령 | ☐ |
-| 5 | 문서화 (README/CLAUDE/ARCHITECTURE) | ☐ |
-| 6 | 회귀 테스트 + 서브 에이전트 검증 | ☐ |
+| 1 | #6-1 voice_daemon `-L vt` 통일 | ☑ |
+| 2 | #6-4 `_ensure_tmux` 3단계 분리 | ☑ |
+| 3 | #6-3 `vt shell-init` 명령 | ☑ |
+| 4 | #6-2 `vt install-profiles` 명령 | ☑ |
+| 5 | 문서화 (README/CLAUDE/ARCHITECTURE) | ☑ |
+| 6 | 회귀 테스트 + 서브 에이전트 검증 | ☑ (100%) |
 
 ---
 

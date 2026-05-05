@@ -32,6 +32,19 @@
 
 **핵심 아이디어**: tmux 세션이 **단일 진실의 원천(single source of truth)**. 데스크톱 iTerm, 모바일 PWA, Voice Daemon이 모두 같은 tmux에 붙어서 동작한다.
 
+### 1.1 단일 tmux 서버 원칙 (Phase 6)
+
+vt의 모든 클라이언트는 격리된 tmux 소켓 `-L vt` (`VT_TMUX_SOCKET` 환경변수로 오버라이드 가능)에 접속한다. 사용자의 기존 `tmux ls` 세션과 분리되며, 4개 클라이언트가 같은 서버를 공유한다:
+
+| 클라이언트 | 호출 형태 | 출처 |
+|------------|-----------|------|
+| `bin/vt` (CLI) | `${TMUX_BASE[@]} ...` (`tmux -L vt`) | `bin/vt` 상단 정의 |
+| `server/main.py` (PTY) | `tmux -L vt attach-session ...` | `pty_manager` 경로 |
+| `server/voice_daemon.py` | `TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]` | Phase 6 #6-1 |
+| Stop hook (`tts_hook.sh`) | (TTS만, tmux 직접 호출 없음) | — |
+
+소켓을 통일하지 않으면 Voice Daemon 입력이 모바일·웹과 분리되어 "왜 안 들어가지?" 류 디버깅이 발생한다.
+
 ---
 
 ## 2. 디렉토리별 책임
