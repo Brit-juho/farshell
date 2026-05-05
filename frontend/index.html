@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>랄프톤 Terminal</title>
+  <title>voice-terminal Terminal</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#181825">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
@@ -169,9 +169,9 @@
     let activeId = null;
     const _urlParams = new URLSearchParams(location.search);
     const _hashParams = new URLSearchParams(location.hash.slice(1));
-    const RALPH_TOKEN = _urlParams.get('token') || '';
-    const _tokenQuery = RALPH_TOKEN ? `?token=${RALPH_TOKEN}` : '';
-    const _tokenParam = RALPH_TOKEN ? `&token=${RALPH_TOKEN}` : '';
+    const VT_TOKEN = _urlParams.get('token') || '';
+    const _tokenQuery = VT_TOKEN ? `?token=${VT_TOKEN}` : '';
+    const _tokenParam = VT_TOKEN ? `&token=${VT_TOKEN}` : '';
     // E2E 암호화 활성화 — URL에 ?e2e=1 또는 #e2e=1 있으면 ON (D3)
     const E2E_ENABLED = (_urlParams.get('e2e') === '1' || _hashParams.get('e2e') === '1');
     const _e2eQuery = E2E_ENABLED ? (_tokenQuery ? '&e2e=1' : '?e2e=1') : '';
@@ -239,14 +239,14 @@
     }
     const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
     const API_BASE = `${location.protocol}//${location.host}`;
-    const _authHeaders = RALPH_TOKEN ? {'Authorization': `Bearer ${RALPH_TOKEN}`} : {};
+    const _authHeaders = VT_TOKEN ? {'Authorization': `Bearer ${VT_TOKEN}`} : {};
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const termFontSize = isMobile ? 12 : 14;
 
     // 인증 토큰 자동 첨부 fetch 래퍼
     const _origFetch = window.fetch;
     window.fetch = (url, opts = {}) => {
-      if (RALPH_TOKEN && typeof url === 'string' && url.startsWith(API_BASE)) {
+      if (VT_TOKEN && typeof url === 'string' && url.startsWith(API_BASE)) {
         opts.headers = { ...(opts.headers || {}), ..._authHeaders };
       }
       return _origFetch(url, opts);

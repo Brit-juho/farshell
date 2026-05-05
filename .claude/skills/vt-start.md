@@ -1,17 +1,17 @@
 ---
-name: ralph-start
+name: vt-start
 description: |
-  랄프톤 서버 시작 + Cloudflare Tunnel 원격 접속 설정.
+  Voice Terminal 서버 시작 + Cloudflare Tunnel 원격 접속 설정.
   서버 실행, tmux 세션 준비, 터널 URL 생성까지 원스텝으로 처리.
-  Use when asked to "서버 시작", "랄프톤 시작", "start ralph", "원격 접속 설정".
+  Use when asked to "서버 시작", "voice terminal 시작", "start vt", "원격 접속 설정".
 allowed-tools:
   - Bash
   - Read
 ---
 
-## 랄프톤 서버 시작 스킬
+## Voice Terminal 서버 시작 스킬
 
-이 스킬은 랄프톤 Voice Terminal 서버를 시작하고 원격 접속을 설정합니다.
+이 스킬은 Voice Terminal 서버를 시작하고 원격 접속을 설정합니다.
 
 ### 실행 순서
 
@@ -28,7 +28,7 @@ lsof -i :7777 -t 2>/dev/null && echo "SERVER_ALREADY_RUNNING" || echo "SERVER_NO
 
 ```bash
 cd "$CLAUDE_PROJECT_DIR/server"
-nohup /opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python -m uvicorn main:app --host 0.0.0.0 --port 7777 > /tmp/ralphton-server.log 2>&1 &
+nohup /opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python -m uvicorn main:app --host 0.0.0.0 --port 7777 > /tmp/vt-server.log 2>&1 &
 echo "SERVER_PID: $!"
 ```
 
@@ -37,7 +37,7 @@ echo "SERVER_PID: $!"
 curl -sf http://localhost:7777/ -o /dev/null && echo "SERVER_OK" || echo "SERVER_FAIL"
 ```
 
-실패 시 로그 확인: `tail -20 /tmp/ralphton-server.log`
+실패 시 로그 확인: `tail -20 /tmp/vt-server.log`
 
 3. **tmux 세션 준비**
 

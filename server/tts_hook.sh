@@ -11,7 +11,7 @@ cat > "$TMPINPUT"
 python3 - "$TMPINPUT" << 'PYEOF'
 import json, sys, subprocess, os, urllib.request
 
-SERVER = os.environ.get("RALPH_SERVER", "http://localhost:7777")
+SERVER = os.environ.get("VT_SERVER", "http://localhost:7777")
 MAX_CHARS = 200
 TMP_AUDIO = "/tmp/claude_tts.mp3"
 
@@ -66,8 +66,8 @@ try:
 except Exception:
     subprocess.Popen(["say", "-v", "Yuna", text])
 
-# 모바일 푸시 (ntfy) — RALPH_NOTIFY_URL 설정돼 있을 때만
-notify_url = os.environ.get("RALPH_NOTIFY_URL", "").strip()
+# 모바일 푸시 (ntfy) — VT_NOTIFY_URL 설정돼 있을 때만
+notify_url = os.environ.get("VT_NOTIFY_URL", "").strip()
 if notify_url:
     try:
         push_req = urllib.request.Request(

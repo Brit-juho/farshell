@@ -1,5 +1,5 @@
 #!/bin/bash
-# 랄프톤 Voice Terminal Server 실행 스크립트
+# voice-terminal Server 실행 스크립트
 # whisper conda 환경에서 서버를 시작합니다.
 
 set -e
@@ -20,14 +20,14 @@ if [ ! -f "$PYTHON" ] && ! command -v "$PYTHON" >/dev/null 2>&1; then
     exit 1
 fi
 
-# ~/.ralph.env 설정 로드
-[ -f "$HOME/.ralph.env" ] && source "$HOME/.ralph.env"
+# ~/.vt.env 설정 로드
+[ -f "$HOME/.vt.env" ] && source "$HOME/.vt.env"
 
 HOST="${HOST:-0.0.0.0}"
-PORT="${RALPH_PORT:-${PORT:-7777}}"
-PYTHON="${RALPH_PYTHON:-$PYTHON}"
+PORT="${VT_PORT:-${PORT:-7777}}"
+PYTHON="${VT_PYTHON:-$PYTHON}"
 
-echo "랄프톤 Voice Terminal Server"
+echo "voice-terminal Server"
 echo "  http://localhost:${PORT}"
 if [ "$(uname)" = "Darwin" ]; then
   _IP=$(ipconfig getifaddr en0 2>/dev/null || echo '0.0.0.0')

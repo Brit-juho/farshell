@@ -1,5 +1,5 @@
 #!/bin/bash
-# 랄프톤 원라인 설치 스크립트
+# voice-terminal 원라인 설치 스크립트
 # 사용법:
 #   ./install.sh             # 터미널만 (경량, ~50MB)
 #   ./install.sh voice       # 터미널 + 음성 모드 (~1.5GB)
@@ -7,8 +7,8 @@
 #   curl -fsSL <URL>/install.sh | bash -s voice
 #
 # 환경변수:
-#   RALPH_DIR   — 설치 경로 (기본: 스크립트 위치 또는 ~/ralphton)
-#   RALPH_PORT  — 포트 (기본: 7777)
+#   VT_DIR   — 설치 경로 (기본: 스크립트 위치 또는 ~/voice-terminal)
+#   VT_PORT  — 포트 (기본: 7777)
 
 set -euo pipefail
 
@@ -16,23 +16,23 @@ PROFILE="${1:-terminal}"  # terminal | voice
 PIPE_INSTALL=0
 
 # 스크립트가 파이프(curl | bash)로 실행되면 레포 자동 클론
-if [ -t 0 ] && [ -f "$(dirname "$0")/bin/ralph" ]; then
-  RALPH_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -t 0 ] && [ -f "$(dirname "$0")/bin/vt" ]; then
+  VT_DIR="$(cd "$(dirname "$0")" && pwd)"
 else
   PIPE_INSTALL=1
-  RALPH_DIR="${RALPH_DIR:-$HOME/ralphton}"
-  if [ ! -d "$RALPH_DIR" ]; then
-    echo "▸ 레포 클론 중 → $RALPH_DIR"
-    git clone --depth 1 https://github.com/NeTrioGit/ralphton.git "$RALPH_DIR"
+  VT_DIR="${VT_DIR:-$HOME/voice-terminal}"
+  if [ ! -d "$VT_DIR" ]; then
+    echo "▸ 레포 클론 중 → $VT_DIR"
+    git clone --depth 1 https://github.com/NeTrioGit/voice-terminal.git "$VT_DIR"
   else
-    echo "✓ 기존 레포 사용: $RALPH_DIR"
+    echo "✓ 기존 레포 사용: $VT_DIR"
   fi
-  cd "$RALPH_DIR"
+  cd "$VT_DIR"
 fi
 
 echo ""
-echo "  🎤 랄프톤 설치 — 프로필: $PROFILE"
-echo "  설치 경로: $RALPH_DIR"
+echo "  🎤 voice-terminal 설치 — 프로필: $PROFILE"
+echo "  설치 경로: $VT_DIR"
 echo ""
 
 # 1. Python 확인
@@ -44,7 +44,7 @@ PY_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.vers
 echo "✓ Python $PY_VERSION"
 
 # 2. venv 생성 (이미 있으면 재사용)
-VENV="$RALPH_DIR/.venv"
+VENV="$VT_DIR/.venv"
 if [ ! -d "$VENV" ]; then
   echo "▸ 가상환경 생성 → $VENV"
   python3 -m venv "$VENV"
@@ -55,9 +55,9 @@ pip install --quiet --upgrade pip
 
 # 3. 프로필별 패키지 설치
 echo "▸ 패키지 설치 중..."
-pip install --quiet -r "$RALPH_DIR/requirements-core.txt"
+pip install --quiet -r "$VT_DIR/requirements-core.txt"
 if [ "$PROFILE" = "voice" ]; then
-  pip install --quiet -r "$RALPH_DIR/requirements-voice.txt"
+  pip install --quiet -r "$VT_DIR/requirements-voice.txt"
   if [ "$(uname)" = "Darwin" ]; then
     pip install --quiet pyobjc-framework-Cocoa
   fi
@@ -66,24 +66,24 @@ else
   echo "✓ 터미널 의존성 설치 완료 (음성 모드는 './install.sh voice'로 추가)"
 fi
 
-# 4. ralph CLI 등록
+# 4. vt CLI 등록
 mkdir -p "$HOME/.local/bin"
-ln -sf "$RALPH_DIR/bin/ralph" "$HOME/.local/bin/ralph"
-chmod +x "$RALPH_DIR/bin/ralph"
-echo "✓ ralph CLI 등록 → ~/.local/bin/ralph"
+ln -sf "$VT_DIR/bin/vt" "$HOME/.local/bin/vt"
+chmod +x "$VT_DIR/bin/vt"
+echo "✓ vt CLI 등록 → ~/.local/bin/vt"
 
 # 5. 설정 파일 생성 (없을 때만)
-if [ ! -f "$HOME/.ralph.env" ]; then
-  cat > "$HOME/.ralph.env" <<EOF
-# 랄프톤 설정 (수정 가능)
-RALPH_PORT=${RALPH_PORT:-7777}
-RALPH_PYTHON=$VENV/bin/python
-# RALPH_TOKEN=your-secret    # 원격 접속 시 인증 (선택)
-# RALPH_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (D2, 선택)
+if [ ! -f "$HOME/.vt.env" ]; then
+  cat > "$HOME/.vt.env" <<EOF
+# voice-terminal 설정 (수정 가능)
+VT_PORT=${VT_PORT:-7777}
+VT_PYTHON=$VENV/bin/python
+# VT_TOKEN=your-secret    # 원격 접속 시 인증 (선택)
+# VT_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (D2, 선택)
 EOF
-  echo "✓ 설정 파일 생성 → ~/.ralph.env"
+  echo "✓ 설정 파일 생성 → ~/.vt.env"
 else
-  echo "✓ 기존 설정 유지 → ~/.ralph.env"
+  echo "✓ 기존 설정 유지 → ~/.vt.env"
 fi
 
 # 6. PATH 확인
@@ -102,7 +102,7 @@ fi
 # 7. cloudflared 안내 (선택)
 if ! command -v cloudflared >/dev/null 2>&1; then
   echo ""
-  echo "  ⓘ 원격 접속(ralph mobile)용 cloudflared 미설치."
+  echo "  ⓘ 원격 접속(vt mobile)용 cloudflared 미설치."
   if [ "$(uname)" = "Darwin" ]; then
     echo "    설치: brew install cloudflared"
   else
@@ -115,10 +115,10 @@ echo "  ┌───────────────────────
 echo "  │  ✓ 설치 완료                              │"
 echo "  │                                         │"
 echo "  │  다음 명령으로 시작:                        │"
-echo "  │    ralph status   — 상태 확인              │"
-echo "  │    ralph mobile   — 폰 접속 URL            │"
+echo "  │    vt status   — 상태 확인                │"
+echo "  │    vt mobile   — 폰 접속 URL              │"
 if [ "$PROFILE" = "voice" ]; then
-echo "  │    ralph voice    — 음성 모드              │"
+echo "  │    vt voice    — 음성 모드                │"
 fi
 echo "  │                                         │"
 echo "  │  새 터미널을 열거나 'source ~/.zshrc' 실행  │"

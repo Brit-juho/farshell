@@ -1,7 +1,7 @@
 ---
-name: ralph-mobile
+name: vt-mobile
 description: |
-  모바일 기기에서 랄프톤 테스트. adb 포트포워딩, Chrome 열기, 스크린샷 캡처,
+  모바일 기기에서 Voice Terminal 테스트. adb 포트포워딩, Chrome 열기, 스크린샷 캡처,
   원격 터널 접속까지 처리. Use when asked to "모바일 테스트", "폰에서 테스트",
   "mobile test", "adb 테스트", "모바일로 확인".
 allowed-tools:
@@ -14,7 +14,7 @@ allowed-tools:
 
 ### 사전 조건
 
-- 서버가 실행 중이어야 합니다 (아니면 `/ralph-start` 먼저 실행)
+- 서버가 실행 중이어야 합니다 (아니면 `/vt-start` 먼저 실행)
 - USB 디버깅이 활성화된 Android 기기가 연결되어 있어야 합니다
 
 ### 1. 기기 확인
@@ -56,10 +56,10 @@ adb reverse --remove tcp:7777 2>/dev/null
 ### 3. 스크린샷 캡처
 
 ```bash
-adb shell screencap -p /sdcard/ralph_test.png && adb pull /sdcard/ralph_test.png /tmp/ralph_mobile.png
+adb shell screencap -p /sdcard/vt_test.png && adb pull /sdcard/vt_test.png /tmp/vt_mobile.png
 ```
 
-캡처한 이미지는 Read 도구로 확인하세요: `/tmp/ralph_mobile.png`
+캡처한 이미지는 Read 도구로 확인하세요: `/tmp/vt_mobile.png`
 
 ### 4. 동기화 테스트
 
@@ -70,7 +70,7 @@ adb shell screencap -p /sdcard/ralph_test.png && adb pull /sdcard/ralph_test.png
 tmux send-keys -t dev "echo 'sync test OK'" Enter
 
 # 1초 후 모바일 스크린샷
-adb shell screencap -p /sdcard/ralph_sync.png && adb pull /sdcard/ralph_sync.png /tmp/ralph_sync.png
+adb shell screencap -p /sdcard/vt_sync.png && adb pull /sdcard/vt_sync.png /tmp/vt_sync.png
 ```
 
 ### 5. 음성 입력 테스트

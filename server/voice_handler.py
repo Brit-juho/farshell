@@ -91,7 +91,7 @@ async def transcribe(audio_bytes: bytes, input_format: str = "webm",
 
     language=None 이면 자동 감지 (Whisper가 한/영/일 등 자동 판별).
     language="ko"/"en" 등으로 명시 지정 시 해당 언어로 고정.
-    환경변수 RALPH_STT_LANG=ko 로 기본값 오버라이드 가능.
+    환경변수 VT_STT_LANG=ko 로 기본값 오버라이드 가능.
     """
     engine = _init_stt()
     if engine == "none":
@@ -99,7 +99,7 @@ async def transcribe(audio_bytes: bytes, input_format: str = "webm",
 
     # 언어 결정: 명시 인자 > 환경변수 > 자동(None)
     import os as _os
-    lang = language if language else _os.environ.get("RALPH_STT_LANG", "").strip() or None
+    lang = language if language else _os.environ.get("VT_STT_LANG", "").strip() or None
 
     loop = asyncio.get_running_loop()
     wav_bytes = await loop.run_in_executor(None, _convert_to_wav, audio_bytes, input_format)

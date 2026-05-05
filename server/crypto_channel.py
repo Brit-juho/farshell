@@ -1,6 +1,6 @@
 """E2E Crypto Channel — cloudflared 터널 너머 페이로드 암호화.
 
-설계 (opt-in, 쿼리 ?e2e=1 또는 환경변수 RALPH_E2E=1로 활성화):
+설계 (opt-in, 쿼리 ?e2e=1 또는 환경변수 VT_E2E=1로 활성화):
   1. 서버가 세션당 X25519 ephemeral keypair 생성
   2. 서버 공개키를 첫 WebSocket 텍스트로 전송: {"type":"e2e-hello","pub":"<b64u>"}
   3. 클라이언트가 자체 keypair 생성 → {"type":"e2e-ack","pub":"<b64u>"} 응답
@@ -38,7 +38,7 @@ def is_available() -> bool:
 
 def is_enabled() -> bool:
     """환경변수로 opt-in (기본 OFF)."""
-    return _NACL_AVAILABLE and os.environ.get("RALPH_E2E", "").strip() in ("1", "true", "yes")
+    return _NACL_AVAILABLE and os.environ.get("VT_E2E", "").strip() in ("1", "true", "yes")
 
 
 def _b64u_enc(data: bytes) -> str:
