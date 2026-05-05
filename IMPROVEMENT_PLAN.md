@@ -481,12 +481,12 @@ E2E 회귀:
 
 | Phase | 항목 | 상태 |
 |-------|------|------|
-| 1 | #1 격리 tmux 소켓 | ☐ |
-| 2 | #2 AI CLI 감지 배지 | ☐ |
-| 2 | #9 `vt agent <name>` 일반화 | ☐ |
-| 3 | #4 CLAUDE.md 템플릿 | ☐ |
-| 3 | #7 tmux popup | ☐ |
-| 3 | #6 `vt run` headless 디스패치 | ☐ |
-| 4 | #8 Pre/PostToolUse 훅 | ☐ |
-| 5 | #12 `--safe` 모드 | ☐ |
-| 5 | #13 디바이스 워크스페이스 동기화 | ☐ |
+| 1 | #1 격리 tmux 소켓 | ☑ |
+| 2 | #2 AI CLI 감지 배지 | ☑ |
+| 2 | #9 `vt agent <name>` 일반화 | ☑ |
+| 3 | #4 CLAUDE.md 템플릿 | ☑ |
+| 3 | #7 tmux popup | ☑ |
+| 3 | #6 `vt run` headless 디스패치 | ☑ |
+| 4 | #8 Pre/PostToolUse 훅 | ☑ |
+| 5 | #12 `--safe` 모드 | ☑ |
+| 5 | #13 디바이스 워크스페이스 동기화 | ☑ |

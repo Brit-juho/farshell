@@ -52,13 +52,16 @@ cd ~/voice-terminal
 | 명령 | 설명 |
 |------|------|
 | `vt voice` | 음성 모드 — 서버 + Voice Daemon 백그라운드 시작 |
-| `vt mobile [--e2e]` | 모바일 접속 — Cloudflare Tunnel URL + QR 코드 출력 |
+| `vt mobile [--e2e] [--safe]` | 모바일 접속 — `--safe` 시 위험 명령 차단 |
 | `vt start` | 전체 시작 — 서버 + 터널 + 음성 데몬 |
 | `vt stop` | 모든 vt 프로세스 종료 |
 | `vt status` | 서버·터널·Voice Daemon·tmux 상태 확인 |
 | `vt claude` | 새 터미널 창에 `tmux dev` + `claude --resume` 오픈 |
-| `vt handoff mobile` | 현재 tmux 세션을 폰으로 넘김 (QR + `#tmux=<name>`) |
-| `vt handoff desktop` | 폰 세션을 맥 터미널로 가져옴 |
+| `vt agent <name>` | claude/codex/aider/gemini 시작 (일반화) |
+| `vt handoff mobile/desktop` | 기기 간 tmux 세션 핸드오프 |
+| `vt template [save\|apply\|list\|rm] <name>` | CLAUDE.md 템플릿 관리 |
+| `vt popup <action>` | tmux 3.2+ popup으로 빠른 호출 |
+| `vt run "..."` | headless `claude -p` 백그라운드 + TTS 알림 |
 | `vt doctor` | 설치·환경 진단 (13개 항목 자동 점검) |
 
 ### 옵션
@@ -113,6 +116,8 @@ VT_TELEGRAM_CHAT_ID=...                   # Telegram 수신 채팅 ID
 
 # 보안
 VT_E2E=1                                  # 모든 WebSocket 강제 E2E (기본: opt-in)
+VT_SAFE_MODE=1                            # 위험 명령(rm -rf /, sudo 등) 사전 차단
+VT_TMUX_SOCKET=vt                         # tmux 격리 소켓 이름 (기본: vt)
 
 # 음성
 VT_STT_LANG=ko                            # STT 언어 고정 (미설정 시 자동 감지)
@@ -180,6 +185,24 @@ Voice Daemon 의존성 확인·설치·실행.
 ---
 
 ## Claude Code 훅
+
+### Pre / Post / Stop 훅 — Agent 상태 + TTS
+
+`server/agent_hook.sh` — Claude의 도구 사용 시작·종료·완료를 모바일 UI에 실시간 반영 + Stop 시 기존 TTS 동작.
+
+**등록 위치:** `~/.claude/settings.json`
+
+```json
+{
+  "hooks": {
+    "PreToolUse":  [{ "command": "<repo>/server/agent_hook.sh pre"  }],
+    "PostToolUse": [{ "command": "<repo>/server/agent_hook.sh post" }],
+    "Stop":        [{ "command": "<repo>/server/agent_hook.sh stop" }]
+  }
+}
+```
+
+서버는 `POST /api/agent/event`로 받아 `_state` 갱신 + `WS /ws-agent`로 브로드캐스트.
 
 ### Stop 훅 — TTS 자동 요약
 

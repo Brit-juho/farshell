@@ -278,6 +278,10 @@
     function addSession(id, displayName) {
       const tab = document.createElement('div');
       tab.className = 'tab';
+      tab.dataset.sessionId = id;
+      const agentBadge = document.createElement('span');
+      agentBadge.className = 'tab-agent';
+      agentBadge.style.cssText = 'margin-right:4px;font-size:12px;';
       const nameSpan = document.createElement('span');
       nameSpan.className = 'tab-name';
       nameSpan.textContent = displayName || id.slice(0, 8);
@@ -285,6 +289,7 @@
       closeSpan.className = 'close';
       closeSpan.textContent = '×';
       closeSpan.onclick = (e) => { e.stopPropagation(); removeSession(id); };
+      tab.appendChild(agentBadge);
       tab.appendChild(nameSpan);
       tab.appendChild(closeSpan);
       tab.onclick = () => switchTo(id);
@@ -729,6 +734,64 @@
       s.src = '/static/voice.js';
       document.body.appendChild(s);
     })();
+
+    // ── AI agent 배지 폴링 (5초) ─────────────────────────────────────
+    async function pollAgentBadges() {
+      try {
+        const res = await fetch(`${API_BASE}/api/agents`);
+        const agents = await res.json();
+        document.querySelectorAll('.tab').forEach((tab) => {
+          const sid = tab.dataset.sessionId;
+          const sess = sessions[sid];
+          const badge = tab.querySelector('.tab-agent');
+          if (!sess || !badge) return;
+          const tmuxName = sess.tmux_name || sess.tmuxName;
+          const info = tmuxName && agents[tmuxName];
+          if (info && info.icon) {
+            badge.textContent = info.icon;
+            badge.title = info.label;
+          } else {
+            badge.textContent = '';
+          }
+        });
+      } catch (e) { /* 무시 */ }
+    }
+    setInterval(pollAgentBadges, 5000);
+
+    // ── 안전 모드 표시 ───────────────────────────────────────────────
+    fetch(`${API_BASE}/api/safe-mode`).then(r => r.json()).then(data => {
+      if (data.enabled) {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#f38ba8;color:#1e1e2e;text-align:center;padding:4px;font-size:12px;z-index:9999;';
+        banner.textContent = '🛡 안전 모드 — 위험 명령 차단됨';
+        document.body.appendChild(banner);
+      }
+    }).catch(() => {});
+
+    // ── Agent 도구 사용 토스트 (WebSocket) ───────────────────────────
+    try {
+      const wsAgent = new WebSocket(`${WS_BASE}/ws-agent`);
+      wsAgent.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'agent_event' && msg.state && msg.state.tool) {
+          showToast(`🔧 ${msg.state.tool} 실행 중...`);
+        }
+      };
+    } catch (e) {}
+
+    function showToast(text) {
+      let toast = document.getElementById('agent-toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'agent-toast';
+        toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#313244;color:#cdd6f4;padding:8px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .2s;';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = text;
+      toast.style.opacity = '1';
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 2500);
+    }
   </script>
 </body>
 </html>

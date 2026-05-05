@@ -21,6 +21,10 @@ import local_mic
 import platform_utils
 import notify
 import crypto_channel
+import agent_detector
+import agent_status
+import safe_mode
+import workspace
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -163,6 +167,10 @@ async def rename_session(session_id: str, request: Request):
 # tmux 연동 — 기존 tmux 세션에 attach
 # ---------------------------------------------------------------------------
 
+TMUX_SOCKET = "vt"
+TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]
+
+
 @app.get("/api/tmux/sessions")
 async def list_tmux_sessions():
     """서버에서 실행 중인 tmux 세션 목록 (현재 명령, cwd 포함)."""
@@ -170,7 +178,7 @@ async def list_tmux_sessions():
     fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{pane_current_command}\t#{pane_current_path}"
     try:
         result = subprocess.run(
-            ["tmux", "list-sessions", "-F", fmt],
+            TMUX_BASE + ["list-sessions", "-F", fmt],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode != 0:
@@ -213,14 +221,14 @@ async def create_tmux_session(request: Request):
 
     # tmux 세션 생성
     subprocess.run(
-        ["tmux", "new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows)],
+        TMUX_BASE + ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows)],
         timeout=5,
     )
 
     # 맥북 터미널 자동 오픈 — AppleScript 인젝션 방지를 위해 세션명 화이트리스트 검증
     # 지원 터미널 우선순위: iTerm2 → Ghostty → WezTerm → Kitty → Alacritty → Terminal.app
     if auto_open and platform_utils.IS_MACOS and re.fullmatch(r"[A-Za-z0-9_\-]+", tmux_name):
-        attach_cmd = f"tmux attach -t {tmux_name}"
+        attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
         try:
             ok = platform_utils.spawn_mac_terminal(attach_cmd)
             if not ok:
@@ -262,7 +270,7 @@ async def kill_tmux_session(tmux_name: str):
         session_store.remove(existing.session_id)
         output_watcher.remove_session(existing.session_id)
 
-    subprocess.run(["tmux", "kill-session", "-t", tmux_name], timeout=5)
+    subprocess.run(TMUX_BASE + ["kill-session", "-t", tmux_name], timeout=5)
     return {"ok": True}
 
 
@@ -272,7 +280,7 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int) -> dict:
     pty_mgr.create_session(
         session_id,
         cmd=platform_utils.find_tmux(),
-        cmd_args=["tmux", "attach-session", "-t", tmux_name],
+        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", tmux_name],
         cols=cols,
         rows=rows,
     )
@@ -280,6 +288,124 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int) -> dict:
     info.tmux_name = tmux_name
     output_watcher.add_session(session_id)
     return {"id": session_id, "name": f"tmux:{tmux_name}", "tmux_session": tmux_name}
+
+
+@app.get("/api/agents")
+async def list_agents():
+    """모든 tmux 세션의 AI CLI 감지 결과 (탭 배지용)."""
+    return agent_detector.detect_all()
+
+
+@app.get("/api/agents/{tmux_name}")
+async def get_agent(tmux_name: str):
+    """특정 tmux 세션의 AI CLI 감지 결과."""
+    info = agent_detector.detect(tmux_name)
+    return info or {"agent": None}
+
+
+# Agent 훅 이벤트 ----------------------------------------------------------------
+_agent_event_clients: set[WebSocket] = set()
+
+
+@app.post("/api/agent/event")
+async def agent_event(request: Request):
+    """Claude Code Pre/Post/Stop 훅이 호출하는 엔드포인트.
+    상태 갱신 + WebSocket 브로드캐스트.
+    """
+    body = await request.json()
+    event = body.get("event", "stop")
+    payload = body.get("payload", {})
+
+    state = agent_status.on_event(event, payload)
+
+    # 브로드캐스트
+    msg = {"type": "agent_event", "event": event, "state": state}
+    dead = set()
+    for ws in list(_agent_event_clients):
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            dead.add(ws)
+    _agent_event_clients.difference_update(dead)
+
+    return {"ok": True, "state": state}
+
+
+@app.get("/api/agent/status")
+async def agent_status_get():
+    """현재 모든 활성 세션의 도구 사용 상태."""
+    return {"active": agent_status.all_active(), "all": agent_status.get_state()}
+
+
+# 워크스페이스 동기화 ----------------------------------------------------------
+_workspace_clients: set[WebSocket] = set()
+
+
+@app.get("/api/workspace")
+async def workspace_get():
+    return workspace.load()
+
+
+@app.put("/api/workspace")
+async def workspace_put(request: Request):
+    data = await request.json()
+    merged = workspace.update(data)
+
+    # 다른 디바이스로 브로드캐스트
+    msg = {"type": "workspace_updated", "data": merged}
+    dead = set()
+    for ws in list(_workspace_clients):
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            dead.add(ws)
+    _workspace_clients.difference_update(dead)
+    return {"ok": True, "data": merged}
+
+
+@app.websocket("/ws-workspace")
+async def ws_workspace(websocket: WebSocket):
+    """워크스페이스 변경 브로드캐스트 구독."""
+    await websocket.accept()
+    _workspace_clients.add(websocket)
+    try:
+        await websocket.send_json({"type": "workspace_snapshot", "data": workspace.load()})
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        _workspace_clients.discard(websocket)
+
+
+@app.get("/api/safe-mode")
+async def safe_mode_status():
+    """현재 안전 모드 상태 조회."""
+    return {"enabled": safe_mode.is_enabled()}
+
+
+@app.websocket("/ws-agent")
+async def ws_agent(websocket: WebSocket):
+    """agent 이벤트 브로드캐스트 구독."""
+    await websocket.accept()
+    _agent_event_clients.add(websocket)
+    try:
+        # 연결 시 현재 상태 전송
+        await websocket.send_json({
+            "type": "agent_snapshot",
+            "active": agent_status.all_active(),
+        })
+        while True:
+            # 클라이언트 ping 또는 close 대기
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        _agent_event_clients.discard(websocket)
 
 
 # ---------------------------------------------------------------------------
