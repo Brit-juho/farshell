@@ -38,3 +38,6 @@ Thumbs.db
 # 세션 임시 파일 (ralph-loop, 자동 생성 상태)
 .claude/*.local.md
 .claude/sessions/
+
+# 작업/플랜/점검/리뷰 문서 (가이드는 루트 유지)
+docs/
