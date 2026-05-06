@@ -1,1 +1,40 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node (혹시 prebuild 도입 시)
+node_modules/
+dist/
+build/
+.next/
+
+# OS
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs / runtime
+*.log
+*.bak
+
+# Local config (절대 커밋 금지 — 토큰·시크릿)
+.env
+.env.local
+.vt.env
+
+# 세션 임시 파일 (ralph-loop, 자동 생성 상태)
+.claude/*.local.md
+.claude/sessions/
