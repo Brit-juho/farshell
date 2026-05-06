@@ -38,6 +38,8 @@ class PTYSession:
     _read_task: Optional[asyncio.Task] = field(default=None, repr=False)
     # scrollback 버퍼 — 재접속 시 이전 출력 복원
     _scrollback: deque = field(default_factory=lambda: deque(maxlen=5000), repr=False)
+    # D3: 백프레셔(backpressure) 플래그 — True이면 _read_loop이 대기
+    _paused: bool = field(default=False, repr=False)
 
 
 class PTYManager:
@@ -173,6 +175,18 @@ class PTYManager:
         except OSError as e:
             logger.warning(f"Write failed for session {session_id}: {e}")
 
+    def pause_read(self, session_id: str) -> None:
+        """D3: 백프레셔 — PTY read loop을 일시 중단 (큐 HIGH 임계 초과 시)."""
+        session = self._sessions.get(session_id)
+        if session:
+            session._paused = True
+
+    def resume_read(self, session_id: str) -> None:
+        """D3: 백프레셔 — PTY read loop 재개 (큐 LOW 임계 이하 시)."""
+        session = self._sessions.get(session_id)
+        if session:
+            session._paused = False
+
     # [C1] subscriber 관리 — 여러 WS가 같은 세션 출력을 받을 수 있음
     def subscribe(self, session_id: str, callback: Callable[[bytes], None]) -> None:
         session = self._get(session_id)
@@ -195,6 +209,10 @@ class PTYManager:
                 return None
 
         while session_id in self._sessions:
+            # D3: 백프레셔 — 클라이언트 큐가 차 있으면 잠시 대기
+            if session._paused:
+                await asyncio.sleep(0.05)
+                continue
             data = await loop.run_in_executor(None, _blocking_read)
             if data is None or len(data) == 0:
                 # EOF — tmux detach 등으로 프로세스 종료

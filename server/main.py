@@ -216,8 +216,7 @@ async def rename_session(session_id: str, request: Request):
 # tmux 연동 — 기존 tmux 세션에 attach
 # ---------------------------------------------------------------------------
 
-TMUX_SOCKET = "vt"
-TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]
+TMUX_SOCKET = tmux_runner.VT_TMUX_SOCKET  # D5: 단일 진실의 원천 — tmux_runner에서 참조
 
 
 @app.get("/api/tmux/sessions")
@@ -269,21 +268,19 @@ async def create_tmux_session(request: Request):
     같은 tmux 세션에 자동 attach (모바일↔맥북 동시 작업용).
     """
     import re
-    import subprocess
     body = await request.json()
     tmux_name = body.get("name", f"web-{str(uuid.uuid4())[:4]}")
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
 
-    # tmux 세션 생성
-    subprocess.run(
-        TMUX_BASE + ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows)],
-        timeout=5,
+    # D5: tmux_runner로 통일 — timeout + config 적용
+    tmux_runner.run(
+        ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows)],
+        timeout=5.0,
     )
 
     # 맥북 터미널 자동 오픈 — AppleScript 인젝션 방지를 위해 세션명 화이트리스트 검증
-    # 지원 터미널 우선순위: iTerm2 → Ghostty → WezTerm → Kitty → Alacritty → Terminal.app
     if auto_open and platform_utils.IS_MACOS and re.fullmatch(r"[A-Za-z0-9_\-]+", tmux_name):
         attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
         try:
@@ -319,7 +316,6 @@ async def attach_tmux_session(request: Request):
 @app.delete("/api/tmux/kill/{tmux_name}")
 async def kill_tmux_session(tmux_name: str):
     """tmux 세션을 완전히 종료."""
-    import subprocess
     # 웹 세션도 정리
     existing = session_store.find_by_tmux_name(tmux_name)
     if existing:
@@ -327,7 +323,8 @@ async def kill_tmux_session(tmux_name: str):
         session_store.remove(existing.session_id)
         output_watcher.remove_session(existing.session_id)
 
-    subprocess.run(TMUX_BASE + ["kill-session", "-t", tmux_name], timeout=5)
+    # D5: tmux_runner로 통일
+    tmux_runner.run(["kill-session", "-t", tmux_name], timeout=5.0)
     return {"ok": True}
 
 
@@ -611,13 +608,15 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                 send_queue.put_nowait(out)
             except (asyncio.QueueEmpty, asyncio.QueueFull):
                 pass
-        # 큐 임계 검사
+        # 큐 임계 검사 — D3: pty_manager에 실제 pause/resume 전달
         qs = send_queue.qsize()
         if qs > WS_QUEUE_HIGH and not pty_paused:
             pty_paused = True
+            pty_mgr.pause_read(session_id)
             logger.debug(f"[ws] qsize={qs} → PTY pause sid={session_id}")
         elif qs < WS_QUEUE_LOW and pty_paused:
             pty_paused = False
+            pty_mgr.resume_read(session_id)
             logger.debug(f"[ws] qsize={qs} → PTY resume sid={session_id}")
 
     async def _send_worker():
