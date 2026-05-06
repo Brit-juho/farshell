@@ -1,6 +1,6 @@
 # voice-terminal
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
 
 맥북(또는 WSL2)을 서버로 두고, 어디서든 음성으로 터미널을 조작하는 시스템.
@@ -519,12 +519,13 @@ Claude 작업이 완료되면 `tts_hook.sh`가 자동으로 결과를 TTS로 읽
 
 ## 버전 / 변경 이력
 
-현재 버전: **v1.1.0** (2026-05-06)
+현재 버전: **v1.2.0** (2026-05-07)
 
 전체 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고.
 
 | 버전 | 날짜 | 주요 내용 |
 |------|------|-----------|
+| [v1.2.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.2.0) | 2026-05-07 | Phase 7-8: 라이브 프리뷰·setup-keybind·--network 모드·Cloudflare 명명 터널·WS 백프레셔·--disallowedTools·trust 자동·워크스페이스·tmux batch |
 | [v1.1.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.1.0) | 2026-05-06 | ralph→vt 리네이밍, Phase 1-6 (격리 소켓·AI 인식·명령 확장·훅·안전 모드·크로스 플랫폼 통합) |
 | [v1.0.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.0.0) | 2026-04-14 | 초기 안정 버전 (PWA·Voice Daemon·STT/TTS·터널·`vt` CLI·`install.sh`) |
 

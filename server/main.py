@@ -25,6 +25,10 @@ import agent_detector
 import agent_status
 import safe_mode
 import workspace
+import tmux_runner
+import network_access
+import tunnel
+import auto_responder
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,7 +60,36 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class NetworkAccessMiddleware(BaseHTTPMiddleware):
+    """Phase 8 G1: CIDR 기반 IP 화이트리스트.
+
+    `VT_NETWORK_MODE`(localhost/lan/all)에 따라 외부 요청 차단.
+    Cloudflare Tunnel은 항상 127.0.0.1로 들어와서 `all` 모드면 자동 통과.
+    """
+    async def dispatch(self, request: Request, call_next):
+        spec = network_access.get_current_spec()
+        if spec.allow_all:
+            return await call_next(request)
+        # 정적 파일은 통과
+        path = request.url.path
+        if path in ("/", "/sw.js", "/manifest.json") or path.startswith("/static"):
+            return await call_next(request)
+        client_host = request.client.host if request.client else None
+        # X-Forwarded-For 신뢰 옵션 (proxy 뒤 환경)
+        if os.environ.get("VT_TRUST_PROXY", "").strip() == "1":
+            xff = request.headers.get("x-forwarded-for", "")
+            if xff:
+                client_host = xff.split(",")[0].strip()
+        if not spec.is_allowed(client_host):
+            return JSONResponse(
+                {"error": "forbidden", "reason": "ip_not_allowed", "ip": client_host},
+                status_code=403,
+            )
+        return await call_next(request)
+
+
 app = FastAPI()
+app.add_middleware(NetworkAccessMiddleware)
 app.add_middleware(TokenAuthMiddleware)
 
 # [H3] CORS 미들웨어
@@ -70,6 +103,11 @@ app.add_middleware(
 pty_mgr = PTYManager()
 session_store = SessionStore()
 output_watcher = OutputWatcher()
+
+# Phase 8 G5: trust prompt 자동 응답 (옵트인 — VT_AUTO_TRUST=1)
+_auto_responder = auto_responder.get_global_responder(
+    write_fn=lambda sid, data: pty_mgr.write(sid, data)
+)
 
 # 알림용 WebSocket 클라이언트 관리
 _notify_clients: set[WebSocket] = set()
@@ -103,11 +141,22 @@ async def capabilities():
     """설치된 기능 반환 — 프론트엔드가 UI를 조건부로 표시."""
     stt = voice_handler._init_stt()
     tts = voice_handler._init_tts()
+    spec = network_access.get_current_spec()
     return {
         "voice": stt != "none" or tts != "none",
         "stt": stt,
         "tts": tts,
+        "network_mode": os.environ.get("VT_NETWORK_MODE", "all"),
+        "bound_host": network_access.resolve_bind_host(spec),
+        "lan_ip": network_access.get_lan_ip(),
+        "tunnel": tunnel.get_tunnel_status(),
     }
+
+
+@app.get("/api/tunnel/status")
+async def tunnel_status():
+    """Cloudflare Tunnel 상태 (Phase 8 G1 옵션 B)."""
+    return tunnel.get_tunnel_status()
 
 
 @app.get("/api/sessions")
@@ -173,35 +222,43 @@ TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]
 
 @app.get("/api/tmux/sessions")
 async def list_tmux_sessions():
-    """서버에서 실행 중인 tmux 세션 목록 (현재 명령, cwd 포함)."""
-    import subprocess
-    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{pane_current_command}\t#{pane_current_path}"
-    try:
-        result = subprocess.run(
-            TMUX_BASE + ["list-sessions", "-F", fmt],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode != 0:
-            return []
-        sessions = []
-        for line in result.stdout.strip().split("\n"):
-            if not line:
-                continue
-            parts = line.split("\t")
-            name = parts[0]
-            # 이미 웹에서 attach된 세션인지 표시
-            web_session = session_store.find_by_tmux_name(name)
-            sessions.append({
-                "name": name,
-                "windows": int(parts[1]) if len(parts) > 1 else 1,
-                "attached": int(parts[2]) if len(parts) > 2 else 0,
-                "command": parts[3] if len(parts) > 3 else "",
-                "cwd": parts[4] if len(parts) > 4 else "",
-                "web_session_id": web_session.session_id if web_session else None,
-            })
-        return sessions
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    """서버에서 실행 중인 tmux 세션 목록 (현재 명령, cwd 포함).
+
+    Phase 8 G3: tmux_runner 사용 + 단일 list-panes -a 호출로 세션+pane 정보 일괄 수집.
+    """
+    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}"
+    fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}"
+
+    sessions_text = tmux_runner.run_text(["list-sessions", "-F", fmt_sessions], timeout=2.0)
+    if not sessions_text:
         return []
+
+    panes_text = tmux_runner.run_text(["list-panes", "-a", "-F", fmt_panes], timeout=2.0) or ""
+    pane_by_session: dict[str, tuple[str, str]] = {}
+    for line in panes_text.strip().split("\n"):
+        if not line:
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 2 and parts[0] not in pane_by_session:
+            pane_by_session[parts[0]] = (parts[1], parts[2] if len(parts) > 2 else "")
+
+    sessions = []
+    for line in sessions_text.strip().split("\n"):
+        if not line:
+            continue
+        parts = line.split("\t")
+        name = parts[0]
+        cmd, cwd = pane_by_session.get(name, ("", ""))
+        web_session = session_store.find_by_tmux_name(name)
+        sessions.append({
+            "name": name,
+            "windows": int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1,
+            "attached": int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0,
+            "command": cmd,
+            "cwd": cwd,
+            "web_session_id": web_session.session_id if web_session else None,
+        })
+    return sessions
 
 
 @app.post("/api/tmux/create")
@@ -285,7 +342,7 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int) -> dict:
         rows=rows,
     )
     info = session_store.add(session_id, name=f"tmux:{tmux_name}")
-    info.tmux_name = tmux_name
+    session_store.update_tmux_name(session_id, tmux_name)
     output_watcher.add_session(session_id)
     return {"id": session_id, "name": f"tmux:{tmux_name}", "tmux_session": tmux_name}
 
@@ -301,6 +358,19 @@ async def get_agent(tmux_name: str):
     """특정 tmux 세션의 AI CLI 감지 결과."""
     info = agent_detector.detect(tmux_name)
     return info or {"agent": None}
+
+
+@app.get("/api/tmux/preview/{tmux_name}")
+async def get_tmux_preview(tmux_name: str, lines: int = 20, ansi: int = 1):
+    """tmux pane 라이브 프리뷰 (Phase 7 #7-3).
+
+    그리드 뷰에서 다른 세션의 마지막 N줄을 ANSI escape 보존한 채 폴링.
+    """
+    import preview
+    content = preview.capture_pane(tmux_name, lines=lines, ansi=bool(ansi))
+    if content is None:
+        return {"name": tmux_name, "content": "", "available": False}
+    return {"name": tmux_name, "content": content, "available": True, "lines": lines}
 
 
 # Agent 훅 이벤트 ----------------------------------------------------------------
@@ -449,8 +519,22 @@ def _ws_auth(ws: WebSocket) -> bool:
     return token == VT_TOKEN
 
 
+# Phase 8 G2: 연결 한도 + 백프레셔 + 하트비트
+WS_MAX_PER_SESSION = int(os.environ.get("VT_WS_MAX_PER_SESSION", "8"))
+WS_MAX_TOTAL = int(os.environ.get("VT_WS_MAX_TOTAL", "32"))
+WS_HEARTBEAT_INTERVAL = float(os.environ.get("VT_WS_HEARTBEAT_INTERVAL", "30.0"))
+WS_HEARTBEAT_TIMEOUT = float(os.environ.get("VT_WS_HEARTBEAT_TIMEOUT", "90.0"))
+WS_QUEUE_HIGH = 200  # qsize 임계: PTY pause
+WS_QUEUE_LOW = 50    # qsize 임계: PTY resume
+
+_ws_count_per_session: dict[str, int] = {}
+_ws_total_count = 0
+
+
 @app.websocket("/ws/{session_id}")
 async def ws_terminal(ws: WebSocket, session_id: str):
+    global _ws_total_count
+
     if not _ws_auth(ws):
         await ws.close(code=4001, reason="Unauthorized")
         return
@@ -460,7 +544,21 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         await ws.close(code=4004, reason="Session not found")
         return
 
+    # 연결 한도 검사
+    if _ws_total_count >= WS_MAX_TOTAL:
+        await ws.close(code=1013, reason="Max total connections")
+        return
+    per_session = _ws_count_per_session.get(session_id, 0)
+    if per_session >= WS_MAX_PER_SESSION:
+        await ws.close(code=1013, reason="Max per-session connections")
+        return
+    _ws_count_per_session[session_id] = per_session + 1
+    _ws_total_count += 1
+
     loop = asyncio.get_running_loop()
+    last_pong = loop.time()
+    send_queue: asyncio.Queue = asyncio.Queue(maxsize=WS_QUEUE_HIGH * 2)
+    pty_paused = False
 
     # [E2E] E2E 모드 협상 — 쿼리 파라미터 ?e2e=1 또는 환경변수로 opt-in
     # 요청 시 서버가 ephemeral X25519 공개키를 텍스트 JSON으로 전송,
@@ -497,16 +595,68 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             return
 
     # [C1] broadcast 패턴 — subscribe/unsubscribe
+    # Phase 8 G2: 자체 send 큐 + 백프레셔
     def on_data(data: bytes):
+        nonlocal pty_paused
         output_watcher.feed_output(session_id, data)
+        # Phase 8 G5: trust prompt 자동 응답 (VT_AUTO_TRUST=1일 때만)
+        _auto_responder.feed(session_id, data)
         out = channel.encrypt_simple(data) if channel else data
-        asyncio.run_coroutine_threadsafe(
-            _safe_send(ws, out), loop
-        )
+        try:
+            send_queue.put_nowait(out)
+        except asyncio.QueueFull:
+            # 큐 풀 — 가장 오래된 것 버리고 새 것 넣음 (lossy)
+            try:
+                send_queue.get_nowait()
+                send_queue.put_nowait(out)
+            except (asyncio.QueueEmpty, asyncio.QueueFull):
+                pass
+        # 큐 임계 검사
+        qs = send_queue.qsize()
+        if qs > WS_QUEUE_HIGH and not pty_paused:
+            pty_paused = True
+            logger.debug(f"[ws] qsize={qs} → PTY pause sid={session_id}")
+        elif qs < WS_QUEUE_LOW and pty_paused:
+            pty_paused = False
+            logger.debug(f"[ws] qsize={qs} → PTY resume sid={session_id}")
+
+    async def _send_worker():
+        """별도 task로 큐 → ws 전송 (백프레셔 분리)."""
+        while True:
+            try:
+                data = await send_queue.get()
+                await ws.send_bytes(data)
+            except (WebSocketDisconnect, RuntimeError):
+                break
+            except Exception as e:
+                logger.debug(f"[ws] send error: {e}")
+                break
+
+    async def _heartbeat_loop():
+        """30초마다 ping, 90초 무응답 시 close."""
+        while True:
+            try:
+                await asyncio.sleep(WS_HEARTBEAT_INTERVAL)
+                if loop.time() - last_pong > WS_HEARTBEAT_TIMEOUT:
+                    logger.info(f"[ws] heartbeat timeout sid={session_id}")
+                    try:
+                        await ws.close(code=1001, reason="heartbeat timeout")
+                    except Exception:
+                        pass
+                    return
+                try:
+                    await ws.send_text(json.dumps({"type": "ping"}))
+                except Exception:
+                    return
+            except asyncio.CancelledError:
+                return
+
+    send_task = asyncio.create_task(_send_worker())
+    hb_task = asyncio.create_task(_heartbeat_loop())
 
     pty_mgr.subscribe(session_id, on_data)
 
-    # 재접속 시 scrollback 전송 (E2E면 암호화)
+    # 재접속 시 scrollback 전송 (E2E면 암호화) — 큐 우회 직접 전송
     for chunk in pty_mgr.get_scrollback(session_id):
         out = channel.encrypt_simple(chunk) if channel else chunk
         await _safe_send(ws, out)
@@ -517,8 +667,11 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             if msg["type"] == "websocket.receive":
                 if "text" in msg:
                     data = json.loads(msg["text"])
-                    if data.get("type") == "resize":
+                    msg_type = data.get("type")
+                    if msg_type == "resize":
                         pty_mgr.resize(session_id, data["cols"], data["rows"])
+                    elif msg_type == "pong":
+                        last_pong = loop.time()
                 elif "bytes" in msg:
                     payload = msg["bytes"]
                     if channel:
@@ -535,6 +688,13 @@ async def ws_terminal(ws: WebSocket, session_id: str):
     finally:
         # [H5] 연결 종료 시 구독 해제 — dead WS에 send 방지
         pty_mgr.unsubscribe(session_id, on_data)
+        send_task.cancel()
+        hb_task.cancel()
+        # 카운터 감소
+        _ws_count_per_session[session_id] = max(0, _ws_count_per_session.get(session_id, 1) - 1)
+        if _ws_count_per_session[session_id] == 0:
+            _ws_count_per_session.pop(session_id, None)
+        _ws_total_count = max(0, _ws_total_count - 1)
 
 
 async def _safe_send(ws: WebSocket, data: bytes) -> None:
