@@ -25,7 +25,25 @@ VT_PORT="${VT_PORT:-7777}"
 
 # 격리된 tmux 소켓 — 사용자 기존 tmux 세션과 분리
 VT_TMUX_SOCKET="${VT_TMUX_SOCKET:-vt}"
-TMUX_BASE=(tmux -L "$VT_TMUX_SOCKET")
+
+# Phase 8 G3: 격리 config 자동 탐색 (XDG → 레포 → 미사용)
+_resolve_tmux_conf() {
+  if [ -n "${VT_TMUX_CONF:-}" ] && [ -f "$VT_TMUX_CONF" ]; then
+    echo "$VT_TMUX_CONF"; return
+  fi
+  if [ -f "$HOME/.config/vt/tmux.conf" ]; then
+    echo "$HOME/.config/vt/tmux.conf"; return
+  fi
+  if [ -f "$VT_DIR/config/vt-tmux.conf" ]; then
+    echo "$VT_DIR/config/vt-tmux.conf"; return
+  fi
+}
+VT_TMUX_CONF_PATH="$(_resolve_tmux_conf)"
+if [ -n "$VT_TMUX_CONF_PATH" ]; then
+  TMUX_BASE=(tmux -u -L "$VT_TMUX_SOCKET" -f "$VT_TMUX_CONF_PATH")
+else
+  TMUX_BASE=(tmux -u -L "$VT_TMUX_SOCKET")
+fi
 
 # Python 자동 감지 — 우선순위:
 #   1) 환경변수 VT_PYTHON / ~/.vt.env
@@ -42,6 +60,21 @@ _detect_python() {
   fi
 }
 VT_PYTHON="${VT_PYTHON:-$(_detect_python)}"
+
+# Phase 8 G4: Claude --disallowedTools 정책 (도구 호출 단계 차단, 정규식보다 견고)
+_DEFAULT_DISALLOWED='Bash(rm -rf /:*),Bash(sudo:*),Bash(git push --force:*),Bash(dd if=*:*),Bash(chmod -R 777 /:*),Bash(mkfs.*:*)'
+_SAFE_DISALLOWED="$_DEFAULT_DISALLOWED,Bash(curl * | sh:*),Bash(curl * | bash:*),Bash(wget * | sh:*),Bash(rm:*),Bash(git push:*),Bash(git clean:*),Edit(/etc/*),Edit(/usr/*),Write(/etc/*),Write(/usr/*)"
+
+_resolve_disallowed_tools() {
+  if [ -n "${VT_DISALLOWED_TOOLS:-}" ]; then
+    echo "$VT_DISALLOWED_TOOLS"
+  elif [ "${VT_SAFE_MODE:-}" = "1" ]; then
+    echo "$_SAFE_DISALLOWED"
+  else
+    echo "$_DEFAULT_DISALLOWED"
+  fi
+}
+
 SERVER_LOG="/tmp/vt-server.log"
 TUNNEL_LOG="/tmp/cloudflared.log"
 DAEMON_LOG="/tmp/vt-voice-daemon.log"
@@ -76,17 +109,49 @@ _start_server() {
 }
 
 _start_tunnel() {
-  if _is_running tunnel; then
+  # Phase 8 G1: 외부에서 떠있는 cloudflared도 발견하여 재사용 (옵션 A)
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    echo "✗ cloudflared 미설치. brew install cloudflared (macOS) 또는 https://github.com/cloudflare/cloudflared/releases"
+    return 1
+  fi
+
+  # 우리 PID file 또는 외부 cloudflared 프로세스 감지
+  local existing_pids=""
+  if command -v pgrep >/dev/null 2>&1; then
+    existing_pids="$(pgrep -f "cloudflared.*tunnel" 2>/dev/null || true)"
+  fi
+
+  if _is_running tunnel || [ -n "$existing_pids" ]; then
     local url
     url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-    echo "✓ 터널 이미 실행 중: $url"
-    return 0
+    if [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+      url="https://$VT_TUNNEL_HOSTNAME"
+    fi
+    if [ -n "$url" ]; then
+      echo "✓ 터널 이미 실행 중 (PID${existing_pids:+: $existing_pids}): $url"
+      return 0
+    fi
   fi
-  echo "▸ Cloudflare Tunnel 시작 중..."
+
+  # 명명 터널 우선 (옵션 C: VT_TUNNEL_NAME + VT_TUNNEL_HOSTNAME 필요)
+  if [ -n "${VT_TUNNEL_NAME:-}" ] && [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+    echo "▸ Cloudflare 명명 터널 시작 중 (name=$VT_TUNNEL_NAME → $VT_TUNNEL_HOSTNAME)..."
+    : > "$TUNNEL_LOG"
+    nohup cloudflared tunnel run "$VT_TUNNEL_NAME" > "$TUNNEL_LOG" 2>&1 &
+    echo $! > "$PID_DIR/tunnel.pid"
+    sleep 2
+    if _is_running tunnel; then
+      echo "✓ 명명 터널: https://$VT_TUNNEL_HOSTNAME"
+      return 0
+    fi
+    echo "  ⚠ 명명 터널 시작 실패 — 익명 터널로 fallback"
+  fi
+
+  # 익명 터널 (옵션 A 기본 동작)
+  echo "▸ Cloudflare 익명 터널 시작 중..."
   : > "$TUNNEL_LOG"
   nohup cloudflared tunnel --url http://localhost:$VT_PORT > "$TUNNEL_LOG" 2>&1 &
   echo $! > "$PID_DIR/tunnel.pid"
-  # URL 추출 대기
   for i in $(seq 1 30); do
     local url
     url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
@@ -296,13 +361,29 @@ cmd_voice() {
 }
 
 cmd_mobile() {
-  # 옵션: --e2e (E2E 암호화), --safe (위험 명령 차단)
+  # 옵션: --e2e (E2E 암호화), --safe (위험 명령 차단), --network <mode> (Phase 8 G1)
   local want_e2e=0
   local want_safe=0
+  local network_mode="${VT_NETWORK_MODE:-all}"
+  local i=1
   for arg in "$@"; do
-    [ "$arg" = "--e2e" ] && want_e2e=1
-    [ "$arg" = "--safe" ] && want_safe=1
+    case "$arg" in
+      --e2e) want_e2e=1 ;;
+      --safe) want_safe=1 ;;
+      --network) eval "next_arg=\${$((i+1))}"; network_mode="${next_arg:-all}" ;;
+      --network=*) network_mode="${arg#--network=}" ;;
+    esac
+    i=$((i+1))
   done
+
+  # 모드 검증
+  case "$network_mode" in
+    localhost|lan|all) ;;
+    *)
+      echo "  ✗ 지원되지 않는 --network 모드: $network_mode (localhost|lan|all)"
+      return 1 ;;
+  esac
+  export VT_NETWORK_MODE="$network_mode"
 
   # --safe 플래그 → 환경변수로 서버에 전달 (서버 시작 전 export)
   if [ $want_safe -eq 1 ]; then
@@ -310,7 +391,7 @@ cmd_mobile() {
   fi
 
   echo ""
-  local mode_tag=""
+  local mode_tag=" [network=$network_mode]"
   [ $want_e2e -eq 1 ] && mode_tag="${mode_tag} (E2E)"
   [ $want_safe -eq 1 ] && mode_tag="${mode_tag} (SAFE)"
   echo "  📱 vt mobile — 모바일 접속${mode_tag}"
@@ -318,18 +399,43 @@ cmd_mobile() {
 
   _ensure_tmux
   _start_server
-  _start_tunnel
+
+  # localhost/lan 모드에선 Cloudflare Tunnel 안 띄움
+  local full_url=""
+  case "$network_mode" in
+    localhost)
+      full_url="http://127.0.0.1:$VT_PORT"
+      echo "  ⓘ localhost 모드: 같은 머신에서만 접속 가능"
+      ;;
+    lan)
+      local lan_ip
+      lan_ip="$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+      [ -z "$lan_ip" ] && lan_ip="$(ifconfig 2>/dev/null | awk '/inet 192\\./{print $2; exit}')"
+      [ -z "$lan_ip" ] && lan_ip="localhost"
+      full_url="http://${lan_ip}:$VT_PORT"
+      echo "  ⓘ lan 모드: 같은 네트워크에서만 접속 가능"
+      ;;
+    all)
+      _start_tunnel
+      ;;
+  esac
 
   local url
   url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+  if [ -n "${VT_TUNNEL_HOSTNAME:-}" ] && [ "$network_mode" = "all" ]; then
+    url="https://$VT_TUNNEL_HOSTNAME"
+  fi
+  # localhost/lan 모드는 위에서 full_url 이미 설정됨 — all 모드는 url 사용
+  if [ "$network_mode" = "all" ] && [ -n "$url" ]; then
+    full_url="$url"
+  fi
   local token=${VT_TOKEN:-}
   # E2E 활성화 시 URL hash fragment에 #e2e=1 추가 (서버 로그에 안 남음)
   local e2e_frag=""
   [ $want_e2e -eq 1 ] && e2e_frag="#e2e=1"
 
-  # 최종 URL 빌드 (토큰 + E2E hash)
-  local full_url="$url"
-  [ -n "$token" ] && full_url="${url}?token=${token}"
+  # 토큰 + E2E hash 추가
+  [ -n "$token" ] && full_url="${full_url}?token=${token}"
   full_url="${full_url}${e2e_frag}"
 
   echo ""
@@ -563,8 +669,11 @@ cmd_agent() {
   shift || true
 
   local exec_cmd bin_name icon label
+  # Phase 8 G4: Claude만 --disallowedTools 자동 주입 (다른 CLI는 미지원)
+  local disallowed
+  disallowed="$(_resolve_disallowed_tools)"
   case "$agent" in
-    claude) exec_cmd="claude --resume"; bin_name="claude"; icon="🟣"; label="Claude" ;;
+    claude) exec_cmd="claude --resume --disallowedTools \"$disallowed\""; bin_name="claude"; icon="🟣"; label="Claude" ;;
     codex)  exec_cmd="codex"; bin_name="codex"; icon="🟢"; label="Codex" ;;
     aider)  exec_cmd="aider"; bin_name="aider"; icon="🔵"; label="Aider" ;;
     gemini) exec_cmd="gemini"; bin_name="gemini"; icon="🟡"; label="Gemini" ;;
@@ -707,6 +816,7 @@ cmd_popup() {
 
 cmd_run() {
   # vt run "..." — headless claude -p 백그라운드 실행 + 완료 시 TTS/푸시
+  # Phase 8 G4: --disallowedTools 자동 주입 + lockfile (중복 실행 방지)
   local prompt="$*"
   if [ -z "$prompt" ]; then
     echo "사용법: vt run \"명령어\""
@@ -719,27 +829,62 @@ cmd_run() {
     return 1
   fi
 
-  local LOG="/tmp/vt-run-$$-$(date +%s).log"
+  # lockfile — 같은 프롬프트 중복 실행 방지 (reminder-watch 패턴)
+  local prompt_hash
+  prompt_hash="$(printf '%s' "$prompt" | shasum 2>/dev/null | cut -c1-8 || echo "$$")"
+  local LOCK="/tmp/vt-run-${prompt_hash}.lock"
+  if [ -f "$LOCK" ]; then
+    local lock_pid
+    lock_pid="$(cat "$LOCK" 2>/dev/null)"
+    if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+      echo "  ⓘ 이미 실행 중 (PID $lock_pid). 같은 프롬프트는 동시 실행 차단."
+      echo "    중복 해제: rm $LOCK"
+      return 1
+    else
+      # stale lockfile → 자동 정리
+      rm -f "$LOCK"
+    fi
+  fi
+
+  local LOG="/tmp/vt-run-${prompt_hash}-$(date +%s).log"
   local TIMEOUT="${VT_RUN_TIMEOUT:-3600}"
+  local disallowed
+  disallowed="$(_resolve_disallowed_tools)"
 
   echo ""
   echo "  🚀 vt run — 백그라운드 dispatch"
   echo "    프롬프트: $prompt"
   echo "    타임아웃: ${TIMEOUT}초"
   echo "    로그: $LOG"
+  echo "    차단 도구: ${disallowed:0:60}..."
   echo ""
 
   (
+    echo $$ > "$LOCK"
+    trap 'rm -f "$LOCK"' EXIT
+
+    local timeout_flag=0
     if command -v timeout >/dev/null 2>&1; then
-      timeout "$TIMEOUT" claude -p "$prompt" > "$LOG" 2>&1
+      timeout "$TIMEOUT" claude -p "$prompt" \
+        --permission-mode bypassPermissions \
+        --disallowedTools "$disallowed" \
+        > "$LOG" 2>&1
+      [ $? -eq 124 ] && timeout_flag=1
     else
-      # macOS는 gtimeout 또는 fallback
-      claude -p "$prompt" > "$LOG" 2>&1
+      claude -p "$prompt" \
+        --permission-mode bypassPermissions \
+        --disallowedTools "$disallowed" \
+        > "$LOG" 2>&1
     fi
 
     local result
     result="$(tail -c 400 "$LOG" 2>/dev/null)"
     [ -z "$result" ] && result="(빈 응답 또는 실패)"
+    local title_tag="vt run 완료"
+    if [ $timeout_flag -eq 1 ]; then
+      title_tag="[TIMEOUT] vt run"
+      result="타임아웃 (${TIMEOUT}초): $result"
+    fi
 
     # TTS — 서버 실행 중이면
     if curl -sf "http://localhost:${VT_PORT}/" -o /dev/null 2>/dev/null; then
@@ -756,7 +901,7 @@ cmd_run() {
     # ntfy 푸시
     if [ -n "${VT_NOTIFY_URL:-}" ]; then
       curl -sf -d "$result" \
-        -H "Title: vt run 완료" \
+        -H "Title: ${title_tag}" \
         -H "Tags: white_check_mark" \
         "$VT_NOTIFY_URL" >/dev/null 2>&1
     fi
@@ -836,6 +981,380 @@ cmd_handoff() {
       ;;
   esac
   echo ""
+}
+
+cmd_tunnel() {
+  # vt tunnel <subcommand> — Phase 8 G1 옵션 C (명명 터널 옵트인)
+  # subcommands: status | setup | teardown | switch [anon|named]
+  local sub="${1:-status}"
+
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    echo "  ✗ cloudflared 미설치"
+    return 1
+  fi
+
+  case "$sub" in
+    status)
+      _tunnel_print_status
+      ;;
+    setup)
+      _tunnel_setup_named
+      ;;
+    teardown)
+      _tunnel_teardown_named
+      ;;
+    switch)
+      _tunnel_switch "${2:-}"
+      ;;
+    *)
+      echo "사용법: vt tunnel [status|setup|teardown|switch <anon|named>]"
+      return 1
+      ;;
+  esac
+}
+
+_tunnel_print_status() {
+  echo ""
+  echo "  🌐 Cloudflare Tunnel 상태"
+  echo ""
+  local pids
+  pids="$(pgrep -f 'cloudflared.*tunnel' 2>/dev/null || true)"
+  if [ -n "$pids" ]; then
+    echo "  실행:    ✓ PID(s) $pids"
+  else
+    echo "  실행:    ✗ 중지"
+  fi
+
+  if [ -n "${VT_TUNNEL_NAME:-}" ] && [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+    echo "  모드:    명명 (named)"
+    echo "  이름:    $VT_TUNNEL_NAME"
+    echo "  호스트:  $VT_TUNNEL_HOSTNAME"
+    echo "  URL:     https://$VT_TUNNEL_HOSTNAME"
+  else
+    echo "  모드:    익명 (anonymous, trycloudflare.com)"
+    local url
+    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+    [ -n "$url" ] && echo "  URL:     $url"
+  fi
+
+  if [ -d "$HOME/.cloudflared" ] && [ -f "$HOME/.cloudflared/cert.pem" ]; then
+    echo "  인증:    ✓ ~/.cloudflared/cert.pem 있음"
+    local count
+    count="$(ls -1 "$HOME/.cloudflared"/*.json 2>/dev/null | wc -l | tr -d ' ')"
+    echo "  터널 수: $count (credentials JSON 파일)"
+  else
+    echo "  인증:    ✗ ~/.cloudflared/cert.pem 없음 — 'cloudflared tunnel login' 필요"
+  fi
+  echo ""
+}
+
+_tunnel_setup_named() {
+  echo ""
+  echo "  🔧 vt tunnel setup — 명명 터널 마법사"
+  echo ""
+  echo "  요구사항:"
+  echo "    1. Cloudflare 계정"
+  echo "    2. Cloudflare DNS에 등록된 도메인"
+  echo "  계속하시겠습니까? (y/N)"
+  read -r ans
+  case "$ans" in y|Y|yes) ;; *) echo "  중단됨"; return 1 ;; esac
+
+  # 1. cloudflared 인증
+  if [ ! -f "$HOME/.cloudflared/cert.pem" ]; then
+    echo ""
+    echo "▸ cloudflared 인증 (브라우저 자동 열림)..."
+    cloudflared tunnel login || { echo "✗ 인증 실패"; return 1; }
+  else
+    echo "✓ cloudflared 이미 인증됨"
+  fi
+
+  # 2. 터널 이름
+  echo ""
+  printf "터널 이름 (default: vt-mobile): "
+  read -r tunnel_name
+  tunnel_name="${tunnel_name:-vt-mobile}"
+
+  # 3. 호스트명
+  echo ""
+  printf "호스트명 (예: vt.example.com): "
+  read -r hostname
+  if [ -z "$hostname" ]; then
+    echo "  ✗ 호스트명 필요"
+    return 1
+  fi
+
+  # 4. 터널 생성
+  echo ""
+  echo "▸ 터널 생성: $tunnel_name"
+  cloudflared tunnel create "$tunnel_name" 2>&1 | tail -5
+  if [ $? -ne 0 ]; then
+    echo "  ⓘ 이미 존재하는 이름이면 무시 가능"
+  fi
+
+  # 5. DNS 라우팅
+  echo ""
+  echo "▸ DNS 라우팅: $tunnel_name → $hostname"
+  cloudflared tunnel route dns "$tunnel_name" "$hostname" 2>&1 | tail -3 || {
+    echo "  ⚠ DNS 라우팅 실패 — 도메인이 Cloudflare DNS인지 확인"
+  }
+
+  # 6. config.yml 생성
+  local cf_dir="$HOME/.cloudflared"
+  local config_yml="$cf_dir/config.yml"
+  local creds_json="$cf_dir/${tunnel_name}.json"
+  if [ ! -f "$creds_json" ]; then
+    # UUID 형태 파일 찾기
+    creds_json="$(ls -1 "$cf_dir"/*.json 2>/dev/null | head -1)"
+  fi
+  cat > "$config_yml" <<EOF
+tunnel: $tunnel_name
+credentials-file: $creds_json
+ingress:
+  - hostname: $hostname
+    service: http://localhost:${VT_PORT:-7777}
+  - service: http_status:404
+EOF
+  echo "✓ config.yml 작성: $config_yml"
+
+  # 7. ~/.vt.env에 저장
+  local vt_env="$HOME/.vt.env"
+  touch "$vt_env"
+  # 기존 라인 제거 후 새로 추가
+  grep -v '^VT_TUNNEL_NAME=\|^VT_TUNNEL_HOSTNAME=' "$vt_env" > "${vt_env}.tmp" 2>/dev/null || true
+  echo "VT_TUNNEL_NAME=$tunnel_name" >> "${vt_env}.tmp"
+  echo "VT_TUNNEL_HOSTNAME=$hostname" >> "${vt_env}.tmp"
+  mv "${vt_env}.tmp" "$vt_env"
+  echo "✓ ~/.vt.env에 저장"
+
+  echo ""
+  echo "  ✅ 명명 터널 설정 완료"
+  echo "    이제 'vt mobile' 시 https://$hostname 사용"
+  echo "    (DNS 전파 ~1분 소요 가능)"
+}
+
+_tunnel_teardown_named() {
+  echo ""
+  echo "  ⚠️  명명 터널 제거"
+  echo "  현재 설정: ${VT_TUNNEL_NAME:-(없음)} → ${VT_TUNNEL_HOSTNAME:-(없음)}"
+  echo "  ~/.vt.env에서 제거하고 익명 터널로 fallback (cloudflared 터널 자체는 유지)."
+  echo "  계속? (y/N)"
+  read -r ans
+  case "$ans" in y|Y|yes) ;; *) echo "  중단됨"; return 1 ;; esac
+
+  local vt_env="$HOME/.vt.env"
+  if [ -f "$vt_env" ]; then
+    grep -v '^VT_TUNNEL_NAME=\|^VT_TUNNEL_HOSTNAME=' "$vt_env" > "${vt_env}.tmp" 2>/dev/null || true
+    mv "${vt_env}.tmp" "$vt_env"
+    echo "✓ ~/.vt.env에서 VT_TUNNEL_NAME/HOSTNAME 제거"
+  fi
+  echo ""
+  echo "  ⓘ cloudflared 터널 자체를 삭제하려면:"
+  echo "    cloudflared tunnel delete <name>"
+  echo "    cloudflared tunnel route dns <name> <hostname> --overwrite-dns"
+}
+
+_tunnel_switch() {
+  local mode="${1:-}"
+  case "$mode" in
+    anon|anonymous)
+      unset VT_TUNNEL_NAME VT_TUNNEL_HOSTNAME
+      echo "✓ 현재 셸: 익명 터널 모드 (영구 적용은 vt tunnel teardown)"
+      ;;
+    named)
+      if [ -z "${VT_TUNNEL_NAME:-}" ] || [ -z "${VT_TUNNEL_HOSTNAME:-}" ]; then
+        echo "  ✗ 명명 터널 미설정. vt tunnel setup 먼저 실행"
+        return 1
+      fi
+      echo "✓ 현재 셸: 명명 터널 사용 ($VT_TUNNEL_HOSTNAME)"
+      ;;
+    *)
+      echo "사용법: vt tunnel switch <anon|named>"
+      return 1 ;;
+  esac
+}
+
+cmd_setup_keybind() {
+  # vt setup-keybind [key] [action] — Phase 7 #7-2 (lunemis/mux popup.go 차용)
+  # tmux conf에 popup 키바인딩 자동 등록. oh-my-tmux 호환, 마커 멱등 갱신, sentinel 보호.
+  local key="${1:-v}"
+  local action="${2:-status}"
+
+  # tmux 3.2+ 확인
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "  ✗ tmux 미설치"
+    return 1
+  fi
+  local tmux_ver first_ver
+  tmux_ver="$(tmux -V 2>/dev/null | awk '{print $2}' | sed 's/[a-z]$//')"
+  first_ver="$(printf '3.2\n%s' "$tmux_ver" | sort -V | head -1)"
+  if [ "$first_ver" != "3.2" ]; then
+    echo "  ✗ tmux 3.2+ 필요 (현재: $tmux_ver)"
+    return 1
+  fi
+
+  local self_path
+  self_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+  [ -L "$self_path" ] && self_path="$(readlink "$self_path")"
+
+  local bind_line="bind $key display-popup -E -w 85% -h 80% \"$self_path $action\""
+  local marker="# vt popup keybinding"
+  local tagged="${bind_line}  ${marker}"
+
+  local conf_path
+  conf_path="$(_find_tmux_conf)"
+
+  if _is_oh_my_tmux "$conf_path"; then
+    local local_path
+    local_path="$(_find_tmux_conf_local "$conf_path")"
+    _write_bind_to_local "$local_path" "$tagged" "$marker"
+    # 메인 conf의 옛 잘못된 라인 정리
+    local removed=0
+    _strip_marker_lines "$conf_path" "$marker" && removed=1
+    echo "  ✓ oh-my-tmux 감지 → $local_path"
+    echo "    $bind_line"
+    if [ $removed -eq 1 ]; then
+      echo "  ⓘ $conf_path에서 옛 vt 라인 제거 (oh-my-tmux heredoc 보호)"
+    fi
+    echo ""
+    echo "  reload: tmux source-file $local_path"
+  else
+    _upsert_bind_line "$conf_path" "$tagged" "$marker"
+    echo "  ✓ 등록 → $conf_path"
+    echo "    $bind_line"
+    echo ""
+    echo "  reload: tmux source-file $conf_path"
+  fi
+  echo "  사용: prefix + $key  (default prefix: Ctrl+b)"
+}
+
+_find_tmux_conf() {
+  if [ -n "${XDG_CONFIG_HOME:-}" ] && [ -f "$XDG_CONFIG_HOME/tmux/tmux.conf" ]; then
+    echo "$XDG_CONFIG_HOME/tmux/tmux.conf"; return
+  fi
+  if [ -f "$HOME/.config/tmux/tmux.conf" ]; then
+    echo "$HOME/.config/tmux/tmux.conf"; return
+  fi
+  if [ -f "$HOME/.tmux.conf" ]; then
+    echo "$HOME/.tmux.conf"; return
+  fi
+  # 없으면 default 위치 (생성될 곳)
+  echo "$HOME/.tmux.conf"
+}
+
+_find_tmux_conf_local() {
+  local conf="$1"
+  local dir base
+  dir="$(dirname "$conf")"
+  base="$(basename "$conf")"
+  case "$base" in
+    tmux.conf)  echo "$dir/tmux.conf.local" ;;
+    .tmux.conf) echo "$dir/.tmux.conf.local" ;;
+    *)          echo "$conf.local" ;;
+  esac
+}
+
+_is_oh_my_tmux() {
+  local conf="$1"
+  [ -f "$conf" ] || return 1
+  # 전략 1: symlink 타겟에 .tmux/ 포함
+  if [ -L "$conf" ]; then
+    local target
+    target="$(readlink "$conf")"
+    case "$target" in
+      */.tmux/*) return 0 ;;
+    esac
+  fi
+  # 전략 2: 첫 줄이 oh-my-tmux heredoc 시그니처
+  local first_line
+  first_line="$(head -1 "$conf" 2>/dev/null)"
+  [ "$first_line" = "# : << 'EOF'" ] && return 0
+  return 1
+}
+
+_upsert_bind_line() {
+  # path, tagged_line, marker
+  local path="$1" tagged="$2" marker="$3"
+  local tmp
+  tmp="$(mktemp)"
+  if [ -f "$path" ]; then
+    local replaced=0
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        *"$marker"*) printf '%s\n' "$tagged" >> "$tmp"; replaced=1 ;;
+        *) printf '%s\n' "$line" >> "$tmp" ;;
+      esac
+    done < "$path"
+    if [ $replaced -eq 0 ]; then
+      printf '\n%s\n' "$tagged" >> "$tmp"
+    fi
+  else
+    printf '%s\n' "$tagged" > "$tmp"
+  fi
+  mv "$tmp" "$path"
+}
+
+_write_bind_to_local() {
+  # path, tagged_line, marker — sentinel ('# "$@"') 앞 삽입
+  local path="$1" tagged="$2" marker="$3"
+  local tmp
+  tmp="$(mktemp)"
+  local sentinel='# "$@"'
+
+  if [ ! -f "$path" ]; then
+    printf '%s\n' "$tagged" > "$path"
+    return
+  fi
+
+  # marker 라인 있으면 in-place 교체
+  if grep -qF "$marker" "$path" 2>/dev/null; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        *"$marker"*) printf '%s\n' "$tagged" >> "$tmp" ;;
+        *) printf '%s\n' "$line" >> "$tmp" ;;
+      esac
+    done < "$path"
+    mv "$tmp" "$path"
+    return
+  fi
+
+  # sentinel 있으면 그 앞에 빈줄+태그+빈줄 삽입
+  if grep -qxF "$sentinel" "$path" 2>/dev/null; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      if [ "$line" = "$sentinel" ]; then
+        printf '\n%s\n\n' "$tagged" >> "$tmp"
+      fi
+      printf '%s\n' "$line" >> "$tmp"
+    done < "$path"
+    mv "$tmp" "$path"
+    return
+  fi
+
+  # sentinel 없으면 EOF append
+  rm -f "$tmp"
+  printf '\n%s\n' "$tagged" >> "$path"
+}
+
+_strip_marker_lines() {
+  # path, marker — 마커 또는 legacy 패턴 라인 제거
+  local path="$1" marker="$2"
+  [ -f "$path" ] || return 1
+  if ! grep -qF "$marker" "$path" 2>/dev/null; then
+    # legacy 패턴 (마커 없이 등록된 옛 라인)
+    if ! grep -qE 'display-popup .*"vt ' "$path" 2>/dev/null; then
+      return 1
+    fi
+  fi
+  local tmp
+  tmp="$(mktemp)"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      *"$marker"*) ;;
+      *'display-popup'*'"vt '*) ;;
+      *) printf '%s\n' "$line" >> "$tmp" ;;
+    esac
+  done < "$path"
+  mv "$tmp" "$path"
+  return 0
 }
 
 cmd_install_profiles() {
@@ -1098,10 +1617,19 @@ cmd_status() {
     server_status="✓ 실행 중 (port $VT_PORT)"
   fi
 
-  if _is_running tunnel; then
+  # Phase 8 G1: cloudflared 정밀 표시
+  local tunnel_installed="✗"
+  command -v cloudflared >/dev/null 2>&1 && tunnel_installed="✓"
+  local tunnel_pids
+  tunnel_pids="$(pgrep -f 'cloudflared.*tunnel' 2>/dev/null || true)"
+  if [ -n "$tunnel_pids" ]; then
     local url
-    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-    tunnel_status="✓ $url"
+    if [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+      url="https://$VT_TUNNEL_HOSTNAME"
+    else
+      url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+    fi
+    tunnel_status="✓ PID $tunnel_pids — $url"
   fi
 
   if _is_running voice; then
@@ -1113,7 +1641,14 @@ cmd_status() {
   fi
 
   echo "  서버:        $server_status"
-  echo "  터널:        $tunnel_status"
+  echo "  Cloudflare:"
+  echo "    설치:       $tunnel_installed"
+  echo "    실행:       $tunnel_status"
+  if [ -n "${VT_TUNNEL_NAME:-}" ] && [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+    echo "    모드:       명명 (named) → $VT_TUNNEL_HOSTNAME"
+  else
+    echo "    모드:       익명 (anonymous, trycloudflare.com)"
+  fi
   echo "  Voice Daemon: $voice_status"
   echo "  tmux:        $tmux_status"
   echo ""
@@ -1132,6 +1667,8 @@ case "${1:-help}" in
   doctor)   cmd_doctor ;;
   shell-init) shift; cmd_shell_init "$@" ;;
   install-profiles) shift; cmd_install_profiles "$@" ;;
+  setup-keybind) shift; cmd_setup_keybind "$@" ;;
+  tunnel) shift; cmd_tunnel "$@" ;;
   template) shift; cmd_template "$@" ;;
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;
@@ -1159,6 +1696,12 @@ case "${1:-help}" in
     echo "                          터미널 앱 profile 자동 등록 (iTerm2 등)"
     echo "    vt shell-init [zsh|bash|fish|pwsh]"
     echo "                          셸별 안전 통합 스니펫 출력"
+    echo "    vt setup-keybind [key] [action]"
+    echo "                          tmux popup 키바인딩 자동 등록 (default: prefix+v → status)"
+    echo "    vt tunnel [status|setup|teardown|switch <anon|named>]"
+    echo "                          Cloudflare Tunnel 관리 (명명 터널 옵트인)"
+    echo "    vt mobile --network <localhost|lan|all>"
+    echo "                          모바일 모드 — localhost(같은 머신) / lan(같은 네트워크) / all(터널, default)"
     echo ""
     ;;
 esac

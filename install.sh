@@ -72,6 +72,13 @@ ln -sf "$VT_DIR/bin/vt" "$HOME/.local/bin/vt"
 chmod +x "$VT_DIR/bin/vt"
 echo "✓ vt CLI 등록 → ~/.local/bin/vt"
 
+# 4-1. tmux 격리 config 복사 (Phase 8 G3)
+mkdir -p "$HOME/.config/vt"
+if [ -f "$VT_DIR/config/vt-tmux.conf" ] && [ ! -f "$HOME/.config/vt/tmux.conf" ]; then
+  cp "$VT_DIR/config/vt-tmux.conf" "$HOME/.config/vt/tmux.conf"
+  echo "✓ tmux 격리 config → ~/.config/vt/tmux.conf"
+fi
+
 # 5. 설정 파일 생성 (없을 때만)
 if [ ! -f "$HOME/.vt.env" ]; then
   cat > "$HOME/.vt.env" <<EOF
