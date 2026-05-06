@@ -1,3 +1,5 @@
+> **voice-terminal v1.1.0** (2026-05-06) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
+
 ## vt CLI (어디서든 실행)
 
 터미널 어디서든 `vt` 명령으로 Voice Terminal을 제어합니다:
