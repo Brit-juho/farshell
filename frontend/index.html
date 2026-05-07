@@ -944,7 +944,17 @@
         });
       } catch (e) { /* 무시 */ }
     }
-    setInterval(pollAgentBadges, 5000);
+    // 탭 포커스 있을 때만 폴링 — 백그라운드에서 불필요한 네트워크 요청 방지
+    let _agentPollTimer = setInterval(pollAgentBadges, 5000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearInterval(_agentPollTimer);
+        if (gridPollTimer) { clearInterval(gridPollTimer); gridPollTimer = null; }
+      } else {
+        _agentPollTimer = setInterval(pollAgentBadges, 5000);
+        if (gridViewEnabled) gridPollTimer = setInterval(refreshGrid, 1000);
+      }
+    });
 
     // ── 라이브 프리뷰 그리드 뷰 (Phase 7 #7-3) ─────────────────────────
     let gridViewEnabled = false;
@@ -991,7 +1001,7 @@
         term.style.display = 'none';
         btn.classList.add('active');     // D2: CSS class로 활성 상태 관리
         await refreshGrid();
-        gridPollTimer = setInterval(refreshGrid, 1000);
+        gridPollTimer = setInterval(refreshGrid, 2000);  // 1초→2초: 세션마다 capture-pane 호출 비용
       } else {
         grid.style.display = 'none';
         term.style.display = '';
