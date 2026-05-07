@@ -61,10 +61,13 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
 
 
 class NetworkAccessMiddleware(BaseHTTPMiddleware):
-    """Phase 8 G1: CIDR 기반 IP 화이트리스트.
+    """Phase 8 G1 + Codex: CIDR 기반 IP 화이트리스트 (HTTP + WebSocket).
 
     `VT_NETWORK_MODE`(localhost/lan/all)에 따라 외부 요청 차단.
     Cloudflare Tunnel은 항상 127.0.0.1로 들어와서 `all` 모드면 자동 통과.
+
+    Codex: BaseHTTPMiddleware는 WS scope를 HTTP로 착각하여 통과시킬 수 있음.
+    scope["type"]를 직접 체크하여 WS 업그레이드도 필터링.
     """
     async def dispatch(self, request: Request, call_next):
         spec = network_access.get_current_spec()
@@ -86,6 +89,23 @@ class NetworkAccessMiddleware(BaseHTTPMiddleware):
                 status_code=403,
             )
         return await call_next(request)
+
+    async def __call__(self, scope, receive, send):
+        """Codex: WebSocket scope도 IP 필터 적용 (BaseHTTPMiddleware 우회 패치)."""
+        if scope["type"] == "websocket":
+            spec = network_access.get_current_spec()
+            if not spec.allow_all:
+                client = scope.get("client")
+                host = client[0] if client else None
+                if not spec.is_allowed(host):
+                    # WS는 HTTP 403으로 응답 후 연결 거부
+                    response = JSONResponse(
+                        {"error": "forbidden", "reason": "ip_not_allowed", "ip": host},
+                        status_code=403,
+                    )
+                    await response(scope, receive, send)
+                    return
+        await super().__call__(scope, receive, send)
 
 
 app = FastAPI()
@@ -274,11 +294,16 @@ async def create_tmux_session(request: Request):
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
 
-    # D5: tmux_runner로 통일 — timeout + config 적용
-    tmux_runner.run(
+    # D5: tmux_runner로 통일, Codex: return code 확인
+    rc, _, err = tmux_runner.run(
         ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows)],
         timeout=5.0,
     )
+    if rc != 0:
+        return JSONResponse(
+            {"error": "tmux session create failed", "detail": err.decode("utf-8", errors="ignore")},
+            status_code=500,
+        )
 
     # 맥북 터미널 자동 오픈 — AppleScript 인젝션 방지를 위해 세션명 화이트리스트 검증
     if auto_open and platform_utils.IS_MACOS and re.fullmatch(r"[A-Za-z0-9_\-]+", tmux_name):
@@ -323,8 +348,10 @@ async def kill_tmux_session(tmux_name: str):
         session_store.remove(existing.session_id)
         output_watcher.remove_session(existing.session_id)
 
-    # D5: tmux_runner로 통일
-    tmux_runner.run(["kill-session", "-t", tmux_name], timeout=5.0)
+    # D5+Codex: tmux_runner로 통일 + return code 확인
+    rc, _, _ = tmux_runner.run(["kill-session", "-t", tmux_name], timeout=5.0)
+    if rc != 0:
+        return JSONResponse({"error": "tmux kill failed", "name": tmux_name}, status_code=500)
     return {"ok": True}
 
 
@@ -556,6 +583,7 @@ async def ws_terminal(ws: WebSocket, session_id: str):
     last_pong = loop.time()
     send_queue: asyncio.Queue = asyncio.Queue(maxsize=WS_QUEUE_HIGH * 2)
     pty_paused = False
+    ws_id = id(ws)  # Codex: 구독자별 pause 추적에 사용
 
     # [E2E] E2E 모드 협상 — 쿼리 파라미터 ?e2e=1 또는 환경변수로 opt-in
     # 요청 시 서버가 ephemeral X25519 공개키를 텍스트 JSON으로 전송,
@@ -608,16 +636,16 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                 send_queue.put_nowait(out)
             except (asyncio.QueueEmpty, asyncio.QueueFull):
                 pass
-        # 큐 임계 검사 — D3: pty_manager에 실제 pause/resume 전달
+        # 큐 임계 검사 — D3+Codex: ws_id별 독립 pause/resume
         qs = send_queue.qsize()
         if qs > WS_QUEUE_HIGH and not pty_paused:
             pty_paused = True
-            pty_mgr.pause_read(session_id)
-            logger.debug(f"[ws] qsize={qs} → PTY pause sid={session_id}")
+            pty_mgr.pause_read(session_id, ws_id)
+            logger.debug(f"[ws] qsize={qs} → PTY pause sid={session_id} ws={ws_id}")
         elif qs < WS_QUEUE_LOW and pty_paused:
             pty_paused = False
-            pty_mgr.resume_read(session_id)
-            logger.debug(f"[ws] qsize={qs} → PTY resume sid={session_id}")
+            pty_mgr.resume_read(session_id, ws_id)
+            logger.debug(f"[ws] qsize={qs} → PTY resume sid={session_id} ws={ws_id}")
 
     async def _send_worker():
         """별도 task로 큐 → ws 전송 (백프레셔 분리)."""
@@ -689,6 +717,9 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         pty_mgr.unsubscribe(session_id, on_data)
         send_task.cancel()
         hb_task.cancel()
+        # Codex: 끊길 때 이 WS의 pause 반드시 해제 — 세션 영구 정지 방지
+        if pty_paused:
+            pty_mgr.resume_read(session_id, ws_id)
         # 카운터 감소
         _ws_count_per_session[session_id] = max(0, _ws_count_per_session.get(session_id, 1) - 1)
         if _ws_count_per_session[session_id] == 0:

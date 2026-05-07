@@ -175,16 +175,32 @@ class PTYManager:
         except OSError as e:
             logger.warning(f"Write failed for session {session_id}: {e}")
 
-    def pause_read(self, session_id: str) -> None:
-        """D3: 백프레셔 — PTY read loop을 일시 중단 (큐 HIGH 임계 초과 시)."""
-        session = self._sessions.get(session_id)
-        if session:
-            session._paused = True
+    def pause_read(self, session_id: str, requester_id: str) -> None:
+        """D3+Codex: 백프레셔 — 구독자별 pause 카운트.
 
-    def resume_read(self, session_id: str) -> None:
-        """D3: 백프레셔 — PTY read loop 재개 (큐 LOW 임계 이하 시)."""
+        다중 WS가 같은 세션을 구독할 때, 한 WS가 느려도 다른 WS는
+        계속 받을 수 있어야 한다. pause 요청자를 set으로 추적하여
+        모든 요청자가 resume해야만 read loop을 재개한다.
+        """
         session = self._sessions.get(session_id)
-        if session:
+        if session is None:
+            return
+        if not hasattr(session, "_pause_requesters"):
+            session._pause_requesters = set()
+        session._pause_requesters.add(requester_id)
+        session._paused = True
+
+    def resume_read(self, session_id: str, requester_id: str) -> None:
+        """D3+Codex: 백프레셔 — 해당 requester의 pause 해제.
+
+        모든 구독자가 resume해야만 실제로 read loop 재개.
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            return
+        requesters = getattr(session, "_pause_requesters", set())
+        requesters.discard(requester_id)
+        if not requesters:
             session._paused = False
 
     # [C1] subscriber 관리 — 여러 WS가 같은 세션 출력을 받을 수 있음
