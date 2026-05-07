@@ -14,7 +14,8 @@
 | `--red` | `#f38ba8` | 에러, 녹음 중, 연결 끊김 |
 | `--green` | `#a6e3a1` | 성공, 연결됨, 업로드 완료 |
 | `--blue` | `#89b4fa` | 정보, 링크 |
-| `--lavender` | `#cba6f7` | 음성 전용 모드 활성 |
+| `--lavender` | `#cba6f7` | 음성 전용 모드 활성, Grid 버튼 활성 |
+| `--crust` | `#11111b` | 터미널 프리뷰 배경 (그리드 카드 내부) |
 
 ## 타이포그래피
 
@@ -56,6 +57,18 @@
 - 배경: `--overlay`
 - 호버: `--muted`
 - 그림자: `0 4px 12px rgba(0,0,0,0.5)`
+
+### 그리드 뷰 (Phase 7-8 추가)
+
+- 버튼: 탭 바 우측 `ml-auto` 고정, 기본 `--muted`, 활성 `--lavender` + 어두운 텍스트
+- 컨테이너: `position:absolute`, 탭 바 아래에서 보이스 바 위까지 전체 overlay
+- 카드 그리드: `display:grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px`
+- **그리드 카드**: 배경 `--surface`, 테두리 `1px solid --overlay`, 반경 `8px`
+  - 헤더: 세션명 `13px bold --text` + 명령어 `11px --subtext` (우측 정렬)
+  - 프리뷰 영역: 배경 `--crust`, 반경 `4px`, 패딩 `8px`, 최대 높이 `240px`, 폰트 `11px monospace`
+  - 빈 상태 (세션 없음): 중앙 텍스트, 아이콘 + 안내 메시지 + tmux 명령어 예시
+  - 로딩 상태: "로딩 중..." italic muted 텍스트
+- 모바일: `minmax(300px, 1fr)` (375px 화면에서 단일 열로 변환)
 
 ### 검색 바
 - 위치: 우측 상단 고정
