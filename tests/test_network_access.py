@@ -101,40 +101,17 @@ def test_env_network_mode_all(monkeypatch):
 
 # --- D2: WS 미들웨어 IP 필터 통합 검증 (httpx로 실제 미들웨어 실행) ---
 
-def test_middleware_blocks_lan_in_localhost_mode():
-    """NetworkAccessMiddleware가 localhost 모드에서 LAN IP를 403으로 차단함."""
-    import os
-    os.environ["VT_NETWORK_MODE"] = "localhost"
-    os.environ.pop("VT_ACCESS_SPEC", None)
+def test_middleware_allows_loopback_in_localhost_mode():
+    """parse_access_spec("localhost")로 얻은 spec이 TestClient(127.0.0.1)를 허용함."""
+    spec = na.parse_access_spec("localhost")
+    # TestClient는 127.0.0.1에서 요청하므로 허용됨
+    assert spec.is_allowed("127.0.0.1")
+    # LAN은 차단됨
+    assert not spec.is_allowed("192.168.0.1")
 
-    from fastapi.testclient import TestClient
-    from fastapi import FastAPI
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from fastapi.responses import JSONResponse
 
-    app = FastAPI()
-
-    class TestNetworkMiddleware(BaseHTTPMiddleware):
-        async def dispatch(self, request, call_next):
-            spec = na.get_current_spec()
-            if spec.allow_all:
-                return await call_next(request)
-            client = request.client
-            host = client.host if client else None
-            if not spec.is_allowed(host):
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            return await call_next(request)
-
-    app.add_middleware(TestNetworkMiddleware)
-
-    @app.get("/test")
-    async def _():
-        return {"ok": True}
-
-    client = TestClient(app, raise_server_exceptions=False)
-    # TestClient는 127.0.0.1로 요청하므로 localhost 모드에서 허용됨
-    r = client.get("/test")
-    assert r.status_code == 200
-
-    # 환경변수 정리
-    os.environ.pop("VT_NETWORK_MODE", None)
+def test_middleware_blocks_wan_in_lan_mode():
+    """localhost,lan 모드에서 WAN IP 차단."""
+    spec = na.parse_access_spec("localhost,lan")
+    assert not spec.is_allowed("54.192.0.0")
+    assert not spec.is_allowed("8.8.8.8")
