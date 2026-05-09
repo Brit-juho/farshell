@@ -10,7 +10,9 @@ const WS_NOTIFY = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
-let handsFreeModeOn = false;
+// W1-5: handsFreeModeOn 제거됨 (VAD 미구현 상태에서의 가짜 핸즈프리 모드 폐기)
+// W2-3: 이어폰 미디어 키 트리거 토글. localStorage 영구 저장.
+let mediaKeyTriggerOn = (localStorage.getItem('vt_mediakey_trigger') ?? 'on') !== 'off';
 
 const micBtn = document.getElementById('mic-btn-wrap');
 const micStatus = document.getElementById('mic-status');
@@ -29,7 +31,7 @@ async function startRecording() {
   try {
     // [D8 barge-in] 재생 중인 TTS 중단 — 사용자가 말하기 시작하면 즉시 정지
     try {
-      fetch(`${API_BASE}/voice/cancel`, { method: 'POST' }).catch(() => {});
+      fetch(`${API}/voice/cancel`, { method: 'POST' }).catch(() => {});
       // 브라우저에서 TTS로 재생 중인 Audio 요소도 중단
       if (window._currentTTSAudio) {
         try { window._currentTTSAudio.pause(); } catch {}
@@ -83,12 +85,8 @@ async function sendAudio(blob) {
     });
     const data = await res.json();
     micStatus.textContent = data.text ? `"${data.text}"` : '인식 실패';
-    // 핸즈프리: STT 처리 후 자동으로 다음 녹음 시작
-    if (handsFreeModeOn) {
-      setTimeout(() => startRecording(), 500);
-    } else {
-      setTimeout(() => { micStatus.textContent = ''; }, 3000);
-    }
+    // W1-5: 핸즈프리 자동 재시작 분기 제거. 매 녹음은 명시적 클릭으로만.
+    setTimeout(() => { micStatus.textContent = ''; }, 3000);
   } catch (err) {
     console.error('음성 전송 실패:', err);
     micStatus.textContent = '전송 실패';
@@ -169,21 +167,40 @@ function showPlayButton() {
   }
 }
 
-// --- 핸즈프리 모드 ---
+// W2-3: 이어폰 미디어 키 트리거 ON/OFF 토글
+function toggleMediaKeyTrigger() {
+  mediaKeyTriggerOn = !mediaKeyTriggerOn;
+  localStorage.setItem('vt_mediakey_trigger', mediaKeyTriggerOn ? 'on' : 'off');
+  const btn = document.getElementById('mediakey-btn');
+  if (btn) btn.classList.toggle('active', mediaKeyTriggerOn);
 
-function toggleHandsFree() {
-  handsFreeModeOn = !handsFreeModeOn;
-  const btn = document.getElementById('handsfree-btn');
-  if (btn) {
-    btn.classList.toggle('active', handsFreeModeOn);
-  }
-  if (handsFreeModeOn) {
-    micStatus.textContent = '핸즈프리 모드 — 자동으로 계속 녹음합니다';
-    if (!isRecording) startRecording();
+  if (mediaKeyTriggerOn) {
+    // ON: Media Session 핸들러 등록 + 무음 오디오 재생
+    setupMediaSession();
+    micStatus.textContent = '이어폰 Play/Pause = 녹음 토글';
   } else {
-    micStatus.textContent = '';
-    if (isRecording) stopRecording();
+    // OFF: 핸들러 해제 + 무음 완전 정지 → OS가 기본 미디어 컨트롤 가짐
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+        navigator.mediaSession.setActionHandler('nexttrack', null);
+        navigator.mediaSession.setActionHandler('previoustrack', null);
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+      } catch (e) {}
+    }
+    if (silentAudio) {
+      try {
+        silentAudio.pause();
+        silentAudio.removeAttribute('src');
+        silentAudio.load();
+      } catch (e) {}
+      silentAudio = null;  // 다음 ON 토글 시 재생성
+    }
+    micStatus.textContent = '이어폰 미디어 키 → OS 기본 동작';
   }
+  setTimeout(() => { micStatus.textContent = ''; }, 2500);
 }
 
 // --- 음성 전용 모드 ---
@@ -301,6 +318,8 @@ let silentAudio = null;
 
 function setupMediaSession() {
   if (!('mediaSession' in navigator)) return;
+  // 이중 호출 방어 — 이미 setup됐으면 silentAudio가 존재
+  if (silentAudio) return;
 
   // [M3] 무음 오디오 — AudioContext.suspend()로 배터리 절약
   silentAudio = new Audio();
@@ -345,8 +364,23 @@ function setupMediaSession() {
   navigator.mediaSession.playbackState = 'paused';
 }
 
-// 첫 사용자 인터랙션 후 Media Session 활성화
+// 페이지 로드 직후 토글 버튼 active 상태 동기화 (사용자 인터랙션 전에도)
+(function syncMediaKeyButton() {
+  const apply = () => {
+    const btn = document.getElementById('mediakey-btn');
+    if (btn) btn.classList.toggle('active', mediaKeyTriggerOn);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply, { once: true });
+  } else {
+    apply();
+  }
+})();
+
+// 첫 사용자 인터랙션 후 Media Session 활성화 (W2-3 토글 ON일 때만)
 document.addEventListener('click', function initMedia() {
-  setupMediaSession();
+  if (mediaKeyTriggerOn) {
+    setupMediaSession();
+  }
   document.removeEventListener('click', initMedia);
 }, { once: true });

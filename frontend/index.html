@@ -6,11 +6,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>voice-terminal Terminal</title>
+  <link rel="icon" type="image/png" href="/static/icon-192.png">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#181825">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
-  <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.469.0/font/lucide.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/vendor/xterm.min.css">
+  <link href="/static/vendor/lucide.min.css" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overflow: hidden; }
@@ -76,12 +77,16 @@
     #terminal-container { flex: 1; min-height: 0; padding: 2px; }
     #terminal-container .xterm { height: 100%; }
 
-    /* 보이스 바 */
+    /* 보이스 바 — 모바일 시스템 네비 바와 충돌 방지를 위해 safe-area 패딩 */
     #voice-bar {
       display: flex; align-items: flex-end; gap: 0;
-      padding: 8px 8px 10px; background: #181825; flex-shrink: 0;
+      padding: 8px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+      background: #181825; flex-shrink: 0;
       justify-content: space-around;
       border-top: 1px solid #313244;
+    }
+    .voice-action {
+      min-height: 48px;  /* 터치 타겟 최소 권장(WCAG/Material) */
     }
     .voice-action {
       display: flex; flex-direction: column; align-items: center; gap: 5px;
@@ -184,13 +189,15 @@
       <div class="icon"><i class="icon-mic"></i></div>
       <span class="label">음성 입력</span>
     </button>
-    <button id="handsfree-btn" class="voice-action" onclick="toggleHandsFree()">
-      <div class="icon"><i class="icon-refresh-cw"></i></div>
-      <span class="label">핸즈프리</span>
-    </button>
+    <!-- W1-5: 핸즈프리 버튼 제거 (VAD 없이 "핸즈프리"라는 이름이 동작과 불일치) -->
     <button id="voiceonly-btn" class="voice-action" onclick="toggleVoiceOnly()">
       <div class="icon"><i class="icon-headphones"></i></div>
       <span class="label">음성 전용</span>
+    </button>
+    <!-- W2-3: 이어폰 미디어 키 트리거 ON/OFF 토글. active 클래스는 JS가 localStorage 기준으로 동기화 -->
+    <button id="mediakey-btn" class="voice-action" onclick="toggleMediaKeyTrigger()">
+      <div class="icon"><i class="icon-music"></i></div>
+      <span class="label">이어폰</span>
     </button>
     <label class="voice-action" id="upload-btn">
       <div class="icon"><i class="icon-paperclip"></i></div>
@@ -199,20 +206,44 @@
     </label>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js"></script>
+  <script src="/static/vendor/xterm.min.js"></script>
+  <script src="/static/vendor/addon-fit.min.js"></script>
+  <script src="/static/vendor/addon-search.min.js"></script>
   <!-- tweetnacl — E2E 암호화 (D3, opt-in) -->
-  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+  <script src="/static/vendor/nacl.min.js"></script>
+  <script src="/static/vendor/nacl-util.min.js"></script>
   <script>
     const sessions = {};
     let activeId = null;
     const _urlParams = new URLSearchParams(location.search);
     const _hashParams = new URLSearchParams(location.hash.slice(1));
-    const VT_TOKEN = _urlParams.get('token') || '';
-    const _tokenQuery = VT_TOKEN ? `?token=${VT_TOKEN}` : '';
-    const _tokenParam = VT_TOKEN ? `&token=${VT_TOKEN}` : '';
+    let VT_TOKEN = _urlParams.get('token') || '';
+    let _tokenQuery = VT_TOKEN ? `?token=${VT_TOKEN}` : '';
+    let _tokenParam = VT_TOKEN ? `&token=${VT_TOKEN}` : '';
+
+    // Phase 9 #8: URL의 토큰을 HttpOnly cookie로 1회 교환 후 URL에서 제거.
+    // 이후 fetch는 credentials:'include'로 cookie 자동 전송, ws는 same-origin이라 자동.
+    (async function _exchangeTokenForCookie() {
+      if (!VT_TOKEN) return;
+      try {
+        const r = await fetch('/api/auth', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({token: VT_TOKEN}),
+        });
+        if (r.ok) {
+          // URL에서 토큰 제거 — 로그/공유/history 노출 차단
+          _urlParams.delete('token');
+          const newSearch = _urlParams.toString();
+          history.replaceState({}, '', location.pathname + (newSearch ? '?' + newSearch : '') + location.hash);
+          // 이후 ws/fetch는 cookie로 자동 인증되므로 query 파라미터 비우기
+          VT_TOKEN = '';
+          _tokenQuery = '';
+          _tokenParam = '';
+        }
+      } catch (e) { /* 실패 시 query 토큰 그대로 사용 (호환) */ }
+    })();
     // E2E 암호화 활성화 — URL에 ?e2e=1 또는 #e2e=1 있으면 ON (D3)
     const E2E_ENABLED = (_urlParams.get('e2e') === '1' || _hashParams.get('e2e') === '1');
     const _e2eQuery = E2E_ENABLED ? (_tokenQuery ? '&e2e=1' : '?e2e=1') : '';
@@ -362,6 +393,7 @@
         fontSize: termFontSize,
         theme: { background: '#1e1e2e' },
         allowProposedApi: true,
+        screenReaderMode: true,  // a11y: Canvas 외에 hidden DOM도 유지
       });
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
@@ -923,35 +955,13 @@
       document.body.appendChild(s);
     })();
 
-    // ── AI agent 배지 폴링 (5초) ─────────────────────────────────────
-    async function pollAgentBadges() {
-      try {
-        const res = await fetch(`${API_BASE}/api/agents`);
-        const agents = await res.json();
-        document.querySelectorAll('.tab').forEach((tab) => {
-          const sid = tab.dataset.sessionId;
-          const sess = sessions[sid];
-          const badge = tab.querySelector('.tab-agent');
-          if (!sess || !badge) return;
-          const tmuxName = sess.tmux_name || sess.tmuxName;
-          const info = tmuxName && agents[tmuxName];
-          if (info && info.icon) {
-            badge.textContent = info.icon;
-            badge.title = info.label;
-          } else {
-            badge.textContent = '';
-          }
-        });
-      } catch (e) { /* 무시 */ }
-    }
-    // 탭 포커스 있을 때만 폴링 — 백그라운드에서 불필요한 네트워크 요청 방지
-    let _agentPollTimer = setInterval(pollAgentBadges, 5000);
+    // Phase 9 #2: agents 폴링 제거 — `/ws-agent` push가 모두 대체.
+    // applyAgentBadges() / connectAgentWs()는 위쪽(약 ~1120행)에 정의됨.
+    // grid 폴링만 visibilitychange로 정리.
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        clearInterval(_agentPollTimer);
         if (gridPollTimer) { clearInterval(gridPollTimer); gridPollTimer = null; }
       } else {
-        _agentPollTimer = setInterval(pollAgentBadges, 5000);
         if (gridViewEnabled) gridPollTimer = setInterval(refreshGrid, 1000);
       }
     });
@@ -1001,13 +1011,37 @@
         term.style.display = 'none';
         btn.classList.add('active');     // D2: CSS class로 활성 상태 관리
         await refreshGrid();
-        gridPollTimer = setInterval(refreshGrid, 2000);  // 1초→2초: 세션마다 capture-pane 호출 비용
+        // Phase 9 #1: setInterval(refreshGrid, 2000) 제거 — 카드별 ws push가 갱신 담당.
       } else {
         grid.style.display = 'none';
         term.style.display = '';
         btn.classList.remove('active');  // D2: 비활성 시 class 제거
         if (gridPollTimer) { clearInterval(gridPollTimer); gridPollTimer = null; }
+        // 모든 preview ws 닫기
+        for (const ws of Object.values(_previewWs)) { try { ws.close(); } catch (_) {} }
+        Object.keys(_previewWs).forEach(k => delete _previewWs[k]);
       }
+    }
+    // Phase 9 #1: 카드별 preview ws — 변화 시에만 갱신.
+    const _previewWs = {};
+    function ensurePreviewWs(sessName) {
+      if (_previewWs[sessName]) return;
+      const ws = new WebSocket(`${WS_BASE}/ws-preview/${encodeURIComponent(sessName)}${_tokenQuery}`);
+      _previewWs[sessName] = ws;
+      ws.onmessage = (e) => {
+        let msg; try { msg = JSON.parse(e.data); } catch (_) { return; }
+        if (msg.type !== 'preview' || !msg.content) return;
+        const cards = document.getElementById('grid-cards');
+        const card = cards && cards.querySelector(`[data-name="${CSS.escape(sessName)}"]`);
+        if (!card) return;
+        const pre = card.querySelector('.card-preview');
+        if (pre) { pre.innerHTML = ansiToHtml(msg.content); pre.scrollTop = pre.scrollHeight; }
+      };
+      ws.onclose = () => { delete _previewWs[sessName]; };
+      // 30초 keepalive — 끊김 방지
+      const ka = setInterval(() => {
+        try { ws.send('ping'); } catch (_) { clearInterval(ka); }
+      }, 30000);
     }
 
     async function refreshGrid() {
@@ -1063,20 +1097,15 @@
           card.querySelector('.card-cmd').textContent = sess.command || '';
         }
 
-        // D8: 프리뷰를 모든 세션에 대해 병렬로 fetch
-        await Promise.all(tmuxSessions.map(async (sess) => {
-          try {
-            const pres = await fetch(`${API_BASE}/api/tmux/preview/${encodeURIComponent(sess.name)}?lines=15&ansi=1`);
-            const data = await pres.json();
-            const card = cards.querySelector(`[data-name="${CSS.escape(sess.name)}"]`);
-            if (!card) return;
-            const pre = card.querySelector('.card-preview');
-            if (data.available && data.content) {
-              pre.innerHTML = ansiToHtml(data.content);
-              pre.scrollTop = pre.scrollHeight;
-            }
-          } catch (e) { /* 무시 */ }
-        }));
+        // Phase 9 #1: 폴링 fetch 제거 — 카드별 ws push가 즉시 첫 콘텐츠 + 변화 push.
+        for (const sess of tmuxSessions) ensurePreviewWs(sess.name);
+        // 사라진 세션의 ws는 닫기
+        for (const name of Object.keys(_previewWs)) {
+          if (!incomingNames.has(name)) {
+            try { _previewWs[name].close(); } catch (_) {}
+            delete _previewWs[name];
+          }
+        }
       } catch (e) { console.warn('grid refresh fail', e); }
     }
 
@@ -1108,16 +1137,47 @@
       }
     }).catch(() => {});
 
-    // ── Agent 도구 사용 토스트 (WebSocket) ───────────────────────────
-    try {
-      const wsAgent = new WebSocket(`${WS_BASE}/ws-agent`);
+    // ── Agent WebSocket — Phase 9 #2: 폴링 대체용 push 채널 + #5: heartbeat/reconnect ─
+    let wsAgent = null;
+    let _wsAgentRetries = 0;
+    function connectAgentWs() {
+      try {
+        wsAgent = new WebSocket(`${WS_BASE}/ws-agent${_tokenQuery}`);
+      } catch (e) { return scheduleAgentReconnect(); }
+      wsAgent.onopen = () => { _wsAgentRetries = 0; };
       wsAgent.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'agent_event' && msg.state && msg.state.tool) {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch (_) { return; }
+        if (msg.type === 'ping') {
+          try { wsAgent.send(JSON.stringify({ type: 'pong' })); } catch (_) {}
+        } else if (msg.type === 'agent_snapshot' || msg.type === 'agents_change') {
+          if (msg.agents) applyAgentBadges(msg.agents);
+        } else if (msg.type === 'agent_event' && msg.state && msg.state.tool) {
           showToast(`🔧 ${msg.state.tool} 실행 중...`);
         }
       };
-    } catch (e) {}
+      wsAgent.onclose = scheduleAgentReconnect;
+      wsAgent.onerror = () => { try { wsAgent.close(); } catch (_) {} };
+    }
+    function scheduleAgentReconnect() {
+      if (_wsAgentRetries >= 15) return;
+      _wsAgentRetries++;
+      const delay = Math.min(1000 * Math.pow(2, _wsAgentRetries), 30000);
+      setTimeout(connectAgentWs, delay);
+    }
+    function applyAgentBadges(agents) {
+      document.querySelectorAll('.tab').forEach((tab) => {
+        const sid = tab.dataset.sessionId;
+        const sess = sessions[sid];
+        const badge = tab.querySelector('.tab-agent');
+        if (!sess || !badge) return;
+        const tmuxName = sess.tmux_name || sess.tmuxName;
+        const info = tmuxName && agents[tmuxName];
+        badge.textContent = (info && info.icon) ? info.icon : '';
+        if (info && info.label) badge.title = info.label;
+      });
+    }
+    connectAgentWs();
 
     function showToast(text) {
       let toast = document.getElementById('agent-toast');

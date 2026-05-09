@@ -12,6 +12,7 @@ import fcntl
 import logging
 import os
 import pty
+import re
 import shutil
 import signal
 import struct
@@ -24,6 +25,28 @@ from typing import Callable, Optional
 logger = logging.getLogger(__name__)
 
 ALLOWED_SHELLS = {"/bin/bash", "/bin/zsh", "/bin/sh", "/bin/fish", "/usr/bin/bash"}
+
+# 클라이언트 터미널(xterm.js)이 PTY query에 자동 응답한 시퀀스를 영구 차단한다.
+# 이 패턴들은 사용자가 vim 등에서 직접 입력할 일이 거의 없고, PTY stdin으로
+# 흘러가면 zsh가 명령으로 인식해 `command not found: 2c0` 같은 노이즈를 낸다.
+TERMINAL_AUTO_REPLY_RE = re.compile(
+    rb"\x1b\[[\?>]?[\d;]*[cR]"
+    rb"|\x1b\]\d{1,2};[^\x07\x1b]*(?:\x07|\x1b\\)"
+)
+
+# Phase 9 #6: PTY 출력의 query를 server가 직접 응답하고, 클라이언트로는 query를 안 보낸다.
+# 이렇게 하면 ws 재연결 등 어떤 시점에도 client→server 자동응답 트래픽이 발생하지 않는다.
+# 부팅 후 PTY_QUERY_INTERCEPT_SEC 동안만 활성 — vim/htop 등 TUI가 자체 query를 쓸 수 있어
+# 영구 가로채기는 위험.
+PTY_QUERY_INTERCEPT_SEC = 1.5
+PTY_OUT_QUERY_REPLIES = (
+    (b"\x1b[c",        b"\x1b[?6c"),                           # DA1
+    (b"\x1b[0c",       b"\x1b[?6c"),
+    (b"\x1b[>c",       b"\x1b[>0;1;0c"),                       # DA2
+    (b"\x1b[>0c",      b"\x1b[>0;1;0c"),
+    (b"\x1b]10;?\x07", b"\x1b]10;rgb:cdcd/d6d6/f4f4\x07"),     # OSC10 fg
+    (b"\x1b]11;?\x07", b"\x1b]11;rgb:1e1e/1e1e/2e2e\x07"),     # OSC11 bg
+)
 
 
 @dataclass
@@ -40,11 +63,17 @@ class PTYSession:
     _scrollback: deque = field(default_factory=lambda: deque(maxlen=5000), repr=False)
     # D3: 백프레셔(backpressure) 플래그 — True이면 _read_loop이 대기
     _paused: bool = field(default=False, repr=False)
+    # P0 fix: PTY 시작 시각 — grace period 동안 클라이언트 자동응답(ESC 시퀀스) 차단용
+    _start_monotonic: float = field(default=0.0, repr=False)
 
 
 class PTYManager:
     def __init__(self):
         self._sessions: dict[str, PTYSession] = {}
+        # SIGCHLD 핸들러는 의도적으로 등록하지 않는다 — `subprocess.run` 같은 stdlib이
+        # 자체 wait를 수행하므로 process-wide reaper와 충돌해 ECHILD/returncode 깨짐을
+        # 유발할 수 있다. 대신 `_read_loop` EOF 분기와 `destroy_session`에서 PTY 자식만
+        # 명시적으로 회수한다 (TEST_REPORT.md Bug #3).
 
     @property
     def sessions(self) -> dict[str, PTYSession]:
@@ -111,6 +140,7 @@ class PTYManager:
                 fd=fd,
                 cols=cols,
                 rows=rows,
+                _start_monotonic=time.monotonic(),
             )
             self._sessions[session_id] = session
 
@@ -134,8 +164,29 @@ class PTYManager:
     # 안전 모드 — 라인 버퍼 (Enter 입력 시 검사)
     _line_buffer: dict[str, bytes] = {}
 
+    # PTY 시작 직후 grace period — 이 동안 ESC로 시작하는 클라이언트 입력은 무시.
+    # xterm.js가 PTY의 DA1/DA2/OSC10/11 query에 자동 응답한 시퀀스가 zsh stdin에
+    # 들어가 명령으로 오인되는 누수를 차단한다 (TEST_REPORT.md Bug #1).
+    PTY_BOOT_GRACE_SEC = 0.5
+
     def write(self, session_id: str, data: bytes) -> None:
         session = self._get(session_id)
+
+        # P0 fix #1 — 영구 차단: 클라이언트가 보낸 DA/CPR/OSC 자동응답을 stdin에서 제거.
+        # 이게 1순위 방어선이다. WS 재연결/탭 전환 등 grace 윈도우 밖에서도 보호된다.
+        if data:
+            filtered = TERMINAL_AUTO_REPLY_RE.sub(b"", data)
+            if not filtered:
+                return
+            data = filtered
+
+        # P0 fix #2 — 부팅 직후 추가 안전망: 다른 종류의 ESC 시퀀스도 0.5s 동안 무시.
+        # 사용자 키 입력은 ESC로 시작하지 않는 일반 ASCII이므로 영향 없다.
+        if (
+            data.startswith(b"\x1b")
+            and time.monotonic() - session._start_monotonic < self.PTY_BOOT_GRACE_SEC
+        ):
+            return
 
         # 안전 모드 검사 — Enter 입력 시 누적 라인 검사
         try:
@@ -230,8 +281,27 @@ class PTYManager:
                 await asyncio.sleep(0.05)
                 continue
             data = await loop.run_in_executor(None, _blocking_read)
+            # Phase 9 #6: PTY 출력의 query를 가로채 server가 직접 응답.
+            # client로는 query를 안 보내므로 client→server 자동응답 트래픽 0.
+            if (
+                data
+                and time.monotonic() - session._start_monotonic < PTY_QUERY_INTERCEPT_SEC
+            ):
+                for q, resp in PTY_OUT_QUERY_REPLIES:
+                    if q in data:
+                        try:
+                            os.write(session.fd, resp)
+                        except OSError:
+                            pass
+                        data = data.replace(q, b"")
+                if not data:
+                    continue
             if data is None or len(data) == 0:
-                # EOF — tmux detach 등으로 프로세스 종료
+                # EOF — tmux detach 등으로 프로세스 종료. 좀비 방지를 위해 명시적 회수.
+                try:
+                    os.waitpid(session.pid, os.WNOHANG)
+                except ChildProcessError:
+                    pass
                 eof_msg = b"\r\n[process exited]\r\n"
                 for cb in list(session._subscribers):
                     try:
@@ -279,22 +349,14 @@ class PTYManager:
         except (OSError, ProcessLookupError):
             pass
 
-        # 백그라운드 스레드에서 blocking waitpid (이벤트 루프 블로킹 방지)
+        # 백그라운드 스레드에서 blocking waitpid (이벤트 루프 블로킹 방지).
+        # SIGCHLD 핸들러가 먼저 회수할 수도 있으므로 ChildProcessError는 정상 종료로 본다.
         import threading
         def _reap():
-            for _ in range(10):
-                try:
-                    rpid, _ = os.waitpid(pid, os.WNOHANG)
-                    if rpid != 0:
-                        return
-                except ChildProcessError:
-                    return
-                time.sleep(0.1)
-            # 마지막 시도
             try:
-                os.waitpid(pid, os.WNOHANG)
+                os.waitpid(pid, 0)  # blocking — 자식이 죽을 때까지 대기
             except ChildProcessError:
-                pass
+                pass  # SIGCHLD 핸들러가 이미 회수함
 
         threading.Thread(target=_reap, daemon=True).start()
 
@@ -304,10 +366,33 @@ class PTYManager:
         for sid in list(self._sessions):
             self.destroy_session(sid)
 
+    # Phase 9 #7: scrollback을 마지막 N 바이트로 제한 → 모바일 재접속 트래픽 ↓.
+    SCROLLBACK_MAX_BYTES = 256 * 1024
+
     def get_scrollback(self, session_id: str) -> list[bytes]:
-        """재접속 시 이전 출력을 전송하기 위한 scrollback 데이터 반환."""
+        """재접속 시 이전 출력을 전송하기 위한 scrollback 데이터 반환.
+
+        용량 제한: 합쳐서 SCROLLBACK_MAX_BYTES (256KB)를 넘으면 뒤(최근)부터 잘라
+        반환한다. 단일 `bytes`가 아닌 list[bytes] 시그니처는 호환을 위해 유지.
+        """
         session = self._get(session_id)
-        return list(session._scrollback)
+        chunks = list(session._scrollback)
+        total = sum(len(c) for c in chunks)
+        if total <= self.SCROLLBACK_MAX_BYTES:
+            return chunks
+        # 뒤에서부터 누적해 SCROLLBACK_MAX_BYTES 안에 들어오는 만큼만
+        out: list[bytes] = []
+        size = 0
+        for c in reversed(chunks):
+            if size + len(c) > self.SCROLLBACK_MAX_BYTES:
+                # 마지막 chunk를 잘라 정확히 맞춘다
+                remain = self.SCROLLBACK_MAX_BYTES - size
+                if remain > 0:
+                    out.append(c[-remain:])
+                break
+            out.append(c)
+            size += len(c)
+        return list(reversed(out))
 
     def _get(self, session_id: str) -> PTYSession:
         try:
