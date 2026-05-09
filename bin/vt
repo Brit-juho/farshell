@@ -654,6 +654,7 @@ cmd_help() {
     vt handoff desktop     폰 세션을 맥으로
     vt hotkey              핫키 조회/변경
     vt voice-target        음성 daemon 타깃 세션 lock/해제
+    vt manage              TUI 관리 도구 (세션/타깃/핫키/상태)
     vt doctor              설치/환경 진단
     vt install-profiles    터미널 앱 자동 등록 (iTerm2 등)
     vt help <topic>        토픽별 상세 도움말

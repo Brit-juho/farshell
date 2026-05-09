@@ -244,6 +244,13 @@ adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 10
 | DELETE | `/api/tmux/kill/{name}` | tmux 세션 완전 종료 |
 | POST | `/api/upload?session_id=X` | 파일 업로드 (multipart/form-data) |
 | GET | `/api/download?path=X` | 서버 파일 다운로드 |
+| POST | `/api/auth` | 토큰 인증 → `vt_session` HttpOnly cookie 발급 (v1.3+) |
+| GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널 등) |
+| GET | `/api/workspace` | 워크스페이스 동기화 (탭/UI 상태) |
+| GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) |
+| WS | `/ws-preview/{name}` | grid view용 tmux pane 출력 push (v1.3+) |
+| WS | `/ws-agent` | 에이전트 활성 상태 push |
+| WS | `/ws-workspace` | 워크스페이스 변경 push |
 
 ### E2E 테스트 방법
 
