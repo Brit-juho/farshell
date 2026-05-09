@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import time
 import pytest
+
+pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import Page, expect
 
 BASE_URL = "http://localhost:7777"

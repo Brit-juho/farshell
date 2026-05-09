@@ -530,12 +530,14 @@ vt voice
 
 ## 버전 / 변경 이력
 
-현재 버전: **v1.2.0** (2026-05-07)
+현재 버전: **v1.4.0** (2026-05-09)
 
 전체 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고.
 
 | 버전 | 날짜 | 주요 내용 |
 |------|------|-----------|
+| [v1.4.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.4.0) | 2026-05-09 | UX overhaul + Linux 1급 동등화: `vt manage` TUI·`vt attach`·`vt voice-target`·`vt hotkey`·`vt help`·`vt stop --purge`·핸즈프리 제거·이어폰 토글·Linux 터미널/TTS/notify 분기·onboarding |
+| [v1.3.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.3.0) | 2026-05-08 | Phase 9 안정성·네트워크 효율: `/ws-preview` push·`/api/auth` cookie·vendor 자체 호스팅·ETag 304·pyav decoding·SW 캐시·PTY query 가로채기·WS heartbeat |
 | [v1.2.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.2.0) | 2026-05-07 | Phase 7-8: 라이브 프리뷰·setup-keybind·--network 모드·Cloudflare 명명 터널·WS 백프레셔·--disallowedTools·trust 자동·워크스페이스·tmux batch |
 | [v1.1.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.1.0) | 2026-05-06 | ralph→vt 리네이밍, Phase 1-6 (격리 소켓·AI 인식·명령 확장·훅·안전 모드·크로스 플랫폼 통합) |
 | [v1.0.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.0.0) | 2026-04-14 | 초기 안정 버전 (PWA·Voice Daemon·STT/TTS·터널·`vt` CLI·`install.sh`) |
