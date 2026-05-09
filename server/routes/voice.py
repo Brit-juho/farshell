@@ -86,8 +86,16 @@ async def voice_input(request: Request):
 @router.post("/voice/output")
 async def voice_output(request: Request):
     body = await request.json()
-    text = body.get("text", "")
+    text = (body.get("text") or "").strip()
     voice = body.get("voice", "ko-KR-SunHiNeural")
+
+    # 빈 텍스트는 200 + 0 bytes 대신 400으로 명시적으로 거절 (TEST_REPORT.md Bug #7).
+    if not text:
+        return Response(
+            content=b'{"error":"empty text"}',
+            status_code=400,
+            media_type="application/json",
+        )
 
     try:
         audio = await voice_handler.synthesize(text, voice=voice)

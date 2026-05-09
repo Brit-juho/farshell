@@ -15,9 +15,12 @@ set -euo pipefail
 PROFILE="${1:-terminal}"  # terminal | voice
 PIPE_INSTALL=0
 
-# 스크립트가 파이프(curl | bash)로 실행되면 레포 자동 클론
-if [ -t 0 ] && [ -f "$(dirname "$0")/bin/vt" ]; then
-  VT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# 로컬 레포가 있으면 그걸 우선 사용. 진짜 파이프 설치(curl | bash)에서만 클론.
+# 이전 버전은 `[ -t 0 ]`로 stdin TTY 여부를 체크했지만, 자동화/CI 환경도 false로
+# 잡혀 로컬 레포를 무시하는 버그가 있었다 (TEST_REPORT.md Bug #2).
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/bin/vt" ]; then
+  VT_DIR="$SCRIPT_DIR"
 else
   PIPE_INSTALL=1
   VT_DIR="${VT_DIR:-$HOME/voice-terminal}"
@@ -72,6 +75,31 @@ ln -sf "$VT_DIR/bin/vt" "$HOME/.local/bin/vt"
 chmod +x "$VT_DIR/bin/vt"
 echo "✓ vt CLI 등록 → ~/.local/bin/vt"
 
+# 4-0. vendor 자산 다운로드 (Phase 9 #3 — CDN 의존 제거)
+VENDOR="$VT_DIR/frontend/static/vendor"
+if [ ! -f "$VENDOR/xterm.min.js" ]; then
+  echo "▸ vendor 자산 다운로드 (~1.5MB)..."
+  mkdir -p "$VENDOR"
+  CDN="https://cdn.jsdelivr.net/npm"
+  for f in \
+    "@xterm/xterm@5.5.0/lib/xterm.min.js" \
+    "@xterm/xterm@5.5.0/css/xterm.min.css" \
+    "@xterm/addon-fit@0.10.0/lib/addon-fit.min.js" \
+    "@xterm/addon-search@0.15.0/lib/addon-search.min.js" \
+    "lucide-static@0.469.0/font/lucide.min.css" \
+    "lucide-static@0.469.0/font/lucide.woff2" \
+    "lucide-static@0.469.0/font/lucide.woff" \
+    "lucide-static@0.469.0/font/lucide.ttf" \
+    "tweetnacl@1.0.3/nacl.min.js" \
+    "tweetnacl-util@0.15.1/nacl-util.min.js"; do
+    out="$VENDOR/$(basename "$f")"
+    [ -f "$out" ] || curl -fsSL "$CDN/$f" -o "$out" || echo "  ⚠ $f 다운로드 실패"
+  done
+  # CSS의 ?t=... 캐시버스터 제거
+  [ -f "$VENDOR/lucide.min.css" ] && sed -i.bak 's/?t=[0-9]*//g' "$VENDOR/lucide.min.css" && rm -f "$VENDOR/lucide.min.css.bak"
+  echo "✓ vendor 자산 → $VENDOR"
+fi
+
 # 4-1. tmux 격리 config 복사 (Phase 8 G3)
 mkdir -p "$HOME/.config/vt"
 if [ -f "$VT_DIR/config/vt-tmux.conf" ] && [ ! -f "$HOME/.config/vt/tmux.conf" ]; then
@@ -83,8 +111,9 @@ fi
 if [ ! -f "$HOME/.vt.env" ]; then
   cat > "$HOME/.vt.env" <<EOF
 # voice-terminal 설정 (수정 가능)
+VT_DIR=$VT_DIR
 VT_PORT=${VT_PORT:-7777}
-VT_PYTHON=$VENV/bin/python
+VT_PYTHON=\${VT_DIR}/.venv/bin/python
 # VT_TOKEN=your-secret    # 원격 접속 시 인증 (선택)
 # VT_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (D2, 선택)
 EOF
@@ -114,6 +143,30 @@ if ! command -v cloudflared >/dev/null 2>&1; then
     echo "    설치: brew install cloudflared"
   else
     echo "    설치: curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/.local/bin/cloudflared && chmod +x ~/.local/bin/cloudflared"
+  fi
+fi
+
+# 8. (W3-5) Linux voice 프로필 — espeak-ng + libnotify 안내
+if [ "$PROFILE" = "voice" ] && [ "$(uname)" = "Linux" ]; then
+  if ! command -v espeak-ng >/dev/null 2>&1 && ! command -v espeak >/dev/null 2>&1; then
+    echo ""
+    echo "  ⓘ Linux 음성 출력(TTS)을 위해 espeak-ng 권장:"
+    echo "    Debian/Ubuntu: sudo apt-get install espeak-ng libnotify-bin"
+    echo "    Fedora:        sudo dnf install espeak-ng libnotify"
+    echo "    Arch:          sudo pacman -S espeak-ng libnotify"
+  fi
+fi
+
+# 9. (W5-1) 터미널 profile 자동 등록 권유
+# 비대화형(curl|bash)에서는 스킵. TTY가 있으면 사용자에게 확인 후 vt install-profiles 실행
+if [ -t 0 ] && [ -t 1 ]; then
+  echo ""
+  printf "  새 터미널 창이 자동으로 voice-terminal tmux로 진입하도록 설정할까요? [y/N] "
+  IFS= read -r REPLY_PROFILE || REPLY_PROFILE=""
+  if [ "${REPLY_PROFILE:-}" = "y" ] || [ "${REPLY_PROFILE:-}" = "Y" ]; then
+    "$VT_DIR/bin/vt" install-profiles 2>&1 || echo "  ⚠ install-profiles 실패 — 'vt install-profiles' 수동 실행 가능"
+  else
+    echo "  ⓘ 나중에 'vt install-profiles' 또는 'vt shell-init zsh >> ~/.zshrc'로 활성화 가능"
   fi
 fi
 

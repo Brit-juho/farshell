@@ -26,8 +26,8 @@ UPLOAD_DIR = Path("/tmp/vt-uploads")
 # Phase 8 G2: 연결 한도 + 백프레셔 + 하트비트
 WS_MAX_PER_SESSION = int(os.environ.get("VT_WS_MAX_PER_SESSION", "8"))
 WS_MAX_TOTAL = int(os.environ.get("VT_WS_MAX_TOTAL", "32"))
-WS_HEARTBEAT_INTERVAL = float(os.environ.get("VT_WS_HEARTBEAT_INTERVAL", "30.0"))
-WS_HEARTBEAT_TIMEOUT = float(os.environ.get("VT_WS_HEARTBEAT_TIMEOUT", "90.0"))
+WS_HEARTBEAT_INTERVAL = float(os.environ.get("VT_WS_HEARTBEAT_INTERVAL", "15.0"))
+WS_HEARTBEAT_TIMEOUT = float(os.environ.get("VT_WS_HEARTBEAT_TIMEOUT", "45.0"))
 WS_QUEUE_HIGH = 200
 WS_QUEUE_LOW = 50
 
@@ -37,17 +37,31 @@ VT_TOKEN = os.environ.get("VT_TOKEN", "")
 
 
 def _ws_auth(ws: WebSocket) -> bool:
+    """Phase 9 #8: WS 인증은 query/Authorization/cookie 모두에서 토큰 수용.
+    HTTP 미들웨어와 동일한 다중 소스를 받아야 cookie-only 클라이언트(/api/auth 후)도 통과.
+    """
     if not VT_TOKEN:
         return True
+    # 1) query string
     token = ws.query_params.get("token", "")
-    return token == VT_TOKEN
+    if token == VT_TOKEN:
+        return True
+    # 2) Authorization: Bearer
+    auth_hdr = ws.headers.get("authorization", "")
+    if auth_hdr.startswith("Bearer ") and auth_hdr[7:] == VT_TOKEN:
+        return True
+    # 3) HttpOnly cookie (vt_session)
+    cookie_token = ws.cookies.get("vt_session", "")
+    if cookie_token == VT_TOKEN:
+        return True
+    return False
 
 
 # --------------------------------------------------------------------------
 # PTY 세션 CRUD
 # --------------------------------------------------------------------------
 
-@router.get("/api/sessions")
+@router.api_route("/api/sessions", methods=["GET", "HEAD"])
 async def list_sessions():
     return [
         {
@@ -93,10 +107,47 @@ async def rename_session(session_id: str, request: Request):
     name = body.get("name", "").strip()
     info = session_store.get(session_id)
     if not info:
-        return {"error": "Session not found"}, 404
-    if name:
-        info.name = name
-    return {"id": session_id, "name": info.name}
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    if not name:
+        return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name}
+
+    # Wave 1 W1-1: tmux 세션 이름도 같이 변경 (이전엔 메타데이터만 변경)
+    tmux_renamed = False
+    warning = None
+    if info.tmux_name and info.tmux_name != name:
+        import re
+        import tmux_runner
+        # tmux 세션명 안전 문자 검증 (영숫자, dash, underscore만 허용)
+        if re.fullmatch(r"[A-Za-z0-9_\-]+", name):
+            # 충돌 검사
+            if tmux_runner.has_session(name):
+                return JSONResponse(
+                    {"error": "tmux session name already exists", "name": name},
+                    status_code=409,
+                )
+            rc, _, err = tmux_runner.run(
+                ["rename-session", "-t", info.tmux_name, name],
+                timeout=2.0,
+            )
+            if rc != 0:
+                return JSONResponse(
+                    {"error": "tmux rename-session failed", "detail": err.decode("utf-8", errors="ignore")},
+                    status_code=500,
+                )
+            session_store.update_tmux_name(session_id, name)
+            tmux_renamed = True
+        else:
+            # 안전하지 않은 문자 포함 — tmux는 안 건드리고 메타데이터만 변경 + 경고 명시
+            warning = (
+                "tmux 세션 이름은 변경되지 않음 — 영숫자/dash/underscore만 허용. "
+                "웹 라벨만 변경됨."
+            )
+            logger.warning(f"rename {session_id}: unsafe chars in '{name}' — tmux unchanged")
+    info.name = name
+    resp = {"id": session_id, "name": info.name, "tmux_name": info.tmux_name, "tmux_renamed": tmux_renamed}
+    if warning:
+        resp["warning"] = warning
+    return resp
 
 
 # --------------------------------------------------------------------------

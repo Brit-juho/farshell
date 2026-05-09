@@ -56,25 +56,69 @@ def _init_stt() -> str:
 
 ALLOWED_AUDIO_FORMATS = {"webm", "wav", "ogg", "mp3", "m4a"}
 
+# 입력이 이미 16kHz mono int16 WAV인지 빠르게 판별 (ffmpeg/pyav 우회)
+def _is_already_target_wav(audio_bytes: bytes) -> bool:
+    if len(audio_bytes) < 44 or audio_bytes[:4] != b"RIFF" or audio_bytes[8:12] != b"WAVE":
+        return False
+    try:
+        # fmt 청크: 24~28 sample rate, 22~24 channels, 34~36 bit depth
+        import struct as _s
+        chans = _s.unpack("<H", audio_bytes[22:24])[0]
+        rate = _s.unpack("<I", audio_bytes[24:28])[0]
+        bits = _s.unpack("<H", audio_bytes[34:36])[0]
+        return chans == 1 and rate == 16000 and bits == 16
+    except Exception:
+        return False
 
-def _convert_to_wav(audio_bytes: bytes, input_format: str = "webm") -> bytes:
-    """ffmpeg으로 입력 오디오를 16kHz mono WAV로 변환."""
-    # [H4] 허용 포맷 검증
-    if input_format not in ALLOWED_AUDIO_FORMATS:
-        raise ValueError(f"Unsupported audio format: {input_format!r}")
+
+def _convert_to_wav_pyav(audio_bytes: bytes, input_format: str) -> Optional[bytes]:
+    """Phase 9 #10: pyav로 in-process 디코딩 (ffmpeg subprocess 회피).
+
+    실패 시 None을 반환해 호출자가 ffmpeg fallback을 쓰도록 한다.
+    """
+    try:
+        import av  # type: ignore
+        import io as _io
+        import wave as _wave
+    except ImportError:
+        return None
+
+    try:
+        container = av.open(_io.BytesIO(audio_bytes), format=input_format)
+        stream = container.streams.audio[0]
+        resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
+        pcm = bytearray()
+        for frame in container.decode(stream):
+            for f in resampler.resample(frame):
+                pcm.extend(bytes(f.planes[0]))
+        # resampler flush
+        for f in resampler.resample(None):
+            pcm.extend(bytes(f.planes[0]))
+        container.close()
+
+        buf = _io.BytesIO()
+        with _wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(bytes(pcm))
+        return buf.getvalue()
+    except Exception as e:
+        logger.warning(f"pyav decode failed, falling back to ffmpeg: {e}")
+        return None
+
+
+def _convert_to_wav_ffmpeg(audio_bytes: bytes, input_format: str) -> bytes:
+    """ffmpeg subprocess fallback."""
     with tempfile.NamedTemporaryFile(suffix=f".{input_format}", delete=False) as src:
         src.write(audio_bytes)
         src_path = src.name
-
     dst_path = src_path.rsplit(".", 1)[0] + ".wav"
     try:
         subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", src_path,
-                "-ar", "16000", "-ac", "1", "-f", "wav", dst_path,
-            ],
-            capture_output=True,
-            timeout=10,
+            ["ffmpeg", "-y", "-i", src_path,
+             "-ar", "16000", "-ac", "1", "-f", "wav", dst_path],
+            capture_output=True, timeout=10,
         )
         return Path(dst_path).read_bytes()
     finally:
@@ -82,7 +126,52 @@ def _convert_to_wav(audio_bytes: bytes, input_format: str = "webm") -> bytes:
         Path(dst_path).unlink(missing_ok=True)
 
 
+def _convert_to_wav(audio_bytes: bytes, input_format: str = "webm") -> bytes:
+    """입력 오디오를 16kHz mono int16 WAV로 변환.
+
+    우선순위: (0) 이미 target wav면 그대로 → (1) pyav in-process → (2) ffmpeg subprocess.
+    """
+    # [H4] 허용 포맷 검증
+    if input_format not in ALLOWED_AUDIO_FORMATS:
+        raise ValueError(f"Unsupported audio format: {input_format!r}")
+
+    # (0) wav 패스스루 — local_mic이 만든 wav는 이미 16kHz mono int16
+    if input_format == "wav" and _is_already_target_wav(audio_bytes):
+        return audio_bytes
+
+    # (1) pyav 시도
+    out = _convert_to_wav_pyav(audio_bytes, input_format)
+    if out is not None:
+        return out
+
+    # (2) ffmpeg fallback
+    return _convert_to_wav_ffmpeg(audio_bytes, input_format)
+
+
 STT_TIMEOUT = 30  # seconds
+
+# 무음/저에너지 입력은 Whisper가 "You?" / "Thanks for watching" 등 환각을 내기 쉽다.
+# WAV 16-bit PCM 평균 절대값 임계값(0~32767). 600은 약 -34dBFS — 일반 발화 대비 충분히 낮다.
+SILENCE_RMS_THRESHOLD = 600
+
+
+def _is_silent_wav(wav_bytes: bytes) -> bool:
+    """WAV 헤더(44바이트) 이후를 16-bit signed PCM으로 보고 평균 절대값 측정."""
+    if len(wav_bytes) <= 44:
+        return True
+    try:
+        import struct as _struct
+        pcm = wav_bytes[44:]
+        n = len(pcm) // 2
+        if n == 0:
+            return True
+        # 너무 길면 앞 32K 샘플(약 2초@16kHz)만 검사 — 충분
+        sample_n = min(n, 32000)
+        samples = _struct.unpack(f"<{sample_n}h", pcm[: sample_n * 2])
+        avg_abs = sum(abs(s) for s in samples) / sample_n
+        return avg_abs < SILENCE_RMS_THRESHOLD
+    except Exception:
+        return False
 
 
 async def transcribe(audio_bytes: bytes, input_format: str = "webm",
@@ -103,6 +192,11 @@ async def transcribe(audio_bytes: bytes, input_format: str = "webm",
 
     loop = asyncio.get_running_loop()
     wav_bytes = await loop.run_in_executor(None, _convert_to_wav, audio_bytes, input_format)
+
+    # 무음 차단 — Whisper hallucination 방지 (TEST_REPORT.md Bug #8).
+    if _is_silent_wav(wav_bytes):
+        logger.info("STT: silent input, skipping transcription")
+        return ""
 
     if engine == "mlx-whisper":
         import mlx_whisper

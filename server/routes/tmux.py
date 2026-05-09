@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import JSONResponse
 
 import platform_utils
@@ -19,6 +20,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 TMUX_SOCKET = tmux_runner.VT_TMUX_SOCKET
+
+
+# Wave 1 W1-2: 의미있는 디폴트 세션 이름 (cwd basename + 충돌 시 순번)
+def _generate_default_session_name() -> str:
+    """cwd basename 기반 + 충돌 시 -1, -2 순번. 안전한 영숫자만 사용."""
+    try:
+        cwd = os.getcwd()
+        base = os.path.basename(cwd) or "session"
+    except Exception:
+        base = "session"
+    # 안전한 슬러그: 영숫자/dash/underscore만, 소문자, 최대 20자
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", base).strip("-").lower()[:20]
+    if not slug:
+        slug = "session"
+    candidate = slug
+    n = 1
+    while tmux_runner.has_session(candidate):
+        n += 1
+        candidate = f"{slug}-{n}"
+        if n > 99:
+            # 안전 폴백: uuid
+            candidate = f"web-{str(uuid.uuid4())[:4]}"
+            break
+    return candidate
 
 
 # --------------------------------------------------------------------------
@@ -84,7 +109,9 @@ async def list_tmux_sessions():
 @router.post("/api/tmux/create")
 async def create_tmux_session(request: Request):
     body = await request.json()
-    tmux_name = body.get("name", f"web-{str(uuid.uuid4())[:4]}")
+    # Wave 1 W1-2: 사용자 지정 이름 없으면 cwd 기반 디폴트
+    requested_name = body.get("name", "").strip()
+    tmux_name = requested_name if requested_name else _generate_default_session_name()
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
@@ -149,3 +176,36 @@ async def get_tmux_preview(tmux_name: str, lines: int = 20, ansi: int = 1):
     if content is None:
         return {"name": tmux_name, "content": "", "available": False}
     return {"name": tmux_name, "content": content, "available": True, "lines": lines}
+
+
+# Phase 9 #1: ws push로 grid 1초 폴링 대체 — 변화 시에만 푸시.
+@router.websocket("/ws-preview/{tmux_name}")
+async def ws_preview(websocket: WebSocket, tmux_name: str):
+    import asyncio as _asyncio
+    import json as _json
+    import preview as _preview
+    from fastapi import WebSocketDisconnect
+    # codex review fix: VT_TOKEN 환경에서 인증 없는 미리보기 접근 차단
+    from routes.pty import _ws_auth
+    if not _ws_auth(websocket):
+        await websocket.close(code=4001)
+        return
+    await websocket.accept()
+
+    async def _send(text: str):
+        try:
+            await websocket.send_text(_json.dumps({"type": "preview", "name": tmux_name, "content": text}))
+        except Exception:
+            pass
+
+    await _preview.subscribe(tmux_name, _send)
+    try:
+        while True:
+            # 클라이언트로부터 메시지(ping 등) 대기 — 끊김 감지용
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        _preview.unsubscribe(tmux_name, _send)

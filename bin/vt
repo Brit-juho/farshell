@@ -233,9 +233,90 @@ _ensure_tmux() {
 # $TERM_PROGRAM 기반으로 현재 쓰는 터미널 앱에 맞춰 오픈.
 # 지원: iTerm2, Terminal.app(Apple), WezTerm, Warp, Alacritty, Kitty, Ghostty
 _open_tmux_terminal() {
+  # 호환 wrapper: 디폴트는 dev + claude --resume (W1-3 이전 동작 유지)
+  _open_tmux_terminal_with "dev" "claude --resume"
+}
+
+# W3-1: Linux 터미널 emulator 분기로 새 창 띄우기.
+# 인자: $1 = 실행 명령어 문자열
+_open_linux_terminal_with() {
+  local cmd="$1"
+  [ -z "$cmd" ] && return 1
+
+  # WSL2는 글로벌 핫키/터미널 자동 오픈 미지원 — 가드
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    return 1
+  fi
+
+  # 우선순위 검색
+  local emulators=(
+    "gnome-terminal"
+    "konsole"
+    "alacritty"
+    "kitty"
+    "wezterm"
+    "xfce4-terminal"
+    "xterm"
+  )
+  local em
+  for em in "${emulators[@]}"; do
+    command -v "$em" >/dev/null 2>&1 || continue
+    case "$em" in
+      gnome-terminal)
+        gnome-terminal -- bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
+        return 0
+        ;;
+      konsole)
+        konsole -e bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
+        return 0
+        ;;
+      alacritty)
+        alacritty -e bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
+        return 0
+        ;;
+      kitty)
+        kitty bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
+        return 0
+        ;;
+      wezterm)
+        wezterm start -- bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
+        return 0
+        ;;
+      xfce4-terminal)
+        xfce4-terminal -e "bash -lc '$cmd; exec bash'" >/dev/null 2>&1 &
+        return 0
+        ;;
+      xterm)
+        xterm -e "bash -lc '$cmd; exec bash'" >/dev/null 2>&1 &
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+# W1-3: 임의 세션을 새 OS 터미널 창에서 attach하는 일반화 헬퍼.
+# 인자: $1=session_name, $2=optional command (없으면 attach만)
+# macOS는 osascript 분기, Linux는 emulator 분기 (W3-1)
+_open_tmux_terminal_with() {
+  local session="${1:-dev}"
+  local extra_cmd="${2:-}"
+
+  local cmd
+  if [ -n "$extra_cmd" ]; then
+    cmd="tmux -L $VT_TMUX_SOCKET new -A -s $session \"$extra_cmd\""
+  else
+    cmd="tmux -L $VT_TMUX_SOCKET new -A -s $session"
+  fi
+
+  # Linux 분기 (W3-1)
+  if [ "$(uname)" = "Linux" ]; then
+    _open_linux_terminal_with "$cmd" && return 0
+    return 1
+  fi
+
   [ "$(uname)" = "Darwin" ] || return 1
 
-  local cmd="tmux -L $VT_TMUX_SOCKET new -A -s dev \"claude --resume\""
   local term="${TERM_PROGRAM:-}"
   # 소문자 정규화 (kitty 등 일부 터미널은 소문자로 설정)
   local term_lc
@@ -337,6 +418,8 @@ cmd_voice() {
   echo "  🎤 vt voice — 음성 모드"
   echo "  노션/브라우저 작업을 계속하면서 음성으로 코딩"
   echo ""
+
+  _onboarding_check  # W5-2: 첫 실행 시 안내
 
   _ensure_tmux
   _start_server
@@ -492,7 +575,332 @@ cmd_start() {
   echo ""
 }
 
+# Wave 1 W1-3: 임의 tmux 세션을 새 OS 터미널 창에서 attach
+cmd_attach() {
+  local target="${1:-}"
+
+  if [ -z "$target" ]; then
+    # 인자 없으면 세션 목록 표시 후 선택
+    if ! "${TMUX_BASE[@]}" list-sessions >/dev/null 2>&1; then
+      echo "  ⓘ tmux 세션 없음. 'vt voice' 또는 'vt start'로 시작하세요."
+      return 1
+    fi
+    echo ""
+    echo "  📂 tmux 세션 (vt 소켓):"
+    echo ""
+    "${TMUX_BASE[@]}" list-sessions -F "    • #{session_name}  (#{session_windows} window, #{session_attached} attached)" 2>/dev/null
+    echo ""
+    if command -v fzf >/dev/null 2>&1; then
+      target=$("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' 2>/dev/null | fzf --prompt="attach which? > " --height=40% 2>/dev/null || true)
+    else
+      printf "  세션 이름을 입력하세요: "
+      read -r target
+    fi
+    [ -z "$target" ] && return 0
+  fi
+
+  # 세션 이름 안전성 검증 — 셸/AppleScript 인젝션 방어
+  if ! [[ "$target" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "  ✗ 안전하지 않은 세션 이름: '$target'"
+    echo "  영숫자/dash/underscore만 허용됩니다."
+    return 1
+  fi
+
+  # 세션 존재 확인
+  if ! "${TMUX_BASE[@]}" has-session -t "$target" 2>/dev/null; then
+    echo "  ✗ tmux 세션 '$target' 없음"
+    echo ""
+    echo "  사용 가능한 세션:"
+    "${TMUX_BASE[@]}" list-sessions -F "    • #{session_name}" 2>/dev/null || echo "    (없음)"
+    return 1
+  fi
+
+  # 이미 tmux 안이면 switch-client
+  if [ -n "${TMUX:-}" ]; then
+    "${TMUX_BASE[@]}" switch-client -t "$target"
+    echo "  ✓ 현재 tmux 클라이언트를 '$target'으로 전환"
+    return 0
+  fi
+
+  # 새 OS 터미널 창에 attach (W1-3)
+  if _open_tmux_terminal_with "$target"; then
+    echo "  ✓ 새 터미널 창에 tmux 세션 '$target' attach"
+  else
+    echo "  ⓘ 터미널 자동 오픈 실패. 수동:"
+    echo "      tmux -L $VT_TMUX_SOCKET attach -t $target"
+    return 1
+  fi
+}
+
+# Wave 2 W2-5: 토픽별 도움말
+cmd_help() {
+  local topic="${1:-}"
+  local docs_dir="$VT_DIR/docs/help"
+
+  if [ -z "$topic" ]; then
+    cat <<'HELP'
+
+  vt — Voice Terminal CLI
+
+  주요 명령:
+    vt voice               음성 모드 (백그라운드, 노션 작업 중에도)
+    vt mobile [--e2e]      모바일 접속 URL + QR
+    vt start               전체 시작 (서버+터널+음성)
+    vt stop [--purge]      종료 (--purge: tmux까지 완전 종료)
+    vt status              현재 상태
+    vt attach [name]       임의 tmux 세션을 새 창에 attach
+    vt claude              새 창 + tmux dev + claude --resume
+    vt handoff mobile      세션을 폰으로
+    vt handoff desktop     폰 세션을 맥으로
+    vt hotkey              핫키 조회/변경
+    vt voice-target        음성 daemon 타깃 세션 lock/해제
+    vt doctor              설치/환경 진단
+    vt install-profiles    터미널 앱 자동 등록 (iTerm2 등)
+    vt help <topic>        토픽별 상세 도움말
+
+  도움말 토픽:
+    vt help concepts       tmux/세션/음성 개념 (3-레이어 모델)
+    vt help voice          음성 입력 동작 + 핫키
+    vt help hotkeys        핫키 전체 목록 + 변경 방법
+    vt help target         음성 타깃 lock 설명
+    vt help troubleshoot   자주 묻는 트러블슈팅
+HELP
+    return 0
+  fi
+
+  local file="$docs_dir/${topic}.md"
+  if [ -f "$file" ]; then
+    if command -v less >/dev/null 2>&1; then
+      less -R "$file"
+    else
+      cat "$file"
+    fi
+  else
+    echo "  ✗ 도움말 토픽 '$topic' 없음"
+    echo "  사용 가능한 토픽: concepts / voice / hotkeys / target / troubleshoot"
+    return 1
+  fi
+}
+
+# Wave 2 W2-2: 핫키 조회/변경
+cmd_hotkey() {
+  local sub="${1:-list}"
+  local env_file="$HOME/.vt.env"
+
+  case "$sub" in
+    list|"")
+      echo ""
+      echo "  ⌨  vt hotkey — 현재 핫키 설정"
+      echo ""
+      local voice_hotkey
+      voice_hotkey="$(grep -E '^VT_HOTKEY_VOICE=' "$env_file" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '"')"
+      [ -z "$voice_hotkey" ] && voice_hotkey="ctrl+shift+v (디폴트)"
+      local voice_disabled
+      voice_disabled="$(grep -E '^VT_HOTKEY_VOICE_DISABLED=' "$env_file" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '"')"
+      local voice_state="활성"
+      [ "$voice_disabled" = "true" ] && voice_state="비활성 (DISABLED)"
+      echo "    voice (음성 토글):     $voice_hotkey  [$voice_state]"
+      echo ""
+      echo "  변경: vt hotkey set voice <ctrl+shift+x>"
+      echo "  비활성: vt hotkey disable voice"
+      echo "  복구: vt hotkey reset voice"
+      echo ""
+      echo "  ⓘ 변경 후 'vt stop && vt voice'로 daemon 재시작 필요"
+      ;;
+    set)
+      local action="${2:-}"
+      local value="${3:-}"
+      if [ -z "$action" ] || [ -z "$value" ]; then
+        echo "  사용법: vt hotkey set <action> <hotkey>"
+        echo "  예시:   vt hotkey set voice ctrl+shift+x"
+        return 1
+      fi
+      _hotkey_validate_action "$action" || return 1
+      _hotkey_validate_spec "$value" || return 1
+      _hotkey_set_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')" "$value"
+      echo "  ✓ $action 핫키 → $value"
+      echo "  ⓘ daemon 재시작 필요: vt stop && vt voice"
+      ;;
+    reset)
+      local action="${2:-}"
+      [ -z "$action" ] && { echo "  사용법: vt hotkey reset <action>"; return 1; }
+      _hotkey_validate_action "$action" || return 1
+      _hotkey_unset_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')"
+      _hotkey_unset_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')_DISABLED"
+      echo "  ✓ $action 핫키 디폴트로 복구"
+      ;;
+    disable)
+      local action="${2:-}"
+      [ -z "$action" ] && { echo "  사용법: vt hotkey disable <action>"; return 1; }
+      _hotkey_validate_action "$action" || return 1
+      _hotkey_set_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')_DISABLED" "true"
+      echo "  ✓ $action 핫키 비활성화"
+      ;;
+    *)
+      echo "  사용법: vt hotkey [list|set|reset|disable] [args]"
+      return 1
+      ;;
+  esac
+}
+
+# 액션 이름 화이트리스트 — sed/env 인젝션 방어
+_hotkey_validate_action() {
+  local a="$1"
+  case "$a" in
+    voice) return 0 ;;
+    *)
+      echo "  ✗ 지원되지 않는 action: '$a' (지원: voice)"
+      return 1
+      ;;
+  esac
+}
+
+# 핫키 spec 형식 검증 — alphanumeric + '+' 만 허용
+_hotkey_validate_spec() {
+  local s="$1"
+  if [[ "$s" =~ ^[a-zA-Z0-9_+]+$ ]]; then
+    return 0
+  fi
+  echo "  ✗ 잘못된 핫키 형식: '$s' (예: ctrl+shift+v)"
+  return 1
+}
+
+_hotkey_set_env() {
+  local key="$1" value="$2"
+  local env_file="$HOME/.vt.env"
+  touch "$env_file"
+  if grep -qE "^${key}=" "$env_file"; then
+    # 기존 값 변경 (BSD/GNU sed 호환)
+    if [ "$(uname)" = "Darwin" ]; then
+      sed -i '' "s|^${key}=.*|${key}=\"${value}\"|" "$env_file"
+    else
+      sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$env_file"
+    fi
+  else
+    echo "${key}=\"${value}\"" >> "$env_file"
+  fi
+}
+
+_hotkey_unset_env() {
+  local key="$1"
+  local env_file="$HOME/.vt.env"
+  [ -f "$env_file" ] || return 0
+  if [ "$(uname)" = "Darwin" ]; then
+    sed -i '' "/^${key}=/d" "$env_file"
+  else
+    sed -i "/^${key}=/d" "$env_file"
+  fi
+}
+
+# Wave 2 W2-4: 음성 daemon 타깃 세션 lock/해제 (V3-R)
+cmd_voice_target() {
+  local target_file="$HOME/.vt/voice_target"
+  mkdir -p "$HOME/.vt"
+
+  local arg="${1:-}"
+  case "$arg" in
+    ""|list|status)
+      echo ""
+      echo "  🎤 vt voice-target — 현재 음성 타깃"
+      echo ""
+      if [ -f "$target_file" ]; then
+        local locked
+        locked="$(cat "$target_file" 2>/dev/null)"
+        if [ -n "$locked" ]; then
+          echo "    🔒 LOCK: $locked"
+        else
+          echo "    🔓 AUTO: tmux most-recent (lock 없음)"
+        fi
+      else
+        echo "    🔓 AUTO: tmux most-recent (lock 없음)"
+      fi
+      echo ""
+      echo "  사용 가능한 세션:"
+      "${TMUX_BASE[@]}" list-sessions -F "    • #{session_name}" 2>/dev/null || echo "    (없음)"
+      echo ""
+      echo "  변경: vt voice-target <세션명>     # lock"
+      echo "  해제: vt voice-target --auto       # auto로"
+      echo ""
+      ;;
+    --auto|auto)
+      rm -f "$target_file"
+      echo "  ✓ 음성 타깃 → AUTO (most-recent)"
+      ;;
+    *)
+      # 세션 존재 확인
+      if ! "${TMUX_BASE[@]}" has-session -t "$arg" 2>/dev/null; then
+        echo "  ✗ tmux 세션 '$arg' 없음"
+        return 1
+      fi
+      printf '%s\n' "$arg" > "$target_file"
+      echo "  ✓ 음성 타깃 → $arg (lock)"
+      ;;
+  esac
+}
+
+# Wave 5 W5-2: 첫 실행 onboarding 안내
+_onboarding_check() {
+  local marker="$HOME/.vt/onboarded"
+  [ -f "$marker" ] && return 0
+  mkdir -p "$HOME/.vt"
+
+  # 셸 init 또는 iTerm Dynamic Profile 등록 여부 확인
+  local has_profile=0
+  if [ -f "$HOME/Library/Application Support/iTerm2/DynamicProfiles/vt.json" ]; then
+    has_profile=1
+  fi
+  local has_shellinit=0
+  for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.config/fish/config.fish"; do
+    if [ -f "$rc" ] && grep -q "tmux -L $VT_TMUX_SOCKET new -A -s dev" "$rc" 2>/dev/null; then
+      has_shellinit=1
+      break
+    fi
+  done
+
+  if [ "$has_profile" -eq 0 ] && [ "$has_shellinit" -eq 0 ]; then
+    echo ""
+    echo "  ⚡ 첫 실행 안내"
+    echo ""
+    echo "  새 터미널 창이 자동으로 voice-terminal tmux로 진입하도록 설정하지 않았습니다."
+    echo "  이 설정 없이도 'vt voice'는 동작하지만, 새 창에서 자동 attach가 더 편리합니다."
+    echo ""
+    echo "  설정하려면:"
+    echo "    vt install-profiles               (iTerm2 등 자동 등록)"
+    echo "    eval \"\$(vt shell-init zsh)\" >> ~/.zshrc   (셸 init)"
+    echo ""
+    echo "  개념 설명: vt help concepts"
+    echo ""
+  fi
+
+  touch "$marker"
+}
+
+# Wave 4 W4-1: TUI 관리 도구 진입점
+cmd_manage() {
+  if ! "$VT_PYTHON" -c "import textual" 2>/dev/null; then
+    echo ""
+    echo "  ✗ textual 미설치 — TUI를 실행할 수 없습니다."
+    echo ""
+    echo "  설치:"
+    echo "    cd $VT_DIR && .venv/bin/pip install textual"
+    echo "  또는:"
+    echo "    ./install.sh"
+    echo ""
+    return 1
+  fi
+  export VT_BIN="$VT_DIR/bin/vt"
+  exec "$VT_PYTHON" "$VT_DIR/server/tui_manager.py" "$@"
+}
+
 cmd_stop() {
+  # Wave 1 W1-4: --purge 옵션으로 tmux까지 종료
+  local purge=0
+  for arg in "$@"; do
+    case "$arg" in
+      --purge|-p) purge=1 ;;
+    esac
+  done
+
   echo ""
   echo "  ⏹  vt stop"
   echo ""
@@ -519,8 +927,31 @@ cmd_stop() {
     fuser -k $VT_PORT/tcp 2>/dev/null || true
   fi
 
-  echo "  ✓ 모든 vt 프로세스 종료"
+  echo "  ✓ 서버/터널/음성 데몬 종료"
   echo ""
+
+  # tmux 세션 처리: 디폴트는 살림(영속성), --purge면 완전 종료
+  local sessions=""
+  if "${TMUX_BASE[@]}" list-sessions 2>/dev/null | grep -q .; then
+    sessions="$("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' 2>/dev/null | tr '\n' ' ')"
+  fi
+
+  if [ "$purge" -eq 1 ]; then
+    if [ -n "$sessions" ]; then
+      "${TMUX_BASE[@]}" kill-server 2>/dev/null || true
+      echo "  ✓ tmux 세션 완전 종료 (--purge): $sessions"
+    else
+      echo "  ⓘ 종료할 tmux 세션 없음"
+    fi
+    echo ""
+  else
+    if [ -n "$sessions" ]; then
+      echo "  ⓘ tmux 세션은 살아있습니다 (영속성):"
+      echo "      $sessions"
+      echo "  완전 종료: vt stop --purge"
+    fi
+    echo ""
+  fi
 }
 
 cmd_doctor() {
@@ -647,6 +1078,62 @@ cmd_doctor() {
     # Terminal.app은 맥에 기본 내장이므로 항상 사용 가능
     detected+=("Terminal.app")
     _check "터미널 앱" ok "감지: ${detected[*]} — 현재 TERM_PROGRAM=${TERM_PROGRAM:-unknown}"
+  fi
+
+  # W3-6: Linux 환경 검사
+  if [ "$(uname)" = "Linux" ]; then
+    # 14. Linux 터미널 emulator
+    local lin_terms=()
+    for em in gnome-terminal konsole alacritty kitty wezterm xfce4-terminal xterm; do
+      command -v "$em" >/dev/null 2>&1 && lin_terms+=("$em")
+    done
+    if [ "${#lin_terms[@]}" -gt 0 ]; then
+      _check "Linux 터미널" ok "감지: ${lin_terms[*]}"
+    else
+      _check "Linux 터미널" warn "지원 emulator 없음 — gnome-terminal/konsole 등 설치 권장"
+    fi
+
+    # 15. Linux TTS
+    local lin_tts=""
+    for t in espeak-ng espeak spd-say piper; do
+      command -v "$t" >/dev/null 2>&1 && lin_tts="$lin_tts $t"
+    done
+    if [ -n "$lin_tts" ]; then
+      _check "Linux TTS" ok "감지:$lin_tts"
+    else
+      _check "Linux TTS" warn "TTS 미설치 — sudo apt-get install espeak-ng"
+    fi
+
+    # 16. notify-send
+    if command -v notify-send >/dev/null 2>&1; then
+      _check "notify-send" ok "$(command -v notify-send)"
+    else
+      _check "notify-send" warn "데스크톱 알림 미지원 — sudo apt-get install libnotify-bin"
+    fi
+
+    # 17. Wayland 글로벌 핫키 가드
+    local sess_type="${XDG_SESSION_TYPE:-unknown}"
+    if [ "$sess_type" = "wayland" ]; then
+      _check "Display Server" warn "Wayland — 글로벌 핫키 캡처 제한. X11 세션 또는 모바일 🎤 사용 권장"
+    elif [ "$sess_type" = "x11" ]; then
+      _check "Display Server" ok "X11"
+    else
+      _check "Display Server" warn "XDG_SESSION_TYPE=$sess_type"
+    fi
+  fi
+
+  # 18. textual (TUI 의존성)
+  if "$VT_PYTHON" -c "import textual" 2>/dev/null; then
+    _check "TUI (textual)" ok "vt manage 사용 가능"
+  else
+    _check "TUI (textual)" warn "vt manage 사용 불가 — pip install textual"
+  fi
+
+  # 19. fzf (vt attach 인터랙티브)
+  if command -v fzf >/dev/null 2>&1; then
+    _check "fzf" ok "vt attach 인터랙티브 선택 가능"
+  else
+    _check "fzf" warn "fzf 미설치 — 'vt attach' 시 텍스트 입력만 가능"
   fi
 
   echo ""
@@ -1659,11 +2146,12 @@ case "${1:-help}" in
   voice)   cmd_voice ;;
   mobile)  cmd_mobile ;;
   start)   cmd_start ;;
-  stop)    cmd_stop ;;
+  stop)    shift 2>/dev/null || true; cmd_stop "$@" ;;
   status)  cmd_status ;;
   claude)   shift; cmd_claude "$@" ;;
   agent)    shift; cmd_agent "$@" ;;
   handoff)  shift; cmd_handoff "$@" ;;
+  attach)   shift; cmd_attach "$@" ;;
   doctor)   cmd_doctor ;;
   shell-init) shift; cmd_shell_init "$@" ;;
   install-profiles) shift; cmd_install_profiles "$@" ;;
@@ -1672,6 +2160,11 @@ case "${1:-help}" in
   template) shift; cmd_template "$@" ;;
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;
+  help)     shift 2>/dev/null || true; cmd_help "$@" ;;
+  hotkey)   shift; cmd_hotkey "$@" ;;
+  voice-target) shift; cmd_voice_target "$@" ;;
+  manage)   shift; cmd_manage "$@" ;;
+  tui)      shift; cmd_manage "$@" ;;
   *)
     echo ""
     echo "  vt — Voice Terminal CLI"

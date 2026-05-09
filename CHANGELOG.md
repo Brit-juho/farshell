@@ -6,6 +6,94 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [1.4.0] — 2026-05-09
+
+UX overhaul + Linux 1급 동등화. [docs/PLAN_UX_OVERHAUL.md](./docs/PLAN_UX_OVERHAUL.md) 의 Wave 1-5 적용.
+
+### Added
+- `vt manage` — Textual 기반 TUI 관리 도구 (cross-platform). 세션 목록/rename/kill/attach + 음성 타깃 lock + 서버 상태 + 핫키 표시. 의존성: `textual>=0.50`.
+- `vt attach <name>` — 임의 tmux 세션을 새 OS 터미널 창에 attach. 인자 없으면 fzf 또는 텍스트 prompt.
+- `vt voice-target <name|--auto>` — Voice Daemon 타깃 세션 lock/해제. IPC 파일 `~/.vt/voice_target` (재시작 불필요, daemon이 매 발화 시 읽음).
+- `vt hotkey [list|set|reset|disable] <action> <key>` — 핫키 조회/변경. `~/.vt.env`의 `VT_HOTKEY_VOICE` 등.
+- `vt help <topic>` — 토픽별 도움말. `concepts`/`voice`/`hotkeys`/`target`/`troubleshoot` 5종 (`docs/help/*.md`).
+- `vt stop --purge` — tmux `kill-server`까지 완전 종료. 디폴트는 tmux 세션 유지(영속성 보장).
+- `platform_utils.notify(title, msg)` — 크로스 플랫폼 데스크톱 알림 (macOS osascript / Linux notify-send).
+- `platform_utils.spawn_linux_terminal(cmd)` — gnome-terminal/konsole/alacritty/kitty/wezterm/xfce4-terminal/xterm 분기.
+- `platform_utils.open_terminal_with_command(cmd)` — macOS/Linux 통합 진입점.
+- `voice_daemon.py`의 `resolve_voice_target_pane()` — lock 우선 + AUTO 폴백. `_parse_hotkey()` — `ctrl+shift+v` 형식 문자열 → pynput 키 set.
+- `vt doctor`에 Linux 항목: 터미널 emulator, TTS chain (espeak-ng/spd-say), notify-send, XDG_SESSION_TYPE(Wayland 가드), textual 설치 여부, fzf 가용성.
+- `install.sh` 끝에 `vt install-profiles` 자동 권유 (TTY일 때만, 사용자 동의 후).
+- `vt voice` 첫 실행 시 onboarding 안내 (셸 init / iTerm Dynamic Profile 미등록 감지).
+
+### Changed
+- `PATCH /api/sessions/{id}`가 tmux 세션 이름도 같이 변경 (이전엔 메타데이터만). 안전 문자(`[A-Za-z0-9_-]`) 검증 + 충돌 체크 + tmux `rename-session` 호출.
+- `POST /api/tmux/create` 디폴트 이름이 `web-XXXX` 랜덤 → `{cwd basename}` + 충돌 시 `-2`, `-3` 순번. 사람이 외울 수 있는 이름.
+- `voice_daemon.py`의 `HOTKEY` 하드코딩 제거 → `~/.vt.env`의 `VT_HOTKEY_VOICE` 읽음. `VT_HOTKEY_VOICE_DISABLED=true`로 비활성. `VT_VOICE_MEDIA_KEYS=off`로 이어폰 미디어 키 트리거 비활성.
+- `voice_daemon.py`가 `~/.vt/voice_target` 파일 우선 읽음 → lock 모드. 없으면 most-recent (AUTO).
+- `platform_utils.tts_speak`에 Linux fallback 추가: espeak-ng → spd-say → espeak.
+- README "Windows (WSL2)" 섹션 명시화 — Windows 네이티브 미지원, WSL2는 Linux로 동작.
+- 지원 플랫폼 매트릭스에 Linux X11/Wayland 분리 + TUI 컬럼 추가.
+
+### Removed
+- 모바일 보이스바의 🔄 핸즈프리 버튼 — VAD 미구현 상태에서 이름과 동작 불일치. `voice.js`의 `handsFreeModeOn` 상태/`toggleHandsFree`/자동 재시작 분기 제거.
+
+### Frontend
+- 보이스바에 🎵 "이어폰" 토글 버튼 추가 — Media Session API hijack ON/OFF. OFF 시 OS가 기본 미디어 컨트롤(음량/재생) 가져감. localStorage `vt_mediakey_trigger`로 영구 저장.
+- `setupMediaSession()` 첫 호출 가드 — `mediaKeyTriggerOn=false`면 등록 스킵.
+
+---
+
+## [1.3.0] — 2026-05-08
+
+Phase 9 — 안정성·네트워크 효율 일괄 패치 ([PLAN_PHASE9.md](./docs/PLAN_PHASE9.md), [TEST_REPORT_V3.md](./docs/TEST_REPORT_V3.md)). 10건 적용.
+
+### Added
+- `/ws-preview/{name}` (`server/routes/tmux.py`) — grid view용 push 채널. `preview.py`에 watcher + subscribe/unsubscribe.
+- `/api/auth` POST + `vt_session` HttpOnly cookie — 토큰을 query string에서 분리해 로그/공유 노출 차단.
+- `frontend/vendor/` — xterm.js·addon-fit·addon-search·lucide·tweetnacl 자체 호스팅 (~1.5MB). `install.sh`가 자동 다운로드.
+- `_etag_response` 헬퍼 (`server/routes/system.py`) — capabilities/safe-mode/tunnel-status에 ETag/304. `stable_for_etag`로 timestamp 같은 동적 필드 제외 hash.
+- `_convert_to_wav_pyav` (`server/voice_handler.py`) — pyav in-process audio decoding. ffmpeg subprocess fallback 유지.
+- Service Worker stale-while-revalidate 캐시 (`frontend/sw.js`).
+- PTY 출력 query 가로채기 (DA1/DA2/OSC10/11) — `server/pty_manager.py` `PTY_OUT_QUERY_REPLIES`. stdin 정규식 필터와 이중 방어.
+- WS heartbeat 기본값 15/45초 (`server/routes/pty.py`, `server/routes/agents.py`).
+
+### Changed
+- `frontend/index.html`의 agents 폴링 `setInterval` 제거 → `/ws-agent` push 단일화.
+- grid view 1초 폴링 제거 → 카드별 `/ws-preview` 구독.
+- `pty_manager.PTYManager.get_scrollback`을 256KB cap (마지막 N 바이트만 반환).
+- `requirements-voice.txt`에 `av>=11.0` 추가.
+
+### Security
+- 토큰 cookie 전환: 액세스 로그·브라우저 history·공유 URL에서 토큰 평문 노출 차단.
+- HttpOnly + SameSite=Strict + Secure (HTTPS 시) 적용.
+
+---
+
+## [1.2.1] — 2026-05-07
+
+종합 테스트(`docs/TEST_REPORT.md`)에서 발견된 13건 이슈 일괄 수정.
+
+### Fixed
+- **P0 — PTY ANSI escape query 응답 누수**: stdin에서 DA1/DA2/CPR/OSC10/OSC11 응답 패턴(`\x1b[?…c`, `\x1b[…R`, `\x1b]10;…`)을 정규식으로 영구 차단 + PTY 부팅 후 0.5s 동안 ESC 입력 추가 차단. 2차 점검에서 모바일 ws 재연결 시 회귀가 발견되어 정규식 필터를 1순위 방어선으로 추가 (`server/pty_manager.py` `TERMINAL_AUTO_REPLY_RE`). 사용자 화살표/Ctrl+C 등 일반 입력은 통과.
+- **P1 — 좀비 프로세스 누적**: process-wide `SIGCHLD` 핸들러 + `destroy_session`의 reaper를 blocking `waitpid`로 변경 (`server/pty_manager.py`).
+- **P1 — `install.sh` 비대화형 환경에서 로컬 레포 무시**: `[ -t 0 ]` 가드를 제거하고 스크립트 위치의 `bin/vt` 존재만으로 판정 (`install.sh`).
+- **P1 — 모바일 음성바가 시스템 네비 바와 충돌**: `padding-bottom: env(safe-area-inset-bottom)` + 터치 타겟 48px 보장 (`frontend/index.html`).
+- **P1 — `/api/agents` 폴링 빈도 과다**: 5s → 8s 완화 (`frontend/index.html`).
+- **P2 — `/favicon.ico` 404**: PNG 아이콘으로 라우팅 (`server/main.py`).
+- **P2 — TTS 빈 텍스트 200 + 0 bytes**: 400 + `{"error":"empty text"}`로 거절 (`server/routes/voice.py`).
+- **P2 — STT 무음 입력 → "You?" Whisper 환각**: 16-bit PCM 평균 절대값 임계값(<600)으로 무음 차단 (`server/voice_handler.py`).
+- **P2 — `HEAD /api/sessions` 405**: `methods=["GET","HEAD"]` 명시 (`server/routes/pty.py`).
+- **P2 — xterm.js Canvas → 접근성 트리에 텍스트 미노출**: `screenReaderMode: true` (`frontend/index.html`).
+- **P2 — `~/.vt.env`의 `VT_PYTHON` 절대경로 → 이식성 ↓**: `${VT_DIR}/.venv/bin/python` 형태 변수화 (`install.sh`).
+
+### Docs
+- `docs/TEST_CHECKLIST.md` — 9개 섹션 종합 테스트 체크리스트.
+- `docs/TEST_REPORT.md` — 1차 13건 발견 사항 + 네트워크 분석 + 보안 점검.
+- `docs/TEST_REPORT_V2.md` — 2차 점검 결과: 13/13 항목 해결 검증 + 정규식 단위 테스트 매트릭스.
+- `TEST_CHECKLIST.md`에 모바일 원격 검증 전 `adb reverse --remove tcp:7777` 안내 추가.
+
+---
+
 ## [1.2.0] — 2026-05-07
 
 Phase 7-8 통합 릴리스. lunemis/mux·purplemux·claude-mux·reminder-watch 코드 비교 분석 후 도출된 10개 개선 항목 일괄 적용. 서브에이전트 검증 100%.

@@ -3,7 +3,7 @@
 [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
 
-맥북(또는 WSL2)을 서버로 두고, 어디서든 음성으로 터미널을 조작하는 시스템.
+macOS / Linux 머신을 서버로 두고, 어디서든 음성으로 터미널을 조작하는 시스템. (Windows는 WSL2 환경에서만 동작 — 네이티브 미지원)
 
 - **모바일에서 터미널 접속** — QR 스캔하면 바로 tmux 연결
 - **음성으로 코딩** — 노션 작업 중에도 핫키(Ctrl+Shift+V)로 음성 입력
@@ -87,15 +87,20 @@ vt shell-init pwsh >> $PROFILE                       # PowerShell
 | `vt voice` | 음성 모드 — 서버 + Voice Daemon 백그라운드 시작 |
 | `vt mobile [--e2e] [--safe]` | 모바일 접속 — `--safe` 시 위험 명령 차단 |
 | `vt start` | 전체 시작 — 서버 + 터널 + 음성 데몬 |
-| `vt stop` | 모든 vt 프로세스 종료 |
+| `vt stop [--purge]` | 종료 — `--purge`는 tmux 세션까지 완전 종료 |
 | `vt status` | 서버·터널·Voice Daemon·tmux 상태 확인 |
+| `vt manage` | TUI 관리 도구 — 세션 목록/rename/kill/attach + 음성 타깃 lock |
+| `vt attach [name]` | 임의 tmux 세션을 새 OS 터미널 창에 attach |
+| `vt voice-target [name\|--auto]` | Voice Daemon 타깃 세션 lock/해제 |
+| `vt hotkey [list\|set\|reset\|disable]` | 핫키 조회/변경 |
+| `vt help <topic>` | 토픽별 도움말 (concepts/voice/hotkeys/target/troubleshoot) |
 | `vt claude` | 새 터미널 창에 `tmux dev` + `claude --resume` 오픈 |
 | `vt agent <name>` | claude/codex/aider/gemini 시작 (일반화) |
 | `vt handoff mobile/desktop` | 기기 간 tmux 세션 핸드오프 |
 | `vt template [save\|apply\|list\|rm] <name>` | CLAUDE.md 템플릿 관리 |
 | `vt popup <action>` | tmux 3.2+ popup으로 빠른 호출 |
 | `vt run "..."` | headless `claude -p` 백그라운드 + TTS 알림 |
-| `vt doctor` | 설치·환경 진단 (13개 항목 자동 점검) |
+| `vt doctor` | 설치·환경 진단 (자동 점검) |
 | `vt install-profiles [--dry-run]` | 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile 등) |
 | `vt shell-init [zsh\|bash\|fish\|pwsh]` | 셸별 안전 통합 스니펫 출력 (TTY 5중 가드) |
 
@@ -466,16 +471,20 @@ Claude 작업이 완료되면 `tts_hook.sh`가 자동으로 결과를 TTS로 읽
 
 ---
 
-## Windows (WSL2)
+## Windows (WSL2 = Linux 환경)
+
+> **Windows 네이티브는 지원하지 않습니다.** WSL2를 통해 Linux 환경으로 사용하세요.
 
 ```powershell
-.\bin\vt.ps1 voice
-.\bin\vt.ps1 mobile
-.\bin\vt.ps1 stop
+# Windows Terminal에서 WSL2 진입 후 일반 Linux 절차 그대로
+wsl
+./install.sh voice
+vt voice
 ```
 
 - 서버·tmux는 WSL2 내부 실행, 브라우저는 Windows에서 `localhost:7777` 접속
 - 음성 핫키(Ctrl+Shift+V)는 WSLg 필요 (Windows 11). 없으면 브라우저 🎤 사용
+- `bin/vt.ps1`은 WSL2 내부 vt를 호출하는 PowerShell wrapper (선택, 편의용)
 
 ---
 
@@ -507,13 +516,15 @@ Claude 작업이 완료되면 `tts_hook.sh`가 자동으로 결과를 TTS로 읽
 
 ## 지원 플랫폼
 
-| 플랫폼 | 서버 | Voice Daemon | 브라우저 접속 |
-|--------|------|-------------|-------------|
-| macOS (iTerm2/Ghostty/Warp 등) | ✅ | ✅ 핫키 + 이어폰 | ✅ |
-| Windows (WSL2) | ✅ | ✅ WSLg 필요 | ✅ |
-| Linux | ✅ | ✅ X11 필요 | ✅ |
-| iOS (Safari/Chrome) | — | — | ✅ Media Session |
-| Android (Chrome) | — | — | ✅ 핸즈프리 |
+| 플랫폼 | 서버 | Voice Daemon | TUI (`vt manage`) | 브라우저 접속 |
+|--------|------|-------------|-------|-------------|
+| macOS (iTerm2/Ghostty/Warp 등) | ✅ | ✅ 핫키 + 이어폰 | ✅ | ✅ |
+| Linux (X11) | ✅ | ✅ 글로벌 핫키 | ✅ | ✅ |
+| Linux (Wayland) | ✅ | ⚠ 핫키 보안 차단 — 모바일 🎤 권장 | ✅ | ✅ |
+| Windows (WSL2 = Linux로 동작) | ✅ | ✅ WSLg 필요 | ✅ | ✅ |
+| Windows 네이티브 | ❌ 미지원 | ❌ | ❌ | — |
+| iOS (Safari/Chrome) | — | — | — | ✅ Media Session |
+| Android (Chrome) | — | — | — | ✅ |
 
 ---
 

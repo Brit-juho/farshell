@@ -73,12 +73,14 @@ def get_local_ip() -> str:
 
 
 def tts_speak(text: str) -> None:
-    """크로스 플랫폼 TTS. macOS say → WSL2 PowerShell Speech → 무시."""
+    """크로스 플랫폼 TTS. macOS say → Linux espeak-ng/piper/spd-say → WSL2 PowerShell → silent."""
     short = text[:200]
     try:
         if IS_MACOS:
             subprocess.Popen(["say", "-v", "Yuna", short])
-        elif IS_WSL2 and shutil.which("powershell.exe"):
+            return
+
+        if IS_WSL2 and shutil.which("powershell.exe"):
             safe = short.replace("'", "''").replace('"', '\\"')
             subprocess.Popen([
                 "powershell.exe", "-NoProfile", "-c",
@@ -86,10 +88,122 @@ def tts_speak(text: str) -> None:
                 f"$s=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
                 f"$s.Speak('{safe}')",
             ])
-        else:
-            logger.debug("TTS not available on this platform")
+            return
+
+        if IS_LINUX:
+            # W3-2: Linux TTS fallback chain
+            if shutil.which("espeak-ng"):
+                # espeak-ng가 한국어 일부 지원
+                subprocess.Popen(
+                    ["espeak-ng", "-v", "ko", short],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                return
+            if shutil.which("piper"):
+                # piper는 voice model 별도 다운로드 필요. silent fallback
+                logger.debug("piper detected but model loading skipped (configure VT_PIPER_MODEL)")
+            if shutil.which("spd-say"):
+                subprocess.Popen(
+                    ["spd-say", short],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                return
+            if shutil.which("espeak"):
+                subprocess.Popen(
+                    ["espeak", short],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                return
+            logger.debug("Linux TTS not available — install espeak-ng or speech-dispatcher")
+            return
+
+        logger.debug("TTS not available on this platform")
     except Exception as e:
         logger.warning(f"TTS failed: {e}")
+
+
+def _osascript_quote(s: str) -> str:
+    """AppleScript 문자열 안전 escape — \\, ", 개행 처리."""
+    return (
+        s.replace("\\", "\\\\")
+         .replace('"', '\\"')
+         .replace("\n", " ")
+         .replace("\r", " ")
+    )
+
+
+def notify(title: str, message: str = "") -> None:
+    """크로스 플랫폼 데스크톱 notification.
+
+    macOS: osascript display notification
+    Linux: notify-send (libnotify)
+    실패 시 silent.
+    """
+    try:
+        if IS_MACOS:
+            t = _osascript_quote(title)
+            m = _osascript_quote(message)
+            script = f'display notification "{m}" with title "{t}"'
+            subprocess.Popen(
+                ["osascript", "-e", script],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return
+        if IS_LINUX and shutil.which("notify-send"):
+            subprocess.Popen(
+                ["notify-send", title, message],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return
+        logger.debug(f"notification not available: {title}")
+    except Exception as e:
+        logger.debug(f"notification failed: {e}")
+
+
+def spawn_linux_terminal(command: str) -> bool:
+    """Linux에서 새 터미널 창을 열고 지정 명령 실행.
+
+    우선순위: gnome-terminal → konsole → alacritty → kitty → wezterm → xterm
+    Returns: True if 명령 전달 성공.
+    """
+    if not IS_LINUX:
+        return False
+
+    # xfce4-terminal과 xterm은 -e 옵션이 단일 문자열을 받으므로 shlex.quote로 인젝션 방어
+    import shlex
+    qcmd = shlex.quote(f"{command}; exec bash")
+    candidates = [
+        ("gnome-terminal", ["gnome-terminal", "--", "bash", "-lc", f"{command}; exec bash"]),
+        ("konsole", ["konsole", "-e", "bash", "-lc", f"{command}; exec bash"]),
+        ("alacritty", ["alacritty", "-e", "bash", "-lc", f"{command}; exec bash"]),
+        ("kitty", ["kitty", "bash", "-lc", f"{command}; exec bash"]),
+        ("wezterm", ["wezterm", "start", "--", "bash", "-lc", f"{command}; exec bash"]),
+        ("xfce4-terminal", ["xfce4-terminal", "-e", f"bash -lc {qcmd}"]),
+        ("xterm", ["xterm", "-e", f"bash -lc {qcmd}"]),
+    ]
+    for name, argv in candidates:
+        if shutil.which(name):
+            try:
+                subprocess.Popen(argv)
+                return True
+            except Exception as e:
+                logger.debug(f"{name} spawn failed: {e}")
+                continue
+    return False
+
+
+def open_terminal_with_command(command: str) -> bool:
+    """크로스 플랫폼 터미널 자동 오픈 (W3-1).
+
+    macOS → spawn_mac_terminal
+    Linux → spawn_linux_terminal
+    그 외 → False
+    """
+    if IS_MACOS:
+        return spawn_mac_terminal(command)
+    if IS_LINUX and not IS_WSL2:
+        return spawn_linux_terminal(command)
+    return False
 
 
 def spawn_mac_terminal(command: str) -> bool:

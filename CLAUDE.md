@@ -1,4 +1,4 @@
-> **voice-terminal v1.2.0** (2026-05-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
+> **voice-terminal v1.4.0** (2026-05-09) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
 
 ## vt CLI (어디서든 실행)
 
@@ -8,15 +8,22 @@
 vt voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
 vt mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
 vt start              # 전체 시작 (서버+터널+음성)
-vt stop               # 모든 프로세스 종료
+vt stop [--purge]     # 종료 (--purge: tmux 세션까지 완전 종료)
 vt status             # 현재 상태 확인
+vt manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave 4
+vt attach [name]      # 임의 tmux 세션을 새 창에 attach
+vt voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
+vt hotkey [list|set|reset|disable]  # 핫키 조회/변경
+vt help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 vt claude             # 새 터미널 창에 tmux dev + claude --resume
 vt handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
 vt handoff desktop    # 폰 세션을 맥 터미널로 가져옴
-vt doctor             # 설치/환경 진단 (13개 항목)
+vt doctor             # 설치/환경 진단 (Linux 항목 포함)
 vt install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
 vt shell-init zsh     # 셸 init 스니펫 출력 (eval "$(vt shell-init zsh)" >> ~/.zshrc)
 ```
+
+> **지원 OS**: macOS / Linux (X11) / WSL2 (Linux로 동작). Windows 네이티브는 미지원.
 
 **Phase 6 — 단일 tmux 서버 원칙:** vt CLI · server · Voice Daemon · hook이 모두 `-L vt` 격리 소켓 사용. Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
 
