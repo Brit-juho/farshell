@@ -16,8 +16,10 @@ _SELF="$0"
 [ -L "$_SELF" ] && _SELF="$(readlink "$_SELF")"
 VT_DIR="$(cd "$(dirname "$_SELF")/.." && pwd)"
 VT_CONFIG="$HOME/.vt.env"
+VT_DEFAULTS="$VT_DIR/config/vt.defaults.env"
 
-# 설정 파일 로드 (있으면)
+# 설정 파일 로드 — defaults 먼저, 그 다음 사용자 override
+[ -f "$VT_DEFAULTS" ] && source "$VT_DEFAULTS"
 [ -f "$VT_CONFIG" ] && source "$VT_CONFIG"
 
 # 설정 가능한 변수 (환경변수 또는 ~/.vt.env로 오버라이드)
@@ -46,15 +48,13 @@ else
 fi
 
 # Python 자동 감지 — 우선순위:
-#   1) 환경변수 VT_PYTHON / ~/.vt.env
+#   1) 환경변수 VT_PYTHON / ~/.vt.env / config/vt.defaults.env
 #   2) 프로젝트 .venv (install.sh로 만든 것)
-#   3) legacy whisper conda env (기존 사용자 호환)
-#   4) 시스템 python3
+#   3) 시스템 python3
+# conda/pyenv 등 다른 환경은 ~/.vt.env에 VT_PYTHON으로 명시하세요.
 _detect_python() {
   if [ -x "$VT_DIR/.venv/bin/python" ]; then
     echo "$VT_DIR/.venv/bin/python"
-  elif [ -x "/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python" ]; then
-    echo "/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python"
   else
     command -v python3 2>/dev/null || echo python3
   fi
@@ -982,10 +982,10 @@ cmd_doctor() {
   # 2. venv
   if [ -d "$VT_DIR/.venv" ]; then
     _check "venv" ok "$VT_DIR/.venv"
-  elif [ -d "/opt/homebrew/Caskroom/miniforge/base/envs/whisper" ]; then
-    _check "venv" warn "legacy conda whisper env 사용 중 (install.sh로 venv 전환 권장)"
+  elif [ -n "${VT_PYTHON:-}" ] && [ "$VT_PYTHON" != "$VT_DIR/.venv/bin/python" ] && [ -x "$VT_PYTHON" ]; then
+    _check "venv" ok "외부 환경 사용: $VT_PYTHON (~/.vt.env)"
   else
-    _check "venv" fail ".venv 없음 → './install.sh' 실행"
+    _check "venv" fail ".venv 없음 → './install.sh' 실행 또는 ~/.vt.env에 VT_PYTHON 지정"
   fi
 
   # 3. 핵심 Python 패키지

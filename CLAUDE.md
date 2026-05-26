@@ -69,7 +69,9 @@ vt shell-init zsh     # 셸 init 스니펫 출력 (eval "$(vt shell-init zsh)" >
 
 ### 레거시: 대화형 설치 (수동)
 
-install.sh가 작동하지 않거나 conda 환경을 선호하는 경우에만 아래 절차를 따르세요.
+install.sh가 작동하지 않거나 conda/pyenv 등 다른 환경을 선호하는 경우에만 아래 절차를 따르세요.
+
+> **Python 환경 관리:** 모든 실행 관련 경로/포트는 `~/.vt.env`(사용자 로컬, gitignored)와 `config/vt.defaults.env`(커밋된 기본값)로 관리됩니다. 사용자에게 환경을 묻는 단계에서 venv/conda/pyenv/시스템 Python 중 선택하게 한 뒤 결과를 `~/.vt.env`의 `VT_PYTHON`에 기록하세요.
 
 #### Step 1: OS 감지
 
@@ -94,31 +96,41 @@ grep -qi microsoft /proc/version 2>/dev/null && echo "WSL2" || echo "Native"
 >    - 위 기능 + Whisper STT + edge-tts TTS + Voice Daemon
 >    - macOS 핫키(Ctrl+Shift+V), 모바일 음성 입력
 
-#### Step 3: conda 환경 생성
+#### Step 3: Python 환경 준비
 
+사용자에게 어떤 환경을 사용할지 물어보세요 (venv / conda / pyenv / 시스템 Python). 결과를 Step 6의 `VT_PYTHON`에 기록합니다.
+
+**기본 권장 — venv:**
 ```bash
-conda create -n whisper python=3.10 -y
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-conda가 없으면:
-- macOS: `brew install --cask miniforge`
-- Linux/WSL2: `wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh && bash Miniforge3-Linux-x86_64.sh`
+**conda 선호 시:**
+```bash
+conda create -n vt python=3.11 -y && conda activate vt
+```
 
-#### Step 4: 패키지 설치 (선택에 따라)
+**pyenv 선호 시:**
+```bash
+pyenv install 3.11.7 && pyenv local 3.11.7
+```
+
+#### Step 4: 패키지 설치 (프로필별)
 
 **터미널만 (옵션 1):**
 ```bash
-conda run -n whisper pip install fastapi uvicorn python-multipart websockets
+pip install -r requirements-core.txt
 ```
 
 **터미널 + 음성 (옵션 2):**
 ```bash
-conda run -n whisper pip install fastapi uvicorn faster-whisper edge-tts sounddevice numpy pynput python-multipart websockets
+pip install -r requirements-core.txt -r requirements-voice.txt
 ```
 
-macOS 추가:
+macOS 음성 모드 추가:
 ```bash
-conda run -n whisper pip install pyobjc-framework-Cocoa
+pip install pyobjc-framework-Cocoa
 ```
 
 #### Step 5: vt CLI 등록
@@ -134,16 +146,20 @@ PATH 확인:
 echo "$PATH" | grep -q "$HOME/.local/bin" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 ```
 
-#### Step 6: 설정 파일 생성
+#### Step 6: 설정 파일 생성 (`~/.vt.env`, gitignored)
+
+Step 3에서 선택한 Python 경로를 기록합니다. 모든 키 목록은 `config/vt.defaults.env` 참고.
 
 ```bash
-# VT_PYTHON 경로를 감지
-WHISPER_PY="$(conda info --base)/envs/whisper/bin/python"
+# Step 3에서 만든 환경의 python 절대 경로를 사용 (예시)
+PY_PATH="$(pwd)/.venv/bin/python"   # venv의 경우
+# PY_PATH="$(conda info --base)/envs/vt/bin/python"   # conda 사용 시
+# PY_PATH="$(pyenv which python)"                       # pyenv 사용 시
 
 cat > ~/.vt.env << EOF
 VT_PORT=7777
-VT_PYTHON=$WHISPER_PY
-# VT_TOKEN=my-secret-token  # 원격 접속 시 인증 (선택사항)
+VT_PYTHON=$PY_PATH
+# VT_TOKEN=my-secret-token  # 원격 접속 시 인증 (선택)
 EOF
 ```
 
@@ -187,16 +203,16 @@ vt status
 ### 서버 실행
 
 ```bash
-# 방법 1: 스크립트
+# 방법 1: 스크립트 (~/.vt.env의 VT_PYTHON 자동 사용)
 ./run_server.sh
 
 # 방법 2: 직접 실행
 cd server
-/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python -m uvicorn main:app --host 0.0.0.0 --port 7777
+"$VT_PYTHON" -m uvicorn main:app --host 0.0.0.0 --port 7777
 ```
 
-- conda 환경: `whisper` (faster-whisper, fastapi, edge-tts, sounddevice 포함)
-- Python 경로: `/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python`
+- Python 경로는 환경별로 다름 — `vt doctor`로 현재 감지된 값 확인
+- 패키지: `requirements-core.txt`(필수) + `requirements-voice.txt`(음성 모드)
 
 ### 접속
 
@@ -313,7 +329,7 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 
 ```bash
 # 실행
-/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python server/voice_daemon.py &
+"$VT_PYTHON" server/voice_daemon.py &
 
 # 사용: Ctrl+Shift+V (토글) → 말하기 → STT → 활성 tmux pane에 입력
 # macOS 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 필요

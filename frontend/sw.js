@@ -1,7 +1,9 @@
 // Service Worker — Phase 9 #4: 정적 자원 캐시.
+// v3: index.html을 css/app.css + js/{terminal,search,picker,grid}.js로 분리.
+//     기존 inline <script> 캐시가 stale 상태가 되므로 캐시 키 bump 필수.
 // v2: voice.js / index / manifest는 network-first로 변경 (v1 stale 캐시 이슈 수정).
 //     vendor/* immutable 자산만 stale-while-revalidate.
-const CACHE = 'vt-static-v2';
+const CACHE = 'vt-static-v3';
 
 const PRECACHE = [
   '/static/icon-192.png',
@@ -37,7 +39,7 @@ const NETWORK_ONLY = /^\/(api\/|ws|voice\/)/;
 
 // 자주 바뀌는 우리 코드 — network-first, 네트워크 실패 시만 캐시 fallback.
 // vendor/*는 immutable이므로 SWR 유지 (속도 이득).
-const NETWORK_FIRST = /^\/$|^\/static\/voice\.js$|^\/manifest\.json$|^\/static\/sw\.js$/;
+const NETWORK_FIRST = /^\/$|^\/static\/voice\.js$|^\/manifest\.json$|^\/static\/sw\.js$|^\/static\/(css|js)\//;
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
