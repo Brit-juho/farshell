@@ -1,0 +1,141 @@
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      background: #1e1e2e; color: #cdd6f4; font-family: system-ui, sans-serif;
+      display: flex; flex-direction: column;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* 탭 바 */
+    #tabs {
+      display: flex; gap: 4px; padding: 6px 8px; background: #181825;
+      overflow-x: auto; align-items: center; flex-shrink: 0;
+      -webkit-overflow-scrolling: touch;
+    }
+    /* D2: Grid 버튼 우측 고정 — ml-auto로 탭 목록과 분리 */
+    #grid-toggle {
+      margin-left: auto; flex-shrink: 0; transition: background 0.15s, color 0.15s;
+    }
+    #grid-toggle.active {
+      background: #cba6f7 !important; color: #1e1e2e !important;
+    }
+    /* D6: 모바일 그리드 — 375px에서 overflow 방지 */
+    @media (max-width: 480px) {
+      #grid-view { padding: 8px; }
+      #grid-cards { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important; }
+    }
+    @media (max-width: 340px) {
+      #grid-cards { grid-template-columns: 1fr !important; }
+    }
+    /* D7: 그리드 카드 hover — 클릭 가능 시각적 피드백 */
+    #grid-cards > div {
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    #grid-cards > div:hover {
+      border-color: #89b4fa !important;
+      box-shadow: 0 0 0 1px #89b4fa22;
+    }
+    .tab {
+      padding: 8px 14px; border-radius: 8px; background: #313244;
+      cursor: grab; font-size: 13px; white-space: nowrap;
+      touch-action: manipulation; position: relative;
+      transition: opacity 0.15s;
+    }
+    .tab.dragging { opacity: 0.45; cursor: grabbing; }
+    /* D4: drag over insertion indicator — 파란 선으로 삽입 위치 표시 */
+    .tab.drag-over-left::before {
+      content: ''; position: absolute; left: -2px; top: 0; bottom: 0;
+      width: 3px; background: #89b4fa; border-radius: 2px;
+    }
+    .tab.drag-over-right::after {
+      content: ''; position: absolute; right: -2px; top: 0; bottom: 0;
+      width: 3px; background: #89b4fa; border-radius: 2px;
+    }
+    .tab.active { background: #585b70; color: #f5e0dc; }
+    .tab .close { margin-left: 8px; opacity: 0.5; font-size: 16px; }
+    #add-btn {
+      padding: 8px 14px; border-radius: 8px; background: #45475a;
+      cursor: pointer; font-size: 13px; flex-shrink: 0;
+    }
+
+    /* 터미널 */
+    #terminal-container { flex: 1; min-height: 0; padding: 2px; }
+    #terminal-container .xterm { height: 100%; }
+
+    /* 보이스 바 — 모바일 시스템 네비 바와 충돌 방지를 위해 safe-area 패딩 */
+    #voice-bar {
+      display: flex; align-items: flex-end; gap: 0;
+      padding: 8px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+      background: #181825; flex-shrink: 0;
+      justify-content: space-around;
+      border-top: 1px solid #313244;
+    }
+    .voice-action {
+      min-height: 48px;  /* 터치 타겟 최소 권장(WCAG/Material) */
+    }
+    .voice-action {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      padding: 4px 4px 0; border: none; background: transparent;
+      cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+      flex: 1; min-width: 0;
+    }
+    .voice-action .icon {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: #313244; display: flex; align-items: center; justify-content: center;
+      font-size: 20px; transition: background 0.2s, transform 0.15s;
+      color: #cdd6f4;
+    }
+    .voice-action .icon i { font-size: 20px; }
+    .voice-action .label {
+      font-size: 10px; color: #6c7086; white-space: nowrap; letter-spacing: -0.3px;
+      line-height: 1;
+    }
+    .voice-action.active .icon { background: #a6e3a1; color: #1e1e2e; }
+    .voice-action.active .label { color: #a6e3a1; }
+    #mic-btn-wrap .icon { background: #45475a; }
+    #mic-btn-wrap.recording .icon { background: #f38ba8; animation: pulse 1s infinite; }
+    #mic-btn-wrap.recording .label { color: #f38ba8; }
+    @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    #mic-status {
+      font-size: 12px; color: #a6adc8; text-align: center;
+      padding: 5px 8px; background: #181825;
+      min-height: 0; flex-shrink: 0;
+    }
+    #mic-status:empty { padding: 0; }
+
+    /* 연결 상태 */
+    #conn-status {
+      position: fixed; top: 8px; right: 8px; padding: 4px 10px;
+      border-radius: 12px; font-size: 11px; display: none; z-index: 100;
+    }
+    #conn-status.disconnected { display: block; background: #f38ba8; color: #1e1e2e; }
+
+    /* 음성 전용 모드 */
+    body.voice-only-mode #tabs { display: none; }
+    body.voice-only-mode #terminal-container { display: none; }
+    body.voice-only-mode #voice-bar {
+      flex: 1; flex-direction: column; justify-content: center; align-items: center; gap: 20px;
+    }
+    body.voice-only-mode #mic-btn-wrap .icon { width: 120px; height: 120px; font-size: 48px; }
+    body.voice-only-mode #mic-status { font-size: 18px; text-align: center; }
+    body.voice-only-mode #voice-session-picker { display: block; }
+    #voice-session-picker {
+      display: none; background: #313244; border-radius: 8px; padding: 8px 16px;
+      color: #cdd6f4; font-size: 14px; border: 1px solid #45475a; cursor: pointer;
+    }
+
+    /* 터미널 검색 바 */
+    #search-bar {
+      display: none; position: fixed; top: 50px; right: 12px; z-index: 200;
+      background: #313244; border-radius: 8px; padding: 6px 10px;
+      gap: 6px; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #search-bar.visible { display: flex; }
+    #search-bar input {
+      background: #1e1e2e; border: 1px solid #585b70; border-radius: 4px;
+      color: #cdd6f4; padding: 4px 8px; font-size: 13px; width: 200px; outline: none;
+    }
+    #search-bar button {
+      background: #45475a; border: none; border-radius: 4px; color: #cdd6f4;
+      padding: 4px 8px; cursor: pointer; font-size: 12px;
+    }

@@ -12,6 +12,23 @@
 
 set -euo pipefail
 
+# Windows 네이티브 가드 — Git Bash/MSYS/Cygwin에서 실행 시 거부
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    echo ""
+    echo "✗ Windows 네이티브 환경은 지원하지 않습니다."
+    echo ""
+    echo "  voice-terminal은 tmux를 사용하므로 Linux/macOS 환경이 필요합니다."
+    echo "  Windows 사용자는 WSL2를 통해 설치하세요:"
+    echo ""
+    echo "  1. PowerShell(관리자)에서: wsl --install"
+    echo "  2. WSL2 진입 후: git clone <repo> && cd voice-terminal && ./install.sh"
+    echo ""
+    echo "  자세히: README.md 'Windows (WSL2)' 섹션"
+    exit 1
+    ;;
+esac
+
 PROFILE="${1:-terminal}"  # terminal | voice
 PIPE_INSTALL=0
 

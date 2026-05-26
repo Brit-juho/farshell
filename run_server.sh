@@ -1,31 +1,35 @@
 #!/bin/bash
 # voice-terminal Server 실행 스크립트
-# whisper conda 환경에서 서버를 시작합니다.
+# Python 환경은 ~/.vt.env의 VT_PYTHON 또는 프로젝트 .venv를 사용합니다.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$SCRIPT_DIR/server"
-if [ "$(uname)" = "Darwin" ]; then
-  PYTHON="/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python"
-else
-  PYTHON="$(which python3 2>/dev/null || echo python3)"
-fi
 
-if [ ! -f "$PYTHON" ] && ! command -v "$PYTHON" >/dev/null 2>&1; then
-    echo "whisper conda 환경이 없습니다."
-    echo "conda create -n whisper python=3.10"
-    echo "conda activate whisper"
-    echo "pip install fastapi 'uvicorn[standard]' faster-whisper edge-tts sounddevice"
-    exit 1
-fi
-
-# ~/.vt.env 설정 로드
+# defaults → 사용자 override 순으로 설정 로드
+[ -f "$SCRIPT_DIR/config/vt.defaults.env" ] && source "$SCRIPT_DIR/config/vt.defaults.env"
 [ -f "$HOME/.vt.env" ] && source "$HOME/.vt.env"
+
+# Python 결정: VT_PYTHON > .venv > 시스템 python3
+if [ -n "${VT_PYTHON:-}" ] && [ -x "$VT_PYTHON" ]; then
+  PYTHON="$VT_PYTHON"
+elif [ -x "$SCRIPT_DIR/.venv/bin/python" ]; then
+  PYTHON="$SCRIPT_DIR/.venv/bin/python"
+else
+  PYTHON="$(command -v python3 || echo python3)"
+fi
+
+if ! "$PYTHON" -c "import fastapi, uvicorn" >/dev/null 2>&1; then
+  echo "✗ Python 환경에 의존성이 없습니다: $PYTHON"
+  echo "  설치: ./install.sh         (터미널만)"
+  echo "  설치: ./install.sh voice   (음성 모드 포함)"
+  echo "  또는 ~/.vt.env에 VT_PYTHON=/path/to/python 지정"
+  exit 1
+fi
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${VT_PORT:-${PORT:-7777}}"
-PYTHON="${VT_PYTHON:-$PYTHON}"
 
 echo "voice-terminal Server"
 echo "  http://localhost:${PORT}"
