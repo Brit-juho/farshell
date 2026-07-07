@@ -88,7 +88,10 @@ async def subscribe(session_name: str, callback: Callable[[str], Awaitable[None]
     callback은 (text: str) -> Awaitable[None] 시그니처.
     """
     _subscribers.setdefault(session_name, set()).add(callback)
-    text = _capture_no_cache(session_name)
+    # P1: capture-pane은 blocking subprocess(최대 1.5s)라 이벤트 루프에서 직접 돌리면
+    # 그동안 모든 WS(터미널 포함) I/O가 멈춘다. executor로 offload한다.
+    loop = asyncio.get_running_loop()
+    text = await loop.run_in_executor(None, _capture_no_cache, session_name)
     if text is not None:
         try:
             await callback(text)
@@ -123,12 +126,14 @@ async def _watch_loop() -> None:
 
     구독자가 0이면 idle 모드(1초 sleep)로 들어가 CPU 절약.
     """
+    loop = asyncio.get_running_loop()
     while True:
         if not _subscribers:
             await asyncio.sleep(1.0)
             continue
         for name in list(_subscribers.keys()):
-            text = _capture_no_cache(name)
+            # P1: blocking capture-pane을 executor로 — 이벤트 루프 정지 방지.
+            text = await loop.run_in_executor(None, _capture_no_cache, name)
             if text is None:
                 continue
             h = hashlib.md5(text.encode("utf-8", "ignore")).hexdigest()

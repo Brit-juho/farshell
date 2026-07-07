@@ -116,8 +116,10 @@ async def create_tmux_session(request: Request):
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
 
+    # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
+    start_dir = platform_utils.default_start_dir()
     rc, _, err = tmux_runner.run(
-        ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows)],
+        ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
         timeout=5.0,
     )
     if rc != 0:
@@ -136,6 +138,31 @@ async def create_tmux_session(request: Request):
             logger.warning(f"맥 터미널 자동 오픈 실패: {e}")
 
     return await _attach_tmux(tmux_name, cols, rows)
+
+
+@router.post("/api/tmux/open-on-mac")
+async def open_tmux_on_mac(request: Request):
+    """이미 존재하는 tmux 세션을 맥 터미널(iTerm2 우선)에 새 창으로 attach.
+
+    웹에서 보고 있는 세션을 나중에 맥에서도 열고 싶을 때 사용. 같은 tmux 소켓(-L vt)에
+    attach하므로 웹/음성/맥이 동일 세션을 공유한다.
+    """
+    body = await request.json()
+    tmux_name = (body.get("name") or "").strip()
+    if not tmux_name or not re.fullmatch(r"[A-Za-z0-9_\-]+", tmux_name):
+        return JSONResponse({"ok": False, "error": "유효하지 않은 세션 이름"}, status_code=400)
+    if not platform_utils.IS_MACOS:
+        return JSONResponse({"ok": False, "error": "서버가 macOS가 아님"}, status_code=400)
+    rc, _, _ = tmux_runner.run(["has-session", "-t", tmux_name], timeout=5.0)
+    if rc != 0:
+        return JSONResponse({"ok": False, "error": "tmux 세션을 찾을 수 없음"}, status_code=404)
+    attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
+    try:
+        ok = platform_utils.spawn_mac_terminal(attach_cmd)
+        return {"ok": bool(ok), "error": None if ok else "지원하는 터미널 앱이 없음"}
+    except Exception as e:
+        logger.warning(f"open-on-mac 실패: {e}")
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 @router.post("/api/tmux/attach")

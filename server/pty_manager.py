@@ -93,6 +93,7 @@ class PTYManager:
         cols: int = 80,
         rows: int = 24,
         env: Optional[dict[str, str]] = None,
+        cwd: Optional[str] = None,
     ) -> PTYSession:
         if session_id in self._sessions:
             raise ValueError(f"Session {session_id!r} already exists")
@@ -100,6 +101,11 @@ class PTYManager:
         if not cmd:
             from platform_utils import get_default_shell
             cmd = get_default_shell()
+
+        # 새 세션 시작 디렉토리 — 지정 없으면 홈(기본). 서버 cwd(프로젝트 폴더)를
+        # 물려받아 항상 프로젝트에서 열리던 문제를 막는다.
+        from platform_utils import default_start_dir
+        start_dir = cwd or default_start_dir()
         if cmd not in ALLOWED_SHELLS and cmd not in self.ALLOWED_COMMANDS:
             cmd = "/bin/zsh"
 
@@ -128,6 +134,10 @@ class PTYManager:
             os.dup2(slave_fd, 2)
             if slave_fd > 2:
                 os.close(slave_fd)
+            try:
+                os.chdir(start_dir)
+            except OSError:
+                pass  # 시작 디렉토리 접근 불가 시 상속된 cwd 그대로
             os.execvpe(cmd, cmd_args, child_env)
         else:
             # --- parent process ---

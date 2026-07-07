@@ -128,8 +128,10 @@
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
+      // C5: 401(토큰)/500 시 JSON에 id가 없어 addSession(undefined) 방지.
+      if (!res.ok) { showToast(`세션 생성 실패 (${res.status})`); return; }
       const { id } = await res.json();
-      addSession(id);
+      if (id) addSession(id);
     }
 
     function addSession(id, displayName) {
@@ -176,7 +178,8 @@
       const term = new Terminal({
         cursorBlink: true,
         fontSize: termFontSize,
-        theme: { background: '#1e1e2e' },
+        fontFamily: "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace",
+        theme: (window.getVtXtermTheme ? window.getVtXtermTheme() : { background: '#1e1e2e' }),
         allowProposedApi: true,
         screenReaderMode: true,  // a11y: Canvas 외에 hidden DOM도 유지
       });
@@ -203,7 +206,7 @@
       ws.onopen = () => {
         updateConnStatus(id, true);
         // E2E가 아니면 즉시 resize 가능, E2E면 wrapE2E의 onReady 안에서
-        if (!E2E_ENABLED) { fitAddon.fit(); sendResize(ws, term); }
+        if (!E2E_ENABLED) fitAndResize(id);
       };
       // Phase 8 G2: 서버 ping 응답 (텍스트 메시지)
       const pingHandler = (e) => {
@@ -220,19 +223,22 @@
       wrapE2E(ws,
         (handle) => {
           sessions[id].wsHandle = handle;
-          if (E2E_ENABLED) { fitAddon.fit(); sendResize(ws, term); }
+          if (E2E_ENABLED) fitAndResize(id);
         },
         (bytes) => term.write(bytes)
       );
 
       ws.onclose = () => {
         updateConnStatus(id, false);
-        // [M1] 자동 재연결 (지수 백오프)
+        // [M1] 자동 재연결 (지수 백오프). C2: 상한 도달 시 영구 포기하지 않는다 —
+        // 예전엔 15회 후 멈춰서 모바일 장시간 세션이 네트워크 flap을 반복하면 새로고침
+        // 전까지 죽었다. 백오프 상한(30s)만 유지하고 무한 재시도한다.
         let retries = 0;
         const reconnect = () => {
-          if (retries >= 15 || !(id in sessions)) return;
+          if (!(id in sessions)) return;
           retries++;
-          const delay = Math.min(1000 * Math.pow(2, retries), 30000);
+          // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 5로 clamp.
+          const delay = Math.min(1000 * Math.pow(2, Math.min(retries, 5)), 30000);
           term.write(`\r\n\x1b[33m[재연결 중... ${retries}회]\x1b[0m\r\n`);
           setTimeout(() => {
             const newWs = new WebSocket(`${WS_BASE}${_wsPath}`);
@@ -241,8 +247,12 @@
               retries = 0;
               sessions[id].ws = newWs;
               updateConnStatus(id, true);
-              if (!E2E_ENABLED) { fitAddon.fit(); sendResize(newWs, term); }
-              term.write('\r\n\x1b[32m[재연결됨]\x1b[0m\r\n');
+              // A2: 서버가 재접속 시 scrollback(최대 256KB)을 통째로 재전송하는데
+              // reset 없이 write하면 이전 출력이 화면에 중복 누적된다. 재연결 직후
+              // 터미널을 비워 scrollback이 깨끗하게 repaint 되도록 한다.
+              term.reset();
+              if (!E2E_ENABLED) fitAndResize(id);
+              term.write('\x1b[32m[재연결됨]\x1b[0m\r\n');
             };
             // Codex: 재연결 소켓에도 heartbeat pong 핸들러 등록
             newWs.addEventListener('message', (e) => {
@@ -255,7 +265,7 @@
             wrapE2E(newWs,
               (handle) => {
                 sessions[id].wsHandle = handle;
-                if (E2E_ENABLED) { fitAddon.fit(); sendResize(newWs, term); }
+                if (E2E_ENABLED) fitAndResize(id);
               },
               (bytes) => term.write(bytes)
             );
@@ -273,7 +283,7 @@
         }
       });
 
-      const onResize = () => { fitAddon.fit(); const curWs = sessions[id]?.ws; if (curWs) sendResize(curWs, term); };
+      const onResize = () => fitAndResize(id);
       window.addEventListener('resize', onResize);
 
       // 모바일: visualViewport resize (키보드 나타날 때)
@@ -292,6 +302,20 @@
       }
     }
 
+    // fit(xterm 칸 수 재계산) + PTY에 크기 통보를 항상 함께 한다. 예전엔 곳곳에서
+    // fit만 하고 sendResize를 빠뜨려(switchTo 등) xterm 칸 수와 PTY 칸 수가 어긋났고,
+    // 그 결과 Claude Code 같은 TUI가 박스/입력줄을 엉뚱한 행에 그리고 줄이 겹쳐 보였다.
+    function fitAndResize(id) {
+      const s = sessions[id];
+      if (!s || !s.wrapper) return;
+      // 숨김 탭(display:none)은 컨테이너가 0-height라 fit이 rows를 1로 깨뜨린다 —
+      // 보이는 탭에서만 측정한다. switchTo가 표시 직후 다시 호출해 준다.
+      if (s.wrapper.style.display === 'none') return;
+      try { s.fitAddon.fit(); } catch (_) { return; }
+      const w = s.ws;
+      if (w && w.readyState === WebSocket.OPEN) sendResize(w, s.term);
+    }
+
     function switchTo(id) {
       if (activeId && sessions[activeId]) {
         sessions[activeId].wrapper.style.display = 'none';
@@ -301,8 +325,11 @@
       const s = sessions[id];
       s.tabEl.classList.add('active');
       s.wrapper.style.display = 'block';
-      s.fitAddon.fit();
       s.term.focus();
+      // display:block 직후엔 레이아웃이 아직 안 잡혀 fit이 stale 크기를 잡는다.
+      // rAF로 레이아웃 확정 후 fit + PTY 크기 통보 — 탭 전환 시 xterm↔PTY 칸 수를
+      // 반드시 재동기화한다(안 하면 TUI 정렬이 깨진 채로 남는다).
+      requestAnimationFrame(() => fitAndResize(id));
       if (typeof notifyActiveSession === 'function') notifyActiveSession(id);
       updateSessionPicker();
       saveWorkspace();
@@ -454,14 +481,11 @@
         if (!overlay) {
           overlay = document.createElement('div');
           overlay.id = 'conn-overlay';
-          overlay.style.cssText = `
-            position:fixed;inset:0;background:rgba(30,30,46,0.85);z-index:400;
-            display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-          `;
+          overlay.className = 'vt-overlay';
           overlay.innerHTML = `
-            <div><i class="icon-wifi-off" style="font-size:40px;color:#f38ba8"></i></div>
-            <div style="color:#f38ba8;font-size:16px;font-weight:bold">서버 연결 끊김</div>
-            <div style="color:#a6adc8;font-size:13px">자동 재연결 시도 중...</div>
+            <div class="vt-ov-icon"><i class="icon-wifi-off"></i></div>
+            <div class="vt-ov-title">서버 연결 끊김</div>
+            <div class="vt-ov-sub">자동 재연결 시도 중...</div>
           `;
           document.body.appendChild(overlay);
         }
@@ -471,64 +495,115 @@
       }
     }
 
-    // --- tmux 세션 연결 ---
+    // --- tmux 세션 관리 패널 (깨우기 / 완전 종료) ---
     async function showTmuxSessions() {
-      const res = await fetch(`${API_BASE}/api/tmux/sessions`);
-      const tmuxList = await res.json();
-
-      if (tmuxList.length === 0) {
-        showToast('실행 중인 tmux 세션이 없습니다. 터미널에서 tmux new -s work 로 먼저 생성하세요.');
-        return;
-      }
-
-      // 드롭다운 표시
+      // 토글: 이미 열려 있으면 닫기
       let menu = document.getElementById('tmux-menu');
       if (menu) { menu.remove(); return; }
 
       menu = document.createElement('div');
       menu.id = 'tmux-menu';
-      menu.style.cssText = `
-        position: absolute; top: 44px; right: 8px; background: #313244;
-        border-radius: 8px; padding: 4px; z-index: 300;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-      `;
-
-      for (const s of tmuxList) {
-        const item = document.createElement('div');
-        item.style.cssText = 'padding:8px 16px;cursor:pointer;font-size:13px;border-radius:4px;white-space:nowrap;';
-        const status = s.web_session_id ? '🟢 web' : (s.attached > 0 ? 'attached' : 'detached');
-        const cmdInfo = s.command ? ` [${s.command}]` : '';
-        item.textContent = `${s.name} (${s.windows}win, ${status})${cmdInfo}`;
-        item.onmouseover = () => item.style.background = '#45475a';
-        item.onmouseout = () => item.style.background = 'transparent';
-        item.onclick = async () => {
-          menu.remove();
-          await attachTmux(s.name);
-        };
-        menu.appendChild(item);
-      }
-
-      // Kill all 옵션은 별도 구분
-      const sep = document.createElement('div');
-      sep.style.cssText = 'border-top:1px solid #45475a;margin:4px 0;';
-      menu.appendChild(sep);
-      const newItem = document.createElement('div');
-      newItem.style.cssText = 'padding:8px 16px;cursor:pointer;font-size:13px;border-radius:4px;color:#a6e3a1;';
-      newItem.textContent = '+ 새 tmux 세션';
-      newItem.onmouseover = () => newItem.style.background = '#45475a';
-      newItem.onmouseout = () => newItem.style.background = 'transparent';
-      newItem.onclick = async () => {
-        menu.remove();
-        await createTmuxSession();
-      };
-      menu.appendChild(newItem);
-
+      menu.className = 'vt-menu';
       document.body.appendChild(menu);
+      await renderTmuxMenu(menu);
+
       setTimeout(() => {
         document.addEventListener('click', function _close(e) {
+          if (!document.body.contains(menu)) { document.removeEventListener('click', _close); return; }
           if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close); }
         });
       }, 100);
+    }
+
+    // 패널 내용을 다시 그린다 (kill 후 목록 갱신에도 재사용)
+    async function renderTmuxMenu(menu) {
+      menu.innerHTML = '';
+      let tmuxList = [];
+      try {
+        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        tmuxList = await res.json();
+      } catch (_) { /* 서버 오류 시 빈 목록 */ }
+
+      if (!Array.isArray(tmuxList) || tmuxList.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'vt-menu-item';
+        empty.style.cssText = 'opacity:.6;cursor:default;';
+        empty.textContent = '실행 중인 tmux 세션 없음';
+        menu.appendChild(empty);
+      } else {
+        for (const s of tmuxList) menu.appendChild(buildTmuxRow(menu, s));
+      }
+
+      const sep = document.createElement('div');
+      sep.className = 'vt-menu-sep';
+      menu.appendChild(sep);
+      const newItem = document.createElement('div');
+      newItem.className = 'vt-menu-item new';
+      newItem.textContent = '+ 새 tmux 세션';
+      newItem.onclick = async () => { menu.remove(); await createTmuxSession(); };
+      menu.appendChild(newItem);
+    }
+
+    // 세션 한 줄: [상태·이름 → 깨우기/전환]  [🗑 완전 종료(2단계 확인)]
+    function buildTmuxRow(menu, s) {
+      const row = document.createElement('div');
+      row.className = 'vt-menu-item';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+      const openInWeb = !!s.web_session_id;
+      const badge = openInWeb ? '🟢' : (s.attached > 0 ? '🖥️' : '💤');
+      const statusText = openInWeb ? '웹에 열림' : (s.attached > 0 ? '데스크톱 attach' : '잠듦');
+
+      const label = document.createElement('span');
+      label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      const cmd = s.command ? ` · ${s.command}` : '';
+      label.textContent = `${badge} ${s.name}  (${s.windows}win · ${statusText}${cmd})`;
+      label.title = openInWeb ? '이 탭으로 전환' : '깨워서 열기 (attach)';
+      label.onclick = async () => { menu.remove(); await attachTmux(s.name); };
+      row.appendChild(label);
+
+      // 완전 종료 — 2단계 인라인 확인 (실수 방지, 네이티브 dialog 미사용)
+      const kill = document.createElement('button');
+      const reset = () => {
+        kill.textContent = '🗑'; kill.style.color = 'var(--sub)'; kill.style.fontSize = '14px';
+      };
+      kill.title = '완전 종료 (tmux 세션 kill — 되돌릴 수 없음)';
+      kill.style.cssText = 'flex-shrink:0;background:transparent;border:none;cursor:pointer;padding:2px 6px;border-radius:5px;';
+      reset();
+      let armed = false, armTimer = null;
+      kill.onclick = async (e) => {
+        e.stopPropagation();
+        if (!armed) {
+          armed = true;
+          kill.textContent = '종료?'; kill.style.color = 'var(--err)'; kill.style.fontSize = '11px';
+          armTimer = setTimeout(() => { armed = false; reset(); }, 3000);
+          return;
+        }
+        clearTimeout(armTimer);
+        kill.textContent = '…';
+        await killTmuxSession(s.name, s.web_session_id);
+        if (document.body.contains(menu)) await renderTmuxMenu(menu);
+      };
+      row.appendChild(kill);
+      return row;
+    }
+
+    // tmux 세션 완전 종료. 웹에 열린 탭이 있으면 먼저 정리해 무한 재연결을 막는다.
+    async function killTmuxSession(name, webSessionId) {
+      // 서버 kill이 웹 PTY까지 destroy하므로, 열린 탭을 그대로 두면 WS가 끊긴 뒤
+      // 재연결 루프에 빠진다. 클라이언트 탭을 먼저 정리(= detach)한 뒤 kill한다.
+      if (webSessionId && sessions[webSessionId]) {
+        await removeSession(webSessionId);
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/tmux/kill/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (!res.ok) { showToast(`완전 종료 실패: ${name} (${res.status})`); return false; }
+        showToast(`완전 종료됨: ${name}`);
+        return true;
+      } catch (_) {
+        showToast(`완전 종료 오류: ${name}`);
+        return false;
+      }
     }
 
     async function attachTmux(tmuxName) {
@@ -600,31 +675,16 @@
     function showOnboarding() {
       const el = document.createElement('div');
       el.id = 'onboarding';
-      el.style.cssText = `
-        position:fixed;inset:0;background:#1e1e2e;z-index:500;
-        display:flex;flex-direction:column;align-items:center;justify-content:center;
-        gap:20px;padding:40px;text-align:center;
-      `;
+      el.className = 'vt-onboarding';
       el.innerHTML = `
-        <div><i class="icon-mic" style="font-size:48px;color:#a6e3a1"></i></div>
-        <h2 style="color:#cdd6f4;font-size:20px;margin:0">랄프톤 Voice Terminal</h2>
-        <p style="color:#a6adc8;font-size:14px;max-width:300px;line-height:1.6">
-          음성으로 터미널을 조작하세요.<br>
-          tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.
-        </p>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
-          <button onclick="document.getElementById('onboarding').remove();createTmuxSession()"
-            style="padding:12px 24px;border-radius:8px;border:none;background:#a6e3a1;color:#1e1e2e;font-size:14px;cursor:pointer;">
-            tmux 세션 시작
-          </button>
-          <button onclick="document.getElementById('onboarding').remove();createSession()"
-            style="padding:12px 24px;border-radius:8px;border:none;background:#45475a;color:#cdd6f4;font-size:14px;cursor:pointer;">
-            일반 터미널
-          </button>
+        <div class="vt-ob-icon"><i class="icon-mic"></i></div>
+        <h2>Voice Terminal</h2>
+        <p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
+        <div class="vt-ob-actions">
+          <button class="vt-btn-primary" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
+          <button class="vt-btn-secondary" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
         </div>
-        <p style="color:#585b70;font-size:11px;margin-top:20px">
-          맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)
-        </p>
+        <p class="vt-ob-hint">맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)</p>
       `;
       document.body.appendChild(el);
     }

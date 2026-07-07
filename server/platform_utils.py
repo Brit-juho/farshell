@@ -29,6 +29,21 @@ def get_default_shell() -> str:
     return os.environ.get("SHELL", "/bin/bash")
 
 
+def default_start_dir() -> str:
+    """새 세션(일반 셸 / tmux 새 세션)이 시작할 기본 작업 디렉토리.
+
+    예전엔 서버 프로세스의 cwd(=프로젝트 `server/` 폴더)를 fork된 셸과 tmux가
+    그대로 물려받아, 새 세션이 항상 프로젝트 폴더에서 열렸다. 기본을 사용자 홈으로
+    바꾸고, `VT_START_DIR`로 원하는 경로를 지정할 수 있게 한다.
+    """
+    d = os.environ.get("VT_START_DIR", "").strip()
+    if d:
+        d = os.path.expanduser(d)
+        if os.path.isdir(d):
+            return d
+    return os.path.expanduser("~")
+
+
 def find_tmux() -> str:
     found = shutil.which("tmux")
     if found:

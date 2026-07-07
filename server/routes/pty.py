@@ -206,8 +206,10 @@ async def ws_terminal(ws: WebSocket, session_id: str):
     if per_session >= WS_MAX_PER_SESSION:
         await ws.close(code=1013, reason="Max per-session connections")
         return
-    _deps.ws_count_per_session[session_id] = per_session + 1
-    _deps.ws_total_count += 1
+    # A1: 연결 카운터 증가는 E2E 협상 성공 이후로 미룬다. 예전엔 여기서 증가시켰는데,
+    # 아래 E2E 핸드셰이크 실패 return(4500/4400)은 try/finally 이전이라 감소를 못 타서
+    # 카운터가 샜다 → ?e2e=1로 실패 핸드셰이크를 반복하면 WS_MAX_TOTAL이 소진돼
+    # 정상 접속이 거부되는 DoS. 증가/감소를 finally와 확실히 페어링한다.
 
     loop = asyncio.get_running_loop()
     last_pong = loop.time()
@@ -291,13 +293,25 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             except asyncio.CancelledError:
                 return
 
-    send_task = asyncio.create_task(_send_worker())
-    hb_task = asyncio.create_task(_heartbeat_loop())
-    pty_mgr.subscribe(session_id, on_data)
+    # A1: E2E 협상까지 성공한 지금 카운터를 올린다 — 아래 try/finally가 감소를 보장.
+    # 여기~try 사이에는 raise 가능한 await가 없어 증가/감소 페어링이 유지된다.
+    _deps.ws_count_per_session[session_id] = _deps.ws_count_per_session.get(session_id, 0) + 1
+    _deps.ws_total_count += 1
 
+    # C3: scrollback을 live 데이터와 같은 send_queue로 흘려보낸다. 예전엔 subscribe로
+    # live 데이터가 큐에 쌓이는 동안 scrollback을 _safe_send로 직접 보내 두 전송 경로가
+    # 경쟁했다(재접속 tail 중복/역전). scrollback을 먼저 큐에 넣고 subscribe하면 단일
+    # FIFO 경로로 순서가 보장된다.
     for chunk in pty_mgr.get_scrollback(session_id):
         out = channel.encrypt_simple(chunk) if channel else chunk
-        await _safe_send(ws, out)
+        try:
+            send_queue.put_nowait(out)
+        except asyncio.QueueFull:
+            break
+    pty_mgr.subscribe(session_id, on_data)
+
+    send_task = asyncio.create_task(_send_worker())
+    hb_task = asyncio.create_task(_heartbeat_loop())
 
     try:
         while True:
