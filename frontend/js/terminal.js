@@ -109,6 +109,131 @@
       return _origFetch(url, opts);
     };
 
+    // ─────────────────────────────────────────────────────────────
+    // 클립보드: 복사(선택 자동복사/우클릭/단축키) · 붙여넣기 · 이미지 붙여넣기 업로드
+    // ─────────────────────────────────────────────────────────────
+
+    // 시스템 클립보드에 쓰기. HTTPS/localhost가 아니면 clipboard API가 막히므로
+    // execCommand('copy') 폴백을 둔다.
+    async function copyToClipboard(text) {
+      if (!text) return false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (_) { /* 폴백으로 */ }
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        return ok;
+      } catch (_) { return false; }
+    }
+
+    async function readClipboardText() {
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          return await navigator.clipboard.readText();
+        }
+      } catch (_) { /* 권한/비보안 컨텍스트 */ }
+      return null;
+    }
+
+    // 텍스트를 활성 세션 PTY로 주입 (붙여넣기 공통 경로)
+    function sendToPty(id, text) {
+      if (!text) return;
+      const handle = sessions[id]?.wsHandle;
+      if (handle && handle.readyState === WebSocket.OPEN) {
+        handle.send(new TextEncoder().encode(text));
+      }
+    }
+
+    async function pasteFromClipboard(id) {
+      const text = await readClipboardText();
+      if (text == null) {
+        showToast('클립보드 읽기 불가 — HTTPS/localhost에서만 가능. Cmd/Ctrl+V를 쓰세요.');
+        return;
+      }
+      sendToPty(id, text);
+    }
+
+    // 이미지 붙여넣기 → 서버 업로드 → 저장 경로를 터미널에 삽입 (Claude에 그대로 넘길 수 있게)
+    async function pasteImageUpload(id, file) {
+      try {
+        showToast('이미지 업로드 중...');
+        const ext = ((file.type.split('/')[1] || 'png')).replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+        const fd = new FormData();
+        fd.append('file', file, `pasted-${Date.now()}.${ext}`);
+        const res = await fetch(`${API_BASE}/api/upload?session_id=${encodeURIComponent(id)}`, {
+          method: 'POST', body: fd,
+        });
+        if (!res.ok) { showToast(`이미지 업로드 실패 (${res.status})`); return; }
+        const data = await res.json();
+        if (data && data.path) {
+          sendToPty(id, data.path + ' ');
+          showToast('이미지 경로 삽입됨');
+        } else {
+          showToast('업로드 응답에 경로 없음');
+        }
+      } catch (_) {
+        showToast('이미지 업로드 오류');
+      }
+    }
+
+    // 한 터미널에 복사/붙여넣기 배선. addSession에서 term.open 직후 호출.
+    function wireClipboard(id, term, wrapper) {
+      // 1) copy-on-select — 드래그(브라우저 선택) 끝나면 자동 복사.
+      //    ⚠ tmux mouse on이면 일반 드래그는 tmux가 가로채므로, 브라우저 선택은
+      //    Shift(또는 Option/Alt)+드래그에서 발생한다.
+      wrapper.addEventListener('mouseup', () => {
+        const sel = term.getSelection && term.getSelection();
+        if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
+      });
+
+      // 2) 우클릭 — 선택 있으면 복사, 없으면 붙여넣기 (PuTTY 스타일)
+      wrapper.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const sel = term.getSelection && term.getSelection();
+        if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
+        else pasteFromClipboard(id);
+      });
+
+      // 3) 이미지 붙여넣기 — clipboard에 이미지가 있으면 업로드+경로삽입, 아니면 텍스트는
+      //    xterm 기본 붙여넣기에 위임(preventDefault 안 함). capture로 textarea보다 먼저 검사.
+      wrapper.addEventListener('paste', (e) => {
+        const items = (e.clipboardData && e.clipboardData.items) || [];
+        for (const it of items) {
+          if (it.type && it.type.indexOf('image/') === 0) {
+            e.preventDefault();
+            const file = it.getAsFile();
+            if (file) pasteImageUpload(id, file);
+            return;
+          }
+        }
+      }, true);
+
+      // 4) 복사 단축키 — Cmd+C / Ctrl+Shift+C. 선택이 있으면 xterm 내부 선택을 복사하고
+      //    이벤트를 소비, 없으면 그대로 통과(Ctrl+C 단독 = SIGINT 유지).
+      //    ⚠ 붙여넣기 단축키(Cmd+V/Ctrl+V/Ctrl+Shift+V)는 여기서 다루지 않는다 —
+      //    xterm 네이티브 paste 이벤트가 이미 처리하며(아래 3번 capture 리스너가 이미지만
+      //    가로챔), keydown에서 또 처리하면 이중 붙여넣기가 된다.
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.type !== 'keydown') return true;
+        const isCopy = (e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'c')
+          || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c');
+        if (isCopy) {
+          const sel = term.getSelection && term.getSelection();
+          if (sel && sel.trim()) { copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); }); return false; }
+        }
+        return true;
+      });
+    }
+
     async function createSession() {
       // "맥에서도 열기" 토글이 켜져 있으면 tmux 세션으로 생성하고
       // 서버에 osascript로 iTerm 창을 자동 오픈하도록 요청
@@ -178,7 +303,7 @@
       const term = new Terminal({
         cursorBlink: true,
         fontSize: termFontSize,
-        fontFamily: "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace",
+        fontFamily: (window.getVtXtermFont ? window.getVtXtermFont() : "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace"),
         theme: (window.getVtXtermTheme ? window.getVtXtermTheme() : { background: '#1e1e2e' }),
         allowProposedApi: true,
         screenReaderMode: true,  // a11y: Canvas 외에 hidden DOM도 유지
@@ -194,6 +319,9 @@
       wrapper.style.cssText = 'height:100%;display:none;';
       document.getElementById('terminal-container').appendChild(wrapper);
       term.open(wrapper);
+
+      // 복사(자동복사/우클릭/단축키) · 붙여넣기 · 이미지 붙여넣기 배선
+      wireClipboard(id, term, wrapper);
 
       // WebSocket URL 구성 — E2E 활성 시 ?e2e=1 (또는 토큰 뒤에 &e2e=1)
       const _wsPath = `/ws/${id}${_tokenQuery}${_e2eQuery}`;
