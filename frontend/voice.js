@@ -83,6 +83,8 @@ async function sendAudio(blob) {
       headers: { 'Content-Type': 'audio/webm' },
       body: blob,
     });
+    // C5: 4xx/5xx면 body가 JSON이 아닐 수 있어 res.ok 확인 후 파싱.
+    if (!res.ok) { micStatus.textContent = `전송 실패 (${res.status})`; return; }
     const data = await res.json();
     micStatus.textContent = data.text ? `"${data.text}"` : '인식 실패';
     // W1-5: 핸즈프리 자동 재시작 분기 제거. 매 녹음은 명시적 클릭으로만.
@@ -102,7 +104,10 @@ async function speakText(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
+    // C5: 빈 텍스트 400/서버 500이면 오디오가 아닌 에러 JSON이 온다 — 재생하지 않음.
+    if (!res.ok) { console.warn('[TTS] 서버 오류:', res.status); return; }
     const audioBlob = await res.blob();
+    if (audioBlob.size === 0) return;
     playAudioBlob(audioBlob);
   } catch (err) {
     console.error('TTS 실패:', err);
@@ -150,11 +155,8 @@ function showPlayButton() {
     btn = document.createElement('button');
     btn.id = 'play-pending-btn';
     btn.textContent = '터치하여 재생';
-    btn.style.cssText = `
-      padding: 8px 16px; border-radius: 8px; border: none;
-      background: #a6e3a1; color: #1e1e2e; font-size: 13px;
-      cursor: pointer; display: block; margin: 0 auto;
-    `;
+    btn.className = 'vt-btn-primary';
+    btn.style.cssText = 'display:block;margin:6px auto 0;font-size:13px;';
     btn.onclick = () => {
       if (_pendingAudioUrl) {
         const a = new Audio(_pendingAudioUrl);
@@ -227,11 +229,10 @@ function notifyActiveSession(sessionId) {
 let notifyWs = null;
 let pendingMeta = null;
 let _notifyRetries = 0;
-const _notifyMaxRetries = 20;
 
 function connectNotify() {
-  if (_notifyRetries >= _notifyMaxRetries) return;
-
+  // C2: 상한 도달 후 영구 포기하지 않는다. 예전엔 20회 후 멈춰 모바일 장시간 세션에서
+  // 네트워크 flap이 반복되면 작업완료 알림이 조용히 죽었다. 무한 재시도(백오프 상한 30s).
   notifyWs = new WebSocket(WS_NOTIFY);
 
   notifyWs.onopen = () => { _notifyRetries = 0; };
@@ -254,9 +255,9 @@ function connectNotify() {
   };
 
   notifyWs.onclose = () => {
-    // [M2] 지수 백오프 재연결
+    // [M2] 지수 백오프 재연결 (무한 — 지수는 5로 clamp해 오버플로 방지)
     _notifyRetries++;
-    const delay = Math.min(1000 * Math.pow(2, _notifyRetries), 30000);
+    const delay = Math.min(1000 * Math.pow(2, Math.min(_notifyRetries, 5)), 30000);
     setTimeout(connectNotify, delay);
   };
 
@@ -268,13 +269,7 @@ function connectNotify() {
 function showNotification(summary, sessionId) {
   // 화면 상단에 토스트 알림
   const toast = document.createElement('div');
-  toast.style.cssText = `
-    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-    background: #313244; color: #cdd6f4; padding: 10px 20px;
-    border-radius: 10px; font-size: 13px; z-index: 200;
-    max-width: 90vw; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    animation: fadeIn 0.3s ease;
-  `;
+  toast.className = 'vt-toast ok';
   // 요약 텍스트 (최대 100자)
   const short = summary.length > 100 ? summary.slice(0, 100) + '...' : summary;
   toast.textContent = `✅ [${sessionId}] ${short}`;

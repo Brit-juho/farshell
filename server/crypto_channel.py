@@ -11,6 +11,12 @@
       → 둘 다 crypto_box_beforenm (HSalsa20 of ECDH 결과) 이라 자동 호환
 
 PyNaCl 미설치 시 is_available() == False, 상위 레이어는 E2E 우회.
+
+한계 (C4): 메시지마다 독립 random nonce라 순서/리플레이 시퀀스 번호가 없다. 따라서
+와이어에서 ciphertext chunk를 재정렬하거나 리플레이하면 터미널 출력 순서를 조작할 수
+있다(무결성은 SecretBox MAC로 보장, 순서는 아님). backpressure로 chunk를 drop해도
+복호화는 안전하다(각 메시지 독립). cloudflare TLS 아래라 실제 위험은 낮지만, TLS 없이
+직접 노출하는 경우 이 한계를 인지할 것 — 필요 시 상위에 시퀀스 번호 추가.
 """
 
 from __future__ import annotations
