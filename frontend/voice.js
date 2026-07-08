@@ -229,32 +229,49 @@ function notifyActiveSession(sessionId) {
 let notifyWs = null;
 let pendingMeta = null;
 let _notifyRetries = 0;
+let _notifyStableTimer = null;
 
 function connectNotify() {
-  // C2: 상한 도달 후 영구 포기하지 않는다. 예전엔 20회 후 멈춰 모바일 장시간 세션에서
-  // 네트워크 flap이 반복되면 작업완료 알림이 조용히 죽었다. 무한 재시도(백오프 상한 30s).
+  // C2: 상한 도달 후 영구 포기하지 않는다(모바일 장시간 세션의 flap에도 알림 유지).
+  // [회귀 fb827a6] 단, onopen에서 _notifyRetries를 '즉시' 0으로 리셋하면 서버가 accept
+  // 직후 닫는 half-open flap에서 지수 백오프가 자라지 못해 2초마다 영구 재연결한다
+  // (터미널 WS와 동일한 메모리 스톰). 3초 이상 안정적으로 열린 뒤에만 리셋한다.
   notifyWs = new WebSocket(WS_NOTIFY);
 
-  notifyWs.onopen = () => { _notifyRetries = 0; };
+  notifyWs.onopen = () => {
+    clearTimeout(_notifyStableTimer);
+    _notifyStableTimer = setTimeout(() => { _notifyRetries = 0; }, 3000);
+  };
 
   notifyWs.onmessage = (e) => {
-    if (typeof e.data === 'string') {
-      const data = JSON.parse(e.data);
-      console.log('[NOTIFY] received:', data.type, data.summary?.slice(0, 60));
-      if (data.type === 'task_complete') {
-        pendingMeta = data;
-        showNotification(data.summary, data.session_id);
+    // 메시지 처리 중 어떤 예외(잘못된 JSON, Notification 생성자 throw 등)가 나도
+    // notify 채널 전체가 죽지 않도록 방어한다.
+    try {
+      if (typeof e.data === 'string') {
+        const data = JSON.parse(e.data);
+        console.log('[NOTIFY] received:', data.type, data.summary?.slice(0, 60));
+        if (data.type === 'task_complete') {
+          pendingMeta = data;
+          showNotification(data.summary, data.session_id);
+          // 탭 파비콘 '완료' 뱃지 — 탭 재포커스 시 favicon.js가 자동 해제
+          if (window.VTFavicon) VTFavicon.set('done');
+        }
+      } else if (e.data instanceof Blob) {
+        console.log('[NOTIFY] audio blob:', e.data.size, 'bytes');
+        if (e.data.size > 0) {
+          playAudioBlob(e.data);
+        }
+        pendingMeta = null;
       }
-    } else if (e.data instanceof Blob) {
-      console.log('[NOTIFY] audio blob:', e.data.size, 'bytes');
-      if (e.data.size > 0) {
-        playAudioBlob(e.data);
-      }
-      pendingMeta = null;
+    } catch (err) {
+      console.warn('[NOTIFY] 메시지 처리 오류(무시):', err);
     }
   };
 
-  notifyWs.onclose = () => {
+  notifyWs.onclose = (ev) => {
+    clearTimeout(_notifyStableTimer);
+    // 인증 실패(4001)는 재시도해도 동일 → 재연결 중단.
+    if (ev && ev.code === 4001) { console.warn('[NOTIFY] 인증 실패 — 재연결 중단'); return; }
     // [M2] 지수 백오프 재연결 (무한 — 지수는 5로 clamp해 오버플로 방지)
     _notifyRetries++;
     const delay = Math.min(1000 * Math.pow(2, Math.min(_notifyRetries, 5)), 30000);
@@ -270,8 +287,9 @@ function showNotification(summary, sessionId) {
   // 화면 상단에 토스트 알림
   const toast = document.createElement('div');
   toast.className = 'vt-toast ok';
-  // 요약 텍스트 (최대 100자)
-  const short = summary.length > 100 ? summary.slice(0, 100) + '...' : summary;
+  // 요약 텍스트 (최대 100자). summary가 없을 수도 있으므로 문자열로 정규화.
+  const text = summary == null ? '' : String(summary);
+  const short = text.length > 100 ? text.slice(0, 100) + '...' : text;
   toast.textContent = `✅ [${sessionId}] ${short}`;
   document.body.appendChild(toast);
 
@@ -281,10 +299,26 @@ function showNotification(summary, sessionId) {
     setTimeout(() => toast.remove(), 500);
   }, 5000);
 
-  // 브라우저 Notification API (백그라운드용)
-  if (Notification.permission === 'granted') {
-    new Notification('랄프톤 — 작업 완료', { body: short });
-  }
+  // 백그라운드 브라우저 알림 (화면 밖에서도 보이게)
+  showBrowserNotification('랄프톤 — 작업 완료', short);
+}
+
+// ⚠ Android Chrome 등 모바일 브라우저는 `new Notification()` 생성자를 금지하고
+// (TypeError: Failed to construct 'Notification': Illegal constructor)
+// ServiceWorkerRegistration.showNotification()만 허용한다. 예전엔 권한 수락 직후
+// 첫 task_complete에서 이 생성자가 던지면 notify 처리 전체가 깨졌다(=수락하면 멈춤).
+// SW 경로를 우선 쓰고, 모든 경로를 try/catch로 감싸 어떤 플랫폼에서도 예외가 새지 않게 한다.
+function showBrowserNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(title, { body }))
+        .catch(() => { try { new Notification(title, { body }); } catch (_) {} });
+      return;
+    }
+    new Notification(title, { body });
+  } catch (_) { /* 알림 생성 실패는 무시 — 화면 토스트로 이미 알렸다 */ }
 }
 
 // 이벤트 바인딩 (mic-btn-wrap의 onclick="toggleRecording()"으로 처리)

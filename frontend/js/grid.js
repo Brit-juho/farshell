@@ -4,8 +4,12 @@
         const res = await fetch(`${API_BASE}/api/capabilities`);
         const caps = await res.json();
         if (!caps.voice) {
-          document.getElementById('voice-bar').style.display = 'none';
-          document.getElementById('mic-status').style.display = 'none';
+          const vb = document.getElementById('voice-bar');
+          if (vb) vb.style.display = 'none';
+          const ms = document.getElementById('mic-status');
+          if (ms) ms.style.display = 'none';
+          // 음성 전용/이어폰 메뉴 항목은 voice.js 함수에 의존 → 미설치 시 숨김
+          document.querySelectorAll('.needs-voice').forEach(el => el.style.display = 'none');
           return; // voice.js 로드 안 함
         }
       } catch (e) {
@@ -98,11 +102,16 @@
         const pre = card.querySelector('.card-preview');
         if (pre) { pre.innerHTML = ansiToHtml(msg.content); pre.scrollTop = pre.scrollHeight; }
       };
-      ws.onclose = () => { delete _previewWs[sessName]; };
-      // 30초 keepalive — 끊김 방지
+      // 30초 keepalive — 끊김 방지.
+      // ⚠ 닫힌 WebSocket에 send()는 예외를 던지지 않고 조용히 버린다(스펙: CLOSING/CLOSED).
+      // 따라서 catch로만 정리하면 인터벌이 영구히 남아 죽은 소켓을 붙잡는다(메모리 누수).
+      // onclose에서 명시적으로 clearInterval하고, 매 tick도 readyState로 방어한다.
       const ka = setInterval(() => {
+        if (ws.readyState !== WebSocket.OPEN) { clearInterval(ka); return; }
         try { ws.send('ping'); } catch (_) { clearInterval(ka); }
       }, 30000);
+      ws.onclose = () => { clearInterval(ka); delete _previewWs[sessName]; };
+      ws.onerror = () => { try { ws.close(); } catch (_) {} };
     }
 
     async function refreshGrid() {
@@ -113,10 +122,10 @@
 
         // D3: 빈 상태 — 세션 없을 때 안내 메시지
         if (tmuxSessions.length === 0) {
-          cards.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px 24px;color:#585b70;">
-            <div style="font-size:32px;margin-bottom:12px">⊞</div>
-            <div style="font-size:14px;color:#a6adc8;margin-bottom:8px">실행 중인 tmux 세션이 없습니다</div>
-            <div style="font-size:12px;color:#585b70;">터미널에서 <code style="background:#313244;padding:2px 6px;border-radius:4px">tmux new -A -s dev</code> 실행 후 새로고침</div>
+          cards.innerHTML = `<div class="vt-grid-empty">
+            <div class="big">⊞</div>
+            <div style="font-size:14px;margin-bottom:8px">실행 중인 tmux 세션이 없습니다</div>
+            <div style="font-size:12px;">터미널에서 <code>tmux new -A -s dev</code> 실행 후 새로고침</div>
           </div>`;
           return;
         }
@@ -133,15 +142,13 @@
           if (!card) {
             card = document.createElement('div');
             card.dataset.name = sess.name;
-            card.style.cssText = 'background:#181825;border:1px solid #313244;border-radius:8px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:6px;';
+            card.className = 'vt-card';
             card.innerHTML = `
               <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span style="font-weight:bold;color:#cdd6f4;font-size:13px;">${sess.name}</span>
-                <span class="card-cmd" style="font-size:11px;color:#a6adc8;"></span>
+                <span class="card-title">${sess.name}</span>
+                <span class="card-cmd"></span>
               </div>
-              <pre class="card-preview" style="margin:0;background:#11111b;border-radius:4px;padding:8px;font-family:monospace;font-size:11px;color:#cdd6f4;white-space:pre-wrap;overflow:hidden;max-height:240px;line-height:1.3;">
-                <span style="color:#313244;font-style:italic;font-size:10px;">로딩 중...</span>
-              </pre>
+              <pre class="card-preview"><span style="opacity:.5;font-style:italic;font-size:10px;">로딩 중...</span></pre>
             `;
             card.onclick = () => {
               // Codex: toggleGridView 내부에서 gridViewEnabled를 반전시키므로
@@ -192,7 +199,7 @@
     fetch(`${API_BASE}/api/safe-mode`).then(r => r.json()).then(data => {
       if (data.enabled) {
         const banner = document.createElement('div');
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#f38ba8;color:#1e1e2e;text-align:center;padding:4px;font-size:12px;z-index:9999;';
+        banner.className = 'vt-banner';
         banner.textContent = '🛡 안전 모드 — 위험 명령 차단됨';
         document.body.appendChild(banner);
       }
@@ -201,11 +208,17 @@
     // ── Agent WebSocket — Phase 9 #2: 폴링 대체용 push 채널 + #5: heartbeat/reconnect ─
     let wsAgent = null;
     let _wsAgentRetries = 0;
+    let _wsAgentStableTimer = null;
     function connectAgentWs() {
       try {
         wsAgent = new WebSocket(`${WS_BASE}/ws-agent${_tokenQuery}`);
       } catch (e) { return scheduleAgentReconnect(); }
-      wsAgent.onopen = () => { _wsAgentRetries = 0; };
+      // [회귀 fb827a6와 동일 패턴] 3초 이상 안정적으로 열린 뒤에만 백오프 리셋 —
+      // accept 직후 닫히는 flap에서 지수가 자라지 못하고 빠르게 재연결하는 것을 방지.
+      wsAgent.onopen = () => {
+        clearTimeout(_wsAgentStableTimer);
+        _wsAgentStableTimer = setTimeout(() => { _wsAgentRetries = 0; }, 3000);
+      };
       wsAgent.onmessage = (e) => {
         let msg;
         try { msg = JSON.parse(e.data); } catch (_) { return; }
@@ -213,11 +226,21 @@
           try { wsAgent.send(JSON.stringify({ type: 'pong' })); } catch (_) {}
         } else if (msg.type === 'agent_snapshot' || msg.type === 'agents_change') {
           if (msg.agents) applyAgentBadges(msg.agents);
-        } else if (msg.type === 'agent_event' && msg.state && msg.state.tool) {
-          showToast(`🔧 ${msg.state.tool} 실행 중...`);
+          // 스냅샷에 활성 도구가 있으면 탭 파비콘을 '작업중'으로
+          if (window.VTFavicon && msg.active && msg.active.length) VTFavicon.set('working');
+        } else if (msg.type === 'agent_event') {
+          // 탭 파비콘 상태: pre(도구 시작)=작업중, stop(응답 완료)=완료.
+          // post(도구 종료)는 다음 도구가 이어질 수 있어 '작업중' 유지(무시).
+          // voice 미설치 환경에서도 stop 신호로 완료 뱃지가 뜬다.
+          if (msg.state && msg.state.tool) {
+            showToast(`🔧 ${msg.state.tool} 실행 중...`);
+            if (window.VTFavicon) VTFavicon.set('working');
+          } else if (msg.event === 'stop' && window.VTFavicon) {
+            VTFavicon.set('done');
+          }
         }
       };
-      wsAgent.onclose = scheduleAgentReconnect;
+      wsAgent.onclose = () => { clearTimeout(_wsAgentStableTimer); scheduleAgentReconnect(); };
       wsAgent.onerror = () => { try { wsAgent.close(); } catch (_) {} };
     }
     function scheduleAgentReconnect() {
@@ -245,7 +268,9 @@
       if (!toast) {
         toast = document.createElement('div');
         toast.id = 'agent-toast';
-        toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#313244;color:#cdd6f4;padding:8px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .2s;';
+        toast.className = 'vt-toast';
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity .2s';
         document.body.appendChild(toast);
       }
       toast.textContent = text;

@@ -1,80 +1,181 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-skin="macos">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>voice-terminal Terminal</title>
+  <title>Voice Terminal</title>
   <link rel="icon" type="image/png" href="/static/icon-192.png">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#181825">
+  <meta name="theme-color" content="#2c2c2e" id="theme-color-meta">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="/static/vendor/xterm.min.css">
   <link href="/static/vendor/lucide.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-mono-400.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-sans-400.woff2" crossorigin>
+  <!-- 테마 부팅: 페인트 전에 data-skin 확정 (FOUC 방지). 기본 macos. -->
+  <script>
+    (function(){
+      try {
+        var s = localStorage.getItem('vt-skin') || 'macos';
+        if (['macos','catppuccin','windows','vscode'].indexOf(s) < 0) s = 'macos';
+        document.documentElement.setAttribute('data-skin', s);
+      } catch(e){}
+    })();
+  </script>
 </head>
 <body>
   <div id="conn-status"></div>
+
+  <!-- 터미널 검색 바 -->
   <div id="search-bar">
-    <input id="search-input" type="text" placeholder="검색..." />
-    <button onclick="searchPrev()">▲</button>
-    <button onclick="searchNext()">▼</button>
-    <button onclick="closeSearch()">✕</button>
+    <input id="search-input" type="text" placeholder="검색..." aria-label="터미널 검색" />
+    <button onclick="searchPrev()" aria-label="이전 결과">▲</button>
+    <button onclick="searchNext()" aria-label="다음 결과">▼</button>
+    <button onclick="closeSearch()" aria-label="검색 닫기">✕</button>
   </div>
-  <div id="tabs">
-    <div id="add-btn" onclick="createSession()"><i class="icon-plus" style="font-size:14px;vertical-align:middle;margin-right:2px"></i> New</div>
-    <div id="tmux-btn" onclick="showTmuxSessions()" style="padding:8px 14px;border-radius:8px;background:#45475a;cursor:pointer;font-size:13px;flex-shrink:0;"><i class="icon-terminal" style="font-size:13px;vertical-align:middle;margin-right:3px"></i>tmux</div>
-    <label id="auto-mac-toggle" title="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림"
-      style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:#313244;cursor:pointer;font-size:12px;color:#cdd6f4;flex-shrink:0;user-select:none;">
-      <input type="checkbox" id="auto-mac-checkbox" style="margin:0;cursor:pointer;" />
-      <i class="icon-monitor" style="font-size:13px;vertical-align:middle;"></i>
-      <span>맥에서도 열기</span>
-    </label>
-    <div id="grid-toggle" onclick="toggleGridView()" title="모든 tmux 세션 라이브 프리뷰"
-      style="padding:8px 14px;border-radius:8px;background:#45475a;cursor:pointer;font-size:13px;flex-shrink:0;">
-      <i class="icon-grid" style="font-size:13px;vertical-align:middle;margin-right:3px"></i>Grid
+
+  <!-- 상단 통합 바 -->
+  <header id="topbar">
+    <div class="traffic" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i></div>
+
+    <div id="tabs">
+      <div id="add-btn" onclick="createSession()" title="새 세션" role="button" tabindex="0" aria-label="새 세션">+</div>
+      <div class="wt-chevron" onclick="showTmuxSessions()" title="세션 프로파일" role="button" aria-label="세션 프로파일">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
     </div>
-  </div>
-  <div id="terminal-container"></div>
-  <div id="grid-view" style="display:none;position:absolute;top:54px;left:0;right:0;bottom:60px;overflow-y:auto;background:#1e1e2e;padding:12px;z-index:100;">
-    <div id="grid-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:12px;"></div>
-  </div>
-  <div id="mic-status"></div>
-  <div id="voice-bar">
-    <select id="voice-session-picker" onchange="if(this.value)switchTo(this.value)"></select>
-    <button id="mic-btn-wrap" class="voice-action" onclick="toggleRecording()">
-      <div class="icon"><i class="icon-mic"></i></div>
+
+    <!-- 세션 점프(이름 드롭다운) — picker.js가 동기화. 좁은 화면에서만 노출 -->
+    <select id="voice-session-picker" aria-label="세션 전환"
+      onchange="if(this.value)switchTo(this.value)"></select>
+
+    <div class="spacer"></div>
+
+    <!-- 음성 입력 — 상단 바로 통합 (voice.js 계약: #mic-btn-wrap + .label + .recording) -->
+    <button id="mic-btn-wrap" class="tbtn mic needs-voice" onclick="toggleRecording()" aria-label="음성 입력 (탭하여 녹음)" title="음성 입력">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>
       <span class="label">음성 입력</span>
     </button>
-    <!-- W1-5: 핸즈프리 버튼 제거 (VAD 없이 "핸즈프리"라는 이름이 동작과 불일치) -->
-    <button id="voiceonly-btn" class="voice-action" onclick="toggleVoiceOnly()">
-      <div class="icon"><i class="icon-headphones"></i></div>
-      <span class="label">음성 전용</span>
+
+    <button class="tbtn" onclick="toggleSearch()" aria-label="검색" title="검색">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
-    <!-- W2-3: 이어폰 미디어 키 트리거 ON/OFF 토글. active 클래스는 JS가 localStorage 기준으로 동기화 -->
-    <button id="mediakey-btn" class="voice-action" onclick="toggleMediaKeyTrigger()">
-      <div class="icon"><i class="icon-music"></i></div>
-      <span class="label">이어폰</span>
+    <button id="grid-toggle" class="tbtn" onclick="toggleGridView()" aria-label="Grid 뷰" title="모든 tmux 세션 라이브 프리뷰">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     </button>
-    <label class="voice-action" id="upload-btn">
-      <div class="icon"><i class="icon-paperclip"></i></div>
-      <span class="label">파일</span>
+    <button class="tbtn more" id="more-btn" onclick="toggleMoreMenu(event)" aria-label="더보기" aria-haspopup="true" aria-expanded="false" title="더보기">⋯</button>
+
+    <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
+  </header>
+
+  <!-- ⋯ 팝업 메뉴 -->
+  <div id="more-menu" role="menu" aria-label="더보기 메뉴">
+    <div class="mlabel">세션</div>
+    <button class="mi" role="menuitem" onclick="showTmuxSessions()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>tmux 세션
+    </button>
+    <label class="mi" id="auto-mac-toggle" role="menuitemcheckbox"
+      title="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>
+      맥에서도 열기
+      <input type="checkbox" id="auto-mac-checkbox" />
+    </label>
+    <button class="mi" role="menuitem" onclick="openSessionOnMac()"
+      title="지금 보고 있는 tmux 세션을 맥 iTerm에 새 창으로 attach">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+      이 세션 맥에서 열기
+    </button>
+
+    <div class="msep"></div>
+    <div class="mlabel">음성 · 파일</div>
+    <button class="mi needs-voice" id="voiceonly-btn" role="menuitem" onclick="toggleVoiceOnly()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>음성 전용 모드
+    </button>
+    <button class="mi needs-voice" id="mediakey-btn" role="menuitem" onclick="toggleMediaKeyTrigger()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>이어폰 미디어키
+    </button>
+    <label class="mi" id="upload-btn" role="menuitem">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>파일 업로드
       <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" />
     </label>
+
+    <div class="msep"></div>
+    <div class="mlabel">테마</div>
+    <div class="theme-row" id="theme-row">
+      <button class="theme-chip" data-skin="macos" onclick="setVtSkin('macos')"><span class="dot" style="background:#0a84ff"></span>macOS</button>
+      <button class="theme-chip" data-skin="catppuccin" onclick="setVtSkin('catppuccin')"><span class="dot" style="background:#cba6f7"></span>Catppuccin</button>
+      <button class="theme-chip" data-skin="windows" onclick="setVtSkin('windows')"><span class="dot" style="background:#4cc2ff"></span>Windows</button>
+      <button class="theme-chip" data-skin="vscode" onclick="setVtSkin('vscode')"><span class="dot" style="background:#007acc"></span>VS Code</button>
+    </div>
   </div>
+
+  <!-- 터미널 / Grid -->
+  <div id="terminal-container"></div>
+  <div id="grid-view">
+    <div id="grid-cards"></div>
+  </div>
+
+  <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
+  <div id="mic-status" role="status" aria-live="polite"></div>
 
   <script src="/static/vendor/xterm.min.js"></script>
   <script src="/static/vendor/addon-fit.min.js"></script>
   <script src="/static/vendor/addon-search.min.js"></script>
-  <!-- tweetnacl — E2E 암호화 (D3, opt-in) -->
   <script src="/static/vendor/nacl.min.js"></script>
   <script src="/static/vendor/nacl-util.min.js"></script>
+
+  <!-- 테마 엔진 먼저 — terminal.js의 addSession이 xterm 테마를 참조 -->
+  <script src="/static/js/theme.js"></script>
+
+  <!-- 동적 파비콘 — 선명한 탭 아이콘 + 작업 상태 뱃지 (window.VTFavicon.set) -->
+  <script src="/static/js/favicon.js"></script>
 
   <!-- 앱 스크립트 — 전역 변수 공유를 위해 classic <script> + 원래 순서 보존 -->
   <script src="/static/js/terminal.js"></script>
   <script src="/static/js/search.js"></script>
   <script src="/static/js/picker.js"></script>
   <script src="/static/js/grid.js"></script>
+
+  <!-- ⋯ 메뉴 열고닫기 (전역 상태 불필요, 여기 인라인) -->
+  <script>
+    function toggleMoreMenu(ev) {
+      if (ev) ev.stopPropagation();
+      const m = document.getElementById('more-menu');
+      const btn = document.getElementById('more-btn');
+      const open = m.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    document.addEventListener('click', (e) => {
+      const m = document.getElementById('more-menu');
+      const btn = document.getElementById('more-btn');
+      if (m.classList.contains('open') && !m.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+        m.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+    // 메뉴 안에서 토글(맥에서 열기/파일)이 아닌 액션 클릭 시 메뉴 닫기
+    document.getElementById('more-menu').addEventListener('click', (e) => {
+      const item = e.target.closest('.mi');
+      if (item && !item.querySelector('input') && item.id !== 'voiceonly-btn' && item.id !== 'mediakey-btn') {
+        document.getElementById('more-menu').classList.remove('open');
+      }
+    });
+    // + 버튼 키보드 접근
+    document.getElementById('add-btn').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); createSession(); }
+    });
+    // "맥에서도 열기" — 기본 체크 ON, 선택은 localStorage에 기억 (폰에서 끄면 유지됨)
+    (function initAutoMac() {
+      const cb = document.getElementById('auto-mac-checkbox');
+      if (!cb) return;
+      cb.checked = (localStorage.getItem('vt_auto_mac') ?? 'on') !== 'off';
+      cb.addEventListener('change', () => {
+        localStorage.setItem('vt_auto_mac', cb.checked ? 'on' : 'off');
+      });
+    })();
+  </script>
 </body>
 </html>
