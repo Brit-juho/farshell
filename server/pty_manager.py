@@ -13,6 +13,7 @@ import logging
 import os
 import pty
 import re
+import select
 import shutil
 import signal
 import struct
@@ -38,6 +39,14 @@ TERMINAL_AUTO_REPLY_RE = re.compile(
 # 이렇게 하면 ws 재연결 등 어떤 시점에도 client→server 자동응답 트래픽이 발생하지 않는다.
 # 부팅 후 PTY_QUERY_INTERCEPT_SEC 동안만 활성 — vim/htop 등 TUI가 자체 query를 쓸 수 있어
 # 영구 가로채기는 위험.
+# select() 타임아웃 — read 스레드가 이 간격마다 반드시 반환하도록 강제한다.
+# 이 값이 있어야 세션 destroy(fd close) 시 os.read가 무한 block에 걸려 스레드가
+# leak되고, 반복 누적돼 read executor가 고갈 → 서버 전체 hang 되는 문제를 막는다.
+PTY_READ_SELECT_TIMEOUT = 0.5
+# read가 데이터 없이 select 타임아웃으로 돌아왔음을 나타내는 sentinel.
+# 진짜 EOF(b"")와 구분하기 위해 별도 객체를 쓴다.
+_READ_TIMEOUT = object()
+
 PTY_QUERY_INTERCEPT_SEC = 1.5
 PTY_OUT_QUERY_REPLIES = (
     (b"\x1b[c",        b"\x1b[?6c"),                           # DA1
@@ -279,7 +288,16 @@ class PTYManager:
         session = self._get(session_id)
         loop = asyncio.get_running_loop()
 
-        def _blocking_read() -> Optional[bytes]:
+        def _read_once():
+            # select로 timeout 안에서 readable 여부만 확인한 뒤 read → os.read가
+            # 무한 block되지 않는다. 세션 destroy로 fd가 close되면 select가
+            # OSError를 내거나 다음 루프에서 세션 부재로 종료되어 스레드가 leak되지 않음.
+            try:
+                r, _, _ = select.select([session.fd], [], [], PTY_READ_SELECT_TIMEOUT)
+            except (OSError, ValueError):
+                return None  # fd가 이미 close됨 → EOF 취급
+            if not r:
+                return _READ_TIMEOUT
             try:
                 return os.read(session.fd, 4096)
             except OSError:
@@ -290,7 +308,9 @@ class PTYManager:
             if session._paused:
                 await asyncio.sleep(0.05)
                 continue
-            data = await loop.run_in_executor(None, _blocking_read)
+            data = await loop.run_in_executor(None, _read_once)
+            if data is _READ_TIMEOUT:
+                continue  # 데이터 없음 — 세션 생존 여부 재확인 후 계속
             # Phase 9 #6: PTY 출력의 query를 가로채 server가 직접 응답.
             # client로는 query를 안 보내므로 client→server 자동응답 트래픽 0.
             if (
@@ -349,15 +369,25 @@ class PTYManager:
         pid = session.pid
         try:
             pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGTERM)
         except (OSError, ProcessLookupError):
-            pass
+            pgid = None
 
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGKILL)
-        except (OSError, ProcessLookupError):
-            pass
+        # 치명적 안전장치: create_session의 자식이 os.setsid()로 자기 프로세스
+        # 그룹을 분리하기 전에 destroy가 호출되면(빠른 생성→종료 레이스), 자식은
+        # 아직 부모(서버) 프로세스 그룹에 속해 있다. 이때 killpg를 하면 서버 자신의
+        # 프로세스 그룹 전체에 SIGKILL을 보내 서버가 죽거나 hang한다.
+        # → 자식이 자기 그룹의 리더(pgid == pid)임이 확인될 때만 그룹 kill을 하고,
+        #   그 외에는 자식 프로세스만 개별 kill한다 (부모 그룹은 절대 건드리지 않음).
+        own_pgid = os.getpgrp()
+        group_kill_safe = pgid is not None and pgid == pid and pgid != own_pgid
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                if group_kill_safe:
+                    os.killpg(pgid, sig)
+                else:
+                    os.kill(pid, sig)
+            except (OSError, ProcessLookupError):
+                pass
 
         # 백그라운드 스레드에서 blocking waitpid (이벤트 루프 블로킹 방지).
         # SIGCHLD 핸들러가 먼저 회수할 수도 있으므로 ChildProcessError는 정상 종료로 본다.

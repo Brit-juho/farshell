@@ -11,6 +11,16 @@ def loop():
     """asyncio event loop — create_session이 loop 안에서 실행돼야 함."""
     _loop = asyncio.new_event_loop()
     yield _loop
+    # _read_loop 등 pending task를 취소하고 정리한다. 이렇게 하지 않으면
+    # read 스레드(select 기반)가 닫힌 loop에 결과를 전달하려다 인터프리터가
+    # 크래시할 수 있다.
+    pending = asyncio.all_tasks(_loop)
+    for t in pending:
+        t.cancel()
+    if pending:
+        _loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    # 기본 executor의 read 스레드를 join한 뒤 loop을 닫는다.
+    _loop.run_until_complete(_loop.shutdown_default_executor())
     _loop.close()
 
 
