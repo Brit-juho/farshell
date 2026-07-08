@@ -218,14 +218,31 @@ _ensure_tmux() {
   local name="${1:-dev}"
   if "${TMUX_BASE[@]}" has-session -t "$name" 2>/dev/null; then
     echo "✓ tmux 세션 존재 (소켓: $VT_TMUX_SOCKET): $("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' | tr '\n' ' ')"
+    _maybe_register_client_hooks
     return 0
   fi
   if _ensure_tmux_session "$name"; then
     echo "✓ tmux 세션 '$name' 생성 (소켓: $VT_TMUX_SOCKET)"
+    _maybe_register_client_hooks
   else
     echo "✗ tmux 세션 '$name' 생성 실패"
     return 1
   fi
+}
+
+# D9: SSH(+Tailscale)로 붙는 클라이언트는 web/voice 경로와 달리 서버가 자연히
+# 알 방법이 없다 — tmux client-attached/detached 훅으로 "누가 언제 접속했는지"를
+# push 알림(ntfy/Telegram)으로 알려준다. 기본은 OFF (VT_NOTIFY_CLIENT_EVENTS=1로 옵트인),
+# 매 _ensure_tmux 호출마다 재등록해도 set-hook은 멱등이라 안전함.
+_maybe_register_client_hooks() {
+  [ "${VT_NOTIFY_CLIENT_EVENTS:-0}" = "1" ] || return 0
+  local hook_script="$VT_DIR/server/hooks/tmux_client_notify.sh"
+  [ -f "$hook_script" ] || return 0
+  chmod +x "$hook_script" 2>/dev/null
+  "${TMUX_BASE[@]}" set-hook -g client-attached \
+    "run-shell -b '\"$hook_script\" attached \"#{client_tty}\" \"#{session_name}\"'" 2>/dev/null
+  "${TMUX_BASE[@]}" set-hook -g client-detached \
+    "run-shell -b '\"$hook_script\" detached \"#{client_tty}\" \"#{session_name}\"'" 2>/dev/null
 }
 
 # 새 터미널 창에서 tmux dev 세션 + claude --resume 자동 실행.
@@ -461,9 +478,9 @@ cmd_mobile() {
 
   # 모드 검증
   case "$network_mode" in
-    localhost|lan|all) ;;
+    localhost|lan|tailscale|all) ;;
     *)
-      echo "  ✗ 지원되지 않는 --network 모드: $network_mode (localhost|lan|all)"
+      echo "  ✗ 지원되지 않는 --network 모드: $network_mode (localhost|lan|tailscale|all)"
       return 1 ;;
   esac
   export VT_NETWORK_MODE="$network_mode"
@@ -497,6 +514,16 @@ cmd_mobile() {
       [ -z "$lan_ip" ] && lan_ip="localhost"
       full_url="http://${lan_ip}:$VT_PORT"
       echo "  ⓘ lan 모드: 같은 네트워크에서만 접속 가능"
+      ;;
+    tailscale)
+      local ts_ip
+      ts_ip="$(command -v tailscale >/dev/null 2>&1 && tailscale ip -4 2>/dev/null | head -1)"
+      if [ -z "$ts_ip" ]; then
+        echo "  ✗ tailscale 미실행/미설치. 'tailscale up' 먼저 실행하세요"
+        return 1
+      fi
+      full_url="http://${ts_ip}:$VT_PORT"
+      echo "  ⓘ tailscale 모드: 같은 tailnet에서만 접속 가능 (회사망에서도 Cloudflare 없이 안전)"
       ;;
     all)
       _start_tunnel
@@ -652,6 +679,7 @@ cmd_help() {
     vt claude              새 창 + tmux dev + claude --resume
     vt handoff mobile      세션을 폰으로
     vt handoff desktop     폰 세션을 맥으로
+    vt ssh [session]       Tailscale + SSH로 tmux 세션 직접 접속 명령 안내
     vt hotkey              핫키 조회/변경
     vt voice-target        음성 daemon 타깃 세션 lock/해제
     vt manage              TUI 관리 도구 (세션/타깃/핫키/상태)
@@ -660,10 +688,12 @@ cmd_help() {
     vt help <topic>        토픽별 상세 도움말
 
   도움말 토픽:
+    vt help webui          웹 UI 사용법 (탭/세션관리/복사·붙여넣기·이미지)
     vt help concepts       tmux/세션/음성 개념 (3-레이어 모델)
     vt help voice          음성 입력 동작 + 핫키
     vt help hotkeys        핫키 전체 목록 + 변경 방법
     vt help target         음성 타깃 lock 설명
+    vt help ssh            Tailscale + SSH 원격 접속 (회사망 등)
     vt help troubleshoot   자주 묻는 트러블슈팅
 HELP
     return 0
@@ -678,7 +708,7 @@ HELP
     fi
   else
     echo "  ✗ 도움말 토픽 '$topic' 없음"
-    echo "  사용 가능한 토픽: concepts / voice / hotkeys / target / troubleshoot"
+    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / ssh / troubleshoot"
     return 1
   fi
 }
@@ -1012,6 +1042,19 @@ cmd_doctor() {
     _check "cloudflared" ok "$(cloudflared --version 2>&1 | head -1)"
   else
     _check "cloudflared" warn "원격 접속 시 필요. brew install cloudflared"
+  fi
+
+  # 5b. Tailscale (D9: 회사망 등 화면 원격이 막힌 환경의 SSH 경유 접속용, `vt ssh`)
+  if command -v tailscale >/dev/null 2>&1; then
+    local ts_ip
+    ts_ip="$(tailscale ip -4 2>/dev/null | head -1)"
+    if [ -n "$ts_ip" ]; then
+      _check "Tailscale" ok "연결됨 ($ts_ip) — 'vt ssh'로 원격 SSH 접속 명령 안내"
+    else
+      _check "Tailscale" warn "설치됨, 미연결 — 'tailscale up' 실행 필요"
+    fi
+  else
+    _check "Tailscale" warn "미설치 — 회사망 등에서 SSH로 원격 접속 시 필요. https://tailscale.com/download"
   fi
 
   # 6. ffmpeg (모바일 음성 입력 디코딩)
@@ -1468,6 +1511,116 @@ cmd_handoff() {
       return 1
       ;;
   esac
+  echo ""
+}
+
+cmd_ssh() {
+  # vt ssh [session] [--user <name>] [--add-key "ssh-ed25519 AAAA..."]
+  # 회사망처럼 화면 원격(RDP/VNC/크롬 원격 등)이 막힌 환경에서도 Tailscale은
+  # 대개 통과함 → Tailscale + SSH로 이 맥북의 tmux -L vt 세션에 바로 attach.
+  # 이 명령은 "복사해서 다른 기기에서 실행할 명령어"를 안내만 한다 (원격 실행 없음).
+  local session="dev"
+  local remote_user
+  remote_user="$(whoami)"
+  local add_key=""
+  local args=("$@")
+  local i=0
+  while [ $i -lt ${#args[@]} ]; do
+    local arg="${args[$i]}"
+    case "$arg" in
+      --user) i=$((i+1)); remote_user="${args[$i]:-$remote_user}" ;;
+      --user=*) remote_user="${arg#--user=}" ;;
+      --add-key) i=$((i+1)); add_key="${args[$i]:-}" ;;
+      --add-key=*) add_key="${arg#--add-key=}" ;;
+      -*) echo "  ✗ 알 수 없는 옵션: $arg"; return 1 ;;
+      *) session="$arg" ;;
+    esac
+    i=$((i+1))
+  done
+
+  echo ""
+  echo "  🔑 vt ssh — Tailscale + SSH로 tmux 세션 직접 접속"
+  echo ""
+
+  if [ -n "$add_key" ]; then
+    case "$add_key" in
+      ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-*\ *)
+        mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+        touch "$HOME/.ssh/authorized_keys" && chmod 600 "$HOME/.ssh/authorized_keys"
+        if grep -qF "$add_key" "$HOME/.ssh/authorized_keys" 2>/dev/null; then
+          echo "  ⓘ 이미 등록된 공개키 (중복 스킵)"
+        else
+          echo "$add_key" >> "$HOME/.ssh/authorized_keys"
+          echo "  ✓ 공개키를 ~/.ssh/authorized_keys에 추가했습니다"
+        fi
+        echo ""
+        ;;
+      *)
+        echo "  ✗ 공개키 형식이 아님 (ssh-ed25519/ssh-rsa/ecdsa-sha2-*로 시작해야 함)"
+        return 1
+        ;;
+    esac
+  fi
+
+  if ! command -v tailscale >/dev/null 2>&1; then
+    echo "  ✗ tailscale 미설치. brew install tailscale (macOS) 또는 https://tailscale.com/download"
+    return 1
+  fi
+
+  local ts_json
+  ts_json="$(tailscale status --json 2>/dev/null)"
+  if ! echo "$ts_json" | grep -q '"BackendState":"Running"'; then
+    echo "  ✗ tailscale 미실행. 'tailscale up' 실행 후 다시 시도하세요"
+    return 1
+  fi
+
+  local ts_ip
+  ts_ip="$(tailscale ip -4 2>/dev/null | head -1)"
+  local ts_host
+  ts_host="$("$VT_PYTHON" -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print((d.get('Self') or {}).get('DNSName', '').rstrip('.'))
+except Exception:
+    pass
+" <<<"$ts_json" 2>/dev/null)"
+  local target="${ts_host:-$ts_ip}"
+
+  if [ -z "$target" ]; then
+    echo "  ✗ tailscale IP/호스트명을 가져오지 못했습니다. 'tailscale status'로 확인하세요"
+    return 1
+  fi
+
+  # 세션을 미리 보장해두면 이후 attach가 항상 성공 + 옵트인 시 client hook도 함께 등록됨
+  _ensure_tmux "$session" >/dev/null
+
+  local tmux_cmd="tmux -L $VT_TMUX_SOCKET attach -t $session || tmux -L $VT_TMUX_SOCKET new -A -s $session"
+
+  echo "  이 머신의 tailnet 주소: $target"
+  echo ""
+  echo "  ── 다른 기기(예: 회사 노트북)에서 아래 명령을 그대로 실행 ──"
+  echo ""
+  echo "  # 1) 일반 SSH (이 머신 ~/.ssh/authorized_keys에 공개키 등록 필요)"
+  echo "  ssh -t ${remote_user}@${target} '${tmux_cmd}'"
+  echo ""
+  echo "  # 2) Tailscale SSH (tailnet에서 SSH 허용 시 — 키 등록 불필요, tailscale 계정으로 인증)"
+  echo "  tailscale ssh ${remote_user}@${target} -- '${tmux_cmd}'"
+  echo ""
+  if [ -z "$add_key" ]; then
+    echo "  ⓘ 공개키 미등록이면: 그 기기에서 'cat ~/.ssh/id_ed25519.pub' 결과를 복사해"
+    echo "     여기서 vt ssh --add-key \"<붙여넣은 값>\" 실행"
+  fi
+  echo "  ⓘ 접속하면 vt mobile/음성/데스크톱과 같은 tmux 세션 '$session'에 들어갑니다 (단일 tmux 서버 원칙)"
+  echo "  ⓘ 회사망이 방화벽으로 막아도 Tailscale은 대개 UDP 홀펀칭 또는 443 DERP 폴백으로 통과함"
+  echo "  ⓘ 음성 입력은 이 경로에선 동작하지 않습니다 (SSH는 텍스트 전용) — 그냥 키보드로 입력하세요"
+  echo ""
+  if [ "${VT_NOTIFY_CLIENT_EVENTS:-0}" = "1" ]; then
+    echo "  🔔 클라이언트 접속/해제 알림: 활성화됨 (VT_NOTIFY_CLIENT_EVENTS=1)"
+  else
+    echo "  ⓘ 누가 언제 이 세션에 붙는지 push로 알림 받기: ~/.vt.env에 VT_NOTIFY_CLIENT_EVENTS=1 추가"
+    echo "     (+ VT_NOTIFY_URL 또는 VT_TELEGRAM_TOKEN/CHAT_ID 설정 필요)"
+  fi
   echo ""
 }
 
@@ -2098,6 +2251,7 @@ cmd_status() {
 
   local server_status="✗ 중지"
   local tunnel_status="✗ 중지"
+  local ts_status="✗ 미설치"
   local voice_status="✗ 중지"
   local tmux_status="✗ 없음"
 
@@ -2120,6 +2274,17 @@ cmd_status() {
     tunnel_status="✓ PID $tunnel_pids — $url"
   fi
 
+  # D9: Tailscale 상태 (회사망 등에서 vt ssh로 접속하는 경로)
+  if command -v tailscale >/dev/null 2>&1; then
+    local ts_ip
+    ts_ip="$(tailscale ip -4 2>/dev/null | head -1)"
+    if [ -n "$ts_ip" ]; then
+      ts_status="✓ $ts_ip"
+    else
+      ts_status="⚠ 설치됨, 미연결 ('tailscale up' 필요)"
+    fi
+  fi
+
   if _is_running voice; then
     voice_status="✓ 실행 중 (Ctrl+Shift+V)"
   fi
@@ -2137,6 +2302,7 @@ cmd_status() {
   else
     echo "    모드:       익명 (anonymous, trycloudflare.com)"
   fi
+  echo "  Tailscale:   $ts_status  (원격 SSH 접속: vt ssh)"
   echo "  Voice Daemon: $voice_status"
   echo "  tmux:        $tmux_status"
   echo ""
@@ -2153,6 +2319,7 @@ case "${1:-help}" in
   agent)    shift; cmd_agent "$@" ;;
   handoff)  shift; cmd_handoff "$@" ;;
   attach)   shift; cmd_attach "$@" ;;
+  ssh)      shift; cmd_ssh "$@" ;;
   doctor)   cmd_doctor ;;
   shell-init) shift; cmd_shell_init "$@" ;;
   install-profiles) shift; cmd_install_profiles "$@" ;;
@@ -2185,6 +2352,7 @@ case "${1:-help}" in
     echo "    vt run \"명령\"          headless claude -p 백그라운드 실행"
     echo "    vt handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
     echo "    vt handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
+    echo "    vt ssh [session]      Tailscale + SSH로 tmux 세션 직접 접속 명령 안내"
     echo "    vt doctor             설치/환경 진단"
     echo "    vt install-profiles [--dry-run]"
     echo "                          터미널 앱 profile 자동 등록 (iTerm2 등)"
@@ -2194,8 +2362,8 @@ case "${1:-help}" in
     echo "                          tmux popup 키바인딩 자동 등록 (default: prefix+v → status)"
     echo "    vt tunnel [status|setup|teardown|switch <anon|named>]"
     echo "                          Cloudflare Tunnel 관리 (명명 터널 옵트인)"
-    echo "    vt mobile --network <localhost|lan|all>"
-    echo "                          모바일 모드 — localhost(같은 머신) / lan(같은 네트워크) / all(터널, default)"
+    echo "    vt mobile --network <localhost|lan|tailscale|all>"
+    echo "                          모바일 모드 — localhost(같은 머신) / lan(같은 네트워크) / tailscale(같은 tailnet) / all(터널, default)"
     echo ""
     ;;
 esac
