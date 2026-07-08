@@ -50,7 +50,17 @@ def _generate_default_session_name() -> str:
 # 내부 헬퍼
 # --------------------------------------------------------------------------
 
-async def _attach_tmux(tmux_name: str, cols: int, rows: int) -> dict:
+async def _attach_tmux(tmux_name: str, cols: int, rows: int):
+    # 존재하지 않는 tmux 세션에 attach하면 `tmux attach-session`이 즉시 실패하지만,
+    # 그 전에 유령 web 세션(PTY)이 이미 생성·등록돼 /api/sessions에 남는다. 클라이언트는
+    # 그 id로 WS를 열었다가 죽은 세션에 재연결을 반복하고, restoreWorkspace가 stale 탭마다
+    # 이 유령 세션을 만들어 로드 즉시 세션·터미널·WS가 무더기로 쌓여 메모리가 폭증했다.
+    # → PTY를 만들기 전에 세션 존재를 확인하고, 없으면 404로 돌려보내 복원 루틴이 건너뛰게 한다.
+    if not tmux_runner.has_session(tmux_name):
+        return JSONResponse(
+            {"error": "tmux session not found", "tmux_session": tmux_name},
+            status_code=404,
+        )
     session_id = new_session_id()
     pty_mgr.create_session(
         session_id,
