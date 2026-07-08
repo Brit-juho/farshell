@@ -13,17 +13,31 @@
     }
 
     function showToast(msg, type = 'info') {
-      const colors = { info: '#89b4fa', error: '#f38ba8', success: '#a6e3a1' };
+      const cls = { info: 'info', error: 'err', success: 'ok' };
       const toast = document.createElement('div');
-      toast.style.cssText = `
-        position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
-        background:#313244;color:${colors[type] || '#cdd6f4'};padding:10px 20px;
-        border-radius:10px;font-size:13px;z-index:200;max-width:90vw;
-        box-shadow:0 4px 12px rgba(0,0,0,0.4);
-      `;
+      toast.className = 'vt-toast ' + (cls[type] || 'info');
       toast.textContent = msg;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 4000);
+    }
+
+    // --- 이 세션 맥에서 열기 (tmux 세션을 iTerm에 나중에 attach) ---
+    async function openSessionOnMac() {
+      if (!activeId || !sessions[activeId]) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
+      const s = sessions[activeId];
+      const tmuxName = s.tmuxName || s.tmux_name;
+      if (!tmuxName) { showToast('이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다', 'error'); return; }
+      try {
+        const res = await fetch(`${API_BASE}/api/tmux/open-on-mac`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: tmuxName }),
+        });
+        const data = await res.json();
+        if (data.ok) showToast(`맥 iTerm에 '${tmuxName}' 열림`, 'success');
+        else showToast('맥에서 열기 실패: ' + (data.error || ''), 'error');
+      } catch (e) {
+        showToast('맥에서 열기 실패: ' + e.message, 'error');
+      }
     }
 
     // --- 파일 업로드 ---

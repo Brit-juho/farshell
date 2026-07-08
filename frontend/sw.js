@@ -34,6 +34,18 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// 알림 클릭 → 이미 열린 앱 탭이 있으면 포커스, 없으면 새로 연다.
+// (모바일 Chrome은 new Notification() 대신 이 SW 알림 경로만 허용하므로 클릭 처리도 여기서.)
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cls) => {
+      for (const c of cls) { if ('focus' in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow('/');
+    })
+  );
+});
+
 // API/WS/voice는 항상 네트워크. 정적 자원만 캐시 처리.
 const NETWORK_ONLY = /^\/(api\/|ws|voice\/)/;
 
