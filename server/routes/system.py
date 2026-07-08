@@ -11,7 +11,9 @@ from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import network_access
+import notify
 import safe_mode
+import tailscale
 import tunnel
 import voice_handler
 import workspace
@@ -52,6 +54,7 @@ async def capabilities(request: Request):
         "bound_host": network_access.resolve_bind_host(spec),
         "lan_ip": network_access.get_lan_ip(),
         "tunnel": tunnel.get_tunnel_status(),
+        "tailscale": tailscale.get_status_dict(),
     }
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}
@@ -64,6 +67,46 @@ async def capabilities(request: Request):
 @router.get("/api/tunnel/status")
 async def tunnel_status(request: Request):
     return _etag_response(tunnel.get_tunnel_status(), request)
+
+
+@router.get("/api/tailscale/status")
+async def tailscale_status(request: Request):
+    return _etag_response(tailscale.get_status_dict(), request)
+
+
+@router.post("/api/notify/client-event")
+async def notify_client_event(request: Request):
+    """D9: tmux client-attached/client-detached 훅이 호출하는 엔드포인트.
+
+    SSH(+Tailscale)로 순수 텍스트 접속하는 클라이언트는 web/voice 경로와 달리
+    서버가 자연히 알 방법이 없다. `bin/vt`의 `_maybe_register_client_hooks`가
+    `VT_NOTIFY_CLIENT_EVENTS=1`일 때만 tmux 훅을 등록하고,
+    `server/hooks/tmux_client_notify.sh`가 attach/detach 시 이 엔드포인트로
+    POST해서 기존 ntfy/Telegram 브릿지(notify.py)로 "누가 언제 접속했는지"를 알린다.
+
+    항상 127.0.0.1(tmux 서버가 도는 로컬 머신)에서만 호출되므로 원격 노출 없음.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    event = str(body.get("event", "attached"))[:16]
+    session = str(body.get("session", "?"))[:64]
+    remote_host = str(body.get("remote_host", "") or "").strip()[:128]
+
+    if event == "detached":
+        title = "tmux 세션 연결 해제"
+        message = f"세션 '{session}'에서 클라이언트 연결이 끊어졌습니다"
+        tags = "lock"
+    else:
+        title = "🔐 tmux 세션 접속"
+        source = f"SSH ({remote_host})" if remote_host else "로컬 클라이언트"
+        message = f"세션 '{session}'에 새 클라이언트 연결 — {source}"
+        tags = "unlock,warning"
+
+    sent = await notify.send(title, message, priority="default", tags=tags)
+    return {"ok": True, "notified": sent, "configured": notify.is_configured()}
 
 
 @router.get("/api/safe-mode")

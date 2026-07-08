@@ -229,6 +229,7 @@ def test_tc7_api_endpoints_respond(page: Page):
         "/api/sessions",
         "/api/tmux/sessions",
         "/api/tunnel/status",
+        "/api/tailscale/status",
         "/api/safe-mode",
         "/api/agents",
         "/api/agent/status",
@@ -250,6 +251,8 @@ def test_tc7_capabilities_structure(page: Page):
     assert "tunnel" in data, "tunnel 필드 없음"
     assert "voice" in data, "voice 필드 없음"
     assert "installed" in data["tunnel"], "tunnel.installed 필드 없음"
+    assert "tailscale" in data, "tailscale 필드 없음"
+    assert "installed" in data["tailscale"], "tailscale.installed 필드 없음"
 
 
 # ---------------------------------------------------------------------------
