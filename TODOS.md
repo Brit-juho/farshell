@@ -12,6 +12,27 @@
   - **Context:** 2026-05-07 plan-eng-review(D6)에서 확인. 현재는 관리 가능 수준(936줄)이나 다음 큰 기능 추가 전 진행 권장
   - **Approach:** FastAPI `APIRouter` + `app.include_router()`로 점진적 이동. 기존 엔드포인트 경로 변경 없음
 
+## 네트워크 / 원격 접속
+
+- [x] **[D9] Tailscale + SSH 원격 접속** ✅ 완료 (2026-07-07)
+  - **What:** `vt ssh`(SSH/`tailscale ssh` attach 명령 안내 + `--add-key`), `vt mobile --network tailscale`,
+    `network_access.py`의 `tailscale` 모드/키워드, `server/tailscale.py`(상태 감지),
+    `VT_NOTIFY_CLIENT_EVENTS`(tmux client-attached/detached → push 알림)
+  - **Why:** 회사망처럼 화면 원격(크롬 원격 데스크톱/TeamViewer/RDP/VNC)이 막힌 환경에서도
+    Tailscale은 대개 통과함. 터미널만 필요하면 화면 원격보다 Tailscale+SSH로 기존 tmux 세션에
+    바로 붙는 게 더 가볍고, "tmux가 단일 진실의 원천"이라는 기존 설계와도 자연스럽게 들어맞음
+  - **Context:** `docs/help/ssh.md`, `CHANGELOG.md` [1.5.0], `ARCHITECTURE.md` 4.7/6/7 참고
+  - **알려진 한계 (후속 개선 후보):**
+    - 클라이언트 접속 알림의 원격 호스트 판별은 `who` 출력 파싱에 의존하는 best-effort —
+      플랫폼별 `who` 포맷 차이(macOS/Linux) 또는 `utmp` 미기록 환경에선 호스트가 빈 문자열로 옴
+      (이 경우 알림 자체는 여전히 오지만 "어디서" 정보만 빠짐)
+    - `tmux run-shell` 훅은 tmux 서버 프로세스 컨텍스트에서 실행되므로 `~/.vt.env`의
+      `VT_PORT`/`VT_TOKEN`을 훅 스크립트가 직접 다시 읽어야 함 (tmux `set-environment`로 서버
+      기동 시점 값을 넘기는 방식이 더 견고할 수 있음 — 현재는 단순성 우선으로 스크립트가 매번
+      `~/.vt.env`를 source)
+    - `vt ssh`가 등록하는 SSH 공개키(`--add-key`)는 검증 없이 형식만 확인 — 실수로 잘못된 기기의
+      키를 등록해도 막지 않음 (사용자 책임 하에 동작하는 저수준 유틸리티로 설계)
+
 ## 인프라
 
 - [ ] **[D1] 멀티워커 환경에서 WS 연결 카운터 공유**

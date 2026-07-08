@@ -1,6 +1,6 @@
 # voice-terminal 아키텍처
 
-> **버전:** v1.2.0 (2026-05-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md)
+> **버전:** v1.5.0 (2026-07-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md)
 
 이 문서는 기여자와 LLM이 레포 구조를 빠르게 이해하기 위한 지도입니다. 모노레포 전환 대신 **논리적 경계**만 명시합니다.
 
@@ -57,7 +57,7 @@ vt의 모든 클라이언트는 격리된 tmux 소켓 `-L vt` (`VT_TMUX_SOCKET` 
 | `vt` | macOS/Linux. CLI — 서브커맨드 라우팅, 프로세스 수명 관리 (서버·터널·음성 데몬), iTerm 자동 오픈, 진단 |
 | `vt.ps1` | Windows PowerShell 버전 |
 
-서브커맨드: `voice` · `mobile` · `start` · `stop` · `status` · `claude` · `handoff` · `doctor`
+서브커맨드: `voice` · `mobile` · `start` · `stop` · `status` · `claude` · `handoff` · `ssh` · `doctor`
 
 ### `server/` — FastAPI 백엔드 (Work + Voice Plane)
 | 파일 | 책임 | 주요 의존 |
@@ -72,6 +72,10 @@ vt의 모든 클라이언트는 격리된 tmux 소켓 `-L vt` (`VT_TMUX_SOCKET` 
 | `notify.py` | ntfy/Telegram 비동기 푸시 브릿지 | urllib, asyncio |
 | `platform_utils.py` | OS 감지, 기본 셸, tmux 경로, 로컬 IP, TTS fallback | platform, shutil |
 | `tts_hook.sh` | Claude Code Stop hook — 응답 완료 시 TTS + ntfy | server/voice/output |
+| `network_access.py` | `localhost`/`lan`/`tailscale`/`all` 모드 → CIDR 화이트리스트, bind host 결정 | ipaddress |
+| `tailscale.py` (D9) | `tailscale status --json` 파싱 — 설치/실행/tailnet IP/MagicDNS 호스트명 | subprocess |
+| `tunnel.py` | Cloudflare Tunnel 상태 감지 (동일 패턴, Cloudflare 버전) | subprocess |
+| `hooks/tmux_client_notify.sh` (D9) | tmux client-attached/detached 훅 → `/api/notify/client-event` POST | curl, who |
 
 ### `frontend/` — xterm.js PWA
 | 파일 | 책임 |
@@ -182,6 +186,21 @@ PTY 출력 → output_watcher.feed_output()
 - 토큰 인증은 middleware가 자동 처리 (`/sw.js`, `/manifest.json` 등 화이트리스트 제외)
 - 위험한 작업은 session_id로 제한
 
+### 4.7 새 원격 접속 경로 (D9: Tailscale + SSH 예시)
+- 원격 데스크톱/브라우저가 막힌 환경(회사망 등)에서도 tmux는 "단일 진실의 원천"이라
+  **새 클라이언트 종류를 추가하는 것만으로** 접속 경로를 늘릴 수 있다 — SSH도 web/voice와
+  동급의 다섯 번째 클라이언트일 뿐, 별도 프로토콜 구현이 필요 없다 (그냥 `tmux -L vt attach`).
+- 네트워크 정책에 새 CIDR 대역을 추가하려면 `network_access.py`의 `_expand_keyword()` +
+  `network_mode_to_spec()`에 키워드/모드 추가 (Tailscale은 `tailscale` → CGNAT `100.64.0.0/10`).
+- 대역 자체의 상태 조회(설치/실행/자기 IP)는 `tunnel.py`(Cloudflare)와 동일한 패턴으로
+  독립 모듈에 분리 (`server/tailscale.py`) — `network_access.py`는 CIDR 판단만, 상태 조회는
+  별도 모듈이 담당하는 게 관례.
+- 서버가 자연히 못 보는 클라이언트(순수 SSH 등)의 접속을 알고 싶으면 tmux 훅
+  (`client-attached`/`client-detached`)으로 이벤트를 잡아 `/api/notify/client-event` 같은
+  내부 전용 엔드포인트에 POST → 기존 `notify.py` 브릿지 재사용. `bin/vt`가 옵트인 환경변수로
+  훅을 등록/해제하는 패턴(`_maybe_register_client_hooks`)을 따르면 기본 동작을 안 건드리고
+  추가 가능.
+
 ---
 
 ## 5. 실행 시 프로세스 맵
@@ -204,11 +223,13 @@ PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `vt stop`이 모�
 | 계층 | 메커니즘 | 한계 |
 |---|---|---|
 | 전송 | cloudflared HTTPS 터널 | — |
+| 전송 (대안) | Tailscale WireGuard VPN + IP 화이트리스트 (D9, `--network tailscale`) | Tailscale 자체 신뢰 필요, tailnet ACL 별도 관리 |
 | 인증 | `VT_TOKEN` 쿼리/Bearer 헤더 | 평문 토큰, QR에 노출 |
 | WebSocket 인증 | 미들웨어가 accept 전 검증 | — |
 | 세션 ID | `secrets.token_urlsafe(12)` — 16자, ~96비트 | — |
 | E2E | **없음** (서버가 평문 봄) | TODO: D3 |
 | 업로드 | `/tmp/vt-uploads/` 격리 | 디스크 쿼터 없음 |
+| 접속 가시성 | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push (D9) | 기본 OFF, `who` 기반 원격 호스트 추출은 best-effort |
 
 **D3 (E2E 라이트)**가 구현되면 `libsodium SecretBox`로 WebSocket 페이로드 자체를 암호화하여 cloudflared URL이 노출돼도 코드 평문 유출을 막을 계획.
 
@@ -223,6 +244,7 @@ PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `vt stop`이 모�
 - ✅ D5 세션 ID 확장 (`secrets.token_urlsafe(12)`)
 - ✅ D6 본 문서
 - ✅ D7 `vt doctor` 진단
+- ✅ D9 Tailscale + SSH 원격 접속 (`vt ssh`, `--network tailscale`, 클라이언트 접속 알림)
 
 남은 작업:
 - ⏳ D3 터널 페이로드 E2E 암호화

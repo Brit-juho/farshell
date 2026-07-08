@@ -1,4 +1,4 @@
-> **voice-terminal v1.4.0** (2026-05-09) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
+> **voice-terminal v1.5.0** (2026-07-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
 
 ## vt CLI (어디서든 실행)
 
@@ -18,6 +18,7 @@ vt help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 vt claude             # 새 터미널 창에 tmux dev + claude --resume
 vt handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
 vt handoff desktop    # 폰 세션을 맥 터미널로 가져옴
+vt ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내 (D9, 회사망 등)
 vt doctor             # 설치/환경 진단 (Linux 항목 포함)
 vt install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
 vt shell-init zsh     # 셸 init 스니펫 출력 (eval "$(vt shell-init zsh)" >> ~/.zshrc)
@@ -264,6 +265,8 @@ adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 10
 | GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널 등) |
 | GET | `/api/workspace` | 워크스페이스 동기화 (탭/UI 상태) |
 | GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) |
+| GET | `/api/tailscale/status` | Tailscale 설치/연결/IP/MagicDNS 호스트명 (D9) |
+| POST | `/api/notify/client-event` | tmux client-attached/detached 훅 전용 — SSH 접속 가시화 (D9) |
 | WS | `/ws-preview/{name}` | grid view용 tmux pane 출력 push (v1.3+) |
 | WS | `/ws-agent` | 에이전트 활성 상태 push |
 | WS | `/ws-workspace` | 워크스페이스 변경 push |
@@ -359,6 +362,8 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | 파일 업로드 | 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장 |
 | 파일 다운로드 | `GET /api/download?path=...` |
 | tmux detach 감지 | PTY EOF 시 `[process exited]` 표시 |
+| Tailscale 원격 접속 (D9) | `vt ssh` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속. `vt mobile --network tailscale`은 웹 UI도 tailnet으로만 제한 |
+| 클라이언트 접속 알림 (D9) | `VT_NOTIFY_CLIENT_EVENTS=1` — tmux client-attached/detached 훅 → ntfy/Telegram push |
 
 ### 아키텍처
 
@@ -373,6 +378,8 @@ server/
   tts_hook.sh       — Claude Code Stop hook (TTS 자동 요약)
   voice_daemon.py   — 독립 음성 입력 데몬 (핫키 → STT → tmux)
   platform_utils.py — 크로스 플랫폼 유틸리티 (macOS/Linux/WSL2)
+  tailscale.py      — Tailscale 상태 감지 (D9, tunnel.py와 동일 패턴)
+  hooks/tmux_client_notify.sh — tmux client-attached/detached → /api/notify/client-event (D9)
 
 frontend/
   index.html        — xterm.js 멀티 탭 UI (검색, 세션 이름 편집, 파일 업로드)

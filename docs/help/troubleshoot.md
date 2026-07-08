@@ -58,6 +58,23 @@
 - `vt voice-target <세션명>`으로 lock
 - 또는 `vt voice-target` 명령으로 현재 타깃 확인
 
+### `vt ssh` 실행했는데 tailnet 주소를 못 가져옴 (D9)
+- `tailscale status`로 `Running` 상태인지 확인 — `Stopped`면 `tailscale up`
+- 미설치면 `brew install tailscale` (macOS) 또는 공식 설치 스크립트
+- `vt doctor`에도 Tailscale 항목 포함 — 여기서 먼저 확인
+
+### 회사 노트북에서 `ssh ...` 했더니 `Permission denied (publickey)`
+- 맥북 `~/.ssh/authorized_keys`에 그 기기 공개키가 없음
+- 회사 노트북에서 `cat ~/.ssh/id_ed25519.pub` 결과를 복사해 맥북에서
+  `vt ssh --add-key "ssh-ed25519 AAAA..."` 실행
+- 또는 키 등록 없이 `tailscale ssh user@host -- '...'` 사용 (tailnet ACL에서 SSH 허용 필요)
+
+### 회사망에서 Tailscale 자체가 연결 안 됨
+- 회사 방화벽이 UDP를 전면 차단하는 극히 드문 경우 — Tailscale이 자동으로 443(HTTPS) DERP
+  릴레이로 폴백하므로 대개는 문제없음. `tailscale status`에서 relay 경유 여부 확인 가능
+- 그래도 안 되면 회사 프록시가 아웃바운드 자체를 화이트리스트 방식으로 제한하는 경우 —
+  네트워크 관리자 문의 필요 (vt가 해결할 수 있는 범위 밖)
+
 ## 로그 위치
 
 | 항목 | 경로 |
