@@ -159,7 +159,11 @@
         showToast('클립보드 읽기 불가 — HTTPS/localhost에서만 가능. Cmd/Ctrl+V를 쓰세요.');
         return;
       }
-      sendToPty(id, text);
+      // term.paste()는 앱이 bracketed paste 모드면 마커로 감싼다 — 멀티라인 붙여넣기가
+      // 셸에서 줄마다 즉시 실행되는 것을 막는다. (raw sendToPty는 그 보호가 없음)
+      const term = sessions[id]?.term;
+      if (term && typeof term.paste === 'function') term.paste(text);
+      else sendToPty(id, text);
     }
 
     // 이미지 붙여넣기 → 서버 업로드 → 저장 경로를 터미널에 삽입 (Claude에 그대로 넘길 수 있게)
@@ -260,6 +264,9 @@
     }
 
     function addSession(id, displayName) {
+      // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
+      // 생기므로 무시한다.
+      if (!id) { showToast('세션 생성 실패 (id 없음)'); return; }
       const tab = document.createElement('div');
       tab.className = 'tab';
       tab.dataset.sessionId = id;
@@ -306,7 +313,12 @@
         fontFamily: (window.getVtXtermFont ? window.getVtXtermFont() : "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace"),
         theme: (window.getVtXtermTheme ? window.getVtXtermTheme() : { background: '#1e1e2e' }),
         allowProposedApi: true,
-        screenReaderMode: true,  // a11y: Canvas 외에 hidden DOM도 유지
+        // ⚠ screenReaderMode는 매 write마다 접근성 hidden DOM/live-region을 유지하는데,
+        // Claude 같은 TUI가 대량 출력을 스트리밍하면(입력 후 응답) 이 버퍼가 총 출력량에
+        // 비례해 커진다 — CDP 실측상 동일 출력에 힙 증가가 ~8배(+1.6MB→+13.6MB). 대부분
+        // 사용자는 스크린리더를 안 쓰므로 기본 off로 두고, 필요 시에만 opt-in한다.
+        // 켜기: 브라우저 콘솔에서 localStorage.setItem('vt-a11y','1') 후 새로고침.
+        screenReaderMode: (() => { try { return localStorage.getItem('vt-a11y') === '1'; } catch (_) { return false; } })(),
       });
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
@@ -325,84 +337,85 @@
 
       // WebSocket URL 구성 — E2E 활성 시 ?e2e=1 (또는 토큰 뒤에 &e2e=1)
       const _wsPath = `/ws/${id}${_tokenQuery}${_e2eQuery}`;
-      const ws = new WebSocket(`${WS_BASE}${_wsPath}`);
-      ws.binaryType = 'arraybuffer';
 
-      // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록
-      sessions[id] = { term, ws, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null };
+      // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록.
+      // ws는 connectTerminalWs()에서 채운다.
+      sessions[id] = { term, ws: null, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null };
 
-      ws.onopen = () => {
-        updateConnStatus(id, true);
-        // E2E가 아니면 즉시 resize 가능, E2E면 wrapE2E의 onReady 안에서
-        if (!E2E_ENABLED) fitAndResize(id);
-      };
-      // Phase 8 G2: 서버 ping 응답 (텍스트 메시지)
-      const pingHandler = (e) => {
-        if (typeof e.data !== 'string') return;
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg && msg.type === 'ping') {
-            ws.send(JSON.stringify({ type: 'pong' }));
-          }
-        } catch (_) { /* binary or non-JSON */ }
-      };
-      ws.addEventListener('message', pingHandler);
-      // wrapE2E 가 핸드셰이크 후 handle 을 넘김. E2E 비활성이면 즉시 실행.
-      wrapE2E(ws,
-        (handle) => {
-          sessions[id].wsHandle = handle;
-          if (E2E_ENABLED) fitAndResize(id);
-        },
-        (bytes) => term.write(bytes)
-      );
+      // ── 소켓 수명주기 (초기 연결 + 자동 재연결 통합) ─────────────────────
+      // [회귀 fb827a6] 재연결 상한(retries>=15)을 없애 무한 재시도로 바꾸면서, onopen에서
+      // retries를 '즉시' 0으로 리셋하는 로직을 그대로 뒀다. 서버는 세션이 없으면
+      // `accept()` 직후 code 4004로 닫는데(=half-open flap), 이때 onopen이 먼저 발화해
+      // retries가 0으로 리셋된다 → 지수 백오프가 절대 자라지 못하고 2초마다 영구 재연결.
+      // localStorage 워크스페이스가 복원한 죽은 세션 탭들이 서버 재시작 후 이 스톰에 빠지면
+      // 매 2초 소켓 생성 + scrollback 재주입 + 접근성 DOM 재도색으로 Chrome 메모리가 폭증한다.
+      //
+      // 수정: (1) 4001/4004 같은 '재시도해도 동일'한 코드는 재연결하지 않고 중단.
+      //       (2) 연결이 STABLE_MS 이상 안정적으로 유지된 뒤에만 백오프 카운터를 리셋.
+      const TERMINAL_CLOSE_CODES = new Set([4001, 4004]);
+      const STABLE_MS = 3000;
+      let _retries = 0;
+      let _stableTimer = null;
 
-      ws.onclose = () => {
-        updateConnStatus(id, false);
-        // [M1] 자동 재연결 (지수 백오프). C2: 상한 도달 시 영구 포기하지 않는다 —
-        // 예전엔 15회 후 멈춰서 모바일 장시간 세션이 네트워크 flap을 반복하면 새로고침
-        // 전까지 죽었다. 백오프 상한(30s)만 유지하고 무한 재시도한다.
-        let retries = 0;
-        const reconnect = () => {
-          if (!(id in sessions)) return;
-          retries++;
-          // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 5로 clamp.
-          const delay = Math.min(1000 * Math.pow(2, Math.min(retries, 5)), 30000);
-          term.write(`\r\n\x1b[33m[재연결 중... ${retries}회]\x1b[0m\r\n`);
-          setTimeout(() => {
-            const newWs = new WebSocket(`${WS_BASE}${_wsPath}`);
-            newWs.binaryType = 'arraybuffer';
-            newWs.onopen = () => {
-              retries = 0;
-              sessions[id].ws = newWs;
-              updateConnStatus(id, true);
-              // A2: 서버가 재접속 시 scrollback(최대 256KB)을 통째로 재전송하는데
-              // reset 없이 write하면 이전 출력이 화면에 중복 누적된다. 재연결 직후
-              // 터미널을 비워 scrollback이 깨끗하게 repaint 되도록 한다.
-              term.reset();
-              if (!E2E_ENABLED) fitAndResize(id);
-              term.write('\x1b[32m[재연결됨]\x1b[0m\r\n');
-            };
-            // Codex: 재연결 소켓에도 heartbeat pong 핸들러 등록
-            newWs.addEventListener('message', (e) => {
-              if (typeof e.data !== 'string') return;
-              try {
-                const msg = JSON.parse(e.data);
-                if (msg && msg.type === 'ping') newWs.send(JSON.stringify({ type: 'pong' }));
-              } catch (_) {}
-            });
-            wrapE2E(newWs,
-              (handle) => {
-                sessions[id].wsHandle = handle;
-                if (E2E_ENABLED) fitAndResize(id);
-              },
-              (bytes) => term.write(bytes)
-            );
-            newWs.onclose = reconnect;
-            newWs.onerror = () => newWs.close();
-          }, delay);
+      function connectTerminalWs() {
+        if (!(id in sessions)) return;
+        const sock = new WebSocket(`${WS_BASE}${_wsPath}`);
+        sock.binaryType = 'arraybuffer';
+        sessions[id].ws = sock;
+
+        sock.onopen = () => {
+          updateConnStatus(id, true);
+          // 재연결이었다면(첫 연결이 아니면) 서버가 scrollback(최대 256KB)을 통째로 재전송한다.
+          // reset 없이 write하면 이전 출력이 중복 누적되므로 비운 뒤 깨끗하게 repaint한다.
+          if (_retries > 0) { term.reset(); term.write('\x1b[32m[재연결됨]\x1b[0m\r\n'); }
+          // 새(재)연결된 PTY는 크기를 모르므로 캐시를 비워 첫 fitAndResize가 반드시 보내게 한다.
+          sessions[id]._lastCols = sessions[id]._lastRows = null;
+          if (!E2E_ENABLED) fitAndResize(id);
+          // STABLE_MS 이상 열려 있어야 백오프를 리셋 — 즉시 리셋하면 accept 직후 닫히는
+          // flap에서 지수가 자라지 못해 무한 재연결 스톰이 된다.
+          clearTimeout(_stableTimer);
+          _stableTimer = setTimeout(() => { _retries = 0; }, STABLE_MS);
         };
-        reconnect();
-      };
+
+        // Phase 8 G2: 서버 ping 응답 (heartbeat pong)
+        sock.addEventListener('message', (e) => {
+          if (typeof e.data !== 'string') return;
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg && msg.type === 'ping') sock.send(JSON.stringify({ type: 'pong' }));
+          } catch (_) { /* binary or non-JSON */ }
+        });
+
+        // wrapE2E 가 핸드셰이크 후 handle 을 넘김. E2E 비활성이면 즉시 실행.
+        wrapE2E(sock,
+          (handle) => {
+            sessions[id].wsHandle = handle;
+            if (E2E_ENABLED) fitAndResize(id);
+          },
+          (bytes) => term.write(bytes)
+        );
+
+        sock.onclose = (ev) => {
+          clearTimeout(_stableTimer);
+          updateConnStatus(id, false);
+          if (!(id in sessions)) return;                       // 탭 닫힘 → 중단
+          const code = ev && ev.code;
+          if (TERMINAL_CLOSE_CODES.has(code)) {                // 영구 실패 → 재연결 안 함
+            const why = code === 4001 ? '인증 실패' : '세션이 서버에 없음(종료됨)';
+            try { term.write(`\r\n\x1b[31m[재연결 중단 — ${why}. 탭을 닫고 새로 여세요.]\x1b[0m\r\n`); } catch (_) {}
+            return;
+          }
+          _retries++;
+          // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 5로 clamp.
+          const delay = Math.min(1000 * Math.pow(2, Math.min(_retries, 5)), 30000);
+          term.write(`\r\n\x1b[33m[재연결 중... ${_retries}회]\x1b[0m\r\n`);
+          sessions[id].reconnTimer = setTimeout(connectTerminalWs, delay);
+        };
+
+        sock.onerror = () => { try { sock.close(); } catch (_) {} };
+      }
+
+      connectTerminalWs();
 
       term.onData((data) => {
         const handle = sessions[id]?.wsHandle;
@@ -411,7 +424,14 @@
         }
       });
 
-      const onResize = () => fitAndResize(id);
+      // 리사이즈 디바운스 — 모바일 키보드가 뜨고/닫히거나 viewport가 흔들리면 resize가
+      // 연속으로 쏟아진다. 매 이벤트마다 fit+sendResize하면 PTY가 SIGWINCH 폭탄을 맞아
+      // TUI가 계속 전체 재도색(대량 출력)을 하고, 입력 중 메모리가 급증한다. 120ms로 합친다.
+      let _resizeTimer = null;
+      const onResize = () => {
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => fitAndResize(id), 120);
+      };
       window.addEventListener('resize', onResize);
 
       // 모바일: visualViewport resize (키보드 나타날 때)
@@ -424,10 +444,14 @@
       switchTo(id);
     }
 
-    function sendResize(ws, term) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-      }
+    function sendResize(ws, term, s) {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      // 같은 크기를 다시 보내면 PTY가 SIGWINCH를 받아 Claude 같은 TUI가 화면 전체를
+      // 다시 그린다(대량 출력). fitAndResize가 resize·focus·탭전환마다 호출되므로,
+      // 실제로 cols/rows가 바뀐 경우에만 보내 불필요한 전체 재도색을 없앤다.
+      if (s && s._lastCols === term.cols && s._lastRows === term.rows) return;
+      if (s) { s._lastCols = term.cols; s._lastRows = term.rows; }
+      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
     }
 
     // fit(xterm 칸 수 재계산) + PTY에 크기 통보를 항상 함께 한다. 예전엔 곳곳에서
@@ -441,7 +465,7 @@
       if (s.wrapper.style.display === 'none') return;
       try { s.fitAddon.fit(); } catch (_) { return; }
       const w = s.ws;
-      if (w && w.readyState === WebSocket.OPEN) sendResize(w, s.term);
+      if (w && w.readyState === WebSocket.OPEN) sendResize(w, s.term, s);
     }
 
     function switchTo(id) {
@@ -580,7 +604,10 @@
     async function removeSession(id) {
       const s = sessions[id];
       if (!s) return;
-      s.ws.close();
+      // 대기 중인 재연결 타이머 취소 — 안 그러면 탭을 닫은 뒤에도 setTimeout이 살아남아
+      // (id는 이미 delete되지만) 죽은 타이머가 지연 후 깨어난다.
+      if (s.reconnTimer) { clearTimeout(s.reconnTimer); s.reconnTimer = null; }
+      if (s.ws) { try { s.ws.close(); } catch (_) {} }
       s.term.dispose();
       s.wrapper.remove();
       s.tabEl.remove();
@@ -740,7 +767,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: tmuxName }),
       });
+      // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
+      // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
+      if (!res.ok) { showToast(`세션 열기 실패: ${tmuxName} (${res.status})`); return; }
       const data = await res.json();
+      if (!data.id) { showToast(`세션 열기 실패: ${tmuxName}`); return; }
       // 이미 웹에 열려 있으면 해당 탭으로 전환
       if (data.id in sessions) {
         switchTo(data.id);
@@ -755,7 +786,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
+      if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
       const data = await res.json();
+      if (!data.id) { showToast('tmux 세션 생성 실패'); return; }
       addSession(data.id, data.name?.replace('tmux:', '') || data.id);
     }
 
