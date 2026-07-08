@@ -1,6 +1,6 @@
 # voice-terminal
 
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
 
 macOS / Linux 머신을 서버로 두고, 어디서든 음성으로 터미널을 조작하는 시스템. (Windows는 WSL2 환경에서만 동작 — 네이티브 미지원)
@@ -91,6 +91,7 @@ vt shell-init pwsh >> $PROFILE                       # PowerShell
 | `vt status` | 서버·터널·Voice Daemon·tmux 상태 확인 |
 | `vt manage` | TUI 관리 도구 — 세션 목록/rename/kill/attach + 음성 타깃 lock |
 | `vt attach [name]` | 임의 tmux 세션을 새 OS 터미널 창에 attach |
+| `vt ssh [session]` | Tailscale + SSH로 tmux 세션에 직접 접속하는 명령 안내 (회사망 등 화면 원격 차단 환경용) |
 | `vt voice-target [name\|--auto]` | Voice Daemon 타깃 세션 lock/해제 |
 | `vt hotkey [list\|set\|reset\|disable]` | 핫키 조회/변경 |
 | `vt help <topic>` | 토픽별 도움말 (concepts/voice/hotkeys/target/troubleshoot) |
@@ -107,8 +108,14 @@ vt shell-init pwsh >> $PROFILE                       # PowerShell
 ### 옵션
 
 ```bash
-vt mobile --e2e      # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
+vt mobile --e2e                       # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
+vt mobile --network <mode>            # localhost | lan | tailscale | all(default)
 ```
+
+`tailscale` 모드는 Cloudflare Tunnel 없이 자신의 tailnet IP로만 서버를 열고,
+네트워크 정책도 `tailscale` CIDR(`100.64.0.0/10`)+localhost로만 제한합니다.
+회사망처럼 LAN 자체를 못 믿는 환경에서 안전하게 원격 접속하고 싶을 때 사용하세요.
+자세한 내용: [Tailscale + SSH 원격 접속](#tailscale--ssh-원격-접속-회사망-등-화면-원격이-막힌-환경) 섹션 참고.
 
 ### 자동 동작
 
@@ -292,6 +299,8 @@ echo '{"transcript_path":"/tmp/test.jsonl"}' | ./server/tts_hook.sh
 | **Media Session** | 무선 이어폰 Play/Pause로 녹음 토글 (iOS·Android) |
 | **PWA** | manifest + Service Worker → 홈 화면 추가 후 앱처럼 사용 |
 | **세션 ID 96비트** | 추측 난이도 2^64배 (기존 32비트 대비) |
+| **Tailscale 원격 접속** | `vt ssh` / `vt mobile --network tailscale` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속 |
+| **클라이언트 접속 알림** | `VT_NOTIFY_CLIENT_EVENTS=1` — SSH 등 서버가 못 보는 클라이언트의 attach/detach를 push로 알림 |
 
 ---
 
@@ -343,7 +352,9 @@ echo '{"transcript_path":"/tmp/test.jsonl"}' | ./server/tts_hook.sh
 | GET | `/api/download?path=X` | 서버 파일 다운로드 |
 | GET | `/api/notify/status` | 푸시 알림 채널 설정 상태 확인 |
 | POST | `/api/notify/test` | 테스트 푸시 전송 |
+| POST | `/api/notify/client-event` | tmux client-attached/detached 훅 전용 (D9, SSH 접속 가시화) |
 | GET | `/api/capabilities` | 서버가 지원하는 기능 목록 |
+| GET | `/api/tailscale/status` | Tailscale 설치/연결/IP/MagicDNS 호스트명 (D9) |
 
 ---
 
@@ -439,6 +450,60 @@ voice-terminal/
 | 같은 네트워크 | `http://<맥북IP>:7777` (`ipconfig getifaddr en0`으로 IP 확인) |
 | adb 연결 Android | `adb reverse tcp:7777 tcp:7777` → `http://localhost:7777` |
 | 원격 (어디서든) | `vt mobile` → Cloudflare Tunnel HTTPS URL |
+| 화면 원격이 막힌 회사망 등 | `vt ssh` → Tailscale + SSH로 tmux에 직접 접속 (터미널 전용, 브라우저 불필요) |
+
+---
+
+## Tailscale + SSH 원격 접속 (회사망 등 화면 원격이 막힌 환경)
+
+회사망이 크롬 원격 데스크톱·TeamViewer·RDP/VNC 같은 화면 공유를 막아두는 경우가 있습니다.
+반면 **Tailscale**(WireGuard 기반 VPN 메시)은 UDP 홀펀칭 또는 443 DERP 릴레이 폴백으로
+동작해 이런 방화벽도 대부분 통과합니다. 화면 전체가 아니라 **터미널만** 필요하다면
+Tailscale + SSH로 집 맥북의 tmux 세션에 직접 붙는 쪽이 화면 원격보다 가볍고 빠릅니다.
+
+voice-terminal의 핵심 설계는 "tmux 세션이 단일 진실의 원천" — 데스크톱 iTerm, 모바일
+PWA, Voice Daemon이 전부 같은 `tmux -L vt` 세션에 붙습니다. **SSH도 그 다섯 번째
+클라이언트일 뿐**이라, 회사에서 SSH로 붙어도 집에서 보던 것과 완전히 같은 화면·
+스크롤백·실행 중인 Claude 세션을 그대로 이어받습니다.
+
+```bash
+# 맥북에서 (Tailscale이 이미 tailscale up으로 연결돼 있어야 함)
+vt ssh                   # 세션 'dev'로 접속하는 명령을 안내 (복사해서 회사 노트북에서 실행)
+vt ssh mysession         # 다른 세션 이름 지정
+vt ssh --user alice      # 원격 로그인 계정 지정 (기본: 현재 계정)
+```
+
+출력되는 두 줄 중 하나를 회사 노트북에서 그대로 실행하면 됩니다:
+
+```bash
+# 1) 일반 SSH — 이 맥북 ~/.ssh/authorized_keys에 공개키 등록 필요
+ssh -t user@100.x.x.x 'tmux -L vt attach -t dev || tmux -L vt new -A -s dev'
+
+# 2) Tailscale SSH — tailnet ACL에서 SSH 허용 시 키 등록 없이 접속
+tailscale ssh user@100.x.x.x -- 'tmux -L vt attach -t dev || tmux -L vt new -A -s dev'
+```
+
+공개키가 등록돼 있지 않다면 회사 노트북에서 `cat ~/.ssh/id_ed25519.pub`으로 공개키를
+복사한 뒤, 맥북에서 `vt ssh --add-key "ssh-ed25519 AAAA... user@laptop"`을 실행하면
+`~/.ssh/authorized_keys`에 추가됩니다.
+
+이 경로는 순수 텍스트 SSH라 브라우저 마이크/스피커를 못 씁니다 — 음성 대신
+키보드로 직접 입력하면 됩니다. 대신 완료·idle 알림은 기존 ntfy/Telegram 푸시
+브릿지로 그대로 받을 수 있고, `VT_NOTIFY_CLIENT_EVENTS=1`을 설정해두면 SSH로
+누가 언제 접속했는지도 push로 알림받을 수 있습니다 (`vt help ssh`에 자세히 설명).
+
+웹 UI(음성/터치 포함)도 tailnet 안에서만 열고 싶다면 `vt mobile --network tailscale`을
+사용하세요 — Cloudflare Tunnel 없이 tailnet CIDR로만 접근을 제한합니다.
+
+| 접속 방식 | 필요한 것 | 용도 |
+|---|---|---|
+| `vt ssh` | Tailscale + (선택) SSH 키 | 순수 터미널, vim/IDE 등 키 입력 위주 작업 |
+| `vt mobile --network tailscale` | Tailscale + 브라우저 | 폰에서 음성 입력, 터치 조작 |
+| `vt mobile` (기본, `--network all`) | 아무것도 (공개 URL) | Tailscale 없는 완전 외부 기기 |
+
+셋 다 같은 tmux 세션을 공유하므로 아무 조합이나 섞어 써도 됩니다. 진단은
+`vt doctor`(Tailscale 설치/연결 확인)와 `vt status`(현재 tailnet IP 표시)로,
+더 자세한 설명은 `vt help ssh`로 확인하세요.
 
 ---
 
@@ -462,6 +527,17 @@ voice-terminal/
 2. 폰 카메라로 QR 스캔
 3. tmux 세션에 자동 연결
 4. 🎤 STT 입력  🔄 핸즈프리  🎧 음성 전용  📎 파일 업로드
+```
+
+### 회사에서 화면 원격 없이 SSH로 이어서 작업 (Tailscale)
+
+```
+1. (집) vt voice 또는 vt start          ← tmux 'dev'에서 평소처럼 작업
+2. (집) vt ssh                          ← 접속 명령 두 줄 출력, 하나 복사
+3. (회사 노트북) 복사한 ssh / tailscale ssh 명령 실행
+4. 집에서 보던 tmux 세션에 그대로 진입 — 스크롤백·실행 중인 Claude 세션 이어받음
+5. 키보드로 계속 작업 (음성은 SSH 경로에선 미지원)
+6. VT_NOTIFY_CLIENT_EVENTS=1 설정해뒀다면 접속/해제가 폰으로 push됨
 ```
 
 ### Claude Code + TTS 알림
@@ -530,12 +606,13 @@ vt voice
 
 ## 버전 / 변경 이력
 
-현재 버전: **v1.4.0** (2026-05-09)
+현재 버전: **v1.5.0** (2026-07-07)
 
 전체 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고.
 
 | 버전 | 날짜 | 주요 내용 |
 |------|------|-----------|
+| [v1.5.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH 원격 접속(D9): `vt ssh`·`vt mobile --network tailscale`·`VT_NOTIFY_CLIENT_EVENTS`(tmux client-attached/detached push 알림)·`server/tailscale.py`·`/api/tailscale/status` |
 | [v1.4.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.4.0) | 2026-05-09 | UX overhaul + Linux 1급 동등화: `vt manage` TUI·`vt attach`·`vt voice-target`·`vt hotkey`·`vt help`·`vt stop --purge`·핸즈프리 제거·이어폰 토글·Linux 터미널/TTS/notify 분기·onboarding |
 | [v1.3.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.3.0) | 2026-05-08 | Phase 9 안정성·네트워크 효율: `/ws-preview` push·`/api/auth` cookie·vendor 자체 호스팅·ETag 304·pyav decoding·SW 캐시·PTY query 가로채기·WS heartbeat |
 | [v1.2.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.2.0) | 2026-05-07 | Phase 7-8: 라이브 프리뷰·setup-keybind·--network 모드·Cloudflare 명명 터널·WS 백프레셔·--disallowedTools·trust 자동·워크스페이스·tmux batch |
