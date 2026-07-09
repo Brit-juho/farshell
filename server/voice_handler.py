@@ -25,9 +25,11 @@ _stt_engine: Optional[str] = None
 _whisper_model = None
 # 마지막 STT 사용 시각(monotonic). idle 언로드 판단용.
 _last_stt_use: float = 0.0
-# STT 모델을 마지막 사용 후 이 시간(초) 지나면 언로드해 메모리(~150MB) 회수.
-# 0이면 언로드 안 함(항상 상주). 음성 안 쓸 땐 메모리를 돌려주고, 쓰면 다시 로드.
-STT_IDLE_UNLOAD_SEC = float(os.environ.get("VT_STT_IDLE_SEC", "300"))
+# STT 모델을 마지막 사용 후 이 시간(초) 지나면 언로드. 기본 0(끔) — macOS에선 파이썬
+# 객체를 해제해도 CTranslate2 네이티브 메모리가 OS로 반환되지 않아(malloc arena) RSS가
+# 안 줄어든다(실측). 진짜 회수는 '애초에 안 켜면 안 로드'로 해결(capabilities가 더는
+# 모델을 로드하지 않음). 이 옵션은 Linux/서브프로세스 워커 등에서만 의미. VT_STT_IDLE_SEC로 opt-in.
+STT_IDLE_UNLOAD_SEC = float(os.environ.get("VT_STT_IDLE_SEC", "0"))
 
 
 def _init_stt() -> str:
@@ -64,6 +66,36 @@ def _init_stt() -> str:
 def stt_loaded() -> bool:
     """STT 모델이 현재 메모리에 상주 중인지."""
     return _stt_engine not in (None, "none")
+
+
+def _module_available(*names: str) -> bool:
+    """모듈을 import(=모델 로드) 하지 않고 설치 여부만 확인."""
+    import importlib.util
+    for n in names:
+        try:
+            if importlib.util.find_spec(n) is not None:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def stt_available() -> bool:
+    """STT '설치 여부'만 확인 — 모델을 로드하지 않는다.
+
+    ⚠️ _init_stt()는 faster-whisper 모델을 로드(~400MB)하므로, /api/capabilities처럼
+    페이지 로드마다 불리는 경로에서 쓰면 터미널만 쓰는 사용자도 400MB를 물게 된다.
+    설치 여부 체크는 반드시 이 함수(find_spec, 로드 없음)를 쓸 것.
+    """
+    return _module_available("mlx_whisper", "faster_whisper")
+
+
+def tts_available() -> bool:
+    """TTS '설치 여부'만 확인 — 무거운 import(kokoro→torch 등)를 피한다."""
+    if _module_available("kokoro", "edge_tts"):
+        return True
+    import shutil
+    return shutil.which("say") is not None  # macOS say fallback
 
 
 def preload_stt() -> str:

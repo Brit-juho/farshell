@@ -43,13 +43,19 @@ _workspace_clients: set[WebSocket] = set()
 
 @router.get("/api/capabilities")
 async def capabilities(request: Request):
-    stt = voice_handler._init_stt()
-    tts = voice_handler._init_tts()
+    # ⚠️ 모델을 로드하지 않고 설치 여부만 확인한다. 예전엔 _init_stt()를 불러서
+    # 페이지 로드마다(capabilities는 grid.js가 시작 시 호출) faster-whisper 모델
+    # ~400MB를 서버에 올렸다 → 터미널만 쓰는 사용자도 400MB를 물었다.
+    stt_ok = voice_handler.stt_available()
+    tts_ok = voice_handler.tts_available()
     spec = network_access.get_current_spec()
     payload = {
-        "voice": stt != "none" or tts != "none",
-        "stt": stt,
-        "tts": tts,
+        "voice": stt_ok or tts_ok,
+        # 로드돼 있으면 실제 엔진명, 아니면 설치만 됨(available)/미설치(none)
+        "stt": (voice_handler._stt_engine if voice_handler.stt_loaded()
+                else ("available" if stt_ok else "none")),
+        "stt_loaded": voice_handler.stt_loaded(),
+        "tts": "available" if tts_ok else "none",
         "network_mode": os.environ.get("VT_NETWORK_MODE", "all"),
         "bound_host": network_access.resolve_bind_host(spec),
         "lan_ip": network_access.get_lan_ip(),

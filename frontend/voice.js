@@ -19,6 +19,36 @@ const micStatus = document.getElementById('mic-status');
 
 // --- 마이크 녹음 ---
 
+// STT 모델은 서버에서 첫 사용 시 ~400MB를 잡고 (최초 1회는 다운로드) 로딩에 몇 초 걸린다.
+// 터미널만 쓰는 사람은 음성을 안 켜면 이 비용이 0이다. 그래서 첫 녹음 전에 명시적으로
+// "준비"시키고 그 사실을 사용자에게 알린다. 준비되면 다음 탭부터 바로 녹음.
+let _sttReady = false;
+let _sttPreparing = false;
+
+async function ensureSttReady() {
+  if (_sttReady) return true;
+  if (_sttPreparing) return false;
+  _sttPreparing = true;
+  micBtn.querySelector('.label').textContent = '준비 중...';
+  micStatus.textContent = '음성 모델 준비 중… 최초 1회는 다운로드로 시간이 걸립니다 (메모리 ~400MB)';
+  try {
+    const r = await fetch(`${API}/voice/stt/preload`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok && d.loaded) {
+      _sttReady = true;
+      micBtn.querySelector('.label').textContent = '음성 입력';
+      micStatus.textContent = '✅ 준비 완료 — 마이크를 눌러 녹음';
+      return false;  // 이번 탭은 '준비'로 소비. 사용자가 다시 눌러 녹음.
+    }
+    micStatus.textContent = '음성 준비 실패 — STT가 설치돼 있는지 확인하세요';
+  } catch (e) {
+    micStatus.textContent = '음성 준비 실패 (서버 응답 없음)';
+  } finally {
+    _sttPreparing = false;
+  }
+  return false;
+}
+
 async function toggleRecording() {
   if (isRecording) {
     stopRecording();
@@ -28,6 +58,8 @@ async function toggleRecording() {
 }
 
 async function startRecording() {
+  // 준비 안 됐으면 이번 탭은 모델 준비만 하고 리턴 (녹음은 준비 완료 후 다음 탭)
+  if (!_sttReady) { await ensureSttReady(); return; }
   try {
     // [D8 barge-in] 재생 중인 TTS 중단 — 사용자가 말하기 시작하면 즉시 정지
     try {
