@@ -108,6 +108,16 @@ async def voice_output(request: Request):
     return Response(content=audio, media_type=ct)
 
 
+@router.get("/voice/stt/status")
+async def stt_status():
+    """STT 준비 상태 — 프론트가 '준비 중/완료' 표시에 사용. 모델을 로드하지 않는다."""
+    return {
+        "available": voice_handler.stt_available(),
+        "loaded": voice_handler.stt_loaded(),
+        "engine": voice_handler._stt_engine if voice_handler.stt_loaded() else None,
+    }
+
+
 @router.post("/voice/stt/preload")
 async def stt_preload():
     """음성 모드 on 시 STT 모델을 미리 로드 → 첫 음성 입력 지연 제거."""
