@@ -26,16 +26,29 @@ if not logger.handlers:
     )
 
 _pressed_keys: set = set()
+# 엣지 트리거 상태 — 조합이 '완성된 채 유지'되는 동안 True. 근본 원인 수정:
+# hotkey_match는 레벨 트리거라, macOS 키 반복(key-repeat)이 조합 유지 중 key-down을
+# 초당 ~15회 쏟아내면 _on_press마다 toggle_recording이 재발동돼 녹음 on/off/on/off로
+# 폭주 → 스트림 누수 + _recording desync → 녹음이 안 멈추고 오디오 무한 축적(3GB 원인).
+# rising edge(조합이 처음 완성되는 순간)에만 1회 토글하고, 조합이 풀려야 재무장한다.
+_chord_active = False
 
 
 def _on_press(key):
+    global _chord_active
     _pressed_keys.add(key)
     if hotkey_match(_pressed_keys):
-        toggle_recording()
+        if not _chord_active:  # rising edge에서만 — 키 반복은 무시
+            _chord_active = True
+            toggle_recording()
 
 
 def _on_release(key):
+    global _chord_active
     _pressed_keys.discard(key)
+    # 조합이 깨지면 재무장 (다음 눌림에 다시 토글 가능)
+    if _chord_active and not hotkey_match(_pressed_keys):
+        _chord_active = False
 
 
 def main():
