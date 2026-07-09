@@ -98,6 +98,7 @@ async def delete_session(session_id: str):
     pty_mgr.destroy_session(session_id)
     session_store.remove(session_id)
     output_watcher.remove_session(session_id)
+    _auto_responder.remove(session_id)  # 세션별 윈도우 dict 정리 (누수 방지)
     return {"ok": True, "tmux_detached": tmux_name}
 
 

@@ -196,11 +196,11 @@ async def attach_tmux_session(request: Request):
 async def kill_tmux_session(tmux_name: str):
     existing = session_store.find_by_tmux_name(tmux_name)
     if existing:
+        from deps import _auto_responder
         pty_mgr.destroy_session(existing.session_id)
         session_store.remove(existing.session_id)
         output_watcher.remove_session(existing.session_id)
-
-    rc, _, _ = tmux_runner.run(["kill-session", "-t", tmux_name], timeout=5.0)
+        _auto_responder.remove(existing.session_id)  # 세션별 상태 정리 (누수
     if rc != 0:
         return JSONResponse({"error": "tmux kill failed", "name": tmux_name}, status_code=500)
     return {"ok": True}
