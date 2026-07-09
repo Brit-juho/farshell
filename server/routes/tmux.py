@@ -200,7 +200,10 @@ async def kill_tmux_session(tmux_name: str):
         pty_mgr.destroy_session(existing.session_id)
         session_store.remove(existing.session_id)
         output_watcher.remove_session(existing.session_id)
-        _auto_responder.remove(existing.session_id)  # 세션별 상태 정리 (누수
+        _auto_responder.remove(existing.session_id)  # 세션별 상태 정리 (누수 방지)
+    # 실제 tmux 세션 종료 — 이 줄이 빠져 있어 rc가 정의되지 않은 채 참조돼 500이 났고,
+    # 세션이 전혀 kill되지 않았다.
+    rc, _, _ = tmux_runner.run(["kill-session", "-t", tmux_name], timeout=5.0)
     if rc != 0:
         return JSONResponse({"error": "tmux kill failed", "name": tmux_name}, status_code=500)
     return {"ok": True}

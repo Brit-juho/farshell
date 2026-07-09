@@ -13,6 +13,7 @@ from fastapi import APIRouter, File, Query, Request, UploadFile, WebSocket, WebS
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 import crypto_channel
+import tmux_runner
 from deps import pty_mgr, session_store, output_watcher, _auto_responder
 from deps import ws_count_per_session, ws_total_count
 from session_store import new_session_id
@@ -63,15 +64,26 @@ def _ws_auth(ws: WebSocket) -> bool:
 
 @router.api_route("/api/sessions", methods=["GET", "HEAD"])
 async def list_sessions():
-    return [
-        {
+    # tmux가 `detach-on-destroy off`면 세션이 kill돼도 web의 attach 클라이언트가 다른
+    # 세션으로 전환되어 살아남아 PTY가 EOF되지 않는다 → 죽은 tmux를 가리키는 web 세션이
+    # 목록·메모리(PTY·scrollback)·클라이언트 터미널로 계속 쌓인다. 여기서 실제 tmux 존재를
+    # 검증해 좀비 세션을 정리하고, 살아있는 것만 반환한다.
+    result = []
+    for s in list(pty_mgr.sessions.values()):
+        info = session_store.get(s.session_id)
+        tmux_name = info.tmux_name if info else None
+        if tmux_name and not tmux_runner.has_session(tmux_name):
+            pty_mgr.destroy_session(s.session_id)
+            session_store.remove(s.session_id)
+            output_watcher.remove_session(s.session_id)
+            continue
+        result.append({
             "id": s.session_id,
-            "name": (info.name if (info := session_store.get(s.session_id)) else s.session_id),
+            "name": info.name if info else s.session_id,
             "cols": s.cols,
             "rows": s.rows,
-        }
-        for s in pty_mgr.sessions.values()
-    ]
+        })
+    return result
 
 
 @router.post("/api/sessions")
