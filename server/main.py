@@ -245,6 +245,10 @@ async def startup():
         )
     output_watcher.on_notify(on_task_complete)
     output_watcher.start()
+    # STT 모델 idle 언로드 모니터 — 음성 미사용 시 ~150MB 회수 (VT_STT_IDLE_SEC)
+    import voice_handler
+    import asyncio as _asyncio
+    _asyncio.create_task(voice_handler.stt_idle_monitor())
 
 
 @app.on_event("shutdown")

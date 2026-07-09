@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -107,8 +108,27 @@ async def voice_output(request: Request):
     return Response(content=audio, media_type=ct)
 
 
+@router.post("/voice/stt/preload")
+async def stt_preload():
+    """음성 모드 on 시 STT 모델을 미리 로드 → 첫 음성 입력 지연 제거."""
+    loop = asyncio.get_running_loop()
+    engine = await loop.run_in_executor(None, voice_handler.preload_stt)
+    return {"loaded": voice_handler.stt_loaded(), "engine": engine}
+
+
+@router.post("/voice/stt/unload")
+async def stt_unload():
+    """음성 모드 off 시 STT 모델을 내려 메모리(~150MB) 회수."""
+    return {"unloaded": voice_handler.unload_stt(), "loaded": voice_handler.stt_loaded()}
+
+
 @router.post("/voice/local/start")
 async def local_mic_start():
+    # 로컬 마이크 녹음 시작 = 음성 모드 활성 신호 → STT 미리 로드(백그라운드)
+    try:
+        asyncio.get_running_loop().run_in_executor(None, voice_handler.preload_stt)
+    except Exception:
+        pass
     return local_mic.start_recording()
 
 
