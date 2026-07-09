@@ -68,8 +68,12 @@ class PTYSession:
     # [C1] broadcast: 여러 subscriber에 데이터 전달
     _subscribers: set = field(default_factory=set, repr=False)  # set[Callable[[bytes], None]]
     _read_task: Optional[asyncio.Task] = field(default=None, repr=False)
-    # scrollback 버퍼 — 재접속 시 이전 출력 복원
-    _scrollback: deque = field(default_factory=lambda: deque(maxlen=5000), repr=False)
+    # scrollback 버퍼 — 재접속 시 이전 출력 복원.
+    # maxlen(청크 수) 대신 바이트 예산으로 제한한다(_append_scrollback). 예전엔
+    # maxlen=5000 × 4KB = 세션당 최대 19.5MB를 저장했지만 재접속 시 실제 전송은
+    # 256KB뿐이라 78배 과다 저장 → 세션 몇 개만 열려도 수백 MB로 폭증했다.
+    _scrollback: deque = field(default_factory=deque, repr=False)
+    _scrollback_bytes: int = field(default=0, repr=False)  # 현재 저장 바이트 합
     # D3: 백프레셔(backpressure) 플래그 — True이면 _read_loop이 대기
     _paused: bool = field(default=False, repr=False)
     # P0 fix: PTY 시작 시각 — grace period 동안 클라이언트 자동응답(ESC 시퀀스) 차단용
@@ -339,8 +343,8 @@ class PTYManager:
                     except Exception:
                         pass
                 break
-            # scrollback에 저장
-            session._scrollback.append(data)
+            # scrollback에 저장 (바이트 예산으로 트리밍)
+            self._append_scrollback(session, data)
             # broadcast to all subscribers
             dead = set()
             for cb in list(session._subscribers):
@@ -354,6 +358,9 @@ class PTYManager:
         session = self._sessions.pop(session_id, None)
         if session is None:
             return
+
+        # 세션별 보조 상태 정리 — 안 지우면 세션이 생성/삭제될 때마다 dict가 무한히 커진다.
+        self._line_buffer.pop(session_id, None)
 
         # [C3] read_task cancel
         if session._read_task and not session._read_task.done():
@@ -408,6 +415,21 @@ class PTYManager:
 
     # Phase 9 #7: scrollback을 마지막 N 바이트로 제한 → 모바일 재접속 트래픽 ↓.
     SCROLLBACK_MAX_BYTES = 256 * 1024
+    # 실제로 저장하는 상한. 재접속 시 SCROLLBACK_MAX_BYTES만 보내므로 그 이상 저장은
+    # 낭비다. 여유로 2배(512KB)까지만 보관 → 세션당 메모리 19.5MB → 최대 512KB.
+    SCROLLBACK_STORE_BYTES = 512 * 1024
+    # 작은 청크가 폭주해도 deque 항목 수(파이썬 객체 오버헤드)를 제한하는 안전 상한.
+    SCROLLBACK_MAX_CHUNKS = 5000
+
+    def _append_scrollback(self, session: PTYSession, data: bytes) -> None:
+        """scrollback에 청크 추가 후 바이트/청크 예산 초과분을 앞(오래된)부터 버린다."""
+        sb = session._scrollback
+        sb.append(data)
+        session._scrollback_bytes += len(data)
+        while session._scrollback_bytes > self.SCROLLBACK_STORE_BYTES and len(sb) > 1:
+            session._scrollback_bytes -= len(sb.popleft())
+        while len(sb) > self.SCROLLBACK_MAX_CHUNKS:
+            session._scrollback_bytes -= len(sb.popleft())
 
     def get_scrollback(self, session_id: str) -> list[bytes]:
         """재접속 시 이전 출력을 전송하기 위한 scrollback 데이터 반환.
