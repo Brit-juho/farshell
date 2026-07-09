@@ -12,6 +12,7 @@ import os
 import subprocess
 import tempfile
 import time
+import wave
 from pathlib import Path
 from typing import Optional
 
@@ -233,6 +234,38 @@ def _convert_to_wav(audio_bytes: bytes, input_format: str = "webm") -> bytes:
 
 STT_TIMEOUT = 30  # seconds
 
+# faster-whisper/CTranslate2는 긴 오디오를 처리하면 RSS가 급증하고 그 네이티브 메모리를
+# OS로 반환하지 않는다(실측: 60s 오디오 1회 → +800MB, 안 줄어듦). 터미널 음성 명령은
+# 길어야 수 초이므로, transcribe 직전에 이 상한으로 잘라 메모리 폭주를 원천 차단한다.
+# 모바일(/voice/input)·로컬믹·데몬 모든 경로가 이 지점을 통과한다. VT_STT_MAX_SEC로 조정(0=무제한).
+try:
+    MAX_STT_SECONDS = float(os.environ.get("VT_STT_MAX_SEC", "60"))
+except ValueError:
+    MAX_STT_SECONDS = 60.0
+
+
+def _truncate_wav(wav_bytes: bytes, max_sec: float) -> bytes:
+    """16kHz mono int16 WAV을 앞에서 max_sec초까지만 남기고 자른다.
+
+    _is_already_target_wav를 통과한(16k/mono/16bit) 입력에만 쓴다. 상한 이하면 원본 그대로.
+    """
+    if max_sec <= 0 or len(wav_bytes) <= 44:
+        return wav_bytes
+    max_pcm = int(max_sec * 16000) * 2  # samples * 2바이트(int16)
+    if len(wav_bytes) - 44 <= max_pcm:
+        return wav_bytes
+    pcm = wav_bytes[44:44 + max_pcm]
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(pcm)
+    logger.warning(
+        f"STT 입력 {(len(wav_bytes)-44)/32000:.0f}s → {max_sec:.0f}s로 절단 (메모리 폭주 방어)"
+    )
+    return buf.getvalue()
+
 # 무음/저에너지 입력은 Whisper가 "You?" / "Thanks for watching" 등 환각을 내기 쉽다.
 # WAV 16-bit PCM 평균 절대값 임계값(0~32767). 600은 약 -34dBFS — 일반 발화 대비 충분히 낮다.
 SILENCE_RMS_THRESHOLD = 600
@@ -277,6 +310,9 @@ async def transcribe(audio_bytes: bytes, input_format: str = "webm",
 
     loop = asyncio.get_running_loop()
     wav_bytes = await loop.run_in_executor(None, _convert_to_wav, audio_bytes, input_format)
+
+    # 메모리 폭주 방어 — CTranslate2에 긴 오디오를 넘기지 않도록 상한으로 절단.
+    wav_bytes = _truncate_wav(wav_bytes, MAX_STT_SECONDS)
 
     # 무음 차단 — Whisper hallucination 방지 (TEST_REPORT.md Bug #8).
     if _is_silent_wav(wav_bytes):

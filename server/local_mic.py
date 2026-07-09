@@ -6,6 +6,7 @@ sounddevice로 녹음 → WAV → voice_handler.transcribe → 활성 세션 PTY
 import asyncio
 import io
 import logging
+import os
 import struct
 import wave
 from typing import Optional
@@ -22,6 +23,14 @@ _audio_frames: list[np.ndarray] = []
 _sample_rate = 16000
 _stream: Optional[sd.InputStream] = None
 
+# stop을 놓친(브라우저 종료/네트워크 끊김) 녹음이 초당 32KB씩 무한정 쌓여 RSS가 GB로
+# 폭주하는 것을 막는 상한. 초과분은 버리고 앞부분(최초 N초)만 유지 → 메모리 bounded.
+# VT_MAX_RECORD_SEC로 조정(0=무제한).
+try:
+    _MAX_RECORD_SEC = float(os.environ.get("VT_MAX_RECORD_SEC", "120"))
+except ValueError:
+    _MAX_RECORD_SEC = 120.0
+
 
 def start_recording() -> dict:
     """로컬 마이크 녹음 시작 (push-to-talk)."""
@@ -33,9 +42,21 @@ def start_recording() -> dict:
     _audio_frames = []
     _recording = True
 
+    max_samples = int(_MAX_RECORD_SEC * _sample_rate) if _MAX_RECORD_SEC > 0 else 0
+    _capped = {"n": 0, "warned": False}
+
     def callback(indata, frames, time_info, status):
-        if _recording:
-            _audio_frames.append(indata.copy())
+        if not _recording:
+            return
+        if max_samples and _capped["n"] >= max_samples:
+            if not _capped["warned"]:
+                logger.warning(
+                    f"local mic {_MAX_RECORD_SEC:.0f}s 상한 도달 — 이후 입력 버림 (메모리 폭주 방어)"
+                )
+                _capped["warned"] = True
+            return
+        _audio_frames.append(indata.copy())
+        _capped["n"] += len(indata)
 
     _stream = sd.InputStream(
         samplerate=_sample_rate,
@@ -50,7 +71,7 @@ def start_recording() -> dict:
 
 async def stop_recording() -> dict:
     """녹음 종료 → WAV 변환 → Whisper STT."""
-    global _recording, _stream
+    global _recording, _stream, _audio_frames
 
     if not _recording:
         return {"status": "not_recording", "text": ""}
@@ -64,8 +85,10 @@ async def stop_recording() -> dict:
     if not _audio_frames:
         return {"status": "empty", "text": ""}
 
-    # numpy → WAV bytes
-    audio_data = np.concatenate(_audio_frames, axis=0)
+    # 전역 버퍼를 로컬로 넘기고 즉시 비운다 — STT 진행 중 다음 녹음이 이전 오디오를 물지 않게.
+    frames, _audio_frames = _audio_frames, []
+    audio_data = np.concatenate(frames, axis=0)
+    del frames
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)

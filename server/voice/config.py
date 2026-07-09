@@ -48,6 +48,16 @@ def vt_getenv(key: str, default: str = "") -> str:
     return _VT_ENV.get(key, default)
 
 
+# 토글식 녹음은 '끄기'를 놓치면(미디어 키 오작동/핫키 릴리즈 누락) _recording=True인 채
+# 콜백이 초당 32KB(16kHz·16bit)씩 무한정 프레임을 쌓는다 → 수 시간이면 GB 단위 + 그 거대
+# 오디오를 faster-whisper로 돌리면 CTranslate2 네이티브 메모리(OS 미반환)가 급증해 안 줄어든다.
+# 이 상한을 넘으면 녹음을 강제 종료하고 버퍼를 버린다. VT_MAX_RECORD_SEC로 조정(0=무제한).
+try:
+    MAX_RECORDING_SECONDS = float(vt_getenv("VT_MAX_RECORD_SEC", "120"))
+except ValueError:
+    MAX_RECORDING_SECONDS = 120.0
+
+
 # Phase 6 R5: 단일 tmux 서버 원칙
 TMUX_SOCKET = vt_getenv("VT_TMUX_SOCKET", "vt")
 TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]

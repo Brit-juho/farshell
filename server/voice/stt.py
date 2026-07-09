@@ -4,9 +4,13 @@ import wave
 
 import numpy as np
 
-from .config import SAMPLE_RATE, logger
+from .config import MAX_RECORDING_SECONDS, SAMPLE_RATE, logger
 
 _whisper_model = None
+
+# transcribe에 넘길 오디오 상한. 녹음 상한(MAX_RECORDING_SECONDS)과 같게 두되, 방어적으로
+# 여기서도 한 번 더 자른다 — faster-whisper 긴 오디오 → CTranslate2 네이티브 메모리 폭주 차단.
+_MAX_STT_SAMPLES = int(MAX_RECORDING_SECONDS * SAMPLE_RATE) if MAX_RECORDING_SECONDS > 0 else 0
 
 
 def init_whisper():
@@ -28,6 +32,12 @@ def init_whisper():
 def transcribe(audio_np: np.ndarray) -> str:
     """numpy int16 배열 → 텍스트."""
     init_whisper()
+
+    if _MAX_STT_SAMPLES and len(audio_np) > _MAX_STT_SAMPLES:
+        logger.warning(
+            f"STT 입력 {len(audio_np)/SAMPLE_RATE:.0f}s → {_MAX_STT_SAMPLES/SAMPLE_RATE:.0f}s로 절단 (메모리 폭주 방어)"
+        )
+        audio_np = audio_np[:_MAX_STT_SAMPLES]
 
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
