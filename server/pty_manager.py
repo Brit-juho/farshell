@@ -354,6 +354,19 @@ class PTYManager:
                     dead.add(cb)
             session._subscribers -= dead
 
+        # 루프 종료 — EOF(break)로 빠졌는데 세션이 아직 살아있는 채로 남아 있으면 여기서
+        # 제거한다. 안 그러면 tmux detach/kill/프로세스 종료로 죽은 세션이 self._sessions에
+        # 계속 남아 /api/sessions가 죽은 세션까지 반환하고(=클라이언트가 죽은 터미널을 생성),
+        # scrollback 버퍼가 메모리를 붙잡는다. destroy_session()으로 빠진 경우엔 이미 pop돼
+        # 있어 아래 조건이 False → 무해하게 통과한다. (세션 목록이 '살아있는 것만' 반환되도록)
+        if self._sessions.get(session_id) is session:
+            self._sessions.pop(session_id, None)
+            self._line_buffer.pop(session_id, None)
+            try:
+                os.close(session.fd)
+            except OSError:
+                pass
+
     def destroy_session(self, session_id: str) -> None:
         session = self._sessions.pop(session_id, None)
         if session is None:

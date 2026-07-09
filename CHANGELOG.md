@@ -9,6 +9,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [1.5.1] — 2026-07-08
 
 ### Fixed
+- **세션 종료(kill)가 항상 실패 — `kill-session` 호출 누락 (`server/routes/tmux.py`).**
+  `DELETE /api/tmux/kill/{name}` 핸들러에서 실제 `tmux kill-session`을 실행하는 줄이 빠진 채
+  정의되지 않은 `rc`를 참조해 `NameError → 500`이 났고, tmux 세션이 전혀 종료되지 않아
+  죽어야 할 세션이 계속 남았다(메모리 낭비). `kill-session` 호출을 복원.
+  검증: 새 세션→잠자기(detach, 세션 유지)→깨우기(attach, 내용 보존)→종료(kill, `{"ok":true}`)
+  전 과정이 잔여 프로세스·세션 0으로 통과.
+- **★ 죽은 세션이 목록에 남아 메모리 누적 — `detach-on-destroy off` 좀비 세션
+  (`server/pty_manager.py`, `server/routes/pty.py`).** tmux 옵션이 `detach-on-destroy off`면
+  세션을 kill해도 web의 `tmux attach` 클라이언트가 **종료되지 않고 다른 세션으로 전환**되어
+  살아남는다. PTY가 EOF되지 않으므로 죽은 tmux를 가리키는 web 세션이 `pty_mgr.sessions`에
+  계속 남아, `/api/sessions`가 죽은 세션까지 반환하고(클라이언트가 죽은/중복 터미널을 생성),
+  PTY·scrollback·attach 프로세스가 쌓여 메모리가 누적됐다. tmux 세션을 만들고 죽일수록 좀비가
+  증가. → (1) 읽기 루프가 EOF로 끝나면 세션을 `pty_mgr.sessions`에서 확실히 제거. (2)
+  `list_sessions`가 tmux-backed 세션마다 `tmux_runner.has_session()`으로 실제 존재를 검증해
+  죽은 세션을 그 자리에서 destroy(attach 프로세스까지 종료)하고 **살아있는 것만 반환**한다.
+  검증: `zt` 생성→attach→kill 후 attach 프로세스가 살아남다가(좀비) `/api/sessions` 1회
+  호출로 프로세스 종료 + 목록에서 제거됨.
 - **★ 입력/사용 중 메모리 지속 증가 — 리사이즈마다 TUI 전체 재도색 + screenReaderMode 증폭
   (`frontend/js/terminal.js`).** 라이브 세션 1개를 정상적으로 쓰는데도 입력할 때마다 Chrome
   메모리가 계속 늘던 문제. 두 원인이 겹쳤다.
