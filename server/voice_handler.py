@@ -8,8 +8,10 @@ TTS 우선순위: Kokoro → edge-tts → macOS say fallback
 import asyncio
 import io
 import logging
+import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -21,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 _stt_engine: Optional[str] = None
 _whisper_model = None
+# 마지막 STT 사용 시각(monotonic). idle 언로드 판단용.
+_last_stt_use: float = 0.0
+# STT 모델을 마지막 사용 후 이 시간(초) 지나면 언로드해 메모리(~150MB) 회수.
+# 0이면 언로드 안 함(항상 상주). 음성 안 쓸 땐 메모리를 돌려주고, 쓰면 다시 로드.
+STT_IDLE_UNLOAD_SEC = float(os.environ.get("VT_STT_IDLE_SEC", "300"))
 
 
 def _init_stt() -> str:
@@ -52,6 +59,50 @@ def _init_stt() -> str:
     _stt_engine = "none"
     logger.warning("No STT engine available. Install mlx-whisper or faster-whisper.")
     return _stt_engine
+
+
+def stt_loaded() -> bool:
+    """STT 모델이 현재 메모리에 상주 중인지."""
+    return _stt_engine not in (None, "none")
+
+
+def preload_stt() -> str:
+    """음성 모드 진입 시 미리 로드해 첫 STT 지연을 없앤다."""
+    return _init_stt()
+
+
+def unload_stt() -> bool:
+    """STT 모델을 메모리에서 내린다. 다음 transcribe 때 lazy 재로드된다.
+
+    idle 타임아웃(STT_IDLE_UNLOAD_SEC)이 STT_TIMEOUT(30s)보다 훨씬 크므로, 언로드 시점엔
+    진행 중인 transcribe가 없다(마지막 사용이 수 분 전). 따라서 별도 락 없이 안전하다.
+    """
+    global _stt_engine, _whisper_model
+    if _stt_engine in (None, "none"):
+        return False
+    _whisper_model = None            # faster-whisper 모델 해제
+    _stt_engine = None               # 다음 호출 시 _init_stt 재실행
+    try:
+        # mlx-whisper는 load_models.load_model이 lru_cache라 별도 해제 필요.
+        import mlx_whisper
+        mlx_whisper.load_models.load_model.cache_clear()
+    except Exception:
+        pass
+    import gc
+    gc.collect()
+    logger.info("STT 모델 언로드 — 메모리 회수")
+    return True
+
+
+async def stt_idle_monitor() -> None:
+    """마지막 STT 사용 후 STT_IDLE_UNLOAD_SEC 지나면 모델을 언로드하는 백그라운드 루프."""
+    if STT_IDLE_UNLOAD_SEC <= 0:
+        return
+    while True:
+        await asyncio.sleep(30)
+        if stt_loaded() and _last_stt_use > 0 and \
+                time.monotonic() - _last_stt_use > STT_IDLE_UNLOAD_SEC:
+            unload_stt()
 
 
 ALLOWED_AUDIO_FORMATS = {"webm", "wav", "ogg", "mp3", "m4a"}
@@ -182,6 +233,8 @@ async def transcribe(audio_bytes: bytes, input_format: str = "webm",
     language="ko"/"en" 등으로 명시 지정 시 해당 언어로 고정.
     환경변수 VT_STT_LANG=ko 로 기본값 오버라이드 가능.
     """
+    global _last_stt_use
+    _last_stt_use = time.monotonic()
     engine = _init_stt()
     if engine == "none":
         raise RuntimeError("STT engine not available")
