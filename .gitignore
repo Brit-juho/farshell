@@ -37,6 +37,7 @@ Thumbs.db
 
 # 세션 임시 파일 (ralph-loop, 자동 생성 상태)
 .claude/*.local.md
+.claude/settings.local.json
 .claude/sessions/
 **/.claude/ralph-loop.local.md
 server/.claude/
