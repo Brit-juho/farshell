@@ -6,6 +6,7 @@
 
 ```bash
 vt voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
+vt clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
 vt mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
 vt start              # 전체 시작 (서버+터널+음성)
 vt stop [--purge]     # 종료 (--purge: tmux 세션까지 완전 종료)
@@ -268,6 +269,7 @@ adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 10
 | GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) |
 | GET | `/api/tailscale/status` | Tailscale 설치/연결/IP/MagicDNS 호스트명 (D9) |
 | POST | `/api/notify/client-event` | tmux client-attached/detached 훅 전용 — SSH 접속 가시화 (D9) |
+| POST | `/api/clipboard/push` | `clipboard_daemon.py`(맥 클립보드 폴링) 전용 — `/ws-notify` 클라이언트에 브로드캐스트 |
 | WS | `/ws-preview/{name}` | grid view용 tmux pane 출력 push (v1.3+) |
 | WS | `/ws-agent` | 에이전트 활성 상태 push |
 | WS | `/ws-workspace` | 워크스페이스 변경 push |
@@ -339,6 +341,23 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 # macOS 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 필요
 ```
 
+### Clipboard Daemon (macOS 클립보드 동기화)
+
+원격/모바일에서 웹 터미널에 접속하면 브라우저는 "그 기기"의 클립보드에만 접근할 수
+있어, 맥북(서버) 쪽에서 복사한 게 자동으로 넘어오지 않는다. 두 경로로 보완:
+
+- **OSC52** (별도 실행 불필요) — `vim`, `tmux copy-mode` 등 터미널 프로그램 안에서
+  일어난 복사는 PTY 출력 스트림에 이미 실려 오므로, `frontend/js/terminal.js`가
+  `term.parser.registerOscHandler(52, ...)`로 가로채 웹이 열린 기기의 클립보드에 반영.
+- **폴링 데몬** (`vt clip`) — Safari/Finder 등 터미널 밖에서 일어난 복사는 OSC52로
+  못 잡으므로, `server/clipboard_daemon.py`가 `NSPasteboard.changeCount`를 폴링해
+  변경 시 `POST /api/clipboard/push` → `/ws-notify` 브로드캐스트로 웹에 전달.
+
+```bash
+# 실행 (또는 vt clip)
+"$VT_PYTHON" server/clipboard_daemon.py &
+```
+
 ### tmux 중심 세션 관리
 
 웹 UI는 tmux 세션을 기본으로 사용한다:
@@ -353,9 +372,11 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | 기능 | 설명 |
 |------|------|
 | Voice Daemon | macOS 핫키(Ctrl+Shift+V) → STT → tmux 직접 입력 |
+| Clipboard 동기화 | OSC52(터미널 내부 복사) + `vt clip` 폴링 데몬(터미널 밖 복사) → 웹 클립보드 push |
 | 핸즈프리 모드 | 모바일 🔄 버튼 → 연속 녹음/STT 자동 반복 |
 | 음성 전용 모드 | 🎧 버튼 → 터미널 숨기고 큰 마이크만 표시 (이어폰 조작용) |
-| API 토큰 인증 | `VT_TOKEN` 환경변수 설정 시 활성화. URL `?token=xxx` 또는 `Authorization: Bearer xxx` |
+| 웹 로그인 비밀번호 | `vt password`로 설정 → scrypt 해시(`VT_PASSWORD_HASH`)만 저장, 원문 미저장. 로그인 시 `VT_SECRET_KEY`로 서명된 24h 세션 쿠키 발급(원문·토큰 아님). 사람용 인증. `server/auth.py` |
+| API 토큰 인증 | `VT_TOKEN` 환경변수 = 기계용 토큰(데몬/QR/URL). URL `?token=xxx` 또는 `Authorization: Bearer xxx`. 비밀번호 로그인과 병존 |
 | tmux 세션 관리 | 웹에서 tmux 생성/attach/detach/kill |
 | Scrollback 버퍼 | WS 재접속 시 이전 출력 복원 (최대 5000 청크) |
 | 터미널 검색 | Ctrl+F / Cmd+F → xterm.js search addon |
@@ -379,6 +400,8 @@ server/
   session_store.py  — 세션 메타데이터 (이름 변경 지원)
   tts_hook.sh       — Claude Code Stop hook (TTS 자동 요약)
   voice_daemon.py   — 독립 음성 입력 데몬 (핫키 → STT → tmux)
+  clipboard_daemon.py — macOS 클립보드 폴링 데몬 (changeCount → /api/clipboard/push)
+  routes/clipboard.py — POST /api/clipboard/push → /ws-notify 브로드캐스트
   platform_utils.py — 크로스 플랫폼 유틸리티 (macOS/Linux/WSL2)
   tailscale.py      — Tailscale 상태 감지 (D9, tunnel.py와 동일 패턴)
   hooks/tmux_client_notify.sh — tmux client-attached/detached → /api/notify/client-event (D9)
