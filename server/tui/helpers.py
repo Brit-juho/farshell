@@ -11,7 +11,7 @@ VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "vt")
 VT_PORT = int(os.environ.get("VT_PORT", "7777"))
 VT_TARGET_FILE = Path.home() / ".vt" / "voice_target"
 VT_ENV_FILE = Path.home() / ".vt.env"
-VT_TOKEN = os.environ.get("VT_TOKEN", "")
+VT_TOKEN = os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN", "")
 
 
 def server_request(method: str, path: str, body: dict | None = None, timeout: float = 2.0) -> tuple[bool, dict | None]:

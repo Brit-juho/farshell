@@ -54,7 +54,8 @@ if command -v who >/dev/null 2>&1 && [ -n "$TTY_SHORT" ]; then
 fi
 
 TOKEN_Q=""
-[ -n "${VT_TOKEN:-}" ] && TOKEN_Q="?token=${VT_TOKEN}"
+_VT_TOK="${VT_AUTH_TOKEN:-${VT_TOKEN:-}}"
+[ -n "$_VT_TOK" ] && TOKEN_Q="?token=${_VT_TOK}"
 
 PAYLOAD="$(EVT="$EVENT" SESS="$SESSION" TTYV="$TTY_SHORT" RMT="$REMOTE_HOST" "$PYBIN" - <<'PY' 2>/dev/null
 import json, os
