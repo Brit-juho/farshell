@@ -1,9 +1,10 @@
 // Service Worker — Phase 9 #4: 정적 자원 캐시.
+// v4: WebGL/Canvas GPU 렌더러 addon 추가 (DOM 렌더러 CPU/메모리 비용 문제) — 캐시 키 bump.
 // v3: index.html을 css/app.css + js/{terminal,search,picker,grid}.js로 분리.
 //     기존 inline <script> 캐시가 stale 상태가 되므로 캐시 키 bump 필수.
 // v2: voice.js / index / manifest는 network-first로 변경 (v1 stale 캐시 이슈 수정).
 //     vendor/* immutable 자산만 stale-while-revalidate.
-const CACHE = 'vt-static-v3';
+const CACHE = 'vt-static-v4';
 
 const PRECACHE = [
   '/static/icon-192.png',
@@ -12,6 +13,8 @@ const PRECACHE = [
   '/static/vendor/xterm.min.css',
   '/static/vendor/addon-fit.min.js',
   '/static/vendor/addon-search.min.js',
+  '/static/vendor/addon-webgl.min.js',
+  '/static/vendor/addon-canvas.min.js',
   '/static/vendor/lucide.min.css',
   '/static/vendor/lucide.woff2',
   '/static/vendor/nacl.min.js',
