@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
 
+import auth
 import network_access
 import tunnel
 from deps import pty_mgr, output_watcher
@@ -37,14 +38,16 @@ VT_TOKEN = os.environ.get("VT_TOKEN", "")
 # ---------------------------------------------------------------------------
 
 class TokenAuthMiddleware(BaseHTTPMiddleware):
-    """Phase 9 #8: 토큰을 query/Bearer/cookie 모두에서 받는다.
+    """인증: 서명 세션 쿠키(사람) 또는 기계 토큰(데몬/QR)을 받는다.
 
-    `/api/auth`로 query token을 보내면 HttpOnly cookie로 전환되며, 이후 frontend는
-    URL에서 token을 history.replaceState로 제거해 로그/공유 노출을 차단한다.
+    - 사람: `/api/auth`에 비밀번호 제출 → 검증 성공 시 만료 서명 세션 쿠키 발급.
+      이후 요청은 `vt_session` 쿠키로 통과(원문 비밀번호 아님).
+    - 기계: clipboard_daemon·tui·hook은 Bearer/query로 VT_TOKEN 직접 전달.
+    자세한 판정 로직은 auth 모듈(비밀번호 해시 + HMAC 서명) 참조.
     """
 
     async def dispatch(self, request: Request, call_next):
-        if not VT_TOKEN:
+        if not auth.is_protected():
             return await call_next(request)
         path = request.url.path
         if path in ("/", "/sw.js", "/manifest.json", "/favicon.ico", "/api/auth") or path.startswith("/static"):
@@ -54,10 +57,10 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
             or request.query_params.get("token", "")
         )
         if not token:
-            auth = request.headers.get("authorization", "")
-            if auth.startswith("Bearer "):
-                token = auth[7:]
-        if token != VT_TOKEN:
+            authz = request.headers.get("authorization", "")
+            if authz.startswith("Bearer "):
+                token = authz[7:]
+        if not auth.check_request(token):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         return await call_next(request)
 
@@ -180,25 +183,28 @@ async def manifest():
 
 @app.post("/api/auth")
 async def auth_login(request: Request):
-    """Phase 9 #8: query/Bearer 토큰을 HttpOnly cookie로 변환."""
-    if not VT_TOKEN:
+    """비밀번호(또는 기계 토큰) 제출 → 검증 성공 시 만료 서명 세션 쿠키 발급.
+
+    쿠키에는 비밀번호 원문이 아니라 HMAC 서명된 세션표가 실린다(auth.make_session).
+    """
+    if not auth.is_protected():
         return JSONResponse({"ok": True, "no_token": True})
     body = {}
     try:
         body = await request.json()
     except Exception:
         pass
-    token = body.get("token", "") or request.query_params.get("token", "")
-    if token != VT_TOKEN:
+    cred = body.get("token", "") or request.query_params.get("token", "")
+    if not auth.check_credential(cred):
         return JSONResponse({"error": "invalid"}, status_code=401)
     resp = JSONResponse({"ok": True})
     resp.set_cookie(
         "vt_session",
-        VT_TOKEN,
+        auth.make_session(),
         httponly=True,
         samesite="strict",
         secure=request.url.scheme == "https",
-        max_age=86400,
+        max_age=auth.SESSION_TTL,
         path="/",
     )
     return resp
@@ -229,11 +235,11 @@ async def startup():
     # A5: 기본 자세가 open이면(인증 없음 + IP 필터 없음) 명시적으로 경고. LAN 노출 시
     # 인증 없는 터미널 = 원격 코드 실행이므로 사용자가 인지하도록 한다.
     spec = network_access.get_current_spec()
-    if spec.allow_all and not VT_TOKEN:
+    if spec.allow_all and not auth.is_protected():
         logger.warning(
-            "[보안] 인증(VT_TOKEN) 없음 + IP 필터 없음(VT_NETWORK_MODE=all). "
+            "[보안] 인증(비밀번호/VT_TOKEN) 없음 + IP 필터 없음(VT_NETWORK_MODE=all). "
             "이 서버에 도달할 수 있는 누구나 터미널을 실행할 수 있습니다. "
-            "원격 노출 시 VT_TOKEN 설정 또는 VT_NETWORK_MODE=localhost/lan/tailscale 권장."
+            "원격 노출 시 'vt password' 또는 VT_TOKEN 설정, VT_NETWORK_MODE=localhost/lan/tailscale 권장."
         )
     # A4: cloudflare 터널 뒤에서는 cloudflared가 localhost에서 접속하므로 client IP가
     # 항상 127.0.0.1 → IP 화이트리스트가 원격 요청을 걸러내지 못한다. 실질 방어는 VT_TOKEN.

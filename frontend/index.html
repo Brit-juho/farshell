@@ -20,13 +20,88 @@
     (function(){
       try {
         var s = localStorage.getItem('vt-skin') || 'macos';
-        if (['macos','catppuccin','windows','vscode'].indexOf(s) < 0) s = 'macos';
+        if (['macos','catppuccin','windows','vscode','notepad'].indexOf(s) < 0) s = 'macos';
         document.documentElement.setAttribute('data-skin', s);
       } catch(e){}
     })();
   </script>
+  <!-- 로그인 게이트 스타일 (모든 스킨의 테마 변수 재사용) -->
+  <style>
+    #login-gate{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;
+      background:var(--win,#1c1c1e);color:var(--txt,#e6e6ea);font-family:var(--ui,system-ui,sans-serif);}
+    #login-gate[hidden]{display:none;}
+    #login-spinner{width:26px;height:26px;border-radius:50%;
+      border:3px solid var(--line,rgba(255,255,255,.15));border-top-color:var(--acc,#0a84ff);
+      animation:login-spin .8s linear infinite;}
+    #login-spinner[hidden]{display:none;}
+    @keyframes login-spin{to{transform:rotate(360deg)}}
+    #login-form{width:min(340px,86vw);background:var(--menu,#2a2a2c);
+      border:1px solid var(--line,rgba(255,255,255,.08));border-radius:var(--wrad,12px);
+      padding:28px 24px;box-shadow:0 12px 40px rgba(0,0,0,.4);text-align:center;}
+    #login-form[hidden]{display:none;}
+    #login-form .login-icon{font-size:34px;line-height:1;margin-bottom:12px;}
+    #login-form h1{font-size:18px;font-weight:600;margin:0 0 4px;}
+    #login-form .login-sub{font-size:13px;color:var(--sub,#8e8e96);margin:0 0 20px;}
+    #login-form input{width:100%;box-sizing:border-box;font-size:16px;padding:11px 13px;
+      background:var(--win,#1c1c1e);color:var(--txt,#e6e6ea);
+      border:1px solid var(--line,rgba(255,255,255,.14));border-radius:var(--trad,7px);
+      outline:none;margin-bottom:12px;}
+    #login-form input:focus{border-color:var(--acc,#0a84ff);}
+    #login-form button{width:100%;font-size:15px;font-weight:600;padding:11px;cursor:pointer;
+      background:var(--acc,#0a84ff);color:var(--acc-ink,#fff);border:none;border-radius:var(--trad,7px);}
+    #login-form button:disabled{opacity:.55;cursor:default;}
+    #login-form .login-err{color:var(--err,#ff453a);font-size:13px;margin-top:12px;min-height:1em;}
+    #login-form .login-err[hidden]{display:none;}
+  </style>
 </head>
 <body>
+  <!-- 로그인 게이트 — VT_TOKEN 설정 시 미인증 접속을 여기서 막는다 -->
+  <div id="login-gate">
+    <div id="login-spinner"></div>
+    <form id="login-form" hidden autocomplete="on">
+      <div class="login-icon">🔒</div>
+      <h1>Voice Terminal</h1>
+      <p class="login-sub">접속하려면 비밀번호를 입력하세요</p>
+      <input id="login-pass" type="password" name="password" autocomplete="current-password"
+        placeholder="비밀번호" aria-label="비밀번호" />
+      <button type="submit" id="login-submit">접속</button>
+      <div class="login-err" id="login-err" hidden></div>
+    </form>
+  </div>
+  <script>
+    // 로그인 게이트: /api/capabilities로 인증 여부 확인.
+    //  - 200 → 인증됨(또는 서버에 VT_TOKEN 미설정) → 게이트 숨김
+    //  - 401 → 비밀번호 폼 노출 → POST /api/auth 성공 시 24h 쿠키 발급 후 새로고침
+    (function(){
+      var gate=document.getElementById('login-gate');
+      var spin=document.getElementById('login-spinner');
+      var form=document.getElementById('login-form');
+      var pass=document.getElementById('login-pass');
+      var btn=document.getElementById('login-submit');
+      var err=document.getElementById('login-err');
+      function hideGate(){ gate.hidden=true; }
+      function showForm(){ spin.hidden=true; form.hidden=false;
+        setTimeout(function(){ try{ pass.focus(); }catch(e){} }, 50); }
+      // URL에 ?token= 이 있으면(QR/링크 접속) 그 토큰으로 프로브 → 통과 시 terminal.js가 쿠키 교환
+      var urlTok=new URLSearchParams(location.search).get('token');
+      var probe='/api/capabilities'+(urlTok?('?token='+encodeURIComponent(urlTok)):'');
+      fetch(probe,{credentials:'include'}).then(function(r){
+        if(r.status===401){ showForm(); } else { hideGate(); }
+      }).catch(function(){ hideGate(); });
+      form.addEventListener('submit',function(e){
+        e.preventDefault();
+        var v=pass.value; if(!v) return;
+        btn.disabled=true; err.hidden=true;
+        fetch('/api/auth',{method:'POST',credentials:'include',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({token:v})})
+        .then(function(r){
+          if(r.ok){ location.reload(); }
+          else { btn.disabled=false; err.textContent='비밀번호가 올바르지 않습니다'; err.hidden=false;
+            try{ pass.select(); }catch(e){} }
+        }).catch(function(){ btn.disabled=false; err.textContent='연결 오류'; err.hidden=false; });
+      });
+    })();
+  </script>
   <div id="conn-status"></div>
 
   <!-- 터미널 검색 바 -->
