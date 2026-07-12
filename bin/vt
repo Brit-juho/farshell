@@ -82,6 +82,7 @@ _resolve_disallowed_tools() {
 SERVER_LOG="/tmp/vt-server.log"
 TUNNEL_LOG="/tmp/cloudflared.log"
 DAEMON_LOG="/tmp/vt-voice-daemon.log"
+CLIP_DAEMON_LOG="/tmp/vt-clipboard-daemon.log"
 PID_DIR="/tmp/vt-pids"
 mkdir -p "$PID_DIR"
 
@@ -182,6 +183,23 @@ _start_voice_daemon() {
     echo "✓ Voice Daemon 시작 (Ctrl+Shift+V 로 녹음)"
   else
     echo "✗ Voice Daemon 실패. 로그: $DAEMON_LOG"
+    return 1
+  fi
+}
+
+_start_clipboard_daemon() {
+  if _is_running clip; then
+    echo "✓ Clipboard Daemon 이미 실행 중"
+    return 0
+  fi
+  echo "▸ Clipboard Daemon 시작 중..."
+  nohup "$VT_PYTHON" "$VT_DIR/server/clipboard_daemon.py" > "$CLIP_DAEMON_LOG" 2>&1 &
+  echo $! > "$PID_DIR/clip.pid"
+  sleep 1
+  if _is_running clip; then
+    echo "✓ Clipboard Daemon 시작 (맥 클립보드 변경 → 웹 자동 동기화)"
+  else
+    echo "✗ Clipboard Daemon 실패. 로그: $CLIP_DAEMON_LOG"
     return 1
   fi
 }
@@ -461,6 +479,22 @@ cmd_voice() {
   echo "  └─────────────────────────────────────────┘"
 
   _print_attach_guide
+  echo ""
+}
+
+cmd_clip() {
+  echo ""
+  echo "  📋 vt clip — 클립보드 동기화"
+  echo "  맥북 시스템 클립보드 변경 감지 → 웹이 열린 기기의 클립보드로 push"
+  echo "  (vim/tmux copy-mode 등 터미널 내부 복사는 OSC52로 이미 자동 동기화됨 —"
+  echo "   그 경우엔 이 데몬 없이도 동작)"
+  echo ""
+
+  _start_server
+  _start_clipboard_daemon
+
+  echo ""
+  echo "  종료: vt stop"
   echo ""
 }
 
@@ -990,7 +1024,7 @@ cmd_stop() {
   echo "  ⏹  vt stop"
   echo ""
 
-  for svc in voice tunnel server; do
+  for svc in voice clip tunnel server; do
     local pidfile="$PID_DIR/$svc.pid"
     if [ -f "$pidfile" ]; then
       local pid
@@ -1005,6 +1039,7 @@ cmd_stop() {
 
   # 혹시 남은 프로세스 정리
   pkill -f "voice_daemon.py" 2>/dev/null || true
+  pkill -f "clipboard_daemon.py" 2>/dev/null || true
   pkill -f "cloudflared tunnel" 2>/dev/null || true
   if command -v lsof >/dev/null 2>&1; then
     lsof -i :$VT_PORT -t 2>/dev/null | xargs kill 2>/dev/null || true
@@ -2307,6 +2342,7 @@ cmd_status() {
   local tunnel_status="✗ 중지"
   local ts_status="✗ 미설치"
   local voice_status="✗ 중지"
+  local clip_status="✗ 중지"
   local tmux_status="✗ 없음"
 
   if _port_in_use $VT_PORT; then
@@ -2343,6 +2379,10 @@ cmd_status() {
     voice_status="✓ 실행 중 (Ctrl+Shift+V)"
   fi
 
+  if _is_running clip; then
+    clip_status="✓ 실행 중"
+  fi
+
   if "${TMUX_BASE[@]}" list-sessions 2>/dev/null | grep -q .; then
     tmux_status="✓ $("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' | tr '\n' ' ')"
   fi
@@ -2358,6 +2398,7 @@ cmd_status() {
   fi
   echo "  Tailscale:   $ts_status  (원격 SSH 접속: vt ssh)"
   echo "  Voice Daemon: $voice_status"
+  echo "  Clipboard:   $clip_status"
   echo "  tmux:        $tmux_status"
   echo ""
 }
@@ -2365,6 +2406,7 @@ cmd_status() {
 # --- Main ---
 case "${1:-help}" in
   voice)   cmd_voice ;;
+  clip)    cmd_clip ;;
   mobile)  cmd_mobile ;;
   start)   cmd_start ;;
   stop)    shift 2>/dev/null || true; cmd_stop "$@" ;;
@@ -2394,11 +2436,13 @@ case "${1:-help}" in
     echo ""
     echo "  사용법:"
     echo "    vt voice              음성 모드 (백그라운드)"
+    echo "    vt clip               클립보드 동기화 데몬 (맥 클립보드 → 웹, OSC52 보완)"
     echo "    vt mobile [--e2e] [--safe]"
     echo "                          모바일 접속 (--e2e: 암호화, --safe: 위험명령 차단)"
     echo "    vt start              전체 시작 (서버+터널+음성)"
     echo "    vt stop               모든 프로세스 종료"
     echo "    vt status             상태 확인"
+    echo "    vt password [clear]   웹 로그인 비밀번호 설정 (해시 저장) / clear=해제"
     echo "    vt claude             tmux dev 안에서 claude --resume 시작"
     echo "    vt agent <name>       claude/codex/aider/gemini 시작"
     echo "    vt template [save|apply|list|rm] <이름>"
