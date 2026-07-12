@@ -6,6 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [1.6.0] — 2026-07-12
+
+### Added
+- **웹 로그인 비밀번호 — 해시 저장 + 서명 세션 쿠키 (`server/auth.py` 신규, `vt password`).**
+  기존엔 `VT_TOKEN` 고정 토큰 하나를 URL/QR로 실어 보내는 방식뿐이라, 타 기기에서
+  접속하려면 토큰을 URL에 노출해야 했다. 이제 사람은 **비밀번호 입력 화면**으로 로그인한다:
+  - `vt password`로 설정 → 원문은 저장하지 않고 **scrypt 해시**(`VT_PASSWORD_HASH`)만 기록.
+    파일이 유출돼도 단방향 해시라 원문 복원 불가.
+  - 로그인 성공 시 쿠키에는 비밀번호가 아니라 `v1.<만료>.<HMAC>` 형식의 **서명된 세션표**를
+    싣는다(`VT_SECRET_KEY`로 서명, 24h 만료, 위조 불가). 서명키는 `vt password`가 자동 생성.
+  - 기계용 `VT_TOKEN`(clipboard_daemon·tui·hook·QR)은 그대로 병존 — 데몬은 Bearer 토큰으로
+    계속 인증, 하위 호환 유지. 판정은 `auth.check_request`/`check_credential`로 일원화.
+  - `frontend/index.html`에 로그인 게이트 추가: 미인증(`/api/capabilities` 401) 시 🔒 비밀번호
+    입력창 표시 → `POST /api/auth` 성공 시 쿠키 발급 후 새로고침. `VT_TOKEN`만 있고 비밀번호가
+    없으면 QR/URL 흐름도 그대로 동작(하위 호환).
+  - WebSocket 인증(`_ws_auth`)도 동일 로직으로 갱신 → tmux preview·agents·workspace WS 전부 커버.
+  - 새 의존성 없음(Python 표준 `hashlib.scrypt`/`hmac`/`secrets`만 사용).
+  검증: 미인증 401 / 틀린 비번 401 / 맞는 비번 200+서명쿠키 / 위조쿠키 401 / 기계토큰 Bearer·query
+  200 / WS 쿠키없음 거부·유효쿠키 통과 / 기존 테스트 24 passed.
+
+### Fixed
+- **`bin/vt`가 `~/.vt.env`를 export하지 않아 서버에 `VT_TOKEN`이 전달되지 않던 문제.**
+  `source`만 하고 export/`set -a`가 없어, `_start_server`의 자식 uvicorn이 `VT_TOKEN` 등
+  `os.environ` 값을 상속받지 못했다. 즉 `vt start`로 켜면 토큰을 설정해도 인증이 조용히
+  꺼졌다. 설정 파일 로드를 `set -a`로 감싸 자식 프로세스가 상속받도록 수정.
+  검증: 수정 전 자식 python이 `VT_TOKEN`을 빈 값으로 봄 → 수정 후 정상 상속 확인.
+
+---
+
 ## [1.5.1] — 2026-07-08
 
 ### Fixed

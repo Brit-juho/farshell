@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+import auth
 import crypto_channel
 import tmux_runner
 from deps import pty_mgr, session_store, output_watcher, _auto_responder
@@ -34,26 +35,22 @@ WS_QUEUE_LOW = 50
 
 import deps as _deps  # 전역 카운터 직접 수정용
 
-VT_TOKEN = os.environ.get("VT_TOKEN", "")
-
-
 def _ws_auth(ws: WebSocket) -> bool:
-    """Phase 9 #8: WS 인증은 query/Authorization/cookie 모두에서 토큰 수용.
-    HTTP 미들웨어와 동일한 다중 소스를 받아야 cookie-only 클라이언트(/api/auth 후)도 통과.
+    """WS 인증: HTTP 미들웨어와 동일한 다중 소스(cookie/query/Bearer)를 수용.
+
+    서명 세션 쿠키(사람) 또는 기계 토큰(데몬)을 auth.check_request로 판정한다.
     """
-    if not VT_TOKEN:
+    if not auth.is_protected():
         return True
-    # 1) query string
-    token = ws.query_params.get("token", "")
-    if token == VT_TOKEN:
+    # 1) HttpOnly 세션 쿠키 (/api/auth 후)
+    if auth.check_request(ws.cookies.get("vt_session", "")):
         return True
-    # 2) Authorization: Bearer
+    # 2) query string (QR/URL 기계 토큰)
+    if auth.check_request(ws.query_params.get("token", "")):
+        return True
+    # 3) Authorization: Bearer (데몬)
     auth_hdr = ws.headers.get("authorization", "")
-    if auth_hdr.startswith("Bearer ") and auth_hdr[7:] == VT_TOKEN:
-        return True
-    # 3) HttpOnly cookie (vt_session)
-    cookie_token = ws.cookies.get("vt_session", "")
-    if cookie_token == VT_TOKEN:
+    if auth_hdr.startswith("Bearer ") and auth.check_request(auth_hdr[7:]):
         return True
     return False
 

@@ -1,4 +1,4 @@
-> **voice-terminal v1.5.0** (2026-07-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
+> **voice-terminal v1.6.0** (2026-07-12) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
 
 ## vt CLI (어디서든 실행)
 
@@ -14,6 +14,7 @@ vt manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave
 vt attach [name]      # 임의 tmux 세션을 새 창에 attach
 vt voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 vt hotkey [list|set|reset|disable]  # 핫키 조회/변경
+vt password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
 vt help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 vt claude             # 새 터미널 창에 tmux dev + claude --resume
 vt handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
@@ -370,6 +371,7 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 ```
 server/
   main.py           — FastAPI (WS + REST + Voice + 파일 업로드/다운로드)
+  auth.py           — 웹 로그인 인증 (scrypt 비밀번호 해시 + HMAC 서명 세션 쿠키)
   pty_manager.py    — PTY 세션 (broadcast, scrollback 버퍼, EOF 감지)
   voice_handler.py  — STT (faster-whisper) + TTS (edge-tts / macOS say)
   output_watcher.py — 출력 감시 → 작업 완료 TTS 알림

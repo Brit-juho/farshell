@@ -19,8 +19,12 @@ VT_CONFIG="$HOME/.vt.env"
 VT_DEFAULTS="$VT_DIR/config/vt.defaults.env"
 
 # 설정 파일 로드 — defaults 먼저, 그 다음 사용자 override
+# set -a: source한 변수를 전부 export → _start_server의 자식 uvicorn이
+# VT_TOKEN 등 os.environ 값을 상속받는다 (없으면 인증이 조용히 꺼짐).
+set -a
 [ -f "$VT_DEFAULTS" ] && source "$VT_DEFAULTS"
 [ -f "$VT_CONFIG" ] && source "$VT_CONFIG"
+set +a
 
 # 설정 가능한 변수 (환경변수 또는 ~/.vt.env로 오버라이드)
 VT_PORT="${VT_PORT:-7777}"
@@ -821,6 +825,56 @@ _hotkey_unset_env() {
   else
     sed -i "/^${key}=/d" "$env_file"
   fi
+}
+
+# 값을 '작은따옴표'로 저장 — scrypt 해시엔 $가 들어가므로 큰따옴표면 source 시 확장돼 깨진다.
+# sed 대신 grep -v로 라인 교체 → 값 속 특수문자($, & 등) 안전.
+_set_env_single() {
+  local key="$1" value="$2"
+  local env_file="$HOME/.vt.env"
+  touch "$env_file"
+  if grep -qE "^${key}=" "$env_file"; then
+    grep -vE "^${key}=" "$env_file" > "${env_file}.tmp" && mv "${env_file}.tmp" "$env_file"
+  fi
+  printf "%s='%s'\n" "$key" "$value" >> "$env_file"
+}
+
+# 웹 로그인 비밀번호 설정 — 원문은 저장/노출하지 않고 scrypt 해시만 ~/.vt.env에 기록.
+# 세션 서명키(VT_SECRET_KEY)가 없으면 자동 생성. 기계 토큰 VT_TOKEN과는 독립.
+cmd_password() {
+  local env_file="$HOME/.vt.env"
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'vt doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-set}"
+  if [ "$sub" = "clear" ] || [ "$sub" = "disable" ]; then
+    _hotkey_unset_env "VT_PASSWORD_HASH"
+    echo "  ✓ 웹 로그인 비밀번호 해제 (VT_PASSWORD_HASH 제거)"
+    echo "  ⓘ 서버 재시작 필요: vt stop && vt start"
+    return 0
+  fi
+  local pw pw2
+  printf "  새 웹 로그인 비밀번호: " >&2; read -rs pw; echo >&2
+  printf "  확인 입력: " >&2; read -rs pw2; echo >&2
+  if [ -z "$pw" ]; then echo "  ✗ 비밀번호가 비어 있습니다."; return 1; fi
+  if [ "$pw" != "$pw2" ]; then echo "  ✗ 두 입력이 일치하지 않습니다."; return 1; fi
+  if [ "${#pw}" -lt 6 ]; then echo "  ✗ 6자 이상이어야 합니다."; return 1; fi
+  # 원문은 stdin으로만 python에 전달 → ps/argv/환경변수에 노출되지 않음
+  local hash
+  hash="$(cd "$VT_DIR/server" && printf '%s' "$pw" | "$VT_PYTHON" -c 'import sys, auth; print(auth.hash_password(sys.stdin.read()))')" \
+    || { echo "  ✗ 해시 생성 실패"; return 1; }
+  unset pw pw2
+  if [ -z "$hash" ]; then echo "  ✗ 해시 생성 실패(빈 값)"; return 1; fi
+  _set_env_single "VT_PASSWORD_HASH" "$hash"
+  if ! grep -qE '^VT_SECRET_KEY=' "$env_file"; then
+    local secret
+    secret="$("$VT_PYTHON" -c 'import secrets; print(secrets.token_hex(32))')"
+    _set_env_single "VT_SECRET_KEY" "$secret"
+    echo "  ✓ 세션 서명키(VT_SECRET_KEY) 자동 생성"
+  fi
+  echo "  ✓ 웹 로그인 비밀번호 설정 완료 — 해시만 저장(원문 미저장)"
+  echo "  ⓘ 적용하려면 서버 재시작: vt stop && vt start"
 }
 
 # Wave 2 W2-4: 음성 daemon 타깃 세션 lock/해제 (V3-R)
@@ -2330,6 +2384,7 @@ case "${1:-help}" in
   run)      shift; cmd_run "$@" ;;
   help)     shift 2>/dev/null || true; cmd_help "$@" ;;
   hotkey)   shift; cmd_hotkey "$@" ;;
+  password) shift; cmd_password "$@" ;;
   voice-target) shift; cmd_voice_target "$@" ;;
   manage)   shift; cmd_manage "$@" ;;
   tui)      shift; cmd_manage "$@" ;;
