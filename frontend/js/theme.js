@@ -1,7 +1,7 @@
 /* VT 테마 엔진 — UI 스킨 + xterm.js 터미널 테마(ANSI 16색)를 함께 전환.
    terminal.js보다 먼저 로드되어 addSession()이 getVtXtermTheme()을 참조. */
 
-const VT_SKINS = ['macos', 'catppuccin', 'windows', 'vscode'];
+const VT_SKINS = ['macos', 'catppuccin', 'windows', 'vscode', 'notepad'];
 
 // 각 스킨의 xterm.js 테마 — foreground/background/cursor/selection + ANSI 16색.
 // "iTerm2 vs 윈도우 터미널 느낌"의 핵심은 이 팔레트다.
@@ -40,10 +40,19 @@ const VT_XTERM_THEMES = {
     brightBlack:'#767676', brightRed:'#e74856', brightGreen:'#16c60c', brightYellow:'#f9f1a5',
     brightBlue:'#3b78ff', brightMagenta:'#b4009e', brightCyan:'#61d6d6', brightWhite:'#f2f2f2',
   },
+  // 메모장 — 흰 종이 위 잉크. 밝은 배경이라 ANSI 밝기 관계가 다크 테마와 반대로 뒤집힌다.
+  notepad: {
+    background:'#fffefb', foreground:'#2b2a25', cursor:'#0060df', cursorAccent:'#fffefb',
+    selectionBackground:'rgba(0,96,223,0.18)',
+    black:'#24292e', red:'#d73a49', green:'#22863a', yellow:'#b08800',
+    blue:'#0366d6', magenta:'#5a32a3', cyan:'#0598bc', white:'#6a737d',
+    brightBlack:'#959da5', brightRed:'#cb2431', brightGreen:'#28a745', brightYellow:'#dbab09',
+    brightBlue:'#005cc5', brightMagenta:'#8250df', brightCyan:'#3192aa', brightWhite:'#2b2a25',
+  },
 };
 
 // theme-color 메타(모바일 상태바)용 — --bar 값과 일치
-const VT_BAR_COLOR = { macos:'#2c2c2e', catppuccin:'#181825', windows:'#2b2b2b', vscode:'#2d2d2d' };
+const VT_BAR_COLOR = { macos:'#2c2c2e', catppuccin:'#181825', windows:'#2b2b2b', vscode:'#2d2d2d', notepad:'#f1efe7' };
 
 function getVtSkin() {
   const s = document.documentElement.getAttribute('data-skin');

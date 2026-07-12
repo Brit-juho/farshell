@@ -194,7 +194,10 @@
       // 1) copy-on-select — 드래그(브라우저 선택) 끝나면 자동 복사.
       //    ⚠ tmux mouse on이면 일반 드래그는 tmux가 가로채므로, 브라우저 선택은
       //    Shift(또는 Option/Alt)+드래그에서 발생한다.
+      //    "⋯ → 설정 → 드래그 시 자동 복사"로 끌 수 있다 — 꺼도 선택 자체는 그대로
+      //    되고(브라우저 네이티브), 실제 복사만 우클릭/Ctrl+Insert로 넘어간다.
       wrapper.addEventListener('mouseup', () => {
+        if ((localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off') return;
         const sel = term.getSelection && term.getSelection();
         if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
       });
@@ -221,21 +224,65 @@
         }
       }, true);
 
-      // 4) 복사 단축키 — Cmd+C / Ctrl+Shift+C. 선택이 있으면 xterm 내부 선택을 복사하고
+      // 4) 복사 단축키 — Cmd+C / Ctrl+Insert. 선택이 있으면 xterm 내부 선택을 복사하고
       //    이벤트를 소비, 없으면 그대로 통과(Ctrl+C 단독 = SIGINT 유지).
-      //    ⚠ 붙여넣기 단축키(Cmd+V/Ctrl+V/Ctrl+Shift+V)는 여기서 다루지 않는다 —
-      //    xterm 네이티브 paste 이벤트가 이미 처리하며(아래 3번 capture 리스너가 이미지만
-      //    가로챔), keydown에서 또 처리하면 이중 붙여넣기가 된다.
+      //    Cmd+V(Mac)는 Meta 키라 충돌 없이 브라우저 네이티브 paste로 잘 동작하지만,
+      //    순수 Ctrl+V는 여기서 일부러 안 건드린다 — bash readline(quoted-insert),
+      //    vim(visual-block) 등 터미널 프로그램이 실제로 쓰는 키라 가로채면 그 기능이
+      //    깨진다. 문제는 Windows/Linux 브라우저에선 이 충돌 때문에 xterm이 Ctrl+V를
+      //    그대로 pty로 흘려보내 붙여넣기가 아예 안 되는 경우가 있다는 것 — 그래서
+      //    Ctrl+Shift+V를 크로스플랫폼 안전 우회 경로로 둔다.
+      //    ⚠ Ctrl+Shift+C는 의도적으로 제거했다 — Chrome/Edge에서 "요소 검사(Inspect
+      //    Element)" 브라우저 크롬(chrome UI) 단축키와 겹치는데, 이건 페이지 JS의
+      //    preventDefault()로 막을 수 없는 종류라(Ctrl+T 새 탭처럼 브라우저가 페이지보다
+      //    먼저 가로챔) 복사는 되지만 개발자도구가 항상 같이 뜬다. 대신 어떤 브라우저와도
+      //    절대 안 겹치는 터미널 전통 단축키 Ctrl+Insert(복사) / Shift+Insert(붙여넣기)를
+      //    둔다 — Windows/Linux에서는 이쪽을 쓴다.
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== 'keydown') return true;
         const isCopy = (e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'c')
-          || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c');
+          || (e.ctrlKey && !e.shiftKey && e.key === 'Insert');
         if (isCopy) {
           const sel = term.getSelection && term.getSelection();
-          if (sel && sel.trim()) { copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); }); return false; }
+          if (sel && sel.trim()) {
+            e.preventDefault();
+            copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
+            return false;
+          }
         }
+        // ⚠ Ctrl+Shift+V는 Chrome/Firefox 등에서 "서식 없이 붙여넣기"라는 브라우저
+        // 네이티브 단축키와 겹친다. preventDefault() 없이 return false만 하면 xterm
+        // 자체 처리만 막힐 뿐 브라우저 네이티브 paste는 그대로 발동해 이중 붙여넣기가
+        // 된다 — 반드시 먼저 preventDefault()로 브라우저 기본 동작을 막아야 한다.
+        const isPaste = (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'v')
+          || (e.shiftKey && !e.ctrlKey && e.key === 'Insert');
+        if (isPaste) { e.preventDefault(); pasteFromClipboard(id); return false; }
         return true;
       });
+
+      // 5) OSC 52 — 서버 쪽 프로그램(vim, tmux copy-mode 등)이 클립보드에 쓰려는
+      //    요청은 PTY 출력 스트림에 이스케이프 시퀀스로 실려 이미 여기까지 온다.
+      //    별도 연결 없이 가로채서 이 브라우저(=이 기기)의 시스템 클립보드에 반영.
+      //    "?"(쿼리) 응답은 미지원 — set 요청만 처리.
+      if (term.parser && typeof term.parser.registerOscHandler === 'function') {
+        term.parser.registerOscHandler(52, (data) => {
+          const semi = data.indexOf(';');
+          const payload = semi >= 0 ? data.slice(semi + 1) : data;
+          if (!payload || payload === '?') return true;
+          // tmux가 `set-clipboard external`이면 일반 드래그도 자체 copy-mode를 거쳐
+          // 여기로 OSC52를 쏜다(키보드로 하는 vim/tmux copy-mode 복사도 동일 경로라
+          // 드래그만 따로 구분할 수 없음) — "드래그 시 자동 복사" 토글을 꺼도 이 경로가
+          // 살아있으면 사용자 입장에선 "꺼도 계속 복사된다"로 보이므로 같은 설정을 공유한다.
+          if ((localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off') return true;
+          try {
+            const bin = atob(payload);
+            const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+            const text = new TextDecoder('utf-8').decode(bytes);
+            copyToClipboard(text).then((ok) => { if (ok) showToast('클립보드 동기화됨 (OSC52)'); });
+          } catch (_) { /* 잘못된 base64 무시 */ }
+          return true;
+        });
+      }
     }
 
     async function createSession() {
@@ -249,7 +296,11 @@
           body: JSON.stringify({ auto_open_on_mac: true }),
         });
         const data = await res.json();
-        addSession(data.id, data.name?.replace('tmux:', '') || data.id);
+        addSession(data.id, data.name || data.id);
+        // ⚠ tmuxName을 안 채우면 openSessionOnMac()의 tmuxName 가드가 항상 실패해
+        // "이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다"를 잘못 띄운다 —
+        // 실제로는 진짜 tmux 세션인데도(restoreWorkspace 경로는 이걸 항상 채워왔음).
+        if (sessions[data.id]) sessions[data.id].tmuxName = data.tmux_session;
         return;
       }
       const res = await fetch(`${API_BASE}/api/sessions`, {
@@ -267,6 +318,9 @@
       // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
       // 생기므로 무시한다.
       if (!id) { showToast('세션 생성 실패 (id 없음)'); return; }
+      // 빈 상태 온보딩이 떠 있으면 제거 — 안 그러면 새 터미널이 온보딩 뒤에 가려져
+      // 탭은 생겼는데 이동/조작이 안 되는 것처럼 보인다.
+      document.getElementById('onboarding')?.remove();
       const tab = document.createElement('div');
       tab.className = 'tab';
       tab.dataset.sessionId = id;
@@ -330,7 +384,24 @@
       wrapper.id = `term-${id}`;
       wrapper.style.cssText = 'height:100%;display:none;';
       document.getElementById('terminal-container').appendChild(wrapper);
+
       term.open(wrapper);
+
+      // GPU 렌더러 — 기본 DOM 렌더러는 활발한 스트리밍(TUI 등)에서 매 write마다 DOM
+      // 노드를 갱신해 CPU/메모리 비용이 크다. WebGL 우선, 실패(GPU/드라이버 미지원 또는
+      // context-lost) 시 Canvas로, 그마저 실패하면 DOM 그대로 유지한다(기능 저하 없음,
+      // 성능만 낮음). WebGL/Canvas addon은 term.open() '이후'(DOM 부착 후)에만 로드 가능.
+      try {
+        if (window.WebglAddon) {
+          const webgl = new WebglAddon.WebglAddon();
+          webgl.onContextLoss(() => { try { webgl.dispose(); } catch (_) {} });
+          term.loadAddon(webgl);
+        } else if (window.CanvasAddon) {
+          term.loadAddon(new CanvasAddon.CanvasAddon());
+        }
+      } catch (_) {
+        try { if (window.CanvasAddon) term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (_) {}
+      }
 
       // 복사(자동복사/우클릭/단축키) · 붙여넣기 · 이미지 붙여넣기 배선
       wireClipboard(id, term, wrapper);
@@ -369,7 +440,10 @@
           // reset 없이 write하면 이전 출력이 중복 누적되므로 비운 뒤 깨끗하게 repaint한다.
           if (_retries > 0) { term.reset(); term.write('\x1b[32m[재연결됨]\x1b[0m\r\n'); }
           // 새(재)연결된 PTY는 크기를 모르므로 캐시를 비워 첫 fitAndResize가 반드시 보내게 한다.
+          // _lastFitW/H도 같이 비워야 한다 — 컨테이너 픽셀 크기가 그대로면 fitAndResize의
+          // fit() 자체를 건너뛰어 sendResize까지 도달 못 하고 새 PTY에 크기를 못 알린다.
           sessions[id]._lastCols = sessions[id]._lastRows = null;
+          sessions[id]._lastFitW = sessions[id]._lastFitH = null;
           if (!E2E_ENABLED) fitAndResize(id);
           // STABLE_MS 이상 열려 있어야 백오프를 리셋 — 즉시 리셋하면 accept 직후 닫히는
           // flap에서 지수가 자라지 못해 무한 재연결 스톰이 된다.
@@ -397,8 +471,13 @@
 
         sock.onclose = (ev) => {
           clearTimeout(_stableTimer);
-          updateConnStatus(id, false);
+          // ⚠ 탭을 사용자가 직접 닫은 경우(removeSession이 sessions[id]를 이미 delete)에도
+          // 이 close 이벤트가 큐잉돼 나중에 실행된다. 예전엔 이 체크보다 먼저
+          // updateConnStatus(id, false)를 불러 "서버 연결 끊김" 전체 화면 오버레이가
+          // 잠깐이라도 무조건 떴다 — 의도적으로 닫은 건데 마치 네트워크가 끊긴 것처럼
+          // 보였다. 탭 닫힘 여부를 먼저 확인해 그 경우엔 아예 아무 것도 안 한다.
           if (!(id in sessions)) return;                       // 탭 닫힘 → 중단
+          updateConnStatus(id, false);
           const code = ev && ev.code;
           if (TERMINAL_CLOSE_CODES.has(code)) {                // 영구 실패 → 재연결 안 함
             const why = code === 4001 ? '인증 실패' : '세션이 서버에 없음(종료됨)';
@@ -463,6 +542,16 @@
       // 숨김 탭(display:none)은 컨테이너가 0-height라 fit이 rows를 1로 깨뜨린다 —
       // 보이는 탭에서만 측정한다. switchTo가 표시 직후 다시 호출해 준다.
       if (s.wrapper.style.display === 'none') return;
+      // ⚠ fitAddon.fit()은 호출될 때마다 무조건 dimension을 재계산하고, xterm.js 내부적으로
+      // (this._terminal.rows/cols가 계산값과 조금이라도 다르면) _renderService.clear()를
+      // 실행한다 — 문자 아틀라스(glyph 캐시) 폐기 + 재생성으로, xterm.js 자체 이슈(#955)에서도
+      // "비용이 크다"고 명시된 작업이다. 아래 _lastCols/_lastRows 가드는 서버로 보내는 WS
+      // 메시지만 막을 뿐 이 내부 fit() 호출 자체는 막지 못해서, 탭 전환/포커스마다(피사체 크기가
+      // 실제로는 그대로인데) 서브픽셀 반올림 오차만으로도 매번 아틀라스가 갈아엎어질 수 있다.
+      // 컨테이너의 실제 픽셀 크기가 안 바뀌었으면 fit() 자체를 건너뛴다.
+      const cw = s.wrapper.clientWidth, ch = s.wrapper.clientHeight;
+      if (s._lastFitW === cw && s._lastFitH === ch) return;
+      s._lastFitW = cw; s._lastFitH = ch;
       try { s.fitAddon.fit(); } catch (_) { return; }
       const w = s.ws;
       if (w && w.readyState === WebSocket.OPEN) sendResize(w, s.term, s);
@@ -619,8 +708,14 @@
       await fetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' });
       if (activeId === id) {
         const remaining = Object.keys(sessions);
-        if (remaining.length > 0) switchTo(remaining[0]);
-        else { activeId = null; document.getElementById('terminal-container').innerHTML = ''; }
+        if (remaining.length > 0) {
+          switchTo(remaining[0]);
+        } else {
+          // 마지막 세션을 닫은 경우 — 빈 컨테이너만 남기지 않고 온보딩(빈 상태) 화면으로.
+          activeId = null;
+          document.getElementById('terminal-container').innerHTML = '';
+          if (!document.getElementById('onboarding')) showOnboarding();
+        }
       }
       updateSessionPicker();
       saveWorkspace();
@@ -776,7 +871,9 @@
       if (data.id in sessions) {
         switchTo(data.id);
       } else {
-        addSession(data.id, data.name?.replace('tmux:', '') || data.id);
+        addSession(data.id, data.name || data.id);
+        // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
+        if (sessions[data.id]) sessions[data.id].tmuxName = data.tmux_session || tmuxName;
       }
     }
 
@@ -789,7 +886,9 @@
       if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
       const data = await res.json();
       if (!data.id) { showToast('tmux 세션 생성 실패'); return; }
-      addSession(data.id, data.name?.replace('tmux:', '') || data.id);
+      addSession(data.id, data.name || data.id);
+      // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
+      if (sessions[data.id]) sessions[data.id].tmuxName = data.tmux_session;
     }
 
     // 시작 시: URL hash에 #tmux=<name>이 있으면 해당 세션 우선 attach (handoff 링크)
@@ -814,7 +913,11 @@
         const res = await fetch(`${API_BASE}/api/sessions`);
         const existing = await res.json();
         if (existing.length > 0) {
-          for (const s of existing) addSession(s.id, s.name || s.id);
+          for (const s of existing) {
+            addSession(s.id, s.name || s.id);
+            // ⚠ 없으면 openSessionOnMac()이 진짜 tmux 세션도 "tmux 아님"으로 오판한다.
+            if (s.tmux_name && sessions[s.id]) sessions[s.id].tmuxName = s.tmux_name;
+          }
           return;
         }
 
@@ -847,5 +950,83 @@
         </div>
         <p class="vt-ob-hint">맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)</p>
       `;
+      document.body.appendChild(el);
+    }
+
+    // "⋯ → 가이드 보기" — 언제든 열고/닫을 수 있는 서비스 전체 사용 가이드(첫 사용자용).
+    // 온보딩(showOnboarding)은 첫 실행 시 세션 생성을 강제하는 화면이라 재사용하지 않고
+    // 별도로 둔다.
+    function showGuide() {
+      const existing = document.getElementById('vt-guide');
+      if (existing) { existing.remove(); return; }
+
+      // 섹션 정의 — {icon, title, rows:[{key, desc}]}. key는 왼쪽 라벨, desc는 설명(HTML).
+      const sections = [
+        { icon: 'icon-rocket', title: '시작하기', rows: [
+          { key: '<kbd>+</kbd> 버튼', desc: '새 세션 생성 (tmux 세션 또는 일반 터미널)' },
+          { key: '탭', desc: '더블클릭 → 이름 변경 · <kbd>×</kbd> → 닫기(tmux는 detach만 됨, 완전 종료는 ⋯ 메뉴)' },
+          { key: 'Grid 뷰', desc: '상단 <i class="icon-layout-grid"></i> 아이콘 → 모든 tmux 세션 라이브 미리보기' },
+        ]},
+        { icon: 'icon-mic', title: '음성 입력', rows: [
+          { key: '마이크 버튼', desc: '상단 <i class="icon-mic"></i> 탭 → 말하면 STT로 텍스트 입력' },
+          { key: '맥 핫키', desc: '<code>vt voice</code> 실행 후 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> 토글' },
+          { key: '핸즈프리', desc: '모바일 🔄 버튼 → 녹음·인식 연속 자동 반복' },
+          { key: '음성 전용', desc: '⋯ 메뉴 → 터미널 숨기고 큰 마이크만 표시(이어폰용)' },
+        ]},
+        { icon: 'icon-clipboard-copy', title: '복사 · 붙여넣기', rows: [
+          { key: '복사', desc: '드래그(자동, 설정에서 끄기) · <kbd>Ctrl</kbd>+<kbd>Insert</kbd> · 우클릭' },
+          { key: '붙여넣기', desc: '<kbd>Shift</kbd>+<kbd>Insert</kbd> · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> · 우클릭' },
+          { key: '맥↔웹 동기화', desc: 'vim/tmux copy-mode는 자동(OSC52). 그 밖(Safari 등)은 맥에서 <code>vt clip</code> 실행' },
+        ]},
+        { icon: 'icon-square-terminal', title: 'tmux 세션', rows: [
+          { key: 'tmux 세션', desc: '⋯ 메뉴 → 기존 세션 목록 확인·attach' },
+          { key: '맥에서도 열기', desc: '새 세션 생성 시 맥 iTerm 창도 자동으로 열림(토글)' },
+          { key: '이 세션 열기', desc: '지금 보는 세션을 맥 iTerm 새 창으로 열기' },
+        ]},
+        { icon: 'icon-file-up', title: '파일 · 검색', rows: [
+          { key: '파일 업로드', desc: '⋯ 메뉴 → 업로드(경로 자동 삽입). 이미지는 붙여넣기로도 업로드' },
+          { key: '검색', desc: '<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd> 로 터미널 출력 검색' },
+        ]},
+        { icon: 'icon-monitor-smartphone', title: '모바일 · 원격', rows: [
+          { key: '모바일 접속', desc: '<code>vt mobile</code> → QR/URL로 폰 접속(같은 세션 이어쓰기)' },
+          { key: '핸드오프', desc: '<code>vt handoff mobile</code> / <code>desktop</code> 으로 폰↔맥 전환' },
+        ]},
+        { icon: 'icon-palette', title: '테마', rows: [
+          { key: '스킨 변경', desc: '⋯ 메뉴 → macOS · Catppuccin · Windows · VS Code · Notepad' },
+        ]},
+      ];
+
+      const secHtml = sections.map(s => `
+        <div class="vt-guide-sec">
+          <div class="vt-gs-title"><i class="${s.icon}"></i>${s.title}</div>
+          ${s.rows.map(r => `
+            <div class="vt-guide-row">
+              <div class="vt-gr-key">${r.key}</div>
+              <div class="vt-gr-desc">${r.desc}</div>
+            </div>`).join('')}
+        </div>`).join('');
+
+      const el = document.createElement('div');
+      el.id = 'vt-guide';
+      el.className = 'vt-guide-backdrop';
+      el.innerHTML = `
+        <div class="vt-guide-card" role="dialog" aria-modal="true" aria-label="사용 가이드">
+          <div class="vt-guide-head">
+            <div class="vt-gh-icon"><i class="icon-terminal"></i></div>
+            <div>
+              <h2>Voice Terminal</h2>
+              <p>브라우저로 tmux 터미널을 — 웹·폰 어디서든 이어서</p>
+            </div>
+            <button class="vt-guide-x" aria-label="닫기">✕</button>
+          </div>
+          <div class="vt-guide-scroll">${secHtml}</div>
+        </div>
+      `;
+      // 닫기: X 버튼 · 배경 클릭 · Esc
+      const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+      el.querySelector('.vt-guide-x').addEventListener('click', close);
+      el.addEventListener('click', (ev) => { if (ev.target === el) close(); });
+      document.addEventListener('keydown', onKey);
       document.body.appendChild(el);
     }

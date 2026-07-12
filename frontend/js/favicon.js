@@ -1,5 +1,5 @@
 /* VT 동적 파비콘 — 탭 아이콘을 canvas로 그려 16px에서도 선명하게 + 작업 상태 뱃지.
-   보라(랄프톤/Claude 아이덴티티) 라운드 사각 배경 + 흰 마이크 → 라이트/다크 탭바 양쪽에서 보임.
+   보라(랄프톤/Claude 아이덴티티) 라운드 사각 배경 + 흰 터미널(">_") 글리프 → 라이트/다크 탭바 양쪽에서 보임.
    우하단 상태 점: 대기중=없음, 작업중=앰버, 완료=그린.
 
    theme.js/grid.js/voice.js보다 먼저 로드. window.VTFavicon.set('idle'|'working'|'done').
@@ -11,7 +11,7 @@
 
   var SIZE = 64;               // 렌더 해상도 (브라우저가 16px로 다운스케일 → 선명)
   var BG = '#8839ef';          // catppuccin mauve — Claude 에이전트 색과 동일 계열
-  var FG = '#ffffff';          // 마이크 글리프
+  var FG = '#ffffff';          // 터미널 글리프
   var DOT = { working: '#f9b304', done: '#40c057' };  // 앰버 / 그린
 
   var _status = 'idle';
@@ -59,25 +59,19 @@
     roundRect(ctx, 2, 2, 60, 60, 15);
     ctx.fill();
 
-    // 마이크 캡슐 (본체)
-    ctx.fillStyle = FG;
-    roundRect(ctx, 23, 12, 18, 27, 9);
-    ctx.fill();
-
-    // 마이크 거치대 (하단 U자 호) + 스탠드 + 받침
+    // 터미널 프롬프트 글리프 (">_")
     ctx.strokeStyle = FG;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 6;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.arc(32, 33, 15, 0.15 * Math.PI, 0.85 * Math.PI);  // 아래쪽 반원
+    ctx.moveTo(16, 18);
+    ctx.lineTo(28, 32);          // "> " 위쪽 사선
+    ctx.lineTo(16, 46);          // "> " 아래쪽 사선
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(32, 48);
-    ctx.lineTo(32, 54);          // 스탠드
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(24, 55);
-    ctx.lineTo(40, 55);          // 받침
+    ctx.moveTo(32, 46);
+    ctx.lineTo(48, 46);          // "_" 커서
     ctx.stroke();
 
     // 상태 점 (우하단) — 배경색 링으로 마이크와 분리 후 컬러 점
