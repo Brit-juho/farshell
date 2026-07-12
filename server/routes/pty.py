@@ -79,6 +79,10 @@ async def list_sessions():
             "name": info.name if info else s.session_id,
             "cols": s.cols,
             "rows": s.rows,
+            # 클라이언트가 "이 세션 맥에서 열기" 등 tmux 전용 기능을 판단하는 데 필요.
+            # 예전엔 이 필드가 없어서 페이지 로드 시 복원된 세션은 항상 "tmux 아님"으로
+            # 오판됐다(sessions[id].tmuxName을 채울 소스 자체가 없었음).
+            "tmux_name": tmux_name,
         })
     return result
 
@@ -331,7 +335,13 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                     data = json.loads(msg["text"])
                     msg_type = data.get("type")
                     if msg_type == "resize":
-                        pty_mgr.resize(session_id, data["cols"], data["rows"])
+                        try:
+                            pty_mgr.resize(session_id, data["cols"], data["rows"])
+                        except ValueError:
+                            # 세션이 이미 kill/destroy된 뒤 도착한 지연 메시지 — 클라이언트가
+                            # 이미 아는 상황(4004)으로 정리해서 재연결 스톰 대신 깔끔히 중단시킨다.
+                            await ws.close(code=4004, reason="Session destroyed")
+                            return
                     elif msg_type == "pong":
                         last_pong = loop.time()
                 elif "bytes" in msg:
@@ -342,7 +352,14 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                         except Exception as e:
                             logger.warning(f"[E2E] 복호화 실패: {e}")
                             continue
-                    pty_mgr.write(session_id, payload)
+                    try:
+                        pty_mgr.write(session_id, payload)
+                    except ValueError:
+                        # kill 버튼으로 세션이 방금 destroy된 것과 클라이언트의 마지막 입력이
+                        # 경쟁하면 여기서 터진다 — 예전엔 이게 잡히지 않아 전체 핸들러가
+                        # traceback과 함께 죽고 "서버 연결 끊김"으로 보였다.
+                        await ws.close(code=4004, reason="Session destroyed")
+                        return
             elif msg["type"] == "websocket.disconnect":
                 break
     except WebSocketDisconnect:

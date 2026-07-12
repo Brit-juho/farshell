@@ -227,10 +227,18 @@ def spawn_mac_terminal(command: str) -> bool:
     지원 우선순위: iTerm2 → Ghostty → WezTerm → Kitty → Alacritty → Terminal.app
     command는 AppleScript/쉘에 넘어가므로 호출측에서 sanitize 필요.
 
+    명령은 `exec`로 실행한다 — 이 창의 유일한 용도가 tmux attach라, 웹에서 세션을
+    kill/detach하면 attach 프로세스가 종료되고 그 즉시 창도 닫혀야 한다. 셸 안에서
+    실행하면(또는 `; exec bash`로 셸을 남기면) tmux가 죽어도 `...attach[exited]`만
+    남은 죽은 터미널 창이 계속 떠 있게 된다. exec로 셸을 대체하면 프로세스 종료 시
+    터미널 앱이 (기본 프로필의 "프로세스 종료 시 창 닫기" 규칙에 따라) 창을 닫는다.
+
     Returns: True if 터미널 앱에 명령 전달 성공, False if 모든 시도 실패.
     """
     if not IS_MACOS:
         return False
+
+    exec_command = f"exec {command}"
 
     def _osascript(script: str) -> bool:
         try:
@@ -247,7 +255,7 @@ def spawn_mac_terminal(command: str) -> bool:
             '  activate\n'
             '  create window with default profile\n'
             '  tell current session of current window\n'
-            f'    write text "{command}"\n'
+            f'    write text "{exec_command}"\n'
             '  end tell\n'
             'end tell'
         )
@@ -258,7 +266,7 @@ def spawn_mac_terminal(command: str) -> bool:
     if os.path.isdir("/Applications/Ghostty.app"):
         try:
             subprocess.Popen(["open", "-na", "Ghostty", "--args", "-e",
-                              "bash", "-lc", f"{command}; exec bash"])
+                              "bash", "-lc", exec_command])
             return True
         except Exception:
             pass
@@ -267,7 +275,7 @@ def spawn_mac_terminal(command: str) -> bool:
     if shutil.which("wezterm"):
         try:
             subprocess.Popen(["wezterm", "cli", "spawn", "--new-window",
-                              "--", "bash", "-lc", command])
+                              "--", "bash", "-lc", exec_command])
             return True
         except Exception:
             pass
@@ -276,7 +284,7 @@ def spawn_mac_terminal(command: str) -> bool:
     if os.path.isdir("/Applications/kitty.app"):
         try:
             subprocess.Popen(["open", "-na", "kitty", "--args",
-                              "bash", "-lc", f"{command}; exec bash"])
+                              "bash", "-lc", exec_command])
             return True
         except Exception:
             pass
@@ -285,7 +293,7 @@ def spawn_mac_terminal(command: str) -> bool:
     if os.path.isdir("/Applications/Alacritty.app"):
         try:
             subprocess.Popen(["open", "-na", "Alacritty", "--args", "-e",
-                              "bash", "-lc", f"{command}; exec bash"])
+                              "bash", "-lc", exec_command])
             return True
         except Exception:
             pass
@@ -294,7 +302,7 @@ def spawn_mac_terminal(command: str) -> bool:
     script = (
         'tell application "Terminal"\n'
         '  activate\n'
-        f'  do script "{command}"\n'
+        f'  do script "{exec_command}"\n'
         'end tell'
     )
     if _osascript(script):
