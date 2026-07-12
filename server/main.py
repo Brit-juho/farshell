@@ -238,16 +238,16 @@ async def startup():
     spec = network_access.get_current_spec()
     if spec.allow_all and not auth.is_protected():
         logger.warning(
-            "[보안] 인증(비밀번호/VT_TOKEN) 없음 + IP 필터 없음(VT_NETWORK_MODE=all). "
+            "[보안] 인증(비밀번호/VT_AUTH_TOKEN) 없음 + IP 필터 없음(VT_NETWORK_MODE=all). "
             "이 서버에 도달할 수 있는 누구나 터미널을 실행할 수 있습니다. "
-            "원격 노출 시 'vt password' 또는 VT_TOKEN 설정, VT_NETWORK_MODE=localhost/lan/tailscale 권장."
+            "원격 노출 시 'vt password' 또는 VT_AUTH_TOKEN 설정, VT_NETWORK_MODE=localhost/lan/tailscale 권장."
         )
     # A4: cloudflare 터널 뒤에서는 cloudflared가 localhost에서 접속하므로 client IP가
     # 항상 127.0.0.1 → IP 화이트리스트가 원격 요청을 걸러내지 못한다. 실질 방어는 VT_TOKEN.
     if not spec.allow_all and tunnel.find_active_pids():
         logger.warning(
             "[보안] cloudflare 터널 활성 + IP 필터 모드. 터널 경유 요청은 모두 127.0.0.1로 "
-            "보여 IP 필터가 무력화됩니다. 원격 인증은 VT_TOKEN으로 하세요 "
+            "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "
             "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
         )
     output_watcher.on_notify(on_task_complete)

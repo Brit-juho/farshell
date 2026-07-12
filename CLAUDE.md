@@ -375,8 +375,8 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | Clipboard 동기화 | OSC52(터미널 내부 복사) + `vt clip` 폴링 데몬(터미널 밖 복사) → 웹 클립보드 push |
 | 핸즈프리 모드 | 모바일 🔄 버튼 → 연속 녹음/STT 자동 반복 |
 | 음성 전용 모드 | 🎧 버튼 → 터미널 숨기고 큰 마이크만 표시 (이어폰 조작용) |
-| 웹 로그인 비밀번호 | `vt password`로 설정 → scrypt 해시(`VT_PASSWORD_HASH`)만 저장, 원문 미저장. 로그인 시 `VT_SECRET_KEY`로 서명된 24h 세션 쿠키 발급(원문·토큰 아님). 사람용 인증. `server/auth.py` |
-| API 토큰 인증 | `VT_TOKEN` 환경변수 = 기계용 토큰(데몬/QR/URL). URL `?token=xxx` 또는 `Authorization: Bearer xxx`. 비밀번호 로그인과 병존 |
+| 웹 로그인 비밀번호 | `vt password`로 설정 → scrypt 해시(`VT_AUTH_PASSWORD_HASH`)만 저장, 원문 미저장. 로그인 시 `VT_AUTH_SESSION_KEY`로 서명된 24h 세션 쿠키 발급(원문·토큰 아님). 사람용 인증. `server/auth.py` |
+| API 토큰 인증 | `VT_AUTH_TOKEN` 환경변수 = 기계용 토큰(데몬/QR/URL). URL `?token=xxx` 또는 `Authorization: Bearer xxx`. 비밀번호 로그인과 병존. (구 이름 `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY`도 fallback 인식) |
 | tmux 세션 관리 | 웹에서 tmux 생성/attach/detach/kill |
 | Scrollback 버퍼 | WS 재접속 시 이전 출력 복원 (최대 5000 청크) |
 | 터미널 검색 | Ctrl+F / Cmd+F → xterm.js search addon |

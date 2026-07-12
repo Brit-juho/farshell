@@ -577,7 +577,7 @@ cmd_mobile() {
   if [ "$network_mode" = "all" ] && [ -n "$url" ]; then
     full_url="$url"
   fi
-  local token=${VT_TOKEN:-}
+  local token=${VT_AUTH_TOKEN:-${VT_TOKEN:-}}
   # E2E 활성화 시 URL hash fragment에 #e2e=1 추가 (서버 로그에 안 남음)
   local e2e_frag=""
   [ $want_e2e -eq 1 ] && e2e_frag="#e2e=1"
@@ -883,8 +883,9 @@ cmd_password() {
   fi
   local sub="${1:-set}"
   if [ "$sub" = "clear" ] || [ "$sub" = "disable" ]; then
-    _hotkey_unset_env "VT_PASSWORD_HASH"
-    echo "  ✓ 웹 로그인 비밀번호 해제 (VT_PASSWORD_HASH 제거)"
+    _hotkey_unset_env "VT_AUTH_PASSWORD_HASH"
+    _hotkey_unset_env "VT_PASSWORD_HASH"   # 레거시 이름도 함께 정리
+    echo "  ✓ 웹 로그인 비밀번호 해제 (VT_AUTH_PASSWORD_HASH 제거)"
     echo "  ⓘ 서버 재시작 필요: vt stop && vt start"
     return 0
   fi
@@ -900,12 +901,13 @@ cmd_password() {
     || { echo "  ✗ 해시 생성 실패"; return 1; }
   unset pw pw2
   if [ -z "$hash" ]; then echo "  ✗ 해시 생성 실패(빈 값)"; return 1; fi
-  _set_env_single "VT_PASSWORD_HASH" "$hash"
-  if ! grep -qE '^VT_SECRET_KEY=' "$env_file"; then
+  _set_env_single "VT_AUTH_PASSWORD_HASH" "$hash"
+  _hotkey_unset_env "VT_PASSWORD_HASH"   # 레거시 이름 잔재 제거(중복 방지)
+  if ! grep -qE '^VT_AUTH_SESSION_KEY=' "$env_file" && ! grep -qE '^VT_SECRET_KEY=' "$env_file"; then
     local secret
     secret="$("$VT_PYTHON" -c 'import secrets; print(secrets.token_hex(32))')"
-    _set_env_single "VT_SECRET_KEY" "$secret"
-    echo "  ✓ 세션 서명키(VT_SECRET_KEY) 자동 생성"
+    _set_env_single "VT_AUTH_SESSION_KEY" "$secret"
+    echo "  ✓ 세션 서명키(VT_AUTH_SESSION_KEY) 자동 생성"
   fi
   echo "  ✓ 웹 로그인 비밀번호 설정 완료 — 해시만 저장(원문 미저장)"
   echo "  ⓘ 적용하려면 서버 재시작: vt stop && vt start"
@@ -1183,11 +1185,13 @@ cmd_doctor() {
     _check ".vt.env" warn "없음. install.sh가 자동 생성"
   fi
 
-  # 11. 인증 토큰
-  if [ -n "${VT_TOKEN:-}" ]; then
-    _check "VT_TOKEN" ok "설정됨 (원격 인증 활성)"
+  # 11. 인증 (비밀번호 해시 또는 토큰)
+  if [ -n "${VT_AUTH_PASSWORD_HASH:-${VT_PASSWORD_HASH:-}}" ]; then
+    _check "인증" ok "웹 로그인 비밀번호 설정됨 (vt password)"
+  elif [ -n "${VT_AUTH_TOKEN:-${VT_TOKEN:-}}" ]; then
+    _check "인증" ok "VT_AUTH_TOKEN 설정됨 (원격 인증 활성)"
   else
-    _check "VT_TOKEN" warn "미설정 (공개 터널에선 누구나 접속 가능)"
+    _check "인증" warn "미설정 (공개 터널에선 누구나 접속 가능) — 'vt password' 권장"
   fi
 
   # 12. 푸시 알림
@@ -1557,7 +1561,7 @@ cmd_handoff() {
 
       local url
       url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-      local token=${VT_TOKEN:-}
+      local token=${VT_AUTH_TOKEN:-${VT_TOKEN:-}}
       local full_url="$url"
       [ -n "$token" ] && full_url="${url}?token=${token}"
       # 폰이 접속하면 이 tmux 세션을 기본으로 보도록 hash 파라미터 추가

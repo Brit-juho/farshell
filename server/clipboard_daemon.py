@@ -72,7 +72,7 @@ def _vt_getenv(key: str, default: str = "") -> str:
 
 POLL_SEC = float(_vt_getenv("VT_CLIPBOARD_POLL_SEC", "0.7"))
 _PORT = _vt_getenv("VT_PORT", "7777")
-_TOKEN = _vt_getenv("VT_TOKEN", "")
+_TOKEN = _vt_getenv("VT_AUTH_TOKEN", "") or _vt_getenv("VT_TOKEN", "")
 PUSH_URL = f"http://127.0.0.1:{_PORT}/api/clipboard/push"
 
 
