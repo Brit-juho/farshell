@@ -11,8 +11,13 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 // W1-5: handsFreeModeOn 제거됨 (VAD 미구현 상태에서의 가짜 핸즈프리 모드 폐기)
-// W2-3: 이어폰 미디어 키 트리거 토글. localStorage 영구 저장.
-let mediaKeyTriggerOn = (localStorage.getItem('vt_mediakey_trigger') ?? 'on') !== 'off';
+// W2-3: 이어폰 미디어 키 트리거 토글.
+// ⚠ setupMediaSession()의 무음 오디오 loop=true 재생은 주석("AudioContext.suspend()로
+// 배터리 절약")과 달리 실제로는 suspend 로직이 없어 브라우저가 탭을 "미디어 재생 중"으로
+// 계속 인식 — 오디오 파이프라인이 절대 안 쉬고 장시간(하루 종일) 세션에서 CPU/메모리가
+// 누적되는 원인으로 확인됨(사용자 실측: 이 기능 ON 직후 CPU/RAM 폭증 재현). 그래서 더 이상
+// localStorage로 기억하지 않는다 — 매 페이지 로드마다 항상 OFF로 시작, 필요할 때만 명시적으로 켠다.
+let mediaKeyTriggerOn = false;
 
 const micBtn = document.getElementById('mic-btn-wrap');
 const micStatus = document.getElementById('mic-status');
@@ -64,11 +69,7 @@ async function startRecording() {
     // [D8 barge-in] 재생 중인 TTS 중단 — 사용자가 말하기 시작하면 즉시 정지
     try {
       fetch(`${API}/voice/cancel`, { method: 'POST' }).catch(() => {});
-      // 브라우저에서 TTS로 재생 중인 Audio 요소도 중단
-      if (window._currentTTSAudio) {
-        try { window._currentTTSAudio.pause(); } catch {}
-        window._currentTTSAudio = null;
-      }
+      _stopCurrentTTS();
     } catch {}
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -148,24 +149,43 @@ async function speakText(text) {
 
 // [A1] autoplay 정책 대응 — play() 실패 시 UI로 수동 재생 유도
 let _pendingAudioUrl = null;
+// 현재 재생 중인 TTS의 object URL. audio 엘리먼트 자체(window._currentTTSAudio)와
+// 항상 쌍으로 관리 — pause()만으로 중단하면 ended/error가 안 불려 URL.revokeObjectURL이
+// 영영 안 불리고, Audio 엘리먼트의 디코더/오디오 파이프라인도 안 풀린다. task_complete
+// 알림이 응답마다 오는 활성 세션에서는 이게 매번 하나씩 새서 GB 단위로 쌓인다.
+let _currentTTSUrl = null;
+
+// [D8 barge-in] 재생 중이던 TTS를 완전히 정지 — pause + revoke + src 해제(디코더 파이프라인
+// 즉시 반환). barge-in이 일어나는 모든 지점(startRecording, playAudioBlob)이 이걸 공유한다.
+function _stopCurrentTTS() {
+  const audio = window._currentTTSAudio;
+  if (audio) {
+    try { audio.pause(); } catch {}
+    try { audio.removeAttribute('src'); audio.load(); } catch {}
+    window._currentTTSAudio = null;
+  }
+  if (_currentTTSUrl) {
+    URL.revokeObjectURL(_currentTTSUrl);
+    _currentTTSUrl = null;
+  }
+}
 
 function playAudioBlob(blob) {
   console.log('[TTS] playAudioBlob called,', blob.size, 'bytes');
-  // [D8 barge-in] 기존 재생 중이던 오디오가 있으면 먼저 중단
-  if (window._currentTTSAudio) {
-    try { window._currentTTSAudio.pause(); } catch {}
-  }
+  // [D8 barge-in] 기존 재생 중이던 오디오가 있으면 먼저 완전히 정리
+  _stopCurrentTTS();
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
   window._currentTTSAudio = audio;
+  _currentTTSUrl = url;
   audio.onended = () => {
     console.log('[TTS] 재생 완료');
-    URL.revokeObjectURL(url);
+    if (_currentTTSUrl === url) { URL.revokeObjectURL(url); _currentTTSUrl = null; }
     if (window._currentTTSAudio === audio) window._currentTTSAudio = null;
   };
   audio.onerror = (e) => {
     console.error('[TTS] 재생 에러:', e);
-    URL.revokeObjectURL(url);
+    if (_currentTTSUrl === url) { URL.revokeObjectURL(url); _currentTTSUrl = null; }
     if (window._currentTTSAudio === audio) window._currentTTSAudio = null;
   };
 
@@ -191,9 +211,18 @@ function showPlayButton() {
     btn.style.cssText = 'display:block;margin:6px auto 0;font-size:13px;';
     btn.onclick = () => {
       if (_pendingAudioUrl) {
-        const a = new Audio(_pendingAudioUrl);
+        const url = _pendingAudioUrl;
+        const a = new Audio(url);
+        window._currentTTSAudio = a;
+        _currentTTSUrl = url;
         a.play();
-        a.onended = () => { URL.revokeObjectURL(_pendingAudioUrl); _pendingAudioUrl = null; };
+        const cleanup = () => {
+          if (_currentTTSUrl === url) { URL.revokeObjectURL(url); _currentTTSUrl = null; }
+          if (window._currentTTSAudio === a) window._currentTTSAudio = null;
+        };
+        a.onended = cleanup;
+        a.onerror = cleanup;
+        _pendingAudioUrl = null;
       }
       btn.remove();
     };
@@ -201,10 +230,9 @@ function showPlayButton() {
   }
 }
 
-// W2-3: 이어폰 미디어 키 트리거 ON/OFF 토글
+// W2-3: 이어폰 미디어 키 트리거 ON/OFF 토글. 이번 탭에서만 유효 — 새로고침/재접속 시 항상 OFF로 시작.
 function toggleMediaKeyTrigger() {
   mediaKeyTriggerOn = !mediaKeyTriggerOn;
-  localStorage.setItem('vt_mediakey_trigger', mediaKeyTriggerOn ? 'on' : 'off');
   const btn = document.getElementById('mediakey-btn');
   if (btn) btn.classList.toggle('active', mediaKeyTriggerOn);
 
@@ -287,6 +315,17 @@ function connectNotify() {
           showNotification(data.summary, data.session_id);
           // 탭 파비콘 '완료' 뱃지 — 탭 재포커스 시 favicon.js가 자동 해제
           if (window.VTFavicon) VTFavicon.set('done');
+        } else if (data.type === 'clipboard_push' && data.text) {
+          // 맥북(서버) 쪽 clipboard_daemon.py가 감지한 시스템 클립보드 변경 —
+          // copyToClipboard는 terminal.js가 전역(classic script)으로 정의.
+          // "⋯ → 설정 → 드래그 시 자동 복사"를 꺼도 이 경로(vt clip)만 안 막히면
+          // 여전히 자동으로 클립보드가 덮어써지므로 같은 설정을 공유한다.
+          const autoSyncOff = (localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off';
+          if (!autoSyncOff && typeof copyToClipboard === 'function') {
+            copyToClipboard(data.text).then((ok) => {
+              if (ok && typeof showToast === 'function') showToast('클립보드 동기화됨');
+            });
+          }
         }
       } else if (e.data instanceof Blob) {
         console.log('[NOTIFY] audio blob:', e.data.size, 'bytes');
@@ -382,12 +421,24 @@ function setupMediaSession() {
   // 이중 호출 방어 — 이미 setup됐으면 silentAudio가 존재
   if (silentAudio) return;
 
-  // [M3] 무음 오디오 — AudioContext.suspend()로 배터리 절약
+  // [M3] 무음 오디오 — OS가 이 탭을 미디어 키 대상으로 잡으려면 오디오가 최소 한 번은
+  // "재생"된 적이 있어야 한다(브라우저 오디오 포커스 요건). 예전엔 이걸 무한 loop=true로
+  // 영원히 재생시켜서 오디오 파이프라인이 하루 종일 절대 안 쉬었다(CPU/메모리 누적의 실측
+  // 확인된 원인). 일시정지된 음악 앱도 재생 버튼을 계속 받는 것처럼, 미디어 세션은 '재생 중'을
+  // 유지할 필요 없이 '한 번 재생됨 + 일시정지' 상태로도 OS 미디어 키를 계속 받는다.
+  // → 아주 짧게 1회만 재생하고 즉시 pause한다. 오디오 파이프라인이 대부분의 시간 동안
+  // 실제로 쉬므로 CPU/메모리 비용이 없다.
   silentAudio = new Audio();
   silentAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-  silentAudio.loop = true;
+  silentAudio.loop = false;
   silentAudio.volume = 0.01;
-  silentAudio.play().catch(() => {});
+  const _playP = silentAudio.play();
+  if (_playP && _playP.then) {
+    _playP.then(() => {
+      try { silentAudio.pause(); } catch (_) {}
+      navigator.mediaSession.playbackState = 'paused';
+    }).catch(() => {});
+  }
 
   navigator.mediaSession.metadata = new MediaMetadata({
     title: '랄프톤 Voice Terminal',
