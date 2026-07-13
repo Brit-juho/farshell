@@ -436,3 +436,60 @@ body.voice-only-mode #mic-status {
 }
 
 @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
+
+/* ---- 모바일 특수키 바 (keybar) ------------------------------------------
+   소프트 키보드에 없는 Esc/Tab/화살표/Ctrl 등을 PTY로 주입. 터치 기기 전용.
+   position:fixed로 하단 고정 후, terminal.js가 visualViewport 기준으로 키보드
+   위에 오도록 transform으로 끌어올린다. */
+#keybar {
+  position:fixed; left:0; right:0; bottom:0; z-index:130;
+  display:flex; gap:6px; align-items:center;
+  padding:6px calc(8px + env(safe-area-inset-right,0px))
+          calc(6px + env(safe-area-inset-bottom,0px)) calc(8px + env(safe-area-inset-left,0px));
+  background:var(--bar); border-top:1px solid var(--line);
+  will-change:transform;
+}
+#keybar[hidden] { display:none; }
+/* 키 버튼들만 가로 스크롤 (토글 버튼은 스크롤 밖에 고정) */
+#keybar-keys {
+  flex:1 1 auto; min-width:0;
+  display:flex; gap:6px; align-items:center;
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
+  -webkit-overflow-scrolling:touch; touch-action:pan-x;
+}
+#keybar-keys::-webkit-scrollbar { display:none; }
+.kb {
+  flex:0 0 auto; min-width:42px; height:38px; padding:0 12px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-family:var(--ui); font-size:15px; font-weight:600; line-height:1;
+  color:var(--txt); background:var(--tab); border:1px solid var(--line);
+  border-radius:8px; cursor:pointer; user-select:none; -webkit-user-select:none;
+  touch-action:manipulation;
+}
+.kb:active { background:var(--menu-hover); }
+.kb-arrow { min-width:38px; font-size:17px; }
+.kb-mod.armed { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); }
+/* 접기/펴기 토글 버튼 */
+#keybar-toggle {
+  flex:0 0 auto; width:34px; height:38px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:18px; line-height:1; color:var(--sub);
+  background:var(--tab); border:1px solid var(--line); border-radius:8px;
+  cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation;
+}
+#keybar-toggle:active { background:var(--menu-hover); }
+/* 접힘: 키 줄을 숨기고 바를 우하단 작은 알약으로 축소 (펴기 핸들만 노출) */
+#keybar.collapsed {
+  left:auto; right:calc(8px + env(safe-area-inset-right,0px)); width:auto;
+  border:1px solid var(--line); border-radius:10px;
+  padding:5px 6px calc(5px + env(safe-area-inset-bottom,0px));
+}
+#keybar.collapsed #keybar-keys { display:none; }
+/* 정밀 포인터(데스크톱, 물리 키보드)에서는 항상 숨김 — 단, 강제 오버라이드는 예외 */
+@media (pointer:fine) { #keybar:not(.force-show) { display:none !important; } }
+/* 터치 기기: keybar 높이만큼 터미널 하단 여백을 확보해 프롬프트가 안 가리게.
+   접힌 상태에선 우하단 알약만 남으니 여백을 줄여 화면을 더 쓴다. */
+@media (pointer:coarse) {
+  #terminal-container { padding-bottom:52px; }
+  body.kb-collapsed #terminal-container { padding-bottom:8px; }
+}

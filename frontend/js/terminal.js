@@ -499,7 +499,8 @@
       term.onData((data) => {
         const handle = sessions[id]?.wsHandle;
         if (handle && handle.readyState === WebSocket.OPEN) {
-          handle.send(new TextEncoder().encode(data));
+          // keybar의 sticky Ctrl이 armed면 소프트 키보드로 친 문자에 Ctrl 조합 적용.
+          handle.send(new TextEncoder().encode(applyStickyMod(data)));
         }
       });
 
@@ -1030,3 +1031,114 @@
       document.addEventListener('keydown', onKey);
       document.body.appendChild(el);
     }
+
+    // ---- 모바일 특수키 바 (keybar) -------------------------------------------
+    // 소프트 키보드에 없는 특수키/조합키를 활성 PTY에 원시 시퀀스로 주입한다.
+    // 기존 sendToPty(activeId, ...)와 activeId를 그대로 재사용.
+    // Sticky Ctrl: Ctrl을 한 번 탭하면 "다음 한 키만" Ctrl 조합으로 전송된다
+    // (keybar 문자 버튼 · 소프트 키보드 문자 양쪽 모두). Claude Code/셸의 Ctrl 단축키용.
+    // 순수 키-시퀀스 로직(_KEYBAR_SEQ, ctrlByte, Ctrl+화살표, sticky 변환)은
+    // keyseq.js(window.VTKeySeq)로 분리 — DOM/세션 상태가 없어 단위 테스트 대상.
+    let _ctrlArmed = false;
+
+    function _setCtrlArmed(on) {
+      _ctrlArmed = on;
+      const btn = document.querySelector('#keybar .kb-mod[data-mod="ctrl"]');
+      if (btn) {
+        btn.classList.toggle('armed', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
+
+    // term.onData 경로에서 호출 — armed Ctrl이면 입력 첫 글자에 Ctrl 조합 적용 후 해제.
+    // (함수 선언이라 addSession의 onData보다 뒤에 있어도 호이스팅되어 안전)
+    function applyStickyMod(data) {
+      if (_ctrlArmed && data) {
+        _setCtrlArmed(false);   // 입력이 오면 sticky 상태 소비(해제)
+        return VTKeySeq.applyCtrlToInput(data);
+      }
+      return data;
+    }
+
+    function _focusActiveTerm() {
+      const t = sessions[activeId] && sessions[activeId].term;
+      if (t) { try { t.focus(); } catch (_) {} }
+    }
+
+    function initKeybar() {
+      const bar = document.getElementById('keybar');
+      if (!bar) return;
+      // 물리 키보드가 없는 터치 기기에서만 노출 (데스크톱은 CSS로도 숨기지만 이중 방어).
+      // 강제 오버라이드: ?keybar=1 또는 localStorage vt_keybar='on' (터치 노트북/테스트용).
+      const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+      let _force = false;
+      try { _force = _urlParams.get('keybar') === '1' || localStorage.getItem('vt_keybar') === 'on'; } catch (_) {}
+      if (!coarse && !_force) return;
+      // 강제 노출 시엔 CSS의 pointer:fine 숨김을 이기도록 클래스 부여.
+      if (_force) bar.classList.add('force-show');
+      bar.hidden = false;
+
+      // pointerdown에서 preventDefault → 터미널 textarea 포커스를 뺏지 않아
+      // 소프트 키보드가 내려가지 않는다. (버튼 탭마다 키보드가 닫히면 못 씀)
+      bar.addEventListener('pointerdown', (e) => {
+        // 접기/펴기 토글 — .kb가 아니므로 먼저 가로챈다.
+        const toggle = e.target.closest('#keybar-toggle');
+        if (toggle) {
+          e.preventDefault();
+          _setKeybarCollapsed(!bar.classList.contains('collapsed'));
+          _focusActiveTerm();
+          return;
+        }
+        const btn = e.target.closest('.kb');
+        if (!btn) return;
+        e.preventDefault();
+        if (btn.dataset.mod === 'ctrl') { _setCtrlArmed(!_ctrlArmed); _focusActiveTerm(); return; }
+        // armed면 keybarSeq가 Ctrl+화살표(단어 이동)·Ctrl+문자를 조합해 준다.
+        const out = VTKeySeq.keybarSeq({ key: btn.dataset.key, seq: btn.dataset.seq, ctrl: _ctrlArmed });
+        if (!out) return;
+        if (_ctrlArmed) _setCtrlArmed(false);
+        sendToPty(activeId, out);
+        _focusActiveTerm();
+      });
+
+      // 키보드 위로 띄우기 — visualViewport로 소프트 키보드 높이를 추정해 transform.
+      const positionBar = () => {
+        const vv = window.visualViewport;
+        if (!vv) return;
+        const overlap = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+        bar.style.transform = overlap > 0 ? `translateY(${-overlap}px)` : '';
+      };
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', positionBar);
+        window.visualViewport.addEventListener('scroll', positionBar);
+      }
+      window.addEventListener('resize', positionBar);
+
+      // 접기/펴기 — 상태를 localStorage에 기억. 접으면 우하단 알약만 남고
+      // 터미널 하단 여백이 줄어 화면을 더 쓴다. (함수 선언이라 위 핸들러에서 참조 가능)
+      function _setKeybarCollapsed(collapsed) {
+        // armed Ctrl이 접힘 상태로 넘어가면 하이라이트가 숨겨진 채 다음 입력이
+        // Ctrl 조합으로 나가버린다(놀람). 접기/펴기 시 항상 해제.
+        _setCtrlArmed(false);
+        bar.classList.toggle('collapsed', collapsed);
+        document.body.classList.toggle('kb-collapsed', collapsed);
+        const tg = document.getElementById('keybar-toggle');
+        if (tg) {
+          tg.textContent = collapsed ? '▴' : '▾';
+          tg.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+          tg.setAttribute('aria-label', collapsed ? '특수키 바 펴기' : '특수키 바 접기');
+        }
+        try { localStorage.setItem('vt_keybar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+        // 하단 여백이 바뀌었으니 xterm 칸 수 재계산.
+        if (typeof fitAndResize === 'function' && activeId) setTimeout(() => fitAndResize(activeId), 60);
+        positionBar();
+      }
+
+      // 초기 상태 복원 (기본: 펼침)
+      let _startCollapsed = false;
+      try { _startCollapsed = localStorage.getItem('vt_keybar_collapsed') === '1'; } catch (_) {}
+      if (_startCollapsed) _setKeybarCollapsed(true);
+
+      positionBar();
+    }
+    initKeybar();

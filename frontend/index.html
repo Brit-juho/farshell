@@ -210,6 +210,26 @@
   <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
   <div id="mic-status" role="status" aria-live="polite"></div>
 
+  <!-- 모바일 특수키 바 (keybar) — 소프트 키보드에 없는 Esc/Tab/화살표/Ctrl 등을 PTY로 전송.
+       기본 hidden; terminal.js가 터치 기기(pointer:coarse)에서만 노출하고 배선/위치 조정. -->
+  <div id="keybar" role="toolbar" aria-label="특수키" hidden>
+    <div id="keybar-keys">
+      <button type="button" class="kb" data-key="esc">Esc</button>
+      <button type="button" class="kb kb-mod" data-mod="ctrl" aria-pressed="false">Ctrl</button>
+      <button type="button" class="kb" data-key="tab">Tab</button>
+      <button type="button" class="kb kb-arrow" data-key="up" aria-label="위쪽 화살표">↑</button>
+      <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표">↓</button>
+      <button type="button" class="kb kb-arrow" data-key="left" aria-label="왼쪽 화살표">←</button>
+      <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표">→</button>
+      <button type="button" class="kb" data-seq="|">|</button>
+      <button type="button" class="kb" data-seq="/">/</button>
+      <button type="button" class="kb" data-seq="~">~</button>
+      <button type="button" class="kb" data-seq="-">-</button>
+    </div>
+    <!-- 접기/펴기 토글 — 스크롤 영역 밖에 고정되어 항상 보임 -->
+    <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" title="특수키 바 접기/펴기">▾</button>
+  </div>
+
   <script src="/static/vendor/xterm.min.js"></script>
   <script src="/static/vendor/addon-fit.min.js"></script>
   <script src="/static/vendor/addon-search.min.js"></script>
@@ -227,6 +247,8 @@
   <script src="/static/js/favicon.js"></script>
 
   <!-- 앱 스크립트 — 전역 변수 공유를 위해 classic <script> + 원래 순서 보존 -->
+  <!-- keyseq.js: keybar 순수 키-시퀀스 로직(terminal.js가 window.VTKeySeq 사용) -->
+  <script src="/static/js/keyseq.js"></script>
   <script src="/static/js/terminal.js"></script>
   <script src="/static/js/search.js"></script>
   <script src="/static/js/picker.js"></script>
