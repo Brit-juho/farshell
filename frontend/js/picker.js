@@ -50,8 +50,12 @@
       try {
         const res = await fetch(`${API_BASE}/api/upload?session_id=${sid}`, { method: 'POST', body: formData });
         const data = await res.json();
-        if (data.ok && activeId && sessions[activeId]) {
-          sessions[activeId].term.write(`\r\n\x1b[32m[업로드 완료: ${data.path}]\x1b[0m\r\n`);
+        if (data.ok && data.path && activeId && sessions[activeId]) {
+          // 화면에 찍기만 하면(term.write) 드래그 선택 말고는 경로를 집어낼 수 없다.
+          // 이미지 붙여넣기(pasteImageUpload)와 동일하게 경로를 명령줄에 실제로 타이핑해
+          // Claude 등에 그대로 넘길 수 있게 한다.
+          sendToPty(activeId, data.path + ' ');
+          showToast('업로드 완료 — 경로 삽입됨', 'success');
         }
       } catch (e) {
         showToast('업로드 실패: ' + e.message, 'error');
