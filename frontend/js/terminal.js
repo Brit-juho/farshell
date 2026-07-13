@@ -154,6 +154,23 @@
     }
 
     async function pasteFromClipboard(id) {
+      // 이미지 우선 — Ctrl+Shift+V / 우클릭 붙여넣기는 네이티브 paste 이벤트를
+      // 안 거치므로(그쪽은 Cmd+V/Ctrl+V 전용), 여기서 async Clipboard API로
+      // 이미지를 직접 읽어 업로드한다. read()는 HTTPS/localhost(보안 컨텍스트)에서만
+      // 되므로 실패하면 조용히 텍스트 붙여넣기로 폴백한다.
+      try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+          const items = await navigator.clipboard.read();
+          for (const it of items) {
+            const imgType = it.types.find((t) => t.indexOf('image/') === 0);
+            if (imgType) {
+              const blob = await it.getType(imgType);
+              pasteImageUpload(id, new File([blob], 'pasted', { type: imgType }));
+              return;
+            }
+          }
+        }
+      } catch (_) { /* 권한/비보안 컨텍스트 — 텍스트 폴백 */ }
       const text = await readClipboardText();
       if (text == null) {
         showToast('클립보드 읽기 불가 — HTTPS/localhost에서만 가능. Cmd/Ctrl+V를 쓰세요.');
@@ -195,7 +212,7 @@
       //    ⚠ tmux mouse on이면 일반 드래그는 tmux가 가로채므로, 브라우저 선택은
       //    Shift(또는 Option/Alt)+드래그에서 발생한다.
       //    "⋯ → 설정 → 드래그 시 자동 복사"로 끌 수 있다 — 꺼도 선택 자체는 그대로
-      //    되고(브라우저 네이티브), 실제 복사만 우클릭/Ctrl+Insert로 넘어간다.
+      //    되고(브라우저 네이티브), 실제 복사만 우클릭으로 넘어간다.
       wrapper.addEventListener('mouseup', () => {
         if ((localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off') return;
         const sel = term.getSelection && term.getSelection();
@@ -224,39 +241,23 @@
         }
       }, true);
 
-      // 4) 복사 단축키 — Cmd+C / Ctrl+Insert. 선택이 있으면 xterm 내부 선택을 복사하고
-      //    이벤트를 소비, 없으면 그대로 통과(Ctrl+C 단독 = SIGINT 유지).
-      //    Cmd+V(Mac)는 Meta 키라 충돌 없이 브라우저 네이티브 paste로 잘 동작하지만,
-      //    순수 Ctrl+V는 여기서 일부러 안 건드린다 — bash readline(quoted-insert),
-      //    vim(visual-block) 등 터미널 프로그램이 실제로 쓰는 키라 가로채면 그 기능이
-      //    깨진다. 문제는 Windows/Linux 브라우저에선 이 충돌 때문에 xterm이 Ctrl+V를
-      //    그대로 pty로 흘려보내 붙여넣기가 아예 안 되는 경우가 있다는 것 — 그래서
-      //    Ctrl+Shift+V를 크로스플랫폼 안전 우회 경로로 둔다.
-      //    ⚠ Ctrl+Shift+C는 의도적으로 제거했다 — Chrome/Edge에서 "요소 검사(Inspect
-      //    Element)" 브라우저 크롬(chrome UI) 단축키와 겹치는데, 이건 페이지 JS의
-      //    preventDefault()로 막을 수 없는 종류라(Ctrl+T 새 탭처럼 브라우저가 페이지보다
-      //    먼저 가로챔) 복사는 되지만 개발자도구가 항상 같이 뜬다. 대신 어떤 브라우저와도
-      //    절대 안 겹치는 터미널 전통 단축키 Ctrl+Insert(복사) / Shift+Insert(붙여넣기)를
-      //    둔다 — Windows/Linux에서는 이쪽을 쓴다.
+      // 4) 붙여넣기 단축키 — Ctrl+Shift+V 하나로 통일 (크로스플랫폼 안전 경로).
+      //    · Cmd+V(Mac)는 위 3)의 브라우저 네이티브 paste 이벤트로 처리된다(이미지 포함)
+      //      — 여기서 안 건드린다.
+      //    · 순수 Ctrl+V는 그대로 pty로 흘려보낸다 — bash readline(quoted-insert),
+      //      vim(visual-block) 등 터미널 프로그램이 실제로 쓰는 키라 가로채면 깨진다.
+      //    복사 단축키(예전 Cmd+C / Ctrl+Insert)와 붙여넣기 Shift+Insert는 제거했다:
+      //    드래그하면 이미 자동 복사(copy-on-select)되고, 수동 복사/붙여넣기는 우클릭으로
+      //    되므로 중복이라 오히려 혼란만 준다.
+      //    ⚠ Ctrl+Shift+V는 Chrome/Firefox 등에서 "서식 없이 붙여넣기" 네이티브 단축키와
+      //    겹친다 — preventDefault()로 먼저 막지 않으면 이중 붙여넣기가 된다.
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== 'keydown') return true;
-        const isCopy = (e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'c')
-          || (e.ctrlKey && !e.shiftKey && e.key === 'Insert');
-        if (isCopy) {
-          const sel = term.getSelection && term.getSelection();
-          if (sel && sel.trim()) {
-            e.preventDefault();
-            copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
-            return false;
-          }
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'v') {
+          e.preventDefault();
+          pasteFromClipboard(id);
+          return false;
         }
-        // ⚠ Ctrl+Shift+V는 Chrome/Firefox 등에서 "서식 없이 붙여넣기"라는 브라우저
-        // 네이티브 단축키와 겹친다. preventDefault() 없이 return false만 하면 xterm
-        // 자체 처리만 막힐 뿐 브라우저 네이티브 paste는 그대로 발동해 이중 붙여넣기가
-        // 된다 — 반드시 먼저 preventDefault()로 브라우저 기본 동작을 막아야 한다.
-        const isPaste = (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'v')
-          || (e.shiftKey && !e.ctrlKey && e.key === 'Insert');
-        if (isPaste) { e.preventDefault(); pasteFromClipboard(id); return false; }
         return true;
       });
 
@@ -975,9 +976,12 @@
           { key: '음성 전용', desc: '⋯ 메뉴 → 터미널 숨기고 큰 마이크만 표시(이어폰용)' },
         ]},
         { icon: 'icon-clipboard-copy', title: '복사 · 붙여넣기', rows: [
-          { key: '복사', desc: '드래그(자동, 설정에서 끄기) · <kbd>Ctrl</kbd>+<kbd>Insert</kbd> · 우클릭' },
-          { key: '붙여넣기', desc: '<kbd>Shift</kbd>+<kbd>Insert</kbd> · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> · 우클릭' },
-          { key: '맥↔웹 동기화', desc: 'vim/tmux copy-mode는 자동(OSC52). 그 밖(Safari 등)은 맥에서 <code>vt clip</code> 실행' },
+          { key: '복사', desc: '텍스트 드래그 → <b>자동 복사</b> · 또는 선택 후 우클릭' },
+          { key: '드래그해도 선택이 안 될 때', desc: 'tmux 마우스 모드(<code>mouse on</code>)가 켜져 있으면 드래그를 tmux가 먼저 가로챔 → <kbd>Shift</kbd>+드래그(맥은 <kbd>Option</kbd>+드래그도 가능)로 강제 선택' },
+          { key: '붙여넣기', desc: '<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd> · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> · 선택 없이 우클릭' },
+          { key: '이미지', desc: '이미지를 복사해 붙여넣으면 서버에 <b>자동 업로드</b> + 경로가 명령줄에 삽입' },
+          { key: '자동 복사 켬/끔', desc: '⋯ 메뉴 → 설정에서 토글. <b>켬</b>: 드래그·vim/tmux 복사가 클립보드에 즉시 반영. <b>끔</b>: 선택만 되고 클립보드는 그대로 — 우클릭으로 원할 때만 복사' },
+          { key: '맥↔웹 동기화', desc: 'vim/tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 <code>vt clip</code> 실행' },
         ]},
         { icon: 'icon-square-terminal', title: 'tmux 세션', rows: [
           { key: 'tmux 세션', desc: '⋯ 메뉴 → 기존 세션 목록 확인·attach' },
