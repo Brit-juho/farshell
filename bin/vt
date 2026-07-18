@@ -267,6 +267,35 @@ _maybe_register_client_hooks() {
     "run-shell -b '\"$hook_script\" detached \"#{client_tty}\" \"#{session_name}\"'" 2>/dev/null
 }
 
+# AppleScript 문자열 리터럴에 임의 텍스트를 안전하게 넣기 위한 이스케이프.
+# 백슬래시를 먼저(순서 중요), 그다음 큰따옴표. 이걸 빼먹으면 명령에 포함된
+# 따옴표(예: --disallowedTools "...")가 osascript 문법 오류(-2741)를 낸다.
+_as_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
+}
+
+# 자동 오픈 실패 원인 안내. osascript 실패 시 stderr가 담긴 VT_AUTOOPEN_ERR을
+# 읽어, 특히 macOS 자동화(Automation) 권한 거부(-1743)를 감지해 해결법을 출력한다.
+# 출력 후 변수를 비워 다음 호출에 이전 오류가 새지 않게 한다.
+_autoopen_failure_hint() {
+  local err="${VT_AUTOOPEN_ERR:-}"
+  VT_AUTOOPEN_ERR=""
+  [ -n "$err" ] || return 0
+  case "$err" in
+    *-1743*|*"Not authorized"*|*"not allowed to send"*|*"권한"*|*"승인"*)
+      echo "  ⚠ 원인: 터미널을 자동 제어할 '자동화(Automation)' 권한이 없습니다."
+      echo "     시스템 설정 → 개인정보 보호 및 보안 → 자동화 에서"
+      echo "     지금 실행 중인 앱(iTerm/Terminal/Claude)의 'iTerm' 항목을 켜세요."
+      ;;
+    *)
+      echo "  ⚠ 원인: $err"
+      ;;
+  esac
+}
+
 # 새 터미널 창에서 tmux dev 세션 + claude --resume 자동 실행.
 # 이미 tmux 안에 있으면 호출하지 않음 (멱등성).
 # $TERM_PROGRAM 기반으로 현재 쓰는 터미널 앱에 맞춰 오픈.
@@ -361,26 +390,37 @@ _open_tmux_terminal_with() {
   local term_lc
   term_lc="$(printf '%s' "$term" | tr '[:upper:]' '[:lower:]')"
 
+  local cmd_as
+  cmd_as="$(_as_escape "$cmd")"
+
   _try_iterm() {
     [ -d "/Applications/iTerm.app" ] || return 1
-    osascript <<APPLESCRIPT 2>/dev/null
+    local _err
+    _err="$(osascript 2>&1 <<APPLESCRIPT
 tell application "iTerm"
   activate
   create window with default profile
   tell current session of current window
-    write text "$cmd"
+    write text "$cmd_as"
   end tell
 end tell
 APPLESCRIPT
+)" && return 0
+    VT_AUTOOPEN_ERR="$_err"
+    return 1
   }
 
   _try_terminal_app() {
-    osascript <<APPLESCRIPT 2>/dev/null
+    local _err
+    _err="$(osascript 2>&1 <<APPLESCRIPT
 tell application "Terminal"
   activate
-  do script "$cmd"
+  do script "$cmd_as"
 end tell
 APPLESCRIPT
+)" && return 0
+    VT_AUTOOPEN_ERR="$_err"
+    return 1
   }
 
   _try_wezterm() {
@@ -449,6 +489,7 @@ _print_attach_guide() {
   else
     echo "  ⓘ 자동 오픈 실패. 다른 터미널에서 다음 명령을 실행하세요:"
     echo "      tmux -L $VT_TMUX_SOCKET new -A -s dev 'claude --resume'"
+    _autoopen_failure_hint
   fi
 }
 
@@ -693,6 +734,7 @@ cmd_attach() {
   else
     echo "  ⓘ 터미널 자동 오픈 실패. 수동:"
     echo "      tmux -L $VT_TMUX_SOCKET attach -t $target"
+    _autoopen_failure_hint
     return 1
   fi
 }
@@ -1320,23 +1362,37 @@ cmd_agent() {
   _ensure_tmux
   if [ -n "${TMUX:-}" ]; then
     echo "  ✓ 이미 tmux 안. 현재 창에서 $label 실행."
-    exec $exec_cmd "$@"
+    # exec_cmd 내부 따옴표(--disallowedTools "...")를 셸이 파싱하도록 sh -c 경유.
+    # 단순 단어분할(exec $exec_cmd)은 따옴표를 리터럴로 취급해 인자를 깬다.
+    exec sh -c "$exec_cmd \"\$@\"" sh "$@"
   fi
 
   # 새 터미널 창에서 실행 — _open_tmux_terminal은 'claude --resume' 하드코딩이므로
-  # 이 경로에선 직접 명령 빌드 후 동등한 로직 사용
-  local cmd="tmux -L $VT_TMUX_SOCKET new -A -s dev \"$exec_cmd\""
+  # 이 경로에선 직접 명령 빌드 후 동등한 로직 사용.
+  # exec_cmd는 큰따옴표(--disallowedTools "...")를 포함하므로 작은따옴표로 감싸
+  # 셸이 그대로 tmux에 넘기게 하고, osascript엔 이스케이프해서 전달한다.
+  local cmd="tmux -L $VT_TMUX_SOCKET new -A -s dev '$exec_cmd'"
+  local cmd_as
+  cmd_as="$(_as_escape "$cmd")"
   if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/iTerm.app" ]; then
-    osascript <<APPLESCRIPT 2>/dev/null
+    local _err
+    if _err="$(osascript 2>&1 <<APPLESCRIPT
 tell application "iTerm"
   activate
   create window with default profile
   tell current session of current window
-    write text "$cmd"
+    write text "$cmd_as"
   end tell
 end tell
 APPLESCRIPT
-    echo "  ✓ 새 iTerm 창에서 '$exec_cmd' 시작"
+)"; then
+      echo "  ✓ 새 iTerm 창에서 '$exec_cmd' 시작"
+    else
+      VT_AUTOOPEN_ERR="$_err"
+      echo "  ⓘ 터미널 자동 오픈 실패. 수동으로:"
+      echo "      $cmd"
+      _autoopen_failure_hint
+    fi
   else
     echo "  ⓘ 터미널 자동 오픈 실패. 수동으로:"
     echo "      $cmd"
@@ -1597,6 +1653,7 @@ cmd_handoff() {
         echo "  ✓ 새 ${TERM_PROGRAM:-터미널} 창에 tmux 'dev' + claude --resume 열림"
       else
         echo "  ⓘ 터미널 자동 오픈 실패. 수동: tmux new -A -s dev 'claude --resume'"
+        _autoopen_failure_hint
       fi
       ;;
     *)
