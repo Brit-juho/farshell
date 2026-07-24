@@ -25,6 +25,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 import platform_utils
+import vt_env
 
 logger = logging.getLogger("clipboard-daemon")
 if not logger.handlers:
@@ -33,41 +34,11 @@ if not logger.handlers:
 MAX_TEXT_LEN = 200_000
 
 
-def _load_vt_env_file() -> dict:
-    """~/.vt.env에서 KEY=VALUE 로드. voice/config.py와 동일한 최소 파서를
-    중복 구현 — 이 데몬을 voice 패키지(pynput 의존)와 무관하게 독립 실행 가능하게 유지."""
-    env_file = os.path.expanduser("~/.vt.env")
-    out: dict = {}
-    try:
-        if not os.path.isfile(env_file):
-            return out
-        with open(env_file) as f:
-            for line in f:
-                s = line.strip()
-                if not s or s.startswith("#"):
-                    continue
-                if s.startswith("export "):
-                    s = s[len("export "):]
-                if "=" not in s:
-                    continue
-                k, v = s.split("=", 1)
-                k, v = k.strip(), v.strip()
-                if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
-                    v = v[1:-1]
-                out[k] = v
-    except Exception:
-        pass
-    return out
-
-
-_VT_ENV = _load_vt_env_file()
+_VT_ENV = vt_env.load()
 
 
 def _vt_getenv(key: str, default: str = "") -> str:
-    val = os.environ.get(key)
-    if val is not None and val != "":
-        return val
-    return _VT_ENV.get(key, default)
+    return vt_env.getenv(key, default, file_env=_VT_ENV)
 
 
 POLL_SEC = float(_vt_getenv("VT_CLIPBOARD_POLL_SEC", "0.7"))

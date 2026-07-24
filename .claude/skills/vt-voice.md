@@ -20,8 +20,12 @@ macOS에서 글로벌 핫키로 음성 → STT → tmux 주입하는 데몬을 �
 사용자의 `~/.vt.env`에서 `VT_PYTHON` 값을 읽으세요 (install.sh가 설정):
 
 ```bash
-source ~/.vt.env 2>/dev/null
-PY="${VT_PYTHON:-$(which python3)}"
+# ~/.vt.env는 source하지 않습니다 (설정 파일은 데이터이지 코드가 아님).
+# 저장소의 파서를 쓰거나, 값 하나만 필요하면 vt_env_get을 쓰세요.
+PY="$(vt_env_get VT_PYTHON 2>/dev/null || true)"   # bin/vt 안에서
+# 저장소 밖에서:
+#   . "$VT_DIR/lib/vt_env.sh" && vt_env_load ~/.vt.env
+PY="${PY:-$(which python3)}"
 echo "Python: $PY"
 ```
 

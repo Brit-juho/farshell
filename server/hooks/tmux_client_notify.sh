@@ -30,10 +30,20 @@ EVENT="${1:-attached}"
 CLIENT_TTY="${2:-}"
 SESSION="${3:-?}"
 
-# ~/.vt.env에서 VT_PORT / VT_TOKEN 읽기 (bin/vt와 동일 우선순위: 환경변수가 이미 있으면 유지)
-if [ -f "$HOME/.vt.env" ]; then
+# ~/.vt.env에서 VT_PORT / VT_AUTH_TOKEN 읽기.
+# source가 아니라 bin/vt와 같은 파서를 쓴다 — 해석이 일치하고, tmux 훅이라는
+# 넓은 실행 맥락에서 설정 파일이 코드로 실행되지 않는다.
+# (예전엔 source라 "환경변수가 이미 있으면 유지"라는 주석과 달리 파일이 항상 이겼다)
+_HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_VT_LIB="$_HOOK_DIR/../../lib/vt_env.sh"
+if [ -f "$_VT_LIB" ]; then
+  _VT_ENV_PRESET_NAMES=" "
+  for _vt_v in ${!VT_@}; do _VT_ENV_PRESET_NAMES="$_VT_ENV_PRESET_NAMES$_vt_v "; done
+  unset _vt_v
   # shellcheck disable=SC1090
-  source "$HOME/.vt.env" 2>/dev/null || true
+  . "$_VT_LIB"
+  vt_env_load "$_HOOK_DIR/../../config/vt.defaults.env"
+  vt_env_load "${VT_CONFIG:-$HOME/.vt.env}"
 fi
 
 VT_PORT="${VT_PORT:-7777}"

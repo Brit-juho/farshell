@@ -7,9 +7,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$SCRIPT_DIR/server"
 
-# defaults → 사용자 override 순으로 설정 로드
-[ -f "$SCRIPT_DIR/config/vt.defaults.env" ] && source "$SCRIPT_DIR/config/vt.defaults.env"
-[ -f "$HOME/.vt.env" ] && source "$HOME/.vt.env"
+# 호출 시점의 VT_* 는 파일보다 우선 (bin/vt와 동일한 규칙)
+_VT_ENV_PRESET_NAMES=" "
+for _vt_v in ${!VT_@}; do _VT_ENV_PRESET_NAMES="$_VT_ENV_PRESET_NAMES$_vt_v "; done
+unset _vt_v
+
+# defaults → 사용자 override 순으로 설정 로드.
+# source가 아니라 파서를 쓴다 — bin/vt와 같은 해석을 보장하고 설정 파일이 실행되지 않는다.
+. "$SCRIPT_DIR/lib/vt_env.sh"
+vt_env_load "$SCRIPT_DIR/config/vt.defaults.env"
+vt_env_load "${VT_CONFIG:-$HOME/.vt.env}"
 
 # Python 결정: VT_PYTHON > .venv > 시스템 python3
 if [ -n "${VT_PYTHON:-}" ] && [ -x "$VT_PYTHON" ]; then
