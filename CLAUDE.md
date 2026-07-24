@@ -20,6 +20,10 @@ vt help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 vt claude             # 새 터미널 창에 tmux dev + claude --resume
 vt handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
 vt handoff desktop    # 폰 세션을 맥 터미널로 가져옴
+vt tunnel expose 3000 "앱 이름"  # 다른 로컬 포트를 별도 Cloudflare 터널로 공개
+vt tunnel unexpose 3000          # 해당 포트 터널 종료
+vt tunnel list                   # 열려 있는 터널 전부 (메인 + 추가 포트)
+vt tunnel hook                   # URL 변경 훅 확인 + 즉시 실행 (vt help tunnel-hook)
 vt ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내 (D9, 회사망 등)
 vt doctor             # 설치/환경 진단 (Linux 항목 포함)
 vt install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
@@ -384,6 +388,8 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | 파일 업로드 | 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장 |
 | 파일 다운로드 | `GET /api/download?path=...` |
 | tmux detach 감지 | PTY EOF 시 `[process exited]` 표시 |
+| 추가 포트 터널 | `vt tunnel expose <port>` — Cloudflare quick tunnel은 호스트↔포트 1:1이라 경로(`/localhost:3000`)로 포트를 바꿀 수 없다. 포트마다 터널을 하나씩 띄우고 vt가 PID/레지스트리로 추적 |
+| 터널 URL 변경 훅 | `VT_TUNNEL_HOOK` — URL이 바뀔 때 임의 명령 실행(stdin: `라벨<TAB>URL`). 게시 대상은 사람마다 다르므로(Notion/Slack/ntfy/파일) vt는 서비스를 알지 않는다. 예시·주의사항: `vt help tunnel-hook` |
 | Tailscale 원격 접속 (D9) | `vt ssh` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속. `vt mobile --network tailscale`은 웹 UI도 tailnet으로만 제한 |
 | 클라이언트 접속 알림 (D9) | `VT_NOTIFY_CLIENT_EVENTS=1` — tmux client-attached/detached 훅 → ntfy/Telegram push |
 
@@ -404,7 +410,14 @@ server/
   routes/clipboard.py — POST /api/clipboard/push → /ws-notify 브로드캐스트
   platform_utils.py — 크로스 플랫폼 유틸리티 (macOS/Linux/WSL2)
   tailscale.py      — Tailscale 상태 감지 (D9, tunnel.py와 동일 패턴)
+  vt_env.py         — ~/.vt.env 파서 (bash source와 동일 해석). voice/config.py·clipboard_daemon 공용
   hooks/tmux_client_notify.sh — tmux client-attached/detached → /api/notify/client-event (D9)
+
+lib/
+  vt_env.sh         — ~/.vt.env 형식 정의 + 단일 reader/writer
+                      (vt_env_load/get/set/unset/lint). 설정 파일은 source하지 않고 파싱한다
+                      — 실행 구문 미지원, 'literal' vs "expanded" 구분, 권한 600 보장.
+                      ⚠ 설정 파일을 echo/sed로 직접 건드리지 말 것.
 
 frontend/
   index.html        — xterm.js 멀티 탭 UI (검색, 세션 이름 편집, 파일 업로드)

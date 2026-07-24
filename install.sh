@@ -126,6 +126,10 @@ fi
 
 # 5. 설정 파일 생성 (없을 때만)
 if [ ! -f "$HOME/.vt.env" ]; then
+  # 이 파일에는 VT_AUTH_TOKEN / VT_AUTH_PASSWORD_HASH / VT_AUTH_SESSION_KEY 같은
+  # 시크릿이 들어간다. umask 기본(644)으로 만들면 같은 머신의 다른 사용자가 읽는다.
+  # 세션 서명키가 유출되면 쿠키를 위조해 인증을 우회할 수 있으므로 처음부터 0600.
+  ( umask 077; : > "$HOME/.vt.env" )
   cat > "$HOME/.vt.env" <<EOF
 # voice-terminal 설정 (수정 가능)
 VT_DIR=$VT_DIR
@@ -134,8 +138,11 @@ VT_PYTHON=\${VT_DIR}/.venv/bin/python
 # VT_TOKEN=your-secret    # 원격 접속 시 인증 (선택)
 # VT_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (D2, 선택)
 EOF
-  echo "✓ 설정 파일 생성 → ~/.vt.env"
+  chmod 600 "$HOME/.vt.env"
+  echo "✓ 설정 파일 생성 → ~/.vt.env (권한 600)"
 else
+  # 예전 install.sh가 644로 만들어 둔 파일을 여기서 바로잡는다
+  chmod 600 "$HOME/.vt.env" 2>/dev/null || true
   echo "✓ 기존 설정 유지 → ~/.vt.env"
 fi
 

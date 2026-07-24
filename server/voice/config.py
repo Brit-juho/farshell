@@ -1,8 +1,18 @@
 """Voice Daemon 설정 — ~/.vt.env 로드, 핫키 파싱, 상수."""
 import logging
 import os
+import sys
+from pathlib import Path
 
-from pynput import keyboard
+# server/ 를 import 경로에 — vt_env(공용 .vt.env 파서)를 쓰기 위해.
+# voice_daemon.py로 직접 실행될 땐 이미 들어있지만, 다른 진입점도 있으므로 보장한다.
+_SERVER_DIR = Path(__file__).resolve().parent.parent
+if str(_SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(_SERVER_DIR))
+
+import vt_env  # noqa: E402
+
+from pynput import keyboard  # noqa: E402
 
 logger = logging.getLogger("voice-daemon")
 
@@ -10,42 +20,12 @@ SAMPLE_RATE = 16000
 TTS_CONFIRM = True  # STT 결과를 TTS로 읽어줄지
 
 
-def _load_vt_env_file() -> dict[str, str]:
-    """~/.vt.env에서 KEY=VALUE 라인 파싱. export 접두 + 단/이중 따옴표 처리."""
-    env_file = os.path.expanduser("~/.vt.env")
-    out: dict[str, str] = {}
-    try:
-        if not os.path.isfile(env_file):
-            return out
-        with open(env_file) as f:
-            for line in f:
-                s = line.strip()
-                if not s or s.startswith("#"):
-                    continue
-                if s.startswith("export "):
-                    s = s[len("export "):]
-                if "=" not in s:
-                    continue
-                k, v = s.split("=", 1)
-                k = k.strip()
-                v = v.strip()
-                if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
-                    v = v[1:-1]
-                out[k] = v
-    except Exception:
-        pass
-    return out
-
-
-_VT_ENV = _load_vt_env_file()
+_VT_ENV = vt_env.load()
 
 
 def vt_getenv(key: str, default: str = "") -> str:
     """환경변수 → ~/.vt.env → default 우선순위."""
-    val = os.environ.get(key)
-    if val is not None and val != "":
-        return val
-    return _VT_ENV.get(key, default)
+    return vt_env.getenv(key, default, file_env=_VT_ENV)
 
 
 # 토글식 녹음은 '끄기'를 놓치면(미디어 키 오작동/핫키 릴리즈 누락) _recording=True인 채

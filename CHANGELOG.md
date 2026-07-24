@@ -6,6 +6,84 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [Unreleased]
+
+### Added
+- **추가 포트 터널 (`vt tunnel expose <port> [라벨]` / `unexpose` / `list`).**
+  Cloudflare quick tunnel은 호스트명↔포트가 1:1이라 `https://<터널>/localhost:3000`처럼
+  경로로 포트를 바꿔치기할 수 없다(그 경로는 VT 서버로 그대로 전달돼 404). 다른 로컬 앱을
+  원격에 열려면 터널을 하나 더 띄우는 게 유일한 방법이므로, 그걸 vt가 관리한다:
+  - 포트별 PID 파일(`/tmp/vt-pids/tunnel-<port>.pid`)과 레지스트리(`tunnels.tsv`)로 추적,
+    `vt stop`에서 함께 정리. `vt status` / `vt tunnel list`에 표시.
+  - VT_PORT 중복·비숫자·범위 밖 포트는 거부. 이미 노출된 포트는 재실행 없이 기존 URL 반환.
+- **터널 URL 변경 훅 (`VT_TUNNEL_HOOK`, `vt tunnel hook`, `vt help tunnel-hook`).**
+  익명 터널은 재시작마다 URL이 바뀌어 매번 어딘가로 옮겨 적어야 했다. 그 "어딘가"는
+  사람마다 다르므로(개인 Notion / Slack DM / ntfy / 텔레그램 / 파일) **vt는 특정 서비스를
+  알지 않는다.** URL이 바뀔 때 사용자가 지정한 명령을 한 번 부를 뿐이다:
+  - stdin으로 `라벨<TAB>URL` 줄들, env로 `VT_TUNNEL_EVENT`(start|expose|unexpose|manual)와
+    `VT_TUNNEL_MAIN_URL`을 전달.
+  - 훅이 실패해도 경고만 찍고 터널은 정상 동작. 미설정이면 아무 일도 일어나지 않는다.
+  - `vt tunnel hook`으로 전달될 내용을 확인하고 즉시 시험 실행 가능.
+  - `docs/help/tunnel-hook.md`에 파일/ntfy/Slack/텔레그램/Notion 예시와 주의사항을
+    **권장사항**으로 정리. 특정 서비스용 스크립트는 리포에 넣지 않는다 — 토큰과 페이지
+    구조는 개인 설정이라 `~/.vt.env`와 리포 밖(`~/.config/vt/hooks/` 등)에 두는 게 맞다.
+
+### Fixed
+- `vt status` / `_start_tunnel`이 `pgrep -f 'cloudflared.*tunnel'`로 **모든** cloudflared를
+  세던 문제. 추가 포트 터널이 떠 있으면 메인 터널이 죽었어도 "실행 중"으로 오판하고,
+  PID 여러 개가 줄바꿈째 출력돼 status 표가 깨졌다. 명명 터널(`tunnel run`) 또는
+  `--url http://localhost:$VT_PORT`만 세도록 좁힘(`_main_tunnel_pids`).
+- `~/.vt.env`에 쓰는 값을 셸 이스케이프하지 않던 문제(`_env_quote`). 공백·괄호가 든 값
+  (예: 라벨 `터미널 (VT)`)을 쓰면 다음 실행부터 `source`가 syntax error를 냈다.
+  `vt tunnel setup`의 터널명/호스트명에 적용.
+- **설정 우선순위가 문서와 정반대였던 문제.** `config/vt.defaults.env`는
+  `환경변수 > ~/.vt.env > defaults`라고 명시하는데, `source`는 무조건 덮어쓰므로
+  실제로는 `~/.vt.env`가 항상 이겼다. `VT_PORT=9999 vt start` 같은 일회성 오버라이드가
+  전부 조용히 무시됐다. 호출 시점의 `VT_*`를 `${!VT_@}`+`declare -p`로 떠 뒀다가 복원.
+- `VT_PYTHON` 등 '기본값으로 계산된' 설정이 export되지 않아 부모(vt)와 자식(서버·데몬·훅)이
+  서로 다른 설정을 보던 문제. `VT_PYTHON VT_PORT VT_TMUX_SOCKET VT_CONFIG VT_DIR`을 한곳에서 export.
+
+### Changed
+- **`~/.vt.env` 읽기·쓰기를 단일 구현으로 수렴 (`lib/vt_env.sh` + `server/vt_env.py` 신규).**
+  위 버그 3개는 각각의 실수가 아니라 **이 파일에 주인이 없던 것**이 원인이었다.
+  writer 5개(`_hotkey_set_env`는 큰따옴표, `_set_env_single`은 홑따옴표, `_env_quote`+수동
+  grep 2곳, `install.sh` heredoc)와 reader 3개(bash `source`, `voice/config.py`,
+  `clipboard_daemon.py` — 후자는 주석에 "동일한 최소 파서를 중복 구현"이라 명시)가
+  각자 다른 규칙으로 같은 파일을 다뤘다. 실제로 셋이 다른 값을 읽었다:
+  `VT_H="scrypt$16384$8$1$abc"` → bash `scrypt6384` / Python `scrypt$16384$8$1$abc`.
+  이 해시로는 **로그인이 실패한다**(검증 완료).
+  - `lib/vt_env.sh`가 형식을 정의하고 `vt_env_set/unset/get/quote/lint`를 제공.
+    bin/vt의 모든 쓰기가 여기로 통일됐다.
+  - `server/vt_env.py`가 `shlex(posix)`로 같은 규칙을 구현. Python 파서 2개가 이걸 쓴다.
+  - `server/tests/test_vt_env.py`가 **bash writer → bash source → Python 파서** 3자 일치를
+    까다로운 값 14종(`$`가 든 해시, 홑따옴표, 공백·괄호, 백틱, `$( )`, 유니코드 등)으로 검증.
+    bin/vt는 그동안 테스트가 0개였고, 위 버그들이 하나도 안 걸린 이유가 그것이다.
+- **`~/.vt.env`를 더 이상 `source`하지 않는다 — 설정 파일은 데이터이지 코드가 아니다.**
+  `lib/vt_env.sh`의 `vt_env_load`(파서)가 대신한다. 값 표기는 `'literal'`(확장 없음) /
+  `"expanded"`·bare(`${VAR}` 확장)이고, 명령 치환·백틱·산술 등 실행 구문은 형식에서 제외된다.
+  - `${VAR}` 확장을 `server/vt_env.py`에도 구현했다. 그전엔 bash만 확장해서,
+    `install.sh`가 만드는 `VT_PYTHON=${VT_DIR}/.venv/bin/python`을 bash는
+    `/opt/vt/.venv/bin/python`으로, Python은 리터럴 `${VT_DIR}/...`로 읽었다
+    (Python 쪽 소비자가 없어 표면화되지 않았을 뿐이다).
+  - 우선순위 `환경변수 > ~/.vt.env > defaults`가 snapshot/restore 꼼수 없이
+    구조적으로 성립한다. 동적인 값은 셸 rc의 `export`로 — 그쪽이 원래 맞는 자리다.
+  - `vt_env_lint`가 ① 파싱 불가 ② 실행 구문 ③ **정의되지 않은 변수 참조**(값이 조용히
+    사라지는 경우)를 행번호로 지목한다. 의도한 확장(`${VT_DIR}`)은 통과시킨다.
+
+### Security
+- **`~/.vt.env` 파일 권한이 시크릿 파일인데 보장되지 않던 문제.** 이 파일에는
+  `VT_AUTH_TOKEN`·`VT_AUTH_PASSWORD_HASH`·`VT_AUTH_SESSION_KEY`가 들어간다.
+  세션 서명키가 유출되면 쿠키를 위조해 **인증을 우회**할 수 있다.
+  - `install.sh`가 umask 기본(0644)으로 만들고 있었다 → 0600으로 생성, 기존 파일도 교정.
+  - 쓰기 함수가 임시 파일을 0644로 만들어 `mv` → **0600이던 파일이 매번 0644로 강등**됐다
+    (`vt password` 실행 시 재현 확인). 이제 임시 파일도 umask 077로 만들고 0600을 강제.
+  - `vt doctor`가 권한과 형식을 점검한다.
+- **설정 파일을 통한 임의 코드 실행 경로를 제거**했다(위 `source` 폐지). 파일이 0600에
+  본인 소유라 한계 위험 자체는 낮았지만, 이제 bash와 Python이 정의상 같은 능력을 가지며
+  앞으로 외부 입력이 설정에 기록되더라도 실행으로 이어지지 않는다.
+- 레거시 라인 하나(`"...$8..."`)가 `set -u`에 걸려 **`vt` 전체가 죽고 `vt doctor`조차
+  뜨지 않던** 문제 — 진단 자체가 불가능했다. 파서로 바뀌면서 구조적으로 사라졌다.
+
 ## [1.6.0] — 2026-07-12
 
 ### Added

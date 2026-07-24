@@ -11,20 +11,40 @@
 
 set -uo pipefail
 
+# 호출 시점에 이미 환경에 있던 VT_* 이름 — 파일보다 우선한다.
+# 반드시 아래에서 VT_DIR/VT_CONFIG 등을 대입하기 '전에' 떠야 한다.
+_VT_ENV_PRESET_NAMES=" "
+for _vt_v in ${!VT_@}; do _VT_ENV_PRESET_NAMES="$_VT_ENV_PRESET_NAMES$_vt_v "; done
+unset _vt_v
+
 # 심링크를 따라가서 실제 경로 찾기
 _SELF="$0"
 [ -L "$_SELF" ] && _SELF="$(readlink "$_SELF")"
 VT_DIR="$(cd "$(dirname "$_SELF")/.." && pwd)"
-VT_CONFIG="$HOME/.vt.env"
+# 설정 파일 경로. 오버라이드 가능해야 프로필을 나눠 쓰거나 테스트에서 격리할 수 있다.
+VT_CONFIG="${VT_CONFIG:-$HOME/.vt.env}"
 VT_DEFAULTS="$VT_DIR/config/vt.defaults.env"
 
-# 설정 파일 로드 — defaults 먼저, 그 다음 사용자 override
-# set -a: source한 변수를 전부 export → _start_server의 자식 uvicorn이
-# VT_TOKEN 등 os.environ 값을 상속받는다 (없으면 인증이 조용히 꺼짐).
-set -a
-[ -f "$VT_DEFAULTS" ] && source "$VT_DEFAULTS"
-[ -f "$VT_CONFIG" ] && source "$VT_CONFIG"
-set +a
+# ~/.vt.env 읽기/쓰기 단일 구현 (형식 정의 + 권한 보장).
+# 시크릿이 들어가는 파일이므로 손으로 echo/sed 하지 말고 vt_env_set/unset만 쓸 것.
+# shellcheck source=../lib/vt_env.sh
+if [ -f "$VT_DIR/lib/vt_env.sh" ]; then
+  . "$VT_DIR/lib/vt_env.sh"
+else
+  echo "vt: lib/vt_env.sh 를 찾을 수 없습니다 ($VT_DIR/lib/vt_env.sh)" >&2
+  echo "    설치가 손상됐을 수 있습니다 — './install.sh' 로 복구하세요." >&2
+  exit 1
+fi
+
+# 설정 파일 로드 — defaults 먼저, 그 다음 사용자 override.
+#
+# source가 아니라 vt_env_load(파서)를 쓴다. 설정 파일은 데이터이지 코드가 아니다:
+#   - 파일 안의 어떤 구문도 실행되지 않는다 (임의 코드 실행 경로 제거)
+#   - 레거시 라인 하나가 set -u에 걸려 vt 전체를 죽이는 일이 없다
+#   - bash와 server/vt_env.py가 정의상 같은 값을 읽는다
+# 우선순위 '환경변수 > ~/.vt.env > defaults'는 _VT_ENV_PRESET_NAMES로 구조적으로 성립한다.
+vt_env_load "$VT_DEFAULTS"
+vt_env_load "$VT_CONFIG"
 
 # 설정 가능한 변수 (환경변수 또는 ~/.vt.env로 오버라이드)
 VT_PORT="${VT_PORT:-7777}"
@@ -65,6 +85,11 @@ _detect_python() {
 }
 VT_PYTHON="${VT_PYTHON:-$(_detect_python)}"
 
+# ~/.vt.env에서 온 값은 set -a 덕에 이미 export됐지만, 위에서 '기본값으로 계산된' 값들은
+# 그냥 두면 export되지 않는다. 그러면 부모(vt)와 자식(서버·데몬·훅)이 서로 다른 설정을
+# 보게 된다 — VT_TUNNEL_HOOK 안의 "$VT_PYTHON"이 빈 값이 되는 식. 한곳에서 내보낸다.
+export VT_PYTHON VT_PORT VT_TMUX_SOCKET VT_CONFIG VT_DIR
+
 # Phase 8 G4: Claude --disallowedTools 정책 (도구 호출 단계 차단, 정규식보다 견고)
 _DEFAULT_DISALLOWED='Bash(rm -rf /:*),Bash(sudo:*),Bash(git push --force:*),Bash(dd if=*:*),Bash(chmod -R 777 /:*),Bash(mkfs.*:*)'
 _SAFE_DISALLOWED="$_DEFAULT_DISALLOWED,Bash(curl * | sh:*),Bash(curl * | bash:*),Bash(wget * | sh:*),Bash(rm:*),Bash(git push:*),Bash(git clean:*),Edit(/etc/*),Edit(/usr/*),Write(/etc/*),Write(/usr/*)"
@@ -85,6 +110,8 @@ DAEMON_LOG="/tmp/vt-voice-daemon.log"
 CLIP_DAEMON_LOG="/tmp/vt-clipboard-daemon.log"
 PID_DIR="/tmp/vt-pids"
 mkdir -p "$PID_DIR"
+# 추가 포트 터널 레지스트리 (TSV: port<TAB>url<TAB>label)
+TUNNEL_REGISTRY="$PID_DIR/tunnels.tsv"
 
 _is_running() {
   local pidfile="$PID_DIR/$1.pid"
@@ -113,17 +140,29 @@ _start_server() {
   fi
 }
 
+# 메인 터널 시작. 성공 시 URL 변경 훅 실행 (설정된 경우에만).
 _start_tunnel() {
+  _start_tunnel_impl "$@"
+  local rc=$?
+  [ $rc -eq 0 ] && _run_tunnel_hook start
+  return $rc
+}
+
+_start_tunnel_impl() {
   # Phase 8 G1: 외부에서 떠있는 cloudflared도 발견하여 재사용 (옵션 A)
   if ! command -v cloudflared >/dev/null 2>&1; then
     echo "✗ cloudflared 미설치. brew install cloudflared (macOS) 또는 https://github.com/cloudflare/cloudflared/releases"
     return 1
   fi
 
-  # 우리 PID file 또는 외부 cloudflared 프로세스 감지
+  # 우리 PID file 또는 외부 cloudflared 프로세스 감지.
+  # 'vt tunnel expose'로 뜬 추가 포트 터널을 메인 터널로 오인하지 않도록,
+  # 명명 터널(tunnel run) 또는 VT_PORT를 향한 익명 터널만 센다.
   local existing_pids=""
   if command -v pgrep >/dev/null 2>&1; then
-    existing_pids="$(pgrep -f "cloudflared.*tunnel" 2>/dev/null || true)"
+    existing_pids="$(pgrep -f "cloudflared.*tunnel run" 2>/dev/null || true)"
+    existing_pids="$existing_pids $(pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null || true)"
+    existing_pids="$(echo "$existing_pids" | tr ' ' '\n' | grep -v '^$' | tr '\n' ' ' | sed 's/ $//')"
   fi
 
   if _is_running tunnel || [ -n "$existing_pids" ]; then
@@ -168,6 +207,179 @@ _start_tunnel() {
   done
   echo "✗ 터널 URL 대기 시간 초과. 로그: $TUNNEL_LOG"
   return 1
+}
+
+# ── 추가 포트 터널 (vt tunnel expose <port>) ─────────────────────────
+# 메인 터널은 VT 서버(VT_PORT) 전용이다. Cloudflare quick tunnel은
+# 호스트명↔포트 1:1이라 경로로 포트를 바꿔치기할 수 없으므로,
+# 다른 로컬 앱(예: localhost:3000)은 별도 터널을 하나 더 띄운다.
+
+_extra_tunnel_log() { echo "/tmp/cloudflared-$1.log"; }
+
+_registry_set() {
+  local port="$1" url="$2" label="$3"
+  touch "$TUNNEL_REGISTRY"
+  grep -v "^${port}$(printf '\t')" "$TUNNEL_REGISTRY" > "$TUNNEL_REGISTRY.tmp" 2>/dev/null || true
+  printf '%s\t%s\t%s\n' "$port" "$url" "$label" >> "$TUNNEL_REGISTRY.tmp"
+  mv "$TUNNEL_REGISTRY.tmp" "$TUNNEL_REGISTRY"
+}
+
+_registry_del() {
+  local port="$1"
+  [ -f "$TUNNEL_REGISTRY" ] || return 0
+  grep -v "^${port}$(printf '\t')" "$TUNNEL_REGISTRY" > "$TUNNEL_REGISTRY.tmp" 2>/dev/null || true
+  mv "$TUNNEL_REGISTRY.tmp" "$TUNNEL_REGISTRY"
+}
+
+_registry_url() {
+  [ -f "$TUNNEL_REGISTRY" ] || return 0
+  awk -F'\t' -v p="$1" '$1==p {print $2}' "$TUNNEL_REGISTRY" | head -1
+}
+
+# 죽은 터널 항목 청소 — pid 파일 기준
+_registry_prune() {
+  [ -f "$TUNNEL_REGISTRY" ] || return 0
+  local port rest
+  : > "$TUNNEL_REGISTRY.tmp"
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    port="${line%%$(printf '\t')*}"
+    if _is_running "tunnel-$port"; then
+      printf '%s\n' "$line" >> "$TUNNEL_REGISTRY.tmp"
+    fi
+  done < "$TUNNEL_REGISTRY"
+  mv "$TUNNEL_REGISTRY.tmp" "$TUNNEL_REGISTRY"
+}
+
+_start_extra_tunnel() {
+  local port="${1:-}" label="${2:-}"
+
+  case "$port" in
+    ''|*[!0-9]*) echo "  ✗ 포트는 숫자여야 합니다: '${port}'"; return 1 ;;
+  esac
+  if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+    echo "  ✗ 포트 범위(1-65535)를 벗어났습니다: $port"; return 1
+  fi
+  if [ "$port" = "$VT_PORT" ]; then
+    echo "  ✗ $port 는 VT 서버 포트입니다 — 메인 터널(vt start)이 이미 담당합니다"
+    return 1
+  fi
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    echo "  ✗ cloudflared 미설치. brew install cloudflared"
+    return 1
+  fi
+
+  label="${label:-localhost:$port}"
+
+  if _is_running "tunnel-$port"; then
+    echo "  ✓ 이미 노출 중: $(_registry_url "$port")"
+    return 0
+  fi
+
+  if ! _port_in_use "$port"; then
+    echo "  ⚠ localhost:$port 에 응답하는 서비스가 없습니다 — 터널은 띄우지만 앱을 먼저 켜세요"
+  fi
+
+  local log; log="$(_extra_tunnel_log "$port")"
+  echo "  ▸ localhost:$port 터널 시작 중..."
+  : > "$log"
+  nohup cloudflared tunnel --url "http://localhost:$port" > "$log" 2>&1 &
+  echo $! > "$PID_DIR/tunnel-$port.pid"
+
+  local i url
+  for i in $(seq 1 30); do
+    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$log" 2>/dev/null | head -1)
+    if [ -n "$url" ]; then
+      _registry_set "$port" "$url" "$label"
+      echo "  ✓ $label → $url"
+      _run_tunnel_hook expose
+      return 0
+    fi
+    sleep 1
+  done
+  echo "  ✗ 터널 URL 대기 시간 초과. 로그: $log"
+  return 1
+}
+
+_stop_extra_tunnel() {
+  local port="${1:-}"
+  local pidfile="$PID_DIR/tunnel-$port.pid"
+  if [ ! -f "$pidfile" ]; then
+    echo "  ⓘ 포트 $port 로 열린 터널이 없습니다"
+    _registry_del "$port"
+    return 0
+  fi
+  local pid; pid="$(cat "$pidfile")"
+  kill "$pid" 2>/dev/null && echo "  ✓ 포트 $port 터널 종료 (PID $pid)" || echo "  ⓘ 이미 종료됨 (PID $pid)"
+  rm -f "$pidfile"
+  _registry_del "$port"
+  _run_tunnel_hook unexpose
+}
+
+# ── 터널 URL 변경 훅 (VT_TUNNEL_HOOK) ────────────────────────────────
+# 익명 터널은 재시작마다 URL이 바뀐다. 그 URL을 어디로 흘려보낼지는
+# 사람마다 다르므로(Notion / Slack / ntfy / 파일 / 사내 위키...) vt는
+# 특정 서비스를 알지 않는다. URL이 바뀔 때 임의의 명령을 부를 뿐이다.
+#
+# 계약 (자세히: vt help tunnel-hook):
+#   stdin — "라벨<TAB>URL" 줄들 (메인 터널 먼저, 이후 expose된 포트들)
+#   env   — VT_TUNNEL_EVENT (start|expose|unexpose|manual)
+#           VT_TUNNEL_MAIN_URL (메인 터널 URL, 없으면 빈 값)
+#   훅의 실패는 터널 동작에 영향을 주지 않는다.
+
+# 메인 터널(VT_PORT 또는 명명 터널)의 PID만 — 공백 구분 한 줄.
+# 'expose'로 뜬 다른 포트 터널은 제외한다.
+_main_tunnel_pids() {
+  command -v pgrep >/dev/null 2>&1 || return 0
+  {
+    pgrep -f "cloudflared.*tunnel run" 2>/dev/null || true
+    pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null || true
+  } | grep -v '^$' | tr '\n' ' ' | sed 's/ $//'
+}
+
+_main_tunnel_url() {
+  if [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+    echo "https://$VT_TUNNEL_HOSTNAME"
+    return 0
+  fi
+  grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1
+}
+
+# stdout: "라벨<TAB>URL" 줄들 — 훅의 stdin이자 vt tunnel list의 원본
+_tunnel_entries() {
+  local url
+  url="$(_main_tunnel_url)"
+  [ -n "$url" ] && printf '%s\t%s\n' "${VT_TUNNEL_MAIN_LABEL:-터미널 (VT)}" "$url"
+  _registry_prune
+  if [ -f "$TUNNEL_REGISTRY" ]; then
+    awk -F'\t' 'NF>=2 && $2!="" {print ($3==""?"localhost:"$1:$3) "\t" $2}' "$TUNNEL_REGISTRY"
+  fi
+}
+
+_run_tunnel_hook() {
+  local event="${1:-manual}"
+  # 미설정이면 조용히 통과 — 터널 동작을 절대 방해하지 않는다
+  [ -n "${VT_TUNNEL_HOOK:-}" ] || return 0
+
+  local entries
+  entries="$(_tunnel_entries)"
+  if [ -z "$entries" ]; then
+    [ "$event" = "manual" ] && echo "  ⓘ 알릴 URL이 없습니다 (터널 미실행)"
+    return 0
+  fi
+
+  local out rc
+  out="$(printf '%s\n' "$entries" | \
+    VT_TUNNEL_EVENT="$event" \
+    VT_TUNNEL_MAIN_URL="$(_main_tunnel_url)" \
+    /bin/sh -c "$VT_TUNNEL_HOOK" 2>&1)"
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "  ✓ 훅 실행${out:+: $out}"
+  else
+    echo "  ⚠ 훅 실패(rc=$rc)${out:+: $out}"
+  fi
+  return 0
 }
 
 _start_voice_daemon() {
@@ -774,6 +986,7 @@ cmd_help() {
     vt help hotkeys        핫키 전체 목록 + 변경 방법
     vt help target         음성 타깃 lock 설명
     vt help ssh            Tailscale + SSH 원격 접속 (회사망 등)
+    vt help tunnel-hook    터널 URL이 바뀔 때 Notion/Slack 등에 자동 게시
     vt help troubleshoot   자주 묻는 트러블슈팅
 HELP
     return 0
@@ -804,10 +1017,10 @@ cmd_hotkey() {
       echo "  ⌨  vt hotkey — 현재 핫키 설정"
       echo ""
       local voice_hotkey
-      voice_hotkey="$(grep -E '^VT_HOTKEY_VOICE=' "$env_file" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '"')"
+      voice_hotkey="$(vt_env_get VT_HOTKEY_VOICE)"
       [ -z "$voice_hotkey" ] && voice_hotkey="ctrl+shift+v (디폴트)"
       local voice_disabled
-      voice_disabled="$(grep -E '^VT_HOTKEY_VOICE_DISABLED=' "$env_file" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '"')"
+      voice_disabled="$(vt_env_get VT_HOTKEY_VOICE_DISABLED)"
       local voice_state="활성"
       [ "$voice_disabled" = "true" ] && voice_state="비활성 (DISABLED)"
       echo "    voice (음성 토글):     $voice_hotkey  [$voice_state]"
@@ -828,7 +1041,7 @@ cmd_hotkey() {
       fi
       _hotkey_validate_action "$action" || return 1
       _hotkey_validate_spec "$value" || return 1
-      _hotkey_set_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')" "$value"
+      vt_env_set "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')" "$value"
       echo "  ✓ $action 핫키 → $value"
       echo "  ⓘ daemon 재시작 필요: vt stop && vt voice"
       ;;
@@ -836,15 +1049,15 @@ cmd_hotkey() {
       local action="${2:-}"
       [ -z "$action" ] && { echo "  사용법: vt hotkey reset <action>"; return 1; }
       _hotkey_validate_action "$action" || return 1
-      _hotkey_unset_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')"
-      _hotkey_unset_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')_DISABLED"
+      vt_env_unset "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')"
+      vt_env_unset "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')_DISABLED"
       echo "  ✓ $action 핫키 디폴트로 복구"
       ;;
     disable)
       local action="${2:-}"
       [ -z "$action" ] && { echo "  사용법: vt hotkey disable <action>"; return 1; }
       _hotkey_validate_action "$action" || return 1
-      _hotkey_set_env "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')_DISABLED" "true"
+      vt_env_set "VT_HOTKEY_$(echo "$action" | tr '[:lower:]' '[:upper:]')_DISABLED" "true"
       echo "  ✓ $action 핫키 비활성화"
       ;;
     *)
@@ -876,44 +1089,11 @@ _hotkey_validate_spec() {
   return 1
 }
 
-_hotkey_set_env() {
-  local key="$1" value="$2"
-  local env_file="$HOME/.vt.env"
-  touch "$env_file"
-  if grep -qE "^${key}=" "$env_file"; then
-    # 기존 값 변경 (BSD/GNU sed 호환)
-    if [ "$(uname)" = "Darwin" ]; then
-      sed -i '' "s|^${key}=.*|${key}=\"${value}\"|" "$env_file"
-    else
-      sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$env_file"
-    fi
-  else
-    echo "${key}=\"${value}\"" >> "$env_file"
-  fi
-}
-
-_hotkey_unset_env() {
-  local key="$1"
-  local env_file="$HOME/.vt.env"
-  [ -f "$env_file" ] || return 0
-  if [ "$(uname)" = "Darwin" ]; then
-    sed -i '' "/^${key}=/d" "$env_file"
-  else
-    sed -i "/^${key}=/d" "$env_file"
-  fi
-}
-
-# 값을 '작은따옴표'로 저장 — scrypt 해시엔 $가 들어가므로 큰따옴표면 source 시 확장돼 깨진다.
-# sed 대신 grep -v로 라인 교체 → 값 속 특수문자($, & 등) 안전.
-_set_env_single() {
-  local key="$1" value="$2"
-  local env_file="$HOME/.vt.env"
-  touch "$env_file"
-  if grep -qE "^${key}=" "$env_file"; then
-    grep -vE "^${key}=" "$env_file" > "${env_file}.tmp" && mv "${env_file}.tmp" "$env_file"
-  fi
-  printf "%s='%s'\n" "$key" "$value" >> "$env_file"
-}
+# ~/.vt.env 쓰기는 전부 lib/vt_env.sh의 vt_env_set / vt_env_unset로 일원화됐다.
+# 이전엔 큰따옴표로 쓰는 setter와 홑따옴표로 쓰는 setter가 공존해서,
+# 큰따옴표 쪽으로 $가 든 값(scrypt 해시 등)이 흘러가면 source 시 조용히 파괴됐다.
+# 또 tmp 파일을 umask(644)로 만들어 mv하는 바람에 시크릿 파일 권한이 600→644로
+# 강등됐다. 두 문제 모두 단일 구현에서 구조적으로 막는다.
 
 # 웹 로그인 비밀번호 설정 — 원문은 저장/노출하지 않고 scrypt 해시만 ~/.vt.env에 기록.
 # 세션 서명키(VT_SECRET_KEY)가 없으면 자동 생성. 기계 토큰 VT_TOKEN과는 독립.
@@ -925,8 +1105,8 @@ cmd_password() {
   fi
   local sub="${1:-set}"
   if [ "$sub" = "clear" ] || [ "$sub" = "disable" ]; then
-    _hotkey_unset_env "VT_AUTH_PASSWORD_HASH"
-    _hotkey_unset_env "VT_PASSWORD_HASH"   # 레거시 이름도 함께 정리
+    vt_env_unset "VT_AUTH_PASSWORD_HASH"
+    vt_env_unset "VT_PASSWORD_HASH"   # 레거시 이름도 함께 정리
     echo "  ✓ 웹 로그인 비밀번호 해제 (VT_AUTH_PASSWORD_HASH 제거)"
     echo "  ⓘ 서버 재시작 필요: vt stop && vt start"
     return 0
@@ -943,12 +1123,12 @@ cmd_password() {
     || { echo "  ✗ 해시 생성 실패"; return 1; }
   unset pw pw2
   if [ -z "$hash" ]; then echo "  ✗ 해시 생성 실패(빈 값)"; return 1; fi
-  _set_env_single "VT_AUTH_PASSWORD_HASH" "$hash"
-  _hotkey_unset_env "VT_PASSWORD_HASH"   # 레거시 이름 잔재 제거(중복 방지)
+  vt_env_set "VT_AUTH_PASSWORD_HASH" "$hash"
+  vt_env_unset "VT_PASSWORD_HASH"   # 레거시 이름 잔재 제거(중복 방지)
   if ! grep -qE '^VT_AUTH_SESSION_KEY=' "$env_file" && ! grep -qE '^VT_SECRET_KEY=' "$env_file"; then
     local secret
     secret="$("$VT_PYTHON" -c 'import secrets; print(secrets.token_hex(32))')"
-    _set_env_single "VT_AUTH_SESSION_KEY" "$secret"
+    vt_env_set "VT_AUTH_SESSION_KEY" "$secret"
     echo "  ✓ 세션 서명키(VT_AUTH_SESSION_KEY) 자동 생성"
   fi
   echo "  ✓ 웹 로그인 비밀번호 설정 완료 — 해시만 저장(원문 미저장)"
@@ -1080,6 +1260,19 @@ cmd_stop() {
       rm -f "$pidfile"
     fi
   done
+
+  # 추가 포트 터널 (vt tunnel expose)
+  for pidfile in "$PID_DIR"/tunnel-*.pid; do
+    [ -f "$pidfile" ] || continue
+    local epid
+    epid="$(cat "$pidfile")"
+    if kill -0 "$epid" 2>/dev/null; then
+      kill "$epid" 2>/dev/null
+      echo "  ✓ $(basename "$pidfile" .pid) 종료 (PID $epid)"
+    fi
+    rm -f "$pidfile"
+  done
+  rm -f "$TUNNEL_REGISTRY"
 
   # 혹시 남은 프로세스 정리
   pkill -f "voice_daemon.py" 2>/dev/null || true
@@ -1220,9 +1413,29 @@ cmd_doctor() {
     _check "PATH" warn "~/.local/bin 미포함. echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
   fi
 
-  # 10. 설정 파일
-  if [ -f "$HOME/.vt.env" ]; then
-    _check ".vt.env" ok "$HOME/.vt.env"
+  # 10. 설정 파일 — 존재 / 권한 / 형식
+  if [ -f "$VT_CONFIG" ]; then
+    _check ".vt.env" ok "$VT_CONFIG"
+
+    # 시크릿(토큰·비밀번호 해시·세션 서명키)이 담기므로 그룹/기타 읽기 권한은 위험
+    local perm
+    perm="$(ls -l "$VT_CONFIG" 2>/dev/null | cut -c1-10)"
+    case "$perm" in
+      -rw-------|-r--------)
+        _check ".vt.env 권한" ok "$perm" ;;
+      *)
+        _check ".vt.env 권한" fail "$perm — 다른 사용자가 읽을 수 있음. 'chmod 600 $VT_CONFIG'" ;;
+    esac
+
+    # bash source와 Python 파서가 다르게 읽을 수 있는 줄 (따옴표 없음 / 큰따옴표)
+    local badlines
+    badlines="$(vt_env_lint "$VT_CONFIG" || true)"
+    if [ -n "$badlines" ]; then
+      _check ".vt.env 형식" warn "홑따옴표로 감싸지 않은 값이 있습니다 — bash가 \$를 확장해 값이 깨질 수 있음"
+      printf '%s\n' "$badlines" | sed 's/^/        /'
+    else
+      _check ".vt.env 형식" ok "모든 값이 정규 형식"
+    fi
   else
     _check ".vt.env" warn "없음. install.sh가 자동 생성"
   fi
@@ -1797,11 +2010,60 @@ cmd_tunnel() {
     switch)
       _tunnel_switch "${2:-}"
       ;;
+    expose)
+      echo ""
+      _start_extra_tunnel "${2:-}" "${3:-}"
+      local rc=$?
+      echo ""
+      return $rc
+      ;;
+    unexpose)
+      echo ""
+      _stop_extra_tunnel "${2:-}"
+      echo ""
+      ;;
+    list)
+      _tunnel_list
+      ;;
+    hook)
+      echo ""
+      if [ -z "${VT_TUNNEL_HOOK:-}" ]; then
+        echo "  VT_TUNNEL_HOOK 미설정 — URL이 바뀌어도 아무 곳에도 알리지 않습니다."
+        echo "  Notion/Slack/ntfy 등으로 자동 게시하는 방법: vt help tunnel-hook"
+        echo ""
+        return 0
+      fi
+      echo "  훅: $VT_TUNNEL_HOOK"
+      echo "  전달할 내용 (stdin):"
+      _tunnel_entries | sed 's/^/    /'
+      _run_tunnel_hook manual
+      echo ""
+      ;;
     *)
-      echo "사용법: vt tunnel [status|setup|teardown|switch <anon|named>]"
+      echo "사용법: vt tunnel [status|list|hook|expose <port> [라벨]|unexpose <port>|setup|teardown|switch <anon|named>]"
       return 1
       ;;
   esac
+}
+
+_tunnel_list() {
+  echo ""
+  echo "  🌐 열려 있는 터널"
+  echo ""
+  local main; main="$(_main_tunnel_url)"
+  if [ -n "$main" ]; then
+    printf "  %-6s %-22s %s\n" "$VT_PORT" "터미널 (VT)" "$main"
+  else
+    echo "  (메인 터널 없음 — vt start 또는 vt mobile)"
+  fi
+  _registry_prune
+  if [ -s "$TUNNEL_REGISTRY" ]; then
+    awk -F'\t' '{printf "  %-6s %-22s %s\n", $1, ($3==""?"-":$3), $2}' "$TUNNEL_REGISTRY"
+  fi
+  echo ""
+  echo "  추가:  vt tunnel expose 3000 \"RAPA 앱\""
+  echo "  해제:  vt tunnel unexpose 3000"
+  echo ""
 }
 
 _tunnel_print_status() {
@@ -1809,9 +2071,9 @@ _tunnel_print_status() {
   echo "  🌐 Cloudflare Tunnel 상태"
   echo ""
   local pids
-  pids="$(pgrep -f 'cloudflared.*tunnel' 2>/dev/null || true)"
+  pids="$(pgrep -f 'cloudflared.*tunnel' 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
   if [ -n "$pids" ]; then
-    echo "  실행:    ✓ PID(s) $pids"
+    echo "  실행:    ✓ PID(s) $pids  (메인: $(_main_tunnel_pids))"
   else
     echo "  실행:    ✗ 중지"
   fi
@@ -1908,13 +2170,8 @@ EOF
   echo "✓ config.yml 작성: $config_yml"
 
   # 7. ~/.vt.env에 저장
-  local vt_env="$HOME/.vt.env"
-  touch "$vt_env"
-  # 기존 라인 제거 후 새로 추가
-  grep -v '^VT_TUNNEL_NAME=\|^VT_TUNNEL_HOSTNAME=' "$vt_env" > "${vt_env}.tmp" 2>/dev/null || true
-  echo "VT_TUNNEL_NAME=$tunnel_name" >> "${vt_env}.tmp"
-  echo "VT_TUNNEL_HOSTNAME=$hostname" >> "${vt_env}.tmp"
-  mv "${vt_env}.tmp" "$vt_env"
+  vt_env_set "VT_TUNNEL_NAME" "$tunnel_name" || return 1
+  vt_env_set "VT_TUNNEL_HOSTNAME" "$hostname" || return 1
   echo "✓ ~/.vt.env에 저장"
 
   echo ""
@@ -1932,10 +2189,7 @@ _tunnel_teardown_named() {
   read -r ans
   case "$ans" in y|Y|yes) ;; *) echo "  중단됨"; return 1 ;; esac
 
-  local vt_env="$HOME/.vt.env"
-  if [ -f "$vt_env" ]; then
-    grep -v '^VT_TUNNEL_NAME=\|^VT_TUNNEL_HOSTNAME=' "$vt_env" > "${vt_env}.tmp" 2>/dev/null || true
-    mv "${vt_env}.tmp" "$vt_env"
+  if vt_env_unset "VT_TUNNEL_NAME" "VT_TUNNEL_HOSTNAME"; then
     echo "✓ ~/.vt.env에서 VT_TUNNEL_NAME/HOSTNAME 제거"
   fi
   echo ""
@@ -2414,7 +2668,7 @@ cmd_status() {
   local tunnel_installed="✗"
   command -v cloudflared >/dev/null 2>&1 && tunnel_installed="✓"
   local tunnel_pids
-  tunnel_pids="$(pgrep -f 'cloudflared.*tunnel' 2>/dev/null || true)"
+  tunnel_pids="$(_main_tunnel_pids)"
   if [ -n "$tunnel_pids" ]; then
     local url
     if [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
@@ -2456,6 +2710,16 @@ cmd_status() {
     echo "    모드:       명명 (named) → $VT_TUNNEL_HOSTNAME"
   else
     echo "    모드:       익명 (anonymous, trycloudflare.com)"
+  fi
+  _registry_prune
+  if [ -s "$TUNNEL_REGISTRY" ]; then
+    echo "    추가 포트:"
+    awk -F'\t' '{printf "      %-6s %s  (%s)\n", $1, $2, ($3==""?"-":$3)}' "$TUNNEL_REGISTRY"
+  fi
+  if [ -n "${VT_TUNNEL_HOOK:-}" ]; then
+    echo "  URL 변경 훅: ✓ 설정됨 (vt tunnel hook)"
+  else
+    echo "  URL 변경 훅: ✗ 미설정 (vt help tunnel-hook)"
   fi
   echo "  Tailscale:   $ts_status  (원격 SSH 접속: vt ssh)"
   echo "  Voice Daemon: $voice_status"
@@ -2520,8 +2784,13 @@ case "${1:-help}" in
     echo "                          셸별 안전 통합 스니펫 출력"
     echo "    vt setup-keybind [key] [action]"
     echo "                          tmux popup 키바인딩 자동 등록 (default: prefix+v → status)"
-    echo "    vt tunnel [status|setup|teardown|switch <anon|named>]"
+    echo "    vt tunnel [status|list|hook|setup|teardown|switch <anon|named>]"
     echo "                          Cloudflare Tunnel 관리 (명명 터널 옵트인)"
+    echo "    vt tunnel expose <port> [라벨]"
+    echo "                          다른 로컬 앱(예: 3000)을 별도 터널로 공개"
+    echo "    vt tunnel unexpose <port>"
+    echo "                          해당 포트 터널 종료"
+    echo "                          URL을 어딘가에 자동 게시: vt help tunnel-hook"
     echo "    vt mobile --network <localhost|lan|tailscale|all>"
     echo "                          모바일 모드 — localhost(같은 머신) / lan(같은 네트워크) / tailscale(같은 tailnet) / all(터널, default)"
     echo ""
