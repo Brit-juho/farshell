@@ -315,6 +315,56 @@
       if (id) addSession(id);
     }
 
+    // + 버튼: 일반 터미널 / tmux 중 선택하는 드롭다운. (기존 createSession은
+    // 온보딩·auto-mac 호환을 위해 그대로 둔다.)
+    function showAddMenu(e) {
+      if (e) e.stopPropagation();
+      // 토글: 이미 열려 있으면 닫기
+      const existing = document.getElementById('add-menu');
+      if (existing) { existing.remove(); return; }
+
+      const menu = document.createElement('div');
+      menu.id = 'add-menu';
+      menu.className = 'vt-menu';
+      // + 버튼 바로 아래에 정렬 (기본 .vt-menu는 우측 고정이라 left로 재배치)
+      const btn = document.getElementById('add-btn');
+      const r = btn ? btn.getBoundingClientRect() : { left: 8, bottom: 44 };
+      menu.style.right = 'auto';
+      menu.style.left = `${Math.round(r.left)}px`;
+      menu.style.top = `${Math.round(r.bottom + 6)}px`;
+      menu.style.minWidth = '200px';
+
+      const mkItem = (label, hint, onClick) => {
+        const it = document.createElement('div');
+        it.className = 'vt-menu-item';
+        it.innerHTML = `<div>${label}</div><div style="opacity:.55;font-size:11px;margin-top:2px;">${hint}</div>`;
+        it.onclick = () => { menu.remove(); onClick(); };
+        return it;
+      };
+      menu.appendChild(mkItem('일반 터미널', '단발 셸 (tmux 아님)', createPlainSession));
+      menu.appendChild(mkItem('tmux 세션', 'detach 유지 · 맥/모바일 공유', createTmuxSession));
+      document.body.appendChild(menu);
+
+      setTimeout(() => {
+        document.addEventListener('click', function _close(ev) {
+          if (!document.body.contains(menu)) { document.removeEventListener('click', _close); return; }
+          if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', _close); }
+        });
+      }, 0);
+    }
+
+    // 일반(비 tmux) 터미널 세션 생성
+    async function createPlainSession() {
+      const res = await fetch(`${API_BASE}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!res.ok) { showToast(`세션 생성 실패 (${res.status})`); return; }
+      const { id } = await res.json();
+      if (id) addSession(id);
+    }
+
     function addSession(id, displayName) {
       // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
       // 생기므로 무시한다.
@@ -325,6 +375,8 @@
       const tab = document.createElement('div');
       tab.className = 'tab';
       tab.dataset.sessionId = id;
+      // 좌우 이동 단축키 안내(호버 툴팁)
+      tab.title = '탭 이동: Ctrl/Cmd + Shift + ← / →';
       const agentBadge = document.createElement('span');
       agentBadge.className = 'tab-agent';
       agentBadge.style.cssText = 'margin-right:4px;font-size:12px;';
@@ -577,6 +629,31 @@
       updateSessionPicker();
       saveWorkspace();
     }
+
+    // 탭(터미널 섹션) 좌/우 이동. DOM 순서(= 화면 순서) 기준으로 끝에서 순환한다.
+    function switchTabByOffset(delta) {
+      const tabEls = Array.from(document.querySelectorAll('#tabs .tab'));
+      if (tabEls.length < 2) return;
+      let idx = tabEls.findIndex((t) => t.dataset.sessionId === activeId);
+      if (idx === -1) idx = 0;
+      const next = (idx + delta + tabEls.length) % tabEls.length;
+      const nid = tabEls[next].dataset.sessionId;
+      if (nid && nid !== activeId) switchTo(nid);
+    }
+
+    // 단축키로 터미널 섹션 좌우 이동: Ctrl/Cmd + Shift + ← / →.
+    // xterm이 키를 먹기 전에 잡아야 하므로 document의 capture 단계에서 처리하고,
+    // stopPropagation으로 PTY까지 흘러가지 않게 막는다(포커스 위치와 무관하게 동작).
+    document.addEventListener('keydown', (e) => {
+      if (!e.shiftKey || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      // 검색창·탭 이름 편집 중에는 텍스트 선택(Shift+화살표)을 방해하지 않는다.
+      const ae = document.activeElement;
+      if (ae && (ae.id === 'search-input' || ae.isContentEditable)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      switchTabByOffset(e.key === 'ArrowLeft' ? -1 : 1);
+    }, true);
 
     // ── Phase 8 G7: localStorage 워크스페이스 + 탭 드래그 정렬 ─────────
     const WORKSPACE_KEY = 'vt-workspace-v1';
@@ -880,10 +957,12 @@
     }
 
     async function createTmuxSession() {
+      // "맥에서도 열기" 토글이 켜져 있으면 서버가 osascript로 iTerm 창도 함께 연다.
+      const autoMac = document.getElementById('auto-mac-checkbox')?.checked;
       const res = await fetch(`${API_BASE}/api/tmux/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(autoMac ? { auto_open_on_mac: true } : {}),
       });
       if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
       const data = await res.json();

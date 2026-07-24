@@ -117,7 +117,7 @@
     <div class="traffic" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i></div>
 
     <div id="tabs">
-      <div id="add-btn" onclick="createSession()" title="새 세션" role="button" tabindex="0" aria-label="새 세션">+</div>
+      <div id="add-btn" onclick="showAddMenu(event)" title="새 세션 (일반 터미널 / tmux)" role="button" tabindex="0" aria-haspopup="true" aria-label="새 세션">+</div>
       <div class="wt-chevron" onclick="showTmuxSessions()" title="세션 프로파일" role="button" aria-label="세션 프로파일">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </div>
@@ -280,7 +280,7 @@
     });
     // + 버튼 키보드 접근
     document.getElementById('add-btn').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); createSession(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showAddMenu(e); }
     });
     // "맥에서도 열기" — 기본 체크 ON, 선택은 localStorage에 기억 (폰에서 끄면 유지됨)
     (function initAutoMac() {
