@@ -24,6 +24,8 @@ vt tunnel expose 3000 "앱 이름"  # 다른 로컬 포트를 별도 Cloudflare 
 vt tunnel unexpose 3000          # 해당 포트 터널 종료
 vt tunnel list                   # 열려 있는 터널 전부 (메인 + 추가 포트)
 vt tunnel hook                   # URL 변경 훅 확인 + 즉시 실행 (vt help tunnel-hook)
+vt tunnel restart                # 좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동 + 훅 재실행
+vt tunnel watchdog               # 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 vt start/voice/mobile가 자동 기동)
 vt ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내 (D9, 회사망 등)
 vt doctor             # 설치/환경 진단 (Linux 항목 포함)
 vt install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
@@ -390,6 +392,7 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | tmux detach 감지 | PTY EOF 시 `[process exited]` 표시 |
 | 추가 포트 터널 | `vt tunnel expose <port>` — Cloudflare quick tunnel은 호스트↔포트 1:1이라 경로(`/localhost:3000`)로 포트를 바꿀 수 없다. 포트마다 터널을 하나씩 띄우고 vt가 PID/레지스트리로 추적 |
 | 터널 URL 변경 훅 | `VT_TUNNEL_HOOK` — URL이 바뀔 때 임의 명령 실행(stdin: `라벨<TAB>URL`). 게시 대상은 사람마다 다르므로(Notion/Slack/ntfy/파일) vt는 서비스를 알지 않는다. 예시·주의사항: `vt help tunnel-hook` |
+| 터널 좀비 재연결 자동 복구 | cloudflared는 프로세스가 살아있어도(`kill -0` 성공) 엣지와의 QUIC 컨트롤 스트림만 끊긴 채 재연결을 무한 반복하는 좀비 상태에 빠질 수 있다(정적 파일은 어쩌다 200, API는 503). `server/tunnel_watchdog.py`가 `vt start`/`voice`/`mobile` 시 자동 기동돼 `/tmp/cloudflared.log`의 재연결 실패 패턴을 감시하다가(기본: 90초 안에 4회 이상) `vt tunnel restart`를 자동 호출한다. 수동 확인/기동: `vt tunnel watchdog`, 수동 강제 재시작: `vt tunnel restart` |
 | Tailscale 원격 접속 (D9) | `vt ssh` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속. `vt mobile --network tailscale`은 웹 UI도 tailnet으로만 제한 |
 | 클라이언트 접속 알림 (D9) | `VT_NOTIFY_CLIENT_EVENTS=1` — tmux client-attached/detached 훅 → ntfy/Telegram push |
 
@@ -407,6 +410,7 @@ server/
   tts_hook.sh       — Claude Code Stop hook (TTS 자동 요약)
   voice_daemon.py   — 독립 음성 입력 데몬 (핫키 → STT → tmux)
   clipboard_daemon.py — macOS 클립보드 폴링 데몬 (changeCount → /api/clipboard/push)
+  tunnel_watchdog.py — cloudflared 좀비 재연결 감시 데몬 (로그 패턴 감지 → vt tunnel restart 자동 호출)
   routes/clipboard.py — POST /api/clipboard/push → /ws-notify 브로드캐스트
   platform_utils.py — 크로스 플랫폼 유틸리티 (macOS/Linux/WSL2)
   tailscale.py      — Tailscale 상태 감지 (D9, tunnel.py와 동일 패턴)

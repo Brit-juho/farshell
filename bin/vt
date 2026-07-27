@@ -108,6 +108,7 @@ SERVER_LOG="/tmp/vt-server.log"
 TUNNEL_LOG="/tmp/cloudflared.log"
 DAEMON_LOG="/tmp/vt-voice-daemon.log"
 CLIP_DAEMON_LOG="/tmp/vt-clipboard-daemon.log"
+WATCHDOG_LOG="/tmp/vt-tunnel-watchdog.log"
 PID_DIR="/tmp/vt-pids"
 mkdir -p "$PID_DIR"
 # 추가 포트 터널 레지스트리 (TSV: port<TAB>url<TAB>label)
@@ -140,12 +141,57 @@ _start_server() {
   fi
 }
 
-# 메인 터널 시작. 성공 시 URL 변경 훅 실행 (설정된 경우에만).
+# 메인 터널 시작. 성공 시 URL 변경 훅 실행 + 좀비 재연결 감시 데몬 기동 (설정된 경우에만).
 _start_tunnel() {
   _start_tunnel_impl "$@"
   local rc=$?
-  [ $rc -eq 0 ] && _run_tunnel_hook start
+  if [ $rc -eq 0 ]; then
+    _run_tunnel_hook start
+    _start_tunnel_watchdog
+  fi
   return $rc
+}
+
+# 좀비 재연결 상태에서도 프로세스는 살아있어(kill -0 성공) _is_running만으론
+# 못 잡으므로, PID를 무조건 죽이고 새로 띄운다. 워치독이 자동 호출하거나
+# 'vt tunnel restart'로 수동 호출.
+_tunnel_restart() {
+  echo "  ▸ 터널 재시작 중..."
+  local pids
+  pids="$(_main_tunnel_pids)"
+  if [ -n "$pids" ]; then
+    for p in $pids; do kill "$p" 2>/dev/null || true; done
+    sleep 1
+    for p in $pids; do kill -9 "$p" 2>/dev/null || true; done
+  fi
+  rm -f "$PID_DIR/tunnel.pid"
+
+  _start_tunnel_impl
+  local rc=$?
+  if [ $rc -eq 0 ]; then
+    _run_tunnel_hook start
+    _start_tunnel_watchdog
+    echo "  ✓ 재시작 완료"
+  else
+    echo "  ✗ 재시작 실패"
+  fi
+  return $rc
+}
+
+# 터널 좀비 재연결 감시 데몬. 로그에 재연결 실패가 짧은 시간에 몰리면
+# _tunnel_restart를 자동 호출한다 (server/tunnel_watchdog.py).
+_start_tunnel_watchdog() {
+  if _is_running tunnel-watchdog; then
+    return 0
+  fi
+  nohup "$VT_PYTHON" "$VT_DIR/server/tunnel_watchdog.py" > "$WATCHDOG_LOG" 2>&1 &
+  echo $! > "$PID_DIR/tunnel-watchdog.pid"
+  sleep 0.5
+  if _is_running tunnel-watchdog; then
+    echo "✓ 터널 워치독 시작 (좀비 재연결 자동 감지)"
+  else
+    echo "  ⚠ 터널 워치독 시작 실패. 로그: $WATCHDOG_LOG"
+  fi
 }
 
 _start_tunnel_impl() {
@@ -1248,7 +1294,7 @@ cmd_stop() {
   echo "  ⏹  vt stop"
   echo ""
 
-  for svc in voice clip tunnel server; do
+  for svc in voice clip tunnel-watchdog tunnel server; do
     local pidfile="$PID_DIR/$svc.pid"
     if [ -f "$pidfile" ]; then
       local pid
@@ -1277,6 +1323,7 @@ cmd_stop() {
   # 혹시 남은 프로세스 정리
   pkill -f "voice_daemon.py" 2>/dev/null || true
   pkill -f "clipboard_daemon.py" 2>/dev/null || true
+  pkill -f "tunnel_watchdog.py" 2>/dev/null || true
   pkill -f "cloudflared tunnel" 2>/dev/null || true
   if command -v lsof >/dev/null 2>&1; then
     lsof -i :$VT_PORT -t 2>/dev/null | xargs kill 2>/dev/null || true
@@ -2010,6 +2057,21 @@ cmd_tunnel() {
     switch)
       _tunnel_switch "${2:-}"
       ;;
+    restart)
+      echo ""
+      _tunnel_restart
+      echo ""
+      ;;
+    watchdog)
+      echo ""
+      if _is_running tunnel-watchdog; then
+        echo "  ✓ 터널 워치독 실행 중 (PID $(cat "$PID_DIR/tunnel-watchdog.pid" 2>/dev/null))"
+      else
+        echo "  ✗ 터널 워치독 중지 상태 — 시작 중..."
+        _start_tunnel_watchdog
+      fi
+      echo ""
+      ;;
     expose)
       echo ""
       _start_extra_tunnel "${2:-}" "${3:-}"
@@ -2040,7 +2102,7 @@ cmd_tunnel() {
       echo ""
       ;;
     *)
-      echo "사용법: vt tunnel [status|list|hook|expose <port> [라벨]|unexpose <port>|setup|teardown|switch <anon|named>]"
+      echo "사용법: vt tunnel [status|list|hook|restart|watchdog|expose <port> [라벨]|unexpose <port>|setup|teardown|switch <anon|named>]"
       return 1
       ;;
   esac
@@ -2658,6 +2720,7 @@ cmd_status() {
   local ts_status="✗ 미설치"
   local voice_status="✗ 중지"
   local clip_status="✗ 중지"
+  local watchdog_status="✗ 중지"
   local tmux_status="✗ 없음"
 
   if _port_in_use $VT_PORT; then
@@ -2698,6 +2761,10 @@ cmd_status() {
     clip_status="✓ 실행 중"
   fi
 
+  if _is_running tunnel-watchdog; then
+    watchdog_status="✓ 실행 중 (좀비 재연결 자동 감지)"
+  fi
+
   if "${TMUX_BASE[@]}" list-sessions 2>/dev/null | grep -q .; then
     tmux_status="✓ $("${TMUX_BASE[@]}" list-sessions -F '#{session_name}' | tr '\n' ' ')"
   fi
@@ -2721,6 +2788,7 @@ cmd_status() {
   else
     echo "  URL 변경 훅: ✗ 미설정 (vt help tunnel-hook)"
   fi
+  echo "  터널 워치독: $watchdog_status"
   echo "  Tailscale:   $ts_status  (원격 SSH 접속: vt ssh)"
   echo "  Voice Daemon: $voice_status"
   echo "  Clipboard:   $clip_status"
@@ -2784,8 +2852,11 @@ case "${1:-help}" in
     echo "                          셸별 안전 통합 스니펫 출력"
     echo "    vt setup-keybind [key] [action]"
     echo "                          tmux popup 키바인딩 자동 등록 (default: prefix+v → status)"
-    echo "    vt tunnel [status|list|hook|setup|teardown|switch <anon|named>]"
+    echo "    vt tunnel [status|list|hook|restart|watchdog|setup|teardown|switch <anon|named>]"
     echo "                          Cloudflare Tunnel 관리 (명명 터널 옵트인)"
+    echo "    vt tunnel restart     좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동"
+    echo "    vt tunnel watchdog    좀비 재연결 자동 감지 데몬 상태 확인/시작"
+    echo "                          (vt start/voice/mobile 시 자동 기동, 감지 시 자동 restart)"
     echo "    vt tunnel expose <port> [라벨]"
     echo "                          다른 로컬 앱(예: 3000)을 별도 터널로 공개"
     echo "    vt tunnel unexpose <port>"
