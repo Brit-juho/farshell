@@ -9,6 +9,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **터널 좀비 재연결 자동 감지·복구 (`server/tunnel_watchdog.py`, `vt tunnel restart` / `watchdog`).**
+  cloudflared는 로컬 프로세스가 살아있어도(`kill -0` 성공) Cloudflare 엣지와의 QUIC
+  컨트롤 스트림만 끊긴 채 재연결(`control stream encountered a failure`)을 무한 반복하는
+  좀비 상태에 빠질 수 있었다. 이 상태에선 정적 파일은 어쩌다 200이 오고 `/api/*`는 503이
+  나서 "화면은 뜨는데 기능은 안 되는" 증상으로만 드러나, `vt status`(PID 생존만 확인)로는
+  못 잡았다. 실제로 5일째 재시작 없이 떠 있던 터널이 2.5일 동안 7,950회 재연결 실패를
+  반복한 사례로 확인됨.
+  - `vt start`/`voice`/`mobile`이 터널을 띄울 때 `tunnel_watchdog.py`를 함께 기동. 20초
+    간격으로 `/tmp/cloudflared.log`를 증분 추적해 최근 90초 안에 재연결 실패가 4회 이상
+    몰리면 좀비로 판단하고 자동 재시작(쿨다운 120초, 폭주 방지).
+  - `vt tunnel restart` — `_is_running`이 못 잡는 좀비 PID를 무조건 죽이고 새 터널을
+    강제로 띄운 뒤 URL 변경 훅을 재실행(수동 호출도 가능).
+  - `vt tunnel watchdog` — 워치독 상태 확인/수동 기동. `vt status`에 "터널 워치독" 표시,
+    `vt stop`에서 함께 정리.
 - **추가 포트 터널 (`vt tunnel expose <port> [라벨]` / `unexpose` / `list`).**
   Cloudflare quick tunnel은 호스트명↔포트가 1:1이라 `https://<터널>/localhost:3000`처럼
   경로로 포트를 바꿔치기할 수 없다(그 경로는 VT 서버로 그대로 전달돼 404). 다른 로컬 앱을
