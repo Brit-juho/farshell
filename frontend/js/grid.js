@@ -143,13 +143,16 @@
             card = document.createElement('div');
             card.dataset.name = sess.name;
             card.className = 'vt-card';
+            // 세션 이름은 tmux가 주는 임의 문자열이라 innerHTML 보간이 아니라
+            // textContent로 넣는다 (`<`가 든 이름이 마크업으로 해석되지 않도록).
             card.innerHTML = `
               <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="card-title">${sess.name}</span>
+                <span class="card-title"></span>
                 <span class="card-cmd"></span>
               </div>
               <pre class="card-preview"><span style="opacity:.5;font-style:italic;font-size:10px;">로딩 중...</span></pre>
             `;
+            card.querySelector('.card-title').textContent = sess.name;
             card.onclick = () => {
               // Codex: toggleGridView 내부에서 gridViewEnabled를 반전시키므로
               // 그리드가 열려있을 때만 toggle 호출해야 닫힌다.

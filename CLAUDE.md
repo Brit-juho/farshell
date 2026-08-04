@@ -1,4 +1,4 @@
-> **voice-terminal v1.6.0** (2026-07-12) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
+> **voice-terminal v1.7.0** (2026-08-04) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
 
 ## vt CLI (어디서든 실행)
 
@@ -16,6 +16,8 @@ vt attach [name]      # 임의 tmux 세션을 새 창에 attach
 vt voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 vt hotkey [list|set|reset|disable]  # 핫키 조회/변경
 vt password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
+vt otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전까지 완전 비활성)
+vt device [list|revoke <id>]    # 등록된 기기 조회 / 폐기(폰 분실 시 세션까지 함께 무효)
 vt help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 vt claude             # 새 터미널 창에 tmux dev + claude --resume
 vt handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
@@ -269,7 +271,9 @@ adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 10
 | DELETE | `/api/tmux/kill/{name}` | tmux 세션 완전 종료 |
 | POST | `/api/upload?session_id=X` | 파일 업로드 (multipart/form-data) |
 | GET | `/api/download?path=X` | 서버 파일 다운로드 |
-| POST | `/api/auth` | 토큰 인증 → `vt_session` HttpOnly cookie 발급 (v1.3+) |
+| POST | `/api/auth` | 로그인 — 비밀번호(+새 기기면 `otp`) 또는 1회용 `ticket` → `vt_session`/`vt_device` HttpOnly cookie 발급. 401 `otp_required`/`otp_invalid`, 429 `otp_locked` |
+| GET | `/api/auth/status` | 인증 활성 여부 / OTP 연동 여부 / 이 기기 등록 여부 (미인증 접근 가능, 비밀 미포함) |
+| POST | `/api/auth/logout` | 세션만 해제 (기기 등록은 유지) |
 | GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널 등) |
 | GET | `/api/workspace` | 워크스페이스 동기화 (탭/UI 상태) |
 | GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) |
@@ -382,6 +386,9 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | 핸즈프리 모드 | 모바일 🔄 버튼 → 연속 녹음/STT 자동 반복 |
 | 음성 전용 모드 | 🎧 버튼 → 터미널 숨기고 큰 마이크만 표시 (이어폰 조작용) |
 | 웹 로그인 비밀번호 | `vt password`로 설정 → scrypt 해시(`VT_AUTH_PASSWORD_HASH`)만 저장, 원문 미저장. 로그인 시 `VT_AUTH_SESSION_KEY`로 서명된 24h 세션 쿠키 발급(원문·토큰 아님). 사람용 인증. `server/auth.py` |
+| 기기 등록 + OTP 관문 | 로그인은 **항상 비밀번호**. OTP는 "처음 보는 기기를 등록할 때"만 요구하는 관문이다. 등록된 기기는 `vt_device` 장기 쿠키(90일)를 갖고 이후 비밀번호만으로 통과 — IP가 아니라 기기 단위라 폰이 LTE↔wifi를 오가도 안 끊긴다. **`vt otp setup` 전까지 OTP는 완전 비활성**이고 기기 등록만 조용히 쌓이므로, 나중에 켜도 쓰던 기기는 잠기지 않는다. 저장은 `~/.vt/devices.json`(0600, sha256 해시만). `vt device revoke <id>`로 폐기하면 그 기기의 세션 쿠키까지 즉시 무효 |
+| 1회용 기기 등록 티켓 | `vt mobile`/`vt handoff`의 QR·URL에 상시 토큰 대신 5분짜리 1회용 티켓(`?ticket=`)을 싣는다. QR을 띄우는 시점에 맥 물리 접근이 이미 증명되므로 스캔=등록 승인. 상시 토큰을 URL에 박던 방식은 그 값이 로그·히스토리·QR 이미지에 영구히 남았다 |
+| 크로스 사이트 차단 | `OriginGuardMiddleware`(`server/main.py`) — Origin이 자기 자신이 아니면 HTTP·WS 모두 403. 인증·OTP로는 막을 수 없는 유일한 경로(브라우저에 이미 쿠키가 있으면 인증은 통과한다). CORS 기본 `*`도 제거 — 필요 시 `VT_ALLOWED_ORIGINS`로 옵트인 |
 | API 토큰 인증 | `VT_AUTH_TOKEN` 환경변수 = 기계용 토큰(데몬/QR/URL). URL `?token=xxx` 또는 `Authorization: Bearer xxx`. 비밀번호 로그인과 병존. (구 이름 `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY`도 fallback 인식) |
 | tmux 세션 관리 | 웹에서 tmux 생성/attach/detach/kill |
 | Scrollback 버퍼 | WS 재접속 시 이전 출력 복원 (최대 5000 청크) |
@@ -401,7 +408,11 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 ```
 server/
   main.py           — FastAPI (WS + REST + Voice + 파일 업로드/다운로드)
-  auth.py           — 웹 로그인 인증 (scrypt 비밀번호 해시 + HMAC 서명 세션 쿠키)
+  auth.py           — 웹 로그인 인증 (scrypt 비밀번호 해시 + HMAC 서명 세션 쿠키
+                      + 기기 화이트리스트 + TOTP 관문 + 1회용 등록 티켓).
+                      `python auth.py <cmd>` CLI로 bin/vt가 서버 없이 직접 호출한다.
+                      런타임 상태는 ~/.vt/{devices,totp,tickets}.json (0600) —
+                      설정(~/.vt.env)과 분리해 서버 재시작 없이 즉시 반영된다.
   pty_manager.py    — PTY 세션 (broadcast, scrollback 버퍼, EOF 감지)
   voice_handler.py  — STT (faster-whisper) + TTS (edge-tts / macOS say)
   output_watcher.py — 출력 감시 → 작업 완료 TTS 알림

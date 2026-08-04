@@ -8,6 +8,49 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-08-04
+
+### Security
+- **기기 화이트리스트 + OTP 관문 (`vt otp`, `vt device`).** 로그인은 계속 비밀번호로 하되,
+  "처음 보는 기기"를 등록할 때만 TOTP 6자리를 요구한다. 등록된 기기는 `vt_device`
+  장기 쿠키(90일)를 갖고 이후 비밀번호만으로 통과한다 — IP가 아니라 기기 단위로 신뢰하므로
+  폰이 LTE↔wifi를 오가도 재인증이 필요 없다.
+  - **`vt otp setup` 전까지 OTP는 완전 비활성**이고 기기 등록만 조용히 쌓인다. 그래서 나중에
+    연동해도 쓰던 맥/폰은 이미 목록에 있어 잠기지 않는다(연동 시점부터 '새' 기기에만 적용).
+  - TOTP는 외부 의존성 없이 stdlib(`hmac`+`struct`)로 구현. ±1 스텝 허용 + **마지막 성공
+    카운터를 저장해 같은 코드 재사용을 거부**(어깨너머로 본 코드 리플레이 차단),
+    5회 실패 시 10분 잠금(6자리는 무제한 시도면 실제로 뚫린다).
+  - 저장은 `~/.vt/devices.json`(0600)에 **sha256 해시만** — 파일이 새도 쿠키를 만들 수 없다.
+  - 세션 쿠키를 `v2.<exp>.<device>.<hmac>`로 확장. `vt device revoke <id>`로 기기를 폐기하면
+    그 기기의 세션까지 즉시 무효가 된다(별도 세션 저장소 없이 얻는 revocation). v1 쿠키는 호환 유지.
+- **QR/URL의 상시 토큰을 1회용 등록 티켓으로 교체.** `vt mobile`/`vt handoff`가 `?token=`
+  대신 5분짜리 `?ticket=`을 싣는다. QR을 띄우는 시점에 맥 물리 접근이 이미 증명되므로
+  스캔을 기기 등록 승인으로 본다. 상시 토큰을 URL에 박던 방식은 그 값이 서버 access log,
+  브라우저 히스토리, QR 이미지에 영구히 남아 사실상 만능키가 됐다.
+- **access log 자격증명 마스킹.** uvicorn access log가 요청 라인을 그대로 남겨
+  `?token=...`이 `/tmp/vt-server.log`에 평문으로 쌓이고 있었다(실제 유출 확인). 포맷 인자
+  단위로 `token`/`ticket`/`otp` 값을 `***`로 치환 — 기동 방식과 무관하게 항상 적용된다.
+- **크로스 사이트 접근 차단 (`OriginGuardMiddleware`).** Origin이 자기 자신이 아니면
+  HTTP·WebSocket 모두 403. 비밀번호나 OTP로는 막을 수 없는 유일한 경로다 — 사용자가 아무
+  웹사이트나 방문하면 그 페이지의 JS가 localhost:7777(주소가 뻔하다)로 붙어 명령을 실행할 수
+  있고, 브라우저에 세션 쿠키가 있으면 인증은 그대로 통과한다. WS는 CORS가 적용되지 않아
+  별도 검사가 필수. 비브라우저 클라이언트(curl·clipboard_daemon·훅)는 Origin이 없어 통과.
+- **CORS 와일드카드 제거.** `allow_origins=["*"]`라 임의 사이트가 응답 본문까지 읽을 수
+  있었다. 프론트엔드는 동일 출처라 CORS가 애초에 불필요 — `VT_ALLOWED_ORIGINS` 옵트인으로 전환.
+- **`VT_NETWORK_MODE`를 실제 bind 주소에 반영.** `resolve_bind_host()`가 있는데도 기동은
+  무조건 `--host 0.0.0.0`이라, localhost 모드로 설정해도 포트 자체는 모든 인터페이스(카페
+  wifi 포함)에 열려 있었고 미들웨어 403만이 방어선이었다.
+- **세션 쿠키 `Secure` 플래그 수정.** `request.url.scheme`만 봐서, cloudflared가 TLS를
+  종단하는 원격 접속에서는 Secure가 **한 번도** 붙지 않았다. `X-Forwarded-Proto`를 함께 본다
+  (이 헤더로는 쿠키를 더 엄격하게 만들 수만 있고 약화시킬 수는 없다).
+- **업로드/다운로드 하드닝.** 업로드는 전체를 메모리에 올리던 것(`await file.read()`)을 청크
+  스트리밍 + 상한(`VT_MAX_UPLOAD_MB`, 기본 200MB)으로 바꾸고, `/tmp/vt-uploads`를 0700으로
+  생성한다(기본 퍼미션이라 같은 머신의 다른 계정이 읽을 수 있었다). 다운로드 경로 검사는
+  문자열 `startswith` → `is_relative_to` — 예전엔 `/tmp/vt-uploads-evil/…` 같은 형제
+  디렉토리가 통과했다(`/tmp`는 누구나 디렉토리를 만들 수 있다).
+- **grid view 세션 이름 이스케이프.** tmux 세션 이름을 `innerHTML`에 보간하던 것을
+  `textContent`로 변경.
+
 ### Added
 - **터널 좀비 재연결 자동 감지·복구 (`server/tunnel_watchdog.py`, `vt tunnel restart` / `watchdog`).**
   cloudflared는 로컬 프로세스가 살아있어도(`kill -0` 성공) Cloudflare 엣지와의 QUIC

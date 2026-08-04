@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 UPLOAD_DIR = Path("/tmp/vt-uploads")
+MAX_UPLOAD_BYTES = int(os.environ.get("VT_MAX_UPLOAD_MB", "200")) * 1024 * 1024
 
 # Phase 8 G2: 연결 한도 + 백프레셔 + 하트비트
 WS_MAX_PER_SESSION = int(os.environ.get("VT_WS_MAX_PER_SESSION", "8"))
@@ -170,20 +171,48 @@ async def rename_session(session_id: str, request: Request):
 
 @router.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), session_id: str = Query("")):
-    UPLOAD_DIR.mkdir(exist_ok=True)
-    safe_name = Path(file.filename).name.replace("..", "").strip()
+    # 0700으로 만든다 — 예전엔 기본 퍼미션(0755)이라 같은 머신의 다른 계정이
+    # 업로드한 파일을 그대로 읽을 수 있었다.
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(UPLOAD_DIR, 0o700)
+    except OSError:
+        pass
+    safe_name = Path(file.filename or "").name.replace("..", "").strip()
     if not safe_name:
         safe_name = f"upload-{uuid.uuid4().hex[:8]}"
     dest = UPLOAD_DIR / safe_name
-    content = await file.read()
-    dest.write_bytes(content)
-    return {"ok": True, "path": str(dest), "size": len(content)}
+    # 청크 단위로 받으면서 상한을 건다. 예전엔 await file.read()로 전체를 메모리에
+    # 올려서 큰 파일 하나로 서버(=내 맥)를 OOM으로 밀어낼 수 있었다.
+    size = 0
+    try:
+        fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    out.close()
+                    dest.unlink(missing_ok=True)
+                    return JSONResponse(
+                        {"error": "file too large", "max_mb": MAX_UPLOAD_BYTES // (1024 * 1024)},
+                        status_code=413,
+                    )
+                out.write(chunk)
+    except OSError as e:
+        logger.warning(f"upload 실패: {e}")
+        return JSONResponse({"error": "write failed"}, status_code=500)
+    return {"ok": True, "path": str(dest), "size": size}
 
 
 @router.get("/api/download")
 async def download_file(path: str = Query(...)):
     fp = Path(path).resolve()
-    if not str(fp).startswith(str(UPLOAD_DIR.resolve())):
+    # is_relative_to로 검사한다. 예전 startswith 방식은 문자열 접두사 비교라
+    # /tmp/vt-uploads-evil/… 같은 형제 디렉토리가 통과했다(/tmp는 누구나 만들 수 있다).
+    if not fp.is_relative_to(UPLOAD_DIR.resolve()):
         return Response(content="Access denied", status_code=403)
     if not fp.is_file():
         return Response(content="File not found", status_code=404)

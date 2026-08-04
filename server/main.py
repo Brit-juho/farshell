@@ -6,7 +6,9 @@
 
 import logging
 import os
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +36,36 @@ FRONTEND_DIR = str(BASE_DIR / "frontend")
 
 
 # ---------------------------------------------------------------------------
+# 로그 마스킹
+# ---------------------------------------------------------------------------
+
+_SECRET_QS_RE = re.compile(r"((?:token|ticket|otp)=)[^&\s\"']+", re.IGNORECASE)
+
+
+class _RedactSecretsFilter(logging.Filter):
+    """access log의 쿼리스트링에서 자격증명을 지운다.
+
+    uvicorn access log는 요청 라인을 그대로 남기므로 `?token=...`이 평문으로 디스크에
+    박힌다(로그 파일은 세션보다 오래 살아남고, 백업·공유 경로로도 퍼진다).
+    포맷 인자 단위로 치환해 두면 서버를 어떻게 기동하든 항상 적용된다.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _SECRET_QS_RE.sub(r"\1***", a) if isinstance(a, str) else a
+                for a in record.args
+            )
+        if isinstance(record.msg, str):
+            record.msg = _SECRET_QS_RE.sub(r"\1***", record.msg)
+        return True
+
+
+for _name in ("uvicorn.access", "uvicorn.error"):
+    logging.getLogger(_name).addFilter(_RedactSecretsFilter())
+
+
+# ---------------------------------------------------------------------------
 # 미들웨어
 # ---------------------------------------------------------------------------
 
@@ -50,7 +82,10 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
         if not auth.is_protected():
             return await call_next(request)
         path = request.url.path
-        if path in ("/", "/sw.js", "/manifest.json", "/favicon.ico", "/api/auth") or path.startswith("/static"):
+        if path in (
+            "/", "/sw.js", "/manifest.json", "/favicon.ico",
+            "/api/auth", "/api/auth/status", "/api/auth/logout",
+        ) or path.startswith("/static"):
             return await call_next(request)
         token = (
             request.cookies.get("vt_session", "")
@@ -63,6 +98,57 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
         if not auth.check_request(token):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         return await call_next(request)
+
+
+def _allowed_origins() -> set:
+    """추가로 허용할 출처 — 기본은 비어 있음(동일 출처만)."""
+    raw = os.environ.get("VT_ALLOWED_ORIGINS", "")
+    return {o.strip().rstrip("/").lower() for o in raw.split(",") if o.strip()}
+
+
+def _origin_ok(origin: str, host_header: str) -> bool:
+    """요청 Origin이 이 서버 자신인지 판정."""
+    if not origin or origin == "null":
+        return True  # curl/데몬/네이티브 앱 — 브라우저가 아님
+    origin = origin.rstrip("/").lower()
+    if origin in _allowed_origins():
+        return True
+    try:
+        origin_host = urlsplit(origin).netloc
+    except ValueError:
+        return False
+    return bool(origin_host) and origin_host.lower() == (host_header or "").lower()
+
+
+class OriginGuardMiddleware(BaseHTTPMiddleware):
+    """크로스 사이트 접근 차단 (HTTP + WebSocket).
+
+    OTP·비밀번호로는 막을 수 없는 유일한 경로다. 사용자가 아무 웹사이트나 방문하면
+    그 페이지의 JS가 localhost:7777(주소가 뻔하다)로 붙어 명령을 실행할 수 있고,
+    브라우저에 이미 세션 쿠키가 있으면 인증은 그대로 통과한다.
+    - HTTP: Origin 헤더가 자기 자신이 아니면 403.
+    - WebSocket: CORS가 적용되지 않는 경로라 여기서 직접 막아야 한다.
+      브라우저는 WS 핸드셰이크에 Origin을 항상 붙이므로 판정이 가능하다.
+    비브라우저 클라이언트(curl·clipboard_daemon·훅)는 Origin이 없어 그대로 통과한다.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if not _origin_ok(request.headers.get("origin", ""), request.headers.get("host", "")):
+            return JSONResponse(
+                {"error": "forbidden", "reason": "cross_origin"}, status_code=403
+            )
+        return await call_next(request)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "websocket":
+            headers = _scope_headers(scope)
+            if not _origin_ok(headers.get("origin", ""), headers.get("host", "")):
+                response = JSONResponse(
+                    {"error": "forbidden", "reason": "cross_origin"}, status_code=403
+                )
+                await response(scope, receive, send)
+                return
+        await super().__call__(scope, receive, send)
 
 
 def _effective_client_ip(raw_host, headers) -> "str | None":
@@ -140,12 +226,20 @@ class NetworkAccessMiddleware(BaseHTTPMiddleware):
 app = FastAPI()
 app.add_middleware(NetworkAccessMiddleware)
 app.add_middleware(TokenAuthMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 프론트엔드는 이 서버가 직접 서빙하므로(동일 출처) CORS가 필요 없다. 예전엔 `*`로
+# 열려 있어서 임의의 웹사이트가 응답 본문까지 읽을 수 있었다 — 인증이 꺼진 기본
+# 구성에서는 그대로 원격 코드 실행이었다. 외부 클라이언트가 필요한 경우에만 옵트인.
+_cors = _allowed_origins()
+if _cors:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(_cors),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+# Origin 검사는 가장 바깥 — 인증 여부와 무관하게 크로스 사이트 접근을 먼저 끊는다.
+app.add_middleware(OriginGuardMiddleware)
 
 # 정적 파일
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
@@ -182,10 +276,44 @@ async def manifest():
     return FileResponse(str(Path(FRONTEND_DIR) / "manifest.json"))
 
 
+def _is_https(request: Request) -> bool:
+    """터널 뒤에서도 정확한 https 판정.
+
+    cloudflared가 TLS를 종단하고 서버에는 평문 HTTP로 전달하므로 request.url.scheme은
+    항상 http다 → 예전엔 원격 접속에서 세션 쿠키에 Secure가 **한 번도** 붙지 않았다.
+    X-Forwarded-Proto를 믿어도 안전하다: 이 헤더로 할 수 있는 건 쿠키를 더 엄격하게
+    만드는 것뿐이고, 약화시키는 방향은 불가능하다.
+    """
+    if request.url.scheme == "https":
+        return True
+    proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    return proto == "https"
+
+
+def _device_label(request: Request) -> str:
+    """UA에서 사람이 알아볼 만한 짧은 라벨만 뽑는다 (vt device list 표시용)."""
+    ua = request.headers.get("user-agent", "")
+    for needle, label in (
+        ("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"),
+        ("Macintosh", "Mac"), ("Windows", "Windows"), ("Linux", "Linux"),
+    ):
+        if needle in ua:
+            return label
+    return "기기"
+
+
 @app.post("/api/auth")
 async def auth_login(request: Request):
-    """비밀번호(또는 기계 토큰) 제출 → 검증 성공 시 만료 서명 세션 쿠키 발급.
+    """로그인 — 비밀번호(항상) + 처음 보는 기기면 OTP(연동된 경우에만).
 
+    흐름:
+      1. 1회용 등록 티켓(QR)이면 → 그것만으로 기기 등록 (맥 물리 접근이 이미 증명됨)
+      2. 비밀번호/기계 토큰 검증
+      3. vt_device 쿠키가 등록된 기기면 → 바로 세션 발급
+      4. 처음 보는 기기면 → OTP 연동 시에만 6자리 요구, 통과하면 기기 등록
+
+    OTP 미연동(`vt otp setup` 전) 상태에서는 3~4가 조용히 기기 등록만 하고 넘어가므로
+    동작이 기존과 완전히 같다. 그래서 나중에 OTP를 켜도 쓰던 기기는 잠기지 않는다.
     쿠키에는 비밀번호 원문이 아니라 HMAC 서명된 세션표가 실린다(auth.make_session).
     """
     if not auth.is_protected():
@@ -195,24 +323,93 @@ async def auth_login(request: Request):
         body = await request.json()
     except Exception:
         pass
-    cred = body.get("token", "") or request.query_params.get("token", "")
-    if not auth.check_credential(cred):
-        return JSONResponse({"error": "invalid"}, status_code=401)
-    resp = JSONResponse({"ok": True})
+    qp = request.query_params
+    cred = body.get("token", "") or qp.get("token", "")
+    ticket = body.get("ticket", "") or qp.get("ticket", "")
+    otp = str(body.get("otp", "") or "")
+
+    device_secret = ""
+    device_id = ""
+
+    if ticket:
+        if not auth.consume_ticket(ticket):
+            return JSONResponse({"error": "ticket_invalid"}, status_code=401)
+        device_secret, device_id = auth.register_device(_device_label(request))
+        logger.info(f"[auth] 티켓으로 기기 등록: {device_id} ({_device_label(request)})")
+    else:
+        kind = auth.credential_kind(cred)
+        if kind is None:
+            return JSONResponse({"error": "invalid"}, status_code=401)
+
+        if kind == "password":
+            known = auth.verify_device(request.cookies.get("vt_device", ""))
+            if known:
+                device_id = known["id"]
+            else:
+                if auth.totp_enabled():
+                    locked = auth.otp_lock_remaining()
+                    if locked:
+                        return JSONResponse(
+                            {"error": "otp_locked", "retry_after": locked}, status_code=429
+                        )
+                    if not otp:
+                        return JSONResponse({"error": "otp_required"}, status_code=401)
+                    if not auth.verify_totp(otp):
+                        auth.otp_note_failure()
+                        return JSONResponse(
+                            {"error": "otp_invalid",
+                             "remaining": max(0, auth.OTP_MAX_FAILS - len(auth._otp_failures))},
+                            status_code=401,
+                        )
+                    auth.otp_reset_failures()
+                device_secret, device_id = auth.register_device(_device_label(request))
+                logger.info(f"[auth] 새 기기 등록: {device_id} ({_device_label(request)})")
+        # kind == "token"(데몬)은 기기를 만들지 않는다 — device_id 없이 세션만 발급.
+
+    secure = _is_https(request)
+    resp = JSONResponse({"ok": True, "device_id": device_id or None})
     resp.set_cookie(
         "vt_session",
-        auth.make_session(),
+        auth.make_session(device_id),
         httponly=True,
         samesite="strict",
-        secure=request.url.scheme == "https",
+        secure=secure,
         max_age=auth.SESSION_TTL,
         path="/",
     )
+    if device_secret:
+        resp.set_cookie(
+            "vt_device",
+            device_secret,
+            httponly=True,
+            samesite="strict",
+            secure=secure,
+            max_age=auth.DEVICE_TTL,
+            path="/",
+        )
     return resp
 
 
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    """로그인 화면이 OTP 단계를 미리 준비할 수 있도록 하는 최소 정보.
+
+    미인증 상태에서도 접근 가능해야 하므로 비밀 정보는 담지 않는다.
+    """
+    return {
+        "protected": auth.is_protected(),
+        "otp_enabled": auth.totp_enabled(),
+        "device_known": bool(auth.verify_device(request.cookies.get("vt_device", ""))),
+    }
+
+
 @app.post("/api/auth/logout")
-async def auth_logout():
+async def auth_logout(request: Request):
+    """로그아웃 — 세션만 끊는다.
+
+    기기 등록(vt_device)은 유지한다. 재로그인 시 OTP를 다시 치지 않기 위해서다.
+    기기 자체를 끊으려면 `vt device revoke <id>`(폰 분실 시).
+    """
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("vt_session", path="/")
     return resp
@@ -250,6 +447,17 @@ async def startup():
             "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "
             "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
         )
+    # 인증이 켜져 있는데 OTP가 아직 연동 전이면, 지금 접속하는 기기들이 자동으로
+    # 신뢰 목록에 쌓이고 있다는 사실을 알린다(나중에 OTP를 켜도 잠기지 않는 이유).
+    if auth.is_protected():
+        n_dev = len(auth.list_devices())
+        if auth.totp_enabled():
+            logger.info(f"[보안] OTP 활성 — 새 기기 등록 시 6자리 요구. 등록 기기 {n_dev}개")
+        else:
+            logger.info(
+                f"[보안] OTP 미연동 — 비밀번호만으로 동작(기존과 동일). 등록 기기 {n_dev}개. "
+                "'vt otp setup'으로 연동하면 그 시점부터 '새' 기기에만 OTP를 요구합니다."
+            )
     output_watcher.on_notify(on_task_complete)
     output_watcher.start()
     # STT 모델 idle 언로드 모니터 — 음성 미사용 시 ~150MB 회수 (VT_STT_IDLE_SEC)
