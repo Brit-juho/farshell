@@ -35,8 +35,12 @@ if ! "$PYTHON" -c "import fastapi, uvicorn" >/dev/null 2>&1; then
   exit 1
 fi
 
-HOST="${HOST:-0.0.0.0}"
+# bind 주소는 VT_NETWORK_MODE에서 도출한다(localhost 모드면 실제로 127.0.0.1에만 연다).
+# HOST를 명시하면 그것이 우선.
 PORT="${VT_PORT:-${PORT:-7777}}"
+if [ -z "${HOST:-}" ]; then
+  HOST="$(cd "$SERVER_DIR" && "$PYTHON" -c 'import network_access as n; print(n.resolve_bind_host(n.get_current_spec()))' 2>/dev/null || echo 0.0.0.0)"
+fi
 
 echo "voice-terminal Server"
 echo "  http://localhost:${PORT}"

@@ -130,7 +130,12 @@ _start_server() {
   fi
   echo "▸ 서버 시작 중..."
   cd "$VT_DIR/server"
-  nohup "$VT_PYTHON" -m uvicorn main:app --host 0.0.0.0 --port $VT_PORT > "$SERVER_LOG" 2>&1 &
+  # VT_NETWORK_MODE를 실제 bind 주소에 반영한다. 예전엔 무조건 0.0.0.0으로 열고
+  # 미들웨어에서 403으로 걸러내기만 해서, localhost 모드로 설정해도 포트 자체는
+  # 모든 인터페이스(카페 wifi 포함)에 노출돼 있었다.
+  local bind_host
+  bind_host="$("$VT_PYTHON" -c 'import network_access as n; print(n.resolve_bind_host(n.get_current_spec()))' 2>/dev/null || echo 0.0.0.0)"
+  nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
   echo $! > "$PID_DIR/server.pid"
   sleep 2
   if curl -sf http://localhost:$VT_PORT/ -o /dev/null 2>/dev/null; then
@@ -876,13 +881,16 @@ cmd_mobile() {
   if [ "$network_mode" = "all" ] && [ -n "$url" ]; then
     full_url="$url"
   fi
-  local token=${VT_AUTH_TOKEN:-${VT_TOKEN:-}}
+  # 상시 토큰 대신 1회용 기기 등록 티켓(5분)을 싣는다. QR을 띄우는 시점에 이 맥에
+  # 대한 물리적 접근이 이미 증명됐으므로 스캔 = 기기 등록 승인으로 본다. 상시 토큰을
+  # URL에 박던 예전 방식은 그 값이 로그·히스토리·QR 이미지에 영구히 남는 문제가 있었다.
+  local ticket
+  ticket="$(_issue_ticket "mobile")"
   # E2E 활성화 시 URL hash fragment에 #e2e=1 추가 (서버 로그에 안 남음)
   local e2e_frag=""
   [ $want_e2e -eq 1 ] && e2e_frag="#e2e=1"
 
-  # 토큰 + E2E hash 추가
-  [ -n "$token" ] && full_url="${full_url}?token=${token}"
+  [ -n "$ticket" ] && full_url="${full_url}?ticket=${ticket}"
   full_url="${full_url}${e2e_frag}"
 
   echo ""
@@ -1179,6 +1187,108 @@ cmd_password() {
   fi
   echo "  ✓ 웹 로그인 비밀번호 설정 완료 — 해시만 저장(원문 미저장)"
   echo "  ⓘ 적용하려면 서버 재시작: vt stop && vt start"
+}
+
+# OTP(TOTP) 연동 — 여기서 setup을 하기 전까지 OTP는 완전히 비활성이고,
+# 로그인은 기존과 똑같이 비밀번호만으로 동작한다. setup 이후부터 "처음 보는 기기"에만
+# 6자리를 요구한다(이미 등록된 맥/폰은 영향 없음).
+cmd_otp() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'vt doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-status}"
+  local py_dir="$VT_DIR/server"
+  case "$sub" in
+    status)
+      local enabled
+      enabled="$(cd "$py_dir" && "$VT_PYTHON" auth.py otp-status 2>/dev/null)"
+      echo ""
+      if echo "$enabled" | grep -q '"enabled": *true'; then
+        echo "  🔐 OTP: 활성 — 새 기기 등록 시 6자리 코드 필요"
+      else
+        echo "  🔓 OTP: 비활성 — 비밀번호만으로 동작 (기존과 동일)"
+        echo "     연동하려면: vt otp setup"
+      fi
+      echo ""
+      ;;
+    setup)
+      if [ -z "${VT_AUTH_PASSWORD_HASH:-${VT_PASSWORD_HASH:-}}" ]; then
+        echo "  ✗ 먼저 웹 로그인 비밀번호를 설정하세요: vt password"
+        echo "    OTP는 비밀번호를 대체하지 않고, '새 기기 등록' 관문으로만 쓰입니다."
+        return 1
+      fi
+      local out secret uri
+      out="$(cd "$py_dir" && "$VT_PYTHON" auth.py otp-setup)" || { echo "  ✗ 시크릿 생성 실패"; return 1; }
+      secret="$(printf '%s' "$out" | "$VT_PYTHON" -c 'import sys,json; print(json.load(sys.stdin)["secret"])')"
+      uri="$(printf '%s' "$out" | "$VT_PYTHON" -c 'import sys,json; print(json.load(sys.stdin)["uri"])')"
+      echo ""
+      echo "  🔐 인증 앱에 등록하세요 (1Password / Authy / Google Authenticator 등)"
+      echo ""
+      if command -v qrencode >/dev/null 2>&1; then
+        qrencode -t UTF8 "$uri" 2>/dev/null || true
+      else
+        echo "  (qrencode 설치 시 QR로 표시됩니다: brew install qrencode)"
+      fi
+      echo ""
+      echo "  수동 입력용 키: $secret"
+      echo ""
+      printf "  등록 후 확인을 위해 6자리 코드를 입력하세요: "
+      local code; read -r code
+      if (cd "$py_dir" && "$VT_PYTHON" auth.py otp-verify "$code" >/dev/null); then
+        echo "  ✓ OTP 연동 완료 — 지금부터 '새' 기기 등록 시에만 코드를 요구합니다"
+        echo "  ⓘ 현재 등록된 기기는 그대로 통과합니다: vt device list"
+      else
+        echo "  ✗ 코드가 맞지 않습니다. 시계 동기화를 확인하고 'vt otp setup'을 다시 실행하세요."
+        echo "    (지금 상태로는 새 기기 등록 시 코드가 필요하니, 확실히 하려면 재실행 권장)"
+        return 1
+      fi
+      ;;
+    disable|clear|off)
+      (cd "$py_dir" && "$VT_PYTHON" auth.py otp-disable >/dev/null)
+      echo "  ✓ OTP 연동 해제 — 새 기기도 비밀번호만으로 등록됩니다"
+      ;;
+    *)
+      echo "  사용법: vt otp [status|setup|disable]"
+      return 1
+      ;;
+  esac
+}
+
+# 등록된 기기(화이트리스트) 조회/폐기. 폰 분실 시 revoke하면 그 기기의 세션 쿠키까지 함께 죽는다.
+cmd_device() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'vt doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-list}"
+  local py_dir="$VT_DIR/server"
+  case "$sub" in
+    list|ls|"")
+      (cd "$py_dir" && "$VT_PYTHON" auth.py device-list-pretty)
+      ;;
+    revoke|rm|remove)
+      local id="${2:-}"
+      if [ -z "$id" ]; then echo "  사용법: vt device revoke <id앞자리>"; return 1; fi
+      if (cd "$py_dir" && "$VT_PYTHON" auth.py device-revoke "$id" >/dev/null); then
+        echo "  ✓ 기기 폐기 완료 — 해당 기기의 세션도 즉시 무효화됩니다"
+      else
+        echo "  ✗ 해당 id로 시작하는 기기를 찾지 못했습니다 (vt device list로 확인)"
+        return 1
+      fi
+      ;;
+    *)
+      echo "  사용법: vt device [list|revoke <id>]"
+      return 1
+      ;;
+  esac
+}
+
+# 모바일/핸드오프 URL에 붙일 1회용 기기 등록 티켓. 인증이 꺼져 있으면 빈 문자열.
+_issue_ticket() {
+  [ -z "${VT_AUTH_PASSWORD_HASH:-${VT_PASSWORD_HASH:-}}" ] && [ -z "${VT_AUTH_TOKEN:-${VT_TOKEN:-}}" ] && return 0
+  [ -z "${VT_PYTHON:-}" ] && return 0
+  (cd "$VT_DIR/server" && "$VT_PYTHON" auth.py ticket-new "$1" 2>/dev/null) || true
 }
 
 # Wave 2 W2-4: 음성 daemon 타깃 세션 lock/해제 (V3-R)
@@ -1494,6 +1604,18 @@ cmd_doctor() {
     _check "인증" ok "VT_AUTH_TOKEN 설정됨 (원격 인증 활성)"
   else
     _check "인증" warn "미설정 (공개 터널에선 누구나 접속 가능) — 'vt password' 권장"
+  fi
+
+  # 11-b. OTP(새 기기 등록 관문) + 등록 기기 수
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _otp_json _ndev
+    _otp_json="$(cd "$VT_DIR/server" && "$VT_PYTHON" auth.py otp-status 2>/dev/null)"
+    _ndev="$(cd "$VT_DIR/server" && "$VT_PYTHON" -c 'import auth,sys; sys.stdout.write(str(len(auth.list_devices())))' 2>/dev/null || echo "?")"
+    if echo "$_otp_json" | grep -q '"enabled": *true'; then
+      _check "OTP" ok "활성 — 새 기기 등록 시 코드 필요 (등록 기기 ${_ndev}개)"
+    else
+      _check "OTP" warn "미연동 — 비밀번호만으로 새 기기도 접속 가능 (등록 기기 ${_ndev}개). 'vt otp setup'"
+    fi
   fi
 
   # 12. 푸시 알림
@@ -1877,9 +1999,10 @@ cmd_handoff() {
 
       local url
       url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-      local token=${VT_AUTH_TOKEN:-${VT_TOKEN:-}}
+      local ticket
+      ticket="$(_issue_ticket "handoff")"
       local full_url="$url"
-      [ -n "$token" ] && full_url="${url}?token=${token}"
+      [ -n "$ticket" ] && full_url="${url}?ticket=${ticket}"
       # 폰이 접속하면 이 tmux 세션을 기본으로 보도록 hash 파라미터 추가
       full_url="${full_url}#tmux=${session}"
 
@@ -2820,6 +2943,8 @@ case "${1:-help}" in
   help)     shift 2>/dev/null || true; cmd_help "$@" ;;
   hotkey)   shift; cmd_hotkey "$@" ;;
   password) shift; cmd_password "$@" ;;
+  otp)      shift; cmd_otp "$@" ;;
+  device|devices) shift; cmd_device "$@" ;;
   voice-target) shift; cmd_voice_target "$@" ;;
   manage)   shift; cmd_manage "$@" ;;
   tui)      shift; cmd_manage "$@" ;;
@@ -2836,6 +2961,10 @@ case "${1:-help}" in
     echo "    vt stop               모든 프로세스 종료"
     echo "    vt status             상태 확인"
     echo "    vt password [clear]   웹 로그인 비밀번호 설정 (해시 저장) / clear=해제"
+    echo "    vt otp [setup|status|disable]"
+    echo "                          새 기기 등록 시 OTP 요구 (setup 전까지 비활성)"
+    echo "    vt device [list|revoke <id>]"
+    echo "                          등록된 기기 조회 / 폐기 (폰 분실 시)"
     echo "    vt claude             tmux dev 안에서 claude --resume 시작"
     echo "    vt agent <name>       claude/codex/aider/gemini 시작"
     echo "    vt template [save|apply|list|rm] <이름>"

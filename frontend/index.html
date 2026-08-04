@@ -47,58 +47,126 @@
       border:1px solid var(--line,rgba(255,255,255,.14));border-radius:var(--trad,7px);
       outline:none;margin-bottom:12px;}
     #login-form input:focus{border-color:var(--acc,#0a84ff);}
+    /* type=password 대신 text+마스킹 사용 → Chrome 비밀번호 저장 제안 자체를 차단 (시각적 마스킹은 유지) */
+    #login-pass{-webkit-text-security:disc;text-security:disc;}
     #login-form button{width:100%;font-size:15px;font-weight:600;padding:11px;cursor:pointer;
       background:var(--acc,#0a84ff);color:var(--acc-ink,#fff);border:none;border-radius:var(--trad,7px);}
     #login-form button:disabled{opacity:.55;cursor:default;}
     #login-form .login-err{color:var(--err,#ff453a);font-size:13px;margin-top:12px;min-height:1em;}
     #login-form .login-err[hidden]{display:none;}
+    #login-otp-wrap[hidden]{display:none;}
+    #login-form .login-otp-hint{font-size:12px;color:var(--sub,#8e8e96);margin:0 0 8px;text-align:left;line-height:1.45;}
+    #login-otp{letter-spacing:.4em;text-align:center;font-variant-numeric:tabular-nums;}
   </style>
 </head>
 <body>
   <!-- 로그인 게이트 — VT_TOKEN 설정 시 미인증 접속을 여기서 막는다 -->
   <div id="login-gate">
     <div id="login-spinner"></div>
-    <form id="login-form" hidden autocomplete="on">
+    <form id="login-form" hidden autocomplete="off">
       <div class="login-icon">🔒</div>
       <h1>Voice Terminal</h1>
       <p class="login-sub">접속하려면 비밀번호를 입력하세요</p>
-      <input id="login-pass" type="password" name="password" autocomplete="current-password"
+      <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
+           화면 상 노출은 -webkit-text-security로 그대로 가린다 -->
+      <input id="login-pass" type="text" name="vt-key" autocomplete="off"
+        autocorrect="off" autocapitalize="off" spellcheck="false"
         placeholder="비밀번호" aria-label="비밀번호" />
+      <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'vt otp setup'으로 연동한 뒤에만 나타난다 -->
+      <div id="login-otp-wrap" hidden>
+        <p class="login-otp-hint">처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
+        <input id="login-otp" type="text" name="vt-otp" autocomplete="one-time-code"
+          inputmode="numeric" pattern="[0-9]*" maxlength="6"
+          autocorrect="off" autocapitalize="off" spellcheck="false"
+          placeholder="000000" aria-label="인증 코드" />
+      </div>
       <button type="submit" id="login-submit">접속</button>
       <div class="login-err" id="login-err" hidden></div>
     </form>
   </div>
   <script>
     // 로그인 게이트: /api/capabilities로 인증 여부 확인.
-    //  - 200 → 인증됨(또는 서버에 VT_TOKEN 미설정) → 게이트 숨김
+    //  - 200 → 인증됨(또는 서버에 인증 미설정) → 게이트 숨김
     //  - 401 → 비밀번호 폼 노출 → POST /api/auth 성공 시 24h 쿠키 발급 후 새로고침
+    //
+    // 처음 보는 기기이고 서버에서 'vt otp setup'으로 OTP를 연동해 둔 경우에만
+    // 401 {error:"otp_required"}가 돌아오고, 그때 6자리 입력칸이 추가로 열린다.
+    // OTP 미연동이면 이 분기가 아예 발생하지 않아 기존 동작과 동일하다.
     (function(){
       var gate=document.getElementById('login-gate');
       var spin=document.getElementById('login-spinner');
       var form=document.getElementById('login-form');
       var pass=document.getElementById('login-pass');
+      var otpWrap=document.getElementById('login-otp-wrap');
+      var otp=document.getElementById('login-otp');
       var btn=document.getElementById('login-submit');
       var err=document.getElementById('login-err');
+      var params=new URLSearchParams(location.search);
       function hideGate(){ gate.hidden=true; }
       function showForm(){ spin.hidden=true; form.hidden=false;
-        setTimeout(function(){ try{ pass.focus(); }catch(e){} }, 50); }
-      // URL에 ?token= 이 있으면(QR/링크 접속) 그 토큰으로 프로브 → 통과 시 terminal.js가 쿠키 교환
-      var urlTok=new URLSearchParams(location.search).get('token');
+        setTimeout(function(){ try{ (otpWrap.hidden?pass:otp).focus(); }catch(e){} }, 50); }
+      function showErr(m){ err.textContent=m; err.hidden=false; btn.disabled=false; }
+      // 자격증명 파라미터를 URL에서 지우고 재로드 — 히스토리/공유 링크에 남지 않게 한다.
+      function reloadClean(){
+        params.delete('ticket'); params.delete('token');
+        var q=params.toString();
+        location.replace(location.pathname+(q?'?'+q:'')+location.hash);
+      }
+
+      // 1회용 기기 등록 티켓(QR로 들어온 경우) — 스캔 자체가 등록 승인이다.
+      var ticket=params.get('ticket');
+      if(ticket){
+        fetch('/api/auth',{method:'POST',credentials:'include',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:ticket})})
+        .then(function(r){
+          if(r.ok){ reloadClean(); }
+          else { showForm(); showErr('등록 링크가 만료되었습니다. 비밀번호로 접속하세요.'); }
+        }).catch(function(){ showForm(); });
+        return;
+      }
+
+      // URL에 ?token= 이 있으면(레거시 링크) 그 토큰으로 프로브 → 통과 시 terminal.js가 쿠키 교환
+      var urlTok=params.get('token');
       var probe='/api/capabilities'+(urlTok?('?token='+encodeURIComponent(urlTok)):'');
       fetch(probe,{credentials:'include'}).then(function(r){
         if(r.status===401){ showForm(); } else { hideGate(); }
       }).catch(function(){ hideGate(); });
+
       form.addEventListener('submit',function(e){
         e.preventDefault();
         var v=pass.value; if(!v) return;
+        var payload={token:v};
+        if(!otpWrap.hidden){
+          var code=(otp.value||'').replace(/\D/g,'');
+          if(code.length!==6){ showErr('6자리 코드를 입력하세요'); return; }
+          payload.otp=code;
+        }
         btn.disabled=true; err.hidden=true;
         fetch('/api/auth',{method:'POST',credentials:'include',
-          headers:{'Content-Type':'application/json'},body:JSON.stringify({token:v})})
+          headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
         .then(function(r){
-          if(r.ok){ location.reload(); }
-          else { btn.disabled=false; err.textContent='비밀번호가 올바르지 않습니다'; err.hidden=false;
-            try{ pass.select(); }catch(e){} }
-        }).catch(function(){ btn.disabled=false; err.textContent='연결 오류'; err.hidden=false; });
+          if(r.ok){ location.reload(); return; }
+          return r.json().catch(function(){ return {}; }).then(function(d){
+            if(d.error==='otp_required'){
+              otpWrap.hidden=false; btn.disabled=false; err.hidden=true;
+              setTimeout(function(){ try{ otp.focus(); }catch(e){} },50);
+              return;
+            }
+            if(d.error==='otp_invalid'){
+              otpWrap.hidden=false;
+              showErr('인증 코드가 올바르지 않습니다'+(d.remaining!=null?' (남은 시도 '+d.remaining+'회)':''));
+              try{ otp.value=''; otp.focus(); }catch(e){}
+              return;
+            }
+            if(d.error==='otp_locked'){
+              showErr('시도 횟수를 초과했습니다. '+Math.ceil((d.retry_after||600)/60)+'분 후 다시 시도하세요.');
+              return;
+            }
+            if(d.error==='ticket_invalid'){ showErr('등록 링크가 만료되었습니다'); return; }
+            showErr('비밀번호가 올바르지 않습니다');
+            try{ pass.select(); }catch(e){}
+          });
+        }).catch(function(){ showErr('연결 오류'); });
       });
     })();
   </script>
