@@ -285,6 +285,10 @@ adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 10
 | GET | `/api/fs/file?path=X` | 파일 내용 (읽기 전용). 바이너리는 `binary:true`만, 512KB 초과는 절단 |
 | GET | `/api/git/status?repo=X` | `git status --porcelain` 파싱 결과 |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | `git diff` 원문 (프론트가 `difflex.js`로 파싱) |
+| GET | `/api/ports[?fresh=1]` | 리스닝 포트 목록 (lsof + ps 보강, 3초 캐시) — P3 |
+| DELETE | `/api/ports/{port}[?pid=N]` | 프로세스 종료 (TERM → 3초 → KILL). `pid` 불일치 시 409 |
+| POST | `/api/ports/{port}/expose` | Cloudflare 터널로 공개. 본문 `{"confirm":true}` 필수(없으면 428) |
+| DELETE | `/api/ports/{port}/expose` | 해당 포트 터널 종료 |
 | WS | `/ws-preview/{name}` | grid view용 tmux pane 출력 push (v1.3+) |
 | WS | `/ws-agent` | 에이전트 활성 상태 push |
 | WS | `/ws-workspace` | 워크스페이스 변경 push |
@@ -400,6 +404,7 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | 터미널 검색 | Ctrl+F / Cmd+F → xterm.js search addon |
 | 세션 이름 편집 | 탭 더블클릭 → 이름 변경 (PATCH API) |
 | 코드 뷰어 / diff (P2) | ⋯ 메뉴 → "코드 뷰어". CLI만으로 원격 개발할 때 코드를 눈으로 못 보는 문제를 푼다. 파일 트리 · 문법 하이라이팅(highlight.js, 36개 언어) · `git diff` 렌더링. **읽기 전용이며 쓰기 API가 없다.** 공개 터널 너머로 열리므로 방어가 3중이다: ① 루트 확정(`VT_BROWSE_ROOTS`, 기본 `~/GitHub` — `$HOME`을 열면 `~/.ssh`·`~/.aws`가 사정권에 든다) ② `Path.resolve()` + `is_relative_to`(startswith 금지 — 형제 디렉토리가 통과한다. `resolve()`가 심링크를 펼치므로 루트 밖을 가리키는 링크도 함께 걸린다) ③ 거부 목록(`.env*`·`*.pem`·`id_rsa`·`.ssh/`·`.aws/` 등, 경로의 모든 구성요소를 검사). 판정은 `server/fsguard.py` 한 곳에만 있다 |
+| 포트 대시보드 (P3) | ⋯ 메뉴 → "포트". 맥 앞에 없을 때 "지금 뭐가 떠 있지 / 3000번 죽여줘"를 폰에서 처리한다. 포트·PID·가동시간·CPU·메모리 표시, 원클릭 종료, `vt tunnel expose` 연동. **VT 서버 자신과 cloudflared/tailscaled/sshd는 종료가 막혀 있다** — 죽이면 이 화면이 끊긴다. 다른 사용자 프로세스도 막는다(sudo 안 씀). 종료 직전 `port→pid`를 재확인해 PID 재사용으로 엉뚱한 프로세스를 죽이는 것을 막고, 불일치면 409. `expose`는 로컬 서버를 **공개 인터넷**에 여는 것이라 `confirm:true` 없이는 428이고, `VT_NETWORK_MODE`가 `all`이 아니면 아예 거부한다(접근 범위를 좁혀놓고 다시 뚫으면 의미가 없다). 판정은 `server/portscan.py` |
 | 파일 업로드 | 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장 |
 | 파일 다운로드 | `GET /api/download?path=...` |
 | tmux detach 감지 | PTY EOF 시 `[process exited]` 표시 |

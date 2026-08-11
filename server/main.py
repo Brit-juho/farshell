@@ -28,6 +28,7 @@ from routes.agents import router as agents_router
 from routes.system import router as system_router
 from routes.clipboard import router as clipboard_router
 from routes.files import router as files_router
+from routes.ports import router as ports_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -253,6 +254,7 @@ app.include_router(agents_router)
 app.include_router(system_router)
 app.include_router(clipboard_router)
 app.include_router(files_router)
+app.include_router(ports_router)
 
 
 # ---------------------------------------------------------------------------
