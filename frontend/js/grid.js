@@ -8,6 +8,10 @@
         if (!caps.fs) {
           document.querySelectorAll('.needs-fs').forEach(el => el.style.display = 'none');
         }
+        // P3: lsof 없는 환경이면 포트 대시보드 진입점을 숨긴다.
+        if (!caps.ports) {
+          document.querySelectorAll('.needs-ports').forEach(el => el.style.display = 'none');
+        }
         if (!caps.voice) {
           const vb = document.getElementById('voice-bar');
           if (vb) vb.style.display = 'none';

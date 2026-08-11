@@ -248,6 +248,9 @@
     <button class="mi needs-fs" id="viewer-btn" role="menuitem" onclick="showViewer()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>코드 뷰어
     </button>
+    <button class="mi needs-ports" id="ports-btn" role="menuitem" onclick="showPorts()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/></svg>포트
+    </button>
 
     <div class="msep"></div>
     <div class="mlabel">설정</div>
@@ -331,6 +334,7 @@
   <!-- difflex.js: unified diff 파싱 순수 로직(viewer.js가 window.VTDiffLex 사용) -->
   <script src="/static/js/difflex.js"></script>
   <script src="/static/js/viewer.js"></script>
+  <script src="/static/js/ports.js"></script>
 
   <!-- ⋯ 메뉴 열고닫기 (전역 상태 불필요, 여기 인라인) -->
   <script>

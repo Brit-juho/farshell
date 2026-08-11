@@ -6,6 +6,7 @@ import hashlib
 import json as _json
 import logging
 import os
+import shutil
 
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -64,6 +65,8 @@ async def capabilities(request: Request):
         "tailscale": tailscale.get_status_dict(),
         # P2: 열람 가능한 루트가 하나도 없으면 코드 뷰어 UI를 숨긴다.
         "fs": bool(fsguard.get_roots()),
+        # P3: lsof 없이는 포트 스캔이 불가능하다(최소 리눅스 컨테이너 등).
+        "ports": shutil.which("lsof") is not None,
     }
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}

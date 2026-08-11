@@ -9,6 +9,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **포트 대시보드 (P3).** ⋯ 메뉴 → "포트". 맥 앞에 없을 때 "지금 뭐가 떠 있지,
+  3000번 죽여줘"가 안 되던 문제를 푼다. 포트·PID·가동시간·CPU·메모리를 보여주고
+  원클릭으로 종료한다. Ports.app이 메뉴바에서 하는 일을 원격에서 하는 셈이다.
+  - **자기 발밑을 못 파게 막는다.** VT 서버 자신(`VT_PORT`)과
+    cloudflared/tailscaled/sshd는 종료 버튼이 아예 없다 — 죽이면 이 화면이 끊긴다.
+    다른 사용자의 프로세스도 막는다(sudo는 쓰지 않는다).
+  - **PID 재사용 방어.** 조회와 종료 사이에 프로세스가 죽고 다른 프로세스가 같은 PID를
+    받으면 엉뚱한 것을 죽인다. 종료 직전 `port→pid`를 캐시 없이 재확인하고 불일치면 409.
+  - 종료는 SIGTERM → 3초 대기 → SIGKILL. UI에 어느 신호로 끝났는지 표시한다.
+  - `lsof`의 함정 2가지를 처리한다: COMMAND가 9자에서 잘리므로(`ControlCe`,
+    `redis-ser`) `+c 0`으로 받고, 같은 프로세스가 IPv4/IPv6로 두 줄 나오므로
+    `(port, pid)`로 dedup한다(실측 27줄 → 22행).
+  - `expose`는 로컬 서버를 **공개 인터넷**에 연다. 본문에 `confirm:true`가 없으면 428이고,
+    `VT_NETWORK_MODE`가 `all`이 아니면 거부한다 — 접근 범위를 tailnet으로 좁혀놓고
+    여기서 다시 뚫으면 의미가 없다.
+  - lsof/ps/종료 대기는 전부 `asyncio.to_thread`로 offload(실측 fresh 130ms,
+    캐시 히트 2.6ms). 동기로 부르면 그동안 터미널 WS가 멈춘다.
+  - 새 엔드포인트: `GET /api/ports` · `DELETE /api/ports/{port}` ·
+    `POST|DELETE /api/ports/{port}/expose`. `/api/capabilities`에 `ports` 플래그
+    (lsof 없으면 프론트가 `.needs-ports` 진입점을 숨긴다).
+  - 회귀 테스트: `server/tests/test_portscan.py`(12).
+
 - **코드 뷰어 / diff 패널 (P2).** ⋯ 메뉴 → "코드 뷰어". CLI만으로 원격 개발할 때
   코드를 눈으로 확인할 수 없던 문제를 푼다. 파일 트리 탐색, 문법 하이라이팅,
   `git diff` 렌더링을 웹 UI 안에서 처리한다 — 맥 앞이든 폰이든 같은 화면.
