@@ -280,6 +280,11 @@ adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 10
 | GET | `/api/tailscale/status` | Tailscale 설치/연결/IP/MagicDNS 호스트명 (D9) |
 | POST | `/api/notify/client-event` | tmux client-attached/detached 훅 전용 — SSH 접속 가시화 (D9) |
 | POST | `/api/clipboard/push` | `clipboard_daemon.py`(맥 클립보드 폴링) 전용 — `/ws-notify` 클라이언트에 브로드캐스트 |
+| GET | `/api/fs/roots` | 열람 가능한 루트 목록 (`VT_BROWSE_ROOTS`, 기본 `~/GitHub`) — P2 |
+| GET | `/api/fs/tree?path=X` | 디렉토리 목록 (읽기 전용). `.git`/`node_modules` 등 제외 |
+| GET | `/api/fs/file?path=X` | 파일 내용 (읽기 전용). 바이너리는 `binary:true`만, 512KB 초과는 절단 |
+| GET | `/api/git/status?repo=X` | `git status --porcelain` 파싱 결과 |
+| GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | `git diff` 원문 (프론트가 `difflex.js`로 파싱) |
 | WS | `/ws-preview/{name}` | grid view용 tmux pane 출력 push (v1.3+) |
 | WS | `/ws-agent` | 에이전트 활성 상태 push |
 | WS | `/ws-workspace` | 워크스페이스 변경 push |
@@ -394,6 +399,7 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | Scrollback 버퍼 | WS 재접속 시 이전 출력 복원 (최대 5000 청크) |
 | 터미널 검색 | Ctrl+F / Cmd+F → xterm.js search addon |
 | 세션 이름 편집 | 탭 더블클릭 → 이름 변경 (PATCH API) |
+| 코드 뷰어 / diff (P2) | ⋯ 메뉴 → "코드 뷰어". CLI만으로 원격 개발할 때 코드를 눈으로 못 보는 문제를 푼다. 파일 트리 · 문법 하이라이팅(highlight.js, 36개 언어) · `git diff` 렌더링. **읽기 전용이며 쓰기 API가 없다.** 공개 터널 너머로 열리므로 방어가 3중이다: ① 루트 확정(`VT_BROWSE_ROOTS`, 기본 `~/GitHub` — `$HOME`을 열면 `~/.ssh`·`~/.aws`가 사정권에 든다) ② `Path.resolve()` + `is_relative_to`(startswith 금지 — 형제 디렉토리가 통과한다. `resolve()`가 심링크를 펼치므로 루트 밖을 가리키는 링크도 함께 걸린다) ③ 거부 목록(`.env*`·`*.pem`·`id_rsa`·`.ssh/`·`.aws/` 등, 경로의 모든 구성요소를 검사). 판정은 `server/fsguard.py` 한 곳에만 있다 |
 | 파일 업로드 | 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장 |
 | 파일 다운로드 | `GET /api/download?path=...` |
 | tmux detach 감지 | PTY EOF 시 `[process exited]` 표시 |

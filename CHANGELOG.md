@@ -8,6 +8,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **코드 뷰어 / diff 패널 (P2).** ⋯ 메뉴 → "코드 뷰어". CLI만으로 원격 개발할 때
+  코드를 눈으로 확인할 수 없던 문제를 푼다. 파일 트리 탐색, 문법 하이라이팅,
+  `git diff` 렌더링을 웹 UI 안에서 처리한다 — 맥 앞이든 폰이든 같은 화면.
+  - **읽기 전용이다.** 쓰기 엔드포인트를 의도적으로 만들지 않았다. 수정은 기존대로
+    터미널/에이전트가 한다. 터널이 뚫려도 유출 위험만 있고 변조 위험은 없다.
+  - 경로 판정은 `server/fsguard.py` 한 곳에 모았다. 방어는 3중:
+    ① 루트 확정(`VT_BROWSE_ROOTS`, 기본 `~/GitHub`) — 기본값을 `$HOME`으로 두면
+    `~/.ssh`·`~/.aws`가 그대로 사정권에 들어오므로 절대 그렇게 하지 않는다.
+    ② `Path.resolve()` + `is_relative_to` — `startswith`는 쓰지 않는다(형제 디렉토리
+    `<root>-evil/`이 통과한다. `/api/download`가 예전에 같은 방식으로 뚫렸다).
+    `resolve()`가 심링크를 펼치므로 루트 안에서 밖을 가리키는 링크도 함께 걸린다.
+    ③ 거부 목록 — 루트 안이어도 `.env*`/`*.pem`/`id_rsa`/`.ssh/`/`.aws/` 등은 거부하고,
+    마지막 파일명만이 아니라 경로의 **모든 구성요소**를 검사한다(`x/.ssh/config`).
+  - 512KB 초과 파일은 앞부분만 보내고 `truncated:true`로 알린다(묵시적 절단 금지).
+    바이너리는 선두 8KB의 NUL로 판정해 내용을 아예 싣지 않는다.
+  - `lsof`/`git`/파일 읽기 같은 blocking I/O는 전부 `asyncio.to_thread`로 offload한다 —
+    동기 호출 하나가 터미널 WS 전체를 멈춘다(`preview.py:91-93`의 교훈).
+  - 새 엔드포인트: `GET /api/fs/roots` · `/api/fs/tree` · `/api/fs/file` ·
+    `/api/git/status` · `/api/git/diff`. `/api/capabilities`에 `fs` 플래그 추가 —
+    루트가 없으면 프론트가 `.needs-fs` 진입점을 숨긴다.
+  - 프론트: `frontend/js/viewer.js`(패널) + `frontend/js/difflex.js`(unified diff 파싱
+    순수 로직, `node --test` 대상). 하이라이터는 highlight.js v11.11.1 common 번들을
+    vendor로 자체 호스팅(36개 언어). **테마 CSS는 쓰지 않는다** — 색을 스킨 토큰으로
+    직접 매핑해야 라이트 스킨(notepad)에서 대비가 무너지지 않는다.
+  - 회귀 테스트: `server/tests/test_fsguard.py`(14), `frontend/tests/difflex.test.js`(12).
+  - `sw.js` 캐시 키 `vt-static-v5`로 bump (vendor는 SWR 캐시라 필수).
+
 ## [1.7.0] — 2026-08-04
 
 ### Security

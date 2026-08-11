@@ -3,6 +3,11 @@
       try {
         const res = await fetch(`${API_BASE}/api/capabilities`);
         const caps = await res.json();
+        // P2: 열람 가능한 루트가 없으면 코드 뷰어 진입점을 숨긴다.
+        // (voice와 달리 return보다 먼저 처리해야 음성 미설치 환경에서도 게이팅이 걸린다)
+        if (!caps.fs) {
+          document.querySelectorAll('.needs-fs').forEach(el => el.style.display = 'none');
+        }
         if (!caps.voice) {
           const vb = document.getElementById('voice-bar');
           if (vb) vb.style.display = 'none';

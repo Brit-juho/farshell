@@ -493,3 +493,130 @@ body.voice-only-mode #mic-status {
   #terminal-container { padding-bottom:52px; }
   body.kb-collapsed #terminal-container { padding-bottom:8px; }
 }
+
+/* =========================================================================
+   코드 뷰어 / diff 패널 (viewer.js) — P2
+   색은 전부 토큰으로만. notepad는 라이트 스킨이라 rgba(255,255,255,…)를 쓰면 깨진다.
+   ========================================================================= */
+.vt-viewer-backdrop{
+  position:fixed; inset:0; z-index:600;
+  background:color-mix(in srgb, var(--crust) 62%, transparent);
+  display:flex; align-items:center; justify-content:center;
+  padding:16px;
+}
+.vt-viewer-card{
+  display:flex; flex-direction:column;
+  width:min(1100px, 100%); max-height:min(86vh, 820px);
+  background:var(--win); color:var(--txt);
+  border:1px solid var(--line); border-radius:var(--wrad);
+  box-shadow:0 24px 64px rgba(0,0,0,.45);
+  overflow:hidden;
+}
+.vt-viewer-head{
+  display:flex; align-items:center; gap:8px;
+  padding:10px 12px; background:var(--bar);
+  border-bottom:1px solid var(--line); flex:0 0 auto;
+}
+.vt-vw-title{ flex:1; font:600 13px var(--ui); overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+.vt-vw-back,.vt-vw-x,.vt-vw-diff{
+  background:var(--tab); color:var(--txt);
+  border:1px solid var(--line); border-radius:var(--trad);
+  min-width:32px; height:28px; padding:0 8px; cursor:pointer;
+  font:500 12px var(--ui); touch-action:manipulation;
+}
+.vt-vw-back:hover,.vt-vw-x:hover,.vt-vw-diff:hover{ background:var(--menu-hover); }
+.vt-vw-diff{ color:var(--acc); }
+.vt-vw-path{
+  padding:6px 12px; font:400 11px var(--mono); color:var(--sub);
+  background:var(--bar); border-bottom:1px solid var(--line);
+  overflow-x:auto; white-space:nowrap; flex:0 0 auto;
+  scrollbar-width:none;
+}
+.vt-vw-path::-webkit-scrollbar{ display:none; }
+.vt-vw-body{
+  flex:1 1 auto; overflow:auto; overscroll-behavior:contain;
+  background:var(--crust);
+}
+.vt-vw-loading,.vt-vw-empty{
+  padding:32px 16px; text-align:center; color:var(--sub); font:400 13px var(--ui);
+}
+.vt-vw-note{
+  padding:8px 12px; color:var(--warn); font:400 11px var(--ui);
+  border-top:1px solid var(--line);
+}
+
+/* 디렉토리 목록 */
+.vt-vw-list{ display:flex; flex-direction:column; }
+.vt-vw-row{
+  display:flex; align-items:center; gap:8px;
+  padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--line);
+  font:400 13px var(--ui); touch-action:manipulation;
+}
+.vt-vw-row:hover{ background:var(--menu-hover); }
+.vt-vw-row.dir .vt-vw-name{ color:var(--acc); font-weight:500; }
+.vt-vw-icon{ width:12px; color:var(--sub); flex:0 0 auto; }
+.vt-vw-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-vw-size{ color:var(--sub); font:400 11px var(--mono); flex:0 0 auto; }
+
+/* 코드 본문 — 가로 스크롤은 이 안에서만. 페이지 전체가 밀리면 안 된다. */
+.vt-vw-code{ font:400 12px/1.55 var(--mono); padding:6px 0; }
+.vt-vw-cl,.vt-vw-dl{ display:flex; align-items:flex-start; white-space:pre; }
+.vt-vw-cl:hover{ background:var(--menu-hover); }
+.vt-vw-no{
+  flex:0 0 auto; min-width:44px; padding:0 8px; text-align:right;
+  color:var(--sub); user-select:none; opacity:.7;
+}
+.vt-vw-sign{ flex:0 0 auto; width:14px; text-align:center; user-select:none; color:var(--sub); }
+.vt-vw-tx{ flex:1 1 auto; padding-right:12px; }
+
+/* diff */
+.vt-vw-dfile{ border-bottom:1px solid var(--line); }
+.vt-vw-dhead{
+  display:flex; align-items:center; gap:8px; padding:8px 12px;
+  background:var(--bar); position:sticky; top:0; z-index:1;
+  border-bottom:1px solid var(--line);
+}
+.vt-vw-dpath{ flex:1; font:600 12px var(--mono); overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+.vt-vw-dstat{ font:600 11px var(--mono); flex:0 0 auto; }
+.vt-vw-dstat .add{ color:var(--ok); }
+.vt-vw-dstat .del{ color:var(--err); }
+.vt-vw-hunk{
+  padding:4px 12px; font:400 11px var(--mono); color:var(--sub);
+  background:color-mix(in srgb, var(--acc) 10%, transparent);
+}
+.vt-vw-dl{ font:400 12px/1.55 var(--mono); }
+.vt-vw-dl.add{ background:color-mix(in srgb, var(--ok) 16%, transparent); }
+.vt-vw-dl.del{ background:color-mix(in srgb, var(--err) 16%, transparent); }
+.vt-vw-dl.meta{ color:var(--sub); font-style:italic; }
+
+/* highlight.js — 테마 CSS 대신 스킨 토큰으로 직접 매핑.
+   하이라이터 기본 팔레트를 쓰면 notepad(라이트)에서 대비가 무너진다. */
+.vt-vw-tx .hljs-keyword,.vt-vw-tx .hljs-built_in,
+.vt-vw-tx .hljs-literal,.vt-vw-tx .hljs-type{ color:var(--acc); }
+.vt-vw-tx .hljs-string,.vt-vw-tx .hljs-regexp{ color:var(--ok); }
+.vt-vw-tx .hljs-number{ color:var(--warn); }
+.vt-vw-tx .hljs-comment,.vt-vw-tx .hljs-quote{ color:var(--sub); font-style:italic; }
+.vt-vw-tx .hljs-title,.vt-vw-tx .hljs-name,
+.vt-vw-tx .hljs-function .hljs-title,.vt-vw-tx .hljs-section{ color:var(--info); }
+.vt-vw-tx .hljs-attr,.vt-vw-tx .hljs-attribute,
+.vt-vw-tx .hljs-variable,.vt-vw-tx .hljs-property{ color:var(--txt); }
+.vt-vw-tx .hljs-meta,.vt-vw-tx .hljs-doctag{ color:var(--sub); }
+.vt-vw-tx .hljs-deletion{ color:var(--err); }
+.vt-vw-tx .hljs-addition{ color:var(--ok); }
+.vt-vw-tx .hljs-emphasis{ font-style:italic; }
+.vt-vw-tx .hljs-strong{ font-weight:600; }
+
+/* 모바일 — 바텀시트. .vt-guide-backdrop(:394)와 같은 전환 규칙을 따른다. */
+@media (max-width:560px){
+  .vt-viewer-backdrop{ align-items:flex-end; padding:0; }
+  .vt-viewer-card{
+    max-height:92vh; width:100%;
+    border-radius:18px 18px 0 0; border-bottom:none;
+    animation:vtGuideSheet .18s ease-out;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .vt-vw-code,.vt-vw-dl{ font-size:11px; }
+  .vt-vw-no{ min-width:32px; padding:0 4px; }
+}

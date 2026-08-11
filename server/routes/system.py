@@ -10,6 +10,7 @@ import os
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+import fsguard
 import network_access
 import notify
 import safe_mode
@@ -61,6 +62,8 @@ async def capabilities(request: Request):
         "lan_ip": network_access.get_lan_ip(),
         "tunnel": tunnel.get_tunnel_status(),
         "tailscale": tailscale.get_status_dict(),
+        # P2: 열람 가능한 루트가 하나도 없으면 코드 뷰어 UI를 숨긴다.
+        "fs": bool(fsguard.get_roots()),
     }
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}
