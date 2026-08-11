@@ -27,6 +27,7 @@ from routes.voice import router as voice_router
 from routes.agents import router as agents_router
 from routes.system import router as system_router
 from routes.clipboard import router as clipboard_router
+from routes.files import router as files_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -251,6 +252,7 @@ app.include_router(voice_router)
 app.include_router(agents_router)
 app.include_router(system_router)
 app.include_router(clipboard_router)
+app.include_router(files_router)
 
 
 # ---------------------------------------------------------------------------

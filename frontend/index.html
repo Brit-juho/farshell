@@ -245,6 +245,10 @@
       <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" />
     </label>
 
+    <button class="mi needs-fs" id="viewer-btn" role="menuitem" onclick="showViewer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>코드 뷰어
+    </button>
+
     <div class="msep"></div>
     <div class="mlabel">설정</div>
     <button class="mi" role="menuitem" onclick="showGuide()">
@@ -307,6 +311,9 @@
   <script src="/static/vendor/addon-canvas.min.js"></script>
   <script src="/static/vendor/nacl.min.js"></script>
   <script src="/static/vendor/nacl-util.min.js"></script>
+  <!-- 코드 뷰어 문법 하이라이팅 (P2). 테마 CSS는 쓰지 않는다 —
+       색은 app.css에서 스킨 토큰으로 매핑해야 notepad(라이트)까지 따라간다. -->
+  <script src="/static/vendor/highlight.min.js"></script>
 
   <!-- 테마 엔진 먼저 — terminal.js의 addSession이 xterm 테마를 참조 -->
   <script src="/static/js/theme.js"></script>
@@ -321,6 +328,9 @@
   <script src="/static/js/search.js"></script>
   <script src="/static/js/picker.js"></script>
   <script src="/static/js/grid.js"></script>
+  <!-- difflex.js: unified diff 파싱 순수 로직(viewer.js가 window.VTDiffLex 사용) -->
+  <script src="/static/js/difflex.js"></script>
+  <script src="/static/js/viewer.js"></script>
 
   <!-- ⋯ 메뉴 열고닫기 (전역 상태 불필요, 여기 인라인) -->
   <script>

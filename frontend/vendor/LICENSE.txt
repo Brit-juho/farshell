@@ -9,4 +9,9 @@ This directory contains third-party libraries vendored locally to remove CDN dep
 - lucide-static v0.469.0 (ISC) — https://github.com/lucide-icons/lucide
   Copyright (c) 2024, Lucide Contributors
 
+- highlight.js v11.11.1 (BSD-3-Clause) — https://github.com/highlightjs/highlight.js
+  Copyright (c) 2006, Ivan Sagalaev
+  common 번들(36개 언어). 테마 CSS는 포함하지 않는다 — 색은 app.css의 스킨 토큰으로
+  직접 정의해야 5개 테마(특히 라이트인 notepad)를 따라가기 때문.
+
 Each library retains its original license; full texts available at the source repos.
