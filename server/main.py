@@ -246,7 +246,25 @@ if _cors:
 app.add_middleware(OriginGuardMiddleware)
 
 # 정적 파일
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+#
+# 우리 앱 코드(js/css)에는 Cache-Control: no-cache 를 명시한다.
+# 예전엔 ETag/Last-Modified 만 보냈는데, Cache-Control 이 없으면 브라우저가
+# **휴리스틱 캐싱**(Last-Modified 경과 시간의 10%)으로 마음대로 캐시한다.
+# 그 결과 코드를 고치고 새로고침해도 옛 js 가 계속 돌았다(실제로 물렸다:
+# terminal.js 를 고쳤는데 브라우저는 51KB 짜리 구버전을 들고 있었다).
+# sw.js 의 network-first 가 평소엔 가려주지만, SW 가 아직 활성화되기 전이나
+# SW 가 없는 상황(http 접속 등)에서는 그대로 노출된다.
+# no-cache 는 "캐시하되 매번 재검증" — ETag 가 같으면 304 라 비용은 거의 없다.
+# vendor/* 는 immutable 이므로 손대지 않는다(SWR 캐시 이득 유지).
+class _AppCodeStatic(StaticFiles):
+    async def get_response(self, path: str, scope):
+        resp = await super().get_response(path, scope)
+        if path.startswith(("js/", "css/")) or path == "voice.js":
+            resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+app.mount("/static", _AppCodeStatic(directory=FRONTEND_DIR), name="static")
 
 # 라우터 등록
 app.include_router(pty_router)

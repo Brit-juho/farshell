@@ -207,6 +207,87 @@
     }
 
     // 한 터미널에 복사/붙여넣기 배선. addSession에서 term.open 직후 호출.
+    // 모바일 터치 스크롤 — 손가락 세로 드래그를 휠 이벤트로 번역한다.
+    //
+    // 왜 필요한가: tmux가 `set -g mouse on`(config/vt-tmux.conf)이라 터미널이 마우스
+    // 트래킹 모드로 들어간다(term.modes.mouseTrackingMode !== 'none'). 그러면 xterm.js는
+    // 포인터 입력을 뷰포트 스크롤이 아니라 '앱(tmux)'으로 넘긴다. 데스크톱은 휠이 있어서
+    // tmux가 그걸 copy-mode 스크롤로 번역해주지만, 터치에는 휠이 없다 → 폰에서 화면을
+    // 위아래로 못 넘기는 상태가 된다.
+    //
+    // 그래서 세로 드래그를 감지해 직접 휠 이벤트를 합성한다. 인코딩은 xterm.js가 하던
+    // 대로 맡기므로 데스크톱 휠과 동작이 정확히 같아진다(tmux copy-mode 진입 → 스크롤).
+    // 마우스 트래킹이 꺼진 세션(일반 셸)에서는 앱에 보낼 곳이 없으므로 xterm 자체
+    // 스크롤백을 직접 움직인다.
+    function wireTouchScroll(id, term, wrapper) {
+        // 한 노치로 칠 이동 거리(px). 너무 작으면 손 떨림에 스크롤이 튄다.
+        const NOTCH_PX = 18;
+        // 이 정도는 움직여야 '스크롤 의도'로 본다. 탭(포커스/키보드)을 막지 않기 위함.
+        const SLOP = 8;
+
+        let startX = 0, startY = 0, lastY = 0, acc = 0, engaged = false, multi = false;
+
+        wrapper.addEventListener('touchstart', (e) => {
+          multi = e.touches.length > 1;
+          if (multi) return;
+          startX = e.touches[0].clientX;
+          startY = lastY = e.touches[0].clientY;
+          acc = 0;
+          engaged = false;
+        }, { passive: true });
+
+        wrapper.addEventListener('touchmove', (e) => {
+          if (multi || e.touches.length !== 1) return;
+          const y = e.touches[0].clientY;
+          const x = e.touches[0].clientX;
+
+          if (!engaged) {
+            const dy = Math.abs(y - startY);
+            const dx = Math.abs(x - startX);
+            if (dy < SLOP) return;        // 아직 탭인지 드래그인지 모른다
+            if (dx > dy) return;          // 가로 제스처는 앱/선택에 맡긴다
+            engaged = true;
+          }
+
+          // 여기서부터는 스크롤 제스처다. 앱으로 드래그가 새면 tmux가 선택을 시작한다.
+          e.preventDefault();
+
+          acc += y - lastY;
+          lastY = y;
+
+          while (Math.abs(acc) >= NOTCH_PX) {
+            const dir = acc > 0 ? 1 : -1;   // +1 = 손가락을 아래로 = 위(과거)로 스크롤
+            acc -= dir * NOTCH_PX;
+            _scrollNotch(term, wrapper, dir);
+          }
+        }, { passive: false });
+
+        wrapper.addEventListener('touchend', () => { engaged = false; multi = false; }, { passive: true });
+        wrapper.addEventListener('touchcancel', () => { engaged = false; multi = false; }, { passive: true });
+    }
+
+    function _scrollNotch(term, wrapper, dir) {
+      const tracking = term.modes && term.modes.mouseTrackingMode
+        && term.modes.mouseTrackingMode !== 'none';
+      if (tracking) {
+        // 앱이 마우스를 잡고 있다 → 휠로 넘겨 데스크톱과 같은 경로를 타게 한다.
+        const scr = wrapper.querySelector('.xterm-screen');
+        if (!scr) return;
+        const r = scr.getBoundingClientRect();
+        scr.dispatchEvent(new WheelEvent('wheel', {
+          deltaY: -dir * 120,             // 손가락 아래로(dir=+1) → 휠 업
+          deltaMode: 0,
+          clientX: r.left + Math.min(40, r.width / 2),
+          clientY: r.top + Math.min(40, r.height / 2),
+          bubbles: true,
+          cancelable: true,
+        }));
+      } else {
+        // 앱이 마우스를 안 잡는다(일반 셸) → xterm 자체 스크롤백을 움직인다.
+        try { term.scrollLines(-dir * 3); } catch (_) {}
+      }
+    }
+
     function wireClipboard(id, term, wrapper) {
       // 1) copy-on-select — 드래그(브라우저 선택) 끝나면 자동 복사.
       //    ⚠ tmux mouse on이면 일반 드래그는 tmux가 가로채므로, 브라우저 선택은
@@ -458,6 +539,9 @@
 
       // 복사(자동복사/우클릭/단축키) · 붙여넣기 · 이미지 붙여넣기 배선
       wireClipboard(id, term, wrapper);
+
+      // 모바일 터치 스크롤 (tmux mouse on 이면 xterm이 터치를 앱으로 넘겨 스크롤이 죽는다)
+      wireTouchScroll(id, term, wrapper);
 
       // WebSocket URL 구성 — E2E 활성 시 ?e2e=1 (또는 토큰 뒤에 &e2e=1)
       const _wsPath = `/ws/${id}${_tokenQuery}${_e2eQuery}`;
