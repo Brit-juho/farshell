@@ -691,3 +691,6 @@ body.voice-only-mode #mic-status {
 .vt-q-text{ white-space:pre-wrap; word-break:break-word; }
 .vt-q-sub{ color:var(--sub); font:400 11px var(--mono); margin-top:3px; }
 .vt-q-row.blocked .vt-q-sub{ color:var(--err); }
+
+/* 사용 불가 상태의 메뉴 항목 (P5 푸시 등) — 숨기지 않고 이유를 보여준다 */
+.mi.disabled{ opacity:.5; }

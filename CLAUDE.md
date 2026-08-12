@@ -286,6 +286,11 @@ adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 10
 | GET | `/api/fs/file?path=X` | 파일 내용 (읽기 전용). 바이너리는 `binary:true`만, 512KB 초과는 절단 |
 | GET | `/api/git/status?repo=X` | `git status --porcelain` 파싱 결과 |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | `git diff` 원문 (프론트가 `difflex.js`로 파싱) |
+| GET | `/api/push/status` | 구독 수 / 현재 origin / origin 어긋난 구독 수 — P5 |
+| GET | `/api/push/key` | VAPID 공개키 (브라우저 구독용). pywebpush 없으면 501 |
+| POST | `/api/push/subscribe` | 구독 등록 (JSON: subscription, label). origin은 요청 헤더를 신뢰 |
+| DELETE | `/api/push/subscribe` | 구독 해제 (JSON: endpoint) |
+| POST | `/api/push/test` | 테스트 알림 발송 |
 | GET | `/api/queue` | 프롬프트 큐 목록 — P4 |
 | POST | `/api/queue` | 큐에 추가 (JSON: text, target). 상한 50, 초과 시 409 |
 | DELETE | `/api/queue/{id}` | 항목 삭제. `id=all` 이면 전체 비우기 |
@@ -410,6 +415,7 @@ echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 | 터미널 검색 | Ctrl+F / Cmd+F → xterm.js search addon |
 | 세션 이름 편집 | 탭 더블클릭 → 이름 변경 (PATCH API) |
 | 코드 뷰어 / diff (P2) | ⋯ 메뉴 → "코드 뷰어". CLI만으로 원격 개발할 때 코드를 눈으로 못 보는 문제를 푼다. 파일 트리 · 문법 하이라이팅(highlight.js, 36개 언어) · `git diff` 렌더링. **읽기 전용이며 쓰기 API가 없다.** 공개 터널 너머로 열리므로 방어가 3중이다: ① 루트 확정(`VT_BROWSE_ROOTS`, 기본 `~/GitHub` — `$HOME`을 열면 `~/.ssh`·`~/.aws`가 사정권에 든다) ② `Path.resolve()` + `is_relative_to`(startswith 금지 — 형제 디렉토리가 통과한다. `resolve()`가 심링크를 펼치므로 루트 밖을 가리키는 링크도 함께 걸린다) ③ 거부 목록(`.env*`·`*.pem`·`id_rsa`·`.ssh/`·`.aws/` 등, 경로의 모든 구성요소를 검사). 판정은 `server/fsguard.py` 한 곳에만 있다 |
+| Web Push (P5) | ⋯ 메뉴 → "푸시 알림". 기존 알림(`/ws-notify` → Notification API)은 **PWA 탭이 살아 있어야만** 동작해서, 폰 화면을 끄면 "승인 대기 중"을 놓쳤다. 그 격차를 메운다. WS 클라이언트가 하나라도 붙어 있으면 푸시를 보내지 않는다(같은 알림이 두 번 온다). **성립 조건**: ① https — 평문 http에서는 Service Worker 자체가 등록되지 않는다 ② iOS는 홈 화면에 PWA로 추가해야 한다(16.4+, 사파리 탭에서는 구독이 안 만들어진다. 우회 불가). **구독은 origin에 묶인다** — trycloudflare URL이 바뀌면 기존 구독이 전부 죽으므로 구독마다 origin을 저장해 어긋난 것은 발송에서 제외하고, 404/410 응답은 그 자리에서 정리한다. 알림 본문에는 명령·경로·코드를 넣지 않는다(잠금화면에 뜬다). VAPID 키는 `~/.vt/vapid.json`(0600) 자동 생성 — **지우면 기존 구독이 전부 무효화된다**. SW 등록은 `js/swreg.js`가 담당한다(예전엔 `voice.js` 안에 있어서 음성 미설치 시 SW가 아예 안 떴다) |
 | 프롬프트 큐 (P4) | ⋯ 메뉴 → "프롬프트 큐", 또는 `vt queue`. 에이전트가 작업 중일 때 지시를 쌓아뒀다 순차 투입한다. **음성 모드와 짝** — 지금은 작업 중에 말하면 씹히는데, 큐가 있으면 걸어가며 3개를 던져놓고 순서대로 실행시킬 수 있다. 자동 투입은 **Claude Code의 stop 훅에서만** 걸린다(`POST /api/agent/event`). codex/aider/gemini는 훅이 없어 `vt queue run` / "지금 실행"으로 수동 투입해야 한다 — 출력 유휴로 추측해 투입하는 방식은 빌드 로그가 잠깐 끊긴 것과 작업 완료를 구분할 수 없어 채택하지 않았다. 투입 전 관문 4개: 유예 시간(`VT_QUEUE_GRACE_SEC`, 기본 3초 — 사용자가 직접 타이핑을 시작했을 수 있다) · safe_mode · 타깃 pane 생존 확인 · 한 번에 한 건. 막히거나 실패한 항목은 **버리지 않고** `blocked` 로 큐에 남는다. 타깃 결정은 음성과 같은 규칙(`server/tmux_target.py`)을 쓴다. 저장은 `~/.vt/queue.json`(0600), 동시 쓰기는 flock으로 직렬화 |
 | 포트 대시보드 (P3) | ⋯ 메뉴 → "포트". 맥 앞에 없을 때 "지금 뭐가 떠 있지 / 3000번 죽여줘"를 폰에서 처리한다. 포트·PID·가동시간·CPU·메모리 표시, 원클릭 종료, `vt tunnel expose` 연동. **VT 서버 자신과 cloudflared/tailscaled/sshd는 종료가 막혀 있다** — 죽이면 이 화면이 끊긴다. 다른 사용자 프로세스도 막는다(sudo 안 씀). 종료 직전 `port→pid`를 재확인해 PID 재사용으로 엉뚱한 프로세스를 죽이는 것을 막고, 불일치면 409. `expose`는 로컬 서버를 **공개 인터넷**에 여는 것이라 `confirm:true` 없이는 428이고, `VT_NETWORK_MODE`가 `all`이 아니면 아예 거부한다(접근 범위를 좁혀놓고 다시 뚫으면 의미가 없다). 판정은 `server/portscan.py` |
 | 파일 업로드 | 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장 |

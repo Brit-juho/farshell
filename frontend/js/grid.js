@@ -12,6 +12,11 @@
         if (!caps.ports) {
           document.querySelectorAll('.needs-ports').forEach(el => el.style.display = 'none');
         }
+        // P5: 서버에 pywebpush 가 없으면 푸시 토글을 숨긴다.
+        // (secure context / iOS PWA 여부는 클라이언트 사정이라 pushui.js가 따로 안내한다)
+        if (!caps.push) {
+          document.querySelectorAll('.needs-push').forEach(el => el.style.display = 'none');
+        }
         if (!caps.voice) {
           const vb = document.getElementById('voice-bar');
           if (vb) vb.style.display = 'none';

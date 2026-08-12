@@ -1,11 +1,13 @@
-// Service Worker — Phase 9 #4: 정적 자원 캐시.
+// Service Worker — Phase 9 #4: 정적 자원 캐시 + Web Push 수신.
+// v6: Web Push(P5) — push 리스너 추가. 등록 주체도 voice.js → js/swreg.js 로 이동
+//     (voice.js는 음성 미설치 시 로드되지 않아 SW가 아예 안 떴다).
 // v5: 코드 뷰어(P2) — highlight.min.js vendor 추가. vendor는 SWR 캐시라 키 bump 필수.
 // v4: WebGL/Canvas GPU 렌더러 addon 추가 (DOM 렌더러 CPU/메모리 비용 문제) — 캐시 키 bump.
 // v3: index.html을 css/app.css + js/{terminal,search,picker,grid}.js로 분리.
 //     기존 inline <script> 캐시가 stale 상태가 되므로 캐시 키 bump 필수.
 // v2: voice.js / index / manifest는 network-first로 변경 (v1 stale 캐시 이슈 수정).
 //     vendor/* immutable 자산만 stale-while-revalidate.
-const CACHE = 'vt-static-v5';
+const CACHE = 'vt-static-v6';
 
 const PRECACHE = [
   '/static/icon-192.png',
@@ -39,6 +41,27 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// (P5) Web Push 수신 — 앱이 닫혀 있어도 여기로 온다. 이게 기존 Notification API와
+// 다른 지점이다(그쪽은 페이지가 살아 있어야 한다).
+// userVisibleOnly:true 로 구독했으므로 반드시 알림을 하나 띄워야 한다 —
+// 안 띄우면 브라우저가 "조용한 푸시"로 보고 구독을 폐기한다.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = {}; }
+  const title = d.title || 'Voice Terminal';
+  e.waitUntil(
+    self.registration.showNotification(title, {
+      body: d.body || '',
+      icon: '/static/icon-192.png',
+      badge: '/static/icon-192.png',
+      // 같은 tag는 덮어쓴다 — 알림이 쌓여 잠금화면을 도배하지 않도록.
+      tag: d.tag || 'vt-task',
+      renotify: true,
+      data: { url: d.url || '/' },
+    })
+  );
+});
+
 // 알림 클릭 → 이미 열린 앱 탭이 있으면 포커스, 없으면 새로 연다.
 // (모바일 Chrome은 new Notification() 대신 이 SW 알림 경로만 허용하므로 클릭 처리도 여기서.)
 self.addEventListener('notificationclick', (e) => {
@@ -46,7 +69,8 @@ self.addEventListener('notificationclick', (e) => {
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cls) => {
       for (const c of cls) { if ('focus' in c) return c.focus(); }
-      if (self.clients.openWindow) return self.clients.openWindow('/');
+      const url = (e.notification.data && e.notification.data.url) || '/';
+      if (self.clients.openWindow) return self.clients.openWindow(url);
     })
   );
 });

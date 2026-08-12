@@ -19,6 +19,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   회귀 테스트 `server/tests/test_agent_event.py` 추가.
 
 ### Added
+- **Web Push — 앱이 닫혀 있어도 알림 (P5).** ⋯ 메뉴 → "푸시 알림".
+  기존 알림(`/ws-notify` → Notification API)은 **PWA 탭이 살아 있어야만** 동작해서,
+  폰 화면을 끄면 "Claude가 승인 대기 중"을 놓쳤다. 그 마지막 격차를 메운다.
+  - **중복 알림을 막는다.** WS 클라이언트가 하나라도 붙어 있으면 푸시를 보내지 않는다.
+    붙은 게 없을 때만(= 앱이 닫혀 있다는 뜻) 로컬 TTS + 푸시로 넘어간다.
+  - **성립 조건 2가지.** ① https — 평문 http 에서는 Service Worker 가 등록되지 않아
+    기능 전체가 죽는다. ② iOS 는 홈 화면에 PWA 로 추가해야 한다(16.4+). 사파리 탭에서는
+    구독이 아예 안 만들어지고 우회 방법이 없어서, UI가 그 이유를 그대로 안내한다.
+  - **구독은 origin 에 묶인다.** trycloudflare quick tunnel 은 URL 이 임시라서 터널이
+    재시작되면 기존 구독이 전부 무효가 된다. 구독마다 origin 을 저장해 현재 origin 과
+    다른 것은 발송에서 제외하고, 푸시 서버가 404/410 을 주면 그 자리에서 삭제한다
+    (일시적 오류인 500 에는 지우지 않는다).
+  - 알림 본문에 명령·파일 경로·코드를 넣지 않는다 — 잠금화면에 뜨는 내용이다.
+    작업 요약을 그대로 싣지 않고 "작업 완료" 수준의 사실만 보낸다.
+  - `userVisibleOnly:true` 계약을 지킨다. 페이로드가 비었거나 깨졌어도 반드시 알림을
+    하나 띄운다 — 안 띄우면 브라우저가 "조용한 푸시"로 보고 **구독을 폐기한다.**
+  - VAPID 키는 `~/.vt/vapid.json`(0600)에 자동 생성. 지우면 기존 구독이 전부 무효가
+    되므로 백업 대상이다.
+  - 새 엔드포인트: `GET /api/push/{status,key}` · `POST|DELETE /api/push/subscribe` ·
+    `POST /api/push/test`. `/api/capabilities` 에 `push` 플래그.
+  - 의존성 추가: `pywebpush>=1.14` (requirements-core).
+  - 회귀 테스트: `server/tests/test_push.py`(13),
+    `server/tests/test_notify_fallback.py`(5), `frontend/tests/sw-push.test.js`(9).
+
+### Changed
+- **Service Worker 등록을 `voice.js` → `frontend/js/swreg.js` 로 이동.**
+  `voice.js` 는 음성 미설치 환경에서 아예 로드되지 않는다(grid.js가 `/api/capabilities`
+  를 보고 결정). 그래서 **PWA 오프라인 캐시도, 알림도 음성 설치 여부에 인질로 잡혀
+  있었다.** 항상 로드되는 파일로 옮겨 분리했다. `sw.js` 캐시 키 `vt-static-v6` bump.
+
 - **프롬프트 큐 (P4).** ⋯ 메뉴 → "프롬프트 큐", 또는 `vt queue`.
   에이전트가 작업 중일 때 지시를 쌓아뒀다 순차 투입한다. **음성 모드와 짝이다** —
   지금은 작업 중에 말해도 그냥 씹히는데, 큐가 있으면 걸어가면서 3개를 던져놓고

@@ -430,7 +430,18 @@ async def on_task_complete(session_id: str, summary: str, audio: bytes):
             dead.add(ws)
     notify_clients -= dead
     if not notify_clients:
+        # 붙어 있는 클라이언트가 하나도 없다 = 앱이 닫혀 있다.
+        # 맥 앞에 있으면 TTS로 듣고, 폰이라면 Web Push로 받는다.
+        # WS가 살아 있을 때는 푸시를 보내지 않는다 — 같은 알림이 두 번 온다.
         _platform_utils.tts_speak(summary)
+        try:
+            import push
+            if push.available():
+                # 잠금화면에 뜨는 내용이다. 요약을 그대로 싣지 않고 사실만 보낸다
+                # (명령어·경로·코드가 새지 않도록).
+                await asyncio.to_thread(push.send, "작업 완료", "터미널에서 확인하세요", "/")
+        except Exception as e:
+            logger.warning(f"web push 발송 실패: {e}")
 
 
 @router.websocket("/ws-notify")
