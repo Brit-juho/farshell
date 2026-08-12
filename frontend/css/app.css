@@ -772,6 +772,11 @@ body.vt-resizing #grid-view{ transition:none; }
 }
 @keyframes vtSpin{ to{ transform:rotate(360deg); } }
 
+/* 상위 디렉토리로 이동하는 ".." 행 — 파일/디렉토리와 구분되게 흐리고 기울인다.
+   .dir 이 아니므로 위 :not(.dir) 규칙이 셰브런을 숨기는데, 여기선 위쪽 화살표로 보여야 한다. */
+.vt-vw-trow.vt-vw-up .vt-vw-name{ color:var(--sub); font-style:italic; }
+.vt-vw-trow.vt-vw-up .vt-vw-chev{ visibility:visible; transform:rotate(-90deg); }
+
 /* 트리 안의 안내문(빈 디렉토리/잘림/에러)은 중앙정렬 모달 메시지가 아니라
    해당 깊이의 행처럼 왼쪽 정렬로 — 트리 흐름을 안 끊는다. */
 .vt-vw-tree-pane .vt-vw-note,
