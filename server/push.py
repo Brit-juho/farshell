@@ -129,6 +129,33 @@ def public_key() -> str | None:
     return keys["public"] if keys else None
 
 
+# 서명용 Vapid 인스턴스 캐시. 발송마다 PEM을 다시 파싱할 이유가 없다.
+_vapid_obj = None
+_vapid_pem = None
+
+
+def _vapid() -> object | None:
+    """서명에 쓸 Vapid 인스턴스.
+
+    ⚠ pywebpush 의 `vapid_private_key` 에 **PEM 원문 문자열을 넘기면 안 된다.**
+    pywebpush 는 문자열을 받으면 (1) 파일 경로인지 보고 (2) 아니면
+    `Vapid.from_string()`(base64 DER 기대)으로 넘긴다. PEM 본문은 둘 다 아니라서
+    "Could not deserialize key data ... ASN.1 parsing error" 로 죽는다.
+    실기기 테스트에서 이걸로 물렸다 — 단위 테스트는 webpush 를 모킹해서
+    이 경로를 타지 않았다. 그래서 인스턴스를 직접 만들어 넘긴다.
+    """
+    global _vapid_obj, _vapid_pem
+    keys = get_keys()
+    if not keys:
+        return None
+    if _vapid_obj is not None and _vapid_pem == keys["private"]:
+        return _vapid_obj
+    from py_vapid import Vapid01
+    _vapid_obj = Vapid01.from_pem(keys["private"].encode("utf-8"))
+    _vapid_pem = keys["private"]
+    return _vapid_obj
+
+
 # --- 구독 -------------------------------------------------------------------
 
 
@@ -178,8 +205,8 @@ def send(title: str, body: str = "", url: str = "/") -> dict:
     """모든 유효 구독에 발송. blocking — 호출부가 to_thread 로 감싼다."""
     if not available():
         return {"ok": False, "error": "unavailable", "sent": 0}
-    keys = get_keys()
-    if not keys:
+    signer = _vapid()
+    if signer is None:
         return {"ok": False, "error": "no_keys", "sent": 0}
 
     subs = list_subs()
@@ -209,7 +236,8 @@ def send(title: str, body: str = "", url: str = "/") -> dict:
             webpush(
                 subscription_info=sub,
                 data=payload,
-                vapid_private_key=keys["private"],
+                vapid_private_key=signer,
+                # sign()이 claims 를 변형하므로 매 호출 새 dict 를 준다.
                 vapid_claims={"sub": _SUBJECT},
                 timeout=10,
             )
