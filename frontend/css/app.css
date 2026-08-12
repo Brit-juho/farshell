@@ -658,3 +658,36 @@ body.voice-only-mode #mic-status {
   .vt-pt-meta{ flex:1 1 100%; order:3; }
   .vt-pt-actions{ order:2; margin-left:auto; }
 }
+
+/* 프롬프트 큐 (queue.js) — P4. 패널 껍데기는 코드 뷰어와 공유. */
+.vt-q-compose{
+  display:flex; gap:8px; padding:10px 12px; flex:0 0 auto;
+  background:var(--bar); border-bottom:1px solid var(--line);
+}
+.vt-q-compose textarea{
+  flex:1 1 auto; resize:vertical; min-height:40px; max-height:160px;
+  background:var(--term); color:var(--txt);
+  border:1px solid var(--line); border-radius:var(--trad);
+  padding:8px 10px; font:400 16px var(--ui);   /* 16px — iOS 확대 방지 */
+}
+.vt-q-compose textarea:focus{
+  outline:none; border-color:var(--acc);
+  box-shadow:0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent);
+}
+.vt-q-compose .vt-pt-btn{ align-self:flex-start; }
+
+.vt-q-row{
+  display:flex; align-items:flex-start; gap:10px;
+  padding:10px 12px; border-bottom:1px solid var(--line);
+  font:400 13px var(--ui);
+}
+.vt-q-row:hover{ background:var(--menu-hover); }
+.vt-q-row.blocked{ background:color-mix(in srgb, var(--err) 10%, transparent); }
+.vt-q-idx{
+  flex:0 0 auto; min-width:22px; text-align:right;
+  color:var(--sub); font:600 12px var(--mono); padding-top:1px;
+}
+.vt-q-meta{ flex:1 1 auto; min-width:0; }
+.vt-q-text{ white-space:pre-wrap; word-break:break-word; }
+.vt-q-sub{ color:var(--sub); font:400 11px var(--mono); margin-top:3px; }
+.vt-q-row.blocked .vt-q-sub{ color:var(--err); }

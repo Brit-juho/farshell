@@ -8,7 +8,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **`POST /api/agent/event` 가 모든 요청을 422로 거부하던 문제.**
+  `async def agent_event(request):` 처럼 타입 annotation이 없어서 FastAPI가
+  `request` 를 **필수 쿼리 파라미터**로 해석했다. 함수 본문 안의
+  `from fastapi import Request` 는 시그니처에 아무 영향이 없다.
+  그래서 `agent_hook.sh` 가 보내는 pre/post/stop 이벤트가 줄곧 실패했고 —
+  훅은 실패해도 조용하다 — 웹 UI의 에이전트 뱃지(`/ws-agent`)가 채워지지 않았다.
+  P4 자동 드레인이 이 경로 위에 얹히면서 드러났다.
+  회귀 테스트 `server/tests/test_agent_event.py` 추가.
+
 ### Added
+- **프롬프트 큐 (P4).** ⋯ 메뉴 → "프롬프트 큐", 또는 `vt queue`.
+  에이전트가 작업 중일 때 지시를 쌓아뒀다 순차 투입한다. **음성 모드와 짝이다** —
+  지금은 작업 중에 말해도 그냥 씹히는데, 큐가 있으면 걸어가면서 3개를 던져놓고
+  순서대로 실행시킬 수 있다.
+  - **자동 투입은 Claude Code의 stop 훅에서만 걸린다.** codex/aider/gemini 는 훅이
+    없어 `vt queue run` / "지금 실행"이 유일한 경로다. 출력 유휴(idle)로 추측해
+    투입하는 방식은 검토했다가 뺐다 — 빌드 로그가 잠깐 끊긴 것과 작업 완료를
+    구분할 수 없어서, 남의 입력 중간에 프롬프트를 끼워 넣는 사고가 난다.
+    조용히 틀리느니 안 하는 편이 낫다.
+  - 투입 전 관문 4개: ① 유예 시간(`VT_QUEUE_GRACE_SEC`, 기본 3초 — 사용자가 곧바로
+    직접 타이핑을 시작했을 수 있다) ② safe_mode ③ 타깃 pane 생존 확인
+    ④ 한 번에 한 건(연속 투입하면 에이전트가 두 지시를 한 입력으로 붙여 읽는다).
+  - **지시를 임의로 버리지 않는다.** safe_mode 차단·타깃 없음·전송 실패는 전부
+    큐에 `blocked` 로 남고 이유를 표시한다. 상한(50) 초과도 조용히 버리지 않고
+    거부한다 — 넣은 줄 알았는데 없는 것이 최악이다.
+  - 동시 쓰기는 flock 으로 직렬화한다. 웹·CLI·음성이 동시에 add 할 수 있는데
+    atomic replace 만으로는 read-modify-write 사이에 lost update 가 난다
+    (별도 프로세스 4개 × 10건 = 40건 무손실을 테스트로 고정).
+  - 타깃 결정은 음성과 같은 규칙을 쓴다. 이를 위해 `voice/tmux_target.py` 의 구현을
+    `server/tmux_target.py` 로 옮겼다 — `voice/config.py` 가 pynput 을 import 해서
+    **음성 미설치 환경에서는 voice 경유 import 자체가 실패**하기 때문이다.
+    기존 경로는 재export 껍데기로 남아 그대로 동작한다.
+  - 저장은 `~/.vt/queue.json`(0700 디렉토리 + 0600 파일 + atomic replace).
+    파일이 깨져도 서버가 죽지 않고 빈 큐로 시작한다.
+  - 새 엔드포인트: `GET|POST /api/queue` · `DELETE /api/queue/{id}`(`all` 지원) ·
+    `POST /api/queue/{id}/unblock` · `POST /api/queue/run`.
+    CLI: `vt queue [list|add|run|rm|unblock|clear]` (서버 없이도 동작).
+  - 회귀 테스트: `server/tests/test_queue.py`(19).
+
 - **포트 대시보드 (P3).** ⋯ 메뉴 → "포트". 맥 앞에 없을 때 "지금 뭐가 떠 있지,
   3000번 죽여줘"가 안 되던 문제를 푼다. 포트·PID·가동시간·CPU·메모리를 보여주고
   원클릭으로 종료한다. Ports.app이 메뉴바에서 하는 일을 원격에서 하는 셈이다.
