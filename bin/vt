@@ -1028,6 +1028,7 @@ cmd_help() {
     vt ssh [session]       Tailscale + SSH로 tmux 세션 직접 접속 명령 안내
     vt hotkey              핫키 조회/변경
     vt voice-target        음성 daemon 타깃 세션 lock/해제
+    vt queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
     vt manage              TUI 관리 도구 (세션/타깃/핫키/상태)
     vt doctor              설치/환경 진단
     vt install-profiles    터미널 앱 자동 등록 (iTerm2 등)
@@ -1055,7 +1056,7 @@ HELP
     fi
   else
     echo "  ✗ 도움말 토픽 '$topic' 없음"
-    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / ssh / troubleshoot"
+    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / ssh / tunnel-hook / troubleshoot"
     return 1
   fi
 }
@@ -1151,6 +1152,25 @@ _hotkey_validate_spec() {
 
 # 웹 로그인 비밀번호 설정 — 원문은 저장/노출하지 않고 scrypt 해시만 ~/.vt.env에 기록.
 # 세션 서명키(VT_SECRET_KEY)가 없으면 자동 생성. 기계 토큰 VT_TOKEN과는 독립.
+# 프롬프트 큐 (P4) — 에이전트가 작업 중일 때 지시를 쌓아뒀다 순차 투입.
+# 서버가 안 떠 있어도 동작하도록 queue_store.py CLI를 직접 호출한다(auth.py와 같은 방식).
+cmd_queue() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'vt doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-list}"
+  case "$sub" in
+    list|ls|add|rm|remove|delete|clear|unblock|run)
+      shift 2>/dev/null || true
+      (cd "$VT_DIR/server" && "$VT_PYTHON" queue_store.py "$sub" "$@")
+      ;;
+    *)
+      echo "사용법: vt queue [list|add \"내용\" [세션]|rm <id>|unblock <id>|clear|run]"
+      return 1 ;;
+  esac
+}
+
 cmd_password() {
   local env_file="$HOME/.vt.env"
   if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
@@ -2940,6 +2960,7 @@ case "${1:-help}" in
   template) shift; cmd_template "$@" ;;
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;
+  queue)    shift; cmd_queue "$@" ;;
   help)     shift 2>/dev/null || true; cmd_help "$@" ;;
   hotkey)   shift; cmd_hotkey "$@" ;;
   password) shift; cmd_password "$@" ;;
@@ -2971,6 +2992,7 @@ case "${1:-help}" in
     echo "                          CLAUDE.md 템플릿 관리"
     echo "    vt popup <action>     tmux 3.2+ popup으로 빠른 호출"
     echo "    vt run \"명령\"          headless claude -p 백그라운드 실행"
+    echo "    vt queue [add|run|rm]  프롬프트 큐 (작업 중 지시를 쌓아뒀다 순차 투입)"
     echo "    vt handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
     echo "    vt handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
     echo "    vt ssh [session]      Tailscale + SSH로 tmux 세션 직접 접속 명령 안내"

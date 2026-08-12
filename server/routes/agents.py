@@ -7,7 +7,7 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 
 import agent_detector
 import agent_status
@@ -36,13 +36,29 @@ async def get_agent(tmux_name: str):
 
 
 @router.post("/api/agent/event")
-async def agent_event(request):
-    from fastapi import Request
-    body = await request.json()
+async def agent_event(request: Request):
+    # `request` 에 타입 annotation이 없으면 FastAPI가 이걸 '필수 쿼리 파라미터'로 읽어
+    # 모든 요청이 422로 떨어진다. 함수 안의 `from fastapi import Request` 는 시그니처에
+    # 아무 영향이 없어서, agent_hook.sh 가 보내는 이벤트가 줄곧 조용히 실패하고 있었다.
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
     event = body.get("event", "stop")
     payload = body.get("payload", {})
 
     state = agent_status.on_event(event, payload)
+
+    # P4: 작업이 끝났다는 가장 정확한 신호가 stop 훅이다. 여기서 큐를 한 건 흘린다.
+    # 유예 시간(VT_QUEUE_GRACE_SEC)은 queue_runner가 둔다 — 사용자가 곧바로
+    # 직접 타이핑을 시작했을 수 있으므로 즉시 밀어 넣지 않는다.
+    queued = False
+    if event == "stop":
+        try:
+            import queue_runner
+            queued = queue_runner.schedule_drain()
+        except Exception as e:                       # 큐 문제로 훅 응답이 깨지면 안 된다
+            logger.warning(f"큐 드레인 예약 실패: {e}")
 
     msg = {"type": "agent_event", "event": event, "state": state}
     dead = set()
@@ -53,7 +69,7 @@ async def agent_event(request):
             dead.add(ws)
     _agent_event_clients.difference_update(dead)
 
-    return {"ok": True, "state": state}
+    return {"ok": True, "state": state, "queue_scheduled": queued}
 
 
 @router.get("/api/agent/status")
