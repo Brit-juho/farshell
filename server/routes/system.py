@@ -64,8 +64,8 @@ async def capabilities(request: Request):
         "lan_ip": network_access.get_lan_ip(),
         "tunnel": tunnel.get_tunnel_status(),
         "tailscale": tailscale.get_status_dict(),
-        # P2: 열람 가능한 루트가 하나도 없으면 코드 뷰어 UI를 숨긴다.
-        "fs": bool(fsguard.get_roots()),
+        # P2: 시작할 수 있는 루트가 하나도 없으면(설정 오류 등) 코드 뷰어 UI를 숨긴다.
+        "fs": bool(fsguard.get_start_roots()),
         # P3: lsof 없이는 포트 스캔이 불가능하다(최소 리눅스 컨테이너 등).
         "ports": shutil.which("lsof") is not None,
         # P5: pywebpush 설치 여부. 실제 구독 가능 여부는 secure context 도 필요하므로

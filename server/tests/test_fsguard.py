@@ -107,11 +107,41 @@ def test_no_roots_configured_denies_everything(monkeypatch, tmp_path):
         fsguard.resolve_under_roots("/etc/passwd")
 
 
-def test_default_root_is_not_home(monkeypatch):
-    """기본 루트가 $HOME 이면 ~/.ssh, ~/.aws 가 사정권에 들어온다."""
+def test_default_boundary_is_home_for_upward_navigation(monkeypatch):
+    """기본 경계(get_roots)는 홈 전체 — ~/GitHub 위로 이동할 수 있어야 하기 때문이다.
+    ~/.ssh, ~/.aws 등은 거부 목록이 경계와 무관하게 계속 막는다(아래 두 테스트)."""
     monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
-    roots = fsguard.get_roots()
-    assert Path.home() not in roots
+    assert fsguard.get_roots() == [Path.home()]
+
+
+def test_default_start_root_is_not_home(monkeypatch):
+    """시작 화면은 경계보다 좁게 유지한다 — 첫 화면이 곧 $HOME 전체로 열리면 안 된다."""
+    monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
+    starts = fsguard.get_start_roots()
+    assert Path.home() not in starts
+
+
+def test_default_boundary_still_denies_home_secrets(monkeypatch):
+    """경계가 홈으로 넓어져도 거부 목록은 경로 존재 여부와 무관하게 그대로 막아야 한다."""
+    monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(Path.home() / ".ssh" / "config"))
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(Path.home() / ".aws" / "credentials"))
+
+
+def test_default_boundary_allows_navigating_above_start_root(monkeypatch):
+    """~/GitHub 의 부모(=홈)는 경계 안이라 열람이 허용돼야 한다."""
+    monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
+    p = fsguard.resolve_under_roots(str(Path.home()))
+    assert p == Path.home().resolve()
+
+
+def test_custom_roots_are_not_widened_to_home(sandbox):
+    """VT_BROWSE_ROOTS 를 명시했으면 사용자가 고른 경계 그대로다 — 자동으로 넓히지 않는다."""
+    assert fsguard.get_roots() == [sandbox["root"].resolve()]
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(Path.home()))
 
 
 def test_looks_binary():

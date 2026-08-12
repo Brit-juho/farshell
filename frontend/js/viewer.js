@@ -24,7 +24,8 @@
     const _ICON_FULL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
 
     let _viewerState = {
-      root: null,             // 열람 루트 (VT_BROWSE_ROOTS[0])
+      root: null,             // 트리 최상단 디렉토리. 시작값은 서버 시작 루트(기본 ~/GitHub)지만
+                                // ".." 로 위로 이동하면 바뀐다(서버 경계 — 기본 홈 — 까지 허용).
       cwd: null,               // diff 대상 기본값(루트)
       mode: 'tree',            // 콘텐츠: 'tree' | 'file' | 'diff' — sheet의 활성 화면 판정에 쓴다
       displayMode: 'sheet',    // 레이아웃: 'sheet' | 'dock' | 'full'
@@ -278,12 +279,58 @@
         _setMsg(treeEl, 'vt-vw-empty', [e.message]);
         return;
       }
-      treeEl.innerHTML = '';
-      if (!data.entries.length) {
-        _setMsg(treeEl, 'vt-vw-empty', ['빈 디렉토리']);
+      _renderTopLevel(treeEl, data);
+    }
+
+    // 상위 이동(".." 행) — 서버(fsguard)가 정한 경계까지만 실제로 올라간다.
+    // 경계는 프론트가 미리 알지 못하므로 항상 시도해보고, 막히면(403) 토스트만 띄운다.
+    function _upRowEl() {
+      const row = document.createElement('div');
+      row.className = 'vt-vw-trow vt-vw-up';
+      row.style.setProperty('--d', 0);
+      const chev = document.createElement('span');
+      chev.className = 'vt-vw-chev';
+      chev.innerHTML = _ICON_CHEVRON;
+      const name = document.createElement('span');
+      name.className = 'vt-vw-name';
+      name.textContent = '..';
+      row.appendChild(chev);
+      row.appendChild(name);
+      row.addEventListener('click', _goUpRoot);
+      return row;
+    }
+
+    async function _goUpRoot() {
+      const cur = _viewerState.root;
+      if (!cur || cur === '/') return;
+      const parent = cur.replace(/\/[^/]+\/?$/, '') || '/';
+      let data;
+      try {
+        data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(parent)}`);
+      } catch (e) {
+        showToast(`더 위로는 이동할 수 없습니다: ${e.message}`);
         return;
       }
+      _viewerState.root = parent;
+      _viewerState.expanded = new Set();
+      _setPath(parent);
+      _renderTopLevel(document.getElementById('vt-vw-tree'), data);
+    }
+
+    // 트리 최상단(현재 root의 자식들) 렌더링 — 초기 로드와 "위로 이동" 양쪽에서 쓴다.
+    function _renderTopLevel(treeEl, data) {
+      treeEl.innerHTML = '';
       const frag = document.createDocumentFragment();
+      if (_viewerState.root !== '/') frag.appendChild(_upRowEl());
+
+      if (!data.entries.length) {
+        treeEl.appendChild(frag);
+        const empty = document.createElement('div');
+        empty.className = 'vt-vw-empty';
+        empty.textContent = '빈 디렉토리';
+        treeEl.appendChild(empty);
+        return;
+      }
       data.entries.forEach(entry => {
         const childPath = _viewerState.root.replace(/\/$/, '') + '/' + entry.name;
         const row = _treeRowEl(entry, childPath, 0);
