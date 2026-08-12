@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 import fsguard
 import network_access
 import notify
+import push
 import safe_mode
 import tailscale
 import tunnel
@@ -67,6 +68,9 @@ async def capabilities(request: Request):
         "fs": bool(fsguard.get_roots()),
         # P3: lsof 없이는 포트 스캔이 불가능하다(최소 리눅스 컨테이너 등).
         "ports": shutil.which("lsof") is not None,
+        # P5: pywebpush 설치 여부. 실제 구독 가능 여부는 secure context 도 필요하므로
+        # 프론트가 isSecureContext 를 함께 본다.
+        "push": push.available(),
     }
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}

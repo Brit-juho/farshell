@@ -406,9 +406,9 @@ if ('Notification' in window && Notification.permission === 'default') {
 }
 
 // --- PWA Service Worker 등록 ---
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
-}
+// (P5) 등록은 js/swreg.js 로 옮겼다. 이 파일은 음성 미설치 환경에서 아예 로드되지
+// 않으므로(grid.js가 capabilities를 보고 결정), 여기 두면 SW가 등록조차 안 됐다.
+// → PWA 오프라인 캐시도, Web Push도 음성 설치 여부에 인질로 잡혀 있었다.
 
 // --- 무선 이어폰 터치 컨트롤 (Media Session API) ---
 // play/pause 미디어 키를 녹음 토글로 가로챈다.
