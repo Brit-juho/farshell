@@ -1,66 +1,28 @@
 // 포트 대시보드 (P3) — Ports.app이 메뉴바에서 하는 일을 원격에서.
 // "지금 뭐가 떠 있지 / 3000번 죽여줘"를 폰에서 처리한다.
 //
-// 패널 껍데기(.vt-viewer-backdrop / .vt-viewer-card)는 viewer.js와 공유한다.
+// 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panel.js/vtapi.js가 공유한다.
 // 리스트 행만 .vt-pt-* 로 따로 둔다.
 
-    let _portsTimer = null;
-
-    function _ptEl() { return document.getElementById('vt-ports'); }
-
-    function closePorts() {
-      const el = _ptEl();
-      if (!el) return;
-      el.remove();
-      document.removeEventListener('keydown', _ptKey);
-      if (_portsTimer) { clearInterval(_portsTimer); _portsTimer = null; }
-      try { setTimeout(() => fitAndResize(activeId), 60); } catch (_) {}
-    }
-
-    function _ptKey(ev) {
-      if (ev.key === 'Escape') { ev.stopPropagation(); closePorts(); }
-    }
-
-    async function _ptApi(path, opts) {
-      const sep = path.includes('?') ? '&' : '?';
-      const res = await fetch(`${API_BASE}${path}${sep}${_tokenQuery.replace(/^[?&]/, '')}`, opts);
-      let data = null;
-      try { data = await res.json(); } catch (_) {}
-      if (!res.ok) {
-        const e = new Error((data && (data.reason || data.error)) || `HTTP ${res.status}`);
-        e.status = res.status; e.data = data;
-        throw e;
-      }
-      return data;
-    }
+    function closePorts() { closePanel('vt-ports'); }
 
     function showPorts() {
-      if (_ptEl()) { closePorts(); return; }
+      const panel = openPanel({
+        id: 'vt-ports',
+        ariaLabel: '포트 대시보드',
+        headHTML: `
+          <div class="vt-vw-title">포트 — 실행 중인 개발 서버</div>
+          <button class="vt-vw-diff" id="vt-pt-refresh" title="새로고침">새로고침</button>
+        `,
+        bodyId: 'vt-pt-body',
+      });
+      if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
 
-      const el = document.createElement('div');
-      el.id = 'vt-ports';
-      el.className = 'vt-viewer-backdrop';
-      el.innerHTML = `
-        <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="포트 대시보드">
-          <div class="vt-viewer-head">
-            <div class="vt-vw-title">포트 — 실행 중인 개발 서버</div>
-            <button class="vt-vw-diff" id="vt-pt-refresh" title="새로고침">새로고침</button>
-            <button class="vt-vw-x" aria-label="닫기">✕</button>
-          </div>
-          <div class="vt-vw-body" id="vt-pt-body">
-            <div class="vt-vw-loading">불러오는 중…</div>
-          </div>
-        </div>
-      `;
-      el.querySelector('.vt-vw-x').addEventListener('click', closePorts);
-      el.addEventListener('click', (ev) => { if (ev.target === el) closePorts(); });
-      el.querySelector('#vt-pt-refresh').addEventListener('click', () => refreshPorts(true));
-      document.addEventListener('keydown', _ptKey);
-      document.body.appendChild(el);
+      panel.el.querySelector('#vt-pt-refresh').addEventListener('click', () => refreshPorts(true));
 
       refreshPorts(true);
-      // 5초 폴링. 패널이 열려 있을 때만 돈다 — 닫으면 closePorts가 정리한다.
-      _portsTimer = setInterval(() => { if (_ptEl()) refreshPorts(false); else closePorts(); }, 5000);
+      // 5초 폴링. 패널이 열려 있을 때만 돈다 — 닫으면 setPanelPoll이 정리한다.
+      setPanelPoll('vt-ports', 5000, () => refreshPorts(false));
     }
 
     function _fmtMem(kb) {
@@ -85,9 +47,9 @@
       if (!body) return;
       let d;
       try {
-        d = await _ptApi(`/api/ports${fresh ? '?fresh=true' : ''}`);
+        d = await vtFetch(`/api/ports${fresh ? '?fresh=true' : ''}`);
       } catch (e) {
-        body.innerHTML = `<div class="vt-vw-empty">${e.message}</div>`;
+        body.innerHTML = `<div class="vt-vw-empty">${vtEsc(e.message)}</div>`;
         return;
       }
       if (!d.ports.length) {
@@ -158,7 +120,7 @@
       body.appendChild(list);
       if (d.truncated) {
         const n = document.createElement('div');
-        n.className = 'vt-vw-note';
+        n.className = 'vt-vw-note warn';
         n.textContent = '포트가 많아 일부만 표시했습니다.';
         body.appendChild(n);
       }
@@ -168,7 +130,7 @@
       if (!confirm(`포트 ${port} (${cmd}, pid ${pid}) 를 종료할까요?`)) return;
       try {
         // pid를 함께 보낸다 — 조회 후 프로세스가 바뀌었으면 서버가 409로 거부한다.
-        const r = await _ptApi(`/api/ports/${port}?pid=${pid}`, { method: 'DELETE' });
+        const r = await vtFetch(`/api/ports/${port}?pid=${pid}`, { method: 'DELETE' });
         showToast(`포트 ${port} 종료됨 (${r.signal})`);
       } catch (e) {
         showToast(`종료 실패: ${e.message}`);
@@ -181,7 +143,7 @@
       if (!confirm(`포트 ${port} 를 공개 인터넷에 노출합니다.\n\n누구나 URL만 알면 접근할 수 있습니다. 계속할까요?`)) return;
       showToast(`포트 ${port} 터널 여는 중…`);
       try {
-        const r = await _ptApi(`/api/ports/${port}/expose`, {
+        const r = await vtFetch(`/api/ports/${port}/expose`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ confirm: true }),
