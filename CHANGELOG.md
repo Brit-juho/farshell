@@ -9,6 +9,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- **모바일에서 터미널 화면을 위아래로 스크롤할 수 없던 문제.**
+  tmux 가 `set -g mouse on`(`config/vt-tmux.conf`)이라 터미널이 마우스 트래킹 모드로
+  들어간다(`term.modes.mouseTrackingMode == "drag"`). 그러면 xterm.js 는 포인터 입력을
+  뷰포트 스크롤이 아니라 **앱(tmux)으로 넘긴다.** 데스크톱은 휠이 있어서 tmux 가 그걸
+  copy-mode 스크롤로 번역해주지만, **터치에는 휠이 없다** → 폰에서 스크롤이 죽었다.
+  `terminal.js` 에는 터치 처리가 아예 없었고 keybar 에도 스크롤 키가 없었다.
+  - 세로 드래그를 감지해 휠 이벤트를 합성한다(`wireTouchScroll`). 인코딩은 xterm.js 가
+    하던 대로 맡기므로 **데스크톱 휠과 경로가 완전히 같다** — tmux copy-mode 진입 → 스크롤.
+  - 마우스 트래킹이 꺼진 세션(일반 셸)에서는 보낼 앱이 없으므로 `term.scrollLines()` 로
+    xterm 자체 스크롤백을 직접 움직인다.
+  - 탭(8px 미만 이동)과 가로 드래그는 가로채지 않는다 — 포커스/키보드와 선택을 살린다.
+
+- **앱 코드(js/css)가 브라우저에 옛 버전으로 캐시되던 문제.**
+  `StaticFiles` 가 ETag/Last-Modified 만 보내고 `Cache-Control` 이 없었다. 그러면
+  브라우저는 **휴리스틱 캐싱**(Last-Modified 경과 시간의 10%)으로 마음대로 캐시한다 →
+  코드를 고치고 새로고침해도 옛 js 가 계속 돈다. 실제로 물렸다: `terminal.js` 를 고쳤는데
+  브라우저가 51KB 짜리 구버전을 들고 있었다. `sw.js` 의 network-first 가 평소엔
+  가려주지만, SW 가 활성화되기 전이나 SW 가 없는 상황(http 접속 등)에서는 그대로 노출된다.
+  `/static/js/`·`/static/css/`·`voice.js` 에 `Cache-Control: no-cache` 를 붙였다
+  ("캐시하되 매번 재검증" — ETag 가 같으면 304 라 비용은 거의 없다).
+  `vendor/*` 는 immutable 전제라 예외로 뒀다(SWR 캐시 이득 유지).
+
 - **`POST /api/agent/event` 가 모든 요청을 422로 거부하던 문제.**
   `async def agent_event(request):` 처럼 타입 annotation이 없어서 FastAPI가
   `request` 를 **필수 쿼리 파라미터**로 해석했다. 함수 본문 안의
