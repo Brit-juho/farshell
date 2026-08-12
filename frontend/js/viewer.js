@@ -2,95 +2,144 @@
 // CLI만으로 원격 개발할 때 "코드를 눈으로 확인"이 안 되는 문제를 푼다.
 // 편집 기능은 의도적으로 없다. 수정은 터미널/에이전트가 한다.
 //
-// grid.js 뒤에 로드되므로 API_BASE / _tokenQuery / showToast / activeId /
-// fitAndResize 를 그대로 참조한다(classic script 최상위 스코프 공유).
+// 표시 모드 3종:
+//   sheet — 폰/좁은 화면 기본. 트리 → 파일/diff 로 전체 화면을 전환한다.
+//   dock  — 우측에 고정. 배경을 덮지 않아 터미널을 보면서 동시에 쓸 수 있다.
+//   full  — 화면 대부분을 차지하는 모달. 좌측 트리 + 우측 코드 2단 분할.
+// 트리는 계층형(누적 expand/collapse) — 펼친 디렉토리는 다시 요청하지 않고
+// DOM에 남겨둔 채로 접었다 편다.
+//
+// grid.js 뒤에 로드되므로 activeId / fitAndResize 를,
+// vtapi.js/panel.js 뒤에 로드되므로 vtFetch / vtEsc / openPanel / closePanel 을
+// 그대로 참조한다(classic script 최상위 스코프 공유).
+
+    const VT_MODE_KEY = 'vt_viewer_mode';
+    const VT_DOCKW_KEY = 'vt_viewer_dockw';
+    const VT_DOCK_W_DEFAULT = 420;
+    const VT_DOCK_W_MIN = 280;
+
+    const _ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>';
+    const _ICON_SHEET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="15" x2="21" y2="15"/></svg>';
+    const _ICON_DOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="14" y1="3" x2="14" y2="21"/></svg>';
+    const _ICON_FULL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
 
     let _viewerState = {
-      root: null,        // 현재 탐색 중인 루트
-      cwd: null,         // 현재 디렉토리
-      mode: 'tree',      // 'tree' | 'file' | 'diff'
-      repo: null,        // git 저장소 루트 (diff 대상)
+      root: null,             // 열람 루트 (VT_BROWSE_ROOTS[0])
+      cwd: null,               // diff 대상 기본값(루트)
+      mode: 'tree',            // 콘텐츠: 'tree' | 'file' | 'diff' — sheet의 활성 화면 판정에 쓴다
+      displayMode: 'sheet',    // 레이아웃: 'sheet' | 'dock' | 'full'
+      selectedPath: null,
+      expanded: new Set(),     // 펼쳐진 디렉토리 절대경로 — 접었다 다시 펼 때 재요청 판단에 씀
     };
 
-    // 서버가 준 문자열은 절대 innerHTML 로 넣지 않는다(grid.js:146-147과 같은 규칙).
-    // 하이라이팅된 코드만 예외 — hljs.highlight()가 입력을 이스케이프해서 돌려준다.
-    function _esc(s) {
-      const d = document.createElement('div');
-      d.textContent = s == null ? '' : String(s);
-      return d.innerHTML;
+    function _isMobile() { return window.matchMedia('(max-width:560px)').matches; }
+
+    function _loadMode() {
+      if (_isMobile()) return 'sheet';
+      try {
+        const m = localStorage.getItem(VT_MODE_KEY);
+        return (m === 'dock' || m === 'full') ? m : 'sheet';
+      } catch (_) { return 'sheet'; }
+    }
+    function _saveMode(m) { try { localStorage.setItem(VT_MODE_KEY, m); } catch (_) {} }
+
+    function _loadDockW() {
+      try {
+        const w = parseInt(localStorage.getItem(VT_DOCKW_KEY), 10);
+        return Number.isFinite(w) && w > 0 ? w : VT_DOCK_W_DEFAULT;
+      } catch (_) { return VT_DOCK_W_DEFAULT; }
+    }
+    function _saveDockW(w) { try { localStorage.setItem(VT_DOCKW_KEY, String(w)); } catch (_) {} }
+    function _clampDockW(w) {
+      const maxW = Math.floor(window.innerWidth * 0.7);
+      return Math.max(VT_DOCK_W_MIN, Math.min(w, maxW));
     }
 
-    async function _api(path) {
-      const res = await fetch(`${API_BASE}${path}${path.includes('?') ? '&' : '?'}${_tokenQuery.replace(/^[?&]/, '')}`);
-      let data = null;
-      try { data = await res.json(); } catch (_) { data = null; }
-      if (!res.ok) {
-        const reason = (data && (data.reason || data.error)) || `HTTP ${res.status}`;
-        throw new Error(reason);
-      }
-      return data;
+    // 정적 안내 메시지용 — textContent 만 쓰므로 이스케이프가 필요 없다.
+    // 줄바꿈은 <br> 엘리먼트로 표현한다(문자열 조립 없이).
+    function _setMsg(container, className, lines) {
+      container.innerHTML = '';
+      const div = document.createElement('div');
+      div.className = className;
+      lines.forEach((line, i) => {
+        if (i > 0) div.appendChild(document.createElement('br'));
+        div.appendChild(document.createTextNode(line));
+      });
+      container.appendChild(div);
     }
 
-    function _viewerEl() { return document.getElementById('vt-viewer'); }
-
-    function closeViewer() {
-      const el = _viewerEl();
-      if (!el) return;
-      el.remove();
-      document.removeEventListener('keydown', _viewerKey);
-      // 패널이 레이아웃을 건드렸을 수 있으므로 터미널 크기를 다시 맞춘다.
-      try { setTimeout(() => fitAndResize(activeId), 60); } catch (_) {}
-    }
-
-    function _viewerKey(ev) {
-      if (ev.key === 'Escape') { ev.stopPropagation(); closeViewer(); }
-    }
+    function closeViewer() { closePanel('vt-viewer'); }
 
     async function showViewer() {
-      // 토글 — 이미 열려 있으면 닫는다 (showGuide 패턴)
-      if (_viewerEl()) { closeViewer(); return; }
-
-      const el = document.createElement('div');
-      el.id = 'vt-viewer';
-      el.className = 'vt-viewer-backdrop';
-      el.innerHTML = `
-        <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="코드 뷰어">
-          <div class="vt-viewer-head">
-            <button class="vt-vw-back" aria-label="상위로" title="상위 디렉토리">‹</button>
-            <div class="vt-vw-title" id="vt-vw-title">코드 뷰어</div>
-            <button class="vt-vw-diff" id="vt-vw-diff" title="변경분 보기">diff</button>
-            <button class="vt-vw-x" aria-label="닫기">✕</button>
+      const displayMode = _loadMode();
+      const panel = openPanel({
+        id: 'vt-viewer',
+        ariaLabel: '코드 뷰어',
+        extraClass: displayMode === 'sheet' ? '' : 'mode-' + displayMode,
+        headHTML: `
+          <button class="vt-vw-back" aria-label="트리로" title="트리로">‹</button>
+          <div class="vt-vw-title" id="vt-vw-title">코드 뷰어</div>
+          <div class="vt-vw-modes" role="group" aria-label="표시 모드">
+            <button class="vt-vw-mode-btn" data-mode="sheet" title="시트">${_ICON_SHEET}</button>
+            <button class="vt-vw-mode-btn" data-mode="dock" title="도킹 — 터미널과 함께 보기">${_ICON_DOCK}</button>
+            <button class="vt-vw-mode-btn" data-mode="full" title="전체화면">${_ICON_FULL}</button>
           </div>
+          <button class="vt-vw-diff" id="vt-vw-diff" title="변경분 보기">diff</button>
+        `,
+        extraHTML: `
           <div class="vt-vw-path" id="vt-vw-path"></div>
-          <div class="vt-vw-body" id="vt-vw-body">
-            <div class="vt-vw-loading">불러오는 중…</div>
-          </div>
-        </div>
-      `;
-      // 닫기 3중: X · 배경 클릭 · Esc (showGuide와 동일)
-      el.querySelector('.vt-vw-x').addEventListener('click', closeViewer);
-      el.addEventListener('click', (ev) => { if (ev.target === el) closeViewer(); });
-      document.addEventListener('keydown', _viewerKey);
-      el.querySelector('.vt-vw-back').addEventListener('click', goUp);
-      el.querySelector('#vt-vw-diff').addEventListener('click', () => showDiff());
-      document.body.appendChild(el);
+          <div class="vt-vw-resizer" id="vt-vw-resizer"></div>
+        `,
+        bodyId: 'vt-vw-body',
+        bodyHTML: `
+          <div class="vt-vw-tree-pane" id="vt-vw-tree"><div class="vt-vw-loading">불러오는 중…</div></div>
+          <div class="vt-vw-code-pane" id="vt-vw-code-pane"><div class="vt-vw-code-empty">파일을 선택하세요.</div></div>
+        `,
+        onKey: () => {
+          // 도킹 모드는 터미널과 동시에 보이는 상태 — Esc는 vim 등 터미널 쪽에 쓰이므로
+          // 패널을 닫지 않는다. 시트/전체화면에서는 기본 동작(닫기) 그대로.
+          if (_viewerState.displayMode === 'dock') return true;
+        },
+        onClose: () => {
+          // X · 배경 클릭 · Esc · 재호출 토글 — 어느 경로로 닫히든 panel.js가 이걸 불러준다.
+          const t = document.getElementById('viewer-toggle');
+          if (t) t.classList.remove('active');
+          document.body.classList.remove('vt-docked');
+        },
+      });
+      if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
 
+      const btn = document.getElementById('viewer-toggle');
+      if (btn) btn.classList.add('active');
+
+      document.getElementById('vt-vw-body').classList.add('split');
+      _viewerState.mode = 'tree';
+      _viewerState.selectedPath = null;
+      _viewerState.expanded = new Set();
+      _viewerState.displayMode = displayMode;
+      _applyDisplayMode(displayMode, panel.el);
+
+      panel.el.querySelector('.vt-vw-back').addEventListener('click', () => _setActivePane('tree'));
+      panel.el.querySelectorAll('.vt-vw-mode-btn').forEach(b => {
+        b.addEventListener('click', () => _setDisplayMode(b.dataset.mode));
+      });
+      panel.el.querySelector('#vt-vw-diff').addEventListener('click', () => showDiff());
+      _wireResizer(panel.el);
+
+      const treeEl = document.getElementById('vt-vw-tree');
       try {
-        const { roots } = await _api('/api/fs/roots');
+        const { roots } = await vtFetch('/api/fs/roots');
         if (!roots || !roots.length) {
-          _body(`<div class="vt-vw-empty">열람 가능한 루트가 없습니다.<br>VT_BROWSE_ROOTS 를 설정하세요.</div>`);
+          _setMsg(treeEl, 'vt-vw-empty', ['열람 가능한 루트가 없습니다.', 'VT_BROWSE_ROOTS 를 설정하세요.']);
           return;
         }
         _viewerState.root = roots[0];
-        await openDir(roots[0]);
+        _viewerState.cwd = roots[0];
+        _setPath(roots[0]);
+        await _renderRootTree();
       } catch (e) {
-        _body(`<div class="vt-vw-empty">${_esc(e.message)}</div>`);
+        _setMsg(treeEl, 'vt-vw-empty', [e.message]);
       }
-    }
-
-    function _body(html) {
-      const b = document.getElementById('vt-vw-body');
-      if (b) b.innerHTML = html;
     }
 
     function _setPath(p) {
@@ -103,62 +152,79 @@
       if (el) el.textContent = t;
     }
 
-    // --- 디렉토리 ------------------------------------------------------------
+    function _setActivePane(which) {
+      const body = document.getElementById('vt-vw-body');
+      if (body) body.dataset.active = which;
+      _viewerState.mode = which === 'tree' ? 'tree' : _viewerState.mode;
+    }
 
-    async function openDir(path) {
-      _viewerState.mode = 'tree';
-      _viewerState.cwd = path;
-      _setPath(path);
-      _setTitle('코드 뷰어');
-      _body('<div class="vt-vw-loading">불러오는 중…</div>');
-      let data;
-      try {
-        data = await _api(`/api/fs/tree?path=${encodeURIComponent(path)}`);
-      } catch (e) {
-        _body(`<div class="vt-vw-empty">${_esc(e.message)}</div>`);
-        return;
-      }
-      const list = document.createElement('div');
-      list.className = 'vt-vw-list';
-      if (!data.entries.length) {
-        _body('<div class="vt-vw-empty">빈 디렉토리</div>');
-        return;
-      }
-      data.entries.forEach(e => {
-        const row = document.createElement('div');
-        row.className = 'vt-vw-row' + (e.dir ? ' dir' : '');
-        const icon = document.createElement('span');
-        icon.className = 'vt-vw-icon';
-        icon.textContent = e.dir ? '▸' : '·';
-        const name = document.createElement('span');
-        name.className = 'vt-vw-name';
-        name.textContent = e.name;                       // textContent — XSS 방어
-        const size = document.createElement('span');
-        size.className = 'vt-vw-size';
-        size.textContent = e.dir ? '' : _fmtSize(e.size);
-        row.appendChild(icon); row.appendChild(name); row.appendChild(size);
-        const full = path.replace(/\/$/, '') + '/' + e.name;
-        row.onclick = () => (e.dir ? openDir(full) : openFile(full));
-        list.appendChild(row);
+    // --- 표시 모드 --------------------------------------------------------------
+
+    function _applyDisplayMode(mode, el) {
+      el = el || document.getElementById('vt-viewer');
+      if (!el) return;
+      el.classList.remove('mode-dock', 'mode-full');
+      if (mode === 'dock' || mode === 'full') el.classList.add('mode-' + mode);
+      el.querySelectorAll('.vt-vw-mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
       });
-      _body('');
-      document.getElementById('vt-vw-body').appendChild(list);
-      if (data.truncated) {
-        const n = document.createElement('div');
-        n.className = 'vt-vw-note';
-        n.textContent = `항목이 많아 일부만 표시했습니다 (최대 ${data.entries.length}개)`;
-        document.getElementById('vt-vw-body').appendChild(n);
+
+      const nowDocked = mode === 'dock';
+      const wasDocked = document.body.classList.contains('vt-docked');
+      if (nowDocked) {
+        document.documentElement.style.setProperty('--vt-dock-w', _clampDockW(_loadDockW()) + 'px');
+      }
+      document.body.classList.toggle('vt-docked', nowDocked);
+
+      // 도킹 진입/이탈만 터미널 폭을 바꾼다(margin-right). 그 전환(.18s)이 끝난 뒤
+      // 딱 한 번만 fit() — terminal.js:683 경고와 같은 이유로 전환 도중엔 부르지 않는다.
+      // sheet↔full은 터미널 크기에 영향이 없으므로 fit이 필요 없다.
+      if (wasDocked !== nowDocked) {
+        try { setTimeout(() => fitAndResize(activeId), 200); } catch (_) {}
       }
     }
 
-    function goUp() {
-      if (_viewerState.mode !== 'tree') { openDir(_viewerState.cwd); return; }
-      const cwd = _viewerState.cwd || '';
-      const root = _viewerState.root || '';
-      if (!cwd || cwd === root) return;                  // 루트 위로는 못 간다
-      const parent = cwd.replace(/\/[^/]+\/?$/, '') || root;
-      openDir(parent.length < root.length ? root : parent);
+    function _setDisplayMode(mode) {
+      if (_isMobile()) mode = 'sheet';
+      if (mode === _viewerState.displayMode) return;
+      _viewerState.displayMode = mode;
+      _saveMode(mode);
+      _applyDisplayMode(mode);
     }
+
+    // 도킹 폭 드래그 리사이저. 매 프레임 fit()을 부르면 xterm이 glyph 아틀라스를
+    // 계속 갈아엎으므로(terminal.js:683 주석), 드래그 중엔 CSS 변수만 갱신하고
+    // pointerup 시점에 딱 한 번만 fitAndResize 한다.
+    function _wireResizer(el) {
+      const handle = el.querySelector('#vt-vw-resizer');
+      if (!handle) return;
+      let startX = 0, startW = 0;
+
+      const onMove = (ev) => {
+        const delta = startX - ev.clientX;   // 우측 도킹 — 왼쪽으로 끌수록 넓어진다
+        document.documentElement.style.setProperty('--vt-dock-w', _clampDockW(startW + delta) + 'px');
+      };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        handle.classList.remove('dragging');
+        document.body.classList.remove('vt-resizing');
+        const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--vt-dock-w'), 10);
+        if (Number.isFinite(w)) _saveDockW(w);
+        try { fitAndResize(activeId); } catch (_) {}
+      };
+      handle.addEventListener('pointerdown', (ev) => {
+        if (_viewerState.displayMode !== 'dock') return;
+        ev.preventDefault();
+        startX = ev.clientX;
+        startW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--vt-dock-w'), 10) || _loadDockW();
+        handle.classList.add('dragging');
+        document.body.classList.add('vt-resizing');
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp, { once: true });
+      });
+    }
+
+    // --- 계층 트리 ----------------------------------------------------------------
 
     function _fmtSize(n) {
       if (n < 1024) return n + 'B';
@@ -166,49 +232,275 @@
       return (n / 1024 / 1024).toFixed(1) + 'M';
     }
 
-    // --- 파일 ----------------------------------------------------------------
-
-    async function openFile(path) {
-      _viewerState.mode = 'file';
-      _setPath(path);
-      _setTitle(path.split('/').pop());
-      _body('<div class="vt-vw-loading">불러오는 중…</div>');
-      let d;
-      try {
-        d = await _api(`/api/fs/file?path=${encodeURIComponent(path)}`);
-      } catch (e) {
-        _body(`<div class="vt-vw-empty">${_esc(e.message)}</div>`);
-        return;
-      }
-      if (d.binary) {
-        _body(`<div class="vt-vw-empty">바이너리 파일 (${_fmtSize(d.size)})<br>미리보기를 지원하지 않습니다.</div>`);
-        return;
-      }
-      const lang = window.VTDiffLex ? VTDiffLex.langForPath(path) : null;
-      const lines = VTDiffLex.normalize(d.content).split('\n');
-      let out = '<div class="vt-vw-code">';
-      lines.forEach((ln, i) => {
-        out += `<div class="vt-vw-cl"><span class="vt-vw-no">${i + 1}</span><span class="vt-vw-tx">${_hl(ln, lang)}</span></div>`;
-      });
-      out += '</div>';
-      if (d.truncated) {
-        out += `<div class="vt-vw-note">파일이 커서 앞부분만 표시했습니다 (전체 ${_fmtSize(d.size)})</div>`;
-      }
-      _body(out);
+    function _isDescendant(path, of) {
+      return path !== of && path.startsWith(of.replace(/\/$/, '') + '/');
     }
+
+    function _treeRowEl(entry, path, depth) {
+      const row = document.createElement('div');
+      row.className = 'vt-vw-trow' + (entry.dir ? ' dir' : '');
+      row.style.setProperty('--d', depth);
+      row.dataset.path = path;
+
+      const chev = document.createElement('span');
+      chev.className = 'vt-vw-chev';
+      chev.innerHTML = _ICON_CHEVRON;
+
+      const name = document.createElement('span');
+      name.className = 'vt-vw-name';
+      name.textContent = entry.name;                      // textContent — XSS 방어
+
+      row.appendChild(chev);
+      row.appendChild(name);
+
+      if (!entry.dir) {
+        const size = document.createElement('span');
+        size.className = 'vt-vw-size';
+        size.textContent = _fmtSize(entry.size);
+        row.appendChild(size);
+      }
+      return row;
+    }
+
+    function _wireTreeRow(row, entry, path, depth) {
+      row.addEventListener('click', () => {
+        if (entry.dir) _toggleDir(row, path, depth);
+        else _selectFile(path, row);
+      });
+    }
+
+    async function _renderRootTree() {
+      const treeEl = document.getElementById('vt-vw-tree');
+      let data;
+      try {
+        data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(_viewerState.root)}`);
+      } catch (e) {
+        _setMsg(treeEl, 'vt-vw-empty', [e.message]);
+        return;
+      }
+      treeEl.innerHTML = '';
+      if (!data.entries.length) {
+        _setMsg(treeEl, 'vt-vw-empty', ['빈 디렉토리']);
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      data.entries.forEach(entry => {
+        const childPath = _viewerState.root.replace(/\/$/, '') + '/' + entry.name;
+        const row = _treeRowEl(entry, childPath, 0);
+        _wireTreeRow(row, entry, childPath, 0);
+        frag.appendChild(row);
+      });
+      if (data.truncated) {
+        const note = document.createElement('div');
+        note.className = 'vt-vw-note warn';
+        note.style.setProperty('--d', 0);
+        note.textContent = `항목이 많아 일부만 표시했습니다 (최대 ${data.entries.length}개)`;
+        frag.appendChild(note);
+      }
+      treeEl.appendChild(frag);
+    }
+
+    async function _toggleDir(row, path, depth) {
+      if (_viewerState.expanded.has(path)) { _collapseDir(row, path); return; }
+
+      row.classList.add('open');
+      _viewerState.expanded.add(path);
+      const chev = row.querySelector('.vt-vw-chev');
+      const prevIcon = chev.innerHTML;
+      chev.innerHTML = '';
+      const spin = document.createElement('span');
+      spin.className = 'vt-vw-trow-spin';
+      chev.appendChild(spin);
+
+      let data;
+      try {
+        data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(path)}`);
+      } catch (e) {
+        chev.innerHTML = prevIcon;
+        row.classList.remove('open');
+        _viewerState.expanded.delete(path);
+        showToast(`목록을 불러오지 못했습니다: ${e.message}`);
+        return;
+      }
+      chev.innerHTML = prevIcon;   // 펼쳐진 화살표 방향은 .open의 CSS 회전이 담당한다
+
+      const frag = document.createDocumentFragment();
+      data.entries.forEach(entry => {
+        const childPath = path.replace(/\/$/, '') + '/' + entry.name;
+        const childRow = _treeRowEl(entry, childPath, depth + 1);
+        _wireTreeRow(childRow, entry, childPath, depth + 1);
+        frag.appendChild(childRow);
+      });
+      if (data.truncated) {
+        const note = document.createElement('div');
+        note.className = 'vt-vw-note warn';
+        note.style.setProperty('--d', depth + 1);
+        note.textContent = `일부만 표시했습니다 (최대 ${data.entries.length}개)`;
+        frag.appendChild(note);
+      }
+      if (!data.entries.length && !data.truncated) {
+        const empty = document.createElement('div');
+        empty.className = 'vt-vw-empty';
+        empty.style.setProperty('--d', depth + 1);
+        empty.textContent = '빈 디렉토리';
+        frag.appendChild(empty);
+      }
+      row.after(frag);
+    }
+
+    function _collapseDir(row, path) {
+      row.classList.remove('open');
+      _viewerState.expanded.delete(path);
+      // 이 행 바로 다음부터, path 하위였던 행(과 그 사이의 안내문)을 전부 제거한다.
+      let next = row.nextElementSibling;
+      while (next && (!next.dataset.path || _isDescendant(next.dataset.path, path))) {
+        const rm = next;
+        next = next.nextElementSibling;
+        rm.remove();
+      }
+      for (const p of Array.from(_viewerState.expanded)) {
+        if (_isDescendant(p, path)) _viewerState.expanded.delete(p);
+      }
+    }
+
+    function _selectFile(path, row) {
+      document.querySelectorAll('.vt-vw-trow.active').forEach(r => r.classList.remove('active'));
+      if (row) row.classList.add('active');
+      openFile(path);
+      if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+    }
+
+    // --- 파일 ----------------------------------------------------------------
 
     // 하이라이팅. 실패하면 반드시 이스케이프된 원문으로 폴백한다 —
     // 여기서 예외가 새면 뷰어 전체가 빈 화면이 된다.
     function _hl(text, lang) {
-      if (!lang || !window.hljs) return _esc(text);
+      if (!lang || !window.hljs) return vtEsc(text);
       try {
         return hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
       } catch (_) {
-        return _esc(text);
+        return vtEsc(text);
+      }
+    }
+
+    function _renderFileDOM(container, content, lang) {
+      const lines = VTDiffLex.normalize(content).split('\n');
+      const wrap = document.createElement('div');
+      wrap.className = 'vt-vw-code';
+      lines.forEach((ln, i) => {
+        const row = document.createElement('div');
+        row.className = 'vt-vw-cl';
+        const no = document.createElement('span');
+        no.className = 'vt-vw-no';
+        no.textContent = i + 1;
+        const tx = document.createElement('span');
+        tx.className = 'vt-vw-tx';
+        tx.innerHTML = _hl(ln, lang);   // hljs.highlight()/vtEsc 결과만 innerHTML 예외
+        row.appendChild(no);
+        row.appendChild(tx);
+        wrap.appendChild(row);
+      });
+      container.appendChild(wrap);
+    }
+
+    async function openFile(path) {
+      _viewerState.mode = 'file';
+      _viewerState.selectedPath = path;
+      _setPath(path);
+      _setTitle(path.split('/').pop());
+      const pane = document.getElementById('vt-vw-code-pane');
+      pane.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
+      let d;
+      try {
+        d = await vtFetch(`/api/fs/file?path=${encodeURIComponent(path)}`);
+      } catch (e) {
+        _setMsg(pane, 'vt-vw-empty', [e.message]);
+        return;
+      }
+      if (d.binary) {
+        _setMsg(pane, 'vt-vw-empty', [`바이너리 파일 (${_fmtSize(d.size)})`, '미리보기를 지원하지 않습니다.']);
+        return;
+      }
+      pane.innerHTML = '';
+      const lang = window.VTDiffLex ? VTDiffLex.langForPath(path) : null;
+      _renderFileDOM(pane, d.content, lang);
+      if (d.truncated) {
+        const note = document.createElement('div');
+        note.className = 'vt-vw-note warn';
+        note.textContent = `파일이 커서 앞부분만 표시했습니다 (전체 ${_fmtSize(d.size)})`;
+        pane.appendChild(note);
       }
     }
 
     // --- diff ----------------------------------------------------------------
+
+    function _renderDiffDOM(container, diffText) {
+      const files = VTDiffLex.parse(diffText);
+      files.forEach(f => {
+        const st = VTDiffLex.stats(f);
+        const lang = VTDiffLex.langForPath(f.newPath || f.oldPath);
+
+        const fileEl = document.createElement('div');
+        fileEl.className = 'vt-vw-dfile';
+
+        const head = document.createElement('div');
+        head.className = 'vt-vw-dhead';
+        const pathEl = document.createElement('span');
+        pathEl.className = 'vt-vw-dpath';
+        pathEl.textContent = f.newPath || f.oldPath;
+        const statEl = document.createElement('span');
+        statEl.className = 'vt-vw-dstat';
+        const addB = document.createElement('b'); addB.className = 'add'; addB.textContent = `+${st.add}`;
+        const delB = document.createElement('b'); delB.className = 'del'; delB.textContent = `-${st.del}`;
+        statEl.appendChild(addB);
+        statEl.appendChild(document.createTextNode(' '));
+        statEl.appendChild(delB);
+        head.appendChild(pathEl);
+        head.appendChild(statEl);
+        fileEl.appendChild(head);
+
+        if (f.binary) {
+          const note = document.createElement('div');
+          note.className = 'vt-vw-note';
+          note.textContent = '바이너리 파일';
+          fileEl.appendChild(note);
+        } else {
+          f.hunks.forEach(h => {
+            const hunk = document.createElement('div');
+            hunk.className = 'vt-vw-hunk';
+            hunk.textContent = h.header;                    // textContent — XSS 방어
+            fileEl.appendChild(hunk);
+
+            h.lines.forEach(l => {
+              const cls = l.type === 'add' ? 'add' : l.type === 'del' ? 'del' : l.type === 'meta' ? 'meta' : '';
+              const row = document.createElement('div');
+              row.className = 'vt-vw-dl' + (cls ? ' ' + cls : '');
+
+              const oldNo = document.createElement('span');
+              oldNo.className = 'vt-vw-no';
+              oldNo.textContent = l.oldNo == null ? '' : l.oldNo;
+              const newNo = document.createElement('span');
+              newNo.className = 'vt-vw-no';
+              newNo.textContent = l.newNo == null ? '' : l.newNo;
+              const sign = document.createElement('span');
+              sign.className = 'vt-vw-sign';
+              sign.textContent = l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' ';
+              const tx = document.createElement('span');
+              tx.className = 'vt-vw-tx';
+              if (l.type === 'meta') tx.textContent = l.text;
+              else tx.innerHTML = _hl(l.text, lang);         // hljs 결과만 innerHTML 예외
+
+              row.appendChild(oldNo);
+              row.appendChild(newNo);
+              row.appendChild(sign);
+              row.appendChild(tx);
+              fileEl.appendChild(row);
+            });
+          });
+        }
+        container.appendChild(fileEl);
+      });
+    }
 
     async function showDiff(repo) {
       const target = repo || _viewerState.cwd || _viewerState.root;
@@ -216,54 +508,26 @@
       _viewerState.mode = 'diff';
       _setTitle('변경분');
       _setPath(target);
-      _body('<div class="vt-vw-loading">git diff 실행 중…</div>');
+      const pane = document.getElementById('vt-vw-code-pane');
+      pane.innerHTML = '<div class="vt-vw-loading">git diff 실행 중…</div>';
+      if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+
       let d;
       try {
-        d = await _api(`/api/git/diff?repo=${encodeURIComponent(target)}`);
+        d = await vtFetch(`/api/git/diff?repo=${encodeURIComponent(target)}`);
       } catch (e) {
-        _body(`<div class="vt-vw-empty">${_esc(e.message)}</div>`);
+        _setMsg(pane, 'vt-vw-empty', [e.message]);
         return;
       }
-      if (!d.repo) {
-        _body('<div class="vt-vw-empty">git 저장소가 아닙니다.</div>');
-        return;
-      }
-      if (!d.diff || !d.diff.trim()) {
-        _body('<div class="vt-vw-empty">변경된 내용이 없습니다.</div>');
-        return;
-      }
-      const files = VTDiffLex.parse(d.diff);
-      let out = '';
-      files.forEach(f => {
-        const st = VTDiffLex.stats(f);
-        const lang = VTDiffLex.langForPath(f.newPath || f.oldPath);
-        out += `<div class="vt-vw-dfile">
-          <div class="vt-vw-dhead">
-            <span class="vt-vw-dpath">${_esc(f.newPath || f.oldPath)}</span>
-            <span class="vt-vw-dstat"><b class="add">+${st.add}</b> <b class="del">-${st.del}</b></span>
-          </div>`;
-        if (f.binary) {
-          out += '<div class="vt-vw-note">바이너리 파일</div>';
-        } else {
-          f.hunks.forEach(h => {
-            out += `<div class="vt-vw-hunk">${_esc(h.header)}</div>`;
-            h.lines.forEach(l => {
-              const cls = l.type === 'add' ? 'add' : l.type === 'del' ? 'del' : l.type === 'meta' ? 'meta' : '';
-              const oldNo = l.oldNo == null ? '' : l.oldNo;
-              const newNo = l.newNo == null ? '' : l.newNo;
-              const sign = l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' ';
-              out += `<div class="vt-vw-dl ${cls}">`
-                + `<span class="vt-vw-no">${oldNo}</span><span class="vt-vw-no">${newNo}</span>`
-                + `<span class="vt-vw-sign">${sign}</span>`
-                + `<span class="vt-vw-tx">${l.type === 'meta' ? _esc(l.text) : _hl(l.text, lang)}</span>`
-                + `</div>`;
-            });
-          });
-        }
-        out += '</div>';
-      });
+      if (!d.repo) { _setMsg(pane, 'vt-vw-empty', ['git 저장소가 아닙니다.']); return; }
+      if (!d.diff || !d.diff.trim()) { _setMsg(pane, 'vt-vw-empty', ['변경된 내용이 없습니다.']); return; }
+
+      pane.innerHTML = '';
+      _renderDiffDOM(pane, d.diff);
       if (d.truncated) {
-        out += '<div class="vt-vw-note">diff가 커서 일부만 표시했습니다.</div>';
+        const note = document.createElement('div');
+        note.className = 'vt-vw-note warn';
+        note.textContent = 'diff가 커서 일부만 표시했습니다.';
+        pane.appendChild(note);
       }
-      _body(out);
     }

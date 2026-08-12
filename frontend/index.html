@@ -209,6 +209,9 @@
     <button id="grid-toggle" class="tbtn" onclick="toggleGridView()" aria-label="Grid 뷰" title="모든 tmux 세션 라이브 프리뷰">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     </button>
+    <button id="viewer-toggle" class="tbtn needs-fs" onclick="showViewer()" aria-label="코드 뷰어" title="코드 뷰어 (Ctrl+Shift+E)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    </button>
     <button class="tbtn more" id="more-btn" onclick="toggleMoreMenu(event)" aria-label="더보기" aria-haspopup="true" aria-expanded="false" title="더보기">⋯</button>
 
     <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
@@ -339,6 +342,9 @@
   <script src="/static/js/search.js"></script>
   <script src="/static/js/picker.js"></script>
   <script src="/static/js/grid.js"></script>
+  <!-- vtapi.js/panel.js: viewer/ports/queue 공용 fetch 래퍼 + 패널 껍데기(backdrop/닫기/폴링) -->
+  <script src="/static/js/vtapi.js"></script>
+  <script src="/static/js/panel.js"></script>
   <!-- difflex.js: unified diff 파싱 순수 로직(viewer.js가 window.VTDiffLex 사용) -->
   <script src="/static/js/difflex.js"></script>
   <script src="/static/js/viewer.js"></script>

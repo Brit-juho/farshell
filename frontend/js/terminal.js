@@ -339,6 +339,12 @@
           pasteFromClipboard(id);
           return false;
         }
+        // 코드 뷰어 토글. Ctrl+B는 tmux prefix라 절대 쓰지 않는다(viewer.js 참고).
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'e') {
+          e.preventDefault();
+          showViewer();
+          return false;
+        }
         return true;
       });
 
