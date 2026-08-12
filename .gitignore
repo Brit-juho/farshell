@@ -46,3 +46,4 @@ server/.claude/
 docs/*
 # 단, vt help가 런타임에 사용하는 도움말 토픽은 추적 (W2-5)
 !docs/help/
+.gstack/
