@@ -153,7 +153,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .tbtn:hover { background:var(--menu-hover); color:var(--txt); }
 .tbtn svg { width:16px; height:16px; }
 .tbtn.more { font-size:20px; letter-spacing:1px; line-height:1; }
-#grid-toggle.active { background:var(--acc); color:var(--acc-ink); }
+#grid-toggle.active, #viewer-toggle.active { background:var(--acc); color:var(--acc-ink); }
 @media (pointer:coarse) { .tbtn, #add-btn { min-width:40px; min-height:34px; } }
 
 /* Windows 캡션 버튼 — windows 스킨에서만 */
@@ -526,6 +526,9 @@ body.voice-only-mode #mic-status {
   font:500 12px var(--ui); touch-action:manipulation;
 }
 .vt-vw-back:hover,.vt-vw-x:hover,.vt-vw-diff:hover{ background:var(--menu-hover); }
+.vt-vw-back:active,.vt-vw-x:active,.vt-vw-diff:active{
+  background:color-mix(in srgb, var(--acc) 22%, var(--menu-hover));
+}
 .vt-vw-diff{ color:var(--acc); }
 .vt-vw-path{
   padding:6px 12px; font:400 11px var(--mono); color:var(--sub);
@@ -541,10 +544,13 @@ body.voice-only-mode #mic-status {
 .vt-vw-loading,.vt-vw-empty{
   padding:32px 16px; text-align:center; color:var(--sub); font:400 13px var(--ui);
 }
+/* 기본은 중립(정보성 안내) — 상태가 아니라 "무언가 잘렸다/막혔다"는 실제 경고일 때만
+   .warn 을 붙인다. 이 클래스를 정상 상태 문구에도 그대로 쓰면 늘 경고처럼 보인다. */
 .vt-vw-note{
-  padding:8px 12px; color:var(--warn); font:400 11px var(--ui);
+  padding:8px 12px; color:var(--sub); font:400 11px var(--ui);
   border-top:1px solid var(--line);
 }
+.vt-vw-note.warn{ color:var(--warn); }
 
 /* 디렉토리 목록 */
 .vt-vw-list{ display:flex; flex-direction:column; }
@@ -554,6 +560,7 @@ body.voice-only-mode #mic-status {
   font:400 13px var(--ui); touch-action:manipulation;
 }
 .vt-vw-row:hover{ background:var(--menu-hover); }
+.vt-vw-row:active{ background:color-mix(in srgb, var(--acc) 16%, var(--menu-hover)); }
 .vt-vw-row.dir .vt-vw-name{ color:var(--acc); font-weight:500; }
 .vt-vw-icon{ width:12px; color:var(--sub); flex:0 0 auto; }
 .vt-vw-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -565,9 +572,18 @@ body.voice-only-mode #mic-status {
 .vt-vw-cl:hover{ background:var(--menu-hover); }
 .vt-vw-no{
   flex:0 0 auto; min-width:44px; padding:0 8px; text-align:right;
-  color:var(--sub); user-select:none; opacity:.7;
+  color:var(--sub); user-select:none;
+  /* opacity 로 --sub 를 한 번 더 흐리면 --crust 배경 대비가 2:1 밑으로 떨어져 뺐다. */
 }
-.vt-vw-sign{ flex:0 0 auto; width:14px; text-align:center; user-select:none; color:var(--sub); }
+/* 코드 본문(파일 보기)만 sticky — diff는 add/del 배경 틴트가 번호 칸 아래까지
+   깔리므로 불투명 sticky 배경을 주면 그 틴트를 가린다. */
+.vt-vw-code .vt-vw-no{
+  position:sticky; left:0; background:var(--crust); z-index:1;
+}
+.vt-vw-cl:hover .vt-vw-no{ background:var(--menu-hover); }
+.vt-vw-sign{ flex:0 0 auto; width:14px; text-align:center; user-select:none; color:var(--sub); font-weight:600; }
+.vt-vw-dl.add .vt-vw-sign{ color:var(--ok); }
+.vt-vw-dl.del .vt-vw-sign{ color:var(--err); }
 .vt-vw-tx{ flex:1 1 auto; padding-right:12px; }
 
 /* diff */
@@ -586,10 +602,19 @@ body.voice-only-mode #mic-status {
   padding:4px 12px; font:400 11px var(--mono); color:var(--sub);
   background:color-mix(in srgb, var(--acc) 10%, transparent);
 }
-.vt-vw-dl{ font:400 12px/1.55 var(--mono); }
-.vt-vw-dl.add{ background:color-mix(in srgb, var(--ok) 16%, transparent); }
-.vt-vw-dl.del{ background:color-mix(in srgb, var(--err) 16%, transparent); }
+.vt-vw-dl{ font:400 12px/1.55 var(--mono); border-left:3px solid transparent; }
+.vt-vw-dl.add{
+  background:color-mix(in srgb, var(--ok) 22%, transparent);
+  border-left-color:var(--ok);
+}
+.vt-vw-dl.del{
+  background:color-mix(in srgb, var(--err) 22%, transparent);
+  border-left-color:var(--err);
+}
 .vt-vw-dl.meta{ color:var(--sub); font-style:italic; }
+/* add/del 배경 위에서는 하이라이팅 색(특히 문자열=--ok)이 배경과 겹쳐 안 보인다 —
+   diff 라인 안에서는 하이라이팅을 끄고 본문 색만 쓴다. */
+.vt-vw-dl.add .vt-vw-tx *,.vt-vw-dl.del .vt-vw-tx *{ color:inherit; font-style:normal; font-weight:normal; }
 
 /* highlight.js — 테마 CSS 대신 스킨 토큰으로 직접 매핑.
    하이라이터 기본 팔레트를 쓰면 notepad(라이트)에서 대비가 무너진다. */
@@ -621,6 +646,144 @@ body.voice-only-mode #mic-status {
   .vt-vw-no{ min-width:32px; padding:0 4px; }
 }
 
+/* -------------------------------------------------------------------------
+   코드 뷰어 표시 모드 — sheet(기본, 위 규칙 그대로) / dock(사이드 도킹) / full(전체화면).
+   모드는 #vt-viewer 에 .mode-dock / .mode-full 클래스로 반영된다(viewer.js).
+   ------------------------------------------------------------------------- */
+
+/* dock — 배경을 덮지 않는다. 터미널이 카드 바깥에서 그대로 클릭/타이핑된다.
+   topbar(38px) 아래에만 걸쳐서 상단바 버튼도 계속 쓸 수 있다. */
+#vt-viewer.mode-dock{
+  inset:38px 0 0 0; padding:0; background:transparent;
+  justify-content:flex-end; pointer-events:none;
+}
+#vt-viewer.mode-dock .vt-viewer-card{
+  pointer-events:auto; position:relative;
+  width:var(--vt-dock-w, 420px); max-width:92vw; max-height:none; height:100%;
+  border-radius:0; border-top:none; border-right:none; border-bottom:none;
+  box-shadow:-16px 0 32px rgba(0,0,0,.35);
+}
+.vt-vw-resizer{ display:none; }
+#vt-viewer.mode-dock .vt-vw-resizer{
+  display:block; position:absolute; left:-4px; top:0; bottom:0; width:8px;
+  cursor:col-resize; touch-action:none;
+}
+#vt-viewer.mode-dock .vt-vw-resizer:hover,
+#vt-viewer.mode-dock .vt-vw-resizer.dragging{
+  background:color-mix(in srgb, var(--acc) 30%, transparent);
+}
+
+/* full — 화면 대부분을 차지하는 모달. 배경 dim은 sheet와 동일하게 유지한다 —
+   여기서는 화면 자체가 콘텐츠라 도킹처럼 터미널이 비쳐 보일 필요가 없다. */
+#vt-viewer.mode-full .vt-viewer-card{
+  width:98vw; max-width:none; height:92vh; max-height:none;
+}
+
+/* 도킹으로 좁아진 만큼 터미널이 리플로우할 공간. JS가 --vt-dock-w 를 갱신한다. */
+body.vt-docked #terminal-container,
+body.vt-docked #grid-view{ margin-right:var(--vt-dock-w, 420px); transition:margin-right .18s ease; }
+/* 리사이즈 드래그 중엔 transition을 끈다 — 매 프레임 지연이 그대로 체감된다. */
+body.vt-resizing #terminal-container,
+body.vt-resizing #grid-view{ transition:none; }
+
+/* 모바일은 표시 모드 선택과 무관하게 항상 바텀시트 — dock 폭 자체가 성립하지 않는다. */
+@media (max-width:560px){
+  #vt-viewer.mode-dock, #vt-viewer.mode-full{
+    inset:0; padding:0; align-items:flex-end; justify-content:center;
+    background:color-mix(in srgb, var(--crust) 62%, transparent); pointer-events:auto;
+  }
+  #vt-viewer.mode-dock .vt-viewer-card, #vt-viewer.mode-full .vt-viewer-card{
+    width:100%; max-height:92vh; height:auto;
+    border-radius:18px 18px 0 0; border:1px solid var(--line); border-bottom:none;
+    box-shadow:0 24px 64px rgba(0,0,0,.45);
+  }
+  #vt-viewer.mode-dock .vt-vw-resizer{ display:none; }
+  body.vt-docked #terminal-container, body.vt-docked #grid-view{ margin-right:0; }
+}
+
+/* 모드 전환 버튼 — 헤더에 3개, 현재 모드는 강조. */
+.vt-vw-modes{ display:flex; gap:2px; background:var(--tab); border:1px solid var(--line);
+  border-radius:var(--trad); padding:2px; flex:0 0 auto; }
+.vt-vw-mode-btn{
+  background:transparent; color:var(--sub); border:none; border-radius:calc(var(--trad) - 2px);
+  width:26px; height:24px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; touch-action:manipulation;
+}
+.vt-vw-mode-btn svg{ width:14px; height:14px; }
+.vt-vw-mode-btn:hover{ background:var(--menu-hover); color:var(--txt); }
+.vt-vw-mode-btn.active{ background:var(--acc); color:var(--acc-ink); }
+/* 폭이 없는 모바일에서는 모드 선택 자체가 의미 없다 — 항상 sheet로 강제되니 버튼도 숨긴다. */
+@media (max-width:560px){ .vt-vw-modes{ display:none; } }
+
+/* -------------------------------------------------------------------------
+   계층 트리 + 2단 분할 (dock/full 전용) — 좌측 트리, 우측 코드/diff가 동시에 보인다.
+   sheet(폰)는 폭이 없어 트리 → 코드 전환 방식을 그대로 쓴다(분할 안 함).
+   ------------------------------------------------------------------------- */
+/* #vt-vw-body 자체가 flex 컨테이너가 된다(.split 부여 시) — 트리·코드 각자
+   독립적으로 스크롤해야 해서 body 공통 overflow:auto(app.css:549 부근) 대신
+   여기서 overflow:hidden 으로 덮고 각 pane이 자기 몫만 스크롤한다. */
+.vt-vw-body.split{ display:flex; overflow:hidden; padding:0; }
+.vt-vw-tree-pane{
+  flex:0 0 auto; width:230px; overflow-y:auto; border-right:1px solid var(--line);
+  background:var(--crust);
+}
+.vt-vw-code-pane{ flex:1 1 auto; min-width:0; overflow:auto; }
+
+/* sheet(기본): data-active 로 트리/코드 중 한쪽만 전체 폭에 노출 — 기존 "탐색→열람 전환" 그대로. */
+.vt-vw-body.split[data-active="tree"] .vt-vw-code-pane{ display:none; }
+.vt-vw-body.split[data-active="tree"] .vt-vw-tree-pane{ flex:1 1 auto; width:auto; border-right:none; }
+.vt-vw-body.split[data-active="code"] .vt-vw-tree-pane{ display:none; }
+
+/* dock/full: 폭이 있으니 data-active와 무관하게 항상 둘 다 보인다(IDE 2단 분할). */
+#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-tree-pane,
+#vt-viewer.mode-full .vt-vw-body.split .vt-vw-tree-pane{
+  display:block; flex:0 0 auto; width:230px; border-right:1px solid var(--line);
+}
+#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-code-pane,
+#vt-viewer.mode-full .vt-vw-body.split .vt-vw-code-pane{ display:block; }
+.vt-vw-code-empty{
+  display:flex; align-items:center; justify-content:center; height:100%;
+  color:var(--sub); font:400 13px var(--ui); text-align:center; padding:16px;
+}
+
+/* 트리 행 — 깊이는 padding-left로만 표현. 4단계부터는 증가폭을 줄여 폰 폭에서도
+   이름이 안 밀려나게 한다(들여쓰기 클램프). */
+.vt-vw-trow{
+  display:flex; align-items:center; gap:4px; cursor:pointer;
+  padding:6px 8px 6px calc(8px + min(var(--d, 0), 4) * 14px + max(var(--d, 0) - 4, 0) * 6px);
+  font:400 13px var(--ui); border-bottom:1px solid var(--line);
+  touch-action:manipulation; white-space:nowrap;
+}
+.vt-vw-trow:hover{ background:var(--menu-hover); }
+.vt-vw-trow:active{ background:color-mix(in srgb, var(--acc) 16%, var(--menu-hover)); }
+.vt-vw-trow.active{ background:color-mix(in srgb, var(--acc) 14%, transparent); }
+.vt-vw-trow.dir .vt-vw-name{ color:var(--acc); font-weight:500; }
+.vt-vw-chev{
+  flex:0 0 auto; width:14px; height:14px; color:var(--sub);
+  transition:transform .12s ease; transform:rotate(0deg);
+}
+.vt-vw-trow.dir.open .vt-vw-chev{ transform:rotate(90deg); }
+.vt-vw-trow:not(.dir) .vt-vw-chev{ visibility:hidden; }   /* 파일도 자리는 차지 — 이름 정렬 유지 */
+.vt-vw-trow .vt-vw-name{ overflow:hidden; text-overflow:ellipsis; }
+.vt-vw-trow-spin{
+  flex:0 0 auto; width:12px; height:12px; border-radius:50%;
+  border:2px solid var(--line); border-top-color:var(--acc);
+  animation:vtSpin .6s linear infinite;
+}
+@keyframes vtSpin{ to{ transform:rotate(360deg); } }
+
+/* 트리 안의 안내문(빈 디렉토리/잘림/에러)은 중앙정렬 모달 메시지가 아니라
+   해당 깊이의 행처럼 왼쪽 정렬로 — 트리 흐름을 안 끊는다. */
+.vt-vw-tree-pane .vt-vw-note,
+.vt-vw-tree-pane .vt-vw-empty{
+  padding:6px 8px 6px calc(8px + min(var(--d, 0), 4) * 14px + max(var(--d, 0) - 4, 0) * 6px);
+  text-align:left; border-top:none; border-bottom:1px solid var(--line);
+}
+
+/* dock/full은 트리·코드가 동시에 보이니 "트리로" 버튼이 의미가 없다 — sheet 전용. */
+#vt-viewer.mode-dock .vt-vw-back,
+#vt-viewer.mode-full .vt-vw-back{ display:none; }
+
 /* 포트 대시보드 (ports.js) — P3.
    패널 껍데기(.vt-viewer-backdrop/.vt-viewer-card)는 코드 뷰어와 공유한다. */
 .vt-pt-row{
@@ -629,6 +792,7 @@ body.voice-only-mode #mic-status {
   font:400 13px var(--ui);
 }
 .vt-pt-row:hover{ background:var(--menu-hover); }
+.vt-pt-row:active{ background:color-mix(in srgb, var(--acc) 12%, var(--menu-hover)); }
 .vt-pt-port{
   flex:0 0 auto; min-width:56px;
   font:600 13px var(--mono); color:var(--acc);
@@ -650,8 +814,10 @@ body.voice-only-mode #mic-status {
   touch-action:manipulation; min-height:30px;
 }
 .vt-pt-btn:hover{ background:var(--menu-hover); }
+.vt-pt-btn:active{ background:color-mix(in srgb, var(--acc) 20%, var(--menu-hover)); }
 .vt-pt-btn.danger{ color:var(--err); }
 .vt-pt-btn.danger:hover{ background:color-mix(in srgb, var(--err) 18%, transparent); }
+.vt-pt-btn.danger:active{ background:color-mix(in srgb, var(--err) 32%, transparent); }
 
 @media (max-width:560px){
   .vt-pt-row{ flex-wrap:wrap; gap:6px 8px; }
@@ -682,6 +848,7 @@ body.voice-only-mode #mic-status {
   font:400 13px var(--ui);
 }
 .vt-q-row:hover{ background:var(--menu-hover); }
+.vt-q-row:active{ background:color-mix(in srgb, var(--acc) 12%, var(--menu-hover)); }
 .vt-q-row.blocked{ background:color-mix(in srgb, var(--err) 10%, transparent); }
 .vt-q-idx{
   flex:0 0 auto; min-width:22px; text-align:right;
