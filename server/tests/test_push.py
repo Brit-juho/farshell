@@ -52,6 +52,46 @@ def test_public_key_is_urlsafe_base64_unpadded():
     assert "+" not in key and "/" not in key and "=" not in key
 
 
+def test_vapid_key_actually_signs(monkeypatch):
+    """회귀: 저장한 키로 **실제 VAPID 서명이 되는지**까지 확인한다.
+
+    이 테스트가 없어서 실기기에서 물렸다. pywebpush 의 vapid_private_key 에 PEM
+    원문 문자열을 넘기면 pywebpush 가 (1) 파일 경로인지 보고 (2) 아니면
+    Vapid.from_string(base64 DER 기대)로 넘겨서
+    "Could not deserialize key data ... ASN.1 parsing error" 로 죽는다.
+    다른 테스트들은 webpush 를 모킹해서 이 경로를 아예 타지 않았다.
+    """
+    if not push.available():
+        pytest.skip("pywebpush 미설치")
+    signer = push._vapid()
+    assert signer is not None
+    headers = signer.sign({
+        "sub": "mailto:vt@localhost",
+        "aud": "https://fcm.googleapis.com",
+        "exp": 9999999999,
+    })
+    # Vapid01 은 draft-01 형식 — "WebPush <jwt>" + Crypto-Key.
+    # (draft-02 는 "vapid t=..., k=..." 한 줄) 둘 중 하나면 서명이 된 것이다.
+    auth = headers.get("Authorization", "")
+    assert auth.startswith("WebPush ") or auth.startswith("vapid "), auth
+    assert len(auth.split()[-1].split(".")) == 3, "JWT 3파트가 아니다"
+
+
+def test_send_passes_vapid_instance_not_pem(monkeypatch):
+    """webpush 에 넘기는 값이 PEM 문자열이면 안 된다 — 인스턴스여야 한다."""
+    if not push.available():
+        pytest.skip("pywebpush 미설치")
+    push.add_sub(_sub("https://fcm.example/a"), "")
+    monkeypatch.setattr(push, "_current_origin", lambda: "")
+    captured = {}
+    monkeypatch.setattr("pywebpush.webpush", lambda **kw: captured.update(kw))
+    push.send("제목")
+    key = captured.get("vapid_private_key")
+    assert not isinstance(key, str), "PEM 문자열을 넘기면 서명 단계에서 죽는다"
+    from py_vapid import Vapid01
+    assert isinstance(key, Vapid01)
+
+
 def test_add_and_remove_subscription():
     assert push.add_sub(_sub("https://fcm.example/a"), "https://x.trycloudflare.com")["ok"]
     assert len(push.list_subs()) == 1

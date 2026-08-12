@@ -9,6 +9,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- **Web Push 가 한 건도 발송되지 않던 문제 (VAPID 키 형식).**
+  `pywebpush(vapid_private_key=...)` 에 **PEM 원문 문자열**을 넘기고 있었다.
+  pywebpush 는 문자열을 받으면 (1) 파일 경로인지 확인하고 (2) 아니면
+  `Vapid.from_string()`(base64 DER 기대)으로 넘긴다. PEM 본문은 둘 다 아니라서
+  `Could not deserialize key data ... ASN.1 parsing error` 로 죽었다.
+  응답은 `{"sent": 0}` 이고 예외는 warning 으로만 남아 **조용히 실패**했다.
+  이제 `Vapid01.from_pem()` 으로 만든 인스턴스를 넘긴다(파싱 결과는 캐시).
+  - **단위 테스트가 못 잡은 이유**: 기존 테스트가 `pywebpush.webpush` 를 모킹해서
+    실제 서명 경로를 아예 타지 않았다. 실기기(Galaxy A52 + Chrome)에서 처음 드러났다.
+    모킹 없이 진짜 키로 서명까지 확인하는 테스트 2개를 추가했다.
+
 - **모바일에서 터미널 화면을 위아래로 스크롤할 수 없던 문제.**
   tmux 가 `set -g mouse on`(`config/vt-tmux.conf`)이라 터미널이 마우스 트래킹 모드로
   들어간다(`term.modes.mouseTrackingMode == "drag"`). 그러면 xterm.js 는 포인터 입력을
