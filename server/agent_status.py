@@ -24,6 +24,11 @@ def on_event(event: str, payload: dict) -> Optional[dict]:
         payload.get("session_id")
         or payload.get("transcript_path", "default")
     )
+    # Claude Code 훅 JSON은 이벤트 종류와 무관하게 항상 cwd를 담고 있다.
+    # 이 세션이 "어느 tmux 세션(pane)의 작업인지"는 서버에 별도로 없는데,
+    # /api/tmux/sessions 가 이미 pane_current_path를 cwd로 내려주므로
+    # 프론트가 cwd로 매칭해 그리드 카드를 특정한다(P7: 라이브 프리뷰 작업 상태 표시).
+    cwd = payload.get("cwd")
 
     if event == "pre":
         tool = payload.get("tool_name") or payload.get("tool", "?")
@@ -33,6 +38,7 @@ def on_event(event: str, payload: dict) -> Optional[dict]:
             "since": time.time(),
             "count": prev.get("count", 0) + 1,
             "input": payload.get("tool_input", {}),
+            "cwd": cwd or prev.get("cwd"),
         }
     elif event == "post":
         cur = _state.get(sid, {})
@@ -41,10 +47,14 @@ def on_event(event: str, payload: dict) -> Optional[dict]:
             "tool": None,
             "last_tool": cur.get("tool"),
             "last_done": time.time(),
+            "cwd": cwd or cur.get("cwd"),
         }
     elif event == "stop":
-        _state.pop(sid, None)
-        return None
+        # 상태를 지우기 전에 cwd만은 건져서 돌려준다 — 그래야 "방금 끝난 게
+        # 어느 카드인지"를 프론트가 알 수 있다. pop 후엔 이 세션 정보가 사라진다.
+        cur = _state.pop(sid, None) or {}
+        result_cwd = cwd or cur.get("cwd")
+        return {"cwd": result_cwd} if result_cwd else None
 
     return _state.get(sid)
 

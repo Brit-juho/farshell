@@ -260,11 +260,22 @@ html[data-skin="windows"] .caption { display:flex; }
 /* ---- 그리드 뷰 --------------------------------------------------------- */
 #grid-view {
   display:none; position:absolute; top:38px; left:0; right:0; bottom:0;
-  overflow-y:auto; background:var(--win); padding:12px; z-index:40;
+  overflow-y:auto; background:var(--win); padding:2px; z-index:40;
 }
-#grid-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:12px; }
-@media (max-width:480px) { #grid-view { padding:8px; } #grid-cards { grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); } }
-@media (max-width:320px) { #grid-cards { grid-template-columns:1fr; } }
+/* 카드 자체 테두리(border)가 구분선 역할을 하므로 gap은 없앤다 —
+   여백보다 화면에 더 많은 세션이 보이는 쪽이 라이브 프리뷰의 목적에 맞다.
+   ⚠ minmax()의 하한을 %(또는 %가 낀 max())로 주면 auto-fit/auto-repeat의
+   트랙 개수 계산이 순환 참조가 되어 크롬이 track을 1662px 같은 엉뚱한 값으로
+   뻥튀기하는 걸 실측으로 확인했다(CDP로 375px 뷰포트에서 재현). px 고정값만 쓴다.
+   컬럼 수는 화면 폭과 무관하게 최대 2장 — repeat(auto-fit, ...)처럼 폭에 따라
+   컬럼 개수가 늘어나는 방식은 아예 쓰지 않고 항상 2장으로 못박은 뒤, 카드
+   자체의 폭만 화면이 넓어질수록 커지게 한다(1fr이 남는 공간을 그대로 흡수). */
+#grid-cards { display:grid; grid-template-columns:1fr; gap:0; }
+@media (min-width:481px) {
+  /* 태블릿부터 초광폭 모니터까지 전부 — 3장 이상으로 늘어나지 않고 항상 2장.
+     화면이 넓어질수록 컬럼이 추가되는 게 아니라 이 2장 자체가 넓어진다. */
+  #grid-cards { grid-template-columns:repeat(2, 1fr); }
+}
 
 /* ---- 음성 전용 모드 — #topbar를 전체 화면 컨테이너로 전환 --------------- */
 body.voice-only-mode #terminal-container,
@@ -415,17 +426,61 @@ body.voice-only-mode #mic-status {
 .vt-menu-sep { border-top:1px solid var(--line); margin:4px 0; }
 
 .vt-card {
-  background:var(--bar); border:1px solid var(--line); border-radius:8px; padding:10px;
-  cursor:pointer; display:flex; flex-direction:column; gap:6px;
+  background:var(--bar); border:1px solid var(--line); border-radius:4px; padding:4px;
+  cursor:pointer; display:flex; flex-direction:column; gap:2px;
   transition:border-color .15s, box-shadow .15s;
+  position:relative;
+  /* grid item의 기본 min-width는 auto(=내용의 min-content) — 안 밀어주면
+     preview 안의 안 끊기는 긴 줄(경로 등) 하나가 이 카드의, 그리고 같은 행의
+     다른 트랙까지 억지로 넓혀서 repeat(2,1fr)이 반반이 아니라 비대칭으로
+     깨진다(실측: "1398px 982px"). 0으로 눌러서 지정한 트랙 폭을 그대로 따르게
+     하고, 넘치는 내용은 카드 안(각 자식의 overflow:hidden)에서 처리한다. */
+  min-width:0;
 }
 .vt-card:hover { border-color:var(--acc); box-shadow:0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent); }
-.vt-card .card-title { font-weight:700; color:var(--txt); font-size:13px; }
-.vt-card .card-cmd { font-size:11px; color:var(--sub); }
+.card-head { display:flex; justify-content:space-between; align-items:center; gap:3px; }
+.vt-card .card-agent { flex:0 0 auto; font-size:13px; line-height:1; }
+.vt-card .card-title { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-weight:700; color:var(--txt); font-size:13px; }
+.vt-card .card-cmd { flex:0 1 auto; min-width:0; max-width:40%; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-size:11px; color:var(--sub); }
 .vt-card .card-preview {
-  margin:0; background:var(--crust); border-radius:4px; padding:8px; font-family:var(--mono);
-  font-size:11px; color:var(--txt); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.35;
+  margin:0; background:var(--crust); border-radius:3px; padding:4px; font-family:var(--mono);
+  font-size:11px; color:var(--txt); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.2;
 }
+
+/* 이미 탭으로 열려 있는 세션 — 클릭 결과(전환 vs attach)가 다르므로 미리 구분해둔다.
+   여백을 늘리지 않고 카드 자체의 왼쪽 테두리만 강조한다. */
+.vt-card.open-tab { border-left:3px solid var(--acc); }
+
+/* 지금 도구를 실행 중 — 은은한 펄스로 "지켜볼 필요 있음"을 표시한다.
+   box-shadow를 카드 전체에 애니메이션하면 프레임마다 카드 영역 전체가
+   리페인트된다(컴포지터 전용 속성이 아님) — 여러 카드가 동시에 working이면
+   그리드가 열려 있는 내내 계속 리페인트가 돌아 저사양 모바일에서 체감 지연이
+   생긴다. 테두리는 고정색으로 두고, 움직이는 건 8px짜리 점 하나로 좁혀서
+   opacity/transform만 애니메이션한다(둘 다 컴포지터 전용 — 리페인트 없음).
+*/
+.vt-card.working { border-color:var(--acc); }
+.vt-card.working::before {
+  content:''; position:absolute; top:9px; right:9px;
+  width:8px; height:8px; border-radius:50%; background:var(--acc);
+  animation:vtDotPulse 1.6s ease-in-out infinite;
+}
+@keyframes vtDotPulse {
+  0%, 100% { opacity:1; transform:scale(1); }
+  50% { opacity:.35; transform:scale(1.5); }
+}
+
+/* 방금 끝남 — 클릭(=확인)하기 전까지 유지. 펄스 없이 고정된 색으로 "완료"와
+   "작업중"을 구분한다(둘 다 움직이면 뭐가 뭔지 구분이 안 된다). */
+.vt-card.done { border-color:var(--ok); box-shadow:0 0 0 1px var(--ok); }
+.vt-card.done::after {
+  content:'✓'; position:absolute; top:8px; right:8px;
+  width:16px; height:16px; border-radius:50%; background:var(--ok); color:var(--win);
+  font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;
+  line-height:1;
+}
+
 .vt-grid-empty { grid-column:1/-1; text-align:center; padding:48px 24px; color:var(--sub); }
 .vt-grid-empty .big { font-size:32px; margin-bottom:12px; }
 .vt-grid-empty code { background:var(--tab); padding:2px 6px; border-radius:4px; }
