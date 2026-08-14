@@ -160,6 +160,54 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   - 회귀 테스트: `server/tests/test_fsguard.py`(14), `frontend/tests/difflex.test.js`(12).
   - `sw.js` 캐시 키 `vt-static-v5`로 bump (vendor는 SWR 캐시라 필수).
 
+- **코드 뷰어 IDE화 — 표시 모드(sheet/dock/full) + 계층 트리 + 리사이저.**
+  CLI만으로 원격 개발할 때 코드 뷰어가 전체화면 모달 하나뿐이라 터미널과 동시에 쓸 수
+  없고, 트리도 매번 통째로 갈아끼우는 평면 목록이라 가독성이 떨어졌다.
+  - 표시 모드 3종: sheet(폰 기본) / dock(우측 도킹, 배경 `pointer-events:none`으로 터미널
+    클릭 통과) / full(전체화면). `localStorage`에 저장해 다음 접속 시 복원.
+    상단바 토글 버튼 + `Ctrl+Shift+E` 단축키.
+  - 도킹 폭 리사이저 — 드래그 중엔 CSS 변수만 갱신하고 `pointerup` 시 한 번만
+    `fitAndResize`(xterm 문자 아틀라스 재생성 비용 때문에 매 프레임 `fit()` 금지).
+  - 트리를 계층형으로 재작성 — 펼친 디렉토리는 그 행 뒤에 자식 행을 삽입하고 DOM에
+    남겨둔 채 접었다 편다(재요청 없음). dock/full은 좌측 트리 + 우측 코드 2단 분할,
+    sheet는 기존처럼 트리↔코드 전환.
+  - 파일/diff 렌더링을 문자열 조립(`out+=`)에서 DOM 조립(`createElement`/`textContent`)
+    으로 전환 — `innerHTML`은 `hljs.highlight()` 결과에만 남긴다.
+  - 패널이 X/배경클릭/Esc로 닫힐 때도 정리 콜백이 빠짐없이 돌도록 `panel.js` 보강.
+
+- **코드 뷰어 상위 탐색 — `~/GitHub` 밖(홈까지)으로도 이동 가능.**
+  지금까지는 `VT_BROWSE_ROOTS`(기본 `~/GitHub`) 밖 경로가 전부 403이라 트리에서 위로
+  올라갈 방법이 없었다. 보안 경계(`get_roots`)와 UI 시작점(`get_start_roots`)을 분리해
+  기본 시작 화면은 `~/GitHub` 그대로 두고, 경계만 홈 전체로 넓혔다.
+  - `fsguard`: `VT_BROWSE_ROOTS` 미설정 시 경계=홈, 시작점=`~/GitHub`. 사용자가
+    `VT_BROWSE_ROOTS`를 직접 설정했으면 그 경계를 그대로 쓴다(자동으로 안 넓힘).
+    `.ssh`/`.aws` 등 거부 목록은 경계와 무관하게 계속 차단.
+  - `/api/fs/roots`는 시작점을 반환하도록 변경. 트리 최상단에 ".." 행 추가 — 클릭하면
+    root를 부모로 재설정. 서버가 경계 밖이라고 거부하면 토스트만 띄우고 상태는 유지.
+  - 회귀 테스트 4개 추가: 기본 경계=홈, 기본 시작점≠홈, 경계가 넓어져도 시크릿은 계속
+    거부, 커스텀 `VT_BROWSE_ROOTS`는 자동으로 안 넓어짐.
+
+- **라이브 프리뷰 그리드 뷰 개선 — 에이전트 배지·반응형·여백.**
+  카드에 에이전트 배지(🟣Claude 등)와 작업중/완료 강조를 추가했다. Claude Code 훅은
+  tmux pane을 직접 알려주지 않아 hook payload의 `cwd`를 `/api/tmux/sessions`의
+  `pane_current_path`와 매칭해 카드를 특정한다(`server/agent_status.py` — stop 이벤트가
+  상태를 지우기 직전에 `cwd`만은 돌려주도록 수정). 같은 디렉토리를 공유하는 세션이
+  여럿이면 `cwd`가 유일하지 않은데, 이때는 아무 카드나 강조하는 대신 **아무 것도 강조하지
+  않는다**(틀린 카드를 확신 있게 켜는 것보다 안전). 이미 웹 탭으로 열려 있는 세션은 왼쪽
+  테두리로 구분(`web_session_id`) — 클릭 결과(전환 vs attach)를 미리 예측할 수 있다.
+  - 반응형은 화면 폭과 무관하게 항상 최대 2열로 고정하고 카드 자체 폭만 넓어지게 했다.
+    그 과정에서 실제로 재현한 버그 3개를 고쳤다: `auto-fill`이 빈 트랙까지 공간을 차지해
+    세션이 적으면 카드가 좁게 몰리던 것(`auto-fit`으로 교체), `auto-fit` + `%`(`max()`)
+    조합이 크롬에서 트랙을 엉뚱한 값으로 계산하던 것(px 고정값으로 교체), grid item의
+    암묵적 `min-width:auto`가 프리뷰의 안 끊기는 긴 줄 때문에 트랙을 밀어내던 것.
+
+### Changed (internal)
+- **코드뷰어/포트/큐 패널 공용 뼈대 추출.** viewer/ports/queue 세 패널이 복붙해서 갖고
+  있던 fetch 래퍼(`_api`/`_ptApi`/`_qApi`)와 backdrop 생성·닫기·Esc·자가정리 폴링을
+  `vtapi.js`(`vtFetch`/`vtEsc`)와 `panel.js`(`openPanel`/`closePanel`/`setPanelPoll`)로
+  통합했다. `ports.js`/`queue.js`가 서버 에러 메시지를 이스케이프 없이 `innerHTML`에
+  넣던 것도 `viewer.js`와 동일한 규칙(`textContent` 경유 이스케이프)으로 맞췄다.
+
 ## [1.7.0] — 2026-08-04
 
 ### Security
