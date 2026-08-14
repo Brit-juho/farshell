@@ -1,6 +1,6 @@
 # voice-terminal
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
 
 macOS / Linux 머신을 서버로 두고, 어디서든 음성으로 터미널을 조작하는 시스템. (Windows는 WSL2 환경에서만 동작 — 네이티브 미지원)
@@ -606,12 +606,18 @@ vt voice
 
 ## 버전 / 변경 이력
 
-현재 버전: **v1.5.0** (2026-07-07)
+현재 버전: **v1.7.0** (2026-08-04)
+
+> `v1.7.0` 이후에도 개발이 계속 진행 중입니다 — 웹 로그인 후속 보강, 프롬프트 큐,
+> Web Push, 포트 대시보드, 코드 뷰어/diff 패널 등은 아직 정식 버전 태그 전(`[Unreleased]`)
+> 단계로 [CHANGELOG.md](./CHANGELOG.md) 상단에 기록되어 있습니다.
 
 전체 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고.
 
 | 버전 | 날짜 | 주요 내용 |
 |------|------|-----------|
+| [v1.7.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.7.0) | 2026-08-04 | 보안 하드닝: 기기 화이트리스트 + OTP 관문(`vt otp`·`vt device`)·1회용 등록 티켓·access log 자격증명 마스킹·`OriginGuardMiddleware`(크로스 사이트 차단)·CORS 와일드카드 제거·`VT_NETWORK_MODE` bind 반영·세션 쿠키 Secure 수정·업로드/다운로드 하드닝 |
+| [v1.6.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.6.0) | 2026-07-12 | 웹 로그인 비밀번호(`vt password`): scrypt 해시 저장 + HMAC 서명 세션 쿠키, `VT_TOKEN` 기계 인증과 병존 |
 | [v1.5.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH 원격 접속(D9): `vt ssh`·`vt mobile --network tailscale`·`VT_NOTIFY_CLIENT_EVENTS`(tmux client-attached/detached push 알림)·`server/tailscale.py`·`/api/tailscale/status` |
 | [v1.4.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.4.0) | 2026-05-09 | UX overhaul + Linux 1급 동등화: `vt manage` TUI·`vt attach`·`vt voice-target`·`vt hotkey`·`vt help`·`vt stop --purge`·핸즈프리 제거·이어폰 토글·Linux 터미널/TTS/notify 분기·onboarding |
 | [v1.3.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.3.0) | 2026-05-08 | Phase 9 안정성·네트워크 효율: `/ws-preview` push·`/api/auth` cookie·vendor 자체 호스팅·ETag 304·pyav decoding·SW 캐시·PTY query 가로채기·WS heartbeat |
