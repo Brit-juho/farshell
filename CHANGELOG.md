@@ -9,6 +9,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- **로그인 화면에서 Chrome 자동완성 드롭다운이 뜨고, 한/영 전환을 깜빡하면 비밀번호가
+  한글로 조합되던 문제.**
+  - `#login-pass`에 `readonly` + `onfocus`에서 해제하는 방식을 적용했다. Chrome은
+    로그인성 필드에서 `autocomplete="off"`를 종종 무시하고 자동완성 후보 드롭다운을
+    띄우는데, 포커스 전까지 `readonly`로 막아두면 Chrome이 애초에 자동완성 대상으로
+    인식하지 못한다(포커스 즉시 해제되므로 실제 타이핑에는 영향 없음).
+  - 한글 IME가 켜진 채로 입력하면 실제 눌린 물리 키와 다른 완성형 한글이 조합된다.
+    두벌식 표준 자판 매핑표로 `compositionend` 시점에 조합된 한글(완성형 음절 +
+    조합 안 끝난 홑자모)을 자모로 분해해 원래 눌렀을 영문 키로 역변환한다
+    (겹받침·쌍자음 받침·이중모음까지 포함). 조합 중간(`input`)에는 건드리지 않는다 —
+    IME 조합 상태 자체가 깨진다. 폼 `submit` 시점에도 한 번 더 안전망으로 변환한다.
+  - 서버로 전송되는 값(`payload.token`)에는 영향 없음 — 브라우저 쪽에서만 원래
+    입력 의도(영문)로 되돌리는 것이고, 실제 비밀번호 검증은 그대로 서버가 한다.
+
 - **Web Push 가 한 건도 발송되지 않던 문제 (VAPID 키 형식).**
   `pywebpush(vapid_private_key=...)` 에 **PEM 원문 문자열**을 넘기고 있었다.
   pywebpush 는 문자열을 받으면 (1) 파일 경로인지 확인하고 (2) 아니면
