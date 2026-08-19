@@ -26,10 +26,12 @@ Push 구독은 origin 에 묶인다. trycloudflare quick tunnel 은 URL 이 임�
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 import os
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,33 @@ def _subs_path() -> Path:
 
 def _vapid_path() -> Path:
     return _state_dir() / "vapid.json"
+
+
+def _subs_lock_path() -> Path:
+    return _state_dir() / "push-subs.lock"
+
+
+@contextmanager
+def _locked():
+    """파일 락 — add_sub/remove_sub/send 의 stale 정리가 겹쳐도 항목이 유실되지 않게
+    직렬화한다 (queue_store._locked 와 동일 패턴. atomic replace 만으로는
+    read-modify-write 사이에 lost update 가 난다)."""
+    d = _state_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except OSError:
+        pass
+    lp = _subs_lock_path()
+    fd = os.open(str(lp), os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def available() -> bool:
@@ -168,23 +197,25 @@ def add_sub(subscription: dict, origin: str = "", label: str = "") -> dict:
     ep = (subscription or {}).get("endpoint")
     if not ep:
         return {"ok": False, "error": "bad_subscription"}
-    subs = list_subs()
-    # endpoint 기준 dedup — 같은 기기가 재구독하면 갱신이지 추가가 아니다.
-    subs = [s for s in subs if s.get("subscription", {}).get("endpoint") != ep]
-    subs.append({
-        "subscription": subscription,
-        "origin": origin,
-        "label": label[:40],
-        "added_at": time.time(),
-    })
-    _write_secure(_subs_path(), subs)
+    with _locked():
+        subs = list_subs()
+        # endpoint 기준 dedup — 같은 기기가 재구독하면 갱신이지 추가가 아니다.
+        subs = [s for s in subs if s.get("subscription", {}).get("endpoint") != ep]
+        subs.append({
+            "subscription": subscription,
+            "origin": origin,
+            "label": label[:40],
+            "added_at": time.time(),
+        })
+        _write_secure(_subs_path(), subs)
     return {"ok": True, "count": len(subs)}
 
 
 def remove_sub(endpoint: str) -> dict:
-    subs = list_subs()
-    rest = [s for s in subs if s.get("subscription", {}).get("endpoint") != endpoint]
-    _write_secure(_subs_path(), rest)
+    with _locked():
+        subs = list_subs()
+        rest = [s for s in subs if s.get("subscription", {}).get("endpoint") != endpoint]
+        _write_secure(_subs_path(), rest)
     return {"ok": True, "removed": len(subs) - len(rest), "count": len(rest)}
 
 
@@ -252,9 +283,10 @@ def send(title: str, body: str = "", url: str = "/") -> dict:
             logger.warning(f"web push 오류: {e}")
 
     if stale:
-        rest = [x for x in list_subs()
-                if x.get("subscription", {}).get("endpoint") not in stale]
-        _write_secure(_subs_path(), rest)
+        with _locked():
+            rest = [x for x in list_subs()
+                    if x.get("subscription", {}).get("endpoint") not in stale]
+            _write_secure(_subs_path(), rest)
         logger.info(f"만료된 push 구독 {len(stale)}건 정리")
 
     return {"ok": True, "sent": sent, "expired": len(stale), "skipped_origin": skipped}
