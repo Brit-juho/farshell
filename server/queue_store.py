@@ -164,11 +164,22 @@ def pop_next() -> dict | None:
 
 
 def mark_blocked(item: dict, reason: str) -> None:
-    """safe_mode 에 막힌 항목을 큐 맨 앞에 되돌려 놓는다."""
+    """safe_mode 에 막힌 항목을 큐에 되돌려 놓는다.
+
+    맨 앞(index 0)에 항상 꽂으면, A 가 B보다 먼저 막혔을 때 최종 순서가
+    [B, A] 로 뒤집힌다 — "제출 순서대로 처리한다"는 큐의 설계 원칙 위반이다.
+    이미 blocked 상태인 마지막 항목 바로 뒤에 꽂아 blocked 항목끼리의
+    상대 순서를 제출 순서로 유지한다. blocked 항목이 아직 없으면 기존과
+    동일하게 맨 앞에 넣는다(뒤에 남은 pending 항목보다는 앞이어야 한다).
+    """
     with _locked():
         items = _read_unlocked()
         item = {**item, "status": STATUS_BLOCKED, "blocked_reason": reason}
-        items.insert(0, item)
+        insert_at = 0
+        for i, x in enumerate(items):
+            if x.get("status") == STATUS_BLOCKED:
+                insert_at = i + 1
+        items.insert(insert_at, item)
         _write_unlocked(items)
 
 

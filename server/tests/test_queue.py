@@ -118,6 +118,17 @@ def test_blocked_item_is_reinserted_at_front():
     assert [x["text"] for x in queue_store.list_items()] == ["a", "b"]
 
 
+def test_two_blocked_items_keep_submission_order():
+    """A가 B보다 먼저 막히면, 최종 순서는 [A, B]여야 한다(뒤집히면 안 된다)."""
+    a = queue_store.add("a")["item"]
+    b = queue_store.add("b")["item"]
+    queue_store.pop_next()  # a
+    queue_store.mark_blocked(a, "테스트")
+    queue_store.pop_next()  # b
+    queue_store.mark_blocked(b, "테스트")
+    assert [x["text"] for x in queue_store.list_items()] == ["a", "b"]
+
+
 def test_concurrent_adds_do_not_lose_items(tmp_path):
     """별도 프로세스 4개가 동시에 add — flock 이 없으면 항목이 유실된다."""
     state = str(tmp_path / "vt-concurrent")
@@ -144,6 +155,22 @@ def test_drain_blocks_dangerous_command(monkeypatch):
     queue_store.add("sudo rm -rf /")
     r = queue_runner.drain_once()
     assert not r["ok"] and r["error"] == "blocked"
+    items = queue_store.list_items()
+    assert len(items) == 1 and items[0]["status"] == queue_store.STATUS_BLOCKED
+
+
+def test_drain_blocks_dangerous_command_in_later_line(monkeypatch):
+    """첫 줄만 검사하면 뒤 줄의 위험 명령이 tmux 로 그대로 나간다."""
+    monkeypatch.setenv("VT_SAFE_MODE", "1")
+    sent = []
+    monkeypatch.setattr(queue_runner.tmux_target, "resolve_voice_target_pane",
+                        lambda: ("%1", "auto"))
+    monkeypatch.setattr(queue_runner.tmux_target, "send_to_tmux",
+                        lambda p, t: (sent.append(t), True)[1])
+    queue_store.add("echo hi\nsudo rm -rf /")
+    r = queue_runner.drain_once()
+    assert not r["ok"] and r["error"] == "blocked"
+    assert sent == []  # 아무것도 tmux 로 보내지지 않아야 한다
     items = queue_store.list_items()
     assert len(items) == 1 and items[0]["status"] == queue_store.STATUS_BLOCKED
 
