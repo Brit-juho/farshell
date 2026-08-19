@@ -317,7 +317,7 @@ def totp_disable() -> bool:
         return False
 
 
-def totp_uri(secret: str, account: str = "", issuer: str = "voice-terminal") -> str:
+def totp_uri(secret: str, account: str = "", issuer: str = "farshell") -> str:
     """인증 앱 등록용 otpauth:// URI (QR로 뿌린다)."""
     from urllib.parse import quote
     acct = account or (os.environ.get("USER") or "vt")

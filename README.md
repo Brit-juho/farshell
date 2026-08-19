@@ -1,4 +1,4 @@
-# voice-terminal
+# farshell
 
 [![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
@@ -13,7 +13,7 @@ macOS / Linux 머신을 서버로 두고, 어디서든 음성 또는 브라우�
 - 전부 무료 — API 키, 구독 없음. 오픈소스 STT/TTS
 
 ```
-https://github.com/NeTrioGit/voice-terminal
+https://github.com/Brit-juho/farshell
 ```
 
 ---
@@ -22,17 +22,17 @@ https://github.com/NeTrioGit/voice-terminal
 
 ```bash
 # 터미널만 (경량, ~50MB)
-curl -fsSL https://raw.githubusercontent.com/NeTrioGit/voice-terminal/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash
 
 # 터미널 + 음성 모드 (~1.5GB, Whisper STT + edge-tts TTS)
-curl -fsSL https://raw.githubusercontent.com/NeTrioGit/voice-terminal/master/install.sh | bash -s voice
+curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash -s voice
 ```
 
 또는 클론 후 로컬 실행:
 
 ```bash
-git clone https://github.com/NeTrioGit/voice-terminal.git ~/voice-terminal
-cd ~/voice-terminal
+git clone https://github.com/Brit-juho/farshell.git ~/farshell
+cd ~/farshell
 ./install.sh            # 터미널만
 ./install.sh voice      # 음성 모드 포함
 ```
@@ -133,7 +133,7 @@ cd ~/voice-terminal
 ```bash
 # 기본
 VT_PORT=7777                                 # 서버 포트 (기본값)
-VT_PYTHON=~/voice-terminal/.venv/bin/python  # Python 경로 (자동 감지)
+VT_PYTHON=~/farshell/.venv/bin/python  # Python 경로 (자동 감지)
 
 # 원격 인증 (공개 터널 사용 시 필수 권장)
 # VT_AUTH_TOKEN=my-secret-token              # 기계용 토큰. 사람 로그인은 `vt password` 사용
@@ -222,7 +222,7 @@ VT_STT_LANG=ko                               # STT 언어 고정 (미설정 시 
 ### 프로젝트 구조
 
 ```
-voice-terminal/
+farshell/
 ├── bin/
 │   ├── vt                    CLI 진입점 (bash, macOS/Linux)
 │   └── vt.ps1                CLI 진입점 (PowerShell, Windows/WSL2 wrapper)
@@ -308,14 +308,14 @@ vt voice
 
 | 버전 | 날짜 | 주요 내용 |
 |------|------|-----------|
-| [v1.7.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.7.0) | 2026-08-04 | 보안 하드닝: 기기 화이트리스트 + OTP 관문 · 1회용 등록 티켓 · access log 자격증명 마스킹 · OriginGuardMiddleware · CORS 와일드카드 제거 · 세션 쿠키 Secure 수정 |
-| [v1.6.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.6.0) | 2026-07-12 | 웹 로그인 비밀번호(`vt password`): scrypt 해시 + HMAC 서명 세션 쿠키, 기계 토큰과 병존 |
-| [v1.5.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH 원격 접속: `vt ssh` · `vt mobile --network tailscale` · 클라이언트 접속 알림 |
-| [v1.4.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.4.0) | 2026-05-09 | UX overhaul + Linux 1급 동등화: `vt manage` TUI · `vt attach` · `vt voice-target` · `vt hotkey` |
-| [v1.3.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.3.0) | 2026-05-08 | 안정성/네트워크 효율: `/ws-preview` push · cookie 인증 · vendor 자체 호스팅 · WS heartbeat |
-| [v1.2.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.2.0) | 2026-05-07 | 라이브 프리뷰 · `--network` 모드 · Cloudflare 명명 터널 · WS 백프레셔 |
-| [v1.1.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.1.0) | 2026-05-06 | ralph→vt 리네이밍, 격리 소켓 · AI 인식 · 명령 확장 · 훅 · 안전 모드 · 크로스 플랫폼 통합 |
-| [v1.0.0](https://github.com/NeTrioGit/voice-terminal/releases/tag/v1.0.0) | 2026-04-14 | 초기 안정 버전 (PWA · Voice Daemon · STT/TTS · 터널 · `vt` CLI · `install.sh`) |
+| [v1.7.0](https://github.com/Brit-juho/farshell/releases/tag/v1.7.0) | 2026-08-04 | 보안 하드닝: 기기 화이트리스트 + OTP 관문 · 1회용 등록 티켓 · access log 자격증명 마스킹 · OriginGuardMiddleware · CORS 와일드카드 제거 · 세션 쿠키 Secure 수정 |
+| [v1.6.0](https://github.com/Brit-juho/farshell/releases/tag/v1.6.0) | 2026-07-12 | 웹 로그인 비밀번호(`vt password`): scrypt 해시 + HMAC 서명 세션 쿠키, 기계 토큰과 병존 |
+| [v1.5.0](https://github.com/Brit-juho/farshell/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH 원격 접속: `vt ssh` · `vt mobile --network tailscale` · 클라이언트 접속 알림 |
+| [v1.4.0](https://github.com/Brit-juho/farshell/releases/tag/v1.4.0) | 2026-05-09 | UX overhaul + Linux 1급 동등화: `vt manage` TUI · `vt attach` · `vt voice-target` · `vt hotkey` |
+| [v1.3.0](https://github.com/Brit-juho/farshell/releases/tag/v1.3.0) | 2026-05-08 | 안정성/네트워크 효율: `/ws-preview` push · cookie 인증 · vendor 자체 호스팅 · WS heartbeat |
+| [v1.2.0](https://github.com/Brit-juho/farshell/releases/tag/v1.2.0) | 2026-05-07 | 라이브 프리뷰 · `--network` 모드 · Cloudflare 명명 터널 · WS 백프레셔 |
+| [v1.1.0](https://github.com/Brit-juho/farshell/releases/tag/v1.1.0) | 2026-05-06 | ralph→vt 리네이밍, 격리 소켓 · AI 인식 · 명령 확장 · 훅 · 안전 모드 · 크로스 플랫폼 통합 |
+| [v1.0.0](https://github.com/Brit-juho/farshell/releases/tag/v1.0.0) | 2026-04-14 | 초기 안정 버전 (PWA · Voice Daemon · STT/TTS · 터널 · `vt` CLI · `install.sh`) |
 
 ---
 

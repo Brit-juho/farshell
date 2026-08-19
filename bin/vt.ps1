@@ -1,4 +1,4 @@
-# vt.ps1 — Windows PowerShell launcher for Voice Terminal
+# vt.ps1 — Windows PowerShell launcher for farshell
 # WSL2 내부의 vt CLI를 호출합니다.
 #
 # 사용법:
@@ -23,20 +23,20 @@ if (-not $?) {
     exit 1
 }
 
-# voice-terminal 경로 감지
-$vtPath = wsl.exe -- bash -c "test -f ~/voice-terminal/bin/vt && echo OK" 2>$null
+# farshell 경로 감지
+$vtPath = wsl.exe -- bash -c "test -f ~/farshell/bin/vt && echo OK" 2>$null
 if ($vtPath -ne "OK") {
     Write-Host ""
-    Write-Host "  voice-terminal이 WSL2에 설치되지 않았습니다." -ForegroundColor Red
+    Write-Host "  farshell이 WSL2에 설치되지 않았습니다." -ForegroundColor Red
     Write-Host "  WSL2 Ubuntu에서:"
-    Write-Host "    git clone <repo> ~/voice-terminal"
-    Write-Host "    cd ~/voice-terminal && ./install.sh"
+    Write-Host "    git clone <repo> ~/farshell"
+    Write-Host "    cd ~/farshell && ./install.sh"
     Write-Host ""
     exit 1
 }
 
 # vt 실행
-wsl.exe -- bash -c "cd ~/voice-terminal && bin/vt $Command"
+wsl.exe -- bash -c "cd ~/farshell && bin/vt $Command"
 
 # mobile/start 시 브라우저 자동 열기
 if ($Command -eq "mobile" -or $Command -eq "start") {

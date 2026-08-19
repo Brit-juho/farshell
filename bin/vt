@@ -1,5 +1,5 @@
 #!/bin/bash
-# vt — Voice Terminal 통합 CLI
+# vt — farshell 통합 CLI
 # 어디서든 실행 가능. 노션 작업 중에도 음성으로 코딩.
 #
 # 사용법:
@@ -1047,7 +1047,7 @@ cmd_help() {
   if [ -z "$topic" ]; then
     cat <<'HELP'
 
-  vt — Voice Terminal CLI
+  vt — farshell CLI
 
   주요 명령:
     vt voice               음성 모드 (백그라운드, 노션 작업 중에도)
@@ -1414,7 +1414,7 @@ _onboarding_check() {
     echo ""
     echo "  ⚡ 첫 실행 안내"
     echo ""
-    echo "  새 터미널 창이 자동으로 voice-terminal tmux로 진입하도록 설정하지 않았습니다."
+    echo "  새 터미널 창이 자동으로 farshell tmux로 진입하도록 설정하지 않았습니다."
     echo "  이 설정 없이도 'vt voice'는 동작하지만, 새 창에서 자동 attach가 더 편리합니다."
     echo ""
     echo "  설정하려면:"
@@ -2725,8 +2725,8 @@ _install_iterm_profile() {
   cat > "$FILE" <<EOF
 {
   "Profiles": [{
-    "Name": "vt (Voice Terminal)",
-    "Guid": "vt-voice-terminal",
+    "Name": "vt (farshell)",
+    "Guid": "vt-farshell",
     "Custom Command": "Custom Shell",
     "Command": "/bin/zsh -c '$cmd'",
     "Working Directory Type": "Recycle"
@@ -2734,17 +2734,17 @@ _install_iterm_profile() {
 }
 EOF
   echo "  ✓ iTerm2 Dynamic Profile → $FILE"
-  echo "    iTerm2 재시작 후 Profiles 메뉴에서 'vt (Voice Terminal)' 선택"
+  echo "    iTerm2 재시작 후 Profiles 메뉴에서 'vt (farshell)' 선택"
   return 0
 }
 
 _install_ghostty_profile() {
   local dry_run="$1"
   local CFG="$HOME/.config/ghostty/config"
-  local snippet="# vt (Voice Terminal) — auto-attach (활성화 원하면 아래 # 제거)
+  local snippet="# vt (farshell) — auto-attach (활성화 원하면 아래 # 제거)
 # command = tmux -L $VT_TMUX_SOCKET new -A -s dev"
 
-  if grep -q "vt (Voice Terminal)" "$CFG" 2>/dev/null; then
+  if grep -q "vt (farshell)" "$CFG" 2>/dev/null; then
     echo "  ⓘ Ghostty 이미 등록됨: $CFG"
     return 1
   fi
@@ -3005,7 +3005,7 @@ case "${1:-help}" in
   tui)      shift; cmd_manage "$@" ;;
   *)
     echo ""
-    echo "  vt — Voice Terminal CLI"
+    echo "  vt — farshell CLI"
     echo ""
     echo "  사용법:"
     echo "    vt voice              음성 모드 (백그라운드)"

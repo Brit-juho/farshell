@@ -1,6 +1,6 @@
 {
-  "name": "랄프톤 Voice Terminal",
-  "short_name": "랄프톤",
+  "name": "farshell",
+  "short_name": "farshell",
   "description": "음성으로 터미널을 제어하는 웹앱",
   "start_url": "/",
   "display": "standalone",

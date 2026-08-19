@@ -1,7 +1,7 @@
 ---
 name: vt
 description: |
-  Voice Terminal 제어. 음성 모드, 모바일 접속, 서버 관리.
+  farshell 제어. 음성 모드, 모바일 접속, 서버 관리.
   어디서든 실행 가능한 전역 스킬. Use when asked to "음성 모드", "voice mode",
   "모바일 접속", "mobile mode", "vt", "voice terminal 시작", "음성으로 코딩",
   "voice coding", "터미널 음성".
@@ -11,9 +11,9 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-## Voice Terminal 스킬
+## farshell 스킬
 
-이 스킬은 `vt` CLI를 통해 Voice Terminal을 제어합니다.
+이 스킬은 `vt` CLI를 통해 farshell을 제어합니다.
 **어느 디렉토리에서든 실행 가능합니다.**
 
 ### 실행 전 필수: 기존 실행 상태 확인

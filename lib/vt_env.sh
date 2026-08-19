@@ -1,4 +1,4 @@
-# voice-terminal — ~/.vt.env 형식 정의 + 단일 reader/writer (bash 측)
+# farshell — ~/.vt.env 형식 정의 + 단일 reader/writer (bash 측)
 #
 # 이 파일이 형식을 정의한다. Python 대응 구현은 server/vt_env.py이며,
 # server/tests/test_vt_env.py가 둘이 같은 값을 읽는지 매번 확인한다.

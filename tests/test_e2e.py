@@ -43,9 +43,9 @@ def page(browser_context):
 # ---------------------------------------------------------------------------
 
 def test_tc1_page_loads(page: Page):
-    """페이지가 정상 로드되고 voice-terminal 타이틀을 가짐."""
+    """페이지가 정상 로드되고 farshell 타이틀을 가짐."""
     page.goto(BASE_URL)
-    assert "voice-terminal" in page.title().lower()
+    assert "farshell" in page.title().lower()
 
 
 def test_tc1_onboarding_or_terminal(page: Page):

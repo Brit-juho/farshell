@@ -1,12 +1,22 @@
 # Changelog
 
-All notable changes to voice-terminal are documented in this file.
+All notable changes to farshell (formerly voice-terminal) are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
 ## [Unreleased]
+
+### Changed
+- **프로젝트명을 voice-terminal에서 farshell로 변경.** 초기엔 음성 입력이 핵심
+  셀링포인트였지만, 인증/기기관리, 코드 뷰어, 포트 대시보드, 프롬프트 큐, Web Push,
+  Tailscale SSH 등으로 기능이 늘면서 음성은 여러 접근 경로 중 하나가 됐다 —
+  "원격 셸에 닿는다(far + shell)"는 지금의 정체성에 맞게 이름을 바꿨다. GitHub
+  저장소도 `Brit-juho/farshell`로 rename(GitHub이 구 URL을 자동 리다이렉트한다).
+  `vt` CLI 명령어·설정 키(`~/.vt.env`, `VT_*`)는 하위 호환을 위해 그대로 유지.
+  이전에도 "ralphton" → "voice-terminal" 리네이밍이 한 번 있었는데(v1.1.0)
+  당시 남아있던 잔여 문자열(PWA manifest, 알림 타이틀 등)도 이번에 함께 정리.
 
 ### Fixed
 - **로그인 화면에서 Chrome 자동완성 드롭다운이 뜨고, 한/영 전환을 깜빡하면 비밀번호가

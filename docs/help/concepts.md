@@ -1,6 +1,6 @@
 # vt help concepts — 핵심 개념
 
-voice-terminal을 잘 쓰려면 터미널 생태계의 3-레이어 구조 이해가 도움됩니다.
+farshell을 잘 쓰려면 터미널 생태계의 3-레이어 구조 이해가 도움됩니다.
 
 ## 1. 3-레이어 구조
 
@@ -40,7 +40,7 @@ iTerm 창을 닫아도 tmux 서버 안의 세션은 살아있음. vim/claude 등
 같은 tmux 세션에 데스크톱 iTerm + 모바일 폰 + 웹 브라우저가 동시에 attach 가능.
 모두 같은 화면을 보고, 모두 입력 가능.
 
-→ **이게 voice-terminal의 핵심 인프라.** tmux 없으면 모바일/음성 기능이 안 돔.
+→ **이게 farshell의 핵심 인프라.** tmux 없으면 모바일/음성 기능이 안 돔.
 
 ### 멀티플렉싱
 
@@ -55,16 +55,16 @@ iTerm 창을 닫아도 tmux 서버 안의 세션은 살아있음. vim/claude 등
 
 ## 3. 격리 소켓 `-L vt`
 
-voice-terminal은 별도 tmux 서버(`/tmp/tmux-{uid}/vt` 소켓)를 씀.
+farshell은 별도 tmux 서버(`/tmp/tmux-{uid}/vt` 소켓)를 씀.
 
     tmux ls          # 사용자 평소 세션 (default 소켓)
-    tmux -L vt ls    # voice-terminal 전용 세션 (vt 소켓)
+    tmux -L vt ls    # farshell 전용 세션 (vt 소켓)
 
 → 두 세계가 완전히 분리됨. 사용자 기존 워크플로 안 건드림.
 
 ## 4. 자동 attach 메커니즘
 
-새 터미널 창이 자동으로 voice-terminal tmux로 들어가려면 둘 중 하나 등록:
+새 터미널 창이 자동으로 farshell tmux로 들어가려면 둘 중 하나 등록:
 
 ### 메커니즘 A — 셸 init 스니펫
 

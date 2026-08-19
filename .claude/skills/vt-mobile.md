@@ -1,7 +1,7 @@
 ---
 name: vt-mobile
 description: |
-  모바일 기기에서 Voice Terminal 테스트. adb 포트포워딩, Chrome 열기, 스크린샷 캡처,
+  모바일 기기에서 farshell 테스트. adb 포트포워딩, Chrome 열기, 스크린샷 캡처,
   원격 터널 접속까지 처리. Use when asked to "모바일 테스트", "폰에서 테스트",
   "mobile test", "adb 테스트", "모바일로 확인".
 allowed-tools:
