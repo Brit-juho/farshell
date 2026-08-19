@@ -42,6 +42,42 @@
   - **Trigger:** 로컬 LLM 통합 시작 전
   - **Approach:** 단순 옵션은 `multiprocessing.Manager().Value('i', 0)`, 분산 옵션은 Redis + `aioredis`
 
+- [ ] **[D10] `server/agent_status.py` `_state` 딕셔너리 TTL/최대 크기 안전장치**
+  - **What:** hook의 `stop` 이벤트 없이 프로세스가 죽으면(SIGKILL 등) `_state` 항목이 서버 수명 내내 남는 문제 방지 — TTL 만료 또는 최대 크기 제한 추가
+  - **Why:** 매우 장기 실행 서버에서 느리게 누적되는 메모리. 당장 위험하진 않지만 스크롤백 바이트 예산·WS 카운터 등 다른 곳엔 이미 있는 방어가 여기만 없음
+  - **Context:** 2026-08-18 plan-eng-review(서브에이전트: PTY/tmux/터널) 확인. `server/agent_status.py` 참조
+  - **Trigger:** 실제 메모리 증가가 관측되거나 다음 이 파일 손댈 때
+
+- [ ] **[D11] 인증 남은 테스트 커버리지 확장**
+  - **What:** `server/auth.py`의 세션 만료, OTP 재전송/재시도 방지, `otp_lock_remaining` 타이밍 등 핵심 3개(변조 HMAC 거부/기기 폐기→세션 무효화/티켓 1회성) 이후 남은 브랜치 테스트
+  - **Why:** 2026-08-18 리뷰에서 인증 파일 전체가 무테스트였음이 확인되어 핵심 3개는 즉시 작성하기로 했고, 나머지는 회귀 안전망으로 후속 작업
+  - **Context:** `server/tests/test_auth.py`(신규) 참조. plan-eng-review 2026-08-18
+  - **Trigger:** 다음 auth.py 변경 전
+
+- [ ] **[D12] `routes/ports.py`/`routes/files.py` HTTP 레벨 라우트 테스트**
+  - **What:** FastAPI TestClient로 예외→상태코드 매핑(403/404/409/428) end-to-end 검증. 현재는 하위 로직(`portscan.py`/`fsguard.py`)만 단위 테스트됨
+  - **Why:** 라우터 레이어에서 매핑이 깨져도 현재 테스트가 못 잡음
+  - **Context:** plan-eng-review 2026-08-18 (서브에이전트: 코드뷰어/포트)
+  - **Trigger:** 다음 이 두 라우트 파일 손댈 때
+
+- [ ] **[D13] 프론트엔드 테스트 부재 — theme.js/grid.js/terminal.js**
+  - **What:** 스킨 전환(모든 터미널 갱신 여부), `ansiToHtml` XSS escape, 그리드 카드 상태 전이, 탭 생명주기에 대한 단위 테스트. 현재 `frontend/tests/`엔 `keyseq.test.js`/`difflex.test.js`/`sw-push.test.js`뿐
+  - **Why:** 특히 `ansiToHtml`은 XSS 방어선인데 회귀 감지 수단이 없음
+  - **Context:** plan-eng-review 2026-08-18 (서브에이전트: 프론트엔드)
+  - **Trigger:** 다음 이 파일들 크게 손댈 때
+
+- [ ] **[D14] 비밀번호 재시도 락아웃 (OTP와 동일하게)**
+  - **What:** `server/auth.py`의 OTP는 `otp_lock_remaining`/`otp_note_failure`로 실패 횟수 제한이 있는데 비밀번호 경로엔 없음. scrypt 자체가 시도당 비용을 부과하지만 무제한 시도 자체는 남아있음
+  - **Why:** 같은 파일 안에서 두 자격증명 종류가 다른 위협모델 취급을 받는 일관성 문제
+  - **Context:** plan-eng-review 2026-08-18 (서브에이전트: 인증/보안). `server/auth.py:368-390` 참조
+  - **Trigger:** 원격 노출 강화 작업 시 함께
+
+- [ ] **[D15] OTP 실패 락 범위를 전역이 아니라 기기/IP 단위로 축소**
+  - **What:** 현재 `_otp_failures`가 프로세스 전역 리스트라, 한 클라이언트의 실패한 OTP 시도가 모든 신규 기기 등록을 10분간 잠금. 기기/IP별로 분리
+  - **Why:** 스크립트화된 재시도나 오설정 클라이언트 하나가 본인의 새 기기 등록까지 막을 수 있음(가용성 문제)
+  - **Context:** plan-eng-review 2026-08-18 (서브에이전트: 인증/보안). `server/auth.py:364-379` 참조
+  - **Trigger:** 다중 기기 등록 흐름 다시 손볼 때
+
 ## 테스트
 
 - [x] **E2E 테스트 인프라 (Playwright)** ✅ 완료 (커밋 다음, 2026-05-07)
