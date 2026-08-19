@@ -1192,7 +1192,7 @@
       el.className = 'vt-onboarding';
       el.innerHTML = `
         <div class="vt-ob-icon"><i class="icon-mic"></i></div>
-        <h2>Voice Terminal</h2>
+        <h2>farshell</h2>
         <p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
         <div class="vt-ob-actions">
           <button class="vt-btn-primary" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
@@ -1267,7 +1267,7 @@
           <div class="vt-guide-head">
             <div class="vt-gh-icon"><i class="icon-terminal"></i></div>
             <div>
-              <h2>Voice Terminal</h2>
+              <h2>farshell</h2>
               <p>브라우저로 tmux 터미널을 — 웹·폰 어디서든 이어서</p>
             </div>
             <button class="vt-guide-x" aria-label="닫기">✕</button>

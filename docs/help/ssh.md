@@ -8,7 +8,7 @@
 
 ## 왜 굳이 vt와 엮나
 
-voice-terminal의 핵심 설계는 "tmux 세션이 단일 진실의 원천" — 데스크톱
+farshell의 핵심 설계는 "tmux 세션이 단일 진실의 원천" — 데스크톱
 iTerm, 모바일 PWA, Voice Daemon이 전부 같은 `tmux -L vt` 세션에 붙는다
 (`vt help concepts` 참고). **SSH도 다섯 번째 클라이언트일 뿐**이다.
 회사에서 SSH로 붙어도 집에서 보던 것과 완전히 같은 화면·스크롤백·

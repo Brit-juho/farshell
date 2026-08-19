@@ -1,8 +1,8 @@
-> **voice-terminal v1.7.0** (2026-08-04) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
+> **farshell v1.7.0** (2026-08-04) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
 
 ## vt CLI (어디서든 실행)
 
-터미널 어디서든 `vt` 명령으로 Voice Terminal을 제어합니다:
+터미널 어디서든 `vt` 명령으로 farshell을 제어합니다:
 
 ```bash
 vt voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
@@ -210,7 +210,7 @@ vt status
 
 ---
 
-## voice-terminal 프로젝트 가이드
+## farshell 프로젝트 가이드
 
 ### 서버 실행
 

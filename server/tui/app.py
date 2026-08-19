@@ -86,7 +86,7 @@ class VTManagerApp(App):
 
     def on_mount(self) -> None:
         self.title = "vt manage"
-        self.sub_title = "Voice Terminal Manager"
+        self.sub_title = "farshell Manager"
         table = self.query_one(DataTable)
         table.add_column("세션", width=24)
         table.add_column("Window", width=8)

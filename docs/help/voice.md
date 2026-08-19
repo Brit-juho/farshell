@@ -1,6 +1,6 @@
 # vt help voice — 음성 입력 동작
 
-voice-terminal은 3가지 음성 입력 경로가 있습니다.
+farshell은 3가지 음성 입력 경로가 있습니다.
 
 ## 1. Voice Daemon (데스크톱 전역 핫키)
 

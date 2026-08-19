@@ -8,7 +8,7 @@
 @font-face { font-family:"Cascadia Code"; font-style:normal; font-weight:600; font-display:swap; src:url("/static/vendor/fonts/cascadia-600.woff2") format("woff2"); }
 
 /* =========================================================================
-   VT · Voice Terminal — 5-테마 디자인 시스템
+   VT · farshell — 5-테마 디자인 시스템
    테마: html[data-skin="macos" | "catppuccin" | "windows" | "vscode" | "notepad"] (기본 macos)
    모든 색은 토큰(CSS 변수)으로만 참조. 하드코딩 hex 금지.
    ========================================================================= */

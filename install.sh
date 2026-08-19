@@ -1,5 +1,5 @@
 #!/bin/bash
-# voice-terminal 원라인 설치 스크립트
+# farshell 원라인 설치 스크립트
 # 사용법:
 #   ./install.sh             # 터미널만 (경량, ~50MB)
 #   ./install.sh voice       # 터미널 + 음성 모드 (~1.5GB)
@@ -7,7 +7,7 @@
 #   curl -fsSL <URL>/install.sh | bash -s voice
 #
 # 환경변수:
-#   VT_DIR   — 설치 경로 (기본: 스크립트 위치 또는 ~/voice-terminal)
+#   VT_DIR   — 설치 경로 (기본: 스크립트 위치 또는 ~/farshell)
 #   VT_PORT  — 포트 (기본: 7777)
 
 set -euo pipefail
@@ -18,11 +18,11 @@ case "$(uname -s 2>/dev/null)" in
     echo ""
     echo "✗ Windows 네이티브 환경은 지원하지 않습니다."
     echo ""
-    echo "  voice-terminal은 tmux를 사용하므로 Linux/macOS 환경이 필요합니다."
+    echo "  farshell은 tmux를 사용하므로 Linux/macOS 환경이 필요합니다."
     echo "  Windows 사용자는 WSL2를 통해 설치하세요:"
     echo ""
     echo "  1. PowerShell(관리자)에서: wsl --install"
-    echo "  2. WSL2 진입 후: git clone <repo> && cd voice-terminal && ./install.sh"
+    echo "  2. WSL2 진입 후: git clone <repo> && cd farshell && ./install.sh"
     echo ""
     echo "  자세히: README.md 'Windows (WSL2)' 섹션"
     exit 1
@@ -40,10 +40,10 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/bin/vt" ]; then
   VT_DIR="$SCRIPT_DIR"
 else
   PIPE_INSTALL=1
-  VT_DIR="${VT_DIR:-$HOME/voice-terminal}"
+  VT_DIR="${VT_DIR:-$HOME/farshell}"
   if [ ! -d "$VT_DIR" ]; then
     echo "▸ 레포 클론 중 → $VT_DIR"
-    git clone --depth 1 https://github.com/NeTrioGit/voice-terminal.git "$VT_DIR"
+    git clone --depth 1 https://github.com/Brit-juho/farshell.git "$VT_DIR"
   else
     echo "✓ 기존 레포 사용: $VT_DIR"
   fi
@@ -51,7 +51,7 @@ else
 fi
 
 echo ""
-echo "  🎤 voice-terminal 설치 — 프로필: $PROFILE"
+echo "  🎤 farshell 설치 — 프로필: $PROFILE"
 echo "  설치 경로: $VT_DIR"
 echo ""
 
@@ -106,7 +106,7 @@ if [ ! -f "$HOME/.vt.env" ]; then
   # 세션 서명키가 유출되면 쿠키를 위조해 인증을 우회할 수 있으므로 처음부터 0600.
   ( umask 077; : > "$HOME/.vt.env" )
   cat > "$HOME/.vt.env" <<EOF
-# voice-terminal 설정 (수정 가능)
+# farshell 설정 (수정 가능)
 VT_DIR=$VT_DIR
 VT_PORT=${VT_PORT:-7777}
 VT_PYTHON=\${VT_DIR}/.venv/bin/python
@@ -163,7 +163,7 @@ fi
 # 비대화형(curl|bash)에서는 스킵. TTY가 있으면 사용자에게 확인 후 vt install-profiles 실행
 if [ -t 0 ] && [ -t 1 ]; then
   echo ""
-  printf "  새 터미널 창이 자동으로 voice-terminal tmux로 진입하도록 설정할까요? [y/N] "
+  printf "  새 터미널 창이 자동으로 farshell tmux로 진입하도록 설정할까요? [y/N] "
   IFS= read -r REPLY_PROFILE || REPLY_PROFILE=""
   if [ "${REPLY_PROFILE:-}" = "y" ] || [ "${REPLY_PROFILE:-}" = "Y" ]; then
     "$VT_DIR/bin/vt" install-profiles 2>&1 || echo "  ⚠ install-profiles 실패 — 'vt install-profiles' 수동 실행 가능"

@@ -2,7 +2,7 @@
 # tmux_client_notify.sh — client-attached / client-detached 훅 핸들러 (D9).
 #
 # 왜 필요한가:
-#   voice-terminal은 web(WS)·voice(daemon) 경로에선 누가 접속했는지 서버가 알 수
+#   farshell은 web(WS)·voice(daemon) 경로에선 누가 접속했는지 서버가 알 수
 #   있지만, 회사망처럼 화면 원격이 막혀 Tailscale+SSH로 tmux에 순수 텍스트로
 #   attach하는 경우(`vt ssh` 참고)엔 서버 입장에서 완전히 "보이지 않는" 클라이언트다.
 #   이 스크립트는 tmux 훅으로 attach/detach 시점을 잡아 기존 ntfy/Telegram 푸시

@@ -1,6 +1,6 @@
 # API 레퍼런스
 
-voice-terminal 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트 전체
+farshell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트 전체
 목록입니다. 개요는 [README.md](./README.md), 구조는 [ARCHITECTURE.md](./ARCHITECTURE.md)를
 참고하세요.
 

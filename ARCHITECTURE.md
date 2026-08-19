@@ -1,4 +1,4 @@
-# voice-terminal 아키텍처
+# farshell 아키텍처
 
 > **버전:** v1.5.0 (2026-07-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md)
 

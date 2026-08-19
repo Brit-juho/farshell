@@ -1,6 +1,6 @@
 # 웹 UI 사용 설명서
 
-브라우저에서 Voice Terminal을 쓰는 방법 전체. (CLI는 `vt help concepts`, 음성은 `vt help voice` 참고)
+브라우저에서 farshell을 쓰는 방법 전체. (CLI는 `vt help concepts`, 음성은 `vt help voice` 참고)
 
 ---
 

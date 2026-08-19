@@ -80,7 +80,7 @@ test('push: 페이로드가 비어도 알림을 띄운다', async () => {
   listeners.push(ev);
   await Promise.all(waits);
   assert.strictEqual(shown.length, 1, '페이로드가 없다고 조용히 넘어가면 구독이 폐기된다');
-  assert.strictEqual(shown[0].title, 'Voice Terminal');
+  assert.strictEqual(shown[0].title, 'farshell');
 });
 
 test('push: 깨진 JSON 이어도 알림을 띄운다', async () => {
@@ -92,7 +92,7 @@ test('push: 깨진 JSON 이어도 알림을 띄운다', async () => {
   });
   await Promise.all(waits);
   assert.strictEqual(shown.length, 1);
-  assert.strictEqual(shown[0].title, 'Voice Terminal');
+  assert.strictEqual(shown[0].title, 'farshell');
 });
 
 test('push: 같은 tag 로 묶어 잠금화면을 도배하지 않는다', async () => {

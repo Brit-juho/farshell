@@ -371,7 +371,7 @@ function showNotification(summary, sessionId) {
   }, 5000);
 
   // 백그라운드 브라우저 알림 (화면 밖에서도 보이게)
-  showBrowserNotification('랄프톤 — 작업 완료', short);
+  showBrowserNotification('farshell — 작업 완료', short);
 }
 
 // ⚠ Android Chrome 등 모바일 브라우저는 `new Notification()` 생성자를 금지하고
@@ -441,7 +441,7 @@ function setupMediaSession() {
   }
 
   navigator.mediaSession.metadata = new MediaMetadata({
-    title: '랄프톤 Voice Terminal',
+    title: 'farshell',
     artist: '음성 입력 대기 중',
     album: 'Voice Control',
   });

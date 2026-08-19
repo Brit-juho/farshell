@@ -48,7 +48,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = {}; }
-  const title = d.title || 'Voice Terminal';
+  const title = d.title || 'farshell';
   e.waitUntil(
     self.registration.showNotification(title, {
       body: d.body || '',
