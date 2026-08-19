@@ -60,8 +60,14 @@ def _check_safe(text: str) -> tuple[bool, str]:
         import safe_mode
     except ImportError:
         return True, ""
-    ok, reason = safe_mode.check(text.splitlines()[0] if text else "")
-    return ok, (reason or "")
+    # tmux 로 보내는 전체 텍스트가 여러 줄일 수 있다 — 첫 줄만 검사하면
+    # "echo hi\nsudo rm -rf /" 처럼 뒤 줄의 위험 명령이 통과해버린다.
+    # pty_manager.py 의 Enter 단위 라인 검사와 같은 기준으로 모든 줄을 검사한다.
+    for line in (text or "").splitlines():
+        ok, reason = safe_mode.check(line)
+        if not ok:
+            return ok, (reason or "")
+    return True, ""
 
 
 def drain_once() -> dict:
