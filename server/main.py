@@ -110,10 +110,17 @@ def _allowed_origins() -> set:
     return {o.strip().rstrip("/").lower() for o in raw.split(",") if o.strip()}
 
 
-def _origin_ok(origin: str, host_header: str) -> bool:
-    """요청 Origin이 이 서버 자신인지 판정."""
+def _origin_ok(origin: "str | None", host_header: str) -> bool:
+    """요청 Origin이 이 서버 자신인지 판정.
+
+    origin이 None(헤더 자체가 없음)인 경우만 비브라우저 클라이언트로 간주해 통과시킨다.
+    문자열 "null"은 브라우저가 sandboxed iframe·data: URL 등 opaque origin에서
+    실제로 보내는 값이라 별개다 — 이를 "헤더 없음"과 같이 취급하면 우회로가 열린다.
+    """
+    if origin is None:
+        return True  # curl/데몬/네이티브 앱 — Origin 헤더 자체가 없음(브라우저 아님)
     if not origin or origin == "null":
-        return True  # curl/데몬/네이티브 앱 — 브라우저가 아님
+        return False  # 빈 문자열/명시적 "null" — 브라우저의 opaque origin, 거부
     origin = origin.rstrip("/").lower()
     if origin in _allowed_origins():
         return True
@@ -137,7 +144,7 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        if not _origin_ok(request.headers.get("origin", ""), request.headers.get("host", "")):
+        if not _origin_ok(request.headers.get("origin"), request.headers.get("host", "")):
             return JSONResponse(
                 {"error": "forbidden", "reason": "cross_origin"}, status_code=403
             )
@@ -146,7 +153,7 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
     async def __call__(self, scope, receive, send):
         if scope["type"] == "websocket":
             headers = _scope_headers(scope)
-            if not _origin_ok(headers.get("origin", ""), headers.get("host", "")):
+            if not _origin_ok(headers.get("origin"), headers.get("host", "")):
                 response = JSONResponse(
                     {"error": "forbidden", "reason": "cross_origin"}, status_code=403
                 )
