@@ -6,6 +6,9 @@ __pycache__/
 venv/
 *.egg-info/
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Node (혹시 prebuild 도입 시)
 node_modules/
@@ -47,3 +50,7 @@ docs/*
 # 단, vt help가 런타임에 사용하는 도움말 토픽은 추적 (W2-5)
 !docs/help/
 .gstack/
+
+# install.sh가 만들던 구 vendor 다운로드 경로 (지금은 frontend/vendor/가 git에 직접
+# 커밋되어 서빙되므로 install.sh의 다운로드 단계는 제거됨 — 예전 로컬 잔여물 방지용)
+frontend/static/

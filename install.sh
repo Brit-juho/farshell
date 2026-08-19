@@ -92,31 +92,6 @@ ln -sf "$VT_DIR/bin/vt" "$HOME/.local/bin/vt"
 chmod +x "$VT_DIR/bin/vt"
 echo "✓ vt CLI 등록 → ~/.local/bin/vt"
 
-# 4-0. vendor 자산 다운로드 (Phase 9 #3 — CDN 의존 제거)
-VENDOR="$VT_DIR/frontend/static/vendor"
-if [ ! -f "$VENDOR/xterm.min.js" ]; then
-  echo "▸ vendor 자산 다운로드 (~1.5MB)..."
-  mkdir -p "$VENDOR"
-  CDN="https://cdn.jsdelivr.net/npm"
-  for f in \
-    "@xterm/xterm@5.5.0/lib/xterm.min.js" \
-    "@xterm/xterm@5.5.0/css/xterm.min.css" \
-    "@xterm/addon-fit@0.10.0/lib/addon-fit.min.js" \
-    "@xterm/addon-search@0.15.0/lib/addon-search.min.js" \
-    "lucide-static@0.469.0/font/lucide.min.css" \
-    "lucide-static@0.469.0/font/lucide.woff2" \
-    "lucide-static@0.469.0/font/lucide.woff" \
-    "lucide-static@0.469.0/font/lucide.ttf" \
-    "tweetnacl@1.0.3/nacl.min.js" \
-    "tweetnacl-util@0.15.1/nacl-util.min.js"; do
-    out="$VENDOR/$(basename "$f")"
-    [ -f "$out" ] || curl -fsSL "$CDN/$f" -o "$out" || echo "  ⚠ $f 다운로드 실패"
-  done
-  # CSS의 ?t=... 캐시버스터 제거
-  [ -f "$VENDOR/lucide.min.css" ] && sed -i.bak 's/?t=[0-9]*//g' "$VENDOR/lucide.min.css" && rm -f "$VENDOR/lucide.min.css.bak"
-  echo "✓ vendor 자산 → $VENDOR"
-fi
-
 # 4-1. tmux 격리 config 복사 (Phase 8 G3)
 mkdir -p "$HOME/.config/vt"
 if [ -f "$VT_DIR/config/vt-tmux.conf" ] && [ ! -f "$HOME/.config/vt/tmux.conf" ]; then
