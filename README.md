@@ -67,6 +67,7 @@ cd ~/voice-terminal
 ### 모바일에서 터미널 조작
 
 ```
+0. vt password           (최초 1회) 원격 접속 인증 설정 — 안 하면 vt mobile이 거부됨
 1. vt mobile             URL + QR 코드 출력
 2. 폰 카메라로 QR 스캔
 3. tmux 세션에 자동 연결
