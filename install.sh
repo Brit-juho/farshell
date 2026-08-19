@@ -135,8 +135,11 @@ if [ ! -f "$HOME/.vt.env" ]; then
 VT_DIR=$VT_DIR
 VT_PORT=${VT_PORT:-7777}
 VT_PYTHON=\${VT_DIR}/.venv/bin/python
-# VT_TOKEN=your-secret    # 원격 접속 시 인증 (선택)
-# VT_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (D2, 선택)
+# 'vt mobile'(공개 터널)은 인증이 없으면 실행을 거부합니다 — 아래 둘 중 하나로
+# 인증을 먼저 설정하세요(권장: vt password). localhost/lan/tailscale 모드는 필요 없습니다.
+#   vt password              대화형으로 비밀번호 설정 (scrypt 해시만 여기 저장됨)
+# VT_AUTH_TOKEN=your-secret  기계용 토큰 (데몬/QR 등, 원한다면 직접 값 채우기)
+# VT_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (선택)
 EOF
   chmod 600 "$HOME/.vt.env"
   echo "✓ 설정 파일 생성 → ~/.vt.env (권한 600)"
@@ -207,4 +210,7 @@ fi
 echo "  │                                         │"
 echo "  │  새 터미널을 열거나 'source ~/.zshrc' 실행  │"
 echo "  └─────────────────────────────────────────┘"
+echo ""
+echo "  참고: 'vt mobile'로 공개 터널(원격 접속)을 열려면 먼저 인증을 설정해야"
+echo "  합니다 — 'vt password' 실행 (localhost/lan/tailscale 모드는 필요 없음)."
 echo ""
