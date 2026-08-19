@@ -107,11 +107,17 @@ def test_no_roots_configured_denies_everything(monkeypatch, tmp_path):
         fsguard.resolve_under_roots("/etc/passwd")
 
 
-def test_default_boundary_is_home_for_upward_navigation(monkeypatch):
-    """기본 경계(get_roots)는 홈 전체 — ~/GitHub 위로 이동할 수 있어야 하기 때문이다.
-    ~/.ssh, ~/.aws 등은 거부 목록이 경계와 무관하게 계속 막는다(아래 두 테스트)."""
+def test_default_boundary_is_github_not_home(monkeypatch):
+    """기본 경계(get_roots)는 이제 ~/GitHub 이다 — $HOME 전체를 기본으로 열면
+    .ssh/.aws/셸 히스토리 등 거부 목록이 모르는 임의 시크릿까지 사정권에 든다.
+    CLAUDE.md에 문서화된 기본값(~/GitHub)과도 일치해야 한다."""
     monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
-    assert fsguard.get_roots() == [Path.home()]
+    expected = Path.home() / "GitHub"
+    if expected.is_dir():
+        assert fsguard.get_roots() == [expected]
+    else:
+        # ~/GitHub 이 없는 환경에서는 완전 잠금을 피해 홈으로 폴백한다.
+        assert fsguard.get_roots() == [Path.home()]
 
 
 def test_default_start_root_is_not_home(monkeypatch):
@@ -130,11 +136,14 @@ def test_default_boundary_still_denies_home_secrets(monkeypatch):
         fsguard.resolve_under_roots(str(Path.home() / ".aws" / "credentials"))
 
 
-def test_default_boundary_allows_navigating_above_start_root(monkeypatch):
-    """~/GitHub 의 부모(=홈)는 경계 안이라 열람이 허용돼야 한다."""
+def test_default_boundary_does_not_allow_navigating_above_start_root(monkeypatch):
+    """기본 경계는 이제 ~/GitHub 자체다 — 위(홈)로 이동은 opt-in(VT_BROWSE_ROOTS 명시)
+    으로만 가능해야 한다. ~/GitHub 이 실제로 존재하는 환경에서만 검증한다."""
     monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
-    p = fsguard.resolve_under_roots(str(Path.home()))
-    assert p == Path.home().resolve()
+    if not (Path.home() / "GitHub").is_dir():
+        pytest.skip("이 환경에는 ~/GitHub 이 없어 기본 경계가 홈으로 폴백한다")
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(Path.home()))
 
 
 def test_custom_roots_are_not_widened_to_home(sandbox):

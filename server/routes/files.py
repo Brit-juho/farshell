@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -167,10 +168,23 @@ def _collect_status(repo: Path) -> dict:
         return {"repo": True, "root": str(top), "files": []}
     files = []
     # -z 는 NUL 구분이라 공백/한글 파일명이 안전하다.
-    for rec in out.split("\0"):
+    # rename/copy(R/C)는 필드가 2개: "XY new_path\0old_path\0" — old_path는
+    # 별도 NUL 필드지만 상태 접두사(XY )가 없다. 이걸 그냥 다음 status
+    # record로 오인해서 파싱하면(구 코드) rec[:2]가 old_path 앞 두 글자를
+    # 가짜 status로 삼켜서 UI에 존재하지 않는 파일/상태가 나타난다.
+    parts = out.split("\0")
+    it = iter(parts)
+    for rec in it:
         if len(rec) < 4:
             continue
-        files.append({"status": rec[:2].strip(), "file": rec[3:]})
+        status = rec[:2].strip()
+        entry = {"status": status, "file": rec[3:]}
+        if status and status[0] in ("R", "C"):
+            try:
+                entry["orig_file"] = next(it)
+            except StopIteration:
+                pass
+        files.append(entry)
     return {"repo": True, "root": str(top), "files": files}
 
 
@@ -183,6 +197,63 @@ async def git_status(repo: str = Query(...)):
     if not p.is_dir():
         return JSONResponse({"error": "not a directory"}, status_code=404)
     return await asyncio.to_thread(_collect_status, p)
+
+
+# diff 섹션 헤더: "diff --git a/path b/path" — b/ 쪽 경로를 실제 대상 파일로 취급한다
+# (rename의 경우도 b/ 가 결과 경로). a/, b/ 접두사는 git이 항상 붙이므로 그대로 벗긴다.
+_DIFF_HEADER_RE = re.compile(r"^diff --git a/(.+) b/(.+)$")
+
+REDACTION_PLACEHOLDER = "[내용 가려짐 — 보호된 경로]"
+
+
+def _diff_path_denied(path: str) -> bool:
+    """git diff 헤더에 나온 저장소 상대경로가 fsguard 거부 목록에 걸리는지 확인.
+
+    fsguard.resolve_under_roots()는 루트 경계 검사 + 존재 확인까지 하므로 여기서는
+    쓸 수 없다(diff에 나온 경로는 루트 기준 절대경로가 아니고, 삭제된 파일은 더는
+    존재하지 않을 수도 있다). 순수 이름 판정 로직(_check_denylist)만 재구현 없이
+    그대로 재사용한다 — 거부 목록은 fsguard.py 한 곳에만 있어야 한다.
+    """
+    return fsguard._check_denylist(Path(path)) is not None
+
+
+def _redact_diff(diff_text: str, is_denied=_diff_path_denied) -> str:
+    """거부 목록에 걸리는 파일의 diff 본문을 플레이스홀더로 치환한다.
+
+    /api/fs/file 은 .env·*.pem·id_rsa 등을 절대 내보내지 않는데, 같은 파일이 git diff에는
+    그대로 실려 나가면 그 방어가 무의미해진다. 파일 경로(헤더 줄)는 "뭐가 바뀌었는지"
+    UI에 보여줘야 하므로 남기고, 실제 내용(hunk 본문)만 가린다.
+    """
+    if not diff_text:
+        return diff_text
+    lines = diff_text.split("\n")
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        m = _DIFF_HEADER_RE.match(lines[i])
+        if not m:
+            out.append(lines[i])
+            i += 1
+            continue
+        path_b = m.group(2)
+        section_start = i
+        i += 1
+        while i < n and not lines[i].startswith("diff --git a/"):
+            i += 1
+        section = lines[section_start:i]
+        if is_denied(path_b):
+            # "diff --git", "index", "---", "+++" 같은 헤더 줄만 남기고 hunk(@@ ...)는 버린다.
+            kept = []
+            for hl in section:
+                kept.append(hl)
+                if hl.startswith("+++ "):
+                    break
+            out.extend(kept)
+            out.append(REDACTION_PLACEHOLDER)
+        else:
+            out.extend(section)
+    return "\n".join(out)
 
 
 def _collect_diff(repo: Path, file: str, staged: bool) -> dict:
@@ -199,6 +270,7 @@ def _collect_diff(repo: Path, file: str, staged: bool) -> dict:
     if rc == 124:
         return {"repo": True, "diff": "", "truncated": False,
                 "error": "git diff 시간 초과"}
+    out = _redact_diff(out)
     truncated = len(out.encode()) > MAX_DIFF_BYTES
     if truncated:
         out = out.encode()[:MAX_DIFF_BYTES].decode("utf-8", errors="ignore")
