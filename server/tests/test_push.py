@@ -10,6 +10,8 @@
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -195,6 +197,30 @@ def test_payload_is_truncated(monkeypatch):
     push.send("T" * 500, "B" * 500)
     assert len(captured["title"]) <= push.MAX_BODY
     assert len(captured["body"]) <= push.MAX_BODY
+
+
+def test_concurrent_add_subs_do_not_lose_items(tmp_path):
+    """별도 프로세스 4개가 동시에 add_sub — flock 이 없으면 항목이 유실된다."""
+    state = str(tmp_path / "vt-concurrent")
+    server_dir = str(Path(__file__).resolve().parent.parent)
+    code = (
+        "import sys; sys.path.insert(0, %r)\n"
+        "import push\n"
+        "for i in range(10):\n"
+        "    push.add_sub({'endpoint': f'https://fcm.example/{sys.argv[1]}-{i}',"
+        " 'keys': {'p256dh': 'x', 'auth': 'y'}}, '')\n" % server_dir
+    )
+    env = {**os.environ, "VT_STATE_DIR": state}
+    procs = [
+        subprocess.Popen([sys.executable, "-c", code, f"w{n}"], env=env)
+        for n in range(4)
+    ]
+    for p in procs:
+        p.wait(timeout=30)
+    subs = json.loads((Path(state) / "push-subs.json").read_text())
+    assert len(subs) == 40, f"유실 발생: {len(subs)}/40"
+    eps = {s["subscription"]["endpoint"] for s in subs}
+    assert len(eps) == 40  # endpoint 중복도 없어야 한다
 
 
 def test_status_reports_stale_origin_count(monkeypatch):
