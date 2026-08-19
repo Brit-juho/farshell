@@ -518,6 +518,13 @@ def _cli(argv: list) -> int:
     if cmd == "ticket-new":
         print(issue_ticket(label=arg))
         return 0
+    if cmd in ("status", "is-protected"):
+        # bin/vt가 서버 프로세스 없이 "인증이 켜져 있는가"만 물을 때 쓴다(예: `vt mobile`이
+        # 공개 터널을 열기 전 사전 점검). exit code로만 판단 가능하게 truthy/falsy 출력도
+        # 함께 찍는다 — 0=인증 있음(protected), 1=인증 없음(unprotected).
+        protected = is_protected()
+        print(json.dumps({"protected": protected}, ensure_ascii=False))
+        return 0 if protected else 1
     print(f"unknown command: {cmd}", file=__import__("sys").stderr)
     return 2
 
