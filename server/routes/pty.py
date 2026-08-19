@@ -8,6 +8,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, File, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -66,11 +67,12 @@ async def list_sessions():
     # 세션으로 전환되어 살아남아 PTY가 EOF되지 않는다 → 죽은 tmux를 가리키는 web 세션이
     # 목록·메모리(PTY·scrollback)·클라이언트 터미널로 계속 쌓인다. 여기서 실제 tmux 존재를
     # 검증해 좀비 세션을 정리하고, 살아있는 것만 반환한다.
+    live_tmux_names = {p.session for p in tmux_runner.get_all_panes()}
     result = []
     for s in list(pty_mgr.sessions.values()):
         info = session_store.get(s.session_id)
         tmux_name = info.tmux_name if info else None
-        if tmux_name and not tmux_runner.has_session(tmux_name):
+        if tmux_name and tmux_name not in live_tmux_names:
             pty_mgr.destroy_session(s.session_id)
             session_store.remove(s.session_id)
             output_watcher.remove_session(s.session_id)
@@ -249,114 +251,123 @@ async def ws_terminal(ws: WebSocket, session_id: str):
     if per_session >= WS_MAX_PER_SESSION:
         await ws.close(code=1013, reason="Max per-session connections")
         return
-    # A1: 연결 카운터 증가는 E2E 협상 성공 이후로 미룬다. 예전엔 여기서 증가시켰는데,
-    # 아래 E2E 핸드셰이크 실패 return(4500/4400)은 try/finally 이전이라 감소를 못 타서
-    # 카운터가 샜다 → ?e2e=1로 실패 핸드셰이크를 반복하면 WS_MAX_TOTAL이 소진돼
-    # 정상 접속이 거부되는 DoS. 증가/감소를 finally와 확실히 페어링한다.
+
+    # A2: 한도 검사 통과 직후 카운터를 즉시 증가시킨다. 예전엔(A1) 증가를 E2E 협상
+    # 성공 이후로 미뤘는데, E2E 핸드셰이크에는 실제 await(최대 10초 receive_text)가
+    # 있어 그 사이 동시에 들어온 여러 ?e2e=1 연결이 전부 한도 검사를 통과해버리는
+    # TOCTOU 레이스가 있었다 — WS_MAX_PER_SESSION/WS_MAX_TOTAL을 넘겨 연결이 쌓였다.
+    # 이제는 한도 검사 직후(await 없는 구간)에 증가시키고, 아래 try/finally가
+    # 핸드셰이크 실패를 포함한 모든 종료 경로에서 감소를 보장한다.
+    _deps.ws_count_per_session[session_id] = _deps.ws_count_per_session.get(session_id, 0) + 1
+    _deps.ws_total_count += 1
 
     loop = asyncio.get_running_loop()
     last_pong = loop.time()
     send_queue: asyncio.Queue = asyncio.Queue(maxsize=WS_QUEUE_HIGH * 2)
     pty_paused = False
     ws_id = id(ws)
-
-    # E2E 협상
-    e2e_requested = (
-        ws.query_params.get("e2e", "") in ("1", "true", "yes")
-        or crypto_channel.is_enabled()
-    )
-    channel = None
-    if e2e_requested and crypto_channel.is_available():
-        server_kp = crypto_channel.new_server_keypair()
-        if server_kp is None:
-            await ws.close(code=4500, reason="E2E unavailable")
-            return
-        await ws.send_text(json.dumps({"type": "e2e-hello", "pub": server_kp.public_b64}))
-        try:
-            first = await asyncio.wait_for(ws.receive_text(), timeout=10.0)
-            handshake = json.loads(first)
-            if handshake.get("type") == "e2e-ack" and handshake.get("pub"):
-                channel = crypto_channel.Channel.derive(server_kp.private, handshake["pub"])
-                logger.info(f"[E2E] 핸드셰이크 성공 sid={session_id}")
-            else:
-                await ws.close(code=4400, reason="E2E handshake invalid")
-                return
-        except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"[E2E] 핸드셰이크 실패: {e}")
-            await ws.close(code=4400, reason="E2E handshake failed")
-            return
-
-    def on_data(data: bytes):
-        nonlocal pty_paused
-        output_watcher.feed_output(session_id, data)
-        _auto_responder.feed(session_id, data)
-        out = channel.encrypt_simple(data) if channel else data
-        try:
-            send_queue.put_nowait(out)
-        except asyncio.QueueFull:
-            try:
-                send_queue.get_nowait()
-                send_queue.put_nowait(out)
-            except (asyncio.QueueEmpty, asyncio.QueueFull):
-                pass
-        qs = send_queue.qsize()
-        if qs > WS_QUEUE_HIGH and not pty_paused:
-            pty_paused = True
-            pty_mgr.pause_read(session_id, ws_id)
-        elif qs < WS_QUEUE_LOW and pty_paused:
-            pty_paused = False
-            pty_mgr.resume_read(session_id, ws_id)
-
-    async def _send_worker():
-        while True:
-            try:
-                data = await send_queue.get()
-                await ws.send_bytes(data)
-            except (WebSocketDisconnect, RuntimeError):
-                break
-            except Exception as e:
-                logger.debug(f"[ws] send error: {e}")
-                break
-
-    async def _heartbeat_loop():
-        while True:
-            try:
-                await asyncio.sleep(WS_HEARTBEAT_INTERVAL)
-                if loop.time() - last_pong > WS_HEARTBEAT_TIMEOUT:
-                    logger.info(f"[ws] heartbeat timeout sid={session_id}")
-                    try:
-                        await ws.close(code=1001, reason="heartbeat timeout")
-                    except Exception:
-                        pass
-                    return
-                try:
-                    await ws.send_text(json.dumps({"type": "ping"}))
-                except Exception:
-                    return
-            except asyncio.CancelledError:
-                return
-
-    # A1: E2E 협상까지 성공한 지금 카운터를 올린다 — 아래 try/finally가 감소를 보장.
-    # 여기~try 사이에는 raise 가능한 await가 없어 증가/감소 페어링이 유지된다.
-    _deps.ws_count_per_session[session_id] = _deps.ws_count_per_session.get(session_id, 0) + 1
-    _deps.ws_total_count += 1
-
-    # C3: scrollback을 live 데이터와 같은 send_queue로 흘려보낸다. 예전엔 subscribe로
-    # live 데이터가 큐에 쌓이는 동안 scrollback을 _safe_send로 직접 보내 두 전송 경로가
-    # 경쟁했다(재접속 tail 중복/역전). scrollback을 먼저 큐에 넣고 subscribe하면 단일
-    # FIFO 경로로 순서가 보장된다.
-    for chunk in pty_mgr.get_scrollback(session_id):
-        out = channel.encrypt_simple(chunk) if channel else chunk
-        try:
-            send_queue.put_nowait(out)
-        except asyncio.QueueFull:
-            break
-    pty_mgr.subscribe(session_id, on_data)
-
-    send_task = asyncio.create_task(_send_worker())
-    hb_task = asyncio.create_task(_heartbeat_loop())
+    send_task: Optional[asyncio.Task] = None
+    hb_task: Optional[asyncio.Task] = None
+    on_data = None  # subscribe() 여부의 표식 겸 finally에서 쓸 콜백 레퍼런스
 
     try:
+        # E2E 협상
+        e2e_requested = (
+            ws.query_params.get("e2e", "") in ("1", "true", "yes")
+            or crypto_channel.is_enabled()
+        )
+        channel = None
+        if e2e_requested and crypto_channel.is_available():
+            server_kp = crypto_channel.new_server_keypair()
+            if server_kp is None:
+                await ws.close(code=4500, reason="E2E unavailable")
+                return
+            await ws.send_text(json.dumps({
+                "type": "e2e-hello",
+                "pub": server_kp.public_b64,
+                "identity_pub": server_kp.identity_pub_b64,
+                "sig": server_kp.sig_b64,
+            }))
+            try:
+                first = await asyncio.wait_for(ws.receive_text(), timeout=10.0)
+                handshake = json.loads(first)
+                if handshake.get("type") == "e2e-ack" and handshake.get("pub"):
+                    channel = crypto_channel.Channel.derive(server_kp.private, handshake["pub"])
+                    logger.info(f"[E2E] 핸드셰이크 성공 sid={session_id}")
+                else:
+                    await ws.close(code=4400, reason="E2E handshake invalid")
+                    return
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.warning(f"[E2E] 핸드셰이크 실패: {e}")
+                await ws.close(code=4400, reason="E2E handshake failed")
+                return
+
+        def _on_data(data: bytes):
+            nonlocal pty_paused
+            output_watcher.feed_output(session_id, data)
+            _auto_responder.feed(session_id, data)
+            out = channel.encrypt_simple(data) if channel else data
+            try:
+                send_queue.put_nowait(out)
+            except asyncio.QueueFull:
+                try:
+                    send_queue.get_nowait()
+                    send_queue.put_nowait(out)
+                except (asyncio.QueueEmpty, asyncio.QueueFull):
+                    pass
+            qs = send_queue.qsize()
+            if qs > WS_QUEUE_HIGH and not pty_paused:
+                pty_paused = True
+                pty_mgr.pause_read(session_id, ws_id)
+            elif qs < WS_QUEUE_LOW and pty_paused:
+                pty_paused = False
+                pty_mgr.resume_read(session_id, ws_id)
+
+        async def _send_worker():
+            while True:
+                try:
+                    data = await send_queue.get()
+                    await ws.send_bytes(data)
+                except (WebSocketDisconnect, RuntimeError):
+                    break
+                except Exception as e:
+                    logger.debug(f"[ws] send error: {e}")
+                    break
+
+        async def _heartbeat_loop():
+            while True:
+                try:
+                    await asyncio.sleep(WS_HEARTBEAT_INTERVAL)
+                    if loop.time() - last_pong > WS_HEARTBEAT_TIMEOUT:
+                        logger.info(f"[ws] heartbeat timeout sid={session_id}")
+                        try:
+                            await ws.close(code=1001, reason="heartbeat timeout")
+                        except Exception:
+                            pass
+                        return
+                    try:
+                        await ws.send_text(json.dumps({"type": "ping"}))
+                    except Exception:
+                        return
+                except asyncio.CancelledError:
+                    return
+
+        # C3: scrollback을 live 데이터와 같은 send_queue로 흘려보낸다. 예전엔 subscribe로
+        # live 데이터가 큐에 쌓이는 동안 scrollback을 _safe_send로 직접 보내 두 전송 경로가
+        # 경쟁했다(재접속 tail 중복/역전). scrollback을 먼저 큐에 넣고 subscribe하면 단일
+        # FIFO 경로로 순서가 보장된다.
+        for chunk in pty_mgr.get_scrollback(session_id):
+            out = channel.encrypt_simple(chunk) if channel else chunk
+            try:
+                send_queue.put_nowait(out)
+            except asyncio.QueueFull:
+                break
+        on_data = _on_data
+        pty_mgr.subscribe(session_id, on_data)
+
+        send_task = asyncio.create_task(_send_worker())
+        hb_task = asyncio.create_task(_heartbeat_loop())
+
         while True:
             msg = await ws.receive()
             if msg["type"] == "websocket.receive":
@@ -394,11 +405,17 @@ async def ws_terminal(ws: WebSocket, session_id: str):
     except WebSocketDisconnect:
         pass
     finally:
-        pty_mgr.unsubscribe(session_id, on_data)
-        send_task.cancel()
-        hb_task.cancel()
+        # E2E 핸드셰이크 실패 등으로 subscribe()에 도달하지 못했으면 on_data는 None —
+        # 그 경우 unsubscribe할 대상이 없으므로 건너뛴다.
+        if on_data is not None:
+            pty_mgr.unsubscribe(session_id, on_data)
+        if send_task is not None:
+            send_task.cancel()
+        if hb_task is not None:
+            hb_task.cancel()
         if pty_paused:
             pty_mgr.resume_read(session_id, ws_id)
+        # A2: 핸드셰이크 실패를 포함한 모든 종료 경로에서 위에서 올린 카운터를 되돌린다.
         _deps.ws_count_per_session[session_id] = max(0, _deps.ws_count_per_session.get(session_id, 1) - 1)
         if _deps.ws_count_per_session[session_id] == 0:
             _deps.ws_count_per_session.pop(session_id, None)

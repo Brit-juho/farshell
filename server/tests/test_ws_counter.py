@@ -61,6 +61,52 @@ def test_normal_connect_disconnect_returns_counter_to_zero(client):
         client.delete(f"/api/sessions/{sid}")
 
 
+def test_concurrent_e2e_connects_enforce_per_session_limit(client, monkeypatch):
+    """A2 회귀: per-session 한도 검사와 카운터 증가 사이에 E2E 핸드셰이크의 await가
+    끼어 있으면(TOCTOU), 동시에 들어온 두 번째 ?e2e=1 연결이 첫 번째가 아직 핸드셰이크
+    중(카운터 미증가)인 틈을 타 한도 검사를 통과해버릴 수 있었다. 이제 카운터는 한도
+    검사 통과 직후(핸드셰이크 시작 전)에 증가하므로, 한도=1일 때 두 번째 연결은
+    첫 번째가 핸드셰이크를 끝내기 전이라도 즉시 "Max per-session connections"로
+    거부돼야 한다.
+    """
+    nacl = pytest.importorskip("nacl")  # noqa: F841 — 없으면 스킵
+    import crypto_channel
+    if not crypto_channel.is_available():
+        pytest.skip("nacl/crypto_channel 불가")
+
+    import routes.pty as pty_route
+    monkeypatch.setattr(pty_route, "WS_MAX_PER_SESSION", 1)
+
+    sid = _make_session(client)
+    try:
+        # A: e2e-hello까지만 받고 ack는 보내지 않은 채 핸드셰이크 대기 상태로 둔다 —
+        # 옛 코드였다면 이 시점에 카운터가 아직 0이라 B가 한도 검사를 통과했을 것.
+        with client.websocket_connect(f"/ws/{sid}?e2e=1") as ws_a:
+            hello = json.loads(ws_a.receive_text())
+            assert hello["type"] == "e2e-hello"
+
+            # B: A가 핸드셰이크를 마치지 않은 상태에서 같은 세션에 동시 접속 시도.
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                with client.websocket_connect(f"/ws/{sid}?e2e=1") as ws_b:
+                    ws_b.receive_text()
+            assert exc_info.value.code == 1013
+            assert "Max per-session connections" in (exc_info.value.reason or "")
+            assert deps.ws_count_per_session.get(sid, 0) == 1, (
+                f"B가 한도 검사를 통과해 카운터가 새었다: {deps.ws_count_per_session}"
+            )
+
+            # A는 정상적으로 핸드셰이크를 마무리해서 정리한다.
+            server_pub = hello["pub"]
+            from nacl.public import PrivateKey
+            import base64
+            client_sk = PrivateKey.generate()
+            client_pub_b64 = base64.b64encode(bytes(client_sk.public_key)).decode()
+            ws_a.send_text(json.dumps({"type": "e2e-ack", "pub": client_pub_b64}))
+    finally:
+        client.delete(f"/api/sessions/{sid}")
+    assert _wait_counter_zero(), f"counter leaked: {deps.ws_total_count}"
+
+
 def test_e2e_handshake_failure_does_not_leak_counter(client):
     """A1 핵심: E2E ack를 잘못 보내 서버가 4400으로 끊어도 카운터가 새지 않는다."""
     nacl = pytest.importorskip("nacl")  # noqa: F841 — 없으면 스킵
