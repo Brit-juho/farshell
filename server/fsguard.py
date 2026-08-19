@@ -67,14 +67,17 @@ def get_roots() -> list[Path]:
     """열람 허용 경계 — resolve_under_roots 가 이 안에 있는지만 검사한다.
 
     VT_BROWSE_ROOTS 를 명시하면 그 경계를 그대로 쓴다(사용자가 직접 고른 정책이므로
-    자동으로 넓히지 않는다). 비워두면(기본값) 홈 디렉토리 전체가 경계다 — 시작 화면은
-    get_start_roots()가 ~/GitHub 으로 더 좁게 잡아주고, ~/.ssh·~/.aws 등은 거부 목록
-    (DENY_NAMES/DENY_DIR_PARTS)이 경계와 무관하게 항상 막으므로 "위로 이동 가능"과
-    "시크릿 노출"은 별개다.
+    자동으로 넓히지 않는다). 비워두면(기본값) 경계는 ~/GitHub 이다 — $HOME 전체를
+    기본으로 열면 .ssh/.aws/셸 히스토리/거부 목록이 모르는 임의 시크릿 파일명까지
+    사정권에 들어온다(CLAUDE.md에 문서화된 기본값과도 일치). 홈 전체·상위 디렉토리로
+    범위를 넓히는 건 VT_BROWSE_ROOTS를 명시하는 opt-in으로만 가능하다.
+    ~/GitHub 이 없는 환경(신규 설치 등)에서는 완전 잠금을 피하려 $HOME 으로 폴백한다 —
+    이 경우에도 ~/.ssh·~/.aws 등은 거부 목록(DENY_NAMES/DENY_DIR_PARTS)이 여전히 막는다.
     """
     raw = os.environ.get("VT_BROWSE_ROOTS", "").strip()
     if not raw:
-        return [Path.home()]
+        default = Path.home() / "GitHub"
+        return [default] if default.is_dir() else [Path.home()]
     roots = []
     for chunk in raw.split(":"):
         chunk = chunk.strip()
