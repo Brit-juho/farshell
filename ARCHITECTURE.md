@@ -1,4 +1,4 @@
-# farshell 아키텍처
+# FarShell 아키텍처
 
 > **버전:** v1.5.0 (2026-07-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md)
 
@@ -11,7 +11,7 @@
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Control Plane — 시작/정지/진단 (사용자 한정 동작)              │
-│   bin/vt, install.sh, ~/.vt.env                 │
+│   bin/fsh, install.sh, ~/.vt.env                │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -36,12 +36,12 @@
 
 ### 1.1 단일 tmux 서버 원칙 (Phase 6)
 
-vt의 모든 클라이언트는 격리된 tmux 소켓 `-L vt` (`VT_TMUX_SOCKET` 환경변수로 오버라이드 가능)에 접속한다. 사용자의 기존 `tmux ls` 세션과 분리되며, 4개 클라이언트가 같은 서버를 공유한다:
+fsh의 모든 클라이언트는 격리된 tmux 소켓 `-L fsh` (`VT_TMUX_SOCKET` 환경변수로 오버라이드 가능)에 접속한다. 사용자의 기존 `tmux ls` 세션과 분리되며, 4개 클라이언트가 같은 서버를 공유한다:
 
 | 클라이언트 | 호출 형태 | 출처 |
 |------------|-----------|------|
-| `bin/vt` (CLI) | `${TMUX_BASE[@]} ...` (`tmux -L vt`) | `bin/vt` 상단 정의 |
-| `server/main.py` (PTY) | `tmux -L vt attach-session ...` | `pty_manager` 경로 |
+| `bin/fsh` (CLI) | `${TMUX_BASE[@]} ...` (`tmux -L fsh`) | `bin/fsh` 상단 정의 |
+| `server/main.py` (PTY) | `tmux -L fsh attach-session ...` | `pty_manager` 경로 |
 | `server/voice_daemon.py` | `TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]` | Phase 6 #6-1 |
 | Stop hook (`tts_hook.sh`) | (TTS만, tmux 직접 호출 없음) | — |
 
@@ -54,8 +54,8 @@ vt의 모든 클라이언트는 격리된 tmux 소켓 `-L vt` (`VT_TMUX_SOCKET` 
 ### `bin/` — CLI 진입점 (Control Plane)
 | 파일 | 책임 |
 |---|---|
-| `vt` | macOS/Linux. CLI — 서브커맨드 라우팅, 프로세스 수명 관리 (서버·터널·음성 데몬), iTerm 자동 오픈, 진단 |
-| `vt.ps1` | Windows PowerShell 버전 |
+| `fsh` | macOS/Linux. CLI — 서브커맨드 라우팅, 프로세스 수명 관리 (서버·터널·음성 데몬), iTerm 자동 오픈, 진단 |
+| `fsh.ps1` | Windows PowerShell 버전 |
 
 서브커맨드: `voice` · `mobile` · `start` · `stop` · `status` · `claude` · `handoff` · `ssh` · `doctor`
 
@@ -88,7 +88,7 @@ vt의 모든 클라이언트는 격리된 tmux 소켓 `-L vt` (`VT_TMUX_SOCKET` 
 ### 루트
 | 파일 | 책임 |
 |---|---|
-| `install.sh` | Python venv 생성, 프로필별 패키지 설치, vt 심링크, ~/.vt.env 초기화 |
+| `install.sh` | Python venv 생성, 프로필별 패키지 설치, fsh 심링크, ~/.vt.env 초기화 |
 | `requirements-core.txt` | 터미널 전용 (~50MB) |
 | `requirements-voice.txt` | 음성 추가 의존성 (~1.5GB) |
 | `requirements.txt` | 위 둘 합침 (하위 호환) |
@@ -96,10 +96,10 @@ vt의 모든 클라이언트는 격리된 tmux 소켓 `-L vt` (`VT_TMUX_SOCKET` 
 ### `.claude/skills/` — Claude Code 스킬
 | 파일 | 트리거 |
 |---|---|
-| `vt/SKILL.md` | 전역: "음성 모드", "모바일 접속" 등 |
-| `vt-voice.md` | Voice Daemon 수동 설치/실행 |
-| `vt-mobile.md` | 모바일 adb 테스트 |
-| `vt-start.md` | 서버 수동 시작 |
+| `fsh/SKILL.md` | 전역: "음성 모드", "모바일 접속" 등 |
+| `fsh-voice.md` | Voice Daemon 수동 설치/실행 |
+| `fsh-mobile.md` | 모바일 adb 테스트 |
+| `fsh-start.md` | 서버 수동 시작 |
 
 ---
 
@@ -132,7 +132,7 @@ Claude Code Stop hook → server/tts_hook.sh
 
 ### 3.4 모바일 ↔ 데스크톱 핸드오프
 ```
-데스크톱:  tmux 세션 'dev' 생성 (bin/vt)
+데스크톱:  tmux 세션 'dev' 생성 (bin/fsh)
   ↓ (같은 OS의 tmux server에 등록됨)
 데스크톱 iTerm:  tmux attach -t dev
 모바일 브라우저:  GET /?...#tmux=dev
@@ -173,7 +173,7 @@ PTY 출력 → output_watcher.feed_output()
 - 환경변수 규칙: `VT_XXX_TOKEN` / `VT_XXX_WEBHOOK`
 
 ### 4.4 새 CLI 서브커맨드
-- `bin/vt`의 main switch에 케이스 추가
+- `bin/fsh`의 main switch에 케이스 추가
 - 함수명 규칙: `cmd_<이름>()`
 - help 섹션 문자열에 한 줄 추가
 
@@ -189,7 +189,7 @@ PTY 출력 → output_watcher.feed_output()
 ### 4.7 새 원격 접속 경로 (D9: Tailscale + SSH 예시)
 - 원격 데스크톱/브라우저가 막힌 환경(회사망 등)에서도 tmux는 "단일 진실의 원천"이라
   **새 클라이언트 종류를 추가하는 것만으로** 접속 경로를 늘릴 수 있다 — SSH도 web/voice와
-  동급의 다섯 번째 클라이언트일 뿐, 별도 프로토콜 구현이 필요 없다 (그냥 `tmux -L vt attach`).
+  동급의 다섯 번째 클라이언트일 뿐, 별도 프로토콜 구현이 필요 없다 (그냥 `tmux -L fsh attach`).
 - 네트워크 정책에 새 CIDR 대역을 추가하려면 `network_access.py`의 `_expand_keyword()` +
   `network_mode_to_spec()`에 키워드/모드 추가 (Tailscale은 `tailscale` → CGNAT `100.64.0.0/10`).
 - 대역 자체의 상태 조회(설치/실행/자기 IP)는 `tunnel.py`(Cloudflare)와 동일한 패턴으로
@@ -197,7 +197,7 @@ PTY 출력 → output_watcher.feed_output()
   별도 모듈이 담당하는 게 관례.
 - 서버가 자연히 못 보는 클라이언트(순수 SSH 등)의 접속을 알고 싶으면 tmux 훅
   (`client-attached`/`client-detached`)으로 이벤트를 잡아 `/api/notify/client-event` 같은
-  내부 전용 엔드포인트에 POST → 기존 `notify.py` 브릿지 재사용. `bin/vt`가 옵트인 환경변수로
+  내부 전용 엔드포인트에 POST → 기존 `notify.py` 브릿지 재사용. `bin/fsh`가 옵트인 환경변수로
   훅을 등록/해제하는 패턴(`_maybe_register_client_hooks`)을 따르면 기본 동작을 안 건드리고
   추가 가능.
 
@@ -206,7 +206,7 @@ PTY 출력 → output_watcher.feed_output()
 ## 5. 실행 시 프로세스 맵
 
 ```
-$ vt start
+$ fsh start
   ├─ uvicorn server.main:app  (port 7777)                [서버]
   ├─ cloudflared tunnel --url ...                        [터널]
   ├─ python server/voice_daemon.py                       [음성 데몬]
@@ -214,7 +214,7 @@ $ vt start
       └─ zsh (또는 claude --resume)                      [작업 셸]
 ```
 
-PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `vt stop`이 모두 정리.
+PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `fsh stop`이 모두 정리.
 
 ---
 
@@ -240,11 +240,11 @@ PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `vt stop`이 모�
 `/Users/neo/.claude/plans/adaptive-leaping-cray.md`에 상세. 현재 완료된 개선:
 - ✅ D1 원라인 설치 스크립트
 - ✅ D2 ntfy/Telegram 푸시 브릿지
-- ✅ D4 `vt claude` / `vt handoff` 서브커맨드
+- ✅ D4 `fsh claude` / `fsh handoff` 서브커맨드
 - ✅ D5 세션 ID 확장 (`secrets.token_urlsafe(12)`)
 - ✅ D6 본 문서
-- ✅ D7 `vt doctor` 진단
-- ✅ D9 Tailscale + SSH 원격 접속 (`vt ssh`, `--network tailscale`, 클라이언트 접속 알림)
+- ✅ D7 `fsh doctor` 진단
+- ✅ D9 Tailscale + SSH 원격 접속 (`fsh ssh`, `--network tailscale`, 클라이언트 접속 알림)
 
 남은 작업:
 - ⏳ D3 터널 페이로드 E2E 암호화
