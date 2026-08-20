@@ -363,6 +363,12 @@ async def auth_login(request: Request):
 
     device_secret = ""
     device_id = ""
+    # D14/D15: 잠금은 기기/IP 단위로 건다(전역 X) — 한 클라이언트의 실패가 다른
+    # 클라이언트의 로그인·기기 등록까지 막지 않도록. 신뢰 프록시 설정을 그대로 따른다
+    # (NetworkAccessMiddleware와 동일한 _effective_client_ip).
+    client_key = _effective_client_ip(
+        request.client.host if request.client else None, request.headers
+    ) or "unknown"
 
     if ticket:
         if not auth.consume_ticket(ticket):
@@ -370,9 +376,17 @@ async def auth_login(request: Request):
         device_secret, device_id = auth.register_device(_device_label(request))
         logger.info(f"[auth] 티켓으로 기기 등록: {device_id} ({_device_label(request)})")
     else:
+        locked = auth.password_lock_remaining(client_key)
+        if locked:
+            return JSONResponse(
+                {"error": "password_locked", "retry_after": locked}, status_code=429
+            )
+
         kind = auth.credential_kind(cred)
         if kind is None:
+            auth.password_note_failure(client_key)
             return JSONResponse({"error": "invalid"}, status_code=401)
+        auth.password_reset_failures(client_key)
 
         if kind == "password":
             known = auth.verify_device(request.cookies.get("vt_device", ""))
@@ -380,21 +394,21 @@ async def auth_login(request: Request):
                 device_id = known["id"]
             else:
                 if auth.totp_enabled():
-                    locked = auth.otp_lock_remaining()
-                    if locked:
+                    otp_locked = auth.otp_lock_remaining(client_key)
+                    if otp_locked:
                         return JSONResponse(
-                            {"error": "otp_locked", "retry_after": locked}, status_code=429
+                            {"error": "otp_locked", "retry_after": otp_locked}, status_code=429
                         )
                     if not otp:
                         return JSONResponse({"error": "otp_required"}, status_code=401)
                     if not auth.verify_totp(otp):
-                        auth.otp_note_failure()
+                        auth.otp_note_failure(client_key)
                         return JSONResponse(
                             {"error": "otp_invalid",
-                             "remaining": max(0, auth.OTP_MAX_FAILS - len(auth._otp_failures))},
+                             "remaining": max(0, auth.OTP_MAX_FAILS - auth.otp_failure_count(client_key))},
                             status_code=401,
                         )
-                    auth.otp_reset_failures()
+                    auth.otp_reset_failures(client_key)
                 device_secret, device_id = auth.register_device(_device_label(request))
                 logger.info(f"[auth] 새 기기 등록: {device_id} ({_device_label(request)})")
         # kind == "token"(데몬)은 기기를 만들지 않는다 — device_id 없이 세션만 발급.
@@ -489,7 +503,7 @@ async def startup():
         else:
             logger.info(
                 f"[보안] OTP 미연동 — 비밀번호만으로 동작(기존과 동일). 등록 기기 {n_dev}개. "
-                "'vt otp setup'으로 연동하면 그 시점부터 '새' 기기에만 OTP를 요구합니다."
+                "'fsh otp setup'으로 연동하면 그 시점부터 '새' 기기에만 OTP를 요구합니다."
             )
     output_watcher.on_notify(on_task_complete)
     output_watcher.start()

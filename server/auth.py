@@ -74,6 +74,12 @@ TICKETS_PATH = STATE_DIR / "tickets.json"
 TICKET_TTL = 300  # 1회용 기기 등록 티켓 5분
 OTP_MAX_FAILS = 5  # 6자리 코드는 무제한 시도면 실제로 뚫린다 — 잠금은 필수
 OTP_LOCK_SEC = 600
+PASSWORD_MAX_FAILS = 5  # D14: scrypt 자체가 시도당 비용을 부과하지만, 무제한 시도 자체는 별개 문제
+PASSWORD_LOCK_SEC = 600  # OTP와 동일한 정책 — 같은 파일 안에서 자격증명 종류별로 위협모델을 다르게 다루지 않는다
+
+# 잠금 상태를 추적할 키(IP)가 무한정 늘어나는 걸 막는 상한. 스크립트가 IP를 계속 바꿔가며
+# 때리는 극단적 경우에도 메모리가 무한 증가하진 않게 한다(개인용 단일 프로세스 전제).
+_MAX_LOCKOUT_KEYS = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -317,10 +323,10 @@ def totp_disable() -> bool:
         return False
 
 
-def totp_uri(secret: str, account: str = "", issuer: str = "farshell") -> str:
+def totp_uri(secret: str, account: str = "", issuer: str = "FarShell") -> str:
     """인증 앱 등록용 otpauth:// URI (QR로 뿌린다)."""
     from urllib.parse import quote
-    acct = account or (os.environ.get("USER") or "vt")
+    acct = account or (os.environ.get("USER") or "fsh")
     return (
         f"otpauth://totp/{quote(issuer)}:{quote(acct)}"
         f"?secret={secret}&issuer={quote(issuer)}&algorithm=SHA1&digits=6&period=30"
@@ -361,26 +367,82 @@ def verify_totp(code: str) -> bool:
     return False
 
 
-# OTP 실패 잠금 — 단일 프로세스 전제(개인용)라 메모리에만 둔다.
-_otp_failures: list[float] = []
+# 실패 잠금 — 단일 프로세스 전제(개인용)라 메모리에만 둔다.
+#
+# D15: 예전엔 OTP 실패를 프로세스 전역 리스트(단일 키)로 추적해서, 한 클라이언트의
+# 실패한 시도가 모든 클라이언트의 새 기기 등록까지 함께 잠갔다(가용성 문제 — 스크립트화된
+# 재시도나 오설정 클라이언트 하나가 본인 것 아닌 등록까지 막을 수 있었다). 키(보통 클라이언트
+# IP)별로 분리해서, 한 클라이언트의 실패가 다른 클라이언트를 잠그지 않게 한다.
+# D14: 같은 구조를 비밀번호 재시도 잠금에도 그대로 재사용한다 — OTP만 잠금이 있고 비밀번호는
+# 무제한 시도가 가능했던 비일관성을 없앤다.
+class _KeyedLockout:
+    def __init__(self, max_fails: int, lock_sec: int):
+        self._max_fails = max_fails
+        self._lock_sec = lock_sec
+        self._failures: dict[str, list[float]] = {}
+
+    def lock_remaining(self, key: str) -> int:
+        fails = self._failures.get(key) or []
+        if len(fails) < self._max_fails:
+            return 0
+        elapsed = time.time() - fails[-1]
+        return max(0, int(self._lock_sec - elapsed))
+
+    def note_failure(self, key: str) -> None:
+        now = time.time()
+        fails = [t for t in self._failures.get(key, []) if now - t < self._lock_sec]
+        fails.append(now)
+        self._failures[key] = fails
+        self._evict_stale(now)
+
+    def reset_failures(self, key: str) -> None:
+        self._failures.pop(key, None)
+
+    def failure_count(self, key: str) -> int:
+        return len(self._failures.get(key) or [])
+
+    def _evict_stale(self, now: float) -> None:
+        """키 수가 상한을 넘으면 이미 잠금이 풀린(만료된) 키부터 정리한다."""
+        if len(self._failures) <= _MAX_LOCKOUT_KEYS:
+            return
+        self._failures = {
+            k: v for k, v in self._failures.items()
+            if v and now - v[-1] < self._lock_sec
+        }
 
 
-def otp_lock_remaining() -> int:
-    """잠금 중이면 남은 초, 아니면 0."""
-    if len(_otp_failures) < OTP_MAX_FAILS:
-        return 0
-    elapsed = time.time() - _otp_failures[-1]
-    return max(0, int(OTP_LOCK_SEC - elapsed))
+_otp_lockout = _KeyedLockout(OTP_MAX_FAILS, OTP_LOCK_SEC)
+_password_lockout = _KeyedLockout(PASSWORD_MAX_FAILS, PASSWORD_LOCK_SEC)
 
 
-def otp_note_failure() -> None:
-    now = time.time()
-    _otp_failures[:] = [t for t in _otp_failures if now - t < OTP_LOCK_SEC]
-    _otp_failures.append(now)
+def otp_lock_remaining(key: str) -> int:
+    """key(보통 클라이언트 IP)가 잠금 중이면 남은 초, 아니면 0."""
+    return _otp_lockout.lock_remaining(key)
 
 
-def otp_reset_failures() -> None:
-    _otp_failures.clear()
+def otp_note_failure(key: str) -> None:
+    _otp_lockout.note_failure(key)
+
+
+def otp_reset_failures(key: str) -> None:
+    _otp_lockout.reset_failures(key)
+
+
+def otp_failure_count(key: str) -> int:
+    return _otp_lockout.failure_count(key)
+
+
+def password_lock_remaining(key: str) -> int:
+    """key(보통 클라이언트 IP)가 잠금 중이면 남은 초, 아니면 0."""
+    return _password_lockout.lock_remaining(key)
+
+
+def password_note_failure(key: str) -> None:
+    _password_lockout.note_failure(key)
+
+
+def password_reset_failures(key: str) -> None:
+    _password_lockout.reset_failures(key)
 
 
 # ---------------------------------------------------------------------------
