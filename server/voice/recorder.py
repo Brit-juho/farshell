@@ -7,9 +7,9 @@ import sounddevice as sd
 
 import platform_utils
 
-from .config import MAX_RECORDING_SECONDS, SAMPLE_RATE, TTS_CONFIRM, logger
+from .config import MAX_RECORDING_SECONDS, SAMPLE_RATE, TTS_CONFIRM, VOICE_TARGET_NOTIFY, logger
 from .stt import transcribe
-from .tmux_target import resolve_voice_target_pane, send_to_tmux
+from .tmux_target import pane_label, resolve_voice_target_pane, send_to_tmux
 
 _recording = False
 _audio_frames: list[np.ndarray] = []
@@ -22,6 +22,26 @@ TOGGLE_DEBOUNCE_SEC = 0.25
 
 def is_recording() -> bool:
     return _recording
+
+
+def _notify_target():
+    """V3-G: 녹음 시작 시 이번 발화가 어느 tmux pane으로 갈지 데스크톱 알림으로 미리 보여준다.
+
+    타깃이 없으면(tmux 세션 자체가 없음) 조용히 건너뛴다 — 그 경우는 STT 완료 후
+    stop_recording_and_process가 이미 로그/TTS로 알린다(중복 알림 방지).
+    이 시점의 pane과 실제 전송 시점(stop_recording_and_process)의 pane 판정은 각각
+    독립적으로 다시 계산된다 — 녹음하는 몇 초 사이 활성 pane이 바뀌면 안내와 실제
+    전송 타깃이 어긋날 수 있지만(레이스), 실사용에서 무시할 만한 리스크로 판단했다.
+    """
+    try:
+        pane, mode = resolve_voice_target_pane()
+        if not pane:
+            return
+        label = pane_label(pane) or pane
+        prefix = "🔒 " if mode.startswith("lock:") else ""
+        platform_utils.notify("🎙 음성 입력", f"{prefix}→ {label}")
+    except Exception as e:
+        logger.debug(f"타깃 알림 실패: {e}")
 
 
 def start_recording():
@@ -64,6 +84,8 @@ def start_recording():
     _stream.start()
     logger.info("🎙 녹음 시작")
     platform_utils.play_sound("start")
+    if VOICE_TARGET_NOTIFY:
+        _notify_target()
 
 
 def stop_recording_and_process():
