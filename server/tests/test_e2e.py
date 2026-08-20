@@ -5,7 +5,7 @@
   cd server && python -m uvicorn main:app --host 0.0.0.0 --port 7777
 
   # 다른 터미널에서
-  pytest tests/test_e2e.py -v
+  pytest server/tests/test_e2e.py -v
 
 환경 변수:
   VT_E2E_URL  — 기본값 http://localhost:7777

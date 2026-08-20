@@ -1,7 +1,6 @@
 """D7: auto_responder.py 단위 테스트 (trust prompt cooldown, bypass warning)."""
 
-import sys, os, time
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
+import os, time
 
 
 def test_disabled_by_default():

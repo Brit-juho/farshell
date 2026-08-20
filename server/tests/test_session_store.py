@@ -1,8 +1,5 @@
 """D7: session_store.py 역인덱스 단위 테스트."""
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
-
 from session_store import SessionStore
 
 

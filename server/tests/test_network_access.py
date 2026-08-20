@@ -47,6 +47,17 @@ def test_none_ip_rejected_when_not_allow_all():
     assert s.is_allowed(None) is False
 
 
+def test_empty_ip_rejected():
+    s = _spec("localhost,lan")
+    assert s.is_allowed("") is False
+
+
+def test_ipv6_lan_ranges():
+    s = _spec("lan")
+    assert s.is_allowed("fc00::1") is True  # ULA
+    assert s.is_allowed("fe80::1") is True  # link-local
+
+
 def test_ipv4_mapped_ipv6_is_unwrapped():
     s = _spec("localhost")
     # ::ffff:127.0.0.1 형태가 loopback으로 인식돼야 함
@@ -78,6 +89,16 @@ def test_network_mode_to_spec():
     assert na.network_mode_to_spec("lan") == "localhost,lan"
     assert na.network_mode_to_spec("tailscale") == "localhost,tailscale"
     assert na.network_mode_to_spec("") == "all"
+
+
+def test_env_network_mode_tailscale(monkeypatch):
+    monkeypatch.setenv("VT_NETWORK_MODE", "tailscale")
+    monkeypatch.delenv("VT_ACCESS_SPEC", raising=False)
+    s = na.get_current_spec()
+    assert s.is_allowed("100.64.0.1") is True
+    assert s.is_allowed("127.0.0.1") is True
+    assert s.is_allowed("192.168.1.1") is False
+    assert s.is_allowed("8.8.8.8") is False
 
 
 def test_get_current_spec_cache_invalidates_on_env_change(monkeypatch):
