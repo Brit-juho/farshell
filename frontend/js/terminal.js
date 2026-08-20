@@ -1192,7 +1192,7 @@
       el.className = 'vt-onboarding';
       el.innerHTML = `
         <div class="vt-ob-icon"><i class="icon-mic"></i></div>
-        <h2>farshell</h2>
+        <h2>FarShell</h2>
         <p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
         <div class="vt-ob-actions">
           <button class="vt-btn-primary" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
@@ -1219,7 +1219,7 @@
         ]},
         { icon: 'icon-mic', title: '음성 입력', rows: [
           { key: '마이크 버튼', desc: '상단 <i class="icon-mic"></i> 탭 → 말하면 STT로 텍스트 입력' },
-          { key: '맥 핫키', desc: '<code>vt voice</code> 실행 후 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> 토글' },
+          { key: '맥 핫키', desc: '<code>fsh voice</code> 실행 후 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> 토글' },
           { key: '핸즈프리', desc: '모바일 🔄 버튼 → 녹음·인식 연속 자동 반복' },
           { key: '음성 전용', desc: '⋯ 메뉴 → 터미널 숨기고 큰 마이크만 표시(이어폰용)' },
         ]},
@@ -1229,7 +1229,7 @@
           { key: '붙여넣기', desc: '<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd> · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> · 선택 없이 우클릭' },
           { key: '이미지', desc: '이미지를 복사해 붙여넣으면 서버에 <b>자동 업로드</b> + 경로가 명령줄에 삽입' },
           { key: '자동 복사 켬/끔', desc: '⋯ 메뉴 → 설정에서 토글. <b>켬</b>: 드래그·vim/tmux 복사가 클립보드에 즉시 반영. <b>끔</b>: 선택만 되고 클립보드는 그대로 — 우클릭으로 원할 때만 복사' },
-          { key: '맥↔웹 동기화', desc: 'vim/tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 <code>vt clip</code> 실행' },
+          { key: '맥↔웹 동기화', desc: 'vim/tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 <code>fsh clip</code> 실행' },
         ]},
         { icon: 'icon-square-terminal', title: 'tmux 세션', rows: [
           { key: 'tmux 세션', desc: '⋯ 메뉴 → 기존 세션 목록 확인·attach' },
@@ -1241,8 +1241,8 @@
           { key: '검색', desc: '<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd> 로 터미널 출력 검색' },
         ]},
         { icon: 'icon-monitor-smartphone', title: '모바일 · 원격', rows: [
-          { key: '모바일 접속', desc: '<code>vt mobile</code> → QR/URL로 폰 접속(같은 세션 이어쓰기)' },
-          { key: '핸드오프', desc: '<code>vt handoff mobile</code> / <code>desktop</code> 으로 폰↔맥 전환' },
+          { key: '모바일 접속', desc: '<code>fsh mobile</code> → QR/URL로 폰 접속(같은 세션 이어쓰기)' },
+          { key: '핸드오프', desc: '<code>fsh handoff mobile</code> / <code>desktop</code> 으로 폰↔맥 전환' },
         ]},
         { icon: 'icon-palette', title: '테마', rows: [
           { key: '스킨 변경', desc: '⋯ 메뉴 → macOS · Catppuccin · Windows · VS Code · Notepad' },
@@ -1267,7 +1267,7 @@
           <div class="vt-guide-head">
             <div class="vt-gh-icon"><i class="icon-terminal"></i></div>
             <div>
-              <h2>farshell</h2>
+              <h2>FarShell</h2>
               <p>브라우저로 tmux 터미널을 — 웹·폰 어디서든 이어서</p>
             </div>
             <button class="vt-guide-x" aria-label="닫기">✕</button>

@@ -154,7 +154,7 @@ async def create_tmux_session(request: Request):
 async def open_tmux_on_mac(request: Request):
     """이미 존재하는 tmux 세션을 맥 터미널(iTerm2 우선)에 새 창으로 attach.
 
-    웹에서 보고 있는 세션을 나중에 맥에서도 열고 싶을 때 사용. 같은 tmux 소켓(-L vt)에
+    웹에서 보고 있는 세션을 나중에 맥에서도 열고 싶을 때 사용. 같은 tmux 소켓(-L fsh)에
     attach하므로 웹/음성/맥이 동일 세션을 공유한다.
     """
     body = await request.json()

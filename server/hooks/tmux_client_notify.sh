@@ -2,15 +2,15 @@
 # tmux_client_notify.sh — client-attached / client-detached 훅 핸들러 (D9).
 #
 # 왜 필요한가:
-#   farshell은 web(WS)·voice(daemon) 경로에선 누가 접속했는지 서버가 알 수
+#   FarShell은 web(WS)·voice(daemon) 경로에선 누가 접속했는지 서버가 알 수
 #   있지만, 회사망처럼 화면 원격이 막혀 Tailscale+SSH로 tmux에 순수 텍스트로
-#   attach하는 경우(`vt ssh` 참고)엔 서버 입장에서 완전히 "보이지 않는" 클라이언트다.
+#   attach하는 경우(`fsh ssh` 참고)엔 서버 입장에서 완전히 "보이지 않는" 클라이언트다.
 #   이 스크립트는 tmux 훅으로 attach/detach 시점을 잡아 기존 ntfy/Telegram 푸시
 #   브릿지(server/notify.py)로 알림을 대신 보내 접속 가시성을 확보한다.
 #
 # 등록 방법 (opt-in, 기본 OFF):
-#   ~/.vt.env 에 VT_NOTIFY_CLIENT_EVENTS=1 추가 → bin/vt의
-#   _maybe_register_client_hooks()가 `vt voice`/`vt mobile`/`vt start`/`vt ssh` 등
+#   ~/.vt.env 에 VT_NOTIFY_CLIENT_EVENTS=1 추가 → bin/fsh의
+#   _maybe_register_client_hooks()가 `fsh voice`/`fsh mobile`/`fsh start`/`fsh ssh` 등
 #   _ensure_tmux를 호출하는 모든 명령에서 자동으로 tmux client-attached/detached
 #   훅을 등록한다. 이 스크립트를 직접 실행할 일은 거의 없다.
 #
@@ -31,7 +31,7 @@ CLIENT_TTY="${2:-}"
 SESSION="${3:-?}"
 
 # ~/.vt.env에서 VT_PORT / VT_AUTH_TOKEN 읽기.
-# source가 아니라 bin/vt와 같은 파서를 쓴다 — 해석이 일치하고, tmux 훅이라는
+# source가 아니라 bin/fsh와 같은 파서를 쓴다 — 해석이 일치하고, tmux 훅이라는
 # 넓은 실행 맥락에서 설정 파일이 코드로 실행되지 않는다.
 # (예전엔 source라 "환경변수가 이미 있으면 유지"라는 주석과 달리 파일이 항상 이겼다)
 _HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

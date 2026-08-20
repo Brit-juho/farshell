@@ -1,4 +1,4 @@
-# vt.ps1 — Windows PowerShell launcher for farshell
+# vt.ps1 — Windows PowerShell launcher for FarShell (하위 호환용 — 신규는 fsh.ps1 사용)
 # WSL2 내부의 vt CLI를 호출합니다.
 #
 # 사용법:
@@ -23,11 +23,11 @@ if (-not $?) {
     exit 1
 }
 
-# farshell 경로 감지
+# FarShell 경로 감지
 $vtPath = wsl.exe -- bash -c "test -f ~/farshell/bin/vt && echo OK" 2>$null
 if ($vtPath -ne "OK") {
     Write-Host ""
-    Write-Host "  farshell이 WSL2에 설치되지 않았습니다." -ForegroundColor Red
+    Write-Host "  FarShell이 WSL2에 설치되지 않았습니다." -ForegroundColor Red
     Write-Host "  WSL2 Ubuntu에서:"
     Write-Host "    git clone <repo> ~/farshell"
     Write-Host "    cd ~/farshell && ./install.sh"

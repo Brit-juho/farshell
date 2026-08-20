@@ -1,5 +1,5 @@
 ---
-name: vt-voice
+name: fsh-voice
 description: |
   Voice Daemon 설치 및 실행. macOS에서 핫키(Ctrl+Shift+V)로 음성 입력 → STT → tmux 주입.
   서버 없이 독립 동작. Use when asked to "음성 모드", "voice daemon", "음성 데몬",
@@ -22,7 +22,7 @@ macOS에서 글로벌 핫키로 음성 → STT → tmux 주입하는 데몬을 �
 ```bash
 # ~/.vt.env는 source하지 않습니다 (설정 파일은 데이터이지 코드가 아님).
 # 저장소의 파서를 쓰거나, 값 하나만 필요하면 vt_env_get을 쓰세요.
-PY="$(vt_env_get VT_PYTHON 2>/dev/null || true)"   # bin/vt 안에서
+PY="$(vt_env_get VT_PYTHON 2>/dev/null || true)"   # bin/fsh 안에서
 # 저장소 밖에서:
 #   . "$VT_DIR/lib/vt_env.sh" && vt_env_load ~/.vt.env
 PY="${PY:-$(which python3)}"

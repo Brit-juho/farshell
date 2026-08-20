@@ -48,7 +48,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = {}; }
-  const title = d.title || 'farshell';
+  const title = d.title || 'FarShell';
   e.waitUntil(
     self.registration.showNotification(title, {
       body: d.body || '',

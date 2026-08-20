@@ -191,7 +191,7 @@ class OutputWatcher:
             try:
                 push_msg = summary[:300] if summary else "세션이 idle 상태입니다"
                 await notify.send(
-                    f"farshell: {session_id[:8]}",
+                    f"FarShell: {session_id[:8]}",
                     push_msg,
                     priority="default",
                     tags="white_check_mark",

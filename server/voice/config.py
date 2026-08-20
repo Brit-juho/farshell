@@ -39,7 +39,7 @@ except ValueError:
 
 
 # Phase 6 R5: 단일 tmux 서버 원칙
-TMUX_SOCKET = vt_getenv("VT_TMUX_SOCKET", "vt")
+TMUX_SOCKET = vt_getenv("VT_TMUX_SOCKET", "fsh")
 TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]
 
 

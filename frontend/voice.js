@@ -318,7 +318,7 @@ function connectNotify() {
         } else if (data.type === 'clipboard_push' && data.text) {
           // 맥북(서버) 쪽 clipboard_daemon.py가 감지한 시스템 클립보드 변경 —
           // copyToClipboard는 terminal.js가 전역(classic script)으로 정의.
-          // "⋯ → 설정 → 드래그 시 자동 복사"를 꺼도 이 경로(vt clip)만 안 막히면
+          // "⋯ → 설정 → 드래그 시 자동 복사"를 꺼도 이 경로(fsh clip)만 안 막히면
           // 여전히 자동으로 클립보드가 덮어써지므로 같은 설정을 공유한다.
           const autoSyncOff = (localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off';
           if (!autoSyncOff && typeof copyToClipboard === 'function') {
@@ -371,7 +371,7 @@ function showNotification(summary, sessionId) {
   }, 5000);
 
   // 백그라운드 브라우저 알림 (화면 밖에서도 보이게)
-  showBrowserNotification('farshell — 작업 완료', short);
+  showBrowserNotification('FarShell — 작업 완료', short);
 }
 
 // ⚠ Android Chrome 등 모바일 브라우저는 `new Notification()` 생성자를 금지하고
@@ -441,7 +441,7 @@ function setupMediaSession() {
   }
 
   navigator.mediaSession.metadata = new MediaMetadata({
-    title: 'farshell',
+    title: 'FarShell',
     artist: '음성 입력 대기 중',
     album: 'Voice Control',
   });

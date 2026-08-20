@@ -1,8 +1,8 @@
-# vt help hotkeys — 핫키 전체 목록 + 변경 방법
+# fsh help hotkeys — 핫키 전체 목록 + 변경 방법
 
 ## 디폴트 핫키
 
-### 데스크톱 (Voice Daemon, `vt voice` 실행 시)
+### 데스크톱 (Voice Daemon, `fsh voice` 실행 시)
 
 | 키 | 동작 |
 |---|---|
@@ -22,10 +22,10 @@
 
 ## 핫키 변경
 
-    vt hotkey list                   # 현재 설정 확인
-    vt hotkey set voice ctrl+shift+x # 변경
-    vt hotkey reset voice            # 디폴트로 복구
-    vt hotkey disable voice          # 비활성화
+    fsh hotkey list                   # 현재 설정 확인
+    fsh hotkey set voice ctrl+shift+x # 변경
+    fsh hotkey reset voice            # 디폴트로 복구
+    fsh hotkey disable voice          # 비활성화
 
 내부적으로 `~/.vt.env`에 다음 변수 저장:
 
@@ -34,7 +34,7 @@
 
 변경 후 daemon 재시작 필요:
 
-    vt stop && vt voice
+    fsh stop && fsh voice
 
 ## 키 토큰 형식
 
@@ -77,4 +77,4 @@
 ### 데스크톱 (`~/.vt.env`)
     VT_VOICE_MEDIA_KEYS="off"
 
-이후 `vt stop && vt voice`로 daemon 재시작.
+이후 `fsh stop && fsh voice`로 daemon 재시작.

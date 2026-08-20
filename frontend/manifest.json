@@ -1,6 +1,6 @@
 {
-  "name": "farshell",
-  "short_name": "farshell",
+  "name": "FarShell",
+  "short_name": "FarShell",
   "description": "음성으로 터미널을 제어하는 웹앱",
   "start_url": "/",
   "display": "standalone",

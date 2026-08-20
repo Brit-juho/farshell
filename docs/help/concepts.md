@@ -1,6 +1,6 @@
-# vt help concepts — 핵심 개념
+# fsh help concepts — 핵심 개념
 
-farshell을 잘 쓰려면 터미널 생태계의 3-레이어 구조 이해가 도움됩니다.
+FarShell을 잘 쓰려면 터미널 생태계의 3-레이어 구조 이해가 도움됩니다.
 
 ## 1. 3-레이어 구조
 
@@ -40,7 +40,7 @@ iTerm 창을 닫아도 tmux 서버 안의 세션은 살아있음. vim/claude 등
 같은 tmux 세션에 데스크톱 iTerm + 모바일 폰 + 웹 브라우저가 동시에 attach 가능.
 모두 같은 화면을 보고, 모두 입력 가능.
 
-→ **이게 farshell의 핵심 인프라.** tmux 없으면 모바일/음성 기능이 안 돔.
+→ **이게 FarShell의 핵심 인프라.** tmux 없으면 모바일/음성 기능이 안 돔.
 
 ### 멀티플렉싱
 
@@ -55,44 +55,44 @@ iTerm 창을 닫아도 tmux 서버 안의 세션은 살아있음. vim/claude 등
 
 ## 3. 격리 소켓 `-L vt`
 
-farshell은 별도 tmux 서버(`/tmp/tmux-{uid}/vt` 소켓)를 씀.
+FarShell은 별도 tmux 서버(`/tmp/tmux-{uid}/vt` 소켓)를 씀.
 
     tmux ls          # 사용자 평소 세션 (default 소켓)
-    tmux -L vt ls    # farshell 전용 세션 (vt 소켓)
+    tmux -L vt ls    # FarShell 전용 세션 (vt 소켓)
 
 → 두 세계가 완전히 분리됨. 사용자 기존 워크플로 안 건드림.
 
 ## 4. 자동 attach 메커니즘
 
-새 터미널 창이 자동으로 farshell tmux로 들어가려면 둘 중 하나 등록:
+새 터미널 창이 자동으로 FarShell tmux로 들어가려면 둘 중 하나 등록:
 
 ### 메커니즘 A — 셸 init 스니펫
 
-    eval "$(vt shell-init zsh)" >> ~/.zshrc
+    eval "$(fsh shell-init zsh)" >> ~/.zshrc
 
 새 zsh 시작 시마다 5중 가드 통과 후 자동 attach. iTerm Cmd+N, split, 새 탭 모두 적용.
 
 ### 메커니즘 B — 터미널 profile
 
-    vt install-profiles
+    fsh install-profiles
 
 iTerm Dynamic Profile / Ghostty / WezTerm 등에 등록. 새 창 default command가 tmux로.
 
-## 5. `vt stop`이 안 끄는 것
+## 5. `fsh stop`이 안 끄는 것
 
-`vt stop`은 server/tunnel/voice daemon만 종료.
+`fsh stop`은 server/tunnel/voice daemon만 종료.
 **tmux 세션은 그대로 살아있음** — 이게 영속성의 핵심.
 
-완전 종료: `vt stop --purge`
+완전 종료: `fsh stop --purge`
 
 ## 6. 자주 묻는 질문
 
-- **Q. 기존에 열린 iTerm 창들이 vt 실행 후 자동 통합되나?**
+- **Q. 기존에 열린 iTerm 창들이 fsh 실행 후 자동 통합되나?**
   - A. ❌ 안 됨. zsh 가드는 새 창 시작 시에만 동작. 기존 창은 수동 `tmux -L vt attach -t dev`
 
 - **Q. 모든 iTerm 창을 처음부터 tmux로 시작하면 되나?**
-  - A. ✅ 그게 권장 방식. `vt install-profiles` 또는 `vt shell-init`이 그것.
+  - A. ✅ 그게 권장 방식. `fsh install-profiles` 또는 `fsh shell-init`이 그것.
 
 - **Q. tmux 서버를 항상 켜두는 부담?**
   - A. ~5–10MB 메모리, idle 시 거의 0% CPU. 시스템 sleep 시 다른 사용자 프로세스와 함께 멈춤. 부담 없음.
-        완전 종료가 필요하면 `vt stop --purge`.
+        완전 종료가 필요하면 `fsh stop --purge`.
