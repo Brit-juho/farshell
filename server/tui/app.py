@@ -1,4 +1,4 @@
-"""vt manage 메인 Textual App."""
+"""fsh manage 메인 Textual App."""
 from __future__ import annotations
 
 import os
@@ -30,7 +30,7 @@ from .modals import ConfirmDialog, RenameDialog
 
 
 class VTManagerApp(App):
-    """vt manage TUI 메인 앱."""
+    """fsh manage TUI 메인 앱."""
 
     CSS = """
     Screen {
@@ -85,8 +85,8 @@ class VTManagerApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title = "vt manage"
-        self.sub_title = "farshell Manager"
+        self.title = "fsh manage"
+        self.sub_title = "FarShell Manager"
         table = self.query_one(DataTable)
         table.add_column("세션", width=24)
         table.add_column("Window", width=8)
@@ -129,8 +129,8 @@ class VTManagerApp(App):
         footer.update(
             "[r] rename  [k] kill  [a] attach (새 창)  [l] voice lock  "
             "[u] unlock  [R] refresh  [q] quit\n"
-            f"Hotkey 변경: 'vt hotkey set voice <key>'  |  "
-            f"Help: 'vt help concepts'"
+            f"Hotkey 변경: 'fsh hotkey set voice <key>'  |  "
+            f"Help: 'fsh help concepts'"
         )
 
     def _selected_name(self) -> str | None:
@@ -214,7 +214,7 @@ class VTManagerApp(App):
         try:
             vt_bin = os.environ.get("VT_BIN") or self._find_vt_bin()
             if not vt_bin:
-                self.notify("vt CLI 못 찾음", severity="error")
+                self.notify("fsh CLI 못 찾음", severity="error")
                 return
             subprocess.Popen(
                 [vt_bin, "attach", name],
@@ -228,13 +228,13 @@ class VTManagerApp(App):
             self.notify(f"실패: {e}", severity="error")
 
     def _find_vt_bin(self) -> str | None:
-        for cand in [
-            os.path.expanduser("~/.local/bin/vt"),
-            "/usr/local/bin/vt",
-            "/opt/homebrew/bin/vt",
-        ]:
-            if os.path.isfile(cand) and os.access(cand, os.X_OK):
-                return cand
+        # fsh가 정식 명령어, vt는 하위 호환 심링크(둘 다 같은 bin/fsh를 가리킨다) —
+        # 새 설치는 fsh만 있을 수 있으므로 fsh를 먼저 찾는다.
+        for name in ("fsh", "vt"):
+            for prefix in ("~/.local/bin", "/usr/local/bin", "/opt/homebrew/bin"):
+                cand = os.path.expanduser(f"{prefix}/{name}")
+                if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                    return cand
         return None
 
     def action_lock(self) -> None:
