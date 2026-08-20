@@ -1,7 +1,6 @@
 """D7: ttl_cache.py TTL + 스레드 안전 단위 테스트."""
 
-import sys, os, time, threading
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
+import time, threading
 
 from ttl_cache import TTLCache
 

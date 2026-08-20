@@ -1,7 +1,6 @@
 """D7: pty_manager.py 단위 테스트 (pause/resume, scrollback)."""
 
-import sys, os, asyncio
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
+import asyncio
 
 import pytest
 
