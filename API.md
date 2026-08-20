@@ -1,10 +1,10 @@
 # API 레퍼런스
 
-farshell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트 전체
+FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트 전체
 목록입니다. 개요는 [README.md](./README.md), 구조는 [ARCHITECTURE.md](./ARCHITECTURE.md)를
 참고하세요.
 
-**인증:** 비밀번호(`vt password`) 또는 토큰(`VT_AUTH_TOKEN`)이 설정돼 있으면 모든
+**인증:** 비밀번호(`fsh password`) 또는 토큰(`VT_AUTH_TOKEN`)이 설정돼 있으면 모든
 엔드포인트에 인증이 필요합니다. 사람은 로그인 후 발급되는 `vt_session` 쿠키로,
 데몬/스크립트는 `?token=xxx` 쿼리 또는 `Authorization: Bearer xxx` 헤더로 인증합니다.
 자세한 인증 모델은 [README.md의 보안 섹션](./README.md#보안)을 참고하세요.
@@ -29,6 +29,8 @@ farshell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/tmux/attach` | tmux 세션에 attach (JSON: name) |
 | POST | `/api/tmux/create` | tmux 세션 생성 + 자동 attach (JSON: name, cols, rows) |
 | DELETE | `/api/tmux/kill/{name}` | tmux 세션 완전 종료 |
+| POST | `/api/tmux/open-on-mac` | 이미 존재하는 tmux 세션을 서버(macOS) 터미널에 새 창으로 attach (JSON: name). 서버가 macOS가 아니면 400 |
+| GET | `/api/tmux/preview/{name}?lines=20&ansi=1` | Grid 뷰용 tmux pane 최근 출력 캡처 |
 
 ## 음성
 
@@ -39,6 +41,9 @@ farshell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/voice/cancel` | 재생 중인 TTS 즉시 중단 (barge-in) |
 | POST | `/voice/local/start` | MacBook 마이크 녹음 시작 |
 | POST | `/voice/local/stop?session_id=X` | 녹음 종료 → STT → 세션 입력 |
+| GET | `/voice/stt/status` | STT 모델 준비 상태 조회 (모델을 로드하지 않음) |
+| POST | `/voice/stt/preload` | STT 모델 미리 로드 — 음성 모드 켤 때 첫 입력 지연 제거 |
+| POST | `/voice/stt/unload` | STT 모델 언로드 — 음성 모드 끌 때 메모리(~150MB) 회수 |
 
 ## 인증
 
@@ -60,6 +65,14 @@ farshell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 
 거부 목록(`.env*`, `*.pem`, `id_rsa`, `.ssh/`, `.aws/` 등)에 걸리는 경로는 `/api/fs/file`뿐
 아니라 `/api/git/diff`에서도 동일하게 가려집니다 — 판정은 `server/fsguard.py` 한 곳에만 있습니다.
+
+읽기 전용이 아닌 Git 액션(코드 뷰어에서 stage/commit용):
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/git/stage` | 파일 스테이지 (JSON: repo, files). 응답은 갱신된 status |
+| POST | `/api/git/unstage` | 스테이지 해제 — 워킹트리는 안 건드리고 인덱스만 되돌림 (JSON: repo, files) |
+| POST | `/api/git/commit` | 스테이지된 변경사항 커밋 (JSON: repo, message). 스테이지된 게 없으면 400 |
 
 ## 프롬프트 큐
 
@@ -97,9 +110,17 @@ farshell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/upload?session_id=X` | 파일 업로드 (multipart/form-data) |
 | GET | `/api/download?path=X` | 서버 파일 다운로드 |
 | GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널 등) |
-| GET | `/api/workspace` | 워크스페이스 동기화 (탭/UI 상태) |
-| GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) |
+| GET | `/api/workspace` | 워크스페이스 동기화 조회 (탭/UI 상태) |
+| PUT | `/api/workspace` | 워크스페이스 상태 저장 |
+| GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) 전체 목록 |
+| GET | `/api/agents/{name}` | 특정 tmux 세션의 활성 에이전트 정보 |
+| GET | `/api/agent/status` | Claude Code 훅으로 추적 중인 도구 사용 상태 (그리드 뷰 펄스/완료 배지용) |
+| POST | `/api/agent/event` | Claude Code Pre/Post/StopToolUse 훅이 호출하는 엔드포인트 |
+| GET | `/api/safe-mode` | 프롬프트 큐 safe_mode 활성 여부 |
 | GET | `/api/tailscale/status` | Tailscale 설치/연결/IP/MagicDNS 호스트명 |
+| GET | `/api/tunnel/status` | Cloudflare 터널(메인) 연결 상태 |
+| GET | `/api/notify/status` | ntfy/Telegram 알림 설정 여부 |
+| POST | `/api/notify/test` | 테스트 알림 발송 (JSON: title, message, priority) |
 | POST | `/api/notify/client-event` | tmux client-attached/detached 훅 전용 — SSH 접속 가시화 |
 | POST | `/api/clipboard/push` | `clipboard_daemon.py` 전용 — `/ws-notify` 클라이언트에 브로드캐스트 |
 

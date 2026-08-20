@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to farshell (formerly voice-terminal) are documented in this file.
+All notable changes to FarShell (formerly voice-terminal) are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -9,6 +9,57 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- **표시용 프로젝트명을 `farshell`에서 `FarShell`로 변경(캐멀케이스).** GitHub·YouTube·
+  PayPal처럼 두 단어(far+shell) 합성 브랜드명은 각 단어를 대문자로 시작하는 표기가
+  관례다. README 제목·HTML `<title>`/로그인 화면·PWA manifest(`name`/`short_name`)·
+  TUI(`fsh manage`) 창 제목·데스크톱/푸시 알림 타이틀·TOTP 인증 앱 issuer·
+  `package.json`의 `name`(최신 npm은 로컬/비공개 패키지에서 대문자 이름도 install/test를
+  그대로 통과시킴을 직접 확인 후 변경) 등 표시 텍스트를 바꿨다.
+  **의도적으로 안 바꾼 것** (GitHub 저장소 슬러그 `Brit-juho/farshell`, 로컬 디렉토리
+  이름 `~/farshell`) — 살아있는 서버 프로세스·`~/.local/bin/fsh` 심링크가 이 경로를
+  직접 참조하고, GitHub 저장소 rename은 외부에 공개된 저장소를 건드리는 일이라 사용자
+  확인 후 보류로 결정됨.
+  **바꾼 것 중 마이그레이션이 필요했던 것:**
+  - **tmux 격리 소켓 기본값**을 `vt`→`fsh`로 변경(`VT_TMUX_SOCKET` 기본값, 4곳:
+    `bin/fsh`/`tmux_target.py`/`tmux_runner.py`/`tui/helpers.py`/`voice/config.py`).
+    기존에 `-L vt` 소켓에 떠 있던 세션은 새 기본값에서 안 보이게 된다는 걸 알고도
+    사용자가 명시적으로 선택함 — 기존 세션은 그대로 살아있고 `tmux -L vt attach`로
+    계속 접근 가능하다.
+  - **iTerm2 Dynamic Profile**: 파일명 `vt.json`→`fsh.json`, Guid `vt-farshell`→
+    `fsh-farshell`로 변경하면서 구 파일을 삭제해 중복 프로필이 안 남게 처리.
+  - **Ghostty 자동 attach 마커**: 새 설치는 `# fsh (FarShell) — auto-attach`를 쓰되,
+    이미 등록된 사용자 설정의 구 마커(`vt`/`farshell` 변형)도 인식해 중복 등록을
+    방지(기존 파일은 소급 수정하지 않음 — 사람이 안 읽는 주석이라 무해).
+  - **개인 Notion 훅**(`~/.config/vt/hooks/notion_publish.py`, 레포 밖 개인 설정):
+    self-healing 블록 마커를 `VT 접속 URL`→`FarShell 접속 URL`로 바꾸고, 실제
+    Notion 페이지의 기존 콜아웃/제목도 같이 이관해 중복 블록이 안 생기게 처리 후
+    `fsh tunnel hook`으로 재검증(`갱신` 응답 확인, `생성`이었다면 중복 실패).
+  - **부수 발견 버그**: 앞선 vt→fsh 자동 치환 스크립트의 보호 규칙이 `.vt/`(슬래시
+    포함)만 걸렀는데 `"$HOME/.vt"`(슬래시 없이 따옴표로 끝남)는 안 걸려서, `bin/fsh`의
+    onboarding/voice-target 코드 2곳이 실제 상태 디렉토리(`~/.vt/`) 대신 엉뚱한
+    `~/.fsh/`를 만들고 있었다 — 실제 상태 파일(`devices.json` 등)은 여전히 `~/.vt/`를
+    보므로 방치했으면 조용히 있으나 마나 한 빈 디렉토리가 됐을 상황. `ARCHITECTURE.md`/
+    `DESIGN.md`도 원래 sweep에서 빠져 있던 걸 발견해 함께 정리.
+- **Claude Code 전역 스킬을 `/vt`에서 `/fsh`로 변경.** 스킬 디렉터리
+  `.claude/skills/vt/` → `.claude/skills/fsh/`(프로젝트 스킬 `vt-start`/`vt-mobile`/
+  `vt-voice`도 `fsh-*`로 함께 리네임). 이 과정에서 전역 심링크(`~/.claude/skills/vt`)가
+  `voice-terminal` → `farshell` 디렉터리 리네임 이후로 존재하지 않는 경로를 가리키는
+  **끊어진 심링크였다는 걸 발견**했다 — `/vt`가 그동안 아예 동작하지 않았던 원인.
+  `~/.claude/skills/fsh`로 새로 걸어 고침.
+- **CLI 명령어를 `vt`에서 `fsh`로 변경.** `bin/vt`는 이제 `bin/fsh`를 가리키는
+  심링크라 `vt`도 그대로 계속 동작한다(하위 호환 — 기존 dotfiles/tmux 키바인딩/
+  스크립트가 안 깨짐). 새로 설치하거나 문서를 참고할 땐 `fsh`를 쓰면 된다.
+- **`fsh start`(구 `vt start`)가 더 이상 Voice Daemon을 자동으로 켜지 않음(breaking).**
+  지금까지는 전체 시작을 실행하면 서버·터널과 함께 음성 핫키까지 항상 켜져서, 음성을
+  안 쓰는 사용자도 매번 마이크 리스너가 백그라운드에서 도는 걸 몰랐거나 끌 방법이
+  없었다. 이제 기본은 서버+터널만 켜고, 음성까지 원하면 `fsh start --voice`를 쓰거나
+  기존처럼 `fsh voice`를 따로 실행한다. 인자 없는 `start`를 스크립트/dotfiles에서
+  쓰고 있었다면 음성이 더 이상 자동으로 켜지지 않는다는 점 참고.
+- **그리드 카드 라이브 프리뷰의 ANSI→HTML 변환(`ansiToHtml`)을 `frontend/js/ansilex.js`로
+  분리.** keyseq.js/difflex.js와 같은 이유 — 이 함수가 그리드 프리뷰의 유일한 XSS
+  방어선인데 지금까지 회귀 감지 테스트가 없었다. 프로젝트 최초로 jsdom을
+  devDependency로 추가해(`package.json`) theme.js/grid.js/terminal.js에 대한
+  DOM 단위 테스트 78종을 새로 붙였다(`frontend/tests/`) — 동작은 그대로다.
 - **프로젝트명을 voice-terminal에서 farshell로 변경.** 초기엔 음성 입력이 핵심
   셀링포인트였지만, 인증/기기관리, 코드 뷰어, 포트 대시보드, 프롬프트 큐, Web Push,
   Tailscale SSH 등으로 기능이 늘면서 음성은 여러 접근 경로 중 하나가 됐다 —
@@ -76,6 +127,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   회귀 테스트 `server/tests/test_agent_event.py` 추가.
 
 ### Added
+- **음성 입력 시작 시 타깃 tmux pane을 발화 전에 데스크톱 알림으로 안내.** OS
+  포커스가 브라우저·노션 등 다른 앱에 있어도 Voice Daemon은 계속 동작하는데,
+  어느 pane으로 명령이 들어갈지 모른 채 말하면 엉뚱한 곳에서 실행될 위험이
+  있었다 — 녹음 시작 순간 "🎙 음성 입력 → dev:0.0"(lock된 타깃이면 🔒)을 띄워
+  "확인이 사전"이 되도록 했다. `VT_VOICE_TARGET_NOTIFY=off`로 끌 수 있음.
+- **비밀번호 로그인에도 OTP와 동일한 재시도 잠금 추가, 잠금 범위는 IP 단위로 축소.**
+  기존엔 OTP만 5회 실패 시 10분 잠기고 비밀번호는 무제한 재시도가 가능했다 — 같은
+  파일 안에서 자격증명 종류별로 다른 위협모델을 적용하던 비일관성을 없앴다. 동시에
+  OTP 잠금이 프로세스 전역 리스트 하나로 추적되던 문제도 함께 고쳤다(한 클라이언트의
+  실패한 시도가 다른 모든 클라이언트의 신규 기기 등록까지 막던 가용성 버그) — 이제
+  잠금은 클라이언트 IP별로 격리된다.
+- **코드 뷰어에 Git stage/commit 추가.** `/api/git/stage`·`/api/git/unstage`·
+  `/api/git/commit`. diff를 보다가 커밋하려면 터미널로 돌아가야 했던 "보기 전용"의
+  반쪽짜리 가치를 메운다. push·브랜치 조작은 의도적으로 범위 밖 — 코드 뷰어의
+  "쓰기 API가 없다"는 방어 전제를 stage/commit만큼만 최소로 깨고, 인증/CSRF는 기존
+  전역 미들웨어를 그대로 상속받으며 경로 검증은 diff와 동일한 로직을 재사용한다.
 - **Web Push — 앱이 닫혀 있어도 알림 (P5).** ⋯ 메뉴 → "푸시 알림".
   기존 알림(`/ws-notify` → Notification API)은 **PWA 탭이 살아 있어야만** 동작해서,
   폰 화면을 끄면 "Claude가 승인 대기 중"을 놓쳤다. 그 마지막 격차를 메운다.
