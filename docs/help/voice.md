@@ -1,19 +1,23 @@
-# vt help voice — 음성 입력 동작
+# fsh help voice — 음성 입력 동작
 
-farshell은 3가지 음성 입력 경로가 있습니다.
+FarShell은 3가지 음성 입력 경로가 있습니다.
 
 ## 1. Voice Daemon (데스크톱 전역 핫키)
 
-    vt voice
+    fsh voice
 
 - 백그라운드 실행. 노션/브라우저 작업 중에도 동작
-- 디폴트 핫키: `Ctrl+Shift+V` (변경 가능, `vt help hotkeys` 참고)
+- 디폴트 핫키: `Ctrl+Shift+V` (변경 가능, `fsh help hotkeys` 참고)
 - 이어폰 Play/Pause 버튼으로도 토글 가능 (macOS Media Key)
 - STT 후 텍스트 + Enter로 활성 tmux pane에 직접 입력 → 즉시 실행됨
-- 종료: `vt stop`
+- 종료: `fsh stop`
 
 음성 타깃은 디폴트로 tmux의 most-recent active pane이지만,
-`vt voice-target <세션명>`으로 특정 세션에 lock 가능 (자세히는 `vt help target`).
+`fsh voice-target <세션명>`으로 특정 세션에 lock 가능 (자세히는 `fsh help target`).
+
+포커스가 다른 앱(브라우저 등)에 있어도 daemon은 계속 동작하기 때문에, 녹음을
+시작하는 순간 "→ dev:0.0" 같은 데스크톱 알림으로 이번 발화가 어느 pane으로
+갈지 미리 보여준다(lock된 경우 🔒 표시). 끄려면 `VT_VOICE_TARGET_NOTIFY=off`.
 
 ## 2. 모바일 🎤 버튼
 

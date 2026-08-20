@@ -67,6 +67,26 @@ def read_voice_target_lock() -> str | None:
         return None
 
 
+def pane_label(pane_id: str) -> str | None:
+    """pane_id(`%12` 같은 내부 ID) → 사람이 읽는 라벨("dev:0.0").
+
+    V3-G: 녹음이 어디로 갈지 발화 전에 안내할 때 pane_id 그대로는 의미가 없어 필요해졌다.
+    """
+    try:
+        result = subprocess.run(
+            TMUX_BASE + ["display-message", "-p", "-t", pane_id,
+                         "#{session_name}:#{window_index}.#{pane_index}"],
+            capture_output=True, text=True, timeout=2,
+        )
+        label = result.stdout.strip()
+        # 존재하지 않는 pane_id를 -t로 넘겨도 tmux는 exit 0 + 빈 변수만 채운 형식
+        # 문자열(예: ":.")을 그대로 뱉는다(실측 확인) — session_name이 비어 있으면
+        # 애초에 대상이 없었다는 뜻이라 None으로 취급한다.
+        return label if label and not label.startswith(":") else None
+    except Exception:
+        return None
+
+
 def get_locked_session_pane(session_name: str) -> str | None:
     """lock된 세션의 active pane id."""
     try:

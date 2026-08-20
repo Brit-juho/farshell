@@ -28,6 +28,14 @@ def vt_getenv(key: str, default: str = "") -> str:
     return vt_env.getenv(key, default, file_env=_VT_ENV)
 
 
+# V3-G: 녹음 시작 시(발화 전) 이번 명령이 어느 tmux pane으로 갈지 데스크톱 알림으로
+# 미리 보여준다. OS 포커스가 다른 앱(브라우저 등)에 있어도 daemon은 계속 동작하는데,
+# 어느 pane이 타깃인지 사용자가 모르는 채 말하면 엉뚱한 pane에서 실행될 수 있다는
+# 문제(TODOS.md V3)를 "말하기 전에 확인"으로 해결한다. TTS_CONFIRM(사후 읽어주기)과
+# 달리 이건 "확인이 사전"이라 실수 자체를 막을 수 있다.
+VOICE_TARGET_NOTIFY = vt_getenv("VT_VOICE_TARGET_NOTIFY", "on").lower() != "off"
+
+
 # 토글식 녹음은 '끄기'를 놓치면(미디어 키 오작동/핫키 릴리즈 누락) _recording=True인 채
 # 콜백이 초당 32KB(16kHz·16bit)씩 무한정 프레임을 쌓는다 → 수 시간이면 GB 단위 + 그 거대
 # 오디오를 faster-whisper로 돌리면 CTranslate2 네이티브 메모리(OS 미반환)가 급증해 안 줄어든다.
