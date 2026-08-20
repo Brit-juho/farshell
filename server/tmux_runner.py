@@ -1,6 +1,6 @@
 """tmux 명령 공통 실행 헬퍼 (Phase 8 G3).
 
-- 단일 tmux 서버 원칙: 모든 호출이 -L vt 격리 소켓 + -f vt-tmux.conf 사용
+- 단일 tmux 서버 원칙: 모든 호출이 -L fsh 격리 소켓 + -f vt-tmux.conf 사용
 - timeout 일관 적용 (기본 2초)
 - batch 패턴: list-panes -a로 한 번에 모든 세션 정보 수집
 
@@ -19,7 +19,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "vt")
+VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "fsh")
 
 # config 우선순위: VT_TMUX_CONF > ~/.config/vt/tmux.conf > 레포 내 config/vt-tmux.conf > 미사용
 def _resolve_conf_path() -> Optional[str]:
@@ -40,7 +40,7 @@ VT_TMUX_CONF = _resolve_conf_path()
 
 
 def base_args() -> list[str]:
-    """tmux 호출 시 항상 앞에 붙는 인자 (-L vt -u [-f conf])."""
+    """tmux 호출 시 항상 앞에 붙는 인자 (-L fsh -u [-f conf])."""
     args = ["tmux", "-u", "-L", VT_TMUX_SOCKET]
     if VT_TMUX_CONF:
         args.extend(["-f", VT_TMUX_CONF])

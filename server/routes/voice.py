@@ -191,7 +191,7 @@ async def notify_test(request: Request):
         body = await request.json()
     except Exception:
         pass
-    title = body.get("title", "farshell 테스트")
+    title = body.get("title", "FarShell 테스트")
     message = body.get("message", "푸시 알림이 정상 작동합니다 🎉")
     priority = body.get("priority", "default")
     ok = await notify.send(title, message, priority=priority, tags="mega")

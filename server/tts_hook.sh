@@ -14,6 +14,36 @@ SERVER   = os.environ.get("VT_SERVER", "http://localhost:7777")
 MAX_CHARS = 200
 TMP_AUDIO = "/tmp/claude_tts.mp3"
 
+
+def _vt_auth_token():
+    """VT_AUTH_TOKEN(또는 레거시 VT_TOKEN) — 프로세스 env 우선, 없으면 ~/.vt.env를 직접 읽는다.
+
+    이 훅은 Claude Code가 띄운 프로세스의 자식이라 사용자 셸의 export 여부에
+    기대면 안 된다(실측: 이 값이 셸 rc에서 export되지 않아 env로는 안 보였다).
+    인증이 켜진 서버에 토큰 없이 /voice/output을 부르면 401이 나 항상
+    macOS 'say' 폴백만 타게 된다 — 서버 TTS 엔진(kokoro/edge-tts)을 못 씀.
+    """
+    token = os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN")
+    if token:
+        return token
+    found = {}
+    try:
+        with open(os.path.expanduser("~/.vt.env")) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key in ("VT_AUTH_TOKEN", "VT_TOKEN"):
+                    found[key] = value.strip().strip("'\"")
+    except OSError:
+        pass
+    return found.get("VT_AUTH_TOKEN") or found.get("VT_TOKEN") or ""
+
+
+VT_AUTH_TOKEN = _vt_auth_token()
+
 input_file = sys.argv[1]
 try:
     with open(input_file) as f:
@@ -76,10 +106,13 @@ if not text:
 
 # ── TTS: 서버 → macOS say fallback ───────────────────────────────
 try:
+    headers = {"Content-Type": "application/json"}
+    if VT_AUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {VT_AUTH_TOKEN}"
     req = urllib.request.Request(
         f"{SERVER}/voice/output",
         data=json.dumps({"text": text}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     with urllib.request.urlopen(req, timeout=3) as resp:
         with open(TMP_AUDIO, "wb") as f:

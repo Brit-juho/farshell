@@ -1,7 +1,7 @@
 ---
-name: vt-mobile
+name: fsh-mobile
 description: |
-  모바일 기기에서 farshell 테스트. adb 포트포워딩, Chrome 열기, 스크린샷 캡처,
+  모바일 기기에서 FarShell 테스트. adb 포트포워딩, Chrome 열기, 스크린샷 캡처,
   원격 터널 접속까지 처리. Use when asked to "모바일 테스트", "폰에서 테스트",
   "mobile test", "adb 테스트", "모바일로 확인".
 allowed-tools:
@@ -14,7 +14,7 @@ allowed-tools:
 
 ### 사전 조건
 
-- 서버가 실행 중이어야 합니다 (아니면 `/vt-start` 먼저 실행)
+- 서버가 실행 중이어야 합니다 (아니면 `/fsh-start` 먼저 실행)
 - USB 디버깅이 활성화된 Android 기기가 연결되어 있어야 합니다
 
 ### 1. 기기 확인

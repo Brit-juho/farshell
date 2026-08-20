@@ -1,9 +1,9 @@
 ---
-name: vt
+name: fsh
 description: |
-  farshell 제어. 음성 모드, 모바일 접속, 서버 관리.
+  FarShell 제어. 음성 모드, 모바일 접속, 서버 관리.
   어디서든 실행 가능한 전역 스킬. Use when asked to "음성 모드", "voice mode",
-  "모바일 접속", "mobile mode", "vt", "voice terminal 시작", "음성으로 코딩",
+  "모바일 접속", "mobile mode", "fsh", "vt", "voice terminal 시작", "음성으로 코딩",
   "voice coding", "터미널 음성".
 allowed-tools:
   - Bash
@@ -11,17 +11,17 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-## farshell 스킬
+## FarShell 스킬
 
-이 스킬은 `vt` CLI를 통해 farshell을 제어합니다.
+이 스킬은 `fsh` CLI를 통해 FarShell을 제어합니다(구 CLI 이름 `vt`도 하위 호환 심링크로 계속 동작).
 **어느 디렉토리에서든 실행 가능합니다.**
 
 ### 실행 전 필수: 기존 실행 상태 확인
 
-**모든 모드를 실행하기 전에 반드시 `vt status`를 먼저 실행하세요.**
+**모든 모드를 실행하기 전에 반드시 `fsh status`를 먼저 실행하세요.**
 
 ```bash
-vt status
+fsh status
 ```
 
 - 서버/터널이 **이미 실행 중**이면: 새로 시작하지 말고 기존 정보를 안내하세요.
@@ -31,7 +31,7 @@ vt status
 
 ### 사용 가능한 모드
 
-사용자가 요청하면 해당하는 `vt` 명령을 실행하세요.
+사용자가 요청하면 해당하는 `fsh` 명령을 실행하세요.
 
 #### 음성 모드 ("음성 모드", "voice mode", "음성으로 코딩")
 
@@ -40,7 +40,7 @@ vt status
 **새 iTerm 창에 `tmux dev` + `claude --resume`이 자동으로 열립니다**(macOS).
 
 ```bash
-vt voice
+fsh voice
 ```
 
 시작 후 사용자에게 알려주세요:
@@ -56,7 +56,7 @@ vt voice
 음성 모드와 마찬가지로 **새 iTerm 창에 `tmux dev` + `claude --resume`이 자동으로 열립니다**.
 
 ```bash
-vt mobile
+fsh mobile
 ```
 
 - Cloudflare Tunnel URL이 생성됨
@@ -64,12 +64,14 @@ vt mobile
 - QR 코드도 표시 (qrencode 설치 시)
 - 폰이 attach하는 `dev` 세션 = 새 iTerm 창의 Claude가 동작하는 세션 (단일 진실의 원천)
 
-#### 전체 시작 ("vt 시작", "전부 시작")
+#### 전체 시작 ("fsh 시작", "전부 시작")
 
-서버 + 터널 + 음성 데몬 전체를 시작하고, 새 터미널 창(iTerm/Ghostty/WezTerm/Kitty/Alacritty/Warp/Terminal.app 중 감지된 앱)에 tmux + Claude를 자동 오픈.
+서버 + 터널을 시작하고, 새 터미널 창(iTerm/Ghostty/WezTerm/Kitty/Alacritty/Warp/Terminal.app 중 감지된 앱)에 tmux + Claude를 자동 오픈.
+음성 데몬은 기본으로 켜지지 않는다 — 필요하면 `--voice`를 붙이거나 `fsh voice`를 따로 실행.
 
 ```bash
-vt start
+fsh start          # 서버 + 터널만
+fsh start --voice  # 서버 + 터널 + 음성 데몬
 ```
 
 #### Claude 시작 ("클로드 시작", "claude 실행")
@@ -77,54 +79,54 @@ vt start
 tmux dev 세션 안에서 `claude --resume`을 즉시 실행.
 
 ```bash
-vt claude
+fsh claude
 ```
 
 #### 기기 간 핸드오프 ("폰으로 넘겨", "맥으로 가져와")
 
 ```bash
-vt handoff mobile    # 현재 tmux 세션을 폰으로 (QR + URL hash)
-vt handoff desktop   # 폰 세션을 맥 터미널로
+fsh handoff mobile    # 현재 tmux 세션을 폰으로 (QR + URL hash)
+fsh handoff desktop   # 폰 세션을 맥 터미널로
 ```
 
-#### 진단 ("진단", "vt 점검", "설치 확인")
+#### 진단 ("진단", "fsh 점검", "설치 확인")
 
 13개 항목 체크 (Python · venv · 패키지 · tmux · cloudflared · ffmpeg · 포트 · PATH · 토큰 · 알림 · 터미널 앱).
 
 ```bash
-vt doctor
+fsh doctor
 ```
 
 #### 모바일 접속 (E2E)
 
 ```bash
-vt mobile --e2e      # cloudflared 터널 너머 페이로드 암호화
+fsh mobile --e2e      # cloudflared 터널 너머 페이로드 암호화
 ```
 
 #### 상태 확인
 
 ```bash
-vt status
+fsh status
 ```
 
 #### 종료
 
 ```bash
-vt stop
+fsh stop
 ```
 
 ### 프로세스 수명
 
 - 서버/터널은 **백그라운드 프로세스**로 실행됨
 - Claude 세션을 닫아도 계속 실행됨
-- `vt stop` 또는 맥 재시작 전까지 유지
-- 아무 터미널에서나 `vt stop`으로 종료 가능
+- `fsh stop` 또는 맥 재시작 전까지 유지
+- 아무 터미널에서나 `fsh stop`으로 종료 가능
 
 ### 트러블슈팅
 
 | 문제 | 해결 |
 |------|------|
-| `vt: command not found` | `~/.local/bin`이 PATH에 있는지 확인. 없으면: `export PATH="$HOME/.local/bin:$PATH"` |
+| `fsh: command not found` | `~/.local/bin`이 PATH에 있는지 확인. 없으면: `export PATH="$HOME/.local/bin:$PATH"` |
 | Voice Daemon 핫키 안 먹힘 | macOS 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 |
 | 서버 시작 실패 | `cat /tmp/vt-server.log` 확인 |
 | 터널 URL 안 뜸 | `cat /tmp/cloudflared.log` 확인. cloudflared 설치: `brew install cloudflared` |
@@ -133,7 +135,7 @@ vt stop
 
 ### 사용자 시나리오: 노션 작업 중 음성 코딩
 
-1. 터미널에서 `vt voice` 실행
+1. 터미널에서 `fsh voice` 실행
 2. 노션으로 돌아가서 작업 계속
 3. 코딩이 필요할 때 Ctrl+Shift+V → 말하기 ("git status" 등)
 4. tmux에 자동 입력 → 결과를 TTS로 들음

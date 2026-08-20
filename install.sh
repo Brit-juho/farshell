@@ -1,5 +1,5 @@
 #!/bin/bash
-# farshell 원라인 설치 스크립트
+# FarShell 원라인 설치 스크립트
 # 사용법:
 #   ./install.sh             # 터미널만 (경량, ~50MB)
 #   ./install.sh voice       # 터미널 + 음성 모드 (~1.5GB)
@@ -18,7 +18,7 @@ case "$(uname -s 2>/dev/null)" in
     echo ""
     echo "✗ Windows 네이티브 환경은 지원하지 않습니다."
     echo ""
-    echo "  farshell은 tmux를 사용하므로 Linux/macOS 환경이 필요합니다."
+    echo "  FarShell은 tmux를 사용하므로 Linux/macOS 환경이 필요합니다."
     echo "  Windows 사용자는 WSL2를 통해 설치하세요:"
     echo ""
     echo "  1. PowerShell(관리자)에서: wsl --install"
@@ -36,7 +36,7 @@ PIPE_INSTALL=0
 # 이전 버전은 `[ -t 0 ]`로 stdin TTY 여부를 체크했지만, 자동화/CI 환경도 false로
 # 잡혀 로컬 레포를 무시하는 버그가 있었다 (TEST_REPORT.md Bug #2).
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
-if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/bin/vt" ]; then
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/bin/fsh" ]; then
   VT_DIR="$SCRIPT_DIR"
 else
   PIPE_INSTALL=1
@@ -51,7 +51,7 @@ else
 fi
 
 echo ""
-echo "  🎤 farshell 설치 — 프로필: $PROFILE"
+echo "  🎤 FarShell 설치 — 프로필: $PROFILE"
 echo "  설치 경로: $VT_DIR"
 echo ""
 
@@ -86,11 +86,12 @@ else
   echo "✓ 터미널 의존성 설치 완료 (음성 모드는 './install.sh voice'로 추가)"
 fi
 
-# 4. vt CLI 등록
+# 4. fsh CLI 등록 (bin/vt는 bin/fsh를 가리키는 심링크 — 예전 명령어 vt도 그대로 동작)
 mkdir -p "$HOME/.local/bin"
+chmod +x "$VT_DIR/bin/fsh"
+ln -sf "$VT_DIR/bin/fsh" "$HOME/.local/bin/fsh"
 ln -sf "$VT_DIR/bin/vt" "$HOME/.local/bin/vt"
-chmod +x "$VT_DIR/bin/vt"
-echo "✓ vt CLI 등록 → ~/.local/bin/vt"
+echo "✓ fsh CLI 등록 → ~/.local/bin/fsh (하위 호환: vt도 계속 동작)"
 
 # 4-1. tmux 격리 config 복사 (Phase 8 G3)
 mkdir -p "$HOME/.config/vt"
@@ -106,13 +107,13 @@ if [ ! -f "$HOME/.vt.env" ]; then
   # 세션 서명키가 유출되면 쿠키를 위조해 인증을 우회할 수 있으므로 처음부터 0600.
   ( umask 077; : > "$HOME/.vt.env" )
   cat > "$HOME/.vt.env" <<EOF
-# farshell 설정 (수정 가능)
+# FarShell 설정 (수정 가능)
 VT_DIR=$VT_DIR
 VT_PORT=${VT_PORT:-7777}
 VT_PYTHON=\${VT_DIR}/.venv/bin/python
-# 'vt mobile'(공개 터널)은 인증이 없으면 실행을 거부합니다 — 아래 둘 중 하나로
-# 인증을 먼저 설정하세요(권장: vt password). localhost/lan/tailscale 모드는 필요 없습니다.
-#   vt password              대화형으로 비밀번호 설정 (scrypt 해시만 여기 저장됨)
+# 'fsh mobile'(공개 터널)은 인증이 없으면 실행을 거부합니다 — 아래 둘 중 하나로
+# 인증을 먼저 설정하세요(권장: fsh password). localhost/lan/tailscale 모드는 필요 없습니다.
+#   fsh password              대화형으로 비밀번호 설정 (scrypt 해시만 여기 저장됨)
 # VT_AUTH_TOKEN=your-secret  기계용 토큰 (데몬/QR 등, 원한다면 직접 값 채우기)
 # VT_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (선택)
 EOF
@@ -140,7 +141,7 @@ fi
 # 7. cloudflared 안내 (선택)
 if ! command -v cloudflared >/dev/null 2>&1; then
   echo ""
-  echo "  ⓘ 원격 접속(vt mobile)용 cloudflared 미설치."
+  echo "  ⓘ 원격 접속(fsh mobile)용 cloudflared 미설치."
   if [ "$(uname)" = "Darwin" ]; then
     echo "    설치: brew install cloudflared"
   else
@@ -160,15 +161,15 @@ if [ "$PROFILE" = "voice" ] && [ "$(uname)" = "Linux" ]; then
 fi
 
 # 9. (W5-1) 터미널 profile 자동 등록 권유
-# 비대화형(curl|bash)에서는 스킵. TTY가 있으면 사용자에게 확인 후 vt install-profiles 실행
+# 비대화형(curl|bash)에서는 스킵. TTY가 있으면 사용자에게 확인 후 fsh install-profiles 실행
 if [ -t 0 ] && [ -t 1 ]; then
   echo ""
-  printf "  새 터미널 창이 자동으로 farshell tmux로 진입하도록 설정할까요? [y/N] "
+  printf "  새 터미널 창이 자동으로 FarShell tmux로 진입하도록 설정할까요? [y/N] "
   IFS= read -r REPLY_PROFILE || REPLY_PROFILE=""
   if [ "${REPLY_PROFILE:-}" = "y" ] || [ "${REPLY_PROFILE:-}" = "Y" ]; then
-    "$VT_DIR/bin/vt" install-profiles 2>&1 || echo "  ⚠ install-profiles 실패 — 'vt install-profiles' 수동 실행 가능"
+    "$VT_DIR/bin/fsh" install-profiles 2>&1 || echo "  ⚠ install-profiles 실패 — 'fsh install-profiles' 수동 실행 가능"
   else
-    echo "  ⓘ 나중에 'vt install-profiles' 또는 'vt shell-init zsh >> ~/.zshrc'로 활성화 가능"
+    echo "  ⓘ 나중에 'fsh install-profiles' 또는 'fsh shell-init zsh >> ~/.zshrc'로 활성화 가능"
   fi
 fi
 
@@ -177,15 +178,15 @@ echo "  ┌───────────────────────
 echo "  │  ✓ 설치 완료                              │"
 echo "  │                                         │"
 echo "  │  다음 명령으로 시작:                        │"
-echo "  │    vt status   — 상태 확인                │"
-echo "  │    vt mobile   — 폰 접속 URL              │"
+echo "  │    fsh status   — 상태 확인               │"
+echo "  │    fsh mobile   — 폰 접속 URL             │"
 if [ "$PROFILE" = "voice" ]; then
-echo "  │    vt voice    — 음성 모드                │"
+echo "  │    fsh voice    — 음성 모드               │"
 fi
 echo "  │                                         │"
 echo "  │  새 터미널을 열거나 'source ~/.zshrc' 실행  │"
 echo "  └─────────────────────────────────────────┘"
 echo ""
-echo "  참고: 'vt mobile'로 공개 터널(원격 접속)을 열려면 먼저 인증을 설정해야"
-echo "  합니다 — 'vt password' 실행 (localhost/lan/tailscale 모드는 필요 없음)."
+echo "  참고: 'fsh mobile'로 공개 터널(원격 접속)을 열려면 먼저 인증을 설정해야"
+echo "  합니다 — 'fsh password' 실행 (localhost/lan/tailscale 모드는 필요 없음)."
 echo ""

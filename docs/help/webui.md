@@ -1,6 +1,6 @@
 # 웹 UI 사용 설명서
 
-브라우저에서 farshell을 쓰는 방법 전체. (CLI는 `vt help concepts`, 음성은 `vt help voice` 참고)
+브라우저에서 FarShell을 쓰는 방법 전체. (CLI는 `fsh help concepts`, 음성은 `fsh help voice` 참고)
 
 ---
 
@@ -10,8 +10,8 @@
 |------|------|
 | 데스크톱 | `http://localhost:7777` |
 | 같은 와이파이 모바일 | `http://<맥북IP>:7777` (IP: `ipconfig getifaddr en0`) |
-| 어디서든(원격) | `vt mobile` → 나오는 cloudflare HTTPS URL / QR |
-| 회사망 등 | `vt mobile --network tailscale` (tailnet 제한) |
+| 어디서든(원격) | `fsh mobile` → 나오는 cloudflare HTTPS URL / QR |
+| 회사망 등 | `fsh mobile --network tailscale` (tailnet 제한) |
 
 > 토큰(`VT_TOKEN`)이 설정돼 있으면 URL에 `?token=...`이 붙습니다. 첫 접속 시 토큰이
 > HttpOnly 쿠키로 교환되고 URL에서 제거됩니다(로그/공유 노출 차단).
@@ -89,7 +89,7 @@ Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에
 
 ### 이미지 워크플로 (Claude Code)
 
-이미지를 붙여넣으면 서버 `/tmp/vt-uploads/`에 저장되고 그 경로가 터미널에 입력됩니다.
+이미지를 붙여넣으면 서버 `/tmp/fsh-uploads/`에 저장되고 그 경로가 터미널에 입력됩니다.
 그 경로를 그대로 claude에 넘기면 됩니다. (📎 파일 업로드 버튼으로도 동일하게 가능)
 
 > 터미널은 텍스트(바이트)만 받는 PTY라 이미지 자체를 "붙여넣어" 화면에 띄울 수는 없습니다.
@@ -102,11 +102,11 @@ Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에
 | 기능 | 방법 |
 |------|------|
 | **검색** | `Ctrl+F` / `Cmd+F` → 터미널 내용 검색 (▲▼로 이동) |
-| **파일 업로드** | `⋯ → 파일 업로드` → `/tmp/vt-uploads/`에 저장 |
+| **파일 업로드** | `⋯ → 파일 업로드` → `/tmp/fsh-uploads/`에 저장 |
 | **Grid 뷰** | 상단 격자 아이콘 → 모든 tmux 세션 라이브 프리뷰 (변화 시에만 push) |
 | **테마** | `⋯ → 테마` → macOS / Catppuccin / Windows 스킨 전환 (기억됨) |
 | **맥에서도 열기** | `⋯` 토글 ON → 새 세션 생성 시 iTerm 창도 자동 오픈 (macOS) |
-| **핸드오프** | `vt handoff mobile` (폰으로) / `desktop` (맥으로) |
+| **핸드오프** | `fsh handoff mobile` (폰으로) / `desktop` (맥으로) |
 
 ---
 
@@ -117,7 +117,7 @@ Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에
 - **🎤 음성 입력**: 탭 → 녹음 → 다시 탭 → STT → 활성 세션에 텍스트 입력
 - **🎧 음성 전용 모드** (`⋯`): 터미널 숨기고 큰 마이크만 — 이어폰 조작용
 - **이어폰 미디어키** (`⋯`): 이어폰 Play/Pause를 녹음 토글로 사용
-- 데스크톱 핫키는 `Ctrl+Shift+V` (voice daemon 실행 시). 자세히는 `vt help voice`
+- 데스크톱 핫키는 `Ctrl+Shift+V` (voice daemon 실행 시). 자세히는 `fsh help voice`
 
 ---
 
@@ -136,8 +136,8 @@ Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에
 |------|-------------|
 | 드래그 복사가 안 됨 | tmux 마우스 모드 — **Shift+드래그** (위 4번 참고) |
 | 붙여넣기가 안 됨 | 터미널을 한 번 탭해 포커스 후 `Cmd/Ctrl+V`. 클립보드 읽기는 HTTPS/localhost에서만 |
-| TUI(claude) 줄이 어긋남 | 탭 전환/새로고침하면 크기 재동기화됨. 계속되면 `vt help troubleshoot` |
+| TUI(claude) 줄이 어긋남 | 탭 전환/새로고침하면 크기 재동기화됨. 계속되면 `fsh help troubleshoot` |
 | 새 세션이 프로젝트 폴더에서 열림 | `VT_START_DIR` 설정 (위 3번) — 기본은 홈 |
 | 탭 닫았는데 claude가 사라짐 | 그건 "일반 터미널" 탭. claude는 tmux 탭(`dev`)에서 쓰세요 |
 
-더 많은 트러블슈팅: `vt help troubleshoot`
+더 많은 트러블슈팅: `fsh help troubleshoot`

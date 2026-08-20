@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "vt")
+VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "fsh")
 VT_PORT = int(os.environ.get("VT_PORT", "7777"))
 VT_TARGET_FILE = Path.home() / ".vt" / "voice_target"
 VT_ENV_FILE = Path.home() / ".vt.env"

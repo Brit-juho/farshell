@@ -1,17 +1,17 @@
 ---
-name: vt-start
+name: fsh-start
 description: |
-  farshell 서버 시작 + Cloudflare Tunnel 원격 접속 설정.
+  FarShell 서버 시작 + Cloudflare Tunnel 원격 접속 설정.
   서버 실행, tmux 세션 준비, 터널 URL 생성까지 원스텝으로 처리.
-  Use when asked to "서버 시작", "voice terminal 시작", "start vt", "원격 접속 설정".
+  Use when asked to "서버 시작", "voice terminal 시작", "start fsh", "start vt", "원격 접속 설정".
 allowed-tools:
   - Bash
   - Read
 ---
 
-## farshell 서버 시작 스킬
+## FarShell 서버 시작 스킬
 
-이 스킬은 farshell 서버를 시작하고 원격 접속을 설정합니다.
+이 스킬은 FarShell 서버를 시작하고 원격 접속을 설정합니다.
 
 ### 실행 순서
 

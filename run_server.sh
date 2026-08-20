@@ -1,5 +1,5 @@
 #!/bin/bash
-# farshell Server 실행 스크립트
+# FarShell Server 실행 스크립트
 # Python 환경은 ~/.vt.env의 VT_PYTHON 또는 프로젝트 .venv를 사용합니다.
 
 set -e
@@ -42,7 +42,7 @@ if [ -z "${HOST:-}" ]; then
   HOST="$(cd "$SERVER_DIR" && "$PYTHON" -c 'import network_access as n; print(n.resolve_bind_host(n.get_current_spec()))' 2>/dev/null || echo 0.0.0.0)"
 fi
 
-echo "farshell Server"
+echo "FarShell Server"
 echo "  http://localhost:${PORT}"
 if [ "$(uname)" = "Darwin" ]; then
   _IP=$(ipconfig getifaddr en0 2>/dev/null || echo '0.0.0.0')

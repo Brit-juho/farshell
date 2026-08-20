@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# vt tunnel expose 는 cloudflared 기동 + URL 확보까지 최대 30초를 기다린다(bin/vt:340).
+# fsh tunnel expose 는 cloudflared 기동 + URL 확보까지 최대 30초를 기다린다(bin/fsh:305, _start_extra_tunnel).
 VT_TIMEOUT = 45.0
 
 
@@ -56,14 +56,14 @@ def _vt_bin() -> Path | None:
     vt_dir = os.environ.get("VT_DIR")
     if not vt_dir:
         return None
-    p = Path(vt_dir) / "bin" / "vt"
+    p = Path(vt_dir) / "bin" / "fsh"
     return p if p.is_file() else None
 
 
 def _run_vt(*args: str) -> tuple[int, str]:
     vt = _vt_bin()
     if vt is None:
-        return 127, "vt CLI를 찾을 수 없습니다 (VT_DIR 미설정)"
+        return 127, "fsh CLI를 찾을 수 없습니다 (VT_DIR 미설정)"
     try:
         p = subprocess.run(["bash", str(vt), *args], capture_output=True, timeout=VT_TIMEOUT)
     except subprocess.TimeoutExpired:

@@ -22,7 +22,7 @@ import vt_env
 
 logger = logging.getLogger(__name__)
 
-TMUX_SOCKET = vt_env.getenv("VT_TMUX_SOCKET", "vt")
+TMUX_SOCKET = vt_env.getenv("VT_TMUX_SOCKET", "fsh")
 TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]
 
 VOICE_TARGET_LOCK = "~/.vt/voice_target"

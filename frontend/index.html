@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>farshell</title>
+  <title>FarShell</title>
   <link rel="icon" type="image/png" href="/static/icon-192.png">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#2c2c2e" id="theme-color-meta">
@@ -65,7 +65,7 @@
     <div id="login-spinner"></div>
     <form id="login-form" hidden autocomplete="off">
       <div class="login-icon">🔒</div>
-      <h1>farshell</h1>
+      <h1>FarShell</h1>
       <p class="login-sub">접속하려면 비밀번호를 입력하세요</p>
       <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
            화면 상 노출은 -webkit-text-security로 그대로 가린다.
@@ -76,7 +76,7 @@
         autocorrect="off" autocapitalize="off" spellcheck="false"
         readonly onfocus="this.removeAttribute('readonly')"
         placeholder="비밀번호" aria-label="비밀번호" />
-      <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'vt otp setup'으로 연동한 뒤에만 나타난다 -->
+      <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'fsh otp setup'으로 연동한 뒤에만 나타난다 -->
       <div id="login-otp-wrap" hidden>
         <p class="login-otp-hint">처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
         <input id="login-otp" type="text" name="vt-otp" autocomplete="one-time-code"
@@ -93,7 +93,7 @@
     //  - 200 → 인증됨(또는 서버에 인증 미설정) → 게이트 숨김
     //  - 401 → 비밀번호 폼 노출 → POST /api/auth 성공 시 24h 쿠키 발급 후 새로고침
     //
-    // 처음 보는 기기이고 서버에서 'vt otp setup'으로 OTP를 연동해 둔 경우에만
+    // 처음 보는 기기이고 서버에서 'fsh otp setup'으로 OTP를 연동해 둔 경우에만
     // 401 {error:"otp_required"}가 돌아오고, 그때 6자리 입력칸이 추가로 열린다.
     // OTP 미연동이면 이 분기가 아예 발생하지 않아 기존 동작과 동일하다.
     (function(){
@@ -322,7 +322,7 @@
       <span id="push-label">푸시 알림</span>
     </button>
     <label class="mi" id="autocopy-toggle" role="menuitemcheckbox"
-      title="드래그 선택 · vim/tmux copy-mode(OSC52) · vt clip(맥 클립보드 폴링) 전부 자동 동기화 여부. 꺼도 우클릭/Ctrl+Shift+C로 수동 복사는 가능">
+      title="드래그 선택 · vim/tmux copy-mode(OSC52) · fsh clip(맥 클립보드 폴링) 전부 자동 동기화 여부. 꺼도 우클릭/Ctrl+Shift+C로 수동 복사는 가능">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/></svg>
       드래그 시 자동 복사
       <input type="checkbox" id="autocopy-checkbox" />
@@ -393,6 +393,8 @@
   <script src="/static/js/terminal.js"></script>
   <script src="/static/js/search.js"></script>
   <script src="/static/js/picker.js"></script>
+  <!-- ansilex.js: ANSI→HTML 변환 순수 로직(grid.js가 window.VTAnsiLex 사용) -->
+  <script src="/static/js/ansilex.js"></script>
   <script src="/static/js/grid.js"></script>
   <!-- vtapi.js/panel.js: viewer/ports/queue 공용 fetch 래퍼 + 패널 껍데기(backdrop/닫기/폴링) -->
   <script src="/static/js/vtapi.js"></script>

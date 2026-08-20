@@ -1,12 +1,12 @@
-# vt.ps1 — Windows PowerShell launcher for FarShell (하위 호환용 — 신규는 fsh.ps1 사용)
-# WSL2 내부의 vt CLI를 호출합니다.
+# fsh.ps1 — Windows PowerShell launcher for FarShell
+# WSL2 내부의 fsh CLI를 호출합니다. (vt.ps1은 하위 호환용으로 남아 있습니다.)
 #
 # 사용법:
-#   .\vt.ps1 voice    # 음성 모드
-#   .\vt.ps1 mobile   # 모바일 접속 (브라우저 자동 열림)
-#   .\vt.ps1 start    # 전체 시작
-#   .\vt.ps1 stop     # 종료
-#   .\vt.ps1 status   # 상태
+#   .\fsh.ps1 voice    # 음성 모드
+#   .\fsh.ps1 mobile   # 모바일 접속 (브라우저 자동 열림)
+#   .\fsh.ps1 start    # 전체 시작
+#   .\fsh.ps1 stop     # 종료
+#   .\fsh.ps1 status   # 상태
 
 param(
     [Parameter(Position=0)]
@@ -24,8 +24,8 @@ if (-not $?) {
 }
 
 # FarShell 경로 감지
-$vtPath = wsl.exe -- bash -c "test -f ~/farshell/bin/vt && echo OK" 2>$null
-if ($vtPath -ne "OK") {
+$fshPath = wsl.exe -- bash -c "test -f ~/farshell/bin/fsh && echo OK" 2>$null
+if ($fshPath -ne "OK") {
     Write-Host ""
     Write-Host "  FarShell이 WSL2에 설치되지 않았습니다." -ForegroundColor Red
     Write-Host "  WSL2 Ubuntu에서:"
@@ -35,8 +35,8 @@ if ($vtPath -ne "OK") {
     exit 1
 }
 
-# vt 실행
-wsl.exe -- bash -c "cd ~/farshell && bin/vt $Command"
+# fsh 실행
+wsl.exe -- bash -c "cd ~/farshell && bin/fsh $Command"
 
 # mobile/start 시 브라우저 자동 열기
 if ($Command -eq "mobile" -or $Command -eq "start") {

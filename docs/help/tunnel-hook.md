@@ -11,10 +11,10 @@ https://hats-deal-ferry-sagem.trycloudflare.com         ← 내일
 그 "어딘가"는 사람마다 다릅니다 — 개인 Notion 페이지, 나에게 보내는 Slack DM,
 ntfy 토픽, 텔레그램 봇, 그냥 iCloud Drive의 텍스트 파일...
 
-**vt는 특정 서비스를 알지 않습니다.** 대신 URL이 바뀔 때 여러분이 지정한 명령을
+**fsh는 특정 서비스를 알지 않습니다.** 대신 URL이 바뀔 때 여러분이 지정한 명령을
 한 번 부릅니다. 나머지는 그 명령이 알아서 합니다.
 
-> 고정 주소를 원한다면 훅 대신 **명명 터널**이 답입니다 (`vt tunnel setup`).
+> 고정 주소를 원한다면 훅 대신 **명명 터널**이 답입니다 (`fsh tunnel setup`).
 > Cloudflare 계정 + 보유 도메인이 있으면 URL이 아예 안 바뀝니다.
 
 ---
@@ -26,8 +26,8 @@ ntfy 토픽, 텔레그램 봇, 그냥 iCloud Drive의 텍스트 파일...
 VT_TUNNEL_HOOK='내-스크립트 또는 셸 한 줄'
 ```
 
-훅이 호출되는 시점: `vt start` / `vt mobile` / `vt voice`(터널 시작),
-`vt tunnel expose`, `vt tunnel unexpose`, `vt tunnel hook`(수동).
+훅이 호출되는 시점: `fsh start` / `fsh mobile` / `fsh voice`(터널 시작),
+`fsh tunnel expose`, `fsh tunnel unexpose`, `fsh tunnel hook`(수동).
 
 | 전달 경로 | 내용 |
 |---|---|
@@ -48,7 +48,7 @@ RAPA 앱	https://hats-deal-ferry-sagem.trycloudflare.com
 설정한 훅을 지금 바로 시험해 보려면:
 
 ```bash
-vt tunnel hook      # 전달될 내용을 보여주고 실제로 한 번 실행
+fsh tunnel hook      # 전달될 내용을 보여주고 실제로 한 번 실행
 ```
 
 ---
@@ -60,7 +60,7 @@ vt tunnel hook      # 전달될 내용을 보여주고 실제로 한 번 실행
 ### 1. 파일에 적기 (가장 단순, 의존성 0)
 
 ```bash
-VT_TUNNEL_HOOK='cat > ~/Documents/vt-urls.txt'
+VT_TUNNEL_HOOK='cat > ~/Documents/fsh-urls.txt'
 ```
 
 iCloud/Dropbox 폴더에 두면 폰에서 그대로 열립니다.
@@ -72,7 +72,7 @@ VT_TUNNEL_HOOK='curl -s -T - -H "Title: VT URL" https://ntfy.sh/my-secret-topic'
 ```
 
 폰에 ntfy 앱을 깔고 같은 토픽을 구독해 두면 URL이 바뀔 때마다 알림이 옵니다.
-`vt` 자체 알림(`VT_NOTIFY_URL`)과 같은 서비스지만 용도가 다르니 토픽은 나눠 쓰세요.
+`fsh` 자체 알림(`VT_NOTIFY_URL`)과 같은 서비스지만 용도가 다르니 토픽은 나눠 쓰세요.
 
 > 토픽 이름이 곧 비밀번호입니다. 추측 가능한 이름은 피하세요.
 
@@ -112,8 +112,8 @@ VT_TUNNEL_HOOK='"$VT_PYTHON" ~/.config/vt/hooks/notion_publish.py'
 
 ### 6. 아무 것도 안 하기
 
-기본값입니다. `vt status`나 `vt tunnel list`로 그때그때 확인하고,
-`vt mobile`의 QR 코드로 폰에서 바로 붙는 것으로 충분한 경우가 많습니다.
+기본값입니다. `fsh status`나 `fsh tunnel list`로 그때그때 확인하고,
+`fsh mobile`의 QR 코드로 폰에서 바로 붙는 것으로 충분한 경우가 많습니다.
 
 ---
 
@@ -123,7 +123,7 @@ VT_TUNNEL_HOOK='"$VT_PYTHON" ~/.config/vt/hooks/notion_publish.py'
 - **`~/.vt.env`는 bash가 `source`합니다.** 공백·괄호가 든 값은 반드시 따옴표로 감싸세요.
   안 그러면 다음 실행부터 `syntax error`가 납니다.
 - **터널 URL은 인증 없이 누구나 접근 가능합니다.** 훅으로 URL을 뿌린다는 건
-  그 채널이 곧 접근 통로가 된다는 뜻입니다. `vt password` 또는 `VT_AUTH_TOKEN`으로
+  그 채널이 곧 접근 통로가 된다는 뜻입니다. `fsh password` 또는 `VT_AUTH_TOKEN`으로
   웹 UI 인증을 먼저 걸어두세요.
 - 훅은 터널 시작 흐름 안에서 **동기적으로** 실행됩니다. 오래 걸리는 작업은
   스크립트 쪽에서 백그라운드로 넘기세요.

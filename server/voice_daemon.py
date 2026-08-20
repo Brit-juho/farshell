@@ -2,7 +2,7 @@
 """Voice Daemon entry point — server/voice/ 패키지의 main()을 호출.
 
 분할 이력: 이전엔 단일 500줄 파일이었으나 server/voice/{config,stt,tmux_target,
-recorder,media_keys,daemon}.py로 분할됨. bin/vt 호출 경로 보존을 위해 shim 유지.
+recorder,media_keys,daemon}.py로 분할됨. bin/fsh(구 bin/vt) 호출 경로 보존을 위해 shim 유지.
 
 실행: "$VT_PYTHON" server/voice_daemon.py
 """
