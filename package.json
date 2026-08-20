@@ -1,0 +1,21 @@
+{
+  "name": "FarShell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FarShell frontend test tooling (jsdom for DOM-dependent unit tests)",
+  "scripts": {
+    "test": "node --test frontend/tests/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Brit-juho/farshell.git"
+  },
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Brit-juho/farshell/issues"
+  },
+  "homepage": "https://github.com/Brit-juho/farshell#readme",
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
