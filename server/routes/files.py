@@ -1,7 +1,13 @@
-"""파일 열람 + git diff (읽기 전용).
+"""파일 열람 + git diff/stage/commit.
 
-P2 코드 뷰어의 백엔드. 쓰기 경로는 의도적으로 만들지 않는다 — 수정은 터미널/에이전트가 한다.
+P2 코드 뷰어의 백엔드. 열람(tree/file/diff)은 읽기 전용이지만, D16에서 stage/commit
+만 최소로 추가했다 — push·브랜치 조작 등은 여전히 범위 밖이다(TODOS.md D16 참고).
 경로 판정은 전부 fsguard 에 위임하고, 여기서는 I/O 와 응답 형태만 다룬다.
+
+쓰기 액션(stage/unstage/commit)도 인증(TokenAuthMiddleware)·CSRF 방어(OriginGuardMiddleware)를
+main.py의 전역 미들웨어에서 그대로 상속받는다 — 이 파일에서 별도로 구현할 게 없다.
+다만 경로 검증(fsguard.resolve_under_roots + 저장소 상대경로 검사)은 diff와 동일하게
+반드시 거쳐야 한다.
 
 blocking I/O(파일 읽기, git 호출)는 반드시 asyncio.to_thread 로 offload 한다.
 preview.py:91-93 에 같은 교훈이 있다 — 동기 호출 하나가 터미널 WS 전체를 멈춘다.
@@ -177,9 +183,17 @@ def _collect_status(repo: Path) -> dict:
     for rec in it:
         if len(rec) < 4:
             continue
-        status = rec[:2].strip()
-        entry = {"status": status, "file": rec[3:]}
-        if status and status[0] in ("R", "C"):
+        # XY 두 글자를 그대로 보존한다(strip 금지) — X는 인덱스(스테이지) 상태,
+        # Y는 워킹트리 상태다. "M "(스테이지만 수정)과 " M"(워킹트리만 수정)을
+        # strip()으로 뭉개면 둘 다 "M"이 되어 stage/unstage UI가 상태를 구분할 수 없다.
+        status = rec[:2]
+        entry = {
+            "status": status.strip(),
+            "index_status": status[0] if status[0] != " " else "",
+            "worktree_status": status[1] if status[1] != " " else "",
+            "file": rec[3:],
+        }
+        if status.strip() and status[0] in ("R", "C"):
             try:
                 entry["orig_file"] = next(it)
             except StopIteration:
@@ -277,6 +291,15 @@ def _collect_diff(repo: Path, file: str, staged: bool) -> dict:
     return {"repo": True, "root": str(top), "diff": out, "truncated": truncated}
 
 
+def _bad_repo_relpath(file: str) -> bool:
+    """저장소 기준 상대경로 검증. 절대경로/상위 탈출을 걸러낸다.
+
+    diff의 file 파라미터에서 쓰던 검사를 stage/unstage 파일 목록에도 그대로 재사용한다 —
+    같은 판정을 두 곳에 따로 구현하면 한쪽만 고치고 잊어버리는 사고가 난다.
+    """
+    return file.startswith("/") or ".." in Path(file).parts
+
+
 @router.get("/api/git/diff")
 async def git_diff(
     repo: str = Query(...),
@@ -290,7 +313,114 @@ async def git_diff(
     if not p.is_dir():
         return JSONResponse({"error": "not a directory"}, status_code=404)
     # file 은 저장소 기준 상대경로다. 절대경로/상위 탈출을 여기서 잘라낸다.
-    if file:
-        if file.startswith("/") or ".." in Path(file).parts:
-            return _denied("잘못된 파일 경로입니다")
+    if file and _bad_repo_relpath(file):
+        return _denied("잘못된 파일 경로입니다")
     return await asyncio.to_thread(_collect_diff, p, file, staged)
+
+
+# --- git 쓰기(stage/commit) ---------------------------------------------------
+#
+# D16: 코드 뷰어의 "읽기 전용" 방어 전제를 stage/commit 만큼만 좁게 깬다.
+# push·브랜치 조작·강제 옵션(-f 등)은 절대 추가하지 않는다 — TODOS.md D16 참고.
+
+# 커밋 메시지 상한. 실수로 파일 전체를 붙여넣는 등의 사고를 막는 정도의 느슨한 상한.
+MAX_COMMIT_MSG_BYTES = 8192
+
+
+async def _read_json_body(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def _resolve_repo_top(repo_raw: str) -> tuple[Path, JSONResponse | None]:
+    """repo 쿼리를 fsguard로 검증하고 실제 git 저장소 루트를 찾는다.
+
+    stage/unstage/commit 모두 "저장소 루트에서만 동작"이 전제라 공통화했다.
+    """
+    try:
+        p = fsguard.resolve_under_roots(repo_raw)
+    except fsguard.FsDenied as e:
+        return None, _denied(e.reason)
+    if not p.is_dir():
+        return None, JSONResponse({"error": "not a directory"}, status_code=404)
+    top = _git_toplevel(p)
+    if top is None:
+        return None, JSONResponse({"error": "git 저장소가 아닙니다"}, status_code=404)
+    return top, None
+
+
+def _validate_files(files) -> list[str] | None:
+    """요청 본문의 files 필드를 검증. 문제가 있으면 None."""
+    if not isinstance(files, list) or not files:
+        return None
+    out = []
+    for f in files:
+        if not isinstance(f, str) or not f.strip() or _bad_repo_relpath(f):
+            return None
+        out.append(f)
+    return out
+
+
+@router.post("/api/git/stage")
+async def git_stage(request: Request):
+    body = await _read_json_body(request)
+    top, err = _resolve_repo_top(str(body.get("repo", "")))
+    if err:
+        return err
+    files = _validate_files(body.get("files"))
+    if files is None:
+        return _denied("잘못된 파일 목록입니다")
+    rc, _ = await asyncio.to_thread(_git, top, "add", "--", *files)
+    if rc != 0:
+        return JSONResponse({"error": "git add 실패"}, status_code=500)
+    return await asyncio.to_thread(_collect_status, top)
+
+
+@router.post("/api/git/unstage")
+async def git_unstage(request: Request):
+    body = await _read_json_body(request)
+    top, err = _resolve_repo_top(str(body.get("repo", "")))
+    if err:
+        return err
+    files = _validate_files(body.get("files"))
+    if files is None:
+        return _denied("잘못된 파일 목록입니다")
+    # reset(HEAD 없이) -- <paths> 는 워킹트리를 건드리지 않고 인덱스만 되돌린다.
+    rc, _ = await asyncio.to_thread(_git, top, "reset", "-q", "--", *files)
+    if rc != 0:
+        return JSONResponse({"error": "git reset 실패"}, status_code=500)
+    return await asyncio.to_thread(_collect_status, top)
+
+
+def _has_staged_changes(repo: Path) -> bool:
+    rc, out = _git(repo, "diff", "--cached", "--name-only")
+    return rc == 0 and bool(out.strip())
+
+
+def _commit(repo: Path, message: str) -> tuple[int, str]:
+    return _git(repo, "commit", "-m", message)
+
+
+@router.post("/api/git/commit")
+async def git_commit(request: Request):
+    body = await _read_json_body(request)
+    top, err = _resolve_repo_top(str(body.get("repo", "")))
+    if err:
+        return err
+    message = body.get("message", "")
+    if not isinstance(message, str) or not message.strip():
+        return JSONResponse({"error": "커밋 메시지가 비었습니다"}, status_code=400)
+    if len(message.encode("utf-8")) > MAX_COMMIT_MSG_BYTES:
+        return JSONResponse({"error": "커밋 메시지가 너무 깁니다"}, status_code=400)
+    if not await asyncio.to_thread(_has_staged_changes, top):
+        return JSONResponse({"error": "커밋할 스테이지 변경사항이 없습니다"}, status_code=400)
+    rc, out = await asyncio.to_thread(_commit, top, message)
+    if rc != 0:
+        logger.warning(f"git commit 실패: {out[:500]}")
+        return JSONResponse({"error": "git commit 실패"}, status_code=500)
+    status = await asyncio.to_thread(_collect_status, top)
+    status["committed"] = True
+    return status

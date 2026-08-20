@@ -85,7 +85,7 @@
             <button class="vt-vw-mode-btn" data-mode="dock" title="도킹 — 터미널과 함께 보기">${_ICON_DOCK}</button>
             <button class="vt-vw-mode-btn" data-mode="full" title="전체화면">${_ICON_FULL}</button>
           </div>
-          <button class="vt-vw-diff" id="vt-vw-diff" title="변경분 보기">diff</button>
+          <button class="vt-vw-diff" id="vt-vw-diff" title="Git 변경사항 · stage · commit">git</button>
         `,
         extraHTML: `
           <div class="vt-vw-path" id="vt-vw-path"></div>
@@ -124,7 +124,7 @@
       panel.el.querySelectorAll('.vt-vw-mode-btn').forEach(b => {
         b.addEventListener('click', () => _setDisplayMode(b.dataset.mode));
       });
-      panel.el.querySelector('#vt-vw-diff').addEventListener('click', () => showDiff());
+      panel.el.querySelector('#vt-vw-diff').addEventListener('click', () => showGit());
       _wireResizer(panel.el);
 
       const treeEl = document.getElementById('vt-vw-tree');
@@ -549,24 +549,23 @@
       });
     }
 
-    async function showDiff(repo) {
-      const target = repo || _viewerState.cwd || _viewerState.root;
-      if (!target) return;
+    // 파일 하나의 diff. status 목록에서 특정 파일을 눌렀을 때 쓴다.
+    async function _showFileDiff(repo, file, staged) {
       _viewerState.mode = 'diff';
-      _setTitle('변경분');
-      _setPath(target);
+      _setTitle(file.split('/').pop());
+      _setPath(file);
       const pane = document.getElementById('vt-vw-code-pane');
       pane.innerHTML = '<div class="vt-vw-loading">git diff 실행 중…</div>';
       if (_viewerState.displayMode === 'sheet') _setActivePane('code');
 
       let d;
       try {
-        d = await vtFetch(`/api/git/diff?repo=${encodeURIComponent(target)}`);
+        const q = `repo=${encodeURIComponent(repo)}&file=${encodeURIComponent(file)}&staged=${staged ? 'true' : 'false'}`;
+        d = await vtFetch(`/api/git/diff?${q}`);
       } catch (e) {
         _setMsg(pane, 'vt-vw-empty', [e.message]);
         return;
       }
-      if (!d.repo) { _setMsg(pane, 'vt-vw-empty', ['git 저장소가 아닙니다.']); return; }
       if (!d.diff || !d.diff.trim()) { _setMsg(pane, 'vt-vw-empty', ['변경된 내용이 없습니다.']); return; }
 
       pane.innerHTML = '';
@@ -577,4 +576,143 @@
         note.textContent = 'diff가 커서 일부만 표시했습니다.';
         pane.appendChild(note);
       }
+    }
+
+    // --- git status / stage / commit (D16) ---------------------------------------
+    //
+    // 코드 뷰어의 유일한 쓰기 경로. push·브랜치 조작은 절대 추가하지 않는다.
+    // 스코프를 stage/unstage/commit 으로만 좁게 유지한다 — TODOS.md D16 참고.
+
+    function _gitFileLabel(entry) {
+      if (entry.index_status === '?' || entry.worktree_status === '?') return '추가되지 않음';
+      const code = entry.index_status || entry.worktree_status;
+      return { M: '수정됨', A: '추가됨', D: '삭제됨', R: '이름변경', C: '복사됨', U: '충돌' }[code] || code;
+    }
+
+    async function _gitAction(repo, path, files) {
+      return vtFetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo, files }),
+      });
+    }
+
+    function _gitRowEl(repo, entry, staged) {
+      const row = document.createElement('div');
+      row.className = 'vt-vw-grow';
+
+      const btn = document.createElement('button');
+      btn.className = 'vt-vw-gact';
+      btn.textContent = staged ? '－' : '＋';
+      btn.title = staged ? '스테이지 해제' : '스테이지';
+      btn.setAttribute('aria-label', btn.title);
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        btn.disabled = true;
+        try {
+          await _gitAction(repo, staged ? '/api/git/unstage' : '/api/git/stage', [entry.file]);
+          await showGit(repo);
+        } catch (e) {
+          showToast(`${btn.title} 실패: ${e.message}`);
+          btn.disabled = false;
+        }
+      });
+
+      const badge = document.createElement('span');
+      badge.className = 'vt-vw-gstat';
+      badge.textContent = entry.index_status === '?' ? '??' : (staged ? entry.index_status : entry.worktree_status) || '';
+
+      const name = document.createElement('span');
+      name.className = 'vt-vw-name';
+      name.textContent = entry.orig_file ? `${entry.orig_file} → ${entry.file}` : entry.file;
+      name.title = _gitFileLabel(entry);
+
+      row.appendChild(btn);
+      row.appendChild(badge);
+      row.appendChild(name);
+      row.addEventListener('click', () => _showFileDiff(repo, entry.file, staged));
+      return row;
+    }
+
+    function _gitSectionEl(title, entries, repo, staged) {
+      const sec = document.createElement('div');
+      sec.className = 'vt-vw-gsec';
+      const head = document.createElement('div');
+      head.className = 'vt-vw-ghead';
+      head.textContent = `${title} (${entries.length})`;
+      sec.appendChild(head);
+      entries.forEach(e => sec.appendChild(_gitRowEl(repo, e, staged)));
+      return sec;
+    }
+
+    async function _doCommit(repo, pane) {
+      const ta = pane.querySelector('#vt-vw-commit-msg');
+      const btn = pane.querySelector('#vt-vw-commit-btn');
+      const message = (ta.value || '').trim();
+      if (!message) return;
+      btn.disabled = true;
+      try {
+        await vtFetch('/api/git/commit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo, message }),
+        });
+        showToast('커밋했습니다.');
+        await showGit(repo);
+      } catch (e) {
+        showToast(`커밋 실패: ${e.message}`);
+        btn.disabled = false;
+      }
+    }
+
+    async function showGit(repo) {
+      const target = repo || _viewerState.cwd || _viewerState.root;
+      if (!target) return;
+      _viewerState.mode = 'diff';
+      _viewerState.cwd = target;
+      _setTitle('Git');
+      _setPath(target);
+      const pane = document.getElementById('vt-vw-code-pane');
+      pane.innerHTML = '<div class="vt-vw-loading">git status 확인 중…</div>';
+      if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+
+      let d;
+      try {
+        d = await vtFetch(`/api/git/status?repo=${encodeURIComponent(target)}`);
+      } catch (e) {
+        _setMsg(pane, 'vt-vw-empty', [e.message]);
+        return;
+      }
+      if (!d.repo) { _setMsg(pane, 'vt-vw-empty', ['git 저장소가 아닙니다.']); return; }
+
+      // 미추적 파일("??")은 index_status/worktree_status 둘 다 '?'로 채워지는데,
+      // 실제 인덱스에는 없으므로 스테이지됨으로 분류하면 안 된다.
+      const staged = d.files.filter(f => f.index_status && f.status !== '??');
+      const unstaged = d.files.filter(f => f.status === '??' || (!f.index_status && f.worktree_status));
+
+      pane.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.className = 'vt-vw-git';
+
+      if (!d.files.length) {
+        const empty = document.createElement('div');
+        empty.className = 'vt-vw-empty';
+        empty.textContent = '변경된 내용이 없습니다.';
+        wrap.appendChild(empty);
+      } else {
+        if (staged.length) wrap.appendChild(_gitSectionEl('스테이지됨', staged, target, true));
+        if (unstaged.length) wrap.appendChild(_gitSectionEl('변경사항', unstaged, target, false));
+      }
+
+      const commitBox = document.createElement('div');
+      commitBox.className = 'vt-vw-gcommit';
+      commitBox.innerHTML = `
+        <textarea id="vt-vw-commit-msg" class="vt-vw-gmsg" placeholder="커밋 메시지" rows="2"
+          ${staged.length ? '' : 'disabled'}></textarea>
+        <button id="vt-vw-commit-btn" class="vt-vw-gcommit-btn" ${staged.length ? '' : 'disabled'}>커밋</button>
+      `;
+      wrap.appendChild(commitBox);
+      pane.appendChild(wrap);
+
+      pane.querySelector('#vt-vw-commit-btn').addEventListener('click', () => _doCommit(target, pane));
     }
