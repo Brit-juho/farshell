@@ -2,13 +2,69 @@
     function updateSessionPicker() {
       const picker = document.getElementById('voice-session-picker');
       if (!picker) return;
-      picker.innerHTML = '';
-      for (const [id, s] of Object.entries(sessions)) {
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = s.tabEl?.querySelector('.tab-name')?.textContent || id.slice(0, 8);
-        if (id === activeId) opt.selected = true;
-        picker.appendChild(opt);
+      const s = activeId && sessions[activeId];
+      picker.textContent = s?.tabEl?.querySelector('.tab-name')?.textContent || '세션';
+      const sheet = document.getElementById('session-manager');
+      if (sheet) renderSessionManager(sheet);
+    }
+
+    function sessionName(id, s) {
+      return s?.tabEl?.querySelector('.tab-name')?.textContent || id.slice(0, 8);
+    }
+
+    function openSessionManager() {
+      let backdrop = document.getElementById('session-manager');
+      if (backdrop) { closeSessionManager(); return; }
+      backdrop = document.createElement('div');
+      backdrop.id = 'session-manager';
+      backdrop.className = 'vt-session-backdrop';
+      backdrop.setAttribute('role', 'presentation');
+      backdrop.innerHTML = '<section class="vt-session-sheet" role="dialog" aria-modal="true" aria-labelledby="session-manager-title"></section>';
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSessionManager(); });
+      document.body.appendChild(backdrop);
+      document.getElementById('voice-session-picker')?.setAttribute('aria-expanded', 'true');
+      renderSessionManager(backdrop);
+      const close = backdrop.querySelector('.vt-session-close');
+      if (close) close.focus();
+      backdrop._onKeydown = (e) => { if (e.key === 'Escape') closeSessionManager(); };
+      document.addEventListener('keydown', backdrop._onKeydown);
+    }
+
+    function closeSessionManager() {
+      const backdrop = document.getElementById('session-manager');
+      if (!backdrop) return;
+      if (backdrop._onKeydown) document.removeEventListener('keydown', backdrop._onKeydown);
+      backdrop.remove();
+      const picker = document.getElementById('voice-session-picker');
+      if (picker) { picker.setAttribute('aria-expanded', 'false'); picker.focus(); }
+    }
+
+    function renderSessionManager(backdrop) {
+      const sheet = backdrop.querySelector?.('.vt-session-sheet');
+      if (!sheet) return;
+      sheet.innerHTML = '<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-session-close" type="button" aria-label="세션 관리 닫기">×</button></div><div class="vt-session-list"></div>';
+      sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
+      const list = sheet.querySelector('.vt-session-list');
+      const entries = Object.entries(sessions);
+      if (!entries.length) { list.innerHTML = '<p class="vt-session-empty">열려 있는 세션이 없습니다.</p>'; return; }
+      for (const [id, s] of entries) {
+        const row = document.createElement('div');
+        row.className = 'vt-session-row' + (id === activeId ? ' active' : '');
+        const select = document.createElement('button');
+        select.type = 'button'; select.className = 'vt-session-select'; select.textContent = sessionName(id, s);
+        select.setAttribute('aria-current', id === activeId ? 'true' : 'false');
+        select.onclick = () => { switchTo(id); closeSessionManager(); };
+        const rename = document.createElement('button');
+        rename.type = 'button'; rename.className = 'vt-session-action'; rename.textContent = '✎'; rename.setAttribute('aria-label', `${sessionName(id, s)} 이름 변경`);
+        rename.onclick = async () => {
+          const next = window.prompt('새 세션 이름', sessionName(id, s));
+          if (next === null) return;
+          if (await renameSession(id, next)) renderSessionManager(backdrop);
+        };
+        const close = document.createElement('button');
+        close.type = 'button'; close.className = 'vt-session-action'; close.textContent = '×'; close.setAttribute('aria-label', `${sessionName(id, s)} 닫기`);
+        close.onclick = async () => { await removeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
+        row.append(select, rename, close); list.appendChild(row);
       }
     }
 

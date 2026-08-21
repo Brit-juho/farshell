@@ -21,6 +21,7 @@ html[data-skin="macos"] {
   --menu:#2a2a2c; --menu-hover:rgba(255,255,255,.09); --line:rgba(255,255,255,.08);
   --ok:#32d74b; --warn:#ffd60a; --err:#ff453a; --info:#0a84ff; --crust:#000000;
   --wrad:12px; --trad:7px;
+  --topbar-h:38px; --topbar-popup-y:44px;
   --ui:"IBM Plex Sans",-apple-system,"Segoe UI",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
 }
@@ -69,7 +70,7 @@ button { font-family:inherit; }
 
 /* ---- 상단 통합 바 ------------------------------------------------------- */
 #topbar {
-  display:flex; align-items:center; gap:5px; padding:0 7px; height:38px;
+  display:flex; align-items:center; gap:5px; padding:0 7px; height:var(--topbar-h);
   background:var(--bar); flex-shrink:0; position:relative; z-index:60;
   border-bottom:1px solid var(--line);
 }
@@ -130,14 +131,34 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 }
 #add-btn:hover { background:var(--menu-hover); color:var(--txt); }
 
-/* 세션 점프 드롭다운 (이름으로 빠른 전환) */
+/* 좁은 화면 세션 관리 진입점 */
 #voice-session-picker {
-  flex-shrink:0; max-width:150px; height:32px; padding:0 26px 0 10px;
-  background:var(--tab) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E") no-repeat right 9px center;
+  flex:0 1 150px; min-width:0; height:32px; padding:0 10px;
+  background:var(--tab); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   color:var(--txt); font-size:12.5px; border:1px solid var(--line); border-radius:var(--trad);
-  cursor:pointer; -webkit-appearance:none; appearance:none;
+  cursor:pointer;
 }
 @media (min-width:720px) { #voice-session-picker { display:none; } } /* 넓은 화면에선 탭으로 충분 */
+
+/* 모바일 세션 관리 시트. 탭 바가 0px로 축소되어도 세션의 모든 기본 조작을 제공한다. */
+.vt-session-backdrop { position:fixed; inset:0; z-index:540; background:rgba(0,0,0,.48); display:flex; align-items:flex-end; }
+.vt-session-sheet {
+  width:100%; max-height:min(72vh,560px); overflow:auto; padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px));
+  background:var(--menu); color:var(--txt); border:1px solid var(--line); border-bottom:none;
+  border-radius:18px 18px 0 0; box-shadow:0 -12px 34px rgba(0,0,0,.35);
+}
+.vt-session-head { display:flex; align-items:center; justify-content:space-between; margin:0 2px 10px; }
+.vt-session-head h2 { font-size:15px; }
+.vt-session-close, .vt-session-action { border:0; background:transparent; color:var(--sub); cursor:pointer; border-radius:8px; }
+.vt-session-close { width:44px; height:44px; font-size:22px; }
+.vt-session-close:hover, .vt-session-action:hover { color:var(--txt); background:var(--menu-hover); }
+.vt-session-list { display:flex; flex-direction:column; gap:6px; }
+.vt-session-row { display:flex; align-items:center; gap:6px; min-height:52px; padding:4px 4px 4px 10px; border:1px solid var(--line); border-radius:10px; }
+.vt-session-row.active { border-color:var(--acc); }
+.vt-session-select { flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 13px var(--ui); }
+.vt-session-action { width:44px; height:44px; font-size:16px; flex-shrink:0; }
+.vt-session-empty { padding:28px 10px; text-align:center; color:var(--sub); font-size:13px; }
+@media (min-width:720px) { .vt-session-backdrop { display:none; } }
 
 .spacer { flex:1; }
 
@@ -156,6 +177,10 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
    삐져나온다 — 대신 ::before로 탭 가능 영역만 44px로 확장(WCAG 2.5.5), 시각적
    크기는 그대로 유지. */
 @media (pointer:coarse) {
+  :root { --topbar-h:44px; --topbar-popup-y:50px; }
+  .tab { height:44px; padding:0 5px; gap:3px; }
+  html[data-skin="windows"] .tab { height:44px; }
+  .tab .close { width:44px; height:44px; margin-left:0; }
   .tbtn::before, #add-btn::before {
     content:''; position:absolute; inset:50% auto auto 50%;
     width:44px; height:44px; transform:translate(-50%,-50%);
@@ -174,8 +199,8 @@ html[data-skin="windows"] .caption { display:flex; }
 
 /* ---- ⋯ 팝업 메뉴 ------------------------------------------------------- */
 #more-menu {
-  position:absolute; top:40px; right:8px; z-index:520; width:250px;
-  max-height:calc(100vh - 40px - env(safe-area-inset-bottom,0px) - 12px);
+  position:absolute; top:calc(var(--topbar-h) + 2px); right:8px; z-index:520; width:250px;
+  max-height:calc(100vh - var(--topbar-popup-y) - env(safe-area-inset-bottom,0px) - 12px);
   overflow-y:auto; -webkit-overflow-scrolling:touch;
   background:var(--menu); color:var(--txt); border-radius:12px; padding:6px;
   box-shadow:0 12px 34px rgba(0,0,0,.55); border:1px solid var(--line);
@@ -230,7 +255,7 @@ html[data-skin="windows"] .caption { display:flex; }
 
 /* 음성 상태 pill — 상단 바 아래 우측에 떠 있음 */
 #mic-status {
-  position:fixed; top:calc(44px + env(safe-area-inset-top,0px)); right:12px; z-index:90;
+  position:fixed; top:calc(var(--topbar-popup-y) + env(safe-area-inset-top,0px)); right:12px; z-index:90;
   max-width:min(320px,82vw); font-size:12.5px; color:var(--txt);
   background:var(--menu); border:1px solid var(--line); border-radius:10px;
   padding:8px 13px; box-shadow:0 8px 22px rgba(0,0,0,.5);
@@ -247,7 +272,7 @@ html[data-skin="windows"] .caption { display:flex; }
 
 /* ---- 검색 바 ----------------------------------------------------------- */
 #search-bar {
-  display:none; position:fixed; top:44px; right:12px; z-index:120;
+  display:none; position:fixed; top:var(--topbar-popup-y); right:12px; z-index:120;
   background:var(--menu); border-radius:10px; padding:6px 10px; gap:6px; align-items:center;
   box-shadow:0 8px 24px rgba(0,0,0,.5); border:1px solid var(--line);
 }
@@ -265,7 +290,7 @@ html[data-skin="windows"] .caption { display:flex; }
 
 /* ---- 그리드 뷰 --------------------------------------------------------- */
 #grid-view {
-  display:none; position:absolute; top:38px; left:0; right:0; bottom:0;
+  display:none; position:absolute; top:var(--topbar-h); left:0; right:0; bottom:0;
   overflow-y:auto; background:var(--win); padding:2px; z-index:40;
 }
 /* 카드 자체 테두리(border)가 구분선 역할을 하므로 gap은 없앤다 —
@@ -332,7 +357,7 @@ body.voice-only-mode #mic-status {
 /* 빈 상태 온보딩 — 상단 헤더(#topbar)는 가리지 않고 그 아래 영역만 채운다.
    inset:0로 전체를 덮으면 헤더가 안 보여서 새 세션/메뉴 접근이 막힌다. */
 .vt-onboarding {
-  position:fixed; top:calc(38px + env(safe-area-inset-top,0px)); left:0; right:0; bottom:0;
+  position:fixed; top:calc(var(--topbar-h) + env(safe-area-inset-top,0px)); left:0; right:0; bottom:0;
   background:var(--win); z-index:500;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:20px; padding:40px; text-align:center;
@@ -779,7 +804,7 @@ body.voice-only-mode #mic-status {
 /* dock — 배경을 덮지 않는다. 터미널이 카드 바깥에서 그대로 클릭/타이핑된다.
    topbar(38px) 아래에만 걸쳐서 상단바 버튼도 계속 쓸 수 있다. */
 #vt-viewer.mode-dock{
-  inset:38px 0 0 0; padding:0; background:transparent;
+  inset:var(--topbar-h) 0 0 0; padding:0; background:transparent;
   justify-content:flex-end; pointer-events:none;
 }
 #vt-viewer.mode-dock .vt-viewer-card{
