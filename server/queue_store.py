@@ -151,15 +151,28 @@ def clear() -> dict:
     return {"ok": True, "removed": n}
 
 
-def pop_next() -> dict | None:
-    """맨 앞의 pending 항목을 꺼낸다(FIFO). blocked 는 건너뛴다."""
+def pop_next(session: str | None = None, *, session_scoped: bool = False) -> dict | None:
+    """맨 앞의 pending 항목을 꺼낸다(FIFO). blocked 는 건너뛴다.
+
+    session_scoped=True(자동 드레인, stop 훅)면 다른 세션을 타깃한 항목은
+    건너뛰고 큐에 그대로 남긴다 — "멈춘 세션"과 다른 세션 몫이 잘못 흘러가지
+    않게 막는다. 타깃 미지정 항목은 여전히 대상이다(기존 전역 폴백 규칙 유지).
+    수동 실행(vt queue run / 웹 "지금 실행")은 session_scoped=False로 어떤
+    항목이든 맨 앞부터 그대로 꺼낸다 — 사용자가 명시적으로 누른 동작이라
+    타깃 매칭 없이 그 항목 자신의 타깃(_resolve_pane)으로 보내면 된다.
+    """
     with _locked():
         items = _read_unlocked()
         for i, x in enumerate(items):
-            if x.get("status") == STATUS_PENDING:
-                items.pop(i)
-                _write_unlocked(items)
-                return x
+            if x.get("status") != STATUS_PENDING:
+                continue
+            if session_scoped:
+                target = x.get("target")
+                if target and target != session:
+                    continue
+            items.pop(i)
+            _write_unlocked(items)
+            return x
     return None
 
 

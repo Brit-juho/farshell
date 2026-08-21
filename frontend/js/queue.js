@@ -16,7 +16,12 @@
         extraHTML: `
           <div class="vt-q-compose">
             <textarea id="vt-q-input" rows="2" placeholder="작업이 끝나면 실행할 지시… (Ctrl+Enter로 추가)"></textarea>
-            <button class="vt-pt-btn" id="vt-q-add">추가</button>
+            <div class="vt-q-compose-row">
+              <select id="vt-q-target" class="vt-q-target" title="대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다">
+                <option value="">자동 (음성 타깃 규칙)</option>
+              </select>
+              <button class="vt-pt-btn" id="vt-q-add">추가</button>
+            </div>
           </div>
         `,
         bodyId: 'vt-q-body',
@@ -36,9 +41,29 @@
         if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); addQueueItem(); }
       });
 
+      _loadQueueTargets();
       refreshQueue();
       // 5초 폴링. 패널이 열려 있을 때만 돈다 — 닫으면 setPanelPoll이 정리한다.
       setPanelPoll('vt-queue', 5000, refreshQueue);
+    }
+
+    // 대상 세션 드롭다운 — tmux 세션 목록으로 채운다. 실패해도 "자동"만 남기고 조용히 넘어간다
+    // (큐 자체를 쓰는 데는 지장이 없어야 한다).
+    async function _loadQueueTargets() {
+      const sel = document.getElementById('vt-q-target');
+      if (!sel) return;
+      let sessions;
+      try {
+        sessions = await vtFetch('/api/tmux/sessions');
+      } catch (_) { return; }
+      const cur = sel.value;
+      (sessions || []).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.name;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
+      });
+      sel.value = cur;
     }
 
     async function refreshQueue() {
@@ -113,13 +138,15 @@
 
     async function addQueueItem() {
       const inp = document.getElementById('vt-q-input');
+      const sel = document.getElementById('vt-q-target');
       const text = (inp.value || '').trim();
       if (!text) return;
+      const target = sel && sel.value ? sel.value : undefined;
       try {
         await vtFetch('/api/queue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, target }),
         });
         inp.value = '';
       } catch (e) {
