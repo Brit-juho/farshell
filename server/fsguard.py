@@ -3,9 +3,10 @@
 P2(코드 뷰어)는 읽기 전용이지만, 공개 터널 너머로 열리는 API라서 "읽기만 하니 안전"이
 성립하지 않는다. 루트 밖 파일 하나가 유출되면 그걸로 끝이다. 그래서 방어를 3중으로 둔다.
 
-  1. 경계 확정   VT_BROWSE_ROOTS 안의 경로만 (미설정 시 기본 경계는 홈 전체 —
-                   시작 화면은 get_start_roots()가 ~/GitHub 으로 더 좁게 잡아준다.
-                   경계가 홈까지 넓어져도 3번 거부 목록이 ~/.ssh·~/.aws 등을 막는다)
+  1. 경계 확정   VT_BROWSE_ROOTS 안의 경로만 (미설정 시 기본 경계는 ~/GitHub 자체 —
+                   위로 더 넓게 열려면 VT_BROWSE_ROOTS를 명시하는 opt-in이 필요하다.
+                   그렇게 경계를 홈까지 넓혀도 시작 화면은 get_start_roots()가 여전히
+                   ~/GitHub 으로 좁게 잡고, 3번 거부 목록이 ~/.ssh·~/.aws 등을 막는다)
   2. 경로 검증   Path.resolve() + is_relative_to
                  ⚠ startswith 금지. routes/pty.py:210-219에 같은 교훈이 남아 있다 —
                    문자열 접두사 비교는 /tmp/vt-uploads-evil/ 을 통과시켰다.
@@ -95,14 +96,18 @@ def get_roots() -> list[Path]:
 def get_start_roots() -> list[Path]:
     """UI가 처음 여는 지점 — get_roots()(경계)보다 좁아도 된다.
 
-    VT_BROWSE_ROOTS 를 명시했으면 그게 곧 경계이자 시작점(기존 동작 그대로).
-    비워뒀으면 ~/GitHub 에서 시작하되, 위로 이동하면 get_roots()의 경계(기본 홈)까지는
-    resolve_under_roots 가 계속 허용한다.
+    ~/GitHub 가 있고 그 경계(get_roots()) 안에 포함돼 있으면 VT_BROWSE_ROOTS 를
+    명시했더라도 항상 ~/GitHub 에서 시작한다 — "..” 로 위로 이동해서 경계를 넓게 쓰더라도
+    매번 여는 화면은 좁게 유지하고 싶다는 의도(opt-in으로 넓힌 경계는 탐색 허용 범위일 뿐,
+    시작점을 바꾸는 게 아니다). ~/GitHub 가 경계 밖이면(사용자가 다른 루트만 지정한 경우)
+    get_roots() 그대로 시작한다.
     """
-    if os.environ.get("VT_BROWSE_ROOTS", "").strip():
-        return get_roots()
     default = Path.home() / "GitHub"
-    return [default] if default.is_dir() else get_roots()
+    if default.is_dir():
+        roots = get_roots()
+        if any(_is_within(default, root) for root in roots):
+            return [default]
+    return get_roots()
 
 
 def _is_denied_name(name: str) -> Optional[str]:
