@@ -95,8 +95,6 @@ html[data-skin="macos"] .traffic { display:flex; }
 }
 html[data-skin="windows"] .tab { border-radius:6px 6px 0 0; height:31px; align-self:flex-end; margin-bottom:-1px; }
 .tab.active { background:var(--tab-active); color:var(--tab-active-txt); }
-html[data-skin="windows"] .tab.active { box-shadow:inset 0 2px 0 var(--acc); }
-html[data-skin="vscode"] .tab.active { box-shadow:inset 0 2px 0 var(--acc); }
 
 /* Windows Terminal 오센틱: 아크릴 바 + 투명 인액티브 탭 + 프로파일 드롭다운 */
 html[data-skin="windows"] #topbar {
