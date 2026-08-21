@@ -318,6 +318,149 @@ async def git_diff(
     return await asyncio.to_thread(_collect_diff, p, file, staged)
 
 
+# --- git 로그/커밋 diff (읽기 전용) --------------------------------------------
+#
+# stage/commit(D16)과 달리 log/show는 읽기 전용이라 "코드 뷰어는 읽기 전용" 전제와
+# 충돌하지 않는다. status/diff와 같은 fsguard 검증 + _redact_diff 재사용.
+
+# 커밋 필드 구분자. 저자명/제목에 나올 일이 없는 제어문자(Unit Separator)를 쓴다.
+_LOG_FIELD_SEP = "\x1f"
+_LOG_FMT = _LOG_FIELD_SEP.join(("%H", "%h", "%an", "%ad", "%s"))
+
+# 형식이 명백한 hex sha만 git 인자로 넘긴다 — 그 외 문자열(옵션처럼 보이는 값 등)은 거부.
+_SHA_RE = re.compile(r"^[0-9a-fA-F]{4,40}$")
+
+MAX_LOG_LIMIT = 200
+DEFAULT_LOG_LIMIT = 30
+
+
+def _collect_log(repo: Path, file: str, skip: int, limit: int) -> dict:
+    top = _git_toplevel(repo)
+    if top is None:
+        return {"repo": False, "commits": [], "has_more": False}
+    # has_more 판정을 위해 하나 더 요청한다.
+    args = ["log", f"--pretty=format:{_LOG_FMT}", "--date=iso-strict",
+            f"--skip={skip}", f"-n{limit + 1}"]
+    if file:
+        args += ["--", file]
+    rc, out = _git(top, *args)
+    if rc == 124:
+        return {"repo": True, "commits": [], "has_more": False, "error": "git log 시간 초과"}
+    if rc != 0:
+        # 커밋이 아예 없는 새 저장소 등 — 빈 로그로 취급한다.
+        return {"repo": True, "root": str(top), "commits": [], "has_more": False}
+    lines = [ln for ln in out.split("\n") if ln]
+    has_more = len(lines) > limit
+    lines = lines[:limit]
+    commits = []
+    for ln in lines:
+        parts = ln.split(_LOG_FIELD_SEP)
+        if len(parts) != 5:
+            continue
+        h, short, author, date, subject = parts
+        commits.append({"hash": h, "short": short, "author": author,
+                         "date": date, "subject": subject})
+    return {"repo": True, "root": str(top), "commits": commits, "has_more": has_more}
+
+
+@router.get("/api/git/log")
+async def git_log(
+    repo: str = Query(...),
+    file: str = Query(""),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(DEFAULT_LOG_LIMIT, ge=1, le=MAX_LOG_LIMIT),
+):
+    try:
+        p = fsguard.resolve_under_roots(repo)
+    except fsguard.FsDenied as e:
+        return _denied(e.reason)
+    if not p.is_dir():
+        return JSONResponse({"error": "not a directory"}, status_code=404)
+    if file and _bad_repo_relpath(file):
+        return _denied("잘못된 파일 경로입니다")
+    return await asyncio.to_thread(_collect_log, p, file, skip, limit)
+
+
+def _collect_commit_files(repo: Path, sha: str) -> list[dict]:
+    rc, out = _git(repo, "show", "--no-color", "--name-status", "--format=", sha)
+    if rc != 0:
+        return []
+    files = []
+    for ln in out.split("\n"):
+        if not ln.strip():
+            continue
+        parts = ln.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0]
+        # rename/copy: "R100\told\tnew" — 마지막 필드가 결과 경로.
+        file = parts[-1]
+        entry = {"status": status[0], "file": file}
+        if status[0] in ("R", "C") and len(parts) >= 3:
+            entry["orig_file"] = parts[1]
+        files.append(entry)
+    return files
+
+
+def _collect_commit_meta(repo: Path, sha: str) -> dict | None:
+    rc, out = _git(repo, "show", "-s", f"--format={_LOG_FMT}%x1f%b", "--date=iso-strict", sha)
+    if rc != 0 or not out.strip():
+        return None
+    parts = out.rstrip("\n").split(_LOG_FIELD_SEP, 5)
+    if len(parts) < 5:
+        return None
+    h, short, author, date, subject = parts[:5]
+    body = parts[5].strip() if len(parts) > 5 else ""
+    return {"hash": h, "short": short, "author": author, "date": date,
+            "subject": subject, "body": body}
+
+
+def _collect_commit_file_diff(repo: Path, sha: str, file: str) -> dict:
+    args = ["show", "--no-color", "--format="]
+    args.append(sha)
+    if file:
+        args += ["--", file]
+    rc, out = _git(repo, *args)
+    if rc == 124:
+        return {"diff": "", "truncated": False, "error": "git show 시간 초과"}
+    out = _redact_diff(out)
+    truncated = len(out.encode()) > MAX_DIFF_BYTES
+    if truncated:
+        out = out.encode()[:MAX_DIFF_BYTES].decode("utf-8", errors="ignore")
+    return {"diff": out, "truncated": truncated}
+
+
+@router.get("/api/git/show")
+async def git_show(
+    repo: str = Query(...),
+    sha: str = Query(...),
+    file: str = Query(""),
+):
+    try:
+        p = fsguard.resolve_under_roots(repo)
+    except fsguard.FsDenied as e:
+        return _denied(e.reason)
+    if not p.is_dir():
+        return JSONResponse({"error": "not a directory"}, status_code=404)
+    if not _SHA_RE.match(sha):
+        return _denied("잘못된 커밋 해시입니다")
+    if file and _bad_repo_relpath(file):
+        return _denied("잘못된 파일 경로입니다")
+    top = await asyncio.to_thread(_git_toplevel, p)
+    if top is None:
+        return JSONResponse({"error": "git 저장소가 아닙니다"}, status_code=404)
+
+    if file:
+        diff = await asyncio.to_thread(_collect_commit_file_diff, top, sha, file)
+        return {"repo": True, "root": str(top), "sha": sha, **diff}
+
+    meta = await asyncio.to_thread(_collect_commit_meta, top, sha)
+    if meta is None:
+        return JSONResponse({"error": "커밋을 찾을 수 없습니다"}, status_code=404)
+    files = await asyncio.to_thread(_collect_commit_files, top, sha)
+    return {"repo": True, "root": str(top), "commit": meta, "files": files}
+
+
 # --- git 쓰기(stage/commit) ---------------------------------------------------
 #
 # D16: 코드 뷰어의 "읽기 전용" 방어 전제를 stage/commit 만큼만 좁게 깬다.

@@ -734,6 +734,19 @@ body.voice-only-mode #mic-status {
 .vt-vw-gcommit-btn:hover{ filter:brightness(1.08); }
 .vt-vw-gcommit-btn:disabled{ opacity:.5; cursor:default; filter:none; }
 
+/* 커밋 기록 / 커밋 diff (git log · git show) */
+.vt-vw-glog{ border-top:1px solid var(--line); }
+.vt-vw-crow .vt-vw-gstat{ width:auto; color:var(--sub); }
+.vt-vw-glog .vt-pt-btn{ margin:8px 12px; align-self:flex-start; }
+.vt-vw-cback{ margin:10px 12px 0; }
+.vt-vw-cmeta{ padding:12px; border-bottom:1px solid var(--line); }
+.vt-vw-cmeta-subject{ font:600 13px var(--ui); margin-bottom:4px; }
+.vt-vw-cmeta-body{
+  font:400 12px var(--mono); color:var(--sub); white-space:pre-wrap;
+  margin-bottom:6px;
+}
+.vt-vw-cmeta-info{ font:400 11px var(--mono); color:var(--sub); }
+
 /* 모바일 — 바텀시트. .vt-guide-backdrop(:394)와 같은 전환 규칙을 따른다. */
 @media (max-width:560px){
   .vt-viewer-backdrop{ align-items:flex-end; padding:0; }
