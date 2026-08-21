@@ -146,6 +146,19 @@ def test_default_boundary_does_not_allow_navigating_above_start_root(monkeypatch
         fsguard.resolve_under_roots(str(Path.home()))
 
 
+def test_widened_boundary_keeps_github_as_start_root(monkeypatch):
+    """VT_BROWSE_ROOTS=$HOME 처럼 경계를 홈까지 넓혀도, ~/GitHub 이 그 경계 안에
+    있으면 시작 화면은 여전히 ~/GitHub 로 좁게 유지돼야 한다 — "..” 로 위까지
+    올라갈 수 있는 것과 매번 여는 화면이 좁은 것은 별개다."""
+    github = Path.home() / "GitHub"
+    if not github.is_dir():
+        pytest.skip("이 환경에는 ~/GitHub 이 없다")
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(Path.home()))
+    assert fsguard.get_start_roots() == [github]
+    # 경계 자체는 넓어졌으므로 홈까지는 더 이상 막히지 않는다.
+    fsguard.resolve_under_roots(str(Path.home()))
+
+
 def test_custom_roots_are_not_widened_to_home(sandbox):
     """VT_BROWSE_ROOTS 를 명시했으면 사용자가 고른 경계 그대로다 — 자동으로 넓히지 않는다."""
     assert fsguard.get_roots() == [sandbox["root"].resolve()]

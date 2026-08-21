@@ -352,6 +352,7 @@
 
       row.classList.add('open');
       _viewerState.expanded.add(path);
+      _viewerState.cwd = path;
       const chev = row.querySelector('.vt-vw-chev');
       const prevIcon = chev.innerHTML;
       chev.innerHTML = '';
@@ -453,6 +454,7 @@
     async function openFile(path) {
       _viewerState.mode = 'file';
       _viewerState.selectedPath = path;
+      _viewerState.cwd = path.replace(/\/[^/]+$/, '') || _viewerState.root;
       _setPath(path);
       _setTitle(path.split('/').pop());
       const pane = document.getElementById('vt-vw-code-pane');
