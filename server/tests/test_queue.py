@@ -225,6 +225,39 @@ def test_explicit_target_uses_named_session(monkeypatch):
     assert r["ok"] and r["pane"] == "%7" and r["mode"] == "session:dev"
 
 
+def test_session_scoped_pop_skips_other_sessions_target(monkeypatch):
+    """세션 스코프 드레인에서는 다른 세션 몫 항목을 건너뛰고 큐에 남겨야 한다."""
+    queue_store.add("for-dev", target="dev")
+    queue_store.add("untargeted")
+    item = queue_store.pop_next("staging", session_scoped=True)
+    assert item["text"] == "untargeted"  # 미지정 항목은 여전히 대상
+    remaining = queue_store.list_items()
+    assert len(remaining) == 1 and remaining[0]["text"] == "for-dev"
+
+
+def test_session_scoped_pop_matches_own_session(monkeypatch):
+    queue_store.add("for-dev", target="dev")
+    item = queue_store.pop_next("dev", session_scoped=True)
+    assert item["text"] == "for-dev"
+
+
+def test_unscoped_pop_ignores_target_mismatch(monkeypatch):
+    """수동 실행(session_scoped=False)은 세션 매칭 없이 맨 앞 항목을 그대로 꺼낸다."""
+    queue_store.add("for-dev", target="dev")
+    item = queue_store.pop_next("staging")
+    assert item["text"] == "for-dev"
+
+
+def test_drain_once_session_scoped_leaves_mismatched_item_pending(monkeypatch):
+    monkeypatch.setattr(queue_runner.tmux_target, "session_pane",
+                        lambda name: "%7" if name == "dev" else None)
+    monkeypatch.setattr(queue_runner.tmux_target, "send_to_tmux", lambda p, t: True)
+    queue_store.add("for-dev", target="dev")
+    r = queue_runner.drain_once(session="staging", session_scoped=True)
+    assert r["ok"] and r["drained"] == 0
+    assert queue_store.pending_count() == 1
+
+
 def test_autodrain_toggle(monkeypatch):
     monkeypatch.setenv("VT_QUEUE_AUTODRAIN", "0")
     assert queue_runner.autodrain_enabled() is False

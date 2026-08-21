@@ -946,7 +946,7 @@ body.vt-resizing #grid-view{ transition:none; }
 
 /* 프롬프트 큐 (queue.js) — P4. 패널 껍데기는 코드 뷰어와 공유. */
 .vt-q-compose{
-  display:flex; gap:8px; padding:10px 12px; flex:0 0 auto;
+  display:flex; flex-direction:column; gap:8px; padding:10px 12px; flex:0 0 auto;
   background:var(--bar); border-bottom:1px solid var(--line);
 }
 .vt-q-compose textarea{
@@ -959,7 +959,17 @@ body.vt-resizing #grid-view{ transition:none; }
   outline:none; border-color:var(--acc);
   box-shadow:0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent);
 }
-.vt-q-compose .vt-pt-btn{ align-self:flex-start; }
+.vt-q-compose-row{ display:flex; gap:8px; align-items:center; }
+.vt-q-target{
+  flex:1 1 auto; min-width:0; background:var(--term); color:var(--txt);
+  border:1px solid var(--line); border-radius:var(--trad);
+  padding:6px 8px; font:400 13px var(--ui);
+}
+.vt-q-target:focus{
+  outline:none; border-color:var(--acc);
+  box-shadow:0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent);
+}
+.vt-q-compose-row .vt-pt-btn{ flex:0 0 auto; }
 
 .vt-q-row{
   display:flex; align-items:flex-start; gap:10px;

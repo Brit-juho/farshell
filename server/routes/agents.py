@@ -56,7 +56,12 @@ async def agent_event(request: Request):
     if event == "stop":
         try:
             import queue_runner
-            queued = queue_runner.schedule_drain()
+            import tmux_target
+            # state는 on_event(stop)이 pop 직전에 건져준 {"cwd": ...} — 그리드 뷰와
+            # 같은 방식으로 cwd를 세션 이름으로 특정해, 그 세션 몫 항목만 흘려보낸다.
+            cwd = (state or {}).get("cwd")
+            session = tmux_target.session_for_cwd(cwd) if cwd else None
+            queued = queue_runner.schedule_drain(session=session, session_scoped=True)
         except Exception as e:                       # 큐 문제로 훅 응답이 깨지면 안 된다
             logger.warning(f"큐 드레인 예약 실패: {e}")
 

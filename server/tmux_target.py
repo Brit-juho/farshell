@@ -18,6 +18,7 @@ import logging
 import os
 import subprocess
 
+import tmux_runner
 import vt_env
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,22 @@ def resolve_voice_target_pane() -> tuple[str | None, str]:
 def session_pane(session_name: str) -> str | None:
     """이름으로 지정된 tmux 세션의 pane. 큐 항목이 타깃을 명시할 때 쓴다."""
     return get_locked_session_pane(session_name)
+
+
+def session_for_cwd(cwd: str | None) -> str | None:
+    """cwd → tmux 세션 이름. Claude Code stop 훅이 어느 세션에서 왔는지 특정할 때 쓴다.
+
+    그리드 뷰가 hook payload의 cwd를 pane_current_path와 매칭해 카드를 특정하는
+    것과 동일한 방식(agent_status.py 참고)이다. 같은 cwd로 여러 세션이 떠 있으면
+    (둘 다 $HOME 등) 어느 쪽인지 알 수 없으므로, 틀린 세션을 확신 있게 고르는
+    대신 None을 돌려준다 — 큐 드레인 쪽에서는 이 경우 세션 미지정 항목만 흘려보낸다.
+    """
+    if not cwd:
+        return None
+    matches = {p.session for p in tmux_runner.get_all_panes() if p.path == cwd}
+    if len(matches) == 1:
+        return next(iter(matches))
+    return None
 
 
 def pane_exists(pane_id: str) -> bool:
