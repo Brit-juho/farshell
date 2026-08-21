@@ -236,11 +236,13 @@
   <header id="topbar">
     <div class="traffic" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i></div>
 
-    <div id="tabs">
-      <div id="add-btn" onclick="showAddMenu(event)" title="새 세션 (일반 터미널 / tmux)" role="button" tabindex="0" aria-haspopup="true" aria-label="새 세션">+</div>
-      <div class="wt-chevron" onclick="showTmuxSessions()" title="세션 프로파일" role="button" aria-label="세션 프로파일">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
-      </div>
+    <!-- tab이 많아지면 #tabs는 flex 축소 대상(min-width:0)이라 0px까지 눌릴 수 있다.
+         add-btn/chevron을 그 안에 두면 탭과 함께 사라져 좁은 화면에서 "새 세션" 자체가
+         막힌다 — 항상 보여야 하는 컨트롤이라 #tabs 밖(flex-shrink:0 형제)으로 둔다. -->
+    <div id="tabs"></div>
+    <div id="add-btn" onclick="showAddMenu(event)" title="새 세션 (일반 터미널 / tmux)" role="button" tabindex="0" aria-haspopup="true" aria-label="새 세션">+</div>
+    <div class="wt-chevron" onclick="showTmuxSessions()" title="세션 프로파일" role="button" aria-label="세션 프로파일">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
     </div>
 
     <!-- 세션 점프(이름 드롭다운) — picker.js가 동기화. 좁은 화면에서만 노출 -->
