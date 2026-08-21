@@ -1,6 +1,5 @@
 """Voice Daemon 설정 — ~/.vt.env 로드, 핫키 파싱, 상수."""
 import logging
-import os
 import sys
 from pathlib import Path
 

@@ -3,16 +3,23 @@
 sounddevice로 녹음 → WAV → voice_handler.transcribe → 활성 세션 PTY 입력.
 """
 
-import asyncio
+from __future__ import annotations
+
 import io
 import logging
 import os
-import struct
 import wave
 from typing import Optional
 
-import sounddevice as sd
-import numpy as np
+# local-mic은 voice 설치 프로필에서만 제공되는 기능이다. 이 모듈은 API 라우터가
+# 항상 import하므로, 코어 프로필에서 서버 전체가 기동 불가해지지 않게 의존성을
+# 선택적으로 읽는다. 실제 요청에는 명확한 unavailable 응답을 돌려준다.
+try:
+    import numpy as np
+    import sounddevice as sd
+except ImportError:
+    np = None
+    sd = None
 
 import voice_handler
 
@@ -35,6 +42,9 @@ except ValueError:
 def start_recording() -> dict:
     """로컬 마이크 녹음 시작 (push-to-talk)."""
     global _recording, _audio_frames, _stream
+
+    if not available():
+        return {"status": "unavailable", "error": "sounddevice 또는 numpy가 설치되지 않았습니다"}
 
     if _recording:
         return {"status": "already_recording"}
@@ -73,6 +83,9 @@ async def stop_recording() -> dict:
     """녹음 종료 → WAV 변환 → Whisper STT."""
     global _recording, _stream, _audio_frames
 
+    if not available():
+        return {"status": "unavailable", "text": "", "error": "sounddevice 또는 numpy가 설치되지 않았습니다"}
+
     if not _recording:
         return {"status": "not_recording", "text": ""}
 
@@ -102,3 +115,8 @@ async def stop_recording() -> dict:
     # STT
     text = await voice_handler.transcribe(wav_bytes, input_format="wav")
     return {"status": "ok", "text": text}
+
+
+def available() -> bool:
+    """로컬 마이크에 필요한 선택 의존성이 모두 있는지 확인한다."""
+    return sd is not None and np is not None

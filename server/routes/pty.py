@@ -17,7 +17,6 @@ import auth
 import crypto_channel
 import tmux_runner
 from deps import pty_mgr, session_store, output_watcher, _auto_responder
-from deps import ws_count_per_session, ws_total_count
 from session_store import new_session_id
 
 logger = logging.getLogger(__name__)

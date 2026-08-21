@@ -7,6 +7,10 @@
 
 import pytest
 
+# 이 테스트는 실제로 sounddevice/numpy 기반 recorder를 import한다. 코어 설치는
+# 의도적으로 해당 선택 의존성을 포함하지 않으므로, 그 프로필에서는 수집 대상에서 뺀다.
+pytest.importorskip("sounddevice")
+
 import voice.recorder as recorder
 
 

@@ -221,7 +221,6 @@ async def get_tmux_preview(tmux_name: str, lines: int = 20, ansi: int = 1):
 # Phase 9 #1: ws push로 grid 1초 폴링 대체 — 변화 시에만 푸시.
 @router.websocket("/ws-preview/{tmux_name}")
 async def ws_preview(websocket: WebSocket, tmux_name: str):
-    import asyncio as _asyncio
     import json as _json
     import preview as _preview
     from fastapi import WebSocketDisconnect
