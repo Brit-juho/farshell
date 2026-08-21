@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "FarShell frontend test tooling (jsdom for DOM-dependent unit tests)",
+  "keywords": [
+    "remote-terminal", "tmux", "voice-coding", "pwa", "self-hosted",
+    "claude-code", "ssh-alternative", "mobile-terminal", "speech-to-text"
+  ],
   "scripts": {
     "test": "node --test frontend/tests/*.test.js"
   },

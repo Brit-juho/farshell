@@ -1,7 +1,7 @@
 {
   "name": "FarShell",
   "short_name": "FarShell",
-  "description": "음성으로 터미널을 제어하는 웹앱",
+  "description": "macOS/Linux 터미널을 어디서든 — tmux 세션 공유, 음성 입력, Claude Code 연동",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
