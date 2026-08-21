@@ -626,12 +626,67 @@ _open_linux_terminal_with() {
   return 1
 }
 
+# 해당 tmux 세션에 이미 붙어있는 클라이언트의 tty 목록 (없으면 빈 문자열).
+# 세션당 창 하나 원칙: 이미 어딘가 attach돼 있으면 새 창을 또 열지 않기 위한 판단 근거.
+_tmux_session_client_ttys() {
+  local name="${1:-dev}"
+  "${TMUX_BASE[@]}" list-clients -t "$name" -F '#{client_tty}' 2>/dev/null
+}
+
+# iTerm2 창들 중 주어진 tty를 표시 중인 탭/세션을 찾아 앞으로 가져온다.
+# iTerm session에는 tty 속성이 있어 client-tty와 직접 매칭 가능.
+_focus_iterm_by_tty() {
+  local tty="$1"
+  [ -d "/Applications/iTerm.app" ] || return 1
+  local ok
+  ok="$(osascript <<APPLESCRIPT 2>/dev/null
+tell application "iTerm"
+  repeat with w in windows
+    repeat with t in tabs of w
+      repeat with s in sessions of t
+        if (tty of s) is "$tty" then
+          activate
+          select w
+          select t
+          tell w to select s
+          return "ok"
+        end if
+      end repeat
+    end repeat
+  end repeat
+  return "no"
+end tell
+APPLESCRIPT
+)"
+  [ "$ok" = "ok" ]
+}
+
+# 세션이 이미 다른 창에 attach돼 있으면 새 창을 열지 않고(가능하면 그 창으로
+# 포커스만 전환) 성공(0)을 반환한다. attach된 곳이 없으면 1을 반환 — 호출자가
+# 새 창을 열어야 한다는 뜻.
+_tmux_already_open() {
+  local name="${1:-dev}"
+  local ttys first_tty
+  ttys="$(_tmux_session_client_ttys "$name")"
+  [ -n "$ttys" ] || return 1
+  first_tty="$(printf '%s\n' "$ttys" | head -1)"
+  if [ "$(uname)" = "Darwin" ] && _focus_iterm_by_tty "$first_tty"; then
+    echo "  ✓ tmux 세션 '$name'이 이미 열려 있어 그 창으로 전환했습니다."
+  else
+    echo "  ⓘ tmux 세션 '$name'이 이미 다른 창에 열려 있어 새 창을 열지 않습니다."
+  fi
+  return 0
+}
+
 # W1-3: 임의 세션을 새 OS 터미널 창에서 attach하는 일반화 헬퍼.
 # 인자: $1=session_name, $2=optional command (없으면 attach만)
 # macOS는 osascript 분기, Linux는 emulator 분기 (W3-1)
+# 세션당 창 하나 원칙: 이미 attach된 창이 있으면 새로 열지 않는다.
 _open_tmux_terminal_with() {
   local session="${1:-dev}"
   local extra_cmd="${2:-}"
+
+  _tmux_already_open "$session" && return 0
 
   local cmd
   if [ -n "$extra_cmd" ]; then
@@ -1823,6 +1878,9 @@ cmd_agent() {
     # 단순 단어분할(exec $exec_cmd)은 따옴표를 리터럴로 취급해 인자를 깬다.
     exec sh -c "$exec_cmd \"\$@\"" sh "$@"
   fi
+
+  # 세션당 창 하나 원칙: 'dev'가 이미 다른 창에 열려 있으면 새로 열지 않는다.
+  _tmux_already_open "dev" && { echo ""; return 0; }
 
   # 새 터미널 창에서 실행 — _open_tmux_terminal은 'claude --resume' 하드코딩이므로
   # 이 경로에선 직접 명령 빌드 후 동등한 로직 사용.
