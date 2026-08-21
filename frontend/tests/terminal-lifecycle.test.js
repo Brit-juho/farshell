@@ -26,6 +26,7 @@ const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8'
 const THEME_JS = fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8');
 const KEYSEQ_JS = fs.readFileSync(path.join(__dirname, '../js/keyseq.js'), 'utf8');
 const TERMINAL_JS = fs.readFileSync(path.join(__dirname, '../js/terminal.js'), 'utf8');
+const PICKER_JS = fs.readFileSync(path.join(__dirname, '../js/picker.js'), 'utf8');
 
 class FakeTerminal {
   constructor(opts) { this.options = opts; this.cols = 80; this.rows = 24; this._disposed = false; this._dataCb = null; }
@@ -71,7 +72,8 @@ function buildTerminalWindow() {
 
   window.API_BASE = '';
   window.WS_BASE = 'ws://localhost';
-  window.fetch = fakeFetch;
+  window.__fetches = [];
+  window.fetch = (...args) => { window.__fetches.push(args); return fakeFetch(...args); };
   window.WebSocket = FakeWebSocket;
   window.Terminal = FakeTerminal;
   window.FitAddon = { FitAddon: class { fit() {} } };
@@ -94,6 +96,7 @@ function buildTerminalWindow() {
   runScript(THEME_JS);
   runScript(KEYSEQ_JS);
   runScript(TERMINAL_JS);
+  runScript(PICKER_JS);
   // sessions(객체 참조)/activeId(매번 재할당되는 원시값)를 테스트에서 들여다볼 수 있게
   // 같은 렉시컬 스코프를 공유하는 스크립트로 다리를 놓는다.
   runScript('window.sessions = sessions; window.__getActiveId = function () { return activeId; };');
@@ -194,4 +197,52 @@ test('removeSession: 비활성 탭을 닫아도 활성 탭은 그대로 유지�
 
   assert.strictEqual(window.activeId, 'b', '비활성 탭을 닫는 건 현재 활성 탭에 영향을 주면 안 된다');
   assert.ok(window.document.querySelector('.tab[data-session-id="b"]').classList.contains('active'));
+});
+
+test('모바일 세션 관리: 탭이 보이지 않아도 세션 전환과 닫기가 가능하다', async () => {
+  const window = buildTerminalWindow();
+  window.addSession('a', '첫 세션');
+  window.addSession('b', '둘째 세션');
+
+  window.openSessionManager();
+  const manager = window.document.getElementById('session-manager');
+  assert.ok(manager, '세션 관리 시트가 열려야 한다');
+  assert.strictEqual(manager.querySelectorAll('.vt-session-row').length, 2);
+  assert.strictEqual(window.document.getElementById('voice-session-picker').getAttribute('aria-expanded'), 'true');
+
+  manager.querySelector('.vt-session-row .vt-session-select').click();
+  assert.strictEqual(window.activeId, 'a', '목록의 세션을 누르면 해당 세션으로 전환돼야 한다');
+  assert.strictEqual(window.document.getElementById('session-manager'), null, '전환 후 시트는 닫혀야 한다');
+
+  window.openSessionManager();
+  const close = window.document.querySelectorAll('.vt-session-row')[1].querySelectorAll('.vt-session-action')[1];
+  close.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.strictEqual(window.sessions.b, undefined, '시트에서도 개별 세션을 닫을 수 있어야 한다');
+});
+
+test('모바일 세션 관리: 이름 변경은 탭과 진입점에 함께 반영된다', async () => {
+  const window = buildTerminalWindow();
+  window.addSession('a', '이전 이름');
+  window.prompt = () => '새 이름';
+  window.openSessionManager();
+  window.document.querySelector('.vt-session-action').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.strictEqual(window.document.querySelector('.tab-name').textContent, '새 이름');
+  assert.strictEqual(window.document.getElementById('voice-session-picker').textContent, '새 이름');
+});
+
+test('탭 더블클릭 이름 변경도 공용 API 요청을 보낸다', async () => {
+  const window = buildTerminalWindow();
+  window.addSession('a', '이전 이름');
+  const name = window.document.querySelector('.tab-name');
+  name.ondblclick({ stopPropagation() {} });
+  name.textContent = '바꾼 이름';
+  name.onblur();
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  const renameRequest = window.__fetches.find(([url, options]) => String(url).endsWith('/api/sessions/a') && options?.method === 'PATCH');
+  assert.ok(renameRequest, '편집된 탭 이름은 PATCH API로 저장돼야 한다');
+  assert.strictEqual(JSON.parse(renameRequest[1].body).name, '바꾼 이름');
 });

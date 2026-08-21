@@ -562,18 +562,12 @@
       // 더블클릭으로 이름 편집
       nameSpan.ondblclick = (e) => {
         e.stopPropagation();
+        const originalName = nameSpan.textContent;
         nameSpan.contentEditable = 'true';
         nameSpan.focus();
         const finishEdit = async () => {
           nameSpan.contentEditable = 'false';
-          const newName = nameSpan.textContent.trim();
-          if (newName) {
-            fetch(`${API_BASE}/api/sessions/${id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: newName }),
-            });
-          }
+          await renameSession(id, nameSpan.textContent, originalName);
         };
         nameSpan.onblur = finishEdit;
         nameSpan.onkeydown = (ke) => { if (ke.key === 'Enter') { ke.preventDefault(); nameSpan.blur(); } };
@@ -797,6 +791,32 @@
       if (typeof notifyActiveSession === 'function') notifyActiveSession(id);
       updateSessionPicker();
       saveWorkspace();
+    }
+
+    // 탭 더블클릭과 모바일 세션 관리 시트가 같은 경로로 이름을 바꾼다.
+    // 성공한 경우에만 탭·피커·워크스페이스를 함께 동기화한다.
+    async function renameSession(id, rawName, previousNameOverride) {
+      const s = sessions[id];
+      const newName = String(rawName || '').trim();
+      if (!s || !newName) return false;
+      const nameEl = s.tabEl?.querySelector('.tab-name');
+      const previousName = previousNameOverride ?? (nameEl ? nameEl.textContent : '');
+      if (newName === previousName) return true;
+      try {
+        const res = await fetch(`${API_BASE}/api/sessions/${id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName }),
+        });
+        if (!res.ok) throw new Error('rename failed');
+        if (nameEl) nameEl.textContent = newName;
+        updateSessionPicker();
+        saveWorkspace();
+        return true;
+      } catch (_) {
+        if (nameEl) nameEl.textContent = previousName;
+        if (typeof showToast === 'function') showToast('세션 이름 변경 실패', 'error');
+        return false;
+      }
     }
 
     // 탭(터미널 섹션) 좌/우 이동. DOM 순서(= 화면 순서) 기준으로 끝에서 순환한다.
