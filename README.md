@@ -2,6 +2,10 @@
 
 [![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
+[![English](https://img.shields.io/badge/lang-English-lightgrey.svg)](./README.en.md)
+
+**macOS/Linux 터미널을 어디서든 — tmux 세션 그대로, 음성 입력, 모바일 PWA, Claude Code 연동까지.
+무료·오픈소스, 내 서버에 직접 설치.**
 
 macOS / Linux 머신을 서버로 두고, 어디서든 음성 또는 브라우저로 터미널을 조작하는
 시스템입니다. (Windows는 WSL2 환경에서만 동작 — 네이티브 미지원)
