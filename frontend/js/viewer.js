@@ -17,11 +17,16 @@
     const VT_DOCKW_KEY = 'vt_viewer_dockw';
     const VT_DOCK_W_DEFAULT = 420;
     const VT_DOCK_W_MIN = 280;
+    const VT_TREEW_KEY = 'vt_viewer_treew';
+    const VT_TREE_W_DEFAULT = 230;
+    const VT_TREE_W_MIN = 160;
 
     const _ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>';
     const _ICON_SHEET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="15" x2="21" y2="15"/></svg>';
     const _ICON_DOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="14" y1="3" x2="14" y2="21"/></svg>';
     const _ICON_FULL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+    const _ICON_SIDEBAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+    const _ICON_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>';
 
     let _viewerState = {
       root: null,             // 트리 최상단 디렉토리. 시작값은 서버 시작 루트(기본 ~/GitHub)지만
@@ -56,6 +61,21 @@
       return Math.max(VT_DOCK_W_MIN, Math.min(w, maxW));
     }
 
+    // 폴더 트리 패널(좌측) 폭 — dock/full 2단 분할 전용. 도킹 폭과 같은 저장/클램프 패턴.
+    function _loadTreeW() {
+      try {
+        const w = parseInt(localStorage.getItem(VT_TREEW_KEY), 10);
+        return Number.isFinite(w) && w > 0 ? w : VT_TREE_W_DEFAULT;
+      } catch (_) { return VT_TREE_W_DEFAULT; }
+    }
+    function _saveTreeW(w) { try { localStorage.setItem(VT_TREEW_KEY, String(w)); } catch (_) {} }
+    function _clampTreeW(w) {
+      const body = document.getElementById('vt-vw-body');
+      const total = body ? body.clientWidth : 800;
+      const maxW = Math.floor(total * 0.7);
+      return Math.max(VT_TREE_W_MIN, Math.min(w, maxW));
+    }
+
     // 정적 안내 메시지용 — textContent 만 쓰므로 이스케이프가 필요 없다.
     // 줄바꿈은 <br> 엘리먼트로 표현한다(문자열 조립 없이).
     function _setMsg(container, className, lines) {
@@ -80,6 +100,8 @@
         headHTML: `
           <button class="vt-vw-back" aria-label="트리로" title="트리로">‹</button>
           <div class="vt-vw-title" id="vt-vw-title">코드 뷰어</div>
+          <button class="vt-vw-tree-toggle" id="vt-vw-tree-toggle" title="폴더 트리 접기/펼치기">${_ICON_SIDEBAR}</button>
+          <button class="vt-vw-here" id="vt-vw-here" title="현재 터미널 위치로 열기">${_ICON_PIN}</button>
           <div class="vt-vw-modes" role="group" aria-label="표시 모드">
             <button class="vt-vw-mode-btn" data-mode="sheet" title="시트">${_ICON_SHEET}</button>
             <button class="vt-vw-mode-btn" data-mode="dock" title="도킹 — 터미널과 함께 보기">${_ICON_DOCK}</button>
@@ -88,12 +110,13 @@
           <button class="vt-vw-diff" id="vt-vw-diff" title="Git 변경사항 · stage · commit">git</button>
         `,
         extraHTML: `
-          <div class="vt-vw-path" id="vt-vw-path"></div>
+          <input class="vt-vw-path" id="vt-vw-path" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" title="경로를 입력하고 Enter — 이 위치를 최상단으로 엽니다">
           <div class="vt-vw-resizer" id="vt-vw-resizer"></div>
         `,
         bodyId: 'vt-vw-body',
         bodyHTML: `
           <div class="vt-vw-tree-pane" id="vt-vw-tree"><div class="vt-vw-loading">불러오는 중…</div></div>
+          <div class="vt-vw-tree-resizer" id="vt-vw-tree-resizer"></div>
           <div class="vt-vw-code-pane" id="vt-vw-code-pane"><div class="vt-vw-code-empty">파일을 선택하세요.</div></div>
         `,
         onKey: () => {
@@ -125,7 +148,12 @@
         b.addEventListener('click', () => _setDisplayMode(b.dataset.mode));
       });
       panel.el.querySelector('#vt-vw-diff').addEventListener('click', () => showGit());
+      panel.el.querySelector('#vt-vw-tree-toggle').addEventListener('click', _toggleTreeCollapse);
+      panel.el.querySelector('#vt-vw-here').addEventListener('click', _openAtTerminalCwd);
       _wireResizer(panel.el);
+      _wireTreeResizer(panel.el);
+      _wirePathInput(panel.el);
+      document.documentElement.style.setProperty('--vt-tree-w', _clampTreeW(_loadTreeW()) + 'px');
 
       const treeEl = document.getElementById('vt-vw-tree');
       try {
@@ -145,7 +173,9 @@
 
     function _setPath(p) {
       const el = document.getElementById('vt-vw-path');
-      if (el) el.textContent = p || '';
+      if (!el) return;
+      if (document.activeElement === el) return;   // 입력 중이면 덮어쓰지 않는다
+      el.value = p || '';
     }
 
     function _setTitle(t) {
@@ -223,6 +253,107 @@
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp, { once: true });
       });
+    }
+
+    // 트리 패널 폭 드래그 리사이저 — dock/full 2단 분할에서 트리↔코드 경계를 끈다.
+    // 터미널 폭에는 영향이 없으므로 fitAndResize 호출은 불필요.
+    function _wireTreeResizer(el) {
+      const handle = el.querySelector('#vt-vw-tree-resizer');
+      if (!handle) return;
+      let startX = 0, startW = 0;
+
+      const onMove = (ev) => {
+        const delta = ev.clientX - startX;   // 좌측 패널 — 오른쪽으로 끌수록 넓어진다
+        document.documentElement.style.setProperty('--vt-tree-w', _clampTreeW(startW + delta) + 'px');
+      };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        handle.classList.remove('dragging');
+        const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--vt-tree-w'), 10);
+        if (Number.isFinite(w)) _saveTreeW(w);
+      };
+      handle.addEventListener('pointerdown', (ev) => {
+        if (_viewerState.displayMode !== 'dock' && _viewerState.displayMode !== 'full') return;
+        ev.preventDefault();
+        startX = ev.clientX;
+        startW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--vt-tree-w'), 10) || _loadTreeW();
+        handle.classList.add('dragging');
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp, { once: true });
+      });
+    }
+
+    // 트리 패널 접기/펼치기 — dock/full 전용(CSS가 sheet에서는 버튼 자체를 숨긴다).
+    function _toggleTreeCollapse() {
+      const el = document.getElementById('vt-viewer');
+      if (!el) return;
+      const collapsed = el.classList.toggle('tree-collapsed');
+      const btn = el.querySelector('#vt-vw-tree-toggle');
+      if (btn) btn.classList.toggle('active', collapsed);
+    }
+
+    // 주소창에 경로를 직접 입력해 트리 최상단을 그 경로로 바꾼다.
+    // 서버(fsguard.resolve_under_roots)가 VT_BROWSE_ROOTS 경계 안인지 다시 검증하므로
+    // 여기서는 별도 화이트리스트 검사 없이 그대로 요청한다 — 거부되면 토스트만 띄운다.
+    async function _navigateRoot(path) {
+      const treeEl = document.getElementById('vt-vw-tree');
+      let data;
+      try {
+        data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(path)}`);
+      } catch (e) {
+        showToast(`이동할 수 없습니다: ${e.message}`);
+        return false;
+      }
+      _viewerState.root = path;
+      _viewerState.cwd = path;
+      _viewerState.expanded = new Set();
+      _setPath(path);
+      if (_viewerState.displayMode === 'sheet') _setActivePane('tree');
+      _renderTopLevel(treeEl, data);
+      return true;
+    }
+
+    function _wirePathInput(el) {
+      const input = el.querySelector('#vt-vw-path');
+      if (!input) return;
+      input.addEventListener('focus', () => input.select());
+      input.addEventListener('keydown', async (ev) => {
+        if (ev.key === 'Escape') { input.value = _viewerState.root || ''; input.blur(); return; }
+        if (ev.key !== 'Enter') return;
+        ev.preventDefault();
+        const v = input.value.trim();
+        if (!v) return;
+        const prevRoot = _viewerState.root;
+        const ok = await _navigateRoot(v);
+        if (!ok) input.value = prevRoot || '';
+        input.blur();
+      });
+    }
+
+    // 현재 활성 터미널(tmux) 세션의 cwd를 트리 최상단으로 연다.
+    async function _openAtTerminalCwd() {
+      if (typeof activeId === 'undefined' || !activeId || !sessions[activeId]) {
+        showToast('열려 있는 터미널 세션이 없습니다');
+        return;
+      }
+      const tmuxName = sessions[activeId].tmuxName || sessions[activeId].tmux_name;
+      if (!tmuxName) {
+        showToast('현재 세션은 tmux 세션이 아니라 위치를 알 수 없습니다');
+        return;
+      }
+      let list;
+      try {
+        list = await vtFetch('/api/tmux/sessions');
+      } catch (e) {
+        showToast(`위치 확인 실패: ${e.message}`);
+        return;
+      }
+      const info = (list || []).find(s => s.name === tmuxName);
+      if (!info || !info.cwd) {
+        showToast('현재 터미널 위치를 확인할 수 없습니다');
+        return;
+      }
+      await _navigateRoot(info.cwd);
     }
 
     // --- 계층 트리 ----------------------------------------------------------------
@@ -304,17 +435,7 @@
       const cur = _viewerState.root;
       if (!cur || cur === '/') return;
       const parent = cur.replace(/\/[^/]+\/?$/, '') || '/';
-      let data;
-      try {
-        data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(parent)}`);
-      } catch (e) {
-        showToast(`더 위로는 이동할 수 없습니다: ${e.message}`);
-        return;
-      }
-      _viewerState.root = parent;
-      _viewerState.expanded = new Set();
-      _setPath(parent);
-      _renderTopLevel(document.getElementById('vt-vw-tree'), data);
+      await _navigateRoot(parent);
     }
 
     // 트리 최상단(현재 root의 자식들) 렌더링 — 초기 로드와 "위로 이동" 양쪽에서 쓴다.

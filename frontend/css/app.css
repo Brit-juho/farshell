@@ -580,23 +580,34 @@ body.voice-only-mode #mic-status {
 }
 .vt-vw-title{ flex:1; font:600 13px var(--ui); overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
-.vt-vw-back,.vt-vw-x,.vt-vw-diff{
+.vt-vw-back,.vt-vw-x,.vt-vw-diff,.vt-vw-tree-toggle,.vt-vw-here{
   background:var(--tab); color:var(--txt);
   border:1px solid var(--line); border-radius:var(--trad);
   min-width:32px; height:28px; padding:0 8px; cursor:pointer;
   font:500 12px var(--ui); touch-action:manipulation;
+  display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
 }
-.vt-vw-back:hover,.vt-vw-x:hover,.vt-vw-diff:hover{ background:var(--menu-hover); }
-.vt-vw-back:active,.vt-vw-x:active,.vt-vw-diff:active{
+.vt-vw-back:hover,.vt-vw-x:hover,.vt-vw-diff:hover,
+.vt-vw-tree-toggle:hover,.vt-vw-here:hover{ background:var(--menu-hover); }
+.vt-vw-back:active,.vt-vw-x:active,.vt-vw-diff:active,
+.vt-vw-tree-toggle:active,.vt-vw-here:active{
   background:color-mix(in srgb, var(--acc) 22%, var(--menu-hover));
 }
 .vt-vw-diff{ color:var(--acc); }
+.vt-vw-tree-toggle svg,.vt-vw-here svg{ width:15px; height:15px; }
+.vt-vw-tree-toggle.active{ background:color-mix(in srgb, var(--acc) 18%, var(--tab)); color:var(--acc); }
+/* 트리 접기/펼치기는 dock/full 2단 분할에서만 의미가 있다 — sheet에서는 숨긴다. */
+.vt-vw-tree-toggle{ display:none; }
+#vt-viewer.mode-dock .vt-vw-tree-toggle,
+#vt-viewer.mode-full .vt-vw-tree-toggle{ display:inline-flex; }
 .vt-vw-path{
   padding:6px 12px; font:400 11px var(--mono); color:var(--sub);
-  background:var(--bar); border-bottom:1px solid var(--line);
-  overflow-x:auto; white-space:nowrap; flex:0 0 auto;
+  background:var(--bar); border:none; border-bottom:1px solid var(--line);
+  border-radius:0; outline:none;
+  overflow-x:auto; white-space:nowrap; flex:0 0 auto; width:100%;
   scrollbar-width:none;
 }
+.vt-vw-path:focus{ color:var(--txt); background:color-mix(in srgb, var(--acc) 8%, var(--bar)); }
 .vt-vw-path::-webkit-scrollbar{ display:none; }
 .vt-vw-body{
   flex:1 1 auto; overflow:auto; overscroll-behavior:contain;
@@ -848,13 +859,32 @@ body.vt-resizing #grid-view{ transition:none; }
 .vt-vw-body.split[data-active="tree"] .vt-vw-tree-pane{ flex:1 1 auto; width:auto; border-right:none; }
 .vt-vw-body.split[data-active="code"] .vt-vw-tree-pane{ display:none; }
 
-/* dock/full: 폭이 있으니 data-active와 무관하게 항상 둘 다 보인다(IDE 2단 분할). */
+/* dock/full: 폭이 있으니 data-active와 무관하게 항상 둘 다 보인다(IDE 2단 분할).
+   폭은 --vt-tree-w(기본 230px) — 리사이저로 드래그해 바꾸고 localStorage에 남는다(viewer.js). */
 #vt-viewer.mode-dock .vt-vw-body.split .vt-vw-tree-pane,
 #vt-viewer.mode-full .vt-vw-body.split .vt-vw-tree-pane{
-  display:block; flex:0 0 auto; width:230px; border-right:1px solid var(--line);
+  display:block; flex:0 0 auto; width:var(--vt-tree-w, 230px); border-right:1px solid var(--line);
 }
 #vt-viewer.mode-dock .vt-vw-body.split .vt-vw-code-pane,
 #vt-viewer.mode-full .vt-vw-body.split .vt-vw-code-pane{ display:block; }
+
+/* 트리 폭 리사이저 — dock/full에서만 트리·코드 경계에 나타난다. */
+.vt-vw-tree-resizer{ display:none; }
+#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-tree-resizer,
+#vt-viewer.mode-full .vt-vw-body.split .vt-vw-tree-resizer{
+  display:block; flex:0 0 auto; width:6px; margin:0 -3px; cursor:col-resize;
+  touch-action:none; position:relative; z-index:1;
+}
+#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-tree-resizer:hover,
+#vt-viewer.mode-full .vt-vw-body.split .vt-vw-tree-resizer:hover,
+.vt-vw-tree-resizer.dragging{
+  background:color-mix(in srgb, var(--acc) 30%, transparent);
+}
+
+/* 트리 접기 — #vt-viewer.tree-collapsed일 때 트리 패널·리사이저를 숨기고 코드가 전체 폭을 쓴다. */
+#vt-viewer.tree-collapsed .vt-vw-body.split .vt-vw-tree-pane,
+#vt-viewer.tree-collapsed .vt-vw-body.split .vt-vw-tree-resizer{ display:none; }
+
 .vt-vw-code-empty{
   display:flex; align-items:center; justify-content:center; height:100%;
   color:var(--sub); font:400 13px var(--ui); text-align:center; padding:16px;
