@@ -397,13 +397,11 @@ function showBrowserNotification(title, body) {
 // 알림 WebSocket 연결
 connectNotify();
 
-// 알림 권한 — 첫 사용자 인터랙션 시 한 번만 요청
-if ('Notification' in window && Notification.permission === 'default') {
-  document.addEventListener('click', function _reqNotify() {
-    Notification.requestPermission();
-    document.removeEventListener('click', _reqNotify);
-  }, { once: true });
-}
+// 알림 권한은 여기서 미리 요청하지 않는다 — 브라우저는 권한을 한 번만 물어보므로,
+// 사용자가 "푸시 알림"을 켜기도 전에 아무 탭에서나 먼저 소진시키면 나중에 진짜로
+// 켜려 할 때 다시 물어볼 방법이 없다. ⋯ 메뉴 "푸시 알림" 토글(pushui.js → togglePush()
+// → VTPush.subscribe())에서만 요청한다. showBrowserNotification()은 권한 미승인 시
+// 조용히 스킵하므로 여기서 미리 받아둘 필요가 없다.
 
 // --- PWA Service Worker 등록 ---
 // (P5) 등록은 js/swreg.js 로 옮겼다. 이 파일은 음성 미설치 환경에서 아예 로드되지

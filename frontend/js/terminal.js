@@ -578,7 +578,7 @@
         nameSpan.onblur = finishEdit;
         nameSpan.onkeydown = (ke) => { if (ke.key === 'Enter') { ke.preventDefault(); nameSpan.blur(); } };
       };
-      document.getElementById('tabs').insertBefore(tab, document.getElementById('add-btn'));
+      document.getElementById('tabs').appendChild(tab);
 
       const term = new Terminal({
         cursorBlink: true,
@@ -885,6 +885,36 @@
       } catch (e) { return false; }
     }
 
+    // localStorage 워크스페이스 스냅샷은 "마지막 저장 시점"만 기억한다 — 그 이후
+    // 다른 탭/기기/CLI(fsh)에서 만들어진 tmux 세션은 서버엔 실제로 살아있어도
+    // 이 스냅샷에 없으면 restoreWorkspace()가 절대 못 찾는다. 서버의 진짜 tmux
+    // 목록과 대조해 빠진 것만 추가로 붙인다(활성 탭은 건드리지 않는다).
+    async function reconcileMissingTmuxSessions() {
+      const keepActive = activeId; // addSession()이 매번 switchTo()를 호출하므로 복원해야 함
+      try {
+        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const tmuxList = await res.json();
+        if (!Array.isArray(tmuxList)) return;
+        const known = new Set(Object.values(sessions).map(s => s.tmuxName).filter(Boolean));
+        let added = false;
+        for (const s of tmuxList) {
+          if (known.has(s.name)) continue;
+          const res2 = await fetch(`${API_BASE}/api/tmux/attach`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ name: s.name })
+          });
+          if (!res2.ok) continue;
+          const data = await res2.json();
+          if (data.id && !sessions[data.id]) {
+            addSession(data.id, data.name || `tmux:${s.name}`);
+            if (sessions[data.id]) sessions[data.id].tmuxName = s.name;
+            added = true;
+          }
+        }
+        if (added && keepActive && sessions[keepActive]) switchTo(keepActive);
+      } catch (e) { /* 서버 통신 실패 시 조용히 무시 — 복원된 탭은 이미 정상 동작 중 */ }
+    }
+
     function clearWorkspace() {
       localStorage.removeItem(WORKSPACE_KEY);
     }
@@ -1156,6 +1186,9 @@
 
         // 0.5. localStorage 워크스페이스 복원 (Phase 8 G7)
         if (await restoreWorkspace()) {
+          // 복원된 스냅샷은 "마지막 저장 시점" 기준이라 그 이후 다른 곳에서 생긴
+          // tmux 세션을 놓칠 수 있다 — 서버 목록과 대조해 누락분만 보충.
+          await reconcileMissingTmuxSessions();
           return;
         }
 
