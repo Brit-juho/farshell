@@ -8,7 +8,7 @@ import os
 import subprocess
 
 from fastapi import APIRouter, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 import notify
 import platform_utils
@@ -134,6 +134,11 @@ async def stt_unload():
 
 @router.post("/voice/local/start")
 async def local_mic_start():
+    if not local_mic.available():
+        return JSONResponse(
+            {"error": "local_mic_unavailable", "reason": "sounddevice 또는 numpy가 설치되지 않았습니다"},
+            status_code=503,
+        )
     # 로컬 마이크 녹음 시작 = 음성 모드 활성 신호 → STT 미리 로드(백그라운드)
     try:
         asyncio.get_running_loop().run_in_executor(None, voice_handler.preload_stt)
@@ -144,6 +149,11 @@ async def local_mic_start():
 
 @router.post("/voice/local/stop")
 async def local_mic_stop(request: Request):
+    if not local_mic.available():
+        return JSONResponse(
+            {"error": "local_mic_unavailable", "reason": "sounddevice 또는 numpy가 설치되지 않았습니다"},
+            status_code=503,
+        )
     result = await local_mic.stop_recording()
     text = result.get("text", "")
 

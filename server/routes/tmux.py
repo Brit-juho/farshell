@@ -150,12 +150,20 @@ async def create_tmux_session(request: Request):
     return await _attach_tmux(tmux_name, cols, rows)
 
 
+# open-on-mac 동시 클릭(더블클릭 등) 시 레이스로 중복 스폰되는 걸 막는 세션명 단위 락.
+_mac_open_locks: set[str] = set()
+
+
 @router.post("/api/tmux/open-on-mac")
 async def open_tmux_on_mac(request: Request):
     """이미 존재하는 tmux 세션을 맥 터미널(iTerm2 우선)에 새 창으로 attach.
 
     웹에서 보고 있는 세션을 나중에 맥에서도 열고 싶을 때 사용. 같은 tmux 소켓(-L fsh)에
     attach하므로 웹/음성/맥이 동일 세션을 공유한다.
+
+    맥에 이미 attach된 창이 있으면(세션 생성 시 auto_open_on_mac로 열어뒀거나, 이전 클릭으로
+    이미 열어둔 채 웹에는 안 붙어 있는 "잠든" 세션 등) 또 열지 않고 스킵한다 — session_attached는
+    웹 PTY attach도 함께 세므로, web_session_id로 웹쪽 attach 1개를 빼고 남는 게 있는지로 판단.
     """
     body = await request.json()
     tmux_name = (body.get("name") or "").strip()
@@ -163,16 +171,44 @@ async def open_tmux_on_mac(request: Request):
         return JSONResponse({"ok": False, "error": "유효하지 않은 세션 이름"}, status_code=400)
     if not platform_utils.IS_MACOS:
         return JSONResponse({"ok": False, "error": "서버가 macOS가 아님"}, status_code=400)
-    rc, _, _ = tmux_runner.run(["has-session", "-t", tmux_name], timeout=5.0)
-    if rc != 0:
-        return JSONResponse({"ok": False, "error": "tmux 세션을 찾을 수 없음"}, status_code=404)
-    attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
+
+    if tmux_name in _mac_open_locks:
+        return JSONResponse({"ok": False, "error": "이미 여는 중"}, status_code=409)
+    _mac_open_locks.add(tmux_name)
     try:
-        ok = platform_utils.spawn_mac_terminal(attach_cmd)
-        return {"ok": bool(ok), "error": None if ok else "지원하는 터미널 앱이 없음"}
-    except Exception as e:
-        logger.warning(f"open-on-mac 실패: {e}")
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+        rc, _, _ = tmux_runner.run(["has-session", "-t", tmux_name], timeout=5.0)
+        if rc != 0:
+            return JSONResponse({"ok": False, "error": "tmux 세션을 찾을 수 없음"}, status_code=404)
+
+        # display-message -t는 대상 세션이 없어도 attach된 클라이언트가 하나도 없으면
+        # rc=0/빈 출력을 내는 tmux 특이 동작이 있어(has-session과 결과가 어긋남),
+        # attached 수는 list-sessions 출력에서 이름으로 직접 파싱한다.
+        sessions_text = tmux_runner.run_text(
+            ["list-sessions", "-F", "#{session_name}\t#{session_attached}"], timeout=5.0
+        ) or ""
+        total_attached = 0
+        for line in sessions_text.strip().split("\n"):
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[0] == tmux_name:
+                total_attached = int(parts[1]) if parts[1].isdigit() else 0
+                break
+
+        web_session = session_store.find_by_tmux_name(tmux_name)
+        web_attached = 1 if web_session and web_session.session_id in pty_mgr.sessions else 0
+        desktop_attached = total_attached - web_attached
+
+        if desktop_attached > 0:
+            return {"ok": True, "skipped": True, "error": None, "reason": "이미 맥에서 열려 있음"}
+
+        attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
+        try:
+            ok = platform_utils.spawn_mac_terminal(attach_cmd)
+            return {"ok": bool(ok), "skipped": False, "error": None if ok else "지원하는 터미널 앱이 없음"}
+        except Exception as e:
+            logger.warning(f"open-on-mac 실패: {e}")
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    finally:
+        _mac_open_locks.discard(tmux_name)
 
 
 @router.post("/api/tmux/attach")
@@ -221,7 +257,6 @@ async def get_tmux_preview(tmux_name: str, lines: int = 20, ansi: int = 1):
 # Phase 9 #1: ws push로 grid 1초 폴링 대체 — 변화 시에만 푸시.
 @router.websocket("/ws-preview/{tmux_name}")
 async def ws_preview(websocket: WebSocket, tmux_name: str):
-    import asyncio as _asyncio
     import json as _json
     import preview as _preview
     from fastapi import WebSocketDisconnect

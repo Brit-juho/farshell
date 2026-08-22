@@ -13,7 +13,6 @@ NSPasteboard.changeCount는 클립보드가 바뀔 때마다 증가하는 정수
 """
 import json
 import logging
-import os
 import sys
 import time
 import urllib.error

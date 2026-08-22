@@ -4,9 +4,11 @@
 비즈니스 로직은 routes/ 하위 모듈에 위치.
 """
 
+import asyncio
 import logging
 import os
 import re
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -231,10 +233,62 @@ class NetworkAccessMiddleware(BaseHTTPMiddleware):
 
 
 # ---------------------------------------------------------------------------
+# 앱 lifecycle
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """서버 전역 리소스를 한 곳에서 시작·정리한다.
+
+    FastAPI의 ``on_event`` API는 deprecated 상태다. lifespan으로 옮기면 startup과
+    shutdown의 짝이 같은 스코프에 놓여, 백그라운드 task를 확실히 취소할 수 있다.
+    """
+    # A5: 기본 자세가 open이면(인증 없음 + IP 필터 없음) 명시적으로 경고. LAN 노출 시
+    # 인증 없는 터미널 = 원격 코드 실행이므로 사용자가 인지하도록 한다.
+    spec = network_access.get_current_spec()
+    if spec.allow_all and not auth.is_protected():
+        logger.warning(
+            "[보안] 인증(비밀번호/VT_AUTH_TOKEN) 없음 + IP 필터 없음(VT_NETWORK_MODE=all). "
+            "이 서버에 도달할 수 있는 누구나 터미널을 실행할 수 있습니다. "
+            "원격 노출 시 'vt password' 또는 VT_AUTH_TOKEN 설정, VT_NETWORK_MODE=localhost/lan/tailscale 권장."
+        )
+    # A4: cloudflare 터널 뒤에서는 cloudflared가 localhost에서 접속하므로 client IP가
+    # 항상 127.0.0.1 → IP 화이트리스트가 원격 요청을 걸러내지 못한다. 실질 방어는 VT_TOKEN.
+    if not spec.allow_all and tunnel.find_active_pids():
+        logger.warning(
+            "[보안] cloudflare 터널 활성 + IP 필터 모드. 터널 경유 요청은 모두 127.0.0.1로 "
+            "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "
+            "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
+        )
+    if auth.is_protected():
+        n_dev = len(auth.list_devices())
+        if auth.totp_enabled():
+            logger.info(f"[보안] OTP 활성 — 새 기기 등록 시 6자리 요구. 등록 기기 {n_dev}개")
+        else:
+            logger.info(
+                f"[보안] OTP 미연동 — 비밀번호만으로 동작(기존과 동일). 등록 기기 {n_dev}개. "
+                "'fsh otp setup'으로 연동하면 그 시점부터 '새' 기기에만 OTP를 요구합니다."
+            )
+
+    output_watcher.on_notify(on_task_complete)
+    output_watcher.start()
+    import voice_handler
+    stt_idle_task = asyncio.create_task(voice_handler.stt_idle_monitor())
+    try:
+        yield
+    finally:
+        stt_idle_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await stt_idle_task
+        output_watcher.stop()
+        pty_mgr.destroy_all()
+
+
+# ---------------------------------------------------------------------------
 # 앱 구성
 # ---------------------------------------------------------------------------
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(NetworkAccessMiddleware)
 app.add_middleware(TokenAuthMiddleware)
 # 프론트엔드는 이 서버가 직접 서빙하므로(동일 출처) CORS가 필요 없다. 예전엔 `*`로
@@ -469,51 +523,3 @@ async def favicon():
         str(Path(FRONTEND_DIR) / "icon-192.png"),
         media_type="image/png",
     )
-
-
-# ---------------------------------------------------------------------------
-# Lifecycle
-# ---------------------------------------------------------------------------
-
-@app.on_event("startup")
-async def startup():
-    # A5: 기본 자세가 open이면(인증 없음 + IP 필터 없음) 명시적으로 경고. LAN 노출 시
-    # 인증 없는 터미널 = 원격 코드 실행이므로 사용자가 인지하도록 한다.
-    spec = network_access.get_current_spec()
-    if spec.allow_all and not auth.is_protected():
-        logger.warning(
-            "[보안] 인증(비밀번호/VT_AUTH_TOKEN) 없음 + IP 필터 없음(VT_NETWORK_MODE=all). "
-            "이 서버에 도달할 수 있는 누구나 터미널을 실행할 수 있습니다. "
-            "원격 노출 시 'vt password' 또는 VT_AUTH_TOKEN 설정, VT_NETWORK_MODE=localhost/lan/tailscale 권장."
-        )
-    # A4: cloudflare 터널 뒤에서는 cloudflared가 localhost에서 접속하므로 client IP가
-    # 항상 127.0.0.1 → IP 화이트리스트가 원격 요청을 걸러내지 못한다. 실질 방어는 VT_TOKEN.
-    if not spec.allow_all and tunnel.find_active_pids():
-        logger.warning(
-            "[보안] cloudflare 터널 활성 + IP 필터 모드. 터널 경유 요청은 모두 127.0.0.1로 "
-            "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "
-            "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
-        )
-    # 인증이 켜져 있는데 OTP가 아직 연동 전이면, 지금 접속하는 기기들이 자동으로
-    # 신뢰 목록에 쌓이고 있다는 사실을 알린다(나중에 OTP를 켜도 잠기지 않는 이유).
-    if auth.is_protected():
-        n_dev = len(auth.list_devices())
-        if auth.totp_enabled():
-            logger.info(f"[보안] OTP 활성 — 새 기기 등록 시 6자리 요구. 등록 기기 {n_dev}개")
-        else:
-            logger.info(
-                f"[보안] OTP 미연동 — 비밀번호만으로 동작(기존과 동일). 등록 기기 {n_dev}개. "
-                "'fsh otp setup'으로 연동하면 그 시점부터 '새' 기기에만 OTP를 요구합니다."
-            )
-    output_watcher.on_notify(on_task_complete)
-    output_watcher.start()
-    # STT 모델 idle 언로드 모니터 — 음성 미사용 시 ~150MB 회수 (VT_STT_IDLE_SEC)
-    import voice_handler
-    import asyncio as _asyncio
-    _asyncio.create_task(voice_handler.stt_idle_monitor())
-
-
-@app.on_event("shutdown")
-def shutdown():
-    output_watcher.stop()
-    pty_mgr.destroy_all()

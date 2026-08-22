@@ -28,7 +28,7 @@ FarShell 프론트엔드는 **선택 가능한 5개 테마**를 가진 모바일
 
 ```
 ┌───────────────────────────────────────────────┐
-│ ◉◉◉  [tab][tab][+]   ( 🎤 음성입력 ) 🔍 ⊞ ⋯ (⚊▢✕) │ ← #topbar (38px)
+│ ◉◉◉  [tab][tab][+]   ( 🎤 음성입력 ) 🔍 ⊞ ⋯ (⚊▢✕) │ ← #topbar (fine 38px / coarse 44px)
 ├───────────────────────────────────────────────┤
 │                                                 │
 │                 #terminal-container             │
@@ -116,11 +116,11 @@ ANSI 16색**이다. `js/theme.js`의 `VT_XTERM_THEMES`에 스킨별 완전한 �
 
 ## 반응형 & 접근성
 
-- 모바일 우선. 좁은 화면(<720px)에서 세션 점프 드롭다운 노출, 넓은 화면은 탭으로 충분.
-- 터치 타깃: 상단 아이콘 시각 크기 30px, `#topbar`가 38px 고정이라 시각적으로
-  키울 수 없어 coarse 포인터에서 `::before` 가상 요소로 탭 가능 영역만 44px로
-  확장(WCAG 2.5.5, 시각 레이아웃은 유지). 탭 28px(windows 31px) — 세로 폭이 좁아
-  탭 자체는 44px 확장 대상에서 아직 제외(TODO 후보, `## 알려진 갭` 참고).
+- 모바일 우선. 좁은 화면(<720px)에서는 현재 세션 이름을 표시하는 세션 관리 버튼이
+  바텀시트를 열어 전환·이름 변경·개별 닫기를 제공한다. 탭 영역이 0px로 눌려도 이 기능은 남는다.
+- 터치 타깃: coarse 포인터에서는 `--topbar-h`가 44px가 되고 `.tab`과 닫기 버튼도
+  실제 44px 높이를 사용한다. 아이콘 버튼은 시각 크기 30px을 유지하며 `::before`로
+  44px 탭 가능 영역을 확보한다.
 - 키보드: `#add-btn` Enter/Space, `⋯` `aria-haspopup`/`aria-expanded`, 검색 Ctrl/Cmd+F,
   Grid/검색 Esc 닫기, `:focus-visible` 아웃라인(`--acc`).
 - 스크린리더: 아이콘 버튼 `aria-label`, `#mic-status` `role="status" aria-live="polite"`.
@@ -135,6 +135,6 @@ ANSI 16색**이다. `js/theme.js`의 `VT_XTERM_THEMES`에 스킨별 완전한 �
 | `frontend/css/app.css` | 토큰 3종 + 전 컴포넌트 + `.vt-*` 오버레이 |
 | `frontend/js/theme.js` | 스킨 전환, localStorage, xterm 테마 정의/동기화 |
 | `frontend/js/terminal.js` | 세션/탭/PTY, `getVtXtermTheme()` 적용, 오버레이 생성 |
-| `frontend/js/picker.js` | 세션 드롭다운 동기화, 토스트, 파일 업로드 |
+| `frontend/js/picker.js` | 모바일 세션 관리 시트, 토스트, 파일 업로드 |
 | `frontend/js/grid.js` | 라이브 프리뷰 Grid, capability 게이팅, 안전 모드 배너 |
 | `frontend/voice.js` | 녹음/STT/TTS, 미디어키, 음성 전용 모드 (capability ON일 때 동적 로드) |

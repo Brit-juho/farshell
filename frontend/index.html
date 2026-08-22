@@ -258,9 +258,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
     </div>
 
-    <!-- 세션 점프(이름 드롭다운) — picker.js가 동기화. 좁은 화면에서만 노출 -->
-    <select id="voice-session-picker" aria-label="세션 전환"
-      onchange="if(this.value)switchTo(this.value)"></select>
+    <!-- 좁은 화면의 세션 관리 진입점. 탭 영역이 눌려도 전환·이름 변경·닫기가 남는다. -->
+    <button id="voice-session-picker" type="button" aria-label="세션 관리" aria-haspopup="dialog"
+      aria-expanded="false" onclick="openSessionManager()">세션</button>
 
     <div class="spacer"></div>
 
@@ -396,32 +396,8 @@
        색은 app.css에서 스킨 토큰으로 매핑해야 notepad(라이트)까지 따라간다. -->
   <script src="/static/vendor/highlight.min.js"></script>
 
-  <!-- 테마 엔진 먼저 — terminal.js의 addSession이 xterm 테마를 참조 -->
-  <script src="/static/js/theme.js"></script>
-
-  <!-- 동적 파비콘 — 선명한 탭 아이콘 + 작업 상태 뱃지 (window.VTFavicon.set) -->
-  <script src="/static/js/favicon.js"></script>
-
-  <!-- 앱 스크립트 — 전역 변수 공유를 위해 classic <script> + 원래 순서 보존 -->
-  <!-- keyseq.js: keybar 순수 키-시퀀스 로직(terminal.js가 window.VTKeySeq 사용) -->
-  <script src="/static/js/keyseq.js"></script>
-  <script src="/static/js/terminal.js"></script>
-  <script src="/static/js/search.js"></script>
-  <script src="/static/js/picker.js"></script>
-  <!-- ansilex.js: ANSI→HTML 변환 순수 로직(grid.js가 window.VTAnsiLex 사용) -->
-  <script src="/static/js/ansilex.js"></script>
-  <script src="/static/js/grid.js"></script>
-  <!-- vtapi.js/panel.js: viewer/ports/queue 공용 fetch 래퍼 + 패널 껍데기(backdrop/닫기/폴링) -->
-  <script src="/static/js/vtapi.js"></script>
-  <script src="/static/js/panel.js"></script>
-  <!-- difflex.js: unified diff 파싱 순수 로직(viewer.js가 window.VTDiffLex 사용) -->
-  <script src="/static/js/difflex.js"></script>
-  <script src="/static/js/viewer.js"></script>
-  <script src="/static/js/ports.js"></script>
-  <script src="/static/js/queue.js"></script>
-  <!-- SW 등록 + Web Push. voice.js와 무관하게 항상 로드돼야 한다 -->
-  <script src="/static/js/swreg.js"></script>
-  <script src="/static/js/pushui.js"></script>
+  <!-- ESM 진입점. legacy 기능의 의존 순서는 bootstrap.js manifest에서만 관리한다. -->
+  <script type="module" src="/static/js/bootstrap.js"></script>
 
   <!-- ⋯ 메뉴 열고닫기 (전역 상태 불필요, 여기 인라인) -->
   <script>
