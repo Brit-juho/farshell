@@ -10,9 +10,7 @@ PTY 출력이 일정 시간(idle_timeout) 동안 없으면 "작업 완료"로 �
 
 import asyncio
 import logging
-import subprocess
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
