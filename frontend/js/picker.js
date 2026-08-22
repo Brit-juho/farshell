@@ -89,7 +89,8 @@
           body: JSON.stringify({ name: tmuxName }),
         });
         const data = await res.json();
-        if (data.ok) showToast(`맥 iTerm에 '${tmuxName}' 열림`, 'success');
+        if (data.skipped) showToast(`'${tmuxName}'은 이미 맥에서 열려 있습니다`, 'success');
+        else if (data.ok) showToast(`맥 iTerm에 '${tmuxName}' 열림`, 'success');
         else showToast('맥에서 열기 실패: ' + (data.error || ''), 'error');
       } catch (e) {
         showToast('맥에서 열기 실패: ' + e.message, 'error');
