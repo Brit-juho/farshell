@@ -668,14 +668,25 @@ _tmux_already_open() {
   local name="${1:-dev}"
   local ttys first_tty
   ttys="$(_tmux_session_client_ttys "$name")"
-  [ -n "$ttys" ] || return 1
-  first_tty="$(printf '%s\n' "$ttys" | head -1)"
-  if [ "$(uname)" = "Darwin" ] && _focus_iterm_by_tty "$first_tty"; then
-    echo "  ✓ tmux 세션 '$name'이 이미 열려 있어 그 창으로 전환했습니다."
-  else
-    echo "  ⓘ tmux 세션 '$name'이 이미 다른 창에 열려 있어 새 창을 열지 않습니다."
+  if [ -n "$ttys" ]; then
+    first_tty="$(printf '%s\n' "$ttys" | head -1)"
+    if [ "$(uname)" = "Darwin" ] && _focus_iterm_by_tty "$first_tty"; then
+      echo "  ✓ tmux 세션 '$name'이 이미 열려 있어 그 창으로 전환했습니다."
+    else
+      echo "  ⓘ tmux 세션 '$name'이 이미 다른 창에 열려 있어 새 창을 열지 않습니다."
+    fi
+    return 0
   fi
-  return 0
+  # 붙어있는 클라이언트가 하나도 없어도 세션 자체는 이미 존재할 수 있다(예: 이전에
+  # 열어둔 창을 닫았거나, 웹에서만 attach 중인 경우). 이때도 매번 새 macOS 창을
+  # 또 열면 fsh start/voice/mobile을 반복 호출할 때마다 창이 계속 늘어난다 —
+  # "세션이 하나도 없을 때만 새로 연다"는 원칙으로, 세션 존재 자체를 마지막 방어선으로 확인.
+  if "${TMUX_BASE[@]}" has-session -t "$name" 2>/dev/null; then
+    echo "  ⓘ tmux 세션 '$name'이 이미 존재해 새 창을 열지 않습니다(다른 창에 붙어있진 않음)."
+    echo "      수동으로 열려면: tmux -L $VT_TMUX_SOCKET attach -t $name"
+    return 0
+  fi
+  return 1
 }
 
 # W1-3: 임의 세션을 새 OS 터미널 창에서 attach하는 일반화 헬퍼.
@@ -686,7 +697,10 @@ _open_tmux_terminal_with() {
   local session="${1:-dev}"
   local extra_cmd="${2:-}"
 
-  _tmux_already_open "$session" && return 0
+  # 반환값 3종: 0=새 창을 실제로 열었음, 2=이미 있어서 안 열었음(안내 메시지는
+  # _tmux_already_open이 이미 출력함 — 호출자가 "새로 열렸다"는 메시지를 또 찍으면 안 됨),
+  # 1=열기 시도했으나 실패.
+  _tmux_already_open "$session" && return 2
 
   local cmd
   if [ -n "$extra_cmd" ]; then
@@ -800,10 +814,14 @@ _print_attach_guide() {
     echo "  ✓ 이미 tmux 안 ($(tmux display -p '#S')). 이 창에서 작업을 계속하세요."
     return
   fi
-  if _open_tmux_terminal; then
+  _open_tmux_terminal
+  local rc=$?
+  if [ "$rc" -eq 0 ]; then
     local opened="${TERM_PROGRAM:-터미널}"
     echo "  ✓ 새 ${opened} 창에 tmux 'dev' 세션이 열렸습니다."
     echo "    → resume 목록에서 현재 대화를 고르면 음성/모바일이 그 Claude로 연결됩니다."
+  elif [ "$rc" -eq 2 ]; then
+    : # 이미 열려 있음 — 안내 메시지는 _tmux_already_open이 이미 출력했다.
   else
     echo "  ⓘ 자동 오픈 실패. 다른 터미널에서 다음 명령을 실행하세요:"
     echo "      tmux -L $VT_TMUX_SOCKET new -A -s dev 'claude --resume'"
@@ -1104,8 +1122,12 @@ cmd_attach() {
   fi
 
   # 새 OS 터미널 창에 attach (W1-3)
-  if _open_tmux_terminal_with "$target"; then
+  _open_tmux_terminal_with "$target"
+  local rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo "  ✓ 새 터미널 창에 tmux 세션 '$target' attach"
+  elif [ "$rc" -eq 2 ]; then
+    : # 이미 열려 있음 — 안내 메시지는 _tmux_already_open이 이미 출력했다.
   else
     echo "  ⓘ 터미널 자동 오픈 실패. 수동:"
     echo "      tmux -L $VT_TMUX_SOCKET attach -t $target"

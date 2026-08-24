@@ -89,6 +89,46 @@ fsh handoff mobile    # 현재 tmux 세션을 폰으로 (QR + URL hash)
 fsh handoff desktop   # 폰 세션을 맥 터미널로
 ```
 
+#### 파일 다운로드/업로드 ("파일 다운로드", "파일 옮겨줘", "다운로드 링크 줘")
+
+터미널이 떠 있는 컴퓨터의 파일을 웹/모바일로 받아오는 흐름. 임의 경로를 직접
+다운로드하는 API는 없고, `/tmp/vt-uploads/` 폴더에 들어간 파일만 `/api/download`로
+받을 수 있다(fsguard 스타일의 경로 화이트리스트 — 다른 경로는 403).
+
+```bash
+cp <원본경로> /tmp/vt-uploads/<파일명>   # 대상 파일을 다운로드 가능 영역으로 복사
+chmod 600 /tmp/vt-uploads/<파일명>
+```
+
+이후 다운로드 URL을 안내:
+
+```
+<현재 접속 URL>/api/download?path=/tmp/vt-uploads/<파일명>
+```
+
+- 로컬 접속이면 인증 세션(로그인 쿠키)이 이미 있으면 그대로 열림
+- Cloudflare Tunnel 등 원격 접속이면 `VT_AUTH_TOKEN`(`~/.vt.env`)이 필요 —
+  `?token=<VT_AUTH_TOKEN>` 쿼리 또는 `Authorization: Bearer <VT_AUTH_TOKEN>` 헤더
+- 업로드는 반대 방향: 웹 UI 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장(`POST /api/upload`)
+
+#### 다른 로컬 포트 외부 공개 ("포트 3000 열어줘", "다른 앱도 터널 연결")
+
+FarShell 자신(기본 7777)이 아닌 **다른 로컬 서버**를 Cloudflare Tunnel로 별도 공개.
+Cloudflare quick tunnel은 호스트당 포트 1개만 연결되므로, 포트마다 독립적인
+터널 프로세스 + URL이 생긴다(경로로 포트를 구분하는 방식이 아님).
+
+```bash
+fsh tunnel expose <port> "<앱 이름>"   # 예: fsh tunnel expose 3000 "내 앱"
+fsh tunnel list                       # 열려 있는 터널 전부 (메인 + 추가 포트)
+fsh tunnel unexpose <port>            # 해당 포트 터널만 종료
+```
+
+웹 UI 포트 대시보드(⋯ 메뉴 → "포트")에서도 같은 기능이 있지만, 로컬 서버를
+공개 인터넷에 여는 행위라 `confirm:true` 없이는 428로 막히고
+`VT_NETWORK_MODE=all`이 아니면 아예 거부된다.
+
+전체 REST/WebSocket API 레퍼런스는 저장소의 `API.md` 참고.
+
 #### 진단 ("진단", "fsh 점검", "설치 확인")
 
 13개 항목 체크 (Python · venv · 패키지 · tmux · cloudflared · ffmpeg · 포트 · PATH · 토큰 · 알림 · 터미널 앱).
