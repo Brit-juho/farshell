@@ -8,6 +8,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **`fsh start`/`voice`/`mobile`을 반복 실행할 때마다 새 macOS 터미널 창이 계속 열리던 문제 수정.**
+  `_tmux_already_open`(`bin/fsh`)이 "그 세션에 지금 붙어있는 클라이언트가 있는가"(`tmux
+  list-clients`)만 확인하고 "세션 자체가 존재하는가"(`has-session`)는 확인하지 않아서,
+  `dev` 세션이 tmux 서버에 계속 떠 있어도 창을 닫아 클라이언트가 0개가 되면 다음 호출부터
+  매번 새 창을 또 열었다. `has-session`을 마지막 방어선으로 추가해 **세션이 하나도 없을
+  때만** 새 창을 열도록 수정. 이에 따라 `_open_tmux_terminal_with`의 반환값도
+  0(새로 열림)/2(이미 있어 안 엶)/1(실패) 3종으로 나눠 호출부(`_print_attach_guide`,
+  `cmd_attach`)가 "새로 열렸다"는 메시지를 이미-존재 케이스에도 잘못 출력하던 것도 함께 고침.
+- **새로고침 시 tmux 탭이 순간적으로 중복 표시되던 레이스 컨디션 수정.**
+  `POST /api/tmux/attach`가 "기존 세션 확인 → 없으면 생성"을 원자적으로 하지 않아서,
+  새로고침 도중 이전 페이지의 attach 요청이 아직 처리 중일 때 새 페이지가 같은
+  tmux 세션에 대해 또 attach를 요청하면 둘 다 "없음"으로 보고 각자 새 PTY를
+  만들어버렸다(같은 tmux 세션인데 탭 2개). 다음 새로고침에선 서버 내부 저장소가
+  마지막 등록만 남기며 저절로 정상화돼 재현이 간헐적으로만 보였다.
+  `server/routes/tmux.py`에 tmux_name 단위 `asyncio.Lock`을 추가해 같은 이름에 대한
+  attach 요청을 직렬화(`open-on-mac`의 기존 `_mac_open_locks` 패턴과 동일한 방식).
+
 ### Changed
 - **표시용 프로젝트명을 `farshell`에서 `FarShell`로 변경(캐멀케이스).** GitHub·YouTube·
   PayPal처럼 두 단어(far+shell) 합성 브랜드명은 각 단어를 대문자로 시작하는 표기가

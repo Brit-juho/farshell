@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -73,6 +74,22 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int):
     session_store.update_tmux_name(session_id, tmux_name)
     output_watcher.add_session(session_id)
     return {"id": session_id, "name": f"tmux:{tmux_name}", "tmux_session": tmux_name}
+
+
+# attach 확인(find_by_tmux_name)과 생성(_attach_tmux)이 원자적이지 않아, 같은 tmux_name에
+# 대한 두 요청이 겹치면(예: 새로고침 도중 이전 페이지 요청이 아직 처리 중일 때 새 페이지가
+# 또 attach를 요청) 둘 다 "없음"으로 보고 각자 새 PTY를 만들어버려 탭이 순간적으로
+# 중복 표시됐다(다음 새로고침에선 마지막 등록만 살아남아 저절로 복구되는 것처럼 보임).
+# → tmux_name 단위 락으로 두 번째 요청이 첫 번째의 등록 완료를 기다리게 해서 막는다.
+_attach_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_attach_lock(tmux_name: str) -> asyncio.Lock:
+    lock = _attach_locks.get(tmux_name)
+    if lock is None:
+        lock = asyncio.Lock()
+        _attach_locks[tmux_name] = lock
+    return lock
 
 
 # --------------------------------------------------------------------------
@@ -147,7 +164,8 @@ async def create_tmux_session(request: Request):
         except Exception as e:
             logger.warning(f"맥 터미널 자동 오픈 실패: {e}")
 
-    return await _attach_tmux(tmux_name, cols, rows)
+    async with _get_attach_lock(tmux_name):
+        return await _attach_tmux(tmux_name, cols, rows)
 
 
 # open-on-mac 동시 클릭(더블클릭 등) 시 레이스로 중복 스폰되는 걸 막는 세션명 단위 락.
@@ -221,11 +239,12 @@ async def attach_tmux_session(request: Request):
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
 
-    existing = session_store.find_by_tmux_name(tmux_name)
-    if existing and existing.session_id in pty_mgr.sessions:
-        return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
+    async with _get_attach_lock(tmux_name):
+        existing = session_store.find_by_tmux_name(tmux_name)
+        if existing and existing.session_id in pty_mgr.sessions:
+            return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
 
-    return await _attach_tmux(tmux_name, cols, rows)
+        return await _attach_tmux(tmux_name, cols, rows)
 
 
 @router.delete("/api/tmux/kill/{tmux_name}")

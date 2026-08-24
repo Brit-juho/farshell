@@ -1,251 +1,253 @@
-# FarShell 아키텍처
+# FarShell Architecture
 
-> **버전:** v1.5.0 (2026-07-07) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md)
+[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./ARCHITECTURE.ko.md)
 
-이 문서는 기여자와 LLM이 레포 구조를 빠르게 이해하기 위한 지도입니다. 모노레포 전환 대신 **논리적 경계**만 명시합니다.
+> **Version:** v1.5.0 (2026-07-07) — see [CHANGELOG.md](./CHANGELOG.md) for the change history
+
+This document is a map for contributors and LLMs to quickly understand the repo structure. Instead of switching to a monorepo, it only spells out the **logical boundaries**.
 
 ---
 
-## 1. 3-Plane 모델
+## 1. The 3-Plane Model
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Control Plane — 시작/정지/진단 (사용자 한정 동작)              │
+│ Control Plane — start/stop/diagnostics (user-only actions)     │
 │   bin/fsh, install.sh, ~/.vt.env                │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Work Plane — 실제 작업이 벌어지는 곳                           │
-│   tmux 세션 (dev) ← Claude / aider / codex / 쉘 / psql ...    │
-│   ↑ Voice Daemon이 send-keys로 키 주입                        │
-│   ↑ 모바일 브라우저가 WebSocket으로 attach                     │
+│ Work Plane — where the actual work happens                    │
+│   tmux session (dev) ← Claude / aider / codex / shell / psql ...│
+│   ↑ Voice Daemon injects keys via send-keys                    │
+│   ↑ Mobile browser attaches over WebSocket                     │
 └──────────────────────────────────────────────────────────────┘
                             ▲                       ▲
                             │                       │
 ┌───────────────────────────┴─────┐   ┌─────────────┴──────────┐
 │ Voice Plane — STT/TTS          │   │ Network Plane           │
-│   server/voice_handler.py      │   │   cloudflared 터널      │
-│   server/voice_daemon.py       │   │   토큰 인증 미들웨어     │
-│   server/local_mic.py          │   │   ntfy/Telegram 푸시    │
+│   server/voice_handler.py      │   │   cloudflared tunnel   │
+│   server/voice_daemon.py       │   │   token auth middleware│
+│   server/local_mic.py          │   │   ntfy/Telegram push   │
 │   frontend/voice.js            │   │                         │
 └────────────────────────────────┘   └─────────────────────────┘
 ```
 
-**핵심 아이디어**: tmux 세션이 **단일 진실의 원천(single source of truth)**. 데스크톱 iTerm, 모바일 PWA, Voice Daemon이 모두 같은 tmux에 붙어서 동작한다.
+**Core idea**: the tmux session is the **single source of truth**. Desktop iTerm, the mobile PWA, and the Voice Daemon all attach to and operate on the same tmux session.
 
-### 1.1 단일 tmux 서버 원칙 (Phase 6)
+### 1.1 Single tmux server principle (Phase 6)
 
-fsh의 모든 클라이언트는 격리된 tmux 소켓 `-L fsh` (`VT_TMUX_SOCKET` 환경변수로 오버라이드 가능)에 접속한다. 사용자의 기존 `tmux ls` 세션과 분리되며, 4개 클라이언트가 같은 서버를 공유한다:
+Every fsh client connects to the isolated tmux socket `-L fsh` (overridable via the `VT_TMUX_SOCKET` environment variable). It's kept separate from the user's own existing `tmux ls` sessions, and 4 clients share the same server:
 
-| 클라이언트 | 호출 형태 | 출처 |
+| Client | Invocation form | Source |
 |------------|-----------|------|
-| `bin/fsh` (CLI) | `${TMUX_BASE[@]} ...` (`tmux -L fsh`) | `bin/fsh` 상단 정의 |
-| `server/main.py` (PTY) | `tmux -L fsh attach-session ...` | `pty_manager` 경로 |
+| `bin/fsh` (CLI) | `${TMUX_BASE[@]} ...` (`tmux -L fsh`) | Defined at the top of `bin/fsh` |
+| `server/main.py` (PTY) | `tmux -L fsh attach-session ...` | `pty_manager` path |
 | `server/voice_daemon.py` | `TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]` | Phase 6 #6-1 |
-| Stop hook (`tts_hook.sh`) | (TTS만, tmux 직접 호출 없음) | — |
+| Stop hook (`tts_hook.sh`) | (TTS only, no direct tmux call) | — |
 
-소켓을 통일하지 않으면 Voice Daemon 입력이 모바일·웹과 분리되어 "왜 안 들어가지?" 류 디버깅이 발생한다.
+Without a unified socket, Voice Daemon input ends up disconnected from mobile/web, leading to "why isn't this going in?" style debugging.
 
 ---
 
-## 2. 디렉토리별 책임
+## 2. Responsibilities by directory
 
-### `bin/` — CLI 진입점 (Control Plane)
-| 파일 | 책임 |
+### `bin/` — CLI entry point (Control Plane)
+| File | Responsibility |
 |---|---|
-| `fsh` | macOS/Linux. CLI — 서브커맨드 라우팅, 프로세스 수명 관리 (서버·터널·음성 데몬), iTerm 자동 오픈, 진단 |
-| `fsh.ps1` | Windows PowerShell 버전 |
+| `fsh` | macOS/Linux. CLI — subcommand routing, process lifecycle management (server/tunnel/voice daemon), auto-opening iTerm, diagnostics |
+| `fsh.ps1` | Windows PowerShell version |
 
-서브커맨드: `voice` · `mobile` · `start` · `stop` · `status` · `claude` · `handoff` · `ssh` · `doctor`
+Subcommands: `voice` · `mobile` · `start` · `stop` · `status` · `claude` · `handoff` · `ssh` · `doctor`
 
-### `server/` — FastAPI 백엔드 (Work + Voice Plane)
-| 파일 | 책임 | 주요 의존 |
+### `server/` — FastAPI backend (Work + Voice Plane)
+| File | Responsibility | Key dependencies |
 |---|---|---|
-| `main.py` | FastAPI 앱, REST/WS 라우팅, 토큰 미들웨어 | pty_manager, session_store, output_watcher, voice_handler, notify, platform_utils |
-| `pty_manager.py` | PTY fork, WebSocket broadcast, scrollback 버퍼 | — |
-| `session_store.py` | 세션 메타데이터 (이름, tmux_name), `new_session_id()` | secrets |
-| `output_watcher.py` | idle 감지 → TTS + 푸시 알림 | voice_handler, notify |
+| `main.py` | FastAPI app, REST/WS routing, token middleware | pty_manager, session_store, output_watcher, voice_handler, notify, platform_utils |
+| `pty_manager.py` | PTY fork, WebSocket broadcast, scrollback buffer | — |
+| `session_store.py` | Session metadata (name, tmux_name), `new_session_id()` | secrets |
+| `output_watcher.py` | Idle detection → TTS + push notification | voice_handler, notify |
 | `voice_handler.py` | STT (mlx-whisper → faster-whisper) · TTS (Kokoro → edge-tts → say) | platform_utils |
-| `voice_daemon.py` | macOS 핫키(Ctrl+Shift+V) → 녹음 → STT → tmux send-keys | pynput, sounddevice, whisper |
-| `local_mic.py` | 데스크톱 로컬 마이크 REST API | sounddevice |
-| `notify.py` | ntfy/Telegram 비동기 푸시 브릿지 | urllib, asyncio |
-| `platform_utils.py` | OS 감지, 기본 셸, tmux 경로, 로컬 IP, TTS fallback | platform, shutil |
-| `tts_hook.sh` | Claude Code Stop hook — 응답 완료 시 TTS + ntfy | server/voice/output |
-| `network_access.py` | `localhost`/`lan`/`tailscale`/`all` 모드 → CIDR 화이트리스트, bind host 결정 | ipaddress |
-| `tailscale.py` (D9) | `tailscale status --json` 파싱 — 설치/실행/tailnet IP/MagicDNS 호스트명 | subprocess |
-| `tunnel.py` | Cloudflare Tunnel 상태 감지 (동일 패턴, Cloudflare 버전) | subprocess |
-| `hooks/tmux_client_notify.sh` (D9) | tmux client-attached/detached 훅 → `/api/notify/client-event` POST | curl, who |
+| `voice_daemon.py` | macOS hotkey (Ctrl+Shift+V) → record → STT → tmux send-keys | pynput, sounddevice, whisper |
+| `local_mic.py` | Desktop local microphone REST API | sounddevice |
+| `notify.py` | ntfy/Telegram async push bridge | urllib, asyncio |
+| `platform_utils.py` | OS detection, default shell, tmux path, local IP, TTS fallback | platform, shutil |
+| `tts_hook.sh` | Claude Code Stop hook — TTS + ntfy on response completion | server/voice/output |
+| `network_access.py` | `localhost`/`lan`/`tailscale`/`all` mode → CIDR whitelist, bind host determination | ipaddress |
+| `tailscale.py` (D9) | Parses `tailscale status --json` — install/running/tailnet IP/MagicDNS hostname | subprocess |
+| `tunnel.py` | Cloudflare Tunnel status detection (same pattern, Cloudflare version) | subprocess |
+| `hooks/tmux_client_notify.sh` (D9) | tmux client-attached/detached hook → POST to `/api/notify/client-event` | curl, who |
 
 ### `frontend/` — xterm.js PWA
-| 파일 | 책임 |
+| File | Responsibility |
 |---|---|
-| `index.html` | UI 레이아웃, xterm.js 멀티탭, tmux 자동 attach, `#tmux=<name>` hash 처리 |
-| `voice.js` | MediaRecorder 녹음, TTS 재생, Media Session API, 핸즈프리/음성 전용 모드 |
-| `manifest.json` | PWA 설정 (아이콘, 홈 화면 추가) |
-| `sw.js` | Service Worker (오프라인 캐싱) |
+| `index.html` | UI layout, xterm.js multi-tab, tmux auto-attach, `#tmux=<name>` hash handling |
+| `voice.js` | MediaRecorder recording, TTS playback, Media Session API, hands-free/voice-only mode |
+| `manifest.json` | PWA settings (icons, add to home screen) |
+| `sw.js` | Service Worker (offline caching) |
 
-### 루트
-| 파일 | 책임 |
+### Root
+| File | Responsibility |
 |---|---|
-| `install.sh` | Python venv 생성, 프로필별 패키지 설치, fsh 심링크, ~/.vt.env 초기화 |
-| `requirements-core.txt` | 터미널 전용 (~50MB) |
-| `requirements-voice.txt` | 음성 추가 의존성 (~1.5GB) |
-| `requirements.txt` | 위 둘 합침 (하위 호환) |
+| `install.sh` | Creates Python venv, installs per-profile packages, symlinks fsh, initializes ~/.vt.env |
+| `requirements-core.txt` | Terminal-only (~50MB) |
+| `requirements-voice.txt` | Additional voice dependencies (~1.5GB) |
+| `requirements.txt` | Combines both above (for backward compatibility) |
 
-### `.claude/skills/` — Claude Code 스킬
-| 파일 | 트리거 |
+### `.claude/skills/` — Claude Code skills
+| File | Trigger |
 |---|---|
-| `fsh/SKILL.md` | 전역: "음성 모드", "모바일 접속" 등 |
-| `fsh-voice.md` | Voice Daemon 수동 설치/실행 |
-| `fsh-mobile.md` | 모바일 adb 테스트 |
-| `fsh-start.md` | 서버 수동 시작 |
+| `fsh/SKILL.md` | Global: "voice mode", "mobile access", etc. |
+| `fsh-voice.md` | Manual Voice Daemon install/run |
+| `fsh-mobile.md` | Mobile adb testing |
+| `fsh-start.md` | Manual server startup |
 
 ---
 
-## 3. 주요 데이터 흐름
+## 3. Key data flows
 
-### 3.1 데스크톱 음성 입력 (Voice Daemon)
+### 3.1 Desktop voice input (Voice Daemon)
 ```
 Ctrl+Shift+V (pynput)
-  → sounddevice 16kHz mono 녹음
+  → sounddevice 16kHz mono recording
   → mlx-whisper / faster-whisper STT
   → tmux send-keys <active-pane> "<text>"
 ```
 
-### 3.2 모바일 음성 입력 (PWA)
+### 3.2 Mobile voice input (PWA)
 ```
-🎤 버튼 (voice.js)
+🎤 button (voice.js)
   → MediaRecorder (webm/opus)
   → POST /voice/input?session_id=...
-  → voice_handler.transcribe (ffmpeg 변환 포함)
+  → voice_handler.transcribe (includes ffmpeg conversion)
   → pty_mgr.write(session_id, text)  → PTY → tmux
 ```
 
-### 3.3 Claude 응답 완료 → TTS + 푸시
+### 3.3 Claude response completion → TTS + push
 ```
 Claude Code Stop hook → server/tts_hook.sh
-  ├─ transcript에서 마지막 assistant 응답 추출
-  ├─ POST /voice/output → edge-tts → afplay (로컬 재생)
-  └─ POST ntfy (VT_NOTIFY_URL 설정 시) → 폰 푸시
+  ├─ Extract the last assistant response from the transcript
+  ├─ POST /voice/output → edge-tts → afplay (local playback)
+  └─ POST to ntfy (if VT_NOTIFY_URL is set) → phone push
 ```
 
-### 3.4 모바일 ↔ 데스크톱 핸드오프
+### 3.4 Mobile ↔ desktop handoff
 ```
-데스크톱:  tmux 세션 'dev' 생성 (bin/fsh)
-  ↓ (같은 OS의 tmux server에 등록됨)
-데스크톱 iTerm:  tmux attach -t dev
-모바일 브라우저:  GET /?...#tmux=dev
-  → frontend/index.html이 hash 파싱
+Desktop:  create tmux session 'dev' (bin/fsh)
+  ↓ (registered with the tmux server on the same OS)
+Desktop iTerm:  tmux attach -t dev
+Mobile browser:  GET /?...#tmux=dev
+  → frontend/index.html parses the hash
   → POST /api/tmux/attach {name:"dev"}
-  → 서버: pty.fork() → exec "tmux attach -t dev"
-  → WebSocket으로 화면 중계
+  → server: pty.fork() → exec "tmux attach -t dev"
+  → screen relayed over WebSocket
 ```
 
-**포인트**: 양쪽이 **같은 tmux 세션의 다른 클라이언트**일 뿐. 버퍼·스크롤백·프로세스 모두 공유.
+**Point**: both sides are simply **different clients of the same tmux session**. Buffer, scrollback, and process are all shared.
 
-### 3.5 idle 감지 → 푸시 (OutputWatcher)
+### 3.5 Idle detection → push (OutputWatcher)
 ```
-PTY 출력 → output_watcher.feed_output()
-  → 버퍼에 쌓임
-  → idle_timeout(3s) 초과 시
-  → summary 생성 → TTS 합성
-  → notify.send() (ntfy/Telegram 병렬)
+PTY output → output_watcher.feed_output()
+  → accumulates in buffer
+  → once idle_timeout(3s) is exceeded
+  → generate summary → synthesize TTS
+  → notify.send() (ntfy/Telegram in parallel)
 ```
 
 ---
 
-## 4. 확장 포인트
+## 4. Extension points
 
-새 기능을 붙일 때 어디를 건드려야 하는지.
+Where to make changes when adding a new feature.
 
-### 4.1 새 STT 엔진 추가
-- `server/voice_handler.py`의 우선순위 리스트에 삽입
-- mlx-whisper → faster-whisper 순서 참고
+### 4.1 Adding a new STT engine
+- Insert into the priority list in `server/voice_handler.py`
+- Follow the mlx-whisper → faster-whisper ordering as a reference
 
-### 4.2 새 TTS 엔진 추가
-- `server/voice_handler.py` synthesize() 함수의 fallback 체인
-- 바이트 반환 or 직접 재생 두 경로 모두 지원
+### 4.2 Adding a new TTS engine
+- The fallback chain in the synthesize() function of `server/voice_handler.py`
+- Support both paths: returning bytes or playing directly
 
-### 4.3 새 푸시 알림 채널 (예: Discord, Slack)
-- `server/notify.py`에 `_send_xxx()` 함수 추가
-- `is_configured()` 및 `send()`에서 병렬 task 리스트에 포함
-- 환경변수 규칙: `VT_XXX_TOKEN` / `VT_XXX_WEBHOOK`
+### 4.3 Adding a new push notification channel (e.g. Discord, Slack)
+- Add a `_send_xxx()` function to `server/notify.py`
+- Include it in the parallel task list in `is_configured()` and `send()`
+- Environment variable convention: `VT_XXX_TOKEN` / `VT_XXX_WEBHOOK`
 
-### 4.4 새 CLI 서브커맨드
-- `bin/fsh`의 main switch에 케이스 추가
-- 함수명 규칙: `cmd_<이름>()`
-- help 섹션 문자열에 한 줄 추가
+### 4.4 Adding a new CLI subcommand
+- Add a case to the main switch in `bin/fsh`
+- Function naming convention: `cmd_<name>()`
+- Add one line to the help section string
 
-### 4.5 새 AI 에이전트 (Claude 외)
-- **별도 래퍼 불필요.** 사용자가 그냥 tmux 안에서 `aider` / `codex` / 등을 실행하면 음성·모바일이 모두 동작함 (범용 tmux 주입 설계의 이점)
-- Claude Code Stop hook과 유사한 완료 알림이 필요하면 해당 도구의 종료 이벤트를 `tts_hook.sh` 스타일로 작성
+### 4.5 Adding a new AI agent (besides Claude)
+- **No separate wrapper needed.** If the user just runs `aider` / `codex` / etc. inside tmux, both voice and mobile work automatically (this is the benefit of the general-purpose tmux injection design)
+- If a completion notification similar to the Claude Code Stop hook is needed, write the tool's exit event handling in the `tts_hook.sh` style
 
-### 4.6 새 엔드포인트
-- `server/main.py`에 `@app.<method>("/api/...")` 추가
-- 토큰 인증은 middleware가 자동 처리 (`/sw.js`, `/manifest.json` 등 화이트리스트 제외)
-- 위험한 작업은 session_id로 제한
+### 4.6 Adding a new endpoint
+- Add `@app.<method>("/api/...")` to `server/main.py`
+- Token auth is handled automatically by the middleware (excluding whitelisted paths like `/sw.js`, `/manifest.json`)
+- Restrict dangerous operations by session_id
 
-### 4.7 새 원격 접속 경로 (D9: Tailscale + SSH 예시)
-- 원격 데스크톱/브라우저가 막힌 환경(회사망 등)에서도 tmux는 "단일 진실의 원천"이라
-  **새 클라이언트 종류를 추가하는 것만으로** 접속 경로를 늘릴 수 있다 — SSH도 web/voice와
-  동급의 다섯 번째 클라이언트일 뿐, 별도 프로토콜 구현이 필요 없다 (그냥 `tmux -L fsh attach`).
-- 네트워크 정책에 새 CIDR 대역을 추가하려면 `network_access.py`의 `_expand_keyword()` +
-  `network_mode_to_spec()`에 키워드/모드 추가 (Tailscale은 `tailscale` → CGNAT `100.64.0.0/10`).
-- 대역 자체의 상태 조회(설치/실행/자기 IP)는 `tunnel.py`(Cloudflare)와 동일한 패턴으로
-  독립 모듈에 분리 (`server/tailscale.py`) — `network_access.py`는 CIDR 판단만, 상태 조회는
-  별도 모듈이 담당하는 게 관례.
-- 서버가 자연히 못 보는 클라이언트(순수 SSH 등)의 접속을 알고 싶으면 tmux 훅
-  (`client-attached`/`client-detached`)으로 이벤트를 잡아 `/api/notify/client-event` 같은
-  내부 전용 엔드포인트에 POST → 기존 `notify.py` 브릿지 재사용. `bin/fsh`가 옵트인 환경변수로
-  훅을 등록/해제하는 패턴(`_maybe_register_client_hooks`)을 따르면 기본 동작을 안 건드리고
-  추가 가능.
+### 4.7 Adding a new remote access path (D9: Tailscale + SSH example)
+- In environments where remote desktop/browser access is blocked (e.g. corporate networks), since tmux is the "single source of truth,"
+  access paths can be added **just by adding a new client type** — SSH is just a fifth client on par with
+  web/voice, requiring no separate protocol implementation (just `tmux -L fsh attach`).
+- To add a new CIDR range to the network policy, add a keyword/mode to `_expand_keyword()` +
+  `network_mode_to_spec()` in `network_access.py` (Tailscale maps `tailscale` → CGNAT `100.64.0.0/10`).
+- Status lookups for the range itself (installed/running/own IP) should follow the same pattern as
+  `tunnel.py` (Cloudflare) and be split into an independent module (`server/tailscale.py`) — the convention is that
+  `network_access.py` only makes CIDR decisions while a separate module handles status lookups.
+- To surface connections from clients the server naturally can't see (e.g. plain SSH), catch the event with a tmux hook
+  (`client-attached`/`client-detached`) and POST to an internal-only endpoint like `/api/notify/client-event`,
+  reusing the existing `notify.py` bridge. Following the pattern where `bin/fsh` registers/unregisters
+  the hook via an opt-in environment variable (`_maybe_register_client_hooks`) lets you add this
+  without touching the default behavior.
 
 ---
 
-## 5. 실행 시 프로세스 맵
+## 5. Process map at runtime
 
 ```
 $ fsh start
-  ├─ uvicorn server.main:app  (port 7777)                [서버]
-  ├─ cloudflared tunnel --url ...                        [터널]
-  ├─ python server/voice_daemon.py                       [음성 데몬]
-  └─ tmux server (새 session: dev)                       [tmux]
-      └─ zsh (또는 claude --resume)                      [작업 셸]
+  ├─ uvicorn server.main:app  (port 7777)                [server]
+  ├─ cloudflared tunnel --url ...                        [tunnel]
+  ├─ python server/voice_daemon.py                       [voice daemon]
+  └─ tmux server (new session: dev)                       [tmux]
+      └─ zsh (or claude --resume)                      [work shell]
 ```
 
-PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `fsh stop`이 모두 정리.
+PIDs are stored in `/tmp/vt-pids/{server,tunnel,voice}.pid`. `fsh stop` cleans them all up.
 
 ---
 
-## 6. 보안 모델 (현재 상태)
+## 6. Security model (current state)
 
-| 계층 | 메커니즘 | 한계 |
+| Layer | Mechanism | Limitation |
 |---|---|---|
-| 전송 | cloudflared HTTPS 터널 | — |
-| 전송 (대안) | Tailscale WireGuard VPN + IP 화이트리스트 (D9, `--network tailscale`) | Tailscale 자체 신뢰 필요, tailnet ACL 별도 관리 |
-| 인증 | `VT_TOKEN` 쿼리/Bearer 헤더 | 평문 토큰, QR에 노출 |
-| WebSocket 인증 | 미들웨어가 accept 전 검증 | — |
-| 세션 ID | `secrets.token_urlsafe(12)` — 16자, ~96비트 | — |
-| E2E | **없음** (서버가 평문 봄) | TODO: D3 |
-| 업로드 | `/tmp/vt-uploads/` 격리 | 디스크 쿼터 없음 |
-| 접속 가시성 | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push (D9) | 기본 OFF, `who` 기반 원격 호스트 추출은 best-effort |
+| Transport | cloudflared HTTPS tunnel | — |
+| Transport (alternative) | Tailscale WireGuard VPN + IP whitelist (D9, `--network tailscale`) | Requires trusting Tailscale itself; tailnet ACLs must be managed separately |
+| Auth | `VT_TOKEN` query/Bearer header | Plaintext token, exposed in QR code |
+| WebSocket auth | Middleware validates before accept | — |
+| Session ID | `secrets.token_urlsafe(12)` — 16 chars, ~96 bits | — |
+| E2E | **None** (server sees plaintext) | TODO: D3 |
+| Upload | Isolated to `/tmp/vt-uploads/` | No disk quota |
+| Connection visibility | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push (D9) | Off by default; `who`-based remote host extraction is best-effort |
 
-**D3 (E2E 라이트)**가 구현되면 `libsodium SecretBox`로 WebSocket 페이로드 자체를 암호화하여 cloudflared URL이 노출돼도 코드 평문 유출을 막을 계획.
+Once **D3 (lightweight E2E)** is implemented, the plan is to encrypt the WebSocket payload itself with `libsodium SecretBox`, so that even if the cloudflared URL is exposed, plaintext code leakage is prevented.
 
 ---
 
-## 7. 로드맵 (요약)
+## 7. Roadmap (summary)
 
-`/Users/neo/.claude/plans/adaptive-leaping-cray.md`에 상세. 현재 완료된 개선:
-- ✅ D1 원라인 설치 스크립트
-- ✅ D2 ntfy/Telegram 푸시 브릿지
-- ✅ D4 `fsh claude` / `fsh handoff` 서브커맨드
-- ✅ D5 세션 ID 확장 (`secrets.token_urlsafe(12)`)
-- ✅ D6 본 문서
-- ✅ D7 `fsh doctor` 진단
-- ✅ D9 Tailscale + SSH 원격 접속 (`fsh ssh`, `--network tailscale`, 클라이언트 접속 알림)
+Details in `/Users/neo/.claude/plans/adaptive-leaping-cray.md`. Improvements completed so far:
+- ✅ D1 one-line install script
+- ✅ D2 ntfy/Telegram push bridge
+- ✅ D4 `fsh claude` / `fsh handoff` subcommands
+- ✅ D5 extended session ID (`secrets.token_urlsafe(12)`)
+- ✅ D6 this document
+- ✅ D7 `fsh doctor` diagnostics
+- ✅ D9 Tailscale + SSH remote access (`fsh ssh`, `--network tailscale`, client connection notifications)
 
-남은 작업:
-- ⏳ D3 터널 페이로드 E2E 암호화
-- ⏳ D8 barge-in + 언어 감지
+Remaining work:
+- ⏳ D3 tunnel payload E2E encryption
+- ⏳ D8 barge-in + language detection

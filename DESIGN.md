@@ -1,140 +1,162 @@
-# FarShell 디자인 시스템
+# FarShell Design System
 
-## 개요 — 5-테마 · 상단 통합 레이아웃
+[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./DESIGN.ko.md)
 
-FarShell 프론트엔드는 **선택 가능한 5개 테마**를 가진 모바일 우선 웹 터미널이다.
-테마는 `<html data-skin="...">` 속성으로 전환되며, **모든 색은 CSS 변수(토큰)로만**
-참조한다. 하드코딩 hex 금지 — JS가 동적 생성하는 오버레이도 `.vt-*` 클래스를 통해
-토큰을 상속한다.
+## Overview — 5 themes, unified top bar layout
 
-| 스킨 | 정체성 | 기본값 |
+The FarShell frontend is a mobile-first web terminal with **5 selectable themes**.
+Themes switch via the `<html data-skin="...">` attribute, and **every color is
+referenced through CSS variables (tokens) only** — no hardcoded hex values.
+Even overlays that JS creates dynamically inherit tokens through `.vt-*` classes.
+
+| Skin | Identity | Default |
 |------|--------|--------|
-| `macos` | iTerm2/Terminal.app — 신호등, SF 폰트, 시스템 블루, 둥근 창 | ✅ 기본 |
-| `catppuccin` | 기존 파스텔 — 크롬 없음, 라벤더 강조 | |
-| `windows` | Windows Terminal — 캡션 버튼, Cascadia, Fluent 블루, 각진 창 | |
-| `vscode` | VS Code 통합 터미널 — 어두운 그레이, Fluent 블루 강조, 각진 UI | |
-| `notepad` | 메모장/종이 느낌 — 유일한 **라이트 테마**, 따뜻한 오프화이트 배경 | |
+| `macos` | iTerm2/Terminal.app — traffic lights, SF font, system blue, rounded window | ✅ Default |
+| `catppuccin` | The original pastel look — no chrome, lavender accent | |
+| `windows` | Windows Terminal — caption buttons, Cascadia, Fluent blue, sharp corners | |
+| `vscode` | VS Code integrated terminal — dark gray, Fluent blue accent, sharp UI | |
+| `notepad` | Notepad/paper feel — the only **light theme**, warm off-white background | |
 
-전환: 상단 `⋯` 메뉴 → 테마 칩(`#theme-row`, 5개). `localStorage['vt-skin']`에 저장,
-재방문 시 복원. 부팅 시 `<head>` 인라인 스크립트가 페인트 전에 `data-skin`을
-확정(FOUC 방지).
+Switching: top `⋯` menu → theme chips (`#theme-row`, 5 of them). Saved to
+`localStorage['vt-skin']` and restored on revisit. An inline `<head>` script
+locks in `data-skin` before paint at boot time (prevents FOUC).
 
-## 레이아웃 (2026 리뉴얼)
+## Layout (2026 redesign)
 
-과거의 3-존(상단 탭 바 · 터미널 · 하단 보이스 바)에서 **상단 통합 바**로 전환. 하단 바
-제거로 터미널 세로 공간을 회복했다. 음성 입력은 더 이상 별도 플로팅 FAB가 아니라
-**상단 바에 인라인 통합된 pill 버튼**이다 — `#voice-bar` 컨테이너는 HTML에서
-제거됐고, `#mic-btn-wrap`은 `#topbar` 안의 다른 아이콘 버튼들과 같은 줄에 산다.
+Moved from the old 3-zone layout (top tab bar · terminal · bottom voice bar) to a
+**unified top bar**. Removing the bottom bar reclaimed vertical space for the
+terminal. Voice input is no longer a separate floating FAB — it's now a
+**pill button inlined into the top bar**: the `#voice-bar` container has been
+removed from the HTML, and `#mic-btn-wrap` now lives on the same row as the
+other icon buttons inside `#topbar`.
 
 ```
 ┌───────────────────────────────────────────────┐
-│ ◉◉◉  [tab][tab][+]   ( 🎤 음성입력 ) 🔍 ⊞ ⋯ (⚊▢✕) │ ← #topbar (fine 38px / coarse 44px)
+│ ◉◉◉  [tab][tab][+]   ( 🎤 Voice input ) 🔍 ⊞ ⋯ (⚊▢✕) │ ← #topbar (fine 38px / coarse 44px)
 ├───────────────────────────────────────────────┤
 │                                                 │
 │                 #terminal-container             │
-│                 (xterm, 테마별 ANSI)             │
+│                 (xterm, per-theme ANSI)          │
 │                                     ┌──────┐    │
-│                                     │ 상태 │    │ ← #mic-status (top-right, 상단 바 아래 뜨는 pill)
+│                                     │status│    │ ← #mic-status (top-right, pill below the top bar)
 │                                     └──────┘    │
 └───────────────────────────────────────────────┘
 ```
 
-- **`#topbar`**: 신호등(macOS만) · 탭(`#tabs`, `#add-btn` 앞에 삽입) · 세션 점프
-  드롭다운(`#voice-session-picker`, 좁은 화면에서만) · 음성 입력(`#mic-btn-wrap`, 인라인
-  pill) · `🔍 검색` · `⊞ Grid`(`#grid-toggle`) · 코드 뷰어(`#viewer-toggle`)
-  · `⋯ 더보기`(`#more-btn`) · 캡션 버튼(windows만).
-- **`#more-menu`**: tmux 세션 · 맥에서도 열기(체크박스) · 음성 전용 · 이어폰 미디어키
-  · 파일 업로드 · 코드 뷰어 · 프롬프트 큐 · 포트 · 가이드 · 푸시 알림 · 드래그 자동복사
-  · 테마 칩 5종.
-- **`#mic-status`**: 상단 바 아래 우측에 고정된 상태 pill(내용 없으면 자동 숨김).
-  음성 전용 모드에서는 `#mic-btn-wrap`이 확대(svg 50px)되어 전체 화면 마이크로 전환.
-  grid.js가 `/api/capabilities`로 음성 미설치 감지 시 `.needs-voice` 요소 전체를 숨김.
+- **`#topbar`**: traffic lights (macOS only) · tabs (`#tabs`, inserted before
+  `#add-btn`) · session jump dropdown (`#voice-session-picker`, narrow screens
+  only) · voice input (`#mic-btn-wrap`, inline pill) · `🔍 search` ·
+  `⊞ Grid` (`#grid-toggle`) · code viewer (`#viewer-toggle`) · `⋯ more`
+  (`#more-btn`) · caption buttons (windows skin only).
+- **`#more-menu`**: tmux sessions · open on Mac too (checkbox) · voice-only
+  mode · earbud media keys · file upload · code viewer · prompt queue · ports
+  · guide · push notifications · drag-to-copy · 5 theme chips.
+- **`#mic-status`**: a status pill pinned bottom-right below the top bar
+  (auto-hides when empty). In voice-only mode, `#mic-btn-wrap` enlarges
+  (50px svg) and becomes a full-screen microphone. `grid.js` hides every
+  `.needs-voice` element entirely when `/api/capabilities` reports voice is
+  not installed.
 
-## 토큰 (CSS 변수)
+## Tokens (CSS variables)
 
-`css/app.css`의 `html[data-skin="..."]` 블록에 정의. 스킨마다 재정의된다.
+Defined in `html[data-skin="..."]` blocks in `css/app.css`. Each skin
+redefines them.
 
-| 토큰 | 용도 |
+| Token | Purpose |
 |------|------|
-| `--win` | 앱 배경 |
-| `--bar` | 상단 바 배경 (모바일 theme-color 메타도 이 값) |
-| `--tab` / `--tab-active` / `--tab-active-txt` | 탭 |
-| `--term` | 터미널 배경 (xterm background와 일치) |
-| `--txt` / `--sub` | 본문 / 보조 텍스트 |
-| `--acc` / `--acc-ink` | 강조색 / 강조 위 텍스트 (FAB, active, 링크) |
-| `--menu` / `--menu-hover` / `--line` | 메뉴·구분선 |
-| `--ok` / `--warn` / `--err` / `--info` | 시맨틱 (연결끊김, 에러, 성공) |
-| `--crust` | Grid 카드 프리뷰 배경 |
-| `--wrad` / `--trad` | 창 / 탭 반경 |
-| `--ui` / `--mono` | UI / 모노스페이스 폰트 스택 |
+| `--win` | App background |
+| `--bar` | Top bar background (also used for the mobile theme-color meta) |
+| `--tab` / `--tab-active` / `--tab-active-txt` | Tabs |
+| `--term` | Terminal background (matches the xterm background) |
+| `--txt` / `--sub` | Body / secondary text |
+| `--acc` / `--acc-ink` | Accent color / text on accent (FAB, active state, links) |
+| `--menu` / `--menu-hover` / `--line` | Menu & dividers |
+| `--ok` / `--warn` / `--err` / `--info` | Semantic colors (disconnected, error, success) |
+| `--crust` | Grid card preview background |
+| `--wrad` / `--trad` | Window / tab corner radius |
+| `--ui` / `--mono` | UI / monospace font stacks |
 
-### 타이포그래피 — OS 네이티브 (의도적)
+### Typography — OS-native (intentional)
 
-각 스킨은 해당 OS의 시스템 폰트를 쓴다. `system-ui`가 여기선 "타이포 포기 신호"가
-아니라 **iTerm2/Windows Terminal을 흉내내는 authentic한 선택**이다.
+Each skin uses its OS's native system font. `system-ui` here isn't a "gave up
+on typography" signal — it's the **authentic choice for mimicking iTerm2/Windows
+Terminal**.
 
-- macOS: `-apple-system, "SF Pro Text"` (UI), `ui-monospace, "SF Mono", Menlo` (터미널)
-- windows: `"Segoe UI"` (UI), `"Cascadia Code", "Cascadia Mono", Consolas` (터미널)
-- catppuccin: `system-ui` (UI), `ui-monospace, "SF Mono", Menlo, Consolas` (터미널)
+- macOS: `-apple-system, "SF Pro Text"` (UI), `ui-monospace, "SF Mono", Menlo` (terminal)
+- windows: `"Segoe UI"` (UI), `"Cascadia Code", "Cascadia Mono", Consolas` (terminal)
+- catppuccin: `system-ui` (UI), `ui-monospace, "SF Mono", Menlo, Consolas` (terminal)
 
-## xterm.js 터미널 테마
+## xterm.js terminal theme
 
-"iTerm2 느낌 vs 윈도우 느낌"의 핵심은 창 크롬이 아니라 **터미널 자체의 배경 +
-ANSI 16색**이다. `js/theme.js`의 `VT_XTERM_THEMES`에 스킨별 완전한 팔레트를 정의:
+What makes something feel like "iTerm2" versus "Windows" isn't the window
+chrome — it's the **terminal's own background + 16-color ANSI palette**.
+`js/theme.js`'s `VT_XTERM_THEMES` defines a complete per-skin palette:
 `background/foreground/cursor/selection + black..white + brightBlack..brightWhite`.
 
-- macos: 딥 블랙(#101012) + macOS 시스템 컬러(빨강 #ff453a, 초록 #32d74b, 파랑 #0a84ff …)
-- catppuccin: #1e1e2e + Catppuccin Mocha 팔레트
-- windows: **공식 Campbell 팔레트** (#0c0c0c, 빨강 #c50f1f, 파랑 #0037da …)
-- vscode: #1e1e1e + VS Code 통합 터미널 기본 팔레트
-- notepad: 유일한 라이트 배경(#fffefb) + 파랑 커서(#0060df) — 밝은 배경에 맞춘 별도 팔레트
+- macos: deep black (#101012) + macOS system colors (red #ff453a, green #32d74b, blue #0a84ff …)
+- catppuccin: #1e1e2e + Catppuccin Mocha palette
+- windows: **official Campbell palette** (#0c0c0c, red #c50f1f, blue #0037da …)
+- vscode: #1e1e1e + VS Code integrated terminal default palette
+- notepad: the only light background (#fffefb) + blue cursor (#0060df) — a dedicated palette tuned for the light background
 
-`addSession()`이 생성 시 `getVtXtermTheme()`을 적용하고, 테마 전환 시
-`setVtSkin()`이 열려 있는 모든 터미널의 `term.options.theme`를 즉시 갱신한다.
+`addSession()` applies `getVtXtermTheme()` on creation, and on theme switch
+`setVtSkin()` immediately updates `term.options.theme` for every open terminal.
 
-## 컴포넌트
+## Components
 
-### 음성 버튼 (`#mic-btn-wrap`)
-- 상단 바 인라인 pill(`.tbtn.mic`), `--acc` 배경 + 라벨 텍스트. 440px 이하에서는
-  라벨을 숨기고 32px 정사각 아이콘 버튼으로 축소. 음성 전용 모드에서는 화면 중앙
-  대형 버튼(svg 50px)으로 확대 — 더 이상 우하단 고정 FAB가 아니다.
-- voice.js 계약: `.label` 자식 텍스트 + `.recording` 클래스(녹음 시 `--err` + pulse).
-- 상태는 `#mic-status`(상단 바 아래 우측 고정 pill)가 텍스트로 표시: "녹음 중 — 탭하여
-  중지" · "처리 중..." · "마이크 권한 필요" · `"<인식된 텍스트>"` · "인식 실패" · "전송 실패".
+### Voice button (`#mic-btn-wrap`)
+- An inline pill in the top bar (`.tbtn.mic`), `--acc` background + label text.
+  At 440px and below, the label is hidden and it shrinks to a 32px square
+  icon button. In voice-only mode it expands into a large centered button
+  (50px svg) — no longer a fixed bottom-right FAB.
+- voice.js contract: a `.label` child text node + a `.recording` class
+  (turns `--err` + pulse while recording).
+- Status is shown as text in `#mic-status` (a pill fixed below the top bar,
+  right side): "Recording — tap to stop" · "Processing..." · "Microphone
+  permission required" · `"<recognized text>"` · "Recognition failed" ·
+  "Send failed".
 
-### ⋯ 메뉴 (`#more-menu`) / 팝업
-- `--menu` 배경, `.mi` 항목(hover `--menu-hover`), `.msep` 구분선, `.mlabel` 섹션 헤더.
-- 액션 클릭 시 자동 닫힘. 토글(체크박스/음성 전용/이어폰)은 열린 채 유지.
+### `⋯` menu (`#more-menu`) / popup
+- `--menu` background, `.mi` items (hover: `--menu-hover`), `.msep` dividers,
+  `.mlabel` section headers.
+- Clicking an action closes the menu automatically. Toggles (checkbox/
+  voice-only/earbuds) stay open.
 
-### JS 동적 오버레이 (`.vt-*` 클래스, 토큰 상속)
-- `.vt-onboarding` — 세션 0개 empty state(주 액션: tmux 세션 / 일반 터미널).
-- `.vt-overlay` — 서버 연결 끊김 전체 화면 + `#conn-status` pill.
-- `.vt-menu` / `.vt-menu-item` — tmux 세션 드롭다운.
-- `.vt-toast` (`.ok`/`.err`/`.info`) — 알림·업로드·에이전트 토스트.
-- `.vt-card` / `.card-title` / `.card-cmd` / `.card-preview` / `.vt-grid-empty` — Grid 뷰.
-- `.vt-banner` — 안전 모드 배너.
+### Dynamic JS overlays (`.vt-*` classes, inherit tokens)
+- `.vt-onboarding` — empty state when there are 0 sessions (primary actions:
+  tmux session / plain terminal).
+- `.vt-overlay` — full-screen "server disconnected" state + `#conn-status` pill.
+- `.vt-menu` / `.vt-menu-item` — tmux session dropdown.
+- `.vt-toast` (`.ok`/`.err`/`.info`) — notification/upload/agent toasts.
+- `.vt-card` / `.card-title` / `.card-cmd` / `.card-preview` / `.vt-grid-empty` — Grid view.
+- `.vt-banner` — safe-mode banner.
 
-## 반응형 & 접근성
+## Responsiveness & accessibility
 
-- 모바일 우선. 좁은 화면(<720px)에서는 현재 세션 이름을 표시하는 세션 관리 버튼이
-  바텀시트를 열어 전환·이름 변경·개별 닫기를 제공한다. 탭 영역이 0px로 눌려도 이 기능은 남는다.
-- 터치 타깃: coarse 포인터에서는 `--topbar-h`가 44px가 되고 `.tab`과 닫기 버튼도
-  실제 44px 높이를 사용한다. 아이콘 버튼은 시각 크기 30px을 유지하며 `::before`로
-  44px 탭 가능 영역을 확보한다.
-- 키보드: `#add-btn` Enter/Space, `⋯` `aria-haspopup`/`aria-expanded`, 검색 Ctrl/Cmd+F,
-  Grid/검색 Esc 닫기, `:focus-visible` 아웃라인(`--acc`).
-- 스크린리더: 아이콘 버튼 `aria-label`, `#mic-status` `role="status" aria-live="polite"`.
-- `prefers-reduced-motion`: 모든 애니메이션/트랜지션 비활성.
-- safe-area-inset: 상하 패딩 적용(노치/제스처 바).
+- Mobile-first. On narrow screens (<720px), a session-management button
+  showing the current session name opens a bottom sheet for switching,
+  renaming, and closing sessions individually. This stays available even
+  when the tab strip is squeezed down to 0px.
+- Touch targets: on coarse pointers, `--topbar-h` becomes 44px, and `.tab`
+  and the close button also use a real 44px height. Icon buttons keep a
+  visual size of 30px while a `::before` pseudo-element provides a full
+  44px tappable area.
+- Keyboard: `#add-btn` responds to Enter/Space, `⋯` has
+  `aria-haspopup`/`aria-expanded`, search uses Ctrl/Cmd+F, Grid/search close
+  on Esc, and `:focus-visible` gets an outline (`--acc`).
+- Screen readers: icon buttons have `aria-label`, `#mic-status` has
+  `role="status" aria-live="polite"`.
+- `prefers-reduced-motion`: disables all animations/transitions.
+- safe-area-inset: top/bottom padding applied (notches/gesture bars).
 
-## 파일 맵
+## File map
 
-| 파일 | 책임 |
+| File | Responsibility |
 |------|------|
-| `frontend/index.html` | 레이아웃 마크업, 부팅 테마 스크립트, `⋯` 메뉴 토글 |
-| `frontend/css/app.css` | 토큰 3종 + 전 컴포넌트 + `.vt-*` 오버레이 |
-| `frontend/js/theme.js` | 스킨 전환, localStorage, xterm 테마 정의/동기화 |
-| `frontend/js/terminal.js` | 세션/탭/PTY, `getVtXtermTheme()` 적용, 오버레이 생성 |
-| `frontend/js/picker.js` | 모바일 세션 관리 시트, 토스트, 파일 업로드 |
-| `frontend/js/grid.js` | 라이브 프리뷰 Grid, capability 게이팅, 안전 모드 배너 |
-| `frontend/voice.js` | 녹음/STT/TTS, 미디어키, 음성 전용 모드 (capability ON일 때 동적 로드) |
+| `frontend/index.html` | Layout markup, boot-time theme script, `⋯` menu toggle |
+| `frontend/css/app.css` | The 3 token sets + all components + `.vt-*` overlays |
+| `frontend/js/theme.js` | Skin switching, localStorage, xterm theme definitions/sync |
+| `frontend/js/terminal.js` | Session/tab/PTY, applies `getVtXtermTheme()`, creates overlays |
+| `frontend/js/picker.js` | Mobile session-management sheet, toasts, file upload |
+| `frontend/js/grid.js` | Live preview grid, capability gating, safe-mode banner |
+| `frontend/voice.js` | Recording/STT/TTS, media keys, voice-only mode (loaded dynamically when capability is ON) |
