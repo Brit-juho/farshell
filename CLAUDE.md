@@ -1,186 +1,188 @@
-> **FarShell v1.7.0** (2026-08-20) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
+[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./CLAUDE.ko.md)
 
-## fsh CLI (어디서든 실행)
+> **FarShell v1.7.0** (2026-08-20) — see [CHANGELOG.md](./CHANGELOG.md) for release history
 
-터미널 어디서든 `fsh` 명령으로 FarShell을 제어합니다:
+## fsh CLI (runs anywhere)
+
+Control FarShell from any terminal with the `fsh` command:
 
 ```bash
-fsh voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
-fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
-fsh mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
-fsh start [--voice]    # 전체 시작 (서버+터널, --voice로 음성 데몬도 함께)
-fsh stop [--purge]     # 종료 (--purge: tmux 세션까지 완전 종료)
-fsh status             # 현재 상태 확인
-fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave 4
-fsh attach [name]      # 임의 tmux 세션을 새 창에 attach
-fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
-fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐 (P4)
-fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
-fsh password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
-fsh otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전까지 완전 비활성)
-fsh device [list|revoke <id>]    # 등록된 기기 조회 / 폐기(폰 분실 시 세션까지 함께 무효)
+fsh voice              # voice mode (background, usable while working in Notion)
+fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
+fsh mobile [--e2e]     # mobile access URL + QR (--e2e: encrypt payload)
+fsh start [--voice]    # start everything (server+tunnel, --voice also starts the voice daemon)
+fsh stop [--purge]     # stop (--purge: also fully kill tmux sessions)
+fsh status             # check current status
+fsh manage             # TUI management tool (sessions/target/hotkeys/status) — Wave 4
+fsh attach [name]      # attach any tmux session in a new window
+fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
+fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue (P4)
+fsh hotkey [list|set|reset|disable]  # view/change hotkeys
+fsh password [clear]   # set web login password (stores a hash) / clear=unset
+fsh otp [status|setup|disable]   # require OTP when registering a new device (fully disabled until setup)
+fsh device [list|revoke <id>]    # list registered devices / revoke (also invalidates sessions if a phone is lost)
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
-fsh claude             # 새 터미널 창에 tmux dev + claude --resume (내부적으로 fsh agent claude)
-fsh agent <name>       # claude/codex/aider/gemini 등 임의 에이전트로 시작 (fsh claude의 일반화)
-fsh template [save|apply|list|rm] <name>  # CLAUDE.md 템플릿 저장/적용 관리
-fsh popup <action>     # tmux 3.2+ popup으로 fsh 명령 빠른 호출
-fsh run "..."          # headless `claude -p` 백그라운드 실행 + 완료 시 TTS 알림
-fsh handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
-fsh handoff desktop    # 폰 세션을 맥 터미널로 가져옴
-fsh tunnel expose 3000 "앱 이름"  # 다른 로컬 포트를 별도 Cloudflare 터널로 공개
-fsh tunnel unexpose 3000          # 해당 포트 터널 종료
-fsh tunnel list                   # 열려 있는 터널 전부 (메인 + 추가 포트)
-fsh tunnel hook                   # URL 변경 훅 확인 + 즉시 실행 (fsh help tunnel-hook)
-fsh tunnel restart                # 좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동 + 훅 재실행
-fsh tunnel watchdog               # 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 fsh start/voice/mobile가 자동 기동)
-fsh ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내 (D9, 회사망 등)
-fsh doctor             # 설치/환경 진단 (Linux 항목 포함)
-fsh install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
-fsh shell-init zsh     # 셸 init 스니펫 출력 (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
+fsh claude             # open new terminal window with tmux dev + claude --resume (internally fsh agent claude)
+fsh agent <name>       # start with any agent — claude/codex/aider/gemini (generalization of fsh claude)
+fsh template [save|apply|list|rm] <name>  # save/apply CLAUDE.md templates
+fsh popup <action>     # quick fsh command invocation via tmux 3.2+ popup
+fsh run "..."          # run headless `claude -p` in background + TTS notification on completion
+fsh handoff mobile     # hand off the current tmux session to your phone (QR + #tmux=)
+fsh handoff desktop    # bring a phone session back to the Mac terminal
+fsh tunnel expose 3000 "app name"  # expose another local port through a separate Cloudflare tunnel
+fsh tunnel unexpose 3000          # stop the tunnel for that port
+fsh tunnel list                   # list all open tunnels (main + extra ports)
+fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
+fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook
+fsh tunnel watchdog               # check/start the zombie-reconnect auto-detection daemon (normally auto-started by fsh start/voice/mobile)
+fsh ssh [session]      # guidance for connecting directly to a tmux session via Tailscale + SSH (D9, corporate networks, etc.)
+fsh doctor             # installation/environment diagnostics (includes Linux checks)
+fsh install-profiles   # auto-register terminal app profiles (iTerm2 Dynamic Profile + other snippets)
+fsh shell-init zsh     # print the shell init snippet (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
 ```
 
-> **지원 OS**: macOS / Linux (X11) / WSL2 (Linux로 동작). Windows 네이티브는 미지원.
+> **Supported OS**: macOS / Linux (X11) / WSL2 (behaves as Linux). Native Windows is not supported.
 
-**Phase 6 — 단일 tmux 서버 원칙:** fsh CLI · server · Voice Daemon · hook이 모두 `-L vt` 격리 소켓 사용(소켓 이름은 CLI 이름과 무관하게 `vt`로 유지). Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
+**Phase 6 — single tmux server principle:** the fsh CLI, server, Voice Daemon, and hooks all use the `-L vt` isolated socket (the socket name stays `vt` regardless of the CLI's name). The Voice Daemon can override it via the `VT_TMUX_SOCKET` environment variable. This is kept separate from the user's own `tmux ls`.
 
-**`voice` / `mobile` / `start` 실행 시 자동 동작:** 현재 쓰는 터미널 앱(iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app)에 새 창이 열리고 그 안에서 `tmux new -A -s dev 'claude --resume'`이 실행됩니다. 이미 tmux 안이면 새 창을 열지 않습니다.
+**Automatic behavior when running `voice` / `mobile` / `start`:** a new window opens in your current terminal app (iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app) and runs `tmux new -A -s dev 'claude --resume'` inside it. If you're already inside tmux, no new window is opened.
 
-**노션 작업 중 음성 코딩 워크플로:**
-1. `fsh voice` → 백그라운드 시작 (+ 새 iTerm 창에 `tmux dev` + `claude --resume` 자동 오픈)
-2. 새 창의 resume 목록에서 현재 대화 선택 → 이후 음성/모바일이 그 Claude로 연결됨
-3. 원래 창은 그대로 두고 노션으로 돌아가서 작업
-4. Ctrl+Shift+V → 말하기 ("git status") → tmux dev에 자동 입력
-5. `fsh stop` → 종료
+**Voice-coding workflow while working in Notion:**
+1. `fsh voice` → starts in the background (+ auto-opens a new iTerm window with `tmux dev` + `claude --resume`)
+2. Pick the current conversation from the resume list in the new window → voice/mobile then connects to that Claude
+3. Leave the original window as-is and go back to Notion to work
+4. Ctrl+Shift+V → speak ("git status") → automatically typed into tmux dev
+5. `fsh stop` → shut down
 
-> 이미 tmux 안에서 `fsh` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
-> 자동 오픈은 macOS + iTerm 환경 한정. 그 외에는 수동 명령(`tmux new -A -s dev 'claude --resume'`) 안내가 출력됩니다.
+> Calling an `fsh` command from inside tmux already won't open a new window (checked via `$TMUX`).
+> Auto-open is limited to macOS + iTerm. Elsewhere, it prints guidance for the manual command (`tmux new -A -s dev 'claude --resume'`).
 
-### Claude 전역 스킬
+### Claude global skill
 
-| 커맨드 | 설명 |
+| Command | Description |
 |--------|------|
-| `/fsh` | 전역 스킬(구 `/vt`). 어디서든 "음성 모드", "모바일 접속" 등으로 호출 |
+| `/fsh` | Global skill (formerly `/vt`). Invokable from anywhere with phrases like "voice mode", "mobile access" |
 
-### 프로젝트 스킬
+### Project skills
 
-| 커맨드 | 설명 |
+| Command | Description |
 |--------|------|
-| `/fsh-start` | 서버 시작 + tmux 준비 + Cloudflare Tunnel 원격 접속 |
-| `/fsh-mobile` | 모바일 테스트 (adb 포트포워딩, Chrome 열기, 스크린샷) |
-| `/fsh-voice` | Voice Daemon 설치/실행 (핫키 → STT → tmux 주입) |
+| `/fsh-start` | Start server + prepare tmux + remote access via Cloudflare Tunnel |
+| `/fsh-mobile` | Mobile testing (adb port forwarding, opening Chrome, screenshots) |
+| `/fsh-voice` | Install/run the Voice Daemon (hotkey → STT → tmux injection) |
 
-### 신규 사용자 설치
+### Installing for new users
 
-**기본 경로는 `./install.sh`** (원라인 설치, 2026-04-14 추가). 아래는 대화형 안내가 필요한 경우에만 사용.
+**The default path is `./install.sh`** (one-line installer, added 2026-04-14). The steps below are only for when interactive guidance is needed.
 
 ```bash
-# 원라인 설치 (추천)
-./install.sh            # 터미널만 (~50MB)
-./install.sh voice      # 터미널 + 음성 모드 (~1.5GB)
+# One-line install (recommended)
+./install.sh            # terminal only (~50MB)
+./install.sh voice      # terminal + voice mode (~1.5GB)
 ```
 
-`install.sh`가 자동으로: Python venv 생성 → 프로필별 패키지 설치 → fsh CLI 심링크 → `~/.vt.env` 생성 → PATH 갱신.
+`install.sh` automatically: creates a Python venv → installs packages per profile → symlinks the fsh CLI → creates `~/.vt.env` → updates PATH.
 
 ---
 
-### 레거시: 대화형 설치 (수동)
+### Legacy: interactive install (manual)
 
-install.sh가 작동하지 않거나 conda/pyenv 등 다른 환경을 선호하는 경우에만 아래 절차를 따르세요.
+Only follow the steps below if install.sh doesn't work, or if you prefer a different environment such as conda/pyenv.
 
-> **Python 환경 관리:** 모든 실행 관련 경로/포트는 `~/.vt.env`(사용자 로컬, gitignored)와 `config/vt.defaults.env`(커밋된 기본값)로 관리됩니다. 사용자에게 환경을 묻는 단계에서 venv/conda/pyenv/시스템 Python 중 선택하게 한 뒤 결과를 `~/.vt.env`의 `VT_PYTHON`에 기록하세요.
+> **Python environment management:** all execution-related paths/ports are managed via `~/.vt.env` (user-local, gitignored) and `config/vt.defaults.env` (committed defaults). When asking the user to choose their environment, have them pick among venv/conda/pyenv/system Python, then record the result in `VT_PYTHON` in `~/.vt.env`.
 
-#### Step 1: OS 감지
+#### Step 1: Detect OS
 
 ```bash
 uname -s  # Darwin=macOS, Linux=Linux/WSL2
 grep -qi microsoft /proc/version 2>/dev/null && echo "WSL2" || echo "Native"
 ```
 
-사용자에게 확인: "macOS / WSL2 / Linux 환경이 맞나요?"
+Confirm with the user: "Is this macOS / WSL2 / Linux?"
 
-#### Step 2: 설치 구성 선택
+#### Step 2: Choose install profile
 
-사용자에게 물어보세요:
+Ask the user:
 
-> 어떤 기능을 설치할까요?
+> Which features would you like to install?
 >
-> 1. **터미널만** — 모바일에서 터미널 접속 (~500MB)
->    - FastAPI 서버 + xterm.js 웹 터미널 + Cloudflare Tunnel
->    - 음성 기능 없음
+> 1. **Terminal only** — terminal access from mobile (~500MB)
+>    - FastAPI server + xterm.js web terminal + Cloudflare Tunnel
+>    - No voice features
 >
-> 2. **터미널 + 음성 모드** — 음성으로 코딩 (~3GB)
->    - 위 기능 + Whisper STT + edge-tts TTS + Voice Daemon
->    - macOS 핫키(Ctrl+Shift+V), 모바일 음성 입력
+> 2. **Terminal + voice mode** — code by voice (~3GB)
+>    - Everything above + Whisper STT + edge-tts TTS + Voice Daemon
+>    - macOS hotkey (Ctrl+Shift+V), mobile voice input
 
-#### Step 3: Python 환경 준비
+#### Step 3: Prepare Python environment
 
-사용자에게 어떤 환경을 사용할지 물어보세요 (venv / conda / pyenv / 시스템 Python). 결과를 Step 6의 `VT_PYTHON`에 기록합니다.
+Ask the user which environment they want to use (venv / conda / pyenv / system Python). Record the result in `VT_PYTHON` in Step 6.
 
-**기본 권장 — venv:**
+**Default recommendation — venv:**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-**conda 선호 시:**
+**If preferring conda:**
 ```bash
 conda create -n fsh python=3.11 -y && conda activate fsh
 ```
 
-**pyenv 선호 시:**
+**If preferring pyenv:**
 ```bash
 pyenv install 3.11.7 && pyenv local 3.11.7
 ```
 
-#### Step 4: 패키지 설치 (프로필별)
+#### Step 4: Install packages (per profile)
 
-**터미널만 (옵션 1):**
+**Terminal only (option 1):**
 ```bash
 pip install -r requirements-core.txt
 ```
 
-**터미널 + 음성 (옵션 2):**
+**Terminal + voice (option 2):**
 ```bash
 pip install -r requirements-core.txt -r requirements-voice.txt
 ```
 
-macOS 음성 모드 추가:
+Additional package for macOS voice mode:
 ```bash
 pip install pyobjc-framework-Cocoa
 ```
 
-#### Step 5: fsh CLI 등록
+#### Step 5: Register the fsh CLI
 
 ```bash
 mkdir -p ~/.local/bin
 chmod +x bin/fsh
 ln -sf "$(pwd)/bin/fsh" ~/.local/bin/fsh
-ln -sf "$(pwd)/bin/vt" ~/.local/bin/vt   # 하위 호환 — bin/vt는 bin/fsh를 가리키는 심링크
+ln -sf "$(pwd)/bin/vt" ~/.local/bin/vt   # backward compatibility — bin/vt is a symlink pointing to bin/fsh
 ```
 
-PATH 확인:
+Check PATH:
 ```bash
 echo "$PATH" | grep -q "$HOME/.local/bin" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 ```
 
-#### Step 6: 설정 파일 생성 (`~/.vt.env`, gitignored)
+#### Step 6: Create the config file (`~/.vt.env`, gitignored)
 
-Step 3에서 선택한 Python 경로를 기록합니다. 모든 키 목록은 `config/vt.defaults.env` 참고.
+Record the Python path chosen in Step 3. See `config/vt.defaults.env` for the full list of keys.
 
 ```bash
-# Step 3에서 만든 환경의 python 절대 경로를 사용 (예시)
-PY_PATH="$(pwd)/.venv/bin/python"   # venv의 경우
-# PY_PATH="$(conda info --base)/envs/vt/bin/python"   # conda 사용 시
-# PY_PATH="$(pyenv which python)"                       # pyenv 사용 시
+# Use the absolute python path from the environment you created in Step 3 (example)
+PY_PATH="$(pwd)/.venv/bin/python"   # for venv
+# PY_PATH="$(conda info --base)/envs/vt/bin/python"   # if using conda
+# PY_PATH="$(pyenv which python)"                       # if using pyenv
 
 cat > ~/.vt.env << EOF
 VT_PORT=7777
 VT_PYTHON=$PY_PATH
-# VT_TOKEN=my-secret-token  # 원격 접속 시 인증 (선택)
+# VT_TOKEN=my-secret-token  # auth for remote access (optional)
 EOF
 ```
 
-#### Step 7: cloudflared 설치 (모바일 원격 접속용)
+#### Step 7: Install cloudflared (for mobile remote access)
 
 ```bash
 # macOS
@@ -190,99 +192,99 @@ brew install cloudflared
 curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/.local/bin/cloudflared && chmod +x ~/.local/bin/cloudflared
 ```
 
-#### Step 8: Claude Code 스킬 등록 (선택)
+#### Step 8: Register the Claude Code skill (optional)
 
 ```bash
 mkdir -p ~/.claude/skills/fsh
 cp .claude/skills/fsh/SKILL.md ~/.claude/skills/fsh/SKILL.md 2>/dev/null || true
 ```
 
-#### Step 9: 설치 확인
+#### Step 9: Verify the install
 
 ```bash
 fsh status
 ```
 
-사용자에게 안내:
-- `fsh mobile` — 모바일 접속 (QR코드)
-- `fsh voice` — 음성 모드 (옵션 2 선택 시)
-- `fsh stop` — 종료
+Guidance for the user:
+- `fsh mobile` — mobile access (QR code)
+- `fsh voice` — voice mode (if option 2 was chosen)
+- `fsh stop` — shut down
 
-#### 플랫폼별 참고
+#### Platform-specific notes
 
-**macOS:** 음성 모드 시 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 필요
-**WSL2:** 음성 핫키는 WSLg 필요 (Windows 11). 없으면 브라우저 🎤 사용. PowerShell: `.\bin\fsh.ps1 voice`
+**macOS:** for voice mode, the terminal app must be allowed under System Settings → Privacy → Accessibility
+**WSL2:** the voice hotkey requires WSLg (Windows 11). If unavailable, use the browser 🎤. PowerShell: `.\bin\fsh.ps1 voice`
 
 ---
 
-## FarShell 프로젝트 가이드
+## FarShell project guide
 
-### 서버 실행
+### Running the server
 
 ```bash
-# 방법 1: 스크립트 (~/.vt.env의 VT_PYTHON 자동 사용)
+# Method 1: script (automatically uses VT_PYTHON from ~/.vt.env)
 ./run_server.sh
 
-# 방법 2: 직접 실행
+# Method 2: run directly
 cd server
 "$VT_PYTHON" -m uvicorn main:app --host 0.0.0.0 --port 7777
 ```
 
-- Python 경로는 환경별로 다름 — `fsh doctor`로 현재 감지된 값 확인
-- 패키지: `requirements-core.txt`(필수) + `requirements-voice.txt`(음성 모드)
+- The Python path differs per environment — check the currently detected value with `fsh doctor`
+- Packages: `requirements-core.txt` (required) + `requirements-voice.txt` (voice mode)
 
-### 접속
+### Access
 
-| 환경 | URL |
+| Environment | URL |
 |------|-----|
-| 데스크톱 | `http://localhost:7777` |
-| 같은 네트워크 모바일 | `http://맥북-IP:7777` (IP는 `ipconfig getifaddr en0`) |
-| adb 연결 모바일 | `adb reverse tcp:7777 tcp:7777` → `http://localhost:7777` |
-| 원격 (어디서든) | `cloudflared tunnel --url http://localhost:7777` → 생성된 HTTPS URL 사용 |
+| Desktop | `http://localhost:7777` |
+| Mobile on the same network | `http://macbook-IP:7777` (get the IP with `ipconfig getifaddr en0`) |
+| Mobile via adb | `adb reverse tcp:7777 tcp:7777` → `http://localhost:7777` |
+| Remote (from anywhere) | `cloudflared tunnel --url http://localhost:7777` → use the generated HTTPS URL |
 
-### 모바일 테스트 (adb)
+### Mobile testing (adb)
 
 ```bash
-# 1. 포트 포워딩
+# 1. Port forwarding
 adb reverse tcp:7777 tcp:7777
 
-# 2. Chrome 열기
+# 2. Open Chrome
 adb shell am start -a android.intent.action.VIEW -d "http://localhost:7777" com.android.chrome
 
-# 3. 스크린샷 캡처
+# 3. Capture a screenshot
 adb shell screencap -p /sdcard/test.png && adb pull /sdcard/test.png /tmp/test.png
 
-# 4. 화면 켜기 (잠김 상태)
+# 4. Wake the screen (if locked)
 adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 1000 300
 ```
 
-### API 엔드포인트
+### API endpoints
 
-전체 REST/WebSocket 레퍼런스는 **[API.md](./API.md)** 참고 — 표를 여기 CLAUDE.md에도
-따로 유지하면 한쪽만 갱신될 때마다 드리프트가 생겨서(2026-08-20에 실제로 발견·정정함),
-카테고리 목록만 두고 상세는 API.md 하나로 일원화했다.
+See **[API.md](./API.md)** for the full REST/WebSocket reference — keeping a separate table
+here in CLAUDE.md caused drift whenever only one side got updated (actually caught and fixed
+on 2026-08-20), so this file keeps only the category list and API.md is the single source of detail.
 
-| 카테고리 | 대표 경로 |
+| Category | Representative paths |
 |----------|-----------|
-| 세션 / PTY | `/api/sessions`, `/ws/{id}` |
+| Sessions / PTY | `/api/sessions`, `/ws/{id}` |
 | tmux | `/api/tmux/*` (sessions·attach·create·kill·open-on-mac·preview) |
-| 음성 | `/voice/input`, `/voice/output`, `/voice/cancel`, `/voice/local/*`, `/voice/stt/*` |
-| 인증 | `/api/auth`, `/api/auth/status`, `/api/auth/logout` |
-| 코드 뷰어 / diff / Git 액션 | `/api/fs/*`, `/api/git/status`·`diff`·`stage`·`unstage`·`commit` (D16) |
-| 프롬프트 큐 | `/api/queue*` (P4) |
-| 포트 대시보드 | `/api/ports*` (P3) |
+| Voice | `/voice/input`, `/voice/output`, `/voice/cancel`, `/voice/local/*`, `/voice/stt/*` |
+| Auth | `/api/auth`, `/api/auth/status`, `/api/auth/logout` |
+| Code viewer / diff / Git actions | `/api/fs/*`, `/api/git/status`·`diff`·`stage`·`unstage`·`commit` (D16) |
+| Prompt queue | `/api/queue*` (P4) |
+| Port dashboard | `/api/ports*` (P3) |
 | Web Push | `/api/push/*` (P5) |
-| 에이전트 상태 / 알림 / 진단 | `/api/agent*`, `/api/notify/*`, `/api/safe-mode`, `/api/tailscale/status`, `/api/tunnel/status` |
-| 워크스페이스 / 기타 | `/api/workspace`, `/api/capabilities`, `/api/upload`, `/api/download`, `/api/clipboard/push` |
+| Agent status / notifications / diagnostics | `/api/agent*`, `/api/notify/*`, `/api/safe-mode`, `/api/tailscale/status`, `/api/tunnel/status` |
+| Workspace / misc | `/api/workspace`, `/api/capabilities`, `/api/upload`, `/api/download`, `/api/clipboard/push` |
 | WebSocket | `/ws/{id}`, `/ws-notify`, `/ws-preview/{name}`, `/ws-agent`, `/ws-workspace` |
 
-### E2E 테스트 방법
+### E2E test procedure
 
 ```bash
-# 1. 세션 생성
+# 1. Create a session
 SID=$(curl -s -X POST http://localhost:7777/api/sessions -H 'Content-Type: application/json' -d '{}' | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
-# 2. WebSocket으로 명령 실행 (Python)
+# 2. Run a command over WebSocket (Python)
 python3 -c "
 import asyncio, websockets
 async def t():
@@ -296,144 +298,148 @@ async def t():
 asyncio.run(t())
 "
 
-# 3. TTS 테스트
+# 3. TTS test
 curl -s -X POST http://localhost:7777/voice/output \
   -H 'Content-Type: application/json' \
-  -d '{"text":"테스트"}' -o /tmp/tts.mp3 -w "bytes: %{size_download}"
+  -d '{"text":"test"}' -o /tmp/tts.mp3 -w "bytes: %{size_download}"
 
-# 4. 좀비 프로세스 확인
+# 4. Check for zombie processes
 curl -s -X DELETE "http://localhost:7777/api/sessions/$SID"
 ps aux | grep defunct | grep -v grep || echo "No zombies"
 
-# 5. 파일 업로드 테스트
+# 5. File upload test
 echo "hello" > /tmp/test_upload.txt
 curl -s -X POST "http://localhost:7777/api/upload?session_id=$SID" \
   -F "file=@/tmp/test_upload.txt"
 
-# 6. 세션 이름 변경 테스트
+# 6. Session rename test
 curl -s -X PATCH "http://localhost:7777/api/sessions/$SID" \
   -H 'Content-Type: application/json' -d '{"name":"my-session"}'
 
-# 7. Scrollback 테스트 — 브라우저 새로고침 후 이전 출력이 보이는지 확인
+# 7. Scrollback test — check that previous output is visible after a browser refresh
 ```
 
-### Claude Code Stop hook (TTS 자동 요약)
+### Claude Code Stop hook (automatic TTS summary)
 
-Claude Code 응답 완료 시 자동으로 TTS 요약을 재생한다.
+Automatically plays a TTS summary when a Claude Code response completes.
 
-- 스크립트: `server/tts_hook.sh`
-- 설정: `~/.claude/settings.json`의 `hooks.Stop`에 등록
-- 동작: transcript에서 마지막 assistant 응답(최대 200자) 추출 → 서버 TTS → `afplay` 재생
-- fallback: 서버 미실행 시 macOS `say -v Yuna` 사용
+- Script: `server/tts_hook.sh`
+- Config: registered under `hooks.Stop` in `~/.claude/settings.json`
+- Behavior: extracts the last assistant response (up to 200 chars) from the transcript → server TTS → plays via `afplay`
+- Fallback: uses macOS `say -v Yuna` if the server isn't running
 
 ```bash
-# hook 테스트 (서버 실행 중)
+# Test the hook (with the server running)
 echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 ```
 
-### Voice Daemon (macOS 독립 음성 입력)
+### Voice Daemon (standalone macOS voice input)
 
-서버 없이 맥북에서 핫키로 음성 입력 → tmux에 직접 타이핑하는 데몬.
+A daemon that types voice input directly into tmux via a hotkey, without needing the server.
 
 ```bash
-# 실행
+# Run
 "$VT_PYTHON" server/voice_daemon.py &
 
-# 사용: Ctrl+Shift+V (토글) → 말하기 → STT → 활성 tmux pane에 입력
-# macOS 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 필요
+# Usage: Ctrl+Shift+V (toggle) → speak → STT → typed into the active tmux pane
+# Requires allowing the terminal app under macOS System Settings → Privacy → Accessibility
 ```
 
-### Clipboard Daemon (macOS 클립보드 동기화)
+### Clipboard Daemon (macOS clipboard sync)
 
-원격/모바일에서 웹 터미널에 접속하면 브라우저는 "그 기기"의 클립보드에만 접근할 수
-있어, 맥북(서버) 쪽에서 복사한 게 자동으로 넘어오지 않는다. 두 경로로 보완:
+When connecting to the web terminal remotely/from mobile, the browser can only access
+"that device's" clipboard, so copies made on the Mac (server) side don't automatically
+carry over. Two paths cover this:
 
-- **OSC52** (별도 실행 불필요) — `vim`, `tmux copy-mode` 등 터미널 프로그램 안에서
-  일어난 복사는 PTY 출력 스트림에 이미 실려 오므로, `frontend/js/terminal.js`가
-  `term.parser.registerOscHandler(52, ...)`로 가로채 웹이 열린 기기의 클립보드에 반영.
-- **폴링 데몬** (`fsh clip`) — Safari/Finder 등 터미널 밖에서 일어난 복사는 OSC52로
-  못 잡으므로, `server/clipboard_daemon.py`가 `NSPasteboard.changeCount`를 폴링해
-  변경 시 `POST /api/clipboard/push` → `/ws-notify` 브로드캐스트로 웹에 전달.
+- **OSC52** (no separate process needed) — copies made inside terminal programs like
+  `vim` or `tmux copy-mode` are already carried in the PTY output stream, so
+  `frontend/js/terminal.js` intercepts them via
+  `term.parser.registerOscHandler(52, ...)` and applies them to the clipboard of
+  whatever device has the web page open.
+- **Polling daemon** (`fsh clip`) — copies made outside the terminal (Safari, Finder,
+  etc.) can't be caught via OSC52, so `server/clipboard_daemon.py` polls
+  `NSPasteboard.changeCount` and, on a change, delivers it to the web via
+  `POST /api/clipboard/push` → `/ws-notify` broadcast.
 
 ```bash
-# 실행 (또는 fsh clip)
+# Run (or use fsh clip)
 "$VT_PYTHON" server/clipboard_daemon.py &
 ```
 
-### tmux 중심 세션 관리
+### tmux-centric session management
 
-웹 UI는 tmux 세션을 기본으로 사용한다:
-- 시작 시 tmux 세션 자동 감지 → 첫 번째 세션에 attach
-- "+ New" → tmux 세션 생성 (`POST /api/tmux/create`)
-- 탭 닫기 → detach만 (tmux 세션 유지). Kill은 `DELETE /api/tmux/kill/{name}`
-- 중복 attach 방지: 이미 웹에 열린 tmux 세션은 기존 탭으로 전환
-- iTerm2와 웹이 같은 tmux 세션에 동시 접속 가능
+The web UI uses tmux sessions as its default:
+- On startup, tmux sessions are auto-detected → attaches to the first one
+- "+ New" → creates a tmux session (`POST /api/tmux/create`)
+- Closing a tab → only detaches (the tmux session stays alive). Kill is done via `DELETE /api/tmux/kill/{name}`
+- Duplicate-attach prevention: a tmux session already open in the web switches to its existing tab
+- iTerm2 and the web can be attached to the same tmux session at the same time
 
-### 주요 기능
+### Key features
 
-| 기능 | 설명 |
+| Feature | Description |
 |------|------|
-| Voice Daemon | macOS 핫키(Ctrl+Shift+V) → STT → tmux 직접 입력 |
-| Clipboard 동기화 | OSC52(터미널 내부 복사) + `fsh clip` 폴링 데몬(터미널 밖 복사) → 웹 클립보드 push |
-| 핸즈프리 모드 | 모바일 🔄 버튼 → 연속 녹음/STT 자동 반복 |
-| 음성 전용 모드 | 🎧 버튼 → 터미널 숨기고 큰 마이크만 표시 (이어폰 조작용) |
-| 웹 로그인 비밀번호 | `fsh password`로 설정 → scrypt 해시(`VT_AUTH_PASSWORD_HASH`)만 저장, 원문 미저장. 로그인 시 `VT_AUTH_SESSION_KEY`로 서명된 24h 세션 쿠키 발급(원문·토큰 아님). 사람용 인증. `server/auth.py` |
-| 기기 등록 + OTP 관문 | 로그인은 **항상 비밀번호**. OTP는 "처음 보는 기기를 등록할 때"만 요구하는 관문이다. 등록된 기기는 `vt_device` 장기 쿠키(90일)를 갖고 이후 비밀번호만으로 통과 — IP가 아니라 기기 단위라 폰이 LTE↔wifi를 오가도 안 끊긴다. **`fsh otp setup` 전까지 OTP는 완전 비활성**이고 기기 등록만 조용히 쌓이므로, 나중에 켜도 쓰던 기기는 잠기지 않는다. 저장은 `~/.vt/devices.json`(0600, sha256 해시만). `fsh device revoke <id>`로 폐기하면 그 기기의 세션 쿠키까지 즉시 무효 |
-| 1회용 기기 등록 티켓 | `fsh mobile`/`fsh handoff`의 QR·URL에 상시 토큰 대신 5분짜리 1회용 티켓(`?ticket=`)을 싣는다. QR을 띄우는 시점에 맥 물리 접근이 이미 증명되므로 스캔=등록 승인. 상시 토큰을 URL에 박던 방식은 그 값이 로그·히스토리·QR 이미지에 영구히 남았다 |
-| 크로스 사이트 차단 | `OriginGuardMiddleware`(`server/main.py`) — Origin이 자기 자신이 아니면 HTTP·WS 모두 403. 인증·OTP로는 막을 수 없는 유일한 경로(브라우저에 이미 쿠키가 있으면 인증은 통과한다). CORS 기본 `*`도 제거 — 필요 시 `VT_ALLOWED_ORIGINS`로 옵트인 |
-| API 토큰 인증 | `VT_AUTH_TOKEN` 환경변수 = 기계용 토큰(데몬/QR/URL). URL `?token=xxx` 또는 `Authorization: Bearer xxx`. 비밀번호 로그인과 병존. (구 이름 `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY`도 fallback 인식) |
-| tmux 세션 관리 | 웹에서 tmux 생성/attach/detach/kill |
-| Scrollback 버퍼 | WS 재접속 시 이전 출력 복원 (최대 5000 청크) |
-| 터미널 검색 | Ctrl+F / Cmd+F → xterm.js search addon |
-| 세션 이름 편집 | 탭 더블클릭 → 이름 변경 (PATCH API, tmux 세션명도 `rename-session`으로 함께 바뀐다 — 영숫자·dash·underscore가 아니면 tmux는 안 건드리고 웹 라벨만 바뀐다) |
-| 라이브 프리뷰 그리드 뷰 | 상단바 그리드 버튼. tmux 세션을 카드로 한눈에 훑어보는 화면. 카드엔 에이전트 배지(🟣Claude 등, `GET /api/agents`)가 붙고, 도구 실행 중이면 카드가 은은하게 펄스(`.working`), Stop 훅이 오면 펄스 대신 ✓ 완료 배지(`.done`, 클릭해서 확인하면 지워짐)로 바뀐다. **Claude Code 훅은 tmux pane을 직접 알려주지 않는다** — hook payload의 `cwd`를 `/api/tmux/sessions`가 주는 `pane_current_path`와 매칭해 카드를 특정한다(`server/agent_status.py`). 같은 디렉토리에 여러 세션이 떠 있으면(둘 다 `$HOME` 등) cwd가 유일하지 않은데, 이때는 아무 카드나 강조하는 대신 **아무 것도 강조하지 않는다** — 틀린 카드를 확신 있게 켜는 것보다 안전하다. 이미 웹 탭으로 열려 있는 세션은 카드 왼쪽 테두리로 구분(`web_session_id`) — 클릭 결과(탭 전환 vs 새 attach)가 미리 예측 가능하다 |
-| 코드 뷰어 / diff (P2) | ⋯ 메뉴 → "코드 뷰어". CLI만으로 원격 개발할 때 코드를 눈으로 못 보는 문제를 푼다. 파일 트리 · 문법 하이라이팅(highlight.js, 36개 언어) · `git diff` 렌더링. **읽기 전용이며 쓰기 API가 없다.** 공개 터널 너머로 열리므로 방어가 3중이다: ① 루트 확정(`VT_BROWSE_ROOTS`, 기본 `~/GitHub` — `$HOME`을 열면 `~/.ssh`·`~/.aws`가 사정권에 든다) ② `Path.resolve()` + `is_relative_to`(startswith 금지 — 형제 디렉토리가 통과한다. `resolve()`가 심링크를 펼치므로 루트 밖을 가리키는 링크도 함께 걸린다) ③ 거부 목록(`.env*`·`*.pem`·`id_rsa`·`.ssh/`·`.aws/` 등, 경로의 모든 구성요소를 검사). 판정은 `server/fsguard.py` 한 곳에만 있다 |
-| Web Push (P5) | ⋯ 메뉴 → "푸시 알림". 기존 알림(`/ws-notify` → Notification API)은 **PWA 탭이 살아 있어야만** 동작해서, 폰 화면을 끄면 "승인 대기 중"을 놓쳤다. 그 격차를 메운다. WS 클라이언트가 하나라도 붙어 있으면 푸시를 보내지 않는다(같은 알림이 두 번 온다). **성립 조건**: ① https — 평문 http에서는 Service Worker 자체가 등록되지 않는다 ② iOS는 홈 화면에 PWA로 추가해야 한다(16.4+, 사파리 탭에서는 구독이 안 만들어진다. 우회 불가). **구독은 origin에 묶인다** — trycloudflare URL이 바뀌면 기존 구독이 전부 죽으므로 구독마다 origin을 저장해 어긋난 것은 발송에서 제외하고, 404/410 응답은 그 자리에서 정리한다. 알림 본문에는 명령·경로·코드를 넣지 않는다(잠금화면에 뜬다). VAPID 키는 `~/.vt/vapid.json`(0600) 자동 생성 — **지우면 기존 구독이 전부 무효화된다**. SW 등록은 `js/swreg.js`가 담당한다(예전엔 `voice.js` 안에 있어서 음성 미설치 시 SW가 아예 안 떴다) |
-| 프롬프트 큐 (P4) | ⋯ 메뉴 → "프롬프트 큐", 또는 `fsh queue`. 에이전트가 작업 중일 때 지시를 쌓아뒀다 순차 투입한다. **음성 모드와 짝** — 지금은 작업 중에 말하면 씹히는데, 큐가 있으면 걸어가며 3개를 던져놓고 순서대로 실행시킬 수 있다. 자동 투입은 **Claude Code의 stop 훅에서만** 걸린다(`POST /api/agent/event`). codex/aider/gemini는 훅이 없어 `fsh queue run` / "지금 실행"으로 수동 투입해야 한다 — 출력 유휴로 추측해 투입하는 방식은 빌드 로그가 잠깐 끊긴 것과 작업 완료를 구분할 수 없어 채택하지 않았다. 투입 전 관문 4개: 유예 시간(`VT_QUEUE_GRACE_SEC`, 기본 3초 — 사용자가 직접 타이핑을 시작했을 수 있다) · safe_mode · 타깃 pane 생존 확인 · 한 번에 한 건. 막히거나 실패한 항목은 **버리지 않고** `blocked` 로 큐에 남는다. 타깃 결정은 음성과 같은 규칙(`server/tmux_target.py`)을 쓴다. 저장은 `~/.vt/queue.json`(0600), 동시 쓰기는 flock으로 직렬화 |
-| 포트 대시보드 (P3) | ⋯ 메뉴 → "포트". 맥 앞에 없을 때 "지금 뭐가 떠 있지 / 3000번 죽여줘"를 폰에서 처리한다. 포트·PID·가동시간·CPU·메모리 표시, 원클릭 종료, `fsh tunnel expose` 연동. **VT 서버 자신과 cloudflared/tailscaled/sshd는 종료가 막혀 있다** — 죽이면 이 화면이 끊긴다. 다른 사용자 프로세스도 막는다(sudo 안 씀). 종료 직전 `port→pid`를 재확인해 PID 재사용으로 엉뚱한 프로세스를 죽이는 것을 막고, 불일치면 409. `expose`는 로컬 서버를 **공개 인터넷**에 여는 것이라 `confirm:true` 없이는 428이고, `VT_NETWORK_MODE`가 `all`이 아니면 아예 거부한다(접근 범위를 좁혀놓고 다시 뚫으면 의미가 없다). 판정은 `server/portscan.py` |
-| 파일 업로드 | 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장 |
-| 파일 다운로드 | `GET /api/download?path=...` |
-| tmux detach 감지 | PTY EOF 시 `[process exited]` 표시 |
-| 추가 포트 터널 | `fsh tunnel expose <port>` — Cloudflare quick tunnel은 호스트↔포트 1:1이라 경로(`/localhost:3000`)로 포트를 바꿀 수 없다. 포트마다 터널을 하나씩 띄우고 fsh가 PID/레지스트리로 추적 |
-| 터널 URL 변경 훅 | `VT_TUNNEL_HOOK` — URL이 바뀔 때 임의 명령 실행(stdin: `라벨<TAB>URL`). 게시 대상은 사람마다 다르므로(Notion/Slack/ntfy/파일) fsh는 서비스를 알지 않는다. 예시·주의사항: `fsh help tunnel-hook` |
-| 터널 좀비 재연결 자동 복구 | cloudflared는 프로세스가 살아있어도(`kill -0` 성공) 엣지와의 QUIC 컨트롤 스트림만 끊긴 채 재연결을 무한 반복하는 좀비 상태에 빠질 수 있다(정적 파일은 어쩌다 200, API는 503). `server/tunnel_watchdog.py`가 `fsh start`/`voice`/`mobile` 시 자동 기동돼 `/tmp/cloudflared.log`의 재연결 실패 패턴을 감시하다가(기본: 90초 안에 4회 이상) `fsh tunnel restart`를 자동 호출한다. 수동 확인/기동: `fsh tunnel watchdog`, 수동 강제 재시작: `fsh tunnel restart` |
-| Tailscale 원격 접속 (D9) | `fsh ssh` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속. `fsh mobile --network tailscale`은 웹 UI도 tailnet으로만 제한 |
-| 클라이언트 접속 알림 (D9) | `VT_NOTIFY_CLIENT_EVENTS=1` — tmux client-attached/detached 훅 → ntfy/Telegram push |
+| Voice Daemon | macOS hotkey (Ctrl+Shift+V) → STT → direct input into tmux |
+| Clipboard sync | OSC52 (in-terminal copies) + `fsh clip` polling daemon (copies outside the terminal) → pushed to web clipboard |
+| Hands-free mode | Mobile 🔄 button → continuous record/STT loop |
+| Voice-only mode | 🎧 button → hides the terminal and shows only a large mic (for earbud operation) |
+| Web login password | Set via `fsh password` → stores only an scrypt hash (`VT_AUTH_PASSWORD_HASH`); the plaintext is never stored. On login, issues a 24h session cookie signed with `VT_AUTH_SESSION_KEY` (not the plaintext or a token). Human-facing auth. `server/auth.py` |
+| Device registration + OTP gate | Login is **always** by password. OTP is a gate required only "when registering a device seen for the first time." A registered device gets a `vt_device` long-lived cookie (90 days) and afterward passes with just the password — since it's per-device rather than per-IP, a phone switching between LTE and wifi doesn't get disconnected. **OTP stays fully disabled until `fsh otp setup`**, and device registrations quietly accumulate in the meantime, so turning it on later doesn't lock out devices already in use. Stored at `~/.vt/devices.json` (0600, sha256 hashes only). `fsh device revoke <id>` immediately invalidates that device's session cookie as well |
+| One-time device registration ticket | The QR/URL from `fsh mobile`/`fsh handoff` carries a 5-minute one-time ticket (`?ticket=`) instead of a persistent token. Physical access to the Mac is already proven at the moment the QR is shown, so scanning it equals approving registration. The old approach of embedding a persistent token in the URL left that value permanently sitting in logs, history, and QR images |
+| Cross-site blocking | `OriginGuardMiddleware` (`server/main.py`) — returns 403 for both HTTP and WS if the Origin isn't itself. The only path that auth/OTP alone can't block (if the browser already has a cookie, auth passes). Also removes the default `*` CORS — opt in via `VT_ALLOWED_ORIGINS` if needed |
+| API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (for daemons/QR/URLs). Via URL `?token=xxx` or `Authorization: Bearer xxx`. Coexists with password login. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are also recognized as fallbacks) |
+| tmux session management | Create/attach/detach/kill tmux sessions from the web |
+| Scrollback buffer | Restores previous output on WS reconnect (up to 5000 chunks) |
+| Terminal search | Ctrl+F / Cmd+F → xterm.js search addon |
+| Session name editing | Double-click a tab → rename (PATCH API; the tmux session name is also changed via `rename-session` — if the new name isn't alphanumeric/dash/underscore, tmux is left untouched and only the web label changes) |
+| Live preview grid view | Grid button in the top bar. A screen for scanning tmux sessions at a glance as cards. Cards carry an agent badge (🟣Claude etc., from `GET /api/agents`), pulse gently while a tool is running (`.working`), and switch from the pulse to a ✓ done badge when the Stop hook fires (`.done`, cleared once clicked to acknowledge). **Claude Code hooks don't directly report the tmux pane** — the card is identified by matching the hook payload's `cwd` against the `pane_current_path` from `/api/tmux/sessions` (`server/agent_status.py`). When multiple sessions share the same directory (e.g. both at `$HOME`), cwd isn't unique, and in that case **nothing is highlighted** instead of picking one — safer than confidently lighting up the wrong card. A session already open as a web tab is marked with a left border on the card (`web_session_id`) — so the click outcome (switch tab vs. new attach) is predictable in advance |
+| Code viewer / diff (P2) | ⋯ menu → "Code Viewer". Solves the problem of not being able to see code visually when developing remotely via CLI only. File tree · syntax highlighting (highlight.js, 36 languages) · `git diff` rendering. **Read-only, with no write API.** Since it's exposed over a public tunnel, it has three layers of defense: ① a fixed root (`VT_BROWSE_ROOTS`, default `~/GitHub` — opening `$HOME` would put `~/.ssh`·`~/.aws` in scope) ② `Path.resolve()` + `is_relative_to` (startswith is banned — sibling directories would pass. Since `resolve()` expands symlinks, links pointing outside the root are also caught) ③ a denylist (`.env*`·`*.pem`·`id_rsa`·`.ssh/`·`.aws/` etc., checked against every path component). The check lives in one place only: `server/fsguard.py` |
+| Web Push (P5) | ⋯ menu → "Push Notifications". Existing notifications (`/ws-notify` → Notification API) only work **while a PWA tab is alive**, so turning off the phone screen meant missing "waiting for approval." This fills that gap. No push is sent while at least one WS client is connected (to avoid the same notification arriving twice). **Requirements**: ① https — Service Workers don't even register over plain http ② iOS requires adding to the home screen as a PWA (16.4+; a subscription can't be created from a Safari tab — no workaround). **A subscription is bound to its origin** — if the trycloudflare URL changes, existing subscriptions all die, so each subscription stores its origin, mismatches are excluded from sending, and 404/410 responses are cleaned up on the spot. Notification bodies never contain commands, paths, or code (they'd show on the lock screen). The VAPID key is auto-generated at `~/.vt/vapid.json` (0600) — **deleting it invalidates every existing subscription**. SW registration is handled by `js/swreg.js` (it used to live inside `voice.js`, so the SW never registered at all when voice wasn't installed) |
+| Prompt queue (P4) | ⋯ menu → "Prompt Queue", or `fsh queue`. Queues up instructions while an agent is busy and feeds them in sequentially. **Pairs with voice mode** — right now, speaking while the agent is working gets swallowed, but with the queue you can walk around dropping in 3 instructions and have them run in order. Automatic feeding is only triggered **by Claude Code's stop hook** (`POST /api/agent/event`). codex/aider/gemini have no hook, so they need manual feeding via `fsh queue run` / "run now" — feeding based on guessing output idleness was not adopted, since it can't tell a brief pause in build logs apart from actual completion. Four gates before feeding: grace period (`VT_QUEUE_GRACE_SEC`, default 3 sec — the user may have started typing directly) · safe_mode · confirming the target pane is alive · one item at a time. Blocked or failed items are **not discarded** — they stay in the queue as `blocked`. Target resolution uses the same rules as voice (`server/tmux_target.py`). Stored at `~/.vt/queue.json` (0600), with concurrent writes serialized via flock |
+| Port dashboard (P3) | ⋯ menu → "Ports". Handles "what's running right now / kill port 3000" from the phone when you're away from the Mac. Shows port·PID·uptime·CPU·memory, one-click kill, integrates with `fsh tunnel expose`. **Killing the VT server itself, or cloudflared/tailscaled/sshd, is blocked** — killing them would cut off this very screen. Other users' processes are also blocked (no sudo used). Right before killing, `port→pid` is re-checked to prevent PID reuse from killing the wrong process, returning 409 on a mismatch. `expose` opens the local server to the **public internet**, so it returns 428 without `confirm:true`, and is refused outright unless `VT_NETWORK_MODE` is `all` (there's no point narrowing access scope and then reopening it). Checked in `server/portscan.py` |
+| File upload | Voice bar 📎 button → saved to `/tmp/vt-uploads/` |
+| File download | `GET /api/download?path=...` |
+| tmux detach detection | Shows `[process exited]` on PTY EOF |
+| Extra port tunnels | `fsh tunnel expose <port>` — a Cloudflare quick tunnel is a 1:1 host↔port mapping, so a port can't be switched via a path (`/localhost:3000`). One tunnel is spun up per port, tracked by fsh via PID/registry |
+| Tunnel URL change hook | `VT_TUNNEL_HOOK` — runs an arbitrary command when the URL changes (stdin: `label<TAB>URL`). Since publishing targets differ per person (Notion/Slack/ntfy/file), fsh doesn't know about the service itself. Examples and caveats: `fsh help tunnel-hook` |
+| Automatic tunnel zombie-reconnect recovery | cloudflared can fall into a zombie state where the process is alive (`kill -0` succeeds) but only the QUIC control stream to the edge is cut, endlessly retrying reconnection (static files occasionally return 200, API returns 503). `server/tunnel_watchdog.py` auto-starts with `fsh start`/`voice`/`mobile`, watches `/tmp/cloudflared.log` for reconnect-failure patterns (default: 4+ times within 90 seconds), and automatically calls `fsh tunnel restart`. Manual check/start: `fsh tunnel watchdog`; manual forced restart: `fsh tunnel restart` |
+| Tailscale remote access (D9) | `fsh ssh` — connect directly to tmux via SSH on networks where screen remoting is blocked (e.g. corporate networks). `fsh mobile --network tailscale` also restricts the web UI to the tailnet only |
+| Client connection notifications (D9) | `VT_NOTIFY_CLIENT_EVENTS=1` — tmux client-attached/detached hook → ntfy/Telegram push |
 
-### 아키텍처
+### Architecture
 
 ```
 server/
-  main.py           — FastAPI (WS + REST + Voice + 파일 업로드/다운로드)
-  auth.py           — 웹 로그인 인증 (scrypt 비밀번호 해시 + HMAC 서명 세션 쿠키
-                      + 기기 화이트리스트 + TOTP 관문 + 1회용 등록 티켓).
-                      `python auth.py <cmd>` CLI로 bin/fsh가 서버 없이 직접 호출한다.
-                      런타임 상태는 ~/.vt/{devices,totp,tickets}.json (0600) —
-                      설정(~/.vt.env)과 분리해 서버 재시작 없이 즉시 반영된다.
-  pty_manager.py    — PTY 세션 (broadcast, scrollback 버퍼, EOF 감지)
+  main.py           — FastAPI (WS + REST + Voice + file upload/download)
+  auth.py           — web login auth (scrypt password hash + HMAC-signed session cookie
+                      + device whitelist + TOTP gate + one-time registration ticket).
+                      bin/fsh calls this directly via the `python auth.py <cmd>` CLI without the server.
+                      Runtime state lives in ~/.vt/{devices,totp,tickets}.json (0600) —
+                      kept separate from config (~/.vt.env) so it takes effect immediately without a server restart.
+  pty_manager.py    — PTY sessions (broadcast, scrollback buffer, EOF detection)
   voice_handler.py  — STT (faster-whisper) + TTS (edge-tts / macOS say)
-  output_watcher.py — 출력 감시 → 작업 완료 TTS 알림
-  local_mic.py      — MacBook 로컬 마이크 (sounddevice)
-  session_store.py  — 세션 메타데이터 (이름 변경 지원)
-  tts_hook.sh       — Claude Code Stop hook (TTS 자동 요약)
-  voice_daemon.py   — 독립 음성 입력 데몬 (핫키 → STT → tmux)
-  clipboard_daemon.py — macOS 클립보드 폴링 데몬 (changeCount → /api/clipboard/push)
-  tunnel_watchdog.py — cloudflared 좀비 재연결 감시 데몬 (로그 패턴 감지 → fsh tunnel restart 자동 호출)
-  routes/clipboard.py — POST /api/clipboard/push → /ws-notify 브로드캐스트
-  platform_utils.py — 크로스 플랫폼 유틸리티 (macOS/Linux/WSL2)
-  tailscale.py      — Tailscale 상태 감지 (D9, tunnel.py와 동일 패턴)
-  vt_env.py         — ~/.vt.env 파서 (bash source와 동일 해석). voice/config.py·clipboard_daemon 공용
+  output_watcher.py — output monitoring → task-completion TTS notification
+  local_mic.py      — MacBook local microphone (sounddevice)
+  session_store.py  — session metadata (supports renaming)
+  tts_hook.sh       — Claude Code Stop hook (automatic TTS summary)
+  voice_daemon.py   — standalone voice input daemon (hotkey → STT → tmux)
+  clipboard_daemon.py — macOS clipboard polling daemon (changeCount → /api/clipboard/push)
+  tunnel_watchdog.py — cloudflared zombie-reconnect watchdog daemon (log pattern detection → auto-calls fsh tunnel restart)
+  routes/clipboard.py — POST /api/clipboard/push → /ws-notify broadcast
+  platform_utils.py — cross-platform utilities (macOS/Linux/WSL2)
+  tailscale.py      — Tailscale status detection (D9, same pattern as tunnel.py)
+  vt_env.py         — ~/.vt.env parser (interpreted the same way as bash source). Shared by voice/config.py and clipboard_daemon
   hooks/tmux_client_notify.sh — tmux client-attached/detached → /api/notify/client-event (D9)
 
 lib/
-  vt_env.sh         — ~/.vt.env 형식 정의 + 단일 reader/writer
-                      (vt_env_load/get/set/unset/lint). 설정 파일은 source하지 않고 파싱한다
-                      — 실행 구문 미지원, 'literal' vs "expanded" 구분, 권한 600 보장.
-                      ⚠ 설정 파일을 echo/sed로 직접 건드리지 말 것.
+  vt_env.sh         — defines the ~/.vt.env format + a single reader/writer
+                      (vt_env_load/get/set/unset/lint). Parses the config file rather than sourcing it
+                      — no executable syntax support, distinguishes 'literal' vs "expanded", enforces 0600 permissions.
+                      ⚠ Never touch the config file directly with echo/sed.
 
 frontend/
-  index.html        — xterm.js 멀티 탭 UI (검색, 세션 이름 편집, 파일 업로드)
-  voice.js          — 마이크 녹음 + TTS + 알림 + Media Session
+  index.html        — xterm.js multi-tab UI (search, session name editing, file upload)
+  voice.js          — mic recording + TTS + notifications + Media Session
   manifest.json     — PWA manifest
   sw.js             — Service Worker
 ```
