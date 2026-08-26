@@ -479,6 +479,11 @@ body.voice-only-mode #mic-status {
 .vt-card .card-preview {
   margin:0; background:var(--crust); border-radius:3px; padding:4px; font-family:var(--mono);
   font-size:11px; color:var(--txt); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.2;
+  /* max-height로 잘려나가는 마지막 줄이 단어 중간에서 뚝 끊긴 채로 보이던 것을,
+     하단 페이드로 부드럽게 흐려지게 해 "미리보기이므로 잘렸다"는 게 자연스럽게
+     읽히도록 한다. */
+  mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent 100%);
 }
 
 /* 이미 탭으로 열려 있는 세션 — 클릭 결과(전환 vs attach)가 다르므로 미리 구분해둔다.
