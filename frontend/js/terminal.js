@@ -531,7 +531,7 @@
       if (id) addSession(id);
     }
 
-    function addSession(id, displayName) {
+    function addSession(id, displayName, insertBeforeId) {
       // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
       // 생기므로 무시한다.
       if (!id) { showToast('세션 생성 실패 (id 없음)'); return; }
@@ -572,7 +572,16 @@
         nameSpan.onblur = finishEdit;
         nameSpan.onkeydown = (ke) => { if (ke.key === 'Enter') { ke.preventDefault(); nameSpan.blur(); } };
       };
-      document.getElementById('tabs').appendChild(tab);
+      // insertBeforeId가 주어지고 아직 DOM에 있으면 그 앞에 삽입 — 복원 시 원래
+      // 탭 순서를 지키기 위함(없거나 이미 사라졌으면 기존처럼 끝에 append).
+      const insertBeforeTab = insertBeforeId
+        ? document.querySelector(`#tabs .tab[data-session-id="${insertBeforeId}"]`)
+        : null;
+      if (insertBeforeTab) {
+        document.getElementById('tabs').insertBefore(tab, insertBeforeTab);
+      } else {
+        document.getElementById('tabs').appendChild(tab);
+      }
 
       const term = new Terminal({
         cursorBlink: true,
@@ -591,6 +600,14 @@
       term.loadAddon(fitAddon);
       const searchAddon = new SearchAddon.SearchAddon();
       term.loadAddon(searchAddon);
+      // 이모지 등 wide 문자 폭 계산을 최신 유니코드로 전환 — 없으면 xterm.js 기본값(V6
+      // 테이블)이 최근 이모지를 좁은 문자(1칸)로 오판해, 폰트가 실제로는 2칸 너비로
+      // 그리면서 다음 글자와 겹쳐 보인다(원격 웹 터미널에서만 발생, 로컬 Terminal.app/
+      // iTerm2는 자체 폰트 렌더러라 폭 판정과 렌더링이 항상 일치해 영향 없음).
+      if (window.Unicode11Addon) {
+        term.loadAddon(new Unicode11Addon.Unicode11Addon());
+        term.unicode.activeVersion = '11';
+      }
 
       // 각 세션에 고유 wrapper div 생성 (show/hide로 탭 전환)
       const wrapper = document.createElement('div');
@@ -874,7 +891,16 @@
         const state = JSON.parse(raw);
         if (!state || !Array.isArray(state.tabs) || state.tabs.length === 0) return false;
         let restored = 0;
+        let failed = 0;
         let firstNewId = null;
+        // tmux_name이 없는(순수 PTY) 탭은 서버가 재시작되지 않은 한 session_store에
+        // 그대로 살아있을 수 있다 — /api/sessions로 살아있는 id 목록을 한 번에 확인.
+        let liveWebIds = new Set();
+        try {
+          const wsRes = await fetch(`${API_BASE}/api/sessions`);
+          if (wsRes.ok) liveWebIds = new Set((await wsRes.json()).map(s => s.id));
+        } catch (_) { /* 조회 실패 시 아래에서 전부 유실 처리됨 */ }
+
         for (const tab of state.tabs) {
           if (tab.tmux_name) {
             try {
@@ -893,10 +919,25 @@
                     if (!firstNewId) firstNewId = data.id;
                   }
                   restored++;
-                }
+                } else { failed++; }
+              } else { failed++; }
+            } catch (_) { failed++; }
+          } else {
+            // 비-tmux(순수 PTY) 탭: 원래 조용히 버려지던 부분 — 서버가 아직
+            // 그 PTY를 들고 있으면(=재시작 안 됐으면) 그대로 재연결한다.
+            if (liveWebIds.has(tab.id)) {
+              if (!sessions[tab.id]) {
+                addSession(tab.id, tab.name || tab.id);
+                if (!firstNewId) firstNewId = tab.id;
               }
-            } catch (_) { /* 세션이 죽은 경우 skip */ }
+              restored++;
+            } else {
+              failed++;
+            }
           }
+        }
+        if (failed > 0) {
+          showToast(`탭 ${failed}개 복원 실패 (세션이 이미 종료됨)`);
         }
         if (restored > 0 && firstNewId) {
           switchTo(firstNewId);
@@ -916,9 +957,26 @@
         const tmuxList = await res.json();
         if (!Array.isArray(tmuxList)) return;
         const known = new Set(Object.values(sessions).map(s => s.tmuxName).filter(Boolean));
+        const missing = tmuxList.filter(s => !known.has(s.name));
+        if (missing.length === 0) return;
+
+        // 저장된 스냅샷에 있던 순서를 알아야 "원래 자리"에 되돌려 넣을 수 있다
+        // (attach가 일시 실패해서 restoreWorkspace가 놓쳤던 세션 등). 스냅샷에
+        // 없던(=저장 이후 다른 곳에서 새로 생긴) 세션은 원래 자리가 없으므로
+        // 알파벳/숫자 순으로 정렬해 끝에 붙인다.
+        let savedOrder = [];
+        try {
+          const raw = localStorage.getItem(WORKSPACE_KEY);
+          const state = raw ? JSON.parse(raw) : null;
+          if (state && Array.isArray(state.tabs)) savedOrder = state.tabs;
+        } catch (_) { /* 파싱 실패 시 전부 새 세션 취급 */ }
+
+        const knownFromSnapshot = missing.filter(s => savedOrder.some(t => t.tmux_name === s.name));
+        const genuinelyNew = missing.filter(s => !savedOrder.some(t => t.tmux_name === s.name))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
         let added = false;
-        for (const s of tmuxList) {
-          if (known.has(s.name)) continue;
+        for (const s of [...knownFromSnapshot, ...genuinelyNew]) {
           const res2 = await fetch(`${API_BASE}/api/tmux/attach`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ name: s.name })
@@ -926,7 +984,16 @@
           if (!res2.ok) continue;
           const data = await res2.json();
           if (data.id && !sessions[data.id]) {
-            addSession(data.id, data.name || `tmux:${s.name}`);
+            // 스냅샷 순서상 이 세션 다음에 와야 할, 이미 DOM에 있는 탭을 찾아 그 앞에 삽입
+            let insertBeforeId = null;
+            const idx = savedOrder.findIndex(t => t.tmux_name === s.name);
+            if (idx !== -1) {
+              for (let i = idx + 1; i < savedOrder.length; i++) {
+                const nextId = Object.keys(sessions).find(sid => sessions[sid].tmuxName === savedOrder[i].tmux_name);
+                if (nextId) { insertBeforeId = nextId; break; }
+              }
+            }
+            addSession(data.id, data.name || `tmux:${s.name}`, insertBeforeId);
             if (sessions[data.id]) sessions[data.id].tmuxName = s.name;
             added = true;
           }
@@ -1224,11 +1291,15 @@
           return;
         }
 
-        // 2. tmux 세션이 있으면 첫 번째 자동 attach
+        // 2. tmux 세션이 있으면 전부 자동 attach (저장된 탭 순서가 없는 상태이므로
+        //    이름 알파벳/숫자 순으로 정렬 — 예전엔 tmuxList[0] 하나만 열고 끝냈다)
         const tmuxRes = await fetch(`${API_BASE}/api/tmux/sessions`);
         const tmuxList = await tmuxRes.json();
         if (tmuxList.length > 0) {
-          await attachTmux(tmuxList[0].name);
+          const sorted = [...tmuxList].sort((a, b) => a.name.localeCompare(b.name));
+          for (const s of sorted) {
+            await attachTmux(s.name);
+          }
           return;
         }
 

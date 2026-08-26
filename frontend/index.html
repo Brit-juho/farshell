@@ -386,6 +386,9 @@
   <script src="/static/vendor/xterm.min.js"></script>
   <script src="/static/vendor/addon-fit.min.js"></script>
   <script src="/static/vendor/addon-search.min.js"></script>
+  <!-- 이모지 등 wide 문자 폭 계산을 최신 유니코드 기준으로 맞춤 — 없으면 xterm.js가 구버전
+       Unicode 6 폭 테이블을 써서 최근 이모지를 좁게(1칸) 오판해, 다음 글자와 겹쳐 보인다. -->
+  <script src="/static/vendor/addon-unicode11.min.js"></script>
   <!-- GPU 렌더러 — 기본(DOM) 렌더러는 활발한 스트리밍(TUI 등)에서 CPU/메모리 비용이 크다.
        WebGL 우선 시도, 실패(GPU/드라이버 미지원) 시 Canvas로 폴백. -->
   <script src="/static/vendor/addon-webgl.min.js"></script>
