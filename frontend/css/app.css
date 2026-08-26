@@ -208,7 +208,7 @@ html[data-skin="windows"] .caption { display:flex; }
 #more-menu {
   position:absolute; top:calc(var(--topbar-h) + 2px); right:8px; z-index:520; width:250px;
   max-height:calc(100vh - var(--topbar-popup-y) - env(safe-area-inset-bottom,0px) - 12px);
-  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  overflow-y:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
   background:var(--menu); color:var(--txt); border-radius:12px; padding:6px;
   box-shadow:0 12px 34px rgba(0,0,0,.55), inset 0 -16px 12px -12px rgba(0,0,0,.35);
   border:1px solid var(--line);
@@ -216,6 +216,7 @@ html[data-skin="windows"] .caption { display:flex; }
   pointer-events:none; transition:opacity .16s, transform .16s;
 }
 #more-menu.open { opacity:1; transform:none; pointer-events:auto; }
+#more-menu::-webkit-scrollbar { display:none; width:0; height:0; }
 .mi {
   display:flex; align-items:center; gap:11px; padding:10px 10px; border-radius:8px;
   font-size:13.5px; cursor:pointer; color:var(--txt); border:none; background:transparent;
@@ -239,8 +240,18 @@ html[data-skin="windows"] .caption { display:flex; }
 .theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--menu-hover); }
 
 /* ---- 터미널 ------------------------------------------------------------ */
-#terminal-container { flex:1; min-height:0; padding:2px; background:var(--term); }
+#terminal-container { flex:1; min-height:0; padding:2px; background:var(--term); overflow:hidden; }
 #terminal-container .xterm { height:100%; }
+/* xterm-viewport 스크롤(휠/모바일 터치)은 tmux mouse-on 세션에서 항상 tmux
+   copy-mode로 위임되고(wireTouchScroll 참고), 스크롤 위치도 항상 그 경로로만
+   맞춰진다. 그런데 브라우저 기본 스크롤바 thumb은 이 경로를 거치지 않고
+   xterm.js 자체의 로컬 scrollback(과거 렌더링 도중의 raw 상태까지 포함)을
+   직접 scrollTop으로 움직여서, 드래그 중 tmux 화면과 불일치하는 깨진 프레임이
+   보였다가 손을 떼야 정상 화면으로 재동기화됐다. thumb을 아예 그리지 않으면
+   그 경로 자체가 막혀 근본적으로 재발하지 않는다 — 휠/터치 스크롤은 JS로
+   scrollTop을 직접 옮기는 방식이라 계속 정상 동작한다. */
+#terminal-container .xterm-viewport { scrollbar-width:none; }
+#terminal-container .xterm-viewport::-webkit-scrollbar { display:none; width:0; height:0; }
 
 /* ---- 음성 버튼 — 상단 바 통합 (voice.js 계약: .label 자식 + .recording) ---- */
 #mic-btn-wrap.mic {
