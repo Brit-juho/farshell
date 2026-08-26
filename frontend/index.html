@@ -52,7 +52,7 @@
       border:1px solid var(--line,rgba(255,255,255,.08));border-radius:var(--wrad,12px);
       padding:28px 24px;box-shadow:0 12px 40px rgba(0,0,0,.4);text-align:center;}
     #login-form[hidden]{display:none;}
-    #login-form .login-icon{font-size:34px;line-height:1;margin-bottom:12px;}
+    #login-form .login-icon{font-size:32px;line-height:1;margin-bottom:12px;color:var(--acc,#0a84ff);}
     #login-form h1{font-size:18px;font-weight:600;margin:0 0 4px;}
     #login-form .login-sub{font-size:13px;color:var(--sub,#8e8e96);margin:0 0 20px;}
     #login-form input{width:100%;box-sizing:border-box;font-size:16px;padding:11px 13px;
@@ -80,7 +80,7 @@
   <div id="login-gate">
     <div id="login-spinner"></div>
     <form id="login-form" hidden autocomplete="off">
-      <div class="login-icon">🔒</div>
+      <div class="login-icon"><i class="icon-lock"></i></div>
       <h1>FarShell</h1>
       <p class="login-sub">접속하려면 비밀번호를 입력하세요</p>
       <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
