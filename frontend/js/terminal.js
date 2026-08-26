@@ -806,7 +806,13 @@
       // 반드시 재동기화한다(안 하면 TUI 정렬이 깨진 채로 남는다).
       requestAnimationFrame(() => fitAndResize(id));
       if (typeof notifyActiveSession === 'function') notifyActiveSession(id);
-      updateSessionPicker();
+      // picker.js는 bootstrap.js 매니페스트에서 terminal.js보다 늦게 로드된다.
+      // 부팅 직후(로그인 직후 세션 복원 시점)엔 이 함수가 아직 정의 전이라
+      // switchTo()가 여기서 ReferenceError를 던지고, addSession()을 거쳐
+      // boot IIFE의 catch(e){ createSession() }로 떨어져 — "맥에서도 열기"가
+      // 켜져 있으면 조용히 새 tmux 세션 + 새 맥 터미널 창을 만들어버렸다.
+      // notifyActiveSession과 같은 패턴으로 typeof 가드를 씌운다.
+      if (typeof updateSessionPicker === 'function') updateSessionPicker();
       saveWorkspace();
     }
 
