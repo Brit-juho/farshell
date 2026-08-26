@@ -137,13 +137,20 @@ _start_server() {
   bind_host="$("$VT_PYTHON" -c 'import network_access as n; print(n.resolve_bind_host(n.get_current_spec()))' 2>/dev/null || echo 0.0.0.0)"
   nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
   echo $! > "$PID_DIR/server.pid"
-  sleep 2
-  if curl -sf http://localhost:$VT_PORT/ -o /dev/null 2>/dev/null; then
-    echo "✓ 서버 시작 완료 (http://localhost:$VT_PORT)"
-  else
-    echo "✗ 서버 시작 실패. 로그: $SERVER_LOG"
-    return 1
-  fi
+  # 고정 sleep 대신 서버가 실제로 응답할 때까지 폴링한다. uvicorn 기동 시간은
+  # 패키지 로딩량 등에 따라 달라져서, 고정 대기 중에 브라우저가 자동으로 열리거나
+  # 사용자가 새로고침하면 아직 안 뜬 서버에 요청이 가서 프론트가 "세션 없음"으로
+  # 오판해 tmux 세션을 중복 생성하는 원인이 됐다 (최대 10초, 100ms 간격).
+  local waited=0
+  while ! curl -sf http://localhost:$VT_PORT/ -o /dev/null 2>/dev/null; do
+    if [ $waited -ge 10000 ]; then
+      echo "✗ 서버 시작 실패(10초 타임아웃). 로그: $SERVER_LOG"
+      return 1
+    fi
+    sleep 0.1
+    waited=$((waited + 100))
+  done
+  echo "✓ 서버 시작 완료 (http://localhost:$VT_PORT)"
 }
 
 # 메인 터널 시작. 성공 시 URL 변경 훅 실행 + 좀비 재연결 감시 데몬 기동 (설정된 경우에만).

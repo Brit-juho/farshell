@@ -3,6 +3,9 @@ This directory contains third-party libraries vendored locally to remove CDN dep
 - xterm.js v5.5.0 (MIT) — https://github.com/xtermjs/xterm.js
   Copyright (c) 2017-present, The xterm.js authors
 
+- @xterm/addon-unicode11 v0.8.0 (MIT) — https://github.com/xtermjs/xterm.js
+  Copyright (c) 2017-present, The xterm.js authors
+
 - @xterm/addon-fit v0.10.0 (MIT)
 - @xterm/addon-search v0.15.0 (MIT)
 
