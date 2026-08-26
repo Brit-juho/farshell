@@ -63,7 +63,10 @@
     /* type=password 대신 text+마스킹 사용 → Chrome 비밀번호 저장 제안 자체를 차단 (시각적 마스킹은 유지) */
     #login-pass{-webkit-text-security:disc;text-security:disc;}
     #login-form button{width:100%;font-size:15px;font-weight:600;padding:11px;cursor:pointer;
-      background:var(--acc,#0a84ff);color:var(--acc-ink,#fff);border:none;border-radius:var(--trad,7px);}
+      background:var(--acc,#0a84ff);color:var(--acc-ink,#fff);border:none;border-radius:var(--trad,7px);
+      transition:filter .12s, transform .08s;}
+    #login-form button:hover:not(:disabled){filter:brightness(1.1);}
+    #login-form button:active:not(:disabled){transform:scale(.97);filter:brightness(.95);}
     #login-form button:disabled{opacity:.55;cursor:default;}
     #login-form .login-err{color:var(--err,#ff453a);font-size:13px;margin-top:12px;min-height:1em;}
     #login-form .login-err[hidden]{display:none;}
