@@ -163,7 +163,12 @@
         return out;
       }
 
-      function hideGate(){ gate.hidden=true; }
+      // grid.js 등 다른 번들 스크립트가 "로그인 확정 전에는 인증이 필요한 호출을
+      // 하나도 내보내지 않도록" 기다릴 수 있는 유일한 신호. 이게 없으면 각 스크립트가
+      // 로그인 폼이 떠 있는 내내(사용자가 비밀번호를 입력하는 시간만큼) 401/403을
+      // 반복 재시도하게 된다 — 자연 치유되긴 해도 불필요한 노이즈다.
+      window.__vtAuthed=false;
+      function hideGate(){ gate.hidden=true; window.__vtAuthed=true; document.dispatchEvent(new Event('vt:authed')); }
       function showForm(){ spin.hidden=true; form.hidden=false;
         setTimeout(function(){ try{ (otpWrap.hidden?pass:otp).focus(); }catch(e){} }, 50); }
       function showErr(m){ err.textContent=m; err.hidden=false; btn.disabled=false; }
