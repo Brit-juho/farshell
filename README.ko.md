@@ -1,21 +1,24 @@
-[![English](https://img.shields.io/badge/lang-English-lightgrey.svg)](./README.md) · [![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md) [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#설치) [![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#설치)
-
 # FarShell
 
-**macOS/Linux 머신을 개인 개발 서버로 — 어디서든 tmux 세션 그대로, 음성 입력,
-모바일 PWA로 접속합니다. 셀프호스팅, 무료.**
+[![English](https://img.shields.io/badge/lang-English-lightgrey.svg)](./README.md)
+[![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#설치)
+[![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#설치)
 
-FarShell은 특정 에이전트에 종속되지 않습니다. Claude Code든 Codex든 Aider든
-Gemini CLI든, 아니면 그냥 셸이든 — 같은 tmux 세션 안에서 원하는 걸 실행하면
-됩니다(`fsh agent <name>`). 음성 입력·모바일 접속·tmux 공유는 어떤 에이전트를
-쓰든 동일하게 동작합니다. (Windows는 WSL2 환경에서만 동작 — 네이티브 미지원)
+> 내 터미널을 어디서든. 한 줄로 설치.
+
+FarShell은 macOS/Linux 머신을 개인 개발 서버로 씁니다 — 같은 tmux 세션을
+음성으로도, 폰으로도 그대로 접속합니다. Claude Code든 Codex든 Aider든
+Gemini CLI든, 아니면 그냥 셸이든 `fsh agent <name>`으로 원하는 걸 실행하면
+음성 입력·모바일 접속·tmux 공유는 무엇을 쓰든 똑같이 동작합니다.
+(Windows는 WSL2 환경에서만 동작)
 
 - 모바일에서 터미널 접속 — QR 스캔하면 바로 tmux 연결
 - 음성으로 코딩 — 다른 작업 중에도 핫키(Ctrl+Shift+V)로 음성 입력
 - 원격에서도 읽기 전용 코드 뷰어/diff, 포트 대시보드로 상태 확인
-- 같은 세션에서 원하는 CLI 에이전트를 그대로 — Claude Code, Codex, Aider, Gemini CLI, 또는 그냥 셸
-- Claude Code를 쓴다면 Stop hook으로 두 가지가 덤으로 붙습니다 — 작업 완료 시 TTS 요약, 다음 지시를 자동으로 흘려보내는 프롬프트 큐
-- 전부 무료 — API 키, 구독 없음. 오픈소스 STT/TTS
+- Claude Code를 쓴다면 Stop hook으로 작업 완료 TTS 요약 + 자동 프롬프트 큐가 덤으로 붙습니다
+- API 키도 구독도 없음 — 오픈소스 STT/TTS, 전부 무료
 
 ---
 

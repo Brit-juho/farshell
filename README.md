@@ -1,23 +1,24 @@
-[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./README.ko.md) · [![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md) [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#installation) [![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#installation)
-
 # FarShell
 
-**Turn a macOS/Linux machine into a personal dev server you can reach from
-anywhere — full tmux sessions, voice input, and a mobile PWA. Self-hosted
-and free.**
+[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./README.ko.md)
+[![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#installation)
+[![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#installation)
 
-FarShell is agent-agnostic: run Claude Code, Codex, Aider, Gemini CLI, or a
-plain shell — whatever you use — inside the same tmux session
-(`fsh agent <name>`). Voice input, mobile access, and tmux sharing work the
-same no matter which one you pick. (Windows works only through WSL2 — no
-native support.)
+> Your terminal, from anywhere. One-line install.
+
+FarShell turns a macOS/Linux machine into a personal dev server: the same
+tmux session, reachable by voice or by phone. Run Claude Code, Codex, Aider,
+Gemini CLI, or just a shell — pick your agent with `fsh agent <name>`, and
+voice input, mobile access, and tmux sharing all work the same either way.
+(Windows works only through WSL2.)
 
 - Access your terminal from mobile — scan a QR code and you're connected to tmux
 - Code by voice — a hotkey (Ctrl+Shift+V) triggers voice input even while doing other work
 - Check status remotely with a read-only code viewer/diff and a port dashboard
-- Run any CLI agent you like in the same session — Claude Code, Codex, Aider, Gemini CLI, or just a shell
-- If you happen to use Claude Code, its Stop hook adds two extras: a TTS summary when a task finishes, and a prompt queue that auto-feeds the next instruction
-- Entirely free — no API keys, no subscriptions. Open-source STT/TTS
+- If you use Claude Code, its Stop hook adds a TTS summary on task completion and an auto-fed prompt queue
+- No API keys, no subscriptions — open-source STT/TTS, entirely free
 
 ---
 
