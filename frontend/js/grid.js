@@ -1,5 +1,14 @@
+    // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
+    // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
+    // 파일의 인증 필요 호출(capabilities/safe-mode/ws-agent)이 로그인 폼이 떠 있는
+    // 동안(=사용자가 비밀번호를 입력하는 시간만큼) 계속 401/403으로 재시도한다.
+    function whenAuthed(cb) {
+      if (window.__vtAuthed) { cb(); return; }
+      document.addEventListener('vt:authed', cb, { once: true });
+    }
+
     // 음성 기능 설치 여부 확인 → 미설치 시 voice UI 숨김
-    (async () => {
+    whenAuthed(() => (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/capabilities`);
         const caps = await res.json();
@@ -32,7 +41,7 @@
       const s = document.createElement('script');
       s.src = '/static/voice.js';
       document.body.appendChild(s);
-    })();
+    })());
 
     // Phase 9 #2: agents 폴링 제거 — `/ws-agent` push가 모두 대체.
     // applyAgentBadges() / connectAgentWs()는 위쪽(약 ~1120행)에 정의됨.
@@ -241,14 +250,16 @@
     }
 
     // ── 안전 모드 표시 ───────────────────────────────────────────────
-    fetch(`${API_BASE}/api/safe-mode`).then(r => r.json()).then(data => {
-      if (data.enabled) {
-        const banner = document.createElement('div');
-        banner.className = 'vt-banner';
-        banner.textContent = '🛡 안전 모드 — 위험 명령 차단됨';
-        document.body.appendChild(banner);
-      }
-    }).catch(() => {});
+    whenAuthed(() => {
+      fetch(`${API_BASE}/api/safe-mode`).then(r => r.json()).then(data => {
+        if (data.enabled) {
+          const banner = document.createElement('div');
+          banner.className = 'vt-banner';
+          banner.textContent = '🛡 안전 모드 — 위험 명령 차단됨';
+          document.body.appendChild(banner);
+        }
+      }).catch(() => {});
+    });
 
     // ── Agent WebSocket — Phase 9 #2: 폴링 대체용 push 채널 + #5: heartbeat/reconnect ─
     let wsAgent = null;
@@ -317,7 +328,7 @@
         _applyCardAgent(card, agents[card.dataset.name]);
       });
     }
-    connectAgentWs();
+    whenAuthed(connectAgentWs);
 
     function showToast(text) {
       let toast = document.getElementById('agent-toast');
