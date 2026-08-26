@@ -203,7 +203,8 @@ html[data-skin="windows"] .caption { display:flex; }
   max-height:calc(100vh - var(--topbar-popup-y) - env(safe-area-inset-bottom,0px) - 12px);
   overflow-y:auto; -webkit-overflow-scrolling:touch;
   background:var(--menu); color:var(--txt); border-radius:12px; padding:6px;
-  box-shadow:0 12px 34px rgba(0,0,0,.55); border:1px solid var(--line);
+  box-shadow:0 12px 34px rgba(0,0,0,.55), inset 0 -16px 12px -12px rgba(0,0,0,.35);
+  border:1px solid var(--line);
   opacity:0; transform:translateY(-6px) scale(.98); transform-origin:top right;
   pointer-events:none; transition:opacity .16s, transform .16s;
 }
