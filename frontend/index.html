@@ -438,11 +438,12 @@
     document.getElementById('add-btn').addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showAddMenu(e); }
     });
-    // "맥에서도 열기" — 기본 체크 ON, 선택은 localStorage에 기억 (폰에서 끄면 유지됨)
+    // "맥에서도 열기" — 기본 체크 OFF(새 세션마다 맥 터미널 창이 자동으로 뜨는 걸
+    // 원치 않는 사용자가 다수), 선택은 localStorage에 기억 (켜면 유지됨)
     (function initAutoMac() {
       const cb = document.getElementById('auto-mac-checkbox');
       if (!cb) return;
-      cb.checked = (localStorage.getItem('vt_auto_mac') ?? 'on') !== 'off';
+      cb.checked = (localStorage.getItem('vt_auto_mac') ?? 'off') === 'on';
       cb.addEventListener('change', () => {
         localStorage.setItem('vt_auto_mac', cb.checked ? 'on' : 'off');
       });
