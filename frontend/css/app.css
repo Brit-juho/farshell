@@ -56,6 +56,13 @@ html[data-skin="notepad"] {
   --wrad:6px; --trad:4px;
 }
 
+/* 3단 텍스트 램프의 중간 톤 — 헤딩(--txt)·메타(--sub) 둘뿐이던 텍스트 색을
+   본문 등급 하나로 넓힌다. Grid 카드처럼 제목/본문/메타 3단이 필요한 곳에서
+   본문(card-preview 등)이 제목과 똑같은 밝기로 경쟁하던 걸 막는다. 스킨마다
+   새 hex를 추가하는 대신 기존 두 토큰의 믹스로 유도해 5개 스킨 전부에
+   자동으로 맞는 톤이 나오게 한다. */
+:root, html { --txt2: color-mix(in srgb, var(--txt) 65%, var(--sub) 35%); }
+
 /* ---- 리셋 -------------------------------------------------------------- */
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { height:100%; overflow:hidden; }
@@ -472,13 +479,17 @@ body.voice-only-mode #mic-status {
 .vt-card:hover { border-color:var(--acc); box-shadow:0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent); }
 .card-head { display:flex; justify-content:space-between; align-items:center; gap:3px; }
 .vt-card .card-agent { flex:0 0 auto; font-size:13px; line-height:1; }
+/* 카드 위계 3단: 제목(가장 밝고 큼) > 프리뷰(중간 톤 --txt2, 실제 내용) >
+   명령어(가장 어두운 --sub, 메타데이터). 이전엔 제목·프리뷰가 둘 다 --txt +
+   13/11px 1px 차이뿐이라 무게만으로 구분해야 했던 걸, 크기·색을 함께 벌려
+   스캔했을 때 즉시 구분되게 한다. */
 .vt-card .card-title { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-weight:700; color:var(--txt); font-size:13px; }
+  font-weight:700; color:var(--txt); font-size:14px; }
 .vt-card .card-cmd { flex:0 1 auto; min-width:0; max-width:40%; overflow:hidden; text-overflow:ellipsis;
   white-space:nowrap; font-size:11px; color:var(--sub); }
 .vt-card .card-preview {
   margin:0; background:var(--crust); border-radius:3px; padding:4px; font-family:var(--mono);
-  font-size:11px; color:var(--txt); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.2;
+  font-size:11px; color:var(--txt2); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.2;
   /* max-height로 잘려나가는 마지막 줄이 단어 중간에서 뚝 끊긴 채로 보이던 것을,
      하단 페이드로 부드럽게 흐려지게 해 "미리보기이므로 잘렸다"는 게 자연스럽게
      읽히도록 한다. */
