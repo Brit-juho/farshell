@@ -1,26 +1,23 @@
+[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./README.ko.md) · [![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md) [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#installation) [![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#installation)
+
 # FarShell
 
-[![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
-[![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
-[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./README.ko.md)
+**Turn a macOS/Linux machine into a personal dev server you can reach from
+anywhere — full tmux sessions, voice input, and a mobile PWA. Self-hosted
+and free.**
 
-**Your macOS/Linux terminal, from anywhere — full tmux sessions, voice input,
-a mobile PWA, and Claude Code integration.
-Free and open source, self-hosted on your own machine.**
-
-A system that turns a macOS / Linux machine into a server so you can drive
-your terminal from anywhere, by voice or by browser. (Windows works only
-through WSL2 — no native support.)
+FarShell is agent-agnostic: run Claude Code, Codex, Aider, Gemini CLI, or a
+plain shell — whatever you use — inside the same tmux session
+(`fsh agent <name>`). Voice input, mobile access, and tmux sharing work the
+same no matter which one you pick. (Windows works only through WSL2 — no
+native support.)
 
 - Access your terminal from mobile — scan a QR code and you're connected to tmux
 - Code by voice — a hotkey (Ctrl+Shift+V) triggers voice input even while doing other work
 - Check status remotely with a read-only code viewer/diff and a port dashboard
-- Claude Code integration — TTS summaries when a task finishes, plus a prompt queue
+- Run any CLI agent you like in the same session — Claude Code, Codex, Aider, Gemini CLI, or just a shell
+- If you happen to use Claude Code, its Stop hook adds two extras: a TTS summary when a task finishes, and a prompt queue that auto-feeds the next instruction
 - Entirely free — no API keys, no subscriptions. Open-source STT/TTS
-
-```
-https://github.com/Brit-juho/farshell
-```
 
 ---
 
