@@ -1,10 +1,9 @@
 ---
 name: fsh
 description: |
-  FarShell 제어. 음성 모드, 모바일 접속, 서버 관리.
-  어디서든 실행 가능한 전역 스킬. Use when asked to "음성 모드", "voice mode",
-  "모바일 접속", "mobile mode", "fsh", "vt", "voice terminal 시작", "음성으로 코딩",
-  "voice coding", "터미널 음성".
+  FarShell(fsh) 제어. 터미널을 웹/모바일로 원격 접속시키는 전역 스킬(서버/터널 관리,
+  음성 입력 포함). 어디서든 실행 가능. Use when asked to "모바일 접속", "mobile mode",
+  "fsh", "음성 모드", "voice mode".
 allowed-tools:
   - Bash
   - Read

@@ -7,15 +7,15 @@
 Control FarShell from any terminal with the `fsh` command:
 
 ```bash
-fsh voice              # voice mode (background, usable while working in Notion)
-fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
-fsh mobile [--e2e]     # mobile access URL + QR (--e2e: encrypt payload)
 fsh start [--voice]    # start everything (server+tunnel, --voice also starts the voice daemon)
 fsh stop [--purge]     # stop (--purge: also fully kill tmux sessions)
 fsh status             # check current status
+fsh mobile [--e2e]     # mobile access URL + QR (--e2e: encrypt payload)
 fsh manage             # TUI management tool (sessions/target/hotkeys/status) — Wave 4
 fsh attach [name]      # attach any tmux session in a new window
+fsh voice              # voice mode (background, usable while working in Notion)
 fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
+fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
 fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue (P4)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
 fsh password [clear]   # set web login password (stores a hash) / clear=unset

@@ -5,15 +5,15 @@
 터미널 어디서든 `fsh` 명령으로 FarShell을 제어합니다:
 
 ```bash
-fsh voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
-fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
-fsh mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
 fsh start [--voice]    # 전체 시작 (서버+터널, --voice로 음성 데몬도 함께)
 fsh stop [--purge]     # 종료 (--purge: tmux 세션까지 완전 종료)
 fsh status             # 현재 상태 확인
+fsh mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
 fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave 4
 fsh attach [name]      # 임의 tmux 세션을 새 창에 attach
+fsh voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
 fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
+fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
 fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐 (P4)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
 fsh password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
