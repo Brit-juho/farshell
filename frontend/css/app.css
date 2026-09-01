@@ -147,6 +147,30 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 }
 @media (min-width:720px) { #voice-session-picker { display:none; } } /* 넓은 화면에선 탭으로 충분 */
 
+/* 좁은 화면 상단 바 정리 — 390px에서 요소 9개가 경쟁하면서 탭 이름이 두 글자("tm…")로
+   잘려 세션을 구분할 수 없었다. 폰에서 탭 라벨은 "어느 세션인지"를 알려주는 유일한
+   단서라 폭을 최우선으로 준다.
+     · 신호등(42px): macOS 창 장식이라 터치 환경에서 아무 기능이 없다.
+     · 검색·Grid·코드뷰어(90px): ⋯ 메뉴 "보기" 그룹에 같은 항목이 있다.
+     · 세션 피커(150px): 탭이 살아나면 역할이 겹친다. 탭이 0개로 눌릴 때를 대비한
+       폴백이었는데, 위 두 항목을 걷어내면 그 상황 자체가 생기지 않는다.
+   회수한 ~280px는 전부 #tabs로 간다. */
+@media (max-width:719px) {
+  html[data-skin="macos"] .traffic { display:none; }
+  #search-toggle, #grid-toggle, #viewer-toggle { display:none; }
+  #voice-session-picker { display:none; }
+  .tab { max-width:none; flex:1 1 0; min-width:76px; padding:0 7px; gap:4px; }
+  .tab-name { min-width:0; }
+  /* 비활성 탭의 ×를 감춰 이름에 22px를 더 준다. 탭 3개면 이름 칸이 40px→62px로
+     늘어 서너 글자에서 예닐곱 글자가 된다. 닫으려면 그 탭으로 먼저 이동해야 하는데,
+     모바일 브라우저의 탭 UI가 쓰는 방식과 같고 오조작으로 세션을 닫는 사고도 줄어든다.
+     세션 시트(⋯ → 세션)에서는 어느 탭이든 바로 닫을 수 있다. */
+  .tab:not(.active) .close { display:none; }
+  /* 활성 탭은 ×를 유지하므로 같은 flex 비율이면 오히려 이름이 제일 짧아진다 —
+     지금 보고 있는 세션이 가장 안 보이는 역전이라, ×가 먹는 만큼 폭을 더 준다. */
+  .tab.active { flex:1.7 1 0; }
+}
+
 /* 모바일 세션 관리 시트. 탭 바가 0px로 축소되어도 세션의 모든 기본 조작을 제공한다. */
 .vt-session-backdrop { position:fixed; inset:0; z-index:540; background:rgba(0,0,0,.48); display:flex; align-items:flex-end; }
 .vt-session-sheet {
@@ -814,9 +838,14 @@ body.voice-only-mode #mic-status {
 /* 모바일 — 바텀시트. .vt-guide-backdrop(:394)와 같은 전환 규칙을 따른다. */
 @media (max-width:560px){
   .vt-viewer-backdrop{ align-items:flex-end; padding:0; }
+  /* 카드에 height 를 주지 않으면 flex 컨테이너가 내용 높이로만 잡혀, max-height:92vh
+     를 걸어둬도 실제로는 화면의 절반도 안 쓰는 일이 생긴다(측정값 347/844px).
+     코드는 세로로 읽는 물건이라 이 손실이 그대로 읽을 수 있는 줄 수로 이어진다.
+     dvh 를 먼저 두고 vh 로 폴백한다 — 주소창이 접히고 펴지는 모바일 브라우저에서
+     vh 는 보이는 높이보다 크게 잡혀 하단이 잘린다. */
   .vt-viewer-card{
-    max-height:92vh; width:100%;
-    border-radius:18px 18px 0 0; border-bottom:none;
+    height:100vh; height:100dvh; max-height:none; width:100%;
+    border-radius:0; border:none;
     animation:vtGuideSheet .18s ease-out;
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
@@ -870,10 +899,14 @@ body.vt-resizing #grid-view{ transition:none; }
     inset:0; padding:0; align-items:flex-end; justify-content:center;
     background:color-mix(in srgb, var(--crust) 62%, transparent); pointer-events:auto;
   }
+  /* 폰에서는 시트를 화면 전체로 편다. 92vh + height:auto 였을 때는 내용이 짧으면
+     카드가 더 작게 잡혀 세로의 절반만 쓰고, 코드를 읽을 줄 수가 그만큼 줄었다.
+     dvh 를 먼저 두고 vh 로 폴백한다 — 주소창이 접히고 펴지는 모바일 브라우저에서
+     vh 는 실제 보이는 높이보다 크게 잡혀 하단이 잘린다. */
   #vt-viewer.mode-dock .vt-viewer-card, #vt-viewer.mode-full .vt-viewer-card{
-    width:100%; max-height:92vh; height:auto;
-    border-radius:18px 18px 0 0; border:1px solid var(--line); border-bottom:none;
-    box-shadow:0 24px 64px rgba(0,0,0,.45);
+    width:100%; height:100vh; height:100dvh; max-height:none;
+    border-radius:0; border:none;
+    box-shadow:none;
   }
   #vt-viewer.mode-dock .vt-vw-resizer{ display:none; }
   body.vt-docked #terminal-container, body.vt-docked #grid-view{ margin-right:0; }
@@ -1076,3 +1109,31 @@ body.vt-resizing #grid-view{ transition:none; }
 
 /* 사용 불가 상태의 메뉴 항목 (P5 푸시 등) — 숨기지 않고 이유를 보여준다 */
 .mi.disabled{ opacity:.5; }
+
+/* 최근 연 파일 — 트리 최상단. 루트가 ~/GitHub 이라 실제 파일까지 매번 네다섯 단계를
+   내려가야 했고, 폰에서는 그 동선 자체가 뷰어를 안 쓰게 되는 이유였다. */
+.vt-vw-recent{ border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:4px; }
+.vt-vw-recent-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:6px 10px 4px; font:600 10.5px var(--ui); letter-spacing:.08em;
+  text-transform:uppercase; color:var(--sub);
+}
+.vt-vw-recent-clear{
+  background:none; border:none; color:var(--sub); font:400 11px var(--ui);
+  cursor:pointer; padding:2px 4px; border-radius:4px; text-transform:none; letter-spacing:0;
+}
+.vt-vw-recent-clear:hover{ background:var(--menu-hover); color:var(--txt); }
+.vt-vw-recent-row{ flex-direction:column; align-items:flex-start; gap:1px; }
+.vt-vw-recent-row .vt-vw-name{ flex:0 0 auto; width:100%; }
+.vt-vw-recent-dir{
+  font:400 10.5px var(--mono); color:var(--sub);
+  width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left;
+}
+
+/* 빠른 열기 (Quick open, D) — 세션·최근 파일·명령 통합 검색. */
+.vt-qo-section-head{
+  padding:8px 10px 4px; font:600 10.5px var(--ui); letter-spacing:.08em;
+  text-transform:uppercase; color:var(--sub);
+}
+.vt-qo-row{ cursor:pointer; }
+.vt-qo-hint{ margin-left:auto; flex:0 0 auto; font:400 11px var(--mono); color:var(--sub); }

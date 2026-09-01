@@ -137,6 +137,12 @@
       if (btn) btn.classList.add('active');
 
       document.getElementById('vt-vw-body').classList.add('split');
+      // data-active 를 처음부터 세운다. 이게 없으면 sheet(폰)에서도 CSS의 한쪽만
+      // 보여주는 규칙([data-active="tree"])이 걸리지 않아, .split 기본값인 좌우
+      // 분할이 그대로 적용된다 — 390px 화면에서 트리 230px + 코드 160px로 쪼개져
+      // 코드를 읽을 수 없었다. dock/full은 data-active와 무관하게 둘 다 보이므로
+      // 넓은 화면 동작에는 영향이 없다.
+      _setActivePane('tree');
       _viewerState.mode = 'tree';
       _viewerState.selectedPath = null;
       _viewerState.expanded = new Set();
@@ -438,13 +444,23 @@
       await _navigateRoot(parent);
     }
 
+    // OS가 만드는 메타데이터 파일만 목록에서 뺀다. 사용자가 만든 dot 디렉토리
+    // (.claude, .vscode, .github 등)는 실제로 열어볼 일이 있으므로 남긴다 —
+    // "숨김 파일 전부 숨기기"로 잡으면 그쪽까지 사라져 오히려 불편해진다.
+    const _OS_NOISE = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini', '.localized']);
+    function _denoise(entries) {
+      return (entries || []).filter(e => !_OS_NOISE.has(e.name));
+    }
+
     // 트리 최상단(현재 root의 자식들) 렌더링 — 초기 로드와 "위로 이동" 양쪽에서 쓴다.
     function _renderTopLevel(treeEl, data) {
       treeEl.innerHTML = '';
       const frag = document.createDocumentFragment();
       if (_viewerState.root !== '/') frag.appendChild(_upRowEl());
+      const recent = _recentSectionEl();
+      if (recent) frag.appendChild(recent);
 
-      if (!data.entries.length) {
+      if (!_denoise(data.entries).length) {
         treeEl.appendChild(frag);
         const empty = document.createElement('div');
         empty.className = 'vt-vw-empty';
@@ -452,7 +468,7 @@
         treeEl.appendChild(empty);
         return;
       }
-      data.entries.forEach(entry => {
+      _denoise(data.entries).forEach(entry => {
         const childPath = _viewerState.root.replace(/\/$/, '') + '/' + entry.name;
         const row = _treeRowEl(entry, childPath, 0);
         _wireTreeRow(row, entry, childPath, 0);
@@ -494,7 +510,7 @@
       chev.innerHTML = prevIcon;   // 펼쳐진 화살표 방향은 .open의 CSS 회전이 담당한다
 
       const frag = document.createDocumentFragment();
-      data.entries.forEach(entry => {
+      _denoise(data.entries).forEach(entry => {
         const childPath = path.replace(/\/$/, '') + '/' + entry.name;
         const childRow = _treeRowEl(entry, childPath, depth + 1);
         _wireTreeRow(childRow, entry, childPath, depth + 1);
@@ -507,7 +523,7 @@
         note.textContent = `일부만 표시했습니다 (최대 ${data.entries.length}개)`;
         frag.appendChild(note);
       }
-      if (!data.entries.length && !data.truncated) {
+      if (!_denoise(data.entries).length && !data.truncated) {
         const empty = document.createElement('div');
         empty.className = 'vt-vw-empty';
         empty.style.setProperty('--d', depth + 1);
@@ -535,8 +551,76 @@
     function _selectFile(path, row) {
       document.querySelectorAll('.vt-vw-trow.active').forEach(r => r.classList.remove('active'));
       if (row) row.classList.add('active');
+      _pushRecent(path);
       openFile(path);
       if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+    }
+
+    // --- 최근 연 파일 -----------------------------------------------------------
+    // 루트가 ~/GitHub 이라 실제로 보는 파일까지 매번 네다섯 단계를 눌러 내려가야 했다.
+    // 폰에서는 그 자체가 뷰어를 안 쓰게 되는 이유가 된다. 최근 목록을 트리 맨 위에
+    // 얹어 한 번에 도달하게 한다. 경로만 저장하므로 파일 내용은 남지 않는다.
+    const VT_RECENT_KEY = 'vt_viewer_recent';
+    const VT_RECENT_MAX = 8;
+
+    function _loadRecent() {
+      try {
+        const v = JSON.parse(localStorage.getItem(VT_RECENT_KEY) || '[]');
+        return Array.isArray(v) ? v.filter(p => typeof p === 'string') : [];
+      } catch (_) { return []; }
+    }
+    function _pushRecent(path) {
+      if (!path) return;
+      try {
+        const list = _loadRecent().filter(p => p !== path);
+        list.unshift(path);
+        localStorage.setItem(VT_RECENT_KEY, JSON.stringify(list.slice(0, VT_RECENT_MAX)));
+      } catch (_) { /* 사생활 보호 모드 등 — 최근 목록 없이 그냥 동작한다 */ }
+    }
+
+    // 최근 목록 섹션을 트리 상단에 만들어 반환한다. 없으면 null.
+    function _recentSectionEl() {
+      const list = _loadRecent();
+      if (!list.length) return null;
+
+      const sec = document.createElement('div');
+      sec.className = 'vt-vw-recent';
+
+      const head = document.createElement('div');
+      head.className = 'vt-vw-recent-head';
+      const label = document.createElement('span');
+      label.textContent = '최근';
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'vt-vw-recent-clear';
+      clear.textContent = '지우기';
+      clear.addEventListener('click', (e) => {
+        e.stopPropagation();
+        try { localStorage.removeItem(VT_RECENT_KEY); } catch (_) {}
+        sec.remove();
+      });
+      head.appendChild(label);
+      head.appendChild(clear);
+      sec.appendChild(head);
+
+      list.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'vt-vw-row vt-vw-recent-row';
+        const name = document.createElement('div');
+        name.className = 'vt-vw-name';
+        name.textContent = p.split('/').pop() || p;
+        const dir = document.createElement('div');
+        dir.className = 'vt-vw-recent-dir';
+        // 루트 밑 상대경로만 보여준다 — 전체 경로는 폰 폭에서 앞부분이 다 잘린다.
+        const rootPrefix = (_viewerState.root || '').replace(/\/$/, '') + '/';
+        const rel = p.startsWith(rootPrefix) ? p.slice(rootPrefix.length) : p;
+        dir.textContent = rel.split('/').slice(0, -1).join('/') || '.';
+        row.appendChild(name);
+        row.appendChild(dir);
+        row.addEventListener('click', () => _selectFile(p, null));
+        sec.appendChild(row);
+      });
+      return sec;
     }
 
     // --- 파일 ----------------------------------------------------------------

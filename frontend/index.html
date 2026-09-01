@@ -278,7 +278,7 @@
       <span class="label">음성 입력</span>
     </button>
 
-    <button class="tbtn" onclick="toggleSearch()" aria-label="검색" title="검색">
+    <button id="search-toggle" class="tbtn" onclick="toggleSearch()" aria-label="검색" title="검색">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
     <button id="grid-toggle" class="tbtn" onclick="toggleGridView()" aria-label="Grid 뷰" title="모든 tmux 세션 라이브 프리뷰">
@@ -310,6 +310,20 @@
       이 세션 맥에서 열기
     </button>
 
+    <div class="msep"></div>
+    <div class="mlabel">보기</div>
+    <!-- 좁은 화면에선 상단 바의 검색/Grid 아이콘이 숨겨지므로(app.css, max-width:719px)
+         여기가 유일한 진입점이 된다. 넓은 화면에서도 중복 노출을 허용한다 — 메뉴에서
+         찾는 사용자와 아이콘을 누르는 사용자가 갈리기 때문. -->
+    <button class="mi" id="qopen-btn" role="menuitem" onclick="openQuickOpen()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>빠른 열기
+    </button>
+    <button class="mi" id="search-mi" role="menuitem" onclick="toggleSearch()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>터미널 내 검색
+    </button>
+    <button class="mi" id="grid-mi" role="menuitem" onclick="toggleGridView()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Grid 뷰
+    </button>
     <div class="msep"></div>
     <div class="mlabel">음성 · 파일</div>
     <button class="mi needs-voice" id="voiceonly-btn" role="menuitem" onclick="toggleVoiceOnly()">

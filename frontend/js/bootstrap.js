@@ -17,6 +17,7 @@ const LEGACY_APP_SCRIPTS = [
   '/static/js/viewer.js',
   '/static/js/ports.js',
   '/static/js/queue.js',
+  '/static/js/quickopen.js',
   '/static/js/swreg.js',
   '/static/js/pushui.js',
 ];
