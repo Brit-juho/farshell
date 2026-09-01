@@ -765,6 +765,21 @@ body.voice-only-mode #mic-status {
    diff 라인 안에서는 하이라이팅을 끄고 본문 색만 쓴다. */
 .vt-vw-dl.add .vt-vw-tx *,.vt-vw-dl.del .vt-vw-tx *{ color:inherit; font-style:normal; font-weight:normal; }
 
+/* diff 줄 클릭 → 큐에 주석 추가(C). add/del 줄은 이미 색 배경이 있어 일반
+   hover 배경으로는 안 보이므로, 배경과 무관하게 드러나는 안쪽 테두리로 신호를 준다. */
+.vt-vw-dl{ cursor:pointer; }
+.vt-vw-dl:hover{ box-shadow:inset 0 0 0 1px var(--acc); }
+.vt-vw-annotate{
+  padding:8px 10px; background:var(--menu);
+  border-top:1px dashed var(--line); border-bottom:1px dashed var(--line);
+}
+.vt-vw-annotate-input{
+  width:100%; box-sizing:border-box; font:400 12.5px var(--ui);
+  padding:6px 8px; border:1px solid var(--line); border-radius:var(--trad);
+  background:var(--win); color:var(--txt); resize:vertical;
+}
+.vt-vw-annotate-row{ display:flex; justify-content:flex-end; gap:6px; margin-top:6px; }
+
 /* highlight.js — 테마 CSS 대신 스킨 토큰으로 직접 매핑.
    하이라이터 기본 팔레트를 쓰면 notepad(라이트)에서 대비가 무너진다. */
 .vt-vw-tx .hljs-keyword,.vt-vw-tx .hljs-built_in,
