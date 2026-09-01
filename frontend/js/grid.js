@@ -220,14 +220,44 @@
       return matches.length === 1 ? matches[0] : null;
     }
 
-    // /ws-agent 스냅샷(agent_snapshot)의 active 목록을 카드 강조에 반영.
+    // T6: 탭도 카드와 같은 방식(cwd 매칭)으로 작업중/완료 표시를 받는다. 카드는
+    // dataset.cwd를 그리드가 열려 있을 때만 채우므로(refreshGrid), 그리드를 한
+    // 번도 안 연 상태에서도 탭 뱃지가 동작하려면 tmux 세션명→cwd 매핑을 따로
+    // 들고 있어야 한다 — 그게 _tmuxCwdByName이다.
+    let _tmuxCwdByName = {};
+    async function _refreshTmuxCwdMap() {
+      try {
+        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const list = await res.json();
+        if (!Array.isArray(list)) return;
+        const map = {};
+        for (const s of list) if (s.name) map[s.name] = s.cwd || '';
+        _tmuxCwdByName = map;
+      } catch (_) { /* 다음 주기에 재시도 */ }
+    }
+
+    function _tabByCwd(cwd) {
+      if (!cwd) return null;
+      const matches = [];
+      document.querySelectorAll('#tabs .tab').forEach((tab) => {
+        const sess = sessions[tab.dataset.sessionId];
+        const tmuxName = sess && (sess.tmux_name || sess.tmuxName);
+        if (tmuxName && _tmuxCwdByName[tmuxName] === cwd) matches.push(tab);
+      });
+      return matches.length === 1 ? matches[0] : null;
+    }
+
+    // /ws-agent 스냅샷(agent_snapshot)의 active 목록을 카드/탭 강조에 반영.
     // 그리드를 연 시점에 이미 도구를 쓰고 있던 세션도 놓치지 않기 위함.
     let agent_status_active_cache = [];
     function _applyActiveHighlights(active) {
       document.querySelectorAll('.vt-card.working').forEach(c => c.classList.remove('working'));
+      document.querySelectorAll('#tabs .tab.working').forEach(t => t.classList.remove('working'));
       (active || []).forEach(a => {
         const card = _cardByCwd(a.cwd);
         if (card) card.classList.add('working');
+        const tab = _tabByCwd(a.cwd);
+        if (tab) tab.classList.add('working');
       });
     }
 
@@ -274,6 +304,9 @@
       wsAgent.onopen = () => {
         clearTimeout(_wsAgentStableTimer);
         _wsAgentStableTimer = setTimeout(() => { _wsAgentRetries = 0; }, 3000);
+        // T6: 탭 뱃지의 cwd 매핑을 연결 시점에 한 번 채워둔다 — 그리드를 열기 전에도
+        // agent_event가 도착하는 즉시 탭에 매칭될 수 있도록.
+        _refreshTmuxCwdMap();
       };
       wsAgent.onmessage = (e) => {
         let msg;
@@ -291,16 +324,22 @@
           // 탭 파비콘 상태: pre(도구 시작)=작업중, stop(응답 완료)=완료.
           // post(도구 종료)는 다음 도구가 이어질 수 있어 '작업중' 유지(무시).
           // voice 미설치 환경에서도 stop 신호로 완료 뱃지가 뜬다.
-          // 그리드 카드도 cwd로 매칭해 같은 규칙(pre=작업중, stop=완료)을 적용한다.
+          // 그리드 카드/탭도 cwd로 매칭해 같은 규칙(pre=작업중, stop=완료)을 적용한다.
+          // T6: 그리드를 안 열어도 탭만 보고 승인 대기 세션을 찾을 수 있어야 하므로
+          // 카드와 동일하게 탭에도 working/done class를 건다.
           if (msg.state && msg.state.tool) {
             showToast(`🔧 ${msg.state.tool} 실행 중...`);
             if (window.VTFavicon) VTFavicon.set('working');
             const card = _cardByCwd(msg.state.cwd);
             if (card) { card.classList.add('working'); card.classList.remove('done'); }
+            const tab = _tabByCwd(msg.state.cwd);
+            if (tab) { tab.classList.add('working'); tab.classList.remove('done'); }
           } else if (msg.event === 'stop') {
             if (window.VTFavicon) VTFavicon.set('done');
             const card = _cardByCwd(msg.state && msg.state.cwd);
             if (card) { card.classList.remove('working'); card.classList.add('done'); }
+            const tab = _tabByCwd(msg.state && msg.state.cwd);
+            if (tab) { tab.classList.remove('working'); tab.classList.add('done'); }
           }
         }
       };
@@ -329,6 +368,12 @@
       });
     }
     whenAuthed(connectAgentWs);
+    // T6: 탭 뱃지가 그리드를 열지 않아도 최신 cwd를 알도록 저빈도로 재조회
+    // (탭 상시 표시라 그리드 폴링(1초)만큼 자주일 필요는 없다 — 새 tmux 세션이
+    // 생기는 빈도에 맞춰 20초면 충분).
+    whenAuthed(() => {
+      setInterval(() => { if (!document.hidden) _refreshTmuxCwdMap(); }, 20000);
+    });
 
     function showToast(text) {
       let toast = document.getElementById('agent-toast');

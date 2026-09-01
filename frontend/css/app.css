@@ -130,6 +130,19 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .tab.drag-over-left::before { content:''; position:absolute; left:-2px; top:4px; bottom:4px; width:3px; background:var(--acc); border-radius:2px; }
 .tab.drag-over-right::after { content:''; position:absolute; right:-2px; top:4px; bottom:4px; width:3px; background:var(--acc); border-radius:2px; }
 
+/* T6: 그리드 카드엔 있던 작업중/완료 표시가 탭엔 없어서, 그리드를 열지 않으면
+   승인 대기 세션을 못 찾았다 — 카드와 같은 패턴(점 하나만 opacity/transform
+   애니메이션, 컴포지터 전용이라 리페인트 없음)을 탭에도 그대로 적용. */
+.tab.working::before {
+  content:''; position:absolute; top:3px; right:3px;
+  width:6px; height:6px; border-radius:50%; background:var(--acc);
+  animation:vtDotPulse 1.6s ease-in-out infinite;
+}
+.tab.done::before {
+  content:''; position:absolute; top:3px; right:3px;
+  width:6px; height:6px; border-radius:50%; background:var(--ok);
+}
+
 /* 새 세션(+) */
 #add-btn {
   display:flex; align-items:center; justify-content:center;

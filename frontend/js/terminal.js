@@ -803,6 +803,9 @@
       activeId = id;
       const s = sessions[id];
       s.tabEl.classList.add('active');
+      // T6: 그리드 카드와 같은 규칙 — "완료" 표시는 확인했다는 뜻이니 탭으로
+      // 전환하면 지운다.
+      s.tabEl.classList.remove('done');
       s.wrapper.style.display = 'block';
       s.term.focus();
       // display:block 직후엔 레이아웃이 아직 안 잡혀 fit이 stale 크기를 잡는다.
