@@ -434,6 +434,10 @@ body.voice-only-mode #mic-status {
   border-radius:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .vt-ob-row-label:hover { background:var(--menu-hover); }
+/* L1: 캐시로 즉시 그린 목록 — 아직 실제 연결을 확인 전이라 눌리지 않게 막고
+   흐리게 표시(Orca 패턴: "확인 전엔 비활성"). */
+.vt-ob-sessions-pending { opacity:.55; }
+.vt-ob-sessions-pending .vt-ob-row-label { cursor:default; pointer-events:none; }
 .vt-btn-primary, .vt-btn-secondary {
   padding:12px 22px; border-radius:8px; border:none; font-size:14px; cursor:pointer;
 }

@@ -1345,23 +1345,21 @@
     // U1: 탭 0개(온보딩) 화면이 살아있는 tmux 세션을 모르는 채로 "새 세션" 버튼만
     // 보여주던 문제 — showTmuxSessions()의 목록 로직(buildTmuxRow와 동일한 배지/문구)을
     // 온보딩 안에도 그려서, 새로 만들지 않고 기존 세션으로 바로 들어갈 수 있게 한다.
-    async function renderOnboardingSessions() {
-      const list = document.getElementById('ob-sessions');
-      if (!list) return; // 그 사이 온보딩이 닫혔으면 조용히 무시
-      let tmuxList = [];
-      try {
-        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
-        tmuxList = await res.json();
-      } catch (_) { /* 서버 오류 시 목록 없이 버튼만 */ }
-      if (!document.getElementById('ob-sessions')) return; // fetch 중 닫혔을 수 있음
-
+    //
+    // L1(U1 보강, Orca 패턴): fetch가 끝나야 목록이 나타나면 그 사이 빈 칸이었다가
+    // 갑자기 목록이 생겨서 아래 버튼들이 밀려 내려간다(레이아웃 점프). 직전 목록을
+    // localStorage에 캐시해뒀다가 즉시(비활성 상태로) 그리고, 실제 fetch 결과가
+    // 오면 그걸로 다시 그려 갱신 + 캐시 반영한다 — 첫 실행(캐시 없음)만 빈 칸에서
+    // 시작하고 그 이후로는 항상 레이아웃이 안정적이다.
+    const OB_SESSIONS_CACHE_KEY = 'vt_ob_sessions_cache';
+    function _drawOnboardingSessions(list, tmuxList, interactive) {
       if (!Array.isArray(tmuxList) || tmuxList.length === 0) {
         list.hidden = true;
         list.innerHTML = '';
         return;
       }
-
       list.hidden = false;
+      list.classList.toggle('vt-ob-sessions-pending', !interactive);
       list.innerHTML = '';
       const title = document.createElement('div');
       title.className = 'vt-ob-sessions-title';
@@ -1377,14 +1375,47 @@
         label.className = 'vt-ob-row-label';
         const cmd = s.command ? ` · ${s.command}` : '';
         label.textContent = `${badge} ${s.name}  (${s.windows}win · ${statusText}${cmd})`;
-        label.title = '이 세션 열기';
-        label.onclick = async () => {
-          document.getElementById('onboarding')?.remove();
-          await attachTmux(s.name);
-        };
+        if (interactive) {
+          label.title = '이 세션 열기';
+          label.onclick = async () => {
+            document.getElementById('onboarding')?.remove();
+            await attachTmux(s.name);
+          };
+        } else {
+          label.title = '연결 확인 중...';
+        }
         row.appendChild(label);
         list.appendChild(row);
       }
+    }
+
+    async function renderOnboardingSessions() {
+      const list = document.getElementById('ob-sessions');
+      if (!list) return; // 그 사이 온보딩이 닫혔으면 조용히 무시
+
+      // 1) 캐시가 있으면 비활성 상태로 즉시 그린다 — fetch 대기 중에도 레이아웃이
+      //    미리 자리를 잡아서, 실제 목록이 도착했을 때 아래 버튼이 밀리지 않는다.
+      try {
+        const cached = JSON.parse(localStorage.getItem(OB_SESSIONS_CACHE_KEY) || 'null');
+        if (Array.isArray(cached) && cached.length > 0) _drawOnboardingSessions(list, cached, false);
+      } catch (_) { /* 캐시 파싱 실패 시 빈 칸에서 시작 */ }
+
+      let tmuxList = [];
+      try {
+        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        tmuxList = await res.json();
+      } catch (_) { /* 서버 오류 시 목록 없이 버튼만 — 아래에서 캐시본도 정리 */ }
+      if (!document.getElementById('ob-sessions')) return; // fetch 중 닫혔을 수 있음
+
+      // 2) 실제 결과로 다시 그리고(클릭 가능) 캐시 갱신 — 세션이 사라졌으면 캐시도 비운다.
+      _drawOnboardingSessions(list, tmuxList, true);
+      try {
+        if (Array.isArray(tmuxList) && tmuxList.length > 0) {
+          localStorage.setItem(OB_SESSIONS_CACHE_KEY, JSON.stringify(tmuxList));
+        } else {
+          localStorage.removeItem(OB_SESSIONS_CACHE_KEY);
+        }
+      } catch (_) { /* localStorage 실패 무시 */ }
     }
 
     // "⋯ → 가이드 보기" — 언제든 열고/닫을 수 있는 서비스 전체 사용 가이드(첫 사용자용).
