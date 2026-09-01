@@ -91,7 +91,27 @@
 
     function closeViewer() { closePanel('vt-viewer'); }
 
+    // P1: highlight.min.js(127KB)는 초기 로드에서 빼고 코드 뷰어를 실제로 열 때만
+    // 불러온다. openFile()이 파일을 네트워크로 fetch하는 동안 대부분 로드가 끝나므로
+    // 체감 지연은 거의 없고, _hl()이 이미 `!window.hljs`를 하이라이트 없는 이스케이프
+    // 텍스트로 안전하게 폴백하므로 로드 전에 렌더링이 일어나도 깨지지 않는다.
+    let _hljsLoading = null;
+    function _ensureHljs() {
+      if (window.hljs) return Promise.resolve();
+      if (!_hljsLoading) {
+        _hljsLoading = new Promise((resolve) => {
+          const s = document.createElement('script');
+          s.src = '/static/vendor/highlight.min.js';
+          s.onload = resolve;
+          s.onerror = resolve; // 실패해도 _hl()의 이스케이프 폴백으로 뷰어는 계속 동작
+          document.head.appendChild(s);
+        });
+      }
+      return _hljsLoading;
+    }
+
     async function showViewer() {
+      _ensureHljs(); // fire-and-forget — openFile()의 fetch와 겹쳐서 대기시간 없음
       const displayMode = _loadMode();
       const panel = openPanel({
         id: 'vt-viewer',

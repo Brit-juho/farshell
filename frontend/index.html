@@ -412,14 +412,22 @@
        Unicode 6 폭 테이블을 써서 최근 이모지를 좁게(1칸) 오판해, 다음 글자와 겹쳐 보인다. -->
   <script src="/static/vendor/addon-unicode11.min.js"></script>
   <!-- GPU 렌더러 — 기본(DOM) 렌더러는 활발한 스트리밍(TUI 등)에서 CPU/메모리 비용이 크다.
-       WebGL 우선 시도, 실패(GPU/드라이버 미지원) 시 Canvas로 폴백. -->
+       WebGL 우선 시도, 실패(GPU/드라이버 미지원) 시 Canvas로 폴백.
+       addon-canvas.min.js(95KB)는 여기서 미리 로드하지 않는다 — WebGL이 대부분의
+       환경에서 성공해 실제로는 거의 안 쓰이므로, terminal.js가 WebGL 실패를 감지한
+       순간에만 동적으로 불러온다(P1). -->
   <script src="/static/vendor/addon-webgl.min.js"></script>
-  <script src="/static/vendor/addon-canvas.min.js"></script>
-  <script src="/static/vendor/nacl.min.js"></script>
-  <script src="/static/vendor/nacl-util.min.js"></script>
-  <!-- 코드 뷰어 문법 하이라이팅 (P2). 테마 CSS는 쓰지 않는다 —
-       색은 app.css에서 스킨 토큰으로 매핑해야 notepad(라이트)까지 따라간다. -->
-  <script src="/static/vendor/highlight.min.js"></script>
+  <!-- E2E 암호화(nacl, ~20KB)는 ?e2e=1/#e2e=1일 때만 필요 — 그 경우에만 동기 로드해서
+       terminal.js가 실행될 때 이미 window.nacl이 준비돼 있게 한다(P1). -->
+  <script>
+    if (/[?&#]e2e=1(&|$)/.test(location.search + location.hash)) {
+      document.write('<scr' + 'ipt src="/static/vendor/nacl.min.js"></scr' + 'ipt>');
+      document.write('<scr' + 'ipt src="/static/vendor/nacl-util.min.js"></scr' + 'ipt>');
+    }
+  </script>
+  <!-- 코드 뷰어 문법 하이라이팅(P2, 127KB) — 코드 뷰어를 실제로 열 때만 viewer.js가
+       동적으로 불러온다(P1). 테마 CSS는 쓰지 않는다 — 색은 app.css에서 스킨
+       토큰으로 매핑해야 notepad(라이트)까지 따라간다. -->
 
   <!-- ESM 진입점. legacy 기능의 의존 순서는 bootstrap.js manifest에서만 관리한다. -->
   <script type="module" src="/static/js/bootstrap.js"></script>

@@ -535,6 +535,30 @@
       if (id) addSession(id);
     }
 
+    // P1: addon-canvas.min.js를 WebGL이 없거나 실패했을 때만 동적으로 불러와
+    // term에 붙인다. 여러 세션이 동시에 이 경로를 타도 스크립트는 한 번만 로드.
+    let _canvasAddonLoading = null;
+    function _ensureCanvasAddon(term) {
+      if (window.CanvasAddon) {
+        try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (_) {}
+        return;
+      }
+      if (!_canvasAddonLoading) {
+        _canvasAddonLoading = new Promise((resolve) => {
+          const s = document.createElement('script');
+          s.src = '/static/vendor/addon-canvas.min.js';
+          s.onload = resolve;
+          s.onerror = resolve; // 실패해도 DOM 렌더러로 계속 동작(기능 저하만)
+          document.head.appendChild(s);
+        });
+      }
+      _canvasAddonLoading.then(() => {
+        if (window.CanvasAddon) {
+          try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (_) {}
+        }
+      });
+    }
+
     function addSession(id, displayName, insertBeforeId) {
       // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
       // 생기므로 무시한다.
@@ -625,16 +649,20 @@
       // 노드를 갱신해 CPU/메모리 비용이 크다. WebGL 우선, 실패(GPU/드라이버 미지원 또는
       // context-lost) 시 Canvas로, 그마저 실패하면 DOM 그대로 유지한다(기능 저하 없음,
       // 성능만 낮음). WebGL/Canvas addon은 term.open() '이후'(DOM 부착 후)에만 로드 가능.
+      // P1: addon-canvas.min.js(95KB)는 static <script>로 미리 안 실어둔다 — WebGL은
+      // 대부분의 환경에서 성공해 실제로는 거의 안 쓰이므로, WebGL이 없거나 실패했을
+      // 때만 동적으로 불러온다(_ensureCanvasAddon). DOM 렌더러로 잠깐 시작했다가
+      // 로드 완료 시 Canvas로 업그레이드되는 것뿐이라 기능 저하는 없다.
       try {
         if (window.WebglAddon) {
           const webgl = new WebglAddon.WebglAddon();
           webgl.onContextLoss(() => { try { webgl.dispose(); } catch (_) {} });
           term.loadAddon(webgl);
-        } else if (window.CanvasAddon) {
-          term.loadAddon(new CanvasAddon.CanvasAddon());
+        } else {
+          _ensureCanvasAddon(term);
         }
       } catch (_) {
-        try { if (window.CanvasAddon) term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (_) {}
+        _ensureCanvasAddon(term);
       }
 
       // 복사(자동복사/우클릭/단축키) · 붙여넣기 · 이미지 붙여넣기 배선
