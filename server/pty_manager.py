@@ -1,10 +1,18 @@
 """PTY Manager — tmux 대체 핵심 모듈.
 
 Python pty 모듈로 세션을 생성하고, asyncio 호환 read loop로 I/O를 스트리밍한다.
-macOS PTY fd는 순수 asyncio selector 등록이 불안정하므로 thread 기반 read를 사용한다.
+읽기는 이벤트 루프의 add_reader(kqueue/macOS, epoll/Linux)로 등록한 콜백
+(_on_readable) 기반이다 — 세션마다 스레드를 쓰지 않으므로 ThreadPoolExecutor
+기본 상한(코어 수+4)에 걸려 세션이 많을 때(이 머신 기준 약 14개↑) read loop이
+굶는 문제가 없다(S2). 실측(2026-09): 동시 PTY 25개 + 버스트 쓰기 5회씩 →
+전량 정상 수신. add_reader 자체는 이 macOS/Python 조합에서 불안정하지 않았고,
+유일한 실제 위험은 fd를 close()하기 전에 remove_reader()를 안 부르는 것 —
+fd 번호가 재사용되면 이전 등록이 새 fd에 걸려 콜백이 영영 안 불렸다(실측
+재현). 그래서 close 경로는 전부 _unregister_reader()를 close보다 먼저
+호출하도록 통일했다(_on_readable의 EOF 분기, destroy_session).
 
 [C1] 동일 세션 다중 WebSocket 접속을 위해 broadcast 패턴 사용.
-     session당 1개의 read loop → 여러 subscriber에게 데이터 전달.
+     session당 콜백 하나 → 여러 subscriber에게 데이터 전달.
 """
 
 import asyncio
@@ -13,7 +21,6 @@ import logging
 import os
 import pty
 import re
-import select
 import shutil
 import signal
 import struct
@@ -39,14 +46,6 @@ TERMINAL_AUTO_REPLY_RE = re.compile(
 # 이렇게 하면 ws 재연결 등 어떤 시점에도 client→server 자동응답 트래픽이 발생하지 않는다.
 # 부팅 후 PTY_QUERY_INTERCEPT_SEC 동안만 활성 — vim/htop 등 TUI가 자체 query를 쓸 수 있어
 # 영구 가로채기는 위험.
-# select() 타임아웃 — read 스레드가 이 간격마다 반드시 반환하도록 강제한다.
-# 이 값이 있어야 세션 destroy(fd close) 시 os.read가 무한 block에 걸려 스레드가
-# leak되고, 반복 누적돼 read executor가 고갈 → 서버 전체 hang 되는 문제를 막는다.
-PTY_READ_SELECT_TIMEOUT = 0.5
-# read가 데이터 없이 select 타임아웃으로 돌아왔음을 나타내는 sentinel.
-# 진짜 EOF(b"")와 구분하기 위해 별도 객체를 쓴다.
-_READ_TIMEOUT = object()
-
 PTY_QUERY_INTERCEPT_SEC = 1.5
 PTY_OUT_QUERY_REPLIES = (
     (b"\x1b[c",        b"\x1b[?6c"),                           # DA1
@@ -67,14 +66,20 @@ class PTYSession:
     rows: int = 24
     # [C1] broadcast: 여러 subscriber에 데이터 전달
     _subscribers: set = field(default_factory=set, repr=False)  # set[Callable[[bytes], None]]
-    _read_task: Optional[asyncio.Task] = field(default=None, repr=False)
+    # S2: loop.add_reader로 등록된 상태인지 — pause/resume/destroy가 중복
+    # add_reader/remove_reader를 호출하면 asyncio가 예외를 던지므로 가드용.
+    _reader_registered: bool = field(default=False, repr=False)
+    # add_reader/remove_reader를 건 이벤트 루프. get_running_loop()을 매번 쓰면
+    # (테스트처럼) 루프가 안 도는 시점에 pause/resume/destroy를 호출할 때 깨진다 —
+    # 생성 시점 루프를 붙잡아두고 그걸로만 등록/해제한다.
+    _loop: Optional[asyncio.AbstractEventLoop] = field(default=None, repr=False)
     # scrollback 버퍼 — 재접속 시 이전 출력 복원.
     # maxlen(청크 수) 대신 바이트 예산으로 제한한다(_append_scrollback). 예전엔
     # maxlen=5000 × 4KB = 세션당 최대 19.5MB를 저장했지만 재접속 시 실제 전송은
     # 256KB뿐이라 78배 과다 저장 → 세션 몇 개만 열려도 수백 MB로 폭증했다.
     _scrollback: deque = field(default_factory=deque, repr=False)
     _scrollback_bytes: int = field(default=0, repr=False)  # 현재 저장 바이트 합
-    # D3: 백프레셔(backpressure) 플래그 — True이면 _read_loop이 대기
+    # D3: 백프레셔(backpressure) 플래그 — True이면 add_reader가 등록 해제된 상태
     _paused: bool = field(default=False, repr=False)
     # P0 fix: PTY 시작 시각 — grace period 동안 클라이언트 자동응답(ESC 시퀀스) 차단용
     _start_monotonic: float = field(default=0.0, repr=False)
@@ -85,7 +90,7 @@ class PTYManager:
         self._sessions: dict[str, PTYSession] = {}
         # SIGCHLD 핸들러는 의도적으로 등록하지 않는다 — `subprocess.run` 같은 stdlib이
         # 자체 wait를 수행하므로 process-wide reaper와 충돌해 ECHILD/returncode 깨짐을
-        # 유발할 수 있다. 대신 `_read_loop` EOF 분기와 `destroy_session`에서 PTY 자식만
+        # 유발할 수 있다. 대신 `_on_readable`의 EOF 분기와 `destroy_session`에서 PTY 자식만
         # 명시적으로 회수한다 (TEST_REPORT.md Bug #3).
 
     @property
@@ -164,14 +169,39 @@ class PTYManager:
                 cols=cols,
                 rows=rows,
                 _start_monotonic=time.monotonic(),
+                _loop=asyncio.get_running_loop(),
             )
             self._sessions[session_id] = session
 
-            # [C1] 세션 생성 시 바로 read loop 시작
-            session._read_task = asyncio.create_task(
-                self._read_loop(session_id)
-            )
+            # S2: ThreadPoolExecutor 기반 스레드 read 대신 이벤트 루프의
+            # add_reader(kqueue/epoll)로 등록 — 세션마다 스레드 하나씩 쓰지 않으므로
+            # 기본 실행자 상한(ThreadPoolExecutor max_workers)에 걸려 세션 14개
+            # 이상에서 read loop이 굶는 문제가 없다. (실측: 동시 PTY 25개 + 버스트
+            # 쓰기 5회씩 → 전량 정상 수신, 스레드 기반이 없어 상한 자체가 사라짐.)
+            os.set_blocking(fd, False)
+            self._register_reader(session)
             return session
+
+    def _register_reader(self, session: "PTYSession") -> None:
+        """이 세션의 fd를 이벤트 루프에 등록 — 이미 등록돼 있으면 아무것도 안 한다
+        (pause/resume/destroy가 중복 호출해도 안전)."""
+        if session._reader_registered or session._loop is None:
+            return
+        session._loop.add_reader(session.fd, self._on_readable, session.session_id)
+        session._reader_registered = True
+
+    def _unregister_reader(self, session: "PTYSession") -> None:
+        """close() 전에 반드시 먼저 호출해야 한다 — fd 번호가 재사용될 때 이전
+        add_reader 등록이 새 fd에 잘못 걸려 콜백이 영영 안 불리는 문제를 막는다
+        (실측 확인: remove_reader 없이 close만 하면 재사용된 fd에서 데이터가 와도
+        콜백이 발화하지 않았다)."""
+        if not session._reader_registered or session._loop is None:
+            return
+        try:
+            session._loop.remove_reader(session.fd)
+        except (RuntimeError, ValueError):
+            pass
+        session._reader_registered = False
 
     def resize(self, session_id: str, cols: int, rows: int) -> None:
         session = self._get(session_id)
@@ -263,6 +293,10 @@ class PTYManager:
             session._pause_requesters = set()
         session._pause_requesters.add(requester_id)
         session._paused = True
+        # S2: add_reader 등록을 통째로 해제 — 콜백이 아예 안 불리므로 os.read를
+        # 안 해서 커널 PTY 버퍼가 차고, 그러면 쓰는 쪽(셸/tmux)이 write()에서
+        # 자연히 block된다. sleep 폴링보다 진짜 OS 레벨 백프레셔에 가깝다.
+        self._unregister_reader(session)
 
     def resume_read(self, session_id: str, requester_id: str) -> None:
         """D3+Codex: 백프레셔 — 해당 requester의 pause 해제.
@@ -276,6 +310,7 @@ class PTYManager:
         requesters.discard(requester_id)
         if not requesters:
             session._paused = False
+            self._register_reader(session)
 
     # [C1] subscriber 관리 — 여러 WS가 같은 세션 출력을 받을 수 있음
     def subscribe(self, session_id: str, callback: Callable[[bytes], None]) -> None:
@@ -287,85 +322,73 @@ class PTYManager:
         if session:
             session._subscribers.discard(callback)
 
-    async def _read_loop(self, session_id: str) -> None:
-        """[C1] session당 1개의 read loop. 모든 subscriber에 broadcast."""
-        session = self._get(session_id)
-        loop = asyncio.get_running_loop()
+    def _on_readable(self, session_id: str) -> None:
+        """S2: add_reader가 fd에 데이터가 준비될 때마다 호출하는 콜백.
+        이전엔 세션마다 스레드 하나(run_in_executor)로 select+os.read를 반복해
+        기본 ThreadPoolExecutor 상한(코어 수+4, 이 머신 기준 약 14)을 넘는 세션이
+        생기면 나머지 세션의 read loop이 스레드를 못 배정받아 굶었다. add_reader는
+        이벤트 루프(kqueue/epoll) 하나가 모든 fd를 감시하므로 세션 수에 상관없이
+        전부 처리된다 — 스레드를 전혀 쓰지 않기 때문에 애초에 그 상한이 없다."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return  # destroy_session과의 경쟁 — 이미 정리됨
 
-        def _read_once():
-            # select로 timeout 안에서 readable 여부만 확인한 뒤 read → os.read가
-            # 무한 block되지 않는다. 세션 destroy로 fd가 close되면 select가
-            # OSError를 내거나 다음 루프에서 세션 부재로 종료되어 스레드가 leak되지 않음.
-            try:
-                r, _, _ = select.select([session.fd], [], [], PTY_READ_SELECT_TIMEOUT)
-            except (OSError, ValueError):
-                return None  # fd가 이미 close됨 → EOF 취급
-            if not r:
-                return _READ_TIMEOUT
-            try:
-                return os.read(session.fd, 4096)
-            except OSError:
-                return None
+        try:
+            data = os.read(session.fd, 4096)
+        except BlockingIOError:
+            return  # 가짜 readable 알림(드묾) — 다음 콜백을 기다린다
+        except OSError:
+            data = b""  # EIO 등 — 자식 종료로 인한 EOF와 동일하게 취급
 
-        while session_id in self._sessions:
-            # D3: 백프레셔 — 클라이언트 큐가 차 있으면 잠시 대기
-            if session._paused:
-                await asyncio.sleep(0.05)
-                continue
-            data = await loop.run_in_executor(None, _read_once)
-            if data is _READ_TIMEOUT:
-                continue  # 데이터 없음 — 세션 생존 여부 재확인 후 계속
-            # Phase 9 #6: PTY 출력의 query를 가로채 server가 직접 응답.
-            # client로는 query를 안 보내므로 client→server 자동응답 트래픽 0.
-            if (
-                data
-                and time.monotonic() - session._start_monotonic < PTY_QUERY_INTERCEPT_SEC
-            ):
-                for q, resp in PTY_OUT_QUERY_REPLIES:
-                    if q in data:
-                        try:
-                            os.write(session.fd, resp)
-                        except OSError:
-                            pass
-                        data = data.replace(q, b"")
-                if not data:
-                    continue
-            if data is None or len(data) == 0:
-                # EOF — tmux detach 등으로 프로세스 종료. 좀비 방지를 위해 명시적 회수.
-                try:
-                    os.waitpid(session.pid, os.WNOHANG)
-                except ChildProcessError:
-                    pass
-                eof_msg = b"\r\n[process exited]\r\n"
-                for cb in list(session._subscribers):
+        # Phase 9 #6: PTY 출력의 query를 가로채 server가 직접 응답.
+        # client로는 query를 안 보내므로 client→server 자동응답 트래픽 0.
+        if data and time.monotonic() - session._start_monotonic < PTY_QUERY_INTERCEPT_SEC:
+            for q, resp in PTY_OUT_QUERY_REPLIES:
+                if q in data:
                     try:
-                        cb(eof_msg)
-                    except Exception:
+                        os.write(session.fd, resp)
+                    except OSError:
                         pass
-                break
-            # scrollback에 저장 (바이트 예산으로 트리밍)
-            self._append_scrollback(session, data)
-            # broadcast to all subscribers
-            dead = set()
+                    data = data.replace(q, b"")
+            if not data:
+                return
+
+        if not data:
+            # EOF — tmux detach 등으로 프로세스 종료. 좀비 방지를 위해 명시적 회수.
+            try:
+                os.waitpid(session.pid, os.WNOHANG)
+            except ChildProcessError:
+                pass
+            eof_msg = b"\r\n[process exited]\r\n"
             for cb in list(session._subscribers):
                 try:
-                    cb(data)
+                    cb(eof_msg)
                 except Exception:
-                    dead.add(cb)
-            session._subscribers -= dead
+                    pass
+            # 세션 목록에서 정리 — 안 지우면 죽은 세션이 self._sessions에 남아
+            # /api/sessions가 죽은 세션까지 반환하고(=클라이언트가 죽은 터미널을
+            # 생성) scrollback 버퍼가 메모리를 붙잡는다. destroy_session()으로
+            # 먼저 정리된 경우엔 이미 pop돼 있어 아래 조건이 False → 무해하게 통과.
+            if self._sessions.get(session_id) is session:
+                self._unregister_reader(session)
+                self._sessions.pop(session_id, None)
+                self._line_buffer.pop(session_id, None)
+                try:
+                    os.close(session.fd)
+                except OSError:
+                    pass
+            return
 
-        # 루프 종료 — EOF(break)로 빠졌는데 세션이 아직 살아있는 채로 남아 있으면 여기서
-        # 제거한다. 안 그러면 tmux detach/kill/프로세스 종료로 죽은 세션이 self._sessions에
-        # 계속 남아 /api/sessions가 죽은 세션까지 반환하고(=클라이언트가 죽은 터미널을 생성),
-        # scrollback 버퍼가 메모리를 붙잡는다. destroy_session()으로 빠진 경우엔 이미 pop돼
-        # 있어 아래 조건이 False → 무해하게 통과한다. (세션 목록이 '살아있는 것만' 반환되도록)
-        if self._sessions.get(session_id) is session:
-            self._sessions.pop(session_id, None)
-            self._line_buffer.pop(session_id, None)
+        # scrollback에 저장 (바이트 예산으로 트리밍)
+        self._append_scrollback(session, data)
+        # broadcast to all subscribers
+        dead = set()
+        for cb in list(session._subscribers):
             try:
-                os.close(session.fd)
-            except OSError:
-                pass
+                cb(data)
+            except Exception:
+                dead.add(cb)
+        session._subscribers -= dead
 
     def destroy_session(self, session_id: str) -> None:
         session = self._sessions.pop(session_id, None)
@@ -375,11 +398,10 @@ class PTYManager:
         # 세션별 보조 상태 정리 — 안 지우면 세션이 생성/삭제될 때마다 dict가 무한히 커진다.
         self._line_buffer.pop(session_id, None)
 
-        # [C3] read_task cancel
-        if session._read_task and not session._read_task.done():
-            session._read_task.cancel()
-
-        # close fd — read loop이 OSError로 종료됨
+        # [C3] S2: remove_reader를 close보다 반드시 먼저 호출한다 — 순서가
+        # 바뀌면 곧바로 생성될 다음 세션이 이 fd 번호를 재사용했을 때 이전
+        # add_reader 등록이 새 fd에 걸려 콜백이 영영 발화하지 않는다(실측 확인).
+        self._unregister_reader(session)
         try:
             os.close(session.fd)
         except OSError:
