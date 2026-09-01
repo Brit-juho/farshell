@@ -1328,6 +1328,7 @@
         <div class="vt-ob-icon"><i class="icon-mic"></i></div>
         <h2>FarShell</h2>
         <p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
+        <div id="ob-sessions" class="vt-ob-sessions" hidden></div>
         <div class="vt-ob-actions">
           <button class="vt-btn-primary" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
           <button class="vt-btn-secondary" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
@@ -1335,6 +1336,52 @@
         <p class="vt-ob-hint">맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)</p>
       `;
       document.body.appendChild(el);
+      renderOnboardingSessions();
+    }
+
+    // U1: 탭 0개(온보딩) 화면이 살아있는 tmux 세션을 모르는 채로 "새 세션" 버튼만
+    // 보여주던 문제 — showTmuxSessions()의 목록 로직(buildTmuxRow와 동일한 배지/문구)을
+    // 온보딩 안에도 그려서, 새로 만들지 않고 기존 세션으로 바로 들어갈 수 있게 한다.
+    async function renderOnboardingSessions() {
+      const list = document.getElementById('ob-sessions');
+      if (!list) return; // 그 사이 온보딩이 닫혔으면 조용히 무시
+      let tmuxList = [];
+      try {
+        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        tmuxList = await res.json();
+      } catch (_) { /* 서버 오류 시 목록 없이 버튼만 */ }
+      if (!document.getElementById('ob-sessions')) return; // fetch 중 닫혔을 수 있음
+
+      if (!Array.isArray(tmuxList) || tmuxList.length === 0) {
+        list.hidden = true;
+        list.innerHTML = '';
+        return;
+      }
+
+      list.hidden = false;
+      list.innerHTML = '';
+      const title = document.createElement('div');
+      title.className = 'vt-ob-sessions-title';
+      title.textContent = `살아있는 tmux 세션 ${tmuxList.length}개`;
+      list.appendChild(title);
+      for (const s of tmuxList) {
+        const row = document.createElement('div');
+        row.className = 'vt-ob-row';
+        const openInWeb = !!s.web_session_id;
+        const badge = openInWeb ? '🟢' : (s.attached > 0 ? '🖥️' : '💤');
+        const statusText = openInWeb ? '웹에 열림' : (s.attached > 0 ? '데스크톱 attach' : '잠듦');
+        const label = document.createElement('span');
+        label.className = 'vt-ob-row-label';
+        const cmd = s.command ? ` · ${s.command}` : '';
+        label.textContent = `${badge} ${s.name}  (${s.windows}win · ${statusText}${cmd})`;
+        label.title = '이 세션 열기';
+        label.onclick = async () => {
+          document.getElementById('onboarding')?.remove();
+          await attachTmux(s.name);
+        };
+        row.appendChild(label);
+        list.appendChild(row);
+      }
     }
 
     // "⋯ → 가이드 보기" — 언제든 열고/닫을 수 있는 서비스 전체 사용 가이드(첫 사용자용).
