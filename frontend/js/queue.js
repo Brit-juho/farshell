@@ -15,7 +15,7 @@
         `,
         extraHTML: `
           <div class="vt-q-compose">
-            <textarea id="vt-q-input" rows="2" placeholder="작업이 끝나면 실행할 지시… (Ctrl+Enter로 추가)"></textarea>
+            <textarea id="vt-q-input" rows="2" placeholder="작업이 끝나면 실행할 지시… (${isMac ? 'Cmd' : 'Ctrl'}+Enter로 추가)"></textarea>
             <div class="vt-q-compose-row">
               <select id="vt-q-target" class="vt-q-target" title="대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다">
                 <option value="">자동 (음성 타깃 규칙)</option>

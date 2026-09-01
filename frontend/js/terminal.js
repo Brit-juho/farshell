@@ -178,6 +178,10 @@
     const _authHeaders = VT_TOKEN ? {'Authorization': `Bearer ${VT_TOKEN}`} : {};
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const termFontSize = isMobile ? 12 : 14;
+    // OS별 안내 문구 표시용. 실제 키 처리는 이미 ctrlKey||metaKey로 두 OS 모두
+    // 받아들이므로 동작에는 영향 없다 — "Ctrl+Enter"처럼 문구가 항상 Windows
+    // 기준으로 하드코딩돼 있어 Mac에서 어색해 보이는 문제만 고친다.
+    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
     // 인증 토큰 자동 첨부 fetch 래퍼
     const _origFetch = window.fetch;
@@ -542,7 +546,7 @@
       tab.className = 'tab';
       tab.dataset.sessionId = id;
       // 좌우 이동 단축키 안내(호버 툴팁)
-      tab.title = '탭 이동: Ctrl/Cmd + Shift + ← / →';
+      tab.title = `탭 이동: ${isMac ? 'Cmd' : 'Ctrl'} + Shift + ← / →`;
       const agentBadge = document.createElement('span');
       agentBadge.className = 'tab-agent';
       agentBadge.style.cssText = 'margin-right:4px;font-size:12px;';
