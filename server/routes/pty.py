@@ -355,7 +355,15 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         # live 데이터가 큐에 쌓이는 동안 scrollback을 _safe_send로 직접 보내 두 전송 경로가
         # 경쟁했다(재접속 tail 중복/역전). scrollback을 먼저 큐에 넣고 subscribe하면 단일
         # FIFO 경로로 순서가 보장된다.
-        for chunk in pty_mgr.get_scrollback(session_id):
+        # S1: get_scrollback()은 시간순(오래된→최신)으로 반환하는데, 청크 수가 많으면
+        # (256KB 안에 작은 청크가 수천 개) 큐(maxsize 400)가 중간에 꽉 차 break로
+        # 잘렸다 — 잘려나가는 뒤쪽이 하필 가장 최신 출력이었다. 큐 여유분에 맞게
+        # 뒤(최신)에서부터만 남겨서 채운다.
+        scrollback_chunks = pty_mgr.get_scrollback(session_id)
+        available = send_queue.maxsize - send_queue.qsize()
+        if 0 <= available < len(scrollback_chunks):
+            scrollback_chunks = scrollback_chunks[-available:] if available > 0 else []
+        for chunk in scrollback_chunks:
             out = channel.encrypt_simple(chunk) if channel else chunk
             try:
                 send_queue.put_nowait(out)
