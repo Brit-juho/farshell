@@ -686,7 +686,7 @@ body.voice-only-mode #mic-status {
 }
 .vt-vw-title{ flex:1; font:600 13px var(--ui); overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
-.vt-vw-back,.vt-vw-x,.vt-vw-diff,.vt-vw-tree-toggle,.vt-vw-here{
+.vt-vw-back,.vt-vw-x,.vt-vw-diff,.vt-vw-tree-toggle,.vt-vw-here,.vt-vw-insert-cur{
   background:var(--tab); color:var(--txt);
   border:1px solid var(--line); border-radius:var(--trad);
   min-width:32px; height:28px; padding:0 8px; cursor:pointer;
@@ -694,13 +694,13 @@ body.voice-only-mode #mic-status {
   display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
 }
 .vt-vw-back:hover,.vt-vw-x:hover,.vt-vw-diff:hover,
-.vt-vw-tree-toggle:hover,.vt-vw-here:hover{ background:var(--menu-hover); }
+.vt-vw-tree-toggle:hover,.vt-vw-here:hover,.vt-vw-insert-cur:hover{ background:var(--menu-hover); }
 .vt-vw-back:active,.vt-vw-x:active,.vt-vw-diff:active,
-.vt-vw-tree-toggle:active,.vt-vw-here:active{
+.vt-vw-tree-toggle:active,.vt-vw-here:active,.vt-vw-insert-cur:active{
   background:color-mix(in srgb, var(--acc) 22%, var(--menu-hover));
 }
 .vt-vw-diff{ color:var(--acc); }
-.vt-vw-tree-toggle svg,.vt-vw-here svg{ width:15px; height:15px; }
+.vt-vw-tree-toggle svg,.vt-vw-here svg,.vt-vw-insert-cur svg{ width:15px; height:15px; }
 .vt-vw-tree-toggle.active{ background:color-mix(in srgb, var(--acc) 18%, var(--tab)); color:var(--acc); }
 /* 트리 접기/펼치기는 dock/full 2단 분할에서만 의미가 있다 — sheet에서는 숨긴다. */
 .vt-vw-tree-toggle{ display:none; }
@@ -1039,6 +1039,16 @@ body.vt-resizing #grid-view{ transition:none; }
 .vt-vw-trow.dir.open .vt-vw-chev{ transform:rotate(90deg); }
 .vt-vw-trow:not(.dir) .vt-vw-chev{ visibility:hidden; }   /* 파일도 자리는 차지 — 이름 정렬 유지 */
 .vt-vw-trow .vt-vw-name{ overflow:hidden; text-overflow:ellipsis; }
+/* L2: 파일 행마다 있는 "터미널에 경로 삽입" 버튼 — 터치 기기는 hover가 없어서
+   항상 보이게 두되, 크기/색을 낮춰 파일명·크기보다 시각적으로 물러나게 한다. */
+.vt-vw-row-insert{
+  flex:0 0 auto; width:22px; height:22px; margin-left:2px;
+  background:transparent; border:none; border-radius:5px; cursor:pointer;
+  color:var(--sub); display:inline-flex; align-items:center; justify-content:center;
+  touch-action:manipulation;
+}
+.vt-vw-row-insert:hover{ background:var(--menu-hover); color:var(--acc); }
+.vt-vw-row-insert svg{ width:13px; height:13px; }
 .vt-vw-trow-spin{
   flex:0 0 auto; width:12px; height:12px; border-radius:50%;
   border:2px solid var(--line); border-top-color:var(--acc);

@@ -27,6 +27,8 @@
     const _ICON_FULL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
     const _ICON_SIDEBAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
     const _ICON_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>';
+    // L2: Termius SFTP→프롬프트 패턴 — 경로를 터미널로 삽입.
+    const _ICON_INSERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>';
 
     let _viewerState = {
       root: null,             // 트리 최상단 디렉토리. 시작값은 서버 시작 루트(기본 ~/GitHub)지만
@@ -122,6 +124,7 @@
           <div class="vt-vw-title" id="vt-vw-title">코드 뷰어</div>
           <button class="vt-vw-tree-toggle" id="vt-vw-tree-toggle" title="폴더 트리 접기/펼치기">${_ICON_SIDEBAR}</button>
           <button class="vt-vw-here" id="vt-vw-here" title="현재 터미널 위치로 열기">${_ICON_PIN}</button>
+          <button class="vt-vw-insert-cur" id="vt-vw-insert-cur" title="현재 파일 경로를 터미널에 삽입">${_ICON_INSERT}</button>
           <div class="vt-vw-modes" role="group" aria-label="표시 모드">
             <button class="vt-vw-mode-btn" data-mode="sheet" title="시트">${_ICON_SHEET}</button>
             <button class="vt-vw-mode-btn" data-mode="dock" title="도킹 — 터미널과 함께 보기">${_ICON_DOCK}</button>
@@ -176,6 +179,13 @@
       panel.el.querySelector('#vt-vw-diff').addEventListener('click', () => showGit());
       panel.el.querySelector('#vt-vw-tree-toggle').addEventListener('click', _toggleTreeCollapse);
       panel.el.querySelector('#vt-vw-here').addEventListener('click', _openAtTerminalCwd);
+      panel.el.querySelector('#vt-vw-insert-cur').addEventListener('click', () => {
+        if (_viewerState.mode === 'file' && _viewerState.selectedPath) {
+          _insertPathToTerminal(_viewerState.selectedPath);
+        } else {
+          showToast('먼저 파일을 여세요');
+        }
+      });
       _wireResizer(panel.el);
       _wireTreeResizer(panel.el);
       _wirePathInput(panel.el);
@@ -356,6 +366,18 @@
       });
     }
 
+    // L2: Termius SFTP→프롬프트 패턴 — 뷰어에서 보던 경로를 활성 터미널에 그대로
+    // 타이핑해 넣는다(엔터는 안 침 — 뒤에 명령을 이어 쓸 수 있게). 이미지 붙여넣기
+    // 업로드 후 경로 삽입(pasteImageUpload)과 같은 sendToPty 패턴 재사용.
+    function _insertPathToTerminal(path) {
+      if (typeof activeId === 'undefined' || !activeId || !sessions[activeId]) {
+        showToast('열려 있는 터미널 세션이 없습니다');
+        return;
+      }
+      sendToPty(activeId, path + ' ');
+      showToast('경로 삽입됨: ' + path.split('/').pop());
+    }
+
     // 현재 활성 터미널(tmux) 세션의 cwd를 트리 최상단으로 연다.
     async function _openAtTerminalCwd() {
       if (typeof activeId === 'undefined' || !activeId || !sessions[activeId]) {
@@ -416,6 +438,17 @@
         size.className = 'vt-vw-size';
         size.textContent = _fmtSize(entry.size);
         row.appendChild(size);
+        // L2: 파일을 열지 않고도 경로만 터미널에 바로 꽂을 수 있는 행별 버튼.
+        const insert = document.createElement('button');
+        insert.className = 'vt-vw-row-insert';
+        insert.type = 'button';
+        insert.title = '터미널에 경로 삽입';
+        insert.innerHTML = _ICON_INSERT;
+        insert.addEventListener('click', (e) => {
+          e.stopPropagation(); // row 클릭(파일 열기)으로 안 번지게
+          _insertPathToTerminal(path);
+        });
+        row.appendChild(insert);
       }
       return row;
     }
