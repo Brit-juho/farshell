@@ -656,7 +656,13 @@
       try {
         if (window.WebglAddon) {
           const webgl = new WebglAddon.WebglAddon();
-          webgl.onContextLoss(() => { try { webgl.dispose(); } catch (_) {} });
+          // P2: dispose만 하고 끝내면 xterm이 기본 DOM 렌더러로 추락한다(성능 저하).
+          // ttyd 등도 컨텍스트 손실 시 재활성화는 안 하지만, 그건 업계 표준이 아니라
+          // 우리 판단으로 한 단계 아래인 Canvas로라도 내려가게 한다.
+          webgl.onContextLoss(() => {
+            try { webgl.dispose(); } catch (_) {}
+            _ensureCanvasAddon(term);
+          });
           term.loadAddon(webgl);
         } else {
           _ensureCanvasAddon(term);
