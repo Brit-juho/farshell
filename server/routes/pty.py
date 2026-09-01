@@ -391,6 +391,16 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                             return
                     elif msg_type == "pong":
                         last_pong = loop.time()
+                    elif msg_type == "render_pause":
+                        # R2: WS 송신 큐(_on_data)만으로는 "네트워크로는 다 나갔는데
+                        # 클라이언트 xterm.js 렌더링이 못 따라가는" 상황을 못 잡는다.
+                        # 클라이언트가 xterm write() 완료 콜백 기준으로 직접 신호를
+                        # 보낸다 — pause_read는 requester별 카운트라 _on_data의
+                        # 큐 기반 pause와 독립적으로 겹쳐도 안전하다(둘 다 resume해야
+                        # 재개).
+                        pty_mgr.pause_read(session_id, f"{ws_id}-render")
+                    elif msg_type == "render_resume":
+                        pty_mgr.resume_read(session_id, f"{ws_id}-render")
                 elif "bytes" in msg:
                     payload = msg["bytes"]
                     if channel:
@@ -422,6 +432,10 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             hb_task.cancel()
         if pty_paused:
             pty_mgr.resume_read(session_id, ws_id)
+        # R2: 클라이언트가 render_pause만 보내고 render_resume 전에 끊긴 경우
+        # _pause_requesters에 requester가 영영 남아 read loop이 계속 막힌다 —
+        # resume_read는 없는 requester를 지워도 안전(discard)하므로 무조건 호출.
+        pty_mgr.resume_read(session_id, f"{ws_id}-render")
         # A2: 핸드셰이크 실패를 포함한 모든 종료 경로에서 위에서 올린 카운터를 되돌린다.
         _deps.ws_count_per_session[session_id] = max(0, _deps.ws_count_per_session.get(session_id, 1) - 1)
         if _deps.ws_count_per_session[session_id] == 0:

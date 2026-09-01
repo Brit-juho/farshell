@@ -734,13 +734,35 @@
           } catch (_) { /* binary or non-JSON */ }
         });
 
+        // R2: 서버 pause_read는 WS 송신 큐(_on_data) 크기만 본다 — 네트워크로는
+        // 다 나갔는데 xterm.js 렌더링(특히 저사양 모바일)이 못 따라가는 상황은
+        // 못 잡는다. ttyd의 writeData() 패턴처럼 xterm write() 완료 콜백으로 실제
+        // 렌더링 진행 상황을 재고, 밀리면 별도 render_pause/resume 신호를 보낸다
+        // (서버는 이걸 큐 기반 pause와 독립된 requester로 취급 — 둘 다 풀려야 재개).
+        let _pendingWrites = 0;
+        let _renderPaused = false;
+        const RENDER_PAUSE_HIGH = 8;
+        const RENDER_PAUSE_LOW = 2;
         // wrapE2E 가 핸드셰이크 후 handle 을 넘김. E2E 비활성이면 즉시 실행.
         wrapE2E(sock,
           (handle) => {
             sessions[id].wsHandle = handle;
             if (E2E_ENABLED) fitAndResize(id);
           },
-          (bytes) => term.write(bytes)
+          (bytes) => {
+            _pendingWrites++;
+            if (_pendingWrites > RENDER_PAUSE_HIGH && !_renderPaused) {
+              _renderPaused = true;
+              try { sock.send(JSON.stringify({ type: 'render_pause' })); } catch (_) {}
+            }
+            term.write(bytes, () => {
+              _pendingWrites--;
+              if (_pendingWrites < RENDER_PAUSE_LOW && _renderPaused) {
+                _renderPaused = false;
+                try { sock.send(JSON.stringify({ type: 'render_resume' })); } catch (_) {}
+              }
+            });
+          }
         );
 
         sock.onclose = (ev) => {
