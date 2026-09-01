@@ -709,7 +709,10 @@
           updateConnStatus(id, true);
           // 재연결이었다면(첫 연결이 아니면) 서버가 scrollback(최대 256KB)을 통째로 재전송한다.
           // reset 없이 write하면 이전 출력이 중복 누적되므로 비운 뒤 깨끗하게 repaint한다.
-          if (_retries > 0) { term.reset(); term.write('\x1b[32m[재연결됨]\x1b[0m\r\n'); }
+          // R1: "[재연결됨]" 상태 문구는 예전엔 term.write()로 찍어 스크롤백에 영구히
+          // 남았다(ttyd·wetty처럼 오버레이로 분리) — updateConnStatus가 이미 오버레이를
+          // 지워 "연결됨"을 보여주므로 별도 텍스트 없이 reset만 한다.
+          if (_retries > 0) { term.reset(); }
           // 새(재)연결된 PTY는 크기를 모르므로 캐시를 비워 첫 fitAndResize가 반드시 보내게 한다.
           // _lastFitW/H도 같이 비워야 한다 — 컨테이너 픽셀 크기가 그대로면 fitAndResize의
           // fit() 자체를 건너뛰어 sendResize까지 도달 못 하고 새 PTY에 크기를 못 알린다.
@@ -752,13 +755,13 @@
           const code = ev && ev.code;
           if (TERMINAL_CLOSE_CODES.has(code)) {                // 영구 실패 → 재연결 안 함
             const why = code === 4001 ? '인증 실패' : '세션이 서버에 없음(종료됨)';
-            try { term.write(`\r\n\x1b[31m[재연결 중단 — ${why}. 탭을 닫고 새로 여세요.]\x1b[0m\r\n`); } catch (_) {}
+            _setConnOverlayDetail(id, `재연결 중단 — ${why}. 탭을 닫고 새로 여세요.`);
             return;
           }
           _retries++;
           // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 5로 clamp.
           const delay = Math.min(1000 * Math.pow(2, Math.min(_retries, 5)), 30000);
-          term.write(`\r\n\x1b[33m[재연결 중... ${_retries}회]\x1b[0m\r\n`);
+          _setConnOverlayDetail(id, `재연결 시도 중... (${_retries}회)`);
           sessions[id].reconnTimer = setTimeout(connectTerminalWs, delay);
         };
 
@@ -1155,6 +1158,16 @@
         el.className = '';
         if (overlay) overlay.remove();
       }
+    }
+
+    // R1: 재연결 시도 횟수/중단 사유 같은 상태 디테일은 예전엔 term.write()로 터미널
+    // 스크롤백에 직접 찍어 영구히 남았다. updateConnStatus()가 이미 띄워둔 오버레이의
+    // 서브텍스트만 갱신 — 실제 세션 출력과 분리된다(ttyd·wetty와 같은 패턴).
+    function _setConnOverlayDetail(id, text) {
+      if (id !== activeId) return;
+      const overlay = document.getElementById('conn-overlay');
+      const sub = overlay && overlay.querySelector('.vt-ov-sub');
+      if (sub) sub.textContent = text;
     }
 
     // --- tmux 세션 관리 패널 (깨우기 / 완전 종료) ---
