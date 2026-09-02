@@ -418,6 +418,16 @@ body.voice-only-mode #mic-status {
 }
 .vt-toast.err { color:var(--err); } .vt-toast.ok { color:var(--ok); } .vt-toast.info { color:var(--info); }
 
+/* M6: 핀치로 폰트 크기 조절하는 동안 현재 값을 보여주는 뱃지 — 손 떼면 숨김 */
+.vt-font-badge {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  background:var(--menu); color:var(--txt); border:1px solid var(--line);
+  padding:var(--sp-8) var(--sp-10); border-radius:var(--r-2xl);
+  font:600 var(--fs-xl) var(--ui); z-index:210; pointer-events:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+}
+.vt-font-badge[hidden] { display:none; }
+
 .vt-overlay {
   position:fixed; inset:0; background:color-mix(in srgb, var(--win) 88%, transparent);
   z-index:400; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--sp-9);
