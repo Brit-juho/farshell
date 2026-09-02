@@ -400,6 +400,12 @@
       <button type="button" class="kb" data-seq="/">/</button>
       <button type="button" class="kb" data-seq="~">~</button>
       <button type="button" class="kb" data-seq="-">-</button>
+      <!-- R4: 짧게 누르면 문자 n/p 입력, 길게 누르면 tmux 창 전환(Ctrl-B n/p).
+           전 세션이 tmux라 조건 분기 없이 바로 적용(swell.sh 패턴). -->
+      <button type="button" class="kb" data-seq="n" data-longpress-tmux="n"
+        title="짧게: n 입력 · 길게: tmux 다음 창">n</button>
+      <button type="button" class="kb" data-seq="p" data-longpress-tmux="p"
+        title="짧게: p 입력 · 길게: tmux 이전 창">p</button>
     </div>
     <!-- 접기/펴기 토글 — 스크롤 영역 밖에 고정되어 항상 보임 -->
     <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" title="특수키 바 접기/펴기">▾</button>

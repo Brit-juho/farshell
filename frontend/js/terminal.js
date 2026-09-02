@@ -1861,6 +1861,8 @@
       // M3: ←/→ 버튼을 누른 채 드래그하면 끈 거리만큼 같은 방향으로 연속 이동.
       const ARROW_DRAG_STEP_PX = 14;
       let _dragArrow = null;
+      // R4: 롱프레스 임계값 — 사람이 "누르고 있다"고 인지하는 최소 시간대(400~600ms 범주).
+      const LONGPRESS_MS = 500;
 
       // pointerdown에서 preventDefault → 터미널 textarea 포커스를 뺏지 않아
       // 소프트 키보드가 내려가지 않는다. (버튼 탭마다 키보드가 닫히면 못 씀)
@@ -1877,6 +1879,43 @@
         if (!btn) return;
         e.preventDefault();
         if (btn.dataset.mod === 'ctrl') { _setCtrlArmed(!_ctrlArmed); _focusActiveTerm(); return; }
+
+        // R4: n/p처럼 data-longpress-tmux가 붙은 버튼은 짧게 누르면 평소처럼 문자를
+        // 입력하고, LONGPRESS_MS 이상 누르고 있으면 그 대신 tmux prefix(Ctrl-B, 0x02)
+        // + n/p를 보내 창을 전환한다(swell.sh 패턴). 다른 키들은 기존처럼 pointerdown
+        // 즉시 발화 — 여기서만 pointerup까지 기다리는 예외를 둔다.
+        if (btn.dataset.longpressTmux) {
+          let fired = false;
+          btn.classList.add('holding');
+          const timer = setTimeout(() => {
+            fired = true;
+            btn.classList.remove('holding');
+            btn.classList.add('longpress-fired');
+            setTimeout(() => btn.classList.remove('longpress-fired'), 150);
+            sendToPty(activeId, '\x02' + btn.dataset.longpressTmux);
+            _focusActiveTerm();
+          }, LONGPRESS_MS);
+          const finish = (sendShort) => {
+            clearTimeout(timer);
+            btn.classList.remove('holding');
+            bar.removeEventListener('pointerup', onUp);
+            bar.removeEventListener('pointercancel', onCancel);
+            if (sendShort && !fired) {
+              const shortOut = VTKeySeq.keybarSeq({ key: btn.dataset.key, seq: btn.dataset.seq, ctrl: _ctrlArmed });
+              if (shortOut) {
+                if (_ctrlArmed) _setCtrlArmed(false);
+                sendToPty(activeId, shortOut);
+                _focusActiveTerm();
+              }
+            }
+          };
+          const onUp = (ev) => { if (ev.pointerId === e.pointerId) finish(true); };
+          const onCancel = (ev) => { if (ev.pointerId === e.pointerId) finish(false); };
+          bar.addEventListener('pointerup', onUp);
+          bar.addEventListener('pointercancel', onCancel);
+          return;
+        }
+
         // armed면 keybarSeq가 Ctrl+화살표(단어 이동)·Ctrl+문자를 조합해 준다.
         const out = VTKeySeq.keybarSeq({ key: btn.dataset.key, seq: btn.dataset.seq, ctrl: _ctrlArmed });
         if (!out) return;
