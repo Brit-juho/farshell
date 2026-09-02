@@ -613,6 +613,12 @@
 
       const term = new Terminal({
         cursorBlink: true,
+        // xterm 기본값(1000)은 서버 재접속 복원 예산(최대 256KB, server/pty_manager.py
+        // SCROLLBACK_MAX_BYTES)에 비해 작아, 일반 텍스트 위주 세션에서는 서버가 보낸
+        // scrollback 상당수가 도착 즉시 버려진다. Wave Terminal 기본값(2000)에 맞춤 —
+        // 참고한 다른 프로젝트(wetty/ttyd/orca/blink/swell.sh)는 xterm 기본값을 그대로
+        // 쓰거나 재접속 복원 자체를 지원하지 않아 참고할 표준값이 없었음(2026-09-02 조사).
+        scrollback: 2000,
         fontSize: termFontSize,
         fontFamily: (window.getVtXtermFont ? window.getVtXtermFont() : "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace"),
         theme: (window.getVtXtermTheme ? window.getVtXtermTheme() : { background: '#1e1e2e' }),
