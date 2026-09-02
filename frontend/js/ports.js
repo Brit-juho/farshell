@@ -42,6 +42,70 @@
       return s;
     }
 
+    // U5/L6: 포트 종료 버튼 스와이프 액션 (터치 전용). 한 번에 하나만 열려 있게 관리.
+    const SWIPE_OPEN_PX = 76;   // kill 버튼 폭 — 열렸을 때 inner가 이만큼 왼쪽으로 밀린다.
+    const SWIPE_THRESHOLD_PX = 36;
+    let _openSwipeRow = null;
+
+    function _closeSwipe(row) {
+      if (!row) return;
+      row.classList.remove('open');
+      const inner = row.querySelector('.vt-pt-row-inner');
+      if (inner) inner.style.transform = '';
+      if (_openSwipeRow === row) _openSwipeRow = null;
+    }
+
+    function _wireSwipe(row, inner, killBtn) {
+      let startX = 0, startY = 0, dx = 0, dragging = false, decided = false, horizontal = false;
+
+      row.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return;
+        if (_openSwipeRow && _openSwipeRow !== row) _closeSwipe(_openSwipeRow);
+        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        dx = 0; dragging = true; decided = false; horizontal = false;
+        inner.style.transition = 'none';
+      }, { passive: true });
+
+      row.addEventListener('touchmove', (e) => {
+        if (!dragging) return;
+        const x = e.touches[0].clientX, y = e.touches[0].clientY;
+        const rawDx = x - startX;
+        if (!decided) {
+          // 세로 스크롤과 헷갈리지 않게 — 수평 이동이 확실히 더 클 때만 스와이프로 확정.
+          if (Math.abs(rawDx) < 6 && Math.abs(y - startY) < 6) return;
+          horizontal = Math.abs(rawDx) > Math.abs(y - startY);
+          decided = true;
+        }
+        if (!horizontal) return;
+        e.preventDefault();
+        const base = row.classList.contains('open') ? -SWIPE_OPEN_PX : 0;
+        dx = Math.max(-SWIPE_OPEN_PX, Math.min(0, base + rawDx));
+        inner.style.transform = `translateX(${dx}px)`;
+      }, { passive: false });
+
+      const finish = () => {
+        if (!dragging) return;
+        dragging = false;
+        inner.style.transition = '';
+        if (!horizontal) { inner.style.transform = row.classList.contains('open') ? `translateX(${-SWIPE_OPEN_PX}px)` : ''; return; }
+        if (dx <= -SWIPE_THRESHOLD_PX) {
+          row.classList.add('open');
+          inner.style.transform = `translateX(${-SWIPE_OPEN_PX}px)`;
+          _openSwipeRow = row;
+        } else {
+          _closeSwipe(row);
+        }
+      };
+      row.addEventListener('touchend', finish);
+      row.addEventListener('touchcancel', finish);
+
+      // 열려 있을 때 inner(카드 본문)를 탭하면 닫기만 하고 그 탭이 공개/종료
+      // 버튼 클릭으로 새지 않게 한다.
+      inner.addEventListener('click', (e) => {
+        if (row.classList.contains('open')) { e.stopPropagation(); e.preventDefault(); _closeSwipe(row); }
+      }, true);
+    }
+
     async function refreshPorts(fresh) {
       const body = document.getElementById('vt-pt-body');
       if (!body) return;
@@ -113,6 +177,10 @@
 
         const actions = document.createElement('span');
         actions.className = 'vt-pt-actions';
+        // U5/L6: 터치 기기는 종료 버튼을 왼쪽 스와이프로 드러낸다(Mail/Linear 패턴) —
+        // 목록을 스크롤하다 손가락이 스치는 것만으로 프로세스가 죽는 오탭을 막기 위함.
+        // 마우스는 오탭 위험이 없으니 기존처럼 버튼이 항상 보인다.
+        const swipeKillOnTouch = _isCoarsePointer() && !p.protected;
         if (p.protected) {
           const lock = document.createElement('span');
           lock.className = 'vt-pt-lock';
@@ -125,15 +193,39 @@
           ex.textContent = '공개';
           ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
           ex.onclick = () => exposePort(p.port);
-          const kb = document.createElement('button');
-          kb.className = 'vt-pt-btn danger';
-          kb.textContent = '종료';
-          kb.onclick = () => killPort(p.port, p.pid, p.cmd);
-          actions.appendChild(ex); actions.appendChild(kb);
+          actions.appendChild(ex);
+          if (!swipeKillOnTouch) {
+            const kb = document.createElement('button');
+            kb.className = 'vt-pt-btn danger';
+            kb.textContent = '종료';
+            kb.onclick = () => killPort(p.port, p.pid, p.cmd);
+            actions.appendChild(kb);
+          }
         }
 
-        row.appendChild(port); row.appendChild(meta);
-        row.appendChild(tags); row.appendChild(actions);
+        if (!swipeKillOnTouch) {
+          row.appendChild(port); row.appendChild(meta);
+          row.appendChild(tags); row.appendChild(actions);
+          list.appendChild(row);
+          return;
+        }
+
+        // 스와이프 레이어: row는 뷰포트(overflow:hidden), inner가 실제로 좌우로
+        // 밀리고, 그 아래 깔린 kill 버튼이 밀린 만큼 드러난다.
+        row.classList.add('swipeable');
+        const inner = document.createElement('div');
+        inner.className = 'vt-pt-row-inner';
+        inner.appendChild(port); inner.appendChild(meta);
+        inner.appendChild(tags); inner.appendChild(actions);
+
+        const kill = document.createElement('button');
+        kill.className = 'vt-pt-swipe-kill';
+        kill.textContent = '종료';
+        kill.onclick = () => { _closeSwipe(row); killPort(p.port, p.pid, p.cmd); };
+
+        row.appendChild(kill);
+        row.appendChild(inner);
+        _wireSwipe(row, inner, kill);
         list.appendChild(row);
       });
       body.innerHTML = '';
