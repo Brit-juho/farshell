@@ -436,6 +436,18 @@ body.voice-only-mode #mic-status {
 .vt-overlay .vt-ov-icon { font-size:var(--fs-3xl); color:var(--err); }
 .vt-overlay .vt-ov-title { color:var(--err); font-size:var(--fs-md); font-weight:700; }
 .vt-overlay .vt-ov-sub { color:var(--sub); font-size:var(--fs-sm); }
+/* O1: 재연결 오버레이의 경과 시간 + 끊기/다시 연결 버튼(Wave connstatusoverlay 참고) */
+.vt-overlay .vt-ov-elapsed{
+  color:var(--sub); font:400 var(--fs-xs) var(--mono); font-variant-numeric:tabular-nums;
+  margin-top:calc(var(--sp-9) * -1 + var(--sp-4));   /* .vt-ov-sub 바로 아래로 붙임 */
+}
+.vt-overlay .vt-ov-stop-btn{
+  background:var(--tab); color:var(--txt); border:1px solid var(--line);
+  border-radius:var(--trad); padding:var(--sp-5) var(--sp-9);
+  font:500 var(--fs-sm) var(--ui); cursor:pointer; touch-action:manipulation;
+}
+.vt-overlay .vt-ov-stop-btn:hover{ background:var(--menu-hover); }
+.vt-overlay.stopped .vt-ov-stop-btn{ background:var(--acc); color:var(--acc-ink); border-color:var(--acc); }
 
 /* 빈 상태 온보딩 — 상단 헤더(#topbar)는 가리지 않고 그 아래 영역만 채운다.
    inset:0로 전체를 덮으면 헤더가 안 보여서 새 세션/메뉴 접근이 막힌다. */

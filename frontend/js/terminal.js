@@ -906,6 +906,10 @@
       // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록.
       // ws는 connectTerminalWs()에서 채운다.
       sessions[id] = { term, ws: null, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null };
+      // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션 클로저 안의 connectTerminalWs를
+      // 부를 수 있도록 참조를 걸어둔다 — updateConnStatus/_toggleReconnectStop은 이
+      // 클로저 밖(파일 최상위)에 있어 함수 자체엔 접근할 수 없다.
+      sessions[id]._reconnectNow = connectTerminalWs;
 
       // ── 소켓 수명주기 (초기 연결 + 자동 재연결 통합) ─────────────────────
       // [회귀 fb827a6] 재연결 상한(retries>=15)을 없애 무한 재시도로 바꾸면서, onopen에서
@@ -1013,7 +1017,11 @@
           // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 7로 clamp.
           const delay = Math.min(250 * Math.pow(2, Math.min(_retries, 7)), 30000);
           _setConnOverlayDetail(id, `재연결 시도 중... (${_retries}회)`);
-          sessions[id].reconnTimer = setTimeout(connectTerminalWs, delay);
+          // O1: "끊기"를 누른 상태면 사용자가 멈춘 것 — 다음 타이머를 새로 걸지 않는다.
+          // "다시 연결"을 누르면 _reconnectNow()가 이 delay를 기다리지 않고 즉시 재시도한다.
+          if (!sessions[id]._reconnectStopped) {
+            sessions[id].reconnTimer = setTimeout(connectTerminalWs, delay);
+          }
         };
 
         sock.onerror = () => { try { sock.close(); } catch (_) {} };
@@ -1395,12 +1403,63 @@
     // 갱신 — 방해되지 않는 수준이라 굳이 늦출 이유가 없다.
     const CONN_OVERLAY_GRACE_MS = 1500;
     let _connOverlayTimer = null;
+    let _connOverlayTickTimer = null;
+
+    function _fmtElapsed(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const m = Math.floor(total / 60), s = total % 60;
+      return m > 0 ? `${m}분 ${s}초 경과` : `${s}초 경과`;
+    }
+
+    // O1: 오버레이가 떠 있는 동안 1초마다 경과 시간을 갱신 — Wave의
+    // connstatusoverlay.tsx가 "얼마나 기다렸는지" 실시간으로 보여주는 것과 같은 이유.
+    // 그래야 "재연결 시도 중..."만 보고 언제까지 기다려야 할지 감이 안 오는 문제가 풀린다.
+    function _tickConnOverlay(id) {
+      const overlay = document.getElementById('conn-overlay');
+      if (!overlay) { clearInterval(_connOverlayTickTimer); _connOverlayTickTimer = null; return; }
+      const s = sessions[id];
+      const el = overlay.querySelector('.vt-ov-elapsed');
+      if (el && s && s._disconnectedAt) el.textContent = _fmtElapsed(Date.now() - s._disconnectedAt);
+    }
+
+    // O1: "끊기" — 무한 지수 백오프 재시도를 사용자가 직접 멈출 수 있게 한다(예: 서버가
+    // 한동안 안 뜰 걸 아는 상황에서 계속 재시도 소리/배터리 낭비를 막고 싶을 때).
+    // 다시 누르면(라벨이 "다시 연결"로 바뀜) 즉시(백오프 지연 없이) 재연결을 시도한다.
+    function _toggleReconnectStop(id) {
+      const s = sessions[id];
+      const overlay = document.getElementById('conn-overlay');
+      if (!s || !overlay) return;
+      const sub = overlay.querySelector('.vt-ov-sub');
+      const btn = overlay.querySelector('.vt-ov-stop-btn');
+      if (!s._reconnectStopped) {
+        s._reconnectStopped = true;
+        if (s.reconnTimer) { clearTimeout(s.reconnTimer); s.reconnTimer = null; }
+        overlay.classList.add('stopped');
+        if (sub) sub.textContent = '자동 재연결이 중단되었습니다.';
+        if (btn) btn.textContent = '다시 연결';
+      } else {
+        s._reconnectStopped = false;
+        overlay.classList.remove('stopped');
+        if (sub) sub.textContent = '자동 재연결 시도 중...';
+        if (btn) btn.textContent = '끊기';
+        if (typeof s._reconnectNow === 'function') s._reconnectNow();
+      }
+    }
+
+    function _removeConnOverlay() {
+      const overlay = document.getElementById('conn-overlay');
+      if (overlay) overlay.remove();
+      if (_connOverlayTickTimer) { clearInterval(_connOverlayTickTimer); _connOverlayTickTimer = null; }
+    }
+
     function updateConnStatus(id, connected) {
       const el = document.getElementById('conn-status');
       let overlay = document.getElementById('conn-overlay');
       if (!connected && id === activeId) {
         el.textContent = '서버 연결 끊김';
         el.className = 'disconnected';
+        const s0 = sessions[id];
+        if (s0 && !s0._disconnectedAt) s0._disconnectedAt = Date.now();
         if (!overlay && !_connOverlayTimer) {
           _connOverlayTimer = setTimeout(() => {
             _connOverlayTimer = null;
@@ -1415,14 +1474,22 @@
               <div class="vt-ov-icon"><i class="icon-wifi-off"></i></div>
               <div class="vt-ov-title">서버 연결 끊김</div>
               <div class="vt-ov-sub">자동 재연결 시도 중...</div>
+              <div class="vt-ov-elapsed"></div>
+              <button type="button" class="vt-ov-stop-btn">끊기</button>
             `;
             document.body.appendChild(ov);
+            ov.querySelector('.vt-ov-stop-btn').addEventListener('click', () => _toggleReconnectStop(id));
+            _tickConnOverlay(id);
+            clearInterval(_connOverlayTickTimer);
+            _connOverlayTickTimer = setInterval(() => _tickConnOverlay(id), 1000);
           }, CONN_OVERLAY_GRACE_MS);
         }
       } else {
         el.className = '';
         if (_connOverlayTimer) { clearTimeout(_connOverlayTimer); _connOverlayTimer = null; }
-        if (overlay) overlay.remove();
+        _removeConnOverlay();
+        const s = sessions[id];
+        if (s) { s._disconnectedAt = null; s._reconnectStopped = false; }
       }
     }
 
