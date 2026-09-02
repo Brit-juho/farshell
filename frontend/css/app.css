@@ -651,7 +651,10 @@ body.voice-only-mode #mic-status {
   touch-action:manipulation;
 }
 .kb:active { background:var(--menu-hover); }
-.kb-arrow { min-width:38px; font-size:var(--fs-lg); }
+/* M3: ←/→는 누른 채 드래그로 연속 이동을 받는다 — 부모 #keybar-keys의
+   touch-action:pan-x(버튼 줄 가로 스크롤용)가 이 드래그를 스크롤로 가로채지
+   않도록 이 버튼들만 touch-action:none으로 덮어쓴다. */
+.kb-arrow { min-width:38px; font-size:var(--fs-lg); touch-action:none; }
 .kb-mod.armed { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); }
 /* 접기/펴기 토글 버튼 */
 #keybar-toggle {

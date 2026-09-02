@@ -1620,6 +1620,10 @@
       if (_force) bar.classList.add('force-show');
       bar.hidden = false;
 
+      // M3: ←/→ 버튼을 누른 채 드래그하면 끈 거리만큼 같은 방향으로 연속 이동.
+      const ARROW_DRAG_STEP_PX = 14;
+      let _dragArrow = null;
+
       // pointerdown에서 preventDefault → 터미널 textarea 포커스를 뺏지 않아
       // 소프트 키보드가 내려가지 않는다. (버튼 탭마다 키보드가 닫히면 못 씀)
       bar.addEventListener('pointerdown', (e) => {
@@ -1641,7 +1645,31 @@
         if (_ctrlArmed) _setCtrlArmed(false);
         sendToPty(activeId, out);
         _focusActiveTerm();
+        // M3: ←/→를 누른 채 그 방향으로 더 끌면 끈 거리만큼 같은 방향으로 반복
+        // 전송한다(트랙패드형 연속 이동). 반대로 되끄는 건 무시한다 — 화살표는
+        // 이미 보낸 걸 취소할 수 없어서, "얼마나 더 보냈는지"만 늘어나는 카운터로
+        // 추적해야 화면에 보이는 커서 위치와 어긋나지 않는다.
+        if (btn.dataset.key === 'left' || btn.dataset.key === 'right') {
+          _dragArrow = { key: btn.dataset.key, pointerId: e.pointerId, startX: e.clientX, steps: 1 };
+          try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+        }
       });
+
+      bar.addEventListener('pointermove', (e) => {
+        if (!_dragArrow || e.pointerId !== _dragArrow.pointerId) return;
+        const dir = _dragArrow.key === 'right' ? 1 : -1;
+        const advanced = (e.clientX - _dragArrow.startX) * dir;
+        const targetSteps = Math.max(1, 1 + Math.floor(advanced / ARROW_DRAG_STEP_PX));
+        while (_dragArrow.steps < targetSteps) {
+          sendToPty(activeId, VTKeySeq.keybarSeq({ key: _dragArrow.key }));
+          _dragArrow.steps++;
+        }
+      });
+      const _endDragArrow = (e) => {
+        if (_dragArrow && e.pointerId === _dragArrow.pointerId) _dragArrow = null;
+      };
+      bar.addEventListener('pointerup', _endDragArrow);
+      bar.addEventListener('pointercancel', _endDragArrow);
 
       // 키보드 위로 띄우기 — visualViewport로 소프트 키보드 높이를 추정해 transform.
       const positionBar = () => {
