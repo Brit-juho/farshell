@@ -16,7 +16,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
 
 import auth
@@ -75,24 +74,34 @@ for _name in ("uvicorn.access", "uvicorn.error"):
 # 미들웨어
 # ---------------------------------------------------------------------------
 
-class TokenAuthMiddleware(BaseHTTPMiddleware):
+class TokenAuthMiddleware:
     """인증: 서명 세션 쿠키(사람) 또는 기계 토큰(데몬/QR)을 받는다.
 
     - 사람: `/api/auth`에 비밀번호 제출 → 검증 성공 시 만료 서명 세션 쿠키 발급.
       이후 요청은 `vt_session` 쿠키로 통과(원문 비밀번호 아님).
     - 기계: clipboard_daemon·tui·hook은 Bearer/query로 VT_TOKEN 직접 전달.
     자세한 판정 로직은 auth 모듈(비밀번호 해시 + HMAC 서명) 참조.
+
+    S3: BaseHTTPMiddleware 대신 순수 ASGI로 작성 — call_next()가 매 요청마다
+    응답을 별도 태스크로 스트리밍 재포장하는 오버헤드(Starlette 자체 이슈로
+    잘 알려진 지연·취소 전파 문제의 근원)가 없다. WS는 원래도 BaseHTTPMiddleware의
+    dispatch()를 안 타고 그냥 통과했다(스코프 타입이 http가 아니면 dispatch 자체를
+    건너뜀) — 그 동작을 scope["type"] 분기로 그대로 유지한다.
     """
 
-    async def dispatch(self, request: Request, call_next):
-        if not auth.is_protected():
-            return await call_next(request)
-        path = request.url.path
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not auth.is_protected():
+            return await self.app(scope, receive, send)
+        path = scope.get("path", "")
         if path in (
             "/", "/sw.js", "/manifest.json", "/favicon.ico",
             "/api/auth", "/api/auth/status", "/api/auth/logout",
         ) or path.startswith("/static"):
-            return await call_next(request)
+            return await self.app(scope, receive, send)
+        request = Request(scope, receive)
         token = (
             request.cookies.get("vt_session", "")
             or request.query_params.get("token", "")
@@ -102,8 +111,10 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
             if authz.startswith("Bearer "):
                 token = authz[7:]
         if not auth.check_request(token):
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        return await call_next(request)
+            response = JSONResponse({"error": "unauthorized"}, status_code=401)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 def _allowed_origins() -> set:
@@ -133,7 +144,7 @@ def _origin_ok(origin: "str | None", host_header: str) -> bool:
     return bool(origin_host) and origin_host.lower() == (host_header or "").lower()
 
 
-class OriginGuardMiddleware(BaseHTTPMiddleware):
+class OriginGuardMiddleware:
     """크로스 사이트 접근 차단 (HTTP + WebSocket).
 
     OTP·비밀번호로는 막을 수 없는 유일한 경로다. 사용자가 아무 웹사이트나 방문하면
@@ -143,25 +154,26 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
     - WebSocket: CORS가 적용되지 않는 경로라 여기서 직접 막아야 한다.
       브라우저는 WS 핸드셰이크에 Origin을 항상 붙이므로 판정이 가능하다.
     비브라우저 클라이언트(curl·clipboard_daemon·훅)는 Origin이 없어 그대로 통과한다.
+
+    S3: 순수 ASGI로 작성 — HTTP/WS 둘 다 같은 판정 로직(`_origin_ok`)을 한
+    분기 안에서 쓴다. 예전엔 BaseHTTPMiddleware를 상속해 HTTP는 dispatch(),
+    WS는 __call__ 오버라이드로 경로가 둘로 갈라져 있었다.
     """
 
-    async def dispatch(self, request: Request, call_next):
-        if not _origin_ok(request.headers.get("origin"), request.headers.get("host", "")):
-            return JSONResponse(
-                {"error": "forbidden", "reason": "cross_origin"}, status_code=403
-            )
-        return await call_next(request)
+    def __init__(self, app):
+        self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "websocket":
-            headers = _scope_headers(scope)
-            if not _origin_ok(headers.get("origin"), headers.get("host", "")):
-                response = JSONResponse(
-                    {"error": "forbidden", "reason": "cross_origin"}, status_code=403
-                )
-                await response(scope, receive, send)
-                return
-        await super().__call__(scope, receive, send)
+        if scope["type"] not in ("http", "websocket"):
+            return await self.app(scope, receive, send)
+        headers = _scope_headers(scope)
+        if not _origin_ok(headers.get("origin"), headers.get("host", "")):
+            response = JSONResponse(
+                {"error": "forbidden", "reason": "cross_origin"}, status_code=403
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 def _effective_client_ip(raw_host, headers) -> "str | None":
@@ -195,41 +207,38 @@ def _scope_headers(scope) -> dict:
     return out
 
 
-class NetworkAccessMiddleware(BaseHTTPMiddleware):
-    """Phase 8 G1 + Codex: CIDR 기반 IP 화이트리스트 (HTTP + WebSocket)."""
+class NetworkAccessMiddleware:
+    """Phase 8 G1 + Codex: CIDR 기반 IP 화이트리스트 (HTTP + WebSocket).
 
-    async def dispatch(self, request: Request, call_next):
+    S3: 순수 ASGI로 작성 — HTTP/WS 둘 다 같은 분기 안에서 처리한다(예전엔
+    BaseHTTPMiddleware dispatch()/__call__ 오버라이드로 갈라져 있었음).
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            return await self.app(scope, receive, send)
         spec = network_access.get_current_spec()
         if spec.allow_all:
-            return await call_next(request)
-        path = request.url.path
-        if path in ("/", "/sw.js", "/manifest.json", "/favicon.ico") or path.startswith("/static"):
-            return await call_next(request)
-        raw = request.client.host if request.client else None
-        client_host = _effective_client_ip(raw, request.headers)
+            return await self.app(scope, receive, send)
+        headers = _scope_headers(scope)
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path in ("/", "/sw.js", "/manifest.json", "/favicon.ico") or path.startswith("/static"):
+                return await self.app(scope, receive, send)
+        client = scope.get("client")
+        raw = client[0] if client else None
+        client_host = _effective_client_ip(raw, headers)
         if not spec.is_allowed(client_host):
-            return JSONResponse(
+            response = JSONResponse(
                 {"error": "forbidden", "reason": "ip_not_allowed", "ip": client_host},
                 status_code=403,
             )
-        return await call_next(request)
-
-    async def __call__(self, scope, receive, send):
-        """Codex: WebSocket scope도 IP 필터 적용. A3: HTTP와 동일한 프록시 헤더 처리."""
-        if scope["type"] == "websocket":
-            spec = network_access.get_current_spec()
-            if not spec.allow_all:
-                client = scope.get("client")
-                raw = client[0] if client else None
-                host = _effective_client_ip(raw, _scope_headers(scope))
-                if not spec.is_allowed(host):
-                    response = JSONResponse(
-                        {"error": "forbidden", "reason": "ip_not_allowed", "ip": host},
-                        status_code=403,
-                    )
-                    await response(scope, receive, send)
-                    return
-        await super().__call__(scope, receive, send)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
