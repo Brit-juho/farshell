@@ -1105,6 +1105,12 @@ body.vt-resizing #grid-view{ transition:none; }
 
 /* 포트 대시보드 (ports.js) — P3.
    패널 껍데기(.vt-viewer-backdrop/.vt-viewer-card)는 코드 뷰어와 공유한다. */
+/* U3: 내 서버 / 보호됨(시스템) 구분 헤더 — 두 그룹이 섞여 있을 때만 렌더된다. */
+.vt-pt-section{
+  padding:var(--sp-5) var(--sp-7) var(--sp-3);
+  font:600 var(--fs-2xs) var(--ui); color:var(--sub);
+  text-transform:uppercase; letter-spacing:.04em;
+}
 .vt-pt-row{
   display:flex; align-items:center; gap:var(--sp-6);
   padding:var(--sp-6) var(--sp-7); border-bottom:1px solid var(--line);

@@ -59,7 +59,27 @@
 
       const list = document.createElement('div');
       list.className = 'vt-vw-list';
+      // U3: 서버가 이미 protected(보호됨/시스템) 기준으로 뒤로 정렬해서 보내준다.
+      // 그 경계가 바뀌는 지점에 구분 헤더만 얹는다 — 정렬 로직 자체는 서버가 단일 소스.
+      // 두 그룹이 실제로 섞여 있을 때만 헤더를 보여준다 — 전부 한쪽뿐이면 굳이 안 나눔.
+      const hasBothGroups = d.ports.some(p => !p.protected) && d.ports.some(p => p.protected);
+      let sawProtected = false;
+      let sawMine = false;
       d.ports.forEach(p => {
+        if (hasBothGroups && !p.protected && !sawMine) {
+          sawMine = true;
+          const head = document.createElement('div');
+          head.className = 'vt-pt-section';
+          head.textContent = '내 서버';
+          list.appendChild(head);
+        }
+        if (hasBothGroups && p.protected && !sawProtected) {
+          sawProtected = true;
+          const head = document.createElement('div');
+          head.className = 'vt-pt-section';
+          head.textContent = '보호됨 / 시스템';
+          list.appendChild(head);
+        }
         const row = document.createElement('div');
         row.className = 'vt-pt-row';
 

@@ -168,6 +168,12 @@ def scan(use_cache: bool = True) -> dict:
         row["public"] = any(a in ("*", "0.0.0.0", "[::]") for a in row["addrs"])
         out.append(row)
 
+    # U3: 포트 번호 순 하나로만 늘어놓으면 내가 실제로 만지는 개발 서버가
+    # sshd/cloudflared/다른 유저 프로세스 사이사이에 섞여 스캔하기 번거로웠다.
+    # 종료 가능한(내 서버) 쪽을 먼저, 보호된(시스템/타인) 쪽을 뒤로 — 각 그룹
+    # 안에서는 그대로 포트 오름차순.
+    out.sort(key=lambda r: (r["protected"], r["port"]))
+
     _cache = (now, out)
     return {"ports": out, "cached": False, "truncated": truncated}
 
