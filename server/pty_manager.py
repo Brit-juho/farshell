@@ -83,6 +83,10 @@ class PTYSession:
     _paused: bool = field(default=False, repr=False)
     # P0 fix: PTY 시작 시각 — grace period 동안 클라이언트 자동응답(ESC 시퀀스) 차단용
     _start_monotonic: float = field(default=0.0, repr=False)
+    # R3: 출력 배치 버퍼 — read마다 즉시 broadcast하지 않고 짧은 창(BATCH_WINDOW_SEC)
+    # 동안 모았다가 한 번에 내보낸다. wetty의 tinybuffer(2ms, 512KB) 패턴.
+    _out_buf: bytearray = field(default_factory=bytearray, repr=False)
+    _flush_handle: Optional[asyncio.TimerHandle] = field(default=None, repr=False)
 
 
 class PTYManager:
@@ -354,7 +358,11 @@ class PTYManager:
                 return
 
         if not data:
-            # EOF — tmux detach 등으로 프로세스 종료. 좀비 방지를 위해 명시적 회수.
+            # EOF — tmux detach 등으로 프로세스 종료. 순서를 지킨다: 남은 배치 버퍼를
+            # 먼저 내보내야 [process exited] 메시지가 그 앞의 출력보다 먼저 도착하는
+            # 일이 없다.
+            self._flush_session(session_id)
+            # 좀비 방지를 위해 명시적 회수.
             try:
                 os.waitpid(session.pid, os.WNOHANG)
             except ChildProcessError:
@@ -379,6 +387,38 @@ class PTYManager:
                     pass
             return
 
+        # R3: 매 read마다 즉시 scrollback+broadcast 하지 않고, 짧은 창(BATCH_WINDOW_SEC)
+        # 동안 모아서 한 번에 내보낸다 — 빠른 출력(build 로그 등)에서 WS 프레임 수·
+        # xterm.js write() 호출 수를 줄인다(wetty의 tinybuffer 패턴). BATCH_MAX_BYTES를
+        # 넘으면 창을 기다리지 않고 즉시 flush — 지연시간에 상한을 둔다.
+        session._out_buf.extend(data)
+        if len(session._out_buf) >= self.BATCH_MAX_BYTES:
+            self._flush_session(session_id)
+            return
+        if session._flush_handle is None and session._loop is not None:
+            session._flush_handle = session._loop.call_later(
+                self.BATCH_WINDOW_SEC, self._flush_session, session_id
+            )
+
+    # wetty tinybuffer 참고 — 2ms/512KB. 사람이 타이핑한 에코는 2ms 정도로는 체감
+    # 지연이 없고(사람 반응속도 훨씬 느림), 빌드 로그 같은 폭주 출력에서만 실제로
+    # 여러 read를 하나의 WS 프레임으로 묶는 효과가 난다.
+    BATCH_WINDOW_SEC = 0.002
+    BATCH_MAX_BYTES = 512 * 1024
+
+    def _flush_session(self, session_id: str) -> None:
+        """배치 버퍼를 scrollback에 반영하고 구독자에게 한 번에 broadcast."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return
+        if session._flush_handle is not None:
+            session._flush_handle.cancel()
+            session._flush_handle = None
+        if not session._out_buf:
+            return
+        data = bytes(session._out_buf)
+        session._out_buf.clear()
+
         # scrollback에 저장 (바이트 예산으로 트리밍)
         self._append_scrollback(session, data)
         # broadcast to all subscribers
@@ -394,6 +434,13 @@ class PTYManager:
         session = self._sessions.pop(session_id, None)
         if session is None:
             return
+
+        # R3: 예약된 배치 flush 타이머 취소 — 안 지우면 이미 pop된 session_id로
+        # _flush_session이 뒤늦게 불려 no-op하긴 하지만, 굳이 늦게 도는 타이머를
+        # 남겨둘 이유가 없다.
+        if session._flush_handle is not None:
+            session._flush_handle.cancel()
+            session._flush_handle = None
 
         # 세션별 보조 상태 정리 — 안 지우면 세션이 생성/삭제될 때마다 dict가 무한히 커진다.
         self._line_buffer.pop(session_id, None)

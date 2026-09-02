@@ -76,3 +76,33 @@ def test_scrollback_returned_on_get(loop):
     chunks = mgr.get_scrollback("test-sb")
     assert chunks == [b"hello\n"]
     mgr.destroy_session("test-sb")
+
+
+def test_output_batching_coalesces_rapid_reads(loop):
+    """R3: BATCH_WINDOW_SEC 안에 들어온 여러 _on_readable 호출이 broadcast 1번으로 합쳐지는지."""
+    mgr = make_manager_with_session(loop, "test-batch")
+    session = mgr._sessions["test-batch"]
+
+    received = []
+    session._subscribers.add(received.append)
+
+    async def _run():
+        # os.read를 실제로 하면 fd에 데이터가 없어 BlockingIOError로 조기 반환하니,
+        # _on_readable 내부의 os.read 호출 지점만 우회해 배치 로직 자체를 검증한다.
+        import pty_manager as pm
+        orig_read = pm.os.read
+        pm.os.read = lambda fd, n: b"chunk"
+        try:
+            mgr._on_readable("test-batch")
+            mgr._on_readable("test-batch")
+            mgr._on_readable("test-batch")
+        finally:
+            pm.os.read = orig_read
+        # flush 전이므로 아직 구독자에게 아무것도 안 갔어야 한다.
+        assert received == []
+        await asyncio.sleep(mgr.BATCH_WINDOW_SEC * 3)
+
+    loop.run_until_complete(_run())
+    # 3번의 read가 한 번의 broadcast로 합쳐짐.
+    assert received == [b"chunkchunkchunk"]
+    mgr.destroy_session("test-batch")
