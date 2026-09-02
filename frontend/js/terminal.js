@@ -908,8 +908,14 @@
             return;
           }
           _retries++;
-          // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 5로 clamp.
-          const delay = Math.min(1000 * Math.pow(2, Math.min(_retries, 5)), 30000);
+          // M9: 첫 재시도는 기존에 1000ms 밑변으로 시작해 최소 2초를 기다렸다 —
+          // wifi↔LTE 전환 같은 순간적 끊김조차 늘 2초+ 재연결 지연을 강제해,
+          // updateConnStatus의 오버레이 유예(CONN_OVERLAY_GRACE_MS=1.5초)가
+          // 사실상 항상 만료되고 오버레이가 뜬 뒤였다. 밑변을 250ms로 낮춰
+          // 첫 재시도(500ms)가 유예 시간 안에 들어오게 했다 — 지속되는 장애에는
+          // 여전히 지수적으로 늘어나 30초 상한까지 백오프하므로 폭풍 재발 위험은 없음.
+          // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 7로 clamp.
+          const delay = Math.min(250 * Math.pow(2, Math.min(_retries, 7)), 30000);
           _setConnOverlayDetail(id, `재연결 시도 중... (${_retries}회)`);
           sessions[id].reconnTimer = setTimeout(connectTerminalWs, delay);
         };
@@ -1285,26 +1291,41 @@
       saveWorkspace();
     }
 
+    // M9: wifi↔LTE 전환 같은 순간적 망 전환은 보통 1~2초면 스스로 재연결된다.
+    // 예전엔 첫 onclose에서 곧바로 전체 화면 오버레이를 띄워, 그런 찰나의 끊김도
+    // 매번 화면을 덮었다 사라지길 반복해 거슬렸다. Mosh는 이런 순간 끊김을 아예
+    // 티 안 나게 처리하는 게 원칙 — 여기서도 GRACE_MS 안에 재연결되면 오버레이
+    // 자체를 띄우지 않고 조용히 넘어간다. 작은 상태 pill(#conn-status)은 즉시
+    // 갱신 — 방해되지 않는 수준이라 굳이 늦출 이유가 없다.
+    const CONN_OVERLAY_GRACE_MS = 1500;
+    let _connOverlayTimer = null;
     function updateConnStatus(id, connected) {
       const el = document.getElementById('conn-status');
       let overlay = document.getElementById('conn-overlay');
       if (!connected && id === activeId) {
         el.textContent = '서버 연결 끊김';
         el.className = 'disconnected';
-        // 전체 화면 연결 끊김 오버레이
-        if (!overlay) {
-          overlay = document.createElement('div');
-          overlay.id = 'conn-overlay';
-          overlay.className = 'vt-overlay';
-          overlay.innerHTML = `
-            <div class="vt-ov-icon"><i class="icon-wifi-off"></i></div>
-            <div class="vt-ov-title">서버 연결 끊김</div>
-            <div class="vt-ov-sub">자동 재연결 시도 중...</div>
-          `;
-          document.body.appendChild(overlay);
+        if (!overlay && !_connOverlayTimer) {
+          _connOverlayTimer = setTimeout(() => {
+            _connOverlayTimer = null;
+            // 유예 시간 동안 이미 재연결됐으면(다른 분기가 정리했으면) 아무 것도 안 함.
+            const s = sessions[id];
+            if (document.getElementById('conn-overlay')) return;
+            if (!s || (s.ws && s.ws.readyState === WebSocket.OPEN)) return;
+            const ov = document.createElement('div');
+            ov.id = 'conn-overlay';
+            ov.className = 'vt-overlay';
+            ov.innerHTML = `
+              <div class="vt-ov-icon"><i class="icon-wifi-off"></i></div>
+              <div class="vt-ov-title">서버 연결 끊김</div>
+              <div class="vt-ov-sub">자동 재연결 시도 중...</div>
+            `;
+            document.body.appendChild(ov);
+          }, CONN_OVERLAY_GRACE_MS);
         }
       } else {
         el.className = '';
+        if (_connOverlayTimer) { clearTimeout(_connOverlayTimer); _connOverlayTimer = null; }
         if (overlay) overlay.remove();
       }
     }
