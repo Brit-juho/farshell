@@ -1,5 +1,10 @@
     const sessions = {};
     let activeId = null;
+    // 물리 키보드가 없는 터치 기기 판정 — keybar 노출, M5 롱프레스 선택 기본값 등
+    // 여러 곳에서 같은 기준을 쓴다.
+    function _isCoarsePointer() {
+      try { return !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches); } catch (_) { return false; }
+    }
     const _urlParams = new URLSearchParams(location.search);
     const _hashParams = new URLSearchParams(location.hash.slice(1));
     let VT_TOKEN = _urlParams.get('token') || '';
@@ -623,12 +628,24 @@
         fontFamily: (window.getVtXtermFont ? window.getVtXtermFont() : "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace"),
         theme: (window.getVtXtermTheme ? window.getVtXtermTheme() : { background: '#1e1e2e' }),
         allowProposedApi: true,
-        // ⚠ screenReaderMode는 매 write마다 접근성 hidden DOM/live-region을 유지하는데,
-        // Claude 같은 TUI가 대량 출력을 스트리밍하면(입력 후 응답) 이 버퍼가 총 출력량에
-        // 비례해 커진다 — CDP 실측상 동일 출력에 힙 증가가 ~8배(+1.6MB→+13.6MB). 대부분
-        // 사용자는 스크린리더를 안 쓰므로 기본 off로 두고, 필요 시에만 opt-in한다.
-        // 켜기: 브라우저 콘솔에서 localStorage.setItem('vt-a11y','1') 후 새로고침.
-        screenReaderMode: (() => { try { return localStorage.getItem('vt-a11y') === '1'; } catch (_) { return false; } })(),
+        // ⚠ screenReaderMode는 매 write마다 접근성 hidden DOM/live-region을 유지한다.
+        // 2026-07-09 CDP 실측 당시엔 동일 출력에 힙 증가가 ~8배(+1.6MB→+13.6MB)로
+        // 기록돼 기본 off로 뒀었는데, M3 작업 중(2026-09-02) 같은 방식으로 재실측하니
+        // 재현되지 않았다(접근성 DOM 노드 수가 출력량과 무관하게 고정폭 유지, GC 후
+        // 힙도 on/off 비슷한 수준으로 수렴 — xterm.js 벤더 버전이 그 사이 바뀐 것으로
+        // 추정, 다만 스트리밍 순간의 힙 스파이크는 on 쪽이 더 컸다). 이걸 감안해
+        // 터치 기기(롱프레스 텍스트 선택이 필요한 쪽)는 기본 on, 데스크톱(마우스
+        // 드래그 선택이 이미 되는 쪽)은 기본 off로 절충 — 순간 스파이크 리스크를
+        // 필요한 쪽에만 감수시킨다. localStorage로 양쪽 다 강제 override 가능:
+        // vt-a11y='1' 강제 on, '0' 강제 off, 미설정 시 위 기본 규칙.
+        screenReaderMode: (() => {
+          try {
+            const v = localStorage.getItem('vt-a11y');
+            if (v === '1') return true;
+            if (v === '0') return false;
+          } catch (_) {}
+          return _isCoarsePointer();
+        })(),
       });
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
@@ -650,6 +667,45 @@
       document.getElementById('terminal-container').appendChild(wrapper);
 
       term.open(wrapper);
+
+      // M5: xterm은 접근성 텍스트 레이어(.xterm-accessibility)에 기본
+      // pointer-events:none을 건다 — 스크린리더가 "읽기만" 하도록 캔버스 위에 투명
+      // 오버레이로만 존재하고, 실제 마우스/터치는 그 밑 캔버스로 그대로 통과시키기
+      // 위해서다. 문제는 브라우저가 롱프레스 같은 네이티브 제스처의 히트타깃을
+      // touchstart 시점에 한 번 확정한다는 것 — 롱프레스가 감지된 "다음에" JS로
+      // pointer-events를 켜면 이미 늦어 텍스트 레이어가 대상이 될 수 없다. 그래서
+      // 터치 기기(screenReaderMode가 켜진 쪽과 동일 조건)에서는 애초에 상시 켜둔다.
+      // 대신 평소 짧은 탭(포커스/tmux 마우스 트래킹 클릭)까지 이 레이어가 가로채지
+      // 않도록, 탭 하나는 밑 캔버스로 합성 이벤트를 만들어 그대로 전달한다.
+      if (term.options.screenReaderMode && _isCoarsePointer()) {
+        const a11yLayer = wrapper.querySelector('.xterm-accessibility');
+        if (a11yLayer) {
+          a11yLayer.style.pointerEvents = 'auto';
+          let _tapStart = null; // {x,y,t} — 롱프레스/드래그로 번진 탭은 전달하지 않는다
+          a11yLayer.addEventListener('pointerdown', (e) => {
+            _tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+          });
+          a11yLayer.addEventListener('pointerup', (e) => {
+            const s = _tapStart; _tapStart = null;
+            if (!s) return;
+            const moved = Math.hypot(e.clientX - s.x, e.clientY - s.y);
+            // 500ms/8px 안쪽이면 "탭"으로 보고 캔버스로 합성 클릭을 전달한다.
+            // 그보다 길거나 크게 움직였으면 브라우저 자체 선택 제스처였을 가능성이
+            // 높아 건드리지 않는다(이미 네이티브 선택이 진행 중일 수 있음).
+            if (Date.now() - s.t > 500 || moved > 8) return;
+            a11yLayer.style.pointerEvents = 'none';
+            const target = document.elementFromPoint(e.clientX, e.clientY);
+            a11yLayer.style.pointerEvents = 'auto';
+            if (!target) return;
+            for (const type of ['mousedown', 'mouseup', 'click']) {
+              target.dispatchEvent(new MouseEvent(type, {
+                bubbles: true, cancelable: true, view: window,
+                clientX: e.clientX, clientY: e.clientY, button: 0,
+              }));
+            }
+          });
+        }
+      }
 
       // GPU 렌더러 — 기본 DOM 렌더러는 활발한 스트리밍(TUI 등)에서 매 write마다 DOM
       // 노드를 갱신해 CPU/메모리 비용이 크다. WebGL 우선, 실패(GPU/드라이버 미지원 또는
@@ -1612,7 +1668,7 @@
       if (!bar) return;
       // 물리 키보드가 없는 터치 기기에서만 노출 (데스크톱은 CSS로도 숨기지만 이중 방어).
       // 강제 오버라이드: ?keybar=1 또는 localStorage vt_keybar='on' (터치 노트북/테스트용).
-      const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+      const coarse = _isCoarsePointer();
       let _force = false;
       try { _force = _urlParams.get('keybar') === '1' || localStorage.getItem('vt_keybar') === 'on'; } catch (_) {}
       if (!coarse && !_force) return;
