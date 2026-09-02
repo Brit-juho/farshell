@@ -1172,7 +1172,15 @@ body.vt-resizing #grid-view{ transition:none; }
 }
 .vt-pt-btn:hover{ background:var(--menu-hover); }
 .vt-pt-btn:active{ background:color-mix(in srgb, var(--acc) 20%, var(--menu-hover)); }
-.vt-pt-btn.danger{ color:var(--err); }
+/* D3: rest 상태에서 텍스트색만 다르면 옆의 일반 버튼과 눈에 잘 안 띄게 같아 보였다
+   (특히 작은 화면·빠르게 훑을 때). border/background에도 옅게 붉은기를 얹어
+   "이건 파괴적 동작"이 텍스트를 읽기 전에 형태로 먼저 들어오게 한다 —
+   L6(스와이프로 숨기기)와는 별개로, 눌러도 보이는 상태 자체의 문제였다. */
+.vt-pt-btn.danger{
+  color:var(--err);
+  border-color:color-mix(in srgb, var(--err) 45%, var(--line));
+  background:color-mix(in srgb, var(--err) 8%, var(--tab));
+}
 .vt-pt-btn.danger:hover{ background:color-mix(in srgb, var(--err) 18%, transparent); }
 .vt-pt-btn.danger:active{ background:color-mix(in srgb, var(--err) 32%, transparent); }
 
