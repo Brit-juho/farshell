@@ -188,11 +188,20 @@
           lock.title = p.protected_reason;
           actions.appendChild(lock);
         } else {
+          // L5: 이미 공개 터널이 열려 있으면(server가 GET /api/ports에 tunnel_url을
+          // 얹어 알려준다) "공개" 대신 "미리보기"로 바꿔 앱 안에서 바로 확인하게 한다 —
+          // 매번 "공개→URL 복사→새 탭"을 거칠 필요가 없다(Termius 포트포워딩+브라우저 워크플로).
           const ex = document.createElement('button');
           ex.className = 'vt-pt-btn';
-          ex.textContent = '공개';
-          ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
-          ex.onclick = () => exposePort(p.port);
+          if (p.tunnel_url) {
+            ex.textContent = '미리보기';
+            ex.title = p.tunnel_url;
+            ex.onclick = () => showPortPreview(p.port, p.tunnel_url);
+          } else {
+            ex.textContent = '공개';
+            ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
+            ex.onclick = () => exposePort(p.port);
+          }
           actions.appendChild(ex);
           if (!swipeKillOnTouch) {
             const kb = document.createElement('button');
@@ -264,4 +273,25 @@
       } catch (e) {
         showToast(`공개 실패: ${e.message}`);
       }
+      // L5: 성공하면 그 행의 버튼이 "공개"→"미리보기"로 바뀌어야 하니 목록을 새로 받는다.
+      refreshPorts(true);
+    }
+
+    // L5: 이미 열려 있는 터널을 앱 안 iframe으로 바로 확인. X-Frame-Options/CSP로
+    // 대상 서버가 프레임을 거부하는 건 우리가 감지도 우회도 할 수 없는 영역이라
+    // (그런 실패는 iframe 안에서 브라우저가 자체적으로 보여줄 뿐 JS 이벤트로 알 수 없다),
+    // "새 탭에서 열기"를 항상 같이 둬 안전망으로 삼는다.
+    function showPortPreview(port, url) {
+      const panel = openPanel({
+        id: 'vt-pt-preview',
+        ariaLabel: `포트 ${port} 미리보기`,
+        extraClass: 'mode-preview',
+        headHTML: `
+          <div class="vt-vw-title">포트 ${port} 미리보기</div>
+          <a class="vt-vw-diff" href="${vtEsc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기</a>
+        `,
+        bodyId: 'vt-pt-preview-body',
+        bodyHTML: `<iframe src="${vtEsc(url)}" title="포트 ${port} 미리보기" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>`,
+      });
+      if (!panel) return;
     }

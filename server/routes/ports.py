@@ -15,6 +15,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 import portscan
+import tunnel_registry
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,15 @@ VT_TIMEOUT = 45.0
 
 @router.get("/api/ports")
 async def list_ports(fresh: bool = Query(False)):
-    return await asyncio.to_thread(portscan.scan, not fresh)
+    result = await asyncio.to_thread(portscan.scan, not fresh)
+    # L5: 이미 공개 터널이 열려 있는 포트는 행에 tunnel_url을 얹어준다 — ports.js가
+    # 이걸로 "공개" 대신 "미리보기" 버튼을 보여준다.
+    tunnels = await asyncio.to_thread(tunnel_registry.exposed_ports)
+    for row in result["ports"]:
+        t = tunnels.get(row["port"])
+        if t:
+            row["tunnel_url"] = t["url"]
+    return result
 
 
 @router.delete("/api/ports/{port}")

@@ -1214,6 +1214,15 @@ body.vt-resizing #grid-view{ transition:none; }
 .vt-q-sub{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); margin-top:var(--sp-3); }
 .vt-q-row.blocked .vt-q-sub{ color:var(--err); }
 
+/* 포트 미리보기 (ports.js showPortPreview, L5) — 카드를 크게 키우고 iframe이 body를 꽉 채움. */
+.vt-viewer-backdrop.mode-preview .vt-viewer-card{
+  width:min(1400px, 96vw); max-height:92vh; height:92vh;
+}
+.vt-viewer-backdrop.mode-preview .vt-vw-body{ padding:0; }
+.vt-viewer-backdrop.mode-preview .vt-vw-body iframe{
+  width:100%; height:100%; border:0; display:block; background:#fff;
+}
+
 /* 프롬프트 스니펫 (snippets.js) — L3. 작성 바는 큐와 동일한 톤, input만 추가. */
 #vt-sn-label{
   background:var(--term); color:var(--txt);
