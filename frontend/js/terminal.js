@@ -728,7 +728,22 @@
       const closeSpan = document.createElement('span');
       closeSpan.className = 'close';
       closeSpan.textContent = '×';
-      closeSpan.onclick = (e) => { e.stopPropagation(); removeSession(id); };
+      // U2: tmux 세션은 탭을 닫아도 kill이 아니라 detach — 백그라운드에서 계속 돈다.
+      // 호버 툴팁(데스크톱)과 닫은 직후 토스트(모바일 포함) 둘 다로 알린다.
+      closeSpan.addEventListener('mouseenter', () => {
+        const sess = sessions[id];
+        const isTmux = sess && (sess.tmuxName || sess.tmux_name);
+        closeSpan.title = isTmux ? '닫기 (tmux 세션은 백그라운드에서 계속 실행됨)' : '닫기 (세션 종료)';
+      });
+      closeSpan.onclick = (e) => {
+        e.stopPropagation();
+        const sess = sessions[id];
+        const isTmux = sess && (sess.tmuxName || sess.tmux_name);
+        removeSession(id);
+        if (isTmux && typeof showToast === 'function') {
+          showToast('탭을 닫았습니다 — tmux 세션은 계속 실행 중', 'info');
+        }
+      };
       tab.appendChild(agentBadge);
       tab.appendChild(nameSpan);
       tab.appendChild(closeSpan);
