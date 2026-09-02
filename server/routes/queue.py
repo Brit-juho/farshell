@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 import queue_runner
 import queue_store
+import tmux_target
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +19,17 @@ router = APIRouter()
 @router.get("/api/queue")
 async def get_queue():
     items = queue_store.list_items()
+    # U9: "자동" 타깃 드롭다운/문구가 실제로 어느 세션을 가리키는지 눈에 보이게.
+    # 큐/음성이 공유하는 같은 판정(tmux_target.resolve_voice_target_pane)을 그대로 재사용.
+    pane, mode = tmux_target.resolve_voice_target_pane()
+    auto_target_label = tmux_target.pane_label(pane) if pane else None
     return {
         "items": items,
         "pending": sum(1 for x in items if x.get("status") == queue_store.STATUS_PENDING),
         "autodrain": queue_runner.autodrain_enabled(),
         "max": queue_store.MAX_ITEMS,
+        "auto_target": auto_target_label,
+        "auto_target_mode": mode,
     }
 
 

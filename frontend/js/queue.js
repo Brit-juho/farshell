@@ -66,6 +66,18 @@
       sel.value = cur;
     }
 
+    // U9: 드롭다운 첫 옵션("자동")의 문구를 실제 타깃으로 갱신.
+    // lock:<세션> 모드면 "그 세션으로 고정돼 있다"까지 드러내야 음성 타깃(fsh voice-target)과
+    // 헷갈리지 않는다 — auto가 항상 "현재 보고 있는 세션"은 아니기 때문.
+    function _updateAutoTargetLabel(label, mode) {
+      const opt = document.querySelector('#vt-q-target option[value=""]');
+      if (!opt) return;
+      if (!label) { opt.textContent = '자동 (대상 없음)'; return; }
+      opt.textContent = mode && mode.startsWith('lock:')
+        ? `자동 (→ ${label}, 고정됨)`
+        : `자동 (→ ${label})`;
+    }
+
     async function refreshQueue() {
       const body = document.getElementById('vt-q-body');
       if (!body) return;
@@ -76,6 +88,9 @@
         body.innerHTML = `<div class="vt-vw-empty">${vtEsc(e.message)}</div>`;
         return;
       }
+      // U9: "자동" 옵션이 실제로 가리키는 세션을 드롭다운 라벨에 바로 반영.
+      _updateAutoTargetLabel(d.auto_target, d.auto_target_mode);
+
       if (!d.items.length) {
         body.innerHTML = `<div class="vt-vw-empty">큐가 비어 있습니다.<br>`
           + `${d.autodrain ? '작업이 끝나면 자동으로 투입됩니다.' : '자동 투입이 꺼져 있습니다 — "지금 실행"을 쓰세요.'}</div>`;
