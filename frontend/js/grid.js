@@ -45,18 +45,18 @@
 
     // Phase 9 #2: agents 폴링 제거 — `/ws-agent` push가 모두 대체.
     // applyAgentBadges() / connectAgentWs()는 위쪽(약 ~1120행)에 정의됨.
-    // grid 폴링만 visibilitychange로 정리.
+    // P6: 예전엔 탭이 다시 보이면 setInterval(refreshGrid, 1000)을 영구히 돌렸다 —
+    // 프리뷰/에이전트 배지는 이미 ws-preview/ws-agent push가 갱신을 맡고 있어
+    // 1초 폴링과 내용이 겹쳤다. 실제로 폴링이 필요한 건 "탭이 백그라운드였던 동안
+    // 놓쳤을 수도 있는 갱신"을 한 번 따라잡는 것뿐이므로(외부에서 tmux 세션을
+    // 새로 만들거나 죽인 경우는 push 채널이 없어 이 캐치업이 유일한 감지 수단),
+    // 반복 폴링 대신 1회성 refreshGrid() 호출로 바꿨다.
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        if (gridPollTimer) { clearInterval(gridPollTimer); gridPollTimer = null; }
-      } else {
-        if (gridViewEnabled) gridPollTimer = setInterval(refreshGrid, 1000);
-      }
+      if (!document.hidden && gridViewEnabled) refreshGrid();
     });
 
     // ── 라이브 프리뷰 그리드 뷰 (Phase 7 #7-3) ─────────────────────────
     let gridViewEnabled = false;
-    let gridPollTimer = null;
 
     // ANSI→HTML 변환 + 빈 줄/긴 패딩 정리는 순수 로직이라 ansilex.js로 분리했다
     // (keyseq.js/difflex.js와 같은 이유 — Node 테스트에서 재사용하기 위해서다).
@@ -81,7 +81,6 @@
         grid.style.display = 'none';
         term.style.display = '';
         btn.classList.remove('active');  // D2: 비활성 시 class 제거
-        if (gridPollTimer) { clearInterval(gridPollTimer); gridPollTimer = null; }
         // 모든 preview ws 닫기
         for (const ws of Object.values(_previewWs)) { try { ws.close(); } catch (_) {} }
         Object.keys(_previewWs).forEach(k => delete _previewWs[k]);
