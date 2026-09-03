@@ -1,18 +1,20 @@
 // 앱 진입점 (F1 — 구 js/bootstrap.js를 대체). Vite가 이 파일 하나를 lib 모드로
 // 번들해 frontend/dist/app.js + app.css를 만든다 (vite.config.js 참고).
 //
-// F2에서 부수효과가 적은 잎(leaf) 모듈부터 진짜 ES import로 옮기기 시작했다.
-// 이 정적 import들은 아래 boot()가 시작되기(=legacy classic script가 한 줄이라도
-// 로드되기) 전에 전부 평가된다 — 그래서 이들이 window에 심어두는 값
-// (API_BASE·vtFetch·VTAnsiLex 등)은 legacy 스크립트 어디서 읽어도 항상 이미
-// 준비돼 있다. 아직 안 옮긴 legacy 스크립트는 classic script 최상위 스코프를
-// 계속 공유하며, 이 파일의 LEGACY_APP_SCRIPTS 배열이 그 로드 순서를 관리한다.
+// F2~F5에 걸쳐 모든 프런트엔드 자바스크립트를 여기 정적 import 그래프로
+// 옮겼다(F5에서 마지막 9개 classic script 전환 완료). 아직 window.* 브리지가
+// 남아 있는 값들은 (1) voice.js — capability 확인 후 별도로 독립 빌드·로드되는
+// 완전히 분리된 번들이라 진짜 import가 불가능한 경우(voice/recording.js 상단
+// 주석 참고), (2) index.html의 인라인 onchange="uploadFile(this)" 같은 HTML
+// 속성 핸들러, (3) clearWorkspace처럼 콘솔 디버깅용으로 의도적으로 남긴 것뿐이다.
 import '../../styles/main.css';
 
 import './core/env.js';
 import './core/api.js';
 import './core/store.js';
 import './core/dom.js';
+import './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
+import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
 import './lib/ansilex.js';
 import './lib/difflex.js';
 import './lib/keyseq.js';
@@ -55,43 +57,25 @@ import './panels/viewer/tree.js';
 import './panels/viewer/shell.js';
 import './panels/viewer/diff.js';
 import './panels/viewer/git.js';
+// F5 — 나머지 classic script 9개(theme/toast는 위에서 이미 처리)를 마저 ES
+// 모듈로 전환. picker.js↔term/session.js는 순환 import(picker.js 상단 주석),
+// quickopen.js는 panels/viewer/*·term/session.js를 소비하므로 그 뒤에 둔다.
+import './search.js';
+import './picker.js';
+import './ports.js';
+import './queue.js';
+import './snippets.js';
+import './quickopen.js';
+import './pushui.js';
 
-const LEGACY_APP_SCRIPTS = [
-  '/static/js/ui/toast.js',   // showToast 단일 구현 — 다른 스크립트가 호출하므로 먼저
-  '/static/js/theme.js',
-  '/static/js/search.js',
-  '/static/js/picker.js',
-  '/static/js/ports.js',
-  '/static/js/queue.js',
-  '/static/js/snippets.js',
-  '/static/js/quickopen.js',
-  '/static/js/pushui.js',
-];
-
-function loadClassicScript(src) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = false; // manifest 순서를 보장한다.
-    script.onload = resolve;
-    script.onerror = () => reject(new Error(`앱 스크립트를 불러오지 못했습니다: ${src}`));
-    document.head.appendChild(script);
-  });
-}
-
-async function boot() {
-  // toast.js가 로드되기 전에 bootApp()(구 terminal.js 부팅 IIFE)이 showToast를
-  // 부르면 ReferenceError다 — F4 전에는 classic script 로드 순서가 이 순서를
-  // 자연히 보장했지만, term/*.js가 정적 import로 옮겨가며 없어진 보장이라
-  // 명시적으로 기다린다.
-  await loadClassicScript(LEGACY_APP_SCRIPTS[0]);
+// LEGACY_APP_SCRIPTS(classic <script> 순차 로더)는 F5에서 제거했다 — 위 정적
+// import가 전부 대체했고, main.js가 실행되는 시점엔 이미 모든 모듈이 평가돼
+// 있으므로(ES 모듈은 정적 import 그래프를 먼저 전부 해석한 뒤 진입 모듈 본문을
+// 실행한다) bootApp()을 바로 불러도 안전하다 — classic script 시절엔 toast.js가
+// "먼저 로드"됨을 명시적으로 기다려야 했지만 이제 그 문제 자체가 없다.
+try {
   bootApp();
-  for (const src of LEGACY_APP_SCRIPTS.slice(1)) {
-    await loadClassicScript(src);
-  }
-}
-
-boot().catch((error) => {
+} catch (error) {
   console.error('[FarShell bootstrap]', error);
   document.documentElement.dataset.appBootFailed = 'true';
-});
+}

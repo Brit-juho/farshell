@@ -1,12 +1,16 @@
 // 포트 대시보드 (P3) — Ports.app이 메뉴바에서 하는 일을 원격에서.
 // "지금 뭐가 떠 있지 / 3000번 죽여줘"를 폰에서 처리한다.
 //
-// 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panel.js/vtapi.js가 공유한다.
-// 리스트 행만 .vt-pt-* 로 따로 둔다.
+// 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panels/panel.js·core/api.js가 공유한다.
+// 리스트 행만 .vt-pt-* 로 따로 둔다. F5에서 classic script에서 ES 모듈로 전환.
+import { openPanel, closePanel, setPanelPoll } from './panels/panel.js';
+import { vtFetch, vtEsc } from './core/api.js';
+import { _isCoarsePointer } from './core/env.js';
+import { registerAction } from './core/dom.js';
 
-    function closePorts() { closePanel('vt-ports'); }
+function closePorts() { closePanel('vt-ports'); }
 
-    function showPorts() {
+function showPorts() {
       const panel = openPanel({
         id: 'vt-ports',
         ariaLabel: '포트 대시보드',

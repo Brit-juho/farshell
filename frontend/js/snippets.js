@@ -3,11 +3,17 @@
 // 대기 없이 지금 보고 있는 세션에 바로 주입한다. 그래서 상태 기계 없이 순수
 // CRUD + "실행"(=sendToPty) 하나뿐이다.
 //
-// 패널 껍데기 · fetch · 닫기 뼈대는 panel.js/vtapi.js가 공유한다.
+// 패널 껍데기 · fetch · 닫기 뼈대는 panels/panel.js·core/api.js가 공유한다.
+// F5에서 classic script에서 ES 모듈로 전환.
+import { openPanel, closePanel } from './panels/panel.js';
+import { vtFetch, vtEsc } from './core/api.js';
+import { registerAction } from './core/dom.js';
+import { activeSession, activeSessionId } from './core/store.js';
+import { sendToPty } from './term/clipboard.js';
 
-    function closeSnippets() { closePanel('vt-snippets'); }
+function closeSnippets() { closePanel('vt-snippets'); }
 
-    function showSnippets() {
+function showSnippets() {
       const panel = openPanel({
         id: 'vt-snippets',
         ariaLabel: '프롬프트 스니펫',
@@ -113,7 +119,7 @@
       if (!activeSession()) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
       let text = it.text;
       if (!text.endsWith('\n')) text += '\n';   // 마지막 줄도 Enter로 실행되게.
-      sendToPty(activeId, text);
+      sendToPty(activeSessionId(), text);
       closeSnippets();
     }
 

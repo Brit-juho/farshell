@@ -6,6 +6,7 @@ import { isMobile, _isCoarsePointer } from '../core/env.js';
 import { wireClipboard } from './selection.js';
 import { wireLinks } from './links.js';
 import { wireTouchScroll } from './touch.js';
+import { getVtXtermFont, getVtXtermTheme } from '../theme.js';
 
 // M6: 핀치로 조절한 폰트 크기가 있으면 그걸 기본값으로 — 없으면 기존 규칙.
 // touch.js의 _setGlobalFontSize도 같은 상한/하한을 쓰므로 여기서 export해 공유한다
@@ -53,8 +54,8 @@ export function createXtermInstance(id) {
     // 쓰거나 재접속 복원 자체를 지원하지 않아 참고할 표준값이 없었음(2026-09-02 조사).
     scrollback: 2000,
     fontSize: termFontSize,
-    fontFamily: (window.getVtXtermFont ? window.getVtXtermFont() : "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace"),
-    theme: (window.getVtXtermTheme ? window.getVtXtermTheme() : { background: '#1e1e2e' }),
+    fontFamily: getVtXtermFont(),
+    theme: getVtXtermTheme(),
     allowProposedApi: true,
     // ⚠ screenReaderMode는 매 write마다 접근성 hidden DOM/live-region을 유지한다.
     // 2026-07-09 CDP 실측 당시엔 동일 출력에 힙 증가가 ~8배(+1.6MB→+13.6MB)로

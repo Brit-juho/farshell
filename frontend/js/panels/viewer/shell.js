@@ -261,7 +261,3 @@ export function _toggleTreeCollapse() {
 
 // F3(c): data-action 위임용 등록.
 registerAction('viewer.show', () => showViewer());
-
-// quickopen.js(classic script)가 showViewer()를 typeof 가드 없이 직접 호출한다 —
-// 브리지 필요(구 viewer.js 시절부터의 계약, F4에서 계속 유지).
-window.showViewer = showViewer;

@@ -1,11 +1,16 @@
 // 프롬프트 큐 패널 (P4) — 에이전트가 작업 중일 때 지시를 쌓아두는 곳.
 // 음성 모드와 짝이다: 걸어가면서 3개 던져놓고 순서대로 실행시킨다.
 //
-// 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panel.js/vtapi.js가 공유한다.
+// 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panels/panel.js·core/api.js가 공유한다.
+// F5에서 classic script에서 ES 모듈로 전환.
+import { openPanel, closePanel, setPanelPoll } from './panels/panel.js';
+import { vtFetch, vtEsc } from './core/api.js';
+import { isMac } from './core/env.js';
+import { registerAction } from './core/dom.js';
 
-    function closeQueue() { closePanel('vt-queue'); }
+function closeQueue() { closePanel('vt-queue'); }
 
-    function showQueue() {
+function showQueue() {
       const panel = openPanel({
         id: 'vt-queue',
         ariaLabel: '프롬프트 큐',

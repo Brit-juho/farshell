@@ -19,6 +19,8 @@ import { saveWorkspace } from './workspace.js';
 import { showOnboarding } from './boot.js';
 import { createTmuxSession } from './tmux-panel.js';
 import { registerAction } from '../core/dom.js';
+// F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
+import { updateSessionPicker } from '../picker.js';
 
 export async function createSession() {
   // "맥에서도 열기" 토글이 켜져 있으면 tmux 세션으로 생성하고
@@ -147,13 +149,11 @@ export function switchTo(id) {
   // 반드시 재동기화한다(안 하면 TUI 정렬이 깨진 채로 남는다).
   requestAnimationFrame(() => fitAndResize(id));
   // notifyActiveSession은 어느 파일에도 정의된 적 없는 죽은 방어 코드였다
-  // (전수 grep 확인) — F4에서 함께 정리했다.
-  // picker.js는 main.js 매니페스트에서 이 모듈들보다 늦게 로드된다.
-  // 부팅 직후(로그인 직후 세션 복원 시점)엔 이 함수가 아직 정의 전이라
-  // switchTo()가 여기서 ReferenceError를 던지고, addSession()을 거쳐
-  // boot IIFE의 catch(e){ createSession() }로 떨어져 — "맥에서도 열기"가
-  // 켜져 있으면 조용히 새 tmux 세션 + 새 맥 터미널 창을 만들어버렸다.
-  if (typeof updateSessionPicker === 'function') updateSessionPicker();
+  // (전수 grep 확인) — F4에서 함께 정리했다. F5에서 picker.js를 ES 모듈로
+  // 전환하며 updateSessionPicker를 진짜 import로 바꿔 로드 순서 문제 자체가
+  // 사라졌다(옛 classic script 시절엔 picker.js가 이 파일보다 늦게 로드돼
+  // 부팅 직후엔 이 함수가 미정의였다 — 이제는 정적 import라 항상 준비돼 있다).
+  updateSessionPicker();
   saveWorkspace();
 }
 

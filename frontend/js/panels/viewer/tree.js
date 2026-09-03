@@ -358,9 +358,3 @@ function _recentSectionEl() {
   });
   return sec;
 }
-
-// quickopen.js(classic script)가 _loadRecent()/_selectFile()을 typeof 가드로
-// 조회해 직접 부른다(뷰어를 실제로 연 적 없으면 undefined로 조용히 스킵) —
-// 브리지 필요. 공개 API 승격은 백로그(10-frontend-restructure.md F3 TODO).
-window._loadRecent = _loadRecent;
-window._selectFile = _selectFile;

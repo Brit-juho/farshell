@@ -1,7 +1,10 @@
 // 푸시 알림 토글 UI (P5) — ⋯ 메뉴의 "푸시 알림" 항목.
-// 구독 로직 자체는 swreg.js(window.VTPush)에 있다.
+// 구독 로직 자체는 push/swreg.js(window.VTPush)에 있다. VTPush는 F2 결정대로
+// window 전용으로 남아 있어(UMD류) 계속 bare로 읽는다. F5에서 이 파일 자체는
+// classic script에서 ES 모듈로 전환.
+import { registerAction } from './core/dom.js';
 
-    async function _refreshPushLabel() {
+async function _refreshPushLabel() {
       const label = document.getElementById('push-label');
       const btn = document.getElementById('push-btn');
       if (!label || !window.VTPush) return;

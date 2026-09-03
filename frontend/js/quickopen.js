@@ -3,12 +3,18 @@
 // 데이터(열린 세션, 코드 뷰어의 최근 파일 목록, 고정 명령 리스트)만으로 만든다 —
 // 파일시스템 전체를 훑는 진짜 fuzzy 검색은 별도 서버 API가 필요해 스코프 밖으로 뺐다.
 //
-// _loadRecent()/showViewer()/_selectFile()은 F4에서 panels/viewer/{tree,shell}.js로
-// 옮겨간 뒤에도 window 브리지로 계속 노출된다(그 파일들 하단 주석 참고) — main.js의
-// 정적 import가 이 classic script보다 먼저 평가되므로 항상 이미 준비돼 있다.
-// openPanel/closePanel/vtFetch도 마찬가지로 core/api.js·panels/panel.js가 먼저 평가된다.
+// F5에서 classic script에서 ES 모듈로 전환 — _loadRecent/showViewer/_selectFile을
+// panels/viewer/{tree,shell}.js에서 진짜 import로 받는다. main.js가 이 파일들을
+// 전부 정적 import하므로(뷰어를 실제로 연 적 없어도) 항상 준비돼 있어, 예전
+// `typeof _loadRecent === 'function'` 방어 체크는 더 이상 필요 없다.
+import { openPanel, closePanel } from './panels/panel.js';
+import { getAction, registerAction } from './core/dom.js';
+import { allSessions, getSession } from './core/store.js';
+import { _loadRecent, _selectFile } from './panels/viewer/tree.js';
+import { showViewer } from './panels/viewer/shell.js';
+import { switchTo } from './term/session.js';
 
-    function closeQuickOpen() { closePanel('vt-qopen'); }
+function closeQuickOpen() { closePanel('vt-qopen'); }
 
     // 정적 명령 목록 — core/dom.js의 액션 레지스트리를 그대로 조회한다(F3(c)).
     // 예전엔 window[c.fn]를 직접 찾았는데, 그 함수가 const로 선언돼 있었다면
@@ -54,9 +60,9 @@
       const input = document.getElementById('vt-qo-input');
       const body = document.getElementById('vt-qo-body');
 
-      // 최근 파일은 viewer.js의 로컬 저장소 목록을 그대로 가져온다 — 뷰어를
-      // 실제로 연 적이 없으면(_loadRecent 미정의) 빈 배열로 조용히 넘어간다.
-      const recentFiles = (typeof _loadRecent === 'function') ? _loadRecent() : [];
+      // 최근 파일은 코드 뷰어의 로컬 저장소 목록을 그대로 가져온다 — 뷰어를
+      // 실제로 연 적이 없으면 빈 배열이다(localStorage에 저장된 게 없을 뿐).
+      const recentFiles = _loadRecent();
 
       function render(query) {
         const q = query.trim();
@@ -106,7 +112,7 @@
           row.addEventListener('click', async () => {
             closeQuickOpen();
             await showViewer();
-            if (typeof _selectFile === 'function') _selectFile(p, null);
+            _selectFile(p, null);
           });
           return row;
         });

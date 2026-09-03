@@ -23,9 +23,10 @@ const { JSDOM } = require('jsdom');
 // 옵션을 안 줘서 자동 실행되지 않으므로 그대로 둬도 무해하다.
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
-const THEME_JS = fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8');
+// F5: theme.js/picker.js도 classic script에서 진짜 ES 모듈로 전환됐다 —
+// import/export 구문을 걷어내고 주입한다(term/*.js와 같은 stripEsm 기법,
+// 아래 정의).
 const KEYSEQ_JS = fs.readFileSync(path.join(__dirname, '../js/lib/keyseq.js'), 'utf8');
-const PICKER_JS = fs.readFileSync(path.join(__dirname, '../js/picker.js'), 'utf8');
 
 // F4: terminal.js가 frontend/js/term/ 아래 진짜 ES 모듈 14개로 쪼개졌다. 이
 // 하네스는 jsdom에 실제 <script type=module>을 못 붙이므로(runScripts:
@@ -49,6 +50,10 @@ const TERM_FILES = [
   'tab-dom', 'workspace', 'conn-overlay', 'keybar', 'ws', 'tmux-panel',
   'session', 'guide', 'boot',
 ].map((name) => stripEsm(fs.readFileSync(path.join(__dirname, `../js/term/${name}.js`), 'utf8')));
+const THEME_JS = stripEsm(fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8'));
+// F5: picker.js↔term/session.js는 순환 import(picker.js 상단 주석) — 이 테스트는
+// 둘 다 stripEsm으로 걷어내 같은 전역 렉시컬 환경에 주입하므로 문제없다.
+const PICKER_JS = stripEsm(fs.readFileSync(path.join(__dirname, '../js/picker.js'), 'utf8'));
 
 class FakeTerminal {
   constructor(opts) { this.options = opts; this.cols = 80; this.rows = 24; this._disposed = false; this._dataCb = null; }

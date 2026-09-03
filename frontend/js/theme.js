@@ -1,5 +1,7 @@
-/* VT 테마 엔진 — UI 스킨 + xterm.js 터미널 테마(ANSI 16색)를 함께 전환.
-   terminal.js보다 먼저 로드되어 addSession()이 getVtXtermTheme()을 참조. */
+// VT 테마 엔진 — UI 스킨 + xterm.js 터미널 테마(ANSI 16색)를 함께 전환. F5에서
+// classic script에서 ES 모듈로 전환.
+import { allSessions } from './core/store.js';
+import { registerAction } from './core/dom.js';
 
 const VT_SKINS = ['macos', 'catppuccin', 'windows', 'vscode', 'notepad'];
 
@@ -54,12 +56,12 @@ const VT_XTERM_THEMES = {
 // theme-color 메타(모바일 상태바)용 — --bar 값과 일치
 const VT_BAR_COLOR = { macos:'#2c2c2e', catppuccin:'#181825', windows:'#2b2b2b', vscode:'#2d2d2d', notepad:'#f1efe7' };
 
-function getVtSkin() {
+export function getVtSkin() {
   const s = document.documentElement.getAttribute('data-skin');
   return VT_SKINS.indexOf(s) >= 0 ? s : 'macos';
 }
 
-function getVtXtermTheme(skin) {
+export function getVtXtermTheme(skin) {
   return VT_XTERM_THEMES[skin || getVtSkin()] || VT_XTERM_THEMES.macos;
 }
 
@@ -68,16 +70,13 @@ const VT_XTERM_FONTS = {
   windows: "'Cascadia Code', 'Cascadia Mono', 'IBM Plex Mono', ui-monospace, Consolas, monospace",
   _default: "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace",
 };
-function getVtXtermFont(skin) {
+export function getVtXtermFont(skin) {
   skin = skin || getVtSkin();
   return VT_XTERM_FONTS[skin] || VT_XTERM_FONTS._default;
 }
 
 // 열린 터미널에 스킨의 테마(색) + 폰트를 함께 적용하고 refit.
 function _applyXtermToOpen(skin) {
-  // F3(b): sessions는 core/store.js가 소유하고 window에 항상 미리 심어둔다
-  // (main.js의 정적 import가 classic script보다 먼저 평가되므로) — 방어적
-  // try/catch 없이 바로 읽어도 안전하다.
   const map = allSessions();
   const theme = getVtXtermTheme(skin);
   const font = getVtXtermFont(skin);
@@ -101,19 +100,13 @@ function _syncThemeChips(skin) {
   if (meta && VT_BAR_COLOR[skin]) meta.setAttribute('content', VT_BAR_COLOR[skin]);
 }
 
-function setVtSkin(skin) {
+export function setVtSkin(skin) {
   if (VT_SKINS.indexOf(skin) < 0) skin = 'macos';
   document.documentElement.setAttribute('data-skin', skin);
   try { localStorage.setItem('vt-skin', skin); } catch (_) {}
   _syncThemeChips(skin);
   _applyXtermToOpen(skin);
 }
-
-// 전역 노출 (인라인 onclick / terminal.js 참조)
-window.getVtXtermTheme = getVtXtermTheme;
-window.getVtXtermFont = getVtXtermFont;
-window.getVtSkin = getVtSkin;
-window.setVtSkin = setVtSkin;
 
 // 초기 칩/메타 동기화 (부팅 인라인 스크립트가 이미 data-skin은 설정함)
 (function initSkinUI() {

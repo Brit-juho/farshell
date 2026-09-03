@@ -9,7 +9,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
 
-const THEME_JS = fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8');
+// F5: theme.js가 classic script에서 진짜 ES 모듈로 전환됐다 — import/export
+// 구문은 classic <script>에 그대로 주입하면 SyntaxError이므로 걷어낸다(F2~F4의
+// stripEsm과 같은 기법). import되는 allSessions/registerAction은 아래
+// buildThemeWindow의 스텁으로 그대로 대체된다.
+const THEME_JS = fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8')
+  .replace(/^import .*$/gm, '')
+  .replace(/^export (function|const|let)/gm, '$1');
 
 const _windows = [];
 after(() => { for (const w of _windows) { try { w.close(); } catch (_) {} } });
