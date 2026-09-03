@@ -48,11 +48,14 @@ FarShell 프론트엔드는 **선택 가능한 5개 테마**를 가진 모바일
   · 테마 칩 5종.
 - **`#mic-status`**: 상단 바 아래 우측에 고정된 상태 pill(내용 없으면 자동 숨김).
   음성 전용 모드에서는 `#mic-btn-wrap`이 확대(svg 50px)되어 전체 화면 마이크로 전환.
-  grid.js가 `/api/capabilities`로 음성 미설치 감지 시 `.needs-voice` 요소 전체를 숨김.
+  `js/agent/status.js`가 `/api/capabilities`로 음성 미설치 감지 시 `.needs-voice`
+  요소 전체를 숨김.
 
 ## 토큰 (CSS 변수)
 
-`css/app.css`의 `html[data-skin="..."]` 블록에 정의. 스킨마다 재정의된다.
+`styles/layers/legacy.css`의 `html[data-skin="..."]` 블록에 정의(Vite가
+`frontend/dist/app.css`로 빌드 — 빌드 파이프라인은 ARCHITECTURE.ko.md §2 참고).
+스킨마다 재정의된다.
 
 | 토큰 | 용도 |
 |------|------|
@@ -89,8 +92,9 @@ ANSI 16색**이다. `js/theme.js`의 `VT_XTERM_THEMES`에 스킨별 완전한 �
 - vscode: #1e1e1e + VS Code 통합 터미널 기본 팔레트
 - notepad: 유일한 라이트 배경(#fffefb) + 파랑 커서(#0060df) — 밝은 배경에 맞춘 별도 팔레트
 
-`addSession()`이 생성 시 `getVtXtermTheme()`을 적용하고, 테마 전환 시
-`setVtSkin()`이 열려 있는 모든 터미널의 `term.options.theme`를 즉시 갱신한다.
+`addSession()`(`js/term/xterm-setup.js`, `js/term/session.js`에서 호출)이
+생성 시 `getVtXtermTheme()`을 적용하고, 테마 전환 시 `setVtSkin()`(`js/theme.js`)이
+열려 있는 모든 터미널의 `term.options.theme`를 즉시 갱신한다.
 
 ## 컴포넌트
 
@@ -98,7 +102,8 @@ ANSI 16색**이다. `js/theme.js`의 `VT_XTERM_THEMES`에 스킨별 완전한 �
 - 상단 바 인라인 pill(`.tbtn.mic`), `--acc` 배경 + 라벨 텍스트. 440px 이하에서는
   라벨을 숨기고 32px 정사각 아이콘 버튼으로 축소. 음성 전용 모드에서는 화면 중앙
   대형 버튼(svg 50px)으로 확대 — 더 이상 우하단 고정 FAB가 아니다.
-- voice.js 계약: `.label` 자식 텍스트 + `.recording` 클래스(녹음 시 `--err` + pulse).
+- `js/voice/recording.js` 계약: `.label` 자식 텍스트 + `.recording` 클래스
+  (녹음 시 `--err` + pulse).
 - 상태는 `#mic-status`(상단 바 아래 우측 고정 pill)가 텍스트로 표시: "녹음 중 — 탭하여
   중지" · "처리 중..." · "마이크 권한 필요" · `"<인식된 텍스트>"` · "인식 실패" · "전송 실패".
 
@@ -129,12 +134,21 @@ ANSI 16색**이다. `js/theme.js`의 `VT_XTERM_THEMES`에 스킨별 완전한 �
 
 ## 파일 맵
 
+2.0 프런트엔드 재구조화(F0~F5, 2026-09) 이후 모든 프런트엔드 스크립트는
+Vite가 빌드하는 진짜 ES 모듈이다 — 전체 모듈 지도는
+[ARCHITECTURE.ko.md](./ARCHITECTURE.ko.md) §2 참고. 이 표는 *시각적* 디자인과
+직결된 파일만 추려 놓은 것이라 일부러 전수 목록이 아니다.
+
 | 파일 | 책임 |
 |------|------|
-| `frontend/index.html` | 레이아웃 마크업, 부팅 테마 스크립트, `⋯` 메뉴 토글 |
-| `frontend/css/app.css` | 토큰 3종 + 전 컴포넌트 + `.vt-*` 오버레이 |
+| `frontend/index.html` | 레이아웃 마크업, 부팅 테마 스크립트(FOUC 방지), 로그인 게이트 |
+| `styles/main.css` + `styles/layers/legacy.css` | 토큰 + 전 컴포넌트 + `.vt-*` 오버레이 (`frontend/dist/app.css`로 빌드됨) |
 | `frontend/js/theme.js` | 스킨 전환, localStorage, xterm 테마 정의/동기화 |
-| `frontend/js/terminal.js` | 세션/탭/PTY, `getVtXtermTheme()` 적용, 오버레이 생성 |
-| `frontend/js/picker.js` | 모바일 세션 관리 시트, 토스트, 파일 업로드 |
-| `frontend/js/grid.js` | 라이브 프리뷰 Grid, capability 게이팅, 안전 모드 배너 |
-| `frontend/voice.js` | 녹음/STT/TTS, 미디어키, 음성 전용 모드 (capability ON일 때 동적 로드) |
+| `frontend/js/term/xterm-setup.js` | xterm 인스턴스 생성, `getVtXtermTheme()` 적용 |
+| `frontend/js/term/session.js` | `addSession()`/`switchTo()`/탭 수명주기 오케스트레이션 |
+| `frontend/js/term/conn-overlay.js` | 서버 연결 끊김 전체화면 오버레이 |
+| `frontend/js/picker.js` | 모바일 세션 관리 시트, 파일 업로드 |
+| `frontend/js/ui/toast.js` | 통합 토스트(`.vt-toast`) 구현 |
+| `frontend/js/agent/preview.js` | 라이브 프리뷰 그리드(`.vt-card` 등) 열고닫기 |
+| `frontend/js/agent/status.js` | capability 게이팅(`.needs-voice`/`.needs-fs`/…), 안전 모드 배너 |
+| `frontend/js/voice/` | 녹음/STT/TTS, 미디어키, 음성 전용 모드 — **별도** lib entry(`frontend/dist/voice.js`)로 독립 빌드돼 음성 capability가 켜졌을 때만 지연 로드된다 |

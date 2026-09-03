@@ -53,14 +53,15 @@ other icon buttons inside `#topbar`.
   · guide · push notifications · drag-to-copy · 5 theme chips.
 - **`#mic-status`**: a status pill pinned bottom-right below the top bar
   (auto-hides when empty). In voice-only mode, `#mic-btn-wrap` enlarges
-  (50px svg) and becomes a full-screen microphone. `grid.js` hides every
-  `.needs-voice` element entirely when `/api/capabilities` reports voice is
-  not installed.
+  (50px svg) and becomes a full-screen microphone. `js/agent/status.js`
+  hides every `.needs-voice` element entirely when `/api/capabilities`
+  reports voice is not installed.
 
 ## Tokens (CSS variables)
 
-Defined in `html[data-skin="..."]` blocks in `css/app.css`. Each skin
-redefines them.
+Defined in `html[data-skin="..."]` blocks in `styles/layers/legacy.css`
+(built into `frontend/dist/app.css` by Vite — see ARCHITECTURE.md §2 for the
+build pipeline). Each skin redefines them.
 
 | Token | Purpose |
 |------|------|
@@ -99,8 +100,10 @@ chrome — it's the **terminal's own background + 16-color ANSI palette**.
 - vscode: #1e1e1e + VS Code integrated terminal default palette
 - notepad: the only light background (#fffefb) + blue cursor (#0060df) — a dedicated palette tuned for the light background
 
-`addSession()` applies `getVtXtermTheme()` on creation, and on theme switch
-`setVtSkin()` immediately updates `term.options.theme` for every open terminal.
+`addSession()` (`js/term/xterm-setup.js`, called from `js/term/session.js`)
+applies `getVtXtermTheme()` on creation, and on theme switch `setVtSkin()`
+(`js/theme.js`) immediately updates `term.options.theme` for every open
+terminal.
 
 ## Components
 
@@ -109,8 +112,8 @@ chrome — it's the **terminal's own background + 16-color ANSI palette**.
   At 440px and below, the label is hidden and it shrinks to a 32px square
   icon button. In voice-only mode it expands into a large centered button
   (50px svg) — no longer a fixed bottom-right FAB.
-- voice.js contract: a `.label` child text node + a `.recording` class
-  (turns `--err` + pulse while recording).
+- `js/voice/recording.js` contract: a `.label` child text node + a
+  `.recording` class (turns `--err` + pulse while recording).
 - Status is shown as text in `#mic-status` (a pill fixed below the top bar,
   right side): "Recording — tap to stop" · "Processing..." · "Microphone
   permission required" · `"<recognized text>"` · "Recognition failed" ·
@@ -151,12 +154,21 @@ chrome — it's the **terminal's own background + 16-color ANSI palette**.
 
 ## File map
 
+As of the 2.0 frontend restructure (F0–F5, 2026-09), every frontend script is
+a real ES module built by Vite — see [ARCHITECTURE.md](./ARCHITECTURE.md) §2
+for the full module map. This table only lists the files most relevant to
+*visual* design (theme, layout, overlays); it's deliberately not exhaustive.
+
 | File | Responsibility |
 |------|------|
-| `frontend/index.html` | Layout markup, boot-time theme script, `⋯` menu toggle |
-| `frontend/css/app.css` | The 3 token sets + all components + `.vt-*` overlays |
+| `frontend/index.html` | Layout markup, boot-time theme script (FOUC guard), login gate |
+| `styles/main.css` + `styles/layers/legacy.css` | Token sets + all components + `.vt-*` overlays (built to `frontend/dist/app.css`) |
 | `frontend/js/theme.js` | Skin switching, localStorage, xterm theme definitions/sync |
-| `frontend/js/terminal.js` | Session/tab/PTY, applies `getVtXtermTheme()`, creates overlays |
-| `frontend/js/picker.js` | Mobile session-management sheet, toasts, file upload |
-| `frontend/js/grid.js` | Live preview grid, capability gating, safe-mode banner |
-| `frontend/voice.js` | Recording/STT/TTS, media keys, voice-only mode (loaded dynamically when capability is ON) |
+| `frontend/js/term/xterm-setup.js` | Creates each xterm instance, applies `getVtXtermTheme()` |
+| `frontend/js/term/session.js` | `addSession()`/`switchTo()`/tab lifecycle orchestration |
+| `frontend/js/term/conn-overlay.js` | The full-screen "server disconnected" overlay |
+| `frontend/js/picker.js` | Mobile session-management sheet, file upload |
+| `frontend/js/ui/toast.js` | Unified toast (`.vt-toast`) implementation |
+| `frontend/js/agent/preview.js` | Live preview grid (`.vt-card` etc.), open/close |
+| `frontend/js/agent/status.js` | Capability gating (`.needs-voice`/`.needs-fs`/…), safe-mode banner |
+| `frontend/js/voice/` | Recording/STT/TTS, media keys, voice-only mode — built as a **separate** lib entry (`frontend/dist/voice.js`) and lazy-loaded only when the voice capability is on |
