@@ -47,13 +47,20 @@ import { bootApp } from './term/boot.js';
 import './agent/badges.js';
 import './agent/status.js';
 import './agent/preview.js';
+// F4 — viewer.js(1230줄)를 panels/viewer/ 아래 6개로 분할. state(leaf) →
+// shell/tree(서로 순환 참조, shell.js 헤더 주석 참고) → file → diff → git 순.
+import './panels/viewer/state.js';
+import './panels/viewer/file.js';
+import './panels/viewer/tree.js';
+import './panels/viewer/shell.js';
+import './panels/viewer/diff.js';
+import './panels/viewer/git.js';
 
 const LEGACY_APP_SCRIPTS = [
   '/static/js/ui/toast.js',   // showToast 단일 구현 — 다른 스크립트가 호출하므로 먼저
   '/static/js/theme.js',
   '/static/js/search.js',
   '/static/js/picker.js',
-  '/static/js/viewer.js',
   '/static/js/ports.js',
   '/static/js/queue.js',
   '/static/js/snippets.js',

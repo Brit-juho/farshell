@@ -3,9 +3,10 @@
 // 데이터(열린 세션, 코드 뷰어의 최근 파일 목록, 고정 명령 리스트)만으로 만든다 —
 // 파일시스템 전체를 훑는 진짜 fuzzy 검색은 별도 서버 API가 필요해 스코프 밖으로 뺐다.
 //
-// viewer.js가 먼저 로드되어야 _loadRecent()/openFile()/_setActivePane()을 쓸 수 있고,
-// panel.js/vtapi.js 뒤에 로드되어야 openPanel/closePanel/vtFetch를 쓸 수 있다
-// (main.js 매니페스트 순서로 보장 — 구 bootstrap.js, F1에서 개명).
+// _loadRecent()/showViewer()/_selectFile()은 F4에서 panels/viewer/{tree,shell}.js로
+// 옮겨간 뒤에도 window 브리지로 계속 노출된다(그 파일들 하단 주석 참고) — main.js의
+// 정적 import가 이 classic script보다 먼저 평가되므로 항상 이미 준비돼 있다.
+// openPanel/closePanel/vtFetch도 마찬가지로 core/api.js·panels/panel.js가 먼저 평가된다.
 
     function closeQuickOpen() { closePanel('vt-qopen'); }
 
