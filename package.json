@@ -4,10 +4,20 @@
   "private": true,
   "description": "FarShell frontend test tooling (jsdom for DOM-dependent unit tests)",
   "keywords": [
-    "remote-terminal", "tmux", "voice-coding", "pwa", "self-hosted",
-    "claude-code", "ssh-alternative", "mobile-terminal", "speech-to-text"
+    "remote-terminal",
+    "tmux",
+    "voice-coding",
+    "pwa",
+    "self-hosted",
+    "claude-code",
+    "ssh-alternative",
+    "mobile-terminal",
+    "speech-to-text"
   ],
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "watch": "vite build --watch",
     "test": "node --test frontend/tests/*.test.js"
   },
   "repository": {
@@ -20,6 +30,12 @@
   },
   "homepage": "https://github.com/Brit-juho/farshell#readme",
   "devDependencies": {
-    "jsdom": "^29.1.1"
+    "jsdom": "^29.1.1",
+    "vite": "7.3.6",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/vite": "4.3.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

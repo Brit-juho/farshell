@@ -1,0 +1,56 @@
+name: CI
+
+# 신설 (F1, 2026-09-03) — 이 저장소엔 CI가 아예 없었다. 2.0에서 프런트엔드에
+# 빌드 단계가 처음 생기는 시점이라, 깨진 빌드를 사용자보다 먼저 잡기 위해 도입한다.
+# 설계 근거·실측: docs/plan-2.0/80-ci-release.md 참고.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    # 매주 일요일 03:00 KST — requirements-core.txt에 상한 핀이 없어서(§0-c),
+    # 업스트림 릴리스만으로 install.sh가 사용자보다 먼저 깨질 수 있다.
+    - cron: '0 18 * * 0'
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: 산출물 형태 검증 (I2)
+        run: |
+          test -f frontend/dist/app.js
+          test -f frontend/dist/app.css
+          # sw.js PRECACHE 계약: 파일명에 해시가 붙으면 오프라인 PWA가 죽는다.
+          ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
+          SIZE=$(wc -c < frontend/dist/app.js)
+          echo "app.js = ${SIZE} bytes (상한 307200)"
+          [ "$SIZE" -le 307200 ]
+      - name: dist 커밋 금지 확인 (ADR-2)
+        run: git check-ignore -q frontend/dist
+
+  server:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '${{ matrix.python }}'
+          cache: 'pip'
+      # requirements-voice.txt는 설치하지 않는다 — faster-whisper/torch가 수 GB.
+      # 2026-09-03 실측: voice 없이 332 passed / 2 skipped (Python 3.12/3.14 확인).
+      # pytest·httpx 는 이미 requirements-core.txt 에 있어 추가 설치 불필요.
+      - run: pip install -r requirements-core.txt
+      - run: pytest server/tests -q

@@ -1,8 +1,9 @@
 // D13: 그리드 카드 상태 전이 — toggleGridView(그리드/터미널 뷰 전환)와
 // refreshGrid(세션 목록 → 카드 생성/갱신/제거, 빈 상태)를 실제 index.html 마크업
-// 위에서 검증한다. ansiToHtml 자체(XSS 방어)는 ansilex.test.js가, grid.js가 그
-// 함수를 올바르게 참조하는지는 grid-wiring.test.js가 이미 다룬다 — 여기서는 카드
-// DOM의 생성/갱신/제거 전이만 본다.
+// 위에서 검증한다. ansiToHtml 자체(XSS 방어)는 ansilex.test.js가 다룬다 —
+// 여기서는 카드 DOM의 생성/갱신/제거 전이만 본다.
+// (예전에 grid-wiring.test.js를 함께 가리켰으나 그 파일은 이미 삭제되고 없다.
+//  참조만 남아 있던 것을 F0에서 정리했다.)
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -12,7 +13,7 @@ const { JSDOM } = require('jsdom');
 // 인라인 부팅 스크립트는 걷어내고 마크업만 쓴다 — terminal-lifecycle.test.js와 같은 이유.
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
-const ANSILEX_JS = fs.readFileSync(path.join(__dirname, '../js/ansilex.js'), 'utf8');
+const ANSILEX_JS = fs.readFileSync(path.join(__dirname, '../js/lib/ansilex.js'), 'utf8');
 const GRID_JS = fs.readFileSync(path.join(__dirname, '../js/grid.js'), 'utf8');
 
 class FakeWebSocket {
@@ -56,12 +57,23 @@ function buildGridWindow({ tmuxSessions = [], agents = {} } = {}) {
     if (u.includes('/api/capabilities')) return ok({});
     return ok({});
   };
+  // F3(a): grid.js가 window.fetch 몽키패치 대신 core/api.js의 apiFetch()를 부른다.
+  // core/env.js/core/api.js는 이 테스트에 import되지 않으므로, 위 fetch 스텁을
+  // 그대로 감싸 같은 동작을 준다.
+  window.apiFetch = (...args) => window.fetch(...args);
+  // F3(c): grid.js가 파일 맨 끝에서 registerAction()을 부른다(core/dom.js가
+  // 이 테스트엔 import되지 않음) — no-op 스텁으로 충분하다.
+  window.registerAction = () => {};
 
   const runScript = (code) => {
     const el = window.document.createElement('script');
     el.textContent = code;
     window.document.body.appendChild(el);
   };
+  // F3(b): grid.js가 core/store.js의 getSession()/allSessions()를 부른다.
+  // 매 호출 시점의 window.sessions(테스트가 재할당하기도 함)를 그대로 읽도록
+  // bare identifier로 감싼 최소 스텁.
+  runScript('function getSession(id) { return sessions[id]; } function allSessions() { return sessions; }');
   runScript(ANSILEX_JS);
   runScript(GRID_JS);
 

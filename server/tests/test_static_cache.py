@@ -27,8 +27,12 @@ def client():
 @pytest.mark.parametrize("path", [
     "/static/js/terminal.js",
     "/static/js/grid.js",
-    "/static/css/app.css",
     "/static/voice.js",
+    # F1(Vite/Tailwind 도입) — frontend/css/app.css 는 폐기되고 frontend/dist/app.{js,css}
+    # 로 대체됐다. 옛날 css/app.css 가 겪었던 것과 똑같은 브라우저 고정 캐싱 사고가
+    # 빌드 산출물에서도 재현될 수 있어 같은 회귀 테스트로 묶는다.
+    "/static/dist/app.js",
+    "/static/dist/app.css",
 ])
 def test_app_code_is_revalidated(client, path):
     r = client.get(path)

@@ -1,0 +1,26 @@
+/* Tailwind 소스 진입점 (F1 — 파이프라인만 부설, 유틸리티는 아직 한 개도 안 쓴다).
+ *
+ * Preflight(리셋 레이어)를 의도적으로 뺐다 — @import "tailwindcss" 전체를 쓰면
+ * Preflight가 margin/list-style/box-sizing 등을 전역 리셋해서, legacy.css가
+ * 이미 하고 있는 리셋과 충돌해 "화면이 1px도 안 변한다"는 F1의 성공 기준을
+ * 못 지킨다. theme(변수)와 utilities(아직 미사용) 레이어만 가져온다.
+ * (Tailwind 공식 문서: "Preflight can be completely disabled by omitting the
+ *  import of the preflight CSS file while keeping the theme and utilities
+ *  imports. This is useful when integrating Tailwind into existing projects.")
+ */
+@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* 자동 스캐너가 서드파티 번들(highlight.js 등)의 문자열까지 훑어 "invisible"
+ * 같은 우연한 단어 일치로 유틸리티를 만드는 걸 막는다. 실제 DOM에 그 클래스를
+ * 붙인 곳이 없어 위험하진 않았지만(레이어 밖 legacy.css가 항상 이기므로),
+ * 벤더 코드는 스캔 대상이 아니어야 한다는 게 맞다. */
+@source not "../frontend/vendor/**";
+@source not "../frontend/dist/**";
+
+/* legacy.css는 레이어 밖(unlayered)에 둔다 — CSS 캐스케이드 규칙상 레이어 밖
+ * 스타일이 어떤 @layer보다도 항상 우선하므로, 위 theme/utilities 레이어가
+ * 이 파일의 기존 규칙을 절대 덮어쓰지 못한다. D1(20-design-system.md)에서
+ * 진짜 토큰 교체를 시작하기 전까지는 이 파일이 사실상 app.css 그대로다. */
+@import "./layers/legacy.css";

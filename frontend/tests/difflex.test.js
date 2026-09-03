@@ -2,7 +2,7 @@
 //   node --test frontend/tests/difflex.test.js
 const { test } = require('node:test');
 const assert = require('node:assert');
-const D = require('../js/difflex.js');
+const D = require('../js/lib/difflex.js');
 
 const SAMPLE = [
   'diff --git a/server/main.py b/server/main.py',

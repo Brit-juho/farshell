@@ -330,7 +330,9 @@ app.add_middleware(OriginGuardMiddleware)
 class _AppCodeStatic(StaticFiles):
     async def get_response(self, path: str, scope):
         resp = await super().get_response(path, scope)
-        if path.startswith(("js/", "css/")) or path == "voice.js":
+        # F1: frontend/dist/ (Vite 산출물)도 같은 이유로 no-cache가 필요하다 —
+        # 그대로 두면 옛 terminal.js가 51KB로 물렸던 사고가 app.js/app.css에서도 재현된다.
+        if path.startswith(("js/", "css/", "dist/")) or path == "voice.js":
             resp.headers["Cache-Control"] = "no-cache"
         return resp
 

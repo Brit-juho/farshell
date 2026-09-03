@@ -295,3 +295,6 @@
       });
       if (!panel) return;
     }
+
+// F3(c): data-action 위임용 등록.
+registerAction('ports.show', () => showPorts());

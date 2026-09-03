@@ -20,6 +20,15 @@ function buildThemeWindow() {
   });
   const { window } = dom;
   _windows.push(window);
+  // F3(b): sessions는 core/store.js(ESM)가 소유하고, main.js의 정적 import가
+  // classic script(theme.js 포함)보다 먼저 평가되므로 항상 미리 존재한다 —
+  // theme.js도 이제 방어적 try/catch 없이 allSessions()를 바로 부른다.
+  window.sessions = {};
+  // F3(c): theme.js가 파일 맨 끝에서 registerAction()을 부른다 — no-op 스텁.
+  window.registerAction = () => {};
+  const storeStub = window.document.createElement('script');
+  storeStub.textContent = 'function allSessions() { return sessions; }';
+  window.document.body.appendChild(storeStub);
   const script = window.document.createElement('script');
   script.textContent = THEME_JS;
   window.document.body.appendChild(script);
@@ -115,10 +124,12 @@ test('setVtSkin: 터미널이 없는(로드 전) 세션은 조용히 건너뛴�
   assert.doesNotThrow(() => window.setVtSkin('windows'));
 });
 
-test('setVtSkin: sessions가 아직 정의 안 됐어도(terminal.js 로드 전) 죽지 않는다', () => {
+test('setVtSkin: 세션이 하나도 없어도(빈 store) 죽지 않는다', () => {
+  // F3(b) 이전엔 "terminal.js 로드 전이라 sessions 자체가 없을 수 있다"는
+  // 방어적 시나리오였다. 이제 core/store.js가 항상 먼저 sessions를 만들어
+  // 두므로(buildThemeWindow의 window.sessions = {}), 남은 불변조건은
+  // "빈 store에서도 안전"뿐이다.
   const window = buildThemeWindow();
-  // sessions를 아예 안 만든 상태 — theme.js는 terminal.js보다 먼저 로드되므로
-  // 이 시점엔 실제로 sessions가 없을 수 있다(index.html 주석 참고).
   assert.doesNotThrow(() => window.setVtSkin('macos'));
 });
 

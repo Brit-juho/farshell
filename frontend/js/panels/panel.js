@@ -1,11 +1,13 @@
-// 모달형 패널(코드 뷰어/포트/큐)의 공용 뼈대.
+// 모달형 패널(코드 뷰어/포트/큐)의 공용 뼈대. 구 js/panel.js (F2에서 이관).
 // 세 패널이 토글 진입 · backdrop 클릭 닫기 · Esc 닫기 · 닫을 때 fitAndResize ·
 // "패널이 열려 있는 동안만 도는 자가정리 폴링" 을 각자 복붙해서 갖고 있었다.
 // 껍데기(.vt-viewer-backdrop/.vt-viewer-card)는 이미 CSS에서 공유되고 있었으니
 // 그걸 만드는 JS도 한 곳에 둔다.
 //
-// grid.js 뒤에 로드되므로 activeId / fitAndResize 를 그대로 참조한다
-// (classic script 최상위 스코프 공유 — viewer.js 원래 주석과 동일한 계약).
+// 이제 ES 모듈이라 activeId/fitAndResize를 classic script 공유 스코프로 못
+// 읽는다. fitAndResize는 top-level 함수 선언이라 원래도 window에 자동으로
+// 걸려 있고(terminal.js), activeId는 F3(b)부터 core/store.js가 window.activeId로
+// 브리지해준다.
 
     // opts:
     //   id             — 패널 루트 엘리먼트 id ('vt-viewer' 등)
@@ -28,7 +30,7 @@
     //                     모든 닫힘 경로에서 빠짐없이 실행된다(토글 버튼 active 해제 등).
     //
     // 반환: 이미 열려 있어서 토글-닫기만 했으면 null, 새로 열었으면 { el, body }.
-    function openPanel(opts) {
+export function openPanel(opts) {
       if (document.getElementById(opts.id)) { closePanel(opts.id); return null; }
 
       const el = document.createElement('div');
@@ -58,7 +60,7 @@
       return { el, body: document.getElementById(opts.bodyId) };
     }
 
-    function closePanel(id) {
+export function closePanel(id) {
       const el = document.getElementById(id);
       if (!el) return;
       if (el._vtTimer) clearInterval(el._vtTimer);
@@ -66,14 +68,19 @@
       el.remove();
       if (el._vtOnClose) el._vtOnClose();
       // 패널이 레이아웃을 건드렸을 수 있으므로 터미널 크기를 다시 맞춘다.
-      try { setTimeout(() => fitAndResize(activeId), 60); } catch (_) {}
+      try { setTimeout(() => window.fitAndResize(window.activeId), 60); } catch (_) {}
     }
 
     // 패널이 열려 있는 동안만 도는 폴링 — 닫히면 스스로 정리한다.
-    function setPanelPoll(id, ms, fn) {
+export function setPanelPoll(id, ms, fn) {
       const el = document.getElementById(id);
       if (!el) return;
       el._vtTimer = setInterval(() => {
         if (document.getElementById(id)) fn(); else closePanel(id);
       }, ms);
     }
+
+
+window.openPanel = openPanel;
+window.closePanel = closePanel;
+window.setPanelPoll = setPanelPoll;

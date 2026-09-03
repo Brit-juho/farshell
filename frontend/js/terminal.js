@@ -1,44 +1,17 @@
-    const sessions = {};
-    let activeId = null;
-    // 물리 키보드가 없는 터치 기기 판정 — keybar 노출, M5 롱프레스 선택 기본값 등
-    // 여러 곳에서 같은 기준을 쓴다.
-    function _isCoarsePointer() {
-      try { return !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches); } catch (_) { return false; }
-    }
+    // sessions/activeId는 F3(b)에서 core/store.js가 정식으로 소유하게 됐다
+    // (구 :1-8의 로컬 선언 + F2 읽기전용 getter 브리지를 대체). 아래 bare
+    // `sessions`/`activeId` 참조는 core/store.js가 window에 심어둔 값을 그대로
+    // 읽는다 — sessions는 스토어와 같은 객체 참조라 필드 mutation은 지금처럼
+    // 계속하고, 세션 생성/삭제(구조적 변경)만 registerSession()/
+    // removeSessionRecord()를 거치며, activeId 재할당은 setActive()를 거친다.
+    // _isCoarsePointer는 F2에서 core/env.js로 이관 (window 브리지로 계속 사용 가능)
     const _urlParams = new URLSearchParams(location.search);
     const _hashParams = new URLSearchParams(location.hash.slice(1));
-    let VT_TOKEN = _urlParams.get('token') || '';
-    let _tokenQuery = VT_TOKEN ? `?token=${VT_TOKEN}` : '';
-    let _tokenParam = VT_TOKEN ? `&token=${VT_TOKEN}` : '';
-    // [fix 2026-08-19] WS 쿼리는 이 두 변수를 문자열로 이어붙이지 않고 항상
-    // _wsQuery()로 그때그때 조립한다 — _e2eQuery를 '?'/'&' 구분자까지 미리
-    // const로 굳혀두면, 토큰 교환(_exchangeTokenForCookie)이 나중에
-    // _tokenQuery만 비우고 _e2eQuery는 못 건드려서 `/ws/id&e2e=1`처럼 구분자가
-    // 깨진 URL이 나갔다(E2E가 실제로는 안 켜지는 버그).
+    // VT_TOKEN·_tokenQuery·쿠키 교환(_exchangeTokenForCookie)은 F3(a)에서
+    // core/env.js로 이관했다. 아래 VT_TOKEN은 bare identifier라 이제 window.VT_TOKEN을
+    // 읽는다 — core/env.js가 쿠키 교환 완료 시 그 값을 갱신해주므로(:44 부근) 여기서
+    // 매번 최신 상태를 본다. _tokenParam은 어디서도 읽히지 않던 죽은 값이라 함께 정리했다.
 
-    // Phase 9 #8: URL의 토큰을 HttpOnly cookie로 1회 교환 후 URL에서 제거.
-    // 이후 fetch는 credentials:'include'로 cookie 자동 전송, ws는 same-origin이라 자동.
-    (async function _exchangeTokenForCookie() {
-      if (!VT_TOKEN) return;
-      try {
-        const r = await fetch('/api/auth', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({token: VT_TOKEN}),
-        });
-        if (r.ok) {
-          // URL에서 토큰 제거 — 로그/공유/history 노출 차단
-          _urlParams.delete('token');
-          const newSearch = _urlParams.toString();
-          history.replaceState({}, '', location.pathname + (newSearch ? '?' + newSearch : '') + location.hash);
-          // 이후 ws/fetch는 cookie로 자동 인증되므로 query 파라미터 비우기
-          VT_TOKEN = '';
-          _tokenQuery = '';
-          _tokenParam = '';
-        }
-      } catch (e) { /* 실패 시 query 토큰 그대로 사용 (호환) */ }
-    })();
     // E2E 암호화 활성화 — URL에 ?e2e=1 또는 #e2e=1 있으면 ON (D3)
     const E2E_ENABLED = (_urlParams.get('e2e') === '1' || _hashParams.get('e2e') === '1');
 
@@ -178,11 +151,11 @@
         }
       });
     }
-    const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
-    const API_BASE = `${location.protocol}//${location.host}`;
-    const _authHeaders = VT_TOKEN ? {'Authorization': `Bearer ${VT_TOKEN}`} : {};
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    // M6: 핀치로 조절한 폰트 크기가 있으면 그걸 기본값으로 — 없으면 기존 규칙.
+    // WS_BASE/API_BASE/isMobile/isMac은 F2에서 core/env.js로 이관 (window 브리지).
+    // window.fetch 몽키패치는 F3(a)에서 제거했다 — core/api.js의 apiFetch()가
+    // 인증 헤더 첨부를 명시적으로 대신한다(이 파일 전체의 fetch(...) 호출부를
+    // apiFetch(...)로 치환했다). M6: 핀치로 조절한 폰트 크기가 있으면 그걸
+    // 기본값으로 — 없으면 기존 규칙.
     const FONT_MIN = 8, FONT_MAX = 28;
     const termFontSize = (() => {
       try {
@@ -191,19 +164,6 @@
       } catch (_) {}
       return isMobile ? 12 : 14;
     })();
-    // OS별 안내 문구 표시용. 실제 키 처리는 이미 ctrlKey||metaKey로 두 OS 모두
-    // 받아들이므로 동작에는 영향 없다 — "Ctrl+Enter"처럼 문구가 항상 Windows
-    // 기준으로 하드코딩돼 있어 Mac에서 어색해 보이는 문제만 고친다.
-    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-
-    // 인증 토큰 자동 첨부 fetch 래퍼
-    const _origFetch = window.fetch;
-    window.fetch = (url, opts = {}) => {
-      if (VT_TOKEN && typeof url === 'string' && url.startsWith(API_BASE)) {
-        opts.headers = { ...(opts.headers || {}), ..._authHeaders };
-      }
-      return _origFetch(url, opts);
-    };
 
     // ─────────────────────────────────────────────────────────────
     // 클립보드: 복사(선택 자동복사/우클릭/단축키) · 붙여넣기 · 이미지 붙여넣기 업로드
@@ -286,7 +246,7 @@
         const ext = ((file.type.split('/')[1] || 'png')).replace('jpeg', 'jpg').replace('svg+xml', 'svg');
         const fd = new FormData();
         fd.append('file', file, `pasted-${Date.now()}.${ext}`);
-        const res = await fetch(`${API_BASE}/api/upload?session_id=${encodeURIComponent(id)}`, {
+        const res = await apiFetch(`${API_BASE}/api/upload?session_id=${encodeURIComponent(id)}`, {
           method: 'POST', body: fd,
         });
         if (!res.ok) { showToast(`이미지 업로드 실패 (${res.status})`); return; }
@@ -609,7 +569,7 @@
       // 서버에 osascript로 iTerm 창을 자동 오픈하도록 요청
       const autoMac = document.getElementById('auto-mac-checkbox')?.checked;
       if (autoMac) {
-        const res = await fetch(`${API_BASE}/api/tmux/create`, {
+        const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ auto_open_on_mac: true }),
@@ -622,7 +582,7 @@
         if (sessions[data.id]) sessions[data.id].tmuxName = data.tmux_session;
         return;
       }
-      const res = await fetch(`${API_BASE}/api/sessions`, {
+      const res = await apiFetch(`${API_BASE}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
@@ -673,7 +633,7 @@
 
     // 일반(비 tmux) 터미널 세션 생성
     async function createPlainSession() {
-      const res = await fetch(`${API_BASE}/api/sessions`, {
+      const res = await apiFetch(`${API_BASE}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
@@ -905,7 +865,7 @@
 
       // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록.
       // ws는 connectTerminalWs()에서 채운다.
-      sessions[id] = { term, ws: null, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null };
+      registerSession(id, { term, ws: null, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null });
       // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션 클로저 안의 connectTerminalWs를
       // 부를 수 있도록 참조를 걸어둔다 — updateConnStatus/_toggleReconnectStop은 이
       // 클로저 밖(파일 최상위)에 있어 함수 자체엔 접근할 수 없다.
@@ -1096,7 +1056,7 @@
         sessions[activeId].wrapper.style.display = 'none';
         sessions[activeId].tabEl.classList.remove('active');
       }
-      activeId = id;
+      setActive(id);
       const s = sessions[id];
       s.tabEl.classList.add('active');
       // T6: 그리드 카드와 같은 규칙 — "완료" 표시는 확인했다는 뜻이니 탭으로
@@ -1109,7 +1069,7 @@
       // 반드시 재동기화한다(안 하면 TUI 정렬이 깨진 채로 남는다).
       requestAnimationFrame(() => fitAndResize(id));
       if (typeof notifyActiveSession === 'function') notifyActiveSession(id);
-      // picker.js는 bootstrap.js 매니페스트에서 terminal.js보다 늦게 로드된다.
+      // picker.js는 main.js 매니페스트에서 terminal.js보다 늦게 로드된다. (구 bootstrap.js, F1에서 개명)
       // 부팅 직후(로그인 직후 세션 복원 시점)엔 이 함수가 아직 정의 전이라
       // switchTo()가 여기서 ReferenceError를 던지고, addSession()을 거쳐
       // boot IIFE의 catch(e){ createSession() }로 떨어져 — "맥에서도 열기"가
@@ -1129,7 +1089,7 @@
       const previousName = previousNameOverride ?? (nameEl ? nameEl.textContent : '');
       if (newName === previousName) return true;
       try {
-        const res = await fetch(`${API_BASE}/api/sessions/${id}`, {
+        const res = await apiFetch(`${API_BASE}/api/sessions/${id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: newName }),
         });
@@ -1206,14 +1166,14 @@
         // 그대로 살아있을 수 있다 — /api/sessions로 살아있는 id 목록을 한 번에 확인.
         let liveWebIds = new Set();
         try {
-          const wsRes = await fetch(`${API_BASE}/api/sessions`);
+          const wsRes = await apiFetch(`${API_BASE}/api/sessions`);
           if (wsRes.ok) liveWebIds = new Set((await wsRes.json()).map(s => s.id));
         } catch (_) { /* 조회 실패 시 아래에서 전부 유실 처리됨 */ }
 
         for (const tab of state.tabs) {
           if (tab.tmux_name) {
             try {
-              const res = await fetch(`${API_BASE}/api/tmux/attach`, {
+              const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
                 method: 'POST', headers: {'Content-Type':'application/json'},
                 body: JSON.stringify({ name: tab.tmux_name })
               });
@@ -1262,7 +1222,7 @@
     async function reconcileMissingTmuxSessions() {
       const keepActive = activeId; // addSession()이 매번 switchTo()를 호출하므로 복원해야 함
       try {
-        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
         const tmuxList = await res.json();
         if (!Array.isArray(tmuxList)) return;
         const known = new Set(Object.values(sessions).map(s => s.tmuxName).filter(Boolean));
@@ -1286,7 +1246,7 @@
 
         let added = false;
         for (const s of [...knownFromSnapshot, ...genuinelyNew]) {
-          const res2 = await fetch(`${API_BASE}/api/tmux/attach`, {
+          const res2 = await apiFetch(`${API_BASE}/api/tmux/attach`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ name: s.name })
           });
@@ -1378,15 +1338,15 @@
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', s.onResize);
       }
-      delete sessions[id];
-      await fetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' });
+      removeSessionRecord(id);
+      await apiFetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' });
       if (activeId === id) {
         const remaining = Object.keys(sessions);
         if (remaining.length > 0) {
           switchTo(remaining[0]);
         } else {
           // 마지막 세션을 닫은 경우 — 빈 컨테이너만 남기지 않고 온보딩(빈 상태) 화면으로.
-          activeId = null;
+          setActive(null);
           document.getElementById('terminal-container').innerHTML = '';
           if (!document.getElementById('onboarding')) showOnboarding();
         }
@@ -1528,7 +1488,7 @@
       menu.innerHTML = '';
       let tmuxList = [];
       try {
-        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
         tmuxList = await res.json();
       } catch (_) { /* 서버 오류 시 빈 목록 */ }
 
@@ -1604,7 +1564,7 @@
         await removeSession(webSessionId);
       }
       try {
-        const res = await fetch(`${API_BASE}/api/tmux/kill/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const res = await apiFetch(`${API_BASE}/api/tmux/kill/${encodeURIComponent(name)}`, { method: 'DELETE' });
         if (!res.ok) { showToast(`완전 종료 실패: ${name} (${res.status})`); return false; }
         showToast(`완전 종료됨: ${name}`);
         return true;
@@ -1615,7 +1575,7 @@
     }
 
     async function attachTmux(tmuxName) {
-      const res = await fetch(`${API_BASE}/api/tmux/attach`, {
+      const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: tmuxName }),
@@ -1638,7 +1598,7 @@
     async function createTmuxSession() {
       // "맥에서도 열기" 토글이 켜져 있으면 서버가 osascript로 iTerm 창도 함께 연다.
       const autoMac = document.getElementById('auto-mac-checkbox')?.checked;
-      const res = await fetch(`${API_BASE}/api/tmux/create`, {
+      const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(autoMac ? { auto_open_on_mac: true } : {}),
@@ -1673,7 +1633,7 @@
         }
 
         // 1. 기존 웹 세션 복원
-        const res = await fetch(`${API_BASE}/api/sessions`);
+        const res = await apiFetch(`${API_BASE}/api/sessions`);
         const existing = await res.json();
         if (existing.length > 0) {
           for (const s of existing) {
@@ -1686,7 +1646,7 @@
 
         // 2. tmux 세션이 있으면 전부 자동 attach (저장된 탭 순서가 없는 상태이므로
         //    이름 알파벳/숫자 순으로 정렬 — 예전엔 tmuxList[0] 하나만 열고 끝냈다)
-        const tmuxRes = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const tmuxRes = await apiFetch(`${API_BASE}/api/tmux/sessions`);
         const tmuxList = await tmuxRes.json();
         if (tmuxList.length > 0) {
           const sorted = [...tmuxList].sort((a, b) => a.name.localeCompare(b.name));
@@ -1782,7 +1742,7 @@
 
       let tmuxList = [];
       try {
-        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
         tmuxList = await res.json();
       } catch (_) { /* 서버 오류 시 목록 없이 버튼만 — 아래에서 캐시본도 정리 */ }
       if (!document.getElementById('ob-sessions')) return; // fetch 중 닫혔을 수 있음
@@ -2056,3 +2016,8 @@
       positionBar();
     }
     initKeybar();
+
+// F3(c): data-action 위임용 등록.
+registerAction('session.add-menu', (el, e) => showAddMenu(e));
+registerAction('session.tmux-list', () => showTmuxSessions());
+registerAction('guide.show', () => showGuide());

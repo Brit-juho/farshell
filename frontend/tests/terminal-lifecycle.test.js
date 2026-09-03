@@ -4,7 +4,7 @@
 // terminal.js는 xterm.js(vendor, 실제 캔버스/DOM 렌더링)·WebSocket·여러 다른
 // classic script(picker.js의 updateSessionPicker 등)에 깊게 얽혀 있어, 그 전부를
 // 그대로 실행하려 들면 관련 없는 것까지 끝없이 스텁해야 한다(grid.js를 vm으로
-// 통째로 돌리려다 겪은 것과 같은 함정 — grid-wiring.test.js 주석 참고). 대신
+// 통째로 돌리려다 겪은 것과 같은 함정). 대신
 // 진짜 index.html DOM(진짜 #tabs/#terminal-container/#keybar 마크업)을 jsdom으로
 // 띄우고, terminal.js 자신이 직접 다루는 것(Terminal/FitAddon/SearchAddon/
 // WebSocket/fetch)만 최소로 대체해 실제 addSession/switchTo/removeSession 함수를
@@ -24,7 +24,7 @@ const { JSDOM } = require('jsdom');
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
 const THEME_JS = fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8');
-const KEYSEQ_JS = fs.readFileSync(path.join(__dirname, '../js/keyseq.js'), 'utf8');
+const KEYSEQ_JS = fs.readFileSync(path.join(__dirname, '../js/lib/keyseq.js'), 'utf8');
 const TERMINAL_JS = fs.readFileSync(path.join(__dirname, '../js/terminal.js'), 'utf8');
 const PICKER_JS = fs.readFileSync(path.join(__dirname, '../js/picker.js'), 'utf8');
 
@@ -72,8 +72,27 @@ function buildTerminalWindow() {
 
   window.API_BASE = '';
   window.WS_BASE = 'ws://localhost';
+  // F2: core/env.js가 terminal.js 밖(진짜 ES 모듈)으로 옮겨가면서, 이 테스트가
+  // 주입하는 TERMINAL_JS 텍스트 자체에는 더 이상 isMobile/isMac/_isCoarsePointer
+  // 선언이 없다 — 예전엔 terminal.js가 jsdom의 navigator.userAgent로 스스로
+  // 계산해 정의했었다(Node의 기본 UA는 모바일/Mac 패턴에 안 걸려 사실상 이미
+  // false였다). core/env.js는 이 테스트 하네스에 import되지 않으므로 그때와
+  // 같은 기본값을 그대로 명시해 준다.
+  window.isMobile = false;
+  window.isMac = false;
+  window._isCoarsePointer = () => false;
+  // F3(a): VT_TOKEN도 core/env.js로 옮겨갔다 — _wsQuery()가 bare identifier로
+  // 읽으므로 같은 이유로 명시해 준다.
+  window.VT_TOKEN = '';
   window.__fetches = [];
   window.fetch = (...args) => { window.__fetches.push(args); return fakeFetch(...args); };
+  // F3(a): terminal.js/picker.js가 window.fetch 몽키패치 대신 core/api.js의
+  // apiFetch()를 부른다. core/env.js/core/api.js는 이 테스트에 import되지
+  // 않으므로, 위 fetch 스텁을 그대로 감싸 같은 동작을 준다.
+  window.apiFetch = (...args) => window.fetch(...args);
+  // F3(c): terminal.js/search.js/picker.js가 각자 끝에서 registerAction()을
+  // 부른다(core/dom.js는 이 테스트에 import되지 않음) — no-op 스텁으로 충분하다.
+  window.registerAction = () => {};
   window.WebSocket = FakeWebSocket;
   window.Terminal = FakeTerminal;
   window.FitAddon = { FitAddon: class { fit() {} } };
@@ -93,14 +112,26 @@ function buildTerminalWindow() {
     el.textContent = code;
     window.document.body.appendChild(el);
   };
+  // F3(b): sessions/activeId는 core/store.js(ESM)가 소유하고 window에 심어준다.
+  // 이 테스트에는 core/store.js가 import되지 않으므로, 실제 구현과 동일한
+  // 동작(같은 객체 참조 유지 + activeId 재할당 시 window 동기화)의 최소 스텁을
+  // terminal.js보다 먼저 주입한다.
+  runScript(`
+    const sessions = {};
+    let activeId = null;
+    window.sessions = sessions;
+    window.activeId = activeId;
+    function getSession(id) { return sessions[id]; }
+    function activeSession() { return activeId ? sessions[activeId] : undefined; }
+    function allSessions() { return sessions; }
+    function setActive(id) { activeId = id; window.activeId = activeId; }
+    function registerSession(id, data) { sessions[id] = data; }
+    function removeSessionRecord(id) { delete sessions[id]; }
+  `);
   runScript(THEME_JS);
   runScript(KEYSEQ_JS);
   runScript(TERMINAL_JS);
   runScript(PICKER_JS);
-  // sessions(객체 참조)/activeId(매번 재할당되는 원시값)를 테스트에서 들여다볼 수 있게
-  // 같은 렉시컬 스코프를 공유하는 스크립트로 다리를 놓는다.
-  runScript('window.sessions = sessions; window.__getActiveId = function () { return activeId; };');
-  Object.defineProperty(window, 'activeId', { get: () => window.__getActiveId() });
 
   return window;
 }

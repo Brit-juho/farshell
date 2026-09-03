@@ -2,7 +2,7 @@
 //   node --test frontend/tests/keyseq.test.js
 const { test } = require('node:test');
 const assert = require('node:assert');
-const K = require('../js/keyseq.js');
+const K = require('../js/lib/keyseq.js');
 
 test('ctrlByte: a-z(대소문자) → 제어문자', () => {
   assert.strictEqual(K.ctrlByte('c'), '\x03');   // Ctrl+C

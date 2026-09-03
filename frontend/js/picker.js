@@ -2,7 +2,7 @@
     function updateSessionPicker() {
       const picker = document.getElementById('voice-session-picker');
       if (!picker) return;
-      const s = activeId && sessions[activeId];
+      const s = activeSession();
       picker.textContent = s?.tabEl?.querySelector('.tab-name')?.textContent || '세션';
       const sheet = document.getElementById('session-manager');
       if (sheet) renderSessionManager(sheet);
@@ -45,7 +45,7 @@
       sheet.innerHTML = '<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-session-close" type="button" aria-label="세션 관리 닫기">×</button></div><div class="vt-session-list"></div>';
       sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
       const list = sheet.querySelector('.vt-session-list');
-      const entries = Object.entries(sessions);
+      const entries = Object.entries(allSessions());
       if (!entries.length) { list.innerHTML = '<p class="vt-session-empty">열려 있는 세션이 없습니다.</p>'; return; }
       for (const [id, s] of entries) {
         const row = document.createElement('div');
@@ -68,23 +68,17 @@
       }
     }
 
-    function showToast(msg, type = 'info') {
-      const cls = { info: 'info', error: 'err', success: 'ok' };
-      const toast = document.createElement('div');
-      toast.className = 'vt-toast ' + (cls[type] || 'info');
-      toast.textContent = msg;
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 4000);
-    }
+    // showToast 는 js/ui/toast.js 로 통합됐다 (F0). 여기 있던 정의는 grid.js 판에
+    // 덮어써지고 있었다 — 그래서 아래 호출들의 'error'/'success' 가 무시됐다.
 
     // --- 이 세션 맥에서 열기 (tmux 세션을 iTerm에 나중에 attach) ---
     async function openSessionOnMac() {
-      if (!activeId || !sessions[activeId]) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
-      const s = sessions[activeId];
+      const s = activeSession();
+      if (!s) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
       const tmuxName = s.tmuxName || s.tmux_name;
       if (!tmuxName) { showToast('이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다', 'error'); return; }
       try {
-        const res = await fetch(`${API_BASE}/api/tmux/open-on-mac`, {
+        const res = await apiFetch(`${API_BASE}/api/tmux/open-on-mac`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: tmuxName }),
         });
@@ -105,9 +99,9 @@
       formData.append('file', file);
       const sid = activeId || '';
       try {
-        const res = await fetch(`${API_BASE}/api/upload?session_id=${sid}`, { method: 'POST', body: formData });
+        const res = await apiFetch(`${API_BASE}/api/upload?session_id=${sid}`, { method: 'POST', body: formData });
         const data = await res.json();
-        if (data.ok && data.path && activeId && sessions[activeId]) {
+        if (data.ok && data.path && activeSession()) {
           // 화면에 찍기만 하면(term.write) 드래그 선택 말고는 경로를 집어낼 수 없다.
           // 이미지 붙여넣기(pasteImageUpload)와 동일하게 경로를 명령줄에 실제로 타이핑해
           // Claude 등에 그대로 넘길 수 있게 한다.
@@ -119,3 +113,7 @@
       }
       input.value = '';
     }
+
+// F3(c): data-action 위임용 등록.
+registerAction('session.manager', () => openSessionManager());
+registerAction('session.open-on-mac', () => openSessionOnMac());

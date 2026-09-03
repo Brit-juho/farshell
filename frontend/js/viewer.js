@@ -370,7 +370,7 @@
     // 타이핑해 넣는다(엔터는 안 침 — 뒤에 명령을 이어 쓸 수 있게). 이미지 붙여넣기
     // 업로드 후 경로 삽입(pasteImageUpload)과 같은 sendToPty 패턴 재사용.
     function _insertPathToTerminal(path) {
-      if (typeof activeId === 'undefined' || !activeId || !sessions[activeId]) {
+      if (!activeSession()) {
         showToast('열려 있는 터미널 세션이 없습니다');
         return;
       }
@@ -380,11 +380,12 @@
 
     // 현재 활성 터미널(tmux) 세션의 cwd를 트리 최상단으로 연다.
     async function _openAtTerminalCwd() {
-      if (typeof activeId === 'undefined' || !activeId || !sessions[activeId]) {
+      const _s = activeSession();
+      if (!_s) {
         showToast('열려 있는 터미널 세션이 없습니다');
         return;
       }
-      const tmuxName = sessions[activeId].tmuxName || sessions[activeId].tmux_name;
+      const tmuxName = _s.tmuxName || _s.tmux_name;
       if (!tmuxName) {
         showToast('현재 세션은 tmux 세션이 아니라 위치를 알 수 없습니다');
         return;
@@ -1224,3 +1225,6 @@
         pane.appendChild(note);
       }
     }
+
+// F3(c): data-action 위임용 등록.
+registerAction('viewer.show', () => showViewer());

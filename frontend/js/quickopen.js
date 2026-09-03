@@ -5,28 +5,30 @@
 //
 // viewer.js가 먼저 로드되어야 _loadRecent()/openFile()/_setActivePane()을 쓸 수 있고,
 // panel.js/vtapi.js 뒤에 로드되어야 openPanel/closePanel/vtFetch를 쓸 수 있다
-// (bootstrap.js 매니페스트 순서로 보장).
+// (main.js 매니페스트 순서로 보장 — 구 bootstrap.js, F1에서 개명).
 
     function closeQuickOpen() { closePanel('vt-qopen'); }
 
-    // 정적 명령 목록 — 다른 화면을 열 때 이미 있는 전역 함수를 그대로 호출한다.
-    // typeof 가드는 switchTo()의 picker.js 케이스와 같은 이유: 로드 순서에 따라
-    // 아직 정의 전인 함수를 참조할 수 있다.
+    // 정적 명령 목록 — core/dom.js의 액션 레지스트리를 그대로 조회한다(F3(c)).
+    // 예전엔 window[c.fn]를 직접 찾았는데, 그 함수가 const로 선언돼 있었다면
+    // window 프로퍼티가 아니라 조용히 실패했을 구조였다 — registerAction()으로
+    // 명시 등록된 것만 걸리므로 그 위험이 없다. 로드 순서(voice.js 미설치 등)에
+    // 따라 아직 등록 안 된 액션도 있을 수 있어 getAction()으로 필터링한다.
     function _quickOpenCommands() {
       const cmds = [
-        { label: '코드 뷰어 열기', hint: 'Ctrl+Shift+E', fn: 'showViewer' },
-        { label: '프롬프트 큐', hint: '', fn: 'showQueue' },
-        { label: '포트 대시보드', hint: '', fn: 'showPorts' },
-        { label: 'Grid 뷰', hint: '', fn: 'toggleGridView' },
-        { label: '터미널 내 검색', hint: 'Ctrl/Cmd+F', fn: 'toggleSearch' },
-        { label: '새 세션', hint: '', fn: 'showAddMenu' },
+        { label: '코드 뷰어 열기', hint: 'Ctrl+Shift+E', action: 'viewer.show' },
+        { label: '프롬프트 큐', hint: '', action: 'queue.show' },
+        { label: '포트 대시보드', hint: '', action: 'ports.show' },
+        { label: 'Grid 뷰', hint: '', action: 'grid.toggle' },
+        { label: '터미널 내 검색', hint: 'Ctrl/Cmd+F', action: 'search.toggle' },
+        { label: '새 세션', hint: '', action: 'session.add-menu' },
       ];
-      return cmds.filter(c => typeof window[c.fn] === 'function' || typeof globalThis[c.fn] === 'function');
+      return cmds.filter(c => typeof getAction(c.action) === 'function');
     }
 
     function _quickOpenSessionItems() {
-      return Object.keys(sessions).map(id => {
-        const nameEl = sessions[id].tabEl?.querySelector('.tab-name');
+      return Object.keys(allSessions()).map(id => {
+        const nameEl = getSession(id).tabEl?.querySelector('.tab-name');
         return { id, name: (nameEl?.textContent || id).trim() };
       });
     }
@@ -123,7 +125,7 @@
           }
           row.addEventListener('click', () => {
             closeQuickOpen();
-            const fn = window[c.fn] || globalThis[c.fn];
+            const fn = getAction(c.action);
             if (typeof fn === 'function') fn();
           });
           return row;
@@ -142,3 +144,6 @@
       // iOS Safari가 무시하는 경우가 있다).
       requestAnimationFrame(() => input.focus());
     }
+
+// F3(c): data-action 위임용 등록.
+registerAction('quickopen.open', () => openQuickOpen());

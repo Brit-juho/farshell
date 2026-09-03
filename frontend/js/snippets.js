@@ -110,9 +110,12 @@
 
     // 큐에 넣지 않고 지금 활성 세션에 바로 주입 — iTerm2 Snippets를 클릭하는 것과 동일.
     function runSnippet(it) {
-      if (!activeId || !sessions[activeId]) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
+      if (!activeSession()) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
       let text = it.text;
       if (!text.endsWith('\n')) text += '\n';   // 마지막 줄도 Enter로 실행되게.
       sendToPty(activeId, text);
       closeSnippets();
     }
+
+// F3(c): data-action 위임용 등록.
+registerAction('snippets.show', () => showSnippets());

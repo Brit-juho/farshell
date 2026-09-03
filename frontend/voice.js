@@ -37,7 +37,7 @@ async function ensureSttReady() {
   micBtn.querySelector('.label').textContent = '준비 중...';
   micStatus.textContent = '음성 모델 준비 중… 최초 1회는 다운로드로 시간이 걸립니다 (메모리 ~400MB)';
   try {
-    const r = await fetch(`${API}/voice/stt/preload`, { method: 'POST' });
+    const r = await apiFetch(`${API}/voice/stt/preload`, { method: 'POST' });
     const d = await r.json();
     if (r.ok && d.loaded) {
       _sttReady = true;
@@ -68,7 +68,7 @@ async function startRecording() {
   try {
     // [D8 barge-in] 재생 중인 TTS 중단 — 사용자가 말하기 시작하면 즉시 정지
     try {
-      fetch(`${API}/voice/cancel`, { method: 'POST' }).catch(() => {});
+      apiFetch(`${API}/voice/cancel`, { method: 'POST' }).catch(() => {});
       _stopCurrentTTS();
     } catch {}
 
@@ -111,7 +111,7 @@ async function sendAudio(blob) {
   try {
     // [H2] 현재 활성 세션 ID를 쿼리 파라미터로 전달
     const sid = typeof activeId !== 'undefined' ? activeId : '';
-    const res = await fetch(`${API}/voice/input?session_id=${sid}`, {
+    const res = await apiFetch(`${API}/voice/input?session_id=${sid}`, {
       method: 'POST',
       headers: { 'Content-Type': 'audio/webm' },
       body: blob,
@@ -132,7 +132,7 @@ async function sendAudio(blob) {
 
 async function speakText(text) {
   try {
-    const res = await fetch(`${API}/voice/output`, {
+    const res = await apiFetch(`${API}/voice/output`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
@@ -494,3 +494,10 @@ document.addEventListener('click', function initMedia() {
   }
   document.removeEventListener('click', initMedia);
 }, { once: true });
+
+// F3(c): data-action 위임용 등록. voice.js는 capability에 따라 조건부로만
+// 로드되므로, 등록도 로드된 경우에만 이뤄진다(미로드 시 core/dom.js가 조용히
+// no-op — .needs-voice로 애초에 버튼도 숨어 있다).
+registerAction('voice.record', () => toggleRecording());
+registerAction('voice.only-toggle', () => toggleVoiceOnly());
+registerAction('voice.mediakey-toggle', () => toggleMediaKeyTrigger());

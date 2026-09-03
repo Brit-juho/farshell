@@ -1,4 +1,4 @@
-// Service Worker 등록 + Web Push 구독 (P5).
+// Service Worker 등록 + Web Push 구독 (P5). 구 js/swreg.js (F2에서 이관).
 //
 // 등록이 원래 voice.js 안에 있었는데, 그 파일은 음성 미설치 환경에서 로드되지 않는다
 // (grid.js가 /api/capabilities 를 보고 결정). 그래서 PWA 오프라인 캐시도, 알림도
@@ -25,7 +25,9 @@
   }
 
   function tokenQuery() {
-    try { return (typeof _tokenQuery === 'string' ? _tokenQuery : ''); }
+    // F2: 이제 ES 모듈이라 terminal.js의 bare _tokenQuery를 못 읽는다.
+    // terminal.js가 window._tokenQuery로 브리지해준다(쿠키 교환 완료 시 갱신됨).
+    try { return (typeof window._tokenQuery === 'string' ? window._tokenQuery : ''); }
     catch (_) { return ''; }
   }
 

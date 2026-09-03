@@ -418,6 +418,21 @@ body.voice-only-mode #mic-status {
 }
 .vt-toast.err { color:var(--err); } .vt-toast.ok { color:var(--ok); } .vt-toast.info { color:var(--info); }
 
+/* F0: 토스트 스택 컨테이너 — 통합 showToast(js/ui/toast.js)가 사용한다.
+   예전엔 grid.js 가 #agent-toast 싱글톤 하나를 재사용해 연속 토스트가 서로를
+   덮어썼다. voice.js 의 showNotification 은 아직 body 에 .vt-toast 를 직접
+   붙이므로(D6에서 통합 예정) .vt-toast 자체의 fixed 배치는 그대로 두고,
+   컨테이너 안에 들어온 것만 정적 배치로 되돌려 세로로 쌓는다. */
+#vt-toasts {
+  position:fixed; bottom:calc(96px + env(safe-area-inset-bottom,0px));
+  left:50%; transform:translateX(-50%); z-index:200;
+  display:flex; flex-direction:column; align-items:center; gap:var(--sp-4);
+  max-width:90vw; pointer-events:none;
+}
+#vt-toasts .vt-toast {
+  position:static; transform:none; bottom:auto; left:auto; pointer-events:auto;
+}
+
 /* M6: 핀치로 폰트 크기 조절하는 동안 현재 값을 보여주는 뱃지 — 손 떼면 숨김 */
 .vt-font-badge {
   position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);

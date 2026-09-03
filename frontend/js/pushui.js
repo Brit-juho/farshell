@@ -54,3 +54,6 @@
         init();
       }
     })();
+
+// F3(c): data-action 위임용 등록.
+registerAction('push.toggle', () => togglePush());

@@ -86,6 +86,25 @@ else
   echo "✓ 터미널 의존성 설치 완료 (음성 모드는 './install.sh voice'로 추가)"
 fi
 
+# 3-1. 프런트엔드 빌드 (F1, 2026-09) — Tailwind/Vite 도입으로 node가 처음 필요해졌다.
+#      frontend/dist/ 는 git에 커밋하지 않으므로(빌드 산출물, .gitignore) 설치 시
+#      매번 직접 빌드해야 한다. 릴리스 tarball로 설치하는 경로가 생기면(I4) 그때는
+#      dist/ 가 이미 들어있어 이 단계 자체가 필요 없어진다 — 지금은 소스 설치뿐이라 필수.
+if ! command -v npm >/dev/null 2>&1; then
+  echo ""
+  echo "✗ Node.js(npm)가 필요합니다 — 프런트엔드 빌드에 사용합니다(런타임에는 불필요, 빌드 전용)."
+  if [ "$(uname)" = "Darwin" ]; then
+    echo "    설치: brew install node"
+  else
+    echo "    설치: https://nodejs.org (또는 배포판 패키지 매니저: apt/dnf/pacman install nodejs npm)"
+  fi
+  echo "    설치 후 './install.sh $PROFILE'을 다시 실행하세요."
+  exit 1
+fi
+echo "▸ 프런트엔드 빌드 중... (Vite + Tailwind, node $(node --version))"
+( cd "$VT_DIR" && npm ci --silent && npm run build --silent )
+echo "✓ 프런트엔드 빌드 완료 → frontend/dist/"
+
 # 4. fsh CLI 등록 (bin/vt는 bin/fsh를 가리키는 심링크 — 예전 명령어 vt도 그대로 동작)
 mkdir -p "$HOME/.local/bin"
 chmod +x "$VT_DIR/bin/fsh"

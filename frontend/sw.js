@@ -80,7 +80,11 @@ const NETWORK_ONLY = /^\/(api\/|ws|voice\/)/;
 
 // 자주 바뀌는 우리 코드 — network-first, 네트워크 실패 시만 캐시 fallback.
 // vendor/*는 immutable이므로 SWR 유지 (속도 이득).
-const NETWORK_FIRST = /^\/$|^\/static\/voice\.js$|^\/manifest\.json$|^\/static\/sw\.js$|^\/static\/(css|js)\//;
+// F1(2026-09): frontend/css/app.css + js/bootstrap.js가 폐기되고 Vite 산출물
+// frontend/dist/app.{js,css}가 그 자리를 대신한다 — 'dist'를 빠뜨리면 새 코드가
+// 아래 vendor immutable(stale-while-revalidate) 경로로 떨어져서, 정확히 이 파일이
+// 막으려던 사고(브라우저가 옛 app.js를 계속 캐시)가 재현된다.
+const NETWORK_FIRST = /^\/$|^\/static\/voice\.js$|^\/manifest\.json$|^\/static\/sw\.js$|^\/static\/(css|js|dist)\//;
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;

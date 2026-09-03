@@ -11,15 +11,18 @@
     }
     function closeSearch() {
       searchBar.classList.remove('visible');
-      if (activeId && sessions[activeId]) sessions[activeId].term.focus();
+      const s = activeSession();
+      if (s) s.term.focus();
     }
     function searchNext() {
-      if (!activeId || !sessions[activeId]) return;
-      sessions[activeId].searchAddon.findNext(searchInput.value);
+      const s = activeSession();
+      if (!s) return;
+      s.searchAddon.findNext(searchInput.value);
     }
     function searchPrev() {
-      if (!activeId || !sessions[activeId]) return;
-      sessions[activeId].searchAddon.findPrevious(searchInput.value);
+      const s = activeSession();
+      if (!s) return;
+      s.searchAddon.findPrevious(searchInput.value);
     }
 
     document.addEventListener('keydown', (e) => {
@@ -40,3 +43,9 @@
         e.shiftKey ? searchPrev() : searchNext();
       }
     });
+
+// F3(c): data-action 위임용 등록.
+registerAction('search.toggle', () => toggleSearch());
+registerAction('search.next', () => searchNext());
+registerAction('search.prev', () => searchPrev());
+registerAction('search.close', () => closeSearch());

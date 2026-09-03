@@ -10,7 +10,7 @@
     // 음성 기능 설치 여부 확인 → 미설치 시 voice UI 숨김
     whenAuthed(() => (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/capabilities`);
+        const res = await apiFetch(`${API_BASE}/api/capabilities`);
         const caps = await res.json();
         // P2: 열람 가능한 루트가 없으면 코드 뷰어 진입점을 숨긴다.
         // (voice와 달리 return보다 먼저 처리해야 음성 미설치 환경에서도 게이팅이 걸린다)
@@ -27,8 +27,7 @@
           document.querySelectorAll('.needs-push').forEach(el => el.style.display = 'none');
         }
         if (!caps.voice) {
-          const vb = document.getElementById('voice-bar');
-          if (vb) vb.style.display = 'none';
+          // (#voice-bar 조회가 있었으나 index.html 에 그런 id 가 없어 항상 null 이었다 — F0에서 제거)
           const ms = document.getElementById('mic-status');
           if (ms) ms.style.display = 'none';
           // 음성 전용/이어폰 메뉴 항목은 voice.js 함수에 의존 → 미설치 시 숨김
@@ -119,8 +118,8 @@
         // agents는 /ws-agent 최초 접속 시 한 번(snapshot)만 오므로, 그리드를 열 때마다
         // 여기서도 새로 물어봐야 배지가 stale해지지 않는다.
         const [sessRes, agentsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/tmux/sessions`),
-          fetch(`${API_BASE}/api/agents`).catch(() => null),
+          apiFetch(`${API_BASE}/api/tmux/sessions`),
+          apiFetch(`${API_BASE}/api/agents`).catch(() => null),
         ]);
         const tmuxSessions = await sessRes.json();
         const agents = agentsRes ? await agentsRes.json().catch(() => ({})) : {};
@@ -166,7 +165,7 @@
               if (gridViewEnabled) toggleGridView();
               // "완료" 강조는 확인했다는 뜻이니 클릭하면 지운다.
               card.classList.remove('done');
-              if (sess.web_session_id && sessions[sess.web_session_id]) {
+              if (sess.web_session_id && getSession(sess.web_session_id)) {
                 switchTo(sess.web_session_id);
               } else {
                 attachTmuxSession(sess.name);
@@ -179,7 +178,7 @@
           // "어느 카드가 지금 작업 중인지"를 여기 저장된 값과 매칭해서 찾는다.
           card.dataset.cwd = sess.cwd || '';
           // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.
-          const isOpenTab = !!(sess.web_session_id && sessions[sess.web_session_id]);
+          const isOpenTab = !!(sess.web_session_id && getSession(sess.web_session_id));
           card.classList.toggle('open-tab', isOpenTab);
           card.title = isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속';
           _applyCardAgent(card, agents[sess.name]);
@@ -226,7 +225,7 @@
     let _tmuxCwdByName = {};
     async function _refreshTmuxCwdMap() {
       try {
-        const res = await fetch(`${API_BASE}/api/tmux/sessions`);
+        const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
         const list = await res.json();
         if (!Array.isArray(list)) return;
         const map = {};
@@ -239,7 +238,7 @@
       if (!cwd) return null;
       const matches = [];
       document.querySelectorAll('#tabs .tab').forEach((tab) => {
-        const sess = sessions[tab.dataset.sessionId];
+        const sess = getSession(tab.dataset.sessionId);
         const tmuxName = sess && (sess.tmux_name || sess.tmuxName);
         if (tmuxName && _tmuxCwdByName[tmuxName] === cwd) matches.push(tab);
       });
@@ -262,16 +261,17 @@
 
     async function attachTmuxSession(name) {
       try {
-        const res = await fetch(`${API_BASE}/api/tmux/attach`, {
+        const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name })
         });
         const data = await res.json();
         if (data.id) {
-          if (!sessions[data.id]) {
+          if (!getSession(data.id)) {
             addSession(data.id, data.name || `tmux:${name}`);
-            if (sessions[data.id]) sessions[data.id].tmuxName = name;
+            const s = getSession(data.id);
+            if (s) s.tmuxName = name;
           }
           switchTo(data.id);
         }
@@ -280,7 +280,7 @@
 
     // ── 안전 모드 표시 ───────────────────────────────────────────────
     whenAuthed(() => {
-      fetch(`${API_BASE}/api/safe-mode`).then(r => r.json()).then(data => {
+      apiFetch(`${API_BASE}/api/safe-mode`).then(r => r.json()).then(data => {
         if (data.enabled) {
           const banner = document.createElement('div');
           banner.className = 'vt-banner';
@@ -327,7 +327,7 @@
           // T6: 그리드를 안 열어도 탭만 보고 승인 대기 세션을 찾을 수 있어야 하므로
           // 카드와 동일하게 탭에도 working/done class를 건다.
           if (msg.state && msg.state.tool) {
-            showToast(`🔧 ${msg.state.tool} 실행 중...`);
+            showToast(`🔧 ${msg.state.tool} 실행 중...`, 'info', { key: 'agent', duration: 2500 });
             if (window.VTFavicon) VTFavicon.set('working');
             const card = _cardByCwd(msg.state.cwd);
             if (card) { card.classList.add('working'); card.classList.remove('done'); }
@@ -354,7 +354,7 @@
     function applyAgentBadges(agents) {
       document.querySelectorAll('.tab').forEach((tab) => {
         const sid = tab.dataset.sessionId;
-        const sess = sessions[sid];
+        const sess = getSession(sid);
         const badge = tab.querySelector('.tab-agent');
         if (!sess || !badge) return;
         const tmuxName = sess.tmux_name || sess.tmuxName;
@@ -374,18 +374,9 @@
       setInterval(() => { if (!document.hidden) _refreshTmuxCwdMap(); }, 20000);
     });
 
-    function showToast(text) {
-      let toast = document.getElementById('agent-toast');
-      if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'agent-toast';
-        toast.className = 'vt-toast';
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity .2s';
-        document.body.appendChild(toast);
-      }
-      toast.textContent = text;
-      toast.style.opacity = '1';
-      clearTimeout(toast._t);
-      toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 2500);
-    }
+    // showToast 는 js/ui/toast.js 로 통합됐다 (F0). 여기 있던 #agent-toast 싱글톤
+    // 판이 picker.js 판을 덮어쓰면서 type 인자를 11곳에서 삼키고 있었다.
+    // 잦은 도구 이벤트가 화면을 덮지 않도록, 이 경로는 key:'agent' 로 제자리 교체한다.
+
+// F3(c): data-action 위임용 등록.
+registerAction('grid.toggle', () => toggleGridView());

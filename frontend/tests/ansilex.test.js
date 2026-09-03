@@ -5,7 +5,7 @@
 // innerHTML)의 유일한 XSS 방어선이다. D13: 지금까지 회귀 감지 수단이 없었다.
 const { test } = require('node:test');
 const assert = require('node:assert');
-const A = require('../js/ansilex.js');
+const A = require('../js/lib/ansilex.js');
 
 // --- ansiToHtml: XSS 방어(HTML escape) ------------------------------------------
 

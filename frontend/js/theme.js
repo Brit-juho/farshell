@@ -75,10 +75,10 @@ function getVtXtermFont(skin) {
 
 // 열린 터미널에 스킨의 테마(색) + 폰트를 함께 적용하고 refit.
 function _applyXtermToOpen(skin) {
-  // terminal.js의 sessions는 전역 렉시컬 바인딩. 로드 순서상 아직 없을 수 있어 방어적으로 접근.
-  let map;
-  try { map = sessions; } catch (_) { map = null; }
-  if (!map) return;
+  // F3(b): sessions는 core/store.js가 소유하고 window에 항상 미리 심어둔다
+  // (main.js의 정적 import가 classic script보다 먼저 평가되므로) — 방어적
+  // try/catch 없이 바로 읽어도 안전하다.
+  const map = allSessions();
   const theme = getVtXtermTheme(skin);
   const font = getVtXtermFont(skin);
   for (const id of Object.keys(map)) {
@@ -125,11 +125,13 @@ window.setVtSkin = setVtSkin;
 // 번들 폰트(IBM Plex Mono) 로드 완료 후 열린 터미널 refit — swap로 인한 셀 폭 오차 보정
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => {
-    let map;
-    try { map = sessions; } catch (_) { map = null; }
-    if (!map) return;
+    const map = allSessions();
     for (const id of Object.keys(map)) {
       try { map[id].fitAddon && map[id].fitAddon.fit(); } catch (_) {}
     }
   });
 }
+
+// F3(c): data-action 위임용 등록. 테마 칩은 data-skin 속성을 그대로 읽는다
+// (이미 CSS 선택자용으로 붙어 있던 값 재사용 — F3(d)에서 추가 속성을 만들지 않았다).
+registerAction('theme.set', (el) => setVtSkin(el.dataset.skin));
