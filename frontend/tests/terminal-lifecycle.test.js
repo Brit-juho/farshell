@@ -2,58 +2,40 @@
 // 일(탭 DOM 생성/활성화 전환/정리, activeId 갱신)을 jsdom 위에서 검증한다.
 //
 // terminal.js는 xterm.js(vendor, 실제 캔버스/DOM 렌더링)·WebSocket·여러 다른
-// classic script(picker.js의 updateSessionPicker 등)에 깊게 얽혀 있어, 그 전부를
-// 그대로 실행하려 들면 관련 없는 것까지 끝없이 스텁해야 한다(grid.js를 vm으로
-// 통째로 돌리려다 겪은 것과 같은 함정). 대신
-// 진짜 index.html DOM(진짜 #tabs/#terminal-container/#keybar 마크업)을 jsdom으로
-// 띄우고, terminal.js 자신이 직접 다루는 것(Terminal/FitAddon/SearchAddon/
-// WebSocket/fetch)만 최소로 대체해 실제 addSession/switchTo/removeSession 함수를
-// 그대로 실행한다. 렌더링 결과가 아니라 "탭 생명주기 부기(book-keeping)"가
+// 모듈(picker.js의 updateSessionPicker 등)에 깊게 얽혀 있어, 그 전부를 그대로
+// 실행하려 들면 관련 없는 것까지 끝없이 스텁해야 한다. 대신 진짜 index.html
+// DOM(진짜 #tabs/#terminal-container/#keybar 마크업)을 jsdom으로 띄우고,
+// term/*.js 자신이 직접 다루는 vendor 전역(Terminal/FitAddon/SearchAddon/
+// WebSocket/fetch)만 최소로 대체해 실제 addSession/switchTo/removeSession
+// 함수를 그대로 실행한다. 렌더링 결과가 아니라 "탭 생명주기 부기(book-keeping)"가
 // 이 테스트의 관심사다.
+//
+// 테스트 하네스 재설계(F5 백로그): stripEsm(import/export 구문을 정규식으로
+// 지운 뒤 classic <script>로 하나의 전역 렉시컬 환경에 주입) 대신
+// vm.SourceTextModule로 term/session.js를 엔트리 삼아 실제 모듈 그래프(picker.js
+// 와의 순환 import 포함)를 그대로 링크·평가한다 — 소스가 실제로 export하지 않는
+// 이름(switchTabByOffset 등)은 이제 그 이름이 정말 window 브리지로 존재할 때만
+// window.foo(...)로 부르고, 그렇지 않은 것(openSessionManager)은 실제 소비
+// 경로와 같은 core/dom.js의 getAction()으로 부른다.
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { JSDOM } = require('jsdom');
+const { createDomEnv } = require('./helpers/dom-env');
+const { importFresh } = require('./helpers/vm-esm');
 
 // 인라인 <script>(src 없는 것)는 걷어내고 마크업만 쓴다 — index.html의 부팅 인라인
-// 스크립트(인증/SW 등록 등)는 이 테스트와 무관하고, runScripts:'dangerously'로
-// JSDOM을 만드는 시점에 우리 스텁(window.fetch 등)이 붙기 '전에' 실행돼 버려서
-// 무관한 ReferenceError만 콘솔에 남긴다. <script src=...> 태그는 어차피 resources
-// 옵션을 안 줘서 자동 실행되지 않으므로 그대로 둬도 무해하다.
+// 스크립트(인증/SW 등록 등)는 이 테스트와 무관하고, jsdom이 그 자리에서 실행해
+// 버리면(runScripts:'dangerously') 우리 스텁이 붙기 '전에' 실행돼 무관한
+// ReferenceError만 콘솔에 남긴다. <script src=...> 태그는 fetch/실행되지 않으므로
+// 그대로 둬도 무해하다.
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
-// F5: theme.js/picker.js도 classic script에서 진짜 ES 모듈로 전환됐다 —
-// import/export 구문을 걷어내고 주입한다(term/*.js와 같은 stripEsm 기법,
-// 아래 정의).
-const KEYSEQ_JS = fs.readFileSync(path.join(__dirname, '../js/lib/keyseq.js'), 'utf8');
 
-// F4: terminal.js가 frontend/js/term/ 아래 진짜 ES 모듈 14개로 쪼개졌다. 이
-// 하네스는 jsdom에 실제 <script type=module>을 못 붙이므로(runScripts:
-// 'dangerously'는 classic script 전용), 각 파일의 import/export 구문만 지우고
-// classic script로 주입한다 — 어차피 이 파일들 전부가 같은 전역 렉시컬 환경을
-// 공유하게 되므로(테스트 파일 상단 주석 참고), 지워진 import가 가리키던
-// 이름들은 (a) 이 스텁이 만든 window 프로퍼티, (b) 뒤에 같이 주입되는 다른
-// term/*.js의 top-level 함수 선언으로 그대로 resolve된다 — F2/F3 시절
-// TERMINAL_JS/PICKER_JS를 나란히 주입하던 방식과 동일한 원리다.
-function stripEsm(src) {
-  return src
-    .replace(/^import .*$/gm, '')
-    .replace(/^export (async function|function|const|let)/gm, '$1');
-}
-// boot.js도 포함한다 — bootApp()은 F4에서 자동 실행 IIFE에서 export 함수로
-// 바뀌어(레이스 방지, main.js가 명시 호출) 이 테스트는 bootApp()을 부르지
-// 않지만, removeSession이 마지막 탭을 닫을 때 boot.js가 소유한
-// showOnboarding()을 호출하므로 정의는 필요하다.
-const TERM_FILES = [
-  'e2e', 'clipboard', 'resize', 'touch', 'links', 'selection', 'xterm-setup',
-  'tab-dom', 'workspace', 'conn-overlay', 'keybar', 'ws', 'tmux-panel',
-  'session', 'guide', 'boot',
-].map((name) => stripEsm(fs.readFileSync(path.join(__dirname, `../js/term/${name}.js`), 'utf8')));
-const THEME_JS = stripEsm(fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8'));
-// F5: picker.js↔term/session.js는 순환 import(picker.js 상단 주석) — 이 테스트는
-// 둘 다 stripEsm으로 걷어내 같은 전역 렉시컬 환경에 주입하므로 문제없다.
-const PICKER_JS = stripEsm(fs.readFileSync(path.join(__dirname, '../js/picker.js'), 'utf8'));
+const KEYSEQ_JS = path.join(__dirname, '../js/lib/keyseq.js');
+const TOAST_JS = path.join(__dirname, '../js/ui/toast.js');
+const SESSION_JS = path.join(__dirname, '../js/term/session.js');
+const DOM_JS = path.join(__dirname, '../js/core/dom.js');
 
 class FakeTerminal {
   constructor(opts) { this.options = opts; this.cols = 80; this.rows = 24; this._disposed = false; this._dataCb = null; }
@@ -84,94 +66,50 @@ function fakeFetch(url) {
   return ok({});
 }
 
-// terminal.js는 재연결/리사이즈 디바운스용 setTimeout을 여럿 만든다. window.close()로
-// 정리 안 하면 그 타이머들이 다 소진될 때까지 프로세스가 붙잡혀 node --test가 느려진다.
-const _windows = [];
-after(() => { for (const w of _windows) { try { w.close(); } catch (_) {} } });
+// term/*.js는 재연결/리사이즈 디바운스용 setTimeout을 여럿 만든다. window.close()로
+// 정리 안 하면 그 타이머들이 다 소진될 때까지 프로세스가 붙잡혀 node --test가
+// 느려진다.
+const _doms = [];
+after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
-function buildTerminalWindow() {
-  // runScripts:'dangerously' — window.eval()이 진짜 브라우저 전역(window 자기참조 등)을
-  // 갖게 하기 위함이다. resources 옵션은 안 줘서 index.html의 <script src> 태그(vendor
-  // 등)는 자동 fetch/실행되지 않는다 — 우리가 원하는 파일만 아래서 직접 eval한다.
-  const dom = new JSDOM(INDEX_HTML, { url: 'http://localhost/', pretendToBeVisual: true, runScripts: 'dangerously' });
-  const { window } = dom;
-  _windows.push(window);
+async function buildTerminalWindow() {
+  const env = createDomEnv(INDEX_HTML);
+  _doms.push(env.dom);
+  const { window } = env;
 
-  window.API_BASE = '';
-  window.WS_BASE = 'ws://localhost';
-  // F2: core/env.js가 terminal.js 밖(진짜 ES 모듈)으로 옮겨가면서, 이 테스트가
-  // 주입하는 TERMINAL_JS 텍스트 자체에는 더 이상 isMobile/isMac/_isCoarsePointer
-  // 선언이 없다 — 예전엔 terminal.js가 jsdom의 navigator.userAgent로 스스로
-  // 계산해 정의했었다(Node의 기본 UA는 모바일/Mac 패턴에 안 걸려 사실상 이미
-  // false였다). core/env.js는 이 테스트 하네스에 import되지 않으므로 그때와
-  // 같은 기본값을 그대로 명시해 준다.
-  window.isMobile = false;
-  window.isMac = false;
-  window._isCoarsePointer = () => false;
-  // F3(a): VT_TOKEN도 core/env.js로 옮겨갔다 — _wsQuery()가 bare identifier로
-  // 읽으므로 같은 이유로 명시해 준다.
-  window.VT_TOKEN = '';
-  window.__fetches = [];
-  window.fetch = (...args) => { window.__fetches.push(args); return fakeFetch(...args); };
-  // F3(a): terminal.js/picker.js가 window.fetch 몽키패치 대신 core/api.js의
-  // apiFetch()를 부른다. core/env.js/core/api.js는 이 테스트에 import되지
-  // 않으므로, 위 fetch 스텁을 그대로 감싸 같은 동작을 준다.
-  window.apiFetch = (...args) => window.fetch(...args);
-  // F4: links.js가 core/api.js의 vtFetch도 부른다 — 링크 클릭 경로는 이
-  // 테스트가 직접 누르지 않지만(비동기 우발 호출 방지 차원에서) 같이 스텁.
-  window.vtFetch = (...args) => window.fetch(...args).then((r) => r.json());
-  // F3(c): terminal.js/search.js/picker.js가 각자 끝에서 registerAction()을
-  // 부른다(core/dom.js는 이 테스트에 import되지 않음) — no-op 스텁으로 충분하다.
-  window.registerAction = () => {};
+  // vendor 전역(xterm.js/WebSocket) — term/xterm-setup.js·term/ws.js가 bare
+  // identifier로 참조한다(<script src>로 로드되던 실제 vendor 스크립트 자리).
   window.WebSocket = FakeWebSocket;
   window.Terminal = FakeTerminal;
   window.FitAddon = { FitAddon: class { fit() {} } };
   window.SearchAddon = { SearchAddon: class {} };
-  window.showToast = () => {};
-  // picker.js(세션 피커 UI)는 이 테스트의 관심사가 아니라 no-op으로 대체한다 —
-  // switchTo/removeSession이 무조건 호출하므로 없으면 ReferenceError로 죽는다.
-  window.updateSessionPicker = () => {};
+  window.__fetches = [];
+  window.fetch = (...args) => { window.__fetches.push(args); return fakeFetch(...args); };
 
-  // window.eval()이 아니라 진짜 <script> 엘리먼트를 문서에 붙여서 실행한다 —
-  // eval() 호출은 매번 독립된 전역 렉시컬 환경을 만들어 terminal.js의 최상위
-  // `const sessions = {}`/`let activeId`가 다음 eval() 호출에서 "sessions is not
-  // defined"로 사라진다(실측 확인). 반면 실제 <script> 태그들은 브라우저처럼
-  // 같은 전역 렉시컬 환경을 공유한다 — index.html의 진짜 로드 방식과도 일치한다.
-  const runScript = (code) => {
-    const el = window.document.createElement('script');
-    el.textContent = code;
-    window.document.body.appendChild(el);
-  };
-  // F3(b): sessions/activeId는 core/store.js(ESM)가 소유하고 window에 심어준다.
-  // 이 테스트에는 core/store.js가 import되지 않으므로, 실제 구현과 동일한
-  // 동작(같은 객체 참조 유지 + activeId 재할당 시 window 동기화)의 최소 스텁을
-  // terminal.js보다 먼저 주입한다.
-  runScript(`
-    const sessions = {};
-    let activeId = null;
-    window.sessions = sessions;
-    window.activeId = activeId;
-    function getSession(id) { return sessions[id]; }
-    function activeSession() { return activeId ? sessions[activeId] : undefined; }
-    function activeSessionId() { return activeId; }
-    function allSessions() { return sessions; }
-    function setActive(id) { activeId = id; window.activeId = activeId; }
-    function registerSession(id, data) { sessions[id] = data; }
-    function removeSessionRecord(id) { delete sessions[id]; }
-  `);
-  runScript(THEME_JS);
-  runScript(KEYSEQ_JS);
-  for (const src of TERM_FILES) runScript(src);
-  runScript(PICKER_JS);
+  // 한 buildTerminalWindow() 호출 = 한 테스트 = 새 cache. core/store.js의
+  // sessions/activeId 같은 모듈 스코프 싱글톤이 테스트마다 새로 시작한다.
+  const cache = new Map();
+  // term/keybar.js가 bare identifier VTKeySeq로 참조하는 UMD 전역을 먼저 심는다.
+  await importFresh(KEYSEQ_JS, env.context, cache);
+  // picker.js/term/*.js 다수가 bare identifier showToast로 참조한다(voice.js와
+  // 같은 cross-bundle 브리지 이유로 window 전역 유지 — ui/toast.js 상단 주석 참고).
+  await importFresh(TOAST_JS, env.context, cache);
+  // term/session.js를 엔트리로 실제 그래프 전체(picker.js·core/*·term/* 나머지)가
+  // 링크·평가된다 — picker.js↔term/session.js 순환 import도 vm.Module이 표준
+  // ES 모듈 순환 참조 규칙대로 정상 처리한다.
+  const sessionNs = await importFresh(SESSION_JS, env.context, cache);
+  // openSessionManager는 export되지 않고 core/dom.js의 액션 레지스트리로만
+  // 노출된다(data-action="session.manager") — 실제 소비 경로와 같은 방식으로 호출.
+  const { getAction } = await importFresh(DOM_JS, env.context, cache);
 
-  return window;
+  return { window, getAction, ...sessionNs };
 }
 
-test('addSession: 탭 DOM이 생성되고 즉시 활성 탭이 된다', () => {
-  const window = buildTerminalWindow();
+test('addSession: 탭 DOM이 생성되고 즉시 활성 탭이 된다', async () => {
+  const { window, addSession } = await buildTerminalWindow();
   const { document } = window;
 
-  window.addSession('sess-1', 'my session');
+  addSession('sess-1', 'my session');
 
   const tab = document.querySelector('.tab[data-session-id="sess-1"]');
   assert.ok(tab, '탭 DOM이 생성돼야 한다');
@@ -184,17 +122,17 @@ test('addSession: 탭 DOM이 생성되고 즉시 활성 탭이 된다', () => {
   assert.strictEqual(wrapper.style.display, 'block', '활성 세션의 wrapper는 보여야 한다');
 });
 
-test('addSession: id 없이 호출되면 유령 탭을 만들지 않는다', () => {
-  const window = buildTerminalWindow();
-  window.addSession('', 'no id');
+test('addSession: id 없이 호출되면 유령 탭을 만들지 않는다', async () => {
+  const { window, addSession } = await buildTerminalWindow();
+  addSession('', 'no id');
   assert.strictEqual(Object.keys(window.sessions).length, 0);
   assert.strictEqual(window.document.querySelectorAll('.tab').length, 0);
 });
 
-test('switchTo: 이전 탭은 비활성/숨김, 새 탭은 활성/표시로 전환된다', () => {
-  const window = buildTerminalWindow();
-  window.addSession('a', 'A');
-  window.addSession('b', 'B'); // addSession이 내부에서 switchTo(b)까지 호출
+test('switchTo: 이전 탭은 비활성/숨김, 새 탭은 활성/표시로 전환된다', async () => {
+  const { window, addSession, switchTo } = await buildTerminalWindow();
+  addSession('a', 'A');
+  addSession('b', 'B'); // addSession이 내부에서 switchTo(b)까지 호출
 
   const tabA = window.document.querySelector('.tab[data-session-id="a"]');
   const tabB = window.document.querySelector('.tab[data-session-id="b"]');
@@ -204,7 +142,7 @@ test('switchTo: 이전 탭은 비활성/숨김, 새 탭은 활성/표시로 전�
   assert.strictEqual(window.document.getElementById('term-a').style.display, 'none');
   assert.strictEqual(window.document.getElementById('term-b').style.display, 'block');
 
-  window.switchTo('a');
+  switchTo('a');
   assert.strictEqual(window.activeId, 'a');
   assert.ok(tabA.classList.contains('active'));
   assert.ok(!tabB.classList.contains('active'));
@@ -212,12 +150,15 @@ test('switchTo: 이전 탭은 비활성/숨김, 새 탭은 활성/표시로 전�
   assert.strictEqual(window.document.getElementById('term-b').style.display, 'none');
 });
 
-test('switchTabByOffset: 탭 목록 끝에서 순환한다', () => {
-  const window = buildTerminalWindow();
-  window.addSession('a', 'A');
-  window.addSession('b', 'B');
-  window.addSession('c', 'C'); // 활성 = c
+test('switchTabByOffset: 탭 목록 끝에서 순환한다', async () => {
+  const { window, addSession } = await buildTerminalWindow();
+  addSession('a', 'A');
+  addSession('b', 'B');
+  addSession('c', 'C'); // 활성 = c
 
+  // switchTabByOffset은 export되지 않지만, 키보드 단축키 없이 테스트가 직접
+  // 부를 수 있도록 term/session.js가 의도적으로 window 브리지를 유지한다
+  // (term/session.js 하단 주석 참고).
   window.switchTabByOffset(1); // c → (순환) a
   assert.strictEqual(window.activeId, 'a');
 
@@ -226,11 +167,11 @@ test('switchTabByOffset: 탭 목록 끝에서 순환한다', () => {
 });
 
 test('removeSession: 탭/wrapper DOM을 정리하고 다른 세션으로 전환한다', async () => {
-  const window = buildTerminalWindow();
-  window.addSession('a', 'A');
-  window.addSession('b', 'B'); // 활성 = b
+  const { window, addSession, removeSession } = await buildTerminalWindow();
+  addSession('a', 'A');
+  addSession('b', 'B'); // 활성 = b
 
-  await window.removeSession('b');
+  await removeSession('b');
 
   assert.strictEqual(window.sessions['b'], undefined, 'sessions 맵에서 제거돼야 한다');
   assert.strictEqual(window.document.querySelector('.tab[data-session-id="b"]'), null);
@@ -240,10 +181,10 @@ test('removeSession: 탭/wrapper DOM을 정리하고 다른 세션으로 전환�
 });
 
 test('removeSession: 마지막 탭을 닫으면 activeId가 비고 온보딩이 뜬다', async () => {
-  const window = buildTerminalWindow();
-  window.addSession('only', 'Only');
+  const { window, addSession, removeSession } = await buildTerminalWindow();
+  addSession('only', 'Only');
 
-  await window.removeSession('only');
+  await removeSession('only');
 
   assert.strictEqual(window.activeId, null);
   assert.strictEqual(Object.keys(window.sessions).length, 0);
@@ -251,22 +192,22 @@ test('removeSession: 마지막 탭을 닫으면 activeId가 비고 온보딩이 
 });
 
 test('removeSession: 비활성 탭을 닫아도 활성 탭은 그대로 유지된다', async () => {
-  const window = buildTerminalWindow();
-  window.addSession('a', 'A');
-  window.addSession('b', 'B'); // 활성 = b
+  const { window, addSession, removeSession } = await buildTerminalWindow();
+  addSession('a', 'A');
+  addSession('b', 'B'); // 활성 = b
 
-  await window.removeSession('a');
+  await removeSession('a');
 
   assert.strictEqual(window.activeId, 'b', '비활성 탭을 닫는 건 현재 활성 탭에 영향을 주면 안 된다');
   assert.ok(window.document.querySelector('.tab[data-session-id="b"]').classList.contains('active'));
 });
 
 test('모바일 세션 관리: 탭이 보이지 않아도 세션 전환과 닫기가 가능하다', async () => {
-  const window = buildTerminalWindow();
-  window.addSession('a', '첫 세션');
-  window.addSession('b', '둘째 세션');
+  const { window, addSession, getAction } = await buildTerminalWindow();
+  addSession('a', '첫 세션');
+  addSession('b', '둘째 세션');
 
-  window.openSessionManager();
+  getAction('session.manager')();
   const manager = window.document.getElementById('session-manager');
   assert.ok(manager, '세션 관리 시트가 열려야 한다');
   assert.strictEqual(manager.querySelectorAll('.vt-session-row').length, 2);
@@ -276,7 +217,7 @@ test('모바일 세션 관리: 탭이 보이지 않아도 세션 전환과 닫�
   assert.strictEqual(window.activeId, 'a', '목록의 세션을 누르면 해당 세션으로 전환돼야 한다');
   assert.strictEqual(window.document.getElementById('session-manager'), null, '전환 후 시트는 닫혀야 한다');
 
-  window.openSessionManager();
+  getAction('session.manager')();
   const close = window.document.querySelectorAll('.vt-session-row')[1].querySelectorAll('.vt-session-action')[1];
   close.click();
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -284,10 +225,10 @@ test('모바일 세션 관리: 탭이 보이지 않아도 세션 전환과 닫�
 });
 
 test('모바일 세션 관리: 이름 변경은 탭과 진입점에 함께 반영된다', async () => {
-  const window = buildTerminalWindow();
-  window.addSession('a', '이전 이름');
+  const { window, addSession, getAction } = await buildTerminalWindow();
+  addSession('a', '이전 이름');
   window.prompt = () => '새 이름';
-  window.openSessionManager();
+  getAction('session.manager')();
   window.document.querySelector('.vt-session-action').click();
   await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -296,8 +237,8 @@ test('모바일 세션 관리: 이름 변경은 탭과 진입점에 함께 반�
 });
 
 test('탭 더블클릭 이름 변경도 공용 API 요청을 보낸다', async () => {
-  const window = buildTerminalWindow();
-  window.addSession('a', '이전 이름');
+  const { window, addSession } = await buildTerminalWindow();
+  addSession('a', '이전 이름');
   const name = window.document.querySelector('.tab-name');
   name.ondblclick({ stopPropagation() {} });
   name.textContent = '바꾼 이름';
