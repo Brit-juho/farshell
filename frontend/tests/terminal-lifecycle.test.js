@@ -25,8 +25,30 @@ const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8'
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
 const THEME_JS = fs.readFileSync(path.join(__dirname, '../js/theme.js'), 'utf8');
 const KEYSEQ_JS = fs.readFileSync(path.join(__dirname, '../js/lib/keyseq.js'), 'utf8');
-const TERMINAL_JS = fs.readFileSync(path.join(__dirname, '../js/terminal.js'), 'utf8');
 const PICKER_JS = fs.readFileSync(path.join(__dirname, '../js/picker.js'), 'utf8');
+
+// F4: terminal.js가 frontend/js/term/ 아래 진짜 ES 모듈 14개로 쪼개졌다. 이
+// 하네스는 jsdom에 실제 <script type=module>을 못 붙이므로(runScripts:
+// 'dangerously'는 classic script 전용), 각 파일의 import/export 구문만 지우고
+// classic script로 주입한다 — 어차피 이 파일들 전부가 같은 전역 렉시컬 환경을
+// 공유하게 되므로(테스트 파일 상단 주석 참고), 지워진 import가 가리키던
+// 이름들은 (a) 이 스텁이 만든 window 프로퍼티, (b) 뒤에 같이 주입되는 다른
+// term/*.js의 top-level 함수 선언으로 그대로 resolve된다 — F2/F3 시절
+// TERMINAL_JS/PICKER_JS를 나란히 주입하던 방식과 동일한 원리다.
+function stripEsm(src) {
+  return src
+    .replace(/^import .*$/gm, '')
+    .replace(/^export (async function|function|const|let)/gm, '$1');
+}
+// boot.js도 포함한다 — bootApp()은 F4에서 자동 실행 IIFE에서 export 함수로
+// 바뀌어(레이스 방지, main.js가 명시 호출) 이 테스트는 bootApp()을 부르지
+// 않지만, removeSession이 마지막 탭을 닫을 때 boot.js가 소유한
+// showOnboarding()을 호출하므로 정의는 필요하다.
+const TERM_FILES = [
+  'e2e', 'clipboard', 'resize', 'touch', 'links', 'selection', 'xterm-setup',
+  'tab-dom', 'workspace', 'conn-overlay', 'keybar', 'ws', 'tmux-panel',
+  'session', 'guide', 'boot',
+].map((name) => stripEsm(fs.readFileSync(path.join(__dirname, `../js/term/${name}.js`), 'utf8')));
 
 class FakeTerminal {
   constructor(opts) { this.options = opts; this.cols = 80; this.rows = 24; this._disposed = false; this._dataCb = null; }
@@ -90,6 +112,9 @@ function buildTerminalWindow() {
   // apiFetch()를 부른다. core/env.js/core/api.js는 이 테스트에 import되지
   // 않으므로, 위 fetch 스텁을 그대로 감싸 같은 동작을 준다.
   window.apiFetch = (...args) => window.fetch(...args);
+  // F4: links.js가 core/api.js의 vtFetch도 부른다 — 링크 클릭 경로는 이
+  // 테스트가 직접 누르지 않지만(비동기 우발 호출 방지 차원에서) 같이 스텁.
+  window.vtFetch = (...args) => window.fetch(...args).then((r) => r.json());
   // F3(c): terminal.js/search.js/picker.js가 각자 끝에서 registerAction()을
   // 부른다(core/dom.js는 이 테스트에 import되지 않음) — no-op 스텁으로 충분하다.
   window.registerAction = () => {};
@@ -123,6 +148,7 @@ function buildTerminalWindow() {
     window.activeId = activeId;
     function getSession(id) { return sessions[id]; }
     function activeSession() { return activeId ? sessions[activeId] : undefined; }
+    function activeSessionId() { return activeId; }
     function allSessions() { return sessions; }
     function setActive(id) { activeId = id; window.activeId = activeId; }
     function registerSession(id, data) { sessions[id] = data; }
@@ -130,7 +156,7 @@ function buildTerminalWindow() {
   `);
   runScript(THEME_JS);
   runScript(KEYSEQ_JS);
-  runScript(TERMINAL_JS);
+  for (const src of TERM_FILES) runScript(src);
   runScript(PICKER_JS);
 
   return window;

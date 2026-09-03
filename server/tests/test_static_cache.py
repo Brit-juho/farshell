@@ -25,7 +25,8 @@ def client():
 
 
 @pytest.mark.parametrize("path", [
-    "/static/js/terminal.js",
+    # F4: terminal.js는 frontend/js/term/ 아래로 쪼개졌다(session.js가 그 후신 중 하나).
+    "/static/js/term/session.js",
     "/static/js/grid.js",
     "/static/voice.js",
     # F1(Vite/Tailwind 도입) — frontend/css/app.css 는 폐기되고 frontend/dist/app.{js,css}
@@ -50,8 +51,8 @@ def test_vendor_is_not_forced_to_revalidate(client):
 
 def test_etag_still_present_for_304(client):
     """no-cache 는 '캐시하되 재검증' — ETag 가 있어야 304 로 싸게 끝난다."""
-    r = client.get("/static/js/terminal.js")
+    r = client.get("/static/js/term/session.js")
     etag = r.headers.get("etag")
     assert etag
-    r2 = client.get("/static/js/terminal.js", headers={"If-None-Match": etag})
+    r2 = client.get("/static/js/term/session.js", headers={"If-None-Match": etag})
     assert r2.status_code == 304
