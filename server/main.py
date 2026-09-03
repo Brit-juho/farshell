@@ -332,7 +332,9 @@ class _AppCodeStatic(StaticFiles):
         resp = await super().get_response(path, scope)
         # F1: frontend/dist/ (Vite 산출물)도 같은 이유로 no-cache가 필요하다 —
         # 그대로 두면 옛 terminal.js가 51KB로 물렸던 사고가 app.js/app.css에서도 재현된다.
-        if path.startswith(("js/", "css/", "dist/")) or path == "voice.js":
+        # F4: voice.js(최상위 파일)는 js/voice/ 아래 ES 모듈로 옮겨가 js/ 규칙에
+        # 자동으로 포함된다 — 최상위 특례(`path == "voice.js"`)는 삭제.
+        if path.startswith(("js/", "css/", "dist/")):
             resp.headers["Cache-Control"] = "no-cache"
         return resp
 

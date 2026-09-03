@@ -36,9 +36,11 @@ test('NETWORK_FIRST가 dist/app.js·app.css를 잡는다 (F1 회귀)', () => {
 
 test('NETWORK_FIRST가 기존 js/·css/ 경로도 계속 잡는다 (구 경로 회귀 방지)', () => {
   const NETWORK_FIRST = extractRegex('NETWORK_FIRST');
-  assert.ok(NETWORK_FIRST.test('/static/js/terminal.js'));
+  // F4: terminal.js → js/term/session.js, voice.js(최상위) → js/voice/index.js로
+  // 쪼개졌다 — 둘 다 이미 `/static/js/` 규칙에 포함되므로 최상위 특례가 삭제됐다.
+  assert.ok(NETWORK_FIRST.test('/static/js/term/session.js'));
   assert.ok(NETWORK_FIRST.test('/static/js/ui/toast.js'));
-  assert.ok(NETWORK_FIRST.test('/static/voice.js'));
+  assert.ok(NETWORK_FIRST.test('/static/js/voice/index.js'));
   assert.ok(NETWORK_FIRST.test('/'));
   assert.ok(NETWORK_FIRST.test('/manifest.json'));
 });

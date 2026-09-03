@@ -14,7 +14,19 @@ const { JSDOM } = require('jsdom');
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
 const ANSILEX_JS = fs.readFileSync(path.join(__dirname, '../js/lib/ansilex.js'), 'utf8');
-const GRID_JS = fs.readFileSync(path.join(__dirname, '../js/grid.js'), 'utf8');
+
+// F4: grid.js가 agent/{badges,status,preview}.js 3개의 진짜 ES 모듈로 쪼개졌다.
+// terminal-lifecycle.test.js와 같은 기법 — import/export 구문만 지우고 classic
+// script로 주입한다(전부 같은 전역 렉시컬 환경을 공유하게 되므로, 지워진 import가
+// 가리키던 이름은 아래 window 스텁 또는 나란히 주입되는 다른 파일의 top-level
+// 선언으로 resolve된다).
+function stripEsm(src) {
+  return src
+    .replace(/^import .*$/gm, '')
+    .replace(/^export (async function|function|const|let)/gm, '$1');
+}
+const AGENT_FILES = ['badges', 'status', 'preview'].map((name) =>
+  stripEsm(fs.readFileSync(path.join(__dirname, `../js/agent/${name}.js`), 'utf8')));
 
 class FakeWebSocket {
   constructor(url) { this.url = url; this.readyState = FakeWebSocket.CONNECTING; }
@@ -27,10 +39,10 @@ FakeWebSocket.CONNECTING = 0; FakeWebSocket.OPEN = 1; FakeWebSocket.CLOSING = 2;
 // 완전한 스펙 구현일 필요는 없다.
 function cssEscape(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c); }
 
-// grid.js는 connectAgentWs()가 최상위에서 즉시 불려 ensurePreviewWs 등에서 30초
-// keepalive setInterval을 만든다. window.close()로 정리 안 하면 프로세스가 그
-// 타이머들이 다 소진될 때까지 붙잡혀 node --test가 30초씩 느려진다 — 파일 끝의
-// after()에서 한꺼번에 닫는다.
+// refreshGrid가 부르는 ensurePreviewWs가 세션마다 30초 keepalive setInterval을
+// 만든다. window.close()로 정리 안 하면 프로세스가 그 타이머들이 다 소진될
+// 때까지 붙잡혀 node --test가 30초씩 느려진다 — 파일 끝의 after()에서 한꺼번에
+// 닫는다.
 const _windows = [];
 after(() => { for (const w of _windows) { try { w.close(); } catch (_) {} } });
 
@@ -57,13 +69,15 @@ function buildGridWindow({ tmuxSessions = [], agents = {} } = {}) {
     if (u.includes('/api/capabilities')) return ok({});
     return ok({});
   };
-  // F3(a): grid.js가 window.fetch 몽키패치 대신 core/api.js의 apiFetch()를 부른다.
-  // core/env.js/core/api.js는 이 테스트에 import되지 않으므로, 위 fetch 스텁을
-  // 그대로 감싸 같은 동작을 준다.
+  // F3(a): apiFetch()를 window.fetch 스텁으로 그대로 감싼다.
   window.apiFetch = (...args) => window.fetch(...args);
-  // F3(c): grid.js가 파일 맨 끝에서 registerAction()을 부른다(core/dom.js가
-  // 이 테스트엔 import되지 않음) — no-op 스텁으로 충분하다.
+  // F3(c): badges/status/preview가 각자 끝에서 registerAction()을 부른다 —
+  // no-op 스텁으로 충분하다.
   window.registerAction = () => {};
+  // F4: preview.js가 term/session.js의 switchTo/addSession을 부른다. 이 테스트는
+  // 카드를 실제로 클릭하지 않으므로(attachTmuxSession 경로 미실행) no-op으로 충분.
+  window.switchTo = () => {};
+  window.addSession = () => {};
 
   const runScript = (code) => {
     const el = window.document.createElement('script');
@@ -75,7 +89,7 @@ function buildGridWindow({ tmuxSessions = [], agents = {} } = {}) {
   // bare identifier로 감싼 최소 스텁.
   runScript('function getSession(id) { return sessions[id]; } function allSessions() { return sessions; }');
   runScript(ANSILEX_JS);
-  runScript(GRID_JS);
+  for (const src of AGENT_FILES) runScript(src);
 
   return window;
 }

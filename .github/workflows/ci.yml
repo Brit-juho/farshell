@@ -29,11 +29,18 @@ jobs:
         run: |
           test -f frontend/dist/app.js
           test -f frontend/dist/app.css
+          # F4: voice/index.js가 별도 lib entry(voice.js)로 독립 빌드된다 —
+          # agent/status.js가 capability 확인 후 <script type="module">로 지연
+          # 주입(vite.config.js 주석 참고, Rollup 공유 청크 해시 문제 회피).
+          test -f frontend/dist/voice.js
           # sw.js PRECACHE 계약: 파일명에 해시가 붙으면 오프라인 PWA가 죽는다.
           ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
           SIZE=$(wc -c < frontend/dist/app.js)
           echo "app.js = ${SIZE} bytes (상한 307200)"
           [ "$SIZE" -le 307200 ]
+          VSIZE=$(wc -c < frontend/dist/voice.js)
+          echo "voice.js = ${VSIZE} bytes (상한 307200)"
+          [ "$VSIZE" -le 307200 ]
       - name: dist 커밋 금지 확인 (ADR-2)
         run: git check-ignore -q frontend/dist
 

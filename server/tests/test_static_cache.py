@@ -25,10 +25,12 @@ def client():
 
 
 @pytest.mark.parametrize("path", [
-    # F4: terminal.js는 frontend/js/term/ 아래로 쪼개졌다(session.js가 그 후신 중 하나).
+    # F4: terminal.js는 frontend/js/term/ 아래로, grid.js는 frontend/js/agent/ 아래로,
+    # voice.js(최상위 파일)는 frontend/js/voice/ 아래로 쪼개졌다(session.js/preview.js/
+    # index.js가 각각의 후신 중 하나) — voice.js는 이제 js/ 규칙에 그대로 포함된다.
     "/static/js/term/session.js",
-    "/static/js/grid.js",
-    "/static/voice.js",
+    "/static/js/agent/preview.js",
+    "/static/js/voice/index.js",
     # F1(Vite/Tailwind 도입) — frontend/css/app.css 는 폐기되고 frontend/dist/app.{js,css}
     # 로 대체됐다. 옛날 css/app.css 가 겪었던 것과 똑같은 브라우저 고정 캐싱 사고가
     # 빌드 산출물에서도 재현될 수 있어 같은 회귀 테스트로 묶는다.

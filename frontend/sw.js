@@ -84,7 +84,9 @@ const NETWORK_ONLY = /^\/(api\/|ws|voice\/)/;
 // frontend/dist/app.{js,css}가 그 자리를 대신한다 — 'dist'를 빠뜨리면 새 코드가
 // 아래 vendor immutable(stale-while-revalidate) 경로로 떨어져서, 정확히 이 파일이
 // 막으려던 사고(브라우저가 옛 app.js를 계속 캐시)가 재현된다.
-const NETWORK_FIRST = /^\/$|^\/static\/voice\.js$|^\/manifest\.json$|^\/static\/sw\.js$|^\/static\/(css|js|dist)\//;
+// F4: voice.js(최상위 파일)는 frontend/js/voice/ 아래 ES 모듈로 옮겨가 이미
+// `static/js/`로 매치된다 — 최상위 특례(`^\/static\/voice\.js$`)는 삭제.
+const NETWORK_FIRST = /^\/$|^\/manifest\.json$|^\/static\/sw\.js$|^\/static\/(css|js|dist)\//;
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;

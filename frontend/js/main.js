@@ -41,13 +41,18 @@ import './term/tmux-panel.js';
 import './term/session.js';
 import './term/guide.js';
 import { bootApp } from './term/boot.js';
+// F4 — grid.js(382줄)를 agent/{badges,status,preview}.js 3개로 분할.
+// badges(어떤 아이콘) → status(일하는 중인지, badges를 소비) → preview(그리드
+// 뷰 자체, status/badges를 소비) 순서로 의존한다.
+import './agent/badges.js';
+import './agent/status.js';
+import './agent/preview.js';
 
 const LEGACY_APP_SCRIPTS = [
   '/static/js/ui/toast.js',   // showToast 단일 구현 — 다른 스크립트가 호출하므로 먼저
   '/static/js/theme.js',
   '/static/js/search.js',
   '/static/js/picker.js',
-  '/static/js/grid.js',
   '/static/js/viewer.js',
   '/static/js/ports.js',
   '/static/js/queue.js',
