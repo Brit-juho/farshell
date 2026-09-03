@@ -1,7 +1,22 @@
 // 마이크 녹음 + STT 전송 — F4에서 voice.js에서 분리.
+//
+// 🔴 F4 완료 직후 발견해 여기서 고친 사고: 이 파일은 voice.js 전용 lib entry로
+// 별도 빌드된다(vite.config.js 참고, app.js와 완전히 분리된 두 번의 Rollup 실행).
+// 그 말은 `import ... from '../core/store.js'`를 쓰면 voice 번들이 core/store.js
+// 소스를 "app.js와 공유하는 하나의 모듈"이 아니라 **자기 것만의 새 사본**으로
+// 통째로 인라인한다는 뜻이다 — sessions/activeId 같은 상태를 가진 모듈을 그렇게
+// import하면, 그 사본이 자기 자신의 빈 `sessions = {}`/`activeId = null`로
+// `window.sessions`/`window.activeId`/`window.getSession`을 실제 앱 상태 위에
+// **덮어써 버린다**(실측: 세션이 실제로 있는데도 voice.js 로드 후
+// `window.sessens`가 빈 객체가 됨 — picker.js/search.js/quickopen.js처럼 아직
+// classic script라 bare `sessions`/`getSession`을 읽는 파일 전부가 깨진다).
+// apiFetch(core/api.js)는 내부에서 `window.VT_TOKEN`/`window.API_BASE`를 그때그때
+// bare로 읽을 뿐 자체 상태가 없어 안전하지만, core/store.js·core/dom.js처럼
+// 모듈 최상위에 mutable state(`sessions`/`registry`)를 갖고 `window.*`에 무조건
+// 덮어쓰는 모듈은 여기서 import하면 안 된다 — 대신 그 값이 필요하면 실제
+// 공유 인스턴스인 `window.activeId`/`window.registerAction`을 bare로 읽는다
+// (F4 이전 voice.js가 classic script로 하던 방식 그대로).
 import { apiFetch } from '../core/api.js';
-import { activeSessionId } from '../core/store.js';
-import { registerAction } from '../core/dom.js';
 import { _stopCurrentTTS } from './tts.js';
 
 const API = `${location.protocol}//${location.host}`;
@@ -100,10 +115,10 @@ export function stopRecording() {
 
 async function sendAudio(blob) {
   try {
-    // [H2] 현재 활성 세션 ID를 쿼리 파라미터로 전달. core/store.js가 항상 먼저
-    // 로드되므로(F3(b)) activeSessionId()는 세션이 없으면 null을 준다 — 옛
-    // `typeof activeId !== 'undefined'` 방어 체크는 store.js 도입 전 잔재라 필요 없다.
-    const sid = activeSessionId() || '';
+    // [H2] 현재 활성 세션 ID를 쿼리 파라미터로 전달. window.activeId는 core/store.js
+    // (app.js 번들)가 실 세션 전환마다 갱신해주는 진짜 공유 값이다 — 이 파일에서
+    // core/store.js를 직접 import하면 안 되는 이유는 파일 상단 주석 참고.
+    const sid = window.activeId || '';
     const res = await apiFetch(`${API}/voice/input?session_id=${sid}`, {
       method: 'POST',
       headers: { 'Content-Type': 'audio/webm' },
@@ -127,5 +142,7 @@ function notifyActiveSession(sessionId) {
   // 하지만 local_mic에서 쓸 수 있으므로 유지
 }
 
-// 이벤트 바인딩은 data-action="voice.record"(index.html)로 처리.
-registerAction('voice.record', () => toggleRecording());
+// 이벤트 바인딩은 data-action="voice.record"(index.html)로 처리. window.registerAction
+// 은 app.js 번들의 진짜 인스턴스다 — core/dom.js를 여기서 import하면 안 되는 이유는
+// 파일 상단 주석 참고(자체 registry 사본을 만들어 문서 클릭 리스너가 중복된다).
+window.registerAction('voice.record', () => toggleRecording());

@@ -1,7 +1,12 @@
 // 이어폰 미디어 키 트리거 + 음성 전용 모드 — F4에서 voice.js에서 분리.
 // W2-3: 이어폰 미디어 키(재생/일시정지)를 녹음 토글로 가로챈다. 브라우저가
 // 미디어 세션을 인식하려면 무음 오디오가 재생 중이어야 한다.
-import { registerAction } from '../core/dom.js';
+//
+// core/dom.js는 여기서 import하지 않는다 — voice.js는 app.js와 완전히 분리된
+// 별도 lib entry로 빌드되므로(vite.config.js), import하면 core/dom.js의 mutable
+// 레지스트리(`registry` Map)까지 통째로 새 사본이 인라인돼 `window.registerAction`이
+// app.js 쪽 진짜 인스턴스를 덮어쓴다(recording.js 상단 주석에 상세 — 실측으로
+// 확인한 사고). `window.registerAction`을 bare로 그대로 쓴다.
 import { isRecording, startRecording, stopRecording, toggleRecording, micStatus } from './recording.js';
 
 // W1-5: handsFreeModeOn 제거됨 (VAD 미구현 상태에서의 가짜 핸즈프리 모드 폐기)
@@ -145,6 +150,7 @@ document.addEventListener('click', function initMedia() {
 
 // F3(c): data-action 위임용 등록. voice.js는 capability에 따라 조건부로만
 // 로드되므로, 등록도 로드된 경우에만 이뤄진다(미로드 시 core/dom.js가 조용히
-// no-op — .needs-voice로 애초에 버튼도 숨어 있다).
-registerAction('voice.only-toggle', () => toggleVoiceOnly());
-registerAction('voice.mediakey-toggle', () => toggleMediaKeyTrigger());
+// no-op — .needs-voice로 애초에 버튼도 숨어 있다). window.registerAction 사용
+// 이유는 파일 상단 주석 참고.
+window.registerAction('voice.only-toggle', () => toggleVoiceOnly());
+window.registerAction('voice.mediakey-toggle', () => toggleMediaKeyTrigger());
