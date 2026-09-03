@@ -1,0 +1,140 @@
+/* D1 — 나머지 5개 스킨(farshell 외)을 tokens.css와 같은 색 토큰 17개로
+ * 재매핑한다. 값 자체는 styles/layers/legacy.css의 기존 --win/--acc/--txt/
+ * --sub/--line/--ok/--warn/--err/--info 값을 그대로 옮긴 것 — 이 커밋은
+ * "스킨이 다르게 보이게" 만드는 게 아니라 "같은 색을 다른 이름 체계로도
+ * 표현 가능하게" 만드는 것이다(legacy.css 쪽 diff에서 그 var(--color-*)
+ * 참조로 바뀐 걸 확인).
+ *
+ * @theme이 아니라 일반 CSS로 쓴다 — @theme은 :root 최상위 전용이라 선택자
+ * 안에 못 넣는다(Tailwind 공식 문서: "enforces top-level, not nested under
+ * selectors"). base 레이어에 둬 legacy.css(레이어 밖, 항상 우선)에 영향받지
+ * 않고 tokens.css의 :root 기본값 위에 스킨별로 얹힌다.
+ */
+@layer base {
+  html[data-skin="macos"] {
+    --color-bg-0: #1c1c1e;
+    --color-bg-1: #2c2c2e;
+    --color-bg-2: #2a2a2c;
+    --color-bg-3: #3a3a3c;
+    --color-line: rgb(255 255 255 / .08);
+    --color-line-strong: rgb(255 255 255 / .16);
+    --color-txt: #e6e6ea;
+    --color-sub: #8e8e96;
+    --color-muted: #6e6e76;
+    --color-acc: #0a84ff;
+    --color-acc-dim: #0868c4;
+    --color-acc-ink: #ffffff;
+    --color-st-idle: #6e6e76;
+    --color-st-working: #32d74b;
+    --color-st-waiting: #ffd60a;
+    --color-st-done: #0a84ff;
+    --color-st-error: #ff453a;
+    --color-term-bg: #101012;
+    --color-term-fg: #e6e6ea;
+  }
+
+  html[data-skin="catppuccin"] {
+    --color-bg-0: #1e1e2e;
+    --color-bg-1: #181825;
+    --color-bg-2: #313244;
+    --color-bg-3: #45475a;
+    --color-line: rgb(255 255 255 / .06);
+    --color-line-strong: rgb(255 255 255 / .12);
+    --color-txt: #cdd6f4;
+    --color-sub: #a6adc8;
+    --color-muted: #7f849c;
+    --color-acc: #cba6f7;
+    --color-acc-dim: #9a7fc4;
+    --color-acc-ink: #1e1e2e;
+    --color-st-idle: #7f849c;
+    --color-st-working: #a6e3a1;
+    --color-st-waiting: #f9e2af;
+    --color-st-done: #89b4fa;
+    --color-st-error: #f38ba8;
+    --color-term-bg: #1e1e2e;
+    --color-term-fg: #cdd6f4;
+  }
+
+  html[data-skin="windows"] {
+    --color-bg-0: #1f1f1f;
+    --color-bg-1: #2b2b2b;
+    --color-bg-2: #2b2b2b;
+    --color-bg-3: #0c0c0c;
+    --color-line: rgb(255 255 255 / .09);
+    --color-line-strong: rgb(255 255 255 / .18);
+    --color-txt: #cccccc;
+    --color-sub: #9a9a9a;
+    --color-muted: #767676;
+    --color-acc: #4cc2ff;
+    --color-acc-dim: #3a93bf;
+    --color-acc-ink: #0c0c0c;
+    --color-st-idle: #767676;
+    --color-st-working: #16c60c;
+    --color-st-waiting: #f9f1a5;
+    --color-st-done: #3b78ff;
+    --color-st-error: #e74856;
+    --color-term-bg: #0c0c0c;
+    --color-term-fg: #cccccc;
+  }
+
+  html[data-skin="vscode"] {
+    --color-bg-0: #1e1e1e;
+    --color-bg-1: #2d2d2d;
+    --color-bg-2: #252526;
+    --color-bg-3: #1e1e1e;
+    --color-line: rgb(255 255 255 / .10);
+    --color-line-strong: rgb(255 255 255 / .20);
+    --color-txt: #cccccc;
+    --color-sub: #858585;
+    --color-muted: #6e6e6e;
+    --color-acc: #007acc;
+    --color-acc-dim: #005a94;
+    --color-acc-ink: #ffffff;
+    --color-st-idle: #6e6e6e;
+    --color-st-working: #89d185;
+    --color-st-waiting: #cca700;
+    --color-st-done: #3794ff;
+    --color-st-error: #f14c4c;
+    --color-term-bg: #1e1e1e;
+    --color-term-fg: #cccccc;
+  }
+
+  /* 유일한 라이트 스킨. --color-line은 검정 오버레이로 뒤집어야 대비가 산다
+   * (legacy.css 기존 주석과 같은 이유).
+   *
+   * 값은 20-design-system.md §2-3의 예시(주황 액센트 #b8651a 등)를 그대로
+   * 베끼지 않았다 — 그건 이 문서가 작성된 시점의 목업이라, 실제
+   * legacy.css의 현재 notepad 값(파란 액센트 #0060df 등)과 다르다. D1의
+   * 목적은 "기존 스킨의 보이는 색을 바꾸는 것"이 아니라 "같은 색을 새
+   * 토큰 이름으로도 표현 가능하게 하는 것"이므로, txt/sub/acc/ok/warn/
+   * err/info/term은 legacy.css에 실제로 이미 있던 값을 그대로 옮겼다.
+   * --muted(신규 개념, 기존에 없던 3단계 톤)만 새로 골랐다 — 실측(node
+   * 대비 계산): #6e6b60이 4스킨 배경 전부에서 4.3~5.3:1(AA 이상). */
+  html[data-skin="notepad"] {
+    --color-bg-0: #faf9f5;
+    --color-bg-1: #f1efe7;
+    --color-bg-2: #eae7dc;
+    --color-bg-3: #ffffff;
+    --color-line: rgb(0 0 0 / .12);
+    --color-line-strong: rgb(0 0 0 / .24);
+    --color-txt: #2b2a25;
+    --color-sub: #767468;
+    --color-muted: #6e6b60;
+    --color-acc: #0060df;
+    --color-acc-dim: #0047a8;
+    --color-acc-ink: #ffffff;
+    --color-st-idle: #6e6b60;
+    --color-st-working: #1e8e3e;
+    --color-st-waiting: #b3730a;
+    --color-st-done: #0060df;
+    --color-st-error: #d93025;
+    --color-term-bg: #fffefb;
+    --color-term-fg: #2b2a25;
+    /* 라이트에서 다크와 같은 그림자 강도를 쓰면 더러워진다 — D2(elevation)가
+     * 아직 소비처를 안 옮겼어도(legacy.css는 여전히 리터럴 rgba shadow),
+     * 토큰 자체는 미리 옳게 정의해 둔다. */
+    --shadow-e1: 0 1px 2px rgb(0 0 0 / .10), 0 2px 8px rgb(0 0 0 / .06);
+    --shadow-e2: 0 4px 12px rgb(0 0 0 / .12), 0 12px 32px rgb(0 0 0 / .08);
+    --shadow-e3: 0 -2px 16px rgb(0 0 0 / .12);
+  }
+}

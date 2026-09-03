@@ -3,11 +3,26 @@
 import { allSessions } from './core/store.js';
 import { registerAction } from './core/dom.js';
 
-const VT_SKINS = ['macos', 'catppuccin', 'windows', 'vscode', 'notepad'];
+// D1(ADR-3): farshell이 새 기본 스킨 — 목록 순서가 곧 설정 화면 칩 순서이자
+// "미지의 스킨" 폴백 우선순위 의도를 나타내므로 맨 앞에 둔다.
+const VT_SKINS = ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad'];
 
 // 각 스킨의 xterm.js 테마 — foreground/background/cursor/selection + ANSI 16색.
 // "iTerm2 vs 윈도우 터미널 느낌"의 핵심은 이 팔레트다.
 const VT_XTERM_THEMES = {
+  // 근흑 + 앰버 단일 액센트(styles/theme/tokens.css의 --color-* 17개와 같은
+  // 값). ANSI 16색은 그 토큰에서 없는 새 값이라 이번에 처음 골랐다 —
+  // red/green/blue는 상태 램프(--color-st-error/working/done)와 맞추고,
+  // yellow는 액센트(--color-acc)와 맞췄다(waiting == accent라는 D3 의도와
+  // 같은 이유). magenta/cyan은 그 넷과 부딪히지 않는 보색으로 새로 골랐다.
+  farshell: {
+    background:'#0a0a0b', foreground:'#eeeef0', cursor:'#f0a860', cursorAccent:'#0a0a0b',
+    selectionBackground:'rgba(240,168,96,0.28)',
+    black:'#232328', red:'#f06868', green:'#4fd1a5', yellow:'#f0a860',
+    blue:'#5b8def', magenta:'#c792ea', cyan:'#64d9e0', white:'#9a9aa2',
+    brightBlack:'#6a6a72', brightRed:'#ff8585', brightGreen:'#7ee2c0', brightYellow:'#ffc285',
+    brightBlue:'#82a8ff', brightMagenta:'#dba6f5', brightCyan:'#8be6ec', brightWhite:'#ffffff',
+  },
   macos: {
     background:'#101012', foreground:'#e6e6ea', cursor:'#0a84ff', cursorAccent:'#101012',
     selectionBackground:'rgba(10,132,255,0.32)',
@@ -54,15 +69,15 @@ const VT_XTERM_THEMES = {
 };
 
 // theme-color 메타(모바일 상태바)용 — --bar 값과 일치
-const VT_BAR_COLOR = { macos:'#2c2c2e', catppuccin:'#181825', windows:'#2b2b2b', vscode:'#2d2d2d', notepad:'#f1efe7' };
+const VT_BAR_COLOR = { farshell:'#131316', macos:'#2c2c2e', catppuccin:'#181825', windows:'#2b2b2b', vscode:'#2d2d2d', notepad:'#f1efe7' };
 
 export function getVtSkin() {
   const s = document.documentElement.getAttribute('data-skin');
-  return VT_SKINS.indexOf(s) >= 0 ? s : 'macos';
+  return VT_SKINS.indexOf(s) >= 0 ? s : 'farshell';
 }
 
 export function getVtXtermTheme(skin) {
-  return VT_XTERM_THEMES[skin || getVtSkin()] || VT_XTERM_THEMES.macos;
+  return VT_XTERM_THEMES[skin || getVtSkin()] || VT_XTERM_THEMES.farshell;
 }
 
 // 테마별 터미널 폰트 — Windows는 Cascadia Code(WT 정체성), 나머지는 IBM Plex Mono
@@ -101,7 +116,7 @@ function _syncThemeChips(skin) {
 }
 
 export function setVtSkin(skin) {
-  if (VT_SKINS.indexOf(skin) < 0) skin = 'macos';
+  if (VT_SKINS.indexOf(skin) < 0) skin = 'farshell';
   document.documentElement.setAttribute('data-skin', skin);
   try { localStorage.setItem('vt-skin', skin); } catch (_) {}
   _syncThemeChips(skin);

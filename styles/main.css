@@ -8,9 +8,16 @@
  *  import of the preflight CSS file while keeping the theme and utilities
  *  imports. This is useful when integrating Tailwind into existing projects.")
  */
-@layer theme, utilities;
+@layer theme, base, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
+
+/* D1(20-design-system.md) — 구조 토큰 + farshell(신규 기본 스킨) 색 17개.
+ * theme 레이어: @theme static이 실제 :root 커스텀 프로퍼티로 컴파일된다. */
+@import "./theme/tokens.css";
+/* 나머지 5스킨의 색 17개 재매핑 — base 레이어(legacy.css보다는 뒤지지만
+ * theme 레이어보다는 우선해 스킨별 오버라이드가 기본값을 덮는다). */
+@import "./theme/skins.css";
 
 /* 자동 스캐너가 서드파티 번들(highlight.js 등)의 문자열까지 훑어 "invisible"
  * 같은 우연한 단어 일치로 유틸리티를 만드는 걸 막는다. 실제 DOM에 그 클래스를

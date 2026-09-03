@@ -1,0 +1,86 @@
+/* D1 (docs/plan-2.0/20-design-system.md §2) — 구조 토큰 + 기본 스킨(farshell)의
+ * 색 토큰 17개. Tailwind v4 @theme으로 선언하면 실제 :root 커스텀 프로퍼티로
+ * 컴파일되므로, 아직 레거시인 styles/layers/legacy.css에서도 var(--color-*)로
+ * 그대로 참조할 수 있다(커스텀 프로퍼티 상속은 @layer 경계와 무관하다) — 그
+ * 파일의 기존 --win/--acc/--txt/--sub/--line 등은 이 토큰들을 가리키도록
+ * 바꿨다(별도 커밋 diff 참고). 소비 측(수백 곳의 var(--acc) 등)을 전부
+ * var(--color-acc)로 바꾸는 건 D1 범위 밖 — 그건 값의 소스를 옮기는 것과
+ * 완전히 다른, 훨씬 큰 별도 작업이라 이번엔 하지 않는다.
+ *
+ * --*: initial 로 Tailwind 기본 팔레트(red-50..slate-950 등 22색×11단)를
+ * 통째로 지운다 — 유틸리티 클래스는 아직 하나도 안 쓰므로(main.css 상단
+ * 주석) 대가가 없다. 나중에 유틸리티를 쓰기 시작하면 "우리 토큰 밖의 값은
+ * 클래스가 안 생겨 즉시 눈에 띈다"는 게 의도된 안전장치.
+ */
+@theme static {
+  --*: initial;
+
+  /* ── 간격: 4px 배수 단일 스케일 (D4에서 legacy.css --sp-* 소비처를 이걸로
+     교체한다 — 이번 D1은 값만 정의, 소비처 교체는 하지 않는다) ────────── */
+  --spacing: 4px;
+
+  --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+             "Pretendard", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+
+  --text-2xs: 10.5px;
+  --text-xs:  11px;
+  --text-sm:  12.5px;
+  --text-base:14px;
+  --text-lg:  16px;
+  --text-xl:  20px;
+  --text-2xl: 28px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+
+  --shadow-e1: 0 1px 2px rgb(0 0 0 / .28), 0 2px 8px rgb(0 0 0 / .22);
+  --shadow-e2: 0 4px 12px rgb(0 0 0 / .34), 0 12px 32px rgb(0 0 0 / .28);
+  --shadow-e3: 0 -2px 16px rgb(0 0 0 / .40);
+
+  --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+
+  --breakpoint-regular: 720px;
+  --breakpoint-wide:   1024px;
+
+  /* ── farshell(신규 기본 스킨) 색 17개 — 근흑 + 앰버 단일 액센트.
+     실측(node 스크립트, 상대휘도 WCAG 대비): txt 13.5~17.1:1 · sub 5.6~7.1:1
+     (모든 배경 4단에서 AA 4.5:1 이상) · muted는 3:1(UI 컴포넌트/보조 텍스트
+     기준) 이상을 맞추려 스펙 초안(#6a6a72, bg-3에서 2.92:1로 미달)보다
+     밝힌 #7c7c84(bg-3에서 3.78:1)로 조정했다. */
+  --color-bg-0: #0a0a0b;
+  --color-bg-1: #131316;
+  --color-bg-2: #1a1a1e;
+  --color-bg-3: #232328;
+
+  --color-line: rgb(255 255 255 / .08);
+  --color-line-strong: rgb(255 255 255 / .16);
+
+  --color-txt: #eeeef0;
+  --color-sub: #9a9aa2;
+  --color-muted: #7c7c84;
+
+  --color-acc: #f0a860;
+  --color-acc-dim: #b3803f;
+  --color-acc-ink: #17140f;
+
+  --color-st-idle:    #7c7c84;
+  --color-st-working: #4fd1a5;
+  --color-st-waiting: #f0a860;
+  --color-st-done:    #5b8def;
+  --color-st-error:   #f06868;
+
+  --color-term-bg: #0a0a0b;
+  --color-term-fg: #eeeef0;
+
+  /* 17개 계약 밖의 보조 토큰 — 상태 배너(--err 등) 위에 얹는 고정 흰 텍스트가
+   * legacy.css 여러 곳에 `color:#fff` 리터럴로 흩어져 있던 것(D1 체크리스트
+   * "하드코딩 색 제거")을 이걸로 대체한다. 모든 스킨의 상태색(성공/경고/에러)이
+   * 전부 흰 텍스트로 충분한 명도 대비를 내므로 스킨별 오버라이드 불필요.
+   */
+  --color-on-solid: #ffffff;
+}

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko" data-skin="macos">
+<html lang="ko" data-skin="farshell">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -21,19 +21,32 @@
   <title>FarShell</title>
   <link rel="icon" type="image/png" href="/static/icon-192.png">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#2c2c2e" id="theme-color-meta">
+  <meta name="theme-color" content="#131316" id="theme-color-meta">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="/static/vendor/xterm.min.css">
   <link href="/static/vendor/lucide.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/dist/app.css">
   <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-mono-400.woff2" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-sans-400.woff2" crossorigin>
-  <!-- 테마 부팅: 페인트 전에 data-skin 확정 (FOUC 방지). 기본 macos. -->
+  <!-- 테마 부팅: 페인트 전에 data-skin 확정 (FOUC 방지).
+       D1(ADR-3): 기본값이 macos → farshell로 바뀌었다. 이미 vt-skin을
+       저장해 둔 사용자는 그 값을 그대로 쓴다(마이그레이션 없음) — 저장된
+       값이 아예 없을 때만 새 기본값이 적용된다. 그 "없을 때"도 시스템이
+       라이트 모드면 다크 스킨을 강제로 들이밀지 않고 유일한 라이트 스킨인
+       notepad로 떨어진다(prefers-color-scheme 추종, D1 체크리스트) —
+       사용자가 명시적으로 스킨을 고르면 그게 항상 이긴다. -->
   <script>
     (function(){
       try {
-        var s = localStorage.getItem('vt-skin') || 'macos';
-        if (['macos','catppuccin','windows','vscode','notepad'].indexOf(s) < 0) s = 'macos';
+        var stored = localStorage.getItem('vt-skin');
+        var valid = ['farshell','macos','catppuccin','windows','vscode','notepad'];
+        var s;
+        if (stored && valid.indexOf(stored) >= 0) {
+          s = stored;
+        } else {
+          var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+          s = prefersLight ? 'notepad' : 'farshell';
+        }
         document.documentElement.setAttribute('data-skin', s);
       } catch(e){}
     })();
@@ -234,6 +247,7 @@
     <div class="msep"></div>
     <div class="mlabel">테마</div>
     <div class="theme-row" id="theme-row">
+      <button class="theme-chip" data-skin="farshell" data-action="theme.set"><span class="dot" style="background:#f0a860"></span>FarShell</button>
       <button class="theme-chip" data-skin="macos" data-action="theme.set"><span class="dot" style="background:#0a84ff"></span>macOS</button>
       <button class="theme-chip" data-skin="catppuccin" data-action="theme.set"><span class="dot" style="background:#cba6f7"></span>Catppuccin</button>
       <button class="theme-chip" data-skin="windows" data-action="theme.set"><span class="dot" style="background:#4cc2ff"></span>Windows</button>

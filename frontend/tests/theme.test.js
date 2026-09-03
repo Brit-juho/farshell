@@ -42,7 +42,7 @@ function fakeSession4x() {
   };
 }
 
-test('getVtSkin: data-skin 속성을 읽고, 미지의 값이면 macos로 폴백한다', async () => {
+test('getVtSkin: data-skin 속성을 읽고, 미지의 값이면 farshell로 폴백한다 (D1: 기본 스킨 macos→farshell)', async () => {
   const { window, getVtSkin } = await buildThemeWindow();
   assert.strictEqual(getVtSkin(), 'macos');
 
@@ -50,21 +50,21 @@ test('getVtSkin: data-skin 속성을 읽고, 미지의 값이면 macos로 폴백
   assert.strictEqual(getVtSkin(), 'catppuccin');
 
   window.document.documentElement.setAttribute('data-skin', 'not-a-real-skin');
-  assert.strictEqual(getVtSkin(), 'macos');
+  assert.strictEqual(getVtSkin(), 'farshell');
 });
 
-test('getVtXtermTheme: 스킨별로 다른 팔레트를 반환하고, 미지의 스킨은 macos로 폴백한다', async () => {
+test('getVtXtermTheme: 스킨별로 다른 팔레트를 반환하고, 미지의 스킨은 farshell로 폴백한다', async () => {
   const { getVtXtermTheme } = await buildThemeWindow();
-  const macos = getVtXtermTheme('macos');
+  const farshell = getVtXtermTheme('farshell');
   const notepad = getVtXtermTheme('notepad');
-  assert.notStrictEqual(macos.background, notepad.background);
-  assert.strictEqual(getVtXtermTheme('nonexistent').background, macos.background);
+  assert.notStrictEqual(farshell.background, notepad.background);
+  assert.strictEqual(getVtXtermTheme('nonexistent').background, farshell.background);
 });
 
-test('setVtSkin: 미지의 스킨을 넘기면 macos로 강제된다', async () => {
+test('setVtSkin: 미지의 스킨을 넘기면 farshell로 강제된다', async () => {
   const { window, setVtSkin } = await buildThemeWindow();
   setVtSkin('totally-bogus');
-  assert.strictEqual(window.document.documentElement.getAttribute('data-skin'), 'macos');
+  assert.strictEqual(window.document.documentElement.getAttribute('data-skin'), 'farshell');
 });
 
 test('setVtSkin: data-skin 속성과 localStorage를 함께 갱신한다', async () => {

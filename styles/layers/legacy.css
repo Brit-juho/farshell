@@ -8,8 +8,12 @@
 @font-face { font-family:"Cascadia Code"; font-style:normal; font-weight:600; font-display:swap; src:url("/static/vendor/fonts/cascadia-600.woff2") format("woff2"); }
 
 /* =========================================================================
-   VT · farshell — 5-테마 디자인 시스템
-   테마: html[data-skin="macos" | "catppuccin" | "windows" | "vscode" | "notepad"] (기본 macos)
+   VT · farshell — 6-테마 디자인 시스템
+   테마: html[data-skin="farshell" | "macos" | "catppuccin" | "windows" |
+         "vscode" | "notepad"] (기본 farshell — D1, 2026-09-04부터.
+         기존 macos 기본은 ADR-3로 폐기, 이미 vt-skin을 저장해 둔 사용자는
+         그 값을 그대로 존중한다 — 이 CSS는 관여하지 않음, frontend/index.html
+         의 부팅 스크립트가 "저장된 값이 없을 때만" farshell로 떨어진다.)
    모든 색은 토큰(CSS 변수)으로만 참조. 하드코딩 hex 금지.
    ========================================================================= */
 
@@ -30,46 +34,75 @@
   --r-2xl:12px; --r-3xl:16px; --r-4xl:18px; --r-pill:999px;
 }
 
-/* ---- 테마 토큰 ---------------------------------------------------------- */
+/* ---- 테마 토큰 ----------------------------------------------------------
+   D1(20-design-system.md/ADR-3): --win/--term/--txt/--sub/--acc/--acc-ink/
+   --line/--ok/--warn/--err/--info는 이제 리터럴 hex가 아니라 styles/theme/
+   tokens.css·skins.css의 --color-*(색 토큰 17개, 스킨별 html[data-skin=...]
+   블록에서 재정의됨)를 가리킨다 — 그 두 파일이 이제 색의 단일 진실이다.
+   --bar/--tab/--tab-active/--tab-active-txt/--menu/--menu-hover/--crust는
+   17개 토큰 계약 밖(UI 크롬 세부 톤)이라 지금까지처럼 이 파일에 리터럴로
+   남겨둔다 — 강제로 4단 bg 스케일에 욱여넣으면 기존 5종 스킨 다수가 실제로
+   보이는 색이 미세하게 달라진다(예: notepad는 tab-active/menu가 이미 같은
+   #fff라 bg 슬롯 하나에 안 들어간다). 값 자체는 전부 기존과 동일 — 이
+   커밋은 "달라 보이게" 만드는 게 아니라 "색의 소스를 옮기는" 작업이다
+   (farshell 스킨만 예외 — 새 스킨이라 처음부터 새 값). */
 :root,
-html[data-skin="macos"] {
-  --win:#1c1c1e; --bar:#2c2c2e; --tab:#2c2c2e; --tab-active:#3a3a3c; --tab-active-txt:#f2f2f5;
-  --term:#101012; --txt:#e6e6ea; --sub:#8e8e96; --acc:#0a84ff; --acc-ink:#ffffff;
-  --menu:#2a2a2c; --menu-hover:rgba(255,255,255,.09); --line:rgba(255,255,255,.08);
-  --ok:#32d74b; --warn:#ffd60a; --err:#ff453a; --info:#0a84ff; --crust:#000000;
+html[data-skin="farshell"] {
+  --win:var(--color-bg-0); --bar:#131316; --tab:#131316; --tab-active:#232328; --tab-active-txt:var(--color-txt);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:#1a1a1e; --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
   --wrad:12px; --trad:7px;
   --topbar-h:38px; --topbar-popup-y:44px;
   --ui:"IBM Plex Sans",-apple-system,"Segoe UI",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
 }
+html[data-skin="macos"] {
+  --win:var(--color-bg-0); --bar:#2c2c2e; --tab:#2c2c2e; --tab-active:#3a3a3c; --tab-active-txt:#f2f2f5;
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:#2a2a2c; --menu-hover:rgba(255,255,255,.09); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
+  --wrad:12px; --trad:7px;
+  --topbar-h:38px; --topbar-popup-y:44px;
+  --ui:"IBM Plex Sans",-apple-system,"Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+  /* macOS 신호등 3색 — macos 스킨 전용 UI 크롬(실제 macOS 창 컨트롤 색을
+     그대로 재현하는 것이 목적이라 다른 스킨에 맞춰 바뀌면 안 된다. D1 하드코딩
+     정리 대상이었으나 "토큰화"가 아니라 "이 스킨 블록 안으로 이동"이 맞는
+     처리 — .traffic은 어차피 macos 외 스킨에서 display:none). */
+  --traffic-c1:#ff5f57; --traffic-c2:#febc2e; --traffic-c3:#28c840;
+}
 html[data-skin="catppuccin"] {
-  --win:#1e1e2e; --bar:#181825; --tab:#313244; --tab-active:#45475a; --tab-active-txt:#f5e0dc;
-  --term:#1e1e2e; --txt:#cdd6f4; --sub:#a6adc8; --acc:#cba6f7; --acc-ink:#1e1e2e;
-  --menu:#313244; --menu-hover:rgba(255,255,255,.08); --line:rgba(255,255,255,.06);
-  --ok:#a6e3a1; --warn:#f9e2af; --err:#f38ba8; --info:#89b4fa; --crust:#11111b;
+  --win:var(--color-bg-0); --bar:#181825; --tab:#313244; --tab-active:#45475a; --tab-active-txt:#f5e0dc;
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:#313244; --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#11111b;
   --wrad:12px; --trad:8px;
 }
 html[data-skin="windows"] {
-  --win:#1f1f1f; --bar:#2b2b2b; --tab:#2b2b2b; --tab-active:#0c0c0c; --tab-active-txt:#ffffff;
-  --term:#0c0c0c; --txt:#cccccc; --sub:#9a9a9a; --acc:#4cc2ff; --acc-ink:#0c0c0c;
-  --menu:#2b2b2b; --menu-hover:rgba(255,255,255,.1); --line:rgba(255,255,255,.09);
-  --ok:#16c60c; --warn:#f9f1a5; --err:#e74856; --info:#3b78ff; --crust:#0c0c0c;
+  --win:var(--color-bg-0); --bar:#2b2b2b; --tab:#2b2b2b; --tab-active:#0c0c0c; --tab-active-txt:#ffffff;
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:#2b2b2b; --menu-hover:rgba(255,255,255,.1); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#0c0c0c;
   --wrad:8px; --trad:6px;
+  /* Windows 11 실제 창 닫기 버튼 hover 빨강 — windows 스킨 전용 UI 크롬(D1
+     하드코딩 정리 대상, .traffic과 같은 이유로 스킨 블록 안으로 이동). */
+  --close-hover:#e81123;
 }
 html[data-skin="vscode"] {
-  --win:#1e1e1e; --bar:#2d2d2d; --tab:#2d2d2d; --tab-active:#1e1e1e; --tab-active-txt:#ffffff;
-  --term:#1e1e1e; --txt:#cccccc; --sub:#858585; --acc:#007acc; --acc-ink:#ffffff;
-  --menu:#252526; --menu-hover:rgba(255,255,255,.08); --line:rgba(255,255,255,.10);
-  --ok:#89d185; --warn:#cca700; --err:#f14c4c; --info:#3794ff; --crust:#181818;
+  --win:var(--color-bg-0); --bar:#2d2d2d; --tab:#2d2d2d; --tab-active:#1e1e1e; --tab-active-txt:#ffffff;
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:#252526; --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#181818;
   --wrad:8px; --trad:4px;
 }
 /* 노트패드 — 메모장/종이 느낌의 라이트 테마. 다른 스킨과 달리 밝은 배경이라
    --menu-hover/--line은 흰색이 아닌 검정 오버레이로 뒤집어야 대비가 산다. */
 html[data-skin="notepad"] {
-  --win:#faf9f5; --bar:#f1efe7; --tab:#eae7dc; --tab-active:#ffffff; --tab-active-txt:#2b2a25;
-  --term:#fffefb; --txt:#2b2a25; --sub:#767468; --acc:#0060df; --acc-ink:#ffffff;
-  --menu:#ffffff; --menu-hover:rgba(0,0,0,.055); --line:rgba(0,0,0,.12);
-  --ok:#1e8e3e; --warn:#b3730a; --err:#d93025; --info:#0060df; --crust:#f1efe7;
+  --win:var(--color-bg-0); --bar:#f1efe7; --tab:#eae7dc; --tab-active:#ffffff; --tab-active-txt:#2b2a25;
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:#ffffff; --menu-hover:rgba(0,0,0,.055); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#f1efe7;
   --wrad:6px; --trad:4px;
 }
 
@@ -104,7 +137,7 @@ html[data-skin="macos"] #topbar { -webkit-backdrop-filter:blur(20px); backdrop-f
 .traffic { display:none; gap:var(--sp-5); padding:0 var(--sp-4) 0 var(--sp-3); flex-shrink:0; }
 html[data-skin="macos"] .traffic { display:flex; }
 .traffic i { width:11px; height:11px; border-radius:50%; display:block; }
-.traffic .c1 { background:#ff5f57; } .traffic .c2 { background:#febc2e; } .traffic .c3 { background:#28c840; }
+.traffic .c1 { background:var(--traffic-c1); } .traffic .c2 { background:var(--traffic-c2); } .traffic .c3 { background:var(--traffic-c3); }
 
 /* 탭 */
 #tabs {
@@ -128,7 +161,7 @@ html[data-skin="windows"] #topbar {
 }
 html[data-skin="windows"] .tab { background:transparent; color:var(--sub); }
 html[data-skin="windows"] .tab:not(.active):hover { background:var(--menu-hover); color:var(--txt); }
-html[data-skin="windows"] .tab.active { background:var(--tab-active); color:#fff; }
+html[data-skin="windows"] .tab.active { background:var(--tab-active); color:var(--color-on-solid); }
 .wt-chevron { display:none; }
 html[data-skin="windows"] .wt-chevron {
   display:flex; align-items:center; justify-content:center; width:22px; height:26px;
@@ -256,7 +289,7 @@ html[data-skin="windows"] .caption { display:flex; }
   color:var(--sub); font-size:var(--fs-2xs); cursor:pointer; border-radius:var(--r-sm);
 }
 .caption span:hover { background:var(--menu-hover); color:var(--txt); }
-.caption span.cls:hover { background:#e81123; color:#fff; }
+.caption span.cls:hover { background:var(--close-hover); color:var(--color-on-solid); }
 
 /* ---- ⋯ 팝업 메뉴 ------------------------------------------------------- */
 #more-menu {
@@ -316,7 +349,7 @@ html[data-skin="windows"] .caption { display:flex; }
 #mic-btn-wrap.mic svg { width:15px; height:15px; }
 #mic-btn-wrap.mic .label { font-size:var(--fs-xs); font-weight:600; letter-spacing:-.2px; }
 #mic-btn-wrap.mic:active { transform:scale(.94); }
-#mic-btn-wrap.mic.recording { background:var(--err); color:#fff; animation:vt-pulse 1.1s infinite; }
+#mic-btn-wrap.mic.recording { background:var(--err); color:var(--color-on-solid); animation:vt-pulse 1.1s infinite; }
 @keyframes vt-pulse {
   0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--err) 45%, transparent); }
   50%     { box-shadow:0 0 0 5px color-mix(in srgb, var(--err) 0%, transparent); }
@@ -341,7 +374,7 @@ html[data-skin="windows"] .caption { display:flex; }
   position:fixed; top:calc(8px + env(safe-area-inset-top,0px)); right:8px;
   padding:var(--sp-3) var(--sp-7); border-radius:var(--r-2xl); font-size:var(--fs-2xs); display:none; z-index:110;
 }
-#conn-status.disconnected { display:block; background:var(--err); color:#fff; }
+#conn-status.disconnected { display:block; background:var(--err); color:var(--color-on-solid); }
 
 /* ---- 검색 바 ----------------------------------------------------------- */
 #search-bar {
@@ -652,7 +685,7 @@ body.voice-only-mode #mic-status {
 .vt-grid-empty code { background:var(--tab); padding:var(--sp-2) var(--sp-4); border-radius:var(--r-xs); }
 
 .vt-banner {
-  position:fixed; top:0; left:0; right:0; background:var(--err); color:#fff;
+  position:fixed; top:0; left:0; right:0; background:var(--err); color:var(--color-on-solid);
   text-align:center; padding:var(--sp-4); font-size:var(--fs-xs); z-index:9999;
 }
 
@@ -1159,7 +1192,7 @@ body.vt-resizing #grid-view{ transition:none; }
 }
 .vt-pt-swipe-kill{
   position:absolute; top:0; right:0; bottom:0; width:76px;
-  background:var(--err); color:#fff; border:0;
+  background:var(--err); color:var(--color-on-solid); border:0;
   font:600 var(--fs-sm) var(--ui); cursor:pointer;
 }
 .vt-pt-port{
