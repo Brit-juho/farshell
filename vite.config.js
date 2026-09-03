@@ -22,6 +22,34 @@ import tailwindcss from '@tailwindcss/vite';
 
 const isVoice = !!process.env.VOICE_BUILD;
 
+// F4에서 Codex가 지적한 잔여 버그 수정: vite dev 서버가 /api·/ws만 프록시해서
+// index.html이 참조하는 /static/*(서버가 frontend/ 를 마운트하는 경로 — vendor
+// 스크립트·아이콘·manifest·frontend/dist/의 빌드 산출물)가 vite 자체에서는 404였다
+// (vite root가 저장소 루트라 /static이라는 실제 디렉토리가 없다). 그래서 /static도
+// 같은 백엔드로 프록시를 추가했는데, 그것만으로는 부족했다 — 실측해보니
+// server/main.py의 OriginGuardMiddleware가 모든 HTTP/WS 요청의 Origin이 자기
+// 자신(Host)과 일치하는지 확인해 403(cross_origin)으로 막는다. 브라우저는 항상
+// 실제 페이지 origin(http://localhost:5173)을 Origin 헤더에 넣어 보내는데, 이건
+// 백엔드 자신의 origin(http://localhost:7777)과 다르므로 프록시를 거쳐도 그대로
+// 막힌다(실측: 원본 Origin 그대로 포워딩 시 /api/capabilities가 403). 백엔드
+// 쪽에서 이 방어를 풀면(VT_ALLOWED_ORIGINS) 이 CSRF 방어의 운영 의미가 없어지고
+// 매번 서버 설정도 따로 요구하므로, 대신 프록시가 나가는 요청의 Origin을 백엔드
+// 자신의 origin으로 다시 써서(changeOrigin이 바꾸는 Host와 짝을 맞춰) 백엔드
+// 입장에서 "자기 자신에게서 온 요청"으로 보이게 한다 — 이 재작성은 vite dev
+// 프록시 계층에서만 일어나므로 백엔드의 실제 운영 정책은 전혀 느슨해지지 않는다.
+const BACKEND_ORIGIN = 'http://localhost:7777';
+function sameOriginProxy(target, extra = {}) {
+  return {
+    target,
+    changeOrigin: true,
+    ...extra,
+    configure(proxy) {
+      proxy.on('proxyReq', (proxyReq) => proxyReq.setHeader('origin', BACKEND_ORIGIN));
+      proxy.on('proxyReqWs', (proxyReq) => proxyReq.setHeader('origin', BACKEND_ORIGIN));
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [tailwindcss()],
   build: {
@@ -54,8 +82,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:7777',
-      '/ws': { target: 'ws://localhost:7777', ws: true },
+      '/api': sameOriginProxy(BACKEND_ORIGIN),
+      '/ws': sameOriginProxy('ws://localhost:7777', { ws: true }),
+      '/static': sameOriginProxy(BACKEND_ORIGIN),
     },
   },
 });
