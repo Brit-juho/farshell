@@ -29,6 +29,12 @@ export function fitAndResize(id) {
   // 실제로는 그대로인데) 서브픽셀 반올림 오차만으로도 매번 아틀라스가 갈아엎어질 수 있다.
   // 컨테이너의 실제 픽셀 크기가 안 바뀌었으면 fit() 자체를 건너뛴다.
   const cw = s.wrapper.clientWidth, ch = s.wrapper.clientHeight;
+  // L2: display:none은 위에서 이미 걸렀지만, 그것만으로는 부족하다 — flex/트랜지션
+  // 레이아웃이 아직 자리를 잡기 전(예: 방금 보여진 프레임, 분할 pane 애니메이션 중)엔
+  // display:block이면서도 0×0으로 측정될 수 있다. 이전 값과 다르다는 이유만으로
+  // fit()을 부르면 xterm이 0(또는 음수) 칸으로 계산해 PTY에 그 크기를 그대로
+  // 통보할 위험이 있다 — 다음 실측 프레임을 기다린다(호출자가 rAF로 재시도).
+  if (cw <= 0 || ch <= 0) return;
   if (s._lastFitW === cw && s._lastFitH === ch) return;
   s._lastFitW = cw; s._lastFitH = ch;
   try { s.fitAddon.fit(); } catch (_) { return; }

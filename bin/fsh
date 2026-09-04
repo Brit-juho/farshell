@@ -1704,6 +1704,15 @@ cmd_doctor() {
   # 4. tmux
   if command -v tmux >/dev/null 2>&1; then
     _check "tmux" ok "$(tmux -V)"
+    # L2: window-size latest(여러 클라이언트 동시 attach 시 리사이즈 안정화)는
+    # tmux 3.1+ 전용. config/vt-tmux.conf가 실패를 조용히 삼키므로 기능이 그냥
+    # 안 켜질 뿐 에러는 안 나지만, 사용자가 원인을 알 수 있게 여기서 경고한다.
+    local _tmux_ver _first_ver
+    _tmux_ver="$(tmux -V 2>/dev/null | awk '{print $2}' | sed 's/[a-z]$//')"
+    _first_ver="$(printf '3.1\n%s' "$_tmux_ver" | sort -V | head -1)"
+    if [ "$_first_ver" != "3.1" ]; then
+      _check "tmux 리사이즈 안정화" warn "tmux 3.1+ 필요(현재 $_tmux_ver) — 여러 화면 동시 접속 시 창이 계속 찌그러질 수 있음"
+    fi
   else
     _check "tmux" fail "brew install tmux / apt install tmux"
   fi
