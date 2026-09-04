@@ -14,13 +14,13 @@ import { API_BASE } from '../core/env.js';
 import { createTabElement } from './tab-dom.js';
 import { createXtermInstance } from './xterm-setup.js';
 import { startSessionSocket } from './ws.js';
-import { fitAndResize } from './resize.js';
 import { saveWorkspace } from './workspace.js';
 import { showOnboarding } from './boot.js';
 import { createTmuxSession } from './tmux-panel.js';
 import { registerAction } from '../core/dom.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
+import { setPaneSession } from '../layout/store.js';
 
 export async function createSession() {
   // "맥에서도 열기" 토글이 켜져 있으면 tmux 세션으로 생성하고
@@ -133,7 +133,6 @@ export function switchTo(id) {
   const prevId = activeSessionId();
   if (prevId && getSession(prevId)) {
     const prev = getSession(prevId);
-    prev.wrapper.style.display = 'none';
     prev.tabEl.classList.remove('active');
     prev.tabEl.setAttribute('aria-selected', 'false');
     prev.tabEl.tabIndex = -1;
@@ -146,12 +145,13 @@ export function switchTo(id) {
   // T6: 그리드 카드와 같은 규칙 — "완료" 표시는 확인했다는 뜻이니 탭으로
   // 전환하면 지운다.
   s.tabEl.classList.remove('done');
-  s.wrapper.style.display = 'block';
+  // L3 1단계: wrapper를 여기서 직접 보이기/숨기기 하지 않는다 — 활성 pane에
+  // 이 세션을 배정한다고만 알리면 layout/panes.js의 renderLayout()이 실제
+  // DOM 반영(wrapper 이동·표시, 배경 탭은 풀로, rAF fit+PTY 크기 통보까지)을
+  // 전부 대신한다. setPaneSession은 동기적으로 renderLayout을 트리거하므로
+  // 이 줄이 끝난 시점엔 이미 wrapper가 보이는 상태라 바로 focus()해도 된다.
+  setPaneSession(id);
   s.term.focus();
-  // display:block 직후엔 레이아웃이 아직 안 잡혀 fit이 stale 크기를 잡는다.
-  // rAF로 레이아웃 확정 후 fit + PTY 크기 통보 — 탭 전환 시 xterm↔PTY 칸 수를
-  // 반드시 재동기화한다(안 하면 TUI 정렬이 깨진 채로 남는다).
-  requestAnimationFrame(() => fitAndResize(id));
   // notifyActiveSession은 어느 파일에도 정의된 적 없는 죽은 방어 코드였다
   // (전수 grep 확인) — F4에서 함께 정리했다. F5에서 picker.js를 ES 모듈로
   // 전환하며 updateSessionPicker를 진짜 import로 바꿔 로드 순서 문제 자체가
@@ -237,7 +237,11 @@ export async function removeSession(id) {
     } else {
       // 마지막 세션을 닫은 경우 — 빈 컨테이너만 남기지 않고 온보딩(빈 상태) 화면으로.
       setActive(null);
-      document.getElementById('terminal-container').innerHTML = '';
+      // L3 1단계: 이 삭제된 세션이 여전히 트리(유일한 leaf)에 남아있으면
+      // 죽은 참조가 된다 — setPaneSession(null)이 그 leaf를 비우고,
+      // renderLayout()이 알아서 #terminal-container를 빈 상태로 다시 그린다
+      // (수동 innerHTML 클리어보다 이 경로 하나로 일원화).
+      setPaneSession(null);
       if (!document.getElementById('onboarding')) showOnboarding();
     }
   }

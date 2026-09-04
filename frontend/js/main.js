@@ -30,6 +30,7 @@ import './push/swreg.js';
 import './term/e2e.js';
 import './term/clipboard.js';
 import './term/resize.js';
+import './layout/panes.js';   // L3 1단계 — 분할 pane 렌더러. session.js의 switchTo()가 이걸 거친다.
 import './term/touch.js';
 import './term/links.js';
 import './term/selection.js';

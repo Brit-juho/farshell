@@ -35,6 +35,7 @@ const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8'
 const KEYSEQ_JS = path.join(__dirname, '../js/lib/keyseq.js');
 const TOAST_JS = path.join(__dirname, '../js/ui/toast.js');
 const SESSION_JS = path.join(__dirname, '../js/term/session.js');
+const PANES_JS = path.join(__dirname, '../js/layout/panes.js');
 const DOM_JS = path.join(__dirname, '../js/core/dom.js');
 
 class FakeTerminal {
@@ -98,6 +99,11 @@ async function buildTerminalWindow() {
   // 링크·평가된다 — picker.js↔term/session.js 순환 import도 vm.Module이 표준
   // ES 모듈 순환 참조 규칙대로 정상 처리한다.
   const sessionNs = await importFresh(SESSION_JS, env.context, cache);
+  // L3 1단계: session.js는 layout/store.js(트리 상태)만 알고 layout/panes.js
+  // (실제 DOM 반영)는 모른다 — 실서비스에서는 main.js가 둘 다 독립적으로
+  // import해서 onLayoutChange 구독이 걸리는 구조다. 이 파일을 안 불러오면
+  // setPaneSession()이 상태만 바꾸고 아무도 wrapper의 display를 바꾸지 않는다.
+  await importFresh(PANES_JS, env.context, cache);
   // openSessionManager는 export되지 않고 core/dom.js의 액션 레지스트리로만
   // 노출된다(data-action="session.manager") — 실제 소비 경로와 같은 방식으로 호출.
   const { getAction } = await importFresh(DOM_JS, env.context, cache);
