@@ -125,7 +125,14 @@ html[data-skin="notepad"] {
 
 /* ---- 리셋 -------------------------------------------------------------- */
 * { margin:0; padding:0; box-sizing:border-box; }
-html, body { height:100%; overflow:hidden; }
+/* 모바일 키보드 대응: height:100%는 레이아웃 뷰포트 기준이라 소프트 키보드가
+   떠도 줄어들지 않는다 — #terminal-container(flex:1)의 clientHeight가 안
+   바뀌니 ws.js의 visualViewport resize → fitAndResize 트리거가 있어도 xterm
+   줄 수가 그대로라, 커서(프롬프트) 줄이 키보드에 덮인 채로 남는다. dvh는
+   시각 뷰포트를 따라가 키보드가 뜨면 실제로 줄어든다(iOS 16+/Android
+   Chrome). 미지원 브라우저 폴백으로 vh를 먼저 둔다 — 코드 뷰어/가이드
+   모바일 시트에 이미 쓰던 것과 같은 관용구. */
+html, body { height:100vh; height:100dvh; overflow:hidden; }
 body {
   background:var(--win); color:var(--txt); font-family:var(--ui);
   display:flex; flex-direction:column;
