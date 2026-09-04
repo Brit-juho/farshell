@@ -250,7 +250,12 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
   width:100%; max-height:min(72vh,560px); overflow:auto; padding:calc(var(--spacing) * 3.5) calc(var(--spacing) * 3.5) calc(calc(var(--spacing) * 3.5) + env(safe-area-inset-bottom,0px));
   background:var(--menu); color:var(--txt); border:1px solid var(--line); border-bottom:none;
   border-radius:var(--radius-lg) var(--radius-lg) 0 0; box-shadow:var(--shadow-e3);
+  /* D6: 코드 뷰어/가이드 모바일 시트(:960)와 같은 진입 전환으로 통일 —
+     예전엔 이 시트만 전환 없이 즉시 나타났다. */
+  animation:vtSheetIn .18s ease-out;
 }
+/* 바텀시트 진입 전환 — 코드 뷰어(openPanel)·가이드·세션 시트가 공유하는 단일 정의(D6) */
+@keyframes vtSheetIn { from { transform:translateY(100%); } to { transform:none; } }
 .vt-session-head { display:flex; align-items:center; justify-content:space-between; margin:0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 2.5); }
 .vt-session-head h2 { font-size:var(--fs-md); }
 .vt-session-close, .vt-session-action { border:0; background:transparent; color:var(--sub); cursor:pointer; border-radius:var(--radius-md); }
@@ -542,40 +547,22 @@ body.voice-only-mode #mic-status {
 .vt-btn-secondary { background:var(--tab); color:var(--txt); }
 .vt-onboarding .vt-ob-hint { color:var(--sub); font-size:var(--fs-2xs); margin-top:calc(var(--spacing) * 4); opacity:.7; }
 
-/* ── 사용 가이드 모달 (첫 사용자용) ────────────────────────────── */
-.vt-guide-backdrop {
-  position:fixed; inset:0; z-index:600;
-  background:rgba(0,0,0,.62); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-  display:flex; align-items:center; justify-content:center; padding:calc(var(--spacing) * 5);
-  animation:vtGuideFade .18s ease;
-}
-@keyframes vtGuideFade { from { opacity:0; } to { opacity:1; } }
-.vt-guide-card {
-  background:var(--win); color:var(--txt); border:1px solid var(--line);
-  border-radius:var(--radius-lg); box-shadow:var(--shadow-e2);
-  width:100%; max-width:540px; max-height:min(84vh,720px);
-  display:flex; flex-direction:column; overflow:hidden;
-  animation:vtGuidePop .2s cubic-bezier(.2,.8,.2,1);
-}
-@keyframes vtGuidePop { from { transform:translateY(12px) scale(.98); opacity:0; } to { transform:none; opacity:1; } }
-.vt-guide-head {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 3); padding:calc(var(--spacing) * 5) calc(var(--spacing) * 5);
-  border-bottom:1px solid var(--line); flex-shrink:0;
-}
-.vt-guide-head .vt-gh-icon {
-  width:40px; height:40px; border-radius:var(--radius-md); flex-shrink:0;
+/* ── 사용 가이드 모달 (첫 사용자용) ────────────────────────────────────────
+   D6: 모달 뼈대(backdrop/card/닫기/Esc/배경클릭)는 openPanel() 공용 구현
+   (.vt-viewer-backdrop/.vt-viewer-card, 아래 "코드 뷰어" 섹션)을 그대로 쓴다.
+   여기 남은 건 가이드 본문 내용에만 쓰는 클래스뿐이다. 모바일 바텀시트 전환도
+   .vt-viewer-backdrop의 공용 규칙(§ 코드 뷰어 모바일 미디어쿼리)을 그대로
+   물려받는다 — 예전엔 같은 규칙을 여기 따로 한 벌 더 갖고 있었다. */
+#vt-guide .vt-viewer-card { max-width:540px; max-height:min(84vh,720px); }
+.vt-gh-icon {
+  width:32px; height:32px; border-radius:var(--radius-md); flex-shrink:0;
   display:flex; align-items:center; justify-content:center;
-  background:var(--acc); color:var(--acc-ink); font-size:var(--fs-xl);
+  background:var(--acc); color:var(--acc-ink); font-size:var(--fs-lg);
 }
-.vt-guide-head h2 { font-size:var(--fs-md); font-weight:600; margin:0; line-height:1.25; }
-.vt-guide-head p { font-size:var(--fs-xs); color:var(--sub); margin:calc(var(--spacing) * 0.5) 0 0; }
-.vt-guide-x {
-  margin-left:auto; width:30px; height:30px; flex-shrink:0; border:none; cursor:pointer;
-  background:var(--tab); color:var(--sub); border-radius:var(--radius-md); font-size:var(--fs-md);
-  display:flex; align-items:center; justify-content:center; transition:background .12s,color .12s;
-}
-.vt-guide-x:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-guide-scroll { overflow-y:auto; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 5) calc(var(--spacing) * 5); overscroll-behavior:contain; }
+.vt-guide-title-wrap { flex:1; min-width:0; }
+.vt-guide-title-wrap h2 { font-size:var(--fs-md); font-weight:600; margin:0; line-height:1.25; }
+.vt-guide-sub { font-size:var(--fs-xs); color:var(--sub); margin:calc(var(--spacing) * 0.5) 0 0; }
+.vt-guide-scroll { padding:calc(var(--spacing) * 2) calc(var(--spacing) * 5) calc(var(--spacing) * 5); }
 .vt-guide-sec { padding:calc(var(--spacing) * 3.5) 0 calc(var(--spacing) * 1); border-top:1px solid var(--line); }
 .vt-guide-sec:first-child { border-top:none; }
 .vt-guide-sec > .vt-gs-title {
@@ -590,30 +577,23 @@ body.voice-only-mode #mic-status {
   flex-shrink:0; width:104px; font-size:var(--fs-sm); font-weight:500; line-height:1.55; color:var(--txt);
 }
 .vt-guide-row .vt-gr-desc { flex:1; font-size:var(--fs-sm); line-height:1.55; color:var(--sub); }
-.vt-guide-card kbd {
+.vt-guide-scroll kbd {
   display:inline-block; font-family:var(--mono); font-size:var(--fs-2xs); line-height:1.4;
   padding:calc(var(--spacing) * 0.25) calc(var(--spacing) * 1.5); margin:0 calc(var(--spacing) * 0.25); border-radius:var(--radius-sm);
   background:var(--tab); color:var(--txt); border:1px solid var(--line);
   box-shadow:0 1px 0 var(--line);
 }
-.vt-guide-card code {
+.vt-guide-scroll code {
   font-family:var(--mono); background:var(--tab); color:var(--txt);
   padding:calc(var(--spacing) * 0.25) calc(var(--spacing) * 1.5); border-radius:var(--radius-sm); font-size:var(--fs-xs);
 }
 
-/* ── 모바일: 카드를 하단 시트로, 2열 → 세로 스택 ───────────────── */
+/* ── 모바일: 2열 → 세로 스택 (배경/카드 전환 자체는 위 공용 규칙) ───────── */
 @media (max-width:560px) {
-  .vt-guide-backdrop { padding:0; align-items:flex-end; }
-  .vt-guide-card {
-    max-width:100%; max-height:90vh; border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-    animation:vtGuideSheet .22s cubic-bezier(.2,.8,.2,1);
-  }
-  .vt-guide-head { padding:calc(var(--spacing) * 4); }
   .vt-guide-scroll { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 4) calc(var(--spacing) * 6); }
   .vt-guide-row { flex-direction:column; gap:calc(var(--spacing) * 0.5); padding:calc(var(--spacing) * 1.5) 0; }
   .vt-guide-row .vt-gr-key { width:auto; }
 }
-@keyframes vtGuideSheet { from { transform:translateY(100%); } to { transform:none; } }
 
 .vt-menu {
   position:absolute; top:46px; right:8px; background:var(--menu); color:var(--txt);
@@ -982,7 +962,8 @@ body.voice-only-mode #mic-status {
 }
 .vt-vw-cmeta-info{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
 
-/* 모바일 — 바텀시트. .vt-guide-backdrop(:394)와 같은 전환 규칙을 따른다. */
+/* 모바일 — 바텀시트. #vt-guide도 openPanel()로 이 backdrop/card 클래스를
+   그대로 쓰므로(D6) 별도 규칙 없이 여기 물린다. */
 @media (max-width:560px){
   .vt-viewer-backdrop{ align-items:flex-end; padding:0; }
   /* 카드에 height 를 주지 않으면 flex 컨테이너가 내용 높이로만 잡혀, max-height:92vh
@@ -993,7 +974,7 @@ body.voice-only-mode #mic-status {
   .vt-viewer-card{
     height:100vh; height:100dvh; max-height:none; width:100%;
     border-radius:0; border:none;
-    animation:vtGuideSheet .18s ease-out;
+    animation:vtSheetIn .18s ease-out;
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
   .vt-vw-code,.vt-vw-dl{ font-size:var(--fs-2xs); }

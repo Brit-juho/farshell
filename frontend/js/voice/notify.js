@@ -77,20 +77,14 @@ export function connectNotify() {
 }
 
 function showNotification(summary, sessionId) {
-  // 화면 상단에 토스트 알림
-  const toast = document.createElement('div');
-  toast.className = 'vt-toast ok';
   // 요약 텍스트 (최대 100자). summary가 없을 수도 있으므로 문자열로 정규화.
   const text = summary == null ? '' : String(summary);
   const short = text.length > 100 ? text.slice(0, 100) + '...' : text;
-  toast.textContent = `✅ [${sessionId}] ${short}`;
-  document.body.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transition = 'opacity 0.5s';
-    setTimeout(() => toast.remove(), 500);
-  }, 5000);
+  // D6: 예전엔 이 함수가 #vt-toasts 컨테이너를 거치지 않고 body에 .vt-toast를
+  // 직접 붙인 뒤 인라인 style로 페이드아웃했다 — ui/toast.js(F5 통합본)와
+  // 별개의 세 번째 토스트 구현이었다. showToast는 voice 번들에서도 bare 전역으로
+  // 이미 쓰고 있으므로(clipboard_push 분기 참고) 그대로 재사용한다.
+  showToast(`[${sessionId}] ${short}`, 'success', { duration: 5000 });
 
   // 백그라운드 브라우저 알림 (화면 밖에서도 보이게)
   showBrowserNotification('FarShell — 작업 완료', short);

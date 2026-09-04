@@ -58,8 +58,11 @@
     #login-gate[hidden]{display:none;}
     #login-spinner{width:26px;height:26px;border-radius:50%;
       border:3px solid var(--line,rgba(255,255,255,.15));border-top-color:var(--acc,#0a84ff);
-      animation:login-spin .8s linear infinite;}
+      animation:login-spin .6s linear infinite;}
     #login-spinner[hidden]{display:none;}
+    /* app.css의 vtSpin과 값이 완전히 같은 키프레임이지만(D6), 로그인 게이트 CSS 색
+       토큰 인라인 복제(위 #login-gate 배경)와 같은 이유로 여기 남긴다 — 번들 CSS
+       도착 전에도 스피너가 돌아야 한다. */
     @keyframes login-spin{to{transform:rotate(360deg)}}
     #login-form{width:min(340px,86vw);background:var(--menu,#2a2a2c);
       border:1px solid var(--line,rgba(255,255,255,.08));border-radius:var(--wrad,12px);

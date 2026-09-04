@@ -2,11 +2,9 @@
 // F4에서 terminal.js(구 :1761-1840)에서 분리. 온보딩(showOnboarding, boot.js)은
 // 첫 실행 시 세션 생성을 강제하는 화면이라 재사용하지 않고 별도로 둔다.
 import { registerAction } from '../core/dom.js';
+import { openPanel } from '../panels/panel.js';
 
 function showGuide() {
-  const existing = document.getElementById('vt-guide');
-  if (existing) { existing.remove(); return; }
-
   // 섹션 정의 — {icon, title, rows:[{key, desc}]}. key는 왼쪽 라벨, desc는 설명(HTML).
   const sections = [
     { icon: 'icon-rocket', title: '시작하기', rows: [
@@ -56,29 +54,21 @@ function showGuide() {
         </div>`).join('')}
     </div>`).join('');
 
-  const el = document.createElement('div');
-  el.id = 'vt-guide';
-  el.className = 'vt-guide-backdrop';
-  el.innerHTML = `
-    <div class="vt-guide-card" role="dialog" aria-modal="true" aria-label="사용 가이드">
-      <div class="vt-guide-head">
-        <div class="vt-gh-icon"><i class="icon-terminal"></i></div>
-        <div>
-          <h2>FarShell</h2>
-          <p>브라우저로 tmux 터미널을 — 웹·폰 어디서든 이어서</p>
-        </div>
-        <button class="vt-guide-x" aria-label="닫기">✕</button>
+  // 모달 뼈대(backdrop/card/닫기 버튼/Esc/배경 클릭)는 openPanel() 공용 구현에
+  // 맡긴다 — D6: 예전엔 이 모달만 .vt-guide-* 전용 CSS로 직접 구현하고 있었다.
+  openPanel({
+    id: 'vt-guide',
+    ariaLabel: '사용 가이드',
+    headHTML: `
+      <div class="vt-gh-icon"><i class="icon-terminal"></i></div>
+      <div class="vt-guide-title-wrap">
+        <h2>FarShell</h2>
+        <p class="vt-guide-sub">브라우저로 tmux 터미널을 — 웹·폰 어디서든 이어서</p>
       </div>
-      <div class="vt-guide-scroll">${secHtml}</div>
-    </div>
-  `;
-  // 닫기: X 버튼 · 배경 클릭 · Esc
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
-  el.querySelector('.vt-guide-x').addEventListener('click', close);
-  el.addEventListener('click', (ev) => { if (ev.target === el) close(); });
-  document.addEventListener('keydown', onKey);
-  document.body.appendChild(el);
+    `,
+    bodyId: 'vt-guide-body',
+    bodyHTML: `<div class="vt-guide-scroll">${secHtml}</div>`,
+  });
 }
 
 registerAction('guide.show', () => showGuide());
