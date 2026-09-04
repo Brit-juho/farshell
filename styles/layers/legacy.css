@@ -170,6 +170,13 @@ html[data-skin="macos"] .traffic { display:flex; }
 }
 html[data-skin="windows"] .tab { border-radius:var(--radius-sm) var(--radius-sm) 0 0; height:31px; align-self:flex-end; margin-bottom:calc(-1 * calc(var(--spacing) * 0.25)); }
 .tab.active { background:var(--tab-active); color:var(--tab-active-txt); }
+/* L3 3단계: 분할 시 2개 이상의 탭이 동시에 화면에 보일 수 있다 — .active는
+   여전히 "키보드 포커스를 가진 하나"(aria-selected와 연동, D7 그대로)만
+   가리키고, .placed는 "지금 어느 pane에든 보이고 있음"을 보조 표시한다. */
+.tab.placed:not(.active)::after {
+  content:''; position:absolute; top:4px; right:4px; width:5px; height:5px;
+  border-radius:50%; background:var(--acc-dim);
+}
 
 /* Windows Terminal 오센틱: 아크릴 바 + 투명 인액티브 탭 + 프로파일 드롭다운 */
 html[data-skin="windows"] #topbar {
@@ -379,7 +386,39 @@ html[data-skin="windows"] .caption { display:flex; }
    안 씀, 지금 유일한 경우)는 .vt-pane 하나가 #terminal-container 전체를
    차지해 예전(wrapper가 직계 자식이던 시절)과 화면상 동일하다. */
 .vt-split { display:flex; width:100%; height:100%; min-width:0; min-height:0; }
+.vt-split-row { flex-direction:row; }
+.vt-split-col { flex-direction:column; }
+/* L3 3단계: 구분선. 시각 두께는 1px, 히트 영역만 ::before로 확장 —
+   app.css의 기존 터치 타겟 확장 기법(:coarse 8px/:fine 4px)과 동일 규칙. */
+.vt-split-resizer { position:relative; flex:0 0 1px; background:var(--line); z-index:5; }
+.vt-split-row > .vt-split-resizer { cursor:col-resize; }
+.vt-split-col > .vt-split-resizer { cursor:row-resize; }
+.vt-split-resizer::before { content:''; position:absolute; }
+.vt-split-row > .vt-split-resizer::before { top:0; bottom:0; left:-4px; right:-4px; }
+.vt-split-col > .vt-split-resizer::before { left:0; right:0; top:-4px; bottom:-4px; }
+@media (pointer:coarse) {
+  .vt-split-row > .vt-split-resizer::before { left:-8px; right:-8px; }
+  .vt-split-col > .vt-split-resizer::before { top:-8px; bottom:-8px; }
+}
+.vt-split-resizer.dragging, .vt-split-resizer:hover { background:var(--acc); }
+
 .vt-pane { display:flex; flex-direction:column; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; }
+.vt-pane.active { outline:1px solid var(--acc); outline-offset:-1px; }
+/* pane 헤더 — root가 leaf 하나뿐이면 JS가 display:none으로 숨긴다(분할을
+   안 쓰면 지금과 화면상 완전히 동일해야 한다는 L3 1단계 검증 기준 그대로). */
+.vt-pane-head {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); height:22px; flex-shrink:0;
+  padding:0 calc(var(--spacing) * 1.5); background:var(--bar); border-bottom:1px solid var(--line);
+  font-size:var(--fs-2xs); color:var(--sub);
+}
+.vt-pane-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pane-btn {
+  display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
+  border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm); cursor:pointer; flex-shrink:0;
+}
+.vt-pane-btn:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-pane-body { flex:1; min-height:0; position:relative; }
+.vt-pane-empty { display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
 /* xterm-viewport 스크롤(휠/모바일 터치)은 tmux mouse-on 세션에서 항상 tmux
    copy-mode로 위임되고(wireTouchScroll 참고), 스크롤 위치도 항상 그 경로로만
    맞춰진다. 그런데 브라우저 기본 스크롤바 thumb은 이 경로를 거치지 않고

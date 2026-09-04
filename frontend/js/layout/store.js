@@ -58,16 +58,24 @@ export function setPaneSession(sessionId, paneId = _activePaneId) {
   _notify();
 }
 
-// 활성 pane을 분할해 새 leaf를 만들고, 그 leaf를 활성 pane으로 바꾼다(방금
-// 만든 자리에 바로 세션을 골라 넣기 편하도록). 새 pane id를 반환한다.
-export function splitActivePane(dir, sessionId = null) {
+// paneId를 분할해 새 leaf를 만들고, 그 leaf를 활성 pane으로 바꾼다(방금
+// 만든 자리에 바로 세션을 골라 넣기 편하도록). 새 pane id를 반환한다(실패
+// 시 null — paneId가 이미 없어졌다든가 하는 방어 상황).
+// L3 3단계: pane 헤더 버튼은 "그 헤더가 달린 pane"을 분할해야 한다 —
+// 반드시 활성 pane과 같을 필요가 없어 paneId를 인자로 받는 일반형으로 뒀다.
+export function splitPane(paneId, dir, sessionId = null) {
   const newLeaf = makeLeaf(_genId('pane'), sessionId);
-  const next = _splitPane(_tree, _activePaneId, dir, newLeaf, _genId('split'));
-  if (next === _tree) return null; // 활성 pane이 이미 없어졌다든가 하는 방어 상황
+  const next = _splitPane(_tree, paneId, dir, newLeaf, _genId('split'));
+  if (next === _tree) return null;
   _tree = next;
   _activePaneId = newLeaf.id;
   _notify();
   return newLeaf.id;
+}
+
+// 키맵(`Mod+D` 등, S3)처럼 "지금 활성 pane"을 대상으로 하는 짧은 표기.
+export function splitActivePane(dir, sessionId = null) {
+  return splitPane(_activePaneId, dir, sessionId);
 }
 
 // paneId를 닫는다. 닫힌 pane이 활성 pane이었으면(부모가 collapse되며

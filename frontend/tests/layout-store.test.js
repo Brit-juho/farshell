@@ -92,6 +92,25 @@ test('onLayoutChange — 트리가 바뀔 때마다 구독자에게 알린다', 
   assert.strictEqual(calls, 2, 'unsubscribe 후에는 더 안 불려야 한다');
 });
 
+test('splitPane — 활성 pane이 아닌 특정 pane도 분할할 수 있다', async () => {
+  const S = await loadStore();
+  const rootId = S.getActivePaneId();
+  const otherId = S.splitActivePane('row'); // 활성 = otherId, rootId는 이제 비활성
+
+  const thirdId = S.splitPane(rootId, 'col', 'sess-c'); // rootId를 대상으로 분할(활성 아님)
+  assert.strictEqual(S.countLeaves(), 3);
+  assert.strictEqual(S.getActivePaneId(), thirdId, '분할한 pane이 활성이 된다(대상이 활성이 아니었어도)');
+  void otherId;
+});
+
+test('splitPane — 존재하지 않는 pane을 분할하려 하면 null을 반환하고 트리는 그대로', async () => {
+  const S = await loadStore();
+  const before = S.getTree();
+  const result = S.splitPane('no-such-pane', 'row');
+  assert.strictEqual(result, null);
+  assert.strictEqual(S.getTree(), before);
+});
+
 test('setRatio — 스토어를 거쳐도 clamp가 그대로 적용된다', async () => {
   const S = await loadStore();
   // splitActivePane이 만든 split의 id를 얻으려면 getTree()로 직접 확인해야 한다.
