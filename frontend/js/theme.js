@@ -80,10 +80,15 @@ export function getVtXtermTheme(skin) {
   return VT_XTERM_THEMES[skin || getVtSkin()] || VT_XTERM_THEMES.farshell;
 }
 
-// 테마별 터미널 폰트 — Windows는 Cascadia Code(WT 정체성), 나머지는 IBM Plex Mono
+// 테마별 터미널 폰트 — Windows는 Cascadia Code(WT 정체성, 시스템 설치 폰트를
+// 찾는 의도적 선택 — D4에서 legacy.css의 --mono 번들 @font-face는 제거했지만
+// 이건 별개), 나머지는 D4: 1순위를 JetBrains Mono로(시스템에 있으면 사용,
+// 없으면 번들된 IBM Plex Mono로 자연히 넘어감). 예전 4순위 'Cascadia Code'는
+// IBM Plex Mono/ui-monospace/SF Mono가 항상 먼저 걸려 로드될 일이 없던
+// 죽은 값이라 제거.
 const VT_XTERM_FONTS = {
   windows: "'Cascadia Code', 'Cascadia Mono', 'IBM Plex Mono', ui-monospace, Consolas, monospace",
-  _default: "'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace",
+  _default: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
 };
 export function getVtXtermFont(skin) {
   skin = skin || getVtSkin();

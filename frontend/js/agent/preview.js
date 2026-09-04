@@ -115,7 +115,7 @@ export async function refreshGrid() {
             <span class="card-title"></span>
             <span class="card-cmd"></span>
           </div>
-          <pre class="card-preview"><span style="opacity:.5;font-style:italic;font-size:10px;">로딩 중...</span></pre>
+          <pre class="card-preview"><span style="opacity:.5;font-style:italic;font-size:var(--fs-3xs);">로딩 중...</span></pre>
         `;
         card.querySelector('.card-title').textContent = sess.name;
         card.onclick = () => {
