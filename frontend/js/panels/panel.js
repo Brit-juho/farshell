@@ -30,6 +30,21 @@
     //                     모든 닫힘 경로에서 빠짐없이 실행된다(토글 버튼 active 해제 등).
     //
     // 반환: 이미 열려 있어서 토글-닫기만 했으면 null, 새로 열었으면 { el, body }.
+// D7: 포커스 트랩 대상 셀렉터 — MDN의 "포커스 가능 요소" 표준 목록에서
+// 이 앱이 실제로 헤더/바디에 쓰는 것만 추렸다.
+const FOCUSABLE_SEL = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+  'select:not([disabled])', 'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+// picker.js의 세션 시트도 같은 트랩 로직을 쓴다(별도 모달 구현이라 openPanel을
+// 못 쓰지만, "포커스가 배경으로 새면 안 된다"는 규칙은 같다).
+export function _focusables(el) {
+  return Array.from(el.querySelectorAll(FOCUSABLE_SEL))
+    .filter((n) => n.offsetParent !== null); // 화면에 실제로 보이는 것만
+}
+
 export function openPanel(opts) {
       if (document.getElementById(opts.id)) { closePanel(opts.id); return null; }
 
@@ -44,18 +59,41 @@ export function openPanel(opts) {
         </div>
       `;
       el._vtOnClose = opts.onClose;
+      // D7: 닫을 때 열기 전 포커스로 복귀 — 트리거 버튼(⋯ 메뉴 항목 등)을 놓치지 않는다.
+      el._vtTriggerEl = document.activeElement;
       el.querySelector('.vt-vw-x').addEventListener('click', () => closePanel(opts.id));
       el.addEventListener('click', (ev) => { if (ev.target === el) closePanel(opts.id); });
 
       const keyHandler = (ev) => {
-        if (ev.key !== 'Escape') return;
-        if (opts.onKey && opts.onKey(ev) === true) return;
-        ev.stopPropagation();
-        closePanel(opts.id);
+        if (ev.key === 'Escape') {
+          if (opts.onKey && opts.onKey(ev) === true) return;
+          ev.stopPropagation();
+          closePanel(opts.id);
+          return;
+        }
+        // D7: 포커스 트랩 — Tab이 배경(터미널 등)으로 새지 않게 첫/끝 사이를 순환시킨다.
+        if (ev.key !== 'Tab') return;
+        const items = _focusables(el);
+        if (items.length === 0) return;
+        const first = items[0], last = items[items.length - 1];
+        if (ev.shiftKey && document.activeElement === first) {
+          ev.preventDefault(); last.focus();
+        } else if (!ev.shiftKey && document.activeElement === last) {
+          ev.preventDefault(); first.focus();
+        } else if (!el.contains(document.activeElement)) {
+          // 포커스가 이미 트랩 밖으로 샌 상태(자동완성 등) — 안으로 되돌린다.
+          ev.preventDefault(); first.focus();
+        }
       };
       el._vtKeyHandler = keyHandler;
       document.addEventListener('keydown', keyHandler);
       document.body.appendChild(el);
+
+      // D7: 초기 포커스 — 첫 포커스 가능 요소(대개 닫기 버튼)로. 패널 자신의
+      // 검색창 등 더 적절한 대상이 있으면 opts.onOpen()이 openPanel() 리턴 직후
+      // 그 위에 다시 focus()를 걸면 된다(quickopen.js가 이렇게 한다).
+      const toFocus = _focusables(el)[0];
+      if (toFocus) toFocus.focus();
 
       return { el, body: document.getElementById(opts.bodyId) };
     }
@@ -67,6 +105,10 @@ export function closePanel(id) {
       document.removeEventListener('keydown', el._vtKeyHandler);
       el.remove();
       if (el._vtOnClose) el._vtOnClose();
+      // D7: 트리거로 포커스 복귀 — DOM에서 사라졌을 수 있으니(탭 닫힘 등) 방어.
+      if (el._vtTriggerEl && el._vtTriggerEl.isConnected && typeof el._vtTriggerEl.focus === 'function') {
+        el._vtTriggerEl.focus();
+      }
       // 패널이 레이아웃을 건드렸을 수 있으므로 터미널 크기를 다시 맞춘다.
       try { setTimeout(() => window.fitAndResize(window.activeId), 60); } catch (_) {}
     }

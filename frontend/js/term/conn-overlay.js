@@ -76,6 +76,8 @@ export function updateConnStatus(id, connected) {
         const ov = document.createElement('div');
         ov.id = 'conn-overlay';
         ov.className = 'vt-overlay';
+        ov.setAttribute('role', 'status');
+        ov.setAttribute('aria-live', 'polite');
         ov.innerHTML = `
           <div class="vt-ov-icon"><i class="icon-wifi-off"></i></div>
           <div class="vt-ov-title">서버 연결 끊김</div>

@@ -8,11 +8,39 @@ import { getSession } from '../core/store.js';
 import { isMac } from '../core/env.js';
 import { saveWorkspace } from './workspace.js';
 
+// D7: #tabs를 진짜 탭 위젯으로 만든다 — 예전엔 <div>+onclick이라 키보드로
+// 아예 접근이 안 됐다(포커스도, Enter로 전환도 불가능). role="tablist" +
+// 롤링 탭인덱스(활성 탭만 0, 나머지 -1 — Tab 키는 탭 목록에 한 번만 멈추고
+// 그 안에서는 방향키로 이동) 패턴은 WAI-ARIA Tabs 예제와 동일.
+const tabsEl = document.getElementById('tabs');
+if (tabsEl) {
+  tabsEl.setAttribute('role', 'tablist');
+  tabsEl.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const tabs = Array.from(tabsEl.querySelectorAll('.tab'));
+    const i = tabs.indexOf(document.activeElement);
+    if (i === -1) return;
+    e.preventDefault();
+    const next = e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length]
+      : e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
+      : e.key === 'Home' ? tabs[0]
+      : tabs[tabs.length - 1];
+    next.focus();
+  });
+}
+
 // handlers: { onSwitch(id), onClose(id), onRename(id, newText, originalText) }
 export function createTabElement(id, displayName, insertBeforeId, handlers) {
   const tab = document.createElement('div');
   tab.className = 'tab';
   tab.dataset.sessionId = id;
+  tab.id = `tab-${id}`;
+  tab.setAttribute('role', 'tab');
+  tab.setAttribute('aria-selected', 'false');
+  tab.setAttribute('aria-controls', `term-${id}`);
+  // 방향키로만 이동, Tab 키는 활성 탭 하나만 거친다(롤링 탭인덱스) — switchTo()가
+  // 전환될 때마다 이전/이후 탭의 값을 뒤집는다.
+  tab.tabIndex = -1;
   // 좌우 이동 단축키 안내(호버 툴팁)
   tab.title = `탭 이동: ${isMac ? 'Cmd' : 'Ctrl'} + Shift + ← / →`;
   const agentBadge = document.createElement('span');
@@ -21,17 +49,19 @@ export function createTabElement(id, displayName, insertBeforeId, handlers) {
   const nameSpan = document.createElement('span');
   nameSpan.className = 'tab-name';
   nameSpan.textContent = displayName || id.slice(0, 8);
-  const closeSpan = document.createElement('span');
-  closeSpan.className = 'close';
-  closeSpan.textContent = '×';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'close';
+  closeBtn.textContent = '×';
+  closeBtn.setAttribute('aria-label', '탭 닫기');
   // U2: tmux 세션은 탭을 닫아도 kill이 아니라 detach — 백그라운드에서 계속 돈다.
   // 호버 툴팁(데스크톱)과 닫은 직후 토스트(모바일 포함) 둘 다로 알린다.
-  closeSpan.addEventListener('mouseenter', () => {
+  closeBtn.addEventListener('mouseenter', () => {
     const sess = getSession(id);
     const isTmux = sess && (sess.tmuxName || sess.tmux_name);
-    closeSpan.title = isTmux ? '닫기 (tmux 세션은 백그라운드에서 계속 실행됨)' : '닫기 (세션 종료)';
+    closeBtn.title = isTmux ? '닫기 (tmux 세션은 백그라운드에서 계속 실행됨)' : '닫기 (세션 종료)';
   });
-  closeSpan.onclick = (e) => {
+  closeBtn.onclick = (e) => {
     e.stopPropagation();
     const sess = getSession(id);
     const isTmux = sess && (sess.tmuxName || sess.tmux_name);
@@ -42,8 +72,14 @@ export function createTabElement(id, displayName, insertBeforeId, handlers) {
   };
   tab.appendChild(agentBadge);
   tab.appendChild(nameSpan);
-  tab.appendChild(closeSpan);
+  tab.appendChild(closeBtn);
   tab.onclick = () => handlers.onSwitch(id);
+  tab.addEventListener('keydown', (e) => {
+    // Space는 스크롤을 막아야 하므로 keydown에서 preventDefault, Enter는 기본 동작이 없다.
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    handlers.onSwitch(id);
+  });
   // Phase 8 G7: 탭 드래그 정렬
   makeTabDraggable(tab);
   // 더블클릭으로 이름 편집

@@ -11,6 +11,7 @@ import { API_BASE } from './core/env.js';
 import { registerAction } from './core/dom.js';
 import { switchTo, removeSession, renameSession } from './term/session.js';
 import { sendToPty } from './term/clipboard.js';
+import { _focusables } from './panels/panel.js';
 
 export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
@@ -39,7 +40,17 @@ function openSessionManager() {
   renderSessionManager(backdrop);
   const close = backdrop.querySelector('.vt-session-close');
   if (close) close.focus();
-  backdrop._onKeydown = (e) => { if (e.key === 'Escape') closeSessionManager(); };
+  // D7: 포커스 트랩 — openPanel()의 모달들과 같은 규칙(panels/panel.js 참고).
+  backdrop._onKeydown = (e) => {
+    if (e.key === 'Escape') { closeSessionManager(); return; }
+    if (e.key !== 'Tab') return;
+    const items = _focusables(backdrop);
+    if (items.length === 0) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    else if (!backdrop.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  };
   document.addEventListener('keydown', backdrop._onKeydown);
 }
 

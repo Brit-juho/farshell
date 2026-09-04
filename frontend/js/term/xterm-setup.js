@@ -92,6 +92,8 @@ export function createXtermInstance(id) {
   // 각 세션에 고유 wrapper div 생성 (show/hide로 탭 전환)
   const wrapper = document.createElement('div');
   wrapper.id = `term-${id}`;
+  wrapper.setAttribute('role', 'tabpanel');
+  wrapper.setAttribute('aria-labelledby', `tab-${id}`);
   wrapper.style.cssText = 'height:100%;display:none;';
   document.getElementById('terminal-container').appendChild(wrapper);
 

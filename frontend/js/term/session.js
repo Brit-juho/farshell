@@ -135,10 +135,14 @@ export function switchTo(id) {
     const prev = getSession(prevId);
     prev.wrapper.style.display = 'none';
     prev.tabEl.classList.remove('active');
+    prev.tabEl.setAttribute('aria-selected', 'false');
+    prev.tabEl.tabIndex = -1;
   }
   setActive(id);
   const s = getSession(id);
   s.tabEl.classList.add('active');
+  s.tabEl.setAttribute('aria-selected', 'true');
+  s.tabEl.tabIndex = 0;
   // T6: 그리드 카드와 같은 규칙 — "완료" 표시는 확인했다는 뜻이니 탭으로
   // 전환하면 지운다.
   s.tabEl.classList.remove('done');

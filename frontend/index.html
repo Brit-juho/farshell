@@ -117,11 +117,12 @@
           placeholder="000000" aria-label="인증 코드" />
       </div>
       <button type="submit" id="login-submit">접속</button>
-      <div class="login-err" id="login-err" hidden></div>
+      <div class="login-err" id="login-err" role="alert" hidden></div>
     </form>
   </div>
   <script src="/static/js/gate.js"></script>
-  <div id="conn-status"></div>
+  <!-- D7: screenReaderMode가 터치 기기 기본 ON(M5)인데 정작 연결 끊김이 안 읽히던 문제 -->
+  <div id="conn-status" role="status" aria-live="polite"></div>
 
   <!-- 터미널 검색 바 -->
   <div id="search-bar">
