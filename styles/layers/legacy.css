@@ -232,13 +232,17 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
    단서라 폭을 최우선으로 준다.
      · 신호등(42px): macOS 창 장식이라 터치 환경에서 아무 기능이 없다.
      · 검색·Grid·코드뷰어(90px): ⋯ 메뉴 "보기" 그룹에 같은 항목이 있다.
-     · 세션 피커(150px): 탭이 살아나면 역할이 겹친다. 탭이 0개로 눌릴 때를 대비한
-       폴백이었는데, 위 두 항목을 걷어내면 그 상황 자체가 생기지 않는다.
-   회수한 ~280px는 전부 #tabs로 간다. */
+   회수한 ~190px는 #tabs로 간다.
+   L1(실버그 수정, 구 30-layout-shell.md 「증상 3」): 세션 피커(#voice-session-picker)는
+   여기서 숨기지 않는다 — 넓은 화면 전용 숨김(아래 `min-width:720px` 규칙)과 겹쳐
+   **모든 뷰포트에서 안 보이던 버그**였다. 탭 이름 더블클릭 rename과 달리, 비활성
+   탭을 바로 닫는 유일한 경로(세션 관리 시트)가 이 버튼 하나뿐이라 실제 기능 결손이었다
+   — `.tab:not(.active) .close { display:none; }` 바로 아래 주석이 "세션 시트에서는
+   어느 탭이든 바로 닫을 수 있다"고 이미 전제하고 있었는데, 그 시트로 들어가는 문이
+   막혀 있었다. */
 @media (max-width:719px) {
   html[data-skin="macos"] .traffic { display:none; }
   #search-toggle, #grid-toggle, #viewer-toggle { display:none; }
-  #voice-session-picker { display:none; }
   .tab { max-width:none; flex:1 1 0; min-width:76px; padding:0 calc(var(--spacing) * 2); gap:calc(var(--spacing) * 1); }
   .tab-name { min-width:0; }
   /* 비활성 탭의 ×를 감춰 이름에 22px를 더 준다. 탭 3개면 이름 칸이 40px→62px로
@@ -274,6 +278,19 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .vt-session-select { flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--ui); }
 .vt-session-action { width:44px; height:44px; flex-shrink:0; }
 .vt-session-empty { padding:calc(var(--spacing) * 8) calc(var(--spacing) * 2.5); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
+/* L1: ⋯ 메뉴 「세션」 3항목의 임시 자리(rail 이관 전까지). 목록과 시각적으로
+   구분되게 위쪽 구분선만 두고, 버튼 자체는 세션 행보다 한 단계 낮은 밀도로. */
+.vt-session-footer {
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
+  margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2.5); border-top:1px solid var(--line);
+}
+.vt-session-footer-item {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-height:40px;
+  padding:0 calc(var(--spacing) * 1.5); border:0; background:transparent; border-radius:var(--radius-md);
+  color:var(--sub); font-size:var(--fs-sm); text-align:left; cursor:pointer;
+}
+.vt-session-footer-item:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-session-footer-item input[type="checkbox"] { margin-left:auto; width:16px; height:16px; accent-color:var(--acc); cursor:pointer; }
 @media (min-width:720px) { .vt-session-backdrop { display:none; } }
 
 .spacer { flex:1; }

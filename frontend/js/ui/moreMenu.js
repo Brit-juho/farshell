@@ -34,7 +34,9 @@ document.getElementById('add-btn').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.showAddMenu(e); }
 });
 // "맥에서도 열기" — 기본 체크 OFF(새 세션마다 맥 터미널 창이 자동으로 뜨는 걸
-// 원치 않는 사용자가 다수), 선택은 localStorage에 기억 (켜면 유지됨)
+// 원치 않는 사용자가 다수), 선택은 localStorage에 기억 (켜면 유지됨).
+// L1: 「세션」 그룹에서 「설정」 그룹으로 옮겼을 뿐 여전히 정적 DOM이라(세션
+// 시트처럼 매번 다시 그려지지 않음) 이 부팅 1회성 IIFE 그대로 유지한다.
 (function initAutoMac() {
   const cb = document.getElementById('auto-mac-checkbox');
   if (!cb) return;

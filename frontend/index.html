@@ -173,33 +173,24 @@
   </header>
 
   <!-- ⋯ 팝업 메뉴 -->
+  <!-- L1: 「세션」 그룹(tmux 세션 목록·맥에서도 열기·이 세션 맥에서 열기)은
+       세션 관리 시트(picker.js openSessionManager → vt-session-footer)로
+       옮겼다 — rail(L4)이 생기기 전까지의 과도기 자리. -->
   <div id="more-menu" role="menu" aria-label="더보기 메뉴">
-    <div class="mlabel">세션</div>
-    <button class="mi" role="menuitem" data-action="session.tmux-list">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>tmux 세션
-    </button>
-    <label class="mi" id="auto-mac-toggle" role="menuitemcheckbox"
-      title="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>
-      맥에서도 열기
-      <input type="checkbox" id="auto-mac-checkbox" />
-    </label>
-    <button class="mi" role="menuitem" data-action="session.open-on-mac"
-      title="지금 보고 있는 tmux 세션을 맥 iTerm에 새 창으로 attach">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-      이 세션 맥에서 열기
-    </button>
-
-    <div class="msep"></div>
     <div class="mlabel">보기</div>
     <!-- 좁은 화면에선 상단 바의 검색/Grid 아이콘이 숨겨지므로(app.css, max-width:719px)
          여기가 유일한 진입점이 된다. 넓은 화면에서도 중복 노출을 허용한다 — 메뉴에서
          찾는 사용자와 아이콘을 누르는 사용자가 갈리기 때문. -->
+    <!-- L1(아이콘 교차 수정): 이 둘이 정확히 같은 돋보기 아이콘을 썼었는데
+         (빠른 열기=팔레트형 검색, 터미널 내 검색=search.toggle) 서로 다른 기능이었다.
+         반대로 "터미널 내 검색"은 상단바 #search-toggle과 같은 기능(search.toggle)
+         인데도 다른 아이콘(리스트)을 쓰고 있었다 — 지금은 기능 기준으로 재배정:
+         검색=돋보기(상단바와 통일), 빠른 열기=팔레트형(⌘) 아이콘. -->
     <button class="mi" id="qopen-btn" role="menuitem" data-action="quickopen.open">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>빠른 열기
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>빠른 열기
     </button>
     <button class="mi" id="search-mi" role="menuitem" data-action="search.toggle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>터미널 내 검색
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>터미널 내 검색
     </button>
     <button class="mi" id="grid-mi" role="menuitem" data-action="grid.toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Grid 뷰
@@ -208,9 +199,6 @@
     <div class="mlabel">음성 · 파일</div>
     <button class="mi needs-voice" id="voiceonly-btn" role="menuitem" data-action="voice.only-toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>음성 전용 모드
-    </button>
-    <button class="mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>이어폰 미디어키
     </button>
     <label class="mi" id="upload-btn" role="menuitem">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>파일 업로드
@@ -232,11 +220,19 @@
     </button>
 
     <div class="msep"></div>
+    <!-- L1: 예전엔 「설정」·「테마」 2개 그룹으로 나뉘어 있었다. 전부 "한 번
+         켜고 잊는" 종류(테마/푸시/자동복사/맥에서도열기/미디어키)라 하나로
+         합쳤다 — 「맥에서도 열기」도 세션 시트로 옮긴 나머지 2항목(세션 한정
+         동작)과 달리 앞으로 만들 모든 세션에 적용되는 전역 설정이라 여기 남는다. -->
     <div class="mlabel">설정</div>
-    <button class="mi" role="menuitem" data-action="guide.show">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      가이드 보기
-    </button>
+    <div class="theme-row" id="theme-row">
+      <button class="theme-chip" data-skin="farshell" data-action="theme.set"><span class="dot" style="background:#f0a860"></span>FarShell</button>
+      <button class="theme-chip" data-skin="macos" data-action="theme.set"><span class="dot" style="background:#0a84ff"></span>macOS</button>
+      <button class="theme-chip" data-skin="catppuccin" data-action="theme.set"><span class="dot" style="background:#cba6f7"></span>Catppuccin</button>
+      <button class="theme-chip" data-skin="windows" data-action="theme.set"><span class="dot" style="background:#4cc2ff"></span>Windows</button>
+      <button class="theme-chip" data-skin="vscode" data-action="theme.set"><span class="dot" style="background:#007acc"></span>VS Code</button>
+      <button class="theme-chip" data-skin="notepad" data-action="theme.set"><span class="dot" style="background:#0060df;border:1px solid #ccc"></span>Notepad</button>
+    </div>
     <button class="mi needs-push" id="push-btn" role="menuitem" data-action="push.toggle"
       title="앱을 닫아도 작업 완료 알림을 받습니다">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -248,17 +244,19 @@
       드래그 시 자동 복사
       <input type="checkbox" id="autocopy-checkbox" />
     </label>
-
-    <div class="msep"></div>
-    <div class="mlabel">테마</div>
-    <div class="theme-row" id="theme-row">
-      <button class="theme-chip" data-skin="farshell" data-action="theme.set"><span class="dot" style="background:#f0a860"></span>FarShell</button>
-      <button class="theme-chip" data-skin="macos" data-action="theme.set"><span class="dot" style="background:#0a84ff"></span>macOS</button>
-      <button class="theme-chip" data-skin="catppuccin" data-action="theme.set"><span class="dot" style="background:#cba6f7"></span>Catppuccin</button>
-      <button class="theme-chip" data-skin="windows" data-action="theme.set"><span class="dot" style="background:#4cc2ff"></span>Windows</button>
-      <button class="theme-chip" data-skin="vscode" data-action="theme.set"><span class="dot" style="background:#007acc"></span>VS Code</button>
-      <button class="theme-chip" data-skin="notepad" data-action="theme.set"><span class="dot" style="background:#0060df;border:1px solid #ccc"></span>Notepad</button>
-    </div>
+    <label class="mi" id="auto-mac-toggle" role="menuitemcheckbox"
+      title="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>
+      맥에서도 열기
+      <input type="checkbox" id="auto-mac-checkbox" />
+    </label>
+    <button class="mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>이어폰 미디어키
+    </button>
+    <button class="mi" role="menuitem" data-action="guide.show">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      가이드 보기
+    </button>
   </div>
 
   <!-- 터미널 / Grid -->
