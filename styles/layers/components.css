@@ -1,0 +1,45 @@
+/* D3(20-design-system.md §4-1) — 상태 dot. 이 디자인 시스템에서 처음으로
+ * "components" 레이어에 들어가는 진짜 신규 컴포넌트다(그전까지는 legacy.css의
+ * 기존 규칙만 손댔다). 아직 아무도 이 클래스를 렌더링하지 않는다 — 탭/사이드바/
+ * pane 헤더/파비콘/푸시에 실제로 배선하는 건 A1(에이전트 상태 머신, 40-agent-
+ * state.md)의 몫이라 D3는 "컴포넌트 계약"만 만든다(색 토큰 자체는 D1에서 이미
+ * --color-st-{idle,working,waiting,done,error}로 정의됨).
+ */
+@layer components {
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    flex: none;
+    display: inline-block;
+    background: var(--color-st-idle);
+  }
+  .status-dot[data-state="idle"]    { background: var(--color-st-idle); }
+  .status-dot[data-state="working"] { background: var(--color-st-working); }
+  .status-dot[data-state="waiting"] { background: var(--color-st-waiting); }
+  .status-dot[data-state="done"]    { background: var(--color-st-done); }
+  .status-dot[data-state="error"]   { background: var(--color-st-error); }
+
+  /* waiting만 breathing 애니메이션 — 레퍼런스 만장일치 결론: "가장 높은
+   * 가치의 상태는 실행중도 완료도 아닌 당신의 입력을 기다리는 중"이므로 그
+   * 상태만 눈에 띄어야 한다. working까지 같이 펄스하면(구현 전 .working
+   * 펄스처럼) 세션 여러 개가 늘어선 화면에서 전부 움직여 아무것도 눈에 안
+   * 띈다. */
+  @keyframes vt-status-breathe {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .45; }
+  }
+  .status-dot[data-state="waiting"] {
+    animation: vt-status-breathe 1.8s var(--ease-out-quint) infinite;
+  }
+
+  /* 모션을 줄여야 하는 사용자에게는 깜빡임 대신 outline으로 같은 정보를
+   * 잃지 않고 전달한다. */
+  @media (prefers-reduced-motion: reduce) {
+    .status-dot[data-state="waiting"] {
+      animation: none;
+      outline: 2px solid var(--color-st-waiting);
+      outline-offset: 2px;
+    }
+  }
+}

@@ -1,4 +1,6 @@
-/* Tailwind 소스 진입점 (F1 — 파이프라인만 부설, 유틸리티는 아직 한 개도 안 쓴다).
+/* Tailwind 소스 진입점 (F1 — 파이프라인만 부설. D3에서 .status-dot 하나로
+ * components 레이어의 첫 실사용이 생겼다 — 그 전까진 유틸리티도 컴포넌트도
+ * 안 썼다).
  *
  * Preflight(리셋 레이어)를 의도적으로 뺐다 — @import "tailwindcss" 전체를 쓰면
  * Preflight가 margin/list-style/box-sizing 등을 전역 리셋해서, legacy.css가
@@ -8,7 +10,7 @@
  *  import of the preflight CSS file while keeping the theme and utilities
  *  imports. This is useful when integrating Tailwind into existing projects.")
  */
-@layer theme, base, utilities;
+@layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
@@ -18,6 +20,9 @@
 /* 나머지 5스킨의 색 17개 재매핑 — base 레이어(legacy.css보다는 뒤지지만
  * theme 레이어보다는 우선해 스킨별 오버라이드가 기본값을 덮는다). */
 @import "./theme/skins.css";
+/* D3 — 상태 dot. components 레이어(utilities가 필요하면 이걸 덮을 수 있게
+ * theme/base보다는 뒤, utilities보다는 앞). */
+@import "./layers/components.css";
 
 /* 자동 스캐너가 서드파티 번들(highlight.js 등)의 문자열까지 훑어 "invisible"
  * 같은 우연한 단어 일치로 유틸리티를 만드는 걸 막는다. 실제 DOM에 그 클래스를
