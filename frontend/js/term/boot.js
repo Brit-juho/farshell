@@ -9,13 +9,15 @@ import { restoreWorkspace, reconcileMissingTmuxSessions } from './workspace.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { getSession } from '../core/store.js';
+import { icon } from '../ui/icons.js';
+import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 
 export function showOnboarding() {
   const el = document.createElement('div');
   el.id = 'onboarding';
   el.className = 'vt-onboarding';
   el.innerHTML = `
-    <div class="vt-ob-icon"><i class="icon-mic"></i></div>
+    <div class="vt-ob-icon">${icon('mic', 22)}</div>
     <h2>FarShell</h2>
     <p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
     <div id="ob-sessions" class="vt-ob-sessions" hidden></div>
@@ -55,13 +57,12 @@ function _drawOnboardingSessions(list, tmuxList, interactive) {
   for (const s of tmuxList) {
     const row = document.createElement('div');
     row.className = 'vt-ob-row';
-    const openInWeb = !!s.web_session_id;
-    const badge = openInWeb ? '🟢' : (s.attached > 0 ? '🖥️' : '💤');
-    const statusText = openInWeb ? '웹에 열림' : (s.attached > 0 ? '데스크톱 attach' : '잠듦');
+    const { text: statusText } = tmuxStatus(s);
     const label = document.createElement('span');
     label.className = 'vt-ob-row-label';
+    label.style.cssText = 'display:flex;align-items:center;';
     const cmd = s.command ? ` · ${s.command}` : '';
-    label.textContent = `${badge} ${s.name}  (${s.windows}win · ${statusText}${cmd})`;
+    label.append(tmuxStatusDot(s), document.createTextNode(`${s.name}  (${s.windows}win · ${statusText}${cmd})`));
     if (interactive) {
       label.title = '이 세션 열기';
       label.onclick = async () => {

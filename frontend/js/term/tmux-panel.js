@@ -8,6 +8,8 @@ import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { addSession, switchTo, removeSession } from './session.js';
 import { registerAction } from '../core/dom.js';
+import { icon } from '../ui/icons.js';
+import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 
 export async function showTmuxSessions() {
   // 토글: 이미 열려 있으면 닫기
@@ -57,20 +59,19 @@ async function renderTmuxMenu(menu) {
   menu.appendChild(newItem);
 }
 
-// 세션 한 줄: [상태·이름 → 깨우기/전환]  [🗑 완전 종료(2단계 확인)]
+// 세션 한 줄: [상태점·이름 → 깨우기/전환]  [완전 종료(2단계 확인)]
 function buildTmuxRow(menu, s) {
   const row = document.createElement('div');
   row.className = 'vt-menu-item';
   row.style.cssText = 'display:flex;align-items:center;gap:8px;';
 
   const openInWeb = !!s.web_session_id;
-  const badge = openInWeb ? '🟢' : (s.attached > 0 ? '🖥️' : '💤');
-  const statusText = openInWeb ? '웹에 열림' : (s.attached > 0 ? '데스크톱 attach' : '잠듦');
+  const { text: statusText } = tmuxStatus(s);
 
   const label = document.createElement('span');
-  label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+  label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;';
   const cmd = s.command ? ` · ${s.command}` : '';
-  label.textContent = `${badge} ${s.name}  (${s.windows}win · ${statusText}${cmd})`;
+  label.append(tmuxStatusDot(s), document.createTextNode(`${s.name}  (${s.windows}win · ${statusText}${cmd})`));
   label.title = openInWeb ? '이 탭으로 전환' : '깨워서 열기 (attach)';
   label.onclick = async () => { menu.remove(); await attachTmux(s.name); };
   row.appendChild(label);
@@ -78,10 +79,11 @@ function buildTmuxRow(menu, s) {
   // 완전 종료 — 2단계 인라인 확인 (실수 방지, 네이티브 dialog 미사용)
   const kill = document.createElement('button');
   const reset = () => {
-    kill.textContent = '🗑'; kill.style.color = 'var(--sub)'; kill.style.fontSize = '14px';
+    kill.innerHTML = icon('trash-2', 14); kill.style.color = 'var(--sub)';
   };
   kill.title = '완전 종료 (tmux 세션 kill — 되돌릴 수 없음)';
-  kill.style.cssText = 'flex-shrink:0;background:transparent;border:none;cursor:pointer;padding:2px 6px;border-radius:5px;';
+  kill.setAttribute('aria-label', `${s.name} 완전 종료`);
+  kill.style.cssText = 'flex-shrink:0;background:transparent;border:none;cursor:pointer;padding:2px 6px;border-radius:5px;display:inline-flex;align-items:center;';
   reset();
   let armed = false, armTimer = null;
   kill.onclick = async (e) => {

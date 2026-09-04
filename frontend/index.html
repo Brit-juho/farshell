@@ -24,7 +24,6 @@
   <meta name="theme-color" content="#131316" id="theme-color-meta">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="/static/vendor/xterm.min.css">
-  <link href="/static/vendor/lucide.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/dist/app.css">
   <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-mono-400.woff2" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-sans-400.woff2" crossorigin>
@@ -68,7 +67,7 @@
       border:1px solid var(--line,rgba(255,255,255,.08));border-radius:var(--wrad,12px);
       padding:28px 24px;box-shadow:0 12px 40px rgba(0,0,0,.4);text-align:center;}
     #login-form[hidden]{display:none;}
-    #login-form .login-icon{font-size:32px;line-height:1;margin-bottom:12px;color:var(--acc,#0a84ff);}
+    #login-form .login-icon{display:flex;justify-content:center;margin-bottom:12px;color:var(--acc,#0a84ff);}
     #login-form h1{font-size:18px;font-weight:600;margin:0 0 4px;}
     #login-form .login-sub{font-size:13px;color:var(--sub,#8e8e96);margin:0 0 20px;}
     #login-form input{width:100%;box-sizing:border-box;font-size:16px;padding:11px 13px;
@@ -96,7 +95,8 @@
   <div id="login-gate">
     <div id="login-spinner"></div>
     <form id="login-form" hidden autocomplete="off">
-      <div class="login-icon"><i class="icon-lock"></i></div>
+      <!-- D5: ui/icons.js와 같은 path(Lucide 'lock') — 번들 로드 전에도 보여야 해서 정적으로 둔다. -->
+      <div class="login-icon"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
       <h1>FarShell</h1>
       <p class="login-sub">접속하려면 비밀번호를 입력하세요</p>
       <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
@@ -129,7 +129,8 @@
     <input id="search-input" type="text" placeholder="검색..." aria-label="터미널 검색" />
     <button data-action="search.prev" aria-label="이전 결과">▲</button>
     <button data-action="search.next" aria-label="다음 결과">▼</button>
-    <button data-action="search.close" aria-label="검색 닫기">✕</button>
+    <!-- D5: ui/icons.js의 'x'와 같은 path -->
+    <button data-action="search.close" aria-label="검색 닫기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
 
   <!-- 상단 통합 바 -->

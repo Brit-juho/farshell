@@ -1,5 +1,6 @@
 // 재연결 오버레이 UI. F4에서 terminal.js(구 :1358-1464)에서 분리.
 import { getSession, activeSessionId } from '../core/store.js';
+import { icon } from '../ui/icons.js';
 
 // M9: wifi↔LTE 전환 같은 순간적 망 전환은 보통 1~2초면 스스로 재연결된다.
 // 예전엔 첫 onclose에서 곧바로 전체 화면 오버레이를 띄워, 그런 찰나의 끊김도
@@ -79,7 +80,7 @@ export function updateConnStatus(id, connected) {
         ov.setAttribute('role', 'status');
         ov.setAttribute('aria-live', 'polite');
         ov.innerHTML = `
-          <div class="vt-ov-icon"><i class="icon-wifi-off"></i></div>
+          <div class="vt-ov-icon">${icon('wifi-off', 36)}</div>
           <div class="vt-ov-title">서버 연결 끊김</div>
           <div class="vt-ov-sub">자동 재연결 시도 중...</div>
           <div class="vt-ov-elapsed"></div>

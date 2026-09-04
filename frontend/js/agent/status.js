@@ -70,7 +70,11 @@ whenAuthed(() => {
     if (data.enabled) {
       const banner = document.createElement('div');
       banner.className = 'vt-banner';
-      banner.textContent = '🛡 안전 모드 — 위험 명령 차단됨';
+      // D5/D7: 이모지(🛡) 제거 — 배경이 이미 --err(빨강)이라 색으로 심각도가
+      // 드러나므로 점이 따로 필요 없다. aria-live로 스크린리더에도 알린다.
+      banner.setAttribute('role', 'status');
+      banner.setAttribute('aria-live', 'polite');
+      banner.textContent = '안전 모드 — 위험 명령 차단됨';
       document.body.appendChild(banner);
     }
   }).catch(() => {});
@@ -168,7 +172,7 @@ export function connectAgentWs() {
       // T6: 그리드를 안 열어도 탭만 보고 승인 대기 세션을 찾을 수 있어야 하므로
       // 카드와 동일하게 탭에도 working/done class를 건다.
       if (msg.state && msg.state.tool) {
-        showToast(`🔧 ${msg.state.tool} 실행 중...`, 'info', { key: 'agent', duration: 2500 });
+        showToast(`${msg.state.tool} 실행 중...`, 'info', { key: 'agent', duration: 2500 });
         if (window.VTFavicon) VTFavicon.set('working');
         const card = _cardByCwd(msg.state.cwd);
         if (card) { card.classList.add('working'); card.classList.remove('done'); }

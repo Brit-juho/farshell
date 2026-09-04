@@ -1,4 +1,6 @@
 // Service Worker — Phase 9 #4: 정적 자원 캐시 + Web Push 수신.
+// v7: D5 — 아이콘을 Lucide 웹폰트에서 인라인 SVG(js/ui/icons.js)로 전환,
+//     vendor/lucide.{min.css,woff2} 제거(-285KB) — 프리캐시 목록에서도 뺀다.
 // v6: Web Push(P5) — push 리스너 추가. 등록 주체도 voice.js → js/swreg.js 로 이동
 //     (voice.js는 음성 미설치 시 로드되지 않아 SW가 아예 안 떴다).
 // v5: 코드 뷰어(P2) — highlight.min.js vendor 추가. vendor는 SWR 캐시라 키 bump 필수.
@@ -7,7 +9,7 @@
 //     기존 inline <script> 캐시가 stale 상태가 되므로 캐시 키 bump 필수.
 // v2: voice.js / index / manifest는 network-first로 변경 (v1 stale 캐시 이슈 수정).
 //     vendor/* immutable 자산만 stale-while-revalidate.
-const CACHE = 'vt-static-v6';
+const CACHE = 'vt-static-v7';
 
 const PRECACHE = [
   '/static/icon-192.png',
@@ -18,8 +20,6 @@ const PRECACHE = [
   '/static/vendor/addon-search.min.js',
   '/static/vendor/addon-webgl.min.js',
   '/static/vendor/addon-canvas.min.js',
-  '/static/vendor/lucide.min.css',
-  '/static/vendor/lucide.woff2',
   '/static/vendor/nacl.min.js',
   '/static/vendor/nacl-util.min.js',
   '/static/vendor/highlight.min.js',

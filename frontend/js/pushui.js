@@ -18,7 +18,7 @@ async function _refreshPushLabel() {
         return;
       }
       const on = await VTPush.isSubscribed();
-      label.textContent = on ? '푸시 알림 ✓' : '푸시 알림';
+      label.textContent = on ? '푸시 알림 (켜짐)' : '푸시 알림';
       if (btn) {
         btn.title = on
           ? '켜져 있습니다 — 앱을 닫아도 작업 완료 알림이 옵니다 (눌러서 끄기)'

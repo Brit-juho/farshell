@@ -189,6 +189,10 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
   border-radius:var(--radius-sm); flex-shrink:0;
 }
 .tab .close:hover { opacity:1; background:var(--menu-hover); }
+
+/* D5: tmux 세션 상태 점(구 🟢/🖥️/💤 이모지) — ui/session-badge.js가 색만 채운다. */
+.vt-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:calc(var(--spacing) * 1.5); flex-shrink:0; }
+
 .tab.dragging { opacity:.45; cursor:grabbing; }
 .tab.drag-over-left::before { content:''; position:absolute; left:-2px; top:4px; bottom:4px; width:3px; background:var(--acc); border-radius:var(--radius-sm); }
 .tab.drag-over-right::after { content:''; position:absolute; right:-2px; top:4px; bottom:4px; width:3px; background:var(--acc); border-radius:var(--radius-sm); }
@@ -261,14 +265,14 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 @keyframes vtSheetIn { from { transform:translateY(100%); } to { transform:none; } }
 .vt-session-head { display:flex; align-items:center; justify-content:space-between; margin:0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 2.5); }
 .vt-session-head h2 { font-size:var(--fs-md); }
-.vt-session-close, .vt-session-action { border:0; background:transparent; color:var(--sub); cursor:pointer; border-radius:var(--radius-md); }
-.vt-session-close { width:44px; height:44px; font-size:var(--fs-xl); }
+.vt-session-close, .vt-session-action { border:0; background:transparent; color:var(--sub); cursor:pointer; border-radius:var(--radius-md); display:inline-flex; align-items:center; justify-content:center; }
+.vt-session-close { width:44px; height:44px; }
 .vt-session-close:hover, .vt-session-action:hover { color:var(--txt); background:var(--menu-hover); }
 .vt-session-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-session-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-height:52px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); border:1px solid var(--line); border-radius:var(--radius-md); }
 .vt-session-row.active { border-color:var(--acc); }
 .vt-session-select { flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--ui); }
-.vt-session-action { width:44px; height:44px; font-size:var(--fs-md); flex-shrink:0; }
+.vt-session-action { width:44px; height:44px; flex-shrink:0; }
 .vt-session-empty { padding:calc(var(--spacing) * 8) calc(var(--spacing) * 2.5); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
 @media (min-width:720px) { .vt-session-backdrop { display:none; } }
 
@@ -499,7 +503,7 @@ body.voice-only-mode #mic-status {
   z-index:400; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--spacing) * 4);
   -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); text-align:center; padding:calc(var(--spacing) * 6);
 }
-.vt-overlay .vt-ov-icon { font-size:var(--fs-3xl); color:var(--err); }
+.vt-overlay .vt-ov-icon { color:var(--err); }
 .vt-overlay .vt-ov-title { color:var(--err); font-size:var(--fs-md); font-weight:700; }
 .vt-overlay .vt-ov-sub { color:var(--sub); font-size:var(--fs-sm); }
 /* O1: 재연결 오버레이의 경과 시간 + 끊기/다시 연결 버튼(Wave connstatusoverlay 참고) */
@@ -572,7 +576,9 @@ body.voice-only-mode #mic-status {
   display:flex; align-items:center; gap:calc(var(--spacing) * 2); margin:0 0 calc(var(--spacing) * 2);
   font-size:var(--fs-sm); font-weight:600; color:var(--txt);
 }
-.vt-guide-sec > .vt-gs-title i { color:var(--acc); font-size:var(--fs-md); }
+.vt-guide-sec > .vt-gs-title svg { color:var(--acc); flex-shrink:0; }
+/* D5: 본문 설명 안에 끼워 쓰는 인라인 아이콘(icons.js) — 글줄 기준선에 맞춘다. */
+.vt-guide-row .vt-gr-desc svg { vertical-align:-2px; margin:0 calc(var(--spacing) * 0.25); }
 /* key/desc 2열 — align-items:start + 동일 line-height로 첫 줄이 세로로 정렬된다.
    (baseline 정렬은 desc가 여러 줄일 때 key가 어긋나 보임) */
 .vt-guide-row { display:flex; gap:calc(var(--spacing) * 3); padding:calc(var(--spacing) * 1.5) 0; align-items:start; }

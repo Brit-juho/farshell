@@ -7,6 +7,7 @@
 import { getSession } from '../core/store.js';
 import { isMac } from '../core/env.js';
 import { saveWorkspace } from './workspace.js';
+import { icon } from '../ui/icons.js';
 
 // D7: #tabs를 진짜 탭 위젯으로 만든다 — 예전엔 <div>+onclick이라 키보드로
 // 아예 접근이 안 됐다(포커스도, Enter로 전환도 불가능). role="tablist" +
@@ -52,7 +53,7 @@ export function createTabElement(id, displayName, insertBeforeId, handlers) {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'close';
-  closeBtn.textContent = '×';
+  closeBtn.innerHTML = icon('x', 12);
   closeBtn.setAttribute('aria-label', '탭 닫기');
   // U2: tmux 세션은 탭을 닫아도 kill이 아니라 detach — 백그라운드에서 계속 돈다.
   // 호버 툴팁(데스크톱)과 닫은 직후 토스트(모바일 포함) 둘 다로 알린다.

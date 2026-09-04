@@ -1,3 +1,5 @@
+import { icon } from '../ui/icons.js';
+
 // 모달형 패널(코드 뷰어/포트/큐)의 공용 뼈대. 구 js/panel.js (F2에서 이관).
 // 세 패널이 토글 진입 · backdrop 클릭 닫기 · Esc 닫기 · 닫을 때 fitAndResize ·
 // "패널이 열려 있는 동안만 도는 자가정리 폴링" 을 각자 복붙해서 갖고 있었다.
@@ -53,7 +55,7 @@ export function openPanel(opts) {
       el.className = 'vt-viewer-backdrop' + (opts.extraClass ? ' ' + opts.extraClass : '');
       el.innerHTML = `
         <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="${opts.ariaLabel}">
-          <div class="vt-viewer-head">${opts.headHTML}<button class="vt-vw-x" aria-label="닫기">✕</button></div>
+          <div class="vt-viewer-head">${opts.headHTML}<button class="vt-vw-x" aria-label="닫기">${icon('x', 14)}</button></div>
           ${opts.extraHTML || ''}
           <div class="vt-vw-body" id="${opts.bodyId}">${opts.bodyHTML || '<div class="vt-vw-loading">불러오는 중…</div>'}</div>
         </div>

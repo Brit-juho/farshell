@@ -48,7 +48,7 @@ async function ensureSttReady() {
     if (r.ok && d.loaded) {
       _sttReady = true;
       micBtn.querySelector('.label').textContent = '음성 입력';
-      micStatus.textContent = '✅ 준비 완료 — 마이크를 눌러 녹음';
+      micStatus.textContent = '준비 완료 — 마이크를 눌러 녹음';
       return false;  // 이번 탭은 '준비'로 소비. 사용자가 다시 눌러 녹음.
     }
     micStatus.textContent = '음성 준비 실패 — STT가 설치돼 있는지 확인하세요';

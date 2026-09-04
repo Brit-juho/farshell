@@ -12,6 +12,7 @@ import { registerAction } from './core/dom.js';
 import { switchTo, removeSession, renameSession } from './term/session.js';
 import { sendToPty } from './term/clipboard.js';
 import { _focusables } from './panels/panel.js';
+import { icon } from './ui/icons.js';
 
 export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
@@ -66,7 +67,7 @@ function closeSessionManager() {
 function renderSessionManager(backdrop) {
   const sheet = backdrop.querySelector?.('.vt-session-sheet');
   if (!sheet) return;
-  sheet.innerHTML = '<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-session-close" type="button" aria-label="세션 관리 닫기">×</button></div><div class="vt-session-list"></div>';
+  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div>`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
   const list = sheet.querySelector('.vt-session-list');
   const entries = Object.entries(allSessions());
@@ -80,14 +81,14 @@ function renderSessionManager(backdrop) {
     select.setAttribute('aria-current', id === activeIdNow ? 'true' : 'false');
     select.onclick = () => { switchTo(id); closeSessionManager(); };
     const rename = document.createElement('button');
-    rename.type = 'button'; rename.className = 'vt-session-action'; rename.textContent = '✎'; rename.setAttribute('aria-label', `${sessionName(id, s)} 이름 변경`);
+    rename.type = 'button'; rename.className = 'vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id, s)} 이름 변경`);
     rename.onclick = async () => {
       const next = window.prompt('새 세션 이름', sessionName(id, s));
       if (next === null) return;
       if (await renameSession(id, next)) renderSessionManager(backdrop);
     };
     const close = document.createElement('button');
-    close.type = 'button'; close.className = 'vt-session-action'; close.textContent = '×'; close.setAttribute('aria-label', `${sessionName(id, s)} 닫기`);
+    close.type = 'button'; close.className = 'vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id, s)} 닫기`);
     close.onclick = async () => { await removeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
     row.append(select, rename, close); list.appendChild(row);
   }
