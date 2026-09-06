@@ -402,8 +402,39 @@ html[data-skin="windows"] .caption { display:flex; }
 }
 .vt-split-resizer.dragging, .vt-split-resizer:hover { background:var(--acc); }
 
-.vt-pane { display:flex; flex-direction:column; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; }
+.vt-pane { display:flex; flex-direction:column; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; position:relative; }
 .vt-pane.active { outline:1px solid var(--acc); outline-offset:-1px; }
+
+/* L5: 5구역 드롭존 오버레이. layout/dnd.js가 드래그 중인 pane에
+   data-dropzone 속성만 찍어주면(마우스=네이티브 dragover, 터치=long-press
+   포인터 추적 둘 다 같은 속성을 쓴다) 여기 하나로 다섯 모양을 다 그린다 —
+   중앙(center)=세션 교체, 가장자리 4곳=그 방향 분할 미리보기. */
+.vt-pane[data-dropzone]::after {
+  content:''; position:absolute; z-index:8; pointer-events:none;
+  background:color-mix(in srgb, var(--acc) 28%, transparent);
+  border:2px solid var(--acc); box-sizing:border-box;
+}
+.vt-pane[data-dropzone="center"]::after { inset:0; }
+.vt-pane[data-dropzone="left"]::after { top:0; bottom:0; left:0; width:50%; }
+.vt-pane[data-dropzone="right"]::after { top:0; bottom:0; right:0; width:50%; }
+.vt-pane[data-dropzone="top"]::after { left:0; right:0; top:0; height:50%; }
+.vt-pane[data-dropzone="bottom"]::after { left:0; right:0; bottom:0; height:50%; }
+
+/* L5: 터치 long-press 드래그 고스트 — 네이티브 DnD의 드래그 이미지를 흉내낸
+   대체물(터치는 브라우저가 그런 프리뷰를 안 그려준다). 포인터를 그대로
+   따라다니다 손을 떼면 사라진다. */
+.vt-drag-ghost {
+  position:fixed; z-index:900; pointer-events:none; transform:translate(-50%,-50%);
+  max-width:160px; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+  background:var(--tab-active); color:var(--tab-active-txt); border-radius:var(--trad);
+  font-size:var(--fs-xs); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  box-shadow:var(--shadow-e2); opacity:.92;
+}
+/* long-press가 아직 확정 전(LONGPRESS_MS 대기 중)임을 알리는 최소한의 시각
+   피드백 — keybar.js의 .kb.holding과 같은 패턴(배경만 살짝). */
+.tab.vt-drag-pending, .vt-pane-head.vt-drag-pending { background:var(--menu-hover); }
+/* 드래그 중엔 터치 스크롤/텍스트 선택이 끼어들면 안 된다. */
+body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-select:none; }
 /* pane 헤더 — root가 leaf 하나뿐이면 JS가 display:none으로 숨긴다(분할을
    안 쓰면 지금과 화면상 완전히 동일해야 한다는 L3 1단계 검증 기준 그대로). */
 .vt-pane-head {

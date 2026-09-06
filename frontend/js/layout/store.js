@@ -63,9 +63,11 @@ export function setPaneSession(sessionId, paneId = _activePaneId) {
 // 시 null — paneId가 이미 없어졌다든가 하는 방어 상황).
 // L3 3단계: pane 헤더 버튼은 "그 헤더가 달린 pane"을 분할해야 한다 —
 // 반드시 활성 pane과 같을 필요가 없어 paneId를 인자로 받는 일반형으로 뒀다.
-export function splitPane(paneId, dir, sessionId = null) {
+// newFirst: L5 DnD 전용 — 왼쪽/위 가장자리 드롭이면 true로 넘겨 새 leaf가 그
+// 자리(a)에 먼저 오게 한다(tree.js splitPane 참고). 헤더 버튼은 항상 기본값(false).
+export function splitPane(paneId, dir, sessionId = null, newFirst = false) {
   const newLeaf = makeLeaf(_genId('pane'), sessionId);
-  const next = _splitPane(_tree, paneId, dir, newLeaf, _genId('split'));
+  const next = _splitPane(_tree, paneId, dir, newLeaf, _genId('split'), newFirst);
   if (next === _tree) return null;
   _tree = next;
   _activePaneId = newLeaf.id;

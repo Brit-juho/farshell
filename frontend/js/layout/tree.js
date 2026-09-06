@@ -52,13 +52,18 @@ function _replace(node, targetId, replacement) {
   return { ...node, a: _replace(node.a, targetId, replacement), b: _replace(node.b, targetId, replacement) };
 }
 
-// paneId가 가리키는 leaf를 split(a=기존 leaf, b=newLeaf)으로 바꾼다.
+// paneId가 가리키는 leaf를 split으로 바꾼다. 기본은 a=기존 leaf, b=newLeaf(헤더의
+// "오른쪽/아래쪽 분할" 버튼이 쓰는 순서). newFirst=true면 순서를 뒤집어 새 leaf가
+// a(왼쪽/위쪽)로 간다 — L5 DnD의 5구역 드롭존에서 "왼쪽/위 가장자리에 놓으면 그
+// 방향으로, 놓은 자리가 먼저 오게" 배치하기 위해 필요하다(가장자리 판정 자체는
+// layout/dnd.js의 몫이고, 이 함수는 순서 뒤집기만 안다).
 // paneId가 leaf가 아니거나(split id를 잘못 넘김) 존재하지 않으면 원본 트리를 그대로 반환한다
 // — 호출자가 존재하지 않는 pane을 잘못 참조해도 트리가 깨지지 않게 방어한다.
-export function splitPane(tree, paneId, dir, newLeaf, splitId) {
+export function splitPane(tree, paneId, dir, newLeaf, splitId, newFirst = false) {
   const found = _findWithParent(tree, paneId);
   if (!found || found.node.t !== 'leaf') return tree;
-  return _replace(tree, paneId, makeSplit(splitId, dir, found.node, newLeaf, 0.5));
+  const [a, b] = newFirst ? [newLeaf, found.node] : [found.node, newLeaf];
+  return _replace(tree, paneId, makeSplit(splitId, dir, a, b, 0.5));
 }
 
 // paneId를 닫는다.

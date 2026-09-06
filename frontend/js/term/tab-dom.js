@@ -8,6 +8,7 @@ import { getSession } from '../core/store.js';
 import { isMac } from '../core/env.js';
 import { saveWorkspace } from './workspace.js';
 import { icon } from '../ui/icons.js';
+import { SESSION_MIME, wireTouchDragSource } from '../layout/dnd.js';
 
 // D7: #tabs를 진짜 탭 위젯으로 만든다 — 예전엔 <div>+onclick이라 키보드로
 // 아예 접근이 안 됐다(포커스도, Enter로 전환도 불가능). role="tablist" +
@@ -109,11 +110,14 @@ export function createTabElement(id, displayName, insertBeforeId, handlers) {
   return tab;
 }
 
-// 탭 드래그 정렬 (HTML5 DnD)
+// 탭 드래그 정렬 (HTML5 DnD) + L5: 같은 탭을 pane 위로 드래그하면 그쪽으로
+// 배정(분할/세션교체) — layout/panes.js의 wirePaneDropTarget이 받는 쪽이다.
+// mime을 하나(SESSION_MIME)로 공유하므로 탭 재정렬 드롭(다른 .tab 위)과
+// pane 드롭(.vt-pane 위)이 서로 다른 엘리먼트에 걸린 리스너로 자연히 갈린다.
 function makeTabDraggable(tab) {
   tab.draggable = true;
   tab.addEventListener('dragstart', (e) => {
-    e.dataTransfer.setData('text/vt-tab-id', tab.dataset.sessionId);
+    e.dataTransfer.setData(SESSION_MIME, tab.dataset.sessionId);
     tab.classList.add('dragging');
   });
   tab.addEventListener('dragend', () => {
@@ -141,7 +145,7 @@ function makeTabDraggable(tab) {
   tab.addEventListener('drop', (e) => {
     e.preventDefault();
     tab.classList.remove('drag-over-left', 'drag-over-right');
-    const draggedId = e.dataTransfer.getData('text/vt-tab-id');
+    const draggedId = e.dataTransfer.getData(SESSION_MIME);
     if (!draggedId || draggedId === tab.dataset.sessionId) return;
     const dragged = document.querySelector(`#tabs .tab[data-session-id="${CSS.escape(draggedId)}"]`);
     if (!dragged) return;
@@ -155,4 +159,10 @@ function makeTabDraggable(tab) {
     }
     saveWorkspace();
   });
+  // L5: 터치 기기는 위 네이티브 dragstart가 안 뜨므로(iOS Safari는 아예
+  // 미지원) long-press로 흉내낸다. 탭 재정렬(다른 탭 위 드롭)까지는 다루지
+  // 않고 — pane 위로 옮기는 배정만 지원한다(wireTouchDragSource는 .vt-pane만
+  // 드롭 타겟으로 본다). 마우스는 위 dragstart 경로를 그대로 쓰므로 내부에서
+  // pointerType으로 걸러 중복 처리하지 않는다.
+  wireTouchDragSource(tab, () => tab.dataset.sessionId);
 }

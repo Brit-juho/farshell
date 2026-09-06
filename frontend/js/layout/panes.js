@@ -7,9 +7,9 @@
 // 대기시킨다.
 //
 // pane 헤더의 분할·닫기 버튼은 "환경 무관 베이스라인"이다(착수 전 설계
-// 리뷰 원칙) — 클릭이든 탭이든 항상 이걸로 전부 가능하다. 탭을 pane 위로
-// 드래그하는 DnD(L5)는 이 baseline 위에 얹는 "있으면 편한" 추가 경로라
-// 이번 패스에서는 미룬다(아래 TODO 주석 + 계획 문서에 기록).
+// 리뷰 원칙) — 클릭이든 탭이든 항상 이걸로 전부 가능하다. 탭/헤더를 pane
+// 위로 드래그하는 DnD(L5, layout/dnd.js)는 이 baseline 위에 얹는 "있으면
+// 편한" 추가 경로다.
 import { getSession, allSessions } from '../core/store.js';
 import { createSession } from '../term/session.js';
 import {
@@ -19,21 +19,10 @@ import {
 import { findNode } from './tree.js';
 import { fitAndResize } from '../term/resize.js';
 import { wireRatioResizer } from './resizer.js';
+import { canSplit, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
 import { icon } from '../ui/icons.js';
 
-// 반응형 3구간별 pane 상한(20-design-system.md §2-1이 정의한 breakpoint와
-// 같은 값). "생성 액션을 막는 게이트"로만 쓴다 — 이미 만들어진 트리는 화면이
-// 좁아져도 그대로 유지한다(잘라내지 않는다). 실제 판정은 canSplit()에서.
-const PANE_CAP = { compact: 720, regular: 1024 };
-function _tierCap() {
-  const w = window.innerWidth;
-  if (w < PANE_CAP.compact) return 2;
-  if (w < PANE_CAP.regular) return 4;
-  return 6;
-}
-export function canSplit() {
-  return countLeaves() < _tierCap();
-}
+export { canSplit };
 
 let _rootEl = null;
 let _poolEl = null;
@@ -57,9 +46,15 @@ function _sessionLabel(sessionId) {
   return s?.tabEl?.querySelector('.tab-name')?.textContent || sessionId.slice(0, 8);
 }
 
+function _paneSessionId(paneId) {
+  const node = findNode(getTree(), paneId);
+  return node && node.t === 'leaf' ? node.session : null;
+}
+
 function _buildPaneEl(paneId) {
   const paneEl = document.createElement('div');
   paneEl.id = `vt-pane-${paneId}`;
+  paneEl.dataset.paneId = paneId;
   paneEl.className = 'vt-pane';
   paneEl.innerHTML = `
     <div class="vt-pane-head">
@@ -70,11 +65,6 @@ function _buildPaneEl(paneId) {
     </div>
     <div class="vt-pane-body"></div>
   `;
-  // TODO(L5): 탭을 이 pane 위로 드래그하면 5구역 드롭존(가장자리=분할,
-  // 중앙=세션 교체)으로 배정하는 DnD. 지금은 위 헤더 버튼(baseline)만으로
-  // 분할·세션 전환 전부 가능 — DnD는 그 위에 얹는 추가 경로라 이번 패스는
-  // pointer:coarse 판별(L5가 요구하는 long-press 분기)까지 포함해서 별도로
-  // 다룬다.
   paneEl.querySelector('.vt-pane-split-row').addEventListener('click', () => {
     if (canSplit()) splitPane(paneId, 'row');
   });
@@ -82,6 +72,26 @@ function _buildPaneEl(paneId) {
     if (canSplit()) splitPane(paneId, 'col');
   });
   paneEl.querySelector('.vt-pane-close').addEventListener('click', () => closePane(paneId));
+
+  // L5: 탭(tab-dom.js)이나 다른 pane 헤더(아래)를 이 pane 위로 드래그하면
+  // 5구역 드롭존으로 배정한다 — 마우스는 네이티브 HTML5 DnD, 터치는 헤더 쪽
+  // long-press 배선(아래)이 같은 wirePaneDropTarget이 세팅한
+  // data-dropzone/data-pane-id를 그대로 읽는다.
+  wirePaneDropTarget(paneEl, paneId);
+
+  // pane 헤더 자체도 드래그 소스다 — "이 pane에 지금 배치된 세션을 다른
+  // pane으로 옮긴다"(이동/교환). 헤더 버튼(baseline)이 이미 분할·닫기·세션
+  // 전환(탭 클릭)을 전부 커버하므로 DnD는 그 위에 얹는 추가 경로일 뿐이다.
+  const head = paneEl.querySelector('.vt-pane-head');
+  head.draggable = true;
+  head.addEventListener('dragstart', (e) => {
+    const sid = _paneSessionId(paneId);
+    if (!sid) { e.preventDefault(); return; }
+    e.dataTransfer.setData(SESSION_MIME, sid);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  wireTouchDragSource(head, () => _paneSessionId(paneId));
+
   return paneEl;
 }
 
