@@ -12,7 +12,7 @@ function showGuide() {
     { icon: 'rocket', title: '시작하기', rows: [
       { key: '<kbd>+</kbd> 버튼', desc: '새 세션 생성 (tmux 세션 또는 일반 터미널)' },
       { key: '탭', desc: `더블클릭 → 이름 변경 · ${icon('x', 12)} → 닫기(tmux는 detach만 됨, 완전 종료는 ⋯ 메뉴)` },
-      { key: 'Grid 뷰', desc: `상단 ${icon('layout-grid', 14)} 아이콘 → 모든 tmux 세션 라이브 미리보기` },
+      { key: 'pane 분할', desc: 'pane 헤더의 분할 버튼 → 화면을 나눠 여러 세션을 동시에 표시' },
     ]},
     { icon: 'mic', title: '음성 입력', rows: [
       { key: '마이크 버튼', desc: `상단 ${icon('mic', 14)} 탭 → 말하면 STT로 텍스트 입력` },

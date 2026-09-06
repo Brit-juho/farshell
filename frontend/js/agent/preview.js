@@ -1,49 +1,29 @@
-// 라이브 프리뷰 그리드 뷰 — F4에서 grid.js에서 분리(Phase 7 #7-3 원본).
-// "지금 뭐가 떠 있고 뭘 하고 있는지 한눈에" 보여주는 카드 그리드 자체
-// (열고닫기·카드 렌더·세션당 프리뷰 WebSocket)를 담당한다. "일하는 중이냐
-// 표시"는 status.js, "무슨 아이콘을 보여줄까"는 badges.js가 갖고 있다.
+// 라이브 프리뷰 카드 — F4에서 grid.js에서 분리(Phase 7 #7-3 원본), L3 4단계에서
+// 전체화면 그리드 뷰(#grid-view/#grid-toggle) 자체는 폐지했다(ADR-7 — 자유
+// 분할 pane 트리로 대체). "카드를 만들고 갱신하는 로직"만 남긴다 — 5단계(빈
+// pane 클릭 → 썸네일 세션 선택 시트)와 팔레트(L6)가 이 카드 마크업을 그대로
+// 재사용할 예정이라, 당장 컨테이너가 없어도(#grid-cards가 사라졌다) 함수
+// 자체는 지우지 않았다. "일하는 중이냐 표시"는 status.js, "무슨 아이콘을
+// 보여줄까"는 badges.js가 갖고 있다.
+//
+// /ws-preview 엔드포인트(세션당 프리뷰 WebSocket)는 서버 쪽 그대로 유지된다
+// — 진짜 attach가 아니라 tmux 클라이언트 수를 늘리지 않는 유일한 수단이라
+// ADR-7이 명시적으로 보존을 요구한다.
 import { apiFetch } from '../core/api.js';
 import { API_BASE, WS_BASE, _tokenQuery } from '../core/env.js';
 import { getSession } from '../core/store.js';
 import { switchTo, addSession } from '../term/session.js';
-import { registerAction } from '../core/dom.js';
 import { _applyCardAgent } from './badges.js';
 import { _applyActiveHighlights, agent_status_active_cache } from './status.js';
 
 // ANSI→HTML 변환 + 빈 줄/긴 패딩 정리는 순수 로직이라 ansilex.js로 분리했다
 // (keyseq.js/difflex.js와 같은 이유 — Node 테스트에서 재사용하기 위해서다).
-// ansiToHtml은 그리드 카드 라이브 프리뷰의 유일한 XSS 방어선이다: 서버가 보낸
+// ansiToHtml은 카드 라이브 프리뷰의 유일한 XSS 방어선이다: 서버가 보낸
 // tmux capture-pane 원문을 innerHTML로 꽂기 때문에(아래 refreshCard), 반드시
 // 여기서 HTML escape를 거쳐야 한다. VTAnsiLex는 UMD(window 전역)라 그대로 읽는다.
 const ansiToHtml = VTAnsiLex.ansiToHtml;
 const _trimBlankLines = VTAnsiLex.trimBlankLines;
 
-// search.js가 Esc로 그리드를 닫을 때 bare `gridViewEnabled`를 읽는다 — 아직
-// classic script라 window 브리지가 필요하다(재할당마다 동기화).
-export let gridViewEnabled = false;
-window.gridViewEnabled = gridViewEnabled;
-
-export async function toggleGridView() {
-  gridViewEnabled = !gridViewEnabled;
-  window.gridViewEnabled = gridViewEnabled;
-  const grid = document.getElementById('grid-view');
-  const term = document.getElementById('terminal-container');
-  const btn = document.getElementById('grid-toggle');
-  if (gridViewEnabled) {
-    grid.style.display = 'block';
-    term.style.display = 'none';
-    btn.classList.add('active');     // D2: CSS class로 활성 상태 관리
-    await refreshGrid();
-    // Phase 9 #1: setInterval(refreshGrid, 2000) 제거 — 카드별 ws push가 갱신 담당.
-  } else {
-    grid.style.display = 'none';
-    term.style.display = '';
-    btn.classList.remove('active');  // D2: 비활성 시 class 제거
-    // 모든 preview ws 닫기
-    for (const ws of Object.values(_previewWs)) { try { ws.close(); } catch (_) {} }
-    Object.keys(_previewWs).forEach(k => delete _previewWs[k]);
-  }
-}
 // Phase 9 #1: 카드별 preview ws — 변화 시에만 갱신.
 const _previewWs = {};
 export function ensurePreviewWs(sessName) {
@@ -72,17 +52,22 @@ export function ensurePreviewWs(sessName) {
 }
 
 export async function refreshGrid() {
+  // L3 4단계: #grid-cards 컨테이너 자체가 사라졌다(그리드 뷰 폐지) — 이 함수는
+  // 5단계가 새 컨테이너를 만들어 다시 연결하기 전까지는 호출부가 없다. 그래도
+  // 누군가 미리 부르더라도(예: 다음 단계 작업 중) 조용히 아무 일도 안 하게
+  // 방어한다 — 없는 엘리먼트에 innerHTML을 쓰면 즉시 TypeError로 죽는다.
+  const cards = document.getElementById('grid-cards');
+  if (!cards) return;
   try {
     // 세션 목록 + 에이전트 배지(어떤 CLI가 그 pane에 떠 있는지)를 함께 가져온다.
-    // agents는 /ws-agent 최초 접속 시 한 번(snapshot)만 오므로, 그리드를 열 때마다
-    // 여기서도 새로 물어봐야 배지가 stale해지지 않는다.
+    // agents는 /ws-agent 최초 접속 시 한 번(snapshot)만 오므로, 카드를 새로
+    // 그릴 때마다 여기서도 새로 물어봐야 배지가 stale해지지 않는다.
     const [sessRes, agentsRes] = await Promise.all([
       apiFetch(`${API_BASE}/api/tmux/sessions`),
       apiFetch(`${API_BASE}/api/agents`).catch(() => null),
     ]);
     const tmuxSessions = await sessRes.json();
     const agents = agentsRes ? await agentsRes.json().catch(() => ({})) : {};
-    const cards = document.getElementById('grid-cards');
 
     // D3: 빈 상태 — 세션 없을 때 안내 메시지
     if (tmuxSessions.length === 0) {
@@ -119,9 +104,6 @@ export async function refreshGrid() {
         `;
         card.querySelector('.card-title').textContent = sess.name;
         card.onclick = () => {
-          // Codex: toggleGridView 내부에서 gridViewEnabled를 반전시키므로
-          // 그리드가 열려있을 때만 toggle 호출해야 닫힌다.
-          if (gridViewEnabled) toggleGridView();
           // "완료" 강조는 확인했다는 뜻이니 클릭하면 지운다.
           card.classList.remove('done');
           if (sess.web_session_id && getSession(sess.web_session_id)) {
@@ -178,17 +160,8 @@ export async function attachTmuxSession(name) {
 }
 
 // Phase 9 #2: agents 폴링 제거 — `/ws-agent` push가 모두 대체.
-// P6: 예전엔 탭이 다시 보이면 setInterval(refreshGrid, 1000)을 영구히 돌렸다 —
-// 프리뷰/에이전트 배지는 이미 ws-preview/ws-agent push가 갱신을 맡고 있어
-// 1초 폴링과 내용이 겹쳤다. 실제로 폴링이 필요한 건 "탭이 백그라운드였던 동안
-// 놓쳤을 수도 있는 갱신"을 한 번 따라잡는 것뿐이므로(외부에서 tmux 세션을
-// 새로 만들거나 죽인 경우는 push 채널이 없어 이 캐치업이 유일한 감지 수단),
-// 반복 폴링 대신 1회성 refreshGrid() 호출로 바꿨다.
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && gridViewEnabled) refreshGrid();
-});
-
-window.toggleGridView = toggleGridView;
-
-// F3(c): data-action 위임용 등록.
-registerAction('grid.toggle', () => toggleGridView());
+// (예전엔 탭 가시성이 돌아올 때 refreshGrid()로 한 번 따라잡는 visibilitychange
+// 리스너가 여기 있었다 — 그리드 뷰 폐지로 카드를 상시 띄워두는 화면 자체가
+// 없어져서 함께 걷어냈다. 5단계가 카드 컨테이너를 다시 연결할 때, 그 UI가
+// 스스로 열리는 시점에 refreshGrid()를 부르면 되므로 여기서 전역으로 감시할
+// 필요가 없다.)

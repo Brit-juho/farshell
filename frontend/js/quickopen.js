@@ -26,7 +26,6 @@ function closeQuickOpen() { closePanel('vt-qopen'); }
         { label: '코드 뷰어 열기', hint: 'Ctrl+Shift+E', action: 'viewer.show' },
         { label: '프롬프트 큐', hint: '', action: 'queue.show' },
         { label: '포트 대시보드', hint: '', action: 'ports.show' },
-        { label: 'Grid 뷰', hint: '', action: 'grid.toggle' },
         { label: '터미널 내 검색', hint: 'Ctrl/Cmd+F', action: 'search.toggle' },
         { label: '새 세션', hint: '', action: 'session.add-menu' },
       ];

@@ -1,7 +1,6 @@
 // 터미널 검색 (Ctrl+F / Cmd+F) — F5에서 classic script에서 ES 모듈로 전환.
 import { activeSession } from './core/store.js';
 import { registerAction } from './core/dom.js';
-import { gridViewEnabled, toggleGridView } from './agent/preview.js';
 
 const searchBar = document.getElementById('search-bar');
 const searchInput = document.getElementById('search-input');
@@ -36,10 +35,6 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape' && searchBar.classList.contains('visible')) {
     closeSearch();
-  }
-  // D7: 그리드 뷰 Esc 닫기 (overlay는 Esc로 닫히는 게 App UI 표준)
-  if (e.key === 'Escape' && gridViewEnabled) {
-    toggleGridView();
   }
 });
 searchInput.addEventListener('keydown', (e) => {

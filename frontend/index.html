@@ -161,9 +161,6 @@
     <button id="search-toggle" class="tbtn" data-action="search.toggle" aria-label="검색" title="검색">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
-    <button id="grid-toggle" class="tbtn" data-action="grid.toggle" aria-label="Grid 뷰" title="모든 tmux 세션 라이브 프리뷰">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-    </button>
     <button id="viewer-toggle" class="tbtn needs-fs" data-action="viewer.show" aria-label="코드 뷰어" title="코드 뷰어 (Ctrl+Shift+E)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
     </button>
@@ -178,9 +175,10 @@
        옮겼다 — rail(L4)이 생기기 전까지의 과도기 자리. -->
   <div id="more-menu" role="menu" aria-label="더보기 메뉴">
     <div class="mlabel">보기</div>
-    <!-- 좁은 화면에선 상단 바의 검색/Grid 아이콘이 숨겨지므로(app.css, max-width:719px)
+    <!-- 좁은 화면에선 상단 바의 검색 아이콘이 숨겨지므로(app.css, max-width:719px)
          여기가 유일한 진입점이 된다. 넓은 화면에서도 중복 노출을 허용한다 — 메뉴에서
-         찾는 사용자와 아이콘을 누르는 사용자가 갈리기 때문. -->
+         찾는 사용자와 아이콘을 누르는 사용자가 갈리기 때문.
+         L3 4단계: Grid 뷰 항목은 분할 pane 트리로 대체돼 삭제됐다(ADR-7). -->
     <!-- L1(아이콘 교차 수정): 이 둘이 정확히 같은 돋보기 아이콘을 썼었는데
          (빠른 열기=팔레트형 검색, 터미널 내 검색=search.toggle) 서로 다른 기능이었다.
          반대로 "터미널 내 검색"은 상단바 #search-toggle과 같은 기능(search.toggle)
@@ -191,9 +189,6 @@
     </button>
     <button class="mi" id="search-mi" role="menuitem" data-action="search.toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>터미널 내 검색
-    </button>
-    <button class="mi" id="grid-mi" role="menuitem" data-action="grid.toggle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Grid 뷰
     </button>
     <div class="msep"></div>
     <div class="mlabel">음성 · 파일</div>
@@ -259,11 +254,8 @@
     </button>
   </div>
 
-  <!-- 터미널 / Grid -->
+  <!-- 터미널 -->
   <div id="terminal-container"></div>
-  <div id="grid-view">
-    <div id="grid-cards"></div>
-  </div>
 
   <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
   <div id="mic-status" role="status" aria-live="polite"></div>

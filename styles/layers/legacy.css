@@ -256,7 +256,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
    막혀 있었다. */
 @media (max-width:719px) {
   html[data-skin="macos"] .traffic { display:none; }
-  #search-toggle, #grid-toggle, #viewer-toggle { display:none; }
+  #search-toggle, #viewer-toggle { display:none; }
   .tab { max-width:none; flex:1 1 0; min-width:76px; padding:0 calc(var(--spacing) * 2); gap:calc(var(--spacing) * 1); }
   .tab-name { min-width:0; }
   /* 비활성 탭의 ×를 감춰 이름에 22px를 더 준다. 탭 3개면 이름 칸이 40px→62px로
@@ -319,7 +319,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .tbtn:hover { background:var(--menu-hover); color:var(--txt); }
 .tbtn svg { width:16px; height:16px; }
 .tbtn.more { font-size:var(--fs-xl); letter-spacing:1px; line-height:1; }
-#grid-toggle.active, #viewer-toggle.active { background:var(--acc); color:var(--acc-ink); }
+#viewer-toggle.active { background:var(--acc); color:var(--acc-ink); }
 /* coarse 포인터: #topbar가 38px 고정이라 시각적 크기(30px)를 키우면 바 밖으로
    삐져나온다 — 대신 ::before로 탭 가능 영역만 44px로 확장(WCAG 2.5.5), 시각적
    크기는 그대로 유지. */
@@ -515,29 +515,8 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 }
 #search-bar button:hover { background:var(--menu-hover); color:var(--txt); }
 
-/* ---- 그리드 뷰 --------------------------------------------------------- */
-#grid-view {
-  display:none; position:absolute; top:var(--topbar-h); left:0; right:0; bottom:0;
-  overflow-y:auto; background:var(--win); padding:calc(var(--spacing) * 0.5); z-index:40;
-}
-/* 카드 자체 테두리(border)가 구분선 역할을 하므로 gap은 없앤다 —
-   여백보다 화면에 더 많은 세션이 보이는 쪽이 라이브 프리뷰의 목적에 맞다.
-   ⚠ minmax()의 하한을 %(또는 %가 낀 max())로 주면 auto-fit/auto-repeat의
-   트랙 개수 계산이 순환 참조가 되어 크롬이 track을 1662px 같은 엉뚱한 값으로
-   뻥튀기하는 걸 실측으로 확인했다(CDP로 375px 뷰포트에서 재현). px 고정값만 쓴다.
-   컬럼 수는 화면 폭과 무관하게 최대 2장 — repeat(auto-fit, ...)처럼 폭에 따라
-   컬럼 개수가 늘어나는 방식은 아예 쓰지 않고 항상 2장으로 못박은 뒤, 카드
-   자체의 폭만 화면이 넓어질수록 커지게 한다(1fr이 남는 공간을 그대로 흡수). */
-#grid-cards { display:grid; grid-template-columns:1fr; gap:0; }
-@media (min-width:481px) {
-  /* 태블릿부터 초광폭 모니터까지 전부 — 3장 이상으로 늘어나지 않고 항상 2장.
-     화면이 넓어질수록 컬럼이 추가되는 게 아니라 이 2장 자체가 넓어진다. */
-  #grid-cards { grid-template-columns:repeat(2, 1fr); }
-}
-
 /* ---- 음성 전용 모드 — #topbar를 전체 화면 컨테이너로 전환 --------------- */
 body.voice-only-mode #terminal-container,
-body.voice-only-mode #grid-view,
 body.voice-only-mode #tabs,
 body.voice-only-mode #voice-session-picker,
 body.voice-only-mode .traffic,
@@ -713,6 +692,11 @@ body.voice-only-mode #mic-status {
 .vt-menu-item.new { color:var(--ok); }
 .vt-menu-sep { border-top:1px solid var(--line); margin:calc(var(--spacing) * 1) 0; }
 
+/* L3 4단계: 그리드 뷰(#grid-view)는 폐지됐지만 카드 스타일은 남긴다 —
+   agent/preview.js의 refreshGrid()가 만드는 카드 마크업 자체는 5단계(빈 pane
+   클릭 → 썸네일 기반 세션 선택 시트)와 팔레트(L6)가 그대로 재사용할 예정이다
+   (ADR-7 "프리뷰 카드는 썸네일로 축소돼 재사용된다"). 지금은 이 카드를 렌더할
+   컨테이너가 없어 당장은 아무도 안 쓰지만, 다음 단계가 여기 다시 연결한다. */
 .vt-card {
   background:var(--bar); border:1px solid var(--line); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1);
   cursor:pointer; display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
@@ -1123,11 +1107,9 @@ body.voice-only-mode #mic-status {
 }
 
 /* 도킹으로 좁아진 만큼 터미널이 리플로우할 공간. JS가 --vt-dock-w 를 갱신한다. */
-body.vt-docked #terminal-container,
-body.vt-docked #grid-view{ margin-right:var(--vt-dock-w, 420px); transition:margin-right .18s ease; }
+body.vt-docked #terminal-container{ margin-right:var(--vt-dock-w, 420px); transition:margin-right .18s ease; }
 /* 리사이즈 드래그 중엔 transition을 끈다 — 매 프레임 지연이 그대로 체감된다. */
-body.vt-resizing #terminal-container,
-body.vt-resizing #grid-view{ transition:none; }
+body.vt-resizing #terminal-container{ transition:none; }
 
 /* 모바일은 표시 모드 선택과 무관하게 항상 바텀시트 — dock 폭 자체가 성립하지 않는다. */
 @media (max-width:560px){
@@ -1145,7 +1127,7 @@ body.vt-resizing #grid-view{ transition:none; }
     box-shadow:none;
   }
   #vt-viewer.mode-dock .vt-vw-resizer{ display:none; }
-  body.vt-docked #terminal-container, body.vt-docked #grid-view{ margin-right:0; }
+  body.vt-docked #terminal-container{ margin-right:0; }
 }
 
 /* 모드 전환 버튼 — 헤더에 3개, 현재 모드는 강조. */

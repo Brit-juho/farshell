@@ -1,9 +1,15 @@
-// D13: 그리드 카드 상태 전이 — toggleGridView(그리드/터미널 뷰 전환)와
-// refreshGrid(세션 목록 → 카드 생성/갱신/제거, 빈 상태)를 실제 index.html 마크업
-// 위에서 검증한다. ansiToHtml 자체(XSS 방어)는 ansilex.test.js가 다룬다 —
+// D13: 그리드 카드 상태 전이 — refreshGrid(세션 목록 → 카드 생성/갱신/제거,
+// 빈 상태)를 검증한다. ansiToHtml 자체(XSS 방어)는 ansilex.test.js가 다룬다 —
 // 여기서는 카드 DOM의 생성/갱신/제거 전이만 본다.
 // (예전에 grid-wiring.test.js를 함께 가리켰으나 그 파일은 이미 삭제되고 없다.
 //  참조만 남아 있던 것을 F0에서 정리했다.)
+//
+// L3 4단계: 전체화면 그리드 뷰(#grid-view/#grid-toggle, toggleGridView)는
+// 폐지됐다(ADR-7) — 그 두 테스트는 함께 지웠다. index.html에도 더 이상
+// #grid-cards 컨테이너가 없으므로(5단계가 다시 만들 예정), 여기서는 그
+// 계약(id="grid-cards")만 흉내 낸 최소 컨테이너를 직접 만들어 붙인다 —
+// refreshGrid()가 실제 화면 마크업과 무관하게 카드 렌더 로직만 순수하게
+// 검증되도록.
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -58,6 +64,12 @@ function buildGridWindow({ tmuxSessions = [], agents = {} } = {}) {
   window.sessions = {};
   window._tokenQuery = '';
 
+  // #grid-cards는 더 이상 index.html에 없다(위 헤더 주석) — refreshGrid()가
+  // 기대하는 컨테이너 계약만 최소로 흉내 낸다.
+  const gridCards = window.document.createElement('div');
+  gridCards.id = 'grid-cards';
+  window.document.body.appendChild(gridCards);
+
   const state = { tmuxSessions, agents };
   window.__setTmuxSessions = (list) => { state.tmuxSessions = list; };
   window.fetch = (url) => {
@@ -94,25 +106,12 @@ function buildGridWindow({ tmuxSessions = [], agents = {} } = {}) {
   return window;
 }
 
-// --- toggleGridView -----------------------------------------------------------
+// --- refreshGrid: 컨테이너 부재(L3 4단계 이후의 실제 상태) ---------------------
 
-test('toggleGridView: 켜면 grid-view가 보이고 terminal-container는 숨는다', async () => {
-  const window = buildGridWindow({ tmuxSessions: [] });
-  await window.toggleGridView();
-
-  assert.strictEqual(window.document.getElementById('grid-view').style.display, 'block');
-  assert.strictEqual(window.document.getElementById('terminal-container').style.display, 'none');
-  assert.ok(window.document.getElementById('grid-toggle').classList.contains('active'));
-});
-
-test('toggleGridView: 다시 누르면 원상복구되고 grid-toggle의 active가 빠진다', async () => {
-  const window = buildGridWindow({ tmuxSessions: [] });
-  await window.toggleGridView();
-  await window.toggleGridView();
-
-  assert.strictEqual(window.document.getElementById('grid-view').style.display, 'none');
-  assert.strictEqual(window.document.getElementById('terminal-container').style.display, '');
-  assert.ok(!window.document.getElementById('grid-toggle').classList.contains('active'));
+test('refreshGrid: #grid-cards가 없으면 조용히 아무 것도 안 한다(TypeError 없음)', async () => {
+  const window = buildGridWindow({ tmuxSessions: [{ name: 'dev', command: 'claude', cwd: '/repo' }] });
+  window.document.getElementById('grid-cards').remove();
+  await assert.doesNotReject(window.refreshGrid());
 });
 
 // --- refreshGrid: 빈 상태 ------------------------------------------------------
