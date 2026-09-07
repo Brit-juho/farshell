@@ -62,6 +62,11 @@ class PTYSession:
     session_id: str
     pid: int  # child process pid
     fd: int  # master pty fd
+    # C1: 이 PTY의 **슬레이브 tty 경로**(예: /dev/ttys012). tmux는 붙어 있는
+    # 클라이언트를 tty로 식별하므로(`list-clients -F '#{client_tty}'`),
+    # "이 클라이언트가 지금 이 브라우저인가"를 판별하려면 이 값이 필요하다.
+    # 이게 없으면 화면 관리 UI가 남의 화면과 내 화면을 구분하지 못한다.
+    tty: str = ""
     cols: int = 80
     rows: int = 24
     # [C1] broadcast: 여러 subscriber에 데이터 전달
@@ -147,6 +152,11 @@ class PTYManager:
             child_env.update(env)
 
         master_fd, slave_fd = pty.openpty()
+        # C1: fork 전에 읽는다 — 부모는 곧 slave_fd를 닫으므로 그 뒤엔 못 읽는다.
+        try:
+            slave_tty = os.ttyname(slave_fd)
+        except OSError:
+            slave_tty = ""
 
         winsize = struct.pack("HHHH", rows, cols, 0, 0)
         fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
@@ -176,6 +186,7 @@ class PTYManager:
                 session_id=session_id,
                 pid=child_pid,
                 fd=fd,
+                tty=slave_tty,
                 cols=cols,
                 rows=rows,
                 _start_monotonic=time.monotonic(),

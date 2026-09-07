@@ -16,6 +16,7 @@ import { COMPACT_MAX, REGULAR_MAX } from './breakpoints.js';
 import { icon } from '../ui/icons.js';
 import { whenAuthed } from '../agent/status.js';
 import { getStatus, onStatusChange, applyStatusDot, sortByUrgency } from '../agent/state.js';
+import { mountClients } from './clients.js';
 
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 280;
 // 'file'/'queue'/'ports'는 data-action 버튼이라 여기서 다루지 않는다(위 헤더 주석).
@@ -40,6 +41,7 @@ if (!rail || !panel) {
 
 function initRail() {
   let openItem = null;   // null | 'session' | 'settings'
+  let _clientsCleanup = null;   // C3 — 「연결된 화면」 폴링 정리
   let panelW = DEFAULT_W;
 
   function isOverlayWidth() {
@@ -68,6 +70,7 @@ function initRail() {
   }
 
   function closePanel({ persist = true } = {}) {
+    if (_clientsCleanup) { _clientsCleanup(); _clientsCleanup = null; }
     if (!openItem) return;
     openItem = null;
     panel.hidden = true;
@@ -126,6 +129,14 @@ function initRail() {
     newBtn.innerHTML = `${icon('plus', 14)}새 세션`;
     newBtn.addEventListener('click', () => createSession());
     panelBody.insertBefore(newBtn, listEl);
+
+    // C3: 활성 세션이 tmux면 그 세션에 붙은 화면 목록을 보여준다. 세션이
+    // 바뀌면 이전 블록의 폴링을 반드시 끊어야 한다(안 그러면 패널을 열고 닫을
+    // 때마다 타이머가 쌓인다) — 아래 _clientsCleanup이 그 역할.
+    if (_clientsCleanup) { _clientsCleanup(); _clientsCleanup = null; }
+    const activeSess = getSession(activeSessionId());
+    const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
+    if (activeTmux) _clientsCleanup = mountClients(panelBody, activeTmux);
 
     const footer = document.createElement('div');
     footer.className = 'vt-rail-session-footer';

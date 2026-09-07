@@ -1757,3 +1757,36 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
   .vt-usage-win { flex-wrap:wrap; }
   .vt-usage-reset { width:100%; text-align:left; padding-left:calc(3ch + var(--spacing)); }
 }
+
+/* ── C3 연결된 화면 ────────────────────────────────────────────────────────
+   rail 세션 패널 안. 붙어 있는 클라이언트가 하나뿐이면(=나만) 통째로 숨는다. */
+.vt-clients {
+  margin-top:calc(var(--spacing) * 2); padding-top:calc(var(--spacing) * 1.5);
+  border-top:1px solid var(--line);
+}
+.vt-clients-head { display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 1); }
+.vt-clients-title { font:600 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-clients-solo {
+  border:0; background:transparent; color:var(--acc); cursor:pointer;
+  font:500 var(--fs-xs) var(--ui); padding:2px 4px; border-radius:var(--radius-sm);
+}
+.vt-clients-solo:hover:not(:disabled) { background:var(--menu-hover); }
+.vt-clients-solo:disabled { color:var(--sub); cursor:default; }
+.vt-clients-list { margin-top:calc(var(--spacing) * 0.5); }
+.vt-clients-row {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1);
+  padding:4px 0; font:400 var(--fs-xs) var(--ui); color:var(--txt);
+}
+.vt-clients-row.me .vt-clients-label { font-weight:600; }
+.vt-clients-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-clients-meta { color:var(--sub); font:400 var(--fs-xs) var(--mono); flex-shrink:0; }
+.vt-clients-badge {
+  background:var(--menu-hover); color:var(--sub); border-radius:var(--radius-full);
+  padding:1px 6px; font:500 var(--fs-xs) var(--ui); flex-shrink:0;
+}
+.vt-clients-detach {
+  width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+  border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm);
+  cursor:pointer; flex-shrink:0;
+}
+.vt-clients-detach:hover { background:var(--menu-hover); color:var(--color-st-error); }

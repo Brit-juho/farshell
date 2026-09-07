@@ -280,6 +280,115 @@ async def get_tmux_preview(tmux_name: str, lines: int = 20, ansi: int = 1):
     return {"name": tmux_name, "content": content, "available": True, "lines": lines}
 
 
+# ── C1·C2: 멀티 클라이언트 화면 관리 ─────────────────────────────────────
+# 웹 attach 1개 = `tmux attach-session` PTY 1개다. 여러 브라우저 + 맥북 iTerm2가
+# 같은 세션에 붙으면 tmux가 **가장 작은 클라이언트**에 맞춰 계속 리레이아웃한다.
+# `L2`(window-size latest)로 대부분 해소됐고, 여기는 "그래도 남은 화면을 정리하고
+# 싶을 때"의 수단이다.
+#
+# 🔴 **클라이언트가 tty를 직접 보내게 하지 않는다.** 남의 tty를 보내 끊어버릴 수
+# 있기 때문이다. 요청자는 자기 **web session id**만 보내고, 서버가 그것으로
+# tty를 역산한다(pty_manager가 기록해둔 슬레이브 tty).
+
+# tmux 세션 이름은 이미 이 파일의 다른 곳에서 같은 문자셋으로 검증한다
+# (`re.fullmatch(r"[A-Za-z0-9_\-]+", ...)`). 인자로 셸을 타지는 않지만(subprocess
+# 리스트 호출), 이름을 그대로 tmux에 넘기므로 옵션처럼 보이는 값(-t 등)을 막는다.
+_CLIENT_SESSION_RE = re.compile(r"[A-Za-z0-9_\-.]{1,64}")
+
+
+def _client_rows(session: str) -> list[dict]:
+    fmt = "#{client_tty}\t#{client_name}\t#{client_width}\t#{client_height}\t#{client_activity}"
+    text = tmux_runner.run_text(["list-clients", "-t", session, "-F", fmt], timeout=2.0) or ""
+    rows = []
+    for line in text.strip().split("\n"):
+        if not line:
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        rows.append({
+            "tty": parts[0],
+            "name": parts[1],
+            "width": int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0,
+            "height": int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0,
+            "activity": parts[4] if len(parts) > 4 else "",
+        })
+    return rows
+
+
+def _tty_of_web_session(session_id: str | None) -> str | None:
+    """web session id → 그 attach PTY의 슬레이브 tty."""
+    if not session_id:
+        return None
+    sess = pty_mgr.sessions.get(session_id)
+    tty = getattr(sess, "tty", "") if sess else ""
+    return tty or None
+
+
+def _label(row: dict, my_tty: str | None) -> str:
+    """사람이 알아볼 라벨. tmux는 클라이언트 종류를 알려주지 않으므로 추정이다 —
+    추정임이 드러나게 '웹(추정)' 같은 표기는 쓰지 않고, 확실한 것(나)만 단정한다."""
+    if my_tty and row["tty"] == my_tty:
+        return "이 화면"
+    return row.get("name") or row["tty"]
+
+
+@router.get("/api/tmux/clients")
+async def tmux_clients(session: str, me: str | None = None):
+    """세션에 붙어 있는 클라이언트 목록. `me`는 요청자의 web session id(선택)."""
+    if not _CLIENT_SESSION_RE.fullmatch(session or ""):
+        return JSONResponse({"error": "invalid session name"}, status_code=400)
+    my_tty = _tty_of_web_session(me)
+    rows = _client_rows(session)
+    for r in rows:
+        r["is_me"] = bool(my_tty and r["tty"] == my_tty)
+        r["label"] = _label(r, my_tty)
+    return {"session": session, "clients": rows, "me_tty": my_tty}
+
+
+@router.post("/api/tmux/detach-client")
+async def tmux_detach_client(request: Request):
+    body = await request.json()
+    tty = str(body.get("tty") or "")
+    me = body.get("me")
+    if not tty:
+        return JSONResponse({"error": "tty required"}, status_code=400)
+    # 지금 보고 있는 화면을 스스로 끊으면 복구 경로가 없다 — 400으로 막는다.
+    if tty == _tty_of_web_session(me):
+        return JSONResponse({"error": "cannot detach self", "reason": "지금 보고 있는 화면은 끊을 수 없습니다"}, status_code=400)
+    tmux_runner.run(["detach-client", "-t", tty], timeout=2.0)
+    return {"ok": True, "detached": tty}
+
+
+@router.post("/api/tmux/clients/solo")
+async def tmux_clients_solo(request: Request):
+    """"이 화면만 남기기" — 요청자를 뺀 나머지 클라이언트를 전부 끊는다.
+
+    맥북 iTerm2(로컬 tty)도 대상이다 — 그게 "맥북 창 닫기"의 실체다.
+    """
+    body = await request.json()
+    session = str(body.get("session") or "")
+    if not _CLIENT_SESSION_RE.fullmatch(session):
+        return JSONResponse({"error": "invalid session name"}, status_code=400)
+    keep = _tty_of_web_session(body.get("me"))
+    if not keep:
+        # 남길 화면을 특정하지 못하면 **아무것도 끊지 않는다**. 전부 끊고 나면
+        # 되돌릴 방법이 없다.
+        return JSONResponse({"error": "unknown client", "reason": "이 화면의 tty를 확인할 수 없습니다"}, status_code=400)
+
+    detached = []
+    for row in _client_rows(session):
+        if row["tty"] == keep:
+            continue
+        # 이미 죽은 tty면 tmux가 에러를 내지만 무시한다(graceful).
+        tmux_runner.run(["detach-client", "-t", row["tty"]], timeout=2.0)
+        detached.append(row["tty"])
+    # 남은 클라이언트 크기로 즉시 재동기화 — 안 하면 방금 사라진 작은 화면
+    # 크기 그대로 한동안 남는다.
+    tmux_runner.run(["refresh-client", "-t", keep], timeout=2.0)
+    return {"ok": True, "kept": keep, "detached": detached}
+
+
 # Phase 9 #1: ws push로 grid 1초 폴링 대체 — 변화 시에만 푸시.
 @router.websocket("/ws-preview/{tmux_name}")
 async def ws_preview(websocket: WebSocket, tmux_name: str):
