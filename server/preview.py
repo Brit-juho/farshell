@@ -10,12 +10,21 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 from typing import Awaitable, Callable, Optional
 
 import tmux_runner
 from ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
+
+# frontend/js/lib/ansilex.js의 ANSI_STRIP_RE와 같은 목적(줄이 "글자 없이 escape만"인지
+# 판정) — 여긴 서버 쪽 트렁케이션(_capture_no_cache)에서 "진짜로 빈 줄인지" 볼 때만 쓴다.
+_ANSI_STRIP_RE = re.compile(r"\x1b\[[\d;]*m|\x1b\[[?\d;]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+
+
+def _is_blank_line(line: str) -> bool:
+    return _ANSI_STRIP_RE.sub("", line).strip() == ""
 
 # 1초 TTL — REST 호환 (capture_pane을 직접 호출하는 구식 클라이언트도 보호)
 _preview_cache: TTLCache[str] = TTLCache(ttl=1.0)
@@ -63,8 +72,20 @@ def _capture_no_cache(session_name: str, lines: int = 20, ansi: bool = True) -> 
         return None
     if lines > 0:
         all_lines = text.split("\n")
+        # 실측 버그(2026-09-07, L6 검증 중 발견): `-S -{lines}`는 캡처의 시작점만
+        # 정하고 끝은 항상 현재 화면 맨 아래다 — 창이 `lines`보다 크고(예: 53행)
+        # 방금 만든 세션처럼 실제 내용이 위쪽 몇 줄뿐이면 총 줄 수가 `lines`를
+        # 넘고 뒤쪽은 전부 빈 줄로 채워진다. 그 상태에서 "끝에서부터 lines줄"을
+        # 그대로 자르면 내용이 아니라 뒤쪽 빈 줄들만 남아 프리뷰가 통째로
+        # 비어 보인다(pane-picker.js·quickopen.js의 라이브 썸네일에서 재현 확인).
+        # 뒤쪽 빈 줄부터 걷어낸 뒤에 끝에서부터 잘라야 실제 최신 내용이 남는다 —
+        # 화면을 꽉 채우는 진짜 긴 출력(빈 줄 없음)에서는 이 정리가 아무 것도
+        # 안 걷어내므로 기존 동작과 동일하다.
+        while all_lines and _is_blank_line(all_lines[-1]):
+            all_lines.pop()
         if len(all_lines) > lines:
-            text = "\n".join(all_lines[-lines:])
+            all_lines = all_lines[-lines:]
+        text = "\n".join(all_lines)
     return text
 
 
