@@ -13,6 +13,7 @@ import './core/env.js';
 import './core/api.js';
 import './core/store.js';
 import './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
+import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
@@ -42,6 +43,7 @@ import './term/conn-overlay.js';
 import './term/keybar.js';
 import './term/ws.js';
 import './term/settings-apply.js';  // S2 — 설정 변경을 살아있는 xterm에 즉시 반영
+import './term/keymap-actions.js'; // S3 — 분할·rail 토글 등 남은 액션 배선 + wire()
 import './term/tmux-panel.js';
 import './term/session.js';
 import './term/guide.js';

@@ -8,6 +8,7 @@
 // 부품들을 순서대로 호출하는 오케스트레이터로 남겼다. 계획서 자신도 이 경로를
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
+import { register as registerKey } from '../core/keymap.js';
 import { getSession, allSessions, registerSession, removeSessionRecord, activeSessionId, setActive } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
@@ -199,19 +200,18 @@ function switchTabByOffset(delta) {
   if (nid && nid !== activeId) switchTo(nid);
 }
 
-// 단축키로 터미널 섹션 좌우 이동: Ctrl/Cmd + Shift + ← / →.
-// xterm이 키를 먹기 전에 잡아야 하므로 document의 capture 단계에서 처리하고,
-// stopPropagation으로 PTY까지 흘러가지 않게 막는다(포커스 위치와 무관하게 동작).
-document.addEventListener('keydown', (e) => {
-  if (!e.shiftKey || !(e.ctrlKey || e.metaKey) || e.altKey) return;
-  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-  // 검색창·탭 이름 편집 중에는 텍스트 선택(Shift+화살표)을 방해하지 않는다.
+// S3: 탭 좌우 이동도 키맵 레지스트리 경유. 레지스트리가 document capture 단계에서
+// 한 번만 듣고 preventDefault/stopPropagation까지 처리하므로(PTY로 새지 않는다),
+// 여기서는 "무엇을 할지"만 남는다.
+// 검색창·탭 이름 편집 중에는 텍스트 선택(Shift+화살표)을 방해하지 않는다 —
+// 이 예외는 이 액션 고유의 문맥이라 레지스트리가 아니라 여기 남긴다.
+function _inTextField() {
   const ae = document.activeElement;
-  if (ae && (ae.id === 'search-input' || ae.isContentEditable)) return;
-  e.preventDefault();
-  e.stopPropagation();
-  switchTabByOffset(e.key === 'ArrowLeft' ? -1 : 1);
-}, true);
+  return !!(ae && (ae.id === 'search-input' || ae.isContentEditable
+    || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'));
+}
+registerKey('tabPrev', () => { if (!_inTextField()) switchTabByOffset(-1); });
+registerKey('tabNext', () => { if (!_inTextField()) switchTabByOffset(1); });
 
 export async function removeSession(id) {
   const s = getSession(id);

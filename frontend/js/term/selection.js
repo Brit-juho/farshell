@@ -1,5 +1,6 @@
 // 마우스/선택 배선 — 드래그 자동복사·우클릭·이미지 붙여넣기·단축키·OSC52.
 // F4에서 terminal.js(구 :482-565)에서 분리. addSession에서 term.open 직후 호출.
+import { match as matchKey } from '../core/keymap.js';
 import { get as setting } from '../core/settings.js';
 import { copyToClipboard, pasteFromClipboard, pasteImageUpload } from './clipboard.js';
 import { getSession } from '../core/store.js';
@@ -50,18 +51,26 @@ export function wireClipboard(id, term, wrapper) {
   //    되므로 중복이라 오히려 혼란만 준다.
   //    ⚠ Ctrl+Shift+V는 Chrome/Firefox 등에서 "서식 없이 붙여넣기" 네이티브 단축키와
   //    겹친다 — preventDefault()로 먼저 막지 않으면 이중 붙여넣기가 된다.
+  // S3: 하드코딩된 두 조합을 키맵 레지스트리로 옮겼다. 여기는 xterm의
+  // attachCustomKeyEventHandler라 성격이 다르다 — xterm이 키를 PTY로 보내기
+  // **전에** 판정해야 하므로, 레지스트리의 match()로 "이 키가 어떤 액션인가"만
+  // 물어보고 실행은 이 자리에서 한다(document 리스너로 옮기면 xterm이 먼저
+  // 먹어서 PTY에 이스케이프가 흘러간다).
+  // passthrough가 켜져 있으면 true를 반환해 터미널로도 흘린다.
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== 'keydown') return true;
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'v') {
-      e.preventDefault();
+    const hit = matchKey(e);
+    if (!hit) return true;
+    if (hit.id === 'paste') {
+      if (!hit.passthrough) e.preventDefault();
       pasteFromClipboard(id);
-      return false;
+      return hit.passthrough;
     }
     // 코드 뷰어 토글. Ctrl+B는 tmux prefix라 절대 쓰지 않는다(viewer.js 참고).
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'e') {
-      e.preventDefault();
+    if (hit.id === 'viewer') {
+      if (!hit.passthrough) e.preventDefault();
       showViewer();
-      return false;
+      return hit.passthrough;
     }
     return true;
   });

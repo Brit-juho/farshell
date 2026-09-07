@@ -14,6 +14,7 @@
 // 완전히 겹치던 3항목(빠른 열기·터미널 내 검색·코드 뷰어)은 L1 잔여 항목에서
 // ⋯ 메뉴 쪽을 제거했다 — 이 파일의 명령 목록(팔레트 자신 + 기본 목록의 "코드
 // 뷰어 열기"/"터미널 내 검색")이 그 안전망이다.
+import { register as registerKey, getBinding, displayCombo } from './core/keymap.js';
 import { openPanel, closePanel } from './panels/panel.js';
 import { getAction, registerAction } from './core/dom.js';
 import { allSessions, getSession } from './core/store.js';
@@ -38,14 +39,24 @@ function _gateOk(gate) {
   return !el || el.style.display !== 'none';
 }
 
+// S3: 하드코딩된 힌트 문자열 대신 키맵 레지스트리에서 **현재** 바인딩을 읽는다.
+// 사용자가 재바인딩하면 팔레트 표시도 같이 바뀐다(Warp 패리티: "각 명령 옆에
+// 현재 키 바인딩 표시"). 옛날처럼 문자열을 여기 적어두면 재바인딩 후 팔레트가
+// 거짓말을 하게 된다.
+function _hint(actionId) {
+  const b = getBinding(actionId);
+  if (!b || b.unavailable) return '';
+  return displayCombo(b.combo);
+}
+
 // "명령" 섹션(접두사 없음) — ⋯ 메뉴의 「음성 · 파일」+「보기」 그룹 대응.
 function _quickOpenCommands() {
   const cmds = [
-    { label: '코드 뷰어 열기', hint: 'Ctrl+Shift+E', action: 'viewer.show', gate: 'fs' },
+    { label: '코드 뷰어 열기', hint: _hint('viewer'), action: 'viewer.show', gate: 'fs' },
     { label: '프롬프트 큐', hint: '', action: 'queue.show' },
     { label: '프롬프트 스니펫', hint: '', action: 'snippets.show' },
     { label: '포트 대시보드', hint: '', action: 'ports.show', gate: 'ports' },
-    { label: '터미널 내 검색', hint: 'Ctrl/Cmd+F', action: 'search.toggle' },
+    { label: '터미널 내 검색', hint: _hint('search'), action: 'search.toggle' },
     { label: '음성 전용 모드', hint: '', action: 'voice.only-toggle', gate: 'voice' },
     { label: '파일 업로드', hint: '', run: () => document.getElementById('file-input')?.click() },
     { label: '새 세션', hint: '', action: 'session.add-menu' },
@@ -323,9 +334,6 @@ registerAction('quickopen.open', () => openQuickOpen());
 // 여부를 가리지 않는다 — 기존 관행과 일치, 그리고 openPanel 자체가 토글이라
 // 실수로 눌러도 다시 누르면 닫힌다). 브라우저 기본 동작(주소창 포커스 등)을
 // 막기 위해 항상 preventDefault.
-document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
-    e.preventDefault();
-    openQuickOpen();
-  }
-});
+// S3: 키맵 레지스트리 경유(하드코딩 제거). 팔레트가 각 명령 옆에 현재 바인딩을
+// 표시하는 것도 같은 레지스트리를 읽는다.
+registerKey('palette', () => openQuickOpen());

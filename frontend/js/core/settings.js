@@ -35,6 +35,10 @@ export const SCHEMA = {
                               parse: (v) => (v === '1' ? 'on' : v === '0' ? 'off' : 'auto') },
   'theme.skin':             { type: 'str',  def: 'farshell', migrate: 'vt-skin' },
   'keybar.collapsed':       { type: 'bool', def: false, migrate: 'vt_keybar_collapsed', parse: (v) => v === '1' },
+  // S3: 키맵 재정의({id: {binding, passthrough}})를 JSON 문자열로 한 덩어리
+  // 저장한다. 항목마다 스키마 키를 만들면 스키마가 키맵의 사본이 되어 반드시
+  // 어긋난다 — 키맵의 진짜 스키마는 core/keymap.js의 ACTIONS 하나뿐이다.
+  'keymap.overrides':       { type: 'str', def: '{}' },
 };
 
 let _values = {};              // 사용자가 실제로 바꾼 값만 (기본값은 안 담는다)
