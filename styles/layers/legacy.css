@@ -1721,3 +1721,39 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
   .vt-set-row { flex-direction:column; align-items:stretch; gap:calc(var(--spacing) * 1); }
   .vt-set-keyrow { flex-wrap:wrap; }
 }
+
+/* ── U2 사용량 게이지 ──────────────────────────────────────────────────────
+   "숫자보다 바가 먼저" — 바 높이 4px, 색만 보고 판단 가능해야 한다. */
+.vt-usage .vt-vw-body { padding:calc(var(--spacing) * 2); }
+.vt-usage .vt-vw-body.stale { opacity:.6; }
+.vt-usage-card {
+  padding:calc(var(--spacing) * 1.5); border:1px solid var(--line);
+  border-radius:var(--radius-md); margin-bottom:calc(var(--spacing) * 1.5);
+}
+.vt-usage-card.active { border-color:var(--acc); }
+.vt-usage-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1); margin-bottom:calc(var(--spacing) * 1); }
+.vt-usage-name { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-usage-tier, .vt-usage-chip {
+  font:500 var(--fs-xs) var(--ui); color:var(--sub);
+  background:var(--menu-hover); padding:1px 6px; border-radius:var(--radius-full);
+}
+.vt-usage-live { margin-left:auto; font:500 var(--fs-xs) var(--ui); color:var(--color-st-working); }
+.vt-usage-win { display:flex; align-items:center; gap:calc(var(--spacing) * 1); margin-top:6px; }
+.vt-usage-label { width:3ch; font:500 var(--fs-xs) var(--mono); color:var(--sub); }
+.vt-usage-track { flex:1; height:4px; background:var(--menu-hover); border-radius:var(--radius-full); overflow:hidden; }
+.vt-usage-fill { height:100%; border-radius:var(--radius-full); transition:width .3s var(--ease-out-quint, ease); }
+.vt-usage-pct { width:4ch; text-align:right; font:500 var(--fs-xs) var(--mono); color:var(--txt); }
+.vt-usage-reset { min-width:9ch; text-align:right; font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-usage-warn {
+  margin-bottom:calc(var(--spacing) * 1); padding:4px 8px; border-radius:var(--radius-sm);
+  background:color-mix(in oklab, var(--color-st-error) 15%, transparent);
+  color:var(--color-st-error); font:500 var(--fs-xs) var(--ui);
+}
+.vt-usage-empty, .vt-usage-none { color:var(--sub); font:400 var(--fs-xs) var(--ui); }
+.vt-usage-fallback { margin-top:calc(var(--spacing) * 1); font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-usage-fallback.armed { color:var(--color-st-waiting); }
+@media (max-width: 720px) {
+  /* compact에서는 리셋 시각을 다음 줄로 — 한 줄에 넣으면 바가 짓눌린다 */
+  .vt-usage-win { flex-wrap:wrap; }
+  .vt-usage-reset { width:100%; text-align:left; padding-left:calc(3ch + var(--spacing)); }
+}

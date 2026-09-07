@@ -18,6 +18,9 @@ fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
 fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
 fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue (P4)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
+fsh hooks [status|install|uninstall]  # register Claude Code hooks (prerequisite for status badges/queue/TTS)
+fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without hooks)
+fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
 fsh password [clear]   # set web login password (stores a hash) / clear=unset
 fsh otp [status|setup|disable]   # require OTP when registering a new device (fully disabled until setup)
 fsh device [list|revoke <id>]    # list registered devices / revoke (also invalidates sessions if a phone is lost)

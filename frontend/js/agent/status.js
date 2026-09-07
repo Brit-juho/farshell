@@ -38,11 +38,10 @@ whenAuthed(() => (async () => {
     if (!caps.push) {
       document.querySelectorAll('.needs-push').forEach(el => el.style.display = 'none');
     }
-    // L4: /api/capabilities는 아직 usage 키를 안 돌려준다(U 마일스톤 — 읽기 전용
-    // clauth 사용량 표시 — 이전, ADR-6). caps.usage는 항상 undefined라 이 분기가
-    // 늘 참이고, rail의 「사용량」 항목은 지금은 항상 숨는다. U가 실제로
-    // capabilities에 usage를 추가하는 순간 이 코드 변경 없이 자동으로 나타난다.
-    if (!caps.usage) {
+    // U1: 이제 capabilities가 usage를 돌려준다 — `{available, provider, profiles}`.
+    // L4가 예고한 대로 이 파일은 안 고치고도 자동으로 나타나야 했는데, 값이
+    // 객체라 truthy가 되면 **소스가 없어도 항목이 뜬다**. `available`을 봐야 한다.
+    if (!caps.usage || !caps.usage.available) {
       document.querySelectorAll('.needs-usage').forEach(el => el.style.display = 'none');
     }
     if (!caps.voice) {

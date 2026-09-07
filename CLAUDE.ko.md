@@ -16,6 +16,9 @@ fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
 fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐 (P4)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
+fsh hooks [status|install|uninstall]  # Claude Code 훅 등록(상태 배지·큐·TTS의 전제)
+fsh pane report [--state ...] [--agent ...]  # 이 pane의 상태 보고(훅 없는 에이전트용)
+fsh clauth [status|which]  # 사용량 조회(읽기 전용, clauth 미설치면 숨김)
 fsh password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
 fsh otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전까지 완전 비활성)
 fsh device [list|revoke <id>]    # 등록된 기기 조회 / 폐기(폰 분실 시 세션까지 함께 무효)

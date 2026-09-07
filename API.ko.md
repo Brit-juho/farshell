@@ -114,7 +114,10 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | PUT | `/api/workspace` | 워크스페이스 상태 저장 |
 | GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) 전체 목록 |
 | GET | `/api/agents/{name}` | 특정 tmux 세션의 활성 에이전트 정보 |
-| GET | `/api/agent/status` | Claude Code 훅으로 추적 중인 도구 사용 상태 (그리드 뷰 펄스/완료 배지용) |
+| GET | `/api/agent/status` | 에이전트 상태 머신(A1) — 세션별 `idle/working/waiting/done` + TTL 만료 |
+| POST | `/api/agent/report` | pane 자기보고(A2) — 훅이 없는 에이전트용 (`fsh pane report`) |
+| GET | `/api/hooks/status` | Claude Code 훅 등록 상태(A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
+| GET | `/api/usage` | 사용량 스냅샷(U1) — 소스가 없으면 `{available:false, reason}`. 토큰·credential은 화이트리스트로 제외 |
 | POST | `/api/agent/event` | Claude Code Pre/Post/StopToolUse 훅이 호출하는 엔드포인트 |
 | GET | `/api/safe-mode` | 프롬프트 큐 safe_mode 활성 여부 |
 | GET | `/api/tailscale/status` | Tailscale 설치/연결/IP/MagicDNS 호스트명 |

@@ -18,6 +18,7 @@ import push
 import safe_mode
 import tailscale
 import tunnel
+import usage
 import voice_handler
 import workspace
 
@@ -71,12 +72,37 @@ async def capabilities(request: Request):
         # P5: pywebpush 설치 여부. 실제 구독 가능 여부는 secure context 도 필요하므로
         # 프론트가 isSecureContext 를 함께 본다.
         "push": push.available(),
+        # U1: 사용량 소스(clauth 피드 등)가 없으면 rail 항목·우측 레일 섹션을
+        # 통째로 숨긴다 — 기존 fs/ports/push 게이팅과 같은 메커니즘이라
+        # 프런트에 새 개념이 생기지 않는다.
+        "usage": usage.capability(),
     }
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}
     tun = dict(payload.get("tunnel") or {})
     tun.pop("checked_at", None)
     stable["tunnel"] = tun
+    return _etag_response(payload, request, stable_for_etag=stable)
+
+
+@router.get("/api/usage")
+async def usage_get(request: Request):
+    """U1 — 정규화된 사용량 스냅샷.
+
+    미설치/비활성이면 `{available: false, reason}`을 돌려준다(404가 아니다) —
+    프런트는 이 응답 하나로 "기능이 없다"와 "일시적 실패"를 구분할 수 있어야
+    한다. ETag는 `generated_at`을 뺀 값으로 계산한다: 피드가 90초마다 새
+    타임스탬프를 찍는데 그걸 포함하면 내용이 같아도 매번 새 ETag가 나온다
+    (기존 `tunnel.checked_at` 처리와 같은 이유).
+    """
+    cap = usage.capability()
+    if not cap.get("available"):
+        return _etag_response({"available": False, **cap}, request)
+    snap = usage.snapshot()
+    if snap is None:
+        return _etag_response({"available": False, "provider": cap.get("provider"), "reason": "read-failed"}, request)
+    payload = {"available": True, **snap}
+    stable = {k: v for k, v in payload.items() if k != "generated_at"}
     return _etag_response(payload, request, stable_for_etag=stable)
 
 

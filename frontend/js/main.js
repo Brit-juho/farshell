@@ -22,6 +22,7 @@ import './lib/difflex.js';
 import './lib/keyseq.js';
 import './panels/panel.js';
 import './panels/settings.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
+import './panels/usage.js';     // U2 — 사용량 게이지(rail 「사용량」)
 import './ui/favicon.js';
 import './ui/moreMenu.js';
 import './push/swreg.js';

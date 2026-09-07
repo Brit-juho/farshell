@@ -56,6 +56,8 @@ function _quickOpenCommands() {
     { label: '프롬프트 큐', hint: '', action: 'queue.show' },
     { label: '프롬프트 스니펫', hint: '', action: 'snippets.show' },
     { label: '포트 대시보드', hint: '', action: 'ports.show', gate: 'ports' },
+    // U2: rail과 1:1 패리티(ADR-8). 사용량 소스가 없으면 gate가 숨긴다.
+    { label: '사용량', hint: '', action: 'usage.open', gate: 'usage' },
     { label: '터미널 내 검색', hint: _hint('search'), action: 'search.toggle' },
     { label: '음성 전용 모드', hint: '', action: 'voice.only-toggle', gate: 'voice' },
     { label: '파일 업로드', hint: '', run: () => document.getElementById('file-input')?.click() },

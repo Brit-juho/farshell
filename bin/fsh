@@ -1181,6 +1181,7 @@ cmd_help() {
     fsh help hotkeys        핫키 전체 목록 + 변경 방법
     fsh help target         음성 타깃 lock 설명
     fsh help agent-state    에이전트 상태(훅 등록 · pane 자기보고 · 4상태)
+    fsh help clauth         사용량 표시(clauth 연동 · 켜고 끄기)
     fsh help ssh            Tailscale + SSH 원격 접속 (회사망 등)
     fsh help tunnel-hook    터널 URL이 바뀔 때 Notion/Slack 등에 자동 게시
     fsh help troubleshoot   자주 묻는 트러블슈팅
@@ -1197,7 +1198,7 @@ HELP
     fi
   else
     echo "  ✗ 도움말 토픽 '$topic' 없음"
-    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / agent-state / ssh / tunnel-hook / troubleshoot"
+    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / agent-state / clauth / ssh / tunnel-hook / troubleshoot"
     return 1
   fi
 }
@@ -1428,6 +1429,89 @@ PYEOF
       ;;
     *)
       echo "  사용법: fsh pane report [--state idle|working|waiting|done] [--agent <이름>]"
+      return 1 ;;
+  esac
+}
+
+# U4: clauth 읽기 전용 래퍼. **전역 스위치(clauth <profile>)는 2.0에 넣지 않는다**
+# — FarShell은 tmux 세션을 여러 개 띄우는 도구라, 세션 5개를 돌려놓고 전역을
+# 바꾸면 기존 세션은 그대로고 새 세션만 바뀐다. 어느 세션이 어느 계정인지
+# 알 수 없게 되고 폰에서 원격으로 볼 때 특히 치명적이다(60-usage-provider.md).
+#
+# 미설치는 **에러가 아니다** — clauth를 안 쓰는 환경이 정상이므로 안내 후 0으로 끝낸다.
+cmd_clauth() {
+  local sub="${1:-status}"
+  local feed="${VT_CLAUTH_STATUS:-$HOME/.clauth/status.json}"
+
+  if [ ! -f "$feed" ]; then
+    echo ""
+    echo "  ⓘ clauth 사용량 피드가 없습니다 ($feed)"
+    echo "    clauth를 쓰지 않는 환경이면 정상입니다 — FarShell은 이 경우 사용량 UI를 숨깁니다."
+    echo "    쓰는데도 안 보이면: clauth 데몬이 떠 있는지 확인하세요."
+    echo ""
+    return 0
+  fi
+
+  case "$sub" in
+    status|"")
+      "${VT_PYTHON:-python3}" - "$feed" <<'PYEOF'
+import json, sys, time
+from datetime import datetime
+
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        d = json.load(f)
+except Exception as e:
+    print(f"  ✗ 피드를 읽을 수 없습니다: {e}")
+    raise SystemExit(0)
+
+if d.get("schema") != 1:
+    print(f"  ⚠ 모르는 피드 형식(schema={d.get('schema')}) — clauth 버전을 확인하세요")
+    raise SystemExit(0)
+
+def age(ts):
+    try:
+        return time.time() - datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+a = age(d.get("generated_at"))
+fresh = "" if a is None else f"  ({a:.0f}초 전 갱신)"
+print("")
+print(f"  📊 clauth 사용량{fresh}")
+print(f"  활성 프로필: {d.get('active_profile') or '?'}")
+print("")
+for p in d.get("profiles") or []:
+    live = " ●live" if p.get("has_live_session") else ""
+    tier = f" [{p['tier']}]" if p.get("tier") else ""
+    auth = "" if p.get("auth_status", "ok") == "ok" else f"  ⚠ 재인증 필요({p['auth_status']})"
+    mark = "*" if p.get("active") else " "
+    print(f"  {mark} {p.get('name','?')}{tier}{live}{auth}")
+    wins = p.get("windows") or []
+    if not wins:
+        print("      사용량 정보 없음")
+    for w in wins:
+        pct = w.get("utilization_pct") or 0
+        filled = int(pct / 10)
+        bar = "▓" * filled + "░" * (10 - filled)
+        print(f"      {str(w.get('label','')):>3}  {bar} {pct:5.1f}%")
+print("")
+PYEOF
+      ;;
+    which)
+      "${VT_PYTHON:-python3}" - "$feed" <<'PYEOF'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    raise SystemExit(0)
+print(d.get("active_profile") or "")
+PYEOF
+      ;;
+    *)
+      echo "  사용법: fsh clauth [status|which]"
+      echo "  (읽기 전용입니다 — 프로필 전환은 clauth 자체 명령을 쓰세요)"
       return 1 ;;
   esac
 }
@@ -1953,6 +2037,40 @@ cmd_doctor() {
       _hooks_missing="$(echo "$_hooks_out" | awk -F'\t' '$2!="ok"{printf "%s ", $1}')"
       _check "Claude 훅" warn "미등록/불일치: ${_hooks_missing}— 'fsh hooks install' (없으면 상태 배지·큐 자동 투입·TTS가 동작 안 함)"
     fi
+  fi
+
+  # 11-d. clauth 사용량 피드 (U4) — 있으면 신선도까지, 없으면 조용히 넘어간다
+  # (clauth를 안 쓰는 환경이 정상이다. 경고로 띄우면 노이즈가 된다).
+  local _clauth_feed="${VT_CLAUTH_STATUS:-$HOME/.clauth/status.json}"
+  if [ -f "$_clauth_feed" ]; then
+    local _cl
+    _cl="$("${VT_PYTHON:-python3}" - "$_clauth_feed" <<'PYEOF' 2>/dev/null
+import json, sys, time
+from datetime import datetime
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    print("broken"); raise SystemExit
+if d.get("schema") != 1:
+    print(f"schema:{d.get('schema')}"); raise SystemExit
+try:
+    age = time.time() - datetime.fromisoformat(str(d.get("generated_at")).replace("Z", "+00:00")).timestamp()
+except Exception:
+    age = -1
+print(f"ok:{len(d.get('profiles') or [])}:{age:.0f}")
+PYEOF
+)"
+    case "$_cl" in
+      ok:*)
+        local _np _age; _np="$(echo "$_cl" | cut -d: -f2)"; _age="$(echo "$_cl" | cut -d: -f3)"
+        if [ "${_age:-999}" -gt 300 ] 2>/dev/null; then
+          _check "clauth 사용량" warn "피드가 ${_age}초째 안 바뀜 — clauth 데몬 확인 (프로필 ${_np}개)"
+        else
+          _check "clauth 사용량" ok "프로필 ${_np}개, ${_age}초 전 갱신"
+        fi ;;
+      schema:*) _check "clauth 사용량" warn "모르는 피드 형식($_cl) — clauth 버전 확인" ;;
+      broken)   _check "clauth 사용량" warn "피드를 읽을 수 없음 ($_clauth_feed)" ;;
+    esac
   fi
 
   # 12. 푸시 알림
@@ -3297,6 +3415,7 @@ case "${1:-help}" in
   hotkey)   shift; cmd_hotkey "$@" ;;
   hooks)    shift; cmd_hooks "$@" ;;
   pane)     shift; cmd_pane "$@" ;;
+  clauth)   shift; cmd_clauth "$@" ;;
   password) shift; cmd_password "$@" ;;
   otp)      shift; cmd_otp "$@" ;;
   device|devices) shift; cmd_device "$@" ;;

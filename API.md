@@ -118,7 +118,10 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | PUT | `/api/workspace` | Save workspace state |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |
 | GET | `/api/agents/{name}` | Active agent info for a specific tmux session |
-| GET | `/api/agent/status` | Tool-use state tracked via Claude Code hooks (for the Grid view's pulse/done badges) |
+| GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |
+| POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
+| GET | `/api/hooks/status` | Claude Code hook registration status (A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
+| GET | `/api/usage` | Usage snapshot (U1) — `{available:false, reason}` when no source. Tokens/credentials are excluded by a field whitelist |
 | POST | `/api/agent/event` | Endpoint called by the Claude Code Pre/Post/StopToolUse hooks |
 | GET | `/api/safe-mode` | Whether prompt queue safe_mode is active |
 | GET | `/api/tailscale/status` | Tailscale install/connection/IP/MagicDNS hostname |
