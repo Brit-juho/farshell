@@ -54,12 +54,31 @@ export function toggleMediaKeyTrigger() {
 
 // --- 음성 전용 모드 ---
 
+// L7: 마이크는 평소 #vt-rail-mic-slot(데스크톱) 또는 #keybar-slot-mic(터치) 중
+// 하나에 산다(keybar.js가 부팅 시 결정). 음성 전용 모드의 "화면 가득 큰 마이크"
+// 연출(body.voice-only-mode #mic-btn-wrap.mic, legacy.css)은 #topbar가
+// flex-column 가운데 정렬 컨테이너로 바뀌는 것에 얹혀 있어, 마이크가 실제로
+// #topbar의 자식이어야만 가운데로 온다 — 켤 때 옮기고 끌 때 원래 자리로
+// 정확히 되돌린다(어느 쪽이었는지 저장해뒀다가).
+let _micHomeBeforeVoiceOnly = null;
+
 export function toggleVoiceOnly() {
   document.body.classList.toggle('voice-only-mode');
   const btn = document.getElementById('voiceonly-btn');
   const isOn = document.body.classList.contains('voice-only-mode');
   if (btn) {
     btn.classList.toggle('active', isOn);
+  }
+  const mic = document.getElementById('mic-btn-wrap');
+  const topbar = document.getElementById('topbar');
+  if (mic && topbar) {
+    if (isOn) {
+      _micHomeBeforeVoiceOnly = mic.parentElement;
+      topbar.appendChild(mic);
+    } else if (_micHomeBeforeVoiceOnly) {
+      _micHomeBeforeVoiceOnly.appendChild(mic);
+      _micHomeBeforeVoiceOnly = null;
+    }
   }
   micStatus.textContent = isOn ? '음성 전용 모드 — 터미널 숨김' : '';
 }

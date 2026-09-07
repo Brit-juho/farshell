@@ -245,6 +245,10 @@ function initRail() {
   // ── 배지(큐 대기 수 · 포트 수) ───────────────────────────────────────────
   // "큐 기능이 안 쓰이는 진짜 이유가 이 가시성 부재다"(문서 §3) — 패널을 열지
   // 않아도 보여야 의미가 있으므로 상시(탭이 보이는 동안만) 가볍게 폴링한다.
+  // L7: 큐 배지는 rail(regular/wide)과 keybar(compact, #keybar-badge-queue)
+  // 둘 다 같은 값을 보여준다 — 폴링을 두 번 하지 않고 한 fetch 결과를 두 id에
+  // 동시에 반영한다(_setBadge가 없는 id는 조용히 건너뛰므로 어느 쪽이 실제로
+  // DOM에 있든 안전).
   function _setBadge(id, n) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -253,13 +257,17 @@ function initRail() {
     el.hidden = false;
   }
   async function refreshBadges() {
-    if (document.hidden || window.innerWidth < COMPACT_MAX) return; // compact는 rail 자체가 안 보임
+    if (document.hidden) return;
     try {
       const q = await vtFetch('/api/queue');
-      _setBadge('vt-rail-badge-queue', (q.items || []).length);
+      const n = (q.items || []).length;
+      _setBadge('vt-rail-badge-queue', n);
+      _setBadge('keybar-badge-queue', n);
     } catch (_) { /* 다음 주기 재시도 */ }
     // agent/status.js가 !caps.ports일 때 .needs-ports 엘리먼트에 직접
     // style.display='none'을 건다 — 그 결과만 재사용(새로 capabilities를 안 물어봄).
+    // rail의 포트 버튼 기준으로만 게이팅한다(compact엔 포트 keybar 슬롯이
+    // 없어 배지도 없음 — §3 6항목 중 포트는 rail 전용이라 keybar엔 없다).
     const portsBtn = document.getElementById('vt-rail-ports');
     if (portsBtn && portsBtn.style.display !== 'none') {
       try {

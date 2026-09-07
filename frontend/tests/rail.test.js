@@ -244,6 +244,12 @@ test('큐/포트 배지가 각 API 응답에 맞춰 표시된다', async () => {
   assert.strictEqual(qb.textContent, '2');
   assert.strictEqual(pb.hidden, false);
   assert.strictEqual(pb.textContent, '1', 'protected 포트는 배지 수에서 제외돼야 한다');
+
+  // L7: keybar의 큐 배지(#keybar-badge-queue)도 같은 fetch 결과로 갱신된다 —
+  // rail이 안 보이는 compact 폭에서도 큐 가시성이 살아있어야 하기 때문(§3).
+  const kb = window.document.getElementById('keybar-badge-queue');
+  assert.strictEqual(kb.hidden, false);
+  assert.strictEqual(kb.textContent, '2');
 });
 
 test('큐가 비어 있으면 배지가 숨는다', async () => {

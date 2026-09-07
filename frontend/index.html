@@ -152,11 +152,10 @@
 
     <div class="spacer"></div>
 
-    <!-- 음성 입력 — 상단 바로 통합 (voice.js 계약: #mic-btn-wrap + .label + .recording) -->
-    <button id="mic-btn-wrap" class="tbtn mic needs-voice" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" title="음성 입력">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>
-      <span class="label">음성 입력</span>
-    </button>
+    <!-- L7: 마이크를 상단바에서 이관했다(accent 버튼 1개 회수, AFTER 다이어그램의
+         최종 상단바 = 탭+ +팔레트뿐). 이제 그 자리는 없고, 정적 마크업은
+         #vt-rail-mic-slot(데스크톱 홈)에 있다 — keybar.js가 부팅 시 포인터
+         타입에 따라 keybar 쪽으로 옮길 수도 있다(아래 #keybar-slot-mic 참고). -->
 
     <!-- L6: 커맨드 팔레트 진입점으로 재배정 — 예전엔 search.toggle(터미널 내 검색)이었다.
          팔레트가 세션·파일·명령을 아우르는 "확인" 진입점(ADR-8)이 되면서, 이 아이콘은
@@ -226,6 +225,18 @@
        #vt-rail-panel-body 안으로 appendChild()만 한다(재생성 아님, 체크박스
        상태·리스너 보존). -->
   <div id="vt-rail-settings-tpl" hidden>
+    <!-- L7: 마이크의 데스크톱 홈 — keybar(터치 전용)가 안 보이는 환경에서도
+         음성 입력이 완전히 사라지지 않게 한다(문서에 명시적 근거는 없었으나,
+         조용히 기능이 없어지는 쪽보다 안전하다고 판단해 유지하기로 함).
+         voice.js 계약(#mic-btn-wrap + .label + .recording)은 그대로 —
+         keybar.js가 부팅 시 pointer:coarse면 이 슬롯 대신 #keybar-slot-mic로
+         이 버튼 자체를 옮긴다(재생성 아님, appendChild). -->
+    <div id="vt-rail-mic-slot">
+      <button id="mic-btn-wrap" class="mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" title="음성 입력">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>
+        <span class="label">음성 입력</span>
+      </button>
+    </div>
     <button class="mi needs-voice" id="voiceonly-btn" role="menuitem" data-action="voice.only-toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>음성 전용 모드
     </button>
@@ -263,17 +274,40 @@
     </button>
   </div>
 
-  <!-- L4: 예전 ⋯ 메뉴의 "파일 업로드" 항목 — 트리거 버튼은 rail/팔레트가
-       대신하므로(quickopen.js "파일 업로드" 명령이 이 input을 직접 클릭한다)
-       숨은 input만 남는다. keybar(L7)가 정식 진입점을 마련하기 전 과도기. -->
+  <!-- L4/L7: 예전 ⋯ 메뉴의 "파일 업로드" 항목 — 실제 트리거는 팔레트(L6, "파일
+       업로드" 명령)와 keybar의 📎 슬롯(L7, 아래) 둘이 이 하나의 input을
+       공유한다. 어디서 부르든 `.click()`만 하면 되므로 input은 어느 한쪽
+       DOM 밑에 있을 필요가 없다 — 최상위에 숨겨서 둔다. -->
   <input type="file" id="file-input" hidden onchange="uploadFile(this)" />
 
   <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
   <div id="mic-status" role="status" aria-live="polite"></div>
 
   <!-- 모바일 특수키 바 (keybar) — 소프트 키보드에 없는 Esc/Tab/화살표/Ctrl 등을 PTY로 전송.
-       기본 hidden; terminal.js가 터치 기기(pointer:coarse)에서만 노출하고 배선/위치 조정. -->
+       기본 hidden; term/keybar.js가 터치 기기(pointer:coarse)에서만 노출하고 배선/위치 조정. -->
   <div id="keybar" role="toolbar" aria-label="특수키" hidden>
+    <!-- L7: 좌측 고정 슬롯 3개 [🎤][큐][📎] + 접기/펴기 토글을 한 줄(#keybar-top)로
+         묶었다 — 이 줄은 접혀도(.collapsed) 항상 보인다. "키들"(#keybar-keys,
+         Esc/Ctrl/Tab/화살표 등 스크롤 줄)만 별도 줄이라 접었을 때 그 줄
+         자체가 통째로 없어져 실제로 세로 공간이 줄어든다(§3 "큐 기능이
+         안 쓰이는 진짜 이유가 이 가시성 부재다"가 접힘으로 다시 묻히면
+         의미가 없다는 게 예전 구조의 문제였다 — 구 M7). #keybar-slot-mic는
+         빈 컨테이너 — keybar.js가 부팅 시 #mic-btn-wrap을 여기로 옮겨 붙인다
+         (coarse pointer일 때만; 아니면 rail 설정 패널에 그대로 남는다). -->
+    <div id="keybar-top">
+      <div id="keybar-slots">
+        <div id="keybar-slot-mic"></div>
+        <button type="button" class="kb kb-slot" id="keybar-slot-queue" aria-label="프롬프트 큐" title="프롬프트 큐">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span class="vt-rail-badge" id="keybar-badge-queue" hidden></span>
+        </button>
+        <button type="button" class="kb kb-slot" id="keybar-slot-upload" aria-label="파일 업로드" title="파일 업로드">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+      </div>
+      <!-- 접기/펴기 토글 -->
+      <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" title="특수키 바 접기/펴기">▾</button>
+    </div>
     <div id="keybar-keys">
       <button type="button" class="kb" data-key="esc">Esc</button>
       <button type="button" class="kb kb-mod" data-mod="ctrl" aria-pressed="false">Ctrl</button>
@@ -293,8 +327,6 @@
       <button type="button" class="kb" data-seq="p" data-longpress-tmux="p"
         title="짧게: p 입력 · 길게: tmux 이전 창">p</button>
     </div>
-    <!-- 접기/펴기 토글 — 스크롤 영역 밖에 고정되어 항상 보임 -->
-    <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" title="특수키 바 접기/펴기">▾</button>
   </div>
 
   <script src="/static/vendor/xterm.min.js"></script>

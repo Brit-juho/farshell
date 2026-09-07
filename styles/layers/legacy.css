@@ -496,24 +496,31 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #terminal-container .xterm-viewport { scrollbar-width:none; }
 #terminal-container .xterm-viewport::-webkit-scrollbar { display:none; width:0; height:0; }
 
-/* ---- 음성 버튼 — 상단 바 통합 (voice.js 계약: .label 자식 + .recording) ---- */
-#mic-btn-wrap.mic {
-  width:auto; padding:0 calc(var(--spacing) * 3); gap:calc(var(--spacing) * 1.5); background:var(--acc); color:var(--acc-ink);
-  touch-action:manipulation;
-}
+/* ---- 음성 버튼 (voice.js 계약: .label 자식 + .recording) --------------------
+   L7: 상단바에서 이관됐다 — 이제 물리적으로 두 곳 중 하나에 산다
+   (#vt-rail-mic-slot 데스크톱 / #keybar-slot-mic 터치, keybar.js가 부팅 시
+   결정) + 음성 전용 모드에서만 잠깐 #topbar로 옮겨간다(media-session.js).
+   색·상태(녹음 중)는 어디에 있든 공통이라 컨텍스트 무관 규칙으로 두고,
+   크기·배치만 컨텍스트별로 아래에서 오버라이드한다. */
+#mic-btn-wrap.mic { background:var(--acc); color:var(--acc-ink); border:0; cursor:pointer; touch-action:manipulation; }
 #mic-btn-wrap.mic:hover { background:var(--acc); color:var(--acc-ink); filter:brightness(1.08); }
-#mic-btn-wrap.mic svg { width:15px; height:15px; }
-#mic-btn-wrap.mic .label { font-size:var(--fs-xs); font-weight:600; letter-spacing:-.2px; }
 #mic-btn-wrap.mic:active { transform:scale(.94); }
 #mic-btn-wrap.mic.recording { background:var(--err); color:var(--color-on-solid); animation:vt-pulse 1.1s infinite; }
 @keyframes vt-pulse {
   0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--err) 45%, transparent); }
   50%     { box-shadow:0 0 0 5px color-mix(in srgb, var(--err) 0%, transparent); }
 }
-@media (max-width:440px) {
-  #mic-btn-wrap.mic { padding:0; width:32px; }
-  #mic-btn-wrap.mic .label { display:none; }
+/* rail 설정 패널 컨텍스트 — 폭은 #vt-rail-settings-tpl .mi가 이미 주는 100%를
+   그대로 쓰고, 여긴 아이콘 크기·라벨 굵기만. */
+#vt-rail-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
+#vt-rail-mic-slot #mic-btn-wrap .label { font-weight:600; }
+/* keybar 컨텍스트 — .kb와 같은 높이의 정사각 아이콘 버튼, 좁아서 라벨은 생략. */
+#keybar-slot-mic #mic-btn-wrap {
+  width:auto; min-width:42px; height:38px; padding:0 calc(var(--spacing) * 3);
+  display:inline-flex; align-items:center; justify-content:center; gap:0; border-radius:var(--radius-md);
 }
+#keybar-slot-mic #mic-btn-wrap svg { width:16px; height:16px; }
+#keybar-slot-mic #mic-btn-wrap .label { display:none; }
 
 /* 음성 상태 pill — 상단 바 아래 우측에 떠 있음 */
 #mic-status {
@@ -551,11 +558,6 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #search-bar button:hover { background:var(--menu-hover); color:var(--txt); }
 
 /* ---- 음성 전용 모드 — #topbar를 전체 화면 컨테이너로 전환 --------------- */
-body.voice-only-mode #terminal-container,
-body.voice-only-mode #tabs,
-body.voice-only-mode #voice-session-picker,
-body.voice-only-mode .traffic,
-body.voice-only-mode .caption,
 /* L4: 예전엔 .more(⋯ 더보기)가 예외였다 — 그 안의 "음성 전용 모드" 토글이 이
    모드를 끄는 유일한 버튼이라 숨기면 새로고침 말고는 되돌릴 방법이 없는
    막다른 상태였기 때문. ⋯가 제거되며 그 토글은 rail의 「설정」 패널로
@@ -564,7 +566,21 @@ body.voice-only-mode .caption,
    rail도 안 보이면 물리 키보드 없이는 끌 방법이 없는 막다른 상태가
    똑같이 재발한다. `#palette-toggle`(빠른 열기, Mod+K와 동일 진입점 —
    L6)은 모든 뷰포트에서 상시 노출이라 이 새 예외로 그 역할을 대신한다 —
-   탭하면 팔레트가 열리고 기본 목록에 "음성 전용 모드" 명령이 있다. -->
+   탭하면 팔레트가 열리고 기본 목록에 "음성 전용 모드" 명령이 있다.
+   L7에서 발견한 버그: 이 주석이 원래 아래 선택자 목록의 쉼표 사이(#caption
+   과 #topbar > .tbtn 사이)에 끼어 있었다 — 문법상 CSS 주석은 선택자 목록
+   중간에 있어도 유효하지만, Vite의 CSS 처리 파이프라인이 이 경우를 잘못
+   처리해 이 규칙 이후 다음 "동일 selector 형태"가 나올 때까지의 규칙들을
+   통째로 삼켜버렸다(빌드된 app.css에서 `body.voice-only-mode #mic-btn-wrap`
+   전체 블록과 `#mic-status` 위치 규칙이 사라져 있었다 — grep으로 직접 확인).
+   L1 커밋 이후 실 서버 배포 산출물에도 계속 있었을 가능성이 높다. 주석을
+   선택자 목록 밖(규칙 앞)으로 빼는 것만으로 해결 — 다시는 셀렉터 콤마 목록
+   중간에 여러 줄 주석을 넣지 않는다. */
+body.voice-only-mode #terminal-container,
+body.voice-only-mode #tabs,
+body.voice-only-mode #voice-session-picker,
+body.voice-only-mode .traffic,
+body.voice-only-mode .caption,
 body.voice-only-mode #topbar > .tbtn:not(.mic):not(#palette-toggle),
 body.voice-only-mode #topbar > .spacer { display:none; }
 body.voice-only-mode #topbar {
@@ -656,6 +672,22 @@ body.voice-only-mode #mic-status {
 @media (min-width:1024px) {
   body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(48px + var(--vt-rail-panel-w, 280px)); }
 }
+/* L7: 실브라우저 검증 중 발견한 같은 종류의 회귀 2건(위 L4 회귀와 원인이
+   같다 — .vt-onboarding의 z-index:500이 새로 생긴 하단/중앙 UI를 덮는다).
+   둘 다 이번 diff가 만든 버그는 아니지만(voice-only-mode의 #topbar flex:1도,
+   keybar 자체도 그 전부터 있었다), 세션 0개 상태를 실제로 테스트해보지 않으면
+   드러나지 않던 것들이라 이번에 같이 고친다. */
+@media (pointer:coarse) {
+  /* keybar 높이(입력 슬롯 줄 + 키들 줄, #terminal-container padding-bottom과
+     같은 값)만큼 온보딩 하단을 비워 keybar가 그 밑에 깔리지 않게 한다. */
+  .vt-onboarding { bottom:calc(var(--spacing) * 24 + env(safe-area-inset-bottom,0px)); }
+}
+/* 음성 전용 모드는 "터미널을 포함해 다른 모든 걸 숨기고 마이크만" 보여주는
+   화면이다 — 온보딩(세션 없음 안내)도 그 "다른 모든 것"에 포함시켜 아예
+   숨긴다. bottom 오프셋 같은 부분 조정 대신 완전히 숨기는 쪽을 택한 이유:
+   음성 전용 모드의 #topbar는 화면 전체 높이로 늘어나므로(flex:1) 부분
+   오프셋으로는 겹침을 못 피한다. */
+body.voice-only-mode .vt-onboarding { display:none; }
 .vt-onboarding .vt-ob-icon { font-size:var(--fs-4xl); color:var(--acc); }
 .vt-onboarding h2 { color:var(--txt); font-size:var(--fs-xl); }
 .vt-onboarding p { color:var(--sub); font-size:var(--fs-base); max-width:320px; line-height:1.6; }
@@ -830,16 +862,22 @@ body.voice-only-mode #mic-status {
    위에 오도록 transform으로 끌어올린다. */
 #keybar {
   position:fixed; left:0; right:0; bottom:0; z-index:130;
-  display:flex; gap:calc(var(--spacing) * 1.5); align-items:center;
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5);
   padding:calc(var(--spacing) * 1.5) calc(calc(var(--spacing) * 2) + env(safe-area-inset-right,0px))
           calc(calc(var(--spacing) * 1.5) + env(safe-area-inset-bottom,0px)) calc(calc(var(--spacing) * 2) + env(safe-area-inset-left,0px));
   background:var(--bar); border-top:1px solid var(--line);
   will-change:transform;
 }
 #keybar[hidden] { display:none; }
-/* 키 버튼들만 가로 스크롤 (토글 버튼은 스크롤 밖에 고정) */
+/* L7: 입력 슬롯[🎤][큐][📎] + 접기/펴기 토글 — 이 줄(#keybar-top)은 별도 줄이라
+   "키들"(#keybar-keys) 줄을 접어도 안 사라진다(구 M7 관련 — 아래 .collapsed
+   주석 참고). .kb-slot은 배지(.vt-rail-badge 재사용)의 위치 기준. */
+#keybar-top { display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 1.5); }
+#keybar-slots { flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
+.kb-slot { position:relative; }
+/* 키 버튼들만 가로 스크롤 */
 #keybar-keys {
-  flex:1 1 auto; min-width:0;
+  min-width:0;
   display:flex; gap:calc(var(--spacing) * 1.5); align-items:center;
   overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
   -webkit-overflow-scrolling:touch; touch-action:pan-x;
@@ -871,20 +909,24 @@ body.voice-only-mode #mic-status {
   cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation;
 }
 #keybar-toggle:active { background:var(--menu-hover); }
-/* 접힘: 키 줄을 숨기고 바를 우하단 작은 알약으로 축소 (펴기 핸들만 노출) */
-#keybar.collapsed {
-  left:auto; right:calc(8px + env(safe-area-inset-right,0px)); width:auto;
-  border:1px solid var(--line); border-radius:var(--radius-md);
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5) calc(calc(var(--spacing) * 1.5) + env(safe-area-inset-bottom,0px));
-}
+/* 접힘: "키들"(#keybar-keys, Esc/Ctrl/Tab/화살표 등 스크롤 줄)만 숨긴다.
+   L7 이전에는 바 전체가 우하단 작은 알약으로 줄어들었는데, 그러면 입력
+   슬롯(마이크/큐/업로드)까지 함께 사라졌다 — "큐 배지가 접힘으로 다시
+   묻히면 가시성 개선이 무의미하다"(§3)는 게 바로 이 문제였다(구 M7 "숨긴
+   키바가 빈 공간을 남기지 않게"의 반대쪽 증상: 접었다고 유용한 걸 통째로
+   숨기면 안 됨). 이제 접힘은 폭을 그대로 두고 "키들" 줄만 걷어낸다 —
+   슬롯 + 토글은 항상 한 줄로 남는다. */
 #keybar.collapsed #keybar-keys { display:none; }
 /* 정밀 포인터(데스크톱, 물리 키보드)에서는 항상 숨김 — 단, 강제 오버라이드는 예외 */
 @media (pointer:fine) { #keybar:not(.force-show) { display:none !important; } }
 /* 터치 기기: keybar 높이만큼 터미널 하단 여백을 확보해 프롬프트가 안 가리게.
-   접힌 상태에선 우하단 알약만 남으니 여백을 줄여 화면을 더 쓴다. */
+   L7: keybar가 두 줄(입력 슬롯+토글 / 키들)이 돼 펼침 높이가 늘었다 — 값을
+   같이 올렸다. 접힌 상태는 "키들" 줄 하나만 없어진 높이(옛 펼침값과 거의
+   같다)로 맞춘다 — 예전처럼 우하단 알약으로 쪼그라들지 않으므로 거의
+   0에 가깝게 줄일 수는 없다(구 M7의 정반대 실수를 새로 만들지 않기 위함). */
 @media (pointer:coarse) {
-  #terminal-container { padding-bottom:calc(var(--spacing) * 12); }
-  body.kb-collapsed #terminal-container { padding-bottom:calc(var(--spacing) * 2); }
+  #terminal-container { padding-bottom:calc(var(--spacing) * 24); }
+  body.kb-collapsed #terminal-container { padding-bottom:calc(var(--spacing) * 12); }
 }
 
 /* =========================================================================

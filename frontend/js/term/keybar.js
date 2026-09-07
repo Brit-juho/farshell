@@ -9,8 +9,27 @@ import { activeSessionId, activeSession } from '../core/store.js';
 import { sendToPty } from './clipboard.js';
 import { fitAndResize } from './resize.js';
 import { _isCoarsePointer } from '../core/env.js';
+import { getAction } from '../core/dom.js';
 
 let _ctrlArmed = false;
+
+// L7: 마이크의 물리적 위치 결정 — voice.js가 `#mic-btn-wrap`을 모듈 최상위에서
+// `const`로 한 번만 캐시하므로(voice/recording.js), *어디에 있든* id만 유지되면
+// 문제없다. 데스크톱(사용자 확인, 문서에 명시적 근거는 없었음)은 rail 설정
+// 패널(#vt-rail-mic-slot, index.html 정적 마크업)에 그대로 두고, 터치 기기만
+// keybar 슬롯으로 옮긴다 — keybar 자체가 pointer:coarse 전용이므로 그 판정
+// 기준을 그대로 재사용한다. keybar 노출 여부(?keybar=1 강제 등)와는 무관하게
+// "입력 방식이 무엇이냐"만 본다 — 아래 initKeybar()의 이른 return보다 먼저
+// 실행해야 한다(강제 노출 없이 조용히 종료돼도 마이크는 제자리를 찾아가야 함).
+function _placeMicButton() {
+  const mic = document.getElementById('mic-btn-wrap');
+  if (!mic) return; // .needs-voice로 이미 숨겨졌거나(음성 미설치) 마크업 자체가 없는 테스트 환경
+  const target = _isCoarsePointer()
+    ? document.getElementById('keybar-slot-mic')
+    : document.getElementById('vt-rail-mic-slot');
+  if (target && mic.parentElement !== target) target.appendChild(mic);
+}
+_placeMicButton();
 
 function _setCtrlArmed(on) {
   _ctrlArmed = on;
@@ -50,6 +69,14 @@ export function initKeybar() {
   // 강제 노출 시엔 CSS의 pointer:fine 숨김을 이기도록 클래스 부여.
   if (_force) bar.classList.add('force-show');
   bar.hidden = false;
+
+  // L7: 좌측 고정 슬롯 — 큐/업로드. 마이크는 이미 _placeMicButton()이 옮겨뒀다.
+  // 이 둘은 keybar 밖의 다른 곳(rail·팔레트)과 액션을 공유하므로 재구현하지
+  // 않는다 — queue.show는 rail.js가 등록한 게 아니라 queue.js가 F5에서 이미
+  // registerAction해둔 진짜 소스이고, 업로드는 L4가 만들어둔 단일 #file-input을
+  // 그대로 클릭한다.
+  document.getElementById('keybar-slot-queue')?.addEventListener('click', () => getAction('queue.show')?.());
+  document.getElementById('keybar-slot-upload')?.addEventListener('click', () => document.getElementById('file-input')?.click());
 
   // M3: ←/→ 버튼을 누른 채 드래그하면 끈 거리만큼 같은 방향으로 연속 이동.
   const ARROW_DRAG_STEP_PX = 14;
