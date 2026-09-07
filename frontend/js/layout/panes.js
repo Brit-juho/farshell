@@ -13,13 +13,14 @@
 import { getSession, allSessions } from '../core/store.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
-  splitPane, closePane, setRatio, countLeaves,
+  splitPane, closePane, setRatio,
 } from './store.js';
 import { findNode } from './tree.js';
 import { fitAndResize } from '../term/resize.js';
 import { wireRatioResizer } from './resizer.js';
 import { canSplit, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
 import { openPanePicker } from './pane-picker.js';
+import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
 
 export { canSplit };
@@ -28,7 +29,12 @@ let _rootEl = null;
 let _poolEl = null;
 
 function _ensureContainers() {
-  if (!_rootEl) _rootEl = document.getElementById('terminal-container');
+  if (!_rootEl) {
+    _rootEl = document.getElementById('terminal-container');
+    // L3 2단계: "터미널 영역 한정"(§8) — 스와이프 리스너를 이 컨테이너 하나에만
+    // 건다(키바·상단바는 형제/조상이 달라 애초에 버블링돼 들어오지 않는다).
+    if (_rootEl) wireCompactSwipe(_rootEl);
+  }
   if (!_poolEl) {
     _poolEl = document.getElementById('terminal-pool');
     if (!_poolEl) {
@@ -154,6 +160,14 @@ function _renderNode(node, activePaneId, isRootOnly, usedSessionIds) {
   }
 
   // leaf
+  return _renderLeaf(node, activePaneId, isRootOnly, usedSessionIds);
+}
+
+// split 렌더러(_renderNode)와 compact 렌더러(_renderCompactActive) 둘 다
+// "leaf 하나를 실제 DOM으로 반영"하는 이 로직을 공유한다 — L3 2단계에서
+// _renderNode의 leaf 분기를 그대로 뽑아냈다(동작 변경 없음). labelSuffix는
+// compact의 위치 표시(" · 2/3")용.
+function _renderLeaf(node, activePaneId, isRootOnly, usedSessionIds, labelSuffix = '') {
   let paneEl = document.getElementById(`vt-pane-${node.id}`);
   if (!paneEl) paneEl = _buildPaneEl(node.id);
   paneEl.classList.toggle('active', node.id === activePaneId);
@@ -168,15 +182,28 @@ function _renderNode(node, activePaneId, isRootOnly, usedSessionIds) {
   const nameEl = paneEl.querySelector('.vt-pane-name');
   if (s && s.wrapper) {
     usedSessionIds.add(node.session);
-    nameEl.textContent = _sessionLabel(node.session);
+    nameEl.textContent = _sessionLabel(node.session) + labelSuffix;
     const empty = bodyEl.querySelector('.vt-pane-empty');
     if (empty) empty.remove();
     if (s.wrapper.parentElement !== bodyEl) bodyEl.appendChild(s.wrapper);
     s.wrapper.style.display = 'block';
   } else {
-    nameEl.textContent = '빈 pane';
+    nameEl.textContent = '빈 pane' + labelSuffix;
     _renderEmptyBody(bodyEl, node.id);
   }
+  return paneEl;
+}
+
+// L3 2단계 — compact(<720px + pointer:coarse) 렌더 모드: 활성 leaf 하나만
+// 화면 전체로 그린다. 헤더는 숨기지 않는다(isRootOnly=false) — 분할/닫기
+// 버튼과 위치 표시(" · n/N")가 여기서만 나온다. 단 accent 테두리(.active)는
+// 뗀다 — 화면에 pane이 하나뿐이라 "여럿 중 활성"이라는 뜻이 성립하지 않는다
+// (비교 대상 자체가 안 보인다).
+function _renderCompactActive(leaves, activePaneId, usedSessionIds) {
+  const idx = Math.max(0, leaves.findIndex((l) => l.id === activePaneId));
+  const active = leaves[idx] ?? leaves[0];
+  const paneEl = _renderLeaf(active, activePaneId, false, usedSessionIds, ` · ${idx + 1}/${leaves.length}`);
+  paneEl.classList.remove('active');
   return paneEl;
 }
 
@@ -193,8 +220,14 @@ export function renderLayout() {
   const tree = getTree();
   const activePaneId = getActivePaneId();
   const usedSessionIds = new Set();
+  const leaves = flattenLeaves(tree);
+  // L3 2단계: 트리는 그대로, 렌더 방식만 갈린다(설계 원칙 1) — leaf가
+  // 하나뿐이면 compact 여부와 무관하게 항상 지금과 같은 전체화면 렌더.
+  const compact = leaves.length > 1 && isCompactMode();
 
-  const rootEl = _renderNode(tree, activePaneId, countLeaves() === 1, usedSessionIds);
+  const rootEl = compact
+    ? _renderCompactActive(leaves, activePaneId, usedSessionIds)
+    : _renderNode(tree, activePaneId, leaves.length === 1, usedSessionIds);
   if (_rootEl.children[0] !== rootEl) _rootEl.replaceChildren(rootEl);
 
   // 트리에 없는 세션(배경 탭) wrapper는 풀로 — 이미 거기 있으면 건드리지 않는다.
@@ -214,3 +247,13 @@ export function renderLayout() {
 }
 
 onLayoutChange(renderLayout);
+
+// L3 2단계: compact 여부는 뷰포트 폭에 달려 있다 — 트리가 안 바뀌어도
+// 창 크기 변경/회전만으로 렌더 모드가 바뀔 수 있으므로 resize에도 다시
+// 그린다. 디바운스 120ms는 term/ws.js의 세션별 resize 핸들러와 같은 값
+// (모바일 키보드/뷰포트 흔들림 대비 관행).
+let _resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(renderLayout, 120);
+});
