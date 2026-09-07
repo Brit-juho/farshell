@@ -52,8 +52,11 @@ async def agent_event(request: Request):
     # P4: 작업이 끝났다는 가장 정확한 신호가 stop 훅이다. 여기서 큐를 한 건 흘린다.
     # 유예 시간(VT_QUEUE_GRACE_SEC)은 queue_runner가 둔다 — 사용자가 곧바로
     # 직접 타이핑을 시작했을 수 있으므로 즉시 밀어 넣지 않는다.
+    # A1: "stop 이벤트"라는 문자열이 아니라 **done 전이**를 트리거로 삼는다.
+    # 상태 판정이 서버로 옮겨온 이상, 큐도 같은 판정을 봐야 한다(나중에 done에
+    # 이르는 경로가 하나 더 생겨도 큐 쪽을 또 고칠 필요가 없다).
     queued = False
-    if event == "stop":
+    if (state or {}).get("status") == agent_status.DONE:
         try:
             import queue_runner
             import tmux_target
@@ -79,6 +82,8 @@ async def agent_event(request: Request):
 
 @router.get("/api/agent/status")
 async def agent_status_get():
+    # 기존 필드(active/all)는 그대로 둔다 — 하위호환. A1에서 각 엔트리에
+    # status가 추가됐고, 소비자는 그걸 그대로 쓰면 된다(파생 금지).
     return {"active": agent_status.all_active(), "all": agent_status.get_state()}
 
 
@@ -115,6 +120,9 @@ async def ws_agent(websocket: WebSocket):
         await websocket.send_json({
             "type": "agent_snapshot",
             "active": agent_status.all_active(),
+            # A1: 재접속·새로고침 시 done/waiting까지 복원되려면 active(=도구
+            # 실행 중)만으론 부족하다 — 상태를 가진 엔트리 전체를 함께 보낸다.
+            "all": agent_status.get_state(),
             "agents": agent_detector.detect_all(),
         })
         while True:

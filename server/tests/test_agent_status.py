@@ -30,23 +30,32 @@ def test_post_keeps_cwd_from_pre():
     assert state["tool"] is None
 
 
-def test_stop_returns_cwd_even_though_state_is_cleared():
+def test_stop_keeps_cwd_and_entry_survives():
+    """A1에서 계약이 바뀌었다 — stop이 엔트리를 지우지 않는다.
+
+    이전에는 `_state.pop`이라 "done이라는 상태"가 서버에 남지 않았고, 그래서
+    새로고침하면 done 배지가 사라졌다. 이제 엔트리를 유지하고 status만
+    done으로 바꾼다(A5 복원의 전제). cwd는 여전히 그대로 실려 나온다.
+    """
     agent_status.on_event("pre", {"session_id": "s1", "tool_name": "Bash", "cwd": "/repo/a"})
     result = agent_status.on_event("stop", {"session_id": "s1"})
-    assert result == {"cwd": "/repo/a"}
-    assert agent_status.get_state("s1") == {}
+    assert result["cwd"] == "/repo/a"
+    assert result["status"] == "done"
+    assert agent_status.get_state("s1")["status"] == "done"
 
 
-def test_stop_without_any_known_cwd_returns_none():
+def test_stop_without_prior_pre_still_records_done():
+    """도구를 하나도 안 쓴 응답(claude -p "ok" 같은)도 완료로 남아야 한다."""
     result = agent_status.on_event("stop", {"session_id": "never-seen"})
-    assert result is None
+    assert result["status"] == "done"
+    assert result["cwd"] is None
 
 
 def test_stop_payload_cwd_wins_over_stale_state_cwd():
     """stop 페이로드에 cwd가 직접 오면(정상 케이스) 그걸 우선한다."""
     agent_status.on_event("pre", {"session_id": "s1", "tool_name": "Bash", "cwd": "/repo/old"})
     result = agent_status.on_event("stop", {"session_id": "s1", "cwd": "/repo/new"})
-    assert result == {"cwd": "/repo/new"}
+    assert result["cwd"] == "/repo/new"
 
 
 def test_all_active_includes_cwd():
