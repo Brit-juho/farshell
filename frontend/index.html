@@ -158,7 +158,13 @@
       <span class="label">음성 입력</span>
     </button>
 
-    <button id="search-toggle" class="tbtn" data-action="search.toggle" aria-label="검색" title="검색">
+    <!-- L6: 커맨드 팔레트 진입점으로 재배정 — 예전엔 search.toggle(터미널 내 검색)이었다.
+         팔레트가 세션·파일·명령을 아우르는 "확인" 진입점(ADR-8)이 되면서, 이 아이콘은
+         모바일 포함 모든 뷰포트에서 상시 노출된다(legacy.css의 max-width:719px 숨김
+         목록에서 제외). 터미널 내 검색 자체는 Ctrl/Cmd+F나 팔레트 `/` 접두사로 그대로
+         쓸 수 있다 — ⋯ 메뉴의 동일 항목("터미널 내 검색"·"빠른 열기")은 L1 잔여
+         항목에서 제거했다(상단바 ↔ ⋯ 중복 제거). -->
+    <button id="palette-toggle" class="tbtn" data-action="quickopen.open" aria-label="빠른 열기" title="빠른 열기 (Ctrl/Cmd+K)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
     <button id="viewer-toggle" class="tbtn needs-fs" data-action="viewer.show" aria-label="코드 뷰어" title="코드 뷰어 (Ctrl+Shift+E)">
@@ -172,25 +178,18 @@
   <!-- ⋯ 팝업 메뉴 -->
   <!-- L1: 「세션」 그룹(tmux 세션 목록·맥에서도 열기·이 세션 맥에서 열기)은
        세션 관리 시트(picker.js openSessionManager → vt-session-footer)로
-       옮겼다 — rail(L4)이 생기기 전까지의 과도기 자리. -->
+       옮겼다 — rail(L4)이 생기기 전까지의 과도기 자리.
+       L1 잔여 항목(L6 완료 후 처리, 2026-09-07): 「보기」 그룹(빠른 열기·터미널
+       내 검색)과 「음성 · 파일」의 "코드 뷰어" 항목을 통째로 지웠다 — 상단바
+       ↔ ⋯ 중복이었다(빠른 열기=상단바 #palette-toggle과 완전히 동일한 액션,
+       터미널 내 검색=Ctrl/Cmd+F·팔레트 `/` 접두사로 대체, 코드 뷰어=상단바
+       #viewer-toggle과 완전히 동일한 액션). L6 이전엔 이 항목들을 지우면 좁은
+       화면(<720px)에서 진입 경로가 아예 사라졌지만(상단바 쪽도 그 폭에서
+       숨어 있었음), 지금은 상단바 돋보기(#palette-toggle)와 Mod+K가 모든
+       뷰포트에서 상시 노출되고 팔레트 기본 목록에 "코드 뷰어 열기"·"터미널
+       내 검색" 명령이 그대로 있어 안전망이 이미 마련돼 있다. Grid 뷰의 ⋯
+       항목은 이보다 앞서 L3 4단계에서 기능 자체가 폐지되며 함께 삭제됐다. -->
   <div id="more-menu" role="menu" aria-label="더보기 메뉴">
-    <div class="mlabel">보기</div>
-    <!-- 좁은 화면에선 상단 바의 검색 아이콘이 숨겨지므로(app.css, max-width:719px)
-         여기가 유일한 진입점이 된다. 넓은 화면에서도 중복 노출을 허용한다 — 메뉴에서
-         찾는 사용자와 아이콘을 누르는 사용자가 갈리기 때문.
-         L3 4단계: Grid 뷰 항목은 분할 pane 트리로 대체돼 삭제됐다(ADR-7). -->
-    <!-- L1(아이콘 교차 수정): 이 둘이 정확히 같은 돋보기 아이콘을 썼었는데
-         (빠른 열기=팔레트형 검색, 터미널 내 검색=search.toggle) 서로 다른 기능이었다.
-         반대로 "터미널 내 검색"은 상단바 #search-toggle과 같은 기능(search.toggle)
-         인데도 다른 아이콘(리스트)을 쓰고 있었다 — 지금은 기능 기준으로 재배정:
-         검색=돋보기(상단바와 통일), 빠른 열기=팔레트형(⌘) 아이콘. -->
-    <button class="mi" id="qopen-btn" role="menuitem" data-action="quickopen.open">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>빠른 열기
-    </button>
-    <button class="mi" id="search-mi" role="menuitem" data-action="search.toggle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>터미널 내 검색
-    </button>
-    <div class="msep"></div>
     <div class="mlabel">음성 · 파일</div>
     <button class="mi needs-voice" id="voiceonly-btn" role="menuitem" data-action="voice.only-toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>음성 전용 모드
@@ -200,9 +199,6 @@
       <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" />
     </label>
 
-    <button class="mi needs-fs" id="viewer-btn" role="menuitem" data-action="viewer.show">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>코드 뷰어
-    </button>
     <button class="mi" id="queue-btn" role="menuitem" data-action="queue.show">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>프롬프트 큐
     </button>

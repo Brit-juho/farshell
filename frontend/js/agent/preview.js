@@ -33,11 +33,17 @@ export function ensurePreviewWs(sessName) {
   ws.onmessage = (e) => {
     let msg; try { msg = JSON.parse(e.data); } catch (_) { return; }
     if (msg.type !== 'preview' || !msg.content) return;
-    const cards = document.getElementById('grid-cards');
-    const card = cards && cards.querySelector(`[data-name="${CSS.escape(sessName)}"]`);
-    if (!card) return;
-    const pre = card.querySelector('.card-preview');
-    if (pre) { pre.innerHTML = ansiToHtml(_trimBlankLines(msg.content)); pre.scrollTop = pre.scrollHeight; }
+    // L6에서 발견한 버그 수정: 이 핸들러가 `#grid-cards`에만 스코프돼 있었다 —
+    // 그리드 뷰가 L3 4단계에서 폐지된 뒤로 카드는 pane-picker.js(`#vt-pp-cards`)·
+    // quickopen.js(팔레트 세션 목록) 두 곳에서 재사용되는데, 이 onmessage는 여전히
+    // 존재하지 않는 `#grid-cards`만 찾아 항상 조용히 no-op이었다 — 즉 두 화면
+    // 모두 "첫 프레임(로딩 중...)" 이후로는 라이브 갱신이 전혀 반영되지 않았다.
+    // 컨테이너 id에 의존하지 않고 문서 전체에서 이름이 일치하는 카드를 찾는다
+    // (같은 세션 카드가 동시에 여러 화면에 떠 있어도 전부 갱신됨).
+    document.querySelectorAll(`[data-name="${CSS.escape(sessName)}"] .card-preview`).forEach((pre) => {
+      pre.innerHTML = ansiToHtml(_trimBlankLines(msg.content));
+      pre.scrollTop = pre.scrollHeight;
+    });
   };
   // 30초 keepalive — 끊김 방지.
   // ⚠ 닫힌 WebSocket에 send()는 예외를 던지지 않고 조용히 버린다(스펙: CLOSING/CLOSED).
