@@ -179,6 +179,22 @@ if [ "$PROFILE" = "voice" ] && [ "$(uname)" = "Linux" ]; then
   fi
 fi
 
+# 8-b. (A0) Claude Code 훅 등록 — 에이전트 상태 배지·큐 자동 투입·TTS 요약이
+# 전부 이 훅에 달려 있다. 지금까지는 README의 JSON 예시로만 안내해서 실제로
+# 등록한 사용자가 사실상 없었고(그래서 서버가 이벤트를 한 건도 못 받았다),
+# 그 사실을 알 방법조차 없었다. 등록기는 멱등이고 남의 훅을 보존한다.
+# ~/.claude가 없으면(=Claude Code 미사용) 조용히 건너뛴다.
+if [ -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" ]; then
+  echo ""
+  if "$VENV/bin/python" "$VT_DIR/server/claude_hooks.py" status >/dev/null 2>&1; then
+    echo "  ✓ Claude Code 훅 이미 등록됨"
+  else
+    echo "  Claude Code 훅 등록 (에이전트 상태·큐 자동 투입·TTS 요약의 전제)"
+    "$VENV/bin/python" "$VT_DIR/server/claude_hooks.py" install \
+      || echo "  ⚠ 훅 등록 실패 — 'fsh hooks install'로 다시 시도할 수 있습니다"
+  fi
+fi
+
 # 9. (W5-1) 터미널 profile 자동 등록 권유
 # 비대화형(curl|bash)에서는 스킵. TTY가 있으면 사용자에게 확인 후 fsh install-profiles 실행
 if [ -t 0 ] && [ -t 1 ]; then

@@ -168,20 +168,21 @@ language like "voice mode" or "mobile access." See `CLAUDE.md` for the full list
 
 | Hook | File | Behavior |
 |---|---|---|
-| Pre/Post/StopToolUse | `server/agent_hook.sh` | Reflects tool-use start/end/completion live in the mobile UI |
-| Stop | `server/tts_hook.sh` | Plays a TTS summary of the last message when a response finishes (falls back to macOS `say` if the server isn't running) |
+| PreToolUse / PostToolUse | `server/agent_hook.sh pre` / `post` | Reflects tool-use start/end live in the mobile UI |
+| Stop | `server/agent_hook.sh stop` | Reports completion to the server, feeds the next prompt-queue item, and delegates stdin to `tts_hook.sh` for the TTS summary (falls back to macOS `say` if the server isn't running) |
 
-Register in `~/.claude/settings.json`:
+Register them with one command — it is idempotent, preserves hooks you added
+yourself, and backs the file up before writing:
 
-```json
-{
-  "hooks": {
-    "PreToolUse":  [{ "command": "<repo>/server/agent_hook.sh pre"  }],
-    "PostToolUse": [{ "command": "<repo>/server/agent_hook.sh post" }],
-    "Stop":        [{ "command": "<repo>/server/tts_hook.sh" }]
-  }
-}
+```bash
+fsh hooks install      # register / update
+fsh hooks status       # check what is registered (also shown by `fsh doctor`)
+fsh hooks uninstall    # remove only FarShell's entries
 ```
+
+`./install.sh` runs this for you. **Register `agent_hook.sh stop`, not
+`tts_hook.sh`** — `agent_hook.sh stop` already delegates to `tts_hook.sh`, so
+registering both plays the TTS summary twice.
 
 ---
 

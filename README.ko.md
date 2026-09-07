@@ -165,20 +165,21 @@ VT_STT_LANG=ko                               # STT 언어 고정 (미설정 시 
 
 | 훅 | 파일 | 동작 |
 |---|---|---|
-| Pre/Post/StopToolUse | `server/agent_hook.sh` | 도구 사용 시작/종료/완료를 모바일 UI에 실시간 반영 |
-| Stop | `server/tts_hook.sh` | 응답 완료 시 마지막 메시지를 TTS로 요약 재생 (서버 미실행 시 macOS `say` 폴백) |
+| PreToolUse / PostToolUse | `server/agent_hook.sh pre` / `post` | 도구 사용 시작/종료를 모바일 UI에 실시간 반영 |
+| Stop | `server/agent_hook.sh stop` | 완료를 서버에 보고 + 프롬프트 큐 다음 항목 투입 + stdin을 `tts_hook.sh`에 위임해 TTS 요약 재생 (서버 미실행 시 macOS `say` 폴백) |
 
-`~/.claude/settings.json`에 등록:
+등록은 명령 하나로 한다. 멱등이고, 직접 넣은 다른 훅은 보존하며, 쓰기 전에
+설정 파일을 백업한다:
 
-```json
-{
-  "hooks": {
-    "PreToolUse":  [{ "command": "<repo>/server/agent_hook.sh pre"  }],
-    "PostToolUse": [{ "command": "<repo>/server/agent_hook.sh post" }],
-    "Stop":        [{ "command": "<repo>/server/tts_hook.sh" }]
-  }
-}
+```bash
+fsh hooks install      # 등록/갱신
+fsh hooks status       # 등록 상태 확인 (`fsh doctor`에도 표시)
+fsh hooks uninstall    # FarShell 항목만 제거
 ```
+
+`./install.sh`가 설치 시 대신 실행해준다. **등록할 것은 `tts_hook.sh`가 아니라
+`agent_hook.sh stop`이다** — `agent_hook.sh stop`이 내부에서 `tts_hook.sh`에
+위임하므로, 둘 다 등록하면 TTS 요약이 두 번 재생된다.
 
 ---
 

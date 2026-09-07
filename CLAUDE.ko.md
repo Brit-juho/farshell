@@ -317,12 +317,21 @@ curl -s -X PATCH "http://localhost:7777/api/sessions/$SID" \
 # 7. Scrollback 테스트 — 브라우저 새로고침 후 이전 출력이 보이는지 확인
 ```
 
-### Claude Code Stop hook (TTS 자동 요약)
+### Claude Code 훅 (에이전트 상태 + TTS 자동 요약)
 
-Claude Code 응답 완료 시 자동으로 TTS 요약을 재생한다.
+`server/agent_hook.sh`가 훅 3종의 단일 진입점이다: `{pre,post,stop}`을
+`POST /api/agent/event`로 보내고(에이전트 상태 배지, 프롬프트 큐 자동 투입),
+`stop`일 때는 stdin을 `tts_hook.sh`에 위임해 TTS 요약을 재생한다.
 
-- 스크립트: `server/tts_hook.sh`
-- 설정: `~/.claude/settings.json`의 `hooks.Stop`에 등록
+등록은 `fsh hooks install`(멱등, 다른 훅 보존, `settings.json` 백업 —
+`./install.sh`가 설치 시 대신 실행한다). `fsh hooks status`와 `fsh doctor`가
+3종 등록 여부를 알려준다 — 등록이 없으면 서버는 이벤트를 한 건도 못 받는데
+아무 것도 눈에 띄게 실패하지 않는다.
+**등록할 것은 `agent_hook.sh stop`이지 `tts_hook.sh`가 아니다** — 둘 다
+등록하면 TTS 요약이 두 번 재생된다.
+
+- 스크립트: `server/tts_hook.sh` (TTS 부분. `agent_hook.sh stop`이 호출한다)
+- 설정: `~/.claude/settings.json`의 `hooks.PreToolUse` / `hooks.PostToolUse` / `hooks.Stop`
 - 동작: transcript에서 마지막 assistant 응답(최대 200자) 추출 → 서버 TTS → `afplay` 재생
 - fallback: 서버 미실행 시 macOS `say -v Yuna` 사용
 
@@ -415,6 +424,8 @@ server/
   output_watcher.py — 출력 감시 → 작업 완료 TTS 알림
   local_mic.py      — MacBook 로컬 마이크 (sounddevice)
   session_store.py  — 세션 메타데이터 (이름 변경 지원)
+  agent_hook.sh     — Claude Code 훅 진입점 (pre/post/stop → /api/agent/event, stop은 tts_hook.sh에 위임)
+  claude_hooks.py   — ~/.claude/settings.json 멱등 등록기 (fsh hooks install/status/uninstall)
   tts_hook.sh       — Claude Code Stop hook (TTS 자동 요약)
   voice_daemon.py   — 독립 음성 입력 데몬 (핫키 → STT → tmux)
   clipboard_daemon.py — macOS 클립보드 폴링 데몬 (changeCount → /api/clipboard/push)

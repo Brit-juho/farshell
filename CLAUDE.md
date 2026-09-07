@@ -319,12 +319,21 @@ curl -s -X PATCH "http://localhost:7777/api/sessions/$SID" \
 # 7. Scrollback test — check that previous output is visible after a browser refresh
 ```
 
-### Claude Code Stop hook (automatic TTS summary)
+### Claude Code hooks (agent state + automatic TTS summary)
 
-Automatically plays a TTS summary when a Claude Code response completes.
+`server/agent_hook.sh` is the single entry point for all three hooks: it posts
+`{pre,post,stop}` to `POST /api/agent/event` (agent status badges, prompt-queue
+auto-feed) and, on `stop`, delegates stdin to `tts_hook.sh` for the TTS summary.
 
-- Script: `server/tts_hook.sh`
-- Config: registered under `hooks.Stop` in `~/.claude/settings.json`
+Register with `fsh hooks install` (idempotent, preserves your other hooks, backs
+up `settings.json`; `./install.sh` runs it for you). `fsh hooks status` and
+`fsh doctor` report whether the three events are registered — without them the
+server never receives a single event and nothing visibly fails.
+**Register `agent_hook.sh stop`, never `tts_hook.sh` directly** — registering
+both plays the TTS summary twice.
+
+- Script: `server/tts_hook.sh` (the TTS half, invoked by `agent_hook.sh stop`)
+- Config: `hooks.PreToolUse` / `hooks.PostToolUse` / `hooks.Stop` in `~/.claude/settings.json`
 - Behavior: extracts the last assistant response (up to 200 chars) from the transcript → server TTS → plays via `afplay`
 - Fallback: uses macOS `say -v Yuna` if the server isn't running
 
@@ -421,6 +430,8 @@ server/
   output_watcher.py — output monitoring → task-completion TTS notification
   local_mic.py      — MacBook local microphone (sounddevice)
   session_store.py  — session metadata (supports renaming)
+  agent_hook.sh     — Claude Code hook entry point (pre/post/stop → /api/agent/event, stop delegates to tts_hook.sh)
+  claude_hooks.py   — idempotent registrar for ~/.claude/settings.json (fsh hooks install/status/uninstall)
   tts_hook.sh       — Claude Code Stop hook (automatic TTS summary)
   voice_daemon.py   — standalone voice input daemon (hotkey → STT → tmux)
   clipboard_daemon.py — macOS clipboard polling daemon (changeCount → /api/clipboard/push)
