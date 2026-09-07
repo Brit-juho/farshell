@@ -8,6 +8,7 @@ import { apiFetch } from '../core/api.js';
 import { API_BASE, WS_BASE, _tokenQuery } from '../core/env.js';
 import { getSession } from '../core/store.js';
 import { applyAgentBadges } from './badges.js';
+import { applySnapshot, applyEvent } from './state.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
 // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
@@ -174,12 +175,17 @@ export function connectAgentWs() {
       try { wsAgent.send(JSON.stringify({ type: 'pong' })); } catch (_) {}
     } else if (msg.type === 'agent_snapshot' || msg.type === 'agents_change') {
       if (msg.agents) applyAgentBadges(msg.agents);
+      // A5: 서버가 판정한 4상태를 상태 스토어에 반영한다. 재접속·새로고침
+      // 시에도 done/waiting이 복원되는 근거가 이 스냅샷이다(A1이 stop에서
+      // 엔트리를 안 지우게 바꾼 이유).
+      if (msg.all) applySnapshot(msg.all);
       // 스냅샷에 활성 도구가 있으면 탭 파비콘을 '작업중'으로
       if (window.VTFavicon && msg.active && msg.active.length) VTFavicon.set('working');
       // 그리드를 늦게 열었을 때도(이미 작업 중이던 세션) 카드 강조가 맞도록 캐시+반영.
       agent_status_active_cache = msg.active || [];
       _applyActiveHighlights(agent_status_active_cache);
     } else if (msg.type === 'agent_event') {
+      applyEvent(msg.state);
       // 탭 파비콘 상태: pre(도구 시작)=작업중, stop(응답 완료)=완료.
       // post(도구 종료)는 다음 도구가 이어질 수 있어 '작업중' 유지(무시).
       // voice 미설치 환경에서도 stop 신호로 완료 뱃지가 뜬다.

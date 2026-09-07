@@ -15,6 +15,7 @@ import { wireRatioResizer } from './resizer.js';
 import { COMPACT_MAX, REGULAR_MAX } from './breakpoints.js';
 import { icon } from '../ui/icons.js';
 import { whenAuthed } from '../agent/status.js';
+import { getStatus, onStatusChange, applyStatusDot, sortByUrgency } from '../agent/state.js';
 
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 280;
 // 'file'/'queue'/'ports'는 data-action 버튼이라 여기서 다루지 않는다(위 헤더 주석).
@@ -148,7 +149,11 @@ function initRail() {
     const tmuxByWebId = await _fetchTmuxByWebId();
     if (openItem !== 'session') return; // 그 사이 패널이 바뀌었으면 그리지 않는다
     const activeIdNow = activeSessionId();
-    for (const [id, s] of entries) {
+    // A5(2-6): 내 개입이 필요한 것이 맨 위 — waiting > done > working > idle.
+    // **탭 순서는 정렬하지 않는다**(사용자가 드래그로 정한 의도라 건드리면
+    // 안 된다). 정렬은 rail·팔레트·세션 시트처럼 "찾아 들어가는" 목록에만.
+    const sorted = sortByUrgency(entries, ([id]) => tmuxByWebId[id]?.name);
+    for (const [id, s] of sorted) {
       const tmuxSess = tmuxByWebId[id];
       let row;
       if (tmuxSess) {
@@ -167,6 +172,9 @@ function initRail() {
         row.appendChild(select);
       }
       row.classList.toggle('active', id === activeIdNow);
+      const st = getStatus(tmuxSess?.name);
+      applyStatusDot(row, st);
+      row.dataset.state = st;
       const actions = document.createElement('div');
       actions.className = 'vt-rail-session-actions';
       const renameBtn = document.createElement('button');
@@ -304,4 +312,6 @@ function initRail() {
   // 다시 그린다 — 다른 화면(pane-picker 등)에서 세션이 바뀌어도 패널이
   // stale 상태로 남지 않게.
   subscribe(() => { if (openItem === 'session') renderSessionPanel(); });
+  // A5: 상태가 바뀌면 dot뿐 아니라 **정렬 순서**도 달라지므로 통째로 다시 그린다.
+  onStatusChange(() => { if (openItem === 'session') renderSessionPanel(); });
 }

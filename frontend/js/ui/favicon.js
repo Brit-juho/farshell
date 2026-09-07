@@ -1,6 +1,6 @@
 /* VT 동적 파비콘 — 탭 아이콘을 canvas로 그려 16px에서도 선명하게 + 작업 상태 뱃지.
    보라(FarShell/Claude 아이덴티티) 라운드 사각 배경 + 흰 터미널(">_") 글리프 → 라이트/다크 탭바 양쪽에서 보임.
-   우하단 상태 점: 대기중=없음, 작업중=앰버, 완료=그린.
+   우하단 상태 점: 유휴=없음, 작업중=앰버, 승인대기=레드(가장 급함), 완료=그린.
 
    theme.js/grid.js/voice.js보다 먼저 로드. window.VTFavicon.set('idle'|'working'|'done').
    - grid.js: agent_event(도구 시작) → 'working'
@@ -12,7 +12,9 @@
   var SIZE = 64;               // 렌더 해상도 (브라우저가 16px로 다운스케일 → 선명)
   var BG = '#8839ef';          // catppuccin mauve — Claude 에이전트 색과 동일 계열
   var FG = '#ffffff';          // 터미널 글리프
-  var DOT = { working: '#f9b304', done: '#40c057' };  // 앰버 / 그린
+  // A5: waiting 추가. 값은 --color-st-* 토큰과 같은 계열이다 — canvas라
+  // CSS 변수를 못 읽어서 리터럴로 둘 수밖에 없다(토큰을 바꾸면 여기도 함께).
+  var DOT = { working: '#f9b304', waiting: '#e64553', done: '#40c057' };
 
   var _status = 'idle';
   var _canvas = null;
@@ -94,7 +96,9 @@
   }
 
   function set(status) {
-    if (status !== 'idle' && status !== 'working' && status !== 'done') return;
+    // A5: 'waiting' 추가 — 이 화이트리스트가 A1의 상태 집합과 어긋나면 새
+    // 상태가 조용히 무시된다(그게 이 함수가 화이트리스트를 갖는 유일한 위험).
+    if (status !== 'idle' && status !== 'working' && status !== 'waiting' && status !== 'done') return;
     if (status === _status) return;
     _status = status;
     draw(status);
@@ -102,6 +106,8 @@
 
   // 완료 뱃지를 사용자가 확인(탭 포커스)하면 대기중으로 되돌림
   document.addEventListener('visibilitychange', function () {
+    // waiting은 사용자가 탭을 봐도 자동으로 내리지 않는다 — 승인은 실제로
+    // 답해야 끝나는 일이고, 그 해제는 서버(A3)가 판정한다.
     if (!document.hidden && _status === 'done') set('idle');
   });
 

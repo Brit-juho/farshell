@@ -49,6 +49,11 @@ import { bootApp } from './term/boot.js';
 // 뷰 자체, status/badges를 소비) 순서로 의존한다.
 import './agent/badges.js';
 import './agent/status.js';
+// A5 — 서버가 판정한 4상태의 프런트 단일 소스(state)와 그걸 화면에 칠하는
+// 유일한 곳(paint). status.js가 WS 메시지를 state로 넣고, paint가 구독해 탭·
+// pane 헤더·파비콘을 갱신한다.
+import './agent/state.js';
+import './agent/paint.js';
 import './agent/preview.js';
 // F4 — viewer.js(1230줄)를 panels/viewer/ 아래 6개로 분할. state(leaf) →
 // shell/tree(서로 순환 참조, shell.js 헤더 주석 참고) → file → diff → git 순.
