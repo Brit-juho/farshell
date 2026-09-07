@@ -173,6 +173,11 @@ export function connectAgentWs() {
     try { msg = JSON.parse(e.data); } catch (_) { return; }
     if (msg.type === 'ping') {
       try { wsAgent.send(JSON.stringify({ type: 'pong' })); } catch (_) {}
+    } else if (msg.type === 'agent_status_sync') {
+      // A6: 하트비트에 실려 오는 상태 스냅샷. TTL 만료처럼 서버 안에서만
+      // 일어나는 전이를 클라이언트가 놓치지 않기 위한 것이라, 상태 스토어만
+      // 갱신하고 다른 UI(에이전트 배지 등)는 건드리지 않는다.
+      applySnapshot(msg.all || {});
     } else if (msg.type === 'agent_snapshot' || msg.type === 'agents_change') {
       if (msg.agents) applyAgentBadges(msg.agents);
       // A5: 서버가 판정한 4상태를 상태 스토어에 반영한다. 재접속·새로고침

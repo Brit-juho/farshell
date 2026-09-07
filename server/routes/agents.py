@@ -163,6 +163,19 @@ async def ws_agent(websocket: WebSocket):
                 return
             try:
                 await websocket.send_text(json.dumps({"type": "ping"}))
+                # A6 검증에서 발견한 갭: TTL 만료(working 15분→idle, waiting
+                # 2분→working 등)는 sweeper가 **서버 안에서 조용히** 일으키는
+                # 전이라 어떤 이벤트도 발생하지 않는다. 그래서 클라이언트는
+                # 다음 훅 이벤트가 올 때까지 만료된 상태를 계속 그리고 있었다
+                # (실제로 화면은 waiting, 서버는 working인 상태를 재현했다).
+                # 하트비트마다 상태 스냅샷을 함께 실어 최대 지연을 한 주기로
+                # 묶는다 — get_state()가 sweep()을 태우므로 조회 없는 서버에서도
+                # 만료가 제때 도는 부수 효과가 있다. detect_all()(프로세스 스캔)은
+                # 여기 넣지 않는다(비싸다 — 그건 agents_change 때만).
+                await websocket.send_json({
+                    "type": "agent_status_sync",
+                    "all": agent_status.get_state(),
+                })
             except Exception:
                 return
 

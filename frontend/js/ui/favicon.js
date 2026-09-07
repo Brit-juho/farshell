@@ -1,6 +1,7 @@
 /* VT 동적 파비콘 — 탭 아이콘을 canvas로 그려 16px에서도 선명하게 + 작업 상태 뱃지.
    보라(FarShell/Claude 아이덴티티) 라운드 사각 배경 + 흰 터미널(">_") 글리프 → 라이트/다크 탭바 양쪽에서 보임.
-   우하단 상태 점: 유휴=없음, 작업중=앰버, 승인대기=레드(가장 급함), 완료=그린.
+   우하단 상태 점: 유휴=없음, 작업중=그린, 승인대기=앰버(가장 급함), 완료=블루.
+   색은 D3 상태 토큰(--color-st-*)과 같은 값이다.
 
    theme.js/grid.js/voice.js보다 먼저 로드. window.VTFavicon.set('idle'|'working'|'done').
    - grid.js: agent_event(도구 시작) → 'working'
@@ -12,9 +13,13 @@
   var SIZE = 64;               // 렌더 해상도 (브라우저가 16px로 다운스케일 → 선명)
   var BG = '#8839ef';          // catppuccin mauve — Claude 에이전트 색과 동일 계열
   var FG = '#ffffff';          // 터미널 글리프
-  // A5: waiting 추가. 값은 --color-st-* 토큰과 같은 계열이다 — canvas라
-  // CSS 변수를 못 읽어서 리터럴로 둘 수밖에 없다(토큰을 바꾸면 여기도 함께).
-  var DOT = { working: '#f9b304', waiting: '#e64553', done: '#40c057' };
+  // A5: waiting 추가 + **D3 토큰과 색 정렬**. 이 파일은 D3(디자인 시스템)보다
+  // 먼저 있던 classic script라 그때 색(작업중=앰버, 완료=그린)을 그대로 들고
+  // 있었는데, 토큰은 작업중=그린·대기=앰버(액센트)·완료=블루로 이미 재정의돼
+  // 있었다 — 같은 화면에서 탭 dot과 파비콘이 서로 다른 색으로 같은 상태를
+  // 가리키고 있었다는 뜻이다. canvas라 CSS 변수를 못 읽어 리터럴이지만,
+  // 값은 styles/theme/skins.css의 --color-st-*와 같게 유지한다.
+  var DOT = { working: '#32d74b', waiting: '#ffd60a', done: '#0a84ff' };
 
   var _status = 'idle';
   var _canvas = null;
