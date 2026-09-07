@@ -449,7 +449,38 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 }
 .vt-pane-btn:hover { background:var(--menu-hover); color:var(--txt); }
 .vt-pane-body { flex:1; min-height:0; position:relative; }
-.vt-pane-empty { display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
+/* L3 5단계: 이제 pane 전체가 클릭 대상인 버튼이다 — 작은 "+ 새 세션" 하나만
+   누르게 하지 않고, 빈 화면 어디를 눌러도 세션 선택 시트가 열린다. */
+.vt-pane-empty {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:calc(var(--spacing) * 1.5); width:100%; height:100%;
+  border:none; background:transparent; color:var(--sub); cursor:pointer;
+  font:500 var(--fs-sm) var(--ui);
+}
+.vt-pane-empty:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-pane-empty svg { width:20px; height:20px; }
+
+/* 빈 pane 세션 선택 시트(layout/pane-picker.js) — openPanel()의 공용 모달
+   껍데기(.vt-viewer-backdrop/-card)를 쓰되 폭만 좁힌다. 팔레트(L6)에서도
+   같은 카드를 재사용할 예정이라 카드 자체(.vt-card)는 4단계에서 그대로
+   남겨둔 스타일을 그대로 쓴다. */
+.vt-pane-pick .vt-viewer-card { max-width:640px; }
+.vt-pp-new {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  width:calc(100% - calc(var(--spacing) * 6));
+  margin:calc(var(--spacing) * 3) calc(var(--spacing) * 3) 0;
+  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+  background:var(--tab); color:var(--txt); border:1px dashed var(--line); border-radius:var(--trad);
+  font:500 var(--fs-sm) var(--ui); cursor:pointer;
+}
+.vt-pp-new:hover { background:var(--menu-hover); border-color:var(--acc); color:var(--acc); }
+.vt-pp-new svg { flex-shrink:0; }
+.vt-card-grid {
+  display:grid; grid-template-columns:repeat(2, 1fr); gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 3);
+}
+@media (max-width:560px) { .vt-card-grid { grid-template-columns:1fr; } }
+.vt-pp-plain-hint { font-size:var(--fs-2xs); color:var(--sub); }
 /* xterm-viewport 스크롤(휠/모바일 터치)은 tmux mouse-on 세션에서 항상 tmux
    copy-mode로 위임되고(wireTouchScroll 참고), 스크롤 위치도 항상 그 경로로만
    맞춰진다. 그런데 브라우저 기본 스크롤바 thumb은 이 경로를 거치지 않고

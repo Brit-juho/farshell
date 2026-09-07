@@ -23,6 +23,8 @@ const PATHS = {
   // L3 3단계: pane 헤더의 분할 버튼(→/↓ 방향).
   'columns-2': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>',
   'rows-2': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/>',
+  // L3 5단계: 빈 pane 세션 선택 시트의 "+ 새 세션".
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
 };
 
 // icon(name, size?) → SVG 마크업 문자열. innerHTML/템플릿 리터럴에 그대로

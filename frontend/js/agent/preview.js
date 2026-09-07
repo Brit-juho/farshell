@@ -51,11 +51,48 @@ export function ensurePreviewWs(sessName) {
   ws.onerror = () => { try { ws.close(); } catch (_) {} };
 }
 
+// 카드 하나의 정적 뼈대를 만든다(제목·프리뷰 자리·클릭 핸들러). 값 채우기는
+// updateSessionCard()가 별도로 한다 — refreshGrid()의 "이미 있으면 재사용,
+// 값만 갱신" 관행과 5단계(layout/pane-picker.js)의 "매번 새로 만든다" 관행이
+// 이 두 함수를 각자 다른 방식으로 조합해서 쓸 수 있도록 분리했다.
+export function buildSessionCard(sess, onSelect) {
+  const card = document.createElement('div');
+  card.dataset.name = sess.name;
+  card.className = 'vt-card';
+  // 세션 이름은 tmux가 주는 임의 문자열이라 innerHTML 보간이 아니라
+  // textContent로 넣는다 (`<`가 든 이름이 마크업으로 해석되지 않도록).
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="card-agent"></span>
+      <span class="card-title"></span>
+      <span class="card-cmd"></span>
+    </div>
+    <pre class="card-preview"><span style="opacity:.5;font-style:italic;font-size:var(--fs-3xs);">로딩 중...</span></pre>
+  `;
+  card.querySelector('.card-title').textContent = sess.name;
+  card.onclick = onSelect;
+  return card;
+}
+
+// 매번 새로 계산해야 하는 값(명령·cwd·이미 탭인지·에이전트 배지)만 갱신한다.
+export function updateSessionCard(card, sess, agentInfo) {
+  card.querySelector('.card-cmd').textContent = sess.command || '';
+  // cwd는 dataset에 저장해둔다 — agent_event(pre/stop)가 cwd로만 오므로
+  // "어느 카드가 지금 작업 중인지"를 여기 저장된 값과 매칭해서 찾는다.
+  card.dataset.cwd = sess.cwd || '';
+  // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.
+  const isOpenTab = !!(sess.web_session_id && getSession(sess.web_session_id));
+  card.classList.toggle('open-tab', isOpenTab);
+  card.title = isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속';
+  _applyCardAgent(card, agentInfo);
+}
+
 export async function refreshGrid() {
   // L3 4단계: #grid-cards 컨테이너 자체가 사라졌다(그리드 뷰 폐지) — 이 함수는
-  // 5단계가 새 컨테이너를 만들어 다시 연결하기 전까지는 호출부가 없다. 그래도
-  // 누군가 미리 부르더라도(예: 다음 단계 작업 중) 조용히 아무 일도 안 하게
-  // 방어한다 — 없는 엘리먼트에 innerHTML을 쓰면 즉시 TypeError로 죽는다.
+  // 그 이름의 컨테이너가 다시 생기기 전까지는 호출부가 없다(5단계는 카드
+  // 빌더만 재사용하고 자기 컨테이너 `#vt-pp-cards`를 따로 쓴다,
+  // layout/pane-picker.js 참고). 그래도 누군가 미리 부르더라도 조용히 아무
+  // 일도 안 하게 방어한다 — 없는 엘리먼트에 innerHTML을 쓰면 즉시 TypeError로 죽는다.
   const cards = document.getElementById('grid-cards');
   if (!cards) return;
   try {
@@ -89,21 +126,7 @@ export async function refreshGrid() {
     for (const sess of tmuxSessions) {
       let card = cards.querySelector(`[data-name="${CSS.escape(sess.name)}"]`);
       if (!card) {
-        card = document.createElement('div');
-        card.dataset.name = sess.name;
-        card.className = 'vt-card';
-        // 세션 이름은 tmux가 주는 임의 문자열이라 innerHTML 보간이 아니라
-        // textContent로 넣는다 (`<`가 든 이름이 마크업으로 해석되지 않도록).
-        card.innerHTML = `
-          <div class="card-head">
-            <span class="card-agent"></span>
-            <span class="card-title"></span>
-            <span class="card-cmd"></span>
-          </div>
-          <pre class="card-preview"><span style="opacity:.5;font-style:italic;font-size:var(--fs-3xs);">로딩 중...</span></pre>
-        `;
-        card.querySelector('.card-title').textContent = sess.name;
-        card.onclick = () => {
+        card = buildSessionCard(sess, () => {
           // "완료" 강조는 확인했다는 뜻이니 클릭하면 지운다.
           card.classList.remove('done');
           if (sess.web_session_id && getSession(sess.web_session_id)) {
@@ -111,18 +134,10 @@ export async function refreshGrid() {
           } else {
             attachTmuxSession(sess.name);
           }
-        };
+        });
         cards.appendChild(card);
       }
-      card.querySelector('.card-cmd').textContent = sess.command || '';
-      // cwd는 dataset에 저장해둔다 — agent_event(pre/stop)가 cwd로만 오므로
-      // "어느 카드가 지금 작업 중인지"를 여기 저장된 값과 매칭해서 찾는다.
-      card.dataset.cwd = sess.cwd || '';
-      // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.
-      const isOpenTab = !!(sess.web_session_id && getSession(sess.web_session_id));
-      card.classList.toggle('open-tab', isOpenTab);
-      card.title = isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속';
-      _applyCardAgent(card, agents[sess.name]);
+      updateSessionCard(card, sess, agents[sess.name]);
     }
 
     // Phase 9 #1: 폴링 fetch 제거 — 카드별 ws push가 즉시 첫 콘텐츠 + 변화 push.

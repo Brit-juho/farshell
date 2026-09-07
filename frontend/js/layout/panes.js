@@ -11,7 +11,6 @@
 // 위로 드래그하는 DnD(L5, layout/dnd.js)는 이 baseline 위에 얹는 "있으면
 // 편한" 추가 경로다.
 import { getSession, allSessions } from '../core/store.js';
-import { createSession } from '../term/session.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
   splitPane, closePane, setRatio, countLeaves,
@@ -20,6 +19,7 @@ import { findNode } from './tree.js';
 import { fitAndResize } from '../term/resize.js';
 import { wireRatioResizer } from './resizer.js';
 import { canSplit, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
+import { openPanePicker } from './pane-picker.js';
 import { icon } from '../ui/icons.js';
 
 export { canSplit };
@@ -95,18 +95,18 @@ function _buildPaneEl(paneId) {
   return paneEl;
 }
 
+// L3 5단계: 임시 "+ 새 세션" 버튼(4단계까지의 최소 placeholder)을 썸네일
+// 기반 세션 선택 시트로 교체 — pane 전체가 클릭 대상이라 좁은 화면에서도
+// 작은 버튼을 정확히 누를 필요가 없다.
 function _renderEmptyBody(bodyEl, paneId) {
   if (bodyEl.querySelector('.vt-pane-empty')) return;
   bodyEl.replaceChildren();
-  const ph = document.createElement('div');
+  const ph = document.createElement('button');
+  ph.type = 'button';
   ph.className = 'vt-pane-empty';
-  ph.innerHTML = `<button type="button" class="vt-btn-secondary">+ 새 세션</button>`;
-  ph.querySelector('button').addEventListener('click', () => {
-    // 이 pane에 바로 배정되도록 활성 pane으로 지정한 뒤 만든다 — createSession()이
-    // 끝에서 부르는 switchTo()가 "현재 활성 pane"에 세션을 넣기 때문.
-    setActivePane(paneId);
-    createSession();
-  });
+  ph.setAttribute('aria-label', '이 화면에 표시할 세션 선택');
+  ph.innerHTML = `${icon('plus', 20)}<span>세션 선택</span>`;
+  ph.addEventListener('click', () => openPanePicker(paneId));
   bodyEl.appendChild(ph);
 }
 

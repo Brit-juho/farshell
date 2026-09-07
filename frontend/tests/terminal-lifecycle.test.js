@@ -34,6 +34,7 @@ const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8'
 
 const KEYSEQ_JS = path.join(__dirname, '../js/lib/keyseq.js');
 const TOAST_JS = path.join(__dirname, '../js/ui/toast.js');
+const ANSILEX_JS = path.join(__dirname, '../js/lib/ansilex.js');
 const SESSION_JS = path.join(__dirname, '../js/term/session.js');
 const PANES_JS = path.join(__dirname, '../js/layout/panes.js');
 const DOM_JS = path.join(__dirname, '../js/core/dom.js');
@@ -95,6 +96,11 @@ async function buildTerminalWindow() {
   // picker.js/term/*.js 다수가 bare identifier showToast로 참조한다(voice.js와
   // 같은 cross-bundle 브리지 이유로 window 전역 유지 — ui/toast.js 상단 주석 참고).
   await importFresh(TOAST_JS, env.context, cache);
+  // L3 5단계: layout/panes.js가 layout/pane-picker.js를 거쳐 agent/preview.js를
+  // 끌어오게 됐다 — 그 파일이 모듈 최상단에서 bare identifier VTAnsiLex를
+  // 즉시 읽으므로(grid-cards.test.js와 같은 이유), PANES_JS를 평가하기 전에
+  // 먼저 심어둬야 한다. 안 그러면 import 시점에 ReferenceError로 죽는다.
+  await importFresh(ANSILEX_JS, env.context, cache);
   // term/session.js를 엔트리로 실제 그래프 전체(picker.js·core/*·term/* 나머지)가
   // 링크·평가된다 — picker.js↔term/session.js 순환 import도 vm.Module이 표준
   // ES 모듈 순환 참조 규칙대로 정상 처리한다.
