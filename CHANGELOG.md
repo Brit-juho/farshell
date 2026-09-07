@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- **밀린 릴리스 태그 소급 정리 (2026-09-08).** `v1.4.0`·`v1.5.1`·`v1.6.0`·`v1.7.0`을
+  각 버전의 `VERSION` 파일이 올라간 커밋에 annotated 태그로 달았다. `v1.3.0`과
+  `v1.5.0`은 전용 릴리스 커밋이 없어 **일부러 달지 않았다**(각 절의 각주 참고) —
+  태그는 "이 트리가 그 릴리스다"라는 사실 진술이라, 없는 트리를 가리키면 거짓 기록이 된다.
+
 ### Fixed
 - **`fsh start`/`voice`/`mobile`을 반복 실행할 때마다 새 macOS 터미널 창이 계속 열리던 문제 수정.**
   `_tmux_already_open`(`bin/fsh`)이 "그 세션에 지금 붙어있는 클라이언트가 있는가"(`tmux
@@ -558,6 +564,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [1.5.0] — 2026-07-07
 
+> ℹ️ **별도 git 태그 없음.** `[1.5.0]`·`[1.5.1]` 두 절이 같은 커밋(`b9f711b`)에서
+> 함께 작성됐고 그 시점 `VERSION`은 이미 1.5.1이었다. 소급 태깅(2026-09-08)에서
+> v1.5.1만 달았다.
+
 D9: Tailscale + SSH 원격 접속. 회사망처럼 화면 원격(크롬 원격 데스크톱/TeamViewer/RDP/VNC)이
 막힌 환경에서도 Tailscale은 대개 통과하므로, 터미널만 필요하면 화면 원격 없이 Tailscale+SSH로
 tmux 세션에 직접 붙을 수 있게 지원.
@@ -628,6 +638,11 @@ UX overhaul + Linux 1급 동등화. [docs/PLAN_UX_OVERHAUL.md](./docs/PLAN_UX_OV
 ---
 
 ## [1.3.0] — 2026-05-08
+
+> ℹ️ **별도 git 태그 없음.** 이 버전은 전용 릴리스 커밋 없이 다음 버전(v1.4.0,
+> `c8fb9a6`)에 포함돼 배포됐다 — 2026-05-08자 커밋이 아예 없고, `[1.3.0]`·`[1.4.0]`
+> 두 절이 그 커밋에서 함께 작성됐다. 없는 트리를 가리키는 태그를 만들지 않기 위해
+> 소급 태깅(2026-09-08)에서 제외했다.
 
 Phase 9 — 안정성·네트워크 효율 일괄 패치 ([PLAN_PHASE9.md](./docs/PLAN_PHASE9.md), [TEST_REPORT_V3.md](./docs/TEST_REPORT_V3.md)). 10건 적용.
 
