@@ -9,6 +9,12 @@
 
 환경 변수:
   VT_E2E_URL  — 기본값 http://localhost:7777
+
+⚠ **CI에서는 자동으로 스킵된다**(I1 잔여 항목으로 명시): playwright는
+`requirements-core.txt`에 없고(브라우저 바이너리까지 수백 MB), 이 파일은 **실제로
+떠 있는 서버**를 요구한다. 둘 중 하나라도 없으면 아래 skip 가드가 걸린다 —
+CI가 초록인데 E2E는 한 번도 안 돌았다는 사실을 여기서 분명히 해둔다.
+실행하려면 위 "실행 방법"대로 서버를 띄우고 로컬에서 직접 돌린다.
 """
 
 from __future__ import annotations

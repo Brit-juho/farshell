@@ -31,6 +31,9 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | DELETE | `/api/tmux/kill/{name}` | tmux 세션 완전 종료 |
 | POST | `/api/tmux/open-on-mac` | 이미 존재하는 tmux 세션을 서버(macOS) 터미널에 새 창으로 attach (JSON: name). 서버가 macOS가 아니면 400 |
 | GET | `/api/tmux/preview/{name}?lines=20&ansi=1` | Grid 뷰용 tmux pane 최근 출력 캡처 |
+| GET | `/api/tmux/clients?session=X&me=Y` | 세션에 붙은 클라이언트 목록(C1). `me`는 요청자의 web session id — 서버가 그걸로 tty를 역산해 `is_me`를 표시한다 |
+| POST | `/api/tmux/detach-client` | 클라이언트 하나 끊기(C1, JSON: tty, me). 자기 자신을 끊으면 400 — 복구 경로가 없다 |
+| POST | `/api/tmux/clients/solo` | "이 화면만 남기기"(C2, JSON: session, me). 남길 tty를 클라이언트가 보내지 않는다 — 서버가 역산하고, 못 하면 전부 끊는 대신 400 |
 
 ## 음성
 
@@ -73,6 +76,8 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/git/stage` | 파일 스테이지 (JSON: repo, files). 응답은 갱신된 status |
 | POST | `/api/git/unstage` | 스테이지 해제 — 워킹트리는 안 건드리고 인덱스만 되돌림 (JSON: repo, files) |
 | POST | `/api/git/commit` | 스테이지된 변경사항 커밋 (JSON: repo, message). 스테이지된 게 없으면 400 |
+| GET | `/api/git/log?repo=X[&file=Y]` | 최근 커밋 목록 |
+| GET | `/api/git/show?repo=X&rev=Y` | 커밋 하나의 diff |
 
 ## 프롬프트 큐
 
@@ -92,6 +97,14 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | DELETE | `/api/ports/{port}[?pid=N]` | 프로세스 종료. `pid` 불일치 시 409 (VT 서버 자신/cloudflared/tailscaled/sshd는 종료 불가) |
 | POST | `/api/ports/{port}/expose` | Cloudflare 터널로 공개. 본문 `{"confirm":true}` 필수(없으면 428) |
 | DELETE | `/api/ports/{port}/expose` | 해당 포트 터널 종료 |
+
+## 프롬프트 스니펫
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/snippets` | 저장된 프롬프트 스니펫 목록 |
+| POST | `/api/snippets` | 스니펫 추가 (JSON: text, label) |
+| DELETE | `/api/snippets/{id}` | 스니펫 삭제 |
 
 ## Web Push
 

@@ -34,6 +34,9 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | DELETE | `/api/tmux/kill/{name}` | Fully kill a tmux session |
 | POST | `/api/tmux/open-on-mac` | Attach an existing tmux session in a new window on the server's (macOS) terminal (JSON: name). Returns 400 if the server isn't macOS |
 | GET | `/api/tmux/preview/{name}?lines=20&ansi=1` | Capture recent tmux pane output for the Grid view |
+| GET | `/api/tmux/clients?session=X&me=Y` | Clients attached to a session (C1). `me` is the caller's web session id — the server derives its tty and marks `is_me` |
+| POST | `/api/tmux/detach-client` | Detach one client (C1, JSON: tty, me). Detaching yourself returns 400 — there'd be no way back |
+| POST | `/api/tmux/clients/solo` | "Keep only this screen" (C2, JSON: session, me). The client never sends a tty to keep — the server derives it. Returns 400 if it can't, rather than detaching everything |
 
 ## Voice
 
@@ -77,6 +80,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/git/stage` | Stage files (JSON: repo, files). Response is the updated status |
 | POST | `/api/git/unstage` | Unstage — only reverts the index, leaves the working tree untouched (JSON: repo, files) |
 | POST | `/api/git/commit` | Commit staged changes (JSON: repo, message). Returns 400 if nothing is staged |
+| GET | `/api/git/log?repo=X[&file=Y]` | Recent commit list |
+| GET | `/api/git/show?repo=X&rev=Y` | Diff of one commit |
 
 ## Prompt Queue
 
@@ -96,6 +101,14 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | DELETE | `/api/ports/{port}[?pid=N]` | Kill the process. Returns 409 on a `pid` mismatch (the VT server itself, and cloudflared/tailscaled/sshd, cannot be killed) |
 | POST | `/api/ports/{port}/expose` | Expose via a Cloudflare tunnel. Requires body `{"confirm":true}` (428 without it) |
 | DELETE | `/api/ports/{port}/expose` | Tear down that port's tunnel |
+
+## Prompt Snippets
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/snippets` | List saved prompt snippets |
+| POST | `/api/snippets` | Add a snippet (JSON: text, label) |
+| DELETE | `/api/snippets/{id}` | Delete a snippet |
 
 ## Web Push
 

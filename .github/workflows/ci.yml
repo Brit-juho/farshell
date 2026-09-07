@@ -44,6 +44,24 @@ jobs:
       - name: dist 커밋 금지 확인 (ADR-2)
         run: git check-ignore -q frontend/dist
 
+  # I3: 문서 일관성 — 코드가 단일 진실이고 문서가 따라간다.
+  # **경고로 시작한다**(계획서 I3): `--strict` 없이 돌려 종료코드 0으로 두고,
+  # 드리프트가 0으로 안정되면 strict로 승격한다. 처음부터 실패로 두면
+  # "원래 빨간 체크"가 되어 아무도 안 본다.
+  #
+  # ⚠ 승격 시점: 이 잡이 몇 주 연속 초록이면 `--strict`를 붙인다. 지금은
+  # 2026-09-07 기준 드리프트 0이므로 사실상 바로 승격 가능하지만, 관례대로
+  # 한 사이클 관찰한 뒤에 바꾼다.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: 문서 일관성 검사 (I3)
+        run: python3 scripts/check_docs.py
+
   server:
     runs-on: ubuntu-latest
     strategy:
