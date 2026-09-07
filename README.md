@@ -43,6 +43,16 @@ cd ~/farshell
 ./install.sh voice      # with voice mode
 ```
 
+**Release tarball — no Node.js needed.** Installing from source builds the
+frontend with Vite, which requires Node. The release tarball ships that build
+already done, so Node is only a developer requirement:
+
+```bash
+# from https://github.com/Brit-juho/farshell/releases
+tar xzf farshell-<version>.tar.gz && cd farshell-<version>
+./install.sh
+```
+
 What `install.sh` does:
 1. Creates a Python `venv` (`.venv/`, no conda required)
 2. Installs the packages for the profile you chose

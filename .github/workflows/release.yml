@@ -1,0 +1,99 @@
+name: Release
+
+# I4 (2026-09-08) — 태그를 계기로 릴리스 흐름을 복구한다.
+#
+# **이 워크플로의 목적은 node 의존성을 되돌리는 것이다.** F1이 Vite/Tailwind를
+# 들이면서 "2.0부터 설치에 node가 필요해졌다"가 생겼는데, 그걸 영구화하지 않으려면
+# **dist가 이미 들어 있는 tarball**을 릴리스로 내놔야 한다(80-ci-release.md §4).
+# 산출물을 git에 커밋하는 절충(ADR-2 위반) 없이 그 상태에 도달하는 유일한 경로다.
+#
+# workflow_dispatch를 함께 두는 이유: 소급 태깅(v1.4.0~v1.7.0, 2026-09-08)은 이
+# 워크플로가 생기기 **전에** 푸시돼서 push 트리거가 안 걸렸다. 과거 태그로
+# 릴리스를 만들려면 수동 실행이 필요하다.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '릴리스할 태그 (예: v1.7.0)'
+        required: true
+
+permissions:
+  contents: write   # 릴리스 생성에 필요. 그 외 권한은 주지 않는다.
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0   # CHANGELOG 전체가 필요하다(릴리스 노트 추출)
+
+      - name: 태그·버전 확정
+        id: ver
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # I3의 검사 중 태그가 있어야만 가능한 항목이 이것이다 — VERSION 파일과
+      # 태그가 어긋난 채로 릴리스가 나가면 사용자가 받은 tarball의 버전을
+      # 신뢰할 수 없게 된다. **여기서는 경고가 아니라 실패**로 막는다.
+      - name: VERSION ↔ 태그 일치 확인 (I3)
+        run: |
+          FILE_VERSION="$(cat VERSION)"
+          echo "VERSION 파일: $FILE_VERSION / 태그: ${{ steps.ver.outputs.version }}"
+          [ "$FILE_VERSION" = "${{ steps.ver.outputs.version }}" ]
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+      # CI(ci.yml)와 같은 산출물 검증을 릴리스에서도 한 번 더 한다 — 태그를
+      # 단 커밋이 CI를 안 거쳤을 수도 있고(직접 태그), 깨진 자산을 tarball에
+      # 넣으면 사용자가 그걸 그대로 받는다.
+      - name: 산출물 형태 검증 (I2)
+        run: |
+          test -f frontend/dist/app.js
+          test -f frontend/dist/app.css
+          test -f frontend/dist/voice.js
+          ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
+          [ "$(wc -c < frontend/dist/app.js)" -le 307200 ]
+
+      - name: 릴리스 노트 생성 (CHANGELOG에서 추출)
+        run: python3 scripts/release_notes.py "${{ steps.ver.outputs.version }}" -o RELEASE_NOTES.md
+
+      - name: 배포 tarball 생성
+        run: |
+          NAME="farshell-${{ steps.ver.outputs.version }}"
+          mkdir -p "/tmp/$NAME"
+          # dist/는 **포함**하고(그게 이 tarball의 존재 이유다), 개발 전용 자산과
+          # 로컬 상태는 제외한다. node_modules는 용량이 크고 플랫폼 의존적이라
+          # 넣으면 안 된다 — 런타임에는 필요 없다.
+          tar -c \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='.venv' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.github' \
+            --exclude='RELEASE_NOTES.md' \
+            . | tar -x -C "/tmp/$NAME"
+          tar czf "$NAME.tar.gz" -C /tmp "$NAME"
+          ls -lh "$NAME.tar.gz"
+          # tarball로 설치하는 경로가 실제로 성립하는지 확인 — dist가 빠지면
+          # 사용자는 node를 요구받게 되고, 이 릴리스의 목적 자체가 무너진다.
+          tar tzf "$NAME.tar.gz" | grep -q "$NAME/frontend/dist/app.js"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          files: farshell-*.tar.gz
+          body_path: RELEASE_NOTES.md

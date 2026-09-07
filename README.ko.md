@@ -43,6 +43,16 @@ cd ~/farshell
 ./install.sh voice      # 음성 모드 포함
 ```
 
+**릴리스 tarball — Node.js가 필요 없다.** 소스에서 설치하면 Vite로 프런트엔드를
+빌드하느라 node가 필요한데, 릴리스 tarball에는 그 빌드가 이미 들어 있다 —
+node는 개발자에게만 필요한 도구가 된다:
+
+```bash
+# https://github.com/Brit-juho/farshell/releases 에서 받는다
+tar xzf farshell-<버전>.tar.gz && cd farshell-<버전>
+./install.sh
+```
+
 `install.sh`가 하는 일:
 1. Python `venv` 생성 (`.venv/`, conda 불필요)
 2. 선택 프로필에 맞는 패키지 설치

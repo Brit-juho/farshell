@@ -86,24 +86,42 @@ else
   echo "✓ 터미널 의존성 설치 완료 (음성 모드는 './install.sh voice'로 추가)"
 fi
 
-# 3-1. 프런트엔드 빌드 (F1, 2026-09) — Tailwind/Vite 도입으로 node가 처음 필요해졌다.
-#      frontend/dist/ 는 git에 커밋하지 않으므로(빌드 산출물, .gitignore) 설치 시
-#      매번 직접 빌드해야 한다. 릴리스 tarball로 설치하는 경로가 생기면(I4) 그때는
-#      dist/ 가 이미 들어있어 이 단계 자체가 필요 없어진다 — 지금은 소스 설치뿐이라 필수.
-if ! command -v npm >/dev/null 2>&1; then
-  echo ""
-  echo "✗ Node.js(npm)가 필요합니다 — 프런트엔드 빌드에 사용합니다(런타임에는 불필요, 빌드 전용)."
-  if [ "$(uname)" = "Darwin" ]; then
-    echo "    설치: brew install node"
-  else
-    echo "    설치: https://nodejs.org (또는 배포판 패키지 매니저: apt/dnf/pacman install nodejs npm)"
+# 3-1. 프런트엔드 자산 준비 — **두 경로**(I4, 2026-09-08)
+#
+#   (a) 릴리스 tarball로 설치  → frontend/dist/가 이미 들어 있다. **node 불필요.**
+#   (b) 소스(git clone)로 설치 → 직접 빌드해야 한다. node 필요.
+#
+# F1이 Vite/Tailwind를 들이면서 "2.0부터 node가 필요해졌다"가 생겼는데, 그걸
+# 영구화하지 않으려고 릴리스 경로를 만든 것이다(80-ci-release.md §4). 산출물을
+# git에 커밋하는 절충(ADR-2 위반) 없이 **개발자에게만 node를 요구하고 사용자에게는
+# 요구하지 않는 상태**에 이 분기로 도달한다.
+#
+# 판정 기준은 "dist가 이미 있고 소스보다 최신인가"가 아니라 **"이 트리가 tarball인가"**다
+# — .git이 없고 dist가 있으면 tarball이다. mtime 비교는 tar 전개 순서에 따라
+# 뒤집힐 수 있어 신뢰할 수 없다.
+if [ ! -d "$VT_DIR/.git" ] && [ -f "$VT_DIR/frontend/dist/app.js" ]; then
+  echo "✓ 릴리스 패키지 — 빌드된 프런트엔드가 포함돼 있습니다 (node 불필요)"
+elif [ -f "$VT_DIR/frontend/dist/app.js" ] && [ ! -f "$VT_DIR/package.json" ]; then
+  # package.json이 없는데 dist만 있는 이상한 트리 — 그래도 돌 수는 있다.
+  echo "✓ 빌드된 프런트엔드 발견 (빌드 생략)"
+else
+  if ! command -v npm >/dev/null 2>&1; then
+    echo ""
+    echo "✗ Node.js(npm)가 필요합니다 — 소스에서 설치할 때 프런트엔드를 빌드합니다."
+    echo "    (릴리스 tarball로 설치하면 node 없이 됩니다:"
+    echo "     https://github.com/Brit-juho/farshell/releases 에서 farshell-*.tar.gz)"
+    if [ "$(uname)" = "Darwin" ]; then
+      echo "    설치: brew install node"
+    else
+      echo "    설치: https://nodejs.org (또는 배포판 패키지 매니저: apt/dnf/pacman install nodejs npm)"
+    fi
+    echo "    설치 후 './install.sh $PROFILE'을 다시 실행하세요."
+    exit 1
   fi
-  echo "    설치 후 './install.sh $PROFILE'을 다시 실행하세요."
-  exit 1
+  echo "▸ 프런트엔드 빌드 중... (Vite + Tailwind, node $(node --version))"
+  ( cd "$VT_DIR" && npm ci --silent && npm run build --silent )
+  echo "✓ 프런트엔드 빌드 완료 → frontend/dist/"
 fi
-echo "▸ 프런트엔드 빌드 중... (Vite + Tailwind, node $(node --version))"
-( cd "$VT_DIR" && npm ci --silent && npm run build --silent )
-echo "✓ 프런트엔드 빌드 완료 → frontend/dist/"
 
 # 4. fsh CLI 등록 (bin/vt는 bin/fsh를 가리키는 심링크 — 예전 명령어 vt도 그대로 동작)
 mkdir -p "$HOME/.local/bin"
