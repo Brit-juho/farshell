@@ -451,7 +451,10 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
   border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm); cursor:pointer; flex-shrink:0;
 }
-.vt-pane-btn:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-pane-btn:hover:not(:disabled) { background:var(--menu-hover); color:var(--txt); }
+/* L8: pane 상한에 걸린 분할 버튼 — 눌러도 아무 일 없는 대신 눌리지 않는 걸
+   보이게 한다(이유는 title/aria-label에 붙는다). */
+.vt-pane-btn:disabled { opacity:.35; cursor:default; }
 .vt-pane-body { flex:1; min-height:0; position:relative; }
 /* L3 5단계: 이제 pane 전체가 클릭 대상인 버튼이다 — 작은 "+ 새 세션" 하나만
    누르게 하지 않고, 빈 화면 어디를 눌러도 세션 선택 시트가 열린다. */

@@ -7,6 +7,7 @@ import { getSession } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { addSession, switchTo, removeSession } from './session.js';
+import { saveWorkspace } from './workspace.js';
 import { registerAction } from '../core/dom.js';
 import { icon } from '../ui/icons.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
@@ -140,6 +141,12 @@ export async function attachTmux(tmuxName) {
     // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
     const s = getSession(data.id);
     if (s) s.tmuxName = data.tmux_session || tmuxName;
+    // L8에서 발견: addSession() 안의 saveWorkspace()는 tmuxName이 붙기 **전에**
+    // 돌기 때문에, 마지막으로 붙인 세션은 스냅샷에 tmux_name:null로 남아
+    // 있었다(그 뒤에 또 다른 세션이 붙어 다시 저장되지 않는 한). 그러면 다음
+    // 부팅에서 그 탭은 "순수 PTY"로 복원돼 tmuxName이 영영 안 채워지고,
+    // openSessionOnMac()·레이아웃 복원이 그 세션을 tmux로 못 알아본다.
+    saveWorkspace();
   }
 }
 

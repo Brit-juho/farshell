@@ -6,6 +6,7 @@
 import { addSession, createSession } from './session.js';
 import { attachTmux } from './tmux-panel.js';
 import { restoreWorkspace, reconcileMissingTmuxSessions } from './workspace.js';
+import { restoreLayout } from '../layout/persist.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { getSession } from '../core/store.js';
@@ -131,6 +132,10 @@ export async function bootApp() {
       // 복원된 스냅샷은 "마지막 저장 시점" 기준이라 그 이후 다른 곳에서 생긴
       // tmux 세션을 놓칠 수 있다 — 서버 목록과 대조해 누락분만 보충.
       await reconcileMissingTmuxSessions();
+      // L8: 세션이 다 붙은 뒤에야 분할 레이아웃을 복원한다(그 전엔 살아있는
+      // 세션이 없어 전부 빈 pane으로 강등된다). handoff 링크(#tmux=) 경로는
+      // "이 세션 하나를 지금 보여달라"는 명시적 요청이라 일부러 제외했다.
+      await restoreLayout();
       return;
     }
 
@@ -146,6 +151,7 @@ export async function bootApp() {
           if (rec) rec.tmuxName = s.tmux_name;
         }
       }
+      await restoreLayout();
       return;
     }
 
@@ -158,6 +164,7 @@ export async function bootApp() {
       for (const s of sorted) {
         await attachTmux(s.name);
       }
+      await restoreLayout();
       return;
     }
 

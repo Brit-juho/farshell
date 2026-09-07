@@ -51,3 +51,30 @@ def test_put_workspace_merges_rather_than_replaces_ui(client):
     # workspace.save()가 "ui" 레벨에서 얕은 병합을 하기 때문(workspace.py 참고).
     assert r.json()["ui"]["theme"] == "dark"
     assert r.json()["ui"]["rail"] == {"open": None, "width": 280}
+
+
+def test_put_workspace_stores_layout_tree_next_to_rail(client):
+    """L8 — ui.layout(분할 트리 정본)이 ui.rail과 나란히 살아남는다.
+
+    둘은 ui 아래의 서로 다른 키라 얕은 병합으로 충분하지만, 프런트가 두 값을
+    각각 다른 시점에 PUT하므로(rail.js는 패널 토글 때, persist.js는 트리 변경
+    때) 한쪽이 다른 쪽을 지우면 새로고침 때마다 둘 중 하나가 날아간다.
+    """
+    layout = {
+        "v": 1,
+        "savedAt": 1234,
+        "active": "pane-2",
+        "tree": {
+            "t": "split", "id": "split-1", "dir": "row", "ratio": 0.4,
+            "a": {"t": "leaf", "id": "pane-1", "session": {"id": "web-1", "tmux": "dev"}},
+            "b": {"t": "leaf", "id": "pane-2", "session": None},
+        },
+    }
+    client.put("/api/workspace", json={"ui": {"rail": {"open": "session", "width": 320}}})
+    client.put("/api/workspace", json={"ui": {"layout": layout}})
+
+    ui = client.get("/api/workspace").json()["ui"]
+    assert ui["rail"] == {"open": "session", "width": 320}
+    assert ui["layout"] == layout
+    # 중첩 구조가 통째로 왕복되는지 — leaf의 tmux 이름이 복원의 핵심 키다.
+    assert ui["layout"]["tree"]["a"]["session"]["tmux"] == "dev"

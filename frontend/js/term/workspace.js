@@ -44,10 +44,20 @@ export async function restoreWorkspace() {
     let firstNewId = null;
     // tmux_name이 없는(순수 PTY) 탭은 서버가 재시작되지 않은 한 session_store에
     // 그대로 살아있을 수 있다 — /api/sessions로 살아있는 id 목록을 한 번에 확인.
+    // 서버 응답의 tmux_name도 함께 들고 있는다 — 스냅샷에 tmux_name이 비어
+    // 있어도(과거에 저장된 스냅샷, L8에서 고친 저장 시점 문제 등) 서버가
+    // 아는 값으로 채워줄 수 있다. 이게 없으면 그 탭은 "순수 PTY"로 복원돼
+    // tmuxName이 계속 비어 있고, 레이아웃 복원(layout/persist.js)이 tmux
+    // 이름으로 그 세션을 다시 찾지 못한다.
     let liveWebIds = new Set();
+    let liveTmuxNames = new Map();
     try {
       const wsRes = await apiFetch(`${API_BASE}/api/sessions`);
-      if (wsRes.ok) liveWebIds = new Set((await wsRes.json()).map(s => s.id));
+      if (wsRes.ok) {
+        const live = await wsRes.json();
+        liveWebIds = new Set(live.map(s => s.id));
+        liveTmuxNames = new Map(live.filter(s => s.tmux_name).map(s => [s.id, s.tmux_name]));
+      }
     } catch (_) { /* 조회 실패 시 아래에서 전부 유실 처리됨 */ }
 
     for (const tab of state.tabs) {
@@ -80,6 +90,8 @@ export async function restoreWorkspace() {
             addSession(tab.id, tab.name || tab.id);
             if (!firstNewId) firstNewId = tab.id;
           }
+          const rec = getSession(tab.id);
+          if (rec && !rec.tmuxName && liveTmuxNames.has(tab.id)) rec.tmuxName = liveTmuxNames.get(tab.id);
           restored++;
         } else {
           failed++;

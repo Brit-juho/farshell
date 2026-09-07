@@ -90,6 +90,19 @@ export function closePane(paneId) {
   _notify();
 }
 
+// L8 — 저장된 스냅샷으로 트리를 통째로 갈아끼운다(layout/persist.js 전용).
+// 이 경로만 예외적으로 activePaneId를 직접 받는다: 복원 시점엔 아직 xterm이
+// focus를 받은 적이 없어 파일 상단의 "focus 이벤트로만 바꾼다" 원칙을 적용할
+// 대상 자체가 없다. 넘어온 id가 트리에 없으면 첫 leaf로 떨어뜨린다.
+// 잘못된 입력(null 등)이면 아무것도 안 바꾸고 false를 반환한다.
+export function replaceTree(tree, activePaneId = null) {
+  if (!tree || (tree.t !== 'leaf' && tree.t !== 'split')) return false;
+  _tree = tree;
+  _activePaneId = (activePaneId && findNode(_tree, activePaneId)) ? activePaneId : _firstLeafId(_tree);
+  _notify();
+  return true;
+}
+
 export function setRatio(splitId, ratio) {
   _tree = _setRatio(_tree, splitId, ratio);
   _notify();

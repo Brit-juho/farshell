@@ -21,14 +21,14 @@ export const SESSION_MIME = 'text/vt-tab-id';
 // 액션"만 막는 게이트다 — 이미 만들어진 트리는 화면이 좁아져도 잘리지 않는다
 // (L3 3단계 원칙 그대로, panes.js의 헤더 분할 버튼과 이 파일의 가장자리 드롭
 // 둘 다 여기 하나만 거친다).
-function _tierCap() {
+export function tierCap() {
   const w = window.innerWidth;
   if (w < COMPACT_MAX) return 2;
   if (w < REGULAR_MAX) return 4;
   return 6;
 }
 export function canSplit() {
-  return countLeaves() < _tierCap();
+  return countLeaves() < tierCap();
 }
 
 // rect 기준 (x,y)가 어느 구역인지 판정한다. 네 가장자리까지의 상대 거리 중

@@ -12,6 +12,8 @@
 import { _isCoarsePointer } from '../core/env.js';
 import { COMPACT_MAX } from './breakpoints.js';
 import { getTree, getActivePaneId, setActivePane } from './store.js';
+import { allSessions, activeSessionId } from '../core/store.js';
+import { switchTo } from '../term/session.js';
 
 export function isCompactMode() {
   return _isCoarsePointer() && window.innerWidth < COMPACT_MAX;
@@ -36,6 +38,44 @@ export function stepActivePane(delta) {
   const idx = leaves.findIndex((l) => l.id === getActivePaneId());
   const next = leaves[(((idx < 0 ? 0 : idx) + delta) % leaves.length + leaves.length) % leaves.length];
   setActivePane(next.id);
+}
+
+// L8 — leaf가 하나뿐일 때(=분할을 안 쓴 상태, 모바일의 일반적인 모습)는
+// 넘길 pane이 없다. 그때는 같은 스와이프를 **세션(탭) 전환**으로 해석한다
+// (§8-a "좌우 스와이프로 세션 전환"). 한 제스처가 "화면에 실제로 보이는 것
+// 중 다음 것"으로 넘어간다는 의미는 두 경우 모두 같다.
+//
+// 순서는 탭 DOM 순서를 그대로 따른다 — 사용자가 드래그로 정렬한 그 순서가
+// 화면에 보이는 유일한 순서라 core/store.js의 객체 키 순서(삽입순)를 쓰면
+// 재정렬 후 손맛이 어긋난다. 탭 DOM이 없는 환경(단위 테스트 등)에서는
+// 세션 스토어 순서로 폴백한다.
+export function sessionOrder() {
+  const tabs = document.querySelectorAll('#tabs .tab');
+  if (tabs.length) return Array.from(tabs).map((t) => t.dataset.sessionId).filter(Boolean);
+  return Object.keys(allSessions());
+}
+
+// 순수 선택 로직만 따로 둔다(단위 테스트 대상) — switchTo는 탭 DOM·xterm이
+// 전부 갖춰져야 도는 함수라, "무엇을 고르는가"와 "실제로 전환한다"를 분리해야
+// 고르는 규칙을 독립적으로 검증할 수 있다.
+export function nextSessionId(delta) {
+  const ids = sessionOrder();
+  if (ids.length < 2) return null;
+  const cur = activeSessionId();
+  const idx = ids.indexOf(cur);
+  const next = ids[(((idx < 0 ? 0 : idx) + delta) % ids.length + ids.length) % ids.length];
+  return next && next !== cur ? next : null;
+}
+
+export function stepSession(delta) {
+  const next = nextSessionId(delta);
+  if (next) switchTo(next);
+}
+
+// 스와이프 한 번의 동작 — leaf가 2개 이상이면 pane 이동, 아니면 세션 전환.
+export function stepView(delta) {
+  if (flattenLeaves(getTree()).length > 1) stepActivePane(delta);
+  else stepSession(delta);
 }
 
 const EDGE_PX = 20;    // §8: 화면 가장자리 20px에서 시작한 것만 인정
@@ -81,7 +121,7 @@ export function wireCompactSwipe(containerEl) {
     if (Math.abs(dx) < COMMIT_PX) return;
     // 왼쪽으로 밀면 다음 leaf, 오른쪽으로 밀면 이전 leaf — 탭/페이지 스와이프의
     // 통상적인 방향 관례.
-    stepActivePane(dx < 0 ? 1 : -1);
+    stepView(dx < 0 ? 1 : -1);
   };
   containerEl.addEventListener('touchend', finish);
   containerEl.addEventListener('touchcancel', () => { tracking = false; });

@@ -18,12 +18,28 @@ import {
 import { findNode } from './tree.js';
 import { fitAndResize } from '../term/resize.js';
 import { wireRatioResizer } from './resizer.js';
-import { canSplit, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
+import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
 import { openPanePicker } from './pane-picker.js';
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
 
 export { canSplit };
+
+// L8 — pane 상한에 걸린 분할 버튼을 실제로 비활성화하고 이유를 붙인다.
+// 지금까지는 클릭해도 canSplit()이 조용히 무시했는데, 버튼이 멀쩡해 보이니
+// "눌렀는데 아무 일도 안 일어난다"로 읽혔다. 드롭존(가장자리 DnD)은 기존대로
+// 조용히 무시한다 — 드래그 중에는 하이라이트가 안 뜨는 것 자체가 피드백이다.
+function _applySplitCap(paneEl) {
+  const ok = canSplit();
+  const reason = `분할 한도에 도달했습니다 (현재 화면 폭에서는 최대 ${tierCap()}개)`;
+  for (const [sel, label] of [['.vt-pane-split-row', '오른쪽 분할'], ['.vt-pane-split-col', '아래쪽 분할']]) {
+    const btn = paneEl.querySelector(sel);
+    if (!btn) continue;
+    btn.disabled = !ok;
+    btn.title = ok ? label : reason;
+    btn.setAttribute('aria-label', ok ? label : `${label} — ${reason}`);
+  }
+}
 
 let _rootEl = null;
 let _poolEl = null;
@@ -171,6 +187,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, usedSessionIds, labelSuffix
   let paneEl = document.getElementById(`vt-pane-${node.id}`);
   if (!paneEl) paneEl = _buildPaneEl(node.id);
   paneEl.classList.toggle('active', node.id === activePaneId);
+  _applySplitCap(paneEl);
   const head = paneEl.querySelector('.vt-pane-head');
   head.style.display = isRootOnly ? 'none' : '';
 

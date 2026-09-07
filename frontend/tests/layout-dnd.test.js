@@ -115,3 +115,14 @@ test('canSplit — pane 상한(wide=6)에 걸리면 가장자리 드롭도 분�
   D.applyPaneDrop(id, 'right', 'sess-overflow');
   assert.strictEqual(S.getTree(), before, '상한 초과 시 트리가 바뀌지 않아야 한다');
 });
+
+test('tierCap — 폭 구간별 상한 2/4/6 (breakpoints.js와 같은 경계값)', async () => {
+  const { D } = await loadDnd();
+  const env = _doms[_doms.length - 1].window;
+  const setW = (w) => Object.defineProperty(env, 'innerWidth', { value: w, configurable: true });
+  setW(390);  assert.strictEqual(D.tierCap(), 2);
+  setW(719);  assert.strictEqual(D.tierCap(), 2);
+  setW(720);  assert.strictEqual(D.tierCap(), 4);
+  setW(1023); assert.strictEqual(D.tierCap(), 4);
+  setW(1024); assert.strictEqual(D.tierCap(), 6);
+});
