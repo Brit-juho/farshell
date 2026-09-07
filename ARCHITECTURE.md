@@ -2,7 +2,7 @@
 
 [![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./ARCHITECTURE.ko.md)
 
-> **Version:** v1.7.0+ — the frontend was substantially restructured in September 2026
+> **Version:** v2.0.0 — the frontend was substantially restructured in September 2026
 > (see [`docs/plan-2.0/`](./docs/plan-2.0/) locally, gitignored — not on GitHub).
 > See [CHANGELOG.md](./CHANGELOG.md) for the release history and [API.md](./API.md)
 > for the full REST/WebSocket reference (this document intentionally does not
@@ -116,7 +116,11 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 | File | Responsibility |
 |---|---|
 | `agent_detector.py` | Detects which AI CLI (Claude Code, etc.) is running in a pane |
-| `agent_status.py` | Tracks agent tool-use state from Claude Code's Pre/Post/Stop hooks, matched to tmux panes by cwd (see CLAUDE.md's live-preview-grid caveat) |
+| `agent_status.py` | **Agent state machine** (`idle`/`working`/`waiting`/`done`, `error` reserved). `post` never changes state (another tool may follow); `stop` keeps the entry and sets `done` so it survives a refresh. TTL sweeping (working 15m / waiting 2m / done 30m) is lazy — it runs on reads and writes rather than a background task, so the same rules hold where there is no event loop |
+| `pane_resolve.py` | Three-tier answer to "which tmux session is this hook event from?": self-reported `$TMUX_PANE` → cwd (only when unique) → give up. Validates `$TMUX`'s socket first, because pane ids are per-socket and a personal tmux's `%12` can collide with ours |
+| `agent_prompt_detect.py` | Approval-prompt (`waiting`) detection off the PTY stream. Same sliding-window shape as `auto_responder`, but writes nothing — it only reports state. Patterns live in `server/detect/*.toml` so a CLI wording change doesn't need a code edit |
+| `claude_hooks.py` | Idempotent registrar for `~/.claude/settings.json` (`fsh hooks install`). Preserves hooks you added yourself, updates our entries in place when the repo moves, backs up before writing |
+| `usage/` | Usage provider abstraction (`base`/`clauth`/`null` + factory). Reads only `~/.clauth/status.json`, through a **field whitelist** — unknown fields are dropped rather than passed through, so a future clauth field can't leak over a public tunnel |
 | `auto_responder.py` | Opt-in auto-responder for trust prompts |
 
 **Network / tunnel**
@@ -202,15 +206,15 @@ precache stays valid:
 
 | Directory | Owns |
 |---|---|
-| `js/core/` | `env.js` (API_BASE/token/cookie exchange), `api.js` (`apiFetch`/`vtFetch`/`vtEsc`), `store.js` (session state — `getSession`/`activeSession`/`setActive`/`subscribe`), `dom.js` (the `data-action` click-delegation registry that replaced 29 inline `onclick` attributes) |
+| `js/core/` | `env.js` (API_BASE/token/cookie exchange), `api.js` (`apiFetch`/`vtFetch`/`vtEsc`), `store.js` (session state), `dom.js` (the `data-action` click-delegation registry that replaced 29 inline `onclick` attributes), `settings.js` (**settings store — the server's `/api/workspace.settings` is the source of truth, localStorage is only a pre-render cache**), `keymap.js` (keybinding registry with `passthrough`, so a shell key like `Mod+F` can be handed back to the terminal) |
 | `js/term/` | Everything that used to be the 2000-line `terminal.js`: `e2e.js` (client side of the E2E handshake), `session.js` (`addSession`/`switchTo`/tab lifecycle — the riskiest split, kept as one orchestrator over `tab-dom.js`/`xterm-setup.js`/`ws.js` "assembly parts" rather than force-split), `clipboard.js`, `touch.js`, `links.js`, `selection.js`, `resize.js`, `workspace.js` (tab order persistence), `conn-overlay.js`, `keybar.js`, `tmux-panel.js`, `guide.js`, `boot.js` (`bootApp()`) |
-| `js/agent/` | What used to be `grid.js`: `badges.js` (which icon), `status.js` (`/ws-agent`, is-it-working detection, capability gating), `preview.js` (the live-preview grid view itself) |
+| `js/agent/` | What used to be `grid.js`, plus the 2.0 state machine's client half: `badges.js` (which icon), `status.js` (`/ws-agent`, capability gating), `preview.js` (session preview cards), `state.js` (**the single client-side source of the four states**, keyed by tmux session name — a web session id changes on every re-attach), `paint.js` (**the single place that paints them**: tabs, pane headers, favicon, app badge) |
 | `js/panels/` | `panel.js` (shared modal-panel shell for code viewer/ports/queue/snippets) + `viewer/` (what used to be `viewer.js`: `state.js`, `shell.js`, `tree.js`, `file.js`, `diff.js`, `git.js` — `shell.js`↔`tree.js` and `shell.js`↔`git.js` have intentional circular imports, same reasoning as `picker.js`↔`term/session.js` below) |
 | `js/voice/` | What used to be the top-level `voice.js`: `recording.js`, `tts.js`, `notify.js`, `media-session.js`, `index.js` (the entry point). Built as its own bundle (see above) |
 | `js/ui/` | `toast.js` (unified toast — still window-bridged since `voice.js`'s separate bundle needs it), `favicon.js` (dynamic tab-badge canvas, UMD-style), `moreMenu.js` |
 | `js/push/` | `swreg.js` — Service Worker registration for Web Push |
 | `js/lib/` | `ansilex.js`, `difflex.js`, `keyseq.js` — pure logic, UMD-wrapped so both the browser (`window.VTAnsiLex`) and the Node test suite (`require(...)`) can use them |
-| `js/layout/` | Currently empty (`.gitkeep`) — reserved for a future rail/command-palette layer |
+| `js/layout/` | The 2.0 shell. `store.js`/`tree.js` (split-pane tree — pure functions + the single place that holds it), `panes.js` (recursive renderer; moves existing session wrappers instead of recreating them), `dnd.js` (5-zone drop targets), `resizer.js`, `compact.js` (<720px + coarse pointer render mode), `pane-picker.js`, `rail.js` (left rail), `right-rail.js` (usage rail, ≥1024px), `clients.js` ("Connected screens"), `persist.js` (layout persistence — leaves store `{id, tmux}` so a tmux session survives a new PTY id), `breakpoints.js` |
 | `js/theme.js`, `search.js`, `picker.js`, `ports.js`, `queue.js`, `snippets.js`, `quickopen.js`, `pushui.js`, `gate.js`, `main.js` | Top-level feature modules and the app entry point. `gate.js` is the one deliberately-classic (non-module) script — it runs the login gate before any ES module (which is deferred) could paint |
 | `sw.js` | Service Worker — offline caching, precache list |
 | `manifest.json` | PWA manifest |

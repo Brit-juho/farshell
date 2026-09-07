@@ -3,7 +3,7 @@
 [![CI](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml/badge.svg)](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml)
 
 [![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./README.ko.md)
-[![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#installation)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#installation)
@@ -322,9 +322,9 @@ issues and fixes are collected in
 
 ## Version / Changelog
 
-Current version: **v1.7.0** (2026-08-04)
+Current version: **v2.0.0** (2026-09-08)
 
-> Development continues past v1.7.0 — auth hardening, the prompt queue, Web
+> Development continues past v2.0.0 — auth hardening, the prompt queue, Web
 > Push, the port dashboard, and the code viewer/diff panel are still
 > pre-tag (`[Unreleased]`) and tracked at the top of
 > [CHANGELOG.md](./CHANGELOG.md).
@@ -333,6 +333,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full change history.
 
 | Version | Date | Highlights |
 |------|------|-----------|
+| [v2.0.0](https://github.com/Brit-juho/farshell/releases/tag/v2.0.0) | 2026-09-08 | UI overhaul: three-column shell (left rail · split panes · usage rail), server-side agent state machine (idle/working/waiting/done), settings + keymap synced across devices, connected-screen management. See CHANGELOG for breaking changes |
 | [v1.7.0](https://github.com/Brit-juho/farshell/releases/tag/v1.7.0) | 2026-08-04 | Security hardening: device whitelist + OTP gate · one-time registration ticket · access-log credential masking · OriginGuardMiddleware · removed CORS wildcard · fixed session cookie Secure flag |
 | [v1.6.0](https://github.com/Brit-juho/farshell/releases/tag/v1.6.0) | 2026-07-12 | Web login password (`fsh password`): scrypt hash + HMAC-signed session cookie, coexists with machine tokens |
 | [v1.5.0](https://github.com/Brit-juho/farshell/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH remote access: `fsh ssh` · `fsh mobile --network tailscale` · client connection notifications |

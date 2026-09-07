@@ -1,6 +1,6 @@
 # FarShell 아키텍처
 
-> **버전:** v1.7.0+ — 2026년 9월에 프런트엔드가 대대적으로 재구조화됐다
+> **버전:** v2.0.0 — 2026년 9월에 프런트엔드가 대대적으로 재구조화됐다
 > (로컬 전용 [`docs/plan-2.0/`](./docs/plan-2.0/) 참고 — gitignore 대상이라
 > GitHub엔 안 올라감). 릴리스 이력은 [CHANGELOG.md](./CHANGELOG.md),
 > REST/WebSocket 전체 레퍼런스는 [API.md](./API.md) 참고 — 이 문서가 엔드포인트
@@ -110,7 +110,11 @@ fsh의 모든 클라이언트는 격리된 tmux 소켓 `-L fsh`(`VT_TMUX_SOCKET`
 | 파일 | 책임 |
 |---|---|
 | `agent_detector.py` | pane에서 어떤 AI CLI(Claude Code 등)가 돌고 있는지 감지 |
-| `agent_status.py` | Claude Code의 Pre/Post/Stop 훅으로 에이전트 도구 사용 상태를 추적, cwd로 tmux pane과 매칭(CLAUDE.md의 라이브 프리뷰 그리드 캐비어트 참고) |
+| `agent_status.py` | **에이전트 상태 머신**(`idle`/`working`/`waiting`/`done`, `error`는 예약). `post`는 상태를 안 바꾸고(다음 도구가 이어질 수 있다), `stop`은 엔트리를 유지한 채 `done`으로 둬 새로고침을 견딘다. TTL 만료(working 15분/waiting 2분/done 30분)는 백그라운드 태스크가 아니라 읽기·쓰기 진입점에서 지연 실행된다 — 이벤트 루프가 없는 곳에서도 같은 규칙이 성립한다 |
+| `pane_resolve.py` | "이 훅 이벤트가 어느 tmux 세션인가"의 3단 해석: 자기보고 `$TMUX_PANE` → cwd(유일할 때만) → 포기. pane id는 소켓별로 매겨지므로 개인 tmux의 `%12`가 우리 것과 겹칠 수 있어 `$TMUX`의 소켓을 먼저 검증한다 |
+| `agent_prompt_detect.py` | PTY 출력에서 승인 대기(`waiting`) 감지. `auto_responder`와 같은 슬라이딩 윈도우 구조지만 **아무것도 쓰지 않고** 상태만 알린다. 패턴은 `server/detect/*.toml`로 외부화 — CLI 문구가 바뀌어도 코드를 안 고친다 |
+| `claude_hooks.py` | `~/.claude/settings.json` 멱등 등록기(`fsh hooks install`). 직접 넣은 훅은 보존하고, 저장소가 옮겨지면 우리 항목만 갱신하며, 쓰기 전에 백업한다 |
+| `usage/` | 사용량 provider 추상화(`base`/`clauth`/`null` + 팩토리). `~/.clauth/status.json` **하나만** 읽고 **필드 화이트리스트**로 내보낸다 — 모르는 필드는 통과시키지 않고 버려서, clauth가 나중에 추가하는 필드가 공개 터널로 새지 않는다 |
 | `auto_responder.py` | 신뢰 프롬프트에 대한 옵트인 자동 응답기 |
 
 **네트워크 / 터널**
@@ -201,7 +205,7 @@ fsh의 모든 클라이언트는 격리된 tmux 소켓 `-L fsh`(`VT_TMUX_SOCKET`
 | `js/ui/` | `toast.js`(통합 토스트 — voice.js가 별도 번들이라 여전히 window 브리지 필요), `favicon.js`(동적 탭 배지 canvas, UMD 방식), `moreMenu.js` |
 | `js/push/` | `swreg.js` — Web Push용 Service Worker 등록 |
 | `js/lib/` | `ansilex.js`, `difflex.js`, `keyseq.js` — 순수 로직, UMD로 감싸 브라우저(`window.VTAnsiLex`)와 Node 테스트(`require(...)`) 양쪽에서 재사용 |
-| `js/layout/` | 현재 비어있음(`.gitkeep`) — 향후 rail/커맨드 팔레트 레이어용으로 예약 |
+| `js/layout/` | 2.0 셸. `store.js`/`tree.js`(분할 pane 트리 — 순수 함수 + 그 상태를 들고 있는 유일한 곳), `panes.js`(재귀 렌더러 — 기존 세션 wrapper를 재생성하지 않고 옮긴다), `dnd.js`(5구역 드롭존), `resizer.js`, `compact.js`(<720px + 터치 렌더 모드), `pane-picker.js`, `rail.js`(좌측 rail), `right-rail.js`(우측 사용량 레일, ≥1024px), `clients.js`(연결된 화면), `persist.js`(레이아웃 영속화 — leaf에 `{id, tmux}`를 적어 새 PTY id로 바뀌어도 tmux 세션을 다시 찾는다), `breakpoints.js` |
 | `js/theme.js`, `search.js`, `picker.js`, `ports.js`, `queue.js`, `snippets.js`, `quickopen.js`, `pushui.js`, `gate.js`, `main.js` | 최상위 기능 모듈들 + 앱 진입점. `gate.js`는 의도적으로 classic(비모듈) 스크립트로 남은 유일한 파일 — 어떤 ES 모듈(defer)보다 먼저 로그인 게이트를 실행해야 하기 때문 |
 | `sw.js` | Service Worker — 오프라인 캐싱, 프리캐시 목록 |
 | `manifest.json` | PWA 매니페스트 |

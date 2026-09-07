@@ -3,7 +3,7 @@
 [![CI](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml/badge.svg)](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml)
 
 [![English](https://img.shields.io/badge/lang-English-lightgrey.svg)](./README.md)
-[![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#설치)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#설치)
@@ -316,9 +316,9 @@ fsh voice
 
 ## 버전 / 변경 이력
 
-현재 버전: **v1.7.0** (2026-08-04)
+현재 버전: **v2.0.0** (2026-09-08)
 
-> v1.7.0 이후에도 개발이 계속 진행 중입니다 — 인증 하드닝, 프롬프트 큐, Web Push,
+> v2.0.0 이후에도 개발이 계속 진행 중입니다 — 인증 하드닝, 프롬프트 큐, Web Push,
 > 포트 대시보드, 코드 뷰어/diff 패널 등은 아직 정식 버전 태그 전(`[Unreleased]`)
 > 단계로 [CHANGELOG.md](./CHANGELOG.md) 상단에 기록되어 있습니다.
 
@@ -326,6 +326,7 @@ fsh voice
 
 | 버전 | 날짜 | 주요 내용 |
 |------|------|-----------|
+| [v2.0.0](https://github.com/Brit-juho/farshell/releases/tag/v2.0.0) | 2026-09-08 | UI 전면 개편: 3단 레이아웃(좌측 rail · 분할 pane · 사용량 레일), 서버 판정 에이전트 4상태, 기기 간 동기화되는 설정·키맵, 연결된 화면 관리. Breaking changes는 CHANGELOG 참고 |
 | [v1.7.0](https://github.com/Brit-juho/farshell/releases/tag/v1.7.0) | 2026-08-04 | 보안 하드닝: 기기 화이트리스트 + OTP 관문 · 1회용 등록 티켓 · access log 자격증명 마스킹 · OriginGuardMiddleware · CORS 와일드카드 제거 · 세션 쿠키 Secure 수정 |
 | [v1.6.0](https://github.com/Brit-juho/farshell/releases/tag/v1.6.0) | 2026-07-12 | 웹 로그인 비밀번호(`fsh password`): scrypt 해시 + HMAC 서명 세션 쿠키, 기계 토큰과 병존 |
 | [v1.5.0](https://github.com/Brit-juho/farshell/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH 원격 접속: `fsh ssh` · `fsh mobile --network tailscale` · 클라이언트 접속 알림 |
