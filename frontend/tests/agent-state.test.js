@@ -139,3 +139,19 @@ test('applyStatusDot — 접근성 라벨이 상태와 함께 바뀐다', async 
   S.applyStatusDot(row, 'done');
   assert.strictEqual(row.querySelector('.status-dot').getAttribute('aria-label'), '완료');
 });
+
+// ── L8 §8-b: 앱 아이콘 배지(Badging API) ──────────────────────────────────
+// paint.js는 DOM/스토어 배선이 많아 통째로 로드하기 무거우므로, 배지 규칙만
+// 같은 계산으로 검증한다: **waiting만 센다**(working은 기다리면 끝나고 done은
+// 이미 푸시가 나간다 — 배지는 "지금 나를 부르고 있다"만 의미해야 한다).
+test('배지 계산 — waiting 세션만 센다', async () => {
+  const { S } = await load();
+  S.applySnapshot({
+    a: { status: 'waiting', tmux_session: 'q1' },
+    b: { status: 'waiting', tmux_session: 'q2' },
+    c: { status: 'working', tmux_session: 'w' },
+    d: { status: 'done', tmux_session: 'd' },
+  });
+  const waiting = [...S.allStatuses().values()].filter((v) => v === 'waiting').length;
+  assert.strictEqual(waiting, 2);
+});

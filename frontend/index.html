@@ -219,6 +219,19 @@
   <!-- 터미널 -->
   <div id="terminal-container"></div>
 
+  <!-- L8/U2: 우측 레일 — wide(≥1024px)에서만 상시 노출된다. 사용량의 요점이
+       "상시 노출로 신뢰감을 만든다"(60-usage-provider.md §왜 하는가)인데 패널을
+       열어야만 보이면 그 요점이 사라진다. 섹션이 하나도 없으면(=사용량 소스가
+       없으면) .needs-usage 게이팅으로 레일 자체가 사라지고 pane이 폭을 회수한다
+       (30-layout-shell.md §4 "빈 패널을 보여주지 않는다"). -->
+  <aside id="vt-right-rail" class="needs-usage" aria-label="사용량">
+    <div class="vt-rr-head">
+      <span class="vt-rr-title">사용량</span>
+      <button type="button" class="vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" title="접기">›</button>
+    </div>
+    <div class="vt-rr-body" id="vt-right-rail-body"></div>
+  </aside>
+
   <!-- rail "설정" 패널의 정적 컨텐츠 — 예전 ⋯ 메뉴의 마지막 남은 그룹(설정 +
        거기 흡수된 음성 전용 모드)을 그대로 옮겼다. moreMenu.js/theme.js/pushui.js가
        id로 직접 찾으므로 id는 그대로 유지 — rail.js가 패널을 열 때 이 노드를

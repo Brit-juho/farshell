@@ -39,6 +39,9 @@ export const SCHEMA = {
   // 저장한다. 항목마다 스키마 키를 만들면 스키마가 키맵의 사본이 되어 반드시
   // 어긋난다 — 키맵의 진짜 스키마는 core/keymap.js의 ACTIONS 하나뿐이다.
   'keymap.overrides':       { type: 'str', def: '{}' },
+  // L8: 우측 레일(사용량) 접힘 상태. 폭은 지금 섹션이 하나뿐이라 고정으로 두고,
+  // 섹션이 늘어나면(변경 파일·최근 diff) 그때 폭도 설정으로 뺀다.
+  'rightRail.collapsed':    { type: 'bool', def: false },
 };
 
 let _values = {};              // 사용자가 실제로 바꾼 값만 (기본값은 안 담는다)

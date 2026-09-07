@@ -76,10 +76,32 @@ function paintFavicon() {
   window.VTFavicon.set(best);
 }
 
+// L8 §8-b — 앱 아이콘 배지(Badging API). PWA라 iOS Live Activity는 못 쓰므로,
+// **홈 화면 아이콘에 `waiting` 세션 수**를 띄우는 것이 "앱을 안 보고 있을 때
+// 내 개입이 필요한지"를 알 수 있는 유일한 수단이다.
+//
+// `waiting`만 센다 — `working`은 기다리면 알아서 끝나고, `done`은 이미 푸시가
+// 나간다. 배지는 "지금 나를 부르고 있다"만 의미해야 한다. 숫자가 상시로 떠
+// 있으면 사용자는 곧 무시하게 된다.
+function paintAppBadge() {
+  if (!navigator.setAppBadge) return;   // 미지원(iOS 웹앱 밖, 일부 브라우저)
+  let waiting = 0;
+  for (const id of Object.keys(allSessions())) {
+    if (getStatus(_tmuxName(id)) === 'waiting') waiting++;
+  }
+  // 실패는 조용히 무시한다 — 권한/컨텍스트 문제로 던질 수 있고(설치 안 된
+  // PWA 등), 그게 화면 갱신을 막을 이유는 없다.
+  try {
+    if (waiting > 0) navigator.setAppBadge(waiting);
+    else navigator.clearAppBadge?.();
+  } catch (_) { /* 무시 */ }
+}
+
 export function paintAll() {
   paintTabs();
   paintPanes();
   paintFavicon();
+  paintAppBadge();
 }
 
 // 상태가 바뀔 때마다 다시 칠한다. rAF로 묶어 한 프레임에 한 번만 —

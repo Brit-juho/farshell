@@ -43,6 +43,9 @@ whenAuthed(() => (async () => {
     // 객체라 truthy가 되면 **소스가 없어도 항목이 뜬다**. `available`을 봐야 한다.
     if (!caps.usage || !caps.usage.available) {
       document.querySelectorAll('.needs-usage').forEach(el => el.style.display = 'none');
+      // L8: 우측 레일은 body padding으로 자리를 만든다 — 엘리먼트를 숨기는
+      // 것만으로는 그 패딩이 안 사라져 오른쪽에 빈 300px가 남는다.
+      document.body.classList.add('no-right-rail');
     }
     if (!caps.voice) {
       // (#voice-bar 조회가 있었으나 index.html 에 그런 id 가 없어 항상 null 이었다 — F0에서 제거)

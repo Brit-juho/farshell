@@ -111,8 +111,8 @@ function renderProfile(p, activeName) {
   return card;
 }
 
-function renderBody(data) {
-  const body = document.getElementById('vt-usage-body');
+function renderBody(data, target) {
+  const body = target || document.getElementById('vt-usage-body');
   if (!body) return;
   body.innerHTML = '';
 
@@ -170,6 +170,7 @@ async function refresh() {
   try {
     const data = await vtFetch('/api/usage');
     renderBody(data);
+    renderBody(data, document.getElementById('vt-right-rail-body'));
     paintRailBadge(data);
   } catch (_) {
     renderBody({ available: false, reason: 'read-failed' });
@@ -179,7 +180,14 @@ async function refresh() {
 // 패널이 닫혀 있어도 rail 배지는 최신이어야 한다(그게 "상시 노출"의 의미다).
 // 피드가 90초 주기라 60초면 충분하고, 서버 쪽 비용은 mtime 비교 하나다.
 async function refreshBadgeOnly() {
-  try { paintRailBadge(await vtFetch('/api/usage')); } catch (_) { /* 조용히 무시 */ }
+  try {
+    const data = await vtFetch('/api/usage');
+    paintRailBadge(data);
+    // L8/U2: 우측 레일은 **패널이 닫혀 있어도** 최신이어야 한다 — 그게 "상시
+    // 노출"의 의미다. 화면에 없으면(compact/regular) 아무 일도 안 한다.
+    const rr = document.getElementById('vt-right-rail-body');
+    if (rr && rr.offsetParent !== null) renderBody(data, rr);
+  } catch (_) { /* 조용히 무시 */ }
 }
 
 export function showUsage() {

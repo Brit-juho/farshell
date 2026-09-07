@@ -1790,3 +1790,60 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
   cursor:pointer; flex-shrink:0;
 }
 .vt-clients-detach:hover { background:var(--menu-hover); color:var(--color-st-error); }
+
+/* ── L8 우측 레일 ──────────────────────────────────────────────────────────
+   wide(≥1024px)에서만 상시 노출. regular/compact에서는 rail 버튼이 여는 패널이
+   같은 내용을 담당한다(같은 렌더러를 두 자리에 쓴다 — 컴포넌트를 두 벌 만들면
+   반드시 어긋난다). 섹션이 없으면 .needs-usage 게이팅으로 통째로 사라진다. */
+/* 좌측 rail과 **같은 관용구**를 쓴다: position:fixed + body padding으로 자리를
+   만든다. body가 flex-column이라 형제로 두면 터미널 아래로 내려가기 때문이고,
+   같은 방식이어야 두 레일의 상호작용(패널 열림 등)을 한 곳에서 계산할 수 있다. */
+#vt-right-rail {
+  display:none;   /* 아래 미디어쿼리에서만 켠다 */
+  flex-direction:column; width:300px;
+  position:fixed; right:0; top:0; bottom:0; z-index:69;
+  border-left:1px solid var(--line); background:var(--bar);
+  overflow:hidden;
+}
+.vt-rr-head {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:calc(var(--spacing) * 1.5); border-bottom:1px solid var(--line);
+}
+.vt-rr-title { font:600 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-rr-collapse {
+  border:0; background:transparent; color:var(--sub); cursor:pointer;
+  font:600 var(--fs-sm) var(--ui); padding:2px 6px; border-radius:var(--radius-sm);
+}
+.vt-rr-collapse:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-rr-body { flex:1; min-height:0; overflow-y:auto; padding:calc(var(--spacing) * 1.5); }
+
+@media (min-width: 1024px) {
+  #vt-right-rail { display:flex; }
+  /* 레일 폭만큼 본문을 밀어낸다. 사용량 소스가 없으면 .needs-usage 게이팅이
+     display:none을 걸지만 body 패딩은 CSS만으로는 못 되돌린다 — 그래서
+     agent/status.js가 게이팅할 때 body에 .no-right-rail을 함께 단다. */
+  body:not(.no-right-rail) { padding-right:calc(env(safe-area-inset-right) + 300px); }
+  body:not(.no-right-rail).vt-rr-collapsed { padding-right:calc(env(safe-area-inset-right) + 32px); }
+  /* 접으면 헤더 버튼만 남는 얇은 띠 — 완전히 감추면 다시 펼 진입점이 사라진다 */
+  #vt-right-rail.collapsed { width:32px; }
+  #vt-right-rail.collapsed .vt-rr-title,
+  #vt-right-rail.collapsed .vt-rr-body { display:none; }
+  #vt-right-rail.collapsed .vt-rr-head { padding:calc(var(--spacing) * 1) 4px; justify-content:center; }
+}
+
+/* ── D4 잔여: 밀도 대비 ────────────────────────────────────────────────────
+   계획서의 마지막 D4 항목("사이드바/rail은 text-sm, 메인 영역은 text-base +
+   여유 패딩")은 **적용할 사이드바가 없어서** 미뤄져 있었다. L4(좌측 rail)·
+   L8(우측 레일)·C3(연결된 화면)이 생긴 지금 그 실체가 있다.
+
+   왜 밀도를 나누나: 사이드바는 **훑는** 곳이고 메인은 **읽는** 곳이다. 같은
+   크기로 두면 사이드바가 화면을 과하게 먹고, 그렇다고 사이드바만 줄이면
+   메인이 상대적으로 답답해 보인다 — 대비를 만들어야 둘 다 제 역할로 읽힌다.
+
+   개별 컴포넌트에 이미 font가 박혀 있는 곳(.vt-rail-session-select 등)은
+   그대로 둔다. 여기서 바꾸는 것은 **상속 기준선**이라, 명시값이 있는 곳은
+   그 값이 계속 이긴다(값 보존). */
+#vt-rail-panel, #vt-right-rail, .vt-clients { font-size:var(--fs-sm); }
+/* 메인(터미널 위 온보딩·가이드 등 텍스트 표면)은 기준선을 base로 두고 패딩을
+   한 단계 더 준다. 터미널 자체는 xterm이 자기 폰트 크기를 쓰므로 영향 없다. */
+#terminal-container { font-size:var(--fs-base); }
