@@ -36,6 +36,15 @@ export function startSessionSocket(id, term) {
 
     sock.onopen = () => {
       updateConnStatus(id, true);
+      // 연결(첫 연결 포함) 직후엔 서버가 scrollback을 먼저 재생한다 — 그 안에
+      // vim/tmux copy-mode 등에서 나온 과거 OSC52 시퀀스가 섞여 있을 수 있으므로,
+      // selection.js의 OSC52 핸들러가 "지금 온 게 재생분이다"를 알 수 있게 플래그를
+      // 켜둔다. 서버가 scrollback 큐잉이 끝났을 때 보내는 scrollback_end 메시지
+      // (아래 message 리스너)에서 끈다. 이게 없으면 재접속마다 세션 도중 쌓인
+      // OSC52들이 한꺼번에 재생되며 매번 다시 발화해 "새로고침하면 클립보드 동기화
+      // 토스트가 우르르 뜬다"는 버그가 났다.
+      const _s0 = getSession(id);
+      if (_s0) _s0._replayingScrollback = true;
       // 재연결이었다면(첫 연결이 아니면) 서버가 scrollback(최대 256KB)을 통째로 재전송한다.
       // reset 없이 write하면 이전 출력이 중복 누적되므로 비운 뒤 깨끗하게 repaint한다.
       // R1: "[재연결됨]" 상태 문구는 예전엔 term.write()로 찍어 스크롤백에 영구히
@@ -55,14 +64,27 @@ export function startSessionSocket(id, term) {
       _stableTimer = setTimeout(() => { _retries = 0; }, STABLE_MS);
     };
 
-    // Phase 8 G2: 서버 ping 응답 (heartbeat pong)
+    // Phase 8 G2: 서버 ping 응답 (heartbeat pong) + scrollback 재생 종료 신호
     sock.addEventListener('message', (e) => {
       if (typeof e.data !== 'string') return;
       try {
         const msg = JSON.parse(e.data);
         if (msg && msg.type === 'ping') sock.send(JSON.stringify({ type: 'pong' }));
+        else if (msg && msg.type === 'scrollback_end') {
+          // s.ws가 이 sock과 다르면 이미 재연결로 교체된 뒤 도착한 낡은 메시지 —
+          // 그 사이 새 연결이 다시 true로 켜둔 플래그를 잘못 꺼버리면 안 된다.
+          const s = getSession(id);
+          if (s && s.ws === sock) s._replayingScrollback = false;
+        }
       } catch (_) { /* binary or non-JSON */ }
     });
+    // 안전장치 — scrollback_end가 유실되는(큐 이상 등) 극단적 상황에서도 플래그가
+    // 영구히 안 풀려 OSC52 동기화가 죽어있지 않게, 일정 시간 뒤 강제로 해제한다.
+    // 같은 이유로 이 sock이 여전히 세션의 현재 연결일 때만 적용한다.
+    setTimeout(() => {
+      const s = getSession(id);
+      if (s && s.ws === sock) s._replayingScrollback = false;
+    }, 5000);
 
     // R2: 서버 pause_read는 WS 송신 큐(_on_data) 크기만 본다 — 네트워크로는
     // 다 나갔는데 xterm.js 렌더링(특히 저사양 모바일)이 못 따라가는 상황은

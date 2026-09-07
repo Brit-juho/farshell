@@ -99,20 +99,26 @@ def _get_attach_lock(tmux_name: str) -> asyncio.Lock:
 @router.get("/api/tmux/sessions")
 async def list_tmux_sessions():
     fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}"
-    fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}"
+    # A2: pane_id를 함께 받아 응답에 싣는다 — 프런트가 "이 카드가 그 pane인가"를
+    # cwd 추측이 아니라 id로 판정할 수 있게(같은 cwd 세션 둘 문제의 해소).
+    fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}"
 
     sessions_text = tmux_runner.run_text(["list-sessions", "-F", fmt_sessions], timeout=2.0)
     if not sessions_text:
         return []
 
     panes_text = tmux_runner.run_text(["list-panes", "-a", "-F", fmt_panes], timeout=2.0) or ""
-    pane_by_session: dict[str, tuple[str, str]] = {}
+    pane_by_session: dict[str, tuple[str, str, str]] = {}
     for line in panes_text.strip().split("\n"):
         if not line:
             continue
         parts = line.split("\t")
         if len(parts) >= 2 and parts[0] not in pane_by_session:
-            pane_by_session[parts[0]] = (parts[1], parts[2] if len(parts) > 2 else "")
+            pane_by_session[parts[0]] = (
+                parts[1],
+                parts[2] if len(parts) > 2 else "",
+                parts[3] if len(parts) > 3 else "",
+            )
 
     sessions = []
     for line in sessions_text.strip().split("\n"):
@@ -120,7 +126,7 @@ async def list_tmux_sessions():
             continue
         parts = line.split("\t")
         name = parts[0]
-        cmd, cwd = pane_by_session.get(name, ("", ""))
+        cmd, cwd, pane_id = pane_by_session.get(name, ("", "", ""))
         web_session = session_store.find_by_tmux_name(name)
         sessions.append({
             "name": name,
@@ -128,6 +134,7 @@ async def list_tmux_sessions():
             "attached": int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0,
             "command": cmd,
             "cwd": cwd,
+            "pane_id": pane_id,
             "web_session_id": web_session.session_id if web_session else None,
         })
     return sessions

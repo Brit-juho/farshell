@@ -1,6 +1,7 @@
 // 마우스/선택 배선 — 드래그 자동복사·우클릭·이미지 붙여넣기·단축키·OSC52.
 // F4에서 terminal.js(구 :482-565)에서 분리. addSession에서 term.open 직후 호출.
 import { copyToClipboard, pasteFromClipboard, pasteImageUpload } from './clipboard.js';
+import { getSession } from '../core/store.js';
 
 export function wireClipboard(id, term, wrapper) {
   // 1) copy-on-select — 드래그(브라우저 선택) 끝나면 자동 복사.
@@ -71,6 +72,11 @@ export function wireClipboard(id, term, wrapper) {
       const semi = data.indexOf(';');
       const payload = semi >= 0 ? data.slice(semi + 1) : data;
       if (!payload || payload === '?') return true;
+      // ws.js가 scrollback 재생 구간 동안 켜두는 플래그 — 재접속마다 세션 도중
+      // 쌓인 과거 OSC52들이 scrollback과 함께 통째로 재생되며 매번 다시 복사+토스트를
+      // 띄우던 버그(새로고침 시 "클립보드 동기화됨" 우르르 뜸)를 막는다. 재생분은
+      // 이미 과거에 한 번 처리된 요청이므로 조용히 무시한다.
+      if (getSession(id)?._replayingScrollback) return true;
       // tmux가 `set-clipboard external`이면 일반 드래그도 자체 copy-mode를 거쳐
       // 여기로 OSC52를 쏜다(키보드로 하는 vim/tmux copy-mode 복사도 동일 경로라
       // 드래그만 따로 구분할 수 없음) — "드래그 시 자동 복사" 토글을 꺼도 이 경로가

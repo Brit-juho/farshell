@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 
 import agent_detector
 import agent_status
+import pane_resolve
 
 # Phase 9 #5: heartbeat (pty.py와 동일 정책)
 _HB_INTERVAL = float(os.environ.get("VT_WS_HEARTBEAT_INTERVAL", "15.0"))
@@ -47,7 +48,16 @@ async def agent_event(request: Request):
     event = body.get("event", "stop")
     payload = body.get("payload", {})
 
-    state = agent_status.on_event(event, payload)
+    # A2: 훅이 자기보고한 pane id를 1차 근거로, cwd를 폴백으로 세션을 특정한다.
+    # 둘 다 실패하면 session=None — "모호하면 아무것도 강조하지 않는다"는
+    # 기존 규칙 그대로다(엉뚱한 카드를 켜는 것보다 안전하다).
+    session, how = pane_resolve.resolve(
+        body.get("pane"), body.get("tmux"), payload.get("cwd")
+    )
+    if how == "foreign-tmux":
+        logger.debug("훅이 우리 소켓이 아닌 tmux에서 왔다 — pane id 폐기")
+
+    state = agent_status.on_event(event, payload, session=session)
 
     # P4: 작업이 끝났다는 가장 정확한 신호가 stop 훅이다. 여기서 큐를 한 건 흘린다.
     # 유예 시간(VT_QUEUE_GRACE_SEC)은 queue_runner가 둔다 — 사용자가 곧바로
@@ -62,13 +72,18 @@ async def agent_event(request: Request):
             import tmux_target
             # state는 on_event(stop)이 pop 직전에 건져준 {"cwd": ...} — 그리드 뷰와
             # 같은 방식으로 cwd를 세션 이름으로 특정해, 그 세션 몫 항목만 흘려보낸다.
-            cwd = (state or {}).get("cwd")
-            session = tmux_target.session_for_cwd(cwd) if cwd else None
-            queued = queue_runner.schedule_drain(session=session, session_scoped=True)
+            # A2 이후로는 3단 해석 결과를 그대로 쓴다 — cwd 추측(같은 cwd
+            # 세션 둘이면 항상 None)보다 정확하다. 이번 이벤트가 특정하지
+            # 못했으면 엔트리에 남아 있던 값(pre 때 pane id로 정한 것)을 쓴다.
+            target = session or (state or {}).get("tmux_session")
+            if not target:
+                cwd = (state or {}).get("cwd")
+                target = tmux_target.session_for_cwd(cwd) if cwd else None
+            queued = queue_runner.schedule_drain(session=target, session_scoped=True)
         except Exception as e:                       # 큐 문제로 훅 응답이 깨지면 안 된다
             logger.warning(f"큐 드레인 예약 실패: {e}")
 
-    msg = {"type": "agent_event", "event": event, "state": state}
+    msg = {"type": "agent_event", "event": event, "state": state, "resolved_by": how}
     dead = set()
     for ws in list(_agent_event_clients):
         try:
@@ -78,6 +93,43 @@ async def agent_event(request: Request):
     _agent_event_clients.difference_update(dead)
 
     return {"ok": True, "state": state, "queue_scheduled": queued}
+
+
+@router.post("/api/agent/report")
+async def agent_report(request: Request):
+    """A2 — pane 자기보고 (`fsh pane report`).
+
+    Claude Code는 훅이 있지만 codex/aider/gemini는 없다. 그 pane들이 스스로
+    "나 지금 working이야"를 알릴 수 있는 유일한 경로다. pane id는 호출자가
+    `$TMUX_PANE`으로 실어 보내고, 서버는 훅과 **같은 3단 해석**을 태운다.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    state = str(body.get("state", "working"))
+    session, how = pane_resolve.resolve(
+        body.get("pane"), body.get("tmux"), body.get("cwd")
+    )
+    # 키는 세션 이름이 가장 안정적이다 — 같은 pane에서 여러 번 보고해도 한
+    # 엔트리로 모이고, 훅 기반 엔트리(session_id 키)와도 섞이지 않는다.
+    sid = body.get("session_id") or (f"pane:{session}" if session else f"pane:{body.get('pane') or 'unknown'}")
+    try:
+        ent = agent_status.report(
+            sid, state, session=session, cwd=body.get("cwd"), agent=body.get("agent")
+        )
+    except ValueError as e:
+        return {"ok": False, "error": "bad_state", "reason": str(e)}
+
+    msg = {"type": "agent_event", "event": "report", "state": ent, "resolved_by": how}
+    dead = set()
+    for ws in list(_agent_event_clients):
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            dead.add(ws)
+    _agent_event_clients.difference_update(dead)
+    return {"ok": True, "session": session, "resolved_by": how, "state": ent}
 
 
 @router.get("/api/agent/status")

@@ -21,7 +21,7 @@ cat > "$TMPINPUT"
 
 # 서버에 이벤트 전송 (timeout 짧게 — 훅이 Claude를 막으면 안 됨)
 python3 - "$EVENT" "$TMPINPUT" "$SERVER" << 'PYEOF' || true
-import json, sys, urllib.request
+import json, os, sys, urllib.request
 
 event, input_file, server = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
@@ -31,7 +31,18 @@ except Exception:
     payload = {}
 
 try:
-    body = json.dumps({"event": event, "payload": payload}).encode()
+    # A2 pane 자기보고: Claude Code 훅 JSON에는 "어느 tmux pane에서 돌고 있나"가
+    # 없다. 지금까지 서버는 cwd 문자열 일치로 추측해왔는데, 같은 디렉토리
+    # ($HOME 등)에 세션이 둘이면 확신할 수 없어 아무것도 표시하지 못했다.
+    # 훅은 pane 셸의 자식이라 TMUX/TMUX_PANE을 그대로 상속받는다 — 그 두 줄을
+    # 실어 보내면 추측이 정확 매칭으로 바뀐다. tmux 밖이면 둘 다 None이고
+    # 서버가 cwd 폴백으로 내려간다.
+    body = json.dumps({
+        "event": event,
+        "payload": payload,
+        "pane": os.environ.get("TMUX_PANE"),
+        "tmux": os.environ.get("TMUX"),
+    }).encode()
     req = urllib.request.Request(
         f"{server}/api/agent/event",
         data=body,

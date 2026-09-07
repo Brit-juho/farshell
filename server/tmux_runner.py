@@ -88,6 +88,9 @@ class PaneInfo:
     command: str
     pid: int
     path: str = ""
+    # A2: tmux pane id("%12"). 훅이 자기보고한 $TMUX_PANE과 정확 매칭하는 키다
+    # — cwd 문자열 일치는 같은 디렉토리에 세션이 둘이면 답을 못 낸다.
+    pane_id: str = ""
 
 
 def get_all_panes() -> list[PaneInfo]:
@@ -95,7 +98,7 @@ def get_all_panes() -> list[PaneInfo]:
 
     purplemux getAllPanesInfo 패턴: list-panes -a 한 번으로 N개 세션 처리.
     """
-    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}"
+    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}"
     text = run_text(["list-panes", "-a", "-F", fmt])
     if not text:
         return []
@@ -116,6 +119,7 @@ def get_all_panes() -> list[PaneInfo]:
                 command=parts[1],
                 pid=pid,
                 path=parts[3] if len(parts) > 3 else "",
+                pane_id=parts[4] if len(parts) > 4 else "",
             )
         )
     return panes

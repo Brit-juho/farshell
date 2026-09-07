@@ -45,6 +45,9 @@ ERROR = "error"  # 예약 — 2.0에서는 진입 경로 없음
 
 STATUSES = (IDLE, WORKING, WAITING, DONE, ERROR)
 
+# 2-6 정렬 우선순위 — "내 개입이 필요한 것이 항상 맨 위".
+_URGENCY = {WAITING: 0, DONE: 1, WORKING: 2, ERROR: 3, IDLE: 4}
+
 # session_id (또는 transcript_path 등 고유 키) → 현재 상태
 _state: dict[str, dict] = {}
 
@@ -127,12 +130,17 @@ def _entry(sid: str, cwd: Optional[str] = None) -> dict:
     return ent
 
 
-def on_event(event: str, payload: dict) -> Optional[dict]:
+def on_event(event: str, payload: dict, session: Optional[str] = None) -> Optional[dict]:
     """훅 이벤트 처리.
 
     Args:
         event: "pre" | "post" | "stop" (그 외는 무시)
         payload: Claude Code hook stdin JSON
+        session: A2의 3단 해석(pane_resolve.resolve)이 특정한 tmux 세션 이름.
+                 None이면 이번 이벤트로는 특정하지 못했다는 뜻이고, **엔트리에
+                 이미 있던 값을 지우지 않는다** — pre에서 pane id로 확실히
+                 특정해뒀는데 stop 페이로드가 어쩌다 단서를 못 실어 왔다고
+                 해서 그 정보를 잃을 이유가 없다.
 
     Returns:
         해당 세션의 갱신된 상태(엔트리 전체). 알 수 없는 세션의 알 수 없는
@@ -148,6 +156,8 @@ def on_event(event: str, payload: dict) -> Optional[dict]:
 
     if event == "pre":
         ent = _entry(sid, cwd)
+        if session:
+            ent["tmux_session"] = session
         ent["tool"] = payload.get("tool_name") or payload.get("tool", "?")
         ent["since"] = time.time()
         ent["count"] = ent.get("count", 0) + 1
@@ -161,6 +171,8 @@ def on_event(event: str, payload: dict) -> Optional[dict]:
         # 상태는 그대로 둔다(파일 상단 규칙). 도구가 끝났을 뿐 다음 도구가
         # 곧바로 이어질 수 있어서다.
         ent = _entry(sid, cwd)
+        if session:
+            ent["tmux_session"] = session
         ent["last_tool"] = ent.get("tool")
         ent["tool"] = None
         ent["last_done"] = time.time()
@@ -168,6 +180,8 @@ def on_event(event: str, payload: dict) -> Optional[dict]:
 
     if event == "stop":
         ent = _entry(sid, cwd)
+        if session:
+            ent["tmux_session"] = session
         ent["tool"] = None
         _set_status(ent, DONE)
         return ent
@@ -213,6 +227,44 @@ def ack(sid: str) -> Optional[dict]:
     return ent
 
 
+def report(sid: str, status: str, session: Optional[str] = None,
+           cwd: Optional[str] = None, agent: Optional[str] = None) -> dict:
+    """pane 자기보고(`fsh pane report`)로 상태를 직접 세팅한다.
+
+    훅이 없는 에이전트(codex/aider/gemini)를 위한 경로다 — 그쪽은 Claude Code
+    훅 같은 게 없으니 사용자가 래퍼/스크립트에서 직접 알려주는 수밖에 없다.
+    알 수 없는 status 문자열은 거부한다(오타가 조용히 새 상태를 만들면 안 된다).
+    """
+    if status not in STATUSES:
+        raise ValueError(f"알 수 없는 상태: {status} (가능: {', '.join(STATUSES)})")
+    sweep()
+    ent = _entry(sid, cwd)
+    if session:
+        ent["tmux_session"] = session
+    if agent:
+        ent["agent"] = agent
+    if status != WORKING:
+        ent["tool"] = None
+    _set_status(ent, status)
+    return ent
+
+
+def status_for_session(name: Optional[str]) -> str:
+    """tmux 세션 이름으로 상태를 찾는다 — A2 이후의 **정확한** 경로.
+
+    `status_for_cwd`와 같은 우선순위 규칙(가장 개입이 필요한 상태)을 쓰되,
+    키가 cwd 문자열이 아니라 3단 해석이 특정한 세션 이름이라 같은 디렉토리에
+    세션이 둘이어도 서로 안 섞인다.
+    """
+    if not name:
+        return IDLE
+    sweep()
+    found = [e.get("status", IDLE) for e in _state.values() if e.get("tmux_session") == name]
+    if not found:
+        return IDLE
+    return min(found, key=lambda s: _URGENCY.get(s, 9))
+
+
 def get_status(sid: str) -> str:
     """세션의 현재 상태 문자열. 모르는 세션은 idle."""
     sweep()
@@ -230,11 +282,10 @@ def status_for_cwd(cwd: Optional[str]) -> str:
     if not cwd:
         return IDLE
     sweep()
-    priority = {WAITING: 0, DONE: 1, WORKING: 2, ERROR: 3, IDLE: 4}
     found = [e.get("status", IDLE) for e in _state.values() if e.get("cwd") == cwd]
     if not found:
         return IDLE
-    return min(found, key=lambda s: priority.get(s, 9))
+    return min(found, key=lambda s: _URGENCY.get(s, 9))
 
 
 def get_state(sid: Optional[str] = None) -> dict:
