@@ -16,6 +16,15 @@ codex/aider/gemini 는 훅이 없어서 자동 드레인이 걸리지 않는다 
   2. safe_mode — 위험 명령이면 투입하지 않고 큐에 blocked 로 남긴다.
   3. 타깃 pane 생존 확인 — 없으면 큐를 유지한 채 중단한다(항목을 버리지 않는다).
   4. 한 번에 한 건 — 연속 투입하면 에이전트가 두 지시를 한 입력으로 붙여 읽는다.
+  5. **타깃이 waiting(승인 대기)이 아닐 것** — A4. 승인 프롬프트가 떠 있는
+     pane 에 send-keys 를 하면 큐 텍스트가 **승인 답변으로 소비된다**
+     (`tmux_target.send_to_tmux` 는 무조건 Enter 를 붙인다). 텍스트가 유실되는
+     정도가 아니라 사용자가 승인한 적 없는 동작이 승인돼버리는 안전 문제다.
+
+**`waiting` 은 완료 판정이 아니라 투입 금지 신호다.** 위의 "출력 유휴로 추측한
+완료 판정은 빼기로 했다"는 결정과 충돌하지 않는다 — waiting 이 아니라고 해서
+투입하는 게 아니고(그건 여전히 stop 훅만 한다), waiting 이면 **투입하지 않을**
+뿐이다. 방향이 한쪽뿐이라 오탐이 나도 "안 넣는다"로만 기운다.
 """
 
 from __future__ import annotations
@@ -70,6 +79,22 @@ def _check_safe(text: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _is_waiting(target: str | None) -> bool:
+    """타깃(tmux 세션 이름 또는 `세션:윈도.페인` 표기)이 승인 대기 상태인가.
+
+    상태를 모르면 False — 감지가 아직 없는 에이전트(codex 등)에서 큐가 영구히
+    막히면 안 된다. "모르면 막는다"가 아니라 "알 때만 막는다"이다.
+    """
+    if not target:
+        return False
+    try:
+        import agent_status
+    except ImportError:
+        return False
+    name = str(target).split(":", 1)[0]
+    return agent_status.status_for_session(name) == agent_status.WAITING
+
+
 def drain_once(session: str | None = None, session_scoped: bool = False) -> dict:
     """pending 한 건을 투입한다. blocking — 호출부가 to_thread 로 감싼다."""
     item = queue_store.pop_next(session, session_scoped=session_scoped)
@@ -82,6 +107,14 @@ def drain_once(session: str | None = None, session_scoped: bool = False) -> dict
         logger.warning(f"큐 항목이 safe_mode 에 막힘: {reason}")
         return {"ok": False, "drained": 0, "error": "blocked",
                 "reason": f"위험 명령으로 차단됨: {reason}", "item": item}
+
+    # 5관문(A4): 승인 대기 중인 pane 에는 절대 넣지 않는다. 항목은 버리지 않고
+    # blocked 로 남겨 승인이 끝난 뒤 다시 흘려보낼 수 있게 한다.
+    target_session = item.get("target") or session
+    if _is_waiting(target_session):
+        queue_store.mark_blocked(item, "타깃이 승인 대기 중")
+        return {"ok": False, "drained": 0, "error": "waiting",
+                "reason": "타깃이 승인 대기 중입니다 (큐에 유지됨)", "item": item}
 
     pane, mode = _resolve_pane(item)
     if not pane:

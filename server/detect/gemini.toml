@@ -1,0 +1,5 @@
+# gemini — 패턴 미조사. 채우면 그 즉시 waiting 감지가 켜진다(서버 재시작 불필요).
+# 형식은 claude.toml 참고. 빈 채로 두면 이 에이전트는 감지하지 않는다.
+name = "gemini"
+enter = []
+exit = []

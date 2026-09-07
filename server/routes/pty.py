@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 import auth
 import crypto_channel
 import tmux_runner
-from deps import pty_mgr, session_store, output_watcher, _auto_responder
+from deps import pty_mgr, session_store, output_watcher, _auto_responder, _prompt_detector
 from session_store import new_session_id
 
 logger = logging.getLogger(__name__)
@@ -122,6 +122,7 @@ async def delete_session(session_id: str):
     session_store.remove(session_id)
     output_watcher.remove_session(session_id)
     _auto_responder.remove(session_id)  # 세션별 윈도우 dict 정리 (누수 방지)
+    _prompt_detector.remove(session_id)
     return {"ok": True, "tmux_detached": tmux_name}
 
 
@@ -313,6 +314,9 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             nonlocal pty_paused
             output_watcher.feed_output(session_id, data)
             _auto_responder.feed(session_id, data)
+            # A3: 같은 스트림의 세 번째 소비자. 아무것도 쓰지 않고 상태만 본다
+            # (auto_responder가 방금 응답한 세션은 그쪽 cooldown 창 동안 억제).
+            _prompt_detector.feed(session_id, data)
             out = channel.encrypt_simple(data) if channel else data
             try:
                 send_queue.put_nowait(out)
@@ -429,6 +433,9 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                             logger.warning(f"[E2E] 복호화 실패: {e}")
                             continue
                     try:
+                        # A3 해제 판정: 사용자가 이 pane에 직접 입력했다면 승인
+                        # 대기는 끝났다(사람이 실제로 답한 가장 확실한 신호).
+                        _prompt_detector.on_user_input(session_id)
                         pty_mgr.write(session_id, payload)
                     except ValueError:
                         # kill 버튼으로 세션이 방금 destroy된 것과 클라이언트의 마지막 입력이

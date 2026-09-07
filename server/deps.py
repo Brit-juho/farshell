@@ -10,6 +10,8 @@ from fastapi import WebSocket
 from pty_manager import PTYManager
 from session_store import SessionStore
 from output_watcher import OutputWatcher
+import agent_prompt_detect
+import agent_status
 import auto_responder
 
 pty_mgr = PTYManager()
@@ -20,6 +22,27 @@ output_watcher = OutputWatcher()
 _auto_responder = auto_responder.get_global_responder(
     write_fn=lambda sid, data: pty_mgr.write(sid, data)
 )
+
+# A3: 승인 대기(waiting) 감지 — auto_responder 옆에서 같은 출력 스트림을 먹되
+# 아무것도 쓰지 않고 상태만 알린다. PTY 세션 id(웹 키스페이스)를 tmux 세션
+# 이름(상태 키스페이스)으로 옮기는 다리가 아래 콜백이다 — 그 매핑을 아는 곳은
+# session_store 하나뿐이라 여기서 묶는다.
+def _on_waiting_change(pty_session_id: str, waiting: bool) -> None:
+    info = session_store.get(pty_session_id)
+    tmux_name = info.tmux_name if info else None
+    if not tmux_name:
+        # tmux가 아닌 순수 PTY 세션 — 상태를 붙일 대상(카드/탭)이 없다.
+        return
+    # 훅이 만든 엔트리가 있으면 그쪽을, 없으면 pane 자기보고와 같은 키를 쓴다.
+    targets = [sid for sid, e in agent_status.get_state().items()
+               if e.get("tmux_session") == tmux_name]
+    for sid in targets or [f"pane:{tmux_name}"]:
+        agent_status.on_waiting(sid, waiting)
+        if not targets:
+            agent_status.get_state(sid)["tmux_session"] = tmux_name
+
+
+_prompt_detector = agent_prompt_detect.get_global_detector(_on_waiting_change)
 
 # 알림용 WebSocket 클라이언트 집합
 notify_clients: set[WebSocket] = set()
