@@ -133,6 +133,11 @@ export function createXtermInstance(id) {
         // 그보다 길거나 크게 움직였으면 브라우저 자체 선택 제스처였을 가능성이
         // 높아 건드리지 않는다(이미 네이티브 선택이 진행 중일 수 있음).
         if (Date.now() - s.t > 500 || moved > 8) return;
+        // S4: 이 동작은 지금까지 **끌 방법이 없었다**(계획서 §3 「마우스 · 선택」).
+        // 설정에서 끄면 탭이 앱으로 전달되지 않고 브라우저 기본 동작만 남는다.
+        // 매 탭마다 읽는 이유: 설정이 바뀌면 다음 탭부터 바로 적용돼야 하고,
+        // 이 리스너는 세션 수명 내내 살아 있기 때문이다.
+        if (!setting('mouse.touchTapToApp')) return;
         a11yLayer.style.pointerEvents = 'none';
         const target = document.elementFromPoint(e.clientX, e.clientY);
         a11yLayer.style.pointerEvents = 'auto';

@@ -14,6 +14,7 @@ import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { createTabElement } from './tab-dom.js';
 import { createXtermInstance } from './xterm-setup.js';
+import { applyMouseMode } from './mouse-mode.js';
 import { startSessionSocket } from './ws.js';
 import { saveWorkspace } from './workspace.js';
 import { showOnboarding } from './boot.js';
@@ -126,6 +127,10 @@ export function addSession(id, displayName, insertBeforeId) {
   // 부를 수 있도록 참조를 걸어둔다 — startSessionSocket이 채운다.
   const onResize = startSessionSocket(id, term);
   getSession(id).onResize = onResize;
+  // S4: 「앱에 마우스 이벤트 전달」이 off면 이 세션도 로컬 선택 모드로 만든다.
+  // (설정이 나중에 바뀌면 mouse-mode.js가 구독으로 전체 세션에 반영한다 —
+  // 여기서는 "새로 생긴 세션"만 챙긴다.)
+  applyMouseMode(getSession(id));
 
   switchTo(id);
 }

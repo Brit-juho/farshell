@@ -24,9 +24,6 @@ registerKey('railToggle', () => {
   if (btn) btn.click();
 });
 
-// 설정 화면은 S4에서 만든다. 그 전까지는 rail의 설정 버튼을 눌러 같은 자리로
-// 보낸다 — 바인딩만 먼저 잡아두면 팔레트·설정 화면이 "이미 있는 키"로 보인다.
-registerKey('settings', () => {
-  const btn = document.querySelector('#vt-rail .vt-rail-btn[data-rail="settings"]');
-  if (btn) btn.click();
-});
+// 'settings' 액션의 주인은 panels/settings.js다(S4에서 생겼다) — 여기서
+// 중복 등록하지 않는다. 같은 id에 두 번 register하면 나중 것이 이기므로
+// 모듈 로드 순서에 따라 동작이 갈릴 수 있다.

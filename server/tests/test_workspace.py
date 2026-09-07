@@ -102,3 +102,37 @@ def test_settings_merge_is_shallow_per_key(client):
 
 def test_settings_defaults_to_empty_object(client):
     assert client.get("/api/workspace").json()["settings"] == {}
+
+
+def test_hooks_status_endpoint_reports_per_event(client, tmp_path, monkeypatch):
+    """S4 — 설정 화면 「정보」가 읽는 훅 등록 상태.
+
+    훅이 없으면 상태 배지·큐 자동 투입·TTS가 전부 조용히 동작하지 않으므로
+    ("왜 아무 일도 안 일어나지"의 1번 원인), 화면에서 확인할 수 있어야 한다.
+    """
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    r = client.get("/api/hooks/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False, "빈 설정이면 미등록"
+    assert set(body["events"]) == {"PreToolUse", "PostToolUse", "Stop"}
+    assert body["events"]["Stop"] == "add"
+
+
+def test_hooks_status_after_install(client, tmp_path, monkeypatch):
+    import claude_hooks
+
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    claude_hooks._cmd_install()
+    body = client.get("/api/hooks/status").json()
+    assert body["ok"] is True
+    assert set(body["events"].values()) == {"ok"}
+
+
+def test_hooks_status_on_broken_settings_json(client, tmp_path, monkeypatch):
+    """깨진 settings.json이어도 500이 아니라 이유를 돌려준다."""
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "settings.json").write_text("{not json")
+    body = client.get("/api/hooks/status").json()
+    assert body["ok"] is False
+    assert body["error"] == "unreadable"

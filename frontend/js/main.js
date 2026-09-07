@@ -21,6 +21,7 @@ import './lib/ansilex.js';
 import './lib/difflex.js';
 import './lib/keyseq.js';
 import './panels/panel.js';
+import './panels/settings.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
 import './ui/favicon.js';
 import './ui/moreMenu.js';
 import './push/swreg.js';
