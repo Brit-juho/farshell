@@ -78,6 +78,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 
 
+### 상세 기록 (개발 사이클)
+
+> 위 요약이 2.0.0의 핵심이고, 아래는 그 과정에서 남긴 상세 기록이다.
+> 2.0 개발 사이클 동안 `[Unreleased]`에 쌓였던 항목들로 **전부 이 릴리스에 포함된다.**
+
 ### Changed
 - **밀린 릴리스 태그 소급 정리 (2026-09-08).** `v1.4.0`·`v1.5.1`·`v1.6.0`·`v1.7.0`을
   각 버전의 `VERSION` 파일이 올라간 커밋에 annotated 태그로 달았다. `v1.3.0`과
