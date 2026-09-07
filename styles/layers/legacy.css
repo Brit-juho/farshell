@@ -556,9 +556,16 @@ body.voice-only-mode #tabs,
 body.voice-only-mode #voice-session-picker,
 body.voice-only-mode .traffic,
 body.voice-only-mode .caption,
-/* .more(더보기)는 예외 — 그 안의 "음성 전용 모드" 토글이 이 모드를 끄는 유일한 버튼이라,
-   숨기면 새로고침 말고는 되돌릴 방법이 없는 막다른 상태가 된다. */
-body.voice-only-mode #topbar > .tbtn:not(.mic):not(.more),
+/* L4: 예전엔 .more(⋯ 더보기)가 예외였다 — 그 안의 "음성 전용 모드" 토글이 이
+   모드를 끄는 유일한 버튼이라 숨기면 새로고침 말고는 되돌릴 방법이 없는
+   막다른 상태였기 때문. ⋯가 제거되며 그 토글은 rail의 「설정」 패널로
+   옮겨갔지만, rail 자체가 compact(<720px)에서는 CSS로 통째로 숨는다 —
+   음성 전용 모드는 이어폰 조작용이라 폰(=compact)이 주 사용처인데, 거기서
+   rail도 안 보이면 물리 키보드 없이는 끌 방법이 없는 막다른 상태가
+   똑같이 재발한다. `#palette-toggle`(빠른 열기, Mod+K와 동일 진입점 —
+   L6)은 모든 뷰포트에서 상시 노출이라 이 새 예외로 그 역할을 대신한다 —
+   탭하면 팔레트가 열리고 기본 목록에 "음성 전용 모드" 명령이 있다. -->
+body.voice-only-mode #topbar > .tbtn:not(.mic):not(#palette-toggle),
 body.voice-only-mode #topbar > .spacer { display:none; }
 body.voice-only-mode #topbar {
   flex:1; height:auto; flex-direction:column; justify-content:center; align-items:center;
@@ -639,6 +646,15 @@ body.voice-only-mode #mic-status {
   background:var(--win); z-index:500;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:calc(var(--spacing) * 5); padding:calc(var(--spacing) * 10); text-align:center;
+}
+/* L4: 실브라우저 검증 중 발견한 회귀 — .vt-onboarding은 position:fixed라 body의
+   padding-left(rail을 위해 밀어낸 공간)를 안 따라간다. z-index(500)가 rail(70)/
+   패널(65, 오버레이 110)보다 훨씬 높아서, 세션이 하나도 없는 상태(흔하다 — 부팅
+   직후, 마지막 탭을 닫은 직후)에서 rail 전체가 온보딩 화면 밑에 깔려 클릭이
+   안 먹혔다. body의 padding-left 규칙과 정확히 같은 값을 쓴다. */
+@media (min-width:720px) { .vt-onboarding { left:48px; } }
+@media (min-width:1024px) {
+  body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(48px + var(--vt-rail-panel-w, 280px)); }
 }
 .vt-onboarding .vt-ob-icon { font-size:var(--fs-4xl); color:var(--acc); }
 .vt-onboarding h2 { color:var(--txt); font-size:var(--fs-xl); }
@@ -1454,3 +1470,138 @@ body.vt-resizing #terminal-container{ transition:none; }
    같은 시각 언어를 쓰는 게 핵심이다. */
 .vt-qo-session-card{ border-radius:var(--radius-sm); margin:0 calc(var(--spacing) * 1); }
 .vt-qo-session-card .card-preview{ max-height:52px; }
+
+/* =========================================================================
+   L4 — 좌측 rail (ADR-8). compact(<720px)에서는 통째로 숨고 팔레트+바텀시트가
+   대신한다(§2 반응형 3구간). rail/패널 자체는 position:fixed로 항상 두고,
+   body 패딩으로 본문(topbar+terminal-container)을 밀어낸다 — 기존 코드 뷰어
+   dock 모드(body.vt-docked, margin-right)와 같은 기법을 반대쪽에 쓴 것뿐이라
+   DOM을 새로 감쌀 필요가 없었다.
+   ========================================================================= */
+#vt-rail { display:none; } /* base: compact 숨김 */
+/* #vt-rail-panel은 아래에서 항상 display:flex를 갖는 실제 레이아웃 규칙이라
+   (id 셀렉터라 UA의 `[hidden]{display:none}` 기본 규칙보다 우선순위가 높다),
+   hidden 속성이 실제로 먹히려면 이 명시적 오버라이드가 반드시 필요하다.
+   compact에서는 rail.js가 애초에 패널을 열지 않지만, 방어적으로도 숨긴다. */
+#vt-rail-panel[hidden] { display:none; }
+@media (max-width:719px) { #vt-rail-panel { display:none; } }
+@media (min-width:720px) {
+  #vt-rail {
+    display:flex; flex-direction:column; align-items:center; gap:calc(var(--spacing) * 1);
+    position:fixed; left:0; top:0; bottom:0; width:48px; padding:calc(var(--spacing) * 2) 0;
+    background:var(--bar); border-right:1px solid var(--line); z-index:70;
+  }
+  /* rail 자신의 폭(48px)만큼은 패널이 열려 있지 않아도 항상 밀어낸다 —
+     아이콘 rail은 regular/wide 어디서나 상시 노출이므로. */
+  body { padding-left:calc(env(safe-area-inset-left) + 48px); }
+}
+.vt-rail-btn {
+  position:relative; width:36px; height:36px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  background:none; border:0; border-radius:var(--radius-md); color:var(--sub); cursor:pointer;
+}
+.vt-rail-btn svg { width:19px; height:19px; }
+.vt-rail-btn:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-rail-btn.active { background:var(--acc); color:var(--acc-ink); }
+.vt-rail-spacer { flex:1; } /* ⚙설정을 rail 맨 아래로 고정 */
+.vt-rail-badge {
+  position:absolute; top:2px; right:2px; min-width:15px; height:15px; padding:0 3px; border-radius:var(--radius-full);
+  background:var(--acc); color:var(--acc-ink); font:600 9px/15px var(--ui); text-align:center;
+}
+
+/* 패널 — regular(720~1023)는 오버레이(뒤 pane을 안 밀어냄, 그림자로 떠 있는
+   느낌), wide(≥1024)는 밀어냄(body 패딩 추가 확장). 두 모드 다 position은
+   fixed로 동일하고 z-index/그림자만 다르다 — CSS 쪽은 body 클래스 하나
+   (.vt-rail-overlay, rail.js가 뷰포트 폭에 따라 토글)로 분기한다. */
+#vt-rail-panel {
+  position:fixed; left:48px; top:0; bottom:0; width:var(--vt-rail-panel-w, 280px);
+  background:var(--menu); border-right:1px solid var(--line); z-index:65;
+  display:flex; flex-direction:column; min-width:0;
+}
+body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,0,.35); }
+/* wide: rail(48px) 폭은 항상 밀려 있고, 패널이 열리면 그만큼 더 민다. */
+@media (min-width:1024px) {
+  body.vt-rail-panel-open:not(.vt-rail-overlay) {
+    padding-left:calc(env(safe-area-inset-left) + 48px + var(--vt-rail-panel-w, 280px));
+    transition:padding-left .15s ease;
+  }
+}
+.vt-rail-panel-head {
+  display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
+  height:var(--topbar-h); padding:0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+}
+.vt-rail-panel-title { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-rail-panel-close {
+  display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+  background:none; border:0; border-radius:var(--radius-sm); color:var(--sub); cursor:pointer;
+}
+.vt-rail-panel-close:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-rail-panel-close svg { width:14px; height:14px; }
+.vt-rail-panel-body { flex:1; min-height:0; overflow-y:auto; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); }
+/* 리사이저 — pane 분할선(layout/resizer.js)·코드뷰어 dock과 같은 관행:
+   히트 영역만 ::before로 넓힌다(4px 마우스/8px 터치), 시각적 선은 1px. */
+.vt-rail-resizer {
+  position:absolute; right:-3px; top:0; bottom:0; width:6px; cursor:col-resize; z-index:1;
+}
+.vt-rail-resizer::before { content:''; position:absolute; inset:0 -1px; }
+@media (pointer:coarse) { .vt-rail-resizer::before { inset:0 -3px; } }
+.vt-rail-resizer.dragging { background:color-mix(in srgb, var(--acc) 30%, transparent); }
+
+/* 「설정」 패널 — 예전 ⋯ 메뉴 마크업을 그대로 옮겨 썼다(.mi/.theme-row 등
+   클래스명이 옛 ⋯ 메뉴와 동일 — moreMenu.js/theme.js/pushui.js가 그 이름으로
+   찾으므로 그대로 둔다). 세로 목록으로만 배치하면 되므로 별도 mi 스타일은
+   기존 것을 재사용. */
+#vt-rail-settings-tpl { display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5); }
+/* #vt-rail-panel[hidden] 위 주석과 같은 이유 — id 셀렉터가 UA의 [hidden] 기본
+   규칙보다 우선하므로, 패널에 옮겨 붙기 전(index.html에 정적으로 있을 때)
+   실제로 숨어 있으려면 이 명시적 오버라이드가 필요하다(실브라우저 검증 중
+   발견 — 헤드리스/jsdom 테스트는 [hidden]을 attribute만으로도 존중해 이
+   불일치를 못 잡았다). rail.js가 패널을 열며 hidden을 지우는 순간부터는
+   위 규칙(display:flex)이 다시 이긴다. */
+#vt-rail-settings-tpl[hidden] { display:none; }
+#vt-rail-settings-tpl .mi {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-height:36px;
+  padding:0 calc(var(--spacing) * 1.5); border:0; background:transparent; border-radius:var(--radius-md);
+  color:var(--txt); font-size:var(--fs-sm); text-align:left; cursor:pointer; width:100%;
+}
+#vt-rail-settings-tpl .mi:hover { background:var(--menu-hover); }
+#vt-rail-settings-tpl .mi svg { width:16px; height:16px; flex-shrink:0; color:var(--sub); }
+#vt-rail-settings-tpl .mi input[type="checkbox"] { margin-left:auto; width:16px; height:16px; accent-color:var(--acc); cursor:pointer; }
+#vt-rail-settings-tpl .msep { height:1px; background:var(--line); margin:calc(var(--spacing) * 1) 0; }
+
+/* 「세션」 패널 */
+.vt-rail-session-new {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); width:100%; margin-bottom:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); background:var(--tab); color:var(--txt);
+  border:1px dashed var(--line); border-radius:var(--trad); font:500 var(--fs-sm) var(--ui); cursor:pointer;
+}
+.vt-rail-session-new:hover { background:var(--menu-hover); border-color:var(--acc); color:var(--acc); }
+.vt-rail-session-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
+.vt-rail-session-row {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-height:40px;
+  padding:0 calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2); border:1px solid var(--line); border-radius:var(--radius-md);
+}
+.vt-rail-session-row.active { border-color:var(--acc); }
+.vt-rail-session-select {
+  flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--ui); padding:calc(var(--spacing) * 1) 0;
+}
+.vt-rail-session-actions { display:flex; flex-shrink:0; }
+.vt-rail-session-action {
+  width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+  border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm); cursor:pointer;
+}
+.vt-rail-session-action:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-rail-session-empty { padding:calc(var(--spacing) * 6) calc(var(--spacing) * 2); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
+/* 라이브 프리뷰 카드(tmux 세션) — .vt-qo-session-card와 같은 목적, 목록
+   레이아웃만 다르다(패딩·테두리는 .vt-card가 이미 갖고 있어 감쌀 필요 없음). */
+.vt-rail-session-card { padding-right:calc(var(--spacing) * 1); }
+.vt-rail-session-card .card-preview { max-height:64px; }
+.vt-rail-session-footer {
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
+  margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2.5); border-top:1px solid var(--line);
+}
+.vt-rail-session-footer-item {
+  min-height:34px; padding:0 calc(var(--spacing) * 1.5); border:0; background:transparent; border-radius:var(--radius-md);
+  color:var(--sub); font-size:var(--fs-xs); text-align:left; cursor:pointer;
+}
+.vt-rail-session-footer-item:hover { background:var(--menu-hover); color:var(--txt); }

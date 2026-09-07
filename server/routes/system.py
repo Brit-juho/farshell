@@ -136,8 +136,15 @@ async def workspace_get():
 
 
 @router.put("/api/workspace")
-async def workspace_put(request):
-    from fastapi import Request
+async def workspace_put(request: Request):
+    # L4에서 발견한 버그 수정: `request`에 타입 힌트가 없어서 FastAPI가 이걸
+    # (Request 객체가 아니라) 필수 쿼리 파라미터 "request"로 해석했다 —
+    # 그래서 body로 JSON을 보내면 매번 422가 났다. `/api/workspace`를 실제로
+    # 쓰는 프런트 코드가 이전엔 하나도 없어서(이 라우트를 만든 뒤로 아무도
+    # PUT을 안 불러봤다) 이 라우트가 생긴 이후 계속 고장나 있었을 가능성이
+    # 높다 — rail.js(L4)가 처음으로 실제 호출하면서 실브라우저 검증 중 발견.
+    # 파일 상단에 이미 `from fastapi import ... Request ...`가 있어 여기 있던
+    # 함수 내부의 중복 import도 함께 정리했다.
     data = await request.json()
     merged = workspace.update(data)
 

@@ -167,55 +167,68 @@
     <button id="palette-toggle" class="tbtn" data-action="quickopen.open" aria-label="빠른 열기" title="빠른 열기 (Ctrl/Cmd+K)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
-    <button id="viewer-toggle" class="tbtn needs-fs" data-action="viewer.show" aria-label="코드 뷰어" title="코드 뷰어 (Ctrl+Shift+E)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-    </button>
-    <button class="tbtn more" id="more-btn" data-action="menu.toggle" aria-label="더보기" aria-haspopup="true" aria-expanded="false" title="더보기">⋯</button>
-
     <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
   </header>
 
-  <!-- ⋯ 팝업 메뉴 -->
-  <!-- L1: 「세션」 그룹(tmux 세션 목록·맥에서도 열기·이 세션 맥에서 열기)은
-       세션 관리 시트(picker.js openSessionManager → vt-session-footer)로
-       옮겼다 — rail(L4)이 생기기 전까지의 과도기 자리.
-       L1 잔여 항목(L6 완료 후 처리, 2026-09-07): 「보기」 그룹(빠른 열기·터미널
-       내 검색)과 「음성 · 파일」의 "코드 뷰어" 항목을 통째로 지웠다 — 상단바
-       ↔ ⋯ 중복이었다(빠른 열기=상단바 #palette-toggle과 완전히 동일한 액션,
-       터미널 내 검색=Ctrl/Cmd+F·팔레트 `/` 접두사로 대체, 코드 뷰어=상단바
-       #viewer-toggle과 완전히 동일한 액션). L6 이전엔 이 항목들을 지우면 좁은
-       화면(<720px)에서 진입 경로가 아예 사라졌지만(상단바 쪽도 그 폭에서
-       숨어 있었음), 지금은 상단바 돋보기(#palette-toggle)와 Mod+K가 모든
-       뷰포트에서 상시 노출되고 팔레트 기본 목록에 "코드 뷰어 열기"·"터미널
-       내 검색" 명령이 그대로 있어 안전망이 이미 마련돼 있다. Grid 뷰의 ⋯
-       항목은 이보다 앞서 L3 4단계에서 기능 자체가 폐지되며 함께 삭제됐다. -->
-  <div id="more-menu" role="menu" aria-label="더보기 메뉴">
-    <div class="mlabel">음성 · 파일</div>
+  <!-- L4: 좌측 rail — ADR-8("⋯ 폐지 → 좌측 rail(포인터) + 커맨드 팔레트(키보드)")의
+       포인터 경로. compact(<720px)에서는 CSS로 통째로 숨는다(팔레트 + 바텀시트가
+       대신한다). 항목 6개는 팔레트(L6)의 기본/설정 명령과 내용이 같다(문서 §3
+       "포인터 경로와 키보드 경로가 나뉘되 내용은 동일") — 파일/큐/포트는 이미
+       있는 모달(viewer.show/queue.show/ports.show)을 그대로 열 뿐이고, "세션"만
+       진짜 새 임베디드 패널이다(연결된 화면 관리는 C3 의존이라 지금은 목록만).
+       사용량은 U 마일스톤 전이라 .needs-usage로 상시 숨김. -->
+  <nav id="vt-rail" aria-label="사이드바">
+    <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" title="세션">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span class="vt-rail-badge" id="vt-rail-badge-session" hidden></span>
+    </button>
+    <button type="button" class="vt-rail-btn needs-fs" id="vt-rail-file" data-rail="file" data-action="viewer.show" aria-label="파일" title="코드 뷰어 (Ctrl+Shift+E)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    </button>
+    <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" title="프롬프트 큐">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span class="vt-rail-badge" id="vt-rail-badge-queue" hidden></span>
+    </button>
+    <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" title="포트 대시보드">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/></svg>
+      <span class="vt-rail-badge" id="vt-rail-badge-ports" hidden></span>
+    </button>
+    <!-- U 마일스톤(읽기 전용 clauth 사용량) 전이라 /api/capabilities가 usage를
+         아예 안 돌려준다 — agent/status.js가 다른 needs-*와 같은 방식(가짐:
+         실패 시 기본 표시 폴백까지 동일)으로 숨긴다. 정적 hidden을 안 거는
+         이유는 그 폴백과 일관성을 맞추기 위해서다 — U가 실제로 caps.usage를
+         추가하는 순간 이 파일을 다시 안 건드려도 자동으로 나타난다. -->
+    <button type="button" class="vt-rail-btn needs-usage" id="vt-rail-usage" data-rail="usage" aria-label="사용량" title="사용량">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    </button>
+    <div class="vt-rail-spacer"></div>
+    <button type="button" class="vt-rail-btn" id="vt-rail-settings" data-rail="settings" aria-label="설정" aria-pressed="false" title="설정">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </nav>
+  <div id="vt-rail-panel" role="region" aria-label="사이드 패널" hidden>
+    <div class="vt-rail-panel-head">
+      <div class="vt-rail-panel-title" id="vt-rail-panel-title"></div>
+      <button type="button" class="vt-rail-panel-close" aria-label="패널 닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="vt-rail-panel-body" id="vt-rail-panel-body"></div>
+    <div class="vt-rail-resizer" id="vt-rail-resizer"></div>
+  </div>
+
+  <!-- 터미널 -->
+  <div id="terminal-container"></div>
+
+  <!-- rail "설정" 패널의 정적 컨텐츠 — 예전 ⋯ 메뉴의 마지막 남은 그룹(설정 +
+       거기 흡수된 음성 전용 모드)을 그대로 옮겼다. moreMenu.js/theme.js/pushui.js가
+       id로 직접 찾으므로 id는 그대로 유지 — rail.js가 패널을 열 때 이 노드를
+       #vt-rail-panel-body 안으로 appendChild()만 한다(재생성 아님, 체크박스
+       상태·리스너 보존). -->
+  <div id="vt-rail-settings-tpl" hidden>
     <button class="mi needs-voice" id="voiceonly-btn" role="menuitem" data-action="voice.only-toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>음성 전용 모드
     </button>
-    <label class="mi" id="upload-btn" role="menuitem">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>파일 업로드
-      <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" />
-    </label>
-
-    <button class="mi" id="queue-btn" role="menuitem" data-action="queue.show">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>프롬프트 큐
-    </button>
-    <button class="mi" id="snippets-btn" role="menuitem" data-action="snippets.show"
-      title="자주 쓰는 지시문을 저장해뒀다 원탭으로 바로 실행 (iTerm2 Snippets와 같은 개념)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="12" y2="11"/></svg>프롬프트 스니펫
-    </button>
-    <button class="mi needs-ports" id="ports-btn" role="menuitem" data-action="ports.show">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/></svg>포트
-    </button>
-
-    <div class="msep"></div>
-    <!-- L1: 예전엔 「설정」·「테마」 2개 그룹으로 나뉘어 있었다. 전부 "한 번
-         켜고 잊는" 종류(테마/푸시/자동복사/맥에서도열기/미디어키)라 하나로
-         합쳤다 — 「맥에서도 열기」도 세션 시트로 옮긴 나머지 2항목(세션 한정
-         동작)과 달리 앞으로 만들 모든 세션에 적용되는 전역 설정이라 여기 남는다. -->
-    <div class="mlabel">설정</div>
     <div class="theme-row" id="theme-row">
       <button class="theme-chip" data-skin="farshell" data-action="theme.set"><span class="dot" style="background:#f0a860"></span>FarShell</button>
       <button class="theme-chip" data-skin="macos" data-action="theme.set"><span class="dot" style="background:#0a84ff"></span>macOS</button>
@@ -250,8 +263,10 @@
     </button>
   </div>
 
-  <!-- 터미널 -->
-  <div id="terminal-container"></div>
+  <!-- L4: 예전 ⋯ 메뉴의 "파일 업로드" 항목 — 트리거 버튼은 rail/팔레트가
+       대신하므로(quickopen.js "파일 업로드" 명령이 이 input을 직접 클릭한다)
+       숨은 input만 남는다. keybar(L7)가 정식 진입점을 마련하기 전 과도기. -->
+  <input type="file" id="file-input" hidden onchange="uploadFile(this)" />
 
   <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
   <div id="mic-status" role="status" aria-live="polite"></div>

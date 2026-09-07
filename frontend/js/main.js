@@ -68,6 +68,9 @@ import './queue.js';
 import './snippets.js';
 import './quickopen.js';
 import './pushui.js';
+// L4 — 좌측 rail. queue.js/ports.js(data-action 대상)·agent/preview.js(세션
+// 카드)·term/session.js 뒤에 둔다 — 전부 rail.js가 값으로 소비한다.
+import './layout/rail.js';
 
 // LEGACY_APP_SCRIPTS(classic <script> 순차 로더)는 F5에서 제거했다 — 위 정적
 // import가 전부 대체했고, main.js가 실행되는 시점엔 이미 모든 모듈이 평가돼

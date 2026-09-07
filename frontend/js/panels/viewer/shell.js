@@ -80,14 +80,16 @@ export async function showViewer() {
     },
     onClose: () => {
       // X · 배경 클릭 · Esc · 재호출 토글 — 어느 경로로 닫히든 panel.js가 이걸 불러준다.
-      const t = document.getElementById('viewer-toggle');
+      const t = document.getElementById('vt-rail-file');
       if (t) t.classList.remove('active');
       document.body.classList.remove('vt-docked');
     },
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
 
-  const btn = document.getElementById('viewer-toggle');
+  // L4: 예전 상단바 #viewer-toggle이 rail의 「파일」 버튼(#vt-rail-file)으로
+  // 대체됐다 — id만 바꿔 그 자리에 계속 active 하이라이트를 건다.
+  const btn = document.getElementById('vt-rail-file');
   if (btn) btn.classList.add('active');
 
   document.getElementById('vt-vw-body').classList.add('split');

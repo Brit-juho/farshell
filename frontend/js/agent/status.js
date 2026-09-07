@@ -37,6 +37,13 @@ whenAuthed(() => (async () => {
     if (!caps.push) {
       document.querySelectorAll('.needs-push').forEach(el => el.style.display = 'none');
     }
+    // L4: /api/capabilities는 아직 usage 키를 안 돌려준다(U 마일스톤 — 읽기 전용
+    // clauth 사용량 표시 — 이전, ADR-6). caps.usage는 항상 undefined라 이 분기가
+    // 늘 참이고, rail의 「사용량」 항목은 지금은 항상 숨는다. U가 실제로
+    // capabilities에 usage를 추가하는 순간 이 코드 변경 없이 자동으로 나타난다.
+    if (!caps.usage) {
+      document.querySelectorAll('.needs-usage').forEach(el => el.style.display = 'none');
+    }
     if (!caps.voice) {
       // (#voice-bar 조회가 있었으나 index.html 에 그런 id 가 없어 항상 null 이었다 — F0에서 제거)
       const ms = document.getElementById('mic-status');
@@ -80,15 +87,23 @@ whenAuthed(() => {
   }).catch(() => {});
 });
 
-// cwd로 그리드 카드를 찾는다 — agent_event/snapshot 둘 다 cwd 기준.
+// cwd로 세션 카드를 찾는다 — agent_event/snapshot 둘 다 cwd 기준.
 // Claude Code 훅은 tmux pane을 직접 알려주지 않아 cwd로만 매칭할 수 있는데,
 // 같은 디렉토리에 여러 세션이 떠 있으면(둘 다 $HOME 등) cwd가 유일하지 않다 —
 // 그럴 땐 아무 데나 강조하는 대신 아무 것도 안 켠다("틀리게 확신"보다 낫다).
+//
+// L4에서 발견한 버그 수정: `#grid-cards`에만 스코프돼 있었다 — 그 컨테이너는
+// L3 4단계에서 그리드 뷰 폐지와 함께 사라졌는데(ADR-7), 이 함수는 계속
+// 존재하지 않는 `#grid-cards`만 찾아 항상 조용히 null을 반환했다. 즉 카드
+// 쪽 working/done 강조는 그리드 폐지 이후 완전히 죽어 있었다(탭 쪽은
+// `_tabByCwd`가 `#tabs`를 직접 보므로 영향 없었다). agent/preview.js의
+// ensurePreviewWs onmessage 스코프 버그(L6에서 발견·수정)와 같은 종류 —
+// 컨테이너 id에 의존하지 않고 문서 전체에서 찾도록 일반화한다. 이제
+// quickopen.js·layout/pane-picker.js·layout/rail.js의 세션 카드가 전부
+// 이 강조를 공짜로 받는다.
 export function _cardByCwd(cwd) {
   if (!cwd) return null;
-  const cards = document.getElementById('grid-cards');
-  if (!cards) return null;
-  const matches = cards.querySelectorAll(`.vt-card[data-cwd="${CSS.escape(cwd)}"]`);
+  const matches = document.querySelectorAll(`.vt-card[data-cwd="${CSS.escape(cwd)}"]`);
   return matches.length === 1 ? matches[0] : null;
 }
 
