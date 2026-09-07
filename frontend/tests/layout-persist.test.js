@@ -207,3 +207,57 @@ test('replaceTree — 잘못된 입력은 트리를 건드리지 않는다', asy
   assert.strictEqual(S.replaceTree({ t: 'nope', id: 'x' }), false);
   assert.strictEqual(S.getTree(), before);
 });
+
+// ── S5 검증에서 발견한 결함: 빈 leaf + 살아있는 세션 ──────────────────────
+test('복원 — leaf가 비어 있는데 살아있는 세션이 있으면 그 자리에 채운다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-1', 'dev');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'leaf', id: 'p1', session: null },
+  }));
+
+  await P.restoreLayout();
+
+  // 이 보정이 없으면 탭에는 세션이 있는데 화면엔 "빈 pane"만 남아, 새로고침
+  // 직후 사용자에게는 "세션이 사라졌다"로 읽힌다(실브라우저에서 재현했다).
+  assert.strictEqual(S.getTree().session, 'live-1');
+});
+
+test('복원 — 이미 배정된 세션을 빈 leaf에 중복으로 넣지 않는다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-1', 'dev');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: {
+      t: 'split', id: 's1', dir: 'row', ratio: 0.5,
+      a: { t: 'leaf', id: 'p1', session: { id: 'old', tmux: 'dev' } },
+      b: { t: 'leaf', id: 'p2', session: null },
+    },
+  }));
+
+  await P.restoreLayout();
+
+  const tree = S.getTree();
+  assert.strictEqual(tree.a.session, 'live-1');
+  assert.strictEqual(tree.b.session, null, '남는 세션이 없으면 빈 pane 그대로');
+});
+
+test('복원 — 빈 leaf가 여러 개면 세션 순서대로 앞에서부터 채운다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-a', 'a');
+  addLive(core, 'live-b', 'b');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: {
+      t: 'split', id: 's1', dir: 'row', ratio: 0.5,
+      a: { t: 'leaf', id: 'p1', session: null },
+      b: { t: 'leaf', id: 'p2', session: null },
+    },
+  }));
+
+  await P.restoreLayout();
+
+  const tree = S.getTree();
+  assert.deepEqual([tree.a.session, tree.b.session], ['live-a', 'live-b']);
+});

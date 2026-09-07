@@ -180,7 +180,12 @@ function renderKeymapSection() {
     const help = [];
     if (b.unavailable) help.push('이 브라우저 탭에서는 사용할 수 없습니다.');
     if (conflictIds && conflictIds.length > 1) {
-      help.push(`충돌: ${conflictIds.filter((x) => x !== b.id).join(', ')}와 같은 조합입니다.`);
+      // S5 검증에서 발견: 액션 id('palette')를 그대로 보여주고 있었다. 사용자는
+      // id를 본 적이 없다 — 같은 화면에 있는 라벨('커맨드 팔레트')로 말해야 한다.
+      const others = conflictIds
+        .filter((x) => x !== b.id)
+        .map((x) => keymap.getBinding(x)?.label || x);
+      help.push(`충돌: '${others.join("', '")}'와 같은 조합입니다.`);
     }
     const r = row(b.label, control, help.join(' ') || undefined);
     if (conflictIds && conflictIds.length > 1) r.classList.add('conflict');

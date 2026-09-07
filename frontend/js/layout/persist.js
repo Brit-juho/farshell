@@ -128,7 +128,35 @@ function _applySnapshot(snap) {
   const resolve = makeResolver(allSessions());
   const tree = deserializeTree(snap.tree, resolve);
   if (!tree) return false;
+  _fillEmptyLeaves(tree);
   return replaceTree(tree, snap.active);
+}
+
+// S5 검증에서 발견한 결함: 저장된 트리의 leaf가 전부 비어 있으면(그 세션들이
+// 죽어서 강등됐거나, 애초에 빈 pane 상태로 저장됐거나) **살아있는 세션이
+// 탭에는 있는데 화면에는 빈 pane만 보인다.** 사용자가 탭을 눌러야 비로소
+// 터미널이 나타나는데, 새로고침 직후엔 "세션이 사라졌다"로 읽힌다.
+//
+// 그래서 배정되지 않은 살아있는 세션이 있으면 빈 leaf를 앞에서부터 채운다.
+// 순서는 세션 스토어의 삽입 순서(=탭 순서)를 따른다.
+function _fillEmptyLeaves(tree) {
+  const used = new Set();
+  const empties = [];
+  (function walk(node) {
+    if (node.t === 'leaf') {
+      if (node.session) used.add(node.session);
+      else empties.push(node);
+      return;
+    }
+    walk(node.a); walk(node.b);
+  })(tree);
+  if (!empties.length) return;
+  const spare = Object.keys(allSessions()).filter((id) => !used.has(id));
+  for (const leaf of empties) {
+    const id = spare.shift();
+    if (!id) break;
+    leaf.session = id;   // deserializeTree가 만든 새 객체라 여기서 직접 채워도 안전하다
+  }
 }
 
 // 부팅 시 1회. 로컬 스냅샷을 먼저 적용(프리렌더)하고, 서버 정본이 더 최신이면
