@@ -78,3 +78,27 @@ def test_put_workspace_stores_layout_tree_next_to_rail(client):
     assert ui["layout"] == layout
     # 중첩 구조가 통째로 왕복되는지 — leaf의 tmux 이름이 복원의 핵심 키다.
     assert ui["layout"]["tree"]["a"]["session"]["tmux"] == "dev"
+
+
+def test_put_workspace_keeps_settings_and_ui_separate(client):
+    """S2 — `settings`(사용자가 원하는 것)와 `ui`(이 기기에서 지금 어떻게 보이는가)는
+    서로를 덮지 않는다. 프런트가 각각 다른 시점에 PUT하기 때문이다."""
+    client.put("/api/workspace", json={"ui": {"rail": {"open": "session", "width": 320}}})
+    client.put("/api/workspace", json={"settings": {"terminal.fontSize": 18}})
+
+    data = client.get("/api/workspace").json()
+    assert data["ui"]["rail"] == {"open": "session", "width": 320}
+    assert data["settings"] == {"terminal.fontSize": 18}
+
+
+def test_settings_merge_is_shallow_per_key(client):
+    """두 기기가 서로 다른 항목을 바꿔도 한쪽이 통째로 지워지지 않는다."""
+    client.put("/api/workspace", json={"settings": {"terminal.fontSize": 18}})
+    client.put("/api/workspace", json={"settings": {"theme.skin": "catppuccin"}})
+
+    settings = client.get("/api/workspace").json()["settings"]
+    assert settings == {"terminal.fontSize": 18, "theme.skin": "catppuccin"}
+
+
+def test_settings_defaults_to_empty_object(client):
+    assert client.get("/api/workspace").json()["settings"] == {}

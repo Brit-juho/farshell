@@ -1,5 +1,6 @@
 // VT 테마 엔진 — UI 스킨 + xterm.js 터미널 테마(ANSI 16색)를 함께 전환. F5에서
 // classic script에서 ES 모듈로 전환.
+import { set as setSetting } from './core/settings.js';
 import { allSessions } from './core/store.js';
 import { registerAction } from './core/dom.js';
 
@@ -123,7 +124,11 @@ function _syncThemeChips(skin) {
 export function setVtSkin(skin) {
   if (VT_SKINS.indexOf(skin) < 0) skin = 'farshell';
   document.documentElement.setAttribute('data-skin', skin);
+  // S2: 스킨도 설정 스토어로 — 기기마다 다른 스킨이 뜨던 것을 없앤다.
+  // 옛 `vt-skin` 키도 계속 쓴다(theme.js는 classic script 시절부터 부팅 아주
+  // 초반에 이 키를 읽어 FOUC를 막아왔다. 그 경로를 깨지 않는다).
   try { localStorage.setItem('vt-skin', skin); } catch (_) {}
+  setSetting('theme.skin', skin);
   _syncThemeChips(skin);
   _applyXtermToOpen(skin);
 }

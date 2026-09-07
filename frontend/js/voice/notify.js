@@ -2,6 +2,7 @@
 // task_complete(TTS blob 또는 요약 텍스트)·clipboard_push(맥 클립보드 동기화)를
 // 처리한다. `copyToClipboard`/`showToast`는 아직 classic script(term/clipboard.js·
 // ui/toast.js)가 소유해 bare identifier로 읽는다.
+import { get as setting } from '../core/settings.js';
 import { playAudioBlob } from './tts.js';
 
 const _vToken = new URLSearchParams(location.search).get('token') || '';
@@ -42,7 +43,7 @@ export function connectNotify() {
           // copyToClipboard는 term/clipboard.js가 전역(window 브리지)으로 노출.
           // "⋯ → 설정 → 드래그 시 자동 복사"를 꺼도 이 경로(fsh clip)만 안 막히면
           // 여전히 자동으로 클립보드가 덮어써지므로 같은 설정을 공유한다.
-          const autoSyncOff = (localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off';
+          const autoSyncOff = !setting('mouse.autocopyOnSelect');
           if (!autoSyncOff && typeof copyToClipboard === 'function') {
             copyToClipboard(data.text).then((ok) => {
               if (ok && typeof showToast === 'function') showToast('클립보드 동기화됨');

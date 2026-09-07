@@ -10,6 +10,7 @@
 // 대로 맡기므로 데스크톱 휠과 동작이 정확히 같아진다(tmux copy-mode 진입 → 스크롤).
 // 마우스 트래킹이 꺼진 세션(일반 셸)에서는 앱에 보낼 곳이 없으므로 xterm 자체
 // 스크롤백을 직접 움직인다.
+import { set as setSetting } from '../core/settings.js';
 import { allSessions, activeSessionId } from '../core/store.js';
 import { fitAndResize } from './resize.js';
 import { FONT_MIN, FONT_MAX } from './xterm-setup.js';
@@ -94,7 +95,9 @@ function _touchDist(touches) {
 // 그 가드를 반드시 무효화해야 한다(_lastFitW/H 리셋).
 function _setGlobalFontSize(px) {
   px = Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(px)));
-  try { localStorage.setItem('vt_font_size', String(px)); } catch (_) {}
+  // S2: 핀치 줌 결과도 설정 스토어로 — 지금까지 이 값은 기기 로컬에만 남아
+  // 폰에서 키운 글씨가 맥에 반영되지 않았다.
+  setSetting('terminal.fontSize', px);
   const sessions = allSessions();
   for (const sid in sessions) {
     const s = sessions[sid];

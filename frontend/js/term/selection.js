@@ -1,5 +1,6 @@
 // 마우스/선택 배선 — 드래그 자동복사·우클릭·이미지 붙여넣기·단축키·OSC52.
 // F4에서 terminal.js(구 :482-565)에서 분리. addSession에서 term.open 직후 호출.
+import { get as setting } from '../core/settings.js';
 import { copyToClipboard, pasteFromClipboard, pasteImageUpload } from './clipboard.js';
 import { getSession } from '../core/store.js';
 
@@ -10,7 +11,9 @@ export function wireClipboard(id, term, wrapper) {
   //    "⋯ → 설정 → 드래그 시 자동 복사"로 끌 수 있다 — 꺼도 선택 자체는 그대로
   //    되고(브라우저 네이티브), 실제 복사만 우클릭으로 넘어간다.
   wrapper.addEventListener('mouseup', () => {
-    if ((localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off') return;
+    // S2: 같은 키를 세 파일이 각자 localStorage에서 읽고 있었다(여기 2곳 +
+    // moreMenu.js + voice/notify.js). 이제 설정 스토어 하나만 본다.
+    if (!setting('mouse.autocopyOnSelect')) return;
     const sel = term.getSelection && term.getSelection();
     if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
   });
@@ -81,7 +84,7 @@ export function wireClipboard(id, term, wrapper) {
       // 여기로 OSC52를 쏜다(키보드로 하는 vim/tmux copy-mode 복사도 동일 경로라
       // 드래그만 따로 구분할 수 없음) — "드래그 시 자동 복사" 토글을 꺼도 이 경로가
       // 살아있으면 사용자 입장에선 "꺼도 계속 복사된다"로 보이므로 같은 설정을 공유한다.
-      if ((localStorage.getItem('vt_autocopy_on_select') ?? 'on') === 'off') return true;
+      if (!setting('mouse.autocopyOnSelect')) return true;
       try {
         const bin = atob(payload);
         const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));

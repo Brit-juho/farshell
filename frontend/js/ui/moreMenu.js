@@ -8,6 +8,7 @@
 // 상태 동기화 IIFE뿐이다 — 이 로직은 ⋯ 메뉴와 무관하게 그 checkbox id가
 // DOM 어디에 있든(지금은 #vt-rail-settings-tpl 안) 그대로 유효하다.
 "use strict";
+import { get as setting, set as setSetting, subscribe as onSettings } from '../core/settings.js';
 // + 버튼 키보드 접근 — showAddMenu는 terminal.js(classic script)가 main.js의
 // boot() 단계에서 나중에 정의한다. 이 콜백은 실제 키 입력 시점에만 실행되므로
 // 그때는 이미 준비돼 있다(top-level에서 부르는 게 아니라 안전). ⋯ 메뉴와
@@ -25,12 +26,14 @@ document.getElementById('add-btn').addEventListener('keydown', (e) => {
     localStorage.setItem('vt_auto_mac', cb.checked ? 'on' : 'off');
   });
 })();
-// "드래그 시 자동 복사" — 기본 체크 ON, 선택은 localStorage에 기억 (terminal.js가 매 드래그마다 읽음)
+// "드래그 시 자동 복사" — S2에서 설정 스토어로 승격. 같은 키를 네 파일이 각자
+// localStorage에서 읽던 것을(여기 + term/selection.js 2곳 + voice/notify.js)
+// 스토어 하나로 모았다. 다른 표면에서 값이 바뀌면 이 체크박스도 따라간다.
 (function initAutoCopy() {
   const cb = document.getElementById('autocopy-checkbox');
   if (!cb) return;
-  cb.checked = (localStorage.getItem('vt_autocopy_on_select') ?? 'on') !== 'off';
-  cb.addEventListener('change', () => {
-    localStorage.setItem('vt_autocopy_on_select', cb.checked ? 'on' : 'off');
-  });
+  const sync = () => { cb.checked = setting('mouse.autocopyOnSelect'); };
+  sync();
+  onSettings(sync);
+  cb.addEventListener('change', () => setSetting('mouse.autocopyOnSelect', cb.checked));
 })();

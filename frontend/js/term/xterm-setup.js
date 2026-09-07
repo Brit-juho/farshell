@@ -2,6 +2,7 @@
 // F4에서 addSession(구 terminal.js :646-861 부근)에서 분리. term.open() 이후에만
 // 가능한 배선(GPU 렌더러·복사/링크/터치)까지 여기서 끝내고 {term, fitAddon,
 // searchAddon, wrapper}를 반환한다 — 나머지(WS 연결·탭 DOM)는 session.js가 조립.
+import { get as setting, has as hasSetting } from '../core/settings.js';
 import { isMobile, _isCoarsePointer } from '../core/env.js';
 import { wireClipboard } from './selection.js';
 import { wireLinks } from './links.js';
@@ -12,13 +13,21 @@ import { getVtXtermFont, getVtXtermTheme } from '../theme.js';
 // touch.js의 _setGlobalFontSize도 같은 상한/하한을 쓰므로 여기서 export해 공유한다
 // (터치와 xterm-setup 양쪽에서 각자 선언하면 값이 어긋날 위험이 생긴다).
 export const FONT_MIN = 8, FONT_MAX = 28;
-const termFontSize = (() => {
-  try {
-    const saved = parseInt(localStorage.getItem('vt_font_size'), 10);
-    if (saved >= FONT_MIN && saved <= FONT_MAX) return saved;
-  } catch (_) {}
+// S2: 설정 스토어 경유(스토어가 부팅 시 옛 `vt_font_size` 키에서 1회 이관한다).
+// **세션을 만들 때마다 평가한다** — 모듈 평가 시점의 상수로 두면, 캐시가 없는
+// 기기에서 서버 설정이 도착하기 전에 이 파일이 로드되면서 값이 기본값으로
+// 굳어버린다(실브라우저 검증에서 실제로 재현: 서버엔 22가 저장돼 있는데 그
+// 기기에서만 14로 떴다).
+// 사용자가 한 번도 바꾼 적이 없으면 기기별 기본(모바일 12 / 데스크톱 14)을
+// 쓴다 — 이 "명시 값이 없을 때만 기기별 기본"은 스키마의 단일 기본값으로는
+// 표현할 수 없어서 hasSetting()으로 구분한다.
+function currentFontSize() {
+  if (hasSetting('terminal.fontSize')) {
+    const v = setting('terminal.fontSize');
+    if (v >= FONT_MIN && v <= FONT_MAX) return v;
+  }
   return isMobile ? 12 : 14;
-})();
+}
 
 // P1: addon-canvas.min.js를 WebGL이 없거나 실패했을 때만 동적으로 불러와
 // term에 붙인다. 여러 세션이 동시에 이 경로를 타도 스크립트는 한 번만 로드.
@@ -53,7 +62,7 @@ export function createXtermInstance(id) {
     // 참고한 다른 프로젝트(wetty/ttyd/orca/blink/swell.sh)는 xterm 기본값을 그대로
     // 쓰거나 재접속 복원 자체를 지원하지 않아 참고할 표준값이 없었음(2026-09-02 조사).
     scrollback: 2000,
-    fontSize: termFontSize,
+    fontSize: currentFontSize(),
     fontFamily: getVtXtermFont(),
     theme: getVtXtermTheme(),
     allowProposedApi: true,
@@ -65,14 +74,14 @@ export function createXtermInstance(id) {
     // 추정, 다만 스트리밍 순간의 힙 스파이크는 on 쪽이 더 컸다). 이걸 감안해
     // 터치 기기(롱프레스 텍스트 선택이 필요한 쪽)는 기본 on, 데스크톱(마우스
     // 드래그 선택이 이미 되는 쪽)은 기본 off로 절충 — 순간 스파이크 리스크를
-    // 필요한 쪽에만 감수시킨다. localStorage로 양쪽 다 강제 override 가능:
-    // vt-a11y='1' 강제 on, '0' 강제 off, 미설정 시 위 기본 규칙.
+    // 필요한 쪽에만 감수시킨다. S2: 설정 `a11y.screenReader`로 양쪽 다 강제
+    // override 가능(auto=위 기본 규칙, on/off=강제). 옛 `vt-a11y` 키는 스토어가
+    // 이관한다 — 이 설정은 S4에서 **처음으로 UI에 노출**된다(그전엔 값을 바꿀
+    // 방법이 콘솔뿐이었다).
     screenReaderMode: (() => {
-      try {
-        const v = localStorage.getItem('vt-a11y');
-        if (v === '1') return true;
-        if (v === '0') return false;
-      } catch (_) {}
+      const v = setting('a11y.screenReader');
+      if (v === 'on') return true;
+      if (v === 'off') return false;
       return _isCoarsePointer();
     })(),
   });

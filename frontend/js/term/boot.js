@@ -7,6 +7,7 @@ import { addSession, createSession } from './session.js';
 import { attachTmux } from './tmux-panel.js';
 import { restoreWorkspace, reconcileMissingTmuxSessions } from './workspace.js';
 import { restoreLayout } from '../layout/persist.js';
+import { load as loadSettings } from '../core/settings.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { getSession } from '../core/store.js';
@@ -118,6 +119,10 @@ async function renderOnboardingSessions() {
 // 등이 그걸 부를 수 있다(레이스). main.js가 toast.js 로드 완료를 기다린 뒤 bootApp()을
 // 명시적으로 호출한다.
 export async function bootApp() {
+  // S2: 설정은 캐시로 이미 동기 적용돼 있고(core/settings.js 모듈 평가 시점),
+  // 여기서는 서버 값으로 맞추기만 한다 — 다른 기기에서 바꾼 설정이 이 시점에
+  // 반영된다. 실패해도 부팅을 막지 않는다(캐시 값으로 그대로 동작).
+  loadSettings().catch(() => {});
   try {
     // 0. handoff 링크 (#tmux=<name>) 처리
     const hashParams = new URLSearchParams(location.hash.slice(1));
