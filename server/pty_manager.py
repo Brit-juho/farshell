@@ -87,6 +87,12 @@ class PTYSession:
     # 동안 모았다가 한 번에 내보낸다. wetty의 tinybuffer(2ms, 512KB) 패턴.
     _out_buf: bytearray = field(default_factory=bytearray, repr=False)
     _flush_handle: Optional[asyncio.TimerHandle] = field(default=None, repr=False)
+    # 입력(stdin) 쓰기 백프레셔 — fd가 non-blocking이라 큰 붙여넣기 등으로 커널
+    # tty 입력 큐가 꽉 차면 os.write()가 짧게 쓰거나 EAGAIN을 낸다. 못 쓴 나머지를
+    # 여기 쌓아두고 add_writer로 fd가 다시 쓰기 가능해질 때 이어서 흘려보낸다
+    # (읽기 쪽 _out_buf/add_reader와 대칭되는 패턴).
+    _in_buf: bytearray = field(default_factory=bytearray, repr=False)
+    _writer_registered: bool = field(default=False, repr=False)
 
 
 class PTYManager:
@@ -278,10 +284,69 @@ class PTYManager:
         except ImportError:
             pass
 
+        self._write_raw(session, data)
+
+    def _write_raw(self, session: "PTYSession", data: bytes) -> None:
+        """os.write()는 non-blocking fd에서 요청한 바이트를 전부 쓴다고 보장하지
+        않는다 — 짧게 쓰거나(반환값 < len(data)) 큐가 꽉 차면 EAGAIN을 낸다.
+        예전엔 반환값/예외를 확인하지 않고 한 번만 호출해서, 큰 붙여넣기의 뒷부분이
+        조용히 유실됐다(잘려서 들어간 것처럼 보임). 순서를 지키기 위해 이미 밀린
+        버퍼가 있으면 새 데이터도 무조건 뒤에 이어붙이고, 비어있을 때만 즉시
+        os.write를 시도한다."""
+        if not data:
+            return
+        if session._in_buf:
+            session._in_buf += data
+            self._register_writer(session)
+            return
         try:
-            os.write(session.fd, data)
+            n = os.write(session.fd, data)
+        except BlockingIOError:
+            n = 0
+        except OSError as e:
+            logger.warning(f"Write failed for session {session.session_id}: {e}")
+            return
+        if n < len(data):
+            session._in_buf += data[n:]
+            self._register_writer(session)
+
+    def _register_writer(self, session: "PTYSession") -> None:
+        if session._writer_registered or session._loop is None:
+            return
+        session._loop.add_writer(session.fd, self._on_writable, session.session_id)
+        session._writer_registered = True
+
+    def _unregister_writer(self, session: "PTYSession") -> None:
+        if not session._writer_registered or session._loop is None:
+            return
+        try:
+            session._loop.remove_writer(session.fd)
+        except (RuntimeError, ValueError):
+            pass
+        session._writer_registered = False
+
+    def _on_writable(self, session_id: str) -> None:
+        """add_writer가 fd를 다시 쓸 수 있게 됐을 때 호출 — 밀린 _in_buf를 마저
+        흘려보낸다."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return  # destroy_session과의 경쟁 — 이미 정리됨(remove_writer도 함께 정리됨)
+        buf = session._in_buf
+        if not buf:
+            self._unregister_writer(session)
+            return
+        try:
+            n = os.write(session.fd, bytes(buf))
+        except BlockingIOError:
+            return  # 아직 안 됨 — 다음 writable 이벤트를 기다린다
         except OSError as e:
             logger.warning(f"Write failed for session {session_id}: {e}")
+            buf.clear()
+            self._unregister_writer(session)
+            return
+        del buf[:n]
+        if not buf:
+            self._unregister_writer(session)
 
     def pause_read(self, session_id: str, requester_id: str) -> None:
         """D3+Codex: 백프레셔 — 구독자별 pause 카운트.
@@ -449,6 +514,7 @@ class PTYManager:
         # 바뀌면 곧바로 생성될 다음 세션이 이 fd 번호를 재사용했을 때 이전
         # add_reader 등록이 새 fd에 걸려 콜백이 영영 발화하지 않는다(실측 확인).
         self._unregister_reader(session)
+        self._unregister_writer(session)
         try:
             os.close(session.fd)
         except OSError:
