@@ -19,12 +19,15 @@
     --color-line: rgb(255 255 255 / .08);
     --color-line-strong: rgb(255 255 255 / .16);
     --color-txt: #e6e6ea;
-    --color-sub: #8e8e96;
-    --color-muted: #6e6e76;
+    --color-sub: #a3a3a9;
+    --color-muted: #83838b;
     --color-acc: var(--acc-macos);
     --color-acc-dim: #0868c4;
+    /* 흰 글자가 시스템 블루 위에서 3.65:1이라 채움 버튼의 바탕만 한 단계
+     * 진하게 쓴다(흰 글자 5.54:1). 액센트 자체는 위 그대로 #0a84ff다. */
+    --color-acc-surface: var(--color-acc-dim);
     --color-acc-ink: #ffffff;
-    --color-st-idle: #6e6e76;
+    --color-st-idle: #83838b;
     --color-st-working: #32d74b;
     --color-st-waiting: #ffd60a;
     --color-st-done: #0a84ff;
@@ -43,12 +46,12 @@
     --color-line: rgb(255 255 255 / .06);
     --color-line-strong: rgb(255 255 255 / .12);
     --color-txt: #cdd6f4;
-    --color-sub: #a6adc8;
-    --color-muted: #7f849c;
+    --color-sub: #afb6ce;
+    --color-muted: #8f93a8;
     --color-acc: var(--acc-catppuccin);
     --color-acc-dim: #9a7fc4;
     --color-acc-ink: #1e1e2e;
-    --color-st-idle: #7f849c;
+    --color-st-idle: #8f93a8;
     --color-st-working: #a6e3a1;
     --color-st-waiting: #f9e2af;
     --color-st-done: #89b4fa;
@@ -91,12 +94,12 @@
     --color-line: rgb(255 255 255 / .10);
     --color-line-strong: rgb(255 255 255 / .20);
     --color-txt: #cccccc;
-    --color-sub: #858585;
-    --color-muted: #6e6e6e;
+    --color-sub: #949494;
+    --color-muted: #767676;
     --color-acc: var(--acc-vscode);
     --color-acc-dim: #005a94;
     --color-acc-ink: #ffffff;
-    --color-st-idle: #6e6e6e;
+    --color-st-idle: #767676;
     --color-st-working: #89d185;
     --color-st-waiting: #cca700;
     --color-st-done: #3794ff;
@@ -126,7 +129,7 @@
     --color-line: rgb(0 0 0 / .12);
     --color-line-strong: rgb(0 0 0 / .24);
     --color-txt: #2b2a25;
-    --color-sub: #767468;
+    --color-sub: #6a685d;
     --color-muted: #6e6b60;
     --color-acc: var(--acc-notepad);
     --color-acc-dim: #0047a8;

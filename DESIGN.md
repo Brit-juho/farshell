@@ -140,12 +140,46 @@ The contract is **17 colors** (4 background + 2 divider + 3 text + 3 accent +
 | `--color-acc` / `--color-acc-dim` / `--color-acc-ink` | `#f0a860` `#b3803f` `#17140f` | Accent · dimmed accent · text on accent |
 | `--color-st-{idle,working,waiting,done,error}` | `#7c7c84` `#4fd1a5` `#f0a860` `#5b8def` `#f06868` | The four agent states + error |
 | `--color-term-bg` / `--color-term-fg` | `#0a0a0b` / `#eeeef0` | xterm background/foreground |
+| `--color-acc-surface` | `var(--color-acc)` | The fill that `acc-ink` text sits on (primary buttons, badges, the mic button). Defaults to the accent itself; **only macos overrides it to `acc-dim`** — white on Apple's system blue measured 3.65:1 |
 | `--color-surface-active` | `rgb(255 255 255 / .18)` | The "selected right now" surface. Twice the hover overlay — reusing the hover value makes active indistinguishable from hover on a pointer device. The accessibility requirement is carried by the accent bar, not by this |
 
-**Measured contrast (WCAG relative luminance):** `txt` 13.5–17.1:1 · `sub`
-5.6–7.1:1 — AA (4.5:1) on all four background steps. `muted` was lightened from
-the draft spec (`#6a6a72`, only 2.92:1 on bg-3) to `#7c7c84` (3.78:1 on bg-3) to
-clear the 3:1 bar for UI components.
+### Contrast rules
+
+The bar differs by role. Forcing `muted` to 4.5:1 too would collapse it into
+`sub` and destroy the three-step ramp, so we split it the way WCAG actually does.
+
+| Token | Bar | Why |
+|---|---|---|
+| `txt` | **4.5:1** | Body text (WCAG 1.4.3 AA) |
+| `sub` | **4.5:1** | Secondary, but still text people read |
+| `muted` · `st-*` | **3:1** | UI components and graphical objects (WCAG 1.4.11) |
+
+The bar has to hold on **all four background steps** — a color passing on `bg-0`
+and failing on `bg-3` is exactly what happened here.
+
+**Measured (worst case across the four backgrounds, per skin):**
+
+| Skin | `txt` | `sub` | `muted` |
+|---|---|---|---|
+| farshell | 13.50 | 5.60 | 3.78 |
+| macos | 9.12 | 4.52 | 3.02 |
+| catppuccin | 6.31 | 4.52 | 3.00 |
+| windows | 8.82 | 5.03 | 3.12 |
+| vscode | 8.58 | 4.54 | 3.03 |
+| notepad | 11.61 | 4.52 | 4.31 |
+
+Until 2026-09-08, **28 combinations were below the bar**. Only farshell had been
+built from measured contrast; the other five carried each OS's colors over
+verbatim — macos `sub` sat at 3.49:1 on bg-3 and vscode `sub` at 3.73:1 on bg-1,
+genuinely unreadable outdoors or on a bright screen.
+
+Fixing it moved **lightness only, keeping hue and saturation exactly.** Imitating
+the OS is the point of those skins, and shifting the hue would stop it being an
+imitation. Seven values changed, with H and S identical to the decimal (e.g.
+macos `sub` `#8e8e96`→`#a3a3a9`, H 240° S 4% unchanged). `st-idle` equals `muted`
+in all six skins, so it moves with it.
+
+`frontend/tests/tokens-contrast.test.js` recomputes this table in CI on every run.
 
 ### Structural tokens
 

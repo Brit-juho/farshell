@@ -323,7 +323,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .tbtn:hover { background:var(--menu-hover); color:var(--txt); }
 .tbtn svg { width:16px; height:16px; }
 .tbtn.more { font-size:var(--fs-xl); letter-spacing:1px; line-height:1; }
-#viewer-toggle.active { background:var(--acc); color:var(--acc-ink); }
+#viewer-toggle.active { background:var(--color-acc-surface); color:var(--acc-ink); }
 /* coarse 포인터: #topbar가 38px 고정이라 시각적 크기(30px)를 키우면 바 밖으로
    삐져나온다 — 대신 ::before로 탭 가능 영역만 44px로 확장(WCAG 2.5.5), 시각적
    크기는 그대로 유지. */
@@ -514,8 +514,8 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
    결정) + 음성 전용 모드에서만 잠깐 #topbar로 옮겨간다(media-session.js).
    색·상태(녹음 중)는 어디에 있든 공통이라 컨텍스트 무관 규칙으로 두고,
    크기·배치만 컨텍스트별로 아래에서 오버라이드한다. */
-#mic-btn-wrap.mic { background:var(--acc); color:var(--acc-ink); border:0; cursor:pointer; touch-action:manipulation; }
-#mic-btn-wrap.mic:hover { background:var(--acc); color:var(--acc-ink); filter:brightness(1.08); }
+#mic-btn-wrap.mic { background:var(--color-acc-surface); color:var(--acc-ink); border:0; cursor:pointer; touch-action:manipulation; }
+#mic-btn-wrap.mic:hover { background:var(--color-acc-surface); color:var(--acc-ink); filter:brightness(1.08); }
 #mic-btn-wrap.mic:active { transform:scale(.94); }
 #mic-btn-wrap.mic.recording { background:var(--err); color:var(--color-on-solid); animation:vt-pulse 1.1s infinite; }
 @keyframes vt-pulse {
@@ -665,7 +665,7 @@ body.voice-only-mode #mic-status {
   font:500 var(--fs-sm) var(--ui); cursor:pointer; touch-action:manipulation;
 }
 .vt-overlay .vt-ov-stop-btn:hover{ background:var(--menu-hover); }
-.vt-overlay.stopped .vt-ov-stop-btn{ background:var(--acc); color:var(--acc-ink); border-color:var(--acc); }
+.vt-overlay.stopped .vt-ov-stop-btn{ background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
 
 /* 빈 상태 온보딩 — 상단 헤더(#topbar)는 가리지 않고 그 아래 영역만 채운다.
    inset:0로 전체를 덮으면 헤더가 안 보여서 새 세션/메뉴 접근이 막힌다. */
@@ -723,7 +723,7 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-btn-primary, .vt-btn-secondary {
   padding:calc(var(--spacing) * 3) calc(var(--spacing) * 6); border-radius:var(--radius-md); border:none; font-size:var(--fs-base); cursor:pointer;
 }
-.vt-btn-primary { background:var(--acc); color:var(--acc-ink); }
+.vt-btn-primary { background:var(--color-acc-surface); color:var(--acc-ink); }
 .vt-btn-secondary { background:var(--tab); color:var(--txt); }
 .vt-onboarding .vt-ob-hint { color:var(--sub); font-size:var(--fs-2xs); margin-top:calc(var(--spacing) * 4); opacity:.7; }
 
@@ -908,12 +908,12 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .kb:active { background:var(--menu-hover); }
 /* R4: n/p 롱프레스(tmux 창 전환) 시각 피드백 — 누르고 있는 동안, 발화되는 순간. */
 .kb.holding { background:var(--menu-hover); border-color:var(--acc); }
-.kb.longpress-fired { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); }
+.kb.longpress-fired { background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
 /* M3: ←/→는 누른 채 드래그로 연속 이동을 받는다 — 부모 #keybar-keys의
    touch-action:pan-x(버튼 줄 가로 스크롤용)가 이 드래그를 스크롤로 가로채지
    않도록 이 버튼들만 touch-action:none으로 덮어쓴다. */
 .kb-arrow { min-width:38px; font-size:var(--fs-lg); touch-action:none; }
-.kb-mod.armed { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); }
+.kb-mod.armed { background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
 /* 접기/펴기 토글 버튼 */
 #keybar-toggle {
   flex:0 0 auto; width:34px; height:38px;
@@ -1146,7 +1146,7 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-vw-gmsg:disabled{ opacity:.5; }
 .vt-vw-gcommit-btn{
   align-self:flex-end; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 4); border-radius:var(--radius-md); border:none;
-  background:var(--acc); color:var(--acc-ink); font:600 var(--fs-xs) var(--ui); cursor:pointer;
+  background:var(--color-acc-surface); color:var(--acc-ink); font:600 var(--fs-xs) var(--ui); cursor:pointer;
 }
 .vt-vw-gcommit-btn:hover{ filter:brightness(1.08); }
 .vt-vw-gcommit-btn:disabled{ opacity:.5; cursor:default; filter:none; }
@@ -1250,7 +1250,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 }
 .vt-vw-mode-btn svg{ width:14px; height:14px; }
 .vt-vw-mode-btn:hover{ background:var(--menu-hover); color:var(--txt); }
-.vt-vw-mode-btn.active{ background:var(--acc); color:var(--acc-ink); }
+.vt-vw-mode-btn.active{ background:var(--color-acc-surface); color:var(--acc-ink); }
 /* 폭이 없는 모바일에서는 모드 선택 자체가 의미 없다 — 항상 sheet로 강제되니 버튼도 숨긴다. */
 @media (max-width:560px){ .vt-vw-modes{ display:none; } }
 
@@ -1589,7 +1589,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-rail-spacer { flex:1; } /* ⚙설정을 rail 맨 아래로 고정 */
 .vt-rail-badge {
   position:absolute; top:2px; right:2px; min-width:15px; height:15px; padding:0 3px; border-radius:var(--radius-full);
-  background:var(--acc); color:var(--acc-ink); font:600 9px/15px var(--ui); text-align:center;
+  background:var(--color-acc-surface); color:var(--acc-ink); font:600 9px/15px var(--ui); text-align:center;
 }
 
 /* 패널 — regular(720~1023)는 오버레이(뒤 pane을 안 밀어냄, 그림자로 떠 있는
