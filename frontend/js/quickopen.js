@@ -24,6 +24,7 @@ import { _loadRecent, _selectFile } from './panels/viewer/tree.js';
 import { showViewer } from './panels/viewer/shell.js';
 import { switchTo } from './term/session.js';
 import { setVtSkin } from './theme.js';
+import { get as setting, set as setSetting } from './core/settings.js';
 import { buildSessionCard, updateSessionCard, ensurePreviewWs } from './agent/preview.js';
 
 function closeQuickOpen() { closePanel('vt-qopen'); }
@@ -66,13 +67,13 @@ function _quickOpenCommands() {
   return cmds.filter(c => _gateOk(c.gate) && (c.run || typeof getAction(c.action) === 'function'));
 }
 
-function _toggleCheckbox(id) {
-  const cb = document.getElementById(id);
-  if (!cb) return;
-  cb.checked = !cb.checked;
-  // moreMenu.js의 initAutoCopy/initAutoMac이 이 이벤트로 localStorage에 반영한다 —
-  // 여기서 직접 localStorage를 건드리면 그 값 소유권이 두 곳으로 갈린다.
-  cb.dispatchEvent(new Event('change'));
+// 불리언 설정을 뒤집는다. E2 전에는 체크박스 엘리먼트를 찾아 .checked를 뒤집고
+// change 이벤트를 쏘는 방식이었다 — 값의 주인이 DOM이던 시절의 잔재다. 이제
+// 스토어가 주인이므로 스토어를 바꾸고, 체크박스는 구독으로 따라온다
+// (ui/settings-toggles.js). 그 결과 rail 설정 패널이 화면에 없어도 팔레트에서
+// 토글이 되고, 값이 서버로 올라가 다른 기기에도 반영된다.
+function _toggleSetting(key) {
+  setSetting(key, !setting(key));
 }
 
 // "설정" 섹션(`>` 접두사) — ⋯ 메뉴의 「설정」 그룹 대응. 테마 6종은 index.html의
@@ -87,8 +88,8 @@ function _quickOpenSettingsCommands() {
   const cmds = [
     ...themeCmds,
     { label: '푸시 알림', hint: '', action: 'push.toggle', gate: 'push' },
-    { label: '드래그 시 자동 복사', hint: '', run: () => _toggleCheckbox('autocopy-checkbox') },
-    { label: '맥에서도 열기', hint: '', run: () => _toggleCheckbox('auto-mac-checkbox') },
+    { label: '드래그 시 자동 복사', hint: '', run: () => _toggleSetting('mouse.autocopyOnSelect') },
+    { label: '맥에서도 열기', hint: '', run: () => _toggleSetting('session.openOnMac') },
     { label: '이어폰 미디어키', hint: '', action: 'voice.mediakey-toggle', gate: 'voice' },
     { label: '가이드 보기', hint: '', action: 'guide.show' },
   ];

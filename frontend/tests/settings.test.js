@@ -109,6 +109,24 @@ test('마이그레이션 — 폰트 크기·스킨·자동복사·a11y·keybar �
   assert.strictEqual(S.get('keybar.collapsed'), true);
 });
 
+// E2(2026-09-08) — "맥에서도 열기"가 스토어로 늦게 합류했다. 그전에는 값의 주인이
+// DOM 체크박스였고 localStorage는 부팅 때 복원만 했다. 이미 켜둔 사용자의 선택이
+// 승격 과정에서 조용히 꺼지면 새 세션마다 맥 창이 안 떠서 "고장난 것처럼" 보인다.
+test('마이그레이션 — vt_auto_mac(on/off) → session.openOnMac', async () => {
+  const on = await load({ pre: (w) => w.localStorage.setItem('vt_auto_mac', 'on') });
+  assert.strictEqual(on.S.get('session.openOnMac'), true, "'on' → true");
+
+  const off = await load({ pre: (w) => w.localStorage.setItem('vt_auto_mac', 'off') });
+  assert.strictEqual(off.S.get('session.openOnMac'), false, "'off' → false");
+});
+
+test('마이그레이션 — vt_auto_mac이 없으면 기본값 off', async () => {
+  // 옛 코드의 기본값도 off였다(`localStorage.getItem('vt_auto_mac') ?? 'off'`).
+  // 여기서 기본값이 true로 뒤집히면 "안 켠 사람에게 갑자기 맥 창이 뜨는" 회귀다.
+  const { S } = await load({});
+  assert.strictEqual(S.get('session.openOnMac'), false);
+});
+
 test('마이그레이션 — 원본 키를 지우지 않는다(롤백 여지)', async () => {
   const { S, window } = await load({ pre: (w) => w.localStorage.setItem('vt_font_size', '20') });
   assert.strictEqual(S.get('terminal.fontSize'), 20);

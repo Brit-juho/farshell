@@ -32,6 +32,34 @@ function initActionDelegation(root) {
     if (typeof fn !== 'function') return;
     fn(el, e);
   });
+
+  // 키보드 접근 — `<div role="button" data-action=...>`처럼 네이티브가 아닌
+  // 요소는 Enter/Space로 click이 합성되지 않는다. 그래서 마우스로만 쓸 수 있는
+  // 버튼이 된다.
+  //
+  // 예전엔 이걸 요소 하나(#add-btn)에 전용 핸들러로 붙여놨었다(ui/moreMenu.js).
+  // 같은 문제를 가진 두 번째 요소(.wt-chevron)는 그냥 빠져 있었다 — 개별
+  // 핸들러 방식이 구조적으로 놓칠 수밖에 없는 모양이다. 모든 data-action이
+  // 지나가는 이 한 곳에서 처리한다.
+  //
+  // 네이티브 button/a는 제외한다. 브라우저가 이미 click을 합성하므로 여기서
+  // 또 부르면 액션이 두 번 실행된다.
+  root.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    // 입력 중인 Space를 뺏으면 안 된다.
+    const t = e.target;
+    if (t.isContentEditable) return;
+    const tag = t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (tag === 'BUTTON' || tag === 'A') return;
+
+    const el = t.closest('[data-action]');
+    if (!el || el.tagName === 'BUTTON' || el.tagName === 'A') return;
+    const fn = registry.get(el.dataset.action);
+    if (typeof fn !== 'function') return;
+    e.preventDefault();   // Space의 스크롤을 막는다
+    fn(el, e);
+  });
 }
 initActionDelegation(document);
 
