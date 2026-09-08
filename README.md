@@ -133,7 +133,7 @@ open a public tunnel (`--network all`, the default) without auth configured.
 | Scrollback buffer | Restores prior output on WebSocket reconnect (up to 5000 chunks) |
 | Terminal search | Ctrl+F / Cmd+F -> xterm.js search addon |
 | Session renaming | Double-click a tab to rename it (also renames the tmux session) |
-| File upload/download | Upload from the voice bar, download via `/api/download` |
+| File upload | Keybar 📎 on mobile, or `Mod+K` → "파일 업로드" — pasting an image into the terminal uploads it too. The saved path is auto-typed into the pane (cap: `VT_MAX_UPLOAD_MB`, default 200) |
 | Media Session | Toggle recording with wireless earbud Play/Pause (iOS/Android) |
 | PWA | manifest + Service Worker -> add to home screen and use it like an app |
 | Tailscale remote access | `fsh ssh` / `fsh mobile --network tailscale` — connect straight to tmux over SSH in environments where screen sharing is blocked (e.g. corporate networks) |

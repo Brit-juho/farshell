@@ -131,7 +131,7 @@ tar xzf farshell-<버전>.tar.gz && cd farshell-<버전>
 | Scrollback 버퍼 | WebSocket 재접속 시 이전 출력 복원 (최대 5000 청크) |
 | 터미널 검색 | Ctrl+F / Cmd+F → xterm.js 검색 addon |
 | 세션 이름 편집 | 탭 더블클릭 → 이름 변경 (tmux 세션명도 함께 변경) |
-| 파일 업로드/다운로드 | 보이스바에서 업로드, `/api/download`로 다운로드 |
+| 파일 업로드 | 모바일은 키바 📎, 데스크톱은 `Mod+K` → "파일 업로드" — 터미널에 이미지를 붙여넣어도 업로드된다. 저장된 경로가 pane에 자동으로 타이핑된다 (상한 `VT_MAX_UPLOAD_MB`, 기본 200) |
 | Media Session | 무선 이어폰 Play/Pause로 녹음 토글 (iOS/Android) |
 | PWA | manifest + Service Worker → 홈 화면 추가 후 앱처럼 사용 |
 | Tailscale 원격 접속 | `fsh ssh` / `fsh mobile --network tailscale` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속 |

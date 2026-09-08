@@ -108,7 +108,8 @@ chmod 600 /tmp/vt-uploads/<파일명>
 - 로컬 접속이면 인증 세션(로그인 쿠키)이 이미 있으면 그대로 열림
 - Cloudflare Tunnel 등 원격 접속이면 `VT_AUTH_TOKEN`(`~/.vt.env`)이 필요 —
   `?token=<VT_AUTH_TOKEN>` 쿼리 또는 `Authorization: Bearer <VT_AUTH_TOKEN>` 헤더
-- 업로드는 반대 방향: 웹 UI 보이스바 📎 버튼 → `/tmp/vt-uploads/`에 저장(`POST /api/upload`)
+- 업로드는 반대 방향: 웹 UI 키바 📎 슬롯(모바일) 또는 `Mod+K` → "파일 업로드",
+  터미널에 이미지 붙여넣기도 같은 경로 → `/tmp/vt-uploads/`에 저장(`POST /api/upload`)
 
 #### 다른 로컬 포트 외부 공개 ("포트 3000 열어줘", "다른 앱도 터널 연결")
 
