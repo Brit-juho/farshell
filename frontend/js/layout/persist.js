@@ -181,7 +181,7 @@ export async function restoreLayout() {
   return applied && countLeaves() > 0;
 }
 
-export function clearLayout() {
+function clearLayout() {
   try { localStorage.removeItem(LS_KEY); } catch (_) {}
 }
 window.clearLayout = clearLayout; // 콘솔에서 호출 가능(clearWorkspace와 같은 관례)

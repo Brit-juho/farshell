@@ -97,7 +97,7 @@ function paintAppBadge() {
   } catch (_) { /* 무시 */ }
 }
 
-export function paintAll() {
+function paintAll() {
   paintTabs();
   paintPanes();
   paintFavicon();

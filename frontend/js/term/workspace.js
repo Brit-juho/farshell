@@ -166,7 +166,7 @@ export async function reconcileMissingTmuxSessions() {
   } catch (e) { /* 서버 통신 실패 시 조용히 무시 — 복원된 탭은 이미 정상 동작 중 */ }
 }
 
-export function clearWorkspace() {
+function clearWorkspace() {
   localStorage.removeItem(WORKSPACE_KEY);
 }
 window.clearWorkspace = clearWorkspace; // 콘솔에서 호출 가능

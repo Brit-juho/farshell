@@ -21,10 +21,10 @@ import { _stopCurrentTTS } from './tts.js';
 
 const API = `${location.protocol}//${location.host}`;
 
-export const micBtn = document.getElementById('mic-btn-wrap');
+const micBtn = document.getElementById('mic-btn-wrap');
 export const micStatus = document.getElementById('mic-status');
 
-export let mediaRecorder = null;
+let mediaRecorder = null;
 let audioChunks = [];
 export let isRecording = false;
 

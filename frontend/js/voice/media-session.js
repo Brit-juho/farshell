@@ -18,7 +18,7 @@ import { isRecording, startRecording, stopRecording, toggleRecording, micStatus 
 let mediaKeyTriggerOn = false;
 
 // W2-3: 이어폰 미디어 키 트리거 ON/OFF 토글. 이번 탭에서만 유효 — 새로고침/재접속 시 항상 OFF로 시작.
-export function toggleMediaKeyTrigger() {
+function toggleMediaKeyTrigger() {
   mediaKeyTriggerOn = !mediaKeyTriggerOn;
   const btn = document.getElementById('mediakey-btn');
   if (btn) btn.classList.toggle('active', mediaKeyTriggerOn);

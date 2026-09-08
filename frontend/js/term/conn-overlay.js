@@ -32,7 +32,7 @@ function _tickConnOverlay(id) {
 // O1: "끊기" — 무한 지수 백오프 재시도를 사용자가 직접 멈출 수 있게 한다(예: 서버가
 // 한동안 안 뜰 걸 아는 상황에서 계속 재시도 소리/배터리 낭비를 막고 싶을 때).
 // 다시 누르면(라벨이 "다시 연결"로 바뀜) 즉시(백오프 지연 없이) 재연결을 시도한다.
-export function _toggleReconnectStop(id) {
+function _toggleReconnectStop(id) {
   const s = getSession(id);
   const overlay = document.getElementById('conn-overlay');
   if (!s || !overlay) return;

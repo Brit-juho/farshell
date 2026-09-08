@@ -2,13 +2,13 @@
 // viewer/*.js 파일 전부가 이 모듈을 참조하는 리프(leaf) — 순환 import를 피하려고
 // 진짜 공유되는 것(상태 객체·localStorage 저장/복원·SVG 아이콘·`_setMsg` 헬퍼)만
 // 여기 둔다. 스킬/기능별 로직은 shell/tree/file/diff/git.js로 나뉜다.
-export const VT_MODE_KEY = 'vt_viewer_mode';
-export const VT_DOCKW_KEY = 'vt_viewer_dockw';
-export const VT_DOCK_W_DEFAULT = 420;
-export const VT_DOCK_W_MIN = 280;
-export const VT_TREEW_KEY = 'vt_viewer_treew';
-export const VT_TREE_W_DEFAULT = 230;
-export const VT_TREE_W_MIN = 160;
+const VT_MODE_KEY = 'vt_viewer_mode';
+const VT_DOCKW_KEY = 'vt_viewer_dockw';
+const VT_DOCK_W_DEFAULT = 420;
+const VT_DOCK_W_MIN = 280;
+const VT_TREEW_KEY = 'vt_viewer_treew';
+const VT_TREE_W_DEFAULT = 230;
+const VT_TREE_W_MIN = 160;
 
 export const _ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>';
 export const _ICON_SHEET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="15" x2="21" y2="15"/></svg>';

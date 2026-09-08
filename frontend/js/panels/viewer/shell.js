@@ -159,7 +159,7 @@ export function _setActivePane(which) {
 
 // --- 표시 모드 --------------------------------------------------------------
 
-export function _applyDisplayMode(mode, el) {
+function _applyDisplayMode(mode, el) {
   el = el || document.getElementById('vt-viewer');
   if (!el) return;
   el.classList.remove('mode-dock', 'mode-full');
@@ -183,7 +183,7 @@ export function _applyDisplayMode(mode, el) {
   }
 }
 
-export function _setDisplayMode(mode) {
+function _setDisplayMode(mode) {
   if (_isMobile()) mode = 'sheet';
   if (mode === _viewerState.displayMode) return;
   _viewerState.displayMode = mode;
@@ -194,7 +194,7 @@ export function _setDisplayMode(mode) {
 // 도킹 폭 드래그 리사이저. 매 프레임 fit()을 부르면 xterm이 glyph 아틀라스를
 // 계속 갈아엎으므로, 드래그 중엔 CSS 변수만 갱신하고 pointerup 시점에 딱 한 번만
 // fitAndResize 한다.
-export function _wireResizer(el) {
+function _wireResizer(el) {
   const handle = el.querySelector('#vt-vw-resizer');
   if (!handle) return;
   let startX = 0, startW = 0;
@@ -225,7 +225,7 @@ export function _wireResizer(el) {
 
 // 트리 패널 폭 드래그 리사이저 — dock/full 2단 분할에서 트리↔코드 경계를 끈다.
 // 터미널 폭에는 영향이 없으므로 fitAndResize 호출은 불필요.
-export function _wireTreeResizer(el) {
+function _wireTreeResizer(el) {
   const handle = el.querySelector('#vt-vw-tree-resizer');
   if (!handle) return;
   let startX = 0, startW = 0;
@@ -252,7 +252,7 @@ export function _wireTreeResizer(el) {
 }
 
 // 트리 패널 접기/펼치기 — dock/full 전용(CSS가 sheet에서는 버튼 자체를 숨긴다).
-export function _toggleTreeCollapse() {
+function _toggleTreeCollapse() {
   const el = document.getElementById('vt-viewer');
   if (!el) return;
   const collapsed = el.classList.toggle('tree-collapsed');

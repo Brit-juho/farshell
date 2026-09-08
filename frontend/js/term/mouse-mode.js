@@ -108,7 +108,7 @@ export function applyMouseMode(session) {
   _wired.set(session.term, () => { undoEnable(); undoForce(); });
 }
 
-export function applyMouseModeToAll() {
+function applyMouseModeToAll() {
   for (const s of Object.values(allSessions())) applyMouseMode(s);
 }
 

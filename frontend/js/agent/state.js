@@ -94,7 +94,7 @@ export function sortByUrgency(items, getName) {
 
 // 상태 dot 하나를 만든다. 색·breathing 애니메이션은 CSS가 data-state로 전부
 // 따라오므로(styles/layers/components.css) 여기서는 속성만 세팅한다.
-export function statusDot(status) {
+function statusDot(status) {
   const el = document.createElement('span');
   el.className = 'status-dot';
   el.dataset.state = status || IDLE;
