@@ -12,15 +12,11 @@
 // data-state="waiting">`). 이 맵은 dot이 아닌 다른 요소(배지·행 강조 등)가
 // 상태색을 Tailwind 유틸리티 클래스로 직접 써야 할 때를 위한 것이다.
 //
-// 소비처 배선(탭·사이드바·pane 헤더·파비콘·푸시)은 A1(40-agent-state.md)의
-// 몫 — 이 파일은 아직 아무도 import하지 않는다.
-export const STATE_DOT = {
-  idle:    'bg-st-idle',
-  working: 'bg-st-working',
-  waiting: 'bg-st-waiting',
-  done:    'bg-st-done',
-  error:   'bg-st-error',
-};
+// STATE_DOT(상태 → Tailwind 유틸리티 클래스 맵)이 여기 있었다. A1이 배선할
+// 자리로 만들어뒀는데, A1은 결국 유틸리티 클래스가 아니라 `.status-dot`의
+// `data-state` 속성 셀렉터로 갔다(agent/state.js의 applyStatusDot). 그래서
+// 끝까지 아무도 import하지 않았고 2026-09-08에 삭제했다 — 남겨두면 "이 맵을
+// 쓰는 게 정석"이라고 다음 사람을 오해시킨다.
 
 export const STATE_LABEL = {
   idle:    '유휴',
