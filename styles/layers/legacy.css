@@ -58,9 +58,9 @@
    (farshell 스킨만 예외 — 새 스킨이라 처음부터 새 값). */
 :root,
 html[data-skin="farshell"] {
-  --win:var(--color-bg-0); --bar:#131316; --tab:#131316; --tab-active:#232328; --tab-active-txt:var(--color-txt);
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:#1a1a1e; --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
+  --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
   --wrad:12px; --trad:7px;
   --topbar-h:38px; --topbar-popup-y:44px;
@@ -68,9 +68,9 @@ html[data-skin="farshell"] {
   --mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 }
 html[data-skin="macos"] {
-  --win:var(--color-bg-0); --bar:#2c2c2e; --tab:#2c2c2e; --tab-active:#3a3a3c; --tab-active-txt:#f2f2f5;
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:#f2f2f5;
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:#2a2a2c; --menu-hover:rgba(255,255,255,.09); --line:var(--color-line);
+  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.09); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
   --wrad:12px; --trad:7px;
   --topbar-h:38px; --topbar-popup-y:44px;
@@ -83,36 +83,36 @@ html[data-skin="macos"] {
   --traffic-c1:#ff5f57; --traffic-c2:#febc2e; --traffic-c3:#28c840;
 }
 html[data-skin="catppuccin"] {
-  --win:var(--color-bg-0); --bar:#181825; --tab:#313244; --tab-active:#45475a; --tab-active-txt:#f5e0dc;
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-2); --tab-active:var(--color-bg-3); --tab-active-txt:#f5e0dc;
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:#313244; --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
+  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#11111b;
   --wrad:12px; --trad:8px;
 }
 html[data-skin="windows"] {
-  --win:var(--color-bg-0); --bar:#2b2b2b; --tab:#2b2b2b; --tab-active:#0c0c0c; --tab-active-txt:#ffffff;
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-on-solid);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:#2b2b2b; --menu-hover:rgba(255,255,255,.1); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#0c0c0c;
+  --menu:var(--color-bg-1); --menu-hover:rgba(255,255,255,.1); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:var(--color-bg-3);
   --wrad:8px; --trad:6px;
   /* Windows 11 실제 창 닫기 버튼 hover 빨강 — windows 스킨 전용 UI 크롬(D1
      하드코딩 정리 대상, .traffic과 같은 이유로 스킨 블록 안으로 이동). */
   --close-hover:#e81123;
 }
 html[data-skin="vscode"] {
-  --win:var(--color-bg-0); --bar:#2d2d2d; --tab:#2d2d2d; --tab-active:#1e1e1e; --tab-active-txt:#ffffff;
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-on-solid);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:#252526; --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
+  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#181818;
   --wrad:8px; --trad:4px;
 }
 /* 노트패드 — 메모장/종이 느낌의 라이트 테마. 다른 스킨과 달리 밝은 배경이라
    --menu-hover/--line은 흰색이 아닌 검정 오버레이로 뒤집어야 대비가 산다. */
 html[data-skin="notepad"] {
-  --win:var(--color-bg-0); --bar:#f1efe7; --tab:#eae7dc; --tab-active:#ffffff; --tab-active-txt:#2b2a25;
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-2); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:#ffffff; --menu-hover:rgba(0,0,0,.055); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#f1efe7;
+  --menu:var(--color-bg-3); --menu-hover:rgba(0,0,0,.055); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:var(--color-bg-1);
   --wrad:6px; --trad:4px;
 }
 
@@ -379,6 +379,17 @@ html[data-skin="windows"] .caption { display:flex; }
   display:flex; flex-direction:column; align-items:center; gap:calc(var(--spacing) * 1.5);
 }
 .theme-chip .dot { width:14px; height:14px; border-radius:50%; box-shadow:inset 0 0 0 1px rgba(0,0,0,.25); }
+/* 칩의 점은 그 스킨의 액센트다. 지금 스킨이 아니라 **칩이 가리키는 스킨**의 색이라
+   var(--color-acc)로는 안 된다(그건 항상 현재 스킨 것이다) — tokens.css의 스킨
+   독립 상수를 쓴다. 예전엔 index.html에 인라인 style로 6개가 박혀 있었다. */
+.theme-chip[data-skin="farshell"]   .dot { background:var(--acc-farshell); }
+.theme-chip[data-skin="macos"]      .dot { background:var(--acc-macos); }
+.theme-chip[data-skin="catppuccin"] .dot { background:var(--acc-catppuccin); }
+.theme-chip[data-skin="windows"]    .dot { background:var(--acc-windows); }
+.theme-chip[data-skin="vscode"]     .dot { background:var(--acc-vscode); }
+/* notepad는 유일한 라이트 스킨이라 점이 밝은 배경에 묻힌다 — 테두리를 덧댄다.
+   (인라인에 있던 border:1px solid #ccc를 여기로 옮겼다.) */
+.theme-chip[data-skin="notepad"]    .dot { background:var(--acc-notepad); border:1px solid #ccc; }
 .theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--menu-hover); }
 
 /* ---- 터미널 ------------------------------------------------------------ */

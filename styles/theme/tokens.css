@@ -64,7 +64,23 @@
   --color-sub: #9a9aa2;
   --color-muted: #7c7c84;
 
-  --color-acc: #f0a860;
+  /* 스킨 독립 액센트 상수 6개.
+   *
+   * --color-acc는 `html[data-skin=...]`에 스코프돼 있어서 "지금 스킨의 액센트"만
+   * 알려준다. 그런데 테마 칩은 **다른 스킨의** 액센트를 점으로 보여줘야 한다 —
+   * farshell을 쓰는 중에도 macOS 칩은 파란 점이어야 한다. 그래서 스코프 밖에도
+   * 이름이 필요하다. 예전엔 이걸 index.html의 인라인 style="background:#0a84ff"
+   * 6개로 해결하고 있었는데, 그러면 같은 색이 두 곳에 적히고 언젠가 어긋난다.
+   *
+   * 이 상수가 단일 소스다 — 각 스킨의 --color-acc도, 칩의 점도 여기서 읽는다. */
+  --acc-farshell:   #f0a860;
+  --acc-macos:      #0a84ff;
+  --acc-catppuccin: #cba6f7;
+  --acc-windows:    #4cc2ff;
+  --acc-vscode:     #007acc;
+  --acc-notepad:    #0060df;
+
+  --color-acc: var(--acc-farshell);
   --color-acc-dim: #b3803f;
   --color-acc-ink: #17140f;
 

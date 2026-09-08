@@ -21,7 +21,7 @@
     --color-txt: #e6e6ea;
     --color-sub: #8e8e96;
     --color-muted: #6e6e76;
-    --color-acc: #0a84ff;
+    --color-acc: var(--acc-macos);
     --color-acc-dim: #0868c4;
     --color-acc-ink: #ffffff;
     --color-st-idle: #6e6e76;
@@ -45,7 +45,7 @@
     --color-txt: #cdd6f4;
     --color-sub: #a6adc8;
     --color-muted: #7f849c;
-    --color-acc: #cba6f7;
+    --color-acc: var(--acc-catppuccin);
     --color-acc-dim: #9a7fc4;
     --color-acc-ink: #1e1e2e;
     --color-st-idle: #7f849c;
@@ -69,7 +69,7 @@
     --color-txt: #cccccc;
     --color-sub: #9a9a9a;
     --color-muted: #767676;
-    --color-acc: #4cc2ff;
+    --color-acc: var(--acc-windows);
     --color-acc-dim: #3a93bf;
     --color-acc-ink: #0c0c0c;
     --color-st-idle: #767676;
@@ -93,7 +93,7 @@
     --color-txt: #cccccc;
     --color-sub: #858585;
     --color-muted: #6e6e6e;
-    --color-acc: #007acc;
+    --color-acc: var(--acc-vscode);
     --color-acc-dim: #005a94;
     --color-acc-ink: #ffffff;
     --color-st-idle: #6e6e6e;
@@ -128,7 +128,7 @@
     --color-txt: #2b2a25;
     --color-sub: #767468;
     --color-muted: #6e6b60;
-    --color-acc: #0060df;
+    --color-acc: var(--acc-notepad);
     --color-acc-dim: #0047a8;
     --color-acc-ink: #ffffff;
     --color-st-idle: #6e6b60;
