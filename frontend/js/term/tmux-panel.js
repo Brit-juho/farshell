@@ -9,10 +9,11 @@ import { API_BASE } from '../core/env.js';
 import { addSession, switchTo, removeSession } from './session.js';
 import { saveWorkspace } from './workspace.js';
 import { registerAction } from '../core/dom.js';
+import { get as setting } from '../core/settings.js';
 import { icon } from '../ui/icons.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 
-export async function showTmuxSessions() {
+async export function showTmuxSessions() {
   // 토글: 이미 열려 있으면 닫기
   let menu = document.getElementById('tmux-menu');
   if (menu) { menu.remove(); return; }
@@ -152,8 +153,9 @@ export async function attachTmux(tmuxName) {
 
 // export — showAddMenu(session.js)의 "tmux 세션" 메뉴 항목이 부른다.
 export async function createTmuxSession() {
-  // "맥에서도 열기" 토글이 켜져 있으면 서버가 osascript로 iTerm 창도 함께 연다.
-  const autoMac = document.getElementById('auto-mac-checkbox')?.checked;
+  // "맥에서도 열기"가 켜져 있으면 서버가 osascript로 iTerm 창도 함께 연다.
+  // E2: DOM이 아니라 설정 스토어가 이 값의 주인이다(session.js와 같은 이유).
+  const autoMac = setting('session.openOnMac');
   const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

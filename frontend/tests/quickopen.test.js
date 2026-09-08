@@ -26,6 +26,12 @@ const DOM_JS = path.join(__dirname, '../js/core/dom.js');
 // `/` 접두사(터미널 내 검색)가 조용히 no-op이 된다.
 const SEARCH_JS = path.join(__dirname, '../js/search.js');
 const QUICKOPEN_JS = path.join(__dirname, '../js/quickopen.js');
+// E2: 팔레트의 설정 토글이 DOM 체크박스가 아니라 설정 스토어를 바꾸므로,
+// 테스트가 결과를 확인하려면 같은 모듈 인스턴스를 손에 쥐어야 한다.
+const SETTINGS_JS = path.join(__dirname, '../js/core/settings.js');
+// 체크박스를 스토어에 묶는 쪽. 실서비스에선 main.js가 정적 import한다 —
+// 이걸 안 불러오면 "스토어를 바꾸면 체크박스가 따라온다"를 검증할 수 없다.
+const SETTINGS_TOGGLES_JS = path.join(__dirname, '../js/ui/settings-toggles.js');
 
 class FakeTerminal {
   constructor(opts) { this.options = opts; this.cols = 80; this.rows = 24; this._disposed = false; }
@@ -83,10 +89,13 @@ async function buildWindow({ tmuxSessions = [], agents = {}, ports = { ports: []
   const storeNs = await importFresh(STORE_JS, env.context, cache);
   const coreStoreNs = await importFresh(CORE_STORE_JS, env.context, cache);
   const domNs = await importFresh(DOM_JS, env.context, cache);
+  const settingsNs = await importFresh(SETTINGS_JS, env.context, cache);
+  await importFresh(SETTINGS_TOGGLES_JS, env.context, cache);
   await importFresh(SEARCH_JS, env.context, cache);
   const qoNs = await importFresh(QUICKOPEN_JS, env.context, cache);
 
-  return { window, ...sessionNs, ...coreStoreNs, store: storeNs, dom: domNs, quickopen: qoNs };
+  return { window, ...sessionNs, ...coreStoreNs, store: storeNs, dom: domNs,
+           quickopen: qoNs, settings: settingsNs };
 }
 
 async function flush() {
@@ -164,12 +173,14 @@ test('`>` 접두사 — 설정 전용 목록(테마·자동복사 등)이 나오
   assert.strictEqual(window.document.getElementById('vt-qopen'), null);
 });
 
-test('`>` 접두사 — "드래그 시 자동 복사" 선택 시 체크박스가 토글되고 change 이벤트가 난다', async () => {
-  const { window } = await buildWindow();
+// E2 전에는 이 테스트가 "체크박스 .checked가 뒤집히고 change가 난다"를 봤다.
+// 그건 값의 주인이 DOM이던 시절의 계약이고, 그래서 rail 설정 패널이 화면에
+// 없으면 팔레트 토글이 조용히 죽었다. 지금은 스토어가 주인이라 계약이
+// "설정이 뒤집힌다 + 체크박스가 그걸 따라온다"로 바뀌었다.
+test('`>` 접두사 — "드래그 시 자동 복사"가 설정을 뒤집고 체크박스가 따라온다', async () => {
+  const { window, settings } = await buildWindow();
   const cb = window.document.getElementById('autocopy-checkbox');
-  cb.checked = true;
-  let changed = false;
-  cb.addEventListener('change', () => { changed = true; });
+  const before = settings.get('mouse.autocopyOnSelect');
 
   openPalette(window);
   await flush();
@@ -180,8 +191,27 @@ test('`>` 접두사 — "드래그 시 자동 복사" 선택 시 체크박스가
   assert.ok(row, '자동 복사 행이 있어야 한다');
   row.click();
 
-  assert.strictEqual(cb.checked, false, '체크 상태가 토글돼야 한다');
-  assert.ok(changed, 'change 이벤트가 발화해 localStorage 동기화 로직을 타야 한다');
+  assert.strictEqual(settings.get('mouse.autocopyOnSelect'), !before, '설정이 뒤집혀야 한다');
+  assert.strictEqual(cb.checked, !before, '체크박스가 스토어를 따라와야 한다');
+});
+
+test('`>` 접두사 — "맥에서도 열기"도 같은 경로를 탄다 (E2에서 스토어로 승격)', async () => {
+  const { window, settings } = await buildWindow();
+  const cb = window.document.getElementById('auto-mac-checkbox');
+  const before = settings.get('session.openOnMac');
+  assert.strictEqual(before, false, '기본값은 off — 새 세션마다 맥 창이 뜨면 안 된다');
+
+  openPalette(window);
+  await flush();
+  const input = window.document.getElementById('vt-qo-input');
+  input.value = '>맥에서도';
+  input.dispatchEvent(new window.Event('input'));
+  const row = Array.from(window.document.querySelectorAll('.vt-qo-row')).find(r => r.textContent.includes('맥에서도 열기'));
+  assert.ok(row, '맥에서도 열기 행이 있어야 한다');
+  row.click();
+
+  assert.strictEqual(settings.get('session.openOnMac'), true);
+  assert.strictEqual(cb.checked, true);
 });
 
 test('`/` 접두사 — 터미널 내 검색을 열고 입력값을 검색창에 채운다', async () => {

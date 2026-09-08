@@ -20,14 +20,17 @@ import { saveWorkspace } from './workspace.js';
 import { showOnboarding } from './boot.js';
 import { createTmuxSession } from './tmux-panel.js';
 import { registerAction } from '../core/dom.js';
+import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
 import { setPaneSession } from '../layout/store.js';
 
 export async function createSession() {
-  // "맥에서도 열기" 토글이 켜져 있으면 tmux 세션으로 생성하고
-  // 서버에 osascript로 iTerm 창을 자동 오픈하도록 요청
-  const autoMac = document.getElementById('auto-mac-checkbox')?.checked;
+  // "맥에서도 열기"가 켜져 있으면 tmux 세션으로 생성하고 서버에 osascript로
+  // iTerm 창을 자동 오픈하도록 요청. E2: 체크박스 엘리먼트의 .checked가 아니라
+  // 설정 스토어를 읽는다 — 그 엘리먼트는 rail 설정 패널 안에 있어서 값의 주인이
+  // DOM이면 기기마다 다른 값이 되고, 패널 마크업이 바뀌면 조용히 undefined가 된다.
+  const autoMac = setting('session.openOnMac');
   if (autoMac) {
     const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
       method: 'POST',

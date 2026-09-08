@@ -28,6 +28,13 @@ export const SCHEMA = {
   // S1 spike 성공 — off면 앱의 마우스 리포팅을 무시하고 항상 로컬 선택(iTerm2 기본 동작).
   'mouse.forwardToApp':     { type: 'bool', def: true },
   'mouse.autocopyOnSelect': { type: 'bool', def: true, migrate: 'vt_autocopy_on_select', parse: onOff },
+  // "맥에서도 열기" — 새 세션을 만들 때 서버가 osascript로 iTerm 창도 함께 연다.
+  // E2(2026-09-08)에서 스토어로 승격했다. 그전엔 ui/moreMenu.js가 localStorage를
+  // 직접 읽고, 소비처(term/session.js·term/tmux-panel.js)는 체크박스 엘리먼트의
+  // .checked를 매번 읽는 구조였다 — 값의 주인이 DOM이라 폰에서 켠 게 맥북에
+  // 안 넘어갔다. autocopyOnSelect가 S2에서 같은 이유로 먼저 옮겨온 자리다.
+  // 기본값은 off — 새 세션마다 맥 터미널 창이 뜨는 걸 원치 않는 사용자가 다수다.
+  'session.openOnMac':      { type: 'bool', def: false, migrate: 'vt_auto_mac', parse: onOff },
   // 터치 기기에서 짧은 탭을 앱으로 합성 전달하는 기존 동작(term/xterm-setup.js).
   // 지금까지 끌 방법이 없었다.
   'mouse.touchTapToApp':    { type: 'bool', def: true },
@@ -84,7 +91,7 @@ export function has(key) {
   return key in _values;
 }
 
-export function getAll() {
+function getAll() {
   const out = {};
   for (const key of Object.keys(SCHEMA)) out[key] = get(key);
   return out;
