@@ -202,8 +202,8 @@ registering both plays the TTS summary twice.
 ## Architecture
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for details (the control / work / voice /
-network 4-plane model). For the design system (theme, tokens, layout), see
-[DESIGN.md](./DESIGN.md).
+network 4-plane model). For the design system (principles, skins, tokens,
+layout), see [DESIGN.md](./DESIGN.md).
 
 ```
                   +----------------------------------------+
@@ -276,7 +276,7 @@ farshell/
 ├── CLAUDE.md                  Claude Code guide (the full ledger of features/commands/API)
 ├── CLI.md                     full fsh CLI reference
 ├── API.md                     full REST/WebSocket API reference
-├── DESIGN.md                  design system (theme/tokens/layout)
+├── DESIGN.md                  design system (principles/skins/tokens/layout)
 ├── ARCHITECTURE.md            4-plane architecture in detail
 ├── CHANGELOG.md                full change history
 └── docs/TODOS.md               follow-up backlog (local only, gitignored)

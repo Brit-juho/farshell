@@ -31,6 +31,8 @@
     --color-st-error: #ff453a;
     --color-term-bg: #101012;
     --color-term-fg: #e6e6ea;
+    /* T3 — hover 오버레이(알파 0.09)의 2배. 근거는 tokens.css 주석 참고. */
+    --color-surface-active: rgb(255 255 255 / .18);
   }
 
   html[data-skin="catppuccin"] {
@@ -53,6 +55,8 @@
     --color-st-error: #f38ba8;
     --color-term-bg: #1e1e2e;
     --color-term-fg: #cdd6f4;
+    /* T3 — hover 오버레이(알파 0.08)의 2배. 근거는 tokens.css 주석 참고. */
+    --color-surface-active: rgb(255 255 255 / .16);
   }
 
   html[data-skin="windows"] {
@@ -75,6 +79,8 @@
     --color-st-error: #e74856;
     --color-term-bg: #0c0c0c;
     --color-term-fg: #cccccc;
+    /* T3 — hover 오버레이(알파 0.10)의 2배. 근거는 tokens.css 주석 참고. */
+    --color-surface-active: rgb(255 255 255 / .20);
   }
 
   html[data-skin="vscode"] {
@@ -97,6 +103,8 @@
     --color-st-error: #f14c4c;
     --color-term-bg: #1e1e1e;
     --color-term-fg: #cccccc;
+    /* T3 — hover 오버레이(알파 0.08)의 2배. 근거는 tokens.css 주석 참고. */
+    --color-surface-active: rgb(255 255 255 / .16);
   }
 
   /* 유일한 라이트 스킨. --color-line은 검정 오버레이로 뒤집어야 대비가 산다
@@ -130,6 +138,10 @@
     --color-st-error: #d93025;
     --color-term-bg: #fffefb;
     --color-term-fg: #2b2a25;
+    /* T3 — 유일한 라이트 스킨이라 오버레이가 검정이고, 같은 배수(0.055x2=0.11)로는
+     * 다크 스킨만큼 안 벌어진다(실측 hover 대비 1.13:1 vs 다크 1.31~1.39:1).
+     * 0.18로 올려 1.35:1을 맞춘다 — 배수가 아니라 결과를 맞추는 게 기준이다. */
+    --color-surface-active: rgb(0 0 0 / .18);
     /* 라이트에서 다크와 같은 그림자 강도를 쓰면 더러워진다 — D2(elevation)가
      * 아직 소비처를 안 옮겼어도(legacy.css는 여전히 리터럴 rgba shadow),
      * 토큰 자체는 미리 옳게 정의해 둔다. */

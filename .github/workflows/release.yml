@@ -59,6 +59,10 @@ jobs:
       # CI(ci.yml)와 같은 산출물 검증을 릴리스에서도 한 번 더 한다 — 태그를
       # 단 커밋이 CI를 안 거쳤을 수도 있고(직접 태그), 깨진 자산을 tarball에
       # 넣으면 사용자가 그걸 그대로 받는다.
+      # ci.yml과 같은 이유 — 태그 커밋이 CI를 안 거쳤을 수 있고, 죽은 CSS
+      # 선언이 든 자산을 tarball에 넣으면 사용자가 그걸 그대로 받는다.
+      - name: 정의되지 않은 CSS 변수 검사
+        run: python3 scripts/check_css_vars.py --strict
       - name: 산출물 형태 검증 (I2)
         run: |
           test -f frontend/dist/app.js
