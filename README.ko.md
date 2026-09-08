@@ -199,7 +199,8 @@ fsh hooks uninstall    # FarShell 항목만 제거
 ## 아키텍처
 
 자세한 내용은 [ARCHITECTURE.md](./ARCHITECTURE.md) 참조 (control / work / voice / network
-4-plane 모델). 디자인 시스템(테마·토큰·레이아웃)은 [DESIGN.md](./DESIGN.md) 참고.
+4-plane 모델). 디자인 시스템(디자인 원칙·스킨·토큰·레이아웃)은
+[DESIGN.ko.md](./DESIGN.ko.md) 참고.
 
 ```
                   +----------------------------------------+
@@ -270,7 +271,7 @@ farshell/
 ├── CLAUDE.md                  Claude Code 가이드 (기능/명령/API 전체 원장)
 ├── CLI.md                     fsh CLI 전체 레퍼런스
 ├── API.md                     REST/WebSocket API 전체 레퍼런스
-├── DESIGN.md                  디자인 시스템 (테마·토큰·레이아웃)
+├── DESIGN.md                  디자인 시스템 (원칙·스킨·토큰·레이아웃)
 ├── ARCHITECTURE.md            4-plane 아키텍처 상세
 ├── CHANGELOG.md                전체 변경 이력
 └── docs/TODOS.md               후속 작업 백로그 (로컬 전용, gitignored)

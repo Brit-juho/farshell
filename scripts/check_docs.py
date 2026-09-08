@@ -167,6 +167,119 @@ def check_version(problems: list[str]) -> None:
         )
 
 
+
+# ── 4. DESIGN.md ↔ 코드 파생 값 ───────────────────────────────────────────
+#
+# DESIGN.{md,ko.md}는 앞으로 모든 UI 작업의 기준이 되므로, 코드에 사는 값을 문서가
+# 베껴 적은 지점은 전부 드리프트 후보다. 2026-09-08 감사에서 실제로 두 건이 틀린 채
+# 발견됐다 — rail 항목 수(문서 6 / 코드 7)와 에이전트 상태 수(문서 4 / STATUSES 5).
+#
+# **왜 산문을 훑지 않고 전용 표를 두는가.** 처음엔 "문서 본문에 이 숫자가 들어있나"로
+# 짰는데 무의미했다. `7`이나 `720` 같은 맨 숫자는 문서 어딘가엔 늘 존재해서 값을
+# 틀리게 바꿔도 검사가 통과했다(실측 확인). 앵커를 산문에 두면 문장을 조금만 고쳐도
+# 깨지고, 느슨하게 두면 아무것도 못 잡는다. 그래서 두 문서에 **기계가 읽는 표**를
+# 하나 두고 그 표만 코드와 대조한다 — 사람에게도 "이 값의 진짜 출처는 여기"를
+# 알려주므로 검사용 껍데기가 아니다.
+_DESIGN_TABLE_ROW = re.compile(r"^\|\s*`([a-z0-9.-]+)`\s*\|\s*`([^`]*)`\s*\|", re.M)
+# 표는 전용 절 안에서만 읽는다. 문서에는 토큰 표처럼 생김새가 같은 표가 더 있어서
+# (`| `--color-acc` | `#f0a860` | 액센트 |`), 파일 전체를 훑으면 그 행들까지
+# "검사 대상"으로 오인한다 — 실제로 처음 구현에서 그렇게 오탐이 났다.
+_DESIGN_SECTION = re.compile(
+    r"^###\s+(?:코드 파생 값|Code-derived values).*?$(.*?)(?=^###\s|\Z)", re.M | re.S
+)
+
+
+def _design_rows(text: str) -> dict[str, str] | None:
+    m = _DESIGN_SECTION.search(text)
+    if not m:
+        return None
+    return dict(_DESIGN_TABLE_ROW.findall(m.group(1)))
+
+
+def _design_expected() -> dict[str, str]:
+    """코드에서 뽑은 (키 → 값). 키는 두 DESIGN 문서의 표 첫 칸과 같다."""
+    out: dict[str, str] = {}
+
+    theme = ROOT / "frontend" / "js" / "theme.js"
+    if theme.exists():
+        m = re.search(r"VT_SKINS\s*=\s*\[([^\]]*)\]", theme.read_text())
+        if m:
+            out["skins"] = ", ".join(re.findall(r"['\"]([\w-]+)['\"]", m.group(1)))
+
+    bp = ROOT / "frontend" / "js" / "layout" / "breakpoints.js"
+    if bp.exists():
+        text = bp.read_text()
+        vals = [re.search(rf"{n}\s*=\s*(\d+)", text) for n in ("COMPACT_MAX", "REGULAR_MAX")]
+        if all(vals):
+            out["breakpoints"] = "/".join(v.group(1) for v in vals)
+
+    dnd = ROOT / "frontend" / "js" / "layout" / "dnd.js"
+    if dnd.exists():
+        text = dnd.read_text()
+        m = re.search(r"function tierCap\(\)\s*\{(.*?)\n\}", text, re.S)
+        if m:
+            caps = re.findall(r"return\s+(\d+)\s*;", m.group(1))
+            if caps:
+                out["pane-cap"] = "/".join(caps)
+
+    index = ROOT / "frontend" / "index.html"
+    if index.exists():
+        # 클래스 경계까지 봐야 한다 — `class="vt-rail-btn`만 보면
+        # `vt-rail-btn-DISABLED` 같은 접두 일치까지 세어 코드 쪽 변경을 놓친다.
+        out["rail-items"] = str(
+            len(re.findall(r'class="vt-rail-btn(?=[ "])', index.read_text()))
+        )
+
+    st = ROOT / "server" / "agent_status.py"
+    if st.exists():
+        m = re.search(r"STATUSES\s*=\s*\(([^)]*)\)", st.read_text())
+        if m:
+            out["agent-states"] = str(len([x for x in m.group(1).split(",") if x.strip()]))
+
+    tokens = ROOT / "styles" / "theme" / "tokens.css"
+    if tokens.exists():
+        text = tokens.read_text()
+        for key, name in (("color-bg-0", "--color-bg-0"), ("color-acc", "--color-acc"),
+                          ("color-txt", "--color-txt")):
+            m = re.search(rf"{name}:\s*(#[0-9a-fA-F]{{3,8}})\s*;", text)
+            if m:
+                out[key] = m.group(1)
+    return out
+
+
+def check_design_md(problems: list[str]) -> None:
+    """DESIGN.{md,ko.md}의 「코드 파생 값」 표를 실제 코드와 대조한다.
+
+    한국어판·영문판을 같이 본다 — 한쪽만 고치고 넘어가는 게 이 저장소에서 가장
+    흔한 문서 사고다.
+    """
+    expected = _design_expected()
+    if not expected:
+        return
+
+    for name in ("DESIGN.md", "DESIGN.ko.md"):
+        doc = ROOT / name
+        if not doc.exists():
+            continue
+        rows = _design_rows(doc.read_text())
+        if not rows:
+            problems.append(
+                f"{name}: 「코드 파생 값」 표가 없다 — 이 표가 없으면 문서의 "
+                "숫자·색이 코드와 맞는지 아무도 검증하지 않는다"
+            )
+            continue
+        for key, want in expected.items():
+            got = rows.get(key)
+            if got is None:
+                problems.append(f"{name}: 「코드 파생 값」 표에 `{key}` 행이 없다 (코드값: {want})")
+            elif got != want:
+                problems.append(
+                    f"{name}: `{key}` — 문서 `{got}` / 코드 `{want}` — 코드가 단일 진실이다"
+                )
+        for key in rows.keys() - expected.keys():
+            problems.append(f"{name}: 「코드 파생 값」 표의 `{key}` 행은 대응하는 코드 검사가 없다")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="문서 일관성 검사 (I3)")
     ap.add_argument("--strict", action="store_true", help="발견 시 종료코드 1")
@@ -177,6 +290,7 @@ def main() -> int:
     check_claude_md(problems)
     check_help_topics(problems)
     check_version(problems)
+    check_design_md(problems)
 
     if not problems:
         print("✓ 문서 일관성 OK")
