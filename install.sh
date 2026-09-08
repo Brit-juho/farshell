@@ -61,6 +61,29 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 PY_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+
+# 최소 버전 게이트 (2026-09-08, 클린 환경 검증에서 발견).
+# 서버 코드는 PEP 604(`str | None`, 3.10+)를 14개 파일에서 쓰고, CI 매트릭스의
+# 하한은 3.11이다. 그런데 여기서는 버전을 **출력만 하고 막지 않아서**, macOS
+# 기본 python3(3.9)로 설치하면 venv 생성·pip 설치까지 전부 성공한 뒤 서버가
+# import 단계에서 TypeError로 죽었다 — 사용자 입장에서는 "설치는 됐다는데 안 켜진다"다.
+# 조용히 깨진 설치를 만드느니 여기서 멈추는 게 낫다.
+PY_MAJOR="${PY_VERSION%%.*}"
+PY_MINOR="${PY_VERSION##*.}"
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
+  echo "✗ Python $PY_VERSION — FarShell은 **3.11 이상**이 필요합니다."
+  echo "    (서버 코드가 3.10+ 문법을 쓰고, CI가 검증하는 하한은 3.11입니다)"
+  if [ "$(uname)" = "Darwin" ]; then
+    echo "    macOS 기본 python3는 3.9라 그대로는 동작하지 않습니다:"
+    echo "      brew install python@3.11"
+    echo "      그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V"
+  else
+    echo "    설치: apt install python3.11 / dnf install python3.11 등"
+  fi
+  echo "    이미 3.11+ 를 갖고 있다면 그 python으로 직접 venv를 만들고"
+  echo "    ~/.vt.env 의 VT_PYTHON 을 그 경로로 지정해도 됩니다."
+  exit 1
+fi
 echo "✓ Python $PY_VERSION"
 
 # 2. venv 생성 (이미 있으면 재사용)
