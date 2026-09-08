@@ -1,0 +1,11 @@
+# 개발·CI 전용 의존성. 사용자 설치 경로(install.sh)에는 절대 안 들어간다 —
+# requirements-core.txt만 그 역할을 한다.
+#
+# playwright는 실브라우저 스모크(server/tests/test_e2e_smoke.py)용이다. 브라우저
+# 바이너리는 pip이 아니라 별도 명령으로 받는다:
+#
+#     pip install -r requirements-dev.txt
+#     playwright install chromium      # ~130MB
+#
+# 둘 중 하나라도 없으면 그 테스트 파일은 통째로 skip된다(사유가 -v에 찍힌다).
+playwright>=1.40
