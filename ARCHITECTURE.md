@@ -73,8 +73,9 @@ mobile/web, leading to "why isn't this going in?" style debugging.
 
 Run `fsh help` (or see [CLI.md](./CLI.md)) for the full subcommand list —
 it's grown well past the original `voice`/`mobile`/`start`/`stop` set (queue,
-snippets, hotkeys, device management, template management, tunnel management,
-`fsh manage` TUI, etc.).
+hotkeys, device management, template management, tunnel management,
+`fsh manage` TUI, etc.). Prompt snippets are web-UI only — there is no
+`fsh snippet` subcommand.
 
 ### `server/` — FastAPI backend (Work + Voice Plane)
 

@@ -67,8 +67,9 @@ fsh의 모든 클라이언트는 격리된 tmux 소켓 `-L fsh`(`VT_TMUX_SOCKET`
 | `fsh.ps1` | Windows PowerShell 버전(네이티브 Windows 자체는 미지원 — WSL2 사용자가 PowerShell에서 fsh를 돌릴 때용) |
 
 전체 서브커맨드 목록은 `fsh help`(또는 [CLI.ko.md](./CLI.ko.md)) 참고 —
-원래의 `voice`/`mobile`/`start`/`stop` 세트를 훨씬 넘어섰다(큐, 스니펫, 핫키,
-기기 관리, 템플릿 관리, 터널 관리, `fsh manage` TUI 등).
+원래의 `voice`/`mobile`/`start`/`stop` 세트를 훨씬 넘어섰다(큐, 핫키,
+기기 관리, 템플릿 관리, 터널 관리, `fsh manage` TUI 등). 프롬프트 스니펫은
+웹 UI 전용이다 — `fsh snippet` 서브커맨드는 없다.
 
 ### `server/` — FastAPI 백엔드 (Work + Voice Plane)
 

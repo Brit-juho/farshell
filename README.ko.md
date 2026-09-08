@@ -122,6 +122,7 @@ tar xzf farshell-<버전>.tar.gz && cd farshell-<버전>
 | barge-in | 마이크 탭 또는 핫키로 재생 중인 TTS 즉시 중단 |
 | Claude Code TTS | Stop 훅으로 응답 완료 시 요약 TTS 자동 재생 |
 | 프롬프트 큐 | 작업 중 지시를 쌓아뒀다 순차 투입 — 음성 모드와 짝 (`fsh queue`, [CLI.md](./CLI.md#prompt-queue-fsh-queue)) |
+| 프롬프트 스니펫 | 자주 쓰는 명령·지시문을 저장해뒀다 지금 보고 있는 pane에 원탭 투입 — iTerm2 Snippets와 같은 개념(예: `cd ~/GitHub/myproject` + `claude --resume`). 큐와 달리 순서를 기다리지 않고 즉시 실행된다. 좌측 rail 또는 `Mod+K` → "프롬프트 스니펫". 웹 UI 전용이라 CLI 서브커맨드는 없다 |
 | 라이브 프리뷰 Grid 뷰 | tmux 세션을 카드로 한눈에 훑어보는 화면. 에이전트 배지, 작업 중/완료 표시 |
 | 코드 뷰어 / diff | 파일 트리 · 문법 하이라이팅 · `git diff` 렌더링 (읽기 전용) |
 | 포트 대시보드 | 리스닝 포트 조회, 원클릭 종료, `fsh tunnel expose` 연동 |

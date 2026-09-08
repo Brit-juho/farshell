@@ -1,7 +1,7 @@
 // L4 — 좌측 rail. ADR-8("⋯ 폐지 → 좌측 rail(포인터) + 커맨드 팔레트(키보드)")의
 // 포인터 경로 절반. 팔레트(quickopen.js)와 "내용은 동일"해야 한다(문서
-// 30-layout-shell.md §3) — 그래서 파일/큐/포트는 이 파일이 새로 뭔가를
-// 그리지 않는다. 그 세 버튼은 index.html에서 이미 `data-action="viewer.show"`
+// 30-layout-shell.md §3) — 그래서 파일/큐/스니펫/포트는 이 파일이 새로 뭔가를
+// 그리지 않는다. 그 네 버튼은 index.html에서 이미 `data-action="viewer.show"`
 // 등을 달고 있어 core/dom.js의 전역 클릭 위임이 알아서 기존 모달을 연다.
 // 이 파일이 직접 관리하는 건 "세션"(진짜 새 임베디드 패널)과 "설정"
 // (⋯ 메뉴의 마지막 남은 그룹을 그대로 옮긴 정적 마크업)뿐이다.
@@ -19,7 +19,7 @@ import { getStatus, onStatusChange, applyStatusDot, sortByUrgency } from '../age
 import { mountClients } from './clients.js';
 
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 280;
-// 'file'/'queue'/'ports'는 data-action 버튼이라 여기서 다루지 않는다(위 헤더 주석).
+// 'file'/'queue'/'snippets'/'ports'는 data-action 버튼이라 여기서 다루지 않는다(위 헤더 주석).
 const PANEL_ITEMS = ['session', 'settings'];
 
 const rail = document.getElementById('vt-rail');

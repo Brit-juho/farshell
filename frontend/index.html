@@ -171,9 +171,9 @@
 
   <!-- L4: 좌측 rail — ADR-8("⋯ 폐지 → 좌측 rail(포인터) + 커맨드 팔레트(키보드)")의
        포인터 경로. compact(<720px)에서는 CSS로 통째로 숨는다(팔레트 + 바텀시트가
-       대신한다). 항목 6개는 팔레트(L6)의 기본/설정 명령과 내용이 같다(문서 §3
-       "포인터 경로와 키보드 경로가 나뉘되 내용은 동일") — 파일/큐/포트는 이미
-       있는 모달(viewer.show/queue.show/ports.show)을 그대로 열 뿐이고, "세션"만
+       대신한다). 항목 7개는 팔레트(L6)의 기본/설정 명령과 내용이 같다(문서 §3
+       "포인터 경로와 키보드 경로가 나뉘되 내용은 동일") — 파일/큐/스니펫/포트는 이미
+       있는 모달(viewer.show/queue.show/snippets.show/ports.show)을 그대로 열 뿐이고, "세션"만
        진짜 새 임베디드 패널이다(연결된 화면 관리는 C3 의존이라 지금은 목록만).
        사용량은 U 마일스톤 전이라 .needs-usage로 상시 숨김. -->
   <nav id="vt-rail" aria-label="사이드바">
@@ -187,6 +187,9 @@
     <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" title="프롬프트 큐">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-queue" hidden></span>
+    </button>
+    <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" title="프롬프트 스니펫">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
     </button>
     <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" title="포트 대시보드">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/></svg>

@@ -124,6 +124,7 @@ open a public tunnel (`--network all`, the default) without auth configured.
 | Barge-in | Tap the mic or hit the hotkey to instantly stop TTS playback |
 | Claude Code TTS | A Stop hook auto-plays a TTS summary when a response finishes |
 | Prompt queue | Queue up instructions while a task is running and feed them in sequentially — pairs with voice mode (`fsh queue`, [CLI.md](./CLI.md#prompt-queue-fsh-queue)) |
+| Prompt snippets | Save frequently used commands or instructions and fire them into the current pane in one tap — the iTerm2 Snippets idea (e.g. `cd ~/GitHub/myproject` + `claude --resume`). Unlike the queue there's no waiting in line: it runs right now. Left rail or `Mod+K` → "Prompt snippets". Web UI only, no CLI subcommand |
 | Live preview grid view | A screen that shows tmux sessions as cards at a glance, with agent badges and working/done indicators |
 | Code viewer / diff | File tree, syntax highlighting, `git diff` rendering (read-only) |
 | Port dashboard | View listening ports, kill with one click, integrates with `fsh tunnel expose` |
