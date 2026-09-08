@@ -22,7 +22,7 @@ const OPTION_KEYS = {
   'terminal.scrollback': 'scrollback',
 };
 
-export function applySettingsToTerminals(changed) {
+function applySettingsToTerminals(changed) {
   const keys = changed ? Object.keys(changed) : Object.keys(OPTION_KEYS);
   const opts = {};
   for (const key of keys) {

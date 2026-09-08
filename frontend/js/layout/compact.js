@@ -67,7 +67,7 @@ export function nextSessionId(delta) {
   return next && next !== cur ? next : null;
 }
 
-export function stepSession(delta) {
+function stepSession(delta) {
   const next = nextSessionId(delta);
   if (next) switchTo(next);
 }

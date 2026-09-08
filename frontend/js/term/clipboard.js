@@ -26,7 +26,7 @@ export async function copyToClipboard(text) {
   } catch (_) { return false; }
 }
 
-export async function readClipboardText() {
+async function readClipboardText() {
   try {
     if (navigator.clipboard && navigator.clipboard.readText) {
       return await navigator.clipboard.readText();

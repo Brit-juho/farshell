@@ -232,7 +232,7 @@ function _leafSessionIds(node) {
 // 트리를 다시 그린다. layout/store.js의 onLayoutChange가 이 함수를 부른다 —
 // term/session.js의 switchTo() 등은 스토어만 갱신하고, 실제 DOM 반영은 항상
 // 이 한 곳을 거친다(직접 wrapper를 만지지 않는다).
-export function renderLayout() {
+function renderLayout() {
   if (!_ensureContainers()) return; // #terminal-container가 아직 없으면(부팅 전) 대기
   const tree = getTree();
   const activePaneId = getActivePaneId();

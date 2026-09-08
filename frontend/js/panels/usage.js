@@ -190,7 +190,7 @@ async function refreshBadgeOnly() {
   } catch (_) { /* 조용히 무시 */ }
 }
 
-export function showUsage() {
+function showUsage() {
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: '사용량',

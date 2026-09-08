@@ -11,7 +11,7 @@ import { openFile } from './file.js';
 // 주소창에 경로를 직접 입력해 트리 최상단을 그 경로로 바꾼다.
 // 서버(fsguard.resolve_under_roots)가 VT_BROWSE_ROOTS 경계 안인지 다시 검증하므로
 // 여기서는 별도 화이트리스트 검사 없이 그대로 요청한다 — 거부되면 토스트만 띄운다.
-export async function _navigateRoot(path) {
+async function _navigateRoot(path) {
   const treeEl = document.getElementById('vt-vw-tree');
   let data;
   try {

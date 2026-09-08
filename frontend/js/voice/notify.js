@@ -14,7 +14,7 @@ let pendingMeta = null;
 let _notifyRetries = 0;
 let _notifyStableTimer = null;
 
-export function connectNotify() {
+function connectNotify() {
   // C2: 상한 도달 후 영구 포기하지 않는다(모바일 장시간 세션의 flap에도 알림 유지).
   // [회귀 fb827a6] 단, onopen에서 _notifyRetries를 '즉시' 0으로 리셋하면 서버가 accept
   // 직후 닫는 half-open flap에서 지수 백오프가 자라지 못해 2초마다 영구 재연결한다

@@ -13,7 +13,7 @@ import { get as setting } from '../core/settings.js';
 import { icon } from '../ui/icons.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 
-async export function showTmuxSessions() {
+async function showTmuxSessions() {
   // 토글: 이미 열려 있으면 닫기
   let menu = document.getElementById('tmux-menu');
   if (menu) { menu.remove(); return; }

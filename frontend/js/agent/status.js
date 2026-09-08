@@ -104,7 +104,7 @@ whenAuthed(() => {
 // 컨테이너 id에 의존하지 않고 문서 전체에서 찾도록 일반화한다. 이제
 // quickopen.js·layout/pane-picker.js·layout/rail.js의 세션 카드가 전부
 // 이 강조를 공짜로 받는다.
-export function _cardByCwd(cwd) {
+function _cardByCwd(cwd) {
   if (!cwd) return null;
   const matches = document.querySelectorAll(`.vt-card[data-cwd="${CSS.escape(cwd)}"]`);
   return matches.length === 1 ? matches[0] : null;
@@ -115,7 +115,7 @@ export function _cardByCwd(cwd) {
 // 번도 안 연 상태에서도 탭 뱃지가 동작하려면 tmux 세션명→cwd 매핑을 따로
 // 들고 있어야 한다 — 그게 _tmuxCwdByName이다.
 let _tmuxCwdByName = {};
-export async function _refreshTmuxCwdMap() {
+async function _refreshTmuxCwdMap() {
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
     const list = await res.json();
@@ -126,7 +126,7 @@ export async function _refreshTmuxCwdMap() {
   } catch (_) { /* 다음 주기에 재시도 */ }
 }
 
-export function _tabByCwd(cwd) {
+function _tabByCwd(cwd) {
   if (!cwd) return null;
   const matches = [];
   document.querySelectorAll('#tabs .tab').forEach((tab) => {
@@ -157,7 +157,7 @@ export function _applyActiveHighlights(active) {
 let wsAgent = null;
 let _wsAgentRetries = 0;
 let _wsAgentStableTimer = null;
-export function connectAgentWs() {
+function connectAgentWs() {
   try {
     wsAgent = new WebSocket(`${WS_BASE}/ws-agent${_tokenQuery}`);
   } catch (e) { return scheduleAgentReconnect(); }
@@ -218,7 +218,7 @@ export function connectAgentWs() {
   wsAgent.onclose = () => { clearTimeout(_wsAgentStableTimer); scheduleAgentReconnect(); };
   wsAgent.onerror = () => { try { wsAgent.close(); } catch (_) {} };
 }
-export function scheduleAgentReconnect() {
+function scheduleAgentReconnect() {
   if (_wsAgentRetries >= 15) return;
   _wsAgentRetries++;
   const delay = Math.min(1000 * Math.pow(2, _wsAgentRetries), 30000);

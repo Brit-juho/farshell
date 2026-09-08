@@ -29,7 +29,7 @@ const BROWSER_RESERVED = new Set(['Mod+W', 'Mod+N', 'Mod+T', 'Mod+Q']);
 
 // 기본 바인딩. `passthrough: true`면 동작을 실행한 뒤에도 터미널로 키를 흘린다
 // (기본은 false = 우리가 먹는다).
-export const ACTIONS = [
+const ACTIONS = [
   { id: 'search',     def: 'Mod+F',        label: '터미널 내 검색' },
   { id: 'palette',    def: 'Mod+K',        label: '커맨드 팔레트' },
   { id: 'viewer',     def: 'Ctrl+Shift+E', label: '코드 뷰어' },
