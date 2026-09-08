@@ -22,7 +22,6 @@ import {
 import { _renderRootTree, _wirePathInput, _openAtTerminalCwd, _insertPathToTerminal } from './tree.js';
 import { showGit } from './git.js';
 
-export function closeViewer() { closePanel('vt-viewer'); }
 
 // P1: highlight.min.js(127KB)는 초기 로드에서 빼고 코드 뷰어를 실제로 열 때만
 // 불러온다. openFile()이 파일을 네트워크로 fetch하는 동안 대부분 로드가 끝나므로

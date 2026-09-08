@@ -194,13 +194,7 @@ export async function load() {
   return getAll();
 }
 
-export function isLoaded() {
-  return _loaded;
-}
-
-// 테스트 전용 — 모듈 스코프 싱글톤을 초기화한다.
-export function _reset() {
-  _values = {};
-  _loaded = false;
-  _listeners.clear();
-}
+// isLoaded()와 _reset()이 여기 있었다. _reset은 "테스트 전용"이라는 주석을
+// 달고 있었지만 frontend/tests/ 어디에서도 쓰이지 않았고, isLoaded는 소비처가
+// 아예 없었다 — 2026-09-08 삭제. 테스트에서 싱글톤 초기화가 다시 필요해지면
+// 그때 그 테스트와 함께 되살린다.

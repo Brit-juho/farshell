@@ -283,7 +283,6 @@ export function showSettings() {
   rerender();
 }
 
-export function closeSettings() { closePanel(PANEL_ID); }
 
 registerAction('settings.show', showSettings);
 // S3에서 잡아둔 `Mod+,` 바인딩의 실제 주인이 이제 생겼다(그전엔 rail ⚙를

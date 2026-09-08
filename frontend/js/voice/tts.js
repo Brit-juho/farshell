@@ -1,25 +1,14 @@
 // TTS 재생 — F4에서 voice.js에서 분리. barge-in(재생 중 새 녹음 시작 시 즉시
 // 정지)이 recording.js와 이 파일 양쪽에서 일어나므로 `_stopCurrentTTS`를 export한다.
-import { apiFetch } from '../core/api.js';
-
-const API = `${location.protocol}//${location.host}`;
-
-export async function speakText(text) {
-  try {
-    const res = await apiFetch(`${API}/voice/output`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    // C5: 빈 텍스트 400/서버 500이면 오디오가 아닌 에러 JSON이 온다 — 재생하지 않음.
-    if (!res.ok) { console.warn('[TTS] 서버 오류:', res.status); return; }
-    const audioBlob = await res.blob();
-    if (audioBlob.size === 0) return;
-    playAudioBlob(audioBlob);
-  } catch (err) {
-    console.error('TTS 실패:', err);
-  }
-}
+// speakText(text)가 여기 있었다 — 클라이언트가 직접 `POST /voice/output`을 불러
+// 그 응답을 재생하는 경로다. **최초 커밋(ced9104)부터 호출처가 0이었다.** F4에서
+// voice.js를 모듈로 쪼갤 때 그대로 옮겨왔을 뿐이라, 리팩터가 만든 회귀가 아니라
+// 처음부터 배선되지 않은 코드였다. 2026-09-08 삭제.
+//
+// 브라우저 TTS는 죽지 않는다 — 실제 경로는 서버가 밀어주는 쪽이다:
+// notify.js가 /ws-notify로 받은 바이너리 프레임을 playAudioBlob에 바로 넘긴다
+// (voice/notify.js:56). `/voice/output` 엔드포인트 자체도 살아있다 —
+// server/tts_hook.sh:113이 Claude Code Stop 훅에서 호출한다.
 
 // [A1] autoplay 정책 대응 — play() 실패 시 UI로 수동 재생 유도
 let _pendingAudioUrl = null;

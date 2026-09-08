@@ -204,7 +204,6 @@ export function showUsage() {
   _timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
 }
 
-export function closeUsage() { closePanel(PANEL_ID); }
 
 registerAction('usage.open', showUsage);
 
