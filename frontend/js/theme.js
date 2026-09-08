@@ -69,8 +69,22 @@ const VT_XTERM_THEMES = {
   },
 };
 
-// theme-color 메타(모바일 상태바)용 — --bar 값과 일치
-const VT_BAR_COLOR = { farshell:'#131316', macos:'#2c2c2e', catppuccin:'#181825', windows:'#2b2b2b', vscode:'#2d2d2d', notepad:'#f1efe7' };
+// theme-color 메타(모바일 상태바) — CSS의 --bar를 그대로 읽는다.
+//
+// 예전엔 스킨별 hex를 여기 표로 갖고 있었다. 값은 정확히 --bar와 같아야 하는데
+// 두 곳에 적어두면 언젠가 한쪽만 바뀐다(2026-09-08 기준으로는 6스킨 다 일치했지만,
+// 그건 아직 안 어긋났다는 뜻이지 안 어긋난다는 보장이 아니다). data-skin을 이미
+// 세운 뒤에 계산값을 읽으면 표 자체가 필요 없어진다.
+//
+// 폴백: 부팅 아주 초반이나 CSS 미로드 시 계산값이 빈 문자열로 온다. 그때는
+// 메타를 건드리지 않는다 — 잘못된 색을 넣느니 브라우저 기본을 두는 게 낫다.
+function _barColor() {
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue('--bar').trim();
+  } catch (_) {
+    return '';
+  }
+}
 
 export function getVtSkin() {
   const s = document.documentElement.getAttribute('data-skin');
@@ -118,7 +132,9 @@ function _syncThemeChips(skin) {
     c.classList.toggle('sel', c.dataset.skin === skin);
   });
   const meta = document.getElementById('theme-color-meta');
-  if (meta && VT_BAR_COLOR[skin]) meta.setAttribute('content', VT_BAR_COLOR[skin]);
+  // data-skin은 setVtSkin이 이 함수보다 먼저 세운다 — 그래서 계산값이 이미 새 스킨 것이다.
+  const bar = _barColor();
+  if (meta && bar) meta.setAttribute('content', bar);
 }
 
 export function setVtSkin(skin) {

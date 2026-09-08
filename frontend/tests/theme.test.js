@@ -141,13 +141,49 @@ test('setVtSkin: .theme-chip에 선택 상태를 동기화한다', async () => {
   assert.deepStrictEqual(selected, ['catppuccin']);
 });
 
-test('setVtSkin: theme-color 메타 태그를 스킨의 상태바 색으로 갱신한다', async () => {
+// T9(2026-09-08): theme.js가 스킨별 --bar 값을 표로 갖고 있던 걸 없애고
+// getComputedStyle(root).getPropertyValue('--bar')로 바꿨다. 같은 색을 CSS와 JS
+// 두 곳에 적어두면 언젠가 한쪽만 바뀌기 때문이다.
+//
+// 그래서 이 테스트도 하드코딩 hex를 기대하지 않는다 — 브라우저처럼 스타일시트를
+// 넣어주고 "메타가 그 --bar를 따라가는가"라는 계약 자체를 본다. 팔레트를 바꿔도
+// 이 테스트는 계속 옳다.
+function _installSkinBarStylesheet(window, bars) {
+  const style = window.document.createElement('style');
+  style.textContent = Object.entries(bars)
+    .map(([skin, color]) => `html[data-skin="${skin}"] { --bar: ${color}; }`)
+    .join('\n');
+  window.document.head.appendChild(style);
+}
+
+test('setVtSkin: theme-color 메타가 그 스킨의 --bar를 따라간다', async () => {
   const { window, setVtSkin } = await buildThemeWindow();
+  _installSkinBarStylesheet(window, { notepad: 'rgb(241, 239, 231)', macos: 'rgb(44, 44, 46)' });
   const meta = window.document.createElement('meta');
   meta.id = 'theme-color-meta';
   meta.setAttribute('content', '#000000');
   window.document.head.appendChild(meta);
 
+  const barOf = () =>
+    window.getComputedStyle(window.document.documentElement).getPropertyValue('--bar').trim();
+
   setVtSkin('notepad');
-  assert.strictEqual(meta.getAttribute('content'), '#f1efe7');
+  assert.notStrictEqual(barOf(), '', '스타일시트가 안 먹었다 — 테스트 전제가 깨졌다');
+  assert.strictEqual(meta.getAttribute('content'), barOf());
+
+  setVtSkin('macos');
+  assert.strictEqual(meta.getAttribute('content'), barOf());
+});
+
+test('setVtSkin: --bar를 읽을 수 없으면 메타를 건드리지 않는다', async () => {
+  // 부팅 아주 초반이나 CSS 미로드 상황. 잘못된 색을 넣느니 기존 값을 두는 게 낫다
+  // — 모바일 상태바가 엉뚱한 색으로 한 번 칠해지면 사용자 눈에 그대로 남는다.
+  const { window, setVtSkin } = await buildThemeWindow();
+  const meta = window.document.createElement('meta');
+  meta.id = 'theme-color-meta';
+  meta.setAttribute('content', '#123456');
+  window.document.head.appendChild(meta);
+
+  setVtSkin('notepad');
+  assert.strictEqual(meta.getAttribute('content'), '#123456');
 });

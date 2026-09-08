@@ -196,6 +196,32 @@ def _design_rows(text: str) -> dict[str, str] | None:
     return dict(_DESIGN_TABLE_ROW.findall(m.group(1)))
 
 
+
+def _resolve_token(css: str, name: str, depth: int = 3) -> str:
+    """`--name`의 최종 hex를 찾는다. `var(--other)` 한두 단계는 따라간다.
+
+    T9에서 액센트가 `--color-acc: var(--acc-farshell)` 형태가 됐다. 테마 칩이
+    "다른 스킨의" 액센트를 보여줘야 해서 스코프 밖 상수를 하나 더 두게 된 결과다.
+    hex만 찾는 정규식으로는 그 순간 값을 못 읽어 검사가 조용히 빠진다 — 실제로
+    이 변경 직후 `color-acc` 행이 "대응하는 코드 검사가 없다"로 떨어졌다.
+    """
+    seen: set[str] = set()
+    for _ in range(depth):
+        if name in seen:
+            return ""
+        seen.add(name)
+        m = re.search(rf"{re.escape(name)}:\s*([^;]+);", css)
+        if not m:
+            return ""
+        val = m.group(1).strip()
+        if val.startswith("#"):
+            return val
+        ref = re.fullmatch(r"var\(\s*(--[\w-]+)\s*\)", val)
+        if not ref:
+            return ""
+        name = ref.group(1)
+    return ""
+
 def _design_expected() -> dict[str, str]:
     """코드에서 뽑은 (키 → 값). 키는 두 DESIGN 문서의 표 첫 칸과 같다."""
     out: dict[str, str] = {}
@@ -241,9 +267,8 @@ def _design_expected() -> dict[str, str]:
         text = tokens.read_text()
         for key, name in (("color-bg-0", "--color-bg-0"), ("color-acc", "--color-acc"),
                           ("color-txt", "--color-txt")):
-            m = re.search(rf"{name}:\s*(#[0-9a-fA-F]{{3,8}})\s*;", text)
-            if m:
-                out[key] = m.group(1)
+            out[key] = _resolve_token(text, name)
+        out = {k: v for k, v in out.items() if v}
     return out
 
 
