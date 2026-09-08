@@ -91,6 +91,14 @@ import './layout/rail.js';
 // "먼저 로드"됨을 명시적으로 기다려야 했지만 이제 그 문제 자체가 없다.
 try {
   bootApp();
+  // 부팅 완료 표시. `appBootFailed`(아래)와 짝이다 — 지금까지 실패만 표시하고
+  // 성공은 표시하지 않아서, 밖에서는 "아직 부팅 중"과 "부팅 끝"을 구분할 수 없었다.
+  //
+  // 필요해진 계기: 실브라우저 스모크(E1)가 rail 버튼을 클릭했는데 아무 일도
+  // 안 일어났다. `#vt-rail`은 index.html의 **정적 마크업**이라 그게 보인다고
+  // 배선이 끝난 게 아니다 — 요소는 있고 리스너는 아직 없는 창이 존재한다.
+  // sleep으로 덮으면 느려지고 CI에서 플레이키해진다. 앱이 직접 말하는 게 맞다.
+  document.documentElement.dataset.appBooted = 'true';
 } catch (error) {
   console.error('[FarShell bootstrap]', error);
   document.documentElement.dataset.appBootFailed = 'true';

@@ -76,6 +76,48 @@ jobs:
       - name: 문서 일관성 검사 (I3)
         run: python3 scripts/check_docs.py --strict
 
+  # E1: 실브라우저 스모크. 정적 검사가 원리상 못 보는 것 — 캐스케이드가 합성된
+  # 결과(자식이 부모 밖으로 나가는가, 구간별 표시/숨김) — 만 본다.
+  #
+  # **주간 cron에서는 안 돈다.** 그 cron의 목적은 requirements-core.txt에 상한
+  # 핀이 없어 생기는 업스트림 드리프트 감시지 렌더링이 아니다. 매주 chromium을
+  # 130MB 받는 건 순수 낭비다.
+  #
+  # 이 잡이 없던 시절에 실제로 놓친 것: rail 세션 카드의 미리보기가 카드 밖으로
+  # 1008px 삐져나와 패널과 터미널 위를 덮고 있었는데, 빌드도 테스트 261개도 전부
+  # 초록이었다. jsdom은 app.css를 안 읽고, 토큰 대비 검사는 색만 계산한다.
+  e2e:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+      # 프런트 산출물이 있어야 페이지가 뜬다 — dist/는 커밋하지 않는다(ADR-2).
+      - run: npm ci
+      - run: npm run build
+      - run: pip install -r requirements-core.txt -r requirements-dev.txt
+      # 브라우저 바이너리만. --with-deps는 시스템 패키지까지 깔아 느리고,
+      # ubuntu-latest 러너에는 chromium이 필요로 하는 라이브러리가 이미 있다.
+      - run: python -m playwright install chromium
+      # 서버는 테스트가 직접 띄운다(격리된 VT_* 환경으로) — 여기서 따로 안 띄운다.
+      # 자세한 이유는 test_e2e_smoke.py의 _isolated_env 주석 참고.
+      - name: 실브라우저 스모크
+        run: pytest tests/e2e -v
+      # 실패 원인을 로그만으로 재구성하기 어려운 종류라(레이아웃), 스크린샷을 남긴다.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-실패-스크린샷
+          path: /tmp/e2e-*.png
+          if-no-files-found: ignore
+
   server:
     runs-on: ubuntu-latest
     strategy:
