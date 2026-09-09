@@ -146,12 +146,15 @@ else
   echo "✓ 프런트엔드 빌드 완료 → frontend/dist/"
 fi
 
-# 4. fsh CLI 등록 (bin/vt는 bin/fsh를 가리키는 심링크 — 예전 명령어 vt도 그대로 동작)
+# 4. fsh CLI 등록. 구 명령어 `vt`는 2.1에서 제거됐다 — 예전 설치본이 남긴
+#    끊어진 심링크를 여기서 정리한다(남겨두면 `vt`가 "No such file"로 죽는다).
 mkdir -p "$HOME/.local/bin"
 chmod +x "$VT_DIR/bin/fsh"
 ln -sf "$VT_DIR/bin/fsh" "$HOME/.local/bin/fsh"
-ln -sf "$VT_DIR/bin/vt" "$HOME/.local/bin/vt"
-echo "✓ fsh CLI 등록 → ~/.local/bin/fsh (하위 호환: vt도 계속 동작)"
+# `set -e` 아래이므로 `[ -L … ] && rm` 형태는 안 된다 — 심링크가 없는 신규
+# 설치에서 test가 1을 반환해 설치 전체가 조용히 중단된다.
+if [ -L "$HOME/.local/bin/vt" ]; then rm -f "$HOME/.local/bin/vt"; fi
+echo "✓ fsh CLI 등록 → ~/.local/bin/fsh"
 
 # 4-1. tmux 격리 config 복사 (Phase 8 G3)
 mkdir -p "$HOME/.config/vt"

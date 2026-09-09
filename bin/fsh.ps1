@@ -1,5 +1,5 @@
 # fsh.ps1 — Windows PowerShell launcher for FarShell
-# WSL2 내부의 fsh CLI를 호출합니다. (vt.ps1은 하위 호환용으로 남아 있습니다.)
+# WSL2 내부의 fsh CLI를 호출합니다.
 #
 # 사용법:
 #   .\fsh.ps1 voice    # 음성 모드
