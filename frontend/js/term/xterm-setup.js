@@ -108,6 +108,19 @@ export function createXtermInstance(id) {
 
   term.open(wrapper);
 
+  // 모바일 소프트 키보드의 자동수정/자동대문자/맞춤법을 끈다. xterm은 입력을
+  // 숨은 textarea(.xterm-helper-textarea)로 받는데, iOS/Android IME는 여기에도
+  // 평문 규칙을 그대로 적용한다 — `git`을 `Git`으로, `--force`를 `—force`(em
+  // dash)로, 경로를 단어로 고쳐버린다. 셸 입력에서는 전부 오작동이므로 끈다.
+  // xterm이 만든 요소라 옵션으로 못 주고, open() 이후에 직접 붙여야 한다.
+  const helper = wrapper.querySelector('.xterm-helper-textarea');
+  if (helper) {
+    helper.setAttribute('autocorrect', 'off');
+    helper.setAttribute('autocapitalize', 'off');
+    helper.setAttribute('autocomplete', 'off');
+    helper.setAttribute('spellcheck', 'false');
+  }
+
   // M5: xterm은 접근성 텍스트 레이어(.xterm-accessibility)에 기본
   // pointer-events:none을 건다 — 스크린리더가 "읽기만" 하도록 캔버스 위에 투명
   // 오버레이로만 존재하고, 실제 마우스/터치는 그 밑 캔버스로 그대로 통과시키기

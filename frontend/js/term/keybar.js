@@ -169,17 +169,47 @@ export function initKeybar() {
   bar.addEventListener('pointercancel', _endDragArrow);
 
   // 키보드 위로 띄우기 — visualViewport로 소프트 키보드 높이를 추정해 transform.
+  //
+  // 여기서 끝내면 안 된다: 바는 키보드 위로 올라가지만 #terminal-container의
+  // 하단 여백은 그대로라, 터미널 마지막 줄(=프롬프트)이 키보드 뒤에 그대로
+  // 깔린다. "액세서리 행이 터미널만 가린다"고 보고된 증상의 실체가 이것이다.
+  // 그래서 두 값을 CSS 변수로 내보내 여백을 계산으로 만든다.
+  //   --kb-height  : keybar가 실제로 차지하는 높이 (접힘/펼침·폰트·스킨 반영)
+  //   --kb-overlap : 소프트 키보드가 레이아웃 뷰포트를 덮은 높이
+  // 예전엔 이 둘을 --spacing*24 / *12 매직 넘버로 근사했는데, 접힘 상태와
+  // 스킨별 버튼 높이가 달라지면 바로 어긋났다. 이제 측정값만 쓴다.
+  const root = document.documentElement;
+  let _lastMetrics = '';
   const positionBar = () => {
     const vv = window.visualViewport;
-    if (!vv) return;
-    const overlap = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
-    bar.style.transform = overlap > 0 ? `translateY(${-overlap}px)` : '';
+    const overlap = vv
+      ? Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
+      : 0;
+    if (vv) bar.style.transform = overlap > 0 ? `translateY(${-overlap}px)` : '';
+    // hidden(데스크톱)이면 offsetHeight가 0 — 그대로 0을 내보내면 된다.
+    const height = bar.hidden ? 0 : bar.offsetHeight;
+    const sig = `${height}|${overlap}`;
+    if (sig === _lastMetrics) return;   // 스크롤 이벤트 폭탄에서 불필요한 fit 방지
+    _lastMetrics = sig;
+    root.style.setProperty('--kb-height', `${height}px`);
+    root.style.setProperty('--kb-overlap', `${overlap}px`);
+    // 터미널 가용 높이가 바뀌었으니 xterm 칸 수를 다시 센다. ws.js도
+    // visualViewport resize를 듣지만, iOS는 키보드가 뜰 때 resize 없이
+    // scroll만 쏘는 경우가 있어 여기서 한 번 더 확실히 건다(양쪽 모두
+    // 디바운스가 걸려 있어 중복 호출은 합쳐진다).
+    const activeId = activeSessionId();
+    if (activeId) setTimeout(() => fitAndResize(activeId), 60);
   };
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', positionBar);
     window.visualViewport.addEventListener('scroll', positionBar);
   }
   window.addEventListener('resize', positionBar);
+  // 바 자체의 높이 변화(접힘/펼침, 폰트 로드, 스킨 전환)도 여백에 반영해야
+  // 한다 — 토글 핸들러에만 의존하면 폰트 지연 로드를 놓친다.
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => positionBar()).observe(bar);
+  }
 
   // 접기/펴기 — 상태를 localStorage에 기억. 접으면 우하단 알약만 남고
   // 터미널 하단 여백이 줄어 화면을 더 쓴다. (함수 선언이라 위 핸들러에서 참조 가능)
