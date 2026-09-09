@@ -158,7 +158,6 @@ pip install pyobjc-framework-Cocoa
 mkdir -p ~/.local/bin
 chmod +x bin/fsh
 ln -sf "$(pwd)/bin/fsh" ~/.local/bin/fsh
-ln -sf "$(pwd)/bin/vt" ~/.local/bin/vt   # 하위 호환 — bin/vt는 bin/fsh를 가리키는 심링크
 ```
 
 PATH 확인:

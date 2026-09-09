@@ -244,7 +244,7 @@ fsh hooks uninstall    # FarShell 항목만 제거
 farshell/
 ├── bin/
 │   ├── fsh                   CLI 진입점 (bash, macOS/Linux; vt는 하위 호환 심링크)
-│   └── fsh.ps1               CLI 진입점 (PowerShell, Windows/WSL2 wrapper; vt.ps1은 하위 호환)
+│   └── fsh.ps1               CLI 진입점 (PowerShell, Windows/WSL2 wrapper)
 ├── server/
 │   ├── main.py                FastAPI 앱, 미들웨어(인증/Origin 가드)
 │   ├── auth.py                비밀번호/세션/기기/OTP/티켓 인증
@@ -303,8 +303,7 @@ fsh voice
 
 서버·tmux는 WSL2 내부에서 실행되고 브라우저는 Windows에서 `localhost:7777`로
 접속합니다. 음성 핫키는 WSLg가 필요합니다(Windows 11) — 없으면 브라우저 마이크를
-사용하세요. `bin/fsh.ps1`은 WSL2 내부 fsh를 호출하는 PowerShell wrapper입니다
-(`vt.ps1`도 하위 호환으로 그대로 동작).
+사용하세요. `bin/fsh.ps1`은 WSL2 내부 fsh를 호출하는 PowerShell wrapper입니다.
 
 ---
 

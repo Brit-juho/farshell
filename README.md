@@ -249,7 +249,7 @@ layout), see [DESIGN.md](./DESIGN.md).
 farshell/
 ├── bin/
 │   ├── fsh                   CLI entry point (bash, macOS/Linux; vt is a backward-compat symlink)
-│   └── fsh.ps1               CLI entry point (PowerShell, Windows/WSL2 wrapper; vt.ps1 is backward-compat)
+│   └── fsh.ps1               CLI entry point (PowerShell, Windows/WSL2 wrapper)
 ├── server/
 │   ├── main.py                FastAPI app, middleware (auth/Origin guard)
 │   ├── auth.py                password/session/device/OTP/ticket auth
@@ -309,7 +309,7 @@ fsh voice
 The server and tmux run inside WSL2, and the browser on Windows connects via
 `localhost:7777`. The voice hotkey requires WSLg (Windows 11) — without it,
 use the browser mic instead. `bin/fsh.ps1` is a PowerShell wrapper that calls
-fsh inside WSL2 (`vt.ps1` also still works for backward compatibility).
+fsh inside WSL2.
 
 ---
 

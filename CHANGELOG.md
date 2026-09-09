@@ -8,7 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-(다음 릴리스 준비 중)
+### ⚠️ Breaking changes
+
+- **구 CLI 명령어 `vt` 제거.** `bin/vt`(심링크)와 `bin/vt.ps1`을 지웠다. 2026-08에
+  `vt` → `fsh`로 개명하면서 하위 호환으로 남겨둔 것인데, 2.1 작업 전 정리했다.
+  `install.sh`가 예전 설치본이 남긴 끊어진 `~/.local/bin/vt` 심링크를 지운다.
+  **환경변수 `VT_*`·설정 파일 `~/.vt.env`·런타임 경로 `~/.vt/`·`/tmp/vt-*`는 그대로다**
+  — 이건 CLI 이름이 아니라 런타임 계약이라 건드리지 않았다.
 
 ## [2.0.0] — 2026-09-08
 
