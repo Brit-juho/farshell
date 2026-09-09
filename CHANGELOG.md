@@ -16,6 +16,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   **환경변수 `VT_*`·설정 파일 `~/.vt.env`·런타임 경로 `~/.vt/`·`/tmp/vt-*`는 그대로다**
   — 이건 CLI 이름이 아니라 런타임 계약이라 건드리지 않았다.
 
+### Removed
+
+- `requirements.txt` — 참조 0건이었다. `install.sh`는 `requirements-core.txt`/
+  `requirements-voice.txt`를, CI는 거기에 `requirements-dev.txt`를 쓴다.
+
+### Changed
+
+- `.gitignore` — 두 구멍을 메웠다.
+  - `release.yml`이 저장소 루트에 만드는 산출물(`RELEASE_NOTES.md`,
+    `farshell-*.tar.gz`)이 무시되지 않고 있었다. 로컬에서 릴리스 절차를
+    시험하면 그대로 미추적 파일로 남는다.
+  - Claude Code 하네스의 런타임 상태 10종이 `.git/info/exclude`에만 있었다.
+    그건 **clone 시 공유되지 않는다** — 다른 사람이 받으면 미추적 파일로
+    쏟아진다. `.gitignore`로 옮겼다(`.claude/skills/`와 `settings.json`은
+    저장소의 일부라 계속 추적한다).
+
+### Fixed
+
+- `requirements-dev.txt` 주석이 없는 파일(`server/tests/test_e2e_smoke.py`)을
+  가리키고 있었다 → 실제 경로 `tests/e2e/test_smoke.py`.
+- `run_server.sh` 주석 2곳이 `bin/vt`를 가리키고 있었다 → `bin/fsh`.
+
 ## [2.0.0] — 2026-09-08
 
 **UI 전면 개편.** 그리드 뷰와 ⋯ 메뉴가 사라지고 3단 레이아웃(좌측 rail · 분할 pane ·
