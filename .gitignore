@@ -51,6 +51,25 @@ docs/*
 !docs/help/
 .gstack/
 
+# 릴리스 산출물 — .github/workflows/release.yml 이 저장소 루트에 만든다.
+# 로컬에서 릴리스 절차를 시험해보면(scripts/release_notes.py, tar czf) 그대로 남는다.
+RELEASE_NOTES.md
+farshell-*.tar.gz
+
+# Claude Code 하네스가 만드는 런타임 상태. 예전엔 .git/info/exclude 에만 있었는데
+# 그건 clone 시 공유되지 않아서, 다른 사람이 받으면 미추적 파일로 쏟아졌다.
+# (.claude/skills/ 와 .claude/settings.json 은 추적한다 — 저장소의 일부다)
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+.claude/agent-registry.json
+.claude/assistant-daemon-state.json
+.claude/first-run
+.claude/routines/.state/
+.claude/worktrees/
+.claude/checkpoints/
+.claude/mailbox/
+.claude/agent-memory-local/
+
 # install.sh가 만들던 구 vendor 다운로드 경로 (지금은 frontend/vendor/가 git에 직접
 # 커밋되어 서빙되므로 install.sh의 다운로드 단계는 제거됨 — 예전 로컬 잔여물 방지용)
 frontend/static/
