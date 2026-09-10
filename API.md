@@ -129,6 +129,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel/version, etc.) |
 | GET | `/api/workspace` | Fetch workspace sync state (tabs/UI state) |
 | PUT | `/api/workspace` | Save workspace state |
+| GET | `/api/device-settings` | Fetch this device's settings (N3 — scoped by the `vt_device` cookie, `local` without it) |
+| PUT | `/api/device-settings` | Save this device's settings |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |
 | GET | `/api/agents/{name}` | Active agent info for a specific tmux session |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |

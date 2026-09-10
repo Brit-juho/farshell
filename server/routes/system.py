@@ -20,6 +20,7 @@ import push
 import safe_mode
 import tailscale
 import tunnel
+import device_settings
 import usage
 import voice_handler
 import workspace
@@ -214,6 +215,29 @@ async def hooks_status():
         "ok": all(state == "ok" for state, _ in plan.values()),
         "events": {event: state for event, (state, _) in plan.items()},
     }
+
+
+# N3(60-settings-palette.md §1) — 기기 스코프 설정. `/api/workspace`(전역)와
+# 저장소가 완전히 분리된다 — device_settings.py 모듈 주석 참고. GET은
+# 인증 없이도 device_id를 매길 수 있어야 부팅 초기(설정 로드가 세션 확인보다
+# 먼저 끝날 수 있다)에도 막히지 않는다 — 다른 상태 없는 GET들(capabilities 등)
+# 과 같은 수준의 노출이라 별도 승격이 필요 없다(D16의 git 쓰기와는 다르다 —
+# 이건 그 기기 자신의 UI 취향일 뿐, 다른 기기·계정에 영향이 없다).
+@router.get("/api/device-settings")
+async def device_settings_get(request: Request):
+    did = device_settings.device_id_for(request.cookies.get("vt_device", ""))
+    return {"device_id": did, "settings": device_settings.load(did)}
+
+
+@router.put("/api/device-settings")
+async def device_settings_put(request: Request):
+    did = device_settings.device_id_for(request.cookies.get("vt_device", ""))
+    body = await request.json()
+    values = body.get("settings") if isinstance(body, dict) else None
+    if not isinstance(values, dict):
+        return JSONResponse({"error": "settings must be an object"}, status_code=400)
+    merged = device_settings.save(did, values)
+    return {"ok": True, "device_id": did, "settings": merged}
 
 
 @router.get("/api/workspace")

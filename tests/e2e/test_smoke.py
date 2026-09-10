@@ -153,14 +153,25 @@ def server(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def browser():
+def _pw():
+    """playwright 드라이버 하나(세션 스코프) — `browser`·`isolated_page`가
+    같이 쓴다. `sync_playwright()`를 두 번 중첩해 열면(각 픽스처가 따로
+    `with sync_playwright()`를 부르면) 드라이버 하나로 처리하도록 되어 있는
+    동기 API가 충돌한다(실측: isolated_page 픽스처를 `with sync_playwright()`
+    로 따로 열었더니 그 즉시 setup 단계에서 에러가 났다) — 그래서 드라이버는
+    세션에 하나만 두고, 그 위에서 브라우저만 따로 띄운다."""
     with sync_playwright() as p:
-        try:
-            b = p.chromium.launch()
-        except PlaywrightError as e:
-            pytest.skip(f"chromium 없음 — `playwright install chromium` 필요 ({e})")
-        yield b
-        b.close()
+        yield p
+
+
+@pytest.fixture(scope="session")
+def browser(_pw):
+    try:
+        b = _pw.chromium.launch()
+    except PlaywrightError as e:
+        pytest.skip(f"chromium 없음 — `playwright install chromium` 필요 ({e})")
+    yield b
+    b.close()
 
 
 # 레이아웃 실패는 로그만으로 재구성하기 어려워서 실패 시 화면을 남긴다 —
@@ -184,6 +195,31 @@ def page(browser, server, request):
         except Exception:  # 스크린샷 실패가 테스트 결과를 덮으면 안 된다
             pass
     ctx.close()
+
+
+# 이 파일의 나머지 테스트는 전부 세션 스코프 `browser`(Chromium 프로세스 하나)를
+# 공유한다 — 컨텍스트만 테스트마다 새로 열고 닫는다. 실측으로 확인한 문제: 실제
+# PTY를 만들어 xterm을 **진짜로 렌더링**하는 테스트(WebGL 사용)가 그 공유
+# 프로세스 안에서 20여 개 컨텍스트를 거친 뒤에 돌면, 서버는 멀쩡한데(격리된
+# 스크립트로 같은 순서를 재현해도 매번 즉시 끝난다) 브라우저 쪽 응답만 느려져
+# `wait_for_selector`가 타임아웃되고, 그 여파로 파일 뒤쪽 테스트까지 연쇄로
+# 깨졌다 — headless Chromium의 소프트웨어 WebGL 렌더러가 컨텍스트를 오래
+# 순환하며 누적 열화되는 것으로 보인다(콘솔에 "GPU stall due to ReadPixels"
+# 경고가 반복 찍힌다). 그래서 실제 터미널을 렌더링하는 테스트만 **자기 전용
+# 브라우저 프로세스**를 새로 띄운다 — 공유 프로세스의 컨텍스트 수와 무관해진다.
+@pytest.fixture
+def isolated_page(_pw, server):
+    base, token = server
+    try:
+        b = _pw.chromium.launch()
+    except PlaywrightError as e:
+        pytest.skip(f"chromium 없음 — `playwright install chromium` 필요 ({e})")
+    ctx = b.new_context(viewport=WIDE)
+    pg = ctx.new_page()
+    _boot(pg, f"{base}/?token={token}")
+    yield pg
+    ctx.close()
+    b.close()
 
 
 def _boot(pg, url: str) -> None:
@@ -498,18 +534,48 @@ def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
     page.keyboard.press("Escape")
 
 
+# ── N3(60-settings-palette.md §1) 기기 스코프 설정 ─────────────────────────
+
+def test_레일_폭이_기기_설정으로_저장되고_새로고침에도_유지된다(page, server):
+    """N3 — Rail.tsx/Dock.tsx가 localStorage 대신 /api/device-settings로
+    옮겨갔는지 실제 새로고침으로 확인한다(재부팅 없이는 캐시만으로도 통과
+    하는 버그를 놓친다)."""
+    base, token = server
+    page.evaluate("() => window.vtSettingsSet('ui.rail.width', 300)")
+    page.wait_for_timeout(400)
+    r = page.request.get(f"{base}/api/device-settings", params={"token": token})
+    assert r.json()["settings"].get("ui.rail.width") == 300
+
+    page.reload()
+    page.wait_for_function(
+        "() => document.documentElement.dataset.appBooted === 'true'", timeout=20000
+    )
+    page.wait_for_timeout(500)
+    got = page.evaluate(
+        "() => getComputedStyle(document.documentElement).getPropertyValue('--vt-wgrail-w')"
+    )
+    assert got.strip() == "300px", f"새로고침 후 레일 폭이 안 돌아왔다: {got}"
+
+
 # ── N43 §8 리사이즈 오버레이 ────────────────────────────────────────────────
 
-def test_리사이즈_오버레이가_분할선_드래그_중에만_보인다(page, server):
+def test_리사이즈_오버레이가_분할선_드래그_중에만_보인다(isolated_page):
     """§8 — 드래그 중 픽셀 크기 + 칸 수가 뜨고, 놓으면 200ms 뒤 사라진다.
     CI에는 tmux 세션이 없으므로 일반 터미널 세션을 직접 만든다.
 
-    이 테스트가 만드는 세션은 **서버 쪽 상태**(session_store)라 브라우저
-    컨텍스트를 닫아도 안 없어진다 — 뒤 테스트가 "세션이 이미 있다" 경로로
-    부팅되며 실제로 깨졌다(스모크 하네스가 공유 서버 위에서 순서대로 돈다).
-    끝나면 만든 세션을 DELETE로 정리한다.
+    **전용 브라우저**(isolated_page)를 쓴다 — `isolated_page` 픽스처 주석 참고.
+
+    이 테스트가 만드는 세션·탭은 **서버 쪽 상태**(session_store + 공유
+    workspace.json)라 브라우저 컨텍스트를 닫아도 안 없어진다. 처음엔
+    `DELETE /api/sessions/{id}`로만 정리했는데 그건 session_store에서만
+    지운다 — 탭을 만들 때 클라이언트가 이미 workspace.json에 저장해 둔 항목은
+    그대로 남아, 뒤 테스트가 새로고침할 때마다 **죽은 세션을 복원하려는
+    부팅 경로**를 타면서 그 뒤로 이어지는 여러 테스트가 통째로 깨졌다(실제
+    재현 — dock 소스컨트롤 테스트 4개가 연쇄로 실패/에러). `window.
+    removeSession()`(닫기 버튼과 같은 경로 — session_store 삭제 + workspace
+    재저장을 한 번에 한다)을 써야 한다.
     """
-    base, token = server
+    page = isolated_page
     page.evaluate("() => window.createSession && window.createSession()")
     page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
     page.wait_for_timeout(500)   # PTY 연결 + 첫 fit
@@ -554,7 +620,8 @@ def test_리사이즈_오버레이가_분할선_드래그_중에만_보인다(pa
             "200ms 뒤에는 사라져야 한다"
     finally:
         for sid in session_ids:
-            page.request.delete(f"{base}/api/sessions/{sid}", params={"token": token})
+            page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+        page.wait_for_timeout(300)   # saveWorkspace()가 서버에 반영될 시간
 
 
 # ── N35 §6 dock ───────────────────────────────────────────────────────────
@@ -653,7 +720,7 @@ def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
     page.wait_for_selector("#vt-dock-scm .vt-vw-annotate", timeout=5000)
     # 되돌아가기 — dock은 한 탭 안에서 상태↔diff를 오간다(모달을 새로 안 띄운다)
     page.locator("#vt-dock-scm .vt-vw-cback").first.click()
-    page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=10000)
+    page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
 
 
 def test_dock_폭_리사이저가_범위를_지킨다(page):

@@ -15,9 +15,12 @@ import { wireRatioResizer } from '../layout/resizer.js';
 import { WIDE_MAX } from '../layout/breakpoints.js';
 
 const MIN_W = 320, MAX_W = 560, DEFAULT_W = 392, COLLAPSED_W = 36;
-// N3(기기 스코프 설정)가 아직 없어 Rail.tsx와 같이 임시로 localStorage를 쓴다.
-// localStorage는 원래 기기 스코프라 60 §1이 오면 그대로 이관하면 된다.
-const W_KEY = 'vt-dock-w', TAB_KEY = 'vt-dock-tab', COLLAPSE_KEY = 'vt-dock-collapsed';
+// N3(60-settings-palette.md §1) — device-settings 정식 스토어. Rail.tsx와
+// 같은 이유로 core/settings.js를 정적 import하지 않고 window 브리지로만 쓴다.
+const SETTINGS_W_KEY = 'ui.dock.width', SETTINGS_TAB_KEY = 'ui.dock.tab', SETTINGS_COLLAPSE_KEY = 'ui.dock.collapsed';
+const _sGet = (k: string) => (window as any).vtSettingsGet?.(k);
+const _sSet = (k: string, v: unknown) => (window as any).vtSettingsSet?.(k, v);
+const _sHas = (k: string) => Boolean((window as any).vtSettingsHas?.(k));
 const BADGE_POLL_MS = 15000;
 
 export interface DockDeps {
@@ -49,13 +52,12 @@ function Dock(props: { deps: DockDeps }) {
   const [badges, setBadges] = createSignal<Record<string, number>>({});
   // 접힘 기본값은 티어를 따른다(§3 표): xwide(≥1600)만 열림 기본, 그 아래는
   // 접힘 36px. 저장된 값이 있으면 그게 이긴다 — 사용자가 직접 정한 것이므로.
-  const stored = localStorage.getItem(COLLAPSE_KEY);
   const [collapsed, setCollapsed] = createSignal(
-    stored === null ? window.innerWidth < WIDE_MAX : stored === '1',
+    _sHas(SETTINGS_COLLAPSE_KEY) ? Boolean(_sGet(SETTINGS_COLLAPSE_KEY)) : window.innerWidth < WIDE_MAX,
   );
-  const [activeTab, setActiveTab] = createSignal(localStorage.getItem(TAB_KEY) || 'scm');
+  const [activeTab, setActiveTab] = createSignal(String(_sGet(SETTINGS_TAB_KEY) || 'scm'));
   const [width, setWidth] = createSignal(
-    Math.min(MAX_W, Math.max(MIN_W, parseInt(localStorage.getItem(W_KEY) || '', 10) || DEFAULT_W)),
+    Math.min(MAX_W, Math.max(MIN_W, Number(_sGet(SETTINGS_W_KEY)) || DEFAULT_W)),
   );
 
   let bodyRef: HTMLDivElement | undefined;
@@ -133,7 +135,7 @@ function Dock(props: { deps: DockDeps }) {
 
   const selectTab = (id: string) => {
     setActiveTab(id);
-    localStorage.setItem(TAB_KEY, id);
+    _sSet(SETTINGS_TAB_KEY, id);
   };
   const onTabClick = (id: string) => {
     // batch: 두 시그널을 따로 쓰면 effect가 **중간 상태**(펼침 + 옛 탭)로 한 번
@@ -144,7 +146,7 @@ function Dock(props: { deps: DockDeps }) {
   };
   const setCollapsedPersist = (v: boolean) => {
     setCollapsed(v);
-    localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0');
+    _sSet(SETTINGS_COLLAPSE_KEY, v);
   };
 
   // ── 배지(큐 대기 수 · 포트 수) ───────────────────────────────────────────
@@ -177,7 +179,7 @@ function Dock(props: { deps: DockDeps }) {
         if (collapsed()) return;
         const w = Math.min(MAX_W, Math.max(MIN_W, Math.round(-r)));
         setWidth(w);
-        localStorage.setItem(W_KEY, String(w));
+        _sSet(SETTINGS_W_KEY, w);
       },
       onStart: () => {},
       onEnd: () => {},
