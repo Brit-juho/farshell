@@ -8,6 +8,7 @@ import { wireClipboard } from './selection.js';
 import { wireLinks } from './links.js';
 import { wireTouchScroll } from './touch.js';
 import { getVtXtermFont, getVtXtermTheme } from '../theme.js';
+import { adoptWrapper } from '../layout/surface.js';
 
 // M6: 핀치로 조절한 폰트 크기가 있으면 그걸 기본값으로 — 없으면 기존 규칙.
 // touch.js의 _setGlobalFontSize도 같은 상한/하한을 쓰므로 여기서 export해 공유한다
@@ -98,13 +99,18 @@ export function createXtermInstance(id) {
     term.unicode.activeVersion = '11';
   }
 
-  // 각 세션에 고유 wrapper div 생성 (show/hide로 탭 전환)
+  // 각 세션에 고유 wrapper div 생성. N16부터 이 wrapper는 페인 크롬이 아니라
+  // #vt-surface(표면 레이어)의 자식이다 — 어느 pane에 보이는지는 layout/
+  // surface.js가 transform으로만 표현하고, 이 div는 다시 옮기지 않는다.
+  // 아직 어느 pane에도 배정되지 않은 상태의 기본값은 문서 §1 그대로
+  // visibility:hidden + 화면 밖 translate(배치되면 surface.js가 visible로
+  // 바꾸고 실측 좌표를 채운다).
   const wrapper = document.createElement('div');
   wrapper.id = `term-${id}`;
   wrapper.setAttribute('role', 'tabpanel');
   wrapper.setAttribute('aria-labelledby', `tab-${id}`);
-  wrapper.style.cssText = 'height:100%;display:none;';
-  document.getElementById('terminal-container').appendChild(wrapper);
+  wrapper.style.cssText = 'height:100%;visibility:hidden;transform:translate(-9999px,0);';
+  adoptWrapper(id, wrapper);
 
   term.open(wrapper);
 

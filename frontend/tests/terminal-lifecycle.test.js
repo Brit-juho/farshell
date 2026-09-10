@@ -131,7 +131,9 @@ test('addSession: 탭 DOM이 생성되고 즉시 활성 탭이 된다', async ()
 
   const wrapper = document.getElementById('term-sess-1');
   assert.ok(wrapper, '터미널 wrapper가 생성돼야 한다');
-  assert.strictEqual(wrapper.style.display, 'block', '활성 세션의 wrapper는 보여야 한다');
+  // N16: 표면 레이어부터는 display가 아니라 visibility로 보임/숨김을 표현한다
+  // (10-shell-layout.md §1) — DOM에서 떼지 않고 화면 밖으로만 옮긴다.
+  assert.strictEqual(wrapper.style.visibility, 'visible', '활성 세션의 wrapper는 보여야 한다');
 });
 
 test('addSession: id 없이 호출되면 유령 탭을 만들지 않는다', async () => {
@@ -151,15 +153,15 @@ test('switchTo: 이전 탭은 비활성/숨김, 새 탭은 활성/표시로 전�
   assert.strictEqual(window.activeId, 'b');
   assert.ok(!tabA.classList.contains('active'));
   assert.ok(tabB.classList.contains('active'));
-  assert.strictEqual(window.document.getElementById('term-a').style.display, 'none');
-  assert.strictEqual(window.document.getElementById('term-b').style.display, 'block');
+  assert.strictEqual(window.document.getElementById('term-a').style.visibility, 'hidden');
+  assert.strictEqual(window.document.getElementById('term-b').style.visibility, 'visible');
 
   switchTo('a');
   assert.strictEqual(window.activeId, 'a');
   assert.ok(tabA.classList.contains('active'));
   assert.ok(!tabB.classList.contains('active'));
-  assert.strictEqual(window.document.getElementById('term-a').style.display, 'block');
-  assert.strictEqual(window.document.getElementById('term-b').style.display, 'none');
+  assert.strictEqual(window.document.getElementById('term-a').style.visibility, 'visible');
+  assert.strictEqual(window.document.getElementById('term-b').style.visibility, 'hidden');
 });
 
 test('switchTabByOffset: 탭 목록 끝에서 순환한다', async () => {

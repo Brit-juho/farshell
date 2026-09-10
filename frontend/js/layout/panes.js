@@ -1,10 +1,11 @@
 // L3 1·3단계 — 트리를 DOM으로 그리는 재귀 렌더러 + 분할 UI. split은 flex
-// 컨테이너, leaf는 **기존 세션 wrapper를 appendChild로 옮기기만 한다(재생성
-// 금지)** — ADR-1 그대로. 구조용 div(.vt-split/.vt-pane)는 매 렌더마다 새로
-// 만들어도 무해하다(진짜 상태를 담은 건 wrapper 하나뿐이다).
-//
-// 트리에 없는(=화면 밖 배경 탭) 세션의 wrapper는 #terminal-pool(숨김)에
-// 대기시킨다.
+// 컨테이너, leaf(.vt-pane-body)는 **빈 상자일 뿐이다** — 실제 xterm wrapper는
+// N16(표면 레이어, layout/surface.js)이 절대좌표로 따로 얹는다. 이 파일은
+// "어느 pane-body가 어느 세션을 보여줘야 하는가"만 계산해 surface.setPlacement로
+// 넘기고, 실제 배치·refit 게이트·드래그 유예는 전부 surface.js 책임이다.
+// 구조용 div(.vt-split/.vt-pane)는 매 렌더마다 새로 만들어도 무해하다(진짜
+// 상태를 담은 건 세션의 wrapper 하나뿐이고, 그건 이제 여기서 아예 건드리지
+// 않는다).
 //
 // pane 헤더의 분할·닫기 버튼은 "환경 무관 베이스라인"이다(착수 전 설계
 // 리뷰 원칙) — 클릭이든 탭이든 항상 이걸로 전부 가능하다. 탭/헤더를 pane
@@ -16,12 +17,12 @@ import {
   splitPane, closePane, setRatio,
 } from './store.js';
 import { findNode } from './tree.js';
-import { fitAndResize } from '../term/resize.js';
 import { wireRatioResizer } from './resizer.js';
 import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
 import { openPanePicker } from './pane-picker.js';
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
+import * as surface from './surface.js';
 
 export { canSplit };
 
@@ -42,23 +43,28 @@ function _applySplitCap(paneEl) {
 }
 
 let _rootEl = null;
-let _poolEl = null;
 
+// N16 — _rootEl은 더 이상 #terminal-container 자신이 아니라 그 안의
+// #vt-chrome-tree(신규, 페인 크롬 전용 마운트 포인트)다. #terminal-container를
+// 직접 replaceChildren 대상으로 쓰면 형제인 #vt-surface(표면 레이어)까지
+// 통째로 날아간다 — 실측으로 재현: 트리 렌더가 한 번이라도 일어나면 surface.js가
+// 이미 만들어 둔 #vt-surface가 사라지고 다음 setPlacement가 새 걸 만들면서
+// 그 안의 wrapper들과 완전히 분리된다. 이 파일은 §3 전면 개편(index.html에
+// #vt-chrome 도입) 전까지 이 div를 JS로 lazy 생성해 그 문제를 막는다.
 function _ensureContainers() {
   if (!_rootEl) {
-    _rootEl = document.getElementById('terminal-container');
-    // L3 2단계: "터미널 영역 한정"(§8) — 스와이프 리스너를 이 컨테이너 하나에만
-    // 건다(키바·상단바는 형제/조상이 달라 애초에 버블링돼 들어오지 않는다).
-    if (_rootEl) wireCompactSwipe(_rootEl);
-  }
-  if (!_poolEl) {
-    _poolEl = document.getElementById('terminal-pool');
-    if (!_poolEl) {
-      _poolEl = document.createElement('div');
-      _poolEl.id = 'terminal-pool';
-      _poolEl.style.cssText = 'display:none;';
-      document.body.appendChild(_poolEl);
+    const container = document.getElementById('terminal-container');
+    if (!container) return false;
+    _rootEl = document.getElementById('vt-chrome-tree');
+    if (!_rootEl) {
+      _rootEl = document.createElement('div');
+      _rootEl.id = 'vt-chrome-tree';
+      _rootEl.style.cssText = 'width:100%;height:100%;';
+      container.appendChild(_rootEl);
     }
+    // L3 2단계: "터미널 영역 한정"(§8) — 스와이프 리스너는 컨테이너 전체에 건다
+    // (표면 레이어의 wrapper도 이 컨테이너의 후손이라 이벤트가 그대로 버블링된다).
+    wireCompactSwipe(container);
   }
   return _rootEl != null;
 }
@@ -133,7 +139,10 @@ function _renderEmptyBody(bodyEl, paneId) {
 }
 
 // node(split 또는 leaf)를 그 자리에 있어야 할 DOM 엘리먼트로 렌더링해 반환한다.
-function _renderNode(node, activePaneId, isRootOnly, usedSessionIds) {
+// placement는 Map<sessionId, paneBodyEl> — leaf 분기가 실제로 세션을 보여주게
+// 되는 pane마다 자신의 .vt-pane-body를 여기 채운다. surface.js는 이 지도만
+// 보고 어느 wrapper를 어디로 옮길지 정한다(DOM 트리 자체는 안 건드린다).
+function _renderNode(node, activePaneId, isRootOnly, placement) {
   if (node.t === 'split') {
     let el = document.getElementById(`vt-split-${node.id}`);
     let resizerEl;
@@ -157,16 +166,16 @@ function _renderNode(node, activePaneId, isRootOnly, usedSessionIds) {
         getContainerSize: () => (node.dir === 'row' ? el.clientWidth : el.clientHeight),
         getStartRatio: () => findNode(getTree(), node.id)?.ratio ?? 0.5,
         onRatio: (r) => setRatio(node.id, r),
-        onEnd: () => {
-          for (const id of _leafSessionIds(getTree())) {
-            requestAnimationFrame(() => fitAndResize(id));
-          }
-        },
+        // N16 — 드래그 중엔 표면 레이어에 fit을 미루게 하고(§1 수용 기준 2:
+        // 드래그 중 0건), 뗀 순간 실제로 크기가 바뀐 세션만 한 번씩 flush한다.
+        // 예전처럼 트리 전체 leaf를 매번 fit하지 않는다.
+        onStart: () => surface.beginDrag(),
+        onEnd: () => surface.endDrag(),
       });
     }
 
-    const aEl = _renderNode(node.a, activePaneId, false, usedSessionIds);
-    const bEl = _renderNode(node.b, activePaneId, false, usedSessionIds);
+    const aEl = _renderNode(node.a, activePaneId, false, placement);
+    const bEl = _renderNode(node.b, activePaneId, false, placement);
     aEl.style.flex = `${node.ratio} 1 0`;
     bEl.style.flex = `${1 - node.ratio} 1 0`;
     if (el.children[0] !== aEl || el.children[1] !== resizerEl || el.children[2] !== bEl) {
@@ -176,14 +185,15 @@ function _renderNode(node, activePaneId, isRootOnly, usedSessionIds) {
   }
 
   // leaf
-  return _renderLeaf(node, activePaneId, isRootOnly, usedSessionIds);
+  return _renderLeaf(node, activePaneId, isRootOnly, placement);
 }
 
 // split 렌더러(_renderNode)와 compact 렌더러(_renderCompactActive) 둘 다
 // "leaf 하나를 실제 DOM으로 반영"하는 이 로직을 공유한다 — L3 2단계에서
 // _renderNode의 leaf 분기를 그대로 뽑아냈다(동작 변경 없음). labelSuffix는
-// compact의 위치 표시(" · 2/3")용.
-function _renderLeaf(node, activePaneId, isRootOnly, usedSessionIds, labelSuffix = '') {
+// compact의 위치 표시(" · 2/3")용. N16부터는 wrapper를 직접 옮기지 않고
+// placement에 "이 세션은 이 pane-body"라고만 적어 둔다.
+function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = '') {
   let paneEl = document.getElementById(`vt-pane-${node.id}`);
   if (!paneEl) paneEl = _buildPaneEl(node.id);
   paneEl.classList.toggle('active', node.id === activePaneId);
@@ -198,12 +208,10 @@ function _renderLeaf(node, activePaneId, isRootOnly, usedSessionIds, labelSuffix
   const s = node.session ? getSession(node.session) : null;
   const nameEl = paneEl.querySelector('.vt-pane-name');
   if (s && s.wrapper) {
-    usedSessionIds.add(node.session);
+    placement.set(node.session, bodyEl);
     nameEl.textContent = _sessionLabel(node.session) + labelSuffix;
     const empty = bodyEl.querySelector('.vt-pane-empty');
     if (empty) empty.remove();
-    if (s.wrapper.parentElement !== bodyEl) bodyEl.appendChild(s.wrapper);
-    s.wrapper.style.display = 'block';
   } else {
     nameEl.textContent = '빈 pane' + labelSuffix;
     _renderEmptyBody(bodyEl, node.id);
@@ -216,51 +224,75 @@ function _renderLeaf(node, activePaneId, isRootOnly, usedSessionIds, labelSuffix
 // 버튼과 위치 표시(" · n/N")가 여기서만 나온다. 단 accent 테두리(.active)는
 // 뗀다 — 화면에 pane이 하나뿐이라 "여럿 중 활성"이라는 뜻이 성립하지 않는다
 // (비교 대상 자체가 안 보인다).
-function _renderCompactActive(leaves, activePaneId, usedSessionIds) {
+function _renderCompactActive(leaves, activePaneId, placement) {
   const idx = Math.max(0, leaves.findIndex((l) => l.id === activePaneId));
   const active = leaves[idx] ?? leaves[0];
-  const paneEl = _renderLeaf(active, activePaneId, false, usedSessionIds, ` · ${idx + 1}/${leaves.length}`);
+  const paneEl = _renderLeaf(active, activePaneId, false, placement, ` · ${idx + 1}/${leaves.length}`);
   paneEl.classList.remove('active');
   return paneEl;
 }
 
-function _leafSessionIds(node) {
-  if (node.t === 'leaf') return node.session ? [node.session] : [];
-  return [..._leafSessionIds(node.a), ..._leafSessionIds(node.b)];
+// 활성 pane만 바뀌었을 때(포커스 이동 등)의 경량 경로 — 트리 구조·세션 배정은
+// 그대로이므로 .active 클래스 토글만 하고 끝난다. 표면 레이어는 전혀 건드리지
+// 않으므로 서버로 resize가 나갈 일이 없다(§1 수용 기준 1).
+function _applyActiveOnly() {
+  const activePaneId = getActivePaneId();
+  for (const el of _rootEl.querySelectorAll('.vt-pane')) {
+    el.classList.toggle('active', el.dataset.paneId === activePaneId);
+  }
 }
 
-// 트리를 다시 그린다. layout/store.js의 onLayoutChange가 이 함수를 부른다 —
-// term/session.js의 switchTo() 등은 스토어만 갱신하고, 실제 DOM 반영은 항상
-// 이 한 곳을 거친다(직접 wrapper를 만지지 않는다).
-function renderLayout() {
-  if (!_ensureContainers()) return; // #terminal-container가 아직 없으면(부팅 전) 대기
+// 특정 split 하나의 비율만 바뀌었을 때(분할선 드래그)의 경량 경로 — 그
+// split의 두 자식 flex만 갱신한다. 실제 크기 변화 감지·refit은 각 pane-body의
+// ResizeObserver(surface.js)가 알아서 하므로, 여기서는 CSS만 만지고 끝난다.
+function _applyRatioOnly(splitId) {
+  const node = findNode(getTree(), splitId);
+  const el = document.getElementById(`vt-split-${splitId}`);
+  if (!node || node.t !== 'split' || !el || el.children.length !== 3) return;
+  el.children[0].style.flex = `${node.ratio} 1 0`;
+  el.children[2].style.flex = `${1 - node.ratio} 1 0`;
+}
+
+// 트리 구조 자체가 바뀌었을 때(분할·닫기·세션 배정·복원)의 전체 경로 —
+// 크롬 DOM을 다시 그리고, 배치 지도를 surface.setPlacement로 넘긴다.
+function _renderFull() {
   const tree = getTree();
   const activePaneId = getActivePaneId();
-  const usedSessionIds = new Set();
+  const placement = new Map(); // sessionId -> pane-body
   const leaves = flattenLeaves(tree);
   // L3 2단계: 트리는 그대로, 렌더 방식만 갈린다(설계 원칙 1) — leaf가
   // 하나뿐이면 compact 여부와 무관하게 항상 지금과 같은 전체화면 렌더.
   const compact = leaves.length > 1 && isCompactMode();
 
   const rootEl = compact
-    ? _renderCompactActive(leaves, activePaneId, usedSessionIds)
-    : _renderNode(tree, activePaneId, leaves.length === 1, usedSessionIds);
+    ? _renderCompactActive(leaves, activePaneId, placement)
+    : _renderNode(tree, activePaneId, leaves.length === 1, placement);
   if (_rootEl.children[0] !== rootEl) _rootEl.replaceChildren(rootEl);
 
-  // 트리에 없는 세션(배경 탭) wrapper는 풀로 — 이미 거기 있으면 건드리지 않는다.
   for (const [id, s] of Object.entries(allSessions())) {
-    if (s.tabEl) s.tabEl.classList.toggle('placed', usedSessionIds.has(id));
-    if (usedSessionIds.has(id) || !s.wrapper) continue;
-    if (s.wrapper.parentElement !== _poolEl) _poolEl.appendChild(s.wrapper);
-    s.wrapper.style.display = 'none';
+    if (s.tabEl) s.tabEl.classList.toggle('placed', placement.has(id));
   }
+  // 표면 레이어에게 최종 배치를 넘긴다 — 빠진 세션은 숨기고, 새로 들어온
+  // 세션은 즉시 실측해 transform·fit을 건다(surface.js 책임).
+  surface.setPlacement(placement);
+}
 
-  // re-attach(부모가 바뀌었을 수 있는) 직후엔 레이아웃이 아직 안 잡혀 fit이
-  // stale 크기를 잡는다 — rAF로 확정 후 fit + PTY 크기 통보(기존 탭 전환
-  // 패턴, term/resize.js 그대로 재사용).
-  for (const id of usedSessionIds) {
-    requestAnimationFrame(() => fitAndResize(id));
+// 트리를 다시 그린다. layout/store.js의 onLayoutChange가 이 함수를 부른다 —
+// term/session.js의 switchTo() 등은 스토어만 갱신하고, 실제 DOM 반영은 항상
+// 이 한 곳을 거친다(직접 wrapper를 만지지 않는다).
+//
+// N16: kind로 세 경로를 가른다 — 'active'(포커스 이동)와 'ratio'(분할선
+// 드래그, extra=splitId)는 compact가 아닌 한 크롬 DOM을 다시 만들지 않는
+// 경량 경로를 탄다. compact 모드에서는 "지금 보이는 leaf가 바뀔 수 있다"는
+// 전제가 깨지므로 항상 전체 경로로 떨어진다.
+function renderLayout(_tree, _activePaneId, kind = 'layout', extra) {
+  if (!_ensureContainers()) return; // #terminal-container가 아직 없으면(부팅 전) 대기
+  const compact = flattenLeaves(getTree()).length > 1 && isCompactMode();
+  if (!compact) {
+    if (kind === 'active') return _applyActiveOnly();
+    if (kind === 'ratio') return _applyRatioOnly(extra);
   }
+  _renderFull();
 }
 
 onLayoutChange(renderLayout);
@@ -268,9 +300,10 @@ onLayoutChange(renderLayout);
 // L3 2단계: compact 여부는 뷰포트 폭에 달려 있다 — 트리가 안 바뀌어도
 // 창 크기 변경/회전만으로 렌더 모드가 바뀔 수 있으므로 resize에도 다시
 // 그린다. 디바운스 120ms는 term/ws.js의 세션별 resize 핸들러와 같은 값
-// (모바일 키보드/뷰포트 흔들림 대비 관행).
+// (모바일 키보드/뷰포트 흔들림 대비 관행). 전체 경로로 고정 — 창 크기 변경은
+// kind 분류 대상이 아니다(항상 트리 재검토가 필요할 수 있다).
 let _resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(_resizeTimer);
-  _resizeTimer = setTimeout(renderLayout, 120);
+  _resizeTimer = setTimeout(_renderFull, 120);
 });

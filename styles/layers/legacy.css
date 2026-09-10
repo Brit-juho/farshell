@@ -393,11 +393,20 @@ html[data-skin="windows"] .caption { display:flex; }
 .theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--menu-hover); }
 
 /* ---- 터미널 ------------------------------------------------------------ */
-#terminal-container { flex:1; min-height:0; padding:calc(var(--spacing) * 0.5); background:var(--term); overflow:hidden; }
+#terminal-container { position:relative; flex:1; min-height:0; padding:calc(var(--spacing) * 0.5); background:var(--term); overflow:hidden; }
 #terminal-container .xterm { height:100%; }
-/* L3 1단계: layout/panes.js가 그리는 분할 트리 껍데기. leaf 하나뿐일 때(분할
-   안 씀, 지금 유일한 경우)는 .vt-pane 하나가 #terminal-container 전체를
-   차지해 예전(wrapper가 직계 자식이던 시절)과 화면상 동일하다. */
+/* N16 표면 레이어(layout/surface.js) — 페인 크롬(.vt-split/.vt-pane)은 빈
+   상자만 그리고, 실제 xterm wrapper는 여기 절대좌표로 얹힌다. 그 자체는
+   투명·클릭 통과(pointer-events:none)이므로 pane 헤더 버튼·리사이저 위를
+   덮어도 무해하다 — 실제로 클릭을 막는 건 wrapper 각각이 자기 pane-body
+   자리에만 정확히 얹는 pointer-events:auto뿐이다. z-index는 분할선(5)·
+   드롭존 오버레이(8)보다 낮게 둬 그 둘이 항상 위에서 잡힌다. */
+#vt-surface { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:2; }
+.vt-term-wrap { position:absolute; top:0; left:0; pointer-events:auto; }
+/* L3 1단계: layout/panes.js가 그리는 분할 트리 껍데기. #vt-chrome-tree(N16 —
+   panes.js가 lazy 생성, #vt-surface의 형제) 안에 얹힌다. leaf 하나뿐일 때(분할
+   안 씀, 지금 유일한 경우)는 .vt-pane 하나가 그 트리 전체를 차지해 예전
+   (wrapper가 직계 자식이던 시절)과 화면상 동일하다. */
 .vt-split { display:flex; width:100%; height:100%; min-width:0; min-height:0; }
 .vt-split-row { flex-direction:row; }
 .vt-split-col { flex-direction:column; }
