@@ -1,5 +1,10 @@
 > **FarShell v2.0.0** (2026-09-08) — 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고
 
+> **다른 에이전트:** 이 문서는 Claude 전용이 아니라 모든 AI 코딩 에이전트를 위한 프로젝트
+> 개요다. CLI 공통 규칙과 깨면 안 되는 계약은 [`AGENTS.md`](./AGENTS.md)에 있다
+> ([agents.md](https://agents.md) 규약 — Codex·opencode·Amp·Cursor 등이 읽는다).
+> `GEMINI.md`와 `.aider.conf.yml`도 그쪽을 가리킨다.
+
 ## fsh CLI (어디서든 실행)
 
 터미널 어디서든 `fsh` 명령으로 FarShell을 제어합니다:
