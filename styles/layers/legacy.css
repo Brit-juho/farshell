@@ -1610,6 +1610,8 @@ body.vt-resizing #terminal-container{ transition:none; }
   text-transform:uppercase; color:var(--sub);
 }
 .vt-qo-row{ cursor:pointer; }
+.vt-qo-row.selected{ background:var(--menu-hover); }
+.vt-qo-card-slot{ display:contents; }
 .vt-qo-hint{ margin-left:auto; flex:0 0 auto; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
 /* L6: 세션 목록에 얹는 라이브 프리뷰 썸네일(ADR-7) — .vt-card를 그대로 재사용하되
    목록 행 안에 들어가므로 그리드 카드(최대 240px)보다 훨씬 낮게 자른다. 나머지
@@ -1617,6 +1619,27 @@ body.vt-resizing #terminal-container{ transition:none; }
    같은 시각 언어를 쓰는 게 핵심이다. */
 .vt-qo-session-card{ border-radius:var(--radius-sm); margin:0 calc(var(--spacing) * 1); }
 .vt-qo-session-card .card-preview{ max-height:52px; }
+
+/* N46 — 2단 레이아웃(결과 | 미리보기). 코드 뷰어의 tree/code 분할(위 §)과
+   같은 패턴: body가 flex 컨테이너가 되고 각 pane이 독립 스크롤한다. 900px
+   미만에서는 미리보기를 통째로 숨긴다(60-settings-palette.md §3) — 모바일
+   폭에서 결과 목록만 쓰는 게 이미 2.0의 관행이었다. */
+.vt-qo-body.two-col{ display:flex; overflow:hidden; padding:0; }
+.vt-qo-results-pane{ flex:1 1 50%; min-width:0; overflow-y:auto; border-right:1px solid var(--line); }
+.vt-qo-preview-pane{
+  flex:1 1 50%; min-width:0; overflow:auto; padding:calc(var(--spacing) * 1.5);
+  font:400 var(--fs-xs)/1.55 var(--mono); color:var(--sub); background:var(--crust);
+}
+.vt-qo-preview-pane .vt-qo-preview-head{
+  font:600 var(--fs-2xs) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 1);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.vt-qo-preview-pane .vt-qo-preview-line{ white-space:pre; }
+.vt-qo-preview-pane .vt-qo-preview-line.match{ color:var(--txt); background:color-mix(in srgb, var(--acc) 16%, transparent); }
+@media (max-width:899px){
+  .vt-qo-preview-pane{ display:none; }
+  .vt-qo-results-pane{ border-right:none; }
+}
 
 /* =========================================================================
    L4 — 좌측 rail (ADR-8). compact(<720px)에서는 통째로 숨고 팔레트+바텀시트가

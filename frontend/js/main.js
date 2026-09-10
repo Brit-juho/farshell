@@ -79,14 +79,16 @@ import './agent/preview.js';
 // `viewer.show` 액션 등록 + 실제 `import()`를 전담한다.
 import './panels/viewer-lazy.js';
 // F5 — 나머지 classic script 9개(theme/toast는 위에서 이미 처리)를 마저 ES
-// 모듈로 전환. picker.js↔term/session.js는 순환 import(picker.js 상단 주석),
-// quickopen.js는 panels/viewer/*·term/session.js를 소비하므로 그 뒤에 둔다.
-import './search.js';
+// 모듈로 전환. picker.js↔term/session.js는 순환 import(picker.js 상단 주석).
+import './term/search-bar.js';
 import './picker.js';
 import './ports.js';
 import './queue.js';
 import './snippets.js';
-import './quickopen.js';
+// N5/N40/N46 — quickopen.js(vanilla)는 shell/Palette.tsx(지연 청크)로
+// 대체됐다. palette-lazy.js는 panels/viewer-lazy.js와 같은 스텁 패턴이라
+// term/session.js·agent/preview.js 뒤에 둔다(그 값들을 deps로 담아간다).
+import './palette-lazy.js';
 import './pushui.js';
 // L4 — 좌측 rail. queue.js/ports.js(data-action 대상)·agent/preview.js(세션
 // 카드)·term/session.js 뒤에 둔다 — 전부 rail.js가 값으로 소비한다.
