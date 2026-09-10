@@ -103,9 +103,12 @@ test('applyPaneDrop — sessionId가 없으면 아무 것도 하지 않는다', 
   assert.strictEqual(S.getTree(), before);
 });
 
-test('canSplit — pane 상한(wide=6)에 걸리면 가장자리 드롭도 분할하지 않는다', async () => {
+test('canSplit — pane 상한에 걸리면 가장자리 드롭도 분할하지 않는다', async () => {
   const { S, D } = await loadDnd();
-  // wide(기본 jsdom innerWidth) 상한은 6 — 5번 분할해 leaf 6개를 만든다.
+  // splitActivePane은 게이트 없이 직접 트리를 조작하는 raw store 함수라 상한을
+  // 무시하고 6개까지 만들 수 있다 — canSplit()이 그걸 보고 false를 내는지가
+  // 이 테스트의 관심사(기본 jsdom innerWidth=1024는 새 체계에서 regular=4,
+  // 6 > 4이니 이 경계에서도 여전히 false여야 함).
   let id = S.getActivePaneId();
   for (let i = 0; i < 5; i++) id = S.splitActivePane('row');
   assert.strictEqual(S.countLeaves(), 6);
@@ -116,13 +119,19 @@ test('canSplit — pane 상한(wide=6)에 걸리면 가장자리 드롭도 분�
   assert.strictEqual(S.getTree(), before, '상한 초과 시 트리가 바뀌지 않아야 한다');
 });
 
-test('tierCap — 폭 구간별 상한 2/4/6 (breakpoints.js와 같은 경계값)', async () => {
+// N16 — 10-shell-layout.md §3: compact/regular/wide/xwide 4구간. xwide(N4)는
+// 상한이 없다(Infinity) — countLeaves()가 아무리 커져도 canSplit()이 계속
+// true여야 하므로 숫자 비교 대신 isFinite로 확인한다.
+test('tierCap — 폭 구간별 상한 2/4/6/무제한 (breakpoints.js와 같은 경계값)', async () => {
   const { D } = await loadDnd();
   const env = _doms[_doms.length - 1].window;
   const setW = (w) => Object.defineProperty(env, 'innerWidth', { value: w, configurable: true });
   setW(390);  assert.strictEqual(D.tierCap(), 2);
   setW(719);  assert.strictEqual(D.tierCap(), 2);
   setW(720);  assert.strictEqual(D.tierCap(), 4);
-  setW(1023); assert.strictEqual(D.tierCap(), 4);
-  setW(1024); assert.strictEqual(D.tierCap(), 6);
+  setW(1279); assert.strictEqual(D.tierCap(), 4);
+  setW(1280); assert.strictEqual(D.tierCap(), 6);
+  setW(1599); assert.strictEqual(D.tierCap(), 6);
+  setW(1600); assert.strictEqual(D.tierCap(), Infinity);
+  setW(2560); assert.strictEqual(D.tierCap(), Infinity);
 });

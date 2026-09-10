@@ -206,7 +206,7 @@ fsh의 모든 클라이언트는 격리된 tmux 소켓 `-L fsh`(`VT_TMUX_SOCKET`
 | `js/ui/` | `toast.js`(통합 토스트 — voice.js가 별도 번들이라 여전히 window 브리지 필요), `favicon.js`(동적 탭 배지 canvas, UMD 방식), `moreMenu.js` |
 | `js/push/` | `swreg.js` — Web Push용 Service Worker 등록 |
 | `js/lib/` | `ansilex.js`, `difflex.js`, `keyseq.js` — 순수 로직, UMD로 감싸 브라우저(`window.VTAnsiLex`)와 Node 테스트(`require(...)`) 양쪽에서 재사용 |
-| `js/layout/` | 2.0 셸. `store.js`/`tree.js`(분할 pane 트리 — 순수 함수 + 그 상태를 들고 있는 유일한 곳), `panes.js`(재귀 렌더러 — 기존 세션 wrapper를 재생성하지 않고 옮긴다), `dnd.js`(5구역 드롭존), `resizer.js`, `compact.js`(<720px + 터치 렌더 모드), `pane-picker.js`, `rail.js`(좌측 rail), `right-rail.js`(우측 사용량 레일, ≥1024px), `clients.js`(연결된 화면), `persist.js`(레이아웃 영속화 — leaf에 `{id, tmux}`를 적어 새 PTY id로 바뀌어도 tmux 세션을 다시 찾는다), `breakpoints.js` |
+| `js/layout/` | 2.0 셸. `store.js`/`tree.js`(분할 pane 트리 — 순수 함수 + 그 상태를 들고 있는 유일한 곳), `panes.js`(재귀 렌더러 — 기존 세션 wrapper를 재생성하지 않고 옮긴다), `dnd.js`(5구역 드롭존), `resizer.js`, `compact.js`(<720px + 터치 렌더 모드), `pane-picker.js`, `rail.js`(좌측 rail), `right-rail.js`(우측 사용량 레일, ≥1280px), `clients.js`(연결된 화면), `persist.js`(레이아웃 영속화 — leaf에 `{id, tmux}`를 적어 새 PTY id로 바뀌어도 tmux 세션을 다시 찾는다), `breakpoints.js` |
 | `js/theme.js`, `search.js`, `picker.js`, `ports.js`, `queue.js`, `snippets.js`, `quickopen.js`, `pushui.js`, `gate.js`, `main.js` | 최상위 기능 모듈들 + 앱 진입점. `gate.js`는 의도적으로 classic(비모듈) 스크립트로 남은 유일한 파일 — 어떤 ES 모듈(defer)보다 먼저 로그인 게이트를 실행해야 하기 때문 |
 | `sw.js` | Service Worker — 오프라인 캐싱, 프리캐시 목록 |
 | `manifest.json` | PWA 매니페스트 |

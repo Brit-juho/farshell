@@ -13,19 +13,21 @@
 // 판정 함수(computeDropZone)와 반영 함수(applyPaneDrop)는 DOM 이벤트와 분리된
 // 순수 로직이라 단위 테스트 대상이다(layout-dnd.test.js).
 import { splitPane, setPaneSession, countLeaves } from './store.js';
-import { COMPACT_MAX, REGULAR_MAX } from './breakpoints.js';
+import { COMPACT_MAX, REGULAR_MAX, WIDE_MAX } from './breakpoints.js';
 
 export const SESSION_MIME = 'text/vt-tab-id';
 
-// 반응형 3구간별 pane 상한(breakpoints.js와 같은 경계값). "새로 분할하는
-// 액션"만 막는 게이트다 — 이미 만들어진 트리는 화면이 좁아져도 잘리지 않는다
-// (L3 3단계 원칙 그대로, panes.js의 헤더 분할 버튼과 이 파일의 가장자리 드롭
-// 둘 다 여기 하나만 거친다).
+// 반응형 4구간별 pane 상한(breakpoints.js와 같은 경계값, 10-shell-layout.md
+// §3). "새로 분할하는 액션"만 막는 게이트다 — 이미 만들어진 트리는 화면이
+// 좁아져도 잘리지 않는다(L3 3단계 원칙 그대로, panes.js의 헤더 분할 버튼과
+// 이 파일의 가장자리 드롭 둘 다 여기 하나만 거친다). xwide(N4)는 상한이 없다
+// — Infinity를 그대로 반환해 countLeaves() < Infinity가 항상 참이 되게 한다.
 export function tierCap() {
   const w = window.innerWidth;
   if (w < COMPACT_MAX) return 2;
   if (w < REGULAR_MAX) return 4;
-  return 6;
+  if (w < WIDE_MAX) return 6;
+  return Infinity;
 }
 export function canSplit() {
   return countLeaves() < tierCap();

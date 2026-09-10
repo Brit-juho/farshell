@@ -45,7 +45,7 @@ function initRail() {
   let panelW = DEFAULT_W;
 
   function isOverlayWidth() {
-    return window.innerWidth < REGULAR_MAX; // regular(720~1023) = 오버레이, wide = 밀어냄
+    return window.innerWidth < REGULAR_MAX; // regular(720~1279) = 오버레이, wide 이상 = 밀어냄
   }
 
   function applyPanelWidth(w) {
@@ -229,7 +229,16 @@ function initRail() {
   // 작업하는 게 목적이라 바깥을 클릭해도 안 닫혀야 한다.
   document.addEventListener('click', (e) => {
     if (!openItem || !document.body.classList.contains('vt-rail-overlay')) return;
-    if (panel.contains(e.target) || rail.contains(e.target)) return;
+    // N16 — e.target이 아니라 e.composedPath()로 판정한다: 세션 목록의 행을
+    // 누르면 그 클릭 핸들러(switchTo → renderSessionPanel)가 패널 내용을
+    // 다시 그리며 눌린 행 자체를 DOM에서 떼어낸다. 이 리스너는 그 뒤(버블
+    // 단계)에 실행되므로 e.target은 이미 어디에도 안 붙어 있는 노드가 되고
+    // panel.contains(e.target)이 false로 나와 "바깥 클릭"으로 오판해 방금 연
+    // 패널을 그대로 닫아버린다(REGULAR_MAX를 1280으로 올리며 overlay 폭 구간이
+    // 넓어져 실제로 재현됨). composedPath()는 dispatch 시점의 경로를 그대로
+    // 담고 있어 그 사이 DOM이 바뀌어도 영향받지 않는다.
+    const path = e.composedPath();
+    if (path.includes(panel) || path.includes(rail)) return;
     closePanel();
   });
   document.addEventListener('keydown', (e) => {

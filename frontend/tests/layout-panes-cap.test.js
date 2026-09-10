@@ -96,3 +96,21 @@ test('닫아서 상한 아래로 내려오면 다시 활성으로 돌아온다',
   store.closePane(second);
   assert.ok(splitButtons(window.document).every((b) => b.disabled === false), '상한이 풀리면 되살아나야 한다');
 });
+
+// N16 — 10-shell-layout.md §3: 4구간(compact/regular/wide/xwide)으로 재편.
+// 1024는 옛 체계에선 wide(상한 6)였지만 새 체계에선 regular(상한 4)다.
+test('1024px는 새 체계에서 regular(상한 4)다 — wide(상한 6)로 새지 않는다', async () => {
+  const { window, addSession, store } = await buildWindow(1024);
+  addSession('a');
+  let last = 'a';
+  for (let i = 0; i < 3; i++) last = store.splitActivePane('row'); // leaf 4개 = 상한 도달
+  assert.ok(splitButtons(window.document).every((b) => b.disabled === true), '4개에서 막혀야 한다(구 체계라면 6개까지 열렸을 것)');
+});
+
+// N4 — xwide(≥1600)는 상한이 없다.
+test('1600px 이상(xwide)에서는 페인 상한이 없다', async () => {
+  const { window, addSession, store } = await buildWindow(1600);
+  addSession('a');
+  for (let i = 0; i < 8; i++) store.splitActivePane('row'); // 옛 상한(6)을 넘겨도
+  assert.ok(splitButtons(window.document).every((b) => b.disabled === false), 'xwide에서는 계속 활성이어야 한다');
+});

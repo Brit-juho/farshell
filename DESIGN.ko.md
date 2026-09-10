@@ -170,7 +170,8 @@ H 240° S 4% 유지). `st-idle`은 6스킨 전부 `muted`와 같은 값이라 �
 - **반경:** `--radius-sm`(6) / `md`(10) / `lg`(14) / `full`. 4단 위계 밖으로 나가지 않는다.
 - **그림자:** `--shadow-e1..e3` — 전부 중립(검정 저투명도). 컬러 그림자는 없다.
 - **모션:** `--dur-fast`(120ms) / `--dur-base`(200ms), `--ease-out-quint`.
-- **브레이크포인트:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1024px).
+- **브레이크포인트:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
+  `--breakpoint-xwide`(1600px, 2.1.0 — N4 페인 상한 무제한이 여기서 시작).
   JS 쪽 상수는 `frontend/js/layout/breakpoints.js`에 **한 벌만** 둔다.
 
 ### 코드 파생 값 (기계 검증)
@@ -184,7 +185,7 @@ CI에서 이 표를 코드와 직접 대조한다(I3). 산문이 아니라 표�
 | 키 | 값 | 소스 |
 |---|---|---|
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad` | `frontend/js/theme.js` — `VT_SKINS` |
-| `breakpoints` | `720/1024` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
+| `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` |
 | `rail-items` | `7` | `frontend/index.html` — `.vt-rail-btn` 개수 |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error`는 예약) |
@@ -251,16 +252,17 @@ OS 모사 스킨은 각 OS의 시스템 폰트를 쓴다. 거기서 `system-ui`�
   탭을 pane 가장자리에 드롭(드롭존 5개)해서 나누고, 구분선은 드래그로 옮긴다.
   `root`가 leaf 하나면 pane 헤더가 숨어 **1.7.0과 시각적으로 동일한 전체화면
   터미널**이 된다.
-- **우측 레일**: wide(≥1024px)에서만. 사용량 게이지 자리 — 소스가 없으면
+- **우측 레일**: wide(≥1280px)에서만. 사용량 게이지 자리 — 소스가 없으면
   통째로 사라진다.
 
-### 반응형 3구간
+### 반응형 구간
 
 | 구간 | 폭 | pane 상한 | 렌더 |
 |------|-----|-----------|------|
 | compact | <720px | 2 | 터치라면 한 번에 **한 pane만** 전체화면 + 헤더에 `· 1/2` 위치 표시, 좌우 스와이프로 이동 |
-| regular | 720~1023px | 4 | 분할 트리 그대로. 패널은 오버레이(뒤 pane을 안 밀어냄) |
-| wide | ≥1024px | 6 | 분할 트리 + 우측 레일. 패널은 밀어냄 |
+| regular | 720~1279px | 4 | 분할 트리 그대로. 패널은 오버레이(뒤 pane을 안 밀어냄) |
+| wide | 1280~1599px | 6 | 분할 트리 + 우측 레일. 패널은 밀어냄 |
+| xwide | ≥1600px(2.1.0) | 무제한(N4) | wide와 동일 + pane 분할 상한 해제 |
 
 상한을 넘으면 분할 버튼이 **이유를 tooltip에 담은 채 비활성**된다 — 조용히
 아무 일도 안 일어나게 두지 않는다. 경계값은 `layout/breakpoints.js` 한 곳에만 있다.

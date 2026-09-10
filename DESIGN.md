@@ -189,7 +189,8 @@ in all six skins, so it moves with it.
   that four-step hierarchy.
 - **Shadows:** `--shadow-e1..e3`, all neutral (low-opacity black). No colored shadows.
 - **Motion:** `--dur-fast` (120ms) / `--dur-base` (200ms), `--ease-out-quint`.
-- **Breakpoints:** `--breakpoint-regular` (720px) / `--breakpoint-wide` (1024px).
+- **Breakpoints:** `--breakpoint-regular` (720px) / `--breakpoint-wide` (1280px) /
+  `--breakpoint-xwide` (1600px, 2.1.0 — N4 unlimited pane cap starts here).
   The JS side keeps **exactly one copy** in `frontend/js/layout/breakpoints.js`.
 
 ### Code-derived values (machine-checked)
@@ -204,7 +205,7 @@ value is wrong — measured, not assumed.
 | Key | Value | Source |
 |---|---|---|
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad` | `frontend/js/theme.js` — `VT_SKINS` |
-| `breakpoints` | `720/1024` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
+| `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` |
 | `rail-items` | `7` | `frontend/index.html` — `.vt-rail-btn` count |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` reserved) |
@@ -277,16 +278,17 @@ is enough.
   the pane header, or by dropping a tab on a pane edge (five drop zones); the
   divider drags. When `root` is a single leaf the pane header hides and you get
   **the same full-screen terminal as 1.7.0**.
-- **Right rail**: wide (≥1024px) only. Home of the usage gauge — it disappears
+- **Right rail**: wide (≥1280px) only. Home of the usage gauge — it disappears
   entirely when there's no source.
 
-### Three responsive tiers
+### Responsive tiers
 
 | Tier | Width | Pane cap | Rendering |
 |------|-------|----------|-----------|
 | compact | <720px | 2 | On touch, **one pane at a time** full-screen with a `· 1/2` position marker in the header; swipe left/right to move |
-| regular | 720–1023px | 4 | The split tree as-is. Panels overlay (they don't push the pane behind) |
-| wide | ≥1024px | 6 | Split tree + right rail. Panels push |
+| regular | 720–1279px | 4 | The split tree as-is. Panels overlay (they don't push the pane behind) |
+| wide | 1280–1599px | 6 | Split tree + right rail. Panels push |
+| xwide | ≥1600px (2.1.0) | unlimited (N4) | Same as wide, plus no pane-split cap |
 
 Past the cap the split buttons are **disabled with the reason in their tooltip** —
 never silently doing nothing. The boundary values live in one place,
