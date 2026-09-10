@@ -31,12 +31,17 @@
   --text-xl:  20px;
   --text-2xl: 28px;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  /* 20-design-system.md §1 — 모서리 한 단계(5/10)로 줄었다. --radius-md는
+   * 삭제(사용처는 sm으로 치환) — "행 24/28/36 세 가지만" 규칙처럼 급간을
+   * 줄이는 게 이번 개편의 방향이다. */
+  --radius-sm: 5px;
+  --radius-lg: 10px;
   --radius-full: 9999px;
 
-  --shadow-e1: 0 1px 2px rgb(0 0 0 / .28), 0 2px 8px rgb(0 0 0 / .22);
+  /* --shadow-e1 삭제 — 오버레이(팔레트·시트·다이얼로그)에만 그림자를 쓰고
+   * 그 외엔 1px 선으로 경계를 표현한다(§3 "과한 그림자·글로우를 걷어낸다").
+   * 기존 e1 사용처(고정 배치 pill·토스트 등, 화면 위에 뜨는 것들)는 e2로
+   * 올렸다 — legacy.css diff 참고. */
   --shadow-e2: 0 4px 12px rgb(0 0 0 / .34), 0 12px 32px rgb(0 0 0 / .28);
   --shadow-e3: 0 -2px 16px rgb(0 0 0 / .40);
 
@@ -58,17 +63,22 @@
      (모든 배경 4단에서 AA 4.5:1 이상) · muted는 3:1(UI 컴포넌트/보조 텍스트
      기준) 이상을 맞추려 스펙 초안(#6a6a72, bg-3에서 2.92:1로 미달)보다
      밝힌 #7c7c84(bg-3에서 3.78:1)로 조정했다. */
-  --color-bg-0: #0a0a0b;
-  --color-bg-1: #131316;
-  --color-bg-2: #1a1a1e;
-  --color-bg-3: #232328;
+  /* 20-design-system.md §1 — farshell 값 재조정. bg-2("행 헤더·서브바")가
+   * bg-1("크롬")보다 어둡다 — 4단 배경 순서가 bg-0 < bg-2 < bg-1 < bg-3로
+   * bg-1·bg-2가 자리를 바꿨다(기존엔 bg-0<bg-1<bg-2<bg-3로 단조 증가였다).
+   * 서브바가 크롬(헤더·레일·dock·HUD)보다 한 단 더 가라앉아야 "행 위에
+   * 얹힌 부제목"으로 읽힌다는 디자인 실측 결론. */
+  --color-bg-0: #08090a;
+  --color-bg-1: #0e1011;
+  --color-bg-2: #0b0d0e;
+  --color-bg-3: #141719;
 
-  --color-line: rgb(255 255 255 / .08);
-  --color-line-strong: rgb(255 255 255 / .16);
+  --color-line: rgb(255 255 255 / .07);
+  --color-line-strong: rgb(255 255 255 / .14);
 
-  --color-txt: #eeeef0;
-  --color-sub: #9a9aa2;
-  --color-muted: #7c7c84;
+  --color-txt: #e8e9ea;
+  --color-sub: #8b8f93;
+  --color-muted: #666a6e;   /* 문서 값(#5c6064)은 bg-3에서 2.84:1로 미달 — 3:1까지 밝혔다 */
 
   /* 스킨 독립 액센트 상수 6개.
    *

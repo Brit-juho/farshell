@@ -33,6 +33,9 @@ function stripEsm(src) {
 }
 const AGENT_FILES = ['badges', 'status', 'preview'].map((name) =>
   stripEsm(fs.readFileSync(path.join(__dirname, `../js/agent/${name}.js`), 'utf8')));
+// badges.js가 이제 agentIcon(icons.js)을 쓴다 — classic script 주입 방식이라
+// 같이 넣어야 bare identifier가 resolve된다(terminal-lifecycle.test.js와 같은 기법).
+const ICONS_JS = stripEsm(fs.readFileSync(path.join(__dirname, '../js/ui/icons.js'), 'utf8'));
 
 class FakeWebSocket {
   constructor(url) { this.url = url; this.readyState = FakeWebSocket.CONNECTING; }
@@ -101,6 +104,7 @@ function buildGridWindow({ tmuxSessions = [], agents = {} } = {}) {
   // bare identifier로 감싼 최소 스텁.
   runScript('function getSession(id) { return sessions[id]; } function allSessions() { return sessions; }');
   runScript(ANSILEX_JS);
+  runScript(ICONS_JS);
   for (const src of AGENT_FILES) runScript(src);
 
   return window;
@@ -191,13 +195,17 @@ test('refreshGrid: 사라진 세션의 카드는 다음 새로고침에서 제�
 });
 
 test('refreshGrid: 에이전트 배지 정보를 카드에 반영한다', async () => {
+  // D3(20-design-system.md §4) — 이모지가 아니라 agent 이름으로 SVG 마크를
+  // 그린다(icons.js의 agentIcon). 배지가 비어 있는지가 아니라, 실제로 svg가
+  // 채워졌는지와 title(접근성 라벨)이 맞는지를 본다.
   const window = buildGridWindow({
     tmuxSessions: [{ name: 'dev', command: 'claude', cwd: '/repo' }],
-    agents: { dev: { icon: '🤖', label: 'Claude Code' } },
+    agents: { dev: { agent: 'claude', label: 'Claude Code' } },
   });
   await window.refreshGrid();
 
   const badge = window.document.querySelector('[data-name="dev"] .card-agent');
-  assert.strictEqual(badge.textContent, '🤖');
+  assert.ok(badge.querySelector('svg'), '에이전트 마크(svg)가 그려져야 한다');
+  assert.strictEqual(badge.title, 'Claude Code');
   assert.strictEqual(badge.getAttribute('title'), 'Claude Code');
 });

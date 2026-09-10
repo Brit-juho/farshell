@@ -209,9 +209,9 @@ value is wrong — measured, not assumed.
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` |
 | `rail-items` | `6` | `frontend/index.html` — `.vt-rail-btn` count |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` reserved) |
-| `color-bg-0` | `#0a0a0b` | `styles/theme/tokens.css` |
+| `color-bg-0` | `#08090a` | `styles/theme/tokens.css` |
 | `color-acc` | `#f0a860` | `styles/theme/tokens.css` |
-| `color-txt` | `#eeeef0` | `styles/theme/tokens.css` |
+| `color-txt` | `#e8e9ea` | `styles/theme/tokens.css` |
 
 ### Legacy aliases
 

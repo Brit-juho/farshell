@@ -45,9 +45,10 @@ export function createTabElement(id, displayName, insertBeforeId, handlers) {
   tab.tabIndex = -1;
   // 좌우 이동 단축키 안내(호버 툴팁)
   tab.title = `탭 이동: ${isMac ? 'Cmd' : 'Ctrl'} + Shift + ← / →`;
+  // D3 — 이모지 시절의 인라인 font-size는 이제 안 맞는다(SVG 마크,
+  // legacy.css .tab-agent가 크기·정렬을 관리한다).
   const agentBadge = document.createElement('span');
   agentBadge.className = 'tab-agent';
-  agentBadge.style.cssText = 'margin-right:4px;font-size:12px;';
   const nameSpan = document.createElement('span');
   nameSpan.className = 'tab-name';
   nameSpan.textContent = displayName || id.slice(0, 8);
