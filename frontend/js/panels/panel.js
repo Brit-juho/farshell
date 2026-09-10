@@ -47,12 +47,27 @@ export function _focusables(el) {
     .filter((n) => n.offsetParent !== null); // 화면에 실제로 보이는 것만
 }
 
+// N35 §6 — dock 호스트. 큐·포트·사용량은 2.1.0부터 backdrop 모달이 아니라
+// dock 탭 안에서 산다. 세 패널의 렌더러(queue.js·ports.js·panels/usage.js)를
+// 다시 쓰지 않기 위해, "어디에 붙일지"만 여기서 갈라준다 — 호출부는 그대로
+// openPanel()을 부르고, dock이 마운트돼 있으면 그 본문에, 아니면 예전처럼
+// backdrop에 붙는다(compact·dock 로드 실패 시 그대로 동작한다).
+//
+// window.vtDockHost는 shell/Dock.tsx가 등록한다. 여기서 직접 import 하지
+// 않는 이유는 그 파일이 지연 청크라서다(ADR-26).
+function _dockHost(id) {
+  const fn = window.vtDockHost;
+  if (typeof fn !== 'function') return null;
+  try { return fn(id) || null; } catch (_) { return null; }
+}
+
 export function openPanel(opts) {
       if (document.getElementById(opts.id)) { closePanel(opts.id); return null; }
 
+      const host = _dockHost(opts.id);
       const el = document.createElement('div');
       el.id = opts.id;
-      el.className = 'vt-viewer-backdrop' + (opts.extraClass ? ' ' + opts.extraClass : '');
+      el.className = (host ? 'vt-dock-panel' : 'vt-viewer-backdrop') + (opts.extraClass ? ' ' + opts.extraClass : '');
       el.innerHTML = `
         <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="${opts.ariaLabel}">
           <div class="vt-viewer-head">${opts.headHTML}<button class="vt-vw-x" aria-label="닫기">${icon('x', 14)}</button></div>
@@ -64,6 +79,15 @@ export function openPanel(opts) {
       // D7: 닫을 때 열기 전 포커스로 복귀 — 트리거 버튼(⋯ 메뉴 항목 등)을 놓치지 않는다.
       el._vtTriggerEl = document.activeElement;
       el.querySelector('.vt-vw-x').addEventListener('click', () => closePanel(opts.id));
+
+      // dock 안에서는 모달의 세 가지 관용구를 전부 뺀다: 배경 클릭 닫기(배경이
+      // 없다), Esc 닫기(터미널에 가야 할 키다 — 도킹 모드 뷰어가 이미 같은
+      // 판단을 했다), 포커스 트랩(터미널로 Tab이 나갈 수 있어야 한다).
+      if (host) {
+        host.appendChild(el);
+        return { el, body: document.getElementById(opts.bodyId) };
+      }
+
       el.addEventListener('click', (ev) => { if (ev.target === el) closePanel(opts.id); });
 
       const keyHandler = (ev) => {

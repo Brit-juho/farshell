@@ -141,6 +141,17 @@ try {
       .then(({ mountRail }) => mountRail(railRoot, { vtFetch, getAction }))
       .catch((e) => console.error('[FarShell rail]', e));
   }
+  // N35 §6 — dock. 같은 지연 청크(shell.js)를 공유한다. 레일 뒤에 마운트하는
+  // 이유는 dock이 부팅 시 활성 탭의 패널 렌더러(queue.js 등)를 곧바로 부르기
+  // 때문이다 — 그 액션들이 registerAction으로 등록돼 있어야 한다(정적 import가
+  // 위에서 이미 끝났으므로 이 시점엔 전부 등록돼 있다).
+  const dockRoot = document.getElementById('vt-dock-slot');
+  if (dockRoot) {
+    import('./shell/Dock.tsx')
+      .then(({ mountDock }) => mountDock(dockRoot, { vtFetch, getAction }))
+      .catch((e) => console.error('[FarShell dock]', e));
+  }
+
   // 부팅 완료 표시. `appBootFailed`(아래)와 짝이다 — 지금까지 실패만 표시하고
   // 성공은 표시하지 않아서, 밖에서는 "아직 부팅 중"과 "부팅 끝"을 구분할 수 없었다.
   //
