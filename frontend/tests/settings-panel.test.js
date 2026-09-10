@@ -18,20 +18,26 @@ const TOAST_JS = path.join(__dirname, '../js/ui/toast.js');
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
-async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' } } } = {}) {
+async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' } }, fetchExtra } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
   window.API_BASE = '';
   window._tokenQuery = '';
   const puts = [];
+  const posts = [];
   window.fetch = (url, opts) => {
     const u = String(url);
     if (opts && opts.method === 'PUT') {
       puts.push(JSON.parse(opts.body));
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
     }
+    if (opts && opts.method === 'POST') posts.push(u);
     if (u.includes('/api/hooks/status')) return Promise.resolve({ ok: true, json: () => Promise.resolve(hooks) });
+    if (fetchExtra) {
+      const r = fetchExtra(u, opts);
+      if (r) return r;
+    }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   };
   window.matchMedia = (q) => ({ matches: false, addEventListener() {}, removeEventListener() {} });
@@ -40,7 +46,7 @@ async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolU
   const S = await importFresh(SETTINGS_JS, env.context, cache);
   const K = await importFresh(KEYMAP_JS, env.context, cache);
   const P = await importFresh(SETTINGS_PANEL_JS, env.context, cache);
-  return { window, document: window.document, S, K, P, puts };
+  return { window, document: window.document, S, K, P, puts, posts };
 }
 
 const flush = () => new Promise((r) => setImmediate(r));
@@ -59,7 +65,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '마우스 · 선택', '접근성', '키맵', '정보'],
+    ['터미널', '마우스 · 선택', '접근성', '음성', '키맵', '정보'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -211,4 +217,111 @@ test('정보 — 훅 상태 조회가 실패해도 패널이 죽지 않는다', 
   sectionButton(env.window.document, '정보').click();
   await flush();
   assert.match(env.window.document.querySelector('.vt-set-about').textContent, /확인할 수 없습니다/);
+});
+
+// N42(60-settings-palette.md §7) — 설정 → 음성 탭: 알림·음성 진단 5항목.
+test('음성 — 5항목이 모두 그려진다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  for (const label of ['웹 푸시', '작업 완료 알림', 'Whisper 모델', '맥에서 음성만 쓰기']) {
+    assert.ok(rowByLabel(document, label), `${label} 행이 있어야 한다`);
+  }
+});
+
+test('음성 — 웹 푸시 상태가 /api/push/status에서 채워진다', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/push/status')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, configured: true, subscriptions: 2 }) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  await flush();
+  const help = rowByLabel(document, '웹 푸시').querySelector('.vt-set-help');
+  assert.match(help.textContent, /구독 2대 · VAPID 확인됨/);
+});
+
+test('음성 — 웹 푸시 테스트 발송 버튼이 실호출 + 토스트를 낸다', async () => {
+  const toasts = [];
+  const { document, window, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/push/test')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, sent: 1 }) })
+      : null),
+  });
+  window.showToast = (msg) => toasts.push(msg);
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  const btn = rowByLabel(document, '웹 푸시').querySelector('button');
+  btn.click();
+  await flush();
+  assert.ok(toasts.some((m) => /발송됨/.test(m)));
+});
+
+test('음성 — 작업 완료 알림 소리 듣기 버튼이 /api/notify/test를 호출한다', async () => {
+  const { document, P, posts } = await build({
+    fetchExtra: (u) => (u.includes('/api/notify/test')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, configured: true }) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  const btn = rowByLabel(document, '작업 완료 알림').querySelector('button');
+  btn.click();
+  await flush();
+  assert.ok(posts.some((u) => u.includes('/api/notify/test')));
+});
+
+test('음성 — Whisper 모델 상태에 따라 적재/내리기 버튼이 토글된다', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/voice/stt/status')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, loaded: true, engine: 'faster-whisper' }) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  await flush();
+  const row = rowByLabel(document, 'Whisper 모델');
+  assert.match(row.querySelector('.vt-set-help').textContent, /메모리 상주 · faster-whisper/);
+  const [preload, unload] = row.querySelectorAll('button');
+  assert.strictEqual(preload.disabled, true, '이미 적재돼 있으면 미리 적재는 비활성');
+  assert.strictEqual(unload.disabled, false);
+});
+
+test('음성 — 맥에서 음성만 쓰기 버튼이 시작→중지로 토글된다', async () => {
+  const { document, P, posts } = await build({
+    fetchExtra: (u) => {
+      if (u.includes('/voice/local/start')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'recording' }) });
+      if (u.includes('/voice/local/stop')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'not_recording', text: '' }) });
+      return null;
+    },
+  });
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  const btn = rowByLabel(document, '맥에서 음성만 쓰기').querySelector('button');
+  assert.strictEqual(btn.textContent, '시작');
+  btn.click();
+  await flush();
+  assert.strictEqual(btn.textContent, '중지');
+  assert.ok(posts.some((u) => u.includes('/voice/local/start')));
+  btn.click();
+  await flush();
+  assert.strictEqual(btn.textContent, '시작');
+  assert.ok(posts.some((u) => u.includes('/voice/local/stop')));
+});
+
+test('음성 — 다른 탭으로 이동해도 죽지 않는다(clients.js 폴링 정리 경로)', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  sectionButton(document, '터미널').click();
+  assert.ok(rowByLabel(document, '글자 크기'), '터미널 섹션으로 정상 전환돼야 한다');
+});
+
+test('음성 — 패널을 닫아도 죽지 않는다(onClose cleanup 경로)', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  P.showSettings();
+  assert.strictEqual(document.getElementById('vt-settings'), null);
 });
