@@ -1517,6 +1517,24 @@ body.vt-resizing #terminal-container{ transition:none; }
 }
 .vt-q-compose-row .vt-pt-btn{ flex:0 0 auto; }
 
+/* N6(60 §4) — 스니펫 스코프 탭(프로젝트/전체). .vt-vw-modes와 같은 세그먼트
+   컨트롤 언어를 쓰되 텍스트 라벨이 들어가므로 고정 정사각 크기는 쓰지 않는다. */
+.vt-sn-scope-tabs{
+  display:flex; gap:calc(var(--spacing) * 0.5); background:var(--tab); border:1px solid var(--line);
+  border-radius:var(--trad); padding:calc(var(--spacing) * 0.5); margin:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3) 0;
+}
+.vt-sn-scope-tab{
+  flex:1 1 auto; background:transparent; color:var(--sub); border:none; border-radius:calc(var(--trad) - 2px);
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2); font:500 var(--fs-xs) var(--ui);
+  cursor:pointer; touch-action:manipulation;
+}
+.vt-sn-scope-tab:hover{ background:var(--menu-hover); color:var(--txt); }
+.vt-sn-scope-tab.active{ background:var(--color-acc-surface); color:var(--acc-ink); }
+.vt-sn-save-scope{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:1 1 auto; min-width:0;
+  color:var(--sub); font:400 var(--fs-xs) var(--ui); cursor:pointer; user-select:none;
+}
+
 .vt-q-row{
   display:flex; align-items:flex-start; gap:calc(var(--spacing) * 2.5);
   padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
@@ -1533,6 +1551,15 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-q-text{ white-space:pre-wrap; word-break:break-word; }
 .vt-q-sub{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); margin-top:calc(var(--spacing) * 1); }
 .vt-q-row.blocked .vt-q-sub{ color:var(--err); }
+/* N6(60 §4) — 큐 행의 [대상 워크트리 칩]. .vt-pt-tag(승인 대기 배지)와 같은
+   pill 모양이지만 경고색(--warn)이 아니라 중립 accent로 — "위험"이 아니라
+   "이 항목이 어디로 갈지"를 알리는 정보 배지라서다. */
+.vt-q-chip{
+  display:inline-block; margin-top:calc(var(--spacing) * 1);
+  font:600 var(--fs-3xs) var(--ui); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
+  border-radius:var(--radius-full);
+  background:color-mix(in srgb, var(--acc) 16%, transparent); color:var(--acc);
+}
 
 /* 포트 미리보기 (ports.js showPortPreview, L5) — 카드를 크게 키우고 iframe이 body를 꽉 채움. */
 .vt-viewer-backdrop.mode-preview .vt-viewer-card{
