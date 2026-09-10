@@ -65,6 +65,9 @@ export function openPanel(opts) {
       if (document.getElementById(opts.id)) { closePanel(opts.id); return null; }
 
       const host = _dockHost(opts.id);
+      // 'stale' = dock이 "이 패널은 이제 필요 없다"고 말한 것(요청과 도착 사이에
+      // 탭이 바뀌었다). 모달로 폴백하면 안 된다 — 사용자가 안 누른 화면이 뜬다.
+      if (host === 'stale') return null;
       const el = document.createElement('div');
       el.id = opts.id;
       el.className = (host ? 'vt-dock-panel' : 'vt-viewer-backdrop') + (opts.extraClass ? ' ' + opts.extraClass : '');

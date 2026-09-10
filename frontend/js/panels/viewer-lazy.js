@@ -42,3 +42,20 @@ export function loadViewer() {
 // registerAction이 같은 이름으로 덮어써서 이후 호출은 이 래퍼를 거치지
 // 않는다(registry.set은 마지막 등록이 이긴다).
 registerAction('viewer.show', () => { loadViewer().then((v) => v.showViewer()); });
+
+// N35 §6 — dock 「소스컨트롤」 탭도 같은 지연 청크에 있다(git.js·diff.js를
+// 그대로 쓰므로 따로 뺄 이유가 없다). viewer와 달리 scm.js는 자기 액션을
+// 등록하지 않으므로 여기 한 곳이 유일한 진입점이다.
+//
+// 재진입 가드가 필요한 이유: dock은 "활성 탭의 패널이 DOM에 없으면 연다"는
+// effect로 동작하는데, 청크가 도착하기 전에 그 effect가 한 번 더 돌면
+// showScm()이 두 번 불려 두 번째 호출이 **토글로 닫아버린다**.
+let _scmOpening = false;
+registerAction('scm.show', () => {
+  if (_scmOpening) return;
+  _scmOpening = true;
+  import('./viewer/scm.js')
+    .then((m) => m.showScm())
+    .catch((e) => console.error('[FarShell scm]', e))
+    .finally(() => { _scmOpening = false; });
+});

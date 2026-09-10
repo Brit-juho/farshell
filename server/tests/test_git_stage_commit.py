@@ -121,3 +121,49 @@ def test_commit_message_with_newlines_survives_intact(repo):
     assert rc == 0
     rc, out = _git(repo, "log", "-1", "--pretty=%B")
     assert out.strip() == msg
+
+
+# --- N35 §6/40 §3: dock 소스컨트롤 머리말(브랜치 · ahead/behind · +/−) ----------
+#
+# 이 값들은 dock 헤더 한 줄에만 쓰이지만, 잘못 읽으면 "회사 저장소인 줄 알고
+# 커밋" 같은 오판으로 이어질 수 있는 자리(브랜치 이름)라 파싱을 고정한다.
+
+
+@pytest.mark.parametrize(
+    "line, expected",
+    [
+        ("## master", ("master", None, 0, 0)),
+        ("## feat/x...origin/feat/x", ("feat/x", "origin/feat/x", 0, 0)),
+        ("## feat/x...origin/feat/x [ahead 3]", ("feat/x", "origin/feat/x", 3, 0)),
+        ("## feat/x...origin/feat/x [behind 2]", ("feat/x", "origin/feat/x", 0, 2)),
+        ("## feat/x...origin/feat/x [ahead 3, behind 2]", ("feat/x", "origin/feat/x", 3, 2)),
+        ("## No commits yet on master", ("master", None, 0, 0)),
+        ("## HEAD (no branch)", (None, None, 0, 0)),   # detached — 이름이 아니다
+        ("쓰레기", (None, None, 0, 0)),
+    ],
+)
+def test_parse_branch_header(line, expected):
+    from routes.files import _parse_branch_header
+
+    got = _parse_branch_header(line)
+    assert (got["branch"], got["upstream"], got["ahead"], got["behind"]) == expected
+
+
+def test_collect_status_reports_branch_and_diff_stat(repo):
+    (repo / "a.py").write_text("print('a')\nprint('a2')\n")
+    (repo / "b.py").write_text("")
+    d = _collect_status(repo)
+    assert d["repo"] is True
+    assert d["branch"] in ("master", "main")   # git 기본 브랜치 설정에 따라 다르다
+    assert d["upstream"] is None               # 원격이 없는 임시 저장소
+    assert (d["ahead"], d["behind"]) == (0, 0)
+    assert d["insertions"] == 1                # a.py 한 줄 추가
+    assert d["deletions"] == 1                 # b.py 한 줄 삭제
+
+
+def test_collect_status_untracked_file_still_parses(repo):
+    """헤더 레코드를 파일 레코드로 오인하면 목록 맨 앞에 유령 항목이 생긴다."""
+    (repo / "new.py").write_text("x\n")
+    d = _collect_status(repo)
+    assert [f["file"] for f in d["files"]] == ["new.py"]
+    assert d["files"][0]["status"] == "??"

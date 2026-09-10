@@ -9,7 +9,7 @@
 // core/store.js·term/session.js 같은 **상태를 가진 모듈을 정적 import 하지
 // 않는다**(ADR-26/N35 — Vite lib 모드가 청크 안에 복제해 넣어 앱과 다른
 // 객체가 된다). 상수 모듈(breakpoints·resizer)만 예외다.
-import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { batch, createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WIDE_MAX } from '../layout/breakpoints.js';
@@ -38,7 +38,7 @@ interface DockTab {
 // 스니펫은 dock 탭이 아니다(60 §4에서 큐 탭 안의 스코프로 들어간다) — 그때까지
 // 레일 "⋯ 더보기"의 팝업으로 남는다.
 const TABS: DockTab[] = [
-  { id: 'scm',   label: '소스컨트롤', panelId: 'vt-dock-scm', action: 'scm.show' },
+  { id: 'scm',   label: '소스컨트롤', panelId: 'vt-dock-scm', action: 'scm.show' },   // 40 §3 (2.1.0은 읽기 전용)
   { id: 'queue', label: '큐',        panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
   { id: 'ports', label: '포트',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
   { id: 'usage', label: '사용량',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
@@ -89,6 +89,11 @@ function Dock(props: { deps: DockDeps }) {
   // (팔레트·키맵·레일 ⋯)도 결국 dock 호스트를 거쳐 activeTab을 바꾸므로,
   // 열고 닫는 판단은 여기 한 곳에만 있다.
   const act = (name: string) => (props.deps.getAction(name) as (() => void) | undefined)?.();
+  // 우리가 방금 열라고 시킨 탭. 액션이 **비동기**일 수 있어서 필요하다(소스컨트롤
+  // 탭은 지연 청크를 먼저 받아온다) — 청크가 도착하기 전에 사용자가 다른 탭을
+  // 누르면, 뒤늦게 도착한 패널이 이미 바뀐 탭 위에 겹쳐 붙는다(실브라우저에서
+  // 재현: 큐를 눌렀는데 잠시 뒤 소스컨트롤로 되돌아갔다).
+  let pendingSelf: string | null = null;
   createEffect(() => {
     const active = activeTab();
     const open = !collapsed();
@@ -96,7 +101,7 @@ function Dock(props: { deps: DockDeps }) {
       if (!t.panelId || !t.action) continue;
       const el = document.getElementById(t.panelId);
       const want = open && t.id === active;
-      if (want && !el) act(t.action);
+      if (want && !el) { pendingSelf = t.id; act(t.action); }
       else if (!want && el) (window as any).closePanel?.(t.panelId);
     }
   });
@@ -105,11 +110,23 @@ function Dock(props: { deps: DockDeps }) {
   // 탭을 바꾸면 위 effect와 재진입이 되므로(호스트 요청 → 탭 변경 → 다시
   // 액션 호출) 탭 변경은 마이크로태스크로 미룬다 — 그때는 이미 패널
   // 엘리먼트가 DOM에 있어서 effect가 아무것도 하지 않는다.
-  (window as any).vtDockHost = (panelId: string): HTMLElement | null => {
+  // 반환값 계약(panels/panel.js가 읽는다):
+  //   HTMLElement — 여기에 붙여라
+  //   null        — dock 밖(모달)으로 열어라
+  //   'stale'     — **열지 마라**. 우리가 시킨 열기인데 그 사이 탭이 바뀌었다.
+  (window as any).vtDockHost = (panelId: string): HTMLElement | null | 'stale' => {
     const tab = TABS.find((t) => t.panelId === panelId);
     if (!tab || !bodyRef) return null;
     if (tab.cap && !tabs().some((t) => t.id === tab.id)) return null; // 게이팅된 탭은 dock에 안 붙는다
-    queueMicrotask(() => { setCollapsed(false); selectTab(tab.id); });
+    if (pendingSelf === tab.id) {
+      pendingSelf = null;
+      if (activeTab() !== tab.id || collapsed()) return 'stale';
+      return bodyRef;
+    }
+    // 밖에서 온 요청(팔레트·키맵·레일 ⋯)은 탭을 그쪽으로 옮기는 게 맞다.
+    // 재진입(요청 → 탭 변경 → effect가 같은 액션을 또 호출)을 피하려고
+    // 탭 변경은 마이크로태스크로 미룬다 — 그때는 이미 패널이 DOM에 있다.
+    queueMicrotask(() => batch(() => { setCollapsed(false); selectTab(tab.id); }));
     return bodyRef;
   };
   onCleanup(() => { delete (window as any).vtDockHost; });
@@ -119,7 +136,9 @@ function Dock(props: { deps: DockDeps }) {
     localStorage.setItem(TAB_KEY, id);
   };
   const onTabClick = (id: string) => {
-    if (collapsed()) { setCollapsedPersist(false); selectTab(id); return; }
+    // batch: 두 시그널을 따로 쓰면 effect가 **중간 상태**(펼침 + 옛 탭)로 한 번
+    // 돌아 엉뚱한 탭의 패널을 연다(위 pendingSelf 주석의 그 버그).
+    if (collapsed()) { batch(() => { setCollapsedPersist(false); selectTab(id); }); return; }
     if (activeTab() === id) { setCollapsedPersist(true); return; }  // 같은 탭 재클릭 = 접기
     selectTab(id);
   };
@@ -194,11 +213,8 @@ function Dock(props: { deps: DockDeps }) {
           <button type="button" class="vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" title="접기">›</button>
         </Show>
       </div>
-      <div class="vt-dock-body" ref={bodyRef}>
-        <Show when={!collapsed() && activeTab() === 'scm'}>
-          <div class="vt-dock-empty">소스컨트롤</div>
-        </Show>
-      </div>
+      {/* 탭 내용은 전부 패널 렌더러가 여기 붙인다(panels/panel.js의 dock 호스트). */}
+      <div class="vt-dock-body" ref={bodyRef} />
       <div ref={wireResizer} class="vt-dock-resizer" />
     </aside>
   );

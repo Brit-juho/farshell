@@ -150,30 +150,48 @@ async function _submitDiffAnnotate(box, ta, filePath, lineNo) {
 }
 
 // 파일 하나의 diff. status 목록에서 특정 파일을 눌렀을 때 쓴다.
-export async function _showFileDiff(repo, file, staged) {
-  _viewerState.mode = 'diff';
-  _setTitle(file.split('/').pop());
-  _setPath(file);
-  const pane = document.getElementById('vt-vw-code-pane');
-  pane.innerHTML = '<div class="vt-vw-loading">git diff 실행 중…</div>';
-  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+// N35 §6 — git.js와 같은 이유로 "어디에 그릴지"를 인자로 받는 렌더러와,
+// 코드 뷰어 크롬을 입히는 래퍼로 나눴다(dock 소스컨트롤 탭이 같은 렌더러를 쓴다).
+export async function renderFileDiff(container, repo, file, staged, opts = {}) {
+  container.innerHTML = '<div class="vt-vw-loading">git diff 실행 중…</div>';
 
   let d;
   try {
     const q = `repo=${encodeURIComponent(repo)}&file=${encodeURIComponent(file)}&staged=${staged ? 'true' : 'false'}`;
     d = await vtFetch(`/api/git/diff?${q}`);
   } catch (e) {
-    _setMsg(pane, 'vt-vw-empty', [e.message]);
+    _setMsg(container, 'vt-vw-empty', [e.message]);
     return;
   }
-  if (!d.diff || !d.diff.trim()) { _setMsg(pane, 'vt-vw-empty', ['변경된 내용이 없습니다.']); return; }
 
-  pane.innerHTML = '';
-  _renderDiffDOM(pane, d.diff);
+  container.innerHTML = '';
+  if (opts.onBack) {
+    const back = document.createElement('button');
+    back.className = 'vt-pt-btn vt-vw-cback';
+    back.textContent = '‹ 상태로';
+    back.addEventListener('click', opts.onBack);
+    container.appendChild(back);
+  }
+  if (!d.diff || !d.diff.trim()) {
+    const empty = document.createElement('div');
+    empty.className = 'vt-vw-empty';
+    empty.textContent = '변경된 내용이 없습니다.';
+    container.appendChild(empty);
+    return;
+  }
+  _renderDiffDOM(container, d.diff);
   if (d.truncated) {
     const note = document.createElement('div');
     note.className = 'vt-vw-note warn';
     note.textContent = 'diff가 커서 일부만 표시했습니다.';
-    pane.appendChild(note);
+    container.appendChild(note);
   }
+}
+
+export async function _showFileDiff(repo, file, staged) {
+  _viewerState.mode = 'diff';
+  _setTitle(file.split('/').pop());
+  _setPath(file);
+  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+  await renderFileDiff(document.getElementById('vt-vw-code-pane'), repo, file, staged);
 }
