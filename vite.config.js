@@ -19,6 +19,7 @@
 // 산출물에 각각 인라인돼 중복되지만, 몇 KB 수준이라 I2의 300KB 상한에 문제없다).
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
+import solid from 'vite-plugin-solid';
 
 const isVoice = !!process.env.VOICE_BUILD;
 
@@ -50,41 +51,58 @@ function sameOriginProxy(target, extra = {}) {
   };
 }
 
-export default defineConfig({
-  plugins: [tailwindcss()],
-  build: {
-    lib: isVoice ? {
-      entry: 'frontend/js/voice/index.js',
-      formats: ['es'],
-      fileName: () => 'voice.js',   // 해시 없음 — sw.js PRECACHE 계약 보호
-    } : {
-      entry: 'frontend/js/main.js',
-      formats: ['es'],
-      fileName: () => 'app.js',     // 해시 없음 — sw.js PRECACHE 계약 보호
-      cssFileName: 'app',           // → app.css
+// N18 — `vite build --mode test`(tests/helpers/solid-env.js가 부른다)로만
+// 켜지는 세 번째 산출물. Solid/TSX 파이프라인 자체(tsx 컴파일 → solid-js
+// 런타임 → 번들)를 실제 브라우저 없이 jsdom에서 검증하려면 뭔가는 실제로
+// 빌드해서 로드해야 한다 — 그 대상이 frontend/tests/fixtures/smoke.tsx다.
+// 별도 outDir(dist-test)라 app/voice 산출물과 절대 안 섞인다.
+export default defineConfig(({ mode }) => {
+  const isTest = mode === 'test';
+
+  return {
+    // N17: solid()는 .tsx/.jsx만 변환한다(기존 9천 줄의 classic .js는 그대로 —
+    // vite-plugin-solid의 기본 include가 확장자로만 걸린다). lib 모드·2회 분리
+    // 빌드·해시 없는 파일명은 그대로 유지된다(ADR-26).
+    plugins: [tailwindcss(), solid()],
+    build: {
+      lib: isTest ? {
+        entry: 'frontend/tests/fixtures/smoke.tsx',
+        formats: ['es'],
+        fileName: () => 'smoke.js',
+      } : isVoice ? {
+        entry: 'frontend/js/voice/index.js',
+        formats: ['es'],
+        fileName: () => 'voice.js',   // 해시 없음 — sw.js PRECACHE 계약 보호
+      } : {
+        entry: 'frontend/js/main.js',
+        formats: ['es'],
+        fileName: () => 'app.js',     // 해시 없음 — sw.js PRECACHE 계약 보호
+        cssFileName: 'app',           // → app.css
+      },
+      outDir: isTest ? 'frontend/dist-test' : 'frontend/dist',
+      // voice 빌드가 app 빌드 산출물을 지우면 안 된다 — package.json의 build
+      // 스크립트가 항상 app을 먼저(emptyOutDir로 정리) 돌리고, voice는 이어서
+      // 같은 디렉토리에 추가하는 순서를 전제한다. test 빌드는 아예 다른
+      // outDir이라 매번 비워도 안전하다.
+      emptyOutDir: isTest || !isVoice,
+      // 디버깅 시 원본을 그대로 읽기 위해 끈다. 크기 이득보다 가치가 크다
+      // (지금 앱 JS 총합이 ~9천줄이라 minify 안 해도 I2의 300KB 상한에 여유가 있다).
+      minify: false,
+      rollupOptions: {
+        // 벤더(xterm 등)는 아직 ES 모듈로 import하지 않는다 — index.html의 classic
+        // <script>가 로드하고 sw.js가 개별 프리캐시한다(F4에서 core/vendor.js가
+        // window.* 를 re-export하며 이 경계가 명시화된다). 지금은 external로 지정할
+        // 대상이 없다 — main.js가 실제로 import하는 건 legacy 앱 스크립트뿐이다.
+        external: [],
+      },
     },
-    outDir: 'frontend/dist',
-    // voice 빌드가 app 빌드 산출물을 지우면 안 된다 — package.json의 build
-    // 스크립트가 항상 app을 먼저(emptyOutDir로 정리) 돌리고, voice는 이어서
-    // 같은 디렉토리에 추가하는 순서를 전제한다.
-    emptyOutDir: !isVoice,
-    // 디버깅 시 원본을 그대로 읽기 위해 끈다. 크기 이득보다 가치가 크다
-    // (지금 앱 JS 총합이 ~9천줄이라 minify 안 해도 I2의 300KB 상한에 여유가 있다).
-    minify: false,
-    rollupOptions: {
-      // 벤더(xterm 등)는 아직 ES 모듈로 import하지 않는다 — index.html의 classic
-      // <script>가 로드하고 sw.js가 개별 프리캐시한다(F4에서 core/vendor.js가
-      // window.* 를 re-export하며 이 경계가 명시화된다). 지금은 external로 지정할
-      // 대상이 없다 — main.js가 실제로 import하는 건 legacy 앱 스크립트뿐이다.
-      external: [],
+    server: {
+      port: 5173,
+      proxy: {
+        '/api': sameOriginProxy(BACKEND_ORIGIN),
+        '/ws': sameOriginProxy('ws://localhost:7777', { ws: true }),
+        '/static': sameOriginProxy(BACKEND_ORIGIN),
+      },
     },
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': sameOriginProxy(BACKEND_ORIGIN),
-      '/ws': sameOriginProxy('ws://localhost:7777', { ws: true }),
-      '/static': sameOriginProxy(BACKEND_ORIGIN),
-    },
-  },
+  };
 });
