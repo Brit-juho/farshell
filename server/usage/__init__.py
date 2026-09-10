@@ -16,10 +16,15 @@ import os
 from typing import Optional
 
 from .clauth import ClauthProvider, feed_path
+from .counter_jsonl import CounterJsonlProvider
 from .null import NullProvider
 
 _provider = None
 _provider_mode: Optional[str] = None
+
+# N41 — 누적형(CounterProvider)은 한도형(clauth)과 별개의 소스다. 파일 유무로만
+# 켜지고 끄므로(한도형처럼 여러 모드가 필요 없다) 단일 인스턴스를 한 번만 만든다.
+_counter_provider: Optional[CounterJsonlProvider] = None
 
 
 def _mode() -> str:
@@ -53,6 +58,47 @@ def snapshot() -> Optional[dict]:
     return get_provider().snapshot()
 
 
+# ── N41: 누적형(CounterProvider) ────────────────────────────────────────────
+# `VT_USAGE_PROVIDER=none`은 "사용량을 아예 내보내고 싶지 않다"는 명시적
+# 의사표시이므로(위 모듈 docstring) 누적형에도 똑같이 적용한다. auto/clauth는
+# 한도형 쪽 강제 여부일 뿐 누적형과는 무관하므로, 그 두 모드에서는 파일
+# 존재 여부로만(2.0 게이팅 규칙) 켜고 끈다.
+
+
+def _get_counter_provider() -> CounterJsonlProvider:
+    global _counter_provider
+    if _counter_provider is None:
+        _counter_provider = CounterJsonlProvider()
+    return _counter_provider
+
+
+def counter_capability() -> dict:
+    if _mode() == "none":
+        return {"available": False, "provider": "counter_jsonl", "models": 0, "reason": "disabled"}
+    return _get_counter_provider().capability()
+
+
+def counter_snapshot(since: float = 0) -> Optional[dict]:
+    if _mode() == "none":
+        return None
+    return _get_counter_provider().snapshot(since)
+
+
+def counter_add(model, tokens, seconds) -> dict:
+    if _mode() == "none":
+        return {"ok": False, "error": "disabled", "reason": "사용량 표시가 꺼져 있습니다 (VT_USAGE_PROVIDER=none)"}
+    return _get_counter_provider().add(model, tokens, seconds)
+
+
+def counter_running_models() -> list[str]:
+    """ollama가 떠 있으면 실행 중 모델 이름. 없으면 빈 리스트(조용히)."""
+    if _mode() == "none":
+        return []
+    from . import ollama
+    return ollama.running_models()
+
+
 def _reset_for_tests() -> None:
-    global _provider, _provider_mode
+    global _provider, _provider_mode, _counter_provider
     _provider, _provider_mode = None, None
+    _counter_provider = None

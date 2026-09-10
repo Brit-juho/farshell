@@ -112,6 +112,10 @@ async def capabilities(request: Request):
         # 통째로 숨긴다 — 기존 fs/ports/push 게이팅과 같은 메커니즘이라
         # 프런트에 새 개념이 생기지 않는다.
         "usage": usage.capability(),
+        # N41: 누적형(로컬 LLM 등) 소스 — 한도형(clauth)과 독립적으로 게이팅한다.
+        # 어느 한쪽만 있어도 dock 사용량 탭은 떠야 하므로, 프런트는 이 둘을
+        # OR로 묶어 `.needs-usage`를 판정한다(agent/status.js).
+        "usage_counter": usage.counter_capability(),
         # N34: HUD 우측 끝 버전 칩. 빈 문자열이면 프런트가 칩을 안 그린다.
         "version": _version(),
         # N37: 헤더 워크스페이스 칩. 빈 문자열이면 "/ 호스트" 부분을 안 그린다.
@@ -144,6 +148,49 @@ async def usage_get(request: Request):
     payload = {"available": True, **snap}
     stable = {k: v for k, v in payload.items() if k != "generated_at"}
     return _etag_response(payload, request, stable_for_etag=stable)
+
+
+@router.get("/api/usage/counter")
+async def usage_counter_get(request: Request, since: float = 0):
+    """N41 — 누적형 사용량 스냅샷. `/api/usage`(한도형)와 별개 엔드포인트다 —
+
+    둘 다 없을 수도, 하나만 있을 수도, 둘 다 있을 수도 있어서(clauth 없이
+    로컬 LLM만 쓰는 사용자도 있다) 응답을 합치면 "무엇이 없는지"가
+    모호해진다. `since`(epoch초, 기본 0=전체 누적)로 집계 창을 고를 수 있다 —
+    7일 스파크라인(`samples`)은 이와 무관하게 항상 최근 7일 고정이다.
+    """
+    cap = usage.counter_capability()
+    if not cap.get("available"):
+        return _etag_response({"available": False, **cap}, request)
+    snap = usage.counter_snapshot(since)
+    if snap is None:
+        return _etag_response({"available": False, "provider": cap.get("provider"), "reason": "read-failed"}, request)
+    running = set(usage.counter_running_models())
+    counters = [{**c, "running": c["label"] in running} for c in snap.get("counters", [])]
+    payload = {"available": True, **snap, "counters": counters}
+    stable = {k: v for k, v in payload.items() if k != "generated_at"}
+    return _etag_response(payload, request, stable_for_etag=stable)
+
+
+@router.post("/api/usage/counter")
+async def usage_counter_post(request: Request):
+    """N41 — 누적형 사용량 기록. `fsh usage add`의 서버 경유 경로.
+
+    호출 주체는 FarShell이 아니다 — 로컬 LLM을 실행한 사용자 스크립트/훅이
+    "방금 이만큼 썼다"를 알려주는 것뿐이다. 그래서 model/tokens/seconds
+    세 필드만 받고, 입력 검증은 `counter_jsonl.add()`(범위·타입)가 전부다.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    r = usage.counter_add(body.get("model"), body.get("tokens"), body.get("seconds"))
+    if not r.get("ok"):
+        status = 403 if r.get("error") == "disabled" else 400
+        return JSONResponse(r, status_code=status)
+    return r
 
 
 @router.get("/api/tunnel/status")
