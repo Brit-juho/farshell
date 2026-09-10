@@ -1899,3 +1899,45 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 /* 메인(터미널 위 온보딩·가이드 등 텍스트 표면)은 기준선을 base로 두고 패딩을
    한 단계 더 준다. 터미널 자체는 xterm이 자기 폰트 크기를 쓰므로 영향 없다. */
 #terminal-container { font-size:var(--fs-base); }
+
+/* ── N34 §7 — 상태바 HUD 24px ──────────────────────────────────────────────
+   디자인 1a의 footer. 내용은 shell/Hud.tsx(Solid)가 채우고, 여기서는 프레임과
+   칩 모양만 정한다.
+
+   "값이 없는 항목은 숨긴다"가 규칙이라 칩 수가 상황마다 달라진다 — 그래서
+   좌/우 그룹 사이를 .vt-hud-spacer(flex:1)가 벌린다(고정 그리드가 아니다).
+
+   compact(<720px)에서는 통째로 숨는다: 그 폭에서는 하단 내비가 이 자리를
+   쓰고(70-mobile.md), 24px짜리 정보 띠는 폰에서 읽히지도 않는다. */
+#vt-hud {
+  display:none;   /* 아래 미디어쿼리에서만 켠다 */
+  align-items:stretch; height:var(--hud-h); flex:none;
+  background:var(--bar); border-top:1px solid var(--line);
+  font:400 var(--fs-2xs) var(--mono); color:var(--sub);
+  overflow:hidden; user-select:none;
+}
+@media (min-width:720px) { #vt-hud { display:flex; } }
+
+.vt-hud-spacer { flex:1; min-width:0; }
+.vt-hud-chip {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  padding:0 calc(var(--spacing) * 2.5); white-space:nowrap;
+  border-right:1px solid var(--line);
+}
+/* 우측 그룹은 경계선이 반대편에 붙어야 좌우가 대칭으로 읽힌다. */
+.vt-hud-spacer ~ .vt-hud-chip { border-right:0; border-left:1px solid var(--line); }
+
+.vt-hud-label { color:var(--sub); }
+.vt-hud-value { color:var(--txt); }
+.vt-hud-hint  { color:var(--color-muted); }
+
+.vt-hud-chip.tone-ok    .vt-hud-value { color:var(--ok); }
+.vt-hud-chip.tone-warn  .vt-hud-value { color:var(--warn); }
+.vt-hud-chip.tone-err   .vt-hud-value { color:var(--err); }
+
+.vt-hud-dot { width:6px; height:6px; border-radius:var(--radius-full); background:var(--ok); flex:none; }
+.vt-hud-chip.tone-warn .vt-hud-dot { background:var(--warn); }
+.vt-hud-chip.tone-err  .vt-hud-dot { background:var(--err); }
+
+.vt-hud-chip.clickable { cursor:pointer; }
+.vt-hud-chip.clickable:hover { background:var(--menu-hover); color:var(--txt); }

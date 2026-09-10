@@ -126,7 +126,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 |--------|------|------|
 | POST | `/api/upload?session_id=X` | Upload a file (multipart/form-data) |
 | GET | `/api/download?path=X` | Download a file from the server |
-| GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel, etc.) |
+| GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel/version, etc.) |
 | GET | `/api/workspace` | Fetch workspace sync state (tabs/UI state) |
 | PUT | `/api/workspace` | Save workspace state |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |

@@ -222,6 +222,11 @@
   <!-- 터미널 -->
   <div id="terminal-container"></div>
 
+  <!-- N34 §7 — 상태바 HUD 24px. 내용은 shell/Hud.tsx(Solid)가 채운다.
+       compact(<720px)에서는 CSS로 통째로 숨는다(하단 내비가 그 자리를 쓴다).
+       "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다. -->
+  <footer id="vt-hud" aria-label="상태"></footer>
+
   <!-- L8/U2: 우측 레일 — wide(≥1024px)에서만 상시 노출된다. 사용량의 요점이
        "상시 노출로 신뢰감을 만든다"(60-usage-provider.md §왜 하는가)인데 패널을
        열어야만 보이면 그 요점이 사라진다. 섹션이 하나도 없으면(=사용량 소스가

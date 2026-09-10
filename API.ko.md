@@ -122,7 +122,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 |--------|------|------|
 | POST | `/api/upload?session_id=X` | 파일 업로드 (multipart/form-data) |
 | GET | `/api/download?path=X` | 서버 파일 다운로드 |
-| GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널 등) |
+| GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널/버전 등) |
 | GET | `/api/workspace` | 워크스페이스 동기화 조회 (탭/UI 상태) |
 | PUT | `/api/workspace` | 워크스페이스 상태 저장 |
 | GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) 전체 목록 |
