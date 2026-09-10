@@ -720,9 +720,19 @@ body.voice-only-mode #mic-status {
    패널(65, 오버레이 110)보다 훨씬 높아서, 세션이 하나도 없는 상태(흔하다 — 부팅
    직후, 마지막 탭을 닫은 직후)에서 rail 전체가 온보딩 화면 밑에 깔려 클릭이
    안 먹혔다. body의 padding-left 규칙과 정확히 같은 값을 쓴다. */
-@media (min-width:720px) { .vt-onboarding { left:48px; } }
+/* N35·N36: 그 48px은 옛 아이콘 레일 폭이었다. 레일이 252px 워크트리 레일로,
+   오른쪽에 dock이 생기면서 **같은 회귀가 두 번 더** 났다(실브라우저로 확인:
+   온보딩이 레일 위 절반과 dock 전체를 덮어 클릭이 안 먹었다). 값은 언제나
+   body의 padding 규칙과 정확히 같아야 하므로 같은 변수를 읽는다 — 접힘·폭
+   변경이 자동으로 따라온다. */
+@media (min-width:720px) {
+  .vt-onboarding { left:var(--vt-wgrail-w, 252px); right:36px; }
+  body.no-right-rail .vt-onboarding { right:0; }
+}
 @media (min-width:1280px) {
-  body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(48px + var(--vt-rail-panel-w, 280px)); }
+  .vt-onboarding { right:var(--vt-dock-w, 392px); }
+  body.no-right-rail .vt-onboarding { right:0; }
+  body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(var(--vt-wgrail-w, 252px) + var(--vt-rail-panel-w, 280px)); }
 }
 /* L7: 실브라우저 검증 중 발견한 같은 종류의 회귀 2건(위 L4 회귀와 원인이
    같다 — .vt-onboarding의 z-index:500이 새로 생긴 하단/중앙 UI를 덮는다).
@@ -2070,3 +2080,96 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 }
 #vt-wgrail.collapsed .vt-wgrail-resizer { display:none; }
 .vt-wgrail-resizer.dragging { background:var(--acc); opacity:.4; }
+
+/* ── N35 §6 — dock 392px ───────────────────────────────────────────────────
+   문서가 정한 프레임 책임(탭 전환·접기·폭 리사이저 320~560·기기 스코프 저장)만
+   여기서 스타일링한다. 탭 "내용"은 기존 패널 렌더러가 그리므로, dock 안에
+   들어온 패널(.vt-dock-panel)은 모달 껍데기(backdrop·카드 그림자·닫기 X)를
+   벗고 본문 영역을 그대로 채우게만 만든다 — 내부 .vt-vw-* 규칙은 손대지
+   않는다(같은 마크업이 두 자리에서 다르게 보이지 않게).
+
+   2.0의 우측 사용량 레일은 dock 「사용량」 탭이 대신한다: #vt-right-rail을
+   숨기고, 그것이 만들던 body padding-right(300px)도 무효화한다. 그 규칙은
+   `body:not(.no-right-rail)`이라 특이도가 더 높으므로 !important로 이긴다
+   (좌측 레일에서 #vt-rail을 대체할 때와 같은 관용구).
+
+   티어(§3 표): compact(<720)는 dock 없음(하단 내비, 70) · regular(720~1279)는
+   접힘 36px 기본이고 펼치면 **오버레이**(본문을 안 민다) · wide 이상은 펼치면
+   본문을 민다. 이 세 가지가 전부 아래 두 개의 @media로 표현된다 — 본문을
+   미는 값이 720 구간에선 36px 고정, 1280 구간에선 --vt-dock-w. */
+#vt-right-rail { display:none !important; }
+
+#vt-dock-slot { display:contents; }
+#vt-dock {
+  display:none;
+  flex-direction:column; width:var(--vt-dock-w, 392px); flex:none;
+  position:fixed; right:0; top:0; bottom:0; z-index:70;
+  background:var(--bar); border-left:1px solid var(--line);
+  min-width:0; transition:width .12s ease;
+}
+@media (min-width:720px) {
+  #vt-dock { display:flex; }
+  body:not(.no-right-rail) { padding-right:calc(env(safe-area-inset-right) + 36px) !important; }
+  /* regular에서 펼친 dock은 본문 위에 뜬다 — 오버레이임을 그림자로 알린다. */
+  #vt-dock:not(.collapsed) { box-shadow:0 0 24px rgba(0,0,0,.35); }
+}
+@media (min-width:1280px) {
+  body:not(.no-right-rail) { padding-right:calc(env(safe-area-inset-right) + var(--vt-dock-w, 392px)) !important; }
+  #vt-dock:not(.collapsed) { box-shadow:none; }
+}
+
+.vt-dock-tabs {
+  display:flex; align-items:stretch; height:28px; flex:none;
+  border-bottom:1px solid var(--line); overflow:hidden;
+}
+.vt-dock-tab {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:none;
+  padding:0 calc(var(--spacing) * 2); border:0; border-right:1px solid var(--line);
+  background:transparent; color:var(--sub); cursor:pointer;
+  font:500 var(--fs-2xs) var(--mono); white-space:nowrap;
+}
+.vt-dock-tab:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-dock-tab.active { background:var(--color-surface-active); color:var(--txt); box-shadow:inset 0 -2px 0 var(--acc); }
+.vt-dock-badge {
+  flex:none; min-width:14px; height:14px; padding:0 4px; border-radius:var(--radius-full);
+  background:var(--acc); color:var(--acc-fg, var(--win));
+  font:600 var(--fs-3xs) var(--mono); display:flex; align-items:center; justify-content:center;
+}
+.vt-dock-collapse {
+  margin-left:auto; flex:none; border:0; background:transparent; color:var(--sub);
+  cursor:pointer; font:600 var(--fs-base) var(--ui); padding:0 calc(var(--spacing) * 1.5); line-height:1;
+}
+.vt-dock-collapse:hover { background:var(--menu-hover); color:var(--txt); }
+
+.vt-dock-body { flex:1; min-height:0; min-width:0; overflow:hidden; display:flex; flex-direction:column; }
+.vt-dock-empty {
+  padding:calc(var(--spacing) * 3); color:var(--sub); font:400 var(--fs-xs) var(--mono);
+}
+
+/* 접힘 36px: 탭 행이 세로로 선다. 라벨은 writing-mode로 세워서 아이콘 세트를
+   새로 만들지 않고도 어느 탭인지 남긴다(§6 "세로 아이콘 4개 + 배지"의 최소
+   구현 — 아이콘은 20 §4 에이전트 마크 작업과 같이 정한다). */
+#vt-dock.collapsed { width:36px !important; }
+#vt-dock.collapsed .vt-dock-tabs { flex-direction:column; height:auto; border-bottom:0; }
+#vt-dock.collapsed .vt-dock-tab {
+  writing-mode:vertical-rl; padding:calc(var(--spacing) * 2) 0;
+  border-right:0; border-bottom:1px solid var(--line); justify-content:center;
+}
+#vt-dock.collapsed .vt-dock-tab.active { box-shadow:inset -2px 0 0 var(--acc); }
+#vt-dock.collapsed .vt-dock-body { display:none; }
+#vt-dock.collapsed .vt-dock-resizer { display:none; }
+
+.vt-dock-resizer {
+  position:absolute; top:0; bottom:0; left:-3px; width:6px; cursor:col-resize; z-index:1;
+}
+.vt-dock-resizer.dragging { background:var(--acc); opacity:.4; }
+
+/* dock 안의 패널 — 모달 껍데기를 벗긴다. */
+.vt-dock-panel { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+.vt-dock-panel .vt-viewer-card {
+  width:100%; max-width:none; height:100%; max-height:none;
+  border:0; border-radius:0; box-shadow:none; background:transparent;
+}
+/* dock에는 닫기 X가 없다 — 닫는 행위는 탭 재클릭/접기다(진입점 이중화 금지). */
+.vt-dock-panel .vt-vw-x { display:none; }
+.vt-dock-panel .vt-vw-head { border-radius:0; }

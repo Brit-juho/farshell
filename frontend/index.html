@@ -235,6 +235,12 @@
   <!-- 터미널 -->
   <div id="terminal-container"></div>
 
+  <!-- N35 §6 — dock 392px(Solid, 지연 로드). 탭 내용은 기존 큐·포트·사용량
+       패널 렌더러가 그대로 그린다(panels/panel.js의 dock 호스트). 2.0의 우측
+       사용량 레일(#vt-right-rail)은 이 dock의 「사용량」 탭이 대신하므로
+       CSS로만 숨긴다 — DOM은 남겨 둔다(usage.js가 id로 직접 찾는다). -->
+  <div id="vt-dock-slot"></div>
+
   <!-- N34 §7 — 상태바 HUD 24px. 내용은 shell/Hud.tsx(Solid)가 채운다.
        compact(<720px)에서는 CSS로 통째로 숨는다(하단 내비가 그 자리를 쓴다).
        "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다. -->

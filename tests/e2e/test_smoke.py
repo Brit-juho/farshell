@@ -199,20 +199,23 @@ def _boot(pg, url: str) -> None:
     assert not failed, "앱 부팅이 실패했다 (main.js의 bootApp 예외)"
 
 
-def _open_rail(pg, item: str = "session") -> None:
-    """rail 패널을 연다 — **이미 열려 있으면 클릭하지 않는다.**
+def _open_dock(pg, label: str) -> None:
+    """dock 탭을 연다 — **이미 그 탭이 열려 있으면 클릭하지 않는다.**
+    같은 탭 재클릭은 접기라서, 앞 테스트가 남긴 상태(dock은 활성 탭·접힘을
+    localStorage에 저장한다) 위에서 무조건 클릭하면 닫아버린다.
 
-    무조건 클릭하면 안 되는 이유: rail은 열림 상태를 `/api/workspace`에 저장하고
-    부팅 때 복원한다(ADR-5). 이 파일의 서버는 세션 스코프라 workspace가 테스트
-    사이에 공유되므로, 앞 테스트가 패널을 열어놨으면 다음 테스트는 열린 채로
-    부팅되고 클릭이 그걸 **닫아버린다**. 실제로 그렇게 실패했다.
+    선택자를 `:has-text()`로 쓰지 않는 이유: 그건 playwright 전용 문법이라
+    `page.evaluate` 안의 querySelector에서는 SyntaxError가 난다(실측). 클릭은
+    locator로, 상태 확인은 textContent 비교로 나눠 쓴다.
     """
-    btn = f"#vt-rail-{item}"
-    if not pg.evaluate(f"() => document.querySelector('{btn}')?.classList.contains('active')"):
-        pg.click(btn)
-    pg.wait_for_function(
-        f"() => document.querySelector('{btn}')?.classList.contains('active')", timeout=5000
+    pg.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
+    is_active = (
+        "(label) => [...document.querySelectorAll('#vt-dock .vt-dock-tab')]"
+        ".some((t) => t.textContent.trim().startsWith(label) && t.classList.contains('active'))"
     )
+    if not pg.evaluate(is_active, label):
+        pg.locator("#vt-dock .vt-dock-tab", has_text=label).first.click()
+    pg.wait_for_function(is_active, arg=label, timeout=5000)
 
 
 # ── 부팅 ──────────────────────────────────────────────────────────────────
@@ -250,56 +253,62 @@ def test_세션이_없으면_온보딩이_보인다(page):
 
 # rail.js가 buildSessionCard 결과에 얹는 클래스 조합. 이게 바뀌면 아래 테스트가
 # 엉뚱한 걸 검사하게 되므로 번들에서 실제로 확인한다.
-_CARD_CLASSES = ["vt-card", "vt-rail-session-row", "vt-rail-session-card", "card-preview"]
+# shell/Rail.tsx가 행에 얹는 클래스 조합(N36). 이게 바뀌면 아래 테스트가
+# 엉뚱한 걸 검사하게 되므로 번들에서 실제로 확인한다 — 레일은 지연 청크
+# (shell.js)에 있으므로 app.js가 아니라 그 파일을 본다.
+_CARD_CLASSES = ["vt-wgrail-row", "vt-wgrail-bar", "vt-wgrail-name", "vt-wgrail-row-sub"]
 
 
-def test_세션_카드_클래스_조합이_아직_코드에_있다(page, server):
+def test_레일_행_클래스_조합이_아직_코드에_있다(page, server):
     """아래 봉쇄 테스트가 검사하는 마크업이 실제 코드와 안 어긋나는지 본다.
 
     테스트가 마크업을 들고 있으면 코드가 바뀔 때 조용히 무의미해진다 — 이 저장소가
     이미 겪은 실패다(폐지된 #grid-toggle을 검사하던 옛 E2E). 최소한의 결합 확인.
     """
     base, _ = server
-    bundle = page.request.get(f"{base}/static/dist/app.js").text()
+    bundle = page.request.get(f"{base}/static/dist/shell.js").text()
     missing = [c for c in _CARD_CLASSES if c not in bundle]
     assert missing == [], f"번들에 없는 클래스: {missing} — 테스트 마크업이 낡았다"
 
 
-def test_세션_카드_레이아웃이_카드_안에_갇힌다(page):
-    """긴 경로가 든 프리뷰가 카드 밖으로 나가지 않는가.
+def test_레일_행_레이아웃이_행_안에_갇힌다(page):
+    """긴 브랜치명·긴 상태 문장이 레일 행 밖으로 나가지 않는가.
 
-    `.card-preview`는 `white-space:pre-wrap` + 마스크가 걸린 요소라, 안 끊기는 긴
-    문자열 하나가 부모의 min-width 계산을 밀어올린다. 그게 그날의 실제 데이터였다.
+    N36이 48px 아이콘 레일을 252px 워크트리 레일로 대체하면서, 봉쇄가 깨질 수
+    있는 자리도 세션 카드에서 이 행으로 옮겨갔다(이름 + 상태 문장 두 줄 모두
+    ellipsis에 의존한다). CI에는 세션이 없으므로 같은 클래스 조합을 직접 넣어
+    캐스케이드가 합성된 결과만 본다 — 옛 세션 카드 테스트와 같은 방식이다.
     """
-    _open_rail(page, "session")
-    page.wait_for_selector(".vt-rail-session-list", timeout=10000)
+    page.wait_for_selector("#vt-wgrail .vt-wgrail-body", timeout=10000)
     overflow = page.evaluate(
         """() => {
-          const list = document.querySelector('.vt-rail-session-list');
-          const card = document.createElement('div');
-          card.className = 'vt-card vt-rail-session-row vt-rail-session-card';
-          card.innerHTML = `
-            <div class="card-head">
-              <span class="card-agent"></span>
-              <span class="card-title">dev</span>
-              <span class="card-cmd">claude</span>
-            </div>
-            <pre class="card-preview">/Users/x/GitHub/side_project/tools/farshell/very/long/path/that/never/wraps/anywhere</pre>`;
-          list.appendChild(card);
-          const c = card.getBoundingClientRect();
+          const list = document.querySelector('#vt-wgrail .vt-wgrail-body');
+          const row = document.createElement('div');
+          row.className = 'vt-wgrail-row';
+          row.innerHTML = `
+            <span class="vt-wgrail-bar tone-waiting"></span>
+            <div class="vt-wgrail-row-main">
+              <div class="vt-wgrail-row-top">
+                <span class="vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
+                <span class="vt-wgrail-diff">파일 7</span>
+              </div>
+              <div class="vt-wgrail-row-sub">/Users/x/GitHub/side_project/tools/farshell/very/long/path/that/never/wraps</div>
+            </div>`;
+          list.appendChild(row);
+          const c = row.getBoundingClientRect();
           const bad = [];
-          for (const child of card.querySelectorAll('*')) {
+          for (const child of row.querySelectorAll('*')) {
             const r = child.getBoundingClientRect();
             if (r.width === 0 && r.height === 0) continue;
             if (r.left < c.left - 1 || r.right > c.right + 1) {
-              bad.push(`${child.className}: ${Math.round(r.left)}~${Math.round(r.right)} (카드 ${Math.round(c.left)}~${Math.round(c.right)})`);
+              bad.push(`${child.className}: ${Math.round(r.left)}~${Math.round(r.right)} (행 ${Math.round(c.left)}~${Math.round(c.right)})`);
             }
           }
-          card.remove();
+          row.remove();
           return bad;
         }"""
     )
-    assert overflow == [], "카드 밖으로 넘친 자식:\n  " + "\n  ".join(overflow)
+    assert overflow == [], "행 밖으로 넘친 자식:\n  " + "\n  ".join(overflow)
 
 
 def test_열린_표면의_내용이_그_표면을_넘지_않는다(page):
@@ -308,12 +317,11 @@ def test_열린_표면의_내용이_그_표면을_넘지_않는다(page):
     데이터가 없어도 되고, 새 UI가 생겨도 선택자만 늘리면 된다. 세션 카드처럼
     특정 조합을 못 집는 대신 같은 **종류**의 실패를 넓게 잡는다.
     """
-    _open_rail(page, "settings")
-    page.wait_for_selector("#vt-rail-panel", timeout=5000)
+    _open_dock(page, "큐")
     page.wait_for_timeout(300)
     bad = page.evaluate(
         """() => {
-          const surfaces = ['#vt-rail-panel', '.vt-onboarding', '#topbar'];
+          const surfaces = ['#vt-wgrail', '#vt-dock', '.vt-onboarding', '#topbar'];
           const out = [];
           for (const sel of surfaces) {
             const host = document.querySelector(sel);
@@ -348,14 +356,18 @@ def test_가로_스크롤이_생기지_않는다(page, viewport):
 
 # ── 반응형 구간 ───────────────────────────────────────────────────────────
 
-def test_rail은_compact에서_숨고_그_위에서_보인다(page):
+def test_레일과_dock은_compact에서_숨고_그_위에서_보인다(page):
+    """N35·N36 — 티어 표(10 §3): compact는 레일·dock 둘 다 없다(하단 내비가
+    자리를 쓴다), regular부터 둘 다 보인다."""
     page.set_viewport_size(COMPACT)
     page.wait_for_timeout(300)
-    assert not page.locator("#vt-rail").is_visible(), "compact에서는 팔레트·바텀시트가 대신한다"
+    assert not page.locator("#vt-wgrail").is_visible(), "compact에서는 팔레트·바텀시트가 대신한다"
+    assert not page.locator("#vt-dock").is_visible(), "compact에서는 하단 내비가 대신한다"
 
     page.set_viewport_size(REGULAR)
     page.wait_for_timeout(300)
-    assert page.locator("#vt-rail").is_visible()
+    assert page.locator("#vt-wgrail").is_visible()
+    assert page.locator("#vt-dock").is_visible()
 
 
 # ── 스킨 ──────────────────────────────────────────────────────────────────
@@ -387,18 +399,122 @@ def test_테마_칩_6개가_서로_다른_색을_보인다(page):
 
 # ── 상태 표시가 색 단독이 아닌가 ──────────────────────────────────────────
 
-def test_rail_활성_항목에_막대가_실제로_그려진다(page):
+def test_레일_상태막대가_색_단독이_아니고_실제로_그려진다(page):
     """T3 회귀 방지. CSS에 규칙이 있는 것과 실제로 렌더되는 건 다르다 —
-    부모의 overflow나 stacking에 막혀 안 보일 수 있다."""
-    _open_rail(page, "session")
-    bar = page.evaluate(
+    부모의 overflow나 stacking에 막혀 안 보일 수 있다. N36에서 그 자리는
+    rail 버튼의 ::before가 아니라 행 왼쪽의 `.vt-wgrail-bar`다."""
+    page.wait_for_selector("#vt-wgrail .vt-wgrail-body", timeout=10000)
+    bars = page.evaluate(
         """() => {
-          const el = document.querySelector('#vt-rail-session');
-          if (!el || !el.classList.contains('active')) return null;
-          const s = getComputedStyle(el, '::before');
-          return { width: s.width, bg: s.backgroundColor, content: s.content };
+          const list = document.querySelector('#vt-wgrail .vt-wgrail-body');
+          const out = {};
+          for (const tone of ['waiting', 'working', 'error', 'idle']) {
+            const row = document.createElement('div');
+            row.className = 'vt-wgrail-row';
+            row.innerHTML = `<span class="vt-wgrail-bar tone-${tone}"></span><div class="vt-wgrail-row-main"><div class="vt-wgrail-row-top"><span class="vt-wgrail-name">x</span></div></div>`;
+            list.appendChild(row);
+            const b = row.querySelector('.vt-wgrail-bar').getBoundingClientRect();
+            const cs = getComputedStyle(row.querySelector('.vt-wgrail-bar'));
+            out[tone] = { w: Math.round(b.width), h: Math.round(b.height), bg: cs.backgroundColor };
+            row.remove();
+          }
+          return out;
         }"""
     )
-    assert bar is not None, "rail 세션 버튼이 active가 되지 않았다"
-    assert bar["width"] == "3px", f"막대 폭이 {bar['width']}"
-    assert bar["bg"] not in ("", "rgba(0, 0, 0, 0)"), f"막대가 투명하다: {bar}"
+    for tone, v in bars.items():
+        assert v["w"] >= 3, f"{tone} 막대 폭이 {v['w']}px"
+        assert v["h"] > 0, f"{tone} 막대가 높이 0이다"
+        assert v["bg"] not in ("", "rgba(0, 0, 0, 0)"), f"{tone} 막대가 투명하다: {v}"
+    assert len({v["bg"] for v in bars.values()}) == len(bars), f"상태별 색이 겹친다: {bars}"
+
+
+def test_온보딩이_레일과_dock을_덮지_않는다(page):
+    """L4에서 한 번 잡았던 회귀의 재발 방지. `.vt-onboarding`은 position:fixed +
+    z-index:500이라 body의 padding(레일·dock 자리)을 안 따라간다 — 세션이 0개인
+    흔한 상태(부팅 직후·마지막 탭을 닫은 직후)에서 두 표면이 통째로 온보딩 밑에
+    깔려 **클릭이 안 먹는다**. 렌더 여부가 아니라 실제 히트 테스트로 본다."""
+    page.set_viewport_size(WIDE)
+    page.wait_for_selector(".vt-onboarding", timeout=10000)
+    page.wait_for_timeout(300)
+    hit = page.evaluate(
+        """() => {
+          const top = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-wgrail, #vt-dock, .vt-onboarding')?.id || 'onboarding';
+          const rail = document.getElementById('vt-wgrail').getBoundingClientRect();
+          const dock = document.getElementById('vt-dock').getBoundingClientRect();
+          return {
+            rail: top(rail.left + rail.width / 2, 400),
+            dock: top(dock.left + dock.width / 2, 400),
+          };
+        }"""
+    )
+    assert hit["rail"] == "vt-wgrail", f"온보딩이 레일을 덮었다: {hit}"
+    assert hit["dock"] == "vt-dock", f"온보딩이 dock을 덮었다: {hit}"
+
+
+# ── N35 §6 dock ───────────────────────────────────────────────────────────
+
+def test_dock_탭_행이_문서대로_그려진다(page):
+    """소스컨트롤 | 큐 | 포트 | 사용량 — capability가 없는 탭은 아예 없다."""
+    page.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
+    labels = page.locator("#vt-dock .vt-dock-tab").all_text_contents()
+    assert labels[:1] == ["소스컨트롤"], f"첫 탭이 소스컨트롤이 아니다: {labels}"
+    assert "큐" in labels, labels
+
+
+def test_dock은_wide에서_접힘이_기본이고_본문_패딩이_접힘을_따라간다(page):
+    """§5에서 실제로 났던 버그의 dock 판: 접었는데 body padding이 펼친 폭
+    그대로 남으면 화면 오른쪽에 빈 띠가 생긴다. 두 값을 같이 본다."""
+    page.set_viewport_size(WIDE)   # 1440 — xwide(1600) 미만이라 접힘 기본
+    page.wait_for_timeout(300)
+    got = page.evaluate(
+        """() => ({
+             collapsed: document.getElementById('vt-dock').classList.contains('collapsed'),
+             dockW: Math.round(document.getElementById('vt-dock').getBoundingClientRect().width),
+             padR: getComputedStyle(document.body).paddingRight,
+           })"""
+    )
+    assert got["collapsed"], f"wide에서는 접힘이 기본이어야 한다: {got}"
+    assert got["dockW"] == 36, got
+    assert got["padR"] == "36px", f"본문 패딩이 접힘 폭을 안 따라간다: {got}"
+
+
+def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
+    """모달 backdrop이 아니라 dock 본문에 들어가는가(패널 렌더러 재사용의 핵심).
+    같은 탭을 다시 누르면 접힌다 — 진입점을 이중화하지 않기 위한 규칙."""
+    _open_dock(page, "큐")
+    got = page.evaluate(
+        """() => {
+             const q = document.getElementById('vt-queue');
+             const dockBody = document.querySelector('#vt-dock .vt-dock-body');
+             return { exists: !!q, inDock: !!(q && dockBody && dockBody.contains(q)),
+                      backdrop: !!(q && q.classList.contains('vt-viewer-backdrop')),
+                      inside: !!(q && q.getBoundingClientRect().right <= document.getElementById('vt-dock').getBoundingClientRect().right + 1) };
+           }"""
+    )
+    assert got["exists"], "큐 탭을 눌렀는데 패널이 안 생겼다"
+    assert got["inDock"], f"패널이 dock 본문 밖에 있다: {got}"
+    assert not got["backdrop"], "dock 안인데 모달 backdrop 클래스가 붙었다"
+    assert got["inside"], f"패널이 dock 폭을 넘는다: {got}"
+
+    # 같은 탭 재클릭 = 접기
+    page.locator("#vt-dock .vt-dock-tab", has_text="큐").first.click()
+    page.wait_for_function(
+        "() => document.getElementById('vt-dock').classList.contains('collapsed')", timeout=5000
+    )
+    assert page.evaluate("() => !document.getElementById('vt-queue')"), "접었는데 패널이 남았다"
+
+
+def test_dock_폭_리사이저가_범위를_지킨다(page):
+    """320~560. 드래그로 그 밖으로 못 나간다 — 나가면 pane이 죽거나 dock이 빈다."""
+    _open_dock(page, "큐")
+    box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
+    assert box, "리사이저가 렌더되지 않았다"
+    for dx in (-600, 900):   # 넓히는 쪽 · 좁히는 쪽 둘 다 끝까지
+        page.mouse.move(box["x"] + 3, box["y"] + 200)
+        page.mouse.down()
+        page.mouse.move(box["x"] + 3 + dx, box["y"] + 200, steps=8)
+        page.mouse.up()
+        page.wait_for_timeout(150)
+        w = page.evaluate("() => Math.round(document.getElementById('vt-dock').getBoundingClientRect().width)")
+        assert 320 <= w <= 560, f"dock 폭이 범위를 벗어났다: {w}px (dx={dx})"
+        box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
