@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-UPLOAD_DIR = Path("/tmp/vt-uploads")
+# VT_RUN_DIR: 한 머신에서 두 인스턴스를 돌릴 때 업로드 영역을 가른다(기본 /tmp).
+UPLOAD_DIR = Path(os.environ.get("VT_RUN_DIR", "/tmp")) / "vt-uploads"
 MAX_UPLOAD_BYTES = int(os.environ.get("VT_MAX_UPLOAD_MB", "200")) * 1024 * 1024
 
 # Phase 8 G2: 연결 한도 + 백프레셔 + 하트비트

@@ -16,6 +16,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   **환경변수 `VT_*`·설정 파일 `~/.vt.env`·런타임 경로 `~/.vt/`·`/tmp/vt-*`는 그대로다**
   — 이건 CLI 이름이 아니라 런타임 계약이라 건드리지 않았다.
 
+### Added
+
+- **`VT_RUN_DIR`** — 로그·PID·터널 레지스트리·업로드의 뿌리(기본 `/tmp`). 기존 경로는
+  그대로다. 이걸 `VT_PORT`·`VT_TMUX_SOCKET`·`VT_STATE_DIR`·`VT_CONFIG`·
+  `VT_WORKSPACE_PATH` 와 함께 바꾸면 **한 머신에서 두 인스턴스를 동시에** 돌릴 수 있다.
+  예전엔 PID 파일이 공유돼서 다른 트리에서 `fsh stop` 을 치면 돌아가던 서버가 죽었다.
+
 ### Removed
 
 - `requirements.txt` — 참조 0건이었다. `install.sh`는 `requirements-core.txt`/
