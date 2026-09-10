@@ -11,7 +11,7 @@
 // 같은 패턴(빈 값으로 시작 → 로드되면 다시 그린다)으로 채운다.
 //
 // L6: ADR-8("⋯ 메뉴의 전 항목이 팔레트 명령으로 존재해야 한다")에 따라 옛 ⋯ 메뉴
-// (index.html #more-menu, 원래 15항목)를 전부 여기서 커버한다. `/`(검색)·`:`(포트)·
+// (index.html #more-menu, 원래 15항목)를 전부 여기서 커버한다. `/`(파일 검색)·`:`(포트)·
 // `>`(설정) 접두사는 30-layout-shell.md §5 입력 표를 그대로 구현한다. 상단바와
 // 완전히 겹치던 3항목(빠른 열기·터미널 내 검색·코드 뷰어)은 L1 잔여 항목에서
 // ⋯ 메뉴 쪽을 제거했다 — 이 파일의 명령 목록(팔레트 자신 + 기본 목록의 "코드
@@ -133,26 +133,13 @@ async function _fetchTmuxCandidates() {
   }
 }
 
-function _openTerminalSearch(query) {
-  const fn = getAction('search.toggle');
-  if (typeof fn === 'function') fn();
-  if (!query) return;
-  const searchInput = document.getElementById('search-input');
-  if (!searchInput) return;
-  searchInput.value = query;
-  // search.js가 searchInput 자신에게 건 keydown 리스너(Enter→searchNext)를 그대로
-  // 재활용한다 — searchNext()를 다시 import해 결합을 늘리는 대신 기존 DOM 계약을 탄다.
-  searchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-}
-
-
 function openQuickOpen() {
       const panel = openPanel({
         id: 'vt-qopen',
         ariaLabel: '빠른 열기',
         headHTML: `<div class="vt-vw-title">빠른 열기</div>`,
         extraHTML: `<input class="vt-vw-path" id="vt-qo-input" type="text" spellcheck="false"
-          autocapitalize="off" autocomplete="off" placeholder="세션 · 최근 파일 · 명령 검색… ( / 검색 · : 포트 · > 설정 )">`,
+          autocapitalize="off" autocomplete="off" placeholder="세션 · 최근 파일 · 명령 검색… ( / 파일 검색 · : 포트 · > 설정 )">`,
         bodyId: 'vt-qo-body',
         bodyHTML: `<div class="vt-vw-loading">불러오는 중…</div>`,
       });
@@ -233,38 +220,84 @@ function openQuickOpen() {
 
         section('세션', sessionItems, sessionRow);
 
-        section('최근 파일', fileItems, (p) => {
-          const row = document.createElement('div');
-          // vt-vw-recent-row가 세로 배치(파일명 위 · 경로 아래)를 준다 — 기본
-          // vt-vw-row는 가로 flex라 두 줄이 나란히 눌려버린다.
-          row.className = 'vt-vw-row vt-vw-recent-row vt-qo-row';
-          const name = document.createElement('div');
-          name.className = 'vt-vw-name';
-          name.textContent = p.split('/').pop() || p;
-          const dir = document.createElement('div');
-          dir.className = 'vt-vw-recent-dir';
-          dir.textContent = p.split('/').slice(0, -1).join('/') || '.';
-          row.appendChild(name);
-          row.appendChild(dir);
-          row.addEventListener('click', () => {
-            closeQuickOpen();
-            openFileInPane(p);   // N35 §6 — 모달이 아니라 페인으로 연다
-          });
-          return row;
-        });
+        section('최근 파일', fileItems, (p) => _fileRow(p));
 
         section('명령', cmdItems, cmdRow);
       }
 
-      // `/` 접두사 — 터미널 내 검색으로 바로 넘긴다(입력 표: §5). 세션·파일·명령
-      // 목록은 감추고 "이 문자열로 검색"이라는 단일 행만 보여준다.
-      function renderSearchMode(q) {
-        body.innerHTML = '';
+      // 최근 파일 목록(경로 문자열)과 /api/fs/search 결과({path,name,size})가
+      // 같은 행 모양을 쓴다 — 하나로 합친다.
+      function _fileRow(pathOrResult) {
+        const p = typeof pathOrResult === 'string' ? pathOrResult : pathOrResult.path;
         const row = document.createElement('div');
-        row.className = 'vt-vw-row vt-qo-row';
-        row.textContent = q ? `"${q}" 터미널에서 검색` : '터미널 내 검색 열기';
-        row.addEventListener('click', () => { closeQuickOpen(); _openTerminalSearch(q); });
-        body.appendChild(row);
+        // vt-vw-recent-row가 세로 배치(파일명 위 · 경로 아래)를 준다 — 기본
+        // vt-vw-row는 가로 flex라 두 줄이 나란히 눌려버린다.
+        row.className = 'vt-vw-row vt-vw-recent-row vt-qo-row';
+        const name = document.createElement('div');
+        name.className = 'vt-vw-name';
+        name.textContent = p.split('/').pop() || p;
+        const dir = document.createElement('div');
+        dir.className = 'vt-vw-recent-dir';
+        dir.textContent = p.split('/').slice(0, -1).join('/') || '.';
+        row.appendChild(name);
+        row.appendChild(dir);
+        row.addEventListener('click', () => {
+          closeQuickOpen();
+          openFileInPane(p);   // N35 §6 — 모달이 아니라 페인으로 연다
+        });
+        return row;
+      }
+
+      // `/` 접두사 — 파일 검색(60-settings-palette.md §3). 질의가 비어 있으면
+      // 최근 파일만(서버를 안 부른다), 있으면 최근 파일 중 일치분 + 서버
+      // fuzzy 검색(GET /api/fs/search) 결과를 합쳐 보여준다. 200ms 디바운스—
+      // 매 타건마다 재귀 파일시스템 스캔을 보내지 않는다.
+      //
+      // 터미널 내 검색(예전에 이 접두사가 하던 일)은 없어지지 않았다 — 기본
+      // 목록의 "터미널 내 검색" 명령과 Cmd+F 단축키로 그대로 열 수 있다
+      // (core/keymap.js의 search 액션, R7: 이 팔레트 접두사 자체는 단축키가
+      // 아니라 팔레트 안에서만 의미가 바뀌는 것이라 전역 근육기억은 안 건드린다).
+      let _searchSeq = 0;
+      let _searchDebounce = null;
+      function renderSearchMode(q) {
+        clearTimeout(_searchDebounce);
+        body.innerHTML = '';
+        const recentMatches = recentFiles.filter(p => _fuzzyMatch(p, q));
+
+        if (!q) {
+          if (!recentMatches.length) { emptyState(); return; }
+          section('최근 파일', recentMatches, (p) => _fileRow(p));
+          return;
+        }
+
+        section('최근 파일', recentMatches, (p) => _fileRow(p));
+        const loading = document.createElement('div');
+        loading.className = 'vt-vw-loading vt-qo-search-loading';
+        loading.textContent = '검색 중…';
+        body.appendChild(loading);
+
+        const seq = ++_searchSeq;
+        _searchDebounce = setTimeout(async () => {
+          let data;
+          try {
+            data = await vtFetch(`/api/fs/search?q=${encodeURIComponent(q)}`);
+          } catch (e) {
+            if (seq !== _searchSeq) return;   // 그 사이 입력이 또 바뀌었다 — 이 응답은 버린다
+            loading.remove();
+            const err = document.createElement('div');
+            err.className = 'vt-vw-empty';
+            err.textContent = e.message;
+            body.appendChild(err);
+            return;
+          }
+          if (seq !== _searchSeq) return;
+          loading.remove();
+          // 최근 파일과 겹치는 경로는 서버 결과에서 뺀다(이미 위 섹션에 있다).
+          const recentSet = new Set(recentMatches);
+          const results = (data.results || []).filter(r => !recentSet.has(r.path));
+          if (!results.length && !recentMatches.length) { emptyState(); return; }
+          if (results.length) section('파일', results, (r) => _fileRow(r));
+        }, 200);
       }
 
       // `:` 접두사 — 포트. 킬은 여기서 하지 않는다(오조작 방지) — 행을 고르면

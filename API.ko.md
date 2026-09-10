@@ -62,6 +62,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 |--------|------|------|
 | GET | `/api/fs/roots` | 열람 가능한 루트 목록 (기본 `~/GitHub`) |
 | GET | `/api/fs/tree?path=X` | 디렉토리 목록. `.git`/`node_modules` 등 제외 |
+| GET | `/api/fs/search?q=X` | 파일명 fuzzy 검색 (N5/N40 — 커맨드 팔레트 `/` 모드). `path=`로 하위 트리 한정, 최대 50건 |
 | GET | `/api/fs/file?path=X` | 파일 내용. 바이너리는 `binary:true`만, 512KB 초과는 절단 |
 | GET | `/api/git/status?repo=X` | `git status --porcelain` 파싱 결과 |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | `git diff` 원문. `.env`/`*.pem`/`id_rsa` 등 보호 경로는 내용이 가려짐(`[내용 가려짐 — 보호된 경로]`) |

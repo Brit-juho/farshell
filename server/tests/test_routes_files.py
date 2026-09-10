@@ -200,3 +200,60 @@ def test_git_commit_success_reflects_in_status_and_log(client, repo):
         capture_output=True, check=True,
     ).stdout.decode()
     assert log.strip() == "update a"
+
+
+# --- fs 검색 (N5/N40, 60-settings-palette.md §3 `/` 모드) --------------------
+
+
+def test_fs_search_empty_query_returns_empty(client, repo):
+    r = client.get("/api/fs/search", params={"q": ""})
+    assert r.status_code == 200
+    assert r.json() == {"results": [], "truncated": False}
+
+
+def test_fs_search_finds_fuzzy_subsequence_match(client, repo):
+    (repo / "settings.js").write_text("x")
+    r = client.get("/api/fs/search", params={"q": "stgs"})
+    assert r.status_code == 200
+    names = [x["name"] for x in r.json()["results"]]
+    assert "settings.js" in names
+
+
+def test_fs_search_scores_closer_matches_first(client, repo):
+    (repo / "settings.js").write_text("x")
+    (repo / "s_e_t_t_i_n_g_s_extra_long_name.js").write_text("x")
+    r = client.get("/api/fs/search", params={"q": "settings"})
+    names = [x["name"] for x in r.json()["results"]]
+    assert names[0] == "settings.js"
+
+
+def test_fs_search_excludes_denied_and_vcs_dirs(client, repo):
+    (repo / ".env").write_text("SECRET=1")
+    nm = repo / "node_modules"
+    nm.mkdir()
+    (nm / "envfile.js").write_text("x")
+    r = client.get("/api/fs/search", params={"q": "env"})
+    paths = [x["path"] for x in r.json()["results"]]
+    assert not any(".env" in p.split("/")[-1] == ".env" for p in paths)
+    assert not any("node_modules" in p for p in paths)
+
+
+def test_fs_search_respects_path_scope_and_denies_outside_root(client, repo):
+    sub = repo / "sub"
+    sub.mkdir()
+    (sub / "target.py").write_text("x")
+    r = client.get("/api/fs/search", params={"q": "target", "path": str(sub)})
+    assert r.status_code == 200
+    assert [x["name"] for x in r.json()["results"]] == ["target.py"]
+
+    r2 = client.get("/api/fs/search", params={"q": "x", "path": "/etc"})
+    assert r2.status_code == 403
+
+
+def test_fs_search_caps_results_at_50(client, repo):
+    for i in range(60):
+        (repo / f"file_{i:03d}.txt").write_text("x")
+    r = client.get("/api/fs/search", params={"q": "file"})
+    data = r.json()
+    assert len(data["results"]) <= 50
+    assert data["truncated"] is True

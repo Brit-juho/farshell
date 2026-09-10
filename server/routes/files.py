@@ -88,6 +88,115 @@ def _list_dir(p: Path) -> dict:
     return {"path": str(p), "entries": entries, "truncated": truncated}
 
 
+# --- 파일명 검색 (N5/N40, 60-settings-palette.md §3 `/` 모드) ----------------
+
+# 트리 조회(MAX_ENTRIES=1000, 한 디렉토리)와 다른 종류의 상한 — 이건 **재귀** 검색이라
+# 파일 수가 아니라 "얼마나 많은 디렉토리를 열어봤는가"로 시간을 잘라야 한다. 큰
+# 모노레포에서도 팔레트가 200ms 디바운스 감각을 지키려면 스캔 자체가 짧아야 한다.
+MAX_SEARCH_SCANNED_DIRS = 4000
+MAX_SEARCH_RESULTS = 50
+
+
+def _fuzzy_score(query: str, name: str) -> Optional[int]:
+    """subsequence 매치 — quickopen.js의 프런트 fuzzy(_fuzzyMatch)와 같은 규칙을
+    서버에도 둔다(다른 데이터소스라 코드 공유는 못 하지만 "질의 문자가 이름에서
+    같은 순서로 다 나오면 매치"라는 규칙은 동일하게 유지). 점수가 낮을수록(문자가
+    이름 안에서 더 붙어 있고 더 앞쪽일수록) 좋은 매치 — 정렬 키로 그대로 쓴다."""
+    if not query:
+        return 0
+    q = query.lower()
+    n = name.lower()
+    qi = 0
+    first = -1
+    last = 0
+    for i, ch in enumerate(n):
+        if qi < len(q) and ch == q[qi]:
+            if first < 0:
+                first = i
+            last = i
+            qi += 1
+    if qi < len(q):
+        return None
+    return (last - first) + first  # 붙어 있을수록·앞쪽일수록 작은 값
+
+
+def _search_files(root: Path, query: str) -> tuple[list[dict], bool]:
+    results = []
+    scanned_dirs = 0
+    truncated = False
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        if scanned_dirs >= MAX_SEARCH_SCANNED_DIRS:
+            truncated = True
+            break
+        scanned_dirs += 1
+        try:
+            with os.scandir(d) as it:
+                subdirs = []
+                for de in it:
+                    name = de.name
+                    try:
+                        is_dir = de.is_dir(follow_symlinks=False)
+                    except OSError:
+                        continue
+                    if is_dir:
+                        if name in fsguard.EXCLUDE_DIRS:
+                            continue
+                        subdirs.append(de.path)
+                        continue
+                    if fsguard._is_denied_name(name):
+                        continue
+                    score = _fuzzy_score(query, name)
+                    if score is None:
+                        continue
+                    try:
+                        size = de.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        size = 0
+                    results.append({"path": de.path, "name": name, "size": size, "_score": score})
+                # 얕은 디렉토리부터 보되(체감상 가까운 결과가 먼저), 순서는 크게
+                # 중요하지 않다 — 최종 정렬은 스코어 기준으로 한 번 더 한다.
+                stack.extend(subdirs)
+        except (PermissionError, OSError):
+            continue
+    results.sort(key=lambda r: (r["_score"], len(r["path"])))
+    trimmed = results[:MAX_SEARCH_RESULTS]
+    return trimmed, truncated or len(results) > MAX_SEARCH_RESULTS
+
+
+@router.get("/api/fs/search")
+async def fs_search(q: str = Query(...), path: str = Query("")):
+    """파일명 fuzzy 검색 — 팔레트 `/` 모드(60-settings-palette.md §3).
+
+    `path`를 주면 그 루트 아래만(quickopen이 "현재 보고 있는 위치 기준"을
+    구현할 수 있게), 안 주면 fsguard.get_start_roots() 전부를 훑는다.
+    질의가 빈 문자열이면 빈 결과 — 팔레트가 빈 입력에서 트리 전체를 긁지 않게.
+    """
+    q = q.strip()
+    if not q:
+        return {"results": [], "truncated": False}
+    if path:
+        try:
+            roots = [fsguard.resolve_under_roots(path)]
+        except fsguard.FsDenied as e:
+            return _denied(e.reason)
+    else:
+        roots = fsguard.get_start_roots()
+
+    all_results: list[dict] = []
+    truncated = False
+    for root in roots:
+        r, t = await asyncio.to_thread(_search_files, root, q)
+        all_results.extend(r)
+        truncated = truncated or t
+    all_results.sort(key=lambda r: (r["_score"], len(r["path"])))
+    final = all_results[:MAX_SEARCH_RESULTS]
+    for r in final:
+        del r["_score"]
+    return {"results": final, "truncated": truncated or len(all_results) > MAX_SEARCH_RESULTS}
+
+
 @router.get("/api/fs/tree")
 async def fs_tree(path: str = Query(...)):
     try:

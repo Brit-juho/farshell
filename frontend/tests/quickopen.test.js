@@ -64,11 +64,12 @@ function buildFetch(state) {
     if (u.includes('/api/tmux/sessions')) return ok(state.tmuxSessions || []);
     if (u.includes('/api/agents')) return ok(state.agents || {});
     if (u.includes('/api/ports')) return ok(state.ports || { ports: [] });
+    if (u.includes('/api/fs/search')) return ok(state.fsSearch || { results: [], truncated: false });
     return ok({});
   };
 }
 
-async function buildWindow({ tmuxSessions = [], agents = {}, ports = { ports: [] } } = {}) {
+async function buildWindow({ tmuxSessions = [], agents = {}, ports = { ports: [] }, fsSearch } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
@@ -77,7 +78,7 @@ async function buildWindow({ tmuxSessions = [], agents = {}, ports = { ports: []
   window.Terminal = FakeTerminal;
   window.FitAddon = { FitAddon: class { fit() {} } };
   window.SearchAddon = { SearchAddon: class {} };
-  const state = { tmuxSessions, agents, ports };
+  const state = { tmuxSessions, agents, ports, fsSearch };
   window.fetch = buildFetch(state);
 
   const cache = new Map();
@@ -215,25 +216,46 @@ test('`>` 접두사 — "맥에서도 열기"도 같은 경로를 탄다 (E2에�
   assert.strictEqual(cb.checked, true);
 });
 
-test('`/` 접두사 — 터미널 내 검색을 열고 입력값을 검색창에 채운다', async () => {
-  const { window } = await buildWindow();
-  const searchBar = window.document.getElementById('search-bar');
-  const searchInput = window.document.getElementById('search-input');
-  assert.ok(!searchBar.classList.contains('visible'));
-
+// N5/N40(60-settings-palette.md §3) — `/`는 터미널 내 검색이 아니라 파일
+// 검색이 됐다(팔레트 안에서만 바뀐 의미 — Cmd+F·"터미널 내 검색" 명령은
+// 그대로 있다. quickopen.js 상단 주석 참고).
+test('`/` 접두사 — 최근 파일 + 서버 fuzzy 검색 결과를 함께 보여준다', async () => {
+  const { window } = await buildWindow({
+    fsSearch: { results: [{ path: '/repo/src/needle.py', name: 'needle.py', size: 10 }], truncated: false },
+  });
   openPalette(window);
   await flush();
   const input = window.document.getElementById('vt-qo-input');
   input.value = '/needle';
   input.dispatchEvent(new window.Event('input'));
+  await flush();
 
-  const row = window.document.querySelector('.vt-qo-row');
-  assert.match(row.textContent, /needle/);
-  row.click();
+  // 디바운스(200ms) — 실제 타이머가 지나야 서버 응답이 반영된다.
+  await new Promise((r) => setTimeout(r, 260));
 
-  assert.ok(searchBar.classList.contains('visible'), '검색바가 열려야 한다');
-  assert.strictEqual(searchInput.value, 'needle');
-  assert.strictEqual(window.document.getElementById('vt-qopen'), null);
+  const rows = Array.from(window.document.querySelectorAll('.vt-qo-row'));
+  assert.ok(rows.some((r) => r.textContent.includes('needle.py')), '서버 검색 결과가 보여야 한다');
+
+  rows.find((r) => r.textContent.includes('needle.py')).click();
+  assert.strictEqual(window.document.getElementById('vt-qopen'), null, '선택하면 팔레트가 닫혀야 한다');
+});
+
+test('`/` 접두사 — 질의가 비어 있으면 서버를 안 부르고 최근 파일만 보여준다', async () => {
+  const { window } = await buildWindow();
+  let searchCalled = false;
+  const origFetch = window.fetch;
+  window.fetch = (url, ...rest) => {
+    if (String(url).includes('/api/fs/search')) searchCalled = true;
+    return origFetch(url, ...rest);
+  };
+  openPalette(window);
+  await flush();
+  const input = window.document.getElementById('vt-qo-input');
+  input.value = '/';
+  input.dispatchEvent(new window.Event('input'));
+  await flush();
+  await new Promise((r) => setTimeout(r, 50));
+  assert.strictEqual(searchCalled, false, '빈 질의로는 파일시스템 스캔을 보내면 안 된다');
 });
 
 test('`:` 접두사 — 포트 목록을 보여주고, 선택하면 포트 대시보드를 연다', async () => {

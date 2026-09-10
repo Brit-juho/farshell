@@ -65,6 +65,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 |--------|------|------|
 | GET | `/api/fs/roots` | List of browsable roots (default `~/GitHub`) |
 | GET | `/api/fs/tree?path=X` | Directory listing. Excludes `.git`/`node_modules` etc. |
+| GET | `/api/fs/search?q=X` | Fuzzy filename search (N5/N40 — command palette `/` mode). `path=` scopes to a subtree, max 50 results |
 | GET | `/api/fs/file?path=X` | File content. Binaries return only `binary:true`; anything over 512KB is truncated |
 | GET | `/api/git/status?repo=X` | Parsed result of `git status --porcelain` |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | Raw `git diff` output. Protected paths (`.env`/`*.pem`/`id_rsa`, etc.) have their content redacted (`[content redacted — protected path]`) |
