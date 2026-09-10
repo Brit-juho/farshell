@@ -165,13 +165,69 @@ def _git_toplevel(repo: Path) -> Path | None:
     return Path(out.strip())
 
 
+# `git status --branch -z`가 맨 앞에 넣는 헤더 한 줄.
+#   ## feat/x...origin/feat/x [ahead 3, behind 1]
+#   ## master            (upstream 없음)
+#   ## HEAD (no branch)  (detached)
+#   ## No commits yet on master
+# ahead/behind는 대괄호 안에 하나만 올 수도 있고 둘 다 올 수도 있다.
+_BRANCH_RE = re.compile(r"^## (?:No commits yet on )?(?P<branch>[^.\s]\S*?)(?:\.\.\.(?P<upstream>\S+))?(?: \[(?P<track>[^\]]*)\])?$")
+_AHEAD_RE = re.compile(r"ahead (\d+)")
+_BEHIND_RE = re.compile(r"behind (\d+)")
+
+
+def _parse_branch_header(line: str) -> dict:
+    """`## ...` 헤더 → {branch, upstream, ahead, behind}. 못 읽으면 전부 비운다.
+
+    파싱 실패가 status 전체를 실패시키면 안 된다 — 파일 목록은 dock의 본체고
+    브랜치 줄은 머리말이라, 머리말을 못 읽었다고 본체를 못 보여줄 이유가 없다.
+    """
+    empty = {"branch": None, "upstream": None, "ahead": 0, "behind": 0}
+    m = _BRANCH_RE.match(line.strip())
+    if not m:
+        return empty
+    branch = m.group("branch")
+    if branch == "HEAD":       # detached — 브랜치 이름이 아니다
+        branch = None
+    track = m.group("track") or ""
+    a = _AHEAD_RE.search(track)
+    b = _BEHIND_RE.search(track)
+    return {
+        "branch": branch,
+        "upstream": m.group("upstream"),
+        "ahead": int(a.group(1)) if a else 0,
+        "behind": int(b.group(1)) if b else 0,
+    }
+
+
+def _diff_stat(top: Path) -> dict:
+    """워킹트리+인덱스 전체의 +/− 합. HEAD가 없는 저장소(커밋 0개)면 0."""
+    rc, out = _git(top, "diff", "--numstat", "HEAD")
+    if rc != 0:
+        return {"insertions": 0, "deletions": 0}
+    ins = dele = 0
+    for line in out.splitlines():
+        cols = line.split("\t")
+        if len(cols) < 3:
+            continue
+        # 바이너리는 "-\t-\tpath"로 나온다 — 숫자가 아니면 건너뛴다.
+        if cols[0].isdigit():
+            ins += int(cols[0])
+        if cols[1].isdigit():
+            dele += int(cols[1])
+    return {"insertions": ins, "deletions": dele}
+
+
 def _collect_status(repo: Path) -> dict:
     top = _git_toplevel(repo)
     if top is None:
         return {"repo": False, "root": str(repo), "files": []}
-    rc, out = _git(top, "status", "--porcelain=v1", "-z")
+    # --branch: dock 소스컨트롤 머리말(브랜치 · ↑ahead ↓behind)을 위해. 별도
+    # git 호출이 아니라 같은 status 호출의 헤더 한 줄이라 비용이 0이다.
+    rc, out = _git(top, "status", "--porcelain=v1", "-z", "--branch")
     if rc != 0:
-        return {"repo": True, "root": str(top), "files": []}
+        return {"repo": True, "root": str(top), "files": [],
+                **_parse_branch_header(""), "insertions": 0, "deletions": 0}
     files = []
     # -z 는 NUL 구분이라 공백/한글 파일명이 안전하다.
     # rename/copy(R/C)는 필드가 2개: "XY new_path\0old_path\0" — old_path는
@@ -180,6 +236,13 @@ def _collect_status(repo: Path) -> dict:
     # 가짜 status로 삼켜서 UI에 존재하지 않는 파일/상태가 나타난다.
     parts = out.split("\0")
     it = iter(parts)
+    # 헤더는 항상 첫 레코드다(-z라서 NUL로 끊긴다).
+    branch_info = {"branch": None, "upstream": None, "ahead": 0, "behind": 0}
+    first = next(it, "")
+    if first.startswith("## "):
+        branch_info = _parse_branch_header(first)
+    else:
+        it = iter(parts)   # 헤더가 없으면(구 git 등) 처음부터 다시 읽는다
     for rec in it:
         if len(rec) < 4:
             continue
@@ -199,7 +262,7 @@ def _collect_status(repo: Path) -> dict:
             except StopIteration:
                 pass
         files.append(entry)
-    return {"repo": True, "root": str(top), "files": files}
+    return {"repo": True, "root": str(top), "files": files, **branch_info, **_diff_stat(top)}
 
 
 @router.get("/api/git/status")

@@ -21,26 +21,43 @@ async function _gitAction(repo, path, files) {
   });
 }
 
-function _gitRowEl(repo, entry, staged) {
+// N35 §6 — 이 아래 렌더러들은 **어디에 그릴지를 인자로 받는다**. 2.1.0부터
+// 같은 화면이 두 자리에 뜨기 때문이다: 코드 뷰어 패널(2.0, 쓰기 가능)과 dock
+// 소스컨트롤 탭(40 §5, 2.1.0은 읽기 전용). 컴포넌트를 두 벌 만들면 반드시
+// 어긋나므로, 뷰어 크롬(제목·경로·활성 페인)에 의존하는 부분만 showGit()에
+// 남기고 목록·커밋 상자·로그는 전부 여기로 내렸다.
+//
+// opts:
+//   readOnly  — +/−·커밋 버튼을 렌더는 하되 disabled + 사유 툴팁(40 §5)
+//   onFile(file, staged)  — 파일 행 클릭
+//   onCommit(sha)         — 커밋 행 클릭
+
+const _RO_HINT = '2.1.1에서 열립니다 — 지금은 읽기 전용입니다';
+
+function _gitRowEl(repo, entry, staged, opts) {
   const row = document.createElement('div');
   row.className = 'vt-vw-grow';
 
   const btn = document.createElement('button');
   btn.className = 'vt-vw-gact';
   btn.textContent = staged ? '－' : '＋';
-  btn.title = staged ? '스테이지 해제' : '스테이지';
+  btn.title = opts.readOnly ? _RO_HINT : (staged ? '스테이지 해제' : '스테이지');
   btn.setAttribute('aria-label', btn.title);
-  btn.addEventListener('click', async (ev) => {
-    ev.stopPropagation();
+  if (opts.readOnly) {
     btn.disabled = true;
-    try {
-      await _gitAction(repo, staged ? '/api/git/unstage' : '/api/git/stage', [entry.file]);
-      await showGit(repo);
-    } catch (e) {
-      showToast(`${btn.title} 실패: ${e.message}`);
-      btn.disabled = false;
-    }
-  });
+  } else {
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      btn.disabled = true;
+      try {
+        await _gitAction(repo, staged ? '/api/git/unstage' : '/api/git/stage', [entry.file]);
+        await opts.reload();
+      } catch (e) {
+        showToast(`${btn.title} 실패: ${e.message}`);
+        btn.disabled = false;
+      }
+    });
+  }
 
   const badge = document.createElement('span');
   badge.className = 'vt-vw-gstat';
@@ -54,24 +71,24 @@ function _gitRowEl(repo, entry, staged) {
   row.appendChild(btn);
   row.appendChild(badge);
   row.appendChild(name);
-  row.addEventListener('click', () => _showFileDiff(repo, entry.file, staged));
+  row.addEventListener('click', () => opts.onFile(entry.file, staged));
   return row;
 }
 
-function _gitSectionEl(title, entries, repo, staged) {
+function _gitSectionEl(title, entries, repo, staged, opts) {
   const sec = document.createElement('div');
   sec.className = 'vt-vw-gsec';
   const head = document.createElement('div');
   head.className = 'vt-vw-ghead';
   head.textContent = `${title} (${entries.length})`;
   sec.appendChild(head);
-  entries.forEach(e => sec.appendChild(_gitRowEl(repo, e, staged)));
+  entries.forEach(e => sec.appendChild(_gitRowEl(repo, e, staged, opts)));
   return sec;
 }
 
-async function _doCommit(repo, pane) {
-  const ta = pane.querySelector('#vt-vw-commit-msg');
-  const btn = pane.querySelector('#vt-vw-commit-btn');
+async function _doCommit(repo, wrap, reload) {
+  const ta = wrap.querySelector('.vt-vw-gmsg');
+  const btn = wrap.querySelector('.vt-vw-gcommit-btn');
   const message = (ta.value || '').trim();
   if (!message) return;
   btn.disabled = true;
@@ -82,11 +99,81 @@ async function _doCommit(repo, pane) {
       body: JSON.stringify({ repo, message }),
     });
     showToast('커밋했습니다.');
-    await showGit(repo);
+    await reload();
   } catch (e) {
     showToast(`커밋 실패: ${e.message}`);
     btn.disabled = false;
   }
+}
+
+/** git status/커밋상자/로그를 container에 그린다. 성공하면 status 응답을 돌려준다. */
+export async function renderGitStatus(container, repo, opts = {}) {
+  const o = {
+    readOnly: false,
+    onFile: () => {},
+    onCommit: () => {},
+    reload: () => renderGitStatus(container, repo, opts),
+    ...opts,
+  };
+  container.innerHTML = '<div class="vt-vw-loading">git status 확인 중…</div>';
+
+  let d;
+  try {
+    d = await vtFetch(`/api/git/status?repo=${encodeURIComponent(repo)}`);
+  } catch (e) {
+    _setMsg(container, 'vt-vw-empty', [e.message]);
+    return null;
+  }
+  if (!d.repo) { _setMsg(container, 'vt-vw-empty', ['git 저장소가 아닙니다.']); return d; }
+
+  // 미추적 파일("??")은 index_status/worktree_status 둘 다 '?'로 채워지는데,
+  // 실제 인덱스에는 없으므로 스테이지됨으로 분류하면 안 된다.
+  const staged = d.files.filter(f => f.index_status && f.status !== '??');
+  const unstaged = d.files.filter(f => f.status === '??' || (!f.index_status && f.worktree_status));
+
+  container.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'vt-vw-git';
+
+  if (!d.files.length) {
+    const empty = document.createElement('div');
+    empty.className = 'vt-vw-empty';
+    empty.textContent = '변경된 내용이 없습니다.';
+    wrap.appendChild(empty);
+  } else {
+    if (staged.length) wrap.appendChild(_gitSectionEl('스테이지됨', staged, repo, true, o));
+    if (unstaged.length) wrap.appendChild(_gitSectionEl('변경사항', unstaged, repo, false, o));
+  }
+
+  // 읽기 전용(dock, 2.1.0)에서는 커밋 상자를 아예 안 그린다 — 비활성 입력창은
+  // 자리만 먹고, "여기서 커밋한다"는 자리 표시는 dock 아래 버튼 줄이 이미 한다.
+  const canCommit = staged.length && !o.readOnly;
+  if (!o.readOnly) {
+  const commitBox = document.createElement('div');
+  commitBox.className = 'vt-vw-gcommit';
+  const ta = document.createElement('textarea');
+  ta.className = 'vt-vw-gmsg';
+  ta.rows = 2;
+  ta.placeholder = '커밋 메시지';
+  ta.disabled = !canCommit;
+  const cbtn = document.createElement('button');
+  cbtn.className = 'vt-vw-gcommit-btn';
+  cbtn.textContent = '커밋';
+  cbtn.disabled = !canCommit;
+  commitBox.appendChild(ta);
+  commitBox.appendChild(cbtn);
+  wrap.appendChild(commitBox);
+  if (canCommit) cbtn.addEventListener('click', () => _doCommit(repo, wrap, o.reload));
+  }
+
+  const logSec = document.createElement('div');
+  logSec.className = 'vt-vw-glog';
+  wrap.appendChild(logSec);
+
+  container.appendChild(wrap);
+
+  _renderCommitLog(repo, logSec, 0, o);
+  return d;
 }
 
 export async function showGit(repo) {
@@ -97,59 +184,17 @@ export async function showGit(repo) {
   _setTitle('Git');
   _setPath(target);
   const pane = document.getElementById('vt-vw-code-pane');
-  pane.innerHTML = '<div class="vt-vw-loading">git status 확인 중…</div>';
   if (_viewerState.displayMode === 'sheet') _setActivePane('code');
-
-  let d;
-  try {
-    d = await vtFetch(`/api/git/status?repo=${encodeURIComponent(target)}`);
-  } catch (e) {
-    _setMsg(pane, 'vt-vw-empty', [e.message]);
-    return;
-  }
-  if (!d.repo) { _setMsg(pane, 'vt-vw-empty', ['git 저장소가 아닙니다.']); return; }
-
-  // 미추적 파일("??")은 index_status/worktree_status 둘 다 '?'로 채워지는데,
-  // 실제 인덱스에는 없으므로 스테이지됨으로 분류하면 안 된다.
-  const staged = d.files.filter(f => f.index_status && f.status !== '??');
-  const unstaged = d.files.filter(f => f.status === '??' || (!f.index_status && f.worktree_status));
-
-  pane.innerHTML = '';
-  const wrap = document.createElement('div');
-  wrap.className = 'vt-vw-git';
-
-  if (!d.files.length) {
-    const empty = document.createElement('div');
-    empty.className = 'vt-vw-empty';
-    empty.textContent = '변경된 내용이 없습니다.';
-    wrap.appendChild(empty);
-  } else {
-    if (staged.length) wrap.appendChild(_gitSectionEl('스테이지됨', staged, target, true));
-    if (unstaged.length) wrap.appendChild(_gitSectionEl('변경사항', unstaged, target, false));
-  }
-
-  const commitBox = document.createElement('div');
-  commitBox.className = 'vt-vw-gcommit';
-  commitBox.innerHTML = `
-    <textarea id="vt-vw-commit-msg" class="vt-vw-gmsg" placeholder="커밋 메시지" rows="2"
-      ${staged.length ? '' : 'disabled'}></textarea>
-    <button id="vt-vw-commit-btn" class="vt-vw-gcommit-btn" ${staged.length ? '' : 'disabled'}>커밋</button>
-  `;
-  wrap.appendChild(commitBox);
-
-  const logSec = document.createElement('div');
-  logSec.className = 'vt-vw-glog';
-  wrap.appendChild(logSec);
-
-  pane.appendChild(wrap);
-
-  pane.querySelector('#vt-vw-commit-btn').addEventListener('click', () => _doCommit(target, pane));
-  _renderCommitLog(target, logSec, 0);
+  await renderGitStatus(pane, target, {
+    onFile: (file, staged) => _showFileDiff(target, file, staged),
+    onCommit: (sha) => _showCommit(target, sha),
+    reload: () => showGit(target),
+  });
 }
 
 // --- git log / show (커밋 기록 · 커밋 간 diff, 읽기 전용) -----------------------
 
-function _commitRowEl(repo, c) {
+function _commitRowEl(repo, c, opts) {
   const row = document.createElement('div');
   row.className = 'vt-vw-grow vt-vw-crow';
   const sha = document.createElement('span');
@@ -161,12 +206,12 @@ function _commitRowEl(repo, c) {
   name.title = `${c.author} · ${c.date}`;
   row.appendChild(sha);
   row.appendChild(name);
-  row.addEventListener('click', () => _showCommit(repo, c.hash));
+  row.addEventListener('click', () => opts.onCommit(c.hash));
   return row;
 }
 
 // skip=0이면 헤더부터 새로 그린다. "더 보기"는 같은 container에 이어 붙인다.
-async function _renderCommitLog(repo, container, skip) {
+async function _renderCommitLog(repo, container, skip, opts) {
   if (skip === 0) {
     container.innerHTML = '';
     const head = document.createElement('div');
@@ -196,38 +241,31 @@ async function _renderCommitLog(repo, container, skip) {
     }
     return;
   }
-  d.commits.forEach(c => container.appendChild(_commitRowEl(repo, c)));
+  d.commits.forEach(c => container.appendChild(_commitRowEl(repo, c, opts)));
   if (d.has_more) {
     const btn = document.createElement('button');
     btn.className = 'vt-pt-btn vt-vw-glog-more';
     btn.textContent = '더 보기';
-    btn.addEventListener('click', () => _renderCommitLog(repo, container, skip + d.commits.length));
+    btn.addEventListener('click', () => _renderCommitLog(repo, container, skip + d.commits.length, opts));
     container.appendChild(btn);
   }
 }
 
-async function _showCommit(repo, sha) {
-  _viewerState.mode = 'diff';
-  _setTitle(sha.slice(0, 7));
-  _setPath(repo);
-  const pane = document.getElementById('vt-vw-code-pane');
-  pane.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
-  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+/** 커밋 하나(메타 + 변경 파일 목록)를 container에 그린다. */
+export async function renderCommit(container, repo, sha, opts = {}) {
+  const o = { onBack: null, onFile: () => {}, ...opts };
+  container.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
 
   let d;
   try {
     d = await vtFetch(`/api/git/show?repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}`);
   } catch (e) {
-    _setMsg(pane, 'vt-vw-empty', [e.message]);
+    _setMsg(container, 'vt-vw-empty', [e.message]);
     return;
   }
 
-  pane.innerHTML = '';
-  const back = document.createElement('button');
-  back.className = 'vt-pt-btn vt-vw-cback';
-  back.textContent = '‹ 상태로';
-  back.addEventListener('click', () => showGit(repo));
-  pane.appendChild(back);
+  container.innerHTML = '';
+  if (o.onBack) container.appendChild(_backBtn('‹ 상태로', o.onBack));
 
   const wrap = document.createElement('div');
   wrap.className = 'vt-vw-git';
@@ -267,49 +305,73 @@ async function _showCommit(repo, sha) {
     name.textContent = f.orig_file ? `${f.orig_file} → ${f.file}` : f.file;
     row.appendChild(badge);
     row.appendChild(name);
-    row.addEventListener('click', () => _showCommitFileDiff(repo, sha, f.file));
+    row.addEventListener('click', () => o.onFile(f.file));
     sec.appendChild(row);
   });
   wrap.appendChild(sec);
-  pane.appendChild(wrap);
+  container.appendChild(wrap);
 }
 
-async function _showCommitFileDiff(repo, sha, file) {
-  _viewerState.mode = 'diff';
-  _setTitle(file.split('/').pop());
-  _setPath(file);
-  const pane = document.getElementById('vt-vw-code-pane');
-  pane.innerHTML = '<div class="vt-vw-loading">git show 실행 중…</div>';
-  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+/** 커밋 안의 파일 하나의 diff를 container에 그린다. */
+export async function renderCommitFileDiff(container, repo, sha, file, opts = {}) {
+  const o = { onBack: null, ...opts };
+  container.innerHTML = '<div class="vt-vw-loading">git show 실행 중…</div>';
 
   let d;
   try {
     const q = `repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}&file=${encodeURIComponent(file)}`;
     d = await vtFetch(`/api/git/show?${q}`);
   } catch (e) {
-    _setMsg(pane, 'vt-vw-empty', [e.message]);
+    _setMsg(container, 'vt-vw-empty', [e.message]);
     return;
   }
 
-  pane.innerHTML = '';
-  const back = document.createElement('button');
-  back.className = 'vt-pt-btn vt-vw-cback';
-  back.textContent = '‹ 커밋으로';
-  back.addEventListener('click', () => _showCommit(repo, sha));
-  pane.appendChild(back);
+  container.innerHTML = '';
+  if (o.onBack) container.appendChild(_backBtn('‹ 커밋으로', o.onBack));
 
   if (!d.diff || !d.diff.trim()) {
     const empty = document.createElement('div');
     empty.className = 'vt-vw-empty';
     empty.textContent = '변경된 내용이 없습니다.';
-    pane.appendChild(empty);
+    container.appendChild(empty);
     return;
   }
-  _renderDiffDOM(pane, d.diff);
+  _renderDiffDOM(container, d.diff);
   if (d.truncated) {
     const note = document.createElement('div');
     note.className = 'vt-vw-note warn';
     note.textContent = 'diff가 커서 일부만 표시했습니다.';
-    pane.appendChild(note);
+    container.appendChild(note);
   }
+}
+
+function _backBtn(label, onClick) {
+  const back = document.createElement('button');
+  back.className = 'vt-pt-btn vt-vw-cback';
+  back.textContent = label;
+  back.addEventListener('click', onClick);
+  return back;
+}
+
+// --- 코드 뷰어 크롬을 입힌 래퍼들 ---------------------------------------------
+
+async function _showCommit(repo, sha) {
+  _viewerState.mode = 'diff';
+  _setTitle(sha.slice(0, 7));
+  _setPath(repo);
+  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+  await renderCommit(document.getElementById('vt-vw-code-pane'), repo, sha, {
+    onBack: () => showGit(repo),
+    onFile: (file) => _showCommitFileDiff(repo, sha, file),
+  });
+}
+
+async function _showCommitFileDiff(repo, sha, file) {
+  _viewerState.mode = 'diff';
+  _setTitle(file.split('/').pop());
+  _setPath(file);
+  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
+  await renderCommitFileDiff(document.getElementById('vt-vw-code-pane'), repo, sha, file, {
+    onBack: () => _showCommit(repo, sha),
+  });
 }

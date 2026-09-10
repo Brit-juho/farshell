@@ -101,6 +101,10 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         VT_TMUX_SOCKET=f"fsh-e2e-{port}",
         VT_NETWORK_MODE="localhost",
         VT_CONFIG=str(tmp / "no-such.env"),   # ~/.vt.env를 읽지 않게
+        # dock 소스컨트롤 탭이 볼 저장소를 이 저장소 자신으로 고정한다. 기본값
+        # (~/GitHub)은 CI에 없고 로컬에선 사람마다 달라 결과가 흔들린다. 열람은
+        # 읽기 전용이고 경계도 여기로 좁아진다.
+        VT_BROWSE_ROOTS=str(ROOT),
         PYTHONUNBUFFERED="1",
     )
     return env
@@ -502,6 +506,52 @@ def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
         "() => document.getElementById('vt-dock').classList.contains('collapsed')", timeout=5000
     )
     assert page.evaluate("() => !document.getElementById('vt-queue')"), "접었는데 패널이 남았다"
+
+
+def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
+    """40 §3 — 머리말(저장소·브랜치)과 목록이 실제 API 응답으로 채워지는가."""
+    _open_dock(page, "소스컨트롤")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    got = page.evaluate(
+        """() => ({
+             head: document.querySelector('#vt-scm-head')?.innerText || '',
+             log: document.querySelectorAll('#vt-dock-scm .vt-vw-crow').length,
+             inDock: !!document.querySelector('#vt-dock .vt-dock-body #vt-dock-scm'),
+           })"""
+    )
+    assert got["inDock"], "소스컨트롤 패널이 dock 밖에 있다"
+    assert got["log"] > 0, f"커밋 기록이 비었다: {got}"
+    assert got["head"].strip(), "머리말이 비었다 — 저장소를 못 찾았다"
+
+
+def test_dock_소스컨트롤_쓰기_버튼은_비활성이고_이유를_말한다(page):
+    """40 §5 — 2.1.0은 읽기 전용. 숨기지 않고 disabled + 사유 툴팁으로 둔다."""
+    _open_dock(page, "소스컨트롤")
+    page.wait_for_selector("#vt-dock-scm .vt-scm-foot button", timeout=15000)
+    btns = page.evaluate(
+        """() => [...document.querySelectorAll('.vt-scm-foot button')]
+                 .map((b) => [b.textContent, b.disabled, b.title])"""
+    )
+    assert [b[0] for b in btns] == ["커밋", "push", "PR 만들기"], btns
+    assert all(b[1] for b in btns), f"쓰기 버튼이 열려 있다: {btns}"
+    assert all("2.1.1" in b[2] for b in btns), f"이유 툴팁이 없다: {btns}"
+
+
+def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
+    """40 §3의 「줄 클릭 → 큐에 코멘트」. 2.0 뷰어의 같은 코드를 dock에서
+    그대로 쓰는지 실제 클릭으로 확인한다 — 변경된 파일이 없으면 건너뛴다."""
+    _open_dock(page, "소스컨트롤")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    rows = page.locator("#vt-dock-scm .vt-vw-gsec .vt-vw-grow")
+    if rows.count() == 0:
+        pytest.skip("작업 트리가 깨끗해 diff를 열 파일이 없다")
+    rows.first.click()
+    page.wait_for_selector("#vt-dock-scm .vt-vw-dl", timeout=15000)
+    page.locator("#vt-dock-scm .vt-vw-dl").first.click()
+    page.wait_for_selector("#vt-dock-scm .vt-vw-annotate", timeout=5000)
+    # 되돌아가기 — dock은 한 탭 안에서 상태↔diff를 오간다(모달을 새로 안 띄운다)
+    page.locator("#vt-dock-scm .vt-vw-cback").first.click()
+    page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=10000)
 
 
 def test_dock_폭_리사이저가_범위를_지킨다(page):
