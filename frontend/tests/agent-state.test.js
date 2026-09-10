@@ -155,3 +155,87 @@ test('배지 계산 — waiting 세션만 센다', async () => {
   const waiting = [...S.allStatuses().values()].filter((v) => v === 'waiting').length;
   assert.strictEqual(waiting, 2);
 });
+
+// ── N37 「읽지 않음」(unseen) ─────────────────────────────────────────────
+// 정의(10-shell-layout.md §4): 상태가 done인데 **이 기기에서** 그 세션이 아직
+// 눈에 띈 적이 없음. done은 서버가 정하고 unseen은 브라우저가 정한다 — 폰에서
+// 확인한 완료가 맥에서도 읽음이 되면 안 되기 때문이다.
+
+test('unseen — done으로 들어오면 읽지 않음이 된다', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  assert.strictEqual(S.isUnseen('dev'), true);
+  assert.strictEqual(S.unseenCount(), 1);
+});
+
+test('unseen — done이 아닌 상태는 읽지 않음이 아니다', async () => {
+  const { S } = await load();
+  for (const status of ['working', 'waiting', 'idle', 'error']) {
+    S.applyEvent({ status, tmux_session: 'dev' });
+    assert.strictEqual(S.isUnseen('dev'), false, `${status}는 읽지 않음이 아니다`);
+  }
+});
+
+test('unseen — markSeen하면 배지는 사라지지만 done 상태는 그대로다', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  S.markSeen('dev');
+  assert.strictEqual(S.isUnseen('dev'), false);
+  // "봤다"와 "완료를 치웠다"는 다른 사건이다 — 상태는 ackLocal만 내린다.
+  assert.strictEqual(S.getStatus('dev'), 'done');
+});
+
+test('unseen — 이미 읽은 done에 같은 스냅샷이 다시 와도 되살아나지 않는다', async () => {
+  const { S } = await load();
+  S.applySnapshot({ h1: { status: 'done', tmux_session: 'dev' } });
+  S.markSeen('dev');
+  // 폴링으로 같은 스냅샷이 반복해서 도착하는 상황
+  S.applySnapshot({ h1: { status: 'done', tmux_session: 'dev' } });
+  S.applySnapshot({ h1: { status: 'done', tmux_session: 'dev' } });
+  assert.strictEqual(S.isUnseen('dev'), false, '읽음 처리가 폴링에 덮여 되살아나면 안 된다');
+});
+
+test('unseen — done을 벗어나면 읽지 않음도 사라진다', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  S.applyEvent({ status: 'working', tmux_session: 'dev' });
+  assert.strictEqual(S.isUnseen('dev'), false, '더 이상 알릴 완료가 아니다');
+});
+
+test('unseen — done → 다른 상태 → 다시 done이면 새 완료라 또 읽지 않음', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  S.markSeen('dev');
+  S.applyEvent({ status: 'working', tmux_session: 'dev' });
+  S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  assert.strictEqual(S.isUnseen('dev'), true, '다음 작업의 완료는 따로 알려야 한다');
+});
+
+test('unseen — 스냅샷에서 사라진 세션은 읽지 않음도 함께 사라진다', async () => {
+  const { S } = await load();
+  S.applySnapshot({ h1: { status: 'done', tmux_session: 'dev' } });
+  assert.strictEqual(S.isUnseen('dev'), true);
+  S.applySnapshot({});   // 서버 TTL 정리 또는 세션 닫힘
+  assert.strictEqual(S.isUnseen('dev'), false);
+  assert.strictEqual(S.unseenCount(), 0);
+});
+
+test('unseen — ackLocal은 읽지 않음도 함께 지운다', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  S.ackLocal('dev');
+  assert.strictEqual(S.isUnseen('dev'), false);
+  assert.strictEqual(S.getStatus('dev'), 'idle');
+});
+
+test('unseen — markSeen은 구독자에게 알린다(배지가 즉시 사라져야 하므로)', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  let calls = 0;
+  S.onStatusChange(() => { calls++; });
+  S.markSeen('dev');
+  assert.strictEqual(calls, 1);
+  // 이미 읽은 걸 또 읽어도 헛 알림은 없다
+  S.markSeen('dev');
+  assert.strictEqual(calls, 1);
+});

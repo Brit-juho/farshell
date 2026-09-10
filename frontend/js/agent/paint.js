@@ -9,7 +9,7 @@
 // 이름만 키로 쓴다 — 웹 세션 id는 재attach마다 바뀌어 키가 될 수 없다.
 import { allSessions, getSession, subscribe } from '../core/store.js';
 import { onLayoutChange } from '../layout/store.js';
-import { getStatus, onStatusChange, applyStatusDot, ackLocal } from './state.js';
+import { getStatus, onStatusChange, applyStatusDot, ackLocal, isUnseen, markSeen } from './state.js';
 
 // 탭·pane 헤더에서는 **idle이면 dot을 아예 안 그린다.** 세션이 열 개면 회색 점
 // 열 개가 상시로 붙어 있게 되는데, 그건 정보가 아니라 노이즈다("아무 일도
@@ -33,14 +33,34 @@ function _tmuxName(sessionId) {
 // 정한 의도다. 정렬은 rail·팔레트만 한다 — 40-agent-state.md 2-6).
 function paintTabs() {
   document.querySelectorAll('#tabs .tab').forEach((tab) => {
-    const status = getStatus(_tmuxName(tab.dataset.sessionId));
+    const name = _tmuxName(tab.dataset.sessionId);
+    const status = getStatus(name);
     _dotOrNone(tab, status);
     // 기존 .working/.done 클래스도 유지한다 — CSS(legacy)가 이미 쓰고 있고,
     // 상태 dot이 안 보이는 좁은 화면에서도 탭 자체가 강조돼야 한다.
     tab.classList.toggle('working', status === 'working');
     tab.classList.toggle('done', status === 'done');
     tab.classList.toggle('waiting', status === 'waiting');
+    // N37 §4 — 「읽지 않음」 배지. done인데 아직 이 기기에서 본 적 없는 탭에만
+    // 붙는다. dot(=지금 상태)과 배지(=내가 놓친 것)는 뜻이 다르므로 둘 다 뜬다.
+    _unreadBadge(tab, isUnseen(name));
   });
+}
+
+// 배지는 있으면 갱신하고 없으면 만든다 — 매번 재생성하면 CSS 전이가 끊긴다
+// (applyStatusDot과 같은 이유).
+function _unreadBadge(tab, show) {
+  let badge = tab.querySelector(':scope > .tab-unread');
+  if (!show) { badge?.remove(); return; }
+  if (badge) return;
+  badge = document.createElement('span');
+  badge.className = 'tab-unread';
+  badge.textContent = '읽지 않음';
+  badge.title = '완료됐지만 아직 확인하지 않았습니다';
+  // 닫기 버튼 앞에 넣는다 — 항상 이름 뒤, 닫기 앞이라는 순서가 고정돼야 한다.
+  const close = tab.querySelector(':scope > .close');
+  if (close) tab.insertBefore(badge, close);
+  else tab.appendChild(badge);
 }
 
 // pane 헤더 — 이름 옆 dot. 분할 화면에서 "어느 칸이 나를 기다리는지"가
@@ -49,11 +69,13 @@ function paintPanes() {
   document.querySelectorAll('.vt-pane').forEach((pane) => {
     const nameEl = pane.querySelector('.vt-pane-name');
     if (!nameEl) return;
-    // pane에 배정된 세션은 wrapper의 소유자다 — pane id로 트리를 다시 뒤지는
-    // 대신, 이미 DOM에 있는 wrapper의 id에서 역으로 찾는다(렌더러와 결합하지
-    // 않으려는 것: panes.js가 어떻게 그리든 이 함수는 그대로 동작한다).
-    const wrapper = pane.querySelector('.vt-pane-body > [id^="term-"]');
-    const sid = wrapper ? wrapper.id.replace(/^term-/, '') : null;
+    // N16 회귀 수정: 예전엔 `.vt-pane-body > [id^="term-"]`로 wrapper를 찾았는데,
+    // 표면 레이어(layout/surface.js)가 wrapper를 페인 트리 밖 #vt-surface로
+    // 옮기면서 이 셀렉터가 **항상 빈 결과**가 됐다 — 페인 헤더 상태 dot이
+    // 통째로 안 그려지고, 세션이 빠져나간 페인에는 옛 dot이 남았다(실브라우저
+    // 실측으로 확인). 이제 surface.setPlacement가 pane-body에 심어주는
+    // data-vt-session-id가 "이 칸에 지금 어느 세션이 보이는가"의 단일 출처다.
+    const sid = pane.querySelector('.vt-pane-body')?.dataset.vtSessionId || null;
     const head = pane.querySelector('.vt-pane-head');
     if (!head) return;
     if (!sid) {
@@ -97,7 +119,19 @@ function paintAppBadge() {
   } catch (_) { /* 무시 */ }
 }
 
+// N37 — 「읽지 않음」을 실제로 지우는 지점. 정의가 "그 페인이 활성이 된 적
+// 없음"이므로, 클릭 같은 입력이 아니라 **화면에 활성으로 떠 있다는 사실**이
+// 기준이다: 다른 기기에서 전환했든 레이아웃 복원으로 떴든 눈에 보였으면 본
+// 것이다. paintAll이 상태·세션·레이아웃 변경마다 도므로 여기 얹으면 그 세
+// 경로가 한 번에 커버된다.
+function markActiveSeen() {
+  const activePane = document.querySelector('.vt-pane.active') || document.querySelector('.vt-pane');
+  const sid = activePane?.querySelector('.vt-pane-body')?.dataset.vtSessionId;
+  if (sid) markSeen(_tmuxName(sid));
+}
+
 function paintAll() {
+  markActiveSeen();
   paintTabs();
   paintPanes();
   paintFavicon();

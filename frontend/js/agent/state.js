@@ -17,6 +17,16 @@ const IDLE = 'idle';
 const _byTmux = new Map();
 const _listeners = new Set();
 
+// N37 — 「읽지 않음」. 정의(10-shell-layout.md §4): **상태가 `done`인데 그
+// 세션이 그 뒤로 한 번도 사용자 눈에 띈 적이 없음.** done 자체와 구분되는
+// 이유는, done은 서버가 정하고 「읽지 않음」은 **이 브라우저가** 정하기
+// 때문이다 — 폰에서 확인한 완료가 맥에서도 읽음이 되면 안 되고, 그 반대도
+// 안 된다(기기마다 본 것이 다르다).
+//
+// 여기 담기는 건 "아직 안 본 done"의 tmux 이름들이다. done → 다른 상태로
+// 바뀌면 지운다(더 이상 알릴 완료가 아니다).
+const _unseen = new Set();
+
 // 2-6 정렬 우선순위 — "내 개입이 필요한 것이 항상 맨 위". 서버(agent_status의
 // _URGENCY)와 **같은 순서**여야 한다: 서버는 큐 판정에, 여기는 목록 정렬에
 // 쓰지만 사용자에게는 하나의 규칙으로 보여야 한다.
@@ -24,6 +34,30 @@ export const URGENCY = { waiting: 0, done: 1, working: 2, error: 3, idle: 4 };
 
 export function getStatus(tmuxName) {
   return (tmuxName && _byTmux.get(tmuxName)) || IDLE;
+}
+
+// N37 — 이 세션에 「읽지 않음」 배지를 붙여야 하는가.
+export function isUnseen(tmuxName) {
+  return !!tmuxName && _unseen.has(tmuxName);
+}
+
+export function unseenCount() {
+  return _unseen.size;
+}
+
+// 사용자가 그 세션을 실제로 봤다 — 탭/페인이 활성이 되면 호출된다. done
+// 상태 자체는 건드리지 않는다(ackLocal과 다른 점): "봤다"와 "완료를 치웠다"는
+// 다른 사건이고, 완료 표시를 언제 내릴지는 ackLocal이 따로 정한다.
+export function markSeen(tmuxName) {
+  if (tmuxName && _unseen.delete(tmuxName)) _notify();
+}
+
+// 상태 전이에 따라 unseen을 갱신한다. done으로 **새로** 들어올 때만 unseen에
+// 넣는다 — 이미 done인 채로 스냅샷이 다시 와도(폴링) 방금 읽음 처리한 걸
+// 되살리면 안 된다.
+function _trackUnseen(name, prev, next) {
+  if (next === 'done' && prev !== 'done') _unseen.add(name);
+  else if (next !== 'done') _unseen.delete(name);
 }
 
 export function allStatuses() {
@@ -56,6 +90,10 @@ export function applySnapshot(all) {
   }
   const changed = next.size !== _byTmux.size
     || [...next].some(([k, v]) => _byTmux.get(k) !== v);
+  // N37 — 전이를 보고 unseen을 갱신한다. 스냅샷에서 사라진 세션(=서버가 TTL로
+  // 정리했거나 세션이 닫힘)은 알릴 완료도 같이 사라진다.
+  for (const [name, status] of next) _trackUnseen(name, _byTmux.get(name), status);
+  for (const name of _byTmux.keys()) if (!next.has(name)) _unseen.delete(name);
   _byTmux.clear();
   for (const [k, v] of next) _byTmux.set(k, v);
   if (changed) _notify();
@@ -68,6 +106,7 @@ export function applyEvent(state) {
   if (!name) return;
   const status = state.status || IDLE;
   if (_byTmux.get(name) === status) return;
+  _trackUnseen(name, _byTmux.get(name), status);
   _byTmux.set(name, status);
   _notify();
 }
@@ -76,8 +115,11 @@ export function applyEvent(state) {
 // 서버 ack API는 A6 이후에 붙인다 — 지금은 화면 반응성이 목적이고, 서버 쪽은
 // done TTL(30분)이 어차피 정리한다.
 export function ackLocal(tmuxName) {
+  const wasUnseen = _unseen.delete(tmuxName);
   if (_byTmux.get(tmuxName) === 'done') {
     _byTmux.set(tmuxName, IDLE);
+    _notify();
+  } else if (wasUnseen) {
     _notify();
   }
 }
