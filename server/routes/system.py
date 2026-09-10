@@ -7,6 +7,7 @@ import json as _json
 import logging
 import os
 import shutil
+from pathlib import Path
 
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -25,6 +26,22 @@ import workspace
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# N34(HUD) — 상태바 우측 끝에 버전을 띄운다. VERSION 파일은 릴리스마다만
+# 바뀌므로 프로세스 수명 동안 한 번만 읽는다. 파일이 없거나 못 읽으면 빈
+# 문자열 → 프런트가 "값이 없는 칩은 숨긴다" 규칙으로 알아서 안 그린다.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_VERSION: str | None = None
+
+
+def _version() -> str:
+    global _VERSION
+    if _VERSION is None:
+        try:
+            _VERSION = (_REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        except Exception:
+            _VERSION = ""
+    return _VERSION
 
 
 def _etag_response(payload, request: Request, stable_for_etag=None) -> Response:
@@ -76,6 +93,8 @@ async def capabilities(request: Request):
         # 통째로 숨긴다 — 기존 fs/ports/push 게이팅과 같은 메커니즘이라
         # 프런트에 새 개념이 생기지 않는다.
         "usage": usage.capability(),
+        # N34: HUD 우측 끝 버전 칩. 빈 문자열이면 프런트가 칩을 안 그린다.
+        "version": _version(),
     }
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}

@@ -1,16 +1,17 @@
 'use strict';
-// N18 — Solid/TSX 파이프라인 검증용. vm-esm.js는 .tsx를 직접 못 읽지만(TS/JSX
-// 변환이 필요), `vite build --mode test`로 tsx를 미리 컴파일해 나온
-// frontend/dist-test/smoke.js는 평범한 ESM 번들(외부 import 없음, solid-js
+// N18 — .ts/.tsx 검증용 공용 하네스. vm-esm.js는 .ts/.tsx를 직접 못 읽지만
+// (TS/JSX 변환이 필요), `vite build --mode test`로 미리 컴파일해 나온
+// frontend/dist-test/test-entry.js는 평범한 ESM 번들(외부 import 없음, solid-js
 // 런타임까지 전부 인라인)이라 vm-esm.js의 importFresh로 다른 테스트와 똑같이
-// 로드할 수 있다.
+// 로드할 수 있다. 새 TS 모듈을 테스트하려면 fixtures/test-entry.ts에 re-export만
+// 추가하면 된다. 빌드는 프로세스당 한 번(buildOnce)만 돈다.
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const { createDomEnv } = require('./dom-env');
 const { importFresh } = require('./vm-esm');
 
 const REPO_ROOT = path.resolve(__dirname, '../../..');
-const DIST_JS = path.join(REPO_ROOT, 'frontend/dist-test/smoke.js');
+const DIST_JS = path.join(REPO_ROOT, 'frontend/dist-test/test-entry.js');
 
 let _built = false;
 function buildOnce() {

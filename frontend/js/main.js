@@ -12,6 +12,12 @@ import '../../styles/main.css';
 import './core/env.js';
 import './core/api.js';
 import './core/store.js';
+// N34 — HUD(지연 청크)에 넘겨줄 것들. 위 부수효과 import와 같은 모듈 인스턴스라
+// 여기서 이름으로 한 번 더 가져와도 중복 평가는 없다(ES 모듈 캐시).
+import { vtFetch } from './core/api.js';
+import { getSession, activeSessionId } from './core/store.js';
+import { getAction } from './core/dom.js';
+import { E2E_ENABLED } from './term/e2e.js';
 import './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
 import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
@@ -91,6 +97,32 @@ import './layout/rail.js';
 // "먼저 로드"됨을 명시적으로 기다려야 했지만 이제 그 문제 자체가 없다.
 try {
   bootApp();
+  // N34 §7 — 상태바 HUD(Solid). **동적 import**인 이유는 ADR-26의 번들 게이트다:
+  // solid-js 런타임(~32KB)을 app.js에 정적으로 넣으면 300KiB 상한을 바로 넘긴다
+  // (실측 303,733 → 336,179B). 상한을 올리는 건 금지돼 있으므로, 문서가 지정한
+  // 대로 **고정 이름 지연 청크**(vite.config.js chunkFileNames → shell.js)로
+  // 분리한다 — 해시가 붙으면 sw.js 캐시 계약이 깨지므로 이름은 반드시 고정.
+  //
+  // 부팅이 끝난 뒤에 마운트한다: HUD가 첫 렌더에서 활성 세션의 tmux 이름을 읽어
+  // 「연결된 화면」을 조회하는데, bootApp() 전에는 세션이 없다.
+  //
+  // core/*는 **인자로 넘긴다**(Hud.tsx 상단 주석): 지연 청크가 그것들을 직접
+  // import하면 Rollup이 청크 안에 복제해 넣어서, 앱의 액션 레지스트리와 HUD가
+  // 보는 레지스트리가 다른 객체가 된다(칩을 눌러도 아무 일도 안 일어남).
+  const hudRoot = document.getElementById('vt-hud');
+  if (hudRoot) {
+    import('./shell/Hud.tsx')
+      .then(({ mountHud }) => mountHud(hudRoot, {
+        vtFetch,
+        activeTmuxName: () => {
+          const s = getSession(activeSessionId());
+          return (s && (s.tmuxName || s.tmux_name)) || '';
+        },
+        getAction,
+        e2eEnabled: E2E_ENABLED,
+      }))
+      .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
+  }
   // 부팅 완료 표시. `appBootFailed`(아래)와 짝이다 — 지금까지 실패만 표시하고
   // 성공은 표시하지 않아서, 밖에서는 "아직 부팅 중"과 "부팅 끝"을 구분할 수 없었다.
   //

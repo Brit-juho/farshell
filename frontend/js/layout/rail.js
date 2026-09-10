@@ -8,7 +8,7 @@
 import { apiFetch, vtFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { allSessions, getSession, activeSessionId, subscribe } from '../core/store.js';
-import { getAction } from '../core/dom.js';
+import { getAction, registerAction } from '../core/dom.js';
 import { switchTo, removeSession, renameSession, createSession } from '../term/session.js';
 import { buildSessionCard, updateSessionCard, ensurePreviewWs } from '../agent/preview.js';
 import { wireRatioResizer } from './resizer.js';
@@ -96,6 +96,15 @@ function initRail() {
     }
     if (persist) saveState();
   }
+
+  // N34 — 「연결된 화면」으로 가는 이름 있는 진입점. 그 블록은 세션 패널 안에
+  // 살고 있는데(mountClients), 지금까지 거기 도달하는 길은 "레일의 세션 버튼을
+  // 누른다" 하나뿐이었고 그마저도 클라이언트가 2개 이상일 때만 보였다 — 그래서
+  // 이 기능이 있다는 사실 자체를 모르고 쓰는 경우가 많았다. HUD의 「연결된 화면」
+  // 칩이 이 액션을 쏘고, 팔레트·키맵도 같은 id로 이 자리를 참조할 수 있다.
+  registerAction('clients.show', () => {
+    if (openItem !== 'session') openPanelItem('session');
+  });
 
   // ── 세션 패널 ────────────────────────────────────────────────────────────
   // quickopen.js의 세션 썸네일과 완전히 같은 조합(tmux 세션 목록 + 라이브

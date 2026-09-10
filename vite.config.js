@@ -52,10 +52,10 @@ function sameOriginProxy(target, extra = {}) {
 }
 
 // N18 — `vite build --mode test`(tests/helpers/solid-env.js가 부른다)로만
-// 켜지는 세 번째 산출물. Solid/TSX 파이프라인 자체(tsx 컴파일 → solid-js
-// 런타임 → 번들)를 실제 브라우저 없이 jsdom에서 검증하려면 뭔가는 실제로
-// 빌드해서 로드해야 한다 — 그 대상이 frontend/tests/fixtures/smoke.tsx다.
-// 별도 outDir(dist-test)라 app/voice 산출물과 절대 안 섞인다.
+// 켜지는 세 번째 산출물. .ts/.tsx는 tests/helpers/vm-esm.js가 직접 못 읽으므로
+// (TS/JSX 변환 필요), 검사 대상을 모은 배럴 frontend/tests/fixtures/test-entry.ts를
+// 실제로 컴파일해 그 산출물을 jsdom에 로드한다. 별도 outDir(dist-test)라
+// app/voice 산출물과 절대 안 섞인다.
 export default defineConfig(({ mode }) => {
   const isTest = mode === 'test';
 
@@ -66,9 +66,9 @@ export default defineConfig(({ mode }) => {
     plugins: [tailwindcss(), solid()],
     build: {
       lib: isTest ? {
-        entry: 'frontend/tests/fixtures/smoke.tsx',
+        entry: 'frontend/tests/fixtures/test-entry.ts',
         formats: ['es'],
-        fileName: () => 'smoke.js',
+        fileName: () => 'test-entry.js',
       } : isVoice ? {
         entry: 'frontend/js/voice/index.js',
         formats: ['es'],
@@ -94,6 +94,29 @@ export default defineConfig(({ mode }) => {
         // window.* 를 re-export하며 이 경계가 명시화된다). 지금은 external로 지정할
         // 대상이 없다 — main.js가 실제로 import하는 건 legacy 앱 스크립트뿐이다.
         external: [],
+        output: {
+          // N34/ADR-26 — 지연 청크(main.js의 `import('./shell/Hud.tsx')`)에도
+          // **해시를 붙이지 않는다.** ADR-1의 "산출물 이름 고정" 계약이 entry뿐
+          // 아니라 청크에도 그대로 적용된다: sw.js가 `/static/dist/`를
+          // network-first로 잡아 캐시하는데, 이름이 매 빌드 바뀌면 옛 청크가
+          // 캐시에 무한히 쌓이고 오프라인 복구도 어긋난다.
+          chunkFileNames: 'shell.js',
+          // ⚠ manualChunks가 없으면 안 된다(실측): 동적 import가 split point를
+          // 만드는 순간 Rollup은 **entry와 청크가 공유하는 모듈 전부**를 청크로
+          // 끌어올린다. Hud.tsx가 core/api·core/store·core/dom·term/e2e를 같이
+          // 쓰므로 그 판정에 앱 그래프 거의 전부가 걸려서, app.js가 21바이트
+          // 스텁이 되고 shell.js가 273KB, 게다가 두 번째 청크(shell2.js)까지
+          // 생겨 고정 이름이 충돌했다.
+          //
+          // 그래서 "무엇이 지연 청크인가"를 자동 판정에 맡기지 않고 못박는다:
+          // **solid-js 런타임과 js/shell/ 아래만** 청크로, 나머지는 전부 entry에
+          // 남는다. 공유 모듈(core/*)은 entry 쪽에 남아 청크에서 import된다.
+          manualChunks(id) {
+            const p = id.split('?')[0].replace(/\\/g, '/');
+            if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
+            return null;
+          },
+        },
       },
     },
     server: {
