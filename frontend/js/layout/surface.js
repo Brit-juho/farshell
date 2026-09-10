@@ -50,7 +50,7 @@ export function createRefitGate(onFit) {
     return ids;
   }
 
-  return { report, forget, beginDrag, endDrag, isDragging: () => dragging };
+  return { report, forget, beginDrag, endDrag, isDragging: () => dragging, pendingSize: () => pending.size };
 }
 
 // ---- DOM 배선 ----
@@ -154,3 +154,6 @@ export function setPlacement(nextMap) {
 
 export function beginDrag() { _gate.beginDrag(); }
 export function endDrag() { _gate.endDrag(); }
+// N43 §8 — 리사이즈 오버레이가 "나머지 N개 유예" 문구를 그릴지 판단하는 데 쓴다.
+// 실제 게이트 상태를 그대로 읽으므로, 게이트 동작이 바뀌면 문구도 저절로 맞는다.
+export function pendingCount() { return _gate.pendingSize(); }

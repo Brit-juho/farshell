@@ -44,6 +44,7 @@ playwright나 브라우저가 없으면 **전체 skip**한다. 옛 파일이 "�
 from __future__ import annotations
 
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -495,6 +496,65 @@ def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
     page.evaluate("() => window.getAction('viewer.show')()")
     page.wait_for_selector("#vt-qopen", timeout=5000)
     page.keyboard.press("Escape")
+
+
+# ── N43 §8 리사이즈 오버레이 ────────────────────────────────────────────────
+
+def test_리사이즈_오버레이가_분할선_드래그_중에만_보인다(page, server):
+    """§8 — 드래그 중 픽셀 크기 + 칸 수가 뜨고, 놓으면 200ms 뒤 사라진다.
+    CI에는 tmux 세션이 없으므로 일반 터미널 세션을 직접 만든다.
+
+    이 테스트가 만드는 세션은 **서버 쪽 상태**(session_store)라 브라우저
+    컨텍스트를 닫아도 안 없어진다 — 뒤 테스트가 "세션이 이미 있다" 경로로
+    부팅되며 실제로 깨졌다(스모크 하네스가 공유 서버 위에서 순서대로 돈다).
+    끝나면 만든 세션을 DELETE로 정리한다.
+    """
+    base, token = server
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
+    page.wait_for_timeout(500)   # PTY 연결 + 첫 fit
+    page.evaluate("() => window.splitActivePane && window.splitActivePane('row')")
+    page.wait_for_selector(".vt-split-resizer", timeout=10000)
+    session_ids = page.evaluate("() => Object.keys(window.allSessions())")
+    try:
+        # 방금 분할로 생긴 새 pane은 비어 있다 — 세션이 있는 쪽을 활성으로 되돌린다.
+        page.evaluate(
+            "() => { const w = window; const sid = Object.keys(w.allSessions())[0]; w.switchTo(sid); }"
+        )
+        page.wait_for_timeout(200)
+
+        assert page.evaluate("() => !document.getElementById('vt-resize-overlay')"), \
+            "드래그 전에는 오버레이가 아예 없어야 한다"
+
+        box = page.locator(".vt-split-resizer").bounding_box()
+        page.mouse.move(box["x"] + 3, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box["x"] + 80, box["y"] + box["height"] / 2, steps=5)
+        page.wait_for_timeout(150)
+        during = page.evaluate(
+            """() => {
+              const el = document.getElementById('vt-resize-overlay');
+              return el && !el.hidden ? {
+                dims: el.querySelector('.vt-ro-dims').textContent,
+                cellsShown: !el.querySelector('.vt-ro-cells').hidden,
+              } : null;
+            }"""
+        )
+        page.mouse.up()
+        assert during, "드래그 중 오버레이가 안 보였다"
+        assert re.match(r"^\d+ × \d+$", during["dims"]), f"픽셀 캡션 형식이 다르다: {during}"
+        assert during["cellsShown"], "터미널 pane인데 칸 수(cols×rows)가 안 보였다"
+
+        page.wait_for_timeout(60)
+        just_after = page.evaluate("() => document.getElementById('vt-resize-overlay').hidden")
+        assert not just_after, "놓자마자 사라지면 안 된다(200ms 유예)"
+
+        page.wait_for_timeout(300)
+        assert page.evaluate("() => document.getElementById('vt-resize-overlay').hidden"), \
+            "200ms 뒤에는 사라져야 한다"
+    finally:
+        for sid in session_ids:
+            page.request.delete(f"{base}/api/sessions/{sid}", params={"token": token})
 
 
 # ── N35 §6 dock ───────────────────────────────────────────────────────────

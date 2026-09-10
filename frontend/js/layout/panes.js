@@ -25,6 +25,7 @@ import { icon } from '../ui/icons.js';
 // N35 §6 — 뷰어 leaf의 내용은 지연 청크가 그린다(정적 import 금지, ADR-26).
 import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
+import { beginResizeOverlay, endResizeOverlay } from './resize-overlay.js';
 
 export { canSplit };
 
@@ -173,8 +174,8 @@ function _renderNode(node, activePaneId, isRootOnly, placement) {
         // N16 — 드래그 중엔 표면 레이어에 fit을 미루게 하고(§1 수용 기준 2:
         // 드래그 중 0건), 뗀 순간 실제로 크기가 바뀐 세션만 한 번씩 flush한다.
         // 예전처럼 트리 전체 leaf를 매번 fit하지 않는다.
-        onStart: () => surface.beginDrag(),
-        onEnd: () => surface.endDrag(),
+        onStart: () => { surface.beginDrag(); beginResizeOverlay(); },
+        onEnd: () => { surface.endDrag(); endResizeOverlay(); },
       });
     }
 
