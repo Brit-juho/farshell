@@ -161,3 +161,12 @@ export function applyStatusDot(container, status) {
   }
   return dot;
 }
+
+// N36(워크트리 레일) — shell/Rail.tsx는 지연 청크(panels/viewer-lazy.js와
+// 같은 이유, ADR-26/N35 커밋 참고)라 이 모듈을 직접 import하면 상태가
+// 복제된다. classic script 호환용으로 이미 이런 값들을 window에 거는
+// 관행(core/store.js 등)을 그대로 따른다.
+window.getStatus = getStatus;
+window.onStatusChange = onStatusChange;
+window.isUnseen = isUnseen;
+window.sortByUrgency = sortByUrgency;

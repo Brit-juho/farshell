@@ -119,3 +119,8 @@ export function countLeaves() {
 function _firstLeafId(node) {
   return node.t === 'leaf' ? node.id : _firstLeafId(node.a);
 }
+
+// N36(워크트리 레일) — shell/Rail.tsx는 지연 청크라 이 모듈을 직접 import하면
+// 트리 상태가 복제된다(ADR-26/N35 커밋의 core/store.js와 같은 이유). ⌘클릭
+// 분할에 필요한 splitActivePane만 다른 파일들처럼 window로 노출한다.
+window.splitActivePane = splitActivePane;

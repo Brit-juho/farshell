@@ -183,6 +183,12 @@
        있는 모달(viewer.show/queue.show/snippets.show/ports.show)을 그대로 열 뿐이고, "세션"만
        진짜 새 임베디드 패널이다(연결된 화면 관리는 C3 의존이라 지금은 목록만).
        사용량은 U 마일스톤 전이라 .needs-usage로 상시 숨김. -->
+  <!-- N36 §5 — 워크트리 레일 252px(Solid, 지연 로드). 2.1.0에서 기존 48px
+       아이콘 레일(아래 #vt-rail)을 시각적으로 대체한다 — #vt-rail 자체와
+       #vt-rail-panel/#vt-rail-settings-tpl(데스크톱 마이크·테마 칩이 사는
+       유일한 자리)은 DOM에서 지우지 않았다: CSS로만 숨기고, 새 레일의
+       "⋯ 더보기" 메뉴가 그 버튼들을 그대로 다시 누른다(shell/Rail.tsx). -->
+  <div id="vt-wgrail-slot"></div>
   <nav id="vt-rail" aria-label="사이드바">
     <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" title="세션">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>

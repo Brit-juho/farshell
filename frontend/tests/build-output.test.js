@@ -21,6 +21,7 @@ execFileSync('npx', ['vite', 'build'], { cwd: REPO_ROOT, stdio: 'pipe' });
 
 const appJs = fs.readFileSync(path.join(DIST, 'app.js'), 'utf8');
 const panelsJs = fs.readFileSync(path.join(DIST, 'panels.js'), 'utf8');
+const shellJs = fs.readFileSync(path.join(DIST, 'shell.js'), 'utf8');
 
 test('app.js가 300KiB 상한(307200B) 이내다 — CI(release.yml)와 같은 기준', () => {
   const size = Buffer.byteLength(appJs, 'utf8');
@@ -47,4 +48,14 @@ test('panels.js가 core/dom.js의 액션 레지스트리를 복제하지 않는�
 test('app.js는 실제 세션 싱글톤을 그대로 갖고 있다(위 검사가 "아예 없어져서" 통과한 게 아님을 확인)', () => {
   assert.match(appJs, /const sessions\s*=\s*\{\}/);
   assert.match(appJs, /let activeId\s*=\s*null/);
+});
+
+test('shell.js(HUD·헤더·워크트리 레일 지연 청크)도 core 싱글톤을 복제하지 않는다', () => {
+  // N36 — Rail.tsx도 panels.js와 같은 함정 대상이다. 여긴 window 브리지로만
+  // core/store.js·layout/store.js·agent/state.js를 읽으므로(직접 import 금지),
+  // 복제되면 셋 중 하나라도 이 시그니처가 나타난다.
+  assert.doesNotMatch(shellJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
+  assert.doesNotMatch(shellJs, /let activeId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
+  assert.doesNotMatch(shellJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
+  assert.doesNotMatch(shellJs, /const _byTmux\s*=\s*new Map\(\)/, 'agent/state.js의 상태 저장소가 복제됐다');
 });

@@ -133,6 +133,14 @@ try {
       })
       .catch((e) => console.error('[FarShell header]', e));
   }
+
+  // N36 §5 — 워크트리 레일. 같은 지연 청크(shell.js)를 공유한다.
+  const railRoot = document.getElementById('vt-wgrail-slot');
+  if (railRoot) {
+    import('./shell/Rail.tsx')
+      .then(({ mountRail }) => mountRail(railRoot, { vtFetch, getAction }))
+      .catch((e) => console.error('[FarShell rail]', e));
+  }
   // 부팅 완료 표시. `appBootFailed`(아래)와 짝이다 — 지금까지 실패만 표시하고
   // 성공은 표시하지 않아서, 밖에서는 "아직 부팅 중"과 "부팅 끝"을 구분할 수 없었다.
   //

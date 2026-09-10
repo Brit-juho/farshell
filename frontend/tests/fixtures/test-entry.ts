@@ -4,3 +4,4 @@
 // 로드한다. 새 .ts/.tsx를 테스트하려면 여기에 re-export만 추가하면 된다.
 export { mountSmoke } from './smoke.js';
 export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
+export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL } from '../../js/shell/rail-data.js';
