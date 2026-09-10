@@ -1972,3 +1972,101 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 
 .vt-hud-chip.clickable { cursor:pointer; }
 .vt-hud-chip.clickable:hover { background:var(--menu-hover); color:var(--txt); }
+
+/* ── N36 §5 — 워크트리 레일 252px (2.1.0은 세션을 임시로 그린다, ADR-10) ──
+   기존 48px 아이콘 레일(#vt-rail)을 시각적으로 대체한다. **#vt-rail-panel/
+   #vt-rail-settings-tpl은 안 건드린다** — 데스크톱 마이크·테마 칩이 그 안에만
+   살아서, "⋯ 더보기" 메뉴가 숨은 #vt-rail-settings 버튼을 그대로 다시 누르면
+   그 플라이아웃이 예전과 똑같이 열려야 한다(Rail.tsx 주석 참고). 아이콘
+   스트립(#vt-rail) 자신만 지운다 — 그게 차지하던 자리는 이제 없으므로, 그
+   자리를 전제로 한 body 고정 패딩(48px)도 함께 무효화한다. 새 레일의 폭은
+   아래 @media 블록에서 --vt-wgrail-w로 다시 민다(같은 specificity, 파일
+   뒤쪽이라 이긴다 — !important 불필요. 패널이 열렸을 때의 추가 패딩 규칙은
+   더 구체적인 셀렉터라 그대로 이긴다). compact(<720px)에서는 이 레일도 하단
+   내비에 자리를 내주므로 통째로 숨는다(70-mobile.md 전까지는 안 보이는
+   것으로 충분). */
+#vt-rail { display:none !important; }
+@media (min-width:720px) {
+  body { padding-left:env(safe-area-inset-left); }
+}
+
+#vt-wgrail-slot { display:contents; }
+#vt-wgrail {
+  display:none;
+  flex-direction:column; width:var(--vt-wgrail-w, 252px); flex:none;
+  position:fixed; left:0; top:0; bottom:0; z-index:70;
+  background:var(--bar); border-right:1px solid var(--line);
+  min-width:0; transition:width .12s ease;
+}
+#vt-wgrail.collapsed { width:48px !important; }
+@media (min-width:720px) {
+  #vt-wgrail { display:flex; }
+  body { padding-left:calc(env(safe-area-inset-left) + var(--vt-wgrail-w, 252px)) !important; }
+}
+
+.vt-wgrail-head {
+  display:flex; align-items:center; justify-content:space-between;
+  height:28px; padding:0 calc(var(--spacing) * 2.5); flex:none;
+  border-bottom:1px solid var(--line);
+}
+.vt-wgrail-title {
+  font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub);
+}
+.vt-wgrail-collapse {
+  border:0; background:transparent; color:var(--sub); cursor:pointer;
+  font:600 var(--fs-base) var(--ui); padding:2px 6px; border-radius:var(--radius-sm); line-height:1;
+}
+.vt-wgrail-collapse:hover { background:var(--menu-hover); color:var(--txt); }
+
+.vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; }
+.vt-wgrail-group-head {
+  padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
+  font:600 var(--fs-3xs) var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--sub);
+  background:var(--win);
+}
+
+.vt-wgrail-row {
+  display:flex; align-items:stretch; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
+  border-bottom:1px solid var(--line); cursor:pointer; min-width:0;
+}
+.vt-wgrail-row:hover { background:var(--menu-hover); }
+.vt-wgrail-row.active { background:var(--color-surface-active); }
+.vt-wgrail-bar { width:3px; flex:none; border-radius:var(--radius-full); background:var(--color-st-idle); }
+.vt-wgrail-bar.tone-waiting { background:var(--color-st-waiting); }
+.vt-wgrail-bar.tone-working { background:var(--color-st-working); }
+.vt-wgrail-bar.tone-error   { background:var(--color-st-error); }
+.vt-wgrail-bar.tone-done    { background:var(--color-st-done); }
+.vt-wgrail-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.vt-wgrail-row-top { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
+.vt-wgrail-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--mono); color:var(--txt); }
+.vt-wgrail-diff { flex:none; font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
+.vt-wgrail-row-sub { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* 접힘: 마크·색점만(§5 "48px 접힘: 마크+색점+dot만") — 이름·상태 문장·그룹
+   헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로. */
+#vt-wgrail.collapsed .vt-wgrail-row { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1); justify-content:center; }
+#vt-wgrail.collapsed .vt-wgrail-row-main { display:none; }
+#vt-wgrail.collapsed .vt-wgrail-bar { width:4px; }
+
+.vt-wgrail-footer {
+  display:flex; align-items:stretch; border-top:1px solid var(--line); flex:none;
+}
+.vt-wgrail-new {
+  flex:1; display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  height:32px; padding:0 calc(var(--spacing) * 2.5); background:transparent; border:0;
+  color:var(--sub); font:500 var(--fs-xs) var(--mono); text-align:left; cursor:pointer; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.vt-wgrail-new:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wgrail-more {
+  flex:none; width:32px; height:32px; border:0; border-left:1px solid var(--line);
+  background:transparent; color:var(--sub); cursor:pointer; font:600 var(--fs-base) var(--ui);
+}
+.vt-wgrail-more:hover { background:var(--menu-hover); color:var(--txt); }
+
+.vt-wgrail-resizer {
+  position:absolute; top:0; bottom:0; right:-3px; width:6px; cursor:col-resize; z-index:1;
+}
+#vt-wgrail.collapsed .vt-wgrail-resizer { display:none; }
+.vt-wgrail-resizer.dragging { background:var(--acc); opacity:.4; }
