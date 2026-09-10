@@ -137,6 +137,10 @@
   <header id="topbar">
     <div class="traffic" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i></div>
 
+    <!-- N37 §4 — 워크스페이스 칩("farshell / 호스트"). 내용은 shell/HeaderExtras.tsx
+         (Solid, 지연 로드)가 채운다. 클릭 → 팔레트(§4: "@ 모드"는 60 §3이 생기면). -->
+    <div id="vt-workspace-chip-slot"></div>
+
     <!-- tab이 많아지면 #tabs는 flex 축소 대상(min-width:0)이라 0px까지 눌릴 수 있다.
          add-btn/chevron을 그 안에 두면 탭과 함께 사라져 좁은 화면에서 "새 세션" 자체가
          막힌다 — 항상 보여야 하는 컨트롤이라 #tabs 밖(flex-shrink:0 형제)으로 둔다. -->
@@ -166,6 +170,9 @@
     <button id="palette-toggle" class="tbtn" data-action="quickopen.open" aria-label="빠른 열기" title="빠른 열기 (Ctrl/Cmd+K)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
+    <!-- N37 §4 — 「연결된 화면」. shell/HeaderExtras.tsx가 채우고, 데이터가 없으면
+         (활성 세션이 tmux가 아님 등) 스스로 빈 상태로 남는다. -->
+    <div id="vt-screens-slot"></div>
     <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
   </header>
 
