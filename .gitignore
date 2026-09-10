@@ -13,6 +13,8 @@ htmlcov/
 # Node — F1(2026-09)에서 Vite/Tailwind 빌드 도입. frontend/dist/ 가 산출물(ADR-2, 커밋 안 함)
 node_modules/
 dist/
+# N18 — `vite build --mode test`(tests/helpers/solid-env.js) 산출물
+dist-test/
 build/
 .next/
 
