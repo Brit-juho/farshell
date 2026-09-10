@@ -2030,6 +2030,17 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 #vt-mnav-top, #vt-mnav-bottom, #vt-fleet-slot { display:none; }
 
 @media (max-width:719px) {
+  /* N35/N38 — L4·N35에서 두 번 났던 것과 같은 회귀: `.vt-onboarding`은
+     position:fixed + z-index:500이라 자기보다 낮은 z-index를 가진 고정
+     UI(N38의 상단 24px·하단 내비 52px, z-index 90/100)를 그대로 덮는다.
+     세션이 0개인 흔한 상태(부팅 직후)에서 하단 내비 자체가 클릭이 안 먹는
+     것으로 실측 확인됐다 — 데스크톱 레일·dock 때와 같은 원인, 같은 처방:
+     onboarding을 그 자리만큼 비켜 세운다. */
+  .vt-onboarding {
+    top:calc(var(--topbar-h) + 24px + env(safe-area-inset-top,0px));
+    bottom:calc(52px + env(safe-area-inset-bottom,0px));
+  }
+
   /* #topbar는 그대로 둔다(세션 탭·팔레트가 이미 거기 있다) — 이 바는 그
      아래 얇은 두 번째 줄로, 정상 flex 흐름에 얹혀 자기 높이(24px)만큼
      terminal-container를 자연스럽게 밀어낸다(JS 계산 없이 body가 flex-column). */
