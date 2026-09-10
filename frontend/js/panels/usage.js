@@ -111,10 +111,11 @@ function renderProfile(p, activeName) {
   return card;
 }
 
-function renderBody(data, target) {
-  const body = target || document.getElementById('vt-usage-body');
-  if (!body) return;
-  body.innerHTML = '';
+// N41(60-settings-palette.md §5) — 한도형 섹션만 그린다. 누적형은
+// renderCounterSection이 별도로 그린다(둘 중 하나만 있는 사용자가 흔하다 —
+// clauth 없이 로컬 LLM만 쓰는 경우, 또는 그 반대).
+function renderLimitSection(data) {
+  const wrap = el('div', 'vt-usage-limit-section');
 
   if (!data || !data.available) {
     const reason = data && data.reason;
@@ -122,21 +123,135 @@ function renderBody(data, target) {
       : reason === 'schema' ? '사용량 피드 형식을 알 수 없습니다 (clauth 버전 확인 필요).'
       : reason === 'permission' ? '사용량 피드를 읽을 권한이 없습니다.'
       : reason === 'broken' ? '사용량 피드를 읽는 중입니다…'
-      : '사용량 소스가 없습니다.';
-    body.appendChild(el('p', 'vt-usage-none', msg));
-    return;
+      : null;
+    if (msg) wrap.appendChild(el('p', 'vt-usage-none', msg));
+    return wrap;
   }
 
   if (data.stale) {
     // 미터를 흐리게 + 이유를 적는다. 흐리기만 하면 사용자는 "왜 흐리지"를 모른다.
-    body.classList.add('stale');
-    body.appendChild(el('div', 'vt-usage-warn', '갱신 멈춤 — 아래 값은 마지막으로 받은 것입니다'));
-  } else {
-    body.classList.remove('stale');
+    wrap.classList.add('stale');
+    wrap.appendChild(el('div', 'vt-usage-warn', '갱신 멈춤 — 아래 값은 마지막으로 받은 것입니다'));
   }
 
-  for (const p of data.profiles || []) body.appendChild(renderProfile(p, data.active_profile));
-  if (!(data.profiles || []).length) body.appendChild(el('p', 'vt-usage-none', '프로필이 없습니다.'));
+  for (const p of data.profiles || []) wrap.appendChild(renderProfile(p, data.active_profile));
+  if (!(data.profiles || []).length) wrap.appendChild(el('p', 'vt-usage-none', '프로필이 없습니다.'));
+  return wrap;
+}
+
+// N41 — "1840 tok" / "4.1M tok" 같은 사람 단위. 스파크라인·헤드라인 둘 다 쓴다.
+function humanTokens(n) {
+  const v = typeof n === 'number' ? n : 0;
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M tok`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K tok`;
+  return `${v} tok`;
+}
+
+// N41 — "1h 8m" 같은 GPU 시간 표시. seconds는 CounterProvider가 누적해 준 값.
+function humanDuration(sec) {
+  const v = typeof sec === 'number' ? sec : 0;
+  if (v < 60) return `${Math.round(v)}s`;
+  const m = Math.floor(v / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  return remM ? `${h}h ${remM}m` : `${h}h`;
+}
+
+// N41 — 7일 일별 토큰 스파크라인을 순수 SVG로 그린다. 라이브러리 없이,
+// 고정색이 아니라 **currentColor**로 그려 스킨마다 자동으로 톤이 맞는다
+// (20-design-system.md: 그래픽 요소도 토큰만). 값이 전부 0이면(막 시작한
+// 모델) 편평한 기준선만 그려 "데이터 없음"과 "0만 있음"을 구분한다.
+function _buildSparkline(samples, w = 96, h = 24) {
+  const vals = (samples || []).map((s) => (typeof s.tokens === 'number' ? s.tokens : 0));
+  if (!vals.length) return { points: '', max: 0 };
+  const max = Math.max(...vals, 0);
+  const n = vals.length;
+  const stepX = n > 1 ? w / (n - 1) : 0;
+  const points = vals.map((v, i) => {
+    const x = (i * stepX).toFixed(1);
+    const y = max > 0 ? (h - (v / max) * h).toFixed(1) : (h - 1).toFixed(1);
+    return `${x},${y}`;
+  }).join(' ');
+  return { points, max };
+}
+
+function renderSparkline(samples) {
+  const w = 96, h = 24;
+  const { points } = _buildSparkline(samples, w, h);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'vt-counter-spark');
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+  if (points) {
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    poly.setAttribute('points', points);
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', 'currentColor');
+    poly.setAttribute('stroke-width', '1.5');
+    poly.setAttribute('stroke-linejoin', 'round');
+    poly.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(poly);
+  }
+  return svg;
+}
+
+function renderCounter(c) {
+  const card = el('div', 'vt-counter-card');
+  const head = el('div', 'vt-counter-head');
+  head.appendChild(el('span', 'vt-counter-name', c.label));
+  if (c.running) {
+    const live = el('span', 'vt-counter-live', '● 실행 중');
+    live.title = 'ollama에서 지금 로드되어 있는 모델입니다';
+    head.appendChild(live);
+  }
+  card.appendChild(head);
+
+  const stats = el('div', 'vt-counter-stats');
+  stats.appendChild(el('span', 'vt-counter-stat', humanTokens(c.tokens)));
+  stats.appendChild(el('span', 'vt-counter-stat', humanDuration(c.seconds)));
+  stats.appendChild(el('span', 'vt-counter-stat',
+    c.tok_per_sec != null ? `${c.tok_per_sec} tok/s 평균` : '—'));
+  card.appendChild(stats);
+
+  card.appendChild(renderSparkline(c.samples));
+  return card;
+}
+
+// N41 — "누적형 · 한도 없음" 섹션. 소스가 아예 없으면(available:false) 아무것도
+// 안 그린다 — 한도형만 쓰는 사용자에게 빈 섹션 타이틀만 보이면 안 된다.
+function renderCounterSection(data) {
+  const wrap = el('div', 'vt-usage-counter-section');
+  if (!data || !data.available) return wrap;
+
+  wrap.appendChild(el('div', 'vt-usage-section-title', '누적형 · 한도 없음'));
+  const counters = data.counters || [];
+  if (!counters.length) {
+    wrap.appendChild(el('p', 'vt-usage-none', '기록이 없습니다 — fsh usage add로 기록하세요.'));
+    return wrap;
+  }
+  for (const c of counters) wrap.appendChild(renderCounter(c));
+  return wrap;
+}
+
+function renderBody(limitData, counterData, target) {
+  const body = target || document.getElementById('vt-usage-body');
+  if (!body) return;
+  body.innerHTML = '';
+  body.appendChild(renderLimitSection(limitData));
+
+  // 한도형·누적형 둘 다 실제로 값이 있을 때만 구분선을 넣는다 — 한쪽만 쓰는
+  // 사용자에게 빈 섹션 위 가로줄만 남는 걸 막는다.
+  const hasLimit = !!(limitData && limitData.available && (limitData.profiles || []).length);
+  const hasCounter = !!(counterData && counterData.available);
+  if (hasLimit && hasCounter) body.appendChild(el('hr', 'vt-usage-divider'));
+  if (hasCounter) body.appendChild(renderCounterSection(counterData));
+
+  if (!hasLimit && !hasCounter) {
+    body.innerHTML = '';
+    body.appendChild(el('p', 'vt-usage-none', '사용량 소스가 없습니다.'));
+  }
 }
 
 // U3 — 프로필 표시. **탭·pane 헤더에 프로필 배지를 달지 않았다.**
@@ -166,19 +281,30 @@ function paintRailBadge(data) {
 let _timer = null;
 let _bgTimer = null;
 
+// N41 — 한도형(/api/usage)과 누적형(/api/usage/counter)을 따로 요청한다.
+// 하나가 실패/없음이어도 다른 하나는 그려야 한다(clauth 없이 로컬 LLM만
+// 쓰는 사용자, 또는 그 반대) — Promise.allSettled로 서로를 막지 않는다.
+async function fetchBoth() {
+  const [limitR, counterR] = await Promise.allSettled([
+    vtFetch('/api/usage'),
+    vtFetch('/api/usage/counter'),
+  ]);
+  const limitData = limitR.status === 'fulfilled' ? limitR.value : { available: false, reason: 'read-failed' };
+  const counterData = counterR.status === 'fulfilled' ? counterR.value : { available: false, reason: 'read-failed' };
+  return { limitData, counterData };
+}
+
 async function refresh() {
-  try {
-    const data = await vtFetch('/api/usage');
-    renderBody(data);
-    renderBody(data, document.getElementById('vt-right-rail-body'));
-    paintRailBadge(data);
-  } catch (_) {
-    renderBody({ available: false, reason: 'read-failed' });
-  }
+  const { limitData, counterData } = await fetchBoth();
+  renderBody(limitData, counterData);
+  renderBody(limitData, counterData, document.getElementById('vt-right-rail-body'));
+  paintRailBadge(limitData);
 }
 
 // 패널이 닫혀 있어도 rail 배지는 최신이어야 한다(그게 "상시 노출"의 의미다).
 // 피드가 90초 주기라 60초면 충분하고, 서버 쪽 비용은 mtime 비교 하나다.
+// 배지는 한도형(%) 전용이라(rail 버튼 하나에 %를 하나만 실을 수 있다) 누적형은
+// 요청하지 않는다 — 자세한 값은 패널/우측 레일에서 본다.
 async function refreshBadgeOnly() {
   try {
     const data = await vtFetch('/api/usage');
@@ -186,7 +312,11 @@ async function refreshBadgeOnly() {
     // L8/U2: 우측 레일은 **패널이 닫혀 있어도** 최신이어야 한다 — 그게 "상시
     // 노출"의 의미다. 화면에 없으면(compact/regular) 아무 일도 안 한다.
     const rr = document.getElementById('vt-right-rail-body');
-    if (rr && rr.offsetParent !== null) renderBody(data, rr);
+    if (rr && rr.offsetParent !== null) {
+      let counterData = { available: false, reason: 'read-failed' };
+      try { counterData = await vtFetch('/api/usage/counter'); } catch (_) { /* 조용히 무시 */ }
+      renderBody(data, counterData, rr);
+    }
   } catch (_) { /* 조용히 무시 */ }
 }
 
@@ -217,3 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
     _bgTimer = setInterval(() => { if (!document.hidden) refreshBadgeOnly(); }, 60000);
   }, 1500);
 });
+
+// 테스트 전용 export — DOM/fetch가 없는 순수 계산만(ports.js의 _groupByPid와 같은 패턴).
+export { _buildSparkline, humanTokens, humanDuration };
