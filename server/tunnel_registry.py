@@ -12,7 +12,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-PID_DIR = Path("/tmp/vt-pids")
+# bin/fsh 의 VT_RUN_DIR 과 같은 값을 봐야 한다 — 갈라지면 CLI 가 만든 레지스트리를
+# 서버가 못 찾는다. bin/fsh 가 export 하므로 서버 프로세스에도 전달된다.
+PID_DIR = Path(os.environ.get("VT_RUN_DIR", "/tmp")) / "vt-pids"
 REGISTRY_PATH = PID_DIR / "tunnels.tsv"
 
 

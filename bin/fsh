@@ -104,12 +104,23 @@ _resolve_disallowed_tools() {
   fi
 }
 
-SERVER_LOG="/tmp/vt-server.log"
-TUNNEL_LOG="/tmp/cloudflared.log"
-DAEMON_LOG="/tmp/vt-voice-daemon.log"
-CLIP_DAEMON_LOG="/tmp/vt-clipboard-daemon.log"
-WATCHDOG_LOG="/tmp/vt-tunnel-watchdog.log"
-PID_DIR="/tmp/vt-pids"
+# 런타임 산출물(로그·PID·터널 레지스트리·업로드)의 뿌리. 기본 /tmp 라서 기존 경로는
+# 그대로다 — 문서와 스킬이 /tmp/vt-server.log 를 안내하고 있다.
+#
+# 이걸 바꾸면 한 머신에서 **두 인스턴스를 동시에** 돌릴 수 있다. 예전엔 PID 파일이
+# 공유돼서, 다른 트리에서 `fsh stop` 을 치면 돌아가던 서버를 죽였다.
+# 격리 실행에는 VT_PORT · VT_TMUX_SOCKET · VT_STATE_DIR · VT_CONFIG ·
+# VT_WORKSPACE_PATH 와 함께 쓴다. server 쪽은 tunnel_registry.py / routes/pty.py 가
+# 같은 변수를 읽는다(bin/fsh 가 export 하므로 값이 갈라지지 않는다).
+VT_RUN_DIR="${VT_RUN_DIR:-/tmp}"
+export VT_RUN_DIR
+mkdir -p "$VT_RUN_DIR"
+SERVER_LOG="$VT_RUN_DIR/vt-server.log"
+TUNNEL_LOG="$VT_RUN_DIR/cloudflared.log"
+DAEMON_LOG="$VT_RUN_DIR/vt-voice-daemon.log"
+CLIP_DAEMON_LOG="$VT_RUN_DIR/vt-clipboard-daemon.log"
+WATCHDOG_LOG="$VT_RUN_DIR/vt-tunnel-watchdog.log"
+PID_DIR="$VT_RUN_DIR/vt-pids"
 mkdir -p "$PID_DIR"
 # 추가 포트 터널 레지스트리 (TSV: port<TAB>url<TAB>label)
 TUNNEL_REGISTRY="$PID_DIR/tunnels.tsv"
