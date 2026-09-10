@@ -113,3 +113,27 @@ test('refit 게이트: forget 이후엔 다시 첫 보고처럼 취급한다(재
   assert.strictEqual(gate.report('a', 100, 40), 'fit', 'forget 후엔 같은 크기라도 변경으로 취급');
   assert.deepStrictEqual(fits, ['a']);
 });
+
+// N43 §8 — pendingSize()는 리사이즈 오버레이가 "나머지 N개 유예" 문구를 켤지
+// 판단하는 유일한 근거다(문서: "실제로 그렇게 동작할 때만" 표시). 게이트
+// 내부 Set 크기를 그대로 세는 것뿐이지만, 그 계약이 깨지면 오버레이가 거짓
+// 문구를 그리거나 계속 숨어 있게 되므로 직접 고정한다.
+test('pendingSize: 드래그 중 유예된 세션 수를 그대로 센다', async () => {
+  const { createRefitGate } = await loadSurface();
+  const fits = [];
+  const gate = createRefitGate((id) => fits.push(id));
+
+  assert.strictEqual(gate.pendingSize(), 0, '드래그 전에는 0');
+
+  gate.beginDrag();
+  gate.report('a', 100, 50);
+  gate.report('b', 200, 80);
+  assert.strictEqual(gate.pendingSize(), 2, '드래그 중 바뀐 세션 수만큼');
+
+  gate.report('a', 100, 50); // 같은 크기 재보고 — 유예 집합에 추가되지 않는다
+  assert.strictEqual(gate.pendingSize(), 2);
+
+  gate.endDrag();
+  assert.strictEqual(gate.pendingSize(), 0, '드래그가 끝나면 비운다');
+  assert.deepStrictEqual(fits.sort(), ['a', 'b']);
+});

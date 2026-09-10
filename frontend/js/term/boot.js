@@ -10,7 +10,7 @@ import { restoreLayout } from '../layout/persist.js';
 import { load as loadSettings } from '../core/settings.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { getSession } from '../core/store.js';
+import { getSession, allSessions } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 
@@ -173,8 +173,12 @@ export async function bootApp() {
       return;
     }
 
-    // 3. 아무것도 없으면 온보딩 표시
-    showOnboarding();
+    // 3. 아무것도 없으면 온보딩 표시. **다만 지금 이 시점에** 없을 때만 —
+    // 여기 도달하기까지 fetch를 두 번(existing·tmuxList) 기다렸고, 그 사이
+    // 사용자가 이미 「새 세션」을 눌렀을 수 있다(빠른 클릭·자동화 스크립트로
+    // 실제 재현됨: 세션은 생겼는데 온보딩이 그 위에 뜬다 — z-index:500이라
+    // 세션이 있어도 가려서 조작이 안 되는 것처럼 보인다).
+    if (Object.keys(allSessions()).length === 0) showOnboarding();
   } catch (e) {
     createSession();
   }

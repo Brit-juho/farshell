@@ -2213,3 +2213,26 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 }
 /* 뷰어 페인이 열려 있으면 온보딩(세션 0개 안내)은 나오지 않는다 — 볼 것이 있다. */
 body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
+
+/* ── N43 §8 · R5 — 리사이즈 오버레이 (화면 2g) ─────────────────────────────
+   분할선을 드래그하는 동안 활성 pane 중앙에 뜬다. transform으로 중앙 정렬하고
+   pointer-events는 끈다(드래그 중인 리사이저 자신 위로 떠도 이벤트를 가로채면
+   안 된다). 드래그 종료 200ms 뒤 페이드 아웃 — reduced-motion은 즉시 사라짐
+   (아래 opacity 트랜지션 자체를 없앤다). */
+#vt-resize-overlay {
+  position:fixed; z-index:650; transform:translate(-50%, -50%);
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+  background:color-mix(in srgb, var(--crust) 80%, transparent);
+  color:var(--txt); border:1px solid var(--line); border-radius:var(--radius-md);
+  box-shadow:var(--shadow-e2); pointer-events:none;
+  font:600 var(--fs-sm) var(--mono); white-space:nowrap;
+  opacity:1; transition:opacity 200ms ease;
+}
+#vt-resize-overlay[hidden] { display:none; }
+#vt-resize-overlay.vt-ro-hide { opacity:0; }
+.vt-ro-cells { font:500 var(--fs-xs) var(--mono); color:var(--sub); }
+.vt-ro-defer { font:400 var(--fs-3xs) var(--mono); color:var(--sub); margin-top:2px; }
+@media (prefers-reduced-motion: reduce) {
+  #vt-resize-overlay { transition:none; }
+}
