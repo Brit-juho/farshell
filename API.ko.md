@@ -136,6 +136,8 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/agent/report` | pane 자기보고(A2) — 훅이 없는 에이전트용 (`fsh pane report`) |
 | GET | `/api/hooks/status` | Claude Code 훅 등록 상태(A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
 | GET | `/api/usage` | 사용량 스냅샷(U1) — 소스가 없으면 `{available:false, reason}`. 토큰·credential은 화이트리스트로 제외 |
+| GET | `/api/usage/counter` | N41 — 누적형(한도 없음, 로컬 LLM 등) CounterProvider 스냅샷. `?since=<epoch>`로 누적 집계 창 선택, 7일 스파크라인은 무관하게 고정 |
+| POST | `/api/usage/counter` | N41 — 사용량 이벤트 기록(`{model, tokens, seconds}`) — `fsh usage add`와 같은 저장소 |
 | POST | `/api/agent/event` | Claude Code Pre/Post/StopToolUse 훅이 호출하는 엔드포인트 |
 | GET | `/api/safe-mode` | 프롬프트 큐 safe_mode 활성 여부 |
 | GET | `/api/tailscale/status` | Tailscale 설치/연결/IP/MagicDNS 호스트명 |

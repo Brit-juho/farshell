@@ -140,6 +140,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
 | GET | `/api/hooks/status` | Claude Code hook registration status (A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
 | GET | `/api/usage` | Usage snapshot (U1) — `{available:false, reason}` when no source. Tokens/credentials are excluded by a field whitelist |
+| GET | `/api/usage/counter` | N41 — CounterProvider (unlimited, e.g. local LLM) snapshot. `?since=<epoch>` filters totals; the 7-day sparkline is a fixed window regardless |
+| POST | `/api/usage/counter` | N41 — record a usage event (`{model, tokens, seconds}`) — same store as `fsh usage add` |
 | POST | `/api/agent/event` | Endpoint called by the Claude Code Pre/Post/StopToolUse hooks |
 | GET | `/api/safe-mode` | Whether prompt queue safe_mode is active |
 | GET | `/api/tailscale/status` | Tailscale install/connection/IP/MagicDNS hostname |
