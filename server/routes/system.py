@@ -7,6 +7,7 @@ import json as _json
 import logging
 import os
 import shutil
+import socket
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
@@ -42,6 +43,23 @@ def _version() -> str:
         except Exception:
             _VERSION = ""
     return _VERSION
+
+
+# N37(헤더 §4) — 워크스페이스 칩의 "/ mac-studio" 자리. tailscale MagicDNS
+# 이름(tailscale.get_hostname())은 tailscale이 안 돌면 없으므로, 항상 있는
+# OS 호스트명을 쓴다 — "이 서버가 물리적으로 어느 기기인가"만 알면 되고,
+# 네트워크 신원까지는 필요 없다. 재부팅 전엔 안 바뀌므로 한 번만 계산한다.
+_HOSTNAME: str | None = None
+
+
+def _hostname() -> str:
+    global _HOSTNAME
+    if _HOSTNAME is None:
+        try:
+            _HOSTNAME = socket.gethostname().split(".")[0]
+        except Exception:
+            _HOSTNAME = ""
+    return _HOSTNAME
 
 
 def _etag_response(payload, request: Request, stable_for_etag=None) -> Response:
@@ -95,6 +113,8 @@ async def capabilities(request: Request):
         "usage": usage.capability(),
         # N34: HUD 우측 끝 버전 칩. 빈 문자열이면 프런트가 칩을 안 그린다.
         "version": _version(),
+        # N37: 헤더 워크스페이스 칩. 빈 문자열이면 "/ 호스트" 부분을 안 그린다.
+        "hostname": _hostname(),
     }
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}

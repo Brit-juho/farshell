@@ -109,19 +109,31 @@ try {
   // core/*는 **인자로 넘긴다**(Hud.tsx 상단 주석): 지연 청크가 그것들을 직접
   // import하면 Rollup이 청크 안에 복제해 넣어서, 앱의 액션 레지스트리와 HUD가
   // 보는 레지스트리가 다른 객체가 된다(칩을 눌러도 아무 일도 안 일어남).
+  const activeTmuxName = () => {
+    const s = getSession(activeSessionId());
+    return (s && (s.tmuxName || s.tmux_name)) || '';
+  };
+
   const hudRoot = document.getElementById('vt-hud');
   if (hudRoot) {
     import('./shell/Hud.tsx')
-      .then(({ mountHud }) => mountHud(hudRoot, {
-        vtFetch,
-        activeTmuxName: () => {
-          const s = getSession(activeSessionId());
-          return (s && (s.tmuxName || s.tmux_name)) || '';
-        },
-        getAction,
-        e2eEnabled: E2E_ENABLED,
-      }))
+      .then(({ mountHud }) => mountHud(hudRoot, { vtFetch, activeTmuxName, getAction, e2eEnabled: E2E_ENABLED }))
       .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
+  }
+
+  // N37 §4 — 워크스페이스 칩 + 연결된 화면. 같은 지연 청크(shell.js)를 공유하므로
+  // HUD와 별도 import()를 또 부르지 않는다(모듈 캐시로 중복 다운로드는 안
+  // 생기지만, 굳이 두 번 요청할 이유가 없다).
+  const chipRoot = document.getElementById('vt-workspace-chip-slot');
+  const screensRoot = document.getElementById('vt-screens-slot');
+  if (chipRoot || screensRoot) {
+    import('./shell/HeaderExtras.tsx')
+      .then(({ mountWorkspaceChip, mountScreensButton }) => {
+        const deps = { vtFetch, activeTmuxName, getAction };
+        if (chipRoot) mountWorkspaceChip(chipRoot, deps);
+        if (screensRoot) mountScreensButton(screensRoot, deps);
+      })
+      .catch((e) => console.error('[FarShell header]', e));
   }
   // 부팅 완료 표시. `appBootFailed`(아래)와 짝이다 — 지금까지 실패만 표시하고
   // 성공은 표시하지 않아서, 밖에서는 "아직 부팅 중"과 "부팅 끝"을 구분할 수 없었다.
