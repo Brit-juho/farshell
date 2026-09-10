@@ -45,7 +45,8 @@
   --dur-base: 200ms;
 
   --breakpoint-regular: 720px;
-  --breakpoint-wide:   1024px;
+  --breakpoint-wide:   1280px;
+  --breakpoint-xwide:  1600px;
 
   /* ── farshell(신규 기본 스킨) 색 17개 — 근흑 + 앰버 단일 액센트.
      실측(node 스크립트, 상대휘도 WCAG 대비): txt 13.5~17.1:1 · sub 5.6~7.1:1
