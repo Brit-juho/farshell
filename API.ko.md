@@ -19,6 +19,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/sessions` | 세션 생성 (JSON: cols, rows, name) |
 | DELETE | `/api/sessions/{id}` | 세션 삭제 |
 | PATCH | `/api/sessions/{id}` | 세션 이름 변경 (JSON: name) — tmux 세션명도 함께 변경(영숫자/dash/underscore만) |
+| POST | `/api/sessions/{id}/keys` | PTY에 텍스트를 직접 써 넣는다 (JSON: text) — 터미널 WS 타이핑과 동급 권한. 존재하지 않는 세션은 404. 모바일 플릿 홈의 인라인 승인 버튼이 쓴다(N38) |
 | POST | `/api/watch/{id}` | 출력 감시 ON/OFF (JSON: enabled, timeout) |
 
 ## tmux

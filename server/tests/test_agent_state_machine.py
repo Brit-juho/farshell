@@ -97,6 +97,41 @@ def test_waiting_clear_on_unknown_session_is_noop():
     assert A._state == {}
 
 
+# ── N38(70-mobile.md §2) — 인라인 승인용 question/options ───────────────────
+def test_waiting_true_stores_question_and_options():
+    A.on_event("pre", {"session_id": "s", "tool_name": "Bash"})
+    opts = [{"key": "1", "label": "Yes"}, {"key": "2", "label": "No"}]
+    ent = A.on_waiting("s", True, question="Do you want to proceed?", options=opts)
+    assert ent["question"] == "Do you want to proceed?"
+    assert ent["options"] == opts
+
+
+def test_waiting_false_clears_question_and_options():
+    A.on_event("pre", {"session_id": "s", "tool_name": "Bash"})
+    A.on_waiting("s", True, question="q?", options=[{"key": "1", "label": "Yes"}])
+    ent = A.on_waiting("s", False)
+    assert ent["question"] is None
+    assert ent["options"] is None
+
+
+def test_options_missing_leaves_none_for_terminal_fallback():
+    """선택지 캡처가 실패하면 question만 있고 options는 None — 프런트는 이때
+    버튼 대신 「터미널로」를 그린다(70-mobile.md §2)."""
+    A.on_event("pre", {"session_id": "s", "tool_name": "Bash"})
+    ent = A.on_waiting("s", True, question="Do you want to make this edit?", options=None)
+    assert ent["question"] == "Do you want to make this edit?"
+    assert ent["options"] is None
+
+
+def test_new_pre_discards_stale_question():
+    """새 도구가 시작되면 이전 질문은 폐기된다 — 더 이상 답할 대상이 아니다."""
+    A.on_event("pre", {"session_id": "s", "tool_name": "Bash"})
+    A.on_waiting("s", True, question="q?", options=[{"key": "1", "label": "Yes"}])
+    ent = A.on_event("pre", {"session_id": "s", "tool_name": "Read"})
+    assert ent["question"] is None
+    assert ent["options"] is None
+
+
 def test_ack_lowers_done_to_idle():
     A.on_event("stop", {"session_id": "s"})
     A.ack("s")

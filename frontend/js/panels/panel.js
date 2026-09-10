@@ -1,4 +1,15 @@
 import { icon } from '../ui/icons.js';
+// N38 — dock이 CSS로 숨는 문턱과 정확히 같은 조건이어야 한다(styles/layers/
+// legacy.css의 `#vt-dock`는 `@media (min-width:720px)`에서만 display:flex —
+// pointer는 안 본다). 그래서 여기서도 폭만 본다 — isCompactMode()(L3
+// 2단계, pointer:coarse까지 요구)를 쓰면 "폭은 좁은데 마우스 포인터인"
+// 창에서 dock CSS는 이미 숨었는데 이 판정만 아니라고 답해, scm/queue
+// 패널이 보이지 않는 dock 안에 계속 조용히 붙어버린다(실제로 그렇게
+// 재현됨). layout/compact.js를 통째로 import하지 않는 이유는 그 파일이
+// 딸고 있는 core/store.js 등 상태 싱글톤이 panels.js(지연 청크) 안에
+// 복제되기 때문이다(build-output.test.js, ADR-26) — breakpoints.js는
+// 상수뿐이라 안전하다(Rail.tsx의 같은 예외 주석 참고).
+import { COMPACT_MAX } from '../layout/breakpoints.js';
 
 // 모달형 패널(코드 뷰어/포트/큐)의 공용 뼈대. 구 js/panel.js (F2에서 이관).
 // 세 패널이 토글 진입 · backdrop 클릭 닫기 · Esc 닫기 · 닫을 때 fitAndResize ·
@@ -56,6 +67,14 @@ export function _focusables(el) {
 // window.vtDockHost는 shell/Dock.tsx가 등록한다. 여기서 직접 import 하지
 // 않는 이유는 그 파일이 지연 청크라서다(ADR-26).
 function _dockHost(id) {
+  // N38(70-mobile.md §1) — compact에서는 dock 자체가 CSS로 숨는다(하단 내비가
+  // 그 자리를 대신한다, 10-shell-layout.md §3 표). Dock.tsx는 뷰포트와
+  // 무관하게 항상 마운트돼 있어 window.vtDockHost도 항상 등록돼 있으므로,
+  // 여기서 거르지 않으면 「변경」·「큐」 액션이 화면에 안 보이는 dock 안에
+  // 조용히 붙어버린다(실제로 재현됨). compact에서는 dock 호스트를 아예
+  // 묻지 않고 바로 아래 backdrop 모달 경로로 폴백한다 — 그 경로는 이미
+  // 작은 화면에서 풀스크린 시트로 보이도록 스타일돼 있다(2.0부터).
+  if (window.innerWidth < COMPACT_MAX) return null;
   const fn = window.vtDockHost;
   if (typeof fn !== 'function') return null;
   try { return fn(id) || null; } catch (_) { return null; }

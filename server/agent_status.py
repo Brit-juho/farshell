@@ -97,6 +97,8 @@ def sweep(now: Optional[float] = None) -> int:
             changed += 1
         elif status == WAITING and age > ttls[WAITING]:
             _set_status(ent, WORKING, now)
+            ent["question"] = None
+            ent["options"] = None
             changed += 1
         elif status == DONE and age > ttls[DONE]:
             _set_status(ent, IDLE, now)
@@ -165,6 +167,10 @@ def on_event(event: str, payload: dict, session: Optional[str] = None) -> Option
         # waiting/done에서 pre가 오면 그것도 working으로 — 새 도구가 시작됐다는
         # 뜻이므로 이전 상태(승인 대기/완료 표시)는 더 이상 유효하지 않다.
         _set_status(ent, WORKING)
+        # N38: 이전 승인 질문(있었다면)도 함께 폐기 — 새 도구가 시작됐으니
+        # 그 질문은 더 이상 답할 대상이 아니다.
+        ent["question"] = None
+        ent["options"] = None
         return ent
 
     if event == "post":
@@ -184,18 +190,31 @@ def on_event(event: str, payload: dict, session: Optional[str] = None) -> Option
             ent["tmux_session"] = session
         ent["tool"] = None
         _set_status(ent, DONE)
+        ent["question"] = None
+        ent["options"] = None
         return ent
 
     # 알 수 없는 이벤트 — 상태를 건드리지 않는다.
     return _state.get(sid)
 
 
-def on_waiting(sid: str, waiting: bool, cwd: Optional[str] = None) -> Optional[dict]:
+def on_waiting(
+    sid: str,
+    waiting: bool,
+    cwd: Optional[str] = None,
+    question: Optional[str] = None,
+    options: Optional[list] = None,
+) -> Optional[dict]:
     """A3(승인 프롬프트 감지)이 부르는 진입점.
 
     waiting=True는 **working일 때만** 받아들인다 — done인 세션에 뒤늦게 도착한
     패턴 감지가 완료 표시를 승인 대기로 되돌리면 안 된다. waiting=False는
     working으로 되돌린다(패턴 소멸 / 사용자 입력 / exit 패턴).
+
+    N38(모바일 인라인 승인): waiting=True일 때 question/options가 있으면
+    엔트리에 실어둔다 — `agent_prompt_detect`가 `detect/*.toml`의 `options`
+    캡처 그룹으로 뽑은 번호 선택지다. 캡처에 실패하면 둘 다 None으로 남고,
+    프런트는 그 경우 인라인 버튼 대신 「터미널로」를 보여준다(70-mobile.md §2).
     """
     sweep()
     ent = _state.get(sid)
@@ -209,8 +228,13 @@ def on_waiting(sid: str, waiting: bool, cwd: Optional[str] = None) -> Optional[d
     if waiting:
         if ent["status"] == WORKING:
             _set_status(ent, WAITING)
+        if ent["status"] == WAITING:
+            ent["question"] = question
+            ent["options"] = options
     elif ent["status"] == WAITING:
         _set_status(ent, WORKING)
+        ent["question"] = None
+        ent["options"] = None
     return ent
 
 
