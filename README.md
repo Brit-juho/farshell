@@ -273,6 +273,7 @@ farshell/
 ├── install.sh                 one-line install script
 ├── requirements-core.txt      FastAPI, uvicorn, etc.
 ├── requirements-voice.txt     faster-whisper, edge-tts, sounddevice, etc.
+├── AGENTS.md                  agent instructions (agents.md convention — Codex/opencode/…)
 ├── CLAUDE.md                  Claude Code guide (the full ledger of features/commands/API)
 ├── CLI.md                     full fsh CLI reference
 ├── API.md                     full REST/WebSocket API reference

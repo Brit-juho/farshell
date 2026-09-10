@@ -2,6 +2,11 @@
 
 > **FarShell v2.0.0** (2026-09-08) — see [CHANGELOG.md](./CHANGELOG.md) for release history
 
+> **Other agents:** this file is the project overview for any AI coding agent, not just
+> Claude. Cross-tool rules and the hard contracts live in [`AGENTS.md`](./AGENTS.md)
+> ([agents.md](https://agents.md) convention — Codex, opencode, Amp, Cursor, …);
+> `GEMINI.md` and `.aider.conf.yml` point there too.
+
 ## fsh CLI (runs anywhere)
 
 Control FarShell from any terminal with the `fsh` command:

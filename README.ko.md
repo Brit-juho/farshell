@@ -268,6 +268,7 @@ farshell/
 ├── install.sh                 원라인 설치 스크립트
 ├── requirements-core.txt      FastAPI, uvicorn 등
 ├── requirements-voice.txt     faster-whisper, edge-tts, sounddevice 등
+├── AGENTS.md                  에이전트 지침 (agents.md 규약 — Codex/opencode/…)
 ├── CLAUDE.md                  Claude Code 가이드 (기능/명령/API 전체 원장)
 ├── CLI.md                     fsh CLI 전체 레퍼런스
 ├── API.md                     REST/WebSocket API 전체 레퍼런스

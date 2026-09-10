@@ -1,0 +1,5 @@
+# Aider config. Agent instructions live in AGENTS.md (agents.md convention) so that
+# every CLI reads the same rules — see AGENTS.md for why they are not duplicated.
+read:
+  - AGENTS.md
+  - CLAUDE.md
