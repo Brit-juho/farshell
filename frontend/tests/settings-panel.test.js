@@ -121,7 +121,7 @@ test('키맵 — 현재 바인딩과 passthrough 체크가 그려진다', async 
   const { document, P } = await build();
   P.showSettings();
   sectionButton(document, '키맵').click();
-  const row = rowByLabel(document, '터미널 내 검색');
+  const row = rowByLabel(document, '스크롤백 검색');
   assert.ok(row.querySelector('.vt-set-combo').textContent.length > 0);
   assert.strictEqual(row.querySelector('.vt-set-pt input').checked, false);
 });
@@ -130,7 +130,9 @@ test('키맵 — passthrough 체크가 레지스트리에 반영된다', async (
   const { document, P, K } = await build();
   P.showSettings();
   sectionButton(document, '키맵').click();
-  const box = rowByLabel(document, '터미널 내 검색').querySelector('.vt-set-pt input');
+  // N40/N46 — `search`(Mod+F)는 이제 「스크롤백 검색」. 인페인 검색바는
+  // `searchInPane`(Mod+Shift+F, 라벨 「터미널 내 검색」)로 내려갔다.
+  const box = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-pt input');
   box.checked = true;
   box.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
   await flush();
@@ -141,7 +143,7 @@ test('키맵 — 재바인딩: 버튼을 누르고 조합을 입력하면 저장
   const { document, window, P, K } = await build();
   P.showSettings();
   sectionButton(document, '키맵').click();
-  const btn = rowByLabel(document, '터미널 내 검색').querySelector('.vt-set-combo');
+  const btn = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-combo');
   btn.click();
   assert.ok(btn.classList.contains('recording'), '녹화 상태가 보여야 한다');
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'g', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
@@ -153,7 +155,7 @@ test('키맵 — 수식키만 누르면 확정되지 않는다', async () => {
   const { document, window, P, K } = await build();
   P.showSettings();
   sectionButton(document, '키맵').click();
-  const btn = rowByLabel(document, '터미널 내 검색').querySelector('.vt-set-combo');
+  const btn = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-combo');
   btn.click();
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Shift', shiftKey: true, bubbles: true, cancelable: true }));
   await flush();
@@ -165,7 +167,7 @@ test('키맵 — Escape로 재바인딩을 취소한다', async () => {
   const { document, window, P, K } = await build();
   P.showSettings();
   sectionButton(document, '키맵').click();
-  rowByLabel(document, '터미널 내 검색').querySelector('.vt-set-combo').click();
+  rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-combo').click();
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   await flush();
   assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+f');
@@ -176,7 +178,7 @@ test('키맵 — 충돌하면 행에 표시하고 이유를 적는다', async ()
   await K.setBinding('palette', 'Mod+F');
   P.showSettings();
   sectionButton(document, '키맵').click();
-  const row = rowByLabel(document, '터미널 내 검색');
+  const row = rowByLabel(document, '스크롤백 검색');
   assert.ok(row.classList.contains('conflict'));
   assert.match(row.querySelector('.vt-set-help').textContent, /충돌/);
 });

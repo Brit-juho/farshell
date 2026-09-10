@@ -30,7 +30,12 @@ const BROWSER_RESERVED = new Set(['Mod+W', 'Mod+N', 'Mod+T', 'Mod+Q']);
 // 기본 바인딩. `passthrough: true`면 동작을 실행한 뒤에도 터미널로 키를 흘린다
 // (기본은 false = 우리가 먹는다).
 const ACTIONS = [
-  { id: 'search',     def: 'Mod+F',        label: '터미널 내 검색' },
+  // N40/N46(60-settings-palette.md §3) — `Mod+F`는 팔레트를 `~`(스크롤백
+  // 검색) 모드로 연다. 예전에 이 자리가 열던 인페인 검색바(xterm
+  // searchAddon)는 `searchInPane`(Mod+Shift+F)으로 내려갔다 — R7: 근육기억이
+  // 걸린 재배선이라 palette-lazy.js가 최초 1회 토스트를 띄운다.
+  { id: 'search',       def: 'Mod+F',        label: '스크롤백 검색' },
+  { id: 'searchInPane', def: 'Mod+Shift+F',  label: '터미널 내 검색' },
   { id: 'palette',    def: 'Mod+K',        label: '커맨드 팔레트' },
   { id: 'viewer',     def: 'Ctrl+Shift+E', label: '코드 뷰어' },
   { id: 'paste',      def: 'Ctrl+Shift+V', label: '붙여넣기' },
@@ -171,6 +176,15 @@ const _handlers = new Map();
 export function register(id, fn) {
   _handlers.set(id, fn);
   return () => { if (_handlers.get(id) === fn) _handlers.delete(id); };
+}
+
+// N46 — 팔레트 `:` 모드(키맵 레지스트리 명령)가 행을 고르면 그 액션을 직접
+// 실행하기 위한 공개 진입점. register()의 핸들러 맵은 지금까지 handleKeydown
+// 내부에서만 조회됐다 — 키 입력 없이도 "이 액션을 지금 실행해줘"를 표현할
+// 방법이 없었다.
+export function invoke(id) {
+  const fn = _handlers.get(id);
+  if (typeof fn === 'function') fn();
 }
 
 // document capture 단계에서 한 번만 듣는다. 여기저기서 각자 keydown을 듣던 것을
