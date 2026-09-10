@@ -18,9 +18,10 @@ function sendResize(ws, term, s) {
 export function fitAndResize(id) {
   const s = getSession(id);
   if (!s || !s.wrapper) return;
-  // 숨김 탭(display:none)은 컨테이너가 0-height라 fit이 rows를 1로 깨뜨린다 —
-  // 보이는 탭에서만 측정한다. switchTo가 표시 직후 다시 호출해 준다.
-  if (s.wrapper.style.display === 'none') return;
+  // 숨김 탭(N16부터 visibility:hidden — 표면 레이어 밖으로 translate된 상태)은
+  // 실측 폭/높이가 없거나 stale이라 fit이 rows를 깨뜨린다 — 보이는 탭에서만
+  // 측정한다. surface.js가 배치할 때 visible로 바꾼 뒤 다시 호출해 준다.
+  if (s.wrapper.style.visibility === 'hidden') return;
   // ⚠ fitAddon.fit()은 호출될 때마다 무조건 dimension을 재계산하고, xterm.js 내부적으로
   // (this._terminal.rows/cols가 계산값과 조금이라도 다르면) _renderService.clear()를
   // 실행한다 — 문자 아틀라스(glyph 캐시) 폐기 + 재생성으로, xterm.js 자체 이슈(#955)에서도

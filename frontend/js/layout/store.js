@@ -23,8 +23,12 @@ let _tree = makeLeaf(_genId('pane'), activeSessionId());
 let _activePaneId = _tree.id;
 
 const _listeners = new Set();
-function _notify() {
-  for (const fn of _listeners) fn(_tree, _activePaneId);
+// N16 — kind로 무엇이 바뀌었는지 구분해 넘긴다: 'active'(활성 pane만) ·
+// 'ratio'(분할 비율, extra=splitId) · 'layout'(트리 구조 자체, 기본값).
+// 구독자가 kind를 안 받아도(기존 283건 계약) 동작은 그대로다 — 인자를
+// 늘렸을 뿐 기존 두 인자(tree, activePaneId)는 자리·의미가 안 바뀐다.
+function _notify(kind = 'layout', extra) {
+  for (const fn of _listeners) fn(_tree, _activePaneId, kind, extra);
 }
 
 // onLayoutChange(fn) → unsubscribe 함수. 1단계의 layout/panes.js가 이걸로
@@ -47,7 +51,7 @@ export function getActivePaneId() {
 export function setActivePane(paneId) {
   if (paneId === _activePaneId || !findNode(_tree, paneId)) return;
   _activePaneId = paneId;
-  _notify();
+  _notify('active');
 }
 
 // 탭 클릭 등 "이 세션을 화면에 보여줘"의 유일한 진입점. 기본은 활성
@@ -105,7 +109,7 @@ export function replaceTree(tree, activePaneId = null) {
 
 export function setRatio(splitId, ratio) {
   _tree = _setRatio(_tree, splitId, ratio);
-  _notify();
+  _notify('ratio', splitId);
 }
 
 export function countLeaves() {
