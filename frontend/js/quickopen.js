@@ -3,7 +3,7 @@
 // 데이터(열린 세션, 코드 뷰어의 최근 파일 목록, 고정 명령 리스트)만으로 만든다 —
 // 파일시스템 전체를 훑는 진짜 fuzzy 검색은 별도 서버 API가 필요해 스코프 밖으로 뺐다.
 //
-// ADR-26/N35 — _loadRecent/showViewer/_selectFile은 panels/viewer-lazy.js의
+// ADR-26/N35 — _loadRecent/openFileInPane은 panels/viewer-lazy.js의
 // loadViewer()로 **동적** import한다. 예전엔 panels/viewer/{tree,shell}.js를
 // 정적 import했는데(main.js가 항상 먼저 로드해 뒀었다), 그 여섯 파일이
 // 지연 청크(shell.js)로 옮겨간 뒤로는 정적 import를 쓰면 그 청크가 이
@@ -22,7 +22,7 @@ import { getAction, registerAction } from './core/dom.js';
 import { allSessions, getSession } from './core/store.js';
 import { apiFetch, vtFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
-import { loadViewer } from './panels/viewer-lazy.js';
+import { loadViewer, openFileInPane } from './panels/viewer-lazy.js';
 import { switchTo } from './term/session.js';
 import { setVtSkin } from './theme.js';
 import { get as setting, set as setSetting } from './core/settings.js';
@@ -54,7 +54,6 @@ function _hint(actionId) {
 // "명령" 섹션(접두사 없음) — ⋯ 메뉴의 「음성 · 파일」+「보기」 그룹 대응.
 function _quickOpenCommands() {
   const cmds = [
-    { label: '코드 뷰어 열기', hint: _hint('viewer'), action: 'viewer.show', gate: 'fs' },
     { label: '프롬프트 큐', hint: '', action: 'queue.show' },
     { label: '프롬프트 스니펫', hint: '', action: 'snippets.show' },
     { label: '포트 대시보드', hint: '', action: 'ports.show', gate: 'ports' },
@@ -247,11 +246,9 @@ function openQuickOpen() {
           dir.textContent = p.split('/').slice(0, -1).join('/') || '.';
           row.appendChild(name);
           row.appendChild(dir);
-          row.addEventListener('click', async () => {
+          row.addEventListener('click', () => {
             closeQuickOpen();
-            const v = await loadViewer();
-            await v.showViewer();
-            v._selectFile(p, null);
+            openFileInPane(p);   // N35 §6 — 모달이 아니라 페인으로 연다
           });
           return row;
         });

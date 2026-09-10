@@ -202,7 +202,7 @@ function Rail(props: { deps: RailDeps }) {
   const moreMenuItems = () => {
     const act = (id: string) => (props.deps.getAction(id) as (() => void) | undefined)?.();
     return [
-      { label: '파일', run: () => act('viewer.show') },
+      { label: '파일 열기', run: () => act('viewer.show') },
       { label: '프롬프트 큐', run: () => act('queue.show') },
       { label: '스니펫', run: () => act('snippets.show') },
       { label: '포트', run: () => act('ports.show') },

@@ -8,7 +8,7 @@
 // 들어간다" 같은 상태 불일치가 애초에 생길 수 없다 — 착수 전 설계 리뷰에서
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
 import { activeSessionId } from '../core/store.js';
-import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setRatio as _setRatio, countLeaves as _countLeaves, findNode } from './tree.js';
+import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setRatio as _setRatio, countLeaves as _countLeaves, findNode } from './tree.js';
 
 function _genId(prefix) {
   const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -77,6 +77,28 @@ export function splitPane(paneId, dir, sessionId = null, newFirst = false) {
   _activePaneId = newLeaf.id;
   _notify();
   return newLeaf.id;
+}
+
+// N35 §6 — 파일을 **페인으로** 연다(모달 코드 뷰어를 대체한 경로).
+// 규칙: 활성 pane이 비어 있거나 이미 뷰어면 그 자리에 연다. 터미널이
+// 들어 있으면 오른쪽으로 쪼갠다 — 보고 있던 터미널을 파일이 덮어버리면
+// "잠깐 열어보려던" 것이 작업을 끊는다. 쪼개기가 실패하면(트리에 없는 pane 등)
+// 활성 pane을 그대로 쓴다. 연 pane id를 반환한다.
+//
+// pane 상한(dnd.js canSplit)은 여기서 안 본다 — dnd.js가 이 모듈을 import
+// 하므로 반대 방향 import는 순환이 된다. 상한은 사용자가 직접 분할할 때의
+// 화면 규칙이다.
+export function openViewerPane(file, paneId = _activePaneId) {
+  const node = findNode(_tree, paneId);
+  let target = paneId;
+  if (node && node.t === 'leaf' && node.session && node.kind !== 'viewer') {
+    const split = splitPane(paneId, 'row');
+    if (split) target = split;
+  }
+  _tree = _setLeafViewer(_tree, target, file);
+  _activePaneId = target;
+  _notify();
+  return target;
 }
 
 // 키맵(`Mod+D` 등, S3)처럼 "지금 활성 pane"을 대상으로 하는 짧은 표기.

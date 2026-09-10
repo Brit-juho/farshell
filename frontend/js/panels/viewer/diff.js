@@ -1,9 +1,8 @@
 // 코드 뷰어 diff 렌더 + 줄 주석→프롬프트 큐 — F4에서 viewer.js에서 분리.
-// git.js가 상태/커밋 목록에서 특정 파일을 눌렀을 때 _showFileDiff를 부른다.
+// git.js가 상태/커밋 목록에서 특정 파일을 눌렀을 때 renderFileDiff를 부른다.
 import { vtFetch } from '../../core/api.js';
 import { isMac } from '../../core/env.js';
-import { _viewerState, _setMsg } from './state.js';
-import { _setPath, _setTitle, _setActivePane } from './shell.js';
+import { _setMsg } from './state.js';
 import { _hl } from './file.js';
 
 export function _renderDiffDOM(container, diffText) {
@@ -150,8 +149,7 @@ async function _submitDiffAnnotate(box, ta, filePath, lineNo) {
 }
 
 // 파일 하나의 diff. status 목록에서 특정 파일을 눌렀을 때 쓴다.
-// N35 §6 — git.js와 같은 이유로 "어디에 그릴지"를 인자로 받는 렌더러와,
-// 코드 뷰어 크롬을 입히는 래퍼로 나눴다(dock 소스컨트롤 탭이 같은 렌더러를 쓴다).
+// N35 §6 — "어디에 그릴지"를 인자로 받는다(dock 소스컨트롤 탭이 유일한 소비처).
 export async function renderFileDiff(container, repo, file, staged, opts = {}) {
   container.innerHTML = '<div class="vt-vw-loading">git diff 실행 중…</div>';
 
@@ -186,12 +184,4 @@ export async function renderFileDiff(container, repo, file, staged, opts = {}) {
     note.textContent = 'diff가 커서 일부만 표시했습니다.';
     container.appendChild(note);
   }
-}
-
-export async function _showFileDiff(repo, file, staged) {
-  _viewerState.mode = 'diff';
-  _setTitle(file.split('/').pop());
-  _setPath(file);
-  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
-  await renderFileDiff(document.getElementById('vt-vw-code-pane'), repo, file, staged);
 }

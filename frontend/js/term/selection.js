@@ -4,6 +4,7 @@ import { match as matchKey } from '../core/keymap.js';
 import { get as setting } from '../core/settings.js';
 import { copyToClipboard, pasteFromClipboard, pasteImageUpload } from './clipboard.js';
 import { getSession } from '../core/store.js';
+import { getAction } from '../core/dom.js';
 
 export function wireClipboard(id, term, wrapper) {
   // 1) copy-on-select — 드래그(브라우저 선택) 끝나면 자동 복사.
@@ -66,10 +67,12 @@ export function wireClipboard(id, term, wrapper) {
       pasteFromClipboard(id);
       return hit.passthrough;
     }
-    // 코드 뷰어 토글. Ctrl+B는 tmux prefix라 절대 쓰지 않는다(viewer.js 참고).
+    // 「파일」 — N35 §6부터 이 키는 모달이 아니라 팔레트를 연다(파일을 고르는
+    // 자리가 그리로 옮겨갔다). Ctrl+B는 tmux prefix라 절대 쓰지 않는다.
     if (hit.id === 'viewer') {
       if (!hit.passthrough) e.preventDefault();
-      showViewer();
+      const open = getAction('viewer.show');
+      if (typeof open === 'function') open();
       return hit.passthrough;
     }
     return true;

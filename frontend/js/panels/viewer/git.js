@@ -3,9 +3,8 @@
 // 코드 뷰어의 유일한 쓰기 경로. push·브랜치 조작은 절대 추가하지 않는다.
 // 스코프를 stage/unstage/commit 으로만 좁게 유지한다 — TODOS.md D16 참고.
 import { vtFetch } from '../../core/api.js';
-import { _viewerState, _setMsg } from './state.js';
-import { _setPath, _setTitle, _setActivePane } from './shell.js';
-import { _renderDiffDOM, _showFileDiff } from './diff.js';
+import { _setMsg } from './state.js';
+import { _renderDiffDOM } from './diff.js';
 
 function _gitFileLabel(entry) {
   if (entry.index_status === '?' || entry.worktree_status === '?') return '추가되지 않음';
@@ -24,8 +23,9 @@ async function _gitAction(repo, path, files) {
 // N35 §6 — 이 아래 렌더러들은 **어디에 그릴지를 인자로 받는다**. 2.1.0부터
 // 같은 화면이 두 자리에 뜨기 때문이다: 코드 뷰어 패널(2.0, 쓰기 가능)과 dock
 // 소스컨트롤 탭(40 §5, 2.1.0은 읽기 전용). 컴포넌트를 두 벌 만들면 반드시
-// 어긋나므로, 뷰어 크롬(제목·경로·활성 페인)에 의존하는 부분만 showGit()에
-// 남기고 목록·커밋 상자·로그는 전부 여기로 내렸다.
+// 어긋나므로 목록·커밋 상자·로그가 전부 "그릴 곳"을 인자로 받는다. (2.0의
+// 모달 코드 뷰어는 §6에서 제거됐다 — 그때 크롬에 묶여 있던 래퍼들도 같이
+// 사라졌고, 지금 유일한 소비처는 dock 소스컨트롤 탭이다.)
 //
 // opts:
 //   readOnly  — +/−·커밋 버튼을 렌더는 하되 disabled + 사유 툴팁(40 §5)
@@ -174,22 +174,6 @@ export async function renderGitStatus(container, repo, opts = {}) {
 
   _renderCommitLog(repo, logSec, 0, o);
   return d;
-}
-
-export async function showGit(repo) {
-  const target = repo || _viewerState.cwd || _viewerState.root;
-  if (!target) return;
-  _viewerState.mode = 'diff';
-  _viewerState.cwd = target;
-  _setTitle('Git');
-  _setPath(target);
-  const pane = document.getElementById('vt-vw-code-pane');
-  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
-  await renderGitStatus(pane, target, {
-    onFile: (file, staged) => _showFileDiff(target, file, staged),
-    onCommit: (sha) => _showCommit(target, sha),
-    reload: () => showGit(target),
-  });
 }
 
 // --- git log / show (커밋 기록 · 커밋 간 diff, 읽기 전용) -----------------------
@@ -351,27 +335,4 @@ function _backBtn(label, onClick) {
   back.textContent = label;
   back.addEventListener('click', onClick);
   return back;
-}
-
-// --- 코드 뷰어 크롬을 입힌 래퍼들 ---------------------------------------------
-
-async function _showCommit(repo, sha) {
-  _viewerState.mode = 'diff';
-  _setTitle(sha.slice(0, 7));
-  _setPath(repo);
-  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
-  await renderCommit(document.getElementById('vt-vw-code-pane'), repo, sha, {
-    onBack: () => showGit(repo),
-    onFile: (file) => _showCommitFileDiff(repo, sha, file),
-  });
-}
-
-async function _showCommitFileDiff(repo, sha, file) {
-  _viewerState.mode = 'diff';
-  _setTitle(file.split('/').pop());
-  _setPath(file);
-  if (_viewerState.displayMode === 'sheet') _setActivePane('code');
-  await renderCommitFileDiff(document.getElementById('vt-vw-code-pane'), repo, sha, file, {
-    onBack: () => _showCommit(repo, sha),
-  });
 }

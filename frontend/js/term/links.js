@@ -9,6 +9,7 @@
 // 컴파일러/린터/git 출력에 흔한 `:줄:열` 접미사는 인식한다.
 import { getSession } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
+import { openFileInPane } from '../panels/viewer-lazy.js';
 
 const _URL_RE = /https?:\/\/[^\s<>"'\)\]]+/g;
 const _PATH_RE = /(?:\.{0,2}\/(?:[\w.\-]+\/)*[\w.\-]+\.\w{1,10}|(?:[\w.\-]+\/)+[\w.\-]+\.\w{1,10})(?::\d+(?::\d+)?)?/g;
@@ -49,11 +50,8 @@ async function _openLinkAsPath(id, rawText) {
     const cwd = await _getSessionCwd(id);
     if (cwd) full = cwd.replace(/\/$/, '') + '/' + full;
   }
-  // viewer.js는 아직 classic script라 showViewer/openFile을 bare identifier로 읽는다.
-  if (!document.getElementById('vt-viewer') && typeof showViewer === 'function') {
-    await showViewer();
-  }
-  if (typeof openFile === 'function') openFile(full);
+  // N35 §6 — 모달 코드 뷰어가 사라져서 파일은 **페인**으로 연다.
+  openFileInPane(full);
 }
 
 export function wireLinks(id, term) {

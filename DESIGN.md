@@ -207,7 +207,7 @@ value is wrong — measured, not assumed.
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad` | `frontend/js/theme.js` — `VT_SKINS` |
 | `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` |
-| `rail-items` | `7` | `frontend/index.html` — `.vt-rail-btn` count |
+| `rail-items` | `6` | `frontend/index.html` — `.vt-rail-btn` count |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` reserved) |
 | `color-bg-0` | `#0a0a0b` | `styles/theme/tokens.css` |
 | `color-acc` | `#f0a860` | `styles/theme/tokens.css` |

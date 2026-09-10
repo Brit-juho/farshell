@@ -2200,3 +2200,16 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-scm-foot .vt-pt-btn[disabled], .vt-scm-account[disabled] { opacity:.5; }
 /* 읽기 전용 dock의 +/− 버튼 — 같은 이유로 죽이지 않고 흐리게만. */
 .vt-dock-panel .vt-vw-gact[disabled] { opacity:.45; cursor:not-allowed; }
+
+/* ── N35 §6 — 뷰어 페인(리프 타입 viewer) ──────────────────────────────────
+   모달 코드 뷰어가 사라지면서 파일은 페인 안에서 열린다. 코드 렌더는 dock·
+   구 뷰어와 같은 .vt-vw-* 클래스를 그대로 쓰고, 여기서는 그것이 페인 상자
+   안에서 스크롤되게만 만든다(페인 밖으로 새면 표면 레이어의 터미널 위를 덮는다). */
+.vt-pane-body.vt-pane-viewer {
+  overflow:auto; background:var(--win); min-width:0; min-height:0;
+}
+.vt-pane-body.vt-pane-viewer .vt-vw-code-pane {
+  min-width:0; padding:calc(var(--spacing) * 1.5) 0;
+}
+/* 뷰어 페인이 열려 있으면 온보딩(세션 0개 안내)은 나오지 않는다 — 볼 것이 있다. */
+body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
