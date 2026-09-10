@@ -137,7 +137,8 @@ test('접두사 없음 — 열린 세션·명령이 함께 나열되고, 세션 
 
   const rows = Array.from(window.document.querySelectorAll('.vt-qo-row'));
   assert.ok(rows.some(r => r.textContent.includes('b')), '세션 행이 보여야 한다');
-  assert.ok(rows.some(r => r.textContent.includes('코드 뷰어 열기')), '명령 행(코드 뷰어)이 보여야 한다');
+  // (§6에서 「코드 뷰어 열기」가 없어졌다 — 팔레트 자신이 그 자리를 받았다.)
+  assert.ok(rows.some(r => r.textContent.includes('터미널 내 검색')), '명령 행(터미널 내 검색)이 보여야 한다');
   assert.ok(rows.some(r => r.textContent.includes('새 세션')), '명령 행(새 세션)이 보여야 한다');
   // 설정 그룹(테마·푸시 등)은 접두사 없이는 안 보여야 한다(> 전용).
   assert.ok(!rows.some(r => r.textContent.startsWith('테마')), '테마는 기본 목록에 없어야 한다');

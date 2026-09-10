@@ -194,9 +194,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-session" hidden></span>
     </button>
-    <button type="button" class="vt-rail-btn needs-fs" id="vt-rail-file" data-rail="file" data-action="viewer.show" aria-label="파일" title="코드 뷰어 (Ctrl+Shift+E)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-    </button>
+    <!-- N35 §6 — 「파일」 버튼은 없어졌다. 모달 코드 뷰어가 사라지면서 그
+         버튼이 열 것 자체가 없어졌고, 파일을 고르는 자리는 팔레트(상단바 🔍 ·
+         Mod+K)로 옮겨갔다. 새 레일의 "⋯ 더보기"에는 「파일 열기」 항목이 있고
+         그건 팔레트를 연다(js/panels/viewer-lazy.js의 viewer.show). -->
     <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" title="프롬프트 큐">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-queue" hidden></span>

@@ -22,6 +22,8 @@ import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSourc
 import { openPanePicker } from './pane-picker.js';
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
+// N35 §6 — 뷰어 leaf의 내용은 지연 청크가 그린다(정적 import 금지, ADR-26).
+import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
 
 export { canSplit };
@@ -127,6 +129,8 @@ function _buildPaneEl(paneId) {
 // 기반 세션 선택 시트로 교체 — pane 전체가 클릭 대상이라 좁은 화면에서도
 // 작은 버튼을 정확히 누를 필요가 없다.
 function _renderEmptyBody(bodyEl, paneId) {
+  bodyEl.classList.remove('vt-pane-viewer');
+  delete bodyEl.dataset.viewerFile;
   if (bodyEl.querySelector('.vt-pane-empty')) return;
   bodyEl.replaceChildren();
   const ph = document.createElement('button');
@@ -205,10 +209,22 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
   // 죽은 세션 참조(예: 서버 재시작으로 세션은 사라졌는데 트리엔 id가 남은
   // 경우) → 조용히 빈 pane 취급. 트리 자체는 안 건드린다(다음 실제 배정이
   // 오면 자연히 덮어써진다), 렌더링에서만 관대하게 처리한다.
-  const s = node.session ? getSession(node.session) : null;
   const nameEl = paneEl.querySelector('.vt-pane-name');
+
+  // N35 §6 — 뷰어 칸: 세션이 아니라 파일 하나를 그린다. 표면 레이어에는 아무
+  // 것도 안 넘긴다(placement에 안 들어가므로 xterm이 이 자리를 덮지 않는다).
+  if (node.kind === 'viewer') {
+    nameEl.textContent = (node.file ? node.file.split('/').pop() : '파일 없음') + labelSuffix;
+    nameEl.title = node.file || '';
+    _renderViewerBody(bodyEl, node.file);
+    return paneEl;
+  }
+
+  const s = node.session ? getSession(node.session) : null;
   if (s && s.wrapper) {
     placement.set(node.session, bodyEl);
+    bodyEl.classList.remove('vt-pane-viewer');
+    delete bodyEl.dataset.viewerFile;
     nameEl.textContent = _sessionLabel(node.session) + labelSuffix;
     const empty = bodyEl.querySelector('.vt-pane-empty');
     if (empty) empty.remove();
@@ -217,6 +233,31 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
     _renderEmptyBody(bodyEl, node.id);
   }
   return paneEl;
+}
+
+// 뷰어 칸의 내용. 같은 파일을 다시 그리지 않는다(렌더는 트리 구조가 바뀔
+// 때마다 도는데, 그때마다 파일을 다시 fetch하면 스크롤 위치가 튄다) —
+// 그려둔 경로를 dataset에 적어 두고 비교한다.
+function _renderViewerBody(bodyEl, file) {
+  bodyEl.classList.add('vt-pane-viewer');
+  if (!file) {
+    bodyEl.replaceChildren();
+    bodyEl.dataset.viewerFile = '';
+    const empty = document.createElement('div');
+    empty.className = 'vt-vw-empty';
+    empty.textContent = '파일이 지정되지 않았습니다.';
+    bodyEl.appendChild(empty);
+    return;
+  }
+  if (bodyEl.dataset.viewerFile === file) return;
+  bodyEl.dataset.viewerFile = file;
+  bodyEl.replaceChildren();
+  const host = document.createElement('div');
+  host.className = 'vt-vw-code-pane';
+  bodyEl.appendChild(host);
+  loadViewer()
+    .then((v) => v.renderFile(host, file))
+    .catch((e) => { host.textContent = String(e && e.message ? e.message : e); });
 }
 
 // L3 2단계 — compact(<720px + pointer:coarse) 렌더 모드: 활성 leaf 하나만
@@ -272,6 +313,11 @@ function _renderFull() {
   for (const [id, s] of Object.entries(allSessions())) {
     if (s.tabEl) s.tabEl.classList.toggle('placed', placement.has(id));
   }
+  // N35 §6 — 뷰어 칸이 하나라도 있으면 화면이 비어 있는 게 아니다. 온보딩은
+  // position:fixed + z-index:500이라 페인 위를 덮으므로 CSS로 눌러둔다.
+  // "열 때 remove()"에 기대지 않는 이유: 세션 목록 응답이 늦게 오는 경로가
+  // 온보딩을 **다시** 붙인다(실브라우저에서 그대로 재현됐다).
+  document.body.classList.toggle('vt-has-viewer-pane', leaves.some((l) => l.kind === 'viewer'));
   // 표면 레이어에게 최종 배치를 넘긴다 — 빠진 세션은 숨기고, 새로 들어온
   // 세션은 즉시 실측해 transform·fit을 건다(surface.js 책임).
   surface.setPlacement(placement);

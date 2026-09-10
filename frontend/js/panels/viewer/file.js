@@ -1,9 +1,33 @@
 // 코드 뷰어 파일 렌더 — F4에서 viewer.js에서 분리. hljs 지연 로드 결과(있으면
 // 하이라이트, 없으면 이스케이프 폴백)로 파일 내용을 줄 번호와 함께 그린다.
 import { vtEsc, vtFetch } from '../../core/api.js';
-import { _viewerState, _setMsg } from './state.js';
-import { _setPath, _setTitle } from './shell.js';
-import { _fmtSize } from './tree.js';
+import { _setMsg } from './state.js';
+
+// 파일 크기 표기 — 구 viewer/tree.js에서 이관(그 파일은 모달 뷰어와 함께 사라졌다).
+export function _fmtSize(n) {
+  if (n == null) return '';
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)}KB`;
+  return `${(n / 1024 / 1024).toFixed(1)}MB`;
+}
+
+// P1: highlight.min.js(127KB)는 파일을 실제로 열 때만 불러온다. fetch와 겹쳐
+// 돌므로 체감 지연이 거의 없고, _hl()이 `!window.hljs`를 이스케이프 텍스트로
+// 안전하게 폴백하므로 로드 전에 렌더링이 일어나도 깨지지 않는다.
+let _hljsLoading = null;
+export function ensureHljs() {
+  if (window.hljs) return Promise.resolve();
+  if (!_hljsLoading) {
+    _hljsLoading = new Promise((resolve) => {
+      const el = document.createElement('script');
+      el.src = '/static/vendor/highlight.min.js';
+      el.onload = resolve;
+      el.onerror = resolve;   // 실패해도 이스케이프 폴백으로 계속 동작
+      document.head.appendChild(el);
+    });
+  }
+  return _hljsLoading;
+}
 
 // 하이라이팅. 실패하면 반드시 이스케이프된 원문으로 폴백한다 —
 // 여기서 예외가 새면 뷰어 전체가 빈 화면이 된다.
@@ -36,32 +60,28 @@ function _renderFileDOM(container, content, lang) {
   container.appendChild(wrap);
 }
 
-export async function openFile(path) {
-  _viewerState.mode = 'file';
-  _viewerState.selectedPath = path;
-  _viewerState.cwd = path.replace(/\/[^/]+$/, '') || _viewerState.root;
-  _setPath(path);
-  _setTitle(path.split('/').pop());
-  const pane = document.getElementById('vt-vw-code-pane');
-  pane.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
+/** 파일 하나를 container에 그린다. N35 §6부터 유일한 소비처는 뷰어 **페인**이다. */
+export async function renderFile(container, path) {
+  ensureHljs();   // fire-and-forget — 아래 fetch와 겹쳐 돈다
+  container.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
   let d;
   try {
     d = await vtFetch(`/api/fs/file?path=${encodeURIComponent(path)}`);
   } catch (e) {
-    _setMsg(pane, 'vt-vw-empty', [e.message]);
+    _setMsg(container, 'vt-vw-empty', [e.message]);
     return;
   }
   if (d.binary) {
-    _setMsg(pane, 'vt-vw-empty', [`바이너리 파일 (${_fmtSize(d.size)})`, '미리보기를 지원하지 않습니다.']);
+    _setMsg(container, 'vt-vw-empty', [`바이너리 파일 (${_fmtSize(d.size)})`, '미리보기를 지원하지 않습니다.']);
     return;
   }
-  pane.innerHTML = '';
+  container.innerHTML = '';
   const lang = window.VTDiffLex ? VTDiffLex.langForPath(path) : null;
-  _renderFileDOM(pane, d.content, lang);
+  _renderFileDOM(container, d.content, lang);
   if (d.truncated) {
     const note = document.createElement('div');
     note.className = 'vt-vw-note warn';
     note.textContent = `파일이 커서 앞부분만 표시했습니다 (전체 ${_fmtSize(d.size)})`;
-    pane.appendChild(note);
+    container.appendChild(note);
   }
 }

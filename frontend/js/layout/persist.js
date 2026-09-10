@@ -28,6 +28,9 @@ const SAVE_DEBOUNCE_MS = 400;
 export function serializeTree(tree, lookup) {
   if (tree.t === 'leaf') {
     const info = tree.session ? lookup(tree.session) : null;
+    // N35 §6 — 뷰어 칸은 세션이 아니라 **경로**를 저장한다. 경로는 새로고침
+    // 뒤에도 그대로 유효하므로(세션 id와 달리) 그대로 되살아난다.
+    if (tree.kind === 'viewer') return { t: 'leaf', id: tree.id, session: null, kind: 'viewer', file: tree.file || null };
     return { t: 'leaf', id: tree.id, session: info };
   }
   return {
@@ -49,10 +52,15 @@ export function deserializeTree(node, resolve, taken = new Set()) {
   if (!node || typeof node !== 'object') return null;
   if (node.t === 'leaf') {
     if (typeof node.id !== 'string') return null;
+    if (node.kind === 'viewer') {
+      // 경로는 서버가 다시 검사한다(fsguard) — 여기서는 문자열인지만 본다.
+      const file = typeof node.file === 'string' ? node.file : null;
+      return { t: 'leaf', id: node.id, session: null, kind: 'viewer', file, worktree: null, host: 'local' };
+    }
     let session = resolve(node.session);
     if (session && taken.has(session)) session = null;
     if (session) taken.add(session);
-    return { t: 'leaf', id: node.id, session, worktree: null, host: 'local' };
+    return { t: 'leaf', id: node.id, session, kind: 'terminal', file: null, worktree: null, host: 'local' };
   }
   if (node.t !== 'split' || typeof node.id !== 'string') return null;
   const a = deserializeTree(node.a, resolve, taken);

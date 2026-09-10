@@ -455,6 +455,48 @@ def test_온보딩이_레일과_dock을_덮지_않는다(page):
     assert hit["dock"] == "vt-dock", f"온보딩이 dock을 덮었다: {hit}"
 
 
+def test_파일이_모달이_아니라_페인으로_열린다(page):
+    """N35 §6 — 모달 코드 뷰어는 제거됐다. 파일은 pane 트리의 leaf(kind:viewer)로
+    열리고, 그 내용이 pane 상자 안에 갇혀 있어야 한다(밖으로 새면 표면 레이어의
+    터미널 위를 덮는다)."""
+    target = str(ROOT / "VERSION")
+    page.evaluate("(p) => window.openFileInPane(p)", target)
+    page.wait_for_selector(".vt-pane-viewer .vt-vw-cl", timeout=15000)
+    got = page.evaluate(
+        """() => {
+          const body = document.querySelector('.vt-pane-viewer');
+          const pane = body.closest('.vt-pane');
+          const pr = pane.getBoundingClientRect();
+          const overflow = [...body.querySelectorAll('*')].filter((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) return false;
+            return r.right > pr.right + 1 || r.left < pr.left - 1;
+          }).length;
+          return {
+            modal: !!document.getElementById('vt-viewer'),
+            lines: body.querySelectorAll('.vt-vw-cl').length,
+            // 온보딩은 남아 있어도 되지만 **덮으면 안 된다** — 실제 히트 테스트로 본다.
+            covered: document.elementFromPoint(pr.left + pr.width / 2, pr.top + pr.height / 2)
+                       ?.closest('.vt-onboarding') != null,
+            overflow,
+          };
+        }"""
+    )
+    assert not got["modal"], "모달 코드 뷰어가 다시 살아났다"
+    assert got["lines"] > 0, f"파일 내용이 안 그려졌다: {got}"
+    assert not got["covered"], "온보딩이 뷰어 페인 위를 덮고 있다"
+    assert got["overflow"] == 0, f"뷰어 내용이 pane 밖으로 넘쳤다: {got}"
+
+
+def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
+    """§6 — 「파일」 진입점은 팔레트로 옮겨갔다. 옛 rail 버튼이 남아 있으면
+    누를 대상이 없는 버튼이 된다."""
+    assert page.evaluate("() => !document.getElementById('vt-rail-file')")
+    page.evaluate("() => window.getAction('viewer.show')()")
+    page.wait_for_selector("#vt-qopen", timeout=5000)
+    page.keyboard.press("Escape")
+
+
 # ── N35 §6 dock ───────────────────────────────────────────────────────────
 
 def test_dock_탭_행이_문서대로_그려진다(page):

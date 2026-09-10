@@ -100,9 +100,9 @@ async function flush() {
 
 test('rail 항목 6개가 올바른 data-rail/data-action을 갖는다', async () => {
   const { window } = await buildWindow();
-  const ids = ['vt-rail-session', 'vt-rail-file', 'vt-rail-queue', 'vt-rail-ports', 'vt-rail-usage', 'vt-rail-settings'];
+  // N35 §6 — 'file'은 빠졌다(모달 코드 뷰어 제거, 팔레트가 그 자리를 받았다).
+  const ids = ['vt-rail-session', 'vt-rail-queue', 'vt-rail-ports', 'vt-rail-usage', 'vt-rail-settings'];
   for (const id of ids) assert.ok(window.document.getElementById(id), `${id}가 있어야 한다`);
-  assert.strictEqual(window.document.getElementById('vt-rail-file').dataset.action, 'viewer.show');
   assert.strictEqual(window.document.getElementById('vt-rail-queue').dataset.action, 'queue.show');
   assert.strictEqual(window.document.getElementById('vt-rail-ports').dataset.action, 'ports.show');
   assert.strictEqual(window.document.getElementById('vt-rail-session').dataset.action, undefined);

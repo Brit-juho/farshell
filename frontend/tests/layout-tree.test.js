@@ -24,7 +24,7 @@ async function loadTree() {
 test('makeLeaf/makeSplit — 기본 필드', async () => {
   const T = await loadTree();
   const leaf = T.makeLeaf('p1', 's1');
-  assert.deepEqual(leaf, { t: 'leaf', id: 'p1', session: 's1', worktree: null, host: 'local' });
+  assert.deepEqual(leaf, { t: 'leaf', id: 'p1', session: 's1', kind: 'terminal', file: null, worktree: null, host: 'local' });
 
   const split = T.makeSplit('sp1', 'row', leaf, T.makeLeaf('p2'), 0.5);
   assert.strictEqual(split.t, 'split');
@@ -52,8 +52,8 @@ test('splitPane — 대상 leaf를 split(a=기존, b=새 leaf)으로 바꾼다',
   assert.strictEqual(next.t, 'split');
   assert.strictEqual(next.id, 'sp1');
   assert.strictEqual(next.dir, 'row');
-  assert.deepEqual(next.a, { t: 'leaf', id: 'p1', session: 'sess-a', worktree: null, host: 'local' });
-  assert.deepEqual(next.b, { t: 'leaf', id: 'p2', session: 'sess-b', worktree: null, host: 'local' });
+  assert.deepEqual(next.a, { t: 'leaf', id: 'p1', session: 'sess-a', kind: 'terminal', file: null, worktree: null, host: 'local' });
+  assert.deepEqual(next.b, { t: 'leaf', id: 'p2', session: 'sess-b', kind: 'terminal', file: null, worktree: null, host: 'local' });
   // 원본은 변형되지 않는다(불변성)
   assert.strictEqual(tree.t, 'leaf');
 });
@@ -81,7 +81,7 @@ test('closePane — root(유일한 pane)는 지울 수 없고 session만 비운�
   const T = await loadTree();
   const tree = T.makeLeaf('p1', 'sess-a');
   const next = T.closePane(tree, 'p1');
-  assert.deepEqual(next, { t: 'leaf', id: 'p1', session: null, worktree: null, host: 'local' });
+  assert.deepEqual(next, { t: 'leaf', id: 'p1', session: null, kind: 'terminal', file: null, worktree: null, host: 'local' });
 });
 
 test('closePane — 형제로 collapse된다', async () => {
@@ -89,7 +89,7 @@ test('closePane — 형제로 collapse된다', async () => {
   const tree = T.splitPane(T.makeLeaf('p1', 'a'), 'p1', 'row', T.makeLeaf('p2', 'b'), 'sp1');
   const next = T.closePane(tree, 'p1');
   // split이 사라지고 살아남은 형제(p2)가 그 자리를 대신한다
-  assert.deepEqual(next, { t: 'leaf', id: 'p2', session: 'b', worktree: null, host: 'local' });
+  assert.deepEqual(next, { t: 'leaf', id: 'p2', session: 'b', kind: 'terminal', file: null, worktree: null, host: 'local' });
 });
 
 test('closePane — 3분할 중 하나를 닫으면 나머지 둘만 남는다', async () => {
@@ -154,4 +154,27 @@ test('findNode — id로 leaf/split 어느 쪽이든 찾는다', async () => {
   assert.strictEqual(T.findNode(tree, 'sp1').t, 'split');
   assert.strictEqual(T.findNode(tree, 'p2').t, 'leaf');
   assert.strictEqual(T.findNode(tree, 'nope'), null);
+});
+
+// N35 §6 — 뷰어 리프.
+test('setLeafViewer — 그 칸만 뷰어가 되고 세션은 비워진다', async () => {
+  const T = await loadTree();
+  const one = T.makeLeaf('p1', 's1');
+  const two = T.splitPane(one, 'p1', 'row', T.makeLeaf('p2', 's2'), 'sp1');
+  const next = T.setLeafViewer(two, 'p2', '/x/a.py');
+
+  assert.deepEqual(T.findNode(next, 'p2'), {
+    t: 'leaf', id: 'p2', session: null, kind: 'viewer', file: '/x/a.py', worktree: null, host: 'local',
+  });
+  // 형제는 그대로 — 참조까지 보존한다(불필요한 재렌더 방지).
+  assert.strictEqual(T.findNode(next, 'p1'), T.findNode(two, 'p1'));
+});
+
+test('setSession — 뷰어 칸에 세션을 넣으면 다시 터미널 칸이 된다', async () => {
+  const T = await loadTree();
+  const viewer = T.setLeafViewer(T.makeLeaf('p1'), 'p1', '/x/a.py');
+  const next = T.setSession(viewer, 'p1', 's9');
+  assert.deepEqual(next, {
+    t: 'leaf', id: 'p1', session: 's9', kind: 'terminal', file: null, worktree: null, host: 'local',
+  });
 });

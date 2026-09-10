@@ -250,7 +250,10 @@ export async function removeSession(id) {
       // renderLayout()이 알아서 #terminal-container를 빈 상태로 다시 그린다
       // (수동 innerHTML 클리어보다 이 경로 하나로 일원화).
       setPaneSession(null);
-      if (!document.getElementById('onboarding')) showOnboarding();
+      // N35 §6 — 뷰어 페인이 열려 있으면 화면이 비어 있는 게 아니다. 온보딩을
+      // 띄우면 그 위를 덮어버린다(z-index:500).
+      const hasViewer = document.querySelector('.vt-pane-viewer');
+      if (!hasViewer && !document.getElementById('onboarding')) showOnboarding();
     }
   }
   updateSessionPicker();
