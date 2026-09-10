@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from collections import deque
 from pathlib import Path
@@ -62,7 +63,7 @@ def load_patterns(force: bool = False) -> dict:
     global _patterns
     if _patterns is not None and not force:
         return _patterns
-    out: dict[str, dict[str, list[bytes]]] = {}
+    out: dict[str, dict] = {}
     if tomllib is None:
         logger.warning("tomllib 없음(Python 3.11+ 필요) — waiting 감지 비활성")
         _patterns = out
@@ -77,10 +78,67 @@ def load_patterns(force: bool = False) -> dict:
             name = str(data.get("name") or path.stem)
             enter = [str(p).encode() for p in (data.get("enter") or []) if str(p)]
             exit_ = [str(p).encode() for p in (data.get("exit") or []) if str(p)]
+            # N38(70-mobile.md §2) — 번호 선택지 캡처 정규식. 단일 문자열 또는
+            # 문자열 리스트(에이전트마다 형태가 여럿일 수 있어) 둘 다 받는다.
+            # 컴파일 실패(정규식 오타)는 이 필드만 무시 — enter/exit는 살아있다.
+            raw_options = data.get("options")
+            if isinstance(raw_options, str):
+                raw_options = [raw_options]
+            options: list[re.Pattern] = []
+            for pat in (raw_options or []):
+                try:
+                    options.append(re.compile(str(pat), re.MULTILINE))
+                except re.error as e:
+                    logger.warning(f"detect options 정규식 무효 — 건너뜀: {path.name}: {e}")
             if enter or exit_:
-                out[name] = {"enter": enter, "exit": exit_}
+                out[name] = {"enter": enter, "exit": exit_, "options": options}
     _patterns = out
     return out
+
+
+def _extract_prompt(pats: dict, joined: bytes) -> tuple[Optional[str], Optional[list]]:
+    """enter 패턴이 히트한 윈도우에서 질문 1줄과 번호 선택지를 뽑는다.
+
+    질문: 히트한 enter 문자열을 담은 실제 줄(더 구체적인 문구를 위해 리터럴이
+    아니라 그 줄 전체를 쓴다) — 못 찾으면 리터럴 그대로.
+    선택지: `options` 정규식을 텍스트에 돌려 (번호, 라벨) 쌍을 순서대로 모은다.
+    디코딩 실패(바이너리 잡음 등)는 조용히 빈 결과로 — waiting 판정 자체는
+    이미 끝났으므로 여기서 실패해도 상태 전이는 막지 않는다.
+    """
+    try:
+        text = joined.decode("utf-8", errors="ignore")
+    except Exception:
+        return None, None
+
+    question: Optional[str] = None
+    for spec in pats.values():
+        for p in spec["enter"]:
+            if p in joined:
+                needle = p.decode("utf-8", errors="ignore")
+                for line in text.splitlines():
+                    if needle in line:
+                        question = line.strip()
+                        break
+                if question is None:
+                    question = needle
+                break
+        if question:
+            break
+
+    options: Optional[list] = None
+    for spec in pats.values():
+        for regex in spec.get("options") or []:
+            found = regex.findall(text)
+            if found:
+                options = [
+                    {"key": str(m[0]).strip(), "label": str(m[1]).strip()}
+                    for m in found
+                ][:6]  # 화면에 6개 넘게 그릴 일은 없다 — 방어적 상한
+                break
+        if options:
+            break
+
+    return question, options
 
 
 class PromptDetector:
@@ -95,6 +153,9 @@ class PromptDetector:
         self._windows: dict[str, deque[bytes]] = {}
         self._waiting: dict[str, bool] = {}
         self._changed_at: dict[str, float] = {}
+        # N38 — 마지막으로 감지된 질문/선택지. waiting=False가 되면 지운다
+        # (더 이상 답할 대상이 없다).
+        self._prompts: dict[str, tuple[Optional[str], Optional[list]]] = {}
 
     # ── 입력 ─────────────────────────────────────────────────────────────
     def feed(self, session_id: str, data: bytes) -> None:
@@ -122,6 +183,7 @@ class PromptDetector:
             if _auto_trust_suppressed(session_id):
                 logger.debug(f"[waiting] sid={session_id} auto_responder cooldown — 억제")
                 return
+            self._prompts[session_id] = _extract_prompt(pats, joined)
             self._set(session_id, True)
 
     def on_user_input(self, session_id: str) -> None:
@@ -138,6 +200,12 @@ class PromptDetector:
     def is_waiting(self, session_id: str) -> bool:
         return bool(self._waiting.get(session_id))
 
+    def get_prompt(self, session_id: str) -> tuple[Optional[str], Optional[list]]:
+        """N38 — 마지막으로 감지된 질문·선택지. waiting이 아니면 (None, None)."""
+        if not self._waiting.get(session_id):
+            return None, None
+        return self._prompts.get(session_id, (None, None))
+
     def _set(self, session_id: str, waiting: bool) -> None:
         if self._waiting.get(session_id, False) == waiting:
             return
@@ -146,6 +214,8 @@ class PromptDetector:
             return
         self._waiting[session_id] = waiting
         self._changed_at[session_id] = now
+        if not waiting:
+            self._prompts.pop(session_id, None)
         try:
             self._on_change(session_id, waiting)
         except Exception as e:  # 감지가 서버를 죽이지 않는다
@@ -155,6 +225,7 @@ class PromptDetector:
         self._windows.pop(session_id, None)
         self._waiting.pop(session_id, None)
         self._changed_at.pop(session_id, None)
+        self._prompts.pop(session_id, None)
 
 
 def _auto_trust_suppressed(session_id: str) -> bool:

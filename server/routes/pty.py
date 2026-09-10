@@ -127,6 +127,35 @@ async def delete_session(session_id: str):
     return {"ok": True, "tmux_detached": tmux_name}
 
 
+@router.post("/api/sessions/{session_id}/keys")
+async def send_keys(session_id: str, request: Request):
+    """N38(70-mobile.md §2) — 모바일 플릿 홈의 인라인 승인 버튼이 부르는 경로.
+
+    `{"text": "1\\r"}` 형태로 받아 그대로 PTY에 쓴다 — WS 입력 경로(위 ws_pty의
+    bytes 분기)와 동급 권한이라 신규 엔드포인트지만 승격은 요구하지 않는다
+    (터미널에 타이핑하는 것과 다를 바 없다, ADR-22의 승격 요구는 git 쓰기
+    한정). 인증은 TokenAuthMiddleware가 이 경로도 이미 보호한다(예외 목록에
+    없음) — 여기서 별도 처리 없음.
+    """
+    if session_id not in pty_mgr.sessions:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "bad_request"}, status_code=400)
+    text = body.get("text")
+    if not isinstance(text, str) or not text:
+        return JSONResponse({"error": "bad_request", "reason": "text required"}, status_code=400)
+    try:
+        # WS 입력 경로와 같은 해제 판정: 이 세션에 뭔가 써 넣는 것 자체가
+        # "사람이 답했다"는 가장 확실한 신호다(§2: 버튼도 답이다).
+        _prompt_detector.on_user_input(session_id)
+        pty_mgr.write(session_id, text.encode())
+    except ValueError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return {"ok": True}
+
+
 @router.patch("/api/sessions/{session_id}")
 async def rename_session(session_id: str, request: Request):
     body = await request.json()

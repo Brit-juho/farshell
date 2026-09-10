@@ -22,6 +22,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | POST | `/api/sessions` | Create a session (JSON: cols, rows, name) |
 | DELETE | `/api/sessions/{id}` | Delete a session |
 | PATCH | `/api/sessions/{id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
+| POST | `/api/sessions/{id}/keys` | Write text straight into the PTY (JSON: text) — same privilege as typing in the terminal WS. 404 for an unknown session. Used by the mobile fleet home's inline approval buttons (N38) |
 | POST | `/api/watch/{id}` | Toggle output watching ON/OFF (JSON: enabled, timeout) |
 
 ## tmux

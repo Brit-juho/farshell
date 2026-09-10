@@ -170,3 +170,7 @@ window.getStatus = getStatus;
 window.onStatusChange = onStatusChange;
 window.isUnseen = isUnseen;
 window.sortByUrgency = sortByUrgency;
+// N38(70-mobile.md §2) — Fleet.tsx(shell 지연 청크)가 "완료 · 확인 안 함" 행
+// 탭 처리에 쓴다. 위 값들과 같은 이유로 window 브리지만 노출한다.
+window.markSeen = markSeen;
+window.allStatuses = allStatuses;
