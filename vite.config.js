@@ -95,12 +95,14 @@ export default defineConfig(({ mode }) => {
         // 대상이 없다 — main.js가 실제로 import하는 건 legacy 앱 스크립트뿐이다.
         external: [],
         output: {
-          // N34/ADR-26 — 지연 청크(main.js의 `import('./shell/Hud.tsx')`)에도
-          // **해시를 붙이지 않는다.** ADR-1의 "산출물 이름 고정" 계약이 entry뿐
-          // 아니라 청크에도 그대로 적용된다: sw.js가 `/static/dist/`를
-          // network-first로 잡아 캐시하는데, 이름이 매 빌드 바뀌면 옛 청크가
-          // 캐시에 무한히 쌓이고 오프라인 복구도 어긋난다.
-          chunkFileNames: 'shell.js',
+          // N34/N35/ADR-26 — 지연 청크에도 **해시를 붙이지 않는다.** ADR-1의
+          // "산출물 이름 고정" 계약이 entry뿐 아니라 청크에도 그대로 적용된다:
+          // sw.js가 `/static/dist/`를 network-first로 잡아 캐시하는데, 이름이
+          // 매 빌드 바뀌면 옛 청크가 캐시에 무한히 쌓이고 오프라인 복구도
+          // 어긋난다. `[name]`은 아래 manualChunks가 반환한 이름 그대로 쓴다
+          // (해시가 안 붙는다는 점은 entry와 동일, 청크가 둘 이상이라 정적
+          // 문자열 하나로는 못 박을 수 없을 뿐).
+          chunkFileNames: '[name].js',
           // ⚠ manualChunks가 없으면 안 된다(실측): 동적 import가 split point를
           // 만드는 순간 Rollup은 **entry와 청크가 공유하는 모듈 전부**를 청크로
           // 끌어올린다. Hud.tsx가 core/api·core/store·core/dom·term/e2e를 같이
@@ -109,11 +111,19 @@ export default defineConfig(({ mode }) => {
           // 생겨 고정 이름이 충돌했다.
           //
           // 그래서 "무엇이 지연 청크인가"를 자동 판정에 맡기지 않고 못박는다:
-          // **solid-js 런타임과 js/shell/ 아래만** 청크로, 나머지는 전부 entry에
-          // 남는다. 공유 모듈(core/*)은 entry 쪽에 남아 청크에서 import된다.
+          // - solid-js 런타임 + js/shell/ 아래 → `shell`(shell.js). bootApp() 뒤
+          //   바로 동적 import되므로 "지연"은 초기 번들 크기 게이트용이지 실제
+          //   로딩 시점을 크게 늦추지는 않는다.
+          // - N35: panels/viewer/ 아래(코드 뷰어, 6파일·1268줄) → `panels`
+          //   (panels.js, ADR-26이 지정한 이름). 이건 **진짜로** 열 때만 받는다
+          //   (panels/viewer-lazy.js). shell과 합치지 않은 이유: 합치면 코드
+          //   뷰어를 한 번도 안 연 세션도 HUD가 뜨는 순간 1268줄을 같이
+          //   받게 되어, 분리한 의미(드물게 쓰는 걸 정말 나중에 받는다)가 없어진다.
+          // 공유 모듈(core/*)은 entry 쪽에 남아 두 청크 다 거기서 import한다.
           manualChunks(id) {
             const p = id.split('?')[0].replace(/\\/g, '/');
             if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
+            if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
             return null;
           },
         },

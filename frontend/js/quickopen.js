@@ -3,10 +3,12 @@
 // 데이터(열린 세션, 코드 뷰어의 최근 파일 목록, 고정 명령 리스트)만으로 만든다 —
 // 파일시스템 전체를 훑는 진짜 fuzzy 검색은 별도 서버 API가 필요해 스코프 밖으로 뺐다.
 //
-// F5에서 classic script에서 ES 모듈로 전환 — _loadRecent/showViewer/_selectFile을
-// panels/viewer/{tree,shell}.js에서 진짜 import로 받는다. main.js가 이 파일들을
-// 전부 정적 import하므로(뷰어를 실제로 연 적 없어도) 항상 준비돼 있어, 예전
-// `typeof _loadRecent === 'function'` 방어 체크는 더 이상 필요 없다.
+// ADR-26/N35 — _loadRecent/showViewer/_selectFile은 panels/viewer-lazy.js의
+// loadViewer()로 **동적** import한다. 예전엔 panels/viewer/{tree,shell}.js를
+// 정적 import했는데(main.js가 항상 먼저 로드해 뒀었다), 그 여섯 파일이
+// 지연 청크(shell.js)로 옮겨간 뒤로는 정적 import를 쓰면 그 청크가 이
+// 파일(=app.js에 남는 쪽)에 도로 끌려 들어온다. recentFiles는 tmuxCandidates와
+// 같은 패턴(빈 값으로 시작 → 로드되면 다시 그린다)으로 채운다.
 //
 // L6: ADR-8("⋯ 메뉴의 전 항목이 팔레트 명령으로 존재해야 한다")에 따라 옛 ⋯ 메뉴
 // (index.html #more-menu, 원래 15항목)를 전부 여기서 커버한다. `/`(검색)·`:`(포트)·
@@ -20,8 +22,7 @@ import { getAction, registerAction } from './core/dom.js';
 import { allSessions, getSession } from './core/store.js';
 import { apiFetch, vtFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
-import { _loadRecent, _selectFile } from './panels/viewer/tree.js';
-import { showViewer } from './panels/viewer/shell.js';
+import { loadViewer } from './panels/viewer-lazy.js';
 import { switchTo } from './term/session.js';
 import { setVtSkin } from './theme.js';
 import { get as setting, set as setSetting } from './core/settings.js';
@@ -163,7 +164,10 @@ function openQuickOpen() {
 
       // 최근 파일은 코드 뷰어의 로컬 저장소 목록을 그대로 가져온다 — 뷰어를
       // 실제로 연 적이 없으면 빈 배열이다(localStorage에 저장된 게 없을 뿐).
-      const recentFiles = _loadRecent();
+      // 청크가 아직 없으면 도착할 때까지 빈 목록으로 시작한다(아래
+      // tmuxCandidates와 같은 패턴 — 도착하면 같은 쿼리로 다시 그린다).
+      let recentFiles = [];
+      loadViewer().then((v) => { recentFiles = v._loadRecent(); render(input.value); });
       // tmux 후보는 비동기로 채워진다 — 도착 전까지는 세션이 평문 행으로만
       // 보이다가, 도착하면 같은 쿼리로 다시 그려 썸네일이 얹힌다(깜빡임 최소화).
       let tmuxCandidates = { byWebId: {}, agents: {} };
@@ -245,8 +249,9 @@ function openQuickOpen() {
           row.appendChild(dir);
           row.addEventListener('click', async () => {
             closeQuickOpen();
-            await showViewer();
-            _selectFile(p, null);
+            const v = await loadViewer();
+            await v.showViewer();
+            v._selectFile(p, null);
           });
           return row;
         });
