@@ -1807,11 +1807,30 @@ cmd_stop() {
   done
   rm -f "$TUNNEL_REGISTRY"
 
-  # 혹시 남은 프로세스 정리
-  pkill -f "voice_daemon.py" 2>/dev/null || true
-  pkill -f "clipboard_daemon.py" 2>/dev/null || true
-  pkill -f "tunnel_watchdog.py" 2>/dev/null || true
-  pkill -f "cloudflared tunnel" 2>/dev/null || true
+  # 혹시 남은 프로세스 정리 — pidfile을 잃어버린 고아만 대상이다.
+  #
+  # ⚠ **반드시 이 인스턴스 것만 죽인다.** 예전엔 `pkill -f "voice_daemon.py"`처럼
+  # 파일 이름만으로 매칭해서, 한 머신에서 두 인스턴스를 돌릴 때(VT_RUN_DIR,
+  # 커밋 380233c) **다른 인스턴스의 데몬과 터널까지 같이 죽었다.** 2.1 작업 중
+  # `fsh21 stop`을 칠 때마다 돌아가던 2.0의 cloudflared가 끊겨서 원격 접속이
+  # 죽는 걸로 실제로 드러났다(2.0 서버 프로세스만 `lsof -i :$VT_PORT`가
+  # 포트별이라 살아남아서 더 늦게 발견됐다).
+  #
+  # 데몬 3종은 `$VT_DIR/server/*.py` 절대경로로 뜨므로 그 경로째로 매칭하면
+  # 트리가 다른 인스턴스와 자연히 갈린다. cloudflared는 포트로 갈린다 —
+  # 위에서 이미 쓰는 _main_tunnel_pids()와 같은 기준.
+  for d in voice_daemon clipboard_daemon tunnel_watchdog; do
+    pkill -f "$VT_DIR/server/$d.py" 2>/dev/null || true
+  done
+  # cloudflared는 **포트가 명시된 익명 터널만** 정리한다. 명명 터널
+  # (`cloudflared tunnel run <name>`)은 명령줄에 포트가 없어서 내 것인지
+  # 남의 것인지 구별할 방법이 없다 — 정리 경로에서 확신 없이 죽이느니
+  # 놔두는 쪽이 옳다(위 pidfile 루프가 정상 경로에서 이미 처리한다).
+  if command -v pgrep >/dev/null 2>&1; then
+    local leftover
+    leftover="$(pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null | tr '\n' ' ')"
+    [ -n "${leftover// /}" ] && kill $leftover 2>/dev/null || true
+  fi
   if command -v lsof >/dev/null 2>&1; then
     lsof -i :$VT_PORT -t 2>/dev/null | xargs kill 2>/dev/null || true
   elif command -v fuser >/dev/null 2>&1; then
