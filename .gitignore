@@ -56,9 +56,17 @@ docs/*
 RELEASE_NOTES.md
 farshell-*.tar.gz
 
-# Claude Code 하네스가 만드는 런타임 상태. 예전엔 .git/info/exclude 에만 있었는데
+# .claude/ 는 부분 추적이다. 추적하는 것은 .claude/skills/ 하나뿐 —
+# 저장소가 제공하는 fsh 스킬이라 클론한 사람에게 따라가야 한다.
+#
+# settings.json + hooks/ 는 개인/팀 툴체인 설정이라 제외한다. settings.json 의
+# PreToolUse 훅이 gstack 미설치 환경에서 Skill 사용을 전부 deny 하므로, 추적하면
+# 클론한 사람의 Claude Code 가 망가진다(파일은 로컬에 남아 내 환경에서는 계속 동작).
+.claude/settings.json
+.claude/hooks/
+
+# 나머지는 하네스가 만드는 런타임 상태. 예전엔 .git/info/exclude 에만 있었는데
 # 그건 clone 시 공유되지 않아서, 다른 사람이 받으면 미추적 파일로 쏟아졌다.
-# (.claude/skills/ 와 .claude/settings.json 은 추적한다 — 저장소의 일부다)
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
 .claude/agent-registry.json
