@@ -73,13 +73,34 @@ test('set — enum에 없는 값은 거부한다', async () => {
   assert.strictEqual(S.get('terminal.cursorStyle'), 'block');
 });
 
-test('set — 서버에 PUT하고 localStorage 캐시에도 쓴다', async () => {
+test('set — 서버에 PUT하고 localStorage 캐시에도 쓴다 (global 키)', async () => {
+  const { S, calls, window } = await load();
+  await S.set('mouse.autocopyOnSelect', false);
+  const put = calls.find((c) => c.opts && c.opts.method === 'PUT');
+  assert.ok(put, 'PUT이 나가야 한다');
+  assert.match(String(put.url), /\/api\/workspace(\?|$)/, 'global 키는 workspace로 간다');
+  assert.deepEqual(JSON.parse(put.opts.body).settings, { 'mouse.autocopyOnSelect': false });
+  assert.match(window.localStorage.getItem('vt-settings-v1'), /mouse\.autocopyOnSelect/);
+});
+
+// N3(60-settings-palette.md §1) — terminal.fontSize는 device 스코프다. 같은
+// set()이 **다른 엔드포인트·다른 캐시 키**로 가는지가 전체 기능의 핵심이다.
+test('set — device 스코프 키는 /api/device-settings와 별도 캐시로 간다', async () => {
   const { S, calls, window } = await load();
   await S.set('terminal.fontSize', 18);
   const put = calls.find((c) => c.opts && c.opts.method === 'PUT');
   assert.ok(put, 'PUT이 나가야 한다');
+  assert.match(String(put.url), /\/api\/device-settings(\?|$)/);
   assert.deepEqual(JSON.parse(put.opts.body).settings, { 'terminal.fontSize': 18 });
-  assert.match(window.localStorage.getItem('vt-settings-v1'), /terminal\.fontSize/);
+  assert.match(window.localStorage.getItem('vt-settings-device-v1'), /terminal\.fontSize/);
+  assert.strictEqual(window.localStorage.getItem('vt-settings-v1'), null, 'global 캐시는 안 건드린다');
+});
+
+test('scopeOf — 스키마가 정한 스코프를 그대로 돌려준다(화면 2b 배지용)', async () => {
+  const { S } = await load();
+  assert.strictEqual(S.scopeOf('terminal.fontSize'), 'device');
+  assert.strictEqual(S.scopeOf('mouse.autocopyOnSelect'), 'global');
+  assert.strictEqual(S.scopeOf('nope.nope'), 'global', '모르는 키도 기본은 global');
 });
 
 test('저장 실패 — 조용히 큐잉하지 않고 토스트로 알린다', async () => {
@@ -134,9 +155,10 @@ test('마이그레이션 — 원본 키를 지우지 않는다(롤백 여지)', 
 });
 
 test('마이그레이션 — 이미 스토어에 값이 있으면 옛 키가 덮어쓰지 않는다', async () => {
+  // fontSize는 device 스코프라 캐시도 device 쪽 키에 미리 있어야 한다.
   const { S } = await load({
     pre: (w) => {
-      w.localStorage.setItem('vt-settings-v1', JSON.stringify({ 'terminal.fontSize': 22 }));
+      w.localStorage.setItem('vt-settings-device-v1', JSON.stringify({ 'terminal.fontSize': 22 }));
       w.localStorage.setItem('vt_font_size', '10');
     },
   });
@@ -156,7 +178,7 @@ test('깨진 캐시 JSON이어도 부팅이 죽지 않는다', async () => {
 // ── 서버 동기화 ───────────────────────────────────────────────────────────
 test('load — 서버 값이 캐시를 이긴다(ADR-5)', async () => {
   const { S } = await load({
-    pre: (w) => w.localStorage.setItem('vt-settings-v1', JSON.stringify({ 'terminal.fontSize': 22 })),
+    pre: (w) => w.localStorage.setItem('vt-settings-device-v1', JSON.stringify({ 'terminal.fontSize': 22 })),
     remote: { 'terminal.fontSize': 16 },
   });
   assert.strictEqual(S.get('terminal.fontSize'), 22, '서버 응답 전에는 캐시 값(프리렌더)');
@@ -186,7 +208,7 @@ test('load — 서버가 죽어 있어도 캐시 값으로 계속 동작한다',
   _doms.push(env.dom);
   env.window.API_BASE = '';
   env.window._tokenQuery = '';
-  env.window.localStorage.setItem('vt-settings-v1', JSON.stringify({ 'terminal.fontSize': 22 }));
+  env.window.localStorage.setItem('vt-settings-device-v1', JSON.stringify({ 'terminal.fontSize': 22 }));
   env.window.fetch = () => Promise.reject(new Error('offline'));
   const S = await importFresh(SETTINGS_JS, env.context, new Map());
   await S.load();

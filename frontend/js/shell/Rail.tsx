@@ -15,8 +15,12 @@ const SESSIONS_POLL_MS = 5000;   // tmux 목록(attached·cwd) — 자주 안 �
 const STATUS_POLL_MS = 4000;     // since/tool 보강 — 서버가 아직 질문 텍스트를 안 줘서(2.1.0 gap) 상태 문장 갱신용.
 const GIT_CACHE_MS = 60000;      // §5 원문: "60초 캐시".
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
-const STORAGE_KEY = 'vt-rail-w';           // N3(기기 스코프 설정) 전이라 임시로 localStorage.
-const COLLAPSE_KEY = 'vt-rail-collapsed';
+// N3(60-settings-palette.md §1)가 생겨 device-settings 정식 스토어로
+// 옮겼다 — 이전엔 여기 주석이 "N3 전이라 임시로 localStorage"였다. core/
+// settings.js도 지연 청크가 정적 import 못 하는 모듈이라(파일 상단 주석과
+// 같은 이유) window 브리지(vtSettingsGet/Set)로만 읽는다.
+const SETTINGS_W_KEY = 'ui.rail.width';
+const SETTINGS_COLLAPSE_KEY = 'ui.rail.collapsed';
 
 export interface RailDeps {
   vtFetch: (path: string) => Promise<unknown>;
@@ -114,7 +118,7 @@ function Rail(props: { deps: RailDeps }) {
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
-  const [collapsed, setCollapsed] = createSignal(localStorage.getItem(COLLAPSE_KEY) === '1');
+  const [collapsed, setCollapsed] = createSignal(Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY)));
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; sessionId: string } | null>(null);
   const [moreMenu, setMoreMenu] = createSignal<{ x: number; y: number } | null>(null);
 
@@ -219,7 +223,7 @@ function Rail(props: { deps: RailDeps }) {
   // 안 그러면 레일은 48px로 줄었는데 본문은 여전히 252px만큼 밀린 채로
   // 빈 틈이 남는다(실브라우저로 실제 재현·확인).
   const [storedWidth, setStoredWidth] = createSignal(
-    Math.min(MAX_W, Math.max(MIN_W, parseInt(localStorage.getItem(STORAGE_KEY) || '', 10) || DEFAULT_W)),
+    Math.min(MAX_W, Math.max(MIN_W, Number((window as any).vtSettingsGet?.(SETTINGS_W_KEY)) || DEFAULT_W)),
   );
   const applyCssVar = () => {
     document.documentElement.style.setProperty('--vt-wgrail-w', `${collapsed() ? 48 : storedWidth()}px`);
@@ -227,12 +231,12 @@ function Rail(props: { deps: RailDeps }) {
   const setWidth = (w: number) => {
     const clamped = Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
     setStoredWidth(clamped);
-    localStorage.setItem(STORAGE_KEY, String(clamped));
+    (window as any).vtSettingsSet?.(SETTINGS_W_KEY, clamped);
   };
   const toggleCollapse = () => {
     const next = !collapsed();
     setCollapsed(next);
-    localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+    (window as any).vtSettingsSet?.(SETTINGS_COLLAPSE_KEY, next);
   };
   createEffect(applyCssVar);
 

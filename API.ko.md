@@ -125,6 +125,8 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널/버전 등) |
 | GET | `/api/workspace` | 워크스페이스 동기화 조회 (탭/UI 상태) |
 | PUT | `/api/workspace` | 워크스페이스 상태 저장 |
+| GET | `/api/device-settings` | 이 기기의 설정 조회 (N3 — `vt_device` 쿠키로 기기 식별, 없으면 `local`) |
+| PUT | `/api/device-settings` | 이 기기의 설정 저장 |
 | GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) 전체 목록 |
 | GET | `/api/agents/{name}` | 특정 tmux 세션의 활성 에이전트 정보 |
 | GET | `/api/agent/status` | 에이전트 상태 머신(A1) — 세션별 `idle/working/waiting/done` + TTL 만료 |
