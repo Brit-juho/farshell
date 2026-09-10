@@ -68,14 +68,12 @@ import './agent/status.js';
 import './agent/state.js';
 import './agent/paint.js';
 import './agent/preview.js';
-// F4 — viewer.js(1230줄)를 panels/viewer/ 아래 6개로 분할. state(leaf) →
-// shell/tree(서로 순환 참조, shell.js 헤더 주석 참고) → file → diff → git 순.
-import './panels/viewer/state.js';
-import './panels/viewer/file.js';
-import './panels/viewer/tree.js';
-import './panels/viewer/shell.js';
-import './panels/viewer/diff.js';
-import './panels/viewer/git.js';
+// F4 — viewer.js(1230줄)를 panels/viewer/ 아래 6개로 분할. **ADR-26/N35로
+// 지연 청크(shell.js)에 넘겼다** — 여섯 파일을 여기서 직접 import하면(정적
+// import) 그래프 전체가 app.js에 도로 박힌다(실측: 336KB로 300KiB 상한
+// 초과, N34 커밋 기록). panels/viewer-lazy.js 하나만 남기고, 그 파일이
+// `viewer.show` 액션 등록 + 실제 `import()`를 전담한다.
+import './panels/viewer-lazy.js';
 // F5 — 나머지 classic script 9개(theme/toast는 위에서 이미 처리)를 마저 ES
 // 모듈로 전환. picker.js↔term/session.js는 순환 import(picker.js 상단 주석),
 // quickopen.js는 panels/viewer/*·term/session.js를 소비하므로 그 뒤에 둔다.

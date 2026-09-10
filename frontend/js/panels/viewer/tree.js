@@ -2,8 +2,10 @@
 // 현재 터미널 위치로 열기, 경로를 터미널에 삽입) + 폴더 펼침/접기 트리 + "최근
 // 연 파일" 섹션을 담당한다. shell.js와 순환 import 관계다(shell.js 헤더 주석 참고).
 import { vtFetch } from '../../core/api.js';
-import { activeSession, activeSessionId } from '../../core/store.js';
-import { sendToPty } from '../../term/clipboard.js';
+// ADR-26/N35 — activeSession/activeSessionId/sendToPty는 window로만 참조한다.
+// shell.js 상단 주석과 같은 이유(이 파일도 지연 청크 panels.js로 빠진다) —
+// core/store.js·term/clipboard.js를 직접 import하면 그 상태가 복제돼
+// "터미널에 경로 삽입"이 항상 활성 세션을 못 찾는 상태로 조용히 죽는다.
 import { _viewerState, _setMsg, _ICON_CHEVRON, _ICON_INSERT } from './state.js';
 import { _setPath, _setActivePane } from './shell.js';
 import { openFile } from './file.js';
@@ -50,17 +52,17 @@ export function _wirePathInput(el) {
 // 타이핑해 넣는다(엔터는 안 침 — 뒤에 명령을 이어 쓸 수 있게). 이미지 붙여넣기
 // 업로드 후 경로 삽입(pasteImageUpload)과 같은 sendToPty 패턴 재사용.
 export function _insertPathToTerminal(path) {
-  if (!activeSession()) {
+  if (!window.activeSession()) {
     showToast('열려 있는 터미널 세션이 없습니다');
     return;
   }
-  sendToPty(activeSessionId(), path + ' ');
+  window.sendToPty(window.activeSessionId(), path + ' ');
   showToast('경로 삽입됨: ' + path.split('/').pop());
 }
 
 // 현재 활성 터미널(tmux) 세션의 cwd를 트리 최상단으로 연다.
 export async function _openAtTerminalCwd() {
-  const _s = activeSession();
+  const _s = window.activeSession();
   if (!_s) {
     showToast('열려 있는 터미널 세션이 없습니다');
     return;

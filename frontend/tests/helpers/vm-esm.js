@@ -40,11 +40,27 @@ function parseImportSpecifiers(src) {
   return specs;
 }
 
+// N35 — 런타임 동적 import() 지원. panels/viewer-lazy.js처럼 실제 소스가
+// `import('./x.js')`를 쓰는 지연 로딩 코드를 테스트하려면 필요하다. 정적
+// import(위 IMPORT_RE)만 미리 그래프로 깔아두는 1단계 방식과 달리, 동적
+// import는 "그 줄이 실제로 실행되는 순간"에야 무엇을 부를지 알 수 있으므로
+// 그때 가서 즉석으로 createModule → link → evaluate 한다 — 이미 캐시에 있는
+// 모듈(정적 그래프에 포함돼 있던 것)이면 재생성 없이 그대로 재사용한다.
 function createModule(filePath, context, cache) {
   const resolved = path.resolve(filePath);
   if (cache.has(resolved)) return cache.get(resolved);
   const src = fs.readFileSync(resolved, 'utf8');
-  const mod = new vm.SourceTextModule(src, { identifier: resolved, context });
+  const mod = new vm.SourceTextModule(src, {
+    identifier: resolved,
+    context,
+    importModuleDynamically: async (specifier, referencingModule) => {
+      const depPath = path.resolve(path.dirname(referencingModule.identifier), specifier);
+      const dep = createModule(depPath, context, cache);
+      if (dep.status === 'unlinked') await dep.link(cacheLinker(context, cache));
+      if (dep.status !== 'evaluated') await dep.evaluate();
+      return dep.namespace;
+    },
+  });
   cache.set(resolved, mod);
   for (const spec of parseImportSpecifiers(src)) {
     createModule(path.resolve(path.dirname(resolved), spec), context, cache);

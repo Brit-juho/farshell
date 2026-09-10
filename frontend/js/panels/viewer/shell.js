@@ -10,8 +10,15 @@
 import { vtFetch } from '../../core/api.js';
 import { openPanel, closePanel } from '../panel.js';
 import { registerAction } from '../../core/dom.js';
-import { fitAndResize } from '../../term/resize.js';
-import { activeSessionId } from '../../core/store.js';
+// ADR-26/N35 — fitAndResize/activeSessionId는 **window로만** 참조한다(직접
+// import 금지). 이 파일은 지연 청크(panels.js, vite.config.js manualChunks)로
+// 빠지는데, Vite lib 모드는 entry(app.js)를 항상 단일 파일로 완전히 인라인
+// 하므로 다른 청크가 같은 모듈을 import하면 **공유가 아니라 복제**가 일어난다
+// (실측: panels.js 안에 core/store.js의 sessions={}·activeId=null 사본이
+// 따로 생겨, 그 사본으로 만든 activeSessionId()는 영원히 null이었다 —
+// "터미널 cwd에서 열기"가 조용히 아무 세션도 못 찾는 버그로 재현됨).
+// core/store.js·term/resize.js는 이미 이 값들을 window에 브리지해 둔다
+// (classic script 호환용, 두 파일 하단 참고) — 그 진짜 전역 하나를 그대로 쓴다.
 import {
   _viewerState, _setMsg,
   _ICON_SHEET, _ICON_DOCK, _ICON_FULL, _ICON_SIDEBAR, _ICON_PIN, _ICON_INSERT,
@@ -179,7 +186,7 @@ function _applyDisplayMode(mode, el) {
   // 딱 한 번만 fit() — resize.js 경고와 같은 이유로 전환 도중엔 부르지 않는다.
   // sheet↔full은 터미널 크기에 영향이 없으므로 fit이 필요 없다.
   if (wasDocked !== nowDocked) {
-    try { setTimeout(() => fitAndResize(activeSessionId()), 200); } catch (_) {}
+    try { setTimeout(() => window.fitAndResize(window.activeSessionId()), 200); } catch (_) {}
   }
 }
 
@@ -209,7 +216,7 @@ function _wireResizer(el) {
     document.body.classList.remove('vt-resizing');
     const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--vt-dock-w'), 10);
     if (Number.isFinite(w)) _saveDockW(w);
-    try { fitAndResize(activeSessionId()); } catch (_) {}
+    try { window.fitAndResize(window.activeSessionId()); } catch (_) {}
   };
   handle.addEventListener('pointerdown', (ev) => {
     if (_viewerState.displayMode !== 'dock') return;
