@@ -37,10 +37,20 @@ _cache: tuple[float, list[dict]] | None = None
 # 죽이면 원격 접속 자체가 끊기는 것들. 이름은 ps의 comm 기준.
 _CRITICAL_NAMES = ("cloudflared", "tailscaled", "sshd", "tailscale")
 
+# macOS가 로그인 유저 권한으로 띄우는 시스템 서비스 실행 경로. root가 아니라
+# me(현재 유저) 소유로 뜨기 때문에 PROTECT_FOREIGN으로는 걸러지지 않는다 —
+# ControlCenter(AirPlay), rapportd(Handoff) 같은 게 실수로 kill 목록에 노출되는 문제.
+_SYSTEM_PATH_PREFIXES = (
+    "/System/",
+    "/usr/libexec/",
+    "/usr/sbin/",
+)
+
 # 목록에서 감추지는 않되 kill을 막는 이유들.
 PROTECT_SELF = "VT 서버 — 죽이면 이 화면이 끊깁니다"
 PROTECT_CRITICAL = "원격 접속 인프라 — 죽이면 외부에서 못 들어옵니다"
 PROTECT_FOREIGN = "다른 사용자의 프로세스입니다"
+PROTECT_SYSTEM = "macOS 기본 시스템 프로세스입니다"
 
 MAX_ROWS = 200
 
@@ -134,11 +144,14 @@ def _ps_info(pids: list[int]) -> dict[int, dict]:
 def _classify(row: dict, me: str, vt_port: int) -> tuple[bool, str]:
     if row["port"] == vt_port:
         return True, PROTECT_SELF
-    base = (row.get("command") or row["cmd"]).split()[0].rsplit("/", 1)[-1]
+    full_path = (row.get("command") or row["cmd"]).split()[0]
+    base = full_path.rsplit("/", 1)[-1]
     if base in _CRITICAL_NAMES or row["cmd"] in _CRITICAL_NAMES:
         return True, PROTECT_CRITICAL
     if row["user"] != me:
         return True, PROTECT_FOREIGN
+    if full_path.startswith(_SYSTEM_PATH_PREFIXES):
+        return True, PROTECT_SYSTEM
     return False, ""
 
 
