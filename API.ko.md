@@ -81,6 +81,12 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/api/git/log?repo=X[&file=Y]` | 최근 커밋 목록 |
 | GET | `/api/git/show?repo=X&rev=Y` | 커밋 하나의 diff |
 
+## 스크롤백 검색
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | 각 세션의 살아있는 scrollback 링버퍼를 grep한다(N40 — 팔레트 `~` 모드, WS 재접속이 쓰는 것과 같은 버퍼, 별도 저장소 없음). `sessions=all`(기본)이면 열린 세션 전부, 콤마 목록이면 그 세션들만. 세션당 20건·전체 50건까지 반환하며, 각 결과는 앞뒤 3줄 컨텍스트를 포함한다 |
+
 ## 프롬프트 큐
 
 | 메서드 | 경로 | 설명 |
