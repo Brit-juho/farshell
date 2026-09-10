@@ -36,11 +36,16 @@ def _on_waiting_change(pty_session_id: str, waiting: bool) -> None:
     if not tmux_name:
         # tmux가 아닌 순수 PTY 세션 — 상태를 붙일 대상(카드/탭)이 없다.
         return
+    # N38 — waiting=True일 때만 질문/선택지를 함께 싣는다(agent_prompt_detect가
+    # 같은 pty_session_id로 이미 뽑아 둔 값). False일 땐 그대로 None, None —
+    # agent_status.on_waiting이 그 경우 엔트리 쪽 값도 지운다.
+    question, options = (_prompt_detector.get_prompt(pty_session_id) if waiting else (None, None))
+
     # 훅이 만든 엔트리가 있으면 그쪽을, 없으면 pane 자기보고와 같은 키를 쓴다.
     targets = [sid for sid, e in agent_status.get_state().items()
                if e.get("tmux_session") == tmux_name]
     for sid in targets or [f"pane:{tmux_name}"]:
-        agent_status.on_waiting(sid, waiting)
+        agent_status.on_waiting(sid, waiting, question=question, options=options)
         if not targets:
             agent_status.get_state(sid)["tmux_session"] = tmux_name
 

@@ -70,6 +70,10 @@ export const SCHEMA = {
   'ui.dock.collapsed':      { type: 'bool', def: false, migrate: 'vt-dock-collapsed', parse: (v) => v === '1', scope: 'device' },
   'ui.dock.width':          { type: 'int',  def: 392, min: 320, max: 560, migrate: 'vt-dock-w', scope: 'device' },
   'ui.dock.tab':            { type: 'str',  def: 'scm', migrate: 'vt-dock-tab', scope: 'device' },
+
+  // N38(70-mobile.md §1) — compact 하단 내비의 시작 탭. 기기 스코프인 이유는
+  // rail/dock 폭과 같다: 폰에서 고른 첫 화면이 맥 터미널 시작 화면에 새면 안 된다.
+  'ui.mobile.home':         { type: 'enum', def: 'fleet', values: ['fleet', 'terminal'], scope: 'device' },
 };
 
 function _scopeOf(key) {

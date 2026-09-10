@@ -13,11 +13,17 @@ export interface RailRowInput {
   status: AgentState;
   /** since epoch초 — 상태 진입 시각. 상대시간·정렬 둘 다 이걸로. */
   since: number | null;
-  /** 진행 중인·마지막 도구 이름("Edit" 등). 서버가 waiting에 물음 텍스트를
-   * 아직 안 주므로(2.1.0 gap — 90-verification.md §4 12번과 별개로 남는
-   * 항목) working에서만 의미 있다. */
+  /** 진행 중인·마지막 도구 이름("Edit" 등). working에서만 의미 있다. */
   tool: string | null;
   diffFiles: number | null; // git 아니거나 아직 조회 전이면 null
+  /** N38(70-mobile.md §2) — waiting 상태에서 감지된 질문 1줄. 데스크톱 레일은
+   * 아직 안 쓰지만(2.1.0 gap이 이제 서버 쪽엔 메워졌다 — agent_prompt_detect의
+   * question/options), 같은 데이터 소스를 쓰는 Fleet.tsx가 이 필드로 인라인
+   * 승인 버튼을 그린다. 선택 필드라 Rail.tsx는 안 넘겨도 그대로 동작한다. */
+  question?: string | null;
+  /** toml `options` 캡처로 뽑은 번호 선택지. 못 뽑았으면 null(또는 undefined)
+   * — 그 경우 Fleet.tsx는 버튼 대신 「터미널로」를 그린다. */
+  options?: { key: string; label: string }[] | null;
 }
 
 export interface RailRow extends RailRowInput {

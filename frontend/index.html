@@ -176,6 +176,17 @@
     <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
   </header>
 
+  <!-- N38(70-mobile.md §1) — 모바일 상단 24px. compact(<720px)에서만 보인다.
+       #topbar는 그대로 둔다(세션 탭·팔레트 진입점을 이미 compact에서도
+       제공한다, L4/L6 주석) — 이 바는 그 아래 얇은 두 번째 줄로 호스트
+       컨텍스트 + 대기 수만 얹는다(2.1.0엔 호스트 전환이 없어 칩은 정적
+       텍스트, N39가 붙는 2.1.2부터 탭 가능해진다). 내용은
+       layout/mobile-nav.js가 채운다. -->
+  <div id="vt-mnav-top" aria-label="상태 요약">
+    <span id="vt-mnav-host-chip">farshell</span>
+    <span id="vt-mnav-waiting" hidden></span>
+  </div>
+
   <!-- L4: 좌측 rail — ADR-8("⋯ 폐지 → 좌측 rail(포인터) + 커맨드 팔레트(키보드)")의
        포인터 경로. compact(<720px)에서는 CSS로 통째로 숨는다(팔레트 + 바텀시트가
        대신한다). 항목 7개는 팔레트(L6)의 기본/설정 명령과 내용이 같다(문서 §3
@@ -235,6 +246,13 @@
 
   <!-- 터미널 -->
   <div id="terminal-container"></div>
+
+  <!-- N38(70-mobile.md §1/§2) — 모바일 플릿 홈. compact(<720px)에서만 CSS로
+       보인다. #terminal-container와 같은 자리를 두고 하단 내비 탭에 따라
+       하나만 보인다(layout/mobile-nav.js가 [hidden]을 토글) — #terminal-container
+       자체는 절대 display:none으로 언마운트하지 않는다(표면 레이어가 xterm
+       WebGL 컨텍스트를 그 안에 계속 들고 있다, 10-shell-layout.md §1). -->
+  <div id="vt-fleet-slot" hidden></div>
 
   <!-- N35 §6 — dock 392px(Solid, 지연 로드). 탭 내용은 기존 큐·포트·사용량
        패널 렌더러가 그대로 그린다(panels/panel.js의 dock 호스트). 2.0의 우측
@@ -369,6 +387,32 @@
         title="짧게: p 입력 · 길게: tmux 이전 창">p</button>
     </div>
   </div>
+
+  <!-- N38(70-mobile.md §1) — 하단 내비 52px 5탭. compact(<720px)에서만 보인다.
+       배지는 dock 배지(shell/Dock.tsx)와 같은 소스(같은 엔드포인트)를 재사용한
+       폴링이다(layout/mobile-nav.js). 「변경」·「큐」·「설정」은 이미 있는
+       data-action(scm.show/queue.show/settings.show)을 그대로 위임 클릭한다
+       (core/dom.js가 모든 [data-action]을 이미 배선한다) — 「플릿」·「터미널」만
+       새 탭 전환 로직이 필요해 data-mnav로 따로 잡는다. -->
+  <nav id="vt-mnav-bottom" aria-label="하단 내비">
+    <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="플릿" aria-pressed="false">
+      <span class="vt-mnav-label">플릿</span>
+    </button>
+    <button type="button" class="vt-mnav-btn" data-mnav="terminal" aria-label="터미널" aria-pressed="false">
+      <span class="vt-mnav-label">터미널</span>
+    </button>
+    <button type="button" class="vt-mnav-btn" data-action="scm.show" aria-label="변경">
+      <span class="vt-mnav-label">변경</span>
+      <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
+    </button>
+    <button type="button" class="vt-mnav-btn" data-action="queue.show" aria-label="큐">
+      <span class="vt-mnav-label">큐</span>
+      <span class="vt-mnav-badge" id="vt-mnav-badge-queue" hidden></span>
+    </button>
+    <button type="button" class="vt-mnav-btn" data-action="settings.show" aria-label="설정">
+      <span class="vt-mnav-label">설정</span>
+    </button>
+  </nav>
 
   <script src="/static/vendor/xterm.min.js"></script>
   <script src="/static/vendor/addon-fit.min.js"></script>

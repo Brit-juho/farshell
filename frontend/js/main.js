@@ -56,6 +56,10 @@ import './term/keymap-actions.js'; // S3 — 분할·rail 토글 등 남은 액�
 import './term/tmux-panel.js';
 import './term/session.js';
 import './term/guide.js';
+// N38(70-mobile.md §1/§2) — 모바일 골격(상단 바·하단 내비) + 플릿 홈 지연
+// 마운트. term/session.js(switchTo) 이후 — 직접 참조는 안 하지만(window
+// 브리지로 대신 받는 shell/Fleet.tsx 쪽), 같은 부팅 단계에 두는 게 자연스럽다.
+import './layout/mobile-nav.js';
 import { bootApp } from './term/boot.js';
 // F4 — grid.js(382줄)를 agent/{badges,status,preview}.js 3개로 분할.
 // badges(어떤 아이콘) → status(일하는 중인지, badges를 소비) → preview(그리드
