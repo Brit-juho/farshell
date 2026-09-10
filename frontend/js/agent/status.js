@@ -41,7 +41,11 @@ whenAuthed(() => (async () => {
     // U1: 이제 capabilities가 usage를 돌려준다 — `{available, provider, profiles}`.
     // L4가 예고한 대로 이 파일은 안 고치고도 자동으로 나타나야 했는데, 값이
     // 객체라 truthy가 되면 **소스가 없어도 항목이 뜬다**. `available`을 봐야 한다.
-    if (!caps.usage || !caps.usage.available) {
+    // N41: 한도형(usage)·누적형(usage_counter)은 독립 소스다 — clauth 없이
+    // 로컬 LLM만 쓰는 사용자도 있으므로 **둘 중 하나만 있어도** 사용량 탭은 뜬다.
+    const usageAvailable = (caps.usage && caps.usage.available)
+      || (caps.usage_counter && caps.usage_counter.available);
+    if (!usageAvailable) {
       document.querySelectorAll('.needs-usage').forEach(el => el.style.display = 'none');
       // L8: 우측 레일은 body padding으로 자리를 만든다 — 엘리먼트를 숨기는
       // 것만으로는 그 패딩이 안 사라져 오른쪽에 빈 300px가 남는다.

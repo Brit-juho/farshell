@@ -1381,6 +1381,27 @@ cmd_queue() {
   esac
 }
 
+# N41(60-settings-palette.md §5) — 누적형 사용량 기록. 로컬 LLM 등 %가 없는
+# 소스는 "얼마나 썼는지"를 아는 게 그 모델을 돌린 스크립트 자신뿐이라, 기록은
+# 여기(CLI)나 POST /api/usage/counter로 사용자가 직접 넣는다 — 에이전트 훅에서
+# 언제 부를지는 FarShell이 정하지 않는다. 서버 없이도 동작(queue와 같은 방식).
+cmd_usage() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-list}"
+  case "$sub" in
+    list|add)
+      shift 2>/dev/null || true
+      (cd "$VT_DIR/server" && "$VT_PYTHON" usage/counter_jsonl.py "$sub" "$@")
+      ;;
+    *)
+      echo "사용법: fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]"
+      return 1 ;;
+  esac
+}
+
 # A2: pane 자기보고. Claude Code는 훅이 있지만 codex/aider/gemini는 없다 —
 # 그 pane들이 "나 지금 working이야"를 서버에 알릴 수 있는 유일한 경로다.
 # tmux 안에서 실행해야 의미가 있다($TMUX_PANE/$TMUX를 그대로 실어 보낸다).
@@ -3441,6 +3462,7 @@ case "${1:-help}" in
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;
   queue)    shift; cmd_queue "$@" ;;
+  usage)    shift; cmd_usage "$@" ;;
   help)     shift 2>/dev/null || true; cmd_help "$@" ;;
   hotkey)   shift; cmd_hotkey "$@" ;;
   hooks)    shift; cmd_hooks "$@" ;;
@@ -3477,6 +3499,8 @@ case "${1:-help}" in
     echo "    fsh popup <action>     tmux 3.2+ popup으로 빠른 호출"
     echo "    fsh run \"명령\"          headless claude -p 백그라운드 실행"
     echo "    fsh queue [add|run|rm]  프롬프트 큐 (작업 중 지시를 쌓아뒀다 순차 투입)"
+    echo "    fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]"
+    echo "                          누적형 사용량 기록/조회 (로컬 LLM 등, 한도 없음)"
     echo "    fsh handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
     echo "    fsh handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
     echo "    fsh ssh [session]      Tailscale + SSH로 tmux 세션 직접 접속 명령 안내"
