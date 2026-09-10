@@ -25,8 +25,9 @@ function showPorts() {
       panel.el.querySelector('#vt-pt-refresh').addEventListener('click', () => refreshPorts(true));
 
       refreshPorts(true);
-      // 5초 폴링. 패널이 열려 있을 때만 돈다 — 닫으면 setPanelPoll이 정리한다.
-      setPanelPoll('vt-ports', 5000, () => refreshPorts(false));
+      // U4/D4(60-settings-palette.md §6): 2초 폴링. 패널이 열려 있을 때만 돈다 —
+      // 닫으면 setPanelPoll이 정리한다.
+      setPanelPoll('vt-ports', 2000, () => refreshPorts(false));
     }
 
     function _fmtMem(kb) {
@@ -44,6 +45,28 @@ function showPorts() {
       if (parts.length === 3) return parseInt(parts[0], 10) + '시간';
       if (parts.length === 2) return parseInt(parts[0], 10) + '분';
       return s;
+    }
+
+    // U4/D4(60-settings-palette.md §6): 같은 pid가 여러 포트를 리스닝하면
+    // (예: vite 5173 + hmr 소켓 5174) 대표 행 하나 아래로 나머지를 묶는다.
+    // 서버(portscan.py:scan)가 이미 (protected, port) 오름차순으로 내려주므로,
+    // 같은 pid가 처음 나오는 자리 = 그 pid의 가장 낮은 포트다 — 그 항목을
+    // 대표로 삼으면 별도 정렬 없이 "가장 낮은 포트" 기준이 자연히 성립한다.
+    // protected 그룹과 non-protected 그룹은 애초에 섞이지 않으므로(서버 정렬)
+    // 대표 선정이 그 경계를 넘어갈 일도 없다.
+    function _groupByPid(ports) {
+      const groups = [];
+      const byPid = new Map();   // pid → groups 배열 인덱스
+      for (const p of ports) {
+        const idx = byPid.get(p.pid);
+        if (idx !== undefined) {
+          groups[idx].subs.push(p);
+          continue;
+        }
+        byPid.set(p.pid, groups.length);
+        groups.push({ rep: p, subs: [] });
+      }
+      return groups;
     }
 
     // U5/L6: 포트 종료 버튼 스와이프 액션 (터치 전용). 한 번에 하나만 열려 있게 관리.
@@ -110,6 +133,108 @@ function showPorts() {
       }, true);
     }
 
+    // isSub: 같은 pid 그룹 안에서 대표 포트가 아닌 나머지 — 들여써서(↳) 보여준다.
+    function _buildRow(p, isSub) {
+      const row = document.createElement('div');
+      row.className = isSub ? 'vt-pt-row vt-pt-row-sub' : 'vt-pt-row';
+
+      const port = document.createElement('span');
+      port.className = 'vt-pt-port';
+      if (isSub) {
+        const arrow = document.createElement('span');
+        arrow.className = 'vt-pt-sub-arrow';
+        arrow.textContent = '↳';
+        arrow.setAttribute('aria-hidden', 'true');
+        port.appendChild(arrow);
+      }
+      port.appendChild(document.createTextNode(String(p.port)));
+
+      const meta = document.createElement('div');
+      meta.className = 'vt-pt-meta';
+      const name = document.createElement('span');
+      name.className = 'vt-pt-cmd';
+      name.textContent = p.cmd;                       // textContent — XSS 방어
+      const sub = document.createElement('span');
+      sub.className = 'vt-pt-sub';
+      const bits = [`pid ${p.pid}`];
+      if (p.uptime) bits.push(_fmtUptime(p.uptime));
+      if (p.rss_kb) bits.push(_fmtMem(p.rss_kb));
+      if (typeof p.cpu === 'number' && p.cpu > 0) bits.push(p.cpu.toFixed(1) + '%');
+      sub.textContent = bits.join(' · ');
+      meta.appendChild(name); meta.appendChild(sub);
+
+      const tags = document.createElement('span');
+      tags.className = 'vt-pt-tags';
+      if (p.public) {
+        const t = document.createElement('b');
+        t.className = 'vt-pt-tag pub';
+        t.textContent = '외부';
+        t.title = '모든 인터페이스에 열려 있습니다 (*)';
+        tags.appendChild(t);
+      }
+
+      const actions = document.createElement('span');
+      actions.className = 'vt-pt-actions';
+      // U5/L6: 터치 기기는 종료 버튼을 왼쪽 스와이프로 드러낸다(Mail/Linear 패턴) —
+      // 목록을 스크롤하다 손가락이 스치는 것만으로 프로세스가 죽는 오탭을 막기 위함.
+      // 마우스는 오탭 위험이 없으니 기존처럼 버튼이 항상 보인다.
+      const swipeKillOnTouch = _isCoarsePointer() && !p.protected;
+      if (p.protected) {
+        const lock = document.createElement('span');
+        lock.className = 'vt-pt-lock';
+        lock.textContent = '보호됨';
+        lock.title = p.protected_reason;
+        actions.appendChild(lock);
+      } else {
+        // L5: 이미 공개 터널이 열려 있으면(server가 GET /api/ports에 tunnel_url을
+        // 얹어 알려준다) "공개" 대신 "미리보기"로 바꿔 앱 안에서 바로 확인하게 한다 —
+        // 매번 "공개→URL 복사→새 탭"을 거칠 필요가 없다(Termius 포트포워딩+브라우저 워크플로).
+        const ex = document.createElement('button');
+        ex.className = 'vt-pt-btn';
+        if (p.tunnel_url) {
+          ex.textContent = '미리보기';
+          ex.title = p.tunnel_url;
+          ex.onclick = () => showPortPreview(p.port, p.tunnel_url);
+        } else {
+          ex.textContent = '공개';
+          ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
+          ex.onclick = () => exposePort(p.port);
+        }
+        actions.appendChild(ex);
+        if (!swipeKillOnTouch) {
+          const kb = document.createElement('button');
+          kb.className = 'vt-pt-btn danger';
+          kb.textContent = '종료';
+          kb.onclick = () => killPort(p.port, p.pid, p.cmd);
+          actions.appendChild(kb);
+        }
+      }
+
+      if (!swipeKillOnTouch) {
+        row.appendChild(port); row.appendChild(meta);
+        row.appendChild(tags); row.appendChild(actions);
+        return row;
+      }
+
+      // 스와이프 레이어: row는 뷰포트(overflow:hidden), inner가 실제로 좌우로
+      // 밀리고, 그 아래 깔린 kill 버튼이 밀린 만큼 드러난다.
+      row.classList.add('swipeable');
+      const inner = document.createElement('div');
+      inner.className = 'vt-pt-row-inner';
+      inner.appendChild(port); inner.appendChild(meta);
+      inner.appendChild(tags); inner.appendChild(actions);
+
+      const kill = document.createElement('button');
+      kill.className = 'vt-pt-swipe-kill';
+      kill.textContent = '종료';
+      kill.onclick = () => { _closeSwipe(row); killPort(p.port, p.pid, p.cmd); };
+
+      row.appendChild(kill);
+      row.appendChild(inner);
+      _wireSwipe(row, inner, kill);
+      return row;
+    }
+
     async function refreshPorts(fresh) {
       const body = document.getElementById('vt-pt-body');
       if (!body) return;
@@ -133,113 +258,25 @@ function showPorts() {
       const hasBothGroups = d.ports.some(p => !p.protected) && d.ports.some(p => p.protected);
       let sawProtected = false;
       let sawMine = false;
-      d.ports.forEach(p => {
-        if (hasBothGroups && !p.protected && !sawMine) {
+      // U4/D4: 같은 pid 행 병합 — 대표(가장 낮은 포트) 아래 나머지를 들여쓴
+      // 하위 행으로 그린다. 그룹핑 자체는 _groupByPid, 헤더·행 렌더링은 여기서.
+      _groupByPid(d.ports).forEach(({ rep, subs }) => {
+        if (hasBothGroups && !rep.protected && !sawMine) {
           sawMine = true;
           const head = document.createElement('div');
           head.className = 'vt-pt-section';
           head.textContent = '내 서버';
           list.appendChild(head);
         }
-        if (hasBothGroups && p.protected && !sawProtected) {
+        if (hasBothGroups && rep.protected && !sawProtected) {
           sawProtected = true;
           const head = document.createElement('div');
           head.className = 'vt-pt-section';
           head.textContent = '보호됨 / 시스템';
           list.appendChild(head);
         }
-        const row = document.createElement('div');
-        row.className = 'vt-pt-row';
-
-        const port = document.createElement('span');
-        port.className = 'vt-pt-port';
-        port.textContent = p.port;
-
-        const meta = document.createElement('div');
-        meta.className = 'vt-pt-meta';
-        const name = document.createElement('div');
-        name.className = 'vt-pt-cmd';
-        name.textContent = p.cmd;                       // textContent — XSS 방어
-        const sub = document.createElement('div');
-        sub.className = 'vt-pt-sub';
-        const bits = [`pid ${p.pid}`];
-        if (p.uptime) bits.push(_fmtUptime(p.uptime));
-        if (p.rss_kb) bits.push(_fmtMem(p.rss_kb));
-        if (typeof p.cpu === 'number' && p.cpu > 0) bits.push(p.cpu.toFixed(1) + '%');
-        sub.textContent = bits.join(' · ');
-        meta.appendChild(name); meta.appendChild(sub);
-
-        const tags = document.createElement('span');
-        tags.className = 'vt-pt-tags';
-        if (p.public) {
-          const t = document.createElement('b');
-          t.className = 'vt-pt-tag pub';
-          t.textContent = '외부';
-          t.title = '모든 인터페이스에 열려 있습니다 (*)';
-          tags.appendChild(t);
-        }
-
-        const actions = document.createElement('span');
-        actions.className = 'vt-pt-actions';
-        // U5/L6: 터치 기기는 종료 버튼을 왼쪽 스와이프로 드러낸다(Mail/Linear 패턴) —
-        // 목록을 스크롤하다 손가락이 스치는 것만으로 프로세스가 죽는 오탭을 막기 위함.
-        // 마우스는 오탭 위험이 없으니 기존처럼 버튼이 항상 보인다.
-        const swipeKillOnTouch = _isCoarsePointer() && !p.protected;
-        if (p.protected) {
-          const lock = document.createElement('span');
-          lock.className = 'vt-pt-lock';
-          lock.textContent = '보호됨';
-          lock.title = p.protected_reason;
-          actions.appendChild(lock);
-        } else {
-          // L5: 이미 공개 터널이 열려 있으면(server가 GET /api/ports에 tunnel_url을
-          // 얹어 알려준다) "공개" 대신 "미리보기"로 바꿔 앱 안에서 바로 확인하게 한다 —
-          // 매번 "공개→URL 복사→새 탭"을 거칠 필요가 없다(Termius 포트포워딩+브라우저 워크플로).
-          const ex = document.createElement('button');
-          ex.className = 'vt-pt-btn';
-          if (p.tunnel_url) {
-            ex.textContent = '미리보기';
-            ex.title = p.tunnel_url;
-            ex.onclick = () => showPortPreview(p.port, p.tunnel_url);
-          } else {
-            ex.textContent = '공개';
-            ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
-            ex.onclick = () => exposePort(p.port);
-          }
-          actions.appendChild(ex);
-          if (!swipeKillOnTouch) {
-            const kb = document.createElement('button');
-            kb.className = 'vt-pt-btn danger';
-            kb.textContent = '종료';
-            kb.onclick = () => killPort(p.port, p.pid, p.cmd);
-            actions.appendChild(kb);
-          }
-        }
-
-        if (!swipeKillOnTouch) {
-          row.appendChild(port); row.appendChild(meta);
-          row.appendChild(tags); row.appendChild(actions);
-          list.appendChild(row);
-          return;
-        }
-
-        // 스와이프 레이어: row는 뷰포트(overflow:hidden), inner가 실제로 좌우로
-        // 밀리고, 그 아래 깔린 kill 버튼이 밀린 만큼 드러난다.
-        row.classList.add('swipeable');
-        const inner = document.createElement('div');
-        inner.className = 'vt-pt-row-inner';
-        inner.appendChild(port); inner.appendChild(meta);
-        inner.appendChild(tags); inner.appendChild(actions);
-
-        const kill = document.createElement('button');
-        kill.className = 'vt-pt-swipe-kill';
-        kill.textContent = '종료';
-        kill.onclick = () => { _closeSwipe(row); killPort(p.port, p.pid, p.cmd); };
-
-        row.appendChild(kill);
-        row.appendChild(inner);
-        _wireSwipe(row, inner, kill);
-        list.appendChild(row);
+        list.appendChild(_buildRow(rep, false));
+        subs.forEach(p => list.appendChild(_buildRow(p, true)));
       });
       body.innerHTML = '';
       body.appendChild(list);
@@ -302,3 +339,6 @@ function showPorts() {
 
 // F3(c): data-action 위임용 등록.
 registerAction('ports.show', () => showPorts());
+
+// 테스트 전용 export — DOM 부수효과 없는 순수 함수만.
+export { _groupByPid };
