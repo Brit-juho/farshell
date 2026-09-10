@@ -492,6 +492,28 @@ def test_온보딩이_레일과_dock을_덮지_않는다(page):
     assert hit["dock"] == "vt-dock", f"온보딩이 dock을 덮었다: {hit}"
 
 
+def test_온보딩이_모바일_상하단_내비를_덮지_않는다(page):
+    """N38 — 데스크톱 레일·dock에서 두 번 났던 것과 같은 회귀가 모바일 상단
+    24px·하단 내비 52px에서도 그대로 재현됐다(z-index 90/100 vs onboarding의
+    500). 부팅 직후(세션 0개)에 하단 내비 버튼을 실제로 누를 수 있는지 본다."""
+    page.set_viewport_size(COMPACT)
+    page.wait_for_selector(".vt-onboarding", timeout=10000)
+    page.wait_for_timeout(300)
+    hit = page.evaluate(
+        """() => {
+          const top = document.getElementById('vt-mnav-top').getBoundingClientRect();
+          const bottom = document.getElementById('vt-mnav-bottom').getBoundingClientRect();
+          const at = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-mnav-top, #vt-mnav-bottom, .vt-onboarding')?.id || 'onboarding';
+          return {
+            top: at(top.left + top.width / 2, top.top + top.height / 2),
+            bottom: at(bottom.left + bottom.width / 2, bottom.top + bottom.height / 2),
+          };
+        }"""
+    )
+    assert hit["top"] == "vt-mnav-top", f"온보딩이 상단 내비를 덮었다: {hit}"
+    assert hit["bottom"] == "vt-mnav-bottom", f"온보딩이 하단 내비를 덮었다: {hit}"
+
+
 def test_파일이_모달이_아니라_페인으로_열린다(page):
     """N35 §6 — 모달 코드 뷰어는 제거됐다. 파일은 pane 트리의 leaf(kind:viewer)로
     열리고, 그 내용이 pane 상자 안에 갇혀 있어야 한다(밖으로 새면 표면 레이어의
