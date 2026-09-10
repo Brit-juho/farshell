@@ -189,9 +189,9 @@ CI에서 이 표를 코드와 직접 대조한다(I3). 산문이 아니라 표�
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` |
 | `rail-items` | `6` | `frontend/index.html` — `.vt-rail-btn` 개수 |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error`는 예약) |
-| `color-bg-0` | `#0a0a0b` | `styles/theme/tokens.css` |
+| `color-bg-0` | `#08090a` | `styles/theme/tokens.css` |
 | `color-acc` | `#f0a860` | `styles/theme/tokens.css` |
-| `color-txt` | `#eeeef0` | `styles/theme/tokens.css` |
+| `color-txt` | `#e8e9ea` | `styles/theme/tokens.css` |
 
 ### 레거시 별칭
 

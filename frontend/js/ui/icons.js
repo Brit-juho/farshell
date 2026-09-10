@@ -25,19 +25,47 @@ const PATHS = {
   'rows-2': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/>',
   // L3 5단계: 빈 pane 세션 선택 시트의 "+ 새 세션".
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+
+  // D3(20-design-system.md §4) — 에이전트 마크. 탭·rail 행이 "어떤 CLI가
+  // 떠 있는가"를 이모지 대신 이 세트로 그린다(icons.js가 D5에서 이미 이모지를
+  // 걷어낸 원칙과 같다 — 플랫폼마다 렌더가 갈리지 않는다). 미지 agent 이름은
+  // agent-shell로 떨어진다(문서 §4 매핑 규칙). gemini·aider는 2.1.0에서
+  // agent-shell로 두고(문서가 "2.1.1에서 결정 — 디자인에 없음"이라 명시)
+  // 2.1.1에서 전용 마크를 만들지 결정한다.
+  'agent-claude': '<path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z"/>',
+  'agent-codex': '<path d="M8 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3"/>',
+  'agent-local': '<rect x="6" y="6" width="12" height="12" rx="1"/><line x1="9" y1="2" x2="9" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="9" y1="18" x2="9" y2="22"/><line x1="15" y1="18" x2="15" y2="22"/>',
+  'agent-ssh': '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>',
+  'agent-shell': '<polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="18" y2="16"/>',
 };
+
+// server/agent_detector.py의 KNOWN_AGENTS 키 → 마크. 없는 이름(gemini·aider
+// 포함, 위 주석 참고)은 agent-shell로 떨어진다.
+const AGENT_MARK = {
+  claude: 'agent-claude',
+  codex: 'agent-codex',
+};
+export function agentMarkFor(agentName) {
+  return AGENT_MARK[agentName] || 'agent-shell';
+}
 
 // icon(name, size?) → SVG 마크업 문자열. innerHTML/템플릿 리터럴에 그대로
 // 꽂아 쓴다 — path 데이터가 사용자 입력과 무관한 고정 맵이라 별도 sanitize가
 // 필요 없다. stroke-width는 2로 고정(기존 코드가 2/2.5를 혼용했다).
-export function icon(name, size) {
+export function icon(name, size, strokeWidth) {
   const body = PATHS[name];
   if (!body) {
     console.warn('[icons] 등록되지 않은 아이콘:', name);
     return '';
   }
   const s = size || 16;
+  const sw = strokeWidth || 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" `
-    + `fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" `
+    + `fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" `
     + `aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+// 에이전트 마크 전용 — 문서 §4: "14px 정사각, stroke 1.75".
+export function agentIcon(agentName) {
+  return icon(agentMarkFor(agentName), 14, 1.75);
 }
