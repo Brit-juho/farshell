@@ -16,16 +16,55 @@ import fcntl
 import json
 import logging
 import os
+import subprocess
 import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+
+import fsguard
 
 logger = logging.getLogger(__name__)
 
 MAX_ITEMS = 100
 MAX_TEXT_LEN = 8000
 MAX_LABEL_LEN = 60
+
+SCOPE_GLOBAL = "global"
+SCOPE_PROJECT = "project"
+VALID_SCOPES = {SCOPE_GLOBAL, SCOPE_PROJECT}
+
+
+def resolve_project_key(cwd: str | None) -> str | None:
+    """cwd → 그 저장소의 top 경로(60 §4 "프로젝트 = 활성 페인의 저장소 top 경로 키").
+
+    fsguard 경계 밖이거나 git 저장소가 아니면 None — 실패를 에러로 올리지 않는다.
+    이 판정을 쓰는 두 곳(스니펫 저장 시 project 채우기, 목록 화면의 「프로젝트」
+    탭 필터)이 항상 같은 값을 봐야 탭에 안 걸리는 항목이 안 생긴다.
+
+    routes/files.py의 `_git_toplevel`과 같은 명령(`git rev-parse --show-toplevel`)을
+    쓰지만 별도로 둔다 — 그쪽은 이미 fsguard로 검증된 Path를 받는 반면, 여기는
+    클라이언트가 보낸 원시 cwd 문자열부터 fsguard 검증까지 직접 해야 한다.
+    """
+    if not cwd:
+        return None
+    try:
+        p = fsguard.resolve_under_roots(cwd)
+    except fsguard.FsDenied:
+        return None
+    if not p.is_dir():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(p), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    top = result.stdout.strip()
+    return top or None
 
 
 def _state_dir() -> Path:
@@ -72,7 +111,13 @@ def _read_unlocked() -> list[dict]:
         return []
     if not isinstance(data, list):
         return []
-    return [x for x in data if isinstance(x, dict) and x.get("text")]
+    items = [x for x in data if isinstance(x, dict) and x.get("text")]
+    # 구 형식(scope 없음) 마이그레이션 — 전부 전체 스코프였다.
+    for x in items:
+        if x.get("scope") not in VALID_SCOPES:
+            x["scope"] = SCOPE_GLOBAL
+            x["project"] = None
+    return items
 
 
 def _write_unlocked(items: list[dict]) -> None:
@@ -97,7 +142,8 @@ def list_items() -> list[dict]:
         return _read_unlocked()
 
 
-def add(text: str, label: str | None = None) -> dict:
+def add(text: str, label: str | None = None, scope: str = SCOPE_GLOBAL,
+        cwd: str | None = None) -> dict:
     text = (text or "").strip("\n")
     if not text.strip():
         return {"ok": False, "error": "empty", "reason": "빈 내용은 저장할 수 없습니다"}
@@ -105,6 +151,13 @@ def add(text: str, label: str | None = None) -> dict:
         return {"ok": False, "error": "too_long",
                 "reason": f"내용이 너무 깁니다 (최대 {MAX_TEXT_LEN}자)"}
     label = (label or "").strip()[:MAX_LABEL_LEN]
+    scope = scope if scope in VALID_SCOPES else SCOPE_GLOBAL
+    project = None
+    if scope == SCOPE_PROJECT:
+        project = resolve_project_key(cwd)
+        if not project:
+            return {"ok": False, "error": "no_project",
+                    "reason": "현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 저장할 수 있습니다"}
     with _locked():
         items = _read_unlocked()
         if len(items) >= MAX_ITEMS:
@@ -114,6 +167,8 @@ def add(text: str, label: str | None = None) -> dict:
             "id": uuid.uuid4().hex[:12],
             "label": label,
             "text": text,
+            "scope": scope,
+            "project": project,
             "created_at": time.time(),
         }
         items.append(item)

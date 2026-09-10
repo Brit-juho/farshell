@@ -27,7 +27,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 |--------|------|------|
 | GET | `/api/tmux/sessions` | tmux 세션 목록 |
 | POST | `/api/tmux/attach` | tmux 세션에 attach (JSON: name) |
-| POST | `/api/tmux/create` | tmux 세션 생성 + 자동 attach (JSON: name, cols, rows) |
+| POST | `/api/tmux/create` | tmux 세션 생성 + 자동 attach (JSON: name, cols, rows, cwd) |
 | DELETE | `/api/tmux/kill/{name}` | tmux 세션 완전 종료 |
 | POST | `/api/tmux/open-on-mac` | 이미 존재하는 tmux 세션을 서버(macOS) 터미널에 새 창으로 attach (JSON: name). 서버가 macOS가 아니면 400 |
 | GET | `/api/tmux/preview/{name}?lines=20&ansi=1` | Grid 뷰용 tmux pane 최근 출력 캡처 |
@@ -104,7 +104,8 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
 | GET | `/api/snippets` | 저장된 프롬프트 스니펫 목록 |
-| POST | `/api/snippets` | 스니펫 추가 (JSON: text, label) |
+| GET | `/api/snippets/project?cwd=` | cwd → 스니펫 project 키(저장소 top, 아니면 null) |
+| POST | `/api/snippets` | 스니펫 추가 (JSON: text, label, scope: global\|project, cwd) |
 | DELETE | `/api/snippets/{id}` | 스니펫 삭제 |
 
 ## Web Push

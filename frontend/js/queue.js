@@ -3,6 +3,14 @@
 //
 // 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panels/panel.js·core/api.js가 공유한다.
 // F5에서 classic script에서 ES 모듈로 전환.
+//
+// N6(60 §4) 문서의 "상태 … `새 섹션에서 실행`(아래)" 표기에 대한 판단: "아래"가
+// 가리키는 실제 정의는 스니펫 섹션의 [새 섹션] 실행처뿐이고, 큐의 target 스키마는
+// 문서상 `{worktree?|session?}` 두 키뿐이라 "새 섹션"이라는 세 번째 타깃 종류는
+// 없다. 그래서 큐에는 새 상태/타깃 모드를 추가하지 않았고, target 칩(대상
+// 워크트리/세션)만 구현했다 — 스니펫 쪽 "새 섹션"과 용어를 공유할 뿐 큐 자체의
+// 드레인 동작을 바꾸는 지시는 아니라고 판단(불명확한 지점, 90-verification.md
+// §4 12항 취지상 문서화하고 진행).
 import { openPanel, closePanel, setPanelPoll } from './panels/panel.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { isMac } from './core/env.js';
@@ -118,13 +126,23 @@ function showQueue() {
         txt.className = 'vt-q-text';
         txt.textContent = it.text;                    // textContent — XSS 방어
         meta.appendChild(txt);
-        if (it.target || it.blocked_reason) {
+        if (it.blocked_reason) {
           const sub = document.createElement('div');
           sub.className = 'vt-q-sub';
-          sub.textContent = it.blocked_reason
-            ? `차단됨: ${it.blocked_reason}`
-            : `→ ${it.target}`;
+          sub.textContent = `차단됨: ${it.blocked_reason}`;
           meta.appendChild(sub);
+        }
+
+        // [대상 워크트리 칩](60 §4) — target.session만 실제로 채워진다(2.1.0엔
+        // 워크트리 모델이 없다, ADR-20). target.worktree는 2.1.1에서 레일이
+        // 실제 워크트리를 그리기 시작하면 여기 표시가 늘어날 자리다.
+        const targetSession = it.target && it.target.session;
+        if (targetSession) {
+          const chip = document.createElement('span');
+          chip.className = 'vt-q-chip';
+          chip.textContent = targetSession;
+          chip.title = `대상 세션: ${targetSession}`;
+          meta.appendChild(chip);
         }
 
         const act = document.createElement('span');
@@ -161,7 +179,9 @@ function showQueue() {
       const sel = document.getElementById('vt-q-target');
       const text = (inp.value || '').trim();
       if (!text) return;
-      const target = sel && sel.value ? sel.value : undefined;
+      // N6(60 §4): target 스키마가 `{worktree?|session?}`로 바뀌었다 — 2.1.0엔
+      // 워크트리 모델이 없어 session 키만 채운다(server/queue_store.py 참고).
+      const target = sel && sel.value ? { session: sel.value } : undefined;
       try {
         await vtFetch('/api/queue', {
           method: 'POST',

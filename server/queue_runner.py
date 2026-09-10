@@ -57,7 +57,7 @@ _pending_task: asyncio.Task | None = None
 
 def _resolve_pane(item: dict) -> tuple[str | None, str]:
     """항목이 타깃을 명시했으면 그 세션, 아니면 음성과 같은 규칙으로 결정."""
-    target = item.get("target")
+    target = queue_store.target_session(item)
     if target:
         pane = tmux_target.session_pane(target)
         return pane, (f"session:{target}" if pane else "none")
@@ -110,7 +110,7 @@ def drain_once(session: str | None = None, session_scoped: bool = False) -> dict
 
     # 5관문(A4): 승인 대기 중인 pane 에는 절대 넣지 않는다. 항목은 버리지 않고
     # blocked 로 남겨 승인이 끝난 뒤 다시 흘려보낼 수 있게 한다.
-    target_session = item.get("target") or session
+    target_session = queue_store.target_session(item) or session
     if _is_waiting(target_session):
         queue_store.mark_blocked(item, "타깃이 승인 대기 중")
         return {"ok": False, "drained": 0, "error": "waiting",

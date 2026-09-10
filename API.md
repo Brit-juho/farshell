@@ -30,7 +30,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 |--------|------|------|
 | GET | `/api/tmux/sessions` | List tmux sessions |
 | POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name) |
-| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows) |
+| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd) |
 | DELETE | `/api/tmux/kill/{name}` | Fully kill a tmux session |
 | POST | `/api/tmux/open-on-mac` | Attach an existing tmux session in a new window on the server's (macOS) terminal (JSON: name). Returns 400 if the server isn't macOS |
 | GET | `/api/tmux/preview/{name}?lines=20&ansi=1` | Capture recent tmux pane output for the Grid view |
@@ -108,7 +108,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/api/snippets` | List saved prompt snippets |
-| POST | `/api/snippets` | Add a snippet (JSON: text, label) |
+| GET | `/api/snippets/project?cwd=` | Resolve a cwd to its snippet project key (repo top, or null) |
+| POST | `/api/snippets` | Add a snippet (JSON: text, label, scope: global\|project, cwd) |
 | DELETE | `/api/snippets/{id}` | Delete a snippet |
 
 ## Web Push

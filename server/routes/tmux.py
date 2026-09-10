@@ -150,8 +150,18 @@ async def create_tmux_session(request: Request):
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
 
-    # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
-    start_dir = platform_utils.default_start_dir()
+    # N6(60 §4) 스니펫 「새 섹션」 — 원 세션과 같은 cwd로 새 세션을 열 때 씀.
+    # fsguard(코드 뷰어 열람 경계)는 여기 적용하지 않는다: tmux 세션은 그냥 셸이고,
+    # 이미 인증된 사용자는 그 안에서 어디로든 cd할 수 있다 — cwd를 미리 지정할 수
+    # 있게 해준다고 새로운 권한이 생기는 게 아니다. 존재하는 절대경로인지만 본다.
+    requested_cwd = str(body.get("cwd") or "").strip()
+    if requested_cwd:
+        if not os.path.isabs(requested_cwd) or not os.path.isdir(requested_cwd):
+            return JSONResponse({"error": "cwd가 존재하는 절대경로가 아닙니다"}, status_code=400)
+        start_dir = requested_cwd
+    else:
+        # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
+        start_dir = platform_utils.default_start_dir()
     rc, _, err = tmux_runner.run(
         ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
         timeout=5.0,

@@ -71,6 +71,38 @@ def _locked():
             os.close(fd)
 
 
+def _normalize_target(target) -> dict | None:
+    """N6(60 §4): `target: {worktree?|session?}`.
+
+    2.1.0엔 워크트리 데이터 모델이 없다(ADR-20 — N8은 2.1.1). 그래서 여기서
+    실제로 채워지는 건 session 키뿐이고, worktree 키는 스키마 자리만 받아둔다
+    (넘어와도 무시 — 2.1.1에서 워크트리 레일이 생기면 그쪽 키로 pane을 결정하게
+    확장). 레거시 호출부(CLI `vt queue add "..." <세션>`, 기존 queue.json의
+    문자열 target)는 계속 plain string으로 넘어오므로 여기서 dict로 승격한다.
+    """
+    if not target:
+        return None
+    if isinstance(target, str):
+        s = target.strip()
+        return {"session": s} if s else None
+    if isinstance(target, dict):
+        out = {}
+        session = str(target.get("session") or "").strip()
+        worktree = str(target.get("worktree") or "").strip()
+        if session:
+            out["session"] = session
+        if worktree:
+            out["worktree"] = worktree
+        return out or None
+    return None
+
+
+def target_session(item: dict) -> str | None:
+    """항목의 target에서 세션 이름을 뽑는다 — 2.1.0엔 이것만 실제로 resolve된다."""
+    t = item.get("target")
+    return t.get("session") if isinstance(t, dict) else None
+
+
 def _read_unlocked() -> list[dict]:
     p = _path()
     if not p.is_file():
@@ -83,7 +115,12 @@ def _read_unlocked() -> list[dict]:
         return []
     if not isinstance(data, list):
         return []
-    return [x for x in data if isinstance(x, dict) and x.get("text")]
+    items = [x for x in data if isinstance(x, dict) and x.get("text")]
+    # 구 형식(target이 plain string) 마이그레이션 — 디스크 재기록은 다음 쓰기 때.
+    for x in items:
+        if isinstance(x.get("target"), str):
+            x["target"] = _normalize_target(x["target"])
+    return items
 
 
 def _write_unlocked(items: list[dict]) -> None:
@@ -109,7 +146,7 @@ def list_items() -> list[dict]:
         return _read_unlocked()
 
 
-def add(text: str, target: str | None = None) -> dict:
+def add(text: str, target: str | dict | None = None) -> dict:
     text = (text or "").strip()
     if not text:
         return {"ok": False, "error": "empty", "reason": "빈 내용은 넣을 수 없습니다"}
@@ -125,7 +162,7 @@ def add(text: str, target: str | None = None) -> dict:
         item = {
             "id": uuid.uuid4().hex[:12],
             "text": text,
-            "target": target or None,
+            "target": _normalize_target(target),
             "status": STATUS_PENDING,
             "created_at": time.time(),
         }
@@ -167,7 +204,7 @@ def pop_next(session: str | None = None, *, session_scoped: bool = False) -> dic
             if x.get("status") != STATUS_PENDING:
                 continue
             if session_scoped:
-                target = x.get("target")
+                target = target_session(x)
                 if target and target != session:
                     continue
             items.pop(i)
@@ -238,7 +275,8 @@ def _cli(argv: list[str]) -> int:
             print()
             for i, x in enumerate(items, 1):
                 mark = "⏸" if x.get("status") == STATUS_BLOCKED else f"{i}."
-                target = f" [{x['target']}]" if x.get("target") else ""
+                ts = target_session(x)
+                target = f" [{ts}]" if ts else ""
                 text = x["text"].replace("\n", " ⏎ ")
                 if len(text) > 60:
                     text = text[:57] + "..."

@@ -258,6 +258,44 @@ def test_drain_once_session_scoped_leaves_mismatched_item_pending(monkeypatch):
     assert queue_store.pending_count() == 1
 
 
+def test_target_accepts_dict_shape(monkeypatch):
+    """N6(60 §4): `target: {worktree?|session?}` — 웹 UI는 dict로 보낸다."""
+    monkeypatch.setattr(queue_runner.tmux_target, "session_pane",
+                        lambda name: "%7" if name == "dev" else None)
+    monkeypatch.setattr(queue_runner.tmux_target, "send_to_tmux", lambda p, t: True)
+    queue_store.add("echo hi", target={"session": "dev"})
+    item = queue_store.list_items()[0]
+    assert item["target"] == {"session": "dev"}
+    assert queue_store.target_session(item) == "dev"
+    r = queue_runner.drain_once()
+    assert r["ok"] and r["pane"] == "%7" and r["mode"] == "session:dev"
+
+
+def test_target_worktree_key_reserved_but_unresolved(monkeypatch):
+    """워크트리 모델은 2.1.1(N8)까지 없다 — worktree 키는 저장되지만 지금은
+    아무 pane도 resolve하지 않고 2.0 자동 규칙으로 폴백해야 한다."""
+    monkeypatch.setattr(queue_runner.tmux_target, "resolve_voice_target_pane",
+                        lambda: ("%9", "auto"))
+    monkeypatch.setattr(queue_runner.tmux_target, "send_to_tmux", lambda p, t: True)
+    r = queue_store.add("echo hi", target={"worktree": "farshell@feat-2.1"})
+    assert r["ok"] and r["item"]["target"] == {"worktree": "farshell@feat-2.1"}
+    assert queue_store.target_session(r["item"]) is None
+    result = queue_runner.drain_once()
+    assert result["ok"] and result["pane"] == "%9" and result["mode"] == "auto"
+
+
+def test_legacy_string_target_migrates_on_read(monkeypatch):
+    """구 queue.json(target이 plain string)도 계속 동작해야 한다."""
+    queue_store.add("echo hi", target="dev")
+    p = Path(os.environ["VT_STATE_DIR"]).expanduser() / "queue.json"
+    raw = json.loads(p.read_text())
+    raw[0]["target"] = "dev"  # 구 형식으로 되돌려 저장(마이그레이션 이전 상태 재현)
+    p.write_text(json.dumps(raw))
+    item = queue_store.list_items()[0]
+    assert item["target"] == {"session": "dev"}
+    assert queue_store.target_session(item) == "dev"
+
+
 def test_autodrain_toggle(monkeypatch):
     monkeypatch.setenv("VT_QUEUE_AUTODRAIN", "0")
     assert queue_runner.autodrain_enabled() is False

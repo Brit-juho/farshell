@@ -2,6 +2,7 @@
 CRUD만 있으니 큐보다 훨씬 단순하다(순서/드레인/safe_mode 상태 기계가 없음)."""
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,17 @@ import snippet_store
 def sandbox(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "vt"))
     yield
+
+
+@pytest.fixture
+def git_repo(tmp_path, monkeypatch):
+    """N6(60 §4) 프로젝트 스코프용 — 실제 git 저장소 하나 + fsguard 경계를
+    tmp_path로 좁혀서 resolve_project_key가 실경로로 동작하게 한다."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(tmp_path))
+    return repo
 
 
 def test_add_and_list():
@@ -69,3 +81,51 @@ def test_survives_corrupt_file():
     p.write_text("{ this is not json")
     assert snippet_store.list_items() == []
     assert snippet_store.add("b")["ok"]
+
+
+def test_default_scope_is_global():
+    r = snippet_store.add("a")
+    assert r["item"]["scope"] == snippet_store.SCOPE_GLOBAL
+    assert r["item"]["project"] is None
+
+
+def test_project_scope_resolves_repo_top(git_repo):
+    r = snippet_store.add("a", scope=snippet_store.SCOPE_PROJECT, cwd=str(git_repo))
+    assert r["ok"]
+    assert r["item"]["scope"] == snippet_store.SCOPE_PROJECT
+    assert r["item"]["project"] == str(git_repo.resolve())
+
+
+def test_project_scope_without_git_repo_rejected(tmp_path, monkeypatch):
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(tmp_path))
+    r = snippet_store.add("a", scope=snippet_store.SCOPE_PROJECT, cwd=str(plain))
+    assert not r["ok"] and r["error"] == "no_project"
+
+
+def test_project_scope_outside_fsguard_roots_rejected(tmp_path, git_repo, monkeypatch):
+    outside = tmp_path.parent / "outside-repo"
+    outside.mkdir(exist_ok=True)
+    r = snippet_store.add("a", scope=snippet_store.SCOPE_PROJECT, cwd=str(outside))
+    assert not r["ok"] and r["error"] == "no_project"
+
+
+def test_resolve_project_key_matches_between_add_and_lookup(git_repo):
+    """저장(add)과 조회(프로젝트 탭 필터)가 같은 project 키를 내야 한다."""
+    r = snippet_store.add("a", scope=snippet_store.SCOPE_PROJECT, cwd=str(git_repo))
+    assert r["item"]["project"] == snippet_store.resolve_project_key(str(git_repo))
+
+
+def test_legacy_items_migrate_to_global_scope():
+    """구 snippets.json(scope 없음)도 계속 동작해야 한다."""
+    snippet_store.add("a")
+    p = Path(os.environ["VT_STATE_DIR"]).expanduser() / "snippets.json"
+    import json
+    raw = json.loads(p.read_text())
+    del raw[0]["scope"]
+    del raw[0]["project"]
+    p.write_text(json.dumps(raw))
+    item = snippet_store.list_items()[0]
+    assert item["scope"] == snippet_store.SCOPE_GLOBAL
+    assert item["project"] is None
