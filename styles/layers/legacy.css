@@ -1419,22 +1419,31 @@ body.vt-resizing #terminal-container{ transition:none; }
   font:600 var(--fs-2xs) var(--ui); color:var(--sub);
   text-transform:uppercase; letter-spacing:.04em;
 }
+/* U4/D4: 행 높이 24px 고정(단일 줄) — cmd/pid/uptime/mem/cpu를 두 줄로 쌓던
+   레이아웃을 한 줄로 합쳤다(.vt-pt-meta가 flex 컨테이너가 되면서 자식이
+   나란히 배치된다). 병합된 pid 그룹의 하위 포트는 .vt-pt-row-sub로 들여쓴다. */
 .vt-pt-row{
   display:flex; align-items:center; gap:calc(var(--spacing) * 2.5);
-  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+  height:24px; padding:0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
   font:400 var(--fs-sm) var(--ui);
 }
 .vt-pt-row:hover{ background:var(--menu-hover); }
 .vt-pt-row:active{ background:color-mix(in srgb, var(--acc) 12%, var(--menu-hover)); }
 
+/* U4/D4: 같은 pid의 대표 포트가 아닌 나머지 — 들여쓰고 톤을 낮춘다. */
+.vt-pt-row-sub{ padding-left:calc(var(--spacing) * 6); }
+.vt-pt-row-sub .vt-pt-cmd{ color:var(--sub); }
+.vt-pt-sub-arrow{ color:var(--sub); margin-right:calc(var(--spacing) * 1); }
+
 /* U5/L6: 스와이프-종료(터치 전용). row는 뷰포트, inner가 실제 카드로 그 위를 덮어
    kill 버튼을 가린다 — 왼쪽으로 밀면 inner가 물러나며 버튼이 드러난다. */
-.vt-pt-row.swipeable{ position:relative; overflow:hidden; padding:0; touch-action:pan-y; }
+.vt-pt-row.swipeable{ position:relative; overflow:hidden; padding:0; touch-action:pan-y; height:auto; }
 .vt-pt-row-inner{
   display:flex; align-items:center; gap:calc(var(--spacing) * 2.5); width:100%;
-  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); background:var(--win);
+  height:24px; padding:0 calc(var(--spacing) * 3); background:var(--win);
   transition:transform .18s ease; will-change:transform;
 }
+.vt-pt-row-sub .vt-pt-row-inner{ padding-left:calc(var(--spacing) * 6); }
 .vt-pt-swipe-kill{
   position:absolute; top:0; right:0; bottom:0; width:76px;
   background:var(--err); color:var(--color-on-solid); border:0;
@@ -1445,11 +1454,12 @@ body.vt-resizing #terminal-container{ transition:none; }
   font:600 var(--fs-sm) var(--mono); color:var(--txt);
   font-variant-numeric:tabular-nums;
 }
-.vt-pt-meta{ flex:1 1 auto; min-width:0; }
-.vt-pt-cmd{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pt-meta{ display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); flex:1 1 auto; min-width:0; }
+.vt-pt-cmd{ flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* pid·uptime·CPU%·메모리처럼 새로고침마다 값이 바뀌는 숫자 — tabular-nums로
-   자릿수가 바뀌어도 폭이 흔들리지 않게 고정한다. */
-.vt-pt-sub{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); margin-top:calc(var(--spacing) * 0.5); font-variant-numeric:tabular-nums; }
+   자릿수가 바뀌어도 폭이 흔들리지 않게 고정한다. 한 줄에 cmd와 나란히 두므로
+   줄어들 땐 이쪽이 먼저 줄어들지 않게 flex:0 0 auto로 고정. */
+.vt-pt-sub{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-2xs) var(--mono); font-variant-numeric:tabular-nums; }
 .vt-pt-tags{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
 .vt-pt-tag{
   font:600 var(--fs-3xs) var(--ui); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5); border-radius:var(--radius-full);
@@ -1477,11 +1487,8 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-pt-btn.danger:hover{ background:color-mix(in srgb, var(--err) 18%, transparent); }
 .vt-pt-btn.danger:active{ background:color-mix(in srgb, var(--err) 32%, transparent); }
 
-@media (max-width:560px){
-  .vt-pt-row{ flex-wrap:wrap; gap:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2); }
-  .vt-pt-meta{ flex:1 1 100%; order:3; }
-  .vt-pt-actions{ order:2; margin-left:auto; }
-}
+/* U4/D4: 행이 한 줄(24px)로 고정된 뒤로는 좁은 화면에서도 줄바꿈이 필요 없다 —
+   cmd가 ellipsis로 줄어들 뿐. 예전엔 두 줄 stacking이라 wrap이 필요했다. */
 
 /* 프롬프트 큐 (queue.js) — P4. 패널 껍데기는 코드 뷰어와 공유. */
 .vt-q-compose{
