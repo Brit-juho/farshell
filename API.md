@@ -85,6 +85,12 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | GET | `/api/git/log?repo=X[&file=Y]` | Recent commit list |
 | GET | `/api/git/show?repo=X&rev=Y` | Diff of one commit |
 
+## Scrollback Search
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | Greps each session's live scrollback ring buffer (N40 — command palette `~` mode; same buffer WS reconnect uses, no separate store). `sessions=all` (default) searches every open session; a comma list restricts to those session ids. Returns up to 50 matches total (20 per session), each with 3 lines of context before/after |
+
 ## Prompt Queue
 
 | Method | Path | Description |

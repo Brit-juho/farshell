@@ -5,3 +5,8 @@
 export { mountSmoke } from './smoke.js';
 export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
 export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL } from '../../js/shell/rail-data.js';
+export {
+  parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
+  DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,
+} from '../../js/shell/palette-data.js';
+export { mountPalette } from '../../js/shell/Palette.tsx';
