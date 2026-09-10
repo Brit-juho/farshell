@@ -183,3 +183,50 @@ def test_suppression_expires_with_cooldown(monkeypatch, det):
 
     d.feed("s1", b"Yes, I trust this folder")
     assert d.is_waiting("s1") is True, "cooldown이 지났으면 더는 억제하지 않는다"
+
+
+# ── N38(70-mobile.md §2) — 질문·번호 선택지 캡처 ────────────────────────────
+def test_patterns_load_options_regex():
+    pats = D.load_patterns(force=True)
+    assert pats["claude"]["options"], "claude.toml에 options 캡처가 있어야 한다"
+
+
+def test_options_extracted_on_enter_hit(det):
+    d, _ = det
+    d.feed("s1", b"Do you want to proceed?\r\n\xe2\x9d\xaf 1. Yes\r\n  2. Yes, and don't ask again\r\n  3. No\r\n")
+    question, options = d.get_prompt("s1")
+    assert question == "Do you want to proceed?"
+    assert options == [
+        {"key": "1", "label": "Yes"},
+        {"key": "2", "label": "Yes, and don't ask again"},
+        {"key": "3", "label": "No"},
+    ]
+
+
+def test_no_options_when_prompt_has_no_numbered_choices(det):
+    """선택지 형태가 아니면 (질문, None) — 프런트는 이때 「터미널로」로 폴백한다."""
+    d, _ = det
+    d.feed("s1", b"Do you want to make this edit to foo.py?\r\n")
+    question, options = d.get_prompt("s1")
+    assert question == "Do you want to make this edit to foo.py?"
+    assert options is None
+
+
+def test_get_prompt_is_none_when_not_waiting(det):
+    d, _ = det
+    assert d.get_prompt("s1") == (None, None)
+
+
+def test_get_prompt_clears_after_exit(det):
+    d, _ = det
+    d.feed("s1", b"Do you want to proceed?\r\n 1. Yes\r\n 2. No\r\n")
+    assert d.get_prompt("s1")[1] is not None
+    d.feed("s1", b"\r\n... (esc to interrupt)")
+    assert d.get_prompt("s1") == (None, None)
+
+
+def test_get_prompt_clears_after_user_input(det):
+    d, _ = det
+    d.feed("s1", b"Do you want to proceed?\r\n 1. Yes\r\n 2. No\r\n")
+    d.on_user_input("s1")
+    assert d.get_prompt("s1") == (None, None)
