@@ -1809,7 +1809,10 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
   cursor:pointer; padding:4px 6px; border-radius:var(--radius-sm);
 }
 .vt-set-reset:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-set-reset:disabled { color:var(--sub); opacity:.5; cursor:default; }
+.vt-set-reset:disabled:hover { background:transparent; }
 
+.vt-set-btns { display:flex; gap:calc(var(--spacing) * 1); flex-shrink:0; }
 .vt-set-about { font:400 var(--fs-sm) var(--ui); color:var(--txt); }
 .vt-set-hookrow { margin-top:4px; font:400 var(--fs-xs) var(--mono); color:var(--sub); }
 .vt-set-hookrow[data-state="ok"] { color:var(--color-st-working); }
