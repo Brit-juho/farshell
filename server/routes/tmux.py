@@ -406,11 +406,14 @@ async def ws_preview(websocket: WebSocket, tmux_name: str):
     import preview as _preview
     from fastapi import WebSocketDisconnect
     # codex review fix: VT_TOKEN 환경에서 인증 없는 미리보기 접근 차단
-    from routes.pty import _ws_auth
-    if not _ws_auth(websocket):
+    from routes.pty import _ws_auth_token
+    import auth
+    token = _ws_auth_token(websocket)
+    if token is None:
         await websocket.close(code=4001)
         return
     await websocket.accept()
+    session_watchdog = auth.spawn_session_watchdog(websocket, token)
 
     async def _send(text: str):
         try:
@@ -428,4 +431,5 @@ async def ws_preview(websocket: WebSocket, tmux_name: str):
     except Exception:
         pass
     finally:
+        session_watchdog.cancel()
         _preview.unsubscribe(tmux_name, _send)

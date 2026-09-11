@@ -325,12 +325,15 @@ async def workspace_put(request: Request):
 @router.websocket("/ws-workspace")
 async def ws_workspace(websocket: WebSocket):
     # codex review fix: VT_TOKEN 보호
-    from routes.pty import _ws_auth
-    if not _ws_auth(websocket):
+    from routes.pty import _ws_auth_token
+    import auth
+    token = _ws_auth_token(websocket)
+    if token is None:
         await websocket.close(code=4001)
         return
     await websocket.accept()
     _workspace_clients.add(websocket)
+    session_watchdog = auth.spawn_session_watchdog(websocket, token)
     try:
         await websocket.send_json({"type": "workspace_snapshot", "data": workspace.load()})
         while True:
@@ -340,4 +343,5 @@ async def ws_workspace(websocket: WebSocket):
     except Exception:
         pass
     finally:
+        session_watchdog.cancel()
         _workspace_clients.discard(websocket)

@@ -45,24 +45,37 @@ _SCROLLBACK_END = object()
 
 import deps as _deps  # 전역 카운터 직접 수정용
 
-def _ws_auth(ws: WebSocket) -> bool:
+def _ws_auth_token(ws: WebSocket) -> Optional[str]:
     """WS 인증: HTTP 미들웨어와 동일한 다중 소스(cookie/query/Bearer)를 수용.
 
     서명 세션 쿠키(사람) 또는 기계 토큰(데몬)을 auth.check_request로 판정한다.
+    통과한 실제 토큰 문자열을 반환한다(호출부가 연결 유지 중 재검사할 수
+    있도록 — `auth._ws_session_watchdog` 참고). 인증이 아예 꺼져 있으면(비밀번호도
+    기계 토큰도 없는 로컬 전용 환경) 빈 문자열 ""을 반환한다 — 재검사할 대상이
+    없다는 뜻. 실패하면 None.
     """
     if not auth.is_protected():
-        return True
+        return ""
     # 1) HttpOnly 세션 쿠키 (/api/auth 후)
-    if auth.check_request(ws.cookies.get("vt_session", "")):
-        return True
+    cookie = ws.cookies.get("vt_session", "")
+    if auth.check_request(cookie):
+        return cookie
     # 2) query string (QR/URL 기계 토큰)
-    if auth.check_request(ws.query_params.get("token", "")):
-        return True
+    q = ws.query_params.get("token", "")
+    if auth.check_request(q):
+        return q
     # 3) Authorization: Bearer (데몬)
     auth_hdr = ws.headers.get("authorization", "")
-    if auth_hdr.startswith("Bearer ") and auth.check_request(auth_hdr[7:]):
-        return True
-    return False
+    if auth_hdr.startswith("Bearer "):
+        bearer = auth_hdr[7:]
+        if auth.check_request(bearer):
+            return bearer
+    return None
+
+
+def _ws_auth(ws: WebSocket) -> bool:
+    """`_ws_auth_token`의 불리언 판정만 필요한 호출부용."""
+    return _ws_auth_token(ws) is not None
 
 
 # --------------------------------------------------------------------------
@@ -272,7 +285,8 @@ async def _safe_send(ws: WebSocket, data: bytes) -> None:
 
 @router.websocket("/ws/{session_id}")
 async def ws_terminal(ws: WebSocket, session_id: str):
-    if not _ws_auth(ws):
+    _auth_token = _ws_auth_token(ws)
+    if _auth_token is None:
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()
@@ -307,6 +321,10 @@ async def ws_terminal(ws: WebSocket, session_id: str):
     send_task: Optional[asyncio.Task] = None
     hb_task: Optional[asyncio.Task] = None
     on_data = None  # subscribe() 여부의 표식 겸 finally에서 쓸 콜백 레퍼런스
+    # 실사용 중 발견 — 세션 쿠키가 24시간 뒤 만료돼도 이미 열린 WS는 계속
+    # 살아있었다(auth.py의 `_ws_session_watchdog` 설명 참고). 핸드셰이크 인증에
+    # 쓰인 토큰을 들고 연결 내내 주기적으로 재검사한다.
+    session_watchdog = auth.spawn_session_watchdog(ws, _auth_token)
 
     try:
         # E2E 협상
@@ -486,6 +504,7 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             send_task.cancel()
         if hb_task is not None:
             hb_task.cancel()
+        session_watchdog.cancel()
         if pty_paused:
             pty_mgr.resume_read(session_id, ws_id)
         # R2: 클라이언트가 render_pause만 보내고 render_resume 전에 끊긴 경우
@@ -541,11 +560,13 @@ async def on_task_complete(session_id: str, summary: str, audio: bytes):
 @router.websocket("/ws-notify")
 async def ws_notify(ws: WebSocket):
     from deps import notify_clients
-    if not _ws_auth(ws):
+    token = _ws_auth_token(ws)
+    if token is None:
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()
     notify_clients.add(ws)
+    session_watchdog = auth.spawn_session_watchdog(ws, token)
     try:
         while True:
             msg = await ws.receive_text()
@@ -559,4 +580,5 @@ async def ws_notify(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
+        session_watchdog.cancel()
         notify_clients.discard(ws)
