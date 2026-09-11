@@ -157,3 +157,27 @@ export interface OtherRailRowInput {
 }
 
 export type DesktopRailRowInput = WorktreeRailRowInput | OtherRailRowInput;
+
+// ---------------------------------------------------------------------------
+// 20-design-system.md §5(O2) — 색점 램프. 저장소 이름 → --color-hash-1..8
+// 중 하나. 순수 함수(DOM·fetch 없음, 파일 상단 주석과 같은 원칙) — 고정
+// 입력에 고정 출력이 나와야 rail-hash.test.js가 검증할 수 있다.
+//
+// FNV-1a 32비트 (offset basis 2166136261 / prime 16777619). 호스트가 달라도
+// 저장소 이름이 같으면 같은 색이 나와야 하므로(§5 "호스트가 달라도 저장소가
+// 같으면 같은 색") 입력은 오직 repoName 문자열 하나 — 경로·호스트명은 섞지
+// 않는다.
+export function fnv1a(str: string): number {
+  let hash = 0x811c9dc5; // 2166136261
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    // Math.imul로 32비트 곱셈 오버플로를 표준과 동일하게 재현한다.
+    hash = Math.imul(hash, 0x01000193); // 16777619
+  }
+  return hash >>> 0; // unsigned 32비트로 정규화
+}
+
+/** §5 해시: fnv1a(repoName) % 8 → --color-hash-(index+1)에 쓸 0~7 인덱스. */
+export function hashRepoColorIndex(repoName: string): number {
+  return fnv1a(repoName) % 8;
+}

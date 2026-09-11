@@ -11,7 +11,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import {
-  buildRailSections, mostUrgentStatus, GROUP_LABEL,
+  buildRailSections, mostUrgentStatus, GROUP_LABEL, hashRepoColorIndex,
   type WorktreeRailRowInput, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
 import { wireRatioResizer } from '../layout/resizer.js';
@@ -132,10 +132,12 @@ function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEve
       role="button"
       tabindex="0"
     >
-      {/* 30-worktree.md §4/10-shell-layout.md §5: 워크트리 행은 상태색 막대(§20의
-          저장소 해시 색점 램프는 §2 6스킨 토큰이 아직 없어 보류 — 대신 상태색을
-          재사용한다, 아래 result 보고 참고). 「기타」 세션 행은 "색점 없음"
-          (kind-session이 CSS에서 투명 처리). */}
+      {/* 20-design-system.md §5(O2): 레일 행 왼쪽 끝 세로 막대는 저장소 해시
+          색점(원형 dot과 헷갈리지 않는 "막대") — 상태 5색·acc와는 별개 램프
+          (--color-hash-1..8). 그 오른쪽의 기존 막대가 상태색(30-worktree.md
+          §4/10-shell-layout.md §5)을 그대로 맡는다. 「기타」 세션 행은 저장소가
+          없어 둘 다 "색점 없음"(kind-session이 CSS에서 투명 처리). */}
+      <span class={`vt-wgrail-hash ${isWt() ? `hash-${hashRepoColorIndex((props.row as WorktreeRailRowInput).repoName)}` : 'kind-session'}`} />
       <span class={`vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
       <div class="vt-wgrail-row-main">
         <div class="vt-wgrail-row-top">

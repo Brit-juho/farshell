@@ -118,6 +118,21 @@
   --color-st-done:    #5b8def;
   --color-st-error:   #f06868;
 
+  /* 20-design-system.md §5 — 색점 램프(O2). 저장소 이름 해시(fnv1a % 8, →
+   * rail-data.ts hashRepoColorIndex)가 이 중 하나를 고른다. 상태 5색·acc와
+   * 색상환에서 겹치지 않는 8색. farshell 값은 목업(docs/design_sample/project/
+   * FarShell 개편안.dc.html, 4f 화면 "팔레트" 줄)에 지정된 정확한 값을 그대로
+   * 썼다 — 다른 5스킨은 그 화면에 "스킨마다 재계산"이라고만 적혀 있어 톤(파스텔·
+   * 중채도)을 맞춰 skins.css에서 산출했다. */
+  --color-hash-1: #c98ae0;
+  --color-hash-2: #e0a0c0;
+  --color-hash-3: #8fd0e8;
+  --color-hash-4: #d8c470;
+  --color-hash-5: #a0b0d8;
+  --color-hash-6: #b5906a;
+  --color-hash-7: #7fb8a8;
+  --color-hash-8: #cf8f7f;
+
   --color-term-bg: #0a0a0b;
   --color-term-fg: #eeeef0;
 

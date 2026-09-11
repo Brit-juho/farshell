@@ -116,3 +116,43 @@ test('buildRailSections — 세션 필드가 없는 워크트리 모양도 그�
   assert.strictEqual(sections[0].rows[0].worktreeId, 'a');
   assert.strictEqual(sections[0].rows[0].statusSentence, '승인 대기 · 1분');
 });
+
+// 20-design-system.md §5(O2) — 색점 램프. fnv1a는 순수 함수라 고정 입력에
+// 고정 출력이 나와야 한다(§5 원문 "테스트: 고정 입력 → 고정 인덱스"). 기대값은
+// 표준 FNV-1a 32비트(offset basis 2166136261 / prime 16777619)를 독립적으로
+// (node의 python3 참조 구현) 계산해 박아 뒀다 — 구현이 이 표준과 어긋나면 실패.
+test('fnv1a — 고정 입력에 고정 32비트 해시가 나온다(FNV-1a 표준값)', async () => {
+  const { fnv1a } = await mod();
+  assert.strictEqual(fnv1a('farshell'), 1331226144);
+  assert.strictEqual(fnv1a('dotfiles'), 2503752351);
+  assert.strictEqual(fnv1a('embed-lab'), 527131960);
+  assert.strictEqual(fnv1a('notes'), 2206293706);
+  assert.strictEqual(fnv1a(''), 2166136261); // 빈 문자열 = offset basis 그대로
+});
+
+test('hashRepoColorIndex — fnv1a % 8, 항상 0~7', async () => {
+  const { hashRepoColorIndex } = await mod();
+  assert.strictEqual(hashRepoColorIndex('farshell'), 0);
+  assert.strictEqual(hashRepoColorIndex('dotfiles'), 7);
+  assert.strictEqual(hashRepoColorIndex('embed-lab'), 0);
+  assert.strictEqual(hashRepoColorIndex('notes'), 2);
+  for (const name of ['a', 'ab', 'abc', 'farshell-2', 'x'.repeat(200)]) {
+    const idx = hashRepoColorIndex(name);
+    assert.ok(Number.isInteger(idx) && idx >= 0 && idx < 8, `${name} → ${idx}`);
+  }
+});
+
+// §5 원문: "같은 저장소의 워크트리들은 같은 색. 호스트가 달라도 저장소가
+// 같으면 같은 색." — 입력은 repoName 문자열뿐이므로 호출을 반복해도(다른
+// 워크트리·다른 브랜치·다른 머신을 흉내 내도) 항상 같은 인덱스가 나와야 한다.
+test('hashRepoColorIndex — 같은 저장소 이름은 몇 번을 불러도(=다른 워크트리·호스트를 대표해도) 같은 색', async () => {
+  const { hashRepoColorIndex } = await mod();
+  const a1 = hashRepoColorIndex('farshell');
+  const a2 = hashRepoColorIndex('farshell'); // 다른 워크트리(예: feat/rail-redesign)를 흉내
+  const a3 = hashRepoColorIndex('farshell'); // 다른 호스트를 흉내(입력에 호스트명이 안 섞인다)
+  assert.strictEqual(a1, a2);
+  assert.strictEqual(a2, a3);
+
+  const b = hashRepoColorIndex('dotfiles');
+  assert.notStrictEqual(a1, b); // 다른 저장소는 (8색 한도 내에서) 다른 인덱스
+});
