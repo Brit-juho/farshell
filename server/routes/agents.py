@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 
 import agent_detector
 import agent_status
+import auth
 import pane_resolve
 
 # Phase 9 #5: heartbeat (pty.py와 동일 정책)
@@ -235,8 +236,9 @@ async def agent_status_get():
 @router.websocket("/ws-agent")
 async def ws_agent(websocket: WebSocket):
     # codex review fix: VT_TOKEN 보호
-    from routes.pty import _ws_auth
-    if not _ws_auth(websocket):
+    from routes.pty import _ws_auth_token
+    token = _ws_auth_token(websocket)
+    if token is None:
         await websocket.close(code=4001)
         return
     await websocket.accept()
@@ -273,6 +275,7 @@ async def ws_agent(websocket: WebSocket):
                 return
 
     hb_task = asyncio.create_task(_hb())
+    session_watchdog = auth.spawn_session_watchdog(websocket, token)
     try:
         # snapshot: active state + 현재 detect 결과 (frontend가 폴링 안 해도 즉시 반영)
         await websocket.send_json({
@@ -297,4 +300,5 @@ async def ws_agent(websocket: WebSocket):
         pass
     finally:
         hb_task.cancel()
+        session_watchdog.cancel()
         _agent_event_clients.discard(websocket)
