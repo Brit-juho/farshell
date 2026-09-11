@@ -1868,6 +1868,24 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-set-hookrow[data-state="ok"] { color:var(--color-st-working); }
 .vt-set-hookrow[data-state="add"], .vt-set-hookrow[data-state="update"] { color:var(--color-st-waiting); }
 
+/* N9/N45 — 감지 커버리지 표(설정 → 에이전트). */
+.vt-set-covtable-host { margin-top:calc(var(--spacing) * 2); overflow-x:auto; }
+.vt-set-covtable { width:100%; border-collapse:collapse; font:400 var(--fs-sm) var(--ui); }
+.vt-set-covtable th, .vt-set-covtable td {
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+  text-align:left; border-bottom:1px solid var(--line); white-space:nowrap;
+}
+.vt-set-covtable th { font:500 var(--fs-xs) var(--ui); color:var(--sub); text-transform:uppercase; letter-spacing:.03em; }
+.vt-set-covtable td { color:var(--txt); }
+.vt-set-covcli { font:500 var(--fs-sm) var(--mono); }
+.vt-set-covtrust {
+  display:inline-block; padding:1px calc(var(--spacing) * 1.5); border-radius:var(--radius-full);
+  font:500 var(--fs-2xs) var(--ui);
+}
+.vt-set-covtrust[data-trust="high"] { color:var(--color-st-working); background:color-mix(in srgb, var(--color-st-working) 16%, transparent); }
+.vt-set-covtrust[data-trust="mid"]  { color:var(--color-st-waiting); background:color-mix(in srgb, var(--color-st-waiting) 16%, transparent); }
+.vt-set-covtrust[data-trust="low"]  { color:var(--color-st-error);   background:color-mix(in srgb, var(--color-st-error) 16%, transparent); }
+
 @media (max-width: 720px) {
   .vt-settings .vt-vw-body { flex-direction:column; }
   .vt-set-nav {

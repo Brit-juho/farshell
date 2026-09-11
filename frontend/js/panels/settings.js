@@ -60,6 +60,8 @@ const SECTIONS = [
   // N42(60-settings-palette.md §7) — 알림·음성 진단. 다섯 항목 전부 서버
   // API는 이미 있고(push.py·voice.py·system.py) 이 섹션은 그 배선일 뿐이다.
   { id: 'voice', label: '음성', custom: renderVoiceSection },
+  // N9/N45(80-multihost-agents.md §2) — CLI별 승인 대기 감지 커버리지 표.
+  { id: 'agents', label: '에이전트', custom: renderAgentsSection },
   { id: 'keymap', label: '키맵', custom: renderKeymapSection },
   { id: 'about', label: '정보', custom: renderAboutSection },
 ];
@@ -343,6 +345,88 @@ function renderVoiceSection() {
   if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux);
 
   return frag;
+}
+
+// ── 「에이전트」 (N9/N45 · 감지 커버리지 표) ────────────────────────────────
+const AGENT_PATH_LABEL = { hook: '훅', pty: 'PTY 패턴', none: '없음' };
+const AGENT_TRUST_LABEL = { high: '높음', mid: '보통', low: '낮음' };
+
+function renderAgentsSection() {
+  const frag = document.createDocumentFragment();
+
+  const title = document.createElement('div');
+  title.className = 'vt-set-label';
+  title.textContent = '감지 커버리지';
+  frag.appendChild(title);
+
+  const status = statusLine('확인 중…');
+  frag.appendChild(status);
+
+  const tableHost = document.createElement('div');
+  tableHost.className = 'vt-set-covtable-host';
+  frag.appendChild(tableHost);
+
+  const note = document.createElement('div');
+  note.className = 'vt-set-help';
+  note.textContent = '"보통" 이하는 레일에서 승인 대기를 놓칠 수 있다는 뜻입니다.';
+  frag.appendChild(note);
+
+  vtFetch('/api/agents/coverage').then((rows) => {
+    if (!Array.isArray(rows) || !rows.length) {
+      status.textContent = '커버리지 정보를 확인할 수 없습니다.';
+      return;
+    }
+    status.remove();
+    tableHost.appendChild(renderCoverageTable(rows));
+  }).catch(() => { status.textContent = '커버리지 정보를 확인할 수 없습니다.'; });
+
+  return frag;
+}
+
+function renderCoverageTable(rows) {
+  const table = document.createElement('table');
+  table.className = 'vt-set-covtable';
+
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  for (const label of ['CLI', '경로', '패턴 줄 수', '상태', '신뢰도']) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.dataset.trust = r.trust;
+
+    const cli = document.createElement('td');
+    cli.textContent = r.cli;
+    cli.className = 'vt-set-covcli';
+
+    const path = document.createElement('td');
+    path.textContent = AGENT_PATH_LABEL[r.path] || r.path;
+
+    const lines = document.createElement('td');
+    lines.textContent = String(r.patternLines);
+
+    const states = document.createElement('td');
+    states.textContent = (r.states && r.states.length) ? r.states.join(', ') : '—';
+
+    const trust = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = 'vt-set-covtrust';
+    badge.dataset.trust = r.trust;
+    badge.textContent = AGENT_TRUST_LABEL[r.trust] || r.trust;
+    trust.appendChild(badge);
+
+    tr.append(cli, path, lines, states, trust);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  return table;
 }
 
 // ── 「정보」 ──────────────────────────────────────────────────────────────
