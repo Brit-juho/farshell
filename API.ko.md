@@ -161,6 +161,16 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/api/files/{id}/download` | id로 다운로드 (`attachment` + `nosniff` + `no-store`) |
 | DELETE | `/api/files/{id}` | 저장된 파일 삭제 |
 | POST | `/api/files/{id}/insert` | 파일 경로를 tmux 세션 pane에 타이핑(JSON: `session`), Enter는 안 누름 |
+| POST | `/api/files/{id}/share` | **승격 필요.** 공유 링크 발급(JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
+| DELETE | `/api/files/{id}/share/{shareId}` | **승격 필요.** 공유 취소 — 서명이 아직 유효해도 그 즉시 URL이 404가 된다 |
+
+공개 다운로드 진입점(api 접두사 밖이고, 평소의 세션/토큰 인증도 미적용 —
+`server/routes/share.py`가 토큰·모드별 검증을 직접 한다):
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/s/{token}` | 공유 다운로드. `device` 모드는 `vt_device`+`vt_session`이 유효하면 바로 다운로드, 아니면 `/?next=/s/{token}`으로 302. `pin` 모드는 1회용 다운로드 쿠키가 없으면 PIN 입력 페이지 |
+| POST | `/s/{token}/pin` | PIN 검증(form: `pin`) → 60초 1회용 다운로드 쿠키 + 리다이렉트. 5회 실패 시 공유 취소 |
 
 ## 기타
 

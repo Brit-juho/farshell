@@ -67,12 +67,27 @@
   // 로그인 폼이 떠 있는 내내(사용자가 비밀번호를 입력하는 시간만큼) 401/403을
   // 반복 재시도하게 된다 — 자연 치유되긴 해도 불필요한 노이즈다.
   window.__vtAuthed=false;
+  // 공유 링크(N21) device 모드가 미등록 세션을 `/?next=/s/<token>`으로 보낸다 —
+  // 로그인/등록이 끝나면 원래 열려던 공유 다운로드로 자동 재진입해야 한다.
+  // open-redirect 방지: 같은 출처의 `/s/`로 시작하는 경로만 허용한다.
+  function safeNext(){
+    var n=params.get('next');
+    return (n && n.charAt(0)==='/' && n.indexOf('//')!==0 && n.indexOf('/s/')===0) ? n : null;
+  }
+  function goNextOrHide(){
+    var n=safeNext();
+    if(n){ location.replace(n); return; }
+    hideGate();
+  }
   function hideGate(){ gate.hidden=true; window.__vtAuthed=true; document.dispatchEvent(new Event('vt:authed')); }
   function showForm(){ spin.hidden=true; form.hidden=false;
     setTimeout(function(){ try{ (otpWrap.hidden?pass:otp).focus(); }catch(e){} }, 50); }
   function showErr(m){ err.textContent=m; err.hidden=false; btn.disabled=false; }
   // 자격증명 파라미터를 URL에서 지우고 재로드 — 히스토리/공유 링크에 남지 않게 한다.
+  // next가 있으면 정리 후 재로드하는 대신 곧장 그리로 옮긴다.
   function reloadClean(){
+    var n=safeNext();
+    if(n){ location.replace(n); return; }
     params.delete('ticket'); params.delete('token');
     var q=params.toString();
     location.replace(location.pathname+(q?'?'+q:'')+location.hash);
@@ -94,8 +109,8 @@
   var urlTok=params.get('token');
   var probe='/api/capabilities'+(urlTok?('?token='+encodeURIComponent(urlTok)):'');
   fetch(probe,{credentials:'include'}).then(function(r){
-    if(r.status===401){ showForm(); } else { hideGate(); }
-  }).catch(function(){ hideGate(); });
+    if(r.status===401){ showForm(); } else { goNextOrHide(); }
+  }).catch(function(){ goNextOrHide(); });
 
   // IME 조합이 끝날 때마다(음절 하나가 완성될 때마다) 한글이 섞여 있으면 즉시 되돌린다.
   pass.addEventListener('compositionend',function(){
@@ -117,7 +132,7 @@
     fetch('/api/auth',{method:'POST',credentials:'include',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){
-      if(r.ok){ location.reload(); return; }
+      if(r.ok){ var n=safeNext(); if(n){ location.replace(n); } else { location.reload(); } return; }
       return r.json().catch(function(){ return {}; }).then(function(d){
         if(d.error==='otp_required'){
           otpWrap.hidden=false; btn.disabled=false; err.hidden=true;
