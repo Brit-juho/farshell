@@ -552,7 +552,7 @@ def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
     누를 대상이 없는 버튼이 된다."""
     assert page.evaluate("() => !document.getElementById('vt-rail-file')")
     page.evaluate("() => window.getAction('viewer.show')()")
-    page.wait_for_selector("#vt-qopen", timeout=5000)
+    page.wait_for_selector("#vt-qo-input", timeout=5000)
     page.keyboard.press("Escape")
 
 
