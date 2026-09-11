@@ -42,7 +42,8 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | `exit` | 문자열 목록. 나타나면 즉시 `waiting` 해제 — 프롬프트가 사라졌다는 신호 |
 | `options` | 정규식(문자열 또는 문자열 목록). 캡처 그룹 1=번호, 2=라벨. 매치되면 모바일 플릿 홈에 번호 버튼이 뜬다. 실패해도 `enter`/`exit`는 그대로 산다 |
 
-`enter`/`exit`가 둘 다 비어 있으면(현재 codex/aider/gemini 스텁 상태) 그 CLI는
+`enter`/`exit`가 둘 다 비어 있으면(2026-09-11 이후로는 해당 없음 — 아래
+「codex/gemini/aider 채움」 참고) 그 CLI는
 `/api/agents/coverage`에서 `path: "none"`, `trust: "low"`로 보고된다 — toml
 파일은 있지만 실효 패턴이 없다는 뜻이다.
 
