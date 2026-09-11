@@ -59,6 +59,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | POST | `/api/auth` | Login — password (+ `otp` for a new device) or a one-time `ticket` → issues `vt_session`/`vt_device` HttpOnly cookies. 401 `otp_required`/`otp_invalid`, 429 `otp_locked` |
 | GET | `/api/auth/status` | Whether auth is active / OTP is linked / this device is registered (accessible unauthenticated, no secrets included) |
 | POST | `/api/auth/logout` | Clears the session only (device registration is kept) |
+| POST | `/api/auth/elevate` | Re-verify password (+ OTP if linked) → reissues `vt_session` with a 15-minute `elev` claim (N31). Session-scoped, not device-scoped. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
 
 ## Code Viewer / Diff (read-only)
 
@@ -84,6 +85,16 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/git/commit` | Commit staged changes (JSON: repo, message). Returns 400 if nothing is staged |
 | GET | `/api/git/log?repo=X[&file=Y]` | Recent commit list |
 | GET | `/api/git/show?repo=X&rev=Y` | Diff of one commit |
+
+## Git accounts & binding (N30, elevated session required except GET)
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/git/accounts` | List accounts — token is never sent, only `auth.masked` (`ghp_…3f2a`) |
+| POST | `/api/git/accounts` | Requires elevation (`require_elevated`). Verifies the PAT against GitHub/GitLab `GET /user` before storing, auto-filling `login` |
+| DELETE | `/api/git/accounts/{account_id}` | Requires elevation. Also removes any bindings pointing at this account |
+| GET | `/api/git/binding?repo=X` | Resolved account id for a repo: `byRepo` → remote URL's `host/owner` in `byHostOrg` → exactly one account on that host → `null` |
+| PUT | `/api/git/binding` | Requires elevation. Body `{repo, account_id}` — sets the explicit `byRepo` binding |
 
 ## Scrollback Search
 
