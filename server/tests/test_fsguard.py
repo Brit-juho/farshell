@@ -107,17 +107,21 @@ def test_no_roots_configured_denies_everything(monkeypatch, tmp_path):
         fsguard.resolve_under_roots("/etc/passwd")
 
 
-def test_default_boundary_is_github_not_home(monkeypatch):
+def test_default_boundary_is_github_not_home(monkeypatch, tmp_path):
     """기본 경계(get_roots)는 이제 ~/GitHub 이다 — $HOME 전체를 기본으로 열면
     .ssh/.aws/셸 히스토리 등 거부 목록이 모르는 임의 시크릿까지 사정권에 든다.
-    CLAUDE.md에 문서화된 기본값(~/GitHub)과도 일치해야 한다."""
+    CLAUDE.md에 문서화된 기본값(~/GitHub)과도 일치해야 한다.
+
+    N8(30-worktree.md §2): 실제 홈에 `~/.worktrees`가 있으면 get_roots()가 그걸
+    자동으로 덧붙이므로, 이 테스트는 그 부작용과 무관하게 결정적이어야 해서
+    `.worktrees`가 없는 가짜 홈으로 고정한다."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
-    expected = Path.home() / "GitHub"
-    if expected.is_dir():
-        assert fsguard.get_roots() == [expected]
-    else:
-        # ~/GitHub 이 없는 환경에서는 완전 잠금을 피해 홈으로 폴백한다.
-        assert fsguard.get_roots() == [Path.home()]
+    expected = fake_home / "GitHub"
+    expected.mkdir()
+    assert fsguard.get_roots() == [expected]
 
 
 def test_default_start_root_is_not_home(monkeypatch):
@@ -159,11 +163,39 @@ def test_widened_boundary_keeps_github_as_start_root(monkeypatch):
     fsguard.resolve_under_roots(str(Path.home()))
 
 
-def test_custom_roots_are_not_widened_to_home(sandbox):
-    """VT_BROWSE_ROOTS 를 명시했으면 사용자가 고른 경계 그대로다 — 자동으로 넓히지 않는다."""
+def test_custom_roots_are_not_widened_to_home(sandbox, monkeypatch, tmp_path):
+    """VT_BROWSE_ROOTS 를 명시했으면 사용자가 고른 경계 그대로다 — 자동으로 넓히지 않는다.
+
+    N8 예외(`~/.worktrees` 자동 추가)와는 무관함을 보이기 위해 `.worktrees`가
+    없는 가짜 홈으로 고정한다 — 그 예외는 별도로 test_worktrees_root_is_appended*
+    가 검증한다."""
+    fake_home = tmp_path / "home-no-worktrees"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     assert fsguard.get_roots() == [sandbox["root"].resolve()]
     with pytest.raises(fsguard.FsDenied):
-        fsguard.resolve_under_roots(str(Path.home()))
+        fsguard.resolve_under_roots(str(fake_home))
+
+
+def test_worktrees_root_is_appended_when_present(monkeypatch, tmp_path):
+    """N8(30-worktree.md §2): `~/.worktrees`가 있으면 VT_BROWSE_ROOTS에 없어도
+    경계에 자동 추가된다."""
+    fake_home = tmp_path / "home"
+    (fake_home / ".worktrees").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    root = tmp_path / "repos"
+    root.mkdir()
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    assert fsguard.get_roots() == [root.resolve(), fake_home / ".worktrees"]
+
+
+def test_worktrees_root_not_duplicated_when_already_covered(monkeypatch, tmp_path):
+    """루트가 이미 `~/.worktrees`를 포함하면 중복 추가하지 않는다."""
+    fake_home = tmp_path / "home"
+    (fake_home / ".worktrees").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(fake_home))
+    assert fsguard.get_roots() == [fake_home.resolve()]
 
 
 def test_looks_binary():

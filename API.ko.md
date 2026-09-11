@@ -97,6 +97,16 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/queue/{id}/unblock` | safe_mode에 막힌 항목 재개 |
 | POST | `/api/queue/run` | 수동 드레인 — 한 건 투입 |
 
+## 워크트리 (N8/N44)
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/worktrees` | `VT_BROWSE_ROOTS`(+ `~/.worktrees`) 아래 모든 저장소의 git 워크트리 합산 — 세션 매핑 + diff 요약. 5초 캐시 |
+| GET | `/api/worktrees/precheck?repo&base` | 만들기 다이얼로그 전에 lockfile 배너 판정(`warnings: ["lockfile_mismatch"]`) |
+| POST | `/api/worktrees` | 워크트리 생성(`git worktree add` + node_modules/`.env`/포트 대역/에이전트). 실패 시 롤백 |
+| DELETE | `/api/worktrees/{id}` | 워크트리 삭제. 변경 있으면 409 + `dirty:true`(`force:true`로 재요청), `killSessions:true`면 tmux 세션도 kill |
+| POST | `/api/worktrees/{id}/open` | 기존 tmux 세션에 붙거나, 없으면 `wt-<repoName>-<branch>` 생성 |
+
 ## 포트 대시보드
 
 | 메서드 | 경로 | 설명 |

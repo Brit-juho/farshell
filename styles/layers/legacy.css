@@ -2244,6 +2244,10 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-wgrail-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--mono); color:var(--txt); }
 .vt-wgrail-diff { flex:none; font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
 .vt-wgrail-row-sub { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* N8(30-worktree.md §4) — 행이 속한 워크트리 라벨(repoName[/branch]). 워크트리에
+   안 속한 세션(「기타」)은 이 배지 자체가 없다(worktreeLabel이 null). */
+.vt-wgrail-worktree { color:var(--txt-dim, var(--sub)); }
+.vt-wgrail-sep { color:var(--sub); }
 
 /* 접힘: 마크·색점만(§5 "48px 접힘: 마크+색점+dot만") — 이름·상태 문장·그룹
    헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로. */

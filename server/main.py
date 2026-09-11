@@ -34,6 +34,7 @@ from routes.push import router as push_router
 from routes.queue import router as queue_router
 from routes.snippets import router as snippets_router
 from routes.search import router as search_router
+from routes.worktree import router as worktree_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -355,6 +356,7 @@ app.include_router(queue_router)
 app.include_router(snippets_router)
 app.include_router(push_router)
 app.include_router(search_router)
+app.include_router(worktree_router)
 
 
 # ---------------------------------------------------------------------------
