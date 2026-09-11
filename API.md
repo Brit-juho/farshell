@@ -132,6 +132,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | DELETE | `/api/ports/{port}[?pid=N]` | Kill the process. Returns 409 on a `pid` mismatch (the VT server itself, and cloudflared/tailscaled/sshd, cannot be killed) |
 | POST | `/api/ports/{port}/expose` | Expose via a Cloudflare tunnel. Requires body `{"confirm":true}` (428 without it) |
 | DELETE | `/api/ports/{port}/expose` | Tear down that port's tunnel |
+| GET | `/api/tunnel/list` | N22 — summary of every currently open tunnel (main + `fsh tunnel expose`d ports) for the Ports tab's "exposed" section. Unexposing reuses `DELETE /api/ports/{port}/expose` above |
 
 ## Prompt Snippets
 

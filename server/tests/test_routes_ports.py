@@ -123,3 +123,47 @@ def test_unexpose_failure_returns_500(client, monkeypatch):
     r = client.delete("/api/ports/3000/expose")
     assert r.status_code == 500
     assert r.json()["error"] == "unexpose_failed"
+
+
+# --- GET /api/tunnel/list (N22) ------------------------------------------------
+
+
+def test_tunnel_list_empty_when_nothing_running(client, monkeypatch):
+    monkeypatch.setattr(ports_mod.tunnel, "get_tunnel_status", lambda: {
+        "running": False, "url": None, "mode": "anonymous",
+    })
+    monkeypatch.setattr(ports_mod.tunnel_registry, "exposed_ports", lambda: {})
+    r = client.get("/api/tunnel/list")
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {"main": None, "extra": [], "count": 0}
+
+
+def test_tunnel_list_includes_main_and_extra(client, monkeypatch):
+    monkeypatch.setenv("VT_PORT", "7777")
+    monkeypatch.setattr(ports_mod.tunnel, "get_tunnel_status", lambda: {
+        "running": True, "url": "https://main.trycloudflare.com", "mode": "named",
+    })
+    monkeypatch.setattr(ports_mod.tunnel_registry, "exposed_ports", lambda: {
+        3000: {"url": "https://caddy-2p91.trycloudflare.com", "label": "RAPA 앱"},
+    })
+    r = client.get("/api/tunnel/list")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 2
+    assert body["main"] == {
+        "port": 7777, "label": "터미널 (VT)",
+        "url": "https://main.trycloudflare.com", "named": True,
+    }
+    assert body["extra"] == [
+        {"port": 3000, "label": "RAPA 앱", "url": "https://caddy-2p91.trycloudflare.com", "named": False},
+    ]
+
+
+def test_tunnel_list_main_absent_when_no_url(client, monkeypatch):
+    monkeypatch.setattr(ports_mod.tunnel, "get_tunnel_status", lambda: {
+        "running": True, "url": None, "mode": "anonymous",
+    })
+    monkeypatch.setattr(ports_mod.tunnel_registry, "exposed_ports", lambda: {})
+    r = client.get("/api/tunnel/list")
+    assert r.json()["main"] is None

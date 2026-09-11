@@ -235,6 +235,74 @@ function showPorts() {
       return row;
     }
 
+// N22(50-files-share.md §5) — 노출 중인 터널(메인 + fsh tunnel expose한 포트) 요약을
+// 포트 목록 아래에 얹는다. 해제는 이미 있는 DELETE /api/ports/{port}/expose를 그대로 쓴다
+// — 메인 터널은 fsh 쪽 명령이 아니라 여기서 해제 대상이 아니므로 행에 해제 버튼이 없다.
+async function _renderTunnelSection(body) {
+  let d;
+  try {
+    d = await vtFetch('/api/tunnel/list');
+  } catch {
+    return;   // 조회 실패는 조용히 생략 — 포트 목록 자체는 이미 떴다
+  }
+  if (!d.count) return;
+
+  const section = document.createElement('div');
+  section.className = 'vt-pt-tunnel-section';
+  const head = document.createElement('div');
+  head.className = 'vt-pt-section';
+  head.textContent = `노출 중 · ${d.count}`;
+  section.appendChild(head);
+
+  const rows = d.main ? [d.main, ...d.extra] : d.extra;
+  rows.forEach((t) => {
+    const row = document.createElement('div');
+    row.className = 'vt-pt-tunnel-row';
+    row.innerHTML = `
+      <span class="vt-pt-port">:${vtEsc(String(t.port))}</span>
+      <span class="vt-pt-tunnel-label">${vtEsc(t.label)}</span>
+      <a class="vt-pt-tunnel-url" href="${vtEsc(t.url)}" target="_blank" rel="noopener noreferrer">${vtEsc(t.url.replace(/^https:\/\//, ''))}</a>
+    `;
+    const actions = document.createElement('span');
+    actions.className = 'vt-pt-actions';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'vt-pt-btn';
+    copyBtn.textContent = '복사';
+    copyBtn.addEventListener('click', () => _copyText(t.url));
+    actions.appendChild(copyBtn);
+    if (t !== d.main) {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'vt-pt-btn danger';
+      closeBtn.textContent = '해제';
+      closeBtn.addEventListener('click', () => _unexposeTunnel(t.port));
+      actions.appendChild(closeBtn);
+    }
+    row.appendChild(actions);
+    section.appendChild(row);
+  });
+  body.appendChild(section);
+}
+
+async function _copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('복사됨');
+  } catch {
+    showToast('복사 실패 — 직접 선택해 복사하세요');
+  }
+}
+
+async function _unexposeTunnel(port) {
+  if (!confirm(`포트 ${port} 터널을 해제할까요?`)) return;
+  try {
+    await vtFetch(`/api/ports/${port}/expose`, { method: 'DELETE' });
+    showToast(`포트 ${port} 터널 해제됨`);
+  } catch (e) {
+    showToast(`해제 실패: ${e.message}`);
+  }
+  refreshPorts(true);
+}
+
     async function refreshPorts(fresh) {
       const body = document.getElementById('vt-pt-body');
       if (!body) return;
@@ -247,6 +315,7 @@ function showPorts() {
       }
       if (!d.ports.length) {
         body.innerHTML = '<div class="vt-vw-empty">리스닝 중인 포트가 없습니다.</div>';
+        await _renderTunnelSection(body);
         return;
       }
 
@@ -286,6 +355,7 @@ function showPorts() {
         n.textContent = '포트가 많아 일부만 표시했습니다.';
         body.appendChild(n);
       }
+      await _renderTunnelSection(body);
     }
 
     async function killPort(port, pid, cmd) {
