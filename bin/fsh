@@ -1192,6 +1192,7 @@ cmd_help() {
     fsh help hotkeys        핫키 전체 목록 + 변경 방법
     fsh help target         음성 타깃 lock 설명
     fsh help agent-state    에이전트 상태(훅 등록 · pane 자기보고 · 4상태)
+    fsh help agent-detect   승인 대기 감지 패턴(detect/*.toml 포맷 · 테스트 방법)
     fsh help clauth         사용량 표시(clauth 연동 · 켜고 끄기)
     fsh help ssh            Tailscale + SSH 원격 접속 (회사망 등)
     fsh help tunnel-hook    터널 URL이 바뀔 때 Notion/Slack 등에 자동 게시
@@ -1209,7 +1210,7 @@ HELP
     fi
   else
     echo "  ✗ 도움말 토픽 '$topic' 없음"
-    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / agent-state / clauth / ssh / tunnel-hook / troubleshoot"
+    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / agent-state / agent-detect / clauth / ssh / tunnel-hook / troubleshoot"
     return 1
   fi
 }
