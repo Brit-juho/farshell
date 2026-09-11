@@ -57,6 +57,8 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/api/auth/status` | 인증 활성 여부 / OTP 연동 여부 / 이 기기 등록 여부 (미인증 접근 가능, 비밀 미포함) |
 | POST | `/api/auth/logout` | 세션만 해제 (기기 등록은 유지) |
 | POST | `/api/auth/elevate` | 비밀번호(+OTP 연동 시 OTP) 재확인 → `vt_session`에 15분짜리 `elev` 클레임을 얹어 재발급(N31). 기기 스코프가 아니라 세션 스코프. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
+| GET | `/api/auth/elevation` | 현재 세션의 승격 상태(`elevated`·`elevated_until`) + `unused: true`·`unused_reason: "ADR-27"` — 지금은 승격을 요구하는 경로가 없다. 읽기 전용(설정 → 보안) |
+| GET | `/api/devices` | 등록 기기 목록(`~/.vt/devices.json`): id(앞 8자만)·라벨·등록·마지막 사용·`current`(요청한 기기). 읽기 전용 — 등록/폐기는 `fsh device` |
 
 ## 코드 뷰어 / diff (읽기 전용)
 
