@@ -87,3 +87,32 @@ test('statusSentence — waiting/working/error/done/idle', async () => {
   assert.strictEqual(statusSentence('idle', since, null, NOW), '유휴 · 2분');
   assert.strictEqual(statusSentence('idle', null, null, NOW), '유휴');
 });
+
+// N8/N44(30-worktree.md §4) — "상태는 sessions 중 가장 '시급한' 것(waiting >
+// error > working > done > idle)". 워크트리 행이 여러 세션을 대표할 때 쓴다.
+test('mostUrgentStatus — waiting > error > working > done > idle, 세션 없으면 idle', async () => {
+  const { mostUrgentStatus } = await mod();
+  assert.strictEqual(mostUrgentStatus([]), 'idle');
+  assert.strictEqual(mostUrgentStatus(['idle']), 'idle');
+  assert.strictEqual(mostUrgentStatus(['idle', 'done']), 'done');
+  assert.strictEqual(mostUrgentStatus(['done', 'working']), 'working');
+  assert.strictEqual(mostUrgentStatus(['working', 'error']), 'error');
+  assert.strictEqual(mostUrgentStatus(['error', 'waiting']), 'waiting');
+  assert.strictEqual(mostUrgentStatus(['waiting', 'idle', 'working', 'error', 'done']), 'waiting');
+});
+
+// buildRailSections는 제네릭이라(status/since/tool만 요구) Rail.tsx의 워크트리
+// 행 모양(kind:'worktree', sessionId 없음)도 그대로 그룹핑한다 — Fleet.tsx의
+// 세션 행 계약(RailRowInput)을 바꾸지 않고도 두 모양을 같은 함수로 처리한다는
+// 게 이 설계의 핵심이다.
+test('buildRailSections — 세션 필드가 없는 워크트리 모양도 그룹핑한다(제네릭)', async () => {
+  const { buildRailSections } = await mod();
+  const wtRow = (over) => ({ kind: 'worktree', worktreeId: 'w1', label: 'farshell', status: 'idle', since: null, tool: null, changed: null, ...over });
+  const sections = buildRailSections([
+    wtRow({ worktreeId: 'a', status: 'waiting', since: NOW / 1000 - 60 }),
+    wtRow({ worktreeId: 'b', status: 'working', since: NOW / 1000 - 30 }),
+  ], NOW);
+  assert.deepStrictEqual(Array.from(sections, (s) => s.group), ['attention', 'working']);
+  assert.strictEqual(sections[0].rows[0].worktreeId, 'a');
+  assert.strictEqual(sections[0].rows[0].statusSentence, '승인 대기 · 1분');
+});
