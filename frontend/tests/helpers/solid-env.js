@@ -22,7 +22,13 @@ const { importFresh } = require('./vm-esm');
 
 const REPO_ROOT = path.resolve(__dirname, '../../..');
 const DIST_JS = path.join(REPO_ROOT, 'frontend/dist-test/test-entry.js');
-const LOCK_PATH = DIST_JS + '.lock';
+// 실측 버그(2.1.0 실기기 검증 중 재현): 락 파일을 `dist-test/` 안에 두면, vite의
+// `emptyOutDir`(test 모드는 항상 true)가 그 빌드 자신이 만든 락 파일까지
+// **자기가 지운다** — A가 락을 쥔 채 빌드 중인데 emptyOutDir가 디렉터리를 통째로
+// 비우는 순간, 락 파일도 같이 사라진다. 그 틈에 B가 "락 없음"으로 보고 동시에
+// 두 번째 `vite build`를 시작해 같은 디렉터리를 서로 지우며 써서 ENOENT/손상된
+// 번들이 나왔다. 락은 빌드가 지우는 디렉터리 **밖**에 둬야 한다.
+const LOCK_PATH = path.join(REPO_ROOT, 'frontend/.dist-test.lock');
 const LOCK_STALE_MS = 30000; // 빌드가 이보다 오래 걸리면 죽은 락으로 보고 뺏는다.
 
 let _built = false;
