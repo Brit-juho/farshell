@@ -173,6 +173,11 @@ export async function createTmuxSession() {
 // showOnboarding()(boot.js)이 만드는 온보딩 화면의 버튼은 innerHTML 문자열
 // onclick="...createTmuxSession()"이라 모듈 경계와 무관하게 window를 거쳐야 한다.
 window.createTmuxSession = createTmuxSession;
+// N8/N44(30-worktree.md §4) — Rail.tsx(지연 청크)가 이 모듈을 정적 import
+// 못 하므로(Rail.tsx 상단 주석과 같은 이유) 워크트리 행 클릭 시 tmux 세션을
+// 여는 경로를 window로 노출한다. attachTmux 자체의 동작은 그대로(이미 웹에
+// 열려 있으면 전환, 아니면 새 탭으로 붙인다).
+window.attachTmux = attachTmux;
 
 // F3(c): data-action 위임용 등록.
 registerAction('session.tmux-list', () => showTmuxSessions());

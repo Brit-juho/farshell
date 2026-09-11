@@ -1,7 +1,13 @@
-// N36 §5 — 워크트리 레일(2.1.0은 세션을 워크트리 자리에 임시로 그린다,
-// ADR-10 「기타」 규칙)의 순수 로직. DOM도 fetch도 모른다 — 여러 소스(세션
-// 목록·에이전트 상태·git status)를 합친 평범한 입력을 받아 그룹핑된 행
-// 목록을 돌려준다.
+// N36 §5 — 워크트리 레일의 순수 로직. DOM도 fetch도 모른다 — 여러 소스(세션
+// 목록·에이전트 상태·git status·워크트리 API)를 합친 평범한 입력을 받아
+// 그룹핑된 행 목록을 돌려준다.
+//
+// 2.1.1(N8/N44)부터 buildRailSections는 제네릭이다 — Fleet.tsx(모바일 플릿
+// 홈, 70-mobile.md)는 여전히 "행 = 세션" 모양(RailRowInput/RailRow, 아래)을
+// 그대로 쓰고, Rail.tsx(데스크톱)는 "행 = Worktree"(WorktreeRailRow) 또는
+// "행 = 기타 세션"(OtherRailRow)의 합집합(DesktopRailRowInput)을 넘긴다.
+// 그룹핑·정렬·문장 로직은 status/since/tool만 보므로 두 모양 모두에 그대로
+// 재사용된다 — Fleet.tsx의 계약(정확히 RailRowInput 모양)을 바꾸지 않는다.
 import type { AgentState } from '../core/types.js';
 
 export type RailGroup = 'attention' | 'working' | 'idle';
@@ -16,29 +22,22 @@ export interface RailRowInput {
   /** 진행 중인·마지막 도구 이름("Edit" 등). working에서만 의미 있다. */
   tool: string | null;
   diffFiles: number | null; // git 아니거나 아직 조회 전이면 null
-  /** N38(70-mobile.md §2) — waiting 상태에서 감지된 질문 1줄. 데스크톱 레일은
-   * 아직 안 쓰지만(2.1.0 gap이 이제 서버 쪽엔 메워졌다 — agent_prompt_detect의
-   * question/options), 같은 데이터 소스를 쓰는 Fleet.tsx가 이 필드로 인라인
-   * 승인 버튼을 그린다. 선택 필드라 Rail.tsx는 안 넘겨도 그대로 동작한다. */
+  /** N38(70-mobile.md §2) — waiting 상태에서 감지된 질문 1줄. Fleet.tsx가
+   * 이 필드로 인라인 승인 버튼을 그린다. 선택 필드라 Rail.tsx는 안 넘겨도
+   * 그대로 동작한다. */
   question?: string | null;
   /** toml `options` 캡처로 뽑은 번호 선택지. 못 뽑았으면 null(또는 undefined)
    * — 그 경우 Fleet.tsx는 버튼 대신 「터미널로」를 그린다. */
   options?: { key: string; label: string }[] | null;
-  /** N8(30-worktree.md §4) — 이 세션의 cwd가 속한 워크트리. 어떤 워크트리에도
-   * 안 속하면(홈 디렉터리, 비 git 경로) null — 그 세션은 「기타」다. rail-data는
-   * 이 값으로 그룹을 나누지 않는다(그룹 순서는 여전히 상태 기준, 10 §5) — Rail.tsx가
-   * 행에 배지로만 얹는다. 워크트리 단위 행 재구성(§4 본문의 "행 = Worktree")은
-   * 2.1.1 후속 범위. */
-  worktreeLabel?: string | null;
 }
 
 export interface RailRow extends RailRowInput {
   statusSentence: string;
 }
 
-export interface RailSectionOut {
+export interface RailSectionOut<TRow = RailRow> {
   group: RailGroup;
-  rows: RailRow[];
+  rows: TRow[];
 }
 
 const GROUP_LABEL: Record<RailGroup, string> = {
@@ -55,6 +54,20 @@ function groupOf(status: AgentState): RailGroup {
   if (status === 'waiting' || status === 'error') return 'attention';
   if (status === 'working') return 'working';
   return 'idle';
+}
+
+// 30-worktree.md §4: "상태는 sessions 중 가장 '시급한' 것(waiting > error >
+// working > done > idle)". 워크트리 행이 여러 세션을 대표할 때 쓴다. 세션이
+// 하나도 없으면(흐리게 표시되는 행) 'idle'로 취급한다 — groupOf가 idle을
+// 유휴로 보내는 것과 같은 결이다.
+const URGENCY: AgentState[] = ['waiting', 'error', 'working', 'done', 'idle'];
+export function mostUrgentStatus(statuses: AgentState[]): AgentState {
+  if (statuses.length === 0) return 'idle';
+  let best = statuses[0];
+  for (const s of statuses) {
+    if (URGENCY.indexOf(s) < URGENCY.indexOf(best)) best = s;
+  }
+  return best;
 }
 
 export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.now()): string {
@@ -80,13 +93,18 @@ export function statusSentence(status: AgentState, since: number | null, tool: s
 }
 
 // 그룹 순서 고정 + 그룹 안은 최근 활동순(since 내림차순, 없으면 맨 뒤).
-export function buildRailSections(inputs: RailRowInput[], nowMs = Date.now()): RailSectionOut[] {
-  const rows: RailRow[] = inputs.map((r) => ({
+// 제네릭: status/since/tool만 요구한다 — Fleet.tsx의 RailRowInput, Rail.tsx의
+// WorktreeRailRowInput/OtherRailRowInput 전부 이 최소 모양을 만족한다.
+export function buildRailSections<T extends { status: AgentState; since: number | null; tool: string | null }>(
+  inputs: T[],
+  nowMs = Date.now(),
+): RailSectionOut<T & { statusSentence: string }>[] {
+  const rows: (T & { statusSentence: string })[] = inputs.map((r) => ({
     ...r,
     statusSentence: statusSentence(r.status, r.since, r.tool, nowMs),
   }));
 
-  const buckets: Record<RailGroup, RailRow[]> = { attention: [], working: [], idle: [] };
+  const buckets: Record<RailGroup, (T & { statusSentence: string })[]> = { attention: [], working: [], idle: [] };
   for (const row of rows) buckets[groupOf(row.status)].push(row);
 
   const order: RailGroup[] = ['attention', 'working', 'idle'];
@@ -95,3 +113,47 @@ export function buildRailSections(inputs: RailRowInput[], nowMs = Date.now()): R
   }
   return order.map((group) => ({ group, rows: buckets[group] })).filter((s) => s.rows.length > 0);
 }
+
+// ---------------------------------------------------------------------------
+// 30-worktree.md §4 — 데스크톱 레일(Rail.tsx) 전용 행 모양. "행 = Worktree",
+// 「기타」 그룹은 "행 = 세션"(어떤 워크트리에도 안 속함). Fleet.tsx는 이
+// 두 타입을 쓰지 않는다(모바일은 항상 세션 단위, 70-mobile.md 범위 밖).
+
+export interface WorktreeRailRowInput {
+  kind: 'worktree';
+  worktreeId: string;
+  /** isMain이면 repoName, 아니면 `${repoName}/${branch}` (30 §4 레일 표시 규칙). */
+  label: string;
+  repoName: string;
+  branch: string;
+  isMain: boolean;
+  path: string;
+  /** 이 워크트리를 연 웹 세션 id. 아직 웹에 안 열려 있으면(서버는 아는데 이
+   * 브라우저 탭엔 없음) null — 행은 흐리게 그려지고 클릭하면 연다(30 §4). */
+  primarySessionId: string | null;
+  /** 서버가 준 tmux 세션 이름(primarySessionId가 없을 때 attach 대상). */
+  primaryTmuxName: string | null;
+  status: AgentState;
+  since: number | null;
+  tool: string | null;
+  /** GET /api/worktrees의 changed 요약(add/del 라인 수) — 2.1.1부터 세션별
+   * git status 폴링 대신 이걸 쓴다(30 §4, 10 §5 원문 "+142 −38"). */
+  changed: { files: number; add: number; del: number } | null;
+  question?: string | null;
+  options?: { key: string; label: string }[] | null;
+}
+
+export interface OtherRailRowInput {
+  kind: 'session';
+  sessionId: string;
+  tmuxName: string | null;
+  name: string;
+  status: AgentState;
+  since: number | null;
+  tool: string | null;
+  diffFiles: number | null;
+  question?: string | null;
+  options?: { key: string; label: string }[] | null;
+}
+
+export type DesktopRailRowInput = WorktreeRailRowInput | OtherRailRowInput;
