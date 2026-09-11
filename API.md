@@ -165,6 +165,16 @@ download API — `/api/files/{id}/download` is id-only by design.
 | GET | `/api/files/{id}/download` | Download by id (`attachment` + `nosniff` + `no-store`) |
 | DELETE | `/api/files/{id}` | Delete a stored file |
 | POST | `/api/files/{id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
+| POST | `/api/files/{id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
+| DELETE | `/api/files/{id}/share/{shareId}` | **Elevated.** Cancel a share — the URL 404s immediately even with a still-valid signature |
+
+Public download entry point (not under the api prefix, and not behind the usual session/token auth —
+`server/routes/share.py` does its own token/mode verification):
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/s/{token}` | Share download. `device` mode: serves if `vt_device`+`vt_session` are valid, else 302 to `/?next=/s/{token}`. `pin` mode: PIN entry page unless a valid one-time download cookie is present |
+| POST | `/s/{token}/pin` | Verify a PIN (form: `pin`) → 60s one-time download cookie + redirect. 5 failed attempts cancels the share |
 
 ## Misc
 

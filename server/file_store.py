@@ -15,6 +15,7 @@ API가 절대경로를 그대로 받아 fsguard 없이 `is_relative_to` 하나�
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import logging
 import mimetypes
@@ -214,6 +215,13 @@ def cleanup() -> dict:
     with _locked():
         items = _read_unlocked()
 
+        # 만료된 공유부터 배열에서 걷어낸다 — "공유 중"의 정의는 **유효한** 공유가
+        # 있다는 뜻이지, 예전에 발급됐다가 만료된 공유가 영구 보호막이 되면 안 된다.
+        for x in items:
+            live = [s for s in x.get("shares", []) if s.get("exp", 0) > now]
+            if len(live) != len(x.get("shares", [])):
+                x["shares"] = live
+
         kept = []
         for x in items:
             if not _is_protected(x, now) and (now - x.get("created", now)) > TTL_SECONDS:
@@ -299,3 +307,83 @@ def reconcile_orphans() -> dict:
     if removed_meta or removed_disk:
         logger.info(f"file_store 고아 정리: meta={removed_meta} disk={removed_disk}")
     return {"removed_meta": removed_meta, "removed_disk": removed_disk}
+
+
+# --- 공유 링크 (N21, 50-files-share.md §3) ------------------------------------
+#
+# 토큰 자체의 서명·만료 검증은 routes/share.py(auth._sign 재사용)가 맡는다. 여기서는
+# "취소되면 서명이 유효해도 404가 나와야 한다"는 요구를 위해 shares[] 를 파일 소유권
+# 있는 이 모듈에서만 건드리게 한다 — 취소 = 배열에서 제거, 그게 전부다.
+
+VALID_SHARE_MODES = {"device", "pin"}
+MAX_PIN_ATTEMPTS = 5
+
+
+def hash_pin(pin: str, salt: str) -> str:
+    return hashlib.sha256(f"{salt}:{pin}".encode("utf-8")).hexdigest()
+
+
+def add_share(file_id: str, mode: str, ttl: int, once: bool, pin: str | None = None) -> dict | None:
+    """새 공유 발급. 파일이 없으면 None(호출자가 404)."""
+    if mode not in VALID_SHARE_MODES:
+        raise ValueError(f"bad mode: {mode}")
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return None
+        share: dict = {
+            "shareId": secrets.token_urlsafe(6),
+            "mode": mode,
+            "exp": time.time() + ttl,
+            "once": bool(once),
+            "attempts": 0,
+            "views": 0,
+            "lastAccess": None,
+        }
+        if mode == "pin":
+            salt = secrets.token_hex(8)
+            share["pinSalt"] = salt
+            share["pinHash"] = hash_pin(pin or "", salt)
+        item.setdefault("shares", []).append(share)
+        _write_unlocked(items)
+    return share
+
+
+def get_item_and_share(file_id: str, share_id: str) -> tuple[dict | None, dict | None]:
+    """취소된 공유는 배열에 아예 없으므로 여기서 이미 None — 토큰 서명이 유효해도
+    호출자는 이 결과만 보고 404를 내면 된다."""
+    item = get_item(file_id)
+    if item is None:
+        return None, None
+    share = next((s for s in item.get("shares", []) if s.get("shareId") == share_id), None)
+    return item, share
+
+
+def remove_share(file_id: str, share_id: str) -> bool:
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return False
+        before = len(item.get("shares", []))
+        item["shares"] = [s for s in item.get("shares", []) if s.get("shareId") != share_id]
+        if len(item["shares"]) == before:
+            return False
+        _write_unlocked(items)
+    return True
+
+
+def update_share(file_id: str, share_id: str, **fields) -> dict | None:
+    """attempts/views/lastAccess 등 공유 레코드 필드 갱신. 없으면 None."""
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return None
+        share = next((s for s in item.get("shares", []) if s.get("shareId") == share_id), None)
+        if share is None:
+            return None
+        share.update(fields)
+        _write_unlocked(items)
+        return share

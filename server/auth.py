@@ -155,6 +155,13 @@ def _sign(payload: str) -> str:
     ).hexdigest()
 
 
+def sign_payload(payload: str) -> str:
+    """`_sign`의 공개 진입점 — 세션 쿠키 서명과 같은 키를 다른 모듈(routes/share.py의
+    공유 링크 토큰, 50-files-share.md §3)이 재사용할 때 밑줄 붙은 내부 이름을
+    직접 건드리지 않도록 한다."""
+    return _sign(payload)
+
+
 def make_session(device_id: str = "", ttl: int = SESSION_TTL, elev_exp: int | None = None) -> str:
     """로그인 성공 시(또는 승격 시) 발급할 서명 세션 값 생성.
 
@@ -580,6 +587,21 @@ def consume_ticket(raw: str) -> Optional[dict]:
 def is_protected() -> bool:
     """비밀번호 또는 기계 토큰 중 하나라도 설정돼 있으면 인증 활성."""
     return bool(VT_AUTH_PASSWORD_HASH or VT_AUTH_TOKEN)
+
+
+def is_https(request: Request) -> bool:
+    """터널 뒤에서도 정확한 https 판정 — 쿠키 Secure 플래그 판정에 쓴다.
+
+    cloudflared가 TLS를 종단하고 서버에는 평문 HTTP로 전달하므로 request.url.scheme은
+    항상 http다 → 예전엔 원격 접속에서 세션 쿠키에 Secure가 **한 번도** 붙지 않았다.
+    X-Forwarded-Proto를 믿어도 안전하다: 이 헤더로 할 수 있는 건 쿠키를 더 엄격하게
+    만드는 것뿐이고, 약화시키는 방향은 불가능하다. main.py(로그인)와 routes/share.py
+    (공유 다운로드 쿠키)가 함께 쓴다 — 원래 main.py에만 있던 것을 여기로 옮겼다.
+    """
+    if request.url.scheme == "https":
+        return True
+    proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    return proto == "https"
 
 
 def credential_kind(cred: str) -> Optional[str]:

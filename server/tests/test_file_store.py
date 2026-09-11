@@ -110,7 +110,7 @@ def test_cleanup_excludes_shared_files(store, tmp_path, monkeypatch):
     items = store._read_unlocked()
     for x in items:
         x["created"] = time.time() - 10
-        x["shares"] = [{"shareId": "s1"}]
+        x["shares"] = [{"shareId": "s1", "exp": time.time() + 3600}]  # 만료 안 된 공유
     store._write_unlocked(items)
 
     store.cleanup()

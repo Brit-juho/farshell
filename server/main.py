@@ -40,6 +40,7 @@ from routes.search import router as search_router
 from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
 from routes.worktree import router as worktree_router
 from routes.security import router as security_router
+from routes.share import elevated_router as share_elevated_router, public_router as share_public_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -107,7 +108,10 @@ class TokenAuthMiddleware:
         if path in (
             "/", "/sw.js", "/manifest.json", "/favicon.ico",
             "/api/auth", "/api/auth/status", "/api/auth/logout",
-        ) or path.startswith("/static"):
+        ) or path.startswith("/static") or path.startswith("/s/"):
+            # /s/{token} — 공유 링크(N21)의 공개 진입점. 이 표준 인증 체크를
+            # 우회하지만 미인증 상태로 통과시키는 게 아니다 — routes/share.py가
+            # 토큰 서명·만료·모드(device/pin)별 자체 검증을 반드시 거친다.
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
         token = (
@@ -384,6 +388,8 @@ app.include_router(git_accounts_router)
 app.include_router(git_accounts_elevated_router)
 app.include_router(worktree_router)
 app.include_router(security_router)
+app.include_router(share_elevated_router)
+app.include_router(share_public_router)
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -420,20 +426,6 @@ async def service_worker():
 @app.get("/manifest.json")
 async def manifest():
     return FileResponse(str(Path(FRONTEND_DIR) / "manifest.json"))
-
-
-def _is_https(request: Request) -> bool:
-    """터널 뒤에서도 정확한 https 판정.
-
-    cloudflared가 TLS를 종단하고 서버에는 평문 HTTP로 전달하므로 request.url.scheme은
-    항상 http다 → 예전엔 원격 접속에서 세션 쿠키에 Secure가 **한 번도** 붙지 않았다.
-    X-Forwarded-Proto를 믿어도 안전하다: 이 헤더로 할 수 있는 건 쿠키를 더 엄격하게
-    만드는 것뿐이고, 약화시키는 방향은 불가능하다.
-    """
-    if request.url.scheme == "https":
-        return True
-    proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
-    return proto == "https"
 
 
 def _device_label(request: Request) -> str:
@@ -526,7 +518,7 @@ async def auth_login(request: Request):
                 logger.info(f"[auth] 새 기기 등록: {device_id} ({_device_label(request)})")
         # kind == "token"(데몬)은 기기를 만들지 않는다 — device_id 없이 세션만 발급.
 
-    secure = _is_https(request)
+    secure = auth.is_https(request)
     resp = JSONResponse({"ok": True, "device_id": device_id or None})
     resp.set_cookie(
         "vt_session",
@@ -629,7 +621,7 @@ async def auth_elevate(request: Request):
         auth.make_session(device_id, elev_exp=elev_exp),
         httponly=True,
         samesite="strict",
-        secure=_is_https(request),
+        secure=auth.is_https(request),
         max_age=auth.SESSION_TTL,
         path="/",
     )
