@@ -20,6 +20,7 @@ fsh voice              # 음성 모드 (백그라운드, 노션 작업 중에도
 fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
 fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐 (P4)
+fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크 (N19/N23)
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리 (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (N30 — 구현만 됐고 미사용, ADR-27)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경

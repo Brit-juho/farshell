@@ -1382,6 +1382,30 @@ cmd_queue() {
   esac
 }
 
+# 파일 저장소 CLI (N23, 50-files-share.md §6) — queue와 같은 방식으로 서버 없이도
+# 동작한다(직접 file_store.py를 실행). share가 찍는 "/s/<token>" 경로 앞에 base URL을
+# 붙이는 것만 여기서 한다 — 어느 게 진짜 공개 주소인지(터널이냐 로컬이냐)는
+# bin/fsh가 이미 알고 있는 정보라 파이썬 쪽에 다시 물을 필요가 없다.
+cmd_files() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-ls}"
+  case "$sub" in
+    ls|list|add|rm|share|unshare|insert)
+      shift 2>/dev/null || true
+      local base; base="$(_main_tunnel_url)"
+      [ -z "$base" ] && base="http://localhost:${VT_PORT:-7777}"
+      (cd "$VT_DIR/server" && "$VT_PYTHON" file_store.py "$sub" "$@") \
+        | sed "s#^\(  ✓ 공유 경로: \)/s/#\1${base}/s/#"
+      ;;
+    *)
+      echo "사용법: fsh files [ls|add <path> [--share 1h|24h|7d|30d] [--pin]|rm <id>|share <id> [--ttl 1h|24h|7d|30d] [--pin] [--once]|unshare <id>|insert <id>]"
+      return 1 ;;
+  esac
+}
+
 # 워크트리 (N8/N44, 30-worktree.md §5) — 서버 API(server/worktree.py)를 그대로
 # 호출한다. queue와 같은 방식으로 서버가 안 떠 있어도 동작한다.
 cmd_worktree() {
@@ -3517,6 +3541,7 @@ case "${1:-help}" in
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;
   queue)    shift; cmd_queue "$@" ;;
+  files)    shift; cmd_files "$@" ;;
   worktree|wt) shift; cmd_worktree "$@" ;;
   usage)    shift; cmd_usage "$@" ;;
   help)     shift 2>/dev/null || true; cmd_help "$@" ;;
@@ -3556,6 +3581,8 @@ case "${1:-help}" in
     echo "    fsh popup <action>     tmux 3.2+ popup으로 빠른 호출"
     echo "    fsh run \"명령\"          headless claude -p 백그라운드 실행"
     echo "    fsh queue [add|run|rm]  프롬프트 큐 (작업 중 지시를 쌓아뒀다 순차 투입)"
+    echo "    fsh files [ls|add|rm|share|unshare|insert]"
+    echo "                          파일 저장소 관리 + 공유 링크 발급/취소 (N19/N23)"
     echo "    fsh worktree [list|add|rm|open]"
     echo "                          git 워크트리 만들기/조회/삭제/열기 (N8/N44)"
     echo "    fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]"

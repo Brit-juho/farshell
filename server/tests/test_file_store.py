@@ -168,3 +168,122 @@ def test_reconcile_orphans_removes_disk_file_without_meta(store, tmp_path):
     result = store.reconcile_orphans()
     assert result["removed_disk"] == 1
     assert not orphan.exists()
+
+
+# --- CLI (N23, 50-files-share.md §6) ------------------------------------------
+
+
+@pytest.fixture
+def cli_env(tmp_path, monkeypatch):
+    """CLI 테스트용 — share 발급은 auth.sign_payload가 필요하므로 서명키도 심는다."""
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path))
+    import auth as _auth
+    monkeypatch.setattr(_auth, "VT_AUTH_SESSION_KEY", "cli-test-key")
+    import file_store
+    importlib.reload(file_store)
+    return file_store
+
+
+def test_cli_ls_empty(cli_env, capsys):
+    rc = cli_env._cli(["ls"])
+    assert rc == 0
+    assert "파일이 없습니다" in capsys.readouterr().out
+
+
+def test_cli_add_copies_file_and_keeps_original(cli_env, tmp_path, capsys):
+    src = tmp_path / "orig.txt"
+    src.write_text("hello")
+    rc = cli_env._cli(["add", str(src)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "추가됨" in out and "orig.txt" in out
+    assert src.is_file()  # add는 복사 — 원본 유지
+    assert len(cli_env.list_items()) == 1
+
+
+def test_cli_add_missing_file_errors(cli_env, capsys):
+    rc = cli_env._cli(["add", "/no/such/file.txt"])
+    assert rc == 1
+    assert "없습니다" in capsys.readouterr().err
+
+
+def test_cli_add_with_share_issues_token(cli_env, tmp_path, capsys):
+    src = tmp_path / "a.txt"
+    src.write_text("x")
+    rc = cli_env._cli(["add", str(src), "--share", "1h"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "/s/v1." in out
+    item = cli_env.list_items()[0]
+    assert len(item["shares"]) == 1
+
+
+def test_cli_rm_by_id_prefix(cli_env, tmp_path, capsys):
+    src = tmp_path / "a.txt"
+    src.write_text("x")
+    cli_env._cli(["add", str(src)])
+    fid = cli_env.list_items()[0]["id"]
+    rc = cli_env._cli(["rm", fid[:4]])
+    assert rc == 0
+    assert cli_env.list_items() == []
+
+
+def test_cli_rm_ambiguous_prefix_fails(cli_env, tmp_path, capsys, monkeypatch):
+    src = tmp_path / "a.txt"
+    src.write_text("x")
+    cli_env._cli(["add", str(src)])
+    src2 = tmp_path / "b.txt"
+    src2.write_text("y")
+    cli_env._cli(["add", str(src2)])
+    rc = cli_env._cli(["rm", ""])  # 빈 접두 — 둘 다 매치
+    assert rc == 1
+    assert "특정되는" in capsys.readouterr().err
+
+
+def test_cli_share_and_unshare(cli_env, tmp_path, capsys):
+    src = tmp_path / "a.txt"
+    src.write_text("x")
+    cli_env._cli(["add", str(src)])
+    fid = cli_env.list_items()[0]["id"]
+    rc = cli_env._cli(["share", fid, "--ttl", "7d", "--once"])
+    assert rc == 0
+    assert len(cli_env.list_items()[0]["shares"]) == 1
+    rc = cli_env._cli(["unshare", fid])
+    assert rc == 0
+    assert cli_env.list_items()[0]["shares"] == []
+
+
+def test_cli_share_bad_ttl_errors(cli_env, tmp_path, capsys):
+    src = tmp_path / "a.txt"
+    src.write_text("x")
+    cli_env._cli(["add", str(src)])
+    fid = cli_env.list_items()[0]["id"]
+    rc = cli_env._cli(["share", fid, "--ttl", "5min"])
+    assert rc == 2
+    assert "알 수 없는" in capsys.readouterr().err
+
+
+def test_cli_insert_requires_tmux_target(cli_env, tmp_path, capsys, monkeypatch):
+    src = tmp_path / "a.txt"
+    src.write_text("x")
+    cli_env._cli(["add", str(src)])
+    fid = cli_env.list_items()[0]["id"]
+    import tmux_target
+    monkeypatch.setattr(tmux_target, "resolve_voice_target_pane", lambda: (None, "none"))
+    rc = cli_env._cli(["insert", fid])
+    assert rc == 1
+    assert "찾지 못했습니다" in capsys.readouterr().err
+
+
+def test_cli_insert_types_path_into_resolved_pane(cli_env, tmp_path, capsys, monkeypatch):
+    src = tmp_path / "a.txt"
+    src.write_text("x")
+    cli_env._cli(["add", str(src)])
+    fid = cli_env.list_items()[0]["id"]
+    import tmux_target
+    monkeypatch.setattr(tmux_target, "resolve_voice_target_pane", lambda: ("%3", "auto"))
+    calls = []
+    monkeypatch.setattr(tmux_target, "type_to_tmux", lambda pane, text: calls.append((pane, text)) or True)
+    rc = cli_env._cli(["insert", fid])
+    assert rc == 0
+    assert calls[0][0] == "%3"
