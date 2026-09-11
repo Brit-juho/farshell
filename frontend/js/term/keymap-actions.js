@@ -27,3 +27,9 @@ registerKey('railToggle', () => {
 // 'settings' 액션의 주인은 panels/settings.js다(S4에서 생겼다) — 여기서
 // 중복 등록하지 않는다. 같은 id에 두 번 register하면 나중 것이 이기므로
 // 모듈 로드 순서에 따라 동작이 갈릴 수 있다.
+
+// N44(30-worktree.md §3) — 'worktreeNew'의 실제 동작은 Rail.tsx(지연 청크)
+// 안에 산다. rail.js의 rail 토글과 같은 이유로 여기서는 직접 구현하지 않고,
+// Rail.tsx가 마운트되며 노출하는 window 브리지(vtOpenWorktreeDialog)를
+// 누른다 — Rail이 아직 안 마운트됐으면(초기 로드 경합) 조용히 무시한다.
+registerKey('worktreeNew', () => { window.vtOpenWorktreeDialog?.(); });
