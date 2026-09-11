@@ -1543,6 +1543,21 @@ body.vt-resizing #terminal-container{ transition:none; }
   color:var(--sub); font:400 var(--fs-xs) var(--ui); cursor:pointer; user-select:none;
 }
 
+/* 실사용 요청(2026-09-11) — 저장할 때 실행 방식(붙여넣기만/새 섹션 자동 실행)을
+   고르는 라디오 그룹. .vt-sn-save-scope와 같은 체크박스 언어를 라디오로 확장. */
+.vt-sn-mode-choice{
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1);
+}
+.vt-sn-mode-opt{
+  display:flex; align-items:baseline; gap:calc(var(--spacing) * 1.5);
+  color:var(--sub); font:400 var(--fs-xs) var(--ui); cursor:pointer; user-select:none;
+}
+.vt-sn-mode-opt input{ flex:0 0 auto; accent-color:var(--acc); }
+.vt-sn-mode-opt .vt-q-sub{ margin-top:0; }
+/* 행의 모드 전환 버튼 — 삭제(danger)와 헷갈리지 않게 중립 톤 유지, 다른
+   .vt-pt-btn과 같은 크기만 공유. */
+.vt-sn-mode-toggle{ color:var(--sub); }
+
 .vt-q-row{
   display:flex; align-items:flex-start; gap:calc(var(--spacing) * 2.5);
   padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);

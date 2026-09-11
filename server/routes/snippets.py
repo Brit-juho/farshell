@@ -40,6 +40,7 @@ async def add_snippet(request: Request):
         body.get("label"),
         scope=body.get("scope") or snippet_store.SCOPE_GLOBAL,
         cwd=body.get("cwd"),
+        mode=body.get("mode"),
     )
     if not r.get("ok"):
         status = 409 if r.get("error") == "full" else 400
@@ -52,4 +53,21 @@ async def delete_snippet(item_id: str):
     r = snippet_store.remove(item_id)
     if not r.get("ok"):
         return JSONResponse(r, status_code=404)
+    return r
+
+
+@router.patch("/api/snippets/{item_id}")
+async def update_snippet_mode(item_id: str, request: Request):
+    """지금은 mode만 바꾼다 — 텍스트·라벨 수정은 스코프 밖(지우고 다시 저장)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    mode = body.get("mode")
+    if not mode:
+        return JSONResponse({"error": "missing_mode"}, status_code=400)
+    r = snippet_store.set_mode(item_id, mode)
+    if not r.get("ok"):
+        status = 404 if r.get("error") == "not_found" else 400
+        return JSONResponse(r, status_code=status)
     return r
