@@ -1187,7 +1187,15 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-vw-gstat{
   flex:0 0 auto; width:20px; text-align:center; font:700 var(--fs-2xs) var(--mono); color:var(--acc);
 }
-.vt-vw-grow .vt-vw-name{ flex:1; }
+.vt-vw-grow .vt-vw-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* 40 §5 — 파일을 뷰어 페인(리프 타입 viewer)으로 여는 버튼. 행 클릭(인라인
+   diff)과 별개 동작이라 항상 눈에 띄게 옅은 텍스트 버튼으로 둔다. */
+.vt-vw-gopen{
+  flex:0 0 auto; border:1px solid var(--line); background:transparent; color:var(--sub);
+  border-radius:var(--radius-sm); padding:2px calc(var(--spacing) * 1.5);
+  font:500 var(--fs-3xs) var(--ui); cursor:pointer;
+}
+.vt-vw-gopen:hover{ background:var(--menu-hover); color:var(--txt); border-color:var(--acc); }
 .vt-vw-gcommit{
   display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 3);
   border-top:1px solid var(--line); background:var(--bar);
@@ -2388,10 +2396,11 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-dock-panel .vt-vw-x { display:none; }
 .vt-dock-panel .vt-vw-head { border-radius:0; }
 
-/* ── 40 §3 — dock 소스컨트롤 탭 머리말/버튼 줄 ─────────────────────────────
-   목록·diff·로그 자체는 코드 뷰어와 **같은 렌더러**(vt-vw-* 클래스)를 쓰므로
-   여기서 새로 정의하지 않는다. 여기 있는 건 dock에만 있는 두 줄이다: 저장소·
-   브랜치 머리말과, 2.1.1까지 disabled로 자리를 지키는 버튼 줄. */
+/* ── 40 §3 — dock 소스컨트롤 탭 머리말 ─────────────────────────────────────
+   목록·diff·로그·커밋상자 자체는 코드 뷰어와 **같은 렌더러**(vt-vw-* 클래스,
+   git.js)를 쓰므로 여기서 새로 정의하지 않는다. 여기 있는 건 dock에만 있는
+   저장소·브랜치 머리말 한 줄뿐이다 — 계정 칩과 push/PR 버튼 줄은 ADR-27로
+   없다(렌더 자체가 없으므로 여기 disabled 스타일도 필요 없다). */
 .vt-scm-head { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; }
 .vt-scm-head-left { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; white-space:nowrap; }
 .vt-scm-repo { font:600 var(--fs-2xs) var(--mono); color:var(--txt); overflow:hidden; text-overflow:ellipsis; }
@@ -2399,21 +2408,9 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-scm-upstream, .vt-scm-track, .vt-scm-count { font:400 var(--fs-3xs) var(--mono); color:var(--sub); flex:none; }
 .vt-scm-add { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-done); flex:none; }
 .vt-scm-del { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-error); flex:none; }
-.vt-scm-account {
-  flex:none; border:1px solid var(--line); background:transparent; color:var(--sub);
-  border-radius:var(--radius-sm); padding:2px calc(var(--spacing) * 1.5);
-  font:500 var(--fs-3xs) var(--mono); cursor:not-allowed;
-}
-.vt-scm-foot {
-  display:flex; gap:calc(var(--spacing) * 1.5); flex:none;
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
-  border-top:1px solid var(--line); background:var(--bar);
-}
-/* disabled는 "안 되는 것"이 아니라 "아직 안 되는 것"이다 — 완전히 죽은 회색
-   대신 흐리게만 두고, 이유는 title 툴팁이 말한다. */
-.vt-scm-foot .vt-pt-btn[disabled], .vt-scm-account[disabled] { opacity:.5; }
-/* 읽기 전용 dock의 +/− 버튼 — 같은 이유로 죽이지 않고 흐리게만. */
-.vt-dock-panel .vt-vw-gact[disabled] { opacity:.45; cursor:not-allowed; }
+/* stage/unstage 진행 중이거나(reload 대기) 스테이지된 게 없어 커밋이 막힌
+   동안의 disabled — "안 되는 것"이 아니라 "지금은 안 되는 것"이라 흐리게만. */
+.vt-dock-panel .vt-vw-gact[disabled], .vt-dock-panel .vt-vw-gcommit-btn[disabled] { opacity:.45; cursor:not-allowed; }
 
 /* ── N35 §6 — 뷰어 페인(리프 타입 viewer) ──────────────────────────────────
    모달 코드 뷰어가 사라지면서 파일은 페인 안에서 열린다. 코드 렌더는 dock·

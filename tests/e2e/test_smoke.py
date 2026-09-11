@@ -715,17 +715,44 @@ def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
     assert got["head"].strip(), "머리말이 비었다 — 저장소를 못 찾았다"
 
 
-def test_dock_소스컨트롤_쓰기_버튼은_비활성이고_이유를_말한다(page):
-    """40 §5 — 2.1.0은 읽기 전용. 숨기지 않고 disabled + 사유 툴팁으로 둔다."""
+def test_dock_소스컨트롤_stage_commit은_실동작하고_push_PR은_렌더되지_않는다(page):
+    """40 §5 · ADR-27 — 2.1.1: stage/unstage/커밋은 ambient git로 실제 동작.
+    push·PR/MR 버튼과 계정 칩은 렌더 자체가 없다(disabled로도 남기지 않는다)."""
     _open_dock(page, "소스컨트롤")
-    page.wait_for_selector("#vt-dock-scm .vt-scm-foot button", timeout=15000)
-    btns = page.evaluate(
-        """() => [...document.querySelectorAll('.vt-scm-foot button')]
-                 .map((b) => [b.textContent, b.disabled, b.title])"""
+    page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    got = page.evaluate(
+        """() => {
+             const texts = [...document.querySelectorAll('#vt-dock-scm button')]
+               .map((b) => b.textContent.trim().toLowerCase());
+             const gact = document.querySelector('#vt-dock-scm .vt-vw-gact');
+             return {
+               texts,
+               hasAccountChip: !!document.querySelector('.vt-scm-account'),
+               hasFoot: !!document.querySelector('.vt-scm-foot'),
+               hasCommitBox: !!document.querySelector('#vt-dock-scm .vt-vw-gmsg'),
+               stageDisabled: gact ? gact.disabled : null,
+             };
+           }"""
     )
-    assert [b[0] for b in btns] == ["커밋", "push", "PR 만들기"], btns
-    assert all(b[1] for b in btns), f"쓰기 버튼이 열려 있다: {btns}"
-    assert all("2.1.1" in b[2] for b in btns), f"이유 툴팁이 없다: {btns}"
+    assert not any("push" in t for t in got["texts"]), got["texts"]
+    assert not any("pr" in t and "만들기" in t for t in got["texts"]), got["texts"]
+    assert not got["hasAccountChip"], "ADR-27로 폐기된 계정 칩이 남아있다"
+    assert not got["hasFoot"], "ADR-27로 폐기된 push/PR 버튼 줄(.vt-scm-foot)이 남아있다"
+    assert got["hasCommitBox"], "커밋 입력창이 없다 — readOnly가 아직 true인 듯하다"
+    if got["stageDisabled"] is not None:
+        assert got["stageDisabled"] is False, "스테이지 +/− 버튼이 아직 비활성이다"
+
+
+def test_dock_소스컨트롤_파일_클릭시_뷰어_페인으로_연다(page):
+    """40 §5 — 파일 행의 「뷰어」 버튼이 페인을 N35 §6 리프 타입 viewer로 바꾼다.
+    변경된 파일이 없으면 건너뛴다."""
+    _open_dock(page, "소스컨트롤")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    open_btns = page.locator("#vt-dock-scm .vt-vw-gopen")
+    if open_btns.count() == 0:
+        pytest.skip("작업 트리가 깨끗해 열어볼 파일이 없다")
+    open_btns.first.click()
+    page.wait_for_selector(".vt-pane-viewer .vt-vw-code-pane", timeout=15000)
 
 
 def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):

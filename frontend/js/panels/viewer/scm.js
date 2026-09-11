@@ -1,9 +1,9 @@
 // N35 §6 / 40 §3·§5 — dock 「소스컨트롤」 탭.
 //
-// 2.1.0 범위는 **읽기 전용**이다(40 §5): status·diff·log를 보여주고, diff 줄을
-// 눌러 프롬프트 큐에 코멘트를 남기는 것까지. stage/unstage/커밋/push/PR 버튼은
-// **렌더하되 disabled + 사유 툴팁**으로 둔다 — 없는 것처럼 숨기면 2.1.1에서
-// 갑자기 생기는 것처럼 보이고, 여기가 그 자리라는 사실도 전달되지 않는다.
+// 2.1.1부터 stage/unstage/커밋이 실제로 동작한다(ambient git, D16) — 승격
+// 세션·계정 바인딩은 붙이지 않는다(ADR-27, 40 §1·§2는 구현만 되고 미사용).
+// push·PR/MR 버튼은 **아예 렌더하지 않는다**(ADR-27) — disabled로도 남기지
+// 않는다. 계정 칩(`[계정: gh-work ▾]`)도 마찬가지로 없다.
 //
 // 화면 자체는 새로 만들지 않는다: 2.0 코드 뷰어의 git 탭 렌더러(git.js·diff.js)를
 // "어디에 그릴지"만 인자로 받게 바꿔서 그대로 쓴다. 같은 화면을 두 벌 만들면
@@ -18,7 +18,6 @@ import { renderFileDiff } from './diff.js';
 import { _viewerState } from './state.js';
 
 const PANEL_ID = 'vt-dock-scm';
-const RO_HINT = '2.1.1에서 열립니다 — 지금은 읽기 전용입니다';
 
 /** 대상 저장소 = 활성 페인의 워크트리(30) 또는 세션 cwd. 둘 다 없으면 뷰어 루트. */
 async function _currentRepo() {
@@ -71,25 +70,7 @@ function _renderHead(headEl, repo, d) {
     if (d.files && d.files.length) left.appendChild(_el('span', 'vt-scm-count', `파일 ${d.files.length}`));
   }
   headEl.appendChild(left);
-
-  // 계정 칩 — 40 §1의 계정 저장소가 2.1.1이라 지금은 자리만 잡는다.
-  const acct = _el('button', 'vt-scm-account', '계정 —');
-  acct.type = 'button';
-  acct.disabled = true;
-  acct.title = RO_HINT;
-  headEl.appendChild(acct);
-}
-
-function _footerEl() {
-  const foot = _el('div', 'vt-scm-foot');
-  for (const label of ['커밋', 'push', 'PR 만들기']) {
-    const b = _el('button', 'vt-pt-btn', label);
-    b.type = 'button';
-    b.disabled = true;
-    b.title = RO_HINT;
-    foot.appendChild(b);
-  }
-  return foot;
+  // 계정 칩 없음(ADR-27) — 40 §1의 계정 저장소는 구현만 되고 dock에 연결하지 않는다.
 }
 
 export async function showScm() {
@@ -104,8 +85,17 @@ export async function showScm() {
 
   const body = panel.body;
   const headEl = panel.el.querySelector('#vt-scm-head');
-  // 버튼 줄은 body 바깥(카드 맨 아래) — 목록을 스크롤해도 따라다니지 않게.
-  panel.el.querySelector('.vt-viewer-card').appendChild(_footerEl());
+
+  // 파일을 뷰어 페인(N35 §6 리프 타입 viewer)으로 연다. entry.file은 저장소
+  // 상대경로라 repo(절대경로)와 합쳐야 /api/fs/*(fsguard)가 받는 절대경로가
+  // 된다. window.openFileInPane은 viewer-lazy.js가 다는 전역 브리지 —
+  // dock 청크(panels.js)에서 app.js의 store.js를 정적 import할 수 없어서
+  // (ADR-26) 이 저장소 관행대로 브리지를 쓴다.
+  const openInViewer = (repo, file) => {
+    if (typeof window.openFileInPane !== 'function' || !repo || !file) return;
+    const abs = `${repo.replace(/\/+$/, '')}/${file}`;
+    window.openFileInPane(abs);
+  };
 
   const paint = async () => {
     const repo = await _currentRepo();
@@ -116,8 +106,9 @@ export async function showScm() {
     }
     const back = () => paint();
     const d = await renderGitStatus(body, repo, {
-      readOnly: true,
+      readOnly: false,
       onFile: (file, staged) => renderFileDiff(body, repo, file, staged, { onBack: back }),
+      onOpenFile: (file) => openInViewer(repo, file),
       onCommit: (sha) => renderCommit(body, repo, sha, {
         onBack: back,
         onFile: (file) => renderCommitFileDiff(body, repo, sha, file, {
