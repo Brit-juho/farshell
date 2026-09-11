@@ -23,6 +23,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | DELETE | `/api/sessions/{id}` | Delete a session |
 | PATCH | `/api/sessions/{id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
 | POST | `/api/sessions/{id}/keys` | Write text straight into the PTY (JSON: text) — same privilege as typing in the terminal WS. 404 for an unknown session. Used by the mobile fleet home's inline approval buttons (N38) |
+| GET | `/api/sessions/{id}/scrollback[?before=&limit=]` | N13 — "load more" from the persisted scrollback log (only has data when `scrollback.persist` is on). `data_b64`-encoded, paginated newest→oldest via `next_before` |
 | POST | `/api/watch/{id}` | Toggle output watching ON/OFF (JSON: enabled, timeout) |
 
 ## tmux
@@ -182,6 +183,7 @@ Public download entry point (not under the api prefix, and not behind the usual 
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel/version, etc.) |
+| GET | `/api/scrollback/usage` | N13 — whether persistence is on + total disk bytes used by `~/.vt/scrollback/` (settings screen) |
 | GET | `/api/workspace` | Fetch workspace sync state (tabs/UI state) |
 | PUT | `/api/workspace` | Save workspace state |
 | GET | `/api/device-settings` | Fetch this device's settings (N3 — scoped by the `vt_device` cookie, `local` without it) |

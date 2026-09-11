@@ -23,6 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import auth
 import file_store
 import network_access
+import scrollback_persist
 import tunnel
 from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
@@ -302,15 +303,20 @@ async def lifespan(_app: FastAPI):
     await asyncio.to_thread(file_store.reconcile_orphans)
     await asyncio.to_thread(file_store.cleanup)
     files_cleanup_task = asyncio.create_task(_file_store_cleanup_loop())
+    # N13 — 스크롤백 영속 로그도 같은 6시간 주기로 7일 보관 정리(scrollback_persist.py).
+    scrollback_cleanup_task = asyncio.create_task(_scrollback_cleanup_loop())
     try:
         yield
     finally:
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
+        scrollback_cleanup_task.cancel()
         with suppress(asyncio.CancelledError):
             await stt_idle_task
         with suppress(asyncio.CancelledError):
             await files_cleanup_task
+        with suppress(asyncio.CancelledError):
+            await scrollback_cleanup_task
         output_watcher.stop()
         pty_mgr.destroy_all()
 
@@ -322,6 +328,15 @@ async def _file_store_cleanup_loop() -> None:
             await asyncio.to_thread(file_store.cleanup)
         except Exception as e:
             logger.warning(f"file_store 주기 정리 실패: {e}")
+
+
+async def _scrollback_cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(file_store.CLEANUP_INTERVAL_SECONDS)
+        try:
+            await asyncio.to_thread(scrollback_persist.cleanup_old)
+        except Exception as e:
+            logger.warning(f"scrollback_persist 주기 정리 실패: {e}")
 
 
 # ---------------------------------------------------------------------------

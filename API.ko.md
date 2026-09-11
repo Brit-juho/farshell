@@ -20,6 +20,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | DELETE | `/api/sessions/{id}` | 세션 삭제 |
 | PATCH | `/api/sessions/{id}` | 세션 이름 변경 (JSON: name) — tmux 세션명도 함께 변경(영숫자/dash/underscore만) |
 | POST | `/api/sessions/{id}/keys` | PTY에 텍스트를 직접 써 넣는다 (JSON: text) — 터미널 WS 타이핑과 동급 권한. 존재하지 않는 세션은 404. 모바일 플릿 홈의 인라인 승인 버튼이 쓴다(N38) |
+| GET | `/api/sessions/{id}/scrollback[?before=&limit=]` | N13 — 영속 스크롤백 로그에서 "더 불러오기"(`scrollback.persist` 켰을 때만 데이터 있음). `data_b64` 인코딩, `next_before`로 최신→과거 페이지네이션 |
 | POST | `/api/watch/{id}` | 출력 감시 ON/OFF (JSON: enabled, timeout) |
 
 ## tmux
@@ -178,6 +179,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
 | GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널/버전 등) |
+| GET | `/api/scrollback/usage` | N13 — 영속화 켜짐 여부 + `~/.vt/scrollback/` 전체 디스크 사용량(설정 화면용) |
 | GET | `/api/workspace` | 워크스페이스 동기화 조회 (탭/UI 상태) |
 | PUT | `/api/workspace` | 워크스페이스 상태 저장 |
 | GET | `/api/device-settings` | 이 기기의 설정 조회 (N3 — `vt_device` 쿠키로 기기 식별, 없으면 `local`) |
