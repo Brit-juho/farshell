@@ -2270,10 +2270,26 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-wgrail-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--mono); color:var(--txt); }
 .vt-wgrail-diff { flex:none; font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
 .vt-wgrail-row-sub { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* N8(30-worktree.md §4) — 행이 속한 워크트리 라벨(repoName[/branch]). 워크트리에
-   안 속한 세션(「기타」)은 이 배지 자체가 없다(worktreeLabel이 null). */
-.vt-wgrail-worktree { color:var(--txt-dim, var(--sub)); }
-.vt-wgrail-sep { color:var(--sub); }
+/* N38(70-mobile.md §2)과 같은 패턴 — waiting 상태에서 감지된 질문 1줄 미리보기
+   (10-shell-layout.md §5 목업 "? Allow edit to legacy.css?"). */
+.vt-wgrail-question { font:400 var(--fs-3xs) var(--mono); color:var(--warn); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* N8/N44(30-worktree.md §4) — "「기타」 그룹: ... 색점 없음". 워크트리 행의
+   막대는 위 tone-* 상태색을 그대로 쓴다(저장소 해시 색점 램프는 20-design-system.md
+   §5(O2)가 아직 6스킨 토큰(`--color-hash-1..8`)을 정의하지 않아 보류 — result 보고 참고). */
+.vt-wgrail-bar.kind-session { background:transparent; }
+/* 30 §4: "워크트리는 있는데 세션이 없는 행: 흐리게, 클릭 → open." */
+.vt-wgrail-row.no-session { opacity:.55; }
+.vt-wgrail-row.no-session:hover { opacity:.8; }
+
+.vt-wgrail-empty {
+  padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
+  color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;
+}
+.vt-wgrail-empty-new {
+  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm);
+  color:var(--txt); font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); cursor:pointer;
+}
+.vt-wgrail-empty-new:hover { background:var(--menu-hover); }
 
 /* 접힘: 마크·색점만(§5 "48px 접힘: 마크+색점+dot만") — 이름·상태 문장·그룹
    헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로. */
@@ -2302,6 +2318,62 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 }
 #vt-wgrail.collapsed .vt-wgrail-resizer { display:none; }
 .vt-wgrail-resizer.dragging { background:var(--acc); opacity:.4; }
+
+/* ── N44 — 워크트리 만들기 다이얼로그(30-worktree.md §3) ────────────────────
+   껍데기는 .vt-viewer-backdrop/.vt-viewer-card(코드 뷰어·가이드·pane picker와
+   공유)를 그대로 쓴다 — 폭만 좁힌다. 안쪽 폼 레이아웃만 새로 정의. */
+.vt-wtd-card { max-width:440px; max-height:min(88vh,720px); }
+.vt-wtd-head {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); flex:none;
+}
+.vt-wtd-title { flex:1; font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-wtd-x {
+  flex:none; width:24px; height:24px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--sub); cursor:pointer; font:400 var(--fs-base) var(--ui); line-height:1;
+}
+.vt-wtd-x:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wtd-body {
+  flex:1 1 auto; overflow-y:auto; padding:calc(var(--spacing) * 3);
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 2);
+}
+.vt-wtd-row { display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-width:0; }
+.vt-wtd-label { flex:0 0 84px; font:500 var(--fs-xs) var(--mono); color:var(--sub); }
+.vt-wtd-input, .vt-wtd-select {
+  flex:1; min-width:0; padding:calc(var(--spacing) * 1.25) calc(var(--spacing) * 1.75);
+  font:400 var(--fs-xs) var(--mono); color:var(--txt); background:var(--bar);
+  border:1px solid var(--line); border-radius:var(--radius-sm); outline:none;
+}
+.vt-wtd-input:focus, .vt-wtd-select:focus { border-color:var(--acc); }
+.vt-wtd-input-narrow { flex:0 0 120px; }
+.vt-wtd-section-title {
+  font:600 var(--fs-3xs) var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--sub);
+  margin-top:calc(var(--spacing) * 1);
+}
+.vt-wtd-warn {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2); font:400 var(--fs-2xs) var(--mono);
+  color:var(--warn); background:color-mix(in srgb, var(--warn) 12%, var(--bar)); border-radius:var(--radius-sm);
+}
+.vt-wtd-warn-fix {
+  flex:none; margin-left:auto; background:transparent; border:1px solid currentColor; border-radius:var(--radius-sm);
+  color:inherit; font:500 var(--fs-3xs) var(--mono); padding:calc(var(--spacing) * .5) calc(var(--spacing) * 1.5); cursor:pointer;
+}
+.vt-wtd-warn-fix:hover { background:color-mix(in srgb, var(--warn) 20%, transparent); }
+.vt-wtd-error { font:400 var(--fs-2xs) var(--mono); color:var(--err); }
+.vt-wtd-foot {
+  display:flex; justify-content:flex-end; gap:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-top:1px solid var(--line); flex:none;
+}
+.vt-wtd-cancel, .vt-wtd-submit {
+  padding:calc(var(--spacing) * 1.25) calc(var(--spacing) * 2.5); border-radius:var(--radius-sm);
+  font:500 var(--fs-xs) var(--mono); cursor:pointer;
+}
+.vt-wtd-cancel { background:transparent; border:1px solid var(--line); color:var(--sub); }
+.vt-wtd-cancel:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wtd-submit { background:var(--acc); border:1px solid var(--acc); color:var(--win); }
+.vt-wtd-submit:hover { filter:brightness(1.08); }
+.vt-wtd-submit:disabled { opacity:.5; cursor:not-allowed; filter:none; }
 
 /* ── N35 §6 — dock 392px ───────────────────────────────────────────────────
    문서가 정한 프레임 책임(탭 전환·접기·폭 리사이저 320~560·기기 스코프 저장)만

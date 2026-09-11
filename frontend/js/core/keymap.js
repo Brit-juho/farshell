@@ -48,6 +48,12 @@ const ACTIONS = [
   // 수 있으므로 **기본값을 `Mod+Shift+W`로** 둔다(조용히 안 되는 것이 최악).
   { id: 'paneClose',  def: 'Mod+Shift+W',  label: 'pane 닫기' },
   { id: 'railToggle', def: 'Mod+B',        label: '사이드바 토글' },
+  // N44(30-worktree.md §3) — 워크트리 만들기. 문서 목업 값 그대로 등록만
+  // 해둔다: `Mod+Shift+N`이 OS/브라우저 단축키와 충돌하는지는 아직 사용자
+  // 환경에서 확인 전이다(90-verification.md §4-12 "물어볼 것"). 충돌이
+  // 확인되면 이 def만 바꾸면 된다 — 레지스트리에 있으므로 사용자도 설정
+  // 화면에서 직접 재배선할 수 있다.
+  { id: 'worktreeNew', def: 'Mod+Shift+N', label: '워크트리 만들기' },
 ];
 
 const BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
