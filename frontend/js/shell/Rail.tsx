@@ -14,6 +14,7 @@ import { wireRatioResizer } from '../layout/resizer.js';
 const SESSIONS_POLL_MS = 5000;   // tmux 목록(attached·cwd) — 자주 안 바뀌어도 짧게, 값싸다.
 const STATUS_POLL_MS = 4000;     // since/tool 보강 — 서버가 아직 질문 텍스트를 안 줘서(2.1.0 gap) 상태 문장 갱신용.
 const GIT_CACHE_MS = 60000;      // §5 원문: "60초 캐시".
+const WORKTREES_POLL_MS = 8000;  // N8(30-worktree.md) — 서버가 이미 5초 캐시라 자주 불러도 싸다.
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
 // N3(60-settings-palette.md §1)가 생겨 device-settings 정식 스토어로
 // 옮겼다 — 이전엔 여기 주석이 "N3 전이라 임시로 localStorage"였다. core/
@@ -62,6 +63,17 @@ async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, AgentDe
   return out;
 }
 
+// N8(30-worktree.md §4) — 세션(tmux 이름) → 소속 워크트리 라벨. 어떤 워크트리에도
+// 없는 세션은 이 맵에 안 잡히고, rows()에서 null(「기타」)로 남는다.
+function worktreeLabelMap(worktrees: any[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const w of worktrees) {
+    const label = w.isMain ? w.repoName : `${w.repoName}/${w.branch}`;
+    for (const sess of w.sessions || []) out[sess] = label;
+  }
+  return out;
+}
+
 const _gitCache = new Map<string, { at: number; files: number | null }>();
 async function fetchDiffCount(deps: RailDeps, cwd: string): Promise<number | null> {
   const hit = _gitCache.get(cwd);
@@ -90,7 +102,13 @@ function Row(props: { row: RailRow; active: boolean; onOpen: (e: MouseEvent) => 
             <span class="vt-wgrail-diff">파일 {props.row.diffFiles}</span>
           </Show>
         </div>
-        <div class="vt-wgrail-row-sub">{props.row.statusSentence}</div>
+        <div class="vt-wgrail-row-sub">
+          <Show when={props.row.worktreeLabel}>
+            <span class="vt-wgrail-worktree">{props.row.worktreeLabel}</span>
+            <span class="vt-wgrail-sep"> · </span>
+          </Show>
+          {props.row.statusSentence}
+        </div>
       </div>
     </div>
   );
@@ -117,6 +135,7 @@ function Rail(props: { deps: RailDeps }) {
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
+  const [worktrees, setWorktrees] = createSignal<any[]>([]);
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
   const [collapsed, setCollapsed] = createSignal(Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY)));
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; sessionId: string } | null>(null);
@@ -127,12 +146,18 @@ function Rail(props: { deps: RailDeps }) {
     if (list) setTmuxSessions(list);
   };
   const refreshAgent = async () => setAgentDetails(await fetchAgentDetails(props.deps));
+  const refreshWorktrees = async () => {
+    const data = await safeFetch<{ worktrees?: any[] }>(props.deps, '/api/worktrees');
+    setWorktrees(data?.worktrees || []);
+  };
 
   refreshSessions();
   refreshAgent();
+  refreshWorktrees();
   const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_POLL_MS);
   const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
-  onCleanup(() => { clearInterval(t1); clearInterval(t2); });
+  const t3 = setInterval(() => { if (!document.hidden) refreshWorktrees(); }, WORKTREES_POLL_MS);
+  onCleanup(() => { clearInterval(t1); clearInterval(t2); clearInterval(t3); });
 
   // 세션 스토어(sessionsVersion)가 바뀔 때마다(탭 추가/삭제/전환) 실제 목록을
   // 다시 구성한다 — window.allSessions()가 진짜 웹 세션 맵의 단일 출처다.
@@ -142,6 +167,7 @@ function Rail(props: { deps: RailDeps }) {
     const all = w.allSessions ? w.allSessions() : {};
     const byName: Record<string, any> = {};
     for (const t of tmuxSessions()) byName[t.name] = t;
+    const wtLabels = worktreeLabelMap(worktrees());
 
     const out: RailRowInput[] = [];
     for (const [sid, s] of Object.entries<any>(all)) {
@@ -158,6 +184,7 @@ function Rail(props: { deps: RailDeps }) {
         since: detail?.since ?? null,
         tool: detail?.tool ?? null,
         diffFiles: cwd ? (_gitCache.get(cwd)?.files ?? null) : null,
+        worktreeLabel: tmuxName ? (wtLabels[tmuxName] ?? null) : null,
       });
       // git status는 별도로 비동기 채운다(캐시 60초) — 도착하면 diffTick으로 재렌더.
       if (cwd && (!_gitCache.has(cwd) || Date.now() - (_gitCache.get(cwd)?.at ?? 0) >= GIT_CACHE_MS)) {
