@@ -129,3 +129,51 @@ def test_legacy_items_migrate_to_global_scope():
     item = snippet_store.list_items()[0]
     assert item["scope"] == snippet_store.SCOPE_GLOBAL
     assert item["project"] is None
+
+
+# ── 실행 방식(mode) — 실사용 요청(2026-09-11) ───────────────────────────────
+
+def test_add_defaults_to_paste_mode():
+    r = snippet_store.add("echo hi")
+    assert r["item"]["mode"] == snippet_store.MODE_PASTE
+
+
+def test_add_with_new_section_mode():
+    r = snippet_store.add("echo hi", mode=snippet_store.MODE_NEW_SECTION)
+    assert r["item"]["mode"] == snippet_store.MODE_NEW_SECTION
+
+
+def test_add_with_invalid_mode_falls_back_to_default():
+    r = snippet_store.add("echo hi", mode="run-and-explode")
+    assert r["item"]["mode"] == snippet_store.MODE_PASTE
+
+
+def test_set_mode_changes_existing_item():
+    r = snippet_store.add("echo hi")
+    item_id = r["item"]["id"]
+    r2 = snippet_store.set_mode(item_id, snippet_store.MODE_NEW_SECTION)
+    assert r2["ok"] and r2["item"]["mode"] == snippet_store.MODE_NEW_SECTION
+    assert snippet_store.list_items()[0]["mode"] == snippet_store.MODE_NEW_SECTION
+
+
+def test_set_mode_rejects_unknown_value():
+    r = snippet_store.add("echo hi")
+    r2 = snippet_store.set_mode(r["item"]["id"], "teleport")
+    assert not r2["ok"] and r2["error"] == "bad_mode"
+
+
+def test_set_mode_not_found():
+    r = snippet_store.set_mode("no-such-id", snippet_store.MODE_PASTE)
+    assert not r["ok"] and r["error"] == "not_found"
+
+
+def test_legacy_items_without_mode_default_to_paste():
+    """구 snippets.json(mode 없음)도 안전한 기본값(paste)으로 채워져야 한다."""
+    snippet_store.add("a")
+    p = Path(os.environ["VT_STATE_DIR"]).expanduser() / "snippets.json"
+    import json
+    raw = json.loads(p.read_text())
+    del raw[0]["mode"]
+    p.write_text(json.dumps(raw))
+    item = snippet_store.list_items()[0]
+    assert item["mode"] == snippet_store.MODE_PASTE

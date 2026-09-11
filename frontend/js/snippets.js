@@ -8,10 +8,12 @@
 //      목록은 두 탭(프로젝트/전체)으로 필터한다. project 키(저장소 top 경로)
 //      판정은 서버(snippet_store.resolve_project_key)가 한다 — 클라이언트가
 //      git 판정을 중복 구현하지 않는다.
-//   2. 실행처 [여기서]/[새 섹션] — 여기서는 기존 sendToPty 그대로, 새 섹션은
-//      활성 페인을 오른쪽으로 분할해 같은 cwd의 새 tmux 세션을 만들고 그
-//      PTY에 넣는다. 워크트리 모델이 없는 2.1.0에서도 cwd 상속만으로 성립
-//      한다(문서 원문).
+//   2. 실행 방식(mode, 실사용 요청 2026-09-11) — 스니펫마다 저장할 때 하나를
+//      고른다: `paste`(지금 세션에 텍스트만 넣고 Enter는 안 누름 — 기본값,
+//      값 채우고 확인 후 실행해야 하는 것들) / `new_section`(활성 페인을
+//      오른쪽으로 분할해 같은 cwd의 새 tmux 세션을 만들고 바로 Enter까지).
+//      행마다 버튼 두 개를 매번 고르던 걸, 저장 시 한 번 고르고 그 뒤로는
+//      버튼 하나로 고정한다 — 나중에 바꾸고 싶으면 행의 모드 전환 버튼으로.
 //
 // 패널 껍데기 · fetch · 닫기 뼈대는 panels/panel.js·core/api.js가 공유한다.
 // F5에서 classic script에서 ES 모듈로 전환.
@@ -39,7 +41,17 @@ function showSnippets() {
           </div>
           <div class="vt-q-compose">
             <input id="vt-sn-label" type="text" placeholder="이름 (선택)" maxlength="60" />
-            <textarea id="vt-sn-input" rows="3" placeholder="저장할 지시문/명령… (여러 줄이면 줄마다 Enter로 실행됩니다)"></textarea>
+            <textarea id="vt-sn-input" rows="3" placeholder="저장할 지시문/명령…"></textarea>
+            <div class="vt-sn-mode-choice" role="radiogroup" aria-label="실행 방식">
+              <label class="vt-sn-mode-opt">
+                <input type="radio" name="vt-sn-mode" value="paste" checked />
+                붙여넣기만 <span class="vt-q-sub">Enter는 안 누름 — 값 채우고 확인 후 직접 실행</span>
+              </label>
+              <label class="vt-sn-mode-opt">
+                <input type="radio" name="vt-sn-mode" value="new_section" />
+                새 섹션 자동 실행 <span class="vt-q-sub">오른쪽에 새 세션을 열고 바로 Enter까지</span>
+              </label>
+            </div>
             <div class="vt-q-compose-row">
               <label class="vt-sn-save-scope" id="vt-sn-save-scope-label" title="현재 활성 세션의 저장소에만 저장">
                 <input type="checkbox" id="vt-sn-save-project" /> 이 프로젝트에만
@@ -150,21 +162,33 @@ function showSnippets() {
 
         const act = document.createElement('span');
         act.className = 'vt-pt-actions';
-        const runHere = document.createElement('button');
-        runHere.className = 'vt-pt-btn';
-        runHere.textContent = '여기서';
-        runHere.title = '지금 보고 있는 세션에 바로 입력';
-        runHere.onclick = () => runSnippet(it);
-        const runNew = document.createElement('button');
-        runNew.className = 'vt-pt-btn';
-        runNew.textContent = '새 섹션';
-        runNew.title = '오른쪽으로 분할해 같은 위치의 새 세션에서 실행';
-        runNew.onclick = () => runSnippetNewSection(it);
+        const isPaste = it.mode !== 'new_section';   // 구형(모드 없는) 항목도 paste로 안전하게 처리
+
+        const run = document.createElement('button');
+        run.className = 'vt-pt-btn';
+        if (isPaste) {
+          run.textContent = '붙여넣기';
+          run.title = '지금 보고 있는 세션에 텍스트만 입력 — Enter는 직접';
+          run.onclick = () => pasteSnippet(it);
+        } else {
+          run.textContent = '새 섹션 실행';
+          run.title = '오른쪽으로 분할해 같은 위치의 새 세션에서 바로 실행';
+          run.onclick = () => runSnippetNewSection(it);
+        }
+
+        // 저장할 때 고른 모드를 나중에 바꿀 수 있어야 "관리"다 — 매번 지우고
+        // 다시 만들게 하지 않는다.
+        const toggle = document.createElement('button');
+        toggle.className = 'vt-pt-btn vt-sn-mode-toggle';
+        toggle.title = isPaste ? '새 섹션 자동 실행으로 바꾸기' : '붙여넣기만으로 바꾸기';
+        toggle.textContent = isPaste ? '⇥ 자동으로' : '⇤ 붙여넣기로';
+        toggle.onclick = () => toggleSnippetMode(it, isPaste ? 'new_section' : 'paste');
+
         const rm = document.createElement('button');
         rm.className = 'vt-pt-btn danger';
         rm.textContent = '삭제';
         rm.onclick = () => removeSnippet(it.id);
-        act.appendChild(runHere); act.appendChild(runNew); act.appendChild(rm);
+        act.appendChild(run); act.appendChild(toggle); act.appendChild(rm);
 
         row.appendChild(meta); row.appendChild(act);
         list.appendChild(row);
@@ -177,6 +201,7 @@ function showSnippets() {
       const labelEl = document.getElementById('vt-sn-label');
       const inputEl = document.getElementById('vt-sn-input');
       const projectCk = document.getElementById('vt-sn-save-project');
+      const modeEl = document.querySelector('input[name="vt-sn-mode"]:checked');
       const text = (inputEl.value || '');
       if (!text.trim()) return;
       const wantProject = !!(projectCk && projectCk.checked);
@@ -189,6 +214,7 @@ function showSnippets() {
             text, label: labelEl.value,
             scope: wantProject ? 'project' : 'global',
             cwd,
+            mode: (modeEl && modeEl.value) || 'paste',
           }),
         });
         labelEl.value = '';
@@ -205,12 +231,26 @@ function showSnippets() {
       refreshSnippets();
     }
 
-    // 큐에 넣지 않고 지금 활성 세션에 바로 주입 — iTerm2 Snippets를 클릭하는 것과 동일.
-    function runSnippet(it) {
+    async function toggleSnippetMode(it, newMode) {
+      try {
+        await vtFetch(`/api/snippets/${it.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: newMode }),
+        });
+      } catch (e) {
+        showToast(`변경 실패: ${e.message}`);
+        return;
+      }
+      refreshSnippets();
+    }
+
+    // 붙여넣기만 — 지금 보고 있는 세션에 텍스트를 넣기만 하고 Enter는 안
+    // 누른다. 값을 끼워 넣거나 실행 전에 확인해야 하는 스니펫용(경로·플래그가
+    // 매번 달라지는 것 등) — 자동 실행되면 오히려 사고가 난다.
+    function pasteSnippet(it) {
       if (!activeSession()) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
-      let text = it.text;
-      if (!text.endsWith('\n')) text += '\n';   // 마지막 줄도 Enter로 실행되게.
-      sendToPty(activeSessionId(), text);
+      sendToPty(activeSessionId(), it.text);   // 끝에 \n을 붙이지 않는다 — 실행하지 않는다.
       closeSnippets();
     }
 
