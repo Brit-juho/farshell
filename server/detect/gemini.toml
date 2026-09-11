@@ -1,5 +1,34 @@
-# gemini — 패턴 미조사. 채우면 그 즉시 waiting 감지가 켜진다(서버 재시작 불필요).
-# 형식은 claude.toml 참고. 빈 채로 두면 이 에이전트는 감지하지 않는다.
+# Gemini CLI (google-gemini/gemini-cli) — 승인/입력 대기 프롬프트 패턴.
+#
+# 근거: google-gemini/gemini-cli 공식 저장소 소스(React/Ink TUI), 2026-09-11 조사,
+# HEAD 커밋 ed2ac40d.
+#   - enter: packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx
+#     https://github.com/google-gemini/gemini-cli/blob/ed2ac40df67a319bf348bd7e3d10494696b31b38/packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx#L701-L748
+#     https://github.com/google-gemini/gemini-cli/blob/ed2ac40df67a319bf348bd7e3d10494696b31b38/packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx#L603-L605
+#     확인 대화상자가 종류별로 렌더링하는 고정 `question` 문구:
+#       - exec(쉘 명령 실행):        "Allow execution of" + [도구명] + "?"
+#       - edit(파일 수정 diff):       "Apply this change?"
+#     ("Allow execution of"만 리터럴로 쓴다 — 뒤에 명령어 이름이 가변으로 붙는다.)
+#   - exit: packages/cli/src/ui/components/LoadingIndicator.tsx
+#     https://github.com/google-gemini/gemini-cli/blob/ed2ac40df67a319bf348bd7e3d10494696b31b38/packages/cli/src/ui/components/LoadingIndicator.tsx#L74-L77
+#     `streamingState === StreamingState.Responding`일 때만(=확인 대화상자가 떠
+#     있는 동안은 안 뜬다) 상태줄에 `(esc to cancel, Ns)`를 렌더링 — 승인 대기가
+#     풀리고 실제로 작업이 재개됐다는 신호로 쓸 수 있는 고정 접두사.
+#
+# 못 채운 것: 이슈 트래커(#14561)에 있는 "1. Yes, allow once / 2. Yes, allow
+# always / 3. No, suggest changes" 형태의 번호 선택지는 실제 소스
+# (RadioButtonSelect.tsx)에서 숫자 접두사 렌더링을 확인하지 못해 `options`
+# 정규식은 넣지 않는다 — 이슈 본문은 사용자가 요약한 것일 수 있어 소스보다
+# 신뢰도가 낮다. 실제 라벨은 "Allow once" / "Allow for this session" /
+# "No, suggest changes (esc)" (같은 파일 L288-L372)이지만 숫자 없이 화살표
+# 커서로 고르는 형태일 가능성이 있어 확정하지 않았다.
 name = "gemini"
-enter = []
-exit = []
+
+enter = [
+  "Allow execution of",
+  "Apply this change?",
+]
+
+exit = [
+  "esc to cancel",
+]

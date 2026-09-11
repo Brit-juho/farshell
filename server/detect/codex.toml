@@ -1,5 +1,31 @@
-# codex — 패턴 미조사. 채우면 그 즉시 waiting 감지가 켜진다(서버 재시작 불필요).
-# 형식은 claude.toml 참고. 빈 채로 두면 이 에이전트는 감지하지 않는다.
+# OpenAI Codex CLI — 승인/입력 대기 프롬프트 패턴.
+#
+# 근거: openai/codex 공식 저장소 소스(Rust TUI), 2026-09-11 조사, HEAD 커밋 40b0409a.
+#   - enter: codex-rs/tui/src/bottom_pane/approval_overlay.rs
+#     https://github.com/openai/codex/blob/40b0409aa1816d2a99935cbe77da66505c05c2a0/codex-rs/tui/src/bottom_pane/approval_overlay.rs#L255-L291
+#     `build_options()`가 승인 요청 종류별로 만드는 고정 문구(title) 그대로:
+#       - Exec: "Would you like to run the following command?"
+#       - ApplyPatch: "Would you like to make the following edits?"
+#       - Permissions: "Would you like to grant these permissions?"
+#   - exit: codex-rs/tui/src/status_indicator_widget.rs
+#     https://github.com/openai/codex/blob/40b0409aa1816d2a99935cbe77da66505c05c2a0/codex-rs/tui/src/status_indicator_widget.rs#L246-L259
+#     작업 중 상태줄에 계속 떠 있는 힌트. 테스트가 리터럴로 고정해둔 문자열
+#     (`assert!(line.starts_with("Working (0s • esc to interrupt)"))`, 같은 파일
+#     L441/L489) — Claude Code와 동일 문구를 codex도 그대로 쓴다(우연이 아니라
+#     둘 다 "esc"를 인터럽트 키로 쓰는 컨벤션이 같다).
+#
+# 못 채운 것: 번호 선택지(`options`) 렌더링 방식을 소스에서 확인하지 못했다
+# (ListSelectionView가 커서 하이라이트만 쓰는지 숫자 접두사도 쓰는지 불명) —
+# 추측해서 넣지 않는다. 모바일 인라인 승인은 이 CLI에서 당장은 번호 버튼 없이
+# enter/exit만 동작한다.
 name = "codex"
-enter = []
-exit = []
+
+enter = [
+  "Would you like to run the following command?",
+  "Would you like to make the following edits?",
+  "Would you like to grant these permissions?",
+]
+
+exit = [
+  "esc to interrupt",
+]

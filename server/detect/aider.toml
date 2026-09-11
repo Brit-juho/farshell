@@ -1,5 +1,31 @@
-# aider — 패턴 미조사. 채우면 그 즉시 waiting 감지가 켜진다(서버 재시작 불필요).
-# 형식은 claude.toml 참고. 빈 채로 두면 이 에이전트는 감지하지 않는다.
+# Aider (Aider-AI/aider) — 승인/입력 대기 프롬프트 패턴.
+#
+# 근거: Aider-AI/aider 공식 저장소 소스(prompt_toolkit 기반 REPL), 2026-09-11 조사,
+# HEAD 커밋 5dc9490b.
+#   - enter: aider/io.py `InputOutput.confirm_ask()`
+#     https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/io.py#L807-L845
+#     모든 y/n 확인 프롬프트가 예외 없이 이 옵션 접미사를 붙인다:
+#       `question += " (Y)es/(N)o" [+ "/(A)ll" + "/(S)kip all" + "/(D)on't ask again"]`
+#     그래서 "(Y)es/(N)o"는 aider의 모든 확인 프롬프트에 공통으로 찍히는 고정
+#     리터럴이다(정확한 대소문자·괄호까지 소스 그대로).
+#     실제 호출부(aider/coders/base_coder.py)의 대표 질문 두 개도 함께 넣는다
+#     (변수 보간이 없는 고정 문구만 골랐다):
+#       https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/base_coder.py#L2226-L2229
+#       https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/base_coder.py#L2456-L2464
+#
+# 못 채운 것 — exit: Aider는 Claude Code/Codex/Gemini CLI처럼 상시 렌더링되는
+# 풀스크린 상태줄(ratatui/ink)이 없다. confirm_ask()는 답변을 받으면 그 줄을
+# 채팅 히스토리 파일에만 적고(`self.append_chat_history`), 화면에는 사용자가
+# 실제로 입력한 한두 글자(y/n/a/s/d)만 에코된다 — 오탐 없이 매칭할 만큼 긴
+# 고정 문구가 없어 추측해서 넣지 않았다. 대신 다른 세 가지 해제 경로(사용자
+# 입력·hook stop·TTL 120초, server/agent_prompt_detect.py 상단 docstring)가
+# 그대로 작동한다 — exit 패턴이 비어 있어도 waiting이 영구히 남지는 않는다.
 name = "aider"
-enter = []
+
+enter = [
+  "(Y)es/(N)o",
+  "Allow edits to file that has not been added to the chat?",
+  "Run shell command?",
+]
+
 exit = []

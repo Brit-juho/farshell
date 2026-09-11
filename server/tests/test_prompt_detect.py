@@ -275,3 +275,87 @@ def test_get_prompt_clears_after_user_input(det):
     d.feed("s1", b"Do you want to proceed?\r\n 1. Yes\r\n 2. No\r\n")
     d.on_user_input("s1")
     assert d.get_prompt("s1") == (None, None)
+
+
+# ── N9/N45 — codex/gemini/aider 실제 프롬프트 문구 회귀 테스트 ──────────────
+# 문구 출처는 server/detect/{codex,gemini,aider}.toml 상단 주석 참고
+# (openai/codex, google-gemini/gemini-cli, Aider-AI/aider 공식 저장소 소스 확인).
+
+def test_codex_patterns_load_from_toml():
+    pats = D.load_patterns(force=True)
+    assert "codex" in pats
+    assert any(
+        b"Would you like to run the following command?" == p
+        for p in pats["codex"]["enter"]
+    )
+    assert any(b"esc to interrupt" == p for p in pats["codex"]["exit"])
+
+
+def test_codex_exec_prompt_sets_waiting(det):
+    d, events = det
+    d.feed("s1", b"Would you like to run the following command?\r\n> npm test\r\n")
+    assert d.is_waiting("s1") is True
+    assert events == [("s1", True)]
+
+
+def test_codex_status_line_clears_waiting(det):
+    """codex 상태줄 `Working (Ns • esc to interrupt)` — 작업 재개 신호."""
+    d, _ = det
+    d.feed("s1", b"Would you like to make the following edits?")
+    d.feed("s1", b"\r\nWorking (2s \xe2\x80\xa2 esc to interrupt)")
+    assert d.is_waiting("s1") is False
+
+
+def test_gemini_patterns_load_from_toml():
+    pats = D.load_patterns(force=True)
+    assert "gemini" in pats
+    assert any(b"Allow execution of" == p for p in pats["gemini"]["enter"])
+    assert any(b"esc to cancel" == p for p in pats["gemini"]["exit"])
+
+
+def test_gemini_shell_confirmation_sets_waiting(det):
+    d, events = det
+    d.feed("s1", b"Allow execution of [Shell]?\r\n\xe2\x9d\xaf 1. Allow once\r\n")
+    assert d.is_waiting("s1") is True
+    assert events == [("s1", True)]
+
+
+def test_gemini_esc_to_cancel_clears_waiting(det):
+    d, _ = det
+    d.feed("s1", b"Apply this change?")
+    d.feed("s1", b"\r\nGenerating\xe2\x80\xa6 (esc to cancel, 3s)")
+    assert d.is_waiting("s1") is False
+
+
+def test_aider_patterns_load_from_toml():
+    pats = D.load_patterns(force=True)
+    assert "aider" in pats
+    assert any(b"(Y)es/(N)o" == p for p in pats["aider"]["enter"])
+    assert any(
+        b"Allow edits to file that has not been added to the chat?" == p
+        for p in pats["aider"]["enter"]
+    )
+    assert pats["aider"]["exit"] == [], "aider는 확인된 exit 문구가 없다 — 추측해서 채우지 않았다"
+
+
+def test_aider_confirm_ask_suffix_sets_waiting(det):
+    """aider의 모든 confirm_ask()는 예외 없이 이 접미사를 붙인다(aider/io.py)."""
+    d, events = det
+    d.feed("s1", b"Run shell command? (Y)es/(N)o [Yes]: ")
+    assert d.is_waiting("s1") is True
+    assert events == [("s1", True)]
+
+
+def test_aider_waiting_only_clears_via_user_input_or_ttl(det):
+    """aider는 exit 리터럴이 없다 — 풀스크린 상태줄이 없어서다(토큰 주석 참고).
+
+    빌드 로그가 아무리 흘러도 waiting은 저절로 안 풀린다. 실제 해제는
+    on_user_input(사람이 답함) 또는 TTL(agent_status 쪽 책임)로만 일어난다 —
+    이 감지기 레벨에서는 그게 맞는 동작이다.
+    """
+    d, _ = det
+    d.feed("s1", b"Allow edits to file that has not been added to the chat? (Y)es/(N)o [Yes]: ")
+    d.feed("s1", b"\r\nRunning tests...\r\nAll 42 tests passed\r\n")
+    assert d.is_waiting("s1") is True
+    d.on_user_input("s1")
+    assert d.is_waiting("s1") is False

@@ -58,12 +58,24 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
   텍스트(`_strip_ansi()` 결과)를 대상으로 매칭한다는 걸 가정하면 된다 —
   직접 이스케이프 시퀀스를 정규식에 넣을 필요는 없다.
 
-## codex/gemini/aider를 채우지 않는 이유(현재 상태)
+## codex/gemini/aider 채움 — 근거와 한계 (2026-09-11)
 
 2.1.1 계획(`80-multihost-agents.md` §2)은 이 세 CLI의 실제 출력 문구를
-**추측해서 넣지 말라**고 명시한다 — 틀린 패턴은 오탐(엉뚱할 때 waiting 표시)
-또는 미탐(진짜 승인 대기인데 못 잡음)으로 이어지고, 둘 다 사용자를 잘못
-가이드한다. 실제 CLI를 돌려서 나온 샘플 출력을 받은 뒤에만 채운다.
+**추측해서 넣지 말라**고 명시한다. 실제 CLI를 손으로 돌려 샘플을 받는 대신
+(사용자 승인하에) 각 CLI의 **공식 오픈소스 저장소 소스 코드**에서 리터럴
+문자열을 직접 확인해 채웠다 — 출처·커밋 해시는 각 toml 파일 상단 주석에 있다.
+
+| CLI | enter/exit | 근거 |
+|---|---|---|
+| `codex` | 채움 | `openai/codex` Rust TUI 소스(`approval_overlay.rs`, `status_indicator_widget.rs`) |
+| `gemini` | 채움 | `google-gemini/gemini-cli` TSX 소스(`ToolConfirmationMessage.tsx`, `LoadingIndicator.tsx`) |
+| `aider` | enter만 채움, exit 없음 | `Aider-AI/aider` 소스(`io.py`, `base_coder.py`) — 풀스크린 상태줄이 없어 안전한 exit 리터럴을 못 찾았다(추측 금지 원칙 유지) |
+
+**한계**: 소스 코드 확인이지 실제 터미널 렌더 확인이 아니다 — ANSI 코드·줄
+분할 방식까지 검증된 claude.toml만큼의 신뢰도는 아니다(`/api/agents/coverage`
+가 이 셋을 `trust: "mid"`로 보고하는 이유). 실제 세션에서 오탐/미탐이 보이면
+`fsh pane report`로 캡처해서 이 파일들을 고쳐라. 번호 선택지(`options`)는
+세 CLI 모두 렌더링 방식을 소스만으로 확신할 수 없어 비워뒀다.
 
 ## `fsh pane report`로 수동 주입해 테스트하기
 
