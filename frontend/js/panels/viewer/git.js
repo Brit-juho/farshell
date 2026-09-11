@@ -29,10 +29,13 @@ async function _gitAction(repo, path, files) {
 //
 // opts:
 //   readOnly  — +/−·커밋 버튼을 렌더는 하되 disabled + 사유 툴팁(40 §5)
-//   onFile(file, staged)  — 파일 행 클릭
+//   onFile(file, staged)  — 파일 행 클릭(인라인 diff)
 //   onCommit(sha)         — 커밋 행 클릭
+//   onOpenFile(file)       — 파일 행의 「뷰어」 버튼 클릭 — 뷰어 페인(N35 §6 리프
+//                            타입 viewer)으로 그 파일을 연다. 인라인 diff와 별개
+//                            동작이라 버튼을 따로 둔다(행 클릭은 diff를 덮지 않는다).
 
-const _RO_HINT = '2.1.1에서 열립니다 — 지금은 읽기 전용입니다';
+const _RO_HINT = '읽기 전용입니다';
 
 function _gitRowEl(repo, entry, staged, opts) {
   const row = document.createElement('div');
@@ -71,6 +74,21 @@ function _gitRowEl(repo, entry, staged, opts) {
   row.appendChild(btn);
   row.appendChild(badge);
   row.appendChild(name);
+
+  if (opts.onOpenFile) {
+    const openBtn = document.createElement('button');
+    openBtn.className = 'vt-vw-gopen';
+    openBtn.type = 'button';
+    openBtn.textContent = '뷰어';
+    openBtn.title = '뷰어 페인에서 파일 열기';
+    openBtn.setAttribute('aria-label', openBtn.title);
+    openBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      opts.onOpenFile(entry.file);
+    });
+    row.appendChild(openBtn);
+  }
+
   row.addEventListener('click', () => opts.onFile(entry.file, staged));
   return row;
 }
@@ -112,6 +130,7 @@ export async function renderGitStatus(container, repo, opts = {}) {
     readOnly: false,
     onFile: () => {},
     onCommit: () => {},
+    onOpenFile: null,
     reload: () => renderGitStatus(container, repo, opts),
     ...opts,
   };
