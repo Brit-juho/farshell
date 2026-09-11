@@ -2262,10 +2262,26 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-wgrail-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--mono); color:var(--txt); }
 .vt-wgrail-diff { flex:none; font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
 .vt-wgrail-row-sub { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* N8(30-worktree.md §4) — 행이 속한 워크트리 라벨(repoName[/branch]). 워크트리에
-   안 속한 세션(「기타」)은 이 배지 자체가 없다(worktreeLabel이 null). */
-.vt-wgrail-worktree { color:var(--txt-dim, var(--sub)); }
-.vt-wgrail-sep { color:var(--sub); }
+/* N38(70-mobile.md §2)과 같은 패턴 — waiting 상태에서 감지된 질문 1줄 미리보기
+   (10-shell-layout.md §5 목업 "? Allow edit to legacy.css?"). */
+.vt-wgrail-question { font:400 var(--fs-3xs) var(--mono); color:var(--warn); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* N8/N44(30-worktree.md §4) — "「기타」 그룹: ... 색점 없음". 워크트리 행의
+   막대는 위 tone-* 상태색을 그대로 쓴다(저장소 해시 색점 램프는 20-design-system.md
+   §5(O2)가 아직 6스킨 토큰(`--color-hash-1..8`)을 정의하지 않아 보류 — result 보고 참고). */
+.vt-wgrail-bar.kind-session { background:transparent; }
+/* 30 §4: "워크트리는 있는데 세션이 없는 행: 흐리게, 클릭 → open." */
+.vt-wgrail-row.no-session { opacity:.55; }
+.vt-wgrail-row.no-session:hover { opacity:.8; }
+
+.vt-wgrail-empty {
+  padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
+  color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;
+}
+.vt-wgrail-empty-new {
+  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm);
+  color:var(--txt); font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); cursor:pointer;
+}
+.vt-wgrail-empty-new:hover { background:var(--menu-hover); }
 
 /* 접힘: 마크·색점만(§5 "48px 접힘: 마크+색점+dot만") — 이름·상태 문장·그룹
    헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로. */
