@@ -32,7 +32,6 @@ import logging
 import os
 import re
 import time
-from collections import deque
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -51,6 +50,31 @@ WINDOW_SIZE = 2048
 FLAP_GUARD_SEC = 1.0
 
 _patterns: Optional[dict] = None
+
+# 실기기 검증(2.1.0)에서 발견 — 실제 CLI 출력은 커서 이동·색상·줄지우기 코드가
+# 옵션 줄 사이사이에 낀다(예: `\xe2\x9d\xaf\r\x1b[3S\x1b[46;2H 1. Yes`). 이걸 안
+# 벗기면 캐리지리턴이 줄바꿈으로 오분류돼 숫자 앞에 이스케이프가 남아 옵션
+# 정규식이 실패하거나(1번 선택지 누락), `\x1b[K`가 라벨 끝에 그대로 붙는다.
+# CSI(`\x1b[...문자`) · OSC(`\x1b]...BEL`) · 문자셋 지정(`\x1b(B` 등) · 기타
+# 2바이트 이스케이프를 텍스트에서 제거한 뒤에만 줄 파싱·정규식을 돌린다.
+_ANSI_RE = re.compile(
+    r"\x1b\[[0-9;?]*[ -/]*[@-~]"       # CSI: ESC [ 파라미터... 최종바이트
+    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"  # OSC: ESC ] ... BEL 또는 ST
+    r"|\x1b[()][0-9A-Za-z]"            # 문자셋 지정: ESC ( B / ESC ) 0 등
+    r"|\x1b[@-_]"                      # 기타 2바이트 이스케이프
+)
+
+
+def _strip_ansi(text: str) -> str:
+    """ANSI 제거 후 줄바꿈을 `\\n` 하나로 통일한다.
+
+    옵션 정규식은 `re.MULTILINE`의 `^`/`$`(오직 `\\n` 경계만 본다)로 줄을
+    가르는데, 실제 터미널 출력은 화면 갱신 중 `\\r` 단독(캐리지리턴만, 다음
+    줄로 안 넘어가고 같은 줄 덮어쓰기)도 섞어 쓴다. 앞뒤 문맥 없이 통일하지
+    않으면 질문 추출(`splitlines()`는 `\\r` 단독도 경계로 본다)과 선택지
+    추출(`\\n`만 경계로 봄)이 서로 다른 줄 개수를 세게 된다.
+    """
+    return _ANSI_RE.sub("", text).replace("\r\n", "\n").replace("\r", "\n")
 
 
 def load_patterns(force: bool = False) -> dict:
@@ -106,7 +130,7 @@ def _extract_prompt(pats: dict, joined: bytes) -> tuple[Optional[str], Optional[
     이미 끝났으므로 여기서 실패해도 상태 전이는 막지 않는다.
     """
     try:
-        text = joined.decode("utf-8", errors="ignore")
+        text = _strip_ansi(joined.decode("utf-8", errors="ignore"))
     except Exception:
         return None, None
 
@@ -150,7 +174,13 @@ class PromptDetector:
 
     def __init__(self, on_change: Callable[[str, bool], None]):
         self._on_change = on_change
-        self._windows: dict[str, deque[bytes]] = {}
+        # 실기기 검증(2.1.0)에서 발견 — 예전엔 `deque(maxlen=4)`로 **청크 개수**를
+        # 제한했다. 실제 터미널은 커서 깜빡임·tmux 상태줄 자동 갱신 같은 잡음이
+        # 초 단위로 끼어들어 한 프롬프트 렌더가 4개 넘는 write로 쪼개지는 일이
+        # 흔하다 — 그러면 청구 개수 상한이 옵션 1번이 담긴 앞쪽 청크를 (2048바이트
+        # 안에 여전히 들어가는데도) 밀어내 버려서, 선택지가 레이스 컨디션으로
+        # 들쭉날쭉 사라졌다. bytearray로 바꿔 **바이트 수**만으로 자른다.
+        self._windows: dict[str, bytearray] = {}
         self._waiting: dict[str, bool] = {}
         self._changed_at: dict[str, float] = {}
         # N38 — 마지막으로 감지된 질문/선택지. waiting=False가 되면 지운다
@@ -162,15 +192,15 @@ class PromptDetector:
         pats = load_patterns()
         if not pats:
             return
-        win = self._windows.get(session_id)
-        if win is None:
-            win = deque(maxlen=4)
-            self._windows[session_id] = win
-        win.append(data)
+        buf = self._windows.get(session_id)
+        if buf is None:
+            buf = bytearray()
+            self._windows[session_id] = buf
+        buf.extend(data)
+        if len(buf) > WINDOW_SIZE:
+            del buf[: len(buf) - WINDOW_SIZE]
 
-        joined = b"".join(win)
-        if len(joined) > WINDOW_SIZE:
-            joined = joined[-WINDOW_SIZE:]
+        joined = bytes(buf)
 
         hit_exit = any(p in joined for spec in pats.values() for p in spec["exit"])
         hit_enter = any(p in joined for spec in pats.values() for p in spec["enter"])

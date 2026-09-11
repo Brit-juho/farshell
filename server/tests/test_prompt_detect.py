@@ -203,6 +203,51 @@ def test_options_extracted_on_enter_hit(det):
     ]
 
 
+def test_options_extracted_when_output_has_ansi_noise(det):
+    """실기기 검증(2.1.0)에서 재현 — 실제 CLI 출력은 옵션 줄 사이에 커서 이동
+    (`\\x1b[3S\\x1b[46;2H`)·줄지우기(`\\x1b[K`)·캐리지리턴 단독(`\\r`)이 낀다.
+    이걸 안 벗기면 1번 선택지가 통째로 누락되고 2·3번 라벨 끝에 `\\x1b[K`가
+    그대로 붙는다."""
+    d, _ = det
+    raw = (
+        b"\n\x1b[ADo you want to make this edit to legacy.css?\r\n"
+        b"\x1b[K\xe2\x9d\xaf\r\x1b[3S\x1b[46;2H 1. Yes\r\n"
+        b"  2. Yes, and don't ask again this session\x1b[K\r\n"
+        b"  3. No\x1b[K\r\n"
+    )
+    d.feed("s1", raw)
+    question, options = d.get_prompt("s1")
+    assert question == "Do you want to make this edit to legacy.css?"
+    assert options == [
+        {"key": "1", "label": "Yes"},
+        {"key": "2", "label": "Yes, and don't ask again this session"},
+        {"key": "3", "label": "No"},
+    ]
+
+
+def test_options_survive_many_small_writes_before_enter_hit(det):
+    """실기기 검증(2.1.0)에서 재현 — 실제 터미널은 커서 깜빡임·tmux 상태줄
+    갱신 같은 잡음 청크가 초 단위로 끼어들어, 프롬프트 한 번 렌더가 4개
+    넘는 write로 쪼개지는 일이 흔하다. 예전 `deque(maxlen=4)`는 **청크 개수**로
+    잘라서 앞쪽(1번 선택지) 청크가 2048바이트 안에 여전히 들어가는데도
+    밀려났다 — bytearray 기반 바이트 수 상한이면 살아남아야 한다."""
+    d, _ = det
+    d.feed("s1", b"Do you want to make this edit to legacy.css?\r\n")
+    d.feed("s1", b"\xe2\x9d\xaf 1. Yes\r\n")
+    # 4청크 넘는 잡음(cursor show/hide 토글류) — 예전 구현이면 위 두 청크를 밀어낸다.
+    for _ in range(8):
+        d.feed("s1", b"\x1b[?25l\x1b[?12l\x1b[?25h")
+    d.feed("s1", b"  2. Yes, and don't ask again\r\n")
+    d.feed("s1", b"  3. No\r\n")
+    question, options = d.get_prompt("s1")
+    assert question == "Do you want to make this edit to legacy.css?"
+    assert options == [
+        {"key": "1", "label": "Yes"},
+        {"key": "2", "label": "Yes, and don't ask again"},
+        {"key": "3", "label": "No"},
+    ]
+
+
 def test_no_options_when_prompt_has_no_numbered_choices(det):
     """선택지 형태가 아니면 (질문, None) — 프런트는 이때 「터미널로」로 폴백한다."""
     d, _ = det
