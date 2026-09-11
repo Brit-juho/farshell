@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from fastapi.responses import JSONResponse
 import auth
 import crypto_channel
 import file_store
+import scrollback_persist
 import tmux_runner
 from deps import pty_mgr, session_store, output_watcher, _auto_responder, _prompt_detector
 from session_store import new_session_id
@@ -135,6 +137,33 @@ async def delete_session(session_id: str):
     _auto_responder.remove(session_id)  # 세션별 윈도우 dict 정리 (누수 방지)
     _prompt_detector.remove(session_id)
     return {"ok": True, "tmux_detached": tmux_name}
+
+
+@router.get("/api/sessions/{session_id}/scrollback")
+async def session_scrollback(session_id: str, before: Optional[int] = Query(None), limit: int = Query(64 * 1024)):
+    """N13(80-multihost-agents.md §3) — 영속 스크롤백 「더 불러오기」.
+
+    WS 재접속 시 자동 복원되는 인메모리 scrollback(최근 256KB, pty_manager)과는
+    다른 경로다. 이건 scrollback.persist가 켜져 있을 때만 쌓인 디스크 로그를
+    역방향(최신 → 과거)으로 페이지네이션해서 읽는다. persist가 꺼져 있었으면
+    로그 자체가 없어 빈 결과가 나간다 — 별도 에러가 아니라 "더 없음"과 같은 모양.
+    """
+    limit = max(1, min(limit, 1024 * 1024))
+    result = await asyncio.to_thread(scrollback_persist.read_before, session_id, before, limit)
+    return {
+        "data_b64": base64.b64encode(result["data"]).decode("ascii"),
+        "next_before": result["next_before"],
+        "total": result["total"],
+    }
+
+
+@router.get("/api/scrollback/usage")
+async def scrollback_usage():
+    return {
+        "enabled": scrollback_persist.is_enabled(),
+        "bytes": await asyncio.to_thread(scrollback_persist.disk_usage_bytes),
+        "retention_days": scrollback_persist.RETENTION_DAYS,
+    }
 
 
 @router.post("/api/sessions/{session_id}/keys")

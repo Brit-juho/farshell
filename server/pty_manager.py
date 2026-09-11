@@ -30,6 +30,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+import scrollback_persist
+
 logger = logging.getLogger(__name__)
 
 ALLOWED_SHELLS = {"/bin/bash", "/bin/zsh", "/bin/sh", "/bin/fish", "/usr/bin/bash"}
@@ -497,6 +499,9 @@ class PTYManager:
 
         # scrollback에 저장 (바이트 예산으로 트리밍)
         self._append_scrollback(session, data)
+        # N13 — 옵트인 디스크 영속화. 입력(session.write)이 아니라 출력 스트림
+        # 여기서만 호출하므로 비밀번호 타이핑 등 입력은 절대 로그에 안 남는다.
+        scrollback_persist.append(session_id, data)
         # broadcast to all subscribers
         dead = set()
         for cb in list(session._subscribers):

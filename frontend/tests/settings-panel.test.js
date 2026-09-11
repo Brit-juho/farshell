@@ -65,7 +65,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '보안', '정보'],
+    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '보안', '스크롤백', '정보'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -476,4 +476,50 @@ test('보안 — API 실패 시 표 대신 안내 문구', async () => {
   assert.ok(helps.some((t) => t.includes('인증 상태를 확인할 수 없습니다')));
   assert.ok(helps.some((t) => t.includes('기기 목록을 확인할 수 없습니다')));
   assert.ok(helps.some((t) => t.includes('승격 상태를 확인할 수 없습니다')));
+});
+
+// ── 「스크롤백」(N13, 80-multihost-agents.md §3) ──────────────────────────
+
+test('스크롤백 — 토글 변경이 스토어와 서버로 나간다', async () => {
+  const { document, P, S, puts } = await build({
+    fetchExtra: (u) => (u.includes('/api/scrollback/usage')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ bytes: 1234 }) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '스크롤백').click();
+  const cb = rowByLabel(document, '스크롤백 영속화').querySelector('.vt-set-check');
+  assert.strictEqual(cb.checked, false); // 기본 OFF
+  cb.checked = true;
+  cb.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+  await flush();
+  assert.strictEqual(S.get('scrollback.persist'), true);
+  assert.strictEqual(puts.at(-1).settings['scrollback.persist'], true);
+});
+
+test('스크롤백 — 디스크 사용량을 보여준다', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/scrollback/usage')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ bytes: 2 * 1024 * 1024 }) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '스크롤백').click();
+  await flush();
+  const texts = Array.from(document.querySelectorAll('.vt-set-help, .vt-set-sechost'))
+    .map((e) => e.textContent);
+  assert.ok(texts.some((t) => t.includes('2.0MB')));
+});
+
+test('스크롤백 — API 실패 시 안내 문구', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/scrollback/usage')
+      ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '스크롤백').click();
+  await flush();
+  const texts = Array.from(document.querySelectorAll('.vt-set-sechost')).map((e) => e.textContent);
+  assert.ok(texts.some((t) => t.includes('디스크 사용량을 확인할 수 없습니다')));
 });

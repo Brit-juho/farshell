@@ -60,6 +60,10 @@ export const SCHEMA = {
   // 섹션이 늘어나면(변경 파일·최근 diff) 그때 폭도 설정으로 뺀다.
   // 문서 §1 표: "ui.rail.collapsed/width · ui.dock.* → device"와 같은 부류.
   'rightRail.collapsed':    { type: 'bool', def: false, scope: 'device' },
+  // N13(80-multihost-agents.md §3) — 옵트인 스크롤백 영속화. 기본 OFF.
+  // 재접속 시 클라이언트가 받는 양(256KB)은 이 설정과 무관하게 항상 그대로다 —
+  // 이건 그 뒤의 "더 불러오기"/검색을 위해 서버 디스크에 계속 쌓을지 여부다.
+  'scrollback.persist':     { type: 'bool', def: false },
 
   // N36/N35가 정식 스토어가 생기기 전까지 localStorage 전용으로 뒀던 값들
   // (Rail.tsx/Dock.tsx 커밋 주석 "N3 전이라 임시로 localStorage" 참고).
