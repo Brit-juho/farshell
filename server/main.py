@@ -37,6 +37,7 @@ from routes.queue import router as queue_router
 from routes.snippets import router as snippets_router
 from routes.search import router as search_router
 from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
+from routes.worktree import router as worktree_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -360,6 +361,7 @@ app.include_router(push_router)
 app.include_router(search_router)
 app.include_router(git_accounts_router)
 app.include_router(git_accounts_elevated_router)
+app.include_router(worktree_router)
 
 
 @app.exception_handler(StarletteHTTPException)
