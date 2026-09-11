@@ -65,7 +65,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '정보'],
+    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '보안', '정보'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -375,4 +375,105 @@ test('에이전트 — API 실패 시 표 대신 안내 문구', async () => {
   sectionButton(document, '에이전트').click();
   await flush();
   assert.ok(!document.querySelector('.vt-set-covtable'));
+});
+
+
+// ── 「보안」(60 §2) — 비밀번호 · OTP · 기기 · 승격 상태. 전부 읽기 전용.
+const SEC_DEVICES = {
+  devices: [
+    { id: 'a1b2c3d4', label: 'iPhone', added_at: 1757000000, last_seen: 1757100000, current: true },
+    { id: 'ff00aa11', label: 'MacBook', added_at: 1756000000, last_seen: 0, current: false },
+  ],
+};
+
+function securityFetch({ status = {}, devices = SEC_DEVICES, elevation = {} } = {}) {
+  return (u) => {
+    if (u.includes('/api/auth/status')) return Promise.resolve({ ok: true, json: () => Promise.resolve(status) });
+    if (u.includes('/api/auth/elevation')) return Promise.resolve({ ok: true, json: () => Promise.resolve(elevation) });
+    if (u.includes('/api/devices')) return Promise.resolve({ ok: true, json: () => Promise.resolve(devices) });
+    return null;
+  };
+}
+
+async function openSecurity(opts) {
+  const built = await build({ fetchExtra: securityFetch(opts) });
+  built.P.showSettings();
+  sectionButton(built.document, '보안').click();
+  await flush();
+  await flush();
+  return built;
+}
+
+const secStates = (document) => Array.from(document.querySelectorAll('.vt-set-secrow')).map((r) => [
+  r.querySelector('.vt-set-label').firstChild.textContent,
+  r.querySelector('.vt-set-secstate').textContent,
+  r.querySelector('.vt-set-secstate').dataset.state,
+]);
+
+test('보안 — 비밀번호·OTP 미설정이면 CLI 명령을 안내한다', async () => {
+  const { document } = await openSecurity({ status: { protected: false, password_set: false, otp_enabled: false } });
+  const rows = secStates(document);
+  assert.deepEqual(rows[0], ['웹 로그인 비밀번호', '설정 안 됨', 'off']);
+  assert.deepEqual(rows[1], ['OTP (새 기기 등록 관문)', '비활성', 'off']);
+  const helps = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
+  assert.ok(helps.some((t) => t.includes('fsh password')));
+  assert.ok(helps.some((t) => t.includes('fsh otp setup')));
+});
+
+test('보안 — 설정돼 있으면 활성 배지', async () => {
+  const { document } = await openSecurity({ status: { protected: true, password_set: true, otp_enabled: true } });
+  const rows = secStates(document);
+  assert.deepEqual(rows[0].slice(1), ['설정됨', 'on']);
+  assert.deepEqual(rows[1].slice(1), ['활성', 'on']);
+});
+
+test('보안 — 기기 목록과 "이 기기" 배지', async () => {
+  const { document } = await openSecurity();
+  const trs = Array.from(document.querySelectorAll('.vt-set-devtable tbody tr'));
+  assert.strictEqual(trs.length, 2);
+  assert.strictEqual(trs[0].dataset.current, '1');
+  assert.ok(trs[0].querySelector('.vt-set-devme'), '현재 기기에 배지가 있어야 한다');
+  assert.strictEqual(trs[1].querySelector('.vt-set-devme'), null);
+  assert.strictEqual(trs[1].children[3].textContent, '기록 없음');
+});
+
+test('보안 — 설정 변경 UI(입력·버튼)를 두지 않는다', async () => {
+  const { document } = await openSecurity();
+  const content = document.querySelector('.vt-set-content');
+  assert.strictEqual(content.querySelector('input'), null);
+  assert.strictEqual(content.querySelector('button'), null);
+});
+
+test('보안 — 승격은 ADR-27로 쓰는 경로가 없다는 설명이 함께 나온다', async () => {
+  const { document } = await openSecurity({ elevation: { elevated: false, elevated_until: 0, unused: true } });
+  const row = Array.from(document.querySelectorAll('.vt-set-secrow'))
+    .find((r) => r.querySelector('.vt-set-label').firstChild.textContent === '승격 세션');
+  assert.ok(row);
+  assert.strictEqual(row.querySelector('.vt-set-secstate').textContent, '승격 안 됨');
+  assert.ok(row.querySelector('.vt-set-help').textContent.includes('ADR-27'));
+});
+
+test('보안 — 승격 중이면 남은 시간을 분으로 보여준다', async () => {
+  const until = Math.floor(Date.now() / 1000) + 9 * 60;
+  const { document } = await openSecurity({ elevation: { elevated: true, elevated_until: until } });
+  const row = Array.from(document.querySelectorAll('.vt-set-secrow'))
+    .find((r) => r.querySelector('.vt-set-label').firstChild.textContent === '승격 세션');
+  assert.match(row.querySelector('.vt-set-secstate').textContent, /승격됨 · 9분 남음/);
+});
+
+test('보안 — API 실패 시 표 대신 안내 문구', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => ((u.includes('/api/devices') || u.includes('/api/auth/'))
+      ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '보안').click();
+  await flush();
+  await flush();
+  assert.strictEqual(document.querySelector('.vt-set-devtable'), null);
+  const helps = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
+  assert.ok(helps.some((t) => t.includes('인증 상태를 확인할 수 없습니다')));
+  assert.ok(helps.some((t) => t.includes('기기 목록을 확인할 수 없습니다')));
+  assert.ok(helps.some((t) => t.includes('승격 상태를 확인할 수 없습니다')));
 });
