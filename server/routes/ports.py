@@ -15,6 +15,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 import portscan
+import tunnel
 import tunnel_registry
 
 logger = logging.getLogger(__name__)
@@ -128,3 +129,30 @@ async def unexpose_port(port: int):
         return JSONResponse({"ok": False, "error": "unexpose_failed", "reason": out.strip()},
                             status_code=500)
     return {"ok": True, "port": port, "output": out.strip()}
+
+
+# --- 노출 포트 섹션 (N22, 50-files-share.md §5) --------------------------------
+#
+# 포트 탭 하단에 "지금 열려 있는 것"만 모아 보여주는 요약. 해제는 새 엔드포인트를
+# 만들지 않고 위의 기존 `DELETE /api/ports/{port}/expose`를 그대로 쓴다 — 이미
+# 같은 일을 하는 라우트가 있는데 이름만 다른 걸 하나 더 만들면 그 자체가
+# 유지보수 부담이 되는 레거시라, 목록 조회만 새로 추가한다.
+
+
+@router.get("/api/tunnel/list")
+async def list_tunnels():
+    main_status = await asyncio.to_thread(tunnel.get_tunnel_status)
+    extra = await asyncio.to_thread(tunnel_registry.exposed_ports)
+    main = None
+    if main_status["running"] and main_status["url"]:
+        main = {
+            "port": int(os.environ.get("VT_PORT", "7777")),
+            "label": "터미널 (VT)",
+            "url": main_status["url"],
+            "named": main_status["mode"] == "named",
+        }
+    extra_rows = [
+        {"port": port, "label": info["label"], "url": info["url"], "named": False}
+        for port, info in sorted(extra.items())
+    ]
+    return {"main": main, "extra": extra_rows, "count": (1 if main else 0) + len(extra_rows)}

@@ -128,6 +128,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | DELETE | `/api/ports/{port}[?pid=N]` | 프로세스 종료. `pid` 불일치 시 409 (VT 서버 자신/cloudflared/tailscaled/sshd는 종료 불가) |
 | POST | `/api/ports/{port}/expose` | Cloudflare 터널로 공개. 본문 `{"confirm":true}` 필수(없으면 428) |
 | DELETE | `/api/ports/{port}/expose` | 해당 포트 터널 종료 |
+| GET | `/api/tunnel/list` | N22 — 지금 열려 있는 모든 터널(메인 + `fsh tunnel expose`한 포트) 요약, 포트 탭 "노출 중" 섹션용. 해제는 위 `DELETE /api/ports/{port}/expose`를 그대로 재사용 |
 
 ## 프롬프트 스니펫
 

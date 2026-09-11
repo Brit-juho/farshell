@@ -1495,6 +1495,20 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-pt-btn.danger:hover{ background:color-mix(in srgb, var(--err) 18%, transparent); }
 .vt-pt-btn.danger:active{ background:color-mix(in srgb, var(--err) 32%, transparent); }
 
+/* N22(50-files-share.md §5) — 포트 목록 아래 "노출 중" 요약. 헤더는 .vt-pt-section을
+   그대로 재사용, 행/버튼은 .vt-pt-row·.vt-pt-btn을 재사용하되 이름/URL 두 칸만 새로 둔다. */
+.vt-pt-tunnel-section{ border-top:1px solid var(--line); margin-top:calc(var(--spacing) * 1); }
+.vt-pt-tunnel-row{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2.5);
+  min-height:30px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+  border-bottom:1px solid var(--line); font:400 var(--fs-sm) var(--ui);
+}
+.vt-pt-tunnel-label{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
+.vt-pt-tunnel-url{
+  flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:400 var(--fs-xs) var(--mono); color:var(--acc);
+}
+
 /* U4/D4: 행이 한 줄(24px)로 고정된 뒤로는 좁은 화면에서도 줄바꿈이 필요 없다 —
    cmd가 ellipsis로 줄어들 뿐. 예전엔 두 줄 stacking이라 wrap이 필요했다. */
 
