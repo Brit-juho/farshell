@@ -158,3 +158,20 @@ def send_to_tmux(pane_id: str, text: str) -> bool:
     except Exception as e:
         logger.error(f"tmux send-keys 실패: {e}")
         return False
+
+
+def type_to_tmux(pane_id: str, text: str) -> bool:
+    """tmux pane에 텍스트만 타이핑(Enter 없음) — 스니펫 paste 모드(N6)와 같은 규칙.
+
+    파일 경로 삽입(N19)처럼 사용자가 명령 일부로 조합해 넣을 값에 쓴다. Enter를
+    자동으로 누르면 아직 완성 안 된 명령을 그대로 실행시켜버릴 수 있어 위험하다.
+    """
+    try:
+        subprocess.run(
+            TMUX_BASE + ["send-keys", "-t", pane_id, "--", text],
+            timeout=2, check=True,
+        )
+        return True
+    except Exception as e:
+        logger.error(f"tmux send-keys(타이핑) 실패: {e}")
+        return False

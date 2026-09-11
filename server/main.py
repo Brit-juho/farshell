@@ -21,6 +21,7 @@ from fastapi import Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import auth
+import file_store
 import network_access
 import tunnel
 from deps import pty_mgr, output_watcher
@@ -290,14 +291,33 @@ async def lifespan(_app: FastAPI):
     output_watcher.start()
     import voice_handler
     stt_idle_task = asyncio.create_task(voice_handler.stt_idle_monitor())
+
+    # N19 — 레거시 업로드(/tmp/vt-uploads)를 ~/.vt/files/로 편입 + 고아 정리 +
+    # TTL/용량 정리를 기동 시 1회, 그 뒤 6시간마다 반복. 블로킹 I/O라 to_thread.
+    await asyncio.to_thread(file_store.migrate_legacy)
+    await asyncio.to_thread(file_store.reconcile_orphans)
+    await asyncio.to_thread(file_store.cleanup)
+    files_cleanup_task = asyncio.create_task(_file_store_cleanup_loop())
     try:
         yield
     finally:
         stt_idle_task.cancel()
+        files_cleanup_task.cancel()
         with suppress(asyncio.CancelledError):
             await stt_idle_task
+        with suppress(asyncio.CancelledError):
+            await files_cleanup_task
         output_watcher.stop()
         pty_mgr.destroy_all()
+
+
+async def _file_store_cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(file_store.CLEANUP_INTERVAL_SECONDS)
+        try:
+            await asyncio.to_thread(file_store.cleanup)
+        except Exception as e:
+            logger.warning(f"file_store 주기 정리 실패: {e}")
 
 
 # ---------------------------------------------------------------------------
