@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -17,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import auth
 import network_access
@@ -34,6 +36,7 @@ from routes.push import router as push_router
 from routes.queue import router as queue_router
 from routes.snippets import router as snippets_router
 from routes.search import router as search_router
+from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -355,6 +358,21 @@ app.include_router(queue_router)
 app.include_router(snippets_router)
 app.include_router(push_router)
 app.include_router(search_router)
+app.include_router(git_accounts_router)
+app.include_router(git_accounts_elevated_router)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """`auth.require_elevated`가 던지는 `HTTPException(detail={"error": ...})`을
+    FastAPI 기본값(`{"detail": {...}}`)이 아니라 dict를 그대로 펼친 응답으로 낸다.
+    이 저장소의 다른 곳은 전부 라우트 핸들러가 직접 JSONResponse를 반환하므로
+    (main.py 상단 참고), 이 핸들러가 걸리는 건 사실상 require_elevated 계열뿐이다.
+    detail이 dict가 아니면(향후 다른 HTTPException 사용처가 생기면) 원래 동작을 보존한다.
+    """
+    if isinstance(exc.detail, dict):
+        return JSONResponse(exc.detail, status_code=exc.status_code)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
 # ---------------------------------------------------------------------------
@@ -519,6 +537,76 @@ async def auth_status(request: Request):
         "otp_enabled": auth.totp_enabled(),
         "device_known": bool(auth.verify_device(request.cookies.get("vt_device", ""))),
     }
+
+
+@app.post("/api/auth/elevate")
+async def auth_elevate(request: Request):
+    """승격 세션 발급(N31, 40-dock-git.md §2) — git 계정 등록/삭제·바인딩 변경 등
+    위험한 조작 직전에 비밀번호(+OTP 연동 시 OTP)를 다시 확인하고, 세션 쿠키에
+    15분짜리 elev 클레임을 추가해 재발급한다.
+
+    이미 로그인된 세션이 전제다 — 이 경로는 AuthMiddleware의 인증 예외 목록에
+    없으므로, 여기 도달했다는 것 자체가 유효한 vt_session/토큰이 있다는 뜻이다.
+    기존 세션의 device 귀속과 만료(exp)는 그대로 유지한 채 elev만 얹는다.
+
+    비밀번호 자체가 설정 안 된 로컬 전용 환경에서는 승격 개념이 없어 그냥 통과시킨다
+    (require_elevated가 같은 조건에서 어차피 통과시키므로 대칭을 맞춘다).
+    """
+    if not auth.VT_AUTH_PASSWORD_HASH:
+        return {"ok": True, "elevated": True, "no_password": True}
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    password = str(body.get("password", "") or "")
+    otp = str(body.get("otp", "") or "")
+
+    client_key = _effective_client_ip(
+        request.client.host if request.client else None, request.headers
+    ) or "unknown"
+
+    locked = auth.password_lock_remaining(client_key)
+    if locked:
+        return JSONResponse({"error": "password_locked", "retry_after": locked}, status_code=429)
+
+    if not auth.verify_password(password, auth.VT_AUTH_PASSWORD_HASH):
+        auth.password_note_failure(client_key)
+        return JSONResponse({"error": "invalid"}, status_code=401)
+    auth.password_reset_failures(client_key)
+
+    if auth.totp_enabled():
+        otp_locked = auth.otp_lock_remaining(client_key)
+        if otp_locked:
+            return JSONResponse({"error": "otp_locked", "retry_after": otp_locked}, status_code=429)
+        if not otp:
+            return JSONResponse({"error": "otp_required"}, status_code=401)
+        if not auth.verify_totp(otp):
+            auth.otp_note_failure(client_key)
+            return JSONResponse(
+                {"error": "otp_invalid",
+                 "remaining": max(0, auth.OTP_MAX_FAILS - auth.otp_failure_count(client_key))},
+                status_code=401,
+            )
+        auth.otp_reset_failures(client_key)
+
+    existing = request.cookies.get("vt_session", "")
+    device_id = auth.session_device(existing) or ""
+    if device_id == "-":
+        device_id = ""
+    elev_exp = int(time.time()) + auth.ELEVATION_TTL
+    resp = JSONResponse({"ok": True, "elevated_until": elev_exp})
+    resp.set_cookie(
+        "vt_session",
+        auth.make_session(device_id, elev_exp=elev_exp),
+        httponly=True,
+        samesite="strict",
+        secure=_is_https(request),
+        max_age=auth.SESSION_TTL,
+        path="/",
+    )
+    return resp
 
 
 @app.post("/api/auth/logout")

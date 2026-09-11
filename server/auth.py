@@ -46,6 +46,15 @@ import time
 from pathlib import Path
 from typing import Optional
 
+# require_elevated가 FastAPI 의존성으로 쓰일 때, 파라미터에 실제 타입이 있어야
+# FastAPI가 이걸 "쿼리 파라미터"가 아니라 Request 객체 주입으로 인식한다
+# (`from __future__ import annotations`로 문자열 annotation이 되므로,
+# get_type_hints가 이 이름을 이 모듈 전역에서 찾을 수 있어야 함).
+# auth.py는 서버 없이도 `python auth.py <cmd>`로 단독 실행되지만, 그 CLI 경로는
+# require_elevated를 호출하지 않으므로 starlette 미설치 환경에서도 문제없다 —
+# 다만 이 프로젝트는 fastapi/starlette가 항상 설치돼 있는 걸 전제한다(requirements-core.txt).
+from starlette.requests import Request
+
 def _env(*names, default=""):
     """새 이름 우선, 없으면 레거시 이름으로 fallback."""
     for n in names:
@@ -61,6 +70,7 @@ VT_AUTH_TOKEN = _env("VT_AUTH_TOKEN", "VT_TOKEN")
 
 SESSION_TTL = 86400  # 24h
 DEVICE_TTL = 90 * 86400  # 등록 기기 쿠키 수명 90일
+ELEVATION_TTL = 900  # 승격 세션(N31) 수명 15분 — git 쓰기 등 위험 조작 직전 재확인용
 
 # scrypt 파라미터 — 대화형 로그인에 충분하면서 과하지 않은 값
 _N, _R, _P, _DKLEN = 16384, 8, 1, 32
@@ -145,18 +155,24 @@ def _sign(payload: str) -> str:
     ).hexdigest()
 
 
-def make_session(device_id: str = "", ttl: int = SESSION_TTL) -> str:
-    """로그인 성공 시 발급할 서명 세션 값 생성.
+def make_session(device_id: str = "", ttl: int = SESSION_TTL, elev_exp: int | None = None) -> str:
+    """로그인 성공 시(또는 승격 시) 발급할 서명 세션 값 생성.
 
-    `v2.<exp>.<device_id|->.<hmac>`. device_id를 서명 안에 넣어두면 기기를 revoke하는
-    것만으로 그 기기의 세션까지 함께 죽는다 — 별도 세션 저장소 없이 얻는 revocation.
-    서명키가 없으면(레거시) 기존처럼 기계 토큰을 그대로 쿠키로 쓴다.
+    기본(elev_exp 없음): `v2.<exp>.<device_id|->.<hmac>`.
+    승격 포함(N31, `POST /api/auth/elevate` 성공 시): `v3.<exp>.<device_id|->.<elevExp>.<hmac>`.
+    device_id를 서명 안에 넣어두면 기기를 revoke하는 것만으로 그 기기의 세션까지 함께
+    죽는다 — 별도 세션 저장소 없이 얻는 revocation. elevExp도 같은 서명 안에 있어
+    위조로 승격을 연장할 수 없다. 서명키가 없으면(레거시) 기존처럼 기계 토큰을 그대로
+    쿠키로 쓴다(이 경우 승격 개념 자체가 없다 — 호출부에서 걸러야 함).
     """
     if not VT_AUTH_SESSION_KEY:
         return VT_AUTH_TOKEN
     exp = int(time.time()) + ttl
     did = device_id or "-"
-    payload = f"v2.{exp}.{did}"
+    if elev_exp is not None:
+        payload = f"v3.{exp}.{did}.{int(elev_exp)}"
+    else:
+        payload = f"v2.{exp}.{did}"
     return f"{payload}.{_sign(payload)}"
 
 
@@ -169,7 +185,12 @@ def session_device(value: str) -> Optional[str]:
         return None
     parts = value.split(".")
     try:
-        if len(parts) == 4 and parts[0] == "v2":
+        if len(parts) == 5 and parts[0] == "v3":
+            # 승격 클레임 포함 쿠키 — 기본 인증 판정에서는 elev 부분을 무시한다
+            # (elev 검증은 session_elevated_until이 별도로 담당).
+            _, exp_s, did, elev_s, sig = parts
+            payload = f"v3.{exp_s}.{did}.{elev_s}"
+        elif len(parts) == 4 and parts[0] == "v2":
             _, exp_s, did, sig = parts
             payload = f"v2.{exp_s}.{did}"
         elif len(parts) == 3 and parts[0] == "v1":
@@ -194,6 +215,67 @@ def session_device(value: str) -> Optional[str]:
 def verify_session(value: str) -> bool:
     """세션 쿠키 값이 유효한(서명·만료·기기 OK) 세션표인지 검증."""
     return session_device(value) is not None
+
+
+def session_elevated_until(value: str) -> int:
+    """세션 쿠키의 승격(elev) 클레임 만료 unix 시각. 없거나 무효면 0.
+
+    v3 형식만 승격 클레임을 갖는다. 서명·기본 세션 만료·기기 revoke 여부까지 전부
+    다시 검증한다 — 승격 여부만 따로 신뢰하고 기본 세션 유효성을 건너뛰면 만료된
+    세션에 승격만 살아있는 상태가 생길 수 있다.
+    """
+    if not VT_AUTH_SESSION_KEY or not value:
+        return 0
+    parts = value.split(".")
+    if len(parts) != 5 or parts[0] != "v3":
+        return 0
+    _, exp_s, did, elev_s, sig = parts
+    payload = f"v3.{exp_s}.{did}.{elev_s}"
+    try:
+        if not hmac.compare_digest(_sign(payload), sig):
+            return 0
+        exp = int(exp_s)
+        elev = int(elev_s)
+    except (ValueError, TypeError):
+        return 0
+    now = int(time.time())
+    if exp <= now:
+        return 0
+    if did != "-" and not _find_device(did):
+        return 0
+    if elev <= now:
+        return 0
+    return elev
+
+
+def require_elevated(request: Request) -> None:
+    """git 쓰기류 라우터에 `APIRouter(dependencies=[Depends(require_elevated)])`로 묶어 쓴다
+    (R4 — 핸들러마다 개별로 붙이면 하나라도 빠뜨릴 수 있다).
+
+    표준 `starlette.exceptions.HTTPException`을 던진다(전용 예외 클래스를 새로 만들지
+    않는다) — 테스트가 `importlib.reload(auth)`로 이 모듈을 다시 로드하면 이 모듈에서
+    정의한 클래스는 매번 새 클래스 객체가 되어, main.py가 처음 import 시점에 등록해둔
+    `@app.exception_handler(그 옛날 클래스)`가 더 이상 같은 클래스로 안 잡히는 사고가
+    난다(실제로 겪음 — 전체 스위트에서만 재현되고 파일 단독 실행에선 재현 안 됨).
+    HTTPException은 이 모듈 밖에서 정의돼 reload로 흔들리지 않는다. `detail`을
+    dict로 주면 main.py의 전역 핸들러가 `{"error": ...}` 형태 그대로 펼쳐 응답한다.
+
+    정책(40-dock-git.md §2):
+    - 비밀번호 자체가 설정 안 된 환경 → 승격 개념 없음 → 통과. 단 `VT_NETWORK_MODE=all`이면
+      공개 터널 + 무인증 + 쓰기 조합을 막기 위해 403 password_required.
+    - 비밀번호가 설정된 환경 → 세션에 유효한(만료 안 된) elev 클레임이 있어야 통과,
+      없으면 401 elevation_required(클라이언트가 비밀번호 다이얼로그를 띄우고 재시도).
+    """
+    from starlette.exceptions import HTTPException
+
+    if not VT_AUTH_PASSWORD_HASH:
+        mode = os.environ.get("VT_NETWORK_MODE", "all").strip().lower()
+        if mode == "all":
+            raise HTTPException(status_code=403, detail={"error": "password_required"})
+        return
+    token = request.cookies.get("vt_session", "")
+    if session_elevated_until(token) <= int(time.time()):
+        raise HTTPException(status_code=401, detail={"error": "elevation_required"})
 
 
 # ---------------------------------------------------------------------------
