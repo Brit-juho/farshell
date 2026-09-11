@@ -51,6 +51,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
     사용량 카운터 프로바이더(N10/N41), 팔레트 나머지 접두사 + Solid 통합,
     `DESIGN.md` 재작성(N15).
 
+- **2.1.1 「워크트리 · 감지 커버리지 · dock 쓰기」(진행 중, docs/plan-2.1/).**
+  - **워크트리(N8/N44).** 좌측 레일과 `fsh worktree`에서 git 워크트리를 발견·
+    생성·삭제·열기. 발견은 fsguard 루트를 깊이 3까지 훑어(`.git`을 만나면 멈춤)
+    저장소마다 `git worktree list --porcelain`을 읽고 ahead/behind·변경 파일 수·
+    그 안에서 돌고 있는 tmux 세션·포트 대역을 붙인다(5초 캐시).
+    생성은 `~/.worktrees/<저장소>/<이름>`·`feat/<이름>` 고정에 네 가지 선택 단계
+    — node_modules 심링크(기본, 재설치 없이 바로 쓴다) · `.env` 상속(있는
+    `PORT`류 줄만 배정 대역으로 치환, 없는 키는 안 만든다) · 포트 대역(5200,
+    +100) · 에이전트를 `wt-<저장소>-<브랜치>` 세션에서 시작.
+    **`git worktree add` 이후 단계는 실패 시 전부 롤백한다** — 반쯤 만들어진
+    워크트리를 남기지 않는다. 삭제는 메인 워크트리를 거부하고, 변경이 있으면
+    `force` 없이는 409(`dirty:true`)다.
+    심링크한 node_modules가 `base`가 아니라 메인 저장소의 **현재** 트리를
+    비추므로, 생성 전에 package.json+락파일 해시를 비교해 `lockfile_mismatch`를
+    경고한다(`GET /api/worktrees/precheck`).
+    `~/.worktrees`는 존재하면 fsguard 루트에 자동 추가된다 — 안 그러면 방금 만든
+    워크트리가 열람 경계 밖이라 자기 목록에서 사라진다.
+  - **감지 커버리지 표(N9/N45).** `GET /api/agents/coverage` + 설정 → 에이전트 탭.
+    패턴이 없는 CLI는 승인 대기 감지가 조용히 아무것도 안 하는데 그걸 볼 방법이
+    없었다 — CLI별 `path`(`hook`/`pty`/`none`)·toml 줄 수·상태·`trust`를 드러낸다.
+    codex/gemini/aider의 `enter`/`exit`를 **추측 없이** 각 프로젝트 공식 저장소
+    소스에서 리터럴을 확인해 채웠다(출처·upstream 커밋 해시는 각 toml 주석에).
+    소스를 읽은 것이지 실제 터미널 렌더를 검증한 게 아니라서 `trust: "mid"`로
+    보고한다. `aider`는 상시 상태줄이 없어 안전한 `exit` 리터럴을 못 찾아
+    enter만 채웠다. 배경: `docs/help/agent-detect.md`.
+  - **dock 소스컨트롤 쓰기.** 2.1.0에서 읽기 전용이던 탭의 stage/unstage/commit을
+    `POST /api/git/{stage,unstage,commit}`에 연결하고, 파일 행에서 그 파일을
+    pane 뷰어로 여는 버튼을 붙였다.
+  - **push·PR/MR은 만들지 않았다(ADR-27).** 빠진 게 아니라 **안 만들기로 결정한
+    것이다** — 비활성 버튼조차 렌더링하지 않으므로 버그로 오해하지 말 것.
+    FarShell은 샌드박스가 아니라 사용자 자신의 맥 터미널을 그대로 돌리는 도구고,
+    push·PR 생성은 이미 그 터미널에서 하고 있으며, 계정을 여럿 쓰는 사람은
+    저장소별 git config로 이미 해결해뒀다. 그래서 dock 커밋은 **ambient git
+    자격증명**으로 나간다.
+    이 결정의 여파로 **git 계정 저장소·승격 세션(N30/N31)은 구현·병합됐지만
+    현재 어디에도 연결되지 않은 미사용 상태다** — push/PR을 위해 만든 층인데
+    그 기능을 접었다. 그 자체로 위험한 코드가 아니라 되돌리지 않고 남겼고,
+    2.2에서 다른 용도가 생기면 다시 쓴다. 접근 경로는 `fsh git-account`뿐이다.
+
 - **`VT_RUN_DIR`** — 로그·PID·터널 레지스트리·업로드의 뿌리(기본 `/tmp`). 기존 경로는
   그대로다. 이걸 `VT_PORT`·`VT_TMUX_SOCKET`·`VT_STATE_DIR`·`VT_CONFIG`·
   `VT_WORKSPACE_PATH` 와 함께 바꾸면 **한 머신에서 두 인스턴스를 동시에** 돌릴 수 있다.
@@ -74,6 +113,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **24시간 세션이 만료돼도 이미 열려 있는 WebSocket은 무제한으로 살아 있었다.**
+  HTTP는 요청마다 `TokenAuthMiddleware`가 다시 검사하지만 WebSocket은 그
+  미들웨어를 타지 않아서, 핸드셰이크 때 한 번 인증한 뒤로는 연결을 영원히
+  신뢰했다. 탭을 한 번도 새로고침하지 않으면 REST는 401인데 터미널만 계속
+  붙어 있는 상태가 됐고, 결국 `SESSION_TTL` 24시간이 사실상 무제한이었다.
+  `auth.spawn_session_watchdog()`가 60초마다 세션을 재검사해 만료되면
+  `4001 session_expired`로 닫는다(핸드셰이크 실패와 같은 코드라 프런트는
+  이미 재연결 금지로 처리하고 있었다 — 프런트 변경 없음). 적용 대상은
+  `/ws/{id}`·`/ws-notify`·`/ws-agent`·`/ws-preview/{name}`·`/ws-workspace`
+  다섯 곳. 인증이 꺼진 로컬 환경에서는 워치독이 즉시 종료돼 재검사하지 않는다.
 - `requirements-dev.txt` 주석이 없는 파일(`server/tests/test_e2e_smoke.py`)을
   가리키고 있었다 → 실제 경로 `tests/e2e/test_smoke.py`.
 - `run_server.sh` 주석 2곳이 `bin/vt`를 가리키고 있었다 → `bin/fsh`.
