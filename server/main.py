@@ -38,6 +38,7 @@ from routes.snippets import router as snippets_router
 from routes.search import router as search_router
 from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
 from routes.worktree import router as worktree_router
+from routes.security import router as security_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -362,6 +363,7 @@ app.include_router(search_router)
 app.include_router(git_accounts_router)
 app.include_router(git_accounts_elevated_router)
 app.include_router(worktree_router)
+app.include_router(security_router)
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -536,6 +538,9 @@ async def auth_status(request: Request):
     """
     return {
         "protected": auth.is_protected(),
+        # 비밀번호와 기계 토큰은 별개다 — 토큰만 설정된 환경은 protected=True인데도
+        # 사람이 쓸 비밀번호는 없다. 설정 「보안」 탭이 그 둘을 구분해 보여준다.
+        "password_set": bool(auth.VT_AUTH_PASSWORD_HASH),
         "otp_enabled": auth.totp_enabled(),
         "device_known": bool(auth.verify_device(request.cookies.get("vt_device", ""))),
     }
