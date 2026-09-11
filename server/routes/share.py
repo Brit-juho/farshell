@@ -65,9 +65,7 @@ async def create_share(file_id: str, request: Request):
     share = file_store.add_share(file_id, mode, ttl, once, pin=pin if mode == "pin" else None)
     if share is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    exp = int(share["exp"])
-    payload = f"v1.{exp}.{file_id}.{share['shareId']}"
-    token = f"{payload}.{auth.sign_payload(payload)}"
+    token = file_store.build_share_token(file_id, share)
     public = {k: v for k, v in share.items() if k not in ("pinHash", "pinSalt", "dl_cookie_hash", "dl_cookie_exp")}
     return {"ok": True, "share": public, "token": token, "url": f"/s/{token}"}
 

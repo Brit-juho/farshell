@@ -387,3 +387,204 @@ def update_share(file_id: str, share_id: str, **fields) -> dict | None:
         share.update(fields)
         _write_unlocked(items)
         return share
+
+
+def build_share_token(file_id: str, share: dict) -> str:
+    """공유 레코드 → URL 토큰(`v1.<exp>.<fileId>.<shareId>.<hmac>`).
+
+    routes/share.py(HTTP 발급)와 `fsh files share`(CLI, 서버 없이 동작) 양쪽이
+    정확히 같은 포맷을 만들어야 서로가 발급한 링크를 서로 검증할 수 있다 —
+    그래서 이 한 함수로 합쳐뒀다. auth는 여기서 함수 안에서만 import한다:
+    file_store는 원래 순수 저장소 모듈이라 fastapi/starlette 의존이 없는데,
+    모듈 최상단에서 import auth를 하면 그 무게가 그대로 옮아온다.
+    """
+    import auth
+    exp = int(share["exp"])
+    payload = f"v1.{exp}.{file_id}.{share['shareId']}"
+    return f"{payload}.{auth.sign_payload(payload)}"
+
+
+# --- CLI (N23, 50-files-share.md §6) ------------------------------------------
+#
+# `fsh files ...`가 서버 없이(queue_store.py/worktree.py와 같은 방식) 직접
+# `file_store.py <sub> ...`를 실행한다. 공개 URL의 스킴/호스트(터널이냐 로컬이냐)는
+# bin/fsh가 이미 알고 있으므로(`_main_tunnel_url`), 여기서는 `/s/<token>` 경로만
+# 찍고 base URL 조립은 bash 쪽(cmd_files)에 맡긴다.
+
+_CLI_TTL_ALIASES = {"1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
+
+
+def _cli_fmt_size(n: int) -> str:
+    for unit, div in (("GB", 1024**3), ("MB", 1024**2), ("KB", 1024)):
+        if n >= div:
+            return f"{n / div:.0f}{unit}"
+    return f"{n}B"
+
+
+def _cli_find_by_prefix(file_id_prefix: str) -> dict | None:
+    matches = [x for x in list_items() if x["id"].startswith(file_id_prefix)]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _cli(argv: list[str]) -> int:
+    import sys
+
+    cmd = argv[0] if argv else "ls"
+    rest = argv[1:]
+
+    if cmd in ("ls", "list"):
+        items = sorted(list_items(), key=lambda x: x.get("created", 0), reverse=True)
+        print()
+        if not items:
+            print("  파일이 없습니다")
+        else:
+            total = sum(x.get("size", 0) for x in items)
+            print(f"  📁 파일 {len(items)}개 · {_cli_fmt_size(total)}")
+            print()
+            for x in items:
+                shared = " [공유중]" if x.get("shares") else ""
+                print(f"    {x['id']}  {x['name']}  {_cli_fmt_size(x.get('size', 0))}{shared}")
+        print()
+        return 0
+
+    if cmd == "add":
+        if not rest or rest[0].startswith("--"):
+            print("  ✗ 경로가 필요합니다. 사용법: fsh files add <path> [--share 1h|24h|7d|30d] [--pin]",
+                  file=sys.stderr)
+            return 2
+        src = Path(rest[0]).expanduser()
+        if not src.is_file():
+            print(f"  ✗ 파일이 없습니다: {src}", file=sys.stderr)
+            return 1
+        share_ttl_arg = None
+        want_pin = False
+        i = 1
+        while i < len(rest):
+            if rest[i] == "--share" and i + 1 < len(rest):
+                share_ttl_arg = rest[i + 1]
+                i += 2
+            elif rest[i] == "--pin":
+                want_pin = True
+                i += 1
+            else:
+                i += 1
+        # add는 원본을 지우지 않는다(복사) — 임시 tmp 파일을 만들어 기존
+        # add_from_upload(rename 기반)에 그대로 태운다.
+        import shutil
+        import uuid as _uuid
+        tmp = files_dir() / f".tmp-{_uuid.uuid4().hex}"
+        files_dir().mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, tmp)
+        item = add_from_upload(tmp, src.name, src.stat().st_size)
+        print(f"  ✓ 추가됨 {item['name']} {_cli_fmt_size(item['size'])} id {item['id']}")
+        if share_ttl_arg:
+            ttl = _CLI_TTL_ALIASES.get(share_ttl_arg)
+            if ttl is None:
+                print(f"  ⚠ 알 수 없는 --share 값: {share_ttl_arg} (1h|24h|7d|30d 중 하나)", file=sys.stderr)
+                return 0
+            pin = None
+            if want_pin:
+                pin = secrets.token_hex(2)  # 4자리 숫자 대용(hex) — 화면에 보여줄 값
+                print(f"  ℹ PIN: {pin}")
+            share = add_share(item["id"], "pin" if want_pin else "device", ttl, False, pin=pin)
+            token = build_share_token(item["id"], share)
+            print(f"  ✓ 공유 경로: /s/{token}")
+        return 0
+
+    if cmd == "rm":
+        if not rest:
+            print("  ✗ id가 필요합니다", file=sys.stderr)
+            return 2
+        item = _cli_find_by_prefix(rest[0])
+        if item is None:
+            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            return 1
+        delete(item["id"])
+        print(f"  ✓ 삭제됨: {item['name']}")
+        return 0
+
+    if cmd == "share":
+        if not rest:
+            print("  ✗ id가 필요합니다. 사용법: fsh files share <id> [--ttl 1h|24h|7d|30d] [--pin] [--once]",
+                  file=sys.stderr)
+            return 2
+        item = _cli_find_by_prefix(rest[0])
+        if item is None:
+            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            return 1
+        ttl_arg, want_pin, want_once = "24h", False, False
+        i = 1
+        while i < len(rest):
+            if rest[i] == "--ttl" and i + 1 < len(rest):
+                ttl_arg = rest[i + 1]
+                i += 2
+            elif rest[i] == "--pin":
+                want_pin = True
+                i += 1
+            elif rest[i] == "--once":
+                want_once = True
+                i += 1
+            else:
+                i += 1
+        ttl = _CLI_TTL_ALIASES.get(ttl_arg)
+        if ttl is None:
+            print(f"  ✗ 알 수 없는 --ttl 값: {ttl_arg} (1h|24h|7d|30d 중 하나)", file=sys.stderr)
+            return 2
+        pin = None
+        if want_pin:
+            pin = secrets.token_hex(2)
+            print(f"  ℹ PIN: {pin}")
+        share = add_share(item["id"], "pin" if want_pin else "device", ttl, want_once, pin=pin)
+        token = build_share_token(item["id"], share)
+        print(f"  ✓ 공유 경로: /s/{token}")
+        return 0
+
+    if cmd == "unshare":
+        if not rest:
+            print("  ✗ id가 필요합니다", file=sys.stderr)
+            return 2
+        item = _cli_find_by_prefix(rest[0])
+        if item is None:
+            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            return 1
+        shares = item.get("shares", [])
+        if not shares:
+            print("  ⓘ 공유 중이 아닙니다")
+            return 0
+        for s in list(shares):
+            remove_share(item["id"], s["shareId"])
+        print(f"  ✓ 공유 {len(shares)}건 취소됨")
+        return 0
+
+    if cmd == "insert":
+        if not rest:
+            print("  ✗ id가 필요합니다", file=sys.stderr)
+            return 2
+        item = _cli_find_by_prefix(rest[0])
+        if item is None:
+            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            return 1
+        fp = real_path_for(item["id"])
+        if fp is None:
+            print("  ✗ 디스크에서 파일을 찾을 수 없습니다(고아 메타)", file=sys.stderr)
+            return 1
+        import tmux_target
+        pane, mode = tmux_target.resolve_voice_target_pane()
+        if not pane:
+            print("  ✗ 대상 tmux pane을 찾지 못했습니다", file=sys.stderr)
+            return 1
+        if not tmux_target.type_to_tmux(pane, str(fp)):
+            print("  ✗ 삽입 실패", file=sys.stderr)
+            return 1
+        print(f"  ✓ 삽입됨 → {pane} ({mode})")
+        return 0
+
+    print(f"unknown command: {cmd}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(_cli(sys.argv[1:]))
