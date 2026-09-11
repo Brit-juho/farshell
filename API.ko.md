@@ -138,6 +138,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | PUT | `/api/device-settings` | 이 기기의 설정 저장 |
 | GET | `/api/agents` | tmux 세션별 활성 에이전트 (claude 등) 전체 목록 |
 | GET | `/api/agents/{name}` | 특정 tmux 세션의 활성 에이전트 정보 |
+| GET | `/api/agents/coverage` | N9/N45 — CLI별 승인 대기 감지 커버리지: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low"}]`, `detect/*.toml`을 실시간으로 읽는다 |
 | GET | `/api/agent/status` | 에이전트 상태 머신(A1) — 세션별 `idle/working/waiting/done` + TTL 만료 |
 | POST | `/api/agent/report` | pane 자기보고(A2) — 훅이 없는 에이전트용 (`fsh pane report`) |
 | GET | `/api/hooks/status` | Claude Code 훅 등록 상태(A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |

@@ -142,6 +142,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | PUT | `/api/device-settings` | Save this device's settings |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |
 | GET | `/api/agents/{name}` | Active agent info for a specific tmux session |
+| GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low"}]`, read live from `detect/*.toml` |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
 | GET | `/api/hooks/status` | Claude Code hook registration status (A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
