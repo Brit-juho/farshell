@@ -101,6 +101,16 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/queue/{id}/unblock` | Resume an item blocked by safe_mode |
 | POST | `/api/queue/run` | Manual drain — dispatch one item |
 
+## Worktrees (N8/N44)
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/worktrees` | List every discovered git worktree across all repos under `VT_BROWSE_ROOTS` (+ `~/.worktrees`), with session mapping and diff summary. 5s cache |
+| GET | `/api/worktrees/precheck?repo&base` | Lockfile-mismatch banner check ahead of the create dialog (`warnings: ["lockfile_mismatch"]`) |
+| POST | `/api/worktrees` | Create a worktree (`git worktree add` + node_modules/`.env`/port-band/agent steps). Rolls back on failure |
+| DELETE | `/api/worktrees/{id}` | Remove a worktree. 409 + `dirty:true` if it has changes unless `force:true`; `killSessions:true` also kills its tmux sessions |
+| POST | `/api/worktrees/{id}/open` | Attach to its existing tmux session, or create `wt-<repoName>-<branch>` if none exists |
+
 ## Port Dashboard
 
 | Method | Path | Description |

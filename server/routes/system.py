@@ -287,6 +287,19 @@ async def device_settings_put(request: Request):
     return {"ok": True, "device_id": did, "settings": merged}
 
 
+async def broadcast_workspace_event(msg: dict) -> None:
+    """`/ws-workspace`에 붙은 모든 클라이언트로 push. workspace_put과 N8(워크트리
+    변경) 양쪽이 공유하는 단일 브로드캐스트 경로 — 각자 클라이언트 집합을 순회하는
+    코드를 복제하지 않는다."""
+    dead = set()
+    for ws in list(_workspace_clients):
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            dead.add(ws)
+    _workspace_clients.difference_update(dead)
+
+
 @router.get("/api/workspace")
 async def workspace_get():
     return workspace.load()
@@ -305,14 +318,7 @@ async def workspace_put(request: Request):
     data = await request.json()
     merged = workspace.update(data)
 
-    msg = {"type": "workspace_updated", "data": merged}
-    dead = set()
-    for ws in list(_workspace_clients):
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            dead.add(ws)
-    _workspace_clients.difference_update(dead)
+    await broadcast_workspace_event({"type": "workspace_updated", "data": merged})
     return {"ok": True, "data": merged}
 
 

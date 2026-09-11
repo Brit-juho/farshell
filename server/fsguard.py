@@ -20,9 +20,12 @@ P2(코드 뷰어)는 읽기 전용이지만, 공개 터널 너머로 열리는 A
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # 열람 가능한 파일 최대 크기. 넘으면 앞부분만 잘라 보낸다(묵시적 실패가 아니라 명시적 절단).
 MAX_BYTES = int(os.environ.get("VT_FS_MAX_BYTES", str(512 * 1024)))
@@ -78,7 +81,8 @@ def get_roots() -> list[Path]:
     raw = os.environ.get("VT_BROWSE_ROOTS", "").strip()
     if not raw:
         default = Path.home() / "GitHub"
-        return [default] if default.is_dir() else [Path.home()]
+        roots = [default] if default.is_dir() else [Path.home()]
+        return _with_worktrees_root(roots)
     roots = []
     for chunk in raw.split(":"):
         chunk = chunk.strip()
@@ -90,7 +94,20 @@ def get_roots() -> list[Path]:
             continue
         if p.is_dir():
             roots.append(p)
-    return roots
+    return _with_worktrees_root(roots)
+
+
+def _with_worktrees_root(roots: list[Path]) -> list[Path]:
+    """N8(30-worktree.md §2) — `~/.worktrees`는 디자인상 정해진 워크트리 저장 위치라
+    VT_BROWSE_ROOTS에 없어도 항상 열람 경계 안에 있어야 한다. 이미 어떤 루트가 그
+    경로를 포함하고 있으면 중복 추가하지 않는다."""
+    wt_root = Path.home() / ".worktrees"
+    if not wt_root.is_dir():
+        return roots
+    if any(_is_within(wt_root, root) for root in roots):
+        return roots
+    logger.info(f"VT_BROWSE_ROOTS에 없어 자동 추가: {wt_root}")
+    return roots + [wt_root]
 
 
 def get_start_roots() -> list[Path]:

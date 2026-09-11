@@ -24,6 +24,12 @@ export interface RailRowInput {
   /** toml `options` 캡처로 뽑은 번호 선택지. 못 뽑았으면 null(또는 undefined)
    * — 그 경우 Fleet.tsx는 버튼 대신 「터미널로」를 그린다. */
   options?: { key: string; label: string }[] | null;
+  /** N8(30-worktree.md §4) — 이 세션의 cwd가 속한 워크트리. 어떤 워크트리에도
+   * 안 속하면(홈 디렉터리, 비 git 경로) null — 그 세션은 「기타」다. rail-data는
+   * 이 값으로 그룹을 나누지 않는다(그룹 순서는 여전히 상태 기준, 10 §5) — Rail.tsx가
+   * 행에 배지로만 얹는다. 워크트리 단위 행 재구성(§4 본문의 "행 = Worktree")은
+   * 2.1.1 후속 범위. */
+  worktreeLabel?: string | null;
 }
 
 export interface RailRow extends RailRowInput {
