@@ -56,6 +56,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/auth` | 로그인 — 비밀번호(+새 기기면 `otp`) 또는 1회용 `ticket` → `vt_session`/`vt_device` HttpOnly 쿠키 발급. 401 `otp_required`/`otp_invalid`, 429 `otp_locked` |
 | GET | `/api/auth/status` | 인증 활성 여부 / OTP 연동 여부 / 이 기기 등록 여부 (미인증 접근 가능, 비밀 미포함) |
 | POST | `/api/auth/logout` | 세션만 해제 (기기 등록은 유지) |
+| POST | `/api/auth/elevate` | 비밀번호(+OTP 연동 시 OTP) 재확인 → `vt_session`에 15분짜리 `elev` 클레임을 얹어 재발급(N31). 기기 스코프가 아니라 세션 스코프. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
 
 ## 코드 뷰어 / diff (읽기 전용)
 
@@ -80,6 +81,16 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/git/commit` | 스테이지된 변경사항 커밋 (JSON: repo, message). 스테이지된 게 없으면 400 |
 | GET | `/api/git/log?repo=X[&file=Y]` | 최근 커밋 목록 |
 | GET | `/api/git/show?repo=X&rev=Y` | 커밋 하나의 diff |
+
+## git 계정 · 바인딩 (N30, GET 제외 승격 세션 필요)
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/git/accounts` | 계정 목록 — 토큰 원문 없이 `auth.masked`(`ghp_…3f2a`)만 |
+| POST | `/api/git/accounts` | 승격 필요(`require_elevated`). 저장 전 GitHub/GitLab `GET /user`로 PAT 검증 후 `login` 자동 채움 |
+| DELETE | `/api/git/accounts/{account_id}` | 승격 필요. 이 계정을 가리키는 바인딩도 함께 제거 |
+| GET | `/api/git/binding?repo=X` | 저장소의 해석된 계정 id: `byRepo` → 원격 URL의 `host/owner`가 `byHostOrg` → 같은 host에 계정이 정확히 1개 → `null` |
+| PUT | `/api/git/binding` | 승격 필요. body `{repo, account_id}` — `byRepo` 명시 바인딩 설정 |
 
 ## 스크롤백 검색
 

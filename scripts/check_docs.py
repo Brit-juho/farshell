@@ -32,8 +32,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # ── 1. 서버 라우트 ↔ API.md ───────────────────────────────────────────────
 # `@router.get("/api/x")` 형태에서 경로만 뽑는다. 데코레이터가 여러 줄이거나
 # 같은 함수에 두 개 붙는 경우(`@router.post` + `@router.get`)도 각각 잡힌다.
+# `\w*router`로 접두사를 허용하는 이유: N30/N31에서 승격이 필요한 라우트를
+# `APIRouter(dependencies=[Depends(require_elevated)])`로 묶은 별도 라우터
+# (`elevated_router`)가 처음 등장했다 — 변수명이 정확히 "router"가 아니면
+# 그 라우트가 통째로 안 잡혀서 문서와 어긋난 것처럼 오탐하는 문제가 있었다.
 ROUTE_RE = re.compile(
-    r'@(?:router|app)\.(get|post|put|patch|delete|websocket)\(\s*["\']([^"\']+)["\']'
+    r'@(?:\w*router|app)\.(get|post|put|patch|delete|websocket)\(\s*["\']([^"\']+)["\']'
 )
 
 # 경로 파라미터는 문서에서 이름이 다를 수 있다(`{id}` vs `{session_id}`).
