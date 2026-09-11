@@ -152,12 +152,24 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/push/test` | Send a test notification |
 | GET | `/api/push/status` | Subscription count / current origin / count of origin-mismatched subscriptions |
 
+## Files (N19)
+
+`/tmp/vt-uploads` (path-based) has been replaced by `~/.vt/files/` (id-based).
+Old uploads are migrated automatically on server startup. There is no path-based
+download API — `/api/files/{id}/download` is id-only by design.
+
+| Method | Path | Description |
+|--------|------|------|
+| POST | `/api/upload?session_id=X` | Upload a file (multipart/form-data) → stored in file_store, response includes `id` |
+| GET | `/api/files?filter=all\|shared\|expiring` | List stored files |
+| GET | `/api/files/{id}/download` | Download by id (`attachment` + `nosniff` + `no-store`) |
+| DELETE | `/api/files/{id}` | Delete a stored file |
+| POST | `/api/files/{id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
+
 ## Misc
 
 | Method | Path | Description |
 |--------|------|------|
-| POST | `/api/upload?session_id=X` | Upload a file (multipart/form-data) |
-| GET | `/api/download?path=X` | Download a file from the server |
 | GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel/version, etc.) |
 | GET | `/api/workspace` | Fetch workspace sync state (tabs/UI state) |
 | PUT | `/api/workspace` | Save workspace state |

@@ -20,12 +20,15 @@ import logging
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
+import file_store
 import fsguard
+import tmux_target
 
 logger = logging.getLogger(__name__)
 
@@ -739,3 +742,92 @@ async def git_commit(request: Request):
     status = await asyncio.to_thread(_collect_status, top)
     status["committed"] = True
     return status
+
+
+# --- 파일 저장소 (N19) ---------------------------------------------------------
+#
+# 코드 뷰어(fs/*)·git 섹션과 달리 이쪽은 fsguard 경계와 무관하다 — 접근 판정은
+# file_store.py의 id 기반 조회 하나뿐이라 여기서 별도 경로 검사를 할 게 없다.
+
+EXPIRING_SOON_SECONDS = 3 * 86400  # dock 칩 "만료 임박" 기준(50-files-share.md §4)
+
+
+def _file_public(item: dict) -> dict:
+    """클라이언트에 내려줄 필드만 — 실 경로(디스크 절대경로)는 노출하지 않는다."""
+    now_ = time.time()
+    expires_at = item.get("created", 0) + file_store.TTL_SECONDS
+    return {
+        "id": item["id"],
+        "name": item["name"],
+        "size": item.get("size", 0),
+        "mime": item.get("mime"),
+        "created": item.get("created"),
+        "session": item.get("session"),
+        "worktree": item.get("worktree"),
+        "host": item.get("host", "local"),
+        "shares": item.get("shares", []),
+        "pin": bool(item.get("pin")),
+        "expires_at": None if item.get("shares") or item.get("pin") else expires_at,
+        "expiring_soon": bool(
+            not item.get("shares") and not item.get("pin")
+            and (expires_at - now_) <= EXPIRING_SOON_SECONDS
+        ),
+    }
+
+
+@router.get("/api/files")
+async def list_files(filter: str = Query("all")):
+    items = await asyncio.to_thread(file_store.list_items)
+    items.sort(key=lambda x: x.get("created", 0), reverse=True)
+    public = [_file_public(x) for x in items]
+    if filter == "shared":
+        public = [x for x in public if x["shares"]]
+    elif filter == "expiring":
+        public = [x for x in public if x["expiring_soon"]]
+    elif filter != "all":
+        return JSONResponse({"error": "bad_filter"}, status_code=400)
+    return {"items": public}
+
+
+@router.get("/api/files/{file_id}/download")
+async def download_file(file_id: str):
+    fp = await asyncio.to_thread(file_store.real_path_for, file_id)
+    if fp is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    item = await asyncio.to_thread(file_store.get_item, file_id)
+    resp = FileResponse(
+        str(fp),
+        filename=item["name"] if item else fp.name,
+        media_type=item.get("mime") if item else None,
+    )
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
+
+
+@router.delete("/api/files/{file_id}")
+async def delete_file(file_id: str):
+    ok = await asyncio.to_thread(file_store.delete, file_id)
+    if not ok:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return {"ok": True}
+
+
+@router.post("/api/files/{file_id}/insert")
+async def insert_file(file_id: str, request: Request):
+    """파일 경로를 지정 세션(tmux)의 pane에 타이핑 — Enter는 누르지 않는다
+    (기존 클라이언트 사이드 sendToPty 동작의 서버판, N19 §2)."""
+    body = await _read_json_body(request)
+    session = str(body.get("session", "")).strip()
+    if not session:
+        return JSONResponse({"error": "missing_session"}, status_code=400)
+    fp = await asyncio.to_thread(file_store.real_path_for, file_id)
+    if fp is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    pane = tmux_target.session_pane(session)
+    if not pane:
+        return JSONResponse({"error": "session_not_found"}, status_code=404)
+    ok = await asyncio.to_thread(tmux_target.type_to_tmux, pane, str(fp))
+    if not ok:
+        return JSONResponse({"error": "insert_failed"}, status_code=500)
+    return {"ok": True}

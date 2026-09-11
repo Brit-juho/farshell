@@ -12,7 +12,9 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
+import file_store
 import main
+import tmux_target
 
 
 def _run_git(repo: Path, *args: str) -> None:
@@ -257,3 +259,97 @@ def test_fs_search_caps_results_at_50(client, repo):
     data = r.json()
     assert len(data["results"]) <= 50
     assert data["truncated"] is True
+
+
+# --- 파일 저장소 API (N19) -----------------------------------------------------
+
+
+@pytest.fixture
+def file_state(tmp_path, monkeypatch):
+    """files.json/실파일을 격리된 ~/.vt로 — file_store가 매 호출 시 env를 다시 읽으므로
+    setenv만으로 충분하다(repo 픽스처가 VT_BROWSE_ROOTS에 하는 것과 동일한 패턴)."""
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path))
+    return tmp_path
+
+
+def _upload_via_api(client, name="a.txt", content=b"hello"):
+    r = client.post("/api/upload", files={"file": (name, content)})
+    assert r.status_code == 200
+    return r.json()
+
+
+def test_upload_then_files_list_shows_id_only_no_disk_path(client, file_state):
+    body = _upload_via_api(client)
+    assert "id" in body and body["path"]
+    r = client.get("/api/files")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == body["id"]
+    assert "path" not in items[0]  # 실 디스크 경로는 노출하지 않는다
+
+
+def test_download_by_id_succeeds_and_sets_security_headers(client, file_state):
+    body = _upload_via_api(client, name="report.pdf", content=b"pdfdata")
+    r = client.get(f"/api/files/{body['id']}/download")
+    assert r.status_code == 200
+    assert r.content == b"pdfdata"
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert "no-store" in r.headers["cache-control"]
+    assert "attachment" in r.headers["content-disposition"]
+
+
+def test_download_unknown_id_is_404(client, file_state):
+    r = client.get("/api/files/does-not-exist/download")
+    assert r.status_code == 404
+
+
+def test_legacy_download_path_route_is_gone(client, file_state):
+    """/tmp/vt-uploads 시절의 경로 기반 다운로드 API는 완전히 제거됐다 — id 기반으로만 접근한다."""
+    r = client.get("/api/download", params={"path": "/etc/passwd"})
+    assert r.status_code == 404  # 라우트 자체가 없다(FastAPI 기본 404)
+
+
+def test_delete_file_removes_it(client, file_state):
+    body = _upload_via_api(client)
+    r = client.delete(f"/api/files/{body['id']}")
+    assert r.status_code == 200
+    assert client.get(f"/api/files/{body['id']}/download").status_code == 404
+    assert client.delete(f"/api/files/{body['id']}").status_code == 404
+
+
+def test_insert_types_path_without_enter(client, file_state, monkeypatch):
+    body = _upload_via_api(client)
+    monkeypatch.setattr(tmux_target, "session_pane", lambda name: "%3" if name == "dev" else None)
+    calls = []
+    monkeypatch.setattr(tmux_target, "type_to_tmux", lambda pane, text: calls.append((pane, text)) or True)
+    r = client.post(f"/api/files/{body['id']}/insert", json={"session": "dev"})
+    assert r.status_code == 200
+    assert calls and calls[0][0] == "%3"
+
+
+def test_insert_unknown_session_is_404(client, file_state, monkeypatch):
+    body = _upload_via_api(client)
+    monkeypatch.setattr(tmux_target, "session_pane", lambda name: None)
+    r = client.post(f"/api/files/{body['id']}/insert", json={"session": "ghost"})
+    assert r.status_code == 404
+
+
+def test_files_filter_shared_and_expiring(client, file_state, monkeypatch):
+    a = _upload_via_api(client, name="shared.txt")
+    b = _upload_via_api(client, name="soon.txt")
+    _upload_via_api(client, name="normal.txt")
+
+    items = file_store.list_items()
+    for x in items:
+        if x["id"] == a["id"]:
+            x["shares"] = [{"shareId": "s1"}]
+        if x["id"] == b["id"]:
+            x["created"] -= file_store.TTL_SECONDS - 1  # 3일 미만 남김
+    file_store._write_unlocked(items)
+
+    shared = client.get("/api/files", params={"filter": "shared"}).json()["items"]
+    assert {x["id"] for x in shared} == {a["id"]}
+
+    expiring = client.get("/api/files", params={"filter": "expiring"}).json()["items"]
+    assert {x["id"] for x in expiring} == {b["id"]}

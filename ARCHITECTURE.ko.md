@@ -415,7 +415,7 @@ PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `fsh stop`이 모�
 | 코드 뷰어 | 고정 루트(`VT_BROWSE_ROOTS`) + `Path.resolve()`/`is_relative_to`(`startswith` 금지) + 거부 목록, 전부 한 곳(`fsguard.py`); 읽기 전용, 쓰기 API 없음 | 공개 터널로 노출되므로 여기가 주된 blast-radius 통제 지점 |
 | 포트 대시보드 | FarShell 서버 자신이나 `cloudflared`/`tailscaled`/`sshd`는 종료 불가; 다른 사용자 프로세스도 불가(sudo 미사용); 종료 직전 port→pid 재확인으로 PID 재사용 오류 방지 | `expose`는 포트를 공인 인터넷에 연다 — `confirm:true` + `VT_NETWORK_MODE=all` 필요 |
 | 명령 안전성 | `safe_mode.py`가 설정 가능한 위험 명령 목록을 사전 차단 | 패턴 매칭 기반 best-effort, 샌드박스 아님 |
-| 업로드 | `/tmp/vt-uploads/` 격리 | 디스크 쿼터 없음 |
+| 업로드 | `~/.vt/files/`(N19) id 기반 저장 — API가 경로를 받지 않고 id만 받는다 | `VT_FILES_MAX_GB`/`VT_FILES_TTL_DAYS`로 상한, 공유/고정 파일은 정리 제외 |
 | 접속 가시성 | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push (D9) | 기본 OFF, `who` 기반 원격 호스트 추출은 best-effort |
 
 ---

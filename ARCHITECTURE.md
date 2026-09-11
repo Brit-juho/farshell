@@ -434,7 +434,7 @@ cleans them all up.
 | Code viewer | Fixed root (`VT_BROWSE_ROOTS`) + `Path.resolve()`/`is_relative_to` (never `startswith`) + denylist, all in one place (`fsguard.py`); read-only, no write API | Exposed over the public tunnel, so this is the primary blast-radius control |
 | Ports dashboard | Can't kill the FarShell server itself or `cloudflared`/`tailscaled`/`sshd`; can't kill other users' processes (no sudo); re-checks port→pid right before killing to avoid PID-reuse mistakes | `expose` opens a port to the public internet — requires `confirm:true` and `VT_NETWORK_MODE=all` |
 | Command safety | `safe_mode.py` pre-blocks a configurable dangerous-command list | Best-effort pattern matching, not a sandbox |
-| Upload | Isolated to `/tmp/vt-uploads/` | No disk quota |
+| Upload | id-based storage in `~/.vt/files/` (N19) — API takes no path, only ids | Bounded by `VT_FILES_MAX_GB`/`VT_FILES_TTL_DAYS`; shared/pinned files are excluded from cleanup |
 | Connection visibility | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push (D9) | Off by default; `who`-based remote host extraction is best-effort |
 
 ---

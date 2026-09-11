@@ -148,12 +148,24 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | POST | `/api/push/test` | 테스트 알림 발송 |
 | GET | `/api/push/status` | 구독 수 / 현재 origin / origin 어긋난 구독 수 |
 
+## 파일 (N19)
+
+`/tmp/vt-uploads`(경로 기반)를 `~/.vt/files/`(id 기반)로 대체했다. 기존 업로드는
+서버 기동 시 자동 이전된다. 경로 기반 다운로드 API는 없다 —
+`/api/files/{id}/download`는 설계상 id로만 접근한다.
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/upload?session_id=X` | 파일 업로드 (multipart/form-data) → file_store에 저장, 응답에 `id` 포함 |
+| GET | `/api/files?filter=all\|shared\|expiring` | 저장된 파일 목록 |
+| GET | `/api/files/{id}/download` | id로 다운로드 (`attachment` + `nosniff` + `no-store`) |
+| DELETE | `/api/files/{id}` | 저장된 파일 삭제 |
+| POST | `/api/files/{id}/insert` | 파일 경로를 tmux 세션 pane에 타이핑(JSON: `session`), Enter는 안 누름 |
+
 ## 기타
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| POST | `/api/upload?session_id=X` | 파일 업로드 (multipart/form-data) |
-| GET | `/api/download?path=X` | 서버 파일 다운로드 |
 | GET | `/api/capabilities` | 서버 capability 정보 (TTS/STT/터널/버전 등) |
 | GET | `/api/workspace` | 워크스페이스 동기화 조회 (탭/UI 상태) |
 | PUT | `/api/workspace` | 워크스페이스 상태 저장 |
