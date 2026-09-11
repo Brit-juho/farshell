@@ -65,7 +65,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '마우스 · 선택', '접근성', '음성', '키맵', '정보'],
+    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '정보'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -326,4 +326,53 @@ test('음성 — 패널을 닫아도 죽지 않는다(onClose cleanup 경로)', 
   sectionButton(document, '음성').click();
   P.showSettings();
   assert.strictEqual(document.getElementById('vt-settings'), null);
+});
+
+// N9/N45(80-multihost-agents.md §2) — 감지 커버리지 표.
+const COVERAGE_ROWS = [
+  { cli: 'claude', path: 'pty', patternLines: 24, states: ['waiting'], trust: 'mid' },
+  { cli: 'codex', path: 'none', patternLines: 4, states: [], trust: 'low' },
+];
+
+test('에이전트 — 커버리지 표가 API 응답으로 그려진다', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/agents/coverage')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve(COVERAGE_ROWS) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '에이전트').click();
+  await flush();
+  const table = document.querySelector('.vt-set-covtable');
+  assert.ok(table, '표가 그려져야 한다');
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[0].querySelector('.vt-set-covcli').textContent, 'claude');
+  assert.strictEqual(rows[0].querySelector('.vt-set-covtrust').dataset.trust, 'mid');
+  assert.strictEqual(rows[1].querySelector('.vt-set-covtrust').dataset.trust, 'low');
+});
+
+test('에이전트 — "보통 이하" 경고 문장이 그대로 노출된다', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/agents/coverage')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve(COVERAGE_ROWS) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '에이전트').click();
+  await flush();
+  const texts = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
+  assert.ok(texts.includes('"보통" 이하는 레일에서 승인 대기를 놓칠 수 있다는 뜻입니다.'));
+});
+
+test('에이전트 — API 실패 시 표 대신 안내 문구', async () => {
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/agents/coverage')
+      ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '에이전트').click();
+  await flush();
+  assert.ok(!document.querySelector('.vt-set-covtable'));
 });
