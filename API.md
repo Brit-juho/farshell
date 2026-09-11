@@ -60,6 +60,8 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | GET | `/api/auth/status` | Whether auth is active / OTP is linked / this device is registered (accessible unauthenticated, no secrets included) |
 | POST | `/api/auth/logout` | Clears the session only (device registration is kept) |
 | POST | `/api/auth/elevate` | Re-verify password (+ OTP if linked) → reissues `vt_session` with a 15-minute `elev` claim (N31). Session-scoped, not device-scoped. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
+| GET | `/api/auth/elevation` | Current session's elevation state (`elevated`, `elevated_until`) + `unused: true` / `unused_reason: "ADR-27"` — no path requires elevation today. Read-only (Settings → Security) |
+| GET | `/api/devices` | Registered devices (`~/.vt/devices.json`): id (first 8 chars only), label, added_at, last_seen, `current` for the requesting device. Read-only — registration/revocation is `fsh device` |
 
 ## Code Viewer / Diff (read-only)
 
