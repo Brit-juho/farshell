@@ -1682,6 +1682,38 @@ cmd_device() {
   esac
 }
 
+# git 계정 저장소 + 바인딩 (N30, 40-dock-git.md §1). 토큰은 절대 argv로 넘기지
+# 않는다 — add는 --token-stdin만 받고 표준입력을 그대로 파이썬 프로세스에 전달한다
+# (이 함수가 stdin을 별도로 리다이렉트하지 않으므로 그대로 상속된다).
+cmd_git_account() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-list}"
+  local py_dir="$VT_DIR/server"
+  shift 2>/dev/null || true
+  case "$sub" in
+    list|ls|"")
+      (cd "$py_dir" && "$VT_PYTHON" git_account_store.py list)
+      ;;
+    add)
+      (cd "$py_dir" && "$VT_PYTHON" git_account_store.py add "$@")
+      ;;
+    rm|remove)
+      (cd "$py_dir" && "$VT_PYTHON" git_account_store.py rm "$@")
+      ;;
+    bind)
+      (cd "$py_dir" && "$VT_PYTHON" git_account_store.py bind "$@")
+      ;;
+    *)
+      echo "  사용법: fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]"
+      echo "  예:     echo \"\$TOKEN\" | fsh git-account add --provider github --token-stdin"
+      return 1
+      ;;
+  esac
+}
+
 # 모바일/핸드오프 URL에 붙일 1회용 기기 등록 티켓. 인증이 꺼져 있으면 빈 문자열.
 _issue_ticket() {
   [ -z "${VT_AUTH_PASSWORD_HASH:-${VT_PASSWORD_HASH:-}}" ] && [ -z "${VT_AUTH_TOKEN:-${VT_TOKEN:-}}" ] && return 0
@@ -3472,6 +3504,7 @@ case "${1:-help}" in
   password) shift; cmd_password "$@" ;;
   otp)      shift; cmd_otp "$@" ;;
   device|devices) shift; cmd_device "$@" ;;
+  git-account) shift; cmd_git_account "$@" ;;
   voice-target) shift; cmd_voice_target "$@" ;;
   manage)   shift; cmd_manage "$@" ;;
   tui)      shift; cmd_manage "$@" ;;
