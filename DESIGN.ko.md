@@ -209,7 +209,7 @@ CI에서 이 표를 코드와 직접 대조한다(I3). 산문이 아니라 표�
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad` | `frontend/js/theme.js` — `VT_SKINS` |
 | `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()`(compact/regular/wide. xwide는 `Infinity`라 표에 안 잡힌다) |
-| `rail-items` | `6` | `frontend/index.html` — `.vt-rail-btn` 개수(**2.1.0에서 CSS로 숨긴 레거시 48px 아이콘 레일** `#vt-rail`. §3 참고 — 새 셸의 워크트리 레일 `#vt-wgrail`은 이 카운트 대상이 아니다) |
+| `rail-items` | `7` | `frontend/index.html` — `.vt-rail-btn` 개수(**2.1.0에서 CSS로 숨긴 레거시 48px 아이콘 레일** `#vt-rail`. §3 참고 — 새 셸의 워크트리 레일 `#vt-wgrail`은 이 카운트 대상이 아니다) |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error`는 예약, §5) |
 | `color-bg-0` | `#08090a` | `styles/theme/tokens.css` |
 | `color-acc` | `#f0a860` | `styles/theme/tokens.css` |

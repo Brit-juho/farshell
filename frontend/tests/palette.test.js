@@ -61,13 +61,13 @@ test('fuzzyMatch — 빈 질의는 항상 매치, 대소문자 무시 부분 문
   assert.strictEqual(fuzzyMatch('Hello World', 'zzz'), false);
 });
 
-test('DEFAULT_COMMANDS — 패널 명령(.show/.open) 4개가 rail과 짝지을 action을 갖는다', async () => {
+test('DEFAULT_COMMANDS — 패널 명령(.show/.open) 5개가 rail과 짝지을 action을 갖는다', async () => {
   const { DEFAULT_COMMANDS, panelCommands } = await mod();
   // vm 모듈이 만든 배열은 이 realm의 Array와 생성자가 달라 deepStrictEqual이
   // "구조는 같은데 참조가 다르다"로 실패한다(cross-realm, hud.test.js의 ids()
   // 헬퍼와 같은 문제) — 이 realm 배열로 복사한다.
   const panels = Array.from(panelCommands(DEFAULT_COMMANDS), (c) => c.action).sort();
-  assert.deepStrictEqual(panels, ['ports.show', 'queue.show', 'snippets.show', 'usage.open'].sort());
+  assert.deepStrictEqual(panels, ['files.show', 'ports.show', 'queue.show', 'snippets.show', 'usage.open'].sort());
 });
 
 // ── 2부: mountPalette() DOM 마운트 ──────────────────────────────────────

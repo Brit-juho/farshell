@@ -765,7 +765,13 @@ def _file_public(item: dict) -> dict:
         "session": item.get("session"),
         "worktree": item.get("worktree"),
         "host": item.get("host", "local"),
-        "shares": item.get("shares", []),
+        # pinHash/pinSalt는 **절대** 내려보내지 않는다. 해시라도 목록 API로
+        # 새어 나가면 오프라인에서 4자리 PIN을 그냥 맞춰볼 수 있다(5회 제한은
+        # 서버 쪽 시도에만 걸린다). 목록이 필요로 하는 건 모드·만료·1회용뿐이다.
+        "shares": [
+            {k: s.get(k) for k in ("shareId", "mode", "exp", "once", "views", "lastAccess")}
+            for s in item.get("shares", []) if isinstance(s, dict)
+        ],
         "pin": bool(item.get("pin")),
         "expires_at": None if item.get("shares") or item.get("pin") else expires_at,
         "expiring_soon": bool(
@@ -786,7 +792,15 @@ async def list_files(filter: str = Query("all")):
         public = [x for x in public if x["expiring_soon"]]
     elif filter != "all":
         return JSONResponse({"error": "bad_filter"}, status_code=400)
-    return {"items": public}
+    # dock 파일 탭 푸터의 용량 게이지(50-files-share.md §4의 "412MB / 2GB · 30일 후
+    # 자동 삭제"). used는 **필터와 무관하게 전체**다 — 게이지가 칩을 누를 때마다
+    # 움직이면 그건 용량이 아니라 필터 결과를 그린 것이 된다.
+    used = sum(int(x.get("size", 0) or 0) for x in items)
+    return {
+        "items": public,
+        "quota": {"used": used, "max": file_store.MAX_TOTAL_BYTES,
+                  "ttl_days": file_store.TTL_SECONDS // 86400},
+    }
 
 
 @router.get("/api/files/{file_id}/download")
@@ -811,6 +825,23 @@ async def delete_file(file_id: str):
     if not ok:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return {"ok": True}
+
+
+@router.get("/api/files/{file_id}/path")
+async def file_path(file_id: str):
+    """저장된 파일의 디스크 경로 — dock 파일 탭의 「경로 복사」(50 §4의 5개 동작 중
+    하나)가 쓴다.
+
+    `_file_public`이 경로를 빼는 것과 모순처럼 보이지만 성격이 다르다: 목록은
+    화면을 그리는 데 경로가 필요 없어서 뺀 것이고, 여기는 **사용자가 명시적으로
+    그 값을 달라고 누른** 경로다. 애초에 `insert`가 같은 문자열을 pane에 그대로
+    타이핑하므로 새로 열리는 비밀은 없다. 입력은 여전히 id 하나뿐이라 경로를
+    받아 파일을 여는 traversal 표면도 생기지 않는다(그게 id 기반 설계의 목적이다).
+    """
+    fp = await asyncio.to_thread(file_store.real_path_for, file_id)
+    if fp is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return {"id": file_id, "path": str(fp)}
 
 
 @router.post("/api/files/{file_id}/insert")

@@ -216,6 +216,12 @@
     <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" title="프롬프트 스니펫">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
     </button>
+    <!-- 50-files-share.md §4 — 파일 저장소 탭. 위 주석의 「파일」(코드 뷰어)과는
+         다른 것이다: 그건 저장소의 소스를 읽는 화면이고, 이건 업로드된 파일을
+         관리·공유하는 화면이다(dock 파일 탭과 같은 렌더러). -->
+    <button type="button" class="vt-rail-btn" id="vt-rail-files" data-rail="files" data-action="files.show" aria-label="파일" title="파일 — 저장소 · 공유 링크">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+    </button>
     <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" title="포트 대시보드">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-ports" hidden></span>

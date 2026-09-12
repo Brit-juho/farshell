@@ -163,8 +163,9 @@ download API — `/api/files/{id}/download` is id-only by design.
 | Method | Path | Description |
 |--------|------|------|
 | POST | `/api/upload?session_id=X` | Upload a file (multipart/form-data) → stored in file_store, response includes `id` |
-| GET | `/api/files?filter=all\|shared\|expiring` | List stored files |
+| GET | `/api/files?filter=all\|shared\|expiring` | List stored files → `{items, quota:{used,max,ttl_days}}` (quota is always the whole store, not the filtered subset) |
 | GET | `/api/files/{id}/download` | Download by id (`attachment` + `nosniff` + `no-store`) |
+| GET | `/api/files/{id}/path` | Disk path of a stored file (dock file tab's "copy path"; id-only input, so no traversal surface) |
 | DELETE | `/api/files/{id}` | Delete a stored file |
 | POST | `/api/files/{id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
 | POST | `/api/files/{id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
