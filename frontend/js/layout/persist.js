@@ -22,16 +22,25 @@ const LS_KEY = 'vt-layout-v1';
 const SAVE_DEBOUNCE_MS = 400;
 
 // ── 직렬화 ────────────────────────────────────────────────────────────────
-// 트리 노드를 그대로 옮기되 leaf.session만 {id, tmux}로 바꾼다. worktree/host는
-// ADR-10의 확장 자리라 2.0에선 항상 고정값이므로 저장하지 않는다(복원 시
+// 트리 노드를 그대로 옮기되 leaf.session만 {id, tmux}로 바꾼다. worktree는
+// ADR-10의 확장 자리라 아직 항상 고정값이므로 저장하지 않는다(복원 시
 // tree.js의 makeLeaf 기본값으로 채워진다).
+//
+// C3(2.1.2) — host는 저장한다. 원격 호스트가 **잠깐 꺼진 것**과 세션이
+// **죽은 것**은 다르다: 둘을 똑같이 빈 pane으로 강등하면, 호스트를 다시
+// 켜도 그 배치가 영영 사라진다. 어느 호스트의 세션이었는지를 적어 둬야
+// 복원 쪽이 그 둘을 구분할 수 있다.
 export function serializeTree(tree, lookup) {
   if (tree.t === 'leaf') {
     const info = tree.session ? lookup(tree.session) : null;
     // N35 §6 — 뷰어 칸은 세션이 아니라 **경로**를 저장한다. 경로는 새로고침
     // 뒤에도 그대로 유효하므로(세션 id와 달리) 그대로 되살아난다.
     if (tree.kind === 'viewer') return { t: 'leaf', id: tree.id, session: null, kind: 'viewer', file: tree.file || null };
-    return { t: 'leaf', id: tree.id, session: info };
+    // C3 — 아직 못 닿은(unreachable) 칸은 세션 객체가 없다. 그대로 저장하면
+    // 다음 저장 한 번에 배치가 사라지므로(레이아웃은 아무 변경에나 저장된다)
+    // 무엇을 기다리는 중이었는지를 그대로 다시 적는다.
+    const u = !info && tree.unreachable ? { id: null, tmux: tree.unreachable.tmux } : null;
+    return { t: 'leaf', id: tree.id, session: info || u, host: tree.host || 'local' };
   }
   return {
     t: 'split', id: tree.id, dir: tree.dir, ratio: tree.ratio,
@@ -41,7 +50,7 @@ export function serializeTree(tree, lookup) {
 
 function _lookupLive(sessionId) {
   const s = getSession(sessionId);
-  return { id: sessionId, tmux: (s && s.tmuxName) || null };
+  return { id: sessionId, tmux: (s && s.tmuxName) || null, host: (s && s.host) || 'local' };
 }
 
 // ── 역직렬화 ──────────────────────────────────────────────────────────────
@@ -60,7 +69,17 @@ export function deserializeTree(node, resolve, taken = new Set()) {
     let session = resolve(node.session);
     if (session && taken.has(session)) session = null;
     if (session) taken.add(session);
-    return { t: 'leaf', id: node.id, session, kind: 'terminal', file: null, worktree: null, host: 'local' };
+    // C3 — 호스트는 leaf(신규) → 저장된 session 정보(구버전 스냅샷) 순으로 읽는다.
+    const host = node.host || (node.session && node.session.host) || 'local';
+    const leaf = { t: 'leaf', id: node.id, session, kind: 'terminal', file: null, worktree: null, host };
+    // 원격 호스트의 세션을 못 찾았다 = 세션이 죽었을 수도 있지만 **호스트가
+    // 잠깐 꺼진 것일 수도** 있다. 강등하지 않고 `unreachable`로 남겨 배치를
+    // 지킨다. 로컬은 그대로 강등한다 — 로컬 tmux에 이름이 없으면 그 세션은
+    // 실제로 없는 것이고, 더 기다릴 이유가 없다.
+    if (!session && host !== 'local' && node.session && node.session.tmux) {
+      leaf.unreachable = { host, tmux: node.session.tmux };
+    }
+    return leaf;
   }
   if (node.t !== 'split' || typeof node.id !== 'string') return null;
   const a = deserializeTree(node.a, resolve, taken);
@@ -153,7 +172,9 @@ function _fillEmptyLeaves(tree) {
   (function walk(node) {
     if (node.t === 'leaf') {
       if (node.session) used.add(node.session);
-      else empties.push(node);
+      // C3 — unreachable leaf는 "빈 칸"이 아니다. 여기에 엉뚱한 로컬 세션을
+      // 채워 넣으면 호스트가 돌아왔을 때 되살릴 자리가 사라진다.
+      else if (!node.unreachable) empties.push(node);
       return;
     }
     walk(node.a); walk(node.b);

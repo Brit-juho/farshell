@@ -2662,3 +2662,19 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-share-row{ display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) 0; }
 .vt-fl-share-label{ flex:1 1 auto; min-width:0; font:400 var(--fs-xs) var(--mono); color:var(--txt); }
 .vt-fl-share-row .vt-fl-act{ font:500 var(--fs-2xs) var(--mono); padding:0 calc(var(--spacing) * 1.5); min-width:auto; }
+
+/* C3(2.1.2) — 원격 호스트가 잠깐 꺼진 pane. 빈 pane(.vt-pane-empty, "세션 선택")과
+   시각적으로 달라야 한다: 여기는 이미 주인이 정해져 있고 그 주인을 기다리는 칸이다. */
+.vt-pane-unreachable{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--spacing) * 2);
+  height:100%; padding:calc(var(--spacing) * 4); text-align:center; color:var(--sub);
+}
+.vt-pane-unreachable-title{ font:600 var(--fs-sm) var(--mono); color:var(--txt); opacity:.8; }
+.vt-pane-unreachable-sub{ font:400 var(--fs-xs) var(--mono); max-width:36ch; }
+.vt-pane-unreachable-acts{ display:flex; gap:calc(var(--spacing) * 2); }
+.vt-pane-unreachable-retry, .vt-pane-unreachable-pick{
+  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm); color:var(--txt);
+  font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); cursor:pointer;
+}
+.vt-pane-unreachable-retry:hover:not([disabled]), .vt-pane-unreachable-pick:hover{ background:var(--menu-hover); }
+.vt-pane-unreachable-retry[disabled]{ opacity:.5; cursor:default; }

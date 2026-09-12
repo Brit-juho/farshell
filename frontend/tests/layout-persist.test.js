@@ -261,3 +261,83 @@ test('복원 — 빈 leaf가 여러 개면 세션 순서대로 앞에서부터 �
   const tree = S.getTree();
   assert.deepEqual([tree.a.session, tree.b.session], ['live-a', 'live-b']);
 });
+
+// ── C3(2.1.2) — 오프라인 호스트 레이아웃 복원 ────────────────────────────────
+// 계약: 원격 호스트의 세션을 못 찾은 leaf는 **강등하지 않는다**. 강등하면
+// 호스트를 다시 켜도 배치가 영영 사라진다. 로컬은 종전대로 강등한다 —
+// 로컬 tmux에 이름이 없으면 그 세션은 실제로 없는 것이다.
+
+test('C3 — 원격 호스트의 못 찾은 세션은 unreachable로 남고 배치를 지킨다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-dev', 'dev');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: {
+      t: 'split', id: 's1', dir: 'row', ratio: 0.5,
+      a: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'dev' }, host: 'local' },
+      b: { t: 'leaf', id: 'p2', session: { id: 'y', tmux: 'build' }, host: 'gpu-box' },
+    },
+  }));
+
+  await P.restoreLayout();
+
+  const tree = S.getTree();
+  assert.strictEqual(tree.a.session, 'live-dev');
+  assert.strictEqual(tree.b.session, null);
+  assert.deepStrictEqual(
+    { ...tree.b.unreachable }, { host: 'gpu-box', tmux: 'build' },
+    '원격 leaf는 무엇을 기다리는 중인지 기억한다',
+  );
+  assert.strictEqual(S.countLeaves(), 2, '배치(칸 수)가 그대로 남는다');
+});
+
+test('C3 — 로컬 호스트의 죽은 세션은 종전대로 빈 pane으로 강등된다', async () => {
+  const { window, S, P } = await load();
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'gone' }, host: 'local' },
+  }));
+  await P.restoreLayout();
+  assert.strictEqual(S.getTree().session, null);
+  assert.strictEqual(S.getTree().unreachable, undefined);
+});
+
+test('C3 — unreachable 자리에 엉뚱한 로컬 세션을 채워 넣지 않는다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-other', 'other');   // 배정되지 않은 살아있는 세션
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'leaf', id: 'p1', session: { id: 'y', tmux: 'build' }, host: 'gpu-box' },
+  }));
+  await P.restoreLayout();
+  const tree = S.getTree();
+  assert.strictEqual(tree.session, null, '_fillEmptyLeaves가 이 칸을 가로채면 안 된다');
+  assert.ok(tree.unreachable, '기다리는 중이라는 표시가 유지된다');
+});
+
+test('C3 — unreachable 칸은 다음 저장 때도 그대로 보존된다', async () => {
+  const { S, P } = await load();
+  const rootId = S.getActivePaneId();
+  // 복원이 만든 것과 같은 모양의 leaf를 직접 넣는다(replaceTree는 트리를 통째로 받는다).
+  S.replaceTree({
+    t: 'leaf', id: rootId, session: null, kind: 'terminal', file: null,
+    worktree: null, host: 'gpu-box', unreachable: { host: 'gpu-box', tmux: 'build' },
+  }, rootId);
+  const snap = P.serializeTree(S.getTree(), () => null);
+  assert.strictEqual(snap.host, 'gpu-box');
+  assert.deepStrictEqual({ ...snap.session }, { id: null, tmux: 'build' },
+    '한 번의 저장으로 배치가 사라지면 안 된다');
+});
+
+test('C3 — 세션이 실제로 붙으면 unreachable 표시는 사라진다', async () => {
+  const { core, S } = await load();
+  const rootId = S.getActivePaneId();
+  addLive(core, 'live-remote', 'build');
+  S.replaceTree({
+    t: 'leaf', id: rootId, session: null, kind: 'terminal', file: null,
+    worktree: null, host: 'gpu-box', unreachable: { host: 'gpu-box', tmux: 'build' },
+  }, rootId);
+  S.setPaneSession('live-remote', rootId);
+  assert.strictEqual(S.getTree().session, 'live-remote');
+  assert.strictEqual(S.getTree().unreachable, undefined);
+});
