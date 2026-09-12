@@ -44,6 +44,7 @@ import './term/resize.js';
 import './layout/panes.js';   // L3 1단계 — 분할 pane 렌더러. session.js의 switchTo()가 이걸 거친다.
 import './term/touch.js';
 import './term/links.js';
+import './term/tab-worktree.js';  // 10 §4 1단계 — 탭 이름을 워크트리 단위로
 import './term/remote.js';   // N7/N39 3단계 — 원격 세션 attach(window 브리지 등록)
 import './term/selection.js';
 import './term/xterm-setup.js';

@@ -188,6 +188,9 @@ export async function renameSession(id, rawName, previousNameOverride) {
     });
     if (!res.ok) throw new Error('rename failed');
     if (nameEl) nameEl.textContent = newName;
+    // 사용자가 직접 지은 이름은 그 뒤 어떤 자동 라벨링도 덮지 않는다
+    // (term/tab-worktree.js의 워크트리 라벨이 첫 소비자다).
+    s.renamed = true;
     updateSessionPicker();
     saveWorkspace();
     return true;
