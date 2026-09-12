@@ -106,8 +106,11 @@ export function setSession(tree, paneId, sessionId) {
     if (node.t === 'leaf') {
       // 세션을 배정하면 그 칸은 다시 터미널 칸이다(뷰어였다면 파일을 놓는다).
       if (node.id === paneId) {
-        if (node.session === sessionId && node.kind !== 'viewer') return node;
-        return { ...node, session: sessionId, kind: 'terminal', file: null };
+        if (node.session === sessionId && node.kind !== 'viewer' && !node.unreachable) return node;
+        // C3 — 실제 세션이 들어오면 "못 닿는 중" 표시는 끝난다. 남겨두면
+        // 터미널이 붙었는데도 자리표시자가 계속 그려진다.
+        const { unreachable, ...rest } = node;
+        return { ...rest, session: sessionId, kind: 'terminal', file: null };
       }
       if (sessionId != null && node.session === sessionId) return { ...node, session: null };
       return node;

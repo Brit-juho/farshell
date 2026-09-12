@@ -22,6 +22,7 @@ import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSourc
 import { openPanePicker } from './pane-picker.js';
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
+import { vtFetch } from '../core/api.js';
 // N35 §6 — 뷰어 leaf의 내용은 지연 청크가 그린다(정적 import 금지, ADR-26).
 import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
@@ -143,6 +144,71 @@ function _renderEmptyBody(bodyEl, paneId) {
   bodyEl.appendChild(ph);
 }
 
+// C3 — "못 닿는 중" 자리표시자. 빈 pane(세션을 고르는 자리)과 **다르게** 보여야
+// 한다: 여기는 이미 주인이 정해져 있고 그 주인을 기다리는 칸이다. 그래서
+// 세션 선택 시트를 열지 않고, 호스트 상태를 다시 확인하는 「다시 시도」만 준다.
+function _renderUnreachableBody(bodyEl, node) {
+  bodyEl.classList.remove('vt-pane-viewer');
+  delete bodyEl.dataset.viewerFile;
+  if (bodyEl.dataset.unreachable === node.unreachable.tmux) return;
+  bodyEl.dataset.unreachable = node.unreachable.tmux;
+  bodyEl.replaceChildren();
+
+  const box = document.createElement('div');
+  box.className = 'vt-pane-unreachable';
+  const title = document.createElement('div');
+  title.className = 'vt-pane-unreachable-title';
+  title.textContent = `${node.unreachable.host} · 연결 안 됨`;
+  const sub = document.createElement('div');
+  sub.className = 'vt-pane-unreachable-sub';
+  sub.textContent = `${node.unreachable.tmux} — 호스트가 돌아오면 이 자리에 복구됩니다.`;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'vt-pane-unreachable-retry';
+  btn.textContent = '다시 시도';
+  btn.addEventListener('click', () => _retryUnreachable(node, sub, btn));
+  const pick = document.createElement('button');
+  pick.type = 'button';
+  pick.className = 'vt-pane-unreachable-pick';
+  pick.textContent = '다른 세션 고르기';
+  // 기다리지 않기로 결정할 수 있어야 한다 — 호스트를 영영 안 켤 수도 있다.
+  pick.addEventListener('click', () => openPanePicker(node.id));
+
+  box.appendChild(title);
+  box.appendChild(sub);
+  const row = document.createElement('div');
+  row.className = 'vt-pane-unreachable-acts';
+  row.appendChild(btn);
+  row.appendChild(pick);
+  box.appendChild(row);
+  bodyEl.appendChild(box);
+}
+
+async function _retryUnreachable(node, subEl, btn) {
+  btn.disabled = true;
+  const prev = subEl.textContent;
+  subEl.textContent = '확인 중…';
+  try {
+    const data = await vtFetch('/api/hosts?fresh=1');
+    const host = (data?.hosts || []).find((h) => h.id === node.unreachable.host);
+    if (!host) {
+      subEl.textContent = '이 호스트는 더 이상 등록돼 있지 않습니다 — 다른 세션을 고르세요.';
+    } else if (!host.online) {
+      subEl.textContent = `${host.label} — 아직 연결되지 않습니다.`;
+    } else if (typeof window.attachRemoteSession === 'function') {
+      // 멀티호스트 3단계가 붙여 주는 경로. 없으면(지금) 아래 안내로 떨어진다.
+      await window.attachRemoteSession(host.id, node.unreachable.tmux);
+      return;
+    } else {
+      subEl.textContent = `${host.label}는 다시 켜졌습니다 — 원격 세션 열기는 준비 중입니다.`;
+    }
+  } catch (_) {
+    subEl.textContent = prev;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // node(split 또는 leaf)를 그 자리에 있어야 할 DOM 엘리먼트로 렌더링해 반환한다.
 // placement는 Map<sessionId, paneBodyEl> — leaf 분기가 실제로 세션을 보여주게
 // 되는 pane마다 자신의 .vt-pane-body를 여기 채운다. surface.js는 이 지도만
@@ -229,6 +295,12 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
     nameEl.textContent = _sessionLabel(node.session) + labelSuffix;
     const empty = bodyEl.querySelector('.vt-pane-empty');
     if (empty) empty.remove();
+  } else if (node.unreachable) {
+    // C3 — 원격 호스트가 잠깐 꺼진 칸. 빈 pane으로 강등하지 않고 배치를 지킨다
+    // (강등하면 호스트를 다시 켜도 배치가 영영 사라진다, layout/persist.js 참고).
+    nameEl.textContent = `${node.unreachable.tmux} · ${node.unreachable.host}` + labelSuffix;
+    nameEl.title = `${node.unreachable.host}에 연결할 수 없습니다`;
+    _renderUnreachableBody(bodyEl, node);
   } else {
     nameEl.textContent = '빈 pane' + labelSuffix;
     _renderEmptyBody(bodyEl, node.id);
