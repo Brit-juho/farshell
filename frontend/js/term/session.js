@@ -107,7 +107,9 @@ async function createPlainSession() {
   if (id) addSession(id);
 }
 
-export function addSession(id, displayName, insertBeforeId) {
+// opts: 세션 레코드에 **소켓이 열리기 전에** 얹어야 하는 필드(N7/N39 3단계의
+// remote/host가 그렇다 — startSessionSocket이 그 값을 보고 WS 경로를 고른다).
+export function addSession(id, displayName, insertBeforeId, opts = null) {
   // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
   // 생기므로 무시한다.
   if (!id) { showToast('세션 생성 실패 (id 없음)'); return; }
@@ -125,7 +127,7 @@ export function addSession(id, displayName, insertBeforeId) {
 
   // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록.
   // ws는 startSessionSocket()에서 채운다.
-  registerSession(id, { term, ws: null, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null });
+  registerSession(id, { term, ws: null, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) });
   // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션의 connectTerminalWs를
   // 부를 수 있도록 참조를 걸어둔다 — startSessionSocket이 채운다.
   const onResize = startSessionSocket(id, term);
@@ -236,8 +238,12 @@ export async function removeSession(id) {
     window.visualViewport.removeEventListener('resize', s.onResize);
   }
   const wasActive = activeSessionId() === id;
+  const wasRemote = !!s.remote;
   removeSessionRecord(id);
-  await apiFetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' });
+  // 원격 세션(N7/N39 3단계)의 PTY는 상대 호스트에 있다 — 여기 세션 id는 서버의
+  // session_store에 아예 없으므로 DELETE를 보내면 404만 받는다. 프록시 소켓은
+  // 위에서 닫았고, 그게 닫히면 상대가 자기 PTY를 정리한다.
+  if (!wasRemote) await apiFetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' });
   if (wasActive) {
     const remaining = Object.keys(allSessions());
     if (remaining.length > 0) {

@@ -252,6 +252,13 @@ async function copyPath(item) {
 async function insertFile(item) {
   const s = activeSession();
   const tmuxName = s && (s.tmuxName || s.tmux_name);
+  if (s && s.remote) {
+    // A2(80 §1 3단계) — 파일 바이트는 이 맥에만 있다. 경로를 원격 pane에
+    // 타이핑해봐야 그쪽에는 그 파일이 없고, 같은 경로에 **다른** 파일이
+    // 있으면 더 나쁘다. 전송이 생기기 전까지는 막고 이유를 말한다.
+    showToast('원격 세션에는 삽입할 수 없습니다 — 파일이 이 맥에만 있습니다', 'error');
+    return;
+  }
   if (!tmuxName) {
     showToast('tmux 세션에 연결된 터미널을 먼저 선택하세요', 'error');
     return;

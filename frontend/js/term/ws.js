@@ -24,7 +24,12 @@ const STABLE_MS = 3000;
 // removeSession이 window.removeEventListener로 해제할 수 있어야 하기 때문.
 export function startSessionSocket(id, term) {
   // WebSocket URL 구성 — E2E 활성 시 ?e2e=1 (토큰 있으면 ?token=...&e2e=1)
-  const _wsPath = `/ws/${id}${_wsQuery()}`;
+  // N7/N39 3단계 — 원격 세션은 이 서버의 프록시를 거친다(브라우저는 peer 서명
+  // 헤더를 못 보내므로 상대 서버에 직접 붙을 수 없다, routes/peer_proxy.py).
+  const _s = getSession(id);
+  const _wsPath = _s && _s.remote
+    ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}`
+    : `/ws/${id}${_wsQuery()}`;
   let _retries = 0;
   let _stableTimer = null;
 
