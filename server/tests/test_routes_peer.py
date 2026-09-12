@@ -293,3 +293,103 @@ def test_sessions_is_audited(env, monkeypatch):
     client.get("/api/peer/sessions",
                headers=_sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions"))
     assert any(r["action"] == "sessions" and r["ok"] for r in hs.read_audit("laptop"))
+
+
+# --- 3단계: 입력(control) · WS ------------------------------------------------------
+
+
+def test_input_is_refused_for_view_level_with_actionable_reason(env):
+    """기본 등급은 view다 — 입력은 막히되, **어떻게 켜는지**까지 말해야 한다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    r = client.post(
+        "/api/peer/input",
+        json={"session": "dev", "data": "ls"},
+        headers=_sign_headers(hs, "laptop", secret, "POST", "/api/peer/input"),
+    )
+    assert r.status_code == 403
+    assert r.json()["error"] == "level_required"
+    assert "allow-control" in r.json()["reason"]
+
+
+def test_input_types_into_pane_at_control_level(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+
+    import tmux_target
+    calls = []
+    monkeypatch.setattr(tmux_target, "session_pane", lambda name: "%7" if name == "dev" else None)
+    monkeypatch.setattr(tmux_target, "type_to_tmux", lambda pane, text: calls.append((pane, text)) or True)
+
+    r = client.post(
+        "/api/peer/input",
+        json={"session": "dev", "data": "git status"},
+        headers=_sign_headers(hs, "laptop", secret, "POST", "/api/peer/input"),
+    )
+    assert r.status_code == 200
+    assert calls == [("%7", "git status")]
+
+    # 없는 세션은 404 — 입력이 엉뚱한 pane으로 새지 않는다.
+    r = client.post(
+        "/api/peer/input",
+        json={"session": "ghost", "data": "x"},
+        headers=_sign_headers(hs, "laptop", secret, "POST", "/api/peer/input"),
+    )
+    assert r.status_code == 404
+
+
+def test_view_get_signature_cannot_be_replayed_on_control_post(env):
+    """서명이 method+path에 묶여 있다는 계약 — 3단계에서 실제로 중요해진다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    headers = _sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions")
+    r = client.post("/api/peer/input", json={"session": "dev", "data": "x"}, headers=headers)
+    assert r.status_code == 401
+
+
+def test_input_requires_session_and_data(env):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = client.post(
+        "/api/peer/input", json={"session": "dev"},
+        headers=_sign_headers(hs, "laptop", secret, "POST", "/api/peer/input"),
+    )
+    assert r.status_code == 400
+
+
+def test_peer_ws_rejects_unsigned_connection(env):
+    """서명 없이 붙으면 PTY를 만들기 전에 끊긴다."""
+    from starlette.websockets import WebSocketDisconnect as WSD
+    client, hs, _ = env
+    with pytest.raises(WSD) as e:
+        with client.websocket_connect("/api/peer/ws/dev") as ws:
+            ws.receive_bytes()
+    assert e.value.code == 4401
+
+
+def test_peer_ws_rejects_unknown_tmux_session(env, monkeypatch):
+    """세션이 없으면 4404 — 유령 PTY를 만들지 않는다(routes/tmux.py가 겪은 그 버그)."""
+    from starlette.websockets import WebSocketDisconnect as WSD
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    import tmux_runner
+    monkeypatch.setattr(tmux_runner, "has_session", lambda name: False)
+    headers = _sign_headers(hs, "laptop", secret, "GET", "/api/peer/ws/ghost")
+    with pytest.raises(WSD) as e:
+        with client.websocket_connect("/api/peer/ws/ghost", headers=headers) as ws:
+            ws.receive_bytes()
+    assert e.value.code == 4404
+
+
+def test_peer_proxy_ws_requires_known_host(env):
+    """A 쪽 프록시: 등록되지 않은 호스트로는 아예 못 나간다."""
+    from starlette.websockets import WebSocketDisconnect as WSD
+    client, hs, _ = env
+    with pytest.raises(WSD) as e:
+        with client.websocket_connect("/ws/remote/nope/dev") as ws:
+            ws.receive_bytes()
+    # 인증(4001) 또는 호스트 없음(4004) — 둘 다 "연결되지 않는다"는 같은 계약이다.
+    assert e.value.code in (4001, 4004)

@@ -28,11 +28,12 @@ peer 응답에는 **내 로컬 것만** 담는다. 내가 등록한 다른 peer�
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import host_store
@@ -64,12 +65,17 @@ class PeerDenied(Exception):
         self.status = status
 
 
-def _authenticate(request: Request) -> dict:
-    """서명 검증 → grant. 실패는 PeerDenied. 실패도 전부 감사 로그에 남긴다."""
-    peer_id = request.headers.get("x-peer-id", "")
-    ts_raw = request.headers.get("x-peer-ts", "")
-    nonce = request.headers.get("x-peer-nonce", "")
-    sig = request.headers.get("x-peer-sig", "")
+def _authenticate_raw(method: str, path: str, headers) -> dict:
+    """서명 검증 → grant. 실패는 PeerDenied. 실패도 전부 감사 로그에 남긴다.
+
+    Request가 아니라 (method, path, headers)를 받는 이유: 3단계의 WebSocket
+    엔드포인트도 **같은 서명 규칙**을 써야 하는데 WebSocket에는 Request가 없다.
+    검증 로직이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.
+    """
+    peer_id = headers.get("x-peer-id", "")
+    ts_raw = headers.get("x-peer-ts", "")
+    nonce = headers.get("x-peer-nonce", "")
+    sig = headers.get("x-peer-sig", "")
     if not (peer_id and ts_raw and nonce and sig):
         raise PeerDenied("서명 헤더가 없습니다")
     try:
@@ -83,8 +89,7 @@ def _authenticate(request: Request) -> dict:
         host_store.audit(peer_id, "auth", False, "등록되지 않은 호스트")
         raise PeerDenied("등록되지 않은 호스트입니다")
 
-    path = request.url.path
-    if not host_store.verify_signature(grant["secret"], request.method, path, ts, nonce, sig):
+    if not host_store.verify_signature(grant["secret"], method, path, ts, nonce, sig):
         host_store.audit(peer_id, "auth", False, "서명 불일치 또는 시간창 밖")
         raise PeerDenied("서명이 유효하지 않습니다 — 시계 차이가 크면 'fsh host ping'으로 확인하세요")
 
@@ -96,6 +101,10 @@ def _authenticate(request: Request) -> dict:
 
     host_store.touch_grant(peer_id)
     return grant
+
+
+def _authenticate(request: Request) -> dict:
+    return _authenticate_raw(request.method, request.url.path, request.headers)
 
 
 def _require(request: Request, level: str = host_store.LEVEL_VIEW) -> tuple[dict | None, JSONResponse | None]:
@@ -243,3 +252,145 @@ async def peer_ping(request: Request):
         "serverTime": time.time(),
         "level": grant["level"],
     }
+
+
+# --- 3단계: 입력(control) · 출력 스트림 -------------------------------------------
+#
+# 여기부터가 "원격 pane을 실제로 조작"하는 부분이다. 두 가지 원칙을 지킨다:
+#
+# 1. **입력은 control 등급에서만.** 서명이 method+path에 묶여 있으므로 view용
+#    GET 서명을 이 POST/WS에 돌려쓸 수 없다 — 등급 검사와 서명 검사가 서로를
+#    보강한다.
+# 2. **PTY를 소유한 호스트만 알린다.** 이 PTY는 여기(B)에 있으므로 출력 감시·
+#    푸시 알림·스크롤백 영속화는 전부 B의 설정을 따른다. 프록시 쪽(A)은
+#    아무것도 기록하지 않는다 — 그래야 알림이 두 번 가지 않는다.
+#    다만 **이 연결은 output_watcher에 등록하지 않는다**: 같은 tmux 세션을
+#    B의 사용자가 이미 자기 탭으로 보고 있으면 그쪽이 이미 감시 중이고,
+#    여기서 또 등록하면 완료 알림이 두 번 울린다.
+
+
+@router.post("/api/peer/input")
+async def peer_input(request: Request):
+    """원격 세션에 텍스트를 넣는다(control 등급). Enter는 누르지 않는다 —
+    `POST /api/files/{id}/insert`와 같은 계약이다. 큐 투입(A3)이 이 경로를 쓴다."""
+    grant, err = _require(request, host_store.LEVEL_CONTROL)
+    if err:
+        return err
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    session = str(body.get("session", "")).strip()
+    data = body.get("data")
+    if not session or not isinstance(data, str) or not data:
+        return JSONResponse({"error": "bad_request", "reason": "session/data가 필요합니다"}, status_code=400)
+
+    import tmux_target
+
+    pane = tmux_target.session_pane(session)
+    if not pane:
+        host_store.audit(grant["id"], "input", False, f"세션 없음: {session}")
+        return JSONResponse({"error": "session_not_found"}, status_code=404)
+    ok = await asyncio.to_thread(tmux_target.type_to_tmux, pane, data)
+    host_store.audit(grant["id"], "input", bool(ok), f"{session} {len(data)}자")
+    if not ok:
+        return JSONResponse({"error": "input_failed"}, status_code=500)
+    return {"ok": True}
+
+
+@router.websocket("/api/peer/ws/{tmux_name}")
+async def peer_ws(ws: WebSocket, tmux_name: str):
+    """원격 pane의 출력 스트림(+ control이면 입력). 상대 서버(A)의 프록시가 연결한다.
+
+    브라우저가 직접 여는 소켓이 아니다 — 서명 헤더를 붙일 수 있는 건 서버뿐이다
+    (브라우저 WebSocket API는 커스텀 헤더를 못 보낸다). 그게 이 구조가 서버-서버인
+    이유이기도 하다.
+
+    수명: 이 연결 전용 PTY를 만들고 끊길 때 정리한다. B의 사용자가 자기 탭으로
+    보고 있는 PTY를 공유하지 않는 이유는 크기(resize) 때문이다 — 두 화면의 크기가
+    다르면 한쪽이 계속 찌그러진다. tmux가 같은 세션에 여러 클라이언트를 붙이는
+    것을 이미 지원하므로 PTY를 따로 두는 게 맞다.
+    """
+    try:
+        grant = _authenticate_raw("GET", ws.url.path, ws.headers)
+    except PeerDenied as e:
+        # accept 전에 닫으면 상대는 HTTP 403을 받는다 — 이유를 실을 수 없어
+        # 일단 받아들인 뒤 코드와 함께 닫는다.
+        await ws.accept()
+        await ws.close(code=4401, reason=e.reason[:120])
+        return
+
+    import tmux_runner
+    from routes.tmux import TMUX_SOCKET
+    from deps import pty_mgr
+    import platform_utils
+
+    if not tmux_runner.has_session(tmux_name):
+        await ws.accept()
+        host_store.audit(grant["id"], "ws", False, f"세션 없음: {tmux_name}")
+        await ws.close(code=4404, reason="tmux session not found")
+        return
+
+    await ws.accept()
+    can_control = grant.get("level") == host_store.LEVEL_CONTROL
+    session_id = f"peer-{grant['id']}-{time.time_ns()}"
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=2048)
+
+    def _on_data(data: bytes) -> None:
+        # PTY 리더 스레드에서 불린다 — 큐에 넣기만 하고 전송은 아래 태스크가 한다.
+        try:
+            queue.put_nowait(data)
+        except asyncio.QueueFull:
+            try:
+                queue.get_nowait()
+                queue.put_nowait(data)
+            except (asyncio.QueueEmpty, asyncio.QueueFull):
+                pass
+
+    pty_mgr.create_session(
+        session_id,
+        cmd=platform_utils.find_tmux(),
+        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", tmux_name],
+        cols=80, rows=24,
+    )
+    pty_mgr.subscribe(session_id, _on_data)
+    host_store.audit(grant["id"], "ws", True, f"{tmux_name} 등급 {grant.get('level')}")
+
+    async def _pump_out():
+        while True:
+            data = await queue.get()
+            await ws.send_bytes(data)
+
+    out_task = asyncio.create_task(_pump_out())
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+            if msg.get("bytes") is not None:
+                if can_control:
+                    pty_mgr.write(session_id, msg["bytes"])
+                continue
+            text = msg.get("text")
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except ValueError:
+                continue
+            if payload.get("type") == "resize":
+                # 크기는 등급과 무관하게 받는다 — 보기만 하는 화면도 자기 크기에
+                # 맞게 그려져야 한다(입력이 아니다).
+                pty_mgr.resize(session_id, int(payload.get("cols", 80)), int(payload.get("rows", 24)))
+            elif payload.get("type") == "input" and can_control:
+                pty_mgr.write(session_id, str(payload.get("data", "")).encode())
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:  # noqa: BLE001 — 어떤 이유로든 연결이 끝나면 정리가 우선
+        logger.debug(f"[peer ws] {e}")
+    finally:
+        out_task.cancel()
+        pty_mgr.unsubscribe(session_id, _on_data)
+        pty_mgr.destroy_session(session_id)
+        host_store.audit(grant["id"], "ws", True, f"{tmux_name} 종료")

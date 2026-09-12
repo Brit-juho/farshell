@@ -126,8 +126,10 @@ function actionSessionId(row: DesktopRailRow): string | null {
 function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void }) {
   const isWt = () => props.row.kind === 'worktree';
   const isRemote = () => props.row.kind === 'session' && !!props.row.remote;
+  // 원격 행은 이제 열 수 있으므로 흐리게 그리지 않는다(3단계 전에는 못 열어서
+  // no-session으로 뒀다).
   const noSession = () =>
-    isRemote() || (isWt() && !actionSessionId(props.row) && !(props.row as WorktreeRailRowInput).primaryTmuxName);
+    isWt() && !actionSessionId(props.row) && !(props.row as WorktreeRailRowInput).primaryTmuxName;
   const diffLabel = () => {
     if (props.row.kind === 'worktree') {
       const c = props.row.changed;
@@ -162,7 +164,7 @@ function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEve
         </div>
         <div class="vt-wgrail-row-sub">
           {props.row.statusSentence}
-          <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 보기 전용</span></Show>
+          <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>
         <Show when={props.row.status === 'waiting' && props.row.question}>
           <div class="vt-wgrail-question">? {props.row.question}</div>
@@ -370,6 +372,14 @@ function Rail(props: { deps: RailDeps }) {
 
   const openRow = async (e: MouseEvent, row: DesktopRailRow) => {
     const w = window as any;
+    // C1+3단계 — 원격 행은 프록시 경로로 연다(term/remote.js가 window에 건다).
+    if (row.kind === 'session' && row.remote) {
+      const host = effectiveHostId();
+      if (typeof w.attachRemoteSession === 'function' && row.tmuxName) {
+        await w.attachRemoteSession(host, row.tmuxName);
+      }
+      return;
+    }
     const sid = actionSessionId(row);
     if (sid) {
       if (e.metaKey || e.ctrlKey) w.splitActivePane?.('row', sid);

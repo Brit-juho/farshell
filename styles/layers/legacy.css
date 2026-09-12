@@ -2678,3 +2678,9 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 }
 .vt-pane-unreachable-retry:hover:not([disabled]), .vt-pane-unreachable-pick:hover{ background:var(--menu-hover); }
 .vt-pane-unreachable-retry[disabled]{ opacity:.5; cursor:default; }
+
+/* N7/N39 3단계 — 세션 패널에서 원격 세션일 때 대신 보여주는 한 줄. */
+.vt-rail-session-note{
+  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+  font:400 var(--fs-xs) var(--mono); color:var(--sub);
+}

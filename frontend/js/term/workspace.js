@@ -10,6 +10,7 @@ import { allSessions, getSession, activeSessionId } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { addSession, switchTo } from './session.js';
+import { attachRemoteSession } from './remote.js';
 
 const WORKSPACE_KEY = 'vt-workspace-v1';
 
@@ -23,6 +24,9 @@ export function saveWorkspace() {
         id,
         name: nameSpan ? nameSpan.textContent : '',
         tmux_name: s && s.tmuxName ? s.tmuxName : null,
+        // N7/N39 3단계 — 호스트를 안 적으면 복원이 **로컬의 같은 이름** tmux
+        // 세션에 붙어버린다(이름은 호스트마다 겹친다).
+        host: s && s.remote ? s.remote.host : 'local',
       };
     });
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify({
@@ -61,6 +65,15 @@ export async function restoreWorkspace() {
     } catch (_) { /* 조회 실패 시 아래에서 전부 유실 처리됨 */ }
 
     for (const tab of state.tabs) {
+      if (tab.host && tab.host !== 'local' && tab.tmux_name) {
+        // 원격 탭. 호스트가 꺼져 있으면 실패하는 게 정상이고, 그 경우 배치는
+        // layout/persist.js의 unreachable(C3)이 자리를 지킨다.
+        try {
+          const id = await attachRemoteSession(tab.host, tab.tmux_name);
+          if (id) { if (!firstNewId) firstNewId = id; restored++; } else { failed++; }
+        } catch (_) { failed++; }
+        continue;
+      }
       if (tab.tmux_name) {
         try {
           const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
