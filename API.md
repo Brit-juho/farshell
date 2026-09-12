@@ -194,6 +194,19 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 |--------|------|------|
 | POST | `/api/peer/pair` | Redeem a one-time pairing ticket (JSON: ticket, id, label, version) → per-connection secret. The only unsigned peer route — the ticket is the auth, since no shared secret exists yet. Rejects reserved ids (`local`/`self`/`me`) **without consuming the ticket** |
 | GET | `/api/peer/ping` | Signed liveness check → id, label, version, `serverTime` (the caller derives clock skew from it), and the caller's granted level |
+| GET | `/api/peer/sessions` | Signed, `view` level — this host's tmux sessions + agent status. **Never relays other peers' sessions** (hop 0): A↔B mutual pairing would otherwise recurse A→B→A |
+
+## Hosts (N7/N39, stage 2 — what the browser calls)
+
+The outbound counterpart to the peer namespace, aggregated into one list for the local UI.
+Ordinary authenticated API (logged-in session only) — unlike the peer namespace, which only
+a peer signature opens.
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/hosts[?fresh=1]` | Local host (always first, id `local`) + every registered peer, each with its session list. Remote lookups run in parallel and are cached 30s; an unreachable host degrades to `online:false` + `reason` instead of failing the list |
+| GET | `/api/hosts/self` | This host's id/label (pairing guidance, settings screen) |
+| POST | `/api/hosts/{id}/ping` | Liveness + clock-skew/latency refresh. A failed connection returns **200 with `online:false`** — it's a state, not a server error |
 
 ## Misc
 

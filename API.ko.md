@@ -190,6 +190,18 @@ peer 자격증명은 여기 정의된 것에만 닿고, 나머지 API에는 절�
 |--------|------|------|
 | POST | `/api/peer/pair` | 1회용 페어링 티켓 제출(JSON: ticket, id, label, version) → 그 연결 전용 secret 발급. 서명 없이 열리는 유일한 peer 경로 — 아직 공유 secret이 없는 시점이라 티켓이 그 역할을 한다. 예약 id(`local`/`self`/`me`)는 **티켓을 소모하지 않고** 거부 |
 | GET | `/api/peer/ping` | 서명된 연결 확인 → id·label·version·`serverTime`(호출자가 이걸로 시계 오차를 계산)·호출자에게 부여된 등급 |
+| GET | `/api/peer/sessions` | 서명 필요, `view` 등급 — 이 호스트의 tmux 세션 + 에이전트 상태. **다른 peer의 세션은 절대 중계하지 않는다**(hop 0): A↔B 상호 페어링에서 A→B→A 무한 재귀가 되기 때문 |
+
+## 호스트 (N7/N39 2단계 — 브라우저가 부르는 쪽)
+
+peer 네임스페이스의 나가는 짝을 로컬 UI에게 하나의 목록으로 합쳐 준다. 평소의
+인증이 지키는 일반 API다(로그인한 사람만) — peer 서명으로만 열리는 peer 네임스페이스와 반대.
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/hosts[?fresh=1]` | 로컬(항상 첫 항목, id `local`) + 등록된 모든 원격 호스트를 각자의 세션 목록과 함께. 원격 조회는 병렬 + 30초 캐시이며, 꺼진 호스트는 목록을 실패시키지 않고 `online:false` + `reason`으로 표현된다 |
+| GET | `/api/hosts/self` | 이 호스트의 id/label (페어링 안내·설정 화면용) |
+| POST | `/api/hosts/{id}/ping` | 연결 확인 + 시계 오차/지연 갱신. 연결 실패는 **200에 `online:false`** — 서버 오류가 아니라 상태이기 때문 |
 
 ## 기타
 
