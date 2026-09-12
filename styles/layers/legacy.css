@@ -2625,7 +2625,7 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-row-main{ flex:1 1 auto; min-width:0; }
 .vt-fl-name{ font:500 var(--fs-sm) var(--mono); color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-fl-sub{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-top:2px; }
-.vt-fl-sub.warn{ color:var(--warn, #d98324); }
+.vt-fl-sub.warn{ color:var(--warn); }
 .vt-fl-acts{ display:flex; gap:calc(var(--spacing) * 0.5); flex:0 0 auto; }
 .vt-fl-act{
   background:transparent; border:0; color:var(--sub); cursor:pointer; border-radius:var(--radius-sm);
@@ -2635,12 +2635,12 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 }
 .vt-fl-act:hover:not([disabled]){ background:var(--tab); color:var(--txt); }
 .vt-fl-act[disabled]{ opacity:.35; cursor:not-allowed; }
-.vt-fl-act.rm:hover:not([disabled]){ color:var(--err, #d24); }
+.vt-fl-act.rm:hover:not([disabled]){ color:var(--err); }
 
 .vt-fl-footer{ padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-top:1px solid var(--line); }
 .vt-fl-gauge{ height:6px; background:var(--tab); border-radius:999px; overflow:hidden; }
 .vt-fl-gauge-fill{ height:100%; background:var(--acc); }
-.vt-fl-gauge-fill.warn{ background:var(--err, #d24); }
+.vt-fl-gauge-fill.warn{ background:var(--err); }
 .vt-fl-footer-text{ margin-top:calc(var(--spacing) * 1.5); font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
 
 /* 링크 발급 다이얼로그(§3 화면 3b). dock 안이 아니라 항상 모달이다 — 발급은
