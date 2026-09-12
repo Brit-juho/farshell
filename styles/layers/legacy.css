@@ -837,6 +837,9 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-menu-item { padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3.5); cursor:pointer; font-size:var(--fs-sm); border-radius:var(--radius-sm); white-space:nowrap; }
 .vt-menu-item:hover { background:var(--menu-hover); }
 .vt-menu-item.new { color:var(--ok); }
+/* C1 — 호스트 메뉴처럼 둘째 줄(세션 수·지연·연결 실패 이유)이 있는 항목. */
+.vt-menu-item-detail { display:block; color:var(--sub); font-size:var(--fs-2xs); margin-top:2px; }
+.vt-menu-item.dim { opacity:.6; }
 .vt-menu-sep { border-top:1px solid var(--line); margin:calc(var(--spacing) * 1) 0; }
 
 /* L3 4단계: 그리드 뷰(#grid-view)는 폐지됐지만 카드 스타일은 남긴다 —
@@ -2291,6 +2294,22 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-wgrail-title {
   font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub);
 }
+/* C1(80 §1) — 호스트 스위처 칩. 제목 자리를 그대로 쓴다(호스트가 둘 이상일
+   때만 렌더되므로 둘이 같이 보이는 일은 없다). 원격을 보고 있을 때만 강조색을
+   주고, 오프라인이면 흐리게 — "지금 보고 있는 게 내 맥이 아니다"를 한눈에. */
+.vt-wgrail-host {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-width:0;
+  border:0; background:transparent; cursor:pointer; padding:2px 4px; border-radius:var(--radius-sm);
+  font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub);
+}
+.vt-wgrail-host:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wgrail-host.remote { color:var(--acc); }
+.vt-wgrail-host.offline { opacity:.6; text-decoration:line-through; }
+.vt-wgrail-host-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-wgrail-host-caret { font-size:var(--fs-3xs, 9px); opacity:.7; }
+.vt-wgrail-remote-note { opacity:.7; }
+.vt-wgrail-new[disabled] { opacity:.45; cursor:not-allowed; }
+
 .vt-wgrail-collapse {
   border:0; background:transparent; color:var(--sub); cursor:pointer;
   font:600 var(--fs-base) var(--ui); padding:2px 6px; border-radius:var(--radius-sm); line-height:1;
