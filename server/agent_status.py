@@ -28,6 +28,20 @@ TTL(2-4): working 15분(훅 유실 의심) · waiting 2분(감지 오탐 가정)
 에서도 같은 규칙이 그대로 성립하고, 태스크 수명 관리라는 실패 지점이 안 생긴다.
 
 In-memory only — 서버 재시작 시 초기화된다(영속화는 2.0 범위 밖).
+
+## 호스트 차원 (N7/N39 2026-09-13)
+
+멀티호스트가 들어오면서 **모든 조회에 host가 붙는다.** 그전에는 상태를 tmux 세션
+이름 문자열 하나로 찾았는데(`status_for_session("dev")`), 맥 두 대에 똑같이 `dev`
+세션이 있으면(기본 이름이라 거의 확실히 그렇다) 원격 `dev`의 승인 대기가 로컬
+`dev` 탭 배지에 뜨고, 더 나쁘게는 **큐가 로컬 pane을 원격 상태 때문에 차단**한다.
+cwd도 같은 문제를 갖는다 — 두 맥의 홈 경로(`/Users/<같은이름>/proj`)는 흔히 똑같다.
+
+그래서 엔트리마다 `host`를 갖고(로컬은 `"local"`), 조회 함수 전부가 host를 받는다.
+기본값이 `"local"`이라 기존 호출부는 그대로 동작하고, 원격 엔트리는 로컬 조회에
+**절대 매칭되지 않는다.** `_state`의 키도 호스트별로 갈라둔다(`_key`) — 두 맥의
+`transcript_path`는 사용자 이름이 같으면 문자열까지 동일할 수 있어서, sid만으로는
+서로 덮어쓴다.
 """
 
 import logging
@@ -48,8 +62,21 @@ STATUSES = (IDLE, WORKING, WAITING, DONE, ERROR)
 # 2-6 정렬 우선순위 — "내 개입이 필요한 것이 항상 맨 위".
 _URGENCY = {WAITING: 0, DONE: 1, WORKING: 2, ERROR: 3, IDLE: 4}
 
-# session_id (또는 transcript_path 등 고유 키) → 현재 상태
+# "이 서버가 직접 돌리는 세션"을 뜻하는 예약 호스트 이름. host_store.RESERVED_IDS가
+# 원격 호스트에게 이 id를 못 쓰게 막는다(tree.js leaf의 host 기본값도 같은 값).
+LOCAL_HOST = "local"
+
+# _key(sid, host) → 현재 상태. 키를 호스트별로 가르는 이유는 모듈 주석 참고.
 _state: dict[str, dict] = {}
+
+
+def _key(sid: str, host: str = LOCAL_HOST) -> str:
+    """상태 저장 키. 로컬은 sid 그대로 — 기존 키 공간을 바꾸지 않는다.
+
+    반환값을 다시 파싱하지 않는다(불투명 키). 호스트/세션을 알아야 하는 쪽은
+    엔트리의 `host`/`session_id` 필드를 읽는다.
+    """
+    return sid if host == LOCAL_HOST else f"{host}@{sid}"
 
 
 def _ttl(name: str, default: float) -> float:
@@ -114,8 +141,9 @@ def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
     ent["updated_at"] = time.time() if now is None else now
 
 
-def _entry(sid: str, cwd: Optional[str] = None) -> dict:
-    ent = _state.get(sid)
+def _entry(sid: str, cwd: Optional[str] = None, host: str = LOCAL_HOST) -> dict:
+    key = _key(sid, host)
+    ent = _state.get(key)
     if ent is None:
         ent = {
             "status": IDLE,
@@ -125,19 +153,26 @@ def _entry(sid: str, cwd: Optional[str] = None) -> dict:
             "input": {},
             "cwd": cwd,
             "updated_at": time.time(),
+            # host/session_id는 엔트리를 보고 "어디의 무엇인지" 알 수 있게 하는
+            # 유일한 경로다 — _state의 키는 불투명하게 두고 여기서만 읽는다.
+            "host": host,
+            "session_id": sid,
         }
-        _state[sid] = ent
+        _state[key] = ent
     if cwd:
         ent["cwd"] = cwd
     return ent
 
 
-def on_event(event: str, payload: dict, session: Optional[str] = None) -> Optional[dict]:
+def on_event(event: str, payload: dict, session: Optional[str] = None,
+             host: str = LOCAL_HOST) -> Optional[dict]:
     """훅 이벤트 처리.
 
     Args:
         event: "pre" | "post" | "stop" (그 외는 무시)
         payload: Claude Code hook stdin JSON
+        host: 이 이벤트를 낸 호스트. 로컬 훅은 항상 "local"이고, 원격 호스트가
+              중계한 이벤트만 다른 값을 갖는다(모듈 주석 「호스트 차원」).
         session: A2의 3단 해석(pane_resolve.resolve)이 특정한 tmux 세션 이름.
                  None이면 이번 이벤트로는 특정하지 못했다는 뜻이고, **엔트리에
                  이미 있던 값을 지우지 않는다** — pre에서 pane id로 확실히
@@ -150,6 +185,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None) -> Option
     """
     sweep()
     sid = _sid(payload)
+    key = _key(sid, host)
     # Claude Code 훅 JSON은 이벤트 종류와 무관하게 항상 cwd를 담고 있다.
     # 이 세션이 "어느 tmux 세션(pane)의 작업인지"는 서버에 별도로 없는데,
     # /api/tmux/sessions 가 이미 pane_current_path를 cwd로 내려주므로
@@ -157,7 +193,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None) -> Option
     cwd = payload.get("cwd")
 
     if event == "pre":
-        ent = _entry(sid, cwd)
+        ent = _entry(sid, cwd, host)
         if session:
             ent["tmux_session"] = session
         ent["tool"] = payload.get("tool_name") or payload.get("tool", "?")
@@ -176,7 +212,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None) -> Option
     if event == "post":
         # 상태는 그대로 둔다(파일 상단 규칙). 도구가 끝났을 뿐 다음 도구가
         # 곧바로 이어질 수 있어서다.
-        ent = _entry(sid, cwd)
+        ent = _entry(sid, cwd, host)
         if session:
             ent["tmux_session"] = session
         ent["last_tool"] = ent.get("tool")
@@ -185,7 +221,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None) -> Option
         return ent
 
     if event == "stop":
-        ent = _entry(sid, cwd)
+        ent = _entry(sid, cwd, host)
         if session:
             ent["tmux_session"] = session
         ent["tool"] = None
@@ -195,7 +231,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None) -> Option
         return ent
 
     # 알 수 없는 이벤트 — 상태를 건드리지 않는다.
-    return _state.get(sid)
+    return _state.get(key)
 
 
 def on_waiting(
@@ -204,6 +240,7 @@ def on_waiting(
     cwd: Optional[str] = None,
     question: Optional[str] = None,
     options: Optional[list] = None,
+    host: str = LOCAL_HOST,
 ) -> Optional[dict]:
     """A3(승인 프롬프트 감지)이 부르는 진입점.
 
@@ -217,11 +254,11 @@ def on_waiting(
     프런트는 그 경우 인라인 버튼 대신 「터미널로」를 보여준다(70-mobile.md §2).
     """
     sweep()
-    ent = _state.get(sid)
+    ent = _state.get(_key(sid, host))
     if ent is None:
         if not waiting:
             return None
-        ent = _entry(sid, cwd)
+        ent = _entry(sid, cwd, host)
         _set_status(ent, WORKING)
     if cwd:
         ent["cwd"] = cwd
@@ -238,21 +275,22 @@ def on_waiting(
     return ent
 
 
-def ack(sid: str) -> Optional[dict]:
+def ack(sid: str, host: str = LOCAL_HOST) -> Optional[dict]:
     """사용자가 완료를 확인했다(탭/카드 클릭) → done을 idle로 내린다.
 
     done이 아닌 상태에는 아무 것도 하지 않는다 — 작업 중인 세션을 클릭했다고
     working이 지워지면 안 된다.
     """
     sweep()
-    ent = _state.get(sid)
+    ent = _state.get(_key(sid, host))
     if ent and ent.get("status") == DONE:
         _set_status(ent, IDLE)
     return ent
 
 
 def report(sid: str, status: str, session: Optional[str] = None,
-           cwd: Optional[str] = None, agent: Optional[str] = None) -> dict:
+           cwd: Optional[str] = None, agent: Optional[str] = None,
+           host: str = LOCAL_HOST) -> dict:
     """pane 자기보고(`fsh pane report`)로 상태를 직접 세팅한다.
 
     훅이 없는 에이전트(codex/aider/gemini)를 위한 경로다 — 그쪽은 Claude Code
@@ -262,7 +300,7 @@ def report(sid: str, status: str, session: Optional[str] = None,
     if status not in STATUSES:
         raise ValueError(f"알 수 없는 상태: {status} (가능: {', '.join(STATUSES)})")
     sweep()
-    ent = _entry(sid, cwd)
+    ent = _entry(sid, cwd, host)
     if session:
         ent["tmux_session"] = session
     if agent:
@@ -273,7 +311,7 @@ def report(sid: str, status: str, session: Optional[str] = None,
     return ent
 
 
-def status_for_session(name: Optional[str]) -> str:
+def status_for_session(name: Optional[str], host: str = LOCAL_HOST) -> str:
     """tmux 세션 이름으로 상태를 찾는다 — A2 이후의 **정확한** 경로.
 
     `status_for_cwd`와 같은 우선순위 규칙(가장 개입이 필요한 상태)을 쓰되,
@@ -283,20 +321,21 @@ def status_for_session(name: Optional[str]) -> str:
     if not name:
         return IDLE
     sweep()
-    found = [e.get("status", IDLE) for e in _state.values() if e.get("tmux_session") == name]
+    found = [e.get("status", IDLE) for e in _state.values()
+             if e.get("tmux_session") == name and e.get("host", LOCAL_HOST) == host]
     if not found:
         return IDLE
     return min(found, key=lambda s: _URGENCY.get(s, 9))
 
 
-def get_status(sid: str) -> str:
+def get_status(sid: str, host: str = LOCAL_HOST) -> str:
     """세션의 현재 상태 문자열. 모르는 세션은 idle."""
     sweep()
-    ent = _state.get(sid)
+    ent = _state.get(_key(sid, host))
     return ent.get("status", IDLE) if ent else IDLE
 
 
-def status_for_cwd(cwd: Optional[str]) -> str:
+def status_for_cwd(cwd: Optional[str], host: str = LOCAL_HOST) -> str:
     """cwd로 상태를 찾는다 — 큐 5번 관문(A4)과 UI가 쓴다.
 
     같은 cwd가 여럿이면 "가장 개입이 필요한" 상태를 돌려준다(2-6의 정렬
@@ -306,17 +345,20 @@ def status_for_cwd(cwd: Optional[str]) -> str:
     if not cwd:
         return IDLE
     sweep()
-    found = [e.get("status", IDLE) for e in _state.values() if e.get("cwd") == cwd]
+    # 두 맥의 홈 경로는 사용자 이름이 같으면 문자열까지 똑같다 — host를 같이
+    # 보지 않으면 원격 세션의 상태가 로컬 조회에 섞인다.
+    found = [e.get("status", IDLE) for e in _state.values()
+             if e.get("cwd") == cwd and e.get("host", LOCAL_HOST) == host]
     if not found:
         return IDLE
     return min(found, key=lambda s: _URGENCY.get(s, 9))
 
 
-def get_state(sid: Optional[str] = None) -> dict:
+def get_state(sid: Optional[str] = None, host: str = LOCAL_HOST) -> dict:
     """전체 또는 특정 세션 상태 반환."""
     sweep()
     if sid:
-        return _state.get(sid, {})
+        return _state.get(_key(sid, host), {})
     return dict(_state)
 
 
@@ -329,7 +371,9 @@ def all_active() -> list[dict]:
     sweep()
     now = time.time()
     return [
-        {"session_id": sid, **data, "elapsed": now - data.get("since", now)}
-        for sid, data in _state.items()
+        # session_id/host는 엔트리 안에 이미 있다 — 키를 파싱해 되살리지 않는다.
+        {"session_id": data.get("session_id", key), "host": data.get("host", LOCAL_HOST),
+         **data, "elapsed": now - data.get("since", now)}
+        for key, data in _state.items()
         if data.get("tool")
     ]

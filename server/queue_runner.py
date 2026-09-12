@@ -92,6 +92,8 @@ def _is_waiting(target: str | None) -> bool:
     except ImportError:
         return False
     name = str(target).split(":", 1)[0]
+    # 큐는 로컬 tmux에만 투입한다(send-keys가 로컬 소켓이다) → 로컬 상태만 본다.
+    # host를 안 거르면 원격의 같은 이름 세션이 waiting일 때 로컬 투입이 막힌다.
     return agent_status.status_for_session(name) == agent_status.WAITING
 
 
