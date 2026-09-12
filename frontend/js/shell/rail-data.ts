@@ -154,6 +154,10 @@ export interface OtherRailRowInput {
   diffFiles: number | null;
   question?: string | null;
   options?: { key: string; label: string }[] | null;
+  /** C1 — 다른 호스트의 세션. 로컬 세션 id 경로(switchTo 등)가 성립하지 않으므로
+   * 클릭·컨텍스트 메뉴가 막히고 행이 흐리게 그려진다(원격 attach는 멀티호스트
+   * 3단계). 선택 필드라 기존 호출부는 그대로 동작한다. */
+  remote?: boolean;
 }
 
 export type DesktopRailRowInput = WorktreeRailRowInput | OtherRailRowInput;

@@ -78,6 +78,14 @@ export const SCHEMA = {
   // N38(70-mobile.md §1) — compact 하단 내비의 시작 탭. 기기 스코프인 이유는
   // rail/dock 폭과 같다: 폰에서 고른 첫 화면이 맥 터미널 시작 화면에 새면 안 된다.
   'ui.mobile.home':         { type: 'enum', def: 'fleet', values: ['fleet', 'terminal'], scope: 'device' },
+
+  // C1(80-multihost-agents.md §1) — 레일이 지금 보고 있는 호스트. **device 스코프**인
+  // 이유가 이 파일의 존재 이유 그 자체다: `/api/workspace`는 모든 기기가 공유하는
+  // 파일 하나라, 전역에 두면 폰에서 gpu-box로 바꾸는 순간 맥 화면의 레일까지 같이
+  // 바뀐다. 기본값 `local`은 서버의 예약 id(`agent_status.LOCAL_HOST`)와 같은 값이고,
+  // 등록이 풀린 id가 남아 있으면 shell/host-data.js의 resolveActiveHost가 로컬로
+  // 되돌린다(값 자체는 지우지 않는다 — 호스트를 다시 추가하면 그대로 살아난다).
+  'ui.activeHostId':        { type: 'str',  def: 'local', scope: 'device' },
 };
 
 function _scopeOf(key) {

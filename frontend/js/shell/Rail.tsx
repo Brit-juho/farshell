@@ -14,6 +14,10 @@ import {
   buildRailSections, mostUrgentStatus, GROUP_LABEL, hashRepoColorIndex,
   type WorktreeRailRowInput, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
+import {
+  buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, LOCAL_HOST,
+  type HostEntry,
+} from './host-data.js';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WorktreeDialog } from './WorktreeDialog.js';
 
@@ -21,6 +25,10 @@ const SESSIONS_POLL_MS = 5000;   // tmux 목록(attached·cwd) — 자주 안 �
 const STATUS_POLL_MS = 4000;     // since/tool 보강 — 서버가 아직 질문 텍스트를 안 줘서(2.1.0 gap) 상태 문장 갱신용.
 const GIT_CACHE_MS = 60000;      // §5 원문: "60초 캐시" — 「기타」 세션 행에만 쓴다(워크트리 행은 changed 요약을 서버가 준다).
 const WORKTREES_POLL_MS = 8000;  // N8(30-worktree.md) — 서버가 이미 5초 캐시라 자주 불러도 싸다.
+// C1 — 호스트 목록. 서버가 원격 세션을 30초 캐시하므로(routes/hosts.py) 그보다
+// 짧게 불러도 네트워크 왕복이 늘지 않는다. 15초면 "호스트가 꺼졌다"를 반 캐시
+// 주기 안에 알아챈다.
+const HOSTS_POLL_MS = 15000;
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
 // N3(60-settings-palette.md §1)가 생겨 device-settings 정식 스토어로
 // 옮겼다 — 이전엔 여기 주석이 "N3 전이라 임시로 localStorage"였다. core/
@@ -28,6 +36,7 @@ const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
 // 같은 이유) window 브리지(vtSettingsGet/Set)로만 읽는다.
 const SETTINGS_W_KEY = 'ui.rail.width';
 const SETTINGS_COLLAPSE_KEY = 'ui.rail.collapsed';
+const SETTINGS_HOST_KEY = 'ui.activeHostId';
 
 export interface RailDeps {
   vtFetch: (path: string, opts?: RequestInit) => Promise<unknown>;
@@ -108,12 +117,17 @@ type DesktopRailRow =
 // 표시된) 행은 null — 컨텍스트 메뉴(세션 대상 액션)를 못 연다, 클릭은 openRow가
 // 별도로 open API로 처리한다.
 function actionSessionId(row: DesktopRailRow): string | null {
-  return row.kind === 'session' ? row.sessionId : row.primarySessionId;
+  // C1: 원격 세션의 sessionId는 `remote:<host>:<name>` 합성 키라 로컬 세션 맵에
+  // 없다 — 여기서 null로 잘라야 활성 표시·컨텍스트 메뉴가 로컬 id와 엉키지 않는다.
+  if (row.kind === 'session') return row.remote ? null : row.sessionId;
+  return row.primarySessionId;
 }
 
 function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void }) {
   const isWt = () => props.row.kind === 'worktree';
-  const noSession = () => isWt() && !actionSessionId(props.row) && !(props.row as WorktreeRailRowInput).primaryTmuxName;
+  const isRemote = () => props.row.kind === 'session' && !!props.row.remote;
+  const noSession = () =>
+    isRemote() || (isWt() && !actionSessionId(props.row) && !(props.row as WorktreeRailRowInput).primaryTmuxName);
   const diffLabel = () => {
     if (props.row.kind === 'worktree') {
       const c = props.row.changed;
@@ -146,7 +160,10 @@ function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEve
             <span class="vt-wgrail-diff">{diffLabel()}</span>
           </Show>
         </div>
-        <div class="vt-wgrail-row-sub">{props.row.statusSentence}</div>
+        <div class="vt-wgrail-row-sub">
+          {props.row.statusSentence}
+          <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 보기 전용</span></Show>
+        </div>
         <Show when={props.row.status === 'waiting' && props.row.question}>
           <div class="vt-wgrail-question">? {props.row.question}</div>
         </Show>
@@ -155,7 +172,18 @@ function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEve
   );
 }
 
-function Menu(props: { x: number; y: number; onClose: () => void; items: { label: string; run: () => void }[] }) {
+interface MenuItem {
+  label: string;
+  run: () => void;
+  /** C1 호스트 메뉴의 둘째 줄("세션 3 · 12ms" 또는 "응답 없음"). 없으면 안 그린다. */
+  detail?: string;
+  /** 흐리게(오프라인 호스트). 선택 자체는 막지 않는다 — 꺼진 호스트를 고르면
+   * 이유를 보여주는 게 목적이다. */
+  dim?: boolean;
+  checked?: boolean;
+}
+
+function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[] }) {
   let ref: HTMLDivElement | undefined;
   const onDocClick = (e: MouseEvent) => { if (ref && !ref.contains(e.target as Node)) props.onClose(); };
   document.addEventListener('mousedown', onDocClick, true);
@@ -164,7 +192,16 @@ function Menu(props: { x: number; y: number; onClose: () => void; items: { label
   return (
     <div ref={ref} class="vt-menu" style={{ left: `${props.x}px`, top: `${props.y}px`, right: 'auto' }}>
       <For each={props.items}>
-        {(it) => <div class="vt-menu-item" onClick={() => { props.onClose(); it.run(); }}>{it.label}</div>}
+        {(it) => (
+          <div
+            class="vt-menu-item"
+            classList={{ dim: !!it.dim, checked: !!it.checked }}
+            onClick={() => { props.onClose(); it.run(); }}
+          >
+            <span class="vt-menu-item-label">{it.checked ? '✓ ' : ''}{it.label}</span>
+            <Show when={it.detail}><span class="vt-menu-item-detail">{it.detail}</span></Show>
+          </div>
+        )}
       </For>
     </div>
   );
@@ -182,6 +219,11 @@ function Rail(props: { deps: RailDeps }) {
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; sessionId: string } | null>(null);
   const [moreMenu, setMoreMenu] = createSignal<{ x: number; y: number } | null>(null);
   const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [hosts, setHosts] = createSignal<HostEntry[]>([]);
+  const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
+  const [activeHostId, setActiveHostId] = createSignal<string>(
+    String((window as any).vtSettingsGet?.(SETTINGS_HOST_KEY) || LOCAL_HOST),
+  );
 
   const refreshSessions = async () => {
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
@@ -193,13 +235,22 @@ function Rail(props: { deps: RailDeps }) {
     setWorktrees(data?.worktrees || []);
   };
 
+  // C1 — 로컬+원격을 한 목록으로. 실패하면(라우터가 없는 옛 서버 등) 빈 배열이
+  // 남아 스위처가 아예 안 그려진다 — 멀티호스트를 안 쓰는 사람에게는 그게 맞다.
+  const refreshHosts = async () => {
+    const data = await safeFetch<{ hosts?: HostEntry[] }>(props.deps, '/api/hosts');
+    if (data?.hosts) setHosts(data.hosts);
+  };
+
   refreshSessions();
   refreshAgent();
   refreshWorktrees();
+  refreshHosts();
   const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_POLL_MS);
   const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
   const t3 = setInterval(() => { if (!document.hidden) refreshWorktrees(); }, WORKTREES_POLL_MS);
-  onCleanup(() => { clearInterval(t1); clearInterval(t2); clearInterval(t3); });
+  const t4 = setInterval(() => { if (!document.hidden) refreshHosts(); }, HOSTS_POLL_MS);
+  onCleanup(() => { clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4); });
 
   // 키맵(worktreeNew, core/keymap.js) · 팔레트 등 이 파일을 정적 import 못 하는
   // 곳(위 파일 상단 주석과 같은 이유)이 다이얼로그를 열 수 있도록 하는 브리지.
@@ -208,9 +259,23 @@ function Rail(props: { deps: RailDeps }) {
 
   // 세션 스토어(sessionsVersion)가 바뀔 때마다(탭 추가/삭제/전환) 실제 목록을
   // 다시 구성한다 — window.allSessions()가 진짜 웹 세션 맵의 단일 출처다.
+  // C1 — 저장된 값이 아직 등록된 호스트를 가리키는지. 목록이 아직 안 왔을 때
+  // (hosts()가 빈 배열) 로컬로 튕기지 않도록 목록이 비면 저장값을 그대로 쓴다.
+  const effectiveHostId = createMemo(() =>
+    hosts().length === 0 ? activeHostId() : resolveActiveHost(hosts(), activeHostId()));
+  const isRemoteHost = createMemo(() => effectiveHostId() !== LOCAL_HOST);
+  const activeHost = createMemo(() => hosts().find((h) => h.id === effectiveHostId()) || null);
+
   const rows = createMemo<DesktopRailRowInput[]>(() => {
     sessionsVersion(); agentVersion(); // 구독 트리거용 — 값 자체는 안 씀
     const w = window as any;
+
+    // 원격 호스트를 고른 상태: 워크트리 API는 로컬 전용이라(2.2 범위) 전부
+    // 세션 행이다. 이미 열린 pane은 건드리지 않는다 — 스위처는 필터일 뿐이다.
+    if (isRemoteHost()) {
+      const h = activeHost();
+      return h ? remoteSessionRows(h) : [];
+    }
     const all = w.allSessions ? w.allSessions() : {};
     const byName: Record<string, any> = {};
     for (const t of tmuxSessions()) byName[t.name] = t;
@@ -347,6 +412,25 @@ function Rail(props: { deps: RailDeps }) {
   // getAction으로 바로 되지만, 마이크·테마는 아직 rail.js의 #vt-rail-panel
   // 플라이아웃 안에만 산다(desktop mic의 유일한 자리) — 그 DOM은 지우지 않고
   // CSS로만 숨겨 뒀으므로, 숨은 버튼을 그대로 다시 눌러 같은 경로를 그대로 쓴다.
+  // C1 — 호스트 스위처.
+  const openHostMenu = (e: MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    refreshHosts(); // 열 때 한 번 더 — 목록이 15초 지나 있을 수 있다.
+    setHostMenu({ x: r.left, y: r.bottom + 4 });
+  };
+  const selectHost = (id: string) => {
+    setActiveHostId(id);
+    (window as any).vtSettingsSet?.(SETTINGS_HOST_KEY, id);
+  };
+  const hostMenuItems = (): MenuItem[] =>
+    buildHostMenu(hosts(), activeHostId()).map((h) => ({
+      label: h.label,
+      detail: h.detail,
+      dim: !h.online,
+      checked: h.active,
+      run: () => selectHost(h.id),
+    }));
+
   const openMoreMenu = (e: MouseEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setMoreMenu({ x: r.left, y: r.bottom + 4 });
@@ -414,18 +498,42 @@ function Rail(props: { deps: RailDeps }) {
     <aside id="vt-wgrail" ref={railRef} classList={{ collapsed: collapsed() }} aria-label="워크트리">
       <div class="vt-wgrail-head">
         <Show when={!collapsed()}>
-          <span class="vt-wgrail-title">워크트리 · {worktrees().length}</span>
+          {/* C1 — 호스트가 로컬 하나뿐이면 칩을 아예 안 그린다. 멀티호스트를
+              안 쓰는 사람에게는 "고를 게 없는 드롭다운"이 잡음일 뿐이다. */}
+          <Show
+            when={hosts().length > 1}
+            fallback={<span class="vt-wgrail-title">워크트리 · {worktrees().length}</span>}
+          >
+            <button
+              type="button"
+              class="vt-wgrail-host"
+              classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: isRemoteHost() }}
+              onClick={openHostMenu}
+              title={activeHost() ? `${activeHost()!.label} · ${hostDetail(activeHost()!)}` : '호스트 선택'}
+            >
+              <span class="vt-wgrail-host-name">{activeHost()?.label || effectiveHostId()}</span>
+              <span class="vt-wgrail-host-caret">▾</span>
+            </button>
+          </Show>
         </Show>
         <button type="button" class="vt-wgrail-collapse" onClick={toggleCollapse} aria-label={collapsed() ? '펼치기' : '접기'} title={collapsed() ? '펼치기' : '접기'}>
           {collapsed() ? '›' : '‹'}
         </button>
       </div>
       <div class="vt-wgrail-body">
-        <Show when={totalRows() === 0 && !collapsed()}>
+        <Show when={totalRows() === 0 && !collapsed() && !isRemoteHost()}>
           <div class="vt-wgrail-empty">
             아직 워크트리가 없습니다.
             <button type="button" class="vt-wgrail-empty-new" onClick={() => setDialogOpen(true)}>+ 워크트리 만들기</button>
           </div>
+        </Show>
+        {/* C1 — 원격 호스트가 꺼져 있으면 "빈 목록"과 "연결 안 됨"을 구분해서
+            보여준다. 둘을 같은 빈 화면으로 뭉개면 "세션이 없는 건가?"로 읽힌다. */}
+        <Show when={isRemoteHost() && !collapsed() && activeHost() && !activeHost()!.online}>
+          <div class="vt-wgrail-empty">{hostDetail(activeHost()!)}</div>
+        </Show>
+        <Show when={isRemoteHost() && !collapsed() && totalRows() === 0 && activeHost()?.online}>
+          <div class="vt-wgrail-empty">이 호스트에 tmux 세션이 없습니다.</div>
         </Show>
         <For each={sections()}>
           {(section) => (
@@ -448,7 +556,15 @@ function Rail(props: { deps: RailDeps }) {
         </For>
       </div>
       <div class="vt-wgrail-footer">
-        <button type="button" class="vt-wgrail-new" onClick={() => setDialogOpen(true)}>
+        {/* 워크트리 생성은 로컬 전용이다(원격 워크트리는 2.2 범위) — 원격을 보고
+            있을 때 누르면 "맥에" 워크트리가 생겨 화면과 결과가 어긋난다. */}
+        <button
+          type="button"
+          class="vt-wgrail-new"
+          disabled={isRemoteHost()}
+          title={isRemoteHost() ? '원격 호스트에는 워크트리를 만들 수 없습니다(2.2)' : ''}
+          onClick={() => setDialogOpen(true)}
+        >
           <Show when={!collapsed()} fallback="+">+ 워크트리 만들기</Show>
         </button>
         <button type="button" class="vt-wgrail-more" onClick={openMoreMenu} aria-label="더보기" title="파일 · 큐 · 스니펫 · 포트 · 사용량 · 설정">
@@ -458,6 +574,9 @@ function Rail(props: { deps: RailDeps }) {
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
       <Show when={ctxMenu()}>
         {(m) => <Menu x={m().x} y={m().y} onClose={() => setCtxMenu(null)} items={ctxMenuItems()} />}
+      </Show>
+      <Show when={hostMenu()}>
+        {(m) => <Menu x={m().x} y={m().y} onClose={() => setHostMenu(null)} items={hostMenuItems()} />}
       </Show>
       <Show when={moreMenu()}>
         {(m) => <Menu x={m().x} y={m().y} onClose={() => setMoreMenu(null)} items={moreMenuItems()} />}
