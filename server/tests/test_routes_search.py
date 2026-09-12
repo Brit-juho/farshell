@@ -107,3 +107,72 @@ def test_result_cap_sets_truncated(client):
     data = r.json()
     assert len(data["results"]) <= 50
     assert data["truncated"] is True
+
+
+# --- 영속 로그까지 확장 (2.1.2, 80-multihost-agents.md §3) -------------------------
+
+
+@pytest.fixture
+def logs(tmp_path, monkeypatch):
+    """격리된 ~/.vt/scrollback/. scrollback_persist는 매 호출 시 env를 다시 읽는다."""
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path))
+    d = tmp_path / "scrollback"
+    d.mkdir()
+    return d
+
+
+def _write_log(logs, session_id, text, rotated=None):
+    if rotated is not None:
+        (logs / f"{session_id}.log.1").write_text(rotated)
+    (logs / f"{session_id}.log").write_text(text)
+
+
+def test_search_finds_output_of_a_session_that_no_longer_exists(client, logs):
+    """이 확장의 핵심 — 서버 재시작·세션 종료로 링버퍼가 사라진 뒤에도 찾힌다."""
+    _write_log(logs, "dead-1", "build ok\nTypeError: boom\ndone\n")
+    r = client.get("/api/search/scrollback?q=TypeError")
+    assert r.status_code == 200
+    results = r.json()["results"]
+    assert len(results) == 1
+    assert results[0]["session_id"] == "dead-1"
+    assert results[0]["source"] == "log"
+    assert results[0]["line"] == "TypeError: boom"
+
+
+def test_rotated_generation_is_searched_before_the_current_log(client, logs):
+    _write_log(logs, "s9", "recent line\n", rotated="older marker line\n")
+    lines = [x["line"] for x in client.get("/api/search/scrollback?q=marker").json()["results"]]
+    assert lines == ["older marker line"]
+
+
+def test_live_session_with_a_log_is_not_reported_twice(client, logs):
+    """세션 하나당 한 소스만 본다 — 링버퍼는 로그의 꼬리라 겹친다."""
+    _seed_session("s1", "dev", ["needle here"])
+    _write_log(logs, "s1", "needle here\n")
+    results = client.get("/api/search/scrollback?q=needle").json()["results"]
+    assert len(results) == 1
+    assert results[0]["source"] == "log"
+
+
+def test_live_session_without_a_log_still_uses_the_ring_buffer(client, logs):
+    _seed_session("s2", "dev", ["needle here"])
+    results = client.get("/api/search/scrollback?q=needle").json()["results"]
+    assert len(results) == 1
+    assert results[0]["source"] == "live"
+
+
+def test_sessions_filter_also_applies_to_logged_only_sessions(client, logs):
+    _write_log(logs, "keep", "needle\n")
+    _write_log(logs, "skip", "needle\n")
+    results = client.get("/api/search/scrollback?q=needle&sessions=keep").json()["results"]
+    assert [x["session_id"] for x in results] == ["keep"]
+
+
+def test_huge_log_is_scanned_from_the_tail_and_marked_truncated(client, logs, monkeypatch):
+    """오래된 쪽을 자른다 — 사람이 찾는 건 대개 최근이고, 잘렸다는 사실은 알린다."""
+    import routes.search as search_mod
+    monkeypatch.setattr(search_mod, "MAX_LOG_SCAN_BYTES", 64)
+    _write_log(logs, "big", "old needle\n" + "x" * 200 + "\nnew needle\n")
+    body = client.get("/api/search/scrollback?q=needle").json()
+    assert body["truncated"] is True
+    assert [x["line"] for x in body["results"]] == ["new needle"]

@@ -99,7 +99,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | 각 세션의 살아있는 scrollback 링버퍼를 grep한다(N40 — 팔레트 `~` 모드, WS 재접속이 쓰는 것과 같은 버퍼, 별도 저장소 없음). `sessions=all`(기본)이면 열린 세션 전부, 콤마 목록이면 그 세션들만. 세션당 20건·전체 50건까지 반환하며, 각 결과는 앞뒤 3줄 컨텍스트를 포함한다 |
+| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | scrollback을 grep한다(N40 — 팔레트 `~` 모드). **세션 하나당 소스 하나**: 영속 로그가 있으면 로그, 없으면 링버퍼(링버퍼는 로그의 꼬리라 둘 다 보면 모든 줄이 두 번 나온다) — 결과의 `source: "log"|"live"`가 어느 쪽인지 밝힌다. 로그는 세션보다 오래 남으므로 **이미 끝난 세션·서버 재시작 이전의 출력**도 찾힌다. `sessions=all`(기본)이면 열린 세션 전부 + 로그가 남은 세션 전부, 콤마 목록이면 그 id들만. 세션당 20건·전체 50건, 앞뒤 3줄 컨텍스트. 로그는 꼬리에서 4MB까지만 훑고 잘리면 `truncated`를 세운다 |
 
 ## 프롬프트 큐
 
