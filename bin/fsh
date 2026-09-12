@@ -1406,6 +1406,28 @@ cmd_files() {
   esac
 }
 
+# 멀티호스트 (N7/N39 1단계) — 맥 두 대의 farshell 서버를 페어링한다.
+# queue/files와 같은 방식으로 서버 없이 동작하지만, pair/ping은 **상대 서버**가
+# 떠 있어야 한다(내 서버는 필요 없다 — 나가는 요청만 하기 때문).
+cmd_host() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-list}"
+  case "$sub" in
+    list|ls|pair|add|ping|rm|remove|rename|allow-control|deny-control|log|revoke-all)
+      shift 2>/dev/null || true
+      (cd "$VT_DIR/server" && "$VT_PYTHON" host_store.py "$sub" "$@")
+      ;;
+    *)
+      echo "사용법: fsh host [list|pair [별명]|add <url> --ticket <티켓> [--label 별명]"
+      echo "                 |ping <id>|rm <id>|rename <id|self> <별명>"
+      echo "                 |allow-control <id>|deny-control <id>|log [id]|revoke-all]"
+      return 1 ;;
+  esac
+}
+
 # 워크트리 (N8/N44, 30-worktree.md §5) — 서버 API(server/worktree.py)를 그대로
 # 호출한다. queue와 같은 방식으로 서버가 안 떠 있어도 동작한다.
 cmd_worktree() {
@@ -1711,6 +1733,21 @@ cmd_device() {
     list|ls|"")
       (cd "$py_dir" && "$VT_PYTHON" auth.py device-list-pretty)
       ;;
+    rename)
+      # 자동 라벨(UA에서 뽑은 "iPhone"/"Mac")만으로는 같은 기종이 여럿이면 구분이
+      # 안 된다 — 목록에서 어느 행이 어느 기기인지 알아야 revoke를 안심하고 쓴다.
+      local id="${2:-}"; shift 2 2>/dev/null || true
+      local label="$*"
+      if [ -z "$id" ] || [ -z "$label" ]; then
+        echo "  사용법: fsh device rename <id앞자리> <별명>"; return 1
+      fi
+      if (cd "$py_dir" && "$VT_PYTHON" auth.py device-rename "$id" "$label" >/dev/null); then
+        echo "  ✓ 기기 이름 변경: $label"
+      else
+        echo "  ✗ 해당 id로 특정되는 기기가 없습니다 (fsh device list로 확인)"
+        return 1
+      fi
+      ;;
     revoke|rm|remove)
       local id="${2:-}"
       if [ -z "$id" ]; then echo "  사용법: fsh device revoke <id앞자리>"; return 1; fi
@@ -1722,7 +1759,7 @@ cmd_device() {
       fi
       ;;
     *)
-      echo "  사용법: fsh device [list|revoke <id>]"
+      echo "  사용법: fsh device [list|rename <id> <별명>|revoke <id>]"
       return 1
       ;;
   esac
@@ -3542,6 +3579,7 @@ case "${1:-help}" in
   run)      shift; cmd_run "$@" ;;
   queue)    shift; cmd_queue "$@" ;;
   files)    shift; cmd_files "$@" ;;
+  host|hosts) shift; cmd_host "$@" ;;
   worktree|wt) shift; cmd_worktree "$@" ;;
   usage)    shift; cmd_usage "$@" ;;
   help)     shift 2>/dev/null || true; cmd_help "$@" ;;
@@ -3583,6 +3621,8 @@ case "${1:-help}" in
     echo "    fsh queue [add|run|rm]  프롬프트 큐 (작업 중 지시를 쌓아뒀다 순차 투입)"
     echo "    fsh files [ls|add|rm|share|unshare|insert]"
     echo "                          파일 저장소 관리 + 공유 링크 발급/취소 (N19/N23)"
+    echo "    fsh host [list|pair|add|ping|rm|rename|allow-control|log]"
+    echo "                          다른 맥의 farshell과 페어링 (N7/N39)"
     echo "    fsh worktree [list|add|rm|open]"
     echo "                          git 워크트리 만들기/조회/삭제/열기 (N8/N44)"
     echo "    fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]"

@@ -42,6 +42,7 @@ from routes.git_accounts import router as git_accounts_router, elevated_router a
 from routes.worktree import router as worktree_router
 from routes.security import router as security_router
 from routes.share import elevated_router as share_elevated_router, public_router as share_public_router
+from routes.peer import router as peer_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -109,10 +110,14 @@ class TokenAuthMiddleware:
         if path in (
             "/", "/sw.js", "/manifest.json", "/favicon.ico",
             "/api/auth", "/api/auth/status", "/api/auth/logout",
-        ) or path.startswith("/static") or path.startswith("/s/"):
+        ) or path.startswith("/static") or path.startswith("/s/") or path.startswith("/api/peer/"):
             # /s/{token} — 공유 링크(N21)의 공개 진입점. 이 표준 인증 체크를
             # 우회하지만 미인증 상태로 통과시키는 게 아니다 — routes/share.py가
             # 토큰 서명·만료·모드(device/pin)별 자체 검증을 반드시 거친다.
+            # /api/peer/* — 원격 호스트(N7/N39)의 진입점. 브라우저 세션 쿠키가
+            # 있을 리 없으므로 여기를 우회하고, routes/peer.py가 HMAC 서명·시간창·
+            # nonce 재생 차단을 직접 검증한다. peer가 닿을 수 있는 라우트는
+            # 그 파일에 있는 것뿐이라 토큰이 새도 다른 API로는 못 넘어간다.
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
         token = (
@@ -405,6 +410,7 @@ app.include_router(worktree_router)
 app.include_router(security_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
+app.include_router(peer_router)
 
 
 @app.exception_handler(StarletteHTTPException)

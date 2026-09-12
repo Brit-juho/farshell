@@ -183,3 +183,51 @@ def test_otp_reset_failures_clears_lock_immediately(auth):
     auth.otp_reset_failures(key)
     assert auth.otp_lock_remaining(key) == 0
     assert auth.otp_failure_count(key) == 0
+
+
+# --- 기기 별명 변경 (C4, 2026-09-12) ------------------------------------------
+
+
+def test_rename_device_changes_label(auth):
+    """자동 라벨(UA에서 뽑은 "Mac"/"iPhone")만으로는 같은 기종이 여럿이면
+    목록에서 구분이 안 된다 — revoke를 안심하고 쓰려면 이름을 붙일 수 있어야 한다."""
+    _, device_id = auth.register_device(label="Mac")
+    r = auth.rename_device(device_id[:8], "작업실 맥북")
+    assert r is not None and r["label"] == "작업실 맥북"
+    assert auth.list_devices()[0]["label"] == "작업실 맥북"
+
+
+def test_rename_device_does_not_leak_hash(auth):
+    _, device_id = auth.register_device(label="Mac")
+    assert "hash" not in auth.rename_device(device_id, "새이름")
+
+
+def test_rename_device_unknown_prefix_is_none(auth):
+    auth.register_device(label="Mac")
+    assert auth.rename_device("nosuchid", "x") is None
+    assert auth.rename_device("", "x") is None
+
+
+def test_rename_device_ambiguous_prefix_is_none(auth, monkeypatch):
+    """접두사가 여러 기기와 맞으면 엉뚱한 기기 이름을 바꾸는 대신 실패한다 —
+    revoke_device가 접두사 매칭으로 여럿을 한꺼번에 지우는 것과 달리, rename은
+    '어느 하나'를 특정해야 의미가 있다."""
+    a, _ = auth.register_device(label="A")
+    devices = auth._load_devices()
+    for i, d in enumerate(devices):
+        d["id"] = f"dupe{i}"
+    devices.append({**devices[0], "id": "dupe9"})
+    auth._save_devices(devices)
+    assert auth.rename_device("dupe", "x") is None
+
+
+def test_rename_device_empty_label_keeps_old(auth):
+    _, device_id = auth.register_device(label="Mac")
+    assert auth.rename_device(device_id, "   ")["label"] == "Mac"
+
+
+def test_rename_device_survives_reload(auth):
+    """디스크에 실제로 써야 한다 — 서버 재시작 후에도 이름이 남아야 의미가 있다."""
+    _, device_id = auth.register_device(label="Mac")
+    auth.rename_device(device_id, "작업실 맥북")
+    assert auth._load_devices()[0]["label"] == "작업실 맥북"

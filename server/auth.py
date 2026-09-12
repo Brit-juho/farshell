@@ -359,6 +359,29 @@ def list_devices() -> list:
     ]
 
 
+def rename_device(prefix: str, label: str) -> Optional[dict]:
+    """id 접두사로 기기 별명 변경. 못 찾거나 여럿이면 None.
+
+    자동 라벨(`_device_label`이 UA에서 뽑는 "iPhone"/"Mac")만으로는 같은 기종이
+    여럿이면 구분이 안 된다 — 목록에서 어느 행이 어느 기기인지 알 수 있어야
+    `fsh device revoke`를 안심하고 쓸 수 있다.
+
+    **CLI 전용이다.** 웹에서 바꾸게 하지 않는다 — routes/security.py가 "보안 탭은
+    읽기 전용"을 불변식으로 두고 있고(프런트 테스트로도 고정), 별명이 인증 수단은
+    아니지만 그 탭에 입력칸을 하나 여는 순간 그 불변식이 무너진다.
+    """
+    prefix = (prefix or "").strip().lower()
+    if not prefix:
+        return None
+    devices = _load_devices()
+    hits = [d for d in devices if d.get("id", "").startswith(prefix)]
+    if len(hits) != 1:
+        return None
+    hits[0]["label"] = (label or "").strip()[:60] or hits[0].get("label", "기기")
+    _save_devices(devices)
+    return {k: v for k, v in hits[0].items() if k != "hash"}
+
+
 def revoke_device(prefix: str) -> list:
     """id 접두사로 기기 폐기. 폐기된 기기 목록 반환(해당 기기의 세션도 함께 죽는다)."""
     prefix = (prefix or "").strip().lower()
@@ -718,8 +741,15 @@ def _cli(argv: list) -> int:
                 label = d.get("label", "?")
                 print(f"    {d['id'][:8]}  {label:<10} 등록 {age}일 전 / 최근 사용 {seen}일 전")
             print()
-            print("  폐기: vt device revoke <id앞자리>")
+            print("  이름 변경: fsh device rename <id앞자리> <별명>")
+            print("  폐기:      fsh device revoke <id앞자리>")
         print()
+        return 0
+    if cmd == "device-rename":
+        renamed = rename_device(arg, argv[2] if len(argv) > 2 else "")
+        if renamed is None:
+            return 1
+        print(json.dumps(renamed, ensure_ascii=False))
         return 0
     if cmd == "device-revoke":
         removed = revoke_device(arg)
