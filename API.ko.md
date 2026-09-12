@@ -159,8 +159,9 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
 | POST | `/api/upload?session_id=X` | 파일 업로드 (multipart/form-data) → file_store에 저장, 응답에 `id` 포함 |
-| GET | `/api/files?filter=all\|shared\|expiring` | 저장된 파일 목록 |
+| GET | `/api/files?filter=all\|shared\|expiring` | 저장된 파일 목록 → `{items, quota:{used,max,ttl_days}}` (quota는 필터와 무관하게 항상 저장소 전체) |
 | GET | `/api/files/{id}/download` | id로 다운로드 (`attachment` + `nosniff` + `no-store`) |
+| GET | `/api/files/{id}/path` | 저장된 파일의 디스크 경로 (dock 파일 탭 「경로 복사」용 — 입력은 id뿐이라 traversal 표면이 없다) |
 | DELETE | `/api/files/{id}` | 저장된 파일 삭제 |
 | POST | `/api/files/{id}/insert` | 파일 경로를 tmux 세션 pane에 타이핑(JSON: `session`), Enter는 안 누름 |
 | POST | `/api/files/{id}/share` | **승격 필요.** 공유 링크 발급(JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |

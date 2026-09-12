@@ -231,7 +231,7 @@ testing it).
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad` | `frontend/js/theme.js` — `VT_SKINS` |
 | `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` (compact/regular/wide; xwide is `Infinity`, so it isn't captured in the table) |
-| `rail-items` | `6` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS in 2.1.0** — see §3. The new shell's worktree rail `#vt-wgrail` is not counted here) |
+| `rail-items` | `7` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS in 2.1.0** — see §3. The new shell's worktree rail `#vt-wgrail` is not counted here) |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` is reserved, §5) |
 | `color-bg-0` | `#08090a` | `styles/theme/tokens.css` |
 | `color-acc` | `#f0a860` | `styles/theme/tokens.css` |

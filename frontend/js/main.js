@@ -83,6 +83,7 @@ import './panels/viewer-lazy.js';
 import './term/search-bar.js';
 import './picker.js';
 import './ports.js';
+import './panels/files-lazy.js';
 import './queue.js';
 import './snippets.js';
 // N5/N40/N46 — quickopen.js(vanilla)는 shell/Palette.tsx(지연 청크)로

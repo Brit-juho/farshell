@@ -353,3 +353,36 @@ def test_files_filter_shared_and_expiring(client, file_state, monkeypatch):
 
     expiring = client.get("/api/files", params={"filter": "expiring"}).json()["items"]
     assert {x["id"] for x in expiring} == {b["id"]}
+
+
+def test_files_list_carries_quota_for_dock_footer(client, file_state):
+    """dock 파일 탭 푸터 게이지(50 §4). used는 **필터와 무관하게 저장소 전체**다 —
+    필터 결과를 세면 칩을 누를 때마다 게이지가 움직인다."""
+    _upload_via_api(client, name="a.txt", content=b"0123456789")
+    _upload_via_api(client, name="b.txt", content=b"01234")
+    q = client.get("/api/files").json()["quota"]
+    assert q["used"] == 15
+    assert q["max"] == file_store.MAX_TOTAL_BYTES
+    assert q["ttl_days"] == file_store.TTL_SECONDS // 86400
+    # 필터를 걸어도 quota는 그대로.
+    assert client.get("/api/files", params={"filter": "shared"}).json()["quota"]["used"] == 15
+
+
+def test_files_list_never_leaks_pin_hash(client, file_state):
+    """PIN 해시가 목록에 실리면 오프라인에서 4자리를 그냥 맞춰볼 수 있다
+    (5회 제한은 서버 시도에만 걸린다)."""
+    body = _upload_via_api(client)
+    file_store.add_share(body["id"], "pin", 3600, False, pin="1234")
+    shares = client.get("/api/files").json()["items"][0]["shares"]
+    assert len(shares) == 1
+    assert shares[0]["mode"] == "pin"
+    assert set(shares[0]) == {"shareId", "mode", "exp", "once", "views", "lastAccess"}
+
+
+def test_file_path_route_returns_disk_path_for_copy_action(client, file_state):
+    """「경로 복사」(50 §4의 5개 동작 중 하나)가 쓰는 경로. 입력은 id뿐이다."""
+    body = _upload_via_api(client)
+    r = client.get(f"/api/files/{body['id']}/path")
+    assert r.status_code == 200
+    assert r.json()["path"] == str(file_store.real_path_for(body["id"]))
+    assert client.get("/api/files/nope/path").status_code == 404

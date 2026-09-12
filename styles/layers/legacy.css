@@ -2601,3 +2601,64 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 @media (prefers-reduced-motion: reduce) {
   #vt-resize-overlay { transition:none; }
 }
+
+/* ── dock 파일 탭 (N19~N21 · 50-files-share.md §4) ───────────────────────────
+   큐/포트 패널과 같은 껍데기(.vt-viewer-card) 안에서 도므로 여기서는 행·칩·
+   게이지만 정의한다. 색·간격 토큰은 전부 기존 것을 그대로 쓴다 — 파일 탭만의
+   새 팔레트를 만들면 dock 안에서 탭마다 다른 화면처럼 보인다. */
+.vt-fl-chips{
+  display:flex; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  background:var(--bar); border-bottom:1px solid var(--line); flex:0 0 auto; flex-wrap:wrap;
+}
+.vt-fl-chip{
+  background:var(--tab); border:1px solid var(--line); border-radius:999px; color:var(--sub);
+  font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); cursor:pointer;
+}
+.vt-fl-chip:hover{ background:var(--menu-hover); color:var(--txt); }
+.vt-fl-chip.active{ border-color:var(--acc); color:var(--acc); }
+
+.vt-fl-row{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+}
+.vt-fl-row:hover{ background:var(--menu-hover); }
+.vt-fl-row-main{ flex:1 1 auto; min-width:0; }
+.vt-fl-name{ font:500 var(--fs-sm) var(--mono); color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-fl-sub{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-top:2px; }
+.vt-fl-sub.warn{ color:var(--warn, #d98324); }
+.vt-fl-acts{ display:flex; gap:calc(var(--spacing) * 0.5); flex:0 0 auto; }
+.vt-fl-act{
+  background:transparent; border:0; color:var(--sub); cursor:pointer; border-radius:var(--radius-sm);
+  /* 44px은 못 주더라도(행 5개가 392px dock 안에 들어가야 한다) 터치 표적이
+     28px 아래로는 안 내려가게 한다. */
+  min-width:28px; min-height:28px; font-size:var(--fs-sm); line-height:1;
+}
+.vt-fl-act:hover:not([disabled]){ background:var(--tab); color:var(--txt); }
+.vt-fl-act[disabled]{ opacity:.35; cursor:not-allowed; }
+.vt-fl-act.rm:hover:not([disabled]){ color:var(--err, #d24); }
+
+.vt-fl-footer{ padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-top:1px solid var(--line); }
+.vt-fl-gauge{ height:6px; background:var(--tab); border-radius:999px; overflow:hidden; }
+.vt-fl-gauge-fill{ height:100%; background:var(--acc); }
+.vt-fl-gauge-fill.warn{ background:var(--err, #d24); }
+.vt-fl-footer-text{ margin-top:calc(var(--spacing) * 1.5); font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+
+/* 링크 발급 다이얼로그(§3 화면 3b). dock 안이 아니라 항상 모달이다 — 발급은
+   되돌리기 전에 한 번 더 보게 해야 하는 조작이라 화면을 덮는 게 맞다. */
+.vt-fl-share-card{ max-width:420px; }
+.vt-fl-field{ margin-bottom:calc(var(--spacing) * 3); }
+.vt-fl-field-label{ font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub); margin-bottom:calc(var(--spacing) * 1.5); }
+.vt-fl-radio{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 1.5); cursor:pointer; }
+.vt-fl-radio.disabled{ opacity:.5; cursor:not-allowed; }
+.vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-left:20px; }
+.vt-fl-input{
+  width:100%; background:var(--term); color:var(--txt); border:1px solid var(--line);
+  border-radius:var(--trad); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+  font:400 var(--fs-md) var(--ui);  /* 16px — iOS 확대 방지(.vt-q-compose와 같은 이유) */
+}
+.vt-fl-check{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 3); cursor:pointer; }
+.vt-fl-share-actions{ display:flex; justify-content:flex-end; margin-bottom:calc(var(--spacing) * 3); }
+.vt-fl-share-list{ border-top:1px solid var(--line); padding-top:calc(var(--spacing) * 2); }
+.vt-fl-share-row{ display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) 0; }
+.vt-fl-share-label{ flex:1 1 auto; min-width:0; font:400 var(--fs-xs) var(--mono); color:var(--txt); }
+.vt-fl-share-row .vt-fl-act{ font:500 var(--fs-2xs) var(--mono); padding:0 calc(var(--spacing) * 1.5); min-width:auto; }

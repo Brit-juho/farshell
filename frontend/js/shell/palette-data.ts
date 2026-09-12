@@ -84,6 +84,7 @@ export interface CommandDescriptor {
 export const DEFAULT_COMMANDS: CommandDescriptor[] = [
   { label: '프롬프트 큐', action: 'queue.show', isPanel: true },
   { label: '프롬프트 스니펫', action: 'snippets.show', isPanel: true },
+  { label: '파일 · 공유 링크', action: 'files.show', isPanel: true },
   { label: '포트 대시보드', action: 'ports.show', gate: 'ports', isPanel: true },
   { label: '사용량', action: 'usage.open', gate: 'usage', isPanel: true },
   { label: '터미널 내 검색', action: 'search.toggle' },

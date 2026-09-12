@@ -43,6 +43,7 @@ interface DockTab {
 const TABS: DockTab[] = [
   { id: 'scm',   label: '소스컨트롤', panelId: 'vt-dock-scm', action: 'scm.show' },   // 40 §3 (2.1.0은 읽기 전용)
   { id: 'queue', label: '큐',        panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
+  { id: 'files', label: '파일',      panelId: 'vt-files', action: 'files.show' },  // 50 §4
   { id: 'ports', label: '포트',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
   { id: 'usage', label: '사용량',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
 ];

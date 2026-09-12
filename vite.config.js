@@ -124,6 +124,9 @@ export default defineConfig(({ mode }) => {
             const p = id.split('?')[0].replace(/\\/g, '/');
             if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
             if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
+            // 50 §4 dock 파일 탭 — 같은 이유로 지연 청크. app.js 300KiB 상한
+            // (build-output.test.js)에 실제로 걸려서 뺀 것이다.
+            if (p.includes('/frontend/js/panels/files/')) return 'panels';
             return null;
           },
         },
