@@ -43,6 +43,7 @@ from routes.worktree import router as worktree_router
 from routes.security import router as security_router
 from routes.share import elevated_router as share_elevated_router, public_router as share_public_router
 from routes.peer import router as peer_router
+from routes.hosts import router as hosts_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -411,6 +412,7 @@ app.include_router(security_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)
+app.include_router(hosts_router)
 
 
 @app.exception_handler(StarletteHTTPException)

@@ -240,3 +240,56 @@ def test_cross_origin_peer_request_is_blocked(env):
     h["Origin"] = "https://evil.example.com"
     r = client.get("/api/peer/ping", headers=h)
     assert r.status_code == 403
+
+
+# --- /api/peer/sessions (2단계) --------------------------------------------------
+
+
+def _fake_tmux(monkeypatch, sessions=("dev",)):
+    import tmux_runner
+    lines = "\n".join(f"{n}\t1\t0" for n in sessions)
+    monkeypatch.setattr(tmux_runner, "run_text", lambda *a, **kw: lines)
+    monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [])
+
+
+def test_sessions_requires_signature(env, monkeypatch):
+    client, _, _ = env
+    _fake_tmux(monkeypatch)
+    assert client.get("/api/peer/sessions").status_code == 401
+
+
+def test_sessions_returns_local_tmux_sessions(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    _fake_tmux(monkeypatch, ("dev", "build"))
+    r = client.get("/api/peer/sessions",
+                   headers=_sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions"))
+    assert r.status_code == 200
+    body = r.json()
+    assert [s["name"] for s in body["sessions"]] == ["dev", "build"]
+    assert body["id"] and body["label"]
+
+
+def test_sessions_reports_local_agent_status_only(env, monkeypatch):
+    """**전이 금지(hop 0)** — 내가 등록한 다른 peer의 상태가 섞이면 A↔B 상호
+    페어링에서 무한 재귀가 된다. 로컬 엔트리만 실려야 한다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    _fake_tmux(monkeypatch, ("dev",))
+    import agent_status
+    agent_status._state.clear()
+    agent_status.report("s-local", agent_status.WORKING, session="dev")
+    agent_status.report("s-other", agent_status.WAITING, session="dev", host="third-mac")
+    r = client.get("/api/peer/sessions",
+                   headers=_sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions"))
+    assert r.json()["sessions"][0]["status"] == agent_status.WORKING
+    agent_status._state.clear()
+
+
+def test_sessions_is_audited(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    _fake_tmux(monkeypatch)
+    client.get("/api/peer/sessions",
+               headers=_sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions"))
+    assert any(r["action"] == "sessions" and r["ok"] for r in hs.read_audit("laptop"))

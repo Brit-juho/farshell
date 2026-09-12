@@ -27,6 +27,7 @@ peer 응답에는 **내 로컬 것만** 담는다. 내가 등록한 다른 peer�
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -168,6 +169,58 @@ async def peer_pair(request: Request):
 
 
 # --- ping (서명 필요) -------------------------------------------------------------
+
+
+@router.get("/api/peer/sessions")
+async def peer_sessions(request: Request):
+    """이 호스트의 tmux 세션 + 에이전트 상태 (2단계, `view` 등급).
+
+    **전이 금지(hop 0)**: 내가 등록한 다른 peer의 세션은 절대 섞지 않는다.
+    A↔B 상호 페어링에서 A→B→A 무한 재귀가 생기기 때문 — 여기서는 언제나
+    `agent_status.LOCAL_HOST` 엔트리만 본다.
+
+    `cwd`를 함께 싣는 이유: 상대 화면이 "무슨 작업 중인 세션인가"를 보여주려면
+    필요하다. 다만 이건 **경로 문자열 노출**이라, view 등급이 이미 세션 이름과
+    출력까지 볼 수 있는 관계라는 전제 위에서만 정당하다(그보다 더 주지는 않는다).
+    """
+    grant, err = _require(request)
+    if err:
+        return err
+
+    import agent_status
+    import tmux_runner
+
+    def _collect() -> list[dict]:
+        fmt = "#{session_name}\t#{session_windows}\t#{session_attached}"
+        text = tmux_runner.run_text(["list-sessions", "-F", fmt], timeout=2.0)
+        if not text:
+            return []
+        panes = {}
+        for p in tmux_runner.get_all_panes():
+            panes.setdefault(p.session, p)
+        out = []
+        for line in text.strip().split("\n"):
+            if not line:
+                continue
+            parts = line.split("\t")
+            name = parts[0]
+            pane = panes.get(name)
+            out.append({
+                "name": name,
+                "windows": int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1,
+                "attached": int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0,
+                "command": pane.command if pane else "",
+                "cwd": pane.path if pane else "",
+                # 로컬 엔트리만 본다 — 이 값이 상대에게 건너가 그쪽에서 다시
+                # host=<나>로 기록된다(A1의 host 차원이 여기서 쓰인다).
+                "status": agent_status.status_for_session(name),
+            })
+        return out
+
+    sessions = await asyncio.to_thread(_collect)
+    host_store.audit(grant["id"], "sessions", True, f"{len(sessions)}건")
+    me = host_store.get_self()
+    return {"ok": True, "id": me["id"], "label": me["label"], "sessions": sessions}
 
 
 @router.get("/api/peer/ping")
