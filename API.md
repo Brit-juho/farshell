@@ -178,6 +178,23 @@ Public download entry point (not under the api prefix, and not behind the usual 
 | GET | `/s/{token}` | Share download. `device` mode: serves if `vt_device`+`vt_session` are valid, else 302 to `/?next=/s/{token}`. `pin` mode: PIN entry page unless a valid one-time download cookie is present |
 | POST | `/s/{token}/pin` | Verify a PIN (form: `pin`) → 60s one-time download cookie + redirect. 5 failed attempts cancels the share |
 
+## Multi-host peering (N7/N39, stage 1)
+
+Endpoints another Mac's FarShell server calls. Deliberately a **separate namespace**:
+a peer credential reaches only what is defined here, never the rest of the API.
+`TokenAuthMiddleware` skips the /api/peer prefix (a peer has no browser session cookie);
+`server/routes/peer.py` verifies HMAC signatures itself.
+
+Auth headers on every call except `pair`: `X-Peer-Id`, `X-Peer-Ts`, `X-Peer-Nonce`,
+`X-Peer-Sig` = `HMAC(secret, "METHOD\npath\nts\nnonce")`. **The secret is never sent.**
+60-second window, one-time nonce (replay-blocked), and the signature is bound to
+method+path so a `view` GET signature can't be reused on a `control` POST.
+
+| Method | Path | Description |
+|--------|------|------|
+| POST | `/api/peer/pair` | Redeem a one-time pairing ticket (JSON: ticket, id, label, version) → per-connection secret. The only unsigned peer route — the ticket is the auth, since no shared secret exists yet. Rejects reserved ids (`local`/`self`/`me`) **without consuming the ticket** |
+| GET | `/api/peer/ping` | Signed liveness check → id, label, version, `serverTime` (the caller derives clock skew from it), and the caller's granted level |
+
 ## Misc
 
 | Method | Path | Description |

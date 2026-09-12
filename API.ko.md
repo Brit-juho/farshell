@@ -174,6 +174,23 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/s/{token}` | 공유 다운로드. `device` 모드는 `vt_device`+`vt_session`이 유효하면 바로 다운로드, 아니면 `/?next=/s/{token}`으로 302. `pin` 모드는 1회용 다운로드 쿠키가 없으면 PIN 입력 페이지 |
 | POST | `/s/{token}/pin` | PIN 검증(form: `pin`) → 60초 1회용 다운로드 쿠키 + 리다이렉트. 5회 실패 시 공유 취소 |
 
+## 멀티호스트 페어링 (N7/N39 1단계)
+
+다른 맥의 FarShell 서버가 호출하는 엔드포인트. 의도적으로 **별도 네임스페이스**다 —
+peer 자격증명은 여기 정의된 것에만 닿고, 나머지 API에는 절대 못 넘어간다.
+`TokenAuthMiddleware`는 /api/peer 접두사를 우회하고(peer에겐 브라우저 세션 쿠키가 없다),
+`server/routes/peer.py`가 HMAC 서명을 직접 검증한다.
+
+`pair`를 제외한 모든 호출의 인증 헤더: `X-Peer-Id`, `X-Peer-Ts`, `X-Peer-Nonce`,
+`X-Peer-Sig` = `HMAC(secret, "METHOD\npath\nts\nnonce")`. **secret은 전송되지 않는다.**
+60초 시간창 + 1회용 nonce(재생 차단), 서명이 method+path에 묶여 있어 `view`용 GET
+서명을 `control`용 POST에 돌려쓸 수 없다.
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/peer/pair` | 1회용 페어링 티켓 제출(JSON: ticket, id, label, version) → 그 연결 전용 secret 발급. 서명 없이 열리는 유일한 peer 경로 — 아직 공유 secret이 없는 시점이라 티켓이 그 역할을 한다. 예약 id(`local`/`self`/`me`)는 **티켓을 소모하지 않고** 거부 |
+| GET | `/api/peer/ping` | 서명된 연결 확인 → id·label·version·`serverTime`(호출자가 이걸로 시계 오차를 계산)·호출자에게 부여된 등급 |
+
 ## 기타
 
 | 메서드 | 경로 | 설명 |
