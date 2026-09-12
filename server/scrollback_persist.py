@@ -136,3 +136,49 @@ def cleanup_old(days: int = RETENTION_DAYS) -> int:
     if removed:
         logger.info(f"scrollback_persist cleanup: {removed}개 삭제(7일 초과)")
     return removed
+
+
+def logged_session_ids() -> list[str]:
+    """영속 로그가 남아 있는 세션 id 전부(살아있지 않은 세션도 포함).
+
+    `~` 검색(routes/search.py)이 "서버를 재시작하기 전의 출력"까지 찾을 수 있는
+    근거가 이 목록이다 — 링버퍼만 보면 그건 애초에 사라진 데이터다.
+    """
+    d = scrollback_dir()
+    if not d.is_dir():
+        return []
+    ids = set()
+    for f in d.iterdir():
+        name = f.name
+        if name.endswith(".log"):
+            ids.add(name[:-4])
+        elif name.endswith(".log.1"):
+            ids.add(name[:-6])
+    return sorted(ids)
+
+
+def read_tail(session_id: str, max_bytes: int) -> tuple[bytes, bool]:
+    """로그의 **마지막** max_bytes. (데이터, 잘렸는가).
+
+    검색은 전체를 다 읽을 이유가 없다 — 20MB 로그 여러 개를 매 타자마다 읽으면
+    팔레트가 멈춘다. 오래된 쪽을 자르는 이유는 사람이 찾는 게 대개 최근이기
+    때문이고, 잘렸다는 사실은 호출자에게 그대로 알려 화면에 표시하게 한다.
+    """
+    p = _log_path(session_id)
+    rotated = p.with_suffix(p.suffix + ".1")
+    parts = []
+    for f in (rotated, p):
+        if f.is_file():
+            try:
+                parts.append(f.read_bytes())
+            except OSError:
+                continue
+    blob = b"".join(parts)
+    if len(blob) <= max_bytes:
+        return blob, False
+    return blob[-max_bytes:], True
+
+
+def has_log(session_id: str) -> bool:
+    p = _log_path(session_id)
+    return p.is_file() or p.with_suffix(p.suffix + ".1").is_file()

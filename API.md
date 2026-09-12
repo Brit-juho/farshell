@@ -103,7 +103,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | Greps each session's live scrollback ring buffer (N40 — command palette `~` mode; same buffer WS reconnect uses, no separate store). `sessions=all` (default) searches every open session; a comma list restricts to those session ids. Returns up to 50 matches total (20 per session), each with 3 lines of context before/after |
+| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | Greps scrollback (N40 — command palette `~` mode). **One source per session**: the persisted log if that session has one, else the live ring buffer (the ring is the log's tail, so searching both would double every hit) — each result says which in `source: "log"|"live"`. Because logs outlive their sessions, output from a finished session or from before a server restart is found too. `sessions=all` (default) covers every open session plus every session with a log; a comma list restricts to those ids. Up to 50 matches total (20 per session) with 3 lines of context; a log is scanned from its tail up to 4MB and sets `truncated` |
 
 ## Prompt Queue
 

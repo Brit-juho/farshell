@@ -291,7 +291,9 @@ function PaletteBody(props: PaletteBodyProps) {
     return {
       key: `sb:${r.session_id}:${r.line_no}:${i}`,
       kind: 'scrollback',
-      label: `${r.session_name} · ${r.line.trim()}`,
+      // 2.1.2 — `source: "log"`는 **끝난 세션이나 재시작 이전의 출력**일 수 있다.
+      // 그 표시가 없으면 클릭했는데 전환할 세션이 없는 이유를 알 수 없다.
+      label: `${r.session_name}${r.source === 'log' ? ' (기록)' : ''} · ${r.line.trim()}`,
       onOpen: () => { deps.switchTo(r.session_id); props.onRequestClose(); },
       onOpenNewPane: () => {
         const paneId = deps.splitActivePane('right');
