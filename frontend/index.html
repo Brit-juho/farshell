@@ -39,6 +39,24 @@
       try {
         var stored = localStorage.getItem('vt-skin');
         var valid = ['farshell','macos','catppuccin','windows','vscode','notepad'];
+        // N14 — 가져온 테마(7번째 스킨)는 저장된 사본이 있을 때만 유효하다.
+        // 색까지 여기서 심는다: 스킨 이름만 복원하고 색을 모듈 로드 뒤에
+        // 적용하면 매번 기본 팔레트로 한 번 번쩍인다(FOUC).
+        var imported = null;
+        try { imported = JSON.parse(localStorage.getItem('vt-theme-imported') || 'null'); } catch (e2) {}
+        if (imported && imported.tokens) {
+          valid.push('imported');
+          var body = '';
+          for (var k in imported.tokens) {
+            if (/^--color-[a-z0-9-]+$/.test(k) && typeof imported.tokens[k] === 'string') {
+              body += k + ':' + imported.tokens[k] + ';';
+            }
+          }
+          var st = document.createElement('style');
+          st.id = 'vt-imported-theme';
+          st.textContent = 'html[data-skin="imported"]{' + body + '}';
+          document.head.appendChild(st);
+        }
         var s;
         if (stored && valid.indexOf(stored) >= 0) {
           s = stored;
