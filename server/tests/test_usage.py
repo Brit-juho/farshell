@@ -115,6 +115,79 @@ def test_unknown_schema_is_refused(feed):
     write(feed, _feed(schema=99))
     cap = ClauthProvider(feed).capability()
     assert cap["available"] is False and cap["reason"] == "schema"
+    # 조용히 끄되 「무엇을 봤는지」는 남긴다 — 설정 화면이 이걸 보여준다.
+    assert cap["schema_seen"] == 99
+    assert 2 in cap["schema_supported"]
+
+
+def _feed_v2(**over):
+    """실제 clauth schema 2 피드 모양(2026-09-13 ~/.clauth/status.json 실측).
+
+    2는 1에 필드를 더하기만 했다. 그런데 어댑터가 schema==1만 받고 있어서
+    clauth가 올라간 순간 사용량이 통째로 꺼졌고, 아무 에러도 안 나서 몇 주
+    동안 아무도 몰랐다. 이 픽스처가 그 회귀를 고정한다.
+    """
+    now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+    data = {
+        "schema": 2,
+        "generated_at": now,
+        "active_profile": "fornerds",
+        "pending_switch": None,
+        "wrap_off": False,
+        "refresh_interval_ms": 90000,
+        "profiles": [
+            {
+                "name": "brit", "active": False, "rolling_token": True,
+                "provider": "anthropic", "base_url": None, "tier": "Pro",
+                "has_live_session": False, "auth_status": "ok",
+                "fetch_status": "Fresh", "stale": False,
+                "fetched_at": now, "next_refresh_at": now,
+                "auto_start": False, "auto_start_queue": None, "bell_threshold": None,
+                "fallback": {"position": 1, "threshold": 95.0, "armed": False},
+                "windows": [
+                    {"label": "5h", "utilization_pct": 0.0, "resets_at": None},
+                    {"label": "7d", "utilization_pct": 52.0, "resets_at": None},
+                ],
+                "third_party": None,
+            },
+            {
+                "name": "fornerds", "active": True, "rolling_token": False,
+                "provider": "generic", "base_url": "http://100.87.66.59:4747",
+                "tier": None, "has_live_session": False, "auth_status": "ok",
+                "fetch_status": None, "stale": False, "fetched_at": None,
+                "next_refresh_at": None, "auto_start": False,
+                "fallback": {"position": 2, "threshold": 95.0, "armed": True},
+                "windows": [], "third_party": None,
+            },
+        ],
+    }
+    data.update(over)
+    return data
+
+
+def test_schema_2_is_accepted(feed):
+    write(feed, _feed_v2())
+    provider = ClauthProvider(feed)
+    cap = provider.capability()
+    assert cap["available"] is True and cap["profiles"] == 2
+    snap = provider.snapshot()
+    assert snap["active_profile"] == "fornerds"
+    assert [p["name"] for p in snap["profiles"]] == ["brit", "fornerds"]
+    brit = snap["profiles"][0]
+    assert brit["tier"] == "Pro" and brit["auth_ok"] is True
+    assert brit["windows"][1]["pct"] == 52.0
+    # tier/fetch_status가 null인 프로필도 문자열로 정규화돼야 한다(폰에서 깨짐 방지)
+    forn = snap["profiles"][1]
+    assert forn["tier"] == "" and forn["fetch_status"] == "" and forn["active"] is True
+
+
+def test_schema_2_does_not_leak_tokens(feed):
+    """rolling_token은 bool로만 실린다 — 화이트리스트 원칙은 버전이 올라가도 같다."""
+    write(feed, _feed_v2())
+    snap = ClauthProvider(feed).snapshot()
+    blob = json.dumps(snap)
+    assert "base_url" not in blob and "100.87.66.59" not in blob
+    assert snap["profiles"][0]["rolling_token"] is True
 
 
 def test_permission_error(feed, monkeypatch):

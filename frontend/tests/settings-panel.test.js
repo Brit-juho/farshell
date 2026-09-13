@@ -188,8 +188,44 @@ test('정보 — 훅이 전부 등록돼 있으면 그대로 보여준다', asyn
   P.showSettings();
   sectionButton(document, '정보').click();
   await flush();
-  const rows = Array.from(document.querySelectorAll('.vt-set-hookrow')).map((r) => r.textContent);
+  const block = document.querySelectorAll('.vt-set-about')[0];
+  const rows = Array.from(block.querySelectorAll('.vt-set-hookrow')).map((r) => r.textContent);
   assert.deepEqual(rows, ['PreToolUse — 등록됨', 'PostToolUse — 등록됨', 'Stop — 등록됨']);
+});
+
+// U1 회귀 — clauth가 schema 2로 올라가자 사용량이 통째로, 아무 말 없이 꺼졌다.
+// 게이팅상 탭도 칩도 사라지므로 「정보」가 유일하게 이유를 볼 수 있는 곳이다.
+function capsFetch(usage) {
+  return (u) => (u.includes('/api/capabilities')
+    ? Promise.resolve({ ok: true, json: () => Promise.resolve({ usage }) })
+    : null);
+}
+
+test('정보 — 사용량 소스가 켜져 있으면 프로필 수까지 보여준다', async () => {
+  const { document, P } = await build({
+    fetchExtra: capsFetch({ available: true, provider: 'clauth', profiles: 2 }),
+  });
+  P.showSettings();
+  sectionButton(document, '정보').click();
+  await flush();
+  const block = Array.from(document.querySelectorAll('.vt-set-about')).at(-1);
+  assert.match(block.textContent, /clauth — 사용 중 \(프로필 2개\)/);
+  assert.strictEqual(block.querySelector('.vt-set-help'), null, '켜져 있으면 안내가 없어야 한다');
+});
+
+test('정보 — 모르는 피드 schema면 본 값과 지원 범위를 적는다', async () => {
+  const { document, P } = await build({
+    fetchExtra: capsFetch({
+      available: false, provider: 'clauth', reason: 'schema',
+      schema_seen: 3, schema_supported: [1, 2],
+    }),
+  });
+  P.showSettings();
+  sectionButton(document, '정보').click();
+  await flush();
+  const help = Array.from(document.querySelectorAll('.vt-set-about .vt-set-help')).at(-1);
+  assert.match(help.textContent, /schema 3/);
+  assert.match(help.textContent, /1, 2/);
 });
 
 test('정보 — 훅이 빠져 있으면 해결 방법을 함께 안내한다', async () => {
