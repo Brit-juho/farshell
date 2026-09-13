@@ -4,7 +4,7 @@
 // 순환 import를 피하려고 switchTo/removeSession/renameSession(session.js 소유)을
 // 직접 import하지 않는다 — 대신 handlers 콜백으로 주입받는다. session.js가 자기
 // 함수를 넘겨 호출하는 쪽이라, tab-dom.js는 session.js를 몰라도 된다.
-import { getSession } from '../core/store.js';
+import { getSession, moveSessionBefore } from '../core/store.js';
 import { isMac } from '../core/env.js';
 import { saveWorkspace } from './workspace.js';
 import { icon } from '../ui/icons.js';
@@ -158,6 +158,9 @@ function makeTabDraggable(tab) {
     } else {
       tabsContainer.insertBefore(dragged, tab);
     }
+    // 순서의 출처는 이제 레코드다(N37 3단계) — DOM만 옮기면 saveWorkspace가
+    // 옛 순서를 그대로 다시 쓴다.
+    moveSessionBefore(draggedId, tab.dataset.sessionId, after);
     saveWorkspace();
   });
   // L5: 터치 기기는 위 네이티브 dragstart가 안 뜨므로(iOS Safari는 아예

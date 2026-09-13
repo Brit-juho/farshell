@@ -10,7 +10,7 @@
 // 남겨도 된다").
 import { register as registerKey } from '../core/keymap.js';
 import { getSession, allSessions, registerSession, removeSessionRecord, activeSessionId, setActive,
-  sessionDisplayName, setSessionDisplayName } from '../core/store.js';
+  sessionDisplayName, setSessionDisplayName, orderedSessionIds, moveSessionByOffset } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { createTabElement } from './tab-dom.js';
@@ -131,7 +131,8 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // displayName은 이제 **레코드가 출처**다(core/store.js의 sessionDisplayName).
   // 탭 DOM의 .tab-name은 그 값을 비추는 화면일 뿐이다.
   registerSession(id, { term, ws: null, tabEl: tab, displayName: displayName || id.slice(0, 8),
-    fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) });
+    fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) },
+    insertBeforeId);
   // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션의 connectTerminalWs를
   // 부를 수 있도록 참조를 걸어둔다 — startSessionSocket이 채운다.
   const onResize = startSessionSocket(id, term);
@@ -211,16 +212,26 @@ export async function renameSession(id, rawName, previousNameOverride) {
   }
 }
 
-// 탭(터미널 섹션) 좌/우 이동. DOM 순서(= 화면 순서) 기준으로 끝에서 순환한다.
-function switchTabByOffset(delta) {
-  const tabEls = Array.from(document.querySelectorAll('#tabs .tab'));
-  if (tabEls.length < 2) return;
+// 세션 좌/우 이동. 순서의 출처는 **세션 레코드**다(core/store.js의 order) —
+// 2.1.3까지는 `#tabs .tab`의 DOM 순서였는데, 그 DOM은 N37 3단계에서 사라진다.
+// 끝에서 순환하는 동작은 그대로 유지한다.
+export function switchTabByOffset(delta) {
+  const ids = orderedSessionIds();
+  if (ids.length < 2) return;
   const activeId = activeSessionId();
-  let idx = tabEls.findIndex((t) => t.dataset.sessionId === activeId);
+  let idx = ids.indexOf(activeId);
   if (idx === -1) idx = 0;
-  const next = (idx + delta + tabEls.length) % tabEls.length;
-  const nid = tabEls[next].dataset.sessionId;
+  const nid = ids[(idx + delta + ids.length) % ids.length];
   if (nid && nid !== activeId) switchTo(nid);
+}
+
+// 순서 자체를 바꾸는 경로. 탭 줄이 사라진 뒤에도 재정렬 수단이 남아야 한다 —
+// 레일 목록은 긴급도로 정렬되므로(agent/state.js의 sortByUrgency) 거기서
+// 드래그 재정렬은 의미가 없다. 그래서 키보드를 재정렬 UI로 둔다.
+export function moveTabByOffset(delta) {
+  const id = activeSessionId();
+  if (!id) return;
+  if (moveSessionByOffset(id, delta)) saveWorkspace();
 }
 
 // S3: 탭 좌우 이동도 키맵 레지스트리 경유. 레지스트리가 document capture 단계에서
@@ -235,6 +246,8 @@ function _inTextField() {
 }
 registerKey('tabPrev', () => { if (!_inTextField()) switchTabByOffset(-1); });
 registerKey('tabNext', () => { if (!_inTextField()) switchTabByOffset(1); });
+registerKey('tabMovePrev', () => { if (!_inTextField()) moveTabByOffset(-1); });
+registerKey('tabMoveNext', () => { if (!_inTextField()) moveTabByOffset(1); });
 
 export async function removeSession(id) {
   const s = getSession(id);
