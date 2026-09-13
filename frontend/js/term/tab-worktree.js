@@ -9,7 +9,7 @@
 // 규칙 둘:
 //  - 사용자가 직접 지은 이름(`renamed`)은 절대 덮지 않는다.
 //  - 워크트리에 안 속한 세션은 그대로 둔다(레일의 「기타」 그룹과 같은 규칙).
-import { allSessions } from '../core/store.js';
+import { allSessions, setSessionDisplayName } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
 import { setWorktreeSessionMap } from '../layout/tabbar.js';
 
@@ -36,18 +36,18 @@ export function canRelabel(session) {
 }
 
 function applyLabels(map) {
-  for (const s of Object.values(allSessions())) {
+  for (const [id, s] of Object.entries(allSessions())) {
     const tmux = s && (s.tmuxName || s.tmux_name);
     if (!tmux || !canRelabel(s)) continue;
     const label = map.get(tmux);
+    if (!label || s.displayName === label) continue;
+    // 이름의 출처는 레코드다(core/store.js) — 탭 DOM은 setSessionDisplayName이
+    // 같이 맞춘다. 3단계에서 그 DOM이 사라져도 이 경로는 그대로 동작한다.
+    setSessionDisplayName(id, label);
+    // 워크트리 라벨은 여러 저장소에서 같아 보일 수 있다(같은 브랜치명) —
+    // 실제 tmux 세션 이름을 툴팁으로 남겨 구분할 수 있게 한다.
     const nameEl = s.tabEl && s.tabEl.querySelector('.tab-name');
-    if (!label || !nameEl) continue;
-    if (nameEl.textContent !== label) {
-      nameEl.textContent = label;
-      // 워크트리 라벨은 여러 저장소에서 같아 보일 수 있다(같은 브랜치명) —
-      // 실제 tmux 세션 이름을 툴팁으로 남겨 구분할 수 있게 한다.
-      nameEl.title = `${label} · ${tmux}`;
-    }
+    if (nameEl) nameEl.title = `${label} · ${tmux}`;
   }
 }
 

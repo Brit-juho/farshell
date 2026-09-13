@@ -5,7 +5,7 @@
 // renameSession을 부르고, term/session.js는 탭 전환/제거 시 updateSessionPicker를
 // 부른다. panels/viewer의 shell.js↔tree.js와 같은 이유로 그대로 유지한다(모든
 // 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
-import { activeSession, activeSessionId, allSessions } from './core/store.js';
+import { activeSession, activeSessionId, allSessions, sessionDisplayName } from './core/store.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
@@ -18,13 +18,13 @@ export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
   if (!picker) return;
   const s = activeSession();
-  picker.textContent = s?.tabEl?.querySelector('.tab-name')?.textContent || '세션';
+  picker.textContent = s ? sessionDisplayName(activeSessionId()) : '세션';
   const sheet = document.getElementById('session-manager');
   if (sheet) renderSessionManager(sheet);
 }
 
-function sessionName(id, s) {
-  return s?.tabEl?.querySelector('.tab-name')?.textContent || id.slice(0, 8);
+function sessionName(id) {
+  return sessionDisplayName(id);
 }
 
 function openSessionManager() {
@@ -81,18 +81,18 @@ function renderSessionManager(backdrop) {
     const row = document.createElement('div');
     row.className = 'vt-session-row' + (id === activeIdNow ? ' active' : '');
     const select = document.createElement('button');
-    select.type = 'button'; select.className = 'vt-session-select'; select.textContent = sessionName(id, s);
+    select.type = 'button'; select.className = 'vt-session-select'; select.textContent = sessionName(id);
     select.setAttribute('aria-current', id === activeIdNow ? 'true' : 'false');
     select.onclick = () => { switchTo(id); closeSessionManager(); };
     const rename = document.createElement('button');
-    rename.type = 'button'; rename.className = 'vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id, s)} 이름 변경`);
+    rename.type = 'button'; rename.className = 'vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id)} 이름 변경`);
     rename.onclick = async () => {
-      const next = window.prompt('새 세션 이름', sessionName(id, s));
+      const next = window.prompt('새 세션 이름', sessionName(id));
       if (next === null) return;
       if (await renameSession(id, next)) renderSessionManager(backdrop);
     };
     const close = document.createElement('button');
-    close.type = 'button'; close.className = 'vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id, s)} 닫기`);
+    close.type = 'button'; close.className = 'vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 닫기`);
     close.onclick = async () => { await removeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
     row.append(select, rename, close); list.appendChild(row);
   }

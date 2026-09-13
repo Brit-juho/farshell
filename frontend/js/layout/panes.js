@@ -11,7 +11,7 @@
 // 리뷰 원칙) — 클릭이든 탭이든 항상 이걸로 전부 가능하다. 탭/헤더를 pane
 // 위로 드래그하는 DnD(L5, layout/dnd.js)는 이 baseline 위에 얹는 "있으면
 // 편한" 추가 경로다.
-import { getSession, allSessions } from '../core/store.js';
+import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
   splitPane, closePane, setRatio,
@@ -74,8 +74,7 @@ function _ensureContainers() {
 }
 
 function _sessionLabel(sessionId) {
-  const s = getSession(sessionId);
-  return s?.tabEl?.querySelector('.tab-name')?.textContent || sessionId.slice(0, 8);
+  return sessionDisplayName(sessionId);
 }
 
 function _paneSessionId(paneId) {

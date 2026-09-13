@@ -213,7 +213,7 @@ function Fleet(props: { deps: FleetDeps }) {
       out.push({
         sessionId: sid,
         tmuxName,
-        name: s.tabEl?.querySelector('.tab-name')?.textContent || tmuxName || sid.slice(0, 8),
+        name: w.sessionDisplayName ? w.sessionDisplayName(sid) : (tmuxName || sid.slice(0, 8)),
         status,
         since: detail?.since ?? null,
         tool: detail?.tool ?? null,

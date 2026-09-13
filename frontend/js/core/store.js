@@ -38,6 +38,35 @@ export function allSessions() {
   return sessions;
 }
 
+/**
+ * 세션의 표시 이름 — **단일 출처**.
+ *
+ * 2.1.2까지 이 값의 출처는 탭 DOM이었다(`s.tabEl.querySelector('.tab-name')
+ * .textContent`). 그래서 이름이 필요한 곳마다 DOM을 뒤졌고, 그 자리가 10개
+ * 파일에 흩어져 있었다. 세션 탭 줄(#tabs)을 워크트리 탭 안으로 흡수하려면
+ * (10-shell-layout.md §4 3단계) 그 DOM이 사라져야 하는데, 그러면 이름도 같이
+ * 사라진다 — 먼저 출처를 레코드로 옮긴다.
+ *
+ * 이름을 **쓰는** 곳은 세 군데뿐이다: 세션 생성(addSession), 사용자 변경
+ * (renameSession), 워크트리 자동 라벨(term/tab-worktree.js). 그 셋이
+ * `displayName`을 갱신하고, 나머지는 전부 이 함수로 읽는다.
+ */
+export function sessionDisplayName(id) {
+  const s = sessions[id];
+  if (!s) return String(id || '').slice(0, 8);
+  return s.displayName || s.tmuxName || s.tmux_name || String(id).slice(0, 8);
+}
+
+export function setSessionDisplayName(id, name) {
+  const s = sessions[id];
+  if (!s) return;
+  s.displayName = name;
+  // 탭 DOM은 아직 살아 있다(3단계에서 사라진다) — 그때까지는 같이 맞춰 둔다.
+  const el = s.tabEl && s.tabEl.querySelector('.tab-name');
+  if (el && el.textContent !== name) el.textContent = name;
+  notify();
+}
+
 export function setActive(id) {
   activeId = id;
   window.activeId = activeId;
@@ -74,5 +103,6 @@ window.activeSessionId = activeSessionId;
 window.allSessions = allSessions;
 window.setActive = setActive;
 window.registerSession = registerSession;
+window.sessionDisplayName = sessionDisplayName;
 window.removeSessionRecord = removeSessionRecord;
 window.storeSubscribe = subscribe;
