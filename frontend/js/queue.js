@@ -76,6 +76,20 @@ function showQueue() {
         opt.textContent = s.name;
         sel.appendChild(opt);
       });
+      // A3(80 §1 3단계) — 원격 호스트 세션. 값은 `host::세션` 합성 키다:
+      // 세션 이름만으로는 어느 기계인지 못 정한다(`dev`는 맥에도 gpu-box에도 있다).
+      try {
+        const hosts = (await vtFetch('/api/hosts'))?.hosts || [];
+        for (const h of hosts) {
+          if (h.id === 'local' || !h.online) continue;
+          for (const rs of h.sessions || []) {
+            const opt = document.createElement('option');
+            opt.value = `${h.id}::${rs.name}`;
+            opt.textContent = `${rs.name} · ${h.label || h.id}`;
+            sel.appendChild(opt);
+          }
+        }
+      } catch (_) { /* 멀티호스트를 안 쓰는 환경 — 로컬 목록만 남는다 */ }
       sel.value = cur;
     }
 
@@ -137,11 +151,14 @@ function showQueue() {
         // 워크트리 모델이 없다, ADR-20). target.worktree는 2.1.1에서 레일이
         // 실제 워크트리를 그리기 시작하면 여기 표시가 늘어날 자리다.
         const targetSession = it.target && it.target.session;
+        const targetHost = it.target && it.target.host;
         if (targetSession) {
           const chip = document.createElement('span');
           chip.className = 'vt-q-chip';
-          chip.textContent = targetSession;
-          chip.title = `대상 세션: ${targetSession}`;
+          chip.textContent = targetHost ? `${targetSession} · ${targetHost}` : targetSession;
+          chip.title = targetHost
+            ? `대상: ${targetHost} 호스트의 ${targetSession} 세션`
+            : `대상 세션: ${targetSession}`;
           meta.appendChild(chip);
         }
 
@@ -181,7 +198,13 @@ function showQueue() {
       if (!text) return;
       // N6(60 §4): target 스키마가 `{worktree?|session?}`로 바뀌었다 — 2.1.0엔
       // 워크트리 모델이 없어 session 키만 채운다(server/queue_store.py 참고).
-      const target = sel && sel.value ? { session: sel.value } : undefined;
+      // `host::세션`이면 host를 분리해 보낸다(A3). 구분자가 없으면 로컬이다.
+      const raw = sel && sel.value ? sel.value : '';
+      const target = raw
+        ? (raw.includes('::')
+            ? { host: raw.slice(0, raw.indexOf('::')), session: raw.slice(raw.indexOf('::') + 2) }
+            : { session: raw })
+        : undefined;
       try {
         await vtFetch('/api/queue', {
           method: 'POST',

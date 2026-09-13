@@ -79,7 +79,33 @@ def _check_safe(text: str) -> tuple[bool, str]:
     return True, ""
 
 
-def _is_waiting(target: str | None) -> bool:
+def _send_remote(host: str, session: str, text: str) -> tuple[bool, str]:
+    """A3 — 원격 호스트 투입. `POST /api/peer/input`(control 등급)을 쓴다.
+
+    로컬 경로가 `send_to_tmux`(Enter 포함)인 것과 맞추려고 `enter: true`를 보낸다 —
+    큐 항목은 "실행돼야 하는 지시"라 Enter 없이 넣으면 영원히 프롬프트에 떠 있는다
+    (파일 경로 삽입과 정반대 요구다).
+
+    실패는 예외가 아니라 (False, 사람이 읽을 이유)로 돌려준다 — 호출부가 그대로
+    큐에 blocked로 남기고 이유를 화면에 띄운다.
+    """
+    try:
+        import host_store
+        import peer_client
+    except ImportError:
+        return False, "멀티호스트 모듈을 불러올 수 없습니다"
+    peer = host_store.find_peer(host)
+    if peer is None:
+        return False, f"등록되지 않은 호스트입니다: {host}"
+    try:
+        peer_client._call_sync(peer, "POST", "/api/peer/input",
+                               {"session": session, "data": text, "enter": True})
+    except peer_client.PeerError as e:
+        return False, e.reason
+    return True, ""
+
+
+def _is_waiting(target: str | None, host: str = "local") -> bool:
     """타깃(tmux 세션 이름 또는 `세션:윈도.페인` 표기)이 승인 대기 상태인가.
 
     상태를 모르면 False — 감지가 아직 없는 에이전트(codex 등)에서 큐가 영구히
@@ -92,9 +118,9 @@ def _is_waiting(target: str | None) -> bool:
     except ImportError:
         return False
     name = str(target).split(":", 1)[0]
-    # 큐는 로컬 tmux에만 투입한다(send-keys가 로컬 소켓이다) → 로컬 상태만 본다.
-    # host를 안 거르면 원격의 같은 이름 세션이 waiting일 때 로컬 투입이 막힌다.
-    return agent_status.status_for_session(name) == agent_status.WAITING
+    # host 차원까지 봐야 한다 — 원격의 같은 이름 세션이 waiting일 때 로컬 투입이
+    # 막히거나, 그 반대가 되면 안 된다(A1에서 넣은 복합키가 여기서 쓰인다).
+    return agent_status.status_for_session(name, host) == agent_status.WAITING
 
 
 def drain_once(session: str | None = None, session_scoped: bool = False) -> dict:
@@ -113,10 +139,31 @@ def drain_once(session: str | None = None, session_scoped: bool = False) -> dict
     # 5관문(A4): 승인 대기 중인 pane 에는 절대 넣지 않는다. 항목은 버리지 않고
     # blocked 로 남겨 승인이 끝난 뒤 다시 흘려보낼 수 있게 한다.
     target_session = queue_store.target_session(item) or session
-    if _is_waiting(target_session):
+    target_host = queue_store.target_host(item)
+    if _is_waiting(target_session, target_host):
         queue_store.mark_blocked(item, "타깃이 승인 대기 중")
         return {"ok": False, "drained": 0, "error": "waiting",
                 "reason": "타깃이 승인 대기 중입니다 (큐에 유지됨)", "item": item}
+
+    # A3 — 원격 호스트 항목은 로컬 tmux를 아예 보지 않는다. pane 해석(send-keys)은
+    # 로컬 소켓 전용이라 원격 세션 이름으로 로컬 pane을 찾으면 **같은 이름의
+    # 로컬 세션**에 명령을 쳐버린다.
+    if target_host != "local":
+        if not target_session:
+            queue_store.mark_blocked(item, "원격 항목에 세션이 없음")
+            return {"ok": False, "drained": 0, "error": "no_target",
+                    "reason": "원격 항목은 대상 세션을 지정해야 합니다 (큐에 유지됨)",
+                    "item": item}
+        ok, reason = _send_remote(target_host, target_session, item["text"])
+        if not ok:
+            queue_store.mark_blocked(item, reason or "원격 전송 실패")
+            return {"ok": False, "drained": 0, "error": "send_failed",
+                    "reason": f"{target_host}에 전송 실패: {reason} (큐에 유지됨)",
+                    "item": item}
+        logger.info(f"큐 투입 → {target_host}:{target_session}: {item['text'][:60]}")
+        return {"ok": True, "drained": 1, "pane": f"{target_host}:{target_session}",
+                "mode": f"host:{target_host}", "item": item,
+                "remaining": queue_store.pending_count()}
 
     pane, mode = _resolve_pane(item)
     if not pane:

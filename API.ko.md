@@ -192,7 +192,7 @@ peer 자격증명은 여기 정의된 것에만 닿고, 나머지 API에는 절�
 | POST | `/api/peer/pair` | 1회용 페어링 티켓 제출(JSON: ticket, id, label, version) → 그 연결 전용 secret 발급. 서명 없이 열리는 유일한 peer 경로 — 아직 공유 secret이 없는 시점이라 티켓이 그 역할을 한다. 예약 id(`local`/`self`/`me`)는 **티켓을 소모하지 않고** 거부 |
 | GET | `/api/peer/ping` | 서명된 연결 확인 → id·label·version·`serverTime`(호출자가 이걸로 시계 오차를 계산)·호출자에게 부여된 등급 |
 | GET | `/api/peer/sessions` | 서명 필요, `view` 등급 — 이 호스트의 tmux 세션 + 에이전트 상태. **다른 peer의 세션은 절대 중계하지 않는다**(hop 0): A↔B 상호 페어링에서 A→B→A 무한 재귀가 되기 때문 |
-| POST | `/api/peer/input` | 서명 + **`control` 등급** — 이 호스트의 tmux 세션에 텍스트를 타이핑(JSON: `session`, `data`), Enter 없음. `view` 상대에겐 켜는 명령까지 담아 403 |
+| POST | `/api/peer/input` | 서명 + **`control` 등급** — 이 호스트의 tmux 세션에 텍스트를 타이핑(JSON: `session`, `data`, 선택 `enter`). 기본은 Enter 없음(파일 삽입과 같은 계약), `enter: true`면 Enter까지 — 프롬프트 큐(A3)가 그것을 쓴다. 어느 쪽인지 호출부가 명시하고 서버는 추측하지 않는다. `view` 상대에겐 켜는 명령까지 담아 403 |
 | WS | `/api/peer/ws/{tmux_name}` | 서명 필요. `view`는 출력 구독, 입력은 `control`에서만 적용. **상대 서버의 프록시**가 여는 소켓이다(브라우저 WebSocket은 서명 헤더를 못 보낸다). 연결마다 이 호스트에 전용 PTY를 만들고 끊길 때 정리한다 — 소유자의 PTY를 공유하면 두 화면이 크기를 두고 싸운다 |
 
 ## 호스트 (N7/N39 2단계 — 브라우저가 부르는 쪽)
