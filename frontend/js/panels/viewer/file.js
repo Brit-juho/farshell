@@ -1,6 +1,6 @@
 // 코드 뷰어 파일 렌더 — F4에서 viewer.js에서 분리. hljs 지연 로드 결과(있으면
 // 하이라이트, 없으면 이스케이프 폴백)로 파일 내용을 줄 번호와 함께 그린다.
-import { vtEsc, vtFetch } from '../../core/api.js';
+import { vtEsc, vtFetch, vtUrl } from '../../core/api.js';
 import { _setMsg } from './state.js';
 
 // 파일 크기 표기 — 구 viewer/tree.js에서 이관(그 파일은 모달 뷰어와 함께 사라졌다).
@@ -69,6 +69,34 @@ export async function renderFile(container, path) {
     d = await vtFetch(`/api/fs/file?path=${encodeURIComponent(path)}`);
   } catch (e) {
     _setMsg(container, 'vt-vw-empty', [e.message]);
+    return;
+  }
+  // [T3] 이미지는 그려 준다 — 스크린샷·다이어그램은 원격에서 코드만큼 자주
+  // 열어본다. 바이트는 /api/fs/raw가 주고, 그 엔드포인트는 이미지 타입만
+  // 내보낸다(SVG·HTML은 같은 오리진에서 열면 XSS라 제외 — server/fsguard.py).
+  if (d.image) {
+    container.innerHTML = '';
+    if (d.too_large) {
+      _setMsg(container, 'vt-vw-empty', [`이미지가 너무 큽니다 (${_fmtSize(d.size)})`,
+        '미리보기 상한을 넘어 표시하지 않습니다.']);
+      return;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'vt-vw-image';
+    const img = document.createElement('img');
+    img.src = vtUrl(`/api/fs/raw?path=${encodeURIComponent(path)}`);
+    img.alt = path.split('/').pop() || '이미지';
+    img.loading = 'lazy';
+    // 못 불러오면 빈 칸을 남기지 않는다 — 깨진 아이콘만 뜨면 "왜 안 되는지"를 모른다.
+    img.addEventListener('error', () => {
+      _setMsg(container, 'vt-vw-empty', ['이미지를 불러오지 못했습니다.']);
+    });
+    wrap.appendChild(img);
+    const note = document.createElement('div');
+    note.className = 'vt-vw-note';
+    note.textContent = `${d.mime} · ${_fmtSize(d.size)}`;
+    wrap.appendChild(note);
+    container.appendChild(wrap);
     return;
   }
   if (d.binary) {

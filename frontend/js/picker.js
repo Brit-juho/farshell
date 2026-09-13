@@ -71,7 +71,7 @@ function renderSessionManager(backdrop) {
   // 열기)를 rail(L4)로 옮기기 전 과도기 자리로 이 시트에 임시 배치한다.
   // "맥에서도 열기"는 (특정 세션이 아니라) 앞으로 만들 모든 세션에 적용되는
   // 전역 설정이라 ⋯의 「설정」 그룹 쪽에 남긴다(index.html 참고).
-  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div><div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">이 세션 맥에서 열기</button><button type="button" class="vt-session-footer-item" id="session-tmux-list-btn">tmux 세션 목록</button></div>`;
+  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div><div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button><button type="button" class="vt-session-footer-item" id="session-tmux-list-btn">tmux 세션 목록</button></div>`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
   const list = sheet.querySelector('.vt-session-list');
   const entries = Object.entries(allSessions());

@@ -129,7 +129,7 @@ test('세션 버튼 클릭 → 패널이 열리고 목록 + "+ 새 세션" + 세
   assert.strictEqual(window.document.getElementById('vt-rail-panel-title').textContent, '세션');
   assert.ok(window.document.querySelector('.vt-rail-session-new'), '"+ 새 세션" 버튼이 있어야 한다');
   const footerItems = Array.from(window.document.querySelectorAll('.vt-rail-session-footer-item')).map(b => b.textContent);
-  assert.ok(footerItems.includes('이 세션 맥에서 열기'));
+  assert.ok(footerItems.includes('지금 이 세션 맥에서 열기'));
   assert.ok(footerItems.includes('tmux 세션 목록'));
   assert.ok(Array.from(window.document.querySelectorAll('.vt-rail-session-select')).some(b => b.textContent === 'a'));
 });

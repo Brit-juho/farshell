@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 import file_store
 import fsguard
@@ -221,8 +221,15 @@ def _read_file(p: Path) -> dict:
     size = p.stat().st_size
     with open(p, "rb") as f:
         head = f.read(fsguard.SNIFF_BYTES)
+        # [T3] 이미지는 "바이너리라 못 보여준다"로 끝내지 않는다 — 스크린샷·다이어그램은
+        # 원격에서 코드만큼 자주 열어보는 파일이다. 바이트는 /api/fs/raw가 준다.
+        mime = fsguard.image_type(p, head)
+        if mime:
+            return {"path": str(p), "size": size, "binary": True, "image": True,
+                    "mime": mime, "too_large": size > fsguard.MAX_IMAGE_BYTES,
+                    "truncated": False, "content": ""}
         if fsguard.looks_binary(head):
-            return {"path": str(p), "size": size, "binary": True,
+            return {"path": str(p), "size": size, "binary": True, "image": False,
                     "truncated": False, "content": ""}
         rest = b"" if size <= fsguard.SNIFF_BYTES else f.read(
             max(0, fsguard.MAX_BYTES - len(head))
@@ -231,7 +238,7 @@ def _read_file(p: Path) -> dict:
     truncated = size > len(raw)
     # errors="replace" — CP949 등 비UTF-8 파일도 열리게 하되 깨짐을 숨기지 않는다.
     text = raw.decode("utf-8", errors="replace")
-    return {"path": str(p), "size": size, "binary": False,
+    return {"path": str(p), "size": size, "binary": False, "image": False,
             "truncated": truncated, "content": text}
 
 
@@ -250,6 +257,50 @@ async def fs_file(path: str = Query(...)):
     except OSError as e:
         logger.warning(f"fs_file 실패: {e}")
         return JSONResponse({"error": "read failed"}, status_code=500)
+
+
+@router.get("/api/fs/raw")
+async def fs_raw(path: str = Query(...)):
+    """[T3] 이미지 원본 바이트 — 인라인 미리보기 전용.
+
+    **이미지가 아니면 아무것도 안 준다.** 열람 경계(fsguard)는 `/api/fs/file`과
+    같은 것을 쓰고, 그 위에 타입 화이트리스트를 하나 더 얹는다: 여기서 나간
+    바이트는 브라우저가 이 오리진의 리소스로 해석하므로 SVG·HTML을 내보내면
+    그 자체가 XSS다(fsguard.IMAGE_TYPES 주석 참고).
+
+    `Content-Disposition: inline` + `X-Content-Type-Options: nosniff`로 "이건
+    이 타입이고 다른 걸로 스니핑하지 말라"를 못 박는다.
+    """
+    try:
+        p = fsguard.resolve_under_roots(path)
+    except fsguard.FsDenied as e:
+        return _denied(e.reason)
+    if not p.is_file():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    try:
+        size = p.stat().st_size
+        with open(p, "rb") as f:
+            head = f.read(fsguard.SNIFF_BYTES)
+            mime = fsguard.image_type(p, head)
+            if not mime:
+                return _denied("이미지 파일이 아닙니다")
+            if size > fsguard.MAX_IMAGE_BYTES:
+                return JSONResponse(
+                    {"error": "too_large",
+                     "reason": f"이미지가 너무 큽니다 (최대 {fsguard.MAX_IMAGE_BYTES // (1024*1024)}MB)"},
+                    status_code=413,
+                )
+            data = head + f.read()
+    except PermissionError:
+        return _denied("읽기 권한이 없습니다")
+    except OSError as e:
+        logger.warning(f"fs_raw 실패: {e}")
+        return JSONResponse({"error": "read failed"}, status_code=500)
+    return Response(content=data, media_type=mime, headers={
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+    })
 
 
 # --- git ---------------------------------------------------------------------

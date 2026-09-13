@@ -20,6 +20,17 @@ export async function vtFetch(path, opts) {
   return data;
 }
 
+/**
+ * `<img src>`처럼 **브라우저가 직접 부르는 URL**을 만든다. fetch가 아니라서
+ * Authorization 헤더를 붙일 방법이 없으므로, vtFetch와 같은 토큰 쿼리를 URL에
+ * 실어야 한다(WebSocket URL을 만드는 `_wsQuery`와 같은 사정).
+ */
+export function vtUrl(path) {
+  const tokenQuery = (window._tokenQuery || '').replace(/^[?&]/, '');
+  if (!tokenQuery) return `${window.API_BASE}${path}`;
+  return `${window.API_BASE}${path}${path.includes('?') ? '&' : '?'}${tokenQuery}`;
+}
+
 // F3(a) 신설 — window.fetch 몽키패치를 대체하는 명시 래퍼. 구 terminal.js:200-206의
 // 동작을 그대로 옮긴 것: url이 API_BASE로 시작할 때만 Authorization 헤더를 붙이고,
 // 나머지는 raw fetch와 100% 동일하게 동작한다(res.ok/res.json() 등 호출부를 안 건드림).

@@ -417,7 +417,7 @@ function Rail(props: { deps: RailDeps }) {
     const w = window as any;
     return [
       { label: '새 세션', run: () => w.createSession?.() },
-      { label: '맥에서 열기', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('session.open-on-mac') as (() => void) | undefined)?.(); } },
+      { label: '지금 이 세션 맥에서 열기', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('session.open-on-mac') as (() => void) | undefined)?.(); } },
       { label: '연결된 화면', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('clients.show') as (() => void) | undefined)?.(); } },
       { label: '닫기', run: () => w.removeSession?.(m.sessionId) },
     ];
