@@ -127,6 +127,7 @@ export default defineConfig(({ mode }) => {
             // 50 §4 dock 파일 탭 — 같은 이유로 지연 청크. app.js 300KiB 상한
             // (build-output.test.js)에 실제로 걸려서 뺀 것이다.
             if (p.includes('/frontend/js/panels/files/')) return 'panels';
+            if (p.includes('/frontend/js/panels/ports/')) return 'panels';
             return null;
           },
         },

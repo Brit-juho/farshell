@@ -136,6 +136,7 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // (설정이 나중에 바뀌면 mouse-mode.js가 구독으로 전체 세션에 반영한다 —
   // 여기서는 "새로 생긴 세션"만 챙긴다.)
   applyMouseMode(getSession(id));
+  window.vtApplySessionFilter?.();
 
   switchTo(id);
 }
@@ -162,6 +163,10 @@ export function switchTo(id) {
   // 전부 대신한다. setPaneSession은 동기적으로 renderLayout을 트리거하므로
   // 이 줄이 끝난 시점엔 이미 wrapper가 보이는 상태라 바로 focus()해도 된다.
   setPaneSession(id);
+  // 10 §4 2단계 — 세션 탭 줄은 활성 워크트리 탭에 속한 것만 보인다. 전환으로
+  // 세션이 바뀌면 그 필터를 다시 적용한다(탭 바가 window로 노출해 둔 함수 —
+  // layout/tabbar.js를 직접 import하면 순환이 된다).
+  window.vtApplySessionFilter?.();
   s.term.focus();
   // notifyActiveSession은 어느 파일에도 정의된 적 없는 죽은 방어 코드였다
   // (전수 grep 확인) — F4에서 함께 정리했다. F5에서 picker.js를 ES 모듈로

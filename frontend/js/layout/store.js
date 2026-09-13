@@ -19,8 +19,33 @@ function _genId(prefix) {
 
 // 기본값: leaf 하나, session=현재 활성 세션. 분할을 한 번도 안 만들면 이
 // 트리는 영원히 이 leaf 하나뿐이라 — 오늘과 화면상 완전히 같은 상태다.
-let _tree = makeLeaf(_genId('pane'), activeSessionId());
-let _activePaneId = _tree.id;
+// 10-shell-layout.md §4 2단계 — **탭 = 워크트리**. 여기서부터 화면에는 pane
+// 트리가 하나가 아니라 **탭마다 하나씩** 있다. 그래도 기존 API(getTree /
+// setPaneSession / splitPane …)는 전부 "활성 탭의 트리"로 그대로 동작한다 —
+// 그게 이 층을 스토어 안에 넣은 이유다. 바깥에서 보면 달라진 게 없고, 탭을
+// 아는 코드(탭 바·영속화)만 새 API를 쓴다.
+//
+// 탭 하나의 모양: `{ id, worktreeId, label, tree, activePaneId }`.
+// `worktreeId`가 null인 탭은 어떤 워크트리에도 속하지 않는 작업 공간이다
+// (레일의 「기타」와 같은 개념 — 워크트리가 0개인 환경에서도 화면이 성립한다).
+function _makeTab({ worktreeId = null, label = '작업 공간', tree = null } = {}) {
+  const t = tree || makeLeaf(_genId('pane'), activeSessionId());
+  return { id: _genId('tab'), worktreeId, label, tree: t, activePaneId: _firstLeafId(t) };
+}
+
+const _tabs = [_makeTab()];
+let _activeTabIndex = 0;
+
+// 활성 탭의 트리/활성 pane을 기존 이름 그대로 노출하기 위한 얇은 별칭.
+// **이 두 값을 직접 대입하는 코드는 전부 아래 _sync()를 거친다** — 탭 안의
+// 사본과 밖의 사본이 갈라지면 "분할했는데 탭을 바꿨다 오면 사라진다"가 된다.
+let _tree = _tabs[0].tree;
+let _activePaneId = _tabs[0].activePaneId;
+
+function _sync() {
+  _tabs[_activeTabIndex].tree = _tree;
+  _tabs[_activeTabIndex].activePaneId = _activePaneId;
+}
 
 const _listeners = new Set();
 // N16 — kind로 무엇이 바뀌었는지 구분해 넘긴다: 'active'(활성 pane만) ·
@@ -28,6 +53,7 @@ const _listeners = new Set();
 // 구독자가 kind를 안 받아도(기존 283건 계약) 동작은 그대로다 — 인자를
 // 늘렸을 뿐 기존 두 인자(tree, activePaneId)는 자리·의미가 안 바뀐다.
 function _notify(kind = 'layout', extra) {
+  _sync();
   for (const fn of _listeners) fn(_tree, _activePaneId, kind, extra);
 }
 
@@ -140,6 +166,103 @@ export function countLeaves() {
 
 function _firstLeafId(node) {
   return node.t === 'leaf' ? node.id : _firstLeafId(node.a);
+}
+
+// ── 탭(작업 공간) API — 10 §4 2단계 ────────────────────────────────────────
+// 탭을 아는 코드는 탭 바(layout/tabbar.js)와 영속화(layout/persist.js) 둘뿐이다.
+
+/** 읽기 전용 사본 — 바깥에서 tree를 직접 바꾸지 못하게 얕은 복사로 준다. */
+export function getTabs() {
+  return _tabs.map((t) => ({ id: t.id, worktreeId: t.worktreeId, label: t.label }));
+}
+
+export function getActiveTabId() {
+  return _tabs[_activeTabIndex].id;
+}
+
+/** 워크트리 id로 이미 열린 탭 찾기 — 같은 워크트리를 두 번 열지 않는다. */
+export function findTabByWorktree(worktreeId) {
+  if (!worktreeId) return null;
+  const t = _tabs.find((x) => x.worktreeId === worktreeId);
+  return t ? t.id : null;
+}
+
+export function switchLayoutTab(tabId) {
+  const i = _tabs.findIndex((t) => t.id === tabId);
+  if (i < 0 || i === _activeTabIndex) return false;
+  _sync();                       // 떠나는 탭의 현재 트리를 먼저 굳힌다
+  _activeTabIndex = i;
+  _tree = _tabs[i].tree;
+  _activePaneId = _tabs[i].activePaneId;
+  _notify();
+  return true;
+}
+
+/** 새 탭. 같은 워크트리 탭이 이미 있으면 그 탭으로 전환만 한다. */
+export function openLayoutTab({ worktreeId = null, label = '작업 공간', sessionId = null } = {}) {
+  const existing = findTabByWorktree(worktreeId);
+  if (existing) { switchLayoutTab(existing); return existing; }
+  _sync();
+  const tab = _makeTab({ worktreeId, label });
+  if (sessionId) tab.tree = _setSession(tab.tree, tab.tree.id, sessionId);
+  _tabs.push(tab);
+  _activeTabIndex = _tabs.length - 1;
+  _tree = tab.tree;
+  _activePaneId = tab.activePaneId;
+  _notify();
+  return tab.id;
+}
+
+/** 탭을 닫는다. **마지막 한 개는 닫지 않는다** — 탭이 0개면 화면에 pane
+ * 트리가 존재하지 않게 되어 렌더러가 그릴 대상을 잃는다. */
+export function closeLayoutTab(tabId) {
+  if (_tabs.length <= 1) return false;
+  const i = _tabs.findIndex((t) => t.id === tabId);
+  if (i < 0) return false;
+  _tabs.splice(i, 1);
+  if (_activeTabIndex >= _tabs.length) _activeTabIndex = _tabs.length - 1;
+  else if (i < _activeTabIndex) _activeTabIndex -= 1;
+  _tree = _tabs[_activeTabIndex].tree;
+  _activePaneId = _tabs[_activeTabIndex].activePaneId;
+  _notify();
+  return true;
+}
+
+export function setTabLabel(tabId, label) {
+  const t = _tabs.find((x) => x.id === tabId);
+  if (!t || !label) return false;
+  t.label = String(label);
+  _notify();
+  return true;
+}
+
+/** L8 영속화 전용 — 탭 전체를 스냅샷으로 갈아끼운다. */
+export function replaceTabs(tabs, activeTabId = null) {
+  if (!Array.isArray(tabs) || tabs.length === 0) return false;
+  const clean = tabs.filter((t) => t && t.tree && (t.tree.t === 'leaf' || t.tree.t === 'split'));
+  if (!clean.length) return false;
+  _tabs.length = 0;
+  for (const t of clean) {
+    _tabs.push({
+      id: t.id || _genId('tab'),
+      worktreeId: t.worktreeId || null,
+      label: t.label || '작업 공간',
+      tree: t.tree,
+      activePaneId: (t.activePaneId && findNode(t.tree, t.activePaneId)) ? t.activePaneId : _firstLeafId(t.tree),
+    });
+  }
+  const i = _tabs.findIndex((t) => t.id === activeTabId);
+  _activeTabIndex = i >= 0 ? i : 0;
+  _tree = _tabs[_activeTabIndex].tree;
+  _activePaneId = _tabs[_activeTabIndex].activePaneId;
+  _notify();
+  return true;
+}
+
+/** 영속화가 읽는 전체 상태(트리 포함). getTabs()와 달리 tree를 그대로 준다. */
+export function getTabsWithTrees() {
+  _sync();
+  return _tabs.map((t) => ({ ...t }));
 }
 
 // N36(워크트리 레일) — shell/Rail.tsx는 지연 청크라 이 모듈을 직접 import하면

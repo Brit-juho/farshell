@@ -3,10 +3,9 @@
 //
 // 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panels/panel.js·core/api.js가 공유한다.
 // 리스트 행만 .vt-pt-* 로 따로 둔다. F5에서 classic script에서 ES 모듈로 전환.
-import { openPanel, closePanel, setPanelPoll } from './panels/panel.js';
-import { vtFetch, vtEsc } from './core/api.js';
-import { _isCoarsePointer } from './core/env.js';
-import { registerAction } from './core/dom.js';
+import { openPanel, closePanel, setPanelPoll } from '../panel.js';
+import { vtFetch, vtEsc } from '../../core/api.js';
+import { _isCoarsePointer } from '../../core/env.js';
 
 function closePorts() { closePanel('vt-ports'); }
 
@@ -407,8 +406,7 @@ async function _unexposeTunnel(port) {
       if (!panel) return;
     }
 
-// F3(c): data-action 위임용 등록.
-registerAction('ports.show', () => showPorts());
-
+// 액션 등록은 지연 진입점(panels/ports-lazy.js)이 맡는다 — 이 파일 자체가
+// `panels` 청크에 있어 여기서 등록하면 청크를 받기 전엔 액션이 없다.
 // 테스트 전용 export — DOM 부수효과 없는 순수 함수만.
-export { _groupByPid };
+export { _groupByPid, showPorts };

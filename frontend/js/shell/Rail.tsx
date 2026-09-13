@@ -380,6 +380,12 @@ function Rail(props: { deps: RailDeps }) {
       }
       return;
     }
+    // 10 §4 2단계 — 워크트리 행을 열면 **그 워크트리의 탭**으로 간다. 탭마다
+    // 자기 pane 트리를 가지므로, 여기서 탭을 안 맞추면 다른 워크트리의 배치
+    // 위에 남의 세션을 얹게 된다.
+    if (row.kind === 'worktree') {
+      w.openWorktreeTab?.(row.worktreeId, row.label);
+    }
     const sid = actionSessionId(row);
     if (sid) {
       if (e.metaKey || e.ctrlKey) w.splitActivePane?.('row', sid);

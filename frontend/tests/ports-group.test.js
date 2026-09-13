@@ -9,7 +9,7 @@ const path = require('node:path');
 const { createDomEnv } = require('./helpers/dom-env');
 const { importFresh } = require('./helpers/vm-esm');
 
-const PORTS_JS = path.join(__dirname, '../js/ports.js');
+const PORTS_JS = path.join(__dirname, '../js/panels/ports/ports.js');
 
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });

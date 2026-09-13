@@ -16,7 +16,7 @@
 // (그 전엔 allSessions()가 비어 있어 전부 빈 pane으로 강등돼 버린다).
 import { allSessions, getSession } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
-import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves } from './store.js';
+import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves, getTabsWithTrees, getActiveTabId, replaceTabs } from './store.js';
 
 const LS_KEY = 'vt-layout-v1';
 const SAVE_DEBOUNCE_MS = 400;
@@ -108,12 +108,27 @@ export function makeResolver(sessions) {
 }
 
 // ── 저장 ──────────────────────────────────────────────────────────────────
+// 10 §4 2단계 — v2: 화면에 pane 트리가 **탭마다 하나씩** 있다. v1은 트리가
+// 하나뿐인 스냅샷이라 "탭 1개짜리 v2"와 정확히 같은 의미다 — 복원에서 그렇게
+// 승격한다(_applySnapshot). 저장은 언제나 v2로만 한다.
 function _snapshot() {
+  const tabs = getTabsWithTrees();
   return {
-    v: 1,
+    v: 2,
     savedAt: Date.now(),
+    activeTab: getActiveTabId(),
+    // v1 필드도 계속 적는다 — **되돌리기 위한 것**이다. 2.1.2를 롤백하면 옛
+    // 코드가 이 스냅샷을 읽는데, v2만 있으면 배치가 통째로 날아간다.
+    // 활성 탭의 트리를 v1 자리에 그대로 둔다(그게 옛 코드가 보던 화면이다).
     active: getActivePaneId(),
     tree: serializeTree(getTree(), _lookupLive),
+    tabs: tabs.map((t) => ({
+      id: t.id,
+      worktreeId: t.worktreeId || null,
+      label: t.label,
+      active: t.activePaneId,
+      tree: serializeTree(t.tree, _lookupLive),
+    })),
   };
 }
 
@@ -147,16 +162,42 @@ function _readLocal() {
   try {
     const raw = localStorage.getItem(LS_KEY);
     const s = raw ? JSON.parse(raw) : null;
-    return s && s.v === 1 && s.tree ? s : null;
+    return _isSnapshot(s) ? s : null;
   } catch (_) { return null; }
+}
+
+// v1(트리 하나) / v2(탭 배열) 둘 다 받는다.
+function _isSnapshot(s) {
+  if (!s) return false;
+  if (s.v === 2 && Array.isArray(s.tabs) && s.tabs.length) return true;
+  return s.v === 1 && !!s.tree;
+}
+
+/** 스냅샷 → 항상 "탭 배열" 모양으로. v1은 탭 1개로 승격한다. */
+export function snapshotTabs(snap) {
+  if (snap.v === 2 && Array.isArray(snap.tabs)) return snap.tabs;
+  return [{ id: 'tab-legacy', worktreeId: null, label: '작업 공간',
+            active: snap.active, tree: snap.tree }];
 }
 
 function _applySnapshot(snap) {
   const resolve = makeResolver(allSessions());
-  const tree = deserializeTree(snap.tree, resolve);
-  if (!tree) return false;
-  _fillEmptyLeaves(tree);
-  return replaceTree(tree, snap.active);
+  // 세션 중복 배정 금지는 **탭을 건너서도** 지켜야 한다 — 같은 세션이 두 탭의
+  // leaf에 동시에 들어가면 wrapper 하나를 두 자리가 서로 뺏어간다(표면 레이어는
+  // DOM 노드 하나를 옮겨 다니게 설계돼 있다). taken 집합을 탭들 사이에서 공유한다.
+  const taken = new Set();
+  const tabs = [];
+  for (const raw of snapshotTabs(snap)) {
+    const tree = deserializeTree(raw.tree, resolve, taken);
+    if (!tree) continue;
+    tabs.push({ id: raw.id, worktreeId: raw.worktreeId || null,
+                label: raw.label || '작업 공간', tree, activePaneId: raw.active });
+  }
+  if (!tabs.length) return false;
+  // 빈 leaf 채우기는 **활성 탭에만** 적용한다(그 화면이 비어 보이는 것이 문제였다).
+  const activeIdx = Math.max(0, tabs.findIndex((t) => t.id === (snap.activeTab || snap.tabs?.[0]?.id)));
+  _fillEmptyLeaves(tabs[activeIdx]?.tree || tabs[0].tree);
+  return replaceTabs(tabs, tabs[activeIdx]?.id || tabs[0].id);
 }
 
 // S5 검증에서 발견한 결함: 저장된 트리의 leaf가 전부 비어 있으면(그 세션들이

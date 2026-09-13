@@ -11,6 +11,7 @@
 //  - 워크트리에 안 속한 세션은 그대로 둔다(레일의 「기타」 그룹과 같은 규칙).
 import { allSessions } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
+import { setWorktreeSessionMap } from '../layout/tabbar.js';
 
 const POLL_MS = 10000;  // 워크트리 목록은 서버가 5초 캐시라 자주 불러도 싸다.
 
@@ -50,10 +51,21 @@ function applyLabels(map) {
   }
 }
 
+/** 세션 이름 → worktreeId. 탭 바가 "이 세션이 이 탭 소속인가"를 판정할 때 쓴다.
+ * 라벨 지도와 같은 응답에서 뽑으므로 조회가 한 번이면 된다. */
+export function worktreeOwnerMap(worktrees) {
+  const map = new Map();
+  for (const wt of worktrees || []) {
+    for (const name of wt.sessions || []) if (!map.has(name)) map.set(name, wt.id);
+  }
+  return map;
+}
+
 export async function refreshTabWorktreeLabels() {
   try {
     const data = await vtFetch('/api/worktrees');
     applyLabels(worktreeLabelMap(data?.worktrees));
+    setWorktreeSessionMap(worktreeOwnerMap(data?.worktrees));
   } catch (_) { /* 워크트리 API가 없거나 실패 — 탭은 기존 이름 그대로 쓴다 */ }
 }
 
