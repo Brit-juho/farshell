@@ -15,7 +15,7 @@
 // 동작(setActivePane 후 createSession)을 그대로 옮긴 것뿐이다.
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { allSessions, getSession } from '../core/store.js';
+import { allSessions, sessionDisplayName } from '../core/store.js';
 import { openPanel, closePanel } from '../panels/panel.js';
 import { switchTo, createSession } from '../term/session.js';
 import { buildSessionCard, updateSessionCard, ensurePreviewWs, attachTmuxSession } from '../agent/preview.js';
@@ -26,7 +26,7 @@ const PANEL_ID = 'vt-pane-pick';
 
 function _sessionLabel(id) {
   const s = getSession(id);
-  return s?.tabEl?.querySelector('.tab-name')?.textContent || id.slice(0, 8);
+  return sessionDisplayName(id);
 }
 
 export function openPanePicker(paneId) {

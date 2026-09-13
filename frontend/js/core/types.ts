@@ -30,7 +30,11 @@ export interface Session {
   id: string;
   term: unknown;
   ws: WebSocket | null;
+  /** 세션 탭 DOM. 10-shell-layout.md §4 3단계에서 사라진다 — 표시 이름의
+   * 출처는 이미 아래 `displayName`으로 옮겼다(core/store.js). */
   tabEl: HTMLElement | null;
+  /** 화면에 보이는 이름의 **단일 출처**. 읽을 때는 sessionDisplayName(id). */
+  displayName?: string;
   wrapper: HTMLElement | null;
   tmuxName?: string;
   [key: string]: unknown; // fitAddon·searchAddon·onResize 등 이후 참조용 필드

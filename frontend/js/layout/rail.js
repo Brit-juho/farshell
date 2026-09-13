@@ -7,7 +7,7 @@
 // (⋯ 메뉴의 마지막 남은 그룹을 그대로 옮긴 정적 마크업)뿐이다.
 import { apiFetch, vtFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { allSessions, getSession, activeSessionId, subscribe } from '../core/store.js';
+import { allSessions, getSession, activeSessionId, subscribe, sessionDisplayName } from '../core/store.js';
 import { getAction, registerAction } from '../core/dom.js';
 import { switchTo, removeSession, renameSession, createSession } from '../term/session.js';
 import { buildSessionCard, updateSessionCard, ensurePreviewWs } from '../agent/preview.js';
@@ -112,8 +112,7 @@ function initRail() {
   // 다른 소비처. 팔레트와 달리 이 패널은 "열어둔 채 작업"하는 게 목적이라
   // 세션 선택 후에도 패널을 닫지 않는다.
   function _sessionLabel(id) {
-    const s = getSession(id);
-    return s?.tabEl?.querySelector('.tab-name')?.textContent?.trim() || id.slice(0, 8);
+    return sessionDisplayName(id).trim();
   }
 
   async function _fetchTmuxByWebId() {

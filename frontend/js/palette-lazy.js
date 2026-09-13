@@ -13,7 +13,7 @@
 import { registerAction, getAction } from './core/dom.js';
 import { register as registerKey, getBinding, displayCombo, list as keymapList, invoke as keymapInvoke } from './core/keymap.js';
 import { vtFetch } from './core/api.js';
-import { allSessions, getSession } from './core/store.js';
+import { allSessions, sessionDisplayName } from './core/store.js';
 import { switchTo } from './term/session.js';
 import { splitActivePane, setPaneSession } from './layout/store.js';
 import { loadViewer, openFileInPane } from './panels/viewer-lazy.js';
@@ -21,13 +21,10 @@ import { setVtSkin } from './theme.js';
 import { buildSessionCard, updateSessionCard, ensurePreviewWs } from './agent/preview.js';
 import { showToast } from './ui/toast.js';
 
-// quickopen.js의 _quickOpenSessionItems()와 동일한 조합(탭 DOM의 이름 텍스트
-// 를 신뢰 소스로 쓴다 — allSessions()는 id만 갖고 있다).
+// 이름의 출처는 세션 레코드다(core/store.js의 sessionDisplayName) — 예전엔
+// 탭 DOM의 텍스트를 읽었는데, 그 DOM은 10 §4 3단계에서 사라진다.
 function listSessions() {
-  return Object.keys(allSessions()).map((id) => {
-    const nameEl = getSession(id).tabEl?.querySelector('.tab-name');
-    return { id, name: (nameEl?.textContent || id).trim() };
-  });
+  return Object.keys(allSessions()).map((id) => ({ id, name: sessionDisplayName(id).trim() }));
 }
 
 // capability 게이팅 — agent/status.js가 /api/capabilities 응답에 따라

@@ -9,7 +9,8 @@
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
 import { register as registerKey } from '../core/keymap.js';
-import { getSession, allSessions, registerSession, removeSessionRecord, activeSessionId, setActive } from '../core/store.js';
+import { getSession, allSessions, registerSession, removeSessionRecord, activeSessionId, setActive,
+  sessionDisplayName, setSessionDisplayName } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { createTabElement } from './tab-dom.js';
@@ -127,7 +128,10 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
 
   // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록.
   // ws는 startSessionSocket()에서 채운다.
-  registerSession(id, { term, ws: null, tabEl: tab, fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) });
+  // displayName은 이제 **레코드가 출처**다(core/store.js의 sessionDisplayName).
+  // 탭 DOM의 .tab-name은 그 값을 비추는 화면일 뿐이다.
+  registerSession(id, { term, ws: null, tabEl: tab, displayName: displayName || id.slice(0, 8),
+    fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) });
   // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션의 connectTerminalWs를
   // 부를 수 있도록 참조를 걸어둔다 — startSessionSocket이 채운다.
   const onResize = startSessionSocket(id, term);
@@ -183,8 +187,7 @@ export async function renameSession(id, rawName, previousNameOverride) {
   const s = getSession(id);
   const newName = String(rawName || '').trim();
   if (!s || !newName) return false;
-  const nameEl = s.tabEl?.querySelector('.tab-name');
-  const previousName = previousNameOverride ?? (nameEl ? nameEl.textContent : '');
+  const previousName = previousNameOverride ?? sessionDisplayName(id);
   if (newName === previousName) return true;
   try {
     const res = await apiFetch(`${API_BASE}/api/sessions/${id}`, {
@@ -192,7 +195,7 @@ export async function renameSession(id, rawName, previousNameOverride) {
       body: JSON.stringify({ name: newName }),
     });
     if (!res.ok) throw new Error('rename failed');
-    if (nameEl) nameEl.textContent = newName;
+    setSessionDisplayName(id, newName);
     // 사용자가 직접 지은 이름은 그 뒤 어떤 자동 라벨링도 덮지 않는다
     // (term/tab-worktree.js의 워크트리 라벨이 첫 소비자다).
     s.renamed = true;
@@ -200,7 +203,9 @@ export async function renameSession(id, rawName, previousNameOverride) {
     saveWorkspace();
     return true;
   } catch (_) {
-    if (nameEl) nameEl.textContent = previousName;
+    // 편집 중 DOM에 남은 값을 되돌린다 — 실패했는데 새 이름이 남아 있으면
+    // 사용자는 바뀐 줄 안다.
+    setSessionDisplayName(id, previousName);
     if (typeof showToast === 'function') showToast('세션 이름 변경 실패', 'error');
     return false;
   }
