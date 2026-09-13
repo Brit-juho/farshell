@@ -786,3 +786,69 @@ def test_dock_폭_리사이저가_범위를_지킨다(page):
         w = page.evaluate("() => Math.round(document.getElementById('vt-dock').getBoundingClientRect().width)")
         assert 320 <= w <= 560, f"dock 폭이 범위를 벗어났다: {w}px (dx={dx})"
         box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
+
+
+# ── 2.1.2: 워크트리 탭(10 §4 2단계) · dock 파일 탭(50 §4) ────────────────────
+
+def test_워크트리_탭은_하나뿐이면_안_보이고_열면_나타난다(page):
+    """탭 줄은 고를 게 둘 이상일 때만 존재한다 — 2.1.1까지의 화면과 같아야 한다."""
+    assert page.evaluate("() => document.getElementById('vt-wtabs').hidden") is True
+    page.evaluate("() => window.openWorktreeTab('wt-smoke', 'repo/smoke')")
+    page.wait_for_timeout(200)
+    assert page.evaluate("() => document.getElementById('vt-wtabs').hidden") is False
+    labels = page.evaluate(
+        "() => [...document.querySelectorAll('#vt-wtabs .vt-wtab-name')].map(e => e.textContent)")
+    assert "repo/smoke" in labels
+    active = page.evaluate(
+        "() => document.querySelector('#vt-wtabs .vt-wtab.active .vt-wtab-name').textContent")
+    assert active == "repo/smoke", "새로 연 워크트리 탭이 활성이어야 한다"
+
+
+def test_탭마다_자기_pane_트리를_가진다(page):
+    """2단계의 핵심 — 탭을 바꿨다 돌아오면 그 워크트리의 분할이 그대로다.
+    1단계에서는 트리가 화면 전체에 하나뿐이라 이게 성립하지 않았다."""
+    panes = lambda: page.evaluate("() => document.querySelectorAll('#terminal-container .vt-pane').length")
+    page.evaluate("() => window.splitActivePane('row')")
+    page.wait_for_timeout(200)
+    first_count = panes()
+    assert first_count >= 2, f"분할이 안 됐다: {first_count}"
+
+    page.evaluate("() => window.openWorktreeTab('wt-b', 'repo/b')")
+    page.wait_for_timeout(250)
+    assert panes() == 1, "새 탭은 빈 한 칸에서 시작해야 한다"
+
+    # 첫 탭으로 되돌아간다(탭 줄의 첫 항목).
+    page.locator("#vt-wtabs .vt-wtab").first.click()
+    page.wait_for_timeout(250)
+    assert panes() == first_count, "돌아왔을 때 그 탭의 분할이 그대로여야 한다"
+
+
+def test_워크트리_탭을_닫아도_마지막_하나는_남는다(page):
+    page.evaluate("() => window.openWorktreeTab('wt-c', 'repo/c')")
+    page.wait_for_timeout(200)
+    n = page.evaluate("() => document.querySelectorAll('#vt-wtabs .vt-wtab').length")
+    assert n >= 2
+    for _ in range(n + 1):
+        close = page.locator("#vt-wtabs .vt-wtab .vt-wtab-close")
+        if close.count() == 0:
+            break
+        close.first.click()
+        page.wait_for_timeout(150)
+    left = page.evaluate("() => document.querySelectorAll('#vt-wtabs .vt-wtab').length")
+    assert left <= 1, "마지막 탭까지 닫히면 그릴 트리가 없어진다"
+    # 탭이 하나로 줄면 줄 자체가 다시 숨는다.
+    assert page.evaluate("() => document.getElementById('vt-wtabs').hidden") is True
+
+
+def test_dock_파일_탭이_dock_안에_마운트되고_용량_게이지를_그린다(page):
+    """50 §4 — 파일 탭은 백엔드만 있고 UI가 없던 자리다. 지연 청크(panels.js)를
+    받아 dock 본문에 붙는지, 푸터 게이지까지 그리는지 실제로 확인한다."""
+    _open_dock(page, "파일")
+    page.wait_for_selector("#vt-dock #vt-files", timeout=15000)
+    page.wait_for_selector("#vt-dock #vt-fl-chips .vt-fl-chip", timeout=10000)
+    chips = page.evaluate(
+        "() => [...document.querySelectorAll('#vt-fl-chips .vt-fl-chip')].map(e => e.textContent.trim())")
+    assert any(c.startswith("전체") for c in chips), chips
+    page.wait_for_selector("#vt-dock .vt-fl-footer .vt-fl-gauge", timeout=10000)
+    # 모달이 아니라 dock 안이어야 한다(패널이 backdrop으로 새면 이 검사가 잡는다).
+    assert page.evaluate("() => !!document.querySelector('#vt-dock #vt-files.vt-dock-panel')")
