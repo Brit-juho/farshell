@@ -438,6 +438,13 @@ function Rail(props: { deps: RailDeps }) {
     setActiveHostId(id);
     (window as any).vtSettingsSet?.(SETTINGS_HOST_KEY, id);
   };
+  // 폰의 플릿 홈(Fleet.tsx)에도 같은 키를 쓰는 스위처가 있다. 창 폭을 오가면
+  // 둘 다 살아 있으므로, 저쪽에서 바꾼 값을 여기서도 따라간다.
+  const unsubHostSetting = (window as any).vtSettingsSubscribe?.((all: any) => {
+    const v = String(all?.[SETTINGS_HOST_KEY] || LOCAL_HOST);
+    if (v !== activeHostId()) setActiveHostId(v);
+  });
+  onCleanup(() => unsubHostSetting?.());
   const hostMenuItems = (): MenuItem[] =>
     buildHostMenu(hosts(), activeHostId()).map((h) => ({
       label: h.label,
