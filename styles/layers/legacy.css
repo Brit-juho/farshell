@@ -2225,6 +2225,39 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
      언어(색점 막대 3px·같은 톤 토큰)를 쓴다: "레일에서 맨 위인 게 폰에서도
      맨 위"뿐 아니라 생김새도 같은 화면이라는 확신을 준다. */
   #vt-fleet { display:flex; flex-direction:column; }
+  /* C1 — 폰의 호스트 스위처. compact에서는 레일이 숨으므로 여기가 유일한
+     진입점이다. 목록을 스크롤해도 "지금 어느 머신을 보고 있는가"가 남아야
+     하므로 sticky. 배경을 깔지 않으면 아래 행이 비쳐 글자가 겹친다. */
+  .vt-fleet-hostbar {
+    position:sticky; top:0; z-index:2;
+    display:flex; padding:calc(var(--spacing) * 1) 0;
+    background:var(--win); border-bottom:1px solid var(--line);
+  }
+  .vt-fleet-host {
+    flex:1; min-width:0; display:flex; align-items:baseline; gap:calc(var(--spacing) * 2);
+    padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5);
+    font:600 var(--fs-sm) var(--mono); color:var(--txt);
+    background:none; border:none; border-radius:var(--radius-sm); cursor:pointer; text-align:left;
+  }
+  .vt-fleet-host.remote .vt-fleet-host-name { color:var(--acc); }
+  .vt-fleet-host.offline { opacity:.6; }
+  .vt-fleet-host.open { background:var(--menu-hover); }
+  .vt-fleet-host-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vt-fleet-host-detail { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+  .vt-fleet-host-caret { flex:none; font-size:var(--fs-3xs, 9px); opacity:.7; }
+  .vt-fleet-hostmenu { display:flex; flex-direction:column; border-bottom:1px solid var(--line); background:var(--tab); }
+  .vt-fleet-hostitem {
+    display:flex; flex-direction:column; gap:2px; align-items:flex-start;
+    padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
+    background:none; border:none; border-bottom:1px solid var(--line); cursor:pointer; text-align:left;
+    font:500 var(--fs-sm) var(--mono); color:var(--txt);
+  }
+  .vt-fleet-hostitem:last-child { border-bottom:none; }
+  .vt-fleet-hostitem.active { background:var(--color-surface-active); }
+  .vt-fleet-hostitem.offline { opacity:.6; }
+  .vt-fleet-hostitem-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+  .vt-fleet-hostitem-detail { font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
   .vt-fleet-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--sub); font:400 var(--fs-sm) var(--mono); }
   .vt-fleet-group-head {
     padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1);

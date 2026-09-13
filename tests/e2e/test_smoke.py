@@ -909,3 +909,48 @@ def test_dock_파일_탭이_dock_안에_마운트되고_용량_게이지를_그�
     page.wait_for_selector("#vt-dock .vt-fl-footer .vt-fl-gauge", timeout=10000)
     # 모달이 아니라 dock 안이어야 한다(패널이 backdrop으로 새면 이 검사가 잡는다).
     assert page.evaluate("() => !!document.querySelector('#vt-dock #vt-files.vt-dock-panel')")
+
+
+def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
+    """C1 — 호스트 칩은 좌측 레일에만 있었는데 compact(<720px)에서는 레일이
+    통째로 숨는다. 즉 **폰에서는 호스트를 바꿀 방법이 아예 없었다.** 플릿 홈
+    상단 sticky 헤더가 그 진입점이다.
+
+    `/api/hosts`를 두 호스트로 가로챈다 — 실제 페어링 없이 "칩이 그려지는가 /
+    골랐을 때 목록이 그 호스트의 세션으로 바뀌는가"를 볼 수 있다. 호스트가
+    하나뿐이면 안 그리는 규칙(레일과 동일)도 같이 확인한다.
+    """
+    page.route(
+        "**/api/hosts*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"hosts":[{"id":"local","label":"이 맥","online":true,"sessions":[]},'
+                 '{"id":"gpu","label":"gpu-box","online":true,"latencyMs":12,'
+                 '"sessions":[{"name":"train","status":"working"}]}]}',
+        ),
+    )
+    page.set_viewport_size(COMPACT)
+    page.reload(wait_until="load")
+    page.wait_for_function(
+        "() => document.documentElement.dataset.appBooted === 'true'", timeout=20000)
+
+    bar = page.wait_for_selector("#vt-fleet .vt-fleet-hostbar", timeout=15000)
+    assert bar.is_visible(), "폰에서 호스트 칩이 보여야 한다"
+
+    page.click("#vt-fleet .vt-fleet-host")
+    page.wait_for_selector("#vt-fleet .vt-fleet-hostmenu", timeout=5000)
+    labels = page.evaluate(
+        "() => [...document.querySelectorAll('#vt-fleet .vt-fleet-hostitem-name')]"
+        ".map(e => e.textContent.replace('✓ ', '').trim())")
+    assert labels == ["이 맥", "gpu-box"], labels
+
+    page.locator("#vt-fleet .vt-fleet-hostitem", has_text="gpu-box").click()
+    # 원격을 고르면 그 호스트의 세션 목록으로 바뀐다(스위처는 필터일 뿐이다).
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('#vt-fleet .vt-fleet-name')]"
+        ".some(e => e.textContent.trim() === 'train')",
+        timeout=10000,
+    )
+    # 그리고 그 선택이 기기 설정에 남는다(레일과 같은 키).
+    assert page.evaluate("() => window.vtSettingsGet('ui.activeHostId')") == "gpu"
