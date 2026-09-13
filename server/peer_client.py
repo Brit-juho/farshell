@@ -14,6 +14,7 @@ import logging
 import secrets
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import host_store
@@ -83,8 +84,15 @@ def _signed_headers(peer: dict, method: str, path: str, body_hash: str = "") -> 
 
 
 def _call_sync(peer: dict, method: str, path: str, body: dict | None = None,
-               timeout: float = TIMEOUT) -> dict:
+               timeout: float = TIMEOUT, query: dict | None = None) -> dict:
+    """`query`는 **서명에 들어가지 않는다** — 상대는 `request.url.path`(쿼리 제외)로
+    서명을 검증하기 때문이다. 그래서 쿼리를 path에 직접 이어 붙이면 서명이 깨진다.
+    쿼리로 보내도 되는 값은 "그 peer의 권한 안에서 무엇을 고를지"뿐이고(세션 이름·
+    화면 토큰·검색어), 권한 자체를 바꾸는 값은 절대 쿼리에 싣지 않는다.
+    """
     url = peer["url"].rstrip("/") + path
+    if query:
+        url += "?" + urllib.parse.urlencode({k: v for k, v in query.items() if v not in (None, "")})
     status, payload = _request(url, method, _signed_headers(peer, method, path), body, timeout)
     if status == 404 and not payload:
         # peer 네임스페이스 자체가 없다 = 상대가 구버전이다. 이 진단이 없으면

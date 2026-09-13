@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -30,6 +31,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 CONNECT_TIMEOUT = 10.0
+
+_SCREEN_RE = re.compile(r"[A-Za-z0-9_\-]{1,64}")
+
+
+def _screen_token(raw: str | None) -> str:
+    """상대 URL에 그대로 들어가는 값이라 여기서도 문자셋을 좁힌다(B도 다시 검사한다)."""
+    raw = (raw or "").strip()
+    return raw if _SCREEN_RE.fullmatch(raw) else ""
 
 
 def _ws_url(base_url: str, path: str) -> str:
@@ -61,8 +70,13 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
         return
 
     path = f"/api/peer/ws/{tmux_name}"
+    # 서명은 **쿼리 없는 path**에 건다 — B도 `ws.url.path`로 검증한다. screen은
+    # 브라우저가 만든 화면 토큰(term/remote.js)으로, B가 이 연결의 attach PTY에
+    # 이름을 붙여 「연결된 화면」이 "이게 나"를 판정할 수 있게 하는 값이다.
+    # 권한을 바꾸는 값이 아니라 자기 화면을 지목하는 이름표라 서명 밖이어도 된다.
     headers = peer_client._signed_headers(peer, "GET", path)
-    url = _ws_url(peer["url"], path)
+    screen = _screen_token(ws.query_params.get("screen"))
+    url = _ws_url(peer["url"], path) + (f"?screen={screen}" if screen else "")
 
     try:
         # max_size=None: 터미널 출력은 한 프레임이 커질 수 있고, 여기서 자르면

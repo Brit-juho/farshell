@@ -33,6 +33,7 @@ import hmac
 import os
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -263,6 +264,163 @@ async def peer_sessions(request: Request):
     return {"ok": True, "id": me["id"], "label": me["label"], "sessions": sessions}
 
 
+_SCREEN_RE = re.compile(r"[A-Za-z0-9_\-]{1,64}")
+
+
+def _screen_token(raw: str | None) -> str:
+    """상대가 보낸 화면 토큰. 그대로 PTY 세션 id에 들어가므로 문자셋을 좁힌다."""
+    raw = (raw or "").strip()
+    return raw if _SCREEN_RE.fullmatch(raw) else ""
+
+
+def _my_tty(grant: dict, screen: str) -> str | None:
+    """이 peer의 그 화면(=B에 떠 있는 attach PTY)의 슬레이브 tty.
+
+    **접두사를 여기서 강제한다** — 상대가 남의 화면 id를 주장해도 `peer-<자기
+    id>-` 밖으로는 나갈 수 없다. 로컬 경로(`routes/tmux.py`)가 "tty를 클라이언트가
+    고르게 하지 않는다"로 지키는 것과 같은 성질을, 원격에서는 이 접두사가 지킨다.
+    """
+    from routes.tmux import _tty_of_web_session
+
+    if not screen:
+        return None
+    return _tty_of_web_session(f"peer-{grant['id']}-{screen}")
+
+
+@router.get("/api/peer/clients")
+async def peer_clients(request: Request):
+    """이 호스트의 tmux 세션에 붙은 클라이언트 목록(`view` 등급).
+
+    2.1.2에서 「연결된 화면」은 원격 세션에서 통째로 숨겨져 있었다. `/api/tmux/
+    clients`는 **요청을 받은 맥의** tmux를 보므로, 원격 탭에서 그대로 부르면 같은
+    이름의 로컬 세션 목록을 보여주고 「이 화면만 남기기」가 자기 자신을 끊었다.
+    목록을 PTY 소유 호스트에게 물어보는 이 엔드포인트가 그 구멍을 메운다.
+
+    등급 경계: **목록은 view, 끊기는 control**. 남의 화면을 끊는 건 입력과 같은
+    무게의 조작이고, 보는 것은 이미 view가 출력 전체를 보는 것과 같은 무게다.
+    """
+    grant, err = _require(request)
+    if err:
+        return err
+
+    from routes.tmux import _CLIENT_SESSION_RE, _client_rows, _label
+
+    session = (request.query_params.get("session") or "").strip()
+    if not _CLIENT_SESSION_RE.fullmatch(session):
+        return JSONResponse({"error": "invalid session name"}, status_code=400)
+    my_tty = _my_tty(grant, _screen_token(request.query_params.get("screen")))
+    rows = await asyncio.to_thread(_client_rows, session)
+    for r in rows:
+        r["is_me"] = bool(my_tty and r["tty"] == my_tty)
+        r["label"] = _label(r, my_tty)
+    host_store.audit(grant["id"], "clients", True, f"{session} {len(rows)}건")
+    return {"session": session, "clients": rows, "me_tty": my_tty}
+
+
+@router.post("/api/peer/clients/detach")
+async def peer_clients_detach(request: Request):
+    """클라이언트 하나를 끊는다(`control` 등급). 자기 화면은 끊을 수 없다."""
+    grant, err = _require(request, host_store.LEVEL_CONTROL)
+    if err:
+        return err
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    import tmux_runner
+
+    tty = str(body.get("tty") or "")
+    if not tty:
+        return JSONResponse({"error": "tty required"}, status_code=400)
+    my_tty = _my_tty(grant, _screen_token(body.get("screen")))
+    if my_tty and tty == my_tty:
+        # 로컬 경로와 같은 규칙 — 지금 보고 있는 화면을 스스로 끊으면 복구 경로가
+        # 없다(그리고 원격에서는 "왜 끊겼는지"가 더 안 보인다).
+        host_store.audit(grant["id"], "clients/detach", False, "자기 화면")
+        return JSONResponse(
+            {"error": "cannot detach self", "reason": "지금 보고 있는 화면은 끊을 수 없습니다"},
+            status_code=400,
+        )
+    await asyncio.to_thread(tmux_runner.run, ["detach-client", "-t", tty], 2.0)
+    host_store.audit(grant["id"], "clients/detach", True, tty)
+    return {"ok": True, "detached": tty}
+
+
+@router.post("/api/peer/clients/solo")
+async def peer_clients_solo(request: Request):
+    """「이 화면만 남기기」 원격판(`control` 등급).
+
+    화면 토큰으로 자기 tty를 특정하지 못하면 **아무것도 끊지 않는다** — 로컬
+    경로와 같은 규칙이다. 전부 끊고 나면 되돌릴 방법이 없다.
+    """
+    grant, err = _require(request, host_store.LEVEL_CONTROL)
+    if err:
+        return err
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    import tmux_runner
+    from routes.tmux import _CLIENT_SESSION_RE, _client_rows
+
+    session = str(body.get("session") or "")
+    if not _CLIENT_SESSION_RE.fullmatch(session):
+        return JSONResponse({"error": "invalid session name"}, status_code=400)
+    keep = _my_tty(grant, _screen_token(body.get("screen")))
+    if not keep:
+        host_store.audit(grant["id"], "clients/solo", False, "자기 화면 미확인")
+        return JSONResponse(
+            {"error": "unknown client", "reason": "이 화면의 tty를 확인할 수 없습니다"},
+            status_code=400,
+        )
+
+    def _solo() -> list[str]:
+        detached = []
+        for row in _client_rows(session):
+            if row["tty"] == keep:
+                continue
+            tmux_runner.run(["detach-client", "-t", row["tty"]], timeout=2.0)
+            detached.append(row["tty"])
+        tmux_runner.run(["refresh-client", "-t", keep], timeout=2.0)
+        return detached
+
+    detached = await asyncio.to_thread(_solo)
+    host_store.audit(grant["id"], "clients/solo", True, f"{session} {len(detached)}건")
+    return {"ok": True, "kept": keep, "detached": detached}
+
+
+@router.get("/api/peer/search")
+async def peer_search(request: Request):
+    """이 호스트의 스크롤백 검색(`view` 등급).
+
+    `~` 검색은 로컬 세션만 봤다 — 원격 호스트를 고른 상태에서도 검색창은 이 맥의
+    과거 출력만 뒤졌다. 검색은 **출력을 읽는 것**이라 view 등급이 맞다(view는
+    이미 라이브 출력 전체를 본다).
+
+    응답 상한은 로컬과 같은 값을 그대로 쓴다(`routes/search`의 상한) — 원격이라고
+    더 많이 내려주면 프록시 쪽 팔레트가 감당하지 못한다. 호출 쪽(A)은 타임아웃을
+    건다(peer_client의 기본 타임아웃).
+    """
+    grant, err = _require(request)
+    if err:
+        return err
+
+    from routes import search as search_routes
+
+    q = (request.query_params.get("q") or "").strip()
+    if not q:
+        return {"results": [], "truncated": False}
+    payload = await search_routes.search_scrollback(q=q, sessions="all")
+    host_store.audit(grant["id"], "search", True, f"{len(payload['results'])}건")
+    # session_id는 **B 안에서만 뜻이 있는 값**이다. 그대로 내려보내면 A가 그걸로
+    # 로컬 세션을 열려다 엉뚱한 세션을 연다 — 이름만 남기고 지운다.
+    for r in payload["results"]:
+        r.pop("session_id", None)
+    return payload
+
+
 @router.get("/api/peer/ping")
 async def peer_ping(request: Request):
     """연결 확인 + 시계 동기 + 버전 교환. 1단계에서 유일한 인증 엔드포인트다.
@@ -372,7 +530,15 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
 
     await ws.accept()
     can_control = grant.get("level") == host_store.LEVEL_CONTROL
-    session_id = f"peer-{grant['id']}-{time.time_ns()}"
+    # 「연결된 화면」이 원격에서도 동작하려면 상대가 **자기 화면이 어느 것인지**
+    # 지목할 수 있어야 한다(안 그러면 「이 화면만 남기기」가 자기 자신을 끊는다).
+    # 그래서 화면 토큰을 상대가 정해 보내고, PTY 세션 id에 그대로 박는다:
+    #   peer-<peer id>-<screen>
+    # 토큰은 서명 대상(method+path)에 안 들어가지만 문제되지 않는다 — 접두사에
+    # peer id가 박혀 있고 아래 clients 엔드포인트가 그 접두사를 강제하므로,
+    # 어떤 토큰을 주장하든 **자기 화면 집합 안에서만** 고를 수 있다.
+    screen = _screen_token(ws.query_params.get("screen"))
+    session_id = f"peer-{grant['id']}-{screen or time.time_ns()}"
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue(maxsize=2048)
 

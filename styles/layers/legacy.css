@@ -2717,10 +2717,11 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-pane-unreachable-retry:hover:not([disabled]), .vt-pane-unreachable-pick:hover{ background:var(--menu-hover); }
 .vt-pane-unreachable-retry[disabled]{ opacity:.5; cursor:default; }
 
-/* N7/N39 3단계 — 세션 패널에서 원격 세션일 때 대신 보여주는 한 줄. */
-.vt-rail-session-note{
-  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
-  font:400 var(--fs-xs) var(--mono); color:var(--sub);
+/* 2.1.3 — 「연결된 화면」이 원격에서 읽기 전용일 때의 한 줄. (2.1.2의
+   .vt-rail-session-note는 원격에서 블록을 통째로 숨길 때 쓰던 것이라 삭제됐다.) */
+.vt-clients-note{
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+  font:400 var(--fs-2xs) var(--mono); color:var(--sub);
 }
 
 /* 10-shell-layout.md §4 2단계 — 워크트리 탭 바. 아래 세션 탭(#tabs)과 한 줄에

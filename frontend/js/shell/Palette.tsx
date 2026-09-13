@@ -159,7 +159,15 @@ function PaletteBody(props: PaletteBodyProps) {
     if (p.mode !== 'scrollback' || !p.query) { setScrollbackResults([]); return; }
     const rawSnapshot = p.raw;
     setScrollbackLoading(true);
-    deps.vtFetch(`/api/search/scrollback?q=${encodeURIComponent(p.query)}&sessions=all`)
+    // 2.1.3 — 호스트 스위처가 원격을 가리키고 있으면 **그 호스트의** 과거 출력을
+    // 찾는다. 로컬만 뒤지면 원격 탭에서 검색이 늘 빈손이라, "기능이 고장났나"로
+    // 읽힌다. 모든 호스트를 동시에 뒤지지 않는 건 타자마다 왕복이 늘기 때문이고,
+    // "지금 이 호스트를 보고 있다"는 스위처의 의미와도 어긋난다.
+    const host = String((window as any).vtSettingsGet?.('ui.activeHostId') || 'local');
+    const url = host && host !== 'local'
+      ? `/api/hosts/${encodeURIComponent(host)}/search?q=${encodeURIComponent(p.query)}`
+      : `/api/search/scrollback?q=${encodeURIComponent(p.query)}&sessions=all`;
+    deps.vtFetch(url)
       .then((data) => {
         if (parseQuery(props.query()).raw !== rawSnapshot) return;
         setScrollbackResults(data.results || []);
@@ -288,14 +296,25 @@ function PaletteBody(props: PaletteBodyProps) {
   }
 
   function scrollbackRow(r: any, i: number): Row {
+    // 원격 결과에는 session_id가 없다 — 그건 상대 서버 안에서만 뜻이 있는 값이라
+    // peer 응답에서 지운다(routes/peer.py). 대신 세션 **이름**으로 그 호스트의
+    // 세션을 연다(로컬의 switchTo와 같은 자리를 attachRemoteSession이 맡는다).
+    const remoteHost: string | null = r.host || null;
+    const open = () => {
+      if (remoteHost) (window as any).attachRemoteSession?.(remoteHost, r.session_name);
+      else deps.switchTo(r.session_id);
+      props.onRequestClose();
+    };
     return {
-      key: `sb:${r.session_id}:${r.line_no}:${i}`,
+      key: `sb:${remoteHost || ''}:${r.session_id || r.session_name}:${r.line_no}:${i}`,
       kind: 'scrollback',
       // 2.1.2 — `source: "log"`는 **끝난 세션이나 재시작 이전의 출력**일 수 있다.
       // 그 표시가 없으면 클릭했는데 전환할 세션이 없는 이유를 알 수 없다.
-      label: `${r.session_name}${r.source === 'log' ? ' (기록)' : ''} · ${r.line.trim()}`,
-      onOpen: () => { deps.switchTo(r.session_id); props.onRequestClose(); },
+      label: `${remoteHost ? `${r.host_label || remoteHost} / ` : ''}${r.session_name}`
+        + `${r.source === 'log' ? ' (기록)' : ''} · ${r.line.trim()}`,
+      onOpen: open,
       onOpenNewPane: () => {
+        if (remoteHost) { open(); return; }
         const paneId = deps.splitActivePane('right');
         if (paneId) deps.setPaneSession(r.session_id, paneId);
         props.onRequestClose();

@@ -145,18 +145,12 @@ function initRail() {
     if (_clientsCleanup) { _clientsCleanup(); _clientsCleanup = null; }
     const activeSess = getSession(activeSessionId());
     const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
-    // N7/N39 3단계 — 원격 세션에서는 이 블록을 아예 띄우지 않는다. `/api/tmux/clients`는
-    // **이 맥의** tmux를 보므로 같은 이름의 로컬 세션이 있으면 남의 화면 목록을
-    // 보여주게 되고, 무엇보다 서버가 "나"를 로컬 PTY의 tty로 역산하기 때문에
-    // 「이 화면만 남기기」가 자기 자신을 끊을 수 있다(routes/tmux.py의
-    // _tty_of_web_session). 원격 화면 관리는 2.2 범위다.
-    if (activeTmux && !(activeSess && activeSess.remote)) {
-      _clientsCleanup = mountClients(panelBody, activeTmux);
-    } else if (activeSess && activeSess.remote) {
-      const note = document.createElement('div');
-      note.className = 'vt-rail-session-note';
-      note.textContent = '원격 세션입니다 — 연결된 화면 관리는 그 호스트에서 하세요.';
-      panelBody.appendChild(note);
+    // 2.1.3 — 원격 세션도 같은 블록을 쓴다. 목록·끊기를 **PTY 소유 호스트**에게
+    // 물어보므로(peer의 /api/peer/clients), 2.1.2에서 이걸 숨겼던 이유가 사라졌다:
+    // 같은 이름의 로컬 세션과 헷갈리지 않고, "나"도 이 탭의 화면 토큰으로
+    // 그쪽에서 판정한다(term/remote.js의 screen).
+    if (activeTmux) {
+      _clientsCleanup = mountClients(panelBody, activeTmux, activeSess && activeSess.remote);
     }
 
     const footer = document.createElement('div');

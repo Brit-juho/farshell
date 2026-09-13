@@ -176,3 +176,13 @@ def test_huge_log_is_scanned_from_the_tail_and_marked_truncated(client, logs, mo
     body = client.get("/api/search/scrollback?q=needle").json()
     assert body["truncated"] is True
     assert [x["line"] for x in body["results"]] == ["new needle"]
+
+
+def test_peer_mirror_sessions_are_excluded(client):
+    """`peer-<host>-<screen>`은 원격 화면의 거울 PTY다 — 같은 tmux 세션의 출력을
+    한 벌 더 들고 있을 뿐이라 검색에 나오면 같은 줄이 두 번 뜨고, 세션 이름 자리에
+    사람이 본 적 없는 내부 id가 뜬다(2.1.3 원격 검색 실측에서 잡혔다)."""
+    _seed_session("s1", "dev", ["needle here"])
+    _seed_session("peer-gpu-box-abc123", "", ["needle here"])
+    results = client.get("/api/search/scrollback?q=needle").json()["results"]
+    assert [r["session_id"] for r in results] == ["s1"]

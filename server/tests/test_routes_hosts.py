@@ -171,3 +171,63 @@ def test_ping_failure_is_200_with_offline_state(env, monkeypatch):
     r = client.post("/api/hosts/gpu-box/ping")
     assert r.status_code == 200
     assert r.json() == {"ok": False, "online": False, "reason": "연결 실패: refused"}
+
+
+# --- 2.1.3: 원격 「연결된 화면」·검색 중계 ------------------------------------------
+
+
+def test_host_clients_proxies_and_passes_query_outside_the_signature(env, monkeypatch):
+    """쿼리는 **서명 대상이 아니다**(상대는 path만 서명 검증한다) — 그래서 path에
+    이어 붙이면 서명이 깨진다. `_call_sync`가 쿼리를 따로 받는 이유이고, 이
+    테스트가 그 계약을 고정한다."""
+    client, hs, mod, _ = env
+    _add_peer(hs)
+    seen = {}
+
+    def fake_call(peer, method, path, body=None, timeout=None, query=None):
+        seen.update(peer=peer["id"], method=method, path=path, query=query)
+        return {"session": "dev", "clients": [], "me_tty": "/dev/ttys002"}
+
+    monkeypatch.setattr(mod.peer_client, "_call_sync", fake_call)
+    r = client.get("/api/hosts/gpu-box/clients?session=dev&screen=abc")
+    assert r.status_code == 200
+    assert seen["path"] == "/api/peer/clients"   # 쿼리가 섞이지 않았다
+    assert seen["query"] == {"session": "dev", "screen": "abc"}
+
+
+def test_host_clients_passes_through_the_remote_403(env, monkeypatch):
+    """상대가 view만 줬으면 403이 그대로 와야 한다 — 502로 뭉개면 화면이
+    「등급을 올리세요」를 말할 수 없다."""
+    client, hs, mod, _ = env
+    _add_peer(hs)
+
+    def boom(*a, **k):
+        raise mod.peer_client.PeerError("이 호스트는 읽기 전용(view)입니다", 403)
+
+    monkeypatch.setattr(mod.peer_client, "call", boom)
+    r = client.post("/api/hosts/gpu-box/clients/solo", json={"session": "dev", "screen": "abc"})
+    assert r.status_code == 403
+    assert "읽기 전용" in r.json()["reason"]
+
+
+def test_host_clients_unknown_host_is_404(env):
+    client, _, _, _ = env
+    assert client.get("/api/hosts/nope/clients?session=dev").status_code == 404
+
+
+def test_host_search_labels_rows_from_our_own_registry(env, monkeypatch):
+    """호스트 라벨은 **이쪽 레지스트리**의 이름을 쓴다 — 원격이 자기를 뭐라고
+    부르든 화면에 그 이름이 뜨면 안 된다."""
+    client, hs, mod, _ = env
+    _add_peer(hs)
+    monkeypatch.setattr(
+        mod.peer_client, "_call_sync",
+        lambda peer, method, path, body=None, timeout=None, query=None: {
+            "results": [{"session_name": "train", "line": "boom", "line_no": 1,
+                         "source": "log", "context_before": [], "context_after": [],
+                         "host_label": "내가 지은 이름"}],
+            "truncated": False,
+        })
+    row = client.get("/api/hosts/gpu-box/search?q=boom").json()["results"][0]
+    assert row["host"] == "gpu-box"
+    assert row["host_label"] == "작업실"

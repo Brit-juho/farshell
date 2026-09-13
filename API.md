@@ -200,6 +200,10 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | POST | `/api/peer/input` | Signed, **`control` level** — type text into a tmux session on this host (JSON: `session`, `data`, optional `enter`). Default types without Enter (same contract as file insert); `enter: true` presses it, which is what the prompt queue needs (A3) — the caller says which, the server never guesses. A `view` peer gets 403 with the exact command to enable it |
 | WS | `/api/peer/ws/{tmux_name}` | Signed, `view` streams output; input is applied only at `control` level. Opened by the **other server's proxy**, never by a browser (a browser WebSocket can't send the signature headers). Each connection gets its own PTY on this host and it is destroyed on disconnect — sharing the owner's PTY would make the two screens fight over the terminal size |
 | POST | `/api/peer/file` | Signed **with a body hash** (`X-Peer-Body`), **`control` level** — raw bytes in, stored in this host's file store; with `X-Peer-File-Session` the path is typed into that pane (no Enter). Re-sends of the same file are deduped by origin (sender host id + their file id), not by content hash. Over this host's `VT_MAX_UPLOAD_MB` → 413 |
+| GET | `/api/peer/clients?session=&screen=` | Signed, `view` level — clients attached to that tmux session on this host. `screen` is the token the caller chose when opening the WS; the server only ever resolves it as the PTY `peer-<caller id>-<screen>`, so **the prefix makes it impossible to claim someone else's screen** |
+| POST | `/api/peer/clients/detach` | Signed, **`control` level** — detach one client (JSON: `tty`, `screen`). Detaching your own screen (identified by `screen`) is refused with 400 |
+| POST | `/api/peer/clients/solo` | Signed, **`control` level** — "keep only this screen" (JSON: `session`, `screen`). If `screen` doesn't resolve to a tty, **nothing is detached** and it returns 400 — detaching everything has no way back |
+| GET | `/api/peer/search?q=` | Signed, `view` level — scrollback search on this host (same caps as the local `/api/search/scrollback`). `session_id` is stripped from the results: it only means something inside this host, and the caller would open the wrong session with it |
 
 ## Hosts (N7/N39, stage 2 — what the browser calls)
 
@@ -212,6 +216,10 @@ a peer signature opens.
 | GET | `/api/hosts[?fresh=1]` | Local host (always first, id `local`) + every registered peer, each with its session list. Remote lookups run in parallel and are cached 30s; an unreachable host degrades to `online:false` + `reason` instead of failing the list |
 | GET | `/api/hosts/self` | This host's id/label (pairing guidance, settings screen) |
 | POST | `/api/hosts/{id}/ping` | Liveness + clock-skew/latency refresh. A failed connection returns **200 with `online:false`** — it's a state, not a server error |
+| GET | `/api/hosts/{id}/clients?session=&screen=` | Remote "connected screens" list — proxied to the peer route of the same name. The remote's status code (403 for insufficient level, etc.) is passed through as-is |
+| POST | `/api/hosts/{id}/clients/detach` | Proxies a remote detach (JSON: `tty`, `screen`). 403 if the peer only granted `view` — the UI then hides the detach buttons and says why |
+| POST | `/api/hosts/{id}/clients/solo` | Proxies remote "keep only this screen" (JSON: `session`, `screen`) |
+| GET | `/api/hosts/{id}/search?q=` | Proxies remote scrollback search. `host`/`host_label` are attached to each row **here** — whatever the remote calls itself, the label comes from this side's registry |
 | WS | `/ws/remote/{host_id}/{tmux_name}` | Remote pane proxy: the browser's usual login auth on this side, the peer signature on the other. **Creates no PTY, feeds no output watcher, writes no scrollback** — the host that owns the PTY is the one that notifies and persists, so nothing is duplicated here |
 
 ## Misc

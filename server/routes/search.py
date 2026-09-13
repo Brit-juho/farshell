@@ -99,7 +99,11 @@ async def search_scrollback(q: str = Query(...), sessions: str = Query("all")):
     if not q:
         return {"results": [], "truncated": False}
 
-    live_ids = list(pty_mgr.sessions.keys())
+    # `peer-<host>-<screen>`은 원격에서 붙은 화면의 **거울 PTY**다(routes/peer.py).
+    # 같은 tmux 세션의 출력을 한 벌 더 들고 있을 뿐이라, 검색에 넣으면 같은 줄이
+    # 두 번 나오고 세션 이름 자리에 사람이 본 적 없는 내부 id가 뜬다. 실측:
+    # 원격 검색을 켜자마자 결과가 통째로 자기 거울 버퍼로 채워졌다.
+    live_ids = [sid for sid in pty_mgr.sessions.keys() if not sid.startswith("peer-")]
     logged_ids = await asyncio.to_thread(scrollback_persist.logged_session_ids)
     # 순서: 살아있는 세션 먼저 — 상한에 걸리더라도 지금 보고 있는 세션의 결과가
     # 먼저 남는 게 맞다.

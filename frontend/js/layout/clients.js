@@ -26,7 +26,7 @@ function timeAgo(activity) {
   return `${Math.floor(sec / 3600)}시간 전`;
 }
 
-function row(client, onDetach) {
+function row(client, onDetach, readOnly = false) {
   const el = document.createElement('div');
   el.className = 'vt-clients-row';
   if (client.is_me) el.classList.add('me');
@@ -47,7 +47,7 @@ function row(client, onDetach) {
     badge.className = 'vt-clients-badge';
     badge.textContent = '나';
     el.appendChild(badge);
-  } else {
+  } else if (!readOnly) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'vt-clients-detach';
@@ -61,8 +61,20 @@ function row(client, onDetach) {
 }
 
 // container 안에 「연결된 화면」 블록을 그린다. 반환값은 정리 함수(폴링 해제).
-export function mountClients(container, tmuxName) {
+//
+// `remote`가 오면(=`{ host, screen }`) 같은 화면을 **원격 호스트의 tmux**에 대고
+// 그린다. 2.1.2에서 원격 세션은 이 블록을 통째로 숨겼다 — `/api/tmux/clients`가
+// 이 맥의 tmux를 보기 때문이다. 2.1.3에서 PTY 소유 호스트에게 물어보는 경로가
+// 생겼고(`/api/hosts/{id}/clients` → peer), 등급 경계가 그대로 UI가 된다:
+// **목록은 view면 보이고, 끊기는 control이 없으면 403** — 그때는 버튼을 숨기고
+// 이유를 한 줄로 적는다(눌러서 실패하게 두지 않는다).
+export function mountClients(container, tmuxName, remote = null) {
   if (!container || !tmuxName) return () => {};
+  const screen = remote ? remote.screen || '' : '';
+  const base = remote ? `/api/hosts/${encodeURIComponent(remote.host)}/clients` : '/api/tmux/clients';
+  const listUrl = base;
+  const detachUrl = remote ? `${base}/detach` : '/api/tmux/detach-client';
+  const soloUrl = remote ? `${base}/solo` : '/api/tmux/clients/solo';
 
   const wrap = document.createElement('div');
   wrap.className = 'vt-clients';
@@ -80,17 +92,25 @@ export function mountClients(container, tmuxName) {
   const list = document.createElement('div');
   list.className = 'vt-clients-list';
   wrap.appendChild(list);
+  // 원격에서 control 등급이 없으면 끊기 자체가 불가능하다 — 그 사실을 여기 적는다.
+  const note = document.createElement('div');
+  note.className = 'vt-clients-note';
+  note.hidden = true;
+  wrap.appendChild(note);
   container.appendChild(wrap);
 
   let stopped = false;
+  let readOnly = false;   // 원격이 control을 안 준 상태
 
   const me = () => activeSessionId();
 
   async function refresh() {
     if (stopped) return;
     try {
-      const q = `?session=${encodeURIComponent(tmuxName)}&me=${encodeURIComponent(me() || '')}`;
-      const data = await vtFetch(`/api/tmux/clients${q}`);
+      const q = remote
+        ? `?session=${encodeURIComponent(tmuxName)}&screen=${encodeURIComponent(screen)}`
+        : `?session=${encodeURIComponent(tmuxName)}&me=${encodeURIComponent(me() || '')}`;
+      const data = await vtFetch(`${listUrl}${q}`);
       if (stopped) return;
       list.innerHTML = '';
       const clients = data.clients || [];
@@ -99,40 +119,63 @@ export function mountClients(container, tmuxName) {
       wrap.hidden = clients.length < 2;
       // 남길 화면을 특정할 수 없으면 solo는 서버가 400으로 거부한다.
       // 눌러서 실패하게 두지 말고 미리 비활성화한다.
-      solo.disabled = !data.me_tty;
+      solo.disabled = !data.me_tty || readOnly;
+      solo.hidden = readOnly;
       solo.title = data.me_tty ? '' : '이 화면의 tty를 확인할 수 없어 사용할 수 없습니다';
-      for (const c of clients) list.appendChild(row(c, detach));
+      note.hidden = !readOnly;
+      for (const c of clients) list.appendChild(row(c, detach, readOnly));
     } catch (_) {
       wrap.hidden = true;   // 조회 실패는 조용히 — 이건 부가 기능이다
     }
   }
 
+  // 원격이 view 등급이면 끊기만 403이 온다(목록은 보인다). 그 뒤로는 버튼을
+  // 감추고 이유를 적는다 — 등급은 상대 맥에서만 올릴 수 있으므로 여기서
+  // 재시도해봐야 계속 실패한다.
+  function _handleDenied(e) {
+    if (remote && /403/.test(String(e && e.message))) {
+      readOnly = true;
+      note.textContent = '읽기 전용(view)으로 연결돼 있어 화면을 끊을 수 없습니다 — 그 호스트에서 '
+        + "'fsh host allow-control'로 켜세요.";
+      return true;
+    }
+    return false;
+  }
+
   async function detach(client) {
     try {
-      await vtFetch('/api/tmux/detach-client', {
+      await vtFetch(detachUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tty: client.tty, me: me() }),
+        body: JSON.stringify(remote
+          ? { tty: client.tty, screen }
+          : { tty: client.tty, me: me() }),
       });
     } catch (e) {
-      if (typeof window.showToast === 'function') window.showToast(e.message || '끊기 실패', 'error');
+      if (!_handleDenied(e) && typeof window.showToast === 'function') {
+        window.showToast(e.message || '끊기 실패', 'error');
+      }
     }
     refresh();
   }
 
   solo.addEventListener('click', async () => {
     try {
-      const r = await vtFetch('/api/tmux/clients/solo', {
+      const r = await vtFetch(soloUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session: tmuxName, me: me() }),
+        body: JSON.stringify(remote
+          ? { session: tmuxName, screen }
+          : { session: tmuxName, me: me() }),
       });
       if (typeof window.showToast === 'function') {
         const n = (r.detached || []).length;
         window.showToast(n ? `화면 ${n}개를 끊었습니다` : '끊을 화면이 없습니다');
       }
     } catch (e) {
-      if (typeof window.showToast === 'function') window.showToast(e.message || '실패', 'error');
+      if (!_handleDenied(e) && typeof window.showToast === 'function') {
+        window.showToast(e.message || '실패', 'error');
+      }
     }
     refresh();
   });

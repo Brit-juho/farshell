@@ -346,7 +346,7 @@ function renderVoiceSection() {
   if (_voiceClientsCleanup) { _voiceClientsCleanup(); _voiceClientsCleanup = null; }
   const activeSess = getSession(activeSessionId());
   const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
-  if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux);
+  if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote);
 
   return frag;
 }
