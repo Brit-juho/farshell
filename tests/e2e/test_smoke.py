@@ -164,14 +164,53 @@ def _pw():
         yield p
 
 
+# 공유 Chromium 프로세스는 컨텍스트를 오래 순환하면 열화된다(`isolated_page`
+# 픽스처 주석의 그 현상). 일정 개수마다 프로세스를 새로 띄워 **메모리 증가를
+# 묶어둔다** — 기동이 1초 미만이라 스위트 전체로도 값싸다.
+#
+# ⚠ 정직하게 적어둔다: 이걸로 **17번째 테스트부터 스위트가 멈추는 문제는 안
+# 고쳐졌다**(2026-09-13 실측 — 브라우저를 새로 띄워도, 좀비 프로세스를 전부
+# 정리한 깨끗한 머신에서도 같은 자리에서 멈춘다). 개별·소그룹 실행은 28건
+# 전부 통과하므로 원인은 "누적된 무언가"이고, 그게 서버인지 드라이버인지는
+# 아직 못 갈랐다. 이 상수는 그 조사 중에 넣은 것이고, 되돌릴 이유가 없어
+# 남긴다 — 다음 조사자가 여기서부터 이어가면 된다.
+CONTEXTS_PER_BROWSER = 10
+
+
+class _BrowserPool:
+    """N개 컨텍스트마다 프로세스를 갈아 끼우는 얇은 래퍼."""
+
+    def __init__(self, pw):
+        self._pw = pw
+        self._b = None
+        self._used = 0
+
+    def new_context(self, **kw):
+        if self._b is None or self._used >= CONTEXTS_PER_BROWSER:
+            self._close()
+            self._b = self._pw.chromium.launch()
+            self._used = 0
+        self._used += 1
+        return self._b.new_context(**kw)
+
+    def _close(self):
+        if self._b is not None:
+            try:
+                self._b.close()
+            except Exception:  # 이미 죽었을 수 있다 — 정리 실패가 결과를 덮으면 안 된다
+                pass
+            self._b = None
+
+
 @pytest.fixture(scope="session")
 def browser(_pw):
     try:
-        b = _pw.chromium.launch()
+        _pw.chromium.launch().close()   # 설치 여부만 먼저 확인한다
     except PlaywrightError as e:
         pytest.skip(f"chromium 없음 — `playwright install chromium` 필요 ({e})")
-    yield b
-    b.close()
+    pool = _BrowserPool(_pw)
+    yield pool
+    pool._close()
 
 
 # 레이아웃 실패는 로그만으로 재구성하기 어려워서 실패 시 화면을 남긴다 —
