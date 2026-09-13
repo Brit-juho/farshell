@@ -111,6 +111,14 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
     return env
 
 
+def _read_log(path, tail: int = 4000) -> str:
+    """서버 로그 꼬리 — 실패 메시지에 붙인다(파이프를 안 쓰므로 파일에서 읽는다)."""
+    try:
+        return path.read_text(errors="replace")[-tail:]
+    except OSError:
+        return "(로그 없음)"
+
+
 @pytest.fixture(scope="session")
 def server(tmp_path_factory):
     """(base_url, token). VT_E2E_URL이 있으면 그걸 쓰고, 없으면 직접 띄운다."""
@@ -122,11 +130,20 @@ def server(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("e2e")
     port = _free_port()
     token = "e2e-smoke-token"
+    # ⚠ 서버 로그는 **파일로** 받는다. 예전엔 stdout=PIPE였는데 그 파이프를 읽는
+    # 쪽이 아무도 없었다 — 액세스 로그가 쌓여 파이프 버퍼(64KB)가 차는 순간
+    # 서버의 write(2)가 영원히 블록되고, 그게 asyncio 이벤트 루프를 통째로
+    # 멈춰 세운다. 그때부터 **모든 요청이 응답 없이 타임아웃**이라 17번째쯤부터
+    # 스위트 전체가 무너졌다(2026-09-14, 멈춘 서버의 스택을 떠서 확인:
+    # uvloop → task_step → _io_FileIO_write → write). 테스트가 오래 돌수록
+    # 로그가 쌓이니 "왜 뒤쪽만 깨지나"도 이걸로 설명된다.
+    log_path = tmp / "server.log"
+    log_file = open(log_path, "w")
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(port)],
         cwd=str(ROOT / "server"),
         env=_isolated_env(port, token, tmp),
-        stdout=subprocess.PIPE,
+        stdout=log_file,
         stderr=subprocess.STDOUT,
         text=True,
     )
@@ -135,7 +152,7 @@ def server(tmp_path_factory):
         deadline = time.time() + 30
         while time.time() < deadline:
             if proc.poll() is not None:
-                pytest.fail(f"서버가 뜨기 전에 죽었다:\n{proc.stdout.read() if proc.stdout else ''}")
+                pytest.fail(f"서버가 뜨기 전에 죽었다:\n{_read_log(log_path)}")
             try:
                 with socket.create_connection(("127.0.0.1", port), timeout=0.3):
                     break
@@ -150,6 +167,7 @@ def server(tmp_path_factory):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+        log_file.close()
 
 
 @pytest.fixture(scope="session")
