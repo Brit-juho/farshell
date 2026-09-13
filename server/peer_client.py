@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import secrets
@@ -64,7 +65,7 @@ def _request(url: str, method: str, headers: dict, body: dict | None,
         raise PeerError(f"연결 실패: {e}")
 
 
-def _signed_headers(peer: dict, method: str, path: str) -> dict:
+def _signed_headers(peer: dict, method: str, path: str, body_hash: str = "") -> dict:
     """서명 헤더. 상대 시계와의 차이(clockSkew)를 보정해 ts를 만든다 —
     두 맥의 시계가 몇 초 틀어져 있어도 서명 창(60초)에서 떨어지지 않게."""
     ts = int(time.time() + peer.get("clockSkew", 0))
@@ -74,7 +75,10 @@ def _signed_headers(peer: dict, method: str, path: str) -> dict:
         "X-Peer-Id": me["id"],
         "X-Peer-Ts": str(ts),
         "X-Peer-Nonce": nonce,
-        "X-Peer-Sig": host_store.sign_request(peer["secret"], method, path, ts, nonce),
+        "X-Peer-Sig": host_store.sign_request(peer["secret"], method, path, ts, nonce, body_hash),
+        # 본문 해시를 쓴 요청만 이 헤더를 단다 — 상대는 헤더가 있으면 그 값으로
+        # 서명을 검증하고, 실제 본문 해시와도 대조한다(A2).
+        **({"X-Peer-Body": body_hash} if body_hash else {}),
     }
 
 
@@ -93,6 +97,42 @@ def _call_sync(peer: dict, method: str, path: str, body: dict | None = None,
     if not (200 <= status < 300):
         raise PeerError(payload.get("reason") or payload.get("error") or f"HTTP {status}", status)
     return payload
+
+
+def send_bytes_sync(peer: dict, path: str, data: bytes, headers: dict,
+                    timeout: float = 120.0) -> dict:
+    """원시 바이트 POST (A2 파일 전송). JSON base64로 감싸지 않는 이유는 단순하다 —
+    200MB 파일이 base64로 267MB가 되고, 그걸 메모리에서 인코딩/디코딩까지 한다.
+
+    서명에 본문 해시를 포함한다(`_signed_headers`의 body_hash). 타임아웃도 따로
+    둔다: 파일 한 개가 터널을 넘어가는 시간은 ping 왕복과 자릿수가 다르다.
+    """
+    body_hash = hashlib.sha256(data).hexdigest()
+    hdrs = {
+        **_signed_headers(peer, "POST", path, body_hash),
+        **headers,
+        "Content-Type": "application/octet-stream",
+    }
+    url = peer["url"].rstrip("/") + path
+    req = urllib.request.Request(url, data=data, headers=hdrs, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                return json.loads(raw)
+            except ValueError:
+                raise PeerError(f"JSON이 아닌 응답({resp.status})", resp.status)
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            payload = {}
+        raise PeerError(payload.get("reason") or payload.get("error") or f"HTTP {e.code}", e.code)
+    except urllib.error.URLError as e:
+        raise PeerError(f"연결 실패: {e.reason}")
+    except OSError as e:
+        raise PeerError(f"연결 실패: {e}")
 
 
 async def call(peer: dict, method: str, path: str, body: dict | None = None) -> dict:
