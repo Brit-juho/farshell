@@ -106,3 +106,86 @@ def test_output_batching_coalesces_rapid_reads(loop):
     # 3번의 read가 한 번의 broadcast로 합쳐짐.
     assert received == [b"chunkchunkchunk"]
     mgr.destroy_session("test-batch")
+
+
+# ── N27: 붙여넣기 페이로드가 키 입력용 필터를 타면 안 된다 ──────────────────
+# 두 필터(자동응답 제거 · 부팅 0.5초 ESC 드롭)는 사용자가 친 키를 방어하려고
+# 있는 것이다. bracketed paste 사이의 바이트는 키가 아니라 **내용**이라,
+# 여기에 적용하면 붙여넣은 텍스트가 조용히 변조되거나 통째로 사라진다.
+
+PS = b"\x1b[200~"
+PE = b"\x1b[201~"
+
+
+def test_split_paste_segments_marks_paste_region():
+    from pty_manager import split_paste_segments
+
+    segs, in_paste = split_paste_segments(b"ab" + PS + b"xy" + PE + b"cd", False)
+    assert segs == [(False, b"ab"), (True, PS + b"xy" + PE), (False, b"cd")]
+    assert in_paste is False
+
+
+def test_split_paste_segments_carries_state_across_chunks():
+    """붙여넣기는 WS 한 프레임에 다 안 들어온다 — 마커가 갈라지면 뒷조각
+    전체가 키 입력으로 오인된다."""
+    from pty_manager import split_paste_segments
+
+    segs, in_paste = split_paste_segments(b"ab" + PS + b"xy", False)
+    assert segs == [(False, b"ab"), (True, PS + b"xy")]
+    assert in_paste is True
+
+    segs2, in_paste2 = split_paste_segments(b"zw" + PE + b"q", True)
+    assert segs2 == [(True, b"zw" + PE), (False, b"q")]
+    assert in_paste2 is False
+
+
+def test_paste_payload_keeps_bytes_that_look_like_auto_replies(loop):
+    """붙여넣는 텍스트 안의 `ESC[...c`/`ESC[...R`가 삭제되던 버그."""
+    mgr = make_manager_with_session(loop, "test-paste-filter")
+    session = mgr._sessions["test-paste-filter"]
+    written = []
+    mgr._write_raw = lambda s, d: written.append(d)
+
+    payload = PS + b"echo \x1b[0c and \x1b[1;1R done" + PE
+    mgr.write("test-paste-filter", payload)
+    assert written == [payload], "붙여넣기 내용은 한 바이트도 바뀌면 안 된다"
+
+    # 같은 바이트를 키 입력으로 보내면 예전대로 걸러낸다(방어선은 그대로다).
+    written.clear()
+    mgr.write("test-paste-filter", b"echo \x1b[0c hi")
+    assert written == [b"echo  hi"]
+    assert session is not None
+
+
+def test_paste_survives_boot_grace_period(loop):
+    """bracketed paste는 ESC로 시작한다 — 세션이 붙자마자 붙여넣으면 부팅
+    grace(0.5초)에 걸려 통째로 사라지던 버그."""
+    import time
+
+    mgr = make_manager_with_session(loop, "test-paste-boot")
+    session = mgr._sessions["test-paste-boot"]
+    session._start_monotonic = time.monotonic()   # 방금 부팅한 상태로
+    written = []
+    mgr._write_raw = lambda s, d: written.append(d)
+
+    payload = PS + b"hello" + PE
+    mgr.write("test-paste-boot", payload)
+    assert written == [payload]
+
+    # 붙여넣기가 아닌 ESC 시퀀스는 여전히 막는다.
+    written.clear()
+    mgr.write("test-paste-boot", b"\x1b[>0;95;0c")
+    assert written == []
+
+
+def test_keystrokes_around_a_paste_are_still_filtered(loop):
+    """한 프레임에 키 입력과 붙여넣기가 섞여 와도 각자 규칙을 받는다."""
+    import time
+
+    mgr = make_manager_with_session(loop, "test-paste-mixed")
+    mgr._sessions["test-paste-mixed"]._start_monotonic = time.monotonic() - 10  # grace 지남
+    written = []
+    mgr._write_raw = lambda s, d: written.append(d)
+
+    mgr.write("test-paste-mixed", b"a\x1b[0c" + PS + b"\x1b[0c" + PE + b"b")
+    assert written == [b"a" + PS + b"\x1b[0c" + PE + b"b"]
