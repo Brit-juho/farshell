@@ -1178,6 +1178,8 @@ cmd_help() {
     fsh hotkey              핫키 조회/변경
     fsh hooks               Claude Code 훅 등록/조회 (상태 배지·큐·TTS의 전제)
     fsh pane report         이 pane의 상태를 서버에 보고 (훅 없는 에이전트용)
+                            --agent <이름>을 함께 주면 설정 → 에이전트의 감지
+                            커버리지가 그 CLI를 「자기보고 · 높음」으로 올린다
     fsh voice-target        음성 daemon 타깃 세션 lock/해제
     fsh queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
     fsh manage              TUI 관리 도구 (세션/타깃/핫키/상태)

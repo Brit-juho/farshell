@@ -13,6 +13,7 @@ import agent_detector
 import agent_status
 import auth
 import pane_resolve
+import report_seen
 
 # Phase 9 #5: heartbeat (pty.py와 동일 정책)
 _HB_INTERVAL = float(os.environ.get("VT_WS_HEARTBEAT_INTERVAL", "15.0"))
@@ -46,16 +47,27 @@ KNOWN_CLIS = ("claude", "codex", "aider", "gemini")  # bin/fsh `agent <name>`과
 def _coverage_trust(path_kind: str, states: list[str]) -> str:
     """등급 임의 기준 — 문서(80 §2)는 값만 요구하고 구체적 임계값은 위임했다.
 
-    high — 훅(가장 정확한 신호: Claude Code pre/stop 이벤트)이 걸려 있고 PTY
-           패턴 감지(waiting)까지 겹친다 — 두 경로가 서로 보강한다.
+    high — **1차 신호**가 있다. 에이전트 자신이 상태를 알려주는 경로 둘 중
+           하나다: Claude Code 훅(`hook`), 또는 `fsh pane report`
+           자기보고(`report`). 둘 다 출력 grep보다 정확하다.
     mid  — PTY 패턴 감지만 있다(출력 grep 하나뿐이라 오탐·누락 가능성이 있다).
     low  — 아무 감지도 없다(toml이 비어 있거나 파일 자체가 없다) — 레일이
            이 CLI의 승인 대기를 절대 띄우지 못한다.
 
+    N9(2.1.4)까지는 `hook`만 high였고, 그 값은 claude일 때만 세워졌다 —
+    그래서 다른 CLI는 패턴을 아무리 넣어도 영원히 mid였다. 자기보고를 쓰는
+    CLI에는 올라갈 길이 생겼다.
+
+    `report`는 패턴 없이도 high다 — 훅과 달리 자기보고는 상태를 **직접**
+    말하므로 PTY 패턴이 보강해 줄 것이 없다. 반면 `hook`은 지금까지처럼
+    패턴과 함께일 때만 high로 둔다(기존 판정을 바꾸지 않는다).
+
     toml 포맷이 지금은 enter/exit/options뿐이라 states는 최대 1개
     (["waiting"])다. 포맷이 확장돼 states가 여러 개(working/done 등)를 표현하게
-    되면, 그때는 개수 기반으로 세분화한다(예: 3개 이상+hook=high).
+    되면, 그때는 개수 기반으로 세분화한다.
     """
+    if path_kind == "report":
+        return "high"
     if path_kind == "hook" and states:
         return "high"
     if states:
@@ -68,7 +80,8 @@ async def agent_coverage():
     """CLI별 승인 대기 감지 커버리지 — 설정 → 에이전트 탭이 그린다.
 
     `path`는 Claude Code에 한해서만 "hook"일 수 있다(다른 CLI는 훅 개념
-    자체가 없다 — codex/aider/gemini는 `fsh pane report`로 직접 보고할 뿐).
+    자체가 없다). 대신 어떤 CLI든 `fsh pane report`로 직접 보고한 적이 있으면
+    "report"가 된다 — N9에서 추가한 두 번째 1차 신호 경로다.
     """
     import agent_prompt_detect as detect
     import claude_hooks
@@ -85,10 +98,13 @@ async def agent_coverage():
     # 수용 기준을 못 지킨다. 이 표는 자주 열리는 화면이 아니라 매번 다시
     # 읽어도 비용이 작다(파일 몇 개, KB 단위).
     parsed = detect.load_patterns(force=True)
+    reported = report_seen.load()
 
     detect_dir = detect.DETECT_DIR
     files = {p.stem: p for p in detect_dir.glob("*.toml")} if detect_dir.is_dir() else {}
-    clis = sorted(set(KNOWN_CLIS) | set(files))
+    # 자기보고를 쓴 CLI는 toml이 없어도 표에 나와야 한다 — 그 CLI에 대해
+    # 감지가 살아 있다는 사실 자체가 이 표가 답해야 할 질문이다.
+    clis = sorted(set(KNOWN_CLIS) | set(files) | set(reported))
 
     rows = []
     for cli in clis:
@@ -107,12 +123,21 @@ async def agent_coverage():
         # 감지 가능한 상태는 "waiting" 하나뿐. 포맷이 확장되면 여기도 확장한다.
         states = ["waiting"] if has_patterns else []
 
+        # 훅이 자기보고보다 우선한다 — claude에 훅이 걸려 있으면 그게 정본이다
+        # (자기보고도 같이 썼다면 어차피 둘 다 high라 표시만 달라진다).
         if cli == "claude" and hook_ok:
             path_kind = "hook"
+        elif cli in reported:
+            path_kind = "report"
         elif has_patterns:
             path_kind = "pty"
         else:
             path_kind = "none"
+
+        if path_kind == "report":
+            # 자기보고는 `fsh pane report --state`가 받는 네 상태를 전부
+            # 직접 말할 수 있다 — PTY 패턴(waiting 하나)보다 넓다.
+            states = ["idle", "working", "waiting", "done"]
 
         rows.append({
             "cli": cli,
@@ -120,6 +145,9 @@ async def agent_coverage():
             "patternLines": pattern_lines,
             "states": states,
             "trust": _coverage_trust(path_kind, states),
+            # 자기보고를 마지막으로 받은 시각(epoch). 없으면 null — 화면이
+            # "언제부터 이 경로가 살아 있었나"를 보여줄 때만 쓴다.
+            "lastReport": reported.get(cli),
         })
     return rows
 
@@ -214,6 +242,11 @@ async def agent_report(request: Request):
         )
     except ValueError as e:
         return {"ok": False, "error": "bad_state", "reason": str(e)}
+
+    # N9 — 이 CLI가 자기보고 경로를 쓴다는 사실을 남긴다. 커버리지 표가
+    # 그걸 읽어 path="report"(→ trust:high)를 준다. 보고한 agent 이름이
+    # 없으면 어느 CLI인지 알 수 없으므로 기록하지 않는다(추측 금지).
+    report_seen.mark(body.get("agent"))
 
     msg = {"type": "agent_event", "event": "report", "state": ent, "resolved_by": how}
     dead = set()
