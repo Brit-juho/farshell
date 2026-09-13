@@ -17,7 +17,17 @@ const DIST = path.join(REPO_ROOT, 'frontend/dist');
 
 // 이 파일 하나만 실제로 프로덕션 빌드를 돌린다(다른 테스트는 --mode test의
 // 별도 산출물을 쓴다) — 무겁지만(약 0.5초) 산출물 검사엔 진짜 산출물이 필요하다.
+//
+// ⚠ **voice 빌드까지 이어서 돌려야 한다.** app 빌드는 emptyOutDir이라 dist를
+// 통째로 비우는데(vite.config.js), 여기서 app만 돌리면 `frontend/dist/voice.js`가
+// 지워진 채 남는다. 게이트 순서가 `npm run build && npm test`라 **테스트를 돌린
+// 뒤의 트리는 항상 voice.js가 없는 상태**가 되고, 그 트리로 서버를 띄우면
+// 브라우저가 매번 `/static/dist/voice.js` 404를 찍는다(실브라우저 스모크의
+// "JS 에러 없이 뜬다"가 이것 때문에 실패했다 — 2026-09-13에 추적).
 execFileSync('npx', ['vite', 'build'], { cwd: REPO_ROOT, stdio: 'pipe' });
+execFileSync('npx', ['vite', 'build'], {
+  cwd: REPO_ROOT, stdio: 'pipe', env: { ...process.env, VOICE_BUILD: '1' },
+});
 
 const appJs = fs.readFileSync(path.join(DIST, 'app.js'), 'utf8');
 const panelsJs = fs.readFileSync(path.join(DIST, 'panels.js'), 'utf8');
@@ -58,4 +68,11 @@ test('shell.js(HUD·헤더·워크트리 레일 지연 청크)도 core 싱글톤
   assert.doesNotMatch(shellJs, /let activeId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
   assert.doesNotMatch(shellJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
   assert.doesNotMatch(shellJs, /const _byTmux\s*=\s*new Map\(\)/, 'agent/state.js의 상태 저장소가 복제됐다');
+});
+
+test('voice.js도 함께 남는다 — app 빌드가 dist를 비우고 끝나면 안 된다', () => {
+  // sw.js PRECACHE가 이 이름을 그대로 참조하고, index.html도 같은 경로를
+  // 불러온다. 이 파일이 app 빌드만 돌리던 시절엔 `npm test` 직후의 트리에서
+  // 그 요청이 404였다(실브라우저 스모크가 잡아냈다).
+  assert.ok(fs.existsSync(path.join(DIST, 'voice.js')), 'frontend/dist/voice.js가 없다');
 });
