@@ -104,7 +104,7 @@ function _buildPaneEl(paneId) {
   });
   paneEl.querySelector('.vt-pane-close').addEventListener('click', () => closePane(paneId));
 
-  // L5: 탭(tab-dom.js)이나 다른 pane 헤더(아래)를 이 pane 위로 드래그하면
+  // L5: 레일 세션 행이나 다른 pane 헤더(아래)를 이 pane 위로 드래그하면
   // 5구역 드롭존으로 배정한다 — 마우스는 네이티브 HTML5 DnD, 터치는 헤더 쪽
   // long-press 배선(아래)이 같은 wirePaneDropTarget이 세팅한
   // data-dropzone/data-pane-id를 그대로 읽는다.
@@ -383,7 +383,6 @@ function _renderFull() {
   if (_rootEl.children[0] !== rootEl) _rootEl.replaceChildren(rootEl);
 
   for (const [id, s] of Object.entries(allSessions())) {
-    if (s.tabEl) s.tabEl.classList.toggle('placed', placement.has(id));
   }
   // N35 §6 — 뷰어 칸이 하나라도 있으면 화면이 비어 있는 게 아니다. 온보딩은
   // position:fixed + z-index:500이라 페인 위를 덮으므로 CSS로 눌러둔다.

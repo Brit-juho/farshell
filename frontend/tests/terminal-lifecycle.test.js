@@ -1,13 +1,15 @@
-// D13: 탭(터미널 세션) 생명주기 — addSession/switchTo/removeSession이 실제로 하는
-// 일(탭 DOM 생성/활성화 전환/정리, activeId 갱신)을 jsdom 위에서 검증한다.
+// D13: 세션 생명주기 — addSession/switchTo/removeSession이 실제로 하는
+// 일(레코드 등록·표시 이름·활성 전환·wrapper 정리, activeId 갱신)을 jsdom
+// 위에서 검증한다. N37 3단계에서 세션 탭 줄이 사라졌으므로 관심사는 탭 DOM이
+// 아니라 **세션 레코드와 터미널 wrapper**다.
 //
 // terminal.js는 xterm.js(vendor, 실제 캔버스/DOM 렌더링)·WebSocket·여러 다른
 // 모듈(picker.js의 updateSessionPicker 등)에 깊게 얽혀 있어, 그 전부를 그대로
 // 실행하려 들면 관련 없는 것까지 끝없이 스텁해야 한다. 대신 진짜 index.html
-// DOM(진짜 #tabs/#terminal-container/#keybar 마크업)을 jsdom으로 띄우고,
+// DOM(진짜 #terminal-container/#keybar 마크업)을 jsdom으로 띄우고,
 // term/*.js 자신이 직접 다루는 vendor 전역(Terminal/FitAddon/SearchAddon/
 // WebSocket/fetch)만 최소로 대체해 실제 addSession/switchTo/removeSession
-// 함수를 그대로 실행한다. 렌더링 결과가 아니라 "탭 생명주기 부기(book-keeping)"가
+// 함수를 그대로 실행한다. 렌더링 결과가 아니라 "세션 생명주기 부기(book-keeping)"가
 // 이 테스트의 관심사다.
 //
 // 테스트 하네스 재설계(F5 백로그): stripEsm(import/export 구문을 정규식으로
@@ -117,16 +119,15 @@ async function buildTerminalWindow() {
   return { window, getAction, ...sessionNs };
 }
 
-test('addSession: 탭 DOM이 생성되고 즉시 활성 탭이 된다', async () => {
+test('addSession: 세션 레코드가 등록되고 즉시 활성 세션이 된다', async () => {
   const { window, addSession } = await buildTerminalWindow();
   const { document } = window;
 
   addSession('sess-1', 'my session');
 
-  const tab = document.querySelector('.tab[data-session-id="sess-1"]');
-  assert.ok(tab, '탭 DOM이 생성돼야 한다');
-  assert.strictEqual(tab.querySelector('.tab-name').textContent, 'my session');
-  assert.ok(tab.classList.contains('active'), '새로 연 세션은 즉시 활성 탭이 된다');
+  assert.ok(window.sessions['sess-1'], '세션 레코드가 등록돼야 한다');
+  assert.strictEqual(window.sessionDisplayName('sess-1'), 'my session');
+  assert.strictEqual(window.orderedSessionIds().join(','), 'sess-1');
   assert.strictEqual(window.activeId, 'sess-1');
 
   const wrapper = document.getElementById('term-sess-1');
@@ -136,35 +137,30 @@ test('addSession: 탭 DOM이 생성되고 즉시 활성 탭이 된다', async ()
   assert.strictEqual(wrapper.style.visibility, 'visible', '활성 세션의 wrapper는 보여야 한다');
 });
 
-test('addSession: id 없이 호출되면 유령 탭을 만들지 않는다', async () => {
+test('addSession: id 없이 호출되면 유령 세션을 만들지 않는다', async () => {
   const { window, addSession } = await buildTerminalWindow();
   addSession('', 'no id');
   assert.strictEqual(Object.keys(window.sessions).length, 0);
-  assert.strictEqual(window.document.querySelectorAll('.tab').length, 0);
+  assert.strictEqual(window.orderedSessionIds().length, 0);
+  assert.strictEqual(window.document.querySelectorAll('[id^="term-"]').length, 0);
 });
 
-test('switchTo: 이전 탭은 비활성/숨김, 새 탭은 활성/표시로 전환된다', async () => {
+test('switchTo: 이전 세션은 숨고, 새 세션이 활성/표시로 전환된다', async () => {
   const { window, addSession, switchTo } = await buildTerminalWindow();
   addSession('a', 'A');
   addSession('b', 'B'); // addSession이 내부에서 switchTo(b)까지 호출
 
-  const tabA = window.document.querySelector('.tab[data-session-id="a"]');
-  const tabB = window.document.querySelector('.tab[data-session-id="b"]');
   assert.strictEqual(window.activeId, 'b');
-  assert.ok(!tabA.classList.contains('active'));
-  assert.ok(tabB.classList.contains('active'));
   assert.strictEqual(window.document.getElementById('term-a').style.visibility, 'hidden');
   assert.strictEqual(window.document.getElementById('term-b').style.visibility, 'visible');
 
   switchTo('a');
   assert.strictEqual(window.activeId, 'a');
-  assert.ok(tabA.classList.contains('active'));
-  assert.ok(!tabB.classList.contains('active'));
   assert.strictEqual(window.document.getElementById('term-a').style.visibility, 'visible');
   assert.strictEqual(window.document.getElementById('term-b').style.visibility, 'hidden');
 });
 
-test('switchTabByOffset: 탭 목록 끝에서 순환한다', async () => {
+test('switchTabByOffset: 세션 목록 끝에서 순환한다', async () => {
   const { window, addSession } = await buildTerminalWindow();
   addSession('a', 'A');
   addSession('b', 'B');
@@ -180,7 +176,7 @@ test('switchTabByOffset: 탭 목록 끝에서 순환한다', async () => {
   assert.strictEqual(window.activeId, 'c');
 });
 
-test('removeSession: 탭/wrapper DOM을 정리하고 다른 세션으로 전환한다', async () => {
+test('removeSession: 레코드/wrapper를 정리하고 다른 세션으로 전환한다', async () => {
   const { window, addSession, removeSession } = await buildTerminalWindow();
   addSession('a', 'A');
   addSession('b', 'B'); // 활성 = b
@@ -188,13 +184,12 @@ test('removeSession: 탭/wrapper DOM을 정리하고 다른 세션으로 전환�
   await removeSession('b');
 
   assert.strictEqual(window.sessions['b'], undefined, 'sessions 맵에서 제거돼야 한다');
-  assert.strictEqual(window.document.querySelector('.tab[data-session-id="b"]'), null);
+  assert.strictEqual(window.orderedSessionIds().join(','), 'a', '순서에서도 빠져야 한다');
   assert.strictEqual(window.document.getElementById('term-b'), null);
-  assert.strictEqual(window.activeId, 'a', '닫은 탭이 활성 탭이었다면 남은 세션으로 전환돼야 한다');
-  assert.ok(window.document.querySelector('.tab[data-session-id="a"]').classList.contains('active'));
+  assert.strictEqual(window.activeId, 'a', '닫은 세션이 활성이었다면 남은 세션으로 전환돼야 한다');
 });
 
-test('removeSession: 마지막 탭을 닫으면 activeId가 비고 온보딩이 뜬다', async () => {
+test('removeSession: 마지막 세션을 닫으면 activeId가 비고 온보딩이 뜬다', async () => {
   const { window, addSession, removeSession } = await buildTerminalWindow();
   addSession('only', 'Only');
 
@@ -205,18 +200,18 @@ test('removeSession: 마지막 탭을 닫으면 activeId가 비고 온보딩이 
   assert.ok(window.document.getElementById('onboarding'), '세션이 하나도 없으면 온보딩이 표시돼야 한다');
 });
 
-test('removeSession: 비활성 탭을 닫아도 활성 탭은 그대로 유지된다', async () => {
+test('removeSession: 비활성 세션을 닫아도 활성 세션은 그대로 유지된다', async () => {
   const { window, addSession, removeSession } = await buildTerminalWindow();
   addSession('a', 'A');
   addSession('b', 'B'); // 활성 = b
 
   await removeSession('a');
 
-  assert.strictEqual(window.activeId, 'b', '비활성 탭을 닫는 건 현재 활성 탭에 영향을 주면 안 된다');
-  assert.ok(window.document.querySelector('.tab[data-session-id="b"]').classList.contains('active'));
+  assert.strictEqual(window.activeId, 'b', '비활성 세션을 닫는 건 현재 활성 세션에 영향을 주면 안 된다');
+  assert.strictEqual(window.orderedSessionIds().join(','), 'b');
 });
 
-test('모바일 세션 관리: 탭이 보이지 않아도 세션 전환과 닫기가 가능하다', async () => {
+test('모바일 세션 관리: 좁은 화면에서도 세션 전환과 닫기가 가능하다', async () => {
   const { window, addSession, getAction } = await buildTerminalWindow();
   addSession('a', '첫 세션');
   addSession('b', '둘째 세션');
@@ -238,7 +233,7 @@ test('모바일 세션 관리: 탭이 보이지 않아도 세션 전환과 닫�
   assert.strictEqual(window.sessions.b, undefined, '시트에서도 개별 세션을 닫을 수 있어야 한다');
 });
 
-test('모바일 세션 관리: 이름 변경은 탭과 진입점에 함께 반영된다', async () => {
+test('모바일 세션 관리: 이름 변경은 레코드와 진입점에 함께 반영된다', async () => {
   const { window, addSession, getAction } = await buildTerminalWindow();
   addSession('a', '이전 이름');
   window.prompt = () => '새 이름';
@@ -246,20 +241,20 @@ test('모바일 세션 관리: 이름 변경은 탭과 진입점에 함께 반�
   window.document.querySelector('.vt-session-action').click();
   await new Promise(resolve => setTimeout(resolve, 0));
 
-  assert.strictEqual(window.document.querySelector('.tab-name').textContent, '새 이름');
+  assert.strictEqual(window.sessionDisplayName('a'), '새 이름');
   assert.strictEqual(window.document.getElementById('voice-session-picker').textContent, '새 이름');
 });
 
-test('탭 더블클릭 이름 변경도 공용 API 요청을 보낸다', async () => {
-  const { window, addSession } = await buildTerminalWindow();
+test('이름 변경은 공용 API 요청을 보내고 레코드를 갱신한다', async () => {
+  // N37 3단계 전에는 탭 이름 더블클릭이 이 경로의 진입점이었다. 그 DOM은
+  // 사라졌고, 지금 진입점은 레일 세션 행·세션 시트·팔레트다 — 셋 다 같은
+  // renameSession()을 부르므로 여기서는 그 함수를 직접 검증한다.
+  const { window, addSession, renameSession } = await buildTerminalWindow();
   addSession('a', '이전 이름');
-  const name = window.document.querySelector('.tab-name');
-  name.ondblclick({ stopPropagation() {} });
-  name.textContent = '바꾼 이름';
-  name.onblur();
-  await new Promise(resolve => setTimeout(resolve, 0));
+  await renameSession('a', '바꾼 이름');
 
   const renameRequest = window.__fetches.find(([url, options]) => String(url).endsWith('/api/sessions/a') && options?.method === 'PATCH');
-  assert.ok(renameRequest, '편집된 탭 이름은 PATCH API로 저장돼야 한다');
+  assert.ok(renameRequest, '바뀐 이름은 PATCH API로 저장돼야 한다');
   assert.strictEqual(JSON.parse(renameRequest[1].body).name, '바꾼 이름');
+  assert.strictEqual(window.sessionDisplayName('a'), '바꾼 이름');
 });

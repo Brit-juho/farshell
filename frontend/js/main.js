@@ -49,7 +49,6 @@ import './term/tab-worktree.js';  // 10 §4 1단계 — 탭 이름을 워크트�
 import './term/remote.js';   // N7/N39 3단계 — 원격 세션 attach(window 브리지 등록)
 import './term/selection.js';
 import './term/xterm-setup.js';
-import './term/tab-dom.js';
 import './term/workspace.js';
 import './term/conn-overlay.js';
 import './term/keybar.js';

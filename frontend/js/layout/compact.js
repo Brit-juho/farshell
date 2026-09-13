@@ -12,7 +12,7 @@
 import { _isCoarsePointer } from '../core/env.js';
 import { COMPACT_MAX } from './breakpoints.js';
 import { getTree, getActivePaneId, setActivePane } from './store.js';
-import { allSessions, activeSessionId } from '../core/store.js';
+import { orderedSessionIds, activeSessionId } from '../core/store.js';
 import { switchTo } from '../term/session.js';
 
 export function isCompactMode() {
@@ -45,14 +45,11 @@ export function stepActivePane(delta) {
 // (§8-a "좌우 스와이프로 세션 전환"). 한 제스처가 "화면에 실제로 보이는 것
 // 중 다음 것"으로 넘어간다는 의미는 두 경우 모두 같다.
 //
-// 순서는 탭 DOM 순서를 그대로 따른다 — 사용자가 드래그로 정렬한 그 순서가
-// 화면에 보이는 유일한 순서라 core/store.js의 객체 키 순서(삽입순)를 쓰면
-// 재정렬 후 손맛이 어긋난다. 탭 DOM이 없는 환경(단위 테스트 등)에서는
-// 세션 스토어 순서로 폴백한다.
+// 순서의 출처는 세션 레코드다(core/store.js의 order — N37 3단계 3/n). 예전엔
+// 탭 DOM 순서를 읽었는데, 그 DOM은 6/n에서 사라졌다. 재정렬(드래그·단축키)의
+// 결과가 곧 이 배열이므로 손맛은 그대로다.
 export function sessionOrder() {
-  const tabs = document.querySelectorAll('#tabs .tab');
-  if (tabs.length) return Array.from(tabs).map((t) => t.dataset.sessionId).filter(Boolean);
-  return Object.keys(allSessions());
+  return orderedSessionIds();
 }
 
 // 순수 선택 로직만 따로 둔다(단위 테스트 대상) — switchTo는 탭 DOM·xterm이
