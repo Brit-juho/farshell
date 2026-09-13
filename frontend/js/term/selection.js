@@ -5,6 +5,7 @@ import { get as setting } from '../core/settings.js';
 import { copyToClipboard, pasteFromClipboard, pasteImageUpload } from './clipboard.js';
 import { getSession } from '../core/store.js';
 import { getAction } from '../core/dom.js';
+import { wireKittyKeyboard, encodeKey } from './kitty-keys.js';
 
 export function wireClipboard(id, term, wrapper) {
   // 1) copy-on-select — 드래그(브라우저 선택) 끝나면 자동 복사.
@@ -58,10 +59,23 @@ export function wireClipboard(id, term, wrapper) {
   // 물어보고 실행은 이 자리에서 한다(document 리스너로 옮기면 xterm이 먼저
   // 먹어서 PTY에 이스케이프가 흘러간다).
   // passthrough가 켜져 있으면 true를 반환해 터미널로도 흘린다.
+  // N12 — kitty 키보드 프로토콜. 앱이 모드를 켰을 때만 동작한다(협상 2층).
+  const kitty = wireKittyKeyboard(term);
+
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== 'keydown') return true;
     const hit = matchKey(e);
-    if (!hit) return true;
+    if (!hit) {
+      // 우리 단축키가 아닌 키만 프로토콜 인코딩 대상이다 — 순서가 반대면
+      // 앱이 모드를 켠 동안 Mod+K 같은 UI 단축키가 PTY로 새어 나간다.
+      const seq = encodeKey(e, kitty.flags);
+      if (seq) {
+        e.preventDefault();
+        term.input(seq, true);
+        return false;
+      }
+      return true;
+    }
     if (hit.id === 'paste') {
       if (!hit.passthrough) e.preventDefault();
       pasteFromClipboard(id);
