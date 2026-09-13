@@ -26,9 +26,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-# 이 어댑터가 이해하는 피드 스키마 버전. 모르는 버전이면 **파싱을 포기한다** —
+# 이 어댑터가 이해하는 피드 스키마 버전들. 모르는 버전이면 **파싱을 포기한다** —
 # 필드 의미가 바뀌었을 수 있는데 추측으로 그리면 숫자가 조용히 틀린다.
-SUPPORTED_SCHEMA = 1
+#
+# 하나만 지원하면 clauth를 올릴 때마다 사용량이 통째로 꺼진다(실제로 schema 2가
+# 나오면서 이 맥에서 사용량 탭·HUD 칩이 사라졌고, 온보딩 버그를 쫓다가 우연히
+# 발견했다 — 조용히 꺼지는 실패는 아무도 신고하지 않는다). 2는 1에 필드를
+# 더하기만 했고(pending_switch·wrap_off·fetched_at·next_refresh_at·auto_start 등)
+# 이 어댑터가 읽는 필드의 의미는 그대로라, 같은 정규화 경로로 처리한다.
+SUPPORTED_SCHEMAS = (1, 2)
+SUPPORTED_SCHEMA = SUPPORTED_SCHEMAS[-1]  # 하위호환(외부 참조용)
 
 DEFAULT_REFRESH_MS = 90_000
 
@@ -61,6 +68,8 @@ class ClauthProvider:
         self._cache_mtime: Optional[float] = None
         self._cache: Optional[dict] = None
         self._cache_error: Optional[str] = None
+        # 모르는 schema를 만났을 때 그 값. 설정 화면 안내에만 쓴다.
+        self._schema_seen = None
 
     # ── 원본 읽기 ────────────────────────────────────────────────────────
     def _read_raw(self) -> tuple[Optional[dict], Optional[str]]:
@@ -93,9 +102,13 @@ class ClauthProvider:
         if not isinstance(data, dict):
             self._cache_mtime, self._cache, self._cache_error = st.st_mtime, None, "broken"
             return None, "broken"
-        if data.get("schema") != SUPPORTED_SCHEMA:
+        if data.get("schema") not in SUPPORTED_SCHEMAS:
+            # 모르는 버전은 계속 조용히 끄되(추측해서 그리느니 안 그리는 게 낫다),
+            # 「본 schema 값」을 남긴다 — 설정 화면이 이걸 그대로 보여준다.
+            self._schema_seen = data.get("schema")
             self._cache_mtime, self._cache, self._cache_error = st.st_mtime, None, "schema"
             return None, "schema"
+        self._schema_seen = None
 
         self._cache_mtime, self._cache, self._cache_error = st.st_mtime, data, None
         return data, None
@@ -166,6 +179,12 @@ class ClauthProvider:
     def capability(self) -> dict:
         data, err = self._read_raw()
         if data is None:
-            return {"available": False, "provider": self.name, "profiles": 0, "reason": err or "no-feed"}
+            cap = {"available": False, "provider": self.name, "profiles": 0, "reason": err or "no-feed"}
+            if err == "schema":
+                # 값 하나뿐이고 민감정보가 아니다(피드 버전 번호). 지원 범위와 함께
+                # 내려야 사용자가 "clauth를 올려야 하나 fsh를 올려야 하나"를 판단한다.
+                cap["schema_seen"] = self._schema_seen
+                cap["schema_supported"] = list(SUPPORTED_SCHEMAS)
+            return cap
         profiles = [p for p in (data.get("profiles") or []) if isinstance(p, dict)]
         return {"available": True, "provider": self.name, "profiles": len(profiles)}
