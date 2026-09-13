@@ -725,13 +725,16 @@ body.voice-only-mode #mic-status {
    온보딩이 레일 위 절반과 dock 전체를 덮어 클릭이 안 먹었다). 값은 언제나
    body의 padding 규칙과 정확히 같아야 하므로 같은 변수를 읽는다 — 접힘·폭
    변경이 자동으로 따라온다. */
+/* 2.1.2 — `.no-right-rail` 예외를 걷어냈다. 그 클래스는 **2.0의 우측 사용량
+   레일**이 없을 때 붙던 것인데, 2.1의 dock은 사용량 소스와 무관하게 항상
+   오른쪽에 있다. 그래서 clauth가 없거나 그 파일 스키마가 바뀐 환경(=그냥
+   usage가 꺼진 흔한 환경)에서 온보딩이 dock 전체를 덮어 클릭이 안 먹었다
+   — 실브라우저 스모크가 잡았다. */
 @media (min-width:720px) {
   .vt-onboarding { left:var(--vt-wgrail-w, 252px); right:36px; }
-  body.no-right-rail .vt-onboarding { right:0; }
 }
 @media (min-width:1280px) {
   .vt-onboarding { right:var(--vt-dock-w, 392px); }
-  body.no-right-rail .vt-onboarding { right:0; }
   body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(var(--vt-wgrail-w, 252px) + var(--vt-rail-panel-w, 280px)); }
 }
 /* L7: 실브라우저 검증 중 발견한 같은 종류의 회귀 2건(위 L4 회귀와 원인이
@@ -2485,12 +2488,14 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 }
 @media (min-width:720px) {
   #vt-dock { display:flex; }
-  body:not(.no-right-rail) { padding-right:calc(env(safe-area-inset-right) + 36px) !important; }
+  /* 같은 이유로 `:not(.no-right-rail)`을 뺐다 — usage 유무와 무관하게 dock은
+     항상 이 자리를 차지한다. 안 그러면 본문이 dock 밑으로 흘러 들어간다. */
+  body { padding-right:calc(env(safe-area-inset-right) + 36px) !important; }
   /* regular에서 펼친 dock은 본문 위에 뜬다 — 오버레이임을 그림자로 알린다. */
   #vt-dock:not(.collapsed) { box-shadow:0 0 24px rgba(0,0,0,.35); }
 }
 @media (min-width:1280px) {
-  body:not(.no-right-rail) { padding-right:calc(env(safe-area-inset-right) + var(--vt-dock-w, 392px)) !important; }
+  body { padding-right:calc(env(safe-area-inset-right) + var(--vt-dock-w, 392px)) !important; }
   #vt-dock:not(.collapsed) { box-shadow:none; }
 }
 
