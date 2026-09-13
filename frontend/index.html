@@ -144,6 +144,11 @@
     <!-- tab이 많아지면 #tabs는 flex 축소 대상(min-width:0)이라 0px까지 눌릴 수 있다.
          add-btn/chevron을 그 안에 두면 탭과 함께 사라져 좁은 화면에서 "새 세션" 자체가
          막힌다 — 항상 보여야 하는 컨트롤이라 #tabs 밖(flex-shrink:0 형제)으로 둔다. -->
+    <!-- 10-shell-layout.md §4 2단계 — **탭 = 열려 있는 워크트리**. 탭마다 자기
+         pane 트리를 가진다(layout/store.js의 탭 집합). 아래 #tabs는 그 탭 안의
+         **세션 목록**으로 남는다 — 세션 배지·이름 편집·드래그를 읽는 코드가
+         전부 그 DOM을 보고 있어서 없애지 않았다(레일 행·에이전트 배지 등). -->
+    <div id="vt-wtabs" role="tablist" aria-label="워크트리 탭"></div>
     <div id="tabs"></div>
     <div id="add-btn" data-action="session.add-menu" title="새 세션 (일반 터미널 / tmux)" role="button" tabindex="0" aria-haspopup="true" aria-label="새 세션">+</div>
     <div class="wt-chevron" data-action="session.tmux-list" title="세션 프로파일" role="button" tabindex="0" aria-label="세션 프로파일">

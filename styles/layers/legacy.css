@@ -2684,3 +2684,29 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
   padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
   font:400 var(--fs-xs) var(--mono); color:var(--sub);
 }
+
+/* 10-shell-layout.md §4 2단계 — 워크트리 탭 바. 아래 세션 탭(#tabs)과 한 줄에
+   같이 서므로 시각적으로 한 단계 위로 읽혀야 한다: 활성 탭만 강조색 밑줄. */
+#vt-wtabs{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); flex:0 0 auto;
+  max-width:40%; overflow-x:auto; scrollbar-width:none;
+}
+#vt-wtabs[hidden]{ display:none; }
+#vt-wtabs::-webkit-scrollbar{ display:none; }
+.vt-wtab{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1);
+  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2); cursor:pointer; white-space:nowrap;
+  border-bottom:2px solid transparent; color:var(--sub);
+  font:500 var(--fs-xs) var(--mono); border-radius:var(--radius-sm) var(--radius-sm) 0 0;
+}
+.vt-wtab:hover{ background:var(--menu-hover); color:var(--txt); }
+.vt-wtab.active{ color:var(--txt); border-bottom-color:var(--acc); }
+.vt-wtab-name{ overflow:hidden; text-overflow:ellipsis; max-width:18ch; }
+.vt-wtab-close{
+  border:0; background:transparent; color:var(--sub); cursor:pointer; padding:0 2px;
+  display:inline-flex; align-items:center; border-radius:var(--radius-sm); opacity:.6;
+}
+.vt-wtab:hover .vt-wtab-close{ opacity:1; }
+.vt-wtab-close:hover{ background:var(--tab); color:var(--err); }
+/* 다른 워크트리 탭에 속한 세션 탭은 숨긴다 — 탭 안의 세션 줄이라는 뜻이 된다. */
+#tabs .tab.other-wtab{ display:none; }

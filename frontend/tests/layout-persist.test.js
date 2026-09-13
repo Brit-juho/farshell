@@ -167,8 +167,12 @@ test('복원 전에는 저장하지 않는다 — 빈 초기 트리로 정본을
   const puts = calls.filter((c) => c.url.includes('/api/workspace') && c.opts && c.opts.method === 'PUT');
   assert.strictEqual(puts.length, 1);
   const body = JSON.parse(puts[0].opts.body);
-  assert.strictEqual(body.ui.layout.v, 1);
-  assert.strictEqual(body.ui.layout.tree.t, 'split');
+  // 10 §4 2단계에서 스키마가 v2(탭 배열)로 올라갔다. v1 필드(tree/active)는
+  // **롤백용으로 계속 적는다** — 2.1.2를 되돌리면 옛 코드가 이 스냅샷을 읽는다.
+  assert.strictEqual(body.ui.layout.v, 2);
+  assert.strictEqual(body.ui.layout.tree.t, 'split', '롤백용 v1 필드가 유지돼야 한다');
+  assert.strictEqual(body.ui.layout.tabs.length, 1);
+  assert.strictEqual(body.ui.layout.tabs[0].tree.t, 'split');
   assert.ok(window.localStorage.getItem('vt-layout-v1'), 'localStorage에도 같이 써야 한다');
 });
 
@@ -340,4 +344,58 @@ test('C3 — 세션이 실제로 붙으면 unreachable 표시는 사라진다', 
   S.setPaneSession('live-remote', rootId);
   assert.strictEqual(S.getTree().session, 'live-remote');
   assert.strictEqual(S.getTree().unreachable, undefined);
+});
+
+// ── 10 §4 2단계 — v1 → v2(탭별 트리) 마이그레이션 ────────────────────────────
+
+test('v2 — 탭이 여러 개면 각 탭의 트리를 따로 복원한다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-dev', 'dev');
+  addLive(core, 'live-build', 'build');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 2, savedAt: 100, activeTab: 'tb',
+    tabs: [
+      { id: 'ta', worktreeId: null, label: '작업 공간', active: 'p1',
+        tree: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'dev' } } },
+      { id: 'tb', worktreeId: 'wt-9', label: 'repo/feat', active: 'p2',
+        tree: { t: 'leaf', id: 'p2', session: { id: 'y', tmux: 'build' } } },
+    ],
+  }));
+
+  await P.restoreLayout();
+  assert.strictEqual(S.getTabs().length, 2);
+  assert.strictEqual(S.getActiveTabId(), 'tb');
+  assert.strictEqual(S.getTree().session, 'live-build', '활성 탭의 트리가 올라와야 한다');
+  S.switchLayoutTab('ta');
+  assert.strictEqual(S.getTree().session, 'live-dev');
+});
+
+test('v1 스냅샷은 탭 1개짜리 v2와 같은 뜻이다 (옛 스냅샷 승격)', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-dev', 'dev');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'dev' } },
+  }));
+  await P.restoreLayout();
+  assert.strictEqual(S.getTabs().length, 1);
+  assert.strictEqual(S.getTree().session, 'live-dev');
+});
+
+test('같은 세션이 두 탭에 동시에 배정되지 않는다 (wrapper는 하나뿐이다)', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-dev', 'dev');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 2, savedAt: 100, activeTab: 'ta',
+    tabs: [
+      { id: 'ta', worktreeId: null, label: 'a', active: 'p1',
+        tree: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'dev' } } },
+      { id: 'tb', worktreeId: 'wt-1', label: 'b', active: 'p2',
+        tree: { t: 'leaf', id: 'p2', session: { id: 'x2', tmux: 'dev' } } },
+    ],
+  }));
+  await P.restoreLayout();
+  assert.strictEqual(S.getTree().session, 'live-dev');
+  S.switchLayoutTab('tb');
+  assert.strictEqual(S.getTree().session, null, '두 번째 탭까지 같은 세션을 가져가면 안 된다');
 });
