@@ -12,7 +12,8 @@
 import { getTabs, getActiveTabId, switchLayoutTab, closeLayoutTab, openLayoutTab, onLayoutChange } from './store.js';
 import { allSessions } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
-import { icon } from '../ui/icons.js';
+import { icon, agentIcon } from '../ui/icons.js';
+import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
 
 const HOST = 'vt-wtabs';
 
@@ -33,6 +34,7 @@ let _worktreeSessions = new Map();   // tmux 세션 이름 → worktreeId
 export function setWorktreeSessionMap(map) {
   _worktreeSessions = map || new Map();
   applySessionFilter();
+  paintTabs();
 }
 
 export function applySessionFilter() {
@@ -44,6 +46,71 @@ export function applySessionFilter() {
     if (!el) continue;
     const tmux = s.tmuxName || s.tmux_name || null;
     el.classList.toggle('other-wtab', !sessionBelongsToTab(tmux, tab.worktreeId, _worktreeSessions));
+  }
+}
+
+// ── 탭 하나의 상태 ─────────────────────────────────────────────────────────
+// 10-shell-layout.md §4: 탭 구성은 `[에이전트 마크][이름][상태 dot][읽지 않음]`.
+// 탭은 워크트리라 세션이 여럿일 수 있으므로 **가장 급한 것 하나**로 접는다
+// (레일 워크트리 행과 같은 규칙 — 두 화면이 다른 말을 하면 안 된다).
+
+/** 이 탭에 속한 tmux 세션 이름들. 필터(sessionBelongsToTab)와 같은 판정이다. */
+function tabSessionNames(tab) {
+  const out = [];
+  for (const s of Object.values(allSessions())) {
+    const tmux = s && (s.tmuxName || s.tmux_name);
+    if (!tmux) continue;
+    if (sessionBelongsToTab(tmux, tab.worktreeId, _worktreeSessions)) out.push(tmux);
+  }
+  return out;
+}
+
+export function mostUrgent(statuses) {
+  let best = 'idle';
+  for (const st of statuses) {
+    if ((URGENCY[st] ?? 9) < (URGENCY[best] ?? 9)) best = st;
+  }
+  return best;
+}
+
+let _agents = {};   // tmux 세션 이름 → { agent, label } (agent/status.js가 준다)
+
+/** agent/badges.js가 스냅샷을 받을 때마다 알려준다 — 같은 응답을 두 번 조회하지 않는다. */
+export function setAgentInfo(agents) {
+  _agents = agents || {};
+  paintTabs();
+}
+
+function paintTabs() {
+  const host = document.getElementById(HOST);
+  if (!host) return;
+  for (const el of host.querySelectorAll('.vt-wtab')) {
+    const tab = getTabs().find((t) => t.id === el.dataset.tabId);
+    if (!tab) continue;
+    const names = tabSessionNames(tab);
+    const status = mostUrgent(names.map((n) => getStatus(n)));
+
+    // 에이전트 마크 — 이 탭에서 돌고 있는 CLI. 여럿이면 첫 번째만(마크는
+    // "무엇이 돌고 있나"의 힌트이지 목록이 아니다. 목록은 레일이 보여준다).
+    const mark = el.querySelector('.vt-wtab-agent');
+    const info = names.map((n) => _agents[n]).find((i) => i && i.agent);
+    if (mark) {
+      mark.innerHTML = info ? agentIcon(info.agent) : '';
+      if (info && info.label) mark.title = info.label; else mark.removeAttribute('title');
+    }
+
+    // 상태 dot — idle이면 안 그린다(세션 탭과 같은 규칙: "아무 일도 없음"은
+    // 기본값이라 표시할 필요가 없다. 상시로 붙은 회색 점은 노이즈다).
+    const dotHost = el.querySelector('.vt-wtab-marks');
+    if (dotHost) {
+      if (!status || status === 'idle') dotHost.querySelector(':scope > .status-dot')?.remove();
+      else applyStatusDot(dotHost, status);
+    }
+
+    // 읽지 않음 — done인데 아직 이 기기에서 본 적 없는 세션이 하나라도 있으면.
+    // dot(=지금 상태)과 뜻이 다르므로 둘 다 뜬다.
+    const unread = el.querySelector('.vt-wtab-unread');
+    if (unread) unread.hidden = !names.some((n) => isUnseen(n));
   }
 }
 
@@ -65,10 +132,27 @@ function render() {
     el.setAttribute('aria-selected', String(t.id === activeId));
     el.tabIndex = t.id === activeId ? 0 : -1;
 
+    const mark = document.createElement('span');
+    mark.className = 'vt-wtab-agent';
+    el.appendChild(mark);
+
     const name = document.createElement('span');
     name.className = 'vt-wtab-name';
     name.textContent = t.label;
     el.appendChild(name);
+
+    // dot과 「읽지 않음」은 이름 뒤·닫기 앞이라는 순서가 고정돼야 한다 —
+    // 상태가 바뀔 때마다 위치가 움직이면 닫기 버튼을 잘못 누르게 된다.
+    const marks = document.createElement('span');
+    marks.className = 'vt-wtab-marks';
+    el.appendChild(marks);
+
+    const unread = document.createElement('span');
+    unread.className = 'vt-wtab-unread';
+    unread.hidden = true;
+    unread.title = '완료됐지만 아직 확인하지 않았습니다';
+    unread.setAttribute('aria-label', '읽지 않음');
+    el.appendChild(unread);
 
     if (tabs.length > 1) {
       const x = document.createElement('button');
@@ -90,6 +174,7 @@ function render() {
     host.appendChild(el);
   }
   applySessionFilter();
+  paintTabs();
 }
 
 /** 워크트리를 탭으로 연다(레일·팔레트가 부른다). 이미 열려 있으면 전환만. */
@@ -100,8 +185,12 @@ export function openWorktreeTab(worktreeId, label) {
 }
 
 onLayoutChange(render);
+// 상태가 바뀌면 탭 마크만 다시 칠한다(다시 그리지 않는다 — 렌더는 DOM을
+// 통째로 갈아 끼우므로 클릭 중에 탭이 사라질 수 있다).
+onStatusChange(paintTabs);
 render();
 
 // 지연 청크(shell/Rail.tsx)가 정적 import 없이 부를 수 있게 — 이 저장소의 관행.
 window.openWorktreeTab = openWorktreeTab;
 window.vtApplySessionFilter = applySessionFilter;
+window.vtSetTabAgentInfo = setAgentInfo;
