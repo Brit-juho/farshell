@@ -6,7 +6,8 @@
 // 반대로 saveWorkspace를 부른다 — 상호 import(순환)이지만 전부 이벤트 콜백 안에서만
 // 쓰여 모듈 평가 시점엔 실행되지 않으므로 안전하다(ES 모듈 circular import는
 // 라이브 바인딩이라 호출 시점에만 실제로 존재하면 된다).
-import { allSessions, getSession, activeSessionId } from '../core/store.js';
+import { allSessions, getSession, activeSessionId, orderedSessionIds,
+  sessionDisplayName, setSessionOrder } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { addSession, switchTo } from './session.js';
@@ -16,13 +17,13 @@ const WORKSPACE_KEY = 'vt-workspace-v1';
 
 export function saveWorkspace() {
   try {
-    const tabs = Array.from(document.querySelectorAll('#tabs .tab')).map(tab => {
-      const id = tab.dataset.sessionId;
+    // 순서·이름 모두 레코드가 출처다(N37 3단계). 탭 DOM을 읽던 시절엔 탭 줄이
+    // 필터로 숨겨진 세션까지 스냅샷에서 통째로 빠질 위험이 있었다.
+    const tabs = orderedSessionIds().map(id => {
       const s = getSession(id);
-      const nameSpan = tab.querySelector('.tab-name');
       return {
         id,
-        name: nameSpan ? nameSpan.textContent : '',
+        name: sessionDisplayName(id),
         tmux_name: s && s.tmuxName ? s.tmuxName : null,
         // N7/N39 3단계 — 호스트를 안 적으면 복원이 **로컬의 같은 이름** tmux
         // 세션에 붙어버린다(이름은 호스트마다 겹친다).
@@ -46,6 +47,9 @@ export async function restoreWorkspace() {
     let restored = 0;
     let failed = 0;
     let firstNewId = null;
+    // 스냅샷의 순서를 그대로 세션 순서로 되돌린다 — tmux 탭은 attach마다 새
+    // 웹 id를 받으므로 "복원된 순서대로 모은 id 목록"이 유일한 연결고리다.
+    const restoredOrder = [];
     // tmux_name이 없는(순수 PTY) 탭은 서버가 재시작되지 않은 한 session_store에
     // 그대로 살아있을 수 있다 — /api/sessions로 살아있는 id 목록을 한 번에 확인.
     // 서버 응답의 tmux_name도 함께 들고 있는다 — 스냅샷에 tmux_name이 비어
@@ -70,7 +74,7 @@ export async function restoreWorkspace() {
         // layout/persist.js의 unreachable(C3)이 자리를 지킨다.
         try {
           const id = await attachRemoteSession(tab.host, tab.tmux_name);
-          if (id) { if (!firstNewId) firstNewId = id; restored++; } else { failed++; }
+          if (id) { if (!firstNewId) firstNewId = id; restoredOrder.push(id); restored++; } else { failed++; }
         } catch (_) { failed++; }
         continue;
       }
@@ -91,6 +95,7 @@ export async function restoreWorkspace() {
                 if (s) s.tmuxName = tab.tmux_name;
                 if (!firstNewId) firstNewId = data.id;
               }
+              restoredOrder.push(data.id);
               restored++;
             } else { failed++; }
           } else { failed++; }
@@ -105,12 +110,14 @@ export async function restoreWorkspace() {
           }
           const rec = getSession(tab.id);
           if (rec && !rec.tmuxName && liveTmuxNames.has(tab.id)) rec.tmuxName = liveTmuxNames.get(tab.id);
+          restoredOrder.push(tab.id);
           restored++;
         } else {
           failed++;
         }
       }
     }
+    if (restoredOrder.length > 0) setSessionOrder(restoredOrder);
     if (failed > 0) {
       showToast(`탭 ${failed}개 복원 실패 (세션이 이미 종료됨)`);
     }

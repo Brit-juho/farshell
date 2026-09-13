@@ -11,6 +11,12 @@
 // 추적이 불가능해지는 지점은 정확히 그 구조적 변경이었다.
 
 const sessions = {};
+// 세션 **순서**의 단일 출처(N37 3단계). 2.1.3까지 순서의 출처는 `#tabs .tab`의
+// DOM 순서였다 — 좌우 순환(switchTabByOffset)도, 워크스페이스 스냅샷 저장도
+// 그 DOM을 읽었다. 세션 탭 줄이 사라지면 그 출처도 같이 사라지므로 명시적
+// 배열로 옮긴다. `sessions` 객체의 삽입 순서를 쓰지 않는 이유: 재정렬(드래그·
+// 단축키)이 키 순서를 못 바꾼다 — 바꾸려면 객체를 통째로 다시 만들어야 한다.
+const order = [];
 let activeId = null;
 const subscribers = new Set();
 
@@ -76,13 +82,71 @@ export function setActive(id) {
 // 세션 생성 — terminal.js의 addSession()이 xterm/WS/DOM을 다 갖춘 rich object를
 // 만든 뒤 등록한다. 이후 필드 mutation은 getSession(id)로 얻은 참조에 직접 한다
 // (같은 객체이므로 스토어에도 즉시 반영된다).
-export function registerSession(id, data) {
+export function registerSession(id, data, insertBeforeId) {
   sessions[id] = data;
+  const at = insertBeforeId ? order.indexOf(insertBeforeId) : -1;
+  const cur = order.indexOf(id);
+  if (cur !== -1) order.splice(cur, 1);
+  if (at === -1) order.push(id);
+  else order.splice(at, 0, id);
   notify();
 }
 
 export function removeSessionRecord(id) {
   delete sessions[id];
+  const at = order.indexOf(id);
+  if (at !== -1) order.splice(at, 1);
+  notify();
+}
+
+/**
+ * 세션 순서 — **단일 출처**. 스토어에 실제로 존재하는 것만 돌려준다
+ * (레코드 없이 order에만 남는 유령 id는 방어적으로 걸러낸다).
+ */
+export function orderedSessionIds() {
+  return order.filter((id) => !!sessions[id]);
+}
+
+/**
+ * `draggedId`를 `targetId`의 앞(또는 `after=true`면 뒤)으로 옮긴다.
+ * 반환값은 순서가 실제로 바뀌었는지 여부 — 호출자가 불필요한 저장을 피할 수 있다.
+ */
+export function moveSessionBefore(draggedId, targetId, after = false) {
+  const from = order.indexOf(draggedId);
+  if (from === -1 || draggedId === targetId) return false;
+  const before = order.slice();
+  order.splice(from, 1);
+  let at = order.indexOf(targetId);
+  if (at === -1) at = order.length;
+  else if (after) at += 1;
+  order.splice(at, 0, draggedId);
+  const changed = before.some((id, i) => id !== order[i]);
+  if (changed) notify();
+  return changed;
+}
+
+/** 현재 세션을 delta(-1/+1)만큼 순서상에서 밀어낸다. 끝에서는 멈춘다(순환하지 않는다 —
+ *  재정렬이 순환하면 "끝까지 밀었다"는 걸 알 수 없다). */
+export function moveSessionByOffset(id, delta) {
+  const ids = orderedSessionIds();
+  const i = ids.indexOf(id);
+  if (i === -1) return false;
+  const j = i + delta;
+  if (j < 0 || j >= ids.length) return false;
+  return moveSessionBefore(id, ids[j], delta > 0);
+}
+
+/** 워크스페이스 복원처럼 "순서 전체"를 한 번에 정하는 경우. 목록에 없는 기존
+ *  세션은 뒤에 그대로 남긴다(복원 중 새로 생긴 세션을 잃지 않는다). */
+export function setSessionOrder(ids) {
+  const seen = new Set();
+  const next = [];
+  for (const id of ids) {
+    if (sessions[id] && !seen.has(id)) { seen.add(id); next.push(id); }
+  }
+  for (const id of order) if (!seen.has(id)) { seen.add(id); next.push(id); }
+  order.length = 0;
+  order.push(...next);
   notify();
 }
 
@@ -101,6 +165,7 @@ window.getSession = getSession;
 window.activeSession = activeSession;
 window.activeSessionId = activeSessionId;
 window.allSessions = allSessions;
+window.orderedSessionIds = orderedSessionIds;
 window.setActive = setActive;
 window.registerSession = registerSession;
 window.sessionDisplayName = sessionDisplayName;
