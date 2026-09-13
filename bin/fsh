@@ -130,6 +130,83 @@ _is_running() {
   [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null
 }
 
+# N28 — "서버가 옛 코드로 돌고 있음" 경고.
+#
+# 파이썬은 import 시점에 모듈을 메모리에 올린다. 그래서 코드를 고쳐도 서버를
+# 재시작하지 않으면 **고친 코드가 전혀 반영되지 않는다** — 2026-09-09에
+# 붙여넣기 잘림을 몇 시간 동안 코드 버그로 쫓았는데, 실제 원인은 서버가
+# 수정 8시간 51분 전에 뜬 프로세스였다는 것이다. 재발 방지책.
+#
+# 결과를 stdout으로 돌려주고(빈 문자열이면 문제 없음) 호출자가 배치한다.
+_stale_server_warning() {
+  local pidfile="$PID_DIR/server.pid" pid
+  [ -f "$pidfile" ] || return 0
+  pid="$(cat "$pidfile" 2>/dev/null)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 0
+  "${VT_PYTHON:-python3}" - "$pid" "$VT_DIR/server" <<'PYEOF' 2>/dev/null
+import os, subprocess, sys, time
+
+pid, server_dir = sys.argv[1], sys.argv[2]
+
+# 프로세스 시작 시각. `etimes`(초)는 Linux 전용이고 **macOS ps에는 없다** —
+# 그쪽은 `etime`([[dd-]hh:]mm:ss)을 파싱한다. 못 재면 아무 말도 하지 않는다
+# (틀린 경고가 침묵보다 나쁘다).
+def _elapsed_seconds(pid):
+    try:
+        out = subprocess.run(["ps", "-o", "etimes=", "-p", pid],
+                             capture_output=True, text=True, timeout=3).stdout.strip()
+        if out.isdigit():
+            return int(out)
+    except Exception:
+        pass
+    try:
+        out = subprocess.run(["ps", "-o", "etime=", "-p", pid],
+                             capture_output=True, text=True, timeout=3).stdout.strip()
+    except Exception:
+        return None
+    if not out:
+        return None
+    days, _, clock = out.rpartition("-")
+    parts = [int(x) for x in clock.split(":")]
+    while len(parts) < 3:
+        parts.insert(0, 0)
+    h, m, sec = parts
+    return ((int(days) if days else 0) * 86400) + h * 3600 + m * 60 + sec
+
+
+elapsed = _elapsed_seconds(pid)
+if elapsed is None:
+    sys.exit(0)
+started = time.time() - elapsed
+
+newest, newest_name = 0.0, ""
+for root, dirs, files in os.walk(server_dir):
+    dirs[:] = [d for d in dirs if d not in ("__pycache__", "tests", ".venv")]
+    for f in files:
+        if not f.endswith(".py"):
+            continue
+        try:
+            m = os.stat(os.path.join(root, f)).st_mtime
+        except OSError:
+            continue
+        if m > newest:
+            newest, newest_name = m, os.path.relpath(os.path.join(root, f), server_dir)
+
+# 여유 10초 — 서버가 뜨는 순간 자기 소스를 건드리는 경우(설치 스크립트 등)까지
+# 경고로 만들지 않는다.
+if newest > started + 10:
+    gap = newest - started
+    if gap < 3600:
+        ago = f"{int(gap / 60)}분"
+    elif gap < 86400:
+        ago = f"{gap / 3600:.1f}시간"
+    else:
+        ago = f"{gap / 86400:.1f}일"
+    print(f"서버가 옛 코드로 돌고 있습니다 — {newest_name}가 서버 시작보다 "
+          f"{ago} 뒤에 바뀌었습니다. `fsh stop && fsh start`로 재시작하세요.")
+PYEOF
+}
+
 _port_in_use() {
   "$VT_PYTHON" -c "import socket;s=socket.socket();s.settimeout(1);exit(0 if s.connect_ex(('127.0.0.1',$1))==0 else 1)" 2>/dev/null
 }
@@ -2127,6 +2204,17 @@ cmd_doctor() {
     _check "port $VT_PORT" ok "사용 가능"
   fi
 
+  # 7-1. N28 — 실행 중인 서버가 옛 코드를 붙들고 있지 않은지.
+  # 파이썬은 import 시점에 모듈을 올리므로 재시작 없이는 수정이 반영되지 않는다.
+  # "고쳤는데 왜 그대로냐"를 몇 시간 쫓은 실제 사건(2026-09-09)의 재발 방지책.
+  local _stale
+  _stale="$(_stale_server_warning)"
+  if [ -n "$_stale" ]; then
+    _check "서버 코드 최신성" warn "$_stale"
+  elif _is_running server; then
+    _check "서버 코드 최신성" ok "실행 중인 서버가 현재 코드로 떠 있습니다"
+  fi
+
   # 8. fsh CLI 심링크
   if [ -L "$HOME/.local/bin/fsh" ]; then
     _check "fsh CLI" ok "~/.local/bin/fsh"
@@ -3488,6 +3576,8 @@ cmd_status() {
   if _port_in_use $VT_PORT; then
     server_status="✓ 실행 중 (port $VT_PORT)"
   fi
+  local stale_warn
+  stale_warn="$(_stale_server_warning)"
 
   # Phase 8 G1: cloudflared 정밀 표시
   local tunnel_installed="✗"
@@ -3532,6 +3622,7 @@ cmd_status() {
   fi
 
   echo "  서버:        $server_status"
+  [ -n "$stale_warn" ] && echo "               ⚠ $stale_warn"
   echo "  Cloudflare:"
   echo "    설치:       $tunnel_installed"
   echo "    실행:       $tunnel_status"
