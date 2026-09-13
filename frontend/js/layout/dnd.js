@@ -105,6 +105,27 @@ export function wirePaneDropTarget(paneEl, paneId) {
   });
 }
 
+// ── 세션 드래그 소스(마우스+터치 한 번에) ──────────────────────────────
+// N37 3단계 4/n. 지금까지 "세션을 pane으로 끌어다 놓는" 소스는 탭 DOM 하나뿐이라
+// (tab-dom.js의 makeTabDraggable), 탭 줄이 사라지면 그 기능이 통째로 없어진다.
+// 레일 세션 행 같은 다른 표면도 같은 소스가 될 수 있도록 배선을 여기로 올린다 —
+// mime(SESSION_MIME)이 하나이므로 드롭 타겟은 소스가 무엇이었는지 몰라도 된다.
+//
+// 탭 재정렬(다른 탭 위 드롭)은 옮기지 않는다. 그건 탭 줄 고유의 동작이고,
+// 순서 재정렬은 3/n에서 레코드+단축키로 이미 옮겼다.
+export function wireSessionDragSource(el, getSessionId) {
+  el.draggable = true;
+  el.addEventListener('dragstart', (e) => {
+    const sid = getSessionId();
+    if (!sid) { e.preventDefault(); return; }
+    e.dataTransfer.setData(SESSION_MIME, sid);
+    e.dataTransfer.effectAllowed = 'move';
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  wireTouchDragSource(el, getSessionId);
+}
+
 // ── 터치(pointer:coarse) long-press 드래그 ──────────────────────────────
 const LONGPRESS_MS = 500;
 const MOVE_THRESHOLD = 8;

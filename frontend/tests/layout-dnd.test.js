@@ -135,3 +135,47 @@ test('tierCap — 폭 구간별 상한 2/4/6/무제한 (breakpoints.js와 같은
   setW(1600); assert.strictEqual(D.tierCap(), Infinity);
   setW(2560); assert.strictEqual(D.tierCap(), Infinity);
 });
+
+// ── N37 3단계 4/n — 세션 드래그 소스 ──────────────────────────────────────
+// 탭 줄이 사라지면 레일 행이 유일한 드래그 소스가 된다. 배선 자체(dragstart가
+// SESSION_MIME에 세션 id를 싣는지, id가 없으면 아예 시작하지 않는지)는 jsdom의
+// 합성 이벤트로 확인 가능하다 — 실제 드래그 제스처만 실브라우저 몫이다.
+function fakeDragEvent(win, type) {
+  const e = new win.Event(type, { bubbles: true, cancelable: true });
+  const data = {};
+  e.dataTransfer = {
+    setData: (mime, v) => { data[mime] = v; },
+    getData: (mime) => data[mime],
+    effectAllowed: null,
+  };
+  e._data = data;
+  return e;
+}
+
+test('wireSessionDragSource — dragstart가 세션 id를 SESSION_MIME으로 싣는다', async () => {
+  const { D } = await loadDnd();
+  const dom = _doms[_doms.length - 1];
+  const el = dom.window.document.createElement('div');
+  dom.window.document.body.appendChild(el);
+  D.wireSessionDragSource(el, () => 'sess-1');
+  assert.strictEqual(el.draggable, true);
+  const e = fakeDragEvent(dom.window, 'dragstart');
+  el.dispatchEvent(e);
+  assert.strictEqual(e._data[D.SESSION_MIME], 'sess-1');
+  assert.ok(el.classList.contains('dragging'));
+  el.dispatchEvent(fakeDragEvent(dom.window, 'dragend'));
+  assert.ok(!el.classList.contains('dragging'));
+});
+
+test('wireSessionDragSource — 세션 id가 없으면 드래그를 시작하지 않는다', async () => {
+  const { D } = await loadDnd();
+  const dom = _doms[_doms.length - 1];
+  const el = dom.window.document.createElement('div');
+  dom.window.document.body.appendChild(el);
+  D.wireSessionDragSource(el, () => null);
+  const e = fakeDragEvent(dom.window, 'dragstart');
+  el.dispatchEvent(e);
+  assert.strictEqual(e.defaultPrevented, true);
+  assert.strictEqual(e._data[D.SESSION_MIME], undefined);
+  assert.ok(!el.classList.contains('dragging'));
+});
