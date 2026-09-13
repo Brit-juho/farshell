@@ -44,6 +44,50 @@ TERMINAL_AUTO_REPLY_RE = re.compile(
     rb"|\x1b\]\d{1,2};[^\x07\x1b]*(?:\x07|\x1b\\)"
 )
 
+# N27 — bracketed paste 마커. 이 사이의 바이트는 **사용자가 친 키가 아니라
+# 붙여넣은 내용**이라, 키 입력 스트림 방어용 필터(위 자동응답 제거, 아래 부팅
+# grace ESC 드롭)를 태우면 안 된다. 실제로 두 가지가 조용히 깨지고 있었다:
+#   · 붙여넣는 텍스트 안에 `ESC[...c`/`ESC[...R`가 있으면 그 부분이 삭제됐다
+#   · bracketed paste는 ESC로 시작하므로, 세션이 붙자마자 붙여넣으면 부팅
+#     grace(0.5초)에 걸려 **통째로** 사라졌다
+PASTE_START = b"\x1b[200~"
+PASTE_END = b"\x1b[201~"
+
+
+def split_paste_segments(data: bytes, in_paste: bool) -> tuple[list[tuple[bool, bytes]], bool]:
+    """입력을 (붙여넣기인가, 조각) 목록으로 가른다. 순수 함수(테스트 대상).
+
+    붙여넣기는 WS 한 프레임에 다 안 들어올 수 있으므로 **세션에 걸친 상태**
+    (in_paste)를 받고 새 상태를 함께 돌려준다 — 청크 경계에서 마커가 갈라지면
+    뒷조각 전체가 키 입력으로 오인된다. 마커 자체는 붙여넣기 조각에 포함해
+    그대로 PTY로 흘린다(앱이 그 마커를 보고 붙여넣기임을 안다).
+    """
+    out: list[tuple[bool, bytes]] = []
+    pos = 0
+    while pos < len(data):
+        if in_paste:
+            end = data.find(PASTE_END, pos)
+            if end == -1:
+                out.append((True, data[pos:]))
+                pos = len(data)
+            else:
+                stop = end + len(PASTE_END)
+                out.append((True, data[pos:stop]))
+                pos = stop
+                in_paste = False
+        else:
+            start = data.find(PASTE_START, pos)
+            if start == -1:
+                out.append((False, data[pos:]))
+                pos = len(data)
+            else:
+                if start > pos:
+                    out.append((False, data[pos:start]))
+                pos = start
+                in_paste = True
+    return [(p, b) for p, b in out if b], in_paste
+
+
 # Phase 9 #6: PTY 출력의 query를 server가 직접 응답하고, 클라이언트로는 query를 안 보낸다.
 # 이렇게 하면 ws 재연결 등 어떤 시점에도 client→server 자동응답 트래픽이 발생하지 않는다.
 # 부팅 후 PTY_QUERY_INTERCEPT_SEC 동안만 활성 — vim/htop 등 TUI가 자체 query를 쓸 수 있어
@@ -90,6 +134,9 @@ class PTYSession:
     _paused: bool = field(default=False, repr=False)
     # P0 fix: PTY 시작 시각 — grace period 동안 클라이언트 자동응답(ESC 시퀀스) 차단용
     _start_monotonic: float = field(default=0.0, repr=False)
+    # N27: bracketed paste가 진행 중인가 — 마커가 WS 프레임 경계에서 갈라져도
+    # 뒷조각을 키 입력으로 오인하지 않게 세션에 걸쳐 들고 간다.
+    _in_paste: bool = field(default=False, repr=False)
     # R3: 출력 배치 버퍼 — read마다 즉시 broadcast하지 않고 짧은 창(BATCH_WINDOW_SEC)
     # 동안 모았다가 한 번에 내보낸다. wetty의 tinybuffer(2ms, 512KB) 패턴.
     _out_buf: bytearray = field(default_factory=bytearray, repr=False)
@@ -248,21 +295,28 @@ class PTYManager:
     def write(self, session_id: str, data: bytes) -> None:
         session = self._get(session_id)
 
-        # P0 fix #1 — 영구 차단: 클라이언트가 보낸 DA/CPR/OSC 자동응답을 stdin에서 제거.
-        # 이게 1순위 방어선이다. WS 재연결/탭 전환 등 grace 윈도우 밖에서도 보호된다.
+        # N27 — 두 필터는 **키 입력 스트림 방어용**이다. 붙여넣기 페이로드는
+        # 사용자가 친 키가 아니므로 통과시킨다(그러지 않으면 붙여넣는 내용이
+        # 조용히 변조되거나 통째로 사라진다).
         if data:
-            filtered = TERMINAL_AUTO_REPLY_RE.sub(b"", data)
-            if not filtered:
+            segments, session._in_paste = split_paste_segments(data, session._in_paste)
+            booting = time.monotonic() - session._start_monotonic < self.PTY_BOOT_GRACE_SEC
+            kept = bytearray()
+            for is_paste, chunk in segments:
+                if is_paste:
+                    kept += chunk
+                    continue
+                # P0 fix #1 — 영구 차단: 클라이언트가 보낸 DA/CPR/OSC 자동응답을
+                # stdin에서 제거. WS 재연결/탭 전환 등 grace 윈도우 밖에서도 보호된다.
+                chunk = TERMINAL_AUTO_REPLY_RE.sub(b"", chunk)
+                # P0 fix #2 — 부팅 직후 추가 안전망: 다른 종류의 ESC 시퀀스도
+                # 0.5s 동안 무시. 사용자 키 입력은 ESC로 시작하지 않는다.
+                if chunk.startswith(b"\x1b") and booting:
+                    continue
+                kept += chunk
+            if not kept:
                 return
-            data = filtered
-
-        # P0 fix #2 — 부팅 직후 추가 안전망: 다른 종류의 ESC 시퀀스도 0.5s 동안 무시.
-        # 사용자 키 입력은 ESC로 시작하지 않는 일반 ASCII이므로 영향 없다.
-        if (
-            data.startswith(b"\x1b")
-            and time.monotonic() - session._start_monotonic < self.PTY_BOOT_GRACE_SEC
-        ):
-            return
+            data = bytes(kept)
 
         # 안전 모드 검사 — Enter 입력 시 누적 라인 검사
         try:
