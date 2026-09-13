@@ -1831,6 +1831,9 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
   padding:0 calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2); border:1px solid var(--line); border-radius:var(--radius-sm);
 }
 .vt-rail-session-row.active { border-color:var(--acc); }
+/* N37 3단계 4/n — 레일 행이 세션 드래그 소스다(탭 줄을 대신한다). 끄는 동안의
+   표시는 탭과 같은 규칙(.tab.dragging)으로 맞춘다. */
+.vt-rail-session-row.dragging { opacity:.45; cursor:grabbing; }
 .vt-rail-session-select {
   flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--ui); padding:calc(var(--spacing) * 1) 0;

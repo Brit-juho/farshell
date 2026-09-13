@@ -17,6 +17,7 @@ import { icon } from '../ui/icons.js';
 import { whenAuthed } from '../agent/status.js';
 import { getStatus, onStatusChange, applyStatusDot, sortByUrgency } from '../agent/state.js';
 import { mountClients } from './clients.js';
+import { wireSessionDragSource } from './dnd.js';
 
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 280;
 // 'file'/'queue'/'snippets'/'ports'는 data-action 버튼이라 여기서 다루지 않는다(위 헤더 주석).
@@ -196,6 +197,10 @@ function initRail() {
         select.addEventListener('click', () => switchTo(id));
         row.appendChild(select);
       }
+      // N37 3단계 4/n — 세션을 pane으로 끌어다 놓는 경로. 탭 줄이 사라지면
+      // 여기가 유일한 드래그 소스가 된다(마우스·터치 둘 다).
+      row.dataset.sessionId = id;
+      wireSessionDragSource(row, () => id);
       row.classList.toggle('active', id === activeIdNow);
       const st = getStatus(tmuxSess?.name);
       applyStatusDot(row, st);
