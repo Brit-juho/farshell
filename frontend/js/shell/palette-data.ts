@@ -98,7 +98,7 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
 export const SETTINGS_COMMANDS: CommandDescriptor[] = [
   { label: '푸시 알림', action: 'push.toggle', gate: 'push' },
   { label: '드래그 시 자동 복사', action: '__toggle:mouse.autocopyOnSelect' },
-  { label: '맥에서도 열기', action: '__toggle:session.openOnMac' },
+  { label: '새 세션을 맥에서도 열기', action: '__toggle:session.openOnMac' },
   { label: '이어폰 미디어키', action: 'voice.mediakey-toggle', gate: 'voice' },
   { label: '가이드 보기', action: 'guide.show' },
 ];

@@ -157,7 +157,7 @@ function initRail() {
     // L1(과도기)~picker.js가 임시로 들고 있던 세션 전용 동작 2개의 최종 착지점.
     const macBtn = document.createElement('button');
     macBtn.type = 'button'; macBtn.className = 'vt-rail-session-footer-item';
-    macBtn.textContent = '이 세션 맥에서 열기';
+    macBtn.textContent = '지금 이 세션 맥에서 열기';
     macBtn.addEventListener('click', () => getAction('session.open-on-mac')?.());
     const tmuxBtn = document.createElement('button');
     tmuxBtn.type = 'button'; tmuxBtn.className = 'vt-rail-session-footer-item';

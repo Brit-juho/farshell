@@ -604,6 +604,32 @@ def test_파일이_모달이_아니라_페인으로_열린다(page):
     assert got["overflow"] == 0, f"뷰어 내용이 pane 밖으로 넘쳤다: {got}"
 
 
+def test_이미지가_페인_안에_인라인으로_그려진다(page):
+    """[T3] 예전엔 이미지도 "바이너리 파일 — 미리보기를 지원하지 않습니다"였다.
+    스크린샷·다이어그램은 원격에서 코드만큼 자주 열어보는 파일이다.
+
+    실브라우저로만 볼 수 있는 것 둘: 이미지가 **실제로 디코드됐는가**
+    (naturalWidth) 와, 그 그림이 **페인 상자 안에 갇혀 있는가**(밖으로 새면
+    표면 레이어의 터미널 위를 덮는다 — 이 파일이 반복해서 잡아 온 회귀다)."""
+    target = str(ROOT / "frontend" / "icon-192.png")
+    page.evaluate("(p) => window.openFileInPane(p)", target)
+    page.wait_for_selector(".vt-pane-viewer .vt-vw-image img", timeout=15000)
+    page.wait_for_function(
+        "() => document.querySelector('.vt-pane-viewer .vt-vw-image img')?.naturalWidth > 0",
+        timeout=10000,
+    )
+    fit = page.evaluate(
+        """() => {
+          const img = document.querySelector('.vt-pane-viewer .vt-vw-image img');
+          const pane = img.closest('.vt-pane');
+          const i = img.getBoundingClientRect(), p = pane.getBoundingClientRect();
+          return { overflowRight: Math.round(i.right - p.right), w: img.naturalWidth };
+        }"""
+    )
+    assert fit["w"] == 192, fit
+    assert fit["overflowRight"] <= 1, f"이미지가 페인 밖으로 나갔다: {fit}"
+
+
 def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
     """§6 — 「파일」 진입점은 팔레트로 옮겨갔다. 옛 rail 버튼이 남아 있으면
     누를 대상이 없는 버튼이 된다."""

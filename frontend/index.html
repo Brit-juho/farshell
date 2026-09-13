@@ -332,7 +332,7 @@
     <label class="mi" id="auto-mac-toggle" role="menuitemcheckbox"
       title="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>
-      맥에서도 열기
+      새 세션을 맥에서도 열기
       <input type="checkbox" id="auto-mac-checkbox" />
     </label>
     <button class="mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
@@ -386,10 +386,16 @@
       <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표">↓</button>
       <button type="button" class="kb kb-arrow" data-key="left" aria-label="왼쪽 화살표">←</button>
       <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표">→</button>
-      <button type="button" class="kb" data-seq="|">|</button>
-      <button type="button" class="kb" data-seq="/">/</button>
-      <button type="button" class="kb" data-seq="~">~</button>
-      <button type="button" class="kb" data-seq="-">-</button>
+      <!-- [M4] 롱프레스 키 변형 — 짝이 뚜렷한 기호는 같은 자리에 겹쳐 둔다.
+           키바는 자리가 12칸뿐이라 `_`·`\`·백틱을 새 버튼으로 넣을 수 없다. -->
+      <button type="button" class="kb" data-seq="|" data-longpress-seq="\"
+        title="짧게: | 입력 · 길게: \ 입력">|</button>
+      <button type="button" class="kb" data-seq="/" data-longpress-seq="?"
+        title="짧게: / 입력 · 길게: ? 입력">/</button>
+      <button type="button" class="kb" data-seq="~" data-longpress-seq="`"
+        title="짧게: ~ 입력 · 길게: ` 입력">~</button>
+      <button type="button" class="kb" data-seq="-" data-longpress-seq="_"
+        title="짧게: - 입력 · 길게: _ 입력">-</button>
       <!-- R4: 짧게 누르면 문자 n/p 입력, 길게 누르면 tmux 창 전환(Ctrl-B n/p).
            전 세션이 tmux라 조건 분기 없이 바로 적용(swell.sh 패턴). -->
       <button type="button" class="kb" data-seq="n" data-longpress-tmux="n"

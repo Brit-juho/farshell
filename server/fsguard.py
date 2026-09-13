@@ -197,6 +197,55 @@ def _is_within(p: Path, root: Path) -> bool:
             return False
 
 
+# [T3] 인라인 이미지 미리보기가 **원본 바이트로 내보내도 되는** 타입.
+#
+# 화이트리스트인 이유가 핵심이다. 이 서버는 공개 터널로 나가고, 여기서 내보낸
+# 바이트는 브라우저가 **이 오리진의 리소스로** 해석한다. 그래서:
+#   - SVG는 뺀다. SVG는 스크립트를 품을 수 있어 같은 오리진에서 열면 XSS다
+#     (SVG는 텍스트라 뷰어가 어차피 소스로 보여준다 — 잃는 게 없다).
+#   - HTML·PDF도 뺀다. 같은 이유(스크립트/임베드).
+#   - 확장자만 믿지 않고 매직 바이트로 한 번 더 확인한다 — `.png`로 이름만 바꾼
+#     HTML을 image/png로 내보내면 브라우저가 스니핑으로 되살릴 여지를 준다.
+IMAGE_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".ico": "image/x-icon",
+}
+
+# 이미지 미리보기 상한. 코드 열람 도구지 사진첩이 아니다 — 원격(터널 너머)에서
+# 20MB짜리를 통째로 끌어오면 화면이 멈춘 것처럼 보인다.
+MAX_IMAGE_BYTES = int(os.environ.get("VT_FS_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
+
+_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"BM", "image/bmp"),
+    (b"\x00\x00\x01\x00", "image/x-icon"),
+)
+
+
+def image_type(path, head: bytes) -> str | None:
+    """확장자와 매직 바이트가 **둘 다** 같은 타입을 가리킬 때만 그 타입을 준다."""
+    from pathlib import Path as _P
+
+    declared = IMAGE_TYPES.get(_P(str(path)).suffix.lower())
+    if not declared:
+        return None
+    for magic, mime in _MAGIC:
+        if head.startswith(magic):
+            return declared if mime == declared else None
+    # webp는 RIFF 컨테이너라 4바이트 건너뛴 자리를 본다.
+    if declared == "image/webp" and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return declared
+    return None
+
+
 def looks_binary(head: bytes) -> bool:
     """선두 바이트에 NUL 이 있으면 바이너리로 본다.
 

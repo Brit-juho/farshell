@@ -68,7 +68,8 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/api/fs/roots` | 열람 가능한 루트 목록 (기본 `~/GitHub`) |
 | GET | `/api/fs/tree?path=X` | 디렉토리 목록. `.git`/`node_modules` 등 제외 |
 | GET | `/api/fs/search?q=X` | 파일명 fuzzy 검색 (N5/N40 — 커맨드 팔레트 `/` 모드). `path=`로 하위 트리 한정, 최대 50건 |
-| GET | `/api/fs/file?path=X` | 파일 내용. 바이너리는 `binary:true`만, 512KB 초과는 절단 |
+| GET | `/api/fs/file?path=X` | 파일 내용. 바이너리는 `binary:true`만, 512KB 초과는 절단. 이미지는 `image:true` + `mime` + `too_large`(상한 초과 여부) — 바이트는 아래 `/api/fs/raw`가 준다 |
+| GET | `/api/fs/raw?path=X` | [T3] 인라인 미리보기용 **이미지 원본 바이트**. 열람 경계는 `/api/fs/file`과 같고, 그 위에 타입 화이트리스트를 하나 더 얹는다 — png·jpeg·gif·webp·bmp·ico만, 그것도 **확장자와 매직 바이트가 둘 다 일치할 때만**. SVG·HTML·PDF는 뺐다: 같은 오리진에서 열리는 스크립트 가능 문서라 그 자체가 XSS다. 8MB 초과는 413, 이미지가 아니면 403. `nosniff` + `Content-Disposition: inline` |
 | GET | `/api/git/status?repo=X` | `git status --porcelain` 파싱 결과 |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | `git diff` 원문. `.env`/`*.pem`/`id_rsa` 등 보호 경로는 내용이 가려짐(`[내용 가려짐 — 보호된 경로]`) |
 

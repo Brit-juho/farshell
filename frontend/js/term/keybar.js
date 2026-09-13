@@ -104,7 +104,14 @@ export function initKeybar() {
     // 입력하고, LONGPRESS_MS 이상 누르고 있으면 그 대신 tmux prefix(Ctrl-B, 0x02)
     // + n/p를 보내 창을 전환한다(swell.sh 패턴). 다른 키들은 기존처럼 pointerdown
     // 즉시 발화 — 여기서만 pointerup까지 기다리는 예외를 둔다.
-    if (btn.dataset.longpressTmux) {
+    // [M4] 롱프레스 키 변형 — R4가 n/p에 만든 그 동작을 **아무 키에나** 붙일 수
+    // 있게 일반화한 것이다. `data-longpress-tmux`는 tmux prefix를 앞에 붙이고,
+    // `data-longpress-seq`는 그 문자를 그대로 보낸다. 폰 키바는 자리가 12칸뿐
+    // 이라 `_`·`\`·백틱 같은 키를 새 버튼으로 넣을 수 없는데, 이 둘은 짝이
+    // 뚜렷해서(`-`↔`_`, `/`↔`\`) 같은 자리에 겹쳐도 헷갈리지 않는다.
+    const lpTmux = btn.dataset.longpressTmux;
+    const lpSeq = btn.dataset.longpressSeq;
+    if (lpTmux || lpSeq) {
       let fired = false;
       btn.classList.add('holding');
       const timer = setTimeout(() => {
@@ -112,7 +119,7 @@ export function initKeybar() {
         btn.classList.remove('holding');
         btn.classList.add('longpress-fired');
         setTimeout(() => btn.classList.remove('longpress-fired'), 150);
-        sendToPty(activeSessionId(), '\x02' + btn.dataset.longpressTmux);
+        sendToPty(activeSessionId(), lpTmux ? '\x02' + lpTmux : lpSeq);
         _focusActiveTerm();
       }, LONGPRESS_MS);
       const finish = (sendShort) => {

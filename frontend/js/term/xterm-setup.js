@@ -63,6 +63,12 @@ export function createXtermInstance(id) {
     // 참고한 다른 프로젝트(wetty/ttyd/orca/blink/swell.sh)는 xterm 기본값을 그대로
     // 쓰거나 재접속 복원 자체를 지원하지 않아 참고할 표준값이 없었음(2026-09-02 조사).
     scrollback: 2000,
+    // [P8] 스크롤 애니메이션을 끈다(0 = 즉시). 터미널에서 스크롤은 "읽던 자리를
+    // 찾는" 조작이라, 부드럽게 미끄러지는 동안 글자가 흐르면 오히려 눈이 따라가지
+    // 못한다. 원격(터널 너머)에서는 그 애니메이션이 입력 반응까지 늦어 보이게
+    // 만든다. 기본값은 0이지만 **명시한다** — xterm 기본값이 바뀌어도 이 판단이
+    // 유지되게(scrollback: 2000을 명시한 것과 같은 이유).
+    smoothScrollDuration: 0,
     fontSize: currentFontSize(),
     fontFamily: getVtXtermFont(),
     theme: getVtXtermTheme(),

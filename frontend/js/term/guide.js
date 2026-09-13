@@ -30,7 +30,7 @@ function showGuide() {
     ]},
     { icon: 'square-terminal', title: 'tmux 세션', rows: [
       { key: 'tmux 세션', desc: '⋯ 메뉴 → 기존 세션 목록 확인·attach' },
-      { key: '맥에서도 열기', desc: '새 세션 생성 시 맥 iTerm 창도 자동으로 열림(토글)' },
+      { key: '새 세션을 맥에서도 열기', desc: '앞으로 만들 세션마다 맥 iTerm 창도 함께 열림(토글). 지금 보고 있는 세션을 여는 것은 「지금 이 세션 맥에서 열기」' },
       { key: '이 세션 열기', desc: '지금 보는 세션을 맥 iTerm 새 창으로 열기' },
     ]},
     { icon: 'file-up', title: '파일 · 검색', rows: [

@@ -386,3 +386,78 @@ def test_file_path_route_returns_disk_path_for_copy_action(client, file_state):
     assert r.status_code == 200
     assert r.json()["path"] == str(file_store.real_path_for(body["id"]))
     assert client.get("/api/files/nope/path").status_code == 404
+
+
+# --- [T3] 인라인 이미지 미리보기 ---------------------------------------------
+#
+# 이 엔드포인트에서 나간 바이트는 브라우저가 **이 오리진의 리소스로** 해석한다.
+# 그래서 테스트의 무게가 "이미지가 보이는가"보다 **"이미지가 아닌 것이 절대
+# 안 나가는가"**에 있다.
+
+PNG_1PX = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
+    b"\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05"
+    b"\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def test_image_file_is_reported_as_image_not_just_binary(client, repo):
+    p = repo / "shot.png"
+    p.write_bytes(PNG_1PX)
+    d = client.get(f"/api/fs/file?path={p}").json()
+    assert d["binary"] is True and d["image"] is True
+    assert d["mime"] == "image/png" and d["too_large"] is False
+
+
+def test_raw_serves_the_image_bytes_with_nosniff(client, repo):
+    p = repo / "shot.png"
+    p.write_bytes(PNG_1PX)
+    r = client.get(f"/api/fs/raw?path={p}")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/png")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.content == PNG_1PX
+
+
+def test_raw_refuses_svg(client, repo):
+    """SVG는 스크립트를 품을 수 있다 — 같은 오리진에서 열면 XSS다.
+    (텍스트라 뷰어는 어차피 소스로 보여준다 — 잃는 게 없다.)"""
+    p = repo / "icon.svg"
+    p.write_text('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
+    assert client.get(f"/api/fs/raw?path={p}").status_code == 403
+
+
+def test_raw_refuses_html_renamed_to_png(client, repo):
+    """확장자만 믿으면 `.png`로 이름만 바꾼 HTML이 image/png로 나간다 —
+    매직 바이트가 안 맞으면 거부한다."""
+    p = repo / "evil.png"
+    p.write_text("<html><script>alert(1)</script></html>")
+    assert client.get(f"/api/fs/raw?path={p}").status_code == 403
+
+
+def test_raw_refuses_plain_text(client, repo):
+    assert client.get(f"/api/fs/raw?path={repo / 'a.py'}").status_code == 403
+
+
+def test_raw_honours_the_browse_boundary(client, repo, tmp_path):
+    """경계는 /api/fs/file과 같은 fsguard 하나다 — 새 엔드포인트가 뒷문이 되면 안 된다."""
+    outside = tmp_path.parent / "outside.png"
+    outside.write_bytes(PNG_1PX)
+    assert client.get(f"/api/fs/raw?path={outside}").status_code == 403
+
+
+def test_raw_refuses_denied_names_even_if_they_are_images(client, repo):
+    p = repo / ".env.png"
+    p.write_bytes(PNG_1PX)
+    assert client.get(f"/api/fs/raw?path={p}").status_code == 403
+
+
+def test_raw_over_the_cap_is_413(client, repo, monkeypatch):
+    import fsguard
+    monkeypatch.setattr(fsguard, "MAX_IMAGE_BYTES", 4)
+    p = repo / "big.png"
+    p.write_bytes(PNG_1PX)
+    r = client.get(f"/api/fs/raw?path={p}")
+    assert r.status_code == 413
+    # 목록 응답도 같은 사실을 알려야 화면이 "너무 큽니다"를 그릴 수 있다.
+    assert client.get(f"/api/fs/file?path={p}").json()["too_large"] is True
