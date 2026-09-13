@@ -1,8 +1,8 @@
-// L5 — DnD 공용 로직. 탭/pane 헤더를 pane 위로 드래그해 5구역 드롭존(가장자리
-// 4곳=그 방향 분할, 중앙=세션 교체)으로 배정한다.
+// L5 — DnD 공용 로직. 세션(레일 행)/pane 헤더를 pane 위로 드래그해 5구역
+// 드롭존(가장자리 4곳=그 방향 분할, 중앙=세션 교체)으로 배정한다.
 //
-// 마우스는 네이티브 HTML5 DnD(dragstart/dragover/drop)를 그대로 쓴다(tab-dom.js의
-// 기존 탭 재정렬 배선과 같은 API). 터치는 별개다 — iOS Safari는 임의 엘리먼트의
+// 마우스는 네이티브 HTML5 DnD(dragstart/dragover/drop)를 그대로 쓴다.
+// 터치는 별개다 — iOS Safari는 임의 엘리먼트의
 // HTML5 DnD를 터치로 아예 지원하지 않고 Android Chrome도 신뢰할 수 없어(터치로
 // 시작한 dragstart가 안 뜨는 경우가 흔함), pointer:coarse는 이 파일의
 // wireTouchDragSource()가 포인터 이벤트로 직접 흉내낸다. LONGPRESS_MS/
@@ -81,8 +81,8 @@ export function applyPaneDrop(paneId, zone, sessionId) {
 
 // ── 마우스(네이티브 HTML5 DnD) 드롭 타겟 배선 ───────────────────────────
 // paneEl에 dragover/dragleave/drop을 걸어 data-dropzone 속성으로 오버레이를
-// 표시하고(CSS가 소비), drop에서 applyPaneDrop을 부른다. 드래그 소스(탭 —
-// tab-dom.js, pane 헤더 — panes.js)는 이 mime 타입으로 dataTransfer에 세션
+// 표시하고(CSS가 소비), drop에서 applyPaneDrop을 부른다. 드래그 소스(세션 —
+// 레일 행, pane 헤더 — panes.js)는 이 mime 타입으로 dataTransfer에 세션
 // id를 실어 보내기만 하면 된다.
 export function wirePaneDropTarget(paneEl, paneId) {
   paneEl.addEventListener('dragover', (e) => {
@@ -106,8 +106,8 @@ export function wirePaneDropTarget(paneEl, paneId) {
 }
 
 // ── 세션 드래그 소스(마우스+터치 한 번에) ──────────────────────────────
-// N37 3단계 4/n. 지금까지 "세션을 pane으로 끌어다 놓는" 소스는 탭 DOM 하나뿐이라
-// (tab-dom.js의 makeTabDraggable), 탭 줄이 사라지면 그 기능이 통째로 없어진다.
+// N37 3단계 4/n. 2.1.3까지 "세션을 pane으로 끌어다 놓는" 소스는 탭 DOM
+// 하나뿐이었다 — 탭 줄이 사라지면 그 기능이 통째로 없어진다.
 // 레일 세션 행 같은 다른 표면도 같은 소스가 될 수 있도록 배선을 여기로 올린다 —
 // mime(SESSION_MIME)이 하나이므로 드롭 타겟은 소스가 무엇이었는지 몰라도 된다.
 //

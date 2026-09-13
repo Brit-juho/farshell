@@ -85,26 +85,20 @@ test('stepActivePane — +1/-1로 다음/이전 leaf로 순환 이동한다', as
 });
 
 // ── L8: leaf가 하나뿐일 때 같은 스와이프가 세션 전환이 된다 ───────────────
-// switchTo(term/session.js)는 탭 DOM·xterm이 모두 있어야 끝까지 도는 함수라
+// switchTo(term/session.js)는 xterm이 있어야 끝까지 도는 함수라
 // 여기서는 "무엇을 다음 대상으로 고르는가"(sessionOrder/stepView의 분기)만
 // 검증한다 — 실제 전환 자체는 terminal-lifecycle.test.js가 이미 덮는다.
-test('sessionOrder — 탭 DOM 순서를 따른다(드래그로 재정렬한 순서가 그대로)', async () => {
-  const { window, C } = await loadCompact();
-  window.document.body.innerHTML = `
-    <div id="tabs">
-      <div class="tab" data-session-id="b"></div>
-      <div class="tab" data-session-id="a"></div>
-    </div>`;
-  assert.deepEqual(C.sessionOrder(), ['b', 'a']);
+test('sessionOrder — 세션 레코드 순서를 따른다(재정렬한 순서가 그대로)', async () => {
+  const { C, core } = await loadCompact();
+  core.registerSession('b', {});
+  core.registerSession('a', {});
+  assert.strictEqual(C.sessionOrder().join(','), 'b,a');
 });
 
 test('stepView — leaf가 2개 이상이면 pane 이동(세션은 안 건드림)', async () => {
-  const { window, S, C } = await loadCompact();
-  window.document.body.innerHTML = `
-    <div id="tabs">
-      <div class="tab" data-session-id="s1"></div>
-      <div class="tab" data-session-id="s2"></div>
-    </div>`;
+  const { S, C, core } = await loadCompact();
+  core.registerSession('s1', {});
+  core.registerSession('s2', {});
   const rootId = S.getActivePaneId();
   S.splitActivePane('row'); // leaf 2개, 활성=새 leaf
 
@@ -113,27 +107,21 @@ test('stepView — leaf가 2개 이상이면 pane 이동(세션은 안 건드림
 });
 
 test('nextSessionId — 활성 세션 기준으로 다음/이전을 순환해서 고른다', async () => {
-  const { window, C, core } = await loadCompact();
-  window.document.body.innerHTML = `
-    <div id="tabs">
-      <div class="tab" data-session-id="a"></div>
-      <div class="tab" data-session-id="b"></div>
-      <div class="tab" data-session-id="c"></div>
-    </div>`;
+  const { C, core } = await loadCompact();
+  for (const id of ['a', 'b', 'c']) core.registerSession(id, {});
   core.setActive('c');
   assert.strictEqual(C.nextSessionId(1), 'a', '끝에서 +1이면 처음으로 순환');
   assert.strictEqual(C.nextSessionId(-1), 'b');
 });
 
 test('nextSessionId — 세션이 1개 이하면 null(전환할 대상 없음)', async () => {
-  const { window, C } = await loadCompact();
-  window.document.body.innerHTML = '<div id="tabs"><div class="tab" data-session-id="a"></div></div>';
+  const { C, core } = await loadCompact();
+  core.registerSession('a', {});
   assert.strictEqual(C.nextSessionId(1), null);
 });
 
 test('stepView — leaf가 하나면 pane은 그대로 두고 세션 전환 경로로 간다', async () => {
-  const { window, S, C } = await loadCompact();
-  window.document.body.innerHTML = '<div id="tabs"></div>'; // 세션 0개 = 아무 일도 없음
+  const { S, C } = await loadCompact();   // 세션 0개 = 아무 일도 없음
   const before = S.getActivePaneId();
   C.stepView(1);
   assert.strictEqual(S.getActivePaneId(), before);

@@ -44,10 +44,6 @@ function applyLabels(map) {
     // 이름의 출처는 레코드다(core/store.js) — 탭 DOM은 setSessionDisplayName이
     // 같이 맞춘다. 3단계에서 그 DOM이 사라져도 이 경로는 그대로 동작한다.
     setSessionDisplayName(id, label);
-    // 워크트리 라벨은 여러 저장소에서 같아 보일 수 있다(같은 브랜치명) —
-    // 실제 tmux 세션 이름을 툴팁으로 남겨 구분할 수 있게 한다.
-    const nameEl = s.tabEl && s.tabEl.querySelector('.tab-name');
-    if (nameEl) nameEl.title = `${label} · ${tmux}`;
   }
 }
 

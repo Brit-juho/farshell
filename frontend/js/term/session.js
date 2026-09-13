@@ -1,10 +1,13 @@
-// 세션 생성 진입점 + 탭 전환/이름변경/좌우이동 단축키 + 세션 제거.
+// 세션 생성 진입점 + 세션 전환/이름변경/좌우이동 단축키 + 세션 제거.
+// N37 3단계 6/n에서 세션 탭 줄(#tabs)이 사라졌다 — 이 파일은 더 이상 탭 DOM을
+// 만들지도, 읽지도 않는다. 화면에 세션을 보여주는 곳은 워크트리 탭(layout/
+// tabbar.js) · pane 헤더 · 레일 세션 목록 · 피커 넷이다.
 // F4에서 terminal.js에서 분리 — addSession(구 :567-1018, 약 350줄)이 가장
-// 위험한 분할 대상이었다. 계획서는 tab-dom/xterm-setup/ws 3분할을 제안했지만,
+// 위험한 분할 대상이었다. 계획서는 tab DOM/xterm-setup/ws 3분할을 제안했지만,
 // 그 세 부분이 로컬 변수(id·tab·term·wrapper 등)를 촘촘히 공유해 함수 자체를
 // 안전하게 3조각으로 쪼개면 오히려 버그를 심기 쉽다고 판단 — 대신 각 관심사를
-// 별도 모듈의 "조립 부품" 함수로 뽑고(tab-dom.createTabElement/
-// xterm-setup.createXtermInstance/ws.startSessionSocket), addSession은 그
+// 별도 모듈의 "조립 부품" 함수로 뽑고(xterm-setup.createXtermInstance/
+// ws.startSessionSocket), addSession은 그
 // 부품들을 순서대로 호출하는 오케스트레이터로 남겼다. 계획서 자신도 이 경로를
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
@@ -13,7 +16,6 @@ import { getSession, allSessions, registerSession, removeSessionRecord, activeSe
   sessionDisplayName, setSessionDisplayName, orderedSessionIds, moveSessionByOffset } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { createTabElement } from './tab-dom.js';
 import { createXtermInstance } from './xterm-setup.js';
 import { applyMouseMode } from './mouse-mode.js';
 import { startSessionSocket } from './ws.js';
@@ -118,19 +120,12 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // 탭은 생겼는데 이동/조작이 안 되는 것처럼 보인다.
   document.getElementById('onboarding')?.remove();
 
-  const tab = createTabElement(id, displayName, insertBeforeId, {
-    onSwitch: switchTo,
-    onClose: removeSession,
-    onRename: renameSession,
-  });
-
   const { term, fitAddon, searchAddon, wrapper } = createXtermInstance(id);
 
   // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록.
   // ws는 startSessionSocket()에서 채운다.
-  // displayName은 이제 **레코드가 출처**다(core/store.js의 sessionDisplayName).
-  // 탭 DOM의 .tab-name은 그 값을 비추는 화면일 뿐이다.
-  registerSession(id, { term, ws: null, tabEl: tab, displayName: displayName || id.slice(0, 8),
+  // displayName의 출처는 레코드다(core/store.js의 sessionDisplayName).
+  registerSession(id, { term, ws: null, displayName: displayName || id.slice(0, 8),
     fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) },
     insertBeforeId);
   // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션의 connectTerminalWs를
@@ -141,37 +136,19 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // (설정이 나중에 바뀌면 mouse-mode.js가 구독으로 전체 세션에 반영한다 —
   // 여기서는 "새로 생긴 세션"만 챙긴다.)
   applyMouseMode(getSession(id));
-  window.vtApplySessionFilter?.();
 
   switchTo(id);
 }
 
 export function switchTo(id) {
-  const prevId = activeSessionId();
-  if (prevId && getSession(prevId)) {
-    const prev = getSession(prevId);
-    prev.tabEl.classList.remove('active');
-    prev.tabEl.setAttribute('aria-selected', 'false');
-    prev.tabEl.tabIndex = -1;
-  }
   setActive(id);
   const s = getSession(id);
-  s.tabEl.classList.add('active');
-  s.tabEl.setAttribute('aria-selected', 'true');
-  s.tabEl.tabIndex = 0;
-  // T6: 그리드 카드와 같은 규칙 — "완료" 표시는 확인했다는 뜻이니 탭으로
-  // 전환하면 지운다.
-  s.tabEl.classList.remove('done');
   // L3 1단계: wrapper를 여기서 직접 보이기/숨기기 하지 않는다 — 활성 pane에
   // 이 세션을 배정한다고만 알리면 layout/panes.js의 renderLayout()이 실제
   // DOM 반영(wrapper 이동·표시, 배경 탭은 풀로, rAF fit+PTY 크기 통보까지)을
   // 전부 대신한다. setPaneSession은 동기적으로 renderLayout을 트리거하므로
   // 이 줄이 끝난 시점엔 이미 wrapper가 보이는 상태라 바로 focus()해도 된다.
   setPaneSession(id);
-  // 10 §4 2단계 — 세션 탭 줄은 활성 워크트리 탭에 속한 것만 보인다. 전환으로
-  // 세션이 바뀌면 그 필터를 다시 적용한다(탭 바가 window로 노출해 둔 함수 —
-  // layout/tabbar.js를 직접 import하면 순환이 된다).
-  window.vtApplySessionFilter?.();
   s.term.focus();
   // notifyActiveSession은 어느 파일에도 정의된 적 없는 죽은 방어 코드였다
   // (전수 grep 확인) — F4에서 함께 정리했다. F5에서 picker.js를 ES 모듈로
@@ -182,8 +159,8 @@ export function switchTo(id) {
   saveWorkspace();
 }
 
-// 탭 더블클릭과 모바일 세션 관리 시트가 같은 경로로 이름을 바꾼다.
-// 성공한 경우에만 탭·피커·워크스페이스를 함께 동기화한다.
+// 레일 세션 행과 모바일 세션 관리 시트가 같은 경로로 이름을 바꾼다.
+// 성공한 경우에만 레코드·피커·워크스페이스를 함께 동기화한다.
 export async function renameSession(id, rawName, previousNameOverride) {
   const s = getSession(id);
   const newName = String(rawName || '').trim();
@@ -258,7 +235,6 @@ export async function removeSession(id) {
   if (s.ws) { try { s.ws.close(); } catch (_) {} }
   s.term.dispose();
   s.wrapper.remove();
-  s.tabEl.remove();
   window.removeEventListener('resize', s.onResize);
   if (window.visualViewport) {
     window.visualViewport.removeEventListener('resize', s.onResize);

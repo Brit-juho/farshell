@@ -5,10 +5,10 @@
 // 옮길 때마다 이전 배치가 사라졌다. 이제 탭을 바꾸면 그 워크트리에서 쓰던 분할이
 // 그대로 돌아온다.
 //
-// 아래쪽 `#tabs`(세션 탭)는 없애지 않았다. 세션 이름·에이전트 배지·드래그 소스가
-// 전부 그 DOM을 읽고 있어서(`session.tabEl`을 보는 곳이 26군데다) 지우면 그 전부를
-// 같이 옮겨야 한다. 대신 **활성 탭에 속한 세션만 보이게 거른다** — 화면상으로는
-// "워크트리 탭 안의 세션 줄"이 된다.
+// 3단계(6/n)에서 아래쪽 세션 탭 줄(`#tabs`)은 사라졌다. 그 줄이 하던 일은
+// 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
+// 닫기·이름 변경은 레일 세션 행으로, 에이전트 마크·상태 dot·읽지 않음은
+// 이 파일의 워크트리 탭으로.
 import { getTabs, getActiveTabId, switchLayoutTab, closeLayoutTab, openLayoutTab, onLayoutChange } from './store.js';
 import { allSessions } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
@@ -17,9 +17,9 @@ import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '..
 
 const HOST = 'vt-wtabs';
 
-/** 이 탭에 보여야 하는 세션인가 — 탭의 워크트리에 속한 세션만. 워크트리가 없는
+/** 이 탭에 속한 세션인가 — 탭의 워크트리에 속한 세션만. 워크트리가 없는
  * 탭(기타 작업 공간)은 **어디에도 안 속한 세션**을 받는다. 워크트리 정보가 아직
- * 없으면(목록 로딩 전) 거르지 않는다 — 잠깐 전부 숨는 것보다 낫다. */
+ * 없으면(목록 로딩 전) 전부 속한 것으로 본다 — 잠깐 전부 비는 것보다 낫다. */
 export function sessionBelongsToTab(tmuxName, tabWorktreeId, worktreeSessions) {
   if (!worktreeSessions || worktreeSessions.size === 0) return true;
   const owner = tmuxName ? worktreeSessions.get(tmuxName) : undefined;
@@ -33,20 +33,7 @@ let _worktreeSessions = new Map();   // tmux 세션 이름 → worktreeId
  * 같은 응답을 두 번 조회하지 않는다. */
 export function setWorktreeSessionMap(map) {
   _worktreeSessions = map || new Map();
-  applySessionFilter();
   paintTabs();
-}
-
-export function applySessionFilter() {
-  const activeId = getActiveTabId();
-  const tab = getTabs().find((t) => t.id === activeId);
-  if (!tab) return;
-  for (const s of Object.values(allSessions())) {
-    const el = s && s.tabEl;
-    if (!el) continue;
-    const tmux = s.tmuxName || s.tmux_name || null;
-    el.classList.toggle('other-wtab', !sessionBelongsToTab(tmux, tab.worktreeId, _worktreeSessions));
-  }
 }
 
 // ── 탭 하나의 상태 ─────────────────────────────────────────────────────────
@@ -173,7 +160,6 @@ function render() {
     el.addEventListener('click', () => { switchLayoutTab(t.id); saveLayoutNow(); });
     host.appendChild(el);
   }
-  applySessionFilter();
   paintTabs();
 }
 
@@ -192,5 +178,4 @@ render();
 
 // 지연 청크(shell/Rail.tsx)가 정적 import 없이 부를 수 있게 — 이 저장소의 관행.
 window.openWorktreeTab = openWorktreeTab;
-window.vtApplySessionFilter = applySessionFilter;
 window.vtSetTabAgentInfo = setAgentInfo;

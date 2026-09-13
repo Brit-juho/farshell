@@ -102,8 +102,7 @@ whenAuthed(() => {
 // L4에서 발견한 버그 수정: `#grid-cards`에만 스코프돼 있었다 — 그 컨테이너는
 // L3 4단계에서 그리드 뷰 폐지와 함께 사라졌는데(ADR-7), 이 함수는 계속
 // 존재하지 않는 `#grid-cards`만 찾아 항상 조용히 null을 반환했다. 즉 카드
-// 쪽 working/done 강조는 그리드 폐지 이후 완전히 죽어 있었다(탭 쪽은
-// `_tabByCwd`가 `#tabs`를 직접 보므로 영향 없었다). agent/preview.js의
+// 쪽 working/done 강조는 그리드 폐지 이후 완전히 죽어 있었다. agent/preview.js의
 // ensurePreviewWs onmessage 스코프 버그(L6에서 발견·수정)와 같은 종류 —
 // 컨테이너 id에 의존하지 않고 문서 전체에서 찾도록 일반화한다. 이제
 // quickopen.js·layout/pane-picker.js·layout/rail.js의 세션 카드가 전부
@@ -114,10 +113,10 @@ function _cardByCwd(cwd) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-// T6: 탭도 카드와 같은 방식(cwd 매칭)으로 작업중/완료 표시를 받는다. 카드는
-// dataset.cwd를 그리드가 열려 있을 때만 채우므로(refreshGrid), 그리드를 한
-// 번도 안 연 상태에서도 탭 뱃지가 동작하려면 tmux 세션명→cwd 매핑을 따로
-// 들고 있어야 한다 — 그게 _tmuxCwdByName이다.
+// T6: 카드의 작업중/완료 표시는 cwd 매칭으로 온다. 카드는 dataset.cwd를
+// 목록이 열려 있을 때만 채우므로 tmux 세션명→cwd 매핑을 따로 들고 있어야
+// 한다 — 그게 _tmuxCwdByName이다. (세션 탭 줄도 같은 경로를 탔지만 N37
+// 3단계에서 사라졌다 — 세션 단위 상태는 A5의 agent/state.js가 소유한다.)
 let _tmuxCwdByName = {};
 async function _refreshTmuxCwdMap() {
   try {
@@ -130,17 +129,6 @@ async function _refreshTmuxCwdMap() {
   } catch (_) { /* 다음 주기에 재시도 */ }
 }
 
-function _tabByCwd(cwd) {
-  if (!cwd) return null;
-  const matches = [];
-  document.querySelectorAll('#tabs .tab').forEach((tab) => {
-    const sess = getSession(tab.dataset.sessionId);
-    const tmuxName = sess && (sess.tmux_name || sess.tmuxName);
-    if (tmuxName && _tmuxCwdByName[tmuxName] === cwd) matches.push(tab);
-  });
-  return matches.length === 1 ? matches[0] : null;
-}
-
 // /ws-agent 스냅샷(agent_snapshot)의 active 목록을 카드/탭 강조에 반영.
 // 그리드를 연 시점에 이미 도구를 쓰고 있던 세션도 놓치지 않기 위함.
 // preview.js의 refreshGrid가 그리드를 늦게 열었을 때 이 캐시로 즉시 반영한다
@@ -148,12 +136,9 @@ function _tabByCwd(cwd) {
 export let agent_status_active_cache = [];
 export function _applyActiveHighlights(active) {
   document.querySelectorAll('.vt-card.working').forEach(c => c.classList.remove('working'));
-  document.querySelectorAll('#tabs .tab.working').forEach(t => t.classList.remove('working'));
   (active || []).forEach(a => {
     const card = _cardByCwd(a.cwd);
     if (card) card.classList.add('working');
-    const tab = _tabByCwd(a.cwd);
-    if (tab) tab.classList.add('working');
   });
 }
 
@@ -200,22 +185,18 @@ function connectAgentWs() {
       // 탭 파비콘 상태: pre(도구 시작)=작업중, stop(응답 완료)=완료.
       // post(도구 종료)는 다음 도구가 이어질 수 있어 '작업중' 유지(무시).
       // voice 미설치 환경에서도 stop 신호로 완료 뱃지가 뜬다.
-      // 그리드 카드/탭도 cwd로 매칭해 같은 규칙(pre=작업중, stop=완료)을 적용한다.
-      // T6: 그리드를 안 열어도 탭만 보고 승인 대기 세션을 찾을 수 있어야 하므로
-      // 카드와 동일하게 탭에도 working/done class를 건다.
+      // 세션 카드도 cwd로 매칭해 같은 규칙(pre=작업중, stop=완료)을 적용한다.
+      // (세션 단위 상태의 정본은 A5의 agent/state.js다 — 여기 카드 강조는
+      // cwd밖에 모르던 T6 시절 경로가 카드에만 남은 것이다.)
       if (msg.state && msg.state.tool) {
         showToast(`${msg.state.tool} 실행 중...`, 'info', { key: 'agent', duration: 2500 });
         if (window.VTFavicon) VTFavicon.set('working');
         const card = _cardByCwd(msg.state.cwd);
         if (card) { card.classList.add('working'); card.classList.remove('done'); }
-        const tab = _tabByCwd(msg.state.cwd);
-        if (tab) { tab.classList.add('working'); tab.classList.remove('done'); }
       } else if (msg.event === 'stop') {
         if (window.VTFavicon) VTFavicon.set('done');
         const card = _cardByCwd(msg.state && msg.state.cwd);
         if (card) { card.classList.remove('working'); card.classList.add('done'); }
-        const tab = _tabByCwd(msg.state && msg.state.cwd);
-        if (tab) { tab.classList.remove('working'); tab.classList.add('done'); }
       }
     }
   };
