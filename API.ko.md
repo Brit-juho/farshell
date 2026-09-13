@@ -164,6 +164,7 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/api/files/{id}/path` | 저장된 파일의 디스크 경로 (dock 파일 탭 「경로 복사」용 — 입력은 id뿐이라 traversal 표면이 없다) |
 | DELETE | `/api/files/{id}` | 저장된 파일 삭제 |
 | POST | `/api/files/{id}/insert` | 파일 경로를 tmux 세션 pane에 타이핑(JSON: `session`), Enter는 안 누름 |
+| POST | `/api/files/{id}/send` | 파일을 원격 호스트로 복사(JSON: `host`, 선택 `session`). `session`을 주면 상대가 **자기 쪽 경로**를 그 pane에 타이핑한다. 이 라우트는 평소 로그인 인증이고, 나가는 요청에만 peer 서명이 붙는다. 같은 파일 재전송은 origin으로 건너뛴다 |
 | POST | `/api/files/{id}/share` | **승격 필요.** 공유 링크 발급(JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
 | DELETE | `/api/files/{id}/share/{shareId}` | **승격 필요.** 공유 취소 — 서명이 아직 유효해도 그 즉시 URL이 404가 된다 |
 
@@ -194,6 +195,7 @@ peer 자격증명은 여기 정의된 것에만 닿고, 나머지 API에는 절�
 | GET | `/api/peer/sessions` | 서명 필요, `view` 등급 — 이 호스트의 tmux 세션 + 에이전트 상태. **다른 peer의 세션은 절대 중계하지 않는다**(hop 0): A↔B 상호 페어링에서 A→B→A 무한 재귀가 되기 때문 |
 | POST | `/api/peer/input` | 서명 + **`control` 등급** — 이 호스트의 tmux 세션에 텍스트를 타이핑(JSON: `session`, `data`, 선택 `enter`). 기본은 Enter 없음(파일 삽입과 같은 계약), `enter: true`면 Enter까지 — 프롬프트 큐(A3)가 그것을 쓴다. 어느 쪽인지 호출부가 명시하고 서버는 추측하지 않는다. `view` 상대에겐 켜는 명령까지 담아 403 |
 | WS | `/api/peer/ws/{tmux_name}` | 서명 필요. `view`는 출력 구독, 입력은 `control`에서만 적용. **상대 서버의 프록시**가 여는 소켓이다(브라우저 WebSocket은 서명 헤더를 못 보낸다). 연결마다 이 호스트에 전용 PTY를 만들고 끊길 때 정리한다 — 소유자의 PTY를 공유하면 두 화면이 크기를 두고 싸운다 |
+| POST | `/api/peer/file` | **본문 해시까지 서명**(`X-Peer-Body`) + **`control` 등급** — 원시 바이트를 받아 이 호스트의 파일 저장소에 넣는다. `X-Peer-File-Session`이 오면 그 pane에 경로를 타이핑(Enter 없음). 같은 파일 재전송은 origin(보낸 호스트 id + 그쪽 파일 id)으로 건너뛴다 — 내용 해시가 아니다. 이 호스트의 `VT_MAX_UPLOAD_MB`를 넘으면 413 |
 
 ## 호스트 (N7/N39 2단계 — 브라우저가 부르는 쪽)
 

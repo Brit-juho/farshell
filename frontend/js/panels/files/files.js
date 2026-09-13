@@ -253,10 +253,23 @@ async function insertFile(item) {
   const s = activeSession();
   const tmuxName = s && (s.tmuxName || s.tmux_name);
   if (s && s.remote) {
-    // A2(80 §1 3단계) — 파일 바이트는 이 맥에만 있다. 경로를 원격 pane에
-    // 타이핑해봐야 그쪽에는 그 파일이 없고, 같은 경로에 **다른** 파일이
-    // 있으면 더 나쁘다. 전송이 생기기 전까지는 막고 이유를 말한다.
-    showToast('원격 세션에는 삽입할 수 없습니다 — 파일이 이 맥에만 있습니다', 'error');
+    // A2 — 파일 바이트는 이 맥에만 있다. 경로만 타이핑하면 그쪽에는 그 파일이
+    // 없고, 같은 경로에 **다른** 파일이 있으면 더 나쁘다. 그래서 바이트를 먼저
+    // 옮기고(상대가 저장한 뒤 자기 경로를 타이핑한다) 그 결과만 알린다.
+    const host = s.remote.host;
+    showToast(`${host}(으)로 전송 중…`);
+    try {
+      const r = await vtFetch(`/api/files/${encodeURIComponent(item.id)}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, session: s.remote.tmux }),
+      });
+      showToast(r.typed
+        ? `${host}에 전송 후 경로 삽입됨${r.reused ? ' (이미 있던 파일 재사용)' : ''}`
+        : `${host}에 전송됨 — pane을 못 찾아 경로는 못 넣었습니다`, r.typed ? 'success' : 'error');
+    } catch (e) {
+      showToast(`전송 실패: ${e.message}`, 'error');
+    }
     return;
   }
   if (!tmuxName) {

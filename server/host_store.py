@@ -409,19 +409,30 @@ def revoke_all() -> dict:
 # --- 요청 서명 -------------------------------------------------------------------
 
 
-def sign_request(secret: str, method: str, path: str, ts: int, nonce: str) -> str:
+def sign_request(secret: str, method: str, path: str, ts: int, nonce: str,
+                 body_hash: str = "") -> str:
     """서명 대상에 method와 path를 포함한다 — 서명 하나를 다른 엔드포인트에
-    돌려쓰지 못하게(예: view용 GET 서명을 control용 POST에 재사용) 막는다."""
+    돌려쓰지 못하게(예: view용 GET 서명을 control용 POST에 재사용) 막는다.
+
+    A2(파일 전송)부터 **본문 해시**도 서명할 수 있다. 지금까지의 엔드포인트는
+    본문이 작고 JSON이라 method+path만으로 충분했지만, 파일 바이트는 터널을
+    지나가는 큰 덩어리라 "서명은 맞는데 내용이 바뀐" 경우를 구분할 수 있어야
+    한다. `body_hash`가 빈 문자열이면 **서명 문자열이 예전과 글자 하나까지
+    같다** — 구버전 상대와의 호환이 깨지지 않는다(그래서 조건부로 붙인다).
+    """
     payload = f"{method.upper()}\n{path}\n{ts}\n{nonce}"
+    if body_hash:
+        payload += f"\n{body_hash}"
     return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
 def verify_signature(secret: str, method: str, path: str, ts: int, nonce: str,
-                     sig: str, now: float | None = None) -> bool:
+                     sig: str, now: float | None = None, body_hash: str = "") -> bool:
     now = time.time() if now is None else now
     if abs(now - ts) > SIGNATURE_WINDOW_SEC:
         return False
-    return hmac.compare_digest(sign_request(secret, method, path, ts, nonce), sig or "")
+    return hmac.compare_digest(
+        sign_request(secret, method, path, ts, nonce, body_hash), sig or "")
 
 
 class NonceCache:

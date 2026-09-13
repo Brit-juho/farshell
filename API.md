@@ -168,6 +168,7 @@ download API — `/api/files/{id}/download` is id-only by design.
 | GET | `/api/files/{id}/path` | Disk path of a stored file (dock file tab's "copy path"; id-only input, so no traversal surface) |
 | DELETE | `/api/files/{id}` | Delete a stored file |
 | POST | `/api/files/{id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
+| POST | `/api/files/{id}/send` | Copy the file to a remote host (JSON: `host`, optional `session`) and, with `session`, have that host type its own path into the pane. Ordinary login auth here; the outbound leg carries the peer signature. Re-sending the same file is skipped by origin |
 | POST | `/api/files/{id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
 | DELETE | `/api/files/{id}/share/{shareId}` | **Elevated.** Cancel a share — the URL 404s immediately even with a still-valid signature |
 
@@ -198,6 +199,7 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | GET | `/api/peer/sessions` | Signed, `view` level — this host's tmux sessions + agent status. **Never relays other peers' sessions** (hop 0): A↔B mutual pairing would otherwise recurse A→B→A |
 | POST | `/api/peer/input` | Signed, **`control` level** — type text into a tmux session on this host (JSON: `session`, `data`, optional `enter`). Default types without Enter (same contract as file insert); `enter: true` presses it, which is what the prompt queue needs (A3) — the caller says which, the server never guesses. A `view` peer gets 403 with the exact command to enable it |
 | WS | `/api/peer/ws/{tmux_name}` | Signed, `view` streams output; input is applied only at `control` level. Opened by the **other server's proxy**, never by a browser (a browser WebSocket can't send the signature headers). Each connection gets its own PTY on this host and it is destroyed on disconnect — sharing the owner's PTY would make the two screens fight over the terminal size |
+| POST | `/api/peer/file` | Signed **with a body hash** (`X-Peer-Body`), **`control` level** — raw bytes in, stored in this host's file store; with `X-Peer-File-Session` the path is typed into that pane (no Enter). Re-sends of the same file are deduped by origin (sender host id + their file id), not by content hash. Over this host's `VT_MAX_UPLOAD_MB` → 413 |
 
 ## Hosts (N7/N39, stage 2 — what the browser calls)
 

@@ -393,3 +393,100 @@ def test_peer_proxy_ws_requires_known_host(env):
             ws.receive_bytes()
     # 인증(4001) 또는 호스트 없음(4004) — 둘 다 "연결되지 않는다"는 같은 계약이다.
     assert e.value.code in (4001, 4004)
+
+
+# --- A2: 파일 전송 (본문 해시 서명 + control 등급) ----------------------------------
+
+
+def _file_headers(hs, peer_id, secret, data, name="a.txt", session="", src_id="f1"):
+    import hashlib
+    digest = hashlib.sha256(data).hexdigest()
+    ts = int(time.time())
+    nonce = f"n-{time.time_ns()}"
+    h = {
+        "X-Peer-Id": peer_id,
+        "X-Peer-Ts": str(ts),
+        "X-Peer-Nonce": nonce,
+        "X-Peer-Sig": hs.sign_request(secret, "POST", "/api/peer/file", ts, nonce, digest),
+        "X-Peer-Body": digest,
+        "X-Peer-File-Name": name,
+        "X-Peer-File-Id": src_id,
+        "Content-Type": "application/octet-stream",
+    }
+    if session:
+        h["X-Peer-File-Session"] = session
+    return h
+
+
+def test_file_transfer_requires_control_level(env):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    data = b"hello"
+    r = client.post("/api/peer/file", content=data, headers=_file_headers(hs, "laptop", secret, data))
+    assert r.status_code == 403
+    assert r.json()["error"] == "level_required"
+
+
+def test_file_transfer_stores_bytes_and_dedupes_by_origin(env):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    import file_store
+    data = b"payload-bytes"
+
+    r = client.post("/api/peer/file", content=data,
+                    headers=_file_headers(hs, "laptop", secret, data, name="build.tar.gz"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["reused"] is False
+    stored = file_store.real_path_for(body["id"])
+    assert stored.read_bytes() == data
+
+    # 같은 파일을 다시 보내면 디스크에 두 벌 쌓이지 않는다.
+    r2 = client.post("/api/peer/file", content=data,
+                     headers=_file_headers(hs, "laptop", secret, data, name="build.tar.gz"))
+    assert r2.json()["reused"] is True
+    assert r2.json()["id"] == body["id"]
+    assert len(file_store.list_items()) == 1
+
+
+def test_file_transfer_rejects_a_tampered_body(env):
+    """서명은 그대로 두고 바이트만 바꾼 요청 — 본문 해시를 서명에 넣은 이유다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    data = b"original"
+    headers = _file_headers(hs, "laptop", secret, data)
+    r = client.post("/api/peer/file", content=b"tampered", headers=headers)
+    assert r.status_code == 401
+    assert "본문" in r.json()["reason"]
+
+
+def test_file_transfer_over_size_cap_is_413(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    import file_store
+    monkeypatch.setattr(file_store, "MAX_UPLOAD_BYTES", 4)
+    data = b"too-long-body"
+    r = client.post("/api/peer/file", content=data, headers=_file_headers(hs, "laptop", secret, data))
+    assert r.status_code == 413
+
+
+def test_file_transfer_types_the_path_into_the_named_session(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    import tmux_target
+    typed = []
+    monkeypatch.setattr(tmux_target, "session_pane", lambda n: "%2" if n == "dev" else None)
+    # Enter 없이 타이핑돼야 한다(로컬 파일 삽입과 같은 계약).
+    monkeypatch.setattr(tmux_target, "type_to_tmux", lambda p, t: typed.append((p, t)) or True)
+    monkeypatch.setattr(tmux_target, "send_to_tmux",
+                        lambda p, t: pytest.fail("파일 삽입은 Enter를 누르면 안 된다"))
+
+    data = b"x"
+    r = client.post("/api/peer/file", content=data,
+                    headers=_file_headers(hs, "laptop", secret, data, session="dev"))
+    assert r.json()["typed"] is True
+    assert typed and typed[0][0] == "%2" and typed[0][1] == r.json()["path"]

@@ -28,6 +28,9 @@ peer 응답에는 **내 로컬 것만** 담는다. 내가 등록한 다른 peer�
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import os
 import json
 import logging
 import time
@@ -65,7 +68,7 @@ class PeerDenied(Exception):
         self.status = status
 
 
-def _authenticate_raw(method: str, path: str, headers) -> dict:
+def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> dict:
     """서명 검증 → grant. 실패는 PeerDenied. 실패도 전부 감사 로그에 남긴다.
 
     Request가 아니라 (method, path, headers)를 받는 이유: 3단계의 WebSocket
@@ -89,7 +92,14 @@ def _authenticate_raw(method: str, path: str, headers) -> dict:
         host_store.audit(peer_id, "auth", False, "등록되지 않은 호스트")
         raise PeerDenied("등록되지 않은 호스트입니다")
 
-    if not host_store.verify_signature(grant["secret"], method, path, ts, nonce, sig):
+    # A2 — 본문 해시를 서명한 요청. 헤더가 **있으면 반드시 맞아야 한다**(없는 척
+    # 지우고 보내면 서명 자체가 안 맞으므로 downgrade가 성립하지 않는다).
+    claimed = headers.get("x-peer-body", "")
+    if claimed and body_hash and not hmac.compare_digest(claimed, body_hash):
+        host_store.audit(peer_id, "auth", False, "본문 해시 불일치")
+        raise PeerDenied("본문이 서명과 일치하지 않습니다")
+    if not host_store.verify_signature(grant["secret"], method, path, ts, nonce, sig,
+                                       body_hash=claimed):
         host_store.audit(peer_id, "auth", False, "서명 불일치 또는 시간창 밖")
         raise PeerDenied("서명이 유효하지 않습니다 — 시계 차이가 크면 'fsh host ping'으로 확인하세요")
 
@@ -122,6 +132,27 @@ def _require(request: Request, level: str = host_store.LEVEL_VIEW) -> tuple[dict
             status_code=403,
         )
     return grant, None
+
+
+async def _require_body(request: Request, level: str = host_store.LEVEL_VIEW):
+    """본문 해시까지 서명한 요청용 인증(A2). 성공하면 `(grant, (grant, body))`,
+    실패하면 `(None, JSONResponse)` — 호출부가 본문을 다시 읽지 않아도 되게
+    바이트를 함께 돌려준다(한 번만 읽을 수 있는 스트림이다)."""
+    data = await request.body()
+    digest = hashlib.sha256(data).hexdigest()
+    try:
+        grant = _authenticate_raw(request.method, request.url.path, request.headers, digest)
+    except PeerDenied as e:
+        return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
+    if level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL:
+        host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
+        return None, JSONResponse(
+            {"error": "level_required", "reason":
+             "이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 "
+             "'fsh host allow-control <id>'로 켜야 합니다"},
+            status_code=403,
+        )
+    return grant, (grant, data)
 
 
 # --- 페어링 (서명 없음 — 티켓 자체가 인증) --------------------------------------
@@ -402,3 +433,83 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
         pty_mgr.unsubscribe(session_id, _on_data)
         pty_mgr.destroy_session(session_id)
         host_store.audit(grant["id"], "ws", True, f"{tmux_name} 종료")
+
+
+@router.post("/api/peer/file")
+async def peer_file(request: Request):
+    """파일 바이트를 받아 이 호스트의 저장소에 넣는다(A2, control 등급).
+
+    ## 왜 control인가
+    파일을 남의 디스크에 쓰는 행위이고, `session`이 함께 오면 그 경로를 pane에
+    타이핑까지 한다 — 입력과 같은 등급이 맞다. `view` 상대는 남의 맥에 파일을
+    떨어뜨릴 수 없어야 한다.
+
+    ## 왜 본문 해시를 서명하나
+    다른 엔드포인트는 본문이 작은 JSON이라 method+path 서명으로 충분했다. 파일은
+    터널을 지나는 큰 덩어리라 "서명은 맞는데 바이트가 다른" 경우를 구분할 수
+    있어야 한다(`X-Peer-Body`).
+
+    ## 중복 전송
+    같은 파일을 다시 보내면 저장하지 않고 이미 있는 항목을 그대로 쓴다 —
+    `origin`(보낸 쪽 호스트 id + 그쪽 파일 id)으로 판정한다. 파일 내용 해시가
+    아니라 origin을 쓰는 이유: 내용이 같아도 **다른 사람이 보낸 파일**은 다른
+    파일로 다뤄야 하고, 무엇보다 200MB를 매번 해싱해 대조할 이유가 없다.
+    """
+    grant, err = await _require_body(request, host_store.LEVEL_CONTROL)
+    if grant is None:
+        return err
+    _, data = err
+
+    import file_store
+    import tmux_target
+
+    name = request.headers.get("x-peer-file-name", "") or "file"
+    src_id = request.headers.get("x-peer-file-id", "")
+    session = request.headers.get("x-peer-file-session", "").strip()
+
+    if len(data) > file_store.MAX_UPLOAD_BYTES:
+        host_store.audit(grant["id"], "file", False, f"{name} 크기 초과")
+        return JSONResponse(
+            {"error": "too_large",
+             "reason": f"파일이 이 호스트의 상한을 넘습니다 (최대 {file_store.MAX_UPLOAD_BYTES // (1024*1024)}MB)"},
+            status_code=413,
+        )
+
+    origin = f"{grant['id']}:{src_id}" if src_id else ""
+    item = await asyncio.to_thread(file_store.find_by_origin, origin) if origin else None
+    reused = item is not None
+    if item is None:
+        item = await asyncio.to_thread(_store_peer_file, data, name, origin)
+
+    path = str(file_store.real_path_for(item["id"]))
+    typed = False
+    if session:
+        pane = tmux_target.session_pane(session)
+        if pane:
+            # 파일 경로는 **Enter 없이** 타이핑한다 — 로컬 파일 삽입과 같은 계약.
+            typed = await asyncio.to_thread(tmux_target.type_to_tmux, pane, path)
+    host_store.audit(grant["id"], "file", True,
+                     f"{name} {len(data)}B{' (재사용)' if reused else ''}{' → ' + session if typed else ''}")
+    return {"ok": True, "id": item["id"], "path": path, "reused": reused, "typed": typed}
+
+
+def _store_peer_file(data: bytes, name: str, origin: str) -> dict:
+    """받은 바이트를 임시 파일로 쓰고 저장소에 편입한다(복사 없이 rename)."""
+    import tempfile
+
+    import file_store
+
+    tmp_dir = file_store.files_dir()
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(tmp_dir), prefix=".peer-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(tmp, 0o600)
+        return file_store.add_from_upload(Path(tmp), name, len(data), origin=origin)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise

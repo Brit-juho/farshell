@@ -149,8 +149,24 @@ def real_path_for(file_id: str) -> Path | None:
     return fp if fp.is_file() else None
 
 
+def find_by_origin(origin: str) -> dict | None:
+    """A2 — 다른 호스트가 보낸 파일의 출처(`<보낸 호스트 id>:<그쪽 파일 id>`)로 찾는다.
+
+    같은 파일을 두 번 보내도 디스크에 두 벌 쌓이지 않게 하는 유일한 키다.
+    내용 해시를 쓰지 않는 이유는 `routes/peer.py`의 엔드포인트 주석에 있다.
+    """
+    if not origin:
+        return None
+    with _locked():
+        for x in _read_unlocked():
+            if x.get("origin") == origin:
+                return x
+    return None
+
+
 def add_from_upload(tmp_path: Path, name: str, size: int,
-                     session: str | None = None, worktree: str | None = None) -> dict:
+                     session: str | None = None, worktree: str | None = None,
+                     origin: str = "") -> dict:
     """이미 디스크에 받아둔 파일(tmp_path)을 저장소로 편입 — 데이터 재복사 없이 rename.
 
     호출자(routes)가 스트리밍 업로드를 먼저 tmp 위치에 0600으로 써두고 넘긴다.
@@ -173,6 +189,8 @@ def add_from_upload(tmp_path: Path, name: str, size: int,
             "session": session,
             "worktree": worktree,
             "host": "local",
+            # A2 — 다른 호스트에서 건너온 파일이면 그 출처. 로컬 업로드는 빈 값이다.
+            "origin": origin,
             "shares": [],
             "pin": False,
         }

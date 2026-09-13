@@ -844,6 +844,52 @@ async def file_path(file_id: str):
     return {"id": file_id, "path": str(fp)}
 
 
+@router.post("/api/files/{file_id}/send")
+async def send_file_to_host(file_id: str, request: Request):
+    """저장된 파일을 원격 호스트로 보낸다(A2) — JSON: `host`, 선택 `session`.
+
+    **왜 필요한가**: 원격 pane에 파일 경로를 타이핑해봐야 그쪽에는 그 파일이 없다.
+    더 나쁜 경우는 같은 경로에 **다른 파일**이 있는 것이다. 그래서 바이트를 먼저
+    옮긴 뒤 그쪽 경로를 넣는다. `session`을 같이 주면 상대가 저장 직후 그 pane에
+    경로를 타이핑한다(Enter 없음 — 로컬 삽입과 같은 계약).
+
+    이 라우트는 **평소의 로그인 인증**으로 지킨다(peer 서명이 아니다) — 부르는
+    쪽이 브라우저이기 때문이다. 나가는 요청에만 peer 서명이 붙는다.
+    """
+    body = await _read_json_body(request)
+    host = str(body.get("host", "")).strip()
+    session = str(body.get("session", "")).strip()
+    if not host or host == "local":
+        return JSONResponse({"error": "bad_host", "reason": "원격 호스트 id가 필요합니다"},
+                            status_code=400)
+    fp = await asyncio.to_thread(file_store.real_path_for, file_id)
+    if fp is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+
+    import host_store
+    import peer_client
+
+    peer = await asyncio.to_thread(host_store.find_peer, host)
+    if peer is None:
+        return JSONResponse({"error": "host_not_found",
+                             "reason": f"등록되지 않은 호스트입니다: {host}"}, status_code=404)
+    item = await asyncio.to_thread(file_store.get_item, file_id)
+    data = await asyncio.to_thread(fp.read_bytes)
+    headers = {
+        "X-Peer-File-Name": (item or {}).get("name", fp.name),
+        "X-Peer-File-Id": file_id,
+        **({"X-Peer-File-Session": session} if session else {}),
+    }
+    try:
+        r = await asyncio.to_thread(peer_client.send_bytes_sync, peer, "/api/peer/file", data, headers)
+    except peer_client.PeerError as e:
+        # 상대의 거부(등급 부족·크기 초과)는 이쪽 서버의 오류가 아니다 —
+        # 그대로 상태와 이유를 전달해 화면이 사람 말로 보여줄 수 있게 한다.
+        return JSONResponse({"error": "peer_failed", "reason": e.reason},
+                            status_code=e.status if 400 <= e.status < 600 else 502)
+    return {"ok": True, "host": host, **{k: r.get(k) for k in ("id", "path", "reused", "typed")}}
+
+
 @router.post("/api/files/{file_id}/insert")
 async def insert_file(file_id: str, request: Request):
     """파일 경로를 지정 세션(tmux)의 pane에 타이핑 — Enter는 누르지 않는다
