@@ -271,8 +271,13 @@ async def peer_ping(request: Request):
 
 @router.post("/api/peer/input")
 async def peer_input(request: Request):
-    """원격 세션에 텍스트를 넣는다(control 등급). Enter는 누르지 않는다 —
-    `POST /api/files/{id}/insert`와 같은 계약이다. 큐 투입(A3)이 이 경로를 쓴다."""
+    """원격 세션에 텍스트를 넣는다(control 등급).
+
+    기본은 **Enter 없이 타이핑**이다(`POST /api/files/{id}/insert`와 같은 계약) —
+    아직 완성 안 된 명령을 대신 실행시키지 않기 위해서다. `enter: true`면 Enter까지
+    누른다: 큐 투입(A3)은 "실행돼야 하는 지시"라 Enter가 없으면 프롬프트에 영원히
+    떠 있게 된다. 어느 쪽인지 **호출부가 명시**하게 하고 서버가 추측하지 않는다.
+    """
     grant, err = _require(request, host_store.LEVEL_CONTROL)
     if err:
         return err
@@ -282,6 +287,7 @@ async def peer_input(request: Request):
         body = {}
     session = str(body.get("session", "")).strip()
     data = body.get("data")
+    enter = bool(body.get("enter", False))
     if not session or not isinstance(data, str) or not data:
         return JSONResponse({"error": "bad_request", "reason": "session/data가 필요합니다"}, status_code=400)
 
@@ -291,8 +297,10 @@ async def peer_input(request: Request):
     if not pane:
         host_store.audit(grant["id"], "input", False, f"세션 없음: {session}")
         return JSONResponse({"error": "session_not_found"}, status_code=404)
-    ok = await asyncio.to_thread(tmux_target.type_to_tmux, pane, data)
-    host_store.audit(grant["id"], "input", bool(ok), f"{session} {len(data)}자")
+    send = tmux_target.send_to_tmux if enter else tmux_target.type_to_tmux
+    ok = await asyncio.to_thread(send, pane, data)
+    host_store.audit(grant["id"], "input", bool(ok),
+                     f"{session} {len(data)}자{' +Enter' if enter else ''}")
     if not ok:
         return JSONResponse({"error": "input_failed"}, status_code=500)
     return {"ok": True}

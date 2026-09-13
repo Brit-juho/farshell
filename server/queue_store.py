@@ -89,10 +89,17 @@ def _normalize_target(target) -> dict | None:
         out = {}
         session = str(target.get("session") or "").strip()
         worktree = str(target.get("worktree") or "").strip()
+        # A3(80 §1 3단계) — 원격 호스트 투입. host가 없으면 언제나 로컬이다.
+        # **세션 이름만으로는 부족하다**: 같은 이름(`dev`)의 세션이 맥에도
+        # gpu-box에도 있는 게 정상이라, host를 안 적으면 큐가 엉뚱한 기계에
+        # 명령을 친다.
+        host = str(target.get("host") or "").strip()
         if session:
             out["session"] = session
         if worktree:
             out["worktree"] = worktree
+        if host and host != "local":
+            out["host"] = host
         return out or None
     return None
 
@@ -101,6 +108,19 @@ def target_session(item: dict) -> str | None:
     """항목의 target에서 세션 이름을 뽑는다 — 2.1.0엔 이것만 실제로 resolve된다."""
     t = item.get("target")
     return t.get("session") if isinstance(t, dict) else None
+
+
+def target_host(item: dict) -> str:
+    """항목이 어느 호스트로 가야 하는가. 명시가 없으면 항상 로컬(A3).
+
+    `"local"`은 예약 id라 원격이 이 값을 가질 수 없다(host_store.normalize_id).
+    """
+    t = item.get("target")
+    if isinstance(t, dict):
+        h = str(t.get("host") or "").strip()
+        if h and h != "local":
+            return h
+    return "local"
 
 
 def _read_unlocked() -> list[dict]:

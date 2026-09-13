@@ -301,3 +301,64 @@ def test_autodrain_toggle(monkeypatch):
     assert queue_runner.autodrain_enabled() is False
     monkeypatch.setenv("VT_QUEUE_AUTODRAIN", "1")
     assert queue_runner.autodrain_enabled() is True
+
+
+# --- A3(80 §1 3단계): 원격 호스트 투입 ---------------------------------------------
+
+
+def test_target_host_defaults_to_local_and_ignores_reserved_id():
+    import queue_store
+    assert queue_store.target_host({"target": None}) == "local"
+    assert queue_store.target_host({"target": {"session": "dev"}}) == "local"
+    assert queue_store.target_host({"target": {"session": "dev", "host": "local"}}) == "local"
+    assert queue_store.target_host({"target": {"session": "dev", "host": "gpu-box"}}) == "gpu-box"
+
+
+def test_add_keeps_host_in_target():
+    import queue_store
+    r = queue_store.add("빌드 돌려", {"session": "dev", "host": "gpu-box"})
+    assert r["ok"]
+    assert r["item"]["target"] == {"session": "dev", "host": "gpu-box"}
+
+
+def test_remote_item_goes_to_peer_and_never_touches_local_tmux(monkeypatch):
+    """같은 이름의 로컬 세션이 있어도 원격 항목은 로컬에 치면 안 된다 — 이게 이
+    분기의 존재 이유다(`dev`는 맥에도 gpu-box에도 있는 게 정상이다)."""
+    import queue_runner, queue_store, tmux_target
+    queue_store.add("git status", {"session": "dev", "host": "gpu-box"})
+
+    local_calls = []
+    monkeypatch.setattr(tmux_target, "session_pane", lambda n: "%1")
+    monkeypatch.setattr(tmux_target, "send_to_tmux", lambda p, t: local_calls.append((p, t)) or True)
+    sent = []
+    monkeypatch.setattr(queue_runner, "_send_remote",
+                        lambda host, session, text: sent.append((host, session, text)) or (True, ""))
+
+    r = queue_runner.drain_once()
+    assert r["ok"] and r["drained"] == 1
+    assert sent == [("gpu-box", "dev", "git status")]
+    assert local_calls == [], "원격 항목이 로컬 tmux로 샜다"
+    assert r["mode"] == "host:gpu-box"
+
+
+def test_remote_send_failure_keeps_the_item_blocked_with_the_reason(monkeypatch):
+    import queue_runner, queue_store
+    queue_store.add("배포", {"session": "dev", "host": "gpu-box"})
+    monkeypatch.setattr(queue_runner, "_send_remote",
+                        lambda *a: (False, "이 호스트는 읽기 전용(view)입니다"))
+
+    r = queue_runner.drain_once()
+    assert not r["ok"] and r["error"] == "send_failed"
+    items = queue_store.list_items()
+    assert len(items) == 1, "실패한 항목을 버리면 안 된다"
+    assert items[0]["status"] == "blocked"
+    assert "읽기 전용" in items[0]["blocked_reason"]
+
+
+def test_remote_item_without_a_session_is_blocked_not_guessed(monkeypatch):
+    """원격은 '자동 타깃' 규칙(음성 규칙)이 성립하지 않는다 — 그건 로컬 pane을 본다."""
+    import queue_runner, queue_store
+    queue_store.add("x", {"host": "gpu-box"})
+    r = queue_runner.drain_once()
+    assert not r["ok"] and r["error"] == "no_target"
+    assert queue_store.list_items()[0]["status"] == "blocked"
