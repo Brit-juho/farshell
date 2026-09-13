@@ -30,4 +30,8 @@ export function applyAgentBadges(agents) {
   document.querySelectorAll('.vt-card').forEach((card) => {
     _applyCardAgent(card, agents[card.dataset.name]);
   });
+  // 10 §4 — 워크트리 탭도 같은 스냅샷으로 마크를 그린다. layout/tabbar.js를
+  // 직접 import하지 않는 이유는 순환(tabbar → agent/state → …)을 만들지 않기
+  // 위해서다. 이 저장소가 이미 쓰는 window 브리지 관행을 따른다.
+  window.vtSetTabAgentInfo?.(agents);
 }

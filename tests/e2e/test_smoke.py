@@ -861,6 +861,38 @@ def test_워크트리_탭은_하나뿐이면_안_보이고_열면_나타난다(p
     assert active == "repo/smoke", "새로 연 워크트리 탭이 활성이어야 한다"
 
 
+def test_워크트리_탭이_에이전트_마크와_상태_자리를_갖는다(page):
+    """10 §4 — 탭 구성은 `[에이전트 마크][이름][상태 dot][읽지 않음][닫기]`.
+    세션 탭 줄을 이 탭 안으로 흡수하려면 그 표시들이 먼저 여기로 와야 한다.
+
+    CI에는 에이전트도 tmux 세션도 없으니 **idle일 때의 규칙**을 본다: 자리는
+    있되 비어 있고, 빈 자리가 폭을 먹지 않는다(:empty 접힘). 회색 점이 상시로
+    붙어 있으면 그건 정보가 아니라 노이즈라는 게 이 규칙의 이유다."""
+    page.evaluate("() => window.openWorktreeTab('wt-marks', 'repo/marks')")
+    page.wait_for_timeout(250)
+    shape = page.evaluate(
+        """() => {
+          const tab = document.querySelector('#vt-wtabs .vt-wtab.active');
+          const agent = tab.querySelector('.vt-wtab-agent');
+          const marks = tab.querySelector('.vt-wtab-marks');
+          const unread = tab.querySelector('.vt-wtab-unread');
+          return {
+            slots: [...tab.children].map((c) => c.className),
+            agentWidth: agent.getBoundingClientRect().width,
+            marksWidth: marks.getBoundingClientRect().width,
+            dot: !!marks.querySelector('.status-dot'),
+            unreadHidden: unread.hidden,
+          };
+        }"""
+    )
+    assert shape["slots"][:4] == [
+        "vt-wtab-agent", "vt-wtab-name", "vt-wtab-marks", "vt-wtab-unread"], shape["slots"]
+    assert shape["dot"] is False, "idle이면 상태 dot을 그리지 않는다"
+    assert shape["unreadHidden"] is True
+    assert shape["agentWidth"] == 0 and shape["marksWidth"] == 0, \
+        f"빈 자리가 폭을 먹으면 안 된다: {shape}"
+
+
 def test_탭마다_자기_pane_트리를_가진다(page):
     """2단계의 핵심 — 탭을 바꿨다 돌아오면 그 워크트리의 분할이 그대로다.
     1단계에서는 트리가 화면 전체에 하나뿐이라 이게 성립하지 않았다."""
