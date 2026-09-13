@@ -40,10 +40,14 @@ export async function attachRemoteSession(hostId, tmuxName) {
 
   // remote는 **소켓이 열리기 전에** 레코드에 있어야 한다(ws.js가 이걸 보고
   // 프록시 경로를 고른다) — addSession의 opts가 그 자리다.
+  // 화면 토큰 — 상대 호스트(B)가 이 탭의 attach PTY를 `peer-<내 id>-<screen>`으로
+  // 이름 붙이고, 「연결된 화면」이 그걸로 "이게 나"를 판정한다. 없으면 원격
+  // 「이 화면만 남기기」가 자기 자신을 끊을 수 있어서 그 기능을 켤 수 없다.
+  const screen = (crypto.randomUUID?.() || String(Math.random()).slice(2)).replace(/-/g, '');
   addSession(id, `${tmuxName} · ${hostId}`, undefined, {
     tmuxName,
     host: hostId,
-    remote: { host: hostId, tmux: tmuxName },
+    remote: { host: hostId, tmux: tmuxName, screen },
   });
   saveWorkspace();
   return id;

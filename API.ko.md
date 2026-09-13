@@ -196,6 +196,10 @@ peer 자격증명은 여기 정의된 것에만 닿고, 나머지 API에는 절�
 | POST | `/api/peer/input` | 서명 + **`control` 등급** — 이 호스트의 tmux 세션에 텍스트를 타이핑(JSON: `session`, `data`, 선택 `enter`). 기본은 Enter 없음(파일 삽입과 같은 계약), `enter: true`면 Enter까지 — 프롬프트 큐(A3)가 그것을 쓴다. 어느 쪽인지 호출부가 명시하고 서버는 추측하지 않는다. `view` 상대에겐 켜는 명령까지 담아 403 |
 | WS | `/api/peer/ws/{tmux_name}` | 서명 필요. `view`는 출력 구독, 입력은 `control`에서만 적용. **상대 서버의 프록시**가 여는 소켓이다(브라우저 WebSocket은 서명 헤더를 못 보낸다). 연결마다 이 호스트에 전용 PTY를 만들고 끊길 때 정리한다 — 소유자의 PTY를 공유하면 두 화면이 크기를 두고 싸운다 |
 | POST | `/api/peer/file` | **본문 해시까지 서명**(`X-Peer-Body`) + **`control` 등급** — 원시 바이트를 받아 이 호스트의 파일 저장소에 넣는다. `X-Peer-File-Session`이 오면 그 pane에 경로를 타이핑(Enter 없음). 같은 파일 재전송은 origin(보낸 호스트 id + 그쪽 파일 id)으로 건너뛴다 — 내용 해시가 아니다. 이 호스트의 `VT_MAX_UPLOAD_MB`를 넘으면 413 |
+| GET | `/api/peer/clients?session=&screen=` | 서명 필요, `view` 등급 — 이 호스트의 그 tmux 세션에 붙은 클라이언트 목록. `screen`은 상대가 WS 연결 때 정한 화면 토큰이고, 서버는 그것을 `peer-<상대 id>-<screen>` PTY로만 해석한다 — **접두사가 강제되므로 남의 화면을 자기 것이라 주장할 수 없다** |
+| POST | `/api/peer/clients/detach` | 서명 + **`control` 등급** — 클라이언트 하나 끊기(JSON: `tty`, `screen`). 자기 화면(`screen`으로 판정)은 400으로 거부한다 |
+| POST | `/api/peer/clients/solo` | 서명 + **`control` 등급** — 「이 화면만 남기기」(JSON: `session`, `screen`). `screen`으로 자기 tty를 특정하지 못하면 **아무것도 끊지 않고** 400 — 전부 끊으면 되돌릴 방법이 없다 |
+| GET | `/api/peer/search?q=` | 서명 필요, `view` 등급 — 이 호스트의 스크롤백 검색(로컬 `/api/search/scrollback`과 같은 상한). 응답에서 `session_id`는 제거한다 — 이 호스트 안에서만 뜻이 있는 값이라 상대가 그걸로 자기 세션을 열면 엉뚱한 세션이 열린다 |
 
 ## 호스트 (N7/N39 2단계 — 브라우저가 부르는 쪽)
 
@@ -207,6 +211,10 @@ peer 네임스페이스의 나가는 짝을 로컬 UI에게 하나의 목록으�
 | GET | `/api/hosts[?fresh=1]` | 로컬(항상 첫 항목, id `local`) + 등록된 모든 원격 호스트를 각자의 세션 목록과 함께. 원격 조회는 병렬 + 30초 캐시이며, 꺼진 호스트는 목록을 실패시키지 않고 `online:false` + `reason`으로 표현된다 |
 | GET | `/api/hosts/self` | 이 호스트의 id/label (페어링 안내·설정 화면용) |
 | POST | `/api/hosts/{id}/ping` | 연결 확인 + 시계 오차/지연 갱신. 연결 실패는 **200에 `online:false`** — 서버 오류가 아니라 상태이기 때문 |
+| GET | `/api/hosts/{id}/clients?session=&screen=` | 원격 「연결된 화면」 목록 — peer의 같은 경로로 중계한다. 원격이 거부한 상태 코드(등급 부족 403 등)를 그대로 넘긴다 |
+| POST | `/api/hosts/{id}/clients/detach` | 원격 클라이언트 끊기 중계(JSON: `tty`, `screen`). 상대가 `view` 등급만 줬으면 403 — 화면은 그때 끊기 버튼을 감추고 이유를 적는다 |
+| POST | `/api/hosts/{id}/clients/solo` | 원격 「이 화면만 남기기」 중계(JSON: `session`, `screen`) |
+| GET | `/api/hosts/{id}/search?q=` | 원격 스크롤백 검색 중계. 결과 각 행에 `host`/`host_label`을 **여기서** 붙인다 — 원격이 스스로를 뭐라 부르든 화면 라벨은 이쪽 레지스트리의 이름을 쓴다 |
 | WS | `/ws/remote/{host_id}/{tmux_name}` | 원격 pane 프록시: 이쪽은 브라우저의 평소 로그인 인증, 저쪽은 peer 서명. **PTY를 만들지 않고, 출력 감시에 먹이지 않고, 스크롤백도 안 쓴다** — 알림·영속화는 PTY를 소유한 호스트의 몫이라 여기서 겹치지 않는다 |
 
 ## 기타

@@ -27,8 +27,12 @@ export function startSessionSocket(id, term) {
   // N7/N39 3단계 — 원격 세션은 이 서버의 프록시를 거친다(브라우저는 peer 서명
   // 헤더를 못 보내므로 상대 서버에 직접 붙을 수 없다, routes/peer_proxy.py).
   const _s = getSession(id);
+  // screen — 상대 호스트가 이 탭의 attach PTY를 식별하는 토큰(term/remote.js).
+  // 「연결된 화면」이 원격에서 "이게 나"를 판정하는 유일한 근거다.
+  const _screen = _s && _s.remote && _s.remote.screen
+    ? `${_wsQuery() ? '&' : '?'}screen=${encodeURIComponent(_s.remote.screen)}` : '';
   const _wsPath = _s && _s.remote
-    ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}`
+    ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}${_screen}`
     : `/ws/${id}${_wsQuery()}`;
   let _retries = 0;
   let _stableTimer = null;

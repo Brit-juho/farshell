@@ -490,3 +490,154 @@ def test_file_transfer_types_the_path_into_the_named_session(env, monkeypatch):
                     headers=_file_headers(hs, "laptop", secret, data, session="dev"))
     assert r.json()["typed"] is True
     assert typed and typed[0][0] == "%2" and typed[0][1] == r.json()["path"]
+
+
+# --- 2.1.3: 「연결된 화면」(view 목록 / control 끊기) · 스크롤백 검색 -----------------
+#
+# 2.1.2에서 이 둘은 원격에서 **꺼져 있었다**. `/api/tmux/clients`는 요청을 받은
+# 맥의 tmux를 보므로 원격 탭에서 부르면 남의 세션 목록을 보여주고, 무엇보다
+# 「이 화면만 남기기」가 자기 자신을 끊었다. 그래서 여기 테스트의 무게는
+# **"자기 화면을 어떻게 판정하는가"**에 있다.
+
+
+def _fake_client_rows(monkeypatch, rows):
+    import routes.tmux as tmux_mod
+    monkeypatch.setattr(tmux_mod, "_client_rows", lambda s: [dict(r) for r in rows])
+
+
+def _fake_tty(monkeypatch, mapping):
+    """web/PTY 세션 id → tty. 원격 화면은 `peer-<peer id>-<screen>`로 들어온다."""
+    import routes.tmux as tmux_mod
+    monkeypatch.setattr(tmux_mod, "_tty_of_web_session", lambda sid: mapping.get(sid))
+
+
+ROWS = [
+    {"tty": "/dev/ttys001", "name": "iterm", "width": 80, "height": 24, "activity": "0"},
+    {"tty": "/dev/ttys002", "name": "remote", "width": 100, "height": 30, "activity": "0"},
+]
+
+
+def test_clients_list_is_view_level_and_marks_my_screen(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)          # 기본 등급은 view
+    _fake_client_rows(monkeypatch, ROWS)
+    _fake_tty(monkeypatch, {"peer-laptop-abc": "/dev/ttys002"})
+    path = "/api/peer/clients"
+    r = client.get(f"{path}?session=dev&screen=abc",
+                   headers=_sign_headers(hs, "laptop", secret, "GET", path))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["me_tty"] == "/dev/ttys002"
+    assert [c["is_me"] for c in body["clients"]] == [False, True]
+    assert body["clients"][1]["label"] == "이 화면"
+
+
+def test_clients_screen_token_cannot_claim_another_peers_screen(env, monkeypatch):
+    """접두사가 강제되므로 남의 화면 id를 주장해도 자기 것이 되지 않는다 —
+    로컬 경로의 "tty를 클라이언트가 고르게 하지 않는다"와 같은 성질."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    _fake_client_rows(monkeypatch, ROWS)
+    _fake_tty(monkeypatch, {"peer-other-abc": "/dev/ttys002"})
+    path = "/api/peer/clients"
+    r = client.get(f"{path}?session=dev&screen=abc",
+                   headers=_sign_headers(hs, "laptop", secret, "GET", path))
+    assert r.json()["me_tty"] is None
+    assert all(c["is_me"] is False for c in r.json()["clients"])
+
+
+def test_clients_detach_requires_control_level(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    _fake_client_rows(monkeypatch, ROWS)
+    path = "/api/peer/clients/detach"
+    r = client.post(path, json={"tty": "/dev/ttys001", "screen": "abc"},
+                    headers=_sign_headers(hs, "laptop", secret, "POST", path))
+    assert r.status_code == 403
+    assert "allow-control" in r.json()["reason"]
+
+
+def test_clients_detach_refuses_my_own_screen(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    _fake_tty(monkeypatch, {"peer-laptop-abc": "/dev/ttys002"})
+    import tmux_runner
+    monkeypatch.setattr(tmux_runner, "run",
+                        lambda *a, **k: pytest.fail("자기 화면을 끊으면 안 된다"))
+    path = "/api/peer/clients/detach"
+    r = client.post(path, json={"tty": "/dev/ttys002", "screen": "abc"},
+                    headers=_sign_headers(hs, "laptop", secret, "POST", path))
+    assert r.status_code == 400
+    assert r.json()["error"] == "cannot detach self"
+
+
+def test_clients_solo_detaches_everyone_but_me(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    _fake_client_rows(monkeypatch, ROWS)
+    _fake_tty(monkeypatch, {"peer-laptop-abc": "/dev/ttys002"})
+    calls = []
+    import tmux_runner
+    monkeypatch.setattr(tmux_runner, "run", lambda args, timeout=2.0: calls.append(args) or (0, b"", b""))
+    path = "/api/peer/clients/solo"
+    r = client.post(path, json={"session": "dev", "screen": "abc"},
+                    headers=_sign_headers(hs, "laptop", secret, "POST", path))
+    assert r.json() == {"ok": True, "kept": "/dev/ttys002", "detached": ["/dev/ttys001"]}
+    assert ["detach-client", "-t", "/dev/ttys001"] in calls
+
+
+def test_clients_solo_detaches_nothing_when_my_screen_is_unknown(env, monkeypatch):
+    """전부 끊고 나면 되돌릴 방법이 없다 — 로컬 경로와 같은 규칙."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    _fake_client_rows(monkeypatch, ROWS)
+    _fake_tty(monkeypatch, {})
+    import tmux_runner
+    monkeypatch.setattr(tmux_runner, "run", lambda *a, **k: pytest.fail("아무것도 끊으면 안 된다"))
+    path = "/api/peer/clients/solo"
+    r = client.post(path, json={"session": "dev", "screen": "abc"},
+                    headers=_sign_headers(hs, "laptop", secret, "POST", path))
+    assert r.status_code == 400
+    assert r.json()["error"] == "unknown client"
+
+
+def test_clients_rejects_option_like_session_name(env):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    path = "/api/peer/clients"
+    r = client.get(f"{path}?session=-t%20other",
+                   headers=_sign_headers(hs, "laptop", secret, "GET", path))
+    assert r.status_code == 400
+
+
+def test_search_is_view_level_and_strips_local_session_ids(env, monkeypatch):
+    """session_id는 이 호스트 안에서만 뜻이 있는 값이다 — 그대로 넘기면 상대가
+    그걸로 자기 로컬 세션을 열려다 엉뚱한 세션을 연다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+
+    async def fake_search(q, sessions="all"):
+        return {"results": [{"session_id": "uuid-1", "session_name": "dev", "source": "log",
+                             "line_no": 3, "line": f"hit {q}",
+                             "context_before": [], "context_after": []}],
+                "truncated": False}
+
+    import routes.search as search_mod
+    monkeypatch.setattr(search_mod, "search_scrollback", fake_search)
+    path = "/api/peer/search"
+    r = client.get(f"{path}?q=boom", headers=_sign_headers(hs, "laptop", secret, "GET", path))
+    assert r.status_code == 200, r.text
+    row = r.json()["results"][0]
+    assert "session_id" not in row
+    assert row["session_name"] == "dev" and row["line"] == "hit boom"
+
+
+def test_search_with_empty_query_returns_nothing(env):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    path = "/api/peer/search"
+    r = client.get(f"{path}?q=%20", headers=_sign_headers(hs, "laptop", secret, "GET", path))
+    assert r.json() == {"results": [], "truncated": False}

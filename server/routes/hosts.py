@@ -133,6 +133,87 @@ async def get_self_host():
     return me
 
 
+# ── 원격 세션의 「연결된 화면」·스크롤백 검색 (2.1.3) ────────────────────────
+# 둘 다 2.1.2에서는 원격에서 **꺼져 있던** 기능이다. `/api/tmux/clients`도
+# `/api/search/scrollback`도 이 맥의 tmux·이 맥의 버퍼만 보므로, 원격 탭에서
+# 부르면 남의 세션 목록을 보여주거나(그리고 「이 화면만 남기기」가 자기 자신을
+# 끊거나) 아무것도 못 찾는다. PTY를 소유한 호스트에게 물어보는 게 유일하게 맞는
+# 답이고, 등급 경계는 자연스럽게 갈린다 — **보는 건 view, 끊는 건 control.**
+
+
+async def _peer_or_404(host_id: str):
+    peer = await asyncio.to_thread(host_store.find_peer, host_id)
+    if peer is None:
+        return None, JSONResponse({"error": "not_found"}, status_code=404)
+    return peer, None
+
+
+def _peer_error(e: "peer_client.PeerError") -> JSONResponse:
+    # 원격이 거부한 이유(등급 부족 403 등)를 그대로 넘긴다 — 여기서 500으로
+    # 뭉개면 화면이 "왜 안 되는지"를 말할 수 없다.
+    status = e.status if 400 <= e.status < 600 else 502
+    return JSONResponse({"error": "peer_error", "reason": e.reason}, status_code=status)
+
+
+@router.get("/api/hosts/{host_id}/clients")
+async def host_clients(host_id: str, session: str, screen: str = Query("")):
+    peer, err = await _peer_or_404(host_id)
+    if err:
+        return err
+    try:
+        return await asyncio.to_thread(
+            peer_client._call_sync, peer, "GET", "/api/peer/clients", None,
+            peer_client.TIMEOUT, {"session": session, "screen": screen},
+        )
+    except peer_client.PeerError as e:
+        return _peer_error(e)
+
+
+@router.post("/api/hosts/{host_id}/clients/detach")
+async def host_clients_detach(host_id: str, request: Request):
+    peer, err = await _peer_or_404(host_id)
+    if err:
+        return err
+    body = await request.json()
+    try:
+        return await peer_client.call(peer, "POST", "/api/peer/clients/detach", body)
+    except peer_client.PeerError as e:
+        return _peer_error(e)
+
+
+@router.post("/api/hosts/{host_id}/clients/solo")
+async def host_clients_solo(host_id: str, request: Request):
+    peer, err = await _peer_or_404(host_id)
+    if err:
+        return err
+    body = await request.json()
+    try:
+        return await peer_client.call(peer, "POST", "/api/peer/clients/solo", body)
+    except peer_client.PeerError as e:
+        return _peer_error(e)
+
+
+@router.get("/api/hosts/{host_id}/search")
+async def host_search(host_id: str, q: str):
+    """원격 스크롤백 검색. 결과의 `host`/`host_label`을 여기서 붙인다 — 팔레트가
+    "이건 다른 맥의 출력"임을 표시할 수 있어야 하고, 그 판단을 원격이 자기
+    응답에 담게 하면(자기를 뭐라고 부르든) 화면 라벨이 상대 말대로 정해진다."""
+    peer, err = await _peer_or_404(host_id)
+    if err:
+        return err
+    try:
+        payload = await asyncio.to_thread(
+            peer_client._call_sync, peer, "GET", "/api/peer/search", None,
+            peer_client.TIMEOUT, {"q": q},
+        )
+    except peer_client.PeerError as e:
+        return _peer_error(e)
+    for r in payload.get("results") or []:
+        r["host"] = host_id
+        r["host_label"] = peer["label"]
+    return payload
+
+
 @router.post("/api/hosts/{host_id}/ping")
 async def ping_host(host_id: str):
     peer = await asyncio.to_thread(host_store.find_peer, host_id)
