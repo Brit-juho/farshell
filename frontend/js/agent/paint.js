@@ -1,6 +1,6 @@
 // A5 — 상태 스토어(agent/state.js)를 화면에 칠하는 유일한 곳.
 //
-// 소비처가 넷(탭 · pane 헤더 · rail 세션 목록 · 파비콘)인데, 각자 WS 메시지를
+// 소비처가 넷(워크트리 탭 · pane 헤더 · rail 세션 목록 · 파비콘)인데, 각자 WS 메시지를
 // 따로 해석하면 A1 이전과 똑같은 문제(소비자마다 규칙이 갈라짐)로 돌아간다.
 // 그래서 **읽기는 state.js 하나, 칠하기는 이 파일 하나**로 묶는다. rail처럼
 // 자기 렌더 타이밍이 따로 있는 소비자는 `onStatusChange`로 다시 그린다.
@@ -9,9 +9,9 @@
 // 이름만 키로 쓴다 — 웹 세션 id는 재attach마다 바뀌어 키가 될 수 없다.
 import { allSessions, getSession, subscribe } from '../core/store.js';
 import { onLayoutChange } from '../layout/store.js';
-import { getStatus, onStatusChange, applyStatusDot, ackLocal, isUnseen, markSeen } from './state.js';
+import { getStatus, onStatusChange, applyStatusDot, ackLocal, markSeen } from './state.js';
 
-// 탭·pane 헤더에서는 **idle이면 dot을 아예 안 그린다.** 세션이 열 개면 회색 점
+// pane 헤더에서는 **idle이면 dot을 아예 안 그린다.** 세션이 열 개면 회색 점
 // 열 개가 상시로 붙어 있게 되는데, 그건 정보가 아니라 노이즈다("아무 일도
 // 없음"은 기본값이라 표시할 필요가 없다). 반대로 rail 세션 목록은 여러 줄이
 // 세로로 늘어선 "상태 열"이라 idle도 자리를 지키는 편이 읽기 쉬워서,
@@ -27,40 +27,6 @@ function _dotOrNone(container, status) {
 function _tmuxName(sessionId) {
   const s = getSession(sessionId);
   return s && (s.tmuxName || s.tmux_name) || null;
-}
-
-// 탭 — 이름 앞에 dot 하나. 탭 **순서는 건드리지 않는다**(사용자가 드래그로
-// 정한 의도다. 정렬은 rail·팔레트만 한다 — 40-agent-state.md 2-6).
-function paintTabs() {
-  document.querySelectorAll('#tabs .tab').forEach((tab) => {
-    const name = _tmuxName(tab.dataset.sessionId);
-    const status = getStatus(name);
-    _dotOrNone(tab, status);
-    // 기존 .working/.done 클래스도 유지한다 — CSS(legacy)가 이미 쓰고 있고,
-    // 상태 dot이 안 보이는 좁은 화면에서도 탭 자체가 강조돼야 한다.
-    tab.classList.toggle('working', status === 'working');
-    tab.classList.toggle('done', status === 'done');
-    tab.classList.toggle('waiting', status === 'waiting');
-    // N37 §4 — 「읽지 않음」 배지. done인데 아직 이 기기에서 본 적 없는 탭에만
-    // 붙는다. dot(=지금 상태)과 배지(=내가 놓친 것)는 뜻이 다르므로 둘 다 뜬다.
-    _unreadBadge(tab, isUnseen(name));
-  });
-}
-
-// 배지는 있으면 갱신하고 없으면 만든다 — 매번 재생성하면 CSS 전이가 끊긴다
-// (applyStatusDot과 같은 이유).
-function _unreadBadge(tab, show) {
-  let badge = tab.querySelector(':scope > .tab-unread');
-  if (!show) { badge?.remove(); return; }
-  if (badge) return;
-  badge = document.createElement('span');
-  badge.className = 'tab-unread';
-  badge.textContent = '읽지 않음';
-  badge.title = '완료됐지만 아직 확인하지 않았습니다';
-  // 닫기 버튼 앞에 넣는다 — 항상 이름 뒤, 닫기 앞이라는 순서가 고정돼야 한다.
-  const close = tab.querySelector(':scope > .close');
-  if (close) tab.insertBefore(badge, close);
-  else tab.appendChild(badge);
 }
 
 // pane 헤더 — 이름 옆 dot. 분할 화면에서 "어느 칸이 나를 기다리는지"가
@@ -132,7 +98,6 @@ function markActiveSeen() {
 
 function paintAll() {
   markActiveSeen();
-  paintTabs();
   paintPanes();
   paintFavicon();
   paintAppBadge();
@@ -157,11 +122,16 @@ subscribe(schedulePaint);       // 세션 추가·삭제·전환
 // 'waiting'이 붙어 있는 상태를 실제로 재현). 레이아웃 변경도 함께 구독한다.
 onLayoutChange(schedulePaint);
 
-// 탭을 클릭하면 그 세션의 done 표시는 "확인했다"는 뜻이다(기존 T6 규칙과 동일 —
-// 그때는 클래스를 직접 지웠고, 이제 상태 스토어를 내린다).
+// 세션을 클릭하면 그 세션의 done 표시는 "확인했다"는 뜻이다(기존 T6 규칙과
+// 동일 — 그때는 클래스를 직접 지웠고, 이제 상태 스토어를 내린다).
+//
+// N37 3단계 5/n: 예전엔 `#tabs .tab`만 이 경로를 탔다. 그 DOM이 사라지므로
+// **세션 id를 들고 있는 표면 전부**로 넓힌다 — 레일 세션 행, 세션 카드,
+// 그리고 터미널 칸 자체(그 칸을 클릭했다면 읽고 있는 것이다).
 document.addEventListener('click', (e) => {
-  const tab = e.target.closest && e.target.closest('#tabs .tab');
-  if (!tab) return;
-  const name = _tmuxName(tab.dataset.sessionId);
+  const el = e.target.closest && e.target.closest('[data-session-id], .vt-pane-body[data-vt-session-id]');
+  if (!el) return;
+  const sid = el.dataset.sessionId || el.dataset.vtSessionId;
+  const name = _tmuxName(sid);
   if (name) ackLocal(name);
 }, true);
