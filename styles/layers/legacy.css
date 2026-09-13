@@ -1836,6 +1836,18 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 }
 .vt-set-reset:hover { background:var(--menu-hover); color:var(--txt); }
 .vt-set-reset:disabled { color:var(--sub); opacity:.5; cursor:default; }
+/* N14 — 테마 가져오기 입력. 붙여넣는 것이 설정 파일 원문이라 등폭이어야
+   하고(정렬된 색 목록), 세로로 늘릴 수 있어야 한다. */
+.vt-set-themeinput {
+  width:100%; box-sizing:border-box; resize:vertical;
+  margin:calc(var(--spacing) * 1.5) 0;
+  padding:calc(var(--spacing) * 1.5);
+  background:var(--color-term-bg); color:var(--txt);
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  font:400 var(--fs-2xs) var(--mono); line-height:1.5;
+}
+.vt-set-themeinput:focus { outline:2px solid var(--acc); outline-offset:-1px; }
+.vt-set-themeactions { display:flex; gap:calc(var(--spacing) * 1.5); }
 .vt-set-reset:disabled:hover { background:transparent; }
 
 .vt-set-btns { display:flex; gap:calc(var(--spacing) * 1); flex-shrink:0; }

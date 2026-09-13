@@ -3,10 +3,21 @@
 import { set as setSetting } from './core/settings.js';
 import { allSessions } from './core/store.js';
 import { registerAction } from './core/dom.js';
+import { IMPORTED_SKIN, bootImportedTheme, loadImportedSkin } from './theme-custom.js';
 
 // D1(ADR-3): farshell이 새 기본 스킨 — 목록 순서가 곧 설정 화면 칩 순서이자
 // "미지의 스킨" 폴백 우선순위 의도를 나타내므로 맨 앞에 둔다.
+// N14 — `imported`는 사용자가 Ghostty/Warp 테마를 가져왔을 때만 존재하는
+// 7번째 스킨이다. 가져온 것이 없으면 목록에 없다(고를 수 없는 칩을 띄우지
+// 않는다) — 그래서 상수가 아니라 아래 vtSkins()로 묻는다.
 const VT_SKINS = ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad'];
+
+export function vtSkins() {
+  return loadImportedSkin() ? [...VT_SKINS, IMPORTED_SKIN] : VT_SKINS.slice();
+}
+
+// 부팅 시 가져온 테마의 CSS 변수를 심는다(있을 때만).
+bootImportedTheme();
 
 // 각 스킨의 xterm.js 테마 — foreground/background/cursor/selection + ANSI 16색.
 // "iTerm2 vs 윈도우 터미널 느낌"의 핵심은 이 팔레트다.
@@ -88,11 +99,19 @@ function _barColor() {
 
 export function getVtSkin() {
   const s = document.documentElement.getAttribute('data-skin');
-  return VT_SKINS.indexOf(s) >= 0 ? s : 'farshell';
+  return vtSkins().indexOf(s) >= 0 ? s : 'farshell';
 }
 
 export function getVtXtermTheme(skin) {
-  return VT_XTERM_THEMES[skin || getVtSkin()] || VT_XTERM_THEMES.farshell;
+  const name = skin || getVtSkin();
+  if (name === IMPORTED_SKIN) {
+    // 저장된 팔레트가 없으면(사본이 지워졌다) 기본으로 떨어진다 — 반쯤
+    // 적용된 테마보다 낫다.
+    const cur = loadImportedSkin();
+    if (cur && cur.xterm) return cur.xterm;
+    return VT_XTERM_THEMES.farshell;
+  }
+  return VT_XTERM_THEMES[name] || VT_XTERM_THEMES.farshell;
 }
 
 // 테마별 터미널 폰트 — Windows는 Cascadia Code(WT 정체성, 시스템 설치 폰트를
@@ -128,6 +147,25 @@ function _applyXtermToOpen(skin) {
 }
 
 function _syncThemeChips(skin) {
+  // N14 — 가져온 테마가 있으면 칩 줄에 7번째 칩을 만든다(없으면 만들지
+  // 않는다 — 고를 수 없는 칩은 띄우지 않는다). 팔레트의 테마 목록도 이
+  // 칩들을 읽으므로(shell/Palette.tsx) 여기 하나만 챙기면 둘 다 맞는다.
+  const row = document.getElementById('theme-row');
+  const imported = loadImportedSkin();
+  const existing = row && row.querySelector(`.theme-chip[data-skin="${IMPORTED_SKIN}"]`);
+  if (row && imported && !existing) {
+    const chip = document.createElement('button');
+    chip.className = 'theme-chip';
+    chip.dataset.skin = IMPORTED_SKIN;
+    chip.dataset.action = 'theme.set';
+    chip.innerHTML = '<span class="dot"></span>';
+    chip.appendChild(document.createTextNode(imported.name || '가져온 테마'));
+    row.appendChild(chip);
+  } else if (existing && !imported) {
+    existing.remove();
+  } else if (existing && imported) {
+    existing.lastChild.textContent = imported.name || '가져온 테마';
+  }
   document.querySelectorAll('.theme-chip').forEach((c) => {
     c.classList.toggle('sel', c.dataset.skin === skin);
   });
@@ -138,7 +176,7 @@ function _syncThemeChips(skin) {
 }
 
 export function setVtSkin(skin) {
-  if (VT_SKINS.indexOf(skin) < 0) skin = 'farshell';
+  if (vtSkins().indexOf(skin) < 0) skin = 'farshell';
   document.documentElement.setAttribute('data-skin', skin);
   // S2: 스킨도 설정 스토어로 — 기기마다 다른 스킨이 뜨던 것을 없앤다.
   // 옛 `vt-skin` 키도 계속 쓴다(theme.js는 classic script 시절부터 부팅 아주
