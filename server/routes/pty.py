@@ -213,9 +213,13 @@ async def paste_session(session_id: str, request: Request):
     try:
         _prompt_detector.on_user_input(session_id)
         info = session_store.get(session_id)
-        pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name))
+        pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name),
+                      tmux_name=info.tmux_name if info else None)
     except ValueError:
         return JSONResponse({"error": "not_found"}, status_code=404)
+    except RuntimeError as e:
+        # tmux paste-buffer 실패 — 조용히 삼키지 않는다(계획서 4-4 위험 3).
+        return JSONResponse({"error": "paste_failed", "reason": str(e)}, status_code=502)
     return {"ok": True}
 
 
@@ -512,16 +516,26 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                     elif msg_type == "paste":
                         # N24(2.1.5 2/n) — 붙여넣기 전용 경로. 클라이언트는
                         # 원문만 보내고 마커·개행·제어문자 처리는 서버가
-                        # 한다(input_mode.py의 판정을 따른다).
+                        # 한다(input_mode.py의 판정을 따른다). tmux 세션은
+                        # N25(3/n)가 tmux 자신에게 위임한다.
                         text = data.get("text")
                         if isinstance(text, str) and text:
                             _prompt_detector.on_user_input(session_id)
                             info = session_store.get(session_id)
                             try:
-                                pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name))
+                                pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name),
+                                              tmux_name=info.tmux_name if info else None)
                             except ValueError:
                                 await ws.close(code=4004, reason="Session destroyed")
                                 return
+                            except RuntimeError as e:
+                                # tmux paste-buffer 실패(죽은 pane 등) — 조용히
+                                # 삼키지 않는다. 세션 자체는 살아있으니 WS는
+                                # 안 끊고 클라이언트에 알리기만 한다.
+                                try:
+                                    await ws.send_json({"type": "paste_failed", "reason": str(e)})
+                                except Exception:
+                                    pass
                 elif "bytes" in msg:
                     payload = msg["bytes"]
                     if channel:
