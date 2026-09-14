@@ -53,6 +53,42 @@ def neutralize_escape(text: str) -> str:
     return text.replace("\x1b", "␛")
 
 
+class LineTooLong(Exception):
+    """N26(2.1.5 4/n) — 정규(줄 단위) 모드에서 어느 한 줄이 그 pane의 한 줄
+    한계를 넘었다. macOS 실측(input_mode.py 문서 참고): 한계를 넘긴 줄은
+    잘려서 일부만 들어가는 게 아니라 **통째로 사라진다**(1023자+개행은
+    도착, 1024자+개행은 0바이트). 그래서 보내기 전에 거절한다 — 조용한
+    실패보다 명시적 거절이 낫다.
+    """
+
+    def __init__(self, max_line: int, line_index: int, line_length: int):
+        self.max_line = max_line
+        self.line_index = line_index
+        self.line_length = line_length
+        super().__init__(
+            f"{line_index + 1}번째 줄이 {line_length}바이트 — "
+            f"이 프로그램은 한 줄 {max_line}바이트까지만 받습니다"
+        )
+
+
+def check_canonical_line_limits(text: str, *, max_line: int) -> None:
+    """정규 모드 한 줄 한계를 넘는 줄이 있으면 `LineTooLong`을 던진다.
+    아무 문제 없으면 조용히 반환한다 — 실제 전송은 `prepare_paste_payload`가
+    그대로 한다(따로 줄마다 나눠 보내지 않는다: 커널 tty 줄 규율은 우리
+    `write()` 호출 경계가 아니라 스트림 안의 개행 위치로 줄을 가르므로,
+    한 번에 보내는 것과 줄마다 나눠 보내는 것이 동작상 같다).
+    """
+    body = strip_unsafe_control_chars(text)
+    body = normalize_newlines(body)
+    lines = body.split("\r")
+    for i, line in enumerate(lines):
+        is_last = i == len(lines) - 1
+        raw = line if is_last else line + "\r"
+        length = len(raw.encode("utf-8", "surrogatepass"))
+        if length > max_line:
+            raise LineTooLong(max_line, i, length)
+
+
 def prepare_paste_payload(text: str, *, bracket: bool) -> bytes:
     """붙여넣기 원문 → PTY에 쓸 바이트열.
 

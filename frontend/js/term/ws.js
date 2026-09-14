@@ -89,6 +89,13 @@ export function startSessionSocket(id, term) {
           // 조용히 삼키지 않는다: PTY write와 달리 tmux 위임은 서버가 별도
           // 프로세스를 실행하는 것이라 실패가 예외적으로 일어날 수 있다.
           if (typeof showToast === 'function') showToast('붙여넣기 실패 — 세션을 확인해 주세요', 'error');
+        } else if (msg && msg.type === 'paste_line_too_long') {
+          // N26(2.1.5 4/n) — 정규(줄 단위) 모드는 한 줄 한계를 넘기면 잘리는
+          // 게 아니라 그 줄이 통째로 사라진다(서버 실측) — 그래서 서버가
+          // 아예 안 보냈다. 조용한 실패보다 이렇게 알리는 편이 낫다.
+          if (typeof showToast === 'function') {
+            showToast(`이 프로그램은 한 줄 ${msg.max_line}자까지만 받습니다 — 파일 업로드로 경로를 넘겨보세요`, 'error');
+          }
         }
       } catch (_) { /* binary or non-JSON */ }
     });

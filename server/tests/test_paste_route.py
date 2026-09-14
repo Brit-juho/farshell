@@ -123,3 +123,34 @@ def test_pty_manager_paste_end_to_end_multiline_goes_as_one_block():
     asyncio.run(_run())
     # 크래시 없이 끝나면 충분 — 셸 출력 캡처는 pty_manager 기존 테스트가
     # 이미 다루는 배관이라 여기선 paste() 경로 자체의 생존만 확인한다.
+
+
+# ── N26(2.1.5 4/n) — 정규 모드 거절이 실제로 소실을 막는지 ───────────────────
+
+def test_pty_manager_paste_rejects_oversized_canonical_line_instead_of_losing_it():
+    """1/n 실측(test_input_mode.py)의 결론을 여기서 다시 확인한다: 거절하지
+    않고 그냥 보냈다면 이 줄은 잘리는 게 아니라 통째로 사라졌을 것이다."""
+    import asyncio
+    import time
+
+    import input_mode
+    import paste_prepare
+
+    async def _run():
+        mgr = pty_manager_module.PTYManager()
+        sid = "test-paste-canonical"
+        mgr.create_session(sid, cmd="/bin/sh")
+        session = mgr._sessions[sid]
+        await asyncio.sleep(0.3)
+        # cat을 정규 모드로 띄운다(1/n과 같은 방식).
+        mgr.write(sid, b"cat > /dev/null\n")
+        await asyncio.sleep(0.5)
+        limit = input_mode.max_canon(session.fd)
+        assert input_mode.is_canonical(session.fd) is True
+
+        with pytest.raises(paste_prepare.LineTooLong):
+            mgr.paste(sid, "x" * limit + "\n", is_tmux=False)  # 한계+1(개행 포함)
+
+        mgr.destroy_session(sid)
+
+    asyncio.run(_run())
