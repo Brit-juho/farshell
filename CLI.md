@@ -42,6 +42,7 @@ overview and `fsh help concepts` for conceptual background.
 | `fsh tunnel watchdog` | Check/start the zombie-reconnect auto-detection daemon (normally auto-starts) |
 | `fsh ssh [session]` | Direct tmux session access via Tailscale + SSH — for environments like a corporate network where screen sharing is blocked (details: [below](#tailscale--ssh-remote-access)) |
 | `fsh doctor` | Installation/environment diagnostics — see [checked items](#fsh-doctor-checked-items) below |
+| `fsh doctor paste` | Paste diagnostics (N29) — run it *in the exact pane* you want to check. Requests bracketed-paste from that terminal, captures the raw bytes, and reports ICANON / canonical line limit / whether tmux would take over delegation — bypasses the FarShell server and PTY code entirely, so it tells apart "our bug" from "this terminal's own limit" |
 | `fsh install-profiles [--dry-run]` | Auto-register terminal app profiles (iTerm2 Dynamic Profile + snippets for others) |
 | `fsh shell-init [zsh\|bash\|fish\|pwsh]` | Print a shell-specific safe integration snippet (`eval "$(fsh shell-init zsh)" >> ~/.zshrc`) |
 

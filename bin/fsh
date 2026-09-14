@@ -1261,6 +1261,7 @@ cmd_help() {
     fsh queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
     fsh manage              TUI 관리 도구 (세션/타깃/핫키/상태)
     fsh doctor              설치/환경 진단
+    fsh doctor paste        붙여넣기 진단 — 이 pane에서 직접 실행(N29)
     fsh install-profiles    터미널 앱 자동 등록 (iTerm2 등)
     fsh help <topic>        토픽별 상세 도움말
 
@@ -2081,6 +2082,10 @@ cmd_stop() {
 }
 
 cmd_doctor() {
+  if [ "${1:-}" = "paste" ]; then
+    cmd_doctor_paste
+    return $?
+  fi
   # 설치 상태 및 실행 환경 진단
   echo ""
   echo "  🩺 fsh doctor — 설치/환경 진단"
@@ -2421,6 +2426,111 @@ PYEOF
     echo "  🟢 모든 체크 통과."
   fi
   echo ""
+}
+
+# N29(2.1.5 5/n) — 붙여넣기 진단. `~/.vt/pastecheck.py`(2026-09-09 임시로
+# 설치해 실사용자 붙여넣기 잘림 원인을 찾는 데 썼던 스크립트)를 정식
+# 서브커맨드로 승격한다. 셸·앱·tty 한계를 전부 우회하고 "이 터미널이 실제로
+# 몇 바이트를 어떤 형태로 받았는가"만 본다 — FarShell 서버·PTY 코드를
+# 하나도 거치지 않으므로 우리 쪽 문제인지 터미널/앱 쪽 문제인지를 갈라낸다.
+#
+# 2.1.5에서 추가한 것: 1/n(input_mode.py)이 서버 쪽에서 판정하는 것과 같은
+# 정보(ICANON·정규 모드 한 줄 한계·tmux 안인지)를 **이 tty에서 직접** 재서
+# 같이 보여준다 — 서버 없이 로컬 termios/pathconf 호출뿐이라 서버가 죽어
+# 있어도 동작한다. 그러면 "왜 내 붙여넣기가 이상한가"가 한 번의 왕복으로
+# 끝난다(원인이 서버 쪽인지, 이 터미널 자체의 한계인지).
+cmd_doctor_paste() {
+  echo ""
+  echo "  🩺 fsh doctor paste — 붙여넣기 진단"
+  echo ""
+  echo "  ⚠ 진단하려는 그 pane에서 직접 실행하세요 — 이 명령이 그 자리의"
+  echo "     stdin을 직접 읽습니다(다른 세션은 진단 못 합니다)."
+  echo "  안내가 뜨면 곧바로 확인하려는 텍스트를 붙여넣으세요(60초 무응답 시 종료)."
+  echo ""
+
+  "${VT_PYTHON:-python3}" - <<'PYEOF'
+import os, sys, time, select, termios, tty
+
+def is_canonical(fd):
+    try:
+        attrs = termios.tcgetattr(fd)
+    except Exception:
+        return None
+    return bool(attrs[3] & termios.ICANON)
+
+def max_canon(fd):
+    try:
+        v = os.pathconf(fd, "PC_MAX_CANON")
+    except Exception:
+        return None
+    return v if isinstance(v, int) and v > 0 else None
+
+# ⚠ 이 스크립트 자체가 `python3 - <<'PYEOF'` heredoc으로 전달된다 — bash의
+# heredoc은 **표준입력**을 그 본문으로 갈아 끼운다(표준출력은 안 건드린다).
+# 그래서 sys.stdin.fileno()는 실제 터미널이 아니라 그 heredoc 파이프를
+# 가리킨다 — /dev/tty를 직접 열어야 진짜 터미널에 닿는다. 쓰기도 같은 fd로
+# 한다(sys.stdout에 기대지 않는다 — 어떻게 호출되든 항상 같은 채널이 되게).
+try:
+    fd = os.open("/dev/tty", os.O_RDWR)
+except OSError:
+    print("  ✗ 이 세션에 연결된 터미널이 없습니다(파이프·리다이렉트로 실행했나요?) — 진단 불가")
+    raise SystemExit(1)
+before_icanon = is_canonical(fd)
+before_limit = max_canon(fd)
+in_tmux = bool(os.environ.get("TMUX"))
+
+def yn(v):
+    return "예" if v else ("모름" if v is None else "아니오")
+
+print(f"  이 tty 정규(줄 단위) 모드 : {yn(before_icanon)}"
+      + (f" (한 줄 한계 {before_limit}바이트)" if before_icanon and before_limit else ""))
+print("  tmux 안                  : " + (
+    "예 — 서버가 이 tty를 직접 판정하지 않고 tmux paste-buffer에 위임합니다(N25)"
+    if in_tmux else
+    "아니오 — 서버가 이 tty를 직접 보고 판정합니다"))
+print()
+
+old = termios.tcgetattr(fd)
+os.write(fd, b"\x1b[?2004h")  # 이 터미널에게 "다음 붙여넣기는 마커로 감싸 달라"고 요청
+tty.setraw(fd)
+buf = bytearray()
+t = time.monotonic()
+try:
+    while True:
+        r, _, _ = select.select([fd], [], [], 0.4)
+        if r:
+            b = os.read(fd, 65536)
+            if not b:
+                break
+            buf += b
+            t = time.monotonic()
+        elif buf and time.monotonic() - t > 1.2:
+            break
+        elif not buf and time.monotonic() - t > 60:
+            break
+finally:
+    termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    os.write(fd, b"\x1b[?2004l\r\n")
+    os.close(fd)
+
+has_start = b"\x1b[200~" in buf
+has_end = b"\x1b[201~" in buf
+body = buf.replace(b"\x1b[200~", b"").replace(b"\x1b[201~", b"")
+
+print(f"  받은 총 바이트      : {len(buf)}")
+print(f"  마커 제외 본문      : {len(body)}")
+print("  시작마커 ESC[200~   : " + ("있음" if has_start else
+      "없음  ← 이 터미널이 bracketed paste를 지원 안 하거나 요청을 못 받았습니다"))
+print("  끝마커  ESC[201~    : " + ("있음" if has_end else
+      ("없음  ← 붙여넣기 도중 잘렸을 수 있습니다" if has_start else "-")))
+if before_icanon and before_limit and not has_start:
+    over = [i for i, ln in enumerate(body.split(b"\r")) if len(ln) >= before_limit - 8]
+    if over:
+        print(f"  ⚠ 정규 모드 한계({before_limit}바이트) 근처 — {len(over)}번째 줄(들)이 "
+              "근접/초과합니다. 넘겼다면 잘리는 게 아니라 그 줄이 통째로 사라졌을 수 있습니다.")
+print(f"  본문 앞 40자        : {body[:40].decode('utf-8','replace')}")
+print(f"  본문 뒤 40자        : {body[-40:].decode('utf-8','replace')}")
+PYEOF
 }
 
 cmd_agent() {
@@ -3662,7 +3772,7 @@ case "${1:-help}" in
   handoff)  shift; cmd_handoff "$@" ;;
   attach)   shift; cmd_attach "$@" ;;
   ssh)      shift; cmd_ssh "$@" ;;
-  doctor)   cmd_doctor ;;
+  doctor)   shift; cmd_doctor "$@" ;;
   shell-init) shift; cmd_shell_init "$@" ;;
   install-profiles) shift; cmd_install_profiles "$@" ;;
   setup-keybind) shift; cmd_setup_keybind "$@" ;;
