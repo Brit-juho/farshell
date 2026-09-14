@@ -30,6 +30,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+import input_mode
 import scrollback_persist
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,9 @@ class PTYSession:
     # N27: bracketed paste가 진행 중인가 — 마커가 WS 프레임 경계에서 갈라져도
     # 뒷조각을 키 입력으로 오인하지 않게 세션에 걸쳐 들고 간다.
     _in_paste: bool = field(default=False, repr=False)
+    # N25(2.1.5 1/n): 이 pane의 앱이 DECSET 2004를 켰는가. 출력 스트림에서
+    # 주워 담는다 — None은 "아직 한 번도 못 봤다"(꺼짐과 다르다).
+    _bracketed: Optional[bool] = field(default=None, repr=False)
     # R3: 출력 배치 버퍼 — read마다 즉시 broadcast하지 않고 짧은 창(BATCH_WINDOW_SEC)
     # 동안 모았다가 한 번에 내보낸다. wetty의 tinybuffer(2ms, 512KB) 패턴.
     _out_buf: bytearray = field(default_factory=bytearray, repr=False)
@@ -550,6 +554,11 @@ class PTYManager:
             return
         data = bytes(session._out_buf)
         session._out_buf.clear()
+
+        # N25 — 앱이 붙여넣기 마커를 원하는지(DECSET 2004)를 출력에서 줍는다.
+        # 붙여넣기 경로(2.1.5 2/n)가 이 값을 보고 마커를 붙인다. 여기서 하는
+        # 이유: 모든 출력이 반드시 한 번 지나는 유일한 지점이다.
+        session._bracketed = input_mode.scan_bracketed_mode(data, session._bracketed)
 
         # scrollback에 저장 (바이트 예산으로 트리밍)
         self._append_scrollback(session, data)
