@@ -40,6 +40,7 @@
 | `fsh tunnel watchdog` | 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 자동 기동) |
 | `fsh ssh [session]` | Tailscale + SSH로 tmux 세션 직접 접속 — 회사망 등 화면 원격이 막힌 환경 (자세히: [아래](#tailscale--ssh-원격-접속)) |
 | `fsh doctor` | 설치/환경 진단 — 아래 [점검 항목](#fsh-doctor-점검-항목) 참고 |
+| `fsh doctor paste` | 붙여넣기 진단(N29) — **진단하려는 그 pane에서** 직접 실행한다. 그 터미널에 bracketed paste를 요청해 실제로 도착한 바이트를 그대로 받아, ICANON·정규 모드 한 줄 한계·tmux면 위임 대상인지를 같이 보여준다 — FarShell 서버·PTY 코드를 아예 거치지 않으므로 "우리 쪽 버그"인지 "이 터미널 자체의 한계"인지를 갈라낸다 |
 | `fsh install-profiles [--dry-run]` | 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet) |
 | `fsh shell-init [zsh\|bash\|fish\|pwsh]` | 셸별 안전 통합 스니펫 출력 (`eval "$(fsh shell-init zsh)" >> ~/.zshrc`) |
 
