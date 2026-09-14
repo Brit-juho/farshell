@@ -195,6 +195,30 @@ async def send_keys(session_id: str, request: Request):
     return {"ok": True}
 
 
+@router.post("/api/sessions/{session_id}/paste")
+async def paste_session(session_id: str, request: Request):
+    """N24(2.1.5 2/n) — 붙여넣기 전용 HTTP 경로. WS의 `{"type":"paste"}`와
+    같은 함수를 부른다(`/keys`가 WS bytes 프레임과 짝인 것과 같은 관계).
+    WS가 닫힌 사이 붙여넣는 경우(모바일 백그라운드 복귀 등)를 위한 대체 경로.
+    """
+    if session_id not in pty_mgr.sessions:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "bad_request"}, status_code=400)
+    text = body.get("text")
+    if not isinstance(text, str) or not text:
+        return JSONResponse({"error": "bad_request", "reason": "text required"}, status_code=400)
+    try:
+        _prompt_detector.on_user_input(session_id)
+        info = session_store.get(session_id)
+        pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name))
+    except ValueError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return {"ok": True}
+
+
 @router.patch("/api/sessions/{session_id}")
 async def rename_session(session_id: str, request: Request):
     body = await request.json()
@@ -485,6 +509,19 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                         pty_mgr.pause_read(session_id, f"{ws_id}-render")
                     elif msg_type == "render_resume":
                         pty_mgr.resume_read(session_id, f"{ws_id}-render")
+                    elif msg_type == "paste":
+                        # N24(2.1.5 2/n) — 붙여넣기 전용 경로. 클라이언트는
+                        # 원문만 보내고 마커·개행·제어문자 처리는 서버가
+                        # 한다(input_mode.py의 판정을 따른다).
+                        text = data.get("text")
+                        if isinstance(text, str) and text:
+                            _prompt_detector.on_user_input(session_id)
+                            info = session_store.get(session_id)
+                            try:
+                                pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name))
+                            except ValueError:
+                                await ws.close(code=4004, reason="Session destroyed")
+                                return
                 elif "bytes" in msg:
                     payload = msg["bytes"]
                     if channel:

@@ -10,7 +10,7 @@ import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
 import { switchTo, removeSession, renameSession } from './term/session.js';
-import { sendToPty } from './term/clipboard.js';
+import { sendPaste } from './term/clipboard.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
 
@@ -141,7 +141,8 @@ async function uploadFile(input) {
       // 화면에 찍기만 하면(term.write) 드래그 선택 말고는 경로를 집어낼 수 없다.
       // 이미지 붙여넣기(pasteImageUpload)와 동일하게 경로를 명령줄에 실제로 타이핑해
       // Claude 등에 그대로 넘길 수 있게 한다.
-      sendToPty(activeSessionId(), data.path + ' ');
+      // N24 — 실행되지 않고 사용자가 이어서 완성할 텍스트라 붙여넣기 경로.
+      sendPaste(activeSessionId(), data.path + ' ');
       showToast('업로드 완료 — 경로 삽입됨', 'success');
     }
   } catch (e) {
