@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 import paste_prepare as pp
 
 
@@ -73,3 +75,36 @@ def test_prepare_payload_multiline_paste_end_to_end_bracketed():
     payload = pp.prepare_paste_payload(text, bracket=True)
     body = payload[len(pp.PASTE_START):-len(pp.PASTE_END)]
     assert body == b"line1\rline2\rline3"
+
+
+# ── N26(2.1.5 4/n) — 정규 모드 한 줄 한계 ───────────────────────────────────
+
+def test_check_canonical_line_limits_passes_under_the_limit():
+    pp.check_canonical_line_limits("x" * 100, max_line=1024)  # 안 던지면 통과
+
+
+def test_check_canonical_line_limits_exact_boundary_passes():
+    # 개행 포함해서 정확히 한계 — 실측(input_mode 1/n)상 여기까지는 통과한다.
+    pp.check_canonical_line_limits("x" * 1023 + "\n", max_line=1024)
+
+
+def test_check_canonical_line_limits_one_over_raises():
+    with pytest.raises(pp.LineTooLong) as exc:
+        pp.check_canonical_line_limits("x" * 1024 + "\n", max_line=1024)
+    assert exc.value.max_line == 1024
+    assert exc.value.line_length == 1025
+
+
+def test_check_canonical_line_limits_checks_every_line_independently():
+    # 첫 줄은 짧고 둘째 줄이 넘친다 — 둘째 줄 인덱스로 잡아야 한다.
+    text = "short\n" + ("y" * 2000) + "\n"
+    with pytest.raises(pp.LineTooLong) as exc:
+        pp.check_canonical_line_limits(text, max_line=1024)
+    assert exc.value.line_index == 1
+
+
+def test_check_canonical_line_limits_ignores_trailing_partial_line_correctly():
+    # 마지막 줄에 개행이 없으면(아직 안 끝난 줄) 그 줄 자체 길이만 잰다.
+    pp.check_canonical_line_limits("x" * 1024, max_line=1024)  # 개행 없어서 1024 그대로 — 통과
+    with pytest.raises(pp.LineTooLong):
+        pp.check_canonical_line_limits("x" * 1025, max_line=1024)

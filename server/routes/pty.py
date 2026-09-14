@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 import auth
 import crypto_channel
 import file_store
+import paste_prepare
 import scrollback_persist
 import tmux_runner
 from deps import pty_mgr, session_store, output_watcher, _auto_responder, _prompt_detector
@@ -217,6 +218,12 @@ async def paste_session(session_id: str, request: Request):
                       tmux_name=info.tmux_name if info else None)
     except ValueError:
         return JSONResponse({"error": "not_found"}, status_code=404)
+    except paste_prepare.LineTooLong as e:
+        # N26 — 정규 모드 한 줄 한계 초과. 413(Payload Too Large)이 뜻에 맞다.
+        return JSONResponse(
+            {"error": "line_too_long", "max_line": e.max_line, "reason": str(e)},
+            status_code=413,
+        )
     except RuntimeError as e:
         # tmux paste-buffer 실패 — 조용히 삼키지 않는다(계획서 4-4 위험 3).
         return JSONResponse({"error": "paste_failed", "reason": str(e)}, status_code=502)
@@ -528,6 +535,18 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                             except ValueError:
                                 await ws.close(code=4004, reason="Session destroyed")
                                 return
+                            except paste_prepare.LineTooLong as e:
+                                # N26 — 정규 모드 한 줄 한계 초과. 이미 안
+                                # 보냈다(pty_manager가 write 전에 거절) —
+                                # 알리기만 한다.
+                                try:
+                                    await ws.send_json({
+                                        "type": "paste_line_too_long",
+                                        "max_line": e.max_line,
+                                        "reason": str(e),
+                                    })
+                                except Exception:
+                                    pass
                             except RuntimeError as e:
                                 # tmux paste-buffer 실패(죽은 pane 등) — 조용히
                                 # 삼키지 않는다. 세션 자체는 살아있으니 WS는

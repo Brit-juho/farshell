@@ -319,6 +319,11 @@ class PTYManager:
             return
         session = self._get(session_id)
         mode = input_mode.pane_input_mode(session.fd, tmux=False, bracketed=session._bracketed)
+        # N26(4/n) — 정규 모드에서 어느 한 줄이 한계를 넘으면 통째로 사라진다
+        # (실측). 보내기 전에 거절한다 — LineTooLong이 그대로 라우트까지
+        # 올라가 클라이언트에 안내된다.
+        if mode["icanon"] and mode["max_line"]:
+            paste_prepare.check_canonical_line_limits(text, max_line=mode["max_line"])
         payload = paste_prepare.prepare_paste_payload(text, bracket=bool(mode["bracketed"]))
         if payload:
             self.write(session_id, payload)
