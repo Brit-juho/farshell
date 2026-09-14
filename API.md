@@ -23,6 +23,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | DELETE | `/api/sessions/{id}` | Delete a session |
 | PATCH | `/api/sessions/{id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
 | POST | `/api/sessions/{id}/keys` | Write text straight into the PTY (JSON: text) — same privilege as typing in the terminal WS. 404 for an unknown session. Used by the mobile fleet home's inline approval buttons (N38) |
+| POST | `/api/sessions/{id}/paste` | Paste-only entry point (JSON: text) — the server decides bracketed-paste markers, newline normalization, and unsafe control-char stripping instead of the browser guessing (N24). Same function as the WS `{"type":"paste"}` message. 404 for an unknown session |
 | GET | `/api/sessions/{id}/scrollback[?before=&limit=]` | N13 — "load more" from the persisted scrollback log (only has data when `scrollback.persist` is on). `data_b64`-encoded, paginated newest→oldest via `next_before` |
 | POST | `/api/watch/{id}` | Toggle output watching ON/OFF (JSON: enabled, timeout) |
 

@@ -2,7 +2,7 @@
 // F4에서 terminal.js(구 :482-565)에서 분리. addSession에서 term.open 직후 호출.
 import { match as matchKey } from '../core/keymap.js';
 import { get as setting } from '../core/settings.js';
-import { copyToClipboard, pasteFromClipboard, pasteImageUpload } from './clipboard.js';
+import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste } from './clipboard.js';
 import { getSession } from '../core/store.js';
 import { getAction } from '../core/dom.js';
 import { wireKittyKeyboard, encodeKey } from './kitty-keys.js';
@@ -29,8 +29,12 @@ export function wireClipboard(id, term, wrapper) {
     else pasteFromClipboard(id);
   });
 
-  // 3) 이미지 붙여넣기 — clipboard에 이미지가 있으면 업로드+경로삽입, 아니면 텍스트는
-  //    xterm 기본 붙여넣기에 위임(preventDefault 안 함). capture로 textarea보다 먼저 검사.
+  // 3) 붙여넣기 — 이미지는 업로드+경로삽입, 텍스트는 N24 경로(sendPaste)로
+  //    통일한다. capture로 textarea보다 먼저 검사. **xterm 기본 paste
+  //    핸들링에는 더 이상 위임하지 않는다** — 위임하면 마커 판단이 다시
+  //    브라우저(xterm.js의 bracketedPasteMode 추정)로 흩어진다. 항상
+  //    preventDefault해서 xterm 쪽 처리가 같은 텍스트를 또 한 번 보내는
+  //    이중 붙여넣기를 막는다.
   wrapper.addEventListener('paste', (e) => {
     const items = (e.clipboardData && e.clipboardData.items) || [];
     for (const it of items) {
@@ -40,6 +44,11 @@ export function wireClipboard(id, term, wrapper) {
         if (file) pasteImageUpload(id, file);
         return;
       }
+    }
+    const text = e.clipboardData && e.clipboardData.getData('text/plain');
+    if (text) {
+      e.preventDefault();
+      sendPaste(id, text);
     }
   }, true);
 

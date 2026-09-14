@@ -21,7 +21,7 @@ import { openPanel, closePanel } from './panels/panel.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { registerAction } from './core/dom.js';
 import { activeSession, activeSessionId, getSession } from './core/store.js';
-import { sendToPty } from './term/clipboard.js';
+import { sendToPty, sendPaste } from './term/clipboard.js';
 import { addSession } from './term/session.js';
 
 // '전체' 탭 기본 — 기존 동작(스코프 구분 없이 전부 표시)과 최대한 같게 시작한다.
@@ -247,10 +247,13 @@ function showSnippets() {
 
     // 붙여넣기만 — 지금 보고 있는 세션에 텍스트를 넣기만 하고 Enter는 안
     // 누른다. 값을 끼워 넣거나 실행 전에 확인해야 하는 스니펫용(경로·플래그가
-    // 매번 달라지는 것 등) — 자동 실행되면 오히려 사고가 난다.
+    // 매번 달라지는 것 등) — 자동 실행되면 오히려 사고가 난다. N24: 이건
+    // 의미 그대로 "붙여넣기"라 sendPaste를 쓴다 — 아래 runSnippetNewSection과
+    // 달리 줄마다 실행되면 안 되므로(그게 사고), bracketed paste로 감싸지는
+    // 경로가 정확히 맞는다.
     function pasteSnippet(it) {
       if (!activeSession()) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
-      sendToPty(activeSessionId(), it.text);   // 끝에 \n을 붙이지 않는다 — 실행하지 않는다.
+      sendPaste(activeSessionId(), it.text);
       closeSnippets();
     }
 
@@ -309,6 +312,11 @@ function showSnippets() {
         showToast('새 세션 연결이 늦어 스니펫을 아직 보내지 못했습니다 — 연결되면 직접 붙여넣으세요', 'error');
         return;
       }
+      // N24: 이 경로는 sendPaste로 옮기지 않는다 — 멀티라인 스니펫은 줄마다
+      // trailing \n이 붙어 **순차 실행**되는 게 의도다(각 줄이 진짜 Enter를
+      // 친 것처럼). bracketed paste로 감싸면 그 전체가 한 덩어리 텍스트로
+      // 삽입될 뿐 줄마다 실행되지 않는다 — 그게 bracketed paste의 존재
+      // 이유이기도 하다. 그래서 이건 의미상 "붙여넣기"가 아니라 "타이핑"이다.
       let text = it.text;
       if (!text.endsWith('\n')) text += '\n';
       sendToPty(data.id, text);

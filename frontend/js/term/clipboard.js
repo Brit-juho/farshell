@@ -35,14 +35,41 @@ async function readClipboardText() {
   return null;
 }
 
-// 텍스트를 활성 세션 PTY로 주입 (붙여넣기 공통 경로). 외부(snippets.js/
-// viewer.js/picker.js)에서도 bare identifier로 호출하므로 window 브리지 필요.
+// 텍스트를 활성 세션 PTY로 **키 입력**으로 주입한다(붙여넣기가 아니라). 실제
+// 키 시퀀스(방향키·tmux prefix 등 — term/keybar.js) 전용. 외부에서도 bare
+// identifier로 호출하므로 window 브리지 필요.
 export function sendToPty(id, text) {
   if (!text) return;
   const handle = getSession(id)?.wsHandle;
   if (handle && handle.readyState === WebSocket.OPEN) {
     handle.send(new TextEncoder().encode(text));
   }
+}
+
+// N24(2.1.5 2/n) — 붙여넣기 전용 경로. 마커를 붙일지·개행을 어떻게 바꿀지는
+// 더 이상 브라우저가 정하지 않는다(예전엔 `term.paste()`가 xterm 자신의
+// bracketedPasteMode 추정을 따랐다) — 서버가 `input_mode.py`의 실측으로
+// 판단한다(`server/paste_prepare.py`). 클립보드 붙여넣기·네이티브 paste
+// 이벤트·스니펫 붙여넣기 모드·파일 경로 삽입이 전부 이 하나로 모인다 —
+// 두 경로가 공존하면 같은 버그가 한쪽에만 남는다는 게 N24의 원래 동기다.
+//
+// WS가 아직 안 열렸거나 끊긴 사이(재연결 중)에는 HTTP 대체 경로로 떨어진다
+// — sendToPty(위)는 그런 경우 조용히 유실됐지만, 붙여넣기는 사용자가 직접
+// 한 행동이라 유실보다는 조금 늦게라도 도착하는 편이 낫다.
+export async function sendPaste(id, text) {
+  if (!text) return;
+  const s = getSession(id);
+  const ws = s && s.ws;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'paste', text }));
+    return;
+  }
+  try {
+    await apiFetch(`${API_BASE}/api/sessions/${encodeURIComponent(id)}/paste`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  } catch (_) { /* 조용히 무시 — 세션이 아예 없으면 다음 키 입력 때 사용자가 알아챈다 */ }
 }
 
 export async function pasteFromClipboard(id) {
@@ -68,11 +95,7 @@ export async function pasteFromClipboard(id) {
     showToast('클립보드 읽기 불가 — HTTPS/localhost에서만 가능. Cmd/Ctrl+V를 쓰세요.');
     return;
   }
-  // term.paste()는 앱이 bracketed paste 모드면 마커로 감싼다 — 멀티라인 붙여넣기가
-  // 셸에서 줄마다 즉시 실행되는 것을 막는다. (raw sendToPty는 그 보호가 없음)
-  const term = getSession(id)?.term;
-  if (term && typeof term.paste === 'function') term.paste(text);
-  else sendToPty(id, text);
+  sendPaste(id, text);
 }
 
 // 이미지 붙여넣기 → 서버 업로드 → 저장 경로를 터미널에 삽입 (Claude에 그대로 넘길 수 있게)
@@ -88,7 +111,9 @@ export async function pasteImageUpload(id, file) {
     if (!res.ok) { showToast(`이미지 업로드 실패 (${res.status})`); return; }
     const data = await res.json();
     if (data && data.path) {
-      sendToPty(id, data.path + ' ');
+      // N24 — 경로 삽입도 붙여넣기 경로로: 사용자가 이어서 명령을 완성하고
+      // 직접 Enter를 눌러야 하므로(자동 실행 아님) 의미상 paste지 keys가 아니다.
+      sendPaste(id, data.path + ' ');
       showToast('이미지 경로 삽입됨');
     } else {
       showToast('업로드 응답에 경로 없음');
@@ -100,3 +125,4 @@ export async function pasteImageUpload(id, file) {
 
 window.copyToClipboard = copyToClipboard;
 window.sendToPty = sendToPty;
+window.sendPaste = sendPaste;
