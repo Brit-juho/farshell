@@ -47,10 +47,12 @@ def base_args() -> list[str]:
     return args
 
 
-def run(args: list[str], timeout: float = 2.0) -> tuple[int, bytes, bytes]:
+def run(args: list[str], timeout: float = 2.0, input: Optional[bytes] = None) -> tuple[int, bytes, bytes]:
     """tmux 명령 실행. (returncode, stdout, stderr) 반환.
 
     실패해도 예외 안 던짐 — 호출자가 returncode로 판단.
+    `input`은 `load-buffer -b <name> -`(stdin에서 버퍼 채우기)처럼 표준입력이
+    필요한 명령용(N25 3/n) — 그 외엔 안 써도 된다.
     """
     cmd = base_args() + args
     try:
@@ -59,6 +61,7 @@ def run(args: list[str], timeout: float = 2.0) -> tuple[int, bytes, bytes]:
             capture_output=True,
             timeout=timeout,
             check=False,
+            input=input,
         )
         return proc.returncode, proc.stdout, proc.stderr
     except FileNotFoundError:

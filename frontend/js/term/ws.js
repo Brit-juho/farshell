@@ -84,6 +84,11 @@ export function startSessionSocket(id, term) {
           // 그 사이 새 연결이 다시 true로 켜둔 플래그를 잘못 꺼버리면 안 된다.
           const s = getSession(id);
           if (s && s.ws === sock) s._replayingScrollback = false;
+        } else if (msg && msg.type === 'paste_failed') {
+          // N25(2.1.5 3/n) — tmux paste-buffer가 실패했다(죽은 pane 등).
+          // 조용히 삼키지 않는다: PTY write와 달리 tmux 위임은 서버가 별도
+          // 프로세스를 실행하는 것이라 실패가 예외적으로 일어날 수 있다.
+          if (typeof showToast === 'function') showToast('붙여넣기 실패 — 세션을 확인해 주세요', 'error');
         }
       } catch (_) { /* binary or non-JSON */ }
     });

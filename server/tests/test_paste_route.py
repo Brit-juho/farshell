@@ -71,18 +71,33 @@ def test_inherits_token_auth_middleware(client, monkeypatch):
         client.delete(f"/api/sessions/{sid}")
 
 
-def test_route_calls_pty_manager_paste_with_tmux_flag(client, monkeypatch):
-    """tmux 세션이면 is_tmux=True로 넘겨야 항상 감싼다(pty_manager.paste의
-    tmux 근사값 규칙) — 라우트가 session_store를 실제로 확인하는지 검증."""
+def test_route_calls_pty_manager_paste_with_tmux_name(client, monkeypatch):
+    """tmux 세션이면 is_tmux=True + tmux_name을 넘겨야 위임(3/n)이 동작한다
+    — 라우트가 session_store를 실제로 확인하는지 검증."""
     calls = []
-    monkeypatch.setattr(pty_mgr, "paste", lambda sid, text, is_tmux=False: calls.append((sid, text, is_tmux)))
+    monkeypatch.setattr(
+        pty_mgr, "paste",
+        lambda sid, text, is_tmux=False, tmux_name=None: calls.append((sid, text, is_tmux, tmux_name)),
+    )
     sid = _make_session(client)
     try:
         from deps import session_store
         session_store.update_tmux_name(sid, "dev")
         r = client.post(f"/api/sessions/{sid}/paste", json={"text": "hi"})
         assert r.status_code == 200
-        assert calls == [(sid, "hi", True)]
+        assert calls == [(sid, "hi", True, "dev")]
+    finally:
+        client.delete(f"/api/sessions/{sid}")
+
+
+def test_route_reports_tmux_paste_failure_as_502_not_silent(client, monkeypatch):
+    """계획서 4-4 위험 3 — tmux paste-buffer 실패를 조용히 삼키지 않는다."""
+    monkeypatch.setattr(pty_mgr, "paste", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("tmux paste-buffer 실패: dev")))
+    sid = _make_session(client)
+    try:
+        r = client.post(f"/api/sessions/{sid}/paste", json={"text": "hi"})
+        assert r.status_code == 502
+        assert r.json()["error"] == "paste_failed"
     finally:
         client.delete(f"/api/sessions/{sid}")
 

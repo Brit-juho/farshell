@@ -33,6 +33,7 @@ from typing import Callable, Optional
 import input_mode
 import paste_prepare
 import scrollback_persist
+import tmux_paste
 
 logger = logging.getLogger(__name__)
 
@@ -297,22 +298,28 @@ class PTYManager:
     # 들어가 명령으로 오인되는 누수를 차단한다 (TEST_REPORT.md Bug #1).
     PTY_BOOT_GRACE_SEC = 0.5
 
-    def paste(self, session_id: str, text: str, *, is_tmux: bool = False) -> None:
-        """N24(2.1.5 2/n) — 붙여넣기 전용 진입점. 클라이언트는 이제 마커를
-        붙이지 않는다(`term.paste()` 호출 삭제) — 여기가 그 판단을 대신한다.
+    def paste(self, session_id: str, text: str, *, is_tmux: bool = False,
+              tmux_name: str | None = None) -> None:
+        """N24/N25(2.1.5 2·3/n) — 붙여넣기 전용 진입점. 클라이언트는 이제
+        마커를 붙이지 않는다(`term.paste()` 호출 삭제) — 여기가 그 판단을 대신한다.
 
-        tmux 세션은 input_mode가 안쪽 pane의 진짜 모드를 모른다(N25 실측:
-        tmux는 attach 순간 자기 쪽 DECSET 2004를 한 번 켜고 계속 켜둔 채,
-        진짜 모드는 자기가 따로 관리한다). 그래서 tmux 세션은 **항상 감싼다**
-        — 이게 지금까지의 동작과 같다(xterm.js가 tmux의 2004h를 그대로
-        믿고 늘 감쌌던 것). tmux 자신에게 위임하는 정밀한 경로(3/n)가 들어올
-        때까지는 이 근사값을 쓴다 — 안 감싸는 쪽으로 바꾸면 tmux 안의 진짜
-        bracketed 앱들(vim 등)이 지금보다 나빠진다.
+        tmux 세션은 **tmux 자신에게 위임한다**(`tmux_paste.paste_via_tmux`).
+        input_mode는 안쪽 pane의 진짜 bracketed 상태를 모르지만(N25 실측:
+        tmux는 attach 순간 자기 쪽 DECSET 2004를 한 번 켜고 계속 켜둔 채
+        진짜 모드는 자기가 따로 관리한다), tmux의 `paste-buffer -p`는 그
+        pane의 실제 화면 모드를 직접 읽어 정확히 판단한다(95번 계획서
+        §1-1, tmux 소스 확인). `tmux_name`이 없으면(비정상 상태 — 세션이
+        tmux라고 알려왔는데 이름이 없음) 위임을 포기하고 raw 경로로
+        떨어진다 — 조용히 실패하는 것보다 낫다.
         """
+        if is_tmux and tmux_name:
+            ok = tmux_paste.paste_via_tmux(tmux_name, text)
+            if not ok:
+                raise RuntimeError(f"tmux paste-buffer 실패: {tmux_name}")
+            return
         session = self._get(session_id)
-        mode = input_mode.pane_input_mode(session.fd, tmux=is_tmux, bracketed=session._bracketed)
-        bracket = is_tmux or bool(mode["bracketed"])
-        payload = paste_prepare.prepare_paste_payload(text, bracket=bracket)
+        mode = input_mode.pane_input_mode(session.fd, tmux=False, bracketed=session._bracketed)
+        payload = paste_prepare.prepare_paste_payload(text, bracket=bool(mode["bracketed"]))
         if payload:
             self.write(session_id, payload)
 
