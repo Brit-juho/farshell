@@ -777,6 +777,30 @@ function renderAboutSection() {
       h.textContent = hint;
       usage.appendChild(h);
     }
+
+    // 96번 계획서 — Codex는 clauth와 독립된 두 번째 한도형 소스라 같은
+    // 자리에 한 줄 더 둔다(합쳐서 하나로 보여주면 "어느 쪽이 문제인지"를
+    // 알 수 없다 — 이 진단 패널의 존재 이유 그대로).
+    const codexCap = (r && r.usage_codex) || {};
+    const codexLine = document.createElement('div');
+    codexLine.className = 'vt-set-hookrow';
+    codexLine.dataset.state = codexCap.available ? 'ok' : 'add';
+    codexLine.textContent = codexCap.available
+      ? `codex — 사용 중`
+      : 'codex — 표시 안 함';
+    usage.appendChild(codexLine);
+    const codexReason = codexCap.available ? null : codexCap.reason;
+    const codexHint = codexReason === 'disabled' ? '설정에서 껐습니다 (VT_USAGE_PROVIDER=none).'
+      : codexReason === 'expired' ? 'Codex 로그인이 만료됐습니다 — 터미널에서 codex로 다시 로그인하세요.'
+      : codexReason === 'no-auth' ? 'Codex 인증 파일이 없습니다 (~/.codex/auth.json) — codex CLI로 먼저 로그인하세요.'
+      : codexReason ? 'Codex 사용량을 잠시 가져오지 못했습니다.'
+      : null;
+    if (codexHint) {
+      const h = document.createElement('div');
+      h.className = 'vt-set-help';
+      h.textContent = codexHint;
+      usage.appendChild(h);
+    }
   }).catch(() => { usage.textContent = '사용량 소스를 확인할 수 없습니다.'; });
 
   return frag;
