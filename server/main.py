@@ -38,6 +38,7 @@ from routes.push import router as push_router
 from routes.queue import router as queue_router
 from routes.snippets import router as snippets_router
 from routes.search import router as search_router
+from routes.mcp import router as mcp_router, elevated_router as mcp_elevated_router
 from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
 from routes.worktree import router as worktree_router
 from routes.security import router as security_router
@@ -415,6 +416,8 @@ app.include_router(share_public_router)
 app.include_router(peer_router)
 app.include_router(hosts_router)
 app.include_router(peer_proxy_router)
+app.include_router(mcp_router)
+app.include_router(mcp_elevated_router)
 
 
 @app.exception_handler(StarletteHTTPException)

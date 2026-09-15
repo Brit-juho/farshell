@@ -101,6 +101,13 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | GET | `/api/git/binding?repo=X` | Resolved account id for a repo: `byRepo` → remote URL's `host/owner` in `byHostOrg` → exactly one account on that host → `null` |
 | PUT | `/api/git/binding` | Requires elevation. Body `{repo, account_id}` — sets the explicit `byRepo` binding |
 
+## MCP servers (97, stage 1 — toggling requires an elevated session)
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/mcp?worktree=<id>` | MCP servers defined across claude/codex/agy, for the global scope plus that worktree's local scope. **Nothing is cached or stored** — the real config files are read on every call, so edits made in a terminal show up immediately. Values are never returned: `env`/`headers` come back as `{key, ref, literal}` only. Also returns `facts` (per-tool hot-reload behaviour) and `errors` (per-file parse failures, which never abort the whole scan) |
+| POST | `/api/mcp/toggle` | Requires elevation. Body `{tool, name, enabled, scope?, worktree?, shared?}` — **declares the target state rather than flipping**, so retrying the same request is safe. Returns `status`: `ok` (written and verified), `unknown` (written but verification failed — 200, never reported as success), or `failed` (409, file left untouched) |
+
 ## Scrollback Search
 
 | Method | Path | Description |
