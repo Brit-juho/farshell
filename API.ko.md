@@ -97,6 +97,13 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 | GET | `/api/git/binding?repo=X` | 저장소의 해석된 계정 id: `byRepo` → 원격 URL의 `host/owner`가 `byHostOrg` → 같은 host에 계정이 정확히 1개 → `null` |
 | PUT | `/api/git/binding` | 승격 필요. body `{repo, account_id}` — `byRepo` 명시 바인딩 설정 |
 
+## MCP 서버 (97번 1단계 — 토글은 승격 세션 필요)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/mcp?worktree=<id>` | claude/codex/agy에 정의된 MCP 서버 — 전역 + 그 워크트리의 로컬 스코프. **저장도 캐시도 하지 않고** 부를 때마다 실제 설정 파일을 읽으므로 터미널에서 직접 고친 것도 바로 보인다. 값은 절대 안 내려간다 — `env`/`headers`는 `{key, ref, literal}` 형태로만. `facts`(도구별 반영 시점)와 `errors`(파일별 파싱 실패, 전체 스캔을 중단시키지 않는다)도 함께 |
+| POST | `/api/mcp/toggle` | 승격 필요. 본문 `{tool, name, enabled, scope?, worktree?, shared?}` — **뒤집기가 아니라 목표 상태 지정**이라 같은 요청을 다시 보내도 안전하다. `status`는 `ok`(쓰고 확인까지), `unknown`(썼는데 확인 실패 — 200, 성공이라 말하지 않는다), `failed`(409, 파일 무변경) |
+
 ## 스크롤백 검색
 
 | 메서드 | 경로 | 설명 |
