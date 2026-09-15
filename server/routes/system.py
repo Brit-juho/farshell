@@ -116,6 +116,9 @@ async def capabilities(request: Request):
         # 어느 한쪽만 있어도 dock 사용량 탭은 떠야 하므로, 프런트는 이 둘을
         # OR로 묶어 `.needs-usage`를 판정한다(agent/status.js).
         "usage_counter": usage.counter_capability(),
+        # 96번 계획서 — Codex도 한도형 독립 소스다. clauth와 마찬가지로
+        # OR로 묶어 `.needs-usage`를 판정한다(agent/status.js).
+        "usage_codex": usage.codex_capability(),
         # N34: HUD 우측 끝 버전 칩. 빈 문자열이면 프런트가 칩을 안 그린다.
         "version": _version(),
         # N37: 헤더 워크스페이스 칩. 빈 문자열이면 "/ 호스트" 부분을 안 그린다.
@@ -139,10 +142,14 @@ async def usage_get(request: Request):
     타임스탬프를 찍는데 그걸 포함하면 내용이 같아도 매번 새 ETag가 나온다
     (기존 `tunnel.checked_at` 처리와 같은 이유).
     """
-    cap = usage.capability()
+    # 96번 계획서 — 이 엔드포인트가 실제로 화면에 그릴 것(clauth+codex를
+    # 합친 프로필 목록)을 결정한다. 설정 →「정보」의 clauth 전용 진단은
+    # `usage.capability()`(merged 아님)를 따로 쓴다 — 섞으면 그 진단이
+    # codex 상태에 가려 틀린 말을 하게 된다.
+    cap = usage.merged_capability()
     if not cap.get("available"):
         return _etag_response({"available": False, **cap}, request)
-    snap = usage.snapshot()
+    snap = usage.merged_snapshot()
     if snap is None:
         return _etag_response({"available": False, "provider": cap.get("provider"), "reason": "read-failed"}, request)
     payload = {"available": True, **snap}

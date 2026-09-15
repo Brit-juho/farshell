@@ -52,6 +52,11 @@ def feed(tmp_path, monkeypatch):
     path = tmp_path / "status.json"
     monkeypatch.setenv("VT_CLAUTH_STATUS", str(path))
     monkeypatch.delenv("VT_USAGE_PROVIDER", raising=False)
+    # 96번 계획서 — /api/usage가 이제 clauth와 codex를 함께 본다. 이 파일의
+    # 테스트는 clauth 전용이라 codex 쪽은 격리해서 "인증 파일 없음"으로
+    # 고정한다 — 안 그러면 이 테스트를 돌리는 실제 맥의 ~/.codex/auth.json
+    # 존재 여부에 결과가 갈리는, 기기마다 다른 결과가 나오는 테스트가 된다.
+    monkeypatch.setenv("VT_CODEX_HOME", str(tmp_path / "codex-empty"))
     usage._reset_for_tests()
     yield path
     usage._reset_for_tests()
