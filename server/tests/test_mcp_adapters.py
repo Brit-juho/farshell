@@ -194,33 +194,66 @@ def test_broken_toml_is_reported(home):
     assert mcp_adapters.scan_codex()["errors"][0]["reason"] == "TOML 파싱 실패"
 
 
-# ------------------------------------------------------------------ gemini
+# --------------------------------------------------------------------- agy
 
-def test_gemini_reads_global_and_local(home, tmp_path):
-    (home / ".gemini" / "settings.json").write_text(
-        json.dumps({"mcpServers": {"g": {"command": "x"}}}))
+# agy(Antigravity CLI)는 구 Gemini CLI와 다른 제품이다 — 2026-09-16 격리된
+# HOME에서 agy 1.1.27을 직접 돌려 확인한 구조만 여기에 고정한다.
+
+def _write_agy(home, data):
+    d = home / ".gemini" / "config"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "mcp_config.json").write_text(json.dumps(data))
+
+
+def test_agy_reads_global_config(home):
+    _write_agy(home, {"mcpServers": {"notion": {"command": "npx", "type": "stdio"}}})
+    s = mcp_adapters.scan_agy()["servers"]
+    assert [(x["name"], x["scope"]) for x in s] == [("notion", "global")]
+
+
+def test_agy_missing_disabled_key_means_enabled(home):
+    """`agy mcp enable`은 키를 false로 두지 않고 **지운다** — 없으면 켜진 것."""
+    _write_agy(home, {"mcpServers": {"n": {"command": "x"}}})
+    assert mcp_adapters.scan_agy()["servers"][0]["enabled"] is True
+
+
+def test_agy_disabled_true_means_off(home):
+    _write_agy(home, {"mcpServers": {"n": {"command": "x", "disabled": True}}})
+    assert mcp_adapters.scan_agy()["servers"][0]["enabled"] is False
+
+
+def test_agy_disabled_false_means_on(home):
+    """`agy mcp add`가 처음 쓸 때는 disabled:false를 넣는다(실측)."""
+    _write_agy(home, {"mcpServers": {"n": {"command": "x", "disabled": False}}})
+    assert mcp_adapters.scan_agy()["servers"][0]["enabled"] is True
+
+
+def test_agy_ignores_worktree_because_it_has_no_project_scope(home, tmp_path):
+    """프로젝트 디렉토리에 설정을 둬도 agy는 읽지 않는다(실측 확인)."""
+    _write_agy(home, {"mcpServers": {"g": {"command": "x"}}})
     wt = tmp_path / "wt"
-    (wt / ".gemini").mkdir(parents=True)
-    (wt / ".gemini" / "settings.json").write_text(
-        json.dumps({"mcpServers": {"l": {"command": "y"}}}))
-    scopes = {s["name"]: s["scope"] for s in mcp_adapters.scan_gemini(str(wt), "wt1")["servers"]}
-    assert scopes == {"g": "global", "l": "local"}
+    (wt / ".gemini" / "config").mkdir(parents=True)
+    (wt / ".gemini" / "config" / "mcp_config.json").write_text(
+        json.dumps({"mcpServers": {"projonly": {"command": "y"}}}))
+    names = [s["name"] for s in mcp_adapters.scan_agy(str(wt), "wt1")["servers"]]
+    assert names == ["g"]
 
 
-def test_gemini_enablement_file_turns_server_off(home):
-    (home / ".gemini" / "settings.json").write_text(
-        json.dumps({"mcpServers": {"g": {"command": "x"}}}))
-    (home / ".gemini" / "mcp-server-enablement.json").write_text(json.dumps({"g": False}))
-    assert mcp_adapters.scan_gemini()["servers"][0]["enabled"] is False
+def test_agy_reference_is_marked_unverified(home):
+    """agy가 `${VAR}`를 확장하는지는 확인하지 못했다 — 확장된다고도,
+    안 된다고도 단정하지 않는다."""
+    _write_agy(home, {"mcpServers": {"n": {"command": "x", "env": {"T": "${TOK}"}}}})
+    s = mcp_adapters.scan_agy()["servers"][0]
+    assert s["env"][0]["ref"] == "TOK"
+    assert s["env"][0]["ref_unverified"] is True
+    assert any("확인되지 않았다" in n for n in s["notes"])
 
 
-def test_gemini_unknown_enablement_schema_defaults_to_enabled(home):
-    """스키마를 확인하지 못한 파일이다 — 못 알아보면 '꺼짐'으로 단정하지 않는다."""
-    (home / ".gemini" / "settings.json").write_text(
-        json.dumps({"mcpServers": {"g": {"command": "x"}}}))
-    (home / ".gemini" / "mcp-server-enablement.json").write_text(
-        json.dumps({"g": {"something": "else"}}))
-    assert mcp_adapters.scan_gemini()["servers"][0]["enabled"] is True
+def test_agy_broken_json_is_reported(home):
+    d = home / ".gemini" / "config"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "mcp_config.json").write_text("{broken")
+    assert mcp_adapters.scan_agy()["errors"][0]["reason"] == "JSON 파싱 실패"
 
 
 # -------------------------------------------------------------------- 공통

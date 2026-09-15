@@ -1,6 +1,6 @@
 """97번 계획서 1단계 1/n — 도구별 MCP 설정 **읽기** 어댑터.
 
-각 CLI(claude/codex/gemini)가 MCP 서버를 어디에 어떤 모양으로 적어두는지는
+각 CLI(claude/codex/agy)가 MCP 서버를 어디에 어떤 모양으로 적어두는지는
 전부 공식 문서에 나온 안정 포맷이다(97번 §0-1). 이 모듈은 그 파일들을
 **읽기만** 하고 하나의 정규화된 스키마로 바꾼다. 쓰기는 다음 단계.
 
@@ -14,7 +14,7 @@
 
 ## 참조 문법이 도구마다 다르다 (97번 §0-3)
 
-- claude/gemini : `${VAR}` · `${VAR:-기본값}` · `$VAR`
+- claude        : `${VAR}` · `${VAR:-기본값}` · `$VAR`
 - codex         : **확장 없음.** `env_vars = ["VAR"]`로 이름만 적는다.
                   그래서 codex의 env에 `${VAR}`를 적으면 확장되지 않고
                   **리터럴 7글자가 그대로 서버에 전달된다** — 조용히 깨지는
@@ -30,7 +30,7 @@ import tomllib
 from pathlib import Path
 from typing import Optional
 
-# `${VAR}` / `${VAR:-기본}` / `$VAR` — claude·gemini가 확장하는 형태
+# `${VAR}` / `${VAR:-기본}` / `$VAR` — claude가 확장하는 형태
 _REF_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}$|^\$([A-Za-z_][A-Za-z0-9_]*)$")
 
 
@@ -67,6 +67,13 @@ def _read_json(path: Path) -> tuple[Optional[dict], Optional[str]]:
     return data, None
 
 
+def _read_toml_text(text: str) -> tuple[Optional[dict], Optional[str]]:
+    try:
+        return tomllib.loads(text), None
+    except tomllib.TOMLDecodeError:
+        return None, "TOML 파싱 실패"
+
+
 def _read_toml(path: Path) -> tuple[Optional[dict], Optional[str]]:
     try:
         raw = path.read_bytes()
@@ -75,8 +82,8 @@ def _read_toml(path: Path) -> tuple[Optional[dict], Optional[str]]:
     except OSError as e:
         return None, f"읽기 실패: {e.__class__.__name__}"
     try:
-        return tomllib.loads(raw.decode("utf-8")), None
-    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return _read_toml_text(raw.decode("utf-8"))
+    except UnicodeDecodeError:
         return None, "TOML 파싱 실패"
 
 
@@ -107,18 +114,23 @@ def _classify_ref(value) -> tuple[Optional[str], bool]:
     return None, True
 
 
-def _describe_fields(mapping, *, expands: bool) -> list[dict]:
+def _describe_fields(mapping, *, expands: Optional[bool]) -> list[dict]:
     """env/headers를 [{key, ref, literal}] 로. **값은 담지 않는다.**
 
-    expands=False(codex)면 `${VAR}` 모양이어도 확장되지 않으므로 리터럴로
-    분류하고 호출부가 경고를 붙인다.
+    `expands`는 그 도구가 `${VAR}`를 실제 값으로 바꿔주는지다.
+    - True(claude)  : 참조로 인정
+    - False(codex)  : 확장이 없으므로 리터럴로 분류하고 호출부가 경고를 붙인다
+    - None(agy)     : **확인하지 못했다.** 참조로 보되 그 사실을 표시한다 —
+                      둘 중 어느 쪽으로 단정해도 사용자에게 거짓말이 된다.
     """
     out = []
     for key, value in sorted(_as_mapping(mapping).items()):
         ref, literal = _classify_ref(value)
-        if not expands and ref is not None:
+        if expands is False and ref is not None:
             # 확장 안 되는 도구인데 참조 모양 — 리터럴로 전달된다.
             out.append({"key": key, "ref": None, "literal": True, "dead_ref": ref})
+        elif expands is None and ref is not None:
+            out.append({"key": key, "ref": ref, "literal": False, "ref_unverified": True})
         else:
             out.append({"key": key, "ref": ref, "literal": literal})
     return out
@@ -140,7 +152,7 @@ def _entry(
     path: Path,
     enabled: bool,
     defn: dict,
-    expands: bool,
+    expands: Optional[bool],
     shared: bool = False,
     worktree_id: Optional[str] = None,
     notes: Optional[list[str]] = None,
@@ -155,6 +167,11 @@ def _entry(
             notes.append(
                 f"`{field['key']}`가 `${{{field['dead_ref']}}}` 모양이지만 "
                 f"{tool}는 확장하지 않는다 — 문자열 그대로 전달된다"
+            )
+        elif field.get("ref_unverified"):
+            notes.append(
+                f"`{field['key']}`가 환경변수 참조 모양인데 {tool}가 이를 확장하는지는 "
+                f"확인되지 않았다 — 동작을 직접 확인할 것"
             )
 
     # 공유 파일(.mcp.json)에 리터럴 값이 있으면 git에 그대로 올라간다.
@@ -330,64 +347,45 @@ def scan_codex(worktree_path: Optional[str] = None, worktree_id: Optional[str] =
     return {"servers": servers, "errors": errors}
 
 
-# ---------------------------------------------------------------- gemini
+# ------------------------------------------------------------------- agy
 
-def gemini_paths() -> dict:
-    base = _home() / ".gemini"
-    return {"global": base / "settings.json", "enablement": base / "mcp-server-enablement.json"}
+# agy = Antigravity CLI. 홈으로 `~/.gemini`를 쓰지만 구 Gemini CLI와는 **다른
+# 제품**이고 구조도 다르다 — 2026-09-16 이 맥의 agy 1.1.27을 격리된 HOME에서
+# 직접 돌려 확인한 것만 여기 적는다(사용자 실제 설정은 건드리지 않았다):
+#
+#   - 설정은 `~/.gemini/config/mcp_config.json` 하나. `settings.json`이 아니다.
+#   - **스코프가 전역 하나뿐이다.** add/enable/disable 어디에도 스코프 플래그가
+#     없고, 프로젝트 디렉토리에 설정을 두고 `agy mcp list`를 돌려도 무시된다.
+#   - on/off는 정의 안의 `"disabled": true`. codex의 `enabled`와 **방향이 반대**다.
+#   - `agy mcp disable` → `disabled: true` 기록, `agy mcp enable` → **키를 제거**.
+#     즉 키가 없으면 켜진 것이다.
 
-
-def _gemini_enablement() -> dict:
-    """`~/.gemini/mcp-server-enablement.json`.
-
-    이 파일의 정확한 스키마는 공식 문서에서 확인하지 못했다(이 기계엔 파일이
-    아직 없다). 그래서 **모르면 꺼졌다고 말하지 않는다** — 알아볼 수 있는
-    모양(이름→bool, 이름→{enabled:bool})만 해석하고 나머지는 무시한다.
-    없는 상태를 "꺼짐"으로 단정하는 쪽이 훨씬 해롭다.
-    """
-    data, _err = _read_json(gemini_paths()["enablement"])
-    out = {}
-    for name, value in _as_mapping(data or {}).items():
-        if isinstance(value, bool):
-            out[name] = value
-        elif isinstance(value, dict) and isinstance(value.get("enabled"), bool):
-            out[name] = value["enabled"]
-    return out
+def agy_paths() -> dict:
+    return {"global": _home() / ".gemini" / "config" / "mcp_config.json"}
 
 
-def _gemini_servers(data: dict, *, path: Path, scope: str, worktree_id, enablement) -> list[dict]:
-    out = []
+def scan_agy(worktree_path: Optional[str] = None, worktree_id: Optional[str] = None) -> dict:
+    """agy는 전역 설정 하나만 본다 — `worktree_*`는 받기만 하고 쓰지 않는다
+    (다른 어댑터와 호출 규약을 맞추기 위한 것)."""
+    path = agy_paths()["global"]
+    data, err = _read_json(path)
+    if err:
+        return {"servers": [], "errors": [{"source": str(path), "reason": err}]}
+    if data is None:
+        return {"servers": [], "errors": []}
+
+    servers = []
     for name, defn in sorted(_as_mapping(data.get("mcpServers")).items()):
         if not isinstance(defn, dict):
             continue
-        out.append(_entry(
-            name=name, tool="gemini", scope=scope, path=path,
-            enabled=enablement.get(name, True),
-            defn=defn, expands=True, worktree_id=worktree_id,
+        servers.append(_entry(
+            name=name, tool="agy", scope="global", path=path,
+            # 키가 없으면 켜진 것 — `agy mcp enable`이 키를 지우기 때문이다.
+            enabled=defn.get("disabled", False) is not True,
+            # `${VAR}` 확장 여부는 확인하지 못했다(§_describe_fields).
+            defn=defn, expands=None, worktree_id=None,
         ))
-    return out
+    return {"servers": servers, "errors": []}
 
 
-def scan_gemini(worktree_path: Optional[str] = None, worktree_id: Optional[str] = None) -> dict:
-    path = gemini_paths()["global"]
-    data, err = _read_json(path)
-    errors = []
-    if err:
-        return {"servers": [], "errors": [{"source": str(path), "reason": err}]}
-    enablement = _gemini_enablement()
-    servers = _gemini_servers(
-        data or {}, path=path, scope="global", worktree_id=None, enablement=enablement)
-
-    if worktree_path:
-        local = Path(worktree_path) / ".gemini" / "settings.json"
-        ldata, lerr = _read_json(local)
-        if lerr:
-            errors.append({"source": str(local), "reason": lerr})
-        elif ldata is not None:
-            servers += _gemini_servers(
-                ldata, path=local, scope="local", worktree_id=worktree_id, enablement=enablement)
-
-    return {"servers": servers, "errors": errors}
-
-
-ADAPTERS = {"claude": scan_claude, "codex": scan_codex, "gemini": scan_gemini}
+ADAPTERS = {"claude": scan_claude, "codex": scan_codex, "agy": scan_agy}

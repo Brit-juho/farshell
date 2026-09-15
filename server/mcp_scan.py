@@ -8,10 +8,10 @@ FarShell이 값어치를 더하는 지점은 "여러 프로젝트에 흩어진 �
 ## 켰다고 다 켜진 게 아니다 (97번 §4)
 
 네 도구 모두 설정 파일을 **세션 시작 시 한 번만** 읽는다. 이미 떠 있는 세션은
-파일이 바뀐 걸 모른다. 게다가 gemini는 외부에서 설정을 지워도 실행 중인
-세션이 그 서버를 계속 호출할 수 있다(소스 확인). 이걸 토글 스위치 하나로
-그리면 사용자에게 사실과 다른 상태를 보여주게 되므로, 도구별 사실을
-`TOOL_FACTS`로 함께 내려보내 화면이 정직하게 말하게 한다.
+파일이 바뀐 걸 모른다. 그런데 도구마다 사정이 또 달라서(agy는 반영 시점을
+아직 확인하지 못했다) 토글 스위치 하나로 그리면 사용자에게 사실과 다른
+상태를 보여주게 된다. 그래서 도구별 사실을 `TOOL_FACTS`로 함께 내려보내
+화면이 정직하게 말하게 한다 — **모르는 항목은 False가 아니라 None**이다.
 """
 
 from __future__ import annotations
@@ -34,16 +34,18 @@ TOOL_FACTS = {
         "apply": "다음 세션부터 — 실행 중인 창은 재시작해야 반영된다",
         "off_is_immediate": None,
     },
-    "gemini": {
-        "hot_reload": False,
-        "apply": "다음 세션부터 — 실행 중인 창은 재시작해야 반영된다",
-        "off_is_immediate": False,
-        "off_warning": "이미 열려 있는 세션은 재시작 전까지 이 서버를 계속 호출할 수 있다",
-        "session_command": "/mcp disable",  # 세션 안에서 직접 꺼야 즉시 반영된다
+    # agy(Antigravity CLI)는 설정이 전역 파일 하나뿐이라 워크트리 개념이 없다.
+    # 핫리로드 여부는 **확인하지 못했다** — 구 Gemini CLI 조사 결과는 다른
+    # 제품의 것이라 그대로 가져다 쓰지 않는다(2026-09-16 정정).
+    "agy": {
+        "hot_reload": None,
+        "apply": "반영 시점이 확인되지 않았다 — 실행 중인 창은 재시작을 권한다",
+        "off_is_immediate": None,
+        "scopes": ["global"],
     },
 }
 
-TOOLS = ("claude", "codex", "gemini")
+TOOLS = ("claude", "codex", "agy")
 
 
 def find_worktree(worktree_id: Optional[str]) -> Optional[dict]:
