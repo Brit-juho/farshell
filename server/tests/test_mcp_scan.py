@@ -60,16 +60,18 @@ def test_unknown_worktree_id_falls_back_to_global(home, wt):
 
 def test_facts_are_included_for_each_tool(home, wt):
     facts = mcp_scan.scan()["facts"]
-    assert set(facts) == {"claude", "codex", "gemini"}
-    assert all(f["hot_reload"] is False for f in facts.values())
+    assert set(facts) == {"claude", "codex", "agy"}
+    assert facts["claude"]["hot_reload"] is False
+    assert facts["codex"]["hot_reload"] is False
 
 
-def test_gemini_fact_admits_off_is_not_immediate(home, wt):
-    """확인된 사실이다 — 껐다고 표시해놓고 실제로는 계속 호출 가능한 상태를
-    숨기면 안 된다(97번 §4)."""
-    g = mcp_scan.scan()["facts"]["gemini"]
-    assert g["off_is_immediate"] is False
-    assert g["session_command"] == "/mcp disable"
+def test_agy_fact_admits_what_is_unverified(home, wt):
+    """agy는 반영 시점을 확인하지 못했다 — False로 단정하면 "즉시 안 된다"는
+    거짓 정보를, True로 단정하면 "껐으니 안전하다"는 더 나쁜 거짓을 준다."""
+    g = mcp_scan.scan()["facts"]["agy"]
+    assert g["hot_reload"] is None
+    assert g["off_is_immediate"] is None
+    assert g["scopes"] == ["global"]
 
 
 def test_unverified_tools_report_unknown_not_false(home, wt):
