@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from routes.files import (
+from routes.git import (
     _bad_repo_relpath,
     _collect_status,
     _commit,
@@ -143,7 +143,7 @@ def test_commit_message_with_newlines_survives_intact(repo):
     ],
 )
 def test_parse_branch_header(line, expected):
-    from routes.files import _parse_branch_header
+    from routes.git import _parse_branch_header
 
     got = _parse_branch_header(line)
     assert (got["branch"], got["upstream"], got["ahead"], got["behind"]) == expected
