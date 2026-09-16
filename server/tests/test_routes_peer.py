@@ -439,14 +439,17 @@ def test_file_transfer_stores_bytes_and_dedupes_by_origin(env):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["reused"] is False
-    stored = file_store.real_path_for(body["id"])
-    assert stored.read_bytes() == data
+    # **응답에는 id·path가 없다**(routes/peer.py의 strip) — B의 저장소 키와
+    # 절대 경로라 A가 자기 것으로 오해한다. 저장 여부는 B 쪽에서 직접 본다.
+    assert "id" not in body and "path" not in body
+    items = file_store.list_items()
+    assert len(items) == 1
+    assert file_store.real_path_for(items[0]["id"]).read_bytes() == data
 
     # 같은 파일을 다시 보내면 디스크에 두 벌 쌓이지 않는다.
     r2 = client.post("/api/peer/file", content=data,
                      headers=_file_headers(hs, "laptop", secret, data, name="build.tar.gz"))
     assert r2.json()["reused"] is True
-    assert r2.json()["id"] == body["id"]
     assert len(file_store.list_items()) == 1
 
 
@@ -489,7 +492,11 @@ def test_file_transfer_types_the_path_into_the_named_session(env, monkeypatch):
     r = client.post("/api/peer/file", content=data,
                     headers=_file_headers(hs, "laptop", secret, data, session="dev"))
     assert r.json()["typed"] is True
-    assert typed and typed[0][0] == "%2" and typed[0][1] == r.json()["path"]
+    # 타이핑되는 것은 **B의 경로**다. 응답에는 안 실리므로(strip) B에서 구한다 —
+    # 그게 이 검사의 요점이기도 하다: 경로는 B 안에서만 쓰인다.
+    import file_store
+    expected = str(file_store.real_path_for(file_store.list_items()[0]["id"]))
+    assert typed and typed[0][0] == "%2" and typed[0][1] == expected
 
 
 # --- 2.1.3: 「연결된 화면」(view 목록 / control 끊기) · 스크롤백 검색 -----------------

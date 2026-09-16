@@ -484,11 +484,17 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
 
 
 @router.post("/api/peer/file")
-# ⚠ `id`와 `path`는 **B 로컬 값**이다. 지금은 안 지운다 — A는 그대로
-# 통과시키고 화면은 `typed`/`reused`만 쓰기 때문이다(frontend/js/panels/
-# files/files.js). 화면이 이 `id`로 `/api/files/{id}/…`를 부르기 시작하면
-# **A의 저장소에서 엉뚱한 파일을 찾게 된다** — 그때는 여기 strip에 넣을 것.
-@capability("file", level=host_store.LEVEL_CONTROL, strip=(), body=True)
+# `id`는 **B의 파일 저장소 키**이고 `path`는 **B의 절대 경로**다. 둘 다
+# A에서는 아무 뜻이 없는데 모양은 A의 것과 똑같아서, 화면이 이 `id`로
+# `/api/files/{id}/…`를 부르면 A의 저장소에서 엉뚱한 파일을 찾는다. 지금은
+# 화면이 `typed`/`reused`만 쓰지만 **모양이 같다는 것 자체가 함정이다** —
+# 나중에 누가 쓰기 시작하는 걸 코드로 막는다.
+#
+# 나중에 원격 파일 목록(2.2)에서 이 파일을 다시 가리켜야 하면, 지우는 대신
+# **B 것임이 이름에 드러나는 형태**로 바꿀 것 — 세션이 `remote:<host>:<name>`을
+# 쓰는 것과 같은 방식이다. 로컬 것과 구별 안 되는 `id`를 그냥 내려보내는
+# 길로는 돌아가지 않는다.
+@capability("file", level=host_store.LEVEL_CONTROL, strip=("id", "path"), body=True)
 async def peer_file(request: Request, grant: dict, data: bytes):
     """파일 바이트를 받아 이 호스트의 저장소에 넣는다(A2, control 등급).
 

@@ -444,7 +444,10 @@ async def send_file_to_host(file_id: str, request: Request):
         # 그대로 상태와 이유를 전달해 화면이 사람 말로 보여줄 수 있게 한다.
         return JSONResponse({"error": "peer_failed", "reason": e.reason},
                             status_code=e.status if 400 <= e.status < 600 else 502)
-    return {"ok": True, "host": host, **{k: r.get(k) for k in ("id", "path", "reused", "typed")}}
+    # `id`·`path`는 상대(B)가 **의도적으로 안 내려준다**(routes/peer.py의 strip).
+    # B의 저장소 키와 절대 경로라 여기서 그대로 흘리면 화면이 그걸 로컬 것으로
+    # 오해한다 — 전달할 것은 "어떻게 됐는가"뿐이다.
+    return {"ok": True, "host": host, **{k: r.get(k) for k in ("reused", "typed")}}
 
 
 @router.post("/api/files/{file_id}/insert")
