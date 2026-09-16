@@ -33,6 +33,11 @@ from typing import Optional
 # `${VAR}` / `${VAR:-기본}` / `$VAR` — claude가 확장하는 형태
 _REF_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}$|^\$([A-Za-z_][A-Za-z0-9_]*)$")
 
+# opencode 고유 문법 — `{env:VAR}`. **`${VAR}`는 opencode에서 동작하지 않는다**
+# (소스 확인, §0-3). 그래서 같은 정규식으로 처리하면 opencode의 정상적인 참조가
+# "리터럴 값"으로 분류돼 화면이 "키가 파일에 박혀 있다"고 거짓 경고를 한다.
+_OPENCODE_REF_RE = re.compile(r"^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$")
+
 
 def _home() -> Path:
     """홈 디렉토리. 테스트가 통째로 격리할 수 있게 VT_MCP_HOME을 먼저 본다
@@ -100,21 +105,30 @@ def _as_name_list(value) -> list[str]:
     return [x for x in value if isinstance(x, str)]
 
 
-def _classify_ref(value) -> tuple[Optional[str], bool]:
+def _classify_ref(value, *, style: str = "dollar") -> tuple[Optional[str], bool]:
     """(참조하는 변수 이름, 리터럴 값인가).
 
     값 자체는 절대 돌려주지 않는다. 참조면 변수 **이름**만 돌려주는데,
     변수 이름은 시크릿이 아니라 "무엇이 필요한지"를 알려주는 정보다.
+
+    `style`은 그 도구의 문법이다 — `dollar`(claude·codex·agy) / `brace_env`
+    (opencode). 문법을 하나로 뭉치면 opencode의 정상 참조가 리터럴로 분류돼
+    화면이 거짓 경고를 한다.
     """
     if not isinstance(value, str) or value == "":
         return None, False
-    m = _REF_RE.match(value.strip())
+    v = value.strip()
+    if style == "brace_env":
+        m = _OPENCODE_REF_RE.match(v)
+        return (m.group(1), False) if m else (None, True)
+    m = _REF_RE.match(v)
     if m:
         return m.group(1) or m.group(2), False
     return None, True
 
 
-def _describe_fields(mapping, *, expands: Optional[bool]) -> list[dict]:
+def _describe_fields(mapping, *, expands: Optional[bool],
+                     style: str = "dollar") -> list[dict]:
     """env/headers를 [{key, ref, literal}] 로. **값은 담지 않는다.**
 
     `expands`는 그 도구가 `${VAR}`를 실제 값으로 바꿔주는지다.
@@ -125,7 +139,7 @@ def _describe_fields(mapping, *, expands: Optional[bool]) -> list[dict]:
     """
     out = []
     for key, value in sorted(_as_mapping(mapping).items()):
-        ref, literal = _classify_ref(value)
+        ref, literal = _classify_ref(value, style=style)
         if expands is False and ref is not None:
             # 확장 안 되는 도구인데 참조 모양 — 리터럴로 전달된다.
             out.append({"key": key, "ref": None, "literal": True, "dead_ref": ref})
@@ -134,6 +148,20 @@ def _describe_fields(mapping, *, expands: Optional[bool]) -> list[dict]:
         else:
             out.append({"key": key, "ref": ref, "literal": literal})
     return out
+
+
+def _fingerprint(defn: dict) -> str:
+    """mcp_catalog.fingerprint와 **같은 계산**이어야 한다 — 저장할 때와 맞출
+    때 재료가 다르면 지문이 영원히 안 맞아 키가 절대 주입되지 않는다.
+    계산을 여기 두는 이유는 어댑터가 카탈로그를 import하지 않게 하기 위함이고,
+    두 벌이 어긋나지 않도록 테스트가 둘을 나란히 비교한다."""
+    import hashlib
+    parts = [
+        str(defn.get("command") or ""),
+        " ".join(str(x) for x in (defn.get("args") or [])),
+        str(defn.get("url") or ""),
+    ]
+    return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 def _transport(defn: dict) -> str:
@@ -158,8 +186,9 @@ def _entry(
     notes: Optional[list[str]] = None,
     extra: Optional[dict] = None,
 ) -> dict:
-    env = _describe_fields(defn.get("env"), expands=expands)
-    headers = _describe_fields(defn.get("headers"), expands=expands)
+    style = "brace_env" if tool == "opencode" else "dollar"
+    env = _describe_fields(defn.get("env"), expands=expands, style=style)
+    headers = _describe_fields(defn.get("headers"), expands=expands, style=style)
     notes = list(notes or [])
 
     for field in (*env, *headers):
@@ -176,17 +205,33 @@ def _entry(
 
     # 공유 파일(.mcp.json)에 리터럴 값이 있으면 git에 그대로 올라간다.
     if shared and any(f["literal"] for f in (*env, *headers)):
-        notes.append("이 파일은 저장소에 커밋된다 — 값을 직접 적지 말고 `${VAR}` 참조를 쓸 것")
+        example = "{env:VAR}" if tool == "opencode" else "${VAR}"
+        notes.append(f"이 파일은 저장소에 커밋된다 — 값을 직접 적지 말고 `{example}` 참조를 쓸 것")
+
+    # §2-5 — OAuth 토큰은 **복제 대상에서 제외**한다. 만료·갱신·audience
+    # 제약이 있어 API 키처럼 다른 스코프로 복사할 수 없고, 복사해봐야 받는
+    # 쪽에서 안 먹거나 조용히 만료된다. 그래서 "있다"는 사실만 표시하고
+    # 가져오기 대상에서 뺀다(값은 물론 절대 안 내보낸다).
+    has_oauth = bool(defn.get("oauth")) or "oauth" in _as_mapping(defn.get("auth"))
+    if has_oauth:
+        notes.append("OAuth를 쓰는 서버입니다 — 토큰은 다른 스코프로 복제할 수 없어 "
+                     "가져오기 대상에서 제외됩니다. 대상 도구에서 직접 인증하세요")
 
     out = {
         "name": name,
         "tool": tool,
+        "oauth": has_oauth,
         "scope": scope,
         "source": str(path),
         "shared": shared,
         "worktree_id": worktree_id,
         "enabled": bool(enabled),
         "transport": _transport(defn),
+        # 97번 3단계 §2-5 — 자격증명을 **이름이 아니라 검증된 대상**에 묶기
+        # 위한 지문. 같은 이름으로 다른 명령/URL이 걸린 서버에 키가 자동으로
+        # 흘러가는 것을 막는 유일한 근거다. 값이 아니라 command/args/url만
+        # 재료로 쓰므로 이 필드가 응답에 실려도 비밀이 새지 않는다.
+        "fingerprint": _fingerprint(defn),
         "env": env,
         "headers": headers,
         "notes": notes,
@@ -389,3 +434,149 @@ def scan_agy(worktree_path: Optional[str] = None, worktree_id: Optional[str] = N
 
 
 ADAPTERS = {"claude": scan_claude, "codex": scan_codex, "agy": scan_agy}
+
+
+# ------------------------------------------------------------ 참조 쓰기 (3단계)
+#
+# 읽기(_classify_ref)의 짝. **도구마다 문법이 다르고, 통일하면 조용히 깨진다**
+# (§0-3): Codex에 `${VAR}`를 쓰면 확장 없이 리터럴 문자열 그대로 전달된다
+# (codex-rs/config/src/mcp_types.rs · rmcp-client/src/utils.rs 확인 — 확장 로직
+# 부재). 그래서 "하나의 문법"이라는 편한 길을 택하지 않는다.
+
+
+def ref_syntax(tool: str) -> str:
+    """그 도구가 설정 파일 **값 자리**에서 쓰는 참조 문법의 종류.
+
+    - `dollar_brace` — `${VAR}`를 값 자리에 그대로 쓴다(claude·agy)
+    - `brace_env`    — `{env:VAR}` 고유 문법(opencode). **`${VAR}`는 안 먹는다**
+    - `name_only`    — 값 자리에 참조를 못 쓴다. **이름만 따로 적는다**(codex)
+    """
+    if tool == "codex":
+        return "name_only"
+    if tool == "opencode":
+        return "brace_env"
+    return "dollar_brace"
+
+
+def render_ref(tool: str, env_name: str) -> Optional[str]:
+    """값 자리에 넣을 문자열. `name_only` 도구는 None — 부르는 쪽이
+    `env_vars` 같은 별도 칸에 이름을 넣어야 한다."""
+    style = ref_syntax(tool)
+    if style == "name_only":
+        return None
+    if style == "brace_env":
+        return "{env:%s}" % env_name
+    return "${%s}" % env_name
+
+
+def apply_refs(tool: str, defn: dict, mapping: dict) -> dict:
+    """정의 하나에서 **값을 참조로 바꾼다**. 원본은 안 건드리고 새 dict를 준다.
+
+    `mapping`은 `{"env": {"TOKEN": "FSH_MCP_X_TOKEN"}, "headers": {…}}` 꼴로,
+    "이 칸의 값을 이 환경변수 이름으로 대체하라"는 뜻이다.
+
+    **값을 지우는 것이 이 함수의 전부다.** 여기서 하나라도 빠뜨리면 그 값이
+    그대로 CLI 설정 파일에 남고, `.mcp.json`이라면 git에 커밋된다(§2-2 —
+    레퍼런스 agent-deck이 실제로 밟고 있는 경로).
+    """
+    out = json.loads(json.dumps(defn))   # 깊은 복사
+    name_only = ref_syntax(tool) == "name_only"
+    names: list[str] = []
+
+    for section in ("env", "headers"):
+        want = mapping.get(section) or {}
+        if not want:
+            continue
+        block = out.get(section)
+        if not isinstance(block, dict):
+            block = {}
+        for key, env_name in want.items():
+            names.append(env_name)
+            if name_only:
+                # 값 자리에 참조를 못 쓰는 도구 — 그 칸을 **지운다.** 값을
+                # 남겨두면 그게 곧 평문 유출이다.
+                block.pop(key, None)
+            else:
+                block[key] = render_ref(tool, env_name)
+        if block:
+            out[section] = block
+        else:
+            out.pop(section, None)
+
+    if name_only and names:
+        # Codex 공식 방식 — 이름만 적고 Codex가 자기 프로세스 환경에서 읽는다.
+        existing = _as_name_list(out.get("env_vars"))
+        out["env_vars"] = sorted(set(existing) | set(names))
+    return out
+
+
+def has_literal_secret(defn: dict, *, tool: str = "claude") -> list[str]:
+    """아직 값이 남아 있는 칸의 이름. **쓰기 직전의 마지막 관문이다** —
+    비어 있지 않으면 그 정의를 파일에 쓰면 안 된다.
+
+    `tool`이 필요한 이유: opencode의 정상 참조 `{env:VAR}`를 `dollar` 문법으로
+    검사하면 리터럴로 잡혀 정상적인 배포가 영원히 막힌다."""
+    style = "brace_env" if tool == "opencode" else "dollar"
+    bad: list[str] = []
+    for section in ("env", "headers"):
+        block = defn.get(section)
+        if not isinstance(block, dict):
+            continue
+        for key, value in block.items():
+            ref, literal = _classify_ref(value, style=style)
+            if literal:
+                bad.append(f"{section}.{key}")
+    return bad
+
+
+# ------------------------------------------------------------- opencode (4단계)
+
+def opencode_paths() -> dict:
+    """전역 설정. `XDG_CONFIG_HOME`을 존중한다 — opencode가 그러기 때문이다."""
+    xdg = os.environ.get("VT_OPENCODE_HOME") or os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg) if xdg else _home() / ".config"
+    return {"global": base / "opencode" / "opencode.json"}
+
+
+def scan_opencode(worktree_path: Optional[str] = None,
+                  worktree_id: Optional[str] = None) -> dict:
+    """opencode — 전역 + 프로젝트 `opencode.json`(둘은 **병합**된다).
+
+    on/off는 `enabled: true/false`. codex의 `enabled`와 같은 방향이고
+    claude의 `disabled*` 목록과는 반대다.
+
+    ⚠ **upstream 버그가 있다**(§6 4단계): 꺼둔 서버가 조용히 다시 켜지는
+    경우가 보고돼 있다. 그래서 여기서 "껐다"를 확정으로 말하지 않고 사실을
+    `TOOL_FACTS`로 함께 내려보낸다 — 화면이 정직하게 말하는 쪽이 이 기능의
+    값어치다(§4).
+    """
+    servers: list[dict] = []
+    errors: list[dict] = []
+
+    targets = [(opencode_paths()["global"], "global", False)]
+    if worktree_path:
+        targets.append((Path(worktree_path) / "opencode.json", "local", True))
+
+    for path, scope, shared in targets:
+        data, err = _read_json(path)
+        if err:
+            errors.append({"source": str(path), "reason": err})
+            continue
+        if data is None:
+            continue
+        for name, defn in sorted(_as_mapping(data.get("mcp")).items()):
+            if not isinstance(defn, dict):
+                continue
+            servers.append(_entry(
+                name=name, tool="opencode", scope=scope, path=path,
+                enabled=defn.get("enabled", True) is not False,
+                defn=defn,
+                # `{env:VAR}`를 설정 텍스트 전체에 치환한다 — 확장한다(§0-3).
+                expands=True,
+                shared=shared,
+                worktree_id=worktree_id if scope == "local" else None,
+            ))
+    return {"servers": servers, "errors": errors}
+
+
+ADAPTERS["opencode"] = scan_opencode

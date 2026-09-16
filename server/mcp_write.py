@@ -45,7 +45,7 @@ from typing import Optional
 import mcp_adapters
 import mcp_scan
 
-TOOLS = ("claude", "codex", "agy")
+TOOLS = ("claude", "codex", "agy", "opencode")
 
 
 class WriteRefused(Exception):
@@ -115,15 +115,24 @@ def _atomic_write(path: Path, text: str) -> None:
         raise
 
 
-def _guard_minimal_change(before: dict, after: dict, touched: str) -> None:
+def _guard_minimal_change(before: dict, after: dict, touched: str,
+                          *, allow_new_key: bool = False) -> None:
     """최상위 키가 사라지거나, 손대지 않기로 한 키의 값이 바뀌면 거부한다.
 
     "키는 있는데 값이 통째로 빈 경우"까지 잡으려면 키 집합 비교만으로는
     부족하다 — 손대지 않은 키는 **값까지 그대로**인지 본다.
+
+    `allow_new_key`는 가져오기(deploy) 전용이다. 토글은 이미 있는 항목을
+    뒤집는 일이라 최상위 키가 늘 이유가 없지만, 정의를 처음 심을 때는
+    `mcpServers`가 아예 없을 수 있다. **그때도 늘어나는 키는 손대기로 한
+    그 하나뿐**이어야 한다 — 그래서 기본값은 끈 채로 두고 여기서만 연다.
     """
-    if set(before) != set(after):
-        lost = sorted(set(before) - set(after))
-        raise WriteRefused(f"최상위 키가 사라진다: {lost or '(추가됨)'}")
+    lost = sorted(set(before) - set(after))
+    if lost:
+        raise WriteRefused(f"최상위 키가 사라진다: {lost}")
+    added = sorted(set(after) - set(before))
+    if added and not (allow_new_key and added == [touched]):
+        raise WriteRefused(f"최상위 키가 늘어난다: {added}")
     for key in before:
         if key == touched:
             continue
@@ -141,8 +150,9 @@ def _load_json_for_write(path: Path) -> dict:
     return {} if data is None else data
 
 
-def _commit_json(path: Path, before: dict, after: dict, touched: str, verify) -> dict:
-    _guard_minimal_change(before, after, touched)
+def _commit_json(path: Path, before: dict, after: dict, touched: str, verify,
+                 *, allow_new_key: bool = False) -> dict:
+    _guard_minimal_change(before, after, touched, allow_new_key=allow_new_key)
     stamp = _stamp(path)
     text = json.dumps(after, indent=2, ensure_ascii=False) + "\n"
 
@@ -367,6 +377,8 @@ def set_enabled(
     try:
         if tool == "claude":
             out = _claude_set(name, enabled, worktree_path=wt_path, shared=shared)
+        elif tool == "opencode":
+            out = _opencode_set(name, enabled, scope=scope, worktree_path=wt_path)
         elif tool == "agy":
             if scope == "local":
                 raise WriteRefused("agy는 전역 설정 하나만 쓴다 — 로컬 스코프가 없다")
@@ -383,3 +395,329 @@ def set_enabled(
 
     out.setdefault("reason", None)
     return out
+
+
+# ------------------------------------------------------------------ 그룹
+
+def apply_group(
+    tag: str,
+    enabled: bool,
+    *,
+    worktree_id: Optional[str] = None,
+) -> dict:
+    """태그가 붙은 서버 전부를 **목표 상태로 맞춘다**(97번 §1-3, 2단계).
+
+    "뒤집기"가 아니라 "전부 on으로 맞추기"인 것이 핵심이다. 그래서 일부가
+    실패한 뒤 사용자가 같은 버튼을 다시 눌러도 안전하고(이미 맞은 것은 아무
+    일도 안 한다), 섞인 상태에서 눌러도 결과가 결정적이다. 멱등성이 별도
+    장치 없이 정의에서 따라 나온다.
+
+    **이미 목표 상태인 항목은 파일을 아예 열지 않는다.** 남의 설정 파일을
+    건드리는 횟수가 그만큼 줄고(§3의 모든 위험이 거기서 나온다), 실패할 수
+    있는 지점도 줄어든다.
+
+    결과의 status는 항목별 결과를 합친 것이다:
+      ok      — 전부 ok(또는 이미 맞아서 건드릴 필요 없었다)
+      partial — 일부만 성공. **어느 것이 실패했는지 `results`에 그대로 담는다**
+      unknown — 실패는 없는데 확인 못 한 게 있다
+      failed  — 하나도 못 바꿨다
+    """
+    import mcp_catalog
+
+    tags_map = mcp_catalog.get_tags()
+    names = set(mcp_catalog.members(tag, tags_map))
+    if not names:
+        return {"status": "failed", "reason": "그 태그가 붙은 서버가 없다",
+                "tag": tag, "results": [], "changed": 0}
+
+    scan = mcp_scan.scan(worktree_id)
+    targets = [s for s in scan["servers"] if s["name"] in names]
+    if not targets:
+        # 태그는 있는데 지금 이 워크트리 기준으로는 아무 항목도 안 보인다.
+        # 실패가 아니라 "여기엔 없다"이므로 그대로 말한다.
+        return {"status": "ok", "reason": "이 워크트리에서 보이는 항목이 없다",
+                "tag": tag, "results": [], "changed": 0}
+
+    results: list[dict] = []
+    for s in targets:
+        entry = {
+            "name": s["name"], "tool": s["tool"], "scope": s["scope"],
+            "shared": bool(s.get("shared")),
+        }
+        if bool(s.get("enabled")) == enabled:
+            results.append({**entry, "status": "ok", "changed": False, "reason": None,
+                            "skipped": True})
+            continue
+        out = set_enabled(
+            s["tool"], s["name"], enabled,
+            scope=s["scope"],
+            worktree_id=s.get("worktree_id") or worktree_id,
+            shared=bool(s.get("shared")),
+        )
+        results.append({**entry, **out, "skipped": False})
+
+    statuses = [r["status"] for r in results if not r.get("skipped")]
+    changed = sum(1 for r in results if r.get("changed"))
+    if not statuses:
+        status = "ok"                       # 전부 이미 맞아 있었다
+    elif all(x == "ok" for x in statuses):
+        status = "ok"
+    elif all(x == "failed" for x in statuses):
+        status = "failed"
+    elif any(x == "failed" for x in statuses):
+        status = "partial"
+    else:
+        status = "unknown"
+
+    return {"status": status, "tag": tag, "enabled": enabled,
+            "results": results, "changed": changed}
+
+
+# ------------------------------------------------------- 가져오기 (3단계, §2)
+#
+# "FarShell이 들고 있는 MCP 설정을 원하는 도구·스코프로 쉽게 가져온다" — 이게
+# 3단계의 목적이다. 값은 절대 따라가지 않는다: 자격증명은 FarShell이 보관하고
+# 설정 파일에는 **참조만** 심는다(§2-2). 도구별 문법 차이는 어댑터가 흡수한다.
+
+# 심을 수 있는 자리. **codex는 없다** — config.toml에 새 테이블을 텍스트 수술로
+# 만들어 넣는 건 기존 `enabled` 한 글자를 뒤집는 것과 위험이 다르다(TOML을
+# 생성해야 하고, 실패하면 사용자의 codex 설정 전체가 깨진다). §3의 "추측해서
+# 고치지 않는다"를 그대로 적용해 **거절하고 공식 명령을 안내한다.**
+DEPLOY_TARGETS = {
+    ("claude", "global"): "~/.claude.json 의 mcpServers",
+    ("claude", "local"): "워크트리의 .mcp.json(공유) 또는 ~/.claude.json projects(비공유)",
+    ("agy", "global"): "~/.gemini/config/mcp_config.json 의 mcpServers",
+    ("opencode", "global"): "~/.config/opencode/opencode.json 의 mcp",
+    ("opencode", "local"): "워크트리의 opencode.json 의 mcp",
+}
+
+
+def _deploy_target_path(tool: str, scope: str, *, worktree_path, shared: bool):
+    if tool == "opencode":
+        if scope == "local":
+            if not worktree_path:
+                raise WriteRefused("로컬 스코프는 워크트리를 지정해야 한다")
+            return Path(worktree_path) / "opencode.json", "mcp", None
+        return mcp_adapters.opencode_paths()["global"], "mcp", None
+    if tool == "agy":
+        return mcp_adapters.agy_paths()["global"], "mcpServers", None
+    if tool == "claude":
+        if scope == "global":
+            return mcp_adapters.claude_paths()["global"], "mcpServers", None
+        if not worktree_path:
+            raise WriteRefused("로컬 스코프는 워크트리를 지정해야 한다")
+        if shared:
+            return Path(worktree_path) / ".mcp.json", "mcpServers", None
+        return mcp_adapters.claude_paths()["global"], "projects", worktree_path
+    raise WriteRefused(
+        f"{tool}에는 정의를 심지 않는다 — config.toml에 새 테이블을 만드는 것은 "
+        f"위험이 다르다. 공식 명령을 쓸 것: `{tool} mcp add`"
+    )
+
+
+def deploy(
+    name: str,
+    defn: dict,
+    *,
+    tool: str,
+    scope: str = "global",
+    worktree_path: Optional[str] = None,
+    shared: bool = False,
+    env_map: Optional[dict] = None,
+) -> dict:
+    """서버 정의 하나를 그 도구·스코프에 심는다. **값은 참조로 바꿔서.**
+
+    `env_map`은 `{"env": {"TOKEN": "FSH_MCP_X_TOKEN"}, …}` — 어느 칸을 어느
+    환경변수 이름으로 대체할지. 대체 후에도 값이 남아 있으면 **쓰지 않는다**
+    (`has_literal_secret`가 마지막 관문이다). 그래야 `.mcp.json`이 git에
+    커밋되며 키가 저장소에 박히는 사고가 구조적으로 불가능해진다(§2-2).
+    """
+    import mcp_catalog
+
+    if tool not in TOOLS:
+        return {"status": "failed", "reason": f"모르는 도구: {tool}", "changed": False}
+    if not isinstance(defn, dict) or not defn:
+        return {"status": "failed", "reason": "정의가 비었다", "changed": False}
+
+    # §2-5 — OAuth는 복제 대상이 아니다. 만료·갱신·audience 제약이 있어
+    # 옮겨봐야 받는 쪽에서 안 먹거나 조용히 만료된다. "옮겼는데 안 된다"보다
+    # "못 옮긴다"가 정직하다.
+    if defn.get("oauth") or "oauth" in (defn.get("auth") or {}):
+        return {"status": "failed", "changed": False,
+                "reason": "OAuth를 쓰는 서버는 다른 스코프로 복제할 수 없다 — "
+                          "대상 도구에서 직접 인증할 것"}
+
+    # 1) 값 → 참조.
+    ready = mcp_adapters.apply_refs(tool, defn, env_map or {})
+
+    # 2) **마지막 관문.** 하나라도 값이 남아 있으면 파일을 열지 않는다.
+    leaked = mcp_adapters.has_literal_secret(ready, tool=tool)
+    if leaked:
+        return {"status": "failed", "changed": False,
+                "reason": f"값이 그대로 남은 칸이 있다: {', '.join(leaked)} — "
+                          f"자격증명을 먼저 등록하고 그 칸을 참조로 지정할 것"}
+
+    try:
+        path, top_key, project_path = _deploy_target_path(
+            tool, scope, worktree_path=worktree_path, shared=shared)
+    except WriteRefused as e:
+        return {"status": "failed", "reason": str(e), "changed": False}
+
+    try:
+        with _locked(path):
+            before = _load_json_for_write(path)
+            after = json.loads(json.dumps(before))
+
+            if project_path:
+                projects = after.setdefault("projects", {})
+                if not isinstance(projects, dict):
+                    raise WriteRefused("projects가 객체가 아니다 — 쓰기를 중단했다")
+                entry = projects.setdefault(project_path, {})
+                if not isinstance(entry, dict):
+                    raise WriteRefused("projects 항목이 객체가 아니다 — 쓰기를 중단했다")
+                block = entry.setdefault("mcpServers", {})
+            else:
+                block = after.setdefault(top_key, {})
+            if not isinstance(block, dict):
+                raise WriteRefused(f"{top_key}가 객체가 아니다 — 쓰기를 중단했다")
+
+            block[name] = ready
+            if before == after:
+                return {"status": "ok", "changed": False, "target": str(path)}
+
+            def verify(d):
+                if project_path:
+                    e = (d.get("projects") or {}).get(project_path) or {}
+                    got = (e.get("mcpServers") or {}).get(name)
+                else:
+                    got = (d.get(top_key) or {}).get(name)
+                return got == ready
+
+            out = _commit_json(path, before, after,
+                               "projects" if project_path else top_key, verify,
+                               allow_new_key=True)
+    except WriteRefused as e:
+        return {"status": "failed", "reason": str(e), "changed": False}
+    except WriteUnverified as e:
+        return {"status": "unknown", "reason": str(e), "changed": None}
+    except OSError as e:
+        return {"status": "failed", "reason": f"파일 오류: {e.__class__.__name__}",
+                "changed": False}
+
+    # 3) 회수용 기록 — 우리가 심은 참조가 어디 있는지. 이름 규칙이 아니라
+    #    쓴 사실 자체를 남긴다(§2-5, 사용자가 이름을 덮어써도 추적이 안 끊긴다).
+    for section in ("env", "headers"):
+        for env_name in (env_map or {}).get(section, {}).values():
+            mcp_catalog.record_ref(tool=tool, scope=scope, source=str(path),
+                                   server=name, env=env_name)
+
+    out["target"] = str(path)
+    return out
+
+
+# --------------------------------------------------------------- opencode
+
+def _opencode_set(name: str, enabled: bool, *, scope: str,
+                  worktree_path: Optional[str]) -> dict:
+    """`enabled: true/false` — codex와 같은 방향, claude의 `disabled*`와 반대.
+
+    JSON이라 codex와 달리 텍스트 수술이 필요 없다(codex는 TOML이라 파서를
+    거치면 주석·서식이 날아가서 원문을 직접 고쳤다).
+    """
+    if scope == "local":
+        if not worktree_path:
+            raise WriteRefused("로컬 스코프는 워크트리를 지정해야 한다")
+        path = Path(worktree_path) / "opencode.json"
+    else:
+        path = mcp_adapters.opencode_paths()["global"]
+
+    with _locked(path):
+        before = _load_json_for_write(path)
+        after = json.loads(json.dumps(before))
+
+        block = after.get("mcp")
+        if not isinstance(block, dict) or name not in block:
+            raise WriteRefused(f"opencode({scope})에 `{name}` 서버 정의가 없다")
+        if not isinstance(block[name], dict):
+            raise WriteRefused("서버 정의가 객체가 아니다 — 쓰기를 중단했다")
+
+        block[name]["enabled"] = enabled
+        if before == after:
+            return {"status": "ok", "changed": False}
+
+        def verify(d):
+            got = (d.get("mcp") or {}).get(name) or {}
+            return (got.get("enabled", True) is not False) == enabled
+
+        return _commit_json(path, before, after, "mcp", verify)
+
+
+# ------------------------------------------------------------ 플러그인 (4단계)
+
+def set_plugin_enabled(name: str, enabled: bool, *, tool: str = "claude",
+                       scope: str = "global",
+                       worktree_id: Optional[str] = None) -> dict:
+    """설치된 플러그인 하나를 켜거나 끈다. **설치는 하지 않는다**(§0-2).
+
+    미설치 플러그인은 `enabled` 값만으론 켜지지 않으므로, **이미 목록에 있는
+    것만** 다룬다. 없는 이름을 받으면 켠 것처럼 보이게 만들지 않고 거절한다 —
+    "켰다고 표시했는데 아무 일도 안 일어난다"가 이 화면이 가장 피해야 할
+    상태다.
+    """
+    if tool != "claude":
+        return {"status": "failed", "changed": False,
+                "reason": f"{tool} 플러그인 토글은 아직 지원하지 않는다 — "
+                          f"공식 명령을 쓸 것"}
+    if scope not in ("global", "local"):
+        return {"status": "failed", "reason": "scope는 global/local", "changed": False}
+
+    wt = mcp_scan.find_worktree(worktree_id)
+    if scope == "local" and wt is None:
+        return {"status": "failed", "reason": "로컬 스코프는 워크트리를 지정해야 한다",
+                "changed": False}
+    wt_path = wt.get("path") if wt else None
+    path = mcp_adapters.claude_paths()["global"]
+
+    try:
+        with _locked(path):
+            before = _load_json_for_write(path)
+            after = json.loads(json.dumps(before))
+
+            if scope == "local":
+                projects = after.setdefault("projects", {})
+                if not isinstance(projects, dict):
+                    raise WriteRefused("projects가 객체가 아니다 — 쓰기를 중단했다")
+                container = projects.setdefault(wt_path, {})
+                touched = "projects"
+            else:
+                container = after
+                touched = "enabledPlugins"
+            if not isinstance(container, dict):
+                raise WriteRefused("설정 블록이 객체가 아니다 — 쓰기를 중단했다")
+
+            block = container.get("enabledPlugins")
+            if not isinstance(block, dict) or name not in block:
+                raise WriteRefused(
+                    f"`{name}` 플러그인이 목록에 없다 — 설치되지 않은 플러그인은 "
+                    f"값만 바꿔도 켜지지 않는다. 먼저 `claude plugin install`로 설치할 것")
+            block[name] = enabled
+
+            if before == after:
+                return {"status": "ok", "changed": False}
+
+            def verify(d):
+                if scope == "local":
+                    c = (d.get("projects") or {}).get(wt_path) or {}
+                else:
+                    c = d
+                return bool((c.get("enabledPlugins") or {}).get(name)) == enabled
+
+            return _commit_json(path, before, after, touched, verify,
+                                allow_new_key=(scope == "global"))
+    except WriteRefused as e:
+        return {"status": "failed", "reason": str(e), "changed": False}
+    except WriteUnverified as e:
+        return {"status": "unknown", "reason": str(e), "changed": None}
+    except OSError as e:
+        return {"status": "failed", "reason": f"파일 오류: {e.__class__.__name__}",
+                "changed": False}

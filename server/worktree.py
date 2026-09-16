@@ -25,6 +25,7 @@ from pathlib import Path
 
 import agents
 import fsguard
+import mcp_env
 import tmux_runner
 
 logger = logging.getLogger(__name__)
@@ -481,7 +482,26 @@ def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dic
         )
         if rc != 0:
             return {"ok": False, "error": err.decode("utf-8", errors="replace")}
-    tmux_runner.run(["send-keys", "-t", tmux_name, spec.command, "Enter"], timeout=GIT_TIMEOUT)
+
+    # 97번 3단계 §2-4 — MCP 설정에는 참조(`${VAR}`)만 심으므로 값은 여기서
+    # 채운다. **값이 아니라 파일 경로만** 명령줄에 실린다(mcp_env 머리말:
+    # `tmux set-environment`에 값을 직접 넘기면 `ps`로 다른 계정에 보인다).
+    # MCP를 못 읽어도 세션은 열려야 하므로 실패는 삼킨다.
+    prefix = ""
+    try:
+        wt = next((w for w in list_worktrees() if w.get("path") == str(path)), None)
+        env_file = mcp_env.prepare(tmux_name, wt.get("id") if wt else None)
+        prefix = mcp_env.source_prefix(env_file)
+        if env_file:
+            tmux_runner.run(
+                ["set-environment", "-t", tmux_name, mcp_env.ENV_POINTER, str(env_file)],
+                timeout=GIT_TIMEOUT,
+            )
+    except Exception:
+        logger.exception("MCP 환경 준비 실패 — 키 없이 세션을 연다")
+
+    tmux_runner.run(["send-keys", "-t", tmux_name, prefix + spec.command, "Enter"],
+                    timeout=GIT_TIMEOUT)
     return {"ok": True, "tmux_session": tmux_name}
 
 

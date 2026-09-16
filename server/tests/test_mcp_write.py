@@ -303,3 +303,211 @@ def test_toml_surgery_keeps_trailing_content():
 def test_unknown_tool_is_rejected(home):
     r = mcp_write.set_enabled("nope", "x", False)
     assert r["status"] == "failed" and "모르는 도구" in r["reason"]
+
+
+# ── 가져오기 (97번 3단계, §2) ──────────────────────────────────────────────
+#
+# 이 블록이 지키는 단 하나: **값이 CLI 설정 파일에 절대 안 들어간다.**
+# `.mcp.json`은 git에 커밋되는 파일이고, 거기 평문 키가 박히는 것이
+# 레퍼런스(agent-deck)가 실제로 밟고 있는 사고 경로다.
+
+def test_deploy_writes_a_reference_not_the_value(home, tmp_path):
+    import mcp_write
+    (home / ".claude.json").write_text("{}")
+    out = mcp_write.deploy(
+        "notion", {"command": "npx", "env": {"TOKEN": "sk-real-secret"}},
+        tool="claude", scope="global",
+        env_map={"env": {"TOKEN": "FSH_MCP_NOTION_TOKEN"}},
+    )
+    assert out["status"] == "ok"
+    text = (home / ".claude.json").read_text()
+    assert "sk-real-secret" not in text, "값이 설정 파일에 들어갔다"
+    assert "${FSH_MCP_NOTION_TOKEN}" in text
+
+
+def test_deploy_refuses_when_a_value_would_remain(home):
+    """매핑에서 빠진 칸이 있으면 **파일을 열지도 않는다.**"""
+    import mcp_write
+    (home / ".claude.json").write_text("{}")
+    before = (home / ".claude.json").read_text()
+    out = mcp_write.deploy(
+        "notion", {"command": "npx", "env": {"A": "sk-a", "B": "sk-b"}},
+        tool="claude", scope="global", env_map={"env": {"A": "V_A"}},
+    )
+    assert out["status"] == "failed"
+    assert "env.B" in out["reason"]
+    assert (home / ".claude.json").read_text() == before
+
+
+def test_deploy_to_codex_is_refused_with_the_official_command(home):
+    """config.toml에 새 테이블을 텍스트 수술로 만드는 건 위험이 다르다."""
+    import mcp_write
+    out = mcp_write.deploy("n", {"command": "x"}, tool="codex", scope="global")
+    assert out["status"] == "failed"
+    assert "codex mcp add" in out["reason"]
+
+
+def test_deploy_into_shared_mcp_json_still_carries_no_value(home, tmp_path):
+    """저장소에 커밋되는 파일이라 여기가 가장 위험하다."""
+    import mcp_write
+    repo = tmp_path / "repo"
+    repo.mkdir(exist_ok=True)
+    out = mcp_write.deploy(
+        "notion", {"command": "npx", "env": {"TOKEN": "sk-real-secret"}},
+        tool="claude", scope="local", worktree_path=str(repo), shared=True,
+        env_map={"env": {"TOKEN": "FSH_MCP_NOTION_TOKEN"}},
+    )
+    assert out["status"] == "ok"
+    text = (repo / ".mcp.json").read_text()
+    assert "sk-real-secret" not in text
+    assert "${FSH_MCP_NOTION_TOKEN}" in text
+
+
+def test_deploy_records_a_ref_for_later_revocation(home, tmp_path):
+    import importlib
+
+    import mcp_catalog
+    importlib.reload(mcp_catalog)   # home 픽스처가 세운 VT_STATE_DIR를 집게 한다
+    import mcp_write
+    (home / ".claude.json").write_text("{}")
+    mcp_write.deploy("notion", {"command": "npx", "env": {"TOKEN": "sk"}},
+                     tool="claude", scope="global",
+                     env_map={"env": {"TOKEN": "FSH_MCP_NOTION_TOKEN"}})
+    refs = mcp_catalog.list_refs()
+    assert [r["env"] for r in refs] == ["FSH_MCP_NOTION_TOKEN"]
+    assert refs[0]["server"] == "notion"
+
+
+def test_deploy_is_idempotent(home):
+    import mcp_write
+    (home / ".claude.json").write_text("{}")
+    args = dict(tool="claude", scope="global",
+                env_map={"env": {"TOKEN": "FSH_MCP_NOTION_TOKEN"}})
+    defn = {"command": "npx", "env": {"TOKEN": "sk"}}
+    assert mcp_write.deploy("notion", defn, **args)["changed"] is True
+    assert mcp_write.deploy("notion", defn, **args)["changed"] is False
+
+
+def test_deploy_does_not_disturb_other_keys(home):
+    import mcp_write
+    (home / ".claude.json").write_text(json.dumps(
+        {"mcpServers": {"keep": {"command": "old"}}, "somethingElse": {"a": 1}}))
+    mcp_write.deploy("notion", {"command": "npx"}, tool="claude", scope="global")
+    data = json.loads((home / ".claude.json").read_text())
+    assert data["somethingElse"] == {"a": 1}
+    assert data["mcpServers"]["keep"] == {"command": "old"}
+    assert data["mcpServers"]["notion"] == {"command": "npx"}
+
+
+# ── opencode 쓰기 (97번 4단계) ─────────────────────────────────────────────
+
+@pytest.fixture
+def oc_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("VT_OPENCODE_HOME", str(tmp_path / "cfg"))
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "vtstate"))
+    p = tmp_path / "cfg" / "opencode"
+    p.mkdir(parents=True)
+    return p / "opencode.json"
+
+
+def test_opencode_toggle_sets_enabled_false(oc_home):
+    import mcp_write
+    oc_home.write_text(json.dumps({"mcp": {"a": {"command": "x"}}}))
+    out = mcp_write.set_enabled("opencode", "a", False)
+    assert out["status"] == "ok" and out["changed"] is True
+    assert json.loads(oc_home.read_text())["mcp"]["a"]["enabled"] is False
+
+
+def test_opencode_toggle_is_idempotent(oc_home):
+    import mcp_write
+    oc_home.write_text(json.dumps({"mcp": {"a": {"command": "x"}}}))
+    assert mcp_write.set_enabled("opencode", "a", False)["changed"] is True
+    assert mcp_write.set_enabled("opencode", "a", False)["changed"] is False
+
+
+def test_opencode_toggle_refuses_an_unknown_server(oc_home):
+    import mcp_write
+    oc_home.write_text(json.dumps({"mcp": {}}))
+    out = mcp_write.set_enabled("opencode", "missing", False)
+    assert out["status"] == "failed" and "정의가 없다" in out["reason"]
+
+
+def test_opencode_toggle_leaves_other_settings_alone(oc_home):
+    """opencode.json에는 MCP 말고도 사용자의 설정이 들어 있다."""
+    import mcp_write
+    oc_home.write_text(json.dumps({"theme": "dark", "mcp": {"a": {"command": "x"}}}))
+    mcp_write.set_enabled("opencode", "a", False)
+    assert json.loads(oc_home.read_text())["theme"] == "dark"
+
+
+def test_opencode_deploy_uses_its_own_reference_syntax(oc_home):
+    """`${VAR}`를 심으면 opencode에서 **조용히 안 먹는다**(§0-3)."""
+    import mcp_write
+    out = mcp_write.deploy("notion", {"command": "npx", "env": {"TOKEN": "sk-real-secret"}},
+                           tool="opencode", scope="global",
+                           env_map={"env": {"TOKEN": "FSH_MCP_NOTION_TOKEN"}})
+    assert out["status"] == "ok"
+    text = oc_home.read_text()
+    assert "sk-real-secret" not in text
+    assert "{env:FSH_MCP_NOTION_TOKEN}" in text
+    assert "${" not in text
+
+
+def test_oauth_servers_are_never_deployed(home):
+    """§2-5 — 만료·갱신·audience 제약이 있어 옮겨봐야 조용히 깨진다."""
+    import mcp_write
+    (home / ".claude.json").write_text("{}")
+    for defn in ({"url": "https://x", "oauth": {"client_id": "c"}},
+                 {"url": "https://x", "auth": {"oauth": {}}}):
+        out = mcp_write.deploy("n", defn, tool="claude", scope="global")
+        assert out["status"] == "failed"
+        assert "OAuth" in out["reason"]
+    assert (home / ".claude.json").read_text() == "{}"
+
+
+# ── 플러그인 (97번 4단계) ──────────────────────────────────────────────────
+
+def test_plugin_toggle_flips_an_installed_plugin(home, wt):
+    import mcp_write
+    _claude(home, {"enabledPlugins": {"p@market": True}})
+    out = mcp_write.set_plugin_enabled("p@market", False)
+    assert out["status"] == "ok" and out["changed"] is True
+    assert _read_claude(home)["enabledPlugins"]["p@market"] is False
+
+
+def test_plugin_toggle_refuses_an_uninstalled_plugin(home, wt):
+    """미설치 플러그인은 값만 바꿔도 안 켜진다 — 켠 척하면 안 된다(§0-2)."""
+    import mcp_write
+    _claude(home, {"enabledPlugins": {}})
+    out = mcp_write.set_plugin_enabled("nope@market", True)
+    assert out["status"] == "failed"
+    assert "설치되지 않은" in out["reason"]
+
+
+def test_plugin_toggle_is_idempotent(home, wt):
+    import mcp_write
+    _claude(home, {"enabledPlugins": {"p@market": True}})
+    assert mcp_write.set_plugin_enabled("p@market", False)["changed"] is True
+    assert mcp_write.set_plugin_enabled("p@market", False)["changed"] is False
+
+
+def test_plugin_local_scope_writes_into_the_project_block(home, wt):
+    import mcp_write
+    _claude(home, {"projects": {wt["path"]: {"enabledPlugins": {"p@m": True}}}})
+    out = mcp_write.set_plugin_enabled("p@m", False, scope="local", worktree_id="wt1")
+    assert out["status"] == "ok"
+    assert _read_claude(home)["projects"][wt["path"]]["enabledPlugins"]["p@m"] is False
+
+
+def test_plugin_toggle_does_not_disturb_mcp_settings(home, wt):
+    import mcp_write
+    _claude(home, {"enabledPlugins": {"p@m": True},
+                   "mcpServers": {"keep": {"command": "x"}}})
+    mcp_write.set_plugin_enabled("p@m", False)
+    assert _read_claude(home)["mcpServers"]["keep"] == {"command": "x"}
+
+
+def test_plugin_toggle_for_other_tools_is_refused(home):
+    import mcp_write
+    out = mcp_write.set_plugin_enabled("p", True, tool="codex")
+    assert out["status"] == "failed"

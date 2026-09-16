@@ -79,7 +79,7 @@ def test_get_lists_servers_and_facts(client):
     assert r.status_code == 200
     body = r.json()
     assert [s["name"] for s in body["servers"]] == ["github"]
-    assert set(body["facts"]) == {"claude", "codex", "agy"}
+    assert set(body["facts"]) == {"claude", "codex", "agy", "opencode"}   # 4단계에서 opencode 추가
 
 
 def test_get_never_leaks_values(client):
@@ -202,3 +202,281 @@ def test_agy_toggle_round_trip(client):
     # 조회에도 그대로 반영된다 — 저장된 상태가 아니라 파일을 다시 읽기 때문.
     servers = client.get("/api/mcp").json()["servers"]
     assert [s["enabled"] for s in servers if s["tool"] == "agy"] == [False]
+
+
+# ------------------------------------------------------------ 그룹 태그 (2단계)
+
+def test_tags_do_not_require_elevation(client):
+    """태그는 FarShell 화면 안의 라벨이고 CLI 설정 파일을 전혀 안 건드린다.
+    여기에 승격을 걸면 칩 하나 붙일 때마다 비밀번호를 묻게 된다."""
+    _login(client)
+    r = client.post("/api/mcp/tags", json={"name": "g", "tags": ["검증용"]})
+    assert r.status_code == 200 and r.json()["ok"]
+
+
+def test_tags_never_touch_the_cli_file(client):
+    _login(client)
+    _write_claude(client, {"mcpServers": {"g": {"command": "x"}}})
+    before = (client.vt_home / ".claude.json").read_text()
+    client.post("/api/mcp/tags", json={"name": "g", "tags": ["검증용"]})
+    assert (client.vt_home / ".claude.json").read_text() == before
+
+
+def test_get_carries_tags_separately_from_servers(client):
+    """`servers[].tags`로 섞지 않는다 — "CLI 파일에서 읽은 사실"과 "우리가
+    붙인 라벨"이 한 덩어리로 보이면 안 된다."""
+    _login(client)
+    _write_claude(client, {"mcpServers": {"g": {"command": "x"}}})
+    client.post("/api/mcp/tags", json={"name": "g", "tags": ["검증용"]})
+    body = client.get("/api/mcp").json()
+    assert body["tags"] == {"g": ["검증용"]}
+    assert body["allTags"] == ["검증용"]
+    assert "tags" not in body["servers"][0]
+
+
+def test_group_requires_elevation(client):
+    """그룹 켜기는 토글을 여러 번 하는 것과 정확히 같은 일이다."""
+    _login(client)
+    client.post("/api/mcp/tags", json={"name": "g", "tags": ["검증용"]})
+    r = client.post("/api/mcp/group", json={"tag": "검증용", "enabled": False, "worktree": "wt1"})
+    assert r.status_code == 401
+    assert r.json()["error"] == "elevation_required"
+
+
+def test_group_off_turns_every_member_off(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"a": {"command": "x"}, "b": {"command": "y"},
+                                          "keep": {"command": "z"}}, "projects": {}})
+    client.post("/api/mcp/tags", json={"name": "a", "tags": ["검증용"]})
+    client.post("/api/mcp/tags", json={"name": "b", "tags": ["검증용"]})
+    r = client.post("/api/mcp/group",
+                    json={"tag": "검증용", "enabled": False, "worktree": "wt1"})
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+    disabled = _read_claude(client)["projects"][str(client.vt_repo)]["disabledMcpServers"]
+    assert sorted(disabled) == ["a", "b"]   # 태그 없는 keep은 그대로 켜져 있다
+
+
+def test_group_on_from_a_mixed_state_turns_all_on(client):
+    """섞인 상태(일부만 켜짐)에서 눌러도 결과가 결정적이어야 한다 — §1-3."""
+    _elevate(client)
+    _write_claude(client, {
+        "mcpServers": {"a": {"command": "x"}, "b": {"command": "y"}},
+        "projects": {str(client.vt_repo): {"disabledMcpServers": ["a"]}},
+    })
+    client.post("/api/mcp/tags", json={"name": "a", "tags": ["검증용"]})
+    client.post("/api/mcp/tags", json={"name": "b", "tags": ["검증용"]})
+    r = client.post("/api/mcp/group",
+                    json={"tag": "검증용", "enabled": True, "worktree": "wt1"})
+    assert r.json()["status"] == "ok"
+    assert _read_claude(client)["projects"][str(client.vt_repo)]["disabledMcpServers"] == []
+
+
+def test_group_is_idempotent(client):
+    """멱등성은 별도 장치가 아니라 "목표 상태 지정"이라는 정의에서 따라 나온다."""
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"a": {"command": "x"}}, "projects": {}})
+    client.post("/api/mcp/tags", json={"name": "a", "tags": ["검증용"]})
+    body = {"tag": "검증용", "enabled": False, "worktree": "wt1"}
+    first = client.post("/api/mcp/group", json=body).json()
+    second = client.post("/api/mcp/group", json=body).json()
+    assert first["changed"] == 1
+    assert second["changed"] == 0 and second["status"] == "ok"
+    # 두 번째는 파일을 아예 열지 않는다 — 남의 설정 파일을 건드리는 횟수를 줄인다.
+    assert all(r["skipped"] for r in second["results"])
+
+
+def test_group_reports_which_member_failed(client, monkeypatch):
+    """부분 실패를 성공으로 뭉개면 사용자가 "다 껐다"고 믿는다."""
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"a": {"command": "x"}, "b": {"command": "y"}},
+                           "projects": {}})
+    client.post("/api/mcp/tags", json={"name": "a", "tags": ["검증용"]})
+    client.post("/api/mcp/tags", json={"name": "b", "tags": ["검증용"]})
+
+    real = __import__("mcp_write").set_enabled
+
+    def flaky(tool, name, enabled, **kw):
+        if name == "b":
+            return {"status": "failed", "reason": "일부러 실패", "changed": False}
+        return real(tool, name, enabled, **kw)
+
+    monkeypatch.setattr("mcp_write.set_enabled", flaky)
+    body = client.post("/api/mcp/group",
+                       json={"tag": "검증용", "enabled": False, "worktree": "wt1"}).json()
+    assert body["status"] == "partial"
+    failed = [r for r in body["results"] if r["status"] == "failed"]
+    assert [r["name"] for r in failed] == ["b"]
+
+
+def test_group_with_unknown_tag_is_409(client):
+    _elevate(client)
+    r = client.post("/api/mcp/group",
+                    json={"tag": "없는태그", "enabled": False, "worktree": "wt1"})
+    assert r.status_code == 409 and r.json()["status"] == "failed"
+
+
+def test_group_non_boolean_enabled_is_rejected(client):
+    _elevate(client)
+    client.post("/api/mcp/tags", json={"name": "a", "tags": ["검증용"]})
+    r = client.post("/api/mcp/group", json={"tag": "검증용", "enabled": "false"})
+    assert r.status_code == 400 and r.json()["error"] == "invalid_enabled"
+
+
+def test_tag_rename_and_delete_over_http(client):
+    _login(client)
+    client.post("/api/mcp/tags", json={"name": "a", "tags": ["검증용"]})
+    client.post("/api/mcp/tags", json={"name": "b", "tags": ["검증용"]})
+    assert client.post("/api/mcp/tags/rename",
+                       json={"from": "검증용", "to": "테스트용"}).json()["renamed"] == 2
+    assert client.get("/api/mcp").json()["allTags"] == ["테스트용"]
+    assert client.post("/api/mcp/tags/delete", json={"tag": "테스트용"}).json()["removed"] == 2
+    assert client.get("/api/mcp").json()["allTags"] == []
+
+
+# ──────────────────────────────────────────────── 자격증명·가져오기 (3단계)
+
+def test_cred_write_requires_elevation(client):
+    """시크릿을 받는 경로다."""
+    _login(client)
+    r = client.post("/api/mcp/creds",
+                    json={"server": "notion", "key": "token", "secret": "sk-x"})
+    assert r.status_code == 401 and r.json()["error"] == "elevation_required"
+
+
+def test_cred_list_never_carries_the_secret(client):
+    _elevate(client)
+    client.post("/api/mcp/creds",
+                json={"server": "notion", "key": "token", "secret": "sk-super-secret"})
+    r = client.get("/api/mcp/creds")
+    assert r.status_code == 200
+    assert "sk-super-secret" not in r.text, "원문이 응답에 실렸다"
+    assert r.json()["creds"][0]["masked"] == "sk-s…cret"
+
+
+def test_cred_write_response_never_echoes_the_secret(client):
+    _elevate(client)
+    r = client.post("/api/mcp/creds",
+                    json={"server": "notion", "key": "token", "secret": "sk-super-secret"})
+    assert "sk-super-secret" not in r.text
+
+
+def test_blank_env_gets_the_generated_default(client):
+    _elevate(client)
+    r = client.post("/api/mcp/creds",
+                    json={"server": "notion", "key": "token", "secret": "x", "env": ""})
+    assert r.json()["cred"]["env"] == "FSH_MCP_NOTION_TOKEN"
+
+
+def test_bad_env_name_is_400(client):
+    _elevate(client)
+    r = client.post("/api/mcp/creds",
+                    json={"server": "n", "key": "k", "secret": "x", "env": "bad name"})
+    assert r.status_code == 400 and r.json()["error"] == "invalid_env_name"
+
+
+def test_cred_delete_requires_elevation_and_works(client):
+    _elevate(client)
+    cid = client.post("/api/mcp/creds",
+                      json={"server": "n", "key": "k", "secret": "x"}).json()["cred"]["id"]
+    assert client.post("/api/mcp/creds/delete", json={"id": cid}).status_code == 200
+    assert client.get("/api/mcp/creds").json()["creds"] == []
+    assert client.post("/api/mcp/creds/delete", json={"id": cid}).status_code == 404
+
+
+def test_deploy_requires_elevation(client):
+    _login(client)
+    r = client.post("/api/mcp/deploy",
+                    json={"name": "n", "defn": {"command": "x"}, "tool": "claude"})
+    assert r.status_code == 401 and r.json()["error"] == "elevation_required"
+
+
+def test_deploy_writes_a_reference_and_records_it(client):
+    _elevate(client)
+    _write_claude(client, {})
+    r = client.post("/api/mcp/deploy", json={
+        "name": "notion", "defn": {"command": "npx", "env": {"TOKEN": "sk-real-secret"}},
+        "tool": "claude", "scope": "global",
+        "env_map": {"env": {"TOKEN": "FSH_MCP_NOTION_TOKEN"}},
+    })
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+    text = (client.vt_home / ".claude.json").read_text()
+    assert "sk-real-secret" not in text
+    assert "${FSH_MCP_NOTION_TOKEN}" in text
+    # 회수용 기록이 남는다(§2-5).
+    assert client.get("/api/mcp/creds").json()["refs"][0]["server"] == "notion"
+
+
+def test_deploy_refuses_to_leave_a_value_behind(client):
+    """`.mcp.json`은 저장소에 커밋되는 파일이다 — 409로 막고 파일은 안 건드린다."""
+    _elevate(client)
+    _write_claude(client, {})
+    before = (client.vt_home / ".claude.json").read_text()
+    r = client.post("/api/mcp/deploy", json={
+        "name": "notion", "defn": {"command": "npx", "env": {"A": "sk-a", "B": "sk-b"}},
+        "tool": "claude", "scope": "global", "env_map": {"env": {"A": "V_A"}},
+    })
+    assert r.status_code == 409
+    assert "env.B" in r.json()["reason"]
+    assert (client.vt_home / ".claude.json").read_text() == before
+
+
+def test_deploy_to_codex_is_refused_over_http(client):
+    _elevate(client)
+    r = client.post("/api/mcp/deploy",
+                    json={"name": "n", "defn": {"command": "x"}, "tool": "codex"})
+    assert r.status_code == 409 and "codex mcp add" in r.json()["reason"]
+
+
+def test_deploy_validates_its_input(client):
+    _elevate(client)
+    for body, err in (
+        ({"defn": {"command": "x"}, "tool": "claude"}, "missing_name"),
+        ({"name": "n", "tool": "claude"}, "invalid_defn"),
+        ({"name": "n", "defn": {"command": "x"}, "tool": "nope"}, "invalid_tool"),
+        ({"name": "n", "defn": {"command": "x"}, "tool": "claude", "scope": "weird"}, "invalid_scope"),
+        ({"name": "n", "defn": {"command": "x"}, "tool": "claude", "env_map": []}, "invalid_env_map"),
+    ):
+        r = client.post("/api/mcp/deploy", json=body)
+        assert r.status_code == 400 and r.json()["error"] == err, body
+
+
+# ──────────────────────────────────────────────────────── 플러그인 (4단계)
+
+def test_plugins_list_distinguishes_absent_from_disabled(client):
+    """"목록에 없음"과 "false"는 다르다 — 뭉개면 "끈 적 없는데 꺼져 보인다"."""
+    _login(client)
+    _write_claude(client, {"enabledPlugins": {"on@m": True, "off@m": False}})
+    body = client.get("/api/mcp/plugins").json()
+    by = {p["name"]: p for p in body["plugins"]}
+    assert by["on@m"]["enabled"] is True and by["on@m"]["explicit"] is True
+    assert by["off@m"]["enabled"] is False
+    assert by["on@m"]["marketplace"] == "m" and by["on@m"]["plugin"] == "on"
+
+
+def test_plugin_toggle_requires_elevation(client):
+    _login(client)
+    r = client.post("/api/mcp/plugins/toggle", json={"name": "p@m", "enabled": False})
+    assert r.status_code == 401 and r.json()["error"] == "elevation_required"
+
+
+def test_plugin_toggle_writes_after_elevation(client):
+    _elevate(client)
+    _write_claude(client, {"enabledPlugins": {"p@m": True}})
+    r = client.post("/api/mcp/plugins/toggle", json={"name": "p@m", "enabled": False})
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+    assert _read_claude(client)["enabledPlugins"]["p@m"] is False
+
+
+def test_plugin_toggle_of_an_uninstalled_plugin_is_409(client):
+    _elevate(client)
+    _write_claude(client, {"enabledPlugins": {}})
+    r = client.post("/api/mcp/plugins/toggle", json={"name": "nope@m", "enabled": True})
+    assert r.status_code == 409 and "설치되지 않은" in r.json()["reason"]
+
+
+def test_plugin_toggle_validates_input(client):
+    _elevate(client)
+    assert client.post("/api/mcp/plugins/toggle",
+                       json={"enabled": True}).json()["error"] == "missing_name"
+    assert client.post("/api/mcp/plugins/toggle",
+                       json={"name": "p@m", "enabled": "true"}).json()["error"] == "invalid_enabled"
