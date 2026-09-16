@@ -27,6 +27,24 @@ import agents
 import fsguard
 import mcp_env
 import tmux_runner
+# 순수 파서는 worktree_parse.py로 옮겼다. **이름은 여기 그대로 남긴다** —
+# tests/test_worktree.py와 create_worktree가 `worktree.parse_*`로 쓰고 있고,
+# 상태를 안 읽는 순수 함수라 재수출해도 monkeypatch와 어긋날 여지가 없다.
+from worktree_ports import (  # noqa: F401
+    DEFAULT_PORT_BASE,
+    PORT_STEP,
+    _load_ports_map,
+    _remove_ports_entry,
+    _update_ports_map,
+    next_port_base,
+)
+from worktree_parse import (  # noqa: F401
+    _PORT_KEYS,
+    _branch_from_block,
+    parse_shortstat,
+    parse_worktree_porcelain,
+    substitute_env_ports,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +52,6 @@ CACHE_TTL_SEC = 5.0
 GIT_TIMEOUT = 10.0
 MAX_SCAN_DEPTH = 3
 
-DEFAULT_PORT_BASE = 5200
-PORT_STEP = 100
-
-_PORT_KEYS = {"PORT", "VITE_PORT", "DEV_PORT", "NEXT_PUBLIC_PORT"}
 _LOCKFILE_NAMES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 
 _SLUG_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -51,93 +65,6 @@ class WorktreeError(Exception):
         super().__init__(payload.get("error", "error"))
         self.status = status
         self.payload = payload
-
-
-# --- 상태 저장 (~/.vt/worktrees.json) ---------------------------------------
-
-
-def _state_dir() -> Path:
-    return Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()
-
-
-def _state_path() -> Path:
-    return _state_dir() / "worktrees.json"
-
-
-def _lock_path() -> Path:
-    return _state_dir() / "worktrees.lock"
-
-
-@contextmanager
-def _locked():
-    d = _state_dir()
-    d.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(d, 0o700)
-    except OSError:
-        pass
-    fd = os.open(str(_lock_path()), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
-
-
-def _load_ports_map() -> dict:
-    p = _state_path()
-    if not p.is_file():
-        return {}
-    try:
-        with open(p, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError) as e:
-        logger.warning(f"워크트리 상태 파일 읽기 실패({e}) — 빈 상태로 시작")
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _save_ports_map(data: dict) -> None:
-    p = _state_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(p.parent, 0o700)
-    except OSError:
-        pass
-    tmp = p.with_name(p.name + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(str(tmp), str(p))
-
-
-def _update_ports_map(wt_id: str, port_base: int) -> None:
-    with _locked():
-        m = _load_ports_map()
-        m[wt_id] = {"ports": {"base": port_base}}
-        _save_ports_map(m)
-
-
-def _remove_ports_entry(wt_id: str) -> None:
-    with _locked():
-        m = _load_ports_map()
-        if m.pop(wt_id, None) is not None:
-            _save_ports_map(m)
-
-
-def next_port_base() -> int:
-    m = _load_ports_map()
-    used = [
-        v.get("ports", {}).get("base")
-        for v in m.values()
-        if isinstance(v, dict) and isinstance(v.get("ports", {}).get("base"), int)
-    ]
-    if not used:
-        return DEFAULT_PORT_BASE
-    return max(used) + PORT_STEP
 
 
 # --- git 실행 헬퍼 ------------------------------------------------------------
@@ -162,52 +89,10 @@ def _is_within(child: Path, parent: Path) -> bool:
         return False
 
 
-# --- porcelain 파싱 -----------------------------------------------------------
-
-
-def parse_worktree_porcelain(text: str) -> list[dict]:
-    """`git worktree list --porcelain` 출력을 블록 리스트로 파싱.
-
-    빈 줄이 블록 구분자. 순서(항상 첫 블록 = 메인 워크트리)는 git이 보장한다.
-    """
-    blocks: list[dict] = []
-    cur: dict = {}
-    for raw_line in text.split("\n"):
-        line = raw_line.rstrip("\r")
-        if line == "":
-            if cur:
-                blocks.append(cur)
-                cur = {}
-            continue
-        if line.startswith("worktree "):
-            if cur:
-                blocks.append(cur)
-            cur = {"path": line[len("worktree "):]}
-        elif line.startswith("HEAD "):
-            cur["head"] = line[len("HEAD "):]
-        elif line.startswith("branch "):
-            cur["branch"] = line[len("branch "):]
-        elif line == "detached":
-            cur["detached"] = True
-        elif line.startswith("locked"):
-            cur["locked"] = line[len("locked"):].strip()
-        elif line.startswith("prunable"):
-            cur["prunable"] = line[len("prunable"):].strip()
-        elif line == "bare":
-            cur["bare"] = True
-    if cur:
-        blocks.append(cur)
-    return blocks
-
-
-def _branch_from_block(block: dict) -> str:
-    branch_ref = block.get("branch")
-    if branch_ref:
-        return branch_ref[len("refs/heads/"):] if branch_ref.startswith("refs/heads/") else branch_ref
-    if block.get("detached"):
-        return "(detached)"
-    return "(unknown)"
-
+# --- diff 요약 / ahead-behind --------------------------------------------------
+#
+# 파싱(worktree_parse.py)과 달리 이 둘은 **git을 실행한다** — 순수 모듈에
+# 두면 그 파일의 "부작용 없음"이라는 성질이 깨진다.
 
 # --- diff 요약 / ahead-behind --------------------------------------------------
 
@@ -224,18 +109,6 @@ def _ahead_behind(path: Path) -> tuple[int, int]:
     except ValueError:
         return 0, 0
     return ahead, behind
-
-
-_RE_FILES = re.compile(r"(\d+) files? changed")
-_RE_ADD = re.compile(r"(\d+) insertions?\(\+\)")
-_RE_DEL = re.compile(r"(\d+) deletions?\(-\)")
-
-
-def parse_shortstat(text: str) -> dict:
-    files = int(m.group(1)) if (m := _RE_FILES.search(text)) else 0
-    add = int(m.group(1)) if (m := _RE_ADD.search(text)) else 0
-    dele = int(m.group(1)) if (m := _RE_DEL.search(text)) else 0
-    return {"files": files, "add": add, "del": dele}
 
 
 def _changed_stat(path: Path) -> dict:
@@ -443,24 +316,6 @@ def precheck(repo: str, base: str) -> dict:
     if _lockfile_mismatch(repo_path, base):
         warnings.append("lockfile_mismatch")
     return {"warnings": warnings}
-
-
-# --- .env 포트 치환 ------------------------------------------------------------
-
-
-_ENV_LINE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
-
-
-def substitute_env_ports(text: str, port_base: int) -> str:
-    """PORT/VITE_PORT/DEV_PORT/NEXT_PUBLIC_PORT 키만 치환. 없는 키는 추가하지 않는다."""
-    out_lines = []
-    for line in text.split("\n"):
-        m = _ENV_LINE_RE.match(line)
-        if m and m.group(1) in _PORT_KEYS:
-            out_lines.append(f"{m.group(1)}={port_base}")
-        else:
-            out_lines.append(line)
-    return "\n".join(out_lines)
 
 
 # --- 에이전트 기동 --------------------------------------------------------------

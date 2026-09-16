@@ -18,12 +18,19 @@ import {
   buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, LOCAL_HOST,
   type HostEntry,
 } from './host-data.js';
+import {
+  actionSessionId, fetchAgentDetails, fetchDiffCount, openWorktree, safeFetch,
+  useAgentVersion, useSessionsVersion,
+  type DesktopRailRow, type RailDeps,
+} from './rail-fetch.js';
+import { Menu, Row, type MenuItem } from './RailRow.js';
+
+export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WorktreeDialog } from './WorktreeDialog.js';
 
 const SESSIONS_POLL_MS = 5000;   // tmux 목록(attached·cwd) — 자주 안 바뀌어도 짧게, 값싸다.
 const STATUS_POLL_MS = 4000;     // since/tool 보강 — 서버가 아직 질문 텍스트를 안 줘서(2.1.0 gap) 상태 문장 갱신용.
-const GIT_CACHE_MS = 60000;      // §5 원문: "60초 캐시" — 「기타」 세션 행에만 쓴다(워크트리 행은 changed 요약을 서버가 준다).
 const WORKTREES_POLL_MS = 8000;  // N8(30-worktree.md) — 서버가 이미 5초 캐시라 자주 불러도 싸다.
 // C1 — 호스트 목록. 서버가 원격 세션을 30초 캐시하므로(routes/hosts.py) 그보다
 // 짧게 불러도 네트워크 왕복이 늘지 않는다. 15초면 "호스트가 꺼졌다"를 반 캐시
@@ -37,177 +44,6 @@ const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
 const SETTINGS_W_KEY = 'ui.rail.width';
 const SETTINGS_COLLAPSE_KEY = 'ui.rail.collapsed';
 const SETTINGS_HOST_KEY = 'ui.activeHostId';
-
-export interface RailDeps {
-  vtFetch: (path: string, opts?: RequestInit) => Promise<unknown>;
-  getAction: (name: string) => unknown;
-}
-
-function safeFetch<T>(deps: RailDeps, path: string): Promise<T | null> {
-  return deps.vtFetch(path).then((v) => v as T).catch(() => null);
-}
-
-// ---- window 브리지 시그널 어댑터 (core/signals.ts의 지연-청크 안전 버전) ----
-
-function useSessionsVersion() {
-  const [v, setV] = createSignal(0);
-  const unsub = (window as any).storeSubscribe?.(() => setV((n) => n + 1));
-  onCleanup(() => unsub?.());
-  return v;
-}
-
-function useAgentVersion() {
-  const [v, setV] = createSignal(0);
-  const unsub = (window as any).onStatusChange?.(() => setV((n) => n + 1));
-  onCleanup(() => unsub?.());
-  return v;
-}
-
-// ---- 데이터 수집 ----
-
-interface AgentDetail {
-  since: number | null;
-  tool: string | null;
-  question: string | null;
-  options: { key: string; label: string }[] | null;
-}
-
-async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, AgentDetail>> {
-  const data = await safeFetch<{ all?: Record<string, any> }>(deps, '/api/agent/status');
-  const out: Record<string, AgentDetail> = {};
-  for (const entry of Object.values(data?.all || {})) {
-    const name = (entry as any)?.tmux_session;
-    if (!name) continue;
-    out[name] = {
-      since: (entry as any).since ?? null,
-      tool: (entry as any).tool || (entry as any).last_tool || null,
-      question: (entry as any).question ?? null,
-      options: (entry as any).options ?? null,
-    };
-  }
-  return out;
-}
-
-const _gitCache = new Map<string, { at: number; files: number | null }>();
-async function fetchDiffCount(deps: RailDeps, cwd: string): Promise<number | null> {
-  const hit = _gitCache.get(cwd);
-  if (hit && Date.now() - hit.at < GIT_CACHE_MS) return hit.files;
-  const data = await safeFetch<{ repo?: boolean; files?: unknown[] }>(deps, `/api/git/status?repo=${encodeURIComponent(cwd)}`);
-  const files = data?.repo ? (data.files || []).length : null;
-  _gitCache.set(cwd, { at: Date.now(), files });
-  return files;
-}
-
-// 30-worktree.md §2: 세션이 하나도 없는 워크트리를 여는 API. 흐리게 표시된
-// 행을 클릭했을 때만 탄다(대부분은 이미 tmux 세션이 있어 attachTmux로 충분).
-async function openWorktree(deps: RailDeps, wtId: string): Promise<string | null> {
-  try {
-    const data = await deps.vtFetch(`/api/worktrees/${encodeURIComponent(wtId)}/open`, { method: 'POST' }) as { tmux_session?: string };
-    return data?.tmux_session || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-type DesktopRailRow =
-  | (WorktreeRailRowInput & { statusSentence: string })
-  | (OtherRailRowInput & { statusSentence: string });
-
-// 행이 가리키는 "열 수 있는" 대상. 워크트리 행 중 세션이 전혀 없는(흐리게
-// 표시된) 행은 null — 컨텍스트 메뉴(세션 대상 액션)를 못 연다, 클릭은 openRow가
-// 별도로 open API로 처리한다.
-function actionSessionId(row: DesktopRailRow): string | null {
-  // C1: 원격 세션의 sessionId는 `remote:<host>:<name>` 합성 키라 로컬 세션 맵에
-  // 없다 — 여기서 null로 잘라야 활성 표시·컨텍스트 메뉴가 로컬 id와 엉키지 않는다.
-  if (row.kind === 'session') return row.remote ? null : row.sessionId;
-  return row.primarySessionId;
-}
-
-function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void }) {
-  const isWt = () => props.row.kind === 'worktree';
-  const isRemote = () => props.row.kind === 'session' && !!props.row.remote;
-  // 원격 행은 이제 열 수 있으므로 흐리게 그리지 않는다(3단계 전에는 못 열어서
-  // no-session으로 뒀다).
-  const noSession = () =>
-    isWt() && !actionSessionId(props.row) && !(props.row as WorktreeRailRowInput).primaryTmuxName;
-  const diffLabel = () => {
-    if (props.row.kind === 'worktree') {
-      const c = props.row.changed;
-      return c && c.files > 0 ? `+${c.add} −${c.del}` : null;
-    }
-    return props.row.diffFiles != null && props.row.diffFiles > 0 ? `파일 ${props.row.diffFiles}` : null;
-  };
-  const rowName = () => (props.row.kind === 'worktree' ? props.row.label : props.row.name);
-
-  return (
-    <div
-      class="vt-wgrail-row"
-      classList={{ active: props.active, 'no-session': noSession() }}
-      onClick={props.onOpen}
-      onContextMenu={props.onContext}
-      role="button"
-      tabindex="0"
-    >
-      {/* 20-design-system.md §5(O2): 레일 행 왼쪽 끝 세로 막대는 저장소 해시
-          색점(원형 dot과 헷갈리지 않는 "막대") — 상태 5색·acc와는 별개 램프
-          (--color-hash-1..8). 그 오른쪽의 기존 막대가 상태색(30-worktree.md
-          §4/10-shell-layout.md §5)을 그대로 맡는다. 「기타」 세션 행은 저장소가
-          없어 둘 다 "색점 없음"(kind-session이 CSS에서 투명 처리). */}
-      <span class={`vt-wgrail-hash ${isWt() ? `hash-${hashRepoColorIndex((props.row as WorktreeRailRowInput).repoName)}` : 'kind-session'}`} />
-      <span class={`vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
-      <div class="vt-wgrail-row-main">
-        <div class="vt-wgrail-row-top">
-          <span class="vt-wgrail-name">{rowName()}</span>
-          <Show when={diffLabel()}>
-            <span class="vt-wgrail-diff">{diffLabel()}</span>
-          </Show>
-        </div>
-        <div class="vt-wgrail-row-sub">
-          {props.row.statusSentence}
-          <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
-        </div>
-        <Show when={props.row.status === 'waiting' && props.row.question}>
-          <div class="vt-wgrail-question">? {props.row.question}</div>
-        </Show>
-      </div>
-    </div>
-  );
-}
-
-interface MenuItem {
-  label: string;
-  run: () => void;
-  /** C1 호스트 메뉴의 둘째 줄("세션 3 · 12ms" 또는 "응답 없음"). 없으면 안 그린다. */
-  detail?: string;
-  /** 흐리게(오프라인 호스트). 선택 자체는 막지 않는다 — 꺼진 호스트를 고르면
-   * 이유를 보여주는 게 목적이다. */
-  dim?: boolean;
-  checked?: boolean;
-}
-
-function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[] }) {
-  let ref: HTMLDivElement | undefined;
-  const onDocClick = (e: MouseEvent) => { if (ref && !ref.contains(e.target as Node)) props.onClose(); };
-  document.addEventListener('mousedown', onDocClick, true);
-  onCleanup(() => document.removeEventListener('mousedown', onDocClick, true));
-
-  return (
-    <div ref={ref} class="vt-menu" style={{ left: `${props.x}px`, top: `${props.y}px`, right: 'auto' }}>
-      <For each={props.items}>
-        {(it) => (
-          <div
-            class="vt-menu-item"
-            classList={{ dim: !!it.dim, checked: !!it.checked }}
-            onClick={() => { props.onClose(); it.run(); }}
-          >
-            <span class="vt-menu-item-label">{it.checked ? '✓ ' : ''}{it.label}</span>
-            <Show when={it.detail}><span class="vt-menu-item-detail">{it.detail}</span></Show>
-          </div>
-        )}
-      </For>
-    </div>
-  );
-}
 
 function Rail(props: { deps: RailDeps }) {
   const sessionsVersion = useSessionsVersion();
