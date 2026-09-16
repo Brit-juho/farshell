@@ -66,10 +66,12 @@ jobs:
       - name: 산출물 형태 검증 (I2)
         run: |
           test -f frontend/dist/app.js
+          test -f frontend/dist/core.js
           test -f frontend/dist/app.css
           test -f frontend/dist/voice.js
           ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
-          [ "$(wc -c < frontend/dist/app.js)" -le 307200 ]
+          # 2.1.6: ci.yml과 같은 이유로 초기 페이로드 합계를 잰다.
+          [ "$(( $(wc -c < frontend/dist/app.js) + $(wc -c < frontend/dist/core.js) ))" -le 307200 ]
 
       - name: 릴리스 노트 생성 (CHANGELOG에서 추출)
         run: python3 scripts/release_notes.py "${{ steps.ver.outputs.version }}" -o RELEASE_NOTES.md

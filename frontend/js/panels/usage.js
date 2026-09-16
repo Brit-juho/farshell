@@ -9,9 +9,12 @@
 //      clauth가 새 tier("Max")나 새 창("30d")을 추가해도 이 화면은 안 깨진다.
 //   2. **숫자보다 바가 먼저**다. 스캔 속도가 다르다 — 바 색만 보고 "괜찮다/
 //      곧 막힌다"를 판단할 수 있어야 하고, 정확한 %는 그 다음이다.
-import { openPanel, closePanel } from './panel.js';
+//
+// **이 파일은 지연 청크(panels.js)다.** 상시 동작(rail 배지 폴링 · 액션 등록)은
+// panels/usage-badge.js에 있고, 여기는 "볼 때" 필요한 렌더러만 담는다.
+import { openPanel } from './panel.js';
 import { vtFetch } from '../core/api.js';
-import { registerAction } from '../core/dom.js';
+import { paintRailBadge } from './usage-badge.js';
 
 const PANEL_ID = 'vt-usage';
 const POLL_MS = 30000;   // 피드 자체가 90초 주기라 그보다 자주 볼 이유가 없다
@@ -235,7 +238,7 @@ function renderCounterSection(data) {
   return wrap;
 }
 
-function renderBody(limitData, counterData, target) {
+export function renderBody(limitData, counterData, target) {
   const body = target || document.getElementById('vt-usage-body');
   if (!body) return;
   body.innerHTML = '';
@@ -263,23 +266,7 @@ function renderBody(limitData, counterData, target) {
 // 그래서 rail 버튼에 전역 지표만 단다: 활성 프로필 이름(title) + 라이브 점.
 // 세션별 귀속은 2.1의 `fsh agent claude --profile`(우리가 실행 주체가 되는 시점)
 // 이후에 정확해진다.
-function paintRailBadge(data) {
-  const btn = document.getElementById('vt-rail-usage');
-  if (!btn) return;
-  const badge = btn.querySelector('.vt-rail-badge')
-    || btn.appendChild(Object.assign(document.createElement('span'), { className: 'vt-rail-badge' }));
-  const live = (data?.profiles || []).filter((p) => p.has_live_session).map((p) => p.name);
-  const active = data?.active_profile;
-  btn.title = data?.available
-    ? `사용량${active ? ` — 활성: ${active}` : ''}${live.length ? ` · 실행 중: ${live.join(', ')}` : ''}`
-    : '사용량';
-  badge.hidden = !live.length;
-  badge.textContent = live.length ? '●' : '';
-  badge.classList.toggle('vt-rail-badge-dot', true);
-}
-
 let _timer = null;
-let _bgTimer = null;
 
 // N41 — 한도형(/api/usage)과 누적형(/api/usage/counter)을 따로 요청한다.
 // 하나가 실패/없음이어도 다른 하나는 그려야 한다(clauth 없이 로컬 LLM만
@@ -301,26 +288,7 @@ async function refresh() {
   paintRailBadge(limitData);
 }
 
-// 패널이 닫혀 있어도 rail 배지는 최신이어야 한다(그게 "상시 노출"의 의미다).
-// 피드가 90초 주기라 60초면 충분하고, 서버 쪽 비용은 mtime 비교 하나다.
-// 배지는 한도형(%) 전용이라(rail 버튼 하나에 %를 하나만 실을 수 있다) 누적형은
-// 요청하지 않는다 — 자세한 값은 패널/우측 레일에서 본다.
-async function refreshBadgeOnly() {
-  try {
-    const data = await vtFetch('/api/usage');
-    paintRailBadge(data);
-    // L8/U2: 우측 레일은 **패널이 닫혀 있어도** 최신이어야 한다 — 그게 "상시
-    // 노출"의 의미다. 화면에 없으면(compact/regular) 아무 일도 안 한다.
-    const rr = document.getElementById('vt-right-rail-body');
-    if (rr && rr.offsetParent !== null) {
-      let counterData = { available: false, reason: 'read-failed' };
-      try { counterData = await vtFetch('/api/usage/counter'); } catch (_) { /* 조용히 무시 */ }
-      renderBody(data, counterData, rr);
-    }
-  } catch (_) { /* 조용히 무시 */ }
-}
-
-function showUsage() {
+export function showUsage() {
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: '사용량',
@@ -334,19 +302,7 @@ function showUsage() {
   _timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
 }
 
-
-registerAction('usage.open', showUsage);
-
-// rail 항목이 보이는 환경(=사용량 소스가 있는 환경)에서만 배지를 돌린다.
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('vt-rail-usage');
-  if (!btn) return;
-  setTimeout(() => {
-    if (getComputedStyle(btn).display === 'none') return;   // capability 게이팅에 걸린 환경
-    refreshBadgeOnly();
-    _bgTimer = setInterval(() => { if (!document.hidden) refreshBadgeOnly(); }, 60000);
-  }, 1500);
-});
+// `usage.open` 액션 등록과 배지 폴링은 panels/usage-badge.js에 있다.
 
 // 테스트 전용 export — DOM/fetch가 없는 순수 계산만(ports.js의 _groupByPid와 같은 패턴).
 export { _buildSparkline, humanTokens, humanDuration };

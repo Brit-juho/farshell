@@ -305,6 +305,12 @@ def _open_dock(pg, label: str) -> None:
     선택자를 `:has-text()`로 쓰지 않는 이유: 그건 playwright 전용 문법이라
     `page.evaluate` 안의 querySelector에서는 SyntaxError가 난다(실측). 클릭은
     locator로, 상태 확인은 textContent 비교로 나눠 쓴다.
+
+    **탭이 active가 된 것과 패널이 뜬 것은 다르다.** 탭 활성은 동기(시그널)지만
+    패널 본체는 지연 청크(panels.js)라 네트워크를 한 번 갔다 온다. 2.1.6 전에는
+    app.js가 panels.js를 정적 import해서(=지연이 지연이 아니었다) 클릭 직후
+    항상 이미 로드돼 있었고, 그래서 이 함수가 패널을 안 기다려도 통과했다.
+    청크가 진짜로 지연되자 그 의존이 드러났다 — 여기서 같이 기다린다.
     """
     pg.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
     is_active = (
@@ -314,6 +320,11 @@ def _open_dock(pg, label: str) -> None:
     if not pg.evaluate(is_active, label):
         pg.locator("#vt-dock .vt-dock-tab", has_text=label).first.click()
     pg.wait_for_function(is_active, arg=label, timeout=5000)
+    # 지연 청크가 도착해 패널이 dock 본문에 붙을 때까지. 무엇이 붙는지는
+    # 호출한 테스트가 검사한다 — 여기서는 "뭔가 하나 떴다"까지만 본다.
+    pg.wait_for_function(
+        "() => !!document.querySelector('#vt-dock .vt-dock-body > *')", timeout=10000
+    )
 
 
 # ── 부팅 ──────────────────────────────────────────────────────────────────
@@ -786,6 +797,10 @@ def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
     """40 §3 — 머리말(저장소·브랜치)과 목록이 실제 API 응답으로 채워지는가."""
     _open_dock(page, "소스컨트롤")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
+    # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
+    # 기다리지 않으면 log가 0인 순간을 잡는다(실측 3회 중 1회).
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
     got = page.evaluate(
         """() => ({
              head: document.querySelector('#vt-scm-head')?.innerText || '',
@@ -803,6 +818,10 @@ def test_dock_소스컨트롤_stage_commit은_실동작하고_push_PR은_렌더�
     push·PR/MR 버튼과 계정 칩은 렌더 자체가 없다(disabled로도 남기지 않는다)."""
     _open_dock(page, "소스컨트롤")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
+    # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
+    # 기다리지 않으면 log가 0인 순간을 잡는다(실측 3회 중 1회).
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
     got = page.evaluate(
         """() => {
              const texts = [...document.querySelectorAll('#vt-dock-scm button')]
@@ -831,6 +850,10 @@ def test_dock_소스컨트롤_파일_클릭시_뷰어_페인으로_연다(page):
     변경된 파일이 없으면 건너뛴다."""
     _open_dock(page, "소스컨트롤")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
+    # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
+    # 기다리지 않으면 log가 0인 순간을 잡는다(실측 3회 중 1회).
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
     open_btns = page.locator("#vt-dock-scm .vt-vw-gopen")
     if open_btns.count() == 0:
         pytest.skip("작업 트리가 깨끗해 열어볼 파일이 없다")
@@ -843,6 +866,10 @@ def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
     그대로 쓰는지 실제 클릭으로 확인한다 — 변경된 파일이 없으면 건너뛴다."""
     _open_dock(page, "소스컨트롤")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
+    # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
+    # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
+    # 기다리지 않으면 log가 0인 순간을 잡는다(실측 3회 중 1회).
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
     rows = page.locator("#vt-dock-scm .vt-vw-gsec .vt-vw-grow")
     if rows.count() == 0:
         pytest.skip("작업 트리가 깨끗해 diff를 열 파일이 없다")

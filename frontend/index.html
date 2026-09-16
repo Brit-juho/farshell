@@ -25,6 +25,20 @@
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="/static/vendor/xterm.min.css">
   <link rel="stylesheet" href="/static/dist/app.css">
+  <!-- 2.1.6: app.js는 부팅 배선만 담은 2KB 진입점이고 상시 코드는 전부
+       core.js에 있다(vite.config.js의 청크 규칙 참고). 이 preload가 없으면
+       **브라우저가 app.js를 받아 파싱한 뒤에야** core.js를 요청해서 부팅 전에
+       왕복이 하나 늘어난다 — 느린 회선·바쁜 기기에서 온보딩 화면이 그만큼
+       더 오래 떠 있는다(실측: 부하 상태의 실브라우저 스모크에서 dock 테스트가
+       그 사이 클릭이 막혀 무더기로 실패했다). 둘을 동시에 받게 한다. -->
+  <link rel="modulepreload" href="/static/dist/core.js">
+  <!-- shell.js도 같이 받는다. 이건 "지연 청크"지만 bootApp() 직후 곧바로 동적
+       import되므로(vite.config.js) 지연의 의미는 **크기 게이트 분리**이지
+       로딩 시점이 아니다. preload가 없으면 app.js → core.js → shell.js가
+       3단 직렬 요청이 되어 HUD·레일·dock이 그만큼 늦게 뜬다(실측: 실브라우저
+       스모크에서 #vt-dock이 아직 없어 dock 테스트 5건이 무너졌다).
+       panels.js는 여기 넣지 않는다 — 그건 정말 열 때만 받는다. -->
+  <link rel="modulepreload" href="/static/dist/shell.js">
   <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-mono-400.woff2" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-sans-400.woff2" crossorigin>
   <!-- 테마 부팅: 페인트 전에 data-skin 확정 (FOUC 방지).

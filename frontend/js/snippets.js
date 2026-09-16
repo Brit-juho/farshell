@@ -19,7 +19,6 @@
 // F5에서 classic script에서 ES 모듈로 전환.
 import { openPanel, closePanel } from './panels/panel.js';
 import { vtFetch, vtEsc } from './core/api.js';
-import { registerAction } from './core/dom.js';
 import { activeSession, activeSessionId, getSession } from './core/store.js';
 import { sendToPty, sendPaste } from './term/clipboard.js';
 import { addSession } from './term/session.js';
@@ -29,7 +28,7 @@ let _scopeTab = 'global';
 
 function closeSnippets() { closePanel('vt-snippets'); }
 
-function showSnippets() {
+export function showSnippets() {
       const panel = openPanel({
         id: 'vt-snippets',
         ariaLabel: '프롬프트 스니펫',
@@ -323,5 +322,5 @@ function showSnippets() {
       closeSnippets();
     }
 
-// F3(c): data-action 위임용 등록.
-registerAction('snippets.show', () => showSnippets());
+// F3(c): data-action 위임용 등록은 snippets-lazy.js에 있다 — 부팅 시점 등록이
+// 지연 청크 안으로 들어가면 안 된다.

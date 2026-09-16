@@ -27,8 +27,8 @@ import './lib/ansilex.js';
 import './lib/difflex.js';
 import './lib/keyseq.js';
 import './panels/panel.js';
-import './panels/settings.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
-import './panels/usage.js';     // U2 — 사용량 게이지(rail 「사용량」 + 우측 레일)
+import './panels/settings-lazy.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
+import './panels/usage-badge.js';     // U2 — 사용량 게이지(rail 「사용량」 + 우측 레일)
 import './layout/right-rail.js';// L8 — 우측 레일 접기/펴기
 import './ui/favicon.js';
 import './ui/settings-toggles.js';  // E2 — rail 설정 패널 체크박스 ↔ 설정 스토어
@@ -87,7 +87,7 @@ import './picker.js';
 import './panels/ports-lazy.js';
 import './panels/files-lazy.js';
 import './queue-lazy.js';
-import './snippets.js';
+import './snippets-lazy.js';
 // N5/N40/N46 — quickopen.js(vanilla)는 shell/Palette.tsx(지연 청크)로
 // 대체됐다. palette-lazy.js는 panels/viewer-lazy.js와 같은 스텁 패턴이라
 // term/session.js·agent/preview.js 뒤에 둔다(그 값들을 deps로 담아간다).
