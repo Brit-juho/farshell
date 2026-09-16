@@ -19,6 +19,13 @@ peer가 아예 호출할 수 없다. `routes/files.py`의 "검사는 한 곳에�
 secret은 절대 전송되지 않는다. ts는 60초 창, nonce는 그 창 안에서 1회용(재생 차단).
 서명 대상에 method/path가 들어가므로 view용 GET 서명을 control용 POST에 돌려쓸 수 없다.
 
+## capability 관문 (2.1.6)
+
+권한·응답 위생·감사 로그는 `routes/peer_protocol.py`의 `@capability`가 건다.
+새 원격 capability를 여기 추가할 때 **`strip`을 반드시 정한다** — B 안에서만
+뜻이 있는 식별자(세션 id·경로·PID·워크트리 id)를 A로 넘기면 A가 그걸 자기
+것으로 오해한다. 일부러 안 지우는 경우도 `strip=()`로 그 판단을 남긴다.
+
 ## 전이(transitive) 금지
 
 peer 응답에는 **내 로컬 것만** 담는다. 내가 등록한 다른 peer의 목록·세션은 절대
@@ -41,120 +48,18 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import host_store
+from routes.peer_protocol import (
+    PeerDenied,
+    _authenticate_raw,
+    _require,
+    _require_body,
+    _version,
+    capability,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_nonces = host_store.NonceCache()
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-_VERSION: str | None = None
-
-
-def _version() -> str:
-    global _VERSION
-    if _VERSION is None:
-        try:
-            _VERSION = (_REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        except OSError:
-            _VERSION = ""
-    return _VERSION
-
-
-class PeerDenied(Exception):
-    def __init__(self, reason: str, status: int = 401):
-        super().__init__(reason)
-        self.reason = reason
-        self.status = status
-
-
-def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> dict:
-    """서명 검증 → grant. 실패는 PeerDenied. 실패도 전부 감사 로그에 남긴다.
-
-    Request가 아니라 (method, path, headers)를 받는 이유: 3단계의 WebSocket
-    엔드포인트도 **같은 서명 규칙**을 써야 하는데 WebSocket에는 Request가 없다.
-    검증 로직이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.
-    """
-    peer_id = headers.get("x-peer-id", "")
-    ts_raw = headers.get("x-peer-ts", "")
-    nonce = headers.get("x-peer-nonce", "")
-    sig = headers.get("x-peer-sig", "")
-    if not (peer_id and ts_raw and nonce and sig):
-        raise PeerDenied("서명 헤더가 없습니다")
-    try:
-        ts = int(ts_raw)
-    except ValueError:
-        raise PeerDenied("잘못된 타임스탬프")
-
-    grant = host_store.find_grant(peer_id)
-    if grant is None:
-        # 취소된 상대가 옛 secret으로 계속 두드리는 경우가 여기다 — 기록해둔다.
-        host_store.audit(peer_id, "auth", False, "등록되지 않은 호스트")
-        raise PeerDenied("등록되지 않은 호스트입니다")
-
-    # A2 — 본문 해시를 서명한 요청. 헤더가 **있으면 반드시 맞아야 한다**(없는 척
-    # 지우고 보내면 서명 자체가 안 맞으므로 downgrade가 성립하지 않는다).
-    claimed = headers.get("x-peer-body", "")
-    if claimed and body_hash and not hmac.compare_digest(claimed, body_hash):
-        host_store.audit(peer_id, "auth", False, "본문 해시 불일치")
-        raise PeerDenied("본문이 서명과 일치하지 않습니다")
-    if not host_store.verify_signature(grant["secret"], method, path, ts, nonce, sig,
-                                       body_hash=claimed):
-        host_store.audit(peer_id, "auth", False, "서명 불일치 또는 시간창 밖")
-        raise PeerDenied("서명이 유효하지 않습니다 — 시계 차이가 크면 'fsh host ping'으로 확인하세요")
-
-    # 재생 차단은 서명 검증을 통과한 뒤에 본다 — 그 전에 하면 아무나 nonce를
-    # 채워 넣어 정상 요청을 막을 수 있다(캐시 오염).
-    if not _nonces.check_and_add(f"{peer_id}:{nonce}"):
-        host_store.audit(peer_id, "auth", False, "nonce 재사용(재생 시도)")
-        raise PeerDenied("이미 사용된 요청입니다")
-
-    host_store.touch_grant(peer_id)
-    return grant
-
-
-def _authenticate(request: Request) -> dict:
-    return _authenticate_raw(request.method, request.url.path, request.headers)
-
-
-def _require(request: Request, level: str = host_store.LEVEL_VIEW) -> tuple[dict | None, JSONResponse | None]:
-    """(grant, 오류응답) — 오류응답이 None이 아니면 그대로 반환하면 된다."""
-    try:
-        grant = _authenticate(request)
-    except PeerDenied as e:
-        return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
-    if level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL:
-        host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
-        return None, JSONResponse(
-            {"error": "level_required", "reason":
-             "이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 "
-             "'fsh host allow-control <id>'로 켜야 합니다"},
-            status_code=403,
-        )
-    return grant, None
-
-
-async def _require_body(request: Request, level: str = host_store.LEVEL_VIEW):
-    """본문 해시까지 서명한 요청용 인증(A2). 성공하면 `(grant, (grant, body))`,
-    실패하면 `(None, JSONResponse)` — 호출부가 본문을 다시 읽지 않아도 되게
-    바이트를 함께 돌려준다(한 번만 읽을 수 있는 스트림이다)."""
-    data = await request.body()
-    digest = hashlib.sha256(data).hexdigest()
-    try:
-        grant = _authenticate_raw(request.method, request.url.path, request.headers, digest)
-    except PeerDenied as e:
-        return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
-    if level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL:
-        host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
-        return None, JSONResponse(
-            {"error": "level_required", "reason":
-             "이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 "
-             "'fsh host allow-control <id>'로 켜야 합니다"},
-            status_code=403,
-        )
-    return grant, (grant, data)
-
 
 # --- 페어링 (서명 없음 — 티켓 자체가 인증) --------------------------------------
 
@@ -213,7 +118,10 @@ async def peer_pair(request: Request):
 
 
 @router.get("/api/peer/sessions")
-async def peer_sessions(request: Request):
+# 세션 이름은 A가 `remote:<host>:<name>`로 다시 감싸 쓰므로 그대로 내려보낸다.
+# cwd도 의도적으로 남긴다(머리말의 등급 근거 참고).
+@capability("sessions", strip=())
+async def peer_sessions(request: Request, grant: dict):
     """이 호스트의 tmux 세션 + 에이전트 상태 (2단계, `view` 등급).
 
     **전이 금지(hop 0)**: 내가 등록한 다른 peer의 세션은 절대 섞지 않는다.
@@ -224,10 +132,6 @@ async def peer_sessions(request: Request):
     필요하다. 다만 이건 **경로 문자열 노출**이라, view 등급이 이미 세션 이름과
     출력까지 볼 수 있는 관계라는 전제 위에서만 정당하다(그보다 더 주지는 않는다).
     """
-    grant, err = _require(request)
-    if err:
-        return err
-
     import agent_status
     import tmux_runner
 
@@ -259,7 +163,6 @@ async def peer_sessions(request: Request):
         return out
 
     sessions = await asyncio.to_thread(_collect)
-    host_store.audit(grant["id"], "sessions", True, f"{len(sessions)}건")
     me = host_store.get_self()
     return {"ok": True, "id": me["id"], "label": me["label"], "sessions": sessions}
 
@@ -288,7 +191,10 @@ def _my_tty(grant: dict, screen: str) -> str | None:
 
 
 @router.get("/api/peer/clients")
-async def peer_clients(request: Request):
+# tty는 B 로컬 값이지만 A는 되돌려 보여주기만 한다 — 자기 것으로 오해할
+# 여지가 없어 지우지 않는다.
+@capability("clients", strip=())
+async def peer_clients(request: Request, grant: dict):
     """이 호스트의 tmux 세션에 붙은 클라이언트 목록(`view` 등급).
 
     2.1.2에서 「연결된 화면」은 원격 세션에서 통째로 숨겨져 있었다. `/api/tmux/
@@ -299,10 +205,6 @@ async def peer_clients(request: Request):
     등급 경계: **목록은 view, 끊기는 control**. 남의 화면을 끊는 건 입력과 같은
     무게의 조작이고, 보는 것은 이미 view가 출력 전체를 보는 것과 같은 무게다.
     """
-    grant, err = _require(request)
-    if err:
-        return err
-
     from routes.tmux import _CLIENT_SESSION_RE, _client_rows, _label
 
     session = (request.query_params.get("session") or "").strip()
@@ -313,16 +215,14 @@ async def peer_clients(request: Request):
     for r in rows:
         r["is_me"] = bool(my_tty and r["tty"] == my_tty)
         r["label"] = _label(r, my_tty)
-    host_store.audit(grant["id"], "clients", True, f"{session} {len(rows)}건")
-    return {"session": session, "clients": rows, "me_tty": my_tty}
+    return ({"session": session, "clients": rows, "me_tty": my_tty},
+            f"{session} {len(rows)}건")
 
 
 @router.post("/api/peer/clients/detach")
-async def peer_clients_detach(request: Request):
+@capability("clients/detach", level=host_store.LEVEL_CONTROL, strip=())
+async def peer_clients_detach(request: Request, grant: dict):
     """클라이언트 하나를 끊는다(`control` 등급). 자기 화면은 끊을 수 없다."""
-    grant, err = _require(request, host_store.LEVEL_CONTROL)
-    if err:
-        return err
     try:
         body = await request.json()
     except Exception:
@@ -337,26 +237,22 @@ async def peer_clients_detach(request: Request):
     if my_tty and tty == my_tty:
         # 로컬 경로와 같은 규칙 — 지금 보고 있는 화면을 스스로 끊으면 복구 경로가
         # 없다(그리고 원격에서는 "왜 끊겼는지"가 더 안 보인다).
-        host_store.audit(grant["id"], "clients/detach", False, "자기 화면")
         return JSONResponse(
             {"error": "cannot detach self", "reason": "지금 보고 있는 화면은 끊을 수 없습니다"},
             status_code=400,
-        )
+        ), "자기 화면"
     await asyncio.to_thread(tmux_runner.run, ["detach-client", "-t", tty], 2.0)
-    host_store.audit(grant["id"], "clients/detach", True, tty)
-    return {"ok": True, "detached": tty}
+    return {"ok": True, "detached": tty}, tty
 
 
 @router.post("/api/peer/clients/solo")
-async def peer_clients_solo(request: Request):
+@capability("clients/solo", level=host_store.LEVEL_CONTROL, strip=())
+async def peer_clients_solo(request: Request, grant: dict):
     """「이 화면만 남기기」 원격판(`control` 등급).
 
     화면 토큰으로 자기 tty를 특정하지 못하면 **아무것도 끊지 않는다** — 로컬
     경로와 같은 규칙이다. 전부 끊고 나면 되돌릴 방법이 없다.
     """
-    grant, err = _require(request, host_store.LEVEL_CONTROL)
-    if err:
-        return err
     try:
         body = await request.json()
     except Exception:
@@ -370,11 +266,10 @@ async def peer_clients_solo(request: Request):
         return JSONResponse({"error": "invalid session name"}, status_code=400)
     keep = _my_tty(grant, _screen_token(body.get("screen")))
     if not keep:
-        host_store.audit(grant["id"], "clients/solo", False, "자기 화면 미확인")
         return JSONResponse(
             {"error": "unknown client", "reason": "이 화면의 tty를 확인할 수 없습니다"},
             status_code=400,
-        )
+        ), "자기 화면 미확인"
 
     def _solo() -> list[str]:
         detached = []
@@ -387,12 +282,15 @@ async def peer_clients_solo(request: Request):
         return detached
 
     detached = await asyncio.to_thread(_solo)
-    host_store.audit(grant["id"], "clients/solo", True, f"{session} {len(detached)}건")
-    return {"ok": True, "kept": keep, "detached": detached}
+    return ({"ok": True, "kept": keep, "detached": detached},
+            f"{session} {len(detached)}건")
 
 
 @router.get("/api/peer/search")
-async def peer_search(request: Request):
+# `session_id`는 **B 안에서만 뜻이 있는 값**이다. 그대로 내려보내면 A가 그걸로
+# 로컬 세션을 열려다 엉뚱한 세션을 연다 — 이름만 남기고 지운다.
+@capability("search", strip=("session_id",))
+async def peer_search(request: Request, grant: dict):
     """이 호스트의 스크롤백 검색(`view` 등급).
 
     `~` 검색은 로컬 세션만 봤다 — 원격 호스트를 고른 상태에서도 검색창은 이 맥의
@@ -403,36 +301,24 @@ async def peer_search(request: Request):
     더 많이 내려주면 프록시 쪽 팔레트가 감당하지 못한다. 호출 쪽(A)은 타임아웃을
     건다(peer_client의 기본 타임아웃).
     """
-    grant, err = _require(request)
-    if err:
-        return err
-
     from routes import search as search_routes
 
     q = (request.query_params.get("q") or "").strip()
     if not q:
-        return {"results": [], "truncated": False}
+        return {"results": [], "truncated": False}, "빈 질의"
     payload = await search_routes.search_scrollback(q=q, sessions="all")
-    host_store.audit(grant["id"], "search", True, f"{len(payload['results'])}건")
-    # session_id는 **B 안에서만 뜻이 있는 값**이다. 그대로 내려보내면 A가 그걸로
-    # 로컬 세션을 열려다 엉뚱한 세션을 연다 — 이름만 남기고 지운다.
-    for r in payload["results"]:
-        r.pop("session_id", None)
-    return payload
+    return payload, f"{len(payload['results'])}건"
 
 
 @router.get("/api/peer/ping")
-async def peer_ping(request: Request):
+@capability("ping", strip=())
+async def peer_ping(request: Request, grant: dict):
     """연결 확인 + 시계 동기 + 버전 교환. 1단계에서 유일한 인증 엔드포인트다.
 
     `serverTime`으로 상대가 시계 오차를 계산해 저장한다 — 그래야 다음 요청의
     서명이 60초 창 안에 들어온다.
     """
-    grant, err = _require(request)
-    if err:
-        return err
     me = host_store.get_self()
-    host_store.audit(grant["id"], "ping", True)
     return {
         "ok": True,
         "id": me["id"],
@@ -459,7 +345,8 @@ async def peer_ping(request: Request):
 
 
 @router.post("/api/peer/input")
-async def peer_input(request: Request):
+@capability("input", level=host_store.LEVEL_CONTROL, strip=())
+async def peer_input(request: Request, grant: dict):
     """원격 세션에 텍스트를 넣는다(control 등급).
 
     기본은 **Enter 없이 타이핑**이다(`POST /api/files/{id}/insert`와 같은 계약) —
@@ -467,9 +354,6 @@ async def peer_input(request: Request):
     누른다: 큐 투입(A3)은 "실행돼야 하는 지시"라 Enter가 없으면 프롬프트에 영원히
     떠 있게 된다. 어느 쪽인지 **호출부가 명시**하게 하고 서버가 추측하지 않는다.
     """
-    grant, err = _require(request, host_store.LEVEL_CONTROL)
-    if err:
-        return err
     try:
         body = await request.json()
     except Exception:
@@ -484,15 +368,13 @@ async def peer_input(request: Request):
 
     pane = tmux_target.session_pane(session)
     if not pane:
-        host_store.audit(grant["id"], "input", False, f"세션 없음: {session}")
-        return JSONResponse({"error": "session_not_found"}, status_code=404)
+        return JSONResponse({"error": "session_not_found"}, status_code=404), f"세션 없음: {session}"
     send = tmux_target.send_to_tmux if enter else tmux_target.type_to_tmux
     ok = await asyncio.to_thread(send, pane, data)
-    host_store.audit(grant["id"], "input", bool(ok),
-                     f"{session} {len(data)}자{' +Enter' if enter else ''}")
+    detail = f"{session} {len(data)}자{' +Enter' if enter else ''}"
     if not ok:
-        return JSONResponse({"error": "input_failed"}, status_code=500)
-    return {"ok": True}
+        return JSONResponse({"error": "input_failed"}, status_code=500), detail
+    return {"ok": True}, detail
 
 
 @router.websocket("/api/peer/ws/{tmux_name}")
@@ -602,7 +484,12 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
 
 
 @router.post("/api/peer/file")
-async def peer_file(request: Request):
+# ⚠ `id`와 `path`는 **B 로컬 값**이다. 지금은 안 지운다 — A는 그대로
+# 통과시키고 화면은 `typed`/`reused`만 쓰기 때문이다(frontend/js/panels/
+# files/files.js). 화면이 이 `id`로 `/api/files/{id}/…`를 부르기 시작하면
+# **A의 저장소에서 엉뚱한 파일을 찾게 된다** — 그때는 여기 strip에 넣을 것.
+@capability("file", level=host_store.LEVEL_CONTROL, strip=(), body=True)
+async def peer_file(request: Request, grant: dict, data: bytes):
     """파일 바이트를 받아 이 호스트의 저장소에 넣는다(A2, control 등급).
 
     ## 왜 control인가
@@ -621,11 +508,6 @@ async def peer_file(request: Request):
     아니라 origin을 쓰는 이유: 내용이 같아도 **다른 사람이 보낸 파일**은 다른
     파일로 다뤄야 하고, 무엇보다 200MB를 매번 해싱해 대조할 이유가 없다.
     """
-    grant, err = await _require_body(request, host_store.LEVEL_CONTROL)
-    if grant is None:
-        return err
-    _, data = err
-
     import file_store
     import tmux_target
 
@@ -634,12 +516,11 @@ async def peer_file(request: Request):
     session = request.headers.get("x-peer-file-session", "").strip()
 
     if len(data) > file_store.MAX_UPLOAD_BYTES:
-        host_store.audit(grant["id"], "file", False, f"{name} 크기 초과")
         return JSONResponse(
             {"error": "too_large",
              "reason": f"파일이 이 호스트의 상한을 넘습니다 (최대 {file_store.MAX_UPLOAD_BYTES // (1024*1024)}MB)"},
             status_code=413,
-        )
+        ), f"{name} 크기 초과"
 
     origin = f"{grant['id']}:{src_id}" if src_id else ""
     item = await asyncio.to_thread(file_store.find_by_origin, origin) if origin else None
@@ -654,9 +535,8 @@ async def peer_file(request: Request):
         if pane:
             # 파일 경로는 **Enter 없이** 타이핑한다 — 로컬 파일 삽입과 같은 계약.
             typed = await asyncio.to_thread(tmux_target.type_to_tmux, pane, path)
-    host_store.audit(grant["id"], "file", True,
-                     f"{name} {len(data)}B{' (재사용)' if reused else ''}{' → ' + session if typed else ''}")
-    return {"ok": True, "id": item["id"], "path": path, "reused": reused, "typed": typed}
+    return ({"ok": True, "id": item["id"], "path": path, "reused": reused, "typed": typed},
+            f"{name} {len(data)}B{' (재사용)' if reused else ''}{' → ' + session if typed else ''}")
 
 
 def _store_peer_file(data: bytes, name: str, origin: str) -> dict:

@@ -1498,7 +1498,7 @@ cmd_host() {
   case "$sub" in
     list|ls|pair|add|ping|rm|remove|rename|allow-control|deny-control|log|revoke-all)
       shift 2>/dev/null || true
-      (cd "$VT_DIR/server" && "$VT_PYTHON" host_store.py "$sub" "$@")
+      (cd "$VT_DIR/server" && "$VT_PYTHON" -m host_store "$sub" "$@")
       ;;
     *)
       echo "사용법: fsh host [list|pair [별명]|add <url> --ticket <티켓> [--label 별명]"
