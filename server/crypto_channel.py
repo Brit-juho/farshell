@@ -57,14 +57,14 @@ except ImportError:
     _NACL_AVAILABLE = False
     logger.debug("PyNaCl 미설치 — E2E 비활성")
 
-# 장기 identity 키 저장 경로. auth.py의 STATE_DIR과 동일한 ~/.vt 아래에 둔다
+# 장기 identity 키 저장 경로. auth 패키지의 STATE_DIR과 동일한 ~/.vt 아래에 둔다
 # (bin/vt·server가 공유하는 런타임 상태 디렉토리 관례를 따름).
 STATE_DIR = Path(os.environ.get("VT_STATE_DIR", "") or (Path.home() / ".vt"))
 IDENTITY_KEY_PATH = STATE_DIR / "e2e_identity.json"
 
 
 def _write_json_secure(path: Path, data) -> None:
-    """0600으로 원자적 저장. 디렉토리도 0700으로 맞춘다 (auth.py의 동일 패턴 재사용)."""
+    """0600으로 원자적 저장. 디렉토리도 0700으로 맞춘다 (auth/fileio.py의 동일 패턴 재사용)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(path.parent, 0o700)

@@ -405,7 +405,7 @@ The web UI uses tmux sessions as its default:
 | Paste (N24·N25·N26·N29, 2.1.5) | **The server decides, not the browser.** The browser cannot know whether the app inside a pane turned bracketed paste on, so guessing meant `200~` printed literally in the wrong place, or auto-indent stair-stepping in the right one. The server now reads the pane's real input mode — `ICANON` via termios, DECSET 2004 seen on the output stream — and decides. Path: WS `paste` message, or `POST /api/sessions/{id}/paste`. **tmux sessions are delegated to tmux itself** (`paste-buffer -p` looks at the pane's actual mode; `-S` on 3.7+ also turns off tmux's own sanitising since we already did it) — we do not guess a second time. Control characters are whitelisted by iTerm2's rule (tab · LF · FF · CR · `^V`); ESC is neutralised to `␛` only when bracketing, and simply dropped otherwise. In canonical mode a line over `PC_MAX_CANON` (1024B on macOS) does **not** get truncated — the whole line vanishes (verified on a real PTY) — so it is now refused up front with a reason instead of disappearing. `fsh doctor paste` shows what this terminal actually sends |
 | Hands-free mode | Mobile 🔄 button → continuous record/STT loop |
 | Voice-only mode | 🎧 button → hides the terminal and shows only a large mic (for earbud operation) |
-| Web login password | Set via `fsh password` → stores only an scrypt hash (`VT_AUTH_PASSWORD_HASH`); the plaintext is never stored. On login, issues a 24h session cookie signed with `VT_AUTH_SESSION_KEY` (not the plaintext or a token). Human-facing auth. `server/auth.py` |
+| Web login password | Set via `fsh password` → stores only an scrypt hash (`VT_AUTH_PASSWORD_HASH`); the plaintext is never stored. On login, issues a 24h session cookie signed with `VT_AUTH_SESSION_KEY` (not the plaintext or a token). Human-facing auth. `server/auth/` |
 | Device registration + OTP gate | Login is **always** by password. OTP is a gate required only "when registering a device seen for the first time." A registered device gets a `vt_device` long-lived cookie (90 days) and afterward passes with just the password — since it's per-device rather than per-IP, a phone switching between LTE and wifi doesn't get disconnected. **OTP stays fully disabled until `fsh otp setup`**, and device registrations quietly accumulate in the meantime, so turning it on later doesn't lock out devices already in use. Stored at `~/.vt/devices.json` (0600, sha256 hashes only). `fsh device revoke <id>` immediately invalidates that device's session cookie as well |
 | One-time device registration ticket | The QR/URL from `fsh mobile`/`fsh handoff` carries a 5-minute one-time ticket (`?ticket=`) instead of a persistent token. Physical access to the Mac is already proven at the moment the QR is shown, so scanning it equals approving registration. The old approach of embedding a persistent token in the URL left that value permanently sitting in logs, history, and QR images |
 | Cross-site blocking | `OriginGuardMiddleware` (`server/main.py`) — returns 403 for both HTTP and WS if the Origin isn't itself. The only path that auth/OTP alone can't block (if the browser already has a cookie, auth passes). Also removes the default `*` CORS — opt in via `VT_ALLOWED_ORIGINS` if needed |
@@ -455,9 +455,10 @@ The web UI uses tmux sessions as its default:
 ```
 server/
   main.py           — FastAPI (WS + REST + Voice + file upload/download)
-  auth.py           — web login auth (scrypt password hash + HMAC-signed session cookie
+  auth/             — web login auth (package: password/devices/totp/tickets/lockout/fileio)
+                       (scrypt password hash + HMAC-signed session cookie
                       + device whitelist + TOTP gate + one-time registration ticket).
-                      bin/fsh calls this directly via the `python auth.py <cmd>` CLI without the server.
+                      bin/fsh calls this directly via the `python -m auth <cmd>` CLI without the server.
                       Runtime state lives in ~/.vt/{devices,totp,tickets}.json (0600) —
                       kept separate from config (~/.vt.env) so it takes effect immediately without a server restart.
   pty_manager.py    — PTY sessions (broadcast, scrollback buffer, EOF detection)

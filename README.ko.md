@@ -247,7 +247,7 @@ farshell/
 │   └── fsh.ps1               CLI 진입점 (PowerShell, Windows/WSL2 wrapper)
 ├── server/
 │   ├── main.py                FastAPI 앱, 미들웨어(인증/Origin 가드)
-│   ├── auth.py                비밀번호/세션/기기/OTP/티켓 인증
+│   ├── auth/                  비밀번호/세션/기기/OTP/티켓 인증 (패키지)
 │   ├── fsguard.py             코드 뷰어 경로 검증 (루트 확정 + 거부 목록)
 │   ├── crypto_channel.py      E2E: X25519 세션 키 + Ed25519 장기 신원키 서명
 │   ├── pty_manager.py         PTY 세션 (broadcast, scrollback, EOF 감지)

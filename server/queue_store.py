@@ -273,7 +273,7 @@ def pending_count() -> int:
     return sum(1 for x in list_items() if x.get("status") == STATUS_PENDING)
 
 
-# --- CLI (bin/vt 가 서버 없이 직접 호출한다 — auth.py 와 같은 방식) --------------
+# --- CLI (bin/fsh 가 서버 없이 직접 호출한다 — `python -m auth` 와 같은 방식) ----
 
 
 def _cli(argv: list[str]) -> int:
