@@ -19,6 +19,7 @@ import { registerAction } from '../core/dom.js';
 import { register as registerKey } from '../core/keymap.js';
 import { activeSessionId, getSession } from '../core/store.js';
 import { mountClients } from '../layout/clients.js';
+import { getTabs, getActiveTabId } from '../layout/store.js';
 import { loadImportedSkin, saveImportedSkin, clearImportedSkin, applyImportedTokens } from '../theme-custom.js';
 import { setVtSkin } from '../theme.js';
 
@@ -68,6 +69,7 @@ const SECTIONS = [
   // N14 — Ghostty/Warp 테마 가져오기. 기본 6스킨을 고르는 칩은 예전부터
   // 다른 자리(테마 줄·팔레트)에 있고, 여기는 "가져오기"만 다룬다.
   { id: 'appearance', label: '모양', custom: renderAppearanceSection },
+  { id: 'mcp', label: 'MCP', custom: renderMcpSection },
   { id: 'security', label: '보안', custom: renderSecuritySection },
   // N13(80-multihost-agents.md §3) — 토글 자체는 스키마 항목이지만, 디스크
   // 사용량은 서버에 물어봐야 하는 값이라(보안 섹션과 같은 이유로) custom.
@@ -555,6 +557,19 @@ function fmtWhen(ts) {
   if (Number.isNaN(d.getTime())) return '기록 없음';
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// 97번 — MCP 조회·토글. 실제 화면은 지연 청크(panels/mcp.js)다. 워크트리 id는
+// 여기서 구해 넘긴다 — 지연 청크가 layout/store.js를 직접 import하면 탭 상태가
+// 복제된다(실측: 싱글톤이 통째로 panels.js로 옮겨갔다).
+function renderMcpSection() {
+  const host = document.createElement('div');
+  host.className = 'vt-set-sechost';
+  const tab = getTabs().find((t) => t.id === getActiveTabId());
+  import('./mcp.js')
+    .then((m) => m.mount(host, (tab && tab.worktreeId) || null))
+    .catch(() => { host.textContent = '불러오지 못했습니다'; });
+  return host;
 }
 
 function renderSecuritySection() {

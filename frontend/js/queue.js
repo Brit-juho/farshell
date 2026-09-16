@@ -14,11 +14,10 @@
 import { openPanel, closePanel, setPanelPoll } from './panels/panel.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { isMac } from './core/env.js';
-import { registerAction } from './core/dom.js';
 
 function closeQueue() { closePanel('vt-queue'); }
 
-function showQueue() {
+export function showQueue() {
       const panel = openPanel({
         id: 'vt-queue',
         ariaLabel: '프롬프트 큐',
@@ -241,4 +240,4 @@ function showQueue() {
     }
 
 // F3(c): data-action 위임용 등록.
-registerAction('queue.show', () => showQueue());
+// 액션 등록은 queue-lazy.js(app.js에 남는 스텁)가 맡는다.

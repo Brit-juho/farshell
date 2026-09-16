@@ -65,7 +65,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '모양', '보안', '스크롤백', '정보'],
+    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '모양', 'MCP', '보안', '스크롤백', '정보'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
