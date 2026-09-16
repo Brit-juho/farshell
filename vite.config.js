@@ -110,30 +110,78 @@ export default defineConfig(({ mode }) => {
           // 스텁이 되고 shell.js가 273KB, 게다가 두 번째 청크(shell2.js)까지
           // 생겨 고정 이름이 충돌했다.
           //
-          // 그래서 "무엇이 지연 청크인가"를 자동 판정에 맡기지 않고 못박는다:
-          // - solid-js 런타임 + js/shell/ 아래 → `shell`(shell.js). bootApp() 뒤
-          //   바로 동적 import되므로 "지연"은 초기 번들 크기 게이트용이지 실제
-          //   로딩 시점을 크게 늦추지는 않는다.
-          // - N35: panels/viewer/ 아래(코드 뷰어, 6파일·1268줄) → `panels`
-          //   (panels.js, ADR-26이 지정한 이름). 이건 **진짜로** 열 때만 받는다
-          //   (panels/viewer-lazy.js). shell과 합치지 않은 이유: 합치면 코드
-          //   뷰어를 한 번도 안 연 세션도 HUD가 뜨는 순간 1268줄을 같이
-          //   받게 되어, 분리한 의미(드물게 쓰는 걸 정말 나중에 받는다)가 없어진다.
-          // 공유 모듈(core/*)은 entry 쪽에 남아 두 청크 다 거기서 import한다.
-          manualChunks(id) {
+          // ── 2.1.6: 화이트리스트에서 **블랙리스트로 뒤집었다** ────────────────
+          // 그전까지는 "지연시킬 것만 이름을 주고 나머지는 null(=Rollup 자동
+          // 판정)"이었는데, 그 구조에는 **조용한 함정**이 있었다: 지연 청크가
+          // 공유 모듈 하나(core/store·layout/store·term/session·theme…)를 새로
+          // import하는 순간 그 모듈이 청크로 승격되고, 거기 딸린 그래프 전부가
+          // 따라간다. 그러면 entry가 청크를 *정적으로* import하게 되어 지연이
+          // 지연이 아니게 되는데, **빌드는 성공하고 크기 게이트도 통과한다**
+          // (app.js는 오히려 작아지니까). 실측: snippets.js 하나를 지연시키자
+          // app.js가 0.04KB 스텁이 되고 panels.js가 215KB로 부풀었다.
+          // 그래서 이 함정을 `shell` 청크는 window 브리지로 우회하고 있었고
+          // (Rail.tsx가 core/store를 직접 import하지 못한다), 새 화면을 지연
+          // 청크로 뺄 때마다 같은 우회를 반복해야 했다.
+          //
+          // 이제 규칙은 하나다: **지연 대상만 열거하고, frontend/js 아래 나머지
+          // 전부를 `core`로 못박는다.** 명시적으로 배정된 모듈은 다른 청크로
+          // 끌려갈 수 없으므로, 지연 청크가 무엇을 import하든 승격이 구조적으로
+          // 일어나지 않는다. 결과로 지연 모듈은 **평범한 정적 import를 그대로
+          // 쓴다** — window 브리지도, 의존성 주입 배관도 필요 없다.
+          //
+          // 산출물 구성:
+          // - `app.js`  — main.js(부팅 배선)만. 수십 KB.
+          // - `core.js` — 상시 필요한 전부(스토어·PTY·레이아웃·터미널·테마).
+          //               app.js가 정적 import하므로 **초기 페이로드**다.
+          // - `shell.js`    — solid-js 런타임 + js/shell/(HUD·레일·독). bootApp() 직후.
+          // - `panels.js`   — dock 탭이 여는 화면(뷰어·소스컨트롤·파일·포트·큐).
+          // - `settings.js` — 설정 패널이 여는 화면(설정 9개 섹션·MCP·스니펫·사용량).
+          // - `theme-import.js` — 테마 파일을 실제로 가져올 때만.
+          // panels와 settings를 나눈 이유는 아래 해당 규칙의 주석에 있다.
+          //
+          // ⚠ 그래서 크기 게이트는 app.js 하나가 아니라 **app.js + core.js 합계**를
+          // 본다(frontend/tests/build-output.test.js). 상한의 뜻은 원래부터
+          // "초기 페이로드 300KiB"였고, 청크를 쪼갰다고 그 뜻이 느슨해지면 안 된다.
+          //
+          // ⚠ voice 빌드(별도 Rollup 실행, 같은 outDir)에는 적용하지 않는다 —
+          // 적용하면 voice 그래프에서도 core.js가 나와 app 빌드의 core.js를
+          // **덮어쓴다**(실측: 201KB → 10KB로 clobber). voice는 예나 지금이나
+          // 단일 산출물이라 청크가 필요 없다.
+          manualChunks: isVoice || isTest ? undefined : (id) => {
             const p = id.split('?')[0].replace(/\\/g, '/');
             if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
+            // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
+            // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
             if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
-            // 50 §4 dock 파일 탭 — 같은 이유로 지연 청크. app.js 300KiB 상한
-            // (build-output.test.js)에 실제로 걸려서 뺀 것이다.
             if (p.includes('/frontend/js/panels/files/')) return 'panels';
             if (p.includes('/frontend/js/panels/ports/')) return 'panels';
-            // 97번 1단계 — 설정 →「MCP」 섹션. 위 셋과 같은 이유로 지연 청크이고,
-            // 같은 이유로 **여기 못박아야 한다**: 이름을 안 주면 Rollup이
-            // core/api·ui/toast·layout/store를 공유 모듈로 판정해 끌어올리고
-            // app.js가 다시 스텁이 된다(이 파일 위 경고 그대로 실제로 재현했다).
-            if (p.endsWith('/frontend/js/panels/mcp.js')) return 'panels';
             if (p.endsWith('/frontend/js/queue.js')) return 'panels';
+            // ── `settings` 청크 ────────────────────────────────────────────
+            // dock 화면들과 **한 청크에 묶지 않는다.** 묶으면 「큐」탭 한 번
+            // 누르는 데 설정 9개 섹션·MCP·스니펫·사용량까지 같이 받는다 —
+            // 실측으로 드러난 문제다: panels.js가 79KB에서 119KB가 되자
+            // 큐 패널이 클릭 후 제때 안 떠서 실브라우저 스모크가 잡아냈다.
+            // 열리는 경로가 다르면(dock 탭 / 설정 패널) 청크도 나눈다.
+            //
+            // `panels/settings.js`·`panels/settings/**`만 해당한다.
+            // **`core/settings.js`(설정 스토어 싱글톤)는 아니다** — 아래 포괄
+            // 규칙이 core로 보낸다.
+            if (p.endsWith('/frontend/js/panels/settings.js')) return 'settings';
+            if (p.includes('/frontend/js/panels/settings/')) return 'settings';
+            if (p.endsWith('/frontend/js/panels/mcp.js')) return 'settings';
+            if (p.endsWith('/frontend/js/snippets.js')) return 'settings';
+            // 사용량 화면. **`panels/usage-badge.js`는 아니다** — rail 배지
+            // 폴링은 상시 동작이라 core에 남는다(endsWith라 안 걸린다).
+            if (p.endsWith('/frontend/js/panels/usage.js')) return 'settings';
+            // N14 테마 파서 — 「모양」 섹션이 **파일을 실제로 가져올 때만**
+            // 동적 import한다. 예전에는 이름을 안 줘도 Rollup 자동 판정이 별도
+            // 청크로 뽑아줬지만, 아래 포괄 규칙이 생긴 지금은 명시하지 않으면
+            // core로 빨려 들어가 상시 로드된다. panels에 합치지도 않는다 —
+            // 설정을 여는 것과 테마 파일을 가져오는 것은 빈도가 한참 다르다.
+            if (p.endsWith('/frontend/js/theme-import.js')) return 'theme-import';
+            // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야
+            // 한다(entry를 청크에 배정하면 Rollup이 app.js를 빈 껍데기로 만든다).
+            if (p.includes('/frontend/js/') && !p.endsWith('/frontend/js/main.js')) return 'core';
             return null;
           },
         },

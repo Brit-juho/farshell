@@ -20,9 +20,6 @@ import { renderAgentsSection } from './settings/sections/agents.js';
 import { renderSecuritySection } from './settings/sections/security.js';
 import { renderScrollbackSection } from './settings/sections/scrollback.js';
 import { renderAboutSection } from './settings/sections/about.js';
-import * as keymap from '../core/keymap.js';
-import { registerAction } from '../core/dom.js';
-import { register as registerKey } from '../core/keymap.js';
 import { getTabs, getActiveTabId } from '../layout/store.js';
 
 const PANEL_ID = 'vt-settings';
@@ -133,8 +130,5 @@ export function showSettings() {
   rerender();
 }
 
-
-registerAction('settings.show', showSettings);
-// S3에서 잡아둔 `Mod+,` 바인딩의 실제 주인이 이제 생겼다(그전엔 rail ⚙를
-// 눌러주는 임시 배선이었다).
-registerKey('settings', () => showSettings());
+// `settings.show` 액션과 `Mod+,` 바인딩 등록은 panels/settings-lazy.js에 있다
+// — 부팅 시점에 등록돼야 하므로 지연 청크 안으로 들어가면 안 된다.

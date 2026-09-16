@@ -40,6 +40,7 @@ jobs:
       - name: 산출물 형태 검증 (I2)
         run: |
           test -f frontend/dist/app.js
+          test -f frontend/dist/core.js
           test -f frontend/dist/app.css
           # F4: voice/index.js가 별도 lib entry(voice.js)로 독립 빌드된다 —
           # agent/status.js가 capability 확인 후 <script type="module">로 지연
@@ -47,9 +48,15 @@ jobs:
           test -f frontend/dist/voice.js
           # sw.js PRECACHE 계약: 파일명에 해시가 붙으면 오프라인 PWA가 죽는다.
           ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
-          SIZE=$(wc -c < frontend/dist/app.js)
-          echo "app.js = ${SIZE} bytes (상한 307200)"
+          # 2.1.6: 상한의 대상은 **초기 페이로드**다. 청크 규칙을 뒤집으면서
+          # app.js는 부팅 배선만 남은 2KB가 되고 상시 코드는 core.js로 갔다 —
+          # app.js만 재면 이 게이트가 아무것도 막지 못한다.
+          SIZE=$(( $(wc -c < frontend/dist/app.js) + $(wc -c < frontend/dist/core.js) ))
+          echo "app.js+core.js = ${SIZE} bytes (상한 307200)"
           [ "$SIZE" -le 307200 ]
+          # 지연이 지연으로 남아 있는지 — app.js가 core.js 말고 다른 청크를
+          # 정적 import하면 그 청크는 상시 로드로 승격된 것이다.
+          ! grep -E '^import[^;]*from *"\./(shell|panels|settings|theme-import)\.js"' frontend/dist/app.js
           VSIZE=$(wc -c < frontend/dist/voice.js)
           echo "voice.js = ${VSIZE} bytes (상한 307200)"
           [ "$VSIZE" -le 307200 ]

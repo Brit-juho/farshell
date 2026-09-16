@@ -30,12 +30,32 @@ execFileSync('npx', ['vite', 'build'], {
 });
 
 const appJs = fs.readFileSync(path.join(DIST, 'app.js'), 'utf8');
+const coreJs = fs.readFileSync(path.join(DIST, 'core.js'), 'utf8');
 const panelsJs = fs.readFileSync(path.join(DIST, 'panels.js'), 'utf8');
+const settingsJs = fs.readFileSync(path.join(DIST, 'settings.js'), 'utf8');
 const shellJs = fs.readFileSync(path.join(DIST, 'shell.js'), 'utf8');
 
-test('app.js가 300KiB 상한(307200B) 이내다 — CI(release.yml)와 같은 기준', () => {
-  const size = Buffer.byteLength(appJs, 'utf8');
-  assert.ok(size <= 307200, `app.js가 ${size}B — 상한 307200B를 넘었다`);
+// 2.1.6 — 상한의 대상이 app.js 하나에서 **초기 페이로드 합계**로 바뀌었다.
+// 청크 규칙을 뒤집으면서(vite.config.js) app.js는 부팅 배선만 남은 2KB가 되고
+// 상시 코드는 전부 core.js로 갔다. 여기서 app.js만 재면 상한이 아무것도
+// 막지 못한다 — 숫자 307200은 그대로 두되 **재는 대상**을 뜻에 맞춘다.
+const EAGER_LIMIT = 307200;
+
+test('초기 페이로드(app.js + core.js)가 300KiB 상한 이내다 — CI(release.yml)와 같은 기준', () => {
+  const size = Buffer.byteLength(appJs, 'utf8') + Buffer.byteLength(coreJs, 'utf8');
+  assert.ok(size <= EAGER_LIMIT, `app.js+core.js가 ${size}B — 상한 ${EAGER_LIMIT}B를 넘었다`);
+});
+
+test('app.js가 지연 청크를 정적으로 import하지 않는다 — "지연이 지연이 아닌" 상태의 유일한 시그니처', () => {
+  // 이 검사가 이 파일에서 가장 중요하다. 지연 청크가 공유 모듈을 끌어올리면
+  // entry가 그 청크를 정적 import하게 되는데, **빌드는 성공하고 크기 게이트도
+  // 통과한다**(app.js가 오히려 작아지니까). 실측한 사고: snippets.js 하나를
+  // 지연시키자 app.js가 0.04KB 스텁이 되고 panels.js가 215KB로 부풀었다.
+  const statics = [...appJs.matchAll(/^import\s[^;]*?from\s*["']\.\/([\w.-]+)["']/gm)].map((m) => m[1]);
+  for (const dep of statics) {
+    assert.strictEqual(dep, 'core.js',
+      `app.js가 ./${dep}를 정적 import한다 — 지연 청크가 상시 로드로 승격됐다`);
+  }
 });
 
 test('panels.js(코드 뷰어 지연 청크)가 core/store.js의 세션 싱글톤을 복제하지 않는다', () => {
@@ -55,9 +75,18 @@ test('panels.js가 core/dom.js의 액션 레지스트리를 복제하지 않는�
   assert.doesNotMatch(panelsJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
 });
 
-test('app.js는 실제 세션 싱글톤을 그대로 갖고 있다(위 검사가 "아예 없어져서" 통과한 게 아님을 확인)', () => {
-  assert.match(appJs, /const sessions\s*=\s*\{\}/);
-  assert.match(appJs, /let activeId\s*=\s*null/);
+test('core.js는 실제 세션 싱글톤을 그대로 갖고 있다(위 검사가 "아예 없어져서" 통과한 게 아님을 확인)', () => {
+  // 2.1.6 전에는 app.js가 상시 코드 전부였다. 지금은 core.js가 그 자리다.
+  assert.match(coreJs, /const sessions\s*=\s*\{\}/);
+  assert.match(coreJs, /let activeId\s*=\s*null/);
+});
+
+test('settings.js(설정·MCP·스니펫·사용량 지연 청크)도 core 싱글톤을 복제하지 않는다', () => {
+  // panels.js와 같은 규칙. 이 청크는 dock 화면과 **일부러 분리**돼 있다 —
+  // 「큐」탭 한 번에 설정 9개 섹션까지 받게 하지 않으려고(vite.config.js).
+  assert.doesNotMatch(settingsJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
+  assert.doesNotMatch(settingsJs, /let activeId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
+  assert.doesNotMatch(settingsJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
 });
 
 test('shell.js(HUD·헤더·워크트리 레일 지연 청크)도 core 싱글톤을 복제하지 않는다', () => {
