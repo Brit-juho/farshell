@@ -1903,6 +1903,48 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 }
 .vt-mcp-toggle:disabled { opacity:.5; cursor:progress; }
 
+/* 97번 2단계 — 그룹 태그. 토글 칩과 같은 규칙: 상태를 **색으로만 구분하지
+   않는다**(전부 켬/전부 끔/섞임을 글자로도 쓴다). 「섞임」은 세 번째 색이
+   아니라 점선 테두리로 구분한다 — 색을 하나 더 만들면 스킨 6개에서 대비를
+   다시 맞춰야 하고, 점선은 색 없이도 읽힌다. */
+.vt-mcp-groupbar { margin:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); }
+.vt-mcp-chips {
+  display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1);
+  margin-top:calc(var(--spacing) * 1);
+}
+.vt-mcp-groupchip {
+  padding:3px calc(var(--spacing) * 2);
+  border:1px solid var(--line); border-radius:var(--radius-full);
+  background:transparent; color:var(--sub);
+  font:500 var(--fs-2xs) var(--ui); cursor:pointer;
+}
+.vt-mcp-groupchip[data-state="on"] {
+  color:var(--color-st-working);
+  border-color:color-mix(in srgb, var(--color-st-working) 45%, transparent);
+  background:color-mix(in srgb, var(--color-st-working) 12%, transparent);
+}
+.vt-mcp-groupchip[data-state="mixed"] {
+  border-style:dashed;
+  color:var(--color-st-waiting);
+  border-color:color-mix(in srgb, var(--color-st-waiting) 55%, transparent);
+}
+.vt-mcp-groupchip:disabled { opacity:.5; cursor:not-allowed; }
+
+/* 서버 이름 줄 — 이름 왼쪽, 태그 편집 오른쪽. 좁은 폭에서는 접힌다. */
+.vt-mcp-servhead {
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:calc(var(--spacing) * 1);
+}
+.vt-mcp-tags { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 0.75); }
+.vt-mcp-tagchip, .vt-mcp-tagadd {
+  padding:1px calc(var(--spacing) * 1.25);
+  border:1px solid var(--line); border-radius:var(--radius-full);
+  background:transparent; color:var(--sub);
+  font:400 var(--fs-2xs) var(--ui); cursor:pointer;
+}
+.vt-mcp-tagadd { border-style:dashed; }
+.vt-mcp-tagchip:disabled, .vt-mcp-tagadd:disabled { opacity:.5; cursor:progress; }
+
 .vt-set-secrow {
   display:flex; align-items:flex-start; justify-content:space-between;
   gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) 0;

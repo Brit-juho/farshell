@@ -103,6 +103,16 @@ FarShell 서버(`server/main.py`)가 제공하는 REST/WebSocket 엔드포인트
 |--------|------|------|
 | GET | `/api/mcp?worktree=<id>` | claude/codex/agy에 정의된 MCP 서버 — 전역 + 그 워크트리의 로컬 스코프. **저장도 캐시도 하지 않고** 부를 때마다 실제 설정 파일을 읽으므로 터미널에서 직접 고친 것도 바로 보인다. 값은 절대 안 내려간다 — `env`/`headers`는 `{key, ref, literal}` 형태로만. `facts`(도구별 반영 시점)와 `errors`(파일별 파싱 실패, 전체 스캔을 중단시키지 않는다)도 함께 |
 | POST | `/api/mcp/toggle` | 승격 필요. 본문 `{tool, name, enabled, scope?, worktree?, shared?}` — **뒤집기가 아니라 목표 상태 지정**이라 같은 요청을 다시 보내도 안전하다. `status`는 `ok`(쓰고 확인까지), `unknown`(썼는데 확인 실패 — 200, 성공이라 말하지 않는다), `failed`(409, 파일 무변경) |
+| POST | `/api/mcp/group` | 승격 필요. 본문 `{tag, enabled, worktree?}` — 그 태그가 붙은 서버를 **전부 목표 상태로 맞춘다**(뒤집기가 아니다). 이미 맞은 항목은 파일을 아예 열지 않는다(`results[].skipped`). `status`는 `ok`/`partial`(일부 실패 — **어느 것이 실패했는지 `results`에 그대로 담는다**)/`unknown`/`failed`(409). 태그가 붙은 서버가 하나도 없으면 409 |
+| POST | `/api/mcp/tags` | 본문 `{name, tags:[…]}` — 서버 이름 하나의 그룹 태그를 **통째로 교체**. 빈 배열은 "태그 없음". **승격을 요구하지 않는다**: 태그는 FarShell 화면 안의 라벨이고 CLI 설정 파일을 전혀 건드리지 않는다(`~/.vt/mcp.json`, 0600). 태그는 **서버 이름**에 붙는다 — 도구·스코프별 항목마다가 아니라 |
+| POST | `/api/mcp/tags/rename` | 본문 `{from, to}` — 태그 이름을 모든 서버에서 한 번에 바꾼다. 오타 하나 때문에 그룹이 둘로 갈라진 채 "그룹 켜기"가 절반만 켜는 일을 막는다. 대상 이름이 이미 있으면 합쳐진다 |
+| POST | `/api/mcp/tags/delete` | 본문 `{tag}` — 태그를 모든 서버에서 뗀다. 서버 자체는 건드리지 않는다 |
+| GET | `/api/mcp/creds` | 자격증명 목록 + 우리가 심어둔 참조의 위치(`refs`). **원문은 절대 안 내려간다** — `masked`(`sk-1…9f2a`)만. `refs`는 §2-5의 일괄 회수 근거로, 이름 규칙이 아니라 **쓴 사실 자체**를 기록한 것이라 사용자가 환경변수 이름을 덮어써도 추적이 안 끊긴다 |
+| POST | `/api/mcp/creds` | 승격 필요(시크릿을 받는 경로). 본문 `{server, key, secret, env?, fingerprint?}`. `env`를 비우면 `FSH_MCP_<서버>_<키>`가 기본값. 값은 `~/.vt/mcp.json`(0600)에 **평문**으로 저장된다 — 암호화한다고 포장하지 않는다(§2-1: 무인 동작과 저장 상태 보호는 동시에 성립하지 않는다). 실제 방어는 "CLI 설정 파일에 값을 안 쓰는 것"에 있다 |
+| POST | `/api/mcp/creds/delete` | 승격 필요. 본문 `{id}` |
+| POST | `/api/mcp/deploy` | 승격 필요. 본문 `{name, defn, tool, scope?, shared?, env_map?, worktree?}` — 정의 하나를 그 도구·스코프로 **가져온다**. 값은 따라가지 않고 `env_map`이 가리킨 칸이 참조로 바뀐다(Claude `${VAR}` / Codex는 값 칸을 지우고 `env_vars`에 이름만 — §0-3, 통일하면 Codex에서 조용히 깨진다). **대체 후에도 값이 남으면 409로 거절하고 파일을 열지 않는다.** codex 대상은 거절한다 — `config.toml`에 새 테이블을 텍스트 수술로 만드는 건 위험이 달라 `codex mcp add`를 안내한다 |
+| GET | `/api/mcp/plugins` | 설치된 플러그인 목록(claude `enabledPlugins`, 전역 + 프로젝트). **"목록에 없음"과 "false"는 다르다** — 전자는 한 번도 건드린 적 없어 도구 기본값을 따르고, 후자는 명시적으로 끈 것이다(`explicit`로 구분). 플러그인 안에 MCP가 번들될 수 있어 MCP와 같은 "이름 + 스코프 + enabled" 메커니즘이다(§0-2) |
+| POST | `/api/mcp/plugins/toggle` | 승격 필요(플러그인 안의 MCP까지 켜지므로 에이전트 능력이 바뀐다). 본문 `{name, enabled, tool?, scope?, worktree?}`. **설치는 하지 않는다** — 목록에 없는 이름은 409로 거절한다(미설치 플러그인은 `enabled` 값만 바꿔도 안 켜지므로, 켠 척하면 안 된다) |
 
 ## 스크롤백 검색
 

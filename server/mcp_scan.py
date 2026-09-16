@@ -43,9 +43,19 @@ TOOL_FACTS = {
         "off_is_immediate": None,
         "scopes": ["global"],
     },
+    # opencode — 전역 + 프로젝트 파일이 **병합**된다. `enabled: true/false`로
+    # codex와 같은 방향이다. ⚠ 꺼둔 서버가 조용히 다시 켜지는 upstream 버그가
+    # 보고돼 있어(§6 4단계) "껐다"를 확정으로 말하지 않는다 — 이 화면의
+    # 값어치는 정직함이므로 그 사실을 그대로 표시한다.
+    "opencode": {
+        "hot_reload": False,
+        "apply": "다음 세션부터 — 실행 중인 창은 재시작해야 반영된다",
+        "off_is_immediate": None,
+        "off_warning": "opencode는 꺼둔 서버가 다시 켜지는 문제가 보고돼 있습니다 — 끈 뒤 실제로 꺼졌는지 확인하세요",
+    },
 }
 
-TOOLS = ("claude", "codex", "agy")
+TOOLS = ("claude", "codex", "agy", "opencode")
 
 
 def find_worktree(worktree_id: Optional[str]) -> Optional[dict]:

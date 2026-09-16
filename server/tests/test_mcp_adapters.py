@@ -263,3 +263,136 @@ def test_transport_is_classified(home):
         "s": {"command": "x"}, "h": {"url": "https://e.example"}, "u": {}}})
     kinds = {s["name"]: s["transport"] for s in mcp_adapters.scan_claude()["servers"]}
     assert kinds == {"s": "stdio", "h": "http", "u": "unknown"}
+
+
+# ── 참조 쓰기 (97번 3단계) ─────────────────────────────────────────────────
+#
+# §0-3의 핵심: **문법을 통일하면 Codex에서 조용히 깨진다.** Codex는 값 자리의
+# `${VAR}`를 확장하지 않고 리터럴 문자열 그대로 전달한다. 그래서 이 테스트들이
+# 지키는 것은 "각 도구의 문법이 서로 다르게 유지되는 것" 자체다.
+
+from pathlib import Path as _Path
+
+import mcp_adapters as _a
+
+
+def test_claude_writes_dollar_brace_in_the_value_slot():
+    out = _a.apply_refs("claude", {"command": "npx", "env": {"TOKEN": "sk-real"}},
+                        {"env": {"TOKEN": "FSH_MCP_N_TOKEN"}})
+    assert out["env"]["TOKEN"] == "${FSH_MCP_N_TOKEN}"
+
+
+def test_codex_removes_the_value_slot_and_lists_the_name():
+    """값 자리를 남겨두면 그게 곧 평문 유출이다 — Codex는 확장하지 않으므로."""
+    out = _a.apply_refs("codex", {"command": "npx", "env": {"TOKEN": "sk-real"}},
+                        {"env": {"TOKEN": "FSH_MCP_N_TOKEN"}})
+    assert "env" not in out, "codex 정의에 env 값 칸이 남았다"
+    assert out["env_vars"] == ["FSH_MCP_N_TOKEN"]
+
+
+def test_codex_never_gets_dollar_brace():
+    out = _a.apply_refs("codex", {"env": {"A": "x"}}, {"env": {"A": "V"}})
+    assert "${" not in json.dumps(out), "codex에 확장되지 않는 문법이 들어갔다"
+
+
+def test_apply_refs_does_not_mutate_the_input():
+    src = {"command": "npx", "env": {"TOKEN": "sk-real"}}
+    _a.apply_refs("codex", src, {"env": {"TOKEN": "V"}})
+    assert src["env"]["TOKEN"] == "sk-real"
+
+
+def test_headers_are_covered_too():
+    out = _a.apply_refs("claude", {"url": "https://x", "headers": {"Authorization": "Bearer sk"}},
+                        {"headers": {"Authorization": "FSH_MCP_X_AUTH"}})
+    assert out["headers"]["Authorization"] == "${FSH_MCP_X_AUTH}"
+
+
+def test_codex_merges_into_existing_env_vars_without_duplicates():
+    out = _a.apply_refs("codex", {"env_vars": ["OLD", "FSH_MCP_N_TOKEN"], "env": {"T": "x"}},
+                        {"env": {"T": "FSH_MCP_N_TOKEN"}})
+    assert out["env_vars"] == ["FSH_MCP_N_TOKEN", "OLD"]
+
+
+def test_has_literal_secret_is_the_last_gate():
+    assert _a.has_literal_secret({"env": {"TOKEN": "sk-real"}}) == ["env.TOKEN"]
+    assert _a.has_literal_secret({"env": {"TOKEN": "${V}"}}) == []
+    assert _a.has_literal_secret({"env": {"TOKEN": "$V"}}) == []
+
+
+def test_unmapped_fields_keep_their_literal_value_and_are_caught():
+    """매핑에서 빠진 칸은 값이 그대로 남는다 — 그걸 잡는 게 has_literal_secret다."""
+    out = _a.apply_refs("claude", {"env": {"A": "sk-a", "B": "sk-b"}},
+                        {"env": {"A": "V_A"}})
+    assert _a.has_literal_secret(out) == ["env.B"]
+
+
+# ── opencode (97번 4단계) ──────────────────────────────────────────────────
+#
+# opencode는 **고유 문법**을 쓴다: `{env:VAR}`. `${VAR}`는 동작하지 않는다.
+# 문법을 하나로 뭉치면 opencode의 정상 참조가 "값이 파일에 박혔다"는 거짓
+# 경고로 바뀌고, 반대로 안 되는 문법을 심어 조용히 깨진다.
+
+def test_opencode_reads_its_own_reference_syntax():
+    assert _a._classify_ref("{env:TOK}", style="brace_env") == ("TOK", False)
+
+
+def test_dollar_brace_is_a_literal_for_opencode():
+    """opencode에서 `${VAR}`는 확장되지 않는다 — 참조로 인정하면 거짓말이다."""
+    assert _a._classify_ref("${TOK}", style="brace_env") == (None, True)
+
+
+def test_opencode_writes_brace_env():
+    out = _a.apply_refs("opencode", {"env": {"T": "sk-real"}}, {"env": {"T": "V"}})
+    assert out["env"]["T"] == "{env:V}"
+    assert "${" not in json.dumps(out)
+
+
+def test_has_literal_secret_respects_the_tool_syntax():
+    """도구를 안 넘기면 opencode의 정상 참조가 유출로 잡혀 배포가 영원히 막힌다."""
+    defn = {"env": {"T": "{env:V}"}}
+    assert _a.has_literal_secret(defn, tool="opencode") == []
+    assert _a.has_literal_secret(defn, tool="claude") == ["env.T"]
+
+
+def test_ref_syntax_per_tool():
+    assert _a.ref_syntax("claude") == "dollar_brace"
+    assert _a.ref_syntax("agy") == "dollar_brace"
+    assert _a.ref_syntax("codex") == "name_only"
+    assert _a.ref_syntax("opencode") == "brace_env"
+
+
+def test_opencode_scan_reads_global_and_project(tmp_path, monkeypatch):
+    monkeypatch.setenv("VT_OPENCODE_HOME", str(tmp_path / "cfg"))
+    g = tmp_path / "cfg" / "opencode" / "opencode.json"
+    g.parent.mkdir(parents=True)
+    g.write_text(json.dumps({"mcp": {"a": {"command": "x"},
+                                     "off": {"command": "y", "enabled": False}}}))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "opencode.json").write_text(json.dumps({"mcp": {"b": {"command": "z"}}}))
+
+    out = _a.scan_opencode(str(repo), "wt1")
+    by = {s["name"]: s for s in out["servers"]}
+    assert set(by) == {"a", "off", "b"}
+    assert by["a"]["enabled"] is True and by["off"]["enabled"] is False
+    assert by["b"]["scope"] == "local" and by["b"]["shared"] is True
+    assert by["a"]["scope"] == "global"
+
+
+def test_opencode_scan_never_leaks_values(tmp_path, monkeypatch):
+    monkeypatch.setenv("VT_OPENCODE_HOME", str(tmp_path / "cfg"))
+    g = tmp_path / "cfg" / "opencode" / "opencode.json"
+    g.parent.mkdir(parents=True)
+    g.write_text(json.dumps({"mcp": {"a": {"command": "x",
+                                           "env": {"T": "sk-should-never-appear"}}}}))
+    out = _a.scan_opencode(None, None)
+    assert "sk-should-never-appear" not in json.dumps(out, ensure_ascii=False)
+    assert out["servers"][0]["env"][0]["key"] == "T"
+
+
+def test_opencode_project_file_warns_about_committing_with_its_own_syntax():
+    """공유 파일 경고가 `${VAR}`를 예시로 들면 opencode 사용자에겐 틀린 조언이다."""
+    entry = _a._entry(name="n", tool="opencode", scope="local",
+                      path=_Path("/repo/opencode.json"), enabled=True,
+                      defn={"env": {"T": "sk-literal"}}, expands=True, shared=True)
+    assert any("{env:VAR}" in n for n in entry["notes"])

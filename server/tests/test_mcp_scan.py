@@ -60,7 +60,7 @@ def test_unknown_worktree_id_falls_back_to_global(home, wt):
 
 def test_facts_are_included_for_each_tool(home, wt):
     facts = mcp_scan.scan()["facts"]
-    assert set(facts) == {"claude", "codex", "agy"}
+    assert set(facts) == {"claude", "codex", "agy", "opencode"}
     assert facts["claude"]["hot_reload"] is False
     assert facts["codex"]["hot_reload"] is False
 
