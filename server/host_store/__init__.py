@@ -59,7 +59,6 @@ VALID_LEVELS = {LEVEL_VIEW, LEVEL_CONTROL}
 DEFAULT_LEVEL = LEVEL_VIEW  # 기본은 항상 안전한 쪽 — control은 명시적으로 켜야 한다
 
 PAIR_TICKET_TTL = 300      # 5분 — auth.TICKET_TTL(기기 등록 티켓)과 같은 관례
-SIGNATURE_WINDOW_SEC = 60  # 요청 서명의 유효 시간창(양쪽 시계 오차 보정 후 기준)
 ID_MAX_LEN = 40
 LABEL_MAX_LEN = 60
 
@@ -406,116 +405,37 @@ def revoke_all() -> dict:
     return {"peers": n_p, "grants": n_g}
 
 
-# --- 요청 서명 -------------------------------------------------------------------
-
-
-def sign_request(secret: str, method: str, path: str, ts: int, nonce: str,
-                 body_hash: str = "") -> str:
-    """서명 대상에 method와 path를 포함한다 — 서명 하나를 다른 엔드포인트에
-    돌려쓰지 못하게(예: view용 GET 서명을 control용 POST에 재사용) 막는다.
-
-    A2(파일 전송)부터 **본문 해시**도 서명할 수 있다. 지금까지의 엔드포인트는
-    본문이 작고 JSON이라 method+path만으로 충분했지만, 파일 바이트는 터널을
-    지나가는 큰 덩어리라 "서명은 맞는데 내용이 바뀐" 경우를 구분할 수 있어야
-    한다. `body_hash`가 빈 문자열이면 **서명 문자열이 예전과 글자 하나까지
-    같다** — 구버전 상대와의 호환이 깨지지 않는다(그래서 조건부로 붙인다).
-    """
-    payload = f"{method.upper()}\n{path}\n{ts}\n{nonce}"
-    if body_hash:
-        payload += f"\n{body_hash}"
-    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-
-
-def verify_signature(secret: str, method: str, path: str, ts: int, nonce: str,
-                     sig: str, now: float | None = None, body_hash: str = "") -> bool:
-    now = time.time() if now is None else now
-    if abs(now - ts) > SIGNATURE_WINDOW_SEC:
-        return False
-    return hmac.compare_digest(
-        sign_request(secret, method, path, ts, nonce, body_hash), sig or "")
-
-
-class NonceCache:
-    """재생 공격 차단 — 서명 창(60초) 안에서 같은 nonce를 두 번 받지 않는다.
-
-    유효 시간창이 짧아 메모리 상한이 자연히 잡힌다(창 밖 항목은 어차피 서명
-    검증에서 먼저 떨어지므로 지워도 안전). auth._Lockout의 _evict_stale과 같은 패턴.
-    """
-
-    def __init__(self, window: float = SIGNATURE_WINDOW_SEC):
-        self._window = window
-        self._seen: dict[str, float] = {}
-
-    def check_and_add(self, key: str, now: float | None = None) -> bool:
-        """처음 보는 nonce면 True(통과), 이미 본 것이면 False(거부)."""
-        now = time.time() if now is None else now
-        self._evict(now)
-        if key in self._seen:
-            return False
-        self._seen[key] = now
-        return True
-
-    def _evict(self, now: float) -> None:
-        cutoff = now - self._window * 2
-        for k in [k for k, t in self._seen.items() if t < cutoff]:
-            self._seen.pop(k, None)
-
-
-# --- 감사 로그 -------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 하위 모듈 — 변경 주기가 다른 둘을 갈랐다
+# ---------------------------------------------------------------------------
 #
-# peer 요청은 "내 맥 밖에서 들어온 것"이라 무슨 일이 있었는지 남는 기록이 있어야 한다.
-# 공유 링크(routes/share.py)가 실패를 logger.warning으로만 남기는 것과 달리, 이쪽은
-# 성공까지 전부 남긴다 — 나중에 "저 맥이 언제 뭘 봤나"를 되짚을 수 있어야 하기 때문.
-# 한 줄 JSON(JSONL) — 회전은 scrollback_persist와 같은 방식으로 단순하게.
-
-AUDIT_MAX_BYTES = 5 * 1024 * 1024
-
-
-def _audit_path() -> Path:
-    return _state_dir() / "peer_audit.log"
-
-
-def audit(peer_id: str, action: str, ok: bool, detail: str = "") -> None:
-    """peer 요청 1건 기록. 실패해도 요청 처리를 막지 않는다(로그가 본체가 아니다)."""
-    line = json.dumps({
-        "ts": int(time.time()), "peer": peer_id, "action": action,
-        "ok": bool(ok), "detail": detail[:200],
-    }, ensure_ascii=False)
-    try:
-        p = _audit_path()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        _chmod_quiet(p.parent, 0o700)
-        if p.is_file() and p.stat().st_size >= AUDIT_MAX_BYTES:
-            os.replace(str(p), str(p.with_suffix(".log.1")))
-        fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        with os.fdopen(fd, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except OSError as e:
-        logger.warning(f"peer 감사 로그 기록 실패: {e}")
-
-
-def read_audit(peer_id: str = "", limit: int = 50) -> list[dict]:
-    """최근 기록부터 limit건. peer_id를 주면 그 상대 것만."""
-    p = _audit_path()
-    if not p.is_file():
-        return []
-    try:
-        lines = p.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return []
-    out = []
-    for line in reversed(lines):
-        try:
-            rec = json.loads(line)
-        except ValueError:
-            continue
-        if peer_id and rec.get("peer") != peer_id:
-            continue
-        out.append(rec)
-        if len(out) >= limit:
-            break
-    return out
-
+# 원격 기능이 늘어도(2.2 이월만 넷) 이 파일은 거의 안 늘어난다. 늘어나는 건
+# `routes/peer.py`의 capability 표면이다. 그래서 여기서 갈라야 할 것은 "크기"가
+# 아니라 **성격**이었다:
+#
+# - `signing.py` — 두 호스트가 **합의한 규칙**이다. 한쪽만 바꾸면 통신이 끊긴다.
+#                  grants/peers를 어떻게 저장하느냐와는 아무 상관이 없다.
+# - `audit.py`   — "누가 언제 무엇을 했는가". 원격 기능이 늘수록 더 중요해지는데
+#                  저장소 코드에 섞여 있으면 그 사실이 안 보인다.
+#
+# 남은 것(자기 정체성·페어링 티켓·grants·peers)은 전부 `~/.vt/hosts.json` 하나를
+# 놓고 도는 CRUD라 함께 있는 게 맞다.
+#
+# ⚠ `auth` 패키지와 달리 여기엔 monkeypatch 함정이 없다 — 경로를 모듈 전역에
+# 굳히지 않고 `VT_STATE_DIR`를 호출 시점에 읽기 때문이다(테스트도 환경변수로만
+# 격리한다). 그래서 재수출이 안전하다.
+from host_store.signing import (  # noqa: E402,F401
+    SIGNATURE_WINDOW_SEC,
+    NonceCache,
+    sign_request,
+    verify_signature,
+)
+from host_store.audit import (  # noqa: E402,F401
+    AUDIT_MAX_BYTES,
+    _audit_path,
+    audit,
+    read_audit,
+)
 
 # --- CLI (`fsh host`) -------------------------------------------------------------
 #
@@ -725,6 +645,3 @@ def host_store_self_id_hint() -> str:
     return get_self()["id"]
 
 
-if __name__ == "__main__":
-    import sys
-    sys.exit(_cli(sys.argv[1:]))
