@@ -92,7 +92,7 @@ fsh의 모든 클라이언트는 격리된 tmux 소켓 `-L fsh`(`VT_TMUX_SOCKET`
 **인증 / 안전**
 | 파일 | 책임 |
 |---|---|
-| `auth.py` | 웹 로그인(scrypt 비밀번호 해시 + HMAC 세션 쿠키), 기기 화이트리스트 + TOTP 게이트, 1회용 등록 티켓 |
+| `auth/` | 웹 로그인(scrypt 비밀번호 해시 + HMAC 세션 쿠키), 기기 화이트리스트 + TOTP 게이트, 1회용 등록 티켓 |
 | `crypto_channel.py` | E2E WebSocket 암호화(X25519 임시 키 + Ed25519 identity 서명 + NaCl SecretBox) — 클라이언트 측 짝은 `frontend/js/term/e2e.js` |
 | `fsguard.py` | 코드 뷰어의 파일 열람 루트 제한·경로 검증·거부 목록의 단일 진실 원천 |
 | `safe_mode.py` | 설정 가능한 위험 명령 목록을 사전 차단 |
@@ -405,7 +405,7 @@ PID는 `/tmp/vt-pids/{server,tunnel,voice}.pid`에 저장됨. `fsh stop`이 모�
 |---|---|---|
 | 전송 | cloudflared HTTPS 터널 | — |
 | 전송 (대안) | Tailscale WireGuard VPN + IP 화이트리스트 (D9, `--network tailscale`) | Tailscale 자체 신뢰 필요, tailnet ACL 별도 관리 |
-| 사람 인증 | 비밀번호(scrypt 해시) → 24h HMAC 서명 세션 쿠키(`server/auth.py`) | — |
+| 사람 인증 | 비밀번호(scrypt 해시) → 24h HMAC 서명 세션 쿠키(`server/auth/`) | — |
 | 기계 인증 | `VT_AUTH_TOKEN`을 `?token=` 또는 `Authorization: Bearer`로 — 데몬/QR/URL용 | 첫 사용 시 쿠키로 교환되고 URL에서 제거됨(Phase 9 #8) |
 | 기기 게이트 | 처음 보는 기기용 TOTP 게이트(옵트인, `fsh otp setup`), 이후 90일 `vt_device` 쿠키 | `fsh otp setup`으로 명시 연동 전까지 완전히 비활성 — 그동안 기기 등록은 조용히 쌓임 |
 | 크로스사이트 | `OriginGuardMiddleware`가 인증보다 먼저 Origin이 자기 자신 아닌 요청/WS 전부 거부 | 비밀번호/OTP만으로는 못 막는 유일한 경로 |

@@ -50,7 +50,7 @@ from typing import Optional
 # FastAPI가 이걸 "쿼리 파라미터"가 아니라 Request 객체 주입으로 인식한다
 # (`from __future__ import annotations`로 문자열 annotation이 되므로,
 # get_type_hints가 이 이름을 이 모듈 전역에서 찾을 수 있어야 함).
-# auth.py는 서버 없이도 `python auth.py <cmd>`로 단독 실행되지만, 그 CLI 경로는
+# auth는 서버 없이도 `python -m auth <cmd>`로 단독 실행되지만, 그 CLI 경로는
 # require_elevated를 호출하지 않으므로 starlette 미설치 환경에서도 문제없다 —
 # 다만 이 프로젝트는 fastapi/starlette가 항상 설치돼 있는 걸 전제한다(requirements-core.txt).
 from starlette.requests import Request
@@ -91,59 +91,67 @@ PASSWORD_LOCK_SEC = 600  # OTP와 동일한 정책 — 같은 파일 안에서 �
 # 때리는 극단적 경우에도 메모리가 무한 증가하진 않게 한다(개인용 단일 프로세스 전제).
 _MAX_LOCKOUT_KEYS = 1000
 
-
 # ---------------------------------------------------------------------------
-# 상태 파일 I/O (0600 보장 + 원자적 교체)
+# 하위 모듈 — **설정 상수 정의가 끝난 뒤에 가져온다.**
 # ---------------------------------------------------------------------------
-
-def _read_json(path: Path, default):
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return default
-
-
-def _write_json_secure(path: Path, data) -> None:
-    """0600으로 원자적 저장. 디렉토리도 0700으로 맞춘다."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(path.parent, 0o700)
-    except OSError:
-        pass
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(str(tmp), str(path))
-
-
-# ---------------------------------------------------------------------------
-# 비밀번호 해시 (단방향)
-# ---------------------------------------------------------------------------
-
-def hash_password(pw: str) -> str:
-    """평문 비밀번호 → 저장용 scrypt 해시 문자열. 랜덤 salt 포함(self-describing)."""
-    salt = secrets.token_bytes(16)
-    dk = hashlib.scrypt(pw.encode("utf-8"), salt=salt, n=_N, r=_R, p=_P, dklen=_DKLEN)
-    return f"scrypt${_N}${_R}${_P}${salt.hex()}${dk.hex()}"
-
-
-def verify_password(pw: str, stored: str) -> bool:
-    """입력 비밀번호가 저장된 해시와 일치하는지 constant-time 비교."""
-    try:
-        algo, n, r, p, salt_hex, hash_hex = stored.split("$")
-        if algo != "scrypt":
-            return False
-        dk = hashlib.scrypt(
-            pw.encode("utf-8"),
-            salt=bytes.fromhex(salt_hex),
-            n=int(n), r=int(r), p=int(p),
-            dklen=len(hash_hex) // 2,
-        )
-        return hmac.compare_digest(dk.hex(), hash_hex)
-    except Exception:
-        return False
-
+#
+# 774줄 한 파일이던 것을 네 하위 도메인(비밀번호·기기등록·TOTP·티켓)과
+# 공통 조각(파일 I/O·잠금)으로 갈랐다. 서로 얽혀 있는 핵심(세션 서명·통합
+# 인증 판정·WS 워치독·CLI)은 여기 남는다 — 그 넷은 서로를 직접 부르므로
+# 억지로 떼면 모듈 경계가 호출 그래프를 가로지르기만 한다.
+#
+# ⚠ **순서가 계약이다.** 하위 모듈은 `import auth` 후 `auth.DEVICES_PATH`처럼
+# 호출 시점에 읽지만, lockout.py만은 모듈 평가 시점에 `auth.OTP_MAX_FAILS`를
+# 읽어 잠금 인스턴스를 만든다. 그래서 상수가 **위에서 이미 정의돼 있어야**
+# 한다. 이 import 블록을 파일 위쪽으로 올리면 AttributeError가 난다.
+#
+# ⚠ 경로를 `from auth import DEVICES_PATH`로 당겨가면 안 된다 — 값이 굳어서
+# 테스트의 monkeypatch가 안 먹고, **테스트가 통과하면서 사용자의 실제 ~/.vt를
+# 건드린다.** server/tests/test_auth_isolation.py가 그 성질을 확인한다.
+from auth import fileio  # noqa: E402
+from auth.fileio import _read_json, _write_json_secure  # noqa: E402,F401
+from auth.password import hash_password, verify_password  # noqa: E402
+from auth.lockout import (  # noqa: E402,F401
+    _KeyedLockout,
+    # 잠금 인스턴스 자체도 노출한다 — 테스트가 내부 상태를 직접 조작한다.
+    # **같은 객체**를 가리키므로 `auth._otp_lockout._failures[...] = …` 같은
+    # 변형은 그대로 먹는다. 다만 `setattr(auth, "_otp_lockout", …)`처럼
+    # **다시 묶는** 건 안 먹는다 — 그럴 땐 lockout.reset_all()을 쓸 것.
+    _otp_lockout,
+    _password_lockout,
+    reset_all as _reset_lockouts,
+    otp_failure_count,
+    otp_lock_remaining,
+    otp_note_failure,
+    otp_reset_failures,
+    password_lock_remaining,
+    password_note_failure,
+    password_reset_failures,
+)
+from auth.devices import (  # noqa: E402,F401
+    _find_device,
+    _load_devices,
+    _save_devices,
+    list_devices,
+    register_device,
+    rename_device,
+    revoke_device,
+    verify_device,
+)
+from auth.totp import (  # noqa: E402,F401
+    _hotp,
+    _totp_state,
+    totp_disable,
+    totp_enabled,
+    totp_new_secret,
+    totp_uri,
+    verify_totp,
+)
+from auth.tickets import (  # noqa: E402,F401
+    _load_tickets,
+    consume_ticket,
+    issue_ticket,
+)
 
 # ---------------------------------------------------------------------------
 # 서명 세션 쿠키
@@ -284,325 +292,6 @@ def require_elevated(request: Request) -> None:
     if session_elevated_until(token) <= int(time.time()):
         raise HTTPException(status_code=401, detail={"error": "elevation_required"})
 
-
-# ---------------------------------------------------------------------------
-# 등록 기기 (화이트리스트)
-# ---------------------------------------------------------------------------
-
-def _load_devices() -> list:
-    data = _read_json(DEVICES_PATH, {})
-    devices = data.get("devices") if isinstance(data, dict) else None
-    return devices if isinstance(devices, list) else []
-
-
-def _save_devices(devices: list) -> None:
-    _write_json_secure(DEVICES_PATH, {"version": 1, "devices": devices})
-
-
-def _find_device(device_id: str) -> Optional[dict]:
-    for d in _load_devices():
-        if d.get("id") == device_id:
-            return d
-    return None
-
-
-def register_device(label: str = "") -> tuple[str, str]:
-    """새 기기 등록 → (쿠키에 심을 secret 원문, device_id).
-
-    저장하는 건 sha256 해시뿐이다. devices.json이 통째로 새도 쿠키를 만들어낼 수 없다
-    — 비밀번호를 scrypt 해시로만 두는 것과 같은 원칙.
-    """
-    secret = secrets.token_hex(32)
-    digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-    device_id = digest[:16]
-    now = int(time.time())
-    devices = [d for d in _load_devices() if d.get("id") != device_id]
-    devices.append({
-        "id": device_id,
-        "hash": digest,
-        "label": (label or "기기")[:60],
-        "added_at": now,
-        "last_seen": now,
-    })
-    _save_devices(devices)
-    return secret, device_id
-
-
-def verify_device(secret: str) -> Optional[dict]:
-    """`vt_device` 쿠키 값 → 등록된 기기 레코드. 미등록/만료면 None."""
-    if not secret:
-        return None
-    digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-    now = int(time.time())
-    devices = _load_devices()
-    for d in devices:
-        stored = d.get("hash", "")
-        if stored and hmac.compare_digest(stored, digest):
-            if now - int(d.get("added_at", now)) > DEVICE_TTL:
-                return None
-            # last_seen은 하루 단위로만 갱신 — 매 요청 디스크 쓰기를 피한다.
-            if now - int(d.get("last_seen", 0)) > 86400:
-                d["last_seen"] = now
-                try:
-                    _save_devices(devices)
-                except OSError:
-                    pass
-            return d
-    return None
-
-
-def list_devices() -> list:
-    """등록 기기 목록(해시 제외)."""
-    return [
-        {k: v for k, v in d.items() if k != "hash"}
-        for d in sorted(_load_devices(), key=lambda x: x.get("added_at", 0))
-    ]
-
-
-def rename_device(prefix: str, label: str) -> Optional[dict]:
-    """id 접두사로 기기 별명 변경. 못 찾거나 여럿이면 None.
-
-    자동 라벨(`_device_label`이 UA에서 뽑는 "iPhone"/"Mac")만으로는 같은 기종이
-    여럿이면 구분이 안 된다 — 목록에서 어느 행이 어느 기기인지 알 수 있어야
-    `fsh device revoke`를 안심하고 쓸 수 있다.
-
-    **CLI 전용이다.** 웹에서 바꾸게 하지 않는다 — routes/security.py가 "보안 탭은
-    읽기 전용"을 불변식으로 두고 있고(프런트 테스트로도 고정), 별명이 인증 수단은
-    아니지만 그 탭에 입력칸을 하나 여는 순간 그 불변식이 무너진다.
-    """
-    prefix = (prefix or "").strip().lower()
-    if not prefix:
-        return None
-    devices = _load_devices()
-    hits = [d for d in devices if d.get("id", "").startswith(prefix)]
-    if len(hits) != 1:
-        return None
-    hits[0]["label"] = (label or "").strip()[:60] or hits[0].get("label", "기기")
-    _save_devices(devices)
-    return {k: v for k, v in hits[0].items() if k != "hash"}
-
-
-def revoke_device(prefix: str) -> list:
-    """id 접두사로 기기 폐기. 폐기된 기기 목록 반환(해당 기기의 세션도 함께 죽는다)."""
-    prefix = (prefix or "").strip().lower()
-    if not prefix:
-        return []
-    devices = _load_devices()
-    removed = [d for d in devices if d.get("id", "").startswith(prefix)]
-    if removed:
-        _save_devices([d for d in devices if d not in removed])
-    return [{k: v for k, v in d.items() if k != "hash"} for d in removed]
-
-
-# ---------------------------------------------------------------------------
-# TOTP — 새 기기 등록 관문 (연동 전까지는 완전 비활성)
-# ---------------------------------------------------------------------------
-
-def _totp_state() -> dict:
-    st = _read_json(TOTP_PATH, {})
-    return st if isinstance(st, dict) else {}
-
-
-def totp_enabled() -> bool:
-    """`vt otp setup`으로 실제 연동이 끝났을 때만 True.
-
-    이 값이 False인 동안은 OTP 관련 동작이 전부 우회되고 기존과 동일하게 굴러간다.
-    """
-    st = _totp_state()
-    return bool(st.get("secret")) and st.get("enabled", True) is not False
-
-
-def totp_new_secret() -> str:
-    """새 TOTP 시크릿(base32) 생성 + 저장. 기존 시크릿은 덮어쓴다."""
-    secret = base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
-    _write_json_secure(TOTP_PATH, {
-        "secret": secret,
-        "enabled": True,
-        "last_counter": -1,
-        "created_at": int(time.time()),
-    })
-    return secret
-
-
-def totp_disable() -> bool:
-    """OTP 연동 해제. 이후 새 기기도 비밀번호만으로 등록된다."""
-    if not TOTP_PATH.exists():
-        return False
-    try:
-        TOTP_PATH.unlink()
-        return True
-    except OSError:
-        return False
-
-
-def totp_uri(secret: str, account: str = "", issuer: str = "FarShell") -> str:
-    """인증 앱 등록용 otpauth:// URI (QR로 뿌린다)."""
-    from urllib.parse import quote
-    acct = account or (os.environ.get("USER") or "fsh")
-    return (
-        f"otpauth://totp/{quote(issuer)}:{quote(acct)}"
-        f"?secret={secret}&issuer={quote(issuer)}&algorithm=SHA1&digits=6&period=30"
-    )
-
-
-def _hotp(secret_b32: str, counter: int) -> str:
-    key = base64.b32decode(secret_b32.upper() + "=" * (-len(secret_b32) % 8))
-    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
-    offset = digest[-1] & 0x0F
-    code = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
-    return f"{code % 1_000_000:06d}"
-
-
-def verify_totp(code: str) -> bool:
-    """TOTP 검증 — ±1 스텝(±30초) 허용 + 재사용 차단.
-
-    마지막으로 성공한 카운터를 저장해 같거나 더 오래된 코드를 거부한다.
-    어깨너머로 본 코드나 로그에 남은 코드를 그대로 되쓰는 걸 막는다.
-    """
-    st = _totp_state()
-    secret = st.get("secret")
-    if not secret:
-        return False
-    digits = re.sub(r"\D", "", code or "")
-    if len(digits) != 6:
-        return False
-    counter = int(time.time()) // 30
-    last = int(st.get("last_counter", -1))
-    for offset in (0, -1, 1):
-        c = counter + offset
-        if c <= last:
-            continue  # 이미 쓴 코드 — 리플레이
-        if hmac.compare_digest(_hotp(secret, c), digits):
-            st["last_counter"] = c
-            _write_json_secure(TOTP_PATH, st)
-            return True
-    return False
-
-
-# 실패 잠금 — 단일 프로세스 전제(개인용)라 메모리에만 둔다.
-#
-# D15: 예전엔 OTP 실패를 프로세스 전역 리스트(단일 키)로 추적해서, 한 클라이언트의
-# 실패한 시도가 모든 클라이언트의 새 기기 등록까지 함께 잠갔다(가용성 문제 — 스크립트화된
-# 재시도나 오설정 클라이언트 하나가 본인 것 아닌 등록까지 막을 수 있었다). 키(보통 클라이언트
-# IP)별로 분리해서, 한 클라이언트의 실패가 다른 클라이언트를 잠그지 않게 한다.
-# D14: 같은 구조를 비밀번호 재시도 잠금에도 그대로 재사용한다 — OTP만 잠금이 있고 비밀번호는
-# 무제한 시도가 가능했던 비일관성을 없앤다.
-class _KeyedLockout:
-    def __init__(self, max_fails: int, lock_sec: int):
-        self._max_fails = max_fails
-        self._lock_sec = lock_sec
-        self._failures: dict[str, list[float]] = {}
-
-    def lock_remaining(self, key: str) -> int:
-        fails = self._failures.get(key) or []
-        if len(fails) < self._max_fails:
-            return 0
-        elapsed = time.time() - fails[-1]
-        return max(0, int(self._lock_sec - elapsed))
-
-    def note_failure(self, key: str) -> None:
-        now = time.time()
-        fails = [t for t in self._failures.get(key, []) if now - t < self._lock_sec]
-        fails.append(now)
-        self._failures[key] = fails
-        self._evict_stale(now)
-
-    def reset_failures(self, key: str) -> None:
-        self._failures.pop(key, None)
-
-    def failure_count(self, key: str) -> int:
-        return len(self._failures.get(key) or [])
-
-    def _evict_stale(self, now: float) -> None:
-        """키 수가 상한을 넘으면 이미 잠금이 풀린(만료된) 키부터 정리한다."""
-        if len(self._failures) <= _MAX_LOCKOUT_KEYS:
-            return
-        self._failures = {
-            k: v for k, v in self._failures.items()
-            if v and now - v[-1] < self._lock_sec
-        }
-
-
-_otp_lockout = _KeyedLockout(OTP_MAX_FAILS, OTP_LOCK_SEC)
-_password_lockout = _KeyedLockout(PASSWORD_MAX_FAILS, PASSWORD_LOCK_SEC)
-
-
-def otp_lock_remaining(key: str) -> int:
-    """key(보통 클라이언트 IP)가 잠금 중이면 남은 초, 아니면 0."""
-    return _otp_lockout.lock_remaining(key)
-
-
-def otp_note_failure(key: str) -> None:
-    _otp_lockout.note_failure(key)
-
-
-def otp_reset_failures(key: str) -> None:
-    _otp_lockout.reset_failures(key)
-
-
-def otp_failure_count(key: str) -> int:
-    return _otp_lockout.failure_count(key)
-
-
-def password_lock_remaining(key: str) -> int:
-    """key(보통 클라이언트 IP)가 잠금 중이면 남은 초, 아니면 0."""
-    return _password_lockout.lock_remaining(key)
-
-
-def password_note_failure(key: str) -> None:
-    _password_lockout.note_failure(key)
-
-
-def password_reset_failures(key: str) -> None:
-    _password_lockout.reset_failures(key)
-
-
-# ---------------------------------------------------------------------------
-# 1회용 기기 등록 티켓 (QR)
-# ---------------------------------------------------------------------------
-
-def _load_tickets() -> list:
-    data = _read_json(TICKETS_PATH, {})
-    items = data.get("tickets") if isinstance(data, dict) else None
-    now = int(time.time())
-    return [t for t in (items or []) if int(t.get("exp", 0)) > now]
-
-
-def issue_ticket(label: str = "") -> str:
-    """1회용 기기 등록 티켓 발급 → URL/QR에 실을 원문 반환.
-
-    QR을 띄우는 시점에 맥에 대한 물리적 접근이 이미 증명된 것이므로, 스캔을
-    기기 등록 승인으로 인정한다(상시 토큰을 URL에 박는 기존 방식의 대체).
-    """
-    raw = secrets.token_urlsafe(24)
-    tickets = _load_tickets()
-    tickets.append({
-        "hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
-        "exp": int(time.time()) + TICKET_TTL,
-        "label": (label or "")[:60],
-    })
-    _write_json_secure(TICKETS_PATH, {"version": 1, "tickets": tickets})
-    return raw
-
-
-def consume_ticket(raw: str) -> Optional[dict]:
-    """티켓 검증 + 즉시 소멸(1회용). 유효하면 티켓 레코드, 아니면 None."""
-    if not raw:
-        return None
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    tickets = _load_tickets()
-    hit = None
-    for t in tickets:
-        if hmac.compare_digest(t.get("hash", ""), digest):
-            hit = t
-            break
-    if hit is None:
-        return None
-    tickets.remove(hit)
-    _write_json_secure(TICKETS_PATH, {"version": 1, "tickets": tickets})
-    return hit
-
-
 # ---------------------------------------------------------------------------
 # 통합 인증 판정
 # ---------------------------------------------------------------------------
@@ -656,7 +345,6 @@ def check_request(token: str) -> bool:
         return True
     return False
 
-
 # ---------------------------------------------------------------------------
 # WS 세션 만료 재검사 (실사용 중 발견 — 2026-09-11)
 # ---------------------------------------------------------------------------
@@ -700,9 +388,8 @@ def spawn_session_watchdog(ws, token: str, interval: float = 60.0):
 
     return asyncio.create_task(_loop())
 
-
 # ---------------------------------------------------------------------------
-# CLI — bin/vt가 서버 없이 직접 호출한다 (python auth.py <cmd>)
+# CLI — bin/fsh가 서버 없이 직접 호출한다 (python -m auth <cmd>). 진입점은 __main__.py
 # ---------------------------------------------------------------------------
 
 def _cli(argv: list) -> int:
@@ -768,7 +455,3 @@ def _cli(argv: list) -> int:
     print(f"unknown command: {cmd}", file=__import__("sys").stderr)
     return 2
 
-
-if __name__ == "__main__":
-    import sys
-    sys.exit(_cli(sys.argv[1:]))

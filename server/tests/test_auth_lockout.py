@@ -21,6 +21,10 @@ import main
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     importlib.reload(auth_mod)  # conftest가 비운 env 기준으로 깨끗하게 재로딩
+    # auth가 패키지가 된 뒤로 reload는 `__init__`만 다시 돌린다 — 잠금 카운터를
+    # 소유한 auth/lockout.py는 sys.modules에 남으므로 앞 테스트의 실패 횟수가
+    # 새어 들어온다(실측: 첫 로그인부터 429). 무엇을 비우는지 이름으로 말한다.
+    auth_mod.lockout.reset_all()
 
     state_dir = tmp_path / "vt"
     monkeypatch.setattr(auth_mod, "STATE_DIR", state_dir)
@@ -118,7 +122,9 @@ def test_lockout_is_scoped_per_ip_not_global(client):
 
 
 def test_otp_lock_key_isolated_per_ip(client, monkeypatch):
-    monkeypatch.setattr(auth_mod, "_otp_lockout", auth_mod._KeyedLockout(auth_mod.OTP_MAX_FAILS, auth_mod.OTP_LOCK_SEC))
+    # 인스턴스를 갈아끼우면 auth/lockout.py 안의 이름은 옛 객체를 계속 가리킨다
+    # — 카운터를 비우는 쪽이 의도에 정확히 맞는다.
+    auth_mod.lockout.reset_all()
     auth_mod.totp_new_secret()
 
     known_ip = "5.5.5.5"

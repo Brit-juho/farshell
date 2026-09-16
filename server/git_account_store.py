@@ -10,7 +10,7 @@
 저장·바인딩·URL 파싱은 순수 CRUD + 판정 로직이라 네트워크 없이 단위 테스트한다.
 GitHub/GitLab `GET /user` 토큰 검증(`verify_token`)만 예외적으로 이 모듈에 둔다 —
 CLI(`fsh git-account add`)가 서버 없이 `python git_account_store.py`로 단독 호출되므로
-(auth.py와 같은 패턴), 검증 로직이 routes/에만 있으면 CLI 경로에서 중복 구현이
+(auth 패키지와 같은 패턴), 검증 로직이 routes/에만 있으면 CLI 경로에서 중복 구현이
 생긴다. 테스트는 `verify_token` 자체를 monkeypatch해 실제 네트워크 호출을 막는다.
 
 토큰 원문은 이 파일이 쓰는 ~/.vt/git-accounts.json에만 존재한다(0600). 클라이언트로

@@ -7,7 +7,7 @@ worktree.py에서 떼어낸 이유: 이 함수들은 파일도 git도 건드리�
 
 **상태를 읽지 않으므로 재수출이 안전하다** — worktree.py가 `from`으로 가져가
 쓰던 이름 그대로 노출해도, 모듈 전역 설정을 monkeypatch하는 테스트와
-어긋날 여지가 없다(auth.py 계열과 갈리는 지점).
+어긋날 여지가 없다(auth 패키지 계열과 갈리는 지점).
 """
 
 from __future__ import annotations

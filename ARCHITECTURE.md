@@ -98,7 +98,7 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 **Auth / safety**
 | File | Responsibility |
 |---|---|
-| `auth.py` | Web login (scrypt password hash + HMAC session cookie), device whitelist + TOTP gate, one-time registration ticket |
+| `auth/` | Web login (scrypt password hash + HMAC session cookie), device whitelist + TOTP gate, one-time registration ticket |
 | `crypto_channel.py` | E2E WebSocket encryption (X25519 ephemeral keys + Ed25519 identity signing + NaCl SecretBox) — server side of the handshake whose client side is `frontend/js/term/e2e.js` |
 | `fsguard.py` | Single source of truth for the code-viewer's file-browse root confinement, path resolution, and denylist |
 | `safe_mode.py` | Pre-blocks a configurable list of dangerous shell commands |
@@ -424,7 +424,7 @@ cleans them all up.
 |---|---|---|
 | Transport | cloudflared HTTPS tunnel | — |
 | Transport (alternative) | Tailscale WireGuard VPN + IP whitelist (D9, `--network tailscale`) | Requires trusting Tailscale itself; tailnet ACLs must be managed separately |
-| Human auth | Password (scrypt hash) → 24h HMAC-signed session cookie (`server/auth.py`) | — |
+| Human auth | Password (scrypt hash) → 24h HMAC-signed session cookie (`server/auth/`) | — |
 | Machine auth | `VT_AUTH_TOKEN` via `?token=` or `Authorization: Bearer` — for daemons/QR/URLs | Exchanged for a cookie and stripped from the URL on first use (Phase 9 #8) |
 | Device gate | First-time-device TOTP gate (opt-in, `fsh otp setup`), 90-day `vt_device` cookie after | Fully disabled — and devices quietly accumulate — until OTP is explicitly set up |
 | Cross-site | `OriginGuardMiddleware` rejects any request/WS whose Origin isn't self, before auth even runs | The one thing password/OTP alone can't block |
