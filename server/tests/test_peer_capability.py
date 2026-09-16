@@ -169,3 +169,25 @@ def test_the_exemptions_are_still_exempt_for_the_stated_reason():
     names = {name for name, _ in _http_handlers()}
     assert _EXEMPT <= names, "예외 목록에 이제 없는 핸들러가 남아 있다"
     assert len(_EXEMPT) == 2
+
+
+def test_peer_file_strips_b_local_identifiers():
+    """`peer_file`의 strip 선언이 사라지지 않게 한다.
+
+    `id`(B의 저장소 키)와 `path`(B의 절대 경로)는 **모양이 A의 것과 똑같다.**
+    화면이 그 `id`로 `/api/files/{id}/…`를 부르면 A의 저장소에서 엉뚱한 파일을
+    찾는데, 아무 오류도 안 난다 — 그냥 다른 파일이 열린다.
+
+    나중에 원격 파일 목록(2.2)에서 이 파일을 다시 가리켜야 하면 **지우는 대신
+    B 것임이 이름에 드러나는 형태**로 바꿀 것(세션의 `remote:<host>:<name>`과
+    같은 방식). 로컬 것과 구별 안 되는 `id`를 그냥 내려보내는 길로 돌아가면
+    이 테스트가 막는다.
+    """
+    src = _PEER_PY.read_text(encoding="utf-8")
+    block = next(b for _, b in _http_handlers() if "peer_file" in b)
+    assert 'strip=("id", "path")' in block, (
+        "peer_file이 B 로컬 식별자를 다시 내려보내려 한다")
+    # A쪽도 그걸 되돌려 흘리면 안 된다.
+    files_py = (_PEER_PY.parent / "files.py").read_text(encoding="utf-8")
+    assert '("id", "path", "reused", "typed")' not in files_py, (
+        "routes/files.py가 B의 id·path를 화면으로 다시 흘린다")
