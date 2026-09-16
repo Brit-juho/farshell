@@ -128,6 +128,12 @@ export default defineConfig(({ mode }) => {
             // (build-output.test.js)에 실제로 걸려서 뺀 것이다.
             if (p.includes('/frontend/js/panels/files/')) return 'panels';
             if (p.includes('/frontend/js/panels/ports/')) return 'panels';
+            // 97번 1단계 — 설정 →「MCP」 섹션. 위 셋과 같은 이유로 지연 청크이고,
+            // 같은 이유로 **여기 못박아야 한다**: 이름을 안 주면 Rollup이
+            // core/api·ui/toast·layout/store를 공유 모듈로 판정해 끌어올리고
+            // app.js가 다시 스텁이 된다(이 파일 위 경고 그대로 실제로 재현했다).
+            if (p.endsWith('/frontend/js/panels/mcp.js')) return 'panels';
+            if (p.endsWith('/frontend/js/queue.js')) return 'panels';
             return null;
           },
         },
