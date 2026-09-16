@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from routes.files import _collect_status
+from routes.git import _collect_status
 
 
 def _git(repo: Path, *args: str) -> None:

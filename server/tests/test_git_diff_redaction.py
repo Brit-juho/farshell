@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from routes import files as files_routes
+from routes import git as files_routes
 
 
 def _git(repo: Path, *args: str) -> None:
