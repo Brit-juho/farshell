@@ -48,11 +48,7 @@
   color:var(--sub); font:400 var(--fs-xs) var(--mono); font-variant-numeric:tabular-nums;
   margin-top:calc(calc(var(--spacing) * 4) * -1 + calc(var(--spacing) * 1.5));   /* .vt-ov-sub 바로 아래로 붙임 */
 }
-.vt-overlay .vt-ov-stop-btn{
-  background:var(--tab); color:var(--txt); border:1px solid var(--line);
-  border-radius:var(--trad); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 4);
-  font:500 var(--fs-sm) var(--ui); cursor:pointer; touch-action:manipulation;
-}
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 연결 끊김 오버레이의 「끊기」 */
 .vt-overlay .vt-ov-stop-btn:hover{ background:var(--menu-hover); }
 .vt-overlay.stopped .vt-ov-stop-btn{ background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
 
@@ -184,12 +180,10 @@ body.voice-only-mode .vt-onboarding { display:none; }
   border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1.5); z-index:520; border:1px solid var(--line);
   box-shadow:var(--shadow-e2); min-width:220px;
 }
-.vt-menu-item { padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3.5); cursor:pointer; font-size:var(--fs-sm); border-radius:var(--radius-sm); white-space:nowrap; }
-.vt-menu-item:hover { background:var(--menu-hover); }
-.vt-menu-item.new { color:var(--ok); }
+/* 2.1.6 — components.css로 승격했다(다섯 벌이던 메뉴 행의 대표 이름). 여기
+   남은 것은 둘째 줄(detail)처럼 이 메뉴에만 있는 것뿐이다. */
 /* C1 — 호스트 메뉴처럼 둘째 줄(세션 수·지연·연결 실패 이유)이 있는 항목. */
 .vt-menu-item-detail { display:block; color:var(--sub); font-size:var(--fs-2xs); margin-top:2px; }
-.vt-menu-item.dim { opacity:.6; }
 .vt-menu-sep { border-top:1px solid var(--line); margin:calc(var(--spacing) * 1) 0; }
 
 /* L3 4단계: 그리드 뷰(#grid-view)는 폐지됐지만 카드 스타일은 남긴다 —

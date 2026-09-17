@@ -84,7 +84,7 @@ export function updateConnStatus(id, connected) {
           <div class="vt-ov-title">서버 연결 끊김</div>
           <div class="vt-ov-sub">자동 재연결 시도 중...</div>
           <div class="vt-ov-elapsed"></div>
-          <button type="button" class="vt-ov-stop-btn">끊기</button>
+          <button type="button" class="vt-btn vt-ov-stop-btn">끊기</button>
         `;
         document.body.appendChild(ov);
         ov.querySelector('.vt-ov-stop-btn').addEventListener('click', () => _toggleReconnectStop(id));

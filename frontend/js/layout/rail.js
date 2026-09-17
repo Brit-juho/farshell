@@ -134,7 +134,7 @@ function initRail() {
 
     const newBtn = document.createElement('button');
     newBtn.type = 'button';
-    newBtn.className = 'vt-rail-session-new';
+    newBtn.className = 'vt-btn vt-rail-session-new';
     newBtn.innerHTML = `${icon('plus', 14)}새 세션`;
     newBtn.addEventListener('click', () => createSession());
     panelBody.insertBefore(newBtn, listEl);
@@ -157,11 +157,11 @@ function initRail() {
     footer.className = 'vt-rail-session-footer';
     // L1(과도기)~picker.js가 임시로 들고 있던 세션 전용 동작 2개의 최종 착지점.
     const macBtn = document.createElement('button');
-    macBtn.type = 'button'; macBtn.className = 'vt-rail-session-footer-item';
+    macBtn.type = 'button'; macBtn.className = 'vt-menu-item sm vt-rail-session-footer-item';
     macBtn.textContent = '지금 이 세션 맥에서 열기';
     macBtn.addEventListener('click', () => getAction('session.open-on-mac')?.());
     const tmuxBtn = document.createElement('button');
-    tmuxBtn.type = 'button'; tmuxBtn.className = 'vt-rail-session-footer-item';
+    tmuxBtn.type = 'button'; tmuxBtn.className = 'vt-menu-item sm vt-rail-session-footer-item';
     tmuxBtn.textContent = 'tmux 세션 목록';
     tmuxBtn.addEventListener('click', () => getAction('session.tmux-list')?.());
     footer.append(macBtn, tmuxBtn);
@@ -192,7 +192,7 @@ function initRail() {
         row = document.createElement('div');
         row.className = 'vt-rail-session-row';
         const select = document.createElement('button');
-        select.type = 'button'; select.className = 'vt-rail-session-select';
+        select.type = 'button'; select.className = 'vt-name-btn vt-rail-session-select';
         select.textContent = _sessionLabel(id);
         select.addEventListener('click', () => switchTo(id));
         row.appendChild(select);
@@ -208,7 +208,7 @@ function initRail() {
       const actions = document.createElement('div');
       actions.className = 'vt-rail-session-actions';
       const renameBtn = document.createElement('button');
-      renameBtn.type = 'button'; renameBtn.className = 'vt-rail-session-action';
+      renameBtn.type = 'button'; renameBtn.className = 'vt-icon-btn vt-rail-session-action';
       renameBtn.innerHTML = icon('pencil', 13);
       renameBtn.setAttribute('aria-label', `${_sessionLabel(id)} 이름 변경`);
       renameBtn.addEventListener('click', async (e) => {
@@ -218,7 +218,7 @@ function initRail() {
         if (await renameSession(id, next) && openItem === 'session') renderSessionPanel();
       });
       const closeBtn = document.createElement('button');
-      closeBtn.type = 'button'; closeBtn.className = 'vt-rail-session-action';
+      closeBtn.type = 'button'; closeBtn.className = 'vt-icon-btn danger vt-rail-session-action';
       closeBtn.innerHTML = icon('x', 13);
       closeBtn.setAttribute('aria-label', `${_sessionLabel(id)} 닫기`);
       closeBtn.addEventListener('click', async (e) => {

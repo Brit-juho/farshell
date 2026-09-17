@@ -411,7 +411,7 @@ function Rail(props: { deps: RailDeps }) {
             </button>
           </Show>
         </Show>
-        <button type="button" class="vt-wgrail-collapse" onClick={toggleCollapse} aria-label={collapsed() ? '펼치기' : '접기'} title={collapsed() ? '펼치기' : '접기'}>
+        <button type="button" class="vt-icon-btn sm vt-wgrail-collapse" onClick={toggleCollapse} aria-label={collapsed() ? '펼치기' : '접기'} title={collapsed() ? '펼치기' : '접기'}>
           {collapsed() ? '›' : '‹'}
         </button>
       </div>
@@ -419,7 +419,7 @@ function Rail(props: { deps: RailDeps }) {
         <Show when={totalRows() === 0 && !collapsed() && !isRemoteHost()}>
           <div class="vt-wgrail-empty">
             아직 워크트리가 없습니다.
-            <button type="button" class="vt-wgrail-empty-new" onClick={() => setDialogOpen(true)}>+ 워크트리 만들기</button>
+            <button type="button" class="vt-btn sm vt-wgrail-empty-new" onClick={() => setDialogOpen(true)}>+ 워크트리 만들기</button>
           </div>
         </Show>
         {/* C1 — 원격 호스트가 꺼져 있으면 "빈 목록"과 "연결 안 됨"을 구분해서
@@ -469,13 +469,13 @@ function Rail(props: { deps: RailDeps }) {
             들어가 있었다. ⋯는 그대로 두고 그 옆에 둔다. */}
         <button
           type="button"
-          class="vt-wgrail-icon"
+          class="vt-icon-btn lg vt-wgrail-icon"
           aria-label="설정"
           title="설정 (Mod+,)"
           onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
           innerHTML={icon('settings', 15, 2)}
         />
-        <button type="button" class="vt-wgrail-icon" onClick={openMoreMenu} aria-label="더보기" title="파일 · 큐 · 스니펫 · 포트 · 사용량" innerHTML={icon('more-horizontal', 15, 2)} />
+        <button type="button" class="vt-icon-btn lg vt-wgrail-icon" onClick={openMoreMenu} aria-label="더보기" title="파일 · 큐 · 스니펫 · 포트 · 사용량" innerHTML={icon('more-horizontal', 15, 2)} />
       </div>
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
       <Show when={ctxMenu()}>

@@ -39,7 +39,7 @@ export function renderKeymapSection(rerender) {
 
     const reset = document.createElement('button');
     reset.type = 'button';
-    reset.className = 'vt-set-reset';
+    reset.className = 'vt-btn sm quiet vt-set-reset';
     reset.textContent = '기본값';
     reset.addEventListener('click', () => keymap.reset(b.id).then(rerender));
 

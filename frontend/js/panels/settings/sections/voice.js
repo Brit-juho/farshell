@@ -18,7 +18,7 @@ export function renderVoiceSection() {
 
   // 1. 웹 푸시
   const pushBtn = document.createElement('button');
-  pushBtn.type = 'button'; pushBtn.className = 'vt-set-reset'; pushBtn.textContent = '테스트 발송';
+  pushBtn.type = 'button'; pushBtn.className = 'vt-btn sm quiet vt-set-reset'; pushBtn.textContent = '테스트 발송';
   const pushRow = row('웹 푸시', pushBtn);
   const pushStatus = statusLine('확인 중…');
   pushRow.querySelector('.vt-set-label').appendChild(pushStatus);
@@ -38,7 +38,7 @@ export function renderVoiceSection() {
 
   // 2. 작업 완료 알림 (Stop 훅 TTS 요약)
   const notifyBtn = document.createElement('button');
-  notifyBtn.type = 'button'; notifyBtn.className = 'vt-set-reset'; notifyBtn.textContent = '소리 듣기';
+  notifyBtn.type = 'button'; notifyBtn.className = 'vt-btn sm quiet vt-set-reset'; notifyBtn.textContent = '소리 듣기';
   const notifyRow = row('작업 완료 알림', notifyBtn);
   const notifyStatus = statusLine('확인 중…');
   notifyRow.querySelector('.vt-set-label').appendChild(notifyStatus);
@@ -58,9 +58,9 @@ export function renderVoiceSection() {
 
   // 3. Whisper 모델 (STT 메모리 상주 여부)
   const preloadBtn = document.createElement('button');
-  preloadBtn.type = 'button'; preloadBtn.className = 'vt-set-reset'; preloadBtn.textContent = '미리 적재';
+  preloadBtn.type = 'button'; preloadBtn.className = 'vt-btn sm quiet vt-set-reset'; preloadBtn.textContent = '미리 적재';
   const unloadBtn = document.createElement('button');
-  unloadBtn.type = 'button'; unloadBtn.className = 'vt-set-reset'; unloadBtn.textContent = '내리기';
+  unloadBtn.type = 'button'; unloadBtn.className = 'vt-btn sm quiet vt-set-reset'; unloadBtn.textContent = '내리기';
   const sttBtns = document.createElement('div');
   sttBtns.className = 'vt-set-btns';
   sttBtns.append(preloadBtn, unloadBtn);
@@ -95,7 +95,7 @@ export function renderVoiceSection() {
   // 4. 맥에서 음성만 쓰기 (로컬 마이크 — 서버에 상태 조회 API가 없어
   //    버튼 라벨은 클라이언트가 마지막 응답을 기억해 토글한다)
   const localBtn = document.createElement('button');
-  localBtn.type = 'button'; localBtn.className = 'vt-set-reset'; localBtn.textContent = '시작';
+  localBtn.type = 'button'; localBtn.className = 'vt-btn sm quiet vt-set-reset'; localBtn.textContent = '시작';
   let localRunning = false;
   localBtn.addEventListener('click', async () => {
     try {

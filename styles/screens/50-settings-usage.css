@@ -21,13 +21,7 @@
   display:flex; flex-direction:column; gap:2px; flex-shrink:0; width:150px;
   padding:calc(var(--spacing) * 1.5); border-right:1px solid var(--line); overflow-y:auto;
 }
-.vt-set-navitem {
-  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1.5); border:0; background:transparent;
-  color:var(--sub); font:500 var(--fs-sm) var(--ui); text-align:left;
-  border-radius:var(--radius-sm); cursor:pointer; white-space:nowrap;
-}
-.vt-set-navitem:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-set-navitem.active { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 설정 왼쪽 내비(sm). 활성은 .active */
 .vt-set-content { flex:1; min-width:0; padding:calc(var(--spacing) * 2); overflow-y:auto; }
 
 .vt-set-row {
@@ -58,11 +52,7 @@
 .vt-set-combo.recording { border-color:var(--acc); color:var(--acc); }
 .vt-set-combo.unavailable { opacity:.5; text-decoration:line-through; }
 .vt-set-pt { display:flex; align-items:center; gap:4px; font:400 var(--fs-xs) var(--ui); color:var(--sub); white-space:nowrap; }
-.vt-set-reset {
-  border:0; background:transparent; color:var(--sub); font:400 var(--fs-xs) var(--ui);
-  cursor:pointer; padding:4px 6px; border-radius:var(--radius-sm);
-}
-.vt-set-reset:hover { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 설정 행 끝의 되돌리기·실행 버튼(sm quiet) */
 .vt-set-reset:disabled { color:var(--sub); opacity:.5; cursor:default; }
 /* N14 — 테마 가져오기 입력. 붙여넣는 것이 설정 파일 원문이라 등폭이어야
    하고(정렬된 색 목록), 세로로 늘릴 수 있어야 한다. */
@@ -280,8 +270,7 @@
    화면을 끊는 **파괴적** 동작이라 hover에서 에러색이 된다는 것.
    `.vt-btn.danger`를 안 쓴 이유는 그건 평소에도 빨간 테두리라, 목록 안에
    행마다 있는 이 버튼에는 과하기 때문이다. */
-.vt-clients-detach { width:22px; padding:0; }
-.vt-clients-detach:hover { color:var(--color-st-error); }
+/* 2.1.6 — `.vt-icon-btn.sm.danger`가 전부 맡는다. 남은 규칙 없음. */
 
 /* ── L8 우측 레일 ──────────────────────────────────────────────────────────
    wide(≥1280px)에서만 상시 노출. regular/compact에서는 rail 버튼이 여는 패널이
@@ -302,11 +291,8 @@
   padding:calc(var(--spacing) * 1.5); border-bottom:1px solid var(--line);
 }
 .vt-rr-title { font:600 var(--fs-xs) var(--ui); color:var(--sub); }
-.vt-rr-collapse {
-  border:0; background:transparent; color:var(--sub); cursor:pointer;
-  font:600 var(--fs-sm) var(--ui); padding:2px 6px; border-radius:var(--radius-sm);
-}
-.vt-rr-collapse:hover { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 안이 아이콘이 아니라 글리프(›)라 글자 크기만 남긴다 */
+.vt-rr-collapse { font:600 var(--fs-sm) var(--ui); }
 .vt-rr-body { flex:1; min-height:0; overflow-y:auto; padding:calc(var(--spacing) * 1.5); }
 
 @media (min-width: 1280px) {

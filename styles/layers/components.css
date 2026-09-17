@@ -123,6 +123,57 @@
   .vt-btn.danger { color: var(--color-st-error); border-color: var(--color-st-error); }
   .vt-btn.danger:hover { background: color-mix(in srgb, var(--color-st-error) 14%, transparent); }
 
+  /* ── 아이콘 버튼 ───────────────────────────────────────────────────────
+   * 안에 아이콘 하나만 들어가는 정사각 버튼. `.vt-btn`과 나누는 이유는 취향이
+   * 아니라 기하다 — `.vt-btn`은 글자 폭 + 좌우 여백으로 크기가 정해지고, 이건
+   * **가로세로가 같아야** 격자(툴바·행 끝·패널 머리)에 들어간다. 글자 버튼에
+   * `padding:0; width:28px`을 매번 덧붙이는 식으로 쓰면 그게 곧 우회다.
+   *
+   * 2.1.6 이전에는 같은 것이 12벌 있었다 — .tbtn · .vt-pane-btn ·
+   * .vt-rail-panel-close · .vt-rail-session-action · .vt-session-close ·
+   * .vt-session-action · .vt-wgrail-collapse · .vt-rr-collapse ·
+   * .vt-dock-collapse · .vt-wtab-close · .vt-wgrail-icon · #search-bar button.
+   * 선언은 사실상 같았고(테두리 없음 · 투명 배경 · sub 색 · radius-sm ·
+   * hover에서 menu-hover + txt) 크기만 18/26/30/30/30/32/44로 제각각이었다.
+   * 그 크기들이 서로 다를 이유가 있었던 게 아니라, 각자 그때 눈대중으로 정해진
+   * 값이다. 여기서는 행 높이 사다리(24/28/36)에 맞춰 네 단으로 줄인다.
+   *
+   * 44px(xl)만 사다리 밖이다 — 폰에서 손가락으로 누르는 닫기 버튼이라
+   * WCAG 2.5.5의 권장 표적 크기를 따른다. */
+  .vt-icon-btn {
+    --icon-btn: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--icon-btn);
+    height: var(--icon-btn);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-sub);
+    cursor: pointer;
+    line-height: 1;
+    transition: background var(--dur-fast) var(--ease-out-quint),
+                color var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-icon-btn.xs { --icon-btn: 18px; }
+  .vt-icon-btn.sm { --icon-btn: 24px; }
+  .vt-icon-btn.lg { --icon-btn: 32px; }
+  .vt-icon-btn.xl { --icon-btn: 44px; }
+
+  .vt-icon-btn:hover:not(:disabled) { background: var(--menu-hover); color: var(--color-txt); }
+  .vt-icon-btn:active:not(:disabled) { background: var(--color-surface-active); }
+  .vt-icon-btn:disabled,
+  .vt-icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; background: transparent; }
+  /* 파괴적 동작(pane 닫기·세션 종료·화면 끊기)은 **hover에서만** 에러색이 된다.
+   * 평소에도 빨가면 목록에 행마다 빨간 점이 박힌다. */
+  .vt-icon-btn.danger:hover:not(:disabled) { color: var(--color-st-error); }
+  /* 지금 켜져 있는 토글형 아이콘 버튼(코드 뷰어의 트리 접기 등). */
+  .vt-icon-btn[aria-pressed="true"],
+  .vt-icon-btn.active { color: var(--color-acc); background: color-mix(in srgb, var(--color-acc) 12%, transparent); }
+
   /* ── 배지 ──────────────────────────────────────────────────────────────
    * 테두리만. 채우지 않는 이유는 규칙이라서가 아니라, 배지가 채워지면 그
    * 화면의 주 액션(유일한 채움 버튼)과 시각 무게가 같아지기 때문이다.
@@ -148,6 +199,71 @@
   .vt-badge[data-state="done"]    { border-color: var(--color-st-done);    color: var(--color-st-done); }
   .vt-badge[data-state="error"]   { border-color: var(--color-st-error);   color: var(--color-st-error); }
   .vt-badge.accent { border-color: var(--color-acc-dim); color: var(--color-acc); }
+
+  /* ── 행 안의 이름 버튼 ─────────────────────────────────────────────────
+   * 목록 행에서 **이름이 차지하는 칸 전체**가 클릭 영역인 버튼. 생긴 건 글자
+   * 한 줄이지만 누르면 그 항목이 열린다. 버튼처럼 보이지 않아야 한다 —
+   * 테두리·배경이 있으면 행마다 상자가 생겨 목록이 읽히지 않는다.
+   * 2.1.6 이전에는 .vt-session-select와 .vt-rail-session-select 두 벌이었고
+   * 선언은 padding 하나만 달랐다. */
+  .vt-name-btn {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-txt);
+    font: var(--weight-medium) var(--fs-sm) / var(--leading-row) var(--font-ui);
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vt-name-btn:hover { color: var(--color-acc); }
+
+  /* ── 메뉴 · 목록 행 ────────────────────────────────────────────────────
+   * 왼쪽 정렬 · 가로 꽉 참 · 아이콘 + 글자. 팝업 메뉴 항목, 설정 왼쪽 내비,
+   * 세션 목록 바닥 줄이 전부 같은 모양인데 2.1.6 이전에는 다섯 벌이었다
+   * (.mi · .vt-menu-item · .vt-session-footer-item ·
+   *  .vt-rail-session-footer-item · .vt-set-navitem). 높이만 34/36/40으로
+   * 달랐고 그 차이에 이유는 없었다.
+   *
+   * 버튼과 나누는 기준: 버튼은 자기 글자만큼 넓고 **가운데 정렬**, 이건 줄을
+   * 꽉 채우고 **왼쪽 정렬**이다. 목록 안에서 위아래로 훑는 것이라 글자 시작
+   * 위치가 일정해야 한다. */
+  .vt-menu-item {
+    --menu-item-h: 36px;
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2.5);
+    width: 100%;
+    min-height: var(--menu-item-h);
+    padding: 0 calc(var(--spacing) * 2.5);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out-quint),
+                color var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-menu-item.sm { --menu-item-h: 28px; font-size: var(--fs-xs); }
+  .vt-menu-item > svg { width: 16px; height: 16px; flex: none; color: var(--color-sub); }
+
+  .vt-menu-item:hover:not(:disabled) { background: var(--menu-hover); }
+  .vt-menu-item:active:not(:disabled) { background: var(--color-surface-active); }
+  .vt-menu-item:disabled { opacity: .45; cursor: not-allowed; background: transparent; }
+  /* "지금 이것" — 설정의 현재 섹션처럼 목록에서 선택된 항목. 액센트 글자가
+   * 아니라 배경 한 단계로 말한다(액센트는 화면당 하나라는 규칙). */
+  .vt-menu-item.active { background: var(--color-surface-active); color: var(--color-txt); }
+  /* 값이 켜져 있는 토글형 항목(마이크·미디어키 등)은 그것만 액센트를 쓴다 —
+   * 선택(어디 있나)과 켜짐(무엇이 동작하나)은 다른 뜻이다. */
+  .vt-menu-item.on,
+  .vt-menu-item.on > svg { color: var(--color-acc); }
+  .vt-menu-item.dim { opacity: .6; }
+  .vt-menu-item.new { color: var(--ok); }
 
   /* ── 칩(필터) ──────────────────────────────────────────────────────────
    * 알약(radius-full)이 아니다. 모서리는 화면 전체가 한 단계(5px)로 통일돼

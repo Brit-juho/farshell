@@ -176,7 +176,7 @@ async function refreshFiles() {
 function iconBtn(iconName, title, cls, onClick) {
   const b = document.createElement('button');
   b.type = 'button';
-  b.className = 'vt-btn sm quiet vt-fl-act ' + cls;
+  b.className = 'vt-icon-btn vt-fl-act ' + cls;
   b.innerHTML = icon(iconName, 15);
   b.title = title;
   b.setAttribute('aria-label', title);

@@ -71,7 +71,7 @@ function renderSessionManager(backdrop) {
   // 열기)를 rail(L4)로 옮기기 전 과도기 자리로 이 시트에 임시 배치한다.
   // "맥에서도 열기"는 (특정 세션이 아니라) 앞으로 만들 모든 세션에 적용되는
   // 전역 설정이라 ⋯의 「설정」 그룹 쪽에 남긴다(index.html 참고).
-  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div><div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button><button type="button" class="vt-session-footer-item" id="session-tmux-list-btn">tmux 세션 목록</button></div>`;
+  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div><div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button><button type="button" class="vt-session-footer-item" id="session-tmux-list-btn">tmux 세션 목록</button></div>`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
   const list = sheet.querySelector('.vt-session-list');
   const entries = Object.entries(allSessions());
@@ -81,18 +81,18 @@ function renderSessionManager(backdrop) {
     const row = document.createElement('div');
     row.className = 'vt-session-row' + (id === activeIdNow ? ' active' : '');
     const select = document.createElement('button');
-    select.type = 'button'; select.className = 'vt-session-select'; select.textContent = sessionName(id);
+    select.type = 'button'; select.className = 'vt-name-btn vt-session-select'; select.textContent = sessionName(id);
     select.setAttribute('aria-current', id === activeIdNow ? 'true' : 'false');
     select.onclick = () => { switchTo(id); closeSessionManager(); };
     const rename = document.createElement('button');
-    rename.type = 'button'; rename.className = 'vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id)} 이름 변경`);
+    rename.type = 'button'; rename.className = 'vt-icon-btn xl vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id)} 이름 변경`);
     rename.onclick = async () => {
       const next = window.prompt('새 세션 이름', sessionName(id));
       if (next === null) return;
       if (await renameSession(id, next)) renderSessionManager(backdrop);
     };
     const close = document.createElement('button');
-    close.type = 'button'; close.className = 'vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 닫기`);
+    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 닫기`);
     close.onclick = async () => { await removeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
     row.append(select, rename, close); list.appendChild(row);
   }

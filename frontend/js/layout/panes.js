@@ -90,9 +90,9 @@ function _buildPaneEl(paneId) {
   paneEl.innerHTML = `
     <div class="vt-pane-head">
       <span class="vt-pane-name"></span>
-      <button type="button" class="vt-pane-btn vt-pane-split-row" title="오른쪽 분할" aria-label="오른쪽 분할">${icon('columns-2', 13)}</button>
-      <button type="button" class="vt-pane-btn vt-pane-split-col" title="아래쪽 분할" aria-label="아래쪽 분할">${icon('rows-2', 13)}</button>
-      <button type="button" class="vt-pane-btn vt-pane-close" title="pane 닫기" aria-label="pane 닫기">${icon('x', 13)}</button>
+      <button type="button" class="vt-icon-btn xs vt-pane-split-row" title="오른쪽 분할" aria-label="오른쪽 분할">${icon('columns-2', 13)}</button>
+      <button type="button" class="vt-icon-btn xs vt-pane-split-col" title="아래쪽 분할" aria-label="아래쪽 분할">${icon('rows-2', 13)}</button>
+      <button type="button" class="vt-icon-btn xs danger vt-pane-close" title="pane 닫기" aria-label="pane 닫기">${icon('x', 13)}</button>
     </div>
     <div class="vt-pane-body"></div>
   `;

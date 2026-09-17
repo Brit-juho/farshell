@@ -89,14 +89,11 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 @keyframes vtSheetIn { from { transform:translateY(100%); } to { transform:none; } }
 .vt-session-head { display:flex; align-items:center; justify-content:space-between; margin:0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 2.5); }
 .vt-session-head h2 { font-size:var(--fs-md); }
-.vt-session-close, .vt-session-action { border:0; background:transparent; color:var(--sub); cursor:pointer; border-radius:var(--radius-sm); display:inline-flex; align-items:center; justify-content:center; }
-.vt-session-close { width:44px; height:44px; }
-.vt-session-close:hover, .vt-session-action:hover { color:var(--txt); background:var(--menu-hover); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 닫기는 폰 터치 표적이라 xl(44px) */
 .vt-session-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-session-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-height:52px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); border:1px solid var(--line); border-radius:var(--radius-sm); }
 .vt-session-row.active { border-color:var(--acc); }
-.vt-session-select { flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--ui); }
-.vt-session-action { width:44px; height:44px; flex-shrink:0; }
+/* 2.1.6 — 모양은 components.css의 `.vt-name-btn`. 여기 남은 건 없다 */
 .vt-session-empty { padding:calc(var(--spacing) * 8) calc(var(--spacing) * 2.5); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
 /* L1: ⋯ 메뉴 「세션」 3항목의 임시 자리(rail 이관 전까지). 목록과 시각적으로
    구분되게 위쪽 구분선만 두고, 버튼 자체는 세션 행보다 한 단계 낮은 밀도로. */
@@ -104,11 +101,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
   display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
   margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2.5); border-top:1px solid var(--line);
 }
-.vt-session-footer-item {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-height:40px;
-  padding:0 calc(var(--spacing) * 1.5); border:0; background:transparent; border-radius:var(--radius-sm);
-  color:var(--sub); font-size:var(--fs-sm); text-align:left; cursor:pointer;
-}
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 세션 시트 바닥 줄 */
 .vt-session-footer-item:hover { background:var(--menu-hover); color:var(--txt); }
 .vt-session-footer-item input[type="checkbox"] { margin-left:auto; width:16px; height:16px; accent-color:var(--acc); cursor:pointer; }
 @media (min-width:720px) { .vt-session-backdrop { display:none; } }
@@ -116,12 +109,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .spacer { flex:1; }
 
 /* 상단 아이콘 버튼 */
-.tbtn {
-  display:flex; align-items:center; justify-content:center;
-  width:30px; height:30px; color:var(--sub); cursor:pointer;
-  border:none; background:transparent; border-radius:var(--radius-sm); flex-shrink:0;
-  transition:background .14s, color .14s; position:relative;
-}
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. .tbtn에 남은 것은 없다(아래 .tbtn 파생 규칙은 그대로) */
 .tbtn:hover { background:var(--menu-hover); color:var(--txt); }
 .tbtn svg { width:16px; height:16px; }
 .tbtn.more { font-size:var(--fs-xl); letter-spacing:1px; line-height:1; }
@@ -182,16 +170,8 @@ html[data-skin="windows"] .caption { display:flex; }
 }
 #more-menu.open { opacity:1; transform:none; pointer-events:auto; }
 #more-menu::-webkit-scrollbar { display:none; width:0; height:0; }
-.mi {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 3); padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 2.5); border-radius:var(--radius-sm);
-  font-size:var(--fs-base); cursor:pointer; color:var(--txt); border:none; background:transparent;
-  width:100%; text-align:left;
-}
-.mi:hover { background:var(--menu-hover); }
-.mi svg { width:16px; height:16px; color:var(--sub); flex-shrink:0; }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 체크박스 자식만 여기 남는다(메뉴 항목 중 이것만 갖는 요소다) */
 .mi input[type="checkbox"] { margin-left:auto; width:16px; height:16px; accent-color:var(--acc); cursor:pointer; }
-.mi.active { color:var(--acc); }
-.mi.active svg { color:var(--acc); }
 .theme-row { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5); }
 .theme-chip {
   flex:1 1 calc(50% - 3px); min-width:0;
@@ -287,11 +267,7 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   font-size:var(--fs-2xs); color:var(--sub);
 }
 .vt-pane-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vt-pane-btn {
-  display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
-  border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm); cursor:pointer; flex-shrink:0;
-}
-.vt-pane-btn:hover:not(:disabled) { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. pane 헤더 버튼은 18px(xs) */
 /* L8: pane 상한에 걸린 분할 버튼 — 눌러도 아무 일 없는 대신 눌리지 않는 걸
    보이게 한다(이유는 title/aria-label에 붙는다). */
 .vt-pane-btn:disabled { opacity:.35; cursor:default; }
@@ -312,13 +288,10 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
    같은 카드를 재사용할 예정이라 카드 자체(.vt-card)는 4단계에서 그대로
    남겨둔 스타일을 그대로 쓴다. */
 .vt-pane-pick .vt-viewer-card { max-width:640px; }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. pane 선택기의 "새 세션" — 가로 꽉 참과 바깥 여백만 남긴다 */
 .vt-pp-new {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
   width:calc(100% - calc(var(--spacing) * 6));
   margin:calc(var(--spacing) * 3) calc(var(--spacing) * 3) 0;
-  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
-  background:var(--tab); color:var(--txt); border:1px dashed var(--line); border-radius:var(--trad);
-  font:500 var(--fs-sm) var(--ui); cursor:pointer;
 }
 .vt-pp-new:hover { background:var(--menu-hover); border-color:var(--acc); color:var(--acc); }
 .vt-pp-new svg { flex-shrink:0; }
@@ -394,11 +367,7 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   color:var(--txt); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); font-size:var(--fs-sm); width:200px; outline:none;
 }
 #search-bar input:focus { border-color:var(--acc); }
-#search-bar button {
-  background:transparent; border:none; border-radius:var(--radius-sm); color:var(--sub);
-  width:30px; height:30px; cursor:pointer; font-size:var(--fs-sm);
-}
-#search-bar button:hover { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 검색 바의 이전/다음/닫기 */
 
 /* ---- 음성 전용 모드 — #topbar를 전체 화면 컨테이너로 전환 --------------- */
 /* L4: 예전엔 .more(⋯ 더보기)가 예외였다 — 그 안의 "음성 전용 모드" 토글이 이

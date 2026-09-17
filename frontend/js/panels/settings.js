@@ -105,7 +105,7 @@ function rerender() {
   for (const s of SECTIONS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'vt-set-navitem' + (s.id === _activeSection ? ' active' : '');
+    b.className = 'vt-menu-item sm vt-set-navitem' + (s.id === _activeSection ? ' active' : '');
     b.textContent = s.label;
     b.addEventListener('click', () => { _activeSection = s.id; rerender(); });
     nav.appendChild(b);

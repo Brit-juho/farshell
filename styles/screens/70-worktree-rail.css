@@ -68,11 +68,8 @@
 .vt-wgrail-remote-note { opacity:.7; }
 .vt-wgrail-new[disabled] { opacity:.45; cursor:not-allowed; }
 
-.vt-wgrail-collapse {
-  border:0; background:transparent; color:var(--sub); cursor:pointer;
-  font:600 var(--fs-base) var(--ui); padding:2px 6px; border-radius:var(--radius-sm); line-height:1;
-}
-.vt-wgrail-collapse:hover { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 글리프(‹)라 글자 크기만 */
+.vt-wgrail-collapse { font:600 var(--fs-base) var(--ui); }
 
 .vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; }
 .vt-wgrail-group-head {
@@ -145,11 +142,7 @@
   padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
   color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;
 }
-.vt-wgrail-empty-new {
-  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm);
-  color:var(--txt); font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); cursor:pointer;
-}
-.vt-wgrail-empty-new:hover { background:var(--menu-hover); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 빈 레일의 "워크트리 만들기" */
 
 /* 접힘: 마크·색점만(§5 "48px 접힘: 마크+색점+dot만") — 이름·상태 문장·그룹
    헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로. */
@@ -171,13 +164,8 @@
 /* 2.1.6 — 레일 바닥의 아이콘 버튼(설정·더보기). 예전 .vt-wgrail-more 한 칸을
    같은 모양의 여러 칸으로 일반화했다. 32px는 행 높이 3단(24/28/36) 밖이지만
    레일 바닥 줄 높이가 32px로 이미 고정돼 있어 그 줄에 맞춘다. */
-.vt-wgrail-icon {
-  flex:none; width:32px; height:32px; border:0; border-left:1px solid var(--line);
-  background:transparent; color:var(--sub); cursor:pointer;
-  display:flex; align-items:center; justify-content:center;
-}
-.vt-wgrail-icon:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-wgrail-icon:active { background:var(--color-surface-active); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 레일 바닥 줄 높이(32px)에 맞춘 lg + 칸 사이 구분선 */
+.vt-wgrail-icon { border-left:1px solid var(--line); border-radius:0; }
 
 .vt-wgrail-resizer {
   position:absolute; top:0; bottom:0; right:-3px; width:6px; cursor:col-resize; z-index:1;
