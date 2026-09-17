@@ -117,6 +117,7 @@ export VT_RUN_DIR
 mkdir -p "$VT_RUN_DIR"
 SERVER_LOG="$VT_RUN_DIR/vt-server.log"
 TUNNEL_LOG="$VT_RUN_DIR/cloudflared.log"
+NGROK_LOG="$VT_RUN_DIR/ngrok.log"
 DAEMON_LOG="$VT_RUN_DIR/vt-voice-daemon.log"
 CLIP_DAEMON_LOG="$VT_RUN_DIR/vt-clipboard-daemon.log"
 WATCHDOG_LOG="$VT_RUN_DIR/vt-tunnel-watchdog.log"
@@ -247,7 +248,10 @@ _start_tunnel() {
   local rc=$?
   if [ $rc -eq 0 ]; then
     _run_tunnel_hook start
-    _start_tunnel_watchdog
+    # 워치독은 cloudflare 전용이다 — 좀비 재연결(프로세스는 살아있는데 QUIC
+    # 제어 스트림만 끊김)은 cloudflared 특유의 증상이고, 감지 로직도 그 로그
+    # 패턴 전용이다. ngrok에 붙이면 아무것도 감지 못 하면서 데몬만 하나 는다.
+    [ "$(_tunnel_provider)" = "cloudflare" ] && _start_tunnel_watchdog
   fi
   return $rc
 }
@@ -270,7 +274,7 @@ _tunnel_restart() {
   local rc=$?
   if [ $rc -eq 0 ]; then
     _run_tunnel_hook start
-    _start_tunnel_watchdog
+    [ "$(_tunnel_provider)" = "cloudflare" ] && _start_tunnel_watchdog
     echo "  ✓ 재시작 완료"
   else
     echo "  ✗ 재시작 실패"
@@ -294,7 +298,55 @@ _start_tunnel_watchdog() {
   fi
 }
 
+# ngrok 메인 터널. cloudflare 경로와 같은 계약을 지킨다:
+#   - 이미 떠 있으면 재사용하고 성공으로 친다
+#   - pid를 $PID_DIR/tunnel.pid에 남긴다 → cmd_stop이 제공자를 몰라도 죽인다
+#   - 성공하면 URL을 한 줄 찍는다
+_start_tunnel_ngrok() {
+  if ! command -v ngrok >/dev/null 2>&1; then
+    echo "✗ ngrok 미설치. brew install ngrok — 설치 후 'ngrok config add-authtoken <토큰>'"
+    return 1
+  fi
+  local url
+  if url="$(_ngrok_public_url "$VT_PORT")"; then
+    echo "✓ ngrok 이미 실행 중: $url"
+    return 0
+  fi
+  local domain="${VT_NGROK_DOMAIN:-}"
+  domain="${domain#https://}"; domain="${domain#http://}"; domain="${domain%/}"
+  : > "$NGROK_LOG"
+  if [ -n "$domain" ]; then
+    echo "▸ ngrok 시작 중 (고정 도메인: $domain)..."
+    nohup ngrok http "$VT_PORT" --url "https://$domain" --log "$NGROK_LOG" --log-format logfmt >/dev/null 2>&1 &
+  else
+    # 도메인을 예약해 두고도 --url을 안 붙이면 임시 주소가 잡힌다. 고정 주소가
+    # 목적이라면 이 경고가 유일한 단서라서 조용히 넘기지 않는다.
+    echo "▸ ngrok 시작 중 (임시 주소 — VT_NGROK_DOMAIN을 설정하면 고정됩니다)..."
+    nohup ngrok http "$VT_PORT" --log "$NGROK_LOG" --log-format logfmt >/dev/null 2>&1 &
+  fi
+  echo $! > "$PID_DIR/tunnel.pid"
+  local i
+  for i in $(seq 1 20); do
+    if url="$(_ngrok_public_url "$VT_PORT")"; then
+      echo "✓ ngrok: $url"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "✗ ngrok URL 대기 시간 초과. 로그: $NGROK_LOG"
+  return 1
+}
+
 _start_tunnel_impl() {
+  case "$(_tunnel_provider)" in
+    none)
+      echo "  ⓘ VT_TUNNEL_PROVIDER=none — 공개 터널을 띄우지 않습니다"
+      return 0 ;;
+    ngrok)
+      _start_tunnel_ngrok
+      return $? ;;
+  esac
+
   # Phase 8 G1: 외부에서 떠있는 cloudflared도 발견하여 재사용 (옵션 A)
   if ! command -v cloudflared >/dev/null 2>&1; then
     echo "✗ cloudflared 미설치. brew install cloudflared (macOS) 또는 https://github.com/cloudflare/cloudflared/releases"
@@ -360,7 +412,13 @@ _start_tunnel_impl() {
 # 호스트명↔포트 1:1이라 경로로 포트를 바꿔치기할 수 없으므로,
 # 다른 로컬 앱(예: localhost:3000)은 별도 터널을 하나 더 띄운다.
 
-_extra_tunnel_log() { echo "/tmp/cloudflared-$1.log"; }
+_extra_tunnel_log() {
+  if [ "$(_tunnel_provider)" = "ngrok" ]; then
+    echo "$VT_RUN_DIR/ngrok-$1.log"
+  else
+    echo "/tmp/cloudflared-$1.log"
+  fi
+}
 
 _registry_set() {
   local port="$1" url="$2" label="$3"
@@ -410,7 +468,17 @@ _start_extra_tunnel() {
     echo "  ✗ $port 는 VT 서버 포트입니다 — 메인 터널(fsh start)이 이미 담당합니다"
     return 1
   fi
-  if ! command -v cloudflared >/dev/null 2>&1; then
+  local provider; provider="$(_tunnel_provider)"
+  if [ "$provider" = "none" ]; then
+    echo "  ✗ VT_TUNNEL_PROVIDER=none — 공개 터널을 쓰지 않도록 설정돼 있습니다"
+    return 1
+  fi
+  if [ "$provider" = "ngrok" ]; then
+    if ! command -v ngrok >/dev/null 2>&1; then
+      echo "  ✗ ngrok 미설치. brew install ngrok"
+      return 1
+    fi
+  elif ! command -v cloudflared >/dev/null 2>&1; then
     echo "  ✗ cloudflared 미설치. brew install cloudflared"
     return 1
   fi
@@ -429,15 +497,28 @@ _start_extra_tunnel() {
   local log; log="$(_extra_tunnel_log "$port")"
   echo "  ▸ localhost:$port 터널 시작 중..."
   : > "$log"
-  nohup cloudflared tunnel --url "http://localhost:$port" > "$log" 2>&1 &
+  if [ "$provider" = "ngrok" ]; then
+    # 고정 도메인은 계정당 1개(=메인 터널이 쓴다). 추가 포트는 임시 주소이고,
+    # 그건 제약이지 결함이 아니다 — 대신 아래 출력에서 그 사실을 말한다.
+    nohup ngrok http "$port" --log "$log" --log-format logfmt >/dev/null 2>&1 &
+  else
+    nohup cloudflared tunnel --url "http://localhost:$port" > "$log" 2>&1 &
+  fi
   echo $! > "$PID_DIR/tunnel-$port.pid"
 
   local i url
   for i in $(seq 1 30); do
-    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$log" 2>/dev/null | head -1)
+    if [ "$provider" = "ngrok" ]; then
+      # 에이전트가 여럿이면 로컬 API 포트가 밀리므로, 여기서는 이 프로세스가
+      # 직접 남기는 로그(logfmt의 url=...)를 읽는 쪽이 확실하다.
+      url=$(grep -oE 'url=https://[^ ]+' "$log" 2>/dev/null | tail -1 | sed 's/^url=//')
+    else
+      url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$log" 2>/dev/null | head -1)
+    fi
     if [ -n "$url" ]; then
       _registry_set "$port" "$url" "$label"
       echo "  ✓ $label → $url"
+      [ "$provider" = "ngrok" ] && echo "     ⓘ 추가 포트는 임시 주소입니다(고정 도메인은 메인 터널이 씁니다)"
       _run_tunnel_hook expose
       return 0
     fi
@@ -475,20 +556,85 @@ _stop_extra_tunnel() {
 
 # 메인 터널(VT_PORT 또는 명명 터널)의 PID만 — 공백 구분 한 줄.
 # 'expose'로 뜬 다른 포트 터널은 제외한다.
+# ── 공개 입구 제공자 ────────────────────────────────────────────────────
+# VT_TUNNEL_PROVIDER = cloudflare(기본) | ngrok | none.
+# 미설정이면 cloudflare — 기존 사용자의 동작은 한 글자도 바뀌지 않는다.
+# 모르는 값은 막지 않고 cloudflare로 진행하되 경고한다(터널은 켜지는 게 우선이다).
+_tunnel_provider() {
+  local p
+  p="$(printf '%s' "${VT_TUNNEL_PROVIDER:-cloudflare}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  case "$p" in
+    cloudflare|ngrok|none) printf '%s' "$p" ;;
+    "")                    printf 'cloudflare' ;;
+    *)  printf 'cloudflare'
+        echo "  ⚠ 알 수 없는 VT_TUNNEL_PROVIDER='$p' — cloudflare로 진행합니다" >&2 ;;
+  esac
+}
+
+# ngrok 에이전트 로컬 API에서 특정 로컬 포트로 가는 공개 URL을 찾는다.
+#
+# 에이전트를 여러 개 띄우면(메인 + fsh tunnel expose) 두 번째부터 4040이 이미
+# 점유돼 4041, 4042…로 밀린다 — 그래서 한 포트만 보면 안 되고 훑어야 한다.
+# VT_NGROK_API를 주면 그 주소만 본다.
+_ngrok_public_url() {
+  local want="${1:-$VT_PORT}" api json url
+  local candidates="${VT_NGROK_API:-}"
+  if [ -z "$candidates" ]; then
+    candidates="http://127.0.0.1:4040 http://127.0.0.1:4041 http://127.0.0.1:4042 http://127.0.0.1:4043"
+  fi
+  local py="${VT_PYTHON:-}"
+  [ -n "$py" ] && [ -x "$py" ] || py="python3"
+  for api in $candidates; do
+    json="$(curl -s --max-time 2 "$api/api/tunnels" 2>/dev/null)"
+    [ -n "$json" ] || continue
+    url="$(printf '%s' "$json" | "$py" -c '
+import json, sys
+try:
+    tunnels = json.load(sys.stdin).get("tunnels") or []
+except Exception:
+    raise SystemExit(0)
+port = sys.argv[1]
+# 우리 포트로 가는 터널만 취한다 — 다른 앱을 내보내는 ngrok이 떠 있을 수 있고,
+# 그걸 FarShell 입구로 표시하면 화면이 거짓말을 하게 된다.
+for t in tunnels:
+    addr = str((t.get("config") or {}).get("addr") or "")
+    pub = str(t.get("public_url") or "")
+    if addr.rsplit(":", 1)[-1] == port and pub.startswith("https"):
+        print(pub)
+        break
+' "$want" 2>/dev/null)"
+    [ -n "$url" ] && { printf '%s' "$url"; return 0; }
+  done
+  return 1
+}
+
 _main_tunnel_pids() {
   command -v pgrep >/dev/null 2>&1 || return 0
+  if [ "$(_tunnel_provider)" = "ngrok" ]; then
+    # 메인 = VT_PORT를 내보내는 에이전트. expose로 띄운 다른 포트 에이전트와 갈린다.
+    pgrep -f "ngrok .*http .*\b$VT_PORT\b" 2>/dev/null | grep -v '^$' | tr '\n' ' ' | sed 's/ $//'
+    return 0
+  fi
   {
     pgrep -f "cloudflared.*tunnel run" 2>/dev/null || true
     pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null || true
   } | grep -v '^$' | tr '\n' ' ' | sed 's/ $//'
 }
 
+# 메인 공개 URL의 단일 진실의 원천. status·mobile·handoff·훅이 전부 이걸 부른다
+# (예전엔 각자 로그를 grep해서 제공자를 하나 더 들이면 그만큼 드리프트했다).
 _main_tunnel_url() {
-  if [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
-    echo "https://$VT_TUNNEL_HOSTNAME"
-    return 0
-  fi
-  grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1
+  case "$(_tunnel_provider)" in
+    none)  return 0 ;;
+    ngrok) _ngrok_public_url "$VT_PORT" || return 0 ;;
+    *)
+      if [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+        echo "https://$VT_TUNNEL_HOSTNAME"
+        return 0
+      fi
+      grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1
+      ;;
+  esac
 }
 
 # stdout: "라벨<TAB>URL" 줄들 — 훅의 stdin이자 fsh tunnel list의 원본
@@ -506,6 +652,20 @@ _run_tunnel_hook() {
   local event="${1:-manual}"
   # 미설정이면 조용히 통과 — 터널 동작을 절대 방해하지 않는다
   [ -n "${VT_TUNNEL_HOOK:-}" ] || return 0
+
+  # ngrok 고정 도메인은 재시작해도 주소가 그대로다. 그런데도 start마다 훅을 쏘면
+  # 노션·슬랙에 "바뀌지 않은 URL"을 계속 덮어쓰게 된다 — 훅의 이름과 계약
+  # (`fsh help tunnel-hook`: URL이 바뀔 때 호출)에도 어긋난다. 그래서 자동
+  # 이벤트는 지난번 게시한 주소와 다를 때만 보낸다. `fsh tunnel hook`으로
+  # 직접 부르는 manual은 언제나 그대로 나간다.
+  local url_now stamp="$PID_DIR/tunnel-hook-last-url"
+  if [ "$(_tunnel_provider)" = "ngrok" ] && [ "$event" != "manual" ]; then
+    url_now="$(_main_tunnel_url)"
+    if [ -n "$url_now" ] && [ -f "$stamp" ] && [ "$url_now" = "$(cat "$stamp" 2>/dev/null)" ]; then
+      return 0
+    fi
+    [ -n "$url_now" ] && printf '%s' "$url_now" > "$stamp"
+  fi
 
   local entries
   entries="$(_tunnel_entries)"
@@ -1074,11 +1234,10 @@ cmd_mobile() {
       ;;
   esac
 
+  # 제공자(cloudflare/ngrok)와 명명 터널 여부를 아는 건 _main_tunnel_url 하나다.
+  # 예전엔 여기서 직접 로그를 grep해서, 제공자가 늘 때마다 QR만 옛 주소를 실었다.
   local url
-  url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-  if [ -n "${VT_TUNNEL_HOSTNAME:-}" ] && [ "$network_mode" = "all" ]; then
-    url="https://$VT_TUNNEL_HOSTNAME"
-  fi
+  url="$(_main_tunnel_url)"
   # localhost/lan 모드는 위에서 full_url 이미 설정됨 — all 모드는 url 사용
   if [ "$network_mode" = "all" ] && [ -n "$url" ]; then
     full_url="$url"
@@ -2034,6 +2193,14 @@ cmd_stop() {
       pid=$(cat "$pidfile")
       if kill -0 "$pid" 2>/dev/null; then
         kill "$pid" 2>/dev/null
+        # SIGTERM을 무시하는 프로세스가 실제로 있다(2026-09-17: ngrok이 그랬다).
+        # 확인 없이 pid 파일만 지우면 "종료했다"고 말해 놓고 터널은 계속 살아
+        # 있는 상태가 된다 — 다음 start가 "이미 실행 중"으로 넘어가 버린다.
+        local waited=0
+        while kill -0 "$pid" 2>/dev/null && [ $waited -lt 20 ]; do
+          sleep 0.1; waited=$((waited + 1))
+        done
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
         echo "  ✓ $svc 종료 (PID $pid)"
       fi
       rm -f "$pidfile"
@@ -2204,12 +2371,40 @@ cmd_doctor() {
     _check "tmux" fail "brew install tmux / apt install tmux"
   fi
 
-  # 5. cloudflared (원격 접속용)
-  if command -v cloudflared >/dev/null 2>&1; then
-    _check "cloudflared" ok "$(cloudflared --version 2>&1 | head -1)"
-  else
-    _check "cloudflared" warn "원격 접속 시 필요. brew install cloudflared"
-  fi
+  # 5. 공개 입구 제공자 + 그 제공자의 실행 파일
+  local _provider; _provider="$(_tunnel_provider)"
+  _check "터널 제공자" ok "$_provider${VT_TUNNEL_PROVIDER:+ (VT_TUNNEL_PROVIDER)}"
+  case "$_provider" in
+    ngrok)
+      if command -v ngrok >/dev/null 2>&1; then
+        _check "ngrok" ok "$(ngrok version 2>&1 | head -1)"
+        # authtoken이 없으면 기동은 되고 연결에서 실패한다 — 그 실패는 로그에만
+        # 남아서, 여기서 미리 말해주지 않으면 원인을 찾기 어렵다.
+        if ngrok config check >/dev/null 2>&1; then
+          _check "ngrok 설정" ok "authtoken 등록됨"
+        else
+          _check "ngrok 설정" fail "'ngrok config add-authtoken <토큰>' 필요"
+        fi
+        if [ -n "${VT_NGROK_DOMAIN:-}" ]; then
+          _check "ngrok 도메인" ok "${VT_NGROK_DOMAIN#https://} (고정)"
+        else
+          _check "ngrok 도메인" warn "VT_NGROK_DOMAIN 미설정 — 매번 임시 주소가 발급됩니다"
+        fi
+      else
+        _check "ngrok" fail "VT_TUNNEL_PROVIDER=ngrok인데 미설치. brew install ngrok"
+      fi
+      ;;
+    none)
+      _check "공개 터널" ok "사용 안 함 (VT_TUNNEL_PROVIDER=none)"
+      ;;
+    *)
+      if command -v cloudflared >/dev/null 2>&1; then
+        _check "cloudflared" ok "$(cloudflared --version 2>&1 | head -1)"
+      else
+        _check "cloudflared" warn "원격 접속 시 필요. brew install cloudflared"
+      fi
+      ;;
+  esac
 
   # 5b. Tailscale (D9: 회사망 등 화면 원격이 막힌 환경의 SSH 경유 접속용, `fsh ssh`)
   if command -v tailscale >/dev/null 2>&1; then
@@ -2852,7 +3047,7 @@ cmd_handoff() {
       fi
 
       local url
-      url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+      url="$(_main_tunnel_url)"
       local ticket
       ticket="$(_issue_ticket "handoff")"
       local full_url="$url"
@@ -3703,40 +3898,25 @@ EOF
 # status 화면이 "외부 접속 경로 없음"처럼 읽히는 걸 막는다(2026-09-17).
 # 감지되지 않으면 줄 자체를 출력하지 않는다 — ngrok을 안 쓰는 사람 화면은 그대로다.
 _ngrok_status() {
-  local api="${VT_NGROK_API:-http://127.0.0.1:4040}" json py url
-  py="${VT_PYTHON:-}"
-  [ -n "$py" ] && [ -x "$py" ] || py="python3"
-  json="$(curl -s --max-time 2 "$api/api/tunnels" 2>/dev/null)"
-  if [ -n "$json" ]; then
-    url="$(printf '%s' "$json" | "$py" -c '
-import json, sys
-try:
-    tunnels = json.load(sys.stdin).get("tunnels") or []
-except Exception:
-    raise SystemExit(0)
-port = sys.argv[1]
-# 우리 포트로 가는 터널만 취한다 — 다른 앱을 내보내는 ngrok이 떠 있을 수 있고,
-# 그걸 FarShell 입구로 표시하면 화면이 거짓말을 하게 된다.
-for t in tunnels:
-    addr = str((t.get("config") or {}).get("addr") or "")
-    pub = str(t.get("public_url") or "")
-    if addr.rsplit(":", 1)[-1] == port and pub.startswith("https"):
-        print(pub)
-        break
-' "$VT_PORT" 2>/dev/null)"
-    if [ -n "$url" ]; then
+  local url
+  if url="$(_ngrok_public_url "$VT_PORT")"; then
+    # provider=ngrok이면 fsh가 띄우고 끄는 대상이다. 아니라면 사용자가 직접
+    # 띄운 것이므로 "fsh가 관리하지 않음"을 붙인다 — fsh stop이 안 끄는 걸
+    # 버그로 읽지 않게 하는 유일한 단서다.
+    if [ "$(_tunnel_provider)" = "ngrok" ]; then
+      echo "✓ $url → :$VT_PORT"
+    else
       echo "✓ $url → :$VT_PORT  (fsh가 관리하지 않음)"
-      return 0
     fi
+    return 0
   fi
   # 프로세스는 있는데 에이전트 API가 안 열린 경우 — "없음"이라고 말하면 안 된다.
   if pgrep -f "ngrok .*http" >/dev/null 2>&1; then
-    echo "⚠ 실행 중 (URL 확인 불가 — 에이전트 API $api 무응답)"
+    echo "⚠ 실행 중 (URL 확인 불가 — ngrok 에이전트 API 무응답)"
     return 0
   fi
   return 1
 }
-
 cmd_status() {
   echo ""
   echo "  📊 fsh status"
@@ -3800,6 +3980,9 @@ cmd_status() {
 
   echo "  서버:        $server_status"
   [ -n "$stale_warn" ] && echo "               ⚠ $stale_warn"
+  # 제공자가 cloudflare가 아니면, cloudflared가 실제로 떠 있을 때만 보여준다.
+  # 안 쓰는 제공자의 "✗ 중지"를 계속 띄우면 화면이 문제처럼 읽힌다.
+  if [ "$(_tunnel_provider)" = "cloudflare" ] || [ -n "$tunnel_pids" ]; then
   echo "  Cloudflare:"
   echo "    설치:       $tunnel_installed"
   echo "    실행:       $tunnel_status"
@@ -3813,10 +3996,12 @@ cmd_status() {
     echo "    추가 포트:"
     awk -F'\t' '{printf "      %-6s %s  (%s)\n", $1, $2, ($3==""?"-":$3)}' "$TUNNEL_REGISTRY"
   fi
+  fi
   local ngrok_line
   if ngrok_line="$(_ngrok_status)"; then
     echo "  ngrok:       $ngrok_line"
   fi
+  echo "  터널 제공자: $(_tunnel_provider)${VT_TUNNEL_PROVIDER:+ (VT_TUNNEL_PROVIDER)}"
   if [ -n "${VT_TUNNEL_HOOK:-}" ]; then
     echo "  URL 변경 훅: ✓ 설정됨 (fsh tunnel hook)"
   else
