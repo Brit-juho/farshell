@@ -75,34 +75,7 @@
   background:var(--win);
 }
 
-.vt-wgrail-row {
-  display:flex; align-items:stretch; gap:calc(var(--spacing) * 2);
-  padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
-  border-bottom:1px solid var(--line); cursor:pointer; min-width:0;
-}
-.vt-wgrail-row:hover { background:var(--menu-hover); }
-/* 활성 행이 **이겨야 한다**(2026-09-17 디자인 리뷰 B1). 이전에는
-   --color-surface-active 하나로만 말했는데, 그 토큰은 밝은 notepad 스킨에서
-   `rgb(0 0 0 / .18)`(검정 오버레이)이다. 어두운 스킨 5종은 흰색 오버레이라
-   "떠오름"으로 읽히지만, 종이 스킨에서 검정을 덮으면 **"흐려짐 = 비활성"**으로
-   읽힌다 — 방향이 뒤집힌 것이다(그 토큰 자체는 hover 대비 1.35:1을 맞추려고
-   고른 값이라 건드리지 않는다. 문제는 대비 크기가 아니라 방향이었다).
-
-   그래서 스킨과 무관하게 뜻이 같은 것으로 말한다:
-     · --color-bg-3 = 각 스킨의 "가장 올라온 표면"(notepad #fff / farshell #141719)
-     · --shadow-e1  = 그 위에 얹은 낮은 elevation
-   둘이 합쳐 밝든 어둡든 "이 행이 떠 있다"가 된다.
-
-   그리고 이름에 액센트를 준다. 리뷰 B3이 "--color-acc가 제품 표면에 한 번도
-   안 쓰인다(60/30/10의 10%가 비어 있다)"고 지적했는데, 액센트가 가장 값진
-   자리가 바로 "지금 여기"다. **채움이 아니라 글자색**이라 DESIGN.md의
-   "화면당 solid 액센트 1개"와도 충돌하지 않는다. */
-.vt-wgrail-row.active {
-  background:var(--color-bg-3);
-  box-shadow:var(--shadow-e1);
-  position:relative; z-index:1;
-}
-.vt-wgrail-row.active .vt-wgrail-name { color:var(--color-acc); font-weight:600; }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-srow`가 맡는다. 데스크톱은 기본 크기 */
 /* 20-design-system.md §5(O2) — 색점 램프. 상태색 막대(.vt-wgrail-bar, 아래)와
    별개 요소 — DOM에서 색점이 먼저(왼쪽 끝), 상태색이 그다음. */
 .vt-wgrail-hash {
@@ -117,32 +90,12 @@
 .vt-wgrail-hash.hash-6 { background:var(--color-hash-7); }
 .vt-wgrail-hash.hash-7 { background:var(--color-hash-8); }
 .vt-wgrail-hash.kind-session { background:transparent; }
-.vt-wgrail-bar {
-  background:var(--color-st-idle);
-}
-.vt-wgrail-bar.tone-waiting { background:var(--color-st-waiting); }
-.vt-wgrail-bar.tone-working { background:var(--color-st-working); }
+/* 2.1.6 — 상태 다섯 색은 components.css의 `.vt-srow-mark`가 맡는다.
+   .kind-session(세션 행은 색점 없음)만 여기 남는다. */
 .vt-wgrail-bar.tone-error   { background:var(--color-st-error); }
 .vt-wgrail-bar.tone-done    { background:var(--color-st-done); }
-.vt-wgrail-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
-.vt-wgrail-row-top { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
-.vt-wgrail-name {
-  flex:1;
-  min-width:0;
-  font:500 var(--fs-sm) var(--mono);
-  color:var(--txt);
-}
-.vt-wgrail-diff { flex:none; font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
-.vt-wgrail-row-sub {
-  font:400 var(--fs-3xs) var(--mono);
-  color:var(--sub);
-}
 /* N38(70-mobile.md §2)과 같은 패턴 — waiting 상태에서 감지된 질문 1줄 미리보기
    (10-shell-layout.md §5 목업 "? Allow edit to legacy.css?"). */
-.vt-wgrail-question {
-  font:400 var(--fs-3xs) var(--mono);
-  color:var(--warn);
-}
 /* N8/N44(30-worktree.md §4) — "「기타」 그룹: ... 색점 없음". 어떤 워크트리에도
    안 속하는 세션 행은 저장소가 없어 색점 막대·상태색 막대 둘 다 투명. */
 .vt-wgrail-bar.kind-session { background:transparent; }

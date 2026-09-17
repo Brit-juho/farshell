@@ -125,6 +125,7 @@
    * 쓴다(20-design-system.md §5: "원형 dot은 상태 전용이므로 색점은 절대
    * 원형이 아니다"). */
   .vt-sidebar-mark,
+  .vt-srow-mark,
   .vt-fleet-bar,
   .vt-wgrail-hash,
   .vt-wgrail-bar {

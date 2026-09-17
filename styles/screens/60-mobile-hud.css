@@ -204,28 +204,16 @@
   .vt-fleet-group-head {
   padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1);
 }
-  .vt-fleet-row {
-    display:flex; align-items:stretch; gap:calc(var(--spacing) * 2);
-    padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
-    border-bottom:1px solid var(--line); cursor:pointer; min-width:0;
-  }
-  .vt-fleet-row.is-waiting { background:var(--color-surface-active); }
-  .vt-fleet-bar {
-  background:var(--color-st-idle);
-}
-  .vt-fleet-bar.tone-waiting { background:var(--color-st-waiting); }
-  .vt-fleet-bar.tone-working { background:var(--color-st-working); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-srow`가 맡는다. 폰은 .lg(이름이 크고 행이 높다) */
+  /* 2.1.6 — 상태 다섯 색은 components.css의 `.vt-srow-mark`가 맡는다. */
   .vt-fleet-bar.tone-error   { background:var(--color-st-error); }
   .vt-fleet-bar.tone-done    { background:var(--color-st-done); }
-  .vt-fleet-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
-  .vt-fleet-row-top { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
   .vt-fleet-name {
   flex:1;
   min-width:0;
   font:500 var(--fs-md) var(--mono);
   color:var(--txt);
 }
-  .vt-fleet-diff { flex:none; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
   .vt-fleet-row-sub {
   font:400 var(--fs-2xs) var(--mono);
   color:var(--sub);

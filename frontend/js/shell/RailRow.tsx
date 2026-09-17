@@ -45,7 +45,7 @@ export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: M
 
   return (
     <div
-      class="vt-wgrail-row"
+      class="vt-srow vt-wgrail-row"
       classList={{ active: props.active, 'no-session': noSession() }}
       onClick={props.onOpen}
       onContextMenu={props.onContext}
@@ -63,29 +63,29 @@ export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: M
           §4/10-shell-layout.md §5)을 그대로 맡는다. 「기타」 세션 행은 저장소가
           없어 둘 다 "색점 없음"(kind-session이 CSS에서 투명 처리). */}
       <span class={`vt-wgrail-hash ${isWt() ? `hash-${hashRepoColorIndex((props.row as WorktreeRailRowInput).repoName)}` : 'kind-session'}`} />
-      <span class={`vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
-      <div class="vt-wgrail-row-main">
-        <div class="vt-wgrail-row-top">
+      <span class={`vt-srow-mark vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
+      <div class="vt-srow-main vt-wgrail-row-main">
+        <div class="vt-srow-top vt-wgrail-row-top">
           {/* 2.1.6 — 헤더의 워크트리 탭(layout/tabbar.js)은 이 마크를 달고 있었고
               레일 행과 폰의 플릿 행은 안 달고 있었다. 같은 세션을 보는 세 화면이
               서로 다른 것을 말하던 것을 맞춘다. 에이전트를 아직 모르면
               (agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
           <Show when={props.row.agent}>
             {(a) => (
-              <span class="vt-wgrail-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
+              <span class="vt-srow-agent vt-wgrail-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
             )}
           </Show>
-          <span class="vt-wgrail-name">{rowName()}</span>
+          <span class="vt-srow-name vt-wgrail-name">{rowName()}</span>
           <Show when={diffLabel()}>
-            <span class="vt-wgrail-diff">{diffLabel()}</span>
+            <span class="vt-srow-meta vt-wgrail-diff">{diffLabel()}</span>
           </Show>
         </div>
-        <div class="vt-wgrail-row-sub">
+        <div class="vt-srow-sub vt-wgrail-row-sub">
           {props.row.statusSentence}
           <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>
         <Show when={props.row.status === 'waiting' && props.row.question}>
-          <div class="vt-wgrail-question">? {props.row.question}</div>
+          <div class="vt-srow-question vt-wgrail-question">? {props.row.question}</div>
         </Show>
       </div>
     </div>
