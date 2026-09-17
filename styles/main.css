@@ -36,6 +36,9 @@
 @import "./layers/reset.css";
 /* 컴포넌트 계약 — 버튼·배지·칩·토글·셀렉트·슬라이더·빈 상태·토스트·상태 dot. */
 @import "./layers/components.css";
+/* 관용구 — 여러 컴포넌트가 공유하는 표현(말줄임·대문자 라벨·손잡이·작은 점).
+ * components 뒤에 와야 컴포넌트 기본값을 덮을 수 있다. */
+@import "./layers/patterns.css";
 
 /* 자동 스캐너가 서드파티 번들(highlight.js 등)의 문자열까지 훑어 "invisible"
  * 같은 우연한 단어 일치로 유틸리티를 만드는 걸 막는다. 실제 DOM에 그 클래스를

@@ -36,8 +36,10 @@
   padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); background:var(--bar);
   border-bottom:1px solid var(--line); flex:0 0 auto;
 }
-.vt-vw-title{ flex:1; font:600 var(--fs-sm) var(--ui); overflow:hidden;
-  text-overflow:ellipsis; white-space:nowrap; }
+.vt-vw-title{
+  flex:1;
+  font:600 var(--fs-sm) var(--ui);
+}
 /* 2.1.6 — 이 묶음은 여섯이었는데 **넷은 죽어 있었다**: .vt-vw-back ·
    .vt-vw-tree-toggle · .vt-vw-here · .vt-vw-insert-cur를 DOM에 붙이는 코드가
    프런트 어디에도 없다(전수 grep). 코드 뷰어가 pane 리프로 다시 쓰이면서
@@ -97,7 +99,9 @@
 }
 .vt-vw-row:hover{ background:var(--menu-hover); }
 .vt-vw-row:active{ background:color-mix(in srgb, var(--acc) 16%, var(--menu-hover)); }
-.vt-vw-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-vw-name{
+  flex:1;
+}
 .vt-vw-size{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); flex:0 0 auto; }
 
 /* 코드 본문 — 가로 스크롤은 이 안에서만. 페이지 전체가 밀리면 안 된다. */
@@ -127,8 +131,10 @@
   background:var(--bar); position:sticky; top:0; z-index:1;
   border-bottom:1px solid var(--line);
 }
-.vt-vw-dpath{ flex:1; font:600 var(--fs-xs) var(--mono); overflow:hidden;
-  text-overflow:ellipsis; white-space:nowrap; }
+.vt-vw-dpath{
+  flex:1;
+  font:600 var(--fs-xs) var(--mono);
+}
 .vt-vw-dstat{ font:600 var(--fs-2xs) var(--mono); flex:0 0 auto; }
 .vt-vw-dstat .add{ color:var(--ok); }
 .vt-vw-dstat .del{ color:var(--err); }
@@ -186,8 +192,7 @@
 .vt-vw-git{ display:flex; flex-direction:column; }
 .vt-vw-gsec + .vt-vw-gsec{ border-top:1px solid var(--line); }
 .vt-vw-ghead{
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); font:600 var(--fs-2xs) var(--ui); color:var(--sub);
-  text-transform:uppercase; letter-spacing:.04em;
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
 }
 .vt-vw-grow{
   display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
@@ -430,8 +435,6 @@ body.vt-resizing #terminal-container{ transition:none; }
 /* U3: 내 서버 / 보호됨(시스템) 구분 헤더 — 두 그룹이 섞여 있을 때만 렌더된다. */
 .vt-pt-section{
   padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3) calc(var(--spacing) * 1);
-  font:600 var(--fs-2xs) var(--ui); color:var(--sub);
-  text-transform:uppercase; letter-spacing:.04em;
 }
 /* U4/D4: 행 높이 24px 고정(단일 줄) — cmd/pid/uptime/mem/cpu를 두 줄로 쌓던
    레이아웃을 한 줄로 합쳤다(.vt-pt-meta가 flex 컨테이너가 되면서 자식이
@@ -471,7 +474,10 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-pt-meta{ display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); flex:1 1 auto; min-width:0; overflow:hidden; }
 /* 줄어드는 순서: cmd가 먼저(가중치 100), 그다음 수치(1). 둘 다 넘치면 자르고
    줄임표를 붙인다. */
-.vt-pt-cmd{ flex:0 100 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pt-cmd{
+  flex:0 100 auto;
+  min-width:0;
+}
 /* pid·uptime·CPU%·메모리처럼 새로고침마다 값이 바뀌는 숫자 — tabular-nums로
    자릿수가 바뀌어도 폭이 흔들리지 않게 고정한다.
 
@@ -481,7 +487,13 @@ body.vt-resizing #terminal-container{ transition:none; }
    겹쳐 그려졌다**(실브라우저에서 확인 — 글자와 버튼이 포개져 둘 다 안 읽혔다).
    부모(.vt-pt-meta)의 min-width:0은 부모만 줄일 뿐 안 줄어드는 자식을 막지 못한다.
    의도(수치가 끝까지 남는다)는 shrink 가중치로 지키고, 넘침은 자른다. */
-.vt-pt-sub{ flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); font:400 var(--fs-2xs) var(--mono); font-variant-numeric:tabular-nums; }
+.vt-pt-sub{
+  flex:0 1 auto;
+  min-width:0;
+  color:var(--sub);
+  font:400 var(--fs-2xs) var(--mono);
+  font-variant-numeric:tabular-nums;
+}
 .vt-pt-tags{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
 .vt-pt-tag{
   font:600 var(--fs-3xs) var(--ui); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5); border-radius:var(--radius-full);
@@ -513,8 +525,10 @@ body.vt-resizing #terminal-container{ transition:none; }
 }
 .vt-pt-tunnel-label{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
 .vt-pt-tunnel-url{
-  flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font:400 var(--fs-xs) var(--mono); color:var(--acc);
+  flex:1 1 auto;
+  min-width:0;
+  font:400 var(--fs-xs) var(--mono);
+  color:var(--acc);
 }
 
 /* U4/D4: 행이 한 줄(24px)로 고정된 뒤로는 좁은 화면에서도 줄바꿈이 필요 없다 —
@@ -627,21 +641,24 @@ body.vt-resizing #terminal-container{ transition:none; }
    내려가야 했고, 폰에서는 그 동선 자체가 뷰어를 안 쓰게 되는 이유였다. */
 .vt-vw-recent{ border-bottom:1px solid var(--line); padding-bottom:calc(var(--spacing) * 1); margin-bottom:calc(var(--spacing) * 1); }
 .vt-vw-recent-head{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1); font:600 var(--fs-3xs) var(--ui); letter-spacing:.08em;
-  text-transform:uppercase; color:var(--sub);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
 }
 .vt-vw-recent-row{ flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 0.25); }
 .vt-vw-recent-row .vt-vw-name{ flex:0 0 auto; width:100%; }
 .vt-vw-recent-dir{
-  font:400 var(--fs-3xs) var(--mono); color:var(--sub);
-  width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left;
+  font:400 var(--fs-3xs) var(--mono);
+  color:var(--sub);
+  width:100%;
+  direction:rtl;
+  text-align:left;
 }
 
 /* 빠른 열기 (Quick open, D) — 세션·최근 파일·명령 통합 검색. */
 .vt-qo-section-head{
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1); font:600 var(--fs-3xs) var(--ui); letter-spacing:.08em;
-  text-transform:uppercase; color:var(--sub);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
 }
 .vt-qo-row{ cursor:pointer; }
 .vt-qo-row.selected{ background:var(--menu-hover); }
@@ -686,8 +703,9 @@ body.vt-resizing #terminal-container{ transition:none; }
   font:400 var(--fs-xs)/1.55 var(--mono); color:var(--sub); background:var(--crust);
 }
 .vt-qo-preview-pane .vt-qo-preview-head{
-  font:600 var(--fs-2xs) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 1);
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font:600 var(--fs-2xs) var(--ui);
+  color:var(--txt);
+  margin-bottom:calc(var(--spacing) * 1);
 }
 .vt-qo-preview-pane .vt-qo-preview-line{ white-space:pre; }
 .vt-qo-preview-pane .vt-qo-preview-line.match{ color:var(--txt); background:color-mix(in srgb, var(--acc) 16%, transparent); }

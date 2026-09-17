@@ -1,0 +1,160 @@
+/* 관용구(pattern) 레이어 — 컴포넌트가 아니라 **여러 곳에서 똑같이 반복되는 선언
+ * 묶음**을 한 곳으로 모은 것.
+ *
+ * components.css와 나누는 기준:
+ *   components  하나의 물건이다. 이름을 부르면 무엇인지 안다(버튼·배지·행).
+ *   patterns    물건이 아니라 **표현 방식**이다. 여러 물건이 공유한다
+ *               (한 줄 말줄임 · 대문자 라벨 · 드래그 손잡이 · 작은 점).
+ *
+ * ⚠ 왜 레거시 이름을 셀렉터로 나열하는가 — DOM을 안 건드리기 위해서다.
+ * 예를 들어 말줄임은 33개 규칙에 흩어져 있었는데, 그 소비자 중 다섯은
+ * `el('div','vt-vw-recent-dir')` 같은 헬퍼나 id로 만들어져 클래스 문자열 검색에
+ * 안 잡힌다. 33곳에 클래스를 손으로 붙이다 하나만 빠뜨려도 그 자리는 **조용히
+ * 말줄임이 풀려** 글자가 옆 요소를 덮는다(포트 패널에서 실제로 겪은 버그다).
+ * 선언을 여기 한 번만 쓰고 이름들을 이어 붙이면 그 위험이 0이 되고, 고칠 곳도
+ * 한 곳이 된다.
+ *
+ * 새로 쓰는 코드는 레거시 이름이 아니라 `.vt-truncate` · `.vt-eyebrow` 처럼
+ * 앞에 선언된 이름을 쓴다. 아래 목록은 **줄어들기만 해야 하는 목록**이다.
+ */
+@layer components {
+
+  /* ── 한 줄 말줄임 ─────────────────────────────────────────────────────
+   * 넘치면 자르고 …을 붙인다. flex 자식이면 `min-width:0`이 같이 있어야
+   * 실제로 줄어든다 — 그건 자리마다 다르므로 여기 넣지 않는다. */
+  .vt-truncate,
+  #voice-session-picker,
+  #vt-mnav-host-chip,
+  .vt-drag-ghost,
+  .vt-pane-name,
+  .vt-ob-row-label,
+  .vt-card .card-title,
+  .vt-card .card-cmd,
+  .vt-vw-title,
+  .vt-vw-name,
+  .vt-vw-dpath,
+  .vt-pt-cmd,
+  .vt-pt-sub,
+  .vt-pt-tunnel-url,
+  .vt-vw-recent-dir,
+  .vt-qo-preview-pane .vt-qo-preview-head,
+  .vt-clients-label,
+  .vt-fleet-host-name,
+  .vt-fleet-host-detail,
+  .vt-fleet-hostitem-name,
+  .vt-fleet-name,
+  .vt-fleet-row-sub,
+  .vt-fleet-question,
+  .vt-wgrail-host-name,
+  .vt-wgrail-name,
+  .vt-wgrail-row-sub,
+  .vt-wgrail-question,
+  .vt-wgrail-new,
+  .vt-fl-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── 대문자 섹션 라벨(eyebrow) ────────────────────────────────────────
+   * 목록 위에 얹혀 "여기부터 무엇"을 말하는 작은 줄. 크기를 키우지 않고
+   * 제목으로 읽히게 하는 방법이 자간을 벌리고 대문자로 쓰는 것이다.
+   *
+   * 2.1.6 이전에는 12벌이었고 자간이 .03 / .04 / .06 / .08 / .1em 다섯 가지,
+   * 글꼴도 --ui와 --mono가 섞여 있었다. 같은 뜻의 줄이 화면마다 다른 밀도로
+   * 보였다는 뜻이다. 자간은 토큰(--tracking-caps) 하나로, 글꼴은 mono로
+   * 통일한다 — 이 앱의 라벨은 목록·경로 옆에 놓이는 일이 많아 mono가 줄을
+   * 더 잘 맞춘다(목업의 구획 머리도 mono다). */
+  .vt-eyebrow,
+  .vt-vw-ghead,
+  .vt-pt-section,
+  .vt-wgrail-title,
+  .vt-fl-field-label,
+  .vt-usage-section-title,
+  .vt-set-covtable th,
+  .vt-vw-recent-head,
+  .vt-qo-section-head,
+  .vt-fleet-group-head,
+  .vt-wgrail-group-head,
+  .vt-wtd-section-title {
+    color: var(--color-sub);
+    font: var(--weight-semibold) var(--fs-2xs) / 1 var(--font-mono);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+  }
+  /* 더 작은 단(행 사이에 끼는 구획 머리). */
+  .vt-eyebrow.sm,
+  .vt-vw-recent-head,
+  .vt-qo-section-head,
+  .vt-fleet-group-head,
+  .vt-wgrail-group-head,
+  .vt-wtd-section-title { font-size: var(--fs-3xs); }
+
+  /* ── 드래그 손잡이(리사이저) ──────────────────────────────────────────
+   * 레일·dock·패널의 폭을 끄는 6px 띠. 보이지 않지만 잡히는 넓이가 있어야
+   * 한다 — 1px 선 위에 정확히 올리는 건 마우스로 못 한다.
+   * 2.1.6 이전에는 세 벌이었고 선언 여섯이 전부 같았다. */
+  .vt-resizer,
+  .vt-rail-resizer,
+  .vt-wgrail-resizer,
+  .vt-dock-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    z-index: 1;
+    cursor: col-resize;
+  }
+
+  /* ── 작은 점(안 읽음 표시) ────────────────────────────────────────────
+   * 6px 원. `.status-dot`(8px)과 다르다 — 저건 상태 다섯 가지를 색으로
+   * 말하고, 이건 "확인 안 함" 하나만 말한다. 색은 자리마다 다르므로
+   * (HUD는 sub, 탭·플릿은 액센트) 모양만 여기서 정한다. */
+  .vt-dot,
+  .vt-hud-dot,
+  .vt-fleet-unseen-badge,
+  .vt-wtab-unread {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-full);
+  }
+
+  /* ── 3px 세로 막대 ────────────────────────────────────────────────────
+   * 행 왼쪽 끝에 서는 띠. 저장소 색점(--color-hash-*)과 상태색 둘 다 이 모양을
+   * 쓴다(20-design-system.md §5: "원형 dot은 상태 전용이므로 색점은 절대
+   * 원형이 아니다"). */
+  .vt-sidebar-mark,
+  .vt-fleet-bar,
+  .vt-wgrail-hash,
+  .vt-wgrail-bar {
+    flex: none;
+    width: 3px;
+    border-radius: var(--radius-full);
+  }
+
+  /* ── 체크박스 ─────────────────────────────────────────────────────────
+   * 설정 화면은 세그먼트 토글(.vt-toggle)로 갔지만, 메뉴 항목 안의 체크는
+   * 네이티브 그대로 둔다 — 줄 끝에 조용히 붙는 표시라 세그먼트가 과하다.
+   * 세 벌이 같은 선언을 갖고 있었다. */
+  .vt-check,
+  .mi input[type="checkbox"],
+  .vt-session-footer-item input[type="checkbox"] {
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-acc);
+    cursor: pointer;
+  }
+
+  /* ── 테두리 카드 ──────────────────────────────────────────────────────
+   * 사용량 패널의 카드 두 종류가 같은 선언이었다. */
+  .vt-card-box,
+  .vt-usage-card,
+  .vt-counter-card {
+    padding: calc(var(--spacing) * 1.5);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-sm);
+    margin-bottom: calc(var(--spacing) * 1.5);
+  }
+}

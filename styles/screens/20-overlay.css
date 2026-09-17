@@ -110,8 +110,12 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-ob-sessions-title { font-size:var(--fs-2xs); color:var(--sub); padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5); }
 .vt-ob-row { padding:0; }
 .vt-ob-row-label {
-  display:block; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2); font-size:var(--fs-sm); color:var(--txt); cursor:pointer;
-  border-radius:var(--radius-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  display:block;
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2);
+  font-size:var(--fs-sm);
+  color:var(--txt);
+  cursor:pointer;
+  border-radius:var(--radius-sm);
 }
 .vt-ob-row-label:hover { background:var(--menu-hover); }
 /* L1: 캐시로 즉시 그린 목록 — 아직 실제 연결을 확인 전이라 눌리지 않게 막고
@@ -212,10 +216,20 @@ body.voice-only-mode .vt-onboarding { display:none; }
    명령어(가장 어두운 --sub, 메타데이터). 이전엔 제목·프리뷰가 둘 다 --txt +
    13/11px 1px 차이뿐이라 무게만으로 구분해야 했던 걸, 크기·색을 함께 벌려
    스캔했을 때 즉시 구분되게 한다. */
-.vt-card .card-title { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-weight:700; color:var(--txt); font-size:var(--fs-base); }
-.vt-card .card-cmd { flex:0 1 auto; min-width:0; max-width:40%; overflow:hidden; text-overflow:ellipsis;
-  white-space:nowrap; font-size:var(--fs-2xs); color:var(--sub); }
+.vt-card .card-title {
+  flex:1 1 auto;
+  min-width:0;
+  font-weight:700;
+  color:var(--txt);
+  font-size:var(--fs-base);
+}
+.vt-card .card-cmd {
+  flex:0 1 auto;
+  min-width:0;
+  max-width:40%;
+  font-size:var(--fs-2xs);
+  color:var(--sub);
+}
 .vt-card .card-preview {
   margin:0; background:var(--crust); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1); font-family:var(--mono);
   font-size:var(--fs-2xs); color:var(--txt2); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.2;
