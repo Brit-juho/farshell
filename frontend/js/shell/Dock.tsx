@@ -193,7 +193,7 @@ function Dock(props: { deps: DockDeps }) {
   const badgeOf = (t: DockTab) => (t.badge ? badges()[t.badge] || 0 : 0);
 
   return (
-    <aside id="vt-dock" classList={{ collapsed: collapsed() }} aria-label="dock">
+    <aside id="vt-dock" class="vt-sidepanel right" classList={{ collapsed: collapsed() }} aria-label="dock">
       <div class="vt-dock-tabs" role="tablist">
         <For each={tabs()}>
           {(t) => (
