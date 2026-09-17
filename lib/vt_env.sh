@@ -178,7 +178,12 @@ vt_env_load() {
 # ⚠ 이 목록은 server/vt_env.py의 BOUNDARY_KEYS와 **같아야 한다.**
 #    server/tests/test_vt_env.py가 두 목록의 일치를 검사한다 — 한쪽만 고치면 실패한다.
 # ⚠ VT_CONFIG는 여기 없다. "어느 파일을 읽을지" 고르는 키라 환경변수가 이겨야 한다.
-VT_ENV_BOUNDARY_KEYS="VT_BROWSE_ROOTS VT_NETWORK_MODE VT_ALLOWED_ORIGINS VT_TRUST_PROXY VT_AUTH_TOKEN VT_AUTH_PASSWORD_HASH VT_AUTH_SESSION_KEY VT_SAFE_MODE VT_DISALLOWED_TOOLS VT_STATE_DIR VT_TOKEN VT_PASSWORD_HASH VT_SECRET_KEY"
+VT_ENV_BOUNDARY_KEYS="VT_BROWSE_ROOTS VT_NETWORK_MODE VT_ALLOWED_ORIGINS VT_TRUST_PROXY VT_AUTH_TOKEN VT_AUTH_PASSWORD_HASH VT_AUTH_SESSION_KEY VT_SAFE_MODE VT_DISALLOWED_TOOLS VT_STATE_DIR VT_TUNNEL_HOOK VT_TOKEN VT_PASSWORD_HASH VT_SECRET_KEY"
+
+# 파일에 **없으면 꺼진 것으로 보는** 키(= server/vt_env.py의 FILE_CLEARED_KEYS).
+# 설정에서 지웠는데 낡은 export 때문에 계속 실행되던 VT_TUNNEL_HOOK이 그 사례다.
+# ⚠ 자격증명은 여기 절대 넣지 않는다 — 지우는 방향이 "인증 없이 열림"이라 위험하다.
+VT_ENV_FILE_CLEARED_KEYS="VT_TUNNEL_HOOK"
 
 # 이번 프로세스에서 파일 값으로 바로잡은 경계값 이름들(공백 구분).
 # 값은 담지 않는다 — 토큰·해시가 섞여 있어 화면·로그에 나가면 안 된다.
@@ -206,6 +211,19 @@ vt_env_apply_boundary() {
       esac
     fi
   done < "$file"
+  # 파일에 없는 "꺼짐 해석" 키는 환경에서 지운다. 파일이 존재할 때만 해석한다.
+  local _vt_ck
+  for _vt_ck in $VT_ENV_FILE_CLEARED_KEYS; do
+    eval "cur=\${$_vt_ck-}"
+    [ -n "$cur" ] || continue
+    if ! grep -qE "^[[:space:]]*(export[[:space:]]+)?$_vt_ck=" "$file" 2>/dev/null; then
+      unset "$_vt_ck"
+      case " $VT_ENV_BOUNDARY_FIXED " in
+        *" $_vt_ck "*) ;;
+        *) VT_ENV_BOUNDARY_FIXED="${VT_ENV_BOUNDARY_FIXED}${VT_ENV_BOUNDARY_FIXED:+ }$_vt_ck" ;;
+      esac
+    fi
+  done
 }
 
 # vt_env_get KEY — 파일에 기록된 값을 출력. 마지막 정의가 이긴다.

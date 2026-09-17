@@ -386,3 +386,55 @@ def test_main_applies_boundary_before_importing_auth():
     apply_at = src.index("apply_boundary_overrides()")
     auth_at = src.index("\nimport auth")
     assert apply_at < auth_at
+
+
+def test_hook_deleted_from_file_is_cleared_from_env(tmp_path, monkeypatch):
+    """설정에서 지운 훅이 낡은 export로 계속 실행되면 안 된다.
+
+    `fsh`에서 VT_TUNNEL_HOOK을 해제했는데, 그 값을 든 창에서는 여전히 옛 명령이
+    실행됐다(2026-09-17). 파일에 없다는 건 "끈 것"이다."""
+    cfg = _env_file(tmp_path, "VT_PORT=7777\n")
+    monkeypatch.setenv("VT_CONFIG", cfg)
+    monkeypatch.setenv("VT_TUNNEL_HOOK", "old-command")
+    changed = vt_env.apply_boundary_overrides()
+    assert "VT_TUNNEL_HOOK" in changed
+    assert "VT_TUNNEL_HOOK" not in os.environ
+
+
+def test_credentials_are_never_cleared_by_absence(tmp_path, monkeypatch):
+    """⚠ 방향이 반대인 값은 지우면 안 된다.
+
+    VT_AUTH_TOKEN이 파일에 없다고 환경에서까지 지우면, env로만 인증을 주던
+    구성에서 **서버가 인증 없이 열린다.** 과하게 막히는 건 안전하지만
+    열리는 건 안전하지 않다."""
+    cfg = _env_file(tmp_path, "VT_PORT=7777\n")
+    monkeypatch.setenv("VT_CONFIG", cfg)
+    monkeypatch.setenv("VT_AUTH_TOKEN", "env-only-token")
+    vt_env.apply_boundary_overrides()
+    assert os.environ["VT_AUTH_TOKEN"] == "env-only-token"
+    for key in ("VT_AUTH_TOKEN", "VT_AUTH_PASSWORD_HASH", "VT_AUTH_SESSION_KEY",
+                "VT_TOKEN", "VT_PASSWORD_HASH", "VT_SECRET_KEY"):
+        assert key not in vt_env.FILE_CLEARED_KEYS
+
+
+def test_no_config_file_clears_nothing(tmp_path, monkeypatch):
+    """설정 파일 없이 환경변수만으로 돌리는 구성에서, 빈 dict를 근거로
+    값을 지우면 안 된다."""
+    monkeypatch.setenv("VT_CONFIG", str(tmp_path / "does-not-exist.env"))
+    monkeypatch.setenv("VT_TUNNEL_HOOK", "keep-me")
+    assert vt_env.apply_boundary_overrides() == []
+    assert os.environ["VT_TUNNEL_HOOK"] == "keep-me"
+
+
+def test_bash_and_python_cleared_lists_match():
+    import re
+    from pathlib import Path
+    sh = (Path(__file__).resolve().parents[2] / "lib" / "vt_env.sh").read_text(encoding="utf-8")
+    m = re.search(r'^VT_ENV_FILE_CLEARED_KEYS="([^"]*)"', sh, re.M)
+    assert m, "lib/vt_env.sh에서 VT_ENV_FILE_CLEARED_KEYS를 찾지 못했다"
+    assert set(m.group(1).split()) == set(vt_env.FILE_CLEARED_KEYS)
+
+
+def test_cleared_keys_are_a_subset_of_boundary_keys():
+    """꺼짐 해석은 경계값 위에서만 의미가 있다 — 목록이 어긋나면 한쪽만 동작한다."""
+    assert set(vt_env.FILE_CLEARED_KEYS) <= set(vt_env.BOUNDARY_KEYS)
