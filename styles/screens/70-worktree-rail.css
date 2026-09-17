@@ -62,8 +62,14 @@
 .vt-wgrail-remote-note { opacity:.7; }
 .vt-wgrail-new[disabled] { opacity:.45; cursor:not-allowed; }
 
-/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 글리프(‹)라 글자 크기만 */
-.vt-wgrail-collapse { font:600 var(--fs-base) var(--ui); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다.
+   2026-09-18 — 글리프(‹ ›)를 chevron-down 하나의 회전으로 바꿨다(DESIGN.md:
+   icons.js가 유일한 아이콘 소스). 펼침=‹(90deg), 접힘=›(-90deg). */
+.vt-wgrail-collapse > svg {
+  transform:rotate(90deg);
+  transition:transform var(--dur-fast) var(--ease-out-quint);
+}
+.vt-wgrail-collapse.collapsed > svg { transform:rotate(-90deg); }
 
 .vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; }
 .vt-wgrail-group-head {
@@ -106,11 +112,23 @@
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 빈 레일의 "워크트리 만들기" */
 
 /* 접힘: 마크·색점만(§5 "48px 접힘: 마크+색점+dot만") — 이름·상태 문장·그룹
-   헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로. */
-#vt-wgrail.collapsed .vt-wgrail-row { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1); justify-content:center; }
+   헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로.
+   2026-09-18 — 여기서 `row-main`을 통째로 숨기면서 **에이전트 마크까지 같이
+   사라져** 48px 기둥에 4px 막대 둘만 남았다(설계는 "마크+색점"). 마크를
+   `row-main` 밖에 접힘 전용으로 다시 그리고(RailRow.tsx), 이름·상태 두 줄은
+   행의 title 툴팁으로 돌려준다. 원형 dot은 만들지 않는다 — 상태는 이미 왼쪽
+   막대가 말하고, 같은 뜻을 두 기호로 쓰면 20-design-system.md §5의 "막대 =
+   행의 띠 / 원 = 상태 전용" 구분이 무너진다. */
+#vt-wgrail.collapsed .vt-wgrail-row { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1); justify-content:center; gap:calc(var(--spacing) * 1.5); }
 #vt-wgrail.collapsed .vt-wgrail-row-main { display:none; }
 #vt-wgrail.collapsed .vt-wgrail-bar,
 #vt-wgrail.collapsed .vt-wgrail-hash { width:4px; }
+.vt-wgrail-agent-compact { align-items:center; }
+
+/* 접힘에서 그룹 라벨 대신 남는 경계선(Rail.tsx의 group-sep). 첫 그룹 위에는
+   머리 밑줄이 이미 있어 겹치므로 그 하나는 그리지 않는다. */
+.vt-wgrail-group-sep { height:1px; margin:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5); background:var(--line); }
+.vt-wgrail-body > .vt-wgrail-group-sep:first-child { display:none; }
 
 .vt-wgrail-footer {
   display:flex; align-items:stretch; border-top:1px solid var(--line); flex:none;
@@ -131,6 +149,14 @@
   min-width:0;
 }
 .vt-wgrail-new:hover { background:var(--menu-hover); color:var(--txt); }
+/* 2026-09-18 — 접힘 푸터는 「+」 하나만 남긴다. 48px 안에 「+」(flex:1) +
+   설정 32px + 마이크 32px가 같이 있어 고정 폭만 64px였다 — 넘치고, flex:1인
+   「+」는 0폭으로 눌려 사라졌다. 설정은 Mod+, 와 팔레트가, 마이크는 접기를
+   푸는 쪽이 입구다. */
+#vt-wgrail.collapsed .vt-wgrail-icon,
+#vt-wgrail.collapsed .vt-wgrail-mic-home { display:none; }
+#vt-wgrail.collapsed .vt-wgrail-new { justify-content:center; padding:0; }
+.vt-wgrail-new-mark { display:inline-flex; flex:none; }
 /* 2.1.6 — 레일 바닥의 아이콘 버튼(설정·더보기). 예전 .vt-wgrail-more 한 칸을
    같은 모양의 여러 칸으로 일반화했다. 32px는 행 높이 3단(24/28/36) 밖이지만
    레일 바닥 줄 높이가 32px로 이미 고정돼 있어 그 줄에 맞춘다. */
