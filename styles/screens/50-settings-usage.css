@@ -76,7 +76,10 @@
 
 /* N9/N45 — 감지 커버리지 표(설정 → 에이전트). */
 .vt-set-covtable-host { margin-top:calc(var(--spacing) * 2); overflow-x:auto; }
-.vt-set-covtable { width:100%; border-collapse:collapse; font:400 var(--fs-sm) var(--ui); }
+/* 2026-09-17 — 13.5 → 12.5px. 표 안은 CLI 이름·경로·줄 수·상태처럼 촘촘한
+   데이터인데 섹션 라벨(.vt-set-label 13.5px)과 같은 크기라, 「등록 기기」와 그
+   아래 'Android'가 같은 층으로 읽혔다. 라벨이 표를 이끌어야 한다. */
+.vt-set-covtable { width:100%; border-collapse:collapse; font:400 var(--fs-xs) var(--ui); }
 .vt-set-covtable th, .vt-set-covtable td {
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
   text-align:left; border-bottom:1px solid var(--line); white-space:nowrap;
@@ -104,7 +107,7 @@
   flex:none; min-width:4.5em;
   font:500 var(--fs-xs) var(--ui); color:var(--sub);
 }
-.vt-mcp-meta { font:400 var(--fs-2xs) var(--ui); color:var(--sub); }
+.vt-mcp-meta { font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
 /* 2.1.6 — 모양(높이·여백·모서리·글꼴·5상태)은 `.vt-chip.sm`이 맡는다. 여기 남은
    것은 **이 칩만의 사실**뿐이다: 켜진 서버는 "지금 도구로 살아 있다"는 뜻이라
    액센트가 아니라 working 상태색을 쓴다. 알약(radius-full)은 버렸다 — 화면

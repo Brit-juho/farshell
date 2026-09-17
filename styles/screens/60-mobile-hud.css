@@ -139,7 +139,10 @@
   /* 2.1.6 — 아이콘이 생겼다. 라벨은 한 단계 작게 내려 아이콘이 먼저 읽히게
      한다(아이콘+라벨을 같은 무게로 두면 52px 안에서 둘이 경쟁한다). */
   .vt-mnav-btn > svg { width:18px; height:18px; flex:none; }
-  .vt-mnav-label { font-size:var(--fs-3xs); letter-spacing:var(--tracking-wide); }
+  /* 2026-09-17 — 10.5 → 11px. 폰에서 화면을 바꾸는 유일한 수단인데 화면에서
+     가장 작은 글씨였다. 52px 바 안에 아이콘과 함께 들어가야 해서 12.5px까지는
+     못 올린다 — 한 단만 올린다. */
+  .vt-mnav-label { font-size:var(--fs-2xs); letter-spacing:var(--tracking-wide); }
   /* 활성 탭은 색만으로 말하지 않는다 — 색 하나에 의존하면 스킨에 따라 약해지고
      색각 이상에서는 사라진다. 상단 2px 막대를 같이 둔다(WCAG 1.4.1). */
   .vt-mnav-btn[aria-pressed="true"]::before {
@@ -204,7 +207,9 @@
   max-width:100%;
 }
   .vt-fleet-hostitem-detail { font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
-  .vt-fleet-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--sub); font:400 var(--fs-sm) var(--mono); }
+  /* 한글 문장인데 mono였다 — JetBrains Mono에 한글이 없어 폴백으로 새고 있었다
+     (dock 탭 라벨과 같은 버그). 빈 상태 문장은 patterns.css의 조판을 따른다. */
+  .vt-fleet-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--color-muted); font:400 var(--fs-xs)/var(--leading-body) var(--font-ui); }
   .vt-fleet-group-head {
   padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1);
 }
