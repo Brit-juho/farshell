@@ -95,7 +95,7 @@ def test_remote_waiting_does_not_block_local_queue():
 def test_same_cwd_on_two_hosts_does_not_collide():
     """두 맥의 홈 경로는 사용자 이름이 같으면 문자열까지 똑같다."""
     a = agent_status  # 모듈 직접 사용 — _reset_state가 autouse로 초기화한다
-    cwd = "/Users/neo/proj"
+    cwd = "/Users/example/proj"
     a.report("s-local", a.WORKING, cwd=cwd)
     a.report("s-remote", a.WAITING, cwd=cwd, host="gpu-box")
     assert a.status_for_cwd(cwd) == a.WORKING
@@ -105,7 +105,7 @@ def test_same_cwd_on_two_hosts_does_not_collide():
 def test_identical_sid_on_two_hosts_does_not_overwrite():
     """transcript_path는 두 맥에서 문자열까지 같을 수 있다 — 덮어쓰면 안 된다."""
     a = agent_status  # 모듈 직접 사용 — _reset_state가 autouse로 초기화한다
-    sid = "/Users/neo/.claude/projects/x/session.jsonl"
+    sid = "/Users/example/.claude/projects/x/session.jsonl"
     a.report(sid, a.WORKING)
     a.report(sid, a.DONE, host="gpu-box")
     assert a.get_status(sid) == a.WORKING

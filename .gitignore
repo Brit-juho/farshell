@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+.venv          # 심링크로 커밋된 적이 있다(절대 경로가 그대로 노출됐다)
 venv/
 *.egg-info/
 .pytest_cache/
