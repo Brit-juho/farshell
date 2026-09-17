@@ -12,7 +12,7 @@ import { GROUP_LABEL, hashRepoColorIndex, type WorktreeRailRowInput } from './ra
 import { actionSessionId, type DesktopRailRow } from './rail-fetch.js';
 import { agentIcon, agentLabel } from '../ui/icons.js';
 
-export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void }) {
+export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boolean; onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void }) {
   const isWt = () => props.row.kind === 'worktree';
   const isRemote = () => props.row.kind === 'session' && !!props.row.remote;
   // 원격 행은 이제 열 수 있으므로 흐리게 그리지 않는다(3단계 전에는 못 열어서
@@ -27,6 +27,17 @@ export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: M
     return props.row.diffFiles != null && props.row.diffFiles > 0 ? `파일 ${props.row.diffFiles}` : null;
   };
   const rowName = () => (props.row.kind === 'worktree' ? props.row.label : props.row.name);
+  // 48px 접힘에서는 이름·상태 문장이 숨는다(10-shell-layout.md §5: "마크+색점만.
+  // 호버 시 툴팁에 2줄"). 그 두 줄이 title이다 — 없으면 접힌 레일은 정체를
+  // 알 수 없는 색 막대 기둥이 된다. 펼친 상태에서는 달지 않는다(글자가 이미
+  // 보이는 자리에 툴팁이 뜨면 잡음이다).
+  // 상태 문장이 빈 행(세션 없는 저장소)은 둘째 줄을 만들지 않는다 — 안 그러면
+  // 툴팁이 `이름\n`이 되어 빈 줄이 한 칸 붙는다(실브라우저 확인).
+  const compactTitle = () => {
+    if (!props.compact) return undefined;
+    const sub = props.row.statusSentence;
+    return sub ? `${rowName()}\n${sub}` : rowName();
+  };
 
   // `role="button"` + `tabindex=0`으로 포커스는 갔지만 **Enter·Space가 아무
   // 일도 안 했다**(실브라우저 확인: 활성 행이 안 바뀜). div에 버튼 역할만
@@ -56,6 +67,7 @@ export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: M
       // 배경색으로 보이지만 스크린리더에는 아무 말도 안 했다. 목록에서 "현재
       // 것"을 가리키는 표준 표기가 aria-current다.
       aria-current={props.active ? 'true' : undefined}
+      title={compactTitle()}
     >
       {/* 20-design-system.md §5(O2): 레일 행 왼쪽 끝 세로 막대는 저장소 해시
           색점(원형 dot과 헷갈리지 않는 "막대") — 상태 5색·acc와는 별개 램프
@@ -64,6 +76,16 @@ export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: M
           없어 둘 다 "색점 없음"(kind-session이 CSS에서 투명 처리). */}
       <span class={`vt-wgrail-hash ${isWt() ? `hash-${hashRepoColorIndex((props.row as WorktreeRailRowInput).repoName)}` : 'kind-session'}`} />
       <span class={`vt-srow-mark vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
+      {/* 접힘 전용 에이전트 마크. 펼친 상태의 마크는 아래 row-main 안에 있고
+          그 블록이 접히면 통째로 숨으므로, 같은 마크를 이 자리에 한 번 더
+          그린다(둘이 동시에 보이는 일은 없다). */}
+      <Show when={props.compact && props.row.agent}>
+        <span
+          class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
+          title={agentLabel(props.row.agent!)}
+          innerHTML={agentIcon(props.row.agent!)}
+        />
+      </Show>
       <div class="vt-srow-main vt-wgrail-row-main">
         <div class="vt-srow-top vt-wgrail-row-top">
           {/* 2.1.6 — 헤더의 워크트리 탭(layout/tabbar.js)은 이 마크를 달고 있었고

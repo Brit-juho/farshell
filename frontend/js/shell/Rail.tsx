@@ -401,9 +401,18 @@ function Rail(props: { deps: RailDeps }) {
             </button>
           </Show>
         </Show>
-        <button type="button" class="vt-icon-btn sm vt-wgrail-collapse" onClick={toggleCollapse} aria-label={collapsed() ? '펼치기' : '접기'} title={collapsed() ? '펼치기' : '접기'}>
-          {collapsed() ? '›' : '‹'}
-        </button>
+        {/* 2026-09-18 — 글리프(‹ ›)를 쓰고 있었다. DESIGN.md §아이콘: icons.js의
+            인라인 SVG가 유일한 아이콘 소스다. chevron 하나를 CSS로 돌리는
+            관용구(키바 토글·호스트 캐럿과 같다)로 맞춘다. */}
+        <button
+          type="button"
+          class="vt-icon-btn sm vt-wgrail-collapse"
+          classList={{ collapsed: collapsed() }}
+          onClick={toggleCollapse}
+          aria-label={collapsed() ? '펼치기' : '접기'}
+          title={collapsed() ? '펼치기' : '접기'}
+          innerHTML={icon('chevron-down', 14, 2)}
+        />
       </div>
       <div class="vt-wgrail-body">
         <Show when={totalRows() === 0 && !collapsed() && !isRemoteHost()}>
@@ -423,13 +432,16 @@ function Rail(props: { deps: RailDeps }) {
         <For each={sections()}>
           {(section) => (
             <>
-              <Show when={!collapsed()}>
+              {/* 접었을 때도 그룹 경계는 남긴다 — 라벨만 못 읽는 것과 「개입
+                  필요」와 「유휴」가 한 덩어리로 붙어 보이는 것은 다르다. */}
+              <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
                 <div class="vt-wgrail-group-head">{GROUP_LABEL[section.group]}</div>
               </Show>
               <For each={section.rows}>
                 {(row) => (
                   <Row
                     row={row}
+                    compact={collapsed()}
                     active={actionSessionId(row) === activeId()}
                     onOpen={(e) => openRow(e, row)}
                     onContext={(e) => contextRow(e, row)}
@@ -447,10 +459,10 @@ function Rail(props: { deps: RailDeps }) {
           type="button"
           class="vt-wgrail-new"
           disabled={isRemoteHost()}
-          title={isRemoteHost() ? '원격 호스트에는 워크트리를 만들 수 없습니다(2.2)' : ''}
+          title={isRemoteHost() ? '원격 호스트에는 워크트리를 만들 수 없습니다(2.2)' : (collapsed() ? '워크트리 만들기' : '')}
           onClick={() => setDialogOpen(true)}
         >
-          <Show when={!collapsed()} fallback="+">+ 워크트리 만들기</Show>
+          <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 워크트리 만들기</Show>
         </button>
         {/* 2.1.6 — 설정을 레일 바닥에 **다시 꺼낸다**. 2.1.0에서 48px 아이콘
             레일(#vt-rail)이 이 레일로 대체되면서 그 안에 살던 ⚙ 버튼이
