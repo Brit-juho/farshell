@@ -118,18 +118,20 @@
   font:500 var(--fs-xs) var(--ui); color:var(--sub);
 }
 .vt-mcp-meta { font:400 var(--fs-2xs) var(--ui); color:var(--sub); }
-.vt-mcp-toggle {
-  flex:none; padding:2px calc(var(--spacing) * 1.5);
-  border:1px solid var(--line); border-radius:var(--radius-full);
-  background:transparent; color:var(--sub);
-  font:500 var(--fs-2xs) var(--ui); cursor:pointer;
-}
+/* 2.1.6 — 모양(높이·여백·모서리·글꼴·5상태)은 `.vt-chip.sm`이 맡는다. 여기 남은
+   것은 **이 칩만의 사실**뿐이다: 켜진 서버는 "지금 도구로 살아 있다"는 뜻이라
+   액센트가 아니라 working 상태색을 쓴다. 알약(radius-full)은 버렸다 — 화면
+   전체의 모서리가 5px 한 단계인데 MCP 화면만 둥글었다.
+   클래스 이름은 남긴다: mcp.js와 mcp-panel.test.js가 이 이름으로 요소를 찾는다. */
+.vt-mcp-toggle { flex:none; }
 .vt-mcp-toggle[data-on="1"] {
   color:var(--color-st-working);
   border-color:color-mix(in srgb, var(--color-st-working) 45%, transparent);
   background:color-mix(in srgb, var(--color-st-working) 12%, transparent);
 }
-.vt-mcp-toggle:disabled { opacity:.5; cursor:progress; }
+/* 쓰기가 진행 중일 때 — `.vt-chip:disabled`는 not-allowed 커서인데, 이건
+   "못 누른다"가 아니라 "기다리는 중"이라 커서만 다르게 둔다. */
+.vt-mcp-toggle:disabled { cursor:progress; }
 
 /* 97번 2단계 — 그룹 태그. 토글 칩과 같은 규칙: 상태를 **색으로만 구분하지
    않는다**(전부 켬/전부 끔/섞임을 글자로도 쓴다). 「섞임」은 세 번째 색이
@@ -140,12 +142,7 @@
   display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1);
   margin-top:calc(var(--spacing) * 1);
 }
-.vt-mcp-groupchip {
-  padding:3px calc(var(--spacing) * 2);
-  border:1px solid var(--line); border-radius:var(--radius-full);
-  background:transparent; color:var(--sub);
-  font:500 var(--fs-2xs) var(--ui); cursor:pointer;
-}
+/* 2.1.6 — 모양은 `.vt-chip`. 여기는 on/mixed 상태 표현만 남는다. */
 .vt-mcp-groupchip[data-state="on"] {
   color:var(--color-st-working);
   border-color:color-mix(in srgb, var(--color-st-working) 45%, transparent);
@@ -156,7 +153,6 @@
   color:var(--color-st-waiting);
   border-color:color-mix(in srgb, var(--color-st-waiting) 55%, transparent);
 }
-.vt-mcp-groupchip:disabled { opacity:.5; cursor:not-allowed; }
 
 /* 서버 이름 줄 — 이름 왼쪽, 태그 편집 오른쪽. 좁은 폭에서는 접힌다. */
 .vt-mcp-servhead {
@@ -164,14 +160,11 @@
   flex-wrap:wrap; gap:calc(var(--spacing) * 1);
 }
 .vt-mcp-tags { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 0.75); }
-.vt-mcp-tagchip, .vt-mcp-tagadd {
-  padding:1px calc(var(--spacing) * 1.25);
-  border:1px solid var(--line); border-radius:var(--radius-full);
-  background:transparent; color:var(--sub);
-  font:400 var(--fs-2xs) var(--ui); cursor:pointer;
-}
+/* 2.1.6 — 모양은 `.vt-chip.sm`. 「추가」는 아직 없는 것을 만드는 자리라 점선으로
+   구분한다(색을 하나 더 쓰지 않는다 — 스킨 6개에서 대비를 다시 맞출 필요가 없고
+   색 없이도 읽힌다). */
 .vt-mcp-tagadd { border-style:dashed; }
-.vt-mcp-tagchip:disabled, .vt-mcp-tagadd:disabled { opacity:.5; cursor:progress; }
+.vt-mcp-tagchip:disabled, .vt-mcp-tagadd:disabled { cursor:progress; }
 
 .vt-set-secrow {
   display:flex; align-items:flex-start; justify-content:space-between;

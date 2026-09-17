@@ -247,7 +247,7 @@
 /* 커밋 기록 / 커밋 diff (git log · git show) */
 .vt-vw-glog{ border-top:1px solid var(--line); }
 .vt-vw-crow .vt-vw-gstat{ width:auto; color:var(--sub); }
-.vt-vw-glog .vt-pt-btn{ margin:calc(var(--spacing) * 2) calc(var(--spacing) * 3); align-self:flex-start; }
+.vt-vw-glog .vt-btn{ margin:calc(var(--spacing) * 2) calc(var(--spacing) * 3); align-self:flex-start; }
 .vt-vw-cback{ margin:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3) 0; }
 .vt-vw-cmeta{ padding:calc(var(--spacing) * 3); border-bottom:1px solid var(--line); }
 .vt-vw-cmeta-subject{ font:600 var(--fs-sm) var(--ui); margin-bottom:calc(var(--spacing) * 1); }
@@ -485,12 +485,20 @@ body.vt-resizing #terminal-container{ transition:none; }
   font:600 var(--fs-sm) var(--mono); color:var(--txt);
   font-variant-numeric:tabular-nums;
 }
-.vt-pt-meta{ display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); flex:1 1 auto; min-width:0; }
-.vt-pt-cmd{ flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pt-meta{ display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); flex:1 1 auto; min-width:0; overflow:hidden; }
+/* 줄어드는 순서: cmd가 먼저(가중치 100), 그다음 수치(1). 둘 다 넘치면 자르고
+   줄임표를 붙인다. */
+.vt-pt-cmd{ flex:0 100 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* pid·uptime·CPU%·메모리처럼 새로고침마다 값이 바뀌는 숫자 — tabular-nums로
-   자릿수가 바뀌어도 폭이 흔들리지 않게 고정한다. 한 줄에 cmd와 나란히 두므로
-   줄어들 땐 이쪽이 먼저 줄어들지 않게 flex:0 0 auto로 고정. */
-.vt-pt-sub{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-2xs) var(--mono); font-variant-numeric:tabular-nums; }
+   자릿수가 바뀌어도 폭이 흔들리지 않게 고정한다.
+
+   2.1.6 — 예전엔 `flex:0 0 auto`로 **아예 안 줄어들게** 해서 "cmd보다 먼저 줄어들지
+   않는다"를 지켰다. 그런데 dock은 사용자가 폭을 줄일 수 있고, 320px쯤에서 이
+   135px짜리 줄이 84px 칸을 뚫고 나가 오른쪽의 태그·[공개]·[종료] 버튼 **밑에
+   겹쳐 그려졌다**(실브라우저에서 확인 — 글자와 버튼이 포개져 둘 다 안 읽혔다).
+   부모(.vt-pt-meta)의 min-width:0은 부모만 줄일 뿐 안 줄어드는 자식을 막지 못한다.
+   의도(수치가 끝까지 남는다)는 shrink 가중치로 지키고, 넘침은 자른다. */
+.vt-pt-sub{ flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); font:400 var(--fs-2xs) var(--mono); font-variant-numeric:tabular-nums; }
 .vt-pt-tags{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
 .vt-pt-tag{
   font:600 var(--fs-3xs) var(--ui); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5); border-radius:var(--radius-full);
@@ -498,25 +506,19 @@ body.vt-resizing #terminal-container{ transition:none; }
 }
 .vt-pt-actions{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
 .vt-pt-lock{ color:var(--sub); font:400 var(--fs-2xs) var(--ui); cursor:help; }
-.vt-pt-btn{
-  background:var(--tab); color:var(--txt);
-  border:1px solid var(--line); border-radius:var(--trad);
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); cursor:pointer; font:500 var(--fs-xs) var(--ui);
-  touch-action:manipulation; min-height:30px;
-}
-.vt-pt-btn:hover{ background:var(--menu-hover); }
-.vt-pt-btn:active{ background:color-mix(in srgb, var(--acc) 20%, var(--menu-hover)); }
-/* D3: rest 상태에서 텍스트색만 다르면 옆의 일반 버튼과 눈에 잘 안 띄게 같아 보였다
-   (특히 작은 화면·빠르게 훑을 때). border/background에도 옅게 붉은기를 얹어
-   "이건 파괴적 동작"이 텍스트를 읽기 전에 형태로 먼저 들어오게 한다 —
-   L6(스와이프로 숨기기)와는 별개로, 눌러도 보이는 상태 자체의 문제였다. */
-.vt-pt-btn.danger{
-  color:var(--err);
-  border-color:color-mix(in srgb, var(--err) 45%, var(--line));
-  background:color-mix(in srgb, var(--err) 8%, var(--tab));
-}
-.vt-pt-btn.danger:hover{ background:color-mix(in srgb, var(--err) 18%, transparent); }
-.vt-pt-btn.danger:active{ background:color-mix(in srgb, var(--err) 32%, transparent); }
+/* 2.1.6 — .vt-pt-btn(큐·스니펫·포트·diff·git 로그·파일 공유, 6개 파일 19곳)은
+   components.css의 `.vt-btn` / `.vt-btn.danger`로 대체했다. 이름이 "pt"(패널
+   텍스트)였지만 하는 일은 그냥 버튼이었고, 컴포넌트와 별개로 한 벌 더 있었다.
+   diff.js는 이 이름을 **JS 셀렉터**(`.vt-pt-btn:last-child`)로도 쓰고 있어서
+   함께 바꿨다 — 이름만 바꾸면 그 조회가 조용히 null이 되어 「추가」 버튼이
+   중복 제출을 막지 못한다.
+
+   D3의 판단(파괴적 버튼은 글자를 읽기 전에 형태로 먼저 들어와야 한다)은
+   `.vt-btn.danger`가 그대로 잇는다 — 거기는 테두리까지 에러색이다.
+
+   터치: 옛 규칙의 min-height:30px은 `.vt-btn`의 28px로 2px 줄었다. 그 대신
+   `touch-action:manipulation`은 아래에서 유지한다(더블탭 확대 지연 제거). */
+.vt-pt-list .vt-btn, .vt-pt-actions .vt-btn { touch-action:manipulation; }
 
 /* N22(50-files-share.md §5) — 포트 목록 아래 "노출 중" 요약. 헤더는 .vt-pt-section을
    그대로 재사용, 행/버튼은 .vt-pt-row·.vt-pt-btn을 재사용하되 이름/URL 두 칸만 새로 둔다. */

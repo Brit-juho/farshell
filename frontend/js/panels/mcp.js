@@ -115,7 +115,7 @@ async function toggle(entry, enabled) {
 }
 
 function toggleButton(entry, facts, onDone) {
-  const btn = el('button', 'vt-mcp-toggle');
+  const btn = el('button', 'vt-chip sm vt-mcp-toggle');
   const paint = () => {
     btn.textContent = `${SCOPE_LABEL[entry.scope] || entry.scope} · ${entry.enabled ? '켬' : '끔'}`;
     btn.dataset.on = entry.enabled ? '1' : '0';
@@ -199,7 +199,7 @@ function renderGroupBar(data) {
 
   for (const tag of tags) {
     const state = groupState(tag, data);
-    const btn = el('button', 'vt-mcp-groupchip');
+    const btn = el('button', 'vt-chip vt-mcp-groupchip');
     btn.type = 'button';
     btn.dataset.state = state;
     // 상태를 **색으로만 구분하지 않는다** — 글자로도 쓴다.
@@ -264,7 +264,7 @@ function tagEditor(name, tags) {
   const current = tags[name] || [];
 
   for (const t of current) {
-    const chip = el('button', 'vt-mcp-tagchip');
+    const chip = el('button', 'vt-chip sm vt-mcp-tagchip');
     chip.type = 'button';
     chip.textContent = `${t} ×`;
     chip.title = `「${t}」 태그 떼기`;
@@ -283,7 +283,7 @@ function tagEditor(name, tags) {
     box.appendChild(chip);
   }
 
-  const add = el('button', 'vt-mcp-tagadd');
+  const add = el('button', 'vt-chip sm vt-mcp-tagadd');
   add.type = 'button';
   add.textContent = '+ 태그';
   add.title = '이 서버를 그룹에 넣습니다 — 그룹은 FarShell 안에만 기록되고 CLI 설정 파일은 건드리지 않습니다';
@@ -339,7 +339,7 @@ function credRow(group, slot, creds) {
 
   if (saved) {
     row.appendChild(el('span', 'vt-mcp-meta', `보관됨 ${saved.masked} → ${saved.env}`));
-    const del = el('button', 'vt-mcp-tagchip');
+    const del = el('button', 'vt-chip sm vt-mcp-tagchip');
     del.type = 'button';
     del.textContent = '지우기';
     del.addEventListener('click', async () => {
@@ -357,7 +357,7 @@ function credRow(group, slot, creds) {
     if (slot.literal) {
       row.appendChild(el('span', 'vt-mcp-meta', '설정 파일에 값이 그대로 있습니다'));
     }
-    const add = el('button', 'vt-mcp-tagadd');
+    const add = el('button', 'vt-chip sm vt-mcp-tagadd');
     add.type = 'button';
     add.textContent = '값 보관';
     add.title = 'FarShell이 보관하고, 설정 파일에는 참조만 씁니다';
@@ -408,7 +408,7 @@ function deployControls(group, data) {
     ['opencode', 'local', 'opencode 이 워크트리'],
   ]) {
     const already = group.entries.some((e) => e.tool === tool && e.scope === scope);
-    const btn = el('button', 'vt-mcp-tagadd');
+    const btn = el('button', 'vt-chip sm vt-mcp-tagadd');
     btn.type = 'button';
     btn.textContent = label;
     if (already) {
@@ -613,7 +613,7 @@ function renderPlugins(data) {
     const row = el('div', 'vt-mcp-row');
     row.appendChild(el('span', 'vt-mcp-tool', TOOL_LABEL[p.tool] || p.tool));
 
-    const btn = el('button', 'vt-mcp-toggle');
+    const btn = el('button', 'vt-chip sm vt-mcp-toggle');
     btn.type = 'button';
     btn.textContent = `${p.plugin} · ${p.enabled ? '켬' : '끔'}`;
     btn.dataset.on = p.enabled ? '1' : '0';
