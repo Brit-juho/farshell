@@ -51,8 +51,20 @@ export interface AgentDetail {
   tool: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
-  /** 떠 있는 CLI 이름(claude·codex·…). ui/icons.js의 agentMarkFor가 마크로 바꾼다. */
-  agent: string | null;
+}
+
+/** tmux 세션 이름 → 떠 있는 CLI. 헤더 탭(layout/tabbar.js)이 쓰던 것과 **같은
+ * 출처**다. `/api/agent/status`에는 이 값이 없다 — 거기서 읽으려다 마크가 한
+ * 개도 안 그려지는 걸 실브라우저에서 확인하고 고쳤다. 상태(무엇을 하는 중인가)와
+ * 정체(어떤 CLI인가)는 서버에서 아예 다른 소스라, 둘을 한 응답으로 착각하면
+ * 조용히 빈 값이 된다. */
+export async function fetchAgentNames(deps: RailDeps): Promise<Record<string, string>> {
+  const data = await safeFetch<Record<string, { agent?: string }>>(deps, '/api/agents');
+  const out: Record<string, string> = {};
+  for (const [name, v] of Object.entries(data || {})) {
+    if (v && v.agent) out[name] = v.agent;
+  }
+  return out;
 }
 
 export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, AgentDetail>> {
@@ -64,11 +76,6 @@ export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, 
     out[name] = {
       since: (entry as any).since ?? null,
       tool: (entry as any).tool || (entry as any).last_tool || null,
-      // 2.1.6 — 어떤 CLI가 떠 있는지. 지금까지 이 값을 쓰는 곳은 헤더의
-      // 워크트리 탭(layout/tabbar.js)뿐이었고, 레일 행과 폰의 플릿 행은
-      // 같은 세션을 그리면서도 에이전트 마크를 안 달았다. 같은 세션을 보는
-      // 세 화면이 서로 다른 것을 말하고 있었다.
-      agent: (entry as any).agent ?? null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
     };

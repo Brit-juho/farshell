@@ -116,12 +116,17 @@ async function _loadHostChip() {
   const el = document.getElementById('vt-mnav-host-chip');
   if (!el) return;
   if (_headerShowsHost()) { el.textContent = ''; _syncTopBar(); return; }
+  let text = 'farshell';
   try {
     const c = await vtFetch('/api/capabilities');
-    el.textContent = c && c.hostname ? `farshell / ${c.hostname}` : 'farshell';
-  } catch (_) {
-    el.textContent = 'farshell';
-  }
+    if (c && c.hostname) text = `farshell / ${c.hostname}`;
+  } catch (_) { /* 이름을 못 받아도 'farshell'은 보여준다 */ }
+  // **await 뒤에 다시 본다.** 헤더 칩은 지연 청크가 채우므로, 이 fetch가
+  // 도는 동안 헤더가 준비되는 일이 실제로 일어난다 — 그때 아래 MutationObserver가
+  // 칩을 비우고 나서 이 응답이 도착해 **지운 자리에 다시 쓰는** 경쟁이 됐다
+  // (실브라우저에서 중복이 그대로 남는 걸로 재현). 쓰기 직전이 유일하게
+  // 안전한 판단 시점이다.
+  el.textContent = _headerShowsHost() ? '' : text;
   _syncTopBar();
 }
 

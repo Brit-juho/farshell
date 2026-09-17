@@ -57,7 +57,15 @@ interface AgentDetail {
   tool: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
-  agent: string | null;
+}
+
+// Rail.tsx와 같은 이유로 여기서도 따로 부른다(지연 청크 정적 import 금지).
+// **정체는 /api/agents, 상태는 /api/agent/status** — 서로 다른 소스다.
+async function fetchAgentNames(deps: FleetDeps): Promise<Record<string, string>> {
+  const data = await safeFetch<Record<string, { agent?: string }>>(deps, '/api/agents');
+  const out: Record<string, string> = {};
+  for (const [name, v] of Object.entries(data || {})) if (v && v.agent) out[name] = v.agent;
+  return out;
 }
 
 async function fetchAgentDetails(deps: FleetDeps): Promise<Record<string, AgentDetail>> {
@@ -71,7 +79,6 @@ async function fetchAgentDetails(deps: FleetDeps): Promise<Record<string, AgentD
       tool: (entry as any).tool || (entry as any).last_tool || null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
-      agent: (entry as any).agent ?? null,
     };
   }
   return out;
@@ -154,6 +161,7 @@ function Fleet(props: { deps: FleetDeps }) {
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
+  const [agentNames, setAgentNames] = createSignal<Record<string, string>>({});
   const [diffTick, setDiffTick] = createSignal(0);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenuOpen, setHostMenuOpen] = createSignal(false);
@@ -165,7 +173,10 @@ function Fleet(props: { deps: FleetDeps }) {
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
     if (list) setTmuxSessions(list);
   };
-  const refreshAgent = async () => setAgentDetails(await fetchAgentDetails(props.deps));
+  const refreshAgent = async () => {
+    setAgentDetails(await fetchAgentDetails(props.deps));
+    setAgentNames(await fetchAgentNames(props.deps));
+  };
   const refreshHosts = async () => {
     const data = await safeFetch<{ hosts?: HostEntry[] }>(props.deps, '/api/hosts');
     if (data?.hosts) setHosts(data.hosts);
@@ -230,7 +241,7 @@ function Fleet(props: { deps: FleetDeps }) {
         diffFiles: cwd ? (_gitCache.get(cwd)?.files ?? null) : null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
-        agent: detail?.agent ?? null,
+        agent: tmuxName ? (agentNames()[tmuxName] ?? null) : null,
       });
       if (cwd && (!_gitCache.has(cwd) || Date.now() - (_gitCache.get(cwd)?.at ?? 0) >= GIT_CACHE_MS)) {
         fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
