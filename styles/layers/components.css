@@ -330,6 +330,116 @@
   /* 목록이 열려 있는 동안 버튼이 눌린 상태로 남는다. */
   .vt-host-btn.open { background: var(--menu-hover); color: var(--color-txt); }
 
+  /* ── 세션 행 ───────────────────────────────────────────────────────────
+   * 세션 하나를 한 줄로 보여주는 행. 데스크톱 레일(.vt-wgrail-row)과 폰의 플릿
+   * 홈(.vt-fleet-row)이 **같은 데이터를 같은 구조로** 그리는데 2.1.6 이전에는
+   * CSS가 두 벌이었다. 데이터는 이미 rail-data.ts를 공유하고 있었는데 표현만
+   * 따로였다 — 그래서 한쪽에 무엇을 더해도 다른 쪽이 안 따라왔다. 에이전트
+   * 마크가 데스크톱에만 있던 것이 그 결과다.
+   *
+   * 구조(양쪽 동일):
+   *   [색 막대][상태 막대] [ main [ top: 마크 · 이름 · 배지 · 변경수 ]
+   *                                sub: 상태 문장
+   *                                question: 승인 대기 질문 ]
+   *
+   * 크기만 두 단이다. 폰은 엄지로 훑으므로 이름이 크고 행이 높다(`.lg`).
+   * 그 차이는 `--srow-*` 두 변수에 모았다 — 규칙을 두 벌 쓰지 않는다. */
+  .vt-srow {
+    --srow-name: var(--fs-sm);
+    --srow-meta: var(--fs-3xs);
+    --srow-gap: 2px;
+    display: flex;
+    align-items: stretch;
+    gap: calc(var(--spacing) * 2);
+    min-width: 0;
+    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
+    border-bottom: 1px solid var(--color-line);
+    cursor: pointer;
+  }
+  .vt-srow.lg {
+    --srow-name: var(--fs-md);
+    --srow-meta: var(--fs-2xs);
+    --srow-gap: 3px;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
+  }
+
+  .vt-srow:hover { background: var(--menu-hover); }
+  /* "지금 보고 있는 행"은 **두 신호**로 말한다: 표면이 한 단 올라오고
+   * (--color-bg-3) 낮은 그림자가 얹힌다(--shadow-e1). 색 하나에 기대면
+   * 스킨에 따라 사라진다 — farshell에서 배경 단차만으로는 1.06:1이라
+   * 사실상 같은 색이었다(2.1.6에서 e1을 6스킨에 정의해 고쳤다). */
+  .vt-srow.active {
+    background: var(--color-bg-3);
+    box-shadow: var(--shadow-e1);
+    position: relative;
+    z-index: 1;
+  }
+  /* 승인 대기는 **활성과 다른 축**이다 — 활성은 "내가 보고 있다", 대기는
+   * "네 입력이 필요하다". 둘이 동시에 참일 수 있으므로 배경을 다르게 쓴다. */
+  .vt-srow.is-waiting { background: var(--color-surface-active); }
+
+  .vt-srow-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--srow-gap);
+  }
+  .vt-srow-top {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1.5);
+    min-width: 0;
+  }
+  .vt-srow-name {
+    flex: 1;
+    min-width: 0;
+    color: var(--color-txt);
+    font: var(--weight-medium) var(--srow-name) / var(--leading-row) var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vt-srow.active .vt-srow-name { color: var(--color-acc); font-weight: var(--weight-semibold); }
+
+  /* 메타(변경 수·시각)와 상태 문장은 **muted**다. 이전에는 둘 다 sub였는데,
+   * sub는 부제의 자리다 — 메타까지 sub면 4단 램프가 실사용에서 2단으로
+   * 무너진다(2.1.6 디자인 리뷰에서 실측: txt 12 · sub 15 · muted 3 · faint 0). */
+  .vt-srow-meta {
+    flex: none;
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--srow-meta) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .vt-srow-sub {
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--srow-meta) / var(--leading-row) var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 질문은 "너를 기다린다"라서 메타보다 위다. 경고색을 쓰되 행 전체를 물들이지
+   * 않는다 — 배경은 .is-waiting이 이미 말했다. */
+  .vt-srow-question {
+    color: var(--warn);
+    font: var(--weight-normal) var(--srow-meta) / var(--leading-row) var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 행 왼쪽 끝의 상태 막대. 모양(3px·둥근 끝)은 patterns의 .vt-sidebar-mark가,
+   * 뜻(다섯 상태)은 여기가 맡는다. 원형 dot이 아닌 이유는 규칙이다 — 원은
+   * 상태 전용 기호이고 막대는 목록 행의 왼쪽 띠다(20-design-system.md §5).
+   * 2.1.6 이전에는 이 다섯 줄이 레일과 플릿에 각각 있었다. */
+  .vt-srow-mark { background: var(--color-st-idle); }
+  .vt-srow-mark.tone-waiting { background: var(--color-st-waiting); }
+  .vt-srow-mark.tone-working { background: var(--color-st-working); }
+  .vt-srow-mark.tone-error   { background: var(--color-st-error); }
+  .vt-srow-mark.tone-done    { background: var(--color-st-done); }
+
+  .vt-srow-agent { display: inline-flex; flex: none; color: var(--color-muted); }
+  .vt-srow.active .vt-srow-agent { color: var(--color-acc); }
+
   /* ── 행 안의 이름 버튼 ─────────────────────────────────────────────────
    * 목록 행에서 **이름이 차지하는 칸 전체**가 클릭 영역인 버튼. 생긴 건 글자
    * 한 줄이지만 누르면 그 항목이 열린다. 버튼처럼 보이지 않아야 한다 —

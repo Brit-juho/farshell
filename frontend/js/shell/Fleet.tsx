@@ -107,28 +107,28 @@ function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) 
   };
 
   return (
-    <div class="vt-fleet-row" classList={{ 'is-waiting': props.row.status === 'waiting' }} onClick={onRowClick} role="button" tabindex="0">
-      <span class={`vt-fleet-bar tone-${props.row.status}`} />
-      <div class="vt-fleet-row-main">
-        <div class="vt-fleet-row-top">
+    <div class="vt-srow lg vt-fleet-row" classList={{ 'is-waiting': props.row.status === 'waiting' }} onClick={onRowClick} role="button" tabindex="0">
+      <span class={`vt-srow-mark vt-fleet-bar tone-${props.row.status}`} />
+      <div class="vt-srow-main vt-fleet-row-main">
+        <div class="vt-srow-top vt-fleet-row-top">
           {/* 2.1.6 — 데스크톱 레일 행·헤더 탭과 같은 마크. 이 화면에만 없어서
               폰에서는 "어떤 CLI가 도는 세션인지"를 이름으로 추측해야 했다. */}
           <Show when={props.row.agent}>
             {(a) => (
-              <span class="vt-fleet-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
+              <span class="vt-srow-agent vt-fleet-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
             )}
           </Show>
-          <span class="vt-fleet-name">{props.row.name}</span>
+          <span class="vt-srow-name vt-fleet-name">{props.row.name}</span>
           <Show when={isUnseenDone()}>
             <span class="vt-fleet-unseen-badge" aria-label="확인 안 함" title="확인 안 함" />
           </Show>
           <Show when={props.row.diffFiles != null && props.row.diffFiles! > 0}>
-            <span class="vt-fleet-diff">+{props.row.diffFiles}</span>
+            <span class="vt-srow-meta vt-fleet-diff">+{props.row.diffFiles}</span>
           </Show>
         </div>
-        <div class="vt-fleet-row-sub">{props.row.statusSentence}</div>
+        <div class="vt-srow-sub vt-fleet-row-sub">{props.row.statusSentence}</div>
         <Show when={props.row.status === 'waiting' && props.row.question}>
-          <div class="vt-fleet-question">? {props.row.question}</div>
+          <div class="vt-srow-question vt-fleet-question">? {props.row.question}</div>
         </Show>
         <Show when={props.row.status === 'waiting'}>
           <div class="vt-fleet-answers" onClick={(e) => e.stopPropagation()}>
