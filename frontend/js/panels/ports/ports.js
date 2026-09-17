@@ -166,7 +166,7 @@ function showPorts() {
       tags.className = 'vt-pt-tags';
       if (p.public) {
         const t = document.createElement('b');
-        t.className = 'vt-pt-tag pub';
+        t.className = 'vt-tag vt-pt-tag pub';
         t.textContent = '외부';
         t.title = '모든 인터페이스에 열려 있습니다 (*)';
         tags.appendChild(t);

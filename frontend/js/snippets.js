@@ -39,7 +39,7 @@ export function showSnippets() {
             <button type="button" class="vt-segment vt-sn-scope-tab" data-scope="global" id="vt-sn-tab-global" role="tab">전체</button>
           </div>
           <div class="vt-q-compose">
-            <input id="vt-sn-label" type="text" placeholder="이름 (선택)" maxlength="60" />
+            <input id="vt-sn-label" class="vt-input lg" type="text" placeholder="이름 (선택)" maxlength="60" />
             <textarea id="vt-sn-input" rows="3" placeholder="저장할 지시문/명령…"></textarea>
             <div class="vt-sn-mode-choice" role="radiogroup" aria-label="실행 방식">
               <label class="vt-sn-mode-opt">
@@ -153,7 +153,7 @@ export function showSnippets() {
         }
         if (it.scope === 'project') {
           const chip = document.createElement('span');
-          chip.className = 'vt-q-chip';
+          chip.className = 'vt-tag vt-q-chip';
           chip.textContent = '프로젝트';
           chip.title = it.project || '';
           meta.appendChild(chip);

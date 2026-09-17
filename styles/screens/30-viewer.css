@@ -496,8 +496,8 @@ body.vt-resizing #terminal-container{ transition:none; }
 }
 .vt-pt-tags{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
 .vt-pt-tag{
-  font:600 var(--fs-3xs) var(--ui); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5); border-radius:var(--radius-full);
-  background:color-mix(in srgb, var(--warn) 22%, transparent); color:var(--warn);
+  background:color-mix(in srgb, var(--warn) 22%, transparent);
+  color:var(--warn);
 }
 .vt-pt-actions{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
 .vt-pt-lock{ color:var(--sub); font:400 var(--fs-2xs) var(--ui); cursor:help; }
@@ -540,10 +540,11 @@ body.vt-resizing #terminal-container{ transition:none; }
   background:var(--bar); border-bottom:1px solid var(--line);
 }
 .vt-q-compose textarea{
-  flex:1 1 auto; resize:vertical; min-height:40px; max-height:160px;
-  background:var(--term); color:var(--txt);
-  border:1px solid var(--line); border-radius:var(--trad);
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); font:400 var(--fs-md) var(--ui);   /* 16px — iOS 확대 방지 */
+  flex:1 1 auto;
+  resize:vertical;
+  min-height:40px;
+  max-height:160px;
+  /* 16px — iOS 확대 방지 */;
 }
 .vt-q-compose textarea:focus{
   outline:none; border-color:var(--acc);
@@ -551,9 +552,8 @@ body.vt-resizing #terminal-container{ transition:none; }
 }
 .vt-q-compose-row{ display:flex; gap:calc(var(--spacing) * 2); align-items:center; }
 .vt-q-target{
-  flex:1 1 auto; min-width:0; background:var(--term); color:var(--txt);
-  border:1px solid var(--line); border-radius:var(--trad);
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2); font:400 var(--fs-sm) var(--ui);
+  flex:1 1 auto;
+  min-width:0;
 }
 .vt-q-target:focus{
   outline:none; border-color:var(--acc);
@@ -608,10 +608,9 @@ body.vt-resizing #terminal-container{ transition:none; }
    pill 모양이지만 경고색(--warn)이 아니라 중립 accent로 — "위험"이 아니라
    "이 항목이 어디로 갈지"를 알리는 정보 배지라서다. */
 .vt-q-chip{
-  display:inline-block; margin-top:calc(var(--spacing) * 1);
-  font:600 var(--fs-3xs) var(--ui); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
-  border-radius:var(--radius-full);
-  background:color-mix(in srgb, var(--acc) 16%, transparent); color:var(--acc);
+  margin-top:calc(var(--spacing) * 1);
+  background:color-mix(in srgb, var(--acc) 16%, transparent);
+  color:var(--acc);
 }
 
 /* 포트 미리보기 (ports.js showPortPreview, L5) — 카드를 크게 키우고 iframe이 body를 꽉 채움. */
@@ -625,9 +624,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 
 /* 프롬프트 스니펫 (snippets.js) — L3. 작성 바는 큐와 동일한 톤, input만 추가. */
 #vt-sn-label{
-  background:var(--term); color:var(--txt);
-  border:1px solid var(--line); border-radius:var(--trad);
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); font:400 var(--fs-md) var(--ui);   /* 16px — iOS 확대 방지 */
+  /* 16px — iOS 확대 방지 */;
 }
 #vt-sn-label:focus{
   outline:none; border-color:var(--acc);

@@ -244,9 +244,8 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-radio.disabled{ opacity:.5; cursor:not-allowed; }
 .vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-left:20px; }
 .vt-fl-input{
-  width:100%; background:var(--term); color:var(--txt); border:1px solid var(--line);
-  border-radius:var(--trad); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
-  font:400 var(--fs-md) var(--ui);  /* 16px — iOS 확대 방지(.vt-q-compose와 같은 이유) */
+  width:100%;
+  /* 16px — iOS 확대 방지(.vt-q-compose와 같은 이유) */;
 }
 .vt-fl-check{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 3); cursor:pointer; }
 .vt-fl-share-actions{ display:flex; justify-content:flex-end; margin-bottom:calc(var(--spacing) * 3); }

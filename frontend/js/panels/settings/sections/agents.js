@@ -78,7 +78,7 @@ function renderCoverageTable(rows) {
 
     const trust = document.createElement('td');
     const badge = document.createElement('span');
-    badge.className = 'vt-set-covtrust';
+    badge.className = 'vt-tag vt-set-covtrust';
     badge.dataset.trust = r.trust;
     badge.textContent = AGENT_TRUST_LABEL[r.trust] || r.trust;
     trust.appendChild(badge);
