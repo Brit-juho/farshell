@@ -32,13 +32,9 @@
 #vt-right-rail { display:none !important; }
 
 #vt-dock-slot { display:contents; }
-#vt-dock {
-  display:none;
-  flex-direction:column; width:var(--vt-dock-w, 392px); flex:none;
-  position:fixed; right:0; top:0; bottom:0; z-index:70;
-  background:var(--bar); border-left:1px solid var(--line);
-  min-width:0; transition:width .12s ease;
-}
+/* 2.1.6 — 프레임은 components.css의 `.vt-sidepanel.right`가 맡는다.
+   여기 남는 건 이 패널의 폭뿐이다. */
+#vt-dock { width:var(--vt-dock-w, 392px); }
 @media (min-width:720px) {
   #vt-dock { display:flex; }
   /* 같은 이유로 `:not(.no-right-rail)`을 뺐다 — usage 유무와 무관하게 dock은

@@ -31,13 +31,9 @@
 }
 
 #vt-wgrail-slot { display:contents; }
-#vt-wgrail {
-  display:none;
-  flex-direction:column; width:var(--vt-wgrail-w, 252px); flex:none;
-  position:fixed; left:0; top:0; bottom:0; z-index:70;
-  background:var(--bar); border-right:1px solid var(--line);
-  min-width:0; transition:width .12s ease;
-}
+/* 2.1.6 — 프레임(고정 배치·배경·전이·접힘 방향)은 components.css의
+   `.vt-sidepanel.left`가 맡는다. 여기 남는 건 이 패널의 폭뿐이다. */
+#vt-wgrail { width:var(--vt-wgrail-w, 252px); }
 #vt-wgrail.collapsed { width:48px !important; }
 @media (min-width:720px) {
   #vt-wgrail { display:flex; }

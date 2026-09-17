@@ -330,6 +330,33 @@
   /* 목록이 열려 있는 동안 버튼이 눌린 상태로 남는다. */
   .vt-host-btn.open { background: var(--menu-hover); color: var(--color-txt); }
 
+  /* ── 고정 사이드 패널 ─────────────────────────────────────────────────
+   * 화면 좌우 끝에 붙어 세로를 다 쓰는 패널. 레일(#vt-wgrail)과 dock(#vt-dock)이
+   * 그것인데, 2.1.6 이전에는 선언 열 개가 양쪽에 똑같이 적혀 있었다 —
+   * position/top/bottom/z-index/display/flex-direction/flex/min-width/background/
+   * transition. 다른 건 **어느 쪽 끝에 붙는가**뿐이다.
+   *
+   * `display:none`이 기본인 이유: 폰(<720px)에서는 둘 다 안 쓰고 하단 내비와
+   * 플릿 홈이 그 역할을 한다. 켜는 것은 각 화면의 미디어쿼리 몫이다.
+   *
+   * 폭은 사용자가 끄는 값이라 변수로 받는다 — 각자 자기 변수를 넘긴다
+   * (--vt-wgrail-w / --vt-dock-w). body의 padding이 같은 변수를 읽어야
+   * 본문이 패널 밑으로 흘러들지 않는다. */
+  .vt-sidepanel {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    z-index: 70;
+    display: none;
+    flex-direction: column;
+    flex: none;
+    min-width: 0;
+    background: var(--bar);
+    transition: width var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-sidepanel.left  { left: 0;  border-right: 1px solid var(--color-line); }
+  .vt-sidepanel.right { right: 0; border-left: 1px solid var(--color-line); }
+
   /* ── 세션 행 ───────────────────────────────────────────────────────────
    * 세션 하나를 한 줄로 보여주는 행. 데스크톱 레일(.vt-wgrail-row)과 폰의 플릿
    * 홈(.vt-fleet-row)이 **같은 데이터를 같은 구조로** 그리는데 2.1.6 이전에는

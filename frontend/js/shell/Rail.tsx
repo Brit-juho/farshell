@@ -390,7 +390,7 @@ function Rail(props: { deps: RailDeps }) {
   };
 
   return (
-    <aside id="vt-wgrail" ref={railRef} classList={{ collapsed: collapsed() }} aria-label="워크트리">
+    <aside id="vt-wgrail" class="vt-sidepanel left" ref={railRef} classList={{ collapsed: collapsed() }} aria-label="워크트리">
       <div class="vt-wgrail-head">
         <Show when={!collapsed()}>
           {/* C1 — 호스트가 로컬 하나뿐이면 칩을 아예 안 그린다. 멀티호스트를
