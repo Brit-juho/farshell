@@ -89,7 +89,7 @@ function showFiles() {
     ariaLabel: '파일',
     headHTML: `
       <div class="vt-vw-title" id="vt-fl-title">파일</div>
-      <button class="vt-vw-diff" id="vt-fl-upload" title="파일 올리기">올리기</button>
+      <button class="vt-btn sm vt-vw-diff" id="vt-fl-upload" title="파일 올리기">올리기</button>
     `,
     extraHTML: `
       <div class="vt-fl-chips" id="vt-fl-chips" role="tablist"></div>
@@ -326,7 +326,7 @@ function openShareDialog(item) {
     <div class="vt-viewer-card vt-fl-share-card" role="dialog" aria-modal="true" aria-label="공유 링크 발급">
       <div class="vt-viewer-head">
         <div class="vt-vw-title">링크 발급 — ${vtEsc(item.name)}</div>
-        <button class="vt-vw-x" aria-label="닫기">${icon('x', 16)}</button>
+        <button class="vt-icon-btn vt-vw-x" aria-label="닫기">${icon('x', 16)}</button>
       </div>
       <div class="vt-vw-body">
         <div class="vt-fl-field">

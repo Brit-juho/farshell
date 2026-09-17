@@ -165,15 +165,15 @@
     display:flex; padding:calc(var(--spacing) * 1) 0;
     background:var(--win); border-bottom:1px solid var(--line);
   }
+  /* 2.1.6 — 모양·상태는 components.css의 `.vt-host-btn`. 여기 남은 것은 폰
+     플릿 홈의 조판이다: 이름과 상세가 한 줄에 baseline으로 붙고, 줄 전체를
+     차지한다(누를 곳이 넓어야 엄지로 쓴다). */
   .vt-fleet-host {
-    flex:1; min-width:0; display:flex; align-items:baseline; gap:calc(var(--spacing) * 2);
-    padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5);
+    flex:1; align-items:baseline; gap:calc(var(--spacing) * 2);
+    padding:calc(var(--spacing) * 1.5);
     font:600 var(--fs-sm) var(--mono); color:var(--txt);
-    background:none; border:none; border-radius:var(--radius-sm); cursor:pointer; text-align:left;
   }
   .vt-fleet-host.remote .vt-fleet-host-name { color:var(--acc); }
-  .vt-fleet-host.offline { opacity:.6; }
-  .vt-fleet-host.open { background:var(--menu-hover); }
   .vt-fleet-host-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vt-fleet-host-detail { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     font:400 var(--fs-2xs) var(--mono); color:var(--sub); }

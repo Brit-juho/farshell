@@ -38,26 +38,19 @@
 }
 .vt-vw-title{ flex:1; font:600 var(--fs-sm) var(--ui); overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
-.vt-vw-back,.vt-vw-x,.vt-vw-diff,.vt-vw-tree-toggle,.vt-vw-here,.vt-vw-insert-cur{
-  background:var(--tab); color:var(--txt);
-  border:1px solid var(--line); border-radius:var(--trad);
-  min-width:32px; height:28px; padding:0 calc(var(--spacing) * 2); cursor:pointer;
-  font:500 var(--fs-xs) var(--ui); touch-action:manipulation;
-  display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
-}
-.vt-vw-back:hover,.vt-vw-x:hover,.vt-vw-diff:hover,
-.vt-vw-tree-toggle:hover,.vt-vw-here:hover,.vt-vw-insert-cur:hover{ background:var(--menu-hover); }
-.vt-vw-back:active,.vt-vw-x:active,.vt-vw-diff:active,
-.vt-vw-tree-toggle:active,.vt-vw-here:active,.vt-vw-insert-cur:active{
-  background:color-mix(in srgb, var(--acc) 22%, var(--menu-hover));
-}
-.vt-vw-diff{ color:var(--acc); }
-.vt-vw-tree-toggle svg,.vt-vw-here svg,.vt-vw-insert-cur svg{ width:15px; height:15px; }
-.vt-vw-tree-toggle.active{ background:color-mix(in srgb, var(--acc) 18%, var(--tab)); color:var(--acc); }
-/* 트리 접기/펼치기는 dock/full 2단 분할에서만 의미가 있다 — sheet에서는 숨긴다. */
-.vt-vw-tree-toggle{ display:none; }
-#vt-viewer.mode-dock .vt-vw-tree-toggle,
-#vt-viewer.mode-full .vt-vw-tree-toggle{ display:inline-flex; }
+/* 2.1.6 — 이 묶음은 여섯이었는데 **넷은 죽어 있었다**: .vt-vw-back ·
+   .vt-vw-tree-toggle · .vt-vw-here · .vt-vw-insert-cur를 DOM에 붙이는 코드가
+   프런트 어디에도 없다(전수 grep). 코드 뷰어가 pane 리프로 다시 쓰이면서
+   사라진 버튼들의 CSS만 남아 있던 자리다.
+
+   살아 있는 둘은 뷰어 전용이 아니라 **패널 공용 컨트롤**이 돼 있었다 —
+   .vt-vw-x는 panels/panel.js가 모든 패널 머리에 자동으로 붙이는 닫기이고,
+   .vt-vw-diff는 큐「지금 실행」· 파일「올리기」· 소스컨트롤/포트「새로고침」이
+   쓴다. 각각 components.css의 `.vt-icon-btn` · `.vt-btn.sm`으로 옮겼다.
+
+   닫기의 테두리는 버렸다(패널 머리의 ×는 테두리 없는 쪽이 관례이고, 워크트리
+   다이얼로그 닫기가 이미 그렇다). 「새로고침」류의 액센트 글자도 버렸다 —
+   패널마다 있는 부차 액션이라 전부 액센트면 액센트가 뜻을 잃는다. */
 .vt-vw-path{
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); font:400 var(--fs-2xs) var(--mono); color:var(--sub);
   background:var(--bar); border:none; border-bottom:1px solid var(--line);
@@ -333,19 +326,9 @@ body.vt-resizing #terminal-container{ transition:none; }
   body.vt-docked #terminal-container{ margin-right:0; }
 }
 
-/* 모드 전환 버튼 — 헤더에 3개, 현재 모드는 강조. */
-.vt-vw-modes{ display:flex; gap:calc(var(--spacing) * 0.5); background:var(--tab); border:1px solid var(--line);
-  border-radius:var(--trad); padding:calc(var(--spacing) * 0.5); flex:0 0 auto; }
-.vt-vw-mode-btn{
-  background:transparent; color:var(--sub); border:none; border-radius:calc(var(--trad) - 2px);
-  width:26px; height:24px; display:flex; align-items:center; justify-content:center;
-  cursor:pointer; touch-action:manipulation;
-}
-.vt-vw-mode-btn svg{ width:14px; height:14px; }
-.vt-vw-mode-btn:hover{ background:var(--menu-hover); color:var(--txt); }
-.vt-vw-mode-btn.active{ background:var(--color-acc-surface); color:var(--acc-ink); }
-/* 폭이 없는 모바일에서는 모드 선택 자체가 의미 없다 — 항상 sheet로 강제되니 버튼도 숨긴다. */
-@media (max-width:560px){ .vt-vw-modes{ display:none; } }
+/* 2.1.6 — 코드 뷰어 모드 전환(.vt-vw-modes + .vt-vw-mode-btn)은 **통째로 죽어
+   있었다**: 컨테이너도 버튼도 DOM에 붙이는 코드가 없다(전수 grep). 뷰어가 pane
+   리프로 다시 쓰이면서 모드 개념 자체가 사라졌고 CSS만 남았다. 지운다. */
 
 /* -------------------------------------------------------------------------
    계층 트리 + 2단 분할 (dock/full 전용) — 좌측 트리, 우측 코드/diff가 동시에 보인다.
@@ -570,13 +553,7 @@ body.vt-resizing #terminal-container{ transition:none; }
   display:flex; gap:calc(var(--spacing) * 0.5); background:var(--tab); border:1px solid var(--line);
   border-radius:var(--trad); padding:calc(var(--spacing) * 0.5); margin:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3) 0;
 }
-.vt-sn-scope-tab{
-  flex:1 1 auto; background:transparent; color:var(--sub); border:none; border-radius:calc(var(--trad) - 2px);
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2); font:500 var(--fs-xs) var(--ui);
-  cursor:pointer; touch-action:manipulation;
-}
-.vt-sn-scope-tab:hover{ background:var(--menu-hover); color:var(--txt); }
-.vt-sn-scope-tab.active{ background:var(--color-acc-surface); color:var(--acc-ink); }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-segment`. */
 .vt-sn-save-scope{
   display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:1 1 auto; min-width:0;
   color:var(--sub); font:400 var(--fs-xs) var(--ui); cursor:pointer; user-select:none;
