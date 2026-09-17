@@ -12,6 +12,7 @@
 // 이 파일은 viewer 지연 청크(shell.js)에 속한다 — app.js 번들 상한(ADR-26) 때문에
 // 정적 import는 금지. 진입점은 panels/viewer-lazy.js의 `scm.show` 액션이다.
 import { openPanel } from '../panel.js';
+import { emptyState } from '../../ui/empty.js';
 import { vtFetch } from '../../core/api.js';
 import { renderGitStatus, renderCommit, renderCommitFileDiff } from './git.js';
 import { renderFileDiff } from './diff.js';
@@ -101,7 +102,12 @@ export async function showScm() {
     const repo = await _currentRepo();
     if (!repo) {
       _renderHead(headEl, null, null);
-      body.innerHTML = '<div class="vt-vw-empty">저장소를 찾을 수 없습니다. 세션을 열면 그 작업 디렉터리를 봅니다.</div>';
+      body.innerHTML = '';
+      body.appendChild(emptyState({
+        icon: 'folder',
+        title: '볼 저장소가 없습니다',
+        desc: '세션을 열면 그 작업 디렉터리의 변경 사항을 여기서 봅니다.',
+      }));
       return;
     }
     const back = () => paint();
