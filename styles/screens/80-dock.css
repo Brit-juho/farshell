@@ -48,15 +48,20 @@
   #vt-dock:not(.collapsed) { box-shadow:none; }
 }
 
+/* 2026-09-17 — 탭 라벨은 「소스컨트롤」·「사용량」 같은 한글 낱말이다. mono는
+   코드·경로·숫자의 열을 맞추려고 쓰는 글꼴이고 한글 글리프는 애초에 들어
+   있지도 않아서(폴백으로 새는 중이었다) 여기서는 아무 일도 안 하고 있었다.
+   낱말은 ui 글꼴로 한 단 키운다 — dock 전체를 바꾸는 이 패널의 주 내비게이션이
+   11px로 가장 작은 단에 앉아 있었다. 높이는 12.5px 글자의 상하 여백만큼 30px. */
 .vt-dock-tabs {
-  display:flex; align-items:stretch; height:28px; flex:none;
+  display:flex; align-items:stretch; height:30px; flex:none;
   border-bottom:1px solid var(--line); overflow:hidden;
 }
 .vt-dock-tab {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:none;
   padding:0 calc(var(--spacing) * 2); border:0; border-right:1px solid var(--line);
   background:transparent; color:var(--color-sub); cursor:pointer;
-  font:500 var(--fs-2xs) var(--mono); white-space:nowrap;
+  font:var(--weight-medium) var(--fs-xs) var(--font-ui); white-space:nowrap;
   transition:background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint);
 }
 .vt-dock-tab:hover { background:var(--menu-hover); color:var(--color-txt); }
@@ -138,7 +143,10 @@
    없다(렌더 자체가 없으므로 여기 disabled 스타일도 필요 없다). */
 .vt-scm-head { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; }
 .vt-scm-head-left { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; white-space:nowrap; }
-.vt-scm-repo { font:600 var(--fs-2xs) var(--mono); color:var(--txt); overflow:hidden; text-overflow:ellipsis; }
+/* 저장소 이름은 이 줄의 주인공이고 나머지(브랜치·↑↓·±)는 그 저장소의 현재
+   상태다. 셋 다 11px이던 것을 이름만 한 단 올리고 ui 글꼴로 바꾼다 —
+   헤더의 워크스페이스 이름과 같은 규칙이다. */
+.vt-scm-repo { font:var(--weight-semibold) var(--fs-xs) var(--font-ui); color:var(--txt); overflow:hidden; text-overflow:ellipsis; }
 .vt-scm-branch { font:500 var(--fs-2xs) var(--mono); color:var(--acc); overflow:hidden; text-overflow:ellipsis; }
 .vt-scm-upstream, .vt-scm-track, .vt-scm-count { font:400 var(--fs-3xs) var(--mono); color:var(--sub); flex:none; }
 .vt-scm-add { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-done); flex:none; }
