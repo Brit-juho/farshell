@@ -8,45 +8,71 @@
 
 ## 명령 목록
 
-| 명령 | 설명 |
-|------|------|
-| `fsh voice` | 음성 모드 — 서버 + Voice Daemon 백그라운드 시작 (노션 등 다른 작업 중에도 사용 가능) |
-| `fsh clip` | 클립보드 동기화 데몬 — 맥 클립보드 변경을 웹으로 push (OSC52로 못 잡는 터미널 밖 복사 보완) |
-| `fsh mobile [옵션]` | 모바일 접속 URL + QR 코드 출력 |
-| `fsh start` | 전체 시작 — 서버 + 터널 + 음성 데몬 |
-| `fsh stop [--purge]` | 종료 — `--purge`는 tmux 세션까지 완전 종료 |
-| `fsh status` | 서버·터널·Voice Daemon·tmux 상태 확인 |
-| `fsh manage` | TUI 관리 도구 — 세션 목록/rename/kill/attach + 핫키/상태 조회 |
-| `fsh attach [name]` | 임의 tmux 세션을 새 OS 터미널 창에 attach |
-| `fsh voice-target [name\|--auto]` | Voice Daemon 타깃 세션 lock/해제 |
-| `fsh queue [하위명령]` | 프롬프트 큐 — 작업 중 지시를 쌓아뒀다 순차 투입 (아래 [프롬프트 큐](#프롬프트-큐-fsh-queue) 참고) |
-| `fsh hotkey [list\|set\|reset\|disable]` | 핫키 조회/변경 |
-| `fsh password [clear]` | 웹 로그인 비밀번호 설정(해시만 저장) / `clear`로 해제 |
-| `fsh otp [status\|setup\|disable]` | 새 기기 등록 시 OTP 요구 — `setup` 전까지 완전 비활성 |
-| `fsh device [list\|revoke <id>]` | 등록된 기기 조회 / 폐기 (폰 분실 시 세션까지 함께 무효화) |
-| `fsh help <topic>` | 토픽별 도움말 — `concepts`/`voice`/`hotkeys`/`target`/`troubleshoot`/`webui`/`ssh`/`tunnel-hook` |
-| `fsh claude` | 새 터미널 창에 `tmux dev` + `claude --resume` 오픈 |
-| `fsh agent <name>` | claude/codex/aider/gemini 시작 (일반화) |
-| `fsh handoff mobile` | 현재 tmux 세션을 폰으로 넘김 (QR + `#tmux=`) |
-| `fsh handoff desktop` | 폰 세션을 맥 터미널로 가져옴 |
-| `fsh template [save\|apply\|list\|rm] <name>` | CLAUDE.md 템플릿 관리 |
-| `fsh popup <action>` | tmux 3.2+ popup으로 빠른 호출 |
-| `fsh run "..."` | headless `claude -p` 백그라운드 실행 + TTS 알림 |
-| `fsh tunnel expose <port> "이름"` | 다른 로컬 포트를 별도 Cloudflare 터널로 공개 |
-| `fsh tunnel unexpose <port>` | 해당 포트 터널 종료 |
-| `fsh tunnel list` | 열려 있는 터널 전부 (메인 + 추가 포트) |
-| `fsh tunnel hook` | URL 변경 훅 확인 + 즉시 실행 (자세히: `fsh help tunnel-hook`) |
-| `fsh tunnel restart` | 좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동 + 훅 재실행 |
-| `fsh tunnel watchdog` | 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 자동 기동) |
-| `fsh ssh [session]` | Tailscale + SSH로 tmux 세션 직접 접속 — 회사망 등 화면 원격이 막힌 환경 (자세히: [아래](#tailscale--ssh-원격-접속)) |
-| `fsh doctor` | 설치/환경 진단 — 아래 [점검 항목](#fsh-doctor-점검-항목) 참고 |
-| `fsh doctor paste` | 붙여넣기 진단(N29) — **진단하려는 그 pane에서** 직접 실행한다. 그 터미널에 bracketed paste를 요청해 실제로 도착한 바이트를 그대로 받아, ICANON·정규 모드 한 줄 한계·tmux면 위임 대상인지를 같이 보여준다 — FarShell 서버·PTY 코드를 아예 거치지 않으므로 "우리 쪽 버그"인지 "이 터미널 자체의 한계"인지를 갈라낸다 |
-| `fsh install-profiles [--dry-run]` | 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet) |
-| `fsh shell-init [zsh\|bash\|fish\|pwsh]` | 셸별 안전 통합 스니펫 출력 (`eval "$(fsh shell-init zsh)" >> ~/.zshrc`) |
+> 2026-09-18: `CLAUDE.ko.md`가 따로 들고 있던 목록을 여기로 합쳤다(그 파일은
+> 삭제됐다 — 에이전트가 읽는 문서는 영문 단일본으로 통일). 같은 목록이 두 곳에
+> 살면 반드시 어긋난다.
 
-> 지원 OS: macOS / Linux (X11) / WSL2 (Linux로 동작). Windows 네이티브는 미지원.
+터미널 어디서든 `fsh` 명령으로 FarShell을 제어합니다:
 
----
+```bash
+fsh start [--voice]    # 전체 시작 (서버+터널, --voice로 음성 데몬도 함께)
+fsh stop [--purge]     # 종료 (--purge: tmux 세션까지 완전 종료)
+fsh status             # 현재 상태 확인
+fsh mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
+fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave 4
+fsh attach [name]      # 임의 tmux 세션을 새 창에 attach
+fsh voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
+fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
+fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
+fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐 (P4)
+fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크 (N19/N23)
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링 (N7/N39)
+fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리 (N8/N44)
+fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (N30 — 구현만 됐고 미사용, ADR-27)
+fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
+fsh hooks [status|install|uninstall]  # Claude Code 훅 등록(상태 배지·큐·TTS의 전제)
+fsh pane report [--state ...] [--agent ...]  # 이 pane의 상태 보고(훅 없는 에이전트용)
+fsh clauth [status|which]  # 사용량 조회(읽기 전용, clauth 미설치면 숨김)
+fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]  # 누적형 사용량 기록/조회 (로컬 LLM 등, 한도 없음)
+fsh password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
+fsh otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전까지 완전 비활성)
+fsh device [list|rename <id> <별명>|revoke <id>]  # 등록된 기기 조회 / 이름 변경 / 폐기(폰 분실 시 세션까지 함께 무효)
+fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
+fsh claude             # 새 터미널 창에 tmux dev + claude --resume (내부적으로 fsh agent claude)
+fsh agent <name>       # claude/codex/aider/gemini 등 임의 에이전트로 시작 (fsh claude의 일반화)
+fsh template [save|apply|list|rm] <name>  # CLAUDE.md 템플릿 저장/적용 관리
+fsh popup <action>     # tmux 3.2+ popup으로 fsh 명령 빠른 호출
+fsh run "..."          # headless `claude -p` 백그라운드 실행 + 완료 시 TTS 알림
+fsh handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
+fsh handoff desktop    # 폰 세션을 맥 터미널로 가져옴
+fsh tunnel expose 3000 "앱 이름"  # 다른 로컬 포트를 별도 Cloudflare 터널로 공개
+fsh tunnel unexpose 3000          # 해당 포트 터널 종료
+fsh tunnel list                   # 열려 있는 터널 전부 (메인 + 추가 포트)
+fsh tunnel hook                   # URL 변경 훅 확인 + 즉시 실행 (fsh help tunnel-hook)
+fsh tunnel restart                # 좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동 + 훅 재실행
+fsh tunnel watchdog               # 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 fsh start/voice/mobile가 자동 기동)
+fsh ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내 (D9, 회사망 등)
+fsh doctor             # 설치/환경 진단 (Linux 항목 포함)
+fsh install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
+fsh shell-init zsh     # 셸 init 스니펫 출력 (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
+```
+
+> **지원 OS**: macOS / Linux (X11) / WSL2 (Linux로 동작). Windows 네이티브는 미지원.
+
+**Phase 6 — 단일 tmux 서버 원칙:** fsh CLI · server · Voice Daemon · hook이 모두 `-L vt` 격리 소켓 사용(소켓 이름은 CLI 이름과 무관하게 `vt`로 유지). Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
+
+**`voice` / `mobile` / `start` 실행 시 자동 동작:** 현재 쓰는 터미널 앱(iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app)에 새 창이 열리고 그 안에서 `tmux new -A -s dev 'claude --resume'`이 실행됩니다. 이미 tmux 안이면 새 창을 열지 않습니다.
+
+**노션 작업 중 음성 코딩 워크플로:**
+1. `fsh voice` → 백그라운드 시작 (+ 새 iTerm 창에 `tmux dev` + `claude --resume` 자동 오픈)
+2. 새 창의 resume 목록에서 현재 대화 선택 → 이후 음성/모바일이 그 Claude로 연결됨
+3. 원래 창은 그대로 두고 노션으로 돌아가서 작업
+4. Ctrl+Shift+V → 말하기 ("git status") → tmux dev에 자동 입력
+5. `fsh stop` → 종료
+
+> 이미 tmux 안에서 `fsh` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
+> 자동 오픈은 macOS + iTerm 환경 한정. 그 외에는 수동 명령(`tmux new -A -s dev 'claude --resume'`) 안내가 출력됩니다.
+
 
 ## `fsh mobile` 옵션
 

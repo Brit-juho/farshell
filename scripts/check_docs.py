@@ -94,7 +94,7 @@ def doc_routes(doc: Path) -> set[str]:
 
 def check_api_docs(problems: list[str]) -> None:
     code = code_routes()
-    for name in ("API.md", "API.ko.md"):
+    for name in ("API.md",):
         doc = ROOT / name
         documented = doc_routes(doc)
         missing = sorted(code - documented)
