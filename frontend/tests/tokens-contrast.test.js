@@ -111,6 +111,13 @@ const BACKGROUNDS = ['--color-bg-0', '--color-bg-1', '--color-bg-2', '--color-bg
 // 역할별 기준. muted까지 4.5를 강요하면 sub와 구분이 안 돼 3단 램프가 무너진다 —
 // WCAG가 실제로 나누는 대로(1.4.3 텍스트 / 1.4.11 UI 컴포넌트) 나눈다.
 const TEXT_TOKENS = ['--color-txt', '--color-sub'];
+// 2.1.6에서 램프에 4번째 단계(--color-faint)가 생겼다. 이건 비활성 라벨·
+// 플레이스홀더처럼 **못 읽어도 일이 막히지 않는** 글자 전용이라 텍스트가 아니라
+// UI 컴포넌트 기준(3:1)으로 본다. 다만 bg-3(hover·활성 행)은 제외한다 —
+// 어두운 스킨에서 2.2~2.9:1로 떨어지고, 그걸 맞추려 밝히면 바로 위 muted와
+// 붙어 4단 램프가 다시 3단이 된다. 대신 "본문에 쓰지 않는다"가 규칙이고
+// scripts/check_contrast.py가 램프 간격(1.25배)으로 그 분리를 지킨다.
+const FAINT_BACKGROUNDS = ['--color-bg-0', '--color-bg-1', '--color-bg-2'];
 const GRAPHIC_TOKENS = [
   '--color-muted',
   '--color-st-idle',
@@ -159,6 +166,27 @@ test('텍스트 토큰이 배경 4단 전부에서 AA(4.5:1)를 넘는다', () =
     }
   }
   assert.deepStrictEqual(fails, [], `AA 미달:\n  ${fails.join('\n  ')}`);
+});
+
+test('--color-faint가 bg-0~2에서 3:1을 넘고, muted와 한 단계 이상 벌어진다', () => {
+  const fails = [];
+  for (const skin of SKIN_NAMES) {
+    const faint = SKINS_ALL[skin]['--color-faint'];
+    assert.ok(faint, `${skin}에 --color-faint가 없다 — 4단 램프가 안 채워졌다`);
+    for (const bg of FAINT_BACKGROUNDS) {
+      const r = contrast(hexToRgb(faint), hexToRgb(SKINS_ALL[skin][bg]));
+      if (r < 3) fails.push(`${skin} --color-faint/${bg} = ${r.toFixed(2)}:1`);
+    }
+    // 램프가 눈으로 네 단계여야 한다. 값이 가까워지면(notepad의 sub 5.62 vs
+    // muted 5.03 = 1.12배처럼) 이름만 네 개고 보이는 건 두세 개다.
+    const bg0 = hexToRgb(SKINS_ALL[skin]['--color-bg-0']);
+    const rMuted = contrast(hexToRgb(SKINS_ALL[skin]['--color-muted']), bg0);
+    const rFaint = contrast(hexToRgb(faint), bg0);
+    if (rMuted / rFaint < 1.25) {
+      fails.push(`${skin} muted(${rMuted.toFixed(2)}) → faint(${rFaint.toFixed(2)}) = ${(rMuted / rFaint).toFixed(2)}배`);
+    }
+  }
+  assert.deepStrictEqual(fails, [], `faint 기준 미달:\n  ${fails.join('\n  ')}`);
 });
 
 test('그래픽·UI 토큰이 배경 4단 전부에서 3:1을 넘는다', () => {

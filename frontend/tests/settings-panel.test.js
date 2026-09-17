@@ -95,14 +95,21 @@ test('range 컨트롤의 min/max도 스키마에서 온다', async () => {
   assert.strictEqual(Number(input.max), S.SCHEMA['terminal.fontSize'].max);
 });
 
-test('체크박스 변경 → 스토어에 즉시 반영되고 서버로 나간다', async () => {
+// 2.1.6 — 불리언 컨트롤이 네이티브 체크박스에서 [ON][OFF] 세그먼트
+// (button[role=switch])로 바뀌었다. 검사하는 것은 그대로다: 누르면 스토어에
+// 즉시 반영되고 서버로 나간다. aria-checked까지 보는 이유는, 이 토글이 상태를
+// **글자와 aria 둘 다로** 말하기로 한 컴포넌트이기 때문이다 — 하나만 바뀌면
+// 눈으로는 켜졌는데 스크린리더는 꺼졌다고 읽는다.
+test('불리언 토글 변경 → 스토어에 즉시 반영되고 서버로 나간다', async () => {
   const { document, P, S, puts } = await build();
   P.showSettings();
   sectionButton(document, '마우스 · 선택').click();
-  const cb = rowByLabel(document, '앱에 마우스 이벤트 전달').querySelector('.vt-set-check');
-  cb.checked = false;
-  cb.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+  const tg = rowByLabel(document, '앱에 마우스 이벤트 전달').querySelector('.vt-toggle');
+  assert.strictEqual(tg.getAttribute('role'), 'switch');
+  assert.strictEqual(tg.getAttribute('aria-checked'), 'true');
+  tg.click();
   await flush();
+  assert.strictEqual(tg.getAttribute('aria-checked'), 'false');
   assert.strictEqual(S.get('mouse.forwardToApp'), false);
   assert.strictEqual(puts.at(-1).settings['mouse.forwardToApp'], false);
 });
@@ -526,10 +533,9 @@ test('스크롤백 — 토글 변경이 스토어와 서버로 나간다', async
   });
   P.showSettings();
   sectionButton(document, '스크롤백').click();
-  const cb = rowByLabel(document, '스크롤백 영속화').querySelector('.vt-set-check');
-  assert.strictEqual(cb.checked, false); // 기본 OFF
-  cb.checked = true;
-  cb.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+  const tg = rowByLabel(document, '스크롤백 영속화').querySelector('.vt-toggle');
+  assert.strictEqual(tg.getAttribute('aria-checked'), 'false'); // 기본 OFF
+  tg.click();
   await flush();
   assert.strictEqual(S.get('scrollback.persist'), true);
   assert.strictEqual(puts.at(-1).settings['scrollback.persist'], true);

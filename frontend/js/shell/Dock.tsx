@@ -10,6 +10,7 @@
 // 않는다**(ADR-26/N35 — Vite lib 모드가 청크 안에 복제해 넣어 앱과 다른
 // 객체가 된다). 상수 모듈(breakpoints·resizer)만 예외다.
 import { batch, createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { icon } from '../ui/icons.js';
 import { render } from 'solid-js/web';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WIDE_MAX } from '../layout/breakpoints.js';
@@ -31,6 +32,8 @@ export interface DockDeps {
 interface DockTab {
   id: string;
   label: string;
+  /** 접힘 36px에서 라벨 대신 보이는 아이콘(ui/icons.js 이름). */
+  icon: string;
   panelId: string | null;   // 기존 패널 렌더러의 루트 id. null이면 자체 빈 상태.
   action: string | null;    // 그 패널을 여는 액션 id(팔레트·키맵이 참조하는 그 id)
   cap?: 'ports' | 'usage';  // /api/capabilities에 없으면 탭 자체가 사라진다
@@ -41,11 +44,11 @@ interface DockTab {
 // 스니펫은 dock 탭이 아니다(60 §4에서 큐 탭 안의 스코프로 들어간다) — 그때까지
 // 레일 "⋯ 더보기"의 팝업으로 남는다.
 const TABS: DockTab[] = [
-  { id: 'scm',   label: '소스컨트롤', panelId: 'vt-dock-scm', action: 'scm.show' },   // 40 §3 (2.1.0은 읽기 전용)
-  { id: 'queue', label: '큐',        panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
-  { id: 'files', label: '파일',      panelId: 'vt-files', action: 'files.show' },  // 50 §4
-  { id: 'ports', label: '포트',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
-  { id: 'usage', label: '사용량',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
+  { id: 'scm',   label: '소스컨트롤', icon: 'git-branch', panelId: 'vt-dock-scm', action: 'scm.show' },   // 40 §3 (2.1.0은 읽기 전용)
+  { id: 'queue', label: '큐', icon: 'list',        panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
+  { id: 'files', label: '파일', icon: 'folder',      panelId: 'vt-files', action: 'files.show' },  // 50 §4
+  { id: 'ports', label: '포트', icon: 'plug',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
+  { id: 'usage', label: '사용량', icon: 'gauge',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
 ];
 
 function Dock(props: { deps: DockDeps }) {
@@ -203,17 +206,22 @@ function Dock(props: { deps: DockDeps }) {
               title={t.label}
               onClick={() => onTabClick(t.id)}
             >
-              {/* 접힘 36px에서는 CSS(writing-mode)가 이 라벨을 세로로 세운다 —
-                  아이콘 세트를 새로 만들지 않고도 "무슨 탭인지"가 남는다. */}
+              {/* 접힘 36px에서는 **아이콘만** 보인다. 이전에는 CSS의
+                  writing-mode:vertical-rl로 이 한글 라벨을 세로로 세웠는데,
+                  한글은 세로쓰기에서 음절이 한 자씩 쌓여 "소/스/컨/트/롤"이
+                  되고 모노스페이스까지 겹쳐 읽을 수 없었다. 세로 라벨은
+                  영문을 전제한 패턴이라 한글에는 성립하지 않는다.
+                  title 속성이 이미 전체 라벨을 들고 있어 툴팁으로 남는다. */}
+              <span class="vt-dock-tab-ico" innerHTML={icon(t.icon, 16)} />
               <span class="vt-dock-tab-label">{t.label}</span>
               <Show when={badgeOf(t) > 0}>
-                <span class="vt-dock-badge">{badgeOf(t) > 99 ? '99+' : badgeOf(t)}</span>
+                <span class="vt-badge accent">{badgeOf(t) > 99 ? '99+' : badgeOf(t)}</span>
               </Show>
             </button>
           )}
         </For>
         <Show when={!collapsed()}>
-          <button type="button" class="vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" title="접기">›</button>
+          <button type="button" class="vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" title="접기"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         </Show>
       </div>
       {/* 탭 내용은 전부 패널 렌더러가 여기 붙인다(panels/panel.js의 dock 호스트). */}

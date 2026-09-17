@@ -1,11 +1,25 @@
-/* D3(20-design-system.md §4-1) — 상태 dot. 이 디자인 시스템에서 처음으로
- * "components" 레이어에 들어가는 진짜 신규 컴포넌트다(그전까지는 legacy.css의
- * 기존 규칙만 손댔다). 아직 아무도 이 클래스를 렌더링하지 않는다 — 탭/사이드바/
- * pane 헤더/파비콘/푸시에 실제로 배선하는 건 A1(에이전트 상태 머신, 40-agent-
- * state.md)의 몫이라 D3는 "컴포넌트 계약"만 만든다(색 토큰 자체는 D1에서 이미
- * --color-st-{idle,working,waiting,done,error}로 정의됨).
+/* components 레이어 — 실제 컴포넌트 계약.
+ *
+ * 2.1.5까지 이 파일은 45줄이었고 `.status-dot` 하나뿐이었다. 나머지 2851줄은
+ * legacy.css에 id 셀렉터 일회성 규칙으로 흩어져 있었다 — 그래서 "디자인 시스템"이
+ * 문서에만 있고 코드에는 없었다. 같은 뜻의 버튼이 화면마다 다르게 생겼고, 어떤
+ * 컨트롤은 아예 OS 기본 모양 그대로였다.
+ *
+ * ⚠ 캐스케이드 주의: legacy.css는 **레이어 밖(unlayered)** 이라 어떤 @layer보다도
+ * 항상 이긴다. 그래서 여기로 옮겨오는 컴포넌트는 legacy.css 쪽 규칙을 **반드시
+ * 지우고** 와야 한다 — 남겨두면 이 파일을 고쳐도 화면이 안 바뀐다.
+ *
+ * 규칙(20-design-system.md §3):
+ *   - 행 높이는 24 / 28 / 36 세 가지만
+ *   - 배지는 테두리만, 배경 없음. 상태 배지만 상태색 테두리
+ *   - 버튼 기본은 테두리만. **화면당 채움 버튼 1개**(주 액션)
+ *   - 토글은 스위치가 아니라 글자로 읽히는 [ON][OFF] 세그먼트
+ *   - 모서리 한 단계(sm 5px / lg 10px), 모션 120~200ms
+ *   - 모든 인터랙티브 요소는 default/hover/active/focus-visible/disabled 5상태
  */
 @layer components {
+
+  /* ── 상태 dot ──────────────────────────────────────────────────────── */
   .status-dot {
     width: 8px;
     height: 8px;
@@ -42,4 +56,492 @@
       outline-offset: 2px;
     }
   }
+
+  /* ── 버튼 ──────────────────────────────────────────────────────────────
+   * 세 변형만 있다. 더 만들면 "이 화면의 주 액션이 무엇인가"라는 질문에
+   * 답이 없어진다.
+   *   .vt-btn            테두리만 — 기본. 화면에 몇 개 있어도 된다
+   *   .vt-btn.solid      액센트 채움 — **화면당 하나**. 그 화면의 주 액션
+   *   .vt-btn.quiet      테두리 없음 — 행 안의 부차 액션(hover에서만 드러남)
+   * 크기는 행 높이와 같은 3단(24/28/36)으로 묶는다 — 행 안에 들어가는 버튼이
+   * 행보다 큰 일이 생기지 않게. */
+  .vt-btn {
+    --btn-h: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--spacing) * 1.5);
+    height: var(--btn-h);
+    padding: 0 calc(var(--spacing) * 2.5);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-txt);
+    font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui);
+    letter-spacing: var(--tracking-wide);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out-quint),
+                border-color var(--dur-fast) var(--ease-out-quint),
+                color var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-btn.sm { --btn-h: 24px; padding: 0 calc(var(--spacing) * 2); font-size: var(--fs-2xs); }
+  .vt-btn.lg { --btn-h: 36px; padding: 0 calc(var(--spacing) * 4); font-size: var(--fs-sm); }
+
+  .vt-btn > svg { width: 14px; height: 14px; flex: none; }
+
+  .vt-btn:hover { background: var(--menu-hover); }
+  /* 누름 피드백은 transform이 아니라 **배경 한 단계**로 준다. 이 버튼은 목록
+   * 안에 촘촘히 놓이는 일이 많아서, scale을 주면 옆 행까지 흔들려 보인다. */
+  .vt-btn:active { background: var(--color-surface-active); }
+  .vt-btn:disabled,
+  .vt-btn[aria-disabled="true"] {
+    opacity: .45;
+    cursor: not-allowed;
+    background: transparent;
+  }
+
+  .vt-btn.solid {
+    background: var(--color-acc-surface);
+    border-color: var(--color-acc-surface);
+    color: var(--color-acc-ink);
+    font-weight: var(--weight-semibold);
+  }
+  /* 채움 버튼의 hover/active는 "더 진하게"가 아니라 살짝 가라앉히는 쪽으로 —
+   * 액센트를 더 밝히면 그 위의 잉크 대비가 깨진다(대비 검사 대상이다). */
+  .vt-btn.solid:hover  { filter: brightness(1.08); }
+  .vt-btn.solid:active { filter: brightness(.94); }
+
+  .vt-btn.quiet {
+    border-color: transparent;
+    color: var(--color-sub);
+  }
+  .vt-btn.quiet:hover { color: var(--color-txt); background: var(--menu-hover); }
+
+  /* 위험한 동작(삭제·취소·강제 종료). 채움으로 만들지 않는다 — 실수로 누르기
+   * 쉬운 자리에 가장 눈에 띄는 버튼을 두지 않는다. */
+  .vt-btn.danger { color: var(--color-st-error); border-color: var(--color-st-error); }
+  .vt-btn.danger:hover { background: color-mix(in srgb, var(--color-st-error) 14%, transparent); }
+
+  /* ── 배지 ──────────────────────────────────────────────────────────────
+   * 테두리만. 채우지 않는 이유는 규칙이라서가 아니라, 배지가 채워지면 그
+   * 화면의 주 액션(유일한 채움 버튼)과 시각 무게가 같아지기 때문이다.
+   * 숫자는 tabular-nums — 1초마다 갱신되는 수치가 자릿수 때문에 흔들리면
+   * 가만히 있는 화면이 움직이는 것처럼 보인다. */
+  .vt-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 calc(var(--spacing) * 1.5);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-sub);
+    font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .vt-badge[data-state="working"] { border-color: var(--color-st-working); color: var(--color-st-working); }
+  .vt-badge[data-state="waiting"] { border-color: var(--color-st-waiting); color: var(--color-st-waiting); }
+  .vt-badge[data-state="done"]    { border-color: var(--color-st-done);    color: var(--color-st-done); }
+  .vt-badge[data-state="error"]   { border-color: var(--color-st-error);   color: var(--color-st-error); }
+  .vt-badge.accent { border-color: var(--color-acc-dim); color: var(--color-acc); }
+
+  /* ── 칩(필터) ──────────────────────────────────────────────────────────
+   * 알약(radius-full)이 아니다. 모서리는 화면 전체가 한 단계(5px)로 통일돼
+   * 있고, 칩만 둥글면 그 칩이 다른 세상에서 온 것처럼 보인다. */
+  .vt-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1);
+    height: 24px;
+    padding: 0 calc(var(--spacing) * 2.5);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-sub);
+    font: var(--weight-medium) var(--fs-2xs) / 1 var(--font-ui);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out-quint),
+                border-color var(--dur-fast) var(--ease-out-quint),
+                color var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-chip:hover { color: var(--color-txt); border-color: var(--color-line-strong); }
+  .vt-chip:active { background: var(--color-surface-active); }
+  .vt-chip[aria-pressed="true"],
+  .vt-chip.active {
+    border-color: var(--color-acc-dim);
+    color: var(--color-acc);
+    background: color-mix(in srgb, var(--color-acc) 10%, transparent);
+  }
+  .vt-chip:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── 세그먼트 토글 ─────────────────────────────────────────────────────
+   * 스위치가 아니라 **글자로 먼저 읽히는** 두 칸이다(20-design-system.md §3).
+   * 스위치는 "지금 켜짐인가 꺼짐인가"를 색과 손잡이 위치로만 말하는데, 그건
+   * 스킨이 6종이고 액센트가 스킨마다 다른 이 앱에서 특히 약한 신호다.
+   *
+   * DOM 계약(panels/settings/controls.js):
+   *   <button class="vt-toggle" role="switch" aria-checked="true|false">
+   *     <span>ON</span><span>OFF</span>
+   *   </button>
+   * role=switch + aria-checked라 스페이스/엔터가 브라우저 기본으로 동작하고
+   * 스크린리더가 상태를 읽는다 — 직접 만든 div였다면 전부 우리가 짜야 한다. */
+  .vt-toggle {
+    display: inline-flex;
+    align-items: stretch;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    cursor: pointer;
+    overflow: hidden;
+    font: var(--weight-semibold) var(--fs-3xs) / 1 var(--font-mono);
+    letter-spacing: var(--tracking-wide);
+  }
+  .vt-toggle > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 0 calc(var(--spacing) * 1.5);
+    color: var(--color-faint);
+    transition: color var(--dur-fast) var(--ease-out-quint),
+                background var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-toggle[aria-checked="true"]  > span:first-child,
+  .vt-toggle[aria-checked="false"] > span:last-child {
+    color: var(--color-acc);
+    background: color-mix(in srgb, var(--color-acc) 12%, transparent);
+  }
+  .vt-toggle:hover { border-color: var(--color-acc-dim); }
+  .vt-toggle:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── 셀렉트 ────────────────────────────────────────────────────────────
+   * appearance:none으로 OS 화살표만 지우고 <select> 자체는 그대로 쓴다.
+   * 직접 만든 드롭다운으로 바꾸지 않는 이유: 키보드 탐색·타이핑 점프·모바일
+   * 네이티브 피커가 전부 공짜로 따라오는데, 그걸 다시 짜면 대개 못 미친다. */
+  .vt-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+  }
+  .vt-select-wrap > svg {
+    position: absolute;
+    right: calc(var(--spacing) * 1.5);
+    width: 12px;
+    height: 12px;
+    color: var(--color-sub);
+    pointer-events: none;   /* 화살표가 클릭을 먹으면 셀렉트가 안 열린다 */
+  }
+  .vt-select {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 24px;
+    padding: 0 calc(var(--spacing) * 6) 0 calc(var(--spacing) * 2);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-0);
+    color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-xs) / 1 var(--font-ui);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-select:hover { border-color: var(--color-acc-dim); }
+  .vt-select:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── 슬라이더 ──────────────────────────────────────────────────────────
+   * 이것도 <input type=range>를 그대로 쓴다(키보드 화살표·Home/End가 공짜).
+   * 트랙과 손잡이만 우리 토큰으로 다시 그린다 — 안 그리면 macOS 기본 파란
+   * 슬라이더가 스킨과 무관하게 혼자 튄다(2.1.5까지의 상태). */
+  .vt-range {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    flex: none;
+  }
+  .vt-range input[type="range"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 128px;
+    height: 16px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .vt-range input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: var(--radius-full);
+    background: var(--color-line-strong);
+  }
+  .vt-range input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4.5px;         /* (트랙 3px - 손잡이 12px) / 2 */
+    border: 0;
+    border-radius: var(--radius-full);
+    background: var(--color-acc);
+    transition: transform var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-range input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.15); }
+  .vt-range input[type="range"]::-moz-range-track {
+    height: 3px;
+    border-radius: var(--radius-full);
+    background: var(--color-line-strong);
+  }
+  .vt-range input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: var(--color-acc);
+  }
+  .vt-range input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
+  .vt-range-value {
+    min-width: 4ch;
+    text-align: right;
+    color: var(--color-sub);
+    font: var(--weight-medium) var(--fs-xs) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── 빈 상태 · 에러 상태 ───────────────────────────────────────────────
+   * 2.1.5까지 빈 화면은 "사용량 소스가 없습니다." 한 줄이 좌상단에 놓인 게
+   * 전부였고, 에러도 "목록을 불러오지 못했습니다: unauthorized"처럼 원문을
+   * 그대로 뱉었다. 빈 상태는 화면이 비어 있다는 사실이 아니라 **다음에 뭘
+   * 할 수 있는지**를 말해야 한다 — 그래서 이 컴포넌트는 action 슬롯이 있고,
+   * 에러 변형은 [다시 시도]를 기본으로 놓는다. */
+  .vt-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--spacing) * 2);
+    padding: calc(var(--spacing) * 10) calc(var(--spacing) * 4);
+    text-align: center;
+  }
+  .vt-empty > svg {
+    width: 20px;
+    height: 20px;
+    color: var(--color-faint);
+  }
+  .vt-empty-title {
+    color: var(--color-sub);
+    font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui);
+  }
+  .vt-empty-desc {
+    max-width: 44ch;
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--fs-2xs) / var(--leading-body) var(--font-ui);
+    text-wrap: pretty;
+  }
+  .vt-empty.error > svg { color: var(--color-st-error); }
+  /* 에러 원문(서버 메시지·예외 문자열)은 제목이 아니라 여기에 둔다 —
+   * "unauthorized"가 제목 자리에 오면 그게 이 화면의 이름처럼 읽힌다. */
+  .vt-empty-detail {
+    max-width: 48ch;
+    color: var(--color-faint);
+    font: var(--weight-normal) var(--fs-3xs) / var(--leading-body) var(--font-mono);
+    word-break: break-word;
+  }
+
+  /* ── 토스트 ────────────────────────────────────────────────────────────
+   * legacy.css에서 옮겨왔다(그쪽 규칙은 지웠다 — 남겨두면 unlayered가 이겨서
+   * 여기 고친 게 화면에 안 나온다).
+   *
+   * 색은 글자에만 준다. 배경까지 상태색으로 채우면 토스트 세 개가 겹쳤을 때
+   * 화면 아래가 색 덩어리가 된다. */
+  #vt-toasts {
+    position: fixed;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--spacing) * 1.5);
+    max-width: 90vw;
+    pointer-events: none;
+  }
+  .vt-toast {
+    position: fixed;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    max-width: 90vw;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3.5);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--menu);
+    box-shadow: var(--shadow-e2);
+    color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
+  }
+  /* 컨테이너 안에 들어온 것만 정적 배치로 되돌려 세로로 쌓는다. voice.js의
+   * showNotification은 아직 body에 .vt-toast를 직접 붙이므로 위의 fixed 배치도
+   * 남겨둔다(D6에서 통합 예정). */
+  #vt-toasts .vt-toast {
+    position: static;
+    transform: none;
+    bottom: auto;
+    left: auto;
+    pointer-events: auto;
+  }
+  .vt-toast.err { color: var(--err); border-color: color-mix(in srgb, var(--color-st-error) 45%, var(--color-line-strong)); }
+  .vt-toast.ok  { color: var(--ok); }
+  .vt-toast.info { color: var(--color-txt); }
+  /* 같은 토스트가 반복해서 뜰 때 몇 번째인지 — 같은 문구 세 줄을 쌓는 대신
+   * (2.1.5까지의 동작) 한 줄에 횟수를 붙인다. ui/toast.js가 채운다. */
+  .vt-toast-count {
+    margin-left: auto;
+    padding-left: calc(var(--spacing) * 2);
+    color: var(--color-muted);
+    font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ── 팔레트 (Mod+K) ────────────────────────────────────────────────────────
+ * 2.1.5까지 이 화면은 코드 뷰어의 껍데기(.vt-viewer-card)를 그대로 물려받아
+ * **1100×550**으로 열렸다. 목업(docs/design_sample 화면 4a)의 팔레트는 560px
+ * 폭에 28px 행이고, 결과를 종류별로 끊어 보여준다. 커진 껍데기 때문에 행이
+ * 성기게 벌어지고, 미리보기 칸이 대부분 비어 있고, 뒤 화면이 거의 다 덮였다.
+ *
+ * 여기서는 **치수와 밀도만** 다시 정한다 — 열고 닫는 로직, 모드 접두사,
+ * 키보드 이동은 전부 그대로다.
+ */
+@layer components {
+  .vt-qo-backdrop {
+    /* 뒤 화면을 한 단계 더 눌러 팔레트가 확실히 위에 있게 한다. 라이트
+     * 스킨(notepad)에서는 기존 62% 합성이 거의 안 보였다. */
+    background: color-mix(in srgb, var(--crust) 78%, transparent);
+    align-items: flex-start;
+    padding-top: 12vh;
+  }
+  /* 카드 폭·높이는 여기가 아니라 legacy.css에 있다 — .vt-viewer-card(레이어 밖)를
+   * 이겨야 하는데 @layer 안에서는 특정성과 무관하게 항상 진다. 그쪽 주석 참고. */
+
+  .vt-qo-head { gap: calc(var(--spacing) * 2); padding: 0 calc(var(--spacing) * 3); height: 34px; }
+  .vt-qo-head-mark { display: inline-flex; color: var(--color-acc); }
+  .vt-qo-head-esc {
+    color: var(--color-faint);
+    font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono);
+  }
+
+  /* 구획 머리 — 대문자 라벨은 자간을 벌려야 크기를 키우지 않고도 "제목"으로
+   * 읽힌다(tokens.css의 --tracking-caps). */
+  .vt-qo-sec {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3) calc(var(--spacing) * 1);
+  }
+  .vt-qo-sec-label {
+    color: var(--color-muted);
+    font: var(--weight-semibold) var(--fs-3xs) / 1 var(--font-mono);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+  }
+  .vt-qo-sec-count {
+    margin-left: auto;
+    color: var(--color-faint);
+    font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 행 — 36px(행 3단 중 가장 큰 것). 목록이 마우스와 손가락 양쪽에서 눌리는
+   * 곳이라 28px로 줄이지 않았다(터치 최소 권장치와의 타협). */
+  /* :not(.vt-card) — 세션 라이브 프리뷰는 같은 .vt-qo-row를 달고 오지만 행이
+   * 아니라 **카드**다(세로 flex). 여기서 align-items:center를 주면 카드 안의
+   * 터미널 미리보기가 stretch되지 않고 자기 내용 폭(862px)만큼 벌어진 채
+   * 가운데 정렬돼, 카드 밖으로 양쪽 224px씩 삐져나온다 — 레일에서 이미 한 번
+   * 겪은 것과 같은 함정이라(legacy.css의 .vt-rail-session-card 주석) 애초에
+   * 카드를 이 규칙에서 제외한다. */
+  .vt-qo-body .vt-qo-row:not(.vt-card) {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2.5);
+    min-height: 36px;
+    padding: 0 calc(var(--spacing) * 3);
+    border-left: 2px solid transparent;
+  }
+  .vt-qo-mark { display: inline-flex; flex: none; color: var(--color-muted); }
+  .vt-qo-body .vt-qo-row:not(.vt-card) .vt-vw-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
+  }
+  .vt-qo-body .vt-qo-row:not(.vt-card) .vt-qo-hint {
+    flex: none;
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono);
+  }
+  /* 선택된 줄에만 ↵. 장식이므로 DOM이 아니라 ::after로 그린다 — 행의
+   * textContent에 섞이면 행을 이름으로 찾는 쪽이 전부 어긋난다. */
+  .vt-qo-body .vt-qo-row.selected:not(.vt-card)::after {
+    content: "\21b5";
+    flex: none;
+    color: var(--color-acc);
+    font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono);
+  }
+  /* 선택 표시는 배경 + 왼쪽 2px 막대. 배경만으로는 라이트 스킨에서 약하고,
+   * 막대만으로는 마우스로 훑을 때 따라오는 느낌이 없다. */
+  .vt-qo-body .vt-qo-row.selected:not(.vt-card) {
+    background: var(--color-bg-3);
+    border-left-color: var(--color-acc);
+  }
+  .vt-qo-body .vt-qo-row.selected:not(.vt-card) .vt-qo-mark { color: var(--color-acc); }
+
+  .vt-qo-foot {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 3);
+    flex: none;
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+    border-top: 1px solid var(--color-line);
+    background: var(--color-bg-1);
+    color: var(--color-faint);
+    font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .vt-qo-foot-modes { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+  /* 폰에서는 키 조합 힌트가 쓸모없다(키보드가 없다) — 모드 힌트만 남긴다. */
+  @media (max-width: 719px) {
+    .vt-qo-foot > span:not(.vt-qo-foot-modes) { display: none; }
+    .vt-qo-foot-modes { margin-left: 0; }
+  }
+}
+
+/* ── 에이전트 마크 (2.1.6) ────────────────────────────────────────────────
+ * 헤더 탭(.vt-wtab-agent)만 갖고 있던 마크를 레일 행과 폰의 플릿 행도 달게
+ * 하면서, 세 곳이 같은 크기·같은 색 규칙을 쓰도록 한 곳에 모은다.
+ * 마크는 정보이지 장식이 아니므로 sub 톤으로 두고, 활성 행에서만 액센트로
+ * 올라온다 — 행이 10개 넘게 늘어선 화면에서 마크가 전부 액센트면 "지금 보고
+ * 있는 것"이 묻힌다. */
+@layer components {
+  .vt-wgrail-agent,
+  .vt-fleet-agent {
+    display: inline-flex;
+    flex: none;
+    color: var(--color-muted);
+  }
+  .vt-wgrail-row.active .vt-wgrail-agent { color: var(--color-acc); }
+  /* 폰의 행은 상태 막대가 이미 왼쪽 끝에 있어, 마크까지 왼쪽에 붙으면 둘이
+   * 한 덩어리로 읽힌다. 이름과의 간격만 준다. */
+  .vt-fleet-agent { margin-right: calc(var(--spacing) * 1.5); }
+  .vt-wgrail-agent { margin-right: calc(var(--spacing) * 1.5); }
 }

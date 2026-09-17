@@ -9,6 +9,7 @@
 // 폴링도 같은 이유로 각자 반복하고 있다 — 이 파일도 그 관행을 따른다.
 import { createSignal, createMemo, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
+import { agentIcon, agentLabel } from '../ui/icons.js';
 import { buildRailSections, GROUP_LABEL, type RailRowInput, type RailRow } from './rail-data.js';
 import {
   buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, LOCAL_HOST,
@@ -56,6 +57,7 @@ interface AgentDetail {
   tool: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
+  agent: string | null;
 }
 
 async function fetchAgentDetails(deps: FleetDeps): Promise<Record<string, AgentDetail>> {
@@ -69,6 +71,7 @@ async function fetchAgentDetails(deps: FleetDeps): Promise<Record<string, AgentD
       tool: (entry as any).tool || (entry as any).last_tool || null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
+      agent: (entry as any).agent ?? null,
     };
   }
   return out;
@@ -101,6 +104,13 @@ function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) 
       <span class={`vt-fleet-bar tone-${props.row.status}`} />
       <div class="vt-fleet-row-main">
         <div class="vt-fleet-row-top">
+          {/* 2.1.6 — 데스크톱 레일 행·헤더 탭과 같은 마크. 이 화면에만 없어서
+              폰에서는 "어떤 CLI가 도는 세션인지"를 이름으로 추측해야 했다. */}
+          <Show when={props.row.agent}>
+            {(a) => (
+              <span class="vt-fleet-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
+            )}
+          </Show>
           <span class="vt-fleet-name">{props.row.name}</span>
           <Show when={isUnseenDone()}>
             <span class="vt-fleet-unseen-badge" aria-label="확인 안 함" title="확인 안 함" />
@@ -220,6 +230,7 @@ function Fleet(props: { deps: FleetDeps }) {
         diffFiles: cwd ? (_gitCache.get(cwd)?.files ?? null) : null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
+        agent: detail?.agent ?? null,
       });
       if (cwd && (!_gitCache.has(cwd) || Date.now() - (_gitCache.get(cwd)?.at ?? 0) >= GIT_CACHE_MS)) {
         fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
@@ -274,7 +285,9 @@ function Fleet(props: { deps: FleetDeps }) {
           >
             <span class="vt-fleet-host-name">{activeHost()?.label || effectiveHostId()}</span>
             <span class="vt-fleet-host-detail">{activeHost() ? hostDetail(activeHost()!) : ''}</span>
-            <span class="vt-fleet-host-caret">{hostMenuOpen() ? '▴' : '▾'}</span>
+            {/* 캐럿은 SVG 하나를 CSS로 뒤집는다(.open일 때 180도) — 글리프
+                ▴▾는 폰트마다 중심이 달라 옆 글자와 광학 정렬이 안 맞았다. */}
+            <span class="vt-fleet-host-caret" classList={{ open: hostMenuOpen() }}><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
           </button>
         </div>
         <Show when={hostMenuOpen()}>

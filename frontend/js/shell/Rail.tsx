@@ -21,17 +21,25 @@ import {
 import {
   actionSessionId, fetchAgentDetails, fetchDiffCount, openWorktree, safeFetch,
   useAgentVersion, useSessionsVersion,
-  type DesktopRailRow, type RailDeps,
+  type DesktopRailRow, type RailDeps, type AgentDetail,
+  cachedDiffCount,
+  diffCountStale,
 } from './rail-fetch.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
+import { icon } from '../ui/icons.js';
 
 export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WorktreeDialog } from './WorktreeDialog.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 const SESSIONS_POLL_MS = 5000;   // tmux 목록(attached·cwd) — 자주 안 바뀌어도 짧게, 값싸다.
 const STATUS_POLL_MS = 4000;     // since/tool 보강 — 서버가 아직 질문 텍스트를 안 줘서(2.1.0 gap) 상태 문장 갱신용.
-const WORKTREES_POLL_MS = 8000;  // N8(30-worktree.md) — 서버가 이미 5초 캐시라 자주 불러도 싸다.
+// N8(30-worktree.md). **정본은 `/ws-workspace`의 `worktrees_changed` push다** —
+// 이 폴링은 WS가 끊긴 동안과, 터미널에서 직접 `git worktree add`를 해서 서버가
+// 변경을 모르는 경우를 위한 안전망이다. 8초였을 땐 서버가 매번 저장소마다 git
+// 서브프로세스를 도는 1~2초 작업을 다시 했다(캐시 TTL 5초 < 폴링 8초라 적중률 0).
+const WORKTREES_POLL_MS = 60000;
 // C1 — 호스트 목록. 서버가 원격 세션을 30초 캐시하므로(routes/hosts.py) 그보다
 // 짧게 불러도 네트워크 왕복이 늘지 않는다. 15초면 "호스트가 꺼졌다"를 반 캐시
 // 주기 안에 알아챈다.
@@ -52,6 +60,22 @@ function Rail(props: { deps: RailDeps }) {
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
   const [worktrees, setWorktrees] = createSignal<any[]>([]);
+
+  // 헤더가 세는 것을 사실대로 말한다. `worktrees()`에는 각 저장소의 **본체
+  // 체크아웃**(isMain)이 함께 들어 있다 — git 용어로는 그것도 worktree가
+  // 맞지만, 개발자가 "워크트리 13개"를 읽으면 `git worktree add`로 만든 것이
+  // 13개라고 이해한다. 실제로 본체만 13개이고 부가 워크트리는 0개인 화면이
+  // "워크트리 · 13"이라고 말하고 있었다.
+  // 그래서 보이는 그대로 「저장소 N」을 기본으로 하고, 부가 워크트리가 있을
+  // 때만 그 수를 덧붙인다. 행이 워크트리 단위라는 구조(ADR-20)는 그대로다 —
+  // 바꾸는 것은 요약 문구뿐이다.
+  const railTitle = () => {
+    const all = worktrees();
+    const extra = all.filter((w) => !w.isMain).length;
+    const repos = new Set(all.map((w) => w.repoName)).size;
+    if (!all.length) return '워크트리';
+    return extra ? `저장소 ${repos} · 워크트리 ${extra}` : `저장소 ${repos}`;
+  };
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
   const [collapsed, setCollapsed] = createSignal(Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY)));
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; sessionId: string } | null>(null);
@@ -88,7 +112,13 @@ function Rail(props: { deps: RailDeps }) {
   const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
   const t3 = setInterval(() => { if (!document.hidden) refreshWorktrees(); }, WORKTREES_POLL_MS);
   const t4 = setInterval(() => { if (!document.hidden) refreshHosts(); }, HOSTS_POLL_MS);
-  onCleanup(() => { clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4); });
+  // 서버가 워크트리 생성·삭제·열기 때 쏘는 push. 폴링(60초)보다 훨씬 빠르게
+  // 반영되고, 평시에는 요청이 아예 나가지 않는다.
+  const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshWorktrees(); });
+  onCleanup(() => {
+    clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
+    offWt();
+  });
 
   // 키맵(worktreeNew, core/keymap.js) · 팔레트 등 이 파일을 정적 import 못 하는
   // 곳(위 파일 상단 주석과 같은 이유)이 다이얼로그를 열 수 있도록 하는 브리지.
@@ -188,12 +218,13 @@ function Rail(props: { deps: RailDeps }) {
         status,
         since: detail?.since ?? null,
         tool: detail?.tool ?? null,
-        diffFiles: cwd ? (_gitCache.get(cwd)?.files ?? null) : null,
+        diffFiles: cwd ? (cachedDiffCount(cwd) ?? null) : null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
+        agent: detail?.agent ?? null,
       });
       // git status는 별도로 비동기 채운다(캐시 60초) — 도착하면 diffTick으로 재렌더.
-      if (cwd && (!_gitCache.has(cwd) || Date.now() - (_gitCache.get(cwd)?.at ?? 0) >= GIT_CACHE_MS)) {
+      if (cwd && diffCountStale(cwd)) {
         fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
       }
     }
@@ -302,7 +333,6 @@ function Rail(props: { deps: RailDeps }) {
       { label: '스니펫', run: () => act('snippets.show') },
       { label: '포트', run: () => act('ports.show') },
       { label: '사용량', run: () => act('usage.open') },
-      { label: '설정', run: () => act('settings.show') },
       { label: '마이크 · 테마', run: () => document.getElementById('vt-rail-settings')?.click() },
     ];
   };
@@ -361,7 +391,7 @@ function Rail(props: { deps: RailDeps }) {
               안 쓰는 사람에게는 "고를 게 없는 드롭다운"이 잡음일 뿐이다. */}
           <Show
             when={hosts().length > 1}
-            fallback={<span class="vt-wgrail-title">워크트리 · {worktrees().length}</span>}
+            fallback={<span class="vt-wgrail-title">{railTitle()}</span>}
           >
             <button
               type="button"
@@ -371,7 +401,7 @@ function Rail(props: { deps: RailDeps }) {
               title={activeHost() ? `${activeHost()!.label} · ${hostDetail(activeHost()!)}` : '호스트 선택'}
             >
               <span class="vt-wgrail-host-name">{activeHost()?.label || effectiveHostId()}</span>
-              <span class="vt-wgrail-host-caret">▾</span>
+              <span class="vt-wgrail-host-caret"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
             </button>
           </Show>
         </Show>
@@ -426,9 +456,20 @@ function Rail(props: { deps: RailDeps }) {
         >
           <Show when={!collapsed()} fallback="+">+ 워크트리 만들기</Show>
         </button>
-        <button type="button" class="vt-wgrail-more" onClick={openMoreMenu} aria-label="더보기" title="파일 · 큐 · 스니펫 · 포트 · 사용량 · 설정">
-          ⋯
-        </button>
+        {/* 2.1.6 — 설정을 레일 바닥에 **다시 꺼낸다**. 2.1.0에서 48px 아이콘
+            레일(#vt-rail)이 이 레일로 대체되면서 그 안에 살던 ⚙ 버튼이
+            display:none으로 통째로 사라졌고, 설정에 가는 길이 `⋯` 메뉴 안이나
+            Mod+, 뿐이었다 — 매일 쓰는 화면의 입구가 메뉴 두 단계 안으로
+            들어가 있었다. ⋯는 그대로 두고 그 옆에 둔다. */}
+        <button
+          type="button"
+          class="vt-wgrail-icon"
+          aria-label="설정"
+          title="설정 (Mod+,)"
+          onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
+          innerHTML={icon('settings', 15, 2)}
+        />
+        <button type="button" class="vt-wgrail-icon" onClick={openMoreMenu} aria-label="더보기" title="파일 · 큐 · 스니펫 · 포트 · 사용량" innerHTML={icon('more-horizontal', 15, 2)} />
       </div>
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
       <Show when={ctxMenu()}>

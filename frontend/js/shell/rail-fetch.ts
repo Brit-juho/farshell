@@ -51,6 +51,8 @@ export interface AgentDetail {
   tool: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
+  /** 떠 있는 CLI 이름(claude·codex·…). ui/icons.js의 agentMarkFor가 마크로 바꾼다. */
+  agent: string | null;
 }
 
 export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, AgentDetail>> {
@@ -62,6 +64,11 @@ export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, 
     out[name] = {
       since: (entry as any).since ?? null,
       tool: (entry as any).tool || (entry as any).last_tool || null,
+      // 2.1.6 — 어떤 CLI가 떠 있는지. 지금까지 이 값을 쓰는 곳은 헤더의
+      // 워크트리 탭(layout/tabbar.js)뿐이었고, 레일 행과 폰의 플릿 행은
+      // 같은 세션을 그리면서도 에이전트 마크를 안 달았다. 같은 세션을 보는
+      // 세 화면이 서로 다른 것을 말하고 있었다.
+      agent: (entry as any).agent ?? null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
     };
@@ -70,6 +77,24 @@ export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, 
 }
 
 const _gitCache = new Map<string, { at: number; files: number | null }>();
+
+// Rail.tsx가 이 캐시를 **직접** 들여다보고 있었는데 `_gitCache`도 `GIT_CACHE_MS`도
+// 이 모듈 밖으로 나가지 않는 값이라 런타임에 `ReferenceError: _gitCache is not
+// defined`가 났다(실브라우저 콘솔에서 발견, 2026-09-17). 스토어 구독자 안에서
+// 던지므로 그 뒤의 행 조립이 통째로 중단된다 — 레일에 세션 행이 안 그려지던 원인.
+// 빌드가 못 잡은 이유는 vite가 타입 검사 없이 트랜스파일만 하기 때문이다.
+// 캐시를 또 복제하지 않고(Fleet.tsx가 이미 사본을 갖고 있다) 접근자만 연다.
+
+/** 캐시에 있는 값. `undefined`는 "아직 모름", `null`은 "git 저장소가 아님" — 둘을 구분한다. */
+export function cachedDiffCount(cwd: string): number | null | undefined {
+  return _gitCache.get(cwd)?.files;
+}
+
+/** 비었거나 낡았으면 true. 호출자가 fetchDiffCount로 채운다. */
+export function diffCountStale(cwd: string): boolean {
+  const hit = _gitCache.get(cwd);
+  return !hit || Date.now() - hit.at >= GIT_CACHE_MS;
+}
 export async function fetchDiffCount(deps: RailDeps, cwd: string): Promise<number | null> {
   const hit = _gitCache.get(cwd);
   if (hit && Date.now() - hit.at < GIT_CACHE_MS) return hit.files;

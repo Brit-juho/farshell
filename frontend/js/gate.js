@@ -14,12 +14,18 @@
 (function(){
   var gate=document.getElementById('login-gate');
   var spin=document.getElementById('login-spinner');
+  var spinLabel=document.getElementById('login-spin-label');
   var form=document.getElementById('login-form');
+  var host=document.getElementById('login-host');
+  var nextNote=document.getElementById('login-next-note');
   var pass=document.getElementById('login-pass');
   var otpWrap=document.getElementById('login-otp-wrap');
   var otp=document.getElementById('login-otp');
   var btn=document.getElementById('login-submit');
+  var btnLabel=document.getElementById('login-submit-label');
   var err=document.getElementById('login-err');
+  var errMsg=document.getElementById('login-err-msg');
+  var errDetail=document.getElementById('login-err-detail');
   var params=new URLSearchParams(location.search);
 
   // 비밀번호 입력창은 한/영 전환 상태와 무관하게 항상 영문으로 들어가야 한다.
@@ -80,9 +86,31 @@
     hideGate();
   }
   function hideGate(){ gate.hidden=true; window.__vtAuthed=true; document.dispatchEvent(new Event('vt:authed')); }
-  function showForm(){ spin.hidden=true; form.hidden=false;
-    setTimeout(function(){ try{ (otpWrap.hidden?pass:otp).focus(); }catch(e){} }, 50); }
-  function showErr(m){ err.textContent=m; err.hidden=false; btn.disabled=false; }
+  function showForm(){
+    spin.hidden=true; form.hidden=false;
+    // 터널 URL은 자주 바뀌고 맥이 둘 이상일 수도 있다 — 지금 어디에 로그인하는지를
+    // 주소창 밖에서도 한 번 보여 준다. 호스트만 쓴다(경로·쿼리에는 티켓이 섞인다).
+    try{ host.textContent=location.host; host.hidden=!location.host; }catch(e){}
+    // 공유 링크가 로그인으로 우회된 경우에만 안내를 켠다(그 외에는 거짓말이 된다).
+    nextNote.hidden=!safeNext();
+    setTimeout(function(){ try{ (otpWrap.hidden?pass:otp).focus(); }catch(e){} }, 50);
+  }
+  // 제출 중 상태. disabled만 걸면 "눌렀는데 아무 일도 없는" 화면이라, 라벨과
+  // aria-busy를 같이 바꿔 CSS가 링을 붙이고 스크린리더도 진행 중임을 안다.
+  function setBusy(on){
+    btn.disabled=on;
+    if(on){ btn.setAttribute('aria-busy','true'); btnLabel.textContent='확인하는 중'; }
+    else { btn.removeAttribute('aria-busy'); btnLabel.textContent='접속'; }
+  }
+  // 제목은 사람이 읽을 한 문장, 보조 줄은 서버가 덧붙인 사실(남은 시도·대기 시간).
+  // 둘을 한 줄에 이어 붙이면 같은 무게로 읽혀서 정작 무슨 일인지가 묻힌다.
+  function showErr(m,detail){
+    errMsg.textContent=m;
+    errDetail.textContent=detail||'';
+    errDetail.hidden=!detail;
+    err.hidden=false;
+    setBusy(false);
+  }
   // 자격증명 파라미터를 URL에서 지우고 재로드 — 히스토리/공유 링크에 남지 않게 한다.
   // next가 있으면 정리 후 재로드하는 대신 곧장 그리로 옮긴다.
   function reloadClean(){
@@ -96,11 +124,29 @@
   // 1회용 기기 등록 티켓(QR로 들어온 경우) — 스캔 자체가 등록 승인이다.
   var ticket=params.get('ticket');
   if(ticket){
+    // 같은 링이지만 기다리는 일이 다르다 — 프로브는 수백 ms, 기기 등록은 서버가
+    // 기기 목록에 쓰고 세션까지 발급하는 동안이라 체감이 길다.
+    spinLabel.textContent='기기를 등록하는 중';
     fetch('/api/auth',{method:'POST',credentials:'include',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:ticket})})
     .then(function(r){
-      if(r.ok){ reloadClean(); }
-      else { showForm(); showErr('등록 링크가 만료되었습니다. 비밀번호로 접속하세요.'); }
+      if(r.ok){ reloadClean(); return; }
+      // 티켓은 **1회용**이라 같은 티켓이 두 번 제출되면 두 번째는 반드시 401이다.
+      // 그런데 첫 제출이 이미 성공해 기기가 등록되고 세션 쿠키까지 받은 뒤라면,
+      // 그 401은 "실패"가 아니라 "이미 됐다"는 뜻이다. 그걸 구분하지 않고
+      // 에러를 띄우는 바람에 **로그인에 성공한 사용자에게 「등록 링크가
+      // 만료되었습니다」가 뜨는** 일이 있었다(서버 로그로 확인: POST 200 →
+      // 재로드 → POST 401 순서). QR 온보딩의 유일한 경로라 치명적이다.
+      //
+      // 그래서 401을 받으면 곧바로 좌절하지 말고 **지금 인증돼 있는지 먼저
+      // 물어본다.** 되어 있으면 그대로 들여보낸다. 중복 제출이 왜 생기는지와
+      // 무관하게 옳은 동작이다 — 재시도·뒤로가기·프리렌더 어느 쪽이든 같다.
+      fetch('/api/capabilities',{credentials:'include'}).then(function(p){
+        if(p.status!==401){ reloadClean(); return; }
+        showForm(); showErr('등록 링크가 만료되었습니다','비밀번호로 접속하거나, 맥에서 fsh mobile로 QR을 다시 받으세요.');
+      }).catch(function(){
+        showForm(); showErr('등록 링크가 만료되었습니다','비밀번호로 접속하거나, 맥에서 fsh mobile로 QR을 다시 받으세요.');
+      });
     }).catch(function(){ showForm(); });
     return;
   }
@@ -125,34 +171,36 @@
     var payload={token:v};
     if(!otpWrap.hidden){
       var code=(otp.value||'').replace(/\D/g,'');
-      if(code.length!==6){ showErr('6자리 코드를 입력하세요'); return; }
+      if(code.length!==6){ showErr('인증 코드를 6자리로 입력하세요'); return; }
       payload.otp=code;
     }
-    btn.disabled=true; err.hidden=true;
+    setBusy(true); err.hidden=true;
     fetch('/api/auth',{method:'POST',credentials:'include',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){
       if(r.ok){ var n=safeNext(); if(n){ location.replace(n); } else { location.reload(); } return; }
       return r.json().catch(function(){ return {}; }).then(function(d){
         if(d.error==='otp_required'){
-          otpWrap.hidden=false; btn.disabled=false; err.hidden=true;
+          otpWrap.hidden=false; setBusy(false); err.hidden=true;
           setTimeout(function(){ try{ otp.focus(); }catch(e){} },50);
           return;
         }
         if(d.error==='otp_invalid'){
           otpWrap.hidden=false;
-          showErr('인증 코드가 올바르지 않습니다'+(d.remaining!=null?' (남은 시도 '+d.remaining+'회)':''));
+          showErr('인증 코드가 올바르지 않습니다', d.remaining!=null?('남은 시도 '+d.remaining+'회'):'');
           try{ otp.value=''; otp.focus(); }catch(e){}
           return;
         }
         if(d.error==='otp_locked'){
-          showErr('시도 횟수를 초과했습니다. '+Math.ceil((d.retry_after||600)/60)+'분 후 다시 시도하세요.');
+          showErr('시도 횟수를 초과했습니다', Math.ceil((d.retry_after||600)/60)+'분 뒤에 다시 시도할 수 있습니다.');
           return;
         }
-        if(d.error==='ticket_invalid'){ showErr('등록 링크가 만료되었습니다'); return; }
+        if(d.error==='ticket_invalid'){ showErr('등록 링크가 만료되었습니다','비밀번호로 접속하세요.'); return; }
         showErr('비밀번호가 올바르지 않습니다');
         try{ pass.select(); }catch(e){}
       });
-    }).catch(function(){ showErr('연결 오류'); });
+    // 네트워크 실패는 비밀번호가 틀린 것과 전혀 다른 일이다 — 같은 자리에 뜨더라도
+    // 무엇을 해야 하는지가 달라서 문장을 나눠 둔다.
+    }).catch(function(){ showErr('서버에 연결하지 못했습니다','네트워크 상태를 확인한 뒤 다시 시도하세요.'); });
   });
 })();

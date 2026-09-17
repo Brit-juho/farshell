@@ -42,8 +42,16 @@ function _gitRowEl(repo, entry, staged, opts) {
   row.className = 'vt-vw-grow';
 
   const btn = document.createElement('button');
-  btn.className = 'vt-vw-gact';
-  btn.textContent = staged ? '－' : '＋';
+  // 모양은 components.css의 .vt-btn(sm · quiet) 이 정한다 — legacy.css에 또 하나
+  // 만들지 않는다(20-design-system.md §3). vt-vw-gact는 이제 치수 보정과
+  // hover 드러남을 거는 훅이다. quiet(테두리 없음)인 이유: 행 안의 부차
+  // 액션이라 행마다 테두리가 쌓이면 목록이 격자처럼 보인다.
+  btn.type = 'button';
+  btn.className = 'vt-btn sm quiet vt-vw-gact';
+  // 전각 ±(＋－)을 쓰던 자리. 버튼 폭을 만들려고 전각을 빌려 쓴 것이었는데
+  // 폭은 이제 CSS가 24px로 잡는다 — 글자는 주위(↑↓ · +142 −38 머릿말)와 같은
+  // 반각 부호로 맞춘다. 이모지가 아니고 icons.js에도 minus가 없어 글자로 남긴다.
+  btn.textContent = staged ? '−' : '+';
   btn.title = opts.readOnly ? _RO_HINT : (staged ? '스테이지 해제' : '스테이지');
   btn.setAttribute('aria-label', btn.title);
   if (opts.readOnly) {
@@ -77,7 +85,7 @@ function _gitRowEl(repo, entry, staged, opts) {
 
   if (opts.onOpenFile) {
     const openBtn = document.createElement('button');
-    openBtn.className = 'vt-vw-gopen';
+    openBtn.className = 'vt-btn sm quiet vt-vw-gopen';
     openBtn.type = 'button';
     openBtn.textContent = '뷰어';
     openBtn.title = '뷰어 페인에서 파일 열기';

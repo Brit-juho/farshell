@@ -10,6 +10,7 @@ import { For, Show, onCleanup } from 'solid-js';
 
 import { GROUP_LABEL, hashRepoColorIndex, type WorktreeRailRowInput } from './rail-data.js';
 import { actionSessionId, type DesktopRailRow } from './rail-fetch.js';
+import { agentIcon, agentLabel } from '../ui/icons.js';
 
 export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void }) {
   const isWt = () => props.row.kind === 'worktree';
@@ -27,14 +28,34 @@ export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: M
   };
   const rowName = () => (props.row.kind === 'worktree' ? props.row.label : props.row.name);
 
+  // `role="button"` + `tabindex=0`으로 포커스는 갔지만 **Enter·Space가 아무
+  // 일도 안 했다**(실브라우저 확인: 활성 행이 안 바뀜). div에 버튼 역할만
+  // 붙이면 브라우저가 키보드 활성화를 대신 해주지 않는다 — 진짜 <button>이
+  // 공짜로 주는 것을 직접 붙여야 한다. 레일은 세션을 고르는 주 경로이고
+  // 재정렬이 키보드 전용(Mod+Alt+Shift+←/→)이라, 여기서 키보드가 끊기면
+  // 그 경로 전체가 끊긴다.
+  //
+  // Space는 preventDefault가 필수다 — 안 하면 활성화와 동시에 페이지가
+  // 스크롤된다(버튼의 기본 동작에는 그 억제가 이미 들어 있다).
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    if (e.key !== 'Enter') e.preventDefault();
+    props.onOpen(e as unknown as MouseEvent);
+  };
+
   return (
     <div
       class="vt-wgrail-row"
       classList={{ active: props.active, 'no-session': noSession() }}
       onClick={props.onOpen}
       onContextMenu={props.onContext}
+      onKeyDown={onKeyDown}
       role="button"
       tabindex="0"
+      // 지금 어느 것을 보고 있는지가 **클래스로만** 표시돼 있었다 — 눈으로는
+      // 배경색으로 보이지만 스크린리더에는 아무 말도 안 했다. 목록에서 "현재
+      // 것"을 가리키는 표준 표기가 aria-current다.
+      aria-current={props.active ? 'true' : undefined}
     >
       {/* 20-design-system.md §5(O2): 레일 행 왼쪽 끝 세로 막대는 저장소 해시
           색점(원형 dot과 헷갈리지 않는 "막대") — 상태 5색·acc와는 별개 램프
@@ -45,6 +66,15 @@ export function Row(props: { row: DesktopRailRow; active: boolean; onOpen: (e: M
       <span class={`vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
       <div class="vt-wgrail-row-main">
         <div class="vt-wgrail-row-top">
+          {/* 2.1.6 — 헤더의 워크트리 탭(layout/tabbar.js)은 이 마크를 달고 있었고
+              레일 행과 폰의 플릿 행은 안 달고 있었다. 같은 세션을 보는 세 화면이
+              서로 다른 것을 말하던 것을 맞춘다. 에이전트를 아직 모르면
+              (agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
+          <Show when={props.row.agent}>
+            {(a) => (
+              <span class="vt-wgrail-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
+            )}
+          </Show>
           <span class="vt-wgrail-name">{rowName()}</span>
           <Show when={diffLabel()}>
             <span class="vt-wgrail-diff">{diffLabel()}</span>

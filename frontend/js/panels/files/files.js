@@ -17,8 +17,10 @@
 //     링크는 복사해서 보내면 되는 값이다 — 모바일 QR은 `fsh mobile`이 이미
 //     서버 쪽에서 만든다.
 import { openPanel, closePanel, setPanelPoll } from '../panel.js';
+import { errorState } from '../../ui/empty.js';
 import { vtFetch, vtEsc } from '../../core/api.js';
 import { showToast } from '../../ui/toast.js';
+import { icon } from '../../ui/icons.js';
 
 // ⚠ ADR-26 — 이 파일은 지연 청크(panels.js)에 들어가므로 core/store.js를
 // **정적 import 하지 않는다**. 하면 Vite가 세션 싱글톤을 청크 안에 복제해
@@ -115,7 +117,7 @@ function renderChips() {
   for (const f of FILTERS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'vt-fl-chip' + (_filter === f.id ? ' active' : '');
+    b.className = 'vt-chip' + (_filter === f.id ? ' active' : '');
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', String(_filter === f.id));
     const n = f.id === 'shared' ? _lastItems.filter((x) => (x.shares || []).length).length
@@ -134,7 +136,11 @@ async function refreshFiles() {
   try {
     data = await vtFetch(`/api/files?filter=${encodeURIComponent(_filter)}`);
   } catch (e) {
-    body.innerHTML = `<div class="vt-vw-loading">목록을 불러오지 못했습니다: ${vtEsc(e.message)}</div>`;
+    // 2.1.6 — 서버 원문(예: "unauthorized")을 제목 자리에 그대로 놓으면 그게
+    // 이 화면의 이름처럼 읽힌다. 제목은 사람 말로, 원문은 detail로, 그리고
+    // 다시 해볼 수 있는 일이므로 [다시 시도]를 단다.
+    body.innerHTML = '';
+    body.appendChild(errorState('파일 목록을 불러오지 못했습니다', e, refreshFiles));
     return;
   }
   const items = data?.items || [];
@@ -163,11 +169,15 @@ async function refreshFiles() {
   body.appendChild(renderFooter(quota));
 }
 
-function iconBtn(label, title, cls, onClick) {
+// 2026-09-16 — 이모지(⬇📋⌨🔗🗑)를 SVG로 바꿨다. DESIGN.md §0의 "No emoji as a
+// UI asset"이 이미 규칙이었는데 이 다섯 자리가 예외로 남아 있었다. 이모지는
+// OS·폰트마다 모양이 갈리고 currentColor를 안 따라서, `.vt-fl-act.rm:hover`가
+// 색을 --err로 바꿔도 🗑는 그대로였다 — 이제 stroke가 따라온다.
+function iconBtn(iconName, title, cls, onClick) {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'vt-fl-act ' + cls;
-  b.textContent = label;
+  b.innerHTML = icon(iconName, 15);
   b.title = title;
   b.setAttribute('aria-label', title);
   b.addEventListener('click', onClick);
@@ -195,11 +205,11 @@ function renderRow(item) {
 
   const acts = document.createElement('div');
   acts.className = 'vt-fl-acts';
-  acts.appendChild(iconBtn('⬇', '다운로드', 'dl', () => downloadFile(item)));
-  acts.appendChild(iconBtn('📋', '경로 복사', 'copy', () => copyPath(item)));
-  acts.appendChild(iconBtn('⌨', '터미널에 삽입', 'ins', () => insertFile(item)));
-  acts.appendChild(iconBtn('🔗', '링크 발급', 'share', () => openShareDialog(item)));
-  acts.appendChild(iconBtn('🗑', '삭제', 'rm', () => deleteFile(item)));
+  acts.appendChild(iconBtn('download', '다운로드', 'dl', () => downloadFile(item)));
+  acts.appendChild(iconBtn('clipboard-copy', '경로 복사', 'copy', () => copyPath(item)));
+  acts.appendChild(iconBtn('keyboard', '터미널에 삽입', 'ins', () => insertFile(item)));
+  acts.appendChild(iconBtn('link', '링크 발급', 'share', () => openShareDialog(item)));
+  acts.appendChild(iconBtn('trash-2', '삭제', 'rm', () => deleteFile(item)));
 
   row.appendChild(main);
   row.appendChild(acts);
@@ -316,7 +326,7 @@ function openShareDialog(item) {
     <div class="vt-viewer-card vt-fl-share-card" role="dialog" aria-modal="true" aria-label="공유 링크 발급">
       <div class="vt-viewer-head">
         <div class="vt-vw-title">링크 발급 — ${vtEsc(item.name)}</div>
-        <button class="vt-vw-x" aria-label="닫기">✕</button>
+        <button class="vt-vw-x" aria-label="닫기">${icon('x', 16)}</button>
       </div>
       <div class="vt-vw-body">
         <div class="vt-fl-field">

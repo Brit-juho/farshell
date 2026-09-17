@@ -19,17 +19,63 @@
      교체한다 — 이번 D1은 값만 정의, 소비처 교체는 하지 않는다) ────────── */
   --spacing: 4px;
 
-  --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
-             "Pretendard", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+  /* ── 글꼴 (2.1.6) ────────────────────────────────────────────────────
+   * UI = Wanted Sans Variable(OFL). 이전의 IBM Plex Sans는 **라틴 서브셋**
+   * 이라 한글 글리프가 하나도 없었고, 화면 글자의 대부분인 한글 라벨이
+   * 전부 OS 기본 글꼴로 떨어지고 있었다(canvas 실측: Plex와 sans-serif의
+   * '설정워크트리' 폭이 소수점까지 동일). 이제 한글과 라틴이 같은 한 벌로
+   * 렌더된다.
+   *
+   * 모노는 수치·경로·시간·단축키 전용이고 라틴만 번들한다. **두 번째 자리가
+   * Wanted Sans인 것이 중요하다** — 모노 스택에 한글 폰트가 없으면 모노로
+   * 조판된 자리에 한글이 섞이는 순간(세션 이름, 한글 경로) 그 글자만 OS
+   * 기본 글꼴로 튄다. JetBrains Mono는 이전까지 스택 1순위이면서 번들도
+   * @font-face도 없어 실제로는 한 번도 쓰인 적이 없었다(실측 확인).
+   * @font-face는 frontend/vendor/fonts/<family>/*.css에 있고 index.html이
+   * app.css보다 먼저 링크한다. */
+  --font-ui: "Wanted Sans Variable", -apple-system, BlinkMacSystemFont,
+             "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Wanted Sans Variable", ui-monospace,
+               "SF Mono", "Menlo", "Consolas", monospace;
 
-  --text-2xs: 10.5px;
-  --text-xs:  11px;
-  --text-sm:  12.5px;
-  --text-base:14px;
-  --text-lg:  16px;
-  --text-xl:  20px;
-  --text-2xl: 28px;
+  /* ── 타입 스케일 ─────────────────────────────────────────────────────
+   * 단일 소스(legacy.css의 :root 중복 정의는 제거했다). 이전 값은 실사용
+   * 223곳 중 219곳이 10.5~13px 안에 몰려 있어서, 네 단계가 2.5px 차이로
+   * 붙어 "크기로 만드는 위계"가 성립하지 않았다. 아래 값은 급간을 약 1.15~
+   * 1.2배로 벌린 것이다. 위계는 크기 혼자 만들지 않는다 — 굵기(--weight-*)
+   * 와 4단 색 램프(--color-txt/sub/muted/faint)를 같이 쓴다.
+   *
+   * 역할: 3xs 배지·HUD 수치 / 2xs 메타·보조 / xs 행 라벨(최다 사용) /
+   *       sm 강조 행·섹션 제목 / base 본문 / md 이상 제목·빈 상태. */
+  --fs-3xs: 10.5px;
+  --fs-2xs: 11px;
+  --fs-xs:  12.5px;
+  --fs-sm:  13.5px;
+  --fs-base:15px;
+  --fs-md:  17px;
+  --fs-lg:  20px;
+  --fs-xl:  24px;
+  --fs-2xl: 30px;
+  --fs-3xl: 38px;
+  --fs-4xl: 46px;
+
+  /* ── 굵기 · 자간 · 행간 ──────────────────────────────────────────────
+   * 지금까지 굵기는 500/600이 규칙 없이 섞여 쓰였고 자간은 전부 기본값이라,
+   * 큰 글자가 문서처럼 헐겁게 읽혔다. 큰 글자일수록 조이고(tight), 작은
+   * 대문자 라벨은 벌린다(wide) — 두 규칙만 지키면 같은 색·같은 크기에서도
+   * 층이 생긴다. */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --tracking-tight:  -0.02em;   /* --fs-lg 이상 제목 */
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;    /* 소문자 라벨·버튼 */
+  --tracking-caps:   0.12em;    /* 대문자 섹션 라벨(uppercase와 세트) */
+
+  --leading-tight: 1.2;   /* 제목 */
+  --leading-row:   1.35;  /* 행 한 줄 */
+  --leading-body:  1.6;   /* 문단 */
 
   /* 20-design-system.md §1 — 모서리 한 단계(5/10)로 줄었다. --radius-md는
    * 삭제(사용처는 sm으로 치환) — "행 24/28/36 세 가지만" 규칙처럼 급간을
@@ -76,9 +122,23 @@
   --color-line: rgb(255 255 255 / .07);
   --color-line-strong: rgb(255 255 255 / .14);
 
-  --color-txt: #e8e9ea;
-  --color-sub: #8b8f93;
-  --color-muted: #666a6e;   /* 문서 값(#5c6064)은 bg-3에서 2.84:1로 미달 — 3:1까지 밝혔다 */
+  /* ── 4단 텍스트 램프 (2.1.6) ────────────────────────────────────────
+   * 이전에는 txt / sub / muted 3단이었고, 스킨에 따라 sub와 muted의 대비가
+   * 사실상 같아지는 일이 있었다(notepad 실측: sub 5.62:1 · muted 5.03:1 —
+   * 눈으로는 한 단계다). 그래서 위계가 글자 크기 하나에만 걸려 있었다.
+   *
+   * 이제 네 단계 모두 **대비 목표치에서 역산**한다(scripts/check_contrast.py가
+   * 6스킨 전부를 검사한다). 목표: txt ≥10:1 · sub ≥6:1 · muted ≥4.2:1 ·
+   * faint ≥3:1, 모두 bg-0·bg-1·bg-2 기준.
+   *
+   * faint는 신설 단계다 — 비활성 라벨·플레이스홀더·장식 수치처럼 **못 읽어도
+   * 일이 막히지 않는** 글자 전용이다. 본문에 쓰면 안 된다: bg-3(hover·활성
+   * 행)에서는 3:1 아래로 내려간다(어두운 스킨 실측 2.2~2.9:1). 읽혀야 하는
+   * 보조 텍스트는 muted가 하한이다. */
+  --color-txt: #e8e9ea;    /* 16.39 / 15.69 / 16.02 */
+  --color-sub: #8e9296;    /*  6.36 /  6.09 /  6.22 */
+  --color-muted: #73787c;  /*  4.46 /  4.27 /  4.36 */
+  --color-faint: #5d6164;  /*  3.19 /  3.05 /  3.12 */
 
   /* 스킨 독립 액센트 상수 6개.
    *
@@ -94,7 +154,14 @@
   --acc-catppuccin: #cba6f7;
   --acc-windows:    #4cc2ff;
   --acc-vscode:     #007acc;
-  --acc-notepad:    #0060df;
+  /* notepad(유일한 라이트 스킨)의 액센트는 2.1.6에서 바뀌었다. 이전 값
+   * #0060df는 브라우저·OS 기본 파랑이라 화면이 제품이 아니라 브라우저처럼
+   * 보이는 가장 큰 원인이었고, 나머지 5스킨과 아무 관계도 없는 색이었다.
+   * 새 값은 farshell 앰버(#f0a860)와 **같은 색상각(30°)·같은 채도**에서
+   * 명도만 종이 배경에 맞게 내린 것이다 — 6스킨이 색을 공유할 수는 없어도
+   * 색의 가족은 공유한다. 실측: 종이 배경 4단에서 최저 5.32:1, 그 위의 흰
+   * 글자 6.63:1(채움 버튼). */
+  --acc-notepad:    #8c4c0d;
 
   --color-acc: var(--acc-farshell);
 

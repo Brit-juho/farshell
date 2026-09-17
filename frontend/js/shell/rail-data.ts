@@ -22,6 +22,12 @@ export interface RailRowInput {
   /** 진행 중인·마지막 도구 이름("Edit" 등). working에서만 의미 있다. */
   tool: string | null;
   diffFiles: number | null; // git 아니거나 아직 조회 전이면 null
+  /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 데스크톱 레일 행과 폰의 플릿 행이
+   * **헤더 탭과 같은 마크**를 달기 위해 필요하다. 모르면 null이고, 그때는
+   * 마크를 그리지 않는다(agent-shell로 떨어뜨리지 않는다 — "셸이다"와
+   * "아직 모른다"는 다르고, 후자에 확신 있는 마크를 그리면 거짓말이 된다.
+   * agent/badges.js가 같은 이유로 같은 선택을 했다). */
+  agent?: string | null;
   /** N38(70-mobile.md §2) — waiting 상태에서 감지된 질문 1줄. Fleet.tsx가
    * 이 필드로 인라인 승인 버튼을 그린다. 선택 필드라 Rail.tsx는 안 넘겨도
    * 그대로 동작한다. */
@@ -88,7 +94,14 @@ export function statusSentence(status: AgentState, since: number | null, tool: s
     case 'working': return tool ? `${tool} 실행 · ${rel}` : (rel ? `작업 중 · ${rel}` : '작업 중');
     case 'error': return '에러';
     case 'done': return '완료';
-    default: return '유휴' + (rel ? ` · ${rel}` : '');
+    // idle은 **그룹 헤더가 이미 「유휴」라고 말한다**(Rail.tsx의 vt-wgrail-group-head,
+    // Fleet.tsx의 vt-fleet-group-head는 개수까지 붙인다). 행마다 또 "유휴"를
+    // 쓰면 목록 전체가 같은 단어로 덮여 이름을 훑는 눈을 방해한다 — 실제로
+    // 저장소 13개 화면이 "유휴"를 14번 반복하고 있었다. 계획서가 상태 dot에
+    // 대해 정한 규칙("idle이면 dot을 안 그린다 — 상시로 붙은 회색 점은 정보가
+    // 아니라 노이즈다")을 글자에도 그대로 적용한다.
+    // 마지막 활동 시각은 그룹 헤더가 말해주지 않는 **행별 정보**라 남긴다.
+    default: return rel || '';
   }
 }
 
@@ -141,6 +154,10 @@ export interface WorktreeRailRowInput {
   changed: { files: number; add: number; del: number } | null;
   question?: string | null;
   options?: { key: string; label: string }[] | null;
+  /** 2.1.6 — 이 행이 가리키는 세션에 떠 있는 CLI 이름. 헤더의 워크트리 탭이
+   * 이미 달고 있던 마크를 레일 행·플릿 행도 같이 달기 위한 필드다. 모르면
+   * null/undefined이고 그때는 마크를 그리지 않는다("셸"과 "모름"은 다르다). */
+  agent?: string | null;
 }
 
 export interface OtherRailRowInput {
@@ -154,6 +171,10 @@ export interface OtherRailRowInput {
   diffFiles: number | null;
   question?: string | null;
   options?: { key: string; label: string }[] | null;
+  /** 2.1.6 — 이 행이 가리키는 세션에 떠 있는 CLI 이름. 헤더의 워크트리 탭이
+   * 이미 달고 있던 마크를 레일 행·플릿 행도 같이 달기 위한 필드다. 모르면
+   * null/undefined이고 그때는 마크를 그리지 않는다("셸"과 "모름"은 다르다). */
+  agent?: string | null;
   /** C1 — 다른 호스트의 세션. 로컬 세션 id 경로(switchTo 등)가 성립하지 않으므로
    * 클릭·컨텍스트 메뉴가 막히고 행이 흐리게 그려진다(원격 attach는 멀티호스트
    * 3단계). 선택 필드라 기존 호출부는 그대로 동작한다. */

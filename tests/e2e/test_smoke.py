@@ -56,6 +56,7 @@ import pytest
 pytest.importorskip("playwright.sync_api", reason="playwright 미설치 — pip install -r requirements-dev.txt")
 
 from playwright.sync_api import Error as PlaywrightError  # noqa: E402
+from playwright.sync_api import expect  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -857,6 +858,11 @@ def test_dock_소스컨트롤_파일_클릭시_뷰어_페인으로_연다(page):
     open_btns = page.locator("#vt-dock-scm .vt-vw-gopen")
     if open_btns.count() == 0:
         pytest.skip("작업 트리가 깨끗해 열어볼 파일이 없다")
+    # 2026-09-17 — 행 액션은 hover/focus에서만 드러난다(visibility). 사람이 하는
+    # 순서 그대로 행에 마우스를 올리고 누른다 — 검사를 느슨하게 바꾸는 게
+    # 아니라, "hover하면 진짜로 드러나고 눌린다"를 하나 더 본다.
+    open_btns.first.locator("xpath=..").hover()
+    expect(open_btns.first).to_be_visible()
     open_btns.first.click()
     page.wait_for_selector(".vt-pane-viewer .vt-vw-code-pane", timeout=15000)
 

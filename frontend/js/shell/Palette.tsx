@@ -13,6 +13,7 @@
 // 그대로 쓴다(과제 브리핑이 명시한 경로 — 이 모듈만 deps 대신 브리지를 쓴다).
 import { createSignal, createEffect, onCleanup, onMount, For, Show, createMemo } from 'solid-js';
 import { render } from 'solid-js/web';
+import { icon } from '../ui/icons.js';
 import {
   parseQuery, fuzzyMatch, PLACEHOLDER, DEFAULT_COMMANDS, SETTINGS_COMMANDS,
   type PaletteMode, type CommandDescriptor,
@@ -53,6 +54,24 @@ interface Row {
   onSendToQueue?: () => void;
   preview?: { kind: 'file'; path: string } | { kind: 'session'; sess: any } | { kind: 'scrollback'; before: string[]; line: string; after: string[] } | null;
 }
+
+// 목업(docs/design_sample, 화면 4a)의 팔레트는 결과를 **종류별 구획**으로 끊고
+// 각 줄 앞에 그 종류의 마크를 둔다. 구현은 한 덩어리 목록이라, 세션·파일·명령이
+// 섞여 나올 때 무엇을 보고 있는지가 글자를 읽어야만 구분됐다.
+//
+// 헤더는 "직전 행과 kind가 다를 때"만 끼워 넣는다 — rows()의 순서를 바꾸지
+// 않으므로 선택 인덱스(selected)와 키보드 이동은 그대로다. 헤더에 .vt-qo-row를
+// 붙이지 않는 것도 같은 이유다(행 수를 세는 곳이 헤더를 행으로 세면 안 된다).
+const KIND_META: Record<string, { label: string; icon: string }> = {
+  session:    { label: '세션',     icon: 'agent-shell' },
+  file:       { label: '파일',     icon: 'file' },
+  command:    { label: '명령',     icon: 'list' },
+  keymap:     { label: '키맵',     icon: 'keyboard' },
+  queue:      { label: '큐',       icon: 'list' },
+  port:       { label: '포트',     icon: 'plug' },
+  scrollback: { label: '스크롤백', icon: 'search' },
+  empty:      { label: '',         icon: 'list' },
+};
 
 const DEBOUNCE_MS = 200;
 
@@ -393,6 +412,28 @@ function PaletteBody(props: PaletteBodyProps) {
     }
   });
 
+  // i번째 행에서 구획이 시작되면 {label,count}, 아니면 null.
+  const sectionHeadAt = (i: number) => {
+    const list = rows();
+    const row = list[i];
+    if (!row) return null;
+    const meta = KIND_META[row.kind];
+    if (!meta || !meta.label) return null;
+    if (i > 0 && list[i - 1]?.kind === row.kind) return null;
+    // 한 종류만 나오는 모드(예: `~` 스크롤백)에서도 머리를 보여준다 — 그
+    // 한 줄이 "지금 무엇을 검색한 결과인가"를 말해준다.
+    return { label: meta.label, count: list.filter((r) => r.kind === row.kind).length };
+  };
+
+  const markFor = (row: Row) => icon(KIND_META[row.kind]?.icon || 'list', 13, 1.75);
+
+  // 미리보기 칸은 **보여줄 게 있을 때만** 연다. 넓은 화면이면 무조건 2단으로
+  // 열던 탓에, 세션·명령처럼 미리보기가 없는 모드에서도 팔레트가 880px로
+  // 벌어지고 오른쪽 절반이 "미리보기 없음"으로 비어 있었다. 파일(`/`)과
+  // 스크롤백(`~`)만 실제로 내용을 채운다 — 세션은 결과 줄 자체가 이미 라이브
+  // 프리뷰 카드라 오른쪽에 또 그릴 것이 없다.
+  const showPreview = () => props.wide() && (parsed().mode === 'file' || parsed().mode === 'scrollback');
+
   function selectAndFire(delta: number) {
     const n = rows().length;
     if (!n) return;
@@ -413,7 +454,7 @@ function PaletteBody(props: PaletteBodyProps) {
   props.onApi({ selectAndFire, openSelected, queueSelected });
 
   return (
-    <div class={`vt-qo-body ${props.wide() ? 'two-col' : ''}`} id="vt-qo-body">
+    <div class={`vt-qo-body ${showPreview() ? 'two-col' : ''}`} id="vt-qo-body">
       <div class="vt-qo-results-pane">
         <Show when={rows().length === 0}>
           <div class="vt-vw-empty">
@@ -426,23 +467,41 @@ function PaletteBody(props: PaletteBodyProps) {
         </Show>
         <For each={rows()}>
           {(row, i) => (
-            <Show when={row.el} fallback={
-              <div
-                class="vt-vw-row vt-qo-row"
-                classList={{ selected: i() === selected() }}
-                onMouseEnter={() => setSelected(i())}
-                onClick={() => row.onOpen?.()}
-              >
-                <div class="vt-vw-name">{row.label}</div>
-                <Show when={row.hint}><div class="vt-qo-hint">{row.hint}</div></Show>
-              </div>
-            }>
-              <div class="vt-qo-card-slot" onMouseEnter={() => setSelected(i())} ref={(el) => { if (row.el) el.appendChild(row.el); }} />
-            </Show>
+            <>
+              {/* 종류가 바뀌는 첫 줄에만 구획 머리를 끼운다. 행이 아니므로
+                  .vt-qo-row를 붙이지 않는다 — 행을 세는 쪽이 이걸 행으로
+                  세면 키보드 이동과 어긋난다. */}
+              <Show when={sectionHeadAt(i())}>
+                {(head) => (
+                  <div class="vt-qo-sec" aria-hidden="true">
+                    <span class="vt-qo-sec-label">{head().label}</span>
+                    <span class="vt-qo-sec-count">{head().count}</span>
+                  </div>
+                )}
+              </Show>
+              <Show when={row.el} fallback={
+                <div
+                  class="vt-vw-row vt-qo-row"
+                  classList={{ selected: i() === selected() }}
+                  onMouseEnter={() => setSelected(i())}
+                  onClick={() => row.onOpen?.()}
+                >
+                  <span class="vt-qo-mark" aria-hidden="true" innerHTML={markFor(row)} />
+                  <div class="vt-vw-name">{row.label}</div>
+                  <Show when={row.hint}><div class="vt-qo-hint">{row.hint}</div></Show>
+                  {/* 선택된 줄의 ↵ 표시는 CSS ::after로 그린다(.vt-qo-row.selected).
+                      DOM에 글자로 넣으면 행의 textContent가 "alpha↵"가 되어,
+                      행 이름으로 찾는 쪽(테스트·접근성 이름)이 전부 어긋난다 —
+                      실제로 테스트가 이 문제를 잡았다. */}
+                </div>
+              }>
+                <div class="vt-qo-card-slot" onMouseEnter={() => setSelected(i())} ref={(el) => { if (row.el) el.appendChild(row.el); }} />
+              </Show>
+            </>
           )}
         </For>
       </div>
-      <Show when={props.wide()}>
+      <Show when={showPreview()}>
         <div class="vt-qo-preview-pane">
           <Show when={parsed().mode === 'scrollback' && rows()[selected()]?.preview?.kind === 'scrollback'}
                 fallback={
@@ -525,11 +584,16 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
     });
     return (
       <Show when={visible()}>
-        <div class="vt-viewer-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
-          <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="빠른 열기">
-            <div class="vt-viewer-head">
+        <div class="vt-viewer-backdrop vt-qo-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+          {/* vt-qo 스코프: 이 카드는 코드 뷰어와 껍데기(.vt-viewer-card)를
+              공유하는데, 그쪽 치수(1100px)를 그대로 물려받아 팔레트가 화면
+              절반을 덮고 있었다. 폭·행 높이·머리글은 이 클래스 안에서만
+              다시 정한다(components.css). */}
+          <div class="vt-viewer-card vt-qo-card" role="dialog" aria-modal="true" aria-label="빠른 열기">
+            <div class="vt-viewer-head vt-qo-head">
+              <span class="vt-qo-head-mark" aria-hidden="true" innerHTML={icon('search', 14, 2)} />
               <div class="vt-vw-title">빠른 열기</div>
-              <button class="vt-vw-x" aria-label="닫기" onClick={close}>×</button>
+              <span class="vt-qo-head-esc" aria-hidden="true">esc 닫기</span>
             </div>
             <input
               ref={inputEl}
@@ -544,6 +608,15 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
               onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
             />
             <PaletteBody deps={deps} visible={visible} query={query} wide={wide} onRequestClose={close} onApi={(a) => { bodyApi = a; }} />
+            {/* 이 팔레트는 접두사(/ @ : # ! ~)로 모드가 갈리는데, 그걸 아는
+                방법이 placeholder 한 줄뿐이었다. 목업 4a처럼 아래에 상시
+                고정한다 — 키 힌트와 모드 힌트를 한 줄에 같이 둔다. */}
+            <div class="vt-qo-foot" aria-hidden="true">
+              <span>↑↓ 이동</span>
+              <span>↵ 열기</span>
+              <span>⌘↵ 새 pane</span>
+              <span class="vt-qo-foot-modes">/ 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백</span>
+            </div>
           </div>
         </div>
       </Show>

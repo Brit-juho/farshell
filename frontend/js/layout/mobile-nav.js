@@ -83,17 +83,46 @@ function _refreshWaitingCount() {
   for (const s of allStatuses().values()) if (s === 'waiting') n += 1;
   if (n > 0) { el.hidden = false; el.textContent = `대기 ${n}`; }
   else el.hidden = true;
+  _syncTopBar();
+}
+
+// 2.1.6 — 이 칩은 헤더(#topbar)가 이미 같은 문자열("farshell / 호스트명")을
+// 보여주고 있어서, 폰에서 화면 맨 위 62px이 **같은 말을 두 번** 하고 있었다.
+// 386px 폭에서 그건 세션 행 두 개만큼의 자리다.
+//
+// 그래서 헤더가 그 문구를 실제로 그리고 있으면 칩은 비운다. 헤더가 없거나
+// (레이아웃이 바뀌어) 안 보이면 칩이 다시 자기 역할을 한다 — 어느 쪽이든
+// "호스트 이름이 화면에서 사라지는" 일은 없다.
+//
+// `대기 N`은 헤더에 없는 정보라 그대로 둔다. 상단 바 자체는 보여줄 게 하나도
+// 없을 때만 숨는다(_syncTopBar).
+function _headerShowsHost() {
+  const brand = document.querySelector('#topbar .vt-workspace-name');
+  if (!brand) return false;
+  return !!(brand.textContent || '').trim() && brand.getClientRects().length > 0;
+}
+
+function _syncTopBar() {
+  const bar = document.getElementById('vt-mnav-top');
+  const chip = document.getElementById('vt-mnav-host-chip');
+  const waiting = document.getElementById('vt-mnav-waiting');
+  if (!bar) return;
+  const hasChip = !!chip && !!(chip.textContent || '').trim();
+  const hasWaiting = !!waiting && !waiting.hidden;
+  bar.hidden = !hasChip && !hasWaiting;
 }
 
 async function _loadHostChip() {
   const el = document.getElementById('vt-mnav-host-chip');
   if (!el) return;
+  if (_headerShowsHost()) { el.textContent = ''; _syncTopBar(); return; }
   try {
     const c = await vtFetch('/api/capabilities');
     el.textContent = c && c.hostname ? `farshell / ${c.hostname}` : 'farshell';
   } catch (_) {
     el.textContent = 'farshell';
   }
+  _syncTopBar();
 }
 
 // ── 하단 내비 배지 — Dock.tsx(N35 §6)의 배지 폴링과 **같은 소스·같은 응답**
@@ -153,6 +182,20 @@ function _init() {
   _mq.addEventListener('change', () => { if (_tab === 'fleet') _ensureFleetMounted(); });
 
   _loadHostChip();
+  // 헤더의 워크스페이스 칩은 지연 청크(shell/HeaderExtras.tsx)가 나중에
+  // 채운다 — _loadHostChip()이 먼저 돌면 "헤더에 아직 없다"고 판단해 중복
+  // 문구를 그대로 넣는다. 슬롯이 채워지는 순간 다시 판단한다.
+  const slot = document.getElementById('vt-workspace-chip-slot');
+  if (slot) {
+    const mo = new MutationObserver(() => {
+      if (!_headerShowsHost()) return;
+      const chip = document.getElementById('vt-mnav-host-chip');
+      if (chip) chip.textContent = '';
+      _syncTopBar();
+      mo.disconnect();
+    });
+    mo.observe(slot, { childList: true, subtree: true });
+  }
   onStatusChange(_refreshWaitingCount);
   _refreshWaitingCount();
 
