@@ -35,7 +35,7 @@ _CACHE_TTL = 3.0
 _cache: tuple[float, list[dict]] | None = None
 
 # 죽이면 원격 접속 자체가 끊기는 것들. 이름은 ps의 comm 기준.
-_CRITICAL_NAMES = ("cloudflared", "tailscaled", "sshd", "tailscale")
+_CRITICAL_NAMES = ("cloudflared", "tailscaled", "sshd", "tailscale", "ngrok")
 
 # macOS가 로그인 유저 권한으로 띄우는 시스템 서비스 실행 경로. root가 아니라
 # me(현재 유저) 소유로 뜨기 때문에 PROTECT_FOREIGN으로는 걸러지지 않는다 —
