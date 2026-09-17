@@ -20,7 +20,7 @@ import {
 } from './host-data.js';
 import {
   actionSessionId, fetchAgentDetails, fetchDiffCount, openWorktree, safeFetch,
-  useAgentVersion, useSessionsVersion,
+  useAgentVersion, useSessionsVersion, fetchAgentNames,
   type DesktopRailRow, type RailDeps, type AgentDetail,
   cachedDiffCount,
   diffCountStale,
@@ -59,6 +59,9 @@ function Rail(props: { deps: RailDeps }) {
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
+  // 정체(어떤 CLI인가)는 상태(무엇을 하는 중인가)와 **다른 엔드포인트**다.
+  // 한 응답에 둘 다 있을 거라 짐작했다가 마크가 한 개도 안 그려졌다.
+  const [agentNames, setAgentNames] = createSignal<Record<string, string>>({});
   const [worktrees, setWorktrees] = createSignal<any[]>([]);
 
   // 헤더가 세는 것을 사실대로 말한다. `worktrees()`에는 각 저장소의 **본체
@@ -91,7 +94,10 @@ function Rail(props: { deps: RailDeps }) {
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
     if (list) setTmuxSessions(list);
   };
-  const refreshAgent = async () => setAgentDetails(await fetchAgentDetails(props.deps));
+  const refreshAgent = async () => {
+    setAgentDetails(await fetchAgentDetails(props.deps));
+    setAgentNames(await fetchAgentNames(props.deps));
+  };
   const refreshWorktrees = async () => {
     const data = await safeFetch<{ worktrees?: any[] }>(props.deps, '/api/worktrees');
     setWorktrees(data?.worktrees || []);
@@ -221,7 +227,7 @@ function Rail(props: { deps: RailDeps }) {
         diffFiles: cwd ? (cachedDiffCount(cwd) ?? null) : null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
-        agent: detail?.agent ?? null,
+        agent: tmuxName ? (agentNames()[tmuxName] ?? null) : null,
       });
       // git status는 별도로 비동기 채운다(캐시 60초) — 도착하면 diffTick으로 재렌더.
       if (cwd && diffCountStale(cwd)) {
