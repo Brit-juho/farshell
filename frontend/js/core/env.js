@@ -62,4 +62,8 @@ window._tokenQuery = _tokenQuery;
       window._tokenQuery = _tokenQuery;
     }
   } catch (e) { /* 실패 시 query 토큰 그대로 사용 (호환) */ }
+  // 2026-09-17 이후 서버는 기계 토큰으로 세션 쿠키를 발급하지 않는다(401).
+  // 그래도 접속이 끊기지는 않는다 — VT_TOKEN이 남아 있어 이후 요청이 ?token=
+  // 으로 계속 인증된다. 다만 토큰이 URL에 남으니, 폰 등록은 `fsh mobile`의
+  // 1회용 티켓(?ticket=)으로 다시 받는 것이 맞다.
 })();

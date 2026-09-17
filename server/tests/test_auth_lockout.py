@@ -152,3 +152,23 @@ def test_otp_lock_key_isolated_per_ip(client, monkeypatch):
     )
     assert r.status_code == 401
     assert r.json()["error"] == "otp_required"
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-17: 기계 토큰은 로그인 폼에서 받지 않는다
+# ---------------------------------------------------------------------------
+
+def test_machine_token_is_not_a_login_credential(monkeypatch):
+    """`VT_AUTH_TOKEN` 값을 비밀번호 칸에 쳐도 로그인되면 안 된다.
+
+    예전엔 통과했고, 그래서 `fsh password`로 바꿔도 죽지 않는 둘째 비밀번호가
+    존재했다. 데몬 경로(check_request)는 그대로 살아 있어야 한다 — 그 둘을
+    한 테스트에서 같이 고정한다."""
+    monkeypatch.setattr(auth_mod, "VT_AUTH_PASSWORD_HASH", auth_mod.hash_password("real-password"))
+    monkeypatch.setattr(auth_mod, "VT_AUTH_TOKEN", "machine-token-value")
+
+    assert auth_mod.credential_kind("real-password") == "password"
+    assert auth_mod.credential_kind("machine-token-value") is None
+    assert not auth_mod.check_credential("machine-token-value")
+    # 데몬·훅 경로는 영향 없음
+    assert auth_mod.check_request("machine-token-value")

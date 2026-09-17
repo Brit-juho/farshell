@@ -1717,10 +1717,39 @@ cmd_password() {
   if [ -z "$pw" ]; then echo "  ✗ 비밀번호가 비어 있습니다."; return 1; fi
   if [ "$pw" != "$pw2" ]; then echo "  ✗ 두 입력이 일치하지 않습니다."; return 1; fi
   if [ "${#pw}" -lt 6 ]; then echo "  ✗ 6자 이상이어야 합니다."; return 1; fi
-  # 원문은 stdin으로만 python에 전달 → ps/argv/환경변수에 노출되지 않음
-  local hash
-  hash="$(cd "$VT_DIR/server" && printf '%s' "$pw" | "$VT_PYTHON" -c 'import sys, auth; print(auth.hash_password(sys.stdin.read()))')" \
-    || { echo "  ✗ 해시 생성 실패"; return 1; }
+  # 원문은 stdin으로만 python에 전달 → ps/argv/환경변수에 노출되지 않음.
+  #
+  # 같은 호출에서 **비ASCII를 먼저 거른다.** 웹 로그인 폼(frontend/js/gate.js)은
+  # 한/영 상태와 무관하게 영문이 들어가도록 한글 IME 입력을 두벌식 매핑으로
+  # 역변환하는데, 이 터미널 입력에는 그 변환이 없다. 그래서 한글이 섞인 채로
+  # 설정하면 저장되는 해시는 한글 문자열이고 웹은 영문으로 바꿔 보내므로
+  # **웹에서는 영원히 로그인할 수 없는 비밀번호**가 조용히 만들어진다.
+  # (2026-09-17 점검에서 확인된 실제 함정. 거부가 맞다 — 경고만 하면 그대로 저장된다.)
+  local hash rc=0
+  hash="$(cd "$VT_DIR/server" && printf '%s' "$pw" | "$VT_PYTHON" -c '
+import sys, auth
+pw = sys.stdin.read()
+# 판정 결과는 **종료코드로만** 돌려준다 — 문제가 된 글자를 stderr로 내보내면
+# 그게 곧 비밀번호 일부를 화면·로그에 찍는 일이 된다.
+if not pw.isascii():
+    raise SystemExit(3)
+if any(ord(c) < 32 or ord(c) == 127 for c in pw):
+    raise SystemExit(4)
+print(auth.hash_password(pw))
+' 2>/dev/null)" || rc=$?
+  if [ "$rc" = 3 ]; then
+    unset pw pw2
+    echo "  ✗ 비밀번호에 영문·숫자·기호가 아닌 문자가 들어 있습니다(한글 IME가 켜져 있었을 가능성)."
+    echo "    웹 로그인 폼은 한글 입력을 영문 키로 되돌려 보내므로, 이대로 저장하면"
+    echo "    **웹에서는 절대 로그인할 수 없습니다.** 한/영을 영문으로 바꾸고 다시 시도하세요."
+    return 1
+  fi
+  if [ "$rc" = 4 ]; then
+    unset pw pw2
+    echo "  ✗ 비밀번호에 제어문자가 들어 있습니다. 다시 입력하세요."
+    return 1
+  fi
+  if [ "$rc" != 0 ]; then unset pw pw2; echo "  ✗ 해시 생성 실패"; return 1; fi
   unset pw pw2
   if [ -z "$hash" ]; then echo "  ✗ 해시 생성 실패(빈 값)"; return 1; fi
   vt_env_set "VT_AUTH_PASSWORD_HASH" "$hash"

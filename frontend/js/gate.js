@@ -196,6 +196,13 @@
           return;
         }
         if(d.error==='ticket_invalid'){ showErr('등록 링크가 만료되었습니다','비밀번호로 접속하세요.'); return; }
+        // 비밀번호 5회 실패 → IP 단위 10분 잠금(429 password_locked). 이걸 따로
+        // 다루지 않으면 잠긴 동안 **정답을 쳐도** "비밀번호가 올바르지 않습니다"가
+        // 뜬다 — 실제로 맞는 비밀번호를 놔두고 비밀번호를 새로 바꾸게 만든 문구다.
+        if(d.error==='password_locked'){
+          showErr('시도 횟수를 초과했습니다', Math.ceil((d.retry_after||600)/60)+'분 뒤에 다시 시도할 수 있습니다. 비밀번호를 바꿀 필요는 없습니다.');
+          return;
+        }
         showErr('비밀번호가 올바르지 않습니다');
         try{ pass.select(); }catch(e){}
       });
