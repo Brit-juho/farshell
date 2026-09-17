@@ -125,7 +125,7 @@ body.voice-only-mode .vt-onboarding { display:none; }
 /* 2.1.6 — .vt-btn-primary/.vt-btn-secondary는 components.css의 `.vt-btn.solid lg`/
    `.vt-btn lg`로 대체했다. 이름부터 "btn"이었는데 컴포넌트와 별개로 한 벌 더
    있었고, 상태가 hover 하나뿐이라 active·focus-visible·disabled가 없었다. */
-.vt-onboarding .vt-ob-hint { color:var(--sub); font-size:var(--fs-2xs); margin-top:calc(var(--spacing) * 4); opacity:.7; }
+.vt-onboarding .vt-ob-hint { color:var(--sub); font-size:var(--fs-xs); margin-top:calc(var(--spacing) * 4); opacity:.7; }
 
 /* ── 사용 가이드 모달 (첫 사용자용) ────────────────────────────────────────
    D6: 모달 뼈대(backdrop/card/닫기/Esc/배경클릭)는 openPanel() 공용 구현

@@ -83,7 +83,7 @@ html[data-skin="farshell"] {
   --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
   --wrad:12px; --trad:7px;
-  --topbar-h:38px; --topbar-popup-y:44px;
+  --topbar-h:32px; --topbar-popup-y:38px;
   --ui:var(--font-ui);
   --mono:var(--font-mono);
 }
@@ -93,7 +93,7 @@ html[data-skin="macos"] {
   --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.09); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
   --wrad:12px; --trad:7px;
-  --topbar-h:38px; --topbar-popup-y:44px;
+  --topbar-h:32px; --topbar-popup-y:38px;
   --ui:var(--font-ui);
   --mono:var(--font-mono);
   /* macOS 신호등 3색 — macos 스킨 전용 UI 크롬(실제 macOS 창 컨트롤 색을

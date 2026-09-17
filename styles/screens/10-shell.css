@@ -16,6 +16,11 @@
 /* ---- 상단 통합 바 ------------------------------------------------------- */
 #topbar {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); padding:0 calc(var(--spacing) * 2); height:var(--topbar-h);
+  /* 2026-09-17 — 38 → 32px. 안에 든 컨트롤이 28px이라 38px일 땐 위아래 5px씩
+     남았다. 32px에서 그 비율(3px씩)을 유지하려고 컨트롤도 26px로 같이 줄인다 —
+     바만 줄이면 버튼이 테두리에 닿아 눌린 것처럼 보인다.
+     터치 기기는 아래 `@media (pointer:coarse)`에서 44px로 따로 잡으므로
+     탭 영역은 이 값과 무관하다(WCAG 2.5.5). */
   background:var(--bar); flex-shrink:0; position:relative; z-index:60;
   border-bottom:1px solid var(--line);
 }
@@ -127,9 +132,11 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 
 /* N37 §4 — 워크스페이스 칩. 헤더 맨 왼쪽, 탭보다 앞. flex:none이라 탭 바가
    눌려도 절대 줄어들지 않는다. */
+#topbar > .vt-icon-btn, #topbar > .tbtn { width:26px; height:26px; }
+
 #vt-workspace-chip {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
-  height:28px; padding:0 calc(var(--spacing) * 2); margin-right:calc(var(--spacing) * 1);
+  height:26px; padding:0 calc(var(--spacing) * 2); margin-right:calc(var(--spacing) * 1);
   flex:none; border:none; border-radius:var(--radius-sm); background:transparent;
   color:var(--sub); cursor:pointer; font:var(--weight-normal) var(--fs-3xs) var(--font-mono);
   letter-spacing:var(--tracking-wide); white-space:nowrap;
@@ -169,7 +176,9 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .caption { display:none; margin-left:calc(var(--spacing) * 0.5); flex-shrink:0; }
 html[data-skin="windows"] .caption { display:flex; }
 .caption span {
-  width:38px; height:34px; display:flex; align-items:center; justify-content:center;
+  /* 높이는 바 안에 꽉 차야 한다(Windows 캡션 관행) — 34px 고정이던 걸 바
+     높이에 묶는다. 안 그러면 32px 바에서 2px 삐져나온다. */
+  width:38px; height:var(--topbar-h); display:flex; align-items:center; justify-content:center;
   color:var(--sub); font-size:var(--fs-2xs); cursor:pointer; border-radius:var(--radius-sm);
 }
 .caption span:hover { background:var(--menu-hover); color:var(--txt); }

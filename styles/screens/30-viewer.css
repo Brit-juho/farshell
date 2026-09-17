@@ -70,7 +70,7 @@
 /* 기본은 중립(정보성 안내) — 상태가 아니라 "무언가 잘렸다/막혔다"는 실제 경고일 때만
    .warn 을 붙인다. 이 클래스를 정상 상태 문구에도 그대로 쓰면 늘 경고처럼 보인다. */
 .vt-vw-note{
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); color:var(--sub); font:400 var(--fs-2xs) var(--ui);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); color:var(--sub); font:400 var(--fs-xs) var(--ui);
   border-top:1px solid var(--line);
 }
 .vt-vw-note.warn{ color:var(--warn); }
@@ -475,6 +475,10 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-pt-cmd{
   flex:0 100 auto;
   min-width:0;
+  /* 2026-09-17 — 행에서 읽는 것은 **포트 번호**다(.vt-pt-port 13.5/600 mono).
+     명령 이름이 같은 13.5px이라 둘이 같은 층에 있었다. 한 단 내려 포트가
+     앞서게 한다 — 아래 수치(.vt-pt-sub 11 mono)까지 세 층이 된다. */
+  font-size:var(--fs-xs);
 }
 /* pid·uptime·CPU%·메모리처럼 새로고침마다 값이 바뀌는 숫자 — tabular-nums로
    자릿수가 바뀌어도 폭이 흔들리지 않게 고정한다.
@@ -498,7 +502,7 @@ body.vt-resizing #terminal-container{ transition:none; }
   color:var(--warn);
 }
 .vt-pt-actions{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
-.vt-pt-lock{ color:var(--sub); font:400 var(--fs-2xs) var(--ui); cursor:help; }
+.vt-pt-lock{ color:var(--sub); font:400 var(--fs-xs) var(--ui); cursor:help; }
 /* 2.1.6 — .vt-pt-btn(큐·스니펫·포트·diff·git 로그·파일 공유, 6개 파일 19곳)은
    components.css의 `.vt-btn` / `.vt-btn.danger`로 대체했다. 이름이 "pt"(패널
    텍스트)였지만 하는 일은 그냥 버튼이었고, 컴포넌트와 별개로 한 벌 더 있었다.
@@ -521,7 +525,7 @@ body.vt-resizing #terminal-container{ transition:none; }
   min-height:30px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3);
   border-bottom:1px solid var(--line); font:400 var(--fs-sm) var(--ui);
 }
-.vt-pt-tunnel-label{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
+.vt-pt-tunnel-label{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-3xs) var(--mono); }
 .vt-pt-tunnel-url{
   flex:1 1 auto;
   min-width:0;
@@ -698,7 +702,7 @@ body.vt-resizing #terminal-container{ transition:none; }
   font:400 var(--fs-xs)/1.55 var(--mono); color:var(--sub); background:var(--crust);
 }
 .vt-qo-preview-pane .vt-qo-preview-head{
-  font:600 var(--fs-2xs) var(--ui);
+  font:600 var(--fs-xs) var(--ui);
   color:var(--txt);
   margin-bottom:calc(var(--spacing) * 1);
 }
