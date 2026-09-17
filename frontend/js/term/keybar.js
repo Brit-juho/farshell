@@ -6,6 +6,7 @@
 // lib/keyseq.js(window.VTKeySeq)로 분리돼 있다 — DOM/세션 상태가 없어 단위 테스트 대상.
 // VTKeySeq는 아직 UMD(globalThis.VTKeySeq)라 bare identifier로 읽는다(F2 판단 유지).
 import { activeSessionId, activeSession } from '../core/store.js';
+import { icon } from '../ui/icons.js';
 import { sendToPty } from './clipboard.js';
 import { fitAndResize } from './resize.js';
 import { _isCoarsePointer } from '../core/env.js';
@@ -21,15 +22,25 @@ let _ctrlArmed = false;
 // 기준을 그대로 재사용한다. keybar 노출 여부(?keybar=1 강제 등)와는 무관하게
 // "입력 방식이 무엇이냐"만 본다 — 아래 initKeybar()의 이른 return보다 먼저
 // 실행해야 한다(강제 노출 없이 조용히 종료돼도 마이크는 제자리를 찾아가야 함).
-function _placeMicButton() {
+// 2026-09-18 — 데스크톱 자리가 바뀌었다. 예전엔 숨은 옛 레일의 설정 플라이아웃
+// (#vt-rail-mic-slot)에 있었고 `⋯ 더보기` 메뉴로만 닿을 수 있었다 — 그 메뉴의
+// 나머지 항목이 전부 dock·팔레트·설정으로 옮겨가면서, ⋯는 사실상 **마이크 하나
+// 때문에** 남아 있는 메뉴가 됐다. 그래서 마이크를 레일 바닥(#vt-rail-mic-home,
+// 설정 버튼 옆)으로 꺼내고 ⋯를 없앤다.
+//
+// 레일은 지연 로드되는 Solid 컴포넌트라 이 모듈이 평가될 때는 아직 없다 —
+// Rail.tsx가 마운트 직후 placeMicButton()을 한 번 더 부른다. 그래서 이 함수는
+// **여러 번 불려도 안전**해야 하고(이미 제자리면 아무것도 안 한다), 레일이 아직
+// 없으면 옛 슬롯에 그대로 둔다(음성이 조용히 사라지지 않게).
+export function placeMicButton() {
   const mic = document.getElementById('mic-btn-wrap');
   if (!mic) return; // .needs-voice로 이미 숨겨졌거나(음성 미설치) 마크업 자체가 없는 테스트 환경
   const target = _isCoarsePointer()
     ? document.getElementById('keybar-slot-mic')
-    : document.getElementById('vt-rail-mic-slot');
+    : (document.getElementById('vt-rail-mic-home') || document.getElementById('vt-rail-mic-slot'));
   if (target && mic.parentElement !== target) target.appendChild(mic);
 }
-_placeMicButton();
+placeMicButton();
 
 function _setCtrlArmed(on) {
   _ctrlArmed = on;
@@ -228,7 +239,10 @@ export function initKeybar() {
     document.body.classList.toggle('kb-collapsed', collapsed);
     const tg = document.getElementById('keybar-toggle');
     if (tg) {
-      tg.textContent = collapsed ? '▴' : '▾';
+      // ▴▾ 글리프는 폰트마다 크기·중심이 제각각이라 다른 키바 버튼과
+      // 광학적으로 안 맞았다. SVG 하나를 CSS로 뒤집어 쓴다.
+      if (!tg.firstElementChild) tg.innerHTML = icon('chevron-down', 14);
+      tg.classList.toggle('flipped', collapsed);
       tg.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       tg.setAttribute('aria-label', collapsed ? '특수키 바 펴기' : '특수키 바 접기');
     }

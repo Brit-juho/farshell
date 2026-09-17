@@ -8,7 +8,7 @@
 // 지연 청크가 이들을 정적 import하면 Vite lib 모드가 상태를 복제한다,
 // ADR-26/N35 커밋 참고). 전부 그 파일들이 이미 노출해 둔 window 브리지로만
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
-import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import {
   buildRailSections, mostUrgentStatus, GROUP_LABEL, hashRepoColorIndex,
@@ -27,6 +27,9 @@ import {
 } from './rail-fetch.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
 import { icon } from '../ui/icons.js';
+// 마이크 노드를 이 레일 바닥으로 옮긴다. 자리를 정하는 곳이 keybar.js 하나뿐이어야
+// 데스크톱/터치가 갈리는 판정이 두 군데로 흩어지지 않는다(L7).
+import { placeMicButton } from '../term/keybar.js';
 
 export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
@@ -82,7 +85,6 @@ function Rail(props: { deps: RailDeps }) {
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
   const [collapsed, setCollapsed] = createSignal(Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY)));
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; sessionId: string } | null>(null);
-  const [moreMenu, setMoreMenu] = createSignal<{ x: number; y: number } | null>(null);
   const [dialogOpen, setDialogOpen] = createSignal(false);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
@@ -327,21 +329,9 @@ function Rail(props: { deps: RailDeps }) {
       run: () => selectHost(h.id),
     }));
 
-  const openMoreMenu = (e: MouseEvent) => {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setMoreMenu({ x: r.left, y: r.bottom + 4 });
-  };
-  const moreMenuItems = () => {
-    const act = (id: string) => (props.deps.getAction(id) as (() => void) | undefined)?.();
-    return [
-      { label: '파일 열기', run: () => act('viewer.show') },
-      { label: '프롬프트 큐', run: () => act('queue.show') },
-      { label: '스니펫', run: () => act('snippets.show') },
-      { label: '포트', run: () => act('ports.show') },
-      { label: '사용량', run: () => act('usage.open') },
-      { label: '마이크 · 테마', run: () => document.getElementById('vt-rail-settings')?.click() },
-    ];
-  };
+  // keybar.js는 모듈 평가 시점에 한 번 자리를 잡는데, 그때 이 레일은 아직 없다
+  // (지연 로드). 마운트된 뒤 한 번 더 부른다 — 이미 제자리면 아무 일도 안 한다.
+  onMount(() => placeMicButton());
 
   let railRef: HTMLElement | undefined;
   // storedWidth는 "펼쳤을 때 폭"이라는 사용자 의도다 — 접힘 여부와 별개로
@@ -475,7 +465,16 @@ function Rail(props: { deps: RailDeps }) {
           onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
           innerHTML={icon('settings', 15, 2)}
         />
-        <button type="button" class="vt-icon-btn lg vt-wgrail-icon" onClick={openMoreMenu} aria-label="더보기" title="파일 · 큐 · 스니펫 · 포트 · 사용량" innerHTML={icon('more-horizontal', 15, 2)} />
+        {/* 2026-09-18 — `⋯ 더보기`가 있던 자리. 그 메뉴의 6개 항목을 하나씩
+            추적해 보니 **마이크 하나 빼고 전부** 다른 입구가 있었다:
+            파일 열기=팔레트 `/`, 큐·포트·사용량=dock 탭+팔레트, 스니펫=팔레트,
+            테마·푸시·자동복사·음성전용=설정/팔레트. 즉 ⋯는 마이크 때문에
+            남아 있던 메뉴였다. 그래서 마이크를 여기로 꺼내고 메뉴를 없앴다
+            (ADR-8 "⋯ 폐지 → 레일(포인터) + 팔레트(키보드)"의 마지막 조각).
+            버튼을 새로 만들지 않고 **기존 노드를 옮겨 온다** — voice.js가
+            `#mic-btn-wrap`을 모듈 최상위에서 캐시하고 `.recording`/.label로
+            상태를 그리므로, 같은 노드가 아니면 녹음 표시가 죽는다. */}
+        <div id="vt-rail-mic-home" class="vt-wgrail-mic-home" />
       </div>
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
       <Show when={ctxMenu()}>
@@ -483,9 +482,6 @@ function Rail(props: { deps: RailDeps }) {
       </Show>
       <Show when={hostMenu()}>
         {(m) => <Menu x={m().x} y={m().y} onClose={() => setHostMenu(null)} items={hostMenuItems()} />}
-      </Show>
-      <Show when={moreMenu()}>
-        {(m) => <Menu x={m().x} y={m().y} onClose={() => setMoreMenu(null)} items={moreMenuItems()} />}
       </Show>
       <Show when={dialogOpen()}>
         <WorktreeDialog deps={props.deps} defaultRepo={defaultRepo()} onClose={() => setDialogOpen(false)} onCreated={onCreated} />
