@@ -98,11 +98,11 @@ def test_design_checks_both_languages(tmp_path, monkeypatch):
     """한쪽만 고치고 넘어가는 게 이 저장소에서 가장 흔한 문서 사고다."""
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
     (tmp_path / "DESIGN.md").write_text(_design_doc({"rail-items": "7"}))
-    (tmp_path / "DESIGN.ko.md").write_text(_design_doc({"rail-items": "6"}))
+    (tmp_path / "DESIGN.md").write_text(_design_doc({"rail-items": "6"}))
     monkeypatch.setattr(check_docs, "_design_expected", lambda: {"rail-items": "7"})
     problems = []
     check_docs.check_design_md(problems)
-    assert len(problems) == 1 and problems[0].startswith("DESIGN.ko.md")
+    assert len(problems) == 1 and problems[0].startswith("DESIGN.md")
 
 
 def test_rail_count_respects_class_boundary():

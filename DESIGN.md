@@ -1,6 +1,5 @@
 # FarShell Design System
 
-[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./DESIGN.ko.md)
 
 > **As of v2.1.0.** The September 2026 "new shell" overhaul (N15~N46) rewrote
 > the surface layer, the Solid/TS shell, the rail, the dock, the HUD, and the

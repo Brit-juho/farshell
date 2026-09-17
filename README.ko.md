@@ -200,7 +200,7 @@ fsh hooks uninstall    # FarShell 항목만 제거
 
 자세한 내용은 [ARCHITECTURE.md](./ARCHITECTURE.md) 참조 (control / work / voice / network
 4-plane 모델). 디자인 시스템(디자인 원칙·스킨·토큰·레이아웃)은
-[DESIGN.ko.md](./DESIGN.ko.md) 참고.
+[DESIGN.md](./DESIGN.md) 참고(영문 단일본).
 
 ```
                   +----------------------------------------+

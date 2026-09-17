@@ -207,7 +207,7 @@ def test_looks_binary():
 # 2026-09-17 보안 점검 회귀 — 홈을 경계로 쓰는 설정에서 실제로 유출됐던 파일들
 # ---------------------------------------------------------------------------
 #
-# VT_BROWSE_ROOTS='/Users/neo' 인 실사용 설정에서 `GET /api/fs/file`이 GitHub PAT
+# VT_BROWSE_ROOTS를 홈($HOME)으로 넓혀 둔 실사용 설정에서 `GET /api/fs/file`이 GitHub PAT
 # (~/.config/gh/hosts.yml), Codex OAuth 토큰(~/.codex/auth.json), ~/.claude.json,
 # 셸 히스토리, FarShell 피어 시크릿(~/.vt/hosts.json)을 전부 200으로 내보냈다.
 # 경계를 좁히는 것이 1차 방어지만, 넓힌 경계에서도 이것들은 막혀야 한다.
