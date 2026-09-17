@@ -189,7 +189,9 @@ function showPorts() {
         // 얹어 알려준다) "공개" 대신 "미리보기"로 바꿔 앱 안에서 바로 확인하게 한다 —
         // 매번 "공개→URL 복사→새 탭"을 거칠 필요가 없다(Termius 포트포워딩+브라우저 워크플로).
         const ex = document.createElement('button');
-        ex.className = 'vt-btn';
+        // sm = 행 높이(24px)와 같은 단. 기본 .vt-btn은 28px이라 24px 행보다 컸다.
+        // quiet = 테두리 상자를 뗀다 — 목록 행 안의 동작이지 주 액션이 아니다.
+        ex.className = 'vt-btn sm quiet';
         if (p.tunnel_url) {
           ex.textContent = '미리보기';
           ex.title = p.tunnel_url;
@@ -202,7 +204,7 @@ function showPorts() {
         actions.appendChild(ex);
         if (!swipeKillOnTouch) {
           const kb = document.createElement('button');
-          kb.className = 'vt-btn danger';
+          kb.className = 'vt-btn sm quiet danger';
           kb.textContent = '종료';
           kb.onclick = () => killPort(p.port, p.pid, p.cmd);
           actions.appendChild(kb);
@@ -265,13 +267,13 @@ async function _renderTunnelSection(body) {
     const actions = document.createElement('span');
     actions.className = 'vt-pt-actions';
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'vt-btn';
+    copyBtn.className = 'vt-btn sm quiet';
     copyBtn.textContent = '복사';
     copyBtn.addEventListener('click', () => _copyText(t.url));
     actions.appendChild(copyBtn);
     if (t !== d.main) {
       const closeBtn = document.createElement('button');
-      closeBtn.className = 'vt-btn danger';
+      closeBtn.className = 'vt-btn sm quiet danger';
       closeBtn.textContent = '해제';
       closeBtn.addEventListener('click', () => _unexposeTunnel(t.port));
       actions.appendChild(closeBtn);
