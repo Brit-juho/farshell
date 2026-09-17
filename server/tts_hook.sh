@@ -16,16 +16,17 @@ TMP_AUDIO = "/tmp/claude_tts.mp3"
 
 
 def _vt_auth_token():
-    """VT_AUTH_TOKEN(또는 레거시 VT_TOKEN) — 프로세스 env 우선, 없으면 ~/.vt.env를 직접 읽는다.
+    """VT_AUTH_TOKEN(또는 레거시 VT_TOKEN) — **~/.vt.env를 먼저** 읽고, 없으면 프로세스 env.
 
     이 훅은 Claude Code가 띄운 프로세스의 자식이라 사용자 셸의 export 여부에
     기대면 안 된다(실측: 이 값이 셸 rc에서 export되지 않아 env로는 안 보였다).
     인증이 켜진 서버에 토큰 없이 /voice/output을 부르면 401이 나 항상
     macOS 'say' 폴백만 타게 된다 — 서버 TTS 엔진(kokoro/edge-tts)을 못 씀.
+
+    2026-09-17: 순서를 뒤집었다. 예전엔 프로세스 env가 우선이라, 토큰을 재발급하면
+    **옛 값을 들고 기동해 있던 에이전트 세션이 전부 조용히 401**이 됐다. 자격증명은
+    낡은 사본이 이기면 안 된다 — agent_hook.sh가 같은 이유로 같은 순서를 쓴다.
     """
-    token = os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN")
-    if token:
-        return token
     found = {}
     try:
         with open(os.path.expanduser("~/.vt.env")) as f:
@@ -39,7 +40,8 @@ def _vt_auth_token():
                     found[key] = value.strip().strip("'\"")
     except OSError:
         pass
-    return found.get("VT_AUTH_TOKEN") or found.get("VT_TOKEN") or ""
+    return (found.get("VT_AUTH_TOKEN") or found.get("VT_TOKEN")
+            or os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN") or "")
 
 
 VT_AUTH_TOKEN = _vt_auth_token()
