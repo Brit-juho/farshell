@@ -379,8 +379,7 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 }
 #search-bar.visible { display:flex; }
 #search-bar input {
-  background:var(--term); border:1px solid var(--line); border-radius:var(--radius-sm);
-  color:var(--txt); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); font-size:var(--fs-sm); width:200px; outline:none;
+  width:200px;
 }
 #search-bar input:focus { border-color:var(--acc); }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 검색 바의 이전/다음/닫기 */

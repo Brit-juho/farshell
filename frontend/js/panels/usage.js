@@ -76,10 +76,10 @@ function renderProfile(p, activeName) {
   const head = el('div', 'vt-usage-head');
   const title = el('span', 'vt-usage-name', p.name);
   head.appendChild(title);
-  if (p.tier) head.appendChild(el('span', 'vt-usage-tier', p.tier));
+  if (p.tier) head.appendChild(el('span', 'vt-tag vt-usage-tier', p.tier));
   // rolling 토큰은 고정 토큰과 성격이 다르다 — 같은 모양으로 그리면 사용자가
   // "왜 값이 계속 바뀌지"를 오해한다(계획서 §4).
-  if (p.rolling_token) head.appendChild(el('span', 'vt-usage-chip', 'rolling'));
+  if (p.rolling_token) head.appendChild(el('span', 'vt-tag vt-usage-chip', 'rolling'));
   if (p.has_live_session) {
     // ● 글리프 대신 저장소에 이미 있는 .status-dot 컴포넌트를 쓴다
     // (styles/layers/components.css). 글리프는 폰트마다 크기·중심이 달라

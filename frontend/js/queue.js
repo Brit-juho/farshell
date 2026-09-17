@@ -27,9 +27,9 @@ export function showQueue() {
         `,
         extraHTML: `
           <div class="vt-q-compose">
-            <textarea id="vt-q-input" rows="2" placeholder="작업이 끝나면 실행할 지시… (${isMac ? 'Cmd' : 'Ctrl'}+Enter로 추가)"></textarea>
+            <textarea id="vt-q-input" class="vt-input lg" rows="2" placeholder="작업이 끝나면 실행할 지시… (${isMac ? 'Cmd' : 'Ctrl'}+Enter로 추가)"></textarea>
             <div class="vt-q-compose-row">
-              <select id="vt-q-target" class="vt-q-target" title="대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다">
+              <select id="vt-q-target" class="vt-input vt-q-target" title="대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다">
                 <option value="">자동 (음성 타깃 규칙)</option>
               </select>
               <button class="vt-btn" id="vt-q-add">추가</button>
@@ -153,7 +153,7 @@ export function showQueue() {
         const targetHost = it.target && it.target.host;
         if (targetSession) {
           const chip = document.createElement('span');
-          chip.className = 'vt-q-chip';
+          chip.className = 'vt-tag vt-q-chip';
           chip.textContent = targetHost ? `${targetSession} · ${targetHost}` : targetSession;
           chip.title = targetHost
             ? `대상: ${targetHost} 호스트의 ${targetSession} 세션`

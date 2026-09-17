@@ -124,15 +124,15 @@ export function WorktreeDialog(props: Props) {
         <div class="vt-wtd-body">
           <label class="vt-wtd-row">
             <span class="vt-wtd-label">저장소</span>
-            <input class="vt-wtd-input" value={repo()} onInput={(e) => setRepo(e.currentTarget.value)} placeholder="/Users/.../repo" />
+            <input class="vt-input mono vt-wtd-input" value={repo()} onInput={(e) => setRepo(e.currentTarget.value)} placeholder="/Users/.../repo" />
           </label>
           <label class="vt-wtd-row">
             <span class="vt-wtd-label">기준</span>
-            <input class="vt-wtd-input" value={base()} onInput={(e) => setBase(e.currentTarget.value)} placeholder="master" />
+            <input class="vt-input mono vt-wtd-input" value={base()} onInput={(e) => setBase(e.currentTarget.value)} placeholder="master" />
           </label>
           <label class="vt-wtd-row">
             <span class="vt-wtd-label">이름</span>
-            <input class="vt-wtd-input" value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="queue-scope" />
+            <input class="vt-input mono vt-wtd-input" value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="queue-scope" />
           </label>
           <Show when={name() && !nameValid()}>
             <div class="vt-wtd-error">이름은 영숫자·-·_ 만 가능합니다</div>
@@ -140,7 +140,7 @@ export function WorktreeDialog(props: Props) {
           <label class="vt-wtd-row">
             <span class="vt-wtd-label">브랜치</span>
             <input
-              class="vt-wtd-input"
+              class="vt-input mono vt-wtd-input"
               value={branch()}
               onInput={(e) => { setBranchEdited(true); setBranch(e.currentTarget.value); }}
               placeholder="feat/..."
@@ -154,7 +154,7 @@ export function WorktreeDialog(props: Props) {
             <input type="checkbox" checked={portsEnabled()} onChange={(e) => setPortsEnabled(e.currentTarget.checked)} />
             <Show when={portsEnabled()}>
               <input
-                class="vt-wtd-input vt-wtd-input-narrow"
+                class="vt-input mono vt-wtd-input vt-wtd-input-narrow"
                 value={portBase()}
                 onInput={(e) => setPortBase(e.currentTarget.value)}
                 placeholder="자동(5200~)"
@@ -165,7 +165,7 @@ export function WorktreeDialog(props: Props) {
 
           <div class="vt-wtd-row">
             <span class="vt-wtd-label">node_modules</span>
-            <select class="vt-wtd-select" value={nodeModules()} onChange={(e) => setNodeModules(e.currentTarget.value as any)}>
+            <select class="vt-input mono vt-wtd-select" value={nodeModules()} onChange={(e) => setNodeModules(e.currentTarget.value as any)}>
               <option value="symlink">심링크</option>
               <option value="copy">복사</option>
               <option value="none">안 함</option>
@@ -181,7 +181,7 @@ export function WorktreeDialog(props: Props) {
 
           <div class="vt-wtd-row">
             <span class="vt-wtd-label">.env</span>
-            <select class="vt-wtd-select" value={envMode()} onChange={(e) => setEnvMode(e.currentTarget.value as any)}>
+            <select class="vt-input mono vt-wtd-select" value={envMode()} onChange={(e) => setEnvMode(e.currentTarget.value as any)}>
               <option value="inherit">상속</option>
               <option value="empty">빈 값</option>
               <option value="none">안 함</option>
@@ -190,7 +190,7 @@ export function WorktreeDialog(props: Props) {
 
           <div class="vt-wtd-row">
             <span class="vt-wtd-label">에이전트</span>
-            <select class="vt-wtd-select" value={agent()} onChange={(e) => setAgent(e.currentTarget.value)}>
+            <select class="vt-input mono vt-wtd-select" value={agent()} onChange={(e) => setAgent(e.currentTarget.value)}>
               <For each={AGENT_OPTIONS}>
                 {(o) => <option value={o.value}>{o.label}</option>}
               </For>

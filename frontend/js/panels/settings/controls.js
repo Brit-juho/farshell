@@ -137,7 +137,7 @@ export function secRow(label, value, state, help) {
     left.appendChild(h);
   }
   const badge = document.createElement('span');
-  badge.className = 'vt-set-secstate';
+  badge.className = 'vt-tag vt-set-secstate';
   badge.dataset.state = state;
   badge.textContent = value;
   el.append(left, badge);

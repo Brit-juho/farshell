@@ -337,11 +337,11 @@ function openShareDialog(item) {
         </div>
         <div class="vt-fl-field" id="vt-fl-pin-field" hidden>
           <div class="vt-fl-field-label">PIN · 4~20자</div>
-          <input type="text" id="vt-fl-pin" class="vt-fl-input" autocomplete="off" inputmode="numeric" placeholder="예: 4821" />
+          <input type="text" id="vt-fl-pin" class="vt-input lg vt-fl-input" autocomplete="off" inputmode="numeric" placeholder="예: 4821" />
         </div>
         <div class="vt-fl-field">
           <div class="vt-fl-field-label">만료 · 필수</div>
-          <select id="vt-fl-ttl" class="vt-fl-input">
+          <select id="vt-fl-ttl" class="vt-input lg vt-fl-input">
             ${TTLS.map((t) => `<option value="${t.v}"${t.v === 86400 ? ' selected' : ''}>${t.label}</option>`).join('')}
           </select>
         </div>

@@ -100,7 +100,7 @@ function renderDeviceTable(rows) {
     label.textContent = d.label || '기기';
     if (d.current) {
       const badge = document.createElement('span');
-      badge.className = 'vt-set-devme';
+      badge.className = 'vt-tag vt-set-devme';
       badge.textContent = '이 기기';
       label.appendChild(badge);
     }

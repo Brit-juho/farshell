@@ -212,9 +212,8 @@
 .vt-wtd-row { display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-width:0; }
 .vt-wtd-label { flex:0 0 84px; font:500 var(--fs-xs) var(--mono); color:var(--sub); }
 .vt-wtd-input, .vt-wtd-select {
-  flex:1; min-width:0; padding:calc(var(--spacing) * 1.25) calc(var(--spacing) * 1.75);
-  font:400 var(--fs-xs) var(--mono); color:var(--txt); background:var(--bar);
-  border:1px solid var(--line); border-radius:var(--radius-sm); outline:none;
+  flex:1;
+  min-width:0;
 }
 .vt-wtd-input:focus, .vt-wtd-select:focus { border-color:var(--acc); }
 .vt-wtd-input-narrow { flex:0 0 120px; }

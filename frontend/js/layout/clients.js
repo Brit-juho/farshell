@@ -44,7 +44,7 @@ function row(client, onDetach, readOnly = false) {
 
   if (client.is_me) {
     const badge = document.createElement('span');
-    badge.className = 'vt-clients-badge';
+    badge.className = 'vt-tag vt-clients-badge';
     badge.textContent = '나';
     el.appendChild(badge);
   } else if (!readOnly) {
