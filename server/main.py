@@ -546,7 +546,8 @@ async def auth_login(request: Request):
                     auth.otp_reset_failures(client_key)
                 device_secret, device_id = auth.register_device(_device_label(request))
                 logger.info(f"[auth] 새 기기 등록: {device_id} ({_device_label(request)})")
-        # kind == "token"(데몬)은 기기를 만들지 않는다 — device_id 없이 세션만 발급.
+        # kind는 이제 "password"만 가능하다 — 기계 토큰은 로그인 폼에서 받지 않는다
+        # (credential_kind 주석 참조). 데몬은 Bearer/?token= 로 각 API를 직접 부른다.
 
     secure = auth.is_https(request)
     resp = JSONResponse({"ok": True, "device_id": device_id or None})

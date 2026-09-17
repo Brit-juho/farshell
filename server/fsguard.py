@@ -50,13 +50,39 @@ DENY_NAMES = {
     ".env", ".vt.env", ".netrc", ".npmrc", ".pypirc", ".htpasswd",
     "credentials", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
     "secrets.json", "serviceaccount.json", ".git-credentials",
+    # --- 에이전트 CLI·개발 도구가 홈에 두는 자격증명 파일 ---------------------
+    # 2026-09-17 점검에서 실제로 읽혔다: VT_BROWSE_ROOTS를 홈으로 넓혀 둔 설정에서
+    # `GET /api/fs/file`이 아래 파일들을 전부 200으로 내보냈다(공개 터널 너머로).
+    # 경계를 다시 ~/GitHub 로 좁히는 것이 1차 방어지만, 거부 목록이 이 이름들을
+    # 모른다는 사실 자체가 결함이다 — 경계를 넓혀 쓰는 선택은 언제든 다시 나온다.
+    "auth.json",            # ~/.codex/auth.json (OAuth 토큰), 그 외 다수 CLI 공통 이름
+    ".claude.json",         # Claude Code 계정·MCP 설정
+    "hosts.yml", "hosts.yaml",  # ~/.config/gh/hosts.yml (GitHub PAT)
+    ".authinfo", ".authinfo.gpg",
+    "token.json", "tokens.json", "credentials.json",
+    # --- FarShell 자신의 런타임 상태 ------------------------------------------
+    # ~/.vt 전체는 아래 DENY_DIR_PARTS가 막는다. 여기 이름으로 한 번 더 두는 것은
+    # 그 파일들이 ~/.vt 밖으로 복사됐을 때(백업·디버깅용 사본)를 위한 것이다:
+    # git-accounts.json은 PAT, vapid.json은 푸시 서명키다.
+    "git-accounts.json", "vapid.json",
 }
 
 DENY_PREFIXES = (".env",)          # .env.local, .env.production ...
-DENY_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".ppk")
+DENY_SUFFIXES = (
+    ".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".ppk",
+    # 셸 히스토리는 파일명이 제각각(.zsh_history/.bash_history/.python_history)이라
+    # 접미사로 잡는다. 토큰을 명령줄에 한 번이라도 쳤으면 여기 그대로 남아 있다.
+    "_history",
+)
 
 # 경로 중간에 이 디렉토리가 끼어 있으면 거부.
-DENY_DIR_PARTS = {".ssh", ".aws", ".gnupg", ".config/gcloud", ".kube", ".docker"}
+DENY_DIR_PARTS = {
+    ".ssh", ".aws", ".gnupg", ".config/gcloud", ".kube", ".docker",
+    # 자격증명·세션 상태를 통째로 담는 디렉토리. 개별 파일명을 쫓는 것보다
+    # 디렉토리를 닫는 쪽이 새 파일이 추가돼도 깨지지 않는다.
+    ".vt", ".claude", ".codex", ".clauth", ".gstack", ".config/gh",
+    ".password-store", ".cert", ".chef", ".azure",
+}
 
 
 class FsDenied(Exception):

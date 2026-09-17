@@ -317,16 +317,25 @@ def is_https(request: Request) -> bool:
 
 
 def credential_kind(cred: str) -> Optional[str]:
-    """제출된 자격증명의 종류 — "password" | "token" | None.
+    """로그인 폼에 제출된 자격증명의 종류 — "password" | None.
 
-    사람(비밀번호)만 기기로 등록한다. 데몬이 쓰는 기계 토큰은 기기를 만들지 않는다.
+    **기계 토큰은 여기서 받지 않는다(2026-09-17).** 예전에는 비밀번호 검증에
+    실패하면 `VT_AUTH_TOKEN`과 한 번 더 비교해서, 그 값을 비밀번호 칸에 그대로
+    쳐도 로그인이 됐다. 그 결과 사람이 쓰는 비밀번호가 **둘**이 되는데, 둘째 값은
+    `fsh password`로 바뀌지 않고 수명도 없어서 "비밀번호를 바꿨는데 예전 값으로
+    계속 들어가진다"가 실제로 벌어졌다. 기계 토큰의 쓰임새는 데몬·훅이지
+    로그인 화면이 아니다 — 그 경로(`Authorization: Bearer` / `?token=`)는
+    check_request가 그대로 받으므로 clipboard_daemon·tui·훅은 영향이 없다.
+
+    영향받는 것은 **레거시 `?token=` 링크의 쿠키 교환**뿐이다
+    (frontend/js/core/env.js). 교환이 401로 실패하면 그 링크는 쿠키 없이 쿼리
+    토큰으로 계속 동작한다 — 접속이 끊기지는 않지만 토큰이 URL에 남으므로,
+    기기 등록은 `fsh mobile`의 1회용 티켓으로 넘어가는 것이 옳다.
     """
     if not cred:
         return None
     if VT_AUTH_PASSWORD_HASH and verify_password(cred, VT_AUTH_PASSWORD_HASH):
         return "password"
-    if VT_AUTH_TOKEN and hmac.compare_digest(cred, VT_AUTH_TOKEN):
-        return "token"
     return None
 
 

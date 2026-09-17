@@ -201,3 +201,52 @@ def test_worktrees_root_not_duplicated_when_already_covered(monkeypatch, tmp_pat
 def test_looks_binary():
     assert fsguard.looks_binary(b"\x89PNG\x00\x1a")
     assert not fsguard.looks_binary(b"print('hello')\n")
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-17 보안 점검 회귀 — 홈을 경계로 쓰는 설정에서 실제로 유출됐던 파일들
+# ---------------------------------------------------------------------------
+#
+# VT_BROWSE_ROOTS='/Users/neo' 인 실사용 설정에서 `GET /api/fs/file`이 GitHub PAT
+# (~/.config/gh/hosts.yml), Codex OAuth 토큰(~/.codex/auth.json), ~/.claude.json,
+# 셸 히스토리, FarShell 피어 시크릿(~/.vt/hosts.json)을 전부 200으로 내보냈다.
+# 경계를 좁히는 것이 1차 방어지만, 넓힌 경계에서도 이것들은 막혀야 한다.
+
+@pytest.mark.parametrize("rel", [
+    ".config/gh/hosts.yml",   # GitHub PAT
+    ".codex/auth.json",       # Codex OAuth 토큰
+    ".claude.json",           # Claude Code 계정·MCP 설정
+    ".claude/settings.json",  # 같은 디렉토리 전체
+    ".clauth/status.json",
+    ".gstack/.auth.json",
+    ".vt/hosts.json",         # 피어 시크릿(설계상 SSH 개인키 등가)
+    ".vt/devices.json",
+    ".zsh_history",           # 명령줄에 스친 토큰
+    ".bash_history",
+    ".python_history",
+    "backup/git-accounts.json",  # ~/.vt 밖으로 복사된 사본
+])
+def test_home_credential_files_are_denied(tmp_path, monkeypatch, rel):
+    """경계를 홈까지 넓혀도 자격증명 파일은 거부된다."""
+    home = tmp_path / "home"
+    target = home / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("secret\n")
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(home))
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(target))
+
+
+def test_ordinary_files_still_allowed_after_denylist_growth(tmp_path, monkeypatch):
+    """거부 목록을 넓혔다고 평범한 소스 파일까지 막으면 안 된다.
+
+    `_history`는 접미사 매칭이라 `history.py`·`user_history.md` 같은 흔한 이름을
+    잡아먹기 쉽다 — 실제로 걸리지 않는지 확인한다."""
+    home = tmp_path / "home"
+    proj = home / "GitHub" / "proj"
+    proj.mkdir(parents=True)
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(home))
+    for name in ("history.py", "user_history.md", "authorize.ts", "hosts.ts", "tokens.ts"):
+        f = proj / name
+        f.write_text("x\n")
+        assert fsguard.resolve_under_roots(str(f)) == f.resolve()
