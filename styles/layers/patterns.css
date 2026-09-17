@@ -134,6 +134,27 @@
     border-radius: var(--radius-full);
   }
 
+  /* ── 빈 상태(맨 문장) ────────────────────────────────────────────────
+   * "여기엔 아무것도 없다"를 한 문장으로 말하는 자리. 열 곳이 각자 padding과
+   * 색을 갖고 있었다(32/48px · sub/txt2 · fs-sm/fs-xs).
+   *
+   * 제대로 된 빈 상태는 아이콘 · 제목 · 설명 · 다음 행동을 갖는 컴포넌트
+   * (`.vt-empty`, js/ui/empty.js)다. 아래 이름들은 **아직 한 문장짜리**이고,
+   * 하나씩 그 컴포넌트로 올라가면서 이 목록에서 빠질 자리다. 그때까지는
+   * 최소한 같은 조판으로 보이게 한다. */
+  .vt-vw-empty,
+  .vt-vw-loading,
+  .vt-session-empty,
+  .vt-rail-session-empty,
+  .vt-usage-empty,
+  .vt-usage-none {
+    padding: calc(var(--spacing) * 8) calc(var(--spacing) * 4);
+    text-align: center;
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-ui);
+    text-wrap: pretty;
+  }
+
   /* ── 체크박스 ─────────────────────────────────────────────────────────
    * 설정 화면은 세그먼트 토글(.vt-toggle)로 갔지만, 메뉴 항목 안의 체크는
    * 네이티브 그대로 둔다 — 줄 끝에 조용히 붙는 표시라 세그먼트가 과하다.

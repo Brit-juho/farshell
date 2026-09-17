@@ -3,6 +3,7 @@
 // 코드 뷰어의 유일한 쓰기 경로. push·브랜치 조작은 절대 추가하지 않는다.
 // 스코프를 stage/unstage/commit 으로만 좁게 유지한다 — TODOS.md D16 참고.
 import { vtFetch } from '../../core/api.js';
+import { emptyState, errorState } from '../../ui/empty.js';
 import { _setMsg } from './state.js';
 import { _renderDiffDOM } from './diff.js';
 
@@ -148,10 +149,24 @@ export async function renderGitStatus(container, repo, opts = {}) {
   try {
     d = await vtFetch(`/api/git/status?repo=${encodeURIComponent(repo)}`);
   } catch (e) {
-    _setMsg(container, 'vt-vw-empty', [e.message]);
+    // 2.1.6 — 서버 예외 문자열을 제목 자리에 그대로 두면 그게 이 화면의 이름처럼
+    // 읽힌다. 제목은 사람 말, 원문은 detail, 그리고 다시 해볼 수 있는 일이다.
+    container.innerHTML = '';
+    container.appendChild(errorState('변경 사항을 불러오지 못했습니다', e, () => renderGitStatus(container, repo, opts)));
     return null;
   }
-  if (!d.repo) { _setMsg(container, 'vt-vw-empty', ['git 저장소가 아닙니다.']); return d; }
+  if (!d.repo) {
+    // dock의 3분의 1을 차지하면서 "git 저장소가 아닙니다." 한 문장만 있던 자리다
+    // (2.1.6 디자인 리뷰 Blocker 1). 빈 상태는 비었다는 사실이 아니라 **다음에
+    // 뭘 할 수 있는지**를 말해야 한다.
+    container.innerHTML = '';
+    container.appendChild(emptyState({
+      icon: 'git-branch',
+      title: 'git 저장소가 아닙니다',
+      desc: '이 워크트리에는 .git이 없습니다. 저장소 안의 세션을 열면 그 변경 사항이 여기 나옵니다.',
+    }));
+    return d;
+  }
 
   // 미추적 파일("??")은 index_status/worktree_status 둘 다 '?'로 채워지는데,
   // 실제 인덱스에는 없으므로 스테이지됨으로 분류하면 안 된다.

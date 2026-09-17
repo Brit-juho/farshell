@@ -201,7 +201,7 @@
   background:color-mix(in oklab, var(--color-st-error) 15%, transparent);
   color:var(--color-st-error); font:500 var(--fs-xs) var(--ui);
 }
-.vt-usage-empty, .vt-usage-none { color:var(--sub); font:400 var(--fs-xs) var(--ui); }
+.vt-usage-empty, .vt-usage-none { }
 .vt-usage-fallback { margin-top:calc(var(--spacing) * 1); font:400 var(--fs-xs) var(--ui); color:var(--sub); }
 .vt-usage-fallback.armed { color:var(--color-st-waiting); }
 @media (max-width: 720px) {

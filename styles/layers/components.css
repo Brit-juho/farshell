@@ -689,6 +689,11 @@
     gap: calc(var(--spacing) * 2);
     padding: calc(var(--spacing) * 10) calc(var(--spacing) * 4);
     text-align: center;
+    /* 자식 없이 글자만 들어오는 자리(레거시 빈 상태 열 곳)를 위한 기본 조판.
+     * 아래 .vt-empty-title/-desc가 있으면 그쪽이 이긴다. */
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-ui);
+    text-wrap: pretty;
   }
   .vt-empty > svg {
     width: 20px;

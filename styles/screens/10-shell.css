@@ -100,7 +100,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .vt-session-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-height:52px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); border:1px solid var(--line); border-radius:var(--radius-sm); }
 .vt-session-row.active { border-color:var(--acc); }
 /* 2.1.6 — 모양은 components.css의 `.vt-name-btn`. 여기 남은 건 없다 */
-.vt-session-empty { padding:calc(var(--spacing) * 8) calc(var(--spacing) * 2.5); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
+.vt-session-empty { }
 /* L1: ⋯ 메뉴 「세션」 3항목의 임시 자리(rail 이관 전까지). 목록과 시각적으로
    구분되게 위쪽 구분선만 두고, 버튼 자체는 세션 행보다 한 단계 낮은 밀도로. */
 .vt-session-footer {

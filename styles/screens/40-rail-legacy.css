@@ -143,7 +143,7 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-rail-session-select { padding:calc(var(--spacing) * 1) 0; }
 .vt-rail-session-actions { display:flex; flex-shrink:0; }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 행 끝의 이름변경·닫기 */
-.vt-rail-session-empty { padding:calc(var(--spacing) * 6) calc(var(--spacing) * 2); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
+.vt-rail-session-empty { }
 /* 라이브 프리뷰 카드(tmux 세션) — .vt-qo-session-card와 같은 목적, 목록
    레이아웃만 다르다(패딩·테두리는 .vt-card가 이미 갖고 있어 감쌀 필요 없음). */
 /* 이 요소는 .vt-card(flex-direction:column)와 .vt-rail-session-row
