@@ -402,6 +402,58 @@ def check_skill_copy_in_sync(problems: list[str]) -> None:
         return
 
 
+# ── 9. 코드가 읽는 설정 키가 문서화돼 있는가 (2026-09-18) ─────────────────
+
+# 오늘 VT_TUNNEL_PROVIDER·VT_NGROK_DOMAIN을 추가하면서 문서 갱신을 빠뜨렸다.
+# 처음엔 "README/CLI에 나와야 한다"로 검사했는데 튜닝 노브 16개가 같이 걸려
+# 노이즈가 됐다 — 그런 검사는 사람들이 끄는 쪽으로 간다. 진짜 불변식은 더 좁다:
+# **코드가 읽는 키는 config/vt.defaults.env에 (주석으로라도) 설명돼 있어야 한다.**
+# 그 파일이 설정의 목록이자 설명이고, 사람이 처음 여는 곳이다.
+CONFIG_SCAN = ("server/*.py", "server/routes/*.py", "server/auth/*.py", "bin/fsh", "lib/*.sh")
+
+# 코드에만 살고 설정 파일에 둘 이유가 없는 키 — 런타임이 스스로 만들거나
+# 테스트·격리 전용이라 사용자가 손댈 값이 아니다.
+CONFIG_KEY_EXEMPT = {
+    "VT_CONFIG",          # 어느 설정 파일을 읽을지 고르는 키(그 파일 안에 적을 수 없다)
+    "VT_DIR", "VT_BIN", "VT_DEFAULTS", "VT_SERVER",  # fsh가 스스로 채운다
+    "VT_TUNNEL_EVENT", "VT_TUNNEL_MAIN_URL",  # 훅에 넘기는 값(입력이 아니라 출력)
+    "VT_WORKSPACE_PATH", "VT_ACCESS_SPEC", "VT_E2E",  # 테스트·격리 전용
+    # 스크립트 내부 변수 — 설정이 아니다
+    "VT_ENV_BOUNDARY_KEYS", "VT_ENV_BOUNDARY_FIXED", "VT_ENV_FILE_CLEARED_KEYS",
+    "VT_AUTOOPEN_ERR", "VT_CLAUTH_STATUS", "VT_TMUX_CONF_PATH", "VT_DETECT_DIR",
+    "VT_HOTKEY_VOICE", "VT_HOTKEY_VOICE_DISABLED",
+    "VT_TIMEOUT",         # routes/ports.py의 모듈 상수(환경변수가 아니다)
+}
+
+
+def check_config_keys_documented(problems: list[str]) -> None:
+    defaults = ROOT / "config" / "vt.defaults.env"
+    if not defaults.exists():
+        return
+    documented = set(re.findall(r"\b(VT_[A-Z0-9_]+)\b", defaults.read_text()))
+    used: dict[str, str] = {}
+    for pattern in CONFIG_SCAN:
+        for path in ROOT.glob(pattern):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text()
+            except (OSError, UnicodeDecodeError):
+                continue
+            for key in re.findall(r"\b(VT_[A-Z0-9_]{3,})\b", text):
+                used.setdefault(key, str(path.relative_to(ROOT)))
+    missing = sorted(
+        k for k in used
+        # 끝이 `_`인 건 f-string 접두사 조각이지 키가 아니다(VT_AUTH_, VT_HOTKEY_ …)
+        if not k.endswith("_") and k not in documented and k not in CONFIG_KEY_EXEMPT
+    )
+    if missing:
+        problems.append(
+            "코드가 읽는 설정 키가 config/vt.defaults.env에 없다: "
+            + ", ".join(f"{k}({used[k]})" for k in missing)
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="문서 일관성 검사 (I3)")
     ap.add_argument("--strict", action="store_true", help="발견 시 종료코드 1")
@@ -416,6 +468,7 @@ def main() -> int:
     check_claude_md_is_an_index(problems)
     check_no_personal_values(problems)
     check_skill_copy_in_sync(problems)
+    check_config_keys_documented(problems)
 
     if not problems:
         print("✓ 문서 일관성 OK")
