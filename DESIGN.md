@@ -62,9 +62,20 @@ steps are the 20%, and the accent is the 10%.
   panels, dock, and rail are all opaque.
 - No gradients on text or buttons.
 - No **glow shadow** — a blurred halo of the same color behind a button.
-  Shadow is gray, low-opacity, and used only to state elevation on overlays
-  (palette, sheets, dialogs) via `--shadow-e2`/`e3`. Every other boundary is
-  a 1px line (`--color-line`) — `--shadow-e1` was removed in 2.1.0.
+  Shadow is gray, low-opacity, and states elevation in exactly two places:
+  overlays (palette, sheets, dialogs) via `--shadow-e2`/`e3`, and **the one
+  row you are currently on** via `--shadow-e1`. Every other boundary is a 1px
+  line (`--color-line`).
+
+  `--shadow-e1` was removed in 2.1.0 and **brought back in 2.1.6**. The reason
+  is worth keeping: it was still referenced by `.vt-wgrail-row.active`, but
+  defined only inside the `notepad` skin — so in the other five skins that
+  `box-shadow` declaration was invalid and dropped, leaving the active row
+  with a background step alone (1.06:1 against the rail in `farshell` —
+  effectively the same colour). "Which row am I on" was carried by the accent
+  text colour and nothing else. e1 is deliberately much weaker than e2: e1
+  says "a row is lifted inside a list", e2 says "a panel floats over the
+  screen".
 - The exception: a 0-blur accent ring is not a shadow, it's a **focus ring** —
   an accessibility affordance, and it stays.
 
@@ -204,8 +215,8 @@ enough, refresh it.
   outer frames, sheets) / `--radius-full`. **`--radius-md` was removed in
   2.1.0** — every use site was replaced with `sm`. The `windows` and `vscode`
   skins override `--radius-sm` to 2px inside the skin for their square UI.
-- **Shadow:** only `--shadow-e2`/`e3` remain (overlay-only).
-  **`--shadow-e1` was removed.**
+- **Shadow:** `--shadow-e1` (the current row) + `--shadow-e2`/`e3` (overlays).
+  e1 was removed in 2.1.0 and restored in 2.1.6 — see §0 for why.
 - **Motion:** `--dur-fast`(120ms) / `--dur-base`(200ms), `--ease-out-quint`.
 - **Breakpoints:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
   `--breakpoint-xwide`(1600px). The JS-side constants live in exactly **one**
