@@ -194,11 +194,8 @@
   padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); flex:none;
 }
 .vt-wtd-title { flex:1; font:600 var(--fs-sm) var(--ui); color:var(--txt); }
-.vt-wtd-x {
-  flex:none; width:24px; height:24px; border:0; border-radius:var(--radius-sm);
-  background:transparent; color:var(--sub); cursor:pointer; font:400 var(--fs-base) var(--ui); line-height:1;
-}
-.vt-wtd-x:hover { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 모양·상태는 `.vt-btn.sm.quiet`. 닫기 ×는 글자 하나라 정사각만 남긴다. */
+.vt-wtd-x { width:24px; padding:0; font-size:var(--fs-base); }
 .vt-wtd-body {
   flex:1 1 auto; overflow-y:auto; padding:calc(var(--spacing) * 3);
   display:flex; flex-direction:column; gap:calc(var(--spacing) * 2);
@@ -222,10 +219,10 @@
   color:var(--warn); background:color-mix(in srgb, var(--warn) 12%, var(--bar)); border-radius:var(--radius-sm);
   display:flex; align-items:flex-start; gap:calc(var(--spacing) * 1.5); flex-wrap:wrap;
 }
-.vt-wtd-warn-fix {
-  flex:none; margin-left:auto; background:transparent; border:1px solid currentColor; border-radius:var(--radius-sm);
-  color:inherit; font:500 var(--fs-3xs) var(--mono); padding:calc(var(--spacing) * .5) calc(var(--spacing) * 1.5); cursor:pointer;
-}
+/* 2.1.6 — 모양·상태는 `.vt-btn.sm`. 이 버튼은 **경고 띠 안에서** 그 경고를
+   해결하는 액션이라, 기본 버튼의 중립색이 아니라 띠의 경고색을 물려받아야
+   "이 경고에 딸린 것"으로 읽힌다. 그 두 줄과 오른쪽 정렬만 남긴다. */
+.vt-wtd-warn-fix { flex:none; margin-left:auto; color:inherit; border-color:currentColor; }
 .vt-wtd-warn-fix:hover { background:color-mix(in srgb, var(--warn) 20%, transparent); }
 .vt-wtd-error { font:400 var(--fs-2xs) var(--mono); color:var(--err); }
 .vt-wtd-foot {

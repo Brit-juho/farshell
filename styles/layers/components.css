@@ -177,6 +177,15 @@
     background: color-mix(in srgb, var(--color-acc) 10%, transparent);
   }
   .vt-chip:disabled { opacity: .45; cursor: not-allowed; }
+  /* 작은 칩 — 한 행 안에 여러 개가 붙는 자리(MCP 서버 행의 태그·켬/끔). 24px
+   * 칩을 서버 이름 옆에 늘어놓으면 행 높이가 칩에 끌려 올라가 목록 밀도가
+   * 무너진다. 20px은 행 3단(24/28/36) 중 가장 작은 행 안에 여백을 남기고
+   * 들어가는 크기다. */
+  .vt-chip.sm {
+    height: 20px;
+    padding: 0 calc(var(--spacing) * 1.5);
+    font-size: var(--fs-3xs);
+  }
 
   /* ── 세그먼트 토글 ─────────────────────────────────────────────────────
    * 스위치가 아니라 **글자로 먼저 읽히는** 두 칸이다(20-design-system.md §3).

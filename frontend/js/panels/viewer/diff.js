@@ -103,11 +103,11 @@ function _toggleDiffAnnotate(row, filePath, lineNo) {
   const actions = document.createElement('div');
   actions.className = 'vt-vw-annotate-row';
   const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'vt-pt-btn';
+  cancelBtn.className = 'vt-btn';
   cancelBtn.type = 'button';
   cancelBtn.textContent = '취소';
   const addBtn = document.createElement('button');
-  addBtn.className = 'vt-pt-btn';
+  addBtn.className = 'vt-btn';
   addBtn.type = 'button';
   addBtn.textContent = '큐에 추가';
   actions.appendChild(cancelBtn);
@@ -132,7 +132,7 @@ async function _submitDiffAnnotate(box, ta, filePath, lineNo) {
   const comment = (ta.value || '').trim();
   if (!comment) return;
   const text = lineNo != null ? `${filePath}:${lineNo} — ${comment}` : `${filePath} — ${comment}`;
-  const addBtn = box.querySelector('.vt-pt-btn:last-child');
+  const addBtn = box.querySelector('.vt-btn:last-child');
   if (addBtn) addBtn.disabled = true;
   try {
     await vtFetch('/api/queue', {
@@ -165,7 +165,7 @@ export async function renderFileDiff(container, repo, file, staged, opts = {}) {
   container.innerHTML = '';
   if (opts.onBack) {
     const back = document.createElement('button');
-    back.className = 'vt-pt-btn vt-vw-cback';
+    back.className = 'vt-btn vt-vw-cback';
     back.textContent = '‹ 상태로';
     back.addEventListener('click', opts.onBack);
     container.appendChild(back);

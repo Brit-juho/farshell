@@ -347,7 +347,7 @@ function openShareDialog(item) {
         </div>
         <label class="vt-fl-check"><input type="checkbox" id="vt-fl-once"> 다운로드 1회 후 자동 취소</label>
         <div class="vt-fl-share-actions">
-          <button class="vt-pt-btn" id="vt-fl-issue">발급</button>
+          <button class="vt-btn" id="vt-fl-issue">발급</button>
         </div>
         <div class="vt-fl-share-list" id="vt-fl-share-list"></div>
       </div>

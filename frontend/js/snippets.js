@@ -55,7 +55,7 @@ export function showSnippets() {
               <label class="vt-sn-save-scope" id="vt-sn-save-scope-label" title="현재 활성 세션의 저장소에만 저장">
                 <input type="checkbox" id="vt-sn-save-project" /> 이 프로젝트에만
               </label>
-              <button class="vt-pt-btn" id="vt-sn-add">저장</button>
+              <button class="vt-btn" id="vt-sn-add">저장</button>
             </div>
           </div>
         `,
@@ -164,7 +164,7 @@ export function showSnippets() {
         const isPaste = it.mode !== 'new_section';   // 구형(모드 없는) 항목도 paste로 안전하게 처리
 
         const run = document.createElement('button');
-        run.className = 'vt-pt-btn';
+        run.className = 'vt-btn';
         if (isPaste) {
           run.textContent = '붙여넣기';
           run.title = '지금 보고 있는 세션에 텍스트만 입력 — Enter는 직접';
@@ -178,13 +178,13 @@ export function showSnippets() {
         // 저장할 때 고른 모드를 나중에 바꿀 수 있어야 "관리"다 — 매번 지우고
         // 다시 만들게 하지 않는다.
         const toggle = document.createElement('button');
-        toggle.className = 'vt-pt-btn vt-sn-mode-toggle';
+        toggle.className = 'vt-btn vt-sn-mode-toggle';
         toggle.title = isPaste ? '새 섹션 자동 실행으로 바꾸기' : '붙여넣기만으로 바꾸기';
         toggle.textContent = isPaste ? '⇥ 자동으로' : '⇤ 붙여넣기로';
         toggle.onclick = () => toggleSnippetMode(it, isPaste ? 'new_section' : 'paste');
 
         const rm = document.createElement('button');
-        rm.className = 'vt-pt-btn danger';
+        rm.className = 'vt-btn danger';
         rm.textContent = '삭제';
         rm.onclick = () => removeSnippet(it.id);
         act.appendChild(run); act.appendChild(toggle); act.appendChild(rm);

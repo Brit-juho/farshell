@@ -119,7 +119,7 @@ export function WorktreeDialog(props: Props) {
       <div class="vt-viewer-card vt-wtd-card" role="dialog" aria-modal="true" aria-label="워크트리 만들기">
         <div class="vt-wtd-head">
           <span class="vt-wtd-title">워크트리 만들기</span>
-          <button type="button" class="vt-wtd-x" onClick={props.onClose} aria-label="닫기">×</button>
+          <button type="button" class="vt-btn sm quiet vt-wtd-x" onClick={props.onClose} aria-label="닫기">×</button>
         </div>
         <div class="vt-wtd-body">
           <label class="vt-wtd-row">
@@ -175,7 +175,7 @@ export function WorktreeDialog(props: Props) {
           <Show when={warnings().includes('lockfile_mismatch')}>
             <div class="vt-wtd-warn">
               ⚠ {base()}와 package.json이 다릅니다 — 심링크로 두면 깨질 수 있습니다.
-              <button type="button" class="vt-wtd-warn-fix" onClick={() => setNodeModules('copy')}>복사로</button>
+              <button type="button" class="vt-btn sm vt-wtd-warn-fix" onClick={() => setNodeModules('copy')}>복사로</button>
             </div>
           </Show>
 

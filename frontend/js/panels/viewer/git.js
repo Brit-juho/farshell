@@ -255,7 +255,7 @@ async function _renderCommitLog(repo, container, skip, opts) {
   d.commits.forEach(c => container.appendChild(_commitRowEl(repo, c, opts)));
   if (d.has_more) {
     const btn = document.createElement('button');
-    btn.className = 'vt-pt-btn vt-vw-glog-more';
+    btn.className = 'vt-btn vt-vw-glog-more';
     btn.textContent = '더 보기';
     btn.addEventListener('click', () => _renderCommitLog(repo, container, skip + d.commits.length, opts));
     container.appendChild(btn);
@@ -358,7 +358,7 @@ export async function renderCommitFileDiff(container, repo, sha, file, opts = {}
 
 function _backBtn(label, onClick) {
   const back = document.createElement('button');
-  back.className = 'vt-pt-btn vt-vw-cback';
+  back.className = 'vt-btn vt-vw-cback';
   back.textContent = label;
   back.addEventListener('click', onClick);
   return back;

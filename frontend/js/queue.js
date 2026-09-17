@@ -32,7 +32,7 @@ export function showQueue() {
               <select id="vt-q-target" class="vt-q-target" title="대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다">
                 <option value="">자동 (음성 타깃 규칙)</option>
               </select>
-              <button class="vt-pt-btn" id="vt-q-add">추가</button>
+              <button class="vt-btn" id="vt-q-add">추가</button>
             </div>
           </div>
         `,
@@ -165,13 +165,13 @@ export function showQueue() {
         act.className = 'vt-pt-actions';
         if (it.status === 'blocked') {
           const ub = document.createElement('button');
-          ub.className = 'vt-pt-btn';
+          ub.className = 'vt-btn';
           ub.textContent = '재개';
           ub.onclick = () => unblockQueueItem(it.id);
           act.appendChild(ub);
         }
         const rm = document.createElement('button');
-        rm.className = 'vt-pt-btn danger';
+        rm.className = 'vt-btn danger';
         rm.textContent = '삭제';
         rm.onclick = () => removeQueueItem(it.id);
         act.appendChild(rm);
