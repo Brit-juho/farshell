@@ -240,12 +240,9 @@
   color:var(--txt); font:400 var(--fs-xs) var(--ui);
 }
 .vt-vw-gmsg:disabled{ opacity:.5; }
-.vt-vw-gcommit-btn{
-  align-self:flex-end; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 4); border-radius:var(--radius-sm); border:none;
-  background:var(--color-acc-surface); color:var(--acc-ink); font:600 var(--fs-xs) var(--ui); cursor:pointer;
-}
-.vt-vw-gcommit-btn:hover{ filter:brightness(1.08); }
-.vt-vw-gcommit-btn:disabled{ opacity:.5; cursor:default; filter:none; }
+/* 2.1.6 — 모양은 `.vt-btn.solid`가 맡는다(값이 완전히 같았다). 이 클래스에
+   남은 역할은 **자리**와 **JS가 찾는 이름**뿐이다 — git.js가 셀렉터로 쓴다. */
+.vt-vw-gcommit-btn{ align-self:flex-end; }
 
 /* 커밋 기록 / 커밋 diff (git log · git show) */
 .vt-vw-glog{ border-top:1px solid var(--line); }
@@ -421,14 +418,6 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-vw-trow .vt-vw-name{ overflow:hidden; text-overflow:ellipsis; }
 /* L2: 파일 행마다 있는 "터미널에 경로 삽입" 버튼 — 터치 기기는 hover가 없어서
    항상 보이게 두되, 크기/색을 낮춰 파일명·크기보다 시각적으로 물러나게 한다. */
-.vt-vw-row-insert{
-  flex:0 0 auto; width:22px; height:22px; margin-left:calc(var(--spacing) * 0.5);
-  background:transparent; border:none; border-radius:var(--radius-sm); cursor:pointer;
-  color:var(--sub); display:inline-flex; align-items:center; justify-content:center;
-  touch-action:manipulation;
-}
-.vt-vw-row-insert:hover{ background:var(--menu-hover); color:var(--acc); }
-.vt-vw-row-insert svg{ width:13px; height:13px; }
 .vt-vw-trow-spin{
   flex:0 0 auto; width:12px; height:12px; border-radius:50%;
   border:2px solid var(--line); border-top-color:var(--acc);
@@ -663,11 +652,6 @@ body.vt-resizing #terminal-container{ transition:none; }
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1); font:600 var(--fs-3xs) var(--ui); letter-spacing:.08em;
   text-transform:uppercase; color:var(--sub);
 }
-.vt-vw-recent-clear{
-  background:none; border:none; color:var(--sub); font:400 var(--fs-2xs) var(--ui);
-  cursor:pointer; padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1); border-radius:var(--radius-sm); text-transform:none; letter-spacing:0;
-}
-.vt-vw-recent-clear:hover{ background:var(--menu-hover); color:var(--txt); }
 .vt-vw-recent-row{ flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 0.25); }
 .vt-vw-recent-row .vt-vw-name{ flex:0 0 auto; width:100%; }
 .vt-vw-recent-dir{
