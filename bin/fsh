@@ -3699,6 +3699,44 @@ if (-not \$env:TMUX -and -not \$env:INSIDE_EMACS) {
 EOF
 }
 
+# ngrok 상태 — fsh가 관리하지 않는 외부 터널이지만, 공개 입구가 그것 하나뿐일 때
+# status 화면이 "외부 접속 경로 없음"처럼 읽히는 걸 막는다(2026-09-17).
+# 감지되지 않으면 줄 자체를 출력하지 않는다 — ngrok을 안 쓰는 사람 화면은 그대로다.
+_ngrok_status() {
+  local api="${VT_NGROK_API:-http://127.0.0.1:4040}" json py url
+  py="${VT_PYTHON:-}"
+  [ -n "$py" ] && [ -x "$py" ] || py="python3"
+  json="$(curl -s --max-time 2 "$api/api/tunnels" 2>/dev/null)"
+  if [ -n "$json" ]; then
+    url="$(printf '%s' "$json" | "$py" -c '
+import json, sys
+try:
+    tunnels = json.load(sys.stdin).get("tunnels") or []
+except Exception:
+    raise SystemExit(0)
+port = sys.argv[1]
+# 우리 포트로 가는 터널만 취한다 — 다른 앱을 내보내는 ngrok이 떠 있을 수 있고,
+# 그걸 FarShell 입구로 표시하면 화면이 거짓말을 하게 된다.
+for t in tunnels:
+    addr = str((t.get("config") or {}).get("addr") or "")
+    pub = str(t.get("public_url") or "")
+    if addr.rsplit(":", 1)[-1] == port and pub.startswith("https"):
+        print(pub)
+        break
+' "$VT_PORT" 2>/dev/null)"
+    if [ -n "$url" ]; then
+      echo "✓ $url → :$VT_PORT  (fsh가 관리하지 않음)"
+      return 0
+    fi
+  fi
+  # 프로세스는 있는데 에이전트 API가 안 열린 경우 — "없음"이라고 말하면 안 된다.
+  if pgrep -f "ngrok .*http" >/dev/null 2>&1; then
+    echo "⚠ 실행 중 (URL 확인 불가 — 에이전트 API $api 무응답)"
+    return 0
+  fi
+  return 1
+}
+
 cmd_status() {
   echo ""
   echo "  📊 fsh status"
@@ -3774,6 +3812,10 @@ cmd_status() {
   if [ -s "$TUNNEL_REGISTRY" ]; then
     echo "    추가 포트:"
     awk -F'\t' '{printf "      %-6s %s  (%s)\n", $1, $2, ($3==""?"-":$3)}' "$TUNNEL_REGISTRY"
+  fi
+  local ngrok_line
+  if ngrok_line="$(_ngrok_status)"; then
+    echo "  ngrok:       $ngrok_line"
   fi
   if [ -n "${VT_TUNNEL_HOOK:-}" ]; then
     echo "  URL 변경 훅: ✓ 설정됨 (fsh tunnel hook)"
