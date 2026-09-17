@@ -186,9 +186,24 @@ BOUNDARY_KEYS = (
     "VT_DISALLOWED_TOOLS",
     "VT_STATE_DIR",           # 기기 목록·OTP가 사는 곳
     # 레거시 이름도 같은 경계값이다 — 하나만 막으면 옛 이름으로 우회된다.
+    "VT_TUNNEL_HOOK",         # URL 변경 시 실행되는 임의 명령
+    # 레거시 이름도 같은 경계값이다 — 하나만 막으면 옛 이름으로 우회된다.
     "VT_TOKEN",
     "VT_PASSWORD_HASH",
     "VT_SECRET_KEY",
+)
+
+# 파일에 **없으면 꺼진 것으로 본다**는 키. BOUNDARY_KEYS는 "파일에 있으면 파일이
+# 이긴다"까지만 하므로, 사용자가 설정 파일에서 지운 값이 낡은 export로 계속 살아
+# 있는 경우는 그것만으론 못 막는다. 실제로 `fsh`에서 VT_TUNNEL_HOOK을 해제했는데
+# 그 창에서는 여전히 옛 훅 명령이 실행됐다(2026-09-17).
+#
+# ⚠ **자격증명은 여기 절대 넣지 않는다.** 없앨 때의 방향이 반대다 —
+# VT_AUTH_TOKEN이 파일에 없다고 환경에서까지 지워버리면, env로만 인증을 주던
+# 구성에서 **서버가 인증 없이 열린다.** 값이 남아 과하게 막히는 쪽은 안전하지만
+# 값이 사라져 열리는 쪽은 안전하지 않다. 그래서 "지우는 것이 더 안전한 값"만 둔다.
+FILE_CLEARED_KEYS = (
+    "VT_TUNNEL_HOOK",
 )
 
 
@@ -225,7 +240,19 @@ def apply_boundary_overrides(file_env: Optional[Mapping[str, str]] = None) -> li
         if os.environ.get(key) != src[key]:
             os.environ[key] = src[key]
             changed.append(key)
+    # 파일이 실제로 존재할 때만 "없음 = 꺼짐"으로 해석한다. 설정 파일 없이
+    # 환경변수만으로 돌리는 구성에서 빈 dict를 근거로 값을 지우면 안 된다.
+    if file_env is not None or _config_exists():
+        for key in FILE_CLEARED_KEYS:
+            if key not in src and key in os.environ:
+                del os.environ[key]
+                changed.append(key)
     return changed
+
+
+def _config_exists() -> bool:
+    p = os.environ.get("VT_CONFIG") or DEFAULT_PATH
+    return os.path.isfile(os.path.expanduser(p))
 
 
 def getenv(key: str, default: str = "",
