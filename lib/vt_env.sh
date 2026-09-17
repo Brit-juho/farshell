@@ -167,6 +167,47 @@ vt_env_load() {
   done < "$file"
 }
 
+# ── 경계값: 설정 파일이 환경변수를 이긴다 (2026-09-17) ────────────────
+#
+# 기본 규칙은 "환경변수 > 파일"이고 포트·경로·인스턴스 격리는 그 규칙에 기대고
+# 있다. 하지만 **보안 경계를 정하는 값**에 그 규칙을 쓰면 낡은 사본이 조용히
+# 경계를 넓힌다. 2026-09-17에 두 번 겪었다: ~/.vt.env의 VT_BROWSE_ROOTS를 좁히고
+# 서버를 재시작했는데 fsh를 실행한 셸이 든 옛 값(홈 전체)이 이겨서, 코드 뷰어가
+# 공개 터널 너머로 홈을 계속 내보냈다. 토큰 재발급 때도 같은 일이 났다.
+#
+# ⚠ 이 목록은 server/vt_env.py의 BOUNDARY_KEYS와 **같아야 한다.**
+#    server/tests/test_vt_env.py가 두 목록의 일치를 검사한다 — 한쪽만 고치면 실패한다.
+# ⚠ VT_CONFIG는 여기 없다. "어느 파일을 읽을지" 고르는 키라 환경변수가 이겨야 한다.
+VT_ENV_BOUNDARY_KEYS="VT_BROWSE_ROOTS VT_NETWORK_MODE VT_ALLOWED_ORIGINS VT_TRUST_PROXY VT_AUTH_TOKEN VT_AUTH_PASSWORD_HASH VT_AUTH_SESSION_KEY VT_SAFE_MODE VT_DISALLOWED_TOOLS VT_STATE_DIR VT_TOKEN VT_PASSWORD_HASH VT_SECRET_KEY"
+
+# 이번 프로세스에서 파일 값으로 바로잡은 경계값 이름들(공백 구분).
+# 값은 담지 않는다 — 토큰·해시가 섞여 있어 화면·로그에 나가면 안 된다.
+VT_ENV_BOUNDARY_FIXED=""
+
+# vt_env_apply_boundary [FILE] — 파일에 정의된 경계값을 환경변수보다 우선 적용.
+# 파일에 없는 키는 건드리지 않는다(일회성 실험을 통째로 막지 않는다).
+vt_env_apply_boundary() {
+  local file="${1:-$(vt_env_file)}" line _vt_key _vt_raw _vt_val _vt_undef cur
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    _vt_env_split_line "$line" || continue
+    case " $VT_ENV_BOUNDARY_KEYS " in
+      *" $_vt_key "*) ;;
+      *) continue ;;
+    esac
+    _vt_undef=""
+    _vt_env_parse_value "$_vt_raw"
+    eval "cur=\${$_vt_key-}"
+    if [ "$cur" != "$_vt_val" ]; then
+      export "$_vt_key=$_vt_val"
+      case " $VT_ENV_BOUNDARY_FIXED " in
+        *" $_vt_key "*) ;;
+        *) VT_ENV_BOUNDARY_FIXED="${VT_ENV_BOUNDARY_FIXED}${VT_ENV_BOUNDARY_FIXED:+ }$_vt_key" ;;
+      esac
+    fi
+  done < "$file"
+}
+
 # vt_env_get KEY — 파일에 기록된 값을 출력. 마지막 정의가 이긴다.
 vt_env_get() {
   local key="${1-}" file line _vt_key _vt_raw _vt_val _vt_undef found=""

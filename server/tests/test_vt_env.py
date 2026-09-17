@@ -309,3 +309,80 @@ class TestPythonParser:
 
     def test_missing_file_is_empty(self, tmp_path):
         assert vt_env.load(str(tmp_path / "nope")) == {}
+
+
+# ---------------------------------------------------------------------------
+# 경계값 — 설정 파일이 환경변수를 이긴다 (2026-09-17)
+# ---------------------------------------------------------------------------
+#
+# 낡은 셸 export가 보안 경계를 되돌린 사고가 두 번 있었다. VT_BROWSE_ROOTS를
+# ~/GitHub 로 좁히고 서버를 재시작했는데도 코드 뷰어가 홈 전체를 계속 내보냈고,
+# 토큰을 재발급했는데 옛 값을 든 세션들의 훅이 전부 401이 됐다.
+
+def _env_file(tmp_path, body: str) -> str:
+    p = tmp_path / "vt.env"
+    p.write_text(body, encoding="utf-8")
+    return str(p)
+
+
+def test_boundary_value_in_file_beats_stale_env(tmp_path, monkeypatch):
+    """파일이 정한 경계가 환경변수를 이긴다 — 사고 재현 그대로."""
+    cfg = _env_file(tmp_path, "VT_BROWSE_ROOTS='/Users/x/GitHub'\n")
+    monkeypatch.setenv("VT_CONFIG", cfg)
+    monkeypatch.setenv("VT_BROWSE_ROOTS", "/Users/x")  # 낡은 export
+    changed = vt_env.apply_boundary_overrides()
+    assert "VT_BROWSE_ROOTS" in changed
+    assert os.environ["VT_BROWSE_ROOTS"] == "/Users/x/GitHub"
+
+
+def test_key_absent_from_file_leaves_env_alone(tmp_path, monkeypatch):
+    """파일에 없는 키까지 뺏지 않는다 — 일회성 실험을 통째로 막지는 않는다."""
+    cfg = _env_file(tmp_path, "VT_PORT=7777\n")
+    monkeypatch.setenv("VT_CONFIG", cfg)
+    monkeypatch.setenv("VT_BROWSE_ROOTS", "/tmp/oneoff")
+    assert vt_env.apply_boundary_overrides() == []
+    assert os.environ["VT_BROWSE_ROOTS"] == "/tmp/oneoff"
+
+
+def test_vt_config_is_never_a_boundary_key():
+    """VT_CONFIG는 '어느 파일을 읽을지' 고르는 키다. 이게 파일에 종속되면
+    격리 테스트 서버가 사용자의 진짜 설정을 읽게 된다(AGENTS.md)."""
+    assert "VT_CONFIG" not in vt_env.BOUNDARY_KEYS
+
+
+def test_legacy_names_are_boundary_too():
+    """옛 이름만 남겨두면 그쪽으로 우회된다."""
+    for key in ("VT_TOKEN", "VT_PASSWORD_HASH", "VT_SECRET_KEY"):
+        assert key in vt_env.BOUNDARY_KEYS
+
+
+def test_boundary_diff_reports_key_without_value(tmp_path, monkeypatch):
+    """진단 출력에 토큰·해시 원문이 섞이면 안 된다 — 키 이름만 돌려준다."""
+    cfg = _env_file(tmp_path, "VT_AUTH_TOKEN='file-secret'\n")
+    monkeypatch.setenv("VT_CONFIG", cfg)
+    monkeypatch.setenv("VT_AUTH_TOKEN", "stale-secret")
+    diff = vt_env.boundary_diff()
+    assert diff == [("VT_AUTH_TOKEN", "env")]
+    flat = repr(diff)
+    assert "file-secret" not in flat and "stale-secret" not in flat
+
+
+def test_bash_and_python_boundary_lists_match():
+    """목록이 두 곳(lib/vt_env.sh, server/vt_env.py)에 산다. 한쪽만 고치면
+    fsh와 서버가 서로 다른 경계를 지키게 된다 — 그걸 여기서 막는다."""
+    import re
+    from pathlib import Path
+    sh = (Path(__file__).resolve().parents[2] / "lib" / "vt_env.sh").read_text(encoding="utf-8")
+    m = re.search(r'^VT_ENV_BOUNDARY_KEYS="([^"]*)"', sh, re.M)
+    assert m, "lib/vt_env.sh에서 VT_ENV_BOUNDARY_KEYS를 찾지 못했다"
+    assert set(m.group(1).split()) == set(vt_env.BOUNDARY_KEYS)
+
+
+def test_main_applies_boundary_before_importing_auth():
+    """⚠ 순서가 계약이다. auth는 import 시점에 값을 읽으므로, 정규화가 그보다
+    뒤로 밀리면 낡은 값을 든 채 기동한다 — 고쳐도 안 고쳐진 것처럼 보인다."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+    apply_at = src.index("apply_boundary_overrides()")
+    auth_at = src.index("\nimport auth")
+    assert apply_at < auth_at

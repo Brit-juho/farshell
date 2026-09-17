@@ -51,13 +51,19 @@ These are load-bearing. Each one caused a real incident.
 5. **Never write `~/.vt.env` with `echo`/`sed`.** Use `lib/vt_env.sh`
    (`vt_env_load/get/set/unset`) — it parses rather than sources, so the config file is
    never executed, and it enforces 0600.
-6. **The agent hook payload format (`POST /api/agent/event`) is a compatibility surface.**
+6. **Security boundary values are read from `~/.vt.env` first, not from the environment.**
+   `BOUNDARY_KEYS` in `server/vt_env.py` (mirrored in `lib/vt_env.sh`; a test asserts the two
+   lists match) are normalised once at boot by `apply_boundary_overrides()`, and that call
+   **must stay above `import auth` in `server/main.py`** — auth reads its values at import
+   time. A stale exported `VT_BROWSE_ROOTS` once kept the whole home directory served through
+   a public tunnel after it had been narrowed. `VT_CONFIG` is never a boundary key.
+7. **The agent hook payload format (`POST /api/agent/event`) is a compatibility surface.**
    Remote hosts may run an older `server/agent_hook.sh`.
-7. **Colors go through tokens.** No hex literals in `frontend/js` or `styles/layers`.
+8. **Colors go through tokens.** No hex literals in `frontend/js` or `styles/layers`.
    Define in `styles/theme/tokens.css` / `skins.css`; `check_css_vars.py` enforces this.
-8. **`API.md` is the only endpoint table.** `CLAUDE.md` keeps a category list only —
+9. **`API.md` is the only endpoint table.** `CLAUDE.md` keeps a category list only —
    the two drifted apart in 2026-08 and `check_docs.py` now enforces the split.
-9. **`docs/*` is gitignored** except `docs/help/`, which `fsh help <topic>` reads at
+10. **`docs/*` is gitignored** except `docs/help/`, which `fsh help <topic>` reads at
    runtime. Add a help topic and you must add both the `bin/fsh` entry and the file.
 
 ## Working rules

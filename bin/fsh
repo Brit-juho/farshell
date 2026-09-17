@@ -45,6 +45,10 @@ fi
 # 우선순위 '환경변수 > ~/.vt.env > defaults'는 _VT_ENV_PRESET_NAMES로 구조적으로 성립한다.
 vt_env_load "$VT_DEFAULTS"
 vt_env_load "$VT_CONFIG"
+# 경계값만은 파일이 이긴다 — 낡은 셸 export가 보안 경계를 되돌리는 걸 막는다.
+# 바로잡은 키는 VT_ENV_BOUNDARY_FIXED에 남고 fsh status/doctor가 그걸 보고한다
+# (조용히 고치면 "왜 내 export가 안 먹지"를 아무도 설명해 주지 못한다).
+vt_env_apply_boundary "$VT_CONFIG"
 
 # 설정 가능한 변수 (환경변수 또는 ~/.vt.env로 오버라이드)
 VT_PORT="${VT_PORT:-7777}"
@@ -2371,6 +2375,33 @@ cmd_doctor() {
     _check "tmux" fail "brew install tmux / apt install tmux"
   fi
 
+  # 4-9. 경계값 — 이 창의 환경변수가 설정 파일과 다른가
+  if [ -n "${VT_ENV_BOUNDARY_FIXED:-}" ]; then
+    _check "경계값" warn "낡은 환경변수를 파일 값으로 바로잡음: $VT_ENV_BOUNDARY_FIXED — 창을 새로 여세요"
+  else
+    _check "경계값" ok "환경변수와 설정 파일이 일치"
+  fi
+  # 돌고 있는 서버가 옛 **설정**으로 떴는지. N28은 옛 *코드*만 본다 —
+  # 2026-09-17에 값이 안 바뀐 채 서버가 떠 있는 걸 몇 시간 못 알아챘다.
+  local _srv_pid _srv_stale
+  _srv_pid="$(cat "$PID_DIR/server.pid" 2>/dev/null || true)"
+  if [ -n "$_srv_pid" ] && kill -0 "$_srv_pid" 2>/dev/null; then
+    _srv_stale=""
+    local _k _fileval _procval
+    for _k in $VT_ENV_BOUNDARY_KEYS; do
+      _fileval="$(vt_env_get "$_k" 2>/dev/null || true)"
+      [ -n "$_fileval" ] || continue
+      _procval="$(ps eww "$_srv_pid" 2>/dev/null | tr ' ' '\n' | grep "^$_k=" | head -1 | cut -d= -f2-)"
+      [ -n "$_procval" ] || continue
+      [ "$_procval" = "$_fileval" ] || _srv_stale="${_srv_stale}${_srv_stale:+ }$_k"
+    done
+    if [ -n "$_srv_stale" ]; then
+      _check "서버 설정" fail "서버가 옛 설정으로 돌고 있습니다: $_srv_stale — 'fsh stop && fsh start' 필요"
+    else
+      _check "서버 설정" ok "돌고 있는 서버가 현재 설정과 일치"
+    fi
+  fi
+
   # 5. 공개 입구 제공자 + 그 제공자의 실행 파일
   local _provider; _provider="$(_tunnel_provider)"
   _check "터널 제공자" ok "$_provider${VT_TUNNEL_PROVIDER:+ (VT_TUNNEL_PROVIDER)}"
@@ -4002,6 +4033,12 @@ cmd_status() {
     echo "  ngrok:       $ngrok_line"
   fi
   echo "  터널 제공자: $(_tunnel_provider)${VT_TUNNEL_PROVIDER:+ (VT_TUNNEL_PROVIDER)}"
+  # 이 창이 낡은 export를 들고 있었다는 사실 자체가 정보다 — 조용히 고치면
+  # "왜 내가 export한 값이 안 먹지"를 아무도 설명해 주지 못한다.
+  if [ -n "${VT_ENV_BOUNDARY_FIXED:-}" ]; then
+    echo "  ⚠ 낡은 환경변수를 설정 파일 값으로 바로잡음: $VT_ENV_BOUNDARY_FIXED"
+    echo "     (이 창이 예전 값을 들고 있습니다. 창을 새로 여는 게 좋습니다)"
+  fi
   if [ -n "${VT_TUNNEL_HOOK:-}" ]; then
     echo "  URL 변경 훅: ✓ 설정됨 (fsh tunnel hook)"
   else
