@@ -136,6 +136,9 @@
   }
 
   .vt-btn.danger { color: var(--color-st-error); border-color: var(--color-st-error); }
+  /* quiet는 상자를 떼는 변형이므로 danger의 테두리보다 뒤에 와야 이긴다 —
+   * 순서가 반대면 「조용한 위험 동작」이 상자를 도로 얻는다. */
+  .vt-btn.quiet.danger { border-color: transparent; }
   .vt-btn.danger:hover { background: color-mix(in srgb, var(--color-st-error) 14%, transparent); }
 
   /* ── 아이콘 버튼 ───────────────────────────────────────────────────────

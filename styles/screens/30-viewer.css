@@ -470,10 +470,17 @@ body.vt-resizing #terminal-container{ transition:none; }
   font-variant-numeric:tabular-nums;
 }
 .vt-pt-meta{ display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); flex:1 1 auto; min-width:0; overflow:hidden; }
-/* 줄어드는 순서: cmd가 먼저(가중치 100), 그다음 수치(1). 둘 다 넘치면 자르고
-   줄임표를 붙인다. */
+/* 줄어드는 순서: **수치가 먼저**(가중치 100), 이름은 마지막(1). 둘 다 넘치면
+   자르고 줄임표를 붙인다.
+
+   2026-09-17 — 이전엔 반대였다(이름이 먼저 양보). 그 결과 392px dock에서 실측하면
+   이름 칸이 47px까지 눌려 「MACSOOPPackage」가 「MACS…」로만 남고, 그 옆에
+   「pid 98234 · 1일 · 13M」은 134px을 온전히 차지하고 있었다. 행에서 답해야 하는
+   질문은 "이 포트에서 **무엇이** 도는가"이고 pid·업타임·메모리는 그다음이다.
+   수치는 잘려도 hover의 제목이나 종료 확인 대화상자에서 다시 읽을 수 있지만,
+   이름이 잘리면 그 행이 무엇인지 알 방법이 화면에 남지 않는다. */
 .vt-pt-cmd{
-  flex:0 100 auto;
+  flex:0 1 auto;
   min-width:0;
   /* 2026-09-17 — 행에서 읽는 것은 **포트 번호**다(.vt-pt-port 13.5/600 mono).
      명령 이름이 같은 13.5px이라 둘이 같은 층에 있었다. 한 단 내려 포트가
@@ -490,7 +497,7 @@ body.vt-resizing #terminal-container{ transition:none; }
    부모(.vt-pt-meta)의 min-width:0은 부모만 줄일 뿐 안 줄어드는 자식을 막지 못한다.
    의도(수치가 끝까지 남는다)는 shrink 가중치로 지키고, 넘침은 자른다. */
 .vt-pt-sub{
-  flex:0 1 auto;
+  flex:0 100 auto;
   min-width:0;
   color:var(--sub);
   font:400 var(--fs-2xs) var(--mono);
@@ -502,6 +509,35 @@ body.vt-resizing #terminal-container{ transition:none; }
   color:var(--warn);
 }
 .vt-pt-actions{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
+
+/* 2026-09-17 — 액션을 행 **위로** 띄운다.
+   392px dock에서 포트 + 이름 + 수치 + 태그 + 버튼 둘이 24px 한 줄에 다 들어가지
+   않아, 실측하면 **명령 이름 칸이 0px**이었다. 이름이 아예 안 보이는데 버튼 두
+   개가 자리를 지키고 있었던 셈이다. 띄우면 그 95px이 통째로 이름에 간다.
+   테두리 상자도 뗀다(.quiet) — 33행 × 2개 = 66개의 상자가 목록에서 가장 눈에
+   띄는 요소였다. 「화면당 채움 버튼 1개」(20-design-system.md §3)의 취지와 어긋난다.
+
+   ⚠ 포인터가 있는 기기에서만 숨긴다. 터치엔 hover가 없어 영영 못 찾는다 —
+   그쪽은 지금처럼 항상 보이고, 종료는 이미 스와이프로 분리돼 있다(U5/L6).
+   ⚠ 「보호됨」(.vt-pt-lock)은 동작이 아니라 **설명**이다("왜 종료 버튼이 없는가").
+   숨기면 그 행이 이유 없이 비어 보이므로 제외한다. */
+@media (hover:hover) and (pointer:fine) {
+  .vt-pt-row{ position:relative; }
+  /* ⚠ `.vt-pt-actions`는 터널 줄(.vt-pt-tunnel-row)도 쓴다. 거기까지 숨기면
+     [복사]·[해제]를 드러낼 hover 규칙이 없어 **영영 안 보인다**. 포트 행으로 한정한다. */
+  .vt-pt-row .vt-pt-actions:not(:has(.vt-pt-lock)){
+    position:absolute; top:0; bottom:0; right:calc(var(--spacing) * 3);
+    padding-left:calc(var(--spacing) * 5);
+    /* 아래 글자를 덮어야 하므로 불투명해야 한다. 행 배경(--bar) 위에 행 hover
+       틴트를 **같은 순서로** 한 번 더 쌓아야 액션 밑만 색이 튀지 않는다. */
+    background:linear-gradient(to right, transparent, var(--menu-hover) calc(var(--spacing) * 5)),
+               linear-gradient(to right, transparent, var(--bar) calc(var(--spacing) * 5));
+    opacity:0; pointer-events:none;
+    transition:opacity var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-pt-row:hover .vt-pt-actions,
+  .vt-pt-row:focus-within .vt-pt-actions{ opacity:1; pointer-events:auto; }
+}
 .vt-pt-lock{ color:var(--sub); font:400 var(--fs-xs) var(--ui); cursor:help; }
 /* 2.1.6 — .vt-pt-btn(큐·스니펫·포트·diff·git 로그·파일 공유, 6개 파일 19곳)은
    components.css의 `.vt-btn` / `.vt-btn.danger`로 대체했다. 이름이 "pt"(패널
