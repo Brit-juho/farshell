@@ -81,7 +81,7 @@
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
   text-align:left; border-bottom:1px solid var(--line); white-space:nowrap;
 }
-.vt-set-covtable th { font:500 var(--fs-xs) var(--ui); color:var(--sub); text-transform:uppercase; letter-spacing:.03em; }
+.vt-set-covtable th { }
 .vt-set-covtable td { color:var(--txt); }
 .vt-set-covcli { font:500 var(--fs-sm) var(--mono); }
 .vt-set-covtrust {
@@ -190,10 +190,7 @@
    "숫자보다 바가 먼저" — 바 높이 4px, 색만 보고 판단 가능해야 한다. */
 .vt-usage .vt-vw-body { padding:calc(var(--spacing) * 2); }
 .vt-usage .vt-vw-body.stale { opacity:.6; }
-.vt-usage-card {
-  padding:calc(var(--spacing) * 1.5); border:1px solid var(--line);
-  border-radius:var(--radius-sm); margin-bottom:calc(var(--spacing) * 1.5);
-}
+.vt-usage-card { }
 .vt-usage-card.active { border-color:var(--acc); }
 .vt-usage-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1); margin-bottom:calc(var(--spacing) * 1); }
 .vt-usage-name { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
@@ -226,14 +223,13 @@
    한도형과 시각 언어를 다르게 가져간다 — 바(%)가 아니라 숫자 3개 + 스파크라인.
    "얼마나 남았나"가 아니라 "얼마나 썼나"라서 진행률 바를 쓰면 거짓 %가 된다. */
 .vt-usage-section-title {
-  font:600 var(--fs-xs) var(--ui); color:var(--sub); text-transform:uppercase;
-  letter-spacing:.04em; margin-bottom:calc(var(--spacing) * 1);
+  margin-bottom:calc(var(--spacing) * 1);
 }
 .vt-usage-divider { border:none; border-top:1px solid var(--line); margin:calc(var(--spacing) * 2) 0; }
 .vt-counter-card {
-  display:flex; flex-direction:column; gap:6px;
-  padding:calc(var(--spacing) * 1.5); border:1px solid var(--line);
-  border-radius:var(--radius-sm); margin-bottom:calc(var(--spacing) * 1.5);
+  display:flex;
+  flex-direction:column;
+  gap:6px;
 }
 .vt-counter-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1); }
 .vt-counter-name { font:600 var(--fs-sm) var(--mono); color:var(--txt); }
@@ -259,7 +255,10 @@
   padding:4px 0; font:400 var(--fs-xs) var(--ui); color:var(--txt);
 }
 .vt-clients-row.me .vt-clients-label { font-weight:600; }
-.vt-clients-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-clients-label {
+  flex:1;
+  min-width:0;
+}
 .vt-clients-meta { color:var(--sub); font:400 var(--fs-xs) var(--mono); flex-shrink:0; }
 .vt-clients-badge {
   background:var(--menu-hover); color:var(--sub); border-radius:var(--radius-full);

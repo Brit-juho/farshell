@@ -121,7 +121,7 @@
 #vt-dock.collapsed .vt-dock-resizer { display:none; }
 
 .vt-dock-resizer {
-  position:absolute; top:0; bottom:0; left:-3px; width:6px; cursor:col-resize; z-index:1;
+  left:-3px;
 }
 .vt-dock-resizer.dragging { background:var(--acc); opacity:.4; }
 
@@ -207,7 +207,10 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 }
 .vt-fl-row:hover{ background:var(--menu-hover); }
 .vt-fl-row-main{ flex:1 1 auto; min-width:0; }
-.vt-fl-name{ font:500 var(--fs-sm) var(--mono); color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-fl-name{
+  font:500 var(--fs-sm) var(--mono);
+  color:var(--txt);
+}
 .vt-fl-sub{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-top:2px; }
 .vt-fl-sub.warn{ color:var(--warn); }
 .vt-fl-acts{ display:flex; gap:calc(var(--spacing) * 0.5); flex:0 0 auto; }
@@ -234,7 +237,9 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
    되돌리기 전에 한 번 더 보게 해야 하는 조작이라 화면을 덮는 게 맞다. */
 .vt-fl-share-card{ max-width:420px; }
 .vt-fl-field{ margin-bottom:calc(var(--spacing) * 3); }
-.vt-fl-field-label{ font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub); margin-bottom:calc(var(--spacing) * 1.5); }
+.vt-fl-field-label{
+  margin-bottom:calc(var(--spacing) * 1.5);
+}
 .vt-fl-radio{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 1.5); cursor:pointer; }
 .vt-fl-radio.disabled{ opacity:.5; cursor:not-allowed; }
 .vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-left:20px; }
@@ -295,7 +300,6 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 /* 세션 탭의 「읽지 않음」은 글자 배지지만, 탭 바는 한 줄에 여러 워크트리가
    서므로 폭을 먹으면 안 된다 — 같은 뜻을 점 하나로 줄인다(aria-label로 읽힌다). */
 .vt-wtab-unread{
-  flex:none; width:6px; height:6px; border-radius:var(--radius-full);
   background:var(--info);
 }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 탭에 마우스를 올려야 드러나는 규칙은 아래 그대로 */

@@ -49,9 +49,7 @@
   height:28px; padding:0 calc(var(--spacing) * 2.5); flex:none;
   border-bottom:1px solid var(--line);
 }
-.vt-wgrail-title {
-  font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub);
-}
+.vt-wgrail-title { }
 /* C1(80 §1) — 호스트 스위처 칩. 제목 자리를 그대로 쓴다(호스트가 둘 이상일
    때만 렌더되므로 둘이 같이 보이는 일은 없다). 원격을 보고 있을 때만 강조색을
    주고, 오프라인이면 흐리게 — "지금 보고 있는 게 내 맥이 아니다"를 한눈에. */
@@ -63,7 +61,7 @@
 }
 /* 취소선은 레일에서만 — 폰은 줄이 좁아 글자가 뭉갠다. */
 .vt-wgrail-host.offline { text-decoration:line-through; }
-.vt-wgrail-host-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-wgrail-host-name { }
 .vt-wgrail-host-caret { font-size:var(--fs-3xs, 9px); opacity:.7; }
 .vt-wgrail-remote-note { opacity:.7; }
 .vt-wgrail-new[disabled] { opacity:.45; cursor:not-allowed; }
@@ -74,7 +72,6 @@
 .vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; }
 .vt-wgrail-group-head {
   padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
-  font:600 var(--fs-3xs) var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--sub);
   background:var(--win);
 }
 
@@ -108,7 +105,9 @@
 .vt-wgrail-row.active .vt-wgrail-name { color:var(--color-acc); font-weight:600; }
 /* 20-design-system.md §5(O2) — 색점 램프. 상태색 막대(.vt-wgrail-bar, 아래)와
    별개 요소 — DOM에서 색점이 먼저(왼쪽 끝), 상태색이 그다음. */
-.vt-wgrail-hash { width:3px; flex:none; border-radius:var(--radius-full); background:transparent; }
+.vt-wgrail-hash {
+  background:transparent;
+}
 .vt-wgrail-hash.hash-0 { background:var(--color-hash-1); }
 .vt-wgrail-hash.hash-1 { background:var(--color-hash-2); }
 .vt-wgrail-hash.hash-2 { background:var(--color-hash-3); }
@@ -118,19 +117,32 @@
 .vt-wgrail-hash.hash-6 { background:var(--color-hash-7); }
 .vt-wgrail-hash.hash-7 { background:var(--color-hash-8); }
 .vt-wgrail-hash.kind-session { background:transparent; }
-.vt-wgrail-bar { width:3px; flex:none; border-radius:var(--radius-full); background:var(--color-st-idle); }
+.vt-wgrail-bar {
+  background:var(--color-st-idle);
+}
 .vt-wgrail-bar.tone-waiting { background:var(--color-st-waiting); }
 .vt-wgrail-bar.tone-working { background:var(--color-st-working); }
 .vt-wgrail-bar.tone-error   { background:var(--color-st-error); }
 .vt-wgrail-bar.tone-done    { background:var(--color-st-done); }
 .vt-wgrail-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
 .vt-wgrail-row-top { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
-.vt-wgrail-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--mono); color:var(--txt); }
+.vt-wgrail-name {
+  flex:1;
+  min-width:0;
+  font:500 var(--fs-sm) var(--mono);
+  color:var(--txt);
+}
 .vt-wgrail-diff { flex:none; font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
-.vt-wgrail-row-sub { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-wgrail-row-sub {
+  font:400 var(--fs-3xs) var(--mono);
+  color:var(--sub);
+}
 /* N38(70-mobile.md §2)과 같은 패턴 — waiting 상태에서 감지된 질문 1줄 미리보기
    (10-shell-layout.md §5 목업 "? Allow edit to legacy.css?"). */
-.vt-wgrail-question { font:400 var(--fs-3xs) var(--mono); color:var(--warn); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-wgrail-question {
+  font:400 var(--fs-3xs) var(--mono);
+  color:var(--warn);
+}
 /* N8/N44(30-worktree.md §4) — "「기타」 그룹: ... 색점 없음". 어떤 워크트리에도
    안 속하는 세션 행은 저장소가 없어 색점 막대·상태색 막대 둘 다 투명. */
 .vt-wgrail-bar.kind-session { background:transparent; }
@@ -155,10 +167,19 @@
   display:flex; align-items:stretch; border-top:1px solid var(--line); flex:none;
 }
 .vt-wgrail-new {
-  flex:1; display:flex; align-items:center; gap:calc(var(--spacing) * 2);
-  height:32px; padding:0 calc(var(--spacing) * 2.5); background:transparent; border:0;
-  color:var(--sub); font:500 var(--fs-xs) var(--mono); text-align:left; cursor:pointer; min-width:0;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  flex:1;
+  display:flex;
+  align-items:center;
+  gap:calc(var(--spacing) * 2);
+  height:32px;
+  padding:0 calc(var(--spacing) * 2.5);
+  background:transparent;
+  border:0;
+  color:var(--sub);
+  font:500 var(--fs-xs) var(--mono);
+  text-align:left;
+  cursor:pointer;
+  min-width:0;
 }
 .vt-wgrail-new:hover { background:var(--menu-hover); color:var(--txt); }
 /* 2.1.6 — 레일 바닥의 아이콘 버튼(설정·더보기). 예전 .vt-wgrail-more 한 칸을
@@ -168,7 +189,7 @@
 .vt-wgrail-icon { border-left:1px solid var(--line); border-radius:0; }
 
 .vt-wgrail-resizer {
-  position:absolute; top:0; bottom:0; right:-3px; width:6px; cursor:col-resize; z-index:1;
+  right:-3px;
 }
 #vt-wgrail.collapsed .vt-wgrail-resizer { display:none; }
 .vt-wgrail-resizer.dragging { background:var(--acc); opacity:.4; }
@@ -198,7 +219,6 @@
 .vt-wtd-input:focus, .vt-wtd-select:focus { border-color:var(--acc); }
 .vt-wtd-input-narrow { flex:0 0 120px; }
 .vt-wtd-section-title {
-  font:600 var(--fs-3xs) var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--sub);
   margin-top:calc(var(--spacing) * 1);
 }
 .vt-wtd-warn {
