@@ -35,8 +35,8 @@ export function showSnippets() {
         headHTML: `<div class="vt-vw-title">프롬프트 스니펫</div>`,
         extraHTML: `
           <div class="vt-sn-scope-tabs" role="tablist" aria-label="스니펫 스코프">
-            <button type="button" class="vt-sn-scope-tab" data-scope="project" id="vt-sn-tab-project" role="tab">프로젝트</button>
-            <button type="button" class="vt-sn-scope-tab" data-scope="global" id="vt-sn-tab-global" role="tab">전체</button>
+            <button type="button" class="vt-segment vt-sn-scope-tab" data-scope="project" id="vt-sn-tab-project" role="tab">프로젝트</button>
+            <button type="button" class="vt-segment vt-sn-scope-tab" data-scope="global" id="vt-sn-tab-global" role="tab">전체</button>
           </div>
           <div class="vt-q-compose">
             <input id="vt-sn-label" type="text" placeholder="이름 (선택)" maxlength="60" />

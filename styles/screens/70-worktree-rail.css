@@ -55,14 +55,14 @@
 /* C1(80 §1) — 호스트 스위처 칩. 제목 자리를 그대로 쓴다(호스트가 둘 이상일
    때만 렌더되므로 둘이 같이 보이는 일은 없다). 원격을 보고 있을 때만 강조색을
    주고, 오프라인이면 흐리게 — "지금 보고 있는 게 내 맥이 아니다"를 한눈에. */
+/* 2.1.6 — 모양·상태(remote·offline·open)는 components.css의 `.vt-host-btn`.
+   여기 남은 것은 이 자리의 조판뿐이다: 레일 머리의 대문자 라벨 줄. */
 .vt-wgrail-host {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-width:0;
-  border:0; background:transparent; cursor:pointer; padding:2px 4px; border-radius:var(--radius-sm);
-  font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub);
+  padding:2px 4px;
+  font:600 var(--fs-2xs) var(--mono); letter-spacing:var(--tracking-wide); text-transform:uppercase;
 }
-.vt-wgrail-host:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-wgrail-host.remote { color:var(--acc); }
-.vt-wgrail-host.offline { opacity:.6; text-decoration:line-through; }
+/* 취소선은 레일에서만 — 폰은 줄이 좁아 글자가 뭉갠다. */
+.vt-wgrail-host.offline { text-decoration:line-through; }
 .vt-wgrail-host-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-wgrail-host-caret { font-size:var(--fs-3xs, 9px); opacity:.7; }
 .vt-wgrail-remote-note { opacity:.7; }

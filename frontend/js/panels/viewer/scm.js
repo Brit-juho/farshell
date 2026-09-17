@@ -78,7 +78,7 @@ export async function showScm() {
     id: PANEL_ID,
     ariaLabel: '소스컨트롤',
     headHTML: '<div class="vt-scm-head" id="vt-scm-head"></div>'
-      + '<button class="vt-vw-diff" id="vt-scm-refresh" title="새로고침">새로고침</button>',
+      + '<button class="vt-btn sm vt-vw-diff" id="vt-scm-refresh" title="새로고침">새로고침</button>',
     bodyId: 'vt-scm-body',
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다

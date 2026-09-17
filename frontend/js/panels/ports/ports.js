@@ -15,7 +15,7 @@ function showPorts() {
         ariaLabel: '포트 대시보드',
         headHTML: `
           <div class="vt-vw-title">포트 — 실행 중인 개발 서버</div>
-          <button class="vt-vw-diff" id="vt-pt-refresh" title="새로고침">새로고침</button>
+          <button class="vt-btn sm vt-vw-diff" id="vt-pt-refresh" title="새로고침">새로고침</button>
         `,
         bodyId: 'vt-pt-body',
       });
@@ -398,7 +398,7 @@ async function _unexposeTunnel(port) {
         extraClass: 'mode-preview',
         headHTML: `
           <div class="vt-vw-title">포트 ${port} 미리보기</div>
-          <a class="vt-vw-diff" href="${vtEsc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기</a>
+          <a class="vt-btn sm vt-vw-diff" href="${vtEsc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기</a>
         `,
         bodyId: 'vt-pt-preview-body',
         bodyHTML: `<iframe src="${vtEsc(url)}" title="포트 ${port} 미리보기" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>`,

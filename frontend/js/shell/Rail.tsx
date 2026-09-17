@@ -401,7 +401,7 @@ function Rail(props: { deps: RailDeps }) {
           >
             <button
               type="button"
-              class="vt-wgrail-host"
+              class="vt-host-btn vt-wgrail-host"
               classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: isRemoteHost() }}
               onClick={openHostMenu}
               title={activeHost() ? `${activeHost()!.label} · ${hostDetail(activeHost()!)}` : '호스트 선택'}

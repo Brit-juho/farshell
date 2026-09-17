@@ -288,7 +288,7 @@ function Fleet(props: { deps: FleetDeps }) {
         <div class="vt-fleet-hostbar">
           <button
             type="button"
-            class="vt-fleet-host"
+            class="vt-host-btn vt-fleet-host"
             classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: isRemoteHost(), open: hostMenuOpen() }}
             aria-haspopup="listbox"
             aria-expanded={hostMenuOpen()}

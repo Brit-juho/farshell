@@ -23,7 +23,7 @@ export function showQueue() {
         ariaLabel: '프롬프트 큐',
         headHTML: `
           <div class="vt-vw-title">프롬프트 큐</div>
-          <button class="vt-vw-diff" id="vt-q-run" title="한 건 지금 투입">지금 실행</button>
+          <button class="vt-btn sm vt-vw-diff" id="vt-q-run" title="한 건 지금 투입">지금 실행</button>
         `,
         extraHTML: `
           <div class="vt-q-compose">

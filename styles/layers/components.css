@@ -120,6 +120,15 @@
 
   /* 위험한 동작(삭제·취소·강제 종료). 채움으로 만들지 않는다 — 실수로 누르기
    * 쉬운 자리에 가장 눈에 띄는 버튼을 두지 않는다. */
+  /* 눌린 채로 유지되는 토글 버튼(패널 머리의 켬/끔). 형제 중 하나를 고르는
+   * 세그먼트(.vt-segment)와는 다르다 — 이건 혼자서 켜지고 꺼진다. */
+  .vt-btn[aria-pressed="true"],
+  .vt-btn.active {
+    border-color: var(--color-acc-dim);
+    color: var(--color-acc);
+    background: color-mix(in srgb, var(--color-acc) 12%, transparent);
+  }
+
   .vt-btn.danger { color: var(--color-st-error); border-color: var(--color-st-error); }
   .vt-btn.danger:hover { background: color-mix(in srgb, var(--color-st-error) 14%, transparent); }
 
@@ -199,6 +208,77 @@
   .vt-badge[data-state="done"]    { border-color: var(--color-st-done);    color: var(--color-st-done); }
   .vt-badge[data-state="error"]   { border-color: var(--color-st-error);   color: var(--color-st-error); }
   .vt-badge.accent { border-color: var(--color-acc-dim); color: var(--color-acc); }
+
+  /* ── 세그먼트 컨트롤 ───────────────────────────────────────────────────
+   * 한 상자 안에서 형제 중 **하나만** 켜지는 칸. 탭과 비슷해 보이지만 탭은
+   * 화면을 바꾸고 이건 같은 화면의 모드를 바꾼다(스니펫 스코프, 코드 뷰어
+   * 표시 모드). 선택은 채움으로 말한다 — 칸이 서로 붙어 있어 테두리나 밑줄로는
+   * 어느 칸이 켜졌는지 눈에 안 들어온다.
+   *
+   * 2.1.6 이전에는 .vt-sn-scope-tab(글자)과 .vt-vw-mode-btn(아이콘)이 각각
+   * 같은 선언을 들고 있었다 — 투명 배경 · 테두리 없음 · hover에서 menu-hover +
+   * txt · active에서 액센트 채움 + 잉크. 확인해 보니 후자는 컨테이너까지 죽은
+   * 코드여서 지웠고, 남은 소비자는 스니펫 스코프 하나다. 그래도 컴포넌트로
+   * 올린 이유는 이게 **이 앱의 세그먼트 관용구**이기 때문이다 — 다음에 같은
+   * 것이 필요할 때 또 한 벌 만들지 않게. */
+  .vt-segment {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 24px;
+    padding: 0 calc(var(--spacing) * 2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-sub);
+    font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background var(--dur-fast) var(--ease-out-quint),
+                color var(--dur-fast) var(--ease-out-quint);
+  }
+  /* 아이콘만 드는 칸은 지금 쓰는 데가 없어 만들지 않았다(코드 뷰어 모드 전환이
+   * 유일한 후보였는데 그건 죽은 코드였다). 필요해지면 그때 추가한다 — 소비자
+   * 없는 변형을 미리 두면 그게 곧 다음 사람이 지울 죽은 코드다. */
+
+  .vt-segment:hover:not(:disabled) { background: var(--menu-hover); color: var(--color-txt); }
+  .vt-segment[aria-selected="true"],
+  .vt-segment.active {
+    background: var(--color-acc-surface);
+    color: var(--color-acc-ink);
+  }
+  .vt-segment:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── 호스트 전환 버튼 ──────────────────────────────────────────────────
+   * "지금 보고 있는 맥"을 보여주고 누르면 호스트 목록을 연다. 데스크톱 레일
+   * 머리와 폰의 플릿 홈에 하나씩 있는데, 2.1.6 이전에는 **상태 규칙까지 두 벌**
+   * 이었다(.remote는 액센트, .offline은 흐리게 — 같은 뜻을 두 곳에 따로 적어
+   * 두면 한쪽만 고쳐질 때 폰과 데스크톱이 다른 말을 하게 된다).
+   *
+   * 글꼴·정렬은 자리마다 다르게 둔다 — 레일 머리는 대문자 라벨 줄이고 폰은
+   * 본문 줄이라, 거기까지 같게 만들면 오히려 각 화면에서 어색해진다. */
+  .vt-host-btn {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1);
+    min-width: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-sub);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out-quint),
+                color var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-host-btn:hover { background: var(--menu-hover); color: var(--color-txt); }
+  /* 원격을 보고 있을 때만 액센트 — "지금 내 맥이 아니다"가 한눈에 보여야 한다. */
+  .vt-host-btn.remote { color: var(--color-acc); }
+  /* 꺼진 호스트: 흐리게. 취소선은 레일에서만 쓴다(폰은 줄이 좁아 글자가 뭉갠다). */
+  .vt-host-btn.offline { opacity: .6; }
+  /* 목록이 열려 있는 동안 버튼이 눌린 상태로 남는다. */
+  .vt-host-btn.open { background: var(--menu-hover); color: var(--color-txt); }
 
   /* ── 행 안의 이름 버튼 ─────────────────────────────────────────────────
    * 목록 행에서 **이름이 차지하는 칸 전체**가 클릭 영역인 버튼. 생긴 건 글자

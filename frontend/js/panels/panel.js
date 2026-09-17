@@ -92,7 +92,7 @@ export function openPanel(opts) {
       el.className = (host ? 'vt-dock-panel' : 'vt-viewer-backdrop') + (opts.extraClass ? ' ' + opts.extraClass : '');
       el.innerHTML = `
         <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="${opts.ariaLabel}">
-          <div class="vt-viewer-head">${opts.headHTML}<button class="vt-vw-x" aria-label="닫기">${icon('x', 14)}</button></div>
+          <div class="vt-viewer-head">${opts.headHTML}<button class="vt-icon-btn vt-vw-x" aria-label="닫기">${icon('x', 14)}</button></div>
           ${opts.extraHTML || ''}
           <div class="vt-vw-body" id="${opts.bodyId}">${opts.bodyHTML || '<div class="vt-vw-loading">불러오는 중…</div>'}</div>
         </div>
