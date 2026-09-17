@@ -37,7 +37,7 @@ export function openPanePicker(paneId) {
     headHTML: `<div class="vt-vw-title">이 화면에 표시할 세션</div>`,
     bodyId: 'vt-pp-body',
     bodyHTML: `
-      <button type="button" class="vt-pp-new">${icon('plus', 15)}새 세션</button>
+      <button type="button" class="vt-btn vt-pp-new">${icon('plus', 15)}새 세션</button>
       <div class="vt-card-grid" id="vt-pp-cards"><div class="vt-vw-loading">불러오는 중…</div></div>
     `,
   });

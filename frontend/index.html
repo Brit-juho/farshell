@@ -346,7 +346,7 @@
          목록에서 제외). 터미널 내 검색 자체는 Ctrl/Cmd+F로 그대로
          쓸 수 있다(팔레트 `/` 접두사는 60-settings-palette.md §3부터 파일 검색으로 바뀌었다) — ⋯ 메뉴의 동일 항목("터미널 내 검색"·"빠른 열기")은 L1 잔여
          항목에서 제거했다(상단바 ↔ ⋯ 중복 제거). -->
-    <button id="palette-toggle" class="tbtn" data-action="quickopen.open" aria-label="빠른 열기" title="빠른 열기 (Ctrl/Cmd+K)">
+    <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" title="빠른 열기 (Ctrl/Cmd+K)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
     <!-- N37 §4 — 「연결된 화면」. shell/HeaderExtras.tsx가 채우고, 데이터가 없으면
@@ -420,7 +420,7 @@
   <div id="vt-rail-panel" role="region" aria-label="사이드 패널" hidden>
     <div class="vt-rail-panel-head">
       <div class="vt-rail-panel-title" id="vt-rail-panel-title"></div>
-      <button type="button" class="vt-rail-panel-close" aria-label="패널 닫기">
+      <button type="button" class="vt-icon-btn sm vt-rail-panel-close" aria-label="패널 닫기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -457,7 +457,7 @@
   <aside id="vt-right-rail" class="needs-usage" aria-label="사용량">
     <div class="vt-rr-head">
       <span class="vt-rr-title">사용량</span>
-      <button type="button" class="vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" title="접기">›</button>
+      <button type="button" class="vt-icon-btn sm vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" title="접기">›</button>
     </div>
     <div class="vt-rr-body" id="vt-right-rail-body"></div>
   </aside>
@@ -475,12 +475,12 @@
          keybar.js가 부팅 시 pointer:coarse면 이 슬롯 대신 #keybar-slot-mic로
          이 버튼 자체를 옮긴다(재생성 아님, appendChild). -->
     <div id="vt-rail-mic-slot">
-      <button id="mic-btn-wrap" class="mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" title="음성 입력">
+      <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" title="음성 입력">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>
         <span class="label">음성 입력</span>
       </button>
     </div>
-    <button class="mi needs-voice" id="voiceonly-btn" role="menuitem" data-action="voice.only-toggle">
+    <button class="vt-menu-item mi needs-voice" id="voiceonly-btn" role="menuitem" data-action="voice.only-toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>음성 전용 모드
     </button>
     <div class="theme-row" id="theme-row">
@@ -491,27 +491,27 @@
       <button class="theme-chip" data-skin="vscode" data-action="theme.set"><span class="dot"></span>VS Code</button>
       <button class="theme-chip" data-skin="notepad" data-action="theme.set"><span class="dot"></span>Notepad</button>
     </div>
-    <button class="mi needs-push" id="push-btn" role="menuitem" data-action="push.toggle"
+    <button class="vt-menu-item mi needs-push" id="push-btn" role="menuitem" data-action="push.toggle"
       title="앱을 닫아도 작업 완료 알림을 받습니다">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       <span id="push-label">푸시 알림</span>
     </button>
-    <label class="mi" id="autocopy-toggle" role="menuitemcheckbox"
+    <label class="vt-menu-item mi" id="autocopy-toggle" role="menuitemcheckbox"
       title="드래그 선택 · vim/tmux copy-mode(OSC52) · fsh clip(맥 클립보드 폴링) 전부 자동 동기화 여부. 꺼도 우클릭/Ctrl+Shift+C로 수동 복사는 가능">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/></svg>
       드래그 시 자동 복사
       <input type="checkbox" id="autocopy-checkbox" />
     </label>
-    <label class="mi" id="auto-mac-toggle" role="menuitemcheckbox"
+    <label class="vt-menu-item mi" id="auto-mac-toggle" role="menuitemcheckbox"
       title="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>
       새 세션을 맥에서도 열기
       <input type="checkbox" id="auto-mac-checkbox" />
     </label>
-    <button class="mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
+    <button class="vt-menu-item mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>이어폰 미디어키
     </button>
-    <button class="mi" role="menuitem" data-action="guide.show">
+    <button class="vt-menu-item mi" role="menuitem" data-action="guide.show">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       가이드 보기
     </button>

@@ -30,9 +30,9 @@ export function renderAppearanceSection() {
   const actions = document.createElement('div');
   actions.className = 'vt-set-themeactions';
   const applyBtn = document.createElement('button');
-  applyBtn.type = 'button'; applyBtn.className = 'vt-set-reset'; applyBtn.textContent = '가져와서 적용';
+  applyBtn.type = 'button'; applyBtn.className = 'vt-btn sm quiet vt-set-reset'; applyBtn.textContent = '가져와서 적용';
   const clearBtn = document.createElement('button');
-  clearBtn.type = 'button'; clearBtn.className = 'vt-set-reset'; clearBtn.textContent = '가져온 테마 삭제';
+  clearBtn.type = 'button'; clearBtn.className = 'vt-btn sm quiet vt-set-reset'; clearBtn.textContent = '가져온 테마 삭제';
   actions.append(applyBtn, clearBtn);
   frag.appendChild(actions);
 

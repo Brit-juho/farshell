@@ -144,7 +144,7 @@ function render() {
     if (tabs.length > 1) {
       const x = document.createElement('button');
       x.type = 'button';
-      x.className = 'vt-wtab-close';
+      x.className = 'vt-icon-btn xs vt-wtab-close';
       x.innerHTML = icon('x', 11);
       x.setAttribute('aria-label', `${t.label} 탭 닫기`);
       // **세션은 죽이지 않는다** — 탭을 닫는 건 배치를 치우는 것이지 tmux를

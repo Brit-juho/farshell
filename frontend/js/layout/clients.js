@@ -50,7 +50,7 @@ function row(client, onDetach, readOnly = false) {
   } else if (!readOnly) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'vt-btn sm quiet vt-clients-detach';
+    btn.className = 'vt-icon-btn sm danger vt-clients-detach';
     btn.title = `${client.label || client.tty} 끊기`;
     btn.setAttribute('aria-label', `${client.label || client.tty} 끊기`);
     btn.innerHTML = icon('x', 12);

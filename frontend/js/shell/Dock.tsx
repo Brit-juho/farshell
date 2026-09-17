@@ -221,7 +221,7 @@ function Dock(props: { deps: DockDeps }) {
           )}
         </For>
         <Show when={!collapsed()}>
-          <button type="button" class="vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" title="접기"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button type="button" class="vt-icon-btn sm vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" title="접기"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         </Show>
       </div>
       {/* 탭 내용은 전부 패널 렌더러가 여기 붙인다(panels/panel.js의 dock 호스트). */}
