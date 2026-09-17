@@ -1,0 +1,440 @@
+/* 상단 통합 바 · 팝업 메뉴 · 터미널 · 음성 버튼 · 검색 바
+ *
+ * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
+ * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
+ * 컴파일 결과의 규칙 시퀀스가 동일하다(scripts로 검증).
+ *
+ * 왜 쪼갰나: 한 파일에 2900줄이면 "이 선이 무엇을 가르치는가"를 확인하려고
+ * 매번 파일 전체를 훑어야 하고, 같은 컴포넌트의 규칙이 파일 앞뒤 1500줄
+ * 떨어진 곳에 각각 있어도 아무도 모른다. 실제로 이번 개편에서 두 번 당했다.
+ *
+ * ⚠ 이 파일들은 main.css에서 `layer(legacy)`로 import된다 — components보다
+ * 뒤 순서다. 여기 규칙이 components의 컴포넌트를 이긴다는 뜻이므로, 컴포넌트로
+ * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
+ */
+
+/* ---- 상단 통합 바 ------------------------------------------------------- */
+#topbar {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); padding:0 calc(var(--spacing) * 2); height:var(--topbar-h);
+  background:var(--bar); flex-shrink:0; position:relative; z-index:60;
+  border-bottom:1px solid var(--line);
+}
+html[data-skin="macos"] #topbar { -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
+
+/* macOS 신호등 — macOS 스킨에서만 노출 */
+.traffic { display:none; gap:calc(var(--spacing) * 2); padding:0 calc(var(--spacing) * 1.5) 0 calc(var(--spacing) * 1); flex-shrink:0; }
+html[data-skin="macos"] .traffic { display:flex; }
+.traffic i { width:11px; height:11px; border-radius:50%; display:block; }
+.traffic .c1 { background:var(--traffic-c1); } .traffic .c2 { background:var(--traffic-c2); } .traffic .c3 { background:var(--traffic-c3); }
+
+/* Windows Terminal 오센틱: 아크릴 바 + 투명 인액티브 탭 + 프로파일 드롭다운 */
+html[data-skin="windows"] #topbar {
+  background-color:color-mix(in srgb, var(--bar) 78%, transparent);
+  -webkit-backdrop-filter:blur(30px) saturate(1.5); backdrop-filter:blur(30px) saturate(1.5);
+}
+.wt-chevron { display:none; }
+html[data-skin="windows"] .wt-chevron {
+  display:flex; align-items:center; justify-content:center; width:22px; height:26px;
+  color:var(--sub); cursor:pointer; border-radius:var(--radius-sm); flex-shrink:0;
+}
+html[data-skin="windows"] .wt-chevron:hover { background:var(--menu-hover); color:var(--txt); }
+html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
+/* D5: tmux 세션 상태 점(구 🟢/🖥️/💤 이모지) — ui/session-badge.js가 색만 채운다. */
+.vt-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:calc(var(--spacing) * 1.5); flex-shrink:0; }
+
+/* 새 세션(+) */
+#add-btn {
+  display:flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:var(--radius-sm); color:var(--sub);
+  cursor:pointer; font-size:var(--fs-lg); line-height:1; flex-shrink:0; position:relative;
+}
+#add-btn:hover { background:var(--menu-hover); color:var(--txt); }
+
+/* 좁은 화면 세션 관리 진입점 */
+#voice-session-picker {
+  flex:0 1 150px; min-width:0; height:32px; padding:0 calc(var(--spacing) * 2.5);
+  background:var(--tab); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--txt); font-size:var(--fs-sm); border:1px solid var(--line); border-radius:var(--trad);
+  cursor:pointer;
+}
+@media (min-width:720px) { #voice-session-picker { display:none; } } /* 넓은 화면에선 탭으로 충분 */
+
+/* 좁은 화면 상단 바 정리 — 390px에서 요소 9개가 경쟁하면서 탭 이름이 두 글자
+   ("tm…")로 잘렸다. 회수한 ~190px는 워크트리 탭 바(#vt-wtabs)로 간다.
+     · 신호등(42px): macOS 창 장식이라 터치 환경에서 아무 기능이 없다.
+     · 코드뷰어: 팔레트(L6)의 "코드 뷰어 열기" 명령이 이 진입점을 대신한다.
+   L1(실버그 수정): 세션 피커(#voice-session-picker)는 여기서 숨기지 않는다 —
+   넓은 화면 전용 숨김(아래 `min-width:720px` 규칙)과 겹쳐 **모든 뷰포트에서
+   안 보이던 버그**였다. N37 3단계에서 세션 탭 줄이 사라진 뒤로는 세션을 닫고
+   이름을 바꾸는 경로가 이 시트와 레일 세션 목록뿐이라 더 중요해졌다.
+   L6: 예전 #search-toggle(검색 아이콘)은 이제 #palette-toggle(커맨드 팔레트
+   진입점)로 재배정됐고, 팔레트가 모바일을 포함한 모든 뷰포트의 "확인" 진입점(ADR-8)
+   이라 이 숨김 목록에서 뺐다 — 이제 여기서 숨는 건 #viewer-toggle뿐이다. */
+@media (max-width:719px) {
+  html[data-skin="macos"] .traffic { display:none; }
+  #viewer-toggle { display:none; }
+}
+
+/* 모바일 세션 관리 시트. 좁은 화면에서 세션의 모든 기본 조작을 제공한다. */
+.vt-session-backdrop { position:fixed; inset:0; z-index:540; background:rgba(0,0,0,.48); display:flex; align-items:flex-end; }
+.vt-session-sheet {
+  width:100%; max-height:min(72vh,560px); overflow:auto; padding:calc(var(--spacing) * 3.5) calc(var(--spacing) * 3.5) calc(calc(var(--spacing) * 3.5) + env(safe-area-inset-bottom,0px));
+  background:var(--menu); color:var(--txt); border:1px solid var(--line); border-bottom:none;
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0; box-shadow:var(--shadow-e3);
+  /* D6: 코드 뷰어/가이드 모바일 시트(:960)와 같은 진입 전환으로 통일 —
+     예전엔 이 시트만 전환 없이 즉시 나타났다. */
+  animation:vtSheetIn .18s ease-out;
+}
+/* 바텀시트 진입 전환 — 코드 뷰어(openPanel)·가이드·세션 시트가 공유하는 단일 정의(D6) */
+@keyframes vtSheetIn { from { transform:translateY(100%); } to { transform:none; } }
+.vt-session-head { display:flex; align-items:center; justify-content:space-between; margin:0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 2.5); }
+.vt-session-head h2 { font-size:var(--fs-md); }
+.vt-session-close, .vt-session-action { border:0; background:transparent; color:var(--sub); cursor:pointer; border-radius:var(--radius-sm); display:inline-flex; align-items:center; justify-content:center; }
+.vt-session-close { width:44px; height:44px; }
+.vt-session-close:hover, .vt-session-action:hover { color:var(--txt); background:var(--menu-hover); }
+.vt-session-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
+.vt-session-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-height:52px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); border:1px solid var(--line); border-radius:var(--radius-sm); }
+.vt-session-row.active { border-color:var(--acc); }
+.vt-session-select { flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--ui); }
+.vt-session-action { width:44px; height:44px; flex-shrink:0; }
+.vt-session-empty { padding:calc(var(--spacing) * 8) calc(var(--spacing) * 2.5); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
+/* L1: ⋯ 메뉴 「세션」 3항목의 임시 자리(rail 이관 전까지). 목록과 시각적으로
+   구분되게 위쪽 구분선만 두고, 버튼 자체는 세션 행보다 한 단계 낮은 밀도로. */
+.vt-session-footer {
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
+  margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2.5); border-top:1px solid var(--line);
+}
+.vt-session-footer-item {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-height:40px;
+  padding:0 calc(var(--spacing) * 1.5); border:0; background:transparent; border-radius:var(--radius-sm);
+  color:var(--sub); font-size:var(--fs-sm); text-align:left; cursor:pointer;
+}
+.vt-session-footer-item:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-session-footer-item input[type="checkbox"] { margin-left:auto; width:16px; height:16px; accent-color:var(--acc); cursor:pointer; }
+@media (min-width:720px) { .vt-session-backdrop { display:none; } }
+
+.spacer { flex:1; }
+
+/* 상단 아이콘 버튼 */
+.tbtn {
+  display:flex; align-items:center; justify-content:center;
+  width:30px; height:30px; color:var(--sub); cursor:pointer;
+  border:none; background:transparent; border-radius:var(--radius-sm); flex-shrink:0;
+  transition:background .14s, color .14s; position:relative;
+}
+.tbtn:hover { background:var(--menu-hover); color:var(--txt); }
+.tbtn svg { width:16px; height:16px; }
+.tbtn.more { font-size:var(--fs-xl); letter-spacing:1px; line-height:1; }
+#viewer-toggle.active { background:var(--color-acc-surface); color:var(--acc-ink); }
+
+/* N37 §4 — 워크스페이스 칩. 헤더 맨 왼쪽, 탭보다 앞. flex:none이라 탭 바가
+   눌려도 절대 줄어들지 않는다. */
+#vt-workspace-chip {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  height:28px; padding:0 calc(var(--spacing) * 2); margin-right:calc(var(--spacing) * 1);
+  flex:none; border:none; border-radius:var(--radius-sm); background:transparent;
+  color:var(--sub); cursor:pointer; font:600 var(--fs-2xs) var(--mono);
+  letter-spacing:.04em; white-space:nowrap;
+}
+#vt-workspace-chip:hover { background:var(--menu-hover); color:var(--txt); }
+#vt-workspace-chip svg { color:var(--acc); flex:none; }
+.vt-workspace-name { color:var(--txt); }
+.vt-workspace-host { color:var(--color-muted); font-weight:400; }
+
+/* N37 §4 — 「연결된 화면」. 평소(나 혼자)엔 아이콘만 있는 조용한 버튼이고,
+   2명 이상 붙으면 숫자 배지가 붙어 존재감이 생긴다(tmux가 가장 작은
+   클라이언트에 맞춰 리레이아웃하는 원인이 이 상태이므로 눈에 띄어야 한다). */
+#vt-screens-btn.vt-screens-multi { color:var(--warn); }
+.vt-screens-count {
+  font:600 var(--fs-3xs) var(--mono); margin-left:2px;
+}
+/* coarse 포인터: #topbar가 38px 고정이라 시각적 크기(30px)를 키우면 바 밖으로
+   삐져나온다 — 대신 ::before로 탭 가능 영역만 44px로 확장(WCAG 2.5.5), 시각적
+   크기는 그대로 유지. */
+@media (pointer:coarse) {
+  :root { --topbar-h:44px; --topbar-popup-y:50px; }
+  .tbtn::before, #add-btn::before {
+    content:''; position:absolute; inset:50% auto auto 50%;
+    width:44px; height:44px; transform:translate(-50%,-50%);
+  }
+}
+
+/* Windows 캡션 버튼 — windows 스킨에서만 */
+.caption { display:none; margin-left:calc(var(--spacing) * 0.5); flex-shrink:0; }
+html[data-skin="windows"] .caption { display:flex; }
+.caption span {
+  width:38px; height:34px; display:flex; align-items:center; justify-content:center;
+  color:var(--sub); font-size:var(--fs-2xs); cursor:pointer; border-radius:var(--radius-sm);
+}
+.caption span:hover { background:var(--menu-hover); color:var(--txt); }
+.caption span.cls:hover { background:var(--close-hover); color:var(--color-on-solid); }
+
+/* ---- ⋯ 팝업 메뉴 ------------------------------------------------------- */
+#more-menu {
+  position:absolute; top:calc(var(--topbar-h) + 2px); right:8px; z-index:520; width:250px;
+  max-height:calc(100vh - var(--topbar-popup-y) - env(safe-area-inset-bottom,0px) - 12px);
+  overflow-y:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+  background:var(--menu); color:var(--txt); border-radius:var(--radius-lg); padding:calc(var(--spacing) * 1.5);
+  box-shadow:var(--shadow-e2), inset 0 -16px 12px -12px rgba(0,0,0,.35);
+  border:1px solid var(--line);
+  opacity:0; transform:translateY(-6px) scale(.98); transform-origin:top right;
+  pointer-events:none; transition:opacity .16s, transform .16s;
+}
+#more-menu.open { opacity:1; transform:none; pointer-events:auto; }
+#more-menu::-webkit-scrollbar { display:none; width:0; height:0; }
+.mi {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 3); padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 2.5); border-radius:var(--radius-sm);
+  font-size:var(--fs-base); cursor:pointer; color:var(--txt); border:none; background:transparent;
+  width:100%; text-align:left;
+}
+.mi:hover { background:var(--menu-hover); }
+.mi svg { width:16px; height:16px; color:var(--sub); flex-shrink:0; }
+.mi input[type="checkbox"] { margin-left:auto; width:16px; height:16px; accent-color:var(--acc); cursor:pointer; }
+.mi.active { color:var(--acc); }
+.mi.active svg { color:var(--acc); }
+.theme-row { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5); }
+.theme-chip {
+  flex:1 1 calc(50% - 3px); min-width:0;
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1); border-radius:var(--radius-sm); border:1px solid var(--line);
+  background:transparent; color:var(--sub); font-size:var(--fs-xs); cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:calc(var(--spacing) * 1.5);
+}
+.theme-chip .dot { width:14px; height:14px; border-radius:50%; box-shadow:inset 0 0 0 1px rgba(0,0,0,.25); }
+/* 칩의 점은 그 스킨의 액센트다. 지금 스킨이 아니라 **칩이 가리키는 스킨**의 색이라
+   var(--color-acc)로는 안 된다(그건 항상 현재 스킨 것이다) — tokens.css의 스킨
+   독립 상수를 쓴다. 예전엔 index.html에 인라인 style로 6개가 박혀 있었다. */
+.theme-chip[data-skin="farshell"]   .dot { background:var(--acc-farshell); }
+.theme-chip[data-skin="macos"]      .dot { background:var(--acc-macos); }
+.theme-chip[data-skin="catppuccin"] .dot { background:var(--acc-catppuccin); }
+.theme-chip[data-skin="windows"]    .dot { background:var(--acc-windows); }
+.theme-chip[data-skin="vscode"]     .dot { background:var(--acc-vscode); }
+/* notepad는 유일한 라이트 스킨이라 점이 밝은 배경에 묻힌다 — 테두리를 덧댄다.
+   (인라인에 있던 border:1px solid #ccc를 여기로 옮겼다.) */
+.theme-chip[data-skin="notepad"]    .dot { background:var(--acc-notepad); border:1px solid #ccc; }
+.theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--menu-hover); }
+
+/* ---- 터미널 ------------------------------------------------------------ */
+#terminal-container { position:relative; flex:1; min-height:0; padding:calc(var(--spacing) * 0.5); background:var(--term); overflow:hidden; }
+#terminal-container .xterm { height:100%; }
+/* N16 표면 레이어(layout/surface.js) — 페인 크롬(.vt-split/.vt-pane)은 빈
+   상자만 그리고, 실제 xterm wrapper는 여기 절대좌표로 얹힌다. 그 자체는
+   투명·클릭 통과(pointer-events:none)이므로 pane 헤더 버튼·리사이저 위를
+   덮어도 무해하다 — 실제로 클릭을 막는 건 wrapper 각각이 자기 pane-body
+   자리에만 정확히 얹는 pointer-events:auto뿐이다. z-index는 분할선(5)·
+   드롭존 오버레이(8)보다 낮게 둬 그 둘이 항상 위에서 잡힌다. */
+#vt-surface { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:2; }
+.vt-term-wrap { position:absolute; top:0; left:0; pointer-events:auto; }
+/* L3 1단계: layout/panes.js가 그리는 분할 트리 껍데기. #vt-chrome-tree(N16 —
+   panes.js가 lazy 생성, #vt-surface의 형제) 안에 얹힌다. leaf 하나뿐일 때(분할
+   안 씀, 지금 유일한 경우)는 .vt-pane 하나가 그 트리 전체를 차지해 예전
+   (wrapper가 직계 자식이던 시절)과 화면상 동일하다. */
+.vt-split { display:flex; width:100%; height:100%; min-width:0; min-height:0; }
+.vt-split-row { flex-direction:row; }
+.vt-split-col { flex-direction:column; }
+/* L3 3단계: 구분선. 시각 두께는 1px, 히트 영역만 ::before로 확장 —
+   app.css의 기존 터치 타겟 확장 기법(:coarse 8px/:fine 4px)과 동일 규칙. */
+.vt-split-resizer { position:relative; flex:0 0 1px; background:var(--line); z-index:5; }
+.vt-split-row > .vt-split-resizer { cursor:col-resize; }
+.vt-split-col > .vt-split-resizer { cursor:row-resize; }
+.vt-split-resizer::before { content:''; position:absolute; }
+.vt-split-row > .vt-split-resizer::before { top:0; bottom:0; left:-4px; right:-4px; }
+.vt-split-col > .vt-split-resizer::before { left:0; right:0; top:-4px; bottom:-4px; }
+@media (pointer:coarse) {
+  .vt-split-row > .vt-split-resizer::before { left:-8px; right:-8px; }
+  .vt-split-col > .vt-split-resizer::before { top:-8px; bottom:-8px; }
+}
+.vt-split-resizer.dragging, .vt-split-resizer:hover { background:var(--acc); }
+
+.vt-pane { display:flex; flex-direction:column; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; position:relative; }
+.vt-pane.active { outline:1px solid var(--acc); outline-offset:-1px; }
+
+/* L5: 5구역 드롭존 오버레이. layout/dnd.js가 드래그 중인 pane에
+   data-dropzone 속성만 찍어주면(마우스=네이티브 dragover, 터치=long-press
+   포인터 추적 둘 다 같은 속성을 쓴다) 여기 하나로 다섯 모양을 다 그린다 —
+   중앙(center)=세션 교체, 가장자리 4곳=그 방향 분할 미리보기. */
+.vt-pane[data-dropzone]::after {
+  content:''; position:absolute; z-index:8; pointer-events:none;
+  background:color-mix(in srgb, var(--acc) 28%, transparent);
+  border:2px solid var(--acc); box-sizing:border-box;
+}
+.vt-pane[data-dropzone="center"]::after { inset:0; }
+.vt-pane[data-dropzone="left"]::after { top:0; bottom:0; left:0; width:50%; }
+.vt-pane[data-dropzone="right"]::after { top:0; bottom:0; right:0; width:50%; }
+.vt-pane[data-dropzone="top"]::after { left:0; right:0; top:0; height:50%; }
+.vt-pane[data-dropzone="bottom"]::after { left:0; right:0; bottom:0; height:50%; }
+
+/* L5: 터치 long-press 드래그 고스트 — 네이티브 DnD의 드래그 이미지를 흉내낸
+   대체물(터치는 브라우저가 그런 프리뷰를 안 그려준다). 포인터를 그대로
+   따라다니다 손을 떼면 사라진다. */
+.vt-drag-ghost {
+  position:fixed; z-index:900; pointer-events:none; transform:translate(-50%,-50%);
+  max-width:160px; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+  background:var(--tab-active); color:var(--tab-active-txt); border-radius:var(--trad);
+  font-size:var(--fs-xs); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  box-shadow:var(--shadow-e2); opacity:.92;
+}
+/* long-press가 아직 확정 전(LONGPRESS_MS 대기 중)임을 알리는 최소한의 시각
+   피드백 — keybar.js의 .kb.holding과 같은 패턴(배경만 살짝). */
+/* 레일 세션 행·pane 헤더의 롱프레스 대기 표시 */
+.vt-rail-session-row.vt-drag-pending, .vt-pane-head.vt-drag-pending { background:var(--menu-hover); }
+/* 드래그 중엔 터치 스크롤/텍스트 선택이 끼어들면 안 된다. */
+body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-select:none; }
+/* pane 헤더 — root가 leaf 하나뿐이면 JS가 display:none으로 숨긴다(분할을
+   안 쓰면 지금과 화면상 완전히 동일해야 한다는 L3 1단계 검증 기준 그대로). */
+.vt-pane-head {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); height:22px; flex-shrink:0;
+  padding:0 calc(var(--spacing) * 1.5); background:var(--bar); border-bottom:1px solid var(--line);
+  font-size:var(--fs-2xs); color:var(--sub);
+}
+.vt-pane-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pane-btn {
+  display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
+  border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm); cursor:pointer; flex-shrink:0;
+}
+.vt-pane-btn:hover:not(:disabled) { background:var(--menu-hover); color:var(--txt); }
+/* L8: pane 상한에 걸린 분할 버튼 — 눌러도 아무 일 없는 대신 눌리지 않는 걸
+   보이게 한다(이유는 title/aria-label에 붙는다). */
+.vt-pane-btn:disabled { opacity:.35; cursor:default; }
+.vt-pane-body { flex:1; min-height:0; position:relative; }
+/* L3 5단계: 이제 pane 전체가 클릭 대상인 버튼이다 — 작은 "+ 새 세션" 하나만
+   누르게 하지 않고, 빈 화면 어디를 눌러도 세션 선택 시트가 열린다. */
+.vt-pane-empty {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:calc(var(--spacing) * 1.5); width:100%; height:100%;
+  border:none; background:transparent; color:var(--sub); cursor:pointer;
+  font:500 var(--fs-sm) var(--ui);
+}
+.vt-pane-empty:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-pane-empty svg { width:20px; height:20px; }
+
+/* 빈 pane 세션 선택 시트(layout/pane-picker.js) — openPanel()의 공용 모달
+   껍데기(.vt-viewer-backdrop/-card)를 쓰되 폭만 좁힌다. 팔레트(L6)에서도
+   같은 카드를 재사용할 예정이라 카드 자체(.vt-card)는 4단계에서 그대로
+   남겨둔 스타일을 그대로 쓴다. */
+.vt-pane-pick .vt-viewer-card { max-width:640px; }
+.vt-pp-new {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  width:calc(100% - calc(var(--spacing) * 6));
+  margin:calc(var(--spacing) * 3) calc(var(--spacing) * 3) 0;
+  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+  background:var(--tab); color:var(--txt); border:1px dashed var(--line); border-radius:var(--trad);
+  font:500 var(--fs-sm) var(--ui); cursor:pointer;
+}
+.vt-pp-new:hover { background:var(--menu-hover); border-color:var(--acc); color:var(--acc); }
+.vt-pp-new svg { flex-shrink:0; }
+.vt-card-grid {
+  display:grid; grid-template-columns:repeat(2, 1fr); gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 3);
+}
+@media (max-width:560px) { .vt-card-grid { grid-template-columns:1fr; } }
+.vt-pp-plain-hint { font-size:var(--fs-2xs); color:var(--sub); }
+/* xterm-viewport 스크롤(휠/모바일 터치)은 tmux mouse-on 세션에서 항상 tmux
+   copy-mode로 위임되고(wireTouchScroll 참고), 스크롤 위치도 항상 그 경로로만
+   맞춰진다. 그런데 브라우저 기본 스크롤바 thumb은 이 경로를 거치지 않고
+   xterm.js 자체의 로컬 scrollback(과거 렌더링 도중의 raw 상태까지 포함)을
+   직접 scrollTop으로 움직여서, 드래그 중 tmux 화면과 불일치하는 깨진 프레임이
+   보였다가 손을 떼야 정상 화면으로 재동기화됐다. thumb을 아예 그리지 않으면
+   그 경로 자체가 막혀 근본적으로 재발하지 않는다 — 휠/터치 스크롤은 JS로
+   scrollTop을 직접 옮기는 방식이라 계속 정상 동작한다. */
+#terminal-container .xterm-viewport { scrollbar-width:none; }
+#terminal-container .xterm-viewport::-webkit-scrollbar { display:none; width:0; height:0; }
+
+/* ---- 음성 버튼 (voice.js 계약: .label 자식 + .recording) --------------------
+   L7: 상단바에서 이관됐다 — 이제 물리적으로 두 곳 중 하나에 산다
+   (#vt-rail-mic-slot 데스크톱 / #keybar-slot-mic 터치, keybar.js가 부팅 시
+   결정) + 음성 전용 모드에서만 잠깐 #topbar로 옮겨간다(media-session.js).
+   색·상태(녹음 중)는 어디에 있든 공통이라 컨텍스트 무관 규칙으로 두고,
+   크기·배치만 컨텍스트별로 아래에서 오버라이드한다. */
+#mic-btn-wrap.mic { background:var(--color-acc-surface); color:var(--acc-ink); border:0; cursor:pointer; touch-action:manipulation; }
+#mic-btn-wrap.mic:hover { background:var(--color-acc-surface); color:var(--acc-ink); filter:brightness(1.08); }
+#mic-btn-wrap.mic:active { transform:scale(.94); }
+#mic-btn-wrap.mic.recording { background:var(--err); color:var(--color-on-solid); animation:vt-pulse 1.1s infinite; }
+@keyframes vt-pulse {
+  0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--err) 45%, transparent); }
+  50%     { box-shadow:0 0 0 5px color-mix(in srgb, var(--err) 0%, transparent); }
+}
+/* rail 설정 패널 컨텍스트 — 폭은 #vt-rail-settings-tpl .mi가 이미 주는 100%를
+   그대로 쓰고, 여긴 아이콘 크기·라벨 굵기만. */
+#vt-rail-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
+#vt-rail-mic-slot #mic-btn-wrap .label { font-weight:600; }
+/* keybar 컨텍스트 — .kb와 같은 높이의 정사각 아이콘 버튼, 좁아서 라벨은 생략. */
+#keybar-slot-mic #mic-btn-wrap {
+  width:auto; min-width:42px; height:38px; padding:0 calc(var(--spacing) * 3);
+  display:inline-flex; align-items:center; justify-content:center; gap:0; border-radius:var(--radius-sm);
+}
+#keybar-slot-mic #mic-btn-wrap svg { width:16px; height:16px; }
+#keybar-slot-mic #mic-btn-wrap .label { display:none; }
+
+/* 음성 상태 pill — 상단 바 아래 우측에 떠 있음 */
+#mic-status {
+  position:fixed; top:calc(var(--topbar-popup-y) + env(safe-area-inset-top,0px)); right:12px; z-index:90;
+  max-width:min(320px,82vw); font-size:var(--fs-sm); color:var(--txt);
+  background:var(--menu); border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3.5); box-shadow:var(--shadow-e2);
+  line-height:1.4; word-break:break-word;
+}
+#mic-status:empty { display:none; }
+
+/* ---- 연결 상태 pill ---------------------------------------------------- */
+#conn-status {
+  position:fixed; top:calc(8px + env(safe-area-inset-top,0px)); right:8px;
+  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); border-radius:var(--radius-lg); font-size:var(--fs-2xs); display:none; z-index:110;
+}
+#conn-status.disconnected { display:block; background:var(--err); color:var(--color-on-solid); }
+
+/* ---- 검색 바 ----------------------------------------------------------- */
+#search-bar {
+  display:none; position:fixed; top:var(--topbar-popup-y); right:12px; z-index:120;
+  background:var(--menu); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); gap:calc(var(--spacing) * 1.5); align-items:center;
+  box-shadow:var(--shadow-e2); border:1px solid var(--line);
+}
+#search-bar.visible { display:flex; }
+#search-bar input {
+  background:var(--term); border:1px solid var(--line); border-radius:var(--radius-sm);
+  color:var(--txt); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); font-size:var(--fs-sm); width:200px; outline:none;
+}
+#search-bar input:focus { border-color:var(--acc); }
+#search-bar button {
+  background:transparent; border:none; border-radius:var(--radius-sm); color:var(--sub);
+  width:30px; height:30px; cursor:pointer; font-size:var(--fs-sm);
+}
+#search-bar button:hover { background:var(--menu-hover); color:var(--txt); }
+
+/* ---- 음성 전용 모드 — #topbar를 전체 화면 컨테이너로 전환 --------------- */
+/* L4: 예전엔 .more(⋯ 더보기)가 예외였다 — 그 안의 "음성 전용 모드" 토글이 이
+   모드를 끄는 유일한 버튼이라 숨기면 새로고침 말고는 되돌릴 방법이 없는
+   막다른 상태였기 때문. ⋯가 제거되며 그 토글은 rail의 「설정」 패널로
+   옮겨갔지만, rail 자체가 compact(<720px)에서는 CSS로 통째로 숨는다 —
+   음성 전용 모드는 이어폰 조작용이라 폰(=compact)이 주 사용처인데, 거기서
+   rail도 안 보이면 물리 키보드 없이는 끌 방법이 없는 막다른 상태가
+   똑같이 재발한다. `#palette-toggle`(빠른 열기, Mod+K와 동일 진입점 —
+   L6)은 모든 뷰포트에서 상시 노출이라 이 새 예외로 그 역할을 대신한다 —
+   탭하면 팔레트가 열리고 기본 목록에 "음성 전용 모드" 명령이 있다.
+   L7에서 발견한 버그: 이 주석이 원래 아래 선택자 목록의 쉼표 사이(#caption
+   과 #topbar > .tbtn 사이)에 끼어 있었다 — 문법상 CSS 주석은 선택자 목록
+   중간에 있어도 유효하지만, Vite의 CSS 처리 파이프라인이 이 경우를 잘못
+   처리해 이 규칙 이후 다음 "동일 selector 형태"가 나올 때까지의 규칙들을
+   통째로 삼켜버렸다(빌드된 app.css에서 `body.voice-only-mode #mic-btn-wrap`
+   전체 블록과 `#mic-status` 위치 규칙이 사라져 있었다 — grep으로 직접 확인).
+   L1 커밋 이후 실 서버 배포 산출물에도 계속 있었을 가능성이 높다. 주석을
+   선택자 목록 밖(규칙 앞)으로 빼는 것만으로 해결 — 다시는 셀렉터 콤마 목록
+   중간에 여러 줄 주석을 넣지 않는다. */
+body.voice-only-mode #terminal-container,
+body.voice-only-mode #voice-session-picker,
+body.voice-only-mode .traffic,
+body.voice-only-mode .caption,
+body.voice-only-mode #topbar > .tbtn:not(.mic):not(#palette-toggle),
+body.voice-only-mode #topbar > .spacer { display:none; }
+body.voice-only-mode #topbar {
+  flex:1; height:auto; flex-direction:column; justify-content:center; align-items:center;
+  gap:calc(var(--spacing) * 6); border-bottom:none; padding:0; background:var(--win);
+}
+body.voice-only-mode #mic-btn-wrap.mic {
+  width:140px; height:140px; border-radius:50%; padding:0; flex-direction:column; gap:calc(var(--spacing) * 2);
+}
+body.voice-only-mode #mic-btn-wrap.mic svg { width:50px; height:50px; }
+body.voice-only-mode #mic-btn-wrap.mic .label { display:block; font-size:var(--fs-base); }
+body.voice-only-mode #mic-status {
+  position:fixed; top:auto; bottom:14%; left:50%; right:auto; transform:translateX(-50%);
+  text-align:center; max-width:80vw; font-size:var(--fs-md); background:transparent; border:none; box-shadow:none;
+}

@@ -1,0 +1,14 @@
+/* 전역 리셋 — base 레이어의 유일한 주민.
+ *
+ * 2.1.5까지 이 한 줄은 legacy.css 안, 그것도 **레이어 밖**에 있었다. 레이어 밖
+ * 선언은 어떤 @layer보다도 항상 이기므로, 이 `*`가 components 레이어의 모든
+ * padding·margin 선언을 셀렉터 특정성과 무관하게 이겼다 — 컴포넌트가 여백을
+ * 가질 수 없었다는 뜻이고, 실제로 .vt-select가 24×24로 찌그러지는 것을
+ * 실브라우저에서 확인하고 나서야 원인이 드러났다(height·border·background는
+ * 적용되는데 padding만 사라져 한눈에 안 보인다).
+ *
+ * 리셋은 캐스케이드에서 **가장 약한 기준선**이어야 한다. base가 그 자리다.
+ */
+@layer base {
+  * { margin:0; padding:0; box-sizing:border-box; }
+}

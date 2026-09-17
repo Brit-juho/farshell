@@ -1,0 +1,354 @@
+/* dock 392px · 소스컨트롤 · 뷰어 페인 · 리사이즈 · 파일 탭
+ *
+ * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
+ * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
+ * 컴파일 결과의 규칙 시퀀스가 동일하다(scripts로 검증).
+ *
+ * 왜 쪼갰나: 한 파일에 2900줄이면 "이 선이 무엇을 가르치는가"를 확인하려고
+ * 매번 파일 전체를 훑어야 하고, 같은 컴포넌트의 규칙이 파일 앞뒤 1500줄
+ * 떨어진 곳에 각각 있어도 아무도 모른다. 실제로 이번 개편에서 두 번 당했다.
+ *
+ * ⚠ 이 파일들은 main.css에서 `layer(legacy)`로 import된다 — components보다
+ * 뒤 순서다. 여기 규칙이 components의 컴포넌트를 이긴다는 뜻이므로, 컴포넌트로
+ * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
+ */
+
+/* ── N35 §6 — dock 392px ───────────────────────────────────────────────────
+   문서가 정한 프레임 책임(탭 전환·접기·폭 리사이저 320~560·기기 스코프 저장)만
+   여기서 스타일링한다. 탭 "내용"은 기존 패널 렌더러가 그리므로, dock 안에
+   들어온 패널(.vt-dock-panel)은 모달 껍데기(backdrop·카드 그림자·닫기 X)를
+   벗고 본문 영역을 그대로 채우게만 만든다 — 내부 .vt-vw-* 규칙은 손대지
+   않는다(같은 마크업이 두 자리에서 다르게 보이지 않게).
+
+   2.0의 우측 사용량 레일은 dock 「사용량」 탭이 대신한다: #vt-right-rail을
+   숨기고, 그것이 만들던 body padding-right(300px)도 무효화한다. 그 규칙은
+   `body:not(.no-right-rail)`이라 특이도가 더 높으므로 !important로 이긴다
+   (좌측 레일에서 #vt-rail을 대체할 때와 같은 관용구).
+
+   티어(§3 표): compact(<720)는 dock 없음(하단 내비, 70) · regular(720~1279)는
+   접힘 36px 기본이고 펼치면 **오버레이**(본문을 안 민다) · wide 이상은 펼치면
+   본문을 민다. 이 세 가지가 전부 아래 두 개의 @media로 표현된다 — 본문을
+   미는 값이 720 구간에선 36px 고정, 1280 구간에선 --vt-dock-w. */
+#vt-right-rail { display:none !important; }
+
+#vt-dock-slot { display:contents; }
+#vt-dock {
+  display:none;
+  flex-direction:column; width:var(--vt-dock-w, 392px); flex:none;
+  position:fixed; right:0; top:0; bottom:0; z-index:70;
+  background:var(--bar); border-left:1px solid var(--line);
+  min-width:0; transition:width .12s ease;
+}
+@media (min-width:720px) {
+  #vt-dock { display:flex; }
+  /* 같은 이유로 `:not(.no-right-rail)`을 뺐다 — usage 유무와 무관하게 dock은
+     항상 이 자리를 차지한다. 안 그러면 본문이 dock 밑으로 흘러 들어간다. */
+  body { padding-right:calc(env(safe-area-inset-right) + 36px) !important; }
+  /* regular에서 펼친 dock은 본문 위에 뜬다 — 오버레이임을 그림자로 알린다. */
+  #vt-dock:not(.collapsed) { box-shadow:0 0 24px rgba(0,0,0,.35); }
+}
+@media (min-width:1280px) {
+  body { padding-right:calc(env(safe-area-inset-right) + var(--vt-dock-w, 392px)) !important; }
+  #vt-dock:not(.collapsed) { box-shadow:none; }
+}
+
+.vt-dock-tabs {
+  display:flex; align-items:stretch; height:28px; flex:none;
+  border-bottom:1px solid var(--line); overflow:hidden;
+}
+.vt-dock-tab {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:none;
+  padding:0 calc(var(--spacing) * 2); border:0; border-right:1px solid var(--line);
+  background:transparent; color:var(--color-sub); cursor:pointer;
+  font:500 var(--fs-2xs) var(--mono); white-space:nowrap;
+  transition:background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint);
+}
+.vt-dock-tab:hover { background:var(--menu-hover); color:var(--color-txt); }
+/* 2026-09-17 — 20-design-system.md §3의 탭 규격으로 되돌린다: 활성 = 하단 2px
+   액센트 밑줄 + 아주 옅은 액센트 면, 비활성 = --color-sub 텍스트.
+   직전까지는 배경이 --color-surface-active여서 밑줄이 아니라 **채움 박스**가
+   활성 신호로 읽혔다 — 헤더의 워크트리 탭(밑줄만)과 같은 화면에서 활성 표시가
+   두 가지 문법으로 갈렸다.
+   ⚠ 문서가 이 배경으로 지목한 --color-acc-surface를 그대로 쓸 수는 없다.
+   문서(§2 표)는 그 토큰을 rgba(240,168,96,.10) 즉 10% 틴트로 적어뒀지만, 이
+   저장소의 tokens.css는 같은 이름을 "액센트 채움 면"(= var(--color-acc), 불투명,
+   위에 --color-acc-ink가 얹히는 용도)으로 쓰고 있다. 그대로 깔면 탭 글자가
+   액센트 위에 --color-txt로 얹혀 안 보인다. 그래서 문서가 의도한 값을 직접
+   만든다 — 칩(.vt-chip.active, components.css)이 쓰는 것과 같은 10% 틴트다.
+   배경을 옅게 두는 건 규격 회피가 아니라 규격의 의도다: 주인공은 밑줄이다. */
+.vt-dock-tab.active {
+  background:color-mix(in srgb, var(--color-acc) 10%, transparent);
+  color:var(--color-txt);
+  box-shadow:inset 0 -2px 0 var(--color-acc);
+}
+/* 2.1.6 — dock 탭 배지는 components.css의 .vt-badge를 쓴다(Dock.tsx가 클래스를
+   바꿔 단다). 여기 남은 건 배지가 탭 안에서 자리를 안 밀도록 하는 배치뿐이다.
+   채움 알약이던 것을 테두리 배지로 바꾼 이유: 채우면 "화면당 채움 하나"인
+   주 액션과 시각 무게가 같아진다(20-design-system.md §3). */
+.vt-dock-tab .vt-badge { flex:none; }
+.vt-dock-collapse {
+  margin-left:auto; flex:none; border:0; background:transparent; color:var(--sub);
+  cursor:pointer; font:600 var(--fs-base) var(--ui); padding:0 calc(var(--spacing) * 1.5); line-height:1;
+}
+.vt-dock-collapse:hover { background:var(--menu-hover); color:var(--txt); }
+
+.vt-dock-body { flex:1; min-height:0; min-width:0; overflow:hidden; display:flex; flex-direction:column; }
+.vt-dock-empty {
+  padding:calc(var(--spacing) * 3); color:var(--sub); font:400 var(--fs-xs) var(--mono);
+}
+
+/* 접힘 36px: 탭 행이 세로로 선다. 라벨은 writing-mode로 세워서 아이콘 세트를
+   새로 만들지 않고도 어느 탭인지 남긴다(§6 "세로 아이콘 4개 + 배지"의 최소
+   구현 — 아이콘은 20 §4 에이전트 마크 작업과 같이 정한다). */
+#vt-dock.collapsed { width:36px !important; }
+#vt-dock.collapsed .vt-dock-tabs { flex-direction:column; height:auto; border-bottom:0; }
+/* 접힌 dock은 **아이콘만** 보여준다(2026-09-17 디자인 리뷰 B4).
+   이전에는 writing-mode:vertical-rl로 한글 라벨을 세로로 세웠는데, 한글은
+   세로쓰기에서 음절이 한 자씩 쌓여 36px 폭에 "소/스/컨/트/롤"이 늘어섰고
+   글꼴까지 모노스페이스라 더 읽기 어려웠다. 세로 라벨은 영문(글자가 옆으로
+   눕는다)을 전제한 패턴이라 한글에는 성립하지 않는다.
+   전체 이름은 button의 title 속성에 그대로 남아 툴팁으로 나온다. */
+#vt-dock.collapsed .vt-dock-tab {
+  padding:calc(var(--spacing) * 2.5) 0;
+  border-right:0; border-bottom:1px solid var(--line); justify-content:center;
+}
+#vt-dock.collapsed .vt-dock-tab-label { display:none; }
+#vt-dock.collapsed .vt-dock-tab-ico { display:inline-flex; }
+/* 펼친 dock은 지금까지대로 글자만 — 아이콘을 같이 넣으면 5개 탭이 가로로
+   늘어선 줄이 빽빽해진다. 아이콘은 접힘 전용 장치다. */
+.vt-dock-tab-ico { display:none; }
+/* 접힘 36px에서는 밑줄이 놓일 아랫변이 없다 — 같은 2px을 세로 변(오른쪽)으로
+   돌린다. 색·두께는 펼친 상태와 같으니 활성 문법은 하나로 유지된다. */
+#vt-dock.collapsed .vt-dock-tab.active { box-shadow:inset -2px 0 0 var(--color-acc); }
+#vt-dock.collapsed .vt-dock-body { display:none; }
+#vt-dock.collapsed .vt-dock-resizer { display:none; }
+
+.vt-dock-resizer {
+  position:absolute; top:0; bottom:0; left:-3px; width:6px; cursor:col-resize; z-index:1;
+}
+.vt-dock-resizer.dragging { background:var(--acc); opacity:.4; }
+
+/* dock 안의 패널 — 모달 껍데기를 벗긴다. */
+.vt-dock-panel { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+.vt-dock-panel .vt-viewer-card {
+  width:100%; max-width:none; height:100%; max-height:none;
+  border:0; border-radius:0; box-shadow:none; background:transparent;
+}
+/* dock에는 닫기 X가 없다 — 닫는 행위는 탭 재클릭/접기다(진입점 이중화 금지). */
+.vt-dock-panel .vt-vw-x { display:none; }
+.vt-dock-panel .vt-vw-head { border-radius:0; }
+
+/* ── 40 §3 — dock 소스컨트롤 탭 머리말 ─────────────────────────────────────
+   목록·diff·로그·커밋상자 자체는 코드 뷰어와 **같은 렌더러**(vt-vw-* 클래스,
+   git.js)를 쓰므로 여기서 새로 정의하지 않는다. 여기 있는 건 dock에만 있는
+   저장소·브랜치 머리말 한 줄뿐이다 — 계정 칩과 push/PR 버튼 줄은 ADR-27로
+   없다(렌더 자체가 없으므로 여기 disabled 스타일도 필요 없다). */
+.vt-scm-head { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; }
+.vt-scm-head-left { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; white-space:nowrap; }
+.vt-scm-repo { font:600 var(--fs-2xs) var(--mono); color:var(--txt); overflow:hidden; text-overflow:ellipsis; }
+.vt-scm-branch { font:500 var(--fs-2xs) var(--mono); color:var(--acc); overflow:hidden; text-overflow:ellipsis; }
+.vt-scm-upstream, .vt-scm-track, .vt-scm-count { font:400 var(--fs-3xs) var(--mono); color:var(--sub); flex:none; }
+.vt-scm-add { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-done); flex:none; }
+.vt-scm-del { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-error); flex:none; }
+/* 스테이지된 게 없어 커밋이 막힌 동안의 disabled — "안 되는 것"이 아니라
+   "지금은 안 되는 것"이라 흐리게만. 스테이지 버튼(.vt-vw-gact)은 이 줄에서
+   빼냈다 — .vt-btn이 됐고 components.css의 :disabled가 이미 같은 opacity .45 +
+   not-allowed를 준다. 같은 값을 legacy에 남겨두면 @layer 밖이라 영원히
+   컴포넌트를 이긴다 — 나중에 .vt-btn의 disabled를 고쳐도 여기만 안 변한다. */
+.vt-dock-panel .vt-vw-gcommit-btn[disabled] { opacity:.45; cursor:not-allowed; }
+
+/* ── N35 §6 — 뷰어 페인(리프 타입 viewer) ──────────────────────────────────
+   모달 코드 뷰어가 사라지면서 파일은 페인 안에서 열린다. 코드 렌더는 dock·
+   구 뷰어와 같은 .vt-vw-* 클래스를 그대로 쓰고, 여기서는 그것이 페인 상자
+   안에서 스크롤되게만 만든다(페인 밖으로 새면 표면 레이어의 터미널 위를 덮는다). */
+.vt-pane-body.vt-pane-viewer {
+  overflow:auto; background:var(--win); min-width:0; min-height:0;
+}
+.vt-pane-body.vt-pane-viewer .vt-vw-code-pane {
+  min-width:0; padding:calc(var(--spacing) * 1.5) 0;
+}
+/* 뷰어 페인이 열려 있으면 온보딩(세션 0개 안내)은 나오지 않는다 — 볼 것이 있다. */
+body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
+
+/* ── N43 §8 · R5 — 리사이즈 오버레이 (화면 2g) ─────────────────────────────
+   분할선을 드래그하는 동안 활성 pane 중앙에 뜬다. transform으로 중앙 정렬하고
+   pointer-events는 끈다(드래그 중인 리사이저 자신 위로 떠도 이벤트를 가로채면
+   안 된다). 드래그 종료 200ms 뒤 페이드 아웃 — reduced-motion은 즉시 사라짐
+   (아래 opacity 트랜지션 자체를 없앤다). */
+#vt-resize-overlay {
+  position:fixed; z-index:650; transform:translate(-50%, -50%);
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+  background:color-mix(in srgb, var(--crust) 80%, transparent);
+  color:var(--txt); border:1px solid var(--line); border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-e2); pointer-events:none;
+  font:600 var(--fs-sm) var(--mono); white-space:nowrap;
+  opacity:1; transition:opacity 200ms ease;
+}
+#vt-resize-overlay[hidden] { display:none; }
+#vt-resize-overlay.vt-ro-hide { opacity:0; }
+.vt-ro-cells { font:500 var(--fs-xs) var(--mono); color:var(--sub); }
+.vt-ro-defer { font:400 var(--fs-3xs) var(--mono); color:var(--sub); margin-top:2px; }
+@media (prefers-reduced-motion: reduce) {
+  #vt-resize-overlay { transition:none; }
+}
+
+/* ── dock 파일 탭 (N19~N21 · 50-files-share.md §4) ───────────────────────────
+   큐/포트 패널과 같은 껍데기(.vt-viewer-card) 안에서 도므로 여기서는 행·칩·
+   게이지만 정의한다. 색·간격 토큰은 전부 기존 것을 그대로 쓴다 — 파일 탭만의
+   새 팔레트를 만들면 dock 안에서 탭마다 다른 화면처럼 보인다. */
+.vt-fl-chips{
+  display:flex; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  background:var(--bar); border-bottom:1px solid var(--line); flex:0 0 auto; flex-wrap:wrap;
+}
+/* 2.1.6 — 파일 필터 칩은 components.css의 .vt-chip을 쓴다(radius 999px 알약을
+   화면 전체와 같은 5px 한 단계로 되돌린다). files.js가 클래스를 바꿔 단다. */
+
+.vt-fl-row{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+}
+.vt-fl-row:hover{ background:var(--menu-hover); }
+.vt-fl-row-main{ flex:1 1 auto; min-width:0; }
+.vt-fl-name{ font:500 var(--fs-sm) var(--mono); color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-fl-sub{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-top:2px; }
+.vt-fl-sub.warn{ color:var(--warn); }
+.vt-fl-acts{ display:flex; gap:calc(var(--spacing) * 0.5); flex:0 0 auto; }
+.vt-fl-act{
+  background:transparent; border:0; color:var(--sub); cursor:pointer; border-radius:var(--radius-sm);
+  /* 44px은 못 주더라도(행 5개가 392px dock 안에 들어가야 한다) 터치 표적이
+     28px 아래로는 안 내려가게 한다. */
+  /* 이모지 글리프였을 땐 font-size로 크기를 잡았지만 이제 안쪽이 SVG라
+     flex로 광학 중앙을 맞춘다(글리프의 baseline 오프셋이 사라져 살짝 위로
+     떠 보이던 것도 같이 해결된다). */
+  min-width:28px; min-height:28px; line-height:1;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.vt-fl-act:hover:not([disabled]){ background:var(--tab); color:var(--txt); }
+.vt-fl-act[disabled]{ opacity:.35; cursor:not-allowed; }
+.vt-fl-act.rm:hover:not([disabled]){ color:var(--err); }
+
+/* 경고 한 줄의 아이콘 자리 — 아이콘과 글줄의 광학 정렬. 아이콘을 baseline에
+   그냥 두면 한글 글줄에서 살짝 내려앉는다. */
+.vt-set-help-warn{ display:flex; align-items:flex-start; gap:calc(var(--spacing) * 1.5); }
+.vt-set-help-ico{ flex:none; display:inline-flex; margin-top:1px; color:var(--warn, var(--color-st-waiting)); }
+
+.vt-fl-footer{ padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-top:1px solid var(--line); }
+.vt-fl-gauge{ height:6px; background:var(--tab); border-radius:999px; overflow:hidden; }
+.vt-fl-gauge-fill{ height:100%; background:var(--acc); }
+.vt-fl-gauge-fill.warn{ background:var(--err); }
+.vt-fl-footer-text{ margin-top:calc(var(--spacing) * 1.5); font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+
+/* 링크 발급 다이얼로그(§3 화면 3b). dock 안이 아니라 항상 모달이다 — 발급은
+   되돌리기 전에 한 번 더 보게 해야 하는 조작이라 화면을 덮는 게 맞다. */
+.vt-fl-share-card{ max-width:420px; }
+.vt-fl-field{ margin-bottom:calc(var(--spacing) * 3); }
+.vt-fl-field-label{ font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub); margin-bottom:calc(var(--spacing) * 1.5); }
+.vt-fl-radio{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 1.5); cursor:pointer; }
+.vt-fl-radio.disabled{ opacity:.5; cursor:not-allowed; }
+.vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-left:20px; }
+.vt-fl-input{
+  width:100%; background:var(--term); color:var(--txt); border:1px solid var(--line);
+  border-radius:var(--trad); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+  font:400 var(--fs-md) var(--ui);  /* 16px — iOS 확대 방지(.vt-q-compose와 같은 이유) */
+}
+.vt-fl-check{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 3); cursor:pointer; }
+.vt-fl-share-actions{ display:flex; justify-content:flex-end; margin-bottom:calc(var(--spacing) * 3); }
+.vt-fl-share-list{ border-top:1px solid var(--line); padding-top:calc(var(--spacing) * 2); }
+.vt-fl-share-row{ display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) 0; }
+.vt-fl-share-label{ flex:1 1 auto; min-width:0; font:400 var(--fs-xs) var(--mono); color:var(--txt); }
+.vt-fl-share-row .vt-fl-act{ font:500 var(--fs-2xs) var(--mono); padding:0 calc(var(--spacing) * 1.5); min-width:auto; }
+
+/* C3(2.1.2) — 원격 호스트가 잠깐 꺼진 pane. 빈 pane(.vt-pane-empty, "세션 선택")과
+   시각적으로 달라야 한다: 여기는 이미 주인이 정해져 있고 그 주인을 기다리는 칸이다. */
+.vt-pane-unreachable{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--spacing) * 2);
+  height:100%; padding:calc(var(--spacing) * 4); text-align:center; color:var(--sub);
+}
+.vt-pane-unreachable-title{ font:600 var(--fs-sm) var(--mono); color:var(--txt); opacity:.8; }
+.vt-pane-unreachable-sub{ font:400 var(--fs-xs) var(--mono); max-width:36ch; }
+.vt-pane-unreachable-acts{ display:flex; gap:calc(var(--spacing) * 2); }
+.vt-pane-unreachable-retry, .vt-pane-unreachable-pick{
+  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm); color:var(--txt);
+  font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); cursor:pointer;
+}
+.vt-pane-unreachable-retry:hover:not([disabled]), .vt-pane-unreachable-pick:hover{ background:var(--menu-hover); }
+.vt-pane-unreachable-retry[disabled]{ opacity:.5; cursor:default; }
+
+/* 2.1.3 — 「연결된 화면」이 원격에서 읽기 전용일 때의 한 줄. (2.1.2의
+   .vt-rail-session-note는 원격에서 블록을 통째로 숨길 때 쓰던 것이라 삭제됐다.) */
+.vt-clients-note{
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+  font:400 var(--fs-2xs) var(--mono); color:var(--sub);
+}
+
+/* 10-shell-layout.md §4 — 워크트리 탭 바. 3단계에서 세션 탭 줄이 사라져
+   이제 상단 바의 탭은 이것 하나뿐이다: 활성 탭만 강조색 밑줄. */
+#vt-wtabs{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); flex:0 0 auto;
+  max-width:40%; overflow-x:auto; scrollbar-width:none;
+}
+#vt-wtabs[hidden]{ display:none; }
+#vt-wtabs::-webkit-scrollbar{ display:none; }
+.vt-wtab{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1);
+  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2); cursor:pointer; white-space:nowrap;
+  border-bottom:2px solid transparent; color:var(--sub);
+  font:500 var(--fs-xs) var(--mono); border-radius:var(--radius-sm) var(--radius-sm) 0 0;
+}
+.vt-wtab:hover{ background:var(--menu-hover); color:var(--txt); }
+.vt-wtab.active{ color:var(--txt); border-bottom-color:var(--acc); }
+.vt-wtab-name{ overflow:hidden; text-overflow:ellipsis; max-width:18ch; }
+/* 10 §4 탭 구성 — [에이전트 마크][이름][상태 dot][읽지 않음][닫기].
+   빈 칸이 자리를 먹지 않게 :empty를 접는다(마크는 에이전트가 없으면 비고,
+   dot 자리는 idle이면 비운다). */
+.vt-wtab-agent{ flex:0 0 auto; display:flex; align-items:center; color:var(--sub); }
+.vt-wtab-agent:empty, .vt-wtab-marks:empty{ display:none; }
+.vt-wtab-marks{ flex:0 0 auto; display:flex; align-items:center; }
+/* 세션 탭의 「읽지 않음」은 글자 배지지만, 탭 바는 한 줄에 여러 워크트리가
+   서므로 폭을 먹으면 안 된다 — 같은 뜻을 점 하나로 줄인다(aria-label로 읽힌다). */
+.vt-wtab-unread{
+  flex:none; width:6px; height:6px; border-radius:var(--radius-full);
+  background:var(--info);
+}
+.vt-wtab-close{
+  border:0; background:transparent; color:var(--sub); cursor:pointer; padding:0 2px;
+  display:inline-flex; align-items:center; border-radius:var(--radius-sm); opacity:.6;
+}
+.vt-wtab:hover .vt-wtab-close{ opacity:1; }
+.vt-wtab-close:hover{ background:var(--tab); color:var(--err); }
+/* 다른 워크트리 탭에 속한 세션 탭은 숨긴다 — 탭 안의 세션 줄이라는 뜻이 된다. */
+
+.vt-wtd-warn-ico{ flex:none; margin-top:2px; }
+
+/* 캐럿 — ▴▾▲▼ 글리프를 chevron SVG 하나로 통일하고 방향은 회전으로 만든다
+   (2026-09-16). 글리프는 폰트마다 크기·중심이 달라 옆 글자·버튼과 광학 정렬이
+   안 맞았고, currentColor를 안 따라 상태색과도 어긋났다.
+   회전에 transition을 거는 이유: 접기/펴기는 "같은 것이 뒤집힌다"는 인과를
+   보여줄 수 있는 몇 안 되는 전이다. 200ms·ease-out으로 짧게 둔다. */
+#keybar-toggle svg,
+.vt-fleet-host-caret svg,
+.vt-wgrail-host-caret svg,
+#search-bar [data-action="search.prev"] svg,
+#search-bar [data-action="search.next"] svg {
+  display:block;
+  transition:transform .2s cubic-bezier(.2,0,0,1);
+}
+@media (prefers-reduced-motion: reduce) {
+  #keybar-toggle svg,
+  .vt-fleet-host-caret svg,
+  .vt-wgrail-host-caret svg { transition:none; }
+}
+#keybar-toggle.flipped svg,
+.vt-fleet-host-caret.open svg,
+#search-bar [data-action="search.prev"] svg { transform:rotate(180deg); }
+/* 캐럿을 감싼 span들이 글줄 baseline에 얹혀 있어 아이콘이 반 픽셀 내려앉았다. */
+.vt-fleet-host-caret, .vt-wgrail-host-caret { display:inline-flex; align-items:center; flex:none; }
+
+/* live 표시의 점과 글자 정렬 — 점이 글줄 가운데에 오게 한다(글리프 ●였을 땐
+   baseline에 얹혀 살짝 내려앉아 있었다). */
+.vt-usage-live, .vt-counter-live { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.25); }
+
+/* idle 행은 서브라인이 비는 경우가 있다(마지막 활동 시각이 없을 때). 빈 줄이
+   높이를 차지하면 행마다 들쭉날쭉해 보이므로 내용이 없으면 아예 접는다. */
+.vt-wgrail-row-sub:empty, .vt-fleet-row-sub:empty { display:none; }
