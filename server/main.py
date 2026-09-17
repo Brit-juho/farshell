@@ -20,6 +20,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi import Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+# ⚠ **순서가 계약이다.** auth를 비롯한 몇몇 모듈은 import 시점에 VT_* 를 읽는다.
+# 그래서 "설정 파일이 환경변수를 이기는" 경계값 정규화는 그 import들보다 **먼저**
+# 일어나야 한다. 아래 두 줄을 내리면, 낡은 셸 export를 든 채 기동한 서버가
+# 예전 경계(예: 홈 전체 열람)를 그대로 쓰게 된다 — 2026-09-17에 실제로 겪었다.
+import vt_env as _vt_env
+
+_VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
+
 import auth
 import file_store
 import network_access

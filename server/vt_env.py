@@ -155,6 +155,79 @@ def load(path: Optional[str] = None) -> dict[str, str]:
         return {}
 
 
+# ---------------------------------------------------------------------------
+# 경계값 — 설정 파일이 환경변수를 이긴다 (2026-09-17)
+# ---------------------------------------------------------------------------
+#
+# 이 파일의 기본 규칙은 "환경변수 > 파일"이고, 포트·경로·인스턴스 격리에는 그게
+# 맞다. 하지만 **보안 경계를 정하는 값**에 그 규칙을 쓰면 낡은 사본이 조용히
+# 경계를 넓힌다. 실제로 두 번 겪었다(2026-09-17):
+#
+#   - ~/.vt.env의 VT_BROWSE_ROOTS를 ~/GitHub 로 좁히고 서버를 재시작했는데,
+#     fsh를 실행한 셸이 예전 값(=홈 전체)을 export하고 있어 새 서버가 그걸
+#     그대로 물려받았다. 코드 뷰어가 공개 터널 너머로 홈을 계속 내보냈다.
+#   - VT_AUTH_TOKEN을 재발급했는데 옛 값을 든 에이전트 세션들의 훅이 전부
+#     401이 됐다(490건). 아무도 알려주지 않았다.
+#
+# 그래서 경계값만 우선순위를 뒤집는다. 호출부가 69곳이라 전부 고치는 대신
+# **부팅 때 한 번 os.environ을 정규화한다**(apply_boundary_overrides).
+#
+# VT_CONFIG는 여기 없다 — "어느 파일을 읽을지" 고르는 키라 env가 이겨야 한다.
+# 격리 테스트 서버가 그 성질에 의존한다(AGENTS.md).
+BOUNDARY_KEYS = (
+    "VT_BROWSE_ROOTS",        # 코드 뷰어 열람 경계
+    "VT_NETWORK_MODE",        # IP 필터
+    "VT_ALLOWED_ORIGINS",     # 교차 출처 허용
+    "VT_TRUST_PROXY",         # 프록시 헤더 신뢰 여부
+    "VT_AUTH_TOKEN",          # 기계 토큰
+    "VT_AUTH_PASSWORD_HASH",  # 웹 로그인 비밀번호 해시
+    "VT_AUTH_SESSION_KEY",    # 세션 쿠키 서명키
+    "VT_SAFE_MODE",           # 위험 도구 차단
+    "VT_DISALLOWED_TOOLS",
+    "VT_STATE_DIR",           # 기기 목록·OTP가 사는 곳
+    # 레거시 이름도 같은 경계값이다 — 하나만 막으면 옛 이름으로 우회된다.
+    "VT_TOKEN",
+    "VT_PASSWORD_HASH",
+    "VT_SECRET_KEY",
+)
+
+
+def boundary_diff(file_env: Optional[Mapping[str, str]] = None) -> list:
+    """환경변수와 파일이 다른 경계값 목록 — [(key, "env")].
+
+    값 자체는 돌려주지 않는다. 토큰·해시가 섞여 있어서 로그·화면에 나가면 안 된다.
+    """
+    src = file_env if file_env is not None else load()
+    out = []
+    for key in BOUNDARY_KEYS:
+        if key not in src:
+            continue
+        env_val = os.environ.get(key)
+        if env_val is not None and env_val != src[key]:
+            out.append((key, "env"))
+    return out
+
+
+def apply_boundary_overrides(file_env: Optional[Mapping[str, str]] = None) -> list:
+    """파일에 정의된 경계값으로 os.environ을 덮어쓴다. 바뀐 키 목록을 돌려준다.
+
+    **파일에 없는 키는 건드리지 않는다** — 그 경우엔 기존대로 환경변수가 이긴다
+    (일회성 실험을 통째로 막지 않기 위해서다. 파일이 정한 경계만 지킨다).
+
+    ⚠ **호출 시점이 계약이다.** auth 등 일부 모듈은 import 시점에 값을 읽으므로,
+    이 함수는 그 import들보다 **먼저** 불려야 한다. server/main.py 상단 참조.
+    """
+    src = file_env if file_env is not None else load()
+    changed = []
+    for key in BOUNDARY_KEYS:
+        if key not in src:
+            continue
+        if os.environ.get(key) != src[key]:
+            os.environ[key] = src[key]
+            changed.append(key)
+    return changed
+
+
 def getenv(key: str, default: str = "",
            file_env: Optional[Mapping[str, str]] = None) -> str:
     """환경변수 → ~/.vt.env → default 우선순위.
