@@ -1,0 +1,207 @@
+/* 상태바 HUD · 모바일 골격(상단바 · 플릿 홈 · 하단 내비)
+ *
+ * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
+ * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
+ * 컴파일 결과의 규칙 시퀀스가 동일하다(scripts로 검증).
+ *
+ * 왜 쪼갰나: 한 파일에 2900줄이면 "이 선이 무엇을 가르치는가"를 확인하려고
+ * 매번 파일 전체를 훑어야 하고, 같은 컴포넌트의 규칙이 파일 앞뒤 1500줄
+ * 떨어진 곳에 각각 있어도 아무도 모른다. 실제로 이번 개편에서 두 번 당했다.
+ *
+ * ⚠ 이 파일들은 main.css에서 `layer(legacy)`로 import된다 — components보다
+ * 뒤 순서다. 여기 규칙이 components의 컴포넌트를 이긴다는 뜻이므로, 컴포넌트로
+ * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
+ */
+
+/* ── N34 §7 — 상태바 HUD 24px ──────────────────────────────────────────────
+   디자인 1a의 footer. 내용은 shell/Hud.tsx(Solid)가 채우고, 여기서는 프레임과
+   칩 모양만 정한다.
+
+   "값이 없는 항목은 숨긴다"가 규칙이라 칩 수가 상황마다 달라진다 — 그래서
+   좌/우 그룹 사이를 .vt-hud-spacer(flex:1)가 벌린다(고정 그리드가 아니다).
+
+   compact(<720px)에서는 통째로 숨는다: 그 폭에서는 하단 내비가 이 자리를
+   쓰고(70-mobile.md), 24px짜리 정보 띠는 폰에서 읽히지도 않는다. */
+#vt-hud {
+  display:none;   /* 아래 미디어쿼리에서만 켠다 */
+  align-items:stretch; height:var(--hud-h); flex:none;
+  background:var(--bar); border-top:1px solid var(--line);
+  font:400 var(--fs-2xs) var(--mono); color:var(--sub);
+  overflow:hidden; user-select:none;
+}
+@media (min-width:720px) { #vt-hud { display:flex; } }
+
+.vt-hud-spacer { flex:1; min-width:0; }
+.vt-hud-chip {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  padding:0 calc(var(--spacing) * 2.5); white-space:nowrap;
+  border-right:1px solid var(--line);
+}
+/* 우측 그룹은 경계선이 반대편에 붙어야 좌우가 대칭으로 읽힌다. */
+.vt-hud-spacer ~ .vt-hud-chip { border-right:0; border-left:1px solid var(--line); }
+
+.vt-hud-label { color:var(--sub); }
+.vt-hud-value { color:var(--txt); }
+.vt-hud-hint  { color:var(--color-muted); }
+
+.vt-hud-chip.tone-ok    .vt-hud-value { color:var(--ok); }
+.vt-hud-chip.tone-warn  .vt-hud-value { color:var(--warn); }
+.vt-hud-chip.tone-err   .vt-hud-value { color:var(--err); }
+
+.vt-hud-dot { width:6px; height:6px; border-radius:var(--radius-full); background:var(--ok); flex:none; }
+.vt-hud-chip.tone-warn .vt-hud-dot { background:var(--warn); }
+.vt-hud-chip.tone-err  .vt-hud-dot { background:var(--err); }
+
+.vt-hud-chip.clickable { cursor:pointer; }
+.vt-hud-chip.clickable:hover { background:var(--menu-hover); color:var(--txt); }
+
+/* ── N38(70-mobile.md §1/§2) — 모바일 골격: 상단 24px · 플릿 홈 · 하단 내비 52px
+   compact(<720px)에서만 보인다(같은 문턱값을 HUD/rail/dock이 이미 쓴다).
+   기본값은 숨김 — 아래 @media 블록에서만 켠다. */
+#vt-mnav-top, #vt-mnav-bottom, #vt-fleet-slot { display:none; }
+
+@media (max-width:719px) {
+  /* N35/N38 — L4·N35에서 두 번 났던 것과 같은 회귀: `.vt-onboarding`은
+     position:fixed + z-index:500이라 자기보다 낮은 z-index를 가진 고정
+     UI(N38의 상단 24px·하단 내비 52px, z-index 90/100)를 그대로 덮는다.
+     세션이 0개인 흔한 상태(부팅 직후)에서 하단 내비 자체가 클릭이 안 먹는
+     것으로 실측 확인됐다 — 데스크톱 레일·dock 때와 같은 원인, 같은 처방:
+     onboarding을 그 자리만큼 비켜 세운다. */
+  .vt-onboarding {
+    top:calc(var(--topbar-h) + 24px + env(safe-area-inset-top,0px));
+    bottom:calc(52px + env(safe-area-inset-bottom,0px));
+  }
+
+  /* #topbar는 그대로 둔다(세션 탭·팔레트가 이미 거기 있다) — 이 바는 그
+     아래 얇은 두 번째 줄로, 정상 flex 흐름에 얹혀 자기 높이(24px)만큼
+     terminal-container를 자연스럽게 밀어낸다(JS 계산 없이 body가 flex-column). */
+  #vt-mnav-top {
+    display:flex; align-items:center; justify-content:space-between;
+    height:24px; flex:none; padding:0 calc(var(--spacing) * 2);
+    background:var(--bar); border-bottom:1px solid var(--line);
+    font:400 var(--fs-2xs) var(--mono); color:var(--sub); overflow:hidden;
+  }
+  #vt-mnav-host-chip { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #vt-mnav-waiting { color:var(--warn); white-space:nowrap; flex:none; }
+  #vt-mnav-waiting[hidden] { display:none; }
+
+  /* 플릿 홈은 #terminal-container를 절대 display:none으로 언마운트하지
+     않는다(표면 레이어가 그 안에서 xterm WebGL 컨텍스트를 들고 있다 —
+     display:none이면 자손 rect가 0×0이 되어 ResizeObserver가 SIGWINCH를
+     쏜다, 10-shell-layout.md §1 수용 기준). 대신 같은 자리를 덮는
+     position:fixed 오버레이로 그린다 — 터미널은 그 아래서 그대로 살아있다. */
+  #vt-fleet-slot {
+    display:block; position:fixed; z-index:90;
+    top:calc(var(--topbar-h, 38px) + 24px + env(safe-area-inset-top,0px));
+    left:0; right:0; bottom:calc(52px + env(safe-area-inset-bottom,0px));
+    overflow-y:auto; background:var(--win);
+    padding:calc(var(--spacing) * 2);
+  }
+  /* [hidden] 다음이라 우선순위가 같은 이 셀렉터가 이긴다(파일 순서) — 위
+     display:block을 되덮는다. hidden 프로퍼티를 mobile-nav.js가 토글한다. */
+  #vt-fleet-slot[hidden] { display:none; }
+
+  #vt-mnav-bottom {
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:100;
+    height:calc(52px + env(safe-area-inset-bottom,0px));
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    background:var(--bar); border-top:1px solid var(--line);
+  }
+  .vt-mnav-btn {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:2px; position:relative; background:none; border:0; color:var(--sub);
+    font-family:var(--ui); font-size:var(--fs-2xs); cursor:pointer; touch-action:manipulation;
+  }
+  .vt-mnav-btn[aria-pressed="true"] { color:var(--acc); }
+  /* 2.1.6 — 아이콘이 생겼다. 라벨은 한 단계 작게 내려 아이콘이 먼저 읽히게
+     한다(아이콘+라벨을 같은 무게로 두면 52px 안에서 둘이 경쟁한다). */
+  .vt-mnav-btn > svg { width:18px; height:18px; flex:none; }
+  .vt-mnav-label { font-size:var(--fs-3xs); letter-spacing:var(--tracking-wide); }
+  /* 활성 탭은 색만으로 말하지 않는다 — 색 하나에 의존하면 스킨에 따라 약해지고
+     색각 이상에서는 사라진다. 상단 2px 막대를 같이 둔다(WCAG 1.4.1). */
+  .vt-mnav-btn[aria-pressed="true"]::before {
+    content:""; position:absolute; top:0; left:20%; right:20%; height:2px;
+    background:var(--acc); border-radius:0 0 var(--radius-sm) var(--radius-sm);
+  }
+  .vt-mnav-badge {
+    position:absolute; top:0; right:calc(50% - 22px); min-width:15px; height:15px; padding:0 4px;
+    border-radius:var(--radius-full); background:var(--acc); color:var(--acc-ink, #08090a);
+    font-size:9px; line-height:15px; text-align:center; font-weight:600;
+  }
+  .vt-mnav-badge[hidden] { display:none; }
+
+  /* keybar는 하단 내비(52px) 바로 위로 — 겹치면 마지막 줄(프롬프트)이 가려진다.
+     탭이 '터미널'이 아니면 keybar 자체를 완전히 숨긴다(§1: "keybar는 터미널
+     탭에서만") — html[data-mobile-tab]의 특이성이 #keybar 단독 규칙을 이긴다. */
+  #keybar { bottom:calc(52px + env(safe-area-inset-bottom,0px)); }
+  html[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar { display:none; }
+
+  /* 플릿 홈(N38 §2) 행 — Rail.tsx(N36 §5)의 .vt-wgrail-row와 같은 시각
+     언어(색점 막대 3px·같은 톤 토큰)를 쓴다: "레일에서 맨 위인 게 폰에서도
+     맨 위"뿐 아니라 생김새도 같은 화면이라는 확신을 준다. */
+  #vt-fleet { display:flex; flex-direction:column; }
+  /* C1 — 폰의 호스트 스위처. compact에서는 레일이 숨으므로 여기가 유일한
+     진입점이다. 목록을 스크롤해도 "지금 어느 머신을 보고 있는가"가 남아야
+     하므로 sticky. 배경을 깔지 않으면 아래 행이 비쳐 글자가 겹친다. */
+  .vt-fleet-hostbar {
+    position:sticky; top:0; z-index:2;
+    display:flex; padding:calc(var(--spacing) * 1) 0;
+    background:var(--win); border-bottom:1px solid var(--line);
+  }
+  .vt-fleet-host {
+    flex:1; min-width:0; display:flex; align-items:baseline; gap:calc(var(--spacing) * 2);
+    padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5);
+    font:600 var(--fs-sm) var(--mono); color:var(--txt);
+    background:none; border:none; border-radius:var(--radius-sm); cursor:pointer; text-align:left;
+  }
+  .vt-fleet-host.remote .vt-fleet-host-name { color:var(--acc); }
+  .vt-fleet-host.offline { opacity:.6; }
+  .vt-fleet-host.open { background:var(--menu-hover); }
+  .vt-fleet-host-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vt-fleet-host-detail { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+  .vt-fleet-host-caret { flex:none; font-size:var(--fs-3xs, 9px); opacity:.7; }
+  .vt-fleet-hostmenu { display:flex; flex-direction:column; border-bottom:1px solid var(--line); background:var(--tab); }
+  .vt-fleet-hostitem {
+    display:flex; flex-direction:column; gap:2px; align-items:flex-start;
+    padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
+    background:none; border:none; border-bottom:1px solid var(--line); cursor:pointer; text-align:left;
+    font:500 var(--fs-sm) var(--mono); color:var(--txt);
+  }
+  .vt-fleet-hostitem:last-child { border-bottom:none; }
+  .vt-fleet-hostitem.active { background:var(--color-surface-active); }
+  .vt-fleet-hostitem.offline { opacity:.6; }
+  .vt-fleet-hostitem-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+  .vt-fleet-hostitem-detail { font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+  .vt-fleet-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--sub); font:400 var(--fs-sm) var(--mono); }
+  .vt-fleet-group-head {
+    padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1);
+    font:600 var(--fs-3xs) var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--sub);
+  }
+  .vt-fleet-row {
+    display:flex; align-items:stretch; gap:calc(var(--spacing) * 2);
+    padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
+    border-bottom:1px solid var(--line); cursor:pointer; min-width:0;
+  }
+  .vt-fleet-row.is-waiting { background:var(--color-surface-active); }
+  .vt-fleet-bar { width:3px; flex:none; border-radius:var(--radius-full); background:var(--color-st-idle); }
+  .vt-fleet-bar.tone-waiting { background:var(--color-st-waiting); }
+  .vt-fleet-bar.tone-working { background:var(--color-st-working); }
+  .vt-fleet-bar.tone-error   { background:var(--color-st-error); }
+  .vt-fleet-bar.tone-done    { background:var(--color-st-done); }
+  .vt-fleet-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .vt-fleet-row-top { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
+  .vt-fleet-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-md) var(--mono); color:var(--txt); }
+  .vt-fleet-diff { flex:none; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+  .vt-fleet-row-sub { font:400 var(--fs-2xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vt-fleet-question { font:400 var(--fs-2xs) var(--mono); color:var(--txt2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vt-fleet-unseen-badge { flex:none; width:6px; height:6px; border-radius:var(--radius-full); background:var(--acc); }
+  .vt-fleet-answers { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); margin-top:2px; }
+  .vt-fleet-answer-btn {
+    flex:none; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+    font:600 var(--fs-2xs) var(--mono); color:var(--txt); background:var(--tab);
+    border:1px solid var(--line); border-radius:var(--radius-sm); cursor:pointer;
+  }
+  .vt-fleet-answer-btn:active { background:var(--menu-hover); }
+  .vt-fleet-answer-fallback { color:var(--acc-ink); background:var(--color-acc-surface); border-color:var(--acc); }
+}

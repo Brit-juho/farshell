@@ -1,0 +1,181 @@
+/* 48px 아이콘 레일(시각적으로는 워크트리 레일로 대체됨)
+ *
+ * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
+ * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
+ * 컴파일 결과의 규칙 시퀀스가 동일하다(scripts로 검증).
+ *
+ * 왜 쪼갰나: 한 파일에 2900줄이면 "이 선이 무엇을 가르치는가"를 확인하려고
+ * 매번 파일 전체를 훑어야 하고, 같은 컴포넌트의 규칙이 파일 앞뒤 1500줄
+ * 떨어진 곳에 각각 있어도 아무도 모른다. 실제로 이번 개편에서 두 번 당했다.
+ *
+ * ⚠ 이 파일들은 main.css에서 `layer(legacy)`로 import된다 — components보다
+ * 뒤 순서다. 여기 규칙이 components의 컴포넌트를 이긴다는 뜻이므로, 컴포넌트로
+ * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
+ */
+
+/* =========================================================================
+   L4 — 좌측 rail (ADR-8). compact(<720px)에서는 통째로 숨고 팔레트+바텀시트가
+   대신한다(§2 반응형 3구간). rail/패널 자체는 position:fixed로 항상 두고,
+   body 패딩으로 본문(topbar+terminal-container)을 밀어낸다 — 기존 코드 뷰어
+   dock 모드(body.vt-docked, margin-right)와 같은 기법을 반대쪽에 쓴 것뿐이라
+   DOM을 새로 감쌀 필요가 없었다.
+   ========================================================================= */
+#vt-rail { display:none; } /* base: compact 숨김 */
+/* #vt-rail-panel은 아래에서 항상 display:flex를 갖는 실제 레이아웃 규칙이라
+   (id 셀렉터라 UA의 `[hidden]{display:none}` 기본 규칙보다 우선순위가 높다),
+   hidden 속성이 실제로 먹히려면 이 명시적 오버라이드가 반드시 필요하다.
+   compact에서는 rail.js가 애초에 패널을 열지 않지만, 방어적으로도 숨긴다. */
+#vt-rail-panel[hidden] { display:none; }
+@media (max-width:719px) { #vt-rail-panel { display:none; } }
+@media (min-width:720px) {
+  #vt-rail {
+    display:flex; flex-direction:column; align-items:center; gap:calc(var(--spacing) * 1);
+    position:fixed; left:0; top:0; bottom:0; width:48px; padding:calc(var(--spacing) * 2) 0;
+    background:var(--bar); border-right:1px solid var(--line); z-index:70;
+  }
+  /* rail 자신의 폭(48px)만큼은 패널이 열려 있지 않아도 항상 밀어낸다 —
+     아이콘 rail은 regular/wide 어디서나 상시 노출이므로. */
+  body { padding-left:calc(env(safe-area-inset-left) + 48px); }
+}
+.vt-rail-btn {
+  position:relative; width:36px; height:36px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  background:none; border:0; border-radius:var(--radius-sm); color:var(--sub); cursor:pointer;
+}
+.vt-rail-btn svg { width:19px; height:19px; }
+.vt-rail-btn:hover { background:var(--menu-hover); color:var(--txt); }
+/* unslop §1(70/20/10) — 상시 노출되는 rail의 활성 항목까지 solid 액센트로
+   채우면, 같은 화면의 주 액션(.vt-btn-primary)·배지와 액센트를 3중으로 나눠
+   갖는다. 액센트는 아이콘 색과 3px 막대로만 남기고 면적은 안 늘린다.
+
+   상태를 두 채널로 말한다 — 색(앰버 아이콘)과 모양(왼쪽 막대). 색 하나만
+   쓰면 색각 이상에서 현재 위치를 잃는다(WCAG 1.4.11). 처음 이 규칙을 적용할
+   땐 배경 단차만 뒀는데, 실측하니 rail 배경 대비 1.13~1.37:1로 사실상 안
+   보여서 결과적으로 색상 단독 신호였다.
+
+   배경은 --menu-hover가 아니라 전용 토큰을 쓴다. 같은 값이면 포인터 장치에서
+   비활성 항목에 hover했을 때 활성 항목과 배경이 똑같아진다.
+
+   아이콘은 액센트가 아니라 --txt다. 액센트를 아이콘에 쓰면 macos(#0a84ff)·
+   vscode(#007acc)처럼 액센트가 어두운 파랑인 스킨에서 활성 배경 위 대비가
+   2.14:1·1.82:1까지 떨어져 안 읽힌다(배경을 어느 쪽으로 밀어도 3:1이 안 나온다).
+   --txt는 5.10~9.34:1이고, 이러면 액센트가 활성 항목당 정확히 한 번 — 막대에서만
+   — 나타나 unslop §1의 "화면당 solid 액센트 1개"에 오히려 더 가까워진다. */
+.vt-rail-btn.active { background:var(--color-surface-active); color:var(--txt); }
+/* 막대가 접근성 요구(상태 식별 3:1)를 담당한다 — 실측 rail 배경 대비
+   farshell 9.25 · catppuccin 8.64 · windows 7.06 · notepad 4.88 · macos 3.82 ·
+   vscode 3.05:1. 버튼 radius(10px) 모서리와 겹치지 않게 위아래를 8px 들이고
+   막대 자신도 pill 반경을 가져, 잘린 막대처럼 보이지 않게 한다. */
+.vt-rail-btn.active::before {
+  content:''; position:absolute; left:0; top:8px; bottom:8px; width:3px;
+  border-radius:var(--radius-full); background:var(--color-acc);
+}
+.vt-rail-spacer { flex:1; } /* ⚙설정을 rail 맨 아래로 고정 */
+.vt-rail-badge {
+  position:absolute; top:2px; right:2px; min-width:15px; height:15px; padding:0 3px; border-radius:var(--radius-full);
+  background:var(--color-acc-surface); color:var(--acc-ink); font:600 9px/15px var(--ui); text-align:center;
+}
+
+/* 패널 — regular(720~1023)는 오버레이(뒤 pane을 안 밀어냄, 그림자로 떠 있는
+   느낌), wide(≥1280)는 밀어냄(body 패딩 추가 확장). 두 모드 다 position은
+   fixed로 동일하고 z-index/그림자만 다르다 — CSS 쪽은 body 클래스 하나
+   (.vt-rail-overlay, rail.js가 뷰포트 폭에 따라 토글)로 분기한다. */
+#vt-rail-panel {
+  position:fixed; left:48px; top:0; bottom:0; width:var(--vt-rail-panel-w, 280px);
+  background:var(--menu); border-right:1px solid var(--line); z-index:65;
+  display:flex; flex-direction:column; min-width:0;
+}
+body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,0,.35); }
+/* wide: rail(48px) 폭은 항상 밀려 있고, 패널이 열리면 그만큼 더 민다. */
+@media (min-width:1280px) {
+  body.vt-rail-panel-open:not(.vt-rail-overlay) {
+    padding-left:calc(env(safe-area-inset-left) + 48px + var(--vt-rail-panel-w, 280px));
+    transition:padding-left .15s ease;
+  }
+}
+.vt-rail-panel-head {
+  display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
+  height:var(--topbar-h); padding:0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+}
+.vt-rail-panel-title { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-rail-panel-close {
+  display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+  background:none; border:0; border-radius:var(--radius-sm); color:var(--sub); cursor:pointer;
+}
+.vt-rail-panel-close:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-rail-panel-close svg { width:14px; height:14px; }
+.vt-rail-panel-body { flex:1; min-height:0; overflow-y:auto; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); }
+/* 리사이저 — pane 분할선(layout/resizer.js)·코드뷰어 dock과 같은 관행:
+   히트 영역만 ::before로 넓힌다(4px 마우스/8px 터치), 시각적 선은 1px. */
+.vt-rail-resizer {
+  position:absolute; right:-3px; top:0; bottom:0; width:6px; cursor:col-resize; z-index:1;
+}
+.vt-rail-resizer::before { content:''; position:absolute; inset:0 -1px; }
+@media (pointer:coarse) { .vt-rail-resizer::before { inset:0 -3px; } }
+.vt-rail-resizer.dragging { background:color-mix(in srgb, var(--acc) 30%, transparent); }
+
+/* 「설정」 패널 — 예전 ⋯ 메뉴 마크업을 그대로 옮겨 썼다(.mi/.theme-row 등
+   클래스명이 옛 ⋯ 메뉴와 동일 — moreMenu.js/theme.js/pushui.js가 그 이름으로
+   찾으므로 그대로 둔다). 세로 목록으로만 배치하면 되므로 별도 mi 스타일은
+   기존 것을 재사용. */
+#vt-rail-settings-tpl { display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5); }
+/* #vt-rail-panel[hidden] 위 주석과 같은 이유 — id 셀렉터가 UA의 [hidden] 기본
+   규칙보다 우선하므로, 패널에 옮겨 붙기 전(index.html에 정적으로 있을 때)
+   실제로 숨어 있으려면 이 명시적 오버라이드가 필요하다(실브라우저 검증 중
+   발견 — 헤드리스/jsdom 테스트는 [hidden]을 attribute만으로도 존중해 이
+   불일치를 못 잡았다). rail.js가 패널을 열며 hidden을 지우는 순간부터는
+   위 규칙(display:flex)이 다시 이긴다. */
+#vt-rail-settings-tpl[hidden] { display:none; }
+#vt-rail-settings-tpl .mi {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-height:36px;
+  padding:0 calc(var(--spacing) * 1.5); border:0; background:transparent; border-radius:var(--radius-sm);
+  color:var(--txt); font-size:var(--fs-sm); text-align:left; cursor:pointer; width:100%;
+}
+#vt-rail-settings-tpl .mi:hover { background:var(--menu-hover); }
+#vt-rail-settings-tpl .mi svg { width:16px; height:16px; flex-shrink:0; color:var(--sub); }
+#vt-rail-settings-tpl .mi input[type="checkbox"] { margin-left:auto; width:16px; height:16px; accent-color:var(--acc); cursor:pointer; }
+
+/* 「세션」 패널 */
+.vt-rail-session-new {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); width:100%; margin-bottom:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); background:var(--tab); color:var(--txt);
+  border:1px dashed var(--line); border-radius:var(--trad); font:500 var(--fs-sm) var(--ui); cursor:pointer;
+}
+.vt-rail-session-new:hover { background:var(--menu-hover); border-color:var(--acc); color:var(--acc); }
+.vt-rail-session-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
+.vt-rail-session-row {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-height:40px;
+  padding:0 calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2); border:1px solid var(--line); border-radius:var(--radius-sm);
+}
+.vt-rail-session-row.active { border-color:var(--acc); }
+/* N37 3단계 4/n — 레일 행이 세션 드래그 소스다(탭 줄을 대신한다). 끄는 동안의
+   표시는 pane 헤더 드래그와 같은 규칙으로 맞춘다. */
+.vt-rail-session-row.dragging { opacity:.45; cursor:grabbing; }
+.vt-rail-session-select {
+  flex:1; min-width:0; border:0; background:transparent; color:var(--txt); text-align:left; cursor:pointer;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--ui); padding:calc(var(--spacing) * 1) 0;
+}
+.vt-rail-session-actions { display:flex; flex-shrink:0; }
+.vt-rail-session-action {
+  width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+  border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm); cursor:pointer;
+}
+.vt-rail-session-action:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-rail-session-empty { padding:calc(var(--spacing) * 6) calc(var(--spacing) * 2); text-align:center; color:var(--sub); font-size:var(--fs-sm); }
+/* 라이브 프리뷰 카드(tmux 세션) — .vt-qo-session-card와 같은 목적, 목록
+   레이아웃만 다르다(패딩·테두리는 .vt-card가 이미 갖고 있어 감쌀 필요 없음). */
+/* 이 요소는 .vt-card(flex-direction:column)와 .vt-rail-session-row
+   (align-items:center)를 동시에 갖는다 — 후자가 파일 뒤쪽이라 이겨서, 컬럼
+   방향 flex의 자식이 stretch되지 않고 max-content 폭을 갖는다. 그 결과
+   .card-preview가 카드 밖으로 1008px 삐져나와(실측: x=-314.5) 패널과 터미널
+   위를 덮고 있었다. 카드 경로에서만 stretch를 되돌린다. */
+.vt-rail-session-card { padding-right:calc(var(--spacing) * 1); align-items:stretch; }
+.vt-rail-session-card .card-preview { max-height:64px; }
+.vt-rail-session-footer {
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
+  margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2.5); border-top:1px solid var(--line);
+}
+.vt-rail-session-footer-item {
+  min-height:34px; padding:0 calc(var(--spacing) * 1.5); border:0; background:transparent; border-radius:var(--radius-sm);
+  color:var(--sub); font-size:var(--fs-xs); text-align:left; cursor:pointer;
+}
+.vt-rail-session-footer-item:hover { background:var(--menu-hover); color:var(--txt); }

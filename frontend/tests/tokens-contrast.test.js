@@ -216,8 +216,21 @@ test('액센트 위 텍스트(acc-ink)가 실제 버튼 바탕에서 AA를 넘�
   assert.deepStrictEqual(fails, [], `주 액션 버튼의 글자가 안 읽힌다:\n  ${fails.join('\n  ')}`);
 });
 
+// 2.1.6 — legacy.css(2927줄 한 파일)가 styles/screens/ 아홉 개로 쪼개졌다.
+// 아래 검사들은 "어느 파일에 있는가"가 아니라 "그 규칙이 어딘가에 살아 있는가"를
+// 보는 것이므로, 파일 하나를 읽는 대신 screens 전체를 이어 붙여 본다. 이렇게
+// 두면 다음에 또 쪼개도 이 테스트는 안 깨지고, 반대로 규칙이 **사라지면**
+// 확실히 깨진다(그게 이 테스트가 지키려는 것이다).
+function readScreens() {
+  const dir = path.join(ROOT, 'styles', 'screens');
+  return fs.readdirSync(dir).sort()
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => fs.readFileSync(path.join(dir, f), 'utf8'))
+    .join('\n');
+}
+
 test('채움 버튼이 --color-acc가 아니라 --color-acc-surface를 쓴다', () => {
-  const legacy = fs.readFileSync(path.join(ROOT, 'styles', 'layers', 'legacy.css'), 'utf8');
+  const legacy = readScreens();
   assert.doesNotMatch(legacy, /background:var\(--acc\);\s*color:var\(--acc-ink\)/,
     '액센트를 바탕으로 직접 쓰면 macos에서 흰 글자가 3.65:1로 떨어진다');
 });
@@ -252,13 +265,13 @@ test('상태 dot에는 색 말고 모양 채널이 있다 (reduced-motion 대체
 });
 
 test('rail 활성 표시가 색 단독이 아니다 (막대가 있어야 한다)', () => {
-  const legacy = fs.readFileSync(path.join(ROOT, 'styles', 'layers', 'legacy.css'), 'utf8');
+  const legacy = readScreens();
   assert.match(legacy, /\.vt-rail-btn\.active::before\s*\{[^}]*background:var\(--color-acc\)/,
     'rail 활성 막대가 사라졌다 — 배경 단차만으로는 1.13~1.37:1이라 색 단독 신호가 된다');
 });
 
 test('rail 활성 배경이 hover와 다른 토큰을 쓴다', () => {
-  const legacy = fs.readFileSync(path.join(ROOT, 'styles', 'layers', 'legacy.css'), 'utf8');
+  const legacy = readScreens();
   const active = legacy.match(/\.vt-rail-btn\.active\s*\{([^}]*)\}/);
   assert.ok(active, '.vt-rail-btn.active 규칙이 없다');
   assert.match(active[1], /background:var\(--color-surface-active\)/);

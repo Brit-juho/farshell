@@ -1,0 +1,243 @@
+/* 워크트리 레일 252px · 워크트리 만들기 다이얼로그
+ *
+ * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
+ * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
+ * 컴파일 결과의 규칙 시퀀스가 동일하다(scripts로 검증).
+ *
+ * 왜 쪼갰나: 한 파일에 2900줄이면 "이 선이 무엇을 가르치는가"를 확인하려고
+ * 매번 파일 전체를 훑어야 하고, 같은 컴포넌트의 규칙이 파일 앞뒤 1500줄
+ * 떨어진 곳에 각각 있어도 아무도 모른다. 실제로 이번 개편에서 두 번 당했다.
+ *
+ * ⚠ 이 파일들은 main.css에서 `layer(legacy)`로 import된다 — components보다
+ * 뒤 순서다. 여기 규칙이 components의 컴포넌트를 이긴다는 뜻이므로, 컴포넌트로
+ * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
+ */
+
+/* ── N36 §5 — 워크트리 레일 252px (2.1.0은 세션을 임시로 그린다, ADR-10) ──
+   기존 48px 아이콘 레일(#vt-rail)을 시각적으로 대체한다. **#vt-rail-panel/
+   #vt-rail-settings-tpl은 안 건드린다** — 데스크톱 마이크·테마 칩이 그 안에만
+   살아서, "⋯ 더보기" 메뉴가 숨은 #vt-rail-settings 버튼을 그대로 다시 누르면
+   그 플라이아웃이 예전과 똑같이 열려야 한다(Rail.tsx 주석 참고). 아이콘
+   스트립(#vt-rail) 자신만 지운다 — 그게 차지하던 자리는 이제 없으므로, 그
+   자리를 전제로 한 body 고정 패딩(48px)도 함께 무효화한다. 새 레일의 폭은
+   아래 @media 블록에서 --vt-wgrail-w로 다시 민다(같은 specificity, 파일
+   뒤쪽이라 이긴다 — !important 불필요. 패널이 열렸을 때의 추가 패딩 규칙은
+   더 구체적인 셀렉터라 그대로 이긴다). compact(<720px)에서는 이 레일도 하단
+   내비에 자리를 내주므로 통째로 숨는다(70-mobile.md 전까지는 안 보이는
+   것으로 충분). */
+#vt-rail { display:none !important; }
+@media (min-width:720px) {
+  body { padding-left:env(safe-area-inset-left); }
+}
+
+#vt-wgrail-slot { display:contents; }
+#vt-wgrail {
+  display:none;
+  flex-direction:column; width:var(--vt-wgrail-w, 252px); flex:none;
+  position:fixed; left:0; top:0; bottom:0; z-index:70;
+  background:var(--bar); border-right:1px solid var(--line);
+  min-width:0; transition:width .12s ease;
+}
+#vt-wgrail.collapsed { width:48px !important; }
+@media (min-width:720px) {
+  #vt-wgrail { display:flex; }
+  body { padding-left:calc(env(safe-area-inset-left) + var(--vt-wgrail-w, 252px)) !important; }
+}
+
+.vt-wgrail-head {
+  display:flex; align-items:center; justify-content:space-between;
+  height:28px; padding:0 calc(var(--spacing) * 2.5); flex:none;
+  border-bottom:1px solid var(--line);
+}
+.vt-wgrail-title {
+  font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub);
+}
+/* C1(80 §1) — 호스트 스위처 칩. 제목 자리를 그대로 쓴다(호스트가 둘 이상일
+   때만 렌더되므로 둘이 같이 보이는 일은 없다). 원격을 보고 있을 때만 강조색을
+   주고, 오프라인이면 흐리게 — "지금 보고 있는 게 내 맥이 아니다"를 한눈에. */
+.vt-wgrail-host {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-width:0;
+  border:0; background:transparent; cursor:pointer; padding:2px 4px; border-radius:var(--radius-sm);
+  font:600 var(--fs-2xs) var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--sub);
+}
+.vt-wgrail-host:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wgrail-host.remote { color:var(--acc); }
+.vt-wgrail-host.offline { opacity:.6; text-decoration:line-through; }
+.vt-wgrail-host-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-wgrail-host-caret { font-size:var(--fs-3xs, 9px); opacity:.7; }
+.vt-wgrail-remote-note { opacity:.7; }
+.vt-wgrail-new[disabled] { opacity:.45; cursor:not-allowed; }
+
+.vt-wgrail-collapse {
+  border:0; background:transparent; color:var(--sub); cursor:pointer;
+  font:600 var(--fs-base) var(--ui); padding:2px 6px; border-radius:var(--radius-sm); line-height:1;
+}
+.vt-wgrail-collapse:hover { background:var(--menu-hover); color:var(--txt); }
+
+.vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; }
+.vt-wgrail-group-head {
+  padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
+  font:600 var(--fs-3xs) var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--sub);
+  background:var(--win);
+}
+
+.vt-wgrail-row {
+  display:flex; align-items:stretch; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
+  border-bottom:1px solid var(--line); cursor:pointer; min-width:0;
+}
+.vt-wgrail-row:hover { background:var(--menu-hover); }
+/* 활성 행이 **이겨야 한다**(2026-09-17 디자인 리뷰 B1). 이전에는
+   --color-surface-active 하나로만 말했는데, 그 토큰은 밝은 notepad 스킨에서
+   `rgb(0 0 0 / .18)`(검정 오버레이)이다. 어두운 스킨 5종은 흰색 오버레이라
+   "떠오름"으로 읽히지만, 종이 스킨에서 검정을 덮으면 **"흐려짐 = 비활성"**으로
+   읽힌다 — 방향이 뒤집힌 것이다(그 토큰 자체는 hover 대비 1.35:1을 맞추려고
+   고른 값이라 건드리지 않는다. 문제는 대비 크기가 아니라 방향이었다).
+
+   그래서 스킨과 무관하게 뜻이 같은 것으로 말한다:
+     · --color-bg-3 = 각 스킨의 "가장 올라온 표면"(notepad #fff / farshell #141719)
+     · --shadow-e1  = 그 위에 얹은 낮은 elevation
+   둘이 합쳐 밝든 어둡든 "이 행이 떠 있다"가 된다.
+
+   그리고 이름에 액센트를 준다. 리뷰 B3이 "--color-acc가 제품 표면에 한 번도
+   안 쓰인다(60/30/10의 10%가 비어 있다)"고 지적했는데, 액센트가 가장 값진
+   자리가 바로 "지금 여기"다. **채움이 아니라 글자색**이라 DESIGN.md의
+   "화면당 solid 액센트 1개"와도 충돌하지 않는다. */
+.vt-wgrail-row.active {
+  background:var(--color-bg-3);
+  box-shadow:var(--shadow-e1);
+  position:relative; z-index:1;
+}
+.vt-wgrail-row.active .vt-wgrail-name { color:var(--color-acc); font-weight:600; }
+/* 20-design-system.md §5(O2) — 색점 램프. 상태색 막대(.vt-wgrail-bar, 아래)와
+   별개 요소 — DOM에서 색점이 먼저(왼쪽 끝), 상태색이 그다음. */
+.vt-wgrail-hash { width:3px; flex:none; border-radius:var(--radius-full); background:transparent; }
+.vt-wgrail-hash.hash-0 { background:var(--color-hash-1); }
+.vt-wgrail-hash.hash-1 { background:var(--color-hash-2); }
+.vt-wgrail-hash.hash-2 { background:var(--color-hash-3); }
+.vt-wgrail-hash.hash-3 { background:var(--color-hash-4); }
+.vt-wgrail-hash.hash-4 { background:var(--color-hash-5); }
+.vt-wgrail-hash.hash-5 { background:var(--color-hash-6); }
+.vt-wgrail-hash.hash-6 { background:var(--color-hash-7); }
+.vt-wgrail-hash.hash-7 { background:var(--color-hash-8); }
+.vt-wgrail-hash.kind-session { background:transparent; }
+.vt-wgrail-bar { width:3px; flex:none; border-radius:var(--radius-full); background:var(--color-st-idle); }
+.vt-wgrail-bar.tone-waiting { background:var(--color-st-waiting); }
+.vt-wgrail-bar.tone-working { background:var(--color-st-working); }
+.vt-wgrail-bar.tone-error   { background:var(--color-st-error); }
+.vt-wgrail-bar.tone-done    { background:var(--color-st-done); }
+.vt-wgrail-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.vt-wgrail-row-top { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
+.vt-wgrail-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 var(--fs-sm) var(--mono); color:var(--txt); }
+.vt-wgrail-diff { flex:none; font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
+.vt-wgrail-row-sub { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* N38(70-mobile.md §2)과 같은 패턴 — waiting 상태에서 감지된 질문 1줄 미리보기
+   (10-shell-layout.md §5 목업 "? Allow edit to legacy.css?"). */
+.vt-wgrail-question { font:400 var(--fs-3xs) var(--mono); color:var(--warn); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* N8/N44(30-worktree.md §4) — "「기타」 그룹: ... 색점 없음". 어떤 워크트리에도
+   안 속하는 세션 행은 저장소가 없어 색점 막대·상태색 막대 둘 다 투명. */
+.vt-wgrail-bar.kind-session { background:transparent; }
+/* 30 §4: "워크트리는 있는데 세션이 없는 행: 흐리게, 클릭 → open." */
+.vt-wgrail-row.no-session { opacity:.55; }
+.vt-wgrail-row.no-session:hover { opacity:.8; }
+
+.vt-wgrail-empty {
+  padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
+  color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;
+}
+.vt-wgrail-empty-new {
+  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm);
+  color:var(--txt); font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); cursor:pointer;
+}
+.vt-wgrail-empty-new:hover { background:var(--menu-hover); }
+
+/* 접힘: 마크·색점만(§5 "48px 접힘: 마크+색점+dot만") — 이름·상태 문장·그룹
+   헤더는 숨긴다. 행 자체는 색점 막대만 보이는 얇은 줄로. */
+#vt-wgrail.collapsed .vt-wgrail-row { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1); justify-content:center; }
+#vt-wgrail.collapsed .vt-wgrail-row-main { display:none; }
+#vt-wgrail.collapsed .vt-wgrail-bar,
+#vt-wgrail.collapsed .vt-wgrail-hash { width:4px; }
+
+.vt-wgrail-footer {
+  display:flex; align-items:stretch; border-top:1px solid var(--line); flex:none;
+}
+.vt-wgrail-new {
+  flex:1; display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  height:32px; padding:0 calc(var(--spacing) * 2.5); background:transparent; border:0;
+  color:var(--sub); font:500 var(--fs-xs) var(--mono); text-align:left; cursor:pointer; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.vt-wgrail-new:hover { background:var(--menu-hover); color:var(--txt); }
+/* 2.1.6 — 레일 바닥의 아이콘 버튼(설정·더보기). 예전 .vt-wgrail-more 한 칸을
+   같은 모양의 여러 칸으로 일반화했다. 32px는 행 높이 3단(24/28/36) 밖이지만
+   레일 바닥 줄 높이가 32px로 이미 고정돼 있어 그 줄에 맞춘다. */
+.vt-wgrail-icon {
+  flex:none; width:32px; height:32px; border:0; border-left:1px solid var(--line);
+  background:transparent; color:var(--sub); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.vt-wgrail-icon:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wgrail-icon:active { background:var(--color-surface-active); }
+
+.vt-wgrail-resizer {
+  position:absolute; top:0; bottom:0; right:-3px; width:6px; cursor:col-resize; z-index:1;
+}
+#vt-wgrail.collapsed .vt-wgrail-resizer { display:none; }
+.vt-wgrail-resizer.dragging { background:var(--acc); opacity:.4; }
+
+/* ── N44 — 워크트리 만들기 다이얼로그(30-worktree.md §3) ────────────────────
+   껍데기는 .vt-viewer-backdrop/.vt-viewer-card(코드 뷰어·가이드·pane picker와
+   공유)를 그대로 쓴다 — 폭만 좁힌다. 안쪽 폼 레이아웃만 새로 정의. */
+.vt-wtd-card { max-width:440px; max-height:min(88vh,720px); }
+.vt-wtd-head {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); flex:none;
+}
+.vt-wtd-title { flex:1; font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-wtd-x {
+  flex:none; width:24px; height:24px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--sub); cursor:pointer; font:400 var(--fs-base) var(--ui); line-height:1;
+}
+.vt-wtd-x:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wtd-body {
+  flex:1 1 auto; overflow-y:auto; padding:calc(var(--spacing) * 3);
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 2);
+}
+.vt-wtd-row { display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-width:0; }
+.vt-wtd-label { flex:0 0 84px; font:500 var(--fs-xs) var(--mono); color:var(--sub); }
+.vt-wtd-input, .vt-wtd-select {
+  flex:1; min-width:0; padding:calc(var(--spacing) * 1.25) calc(var(--spacing) * 1.75);
+  font:400 var(--fs-xs) var(--mono); color:var(--txt); background:var(--bar);
+  border:1px solid var(--line); border-radius:var(--radius-sm); outline:none;
+}
+.vt-wtd-input:focus, .vt-wtd-select:focus { border-color:var(--acc); }
+.vt-wtd-input-narrow { flex:0 0 120px; }
+.vt-wtd-section-title {
+  font:600 var(--fs-3xs) var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--sub);
+  margin-top:calc(var(--spacing) * 1);
+}
+.vt-wtd-warn {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2); font:400 var(--fs-2xs) var(--mono);
+  color:var(--warn); background:color-mix(in srgb, var(--warn) 12%, var(--bar)); border-radius:var(--radius-sm);
+  display:flex; align-items:flex-start; gap:calc(var(--spacing) * 1.5); flex-wrap:wrap;
+}
+.vt-wtd-warn-fix {
+  flex:none; margin-left:auto; background:transparent; border:1px solid currentColor; border-radius:var(--radius-sm);
+  color:inherit; font:500 var(--fs-3xs) var(--mono); padding:calc(var(--spacing) * .5) calc(var(--spacing) * 1.5); cursor:pointer;
+}
+.vt-wtd-warn-fix:hover { background:color-mix(in srgb, var(--warn) 20%, transparent); }
+.vt-wtd-error { font:400 var(--fs-2xs) var(--mono); color:var(--err); }
+.vt-wtd-foot {
+  display:flex; justify-content:flex-end; gap:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-top:1px solid var(--line); flex:none;
+}
+.vt-wtd-cancel, .vt-wtd-submit {
+  padding:calc(var(--spacing) * 1.25) calc(var(--spacing) * 2.5); border-radius:var(--radius-sm);
+  font:500 var(--fs-xs) var(--mono); cursor:pointer;
+}
+.vt-wtd-cancel { background:transparent; border:1px solid var(--line); color:var(--sub); }
+.vt-wtd-cancel:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-wtd-submit { background:var(--acc); border:1px solid var(--acc); color:var(--win); }
+.vt-wtd-submit:hover { filter:brightness(1.08); }
+.vt-wtd-submit:disabled { opacity:.5; cursor:not-allowed; filter:none; }

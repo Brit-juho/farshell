@@ -1,0 +1,191 @@
+/* 글꼴 · 스케일/테마 토큰 별칭 · 전역 리셋
+ *
+ * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
+ * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
+ * 컴파일 결과의 규칙 시퀀스가 동일하다(scripts로 검증).
+ *
+ * 왜 쪼갰나: 한 파일에 2900줄이면 "이 선이 무엇을 가르치는가"를 확인하려고
+ * 매번 파일 전체를 훑어야 하고, 같은 컴포넌트의 규칙이 파일 앞뒤 1500줄
+ * 떨어진 곳에 각각 있어도 아무도 모른다. 실제로 이번 개편에서 두 번 당했다.
+ *
+ * ⚠ 이 파일들은 main.css에서 `layer(legacy)`로 import된다 — components보다
+ * 뒤 순서다. 여기 규칙이 components의 컴포넌트를 이긴다는 뜻이므로, 컴포넌트로
+ * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
+ */
+
+/* ---- 번들 글꼴 -----------------------------------------------------------
+ * UI 글꼴(Wanted Sans)과 UI 모노(JetBrains Mono)의 @font-face는 여기 없다 —
+ * frontend/index.html이 vendor/fonts/<family>/*.css를 app.css보다 먼저 링크한다
+ * (그 파일들은 unicode-range로 92 + 6조각이라 여기 인라인하면 이 파일이
+ *  1000줄 늘어난다).
+ * 아래 두 줄만 남은 이유: IBM Plex Mono는 **터미널(xterm)** 글꼴 스택의
+ * 폴백으로 theme.js가 아직 이름으로 참조한다(windows 스킨 포함). UI에서는
+ * 더 이상 쓰지 않는다. IBM Plex Sans는 한글 글리프가 하나도 없어(라틴
+ * 서브셋) UI 한글이 전부 OS 기본 글꼴로 떨어지던 원인이라 제거했다. */
+@font-face { font-family:"IBM Plex Mono"; font-style:normal; font-weight:400; font-display:swap; src:url("/static/vendor/fonts/plex-mono-400.woff2") format("woff2"); }
+@font-face { font-family:"IBM Plex Mono"; font-style:normal; font-weight:600; font-display:swap; src:url("/static/vendor/fonts/plex-mono-600.woff2") format("woff2"); }
+
+/* =========================================================================
+   VT · farshell — 6-테마 디자인 시스템
+   테마: html[data-skin="farshell" | "macos" | "catppuccin" | "windows" |
+         "vscode" | "notepad"] (기본 farshell — D1, 2026-09-04부터.
+         기존 macos 기본은 ADR-3로 폐기, 이미 vt-skin을 저장해 둔 사용자는
+         그 값을 그대로 존중한다 — 이 CSS는 관여하지 않음, frontend/index.html
+         의 부팅 스크립트가 "저장된 값이 없을 때만" farshell로 떨어진다.)
+   모든 색은 토큰(CSS 변수)으로만 참조. 하드코딩 hex 금지.
+   ========================================================================= */
+
+/* ---- 스케일 토큰 (구 D1 — spacing 21종·font-size 18종·radius 51곳을
+   하나의 스케일로 정리한 이전 히스토리, 2.0 이전) ---------------------------
+   font-size는 스킨 무관 값이라 :root에 한 번만 정의. --wrad/--trad(스킨별
+   모서리 굵기)는 그대로 유지, 이 토큰들과는 별개다.
+   D4(20-design-system.md, 2026-09-04): --sp-1..14와 --r-2xs..pill(10단)을
+   여기서 제거했다.
+   - spacing은 전부 Tailwind의 4px 단일 --spacing(tokens.css, D1에서 정의)
+     배수로 정확히 표현 가능했다(1px=0.25배, 6px=1.5배, 10px=2.5배, 14px=
+     3.5배 등 Tailwind 표준 fractional 스텝과 전부 일치, 우연이 아니라
+     애초에 4px 배수로 설계됐던 값들이라 나온 결과) — 소비처 138곳을
+     `calc(var(--spacing) * N)`으로 치환, 결과 px 값은 전부 기존과 동일
+     (회귀 불가능).
+   - radius는 값 보존이 안 된다(10단→3단+pill이 목적이라 일부러 합친다) —
+     `--radius-sm`(6px)/`--radius-md`(10px)/`--radius-lg`(14px, 전부
+     tokens.css)/`--radius-full`(9999px)로 재배정: r-2xs/xs/sm/md(2~6px)→
+     sm, r-lg/xl(8~10px)→md, r-2xl/3xl/4xl(12~18px)→lg, r-pill→full.
+     최대 델타는 r-4xl(18px→14px, -4px)·r-2xs(2px→6px, +4px) — 둘 다
+     실제 사용처가 큰 표면(바텀시트 모서리)이거나 이미 폭이 좁아 반경이
+     알아서 완전 원형으로 clamp되는 요소(3px 폭 드래그 표시줄)라 실측
+     확인 결과 육안 차이가 없었다(아래 검증 참고). 단, `.vt-vw-mode-btn`의
+     `--trad - var(--r-2xs)`(중첩 코너 보정용, 시맨틱 반경 단계가 아니라
+     순수 2px 오프셋으로 쓰이던 것)는 sm(6px)로 바꾸면 windows/vscode/
+     notepad의 `--trad`(4~6px)보다 커져 음수(0으로 clamp, 각짐)가 나므로
+     이 한 곳만 리터럴 `2px`로 남겼다. */
+/* 타입 스케일은 2.1.6부터 styles/theme/tokens.css가 단일 소스다(--fs-*를
+ * 거기서 정의한다). 여기 있던 :root 블록은 지웠다 — 같은 이름을 두 파일이
+ * 정의하면 unlayered인 이 파일이 항상 이겨서, tokens.css를 고쳐도 화면이
+ * 안 바뀌는 함정이 된다. */
+
+/* ---- 테마 토큰 ----------------------------------------------------------
+   D1(20-design-system.md/ADR-3): --win/--term/--txt/--sub/--acc/--acc-ink/
+   --line/--ok/--warn/--err/--info는 이제 리터럴 hex가 아니라 styles/theme/
+   tokens.css·skins.css의 --color-*(색 토큰 17개, 스킨별 html[data-skin=...]
+   블록에서 재정의됨)를 가리킨다 — 그 두 파일이 이제 색의 단일 진실이다.
+   --bar/--tab/--tab-active/--tab-active-txt/--menu/--menu-hover/--crust는
+   17개 토큰 계약 밖(UI 크롬 세부 톤)이라 지금까지처럼 이 파일에 리터럴로
+   남겨둔다 — 강제로 4단 bg 스케일에 욱여넣으면 기존 5종 스킨 다수가 실제로
+   보이는 색이 미세하게 달라진다(예: notepad는 tab-active/menu가 이미 같은
+   #fff라 bg 슬롯 하나에 안 들어간다). 값 자체는 전부 기존과 동일 — 이
+   커밋은 "달라 보이게" 만드는 게 아니라 "색의 소스를 옮기는" 작업이다
+   (farshell 스킨만 예외 — 새 스킨이라 처음부터 새 값). */
+:root,
+html[data-skin="farshell"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
+  --wrad:12px; --trad:7px;
+  --topbar-h:38px; --topbar-popup-y:44px;
+  --ui:var(--font-ui);
+  --mono:var(--font-mono);
+}
+html[data-skin="macos"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:#f2f2f5;
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.09); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
+  --wrad:12px; --trad:7px;
+  --topbar-h:38px; --topbar-popup-y:44px;
+  --ui:var(--font-ui);
+  --mono:var(--font-mono);
+  /* macOS 신호등 3색 — macos 스킨 전용 UI 크롬(실제 macOS 창 컨트롤 색을
+     그대로 재현하는 것이 목적이라 다른 스킨에 맞춰 바뀌면 안 된다. D1 하드코딩
+     정리 대상이었으나 "토큰화"가 아니라 "이 스킨 블록 안으로 이동"이 맞는
+     처리 — .traffic은 어차피 macos 외 스킨에서 display:none). */
+  --traffic-c1:#ff5f57; --traffic-c2:#febc2e; --traffic-c3:#28c840;
+}
+html[data-skin="catppuccin"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-2); --tab-active:var(--color-bg-3); --tab-active-txt:#f5e0dc;
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#11111b;
+  --wrad:12px; --trad:8px;
+}
+html[data-skin="windows"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-on-solid);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-1); --menu-hover:rgba(255,255,255,.1); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:var(--color-bg-3);
+  --wrad:8px; --trad:6px;
+  /* Windows 11 실제 창 닫기 버튼 hover 빨강 — windows 스킨 전용 UI 크롬(D1
+     하드코딩 정리 대상, .traffic과 같은 이유로 스킨 블록 안으로 이동). */
+  --close-hover:#e81123;
+}
+html[data-skin="vscode"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-on-solid);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#181818;
+  --wrad:8px; --trad:4px;
+}
+/* 노트패드 — 메모장/종이 느낌의 라이트 테마. 다른 스킨과 달리 밝은 배경이라
+   --menu-hover/--line은 흰색이 아닌 검정 오버레이로 뒤집어야 대비가 산다. */
+html[data-skin="notepad"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-2); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-3); --menu-hover:rgba(0,0,0,.055); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:var(--color-bg-1);
+  --wrad:6px; --trad:4px;
+}
+
+/* 3단 텍스트 램프의 중간 톤 — 헤딩(--txt)·메타(--sub) 둘뿐이던 텍스트 색을
+   본문 등급 하나로 넓힌다. Grid 카드처럼 제목/본문/메타 3단이 필요한 곳에서
+   본문(card-preview 등)이 제목과 똑같은 밝기로 경쟁하던 걸 막는다. 스킨마다
+   새 hex를 추가하는 대신 기존 두 토큰의 믹스로 유도해 5개 스킨 전부에
+   자동으로 맞는 톤이 나오게 한다. */
+:root, html { --txt2: color-mix(in srgb, var(--txt) 65%, var(--sub) 35%); }
+
+/* ---- 리셋 -------------------------------------------------------------- */
+/* 전역 리셋을 @layer base 안에 넣는다(2.1.6).
+ *
+ * 이 파일은 레이어 밖(unlayered)이라 어떤 @layer보다도 항상 이긴다. 그래서
+ * 이 한 줄이 레이어 밖에 있는 동안에는 **components 레이어의 어떤 컴포넌트도
+ * padding·margin을 가질 수 없었다** — 셀렉터 특정성과 무관하게 `*`가 이긴다.
+ * 실제로 .vt-select에 준 좌우 패딩이 통째로 무시돼 셀렉트가 24×24 정사각형으로
+ * 찌그러지는 걸 실브라우저에서 확인했다(height·border·background는 적용되는데
+ * padding만 사라져서 원인이 한눈에 안 보였다).
+ *
+ * base 레이어로 내리면 순서가 base < components < utilities < unlayered가 되어
+ * 리셋이 제 역할(가장 약한 기준선)을 한다. 이 파일의 나머지 규칙은 전부
+ * 레이어 밖이라 여전히 리셋을 이기므로 기존 화면은 그대로다. */
+/* 이 규칙 자체는 styles/layers/reset.css로 옮겼다 — 이 파일은 이제
+ * `layer(legacy)`로 들어오므로 여기 `@layer base`를 쓰면 그게 top-level base가
+ * 아니라 **legacy 안의 하위 레이어**(legacy.base)가 된다. 그러면 리셋이 다시
+ * components보다 뒤로 가서, 방금 고친 "컴포넌트가 padding을 못 갖는" 문제가
+ * 그대로 되살아난다. 레이어 안에 레이어를 쓸 때의 함정이라 여기 적어 둔다. */
+/* 모바일 키보드 대응: height:100%는 레이아웃 뷰포트 기준이라 소프트 키보드가
+   떠도 줄어들지 않는다 — #terminal-container(flex:1)의 clientHeight가 안
+   바뀌니 ws.js의 visualViewport resize → fitAndResize 트리거가 있어도 xterm
+   줄 수가 그대로라, 커서(프롬프트) 줄이 키보드에 덮인 채로 남는다. dvh는
+   시각 뷰포트를 따라가 키보드가 뜨면 실제로 줄어든다(iOS 16+/Android
+   Chrome). 미지원 브라우저 폴백으로 vh를 먼저 둔다 — 코드 뷰어/가이드
+   모바일 시트에 이미 쓰던 것과 같은 관용구. */
+html, body { height:100vh; height:100dvh; overflow:hidden; }
+body {
+  background:var(--win); color:var(--txt); font-family:var(--ui);
+  display:flex; flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  transition:background .2s, color .2s;
+  /* 2.1.6 — 네이티브 컨트롤(체크박스·라디오·슬라이더·progress)의 색.
+   * 이게 없으면 OS 기본 파랑이 그대로 나와서, 스킨을 무엇으로 바꾸든 설정
+   * 화면만 혼자 파랗다(실브라우저에서 확인한 상태). 상속되는 속성이라
+   * 여기 한 번이면 전부 따라온다 — 컨트롤의 모양 자체를 다시 그리는 건
+   * 2단계(components 레이어)의 몫이고, 이건 그 전까지의 하한선이다. */
+  accent-color:var(--acc);
+  /* 글꼴이 바뀌면서 필요해진 두 가지. Wanted Sans는 획이 가늘어 맥에서
+   * 기본 렌더링이 굵게 뭉친다. tabular-nums는 HUD·사용량·diff 수치가
+   * 1초마다 갱신될 때 자릿수가 흔들리지 않게 한다(수치는 모노로 조판하지만
+   * 한글이 섞인 줄은 --ui로 떨어지므로 여기서도 켠다). */
+  -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
+}
+:focus-visible { outline:2px solid var(--acc); outline-offset:2px; border-radius:var(--radius-sm); }
+button { font-family:inherit; }

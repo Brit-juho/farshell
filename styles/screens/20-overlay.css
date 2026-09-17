@@ -1,0 +1,356 @@
+/* JS가 만드는 오버레이 · 사용 가이드 · 모바일 키바
+ *
+ * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
+ * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
+ * 컴파일 결과의 규칙 시퀀스가 동일하다(scripts로 검증).
+ *
+ * 왜 쪼갰나: 한 파일에 2900줄이면 "이 선이 무엇을 가르치는가"를 확인하려고
+ * 매번 파일 전체를 훑어야 하고, 같은 컴포넌트의 규칙이 파일 앞뒤 1500줄
+ * 떨어진 곳에 각각 있어도 아무도 모른다. 실제로 이번 개편에서 두 번 당했다.
+ *
+ * ⚠ 이 파일들은 main.css에서 `layer(legacy)`로 import된다 — components보다
+ * 뒤 순서다. 여기 규칙이 components의 컴포넌트를 이긴다는 뜻이므로, 컴포넌트로
+ * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
+ */
+
+/* =========================================================================
+   JS가 동적으로 만드는 오버레이 — 클래스로 테마 적용 (terminal/voice/picker/grid.js)
+   ========================================================================= */
+/* .vt-toast / #vt-toasts는 styles/layers/components.css로 옮겼다(2.1.6).
+   여기 남겨두면 unlayered라 그쪽을 고쳐도 화면이 안 바뀐다. */
+
+/* F0: 토스트 스택 컨테이너 — 통합 showToast(js/ui/toast.js)가 사용한다.
+   예전엔 grid.js 가 #agent-toast 싱글톤 하나를 재사용해 연속 토스트가 서로를
+   덮어썼다. voice.js 의 showNotification 은 아직 body 에 .vt-toast 를 직접
+   붙이므로(D6에서 통합 예정) .vt-toast 자체의 fixed 배치는 그대로 두고,
+   컨테이너 안에 들어온 것만 정적 배치로 되돌려 세로로 쌓는다. */
+
+/* M6: 핀치로 폰트 크기 조절하는 동안 현재 값을 보여주는 뱃지 — 손 떼면 숨김 */
+.vt-font-badge {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  background:var(--menu); color:var(--txt); border:1px solid var(--line);
+  padding:calc(var(--spacing) * 3.5) calc(var(--spacing) * 5); border-radius:var(--radius-lg);
+  font:600 var(--fs-xl) var(--ui); z-index:210; pointer-events:none;
+  box-shadow:var(--shadow-e2);
+}
+.vt-font-badge[hidden] { display:none; }
+
+.vt-overlay {
+  position:fixed; inset:0; background:color-mix(in srgb, var(--win) 88%, transparent);
+  z-index:400; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--spacing) * 4);
+  -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); text-align:center; padding:calc(var(--spacing) * 6);
+}
+.vt-overlay .vt-ov-icon { color:var(--err); }
+.vt-overlay .vt-ov-title { color:var(--err); font-size:var(--fs-md); font-weight:700; }
+.vt-overlay .vt-ov-sub { color:var(--sub); font-size:var(--fs-sm); }
+/* O1: 재연결 오버레이의 경과 시간 + 끊기/다시 연결 버튼(Wave connstatusoverlay 참고) */
+.vt-overlay .vt-ov-elapsed{
+  color:var(--sub); font:400 var(--fs-xs) var(--mono); font-variant-numeric:tabular-nums;
+  margin-top:calc(calc(var(--spacing) * 4) * -1 + calc(var(--spacing) * 1.5));   /* .vt-ov-sub 바로 아래로 붙임 */
+}
+.vt-overlay .vt-ov-stop-btn{
+  background:var(--tab); color:var(--txt); border:1px solid var(--line);
+  border-radius:var(--trad); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+  font:500 var(--fs-sm) var(--ui); cursor:pointer; touch-action:manipulation;
+}
+.vt-overlay .vt-ov-stop-btn:hover{ background:var(--menu-hover); }
+.vt-overlay.stopped .vt-ov-stop-btn{ background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
+
+/* 빈 상태 온보딩 — 상단 헤더(#topbar)는 가리지 않고 그 아래 영역만 채운다.
+   inset:0로 전체를 덮으면 헤더가 안 보여서 새 세션/메뉴 접근이 막힌다. */
+.vt-onboarding {
+  position:fixed; top:calc(var(--topbar-h) + env(safe-area-inset-top,0px)); left:0; right:0; bottom:0;
+  background:var(--win); z-index:500;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:calc(var(--spacing) * 5); padding:calc(var(--spacing) * 10); text-align:center;
+}
+/* L4: 실브라우저 검증 중 발견한 회귀 — .vt-onboarding은 position:fixed라 body의
+   padding-left(rail을 위해 밀어낸 공간)를 안 따라간다. z-index(500)가 rail(70)/
+   패널(65, 오버레이 110)보다 훨씬 높아서, 세션이 하나도 없는 상태(흔하다 — 부팅
+   직후, 마지막 탭을 닫은 직후)에서 rail 전체가 온보딩 화면 밑에 깔려 클릭이
+   안 먹혔다. body의 padding-left 규칙과 정확히 같은 값을 쓴다. */
+/* N35·N36: 그 48px은 옛 아이콘 레일 폭이었다. 레일이 252px 워크트리 레일로,
+   오른쪽에 dock이 생기면서 **같은 회귀가 두 번 더** 났다(실브라우저로 확인:
+   온보딩이 레일 위 절반과 dock 전체를 덮어 클릭이 안 먹었다). 값은 언제나
+   body의 padding 규칙과 정확히 같아야 하므로 같은 변수를 읽는다 — 접힘·폭
+   변경이 자동으로 따라온다. */
+/* 2.1.2 — `.no-right-rail` 예외를 걷어냈다. 그 클래스는 **2.0의 우측 사용량
+   레일**이 없을 때 붙던 것인데, 2.1의 dock은 사용량 소스와 무관하게 항상
+   오른쪽에 있다. 그래서 clauth가 없거나 그 파일 스키마가 바뀐 환경(=그냥
+   usage가 꺼진 흔한 환경)에서 온보딩이 dock 전체를 덮어 클릭이 안 먹었다
+   — 실브라우저 스모크가 잡았다. */
+@media (min-width:720px) {
+  .vt-onboarding { left:var(--vt-wgrail-w, 252px); right:36px; }
+}
+@media (min-width:1280px) {
+  .vt-onboarding { right:var(--vt-dock-w, 392px); }
+  body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(var(--vt-wgrail-w, 252px) + var(--vt-rail-panel-w, 280px)); }
+}
+/* L7: 실브라우저 검증 중 발견한 같은 종류의 회귀 2건(위 L4 회귀와 원인이
+   같다 — .vt-onboarding의 z-index:500이 새로 생긴 하단/중앙 UI를 덮는다).
+   둘 다 이번 diff가 만든 버그는 아니지만(voice-only-mode의 #topbar flex:1도,
+   keybar 자체도 그 전부터 있었다), 세션 0개 상태를 실제로 테스트해보지 않으면
+   드러나지 않던 것들이라 이번에 같이 고친다. */
+@media (pointer:coarse) {
+  /* keybar 높이(입력 슬롯 줄 + 키들 줄, #terminal-container padding-bottom과
+     같은 값)만큼 온보딩 하단을 비워 keybar가 그 밑에 깔리지 않게 한다. */
+  .vt-onboarding { bottom:calc(var(--spacing) * 24 + env(safe-area-inset-bottom,0px)); }
+}
+/* 음성 전용 모드는 "터미널을 포함해 다른 모든 걸 숨기고 마이크만" 보여주는
+   화면이다 — 온보딩(세션 없음 안내)도 그 "다른 모든 것"에 포함시켜 아예
+   숨긴다. bottom 오프셋 같은 부분 조정 대신 완전히 숨기는 쪽을 택한 이유:
+   음성 전용 모드의 #topbar는 화면 전체 높이로 늘어나므로(flex:1) 부분
+   오프셋으로는 겹침을 못 피한다. */
+body.voice-only-mode .vt-onboarding { display:none; }
+.vt-onboarding .vt-ob-icon { font-size:var(--fs-4xl); color:var(--color-muted); }
+.vt-onboarding h2 { color:var(--txt); font-size:var(--fs-xl); }
+.vt-onboarding p { color:var(--sub); font-size:var(--fs-base); max-width:320px; line-height:1.6; }
+.vt-onboarding .vt-ob-actions { display:flex; gap:calc(var(--spacing) * 3); flex-wrap:wrap; justify-content:center; }
+.vt-ob-sessions {
+  width:100%; max-width:360px; max-height:220px; overflow-y:auto;
+  border:1px solid var(--line); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1.5);
+  text-align:left; background:var(--bar);
+}
+.vt-ob-sessions-title { font-size:var(--fs-2xs); color:var(--sub); padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5); }
+.vt-ob-row { padding:0; }
+.vt-ob-row-label {
+  display:block; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2); font-size:var(--fs-sm); color:var(--txt); cursor:pointer;
+  border-radius:var(--radius-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.vt-ob-row-label:hover { background:var(--menu-hover); }
+/* L1: 캐시로 즉시 그린 목록 — 아직 실제 연결을 확인 전이라 눌리지 않게 막고
+   흐리게 표시(Orca 패턴: "확인 전엔 비활성"). */
+.vt-ob-sessions-pending { opacity:.55; }
+.vt-ob-sessions-pending .vt-ob-row-label { cursor:default; pointer-events:none; }
+.vt-btn-primary, .vt-btn-secondary {
+  padding:calc(var(--spacing) * 3) calc(var(--spacing) * 6); border-radius:var(--radius-sm); border:none; font-size:var(--fs-base); cursor:pointer;
+}
+.vt-btn-primary { background:var(--color-acc-surface); color:var(--acc-ink); }
+.vt-btn-secondary { background:var(--tab); color:var(--txt); }
+.vt-onboarding .vt-ob-hint { color:var(--sub); font-size:var(--fs-2xs); margin-top:calc(var(--spacing) * 4); opacity:.7; }
+
+/* ── 사용 가이드 모달 (첫 사용자용) ────────────────────────────────────────
+   D6: 모달 뼈대(backdrop/card/닫기/Esc/배경클릭)는 openPanel() 공용 구현
+   (.vt-viewer-backdrop/.vt-viewer-card, 아래 "코드 뷰어" 섹션)을 그대로 쓴다.
+   여기 남은 건 가이드 본문 내용에만 쓰는 클래스뿐이다. 모바일 바텀시트 전환도
+   .vt-viewer-backdrop의 공용 규칙(§ 코드 뷰어 모바일 미디어쿼리)을 그대로
+   물려받는다 — 예전엔 같은 규칙을 여기 따로 한 벌 더 갖고 있었다. */
+#vt-guide .vt-viewer-card { max-width:540px; max-height:min(84vh,720px); }
+/* unslop §2 — 아이콘을 액센트 라운드사각형에 가두지 않는다. 배경 상자를
+   없애도 잃는 정보가 없고(제목이 바로 옆에 있다), 화면에서 solid 액센트가
+   하나 줄어 주 액션(.vt-btn-primary)의 대비가 살아난다. */
+.vt-gh-icon {
+  flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  color:var(--sub);
+}
+.vt-guide-title-wrap { flex:1; min-width:0; }
+.vt-guide-title-wrap h2 { font-size:var(--fs-md); font-weight:600; margin:0; line-height:1.25; }
+.vt-guide-sub { font-size:var(--fs-xs); color:var(--sub); margin:calc(var(--spacing) * 0.5) 0 0; }
+.vt-guide-scroll { padding:calc(var(--spacing) * 2) calc(var(--spacing) * 5) calc(var(--spacing) * 5); }
+.vt-guide-sec { padding:calc(var(--spacing) * 3.5) 0 calc(var(--spacing) * 1); border-top:1px solid var(--line); }
+.vt-guide-sec:first-child { border-top:none; }
+.vt-guide-sec > .vt-gs-title {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); margin:0 0 calc(var(--spacing) * 2);
+  font-size:var(--fs-sm); font-weight:600; color:var(--txt);
+}
+.vt-guide-sec > .vt-gs-title svg { color:var(--sub); flex-shrink:0; }
+/* D5: 본문 설명 안에 끼워 쓰는 인라인 아이콘(icons.js) — 글줄 기준선에 맞춘다. */
+.vt-guide-row .vt-gr-desc svg { vertical-align:-2px; margin:0 calc(var(--spacing) * 0.25); }
+/* key/desc 2열 — align-items:start + 동일 line-height로 첫 줄이 세로로 정렬된다.
+   (baseline 정렬은 desc가 여러 줄일 때 key가 어긋나 보임) */
+.vt-guide-row { display:flex; gap:calc(var(--spacing) * 3); padding:calc(var(--spacing) * 1.5) 0; align-items:start; }
+.vt-guide-row .vt-gr-key {
+  flex-shrink:0; width:104px; font-size:var(--fs-sm); font-weight:500; line-height:1.55; color:var(--txt);
+}
+.vt-guide-row .vt-gr-desc { flex:1; font-size:var(--fs-sm); line-height:1.55; color:var(--sub); }
+.vt-guide-scroll kbd {
+  display:inline-block; font-family:var(--mono); font-size:var(--fs-2xs); line-height:1.4;
+  padding:calc(var(--spacing) * 0.25) calc(var(--spacing) * 1.5); margin:0 calc(var(--spacing) * 0.25); border-radius:var(--radius-sm);
+  background:var(--tab); color:var(--txt); border:1px solid var(--line);
+  box-shadow:0 1px 0 var(--line);
+}
+.vt-guide-scroll code {
+  font-family:var(--mono); background:var(--tab); color:var(--txt);
+  padding:calc(var(--spacing) * 0.25) calc(var(--spacing) * 1.5); border-radius:var(--radius-sm); font-size:var(--fs-xs);
+}
+
+/* ── 모바일: 2열 → 세로 스택 (배경/카드 전환 자체는 위 공용 규칙) ───────── */
+@media (max-width:560px) {
+  .vt-guide-scroll { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 4) calc(var(--spacing) * 6); }
+  .vt-guide-row { flex-direction:column; gap:calc(var(--spacing) * 0.5); padding:calc(var(--spacing) * 1.5) 0; }
+  .vt-guide-row .vt-gr-key { width:auto; }
+}
+
+.vt-menu {
+  position:absolute; top:46px; right:8px; background:var(--menu); color:var(--txt);
+  border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1.5); z-index:520; border:1px solid var(--line);
+  box-shadow:var(--shadow-e2); min-width:220px;
+}
+.vt-menu-item { padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3.5); cursor:pointer; font-size:var(--fs-sm); border-radius:var(--radius-sm); white-space:nowrap; }
+.vt-menu-item:hover { background:var(--menu-hover); }
+.vt-menu-item.new { color:var(--ok); }
+/* C1 — 호스트 메뉴처럼 둘째 줄(세션 수·지연·연결 실패 이유)이 있는 항목. */
+.vt-menu-item-detail { display:block; color:var(--sub); font-size:var(--fs-2xs); margin-top:2px; }
+.vt-menu-item.dim { opacity:.6; }
+.vt-menu-sep { border-top:1px solid var(--line); margin:calc(var(--spacing) * 1) 0; }
+
+/* L3 4단계: 그리드 뷰(#grid-view)는 폐지됐지만 카드 스타일은 남긴다 —
+   agent/preview.js의 refreshGrid()가 만드는 카드 마크업 자체는 5단계(빈 pane
+   클릭 → 썸네일 기반 세션 선택 시트)와 팔레트(L6)가 그대로 재사용할 예정이다
+   (ADR-7 "프리뷰 카드는 썸네일로 축소돼 재사용된다"). 지금은 이 카드를 렌더할
+   컨테이너가 없어 당장은 아무도 안 쓰지만, 다음 단계가 여기 다시 연결한다. */
+.vt-card {
+  background:var(--bar); border:1px solid var(--line); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1);
+  cursor:pointer; display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
+  transition:border-color .15s, box-shadow .15s;
+  position:relative;
+  /* grid item의 기본 min-width는 auto(=내용의 min-content) — 안 밀어주면
+     preview 안의 안 끊기는 긴 줄(경로 등) 하나가 이 카드의, 그리고 같은 행의
+     다른 트랙까지 억지로 넓혀서 repeat(2,1fr)이 반반이 아니라 비대칭으로
+     깨진다(실측: "1398px 982px"). 0으로 눌러서 지정한 트랙 폭을 그대로 따르게
+     하고, 넘치는 내용은 카드 안(각 자식의 overflow:hidden)에서 처리한다. */
+  min-width:0;
+}
+.vt-card:hover { border-color:var(--acc); }
+.card-head { display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 1); }
+.vt-card .card-agent { flex:0 0 auto; line-height:1; display:flex; }
+.vt-card .card-agent svg { color:var(--sub); }
+/* D3 — 탭의 에이전트 마크. 문서 §4 "탭 구성: [마크 14px][이름][dot][배지]" */
+/* 카드 위계 3단: 제목(가장 밝고 큼) > 프리뷰(중간 톤 --txt2, 실제 내용) >
+   명령어(가장 어두운 --sub, 메타데이터). 이전엔 제목·프리뷰가 둘 다 --txt +
+   13/11px 1px 차이뿐이라 무게만으로 구분해야 했던 걸, 크기·색을 함께 벌려
+   스캔했을 때 즉시 구분되게 한다. */
+.vt-card .card-title { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-weight:700; color:var(--txt); font-size:var(--fs-base); }
+.vt-card .card-cmd { flex:0 1 auto; min-width:0; max-width:40%; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-size:var(--fs-2xs); color:var(--sub); }
+.vt-card .card-preview {
+  margin:0; background:var(--crust); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1); font-family:var(--mono);
+  font-size:var(--fs-2xs); color:var(--txt2); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.2;
+  /* max-height로 잘려나가는 마지막 줄이 단어 중간에서 뚝 끊긴 채로 보이던 것을,
+     하단 페이드로 부드럽게 흐려지게 해 "미리보기이므로 잘렸다"는 게 자연스럽게
+     읽히도록 한다. */
+  mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent 100%);
+}
+
+/* 이미 탭으로 열려 있는 세션 — 클릭 결과(전환 vs attach)가 다르므로 미리 구분해둔다.
+   여백을 늘리지 않고 카드 자체의 왼쪽 테두리만 강조한다. */
+.vt-card.open-tab { box-shadow:inset 3px 0 0 var(--color-acc-dim); }
+
+/* 지금 도구를 실행 중 — 은은한 펄스로 "지켜볼 필요 있음"을 표시한다.
+   box-shadow를 카드 전체에 애니메이션하면 프레임마다 카드 영역 전체가
+   리페인트된다(컴포지터 전용 속성이 아님) — 여러 카드가 동시에 working이면
+   그리드가 열려 있는 내내 계속 리페인트가 돌아 저사양 모바일에서 체감 지연이
+   생긴다. 테두리는 고정색으로 두고, 움직이는 건 8px짜리 점 하나로 좁혀서
+   opacity/transform만 애니메이션한다(둘 다 컴포지터 전용 — 리페인트 없음).
+*/
+.vt-card.working { border-color:var(--acc); }
+.vt-card.working::before {
+  content:''; position:absolute; top:9px; right:9px;
+  width:8px; height:8px; border-radius:50%; background:var(--acc);
+  animation:vtDotPulse 1.6s ease-in-out infinite;
+}
+@keyframes vtDotPulse {
+  0%, 100% { opacity:1; transform:scale(1); }
+  50% { opacity:.35; transform:scale(1.5); }
+}
+
+/* 방금 끝남 — 클릭(=확인)하기 전까지 유지. 펄스 없이 고정된 색으로 "완료"와
+   "작업중"을 구분한다(둘 다 움직이면 뭐가 뭔지 구분이 안 된다). */
+.vt-card.done { border-color:var(--ok); }
+.vt-card.done::after {
+  content:'✓'; position:absolute; top:8px; right:8px;
+  width:16px; height:16px; border-radius:50%; background:var(--ok); color:var(--win);
+  font-size:var(--fs-3xs); font-weight:700; display:flex; align-items:center; justify-content:center;
+  line-height:1;
+}
+
+.vt-grid-empty { grid-column:1/-1; text-align:center; padding:calc(var(--spacing) * 12) calc(var(--spacing) * 6); color:var(--sub); }
+.vt-grid-empty .big { font-size:var(--fs-2xl); margin-bottom:calc(var(--spacing) * 3); }
+.vt-grid-empty code { background:var(--tab); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5); border-radius:var(--radius-sm); }
+
+.vt-banner {
+  position:fixed; top:0; left:0; right:0; background:var(--err); color:var(--color-on-solid);
+  text-align:center; padding:calc(var(--spacing) * 1.5); font-size:var(--fs-xs); z-index:9999;
+}
+
+@media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
+
+/* ---- 모바일 특수키 바 (keybar) ------------------------------------------
+   소프트 키보드에 없는 Esc/Tab/화살표/Ctrl 등을 PTY로 주입. 터치 기기 전용.
+   position:fixed로 하단 고정 후, terminal.js가 visualViewport 기준으로 키보드
+   위에 오도록 transform으로 끌어올린다. */
+#keybar {
+  position:fixed; left:0; right:0; bottom:0; z-index:130;
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 1.5) calc(calc(var(--spacing) * 2) + env(safe-area-inset-right,0px))
+          calc(calc(var(--spacing) * 1.5) + env(safe-area-inset-bottom,0px)) calc(calc(var(--spacing) * 2) + env(safe-area-inset-left,0px));
+  background:var(--bar); border-top:1px solid var(--line);
+  will-change:transform;
+}
+#keybar[hidden] { display:none; }
+/* L7: 입력 슬롯[🎤][큐][📎] + 접기/펴기 토글 — 이 줄(#keybar-top)은 별도 줄이라
+   "키들"(#keybar-keys) 줄을 접어도 안 사라진다(구 M7 관련 — 아래 .collapsed
+   주석 참고). .kb-slot은 배지(.vt-rail-badge 재사용)의 위치 기준. */
+#keybar-top { display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 1.5); }
+#keybar-slots { flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
+.kb-slot { position:relative; }
+/* 키 버튼들만 가로 스크롤 */
+#keybar-keys {
+  min-width:0;
+  display:flex; gap:calc(var(--spacing) * 1.5); align-items:center;
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
+  -webkit-overflow-scrolling:touch; touch-action:pan-x;
+}
+#keybar-keys::-webkit-scrollbar { display:none; }
+.kb {
+  flex:0 0 auto; min-width:42px; height:38px; padding:0 calc(var(--spacing) * 3);
+  display:inline-flex; align-items:center; justify-content:center;
+  font-family:var(--ui); font-size:var(--fs-md); font-weight:600; line-height:1;
+  color:var(--txt); background:var(--tab); border:1px solid var(--line);
+  border-radius:var(--radius-sm); cursor:pointer; user-select:none; -webkit-user-select:none;
+  touch-action:manipulation;
+}
+.kb:active { background:var(--menu-hover); }
+/* R4: n/p 롱프레스(tmux 창 전환) 시각 피드백 — 누르고 있는 동안, 발화되는 순간. */
+.kb.holding { background:var(--menu-hover); border-color:var(--acc); }
+.kb.longpress-fired { background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
+/* M3: ←/→는 누른 채 드래그로 연속 이동을 받는다 — 부모 #keybar-keys의
+   touch-action:pan-x(버튼 줄 가로 스크롤용)가 이 드래그를 스크롤로 가로채지
+   않도록 이 버튼들만 touch-action:none으로 덮어쓴다. */
+.kb-arrow { min-width:38px; font-size:var(--fs-lg); touch-action:none; }
+.kb-mod.armed { background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
+/* 접기/펴기 토글 버튼 */
+#keybar-toggle {
+  flex:0 0 auto; width:34px; height:38px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:var(--fs-lg); line-height:1; color:var(--sub);
+  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm);
+  cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation;
+}
+#keybar-toggle:active { background:var(--menu-hover); }
+/* 접힘: "키들"(#keybar-keys, Esc/Ctrl/Tab/화살표 등 스크롤 줄)만 숨긴다.
+   L7 이전에는 바 전체가 우하단 작은 알약으로 줄어들었는데, 그러면 입력
+   슬롯(마이크/큐/업로드)까지 함께 사라졌다 — "큐 배지가 접힘으로 다시
+   묻히면 가시성 개선이 무의미하다"(§3)는 게 바로 이 문제였다(구 M7 "숨긴
+   키바가 빈 공간을 남기지 않게"의 반대쪽 증상: 접었다고 유용한 걸 통째로
+   숨기면 안 됨). 이제 접힘은 폭을 그대로 두고 "키들" 줄만 걷어낸다 —
+   슬롯 + 토글은 항상 한 줄로 남는다. */
+#keybar.collapsed #keybar-keys { display:none; }
+/* 정밀 포인터(데스크톱, 물리 키보드)에서는 항상 숨김 — 단, 강제 오버라이드는 예외 */
+@media (pointer:fine) { #keybar:not(.force-show) { display:none !important; } }
+/* 터치 기기: 터미널 하단 여백 = keybar 실제 높이 + 소프트 키보드가 덮은 높이.
+   두 값 모두 term/keybar.js의 positionBar()가 측정해 :root에 내보낸다.
+
+   예전에는 --spacing*24(펼침) / *12(접힘) 매직 넘버였는데 두 가지가 틀렸다:
+   ① 접힘/펼침·스킨·폰트에 따라 바의 실제 높이가 달라져 값이 어긋났고,
+   ② 소프트 키보드 높이가 아예 빠져 있어서 키보드가 올라오면 터미널
+      마지막 줄(프롬프트)이 키보드 뒤에 그대로 깔렸다. keybar만 transform으로
+      떠오르니 "바가 터미널을 가린다"처럼 보였지만 실제 범인은 키보드였다.
+   JS가 아직 값을 안 실은 첫 페인트에서만 폴백(--spacing*24)이 쓰인다. */
+@media (pointer:coarse) {
+  #terminal-container {
+    padding-bottom:calc(var(--kb-height, calc(var(--spacing) * 24)) + var(--kb-overlap, 0px));
+  }
+}
