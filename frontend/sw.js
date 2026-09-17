@@ -14,7 +14,7 @@
 //     따라오지만, 실브라우저 검증에서 **예전 index.html이 그대로 나오는 걸
 //     실제로 재현**했다(캐시를 지우니 바로 새 글꼴이 붙었다). 글꼴이 안 바뀌면
 //     화면 전체가 예전 그대로라 "고쳤는데 안 바뀐다"로 보이므로 키를 올린다.
-const CACHE = 'vt-static-v8';
+const CACHE = 'vt-static-v9';
 
 const PRECACHE = [
   '/static/icon-192.png',
