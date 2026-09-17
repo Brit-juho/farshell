@@ -138,6 +138,7 @@ open a public tunnel (`--network all`, the default) without auth configured.
 | PWA | manifest + Service Worker -> add to home screen and use it like an app |
 | Tailscale remote access | `fsh ssh` / `fsh mobile --network tailscale` — connect straight to tmux over SSH in environments where screen sharing is blocked (e.g. corporate networks) |
 | Client connection notifications | `VT_NOTIFY_CLIENT_EVENTS=1` — push notifications for attach/detach from clients the server can't otherwise see, like SSH |
+| Tunnel provider switch | `VT_TUNNEL_PROVIDER=cloudflare\|ngrok\|none` — one setting decides who owns the public way in. `fsh start`/`stop`/`status`/`mobile`/`handoff`/`tunnel expose` all follow it. ngrok takes `VT_NGROK_DOMAIN` for an address that never changes |
 | Automatic tunnel zombie-reconnect recovery | Detects and auto-restarts when cloudflared's process is alive but unresponsive |
 
 For the full fsh CLI command list see [CLI.md](./CLI.md), and for the REST/WebSocket API see [API.md](./API.md).

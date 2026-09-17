@@ -136,6 +136,7 @@ tar xzf farshell-<버전>.tar.gz && cd farshell-<버전>
 | PWA | manifest + Service Worker → 홈 화면 추가 후 앱처럼 사용 |
 | Tailscale 원격 접속 | `fsh ssh` / `fsh mobile --network tailscale` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속 |
 | 클라이언트 접속 알림 | `VT_NOTIFY_CLIENT_EVENTS=1` — SSH 등 서버가 못 보는 클라이언트의 attach/detach를 push로 알림 |
+| 터널 제공자 전환 | `VT_TUNNEL_PROVIDER=cloudflare\|ngrok\|none` — 설정 하나로 공개 입구를 고른다. `fsh start`·`stop`·`status`·`mobile`·`handoff`·`tunnel expose`가 전부 그 값을 따른다. ngrok은 `VT_NGROK_DOMAIN`으로 주소가 고정된다 |
 | 터널 좀비 재연결 자동 복구 | cloudflared가 프로세스는 살아있지만 응답 없는 상태에 빠지면 자동 감지 후 재시작 |
 
 전체 fsh CLI 명령어는 [CLI.md](./CLI.md), REST/WebSocket API는 [API.md](./API.md)를 참고하세요.

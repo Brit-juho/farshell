@@ -115,6 +115,24 @@ fsh queue clear                 # 전체 비우기
 
 ---
 
+## `fsh` 동작을 바꾸는 설정
+
+설정은 전부 `~/.vt.env`(gitignored, 머신별)에 있고, 키 목록과 설명은
+[`config/vt.defaults.env`](./config/vt.defaults.env)에 있다 — 그 파일이 목록이다.
+쓸 때는 `fsh` 명령이나 `lib/vt_env.sh`를 쓴다. `echo`/`sed`로 직접 건드리지 않는다
+(AGENTS.md 계약 5). 이 맥에 어떻게 도달하는지를 정하는 것들만 추리면:
+
+| 키 | 하는 일 |
+|-----|--------------|
+| `VT_TUNNEL_PROVIDER` | `cloudflare`(기본) · `ngrok` · `none` — 공개 입구를 누가 담당하는가. `start`·`stop`·`status`·`mobile`·`handoff`·`tunnel expose`가 전부 따른다 |
+| `VT_NGROK_DOMAIN` | ngrok 예약 도메인. 없으면 실행할 때마다 임시 주소가 잡혀서 고정 주소라는 목적이 사라진다 |
+| `VT_TUNNEL_NAME` + `VT_TUNNEL_HOSTNAME` | Cloudflare 명명 터널(본인 도메인이 Cloudflare에 있어야 한다) |
+| `VT_NETWORK_MODE` | `localhost` · `lan` · `tailscale` · `all` — 애초에 누가 포트에 닿을 수 있는가 |
+| `VT_TRUST_PROXY` | 신뢰하는 프록시의 `X-Forwarded-For`를 믿는다. 기본 꺼짐 — 직결 노출 상태에서 켜면 클라이언트가 자기 IP를 위조할 수 있다 |
+
+**보안 경계값은 셸 환경변수가 아니라 설정 파일을 먼저 읽는다** — 낡은 `export` 하나가
+좁혀놓은 열람 경계를 계속 열어둔 적이 있다. 바로잡으면 `fsh status`·`fsh doctor`가 말해준다.
+
 ## `fsh doctor` 점검 항목
 
 | # | 항목 | 내용 |

@@ -121,6 +121,25 @@ of being fed) → confirming the target pane is still alive → one item at a ti
 
 ---
 
+## Settings that change what `fsh` does
+
+Every setting lives in `~/.vt.env` (gitignored, per-machine) and every key is listed with
+a comment in [`config/vt.defaults.env`](./config/vt.defaults.env) — that file is the list.
+Write it with `fsh` commands or `lib/vt_env.sh`, never with `echo`/`sed` (AGENTS.md
+contract 5). The few that decide how you reach this Mac:
+
+| Key | What it does |
+|-----|--------------|
+| `VT_TUNNEL_PROVIDER` | `cloudflare` (default) · `ngrok` · `none` — who owns the public way in. `start`/`stop`/`status`/`mobile`/`handoff`/`tunnel expose` all follow it |
+| `VT_NGROK_DOMAIN` | ngrok reserved domain. Without it every start gets a throwaway URL, which defeats the point of a fixed address |
+| `VT_TUNNEL_NAME` + `VT_TUNNEL_HOSTNAME` | Cloudflare named tunnel (needs your own domain on Cloudflare) |
+| `VT_NETWORK_MODE` | `localhost` · `lan` · `tailscale` · `all` — who may reach the port at all |
+| `VT_TRUST_PROXY` | Trust `X-Forwarded-For` from a proxy you control. Off by default; turning it on while directly exposed lets a client forge its own IP |
+
+**Security-boundary keys are read from the file first, not from your shell environment**
+— a stale `export` once kept a narrowed browse root wide open. `fsh status` and
+`fsh doctor` say so when they correct one.
+
 ## `fsh doctor` checked items
 
 | # | Item | Details |
