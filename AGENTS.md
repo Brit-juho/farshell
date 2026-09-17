@@ -9,7 +9,7 @@ Cursor, Jules and others. Claude Code reads `CLAUDE.md`; Gemini CLI reads `GEMIN
 
 | Topic | File |
 |---|---|
-| Project overview, install, features, architecture | **[`CLAUDE.md`](./CLAUDE.md)** (Korean: `CLAUDE.ko.md`) |
+| Project overview + area index | **[`CLAUDE.md`](./CLAUDE.md)** — an index; area detail lives in `docs/ref/*.md` |
 | REST/WebSocket endpoints — **the single source of truth** | [`API.md`](./API.md) |
 | Module map, 3-plane model, data flow | [`ARCHITECTURE.md`](./ARCHITECTURE.md) |
 | CLI subcommands | [`CLI.md`](./CLI.md) |
@@ -57,13 +57,19 @@ These are load-bearing. Each one caused a real incident.
    **must stay above `import auth` in `server/main.py`** — auth reads its values at import
    time. A stale exported `VT_BROWSE_ROOTS` once kept the whole home directory served through
    a public tunnel after it had been narrowed. `VT_CONFIG` is never a boundary key.
-7. **The agent hook payload format (`POST /api/agent/event`) is a compatibility surface.**
+7. **Personal values never enter this repo.** Machine-specific config belongs in
+   `~/.vt.env` (gitignored) and personal agent instructions in `~/.claude/CLAUDE.md`.
+   Real hostnames, reserved domains, usernames, tailnet names and public IPs are not
+   acceptable as "examples" — a real reserved ngrok domain shipped as one on 2026-09-18.
+   `scripts/check_docs.py` scans docs, `config/*.env` and skills for them.
+8. **The agent hook payload format (`POST /api/agent/event`) is a compatibility surface.**
    Remote hosts may run an older `server/agent_hook.sh`.
-8. **Colors go through tokens.** No hex literals in `frontend/js` or `styles/layers`.
+9. **Colors go through tokens.** No hex literals in `frontend/js` or `styles/layers`.
    Define in `styles/theme/tokens.css` / `skins.css`; `check_css_vars.py` enforces this.
-9. **`API.md` is the only endpoint table.** `CLAUDE.md` keeps a category list only —
+10. **`API.md` is the only endpoint table.** `CLAUDE.md` keeps a category list only —
    the two drifted apart in 2026-08 and `check_docs.py` now enforces the split.
-10. **`docs/*` is gitignored** except `docs/help/`, which `fsh help <topic>` reads at
+11. **`docs/*` is gitignored** except `docs/help/` (read at runtime by `fsh help <topic>`) and `docs/ref/`
+    (the area docs `CLAUDE.md` indexes), which `fsh help <topic>` reads at
    runtime. Add a help topic and you must add both the `bin/fsh` entry and the file.
 
 ## Working rules

@@ -1,494 +1,98 @@
-[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./CLAUDE.ko.md)
+# FarShell — project overview
 
-> **FarShell v2.1.5** (2026-09-16) — see [CHANGELOG.md](./CHANGELOG.md) for release history
+> **v2.1.5** (2026-09-16) — release history in [CHANGELOG.md](./CHANGELOG.md)
 
 > **Other agents:** this file is the project overview for any AI coding agent, not just
 > Claude. Cross-tool rules and the hard contracts live in [`AGENTS.md`](./AGENTS.md)
 > ([agents.md](https://agents.md) convention — Codex, opencode, Amp, Cursor, …);
 > `GEMINI.md` and `.aider.conf.yml` point there too.
 
-## fsh CLI (runs anywhere)
+FarShell puts your Mac terminal on your phone: a tmux-backed web terminal reachable from
+anywhere, with voice input, file transfer, a code viewer and agent-state awareness.
+macOS / Linux (X11) / WSL2. Native Windows is not supported.
 
-Control FarShell from any terminal with the `fsh` command:
+---
 
-```bash
-fsh start [--voice]    # start everything (server+tunnel, --voice also starts the voice daemon)
-fsh stop [--purge]     # stop (--purge: also fully kill tmux sessions)
-fsh status             # check current status
-fsh mobile [--e2e]     # mobile access URL + QR (--e2e: encrypt payload)
-fsh manage             # TUI management tool (sessions/target/hotkeys/status) — Wave 4
-fsh attach [name]      # attach any tmux session in a new window
-fsh voice              # voice mode (background, usable while working in Notion)
-fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
-fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
-fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue (P4)
-fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links (N19/N23)
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|log|revoke-all]  # pair another Mac's FarShell (N7/N39)
-fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees (N8/N44)
-fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (N30 — built but unused, ADR-27)
-fsh hotkey [list|set|reset|disable]  # view/change hotkeys
-fsh hooks [status|install|uninstall]  # register Claude Code hooks (prerequisite for status badges/queue/TTS)
-fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without hooks)
-fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
-fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)
-fsh password [clear]   # set web login password (stores a hash) / clear=unset
-fsh otp [status|setup|disable]   # require OTP when registering a new device (fully disabled until setup)
-fsh device [list|rename <id> <name>|revoke <id>]  # list/rename registered devices, revoke (also invalidates sessions if a phone is lost)
-fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
-fsh claude             # open new terminal window with tmux dev + claude --resume (internally fsh agent claude)
-fsh agent <name>       # start with any agent — claude/codex/aider/gemini (generalization of fsh claude)
-fsh template [save|apply|list|rm] <name>  # save/apply CLAUDE.md templates
-fsh popup <action>     # quick fsh command invocation via tmux 3.2+ popup
-fsh run "..."          # run headless `claude -p` in background + TTS notification on completion
-fsh handoff mobile     # hand off the current tmux session to your phone (QR + #tmux=)
-fsh handoff desktop    # bring a phone session back to the Mac terminal
-fsh tunnel expose 3000 "app name"  # expose another local port through a separate Cloudflare tunnel
-fsh tunnel unexpose 3000          # stop the tunnel for that port
-fsh tunnel list                   # list all open tunnels (main + extra ports)
-fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
-fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook
-fsh tunnel watchdog               # check/start the zombie-reconnect auto-detection daemon (normally auto-started by fsh start/voice/mobile)
-fsh ssh [session]      # guidance for connecting directly to a tmux session via Tailscale + SSH (D9, corporate networks, etc.)
-fsh doctor             # installation/environment diagnostics (includes Linux checks)
-fsh install-profiles   # auto-register terminal app profiles (iTerm2 Dynamic Profile + other snippets)
-fsh shell-init zsh     # print the shell init snippet (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
-```
-
-> **Supported OS**: macOS / Linux (X11) / WSL2 (behaves as Linux). Native Windows is not supported.
-
-**Phase 6 — single tmux server principle:** the fsh CLI, server, Voice Daemon, and hooks all use the `-L vt` isolated socket (the socket name stays `vt` regardless of the CLI's name). The Voice Daemon can override it via the `VT_TMUX_SOCKET` environment variable. This is kept separate from the user's own `tmux ls`.
-
-**Automatic behavior when running `voice` / `mobile` / `start`:** a new window opens in your current terminal app (iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app) and runs `tmux new -A -s dev 'claude --resume'` inside it. If you're already inside tmux, no new window is opened.
-
-**Voice-coding workflow while working in Notion:**
-1. `fsh voice` → starts in the background (+ auto-opens a new iTerm window with `tmux dev` + `claude --resume`)
-2. Pick the current conversation from the resume list in the new window → voice/mobile then connects to that Claude
-3. Leave the original window as-is and go back to Notion to work
-4. Ctrl+Shift+V → speak ("git status") → automatically typed into tmux dev
-5. `fsh stop` → shut down
-
-> Calling an `fsh` command from inside tmux already won't open a new window (checked via `$TMUX`).
-> Auto-open is limited to macOS + iTerm. Elsewhere, it prints guidance for the manual command (`tmux new -A -s dev 'claude --resume'`).
-
-### Claude global skill
-
-| Command | Description |
-|--------|------|
-| `/fsh` | Global skill (formerly `/vt`). Invokable from anywhere with phrases like "voice mode", "mobile access" |
-
-### Project skills
-
-| Command | Description |
-|--------|------|
-| `/fsh-start` | Start server + prepare tmux + remote access via Cloudflare Tunnel |
-| `/fsh-mobile` | Mobile testing (adb port forwarding, opening Chrome, screenshots) |
-| `/fsh-voice` | Install/run the Voice Daemon (hotkey → STT → tmux injection) |
-
-### Installing for new users
-
-**The default path is `./install.sh`** (one-line installer, added 2026-04-14). The steps below are only for when interactive guidance is needed.
+## Quick start
 
 ```bash
-# One-line install (recommended)
 ./install.sh            # terminal only (~50MB)
 ./install.sh voice      # terminal + voice mode (~1.5GB)
+
+fsh start               # server + public entrance
+fsh mobile              # access URL + QR
+fsh status              # what is running
+fsh doctor              # diagnose install/environment
 ```
 
-`install.sh` automatically: creates a Python venv → installs packages per profile → symlinks the fsh CLI → creates `~/.vt.env` → updates PATH.
+`install.sh` creates the venv, symlinks `fsh`, writes `~/.vt.env` and registers the
+Claude Code hooks. Manual/alternative installs: [`docs/ref/dev.md`](./docs/ref/dev.md).
 
----
-
-### Legacy: interactive install (manual)
-
-Only follow the steps below if install.sh doesn't work, or if you prefer a different environment such as conda/pyenv.
-
-> **Python environment management:** all execution-related paths/ports are managed via `~/.vt.env` (user-local, gitignored) and `config/vt.defaults.env` (committed defaults). When asking the user to choose their environment, have them pick among venv/conda/pyenv/system Python, then record the result in `VT_PYTHON` in `~/.vt.env`.
-
-#### Step 1: Detect OS
-
-```bash
-uname -s  # Darwin=macOS, Linux=Linux/WSL2
-grep -qi microsoft /proc/version 2>/dev/null && echo "WSL2" || echo "Native"
-```
-
-Confirm with the user: "Is this macOS / WSL2 / Linux?"
-
-#### Step 2: Choose install profile
-
-Ask the user:
-
-> Which features would you like to install?
->
-> 1. **Terminal only** — terminal access from mobile (~500MB)
->    - FastAPI server + xterm.js web terminal + Cloudflare Tunnel
->    - No voice features
->
-> 2. **Terminal + voice mode** — code by voice (~3GB)
->    - Everything above + Whisper STT + edge-tts TTS + Voice Daemon
->    - macOS hotkey (Ctrl+Shift+V), mobile voice input
-
-#### Step 3: Prepare Python environment
-
-Ask the user which environment they want to use (venv / conda / pyenv / system Python). Record the result in `VT_PYTHON` in Step 6.
-
-**Default recommendation — venv:**
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-**If preferring conda:**
-```bash
-conda create -n fsh python=3.11 -y && conda activate fsh
-```
-
-**If preferring pyenv:**
-```bash
-pyenv install 3.11.7 && pyenv local 3.11.7
-```
-
-#### Step 4: Install packages (per profile)
-
-**Terminal only (option 1):**
-```bash
-pip install -r requirements-core.txt
-```
-
-**Terminal + voice (option 2):**
-```bash
-pip install -r requirements-core.txt -r requirements-voice.txt
-```
-
-Additional package for macOS voice mode:
-```bash
-pip install pyobjc-framework-Cocoa
-```
-
-#### Step 5: Register the fsh CLI
-
-```bash
-mkdir -p ~/.local/bin
-chmod +x bin/fsh
-ln -sf "$(pwd)/bin/fsh" ~/.local/bin/fsh
-```
-
-Check PATH:
-```bash
-echo "$PATH" | grep -q "$HOME/.local/bin" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-```
-
-#### Step 6: Create the config file (`~/.vt.env`, gitignored)
-
-Record the Python path chosen in Step 3. See `config/vt.defaults.env` for the full list of keys.
-
-```bash
-# Use the absolute python path from the environment you created in Step 3 (example)
-PY_PATH="$(pwd)/.venv/bin/python"   # for venv
-# PY_PATH="$(conda info --base)/envs/vt/bin/python"   # if using conda
-# PY_PATH="$(pyenv which python)"                       # if using pyenv
-
-cat > ~/.vt.env << EOF
-VT_PORT=7777
-VT_PYTHON=$PY_PATH
-# VT_TOKEN=my-secret-token  # auth for remote access (optional)
-EOF
-```
-
-#### Step 7: Install cloudflared (for mobile remote access)
-
-```bash
-# macOS
-brew install cloudflared
-
-# Linux/WSL2
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/.local/bin/cloudflared && chmod +x ~/.local/bin/cloudflared
-```
-
-#### Step 8: Register the Claude Code skill (optional)
-
-```bash
-mkdir -p ~/.claude/skills/fsh
-cp .claude/skills/fsh/SKILL.md ~/.claude/skills/fsh/SKILL.md 2>/dev/null || true
-```
-
-#### Step 9: Verify the install
-
-```bash
-fsh status
-```
-
-Guidance for the user:
-- `fsh mobile` — mobile access (QR code)
-- `fsh voice` — voice mode (if option 2 was chosen)
-- `fsh stop` — shut down
-
-#### Platform-specific notes
-
-**macOS:** for voice mode, the terminal app must be allowed under System Settings → Privacy → Accessibility
-**WSL2:** the voice hotkey requires WSLg (Windows 11). If unavailable, use the browser 🎤. PowerShell: `.\bin\fsh.ps1 voice`
-
----
-
-## FarShell project guide
-
-### Running the server
-
-```bash
-# Method 1: script (automatically uses VT_PYTHON from ~/.vt.env)
-./run_server.sh
-
-# Method 2: run directly
-cd server
-"$VT_PYTHON" -m uvicorn main:app --host 0.0.0.0 --port 7777
-```
-
-- The Python path differs per environment — check the currently detected value with `fsh doctor`
-- Packages: `requirements-core.txt` (required) + `requirements-voice.txt` (voice mode)
-
-### Access
-
-| Environment | URL |
+| Where | URL |
 |------|-----|
 | Desktop | `http://localhost:7777` |
-| Mobile on the same network | `http://macbook-IP:7777` (get the IP with `ipconfig getifaddr en0`) |
-| Mobile via adb | `adb reverse tcp:7777 tcp:7777` → `http://localhost:7777` |
-| Remote (from anywhere) | `cloudflared tunnel --url http://localhost:7777` → use the generated HTTPS URL |
+| Public | whatever `fsh status` reports for your tunnel provider |
 
-### Mobile testing (adb)
+---
 
-```bash
-# 1. Port forwarding
-adb reverse tcp:7777 tcp:7777
+## Document map
 
-# 2. Open Chrome
-adb shell am start -a android.intent.action.VIEW -d "http://localhost:7777" com.android.chrome
+**This file is an index.** It deliberately keeps no detail that lives elsewhere — the
+one time it kept its own endpoint table it drifted from `API.md`, and `AGENTS.md`
+contract 9 exists because of it.
 
-# 3. Capture a screenshot
-adb shell screencap -p /sdcard/test.png && adb pull /sdcard/test.png /tmp/test.png
+| What | Document |
+|------|----------|
+| Every `fsh` command and option | [`CLI.md`](./CLI.md) |
+| REST/WebSocket endpoints | [`API.md`](./API.md) |
+| Server + frontend structure | [`ARCHITECTURE.md`](./ARCHITECTURE.md) |
+| UI rules, tokens, skins | [`DESIGN.md`](./DESIGN.md) |
+| Cross-tool rules + **hard contracts** | [`AGENTS.md`](./AGENTS.md) |
+| Release history | [`CHANGELOG.md`](./CHANGELOG.md) |
 
-# 4. Wake the screen (if locked)
-adb shell input keyevent KEYCODE_WAKEUP && adb shell input swipe 540 2000 540 1000 300
-```
+---
 
-### API endpoints
+## Area index
 
-See **[API.md](./API.md)** for the full REST/WebSocket reference — keeping a separate table
-here in CLAUDE.md caused drift whenever only one side got updated (actually caught and fixed
-on 2026-08-20), so this file keeps only the category list and API.md is the single source of detail.
+**Read the area's document before you touch that area.** Each one carries the reasoning
+and the incidents behind the design — that is the part worth keeping, and the part that
+is expensive to rediscover.
 
-| Category | Representative paths |
-|----------|-----------|
-| Sessions / PTY | `/api/sessions`, `/ws/{id}` |
-| tmux | `/api/tmux/*` (sessions·attach·create·kill·open-on-mac·preview) |
-| Voice | `/voice/input`, `/voice/output`, `/voice/cancel`, `/voice/local/*`, `/voice/stt/*` |
-| Auth | `/api/auth`, `/api/auth/status`, `/api/auth/logout` |
-| Code viewer / diff / Git actions | `/api/fs/*`, `/api/git/status`·`diff`·`stage`·`unstage`·`commit` (D16) |
-| Prompt queue | `/api/queue*` (P4) |
-| Port dashboard | `/api/ports*` (P3) |
-| Web Push | `/api/push/*` (P5) |
-| Agent status / notifications / diagnostics | `/api/agent*`, `/api/notify/*`, `/api/safe-mode`, `/api/tailscale/status`, `/api/tunnel/status` |
-| Workspace / misc | `/api/workspace`, `/api/capabilities`, `/api/upload`, `/api/download`, `/api/clipboard/push` |
-| WebSocket | `/ws/{id}`, `/ws-notify`, `/ws-preview/{name}`, `/ws-agent`, `/ws-workspace` |
+| Area | What lives there | Document |
+|------|------------------|----------|
+| Auth, devices, boundary values | Password login, device registration + OTP, one-time tickets, cross-site blocking, the machine token, and why config-file values beat stale environment variables | [`docs/ref/auth.md`](./docs/ref/auth.md) |
+| Terminal, panes, shell surface | tmux sessions, split panes, rail + palette, scrollback (+persistence), paste, kitty keys, themes, clipboard | [`docs/ref/terminal.md`](./docs/ref/terminal.md) |
+| Agent state, queue, MCP | Claude Code hooks, `idle`/`working`/`waiting`/`done`, approval detection and its coverage, prompt queue, snippets, usage gauge, MCP servers | [`docs/ref/agents.md`](./docs/ref/agents.md) |
+| Files, sharing, code viewer | Upload store, share links, the read-only viewer and `fsguard`'s three layers | [`docs/ref/files.md`](./docs/ref/files.md) |
+| Tunnels, ports, remote access | `VT_TUNNEL_PROVIDER` (cloudflare/ngrok/none), extra ports, URL-change hook, zombie-reconnect watchdog, Tailscale, port dashboard | [`docs/ref/tunnel.md`](./docs/ref/tunnel.md) |
+| Worktrees and git | Worktree creation/discovery, dock source control, the git account store (built but unused) | [`docs/ref/worktree.md`](./docs/ref/worktree.md) |
+| Multi-host peering | Server-to-server pairing, remote panes, offline host layout | [`docs/ref/multihost.md`](./docs/ref/multihost.md) |
+| Voice, clipboard, push | Voice daemon, hands-free and voice-only modes, clipboard daemon, Web Push | [`docs/ref/voice.md`](./docs/ref/voice.md) |
+| Running, testing, install | Running the server, mobile testing over adb, the E2E procedure, manual install | [`docs/ref/dev.md`](./docs/ref/dev.md) |
 
-### E2E test procedure
+---
 
-```bash
-# 1. Create a session
-SID=$(curl -s -X POST http://localhost:7777/api/sessions -H 'Content-Type: application/json' -d '{}' | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+## Skills
 
-# 2. Run a command over WebSocket (Python)
-python3 -c "
-import asyncio, websockets
-async def t():
-    async with websockets.connect(f'ws://localhost:7777/ws/$SID') as ws:
-        await ws.send(b'echo hello\n')
-        for _ in range(5):
-            try:
-                d = await asyncio.wait_for(ws.recv(), timeout=1)
-                if b'hello' in d: print('OK'); break
-            except: break
-asyncio.run(t())
-"
+| Command | Description |
+|--------|------|
+| `/fsh` | Global skill. Invokable from anywhere with phrases like "voice mode", "mobile access" |
+| `/fsh-start` | Start server + tmux + the public entrance |
+| `/fsh-mobile` | Mobile testing (adb port forwarding, Chrome, screenshots) |
+| `/fsh-voice` | Install/run the Voice Daemon |
 
-# 3. TTS test
-curl -s -X POST http://localhost:7777/voice/output \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"test"}' -o /tmp/tts.mp3 -w "bytes: %{size_download}"
+Source of truth is `.claude/skills/` in this repo. The global copy at
+`~/.claude/skills/fsh/SKILL.md` is a manual `cp` — `scripts/check_docs.py` warns when the
+two drift.
 
-# 4. Check for zombie processes
-curl -s -X DELETE "http://localhost:7777/api/sessions/$SID"
-ps aux | grep defunct | grep -v grep || echo "No zombies"
+---
 
-# 5. File upload test
-echo "hello" > /tmp/test_upload.txt
-curl -s -X POST "http://localhost:7777/api/upload?session_id=$SID" \
-  -F "file=@/tmp/test_upload.txt"
+## Two rules that are easy to get wrong
 
-# 6. Session rename test
-curl -s -X PATCH "http://localhost:7777/api/sessions/$SID" \
-  -H 'Content-Type: application/json' -d '{"name":"my-session"}'
+**Personal values never enter this repo.** Machine-specific config lives in `~/.vt.env`
+(gitignored) and personal agent instructions live in `~/.claude/CLAUDE.md` — not here.
+Real hostnames, reserved domains, usernames, tailnet names and public IPs are not
+acceptable as "examples"; `scripts/check_docs.py` scans for them.
 
-# 7. Scrollback test — check that previous output is visible after a browser refresh
-```
-
-### Claude Code hooks (agent state + automatic TTS summary)
-
-`server/agent_hook.sh` is the single entry point for all three hooks: it posts
-`{pre,post,stop}` to `POST /api/agent/event` (agent status badges, prompt-queue
-auto-feed) and, on `stop`, delegates stdin to `tts_hook.sh` for the TTS summary.
-
-Register with `fsh hooks install` (idempotent, preserves your other hooks, backs
-up `settings.json`; `./install.sh` runs it for you). `fsh hooks status` and
-`fsh doctor` report whether the three events are registered — without them the
-server never receives a single event and nothing visibly fails.
-**Register `agent_hook.sh stop`, never `tts_hook.sh` directly** — registering
-both plays the TTS summary twice.
-
-- Script: `server/tts_hook.sh` (the TTS half, invoked by `agent_hook.sh stop`)
-- Config: `hooks.PreToolUse` / `hooks.PostToolUse` / `hooks.Stop` in `~/.claude/settings.json`
-- Behavior: extracts the last assistant response (up to 200 chars) from the transcript → server TTS → plays via `afplay`
-- Fallback: uses macOS `say -v Yuna` if the server isn't running
-
-```bash
-# Test the hook (with the server running)
-echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
-```
-
-### Voice Daemon (standalone macOS voice input)
-
-A daemon that types voice input directly into tmux via a hotkey, without needing the server.
-
-```bash
-# Run
-"$VT_PYTHON" server/voice_daemon.py &
-
-# Usage: Ctrl+Shift+V (toggle) → speak → STT → typed into the active tmux pane
-# Requires allowing the terminal app under macOS System Settings → Privacy → Accessibility
-```
-
-### Clipboard Daemon (macOS clipboard sync)
-
-When connecting to the web terminal remotely/from mobile, the browser can only access
-"that device's" clipboard, so copies made on the Mac (server) side don't automatically
-carry over. Two paths cover this:
-
-- **OSC52** (no separate process needed) — copies made inside terminal programs like
-  `vim` or `tmux copy-mode` are already carried in the PTY output stream, so
-  `frontend/js/terminal.js` intercepts them via
-  `term.parser.registerOscHandler(52, ...)` and applies them to the clipboard of
-  whatever device has the web page open.
-- **Polling daemon** (`fsh clip`) — copies made outside the terminal (Safari, Finder,
-  etc.) can't be caught via OSC52, so `server/clipboard_daemon.py` polls
-  `NSPasteboard.changeCount` and, on a change, delivers it to the web via
-  `POST /api/clipboard/push` → `/ws-notify` broadcast.
-
-```bash
-# Run (or use fsh clip)
-"$VT_PYTHON" server/clipboard_daemon.py &
-```
-
-### tmux-centric session management
-
-The web UI uses tmux sessions as its default:
-- On startup, tmux sessions are auto-detected → attaches to the first one
-- "+ New" → creates a tmux session (`POST /api/tmux/create`)
-- Closing a tab → only detaches (the tmux session stays alive). Kill is done via `DELETE /api/tmux/kill/{name}`
-- Duplicate-attach prevention: a tmux session already open in the web switches to its existing tab
-- iTerm2 and the web can be attached to the same tmux session at the same time
-
-### Key features
-
-| Feature | Description |
-|------|------|
-| Voice Daemon | macOS hotkey (Ctrl+Shift+V) → STT → direct input into tmux |
-| Clipboard sync | OSC52 (in-terminal copies) + `fsh clip` polling daemon (copies outside the terminal) → pushed to web clipboard |
-| Paste (N24·N25·N26·N29, 2.1.5) | **The server decides, not the browser.** The browser cannot know whether the app inside a pane turned bracketed paste on, so guessing meant `200~` printed literally in the wrong place, or auto-indent stair-stepping in the right one. The server now reads the pane's real input mode — `ICANON` via termios, DECSET 2004 seen on the output stream — and decides. Path: WS `paste` message, or `POST /api/sessions/{id}/paste`. **tmux sessions are delegated to tmux itself** (`paste-buffer -p` looks at the pane's actual mode; `-S` on 3.7+ also turns off tmux's own sanitising since we already did it) — we do not guess a second time. Control characters are whitelisted by iTerm2's rule (tab · LF · FF · CR · `^V`); ESC is neutralised to `␛` only when bracketing, and simply dropped otherwise. In canonical mode a line over `PC_MAX_CANON` (1024B on macOS) does **not** get truncated — the whole line vanishes (verified on a real PTY) — so it is now refused up front with a reason instead of disappearing. `fsh doctor paste` shows what this terminal actually sends |
-| Hands-free mode | Mobile 🔄 button → continuous record/STT loop |
-| Voice-only mode | 🎧 button → hides the terminal and shows only a large mic (for earbud operation) |
-| Web login password | Set via `fsh password` → stores only an scrypt hash (`VT_AUTH_PASSWORD_HASH`); the plaintext is never stored. On login, issues a 24h session cookie signed with `VT_AUTH_SESSION_KEY` (not the plaintext or a token). Human-facing auth. `server/auth/` |
-| Device registration + OTP gate | Login is **always** by password. OTP is a gate required only "when registering a device seen for the first time." A registered device gets a `vt_device` long-lived cookie (90 days) and afterward passes with just the password — since it's per-device rather than per-IP, a phone switching between LTE and wifi doesn't get disconnected. **OTP stays fully disabled until `fsh otp setup`**, and device registrations quietly accumulate in the meantime, so turning it on later doesn't lock out devices already in use. Stored at `~/.vt/devices.json` (0600, sha256 hashes only). `fsh device revoke <id>` immediately invalidates that device's session cookie as well |
-| One-time device registration ticket | The QR/URL from `fsh mobile`/`fsh handoff` carries a 5-minute one-time ticket (`?ticket=`) instead of a persistent token. Physical access to the Mac is already proven at the moment the QR is shown, so scanning it equals approving registration. The old approach of embedding a persistent token in the URL left that value permanently sitting in logs, history, and QR images |
-| Cross-site blocking | `OriginGuardMiddleware` (`server/main.py`) — returns 403 for both HTTP and WS if the Origin isn't itself. The only path that auth/OTP alone can't block (if the browser already has a cookie, auth passes). Also removes the default `*` CORS — opt in via `VT_ALLOWED_ORIGINS` if needed |
-| API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (daemons, hooks, the TUI). Via URL `?token=xxx` or `Authorization: Bearer xxx`. **It is not a second password — the login form rejects it (2026-09-17).** It used to be accepted there, which meant a human-usable credential that `fsh password` could never change or expire; the observed symptom was "I changed the password and the old one still logs me in". A legacy `?token=` link therefore no longer trades itself for a session cookie (it keeps working via the query parameter); register phones with `fsh mobile`'s one-time ticket instead. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are still recognized as fallbacks) |
-| tmux session management | Create/attach/detach/kill tmux sessions from the web |
-| Scrollback buffer | Restores previous output on WS reconnect (up to 5000 chunks) |
-| Scrollback persistence (N13) | Opt-in, default OFF — `scrollback.persist` setting toggle (Settings → 스크롤백). ON appends PTY **output only** (never input — the hook point is `pty_manager._flush_session`, not `write()`) to `~/.vt/scrollback/<session>.log` (0600), rotating at 20MB (one `.1` generation kept), 7-day retention via a periodic cleanup pass. The client still only ever receives the most recent 256KB on reconnect regardless of this setting — persisted history is read separately via `GET /api/sessions/{id}/scrollback?before=` ("load more", base64-encoded, paginated newest→oldest). `server/scrollback_persist.py`. Since 2.1.2 the palette's `~` search reads these logs too — one source per session (log if present, else the live ring, never both), so output from a finished session or from before a server restart is searchable; a log is scanned from its tail up to 4MB. |
-| Terminal search | Ctrl+F / Cmd+F → xterm.js search addon |
-| Session name editing | The ✎ on a rail session row, or the mobile session sheet → rename (PATCH API; the tmux session name is also changed via `rename-session` — if the new name isn't alphanumeric/dash/underscore, tmux is left untouched and only the web label changes). 2.1.4 removed the session tab strip, so there is no "double-click the tab" path — the single source of a session's name is its record (`sessionDisplayName` in `core/store.js`) |
-| Split panes (2.0) | The terminal area is a binary tree of panes. Split from the pane header or by dropping a **rail session row** on a pane edge (5 drop zones; before 2.1.4 the drag source was the session tab); the divider is draggable. Pane cap per width tier (compact 2 / regular 4 / wide 6) — over the cap the split buttons are disabled with the reason in their tooltip, rather than silently doing nothing. On <720px touch devices the same tree renders one pane at a time with left/right swipe between them. The layout is saved to `/api/workspace` and restored on load; a leaf whose session died is demoted to an empty pane instead of a ghost |
-| Left rail + command palette (2.0) | The ⋯ menu is gone. The left rail (sessions / files / queue / ports / usage / settings) is the pointer path and `Mod+K` the keyboard path — **both expose the same things**, so learning either one is enough. The palette shows each command's current key binding, read from the keymap registry |
-| Agent state (2.0) | The server decides one of `idle`/`working`/`waiting`/`done` per session and everything else just displays it — worktree tabs, pane headers, the rail list (sorted so what needs you is on top), the favicon, and the app icon badge (`waiting` count). Requires the Claude Code hooks: `fsh hooks install` (`fsh doctor` and Settings → About tell you if they're missing) |
-| Approval detection (`waiting`) | Detected off the PTY stream using patterns in `server/detect/*.toml`. Cleared by an exit pattern, by you typing in that pane, by the next hook event, or by a 2-minute TTL. **The prompt queue will not feed a pane that is `waiting`** — `send-keys` there would be consumed as the approval answer |
-| Detection coverage (2.1.1) | Settings → Agents → "Detection coverage" (`GET /api/agents/coverage`). Approval detection silently does nothing for a CLI with no patterns, and there was no way to see that — this table makes it visible per CLI: `path` (`hook`/`pty`/`none`), the toml's line count, the states it can express, and `trust` (`high`/`mid`/`low`). Only `claude` can reach `hook`/`high`, and only when `fsh hooks install` registered all three events. codex/gemini/aider were filled in from each project's **official repository source** rather than guessed — the literal strings and the upstream commit hash sit in the comment atop each `server/detect/*.toml` — so they report `pty`/`mid`: read from source, never verified against a real terminal render (ANSI and line splitting weren't checked). `aider` has no `exit` literal at all (it has no always-on status line), so it falls back to the other release paths: you typing, the next hook event, or the TTL. `enter`/`exit` are **literal byte strings** matched against a 2048-byte window, not regexes — only `options` is a regex. Background and how to fix a pattern: `docs/help/agent-detect.md` |
-| Usage gauge (2.0 · Codex 2.1.5) | Two sources, merged into one list. **clauth** reads `~/.clauth/status.json` (file, not CLI). Accepts feed schema **1 and 2** (supporting only one means the gauge silently dies on the next clauth upgrade); an unknown schema still disables it silently, but Settings → About now says so (2.1.3). Shown in the right rail on wide screens and in a panel elsewhere. **Disappears entirely when there's no source** — `VT_USAGE_PROVIDER` (`auto`/`clauth`/`none`) controls it. Tokens are excluded by a field whitelist **Codex (2.1.5)** is a second limit-type provider — it calls the same OAuth usage API the Codex CLI itself uses, reading the token from `~/.codex/auth.json` on every call and never storing it. Being a remote API it uses a 60s TTL cache and, on 429/network errors, keeps showing the previous value marked `stale`. The response is whitelisted on the way in (`credits`/`model_usage` stop existing at the normaliser). `panels/usage.js` was not touched — the profile card was already provider-agnostic |
-| MCP servers (97, 2.1.5) | Settings → **MCP**. Shows every MCP server defined for Claude Code / Codex / agy, for the **global scope plus the worktree you're looking at**, and toggles them. All three CLIs support scopes and on/off officially, but each only knows "this project" — there was no view across projects. **Nothing is stored**: the real config files are read every time the section opens and written on toggle, so edits made in a terminal show up immediately and there is no "our record vs. the file" drift. **Values never leave the server** — `env`/`headers` come back as the key name plus "literal or reference" only, because reading `~/.claude.json` pulls in every other server's key and this UI is exposed through the tunnel. The screen refuses to lie: config is read once per session by all three CLIs, so "off" does not mean "not callable right now" — the apply timing is always shown, **anything unverified is said to be unverified** (agy's timing is), and a write whose result could not be confirmed never renders as success. Two diagnostics come free: a literal secret sitting in the committed `.mcp.json`, and a `${VAR}` in Codex (which does **not** expand it — the literal string is passed through). Toggling requires an elevated session; it changes which tools an agent can call. `GET /api/mcp`, `POST /api/mcp/toggle` |
-| Settings + keymap (2.0) | `Mod+,`. Settings live in `/api/workspace.settings`, so a change on your phone shows up on the Mac. Key bindings are rebindable, and **`passthrough` hands a key back to the terminal** — that's how you get `Mod+F` back as the shell's `forward-char`. Mouse section can turn off "forward mouse events to the app", making drag-select always work even under vim/tmux mouse mode |
-| Connected screens (2.0) | rail → Sessions → "Connected screens". Lists every client attached to that tmux session with a "me" badge, and "Keep only this screen" detaches the rest (including a Mac iTerm2 window). You never send a tty — the server derives yours from your web session id, and refuses to detach you |
-| Code viewer / diff (P2) | ⋯ menu → "Code Viewer". Solves the problem of not being able to see code visually when developing remotely via CLI only. File tree · syntax highlighting (highlight.js, 36 languages) · `git diff` rendering. **Read-only, with no write API.** Since it's exposed over a public tunnel, it has three layers of defense: ① a fixed root (`VT_BROWSE_ROOTS`, default `~/GitHub` — opening `$HOME` would put `~/.ssh`·`~/.aws` in scope) ② `Path.resolve()` + `is_relative_to` (startswith is banned — sibling directories would pass. Since `resolve()` expands symlinks, links pointing outside the root are also caught) ③ a denylist (`.env*`·`*.pem`·`id_rsa`·`.ssh/`·`.aws/` etc., checked against every path component). The check lives in one place only: `server/fsguard.py`. **2.1.3: images render inline** (T3) — the bytes come from `GET /api/fs/raw`, which adds a type allowlist on top of the same browse boundary (png/jpeg/gif/webp/bmp/ico, and only when extension **and** magic bytes agree). **SVG, HTML and PDF are excluded** — served same-origin they are scriptable documents, i.e. XSS |
-| Worktrees (N8/N44, 2.1.1) | Left rail, or `fsh worktree` (which talks to `server/worktree.py` directly and works with no server running). Discovery walks the fsguard roots to depth 3, stops at the first `.git`, then reads `git worktree list --porcelain` per repo, annotating each entry with ahead/behind, a changed-file count, the tmux sessions whose pane cwd is inside it, and its port band — 5-second cache, every path re-validated through fsguard. Creation is fixed at `~/.worktrees/<repo>/<name>` on branch `feat/<name>` and does four optional steps: node_modules (**symlink by default**, so a new worktree is usable without a reinstall), `.env` (`inherit` — only *existing* `PORT`/`VITE_PORT`/`DEV_PORT`/`NEXT_PUBLIC_PORT` lines are rewritten to the assigned band; missing keys are never added, and `.env` content is never returned by the API), a port band (5200, +100 per worktree, recorded in `~/.vt/worktrees.json` 0600 + flock), and an agent launched in a detached tmux session named `wt-<repo>-<branch>`. **Every step after `git worktree add` rolls back on failure** (node_modules removed, then `git worktree remove --force` + `git branch -D`) so a half-built worktree never survives. Delete refuses the main worktree outright and returns 409 `dirty:true` on any uncommitted change unless `force:true`; tmux sessions are only killed with `killSessions:true`, and the branch is never deleted. Because a symlinked node_modules reflects the main repo's *current* tree rather than `base`, `GET /api/worktrees/precheck` hashes package.json + lockfile on both sides and raises a `lockfile_mismatch` warning before the create dialog. `~/.worktrees` is auto-added to the fsguard roots when it exists — without that, every worktree created here would sit outside the browse boundary and be silently dropped from its own list |
-| Dock source control (2.1.1) | dock → "Source control". The 2.1.0 tab was read-only; stage/unstage/commit are now wired to `POST /api/git/{stage,unstage,commit}` (D16), and each file row gets a 「viewer」 button that opens the file as a pane leaf. **push and PR/MR are deliberately absent — not disabled buttons, not rendered at all (ADR-27).** FarShell runs your own Mac terminal, where you already push, and anyone juggling several accounts has already solved identity with per-repo git config (SSH `Host` aliases, `git config user.email`); there is no reason for FarShell to decide "which account" for you. Committing therefore runs under **ambient git credentials**. Server-side guards are the fsguard repo resolution, a repo-relative path check on every file, a commit-message length cap, and a 400 when nothing is staged |
-| Git account store (N30/N31 — built but unused) | `~/.vt/git-accounts.json` + `~/.vt/git-bindings.json` (0600 + flock) plus a 15-minute **elevated session** (`POST /api/auth/elevate` re-verifies password + OTP and reissues the cookie with an `elev` claim; session-scoped, not device-scoped, so every tab and device elevates on its own). The account routes sit behind one `APIRouter(dependencies=[Depends(require_elevated)])` rather than per-handler checks, so a write path can't be added without the guard. PATs only — no OAuth, since taking a callback on a public tunnel is the more dangerous design. Tokens are never returned, only `auth.masked`, and `fsh git-account add` takes `--token-stdin` only (never argv). **This entire layer is currently wired to nothing (ADR-27)** — it was built for push/PR, that feature was then dropped, and it was kept rather than reverted because it is harmless on its own and 2.2 may reuse it for cross-account worktree automation. `fsh git-account` is the only way to reach it; no UI does |
-| Web Push (P5) | ⋯ menu → "Push Notifications". Existing notifications (`/ws-notify` → Notification API) only work **while a PWA tab is alive**, so turning off the phone screen meant missing "waiting for approval." This fills that gap. No push is sent while at least one WS client is connected (to avoid the same notification arriving twice). **Requirements**: ① https — Service Workers don't even register over plain http ② iOS requires adding to the home screen as a PWA (16.4+; a subscription can't be created from a Safari tab — no workaround). **A subscription is bound to its origin** — if the trycloudflare URL changes, existing subscriptions all die, so each subscription stores its origin, mismatches are excluded from sending, and 404/410 responses are cleaned up on the spot. Notification bodies never contain commands, paths, or code (they'd show on the lock screen). The VAPID key is auto-generated at `~/.vt/vapid.json` (0600) — **deleting it invalidates every existing subscription**. SW registration is handled by `js/swreg.js` (it used to live inside `voice.js`, so the SW never registered at all when voice wasn't installed) |
-| Prompt queue (P4) | ⋯ menu → "Prompt Queue", or `fsh queue`. Queues up instructions while an agent is busy and feeds them in sequentially. **Pairs with voice mode** — right now, speaking while the agent is working gets swallowed, but with the queue you can walk around dropping in 3 instructions and have them run in order. Automatic feeding is only triggered **by Claude Code's stop hook** (`POST /api/agent/event`). codex/aider/gemini have no hook, so they need manual feeding via `fsh queue run` / "run now" — feeding based on guessing output idleness was not adopted, since it can't tell a brief pause in build logs apart from actual completion. Four gates before feeding: grace period (`VT_QUEUE_GRACE_SEC`, default 3 sec — the user may have started typing directly) · safe_mode · confirming the target pane is alive · one item at a time. Blocked or failed items are **not discarded** — they stay in the queue as `blocked`. Target resolution uses the same rules as voice (`server/tmux_target.py`). Stored at `~/.vt/queue.json` (0600), with concurrent writes serialized via flock **A3 (2.1.2): a queue item can target a remote host** — `target: {session, host}`; without `host` it is always local. A remote item never touches local tmux (`send-keys` is a local socket, and `dev` exists on both machines), it goes out through `POST /api/peer/input` with `enter: true` and needs `control` level on the other side. Failure keeps the item as `blocked` with the reason, never discards it. |
-| Prompt snippets (L3) | Left rail → 📋, or `Mod+K` → "Prompt snippets". The iTerm2 Snippets idea: save a frequently used instruction or command block and fire it into the pane you're looking at right now. **Distinct from the queue** — the queue is a waiting line ("run this when the agent is free"), a snippet has no waiting concept at all, it goes in immediately. So `snippet_store.py` is pure CRUD with no status/target/drain state machine. A multi-line snippet gets a trailing `\n` on every line, so lines execute sequentially. Stored at `~/.vt/snippets.json` (0600 + flock, same rules as the queue), capped at 100 items / 8000 chars. **Web UI only — there is no `fsh snippet` subcommand** |
-| Port dashboard (P3) | ⋯ menu → "Ports". Handles "what's running right now / kill port 3000" from the phone when you're away from the Mac. Shows port·PID·uptime·CPU·memory, one-click kill, integrates with `fsh tunnel expose`. **Killing the VT server itself, or cloudflared/tailscaled/sshd, is blocked** — killing them would cut off this very screen. Other users' processes are also blocked (no sudo used). Right before killing, `port→pid` is re-checked to prevent PID reuse from killing the wrong process, returning 409 on a mismatch. `expose` opens the local server to the **public internet**, so it returns 428 without `confirm:true`, and is refused outright unless `VT_NETWORK_MODE` is `all` (there's no point narrowing access scope and then reopening it). Checked in `server/portscan.py` |
-| File storage / upload (N19) | `~/.vt/files/` (id-based, 0700 dir/0600 files) — replaces the old path-based `/tmp/vt-uploads/`. Uploaded via keybar 📎 slot (mobile — stays visible even when the keybar is collapsed) or `Mod+K` → "파일 업로드"; **pasting an image into the terminal uploads it too**. Size cap `VT_MAX_UPLOAD_MB` (default 200) enforced streaming → 413; total cap `VT_FILES_MAX_GB` (default 2) and `VT_FILES_TTL_DAYS` (default 30) enforced by a cleanup pass on startup + every 6h — files with an active share or `pin` are excluded from cleanup. Old `/tmp/vt-uploads` contents are migrated in automatically on startup. The `#file-input` element is shared by all three upload triggers — never add a second one. **API is id-only** (`server/file_store.py`) — `GET /api/files/{id}/download` (`attachment`+`nosniff`+`no-store`), `DELETE /api/files/{id}`, `POST /api/files/{id}/insert` (types the path into a tmux pane, no Enter). There is no path-based download API anymore |
-| Dock file tab (N19~N21) | dock tab "파일" (also the left rail's file icon and `Mod+K` → "파일 · 공유 링크"). Rows carry the five actions from `50-files-share.md` §4: download / copy path / insert into terminal / issue link / delete. Chips filter `all|shared|expiring` (expiring = within 3 days) and the footer draws a quota gauge from `GET /api/files`'s `quota`. Issuing a share link is the **first UI path that requires elevation** (`require_elevated`) — a 401 prompts for the password once and retries. **A share token is never returned by the list API** (the list needs no elevation, so a token there would be a way around the elevation gate) — the [복사] button therefore only works for links issued in this browser session. No QR: the frontend carries no QR generator and the dependency isn't worth it (`fsh mobile` already makes QR codes server-side). The renderer lives in the lazy `panels` chunk — importing it into app.js pushed the bundle over its 300KiB cap |
-| Offline host layout (C3) | A pane whose session belongs to a **remote** host and can't be found on restore is no longer demoted to an empty pane — it keeps its place as `unreachable` and says which host/session it is waiting for, with [다시 시도] (re-checks `GET /api/hosts?fresh=1`) and [다른 세션 고르기]. A briefly powered-off host and a dead session are different things: demoting both means turning the host back on never brings the layout back. Local sessions are still demoted — a tmux name that isn't there locally really is gone. The leaf's `host` is now persisted (`frontend/js/layout/persist.js`), and a re-save keeps the waiting state instead of erasing it |
-| Multi-host stage 3 — remote panes (N7/N39) | A remote tmux session opens as a normal tab/pane through a **WS proxy**: browser → this server (usual login auth) → the other server's `/api/peer/ws/{name}` (peer signature). A browser WebSocket can't send the signature headers, which is why this is server-to-server at all. Input requires the `control` level (`fsh host allow-control <id>`) and **the owning host decides** — the proxy forwards without judging. Each proxy connection gets its own PTY on the owner and it dies with the connection (sharing the owner's PTY would make two screens fight over the terminal size). Three traps closed on purpose: the proxy never feeds the output watcher or writes scrollback (**only the host that owns the PTY notifies and persists**, so nothing doubles); "Connected screens" was hidden for remote sessions **through 2.1.2** (`/api/tmux/clients` reads *this* mac's tmux and derives "me" from a local PTY tty — "keep only this screen" could cut you off). **2.1.3 opened it**: the list and the detaches go to the host that owns the PTY (`/api/peer/clients{,/detach,/solo}`), and "me" is decided there from a screen token the browser minted, pinned inside a `peer-<caller id>-` prefix. **The list is `view`, detaching is `control`**; file insert into a remote pane is refused with a reason (the bytes only exist on this mac). Client entry point: `frontend/js/term/remote.js` (`window.attachRemoteSession`), which the rail row and the C3 placeholder's [다시 시도] both call **A2 (2.1.2): a file can now be inserted into a remote pane** — the bytes go first (`POST /api/files/{id}/send` → the peer's `POST /api/peer/file`, `control` level), then that host types **its own** path into the pane. This is the only call whose signature also covers a **body hash** (`X-Peer-Body`): every other peer body is small JSON, a file is a large blob crossing a tunnel, so "signature valid but bytes differ" has to be distinguishable. Re-sends are deduped by origin (sender host + their file id), never by content hash — same content from a different sender is a different file, and hashing 200MB per send buys nothing. |
-| Header tabs = worktrees (10 §4) | The header now has a **worktree tab strip** (`#vt-wtabs`) and **each tab owns its own pane tree** — switch away and back and that worktree's split is exactly as you left it. The layout snapshot moved to `v2` (`{tabs:[{id,worktreeId,label,tree}], activeTab}`); a `v1` snapshot means "one tab", and the v1 fields are still written **for rollback** (roll 2.1.2 back and the old code still finds a layout). **2.1.4 (stage 3) removed the per-session tab strip (`#tabs`)** — the only tabs in the header are worktree tabs. Everything that strip did moved: names and order live in the session record (`core/store.js`; order is an explicit array, reorder with `Mod+Alt+Shift+←/→`), the drag source / close / rename live on the rail session row, and the agent mark, status dot and unread badge live on the worktree tab itself. A tab hides itself when there is only one, closing a tab never kills a session, and the last tab can't be closed (no tree left to render). Same session is never placed in two tabs: the surface layer moves one DOM node around. |
-| Share links (N21) | `POST /api/files/{id}/share` (elevated) issues a `v1.<exp>.<fileId>.<shareId>.<hmac>` token signed with the same key as session cookies (`auth.sign_payload`) — `GET /s/{token}` is the public entry point, deliberately outside `TokenAuthMiddleware`'s usual gate (`server/routes/share.py` does its own verification). **`device` mode**: requires a registered `vt_device` + valid `vt_session`; missing either → 302 to `/?next=/s/{token}` (login gate redirects back after auth, `frontend/js/gate.js`). **`pin` mode**: static PIN page (no app chrome) → correct PIN sets a 60s one-time download cookie; 5 failed attempts cancels the share. Cancelling (`DELETE .../share/{shareId}`) removes the record from `files.json` — the URL 404s immediately even though the signature is still cryptographically valid. `once` shares self-delete after the first successful download. There is no issuance dialog UI yet (dock file tab §4 — deferred, tracked with N19/N22/N23/multihost/scrollback in the 2.1.2 backlog) |
-| Multi-host peering (N7/N39, stage 1) | Two Macs each running FarShell, paired **server-to-server** — not SSH. Decided 2026-09-12 over the original SSH-attach plan because SSH can't do any of: revoke one connection without touching other logins, start read-only, or leave an audit trail. `fsh host pair` (on B) issues a one-time 5-minute ticket; `fsh host add <url> --ticket <t>` (on A) redeems it for a **per-connection secret**. Requests carry `id+ts+nonce+HMAC` and **never the secret itself** (60s window, one-time nonce, signature bound to method+path) — the same trade as an SSH private key: plaintext on 0600 disk, never on the wire. Default grade is `view` (read-only); `fsh host allow-control <id>` is the explicit opt-in to input. Deliberately a **separate `/api/peer/*` namespace** (`server/routes/peer.py`) so a leaked peer secret reaches nothing else — regression-tested. Revoking (`fsh host rm`) makes still-valid signatures 404 immediately. `~/.vt/hosts.json` (0600) keeps the two directions separate (`peers` outbound / `grants` inbound); `local`/`self`/`me` are reserved ids. Audit log at `~/.vt/peer_audit.log` (`fsh host log`), emergency `fsh host revoke-all`. **Stage 1 is registry+pairing+ping only** — remote sessions (stage 2) and input (stage 3) are not built yet |
-| tmux detach detection | Shows `[process exited]` on PTY EOF |
-| Boundary values beat stale env | The config rule is "environment wins over `~/.vt.env`", and for ports, paths and instance isolation that is right. For **values that define a security boundary** it is dangerous: a stale copy silently widens the boundary. It happened twice on 2026-09-17 — `VT_BROWSE_ROOTS` was narrowed to `~/GitHub` and the server still served the whole home directory through the public tunnel, because the shell that ran `fsh` still exported the old value; and a rotated `VT_AUTH_TOKEN` left every already-running agent session's hook returning 401 (490 of them, silently). So `BOUNDARY_KEYS` (`server/vt_env.py`, mirrored in `lib/vt_env.sh`) are **read from the file first**. There are 69 direct `os.environ.get("VT_…")` call sites, so instead of editing them the environment is **normalised once at boot** (`apply_boundary_overrides()`), and **⚠ that call must come before `import auth`** — auth reads its values at import time. A key absent from the file is left alone, so one-off experiments still work — with one exception: `FILE_CLEARED_KEYS` (currently `VT_TUNNEL_HOOK`) treats absence as "switched off" and removes it from the environment, because a hook deleted from the config kept running from a stale export. **Credentials are deliberately not in that set**: clearing `VT_AUTH_TOKEN` because the file lacks it would leave an env-only setup serving with no auth at all — a value that lingers errs toward locked, a value that vanishes errs toward open. `VT_CONFIG` is deliberately not a boundary key: it chooses *which file* to read, and isolated test servers depend on that. `fsh status`/`doctor` now say when a window's env was corrected, and `doctor` also compares the **running server's** boundary values against the file — N28 only ever watched for stale *code* |
-| Tunnel provider (`VT_TUNNEL_PROVIDER`) | Who owns the public way in: `cloudflare` (default) · `ngrok` · `none`. Unset behaves exactly as before. `start`/`stop`/`status`/`mobile`/`handoff`/`tunnel expose` all follow it, and `_main_tunnel_url` in `bin/fsh` is the single place that knows which URL is current — before this, status, QR and the hook each grepped the cloudflared log, so a second provider meant three places to drift. **ngrok** takes `VT_NGROK_DOMAIN` for a reserved address (without it every start gets a throwaway URL, which defeats the point); extra ports still work but get throwaway URLs, since a free account reserves one domain and the main tunnel uses it. The **watchdog stays cloudflare-only** — zombie reconnects are a cloudflared symptom and the detector reads its log format. The **URL-change hook only fires when the address actually changed** under ngrok, because a reserved domain would otherwise republish the same URL on every start. `server/tunnel.py`'s `get_tunnel_status()` is provider-aware for the same reason the CLI is: it feeds `/api/tunnel/status` → HUD, which would otherwise say "tunnel down" while ngrok is serving fine. `ngrok` is also in `portscan.py`'s protected list — killing it from the phone's port dashboard would cut the very screen issuing the kill |
-| Extra port tunnels | `fsh tunnel expose <port>` — a Cloudflare quick tunnel is a 1:1 host↔port mapping, so a port can't be switched via a path (`/localhost:3000`). One tunnel is spun up per port, tracked by fsh via PID/registry |
-| Tunnel URL change hook | `VT_TUNNEL_HOOK` — runs an arbitrary command when the URL changes (stdin: `label<TAB>URL`). Since publishing targets differ per person (Notion/Slack/ntfy/file), fsh doesn't know about the service itself. Examples and caveats: `fsh help tunnel-hook` |
-| Automatic tunnel zombie-reconnect recovery | cloudflared can fall into a zombie state where the process is alive (`kill -0` succeeds) but only the QUIC control stream to the edge is cut, endlessly retrying reconnection (static files occasionally return 200, API returns 503). `server/tunnel_watchdog.py` auto-starts with `fsh start`/`voice`/`mobile`, watches `/tmp/cloudflared.log` for reconnect-failure patterns (default: 4+ times within 90 seconds), and automatically calls `fsh tunnel restart`. Manual check/start: `fsh tunnel watchdog`; manual forced restart: `fsh tunnel restart` |
-| Tailscale remote access (D9) | `fsh ssh` — connect directly to tmux via SSH on networks where screen remoting is blocked (e.g. corporate networks). `fsh mobile --network tailscale` also restricts the web UI to the tailnet only |
-| Client connection notifications (D9) | `VT_NOTIFY_CLIENT_EVENTS=1` — tmux client-attached/detached hook → ntfy/Telegram push |
-| kitty keyboard protocol (N12) | Sends combinations that legacy encodings have no room for — `Ctrl+Shift+<letter>`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+Tab` — as CSI u (`frontend/js/term/kitty-keys.js`). Encoding happens **only while an app has turned the mode on** (`CSI > flags u`); otherwise a shell that never enabled it would literally print `\x1b[97;6u`. The mode is a push/pop stack, so a vim that opens and closes inside a shell restores the previous value. Our own UI shortcuts are matched first, so `Mod+K` never leaks to the PTY even with the mode on. ⚠ **Layer 3 (tmux `extended-keys`) is deliberately absent** — that is a change to the user's tmux server options and needs its own approval. With tmux 3.3+ and that option off, tmux blocks CSI u before it reaches the inner app (`set -s extended-keys on`) |
-| Theme import (N14) | Settings → "Appearance": paste a Ghostty config or Warp theme YAML and it becomes a 7th skin (`imported`) — the terminal palette **and inferred UI tokens**. The format is detected from the content. Arbitrary theme files really do contain things like "white background, yellow foreground", so contrast is auto-corrected until body text hits 4.5:1, status colors 3:1 and filled-button text 4.5:1; anything still short is named on screen rather than blocked (it's the user's theme). The parser and inference (`theme-import.js`) are a lazy chunk; the boot path only writes a stored token map into CSS variables (`theme-custom.js` plus an inline block in index.html — the colors must land before first paint or the theme flashes). With nothing imported, the skin doesn't exist in the list or the chips |
-| Detection coverage trust (N9) | The table in Settings → "Agents". `trust: high` means a **first-party signal** exists — a Claude Code hook (`hook`) or `fsh pane report --agent <name>` self-reporting (`report`). Through 2.1.3 only `hook` was high and that value was only ever set for claude, so other CLIs stayed at mid no matter how many patterns you added. Self-reporting is recorded in `~/.vt/agent-report-seen.json` — the same kind of durable fact as "a hook is installed" (status entries expire on a TTL, which would make the grade flicker) |
-| Stale-server warning (N28) | `fsh doctor` and `fsh status` compare the newest mtime under `server/*.py` against the server process start time and tell you to restart when the code is newer. Python loads modules at import time, so without a restart a fix is **not** live at all — the preventive measure for a real incident where paste truncation was chased as a code bug for hours |
-
-### Architecture
-
-```
-server/
-  main.py           — FastAPI (WS + REST + Voice + file upload/download)
-  auth/             — web login auth (package: password/devices/totp/tickets/lockout/fileio)
-                       (scrypt password hash + HMAC-signed session cookie
-                      + device whitelist + TOTP gate + one-time registration ticket).
-                      bin/fsh calls this directly via the `python -m auth <cmd>` CLI without the server.
-                      Runtime state lives in ~/.vt/{devices,totp,tickets}.json (0600) —
-                      kept separate from config (~/.vt.env) so it takes effect immediately without a server restart.
-  pty_manager.py    — PTY sessions (broadcast, scrollback buffer, EOF detection)
-  voice_handler.py  — STT (faster-whisper) + TTS (edge-tts / macOS say)
-  output_watcher.py — output monitoring → task-completion TTS notification
-  local_mic.py      — MacBook local microphone (sounddevice)
-  session_store.py  — session metadata (supports renaming)
-  agent_hook.sh     — Claude Code hook entry point (pre/post/stop → /api/agent/event, stop delegates to tts_hook.sh)
-  claude_hooks.py   — idempotent registrar for ~/.claude/settings.json (fsh hooks install/status/uninstall)
-  tts_hook.sh       — Claude Code Stop hook (automatic TTS summary)
-  voice_daemon.py   — standalone voice input daemon (hotkey → STT → tmux)
-  clipboard_daemon.py — macOS clipboard polling daemon (changeCount → /api/clipboard/push)
-  tunnel_watchdog.py — cloudflared zombie-reconnect watchdog daemon (log pattern detection → auto-calls fsh tunnel restart)
-  routes/clipboard.py — POST /api/clipboard/push → /ws-notify broadcast
-  platform_utils.py — cross-platform utilities (macOS/Linux/WSL2)
-  tailscale.py      — Tailscale status detection (D9, same pattern as tunnel.py)
-  vt_env.py         — ~/.vt.env parser (interpreted the same way as bash source). Shared by voice/config.py and clipboard_daemon
-  hooks/tmux_client_notify.sh — tmux client-attached/detached → /api/notify/client-event (D9)
-
-lib/
-  vt_env.sh         — defines the ~/.vt.env format + a single reader/writer
-                      (vt_env_load/get/set/unset/lint). Parses the config file rather than sourcing it
-                      — no executable syntax support, distinguishes 'literal' vs "expanded", enforces 0600 permissions.
-                      ⚠ Never touch the config file directly with echo/sed.
-
-frontend/
-  index.html        — xterm.js UI shell (worktree tabs, search, file upload; the session tab strip was removed in 2.1.4)
-  voice.js          — mic recording + TTS + notifications + Media Session
-  manifest.json     — PWA manifest
-  sw.js             — Service Worker
-```
+**The single tmux server principle:** the `fsh` CLI, the server, the voice daemon and the
+hooks all use the isolated `-L fsh` socket, kept separate from your own `tmux ls`.
