@@ -31,6 +31,12 @@
 const TYPE_CLASS = { info: 'info', error: 'err', success: 'ok' };
 const DEFAULT_MS = 4000;
 const keyed = new Map();   // key -> element (제자리 교체용)
+// 2.1.6 — 지금 화면에 떠 있는 토스트를 "타입+문구"로 찾는다. key를 안 넘긴
+// 호출부가 같은 문구를 연달아 띄우면 예전에는 그대로 쌓였다(실브라우저 검증
+// 중 "설정을 서버에 저장하지 못했습니다"가 셋까지 쌓인 걸 재현했다). 같은 말을
+// 세 번 하는 건 정보가 아니라 잡음이라, 한 줄로 합치고 횟수를 붙인다.
+// key가 있는 호출은 예전대로 제자리 교체 — 그쪽은 "최신 값으로 갱신"이 의도다.
+const live = new Map();    // "type\u0000msg" -> element
 
 function container() {
   let c = document.getElementById('vt-toasts');
@@ -49,6 +55,7 @@ export function dismissToast(el) {
   if (!el) return;
   clearTimeout(el._vtTimer);
   if (el._vtKey && keyed.get(el._vtKey) === el) keyed.delete(el._vtKey);
+  if (el._vtDedupKey && live.get(el._vtDedupKey) === el) live.delete(el._vtDedupKey);
   if (el.isConnected) el.remove();
 }
 
@@ -62,21 +69,54 @@ export function showToast(msg, type, opts) {
   const ms = (typeof opts.duration === 'number' && isFinite(opts.duration))
     ? opts.duration : DEFAULT_MS;
 
+  const text = msg == null ? '' : String(msg);
+  const dedupKey = type + '\u0000' + text;
+
   let el = key ? keyed.get(key) : null;
   if (el && !el.isConnected) { keyed.delete(key); el = null; }
+
+  // key가 없을 때만 문구로 합친다. 이미 떠 있는 같은 토스트를 다시 띄우면
+  // 새로 쌓지 않고 횟수만 올리고 타이머를 되감는다.
+  if (!el && !key) {
+    const same = live.get(dedupKey);
+    if (same && same.isConnected) {
+      same._vtCount = (same._vtCount || 1) + 1;
+      paintCount(same);
+      clearTimeout(same._vtTimer);
+      if (ms > 0) same._vtTimer = setTimeout(() => dismissToast(same), ms);
+      return same;
+    }
+    if (same) live.delete(dedupKey);
+  }
+
   if (!el) {
     el = document.createElement('div');
     if (key) { el._vtKey = key; keyed.set(key, el); }
     container().appendChild(el);
   }
+  if (!key) { el._vtDedupKey = dedupKey; live.set(dedupKey, el); }
 
   el.className = 'vt-toast ' + (TYPE_CLASS[type] || 'info');
-  el.textContent = msg == null ? '' : String(msg);
+  el._vtCount = 1;
+  el._vtText = text;
+  el.textContent = text;
   el.setAttribute('role', type === 'error' ? 'alert' : 'status');
 
   clearTimeout(el._vtTimer);
   if (ms > 0) el._vtTimer = setTimeout(() => dismissToast(el), ms);
   return el;
+}
+
+// 횟수 배지. 문구 자체는 건드리지 않는다 — "…(3회)"처럼 문장에 끼워 넣으면
+// 스크린리더가 매번 문장 전체를 다시 읽는다.
+function paintCount(el) {
+  let badge = el.querySelector(':scope > .vt-toast-count');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'vt-toast-count';
+    el.appendChild(badge);
+  }
+  badge.textContent = '\u00d7' + el._vtCount;
 }
 
 window.showToast = showToast;

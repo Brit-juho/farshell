@@ -9,7 +9,12 @@
 //     기존 inline <script> 캐시가 stale 상태가 되므로 캐시 키 bump 필수.
 // v2: voice.js / index / manifest는 network-first로 변경 (v1 stale 캐시 이슈 수정).
 //     vendor/* immutable 자산만 stale-while-revalidate.
-const CACHE = 'vt-static-v7';
+// v8(2.1.6): UI 글꼴이 IBM Plex Sans → Wanted Sans로 바뀌면서 index.html이
+//     새 <link>를 갖게 됐다. index는 network-first라 원칙적으로는 bump 없이도
+//     따라오지만, 실브라우저 검증에서 **예전 index.html이 그대로 나오는 걸
+//     실제로 재현**했다(캐시를 지우니 바로 새 글꼴이 붙었다). 글꼴이 안 바뀌면
+//     화면 전체가 예전 그대로라 "고쳤는데 안 바뀐다"로 보이므로 키를 올린다.
+const CACHE = 'vt-static-v8';
 
 const PRECACHE = [
   '/static/icon-192.png',

@@ -13,6 +13,7 @@
 // **이 파일은 지연 청크(panels.js)다.** 상시 동작(rail 배지 폴링 · 액션 등록)은
 // panels/usage-badge.js에 있고, 여기는 "볼 때" 필요한 렌더러만 담는다.
 import { openPanel } from './panel.js';
+import { emptyState } from '../ui/empty.js';
 import { vtFetch } from '../core/api.js';
 import { paintRailBadge } from './usage-badge.js';
 
@@ -80,7 +81,14 @@ function renderProfile(p, activeName) {
   // "왜 값이 계속 바뀌지"를 오해한다(계획서 §4).
   if (p.rolling_token) head.appendChild(el('span', 'vt-usage-chip', 'rolling'));
   if (p.has_live_session) {
-    const live = el('span', 'vt-usage-live', '● live');
+    // ● 글리프 대신 저장소에 이미 있는 .status-dot 컴포넌트를 쓴다
+    // (styles/layers/components.css). 글리프는 폰트마다 크기·중심이 달라
+    // 글줄에서 떠 보였고, 상태색 토큰과도 연결돼 있지 않았다.
+    const live = el('span', 'vt-usage-live');
+    const liveDot = el('span', 'status-dot');
+    liveDot.dataset.state = 'working';
+    live.appendChild(liveDot);
+    live.appendChild(document.createTextNode('live'));
     live.title = '이 프로필로 실행 중인 세션이 있습니다';
     head.appendChild(live);
   }
@@ -205,7 +213,14 @@ function renderCounter(c) {
   const head = el('div', 'vt-counter-head');
   head.appendChild(el('span', 'vt-counter-name', c.label));
   if (c.running) {
-    const live = el('span', 'vt-counter-live', '● 실행 중');
+    // ● 글리프 대신 저장소에 이미 있는 .status-dot 컴포넌트를 쓴다
+    // (styles/layers/components.css). 글리프는 폰트마다 크기·중심이 달라
+    // 글줄에서 떠 보였고, 상태색 토큰과도 연결돼 있지 않았다.
+    const live = el('span', 'vt-counter-live');
+    const liveDot = el('span', 'status-dot');
+    liveDot.dataset.state = 'working';
+    live.appendChild(liveDot);
+    live.appendChild(document.createTextNode('실행 중'));
     live.title = 'ollama에서 지금 로드되어 있는 모델입니다';
     head.appendChild(live);
   }
@@ -252,8 +267,15 @@ export function renderBody(limitData, counterData, target) {
   if (hasCounter) body.appendChild(renderCounterSection(counterData));
 
   if (!hasLimit && !hasCounter) {
+    // 2.1.6 — "사용량 소스가 없습니다." 한 줄이던 것을 빈 상태 컴포넌트로.
+    // 소스가 없는 건 고장이 아니라 설정 문제라서, 무엇을 붙이면 채워지는지까지
+    // 말해야 사용자가 다음 행동을 할 수 있다.
     body.innerHTML = '';
-    body.appendChild(el('p', 'vt-usage-none', '사용량 소스가 없습니다.'));
+    body.appendChild(emptyState({
+      icon: 'gauge',
+      title: '연결된 사용량 소스가 없습니다',
+      desc: 'clauth나 Codex CLI에 로그인하면 남은 한도가 여기 표시됩니다. 로컬 모델처럼 한도가 없는 사용량은 fsh usage add로 기록할 수 있습니다.',
+    }));
   }
 }
 

@@ -6,6 +6,7 @@
 // **컨트롤은 스키마에서 그린다** — 항목을 하드코딩하면 core/settings.js 스키마와
 // 두 벌이 되어 어긋난다. 값·범위·기본값은 전부 스토어에서 읽는다.
 import { get as setting, set as setSetting, SCHEMA } from '../../core/settings.js';
+import { icon } from '../../ui/icons.js';
 
 export function row(label, controlEl, help) {
   const el = document.createElement('div');
@@ -23,19 +24,38 @@ export function row(label, controlEl, help) {
   return el;
 }
 
+// 2.1.6 — 네이티브 체크박스에서 [ON][OFF] 세그먼트로 바꿨다
+// (20-design-system.md §3: "ON/OFF가 글자로 먼저 읽히는 세그먼트, 스위치 아님").
+// 체크박스는 "켜짐"만 표시하고 꺼짐은 빈 네모라, 이 화면처럼 항목이 세로로
+// 늘어선 곳에서는 무엇이 꺼져 있는지 훑어서 알기 어려웠다.
+//
+// role="switch" + aria-checked를 쓰는 이유: <button>이라 스페이스·엔터가 브라우저
+// 기본으로 동작하고, 스크린리더가 "켜짐/꺼짐"을 그대로 읽는다. div로 만들었다면
+// 키보드 처리와 포커스 관리를 전부 직접 짜야 하고 대개 빠뜨린다.
 export function boolControl(key) {
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.className = 'vt-set-check';
-  cb.checked = !!setting(key);
-  cb.addEventListener('change', () => setSetting(key, cb.checked));
-  return cb;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'vt-toggle';
+  btn.setAttribute('role', 'switch');
+  const on = document.createElement('span');
+  on.textContent = 'ON';
+  const off = document.createElement('span');
+  off.textContent = 'OFF';
+  btn.append(on, off);
+  const paint = (v) => { btn.setAttribute('aria-checked', v ? 'true' : 'false'); };
+  paint(!!setting(key));
+  btn.addEventListener('click', () => {
+    const next = btn.getAttribute('aria-checked') !== 'true';
+    paint(next);
+    setSetting(key, next);
+  });
+  return btn;
 }
 
 export function rangeControl(key, step) {
   const spec = SCHEMA[key] || {};
   const wrap = document.createElement('div');
-  wrap.className = 'vt-set-range';
+  wrap.className = 'vt-range';
   const input = document.createElement('input');
   input.type = 'range';
   input.min = spec.min ?? 0;
@@ -43,7 +63,7 @@ export function rangeControl(key, step) {
   input.step = step || 1;
   input.value = setting(key);
   const out = document.createElement('span');
-  out.className = 'vt-set-value';
+  out.className = 'vt-range-value';
   out.textContent = input.value;
   input.addEventListener('input', () => { out.textContent = input.value; });
   // 드래그 중에는 화면만 갱신하고, 놓을 때 저장한다 — 안 그러면 슬라이더 한 번에
@@ -54,10 +74,16 @@ export function rangeControl(key, step) {
   return wrap;
 }
 
+// <select>는 그대로 두고 OS 화살표만 지운다(appearance:none) — 직접 만든
+// 드롭다운으로 바꾸면 키보드 탐색·타이핑 점프·모바일 네이티브 피커를 전부
+// 다시 짜야 하고, 그렇게 만든 것이 네이티브보다 나은 경우는 드물다.
+// 화살표는 아이콘 레지스트리의 chevron-down 하나를 쓴다(라이브러리 혼용 금지).
 export function selectControl(key, labels) {
   const spec = SCHEMA[key] || {};
+  const wrap = document.createElement('div');
+  wrap.className = 'vt-select-wrap';
   const sel = document.createElement('select');
-  sel.className = 'vt-set-select';
+  sel.className = 'vt-select';
   for (const v of spec.values || []) {
     const opt = document.createElement('option');
     opt.value = v;
@@ -66,7 +92,9 @@ export function selectControl(key, labels) {
   }
   sel.value = setting(key);
   sel.addEventListener('change', () => setSetting(key, sel.value));
-  return sel;
+  wrap.appendChild(sel);
+  wrap.insertAdjacentHTML('beforeend', icon('chevron-down', 12, 2));
+  return wrap;
 }
 
 export function renderItems(section) {

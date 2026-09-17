@@ -24,6 +24,16 @@
   <meta name="theme-color" content="#131316" id="theme-color-meta">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="/static/vendor/xterm.min.css">
+  <!-- 2.1.6 타이포 교체: UI 한글의 정본 글꼴. 여기서 app.css보다 **먼저**
+       링크하는 이유는 @font-face가 첫 페인트 전에 등록되어야 하기 때문이다.
+       Wanted Sans는 가변(400~1000) 한 벌을 unicode-range로 92조각 나눠 놓은
+       것이라, 브라우저는 화면에 실제로 뜬 글자가 속한 조각만 받는다(라틴
+       1개 + 한글 몇 개, 대략 100~150KB). 이전의 IBM Plex Sans는 **라틴
+       서브셋**이어서 한글이 한 글자도 들어 있지 않았고, 그래서 화면 글자의
+       대부분인 한글 라벨이 OS 기본 글꼴로 떨어지고 있었다(canvas 실측으로
+       확인 — Plex와 sans-serif의 '설정워크트리' 폭이 완전히 같았다). -->
+  <link rel="stylesheet" href="/static/vendor/fonts/wanted-sans/WantedSansVariable.css">
+  <link rel="stylesheet" href="/static/vendor/fonts/jetbrains-mono/JetBrainsMono.css">
   <link rel="stylesheet" href="/static/dist/app.css">
   <!-- 2.1.6: app.js는 부팅 배선만 담은 2KB 진입점이고 상시 코드는 전부
        core.js에 있다(vite.config.js의 청크 규칙 참고). 이 preload가 없으면
@@ -39,8 +49,13 @@
        스모크에서 #vt-dock이 아직 없어 dock 테스트 5건이 무너졌다).
        panels.js는 여기 넣지 않는다 — 그건 정말 열 때만 받는다. -->
   <link rel="modulepreload" href="/static/dist/shell.js">
-  <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-mono-400.woff2" crossorigin>
-  <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/plex-sans-400.woff2" crossorigin>
+  <!-- 92조각 중 첫 화면이 반드시 쓰는 3개만 미리 받는다. 90=라틴,
+       88=가장 흔한 한글 음절 블록(가·트 등), 모노 400=수치·경로.
+       나머지 조각은 unicode-range 규칙에 따라 필요할 때만 요청된다 —
+       조각 전체를 preload하면 2.4MB를 매번 받는 꼴이 되므로 하지 않는다. -->
+  <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/wanted-sans/woff2/WantedSansVariable.split.90.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/wanted-sans/woff2/WantedSansVariable.split.88.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/static/vendor/fonts/jetbrains-mono/jetbrains-mono-latin-400.woff2" crossorigin>
   <!-- 테마 부팅: 페인트 전에 data-skin 확정 (FOUC 방지).
        D1(ADR-3): 기본값이 macos → farshell로 바뀌었다. 이미 vt-skin을
        저장해 둔 사용자는 그 값을 그대로 쓴다(마이그레이션 없음) — 저장된
@@ -82,74 +97,201 @@
       } catch(e){}
     })();
   </script>
-  <!-- 로그인 게이트 스타일 (모든 스킨의 테마 변수 재사용) -->
+  <!-- 로그인 게이트 스타일.
+       인라인으로 남는 이유는 예전과 같다 — 이 화면은 번들 CSS 도착 여부와
+       무관하게 첫 페인트에 완성돼 있어야 한다(FOUC 방지). 대신 색은 전부
+       `styles/theme/tokens.css`의 --color-* 토큰을 읽고, **폴백은 var()의
+       두 번째 인자로만** 준다(farshell 기본 스킨 값). 하드코딩 hex를 규칙으로
+       두면 토큰이 움직일 때 로그인 화면만 조용히 옛 색으로 남는다 —
+       실제로 이전 버전이 애플 블루(#0a84ff)에 묶여 있어서, 앰버 액센트로
+       바뀐 제품에 브라우저 기본 폼처럼 생긴 로그인이 붙어 있었다. -->
   <style>
-    #login-gate{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;
-      background:var(--win,#1c1c1e);color:var(--txt,#e6e6ea);font-family:var(--ui,system-ui,sans-serif);}
+    #login-gate{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;
+      padding:24px calc(20px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+      background:var(--color-bg-0,#08090a);color:var(--color-txt,#e8e9ea);
+      font-family:var(--font-ui,-apple-system,BlinkMacSystemFont,system-ui,sans-serif);
+      -webkit-font-smoothing:antialiased;}
     #login-gate[hidden]{display:none;}
-    #login-spinner{width:26px;height:26px;border-radius:50%;
-      border:3px solid var(--line,rgba(255,255,255,.15));border-top-color:var(--acc,#0a84ff);
-      animation:login-spin .6s linear infinite;}
+
+    /* ── 확인 중(최초 프로브 · QR 티켓 교환) ──────────────────────────────
+       링만 돌리고 끝내면 "무엇을 기다리는지"가 화면에 없다. 티켓 교환은
+       비밀번호 확인과 체감 길이가 달라서(기기 등록까지 한다) 라벨을 gate.js가
+       갈아끼운다 — 링은 같아도 문장이 상태를 말한다. */
+    #login-spinner{display:flex;flex-direction:column;align-items:center;gap:14px;}
     #login-spinner[hidden]{display:none;}
-    /* app.css의 vtSpin과 값이 완전히 같은 키프레임이지만(D6), 로그인 게이트 CSS 색
-       토큰 인라인 복제(위 #login-gate 배경)와 같은 이유로 여기 남긴다 — 번들 CSS
-       도착 전에도 스피너가 돌아야 한다. */
+    .login-spin-ring{width:22px;height:22px;border-radius:50%;
+      border:2px solid var(--color-line-strong,rgb(255 255 255 / .14));
+      border-top-color:var(--color-acc,#f0a860);
+      animation:login-spin .7s linear infinite;}
+    #login-spin-label{margin:0;font-size:var(--fs-sm,13.5px);color:var(--color-sub,#8e9296);}
+    /* app.css의 vtSpin과 값이 같은 키프레임이지만, 번들 CSS 도착 전에도 돌아야
+       하므로 여기 복제본을 남긴다(D6과 같은 이유). */
     @keyframes login-spin{to{transform:rotate(360deg)}}
-    #login-form{width:min(340px,86vw);background:var(--menu,#2a2a2c);
-      border:1px solid var(--line,rgba(255,255,255,.08));border-radius:var(--wrad,12px);
-      padding:28px 24px;box-shadow:0 12px 40px rgba(0,0,0,.4);text-align:center;}
+
+    /* ── 폼 프레임 ────────────────────────────────────────────────────────
+       라운드 사각형이 화면 한가운데 떠 있는 "로그인 카드"를 만들지 않는다.
+       게이트는 전체 화면을 덮으므로 그 위에 뜰 무언가가 없고, 그림자는 높이를
+       말할 때만 쓴다(DESIGN §4). 경계는 1px 선 하나. 480px 아래에서는 테두리와
+       배경 단차를 아예 지워서 카드가 아니라 **화면 자체**가 되게 한다 —
+       390px 폭에서 20px 여백 안에 카드를 또 그리면 남는 폭이 없다. */
+    #login-form{width:min(380px,100%);box-sizing:border-box;
+      background:var(--color-bg-1,#0e1011);
+      border:1px solid var(--color-line,rgb(255 255 255 / .07));
+      border-radius:var(--radius-lg,10px);padding:28px 24px;}
     #login-form[hidden]{display:none;}
-    #login-form .login-icon{display:flex;justify-content:center;margin-bottom:12px;color:var(--acc,#0a84ff);}
-    #login-form h1{font-size:18px;font-weight:600;margin:0 0 4px;}
-    #login-form .login-sub{font-size:13px;color:var(--sub,#8e8e96);margin:0 0 20px;}
-    #login-form input{width:100%;box-sizing:border-box;font-size:16px;padding:11px 13px;
-      background:var(--win,#1c1c1e);color:var(--txt,#e6e6ea);
-      border:1px solid var(--line,rgba(255,255,255,.14));border-radius:var(--trad,7px);
-      outline:none;margin-bottom:12px;}
-    #login-form input:focus{border-color:var(--acc,#0a84ff);}
+    @media (max-width:480px){
+      #login-form{background:none;border:none;border-radius:0;padding:0;}
+    }
+
+    /* 제품 표식: 자물쇠가 아니라 터미널이다. 자물쇠는 "잠겼다"만 말하고 이 화면이
+       무엇인지는 말하지 않는다 — 문장이 이미 잠금을 말하고 있으니 마크는 제품을
+       말하게 한다. 호스트 줄은 장식이 아니라 정보다: 터널 URL이 여러 개일 때
+       지금 어느 맥에 로그인하는지가 여기서만 보인다. */
+    .login-mark{display:block;color:var(--color-acc,#f0a860);margin:0 0 14px;}
+    #login-form h1{margin:0 0 6px;font-size:var(--fs-lg,20px);font-weight:var(--weight-semibold,600);
+      letter-spacing:var(--tracking-tight,-0.02em);line-height:var(--leading-tight,1.2);}
+    #login-form .login-sub{margin:0;font-size:var(--fs-sm,13.5px);color:var(--color-sub,#8e9296);
+      line-height:var(--leading-body,1.6);}
+    #login-host{margin:2px 0 0;font-family:var(--font-mono,ui-monospace,monospace);
+      font-size:var(--fs-2xs,11px);color:var(--color-faint,#5d6164);
+      word-break:break-all;line-height:var(--leading-row,1.35);}
+    .login-fields{margin-top:22px;}
+
+    /* ── 입력 ─────────────────────────────────────────────────────────────
+       라벨을 눈에 보이게 둔다. 플레이스홀더만 있으면 입력을 시작한 순간
+       그 칸이 무엇이었는지가 사라지고, OTP 단계가 열리면 칸이 둘이 된다.
+       글자 16px는 취향이 아니라 iOS 대응이다 — 그보다 작으면 포커스할 때
+       사파리가 화면을 확대한다. */
+    .login-label{display:block;margin:0 0 6px;font-size:var(--fs-xs,12.5px);
+      color:var(--color-sub,#8e9296);font-weight:var(--weight-medium,500);}
+    #login-form input{width:100%;box-sizing:border-box;min-height:42px;
+      font-family:inherit;font-size:16px;padding:10px 12px;
+      background:var(--color-bg-0,#08090a);color:var(--color-txt,#e8e9ea);
+      border:1px solid var(--color-line,rgb(255 255 255 / .07));
+      border-radius:var(--radius-sm,5px);
+      transition:border-color var(--dur-fast,120ms) ease;}
+    #login-form input::placeholder{color:var(--color-faint,#5d6164);}
+    #login-form input:hover{border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
+    #login-form input:focus{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;
+      border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
     /* type=password 대신 text+마스킹 사용 → Chrome 비밀번호 저장 제안 자체를 차단 (시각적 마스킹은 유지) */
     #login-pass{-webkit-text-security:disc;text-security:disc;}
-    #login-form button{width:100%;font-size:15px;font-weight:600;padding:11px;cursor:pointer;
-      background:var(--acc,#0a84ff);color:var(--acc-ink,#fff);border:none;border-radius:var(--trad,7px);
-      transition:filter .12s, transform .08s;}
-    #login-form button:hover:not(:disabled){filter:brightness(1.1);}
-    #login-form button:active:not(:disabled){transform:scale(.97);filter:brightness(.95);}
-    #login-form button:disabled{opacity:.55;cursor:default;}
-    #login-form .login-err{color:var(--err,#ff453a);font-size:13px;margin-top:12px;min-height:1em;}
-    #login-form .login-err[hidden]{display:none;}
+
+    /* OTP는 "비밀번호 다음에 붙는 칸"이 아니라 **별도 단계**다. 선 하나로
+       끊어 주지 않으면 처음 보는 기기에서 갑자기 칸이 하나 늘어난 것처럼만
+       보인다. */
+    #login-otp-wrap{margin-top:18px;padding-top:18px;
+      border-top:1px solid var(--color-line,rgb(255 255 255 / .07));}
     #login-otp-wrap[hidden]{display:none;}
-    #login-form .login-otp-hint{font-size:12px;color:var(--sub,#8e8e96);margin:0 0 8px;text-align:left;line-height:1.45;}
-    #login-otp{letter-spacing:.4em;text-align:center;font-variant-numeric:tabular-nums;}
+    #login-form .login-otp-hint{margin:0 0 10px;font-size:var(--fs-xs,12.5px);
+      color:var(--color-sub,#8e9296);line-height:var(--leading-body,1.6);}
+    #login-otp{font-family:var(--font-mono,ui-monospace,monospace);
+      letter-spacing:.34em;text-indent:.34em;text-align:center;font-variant-numeric:tabular-nums;}
+
+    /* ── 주 액션 ──────────────────────────────────────────────────────────
+       화면에 채움 버튼은 이것 하나뿐이다(DESIGN §10). hover/active를 밝기
+       필터로 만들지 않고 --color-acc-dim 토큰으로 내린다 — filter는 스킨마다
+       결과가 제각각이고, macos처럼 액센트 위 잉크 대비를 따로 맞춘 스킨에서
+       그 계산을 무너뜨린다. */
+    #login-submit{width:100%;margin-top:18px;min-height:42px;
+      font-family:inherit;font-size:var(--fs-base,15px);font-weight:var(--weight-semibold,600);
+      letter-spacing:var(--tracking-wide,0.04em);cursor:pointer;
+      background:var(--color-acc-surface,var(--color-acc,#f0a860));color:var(--color-acc-ink,#17140f);
+      border:1px solid transparent;border-radius:var(--radius-sm,5px);
+      transition:background-color var(--dur-fast,120ms) ease;}
+    #login-submit:hover:not(:disabled){background:var(--color-acc-dim,#b3803f);}
+    #login-submit:active:not(:disabled){background:var(--color-acc-dim,#b3803f);}
+    #login-submit:focus-visible{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;}
+    /* 제출 중에도 버튼은 disabled다. 투명도만 낮추면 "눌렀는데 아무 일도 없는"
+       화면이 되므로, 라벨을 gate.js가 갈아끼우고 여기서 링을 붙인다. */
+    #login-submit:disabled{background:none;color:var(--color-muted,#73787c);
+      border-color:var(--color-line-strong,rgb(255 255 255 / .14));cursor:default;}
+    #login-submit[aria-busy="true"]{display:flex;align-items:center;justify-content:center;gap:8px;}
+    #login-submit[aria-busy="true"]::before{content:"";width:13px;height:13px;border-radius:50%;
+      border:2px solid var(--color-line-strong,rgb(255 255 255 / .14));
+      border-top-color:var(--color-muted,#73787c);
+      animation:login-spin .7s linear infinite;}
+
+    /* ── 오류 ─────────────────────────────────────────────────────────────
+       한 줄에 다 쓰면 "인증 코드가 올바르지 않습니다 (남은 시도 2회)"처럼
+       사람이 읽어야 할 문장과 서버가 알려준 수치가 같은 무게로 붙는다.
+       제목은 무슨 일인지, 보조 줄은 서버가 덧붙인 사실. */
+    .login-err{display:flex;gap:9px;margin-top:16px;
+      font-size:var(--fs-sm,13.5px);line-height:var(--leading-row,1.35);}
+    .login-err[hidden]{display:none;}
+    .login-err svg{flex:none;margin-top:1px;color:var(--color-st-error,#f06868);}
+    #login-err-msg{color:var(--color-txt,#e8e9ea);}
+    #login-err-detail{margin-top:3px;color:var(--color-sub,#8e9296);font-size:var(--fs-xs,12.5px);}
+    #login-err-detail[hidden]{display:none;}
+
+    /* ?next= 로 들어온 경우(N21 공유 링크의 device 모드). 로그인 뒤 원래 열려던
+       다운로드로 돌아간다는 사실을 말해 두지 않으면, 파일을 누른 사람 눈에는
+       난데없는 로그인 화면이다. */
+    #login-next-note{margin:16px 0 0;padding:9px 11px;
+      border:1px solid var(--color-line,rgb(255 255 255 / .07));border-radius:var(--radius-sm,5px);
+      font-size:var(--fs-xs,12.5px);color:var(--color-sub,#8e9296);line-height:var(--leading-body,1.6);}
+    #login-next-note[hidden]{display:none;}
+
+    /* DESIGN §11 — 모션을 끈 사용자에게는 링 대신 정지한 액센트 호가 남고,
+       상태는 옆의 문장이 말한다. */
+    @media (prefers-reduced-motion:reduce){
+      .login-spin-ring,#login-submit[aria-busy="true"]::before,#login-form input{animation:none;transition:none;}
+    }
   </style>
 </head>
 <body>
   <!-- 로그인 게이트 — VT_TOKEN 설정 시 미인증 접속을 여기서 막는다 -->
   <div id="login-gate">
-    <div id="login-spinner"></div>
+    <!-- 확인 중. role=status + aria-live로 스크린리더에도 단계 전환이 읽힌다
+         (라벨 문구는 gate.js가 상황에 따라 바꾼다 — 프로브 / QR 기기 등록). -->
+    <div id="login-spinner" role="status" aria-live="polite">
+      <span class="login-spin-ring" aria-hidden="true"></span>
+      <p id="login-spin-label">연결을 확인하는 중</p>
+    </div>
     <form id="login-form" hidden autocomplete="off">
-      <!-- D5: ui/icons.js와 같은 path(Lucide 'lock') — 번들 로드 전에도 보여야 해서 정적으로 둔다. -->
-      <div class="login-icon"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+      <!-- D5: ui/icons.js와 같은 path(Lucide 'square-terminal') — 번들 로드 전에도
+           보여야 해서 정적으로 둔다. 두 곳에 같은 도형이 적히는 건 알고 있고,
+           그게 아이콘 라이브러리를 섞는 것보다 낫다. -->
+      <svg class="login-mark" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M12 15h5"/></svg>
       <h1>FarShell</h1>
-      <p class="login-sub">접속하려면 비밀번호를 입력하세요</p>
-      <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
-           화면 상 노출은 -webkit-text-security로 그대로 가린다.
-           readonly+onfocus 해제: Chrome은 autocomplete=off를 로그인성 필드에서 종종 무시하고
-           자동완성 드롭다운을 띄운다 — 포커스 전까지 readonly로 막아 Chrome이 아예 자동완성
-           대상으로 인식하지 못하게 한다(포커스 즉시 해제되므로 타이핑에는 영향 없음). -->
-      <input id="login-pass" type="text" name="vt-key" autocomplete="off"
-        autocorrect="off" autocapitalize="off" spellcheck="false"
-        readonly onfocus="this.removeAttribute('readonly')"
-        placeholder="비밀번호" aria-label="비밀번호" />
-      <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'fsh otp setup'으로 연동한 뒤에만 나타난다 -->
-      <div id="login-otp-wrap" hidden>
-        <p class="login-otp-hint">처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
-        <input id="login-otp" type="text" name="vt-otp" autocomplete="one-time-code"
-          inputmode="numeric" pattern="[0-9]*" maxlength="6"
+      <p class="login-sub">이 터미널에 접속하려면 비밀번호가 필요합니다.</p>
+      <!-- 지금 어느 서버로 들어가는지. 터널 URL은 자주 바뀌고 맥이 둘일 수도 있다. -->
+      <p id="login-host" hidden></p>
+      <!-- 공유 링크(N21)로 들어와 로그인이 가로챈 경우에만 뜬다 -->
+      <p id="login-next-note" hidden>로그인하면 열려던 공유 파일로 이어집니다.</p>
+
+      <div class="login-fields">
+        <label class="login-label" for="login-pass">비밀번호</label>
+        <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
+             화면 상 노출은 -webkit-text-security로 그대로 가린다.
+             readonly+onfocus 해제: Chrome은 autocomplete=off를 로그인성 필드에서 종종 무시하고
+             자동완성 드롭다운을 띄운다 — 포커스 전까지 readonly로 막아 Chrome이 아예 자동완성
+             대상으로 인식하지 못하게 한다(포커스 즉시 해제되므로 타이핑에는 영향 없음). -->
+        <input id="login-pass" type="text" name="vt-key" autocomplete="off"
           autocorrect="off" autocapitalize="off" spellcheck="false"
-          placeholder="000000" aria-label="인증 코드" />
+          readonly onfocus="this.removeAttribute('readonly')"
+          aria-label="비밀번호" />
+        <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'fsh otp setup'으로 연동한 뒤에만 나타난다 -->
+        <div id="login-otp-wrap" hidden>
+          <p class="login-otp-hint">처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
+          <label class="login-label" for="login-otp">인증 코드</label>
+          <input id="login-otp" type="text" name="vt-otp" autocomplete="one-time-code"
+            inputmode="numeric" pattern="[0-9]*" maxlength="6"
+            autocorrect="off" autocapitalize="off" spellcheck="false"
+            placeholder="000000" aria-label="인증 코드" />
+        </div>
+        <button type="submit" id="login-submit"><span id="login-submit-label">접속</span></button>
       </div>
-      <button type="submit" id="login-submit">접속</button>
-      <div class="login-err" id="login-err" role="alert" hidden></div>
+
+      <!-- 오류는 두 줄이다: 무슨 일인지(제목) / 서버가 덧붙인 사실(보조). -->
+      <div class="login-err" id="login-err" role="alert" hidden>
+        <!-- ui/icons.js의 'alert-triangle'과 같은 path -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <div>
+          <div id="login-err-msg"></div>
+          <div id="login-err-detail" hidden></div>
+        </div>
+      </div>
     </form>
   </div>
   <script src="/static/js/gate.js"></script>
@@ -159,8 +301,9 @@
   <!-- 터미널 검색 바 -->
   <div id="search-bar">
     <input id="search-input" type="text" placeholder="검색..." aria-label="터미널 검색" />
-    <button data-action="search.prev" aria-label="이전 결과">▲</button>
-    <button data-action="search.next" aria-label="다음 결과">▼</button>
+    <!-- D5 관용구: ui/icons.js의 'chevron-down'과 같은 path. 이전 결과는 CSS로 뒤집는다. -->
+    <button data-action="search.prev" aria-label="이전 결과" class="flipped"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button data-action="search.next" aria-label="다음 결과"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
     <!-- D5: ui/icons.js의 'x'와 같은 path -->
     <button data-action="search.close" aria-label="검색 닫기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
@@ -208,7 +351,6 @@
     </button>
     <!-- N37 §4 — 「연결된 화면」. shell/HeaderExtras.tsx가 채우고, 데이터가 없으면
          (활성 세션이 tmux가 아님 등) 스스로 빈 상태로 남는다. -->
-    <div id="vt-screens-slot"></div>
     <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
   </header>
 
@@ -407,7 +549,9 @@
         </button>
       </div>
       <!-- 접기/펴기 토글 -->
-      <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" title="특수키 바 접기/펴기">▾</button>
+      <!-- D5 관용구: ui/icons.js의 'chevron-down'과 같은 path. 접히면 keybar.js가
+           .flipped를 붙여 CSS로 뒤집는다(아이콘을 두 개 두지 않는다). -->
+      <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" title="특수키 바 접기/펴기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
     </div>
     <div id="keybar-keys">
       <button type="button" class="kb" data-key="esc">Esc</button>
@@ -442,22 +586,34 @@
        data-action(scm.show/queue.show/settings.show)을 그대로 위임 클릭한다
        (core/dom.js가 모든 [data-action]을 이미 배선한다) — 「플릿」·「터미널」만
        새 탭 전환 로직이 필요해 data-mnav로 따로 잡는다. -->
+  <!-- 2.1.6: 하단 내비에 아이콘을 넣는다. 글자만 있을 때는 다섯 칸이 전부
+       같은 회색 글자라, 지금 어느 탭인지와 어디를 눌러야 하는지가 **읽어야만**
+       구분됐다(엄지로 쓰는 화면에서 가장 비싼 비용이다). 아이콘 path는 전부
+       ui/icons.js에 있는 것과 같은 것을 쓴다 — 이 파일은 정적 HTML이라 그
+       모듈을 부를 수 없어 D5의 관용구대로 같은 path를 인라인한다(라이브러리
+       혼용 금지 규칙은 "같은 출처의 같은 도형"을 요구하는 것이지 인라인을
+       금지하는 게 아니다). -->
   <nav id="vt-mnav-bottom" aria-label="하단 내비">
     <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="플릿" aria-pressed="false">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg>
       <span class="vt-mnav-label">플릿</span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="terminal" aria-label="터미널" aria-pressed="false">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       <span class="vt-mnav-label">터미널</span>
     </button>
     <button type="button" class="vt-mnav-btn" data-action="scm.show" aria-label="변경">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
       <span class="vt-mnav-label">변경</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-action="queue.show" aria-label="큐">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/></svg>
       <span class="vt-mnav-label">큐</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-queue" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-action="settings.show" aria-label="설정">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span class="vt-mnav-label">설정</span>
     </button>
   </nav>
