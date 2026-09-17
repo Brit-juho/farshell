@@ -1,7 +1,5 @@
 # API Reference
 
-[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./API.ko.md)
-
 Full list of REST/WebSocket endpoints served by the FarShell server (`server/main.py`).
 See [README.md](./README.md) for an overview and [ARCHITECTURE.md](./ARCHITECTURE.md) for
 the architecture.

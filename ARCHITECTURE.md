@@ -1,7 +1,5 @@
 # FarShell Architecture
 
-[![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./ARCHITECTURE.ko.md)
-
 > **Version:** v2.0.0 — the frontend was substantially restructured in September 2026
 > (see [`docs/plan-2.0/`](./docs/plan-2.0/) locally, gitignored — not on GitHub).
 > See [CHANGELOG.md](./CHANGELOG.md) for the release history and [API.md](./API.md)
