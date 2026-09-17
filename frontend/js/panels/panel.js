@@ -150,6 +150,9 @@ export function closePanel(id) {
       const el = document.getElementById(id);
       if (!el) return;
       if (el._vtTimer) clearInterval(el._vtTimer);
+      // 폴링과 짝인 visibilitychange 리스너 — 같이 떼지 않으면 닫힌 패널의
+      // 핸들러가 document에 남는다(탭을 오갈 때마다 쌓인다).
+      if (el._vtOnVisible) document.removeEventListener('visibilitychange', el._vtOnVisible);
       document.removeEventListener('keydown', el._vtKeyHandler);
       el.remove();
       if (el._vtOnClose) el._vtOnClose();
@@ -162,12 +165,27 @@ export function closePanel(id) {
     }
 
     // 패널이 열려 있는 동안만 도는 폴링 — 닫히면 스스로 정리한다.
+    //
+    // 2026-09-18 — **탭이 숨어 있으면 건너뛴다.** 포트 패널은 2초, 큐는 5초
+    // 주기라, 패널을 열어 둔 채 탭을 백그라운드로 보내면 아무도 안 보는
+    // 화면을 위해 시간당 1,800건이 나간다(ngrok 무료 요청 한도를 그렇게
+    // 태웠다). 레일·플릿·dock·모바일 내비는 이미 같은 가드를 갖고 있었고
+    // 여기만 빠져 있었다.
+    //
+    // 돌아왔을 때는 다음 tick을 기다리지 않고 한 번 즉시 따라잡는다 — 안
+    // 그러면 포트 패널이 최대 2초, 파일 패널이 10초 동안 낡은 값을 보여준다.
 export function setPanelPoll(id, ms, fn) {
       const el = document.getElementById(id);
       if (!el) return;
-      el._vtTimer = setInterval(() => {
-        if (document.getElementById(id)) fn(); else closePanel(id);
-      }, ms);
+      const tick = () => {
+        if (!document.getElementById(id)) { closePanel(id); return false; }
+        if (document.hidden) return true;
+        fn();
+        return true;
+      };
+      el._vtTimer = setInterval(tick, ms);
+      el._vtOnVisible = () => { if (!document.hidden) tick(); };
+      document.addEventListener('visibilitychange', el._vtOnVisible);
     }
 
 
