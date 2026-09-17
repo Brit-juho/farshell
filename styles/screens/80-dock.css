@@ -214,18 +214,13 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-sub{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-top:2px; }
 .vt-fl-sub.warn{ color:var(--warn); }
 .vt-fl-acts{ display:flex; gap:calc(var(--spacing) * 0.5); flex:0 0 auto; }
-.vt-fl-act{
-  background:transparent; border:0; color:var(--sub); cursor:pointer; border-radius:var(--radius-sm);
-  /* 44px은 못 주더라도(행 5개가 392px dock 안에 들어가야 한다) 터치 표적이
-     28px 아래로는 안 내려가게 한다. */
-  /* 이모지 글리프였을 땐 font-size로 크기를 잡았지만 이제 안쪽이 SVG라
-     flex로 광학 중앙을 맞춘다(글리프의 baseline 오프셋이 사라져 살짝 위로
-     떠 보이던 것도 같이 해결된다). */
-  min-width:28px; min-height:28px; line-height:1;
-  display:inline-flex; align-items:center; justify-content:center;
-}
-.vt-fl-act:hover:not([disabled]){ background:var(--tab); color:var(--txt); }
-.vt-fl-act[disabled]{ opacity:.35; cursor:not-allowed; }
+/* 2.1.6 — 모양·상태는 `.vt-btn.sm.quiet`가 맡는다. 여기 남은 셋만 이 버튼의
+   고유한 성질이다.
+   - 44px은 못 주더라도(행 5개가 392px dock 안에 들어가야 한다) 터치 표적이
+     28px 아래로는 안 내려가게 한다.
+   - 안쪽이 SVG 하나뿐이라 정사각이어야 한다(좌우 패딩 0).
+   - `.rm`은 파괴적 동작이라 hover에서만 에러색이 된다. */
+.vt-fl-act{ min-width:28px; min-height:28px; padding:0; }
 .vt-fl-act.rm:hover:not([disabled]){ color:var(--err); }
 
 /* 경고 한 줄의 아이콘 자리 — 아이콘과 글줄의 광학 정렬. 아이콘을 baseline에
@@ -268,12 +263,8 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-pane-unreachable-title{ font:600 var(--fs-sm) var(--mono); color:var(--txt); opacity:.8; }
 .vt-pane-unreachable-sub{ font:400 var(--fs-xs) var(--mono); max-width:36ch; }
 .vt-pane-unreachable-acts{ display:flex; gap:calc(var(--spacing) * 2); }
-.vt-pane-unreachable-retry, .vt-pane-unreachable-pick{
-  background:var(--tab); border:1px solid var(--line); border-radius:var(--radius-sm); color:var(--txt);
-  font:500 var(--fs-xs) var(--mono); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); cursor:pointer;
-}
-.vt-pane-unreachable-retry:hover:not([disabled]), .vt-pane-unreachable-pick:hover{ background:var(--menu-hover); }
-.vt-pane-unreachable-retry[disabled]{ opacity:.5; cursor:default; }
+/* 2.1.6 — 모양은 `.vt-btn.sm`이 맡는다. `.vt-pane-unreachable-retry`는 JS가
+   disabled를 토글할 때 찾는 이름으로만 남는다(비활성 표현도 .vt-btn:disabled). */
 
 /* 2.1.3 — 「연결된 화면」이 원격에서 읽기 전용일 때의 한 줄. (2.1.2의
    .vt-rail-session-note는 원격에서 블록을 통째로 숨길 때 쓰던 것이라 삭제됐다.) */

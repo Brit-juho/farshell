@@ -122,11 +122,9 @@ body.voice-only-mode .vt-onboarding { display:none; }
    흐리게 표시(Orca 패턴: "확인 전엔 비활성"). */
 .vt-ob-sessions-pending { opacity:.55; }
 .vt-ob-sessions-pending .vt-ob-row-label { cursor:default; pointer-events:none; }
-.vt-btn-primary, .vt-btn-secondary {
-  padding:calc(var(--spacing) * 3) calc(var(--spacing) * 6); border-radius:var(--radius-sm); border:none; font-size:var(--fs-base); cursor:pointer;
-}
-.vt-btn-primary { background:var(--color-acc-surface); color:var(--acc-ink); }
-.vt-btn-secondary { background:var(--tab); color:var(--txt); }
+/* 2.1.6 — .vt-btn-primary/.vt-btn-secondary는 components.css의 `.vt-btn.solid lg`/
+   `.vt-btn lg`로 대체했다. 이름부터 "btn"이었는데 컴포넌트와 별개로 한 벌 더
+   있었고, 상태가 hover 하나뿐이라 active·focus-visible·disabled가 없었다. */
 .vt-onboarding .vt-ob-hint { color:var(--sub); font-size:var(--fs-2xs); margin-top:calc(var(--spacing) * 4); opacity:.7; }
 
 /* ── 사용 가이드 모달 (첫 사용자용) ────────────────────────────────────────

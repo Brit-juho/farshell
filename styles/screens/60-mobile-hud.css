@@ -214,11 +214,7 @@
   .vt-fleet-question { font:400 var(--fs-2xs) var(--mono); color:var(--txt2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vt-fleet-unseen-badge { flex:none; width:6px; height:6px; border-radius:var(--radius-full); background:var(--acc); }
   .vt-fleet-answers { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); margin-top:2px; }
-  .vt-fleet-answer-btn {
-    flex:none; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2);
-    font:600 var(--fs-2xs) var(--mono); color:var(--txt); background:var(--tab);
-    border:1px solid var(--line); border-radius:var(--radius-sm); cursor:pointer;
-  }
-  .vt-fleet-answer-btn:active { background:var(--menu-hover); }
-  .vt-fleet-answer-fallback { color:var(--acc-ink); background:var(--color-acc-surface); border-color:var(--acc); }
+  /* 2.1.6 — `.vt-btn.sm`(선택지) / `.vt-btn.sm.solid`(「터미널로」 대표 액션)으로
+     대체. 승인 버튼은 폰에서 가장 중요한 액션인데 hover·active만 있고
+     focus-visible·disabled가 없었다 — 컴포넌트가 다섯 상태를 다 갖는다. */
 }

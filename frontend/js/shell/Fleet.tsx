@@ -135,14 +135,14 @@ function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) 
             <Show
               when={hasOptions()}
               fallback={
-                <button type="button" class="vt-fleet-answer-btn vt-fleet-answer-fallback" onClick={props.onOpen}>
+                <button type="button" class="vt-btn sm solid" onClick={props.onOpen}>
                   터미널로
                 </button>
               }
             >
               <For each={props.row.options}>
                 {(opt) => (
-                  <button type="button" class="vt-fleet-answer-btn" onClick={() => props.onAnswer(opt.key)}>
+                  <button type="button" class="vt-btn sm" onClick={() => props.onAnswer(opt.key)}>
                     {opt.key} · {opt.label}
                   </button>
                 )}

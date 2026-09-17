@@ -267,12 +267,9 @@
 }
 .vt-clients-head { display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 1); }
 .vt-clients-title { font:600 var(--fs-xs) var(--ui); color:var(--sub); }
-.vt-clients-solo {
-  border:0; background:transparent; color:var(--acc); cursor:pointer;
-  font:500 var(--fs-xs) var(--ui); padding:2px 4px; border-radius:var(--radius-sm);
-}
-.vt-clients-solo:hover:not(:disabled) { background:var(--menu-hover); }
-.vt-clients-solo:disabled { color:var(--sub); cursor:default; }
+/* 2.1.6 — `.vt-btn.sm.quiet`로 대체. 액센트 글자를 뺀 것은 의도다:
+   이 화면에는 이미 액센트를 쓰는 것이 여럿인데 패널 머리의 부차 액션까지
+   액센트면 "화면당 하나"라는 규칙이 무너진다(DESIGN.md §0 70/20/10). */
 .vt-clients-list { margin-top:calc(var(--spacing) * 0.5); }
 .vt-clients-row {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1);
@@ -285,12 +282,13 @@
   background:var(--menu-hover); color:var(--sub); border-radius:var(--radius-full);
   padding:1px 6px; font:500 var(--fs-xs) var(--ui); flex-shrink:0;
 }
-.vt-clients-detach {
-  width:22px; height:22px; display:flex; align-items:center; justify-content:center;
-  border:0; background:transparent; color:var(--sub); border-radius:var(--radius-sm);
-  cursor:pointer; flex-shrink:0;
-}
-.vt-clients-detach:hover { background:var(--menu-hover); color:var(--color-st-error); }
+/* 2.1.6 — 모양·상태는 `.vt-btn.sm.quiet`가 맡고, 여기 남은 둘만 이 버튼의
+   고유한 성질이다: 아이콘만 들어가는 **정사각**이라는 것과, 누르면 남의
+   화면을 끊는 **파괴적** 동작이라 hover에서 에러색이 된다는 것.
+   `.vt-btn.danger`를 안 쓴 이유는 그건 평소에도 빨간 테두리라, 목록 안에
+   행마다 있는 이 버튼에는 과하기 때문이다. */
+.vt-clients-detach { width:22px; padding:0; }
+.vt-clients-detach:hover { color:var(--color-st-error); }
 
 /* ── L8 우측 레일 ──────────────────────────────────────────────────────────
    wide(≥1280px)에서만 상시 노출. regular/compact에서는 rail 버튼이 여는 패널이

@@ -24,8 +24,8 @@ export function showOnboarding() {
     <p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
     <div id="ob-sessions" class="vt-ob-sessions" hidden></div>
     <div class="vt-ob-actions">
-      <button class="vt-btn-primary" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
-      <button class="vt-btn-secondary" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
+      <button class="vt-btn solid lg" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
+      <button class="vt-btn lg" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
     </div>
     <p class="vt-ob-hint">맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)</p>
   `;

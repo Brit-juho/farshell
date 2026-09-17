@@ -163,12 +163,12 @@ function _renderUnreachableBody(bodyEl, node) {
   sub.textContent = `${node.unreachable.tmux} — 호스트가 돌아오면 이 자리에 복구됩니다.`;
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'vt-pane-unreachable-retry';
+  btn.className = 'vt-btn sm vt-pane-unreachable-retry';
   btn.textContent = '다시 시도';
   btn.addEventListener('click', () => _retryUnreachable(node, sub, btn));
   const pick = document.createElement('button');
   pick.type = 'button';
-  pick.className = 'vt-pane-unreachable-pick';
+  pick.className = 'vt-btn sm';
   pick.textContent = '다른 세션 고르기';
   // 기다리지 않기로 결정할 수 있어야 한다 — 호스트를 영영 안 켤 수도 있다.
   pick.addEventListener('click', () => openPanePicker(node.id));

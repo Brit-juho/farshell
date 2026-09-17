@@ -71,7 +71,7 @@ function showPlayButton() {
     btn = document.createElement('button');
     btn.id = 'play-pending-btn';
     btn.textContent = '터치하여 재생';
-    btn.className = 'vt-btn-primary';
+    btn.className = 'vt-btn solid';
     btn.style.cssText = 'display:block;margin:6px auto 0;font-size:13px;';
     btn.onclick = () => {
       if (_pendingAudioUrl) {

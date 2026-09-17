@@ -50,7 +50,7 @@ function row(client, onDetach, readOnly = false) {
   } else if (!readOnly) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'vt-clients-detach';
+    btn.className = 'vt-btn sm quiet vt-clients-detach';
     btn.title = `${client.label || client.tty} 끊기`;
     btn.setAttribute('aria-label', `${client.label || client.tty} 끊기`);
     btn.innerHTML = icon('x', 12);
@@ -85,7 +85,7 @@ export function mountClients(container, tmuxName, remote = null) {
   }));
   const solo = document.createElement('button');
   solo.type = 'button';
-  solo.className = 'vt-clients-solo';
+  solo.className = 'vt-btn sm quiet';
   solo.textContent = '이 화면만 남기기';
   head.appendChild(solo);
   wrap.appendChild(head);

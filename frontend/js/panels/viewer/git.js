@@ -184,7 +184,7 @@ export async function renderGitStatus(container, repo, opts = {}) {
   ta.placeholder = '커밋 메시지';
   ta.disabled = !canCommit;
   const cbtn = document.createElement('button');
-  cbtn.className = 'vt-vw-gcommit-btn';
+  cbtn.className = 'vt-btn solid vt-vw-gcommit-btn';
   cbtn.textContent = '커밋';
   cbtn.disabled = !canCommit;
   commitBox.appendChild(ta);
