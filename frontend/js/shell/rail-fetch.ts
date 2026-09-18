@@ -58,9 +58,6 @@ export function useLayoutVersion() {
 export interface AgentDetail {
   since: number | null;
   tool: string | null;
-  /** App Server가 말해 준 표시용 단계. 미관리/레거시 세션은 null이다. */
-  phase: string | null;
-  source: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
 }
@@ -88,8 +85,6 @@ export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, 
     out[name] = {
       since: (entry as any).since ?? null,
       tool: (entry as any).tool || (entry as any).last_tool || null,
-      phase: (entry as any).phase ?? null,
-      source: (entry as any).source ?? null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
     };
