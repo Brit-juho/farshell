@@ -27,6 +27,7 @@
 //     둔갑시키지 않는다
 //   - 쓰기 결과가 `unknown`이면 성공 표시를 하지 않는다
 import { vtFetch } from '../core/api.js';
+import { icon } from '../ui/icons.js';
 import { showToast } from '../ui/toast.js';
 
 const TOOL_LABEL = { claude: 'Claude', codex: 'Codex', agy: 'agy', opencode: 'opencode' };
@@ -533,7 +534,17 @@ function paint(host, data) {
   host.appendChild(renderFacts(data.facts));
 
   for (const err of data.errors || []) {
-    host.appendChild(help(`⚠ ${err.source}: ${err.reason} — 이 파일은 건드리지 않습니다.`));
+    // ⚠ 이모지를 SVG로 바꾼다. `help()`는 el()을 거쳐 **textContent**를 쓰므로
+    // 아이콘 문자열을 본문에 섞으면 마크업이 글자로 찍힌다. 그리고 err.reason은
+    // 설정 파일에서 온 값이라 innerHTML로 바꾸면 XSS가 된다 — 아이콘만 별도
+    // 노드로 앞에 붙이고 본문은 textContent로 남긴다.
+    const warnRow = help(`${err.source}: ${err.reason} — 이 파일은 건드리지 않습니다.`);
+    warnRow.classList.add('vt-set-help-warn');
+    const warnIcon = document.createElement('span');
+    warnIcon.className = 'vt-set-help-ico';
+    warnIcon.innerHTML = icon('alert-triangle', 13);
+    warnRow.prepend(warnIcon);
+    host.appendChild(warnRow);
   }
 
   const groups = data.groups || [];

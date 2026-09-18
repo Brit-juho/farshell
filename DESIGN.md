@@ -160,7 +160,7 @@ that ride alongside. In 2.1.0 the corner radius dropped to one step
 | `--color-bg-0` | `#08090a` | Deepest background |
 | `--color-bg-1` | `#0e1011` | Chrome (header, rail, dock, HUD) |
 | `--color-bg-2` | `#0b0d0e` | Row headers, subbars — **darker than `bg-1`.** A subbar has to sit one notch below the chrome itself to read as a "subheading laid on a row" (a change from 2.0's monotonically increasing order) |
-| `--color-bg-3` | `#141719` | Hover / active row |
+| `--color-bg-3` | `#141719` | Hover / active row — also the raised surface an active rail row sits on |
 | `--color-line` / `--color-line-strong` | `rgb(255 255 255 / .07)` / `.14` | Two divider steps |
 | `--color-txt` / `--color-sub` / `--color-muted` | `#e8e9ea` `#8b8f93` `#666a6e` | Three text steps (`muted` was brightened from the spec draft to clear 3:1 on `bg-3`) |
 | `--color-acc` | `var(--acc-farshell)` = `#f0a860` | The accent. Kept, together with the 5 status colors, **for those two roles only** |
@@ -354,9 +354,18 @@ hash. Implemented in `shell/RailRow.tsx` + `rail-data.ts`
 
 ### Dock 392px (`shell/Dock.tsx`)
 
-Fixed to the right, collapses to a 36px strip via `›` (no bottom dock — ADR-21,
-to keep terminal vertical space). 4 tabs: **Source control · Queue · Ports ·
-Usage**. The frame owns only tab switching, collapse, the width resizer
+Fixed to the right, collapses to a 36px strip via a chevron (no bottom dock —
+ADR-21, to keep terminal vertical space). 5 tabs: **Source control · Queue ·
+Files · Ports · Usage**.
+
+**Collapsed, a tab is an icon — never rotated text.** The 36px strip used to
+rotate each label with `writing-mode: vertical-rl`, which works for Latin
+(glyphs lie on their side) but not for CJK: Korean syllables *stack*, so
+「소스컨트롤」 became a five-character tower, in a monospace face. Each tab now
+carries an icon from `js/ui/icons.js` (`git-branch · list · folder · plug ·
+gauge`), shown only while collapsed; the full label stays in `title`. The
+expanded strip is text-only on purpose — five tabs in a row with icons as well
+is crowded. The frame owns only tab switching, collapse, the width resizer
 (320~560), and device-scoped persistence — each tab's content is drawn by the
 existing panel renderers (`queue.js`, `ports.js`, `panels/usage.js`,
 `panels/viewer/scm.js`) transplanted as-is. The 4 modal popup panels from 2.0
