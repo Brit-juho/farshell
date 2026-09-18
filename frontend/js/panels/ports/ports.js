@@ -163,16 +163,6 @@ function showPorts() {
       sub.textContent = bits.join(' · ');
       meta.appendChild(name); meta.appendChild(sub);
 
-      const tags = document.createElement('span');
-      tags.className = 'vt-pt-tags';
-      if (p.public) {
-        const t = document.createElement('b');
-        t.className = 'vt-tag vt-pt-tag pub';
-        t.textContent = '외부';
-        t.title = '모든 인터페이스에 열려 있습니다 (*)';
-        tags.appendChild(t);
-      }
-
       const actions = document.createElement('span');
       actions.className = 'vt-pt-actions';
       // U5/L6: 터치 기기는 종료 버튼을 왼쪽 스와이프로 드러낸다(Mail/Linear 패턴) —
@@ -214,7 +204,7 @@ function showPorts() {
 
       if (!swipeKillOnTouch) {
         row.appendChild(port); row.appendChild(meta);
-        row.appendChild(tags); row.appendChild(actions);
+        row.appendChild(actions);
         return row;
       }
 
@@ -224,7 +214,7 @@ function showPorts() {
       const inner = document.createElement('div');
       inner.className = 'vt-pt-row-inner';
       inner.appendChild(port); inner.appendChild(meta);
-      inner.appendChild(tags); inner.appendChild(actions);
+      inner.appendChild(actions);
 
       const kill = document.createElement('button');
       kill.className = 'vt-pt-swipe-kill';
