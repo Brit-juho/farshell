@@ -280,9 +280,27 @@ html[data-skin="windows"] .caption { display:flex; }
   min-width:0; min-height:0; overflow:hidden; position:relative;
   background:var(--term);
 }
-/* 활성 pane이 무엇인지는 **헤더**가 말한다 — 규칙은 .vt-pane-head 절에 있다.
-   pane에 테두리를 못 쓰기 때문이다: 경계에 여백이 없어서 양쪽 pane이 각자
-   테두리를 그리면 분할선 자리에 선이 셋(1+1+1) 겹친다. */
+/* 2026-09-18(2차) — 헤더 신호(.vt-pane-head 절)만으로는 구분이 약하다는
+   피드백으로 테두리를 되살린다. 진짜 `border`는 여전히 못 쓴다: 경계에
+   여백이 없어서 양쪽 pane이 각자 테두리를 그리면 분할선 자리에 선이
+   셋(1+1+1) 겹친다(바로 아래 .vt-split-resizer 주석). 그래서 **활성 쪽
+   하나만**, `::before` 오버레이 + inset box-shadow로 그린다 — 겹칠 상대가
+   없고(비활성 pane엔 아무것도 안 그린다), border와 달리 박스 크기를 안 먹어
+   레이아웃이 안 밀리고 PTY에 SIGWINCH도 안 간다.
+   `position:absolute`라 일반 흐름 자식(헤더·바디, 둘 다 static)보다 나중에
+   그려져 위에 얹힌다 — 안 그러면 바디의 불투명한 터미널 배경에 가려 안
+   보인다. z-index는 분할 리사이저(5)보다 위, 드래그 드롭존(8)보다는 아래로
+   둔다 — 드래그 중엔 드롭존 피드백이 이겨야 한다.
+   분할이 없는 화면(root가 leaf 하나)에서는 아래 `#vt-chrome-tree >` 규칙이
+   꺼준다 — 테두리는 **여럿을 가르는 장치**라 하나뿐인 pane에는 뜻이 없다
+   (L3 1단계 기준: 분할을 안 쓰면 화면이 예전과 완전히 동일해야 한다). */
+.vt-pane.active::before {
+  content:'';
+  position:absolute; inset:0; z-index:6;
+  pointer-events:none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-acc) 55%, transparent);
+}
+#vt-chrome-tree > .vt-pane.active::before { display:none; }
 
 /* L5: 5구역 드롭존 오버레이. layout/dnd.js가 드래그 중인 pane에
    data-dropzone 속성만 찍어주면(마우스=네이티브 dragover, 터치=long-press
@@ -332,17 +350,17 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   font:var(--weight-medium) var(--fs-2xs) var(--font-ui); color:var(--color-sub);
   transition:background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint);
 }
-/* 활성 pane의 신호 셋을 여기 모은다: 10% 액센트 면 + 2px 액센트 밑줄 + 이름 색.
+/* 활성 pane의 신호: 10% 액센트 면 + 이름 색 + (아래) pane 전체 테두리.
    틴트는 dock 탭·칩과 같은 10%다(20-design-system.md §3: 주인공은 채움이 아니라
    그 옆의 액센트 신호).
-   밑줄을 border가 아니라 inset box-shadow로 넣는 이유는 **레이아웃을 1px도
-   밀지 않기** 위해서다 — border-bottom을 2px로 키우면 그만큼 터미널 높이가
-   줄어 활성 전환마다 fit이 돌고 PTY에 SIGWINCH가 간다.
-   2026-09-18 이전에는 이 신호가 1px 액센트 outline 하나뿐이었고, 같은 두께의
-   1px 선이 화면에 둘(분할선·헤더 밑줄) 더 있어 밝은 스킨에서는 구별이 안 됐다. */
+   2026-09-18(3차) — 헤더/화면 경계에 액센트 밑줄을 따로 두지 않는다.
+   `.vt-pane.active::before`가 pane 전체를 두르는 테두리를 이미 그리므로
+   그 위쪽 변이 헤더 바로 위에서 같은 신호를 준다 — 헤더 바닥에 또 하나
+   그으면 화면 안에 가로선이 두 개(테두리 위/아래 변 + 이 밑줄) 생겨
+   오히려 지저분했다. 기본 `border-bottom:1px solid var(--color-line)`
+   (위 .vt-pane-head 규칙)은 비활성 pane과 동일하게 남긴다. */
 .vt-pane.active .vt-pane-head {
   background:color-mix(in srgb, var(--color-acc) 10%, var(--bar));
-  box-shadow:inset 0 -2px 0 var(--color-acc);
   color:var(--color-txt);
 }
 .vt-pane-name {
