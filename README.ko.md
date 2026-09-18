@@ -3,341 +3,128 @@
 [![CI](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml/badge.svg)](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml)
 
 [![English](https://img.shields.io/badge/lang-English-lightgrey.svg)](./README.md)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](./CHANGELOG.md)
-[![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#설치)
+[![Version](https://img.shields.io/badge/version-2.1.6-blue.svg)](./CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](./docs/guide/platforms.ko.md)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#설치)
 
 > 내 터미널을 어디서든. 한 줄로 설치.
 
-FarShell은 macOS/Linux 머신을 개인 개발 서버로 씁니다 — 같은 tmux 세션을
-음성으로도, 폰으로도 그대로 접속합니다. Claude Code든 Codex든 Aider든
-Gemini CLI든, 아니면 그냥 셸이든 `fsh agent <name>`으로 원하는 걸 실행하면
-음성 입력·모바일 접속·tmux 공유는 무엇을 쓰든 똑같이 동작합니다.
-(Windows는 WSL2 환경에서만 동작)
+FarShell은 macOS/Linux 머신을 개인 개발 서버로 씁니다 — 같은 tmux 세션을 음성으로도,
+폰으로도 그대로 씁니다. Claude Code든 Codex든 Aider든 Gemini CLI든, 아니면 그냥 셸이든
+음성 입력·모바일 접속·tmux 공유는 똑같이 동작합니다. (Windows는 WSL2에서만)
 
-- 모바일에서 터미널 접속 — QR 스캔하면 바로 tmux 연결
-- 음성으로 코딩 — 다른 작업 중에도 핫키(Ctrl+Shift+V)로 음성 입력
-- 원격에서도 읽기 전용 코드 뷰어/diff, 포트 대시보드로 상태 확인
-- Claude Code를 쓴다면 Stop hook으로 작업 완료 TTS 요약 + 자동 프롬프트 큐가 덤으로 붙습니다
-- API 키도 구독도 없음 — 오픈소스 STT/TTS, 전부 무료
+- **폰에서 터미널** — QR 스캔하면 바로 tmux
+- **음성으로 코딩** — 다른 작업 중에도 `Ctrl+Shift+M`
+- **원격에서 상태 확인** — 읽기 전용 코드 뷰어와 diff, 포트 대시보드, 에이전트 상태
+- **Claude Code 연동** — 훅으로 도구 사용 상태를 실시간 반영하고, 완료 시 TTS 요약,
+  스스로 다음 항목을 투입하는 프롬프트 큐
+- **API 키도 구독도 없음** — 오픈소스 STT/TTS, 전부 무료
 
 ---
 
 ## 설치
 
 ```bash
-# 터미널만 (경량, ~50MB)
+# 터미널만 (~50MB)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash
 
 # 터미널 + 음성 모드 (~1.5GB, Whisper STT + edge-tts TTS)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash -s voice
 ```
 
-또는 클론 후 로컬 실행:
+`install.sh`는 Python venv를 만들고, 고른 프로필의 패키지를 설치하고,
+`~/.local/bin/fsh` 심링크를 걸고, `~/.vt.env`를 생성하고, Claude Code 훅을 등록합니다.
+
+<details>
+<summary>클론해서 설치 / 릴리스 tarball로 설치 (Node.js 불필요)</summary>
 
 ```bash
 git clone https://github.com/Brit-juho/farshell.git ~/farshell
-cd ~/farshell
-./install.sh            # 터미널만
-./install.sh voice      # 음성 모드 포함
+cd ~/farshell && ./install.sh          # 또는: ./install.sh voice
 ```
 
-**릴리스 tarball — Node.js가 필요 없다.** 소스에서 설치하면 Vite로 프런트엔드를
-빌드하느라 node가 필요한데, 릴리스 tarball에는 그 빌드가 이미 들어 있다 —
-node는 개발자에게만 필요한 도구가 된다:
+소스에서 설치하면 Vite로 프런트엔드를 빌드하느라 Node가 필요합니다.
+[Releases](https://github.com/Brit-juho/farshell/releases)의 tarball에는 그 빌드가
+이미 들어 있어서, Node는 개발자에게만 필요한 도구가 됩니다.
 
 ```bash
-# https://github.com/Brit-juho/farshell/releases 에서 받는다
 tar xzf farshell-<버전>.tar.gz && cd farshell-<버전>
 ./install.sh
 ```
-
-`install.sh`가 하는 일:
-1. Python `venv` 생성 (`.venv/`, conda 불필요)
-2. 선택 프로필에 맞는 패키지 설치
-3. `~/.local/bin/fsh` 심링크 등록 (`vt`도 하위 호환으로 함께 등록)
-4. `~/.vt.env` 설정 파일 자동 생성
-5. PATH 갱신 (zsh/bash)
-
-> Whisper 모델은 첫 실행 시 Hugging Face에서 자동 다운로드됩니다 (~141MB).
-
-설치 후 새 터미널 창을 자동으로 tmux 세션에 진입시키는 통합 방법, 전체 `fsh`
-명령어와 옵션은 [CLI.md](./CLI.md)를 참고하세요.
+</details>
 
 ---
 
 ## 빠른 시작
 
-### 노션 등 다른 작업 중 음성 코딩 (macOS)
+**다른 작업 중에 음성으로 코딩** (macOS)
 
 ```
-1. fsh voice              어느 터미널에서나 실행
-2. 새로 열린 창에서 claude --resume으로 대화 선택
-3. 다른 작업으로 돌아가서 계속
-4. Ctrl+Shift+V → "git status" → tmux에 자동 입력
-5. 결과를 TTS로 이어폰에서 들음
-6. fsh stop                끝나면 종료
+fsh voice                 # 음성 데몬이 도는 터미널이 열린다
+                          # 거기서 세션을 고른다 (예: claude --resume)
+Ctrl+Shift+M              # 말하면 tmux에 바로 입력된다
+                          # 결과는 이어폰에 TTS로 돌아온다
+fsh stop                  # 끝나면 종료
 ```
 
-### 모바일에서 터미널 조작
+**폰에서 터미널 조작**
 
 ```
-0. fsh password           (최초 1회) 원격 접속 인증 설정 — 안 하면 fsh mobile이 거부됨
-1. fsh mobile             URL + QR 코드 출력
-2. 폰 카메라로 QR 스캔
-3. tmux 세션에 자동 연결
-4. 음성 입력 / 핸즈프리 / 음성 전용 모드 / 파일 업로드 사용
+fsh password              # 최초 1회 — 인증이 없으면 fsh mobile이 거부한다
+fsh mobile                # URL + QR 출력, 스캔하면 끝
 ```
 
-원격 접속 방식별 요구사항, 회사망 등 화면 원격이 막힌 환경에서 Tailscale + SSH로
-접속하는 방법은 [CLI.md의 Tailscale 섹션](./CLI.md#tailscale--ssh-remote-access)을 참고하세요.
+설치나 환경이 이상하면 `fsh doctor`가 진단합니다.
 
 ---
 
 ## 보안
 
-기본값은 **무인증**입니다 — 원격에 노출하기 전 반드시 `fsh password`로 비밀번호를
-설정하세요. `fsh mobile`은 인증이 설정되지 않은 상태에서 공개 터널(`--network all`,
-기본값)을 열려고 하면 실행을 거부합니다.
+기본값은 **무인증**입니다. 원격에 노출하기 전에 `fsh password`로 비밀번호를 설정하세요.
+설정하지 않으면 `fsh mobile`이 공개 터널 열기를 거부합니다.
 
 | 계층 | 방식 |
-|------|------|
-| 로그인 | 비밀번호(scrypt 해시) 또는 기계용 토큰(`VT_AUTH_TOKEN`). 세션은 HMAC 서명 쿠키(24h) |
-| 새 기기 등록 | 90일 장기 쿠키로 기기별 신뢰. OTP를 켜면(`fsh otp setup`) 신규 기기에만 6자리 코드 요구 |
-| 기기 폐기 | `fsh device revoke <id>` — 해당 기기의 세션까지 즉시 무효화 |
-| 크로스 사이트 차단 | Origin이 자기 자신이 아니면 HTTP/WS 모두 403. CORS 와일드카드 없음 |
-| 코드 뷰어 | 읽기 전용, 거부 목록(`.env*`/`*.pem`/`.ssh/` 등)이 파일 열람과 `git diff` 양쪽에 동일 적용 |
-| E2E 암호화 | `--e2e` 플래그 — X25519 세션 키교환 + NaCl SecretBox, 장기 Ed25519 신원키로 세션 키를 서명해 TOFU(첫 접속 신뢰) 방식으로 능동적 중간자 공격 방어 |
+|---|---|
+| 로그인 | 비밀번호(scrypt 해시) 또는 기계용 토큰(`VT_AUTH_TOKEN`), HMAC 서명 세션 쿠키(24h) |
+| 새 기기 | 90일 쿠키로 기기별 신뢰. `fsh otp setup`을 켜면 처음 보는 기기에만 6자리 코드 요구 |
+| 폐기 | `fsh device revoke <id>` — 해당 기기의 세션까지 즉시 무효화 |
+| 크로스 사이트 | Origin이 자기 자신이 아니면 HTTP·WS 모두 403. CORS 와일드카드 없음 |
+| 코드 뷰어 | 읽기 전용, 지정한 루트 안으로 제한, 거부 목록(`.env*`·`*.pem`·`.ssh/` 등)이 파일 열람과 `git diff`에 동일 적용 |
+| E2E 암호화 | `--e2e` — X25519 키교환 + NaCl SecretBox, 장기 Ed25519 신원키로 세션 키를 서명해 TOFU 방식으로 능동적 중간자 공격 방어 |
+
+상세는 [`docs/ref/auth.md`](./docs/ref/auth.md).
 
 ---
 
-## 주요 기능
+## 문서
 
-| 기능 | 설명 |
-|------|------|
-| Voice Daemon | macOS 핫키(Ctrl+Shift+V) 또는 이어폰 Play/Pause로 STT → tmux 직접 입력 |
-| 클립보드 동기화 | OSC52(터미널 내부 복사) + 폴링 데몬(`fsh clip`, 터미널 밖 복사) → 웹 클립보드 push |
-| 핸즈프리 / 음성 전용 모드 | 연속 녹음 자동 반복, 또는 터미널을 숨기고 마이크만 크게 표시(이어폰 조작용) |
-| barge-in | 마이크 탭 또는 핫키로 재생 중인 TTS 즉시 중단 |
-| Claude Code TTS | Stop 훅으로 응답 완료 시 요약 TTS 자동 재생 |
-| 프롬프트 큐 | 작업 중 지시를 쌓아뒀다 순차 투입 — 음성 모드와 짝 (`fsh queue`, [CLI.md](./CLI.md#prompt-queue-fsh-queue)) |
-| 프롬프트 스니펫 | 자주 쓰는 명령·지시문을 저장해뒀다 지금 보고 있는 pane에 원탭 투입 — iTerm2 Snippets와 같은 개념(예: `cd ~/GitHub/myproject` + `claude --resume`). 큐와 달리 순서를 기다리지 않고 즉시 실행된다. 좌측 rail 또는 `Mod+K` → "프롬프트 스니펫". 웹 UI 전용이라 CLI 서브커맨드는 없다 |
-| 라이브 프리뷰 Grid 뷰 | tmux 세션을 카드로 한눈에 훑어보는 화면. 에이전트 배지, 작업 중/완료 표시 |
-| 코드 뷰어 / diff | 파일 트리 · 문법 하이라이팅 · `git diff` 렌더링 (읽기 전용) |
-| 포트 대시보드 | 리스닝 포트 조회, 원클릭 종료, `fsh tunnel expose` 연동 |
-| Web Push | 앱이 닫혀 있어도 작업 완료 알림 (명명 터널 권장 — quick tunnel은 URL이 바뀌어 구독이 끊길 수 있음) |
-| tmux 세션 관리 | 웹에서 생성/attach/detach/kill. 데스크톱과 동시 접속 가능 |
-| Scrollback 버퍼 | WebSocket 재접속 시 이전 출력 복원 (최대 5000 청크) |
-| 터미널 검색 | Ctrl+F / Cmd+F → xterm.js 검색 addon |
-| 세션 이름 편집 | 탭 더블클릭 → 이름 변경 (tmux 세션명도 함께 변경) |
-| 파일 업로드 | 모바일은 키바 📎, 데스크톱은 `Mod+K` → "파일 업로드" — 터미널에 이미지를 붙여넣어도 업로드된다. 저장된 경로가 pane에 자동으로 타이핑된다 (상한 `VT_MAX_UPLOAD_MB`, 기본 200) |
-| Media Session | 무선 이어폰 Play/Pause로 녹음 토글 (iOS/Android) |
-| PWA | manifest + Service Worker → 홈 화면 추가 후 앱처럼 사용 |
-| Tailscale 원격 접속 | `fsh ssh` / `fsh mobile --network tailscale` — 화면 원격이 막힌 회사망 등에서 SSH로 tmux에 직접 접속 |
-| 클라이언트 접속 알림 | `VT_NOTIFY_CLIENT_EVENTS=1` — SSH 등 서버가 못 보는 클라이언트의 attach/detach를 push로 알림 |
-| 터널 제공자 전환 | `VT_TUNNEL_PROVIDER=cloudflare\|ngrok\|none` — 설정 하나로 공개 입구를 고른다. `fsh start`·`stop`·`status`·`mobile`·`handoff`·`tunnel expose`가 전부 그 값을 따른다. ngrok은 `VT_NGROK_DOMAIN`으로 주소가 고정된다 |
-| 터널 좀비 재연결 자동 복구 | cloudflared가 프로세스는 살아있지만 응답 없는 상태에 빠지면 자동 감지 후 재시작 |
+| 무엇 | 어디 |
+|---|---|
+| `fsh` 명령어와 옵션 전체 | [`CLI.ko.md`](./CLI.ko.md) |
+| REST / WebSocket 엔드포인트 | [`API.md`](./API.md) (영문 단일본) |
+| 모듈 지도, 3-plane 모델, 데이터 흐름 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) (영문 단일본) |
+| 디자인 시스템 — 원칙·스킨·토큰·레이아웃 | [`DESIGN.md`](./DESIGN.md) (영문 단일본) |
+| 릴리스 이력 | [`CHANGELOG.md`](./CHANGELOG.md) |
+| 지원 플랫폼, WSL2, 음성 엔진 | [`docs/guide/platforms.ko.md`](./docs/guide/platforms.ko.md) |
+| 설정 키 | [`config/vt.defaults.env`](./config/vt.defaults.env) — 커밋된 기본값, 키마다 설명 주석 |
+| 문제 해결 | [`docs/help/troubleshoot.md`](./docs/help/troubleshoot.md) (`fsh help troubleshoot`와 같은 내용) |
 
-전체 fsh CLI 명령어는 [CLI.md](./CLI.md), REST/WebSocket API는 [API.md](./API.md)를 참고하세요.
+**영역별 기능 레퍼런스** — 무엇을 하는지만이 아니라 왜 그렇게 설계했고 어떤 사고가
+있었는지가 함께 적혀 있습니다 (영문 단일본).
 
----
+| 영역 | 문서 |
+|---|---|
+| 인증, 기기, 경계값 | [`docs/ref/auth.md`](./docs/ref/auth.md) |
+| 터미널, 페인, 붙여넣기, 스크롤백, 테마 | [`docs/ref/terminal.md`](./docs/ref/terminal.md) |
+| 에이전트 상태, 프롬프트 큐, 스니펫, 사용량, MCP | [`docs/ref/agents.md`](./docs/ref/agents.md) |
+| 파일, 공유 링크, 코드 뷰어 | [`docs/ref/files.md`](./docs/ref/files.md) |
+| 터널, 포트, Tailscale, 원격 접속 | [`docs/ref/tunnel.md`](./docs/ref/tunnel.md) |
+| 워크트리와 git | [`docs/ref/worktree.md`](./docs/ref/worktree.md) |
+| 멀티호스트 페어링 | [`docs/ref/multihost.md`](./docs/ref/multihost.md) |
+| 음성, 클립보드, Web Push | [`docs/ref/voice.md`](./docs/ref/voice.md) |
+| 실행·테스트·수동 설치 | [`docs/ref/dev.md`](./docs/ref/dev.md) |
 
-## 설정 (`~/.vt.env`)
-
-`install.sh`가 자동 생성합니다. 원하는 항목만 추가하면 됩니다. 전체 키 목록은
-`config/vt.defaults.env`(커밋된 기본값)를 참고하세요.
-
-```bash
-# 기본
-VT_PORT=7777                                 # 서버 포트 (기본값)
-VT_PYTHON=~/farshell/.venv/bin/python  # Python 경로 (자동 감지)
-
-# 원격 인증 (공개 터널 사용 시 필수 권장)
-# VT_AUTH_TOKEN=my-secret-token              # 기계용 토큰. 사람 로그인은 `fsh password` 사용
-
-# 보안
-VT_E2E=1                                     # 모든 WebSocket 강제 E2E (기본: opt-in)
-VT_SAFE_MODE=1                               # 위험 명령(rm -rf /, sudo 등) 사전 차단
-VT_TMUX_SOCKET=vt                            # tmux 격리 소켓 이름 (기본: vt, CLI 이름과 무관)
-VT_NETWORK_MODE=all                          # localhost | lan | tailscale | all
-
-# 음성
-VT_STT_LANG=ko                               # STT 언어 고정 (미설정 시 자동 감지)
-```
-
----
-
-## Claude Code 연동
-
-### 스킬
-
-`.claude/skills/`에 등록된 프로젝트 전용 스킬과 `~/.claude/skills/vt/`의 전역 스킬(`/vt`)이
-"음성 모드", "모바일 접속" 같은 자연어 발화로 fsh를 제어합니다. 목록은 `CLAUDE.md`를 참고하세요.
-
-### 훅
-
-| 훅 | 파일 | 동작 |
-|---|---|---|
-| PreToolUse / PostToolUse | `server/agent_hook.sh pre` / `post` | 도구 사용 시작/종료를 모바일 UI에 실시간 반영 |
-| Stop | `server/agent_hook.sh stop` | 완료를 서버에 보고 + 프롬프트 큐 다음 항목 투입 + stdin을 `tts_hook.sh`에 위임해 TTS 요약 재생 (서버 미실행 시 macOS `say` 폴백) |
-
-등록은 명령 하나로 한다. 멱등이고, 직접 넣은 다른 훅은 보존하며, 쓰기 전에
-설정 파일을 백업한다:
-
-```bash
-fsh hooks install      # 등록/갱신
-fsh hooks status       # 등록 상태 확인 (`fsh doctor`에도 표시)
-fsh hooks uninstall    # FarShell 항목만 제거
-```
-
-`./install.sh`가 설치 시 대신 실행해준다. **등록할 것은 `tts_hook.sh`가 아니라
-`agent_hook.sh stop`이다** — `agent_hook.sh stop`이 내부에서 `tts_hook.sh`에
-위임하므로, 둘 다 등록하면 TTS 요약이 두 번 재생된다.
-
----
-
-## 아키텍처
-
-자세한 내용은 [ARCHITECTURE.md](./ARCHITECTURE.md) 참조 (control / work / voice / network
-4-plane 모델). 디자인 시스템(디자인 원칙·스킨·토큰·레이아웃)은
-[DESIGN.md](./DESIGN.md) 참고(영문 단일본).
-
-```
-                  +----------------------------------------+
-                  |  MacBook / WSL2 (서버)                   |
-                  |                                          |
-  [fsh voice]      |  +----------------+  +----------------+  |
-  Ctrl+Shift+V -->|  | Voice Daemon   |  | FastAPI :7777  |  |
-  -> STT -> tmux  |  | (독립, 서버무관) |  | 인증/큐/push 등 |  |
-                  |  +----------------+  +-------+--------+  |
-                  |                              |           |
-                  |  +----------------+  +-------+--------+  |
-                  |  | tmux sessions  |<-+ PTY Manager    |  |
-                  |  | (데스크/폰 공유) |  | + Scrollback   |  |
-                  |  +----------------+  +-------+--------+  |
-                  |                              |           |
-                  |        +---------------------+--------+  |
-                  |        | Push -> Web Push / ntfy /     |  |
-                  |        | Telegram (idle / 완료 감지)     |  |
-                  |        +--------------------------------+  |
-                  +----------------+-------------------------+
-                                   | Cloudflare Tunnel (HTTPS + opt-in E2E)
-                  +----------------+-------------------------+
-                  |  모바일 / 원격 브라우저                    |
-                  |  xterm.js + 코드 뷰어 + Grid 뷰            |
-                  |  STT -> 서버 -> tmux                     |
-                  |  E2E: X25519 + Ed25519 서명 (TOFU)       |
-                  +------------------------------------------+
-```
-
-### STT / TTS 엔진 우선순위
-
-| STT | TTS |
-|-----|-----|
-| 1. mlx-whisper (Apple Silicon 최적) | 1. Kokoro (최고 품질) |
-| 2. faster-whisper (범용) | 2. edge-tts (온라인, 다양한 음성) |
-| | 3. macOS `say` / Windows Speech API (fallback) |
-
-### 프로젝트 구조
-
-```
-farshell/
-├── bin/
-│   ├── fsh                   CLI 진입점 (bash, macOS/Linux; vt는 하위 호환 심링크)
-│   └── fsh.ps1               CLI 진입점 (PowerShell, Windows/WSL2 wrapper)
-├── server/
-│   ├── main.py                FastAPI 앱, 미들웨어(인증/Origin 가드)
-│   ├── auth/                  비밀번호/세션/기기/OTP/티켓 인증 (패키지)
-│   ├── fsguard.py             코드 뷰어 경로 검증 (루트 확정 + 거부 목록)
-│   ├── crypto_channel.py      E2E: X25519 세션 키 + Ed25519 장기 신원키 서명
-│   ├── pty_manager.py         PTY 세션 (broadcast, scrollback, EOF 감지)
-│   ├── queue_store.py / queue_runner.py   프롬프트 큐 저장/자동 투입
-│   ├── push.py                Web Push 구독 관리 + 발송
-│   ├── portscan.py            포트 대시보드 (lsof/ps 스캔, kill/expose 가드)
-│   ├── voice_handler.py       STT (faster-whisper) + TTS (edge-tts/Kokoro)
-│   ├── voice_daemon.py        핫키 음성 데몬 (독립 실행)
-│   ├── clipboard_daemon.py    macOS 클립보드 폴링 데몬
-│   ├── tunnel_watchdog.py     cloudflared 좀비 재연결 감시
-│   ├── routes/                엔드포인트 모듈 (pty/tmux/files/push/queue/ports/...)
-│   └── tests/                 pytest 스위트
-├── frontend/
-│   ├── index.html             xterm.js UI (탭, 검색, 코드 뷰어, Grid 뷰)
-│   ├── js/                    theme.js, terminal.js, grid.js, viewer.js 등
-│   ├── voice.js                마이크 + TTS + 핸즈프리 + Media Session
-│   └── tests/                 node --test 단위 테스트
-├── install.sh                 원라인 설치 스크립트
-├── requirements-core.txt      FastAPI, uvicorn 등
-├── requirements-voice.txt     faster-whisper, edge-tts, sounddevice 등
-├── AGENTS.md                  에이전트 지침 (agents.md 규약 — Codex/opencode/…)
-├── CLAUDE.md                  Claude Code 가이드 (기능/명령/API 전체 원장)
-├── CLI.md                     fsh CLI 전체 레퍼런스
-├── API.md                     REST/WebSocket API 전체 레퍼런스
-├── DESIGN.md                  디자인 시스템 (원칙·스킨·토큰·레이아웃)
-├── ARCHITECTURE.md            4-plane 아키텍처 상세
-├── CHANGELOG.md                전체 변경 이력
-└── docs/TODOS.md               후속 작업 백로그 (로컬 전용, gitignored)
-```
-
----
-
-## 지원 플랫폼
-
-| 플랫폼 | 서버 | Voice Daemon | TUI (`fsh manage`) | 브라우저 접속 |
-|--------|------|-------------|-------|-------------|
-| macOS (iTerm2/Ghostty/Warp 등) | 지원 | 핫키 + 이어폰 | 지원 | 지원 |
-| Linux (X11) | 지원 | 글로벌 핫키 | 지원 | 지원 |
-| Linux (Wayland) | 지원 | 핫키 보안 차단 — 모바일 마이크 권장 | 지원 | 지원 |
-| Windows (WSL2 = Linux로 동작) | 지원 | WSLg 필요 | 지원 | 지원 |
-| Windows 네이티브 | 미지원 | 미지원 | 미지원 | — |
-| iOS (Safari/Chrome) | — | — | — | Media Session 지원 |
-| Android (Chrome) | — | — | — | 지원 |
-
-### Windows (WSL2)
-
-Windows 네이티브는 지원하지 않습니다 — WSL2를 통해 Linux 환경으로 사용하세요.
-
-```powershell
-wsl
-./install.sh voice
-fsh voice
-```
-
-서버·tmux는 WSL2 내부에서 실행되고 브라우저는 Windows에서 `localhost:7777`로
-접속합니다. 음성 핫키는 WSLg가 필요합니다(Windows 11) — 없으면 브라우저 마이크를
-사용하세요. `bin/fsh.ps1`은 WSL2 내부 fsh를 호출하는 PowerShell wrapper입니다.
-
----
-
-## 트러블슈팅
-
-먼저 `fsh doctor`로 설치/환경을 자동 진단하세요. 자주 발생하는 문제와 해결법은
-[docs/help/troubleshoot.md](./docs/help/troubleshoot.md) (`fsh help troubleshoot`와 동일 내용)에
-정리되어 있습니다.
-
----
-
-## 버전 / 변경 이력
-
-현재 버전: **v2.0.0** (2026-09-08)
-
-> v2.0.0 이후에도 개발이 계속 진행 중입니다 — 인증 하드닝, 프롬프트 큐, Web Push,
-> 포트 대시보드, 코드 뷰어/diff 패널 등은 아직 정식 버전 태그 전(`[Unreleased]`)
-> 단계로 [CHANGELOG.md](./CHANGELOG.md) 상단에 기록되어 있습니다.
-
-전체 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 참고.
-
-| 버전 | 날짜 | 주요 내용 |
-|------|------|-----------|
-| [v2.0.0](https://github.com/Brit-juho/farshell/releases/tag/v2.0.0) | 2026-09-08 | UI 전면 개편: 3단 레이아웃(좌측 rail · 분할 pane · 사용량 레일), 서버 판정 에이전트 4상태, 기기 간 동기화되는 설정·키맵, 연결된 화면 관리. Breaking changes는 CHANGELOG 참고 |
-| [v1.7.0](https://github.com/Brit-juho/farshell/releases/tag/v1.7.0) | 2026-08-04 | 보안 하드닝: 기기 화이트리스트 + OTP 관문 · 1회용 등록 티켓 · access log 자격증명 마스킹 · OriginGuardMiddleware · CORS 와일드카드 제거 · 세션 쿠키 Secure 수정 |
-| [v1.6.0](https://github.com/Brit-juho/farshell/releases/tag/v1.6.0) | 2026-07-12 | 웹 로그인 비밀번호(`fsh password`): scrypt 해시 + HMAC 서명 세션 쿠키, 기계 토큰과 병존 |
-| [v1.5.0](https://github.com/Brit-juho/farshell/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH 원격 접속: `fsh ssh` · `fsh mobile --network tailscale` · 클라이언트 접속 알림 |
-| [v1.4.0](https://github.com/Brit-juho/farshell/releases/tag/v1.4.0) | 2026-05-09 | UX overhaul + Linux 1급 동등화: `fsh manage` TUI · `fsh attach` · `fsh voice-target` · `fsh hotkey` |
-| [v1.3.0](https://github.com/Brit-juho/farshell/releases/tag/v1.3.0) | 2026-05-08 | 안정성/네트워크 효율: `/ws-preview` push · cookie 인증 · vendor 자체 호스팅 · WS heartbeat |
-| [v1.2.0](https://github.com/Brit-juho/farshell/releases/tag/v1.2.0) | 2026-05-07 | 라이브 프리뷰 · `--network` 모드 · Cloudflare 명명 터널 · WS 백프레셔 |
-| [v1.1.0](https://github.com/Brit-juho/farshell/releases/tag/v1.1.0) | 2026-05-06 | ralph→fsh 리네이밍, 격리 소켓 · AI 인식 · 명령 확장 · 훅 · 안전 모드 · 크로스 플랫폼 통합 |
-| [v1.0.0](https://github.com/Brit-juho/farshell/releases/tag/v1.0.0) | 2026-04-14 | 초기 안정 버전 (PWA · Voice Daemon · STT/TTS · 터널 · `fsh` CLI · `install.sh`) |
+작업하는 AI 에이전트(Claude Code, Codex 등)는 [`AGENTS.md`](./AGENTS.md)에서 시작합니다.
 
 ---
 

@@ -55,6 +55,9 @@ docs/*
 # docs/ref/ — CLAUDE.md에서 갈라낸 영역별 참조 문서(2026-09-18). 색인은 CLAUDE.md,
 # 상세는 여기. 에이전트가 만지는 영역의 문서만 열어보게 하려는 분할이라 추적한다.
 !docs/ref/
+# docs/guide/ — 사용자용 문서 중 README에 두기엔 길고 루트를 어지럽히는 것
+# (플랫폼 지원표 등, 2026-09-19). README가 링크하므로 추적한다.
+!docs/guide/
 .gstack/
 
 # 릴리스 산출물 — .github/workflows/release.yml 이 저장소 루트에 만든다.

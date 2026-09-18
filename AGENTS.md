@@ -20,13 +20,13 @@ Cursor, Jules and others. Claude Code reads `CLAUDE.md`; Gemini CLI reads `GEMIN
 ## Commands
 
 ```bash
-npm test                      # tsc --noEmit, then node:test + jsdom (495 tests)
+npm test                      # tsc --noEmit, then node:test + jsdom (524 tests)
 npm run typecheck             # tsc --noEmit alone. Vite only transpiles — it does NOT
                               #   type-check, so a `.tsx` referencing an undefined name
                               #   builds and ships. That shipped a real ReferenceError
                               #   that killed the rail (2026-09-17); `npm test` runs this first now.
 npm run build                 # Vite, two separate passes — see vite.config.js header
-.venv/bin/python -m pytest    # server (1218 tests), testpaths = server/tests
+.venv/bin/python -m pytest    # server (1245 tests), testpaths = server/tests
                               #   ⚠ the repo root `tests/` is NOT in testpaths and CI does
                               #   not run it — put new server tests in server/tests/
 pytest tests/e2e -v           # real-browser smoke, needs playwright (requirements-dev.txt)
@@ -74,9 +74,10 @@ These are load-bearing. Each one caused a real incident.
    Define in `styles/theme/tokens.css` / `skins.css`; `check_css_vars.py` enforces this.
 10. **`API.md` is the only endpoint table.** `CLAUDE.md` keeps a category list only —
    the two drifted apart in 2026-08 and `check_docs.py` now enforces the split.
-11. **`docs/*` is gitignored** except `docs/help/` (read at runtime by `fsh help <topic>`) and `docs/ref/`
-    (the area docs `CLAUDE.md` indexes), which `fsh help <topic>` reads at
-   runtime. Add a help topic and you must add both the `bin/fsh` entry and the file.
+11. **`docs/*` is gitignored** except three directories: `docs/help/` (read at runtime by
+   `fsh help <topic>` — add a topic and you must add both the `bin/fsh` entry and the
+   file), `docs/ref/` (the area docs `CLAUDE.md` indexes) and `docs/guide/` (user-facing
+   pages `README.md` links to). Everything else under `docs/` is local only.
 
 ## Working rules
 
@@ -91,6 +92,9 @@ These are load-bearing. Each one caused a real incident.
 
 ## Current work
 
-`docs/plan-2.1/` holds the 2.1 design set (gitignored, local only). If it exists, read
-`docs/plan-2.1/README.md` before starting feature work, and follow
-`docs/plan-2.1/90-verification.md` §4.
+`docs/` holds the local-only working docs (gitignored apart from the three tracked
+directories in contract 11). If they exist, start with `docs/README.md` — the index —
+and `docs/HANDOFF.md`, which carries the latest session handoff and the open carry-overs.
+The 2.1 design set is done and archived under `docs/archive/v2.1/plan/`; read it for the
+reasoning behind a decision, not as a to-do list. Its working rules (`90-verification.md`
+§4) still apply.

@@ -1,7 +1,8 @@
 # FarShell Architecture
 
-> **Version:** v2.0.0 — the frontend was substantially restructured in September 2026
-> (see [`docs/plan-2.0/`](./docs/plan-2.0/) locally, gitignored — not on GitHub).
+> **Version:** v2.1.6 — the frontend was substantially restructured in September 2026
+> (2.0: ES modules, Vite, tokens; 2.1: surface layer, Solid + TypeScript chrome).
+> The plan sets for both are archived locally under `docs/archive/` (gitignored).
 > See [CHANGELOG.md](./CHANGELOG.md) for the release history and [API.md](./API.md)
 > for the full REST/WebSocket reference (this document intentionally does not
 > duplicate the endpoint table — that caused drift before).
@@ -444,5 +445,5 @@ single source of truth for release history; this document intentionally
 doesn't duplicate a roadmap or a "done/remaining" list (that drifted from
 reality before). For frontend-restructure-specific history (the September
 2026 ES-module migration referenced throughout §2), see
-`docs/plan-2.0/10-frontend-restructure.md` locally (gitignored, not on
-GitHub).
+`docs/archive/v2.0/plan-2.0/10-frontend-restructure.md` locally (gitignored,
+not on GitHub).
