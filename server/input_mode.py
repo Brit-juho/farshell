@@ -62,6 +62,16 @@ def is_canonical(fd: int) -> Optional[bool]:
 
 def max_canon(fd: int) -> int:
     """정규 모드에서 한 줄에 넣을 수 있는 최대 바이트(개행 포함)."""
+    # ⚠ 음수 fd를 os.pathconf에 넘기지 않는다 — **리눅스에서 프로세스가 죽는다.**
+    # CPython은 `-1`을 "fd가 주어지지 않았다"는 센티넬로 쓰므로(path_t.fd), 정수
+    # -1을 줘도 fd 분기가 아니라 **경로 문자열 분기**로 빠져 `pathconf(NULL, …)`을
+    # 부른다. macOS libc는 그걸 EFAULT로 돌려주지만(그래서 여기 except가 받아냈고
+    # 맥에서는 통과했다) glibc는 NULL을 그대로 역참조해 SIGSEGV로 끝난다 —
+    # CI Python 3.11/Linux에서 pytest 프로세스 전체가 죽었다(exit 139). 3.14에서
+    # 고쳐졌지만 3.11~3.13은 그대로다(실측: -1은 EFAULT, -2는 EBADF).
+    # 세션이 방금 죽어 fd가 -1인 경우는 이 모듈이 실제로 다루는 상황이다.
+    if not isinstance(fd, int) or fd < 0:
+        return FALLBACK_MAX_CANON
     try:
         v = os.pathconf(fd, "PC_MAX_CANON")
     except (OSError, ValueError, AttributeError, KeyError):
