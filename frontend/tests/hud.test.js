@@ -153,3 +153,47 @@ test('formatResetsIn — 시/분/곧/없음', async () => {
   assert.strictEqual(formatResetsIn(undefined), '');
   assert.strictEqual(formatResetsIn(-5), '');
 });
+
+// ── 순위(priority) ─────────────────────────────────────────────────────────
+// "값이 없으면 숨긴다"와 다른 축이다 — 보여줄 건 있는데 폭이 없을 때 무엇이
+// 마지막까지 남는지. 실제로 덜어내는 건 Hud.tsx의 fitChips지만, 무엇이 먼저
+// 양보하는지는 이 순수 함수가 정하므로 여기서 잠근다.
+
+test('모든 칩은 순위를 갖는다', async () => {
+  const { buildHudChips } = await mod();
+  const chips = buildHudChips({
+    caps: { version: '2.1.0' }, port: '7777',
+    tunnel: { running: true, mode: 'named' },
+    e2e: true, safeMode: { enabled: true }, screens: 2,
+    usage: { available: true, profiles: [{ name: 'brit', windows: [{ pct: 30 }] }] },
+  });
+  assert.ok(chips.length > 0);
+  for (const c of chips) {
+    assert.strictEqual(typeof c.priority, 'number', `${c.id}에 순위가 없다`);
+  }
+});
+
+test('서버 칩이 버전보다 끝까지 남는다', async () => {
+  const { buildHudChips } = await mod();
+  const chips = buildHudChips({ caps: { version: '2.1.0' }, port: '7777' });
+  const server = chips.find((c) => c.id === 'server');
+  const version = chips.find((c) => c.id === 'version');
+  assert.ok(server.priority < version.priority);
+});
+
+test('사용량은 한도가 임박할 때만 앞자리로 올라온다', async () => {
+  const { buildHudChips } = await mod();
+  const at = (pct) => buildHudChips({
+    caps: {}, usage: { available: true, profiles: [{ name: 'brit', windows: [{ pct }] }] },
+  }).find((c) => c.id === 'usage:brit');
+  // 평상시에는 터널보다 뒤, 위험할 때는 터널보다 앞.
+  const tunnel = buildHudChips({ caps: {}, tunnel: { running: true } }).find((c) => c.id === 'tunnel');
+  assert.ok(at(30).priority > tunnel.priority, '평상시 사용량이 터널보다 앞이면 안 된다');
+  assert.ok(at(95).priority < tunnel.priority, '위험한 사용량은 터널보다 앞이어야 한다');
+});
+
+test('연결된 화면 — 나 혼자일 때보다 여럿일 때 더 오래 남는다', async () => {
+  const { buildHudChips } = await mod();
+  const p = (n) => buildHudChips({ caps: {}, screens: n }).find((c) => c.id === 'screens').priority;
+  assert.ok(p(3) < p(1));
+});

@@ -305,14 +305,31 @@ changed.
 | wide | 1280~1599px | `#vt-wgrail`, device-scoped width | collapsed to 36px by default, opens by pushing | 6 | split tree + rail |
 | xwide | ≥ 1600px | same | 392px, open by default | **unlimited** (N4) | same as wide + cap lifted |
 
-> **The rail's width is not a function of the tier.** Earlier drafts of this
-> table had regular fall back to the legacy 48px icon rail (`#vt-rail`); that
-> never shipped — `#vt-rail` is `display:none` at every width (see "What's left
-> as legacy") and `Rail.tsx` has no tier branch. Rail width comes only from the
-> device-scoped `ui.rail.width`/`ui.rail.collapsed`, so the same 252px rail is
-> drawn at 800px and at 1900px. The consequence is that at regular the rail and
-> dock can together leave the HUD too narrow for its chips — the HUD scrolls
-> horizontally rather than silently dropping them (§"HUD 24px").
+> **The rail is never the legacy icon rail.** Earlier drafts of this table had
+> regular fall back to the 48px `#vt-rail`; that never shipped — `#vt-rail` is
+> `display:none` at every width (see "What's left as legacy"). The worktree rail
+> is the only rail, at every tier.
+
+The tier touches the rail in exactly two places, and **neither overwrites what
+you chose** — `ui.rail.width`/`ui.rail.collapsed` are device-scoped settings
+(§6), and a stored value always wins.
+
+- **Collapse default** (`defaultRailCollapsed`): on a device that has never
+  stated a preference, the rail starts collapsed below wide (<1280). `Dock.tsx`
+  already made this call (`innerWidth < WIDE_MAX`) and the rail didn't, so a
+  narrow screen opened with both panels expanded and left the HUD 472px for
+  667px of chips.
+- **Rendered width clamp**: `--vt-wgrail-w` is `min(<stored>px, 40vw)`. The
+  stored value says how wide you want it; the clamp asks whether the window can
+  spare that. Shrink the window and a 480px rail draws at 40vw; widen it and it
+  returns to 480 — the setting is never rewritten, so a wide rail survives a
+  temporary narrow window. 40vw can't drop below the rail's own 240px minimum,
+  because under 720px there is no rail at all (compact).
+
+Because the variable now holds a `min()` expression rather than a plain px
+number, the resizer reads the element's measured width instead of parsing it —
+a custom property doesn't resolve to computed px, so `parseInt` returned `NaN`
+and the rail jumped on drag.
 
 The rail's and dock's open/width state are **device-scoped settings**
 (`ui.rail.collapsed`, `ui.rail.width`, `ui.dock.collapsed`, `ui.dock.width`) —
@@ -392,14 +409,28 @@ immediate refresh on `/ws-notify` events. A chip with no value is **hidden**
 (no usage provider → no chip, the 2.0 rule kept). There is no HUD at all in
 compact — the bottom nav takes its place.
 
-**"No value" hides a chip; "no room" must not.** The bar used to be
-`overflow: hidden`, so once the rail and dock squeezed it (easy at regular —
-measured 667px of chips in a 612px bar at 900px viewport) the trailing chips,
-version included, were clipped away with no way to reach them. It's
-`overflow-x: auto` with the scrollbar hidden now — the same idiom as
-`#vt-wtabs` and `#keybar-keys`. Scrolling isn't a discoverable affordance, so
-this is a floor, not a finish; priority-based hiding would be the real fix and
-needs `Hud.tsx` to rank its own chips.
+**"No value" hides a chip; "no room" drops the least important one.** These are
+two different axes. The first is `buildHudChips` declining to emit a chip. The
+second is `priority` on `HudChip`, a rank for *who survives a squeeze* — the bar
+is one 24px line, and the rail plus dock can easily leave it too narrow
+(measured: 667px of chips in a 472px bar at a 760px viewport).
+
+The ranking, lowest number survives longest: `server` 1 · alerting usage 2 ·
+`screens` >1 3 · `tunnel` 4 · ordinary usage 5 · `screens` ==1 6 · E2E/safe-mode
+7 · `version` 8. Two rules generate it — a chip warning you about something
+outranks a calm one (so `priority` tracks `tone`, and the same usage gauge moves
+between 5 and 2 as it crosses 75%), and a chip whose information is a click away
+in the dock can yield before one that has nowhere else to live.
+
+`Hud.tsx`'s `fitChips` does the dropping. Chip widths depend on text, font and
+skin, so they can't be known before layout: it renders everything, then while
+`scrollWidth > clientWidth` hides the lowest-ranked remaining chip and measures
+again. It toggles a class rather than removing nodes — those nodes belong to
+Solid's `<For>`, and deleting them behind its back desynchronises it from the
+real DOM. It re-runs on chip changes and on a `ResizeObserver` for the bar,
+coalesced through `requestAnimationFrame` so dragging the rail measures once a
+frame. `overflow-x: auto` stays underneath as the floor for the degenerate case
+where even one chip doesn't fit.
 
 ### Resize overlay (N43)
 

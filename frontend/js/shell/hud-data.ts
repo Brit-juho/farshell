@@ -18,7 +18,44 @@ export interface HudChip {
   /** 클릭 시 발동할 core/dom.js 액션 id. 없으면 클릭 불가. */
   action?: string;
   side: 'left' | 'right';
+  /**
+   * 자리가 모자랄 때 **버티는 순서**. 낮을수록 끝까지 남는다(1이 최우선).
+   *
+   * "값이 없으면 숨긴다"는 규칙과 다른 축이다 — 그건 "보여줄 게 없다"이고
+   * 이건 "보여줄 건 있는데 폭이 없다"이다. 24px 한 줄이라 레일·dock이 넓으면
+   * 칩 전체가 컨테이너를 넘치는데(실측: 900px 뷰포트에서 612px 칸에 667px),
+   * 순위가 없으면 그냥 뒤에서부터 잘려 나간다 — 즉 **버전이 아니라 사용량이
+   * 먼저 사라질 수도 있다.** 그래서 무엇이 마지막까지 남아야 하는지를
+   * 데이터 쪽에서 정한다.
+   *
+   * 기준: 위험을 알리는 칩(err/warn)이 평상시 칩을 이긴다. 다른 데서 같은 걸
+   * 볼 수 있으면(dock 탭이 있는 사용량·연결된 화면) 그만큼 양보할 수 있다.
+   */
+  priority: number;
 }
+
+/**
+ * 순위표. 숫자를 칩마다 흩어 적으면 "이게 저것보다 위인가"를 매번 파일을
+ * 뒤져 비교해야 하므로 한자리에 모은다.
+ */
+const PRIORITY = {
+  /** 서버가 떠 있나 — 이게 없으면 나머지가 다 무의미하다. */
+  server: 1,
+  /** 한도가 임박한 사용량. 지금 손을 써야 하는 유일한 칩이라 서버 다음이다. */
+  usageAlert: 2,
+  /** 나 말고 다른 화면이 붙음 — 화면이 오락가락하는 원인이라 경고로 취급한다. */
+  screensAlert: 3,
+  /** 바깥에서 접근 가능한 상태인가. 보안 감각에 직결된다. */
+  tunnel: 4,
+  /** 평상시 사용량 — dock 사용량 탭에 같은 값이 더 자세히 있다. */
+  usage: 5,
+  /** 화면 1개(=나뿐). 알아두면 좋지만 없어도 곤란하지 않다. */
+  screens: 6,
+  /** 개발 중에만 켜는 토글들. 켠 사람은 켠 걸 안다. */
+  devToggle: 7,
+  /** 버전 — 설정 → 정보에 늘 있다. 가장 먼저 양보한다. */
+  version: 8,
+} as const;
 
 export interface HudInput {
   /** location.port — 서버 칩에 그대로 쓴다. */
@@ -77,15 +114,18 @@ function usageChip(p: UsageProfile): HudChip | null {
   if (!name) return null;
 
   const resets = formatResetsIn(top.resets_in_sec);
+  // 임계값은 dock 게이지와 같은 감각으로: 90% 넘으면 위험, 75% 넘으면 주의.
+  const tone: HudTone = pct >= 90 ? 'err' : pct >= 75 ? 'warn' : 'plain';
   return {
     id: `usage:${name}`,
     label: name,
     value: `${pct}%`,
     hint: resets ? `· ${resets} 후 초기화` : undefined,
-    // 임계값은 dock 게이지와 같은 감각으로: 90% 넘으면 위험, 75% 넘으면 주의.
-    tone: pct >= 90 ? 'err' : pct >= 75 ? 'warn' : 'plain',
+    tone,
     action: 'usage.open',
     side: 'right',
+    // 순위가 tone을 따라간다 — 한도가 임박했을 때만 앞자리로 올라온다.
+    priority: tone === 'plain' ? PRIORITY.usage : PRIORITY.usageAlert,
   };
 }
 
@@ -103,6 +143,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
       tone: 'ok',
       dot: true,
       side: 'left',
+      priority: PRIORITY.server,
     });
   }
 
@@ -113,15 +154,16 @@ export function buildHudChips(input: HudInput): HudChip[] {
       value: input.tunnel.mode === 'named' ? 'named' : '익명',
       tone: 'plain',
       side: 'left',
+      priority: PRIORITY.tunnel,
     });
   }
 
   if (input.e2e) {
-    chips.push({ id: 'e2e', label: 'E2E', value: 'ON', tone: 'ok', side: 'left' });
+    chips.push({ id: 'e2e', label: 'E2E', value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
   }
 
   if (input.safeMode?.enabled) {
-    chips.push({ id: 'safe-mode', label: '세이프모드', value: 'ON', tone: 'ok', side: 'left' });
+    chips.push({ id: 'safe-mode', label: '세이프모드', value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
   }
 
   // 연결된 화면 — 2.0에서는 clients.length < 2면 패널 자체를 숨겨서 "내 화면
@@ -137,6 +179,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
       tone: input.screens > 1 ? 'warn' : 'plain',
       action: 'clients.show',
       side: 'left',
+      priority: input.screens > 1 ? PRIORITY.screensAlert : PRIORITY.screens,
     });
   }
 
@@ -150,7 +193,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
 
   const version = (input.caps?.version || '').trim();
   if (version) {
-    chips.push({ id: 'version', label: '', value: `v${version}`, tone: 'plain', side: 'right' });
+    chips.push({ id: 'version', label: '', value: `v${version}`, tone: 'plain', side: 'right', priority: PRIORITY.version });
   }
 
   return chips;

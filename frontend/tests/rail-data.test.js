@@ -207,3 +207,16 @@ test('hashRepoColorIndex — 같은 저장소 이름은 몇 번을 불러도(=�
   const b = hashRepoColorIndex('dotfiles');
   assert.notStrictEqual(a1, b); // 다른 저장소는 (8색 한도 내에서) 다른 인덱스
 });
+
+// ── 레일 접힘 기본값 ───────────────────────────────────────────────────────
+// 저장값이 있으면 그게 이긴다(그 분기는 Rail.tsx에 있다) — 여기서 잠그는 건
+// "아직 아무 말도 안 한 기기"에서 티어가 무엇을 고르는지다.
+
+test('defaultRailCollapsed — wide 미만은 접고, wide 이상은 편다', async () => {
+  const { defaultRailCollapsed } = await mod();
+  const REGULAR_MAX = 1280;
+  assert.strictEqual(defaultRailCollapsed(760, REGULAR_MAX), true, 'regular 하단은 접힘');
+  assert.strictEqual(defaultRailCollapsed(1279, REGULAR_MAX), true, '경계 바로 아래는 접힘');
+  assert.strictEqual(defaultRailCollapsed(1280, REGULAR_MAX), false, '경계는 펼침');
+  assert.strictEqual(defaultRailCollapsed(1733, REGULAR_MAX), false, 'xwide는 펼침');
+});

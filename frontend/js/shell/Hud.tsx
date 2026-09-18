@@ -9,7 +9,7 @@
 // 아무 일도 안 일어난다 — vite.config.js 상단이 app.js/voice.js에 대해 설명한
 // 중복 문제와 정확히 같은 함정이다. 그래서 필요한 것들을 main.js가 인자로
 // 넘겨준다(HudDeps).
-import { createSignal, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { buildHudChips, type HudChip, type HudInput } from './hud-data.js';
 
@@ -71,6 +71,7 @@ function Chip(props: { chip: HudChip; deps: HudDeps }) {
       class="vt-hud-chip"
       classList={{ [`tone-${props.chip.tone}`]: true, clickable: clickable() }}
       data-chip={props.chip.id}
+      data-priority={props.chip.priority}
       onClick={clickable() ? fire : undefined}
       onKeyDown={clickable() ? (e: KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); }
@@ -94,7 +95,44 @@ function Chip(props: { chip: HudChip; deps: HudDeps }) {
   );
 }
 
-function Hud(props: { deps: HudDeps }) {
+/**
+ * 폭이 모자라면 순위가 낮은 칩부터 덜어낸다.
+ *
+ * 칩 너비는 글자 수·폰트·스킨에 따라 달라서 **그려보기 전에는 모른다.** 그래서
+ * 다 그려놓고 재는 수밖에 없다: 넘치면 최하위 하나를 숨기고 다시 재기를 반복한다.
+ * 칩 수가 한 자리라 반복은 몇 번이면 끝난다.
+ *
+ * DOM에서 빼지 않고 `hidden` 클래스만 토글하는 이유 — Solid의 <For>가 관리하는
+ * 노드를 여기서 직접 없애면 다음 갱신 때 서로 다른 것을 실제 DOM으로 믿게 된다.
+ * 클래스 토글은 Solid의 소유권을 건드리지 않는다.
+ */
+function fitChips(host: HTMLElement) {
+  const els = [...host.querySelectorAll<HTMLElement>('.vt-hud-chip')];
+  if (!els.length) return;
+
+  // 매번 전부 되살리고 시작한다 — 넓어졌을 때 되돌아와야 하므로.
+  for (const el of els) el.classList.remove('overflow-hidden');
+
+  // 순위가 낮은(숫자가 큰) 것부터 후보. 같은 순위면 오른쪽 것을 먼저 버린다.
+  const byDrop = els
+    .map((el, i) => ({ el, i, p: Number(el.dataset.priority) || 0 }))
+    .sort((a, b) => (b.p - a.p) || (b.i - a.i));
+
+  let cursor = 0;
+  // scrollWidth가 clientWidth를 넘으면 넘친 것이다(#vt-hud는 overflow-x:auto).
+  while (host.scrollWidth > host.clientWidth && cursor < byDrop.length) {
+    byDrop[cursor].el.classList.add('overflow-hidden');
+    cursor += 1;
+  }
+
+  // 전부 숨겨도 안 들어가면(레일·dock이 극단적으로 넓은 경우) 마지막으로 숨긴
+  // 것을 되살린다 — 빈 띠보다는 스크롤되는 칩 하나가 낫다.
+  if (cursor === byDrop.length && cursor > 0) {
+    byDrop[cursor - 1].el.classList.remove('overflow-hidden');
+  }
+}
+
+function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   const [chips, setChips] = createSignal<HudChip[]>([]);
 
   // 갱신: 30초 폴링(§7). 간격이 긴 이유는 여기 실리는 값이 전부 "천천히 바뀌는
@@ -108,6 +146,32 @@ function Hud(props: { deps: HudDeps }) {
 
   const side = (s: 'left' | 'right') => chips().filter((c) => c.side === s);
 
+  // 다시 재야 하는 때는 둘뿐이다 — 칩 내용이 바뀌었을 때(값이 길어지면 폭도
+  // 는다), 그리고 띠 자체의 폭이 바뀌었을 때(창 크기·레일/dock 리사이즈).
+  // 레일 드래그는 프레임마다 이벤트가 오므로 rAF로 한 프레임에 한 번만 잰다.
+  //
+  // 컨테이너는 mountHud가 받은 root를 그대로 쓴다. 마커 엘리먼트를 두고
+  // `ref`에서 parentElement를 타고 올라가려 했다가 한 번 헛짚었다 — Solid의
+  // ref는 **노드가 부모에 꽂히기 전에** 불려서 그 시점 parentElement가 null이다.
+  // 그래서 옵저버가 아예 안 붙고 칩이 하나도 안 접혔다(실브라우저에서 재현).
+  let raf = 0;
+  const scheduleFit = () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; fitChips(props.root); });
+  };
+
+  createEffect(() => {
+    chips();            // 내용 변경 구독
+    scheduleFit();
+  });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(scheduleFit);
+    ro.observe(props.root);
+    onCleanup(() => ro.disconnect());
+  }
+  onCleanup(() => { if (raf) cancelAnimationFrame(raf); });
+
   return (
     <>
       <For each={side('left')}>{(c) => <Chip chip={c} deps={props.deps} />}</For>
@@ -117,6 +181,7 @@ function Hud(props: { deps: HudDeps }) {
   );
 }
 
+
 export function mountHud(root: HTMLElement, deps: HudDeps) {
-  return render(() => <Hud deps={deps} />, root);
+  return render(() => <Hud deps={deps} root={root} />, root);
 }
