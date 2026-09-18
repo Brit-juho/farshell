@@ -124,16 +124,17 @@
   font:inherit; letter-spacing:inherit; text-transform:none;
 }
 
-/* §1/§3 — 목록 아래 한 줄짜리 각주(잘림·숨김 개수). 행으로 오해되면 안 되므로
-   색점 막대도 배경도 주지 않는다. */
+/* §1 — 목록 아래 한 줄짜리 각주(저장소 스캔이 200개 상한에서 잘렸을 때).
+   행으로 오해되면 안 되므로 색점 막대도 배경도 주지 않는다. 2026-09-18
+   후속 — 숨김 개수 링크(버튼 변형, `.vt-wgrail-note-btn`)는 지웠다: 머리글
+   줄의 ⚙가 항상 떠 있어 저장소 관리로 가는 유일한 길이라는 이유가 이제
+   없다. */
 .vt-wgrail-note {
   display:block; width:100%; box-sizing:border-box;
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
   color:var(--color-sub); font:400 var(--fs-3xs) var(--font-mono); text-align:left;
   border:0; background:none;
 }
-.vt-wgrail-note-btn { cursor:pointer; }
-.vt-wgrail-note-btn:hover { color:var(--color-txt); text-decoration:underline; }
 
 /* §4 — 행 둘째 줄의 `github/fornerds`. 상태 문장과 같은 줄에 살지만 정체(누구
    것인가)라서 한 단계 더 물러난 톤으로 둔다. */
