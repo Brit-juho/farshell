@@ -4,6 +4,14 @@
 // classic script에서 ES 모듈로 전환.
 import { registerAction } from './core/dom.js';
 
+// 설정 「음성」 섹션이 자기 행을 그린 뒤 부른다 — 그 시점 기준 구독 상태로
+// 라벨·tip을 맞춘다(섹션은 탭을 열 때마다 다시 그려지므로 매번 다시 불러야 함).
+export async function refreshPushLabel() {
+  return _refreshPushLabel();
+}
+
+export { togglePush };
+
 async function _refreshPushLabel() {
       const label = document.getElementById('push-label');
       const btn = document.getElementById('push-btn');

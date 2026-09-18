@@ -36,6 +36,8 @@ export interface PaletteDeps {
   buildSessionCard: (sess: any, onSelect: () => void) => HTMLElement;
   updateSessionCard: (card: HTMLElement, sess: any, agentInfo: any) => void;
   setVtSkin: (skin: string) => void;
+  vtSkins: () => string[];
+  vtSkinLabel: (skin: string) => string;
   listKeymapActions: () => KeymapBinding[];
   invokeKeymapAction: (id: string) => void;
   displayCombo: (combo: string) => string;
@@ -288,12 +290,16 @@ function PaletteBody(props: PaletteBodyProps) {
     return { key: `cmd:${c.label}`, kind: 'command', label: c.label, onOpen: run };
   }
 
+  // 2026-09-18 — DOM의 `.theme-chip`을 읽던 옛 구현은 그 칩이 사는 설정
+  // 「모양」 탭이 열려 있지 않으면(대부분의 시간) 결과가 0개였다 — 칩이
+  // display:none 레일 안에만 있던 시절엔 항상 있어서 안 드러난 문제였다.
+  // theme.js를 deps로 직접 받는다(ADR-26 — DOM 상태가 아니라 모듈 상태를 본다).
   function themeRows(): Row[] {
-    return Array.from(document.querySelectorAll<HTMLElement>('.theme-chip')).map((chip) => ({
-      key: `theme:${chip.dataset.skin}`,
+    return deps.vtSkins().map((skin) => ({
+      key: `theme:${skin}`,
       kind: 'command',
-      label: `테마 · ${(chip.textContent || '').trim()}`,
-      onOpen: () => { props.onRequestClose(); deps.setVtSkin(chip.dataset.skin || ''); },
+      label: `테마 · ${deps.vtSkinLabel(skin)}`,
+      onOpen: () => { props.onRequestClose(); deps.setVtSkin(skin); },
     }));
   }
 

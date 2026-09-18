@@ -32,7 +32,6 @@ import './panels/settings-lazy.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
 import './panels/usage-badge.js';     // U2 — 사용량 게이지(rail 「사용량」 + 우측 레일)
 import './layout/right-rail.js';// L8 — 우측 레일 접기/펴기
 import './ui/favicon.js';
-import './ui/settings-toggles.js';  // E2 — rail 설정 패널 체크박스 ↔ 설정 스토어
 import './push/swreg.js';
 
 // F4 — terminal.js(2023줄)를 term/ 아래 15개 모듈로 분할. 서로 실제 import/export로

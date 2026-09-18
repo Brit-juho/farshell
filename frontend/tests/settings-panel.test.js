@@ -299,10 +299,26 @@ test('음성 — 웹 푸시 테스트 발송 버튼이 실호출 + 토스트를 
   window.showToast = (msg) => toasts.push(msg);
   P.showSettings();
   sectionButton(document, '음성').click();
-  const btn = rowByLabel(document, '웹 푸시').querySelector('button');
+  // 2026-09-18 — 웹 푸시 행에 구독 켜기/끄기(#push-btn, 이식된 pushui.js
+  // 버튼)가 테스트 발송 앞에 추가됐다. 라벨로 정확히 고른다.
+  const btn = Array.from(rowByLabel(document, '웹 푸시').querySelectorAll('button'))
+    .find((b) => b.textContent === '테스트 발송');
+  assert.ok(btn, '테스트 발송 버튼을 찾아야 한다');
   btn.click();
   await flush();
   assert.ok(toasts.some((m) => /발송됨/.test(m)));
+});
+
+test('음성 — 구독 켜기/끄기 버튼(#push-btn)이 이식됐고 pushui.js 계약 id를 유지한다', async () => {
+  // 2026-09-18 — 이 버튼은 legacy rail 플라이아웃(#vt-rail-panel) 안에만
+  // 있다가, 그 플라이아웃을 열던 ⚙가 새 레일로 대체되며 화면에서 완전히
+  // 도달 불가능해졌다. 이 섹션으로 이식한 게 유일한 복구 경로다.
+  const { document, P } = await build({});
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  const subBtn = rowByLabel(document, '웹 푸시').querySelector('#push-btn');
+  assert.ok(subBtn, '#push-btn id가 유지돼야 한다(pushui.js가 getElementById로 찾는다)');
+  assert.ok(subBtn.querySelector('#push-label'), '#push-label id가 유지돼야 한다');
 });
 
 test('음성 — 작업 완료 알림 소리 듣기 버튼이 /api/notify/test를 호출한다', async () => {
@@ -568,4 +584,32 @@ test('스크롤백 — API 실패 시 안내 문구', async () => {
   await flush();
   const texts = Array.from(document.querySelectorAll('.vt-set-sechost')).map((e) => e.textContent);
   assert.ok(texts.some((t) => t.includes('디스크 사용량을 확인할 수 없습니다')));
+});
+
+test('음성 — 음성 전용 모드 버튼(#voiceonly-btn)이 이식됐고 media-session.js 계약 id를 유지한다', async () => {
+  // 2026-09-18 — legacy rail 플라이아웃 도달 불가 사고로 이 섹션에 옮긴 것.
+  const { document, P } = await build({});
+  P.showSettings();
+  sectionButton(document, '음성').click();
+  const btn = rowByLabel(document, '음성 전용 모드').querySelector('#voiceonly-btn');
+  assert.ok(btn, '#voiceonly-btn id가 유지돼야 한다(toggleVoiceOnly가 getElementById로 찾는다)');
+  assert.strictEqual(btn.textContent, '켜기');
+});
+
+test('모양 — 기본 스킨 6개가 #theme-row 칩으로 나온다', async () => {
+  // 2026-09-18 — 이 칩들이 살던 legacy rail 플라이아웃이 통째로 도달
+  // 불가능해진 사고를 고친 자리. 커맨드 팔레트(Palette.tsx)도 이제 DOM이
+  // 아니라 theme.js의 vtSkins()를 직접 읽으므로, 이 섹션이 열려 있지 않아도
+  // 팔레트의 "테마 · X" 목록은 별개로 살아있다(palette.test.js 참고).
+  const { document, P } = await build({});
+  P.showSettings();
+  sectionButton(document, '모양').click();
+  const row = document.getElementById('theme-row');
+  assert.ok(row, '#theme-row가 렌더돼야 한다');
+  const chips = Array.from(row.querySelectorAll('.theme-chip'));
+  assert.strictEqual(chips.length, 6);
+  assert.deepStrictEqual(chips.map((c) => c.dataset.skin),
+    ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad']);
+  assert.ok(chips.find((c) => c.dataset.skin === 'farshell').classList.contains('sel'),
+    '기본 스킨(farshell)이 선택 표시돼야 한다');
 });
