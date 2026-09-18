@@ -79,12 +79,6 @@
   padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 1.5) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5);
   background:var(--win);
 }
-/* ADR-29 E — 드래그로 세션을 이 그룹으로 옮기는 중. 배경만 바꾼다(테두리를
-   추가하면 그 1px만큼 다른 행들이 밀려 레이아웃이 들썩인다). */
-.vt-wgrail-group-head.drag-over { background:color-mix(in srgb, var(--color-acc) 14%, var(--win)); }
-/* 2026-09-18 후속 — 세션 행 위에 세션을 놓으면(둘 다 안 묶였으면 새 그룹을
-   만든다) 같은 배경 강조를 쓴다 — 그룹 헤더 드롭과 같은 의미의 시각 언어. */
-.vt-wgrail-row.drag-over { background:color-mix(in srgb, var(--color-acc) 14%, var(--win)); }
 /* 캐럿+이름+개수 전체가 클릭 영역(§2). 버튼이지만 머리글처럼 보여야 하므로
    색·자간은 부모(그룹 헤더)에서 상속받는다. */
 .vt-wgrail-group-toggle {
@@ -123,6 +117,13 @@
   padding:calc(var(--spacing) * 0.25) calc(var(--spacing) * 0.75);
   font:inherit; letter-spacing:inherit; text-transform:none;
 }
+/* 2026-09-18 후속 — 세션 이름 제자리 편집(RailRow.tsx). 위 그룹 이름 편집과
+   같은 관용구, 자리만 `.vt-srow-name`을 대신한다. */
+.vt-wgrail-name-edit {
+  flex:1; min-width:0; height:auto;
+  padding:calc(var(--spacing) * 0.125) calc(var(--spacing) * 0.5);
+  font:inherit;
+}
 
 /* §1 — 목록 아래 한 줄짜리 각주(저장소 스캔이 200개 상한에서 잘렸을 때).
    행으로 오해되면 안 되므로 색점 막대도 배경도 주지 않는다. 2026-09-18
@@ -153,12 +154,6 @@
    바뀌었지만, 흐리게+클릭으로 깨운다는 상호작용은 그대로다. */
 .vt-wgrail-row.sleeping { opacity:.55; }
 .vt-wgrail-row.sleeping:hover { opacity:.8; }
-/* ADR-29 B — 잠자는 그룹 덩어리(개별 Row가 아니라 Rail.tsx가 직접 그리는
-   커스텀 행). .vt-wgrail-row를 그대로 쓰므로 위 sleeping 톤도 같이 먹지만,
-   커서만 별도로 명시한다 — role="button"만으로는 일부 브라우저가 기본
-   커서를 안 바꾼다. */
-.vt-wgrail-sleep-cluster { cursor:pointer; }
-
 .vt-wgrail-empty {
   padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
   color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;

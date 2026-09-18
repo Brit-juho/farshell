@@ -17,7 +17,8 @@ import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
   splitPane, closePane, setRatio,
 } from './store.js';
-import { findNode } from './tree.js';
+import { findNode, collectSessions } from './tree.js';
+import { detachSession } from '../term/session-actions.js';
 import { paneElId, splitElId } from './dom-ids.js';
 import { snapPx, cellSizeFrom } from './snap.js';
 import { wireRatioResizer } from './resizer.js';
@@ -141,7 +142,20 @@ function _buildPaneEl(paneId) {
   paneEl.querySelector('.vt-pane-split-col').addEventListener('click', () => {
     if (canSplit()) splitPane(paneId, 'col');
   });
-  paneEl.querySelector('.vt-pane-close').addEventListener('click', () => closePane(paneId));
+  // 2026-09-18 후속(그룹 재정의, 사용자 요청: "제거하면 자동으로 풀리고
+  // 제거한 건 잠잘 것") — 이 pane이 그룹(같은 탭에 세션 2개 이상)의
+  // 일원이었으면, 닫을 때 그 세션을 재운다(웹 세션만 놓는다, tmux는
+  // 계속 산다). 남은 세션은 혼자가 되어 자동으로 "개인"이 된다 — 그룹은
+  // 태그가 아니라 pane 트리에서 도출되므로 따로 "그룹 해제"를 할 필요가
+  // 없다. 드래그로 pane을 옮겨 빼는 경우(dnd.js)는 이 재우기를 안 탄다 —
+  // "옮기는 것"과 "닫는 것"은 다른 의도다.
+  paneEl.querySelector('.vt-pane-close').addEventListener('click', () => {
+    const node = findNode(getTree(), paneId);
+    const sessionId = node && node.t === 'leaf' ? node.session : null;
+    const wasGrouped = sessionId && collectSessions(getTree()).length >= 2;
+    closePane(paneId);
+    if (wasGrouped) detachSession(sessionId);
+  });
 
   // 활성 pane을 **포커스가** 정한다. layout/store.js 상단이 L3 설계 원칙으로
   // 적어둔 그대로다("각 pane의 xterm에 실제로 focus 이벤트가 뜰 때만

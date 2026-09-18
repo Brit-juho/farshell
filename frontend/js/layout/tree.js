@@ -64,6 +64,25 @@ export function countLeaves(tree) {
   return tree.t === 'leaf' ? 1 : countLeaves(tree.a) + countLeaves(tree.b);
 }
 
+// 트리 안의 모든 leaf가 물고 있는 세션 id(중복 제거, 발견 순서 유지). 2026-09-18
+// 후속(그룹 재정의) — "그룹"이 태그가 아니라 **한 탭에 같이 떠 있는 세션들**로
+// 바뀌면서, 탭의 실시간 구성원을 아는 게 여러 모듈의 공통 요구가 됐다
+// (layout/tabbar.js의 탭 소속 판정, layout/store.js의 그룹 계산, term/
+// session-actions.js의 sleepTab). 순수 함수라 여기(tree.js)가 자리다.
+export function collectSessions(tree) {
+  const out = [];
+  const seen = new Set();
+  (function walk(node) {
+    if (!node) return;
+    if (node.t === 'leaf') {
+      if (node.session && !seen.has(node.session)) { seen.add(node.session); out.push(node.session); }
+      return;
+    }
+    walk(node.a); walk(node.b);
+  })(tree);
+  return out;
+}
+
 // targetId를 가진 노드를 replacement로 통째로 바꾼 새 트리를 반환한다.
 // targetId가 트리에 없으면 원본과 구조적으로 동일한(그러나 새로 만들어진) 트리를 반환한다.
 function _replace(node, targetId, replacement) {

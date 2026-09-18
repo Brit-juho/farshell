@@ -11,7 +11,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import {
-  buildRailSections, buildSessionSections, buildSleepingEntries, newGroupId,
+  buildRailSections, buildSessionSections, buildSleepingEntries,
   GROUP_LABEL, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
   type RailGroup, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
@@ -21,12 +21,10 @@ import {
 } from './host-data.js';
 import {
   actionSessionId, fetchAgentDetails, fetchDiffCount, safeFetch,
-  useAgentVersion, useSessionsVersion, fetchAgentNames,
+  useAgentVersion, useSessionsVersion, useLayoutVersion, fetchAgentNames,
   type RailDeps, type AgentDetail,
   cachedDiffCount,
   diffCountStale,
-  setSessionGroup,
-  renameGroup,
 } from './rail-fetch.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
@@ -60,6 +58,7 @@ const SETTINGS_HOST_KEY = 'ui.activeHostId';
 function Rail(props: { deps: RailDeps }) {
   const sessionsVersion = useSessionsVersion();
   const agentVersion = useAgentVersion();
+  const layoutVersion = useLayoutVersion();
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
@@ -72,10 +71,6 @@ function Rail(props: { deps: RailDeps }) {
   // 만들고 아무도 안 쓰던 그 라우트)를 쓴다 — wt_id → repoId 매핑을 직접
   // 계산할 필요가 없어진다.
   const [repos, setRepos] = createSignal<any[]>([]);
-  // ADR-29 A — 사용자가 지은 그룹 이름·순서. 아직 안 지은 그룹은 멤버의
-  // 저장소 이름으로 임시 표시된다(groupDisplayLabel, rail-data.ts).
-  const [groupLabels, setGroupLabels] = createSignal<Record<string, string>>({});
-  const [groupOrder, setGroupOrder] = createSignal<string[]>([]);
   // §1 — 탐색이 200개 상한에서 잘렸다. 조용히 자르면 "몇 개가 안 보인다"가
   // 정확히 이 기능을 만들게 한 그 버그로 읽힌다.
   const [truncated, setTruncated] = createSignal(false);
@@ -181,16 +176,6 @@ function Rail(props: { deps: RailDeps }) {
     setTruncated(!!data?.truncated);
     setHiddenCount(Number(data?.hiddenCount) || 0);
   };
-  // ADR-29 A — 그룹 이름·순서. B에서는 렌더만 하고 아무도 안 바꾼다(D/E가
-  // 실제로 이름 짓기·드래그를 붙인다) — 그래도 다른 기기·팔레트 등에서 지은
-  // 이름은 여기서도 보여야 하므로 지금부터 읽는다.
-  const refreshGroups = async () => {
-    const data = await safeFetch<{ groups?: { id: string; label: string | null }[] }>(props.deps, '/api/groups');
-    const list = data?.groups || [];
-    setGroupOrder(list.map((g) => g.id));
-    setGroupLabels(Object.fromEntries(list.filter((g) => g.label).map((g) => [g.id, g.label as string])));
-  };
-
   // C1 — 로컬+원격을 한 목록으로. 실패하면(라우터가 없는 옛 서버 등) 빈 배열이
   // 남아 스위처가 아예 안 그려진다 — 멀티호스트를 안 쓰는 사람에게는 그게 맞다.
   const refreshHosts = async () => {
@@ -201,11 +186,10 @@ function Rail(props: { deps: RailDeps }) {
   refreshSessions();
   refreshAgent();
   refreshRepos();
-  refreshGroups();
   refreshHosts();
   const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_POLL_MS);
   const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
-  const t3 = setInterval(() => { if (!document.hidden) { refreshRepos(); refreshGroups(); } }, WORKTREES_POLL_MS);
+  const t3 = setInterval(() => { if (!document.hidden) refreshRepos(); }, WORKTREES_POLL_MS);
   const t4 = setInterval(() => { if (!document.hidden) refreshHosts(); }, HOSTS_POLL_MS);
   // 서버가 워크트리 생성·삭제·열기 때 쏘는 push. 폴링(60초)보다 훨씬 빠르게
   // 반영되고, 평시에는 요청이 아예 나가지 않는다.
@@ -235,6 +219,16 @@ function Rail(props: { deps: RailDeps }) {
   // ADR-29 B — 행은 이제 tmux 세션 목록이 출처다(잠자는 것까지 나온다).
   // 예전엔 웹 세션 맵(w.allSessions())이 출처라 이 브라우저에 안 열어둔
   // tmux 세션은 화면 어디에도 안 나왔다 — 그게 이 재설계의 발단이었다.
+  // 2026-09-18 후속(그룹 재정의, 사용자 요청: "같은 화면에 묶인 것만
+  // 그룹") — layout/store.js의 tabGroups()를 window 브리지로 읽는다. 태그
+  // (`@fsh_grp`)가 아니라 지금 pane 트리에 2개 이상의 세션이 같이 떠 있는
+  // 탭을 실시간으로 계산한 결과다. layoutVersion(화면 변경)과
+  // sessionsVersion(세션 추가/삭제) 둘 다에 반응한다.
+  const liveTabGroups = createMemo<{ id: string; label: string; sessionIds: string[] }[]>(() => {
+    layoutVersion(); sessionsVersion();
+    return (window as any).getTabGroups?.() || [];
+  });
+
   const rows = createMemo<DesktopRailRowInput[]>(() => {
     sessionsVersion(); agentVersion(); // 구독 트리거용 — 값 자체는 안 씀
     const w = window as any;
@@ -247,6 +241,11 @@ function Rail(props: { deps: RailDeps }) {
     }
     const all = w.allSessions ? w.allSessions() : {};
     const details = agentDetails();
+
+    // 웹 세션 id → 그 세션이 지금 떠 있는 그룹(탭) id. 그룹 아닌(혼자인)
+    // 세션은 이 지도에 없다 — 그때 groupId는 null이다.
+    const sessionIdToGroup = new Map<string, string>();
+    for (const g of liveTabGroups()) for (const sid2 of g.sessionIds) sessionIdToGroup.set(sid2, g.id);
 
     // tmux 세션 이름 → 웹에 이미 열린 세션 id(있으면). 서버가 준
     // web_session_id가 아니라 **이 브라우저의 세션 맵**을 출처로 삼는다 —
@@ -270,7 +269,6 @@ function Rail(props: { deps: RailDeps }) {
         });
       }
     }
-    const labels = groupLabels();
 
     const out: OtherRailRowInput[] = [];
     const seenTmux = new Set<string>();
@@ -288,10 +286,7 @@ function Rail(props: { deps: RailDeps }) {
         tmuxName: t.name,
         name: awake && w.sessionDisplayName ? w.sessionDisplayName(sid) : t.name,
         awake,
-        // 유효 그룹: @fsh_grp가 있으면 그것, 없으면 null(「묶지 않음」).
-        // 저장소 자동 제안은 사용자 요청으로 없앴다(2026-09-18 후속) — 직접
-        // 드래그해서 묶은 것만 그룹이다.
-        groupId: t.grp_id || null,
+        groupId: (sid && sessionIdToGroup.get(sid)) || null,
         status,
         since: detail?.since ?? null,
         tool: detail?.tool ?? null,
@@ -300,6 +295,8 @@ function Rail(props: { deps: RailDeps }) {
         question: detail?.question ?? null,
         options: detail?.options ?? null,
         agent: agentNames()[t.name] ?? null,
+        managed: detail?.source === 'codex-app-server',
+        phase: detail?.phase ?? null,
         repoName: info?.repoName ?? null,
         branch: info?.branch ?? null,
         isMainWorktree: info?.isMain ?? false,
@@ -321,7 +318,7 @@ function Rail(props: { deps: RailDeps }) {
         tmuxName: null,
         name: w.sessionDisplayName ? w.sessionDisplayName(sid) : sid.slice(0, 8),
         awake: true,
-        groupId: null,
+        groupId: sessionIdToGroup.get(sid) || null,
         status: 'idle',
         since: null,
         tool: null,
@@ -332,7 +329,6 @@ function Rail(props: { deps: RailDeps }) {
         isMainWorktree: false,
       });
     }
-    void labels; // groupLabels()는 sections()가 별도로 구독한다 — 여기선 구독 트리거만 필요 없음
     return out;
   });
 
@@ -342,11 +338,12 @@ function Rail(props: { deps: RailDeps }) {
   // 그룹·수면 개념이 아직 없다(2.2 범위).
   const localSessionRows = createMemo<OtherRailRowInput[]>(() =>
     isRemoteHost() ? [] : (rows() as OtherRailRowInput[]));
+  const groupLabelMap = createMemo(() => new Map(liveTabGroups().map((g) => [g.id, g.label])));
   const sessionSections = createMemo(() => {
     diffTick();
-    return buildSessionSections(localSessionRows(), groupLabels(), groupOrder());
+    return buildSessionSections(localSessionRows(), groupLabelMap());
   });
-  const sleepingEntries = createMemo(() => buildSleepingEntries(localSessionRows(), groupLabels()));
+  const sleepingEntries = createMemo(() => buildSleepingEntries(localSessionRows()));
   const remoteSections = createMemo(() => (isRemoteHost() ? buildRailSections(rows() as OtherRailRowInput[]) : []));
   const totalRows = createMemo(() => isRemoteHost()
     ? remoteSections().reduce((n, s) => n + s.rows.length, 0)
@@ -365,18 +362,18 @@ function Rail(props: { deps: RailDeps }) {
       return;
     }
     const meta = e.metaKey || e.ctrlKey;
-    // ADR-29 D — 세션을 열기 전에 그 그룹의 탭으로 먼저 옮긴다(탭 정체성 =
-    // 그룹). switchTo/attachTmux는 항상 **지금 활성 탭**에 배정하므로
-    // (addSession의 마지막 줄) 순서가 바뀌면 엉뚱한 탭에 얹힌다. ⌘클릭
-    // 분할은 예외다 — "지금 보는 화면 옆에 놓기"라는 뜻이라 탭을 바꾸면
-    // 안 된다. groupId가 없는 세션(묶지 않음)도 예외 — D4 이전에도 그런
-    // 세션은 탭을 옮기지 않았다(현재 활성 탭에 그냥 얹혔다).
-    if (!meta && row.groupId) {
-      w.openGroupTab?.({ groupId: row.groupId, worktreeId: row.worktreeId || null, hostId: 'local', label: row.repoName || undefined });
+    // 세션을 열기 전에 그 세션이 이미 떠 있는 화면(탭)으로 먼저 옮긴다 —
+    // 다른 세션과 같은 화면을 공유 중이면(그룹) 그 화면으로, 혼자 있는
+    // 탭이면 그 탭으로. switchTo/attachTmux는 항상 **지금 활성 탭**에
+    // 배정하므로(addSession의 마지막 줄) 순서가 바뀌면 엉뚱한 탭에 얹힌다.
+    // ⌘클릭 분할은 예외다 — "지금 보는 화면 옆에 놓기"라는 뜻이라 탭을
+    // 바꾸면 안 된다. 아직 안 깨어난 세션도 예외 — 탭 소속은 웹 세션 id로만
+    // 알 수 있고(2026-09-18 후속, 그룹 재정의), 깨우면 새 탭이 생긴다.
+    if (!meta && row.awake) {
+      w.openGroupTab?.({ sessionId: actionSessionId(row), worktreeId: row.worktreeId || null, hostId: 'local' });
     }
     // ADR-29 B — 잠자는 세션을 클릭하면 깨운다(attach). 여는 것은 언제나
-    // 세션이라는 원칙 — 그룹째 깨우는 동작(레일의 잠자는 그룹 덩어리)은
-    // 아래 wakeGroup이 따로 맡는다.
+    // 세션이라는 원칙이다.
     if (!row.awake) {
       if (row.tmuxName) await w.attachTmux?.(row.tmuxName);
       return;
@@ -388,16 +385,6 @@ function Rail(props: { deps: RailDeps }) {
     }
   };
 
-  const wakeGroup = async (entry: { rows: OtherRailRowInput[] }) => {
-    const w = window as any;
-    // ADR-29 D — 이 덩어리의 멤버는 전부 같은 groupId를 공유한다(잠자는
-    // 덩어리를 만든 규칙 자체가 groupId로 묶은 것 — rail-data.ts
-    // buildSleepingEntries). 깨우기 전에 그 그룹의 탭부터 연다.
-    const gid = entry.rows[0]?.groupId;
-    if (gid) w.openGroupTab?.({ groupId: gid, hostId: 'local', label: entry.rows[0]?.repoName || undefined });
-    await Promise.all(entry.rows.map((r) => (r.tmuxName ? w.attachTmux?.(r.tmuxName) : null)));
-  };
-
   const contextRow = (e: MouseEvent, row: OtherRailRowInput) => {
     e.preventDefault();
     if (row.remote) return; // 원격 세션은 로컬 액션(맥에서 열기 등)이 안 맞는다 — 지금까지도 메뉴가 없었다.
@@ -406,70 +393,24 @@ function Rail(props: { deps: RailDeps }) {
     setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, tmuxName: row.tmuxName });
   };
 
-  // ADR-29 E — 드래그로 재편성. 끄는 대상은 항상 세션 하나(tmuxName으로
-  // 식별 — @fsh_grp는 세션 이름으로 세팅한다), 놓는 대상은 그룹 섹션
-  // 헤더다. 잠자는 구역·개입 필요 섹션은 드롭 타깃이 아니다 — 「개입
-  // 필요」는 필터링된 보기일 뿐 실제 그룹이 아니고, 잠든 세션은 그룹을
-  // 옮겨도 보이는 자리가 없다(재편성은 깨어있을 때만 의미가 있다).
-  const [dragOverKey, setDragOverKey] = createSignal<string | null>(null);
+  // 2026-09-18 후속(그룹 재정의, 사용자 요청) — 그룹을 만드는 유일한 길은
+  // 이제 **화면(터미널 pane)에 직접 드래그해서 나란히 놓는 것**이다. 레일
+  // 안에서 세션을 세션/그룹 헤더에 끄는 옛 방식(태그를 직접 썼다)은 없앴다
+  // — 그룹은 태그가 아니라 pane 트리에서 도출되므로 레일 자신이 쓸 수
+  // 있는 "그룹에 넣기" 동작 자체가 없어졌다. 대신 세션 행을 pane 분할
+  // 드롭존(layout/dnd.js)의 드래그 소스로 만든다 — mime 이름은 그 파일의
+  // `SESSION_MIME` 상수와 같은 문자열이어야 한다(이 파일은 레이아웃 모듈을
+  // 정적 import 못 해 리터럴로 맞춘다, 파일 머리말 참고). 잠자는 세션은
+  // 웹 세션 id가 없어 끌 수 없다.
   const onRowDragStart = (e: DragEvent, row: OtherRailRowInput) => {
-    if (!row.tmuxName) { e.preventDefault(); return; }
-    e.dataTransfer?.setData('text/vt-tmux-name', row.tmuxName);
+    if (!row.awake || !row.sessionId) { e.preventDefault(); return; }
+    e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
   };
-  const onGroupDragOver = (e: DragEvent, key: string) => {
-    if (!e.dataTransfer?.types.includes('text/vt-tmux-name')) return;
-    e.preventDefault();
-    setDragOverKey(key);
-  };
-  const onGroupDrop = async (e: DragEvent, groupId: string | null) => {
-    e.preventDefault();
-    setDragOverKey(null);
-    const tmuxName = e.dataTransfer?.getData('text/vt-tmux-name');
-    if (!tmuxName) return;
-    const result = await setSessionGroup(props.deps, tmuxName, groupId);
-    if (result.error) (window as any).showToast?.(`그룹 변경 실패: ${result.error}`, 'error');
-    else await refreshSessions();
-  };
 
-  // ADR-29 후속 — 그룹 자동 제안을 없앤 뒤로, 그룹 헤더 자체가 하나도 없는
-  // 상태(아직 아무도 안 묶었을 때)에서는 드래그로 갈 곳이 없었다("묶지
-  // 않음" 섹션만 드롭 타깃이 있었는데 거기 드롭하면 그룹에서 뺀다는 뜻이라
-  // 처음 그룹을 만드는 길이 아니었다). 그래서 세션 행 자체도 드롭 타깃으로
-  // 삼는다 — 세션을 세션 위에 놓으면, 대상이 이미 그룹에 속해 있으면
-  // 합류하고(onGroupDrop과 같은 동작), 둘 다 묶이지 않은 상태였으면 새
-  // 그룹을 만들어 **둘 다** 거기 넣는다.
-  const onSessionDragOver = (e: DragEvent, row: OtherRailRowInput) => {
-    if (!row.tmuxName || !e.dataTransfer?.types.includes('text/vt-tmux-name')) return;
-    e.preventDefault();
-    setDragOverKey(`row:${row.tmuxName}`);
-  };
-  const onSessionDragLeave = (row: OtherRailRowInput) => {
-    setDragOverKey((k) => (k === `row:${row.tmuxName}` ? null : k));
-  };
-  const onSessionDrop = async (e: DragEvent, targetRow: OtherRailRowInput) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOverKey(null);
-    const tmuxName = e.dataTransfer?.getData('text/vt-tmux-name');
-    if (!tmuxName || !targetRow.tmuxName || tmuxName === targetRow.tmuxName) return;
-    if (targetRow.groupId) {
-      const result = await setSessionGroup(props.deps, tmuxName, targetRow.groupId);
-      if (result.error) (window as any).showToast?.(`그룹 변경 실패: ${result.error}`, 'error');
-      else await refreshSessions();
-      return;
-    }
-    const gid = newGroupId();
-    const a = await setSessionGroup(props.deps, targetRow.tmuxName, gid);
-    const b = a.ok ? await setSessionGroup(props.deps, tmuxName, gid) : a;
-    if (b.error) (window as any).showToast?.(`그룹 만들기 실패: ${b.error}`, 'error');
-    else await refreshSessions();
-  };
-
-  // ADR-29 후속 — 그룹 이름 짓기, 제자리 편집(window.prompt 안 씀). 「묶지
-  // 않음」(groupId null)은 대상이 아니다. 이름을 지으면 groupDisplayLabel()의
-  // "첫 멤버 저장소 이름" 폴백을 덮어써서, 여러 저장소가 섞인 그룹의 라벨
-  // 흠도 같이 없어진다.
+  // 그룹 이름 짓기, 제자리 편집(window.prompt 안 씀). 「묶지 않음」
+  // (groupId null)은 대상이 아니다 — 이름은 탭 자체(layout/store.js의
+  // label)에 붙는다.
   const [editingGroupKey, setEditingGroupKey] = createSignal<string | null>(null);
   const [editingGroupValue, setEditingGroupValue] = createSignal('');
   const startRenameGroup = (e: MouseEvent, groupId: string, currentLabel: string) => {
@@ -477,14 +418,33 @@ function Rail(props: { deps: RailDeps }) {
     setEditingGroupValue(currentLabel);
     setEditingGroupKey(groupId);
   };
-  const commitRenameGroup = async (groupId: string) => {
+  const commitRenameGroup = (groupId: string) => {
     if (editingGroupKey() !== groupId) return; // blur가 Enter 뒤에도 한 번 더 온다 — 중복 커밋 방지.
     setEditingGroupKey(null);
     const trimmed = editingGroupValue().trim();
     if (!trimmed) return; // 빈 값은 취소로 본다 — 그룹을 이름 없는 상태로 만들 수는 없다.
-    const result = await renameGroup(props.deps, groupId, trimmed);
-    if (result.error) (window as any).showToast?.(`이름 변경 실패: ${result.error}`, 'error');
-    else await refreshGroups();
+    // groupId는 곧 탭 id다(2026-09-18 후속, 그룹 재정의) — 서버 왕복 없이
+    // layout/store.js의 탭 레코드에 바로 쓴다.
+    const ok = (window as any).vtRenameTab?.(groupId, trimmed);
+    if (!ok) (window as any).showToast?.('이름 변경 실패', 'error');
+  };
+
+  // 세션 이름 변경, 제자리 편집(그룹 이름과 같은 관용구, window.prompt 안
+  // 씀) — layout/tabbar.js의 주석은 "닫기·이름 변경은 레일 세션 행으로"
+  // 옮겼다고 했지만 실제로는 이 메뉴에 빠져 있었다(사용자 지적으로 발견한
+  // 회귀). 웹 세션이 있어야 한다(term/session.js의 renameSession).
+  const [editingSessionKey, setEditingSessionKey] = createSignal<string | null>(null);
+  const [editingSessionValue, setEditingSessionValue] = createSignal('');
+  const startRenameSession = (sessionId: string, currentName: string) => {
+    setEditingSessionValue(currentName);
+    setEditingSessionKey(sessionId);
+  };
+  const commitRenameSession = async (sessionId: string) => {
+    if (editingSessionKey() !== sessionId) return;
+    setEditingSessionKey(null);
+    const trimmed = editingSessionValue().trim();
+    if (!trimmed) return;
+    await (window as any).renameSession?.(sessionId, trimmed);
   };
 
   const ctxMenuItems = () => {
@@ -494,6 +454,7 @@ function Rail(props: { deps: RailDeps }) {
     const items: MenuItem[] = [];
     if (m.sessionId) {
       items.push(
+        { label: '이름 변경', run: () => startRenameSession(m.sessionId as string, w.sessionDisplayName?.(m.sessionId) || '') },
         { label: '새 세션', run: () => w.createSession?.() },
         { label: '지금 이 세션 맥에서 열기', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('session.open-on-mac') as (() => void) | undefined)?.(); } },
         { label: '연결된 화면', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('clients.show') as (() => void) | undefined)?.(); } },
@@ -672,7 +633,7 @@ function Rail(props: { deps: RailDeps }) {
             <button
               type="button"
               class="vt-btn sm vt-wgrail-empty-new"
-              onClick={() => (props.deps.getAction('session.add-menu') as (() => void) | undefined)?.()}
+              onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
             >+ 새 세션</button>
           </div>
         </Show>
@@ -738,13 +699,7 @@ function Rail(props: { deps: RailDeps }) {
             {(section) => (
               <>
                 <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
-                  <div
-                    class="vt-wgrail-group-head"
-                    classList={{ 'drag-over': section.kind !== 'attention' && dragOverKey() === section.key }}
-                    onDragOver={(e) => { if (section.kind !== 'attention') onGroupDragOver(e, section.key); }}
-                    onDragLeave={() => setDragOverKey((k) => (k === section.key ? null : k))}
-                    onDrop={(e) => { if (section.kind !== 'attention') onGroupDrop(e, section.groupId); }}
-                  >
+                  <div class="vt-wgrail-group-head">
                     <Show when={section.kind === 'attention'}>
                       <span class="vt-wgrail-group-label">
                         {section.label}
@@ -805,12 +760,13 @@ function Rail(props: { deps: RailDeps }) {
                       row={row}
                       compact={collapsed()}
                       active={actionSessionId(row) === activeId()}
-                      draggable={!!row.tmuxName}
+                      draggable={!!row.awake && !!row.sessionId}
                       onDragStart={(e) => onRowDragStart(e, row)}
-                      onDragOver={(e) => onSessionDragOver(e, row)}
-                      onDragLeave={() => onSessionDragLeave(row)}
-                      onDrop={(e) => onSessionDrop(e, row)}
-                      dragOver={!!row.tmuxName && dragOverKey() === `row:${row.tmuxName}`}
+                      editing={!!row.sessionId && editingSessionKey() === row.sessionId}
+                      editingValue={editingSessionValue()}
+                      onEditInput={setEditingSessionValue}
+                      onEditCommit={() => commitRenameSession(row.sessionId)}
+                      onEditCancel={() => setEditingSessionKey(null)}
                       onOpen={(e) => openRow(e, row)}
                       onContext={(e) => contextRow(e, row)}
                     />
@@ -821,10 +777,10 @@ function Rail(props: { deps: RailDeps }) {
             )}
           </For>
           {/* ADR-29 B — 잠자는 구역. 깨어있는 섹션과 절대 안 섞인다(최종
-              설계안 §1의 정정: "잠든 것은 그룹 안에 안 들어간다"). 그룹째
-              잠들었으면 덩어리 하나(클릭하면 멤버 전원 attachTmux), 어디에도
-              안 묶인 채 잠들었으면 낱개 행(Row를 그대로 재사용, sleeping=true
-              라서 클릭 한 번으로 그 세션만 깨운다 — openRow가 그 갈림을 안다). */}
+              설계안 §1의 정정: "잠든 것은 그룹 안에 안 들어간다"). 2026-09-18
+              후속(그룹 재정의)으로 그룹째 잠드는 덩어리 표시는 없앴다(그
+              근거였던 태그 자체가 없어졌다) — 전부 낱개 행이다(Row를 그대로
+              재사용, sleeping=true라서 클릭 한 번으로 그 세션을 깨운다). */}
           <Show when={sleepingEntries().length > 0}>
             <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
               <div class="vt-wgrail-group-head">
@@ -844,38 +800,14 @@ function Rail(props: { deps: RailDeps }) {
             <Show when={!collapsedSessionGroups().has('sleeping') || collapsed()}>
               <For each={sleepingEntries()}>
                 {(entry) => (
-                  <Show
-                    when={entry.kind === 'session'}
-                    fallback={(
-                      <div
-                        class="vt-srow vt-wgrail-row vt-wgrail-sleep-cluster"
-                        classList={{ sleeping: true }}
-                        onClick={() => wakeGroup(entry)}
-                        role="button"
-                        tabindex="0"
-                        data-tip={collapsed() ? entry.label : undefined}
-                        data-tip-side="right"
-                      >
-                        <span class="vt-srow-mark vt-wgrail-bar" />
-                        <div class="vt-srow-main vt-wgrail-row-main">
-                          <div class="vt-srow-top vt-wgrail-row-top">
-                            <span class="vt-srow-name vt-wgrail-name">{entry.label}</span>
-                            <span class="vt-wgrail-group-count">{entry.rows.length}</span>
-                          </div>
-                          <div class="vt-srow-sub vt-wgrail-row-sub">그룹째 잠듦 · 클릭해서 깨우기</div>
-                        </div>
-                      </div>
-                    )}
-                  >
-                    <Row
-                      row={{ ...entry.rows[0], statusSentence: '' }}
-                      compact={collapsed()}
-                      sleeping
-                      active={false}
-                      onOpen={(e) => openRow(e, entry.rows[0])}
-                      onContext={(e) => contextRow(e, entry.rows[0])}
-                    />
-                  </Show>
+                  <Row
+                    row={{ ...entry.row, statusSentence: '' }}
+                    compact={collapsed()}
+                    sleeping
+                    active={false}
+                    onOpen={(e) => openRow(e, entry.row)}
+                    onContext={(e) => contextRow(e, entry.row)}
+                  />
                 )}
               </For>
             </Show>
@@ -903,9 +835,11 @@ function Rail(props: { deps: RailDeps }) {
           안으로 옮겨서, 어느 저장소에 만들지 먼저 고르게 한다 — 여기서는
           더 이상 "기본 저장소"를 추측하지 않는다. */}
       <div class="vt-wgrail-footer">
-        {/* session.add-menu(#add-btn과 같은 액션)는 항상 로컬에 만든다 —
-            원격을 보고 있을 때 누르면 "맥에" 세션이 생겨 화면과 결과가
-            어긋나므로 워크트리 만들기와 같은 이유로 막는다. */}
+        {/* 2026-09-18 후속(사용자 요청) — "새 세션" 진입점을 상단 탭 바의
+            #add-btn에서 이 버튼 하나로 합쳤다(#add-btn은 index.html에서
+            지웠다). session.add-menu는 원격을 보고 있을 때 누르면 "맥에"
+            세션이 생겨 화면과 결과가 어긋나므로 워크트리 만들기와 같은
+            이유로 막는다. */}
         <button
           type="button"
           class="vt-wgrail-new"
@@ -913,7 +847,7 @@ function Rail(props: { deps: RailDeps }) {
           data-tip={isRemoteHost() ? '새 세션' : (collapsed() ? '새 세션' : undefined)}
           data-tip-sub={isRemoteHost() ? '원격 호스트에서는 불가 (2.2)' : undefined}
           data-tip-side="right"
-          onClick={() => (props.deps.getAction('session.add-menu') as (() => void) | undefined)?.()}
+          onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
         >
           <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 새 세션</Show>
         </button>

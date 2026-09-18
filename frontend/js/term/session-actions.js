@@ -20,6 +20,7 @@
 // Rail.tsx는 이 파일을 정적 import하지 못한다(shell 지연 청크 제약, Rail.tsx
 // 머리말과 같은 이유) — 그래서 맨 아래서 함수들을 window에 브리지한다.
 import { closeLayoutTab, getTabsWithTrees } from '../layout/store.js';
+import { collectSessions } from '../layout/tree.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { removeSession } from './session.js';
 import { apiFetch } from '../core/api.js';
@@ -32,13 +33,10 @@ export async function detachSession(sessionId) {
   return removeSession(sessionId);
 }
 
-/** 트리 안의 모든 leaf가 물고 있는 세션 id. 순수 함수 — sleepTab이 죽이기
- * 전에 무엇을 재울지 정할 때 쓴다. */
-export function collectTreeSessions(tree) {
-  if (!tree) return [];
-  if (tree.t === 'leaf') return tree.session ? [tree.session] : [];
-  return [...collectTreeSessions(tree.a), ...collectTreeSessions(tree.b)];
-}
+// 옛 이름 — 실체는 layout/tree.js의 collectSessions로 옮겼다(여러 모듈이
+// 같은 순수 함수를 쓰게 됐다, 2026-09-18 후속). 기존 호출자와의 호환을
+// 위해 이름만 남긴다.
+export const collectTreeSessions = collectSessions;
 
 /** 재우기(탭 전체) — ADR-29 D. 탭의 ×는 이제 "배치에서만 뺀다"가 아니라
  * 그 탭이 담고 있던 세션을 전부 재운다: tmux는 계속 살고(레일의 「잠자는

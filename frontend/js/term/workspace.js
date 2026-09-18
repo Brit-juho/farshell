@@ -90,7 +90,7 @@ export async function restoreWorkspace() {
               if (getSession(data.id)) {
                 // 같은 PTY 이미 있으면 skip
               } else {
-                addSession(data.id, data.name || `tmux:${tab.tmux_name}`);
+                addSession(data.id, data.name || tab.tmux_name);
                 const s = getSession(data.id);
                 if (s) s.tmuxName = tab.tmux_name;
                 if (!firstNewId) firstNewId = data.id;
@@ -176,7 +176,7 @@ export async function reconcileMissingTmuxSessions() {
             if (nextId) { insertBeforeId = nextId; break; }
           }
         }
-        addSession(data.id, data.name || `tmux:${s.name}`, insertBeforeId);
+        addSession(data.id, data.name || s.name, insertBeforeId);
         const s2 = getSession(data.id);
         if (s2) s2.tmuxName = s.name;
         added = true;

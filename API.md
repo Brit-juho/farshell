@@ -51,6 +51,8 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | GET | `/voice/stt/status` | Check STT model readiness (does not load the model) |
 | POST | `/voice/stt/preload` | Preload the STT model — removes first-input latency when turning voice mode on |
 | POST | `/voice/stt/unload` | Unload the STT model — reclaims memory (~150MB) when turning voice mode off |
+| GET | `/voice/stt/model` | List downloaded STT model cache folders on disk (name, path, size) |
+| DELETE | `/voice/stt/model` | Delete one downloaded STT model cache folder — body `{"path": "..."}` (must be a path from the GET above) |
 
 ## Auth
 
@@ -143,17 +145,6 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/worktrees/hidden` | Hide or unhide a repo in the rail (`{path, hidden}`). Stored server-side in `~/.vt/repos.json` (2.1 D1; migrated once from the old `rail-repos.json`), so it applies on every device |
 | POST | `/api/worktrees/{id}/open` | Attach to its existing tmux session, or create `wt-<repoName>-<branch>` if none exists |
 | GET | `/api/repos?include_hidden` | 2.1 D1 groundwork — the same worktrees grouped by repo (`{id, host, path, name, remote, hidden, worktrees: [...]}`). Not yet used by the rail; exists for the repo-as-tab work to build on |
-
-## Session Groups (ADR-29 A)
-
-> Groundwork only — no screen calls these yet. B/C/D steps build the session-first rail/tabs on top of them. Membership itself (`@fsh_grp`) lives on the tmux session, not in a store; only names and order persist server-side (`~/.vt/groups.json`).
-
-| Method | Path | Description |
-|--------|------|------|
-| GET | `/api/groups` | `{groups: [{id, label}]}` in saved display order. A group with no custom name yet has `label: null` — the caller falls back to something derived (e.g. the repo name) |
-| PATCH | `/api/groups/{id}` | Rename (`{label}`). First call for a given id creates its record (e.g. naming a repo's auto-suggested group for the first time) |
-| POST | `/api/groups/reorder` | Replace the whole display order (`{order: [id, ...]}`). A group dropped from the list also loses its saved name |
-| POST | `/api/tmux/{name}/group` | Set or clear a session's group (`{groupId: string \| null}`) by writing `@fsh_grp` on that tmux session directly. `null` means "ungrouped" |
 
 ## Port Dashboard
 
@@ -267,6 +258,11 @@ a peer signature opens.
 | GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low"}]`, read live from `detect/*.toml` |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
+| POST | `/api/codex/managed/start` | Start a local Codex App Server for an existing tmux session (`{tmux_session, cwd?}`), returning its managed thread id. Lifecycle events are emitted through the existing `/ws-agent` channel; prompts and raw model output are never retained by FarShell |
+| POST | `/api/codex/managed/turn` | Start a turn on a managed Codex session (`{tmux_session, text}`). The prompt is forwarded only to the local App Server and is not persisted by FarShell |
+| GET | `/api/codex/managed/approvals?tmux_session={name}` | Pending managed-Codex approval metadata only (`id`, kind, allowed decisions); command text, paths, and tool arguments are never returned or stored |
+| POST | `/api/codex/managed/approvals/{id}` | Resolve a pending App Server request (`{tmux_session, decision, answers?}`). Uses the same authenticated terminal authority as typing into that tmux session |
+| POST | `/api/codex/managed/restart` | Explicitly stop and recreate the local managed App Server/thread for a tmux session (`{tmux_session, cwd?}`), so changed MCP/plugin configuration is read; it never restarts silently |
 | GET | `/api/hooks/status` | Claude Code hook registration status (A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
 | GET | `/api/usage` | Usage snapshot (U1) — `{available:false, reason}` when no source. Tokens/credentials are excluded by a field whitelist |
 | GET | `/api/usage/counter` | N41 — CounterProvider (unlimited, e.g. local LLM) snapshot. `?since=<epoch>` filters totals; the 7-day sparkline is a fixed window regardless |

@@ -320,11 +320,12 @@
          pane 트리를 가진다(layout/store.js의 탭 집합). 세션 탭 줄(#tabs)은
          3단계에서 사라졌다 — 세션 목록·닫기·이름 변경·드래그는 레일(세션)로,
          이름·순서는 세션 레코드(core/store.js)로 옮겼다.
-         탭 바는 flex 축소 대상(min-width:0)이라 0px까지 눌릴 수 있다.
-         add-btn/chevron을 그 안에 두면 함께 사라져 좁은 화면에서 "새 세션"
-         자체가 막힌다 — 항상 보여야 하는 컨트롤이라 밖(flex-shrink:0 형제)에 둔다. -->
+         2026-09-18 후속(사용자 요청) — 이 옆에 있던 #add-btn("새 세션")을
+         지웠다. 진입점을 레일 하단 "+ 새 세션" 하나로 합친다 — 좁은 화면에서
+         레일도 같이 접히는 문제는 모바일 레이아웃을 다시 만들 때 같이 본다
+         (지금 모바일 레이아웃은 어차피 갈아엎을 예정이라 여기서 대비하지
+         않는다). -->
     <div id="vt-wtabs" role="tablist" aria-label="워크트리 탭"></div>
-    <div id="add-btn" data-action="session.add-menu" data-tip="새 세션" data-tip-sub="일반 터미널 / tmux" data-tip-side="bottom" role="button" tabindex="0" aria-haspopup="true" aria-label="새 세션"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
     <div class="wt-chevron" data-action="session.manager" data-tip="세션 프로파일" data-tip-side="bottom" role="button" tabindex="0" aria-label="세션 프로파일">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
     </div>

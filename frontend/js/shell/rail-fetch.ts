@@ -42,11 +42,25 @@ export function useAgentVersion() {
   return v;
 }
 
+/** 2026-09-18 후속(그룹 재정의) — 그룹은 이제 화면(pane 트리)에서 도출된다.
+ * `storeSubscribe`(세션 추가/삭제)만으로는 "이미 있는 세션을 다른 pane으로
+ * 옮겼다" 같은 순수 레이아웃 변경을 못 잡으므로, layout/store.js가 따로
+ * 노출한 `window.onLayoutChange`를 구독한다. */
+export function useLayoutVersion() {
+  const [v, setV] = createSignal(0);
+  const unsub = (window as any).onLayoutChange?.(() => setV((n) => n + 1));
+  onCleanup(() => unsub?.());
+  return v;
+}
+
 // ---- 데이터 수집 ----
 
 export interface AgentDetail {
   since: number | null;
   tool: string | null;
+  /** App Server가 말해 준 표시용 단계. 미관리/레거시 세션은 null이다. */
+  phase: string | null;
+  source: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
 }
@@ -74,6 +88,8 @@ export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, 
     out[name] = {
       since: (entry as any).since ?? null,
       tool: (entry as any).tool || (entry as any).last_tool || null,
+      phase: (entry as any).phase ?? null,
+      source: (entry as any).source ?? null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
     };
@@ -167,34 +183,8 @@ export function actionSessionId(row: OtherRailRowInput): string | null {
   return row.sessionId || null;
 }
 
-// ADR-29 A(group_store.py)를 여기서 처음 부른다 — 세션 하나를 그룹에
-// 넣거나(groupId) 뺀다(null). E단계(드래그 재편성)의 주 소비처가 될
-// 예정이지만, 컨텍스트 메뉴 "그룹으로 옮기기"도 이걸 쓴다.
-export async function setSessionGroup(
-  deps: RailDeps, tmuxName: string, groupId: string | null,
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    await deps.vtFetch(`/api/tmux/${encodeURIComponent(tmuxName)}/group`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groupId }),
-    });
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.data?.error || e?.message || '그룹 변경 실패' };
-  }
-}
-
-// ADR-29 E — 그룹 이름 짓기. group_store.py는 처음 만지는 그룹(예: 저장소
-// 자동 제안 id)이면 이 호출로 처음 레코드를 만든다 — 그 전까지는
-// groupDisplayLabel()의 "첫 멤버 저장소 이름" 폴백만 보인다.
-export async function renameGroup(
-  deps: RailDeps, groupId: string, label: string,
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    await deps.vtFetch(`/api/groups/${encodeURIComponent(groupId)}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label }),
-    });
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.data?.reason || e?.data?.error || e?.message || '이름 변경 실패' };
-  }
-}
+// 2026-09-18 후속(그룹 재정의) — `setSessionGroup`/`renameGroup`(둘 다
+// `@fsh_grp`/`~/.vt/groups.json` 기반)을 여기서 지웠다. 그룹은 이제 서버
+// 왕복 없이 화면(pane 트리)에서 실시간으로 도출된다(layout/store.js의
+// tabGroups) — 이름 짓기는 그 탭 자체에 라벨을 붙이는 것뿐이라
+// `window.vtRenameTab`(layout/tabbar.js) 하나로 끝난다.

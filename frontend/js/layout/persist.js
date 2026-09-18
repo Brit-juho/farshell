@@ -112,15 +112,15 @@ export function makeResolver(sessions) {
 // 하나뿐인 스냅샷이라 "탭 1개짜리 v2"와 정확히 같은 의미다 — 복원에서 그렇게
 // 승격한다(_applySnapshot).
 // 2.1 D4 — v3: 탭 레코드에 `repoId`/`hostId`가 붙었다(탭의 정체성이 워크트리에서
-// 저장소로 바뀐 것). ADR-29 D(2026-09-18) — v4: 그 정체성이 한 단 더
-// 일반화돼 `groupId`가 됐다(layout/store.js 머리말 참고). **`repoId` 필드도
-// 그 값 그대로 계속 적는다** — v3만 읽는 옛 코드로 롤백해도(v1 필드를 v3에서도
-// 계속 적던 것과 같은 이유) 탭 자체(정확히는 그 id로 dedup되는 것)는
-// 복원된다. 2026-09-18 후속으로 groupId 자동 제안 폴백을 없앤 뒤로는
-// groupId가 더 이상 항상 저장소 id인 건 아니다(드래그로 만든 그룹은 임의
-// id) — 그래도 v3 리더 입장에선 그냥 "탭을 구분하는 문자열"일 뿐이라
-// 문제없다. `worktreeId`도 v2와 같은 자리에 계속 적는다. 저장은 언제나
-// v4로만 한다.
+// 저장소로 바뀐 것). ADR-29 D(2026-09-18)는 그걸 `groupId`로 일반화했다(v4).
+// **2026-09-18 후속(그룹 재정의, 사용자 요청)이 그 필드 자체를 없앤다** —
+// 그룹은 더 이상 탭에 붙는 태그가 아니라 pane 트리에서 실시간으로 계산되는
+// 값이라(layout/store.js 머리말), 탭 레코드가 들고 다닐 이유가 없다.
+// `repoId`/`groupId`를 계속 써 주던 v3 롤백 미러도 함께 지운다 — 그 값을
+// 읽던 옛 클라이언트로 되돌아갈 계획이 없다(ADR-29가 이미 확정·완료됐다).
+// v3/v4로 저장된 옛 스냅샷은 계속 읽는다(_applySnapshot) — 탭 자체(id·tree·
+// worktreeId·label)는 그대로 복원되고, 이제 뜻이 없어진 groupId/repoId만
+// 버린다. `worktreeId`는 v2와 같은 자리에 계속 적는다.
 function _snapshot() {
   const tabs = getTabsWithTrees();
   return {
@@ -134,9 +134,6 @@ function _snapshot() {
     tree: serializeTree(getTree(), _lookupLive),
     tabs: tabs.map((t) => ({
       id: t.id,
-      groupId: t.groupId || null,
-      // 롤백용 v3 필드 — 위 주석 참고.
-      repoId: t.groupId || null,
       worktreeId: t.worktreeId || null,
       hostId: t.hostId || 'local',
       label: t.label,
@@ -190,7 +187,7 @@ function _isSnapshot(s) {
 /** 스냅샷 → 항상 "탭 배열" 모양으로. v1은 탭 1개로 승격한다. */
 export function snapshotTabs(snap) {
   if ((snap.v === 2 || snap.v === 3 || snap.v === 4) && Array.isArray(snap.tabs)) return snap.tabs;
-  return [{ id: 'tab-legacy', groupId: null, worktreeId: null, hostId: 'local', label: '작업 공간',
+  return [{ id: 'tab-legacy', worktreeId: null, hostId: 'local', label: null,
             active: snap.active, tree: snap.tree }];
 }
 
@@ -204,13 +201,16 @@ function _applySnapshot(snap) {
   for (const raw of snapshotTabs(snap)) {
     const tree = deserializeTree(raw.tree, resolve, taken);
     if (!tree) continue;
-    // v3 이하는 `repoId`만 있다 — 그 값을 그대로 groupId로 읽는다(위
-    // _snapshot의 롤백 주석과 짝. groupId 자동 제안 폴백이 있던 시절에
-    // 저장된 v3 스냅샷이면 repoId가 실제로 저장소 id이므로 뜻도 맞는다).
-    tabs.push({ id: raw.id, groupId: raw.groupId != null ? raw.groupId : (raw.repoId || null),
+    // v3/v4 스냅샷의 `repoId`/`groupId`는 2026-09-18 후속(그룹 재정의)으로
+    // 뜻을 잃었다 — 읽지 않는다. `label`도 옛 기본값 "작업 공간"이 그대로
+    // 저장돼 있을 수 있다(그때는 그게 _makeTab의 기본값이었다) — 그건 사용자가
+    // 지은 이름이 아니라 예전 placeholder이므로 null로 되돌린다(안 그러면
+    // tabDisplayLabel이 "사용자가 지었다"로 착각해 영원히 그 글자만 보인다).
+    const label = (raw.label && raw.label !== '작업 공간') ? raw.label : null;
+    tabs.push({ id: raw.id,
                 worktreeId: raw.worktreeId || null,
                 hostId: raw.hostId || 'local',
-                label: raw.label || '작업 공간', tree, activePaneId: raw.active });
+                label, tree, activePaneId: raw.active });
   }
   if (!tabs.length) return false;
   // 빈 leaf 채우기는 **활성 탭에만** 적용한다(그 화면이 비어 보이는 것이 문제였다).

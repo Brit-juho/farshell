@@ -9,7 +9,8 @@
 // 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
 // 닫기·이름 변경은 레일 세션 행으로, 에이전트 마크·상태 dot·읽지 않음은
 // 이 파일의 워크트리 탭으로.
-import { getTabs, getActiveTabId, switchLayoutTab, openLayoutTab, onLayoutChange } from './store.js';
+import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, setTabLabel, tabDisplayLabel, onLayoutChange } from './store.js';
+import { collectSessions } from './tree.js';
 import { allSessions } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
 import { sleepTab } from '../term/session-actions.js';
@@ -18,39 +19,20 @@ import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '..
 
 const HOST = 'vt-wtabs';
 
-/** 이 탭에 속한 세션인가 — ADR-29 D부터 탭의 정체성은 그룹이다(D4의 저장소
- * 정체성을 한 단 더 일반화한 것 — 커스텀 그룹이 생기기 전까지 groupId는
- * 실질적으로 저장소 id다). 그룹이 없는 탭(묶지 않음 작업 공간)은 **어디에도
- * 안 속한 세션**을 받는다. 그룹 정보가 아직 없으면(목록 로딩 전) 전부 속한
- * 것으로 본다 — 잠깐 전부 비는 것보다 낫다. */
-export function sessionBelongsToTab(tmuxName, tabGroupId, groupSessions) {
-  if (!groupSessions || groupSessions.size === 0) return true;
-  const owner = tmuxName ? groupSessions.get(tmuxName) : undefined;
-  if (tabGroupId) return owner === tabGroupId;
-  return owner === undefined;      // 「묶지 않음」 탭
-}
-
-let _groupSessions = new Map();   // tmux 세션 이름 → groupId(@fsh_grp 또는 저장소 자동 제안)
-
-/** term/tab-worktree.js가 세션·저장소 목록을 받을 때마다 여기에 알려준다 —
- * 같은 응답을 두 번 조회하지 않는다. */
-export function setGroupSessionMap(map) {
-  _groupSessions = map || new Map();
-  paintTabs();
-}
-
 // ── 탭 하나의 상태 ─────────────────────────────────────────────────────────
 // 10-shell-layout.md §4: 탭 구성은 `[에이전트 마크][이름][상태 dot][읽지 않음]`.
 // 탭은 워크트리라 세션이 여럿일 수 있으므로 **가장 급한 것 하나**로 접는다
 // (레일 워크트리 행과 같은 규칙 — 두 화면이 다른 말을 하면 안 된다).
 
-/** 이 탭에 속한 tmux 세션 이름들. 필터(sessionBelongsToTab)와 같은 판정이다. */
+/** 이 탭(실제 pane 트리)에 떠 있는 세션들의 tmux 이름. 2026-09-18 후속
+ * (그룹 재정의) — 태그(`@fsh_grp`)가 아니라 실제 pane 트리에서 뽑는다. */
 function tabSessionNames(tab) {
+  const all = allSessions();
   const out = [];
-  for (const s of Object.values(allSessions())) {
+  for (const sid of collectSessions(tab.tree)) {
+    const s = all[sid];
     const tmux = s && (s.tmuxName || s.tmux_name);
-    if (!tmux) continue;
-    if (sessionBelongsToTab(tmux, tab.groupId, _groupSessions)) out.push(tmux);
+    if (tmux) out.push(tmux);
   }
   return out;
 }
@@ -75,7 +57,7 @@ function paintTabs() {
   const host = document.getElementById(HOST);
   if (!host) return;
   for (const el of host.querySelectorAll('.vt-wtab')) {
-    const tab = getTabs().find((t) => t.id === el.dataset.tabId);
+    const tab = getTabsWithTrees().find((t) => t.id === el.dataset.tabId);
     if (!tab) continue;
     const names = tabSessionNames(tab);
     const status = mostUrgent(names.map((n) => getStatus(n)));
@@ -107,7 +89,7 @@ function paintTabs() {
 function render() {
   const host = document.getElementById(HOST);
   if (!host) return;
-  const tabs = getTabs();
+  const tabs = getTabsWithTrees();
   const activeId = getActiveTabId();
   // 탭이 하나뿐이면 바를 그리지 않는다 — 2.1.1까지의 화면과 같아야 하고,
   // 고를 게 없는 탭 한 줄은 세로 공간만 먹는다(레일 호스트 칩과 같은 판단).
@@ -128,7 +110,7 @@ function render() {
 
     const name = document.createElement('span');
     name.className = 'vt-wtab-name';
-    name.textContent = t.label;
+    name.textContent = tabDisplayLabel(t);
     el.appendChild(name);
 
     // dot과 「읽지 않음」은 이름 뒤·닫기 앞이라는 순서가 고정돼야 한다 —
@@ -150,7 +132,7 @@ function render() {
       x.type = 'button';
       x.className = 'vt-icon-btn xs vt-wtab-close';
       x.innerHTML = icon('x', 11);
-      x.setAttribute('aria-label', `${t.label} 재우기`);
+      x.setAttribute('aria-label', `${tabDisplayLabel(t)} 재우기`);
       x.setAttribute('data-tip', '재우기');
       x.setAttribute('data-tip-sub', 'tmux는 계속 삽니다 · 레일에서 다시 깨울 수 있습니다');
       x.setAttribute('data-tip-side', 'bottom');
@@ -170,14 +152,25 @@ function render() {
   paintTabs();
 }
 
-/** 그룹을 탭으로 연다(레일·저장소 시트가 세션을 열기 전에 부른다 — ADR-29 D).
- * 이미 열려 있으면 전환하고, 다른 워크트리를 보던 중이었으면 `worktreeId`만
- * 갱신한다. D4 시절엔 `openWorktreeTab`/`repoId`였다 — 이름을 그룹에 맞춰
- * 바꿨다(값 자체는 커스텀 그룹이 생기기 전까진 그대로 저장소 id다). */
-export function openGroupTab({ groupId, worktreeId = null, hostId = 'local', label } = {}) {
-  const id = openLayoutTab({ groupId, worktreeId, hostId, label: label || '작업 공간' });
+/** 세션 하나를 화면에 연다(레일·저장소 시트가 세션을 열기 전에 부른다).
+ * 그 세션이 이미 어느 탭(화면)에 떠 있으면 전환만 하고, 다른 워크트리를
+ * 보던 중이었으면 `worktreeId`만 갱신한다. 2026-09-18 후속(그룹 재정의) —
+ * `groupId` 대신 `sessionId`로 찾는다(store.js의 `openLayoutTab` 참고).
+ * D4 시절엔 `openWorktreeTab`, ADR-29 D 시절엔 `openGroupTab({groupId})`
+ * 였다 — 이름은 호출자 호환을 위해 그대로 뒀다. */
+export function openGroupTab({ sessionId, worktreeId = null, hostId = 'local', label } = {}) {
+  const id = openLayoutTab({ sessionId, worktreeId, hostId, label: label || null });
   saveLayoutNow();
   return id;
+}
+
+/** 탭(=화면) 이름 짓기 — 레일의 그룹 이름 인라인 편집이 부른다. 서버
+ * 왕복이 없다: 탭 라벨은 워크스페이스 스냅샷을 통해 이미 영속화되므로
+ * (layout/persist.js) 여기서 store만 바꾸고 바로 저장하면 끝이다. */
+export function renameTab(tabId, label) {
+  const ok = setTabLabel(tabId, label);
+  if (ok) saveLayoutNow();
+  return ok;
 }
 
 onLayoutChange(render);
@@ -188,4 +181,5 @@ render();
 
 // 지연 청크(shell/Rail.tsx)가 정적 import 없이 부를 수 있게 — 이 저장소의 관행.
 window.openGroupTab = openGroupTab;
+window.vtRenameTab = renameTab;
 window.vtSetTabAgentInfo = setAgentInfo;

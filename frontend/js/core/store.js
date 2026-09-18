@@ -60,7 +60,29 @@ export function allSessions() {
 export function sessionDisplayName(id) {
   const s = sessions[id];
   if (!s) return String(id || '').slice(0, 8);
-  return s.displayName || s.tmuxName || s.tmux_name || String(id).slice(0, 8);
+  if (s.displayName) return s.displayName;
+  const tmux = s.tmuxName || s.tmux_name;
+  if (tmux) return tmux;
+  // 2026-09-18 후속(사용자 지적) — 일반(비 tmux) 세션의 폴백 이름이 id를
+  // 8자로 잘라 붙인 의미 없는 문자열이었다("겁나 tmux 표시가 강제된다"와
+  // 짝을 이루는 지적: tmux 세션은 이미 의미 있는 이름이 있는데, 일반
+  // 세션은 오히려 구분이 안 됐다). 열린 순서대로 "터미널 1", "터미널 2"…
+  return `터미널 ${plainSessionOrdinal(id)}`;
+}
+
+/** id가 몇 번째로 열린 일반(비 tmux) 세션인지 — 순서(order)를 훑어 tmux
+ * 세션은 건너뛰고 센다. 세션이 닫히면 뒤쪽 번호가 하나씩 당겨진다(고정
+ * 배지가 아니라 "지금 열려 있는 것들 중 몇 번째"라는 뜻 — 터미널 앱들의
+ * 기본 창 번호 매기기와 같은 방식). */
+function plainSessionOrdinal(id) {
+  let n = 0;
+  for (const oid of order) {
+    const s = sessions[oid];
+    if (!s || s.tmuxName || s.tmux_name) continue;
+    n += 1;
+    if (oid === id) return n;
+  }
+  return n || 1;
 }
 
 export function setSessionDisplayName(id, name) {

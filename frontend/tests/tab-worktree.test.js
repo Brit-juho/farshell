@@ -64,22 +64,7 @@ test('canRelabel — 사용자가 직접 지은 이름은 자동 라벨이 덮�
   assert.strictEqual(canRelabel(null), false);
 });
 
-// ── ADR-29 D — 탭 소속 판정은 @fsh_grp만 본다(2026-09-18 후속: 저장소
-// 자동 제안 폴백을 없앴다 — 드래그로 직접 묶은 것만 그룹) ──────────────────
-
-test('effectiveGroupMap — grp_id를 그대로 옮긴다', async () => {
-  const { effectiveGroupMap } = await load();
-  const map = effectiveGroupMap([{ name: 'dev', grp_id: 'custom-group' }]);
-  assert.strictEqual(map.get('dev'), 'custom-group');
-});
-
-test('effectiveGroupMap — grp_id가 없으면(빈 문자열 포함) null(묶지 않음)', async () => {
-  const { effectiveGroupMap } = await load();
-  const map = effectiveGroupMap([{ name: 'dev', grp_id: '' }]);
-  assert.strictEqual(map.get('dev'), null);
-});
-
-test('effectiveGroupMap — 빈 입력은 빈 지도', async () => {
-  const { effectiveGroupMap } = await load();
-  assert.strictEqual(effectiveGroupMap(undefined).size, 0);
-});
+// 2026-09-18 후속(그룹 재정의) — 탭 소속 판정은 이제 pane 트리에서 나온다
+// (layout/tabbar.js의 tabSessionNames, layout/store.js의 tabGroups). 이
+// 파일의 effectiveGroupMap(@fsh_grp를 옮기던 함수)은 그 태그와 함께
+// 없앴다 — 아래 테스트도 같이 지웠다.
