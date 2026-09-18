@@ -153,6 +153,7 @@ function showPorts() {
       const name = document.createElement('span');
       name.className = 'vt-pt-cmd';
       name.textContent = p.cmd;                       // textContent — XSS 방어
+      name.title = p.cmd;                              // 좁은 dock에서 말줄임돼도 hover로 복구
       const sub = document.createElement('span');
       sub.className = 'vt-pt-sub';
       const bits = [`pid ${p.pid}`];

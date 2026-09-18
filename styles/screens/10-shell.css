@@ -388,7 +388,10 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 /* ---- 연결 상태 pill ---------------------------------------------------- */
 #conn-status {
   position:fixed; top:calc(8px + env(safe-area-inset-top,0px)); right:8px;
-  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); border-radius:var(--radius-lg); font-size:var(--fs-2xs); display:none; z-index:110;
+  /* 모달(.vt-viewer-backdrop 600)보다 위 — 110이던 시절엔 설정/큐를 열어 둔 채
+     끊기면 이 pill이 반투명 백드롭 뒤로 깔려 흐려졌다. 연결 상태는 어떤 패널
+     위에서도 같은 선명도로 읽혀야 한다. 재연결 오버레이(700)와 같은 층. */
+  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); border-radius:var(--radius-lg); font-size:var(--fs-2xs); display:none; z-index:700;
 }
 #conn-status.disconnected { display:block; background:var(--err); color:var(--color-on-solid); }
 

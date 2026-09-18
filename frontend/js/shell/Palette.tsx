@@ -104,6 +104,10 @@ function PaletteBody(props: PaletteBodyProps) {
   const [recentFiles, setRecentFiles] = createSignal<string[]>([]);
   const [fileResults, setFileResults] = createSignal<{ path: string; name: string }[]>([]);
   const [fileLoading, setFileLoading] = createSignal(false);
+  // 검색 요청이 실패했는데 결과 0건으로만 그리면 "그런 파일이 없다"로 읽힌다 —
+  // 루트 밖 경로·권한·서버 오류가 전부 "일치하는 항목이 없습니다"로 뭉개졌다.
+  // dock 소스컨트롤은 같은 상황에서 이유를 말해주는데 여기만 삼키고 있었다.
+  const [searchError, setSearchError] = createSignal('');
   const [tmuxByWebId, setTmuxByWebId] = createSignal<Record<string, any>>({});
   const [agents, setAgents] = createSignal<Record<string, any>>({});
   const [ports, setPorts] = createSignal<{ port: number; cmd?: string }[]>([]);
@@ -141,15 +145,20 @@ function PaletteBody(props: PaletteBodyProps) {
   // `/` 파일 검색 — 서버 fuzzy(GET /api/fs/search), 200ms 디바운스.
   useDebounced(() => {
     const p = parsed();
-    if (p.mode !== 'file' || !p.query) { setFileResults([]); return; }
+    if (p.mode !== 'file' || !p.query) { setFileResults([]); setSearchError(''); return; }
     const rawSnapshot = p.raw;
     setFileLoading(true);
+    setSearchError('');
     deps.vtFetch(`/api/fs/search?q=${encodeURIComponent(p.query)}`)
       .then((data) => {
         if (parseQuery(props.query()).raw !== rawSnapshot) return;
         setFileResults(data.results || []);
       })
-      .catch(() => setFileResults([]))
+      .catch((e) => {
+        if (parseQuery(props.query()).raw !== rawSnapshot) return;
+        setFileResults([]);
+        setSearchError(e?.message ? `검색에 실패했습니다 — ${e.message}` : '검색에 실패했습니다.');
+      })
       .finally(() => setFileLoading(false));
   }, DEBOUNCE_MS, () => parsed().mode === 'file' ? parsed().raw : '');
 
@@ -175,9 +184,10 @@ function PaletteBody(props: PaletteBodyProps) {
   // `~` 스크롤백 검색 — 200ms 디바운스, 서버가 세션 scrollback 링버퍼를 grep.
   useDebounced(() => {
     const p = parsed();
-    if (p.mode !== 'scrollback' || !p.query) { setScrollbackResults([]); return; }
+    if (p.mode !== 'scrollback' || !p.query) { setScrollbackResults([]); setSearchError(''); return; }
     const rawSnapshot = p.raw;
     setScrollbackLoading(true);
+    setSearchError('');
     // 2.1.3 — 호스트 스위처가 원격을 가리키고 있으면 **그 호스트의** 과거 출력을
     // 찾는다. 로컬만 뒤지면 원격 탭에서 검색이 늘 빈손이라, "기능이 고장났나"로
     // 읽힌다. 모든 호스트를 동시에 뒤지지 않는 건 타자마다 왕복이 늘기 때문이고,
@@ -191,7 +201,11 @@ function PaletteBody(props: PaletteBodyProps) {
         if (parseQuery(props.query()).raw !== rawSnapshot) return;
         setScrollbackResults(data.results || []);
       })
-      .catch(() => setScrollbackResults([]))
+      .catch((e) => {
+        if (parseQuery(props.query()).raw !== rawSnapshot) return;
+        setScrollbackResults([]);
+        setSearchError(e?.message ? `검색에 실패했습니다 — ${e.message}` : '검색에 실패했습니다.');
+      })
       .finally(() => setScrollbackLoading(false));
   }, DEBOUNCE_MS, () => parsed().mode === 'scrollback' ? parsed().raw : '');
 
@@ -462,7 +476,9 @@ function PaletteBody(props: PaletteBodyProps) {
               ? '포트 대시보드를 사용할 수 없는 환경입니다.'
               : (parsed().mode === 'file' && fileLoading()) || (parsed().mode === 'scrollback' && scrollbackLoading()) || (parsed().mode === 'port' && portsLoading())
                 ? '불러오는 중…'
-                : '일치하는 항목이 없습니다.'}
+                : searchError()
+                  ? searchError()
+                  : '일치하는 항목이 없습니다.'}
           </div>
         </Show>
         <For each={rows()}>

@@ -301,9 +301,18 @@ changed.
 | Tier | Width | Rail | Dock | Pane cap | Rendering |
 |---|---|---|---|---|---|
 | compact | < 720px | none (fleet home, §7) | a tab in the bottom nav | 2 | 1 pane fullscreen, swipe left/right |
-| regular | 720~1279px | 48px icon rail (legacy, `#vt-rail`) | collapsed to 36px by default, opens as overlay | 4 | split tree |
-| wide | 1280~1599px | 252px (`#vt-wgrail`) | collapsed to 36px by default, opens by pushing | 6 | split tree + rail |
-| xwide | ≥ 1600px | 252px | 392px, open by default | **unlimited** (N4) | same as wide + cap lifted |
+| regular | 720~1279px | `#vt-wgrail`, device-scoped width | collapsed to 36px by default, opens as overlay | 4 | split tree |
+| wide | 1280~1599px | `#vt-wgrail`, device-scoped width | collapsed to 36px by default, opens by pushing | 6 | split tree + rail |
+| xwide | ≥ 1600px | same | 392px, open by default | **unlimited** (N4) | same as wide + cap lifted |
+
+> **The rail's width is not a function of the tier.** Earlier drafts of this
+> table had regular fall back to the legacy 48px icon rail (`#vt-rail`); that
+> never shipped — `#vt-rail` is `display:none` at every width (see "What's left
+> as legacy") and `Rail.tsx` has no tier branch. Rail width comes only from the
+> device-scoped `ui.rail.width`/`ui.rail.collapsed`, so the same 252px rail is
+> drawn at 800px and at 1900px. The consequence is that at regular the rail and
+> dock can together leave the HUD too narrow for its chips — the HUD scrolls
+> horizontally rather than silently dropping them (§"HUD 24px").
 
 The rail's and dock's open/width state are **device-scoped settings**
 (`ui.rail.collapsed`, `ui.rail.width`, `ui.dock.collapsed`, `ui.dock.width`) —
@@ -334,10 +343,14 @@ group. Clicking a row focuses that session in the active pane. The rail's
 width resizer spans 240~480px. Collapsed (48px), only the mark and the
 status bar remain.
 
-> Not yet built: the plan document (20-design-system.md §5) proposed
-> "repo-name-hash → color dot" (a color-dot ramp) — that's **not in the 2.1.0
-> code**. The left bar currently carries only the status color. Per-repo
-> distinction is revisited alongside the worktree model in 2.1.1.
+**Repo color bar** (`.vt-wgrail-hash`, 20-design-system.md §5 O2): a worktree
+row carries a *second* 3px bar, left of the status bar, whose color comes from
+`fnv1a(repo name + remote) % 8` → `--color-hash-1..8` (defined per skin, all
+6). The status bar answers "does this need me"; this one answers "which repo
+is this" — two questions that a single bar was collapsing. Session rows
+(`kind-session`) leave it transparent, since a bare session has no repo to
+hash. Implemented in `shell/RailRow.tsx` + `rail-data.ts`
+(`repoColorKey`/`hashRepoColorIndex`).
 
 ### Dock 392px (`shell/Dock.tsx`)
 
@@ -369,6 +382,15 @@ screens 3 · Claude 62% · resets in 4h12m · v2.1.0`. Polled every 30s, plus
 immediate refresh on `/ws-notify` events. A chip with no value is **hidden**
 (no usage provider → no chip, the 2.0 rule kept). There is no HUD at all in
 compact — the bottom nav takes its place.
+
+**"No value" hides a chip; "no room" must not.** The bar used to be
+`overflow: hidden`, so once the rail and dock squeezed it (easy at regular —
+measured 667px of chips in a 612px bar at 900px viewport) the trailing chips,
+version included, were clipped away with no way to reach them. It's
+`overflow-x: auto` with the scrollbar hidden now — the same idiom as
+`#vt-wtabs` and `#keybar-keys`. Scrolling isn't a discoverable affordance, so
+this is a floor, not a finish; priority-based hiding would be the real fix and
+needs `Hud.tsx` to rank its own chips.
 
 ### Resize overlay (N43)
 
@@ -551,8 +573,17 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
 
 - **Rows**: only three heights, 24/28/36. Text is `--font-ui` 12px; numbers,
   paths, and times are `--font-mono` 10.5~11px.
-- **Badges**: 1px `--color-line` border, no fill, `--radius-sm`. Only status
-  badges get a status-colored border.
+- **Badges** (`.vt-badge`): 1px `--color-line` border, no fill, `--radius-sm`.
+  Only status badges get a status-colored border. A badge **counts** something —
+  a diff count, an unread count, a port count.
+- **Tags** (`.vt-tag`): a filled faint tint, no border, `--radius-sm`. A
+  different species from `.vt-badge` — a tag doesn't count, it states a
+  *property* (public exposure, trust tier, "this device", a plan name like
+  `Pro`/`rolling`). The tint is derived from `currentColor`
+  (`color-mix(… 16%, transparent)`), so a consumer sets only `color` and the
+  ratio isn't restated at each use site. Not a pill — the whole screen is one
+  5px radius step. Added in 2.1.6, when seven separate copies of that
+  `color-mix` were folded into one component.
 - **Tabs (header, dock)**: active = a 2px `--color-acc` bottom underline +
   `--color-acc-surface` background. Inactive = `--color-sub` text.
 - **Buttons**: default = outline only. The primary action (commit, issue

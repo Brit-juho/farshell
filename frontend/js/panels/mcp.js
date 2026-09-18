@@ -505,10 +505,19 @@ function renderServer(group, facts, tags, data) {
 
 function renderFacts(facts) {
   const box = el('div', 'vt-mcp-facts');
+  // 도구 4개가 대개 같은 사실을 공유한다(전부 "다음 세션부터 반영 + 끄기 즉시
+  // 여부 미확인"). 줄마다 CLI 이름만 바꿔 같은 두 문장을 반복하면 네 줄이
+  // 전부 같은 덩어리로 보여서, 정작 **다른** 도구가 있어도 눈에 안 들어온다.
+  // 같은 문구끼리 묶어 "Claude · Codex · agy: …" 한 줄로 낸다.
+  const byNote = new Map();
   for (const [tool, fact] of Object.entries(facts || {})) {
-    const line = `${TOOL_LABEL[tool] || tool}: ${applyNote(fact)}`;
     const off = offNote(fact);
-    box.appendChild(help(off ? `${line} ${off}` : line));
+    const note = off ? `${applyNote(fact)} ${off}` : applyNote(fact);
+    if (!byNote.has(note)) byNote.set(note, []);
+    byNote.get(note).push(TOOL_LABEL[tool] || tool);
+  }
+  for (const [note, tools] of byNote) {
+    box.appendChild(help(`${tools.join(' · ')}: ${note}`));
   }
   return box;
 }
