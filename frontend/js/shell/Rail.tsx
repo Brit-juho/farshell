@@ -1,7 +1,7 @@
-// N36 §5 — 워크트리 레일 252px. 2.1.1(N8/N44)부터 행 = Worktree다(30-worktree.md
-// §4). 어떤 워크트리에도 안 속하는 세션은 「기타」 그룹의 세션 행으로 남는다
-// (같은 §4 규칙) — 워크트리가 0개인 환경(수용 기준)은 이 「기타」 규칙 하나로
-// 그대로 성립한다(레일이 비지 않는다).
+// N36 §5 — 워크트리 레일 252px. 2.1.1(N8/N44)~2.1.6은 행 = Worktree였다
+// (30-worktree.md §4). ADR-29(2026-09-18)로 되돌렸다 — 행은 다시 세션이고,
+// 워크트리는 저장소·브랜치 배지로만 남는다(로컬 호스트에 한함). 원격
+// 호스트는 아직 옛 3버킷(개입 필요/작업 중/열려 있지 않음) 그대로다(2.2 범위).
 //
 // ⚠ 이 파일은 core/store.js·layout/store.js·agent/state.js·term/session.js를
 // 직접 import하지 않는다(panels/viewer-lazy.js·shell/Hud.tsx와 같은 이유 —
@@ -11,19 +11,18 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import {
-  buildRailSections, mostUrgentStatus, GROUP_LABEL, hashRepoColorIndex,
-  COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
-  type RailGroup,
-  type WorktreeRailRowInput, type OtherRailRowInput, type DesktopRailRowInput,
+  buildRailSections, buildSessionSections, buildSleepingEntries,
+  GROUP_LABEL, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
+  type RailGroup, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
 import {
   buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, LOCAL_HOST,
   type HostEntry,
 } from './host-data.js';
 import {
-  actionSessionId, fetchAgentDetails, fetchDiffCount, openWorktree, safeFetch,
-  useAgentVersion, useSessionsVersion, fetchAgentNames, deleteWorktreeRow,
-  type DesktopRailRow, type RailDeps, type AgentDetail,
+  actionSessionId, fetchAgentDetails, fetchDiffCount, safeFetch,
+  useAgentVersion, useSessionsVersion, fetchAgentNames,
+  type RailDeps, type AgentDetail,
   cachedDiffCount,
   diffCountStale,
 } from './rail-fetch.js';
@@ -66,12 +65,32 @@ function Rail(props: { deps: RailDeps }) {
   // 정체(어떤 CLI인가)는 상태(무엇을 하는 중인가)와 **다른 엔드포인트**다.
   // 한 응답에 둘 다 있을 거라 짐작했다가 마크가 한 개도 안 그려졌다.
   const [agentNames, setAgentNames] = createSignal<Record<string, string>>({});
-  const [worktrees, setWorktrees] = createSignal<any[]>([]);
+  // ADR-29 B — 워크트리 행 대신 배지·자동 그룹 제안의 입력으로만 쓴다.
+  // /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임, 2단계에서
+  // 만들고 아무도 안 쓰던 그 라우트)를 쓴다 — wt_id → repoId 매핑을 직접
+  // 계산할 필요가 없어진다.
+  const [repos, setRepos] = createSignal<any[]>([]);
+  // ADR-29 A — 사용자가 지은 그룹 이름·순서. 대부분의 그룹은 아직 아무도
+  // 안 지어서 비어 있다(자동 제안이 저장소 이름으로 대신한다, rail-data.ts).
+  const [groupLabels, setGroupLabels] = createSignal<Record<string, string>>({});
+  const [groupOrder, setGroupOrder] = createSignal<string[]>([]);
   // §1 — 탐색이 200개 상한에서 잘렸다. 조용히 자르면 "몇 개가 안 보인다"가
   // 정확히 이 기능을 만들게 한 그 버그로 읽힌다.
   const [truncated, setTruncated] = createSignal(false);
   const [hiddenCount, setHiddenCount] = createSignal(0);
   const [repoSheet, setRepoSheet] = createSignal(false);
+  // ADR-29 B — 그룹 섹션 접힘. 옛 groupCollapsed(아래)는 RailGroup 3종 전용
+  // 열거형 키라 임의 그룹 id를 못 담는다 — 그룹은 사용자가 몇 개든 만들 수
+  // 있으므로 여기는 Set이다. 기기 간 지속은 아직 안 한다(그룹 자체가 이제
+  // 막 생긴 개념이라 "설정에 무엇을 남길지"는 D/E에서 실제 사용을 보고
+  // 정한다 — 지금 잘못 정하면 나중에 마이그레이션이 생긴다). 잠자는 구역만
+  // 기본 접힘으로 시작한다(옛 idle 그룹과 같은 판단 — 당장 볼 일이 적다).
+  const [collapsedSessionGroups, setCollapsedSessionGroups] = createSignal<Set<string>>(new Set(['sleeping']));
+  const toggleSessionGroup = (key: string) => setCollapsedSessionGroups((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   // §2 — 그룹 접힘. device 스코프 설정이 정본이고(폰에서 접은 게 맥에 새면
   // 안 된다) 여기 시그널은 그 값을 화면에 반영하기 위한 거울이다.
   //
@@ -113,20 +132,19 @@ function Rail(props: { deps: RailDeps }) {
   const isGroupCollapsed = (g: RailGroup) =>
     COLLAPSIBLE_GROUPS.includes(g) && !!groupCollapsed()[g];
 
-  // 헤더가 세는 것을 사실대로 말한다. `worktrees()`에는 각 저장소의 **본체
-  // 체크아웃**(isMain)이 함께 들어 있다 — git 용어로는 그것도 worktree가
-  // 맞지만, 개발자가 "워크트리 13개"를 읽으면 `git worktree add`로 만든 것이
-  // 13개라고 이해한다. 실제로 본체만 13개이고 부가 워크트리는 0개인 화면이
-  // "워크트리 · 13"이라고 말하고 있었다.
+  // 헤더가 세는 것을 사실대로 말한다. `repos()`의 각 저장소 `worktrees`에는
+  // **본체 체크아웃**(isMain)이 함께 들어 있다 — git 용어로는 그것도
+  // worktree가 맞지만, 개발자가 "워크트리 13개"를 읽으면 `git worktree add`로
+  // 만든 것이 13개라고 이해한다. 실제로 본체만 13개이고 부가 워크트리는
+  // 0개인 화면이 "워크트리 · 13"이라고 말하고 있었다.
   // 그래서 보이는 그대로 「저장소 N」을 기본으로 하고, 부가 워크트리가 있을
-  // 때만 그 수를 덧붙인다. 행이 워크트리 단위라는 구조(ADR-20)는 그대로다 —
-  // 바꾸는 것은 요약 문구뿐이다.
+  // 때만 그 수를 덧붙인다. ADR-29로 행의 정체는 세션이 됐지만, 이 요약
+  // 문구가 세는 대상(저장소·워크트리 개수)은 안 바뀌었다.
   const railTitle = () => {
-    const all = worktrees();
-    const extra = all.filter((w) => !w.isMain).length;
-    const repos = new Set(all.map((w) => w.repoName)).size;
-    if (!all.length) return '워크트리';
-    return extra ? `저장소 ${repos} · 워크트리 ${extra}` : `저장소 ${repos}`;
+    const all = repos();
+    if (!all.length) return '세션';
+    const extra = all.reduce((n: number, r: any) => n + (r.worktrees || []).filter((w: any) => !w.isMain).length, 0);
+    return extra ? `저장소 ${all.length} · 워크트리 ${extra}` : `저장소 ${all.length}`;
   };
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
   // 접힘 기본값은 티어를 따른다(§3 표) — wide(≥1280) 미만에서는 접힘으로 시작.
@@ -138,11 +156,12 @@ function Rail(props: { deps: RailDeps }) {
       ? Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY))
       : defaultRailCollapsed(window.innerWidth, REGULAR_MAX),
   );
+  // ADR-29 B — 컨텍스트 메뉴 대상은 이제 항상 세션이다(워크트리 삭제는
+  // C단계에서 저장소 시트로 옮겨간다). sessionId가 없어도(잠자는 세션)
+  // tmuxName만 있으면 메뉴가 성립한다 — 「깨우기」·「완전 종료」는 웹 세션이
+  // 없어도 할 수 있는 일이다.
   const [ctxMenu, setCtxMenu] = createSignal<{
-    x: number; y: number; sessionId: string | null;
-    // 2.1 D5 — 삭제는 세션이 아니라 워크트리를 대상으로 한다(세션이 하나도
-    // 없는 워크트리도 지울 수 있어야 한다), 그래서 별도 필드로 둔다.
-    worktree: { id: string; label: string; hasSessions: boolean } | null;
+    x: number; y: number; sessionId: string | null; tmuxName: string | null;
   } | null>(null);
   const [dialogOpen, setDialogOpen] = createSignal(false);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
@@ -159,13 +178,23 @@ function Rail(props: { deps: RailDeps }) {
     setAgentDetails(await fetchAgentDetails(props.deps));
     setAgentNames(await fetchAgentNames(props.deps));
   };
-  const refreshWorktrees = async () => {
-    const data = await safeFetch<{ worktrees?: any[]; truncated?: boolean; hiddenCount?: number }>(
-      props.deps, '/api/worktrees',
+  // ADR-29 B — /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임).
+  const refreshRepos = async () => {
+    const data = await safeFetch<{ repos?: any[]; truncated?: boolean; hiddenCount?: number }>(
+      props.deps, '/api/repos',
     );
-    setWorktrees(data?.worktrees || []);
+    setRepos(data?.repos || []);
     setTruncated(!!data?.truncated);
     setHiddenCount(Number(data?.hiddenCount) || 0);
+  };
+  // ADR-29 A — 그룹 이름·순서. B에서는 렌더만 하고 아무도 안 바꾼다(D/E가
+  // 실제로 이름 짓기·드래그를 붙인다) — 그래도 다른 기기·팔레트 등에서 지은
+  // 이름은 여기서도 보여야 하므로 지금부터 읽는다.
+  const refreshGroups = async () => {
+    const data = await safeFetch<{ groups?: { id: string; label: string | null }[] }>(props.deps, '/api/groups');
+    const list = data?.groups || [];
+    setGroupOrder(list.map((g) => g.id));
+    setGroupLabels(Object.fromEntries(list.filter((g) => g.label).map((g) => [g.id, g.label as string])));
   };
 
   // C1 — 로컬+원격을 한 목록으로. 실패하면(라우터가 없는 옛 서버 등) 빈 배열이
@@ -177,15 +206,16 @@ function Rail(props: { deps: RailDeps }) {
 
   refreshSessions();
   refreshAgent();
-  refreshWorktrees();
+  refreshRepos();
+  refreshGroups();
   refreshHosts();
   const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_POLL_MS);
   const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
-  const t3 = setInterval(() => { if (!document.hidden) refreshWorktrees(); }, WORKTREES_POLL_MS);
+  const t3 = setInterval(() => { if (!document.hidden) { refreshRepos(); refreshGroups(); } }, WORKTREES_POLL_MS);
   const t4 = setInterval(() => { if (!document.hidden) refreshHosts(); }, HOSTS_POLL_MS);
   // 서버가 워크트리 생성·삭제·열기 때 쏘는 push. 폴링(60초)보다 훨씬 빠르게
   // 반영되고, 평시에는 요청이 아예 나가지 않는다.
-  const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshWorktrees(); });
+  const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshRepos(); });
   onCleanup(() => {
     clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
     offWt();
@@ -205,6 +235,9 @@ function Rail(props: { deps: RailDeps }) {
   const isRemoteHost = createMemo(() => effectiveHostId() !== LOCAL_HOST);
   const activeHost = createMemo(() => hosts().find((h) => h.id === effectiveHostId()) || null);
 
+  // ADR-29 B — 행은 이제 tmux 세션 목록이 출처다(잠자는 것까지 나온다).
+  // 예전엔 웹 세션 맵(w.allSessions())이 출처라 이 브라우저에 안 열어둔
+  // tmux 세션은 화면 어디에도 안 나왔다 — 그게 이 재설계의 발단이었다.
   const rows = createMemo<DesktopRailRowInput[]>(() => {
     sessionsVersion(); agentVersion(); // 구독 트리거용 — 값 자체는 안 씀
     const w = window as any;
@@ -216,149 +249,149 @@ function Rail(props: { deps: RailDeps }) {
       return h ? remoteSessionRows(h) : [];
     }
     const all = w.allSessions ? w.allSessions() : {};
-    const byName: Record<string, any> = {};
-    for (const t of tmuxSessions()) byName[t.name] = t;
     const details = agentDetails();
 
-    // tmux 세션 이름 → 웹에 이미 열린 세션 id(있으면).
+    // tmux 세션 이름 → 웹에 이미 열린 세션 id(있으면). 서버가 준
+    // web_session_id가 아니라 **이 브라우저의 세션 맵**을 출처로 삼는다 —
+    // "깨어있음"은 기기별 개념이라, 다른 기기가 열어둔 걸 이 기기에서
+    // 깨어있다고 하면 안 된다.
     const tmuxToWebSid: Record<string, string> = {};
     for (const [sid, s] of Object.entries<any>(all)) {
       const tn = s.tmuxName || s.tmux_name;
       if (tn && !(tn in tmuxToWebSid)) tmuxToWebSid[tn] = sid;
     }
 
-    // 30-worktree.md §4: 행 = Worktree. 상태는 sessions 중 가장 시급한 것.
-    const wtSessionNames = new Set<string>();
-    const wtRows: WorktreeRailRowInput[] = worktrees().map((wt: any) => {
-      const sessions: string[] = wt.sessions || [];
-      for (const s of sessions) wtSessionNames.add(s);
-      const statuses = sessions.map((t) => (w.getStatus ? w.getStatus(t) : 'idle'));
-      const status = mostUrgentStatus(statuses);
-
-      let since: number | null = null, tool: string | null = null;
-      let question: string | null = null, options: { key: string; label: string }[] | null = null;
-      let primaryTmux: string | null = null;
-      for (const t of sessions) {
-        const st = w.getStatus ? w.getStatus(t) : 'idle';
-        if (st !== status) continue;
-        const d = details[t];
-        if (!primaryTmux || (d?.since ?? -Infinity) > (since ?? -Infinity)) {
-          primaryTmux = t;
-          since = d?.since ?? null;
-          tool = d?.tool ?? null;
-          question = d?.question ?? null;
-          options = d?.options ?? null;
-        }
+    // wt_id → 저장소·브랜치 배지 정보. /api/repos(저장소별로 이미 묶임)에서
+    // 뽑는다 — repoId를 따로 계산할 필요가 없다(그 저장소 객체의 id가
+    // 그룹 자동 제안값이다).
+    const wtInfo = new Map<string, { repoId: string; repoName: string; branch: string; isMain: boolean; gitRemote: any; changed: any }>();
+    for (const repo of repos()) {
+      for (const wt of repo.worktrees || []) {
+        wtInfo.set(wt.id, {
+          repoId: repo.id, repoName: repo.name, branch: wt.branch, isMain: !!wt.isMain,
+          gitRemote: repo.remote || null, changed: wt.changed || null,
+        });
       }
-      const attachTarget = primaryTmux || sessions[0] || null;
-      const primarySessionId = attachTarget ? (tmuxToWebSid[attachTarget] ?? null) : null;
+    }
+    const labels = groupLabels();
 
-      return {
-        kind: 'worktree',
-        worktreeId: wt.id,
-        label: wt.isMain ? wt.repoName : `${wt.repoName}/${wt.branch}`,
-        repoName: wt.repoName,
-        branch: wt.branch,
-        isMain: !!wt.isMain,
-        path: wt.path,
-        primarySessionId,
-        primaryTmuxName: primarySessionId ? null : attachTarget,
-        repoPath: wt.repo,
-        host: wt.host || 'local',
-        status,
-        since,
-        tool,
-        changed: wt.changed || null,
-        question,
-        options,
-        // §4 — 서버가 `.git/config`에서 뽑아 준 origin. 둘째 줄의
-        // `github/fornerds`와 소유자 기반 색 배정의 입력이다.
-        remote: wt.remote || null,
-      };
-    });
-
-    // 「기타」: 어떤 워크트리 sessions 목록에도 없는 세션(30 §4).
-    const otherRows: OtherRailRowInput[] = [];
-    for (const [sid, s] of Object.entries<any>(all)) {
-      const tmuxName = s.tmuxName || s.tmux_name || null;
-      if (tmuxName && wtSessionNames.has(tmuxName)) continue;
-      const tmuxInfo = tmuxName ? byName[tmuxName] : null;
-      const status = tmuxName && w.getStatus ? w.getStatus(tmuxName) : 'idle';
-      const detail = tmuxName ? details[tmuxName] : undefined;
-      const cwd = tmuxInfo?.cwd || null;
-      otherRows.push({
+    const out: OtherRailRowInput[] = [];
+    const seenTmux = new Set<string>();
+    for (const t of tmuxSessions()) {
+      seenTmux.add(t.name);
+      const sid = tmuxToWebSid[t.name] || '';
+      const awake = !!sid;
+      const info = t.wt_id ? wtInfo.get(t.wt_id) : undefined;
+      const detail = details[t.name];
+      const status = awake && w.getStatus ? w.getStatus(t.name) : (w.getStatus ? w.getStatus(t.name) : 'idle');
+      const cwd = t.cwd || null;
+      out.push({
         kind: 'session',
         sessionId: sid,
-        tmuxName,
-        name: w.sessionDisplayName ? w.sessionDisplayName(sid) : (tmuxName || sid.slice(0, 8)),
+        tmuxName: t.name,
+        name: awake && w.sessionDisplayName ? w.sessionDisplayName(sid) : t.name,
+        awake,
+        // 유효 그룹: @fsh_grp가 있으면 그것, 없으면 이 세션의 저장소로
+        // 자동 제안, 그것도 없으면 null(「묶지 않음」).
+        groupId: t.grp_id || info?.repoId || null,
         status,
         since: detail?.since ?? null,
         tool: detail?.tool ?? null,
         diffFiles: cwd ? (cachedDiffCount(cwd) ?? null) : null,
+        changed: info?.changed ?? null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
-        agent: tmuxName ? (agentNames()[tmuxName] ?? null) : null,
+        agent: agentNames()[t.name] ?? null,
+        repoName: info?.repoName ?? null,
+        branch: info?.branch ?? null,
+        isMainWorktree: info?.isMain ?? false,
+        gitRemote: info?.gitRemote ?? null,
       });
-      // git status는 별도로 비동기 채운다(캐시 60초) — 도착하면 diffTick으로 재렌더.
       if (cwd && diffCountStale(cwd)) {
         fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
       }
     }
 
-    return [...wtRows, ...otherRows];
+    // 일반(비 tmux) 세션 — 서버 쪽에 지속되는 대상이 없어 늘 깨어있다.
+    for (const [sid, s] of Object.entries<any>(all)) {
+      const tn = s.tmuxName || s.tmux_name;
+      if (tn && seenTmux.has(tn)) continue;
+      if (tn) continue; // tmux 이름은 있는데 목록에 없다 — 방금 죽은 세션, 다음 폴링에서 정리된다.
+      out.push({
+        kind: 'session',
+        sessionId: sid,
+        tmuxName: null,
+        name: w.sessionDisplayName ? w.sessionDisplayName(sid) : sid.slice(0, 8),
+        awake: true,
+        groupId: null,
+        status: 'idle',
+        since: null,
+        tool: null,
+        diffFiles: null,
+        agent: null,
+        repoName: null,
+        branch: null,
+        isMainWorktree: false,
+        gitRemote: null,
+      });
+    }
+    void labels; // groupLabels()는 sections()가 별도로 구독한다 — 여기선 구독 트리거만 필요 없음
+    return out;
   });
 
-  const sections = createMemo(() => { diffTick(); return buildRailSections(rows()); });
-  const totalRows = createMemo(() => sections().reduce((n, s) => n + s.rows.length, 0));
+  // ADR-29 B — 두 갈래: 깨어있는 세션의 그룹 섹션(개입 필요 고정 뷰 포함),
+  // 잠자는 세션의 구역(그룹째 잠들었으면 덩어리, 아니면 낱개). 원격
+  // 호스트는 옛 3버킷(개입 필요/작업 중/열려 있지 않음) 그대로 — 거긴
+  // 그룹·수면 개념이 아직 없다(2.2 범위).
+  const localSessionRows = createMemo<OtherRailRowInput[]>(() =>
+    isRemoteHost() ? [] : (rows() as OtherRailRowInput[]));
+  const sessionSections = createMemo(() => {
+    diffTick();
+    return buildSessionSections(localSessionRows(), groupLabels(), groupOrder());
+  });
+  const sleepingEntries = createMemo(() => buildSleepingEntries(localSessionRows(), groupLabels()));
+  const remoteSections = createMemo(() => (isRemoteHost() ? buildRailSections(rows() as OtherRailRowInput[]) : []));
+  const totalRows = createMemo(() => isRemoteHost()
+    ? remoteSections().reduce((n, s) => n + s.rows.length, 0)
+    : sessionSections().reduce((n, s) => n + s.rows.length, 0) + sleepingEntries().length);
 
   const activeId = createMemo(() => { sessionsVersion(); return (window as any).activeSessionId?.() ?? null; });
 
-  const openRow = async (e: MouseEvent, row: DesktopRailRow) => {
+  const openRow = async (e: MouseEvent, row: OtherRailRowInput) => {
     const w = window as any;
     // C1+3단계 — 원격 행은 프록시 경로로 연다(term/remote.js가 window에 건다).
-    if (row.kind === 'session' && row.remote) {
+    if (row.remote) {
       const host = effectiveHostId();
       if (typeof w.attachRemoteSession === 'function' && row.tmuxName) {
         await w.attachRemoteSession(host, row.tmuxName);
       }
       return;
     }
-    // 10 §4 2단계 — 워크트리 행을 열면 **그 워크트리의 탭**으로 간다. 탭마다
-    // 자기 pane 트리를 가지므로, 여기서 탭을 안 맞추면 다른 워크트리의 배치
-    // 위에 남의 세션을 얹게 된다.
-    if (row.kind === 'worktree') {
-      // D4 — 탭은 저장소 단위다. 라벨은 저장소 이름만(브랜치는 탭이 아니라
-      // pane 헤더 옆 칩이 보여준다).
-      w.openWorktreeTab?.({ repoId: row.repoPath, worktreeId: row.worktreeId, hostId: row.host, label: row.repoName });
+    // ADR-29 B — 잠자는 세션을 클릭하면 깨운다(attach). 여는 것은 언제나
+    // 세션이라는 원칙 — 그룹째 깨우는 동작(레일의 잠자는 그룹 덩어리)은
+    // 아래 wakeGroup이 따로 맡는다.
+    if (!row.awake) {
+      if (row.tmuxName) await w.attachTmux?.(row.tmuxName);
+      return;
     }
     const sid = actionSessionId(row);
     if (sid) {
       if (e.metaKey || e.ctrlKey) w.splitActivePane?.('row', sid);
       else w.switchTo?.(sid);
-      return;
-    }
-    if (row.kind === 'worktree' && row.primaryTmuxName) {
-      await w.attachTmux?.(row.primaryTmuxName);
-      return;
-    }
-    if (row.kind === 'worktree') {
-      // 세션이 전혀 없는 워크트리 — 30-worktree.md §2 open API로 새로 연다.
-      const tmuxName = await openWorktree(props.deps, row.worktreeId);
-      if (tmuxName) await w.attachTmux?.(tmuxName);
-      await refreshWorktrees();
     }
   };
 
-  const contextRow = (e: MouseEvent, row: DesktopRailRow) => {
+  const wakeGroup = async (entry: { rows: OtherRailRowInput[] }) => {
+    const w = window as any;
+    await Promise.all(entry.rows.map((r) => (r.tmuxName ? w.attachTmux?.(r.tmuxName) : null)));
+  };
+
+  const contextRow = (e: MouseEvent, row: OtherRailRowInput) => {
     e.preventDefault();
+    if (row.remote) return; // 원격 세션은 로컬 액션(맥에서 열기 등)이 안 맞는다 — 지금까지도 메뉴가 없었다.
     const sid = actionSessionId(row);
-    // 2.1 D5 — 메인 워크트리는 삭제할 수 없다(서버도 400으로 거절한다,
-    // worktree.py delete_worktree) — 메뉴에 애초에 안 띄운다.
-    const worktree = (row.kind === 'worktree' && !row.isMain)
-      ? { id: row.worktreeId, label: row.label, hasSessions: !!actionSessionId(row) }
-      : null;
-    if (!sid && !worktree) return; // 세션도 없고 지울 워크트리도 아니면 메뉴가 성립하지 않는다.
-    setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, worktree });
+    if (!sid && !row.tmuxName) return; // 웹 세션도 tmux 이름도 없으면 메뉴가 성립하지 않는다.
+    setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, tmuxName: row.tmuxName });
   };
 
   const ctxMenuItems = () => {
@@ -374,19 +407,23 @@ function Rail(props: { deps: RailDeps }) {
         // 2.1 D3 — "닫기"는 화면마다 다른 뜻이었다. 이 메뉴가 하는 건 웹
         // 세션을 놓는 것뿐(tmux는 계속 산다)이라 이제 그 이름으로 부른다.
         // 실제 동작은 term/session-actions.js 하나로 모았다(vtDetachSession).
+        // D단계에서 "재우기"로 다시 개명한다(동작은 그대로).
         { label: '세션 놓기', run: () => w.vtDetachSession?.(m.sessionId) },
       );
+    } else if (m.tmuxName) {
+      // ADR-29 B — 잠자는 행의 컨텍스트 메뉴: 웹 세션이 없으니 위 넷은 못
+      // 쓰지만(맥에서 열기·연결된 화면은 "지금 활성 세션"을 전제한다), 깨우기와
+      // 완전 종료는 tmux 이름만으로 된다.
+      items.push({ label: '깨우기', run: () => w.attachTmux?.(m.tmuxName) });
     }
-    if (m.worktree) {
-      const wt = m.worktree;
+    if (m.tmuxName) {
+      // ADR-29 B — 지금까지 tmux-panel.js 팝업에만 있던 완전 종료를 레일
+      // 세션 메뉴에도 연결한다(최종 설계안 §4: "완전 종료는 세션 메뉴 맨
+      // 아래 위험 구역"). 확인 문구는 session-actions.js가 상태(waiting/
+      // working)를 보고 만든다 — 여기서 다시 만들지 않는다.
       items.push({
-        label: '워크트리 삭제',
-        detail: '되돌릴 수 없음',
-        run: async () => {
-          const result = await deleteWorktreeRow(props.deps, wt.id, wt.label, wt.hasSessions);
-          if (result.error) w.showToast?.(`워크트리 삭제 실패: ${result.error}`, 'error');
-          else if (result.ok) await refreshWorktrees();
-        },
+        label: '완전 종료', detail: '되돌릴 수 없음',
+        run: () => w.vtConfirmAndKillSession?.(m.tmuxName, m.sessionId || null),
       });
     }
     return items;
@@ -475,11 +512,11 @@ function Rail(props: { deps: RailDeps }) {
     });
   };
 
-  const defaultRepo = () => worktrees().find((x: any) => x.isMain)?.repo || worktrees()[0]?.repo || '';
+  const defaultRepo = () => repos()[0]?.path || '';
 
   const onCreated = async (result: any) => {
     setDialogOpen(false);
-    await refreshWorktrees();
+    await refreshRepos();
     const tmuxName = result?.opened?.tmux_session || null;
     if (tmuxName) await (window as any).attachTmux?.(tmuxName);
   };
@@ -546,7 +583,7 @@ function Rail(props: { deps: RailDeps }) {
       <div class="vt-wgrail-body">
         <Show when={totalRows() === 0 && !collapsed() && !isRemoteHost()}>
           <div class="vt-wgrail-empty">
-            아직 워크트리가 없습니다.
+            아직 세션이 없습니다.
             <button type="button" class="vt-btn sm vt-wgrail-empty-new" onClick={() => setDialogOpen(true)}>+ 워크트리 만들기</button>
           </div>
         </Show>
@@ -558,59 +595,162 @@ function Rail(props: { deps: RailDeps }) {
         <Show when={isRemoteHost() && !collapsed() && totalRows() === 0 && activeHost()?.online}>
           <div class="vt-wgrail-empty">이 호스트에 tmux 세션이 없습니다.</div>
         </Show>
-        <For each={sections()}>
-          {(section) => (
-            <>
-              {/* 접었을 때도 그룹 경계는 남긴다 — 라벨만 못 읽는 것과 「개입
-                  필요」와 「유휴」가 한 덩어리로 붙어 보이는 것은 다르다. */}
-              <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
-                {/* §2 — 그룹 헤더가 이름표에서 **버튼 줄**이 됐다.
-                    캐럿+이름+개수 전체가 여닫기 클릭 영역이고, 오른쪽 ⚙는
-                    저장소 표시 설정(§3)을 연다. 개수를 붙이는 이유는 접었을 때
-                    "몇 개가 숨었나"가 보여야 하기 때문이다(Fleet.tsx의 그룹
-                    헤더가 이미 같은 모양이다).
-                    「개입 필요」는 접기 버튼을 아예 안 그린다 — 승인 대기가
-                    접힌 채 숨으면 그 그룹이 존재할 이유가 사라진다. */}
-                <div class="vt-wgrail-group-head">
-                  <Show
-                    when={COLLAPSIBLE_GROUPS.includes(section.group)}
-                    fallback={(
-                      <span class="vt-wgrail-group-label">
-                        {GROUP_LABEL[section.group]}
+        {/* 원격 호스트: 옛 3버킷 그대로(개입 필요/작업 중/열려 있지 않음) —
+            그룹·수면 개념은 2.2 범위(로컬 전용, ADR-29 결정문 참고). */}
+        <Show when={isRemoteHost()}>
+          <For each={remoteSections()}>
+            {(section) => (
+              <>
+                <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
+                  <div class="vt-wgrail-group-head">
+                    <Show
+                      when={COLLAPSIBLE_GROUPS.includes(section.group)}
+                      fallback={(
+                        <span class="vt-wgrail-group-label">
+                          {GROUP_LABEL[section.group]}
+                          <span class="vt-wgrail-group-count">{section.rows.length}</span>
+                        </span>
+                      )}
+                    >
+                      <button
+                        type="button"
+                        class="vt-wgrail-group-toggle"
+                        classList={{ collapsed: isGroupCollapsed(section.group) }}
+                        aria-expanded={!isGroupCollapsed(section.group)}
+                        onClick={() => toggleGroup(section.group)}
+                      >
+                        <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                        <span class="vt-wgrail-group-label">{GROUP_LABEL[section.group]}</span>
                         <span class="vt-wgrail-group-count">{section.rows.length}</span>
-                      </span>
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={!isGroupCollapsed(section.group) || collapsed()}>
+                <For each={section.rows}>
+                  {(row) => (
+                    <Row
+                      row={row}
+                      compact={collapsed()}
+                      active={actionSessionId(row) === activeId()}
+                      onOpen={(e) => openRow(e, row)}
+                      onContext={(e) => contextRow(e, row)}
+                    />
+                  )}
+                </For>
+                </Show>
+              </>
+            )}
+          </For>
+        </Show>
+        {/* 로컬 호스트: ADR-29 B — 깨어있는 세션의 그룹 섹션. */}
+        <Show when={!isRemoteHost()}>
+          <For each={sessionSections()}>
+            {(section) => (
+              <>
+                <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
+                  <div class="vt-wgrail-group-head">
+                    <Show
+                      when={section.kind !== 'attention'}
+                      fallback={(
+                        <span class="vt-wgrail-group-label">
+                          {section.label}
+                          <span class="vt-wgrail-group-count">{section.rows.length}</span>
+                        </span>
+                      )}
+                    >
+                      <button
+                        type="button"
+                        class="vt-wgrail-group-toggle"
+                        classList={{ collapsed: collapsedSessionGroups().has(section.key) }}
+                        aria-expanded={!collapsedSessionGroups().has(section.key)}
+                        onClick={() => toggleSessionGroup(section.key)}
+                      >
+                        <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                        <span class="vt-wgrail-group-label">{section.label}</span>
+                        <span class="vt-wgrail-group-count">{section.rows.length}</span>
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={section.kind === 'attention' || !collapsedSessionGroups().has(section.key) || collapsed()}>
+                <For each={section.rows}>
+                  {(row) => (
+                    <Row
+                      row={row}
+                      compact={collapsed()}
+                      active={actionSessionId(row) === activeId()}
+                      onOpen={(e) => openRow(e, row)}
+                      onContext={(e) => contextRow(e, row)}
+                    />
+                  )}
+                </For>
+                </Show>
+              </>
+            )}
+          </For>
+          {/* ADR-29 B — 잠자는 구역. 깨어있는 섹션과 절대 안 섞인다(최종
+              설계안 §1의 정정: "잠든 것은 그룹 안에 안 들어간다"). 그룹째
+              잠들었으면 덩어리 하나(클릭하면 멤버 전원 attachTmux), 어디에도
+              안 묶인 채 잠들었으면 낱개 행(Row를 그대로 재사용, sleeping=true
+              라서 클릭 한 번으로 그 세션만 깨운다 — openRow가 그 갈림을 안다). */}
+          <Show when={sleepingEntries().length > 0}>
+            <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
+              <div class="vt-wgrail-group-head">
+                <button
+                  type="button"
+                  class="vt-wgrail-group-toggle"
+                  classList={{ collapsed: collapsedSessionGroups().has('sleeping') }}
+                  aria-expanded={!collapsedSessionGroups().has('sleeping')}
+                  onClick={() => toggleSessionGroup('sleeping')}
+                >
+                  <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                  <span class="vt-wgrail-group-label">잠자는 중</span>
+                  <span class="vt-wgrail-group-count">{sleepingEntries().length}</span>
+                </button>
+              </div>
+            </Show>
+            <Show when={!collapsedSessionGroups().has('sleeping') || collapsed()}>
+              <For each={sleepingEntries()}>
+                {(entry) => (
+                  <Show
+                    when={entry.kind === 'session'}
+                    fallback={(
+                      <div
+                        class="vt-srow vt-wgrail-row vt-wgrail-sleep-cluster"
+                        classList={{ sleeping: true }}
+                        onClick={() => wakeGroup(entry)}
+                        role="button"
+                        tabindex="0"
+                        data-tip={collapsed() ? entry.label : undefined}
+                        data-tip-side="right"
+                      >
+                        <span class="vt-wgrail-hash kind-session" />
+                        <span class="vt-srow-mark vt-wgrail-bar" />
+                        <div class="vt-srow-main vt-wgrail-row-main">
+                          <div class="vt-srow-top vt-wgrail-row-top">
+                            <span class="vt-srow-name vt-wgrail-name">{entry.label}</span>
+                            <span class="vt-wgrail-group-count">{entry.rows.length}</span>
+                          </div>
+                          <div class="vt-srow-sub vt-wgrail-row-sub">그룹째 잠듦 · 클릭해서 깨우기</div>
+                        </div>
+                      </div>
                     )}
                   >
-                    <button
-                      type="button"
-                      class="vt-wgrail-group-toggle"
-                      classList={{ collapsed: isGroupCollapsed(section.group) }}
-                      aria-expanded={!isGroupCollapsed(section.group)}
-                      onClick={() => toggleGroup(section.group)}
-                    >
-                      <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                      <span class="vt-wgrail-group-label">{GROUP_LABEL[section.group]}</span>
-                      <span class="vt-wgrail-group-count">{section.rows.length}</span>
-                    </button>
+                    <Row
+                      row={{ ...entry.rows[0], statusSentence: '' }}
+                      compact={collapsed()}
+                      sleeping
+                      active={false}
+                      onOpen={(e) => openRow(e, entry.rows[0])}
+                      onContext={(e) => contextRow(e, entry.rows[0])}
+                    />
                   </Show>
-                </div>
-              </Show>
-              <Show when={!isGroupCollapsed(section.group) || collapsed()}>
-              <For each={section.rows}>
-                {(row) => (
-                  <Row
-                    row={row}
-                    compact={collapsed()}
-                    active={actionSessionId(row) === activeId()}
-                    onOpen={(e) => openRow(e, row)}
-                    onContext={(e) => contextRow(e, row)}
-                  />
                 )}
               </For>
-              </Show>
-            </>
-          )}
-        </For>
+            </Show>
+          </Show>
+        </Show>
         {/* §1 — 목록이 200개 상한에서 잘렸다. 여기 한 줄이 없으면 "몇 개가
             빠졌다"가 이번에 고친 깊이 버그와 똑같은 증상으로 보인다. */}
         <Show when={truncated() && !collapsed()}>
@@ -651,7 +791,7 @@ function Rail(props: { deps: RailDeps }) {
         <RepoVisibility
           deps={props.deps}
           onClose={() => setRepoSheet(false)}
-          onChanged={() => refreshWorktrees()}
+          onChanged={() => refreshRepos()}
         />
       </Show>
       <Show when={dialogOpen()}>

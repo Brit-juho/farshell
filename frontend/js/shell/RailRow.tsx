@@ -8,31 +8,30 @@
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
 import { For, Show, onCleanup } from 'solid-js';
 
-import {
-  GROUP_LABEL, hashRepoColorIndex, remoteLabel, repoColorKey, type WorktreeRailRowInput,
-} from './rail-data.js';
-import { actionSessionId, type DesktopRailRow } from './rail-fetch.js';
+import { hashRepoColorIndex, repoColorKey } from './rail-data.js';
+import { type DesktopRailRow } from './rail-fetch.js';
 import { agentIcon, agentLabel } from '../ui/icons.js';
 
-export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boolean; onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void }) {
-  const isWt = () => props.row.kind === 'worktree';
-  const isRemote = () => props.row.kind === 'session' && !!props.row.remote;
-  // 원격 행은 이제 열 수 있으므로 흐리게 그리지 않는다(3단계 전에는 못 열어서
-  // no-session으로 뒀다).
-  const noSession = () =>
-    isWt() && !actionSessionId(props.row) && !(props.row as WorktreeRailRowInput).primaryTmuxName;
+// ADR-29 B — 행은 이제 언제나 세션이다(워크트리 행이 없어졌다). `sleeping`은
+// 이 행이 레일의 「잠자는 중」 구역에 그려지는 것인지를 부모(Rail.tsx)가
+// 알려준다 — 잠든 행은 클릭하면 깨우고(openRow가 갈림), 시각적으로도
+// 가라앉은 톤을 쓴다(옛 no-session의 후계자, 뜻은 "세션이 없다"에서
+// "지금 화면에 없다"로 바뀌었다).
+export function Row(props: {
+  row: DesktopRailRow; active: boolean; compact?: boolean; sleeping?: boolean;
+  onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void;
+}) {
+  const isRemote = () => !!props.row.remote;
   const diffLabel = () => {
-    if (props.row.kind === 'worktree') {
-      const c = props.row.changed;
-      return c && c.files > 0 ? `+${c.add} −${c.del}` : null;
-    }
+    const c = props.row.changed;
+    if (c && c.files > 0) return `+${c.add} −${c.del}`;
     return props.row.diffFiles != null && props.row.diffFiles > 0 ? `파일 ${props.row.diffFiles}` : null;
   };
-  const rowName = () => (props.row.kind === 'worktree' ? props.row.label : props.row.name);
-  // 98 §4 — `github/fornerds`. 워크트리 행에만 있다(「기타」 세션 행은 저장소가
-  // 없다). remote를 못 읽은 저장소는 빈 문자열이라 아무것도 안 그린다.
-  const remoteText = () =>
-    props.row.kind === 'worktree' ? remoteLabel(props.row.remote) : '';
+  const rowName = () => props.row.name;
+  // ADR-29 B — 브랜치 배지. 메인 워크트리 세션은 원래부터 브랜치를 안 보였다
+  // (그룹 헤더가 이미 저장소를 말하므로, main은 "기본"이라 생략). 워크트리에
+  // 안 속한 세션(순수 셸)은 branch 자체가 없다.
+  const branchText = () => (props.row.branch && !props.row.isMainWorktree) ? props.row.branch : '';
   // 48px 접힘에서는 이름·상태 문장이 숨는다(10-shell-layout.md §5: "마크+색점만.
   // 호버 시 툴팁에 2줄"). 그 두 줄이 툴팁이다 — 없으면 접힌 레일은 정체를
   // 알 수 없는 색 막대 기둥이 된다. 펼친 상태에서는 달지 않는다(글자가 이미
@@ -43,9 +42,9 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
   // 여기서도 둘을 data-tip / data-tip-sub로 나눠 넘긴다.
   const compactSub = () => {
     if (!props.compact) return undefined;
-    // 상태 문장이 빈 행(세션 없는 저장소)은 보조 단을 아예 안 만든다 — 빈
+    // 상태 문장이 빈 행(방금 만든 세션 등)은 보조 단을 아예 안 만든다 — 빈
     // 문자열을 넘기면 툴팁에 빈 칸이 한 칸 붙는다.
-    return [remoteText(), props.row.statusSentence].filter(Boolean).join(' · ') || undefined;
+    return [branchText(), props.row.statusSentence].filter(Boolean).join(' · ') || undefined;
   };
 
   // `role="button"` + `tabindex=0`으로 포커스는 갔지만 **Enter·Space가 아무
@@ -66,7 +65,7 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
   return (
     <div
       class="vt-srow vt-wgrail-row"
-      classList={{ active: props.active, 'no-session': noSession() }}
+      classList={{ active: props.active, sleeping: !!props.sleeping }}
       onClick={props.onOpen}
       onContextMenu={props.onContext}
       onKeyDown={onKeyDown}
@@ -83,14 +82,16 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
       {/* 20-design-system.md §5(O2): 레일 행 왼쪽 끝 세로 막대는 저장소 해시
           색점(원형 dot과 헷갈리지 않는 "막대") — 상태 5색·acc와는 별개 램프
           (--color-hash-1..8). 그 오른쪽의 기존 막대가 상태색(30-worktree.md
-          §4/10-shell-layout.md §5)을 그대로 맡는다. 「기타」 세션 행은 저장소가
-          없어 둘 다 "색점 없음"(kind-session이 CSS에서 투명 처리). */}
+          §4/10-shell-layout.md §5)을 그대로 맡는다. ADR-29 B — 워크트리에 안
+          속한 세션(순수 셸)은 저장소가 없어 색점만 "없음"(kind-session이
+          CSS에서 투명 처리); 상태색 막대는 이제 모든 세션 행에 그린다 —
+          행 자체가 언제나 진짜 세션이므로 상태가 항상 의미 있다. */}
       {/* 98 §4 — 해시의 입력이 저장소 **이름**에서 **소유자**로 바뀌었다.
           같은 조직의 저장소가 같은 색이 되어, 이 막대가 처음으로 정보를 갖는다
           (이름 해시는 디자인 리뷰에서 S1 「의미 없는 장식」이었다). remote를
           못 읽은 저장소는 예전과 똑같이 이름 해시로 떨어진다. */}
-      <span class={`vt-wgrail-hash ${isWt() ? `hash-${hashRepoColorIndex(repoColorKey((props.row as WorktreeRailRowInput).repoName, (props.row as WorktreeRailRowInput).remote))}` : 'kind-session'}`} />
-      <span class={`vt-srow-mark vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
+      <span class={`vt-wgrail-hash ${props.row.repoName ? `hash-${hashRepoColorIndex(repoColorKey(props.row.repoName, props.row.gitRemote))}` : 'kind-session'}`} />
+      <span class={`vt-srow-mark vt-wgrail-bar tone-${props.row.status}`} />
       {/* 접힘 전용 에이전트 마크. 펼친 상태의 마크는 아래 row-main 안에 있고
           그 블록이 접히면 통째로 숨으므로, 같은 마크를 이 자리에 한 번 더
           그린다(둘이 동시에 보이는 일은 없다). */}
@@ -114,18 +115,16 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
             )}
           </Show>
           <span class="vt-srow-name vt-wgrail-name">{rowName()}</span>
+          {/* ADR-29 B — 브랜치 배지. 그룹 헤더가 이미 저장소를 말하므로 여기는
+              브랜치만(main은 "기본"이라 생략, branchText()가 그 규칙을 안다). */}
+          <Show when={branchText()}>
+            <span class="vt-srow-meta vt-wgrail-branch">{branchText()}</span>
+          </Show>
           <Show when={diffLabel()}>
             <span class="vt-srow-meta vt-wgrail-diff">{diffLabel()}</span>
           </Show>
         </div>
         <div class="vt-srow-sub vt-wgrail-row-sub">
-          {/* 98 §4 — 이 줄은 세션 없는 저장소 행에서 비어 있었다(`:empty`로
-              접힌다). 거기에 "이게 어느 소유자의 저장소인가"를 넣는다. 상태
-              문장이 같이 있으면 가운뎃점으로 잇는다. */}
-          <Show when={remoteText()}>
-            <span class="vt-wgrail-owner">{remoteText()}</span>
-            <Show when={props.row.statusSentence}><span class="vt-wgrail-sub-sep"> · </span></Show>
-          </Show>
           {props.row.statusSentence}
           <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>

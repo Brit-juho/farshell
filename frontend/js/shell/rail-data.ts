@@ -138,7 +138,8 @@ export function statusSentence(status: AgentState, since: number | null, tool: s
 
 // 그룹 순서 고정 + 그룹 안은 최근 활동순(since 내림차순, 없으면 맨 뒤).
 // 제네릭: status/since/tool만 요구한다 — Fleet.tsx의 RailRowInput, Rail.tsx의
-// WorktreeRailRowInput/OtherRailRowInput 전부 이 최소 모양을 만족한다.
+// OtherRailRowInput(원격 호스트 경로), remoteSessionRows 전부 이 최소 모양을
+// 만족한다. 로컬 세션 경로(ADR-29 B)는 buildSessionSections를 쓴다.
 export function buildRailSections<T extends { status: AgentState; since: number | null; tool: string | null }>(
   inputs: T[],
   nowMs = Date.now(),
@@ -159,70 +160,179 @@ export function buildRailSections<T extends { status: AgentState; since: number 
 }
 
 // ---------------------------------------------------------------------------
-// 30-worktree.md §4 — 데스크톱 레일(Rail.tsx) 전용 행 모양. "행 = Worktree",
-// 「기타」 그룹은 "행 = 세션"(어떤 워크트리에도 안 속함). Fleet.tsx는 이
-// 두 타입을 쓰지 않는다(모바일은 항상 세션 단위, 70-mobile.md 범위 밖).
-
-export interface WorktreeRailRowInput {
-  kind: 'worktree';
-  worktreeId: string;
-  /** isMain이면 repoName, 아니면 `${repoName}/${branch}` (30 §4 레일 표시 규칙). */
-  label: string;
-  repoName: string;
-  branch: string;
-  isMain: boolean;
-  path: string;
-  /** 이 워크트리를 연 웹 세션 id. 아직 웹에 안 열려 있으면(서버는 아는데 이
-   * 브라우저 탭엔 없음) null — 행은 흐리게 그려지고 클릭하면 연다(30 §4). */
-  primarySessionId: string | null;
-  /** 서버가 준 tmux 세션 이름(primarySessionId가 없을 때 attach 대상). */
-  primaryTmuxName: string | null;
-  /** 저장소 최상위 경로(서버 `wt.repo`) — 2.1 D4, 탭의 정체성(repoId)으로
-   * 그대로 쓴다. 같은 저장소의 워크트리는 전부 같은 값을 갖는다. */
-  repoPath: string;
-  /** 지금은 항상 `"local"`(서버 `wt.host`) — 2.2에서 원격 호스트가 생기면
-   * 탭 dedup 키(repoId)가 호스트까지 구분해야 한다. */
-  host: string;
-  status: AgentState;
-  since: number | null;
-  tool: string | null;
-  /** GET /api/worktrees의 changed 요약(add/del 라인 수) — 2.1.1부터 세션별
-   * git status 폴링 대신 이걸 쓴다(30 §4, 10 §5 원문 "+142 −38"). */
-  changed: { files: number; add: number; del: number } | null;
-  question?: string | null;
-  options?: { key: string; label: string }[] | null;
-  /** 2.1.6 — 이 행이 가리키는 세션에 떠 있는 CLI 이름. 헤더의 워크트리 탭이
-   * 이미 달고 있던 마크를 레일 행·플릿 행도 같이 달기 위한 필드다. 모르면
-   * null/undefined이고 그때는 마크를 그리지 않는다("셸"과 "모름"은 다르다). */
-  agent?: string | null;
-  /** 98 §4 — `.git/config`의 origin에서 서버가 뽑아 준 `{host, owner, name}`.
-   * remote가 없는 저장소는 null이고, 그때 둘째 줄은 비고 색은 이름 해시로
-   * 떨어진다(동작 변화 없음). */
-  remote?: RailRemote | null;
-}
-
+// ADR-29 B — 데스크톱 레일(Rail.tsx) 전용 행 모양. "행 = 세션"(더 이상
+// 워크트리가 아니다 — 그 결정이 ADR-20이었고, ADR-29가 대체했다). 세션 하나가
+// 워크트리에 속하면 그 저장소·브랜치를 배지로 달고 다닐 뿐, 행 자체의 정체는
+// 언제나 세션이다. Fleet.tsx는 이 타입을 안 쓴다(모바일은 원래부터 세션
+// 단위, 70-mobile.md 범위 밖 — `RailRowInput` 그대로).
+//
+// `remote?: boolean`(C1, 다른 호스트의 세션)과 `gitRemote?: RailRemote`(git
+// origin)는 이름이 겹치면 안 돼서 따로 뒀다 — 뜻이 전혀 다르다.
 export interface OtherRailRowInput {
   kind: 'session';
+  /** 웹 세션 id. **잠든 세션은 빈 문자열**(브라우저 탭이 없다) — `awake`로
+   * 그 뜻을 명시적으로도 들고 있다(빈 문자열 하나로 두 가지를 겹쳐 읽지
+   * 않기 위해서). */
   sessionId: string;
   tmuxName: string | null;
   name: string;
+  /** 이 브라우저에 웹 세션이 있는가 — ADR-29의 1차 축. false면 레일의
+   * 「잠자는 중」 구역에 산다. tmux에는 살아 있지만 이 기기에서 안 열어둔
+   * 상태(다른 기기가 열어뒀을 수도 있다 — 재우기/깨우기는 기기별 개념). */
+  awake: boolean;
+  /** 유효 그룹 id — `@fsh_grp`가 있으면 그것, 없으면 이 세션의 워크트리가
+   * 속한 저장소 id로 자동 제안, 그것도 없으면 null(「묶지 않음」). null인
+   * 세션은 그룹 섹션이 아니라 「묶지 않음」/개별 잠자는 행으로 간다. */
+  groupId: string | null;
   status: AgentState;
   since: number | null;
   tool: string | null;
   diffFiles: number | null;
+  /** GET /api/repos가 주는 워크트리의 changed 요약(add/del 라인 수) — 있으면
+   * diffFiles보다 우선한다(30 §4 원문 "+142 −38" 서식). 이 세션이 속한
+   * 워크트리를 못 찾았으면 null이고, 그때는 diffFiles(파일 개수)로 떨어진다. */
+  changed?: { files: number; add: number; del: number } | null;
   question?: string | null;
   options?: { key: string; label: string }[] | null;
-  /** 2.1.6 — 이 행이 가리키는 세션에 떠 있는 CLI 이름. 헤더의 워크트리 탭이
-   * 이미 달고 있던 마크를 레일 행·플릿 행도 같이 달기 위한 필드다. 모르면
-   * null/undefined이고 그때는 마크를 그리지 않는다("셸"과 "모름"은 다르다). */
+  /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 모르면 null/undefined — "셸"과
+   * "모름"은 다르다. */
   agent?: string | null;
+  /** 이 세션이 속한 워크트리의 저장소 이름·브랜치(있으면). 배지 표시와
+   * 그룹 라벨 폴백(사용자가 그룹 이름을 안 지었을 때)의 입력이다. 워크트리에
+   * 안 속하는 세션(순수 셸 등)은 셋 다 null. */
+  repoName?: string | null;
+  branch?: string | null;
+  isMainWorktree?: boolean;
+  /** 98 §4 — `.git/config`의 origin. remote가 없으면 null. */
+  gitRemote?: RailRemote | null;
   /** C1 — 다른 호스트의 세션. 로컬 세션 id 경로(switchTo 등)가 성립하지 않으므로
    * 클릭·컨텍스트 메뉴가 막히고 행이 흐리게 그려진다(원격 attach는 멀티호스트
    * 3단계). 선택 필드라 기존 호출부는 그대로 동작한다. */
   remote?: boolean;
 }
 
-export type DesktopRailRowInput = WorktreeRailRowInput | OtherRailRowInput;
+export type DesktopRailRowInput = OtherRailRowInput;
+
+// ---------------------------------------------------------------------------
+// ADR-29 B — 세션 행을 그룹 섹션으로 묶는다. buildRailSections(위)와는 다른
+// 축이다: 그건 "얼마나 급한가"로 3버킷, 이건 "누구 것인가"로 N버킷 + 「개입
+// 필요」 고정 뷰 하나. 같은 세션이 「개입 필요」와 자기 그룹 양쪽에 다 나온다
+// — 그룹 안에 접혀 승인 대기가 묻히면 안 된다(최종 설계안 §4).
+
+export interface SessionSectionOut {
+  /** React/Solid key + 접기 상태 키로 쓴다. attention='attention',
+   * ungrouped='ungrouped', 그 외에는 groupId 그대로. */
+  key: string;
+  kind: 'attention' | 'group' | 'ungrouped';
+  groupId: string | null;
+  label: string;
+  rows: (OtherRailRowInput & { statusSentence: string })[];
+}
+
+/** 그룹 표시 이름 — 사용자가 지었으면 그것, 아니면 이 그룹의 세션이 속한
+ * 저장소 이름으로 떨어진다(자동 제안 그룹의 groupId는 그 저장소의 id이므로
+ * 멤버 아무나의 repoName을 보면 된다). 둘 다 없으면(사용자가 지정한 임의
+ * 그룹인데 아직 이름이 없는 경우) "그룹"이라는 자리표시자. */
+export function groupDisplayLabel(
+  groupId: string, customLabels: Record<string, string>, members: { repoName?: string | null }[],
+): string {
+  if (customLabels[groupId]) return customLabels[groupId];
+  const withRepo = members.find((m) => m.repoName);
+  return withRepo?.repoName || '그룹';
+}
+
+/** 깨어있는 세션만 대상으로 한다 — 잠자는 세션은 buildSleepingEntries가
+ * 별도로 다룬다(둘을 한 함수에 넣으면 "그룹 안에 잠든 게 흐리게 끼어드는"
+ * 1판의 실수를 반복하기 쉽다). */
+export function buildSessionSections(
+  inputs: OtherRailRowInput[],
+  customLabels: Record<string, string>,
+  groupOrder: string[],
+  nowMs = Date.now(),
+): SessionSectionOut[] {
+  const awake = inputs.filter((r) => r.awake);
+  const withSentence = awake.map((r) => ({ ...r, statusSentence: statusSentence(r.status, r.since, r.tool, nowMs) }));
+  const byRecency = (a: { since: number | null }, b: { since: number | null }) => (b.since ?? -Infinity) - (a.since ?? -Infinity);
+
+  const sections: SessionSectionOut[] = [];
+
+  const attentionRows = withSentence.filter((r) => r.status === 'waiting' || r.status === 'error');
+  if (attentionRows.length) {
+    sections.push({ key: 'attention', kind: 'attention', groupId: null, label: '개입 필요',
+      rows: [...attentionRows].sort(byRecency) });
+  }
+
+  const byGroup = new Map<string, typeof withSentence>();
+  const ungrouped: typeof withSentence = [];
+  for (const r of withSentence) {
+    if (r.groupId) {
+      if (!byGroup.has(r.groupId)) byGroup.set(r.groupId, []);
+      byGroup.get(r.groupId)!.push(r);
+    } else {
+      ungrouped.push(r);
+    }
+  }
+
+  // 순서: 사용자가 정한 순서(group_store)가 먼저, 그 안에 없는 그룹(대부분
+  // 아직 안 만진 저장소 자동 제안)은 라벨 가나다순으로 뒤에 붙는다 — 그래야
+  // "한 번도 안 만지면 지금과 같은 화면"이 매번 같은 순서로 보인다.
+  const known = new Set(groupOrder);
+  const rest = Array.from(byGroup.keys()).filter((id) => !known.has(id));
+  rest.sort((a, b) => groupDisplayLabel(a, customLabels, byGroup.get(a)!)
+    .localeCompare(groupDisplayLabel(b, customLabels, byGroup.get(b)!)));
+  for (const gid of [...groupOrder.filter((id) => byGroup.has(id)), ...rest]) {
+    const members = byGroup.get(gid)!;
+    sections.push({
+      key: gid, kind: 'group', groupId: gid,
+      label: groupDisplayLabel(gid, customLabels, members),
+      rows: [...members].sort(byRecency),
+    });
+  }
+
+  if (ungrouped.length) {
+    sections.push({ key: 'ungrouped', kind: 'ungrouped', groupId: null, label: '묶지 않음',
+      rows: [...ungrouped].sort(byRecency) });
+  }
+  return sections;
+}
+
+export interface SleepEntryOut {
+  key: string;
+  kind: 'group' | 'session';
+  groupId: string | null;
+  label: string;
+  /** kind='session'이면 항상 원소 1개 — Row 컴포넌트를 그대로 재사용하기
+   * 위해 배열로 통일한다. */
+  rows: OtherRailRowInput[];
+}
+
+/** 잠자는 세션 — 그룹째 잠들었으면 덩어리 하나(label 옆에 개수), 어디에도
+ * 안 묶인 채 잠들었으면 낱개 행. 최종 설계안 §1의 정정: "잠든 것은 그룹
+ * 안에 안 들어간다"— 깨어있는 섹션과 절대 안 섞인다. */
+export function buildSleepingEntries(
+  inputs: OtherRailRowInput[], customLabels: Record<string, string>,
+): SleepEntryOut[] {
+  const asleep = inputs.filter((r) => !r.awake);
+  const byGroup = new Map<string, OtherRailRowInput[]>();
+  const solo: OtherRailRowInput[] = [];
+  for (const r of asleep) {
+    if (r.groupId) {
+      if (!byGroup.has(r.groupId)) byGroup.set(r.groupId, []);
+      byGroup.get(r.groupId)!.push(r);
+    } else {
+      solo.push(r);
+    }
+  }
+  const entries: SleepEntryOut[] = [];
+  for (const [gid, members] of byGroup) {
+    entries.push({ key: gid, kind: 'group', groupId: gid, label: groupDisplayLabel(gid, customLabels, members), rows: members });
+  }
+  for (const r of solo) {
+    entries.push({ key: r.tmuxName || r.sessionId, kind: 'session', groupId: null, label: r.name, rows: [r] });
+  }
+  entries.sort((a, b) => a.label.localeCompare(b.label));
+  return entries;
+}
 
 // ---------------------------------------------------------------------------
 // 20-design-system.md §5(O2) — 색점 램프. 저장소 이름 → --color-hash-1..8
