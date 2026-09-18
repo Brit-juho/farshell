@@ -1,0 +1,94 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FarShell 앱 아이콘 생성기</title>
+<!--
+  frontend/icon-192.png · icon-512.png 를 다시 뽑는 도구.
+
+  왜 스크립트가 아니라 HTML인가: 아이콘의 유일한 원본이 `frontend/js/ui/favicon.js`의
+  캔버스 그리기 코드다. Node에서 같은 그림을 그리려면 node-canvas 같은 네이티브
+  의존성이 필요한데, 이 저장소는 프런트엔드 빌드에 그런 걸 안 들인다(그리고 아이콘을
+  다시 뽑는 일은 1년에 몇 번이다). 브라우저는 이미 그 코드를 돌릴 수 있는 런타임이라
+  의존성 0으로 끝난다.
+
+  ⚠ 탭 파비콘과 **의도적으로 다르다** — 여기서 뽑는 건 앱 아이콘이다:
+    - 라운드 모서리를 안 준다. iOS·안드로이드·PWA가 자기 마스크를 씌우므로, 우리가
+      둥글게 깎으면 마스크 안쪽에 또 둥근 모서리가 생겨 이중으로 보인다.
+    - 상태 배지(코너 웨지)를 안 넣는다. 배지는 일시적 상태이고 앱 아이콘은 설치
+      시점에 고정된다.
+    - 글리프는 maskable 안전구역 안에 있다: 중심에서 가장 먼 점까지 21.3/32 이고
+      안전구역 반지름은 25.6 이다(manifest의 `purpose: any maskable` 근거).
+
+  사용법: 이 파일을 브라우저로 열고 두 버튼을 누르면 받아진다. 받은 파일을
+  frontend/ 로 옮기면 끝이다.
+-->
+<style>
+  body { font: 15px/1.6 system-ui, -apple-system, sans-serif; background:#eceff3; color:#15181e;
+         margin:0; padding:40px 20px; }
+  .wrap { max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:20px; }
+  h1 { font-size:22px; margin:0; }
+  p { margin:0; color:#5b6474; font-size:14px; }
+  .row { display:flex; gap:20px; align-items:flex-end; flex-wrap:wrap; }
+  .cell { display:flex; flex-direction:column; gap:8px; align-items:center;
+          font:500 11px ui-monospace, monospace; color:#8a93a3; }
+  canvas { background:#fff; border:1px solid #d2d8e1; border-radius:6px; }
+  button { font:500 13.5px system-ui; padding:7px 15px; border-radius:8px;
+           border:1px solid #15181e; background:#15181e; color:#fff; cursor:pointer; }
+  code { font:13px ui-monospace, monospace; background:#fff; padding:1px 5px; border-radius:4px; }
+</style>
+
+<div class="wrap">
+  <h1>FarShell 앱 아이콘</h1>
+  <p>
+    <code>frontend/js/ui/favicon.js</code>의 마크를 그대로 전면 채움으로 그린다.
+    탭 파비콘(라운드 + 상태 웨지)과 다른 이유는 이 파일 맨 위 주석에 있다.
+  </p>
+  <div class="row" id="out"></div>
+  <p>받은 파일을 <code>frontend/icon-192.png</code> · <code>frontend/icon-512.png</code>로 덮어쓴다.</p>
+</div>
+
+<script>
+'use strict';
+// favicon.js와 같은 값 — 여기가 바뀌면 그쪽도 바꿔야 한다(마크는 하나다).
+var BG = '#8839ef';
+var FG = '#ffffff';
+
+function drawMark(ctx, size) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, size, size);
+  ctx.scale(size / 64, size / 64);
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, 64, 64);
+  ctx.strokeStyle = FG;
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(16, 18); ctx.lineTo(28, 32); ctx.lineTo(16, 46);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(32, 46); ctx.lineTo(48, 46);
+  ctx.stroke();
+}
+
+[192, 512].forEach(function (size) {
+  var cell = document.createElement('div');
+  cell.className = 'cell';
+  var cv = document.createElement('canvas');
+  cv.width = size; cv.height = size;
+  cv.style.width = Math.min(size, 160) + 'px';
+  cv.style.height = Math.min(size, 160) + 'px';
+  drawMark(cv.getContext('2d'), size);
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'icon-' + size + '.png 받기';
+  btn.addEventListener('click', function () {
+    var a = document.createElement('a');
+    a.href = cv.toDataURL('image/png');
+    a.download = 'icon-' + size + '.png';
+    a.click();
+  });
+  cell.appendChild(cv);
+  cell.appendChild(btn);
+  document.getElementById('out').appendChild(cell);
+});
+</script>

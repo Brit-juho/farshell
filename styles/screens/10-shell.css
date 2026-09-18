@@ -221,7 +221,9 @@ html[data-skin="windows"] .caption { display:flex; }
 .theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--menu-hover); }
 
 /* ---- 터미널 ------------------------------------------------------------ */
-#terminal-container { position:relative; flex:1; min-height:0; padding:calc(var(--spacing) * 0.5); background:var(--term); overflow:hidden; }
+/* 2026-09-18 — padding을 0으로. 2px이 pane 트리 바깥을 둘러 터미널 영역이
+   창 끝까지 안 가고 한 줄 떠 보였다. iTerm2처럼 붙인다. */
+#terminal-container { position:relative; flex:1; min-height:0; background:var(--term); overflow:hidden; }
 #terminal-container .xterm { height:100%; }
 /* 터미널 대기실(layout/surface.js) — **어느 pane에도 배치되지 않은** 세션의
    xterm wrapper가 머무는 곳. 2026-09-18 이전에는 이 자리가 `#vt-surface`라는
@@ -244,22 +246,20 @@ html[data-skin="windows"] .caption { display:flex; }
    panes.js가 lazy 생성, #vt-surface의 형제) 안에 얹힌다. leaf 하나뿐일 때(분할
    안 씀, 지금 유일한 경우)는 .vt-pane 하나가 그 트리 전체를 차지해 예전
    (wrapper가 직계 자식이던 시절)과 화면상 동일하다. */
-/* 2026-09-18 — pane 사이에 2px 고랑(gap)을 둔다. 분할선(1px)까지 더하면
-   경계가 5px이 되고, 그 5px은 pane의 **바깥**이라 어느 쪽 터미널도 침범하지
-   않는다. 왜 필요했나: 그전에는 pane이 서로 맞붙어 있고 경계가 1px 선
-   하나였는데, xterm의 셀 양자화 잔여(실측 22×8px)가 그 선 바로 앞에서 끝나
-   "분할선이 내용에서 멀리 떨어진 빈 틈"으로 읽혔다. pane에 테두리를 두르면
-   같은 22px이 그 pane의 안쪽 여백이 된다 — 없앨 수 없는 잔여를 틈이 아니라
-   여백으로 보이게 하는 게 요점이다. */
-.vt-split { display:flex; width:100%; height:100%; min-width:0; min-height:0; gap:2px; }
+/* pane 사이에 여백을 두지 않는다 — iTerm2처럼 **딱 붙고** 경계는 1px 선
+   하나다(아래 .vt-split-resizer).
+   같은 날 앞서 2px 고랑 + pane 테두리를 넣어봤다. 의도는 xterm의 셀 양자화
+   잔여를 "pane의 안쪽 여백"으로 읽히게 하는 것이었는데, 실제로는 없애려던
+   빈 틈에 고랑 5px을 **더한** 셈이 됐다. 잔여는 여백을 붙여서 설명되는
+   종류가 아니다 — 여백을 없애는 쪽이 맞다. */
+.vt-split { display:flex; width:100%; height:100%; min-width:0; min-height:0; }
 .vt-split-row { flex-direction:row; }
 .vt-split-col { flex-direction:column; }
 /* L3 3단계: 구분선. 시각 두께는 1px, 히트 영역만 ::before로 확장 —
    app.css의 기존 터치 타겟 확장 기법(:coarse 8px/:fine 4px)과 동일 규칙.
-   2026-09-18: 기본 배경을 뺐다. pane이 자기 테두리를 갖게 되면서 이 선까지
-   상시로 그리면 경계에 선이 셋(테두리·선·테두리) 겹친다 — 평소엔 고랑만
-   보이고, 잡을 수 있다는 신호는 호버/드래그 때만 준다. */
-.vt-split-resizer { position:relative; flex:0 0 1px; background:transparent; z-index:5; }
+   pane 테두리를 걷어낸 뒤로 **이 1px이 경계의 유일한 표현**이라 상시로 그린다
+   (테두리가 있던 잠깐은 경계에 선이 셋 겹쳐서 이걸 투명하게 뒀었다). */
+.vt-split-resizer { position:relative; flex:0 0 1px; background:var(--color-line); z-index:5; }
 .vt-split-row > .vt-split-resizer { cursor:col-resize; }
 .vt-split-col > .vt-split-resizer { cursor:row-resize; }
 .vt-split-resizer::before { content:''; position:absolute; }
@@ -271,33 +271,18 @@ html[data-skin="windows"] .caption { display:flex; }
 }
 .vt-split-resizer.dragging, .vt-split-resizer:hover { background:var(--acc); }
 
-/* 2026-09-18 — pane이 진짜 상자가 됐다(테두리·라운드·배경).
-   **이건 표면 레이어를 걷어낸 뒤에야 가능해진 것이다**: 그전엔 터미널이
-   `#vt-surface`라는 다른 레이어에 살아서 이 상자의 후손이 아니었고, 그래서
-   `overflow:hidden`도 `border-radius`도 터미널을 자르지 못했다 — 테두리를
-   두르면 터미널만 상자 밖으로 삐져나왔다(layout/surface.js 상단 주석).
-   배경을 --term으로 명시하는 이유: 셀 양자화 잔여가 드러나는 자리가 바로
-   여기라, 컨테이너 배경에 기대지 않고 pane 스스로 같은 색을 갖게 한다. */
+/* pane은 테두리도 라운드도 없는 평면이다 — 경계는 분할선 1px 하나가 맡는다.
+   `background:--term`은 남긴다: 터미널이 자기 pane 안에 있으므로(표면 레이어
+   제거) 이 면이 그대로 터미널 배경 역할을 한다. `overflow:hidden`도 남긴다 —
+   이게 없으면 pane이 줄어드는 순간 터미널이 옆 pane 위로 넘쳐 보인다. */
 .vt-pane {
   display:flex; flex-direction:column; width:100%; height:100%;
   min-width:0; min-height:0; overflow:hidden; position:relative;
   background:var(--term);
-  border:1px solid var(--color-line);
-  border-radius:var(--radius-sm);
-  transition:border-color var(--dur-fast) var(--ease-out-quint);
 }
-/* 활성 pane은 **세 신호를 동시에** 준다: 테두리색 · 헤더 면 · 이름 색.
-   2026-09-18 이전에는 1px 액센트 outline 하나뿐이었는데, 같은 두께의 1px 선이
-   화면에 셋(분할선·헤더 밑줄·이 outline) 더 있어서 밝은 스킨에서는 어느 게
-   활성인지 구별이 안 됐다. 신호 하나가 약하면 개수를 늘리는 게 맞다 —
-   두께를 2px로 키우면 레이아웃이 1px 밀린다(border-box라도 안쪽 폭이 준다). */
-.vt-pane.active { border-color:var(--color-acc); }
-/* 분할을 안 쓰는 화면(root가 leaf 하나)에서는 상자를 그리지 않는다. L3 1단계의
-   검증 기준이 "분할을 쓰지 않으면 화면이 예전과 완전히 동일하다"였고, 테두리는
-   **여럿을 가르는 장치**라 하나뿐인 pane에서는 뜻이 없다(JS가 같은 조건으로
-   헤더도 숨긴다 — panes.js의 isRootOnly). `>` 직계 선택자가 곧 그 조건이다:
-   분할이 있으면 루트는 .vt-split이라 이 규칙이 아무 pane에도 안 걸린다. */
-#vt-chrome-tree > .vt-pane { border:0; border-radius:0; }
+/* 활성 pane이 무엇인지는 **헤더**가 말한다 — 규칙은 .vt-pane-head 절에 있다.
+   pane에 테두리를 못 쓰기 때문이다: 경계에 여백이 없어서 양쪽 pane이 각자
+   테두리를 그리면 분할선 자리에 선이 셋(1+1+1) 겹친다. */
 
 /* L5: 5구역 드롭존 오버레이. layout/dnd.js가 드래그 중인 pane에
    data-dropzone 속성만 찍어주면(마우스=네이티브 dragover, 터치=long-press
@@ -347,10 +332,17 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   font:var(--weight-medium) var(--fs-2xs) var(--font-ui); color:var(--color-sub);
   transition:background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint);
 }
-/* 활성 신호 2·3 — 헤더 면과 이름 색. 틴트는 dock 탭·칩과 같은 10%다
-   (20-design-system.md §3: 주인공은 채움이 아니라 그 옆의 액센트 신호). */
+/* 활성 pane의 신호 셋을 여기 모은다: 10% 액센트 면 + 2px 액센트 밑줄 + 이름 색.
+   틴트는 dock 탭·칩과 같은 10%다(20-design-system.md §3: 주인공은 채움이 아니라
+   그 옆의 액센트 신호).
+   밑줄을 border가 아니라 inset box-shadow로 넣는 이유는 **레이아웃을 1px도
+   밀지 않기** 위해서다 — border-bottom을 2px로 키우면 그만큼 터미널 높이가
+   줄어 활성 전환마다 fit이 돌고 PTY에 SIGWINCH가 간다.
+   2026-09-18 이전에는 이 신호가 1px 액센트 outline 하나뿐이었고, 같은 두께의
+   1px 선이 화면에 둘(분할선·헤더 밑줄) 더 있어 밝은 스킨에서는 구별이 안 됐다. */
 .vt-pane.active .vt-pane-head {
   background:color-mix(in srgb, var(--color-acc) 10%, var(--bar));
+  box-shadow:inset 0 -2px 0 var(--color-acc);
   color:var(--color-txt);
 }
 .vt-pane-name {

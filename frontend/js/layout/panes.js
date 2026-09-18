@@ -12,13 +12,14 @@
 // 리뷰 원칙) — 클릭이든 탭이든 항상 이걸로 전부 가능하다. 탭/헤더를 pane
 // 위로 드래그하는 DnD(L5, layout/dnd.js)는 이 baseline 위에 얹는 "있으면
 // 편한" 추가 경로다.
-import { getSession, sessionDisplayName } from '../core/store.js';
+import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
   splitPane, closePane, setRatio,
 } from './store.js';
 import { findNode } from './tree.js';
 import { paneElId, splitElId } from './dom-ids.js';
+import { snapPx, cellSizeFrom } from './snap.js';
 import { wireRatioResizer } from './resizer.js';
 import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
 import { openPanePicker } from './pane-picker.js';
@@ -310,11 +311,11 @@ function _renderNode(node, activePaneId, isRootOnly, placement) {
 
     const aEl = _renderNode(node.a, activePaneId, false, placement);
     const bEl = _renderNode(node.b, activePaneId, false, placement);
-    aEl.style.flex = `${node.ratio} 1 0`;
-    bEl.style.flex = `${1 - node.ratio} 1 0`;
     if (el.children[0] !== aEl || el.children[1] !== resizerEl || el.children[2] !== bEl) {
       el.replaceChildren(aEl, resizerEl, bEl);
     }
+    // 자식을 붙인 뒤에 재야 한다 — 그 전엔 el.clientWidth가 0이라 스냅이 포기한다.
+    applySplitFlex(el, node, aEl, bEl);
     return el;
   }
 
@@ -427,8 +428,45 @@ function _applyRatioOnly(splitId) {
   const node = findNode(getTree(), splitId);
   const el = document.getElementById(splitElId(splitId));
   if (!node || node.t !== 'split' || !el || el.children.length !== 3) return;
-  el.children[0].style.flex = `${node.ratio} 1 0`;
-  el.children[2].style.flex = `${1 - node.ratio} 1 0`;
+  applySplitFlex(el, node, el.children[0], el.children[2]);
+}
+
+// pane 헤더가 차지하는 높이. 세로 분할에서 칸은 헤더 **아래**에 놓이므로, 첫째
+// 칸이 배수가 되려면 `헤더 + k × cellHeight`여야 한다. 첫째 칸이 leaf가 아니면
+// (중첩 분할) 그 안에서 각자 스냅하므로 여기서는 0으로 둔다.
+function _headChrome(child) {
+  if (!child || child.t !== 'leaf') return 0;
+  const el = document.getElementById(paneElId(child.id));
+  const head = el && el.querySelector('.vt-pane-head');
+  return head && head.offsetParent !== null ? head.offsetHeight : 0;
+}
+
+/**
+ * 분할의 두 칸에 flex를 건다. 셀 크기를 알고 상자가 이미 실측되면 **첫째 칸을
+ * 셀 배수로 못박고**(`flex: 0 0 Npx`) 둘째 칸이 나머지를 먹는다(`flex: 1 1 0`).
+ * 아직 못 재는 첫 렌더에서는 예전처럼 비율로 깔고, 레이아웃이 잡힌 다음 프레임에
+ * 다시 불려 스냅된다(_renderFull의 rAF).
+ *
+ * 스냅이 idempotent라 되풀이해도 값이 안 바뀐다 — 그래서 ResizeObserver →
+ * fit → 렌더로 돌아와도 루프가 생기지 않는다.
+ */
+export function applySplitFlex(el, node, aEl, bEl) {
+  const horiz = node.dir === 'row';
+  const total = horiz ? el.clientWidth : el.clientHeight;
+  const cell = cellSizeFrom(Object.values(allSessions()));
+  let aPx = null;
+  if (total > 0 && cell) {
+    // 분할선 1px은 어느 칸의 것도 아니다 — 빼고 나눈다.
+    const want = (total - 1) * node.ratio;
+    aPx = snapPx(want, horiz ? cell.w : cell.h, horiz ? 0 : _headChrome(node.a));
+  }
+  if (aPx == null) {
+    aEl.style.flex = `${node.ratio} 1 0`;
+    bEl.style.flex = `${1 - node.ratio} 1 0`;
+  } else {
+    aEl.style.flex = `0 0 ${aPx}px`;
+    bEl.style.flex = '1 1 0';
+  }
 }
 
 // 트리 구조 자체가 바뀌었을 때(분할·닫기·세션 배정·복원)의 전체 경로 —
@@ -455,6 +493,25 @@ function _renderFull() {
   // 최종 배치를 넘긴다 — 빠진 세션은 대기실로 보내고, 새로 들어온 세션은
   // 그 pane-body 안으로 옮긴 뒤 즉시 실측해 fit을 건다(surface.js 책임).
   surface.setPlacement(placement);
+
+  // 셀 배수 스냅은 **한 프레임 뒤에 한 번 더** 돈다. 위 렌더에서 상자가 처음
+  // 생긴 분할은 그 순간 clientWidth가 0이라 스냅이 포기하고 비율로 깔렸고,
+  // 세션이 방금 배치된 pane은 아직 fit 전이라 셀 크기를 모를 수도 있다.
+  // 값이 이미 맞으면 아무 스타일도 안 바뀌므로 추가 리플로우가 없다.
+  if (_snapRaf) cancelAnimationFrame(_snapRaf);
+  _snapRaf = requestAnimationFrame(() => {
+    _snapRaf = 0;
+    _snapAll(getTree());
+  });
+}
+
+let _snapRaf = 0;
+function _snapAll(node) {
+  if (!node || node.t !== 'split') return;
+  const el = document.getElementById(splitElId(node.id));
+  if (el && el.children.length === 3) applySplitFlex(el, node, el.children[0], el.children[2]);
+  _snapAll(node.a);
+  _snapAll(node.b);
 }
 
 // 트리를 다시 그린다. layout/store.js의 onLayoutChange가 이 함수를 부른다 —

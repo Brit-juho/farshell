@@ -18,10 +18,17 @@ function sendResize(ws, term, s) {
 export function fitAndResize(id) {
   const s = getSession(id);
   if (!s || !s.wrapper) return;
-  // 숨김 탭(N16부터 visibility:hidden — 표면 레이어 밖으로 translate된 상태)은
-  // 실측 폭/높이가 없거나 stale이라 fit이 rows를 깨뜨린다 — 보이는 탭에서만
-  // 측정한다. surface.js가 배치할 때 visible로 바꾼 뒤 다시 호출해 준다.
-  if (s.wrapper.style.visibility === 'hidden') return;
+  // 배치 안 된 세션(대기실 #vt-term-stage에 있는 것)은 측정하지 않는다. 그쪽
+  // 상자는 **컨테이너 크기**라, 재보면 pane 크기가 아닌 값으로 fit해서 PTY에
+  // 엉뚱한 SIGWINCH가 간다. 배치되면 surface.js의 refit 게이트가 실측해서
+  // 다시 부른다.
+  //
+  // ⚠ 2026-09-18 이전에는 이 검사가 `wrapper.style.visibility === 'hidden'`
+  // 이었다. 표면 레이어 시절엔 숨김을 **인라인 스타일**로 표현했기 때문인데,
+  // 지금은 대기실의 CSS가 숨기므로 그 인라인 값이 비어 있다 — 그대로 뒀으면
+  // 검사가 영영 통과해 대기 중 터미널까지 fit됐을 것이다. 배치는 이제
+  // "부모가 누구인가"로 표현되므로 검사도 그걸 본다.
+  if (!s.wrapper.closest('.vt-pane-body')) return;
   // ⚠ fitAddon.fit()은 호출될 때마다 무조건 dimension을 재계산하고, xterm.js 내부적으로
   // (this._terminal.rows/cols가 계산값과 조금이라도 다르면) _renderService.clear()를
   // 실행한다 — 문자 아틀라스(glyph 캐시) 폐기 + 재생성으로, xterm.js 자체 이슈(#955)에서도
