@@ -503,11 +503,6 @@ body.vt-resizing #terminal-container{ transition:none; }
   font:400 var(--fs-2xs) var(--mono);
   font-variant-numeric:tabular-nums;
 }
-.vt-pt-tags{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
-.vt-pt-tag{
-  background:color-mix(in srgb, var(--warn) 22%, transparent);
-  color:var(--warn);
-}
 .vt-pt-actions{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
 
 /* 2026-09-17 — 액션을 행 **위로** 띄운다.
@@ -642,9 +637,8 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-q-text{ white-space:pre-wrap; word-break:break-word; }
 .vt-q-sub{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); margin-top:calc(var(--spacing) * 1); }
 .vt-q-row.blocked .vt-q-sub{ color:var(--err); }
-/* N6(60 §4) — 큐 행의 [대상 워크트리 칩]. .vt-pt-tag(승인 대기 배지)와 같은
-   pill 모양이지만 경고색(--warn)이 아니라 중립 accent로 — "위험"이 아니라
-   "이 항목이 어디로 갈지"를 알리는 정보 배지라서다. */
+/* N6(60 §4) — 큐 행의 [대상 워크트리 칩]. 경고색(--warn)이 아니라 중립
+   accent로 — "위험"이 아니라 "이 항목이 어디로 갈지"를 알리는 정보 배지라서다. */
 .vt-q-chip{
   margin-top:calc(var(--spacing) * 1);
   background:color-mix(in srgb, var(--acc) 16%, transparent);
