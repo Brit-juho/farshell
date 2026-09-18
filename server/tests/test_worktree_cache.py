@@ -18,6 +18,7 @@ HTTP·WebSocket·PTY 출력 브로드캐스트가 같이 멈춘다 — 터미널
 """
 
 import asyncio
+import json
 import threading
 import time
 
@@ -76,6 +77,80 @@ def test_route_does_not_block_the_event_loop(monkeypatch):
         f"이벤트 루프가 {worst:.2f}초 멈췄다(탐색 {BLOCK}초) — "
         "라우트가 동기 호출로 되돌아갔다"
     )
+
+
+async def _measure_max_gap(coro_factory) -> float:
+    """coro_factory()가 도는 동안 심장박동 간격의 최댓값을 잰다."""
+    stop = asyncio.Event()
+    gaps = []
+
+    async def heartbeat():
+        last = time.perf_counter()
+        while not stop.is_set():
+            await asyncio.sleep(0.01)
+            now = time.perf_counter()
+            gaps.append(now - last)
+            last = now
+
+    hb = asyncio.create_task(heartbeat())
+    await coro_factory()
+    stop.set()
+    await hb
+    assert gaps, "심장박동이 한 번도 안 뛰었다"
+    return max(gaps)
+
+
+class _FakeBody:
+    def __init__(self, body):
+        self._body = body
+
+    async def json(self):
+        return self._body
+
+
+# ADR-29 A0(2026-09-18) — create/open/delete 세 라우트가 to_thread 없이
+# worktree.py의 동기 함수를 직접 불렀다. create는 git worktree add +
+# node_modules 복사(수십 초 가능), open/delete는 find_by_id(force=True)로
+# 캐시를 무시한 전체 재탐색(실측 1.0~1.7초)을 돈다 — 워크트리 버튼을 누를
+# 때마다 서버 전체(HTTP·WS·PTY 출력)가 멎었다. list_worktrees(위 테스트)와
+# 같은 방식으로 셋 다 고정한다.
+
+def test_create_route_does_not_block_the_event_loop(monkeypatch):
+    BLOCK = 0.5
+    monkeypatch.setattr(worktree, "create_worktree", lambda body: (time.sleep(BLOCK), {"ok": True})[1])
+
+    worst = asyncio.run(_measure_max_gap(lambda: worktree_routes.create_worktree(_FakeBody({}))))
+    assert worst < BLOCK / 2, f"POST /api/worktrees가 이벤트 루프를 {worst:.2f}초 막았다"
+
+
+def test_open_route_does_not_block_the_event_loop(monkeypatch):
+    BLOCK = 0.5
+    monkeypatch.setattr(worktree, "open_worktree", lambda wt_id: (time.sleep(BLOCK), {"ok": True})[1])
+
+    worst = asyncio.run(_measure_max_gap(lambda: worktree_routes.open_worktree("x")))
+    assert worst < BLOCK / 2, f"POST /api/worktrees/{{id}}/open이 이벤트 루프를 {worst:.2f}초 막았다"
+
+
+def test_delete_route_does_not_block_the_event_loop(monkeypatch):
+    BLOCK = 0.5
+    monkeypatch.setattr(
+        worktree, "delete_worktree",
+        lambda wt_id, force=False, kill_sessions=False: (time.sleep(BLOCK), {"ok": True})[1],
+    )
+
+    worst = asyncio.run(_measure_max_gap(lambda: worktree_routes.delete_worktree("x", _FakeBody({}))))
+    assert worst < BLOCK / 2, f"DELETE /api/worktrees/{{id}}가 이벤트 루프를 {worst:.2f}초 막았다"
+
+
+def test_create_route_still_returns_worktree_error_payload(monkeypatch):
+    """to_thread로 감싼 뒤에도 WorktreeError가 여전히 잡혀서 상태코드로 나가야 한다."""
+    def boom(body):
+        raise worktree.WorktreeError(409, {"error": "이미 존재하는 경로입니다"})
+
+    monkeypatch.setattr(worktree, "create_worktree", boom)
+    resp = asyncio.run(worktree_routes.create_worktree(_FakeBody({})))
+    assert resp.status_code == 409
+    assert json.loads(resp.body)["error"] == "이미 존재하는 경로입니다"
 
 
 # --- 2) TTL이 폴링 주기보다 길다 ----------------------------------------------

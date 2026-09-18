@@ -10,6 +10,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **워크트리 만들기·삭제·열기가 서버 전체를 멈췄다(ADR-29 A0).** 세 라우트
+  (`POST /api/worktrees`, `DELETE /api/worktrees/{id}`, `POST
+  /api/worktrees/{id}/open`)가 `asyncio.to_thread` 없이 동기 함수를 직접
+  불렀다 — `GET /api/worktrees`만 2026-09-16 사고 이후 `to_thread`를 쓰고
+  있었고 나머지 셋은 빠져 있었다. `open`/`delete`는 `find_by_id(force=True)`로
+  캐시를 무시한 전체 재탐색을 도는데 저장소 자체 실측이 1.0~1.7초라, 세션
+  없는 워크트리 행을 한 번 클릭할 때마다 서버 전체(HTTP·WebSocket·모든
+  세션의 PTY 출력)가 그만큼 멎었다. `create`는 `git worktree add` +
+  (복사 모드면) `shutil.copytree`까지 포함해 수십 초도 가능했다. 회귀 가드
+  (`test_no_blocking_in_async.py`)의 `BLOCKING` 목록에 `worktree.
+  list_worktrees`만 있고 이 셋이 빠져 있어서 못 잡았다 — 셋 다 추가했고,
+  실제로 이벤트 루프가 멎는지 심장박동으로 재는 테스트도 추가해 옛 코드에
+  대고 재현·확인했다. 화면 변화 없음. 다음 재설계(ADR-29)의 저장소 시트가
+  이 세 라우트를 그대로 타므로, 화면을 옮기기 전에 먼저 고쳤다.
+
 - **오늘(이 릴리스) 안에서만 있었던 사고: 레일 교체가 설정 메뉴 넷을 통째로
   도달 불가능하게 만들었다.** `#vt-rail`(48px 아이콘 레일)이 새 Solid 레일
   (`shell/Rail.tsx`)로 대체되며 `display:none !important`이 됐는데, 그 ⚙

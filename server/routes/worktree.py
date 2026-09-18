@@ -104,8 +104,12 @@ async def create_worktree(request: Request):
         body = {}
     if not isinstance(body, dict):
         return JSONResponse({"error": "잘못된 요청 본문"}, status_code=400)
+    # ADR-29 A0 — `git worktree add` + node_modules 복사(`shutil.copytree`,
+    # 수십 초까지 가능)까지 포함한 동기 작업이다. to_thread 없이 직접 부르면
+    # 그동안 서버 전체(HTTP·WS·PTY 출력)가 멎는다 — /api/worktrees(GET)이
+    # 이미 같은 이유로 쓰고 있는 것과 같은 처방이다.
     try:
-        result = worktree.create_worktree(body)
+        result = await asyncio.to_thread(worktree.create_worktree, body)
     except worktree.WorktreeError as e:
         return JSONResponse(e.payload, status_code=e.status)
     await _broadcast_worktrees_changed()
@@ -123,7 +127,7 @@ async def delete_worktree(wt_id: str, request: Request):
     force = bool(body.get("force"))
     kill_sessions = bool(body.get("killSessions"))
     try:
-        result = worktree.delete_worktree(wt_id, force=force, kill_sessions=kill_sessions)
+        result = await asyncio.to_thread(worktree.delete_worktree, wt_id, force=force, kill_sessions=kill_sessions)
     except worktree.WorktreeError as e:
         return JSONResponse(e.payload, status_code=e.status)
     await _broadcast_worktrees_changed()
@@ -132,8 +136,11 @@ async def delete_worktree(wt_id: str, request: Request):
 
 @router.post("/api/worktrees/{wt_id}/open")
 async def open_worktree(wt_id: str):
+    # ADR-29 A0 — `find_by_id(force=True)`가 캐시를 무시한 전체 재탐색을 돈다
+    # (저장소 실측 1.0~1.7초). to_thread 없이 부르면 세션 없는 워크트리 행을
+    # 한 번 클릭할 때마다 서버가 그만큼 멎는다.
     try:
-        result = worktree.open_worktree(wt_id)
+        result = await asyncio.to_thread(worktree.open_worktree, wt_id)
     except worktree.WorktreeError as e:
         return JSONResponse(e.payload, status_code=e.status)
     await _broadcast_worktrees_changed()
