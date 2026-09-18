@@ -347,7 +347,7 @@ PERSONAL_PATTERNS = (
     (r"\b(?!127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|100\.64\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
      "공인 IP로 보인다"),
 )
-PERSONAL_SCAN_GLOBS = ("*.md", "config/*.env", ".claude/skills/**/*.md", "docs/ref/*.md", "docs/help/*.md")
+PERSONAL_SCAN_GLOBS = ("*.md", "config/*.env", ".claude/skills/**/*.md", "docs/ref/*.md", "docs/help/*.md", "docs/guide/*.md")
 
 # 명백한 자리표시자는 통과시킨다. 이게 없으면 "예시를 쓰라"고 해놓고 예시를
 # 잡아내는 검사가 되어, 사람들이 검사를 끄는 쪽으로 간다.

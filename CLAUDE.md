@@ -49,6 +49,7 @@ contract 9 exists because of it.
 | UI rules, tokens, skins | [`DESIGN.md`](./DESIGN.md) |
 | Cross-tool rules + **hard contracts** | [`AGENTS.md`](./AGENTS.md) |
 | Release history | [`CHANGELOG.md`](./CHANGELOG.md) |
+| Local working docs — index, latest handoff, backlog | `docs/README.md` · `docs/HANDOFF.md` · `docs/TODOS.md` (gitignored) |
 
 ---
 

@@ -3,348 +3,129 @@
 [![CI](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml/badge.svg)](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml)
 
 [![한국어](https://img.shields.io/badge/lang-한국어-lightgrey.svg)](./README.ko.md)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](./CHANGELOG.md)
-[![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-orange.svg)](./CHANGELOG.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](#installation)
-[![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#installation)
+[![Version](https://img.shields.io/badge/version-2.1.6-blue.svg)](./CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](./docs/guide/platforms.md)
+[![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#install)
 
 > Your terminal, from anywhere. One-line install.
 
-FarShell turns a macOS/Linux machine into a personal dev server: the same
-tmux session, reachable by voice or by phone. Run Claude Code, Codex, Aider,
-Gemini CLI, or just a shell — pick your agent with `fsh agent <name>`, and
-voice input, mobile access, and tmux sharing all work the same either way.
-(Windows works only through WSL2.)
+FarShell turns a macOS/Linux machine into a personal dev server: the same tmux
+session, reachable by voice or from your phone. Run Claude Code, Codex, Aider,
+Gemini CLI or just a shell — voice input, mobile access and tmux sharing work the
+same either way. (Windows only through WSL2.)
 
-- Access your terminal from mobile — scan a QR code and you're connected to tmux
-- Code by voice — a hotkey (Ctrl+Shift+M) triggers voice input even while doing other work
-- Check status remotely with a read-only code viewer/diff and a port dashboard
-- If you use Claude Code, its Stop hook adds a TTS summary on task completion and an auto-fed prompt queue
-- No API keys, no subscriptions — open-source STT/TTS, entirely free
+- **Terminal on your phone** — scan a QR code, you're in tmux
+- **Code by voice** — `Ctrl+Shift+M` from anywhere, even while doing other work
+- **See what's running** — read-only code viewer + diff, port dashboard, agent state
+- **Claude Code integration** — hooks give you live tool-use state, a TTS summary on
+  completion, and a prompt queue that feeds itself
+- **No API keys, no subscriptions** — open-source STT/TTS, entirely free
 
 ---
 
-## Installation
+## Install
 
 ```bash
-# Terminal only (lightweight, ~50MB)
+# Terminal only (~50MB)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash
 
 # Terminal + voice mode (~1.5GB, Whisper STT + edge-tts TTS)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash -s voice
 ```
 
-Or clone and run locally:
+`install.sh` creates a Python venv, installs the profile you picked, symlinks
+`~/.local/bin/fsh`, writes `~/.vt.env` and registers the Claude Code hooks.
+
+<details>
+<summary>From a clone, or from a release tarball (no Node.js needed)</summary>
 
 ```bash
 git clone https://github.com/Brit-juho/farshell.git ~/farshell
-cd ~/farshell
-./install.sh            # terminal only
-./install.sh voice      # with voice mode
+cd ~/farshell && ./install.sh          # or: ./install.sh voice
 ```
 
-**Release tarball — no Node.js needed.** Installing from source builds the
-frontend with Vite, which requires Node. The release tarball ships that build
-already done, so Node is only a developer requirement:
+Installing from source builds the frontend with Vite, which needs Node. The
+release tarball at [Releases](https://github.com/Brit-juho/farshell/releases)
+ships that build already done, so Node stays a developer-only requirement:
 
 ```bash
-# from https://github.com/Brit-juho/farshell/releases
 tar xzf farshell-<version>.tar.gz && cd farshell-<version>
 ./install.sh
 ```
-
-What `install.sh` does:
-1. Creates a Python `venv` (`.venv/`, no conda required)
-2. Installs the packages for the profile you chose
-3. Registers a `~/.local/bin/fsh` symlink (`vt` is also registered for backward compatibility)
-4. Auto-generates the `~/.vt.env` config file
-5. Updates PATH (zsh/bash)
-
-> The Whisper model is downloaded automatically from Hugging Face on first run (~141MB).
-
-For the integrated way to have a new terminal window drop straight into a
-tmux session after install, and the full `fsh` command/option reference, see
-[CLI.md](./CLI.md).
+</details>
 
 ---
 
-## Quick Start
+## Quick start
 
-### Voice coding while doing other work, like Notion (macOS)
-
-```
-1. fsh voice              run from any terminal
-2. In the new window, pick your conversation with claude --resume
-3. Switch back to your other work
-4. Ctrl+Shift+M -> "git status" -> auto-typed into tmux
-5. Hear the result via TTS in your earbuds
-6. fsh stop                shut down when you're done
-```
-
-### Controlling your terminal from mobile
+**Voice coding while you work on something else** (macOS)
 
 ```
-0. fsh password           (first time only) set up remote auth — fsh mobile refuses without it
-1. fsh mobile             prints a URL + QR code
-2. Scan the QR with your phone's camera
-3. Auto-connects to a tmux session
-4. Use voice input / hands-free / voice-only mode / file upload
+fsh voice                 # opens a terminal running the voice daemon
+                          # pick your session there, e.g. claude --resume
+Ctrl+Shift+M              # speak -> typed straight into tmux
+                          # the result comes back as TTS in your earbuds
+fsh stop                  # shut everything down
 ```
 
-For requirements per remote-access method, and how to connect via
-Tailscale + SSH in environments where screen sharing is blocked (e.g.
-corporate networks), see [the Tailscale section of CLI.md](./CLI.md#tailscale--ssh-remote-access).
+**Your terminal from your phone**
+
+```
+fsh password              # first time only — fsh mobile refuses without auth
+fsh mobile                # prints a URL + QR code; scan it
+```
+
+`fsh doctor` diagnoses an install or environment that isn't behaving.
 
 ---
 
 ## Security
 
-The default is **no authentication** — set a password with `fsh password`
-before exposing this remotely. `fsh mobile` refuses to run if you try to
-open a public tunnel (`--network all`, the default) without auth configured.
+The default is **no authentication**. Set a password with `fsh password` before
+exposing anything; `fsh mobile` refuses to open a public tunnel without it.
 
 | Layer | Method |
-|------|------|
-| Login | Password (scrypt hash) or a machine token (`VT_AUTH_TOKEN`). Sessions use an HMAC-signed cookie (24h) |
-| New device registration | Per-device trust via a 90-day long-lived cookie. Turning on OTP (`fsh otp setup`) requires a 6-digit code only for new devices |
-| Device revocation | `fsh device revoke <id>` — immediately invalidates that device's sessions too |
-| Cross-site blocking | Both HTTP and WS return 403 if the Origin isn't itself. No CORS wildcard |
-| Code viewer | Read-only; a deny list (`.env*`/`*.pem`/`.ssh/`, etc.) applies equally to file viewing and `git diff` |
-| E2E encryption | `--e2e` flag — X25519 session key exchange + NaCl SecretBox, with the session key signed by a long-lived Ed25519 identity key for TOFU (trust-on-first-use) defense against active man-in-the-middle attacks |
+|---|---|
+| Login | Password (scrypt hash) or a machine token (`VT_AUTH_TOKEN`), with an HMAC-signed 24h session cookie |
+| New devices | Per-device trust via a 90-day cookie. `fsh otp setup` adds a 6-digit gate for unseen devices only |
+| Revocation | `fsh device revoke <id>` — kills that device's sessions immediately |
+| Cross-site | HTTP and WS both return 403 when the Origin isn't self. No CORS wildcard |
+| Code viewer | Read-only, confined to configured roots, with a denylist (`.env*`, `*.pem`, `.ssh/`, …) applied to file reads and `git diff` alike |
+| E2E encryption | `--e2e` — X25519 key exchange + NaCl SecretBox, session key signed by a long-lived Ed25519 identity for TOFU protection against active MITM |
+
+Details: [`docs/ref/auth.md`](./docs/ref/auth.md).
 
 ---
 
-## Key Features
+## Documentation
 
-| Feature | Description |
-|------|------|
-| Voice Daemon | STT via macOS hotkey (Ctrl+Shift+M) or earbud Play/Pause -> typed directly into tmux |
-| Clipboard sync | OSC52 (copies inside the terminal) + a polling daemon (`fsh clip`, copies outside the terminal) -> pushed to the web clipboard |
-| Hands-free / voice-only mode | Continuous recording that auto-repeats, or hide the terminal and show just a large mic (for earbud-only control) |
-| Barge-in | Tap the mic or hit the hotkey to instantly stop TTS playback |
-| Claude Code TTS | A Stop hook auto-plays a TTS summary when a response finishes |
-| Prompt queue | Queue up instructions while a task is running and feed them in sequentially — pairs with voice mode (`fsh queue`, [CLI.md](./CLI.md#prompt-queue-fsh-queue)) |
-| Prompt snippets | Save frequently used commands or instructions and fire them into the current pane in one tap — the iTerm2 Snippets idea (e.g. `cd ~/GitHub/myproject` + `claude --resume`). Unlike the queue there's no waiting in line: it runs right now. Left rail or `Mod+K` → "Prompt snippets". Web UI only, no CLI subcommand |
-| Live preview grid view | A screen that shows tmux sessions as cards at a glance, with agent badges and working/done indicators |
-| Code viewer / diff | File tree, syntax highlighting, `git diff` rendering (read-only) |
-| Port dashboard | View listening ports, kill with one click, integrates with `fsh tunnel expose` |
-| Web Push | Task-complete notifications even when the app is closed (a named tunnel is recommended — quick tunnels can change URL and break subscriptions) |
-| tmux session management | Create/attach/detach/kill from the web. Simultaneous access from desktop is fine |
-| Scrollback buffer | Restores prior output on WebSocket reconnect (up to 5000 chunks) |
-| Terminal search | Ctrl+F / Cmd+F -> xterm.js search addon |
-| Session renaming | Double-click a tab to rename it (also renames the tmux session) |
-| File upload | Keybar 📎 on mobile, or `Mod+K` → "파일 업로드" — pasting an image into the terminal uploads it too. The saved path is auto-typed into the pane (cap: `VT_MAX_UPLOAD_MB`, default 200) |
-| Media Session | Toggle recording with wireless earbud Play/Pause (iOS/Android) |
-| PWA | manifest + Service Worker -> add to home screen and use it like an app |
-| Tailscale remote access | `fsh ssh` / `fsh mobile --network tailscale` — connect straight to tmux over SSH in environments where screen sharing is blocked (e.g. corporate networks) |
-| Client connection notifications | `VT_NOTIFY_CLIENT_EVENTS=1` — push notifications for attach/detach from clients the server can't otherwise see, like SSH |
-| Tunnel provider switch | `VT_TUNNEL_PROVIDER=cloudflare\|ngrok\|none` — one setting decides who owns the public way in. `fsh start`/`stop`/`status`/`mobile`/`handoff`/`tunnel expose` all follow it. ngrok takes `VT_NGROK_DOMAIN` for an address that never changes |
-| Automatic tunnel zombie-reconnect recovery | Detects and auto-restarts when cloudflared's process is alive but unresponsive |
+| What | Where |
+|---|---|
+| Every `fsh` command and option | [`CLI.md`](./CLI.md) |
+| REST / WebSocket endpoints | [`API.md`](./API.md) |
+| Module map, 3-plane model, data flow | [`ARCHITECTURE.md`](./ARCHITECTURE.md) |
+| Design system — principles, skins, tokens, layout | [`DESIGN.md`](./DESIGN.md) |
+| Release history | [`CHANGELOG.md`](./CHANGELOG.md) |
+| Supported platforms, WSL2, voice engines | [`docs/guide/platforms.md`](./docs/guide/platforms.md) |
+| Configuration keys | [`config/vt.defaults.env`](./config/vt.defaults.env) — the committed defaults, with a comment per key |
+| Troubleshooting | [`docs/help/troubleshoot.md`](./docs/help/troubleshoot.md) (same as `fsh help troubleshoot`) |
 
-For the full fsh CLI command list see [CLI.md](./CLI.md), and for the REST/WebSocket API see [API.md](./API.md).
+**Feature reference by area** — each file carries the reasoning and the incidents
+behind the design, not just the what:
 
----
+| Area | Document |
+|---|---|
+| Auth, devices, boundary values | [`docs/ref/auth.md`](./docs/ref/auth.md) |
+| Terminal, panes, paste, scrollback, themes | [`docs/ref/terminal.md`](./docs/ref/terminal.md) |
+| Agent state, prompt queue, snippets, usage, MCP | [`docs/ref/agents.md`](./docs/ref/agents.md) |
+| Files, share links, code viewer | [`docs/ref/files.md`](./docs/ref/files.md) |
+| Tunnels, ports, Tailscale, remote access | [`docs/ref/tunnel.md`](./docs/ref/tunnel.md) |
+| Worktrees and git | [`docs/ref/worktree.md`](./docs/ref/worktree.md) |
+| Multi-host peering | [`docs/ref/multihost.md`](./docs/ref/multihost.md) |
+| Voice, clipboard, Web Push | [`docs/ref/voice.md`](./docs/ref/voice.md) |
+| Running, testing, manual install | [`docs/ref/dev.md`](./docs/ref/dev.md) |
 
-## Configuration (`~/.vt.env`)
-
-Auto-generated by `install.sh`. Add only the settings you need. See
-`config/vt.defaults.env` (the committed defaults) for the full key list.
-
-```bash
-# Basics
-VT_PORT=7777                                 # server port (default)
-VT_PYTHON=~/farshell/.venv/bin/python  # Python path (auto-detected)
-
-# Remote auth (strongly recommended when using a public tunnel)
-# VT_AUTH_TOKEN=my-secret-token              # machine token. Use `fsh password` for human login
-
-# Security
-VT_E2E=1                                     # force E2E on all WebSockets (default: opt-in)
-VT_SAFE_MODE=1                               # block dangerous commands up front (rm -rf /, sudo, etc.)
-VT_TMUX_SOCKET=vt                            # tmux isolated socket name (default: vt, unrelated to the CLI name)
-VT_NETWORK_MODE=all                          # localhost | lan | tailscale | all
-
-# Voice
-VT_STT_LANG=ko                               # pin the STT language (auto-detected if unset)
-```
-
----
-
-## Claude Code Integration
-
-### Skills
-
-Project-specific skills registered under `.claude/skills/`, plus the global
-skill (`/vt`) in `~/.claude/skills/vt/`, let you control fsh with natural
-language like "voice mode" or "mobile access." See `CLAUDE.md` for the full list.
-
-### Hooks
-
-| Hook | File | Behavior |
-|---|---|---|
-| PreToolUse / PostToolUse | `server/agent_hook.sh pre` / `post` | Reflects tool-use start/end live in the mobile UI |
-| Stop | `server/agent_hook.sh stop` | Reports completion to the server, feeds the next prompt-queue item, and delegates stdin to `tts_hook.sh` for the TTS summary (falls back to macOS `say` if the server isn't running) |
-
-Register them with one command — it is idempotent, preserves hooks you added
-yourself, and backs the file up before writing:
-
-```bash
-fsh hooks install      # register / update
-fsh hooks status       # check what is registered (also shown by `fsh doctor`)
-fsh hooks uninstall    # remove only FarShell's entries
-```
-
-`./install.sh` runs this for you. **Register `agent_hook.sh stop`, not
-`tts_hook.sh`** — `agent_hook.sh stop` already delegates to `tts_hook.sh`, so
-registering both plays the TTS summary twice.
-
----
-
-## Architecture
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for details (the control / work / voice /
-network 4-plane model). For the design system (principles, skins, tokens,
-layout), see [DESIGN.md](./DESIGN.md).
-
-```
-                  +----------------------------------------+
-                  |  MacBook / WSL2 (server)                |
-                  |                                          |
-  [fsh voice]      |  +----------------+  +----------------+  |
-  Ctrl+Shift+M -->|  | Voice Daemon   |  | FastAPI :7777  |  |
-  -> STT -> tmux  |  | (standalone,   |  | auth/queue/push |  |
-                  |  |  server-independent) |  etc.        |  |
-                  |  +----------------+  +-------+--------+  |
-                  |                              |           |
-                  |  +----------------+  +-------+--------+  |
-                  |  | tmux sessions  |<-+ PTY Manager    |  |
-                  |  | (shared by     |  | + Scrollback   |  |
-                  |  |  desktop/phone)|  |                |  |
-                  |  +----------------+  +-------+--------+  |
-                  |                              |           |
-                  |        +---------------------+--------+  |
-                  |        | Push -> Web Push / ntfy /     |  |
-                  |        | Telegram (idle / done detect)  |  |
-                  |        +--------------------------------+  |
-                  +----------------+-------------------------+
-                                   | Cloudflare Tunnel (HTTPS + opt-in E2E)
-                  +----------------+-------------------------+
-                  |  Mobile / remote browser                  |
-                  |  xterm.js + code viewer + Grid view        |
-                  |  STT -> server -> tmux                    |
-                  |  E2E: X25519 + Ed25519 signature (TOFU)   |
-                  +------------------------------------------+
-```
-
-### STT / TTS Engine Priority
-
-| STT | TTS |
-|-----|-----|
-| 1. mlx-whisper (optimized for Apple Silicon) | 1. Kokoro (highest quality) |
-| 2. faster-whisper (general purpose) | 2. edge-tts (online, many voices) |
-| | 3. macOS `say` / Windows Speech API (fallback) |
-
-### Project Structure
-
-```
-farshell/
-├── bin/
-│   ├── fsh                   CLI entry point (bash, macOS/Linux; vt is a backward-compat symlink)
-│   └── fsh.ps1               CLI entry point (PowerShell, Windows/WSL2 wrapper)
-├── server/
-│   ├── main.py                FastAPI app, middleware (auth/Origin guard)
-│   ├── auth.py                password/session/device/OTP/ticket auth
-│   ├── fsguard.py             code viewer path validation (root confinement + deny list)
-│   ├── crypto_channel.py      E2E: X25519 session key + Ed25519 long-lived identity key signing
-│   ├── pty_manager.py         PTY sessions (broadcast, scrollback, EOF detection)
-│   ├── queue_store.py / queue_runner.py   prompt queue storage/auto-dispatch
-│   ├── push.py                Web Push subscription management + sending
-│   ├── portscan.py            port dashboard (lsof/ps scan, kill/expose guards)
-│   ├── voice_handler.py       STT (faster-whisper) + TTS (edge-tts/Kokoro)
-│   ├── voice_daemon.py        hotkey voice daemon (runs standalone)
-│   ├── clipboard_daemon.py    macOS clipboard polling daemon
-│   ├── tunnel_watchdog.py     cloudflared zombie-reconnect watchdog
-│   ├── routes/                endpoint modules (pty/tmux/files/push/queue/ports/...)
-│   └── tests/                 pytest suite
-├── frontend/
-│   ├── index.html             xterm.js UI (tabs, search, code viewer, Grid view)
-│   ├── js/                    theme.js, terminal.js, grid.js, viewer.js, etc.
-│   ├── voice.js                mic + TTS + hands-free + Media Session
-│   └── tests/                 node --test unit tests
-├── install.sh                 one-line install script
-├── requirements-core.txt      FastAPI, uvicorn, etc.
-├── requirements-voice.txt     faster-whisper, edge-tts, sounddevice, etc.
-├── AGENTS.md                  agent instructions (agents.md convention — Codex/opencode/…)
-├── CLAUDE.md                  Claude Code guide (the full ledger of features/commands/API)
-├── CLI.md                     full fsh CLI reference
-├── API.md                     full REST/WebSocket API reference
-├── DESIGN.md                  design system (principles/skins/tokens/layout)
-├── ARCHITECTURE.md            4-plane architecture in detail
-├── CHANGELOG.md                full change history
-└── docs/TODOS.md               follow-up backlog (local only, gitignored)
-```
-
----
-
-## Supported Platforms
-
-| Platform | Server | Voice Daemon | TUI (`fsh manage`) | Browser access |
-|--------|------|-------------|-------|-------------|
-| macOS (iTerm2/Ghostty/Warp, etc.) | Supported | Hotkey + earbud | Supported | Supported |
-| Linux (X11) | Supported | Global hotkey | Supported | Supported |
-| Linux (Wayland) | Supported | Hotkey blocked by security policy — mobile mic recommended | Supported | Supported |
-| Windows (WSL2, behaves as Linux) | Supported | Requires WSLg | Supported | Supported |
-| Windows native | Not supported | Not supported | Not supported | — |
-| iOS (Safari/Chrome) | — | — | — | Media Session supported |
-| Android (Chrome) | — | — | — | Supported |
-
-### Windows (WSL2)
-
-Windows native isn't supported — use WSL2 for a Linux environment instead.
-
-```powershell
-wsl
-./install.sh voice
-fsh voice
-```
-
-The server and tmux run inside WSL2, and the browser on Windows connects via
-`localhost:7777`. The voice hotkey requires WSLg (Windows 11) — without it,
-use the browser mic instead. `bin/fsh.ps1` is a PowerShell wrapper that calls
-fsh inside WSL2.
-
----
-
-## Troubleshooting
-
-Start with `fsh doctor` to auto-diagnose your install/environment. Common
-issues and fixes are collected in
-[docs/help/troubleshoot.md](./docs/help/troubleshoot.md) (same content as `fsh help troubleshoot`).
-
----
-
-## Version / Changelog
-
-Current version: **v2.0.0** (2026-09-08)
-
-> Development continues past v2.0.0 — auth hardening, the prompt queue, Web
-> Push, the port dashboard, and the code viewer/diff panel are still
-> pre-tag (`[Unreleased]`) and tracked at the top of
-> [CHANGELOG.md](./CHANGELOG.md).
-
-See [CHANGELOG.md](./CHANGELOG.md) for the full change history.
-
-| Version | Date | Highlights |
-|------|------|-----------|
-| [v2.0.0](https://github.com/Brit-juho/farshell/releases/tag/v2.0.0) | 2026-09-08 | UI overhaul: three-column shell (left rail · split panes · usage rail), server-side agent state machine (idle/working/waiting/done), settings + keymap synced across devices, connected-screen management. See CHANGELOG for breaking changes |
-| [v1.7.0](https://github.com/Brit-juho/farshell/releases/tag/v1.7.0) | 2026-08-04 | Security hardening: device whitelist + OTP gate · one-time registration ticket · access-log credential masking · OriginGuardMiddleware · removed CORS wildcard · fixed session cookie Secure flag |
-| [v1.6.0](https://github.com/Brit-juho/farshell/releases/tag/v1.6.0) | 2026-07-12 | Web login password (`fsh password`): scrypt hash + HMAC-signed session cookie, coexists with machine tokens |
-| [v1.5.0](https://github.com/Brit-juho/farshell/releases/tag/v1.5.0) | 2026-07-07 | Tailscale + SSH remote access: `fsh ssh` · `fsh mobile --network tailscale` · client connection notifications |
-| [v1.4.0](https://github.com/Brit-juho/farshell/releases/tag/v1.4.0) | 2026-05-09 | UX overhaul + first-class Linux parity: `fsh manage` TUI · `fsh attach` · `fsh voice-target` · `fsh hotkey` |
-| [v1.3.0](https://github.com/Brit-juho/farshell/releases/tag/v1.3.0) | 2026-05-08 | Stability/network efficiency: `/ws-preview` push · cookie auth · self-hosted vendor assets · WS heartbeat |
-| [v1.2.0](https://github.com/Brit-juho/farshell/releases/tag/v1.2.0) | 2026-05-07 | Live preview · `--network` modes · Cloudflare named tunnels · WS backpressure |
-| [v1.1.0](https://github.com/Brit-juho/farshell/releases/tag/v1.1.0) | 2026-05-06 | ralph->fsh rename, isolated socket · AI awareness · command expansion · hooks · safe mode · cross-platform unification |
-| [v1.0.0](https://github.com/Brit-juho/farshell/releases/tag/v1.0.0) | 2026-04-14 | Initial stable release (PWA · Voice Daemon · STT/TTS · tunnel · `fsh` CLI · `install.sh`) |
+Contributing agents (Claude Code, Codex, …) start at [`AGENTS.md`](./AGENTS.md).
 
 ---
 
