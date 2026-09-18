@@ -72,7 +72,7 @@ def _modifier_alternatives(token: str) -> frozenset | None:
 
 
 def parse_hotkey(spec: str) -> list[frozenset] | None:
-    """문자열 'ctrl+shift+v' → 토큰별 후보 set 리스트."""
+    """문자열 'ctrl+shift+m' → 토큰별 후보 set 리스트."""
     if not spec or not spec.strip():
         return None
     tokens: list[frozenset] = []
@@ -96,9 +96,15 @@ def parse_hotkey(spec: str) -> list[frozenset] | None:
     return tokens if tokens else None
 
 
+# 2026-09-18 — 기본값을 ctrl+shift+v에서 옮겼다. 이건 **OS 전역 핫키**라
+# 브라우저에 포커스가 있어도 함께 발화하는데, 웹 UI의 붙여넣기 단축키가
+# 같은 ctrl+shift+v였다(frontend/js/core/keymap.js의 `paste`). 한 번 누르면
+# 붙여넣기와 녹음 토글이 동시에 일어나던 충돌이다 — 전역 쪽을 옮긴다.
+DEFAULT_HOTKEY_SPEC = "ctrl+shift+m"
+
 VOICE_HOTKEY_DISABLED = vt_getenv("VT_HOTKEY_VOICE_DISABLED", "").lower() == "true"
-VOICE_HOTKEY_SPEC = vt_getenv("VT_HOTKEY_VOICE", "ctrl+shift+v")
-HOTKEY_TOKENS: list[frozenset] = parse_hotkey(VOICE_HOTKEY_SPEC) or parse_hotkey("ctrl+shift+v")
+VOICE_HOTKEY_SPEC = vt_getenv("VT_HOTKEY_VOICE", DEFAULT_HOTKEY_SPEC)
+HOTKEY_TOKENS: list[frozenset] = parse_hotkey(VOICE_HOTKEY_SPEC) or parse_hotkey(DEFAULT_HOTKEY_SPEC)
 
 
 def hotkey_match(pressed: set) -> bool:

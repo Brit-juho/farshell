@@ -112,7 +112,7 @@ def _parse_env_value(line: str, key: str) -> str | None:
 
 def get_hotkey() -> tuple[str, bool]:
     """(spec, disabled) 반환."""
-    spec = "ctrl+shift+v"
+    spec = "ctrl+shift+m"   # server/voice/config.py의 DEFAULT_HOTKEY_SPEC와 같은 값
     disabled = False
     if VT_ENV_FILE.is_file():
         for line in VT_ENV_FILE.read_text().splitlines():

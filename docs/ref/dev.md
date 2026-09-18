@@ -123,7 +123,7 @@ Ask the user:
 >
 > 2. **Terminal + voice mode** — code by voice (~3GB)
 >    - Everything above + Whisper STT + edge-tts TTS + Voice Daemon
->    - macOS hotkey (Ctrl+Shift+V), mobile voice input
+>    - macOS hotkey (Ctrl+Shift+M), mobile voice input
 
 #### Step 3: Prepare Python environment
 

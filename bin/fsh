@@ -1544,7 +1544,7 @@ cmd_hotkey() {
       echo ""
       local voice_hotkey
       voice_hotkey="$(vt_env_get VT_HOTKEY_VOICE)"
-      [ -z "$voice_hotkey" ] && voice_hotkey="ctrl+shift+v (디폴트)"
+      [ -z "$voice_hotkey" ] && voice_hotkey="ctrl+shift+m (디폴트)"
       local voice_disabled
       voice_disabled="$(vt_env_get VT_HOTKEY_VOICE_DISABLED)"
       local voice_state="활성"
@@ -1611,7 +1611,7 @@ _hotkey_validate_spec() {
   if [[ "$s" =~ ^[a-zA-Z0-9_+]+$ ]]; then
     return 0
   fi
-  echo "  ✗ 잘못된 핫키 형식: '$s' (예: ctrl+shift+v)"
+  echo "  ✗ 잘못된 핫키 형식: '$s' (예: ctrl+shift+m)"
   return 1
 }
 

@@ -137,8 +137,9 @@ test('키맵 — passthrough 체크가 레지스트리에 반영된다', async (
   const { document, P, K } = await build();
   P.showSettings();
   sectionButton(document, '키맵').click();
-  // N40/N46 — `search`(Mod+F)는 이제 「스크롤백 검색」. 인페인 검색바는
-  // `searchInPane`(Mod+Shift+F, 라벨 「터미널 내 검색」)로 내려갔다.
+  // N40/N46 — `search`는 이제 「스크롤백 검색」. 인페인 검색바는 `searchInPane`
+  // (라벨 「터미널 내 검색」)로 내려갔다. 이 테스트 환경은 navigator.platform이
+  // 비어 있어 비-mac 기본값(search=Ctrl+Shift+F)이 적용된다.
   const box = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-pt input');
   box.checked = true;
   box.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
@@ -167,7 +168,7 @@ test('키맵 — 수식키만 누르면 확정되지 않는다', async () => {
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Shift', shiftKey: true, bubbles: true, cancelable: true }));
   await flush();
   assert.ok(btn.classList.contains('recording'), '아직 기다려야 한다');
-  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+f');
+  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+shift+f');
 });
 
 test('키맵 — Escape로 재바인딩을 취소한다', async () => {
@@ -177,12 +178,13 @@ test('키맵 — Escape로 재바인딩을 취소한다', async () => {
   rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-combo').click();
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   await flush();
-  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+f');
+  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+shift+f');
 });
 
 test('키맵 — 충돌하면 행에 표시하고 이유를 적는다', async () => {
   const { document, P, K } = await build();
-  await K.setBinding('palette', 'Mod+F');
+  // 비-mac 기본값 기준 — search의 현재 조합을 그대로 palette에 걸어 충돌을 만든다.
+  await K.setBinding('palette', 'Mod+Shift+F');
   P.showSettings();
   sectionButton(document, '키맵').click();
   const row = rowByLabel(document, '스크롤백 검색');
