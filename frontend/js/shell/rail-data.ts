@@ -267,3 +267,20 @@ export function repoColorKey(repoName: string, remote?: RailRemote | null): stri
   if (remote?.owner) return `${remote.host || ''}/${remote.owner}`;
   return repoName;
 }
+
+/**
+ * 레일을 접은 채로 시작할지 — **저장된 값이 없을 때만** 쓰는 기본값.
+ *
+ * 저장값(ui.rail.collapsed)이 있으면 언제나 그게 이긴다: 사용자가 직접 정한
+ * 것이고, 레일 상태는 기기별 설정이라 폰에서 접은 게 맥에 옮아가지 않는다
+ * (DESIGN.md §6). 여기서 정하는 건 "아직 아무 말도 안 한 기기"의 첫 모습뿐이다.
+ *
+ * wide(≥1280) 미만에서 접는 이유는 자리 다툼이다. 레일 252 + dock 접힘 36을
+ * 빼고 나면 터미널과 HUD가 나눠 쓸 폭이 얼마 안 남는다 — 760px 창에서 HUD가
+ * 472px밖에 못 받아 칩을 다 못 실었다. Dock.tsx가 이미 같은 판단을
+ * (`innerWidth < WIDE_MAX`) 하고 있었는데 레일에만 없어서, 좁은 화면을 처음
+ * 여는 기기가 양쪽 다 펼친 상태로 시작했다.
+ */
+export function defaultRailCollapsed(viewportWidth: number, regularMax: number): boolean {
+  return viewportWidth < regularMax;
+}

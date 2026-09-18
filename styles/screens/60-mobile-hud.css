@@ -36,6 +36,9 @@
   overflow-x:auto; overflow-y:hidden; scrollbar-width:none; user-select:none;
 }
 #vt-hud::-webkit-scrollbar { display:none; }
+/* Hud.tsx의 fitChips가 폭이 모자랄 때 순위가 낮은 칩부터 붙인다. Solid <For>가
+   관리하는 노드라 DOM에서 빼지 않고 클래스로만 감춘다. */
+.vt-hud-chip.overflow-hidden { display:none; }
 @media (min-width:720px) { #vt-hud { display:flex; } }
 
 .vt-hud-spacer { flex:1; min-width:0; }

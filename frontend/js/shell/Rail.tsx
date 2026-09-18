@@ -12,7 +12,7 @@ import { createSignal, createMemo, createEffect, onCleanup, onMount, For, Show }
 import { render } from 'solid-js/web';
 import {
   buildRailSections, mostUrgentStatus, GROUP_LABEL, hashRepoColorIndex,
-  COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT,
+  COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
   type RailGroup,
   type WorktreeRailRowInput, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
@@ -27,6 +27,7 @@ import {
   cachedDiffCount,
   diffCountStale,
 } from './rail-fetch.js';
+import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
 import { icon } from '../ui/icons.js';
 // 마이크 노드를 이 레일 바닥으로 옮긴다. 자리를 정하는 곳이 keybar.js 하나뿐이어야
@@ -131,7 +132,15 @@ function Rail(props: { deps: RailDeps }) {
     return extra ? `저장소 ${repos} · 워크트리 ${extra}` : `저장소 ${repos}`;
   };
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
-  const [collapsed, setCollapsed] = createSignal(Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY)));
+  // 접힘 기본값은 티어를 따른다(§3 표) — wide(≥1280) 미만에서는 접힘으로 시작.
+  // 저장된 값이 있으면 그게 이긴다(사용자가 직접 정한 것이므로). Dock.tsx가
+  // 같은 판단을 이미 하고 있었는데 레일에만 없었다: 그래서 좁은 화면에서
+  // 레일 252 + dock 36이 자리를 먼저 먹고 HUD가 칩을 다 못 싣는 상태로 시작했다.
+  const [collapsed, setCollapsed] = createSignal(
+    (window as any).vtSettingsHas?.(SETTINGS_COLLAPSE_KEY)
+      ? Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY))
+      : defaultRailCollapsed(window.innerWidth, REGULAR_MAX),
+  );
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; sessionId: string } | null>(null);
   const [dialogOpen, setDialogOpen] = createSignal(false);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
@@ -398,7 +407,18 @@ function Rail(props: { deps: RailDeps }) {
     Math.min(MAX_W, Math.max(MIN_W, Number((window as any).vtSettingsGet?.(SETTINGS_W_KEY)) || DEFAULT_W)),
   );
   const applyCssVar = () => {
-    document.documentElement.style.setProperty('--vt-wgrail-w', `${collapsed() ? 48 : storedWidth()}px`);
+    // 저장값(ui.rail.width)은 "얼마로 쓰고 싶은가"이고, 화면에 그리는 폭은
+    // 거기에 "창이 그만큼 내줄 수 있는가"를 한 번 더 건 값이다. 창을 좁히면
+    // 40vw에서 걸리고, 다시 넓히면 저장값으로 알아서 돌아온다 — 저장값 자체는
+    // 건드리지 않으므로 사용자가 끌어 맞춘 폭이 창 크기 때문에 지워지지 않는다.
+    //
+    // 40vw인 이유: 레일이 창의 절반 가까이를 먹으면 터미널이 남지 않는다.
+    // 레일이 존재하는 최소 폭이 720px(그 아래는 compact라 레일이 아예 없다)
+    // 이므로 40vw는 항상 288px 이상 — 레일 자체의 최소폭 240px을 밑돌지 않는다.
+    document.documentElement.style.setProperty(
+      '--vt-wgrail-w',
+      collapsed() ? '48px' : `min(${storedWidth()}px, 40vw)`,
+    );
   };
   const setWidth = (w: number) => {
     const clamped = Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
@@ -418,7 +438,11 @@ function Rail(props: { deps: RailDeps }) {
     wireRatioResizer(el, {
       dir: 'row',
       getContainerSize: () => 1, // 컨테이너=1로 두고 비율을 그대로 픽셀 델타로 쓴다(§5: layout/resizer.js 재사용)
-      getStartRatio: () => parseInt(getComputedStyle(document.documentElement).getPropertyValue('--vt-wgrail-w'), 10) || DEFAULT_W,
+      // 실제로 그려진 폭에서 출발한다. --vt-wgrail-w를 parseInt 하던 걸 바꿨다 —
+      // 이제 그 값이 `min(252px, 40vw)` 같은 식이라 숫자로 파싱되지 않고(커스텀
+      // 속성은 계산된 px로 안 내려온다) NaN → 기본값으로 튀어, 창이 좁아 clamp가
+      // 걸린 상태에서 드래그를 시작하면 레일이 순간 점프한다.
+      getStartRatio: () => railRef?.getBoundingClientRect().width || DEFAULT_W,
       onRatio: (r: number) => { if (!collapsed()) setWidth(r); },
       onStart: () => {},
       onEnd: () => {},

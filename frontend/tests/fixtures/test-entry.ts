@@ -5,7 +5,7 @@
 export { mountSmoke } from './smoke.js';
 export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
 export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
-export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, mostUrgentStatus, fnv1a, hashRepoColorIndex, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, remoteLabel, repoColorKey } from '../../js/shell/rail-data.js';
+export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, mostUrgentStatus, fnv1a, hashRepoColorIndex, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, remoteLabel, repoColorKey, defaultRailCollapsed } from '../../js/shell/rail-data.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,
