@@ -32,7 +32,6 @@ import { icon } from '../ui/icons.js';
 
 export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
-import { WorktreeDialog } from './WorktreeDialog.js';
 import { RepoVisibility } from './RepoVisibility.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
@@ -163,7 +162,6 @@ function Rail(props: { deps: RailDeps }) {
   const [ctxMenu, setCtxMenu] = createSignal<{
     x: number; y: number; sessionId: string | null; tmuxName: string | null;
   } | null>(null);
-  const [dialogOpen, setDialogOpen] = createSignal(false);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
   const [activeHostId, setActiveHostId] = createSignal<string>(
@@ -223,7 +221,10 @@ function Rail(props: { deps: RailDeps }) {
 
   // 키맵(worktreeNew, core/keymap.js) · 팔레트 등 이 파일을 정적 import 못 하는
   // 곳(위 파일 상단 주석과 같은 이유)이 다이얼로그를 열 수 있도록 하는 브리지.
-  (window as any).vtOpenWorktreeDialog = () => setDialogOpen(true);
+  // ADR-29 C — 워크트리 만들기 다이얼로그가 레일 자신이 아니라 저장소 시트
+  // (RepoVisibility.tsx) 안으로 옮겨갔다 — 이 브리지는 이제 그 시트를 연다.
+  // 시트 안에서 저장소를 고르고 "+ 워크트리"를 눌러야 실제 다이얼로그가 뜬다.
+  (window as any).vtOpenWorktreeDialog = () => setRepoSheet(true);
   onCleanup(() => { if ((window as any).vtOpenWorktreeDialog) delete (window as any).vtOpenWorktreeDialog; });
 
   // 세션 스토어(sessionsVersion)가 바뀔 때마다(탭 추가/삭제/전환) 실제 목록을
@@ -512,14 +513,6 @@ function Rail(props: { deps: RailDeps }) {
     });
   };
 
-  const defaultRepo = () => repos()[0]?.path || '';
-
-  const onCreated = async (result: any) => {
-    setDialogOpen(false);
-    await refreshRepos();
-    const tmuxName = result?.opened?.tmux_session || null;
-    if (tmuxName) await (window as any).attachTmux?.(tmuxName);
-  };
 
   return (
     <aside id="vt-wgrail" class="vt-sidepanel left" ref={railRef} classList={{ collapsed: collapsed() }} aria-label="워크트리">
@@ -557,9 +550,9 @@ function Rail(props: { deps: RailDeps }) {
             <button
               type="button"
               class="vt-icon-btn sm vt-wgrail-settings"
-              aria-label="저장소 표시 설정"
-              data-tip="저장소 표시 설정"
-              data-tip-sub={hiddenCount() ? `${hiddenCount()}개 숨김` : undefined}
+              aria-label="저장소 관리"
+              data-tip="저장소 관리"
+              data-tip-sub={hiddenCount() ? `${hiddenCount()}개 숨김` : '표시 · 워크트리 · 세션'}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
               innerHTML={icon('settings', 13, 2)}
@@ -584,7 +577,11 @@ function Rail(props: { deps: RailDeps }) {
         <Show when={totalRows() === 0 && !collapsed() && !isRemoteHost()}>
           <div class="vt-wgrail-empty">
             아직 세션이 없습니다.
-            <button type="button" class="vt-btn sm vt-wgrail-empty-new" onClick={() => setDialogOpen(true)}>+ 워크트리 만들기</button>
+            <button
+              type="button"
+              class="vt-btn sm vt-wgrail-empty-new"
+              onClick={() => (props.deps.getAction('session.add-menu') as (() => void) | undefined)?.()}
+            >+ 새 세션</button>
           </div>
         </Show>
         {/* C1 — 원격 호스트가 꺼져 있으면 "빈 목록"과 "연결 안 됨"을 구분해서
@@ -764,20 +761,26 @@ function Rail(props: { deps: RailDeps }) {
       </div>
       {/* 2026-09-18(2차) — 설정 ⚙과 마이크는 여기 살다가 사용자 요청으로 반대편
           dock(Dock.tsx의 .vt-dock-tabs 아래)으로 옮겼다. 이 레일의 발자국을
-          "+ 워크트리 만들기" 하나로 줄인다. */}
+          "+ 새 세션" 하나로 줄인다.
+          ADR-29 C — 이 버튼의 동작이 "워크트리 만들기"에서 "새 세션"으로
+          바뀌었다: 행이 다시 세션인데(B) 발자국은 여전히 워크트리를 만들고
+          있으면 어긋난다. 워크트리 만들기는 저장소 시트(⚙, RepoVisibility.tsx)
+          안으로 옮겨서, 어느 저장소에 만들지 먼저 고르게 한다 — 여기서는
+          더 이상 "기본 저장소"를 추측하지 않는다. */}
       <div class="vt-wgrail-footer">
-        {/* 워크트리 생성은 로컬 전용이다(원격 워크트리는 2.2 범위) — 원격을 보고
-            있을 때 누르면 "맥에" 워크트리가 생겨 화면과 결과가 어긋난다. */}
+        {/* session.add-menu(#add-btn과 같은 액션)는 항상 로컬에 만든다 —
+            원격을 보고 있을 때 누르면 "맥에" 세션이 생겨 화면과 결과가
+            어긋나므로 워크트리 만들기와 같은 이유로 막는다. */}
         <button
           type="button"
           class="vt-wgrail-new"
           disabled={isRemoteHost()}
-          data-tip={isRemoteHost() ? '워크트리 만들기' : (collapsed() ? '워크트리 만들기' : undefined)}
+          data-tip={isRemoteHost() ? '새 세션' : (collapsed() ? '새 세션' : undefined)}
           data-tip-sub={isRemoteHost() ? '원격 호스트에서는 불가 (2.2)' : undefined}
           data-tip-side="right"
-          onClick={() => setDialogOpen(true)}
+          onClick={() => (props.deps.getAction('session.add-menu') as (() => void) | undefined)?.()}
         >
-          <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 워크트리 만들기</Show>
+          <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 새 세션</Show>
         </button>
       </div>
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
@@ -793,9 +796,6 @@ function Rail(props: { deps: RailDeps }) {
           onClose={() => setRepoSheet(false)}
           onChanged={() => refreshRepos()}
         />
-      </Show>
-      <Show when={dialogOpen()}>
-        <WorktreeDialog deps={props.deps} defaultRepo={defaultRepo()} onClose={() => setDialogOpen(false)} onCreated={onCreated} />
       </Show>
     </aside>
   );
