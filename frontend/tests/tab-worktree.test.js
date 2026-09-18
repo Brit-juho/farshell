@@ -63,3 +63,42 @@ test('canRelabel — 사용자가 직접 지은 이름은 자동 라벨이 덮�
   assert.strictEqual(canRelabel({ tmuxName: 'dev', renamed: true }), false);
   assert.strictEqual(canRelabel(null), false);
 });
+
+// ── ADR-29 D — 탭 소속 판정의 출처가 저장소 경로에서 저장소 id로 바뀌었다 ─────
+
+test('repoOwnerMap — /api/repos(저장소별로 묶인 모양)에서 세션 → 저장소 id를 뽑는다', async () => {
+  const { repoOwnerMap } = await load();
+  const map = repoOwnerMap([
+    { id: 'repo-a-id', worktrees: [{ sessions: ['dev'] }, { sessions: ['feat-1'] }] },
+    { id: 'repo-b-id', worktrees: [{ sessions: ['other'] }] },
+  ]);
+  assert.strictEqual(map.get('dev'), 'repo-a-id');
+  assert.strictEqual(map.get('feat-1'), 'repo-a-id', '같은 저장소의 다른 워크트리도 같은 id');
+  assert.strictEqual(map.get('other'), 'repo-b-id');
+});
+
+test('repoOwnerMap — 빈 입력은 빈 지도', async () => {
+  const { repoOwnerMap } = await load();
+  assert.strictEqual(repoOwnerMap(undefined).size, 0);
+  assert.strictEqual(repoOwnerMap([{ id: 'x', worktrees: [] }]).size, 0);
+});
+
+test('effectiveGroupMap — @fsh_grp(grp_id)가 있으면 저장소 자동 제안보다 우선한다', async () => {
+  const { effectiveGroupMap } = await load();
+  const repos = [{ id: 'repo-a-id', worktrees: [{ sessions: ['dev'] }] }];
+  const map = effectiveGroupMap(repos, [{ name: 'dev', grp_id: 'custom-group' }]);
+  assert.strictEqual(map.get('dev'), 'custom-group');
+});
+
+test('effectiveGroupMap — grp_id가 없으면(빈 문자열 포함) 저장소 id로 자동 제안한다', async () => {
+  const { effectiveGroupMap } = await load();
+  const repos = [{ id: 'repo-a-id', worktrees: [{ sessions: ['dev'] }] }];
+  const map = effectiveGroupMap(repos, [{ name: 'dev', grp_id: '' }]);
+  assert.strictEqual(map.get('dev'), 'repo-a-id');
+});
+
+test('effectiveGroupMap — 어느 워크트리에도 안 속하고 grp_id도 없으면 null(묶지 않음)', async () => {
+  const { effectiveGroupMap } = await load();
+  const map = effectiveGroupMap([], [{ name: 'plain-shell', grp_id: '' }]);
+  assert.strictEqual(map.get('plain-shell'), null);
+});

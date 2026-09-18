@@ -112,13 +112,17 @@ export function makeResolver(sessions) {
 // 하나뿐인 스냅샷이라 "탭 1개짜리 v2"와 정확히 같은 의미다 — 복원에서 그렇게
 // 승격한다(_applySnapshot).
 // 2.1 D4 — v3: 탭 레코드에 `repoId`/`hostId`가 붙었다(탭의 정체성이 워크트리에서
-// 저장소로 바뀐 것 — layout/store.js 머리말 참고). `worktreeId`는 v2와 같은
-// 자리에 **계속 적는다** — 옛 기기(2.1.6 이하)가 이 스냅샷을 읽어도 최소한
-// "어느 워크트리였는지"는 알아보게 하기 위해서다. 저장은 언제나 v3로만 한다.
+// 저장소로 바뀐 것). ADR-29 D(2026-09-18) — v4: 그 정체성이 한 단 더
+// 일반화돼 `groupId`가 됐다(layout/store.js 머리말 참고). 커스텀 그룹(E,
+// 아직 미구현)이 생기기 전까지 모든 groupId 값은 사실 어떤 저장소의 id와
+// 같으므로, **`repoId` 필드도 그 값 그대로 계속 적는다** — 옛 기기(2.1.6~
+// 2.1.7의 v3 리더)가 이 스냅샷을 읽어도 여전히 맞는 탭으로 복원되게 하는
+// 롤백 장치다(v1 필드를 v3에서도 계속 적던 것과 같은 이유). `worktreeId`도
+// v2와 같은 자리에 계속 적는다. 저장은 언제나 v4로만 한다.
 function _snapshot() {
   const tabs = getTabsWithTrees();
   return {
-    v: 3,
+    v: 4,
     savedAt: Date.now(),
     activeTab: getActiveTabId(),
     // v1 필드도 계속 적는다 — **되돌리기 위한 것**이다. 2.1.2를 롤백하면 옛
@@ -128,7 +132,9 @@ function _snapshot() {
     tree: serializeTree(getTree(), _lookupLive),
     tabs: tabs.map((t) => ({
       id: t.id,
-      repoId: t.repoId || null,
+      groupId: t.groupId || null,
+      // 롤백용 v3 필드 — 위 주석 참고.
+      repoId: t.groupId || null,
       worktreeId: t.worktreeId || null,
       hostId: t.hostId || 'local',
       label: t.label,
@@ -172,17 +178,17 @@ function _readLocal() {
   } catch (_) { return null; }
 }
 
-// v1(트리 하나) / v2·v3(탭 배열) 다 받는다.
+// v1(트리 하나) / v2·v3·v4(탭 배열) 다 받는다.
 function _isSnapshot(s) {
   if (!s) return false;
-  if ((s.v === 2 || s.v === 3) && Array.isArray(s.tabs) && s.tabs.length) return true;
+  if ((s.v === 2 || s.v === 3 || s.v === 4) && Array.isArray(s.tabs) && s.tabs.length) return true;
   return s.v === 1 && !!s.tree;
 }
 
 /** 스냅샷 → 항상 "탭 배열" 모양으로. v1은 탭 1개로 승격한다. */
 export function snapshotTabs(snap) {
-  if ((snap.v === 2 || snap.v === 3) && Array.isArray(snap.tabs)) return snap.tabs;
-  return [{ id: 'tab-legacy', repoId: null, worktreeId: null, hostId: 'local', label: '작업 공간',
+  if ((snap.v === 2 || snap.v === 3 || snap.v === 4) && Array.isArray(snap.tabs)) return snap.tabs;
+  return [{ id: 'tab-legacy', groupId: null, worktreeId: null, hostId: 'local', label: '작업 공간',
             active: snap.active, tree: snap.tree }];
 }
 
@@ -196,7 +202,11 @@ function _applySnapshot(snap) {
   for (const raw of snapshotTabs(snap)) {
     const tree = deserializeTree(raw.tree, resolve, taken);
     if (!tree) continue;
-    tabs.push({ id: raw.id, repoId: raw.repoId || null, worktreeId: raw.worktreeId || null,
+    // v3 이하는 `repoId`만 있다 — ADR-29 이전에도 그 값은 실질적으로 "이
+    // 탭이 속한 저장소 id"였고, 지금의 groupId 자동 제안 폴백과 값이
+    // 같으므로 그대로 groupId로 읽는다(위 _snapshot의 롤백 주석과 짝).
+    tabs.push({ id: raw.id, groupId: raw.groupId != null ? raw.groupId : (raw.repoId || null),
+                worktreeId: raw.worktreeId || null,
                 hostId: raw.hostId || 'local',
                 label: raw.label || '작업 공간', tree, activePaneId: raw.active });
   }

@@ -25,20 +25,22 @@ function _genId(prefix) {
 // 그게 이 층을 스토어 안에 넣은 이유다. 바깥에서 보면 달라진 게 없고, 탭을
 // 아는 코드(탭 바·영속화)만 새 API를 쓴다.
 //
-// 탭 하나의 모양: `{ id, repoId, worktreeId, hostId, label, tree, activePaneId }`.
-// 2.1 D4("저장소 1급화" 4단계) 전에는 `worktreeId`가 탭의 정체성이었다 — 저장소
-// 하나에 워크트리가 둘이면 탭도 둘이었다. 이제 **`repoId`가 정체성**이고
-// `worktreeId`는 "이 탭에서 지금 보고 있는 워크트리"라는 부가 정보로
-// 내려간다(pane 헤더 옆 브랜치 칩이 이 값을 읽는다) — 같은 저장소의 두
-// 워크트리를 각각 탭으로 열 수는 없다는 뜻이고(분할 pane을 쓰면 된다), 그
-// 대가로 탭 개수가 "내가 지금 보는 저장소 수"와 일치한다.
-// `repoId`가 null인 탭은 어떤 저장소에도 속하지 않는 작업 공간이다(레일의
-// 「기타」와 같은 개념 — 워크트리가 0개인 환경에서도 화면이 성립한다).
+// 탭 하나의 모양: `{ id, groupId, worktreeId, hostId, label, tree, activePaneId }`.
+// 2.1 D4("저장소 1급화" 4단계)는 `repoId`를 탭의 정체성으로 삼았었다. ADR-29
+// D(2026-09-18)가 그 위에 한 단 더 얹는다 — **정체성이 `groupId`다**(세션의
+// `@fsh_grp`, 없으면 자동 제안인 저장소 id로 떨어진다 — ADR-29 A/B와 같은
+// 폴백). 커스텀 그룹(E단계, 아직 미구현)이 생기기 전까지는 모든 groupId가
+// 곧 어떤 저장소의 id이므로 D4 시절 동작과 화면상 차이가 없다 — 차이는
+// E에서 세션을 손으로 다른 그룹에 옮길 수 있게 되는 순간부터 드러난다.
+// `worktreeId`는 여전히 "이 탭에서 지금 보고 있는 워크트리"라는 부가
+// 정보로 내려간다(pane 헤더 옆 브랜치 칩이 이 값을 읽는다).
+// `groupId`가 null인 탭은 어떤 그룹에도 속하지 않는 작업 공간이다(레일의
+// 「묶지 않음」과 같은 개념).
 // `hostId`는 2.2 원격 호스트 기반이다(지금은 항상 'local') — 다른 호스트의
-// 같은 경로 저장소가 탭을 공유하지 않도록 미리 자리를 잡아 둔다.
-function _makeTab({ repoId = null, worktreeId = null, hostId = 'local', label = '작업 공간', tree = null } = {}) {
+// 같은 그룹이 탭을 공유하지 않도록 미리 자리를 잡아 둔다.
+function _makeTab({ groupId = null, worktreeId = null, hostId = 'local', label = '작업 공간', tree = null } = {}) {
   const t = tree || makeLeaf(_genId('pane'), activeSessionId());
-  return { id: _genId('tab'), repoId, worktreeId, hostId, label, tree: t, activePaneId: _firstLeafId(t) };
+  return { id: _genId('tab'), groupId, worktreeId, hostId, label, tree: t, activePaneId: _firstLeafId(t) };
 }
 
 const _tabs = [_makeTab()];
@@ -195,18 +197,18 @@ function _firstLeafId(node) {
 
 /** 읽기 전용 사본 — 바깥에서 tree를 직접 바꾸지 못하게 얕은 복사로 준다. */
 export function getTabs() {
-  return _tabs.map((t) => ({ id: t.id, repoId: t.repoId, worktreeId: t.worktreeId, hostId: t.hostId, label: t.label }));
+  return _tabs.map((t) => ({ id: t.id, groupId: t.groupId, worktreeId: t.worktreeId, hostId: t.hostId, label: t.label }));
 }
 
 export function getActiveTabId() {
   return _tabs[_activeTabIndex].id;
 }
 
-/** 저장소 id로 이미 열린 탭 찾기 — 같은 저장소를 두 번 열지 않는다(D4:
- * 탭의 정체성은 이제 워크트리가 아니라 저장소다). */
-export function findTabByRepo(repoId) {
-  if (!repoId) return null;
-  const t = _tabs.find((x) => x.repoId === repoId);
+/** 그룹 id로 이미 열린 탭 찾기 — 같은 그룹을 두 번 열지 않는다(ADR-29 D:
+ * 탭의 정체성은 그룹이다, D4의 저장소 정체성을 한 단 더 일반화한 것). */
+export function findTabByGroup(groupId) {
+  if (!groupId) return null;
+  const t = _tabs.find((x) => x.groupId === groupId);
   return t ? t.id : null;
 }
 
@@ -231,17 +233,17 @@ export function switchLayoutTab(tabId) {
   return true;
 }
 
-/** 새 탭. 같은 저장소 탭이 이미 있으면 전환만 하고, 다른 워크트리를 보는
- * 중이었다면 그 탭의 `worktreeId`를 지금 연 워크트리로 갱신한다(D4). */
-export function openLayoutTab({ repoId = null, worktreeId = null, hostId = 'local', label = '작업 공간', sessionId = null } = {}) {
-  const existing = findTabByRepo(repoId);
+/** 새 탭. 같은 그룹 탭이 이미 있으면 전환만 하고, 다른 워크트리를 보는
+ * 중이었다면 그 탭의 `worktreeId`를 지금 연 워크트리로 갱신한다(ADR-29 D). */
+export function openLayoutTab({ groupId = null, worktreeId = null, hostId = 'local', label = '작업 공간', sessionId = null } = {}) {
+  const existing = findTabByGroup(groupId);
   if (existing) {
     switchLayoutTab(existing);
     if (worktreeId) setTabWorktree(existing, worktreeId);
     return existing;
   }
   _sync();
-  const tab = _makeTab({ repoId, worktreeId, hostId, label });
+  const tab = _makeTab({ groupId, worktreeId, hostId, label });
   if (sessionId) tab.tree = _setSession(tab.tree, tab.tree.id, sessionId);
   _tabs.push(tab);
   _activeTabIndex = _tabs.length - 1;
@@ -283,7 +285,7 @@ export function replaceTabs(tabs, activeTabId = null) {
   for (const t of clean) {
     _tabs.push({
       id: t.id || _genId('tab'),
-      repoId: t.repoId || null,
+      groupId: t.groupId || null,
       worktreeId: t.worktreeId || null,
       hostId: t.hostId || 'local',
       label: t.label || '작업 공간',

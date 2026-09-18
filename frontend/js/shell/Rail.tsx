@@ -307,6 +307,7 @@ function Rail(props: { deps: RailDeps }) {
         branch: info?.branch ?? null,
         isMainWorktree: info?.isMain ?? false,
         gitRemote: info?.gitRemote ?? null,
+        worktreeId: t.wt_id || null,
       });
       if (cwd && diffCountStale(cwd)) {
         fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
@@ -368,6 +369,16 @@ function Rail(props: { deps: RailDeps }) {
       }
       return;
     }
+    const meta = e.metaKey || e.ctrlKey;
+    // ADR-29 D — 세션을 열기 전에 그 그룹의 탭으로 먼저 옮긴다(탭 정체성 =
+    // 그룹). switchTo/attachTmux는 항상 **지금 활성 탭**에 배정하므로
+    // (addSession의 마지막 줄) 순서가 바뀌면 엉뚱한 탭에 얹힌다. ⌘클릭
+    // 분할은 예외다 — "지금 보는 화면 옆에 놓기"라는 뜻이라 탭을 바꾸면
+    // 안 된다. groupId가 없는 세션(묶지 않음)도 예외 — D4 이전에도 그런
+    // 세션은 탭을 옮기지 않았다(현재 활성 탭에 그냥 얹혔다).
+    if (!meta && row.groupId) {
+      w.openGroupTab?.({ groupId: row.groupId, worktreeId: row.worktreeId || null, hostId: 'local', label: row.repoName || undefined });
+    }
     // ADR-29 B — 잠자는 세션을 클릭하면 깨운다(attach). 여는 것은 언제나
     // 세션이라는 원칙 — 그룹째 깨우는 동작(레일의 잠자는 그룹 덩어리)은
     // 아래 wakeGroup이 따로 맡는다.
@@ -377,13 +388,18 @@ function Rail(props: { deps: RailDeps }) {
     }
     const sid = actionSessionId(row);
     if (sid) {
-      if (e.metaKey || e.ctrlKey) w.splitActivePane?.('row', sid);
+      if (meta) w.splitActivePane?.('row', sid);
       else w.switchTo?.(sid);
     }
   };
 
   const wakeGroup = async (entry: { rows: OtherRailRowInput[] }) => {
     const w = window as any;
+    // ADR-29 D — 이 덩어리의 멤버는 전부 같은 groupId를 공유한다(잠자는
+    // 덩어리를 만든 규칙 자체가 groupId로 묶은 것 — rail-data.ts
+    // buildSleepingEntries). 깨우기 전에 그 그룹의 탭부터 연다.
+    const gid = entry.rows[0]?.groupId;
+    if (gid) w.openGroupTab?.({ groupId: gid, hostId: 'local', label: entry.rows[0]?.repoName || undefined });
     await Promise.all(entry.rows.map((r) => (r.tmuxName ? w.attachTmux?.(r.tmuxName) : null)));
   };
 
@@ -406,10 +422,10 @@ function Rail(props: { deps: RailDeps }) {
         { label: '지금 이 세션 맥에서 열기', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('session.open-on-mac') as (() => void) | undefined)?.(); } },
         { label: '연결된 화면', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('clients.show') as (() => void) | undefined)?.(); } },
         // 2.1 D3 — "닫기"는 화면마다 다른 뜻이었다. 이 메뉴가 하는 건 웹
-        // 세션을 놓는 것뿐(tmux는 계속 산다)이라 이제 그 이름으로 부른다.
-        // 실제 동작은 term/session-actions.js 하나로 모았다(vtDetachSession).
-        // D단계에서 "재우기"로 다시 개명한다(동작은 그대로).
-        { label: '세션 놓기', run: () => w.vtDetachSession?.(m.sessionId) },
+        // 세션을 놓는 것뿐(tmux는 계속 산다)이라 "세션 놓기"로 불렀다.
+        // ADR-29 D — 레일이 이미 쓰는 잠·깸 어휘와 맞춰 "재우기"로 다시
+        // 부른다(동작은 그대로, term/session-actions.js의 vtDetachSession).
+        { label: '재우기', run: () => w.vtDetachSession?.(m.sessionId) },
       );
     } else if (m.tmuxName) {
       // ADR-29 B — 잠자는 행의 컨텍스트 메뉴: 웹 세션이 없으니 위 넷은 못
