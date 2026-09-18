@@ -96,6 +96,16 @@
     top:calc(var(--topbar-h) + var(--mnav-top-h) + env(safe-area-inset-top,0px));
     bottom:calc(52px + env(safe-area-inset-bottom,0px));
   }
+  /* 2026-09-19 — 같은 회귀의 **세 번째** 자리. 위 두 줄은 온보딩을 상·하단
+     내비만큼 비켜 세웠지만 그 사이의 플릿 홈(`#vt-fleet-slot`, z-index 90)은
+     그대로 덮였다 — z-index 500이 이긴다. 폰의 홈 탭이 바로 그 화면이고,
+     온보딩이 뜨는 조건("세션 0개")이 곧 그 화면을 열어보는 조건이라 **항상**
+     겹친다. 실브라우저에서 호스트 스위처 메뉴가 클릭을 못 받는 것으로
+     확인했다(C1이 없애려던 바로 그 상태 — 폰에서 호스트를 바꿀 방법이 없음).
+     플릿 홈이 떠 있으면 온보딩을 숨긴다: 세션이 없다는 사실도, 새로 만드는
+     경로도 그 화면이 이미 말한다. 코드 뷰어 페인이 뜰 때 같은 처방을 쓰는
+     `body.vt-has-viewer-pane .vt-onboarding`(80-dock.css)과 같은 관용구다. */
+  html:has(#vt-fleet-slot:not([hidden])) .vt-onboarding { display:none; }
 
   /* #topbar는 그대로 둔다(세션 탭·팔레트가 이미 거기 있다) — 이 바는 그
      아래 얇은 두 번째 줄로, 정상 flex 흐름에 얹혀 자기 높이(24px)만큼
