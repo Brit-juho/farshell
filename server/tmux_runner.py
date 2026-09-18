@@ -9,6 +9,8 @@ purplemux/src/lib/tmux.ts 패턴을 Python으로 변형.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import logging
 import os
 import shutil
@@ -154,3 +156,45 @@ def list_sessions() -> list[dict]:
 
 def is_installed() -> bool:
     return shutil.which("tmux") is not None
+
+
+# --------------------------------------------------------------------------
+# async 래퍼 — 이벤트 루프에서 부를 때는 **반드시** 이쪽을 쓴다
+# --------------------------------------------------------------------------
+#
+# 위의 동기 함수들은 전부 `subprocess.run`이라 호출하는 동안 스레드가 멈춘다.
+# async 핸들러에서 그대로 부르면 그 시간만큼 **서버 전체**가 멈춘다 — HTTP도
+# WebSocket도, 그리고 PTY 입출력 브로드캐스트도. 웹 터미널에서는 그것이
+# "타이핑이 멎었다가 한 번에 쏟아지는" 증상으로 나타난다(2026-09-16 실측:
+# tmux 폴링만으로 20초 중 2.1초가 막혔고, 워크트리 탐색까지 겹쳤을 때는
+# 40초 중 16.4초였다).
+#
+# to_thread를 호출부마다 흩뿌리지 않고 여기 한 곳에 두는 이유는, 블로킹이
+# `_client_rows` 같은 **동기 헬퍼 한 겹 아래**에 숨어 있을 때 호출부만 보면
+# 놓치기 때문이다(실제로 `/api/tmux/clients`가 그렇게 감사에서 빠졌다).
+# `server/tests/test_no_blocking_in_async.py`가 위반을 기계적으로 막는다.
+
+
+async def run_async(*args, **kwargs) -> tuple[int, bytes, bytes]:
+    """`run`의 async 버전. 이벤트 루프를 막지 않는다.
+
+    ⚠ **인자를 그대로 넘긴다(투명 래퍼).** 여기서 `timeout`/`input`에 기본값을
+    채워 넘기면 호출 규약이 바뀐다 — `run`을 monkeypatch한 테스트의 가짜 함수가
+    받지 않는 인자를 받게 되어 TypeError가 난다(실제로 한 번 깨뜨렸다).
+    """
+    return await asyncio.to_thread(functools.partial(run, *args, **kwargs))
+
+
+async def run_text_async(*args, **kwargs) -> Optional[str]:
+    """`run_text`의 async 버전. 인자는 그대로 넘긴다(위 주석 참고)."""
+    return await asyncio.to_thread(functools.partial(run_text, *args, **kwargs))
+
+
+async def get_all_panes_async(*args, **kwargs) -> list[PaneInfo]:
+    """`get_all_panes`의 async 버전. 인자는 그대로 넘긴다."""
+    return await asyncio.to_thread(functools.partial(get_all_panes, *args, **kwargs))
+
+
+async def has_session_async(*args, **kwargs) -> bool:
+    """`has_session`의 async 버전. 인자는 그대로 넘긴다."""
+    return await asyncio.to_thread(functools.partial(has_session, *args, **kwargs))

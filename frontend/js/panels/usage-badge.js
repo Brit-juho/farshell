@@ -30,8 +30,13 @@ export function paintRailBadge(data) {
     ? `사용량${active ? ` — 활성: ${active}` : ''}${live.length ? ` · 실행 중: ${live.join(', ')}` : ''}`
     : '사용량';
   badge.hidden = !live.length;
-  badge.textContent = live.length ? '●' : '';
+  // ● 글리프를 .status-dot 컴포넌트로. 배지가 "몇 개"가 아니라 "돌고 있다"를
+  // 뜻하는 자리라 숫자가 아닌 점이 맞지만, 글리프는 상태색과 연결돼 있지 않았다.
+  badge.textContent = '';
   badge.classList.toggle('vt-rail-badge-dot', true);
+  badge.classList.toggle('status-dot', !!live.length);
+  if (live.length) badge.dataset.state = 'working';
+  else delete badge.dataset.state;
 }
 
 // 패널이 닫혀 있어도 rail 배지는 최신이어야 한다(그게 "상시 노출"의 의미다).
