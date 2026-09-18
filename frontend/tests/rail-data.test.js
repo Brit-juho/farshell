@@ -169,20 +169,12 @@ const srow = (over) => ({
   diffFiles: null, awake: true, groupId: null, ...over,
 });
 
-test('groupDisplayLabel — 사용자 이름표가 있으면 그것, 없으면 멤버의 저장소 이름, 둘 다 없으면 "그룹"', async () => {
-  const { groupDisplayLabel } = await mod();
-  assert.strictEqual(groupDisplayLabel('g1', { g1: '내 프로젝트' }, [{ repoName: 'farshell' }]), '내 프로젝트');
-  assert.strictEqual(groupDisplayLabel('g1', {}, [{ repoName: 'farshell' }]), 'farshell');
-  assert.strictEqual(groupDisplayLabel('g1', {}, [{ repoName: null }]), '그룹');
-  assert.strictEqual(groupDisplayLabel('g1', {}, []), '그룹');
-});
-
 test('buildSessionSections — 잠자는 세션은 아예 안 나온다(수면은 buildSleepingEntries의 몫)', async () => {
   const { buildSessionSections } = await mod();
   const sections = buildSessionSections([
     srow({ sessionId: 'a', awake: true, status: 'idle' }),
     srow({ sessionId: 'b', awake: false, status: 'idle' }),
-  ], {}, [], NOW);
+  ], new Map(), NOW);
   const allIds = Array.from(sections.flatMap((s) => Array.from(s.rows, (r) => r.sessionId)));
   assert.deepStrictEqual(allIds, ['a']);
 });
@@ -193,7 +185,7 @@ test('buildSessionSections — waiting/error는 groupId와 무관하게 개입 �
     srow({ sessionId: 'a', status: 'waiting', groupId: 'g1' }),
     srow({ sessionId: 'b', status: 'error', groupId: null }),
     srow({ sessionId: 'c', status: 'idle', groupId: 'g1' }),
-  ], {}, [], NOW);
+  ], new Map(), NOW);
   assert.strictEqual(sections[0].kind, 'attention');
   assert.deepStrictEqual(Array.from(sections[0].rows, (r) => r.sessionId).sort(), ['a', 'b']);
 });
@@ -203,19 +195,19 @@ test('buildSessionSections — groupId 없는 세션은 ungrouped 섹션에, gro
   const sections = buildSessionSections([
     srow({ sessionId: 'a', status: 'idle', groupId: 'g1' }),
     srow({ sessionId: 'b', status: 'idle', groupId: null }),
-  ], {}, [], NOW);
+  ], new Map(), NOW);
   const grouped = sections.find((s) => s.groupId === 'g1');
   const ungrouped = sections.find((s) => s.kind === 'ungrouped');
   assert.deepStrictEqual(Array.from(grouped.rows, (r) => r.sessionId), ['a']);
   assert.deepStrictEqual(Array.from(ungrouped.rows, (r) => r.sessionId), ['b']);
 });
 
-test('buildSessionSections — groupOrder에 있는 그룹이 먼저, 그 외는 라벨 가나다순', async () => {
+test('buildSessionSections — 그룹은 탭 라벨 가나다순으로 고정 정렬한다', async () => {
   const { buildSessionSections } = await mod();
   const sections = buildSessionSections([
     srow({ sessionId: 'a', status: 'idle', groupId: 'zzz', repoName: 'zzz-repo' }),
     srow({ sessionId: 'b', status: 'idle', groupId: 'aaa', repoName: 'aaa-repo' }),
-  ], {}, ['zzz'], NOW);
+  ], new Map([['zzz', '가'], ['aaa', '나']]), NOW);
   const groupKeys = Array.from(sections.filter((s) => s.kind === 'group'), (s) => s.groupId);
   assert.deepStrictEqual(groupKeys, ['zzz', 'aaa']);
 });
@@ -225,56 +217,26 @@ test('buildSleepingEntries — 깨어있는 세션은 아예 안 나온다', asy
   const entries = buildSleepingEntries([
     srow({ sessionId: 'a', awake: true }),
     srow({ tmuxName: 'b', sessionId: '', awake: false }),
-  ], {});
+  ]);
   assert.strictEqual(entries.length, 1);
-  assert.strictEqual(entries[0].rows[0].tmuxName, 'b');
-});
-
-test('buildSleepingEntries — 그룹째 잠든 세션은 덩어리 하나(kind=group, 멤버 전원 포함)', async () => {
-  const { buildSleepingEntries } = await mod();
-  const entries = buildSleepingEntries([
-    srow({ tmuxName: 'a', sessionId: '', awake: false, groupId: 'g1', repoName: 'farshell' }),
-    srow({ tmuxName: 'b', sessionId: '', awake: false, groupId: 'g1', repoName: 'farshell' }),
-  ], {});
-  assert.strictEqual(entries.length, 1);
-  assert.strictEqual(entries[0].kind, 'group');
-  assert.strictEqual(entries[0].rows.length, 2);
-  assert.strictEqual(entries[0].label, 'farshell');
+  assert.strictEqual(entries[0].row.tmuxName, 'b');
 });
 
 test('buildSleepingEntries — 어디에도 안 묶인 채 잠들면 낱개 행(kind=session, 원소 1개)', async () => {
   const { buildSleepingEntries } = await mod();
   const entries = buildSleepingEntries([
     srow({ tmuxName: 'a', sessionId: '', awake: false, groupId: null, name: '내 셸' }),
-  ], {});
+  ]);
   assert.strictEqual(entries.length, 1);
-  assert.strictEqual(entries[0].kind, 'session');
-  assert.strictEqual(entries[0].rows.length, 1);
+  assert.strictEqual(entries[0].row.tmuxName, 'a');
   assert.strictEqual(entries[0].label, '내 셸');
 });
 
-test('buildSleepingEntries — 그룹 덩어리와 낱개가 섞여도 라벨 가나다순으로 함께 정렬된다', async () => {
+test('buildSleepingEntries — 이전 그룹 소속 여부와 무관하게 세션 이름 가나다순으로 정렬한다', async () => {
   const { buildSleepingEntries } = await mod();
   const entries = buildSleepingEntries([
     srow({ tmuxName: 'z', sessionId: '', awake: false, groupId: null, name: 'zzz-solo' }),
     srow({ tmuxName: 'a', sessionId: '', awake: false, groupId: 'g1', repoName: 'aaa-group' }),
-  ], {});
-  assert.deepStrictEqual(Array.from(entries, (e) => e.label), ['aaa-group', 'zzz-solo']);
-});
-
-// ── 2026-09-18 후속 — newGroupId(세션을 세션에 끌어다 놓아 새 그룹 만들기) ────
-// server/routes/groups.py의 _GROUP_ID_RE(`[0-9a-f]{12}`)와 모양이 맞아야
-// 서버가 400으로 거절하지 않는다.
-
-test('newGroupId — 12자리 소문자 16진수를 만든다(서버 _GROUP_ID_RE와 같은 모양)', async () => {
-  const { newGroupId } = await mod();
-  for (let i = 0; i < 20; i++) {
-    assert.match(newGroupId(), /^[0-9a-f]{12}$/);
-  }
-});
-
-test('newGroupId — 부를 때마다 다른 값(충돌 없이 새 그룹을 구분해야 한다)', async () => {
-  const { newGroupId } = await mod();
-  const ids = new Set(Array.from({ length: 50 }, () => newGroupId()));
-  assert.strictEqual(ids.size, 50);
+  ]);
+  assert.deepStrictEqual(Array.from(entries, (e) => e.label), ['x', 'zzz-solo']);
 });

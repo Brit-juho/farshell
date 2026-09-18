@@ -44,31 +44,33 @@ test('탭마다 자기 트리를 가진다 — 돌아오면 분할이 그대로�
   assert.strictEqual(S.countLeaves(), 1);
 });
 
-// D4("저장소 1급화" 4단계) → ADR-29 D — 탭의 정체성이 워크트리→저장소→그룹으로 바뀌었다.
-test('같은 그룹을 두 번 열면 새 탭이 아니라 전환이다', async () => {
+// D4("저장소 1급화" 4단계) → ADR-29 D → 2026-09-18 후속(그룹 재정의) —
+// 탭의 정체성이 워크트리→저장소→그룹(태그)을 거쳐, 이제 "이 세션이 지금
+// 어느 탭의 pane 트리에 있는가"(findTabBySessionId)로 정착했다.
+test('같은 세션을 두 번 열면 새 탭이 아니라 전환이다', async () => {
   const { S } = await load();
-  const a = S.openLayoutTab({ groupId: 'repo-a', worktreeId: 'wt-1', label: 'a' });
+  const a = S.openLayoutTab({ sessionId: 's1', worktreeId: 'wt-1', label: 'a' });
   S.switchLayoutTab(S.getTabs()[0].id);
-  const b = S.openLayoutTab({ groupId: 'repo-a', worktreeId: 'wt-1', label: 'a' });
+  const b = S.openLayoutTab({ sessionId: 's1', worktreeId: 'wt-1', label: 'a' });
   assert.strictEqual(a, b);
-  assert.strictEqual(S.getTabs().length, 2, '탭이 늘어나면 안 된다(기본 탭 + repo-a)');
+  assert.strictEqual(S.getTabs().length, 2, '탭이 늘어나면 안 된다(기본 탭 + s1의 탭)');
   assert.strictEqual(S.getActiveTabId(), a);
 });
 
-test('같은 그룹의 다른 워크트리를 열면 탭은 그대로, worktreeId만 바뀐다', async () => {
+test('같은 세션이 있는 탭을 다른 워크트리로 열면 탭은 그대로, worktreeId만 바뀐다', async () => {
   const { S } = await load();
-  const a = S.openLayoutTab({ groupId: 'repo-a', worktreeId: 'wt-main', label: 'a' });
-  const b = S.openLayoutTab({ groupId: 'repo-a', worktreeId: 'wt-feature', label: 'a' });
-  assert.strictEqual(a, b, '탭 자체는 저장소 단위라 새로 생기지 않는다');
-  assert.strictEqual(S.getTabs().length, 2, '기본 탭 + repo-a, 늘어나지 않는다');
+  const a = S.openLayoutTab({ sessionId: 's1', worktreeId: 'wt-main', label: 'a' });
+  const b = S.openLayoutTab({ sessionId: 's1', worktreeId: 'wt-feature', label: 'a' });
+  assert.strictEqual(a, b, '세션이 이미 있는 탭이라 새로 생기지 않는다');
+  assert.strictEqual(S.getTabs().length, 2, '기본 탭 + s1의 탭, 늘어나지 않는다');
   assert.strictEqual(S.getTabs().find((t) => t.id === a).worktreeId, 'wt-feature',
     '지금 보는 워크트리가 갱신돼야 pane 헤더의 브랜치 칩이 맞는 걸 보여준다');
 });
 
-test('그룹이 다르면 워크트리가 없어도(groupId만 있어도) 별도 탭이다', async () => {
+test('다른 세션을 열면(워크트리가 같아도) 별도 탭이다', async () => {
   const { S } = await load();
-  const a = S.openLayoutTab({ groupId: 'repo-a', label: 'a' });
-  const b = S.openLayoutTab({ groupId: 'repo-b', label: 'b' });
+  const a = S.openLayoutTab({ sessionId: 's1', label: 'a' });
+  const b = S.openLayoutTab({ sessionId: 's2', label: 'b' });
   assert.notStrictEqual(a, b);
   assert.strictEqual(S.getTabs().length, 3);
 });

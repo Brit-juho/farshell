@@ -67,7 +67,7 @@ export async function attachTmuxSession(name) {
     const data = await res.json();
     if (data.id) {
       if (!getSession(data.id)) {
-        addSession(data.id, data.name || `tmux:${name}`);
+        addSession(data.id, data.name || name);
         const s = getSession(data.id);
         if (s) s.tmuxName = name;
       }

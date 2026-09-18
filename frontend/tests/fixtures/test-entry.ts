@@ -5,7 +5,7 @@
 export { mountSmoke } from './smoke.js';
 export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
 export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
-export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, mostUrgentStatus, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed, buildSessionSections, buildSleepingEntries, groupDisplayLabel, newGroupId } from '../../js/shell/rail-data.js';
+export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, mostUrgentStatus, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed, buildSessionSections, buildSleepingEntries } from '../../js/shell/rail-data.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,
@@ -14,4 +14,4 @@ export { mountPalette } from '../../js/shell/Palette.tsx';
 export {
   buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, reasonLabel, LOCAL_HOST,
 } from '../../js/shell/host-data.js';
-export { deleteWorktreeRow, setSessionGroup, renameGroup } from '../../js/shell/rail-fetch.js';
+export { deleteWorktreeRow } from '../../js/shell/rail-fetch.js';

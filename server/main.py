@@ -37,7 +37,7 @@ from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
 from routes.tmux import router as tmux_router
 from routes.voice import router as voice_router
-from routes.agents import router as agents_router
+from routes.agents import router as agents_router, close_managed_codex
 from routes.system import router as system_router
 from routes.clipboard import router as clipboard_router
 from routes.files import router as files_router
@@ -51,7 +51,6 @@ from routes.mcp import router as mcp_router, elevated_router as mcp_elevated_rou
 from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
 from routes.worktree import router as worktree_router
 from routes.repos import router as repos_router
-from routes.groups import router as groups_router
 from routes.security import router as security_router
 from routes.share import elevated_router as share_elevated_router, public_router as share_public_router
 from routes.peer import router as peer_router
@@ -329,6 +328,7 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        await close_managed_codex()
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
         scrollback_cleanup_task.cancel()
@@ -425,7 +425,6 @@ app.include_router(git_accounts_router)
 app.include_router(git_accounts_elevated_router)
 app.include_router(worktree_router)
 app.include_router(repos_router)
-app.include_router(groups_router)
 app.include_router(security_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)

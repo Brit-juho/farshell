@@ -7,8 +7,8 @@
 // 이후 xterm-setup.js가 연결). 그래야 "테두리는 A pane인데 타이핑은 B로
 // 들어간다" 같은 상태 불일치가 애초에 생길 수 없다 — 착수 전 설계 리뷰에서
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
-import { activeSessionId } from '../core/store.js';
-import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode } from './tree.js';
+import { activeSessionId, sessionDisplayName } from '../core/store.js';
+import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, collectSessions } from './tree.js';
 
 function _genId(prefix) {
   const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -25,21 +25,23 @@ function _genId(prefix) {
 // 그게 이 층을 스토어 안에 넣은 이유다. 바깥에서 보면 달라진 게 없고, 탭을
 // 아는 코드(탭 바·영속화)만 새 API를 쓴다.
 //
-// 탭 하나의 모양: `{ id, groupId, worktreeId, hostId, label, tree, activePaneId }`.
-// 2.1 D4("저장소 1급화" 4단계)는 `repoId`를 탭의 정체성으로 삼았었다. ADR-29
-// D(2026-09-18)가 그 위에 한 단 더 얹는다 — **정체성이 `groupId`다**(세션의
-// `@fsh_grp` — 없으면 null, 즉 어느 그룹에도 안 속한다). 그룹은 오직 드래그로
-// 직접 묶은 것만 존재한다(2026-09-18 후속 — 저장소로 자동 묶어 보여주던
-// 폴백은 사용자 요청으로 없앴다). `worktreeId`는 여전히 "이 탭에서 지금
-// 보고 있는 워크트리"라는 부가 정보로 내려간다(pane 헤더 옆 브랜치 칩이
-// 이 값을 읽는다).
-// `groupId`가 null인 탭은 어떤 그룹에도 속하지 않는 작업 공간이다(레일의
-// 「묶지 않음」과 같은 개념).
-// `hostId`는 2.2 원격 호스트 기반이다(지금은 항상 'local') — 다른 호스트의
-// 같은 그룹이 탭을 공유하지 않도록 미리 자리를 잡아 둔다.
-function _makeTab({ groupId = null, worktreeId = null, hostId = 'local', label = '작업 공간', tree = null } = {}) {
+// 탭 하나의 모양: `{ id, worktreeId, hostId, label, tree, activePaneId }`.
+// 2.1 D4("저장소 1급화" 4단계)는 `repoId`를, ADR-29 D(2026-09-18)는 `groupId`
+// (`@fsh_grp` 태그)를 탭의 정체성으로 삼았었다. **2026-09-18 후속(그룹
+// 재정의, 사용자 요청)이 그 필드 자체를 없앤다** — "그룹"은 더 이상 탭에
+// 붙는 태그가 아니라 **그 탭의 pane 트리에 지금 떠 있는 세션이 몇 개인가**로
+// 매 순간 계산된다(2개 이상이면 그룹, 1개면 개인 — layout/tabbar.js의
+// `tabMemberSessionIds`, `tabGroups()` 아래). 탭은 그저 세션들이 같은
+// 화면(pane 트리)을 공유하는 자리일 뿐, 별도 id를 가질 이유가 없다.
+// `worktreeId`는 여전히 "이 탭에서 지금 보고 있는 워크트리"라는 부가
+// 정보로 내려간다(pane 헤더 옆 브랜치 칩이 이 값을 읽는다).
+// `label`은 사용자가 직접 지은 이름만 담는다(없으면 null — layout/
+// tabbar.js의 `tabDisplayLabel`이 그 자리에 현재 구성원 이름을 계산해
+// 채운다. "작업 공간" 같은 무의미한 기본값을 붙이지 않는다).
+// `hostId`는 2.2 원격 호스트 기반이다(지금은 항상 'local').
+function _makeTab({ worktreeId = null, hostId = 'local', label = null, tree = null } = {}) {
   const t = tree || makeLeaf(_genId('pane'), activeSessionId());
-  return { id: _genId('tab'), groupId, worktreeId, hostId, label, tree: t, activePaneId: _firstLeafId(t) };
+  return { id: _genId('tab'), worktreeId, hostId, label, tree: t, activePaneId: _firstLeafId(t) };
 }
 
 const _tabs = [_makeTab()];
@@ -196,19 +198,24 @@ function _firstLeafId(node) {
 
 /** 읽기 전용 사본 — 바깥에서 tree를 직접 바꾸지 못하게 얕은 복사로 준다. */
 export function getTabs() {
-  return _tabs.map((t) => ({ id: t.id, groupId: t.groupId, worktreeId: t.worktreeId, hostId: t.hostId, label: t.label }));
+  return _tabs.map((t) => ({ id: t.id, worktreeId: t.worktreeId, hostId: t.hostId, label: t.label }));
 }
 
 export function getActiveTabId() {
   return _tabs[_activeTabIndex].id;
 }
 
-/** 그룹 id로 이미 열린 탭 찾기 — 같은 그룹을 두 번 열지 않는다(ADR-29 D:
- * 탭의 정체성은 그룹이다, D4의 저장소 정체성을 한 단 더 일반화한 것). */
-export function findTabByGroup(groupId) {
-  if (!groupId) return null;
-  const t = _tabs.find((x) => x.groupId === groupId);
-  return t ? t.id : null;
+/** 이 세션이 지금 어느 탭의 pane 트리에 떠 있는가 — 없으면 null(아직 어느
+ * 화면에도 없다: 처음 여는 세션, 또는 방금 깨운 세션). 2026-09-18 후속
+ * (그룹 재정의)의 핵심 조회 — "같은 화면에 이미 떠 있으면 그 화면으로,
+ * 아니면 새 화면으로"를 여기 하나로 판정한다. */
+export function findTabBySessionId(sessionId) {
+  if (!sessionId) return null;
+  _sync();
+  for (const t of _tabs) {
+    if (collectSessions(t.tree).includes(sessionId)) return t.id;
+  }
+  return null;
 }
 
 /** 이 탭에서 지금 보는 워크트리를 바꾼다(같은 저장소의 다른 워크트리로
@@ -232,17 +239,20 @@ export function switchLayoutTab(tabId) {
   return true;
 }
 
-/** 새 탭. 같은 그룹 탭이 이미 있으면 전환만 하고, 다른 워크트리를 보는
- * 중이었다면 그 탭의 `worktreeId`를 지금 연 워크트리로 갱신한다(ADR-29 D). */
-export function openLayoutTab({ groupId = null, worktreeId = null, hostId = 'local', label = '작업 공간', sessionId = null } = {}) {
-  const existing = findTabByGroup(groupId);
+/** 세션 하나를 화면에 연다. 그 세션이 이미 어느 탭의 pane 트리에 떠
+ * 있으면(다른 세션과 화면을 공유 중 = 그룹) 전환만 하고, 다른 워크트리를
+ * 보는 중이었다면 그 탭의 `worktreeId`를 지금 연 워크트리로 갱신한다.
+ * 2026-09-18 후속 — `groupId` 대신 `sessionId`로 찾는다(그룹은 이제 탭에
+ * 붙는 태그가 아니라 pane 트리 구성원 자체다, `findTabBySessionId`). */
+export function openLayoutTab({ worktreeId = null, hostId = 'local', label = null, sessionId = null } = {}) {
+  const existing = findTabBySessionId(sessionId);
   if (existing) {
     switchLayoutTab(existing);
     if (worktreeId) setTabWorktree(existing, worktreeId);
     return existing;
   }
   _sync();
-  const tab = _makeTab({ groupId, worktreeId, hostId, label });
+  const tab = _makeTab({ worktreeId, hostId, label });
   if (sessionId) tab.tree = _setSession(tab.tree, tab.tree.id, sessionId);
   _tabs.push(tab);
   _activeTabIndex = _tabs.length - 1;
@@ -284,10 +294,9 @@ export function replaceTabs(tabs, activeTabId = null) {
   for (const t of clean) {
     _tabs.push({
       id: t.id || _genId('tab'),
-      groupId: t.groupId || null,
       worktreeId: t.worktreeId || null,
       hostId: t.hostId || 'local',
-      label: t.label || '작업 공간',
+      label: t.label || null,
       tree: t.tree,
       activePaneId: (t.activePaneId && findNode(t.tree, t.activePaneId)) ? t.activePaneId : _firstLeafId(t.tree),
     });
@@ -306,7 +315,38 @@ export function getTabsWithTrees() {
   return _tabs.map((t) => ({ ...t }));
 }
 
+/** 표시용 탭 이름 — 사용자가 직접 지었으면(`tab.label`) 그대로, 아니면
+ * 지금 그 탭에 떠 있는 세션(들)의 이름으로 계산한다. "작업 공간" 같은
+ * 무의미한 기본값을 없앤다(사용자 요청 — 헤더는 항상 실제 개인/그룹
+ * 이름을 보여줘야 한다). layout/tabbar.js와 아래 window 브리지(Rail.tsx가
+ * 그룹 섹션 라벨로 쓴다)가 같은 답을 내도록 여기 한 곳에만 둔다. */
+export function tabDisplayLabel(tab) {
+  if (tab.label) return tab.label;
+  const ids = collectSessions(tab.tree);
+  if (ids.length === 0) return '빈 화면';
+  if (ids.length === 1) return sessionDisplayName(ids[0]);
+  return ids.map((id) => sessionDisplayName(id)).join(' + ');
+}
+
+/** 지금 화면에서 실시간으로 계산한 그룹 목록 — 2026-09-18 후속(그룹
+ * 재정의, 사용자 요청: "같은 화면에 묶인 것만 그룹, 그 외는 전부 개인").
+ * 한 탭의 pane 트리에 서로 다른 세션이 2개 이상 떠 있으면 그룹이다. 탭
+ * id를 그룹 id로 그대로 쓴다 — 그룹은 탭과 별개의 정체성을 가질 이유가
+ * 없다(탭이 곧 "같은 화면"이므로). */
+export function tabGroups() {
+  _sync();
+  return _tabs
+    .map((t) => ({ id: t.id, label: tabDisplayLabel(t), sessionIds: collectSessions(t.tree) }))
+    .filter((g) => g.sessionIds.length >= 2);
+}
+
 // N36(워크트리 레일) — shell/Rail.tsx는 지연 청크라 이 모듈을 직접 import하면
 // 트리 상태가 복제된다(ADR-26/N35 커밋의 core/store.js와 같은 이유). ⌘클릭
-// 분할에 필요한 splitActivePane만 다른 파일들처럼 window로 노출한다.
+// 분할에 필요한 splitActivePane와, 레일이 그룹을 그리는 데 필요한 tabGroups만
+// 다른 파일들처럼 window로 노출한다.
 window.splitActivePane = splitActivePane;
+window.getTabGroups = tabGroups;
+// Rail.tsx가 화면(pane 트리)이 바뀔 때마다 그룹을 다시 계산하려면 이
+// 이벤트가 필요하다 — 세션 스토어 구독(storeSubscribe)만으로는 "이미 있는
+// 세션을 다른 pane으로 옮겼다" 같은 순수 레이아웃 변경을 못 잡는다.
+window.onLayoutChange = onLayoutChange;

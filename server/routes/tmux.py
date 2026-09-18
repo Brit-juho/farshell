@@ -70,10 +70,10 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int):
         cols=cols,
         rows=rows,
     )
-    session_store.add(session_id, name=f"tmux:{tmux_name}")
+    session_store.add(session_id, name=tmux_name)
     session_store.update_tmux_name(session_id, tmux_name)
     output_watcher.add_session(session_id)
-    return {"id": session_id, "name": f"tmux:{tmux_name}", "tmux_session": tmux_name}
+    return {"id": session_id, "name": tmux_name, "tmux_session": tmux_name}
 
 
 # attach 확인(find_by_tmux_name)과 생성(_attach_tmux)이 원자적이지 않아, 같은 tmux_name에
@@ -100,8 +100,7 @@ def _get_attach_lock(tmux_name: str) -> asyncio.Lock:
 async def list_tmux_sessions():
     # 2.1 D2: `@fsh_wt`도 같이 받는다 — 세션이 어느 워크트리 소속인지, cwd
     # 추측이 아니라 tmux에 적힌 사실로 답한다(subprocess 호출 수는 그대로다).
-    # ADR-29 A: `@fsh_grp`(그룹 소속)도 같은 방식으로 얹는다.
-    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}\t#{@fsh_grp}"
+    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}"
     # A2: pane_id를 함께 받아 응답에 싣는다 — 프런트가 "이 카드가 그 pane인가"를
     # cwd 추측이 아니라 id로 판정할 수 있게(같은 cwd 세션 둘 문제의 해소).
     fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}"
@@ -140,7 +139,6 @@ async def list_tmux_sessions():
             "pane_id": pane_id,
             "web_session_id": web_session.session_id if web_session else None,
             "wt_id": parts[3] if len(parts) > 3 else "",
-            "grp_id": parts[4] if len(parts) > 4 else "",
         })
     return sessions
 

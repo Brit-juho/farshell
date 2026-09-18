@@ -18,14 +18,14 @@ import { agentIcon, agentLabel } from '../ui/icons.js';
 // "지금 화면에 없다"로 바뀌었다).
 export function Row(props: {
   row: DesktopRailRow; active: boolean; compact?: boolean; sleeping?: boolean;
-  /** ADR-29 E — 드래그로 그룹 재편성. tmux 이름이 있는(=재편성 대상이 될 수
-   * 있는) 행만 끌 수 있다. */
+  /** 2026-09-18 후속(그룹 재정의) — 화면(터미널 pane)에 끌어다 놓으면
+   * 그룹이 생긴다(layout/dnd.js의 드롭존). 깨어있는(웹 세션 id가 있는)
+   * 행만 끌 수 있다 — Rail.tsx의 onRowDragStart가 그 조건을 본다. 행
+   * 자신은 더 이상 드롭 타깃이 아니다(그룹은 화면에서만 만든다). */
   draggable?: boolean; onDragStart?: (e: DragEvent) => void;
-  /** 2026-09-18 후속 — 행 자체도 드롭 타깃이다(세션을 세션 위에 놓아 새
-   * 그룹을 만드는 동작). dragOver는 지금 이 행 위에 끌린 것이 있다는 뜻 —
-   * 시각 피드백에만 쓴다. */
-  onDragOver?: (e: DragEvent) => void; onDragLeave?: (e: DragEvent) => void; onDrop?: (e: DragEvent) => void;
-  dragOver?: boolean;
+  /** 이름 제자리 편집 — window.prompt 안 씀(사용자 지적). */
+  editing?: boolean; editingValue?: string;
+  onEditInput?: (v: string) => void; onEditCommit?: () => void; onEditCancel?: () => void;
   onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void;
 }) {
   const isRemote = () => !!props.row.remote;
@@ -72,15 +72,12 @@ export function Row(props: {
   return (
     <div
       class="vt-srow vt-wgrail-row"
-      classList={{ active: props.active, sleeping: !!props.sleeping, 'drag-over': !!props.dragOver }}
+      classList={{ active: props.active, sleeping: !!props.sleeping }}
       onClick={props.onOpen}
       onContextMenu={props.onContext}
       onKeyDown={onKeyDown}
       draggable={!!props.draggable}
       onDragStart={props.onDragStart}
-      onDragOver={props.onDragOver}
-      onDragLeave={props.onDragLeave}
-      onDrop={props.onDrop}
       role="button"
       tabindex="0"
       // 지금 어느 것을 보고 있는지가 **클래스로만** 표시돼 있었다 — 눈으로는
@@ -118,7 +115,29 @@ export function Row(props: {
               <span class="vt-srow-agent vt-wgrail-agent" data-tip={agentLabel(a())} data-tip-side="right" innerHTML={agentIcon(a())} />
             )}
           </Show>
-          <span class="vt-srow-name vt-wgrail-name">{rowName()}</span>
+          {/* 이름 제자리 편집 — window.prompt 안 씀(사용자 지적: "절대 기본
+              컴포넌트 쓰지 마라"). 그룹 이름 편집(Rail.tsx)과 같은 관용구. */}
+          <Show
+            when={props.editing}
+            fallback={<span class="vt-srow-name vt-wgrail-name">{rowName()}</span>}
+          >
+            <input
+              type="text"
+              class="vt-input vt-wgrail-name-edit"
+              value={props.editingValue ?? ''}
+              ref={(el) => { queueMicrotask(() => { el.focus(); el.select(); }); }}
+              onInput={(e) => props.onEditInput?.(e.currentTarget.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); props.onEditCommit?.(); }
+                else if (e.key === 'Escape') { e.preventDefault(); props.onEditCancel?.(); }
+              }}
+              onBlur={() => props.onEditCommit?.()}
+            />
+          </Show>
+          <Show when={props.row.managed && props.row.agent === 'codex'}>
+            <span class="vt-srow-mode" data-mode="managed">관리형</span>
+          </Show>
           {/* ADR-29 B — 브랜치 배지. 그룹 헤더가 이미 저장소를 말하므로 여기는
               브랜치만(main은 "기본"이라 생략, branchText()가 그 규칙을 안다). */}
           <Show when={branchText()}>
@@ -130,6 +149,7 @@ export function Row(props: {
         </div>
         <div class="vt-srow-sub vt-wgrail-row-sub">
           {props.row.statusSentence}
+          <Show when={props.row.phase && !props.row.statusSentence}>{props.row.phase}</Show>
           <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>
         <Show when={props.row.status === 'waiting' && props.row.question}>

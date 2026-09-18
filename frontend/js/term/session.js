@@ -61,7 +61,17 @@ export async function createSession() {
 
 // + 버튼: 일반 터미널 / tmux 중 선택하는 드롭다운. (기존 createSession은
 // 온보딩·auto-mac 호환을 위해 그대로 둔다.)
-export function showAddMenu(e) {
+//
+// 2026-09-18 후속(사용자 지적: "열리는 팝업은 누른 위치에 열리게") — 예전엔
+// 항상 `#add-btn`(상단 탭 바의 + 버튼) 기준으로 위치를 계산했다. 그 버튼을
+// 없애고 레일 하단 "+ 새 세션"으로 발자국을 합친 뒤에는, 그 하드코딩 때문에
+// 메뉴가 클릭 위치와 무관하게 화면 구석(폴백 좌표)에 떴다 — 실제로 누른
+// 요소(`el`)를 받아 그 기준으로 계산한다. `initActionDelegation`(core/
+// dom.js)이 위임 클릭에서 이미 `el`(closest('[data-action]'))을 정확히
+// 계산해 넘겨준다 — delegated listener의 `e.currentTarget`은 델리게이트
+// 루트를 가리켜 못 쓴다는 게 이유였다. Rail.tsx의 레일 버튼처럼 델리게이션을
+// 안 거치는 호출자는 자기 엘리먼트를 직접 넘긴다.
+export function showAddMenu(el, e) {
   if (e) e.stopPropagation();
   // 토글: 이미 열려 있으면 닫기
   const existing = document.getElementById('add-menu');
@@ -70,9 +80,8 @@ export function showAddMenu(e) {
   const menu = document.createElement('div');
   menu.id = 'add-menu';
   menu.className = 'vt-menu';
-  // + 버튼 바로 아래에 정렬 (기본 .vt-menu는 우측 고정이라 left로 재배치)
-  const btn = document.getElementById('add-btn');
-  const r = btn ? btn.getBoundingClientRect() : { left: 8, bottom: 44 };
+  // 누른 버튼 바로 아래에 정렬 (기본 .vt-menu는 우측 고정이라 left로 재배치)
+  const r = el ? el.getBoundingClientRect() : { left: 8, bottom: 44 };
   menu.style.right = 'auto';
   menu.style.left = `${Math.round(r.left)}px`;
   menu.style.top = `${Math.round(r.bottom + 6)}px`;
@@ -185,7 +194,13 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // sessions[id] 선 초기화 — wrapE2E의 동기 onReady 콜백이 참조할 수 있도록.
   // ws는 startSessionSocket()에서 채운다.
   // displayName의 출처는 레코드다(core/store.js의 sessionDisplayName).
-  registerSession(id, { term, ws: null, displayName: displayName || id.slice(0, 8),
+  // 2026-09-18 후속(사용자 지적) — 예전엔 이름이 없으면 id를 8자로 잘라
+  // 채웠다("의미 없는 문자열"이라는 지적의 실제 원인이 여기였다 — store.js의
+  // sessionDisplayName이 폴백을 계산해도, 여기서 이미 displayName이 채워져
+  // 있으면 그 폴백에 닿지도 못한다). null로 비워 두면 tmuxName이 있는
+  // 세션은 그 이름을, 없는 일반 세션은 sessionDisplayName의 "터미널 N"
+  // 폴백을 그대로 받는다.
+  registerSession(id, { term, ws: null, displayName: displayName || null,
     fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) },
     insertBeforeId);
   // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션의 connectTerminalWs를
@@ -332,7 +347,7 @@ export async function removeSession(id) {
 // 등록한다. session.tmux-list는 ADR-29 E에서 없앴다 — 그 목록 팝업이 하던
 // 일(tmux 세션 목록 + 깨우기 + 완전 종료)은 이제 picker.js의 세션 관리
 // 시트(session.manager)가 직접 한다.
-registerAction('session.add-menu', (el, e) => showAddMenu(e));
+registerAction('session.add-menu', (el, e) => showAddMenu(el, e));
 
 // 외부(picker.js/quickopen.js/grid.js/snippets.js/viewer.js/moreMenu.js/voice.js)가
 // bare identifier 또는 window.foo(e) 형태로 참조하므로 브리지 필요.

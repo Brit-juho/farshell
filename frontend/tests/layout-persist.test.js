@@ -167,15 +167,16 @@ test('복원 전에는 저장하지 않는다 — 빈 초기 트리로 정본을
   const puts = calls.filter((c) => c.url.includes('/api/workspace') && c.opts && c.opts.method === 'PUT');
   assert.strictEqual(puts.length, 1);
   const body = JSON.parse(puts[0].opts.body);
-  // ADR-29 D에서 스키마가 v4(탭에 groupId)로 올라갔다. v1 필드(tree/active)와
-  // v3 필드(repoId)는 **롤백용으로 계속 적는다** — 되돌리면 옛 코드가 이
-  // 스냅샷을 읽는다(repoId는 groupId와 같은 값 — 커스텀 그룹이 생기기 전).
+  // v1 필드(tree/active)는 **롤백용으로 계속 적는다** — 되돌리면 옛 코드가
+  // 이 스냅샷을 읽는다. groupId/repoId(v3/v4 시절 탭 정체성)는 2026-09-18
+  // 후속(그룹 재정의)에서 뜻을 잃어 더 이상 쓰지 않는다 — 탭 레코드에 아예
+  // 없다.
   assert.strictEqual(body.ui.layout.v, 4);
   assert.strictEqual(body.ui.layout.tree.t, 'split', '롤백용 v1 필드가 유지돼야 한다');
   assert.strictEqual(body.ui.layout.tabs.length, 1);
   assert.strictEqual(body.ui.layout.tabs[0].tree.t, 'split');
-  assert.strictEqual(body.ui.layout.tabs[0].groupId, null);
-  assert.strictEqual(body.ui.layout.tabs[0].repoId, null, '롤백용 v3 필드도 유지돼야 한다');
+  assert.strictEqual(body.ui.layout.tabs[0].groupId, undefined, 'groupId는 더 이상 안 쓴다');
+  assert.strictEqual(body.ui.layout.tabs[0].repoId, undefined, 'repoId 미러도 더 이상 안 쓴다');
   assert.strictEqual(body.ui.layout.tabs[0].hostId, 'local');
   assert.ok(window.localStorage.getItem('vt-layout-v1'), 'localStorage에도 같이 써야 한다');
 });
@@ -238,13 +239,13 @@ test('restoreLayout — 서버 정본이 v4(탭 배열)여도 더 최신이면 �
 
   await P.restoreLayout();
   assert.strictEqual(S.getTree().id, 'remote-leaf');
-  assert.strictEqual(S.getTabs()[0].groupId, 'repo-a');
+  assert.strictEqual(S.getTabs()[0].worktreeId, 'wt-1', '탭 자체(worktreeId 포함)는 groupId 없이도 복원된다');
 });
 
-// ADR-29 D — v3(탭에 repoId만 있고 groupId가 없음)도 읽을 수 있어야 한다.
-// D 이전에 저장된 스냅샷이거나, D 반영 전의 다른 기기가 방금 저장한 것일
-// 수 있다 — repoId 값 자체는 groupId 자동 제안과 같으므로 그대로 옮겨 읽는다.
-test('restoreLayout — 서버 정본이 v3(repoId만 있음)여도 groupId로 읽는다', async () => {
+// 2026-09-18 후속(그룹 재정의) — v3(repoId만 있음) 스냅샷도 여전히 읽을 수
+// 있어야 한다(옛 기기가 저장한 것일 수 있다). repoId는 더 이상 groupId로
+// 승격되지 않는다 — 탭 자체(tree/worktreeId/label)만 복원되면 충분하다.
+test('restoreLayout — 서버 정본이 v3(repoId만 있음)여도 탭은 정상 복원된다', async () => {
   const env = createDomEnv('<!doctype html><html><body></body></html>');
   _doms.push(env.dom);
   env.window.API_BASE = '';
@@ -271,12 +272,13 @@ test('restoreLayout — 서버 정본이 v3(repoId만 있음)여도 groupId로 �
 
   await P.restoreLayout();
   assert.strictEqual(S.getTree().id, 'remote-leaf');
-  assert.strictEqual(S.getTabs()[0].groupId, 'repo-a');
+  assert.strictEqual(S.getTabs()[0].worktreeId, 'wt-1');
 });
 
-// ── ADR-29 D — v3 → v4 마이그레이션(탭 정체성이 repoId에서 groupId로) ─────────
+// ── v2/v3/v4 스냅샷 전부 읽을 수 있어야 한다(worktreeId/hostId/label만 —
+// groupId/repoId는 2026-09-18 후속으로 뜻을 잃었다) ──────────────────────────
 
-test('v2 스냅샷(groupId 없음)도 그대로 복원된다 — groupId는 null로 떨어진다', async () => {
+test('v2 스냅샷도 그대로 복원된다 — groupId 필드 자체가 없다', async () => {
   const { window, core, S, P } = await load();
   addLive(core, 'live-build', 'build');
   window.localStorage.setItem('vt-layout-v1', JSON.stringify({
@@ -286,11 +288,11 @@ test('v2 스냅샷(groupId 없음)도 그대로 복원된다 — groupId는 null
   }));
   await P.restoreLayout();
   assert.strictEqual(S.getTabs()[0].worktreeId, 'wt-9');
-  assert.strictEqual(S.getTabs()[0].groupId, null);
+  assert.strictEqual(S.getTabs()[0].groupId, undefined);
   assert.strictEqual(S.getTabs()[0].hostId, 'local');
 });
 
-test('v4 — 탭의 groupId/worktreeId/hostId가 그대로 복원된다', async () => {
+test('v4(옛 groupId 포함) 스냅샷 — worktreeId/hostId는 복원되고 groupId는 버려진다', async () => {
   const { window, core, S, P } = await load();
   addLive(core, 'live-build', 'build');
   window.localStorage.setItem('vt-layout-v1', JSON.stringify({
@@ -300,7 +302,7 @@ test('v4 — 탭의 groupId/worktreeId/hostId가 그대로 복원된다', async 
   }));
   await P.restoreLayout();
   const tab = S.getTabs()[0];
-  assert.strictEqual(tab.groupId, 'repo-a');
+  assert.strictEqual(tab.groupId, undefined, '2026-09-18 후속 — groupId는 더 이상 읽지 않는다');
   assert.strictEqual(tab.worktreeId, 'wt-9');
   assert.strictEqual(tab.hostId, 'local');
   assert.strictEqual(S.getTree().session, 'live-build');

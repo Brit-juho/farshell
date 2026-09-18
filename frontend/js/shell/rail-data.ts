@@ -28,6 +28,10 @@ export interface RailRowInput {
    * "아직 모른다"는 다르고, 후자에 확신 있는 마크를 그리면 거짓말이 된다.
    * agent/badges.js가 같은 이유로 같은 선택을 했다). */
   agent?: string | null;
+  /** Codex App Server가 직접 상태를 보내는 세션인가. 관찰형과 구분한다. */
+  managed?: boolean;
+  /** 구조화 이벤트가 주는 표시용 대화 단계(기존 5개 상태를 대체하지 않는다). */
+  phase?: string | null;
   /** N38(70-mobile.md §2) — waiting 상태에서 감지된 질문 1줄. Fleet.tsx가
    * 이 필드로 인라인 승인 버튼을 그린다. 선택 필드라 Rail.tsx는 안 넘겨도
    * 그대로 동작한다. */
@@ -179,10 +183,11 @@ export interface OtherRailRowInput {
    * 「잠자는 중」 구역에 산다. tmux에는 살아 있지만 이 기기에서 안 열어둔
    * 상태(다른 기기가 열어뒀을 수도 있다 — 재우기/깨우기는 기기별 개념). */
   awake: boolean;
-  /** 유효 그룹 id — `@fsh_grp`가 있으면 그것, 없으면 null(「묶지 않음」).
-   * 저장소로 자동 묶어 보여주던 폴백은 2026-09-18 후속에서 없앴다(사용자
-   * 요청 — 드래그로 직접 묶은 것만 그룹). null인 세션은 그룹 섹션이 아니라
-   * 「묶지 않음」/개별 잠자는 행으로 간다. */
+  /** 유효 그룹 id — 2026-09-18 후속(그룹 재정의, 사용자 요청: "같은 화면에
+   * 묶인 것만 그룹"). 더 이상 태그(`@fsh_grp`)가 아니라, 이 세션이 지금
+   * 어느 탭(pane 트리)에 다른 세션과 같이 떠 있으면 그 **탭 id** — 혼자면
+   * null(「묶지 않음」). Rail.tsx가 `window.getTabGroups()`로 매 렌더 계산해
+   * 채운다. */
   groupId: string | null;
   status: AgentState;
   since: number | null;
@@ -197,6 +202,9 @@ export interface OtherRailRowInput {
   /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 모르면 null/undefined — "셸"과
    * "모름"은 다르다. */
   agent?: string | null;
+  /** Codex App Server의 구조화 이벤트를 직접 받는 관리형 세션인가. */
+  managed?: boolean;
+  phase?: string | null;
   /** 이 세션이 속한 워크트리의 저장소 이름·브랜치(있으면). 배지 표시와
    * 그룹 라벨 폴백(사용자가 그룹 이름을 안 지었을 때)의 입력이다. 워크트리에
    * 안 속하는 세션(순수 셸 등)은 셋 다 null. */
@@ -231,49 +239,34 @@ export interface SessionSectionOut {
   rows: (OtherRailRowInput & { statusSentence: string })[];
 }
 
-/** 새 그룹 id — `server/routes/groups.py`의 `_GROUP_ID_RE`(`[0-9a-f]{12}`)와
- * 같은 모양이다. group_store는 이름·순서만 관리하고 "그룹이 존재하는가"는
- * 세션들의 `@fsh_grp` 값 자체가 정의하므로, 서버에 미리 등록할 필요 없이
- * 클라이언트가 생성해 세션 둘에 그대로 심으면 그게 곧 새 그룹이다(2026-09-18
- * 후속 — 세션을 세션에 끌어다 놓아 그룹을 만드는 동작의 기반). */
-export function newGroupId(): string {
-  const hasCrypto = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function';
-  const raw = hasCrypto ? crypto.randomUUID().replace(/-/g, '') : Math.random().toString(16).slice(2).padEnd(24, '0');
-  return raw.slice(0, 12);
-}
-
-/** 그룹 표시 이름 — 사용자가 지었으면 그것, 아니면 멤버 아무나의 저장소
- * 이름으로 떨어진다(드래그로 막 만든, 아직 이름을 안 지은 그룹의 임시
- * 이름표 — 그룹 헤더의 연필 아이콘으로 바로 고칠 수 있다). 멤버 중
- * 저장소가 있는 세션이 하나도 없으면(순수 셸끼리만 묶었을 때) "그룹"이라는
- * 자리표시자. */
-export function groupDisplayLabel(
-  groupId: string, customLabels: Record<string, string>, members: { repoName?: string | null }[],
-): string {
-  if (customLabels[groupId]) return customLabels[groupId];
-  const withRepo = members.find((m) => m.repoName);
-  return withRepo?.repoName || '그룹';
-}
-
 /** 깨어있는 세션만 대상으로 한다 — 잠자는 세션은 buildSleepingEntries가
  * 별도로 다룬다(둘을 한 함수에 넣으면 "그룹 안에 잠든 게 흐리게 끼어드는"
- * 1판의 실수를 반복하기 쉽다). */
+ * 1판의 실수를 반복하기 쉽다).
+ *
+ * `groupLabels`는 호출자(Rail.tsx)가 `window.getTabGroups()`로 이미 계산해
+ * 넘긴다 — 2026-09-18 후속(그룹 재정의)으로 그룹은 태그가 아니라 화면(탭)에서
+ * 실시간으로 도출되므로, 그 계산 자체는 여기(순수 데이터 함수)가 아니라
+ * layout/store.js의 몫이다. 이 함수는 이미 정해진 groupId·label을 가진
+ * 행들을 섹션으로 접는 것만 한다. */
 export function buildSessionSections(
   inputs: OtherRailRowInput[],
-  customLabels: Record<string, string>,
-  groupOrder: string[],
+  groupLabels: Map<string, string>,
   nowMs = Date.now(),
 ): SessionSectionOut[] {
   const awake = inputs.filter((r) => r.awake);
   const withSentence = awake.map((r) => ({ ...r, statusSentence: statusSentence(r.status, r.since, r.tool, nowMs) }));
-  const byRecency = (a: { since: number | null }, b: { since: number | null }) => (b.since ?? -Infinity) - (a.since ?? -Infinity);
+  // 2026-09-18 후속 — 정렬 기준을 최근 활동(since)에서 이름으로 바꿨다.
+  // since로 정렬하면 상태가 바뀔 때마다(4~5초 폴링) 순서가 흔들려 행이
+  // 오르락내리락했다(사용자 지적: "뭐 할 때마다 움직여서 불편하다"). 이름
+  // 정렬은 그 값이 바뀌지 않는 한 순서가 절대 안 흔들린다.
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
   const sections: SessionSectionOut[] = [];
 
   const attentionRows = withSentence.filter((r) => r.status === 'waiting' || r.status === 'error');
   if (attentionRows.length) {
     sections.push({ key: 'attention', kind: 'attention', groupId: null, label: '개입 필요',
-      rows: [...attentionRows].sort(byRecency) });
+      rows: [...attentionRows].sort(byName) });
   }
 
   const byGroup = new Map<string, typeof withSentence>();
@@ -287,63 +280,46 @@ export function buildSessionSections(
     }
   }
 
-  // 순서: 사용자가 정한 순서(group_store)가 먼저, 그 안에 없는 그룹(드래그로
-  // 막 만들었지만 아직 순서가 저장 안 된 것)은 라벨 가나다순으로 뒤에
-  // 붙는다 — 그래야 매번 같은 순서로 보인다.
-  const known = new Set(groupOrder);
-  const rest = Array.from(byGroup.keys()).filter((id) => !known.has(id));
-  rest.sort((a, b) => groupDisplayLabel(a, customLabels, byGroup.get(a)!)
-    .localeCompare(groupDisplayLabel(b, customLabels, byGroup.get(b)!)));
-  for (const gid of [...groupOrder.filter((id) => byGroup.has(id)), ...rest]) {
-    const members = byGroup.get(gid)!;
+  // 그룹 순서: 라벨 가나다순 — 고정 규칙이라 세션 활동과 무관하게 항상
+  // 같은 순서로 보인다(위 byName과 같은 이유).
+  const order = Array.from(byGroup.keys())
+    .sort((a, b) => (groupLabels.get(a) || '').localeCompare(groupLabels.get(b) || ''));
+  for (const gid of order) {
     sections.push({
       key: gid, kind: 'group', groupId: gid,
-      label: groupDisplayLabel(gid, customLabels, members),
-      rows: [...members].sort(byRecency),
+      label: groupLabels.get(gid) || '그룹',
+      rows: [...byGroup.get(gid)!].sort(byName),
     });
   }
 
   if (ungrouped.length) {
     sections.push({ key: 'ungrouped', kind: 'ungrouped', groupId: null, label: '묶지 않음',
-      rows: [...ungrouped].sort(byRecency) });
+      rows: [...ungrouped].sort(byName) });
   }
   return sections;
 }
 
+/** 잠자는 세션 한 행 — 전부 낱개다(아래 함수 주석 참고). */
 export interface SleepEntryOut {
   key: string;
-  kind: 'group' | 'session';
-  groupId: string | null;
   label: string;
-  /** kind='session'이면 항상 원소 1개 — Row 컴포넌트를 그대로 재사용하기
-   * 위해 배열로 통일한다. */
-  rows: OtherRailRowInput[];
+  row: OtherRailRowInput;
 }
 
-/** 잠자는 세션 — 그룹째 잠들었으면 덩어리 하나(label 옆에 개수), 어디에도
- * 안 묶인 채 잠들었으면 낱개 행. 최종 설계안 §1의 정정: "잠든 것은 그룹
- * 안에 안 들어간다"— 깨어있는 섹션과 절대 안 섞인다. */
+/** 잠자는 세션 — 전부 낱개 행이다. 2026-09-18 후속(그룹 재정의) — 그룹은
+ * 이제 태그가 아니라 **한 탭의 pane 트리에 실시간으로 떠 있는 세션들**이라
+ * (사용자 요청: "같은 화면에 묶인 것만 그룹"), 탭을 재우면(sleepTab이 탭을
+ * 닫는다) 그 순간 근거 자체가 사라진다 — 잠든 채로 "그룹이었다"를 붙들고
+ * 있을 태그가 더 이상 없다(덩어리 잠자는 구역은 이 후속에서 없앴다).
+ * 덩어리로 재웠던 세션들은 깨어나서 다시 같은 화면에 놓이면 그룹으로
+ * 다시 보인다. */
 export function buildSleepingEntries(
-  inputs: OtherRailRowInput[], customLabels: Record<string, string>,
+  inputs: OtherRailRowInput[],
 ): SleepEntryOut[] {
   const asleep = inputs.filter((r) => !r.awake);
-  const byGroup = new Map<string, OtherRailRowInput[]>();
-  const solo: OtherRailRowInput[] = [];
-  for (const r of asleep) {
-    if (r.groupId) {
-      if (!byGroup.has(r.groupId)) byGroup.set(r.groupId, []);
-      byGroup.get(r.groupId)!.push(r);
-    } else {
-      solo.push(r);
-    }
-  }
-  const entries: SleepEntryOut[] = [];
-  for (const [gid, members] of byGroup) {
-    entries.push({ key: gid, kind: 'group', groupId: gid, label: groupDisplayLabel(gid, customLabels, members), rows: members });
-  }
-  for (const r of solo) {
-    entries.push({ key: r.tmuxName || r.sessionId, kind: 'session', groupId: null, label: r.name, rows: [r] });
-  }
+  const entries: SleepEntryOut[] = asleep.map((r) => (
+    { key: r.tmuxName || r.sessionId, label: r.name, row: r }
+  ));
   entries.sort((a, b) => a.label.localeCompare(b.label));
   return entries;
 }

@@ -10,14 +10,12 @@
 //  - 사용자가 직접 지은 이름(`renamed`)은 절대 덮지 않는다.
 //  - 워크트리에 안 속한 세션은 그대로 둔다(레일의 「묶지 않음」과 같은 규칙).
 //
-// ADR-29 D(2026-09-18) — 탭 소속 판정(setGroupSessionMap이 먹이는 지도)이
-// `@fsh_grp`(`/api/tmux/sessions`의 `grp_id`) 하나만 본다 — 레일의 groupId
-// 계산과 같은 값이어야 탭과 레일이 항상 같은 답을 낸다. 저장소로 자동
-// 묶는 폴백은 2026-09-18 후속에서 없앴다(사용자 요청 — 드래그로 직접
-// 묶은 것만 그룹).
+// 2026-09-18 후속(그룹 재정의) — 탭 소속 판정은 이제 pane 트리 자체에서
+// 나온다(layout/tabbar.js의 tabSessionNames, layout/store.js의 tabGroups) —
+// `@fsh_grp` 태그도, 그 태그를 읽어 지도를 만들던 effectiveGroupMap/
+// setGroupSessionMap도 여기서 함께 없앴다.
 import { allSessions, setSessionDisplayName } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
-import { setGroupSessionMap } from '../layout/tabbar.js';
 import { setBranchChipMap } from '../layout/panes.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
@@ -58,19 +56,6 @@ function applyLabels(map) {
   }
 }
 
-/** 탭 바가 "이 세션이 이 탭(그룹) 소속인가"를 판정할 때 쓰는 최종 지도 —
- * ADR-29 D: 탭의 정체성은 그룹이다. `@fsh_grp`가 없으면(2026-09-18 후속:
- * 저장소 자동 제안 폴백을 없앴다) null — 레일의 groupId 계산(rail-data.ts)과
- * 같은 값이다. */
-export function effectiveGroupMap(tmuxSessions) {
-  const map = new Map();
-  for (const t of tmuxSessions || []) {
-    if (!t || !t.name) continue;
-    map.set(t.name, t.grp_id || null);
-  }
-  return map;
-}
-
 /** 세션 이름 → 브랜치. **저장소에 워크트리가 둘 이상일 때만** 항목이
  * 생긴다(D4: "워크트리가 1개뿐인 저장소는 축이 안 보인다") — 구분할 대상이
  * 하나뿐이면 칩은 정보가 아니라 잡음이다. */
@@ -87,13 +72,9 @@ export function branchChipMap(worktrees) {
 
 export async function refreshTabWorktreeLabels() {
   try {
-    const [repoData, tmuxSessions] = await Promise.all([
-      vtFetch('/api/repos'),
-      vtFetch('/api/tmux/sessions'),
-    ]);
+    const repoData = await vtFetch('/api/repos');
     const worktrees = (repoData?.repos || []).flatMap((r) => r.worktrees || []);
     applyLabels(worktreeLabelMap(worktrees));
-    setGroupSessionMap(effectiveGroupMap(tmuxSessions));
     setBranchChipMap(branchChipMap(worktrees));
   } catch (_) { /* 워크트리 API가 없거나 실패 — 탭은 기존 이름 그대로 쓴다 */ }
 }
