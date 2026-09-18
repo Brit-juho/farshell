@@ -132,13 +132,11 @@ try {
   // HUD와 별도 import()를 또 부르지 않는다(모듈 캐시로 중복 다운로드는 안
   // 생기지만, 굳이 두 번 요청할 이유가 없다).
   const chipRoot = document.getElementById('vt-workspace-chip-slot');
-  const screensRoot = document.getElementById('vt-screens-slot');
-  if (chipRoot || screensRoot) {
+  if (chipRoot) {
     import('./shell/HeaderExtras.tsx')
-      .then(({ mountWorkspaceChip, mountScreensButton }) => {
+      .then(({ mountWorkspaceChip }) => {
         const deps = { vtFetch, activeTmuxName, getAction };
         if (chipRoot) mountWorkspaceChip(chipRoot, deps);
-        if (screensRoot) mountScreensButton(screensRoot, deps);
       })
       .catch((e) => console.error('[FarShell header]', e));
   }

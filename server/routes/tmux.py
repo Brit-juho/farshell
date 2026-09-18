@@ -57,7 +57,7 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int):
     # 그 id로 WS를 열었다가 죽은 세션에 재연결을 반복하고, restoreWorkspace가 stale 탭마다
     # 이 유령 세션을 만들어 로드 즉시 세션·터미널·WS가 무더기로 쌓여 메모리가 폭증했다.
     # → PTY를 만들기 전에 세션 존재를 확인하고, 없으면 404로 돌려보내 복원 루틴이 건너뛰게 한다.
-    if not tmux_runner.has_session(tmux_name):
+    if not await tmux_runner.has_session_async(tmux_name):
         return JSONResponse(
             {"error": "tmux session not found", "tmux_session": tmux_name},
             status_code=404,
@@ -103,11 +103,11 @@ async def list_tmux_sessions():
     # cwd 추측이 아니라 id로 판정할 수 있게(같은 cwd 세션 둘 문제의 해소).
     fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}"
 
-    sessions_text = tmux_runner.run_text(["list-sessions", "-F", fmt_sessions], timeout=2.0)
+    sessions_text = await tmux_runner.run_text_async(["list-sessions", "-F", fmt_sessions], timeout=2.0)
     if not sessions_text:
         return []
 
-    panes_text = tmux_runner.run_text(["list-panes", "-a", "-F", fmt_panes], timeout=2.0) or ""
+    panes_text = await tmux_runner.run_text_async(["list-panes", "-a", "-F", fmt_panes], timeout=2.0) or ""
     pane_by_session: dict[str, tuple[str, str, str]] = {}
     for line in panes_text.strip().split("\n"):
         if not line:
@@ -145,7 +145,8 @@ async def create_tmux_session(request: Request):
     body = await request.json()
     # Wave 1 W1-2: 사용자 지정 이름 없으면 cwd 기반 디폴트
     requested_name = body.get("name", "").strip()
-    tmux_name = requested_name if requested_name else _generate_default_session_name()
+    # 이 헬퍼는 이름이 빌 때까지 has_session을 반복 호출한다(동기 tmux).
+    tmux_name = requested_name or await asyncio.to_thread(_generate_default_session_name)
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
@@ -162,7 +163,7 @@ async def create_tmux_session(request: Request):
     else:
         # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
         start_dir = platform_utils.default_start_dir()
-    rc, _, err = tmux_runner.run(
+    rc, _, err = await tmux_runner.run_async(
         ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
         timeout=5.0,
     )
@@ -211,14 +212,14 @@ async def open_tmux_on_mac(request: Request):
         return JSONResponse({"ok": False, "error": "이미 여는 중"}, status_code=409)
     _mac_open_locks.add(tmux_name)
     try:
-        rc, _, _ = tmux_runner.run(["has-session", "-t", tmux_name], timeout=5.0)
+        rc, _, _ = await tmux_runner.run_async(["has-session", "-t", tmux_name], timeout=5.0)
         if rc != 0:
             return JSONResponse({"ok": False, "error": "tmux 세션을 찾을 수 없음"}, status_code=404)
 
         # display-message -t는 대상 세션이 없어도 attach된 클라이언트가 하나도 없으면
         # rc=0/빈 출력을 내는 tmux 특이 동작이 있어(has-session과 결과가 어긋남),
         # attached 수는 list-sessions 출력에서 이름으로 직접 파싱한다.
-        sessions_text = tmux_runner.run_text(
+        sessions_text = await tmux_runner.run_text_async(
             ["list-sessions", "-F", "#{session_name}\t#{session_attached}"], timeout=5.0
         ) or ""
         total_attached = 0
@@ -275,7 +276,7 @@ async def kill_tmux_session(tmux_name: str):
         _auto_responder.remove(existing.session_id)  # 세션별 상태 정리 (누수 방지)
     # 실제 tmux 세션 종료 — 이 줄이 빠져 있어 rc가 정의되지 않은 채 참조돼 500이 났고,
     # 세션이 전혀 kill되지 않았다.
-    rc, _, _ = tmux_runner.run(["kill-session", "-t", tmux_name], timeout=5.0)
+    rc, _, _ = await tmux_runner.run_async(["kill-session", "-t", tmux_name], timeout=5.0)
     if rc != 0:
         return JSONResponse({"error": "tmux kill failed", "name": tmux_name}, status_code=500)
     return {"ok": True}
@@ -349,7 +350,8 @@ async def tmux_clients(session: str, me: str | None = None):
     if not _CLIENT_SESSION_RE.fullmatch(session or ""):
         return JSONResponse({"error": "invalid session name"}, status_code=400)
     my_tty = _tty_of_web_session(me)
-    rows = _client_rows(session)
+    # 블로킹은 _client_rows 안의 tmux 호출이다 — 헬퍼째로 스레드에 넘긴다.
+    rows = await asyncio.to_thread(_client_rows, session)
     for r in rows:
         r["is_me"] = bool(my_tty and r["tty"] == my_tty)
         r["label"] = _label(r, my_tty)
@@ -366,7 +368,7 @@ async def tmux_detach_client(request: Request):
     # 지금 보고 있는 화면을 스스로 끊으면 복구 경로가 없다 — 400으로 막는다.
     if tty == _tty_of_web_session(me):
         return JSONResponse({"error": "cannot detach self", "reason": "지금 보고 있는 화면은 끊을 수 없습니다"}, status_code=400)
-    tmux_runner.run(["detach-client", "-t", tty], timeout=2.0)
+    await tmux_runner.run_async(["detach-client", "-t", tty], timeout=2.0)
     return {"ok": True, "detached": tty}
 
 
@@ -386,16 +388,21 @@ async def tmux_clients_solo(request: Request):
         # 되돌릴 방법이 없다.
         return JSONResponse({"error": "unknown client", "reason": "이 화면의 tty를 확인할 수 없습니다"}, status_code=400)
 
-    detached = []
-    for row in _client_rows(session):
-        if row["tty"] == keep:
-            continue
-        # 이미 죽은 tty면 tmux가 에러를 내지만 무시한다(graceful).
-        tmux_runner.run(["detach-client", "-t", row["tty"]], timeout=2.0)
-        detached.append(row["tty"])
-    # 남은 클라이언트 크기로 즉시 재동기화 — 안 하면 방금 사라진 작은 화면
-    # 크기 그대로 한동안 남는다.
-    tmux_runner.run(["refresh-client", "-t", keep], timeout=2.0)
+    # tmux 호출이 여러 번이라 한 덩어리로 스레드에 넘긴다(routes/peer.py의 _solo와 같은 관용구).
+    def _solo() -> list[str]:
+        detached = []
+        for row in _client_rows(session):
+            if row["tty"] == keep:
+                continue
+            # 이미 죽은 tty면 tmux가 에러를 내지만 무시한다(graceful).
+            tmux_runner.run(["detach-client", "-t", row["tty"]], timeout=2.0)
+            detached.append(row["tty"])
+        # 남은 클라이언트 크기로 즉시 재동기화 — 안 하면 방금 사라진 작은 화면
+        # 크기 그대로 한동안 남는다.
+        tmux_runner.run(["refresh-client", "-t", keep], timeout=2.0)
+        return detached
+
+    detached = await asyncio.to_thread(_solo)
     return {"ok": True, "kept": keep, "detached": detached}
 
 

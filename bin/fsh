@@ -1486,6 +1486,23 @@ cmd_hooks() {
           update) printf "  ⚠ %-14s 다른 경로/스크립트: %s\n" "$event" "$cur" ;;
         esac
       done <<< "$out"
+      # 등록돼 있다고 **동작하는 것은 아니다.** 훅은 Claude를 막으면 안 되므로
+      # 실패해도 조용히 넘어가는데, 그래서 인증이 막히면 아무도 모른 채 죽는다 —
+      # 실제로 `POST /api/agent/event`가 1,440번 전부 401이었고(2026-09-17)
+      # 그동안 상태 배지·큐 자동 투입이 통째로 멎어 있었다. 훅이 마지막 실패를
+      # 남기게 했으니(~/.vt/hook-last-error) 여기서 그걸 읽어 보여준다.
+      local errfile="$HOME/.vt/hook-last-error"
+      if [ -f "$errfile" ]; then
+        local ev reason
+        IFS=$'\t' read -r ev reason < "$errfile"
+        echo ""
+        echo "  ⚠ 마지막 훅 전송이 실패했습니다 — 등록은 됐지만 서버에 닿지 못합니다."
+        printf "      %s 이벤트: %s\n" "${ev:-?}" "${reason:-알 수 없음}"
+        case "$reason" in
+          *401*|*403*) echo "      → 인증 문제입니다. ~/.vt.env의 VT_AUTH_TOKEN을 확인하세요." ;;
+          *연결*)       echo "      → 서버가 떠 있지 않을 수 있습니다: fsh status" ;;
+        esac
+      fi
       echo ""
       if [ "$rc" != "0" ]; then
         echo "  → 등록: fsh hooks install"

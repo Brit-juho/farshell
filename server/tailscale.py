@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -50,8 +52,38 @@ def _run_status_json(timeout: float = 2.0) -> Optional[dict]:
         return None
 
 
-def get_status() -> TailscaleStatus:
-    """현재 Tailscale 상태. daemon 미실행/미설치 시에도 안전하게 기본값 반환."""
+# `tailscale status --json` 서브프로세스는 실측 **53.6ms**가 걸린다(2026-09-16).
+# `/api/capabilities`가 이 값을 싣는데 그 화면은 30초마다 두 곳에서 폴링되므로,
+# 캐시가 없으면 분당 수백 ms를 서브프로세스에 태운다. 테일스케일이 붙었다
+# 떨어지는 일은 분 단위로도 드물어 30초 캐시로 잃는 정확도가 없다.
+# 테스트는 `is_installed`·`subprocess.check_output`를 monkeypatch하므로
+# 반드시 `invalidate_cache()`로 초기화해야 한다(conftest의 autouse 픽스처).
+CACHE_TTL_SEC = 30.0
+_cache: dict = {"at": 0.0, "data": None}
+_cache_lock = threading.Lock()
+
+
+def invalidate_cache() -> None:
+    with _cache_lock:
+        _cache["at"] = 0.0
+        _cache["data"] = None
+
+
+def get_status(force: bool = False) -> TailscaleStatus:
+    """현재 Tailscale 상태(30초 캐시). daemon 미실행/미설치 시에도 안전하게 기본값 반환."""
+    if not force:
+        with _cache_lock:
+            data, at = _cache["data"], _cache["at"]
+        if data is not None and time.time() - at < CACHE_TTL_SEC:
+            return data
+    status = _get_status_uncached()
+    with _cache_lock:
+        _cache["at"] = time.time()
+        _cache["data"] = status
+    return status
+
+
+def _get_status_uncached() -> TailscaleStatus:
     installed = is_installed()
     data = _run_status_json() if installed else None
     if not data:

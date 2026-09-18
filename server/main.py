@@ -293,7 +293,9 @@ async def lifespan(_app: FastAPI):
         )
     # A4: cloudflare 터널 뒤에서는 cloudflared가 localhost에서 접속하므로 client IP가
     # 항상 127.0.0.1 → IP 화이트리스트가 원격 요청을 걸러내지 못한다. 실질 방어는 VT_TOKEN.
-    if not spec.allow_all and tunnel.find_active_pids():
+    # 기동 중이라 아직 아무것도 서빙하지 않지만, 가드 테스트가 요구하는 규칙을
+    # 예외 없이 지킨다 — "여긴 괜찮다"는 판단이 하나 생기면 다음 사람이 따라 한다.
+    if not spec.allow_all and await asyncio.to_thread(tunnel.find_active_pids):
         logger.warning(
             "[보안] cloudflare 터널 활성 + IP 필터 모드. 터널 경유 요청은 모두 127.0.0.1로 "
             "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "

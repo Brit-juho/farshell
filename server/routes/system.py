@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json as _json
 import logging
@@ -81,8 +82,15 @@ def _etag_response(payload, request: Request, stable_for_etag=None) -> Response:
 _workspace_clients: set[WebSocket] = set()
 
 
-@router.get("/api/capabilities")
-async def capabilities(request: Request):
+def _capabilities_payload() -> dict:
+    """프로브를 전부 도는 **동기** 함수 — 반드시 to_thread로 부른다.
+
+    실측(2026-09-16): 합계 87ms 중 `tailscale.get_status_dict()` 53.6ms +
+    `tunnel.get_tunnel_status()` 32.9ms가 99%다(나머지 11개 프로브 합계 0.26ms).
+    둘 다 서브프로세스라, 이벤트 루프에서 직접 돌면 그 87ms 동안 서버 전체가
+    멈춘다 — 터미널 타이핑에서 감지되는 크기다. 두 모듈에 TTL 캐시를 넣어
+    호출 빈도도 함께 줄였다(tailscale 30초 · tunnel 10초).
+    """
     # ⚠️ 모델을 로드하지 않고 설치 여부만 확인한다. 예전엔 _init_stt()를 불러서
     # 페이지 로드마다(capabilities는 grid.js가 시작 시 호출) faster-whisper 모델
     # ~400MB를 서버에 올렸다 → 터미널만 쓰는 사용자도 400MB를 물었다.
@@ -124,6 +132,12 @@ async def capabilities(request: Request):
         # N37: 헤더 워크스페이스 칩. 빈 문자열이면 "/ 호스트" 부분을 안 그린다.
         "hostname": _hostname(),
     }
+    return payload
+
+
+@router.get("/api/capabilities")
+async def capabilities(request: Request):
+    payload = await asyncio.to_thread(_capabilities_payload)
     # ETag는 결정적 부분(tunnel.checked_at 같은 timestamp 제외)으로만 계산.
     stable = {k: v for k, v in payload.items() if k != "tunnel"}
     tun = dict(payload.get("tunnel") or {})
@@ -202,12 +216,12 @@ async def usage_counter_post(request: Request):
 
 @router.get("/api/tunnel/status")
 async def tunnel_status(request: Request):
-    return _etag_response(tunnel.get_tunnel_status(), request)
+    return _etag_response(await asyncio.to_thread(tunnel.get_tunnel_status), request)
 
 
 @router.get("/api/tailscale/status")
 async def tailscale_status(request: Request):
-    return _etag_response(tailscale.get_status_dict(), request)
+    return _etag_response(await asyncio.to_thread(tailscale.get_status_dict), request)
 
 
 @router.post("/api/notify/client-event")

@@ -48,7 +48,10 @@ function _e2eSetPinned(identityPub) {
 // 사용자가 재신뢰를 명시적으로 승인했을 때만 핀을 갱신한다 (silent fallback 금지).
 function _e2eConfirmRetrust(newIdentityPub) {
   return window.confirm(
-    '⚠️ 이 서버의 E2E 암호화 identity 키가 이전과 다릅니다.\n' +
+    // window.confirm은 순수 텍스트만 받아 SVG를 넣을 수 없다. 이모지(⚠️)는
+    // VS16이 붙어 플랫폼마다 컬러 그림으로 갈리므로 걷어내고, 경고의 무게는
+    // 문장 자체가 지게 한다 — 보안 경고에 장식은 필요 없다.
+    '이 서버의 E2E 암호화 identity 키가 이전과 다릅니다.\n' +
     '서버를 재설치했거나 키를 재발급했다면 정상이지만, 중간자 공격(MITM)일 수도 있습니다.\n\n' +
     '새 키를 신뢰하고 계속하시겠습니까? (신뢰하지 않으면 연결을 종료합니다)'
   );

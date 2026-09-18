@@ -12,8 +12,12 @@
 import { allSessions, setSessionDisplayName } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
 import { setWorktreeSessionMap } from '../layout/tabbar.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
-const POLL_MS = 10000;  // 워크트리 목록은 서버가 5초 캐시라 자주 불러도 싸다.
+// 정본은 `/ws-workspace`의 `worktrees_changed` push(맨 아래). 이 폴링은 WS가
+// 끊긴 동안과, 터미널에서 직접 워크트리를 만들어 서버가 변경을 모르는 경우를
+// 위한 안전망이다 — Rail.tsx의 WORKTREES_POLL_MS와 같은 이유·같은 값.
+const POLL_MS = 60000;
 
 /** 워크트리 목록 → `tmux 세션 이름 → 표시 라벨` 지도. 라벨 규칙은 레일과 같다
  * (30-worktree.md §4: isMain이면 repoName, 아니면 `repo/branch`). 순수 함수. */
@@ -67,3 +71,4 @@ export async function refreshTabWorktreeLabels() {
 
 refreshTabWorktreeLabels();
 setInterval(() => { if (!document.hidden) refreshTabWorktreeLabels(); }, POLL_MS);
+onWorkspaceEvent('worktrees_changed', () => { refreshTabWorktreeLabels(); });

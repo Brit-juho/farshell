@@ -44,13 +44,14 @@ def _cancel_tts_playback() -> int:
 
 @router.post("/voice/cancel")
 async def voice_cancel():
-    n = _cancel_tts_playback()
+    # pkill을 대상마다(최대 3개) timeout=2로 돈다 — 최악 6초 블로킹이다.
+    n = await asyncio.to_thread(_cancel_tts_playback)
     return {"cancelled": n}
 
 
 @router.post("/voice/input")
 async def voice_input(request: Request):
-    _cancel_tts_playback()
+    await asyncio.to_thread(_cancel_tts_playback)
 
     content_type = request.headers.get("content-type", "")
     audio_bytes = await request.body()

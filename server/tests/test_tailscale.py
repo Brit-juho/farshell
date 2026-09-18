@@ -7,7 +7,22 @@
 import json
 import subprocess
 
+import pytest
+
 import tailscale
+
+
+@pytest.fixture(autouse=True)
+def _no_status_cache():
+    """`get_status()`는 30초 캐시를 쓴다(서브프로세스가 실측 53.6ms라서).
+
+    테스트마다 `is_installed`·`subprocess.check_output`을 다르게 monkeypatch
+    하는데, 캐시가 남아 있으면 **앞 테스트의 결과를 그대로 돌려받아** 통과하는
+    것처럼 보인다. 조용히 틀리는 종류라 앞뒤로 모두 비운다.
+    """
+    tailscale.invalidate_cache()
+    yield
+    tailscale.invalidate_cache()
 
 
 RUNNING_JSON = json.dumps({

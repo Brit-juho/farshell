@@ -1,4 +1,12 @@
-// N37 §4 — 헤더의 새 조각 둘: 좌측 워크스페이스 칩, 우측 「연결된 화면」 아이콘.
+// N37 §4 — 헤더 좌측 워크스페이스 칩.
+//
+// 우측에 있던 「연결된 화면」 아이콘 버튼은 2026-09-17에 **제거했다**. 이유 둘:
+//  1. 순수 중복이었다 — 같은 `clients.show`를 HUD 칩(hud-data.ts)이 「연결된
+//     화면 1」이라고 **글자로** 띄우고 레일 행 컨텍스트 메뉴에도 있다.
+//  2. 그 14px 모니터 아이콘이 한글 **「유」로 읽혔다.** 둥근 사각형(ㅇ) 아래
+//     가로줄(ㅡ)과 다리 둘(ㅠ)이라 stroke 2px로 줄면 획이 뭉쳐 글자가 된다.
+//     제품이 쓰는 언어의 글자와 헷갈리는 아이콘은 아이콘 역할을 못 한다.
+//     사용자가 실제로 "우측 상단 유 버튼이 뭐냐"고 물어서 드러났다.
 // 워크트리 탭(layout/tabbar.js)·드래그(layout/dnd.js)·+ 버튼은 그대로 둔다
 // (10-shell-layout.md §4 "탭 드래그→페인 드롭은 기존 layout/dnd.js 유지") —
 // 이미 잘 동작하는 걸 다시 쓰는 리스크를 이번 마일스톤에서 지지 않는다.
@@ -55,53 +63,6 @@ function WorkspaceChip(props: { deps: HeaderDeps }) {
   );
 }
 
-// 「연결된 화면」 — 지금 활성 세션에 붙은 클라이언트 수. HUD의 같은 이름
-// 칩과 데이터·의미가 동일하다(clients.js 기준 — tmux 세션 단위). 1개(나
-// 혼자)면 아이콘만, 2개 이상이면 숫자를 얹는다 — 항상 떠 있는 요소라 평소엔
-// 존재감을 줄이고 "볼 필요가 생겼을 때"만 도드라지게 한다.
-function ScreensButton(props: { deps: HeaderDeps }) {
-  const [count, setCount] = createSignal<number | null>(null);
-
-  const refresh = async () => {
-    const tmuxName = props.deps.activeTmuxName();
-    if (!tmuxName) { setCount(null); return; }
-    const data = await safeFetch<{ clients?: unknown[] }>(
-      props.deps,
-      `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}`,
-    );
-    setCount(data?.clients?.length ?? null);
-  };
-
-  refresh();
-  const timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
-  onCleanup(() => clearInterval(timer));
-
-  const onClick = () => {
-    const fn = props.deps.getAction('clients.show');
-    if (typeof fn === 'function') (fn as () => void)();
-  };
-
-  return (
-    <Show when={count() != null}>
-      <button
-        type="button"
-        id="vt-screens-btn"
-        classList={{ 'vt-screens-multi': (count() ?? 0) > 1 }}
-        onClick={onClick}
-        title="연결된 화면"
-        aria-label={`연결된 화면 ${count()}개`}
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="8" x="5" y="2" rx="2" /><path d="M9 22V13" /><path d="M15 22V13" /><path d="M20 13H4" /></svg>
-        <Show when={(count() ?? 0) > 1}><span class="vt-screens-count">{count()}</span></Show>
-      </button>
-    </Show>
-  );
-}
-
 export function mountWorkspaceChip(root: HTMLElement, deps: HeaderDeps) {
   return render(() => <WorkspaceChip deps={deps} />, root);
-}
-
-export function mountScreensButton(root: HTMLElement, deps: HeaderDeps) {
-  return render(() => <ScreensButton deps={deps} />, root);
 }

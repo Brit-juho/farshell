@@ -12,6 +12,7 @@
 // 드레인 동작을 바꾸는 지시는 아니라고 판단(불명확한 지점, 90-verification.md
 // §4 12항 취지상 문서화하고 진행).
 import { openPanel, closePanel, setPanelPoll } from './panels/panel.js';
+import { icon } from './ui/icons.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { isMac } from './core/env.js';
 
@@ -131,7 +132,10 @@ export function showQueue() {
 
         const idx = document.createElement('span');
         idx.className = 'vt-q-idx';
-        idx.textContent = it.status === 'blocked' ? '⏸' : (i + 1);
+        // blocked는 숫자 자리에 '멈춤' 아이콘을 넣는다. 이모지(⏸)는 플랫폼마다
+        // 모양이 갈리고 currentColor를 안 따라 상태색과 어긋났다.
+        if (it.status === 'blocked') idx.innerHTML = icon('pause', 12);
+        else idx.textContent = String(i + 1);
 
         const meta = document.createElement('div');
         meta.className = 'vt-q-meta';

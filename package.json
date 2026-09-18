@@ -18,7 +18,8 @@
     "dev": "vite",
     "build": "vite build && VOICE_BUILD=1 vite build",
     "watch": "vite build --watch",
-    "test": "node --experimental-vm-modules --test frontend/tests/*.test.js"
+    "test": "npm run typecheck && node --experimental-vm-modules --test frontend/tests/*.test.js",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",

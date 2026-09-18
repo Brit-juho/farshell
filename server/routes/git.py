@@ -475,7 +475,9 @@ def _validate_files(files) -> list[str] | None:
 @router.post("/api/git/stage")
 async def git_stage(request: Request):
     body = await _read_json_body(request)
-    top, err = _resolve_repo_top(str(body.get("repo", "")))
+    # `_resolve_repo_top`은 안쪽에서 `git rev-parse --show-toplevel`을 돈다
+    # (_git_toplevel → _git → subprocess). 3겹 아래라 눈으로는 안 보인다.
+    top, err = await asyncio.to_thread(_resolve_repo_top, str(body.get("repo", "")))
     if err:
         return err
     files = _validate_files(body.get("files"))
@@ -490,7 +492,9 @@ async def git_stage(request: Request):
 @router.post("/api/git/unstage")
 async def git_unstage(request: Request):
     body = await _read_json_body(request)
-    top, err = _resolve_repo_top(str(body.get("repo", "")))
+    # `_resolve_repo_top`은 안쪽에서 `git rev-parse --show-toplevel`을 돈다
+    # (_git_toplevel → _git → subprocess). 3겹 아래라 눈으로는 안 보인다.
+    top, err = await asyncio.to_thread(_resolve_repo_top, str(body.get("repo", "")))
     if err:
         return err
     files = _validate_files(body.get("files"))
@@ -515,7 +519,9 @@ def _commit(repo: Path, message: str) -> tuple[int, str]:
 @router.post("/api/git/commit")
 async def git_commit(request: Request):
     body = await _read_json_body(request)
-    top, err = _resolve_repo_top(str(body.get("repo", "")))
+    # `_resolve_repo_top`은 안쪽에서 `git rev-parse --show-toplevel`을 돈다
+    # (_git_toplevel → _git → subprocess). 3겹 아래라 눈으로는 안 보인다.
+    top, err = await asyncio.to_thread(_resolve_repo_top, str(body.get("repo", "")))
     if err:
         return err
     message = body.get("message", "")

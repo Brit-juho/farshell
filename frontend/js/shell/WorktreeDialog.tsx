@@ -174,7 +174,11 @@ export function WorktreeDialog(props: Props) {
 
           <Show when={warnings().includes('lockfile_mismatch')}>
             <div class="vt-wtd-warn">
-              ⚠ {base()}와 package.json이 다릅니다 — 심링크로 두면 깨질 수 있습니다.
+              {/* 이모지 ⚠ 대신 인라인 SVG — 이 청크(shell)의 관용구를 따른다
+                  (HeaderExtras.tsx와 같은 형태). currentColor를 따르므로
+                  .vt-wtd-warn의 경고색이 아이콘에도 그대로 간다. */}
+              <svg class="vt-wtd-warn-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span>{base()}와 package.json이 다릅니다 — 심링크로 두면 깨질 수 있습니다.</span>
               <button type="button" class="vt-btn sm vt-wtd-warn-fix" onClick={() => setNodeModules('copy')}>복사로</button>
             </div>
           </Show>

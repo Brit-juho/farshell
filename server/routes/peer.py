@@ -404,7 +404,7 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
     from deps import pty_mgr
     import platform_utils
 
-    if not tmux_runner.has_session(tmux_name):
+    if not await tmux_runner.has_session_async(tmux_name):
         await ws.accept()
         host_store.audit(grant["id"], "ws", False, f"세션 없음: {tmux_name}")
         await ws.close(code=4404, reason="tmux session not found")
