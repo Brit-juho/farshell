@@ -135,9 +135,6 @@ export function Row(props: {
               onBlur={() => props.onEditCommit?.()}
             />
           </Show>
-          <Show when={props.row.managed && props.row.agent === 'codex'}>
-            <span class="vt-srow-mode" data-mode="managed">관리형</span>
-          </Show>
           {/* 2026-09-19 후속(사용자 지적: "이름에 붙는 게 아니라 다른 방식으로
               구분되게") — tmux 세션인지 일반 터미널인지는 예전에 이름 앞에
               "tmux:" 문자열을 붙여서 구분했다. 이름을 munging하지 않고
@@ -163,7 +160,6 @@ export function Row(props: {
         </div>
         <div class="vt-srow-sub vt-wgrail-row-sub">
           {props.row.statusSentence}
-          <Show when={props.row.phase && !props.row.statusSentence}>{props.row.phase}</Show>
           <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>
         <Show when={props.row.status === 'waiting' && props.row.question}>

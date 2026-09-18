@@ -258,11 +258,6 @@ a peer signature opens.
 | GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low"}]`, read live from `detect/*.toml` |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
-| POST | `/api/codex/managed/start` | Start a local Codex App Server for an existing tmux session (`{tmux_session, cwd?}`), returning its managed thread id. Lifecycle events are emitted through the existing `/ws-agent` channel; prompts and raw model output are never retained by FarShell |
-| POST | `/api/codex/managed/turn` | Start a turn on a managed Codex session (`{tmux_session, text}`). The prompt is forwarded only to the local App Server and is not persisted by FarShell |
-| GET | `/api/codex/managed/approvals?tmux_session={name}` | Pending managed-Codex approval metadata only (`id`, kind, allowed decisions); command text, paths, and tool arguments are never returned or stored |
-| POST | `/api/codex/managed/approvals/{id}` | Resolve a pending App Server request (`{tmux_session, decision, answers?}`). Uses the same authenticated terminal authority as typing into that tmux session |
-| POST | `/api/codex/managed/restart` | Explicitly stop and recreate the local managed App Server/thread for a tmux session (`{tmux_session, cwd?}`), so changed MCP/plugin configuration is read; it never restarts silently |
 | GET | `/api/hooks/status` | Claude Code hook registration status (A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
 | GET | `/api/usage` | Usage snapshot (U1) — `{available:false, reason}` when no source. Tokens/credentials are excluded by a field whitelist |
 | GET | `/api/usage/counter` | N41 — CounterProvider (unlimited, e.g. local LLM) snapshot. `?since=<epoch>` filters totals; the 7-day sparkline is a fixed window regardless |

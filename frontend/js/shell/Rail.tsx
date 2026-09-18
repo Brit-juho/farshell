@@ -295,8 +295,6 @@ function Rail(props: { deps: RailDeps }) {
         question: detail?.question ?? null,
         options: detail?.options ?? null,
         agent: agentNames()[t.name] ?? null,
-        managed: detail?.source === 'codex-app-server',
-        phase: detail?.phase ?? null,
         repoName: info?.repoName ?? null,
         branch: info?.branch ?? null,
         isMainWorktree: info?.isMain ?? false,

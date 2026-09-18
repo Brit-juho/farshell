@@ -37,7 +37,7 @@ from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
 from routes.tmux import router as tmux_router
 from routes.voice import router as voice_router
-from routes.agents import router as agents_router, close_managed_codex
+from routes.agents import router as agents_router
 from routes.system import router as system_router
 from routes.clipboard import router as clipboard_router
 from routes.files import router as files_router
@@ -328,7 +328,6 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
-        await close_managed_codex()
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
         scrollback_cleanup_task.cancel()

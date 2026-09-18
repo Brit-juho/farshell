@@ -28,10 +28,6 @@ export interface RailRowInput {
    * "아직 모른다"는 다르고, 후자에 확신 있는 마크를 그리면 거짓말이 된다.
    * agent/badges.js가 같은 이유로 같은 선택을 했다). */
   agent?: string | null;
-  /** Codex App Server가 직접 상태를 보내는 세션인가. 관찰형과 구분한다. */
-  managed?: boolean;
-  /** 구조화 이벤트가 주는 표시용 대화 단계(기존 5개 상태를 대체하지 않는다). */
-  phase?: string | null;
   /** N38(70-mobile.md §2) — waiting 상태에서 감지된 질문 1줄. Fleet.tsx가
    * 이 필드로 인라인 승인 버튼을 그린다. 선택 필드라 Rail.tsx는 안 넘겨도
    * 그대로 동작한다. */
@@ -202,9 +198,6 @@ export interface OtherRailRowInput {
   /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 모르면 null/undefined — "셸"과
    * "모름"은 다르다. */
   agent?: string | null;
-  /** Codex App Server의 구조화 이벤트를 직접 받는 관리형 세션인가. */
-  managed?: boolean;
-  phase?: string | null;
   /** 이 세션이 속한 워크트리의 저장소 이름·브랜치(있으면). 배지 표시와
    * 그룹 라벨 폴백(사용자가 그룹 이름을 안 지었을 때)의 입력이다. 워크트리에
    * 안 속하는 세션(순수 셸 등)은 셋 다 null. */
