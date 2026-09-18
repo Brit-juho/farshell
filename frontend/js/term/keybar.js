@@ -25,19 +25,21 @@ let _ctrlArmed = false;
 // 2026-09-18 — 데스크톱 자리가 바뀌었다. 예전엔 숨은 옛 레일의 설정 플라이아웃
 // (#vt-rail-mic-slot)에 있었고 `⋯ 더보기` 메뉴로만 닿을 수 있었다 — 그 메뉴의
 // 나머지 항목이 전부 dock·팔레트·설정으로 옮겨가면서, ⋯는 사실상 **마이크 하나
-// 때문에** 남아 있는 메뉴가 됐다. 그래서 마이크를 레일 바닥(#vt-rail-mic-home,
-// 설정 버튼 옆)으로 꺼내고 ⋯를 없앤다.
+// 때문에** 남아 있는 메뉴가 됐다. 그래서 마이크를 좌측 레일 바닥(#vt-rail-mic-home,
+// 설정 버튼 옆)으로 꺼내고 ⋯를 없앴다.
+// 2026-09-18(2차) — 사용자 요청으로 설정·마이크를 좌측 레일에서 우측 dock
+// (#vt-dock-mic-home, 탭 줄 바로 아래)으로 다시 옮긴다.
 //
-// 레일은 지연 로드되는 Solid 컴포넌트라 이 모듈이 평가될 때는 아직 없다 —
-// Rail.tsx가 마운트 직후 placeMicButton()을 한 번 더 부른다. 그래서 이 함수는
-// **여러 번 불려도 안전**해야 하고(이미 제자리면 아무것도 안 한다), 레일이 아직
+// dock은 지연 로드되는 Solid 컴포넌트라 이 모듈이 평가될 때는 아직 없다 —
+// Dock.tsx가 마운트 직후 placeMicButton()을 한 번 더 부른다. 그래서 이 함수는
+// **여러 번 불려도 안전**해야 하고(이미 제자리면 아무것도 안 한다), dock이 아직
 // 없으면 옛 슬롯에 그대로 둔다(음성이 조용히 사라지지 않게).
 export function placeMicButton() {
   const mic = document.getElementById('mic-btn-wrap');
   if (!mic) return; // .needs-voice로 이미 숨겨졌거나(음성 미설치) 마크업 자체가 없는 테스트 환경
   const target = _isCoarsePointer()
     ? document.getElementById('keybar-slot-mic')
-    : (document.getElementById('vt-rail-mic-home') || document.getElementById('vt-rail-mic-slot'));
+    : (document.getElementById('vt-dock-mic-home') || document.getElementById('vt-rail-mic-slot'));
   if (target && mic.parentElement !== target) target.appendChild(mic);
 }
 placeMicButton();

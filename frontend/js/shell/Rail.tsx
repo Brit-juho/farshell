@@ -8,7 +8,7 @@
 // 지연 청크가 이들을 정적 import하면 Vite lib 모드가 상태를 복제한다,
 // ADR-26/N35 커밋 참고). 전부 그 파일들이 이미 노출해 둔 window 브리지로만
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
-import { createSignal, createMemo, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import {
   buildRailSections, mostUrgentStatus, GROUP_LABEL, hashRepoColorIndex,
@@ -30,9 +30,6 @@ import {
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
 import { icon } from '../ui/icons.js';
-// 마이크 노드를 이 레일 바닥으로 옮긴다. 자리를 정하는 곳이 keybar.js 하나뿐이어야
-// 데스크톱/터치가 갈리는 판정이 두 군데로 흩어지지 않는다(L7).
-import { placeMicButton } from '../term/keybar.js';
 
 export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
@@ -426,10 +423,6 @@ function Rail(props: { deps: RailDeps }) {
       run: () => selectHost(h.id),
     }));
 
-  // keybar.js는 모듈 평가 시점에 한 번 자리를 잡는데, 그때 이 레일은 아직 없다
-  // (지연 로드). 마운트된 뒤 한 번 더 부른다 — 이미 제자리면 아무 일도 안 한다.
-  onMount(() => placeMicButton());
-
   let railRef: HTMLElement | undefined;
   // storedWidth는 "펼쳤을 때 폭"이라는 사용자 의도다 — 접힘 여부와 별개로
   // 기억해 둔다. 실제 화면에 반영되는 --vt-wgrail-w는 늘 이 둘을 합친
@@ -629,6 +622,9 @@ function Rail(props: { deps: RailDeps }) {
           </button>
         </Show>
       </div>
+      {/* 2026-09-18(2차) — 설정 ⚙과 마이크는 여기 살다가 사용자 요청으로 반대편
+          dock(Dock.tsx의 .vt-dock-tabs 아래)으로 옮겼다. 이 레일의 발자국을
+          "+ 워크트리 만들기" 하나로 줄인다. */}
       <div class="vt-wgrail-footer">
         {/* 워크트리 생성은 로컬 전용이다(원격 워크트리는 2.2 범위) — 원격을 보고
             있을 때 누르면 "맥에" 워크트리가 생겨 화면과 결과가 어긋난다. */}
@@ -643,31 +639,6 @@ function Rail(props: { deps: RailDeps }) {
         >
           <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 워크트리 만들기</Show>
         </button>
-        {/* 2.1.6 — 설정을 레일 바닥에 **다시 꺼낸다**. 2.1.0에서 48px 아이콘
-            레일(#vt-rail)이 이 레일로 대체되면서 그 안에 살던 ⚙ 버튼이
-            display:none으로 통째로 사라졌고, 설정에 가는 길이 `⋯` 메뉴 안이나
-            Mod+, 뿐이었다 — 매일 쓰는 화면의 입구가 메뉴 두 단계 안으로
-            들어가 있었다. ⋯는 그대로 두고 그 옆에 둔다. */}
-        <button
-          type="button"
-          class="vt-icon-btn lg vt-wgrail-icon"
-          aria-label="설정"
-          data-tip="설정"
-          data-tip-sub="Mod+,"
-          data-tip-side="right"
-          onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
-          innerHTML={icon('settings', 15, 2)}
-        />
-        {/* 2026-09-18 — `⋯ 더보기`가 있던 자리. 그 메뉴의 6개 항목을 하나씩
-            추적해 보니 **마이크 하나 빼고 전부** 다른 입구가 있었다:
-            파일 열기=팔레트 `/`, 큐·포트·사용량=dock 탭+팔레트, 스니펫=팔레트,
-            테마·푸시·자동복사·음성전용=설정/팔레트. 즉 ⋯는 마이크 때문에
-            남아 있던 메뉴였다. 그래서 마이크를 여기로 꺼내고 메뉴를 없앴다
-            (ADR-8 "⋯ 폐지 → 레일(포인터) + 팔레트(키보드)"의 마지막 조각).
-            버튼을 새로 만들지 않고 **기존 노드를 옮겨 온다** — voice.js가
-            `#mic-btn-wrap`을 모듈 최상위에서 캐시하고 `.recording`/.label로
-            상태를 그리므로, 같은 노드가 아니면 녹음 표시가 죽는다. */}
-        <div id="vt-rail-mic-home" class="vt-wgrail-mic-home" />
       </div>
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
       <Show when={ctxMenu()}>
