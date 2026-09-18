@@ -32,14 +32,20 @@ export function wireClipboard(id, term, wrapper) {
   // 3) 붙여넣기 — 이미지는 업로드+경로삽입, 텍스트는 N24 경로(sendPaste)로
   //    통일한다. capture로 textarea보다 먼저 검사. **xterm 기본 paste
   //    핸들링에는 더 이상 위임하지 않는다** — 위임하면 마커 판단이 다시
-  //    브라우저(xterm.js의 bracketedPasteMode 추정)로 흩어진다. 항상
-  //    preventDefault해서 xterm 쪽 처리가 같은 텍스트를 또 한 번 보내는
-  //    이중 붙여넣기를 막는다.
+  //    브라우저(xterm.js의 bracketedPasteMode 추정)로 흩어진다.
+  //    ⚠ 우리가 처리한 건 **stopPropagation까지** 해야 한다. xterm은 paste
+  //    리스너를 textarea와 element 두 곳에 걸어두고, 그 핸들러
+  //    (`handlePasteEvent`)는 `defaultPrevented`를 보지 않는다 — 즉
+  //    preventDefault만으로는 xterm이 같은 텍스트를 onData로 한 번 더
+  //    보내는 걸 못 막는다(2026-09-18: 붙여넣기가 2번 들어가던 원인).
+  //    capture 단계에서 전파를 끊으면 target/bubble의 xterm 리스너가 아예
+  //    돌지 않는다.
   wrapper.addEventListener('paste', (e) => {
     const items = (e.clipboardData && e.clipboardData.items) || [];
     for (const it of items) {
       if (it.type && it.type.indexOf('image/') === 0) {
         e.preventDefault();
+        e.stopPropagation();
         const file = it.getAsFile();
         if (file) pasteImageUpload(id, file);
         return;
@@ -48,6 +54,7 @@ export function wireClipboard(id, term, wrapper) {
     const text = e.clipboardData && e.clipboardData.getData('text/plain');
     if (text) {
       e.preventDefault();
+      e.stopPropagation();
       sendPaste(id, text);
     }
   }, true);

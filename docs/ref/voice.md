@@ -6,7 +6,7 @@
 
 | Feature | Description |
 |------|------|
-| Voice Daemon | macOS hotkey (Ctrl+Shift+V) → STT → direct input into tmux |
+| Voice Daemon | macOS hotkey (Ctrl+Shift+M) → STT → direct input into tmux |
 | Hands-free mode | Mobile 🔄 button → continuous record/STT loop |
 | Voice-only mode | 🎧 button → hides the terminal and shows only a large mic (for earbud operation) |
 | Web Push (P5) | ⋯ menu → "Push Notifications". Existing notifications (`/ws-notify` → Notification API) only work **while a PWA tab is alive**, so turning off the phone screen meant missing "waiting for approval." This fills that gap. No push is sent while at least one WS client is connected (to avoid the same notification arriving twice). **Requirements**: ① https — Service Workers don't even register over plain http ② iOS requires adding to the home screen as a PWA (16.4+; a subscription can't be created from a Safari tab — no workaround). **A subscription is bound to its origin** — if the trycloudflare URL changes, existing subscriptions all die, so each subscription stores its origin, mismatches are excluded from sending, and 404/410 responses are cleaned up on the spot. Notification bodies never contain commands, paths, or code (they'd show on the lock screen). The VAPID key is auto-generated at `~/.vt/vapid.json` (0600) — **deleting it invalidates every existing subscription**. SW registration is handled by `js/swreg.js` (it used to live inside `voice.js`, so the SW never registered at all when voice wasn't installed) |
@@ -19,7 +19,7 @@ A daemon that types voice input directly into tmux via a hotkey, without needing
 # Run
 "$VT_PYTHON" server/voice_daemon.py &
 
-# Usage: Ctrl+Shift+V (toggle) → speak → STT → typed into the active tmux pane
+# Usage: Ctrl+Shift+M (toggle) → speak → STT → typed into the active tmux pane
 # Requires allowing the terminal app under macOS System Settings → Privacy → Accessibility
 ```
 

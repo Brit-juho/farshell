@@ -1,7 +1,7 @@
 ---
 name: fsh-voice
 description: |
-  Voice Daemon 설치 및 실행. macOS에서 핫키(Ctrl+Shift+V)로 음성 입력 → STT → tmux 주입.
+  Voice Daemon 설치 및 실행. macOS에서 핫키(Ctrl+Shift+M)로 음성 입력 → STT → tmux 주입.
   서버 없이 독립 동작. Use when asked to "음성 모드", "voice daemon", "음성 데몬",
   "핫키 음성", "voice mode", "음성 입력 시작".
 allowed-tools:
@@ -81,8 +81,8 @@ echo "DAEMON_PID: $!"
 
 | 동작 | 설명 |
 |------|------|
-| **Ctrl+Shift+V** (1회) | 녹음 시작 (🔔 Tink 효과음) |
-| **Ctrl+Shift+V** (2회) | 녹음 종료 → STT → tmux 입력 (🔔 Pop 효과음) |
+| **Ctrl+Shift+M** (1회) | 녹음 시작 (🔔 Tink 효과음) |
+| **Ctrl+Shift+M** (2회) | 녹음 종료 → STT → tmux 입력 (🔔 Pop 효과음) |
 | 음성 확인 | STT 결과를 macOS `say`로 읽어줌 |
 
 ### 6. 동작 확인

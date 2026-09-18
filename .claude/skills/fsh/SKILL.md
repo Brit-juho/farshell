@@ -43,7 +43,7 @@ fsh voice
 ```
 
 시작 후 사용자에게 알려주세요:
-- Ctrl+Shift+V로 녹음 시작/종료
+- Ctrl+Shift+M로 녹음 시작/종료
 - 말한 내용이 자동으로 tmux 터미널에 입력됨
 - 다른 작업을 계속해도 됨 (백그라운드 동작)
 - **새로 열린 iTerm 창에서 resume 목록의 현재 대화 선택** → 이후 음성/모바일이 그 Claude로 연결됨
@@ -178,6 +178,6 @@ fsh stop
 
 1. 터미널에서 `fsh voice` 실행
 2. 노션으로 돌아가서 작업 계속
-3. 코딩이 필요할 때 Ctrl+Shift+V → 말하기 ("git status" 등)
+3. 코딩이 필요할 때 Ctrl+Shift+M → 말하기 ("git status" 등)
 4. tmux에 자동 입력 → 결과를 TTS로 들음
 5. 다시 노션 작업 계속

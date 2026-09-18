@@ -69,7 +69,7 @@ fsh shell-init zsh     # print the shell init snippet (eval "$(fsh shell-init zs
 1. `fsh voice` → starts in the background (+ auto-opens a new iTerm window with `tmux dev` + `claude --resume`)
 2. Pick the current conversation from the resume list in the new window → voice/mobile then connects to that Claude
 3. Leave the original window as-is and go back to Notion to work
-4. Ctrl+Shift+V → speak ("git status") → automatically typed into tmux dev
+4. Ctrl+Shift+M → speak ("git status") → automatically typed into tmux dev
 5. `fsh stop` → shut down
 
 > Calling an `fsh` command from inside tmux already won't open a new window (checked via `$TMUX`).

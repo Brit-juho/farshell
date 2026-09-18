@@ -8,6 +8,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- **붙여넣기가 두 번 들어갔다.** `term/selection.js`가 wrapper의 capture 단계에서
+  paste를 가로채 `sendPaste`로 보낸 뒤 `preventDefault`만 했는데, xterm은 paste
+  리스너를 textarea와 element에 따로 걸어두고 그 핸들러가 `defaultPrevented`를
+  보지 않는다 — 같은 텍스트가 우리 경로로 한 번, xterm의 `onData`로 또 한 번 PTY에
+  들어갔다. 이제 capture에서 전파까지 끊는다.
+- **비-mac에서 `Ctrl+…` 표기 바인딩이 아예 안 잡혔다.** `comboFromEvent`는 비-mac의
+  ctrlKey를 `mod`로 내보내는데 `normalize`가 문자열 `Ctrl`을 `ctrl`로 남겨,
+  `Ctrl+Shift+V`(붙여넣기)·`Ctrl+Shift+E`(코드 뷰어)가 Windows/Linux에서 영영
+  매칭되지 않았다. 우리가 못 잡으니 크롬의 "서식 없이 붙여넣기"가 그대로 발동해
+  위 결함과 겹쳐 두 번 붙여넣기가 됐다.
+
+### Changed
+
+- **음성 데몬 전역 핫키 기본값이 `ctrl+shift+m`이다**(이전 `ctrl+shift+v`). 웹 UI의
+  붙여넣기 단축키와 같은 조합이라, 데몬을 켜면 한 번 누를 때 붙여넣기와 녹음 토글이
+  동시에 일어났다. OS 전역인 쪽을 옮긴다 — `VT_HOTKEY_VOICE`로 바꿔 둔 값은 그대로다.
+- **키맵 기본값을 플랫폼별로 나눴다**(`defNonMac`). 비-mac의 `Mod`는 Ctrl이라
+  `Mod+F`·`Mod+K`·`Mod+D`·`Mod+B`가 각각 셸의 forward-char·kill-line·EOF와 tmux
+  prefix를 뺏고 있었다. 비-mac은 `Ctrl+Shift+…`를 1순위로, 그 자리가 찼거나 브라우저
+  예약(창 닫기·시크릿 창·북마크바)이면 `Alt+Shift+…`로 간다. 사용자가 바꾼 값은
+  플랫폼과 무관하게 이긴다.
+- **`pane 닫기`·`워크트리 만들기`는 mac에서도 옮겼다**(`Ctrl+Shift+W`/`Ctrl+Shift+N`).
+  각각 `Cmd+Shift+W`(창 닫기)·`Cmd+Shift+N`(시크릿 창)이라 일반 탭에서는 브라우저가
+  먼저 먹어 우리에게 오지 않았다 — 기존 `Mod+W` 회피가 한 칸 모자랐던 셈이다.
+  예약 목록에 Shift 변형을 넣고, 비교를 **정규형**으로 바꿨다: 설정 화면의 재바인딩은
+  'mod+shift+w' 같은 표기를 저장하는데 원문 비교라 그것만 검사를 빠져나갔다.
+
 ## [2.1.6] — 2026-09-18
 
 > 2.1.5 이후 커밋 37개. 성격이 셋으로 갈린다 — **보안·경계값 정리**(홈 전체가

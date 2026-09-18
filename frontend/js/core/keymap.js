@@ -24,19 +24,39 @@ export function isStandalone() {
 }
 
 // 브라우저가 먼저 소비해 일반 탭에서는 가로챌 수 없는 조합.
-// (`Mod+W` 탭 닫기, `Mod+N` 새 창, `Mod+T` 새 탭, `Mod+Q` 종료)
-const BROWSER_RESERVED = new Set(['Mod+W', 'Mod+N', 'Mod+T', 'Mod+Q']);
+// (`Mod+W` 탭 닫기, `Mod+N` 새 창, `Mod+T` 새 탭, `Mod+Q` 종료,
+//  `Mod+Shift+W` **창** 닫기, `Mod+Shift+N` 시크릿 창, `Mod+Shift+T` 탭 복원)
+//
+// ⚠ 비교는 **정규형으로** 한다. 설정 화면의 재바인딩은 `comboFromEvent`가 만든
+// 'mod+shift+w' 같은 소문자 표기를 저장하는데, 예전에는 이 Set을 원문 문자열로
+// 검사해서(`has('mod+shift+w')` → false) 사용자가 직접 고른 예약 조합만 쏙 빠졌다
+// — 경고도 없이 조용히 안 되는, 이 목록이 막으려던 바로 그 상태다.
+const _RESERVED_SPECS = ['Mod+W', 'Mod+N', 'Mod+T', 'Mod+Q', 'Mod+Shift+W', 'Mod+Shift+N', 'Mod+Shift+T'];
+function isBrowserReserved(combo) {
+  const c = normalize(combo);
+  return _RESERVED_SPECS.some((spec) => normalize(spec) === c);
+}
 
 // 기본 바인딩. `passthrough: true`면 동작을 실행한 뒤에도 터미널로 키를 흘린다
 // (기본은 false = 우리가 먹는다).
+//
+// `defNonMac` — mac이 아닌 곳에서만 쓰는 기본값. 같은 `Mod`라도 mac에서는
+// Cmd라 안전하지만 비-mac에서는 Ctrl이라 **셸/tmux가 실제로 쓰는 키를
+// 뺏는다**(2026-09-18 점검): `Mod+F`=Ctrl+F(forward-char), `Mod+K`=Ctrl+K
+// (kill-line), `Mod+D`=Ctrl+D(EOF), `Mod+B`=Ctrl+B(tmux prefix). 그리고
+// `Mod+Shift+W/N`은 비-mac에서 브라우저의 창 닫기/시크릿 창이라 일반 탭에서는
+// 아예 우리에게 오지 않는다.
+// 그래서 비-mac은 터미널이 못 만드는 조합만 쓴다 — 1순위 `Ctrl+Shift+…`,
+// 그 자리가 이미 찼거나 브라우저 예약이면 `Alt+Shift+…`(AltGr가 있는 유럽식
+// 배열을 건드리는 `Ctrl+Alt`는 피한다).
 const ACTIONS = [
   // N40/N46(60-settings-palette.md §3) — `Mod+F`는 팔레트를 `~`(스크롤백
   // 검색) 모드로 연다. 예전에 이 자리가 열던 인페인 검색바(xterm
   // searchAddon)는 `searchInPane`(Mod+Shift+F)으로 내려갔다 — R7: 근육기억이
   // 걸린 재배선이라 palette-lazy.js가 최초 1회 토스트를 띄운다.
-  { id: 'search',       def: 'Mod+F',        label: '스크롤백 검색' },
-  { id: 'searchInPane', def: 'Mod+Shift+F',  label: '터미널 내 검색' },
-  { id: 'palette',    def: 'Mod+K',        label: '커맨드 팔레트' },
+  { id: 'search',       def: 'Mod+F',        defNonMac: 'Ctrl+Shift+F', label: '스크롤백 검색' },
+  { id: 'searchInPane', def: 'Mod+Shift+F',  defNonMac: 'Alt+Shift+F',  label: '터미널 내 검색' },
+  { id: 'palette',    def: 'Mod+K',        defNonMac: 'Ctrl+Shift+K', label: '커맨드 팔레트' },
   { id: 'viewer',     def: 'Ctrl+Shift+E', label: '코드 뷰어' },
   { id: 'paste',      def: 'Ctrl+Shift+V', label: '붙여넣기' },
   { id: 'tabPrev',    def: 'Mod+Shift+ArrowLeft',  label: '이전 탭' },
@@ -46,18 +66,18 @@ const ACTIONS = [
   { id: 'tabMovePrev', def: 'Mod+Alt+Shift+ArrowLeft',  label: '세션을 앞으로' },
   { id: 'tabMoveNext', def: 'Mod+Alt+Shift+ArrowRight', label: '세션을 뒤로' },
   { id: 'settings',   def: 'Mod+,',        label: '설정' },
-  { id: 'splitRight', def: 'Mod+D',        label: '오른쪽 분할' },
-  { id: 'splitDown',  def: 'Mod+Shift+D',  label: '아래 분할' },
-  // 계획서 경고 그대로: `Mod+W`는 브라우저 탭 닫기와 충돌한다. PWA에서만 가로챌
-  // 수 있으므로 **기본값을 `Mod+Shift+W`로** 둔다(조용히 안 되는 것이 최악).
-  { id: 'paneClose',  def: 'Mod+Shift+W',  label: 'pane 닫기' },
-  { id: 'railToggle', def: 'Mod+B',        label: '사이드바 토글' },
-  // N44(30-worktree.md §3) — 워크트리 만들기. 문서 목업 값 그대로 등록만
-  // 해둔다: `Mod+Shift+N`이 OS/브라우저 단축키와 충돌하는지는 아직 사용자
-  // 환경에서 확인 전이다(90-verification.md §4-12 "물어볼 것"). 충돌이
-  // 확인되면 이 def만 바꾸면 된다 — 레지스트리에 있으므로 사용자도 설정
-  // 화면에서 직접 재배선할 수 있다.
-  { id: 'worktreeNew', def: 'Mod+Shift+N', label: '워크트리 만들기' },
+  { id: 'splitRight', def: 'Mod+D',        defNonMac: 'Ctrl+Shift+D', label: '오른쪽 분할' },
+  { id: 'splitDown',  def: 'Mod+Shift+D',  defNonMac: 'Alt+Shift+D',  label: '아래 분할' },
+  // 계획서 경고 그대로: `Mod+W`는 브라우저 탭 닫기와 충돌한다 — 그런데 대안으로
+  // 뒀던 `Mod+Shift+W`도 **창** 닫기라 일반 탭에서는 똑같이 우리에게 오지 않았다
+  // (2026-09-18 점검). mac은 브라우저가 안 쓰는 `Ctrl+Shift+…`로, 비-mac은 그
+  // 자리(Ctrl=Mod)가 바로 그 창 닫기라 `Alt+Shift+…`로 간다.
+  { id: 'paneClose',  def: 'Ctrl+Shift+W', defNonMac: 'Alt+Shift+W',  label: 'pane 닫기' },
+  { id: 'railToggle', def: 'Mod+B',        defNonMac: 'Alt+Shift+B',  label: '사이드바 토글' },
+  // N44(30-worktree.md §3) — 워크트리 만들기. 시크릿 창이 양쪽 플랫폼에서 이
+  // 자리를 먼저 먹는다(mac `Cmd+Shift+N`, 비-mac `Ctrl+Shift+N`) — paneClose와
+  // 같은 이유로 갈라 둔다.
+  { id: 'worktreeNew', def: 'Ctrl+Shift+N', defNonMac: 'Alt+Shift+N',  label: '워크트리 만들기' },
 ];
 
 const BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -77,19 +97,26 @@ function _overrides() {
   }
 }
 
+// 이 플랫폼의 기본 조합. 사용자가 바꾼 값(재정의)이 없을 때만 쓰인다 —
+// 재정의는 플랫폼과 무관하게 저장한 그대로 이식된다(파일 머리 주석의 약속).
+function _defaultCombo(spec) {
+  return (!IS_MAC && spec.defNonMac) || spec.def;
+}
+
 // { binding?: string, passthrough?: boolean } 형태의 사용자 재정의
 export function getBinding(id) {
   const spec = BY_ID.get(id);
   if (!spec) return null;
   const ov = _overrides()[id] || {};
+  const def = _defaultCombo(spec);
   return {
     id,
     label: spec.label,
-    combo: ov.binding || spec.def,
+    combo: ov.binding || def,
     passthrough: ov.passthrough ?? false,
     isDefault: !ov.binding && ov.passthrough === undefined,
     // 일반 브라우저 탭에서 이 조합이 가로채지지 않는다면 그 사실을 함께 알린다.
-    unavailable: BROWSER_RESERVED.has(ov.binding || spec.def) && !isStandalone(),
+    unavailable: isBrowserReserved(ov.binding || def) && !isStandalone(),
   };
 }
 
@@ -135,6 +162,14 @@ export function reset(id) {
 // ── 매칭 ──────────────────────────────────────────────────────────────────
 // 조합 문자열을 정렬된 표준형으로. 'shift+mod+f' 와 'Mod+Shift+F' 가 같은 것으로
 // 비교돼야 충돌 감지가 의미를 갖는다.
+//
+// ⚠ `Ctrl`은 **비-mac에서 `Mod`와 같은 키다**. comboFromEvent가 비-mac의
+// ctrlKey를 `mod`로 내보내므로, 여기서 `Ctrl` 표기를 `ctrl`로 남겨두면
+// `Ctrl+Shift+V`(붙여넣기)·`Ctrl+Shift+E`(코드 뷰어)가 Windows/Linux
+// 브라우저에서 **영영 매칭되지 않는다**(실측: mac은 'ctrl+shift+v'로 잡히고
+// linux는 'mod+shift+v'라 null). 그 결과 우리가 preventDefault를 못 해
+// 크롬의 "서식 없이 붙여넣기"가 그대로 발동, 붙여넣기가 두 번 들어갔다.
+// mac에서만 Ctrl이 Mod(Cmd)와 별개 키라 구분을 유지한다.
 export function normalize(combo) {
   if (!combo) return '';
   const parts = String(combo).split('+').map((p) => p.trim()).filter(Boolean);
@@ -143,7 +178,9 @@ export function normalize(combo) {
   for (const p of parts) {
     const low = p.toLowerCase();
     if (low === 'mod' || low === 'ctrl' || low === 'control' || low === 'cmd' || low === 'meta' || low === 'shift' || low === 'alt' || low === 'option') {
-      mods.add(low === 'control' ? 'ctrl' : low === 'cmd' || low === 'meta' ? 'mod' : low === 'option' ? 'alt' : low);
+      let m = low === 'control' ? 'ctrl' : low === 'cmd' || low === 'meta' ? 'mod' : low === 'option' ? 'alt' : low;
+      if (m === 'ctrl' && !IS_MAC) m = 'mod';
+      mods.add(m);
     } else {
       key = p.length === 1 ? low : p;   // 한 글자는 소문자, ArrowLeft 등은 원형
     }

@@ -242,7 +242,7 @@ precache stays valid:
 
 ### 3.1 Desktop voice input (Voice Daemon)
 ```
-Ctrl+Shift+V (pynput, server/voice/daemon.py)
+Ctrl+Shift+M (pynput, server/voice/daemon.py)
   → sounddevice 16kHz mono recording (recorder.py)
   → mlx-whisper / faster-whisper STT (stt.py)
   → tmux_target.py resolves the pane → tmux send-keys "<text>"

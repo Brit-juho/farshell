@@ -17,7 +17,7 @@ voice input, mobile access, and tmux sharing all work the same either way.
 (Windows works only through WSL2.)
 
 - Access your terminal from mobile — scan a QR code and you're connected to tmux
-- Code by voice — a hotkey (Ctrl+Shift+V) triggers voice input even while doing other work
+- Code by voice — a hotkey (Ctrl+Shift+M) triggers voice input even while doing other work
 - Check status remotely with a read-only code viewer/diff and a port dashboard
 - If you use Claude Code, its Stop hook adds a TTS summary on task completion and an auto-fed prompt queue
 - No API keys, no subscriptions — open-source STT/TTS, entirely free
@@ -76,7 +76,7 @@ tmux session after install, and the full `fsh` command/option reference, see
 1. fsh voice              run from any terminal
 2. In the new window, pick your conversation with claude --resume
 3. Switch back to your other work
-4. Ctrl+Shift+V -> "git status" -> auto-typed into tmux
+4. Ctrl+Shift+M -> "git status" -> auto-typed into tmux
 5. Hear the result via TTS in your earbuds
 6. fsh stop                shut down when you're done
 ```
@@ -118,7 +118,7 @@ open a public tunnel (`--network all`, the default) without auth configured.
 
 | Feature | Description |
 |------|------|
-| Voice Daemon | STT via macOS hotkey (Ctrl+Shift+V) or earbud Play/Pause -> typed directly into tmux |
+| Voice Daemon | STT via macOS hotkey (Ctrl+Shift+M) or earbud Play/Pause -> typed directly into tmux |
 | Clipboard sync | OSC52 (copies inside the terminal) + a polling daemon (`fsh clip`, copies outside the terminal) -> pushed to the web clipboard |
 | Hands-free / voice-only mode | Continuous recording that auto-repeats, or hide the terminal and show just a large mic (for earbud-only control) |
 | Barge-in | Tap the mic or hit the hotkey to instantly stop TTS playback |
@@ -211,7 +211,7 @@ layout), see [DESIGN.md](./DESIGN.md).
                   |  MacBook / WSL2 (server)                |
                   |                                          |
   [fsh voice]      |  +----------------+  +----------------+  |
-  Ctrl+Shift+V -->|  | Voice Daemon   |  | FastAPI :7777  |  |
+  Ctrl+Shift+M -->|  | Voice Daemon   |  | FastAPI :7777  |  |
   -> STT -> tmux  |  | (standalone,   |  | auth/queue/push |  |
                   |  |  server-independent) |  etc.        |  |
                   |  +----------------+  +-------+--------+  |
