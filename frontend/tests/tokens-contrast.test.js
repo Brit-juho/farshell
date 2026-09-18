@@ -282,10 +282,13 @@ test('rail 활성 배경이 hover와 다른 토큰을 쓴다', () => {
 // ── 하드코딩 색이 다시 늘지 않는가 ───────────────────────────────────────
 
 test('테마 칩의 점 색이 인라인 style로 돌아오지 않았다', () => {
-  const html = fs.readFileSync(path.join(ROOT, 'frontend', 'index.html'), 'utf8');
-  const chipSection = html.match(/theme-chip[\s\S]{0,2000}/);
+  // 2026-09-18 — 칩 마크업은 index.html의 정적 #theme-row에서 설정 「모양」
+  // 섹션(panels/settings/sections/appearance.js)의 동적 렌더로 옮겼다.
+  const js = fs.readFileSync(
+    path.join(ROOT, 'frontend', 'js', 'panels', 'settings', 'sections', 'appearance.js'), 'utf8');
+  const chipSection = js.match(/theme-chip[\s\S]{0,2000}/);
   assert.ok(chipSection);
-  assert.doesNotMatch(chipSection[0], /class="dot"[^>]*style=/,
+  assert.doesNotMatch(chipSection[0], /\.style\.(background|backgroundColor)\s*=/,
     '칩 점 색이 인라인으로 돌아왔다 — tokens.css의 --acc-<skin> 상수를 쓴다');
 });
 

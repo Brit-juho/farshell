@@ -25,9 +25,12 @@ import { getTabs, getActiveTabId } from '../layout/store.js';
 const PANEL_ID = 'vt-settings';
 
 // 섹션 정의 — 계획서(50-settings-keymap.md §3)의 9개 섹션 중, 이번 범위에서
-// 실제로 조작 가능한 것만 넣는다. 「음성」·「알림」·「세션」은 각자 자기 패널이
-// 이미 있거나(푸시 토글·음성 바) 서버 설정이라 여기서 중복 노출하지 않는다 —
-// 빈 섹션을 보여주는 것보다 없는 편이 낫다(§4 "빈 패널을 보여주지 않는다").
+// 실제로 조작 가능한 것만 넣는다. 「세션」은 rail 자체가 그 화면이라 여기서
+// 중복 노출하지 않는다 — 빈 섹션을 보여주는 것보다 없는 편이 낫다(§4 "빈
+// 패널을 보여주지 않는다"). 「음성」의 푸시 구독 토글·음성 전용 모드는 원래
+// 이 설명대로 "다른 자리"(⋯ 메뉴 → legacy rail 플라이아웃)에 있었지만,
+// 2026-09-18 레일 교체로 그 자리 자체가 도달 불가능해져 이 섹션들로 옮겼다
+// (voice.js/appearance.js 참고) — 지금은 중복이 아니라 유일한 자리다.
 const SECTIONS = [
   {
     id: 'terminal', label: '터미널',
@@ -37,6 +40,10 @@ const SECTIONS = [
         labels: { block: '블록', underline: '밑줄', bar: '막대' } },
       { key: 'terminal.cursorBlink', label: '커서 깜빡임', kind: 'bool' },
       { key: 'terminal.scrollback', label: '스크롤백 줄 수', kind: 'range', step: 500 },
+      // 2026-09-18 — ui/settings-toggles.js가 진작 스토어에 묶어뒀지만
+      // (E2), 그 체크박스가 살던 자리(legacy rail 플라이아웃)가 오늘
+      // 도달 불가능해지며 이 키를 끄고 켤 화면이 아예 없어졌다.
+      { key: 'session.openOnMac', label: '새 세션 생성 시 맥에서도 iTerm 열기', kind: 'bool' },
     ],
   },
   {
@@ -65,8 +72,8 @@ const SECTIONS = [
   // N9/N45(80-multihost-agents.md §2) — CLI별 승인 대기 감지 커버리지 표.
   { id: 'agents', label: '에이전트', custom: renderAgentsSection },
   { id: 'keymap', label: '키맵', custom: () => renderKeymapSection(rerender) },
-  // N14 — Ghostty/Warp 테마 가져오기. 기본 6스킨을 고르는 칩은 예전부터
-  // 다른 자리(테마 줄·팔레트)에 있고, 여기는 "가져오기"만 다룬다.
+  // N14 — Ghostty/Warp 테마 가져오기 + 기본 6스킨 칩(2026-09-18부터 이 탭이
+  // 유일한 자리 — 위 주석 참고).
   { id: 'appearance', label: '모양', custom: renderAppearanceSection },
   { id: 'mcp', label: 'MCP', custom: renderMcpSection },
   { id: 'security', label: '보안', custom: renderSecuritySection },

@@ -10,6 +10,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **오늘(이 릴리스) 안에서만 있었던 사고: 레일 교체가 설정 메뉴 넷을 통째로
+  도달 불가능하게 만들었다.** `#vt-rail`(48px 아이콘 레일)이 새 Solid 레일
+  (`shell/Rail.tsx`)로 대체되며 `display:none !important`이 됐는데, 그 ⚙
+  버튼이 열던 legacy 플라이아웃(`#vt-rail-panel`) 안에만 살던 네 가지 —
+  기본 스킨 6종 칩, 음성 전용 모드 토글, 웹 푸시 구독 켜기/끄기, "새 세션도
+  맥에서 열기" — 가 클릭으로는 닿을 수 없어졌다(새 레일의 ⚙는 다른 패널을
+  열었다). 커맨드 팔레트(Mod+K)만 우연히 일부를 계속 우회 서비스했다 —
+  `Palette.tsx`가 화면에 없어도 DOM에 남아있던 `.theme-chip`을 직접 스캔하고
+  있었기 때문. 정식 Settings 패널(Mod+,)로 전부 이식했다: 스킨 칩·구독
+  토글·음성 전용 모드는 각각 「모양」/「음성」 섹션에, "새 세션도 맥에서 열기"는
+  기존 스키마 키(`session.openOnMac`)가 있었는데 UI가 없던 걸 「터미널」
+  섹션에 새로 노출했다. 자동 복사 체크박스는 이미 「마우스 · 선택」에 정식
+  항목이 있던 순수 중복이라 그냥 지웠다. 팔레트의 DOM 스캔도 `theme.js`의
+  `vtSkins()`를 직접 읽도록 바꿔, 같은 종류의 사고(화면 요소가 없으면 팔레트도
+  같이 죽는 결합)가 재발하지 않게 했다. 다 쓴 legacy 배선(`ui/settings-toggles.js`)은
+  지웠다.
+
 - **탭 아이콘이 두 개였고, 그중 하나는 아직 마이크였다.** `icon-192/512.png`가
   voice-terminal 시절 그림 그대로라, JS가 뜬 메인 탭에서만 `ui/favicon.js`의
   보라색 `>_`가 나오고 나머지 전부(`/favicon.ico` → `server/main.py:684` ·

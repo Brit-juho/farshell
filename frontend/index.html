@@ -462,11 +462,22 @@
     <div class="vt-rr-body" id="vt-right-rail-body"></div>
   </aside>
 
-  <!-- rail "설정" 패널의 정적 컨텐츠 — 예전 ⋯ 메뉴의 마지막 남은 그룹(설정 +
-       거기 흡수된 음성 전용 모드)을 그대로 옮겼다. moreMenu.js/theme.js/pushui.js가
-       id로 직접 찾으므로 id는 그대로 유지 — rail.js가 패널을 열 때 이 노드를
-       #vt-rail-panel-body 안으로 appendChild()만 한다(재생성 아님, 체크박스
-       상태·리스너 보존). -->
+  <!-- rail "설정" 패널의 정적 컨텐츠. 2026-09-18 이전에는 ⋯ 메뉴의 마지막
+       남은 그룹 전체(음성 전용 모드·테마 칩·푸시 토글·자동복사 체크박스·맥
+       자동 열기 체크박스)가 여기 있었다 — 그런데 이 패널을 열던 legacy 레일
+       (#vt-rail)의 ⚙가 새 레일(Rail.tsx)로 대체되며 display:none이 됐고,
+       그 다섯 개가 전부 화면에서 도달 불가능해졌다. 조사 결과:
+         - 테마 칩 → 설정 「모양」(appearance.js)으로 이식.
+         - 음성 전용 모드·푸시 구독 → 설정 「음성」(voice.js)으로 이식.
+         - 자동 복사 체크박스 → 이미 설정 「마우스 · 선택」에 정식 항목
+           (mouse.autocopyOnSelect)이 있었다(중복이었을 뿐이라 그냥 삭제).
+         - 맥 자동 열기 체크박스 → 설정 어디에도 없던 진짜 구멍이었다.
+           설정 「터미널」에 session.openOnMac 항목을 새로 추가했다.
+       남은 건 마이크(아래, 부팅 시 #vt-rail-mic-home로 물리 이동해 정상)와
+       이미 커맨드 팔레트로 도달 가능한 두 개(이어폰 미디어키·가이드 보기)뿐.
+       moreMenu.js/theme.js/pushui.js가 id로 직접 찾으므로 id는 그대로 유지 —
+       rail.js가 패널을 열 때 이 노드를 #vt-rail-panel-body 안으로
+       appendChild()만 한다(재생성 아님, 리스너 보존). -->
   <div id="vt-rail-settings-tpl" hidden>
     <!-- L7: 마이크의 데스크톱 홈 — keybar(터치 전용)가 안 보이는 환경에서도
          음성 입력이 완전히 사라지지 않게 한다(문서에 명시적 근거는 없었으나,
@@ -480,34 +491,6 @@
         <span class="label">음성 입력</span>
       </button>
     </div>
-    <button class="vt-menu-item mi needs-voice" id="voiceonly-btn" role="menuitem" data-action="voice.only-toggle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>음성 전용 모드
-    </button>
-    <div class="theme-row" id="theme-row">
-      <button class="theme-chip" data-skin="farshell" data-action="theme.set"><span class="dot"></span>FarShell</button>
-      <button class="theme-chip" data-skin="macos" data-action="theme.set"><span class="dot"></span>macOS</button>
-      <button class="theme-chip" data-skin="catppuccin" data-action="theme.set"><span class="dot"></span>Catppuccin</button>
-      <button class="theme-chip" data-skin="windows" data-action="theme.set"><span class="dot"></span>Windows</button>
-      <button class="theme-chip" data-skin="vscode" data-action="theme.set"><span class="dot"></span>VS Code</button>
-      <button class="theme-chip" data-skin="notepad" data-action="theme.set"><span class="dot"></span>Notepad</button>
-    </div>
-    <button class="vt-menu-item mi needs-push" id="push-btn" role="menuitem" data-action="push.toggle"
-      data-tip="앱을 닫아도 작업 완료 알림을 받습니다">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <span id="push-label">푸시 알림</span>
-    </button>
-    <label class="vt-menu-item mi" id="autocopy-toggle" role="menuitemcheckbox"
-      data-tip="자동 클립보드 동기화" data-tip-sub="드래그 선택 · vim/tmux copy-mode(OSC52) · fsh clip. 꺼도 우클릭·Ctrl+Shift+C로 수동 복사는 된다">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/></svg>
-      드래그 시 자동 복사
-      <input type="checkbox" id="autocopy-checkbox" />
-    </label>
-    <label class="vt-menu-item mi" id="auto-mac-toggle" role="menuitemcheckbox"
-      data-tip="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>
-      새 세션을 맥에서도 열기
-      <input type="checkbox" id="auto-mac-checkbox" />
-    </label>
     <button class="vt-menu-item mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>이어폰 미디어키
     </button>

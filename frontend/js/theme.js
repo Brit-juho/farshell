@@ -12,8 +12,25 @@ import { IMPORTED_SKIN, bootImportedTheme, loadImportedSkin } from './theme-cust
 // 않는다) — 그래서 상수가 아니라 아래 vtSkins()로 묻는다.
 const VT_SKINS = ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad'];
 
+// 칩·팔레트 행에 쓰는 표시 이름 — 두 소비처(설정 「모양」 칩, 커맨드 팔레트)가
+// 각자 표를 갖던 게 이번 사고(테마 칩이 DOM에서 사라지자 팔레트도 같이
+// 말라버린 것)의 근본 원인 중 하나였다. 단일 소스로 둔다.
+export const VT_SKIN_LABELS = {
+  farshell: 'FarShell', macos: 'macOS', catppuccin: 'Catppuccin',
+  windows: 'Windows', vscode: 'VS Code', notepad: 'Notepad',
+};
+
 export function vtSkins() {
   return loadImportedSkin() ? [...VT_SKINS, IMPORTED_SKIN] : VT_SKINS.slice();
+}
+
+export function vtSkinLabel(skin) {
+  if (VT_SKIN_LABELS[skin]) return VT_SKIN_LABELS[skin];
+  if (skin === IMPORTED_SKIN) {
+    const imported = loadImportedSkin();
+    return (imported && imported.name) || '가져온 테마';
+  }
+  return skin;
 }
 
 // 부팅 시 가져온 테마의 CSS 변수를 심는다(있을 때만).

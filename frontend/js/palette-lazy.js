@@ -17,7 +17,7 @@ import { allSessions, sessionDisplayName } from './core/store.js';
 import { switchTo } from './term/session.js';
 import { splitActivePane, setPaneSession } from './layout/store.js';
 import { loadViewer, openFileInPane } from './panels/viewer-lazy.js';
-import { setVtSkin } from './theme.js';
+import { setVtSkin, vtSkins, vtSkinLabel } from './theme.js';
 import { buildSessionCard, updateSessionCard } from './agent/preview.js';
 import { showToast } from './ui/toast.js';
 
@@ -50,6 +50,8 @@ const deps = {
   buildSessionCard,
   updateSessionCard,
   setVtSkin,
+  vtSkins,
+  vtSkinLabel,
   listKeymapActions: keymapList,
   invokeKeymapAction: keymapInvoke,
   displayCombo,

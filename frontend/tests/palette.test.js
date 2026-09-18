@@ -103,6 +103,11 @@ function fakeDeps(doc, overrides = {}) {
     }),
     updateSessionCard: overrides.updateSessionCard || (() => {}),
     setVtSkin: (skin) => calls.setVtSkin.push(skin),
+    vtSkins: overrides.vtSkins || (() => ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad']),
+    vtSkinLabel: overrides.vtSkinLabel || ((skin) => ({
+      farshell: 'FarShell', macos: 'macOS', catppuccin: 'Catppuccin',
+      windows: 'Windows', vscode: 'VS Code', notepad: 'Notepad',
+    }[skin] || skin)),
     listKeymapActions: overrides.listKeymapActions || (() => []),
     invokeKeymapAction: overrides.invokeKeymapAction || (() => {}),
     displayCombo: overrides.displayCombo || ((c) => c),
@@ -335,14 +340,12 @@ test('`:` 접두사 — 키맵 액션을 검색해 실행한다', async () => {
   assert.strictEqual(invoked, 'search');
 });
 
-test('`>` 접두사(레거시 설정) — 테마 칩을 읽어 선택하면 setVtSkin이 불린다', async () => {
+test('`>` 접두사 — deps.vtSkins()로 테마 행을 만들고 고르면 setVtSkin이 불린다', async () => {
+  // 2026-09-18 — DOM의 `.theme-chip`을 읽던 방식은 그 칩이 사는 화면(설정
+  // 「모양」탭)이 열려 있지 않으면 항상 실패하는 취약한 결합이었다(실제로
+  // 그 화면 자체가 도달 불가능해지는 사고가 났다). deps.vtSkins()를 직접
+  // 쓰도록 바꿨으니 DOM에 칩이 전혀 없어도 팔레트 목록엔 떠야 한다.
   const { mountPalette, document, root } = await mountFresh();
-  const chip = document.createElement('button');
-  chip.className = 'theme-chip';
-  chip.dataset.skin = 'farshell';
-  chip.textContent = 'FarShell';
-  document.body.appendChild(chip);
-
   const deps = fakeDeps(document);
   const api = mountPalette(root, deps);
   api.open();

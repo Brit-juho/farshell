@@ -183,30 +183,36 @@ test('tmux 세션은 카드형으로 나오고 cwd가 정적 텍스트로 보인
   assert.strictEqual(card.querySelector('.card-meta').textContent, '/repo');
 });
 
-test('설정 버튼 클릭 → ⋯ 메뉴에서 옮겨온 정적 컨텐츠(테마 칩 등)가 패널에 보인다', async () => {
+test('설정 버튼 클릭 → ⋯ 메뉴에서 옮겨온 정적 컨텐츠(마이크·미디어키·가이드)가 패널에 보인다', async () => {
+  // 2026-09-18 — 테마 칩·음성 전용 모드·푸시 구독·자동복사 체크박스는 설정
+  // 「모양」/「음성」/「마우스 · 선택」 섹션으로 옮겼다(그 자리를 열던 legacy
+  // 레일 ⚙가 새 레일로 대체되며 이 플라이아웃 자체가 도달 불가능해졌기
+  // 때문 — panels/settings.js 상단 주석 참고). 이 패널에는 다른 자리가 없던
+  // 마이크와, 이미 팔레트로도 닿는 미디어키·가이드만 남는다.
   const { window } = await buildWindow();
   window.document.getElementById('vt-rail-settings').click();
   await flush();
   assert.strictEqual(window.document.getElementById('vt-rail-panel-title').textContent, '설정');
-  const chips = window.document.querySelectorAll('#vt-rail-panel-body .theme-chip');
-  assert.strictEqual(chips.length, 6);
-  assert.ok(window.document.getElementById('autocopy-checkbox'), '체크박스 id가 그대로 유지돼야 한다(moreMenu.js 계약)');
+  assert.ok(window.document.getElementById('mic-btn-wrap'), '마이크 자리가 유지돼야 한다');
+  assert.ok(window.document.getElementById('mediakey-btn'), '미디어키 id가 그대로 유지돼야 한다(media-session.js 계약)');
+  assert.strictEqual(window.document.querySelectorAll('#vt-rail-panel-body .theme-chip').length, 0,
+    '테마 칩은 더 이상 이 플라이아웃에 없다(설정 「모양」으로 이식)');
 });
 
-test('설정 패널을 닫았다 다시 열어도 체크박스 상태가 유지된다(재생성이 아니라 이동)', async () => {
+test('설정 패널을 닫았다 다시 열어도 미디어키 버튼 상태가 유지된다(재생성이 아니라 이동)', async () => {
   const { window } = await buildWindow();
   const settingsBtn = window.document.getElementById('vt-rail-settings');
   settingsBtn.click();
   await flush();
-  const cb = window.document.getElementById('autocopy-checkbox');
-  cb.checked = false;
-  cb.dispatchEvent(new window.Event('change'));
+  const btn = window.document.getElementById('mediakey-btn');
+  btn.classList.add('active');
 
   settingsBtn.click(); // 닫기
   await flush();
   settingsBtn.click(); // 다시 열기
   await flush();
-  assert.strictEqual(window.document.getElementById('autocopy-checkbox').checked, false);
+  assert.ok(window.document.getElementById('mediakey-btn').classList.contains('active'),
+    '같은 노드가 다시 붙어야 한다(재생성이면 클래스가 사라진다)');
 });
 
 test('패널을 열고 닫으면 /api/workspace에 상태가 저장된다', async () => {
