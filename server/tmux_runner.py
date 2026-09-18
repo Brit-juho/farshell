@@ -100,6 +100,9 @@ class PaneInfo:
     # (`@fsh_wt` 커스텀 옵션, worktree._sessions_for_path의 1차 판정 기준).
     # 아직 안 심겨 있으면 빈 문자열 — cwd 추론(폴백)으로 넘어간다.
     wt_tag: str = ""
+    # ADR-29 A — 세션이 어느 그룹 소속인지(`@fsh_grp`). 비어 있으면 아직
+    # 사용자가 손대지 않은 것 — 화면(B/C단계)이 `@fsh_wt`로 자동 제안한다.
+    grp_tag: str = ""
 
 
 def get_all_panes() -> list[PaneInfo]:
@@ -107,7 +110,7 @@ def get_all_panes() -> list[PaneInfo]:
 
     purplemux getAllPanesInfo 패턴: list-panes -a 한 번으로 N개 세션 처리.
     """
-    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}\t#{@fsh_wt}"
+    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}\t#{@fsh_wt}\t#{@fsh_grp}"
     text = run_text(["list-panes", "-a", "-F", fmt])
     if not text:
         return []
@@ -130,6 +133,7 @@ def get_all_panes() -> list[PaneInfo]:
                 path=parts[3] if len(parts) > 3 else "",
                 pane_id=parts[4] if len(parts) > 4 else "",
                 wt_tag=parts[5] if len(parts) > 5 else "",
+                grp_tag=parts[6] if len(parts) > 6 else "",
             )
         )
     return panes
@@ -137,7 +141,7 @@ def get_all_panes() -> list[PaneInfo]:
 
 def list_sessions() -> list[dict]:
     """세션 메타 정보를 단일 호출로 수집."""
-    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{@fsh_wt}"
+    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{@fsh_wt}\t#{@fsh_grp}"
     text = run_text(["list-sessions", "-F", fmt])
     if not text:
         return []
@@ -155,6 +159,7 @@ def list_sessions() -> list[dict]:
                 "attached": parts[2] == "1",
                 "created": int(parts[3]) if parts[3].isdigit() else 0,
                 "wt_id": parts[4] if len(parts) > 4 else "",
+                "grp_id": parts[5] if len(parts) > 5 else "",
             }
         )
     return sessions
