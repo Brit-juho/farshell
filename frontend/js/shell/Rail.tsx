@@ -133,20 +133,13 @@ function Rail(props: { deps: RailDeps }) {
   const isGroupCollapsed = (g: RailGroup) =>
     COLLAPSIBLE_GROUPS.includes(g) && !!groupCollapsed()[g];
 
-  // 헤더가 세는 것을 사실대로 말한다. `repos()`의 각 저장소 `worktrees`에는
-  // **본체 체크아웃**(isMain)이 함께 들어 있다 — git 용어로는 그것도
-  // worktree가 맞지만, 개발자가 "워크트리 13개"를 읽으면 `git worktree add`로
-  // 만든 것이 13개라고 이해한다. 실제로 본체만 13개이고 부가 워크트리는
-  // 0개인 화면이 "워크트리 · 13"이라고 말하고 있었다.
-  // 그래서 보이는 그대로 「저장소 N」을 기본으로 하고, 부가 워크트리가 있을
-  // 때만 그 수를 덧붙인다. ADR-29로 행의 정체는 세션이 됐지만, 이 요약
-  // 문구가 세는 대상(저장소·워크트리 개수)은 안 바뀌었다.
-  const railTitle = () => {
-    const all = repos();
-    if (!all.length) return '세션';
-    const extra = all.reduce((n: number, r: any) => n + (r.worktrees || []).filter((w: any) => !w.isMain).length, 0);
-    return extra ? `저장소 ${all.length} · 워크트리 ${extra}` : `저장소 ${all.length}`;
-  };
+  // 2026-09-18 후속 — 예전엔 여기가 "저장소 N · 워크트리 N"이었다(그 시절
+  // 헤더 자체가 이미 자기모순을 알고 있었다: "ADR-29로 행의 정체는 세션이
+  // 됐지만 이 요약 문구가 세는 대상은 안 바뀌었다"). 사용자 지적으로 바로
+  // 잡는다 — 이 레일은 이제 세션 목록이지 저장소 목록이 아니므로, 머리글도
+  // 저장소를 안 센다. 아래 각 그룹 헤더가 이미 자기 몫의 개수를 보여주므로
+  // 여기서 총합을 또 셀 필요도 없다.
+  const railTitle = () => '세션';
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
   // 접힘 기본값은 티어를 따른다(§3 표) — wide(≥1280) 미만에서는 접힘으로 시작.
   // 저장된 값이 있으면 그게 이긴다(사용자가 직접 정한 것이므로). Dock.tsx가
@@ -642,10 +635,10 @@ function Rail(props: { deps: RailDeps }) {
           {/* 2026-09-18 — 이 버튼은 예전엔 「열려 있지 않음」 그룹 머리에만
               있었다. buildRailSections()가 빈 그룹을 통째로 지우므로, 모든
               저장소에 세션이 붙어 있으면(=idle 그룹이 안 생기면) 이 버튼이
-              화면에서 완전히 사라져 "저장소 표시" 설정에 닿을 방법이 없었다
-              (숨긴 게 하나도 없으면 밑단의 "숨긴 저장소 N개" 링크도 안 뜬다 —
-              그 경로도 hiddenCount() > 0 조건이라 똑같이 막혀 있었다). 레일
-              헤더 줄은 섹션 유무와 무관하게 항상 그려지므로 여기 하나만 둔다. */}
+              화면에서 완전히 사라져 "저장소 표시" 설정에 닿을 방법이 없었다.
+              레일 헤더 줄은 섹션 유무와 무관하게 항상 그려지므로 여기 하나만
+              둔다(그래서 목록 바닥의 "숨긴 저장소 N개" 링크도 후속에서
+              지울 수 있었다 — 유일한 진입점이라는 이유가 사라졌다). */}
           <Show when={!collapsed()}>
             <button
               type="button"
@@ -895,11 +888,13 @@ function Rail(props: { deps: RailDeps }) {
         <Show when={truncated() && !collapsed()}>
           <div class="vt-wgrail-note">저장소가 200개를 넘어 일부만 표시합니다.</div>
         </Show>
-        <Show when={!truncated() && hiddenCount() > 0 && !collapsed()}>
-          <button type="button" class="vt-wgrail-note vt-wgrail-note-btn" onClick={() => setRepoSheet(true)}>
-            숨긴 저장소 {hiddenCount()}개
-          </button>
-        </Show>
+        {/* 2026-09-18 후속 — "숨긴 저장소 N개" 링크를 여기서 지웠다. 애초에
+            이 자리에 둔 이유가 "그룹 머리에만 있던 저장소 관리 진입점이
+            그룹이 하나도 없으면 사라진다"는 문제였는데(주석은 head-actions
+            블록에 남아 있다), 지금은 머리글 줄의 ⚙ 버튼이 접힌 상태가
+            아닌 한 항상 떠 있어 같은 문제가 없다 — 게다가 그 ⚙의 툴팁이
+            이미 숨김 개수를 보여준다(hiddenCount 참고). 세션 목록 한복판에
+            저장소 이야기를 또 꺼낼 이유가 없어졌다. */}
       </div>
       {/* 2026-09-18(2차) — 설정 ⚙과 마이크는 여기 살다가 사용자 요청으로 반대편
           dock(Dock.tsx의 .vt-dock-tabs 아래)으로 옮겼다. 이 레일의 발자국을
