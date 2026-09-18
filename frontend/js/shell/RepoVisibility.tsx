@@ -70,9 +70,6 @@ export function RepoVisibility(props: Props) {
   const [roots, setRoots] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null);
-  // 펼친 저장소 id 집합 — 시트를 열 때마다 다 접힌 채로 시작한다(위 머리말
-  // 주석: 이건 device·서버 어디에도 저장하지 않는 화면 상태다).
-  const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   // 서버 왕복 중인 대상. 연타로 같은 행을 두 번 보내면 마지막 응답이 이기는
   // 경합이 생긴다 — 그 행만 잠근다(시트 전체를 잠그면 목록 전체가 굳는다).
   // 저장소 숨김은 path로, 워크트리 조작은 id로 키를 잡는다(서로 다른 API).
@@ -102,12 +99,6 @@ export function RepoVisibility(props: Props) {
   };
 
   onMount(load);
-
-  const toggleExpand = (id: string) => setExpanded((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
 
   const toggleHidden = async (group: RepoGroup) => {
     const nextHidden = !group.hidden;
@@ -217,85 +208,84 @@ export function RepoVisibility(props: Props) {
                 그 행이 통째로 사라지는 것을 실제로 봤다 — 확장 프로그램이 주입한
                 사용자 스타일시트(`document.styleSheets`에 안 잡힌다)에
                 `.hidden { display:none }`이 있었다. 숨긴 저장소를 **되돌릴 수 있는
-                것**이 이 화면의 존재 이유라, 흔한 유틸리티 이름을 피해 `off`를 쓴다. */}
-            <For each={groups()}>
-              {(group) => (
-                <div class="vt-repovis-group">
-                  <div class="vt-repovis-row" classList={{ off: !!group.hidden }}>
-                    <button
-                      type="button"
-                      class="vt-repovis-expand"
-                      classList={{ expanded: expanded().has(group.id) }}
-                      aria-expanded={expanded().has(group.id)}
-                      aria-label={expanded().has(group.id) ? '접기' : '펼치기'}
-                      onClick={() => toggleExpand(group.id)}
-                    >▸</button>
-                    <input
-                      type="checkbox"
-                      checked={!group.hidden}
-                      disabled={!!busyRepo()[group.path]}
-                      aria-label={`${group.name} 표시`}
-                      onChange={() => toggleHidden(group)}
-                    />
-                    <span class="vt-repovis-name" onClick={() => toggleExpand(group.id)}>{group.name}</span>
-                    <Show when={group.worktrees.length > 1}>
-                      <span class="vt-repovis-count">워크트리 {group.worktrees.length}</span>
-                    </Show>
-                    <span class="vt-repovis-path" data-tip={group.path}>{shortenPath(group.path, roots())}</span>
-                  </div>
-                  <Show when={expanded().has(group.id)}>
-                    <div class="vt-repovis-wts">
-                      <For each={group.worktrees}>
-                        {(wt) => (
-                          <div class="vt-repovis-wt">
-                            <div class="vt-repovis-wt-head">
-                              <span class="vt-repovis-wt-branch">{wt.isMain ? '기본' : wt.branch}</span>
-                              <button
-                                type="button"
-                                class="vt-btn sm quiet"
-                                disabled={!!busyWt()[wt.id]}
-                                onClick={() => newSessionIn(wt, group.id, group.name)}
-                              >+ 새 세션</button>
-                              {/* 30-worktree.md §3: 메인 워크트리는 삭제할 수 없다
-                                  (서버도 400으로 거절한다) — 메뉴에 애초에 안 띄운다. */}
-                              <Show when={!wt.isMain}>
-                                <button
-                                  type="button"
-                                  class="vt-btn sm quiet danger"
-                                  disabled={!!busyWt()[wt.id]}
-                                  onClick={() => removeWorktree(wt)}
-                                >삭제</button>
-                              </Show>
-                            </div>
-                            <Show
-                              when={wt.sessions.length > 0}
-                              fallback={<div class="vt-repovis-wt-empty">세션 없음</div>}
-                            >
-                              <div class="vt-repovis-sessions">
-                                <For each={wt.sessions}>
-                                  {(name) => (
-                                    <button type="button" class="vt-repovis-session" onClick={() => openSession(name, group.id, wt.id, group.name)}>
-                                      {name}
-                                    </button>
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
+                것**이 이 화면의 존재 이유라, 흔한 유틸리티 이름을 피해 `off`를 쓴다.
+                2026-09-18 후속 — 저장소를 접었다 펴는 계층을 없앴다: 실제로
+                다른 건 숨기기(저장소 단위)와 "+ 워크트리" 진입점뿐이었고,
+                대부분 저장소는 워크트리가 본체 하나뿐이라 그 계층이 거의
+                항상 워크트리 목록과 같았다. 이제 워크트리가 곧 카드이고,
+                본체 카드가 저장소 표시 체크박스를 겸한다. */}
+            <div class="vt-repovis-list">
+              <For each={groups()}>
+                {(group) => (
+                  <For each={group.worktrees}>
+                    {(wt) => (
+                      <div class="vt-repovis-wt" classList={{ off: !!group.hidden }}>
+                        <div class="vt-repovis-wt-head">
+                          <Show when={wt.isMain}>
+                            <input
+                              type="checkbox"
+                              checked={!group.hidden}
+                              disabled={!!busyRepo()[group.path]}
+                              aria-label={`${group.name} 표시`}
+                              onChange={() => toggleHidden(group)}
+                            />
+                          </Show>
+                          <span class="vt-repovis-wt-branch">{wt.isMain ? group.name : wt.branch}</span>
+                          {/* 부가 워크트리는 소속 저장소를 이름표로(본체는 이름 자체가
+                              저장소 이름이라 필요 없다). */}
+                          <Show when={!wt.isMain}>
+                            <span class="vt-repovis-wt-repo">{group.name}</span>
+                          </Show>
+                          <Show when={wt.isMain}>
+                            <span class="vt-repovis-path" data-tip={group.path}>{shortenPath(group.path, roots())}</span>
+                          </Show>
+                          <button
+                            type="button"
+                            class="vt-btn sm quiet"
+                            disabled={!!busyWt()[wt.id]}
+                            onClick={() => newSessionIn(wt, group.id, group.name)}
+                          >+ 새 세션</button>
+                          {/* 30-worktree.md §3: 메인 워크트리는 삭제할 수 없다
+                              (서버도 400으로 거절한다) — 메뉴에 애초에 안 띄운다.
+                              대신 "+ 워크트리"(그 저장소에 새로 만들기)는 본체
+                              카드에만 둔다 — 어느 저장소에 만들지는 본체 카드
+                              하나로 충분히 정해진다. */}
+                          <Show when={!wt.isMain}>
+                            <button
+                              type="button"
+                              class="vt-btn sm quiet danger"
+                              disabled={!!busyWt()[wt.id]}
+                              onClick={() => removeWorktree(wt)}
+                            >삭제</button>
+                          </Show>
+                          <Show when={wt.isMain}>
+                            <button
+                              type="button"
+                              class="vt-btn sm quiet vt-repovis-add-wt"
+                              onClick={() => setWtDialogRepo({ path: group.path, groupId: group.id, label: group.name })}
+                            >+ 워크트리</button>
+                          </Show>
+                        </div>
+                        <Show
+                          when={wt.sessions.length > 0}
+                          fallback={<div class="vt-repovis-wt-empty">세션 없음</div>}
+                        >
+                          <div class="vt-repovis-sessions">
+                            <For each={wt.sessions}>
+                              {(name) => (
+                                <button type="button" class="vt-repovis-session" onClick={() => openSession(name, group.id, wt.id, group.name)}>
+                                  {name}
+                                </button>
+                              )}
+                            </For>
                           </div>
-                        )}
-                      </For>
-                      <button
-                        type="button"
-                        class="vt-btn sm quiet vt-repovis-add-wt"
-                        onClick={() => setWtDialogRepo({ path: group.path, groupId: group.id, label: group.name })}
-                      >
-                        + 워크트리
-                      </button>
-                    </div>
-                  </Show>
-                </div>
-              )}
-            </For>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                )}
+              </For>
+            </div>
           </div>
           <Show when={errorMsg()}><div class="vt-wtd-error vt-repovis-error">{errorMsg()}</div></Show>
           {/* §3 — "왜 이것들이 목록에 있나"의 답. 지금까지 화면 어디에도 없었다.

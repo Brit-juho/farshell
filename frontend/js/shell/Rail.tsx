@@ -11,7 +11,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import {
-  buildRailSections, buildSessionSections, buildSleepingEntries,
+  buildRailSections, buildSessionSections, buildSleepingEntries, newGroupId,
   GROUP_LABEL, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
   type RailGroup, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
@@ -71,8 +71,8 @@ function Rail(props: { deps: RailDeps }) {
   // 만들고 아무도 안 쓰던 그 라우트)를 쓴다 — wt_id → repoId 매핑을 직접
   // 계산할 필요가 없어진다.
   const [repos, setRepos] = createSignal<any[]>([]);
-  // ADR-29 A — 사용자가 지은 그룹 이름·순서. 대부분의 그룹은 아직 아무도
-  // 안 지어서 비어 있다(자동 제안이 저장소 이름으로 대신한다, rail-data.ts).
+  // ADR-29 A — 사용자가 지은 그룹 이름·순서. 아직 안 지은 그룹은 멤버의
+  // 저장소 이름으로 임시 표시된다(groupDisplayLabel, rail-data.ts).
   const [groupLabels, setGroupLabels] = createSignal<Record<string, string>>({});
   const [groupOrder, setGroupOrder] = createSignal<string[]>([]);
   // §1 — 탐색이 200개 상한에서 잘렸다. 조용히 자르면 "몇 개가 안 보인다"가
@@ -265,13 +265,13 @@ function Rail(props: { deps: RailDeps }) {
     }
 
     // wt_id → 저장소·브랜치 배지 정보. /api/repos(저장소별로 이미 묶임)에서
-    // 뽑는다 — repoId를 따로 계산할 필요가 없다(그 저장소 객체의 id가
-    // 그룹 자동 제안값이다).
-    const wtInfo = new Map<string, { repoId: string; repoName: string; branch: string; isMain: boolean; gitRemote: any; changed: any }>();
+    // 뽑는다. repoId는 안 담는다 — 그룹 자동 제안을 없앤 뒤로(2026-09-18
+    // 후속) 배지 표시 말고는 쓸 데가 없다.
+    const wtInfo = new Map<string, { repoName: string; branch: string; isMain: boolean; gitRemote: any; changed: any }>();
     for (const repo of repos()) {
       for (const wt of repo.worktrees || []) {
         wtInfo.set(wt.id, {
-          repoId: repo.id, repoName: repo.name, branch: wt.branch, isMain: !!wt.isMain,
+          repoName: repo.name, branch: wt.branch, isMain: !!wt.isMain,
           gitRemote: repo.remote || null, changed: wt.changed || null,
         });
       }
@@ -294,9 +294,10 @@ function Rail(props: { deps: RailDeps }) {
         tmuxName: t.name,
         name: awake && w.sessionDisplayName ? w.sessionDisplayName(sid) : t.name,
         awake,
-        // 유효 그룹: @fsh_grp가 있으면 그것, 없으면 이 세션의 저장소로
-        // 자동 제안, 그것도 없으면 null(「묶지 않음」).
-        groupId: t.grp_id || info?.repoId || null,
+        // 유효 그룹: @fsh_grp가 있으면 그것, 없으면 null(「묶지 않음」).
+        // 저장소 자동 제안은 사용자 요청으로 없앴다(2026-09-18 후속) — 직접
+        // 드래그해서 묶은 것만 그룹이다.
+        groupId: t.grp_id || null,
         status,
         since: detail?.since ?? null,
         tool: detail?.tool ?? null,
@@ -439,15 +440,56 @@ function Rail(props: { deps: RailDeps }) {
     else await refreshSessions();
   };
 
-  // ADR-29 E — 그룹 이름 짓기. 「묶지 않음」(groupId null)은 대상이 아니다.
-  // 이름을 지으면 groupDisplayLabel()의 "첫 멤버 저장소 이름" 폴백을
-  // 덮어써서, 여러 저장소가 섞인 그룹의 라벨 흠도 같이 없어진다.
-  const onRenameGroup = async (e: MouseEvent, groupId: string, currentLabel: string) => {
+  // ADR-29 후속 — 그룹 자동 제안을 없앤 뒤로, 그룹 헤더 자체가 하나도 없는
+  // 상태(아직 아무도 안 묶었을 때)에서는 드래그로 갈 곳이 없었다("묶지
+  // 않음" 섹션만 드롭 타깃이 있었는데 거기 드롭하면 그룹에서 뺀다는 뜻이라
+  // 처음 그룹을 만드는 길이 아니었다). 그래서 세션 행 자체도 드롭 타깃으로
+  // 삼는다 — 세션을 세션 위에 놓으면, 대상이 이미 그룹에 속해 있으면
+  // 합류하고(onGroupDrop과 같은 동작), 둘 다 묶이지 않은 상태였으면 새
+  // 그룹을 만들어 **둘 다** 거기 넣는다.
+  const onSessionDragOver = (e: DragEvent, row: OtherRailRowInput) => {
+    if (!row.tmuxName || !e.dataTransfer?.types.includes('text/vt-tmux-name')) return;
+    e.preventDefault();
+    setDragOverKey(`row:${row.tmuxName}`);
+  };
+  const onSessionDragLeave = (row: OtherRailRowInput) => {
+    setDragOverKey((k) => (k === `row:${row.tmuxName}` ? null : k));
+  };
+  const onSessionDrop = async (e: DragEvent, targetRow: OtherRailRowInput) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverKey(null);
+    const tmuxName = e.dataTransfer?.getData('text/vt-tmux-name');
+    if (!tmuxName || !targetRow.tmuxName || tmuxName === targetRow.tmuxName) return;
+    if (targetRow.groupId) {
+      const result = await setSessionGroup(props.deps, tmuxName, targetRow.groupId);
+      if (result.error) (window as any).showToast?.(`그룹 변경 실패: ${result.error}`, 'error');
+      else await refreshSessions();
+      return;
+    }
+    const gid = newGroupId();
+    const a = await setSessionGroup(props.deps, targetRow.tmuxName, gid);
+    const b = a.ok ? await setSessionGroup(props.deps, tmuxName, gid) : a;
+    if (b.error) (window as any).showToast?.(`그룹 만들기 실패: ${b.error}`, 'error');
+    else await refreshSessions();
+  };
+
+  // ADR-29 후속 — 그룹 이름 짓기, 제자리 편집(window.prompt 안 씀). 「묶지
+  // 않음」(groupId null)은 대상이 아니다. 이름을 지으면 groupDisplayLabel()의
+  // "첫 멤버 저장소 이름" 폴백을 덮어써서, 여러 저장소가 섞인 그룹의 라벨
+  // 흠도 같이 없어진다.
+  const [editingGroupKey, setEditingGroupKey] = createSignal<string | null>(null);
+  const [editingGroupValue, setEditingGroupValue] = createSignal('');
+  const startRenameGroup = (e: MouseEvent, groupId: string, currentLabel: string) => {
     e.stopPropagation(); // 부모 토글 버튼까지 눌리면 접혔다 펴진다.
-    const next = window.prompt('그룹 이름', currentLabel);
-    if (next === null) return;
-    const trimmed = next.trim();
-    if (!trimmed) return;
+    setEditingGroupValue(currentLabel);
+    setEditingGroupKey(groupId);
+  };
+  const commitRenameGroup = async (groupId: string) => {
+    if (editingGroupKey() !== groupId) return; // blur가 Enter 뒤에도 한 번 더 온다 — 중복 커밋 방지.
+    setEditingGroupKey(null);
+    const trimmed = editingGroupValue().trim();
+    if (!trimmed) return; // 빈 값은 취소로 본다 — 그룹을 이름 없는 상태로 만들 수는 없다.
     const result = await renameGroup(props.deps, groupId, trimmed);
     if (result.error) (window as any).showToast?.(`이름 변경 실패: ${result.error}`, 'error');
     else await refreshGroups();
@@ -711,15 +753,18 @@ function Rail(props: { deps: RailDeps }) {
                     onDragLeave={() => setDragOverKey((k) => (k === section.key ? null : k))}
                     onDrop={(e) => { if (section.kind !== 'attention') onGroupDrop(e, section.groupId); }}
                   >
-                    <Show
-                      when={section.kind !== 'attention'}
-                      fallback={(
-                        <span class="vt-wgrail-group-label">
-                          {section.label}
-                          <span class="vt-wgrail-group-count">{section.rows.length}</span>
-                        </span>
-                      )}
-                    >
+                    <Show when={section.kind === 'attention'}>
+                      <span class="vt-wgrail-group-label">
+                        {section.label}
+                        <span class="vt-wgrail-group-count">{section.rows.length}</span>
+                      </span>
+                    </Show>
+                    {/* ADR-29 후속 — 제자리 편집. window.prompt 같은 네이티브
+                        다이얼로그를 안 쓴다(사용자 지적: "절대 기본 컴포넌트
+                        쓰지 마라"). 편집 중엔 토글·연필 버튼을 통째로
+                        input으로 갈아 끼운다 — 버튼 위에 input을 얹으면
+                        클릭이 토글로 새는 것과 포커스 다툼이 생긴다. */}
+                    <Show when={section.kind !== 'attention' && editingGroupKey() !== section.key}>
                       <button
                         type="button"
                         class="vt-wgrail-group-toggle"
@@ -731,18 +776,32 @@ function Rail(props: { deps: RailDeps }) {
                         <span class="vt-wgrail-group-label">{section.label}</span>
                         <span class="vt-wgrail-group-count">{section.rows.length}</span>
                       </button>
+                      {/* 「묶지 않음」은 실제 그룹이 아니라 이름 지을 대상이 없다. */}
+                      <Show when={section.kind === 'group' && section.groupId}>
+                        <button
+                          type="button"
+                          class="vt-icon-btn xs vt-wgrail-group-rename"
+                          aria-label={`${section.label} 이름 바꾸기`}
+                          data-tip="그룹 이름 바꾸기"
+                          data-tip-side="bottom"
+                          onClick={(e) => startRenameGroup(e, section.groupId as string, section.label)}
+                          innerHTML={icon('pencil', 12, 2)}
+                        />
+                      </Show>
                     </Show>
-                    {/* ADR-29 E — 「묶지 않음」·「개입 필요」는 실제 그룹이
-                        아니라 이름 지을 대상이 없다. */}
-                    <Show when={section.kind === 'group' && section.groupId}>
-                      <button
-                        type="button"
-                        class="vt-icon-btn xs vt-wgrail-group-rename"
-                        aria-label={`${section.label} 이름 바꾸기`}
-                        data-tip="그룹 이름 바꾸기"
-                        data-tip-side="bottom"
-                        onClick={(e) => onRenameGroup(e, section.groupId as string, section.label)}
-                        innerHTML={icon('pencil', 12, 2)}
+                    <Show when={section.kind !== 'attention' && editingGroupKey() === section.key}>
+                      <input
+                        type="text"
+                        class="vt-input vt-wgrail-group-edit"
+                        value={editingGroupValue()}
+                        ref={(el) => { queueMicrotask(() => { el.focus(); el.select(); }); }}
+                        onInput={(e) => setEditingGroupValue(e.currentTarget.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); commitRenameGroup(section.groupId as string); }
+                          else if (e.key === 'Escape') { e.preventDefault(); setEditingGroupKey(null); }
+                        }}
+                        onBlur={() => commitRenameGroup(section.groupId as string)}
                       />
                     </Show>
                   </div>
@@ -756,6 +815,10 @@ function Rail(props: { deps: RailDeps }) {
                       active={actionSessionId(row) === activeId()}
                       draggable={!!row.tmuxName}
                       onDragStart={(e) => onRowDragStart(e, row)}
+                      onDragOver={(e) => onSessionDragOver(e, row)}
+                      onDragLeave={() => onSessionDragLeave(row)}
+                      onDrop={(e) => onSessionDrop(e, row)}
+                      dragOver={!!row.tmuxName && dragOverKey() === `row:${row.tmuxName}`}
                       onOpen={(e) => openRow(e, row)}
                       onContext={(e) => contextRow(e, row)}
                     />

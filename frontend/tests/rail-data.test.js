@@ -322,3 +322,20 @@ test('buildSleepingEntries — 그룹 덩어리와 낱개가 섞여도 라벨 �
   ], {});
   assert.deepStrictEqual(Array.from(entries, (e) => e.label), ['aaa-group', 'zzz-solo']);
 });
+
+// ── 2026-09-18 후속 — newGroupId(세션을 세션에 끌어다 놓아 새 그룹 만들기) ────
+// server/routes/groups.py의 _GROUP_ID_RE(`[0-9a-f]{12}`)와 모양이 맞아야
+// 서버가 400으로 거절하지 않는다.
+
+test('newGroupId — 12자리 소문자 16진수를 만든다(서버 _GROUP_ID_RE와 같은 모양)', async () => {
+  const { newGroupId } = await mod();
+  for (let i = 0; i < 20; i++) {
+    assert.match(newGroupId(), /^[0-9a-f]{12}$/);
+  }
+});
+
+test('newGroupId — 부를 때마다 다른 값(충돌 없이 새 그룹을 구분해야 한다)', async () => {
+  const { newGroupId } = await mod();
+  const ids = new Set(Array.from({ length: 50 }, () => newGroupId()));
+  assert.strictEqual(ids.size, 50);
+});
