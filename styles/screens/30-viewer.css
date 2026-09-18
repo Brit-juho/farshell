@@ -66,6 +66,15 @@
   flex:1 1 auto; overflow:auto; overscroll-behavior:contain;
   background:var(--crust);
 }
+/* 2026-09-18(4차) — 빈 상태 문장 하나가 전부일 때는 위쪽에 붙지 않고 칸
+   가운데로 온다(큐·사용량 dock 패널에서 지적된 "내용 밑에 빈 공간이 그대로
+   남는다"). `:has()`로 "지금 이 body 안에 빈 상태뿐인가"만 보고 그때만
+   flex 중앙 정렬한다 — 코드 뷰어·파일 트리처럼 스크롤되는 실제 목록이 든
+   body는 원래대로 위에서부터 쌓인다(내용이 있으면 이 선택자가 안 걸린다). */
+.vt-vw-body:has(> .vt-vw-empty:only-child),
+.vt-vw-body:has(> .vt-vw-loading:only-child) {
+  display:flex; flex-direction:column; justify-content:center;
+}
 .vt-vw-loading,.vt-vw-empty{ }
 /* 기본은 중립(정보성 안내) — 상태가 아니라 "무언가 잘렸다/막혔다"는 실제 경고일 때만
    .warn 을 붙인다. 이 클래스를 정상 상태 문구에도 그대로 쓰면 늘 경고처럼 보인다. */

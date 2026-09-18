@@ -300,8 +300,17 @@
 /* 저장소 이름은 이 줄의 주인공이고 나머지(브랜치·↑↓·±)는 그 저장소의 현재
    상태다. 셋 다 11px이던 것을 이름만 한 단 올리고 ui 글꼴로 바꾼다 —
    헤더의 워크스페이스 이름과 같은 규칙이다. */
-.vt-scm-repo { font:var(--weight-semibold) var(--fs-xs) var(--font-ui); color:var(--txt); overflow:hidden; text-overflow:ellipsis; }
-.vt-scm-branch { font:500 var(--fs-2xs) var(--mono); color:var(--acc); overflow:hidden; text-overflow:ellipsis; }
+/* 2026-09-18(4차) — repo/branch에 `min-width:0`이 없어도 부모가
+   `overflow:hidden`이면 flex item의 자동 최소폭이 0으로 떨어진다(스펙). 그
+   결과 이 줄에 함께 서는 flex:none 배지(브랜치·업스트림·↑↓·±·파일 수)가
+   자기 폭을 그대로 지키는 동안 repo/branch만 남은 공간을 나눠 먹어, 392px
+   dock 기본폭에서도 저장소 이름이 "far…" 세 글자로 잘렸다(실측). 주석이
+   말하는 "이름이 주인공"을 실제로 지키려면 최소폭을 명시해야 한다 — repo가
+   branch보다 우선이라 더 넉넉히 준다. 그래도 공간이 모자라면 나머지
+   flex:none 배지들이 컨테이너의 overflow:hidden에 걸려 뒤(오른쪽, DOM상
+   가장 덜 중요한 순서로 배치돼 있다)부터 잘린다 — repo/branch를 지키는 대가다. */
+.vt-scm-repo { font:var(--weight-semibold) var(--fs-xs) var(--font-ui); color:var(--txt); overflow:hidden; text-overflow:ellipsis; min-width:7ch; }
+.vt-scm-branch { font:500 var(--fs-2xs) var(--mono); color:var(--acc); overflow:hidden; text-overflow:ellipsis; min-width:5ch; }
 .vt-scm-upstream, .vt-scm-track, .vt-scm-count { font:400 var(--fs-3xs) var(--mono); color:var(--sub); flex:none; }
 .vt-scm-add { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-done); flex:none; }
 .vt-scm-del { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-error); flex:none; }
@@ -383,6 +392,16 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
    - 안쪽이 SVG 하나뿐이라 정사각이어야 한다(좌우 패딩 0).
    - `.rm`은 파괴적 동작이라 hover에서만 에러색이 된다. */
 .vt-fl-act.rm:hover:not([disabled]){ color:var(--err); }
+/* 2026-09-18(4차) — 행마다 아이콘 5개(다운로드·경로 복사·삽입·링크·삭제)가
+   항상 같은 무게로 늘어서 있어, 파괴적 동작(삭제)이 나머지 넷과 시각적으로
+   구분이 안 됐다. 포트 패널의 종료 버튼(30-viewer.css `.vt-pt-actions`)과
+   같은 관용구 — 포인터가 있는 기기에서만 삭제 아이콘을 행 hover/포커스
+   때까지 숨긴다. 터치는 hover가 없어 영영 못 찾으므로 그대로 상시 노출. */
+@media (hover:hover) and (pointer:fine) {
+  .vt-fl-act.rm{ opacity:0; }
+  .vt-fl-row:hover .vt-fl-act.rm,
+  .vt-fl-act.rm:focus-visible{ opacity:1; }
+}
 
 /* 경고 한 줄의 아이콘 자리 — 아이콘과 글줄의 광학 정렬. 아이콘을 baseline에
    그냥 두면 한글 글줄에서 살짝 내려앉는다. */
