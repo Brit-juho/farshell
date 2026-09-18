@@ -111,6 +111,55 @@ export function renderVoiceSection() {
     refreshStt();
   });
 
+  // 3b. 다운로드된 모델 — 위 「Whisper 모델」이 메모리 적재/내리기(가벼움)라면
+  // 이건 디스크에 받아둔 가중치(~수백MB) 자체를 지우는 것. 별개 행으로
+  // 둔다 — 하나는 "지금 켤지", 하나는 "공간을 돌려받을지"로 성격이 다르다.
+  const modelListEl = document.createElement('div');
+  modelListEl.className = 'vt-set-model-list';
+  const modelRow = row('다운로드된 모델', modelListEl,
+    '지워도 기능은 그대로 켜져 있습니다 — 다음에 쓸 때 다시 받습니다(수백MB, 인터넷 필요).');
+  frag.appendChild(modelRow);
+  const fmtSize = (bytes) => {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)}GB`;
+    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)}MB`;
+    return `${(bytes / 1024).toFixed(0)}KB`;
+  };
+  async function refreshModelList() {
+    modelListEl.textContent = '확인 중…';
+    try {
+      const r = await vtFetch('/voice/stt/model');
+      const models = (r && r.models) || [];
+      modelListEl.textContent = '';
+      if (!models.length) {
+        modelListEl.textContent = '받아둔 모델이 없습니다.';
+        return;
+      }
+      for (const m of models) {
+        const item = document.createElement('div');
+        item.className = 'vt-set-model-item';
+        const label = document.createElement('span');
+        label.className = 'vt-set-model-name';
+        label.textContent = `${m.name} · ${fmtSize(m.size_bytes)}`;
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'vt-btn sm quiet vt-set-reset danger';
+        delBtn.textContent = '삭제';
+        delBtn.addEventListener('click', async () => {
+          if (!confirm(`${m.name} 모델(${fmtSize(m.size_bytes)})을 지울까요?\n\n다음에 음성 입력을 쓰면 다시 받습니다.`)) return;
+          try {
+            await vtFetch('/voice/stt/model', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: m.path }) });
+            toast('모델을 지웠습니다');
+          } catch (e) { toast(e.message || '삭제 실패', 'error'); }
+          refreshStt();
+          refreshModelList();
+        });
+        item.append(label, delBtn);
+        modelListEl.appendChild(item);
+      }
+    } catch (e) { modelListEl.textContent = '상태를 확인할 수 없습니다.'; }
+  }
+  refreshModelList();
+
   // 4. 맥에서 음성만 쓰기 (로컬 마이크 — 서버에 상태 조회 API가 없어
   //    버튼 라벨은 클라이언트가 마지막 응답을 기억해 토글한다)
   const localBtn = document.createElement('button');

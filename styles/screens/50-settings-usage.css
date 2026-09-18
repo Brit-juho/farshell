@@ -70,6 +70,15 @@
 
 .vt-set-btns { display:flex; gap:calc(var(--spacing) * 1); flex-shrink:0; }
 .vt-set-about { font:400 var(--fs-sm) var(--ui); color:var(--txt); }
+
+/* 2026-09-18(3차) — 설정 「음성」의 「다운로드된 모델」 목록. .vt-set-row의
+   control 칸(오른쪽, 가변폭)에 들어가므로 폭은 그 칸을 그대로 따른다 —
+   여기서 새로 고정폭을 주지 않는다. */
+.vt-set-model-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); min-width:0; }
+.vt-set-model-item {
+  display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2);
+}
+.vt-set-model-name { font:400 var(--fs-xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-set-hookrow { margin-top:4px; font:400 var(--fs-xs) var(--mono); color:var(--sub); }
 .vt-set-hookrow[data-state="ok"] { color:var(--color-st-working); }
 .vt-set-hookrow[data-state="add"], .vt-set-hookrow[data-state="update"] { color:var(--color-st-waiting); }

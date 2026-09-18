@@ -127,6 +127,68 @@ def unload_stt() -> bool:
     return True
 
 
+def _hf_cache_dir() -> Path:
+    """mlx-whisper·faster-whisper 둘 다 huggingface_hub 캐시에 모델을 받는다.
+    huggingface_hub가 설치돼 있으면 그 상수를 따르고(사용자가 HF_HOME 등으로
+    캐시 위치를 옮겼을 수 있다), 없으면 기본 경로로 떨어진다."""
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE
+        return Path(HF_HUB_CACHE)
+    except Exception:
+        return Path(os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface"))) / "hub"
+
+
+def _dir_size(path: Path) -> int:
+    total = 0
+    for p in path.rglob("*"):
+        if p.is_file():
+            try:
+                total += p.stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def stt_model_info() -> list[dict]:
+    """디스크에 받아둔 whisper 모델 캐시 목록(이름·경로·바이트 수).
+
+    HF 캐시 전체가 아니라 이름에 'whisper'가 들어간 리포만 고른다 — 같은
+    캐시를 다른 로컬 모델(예: 사용자가 따로 받은 LLM)과 같이 쓸 수 있어서,
+    전체를 지우는 건 이 기능의 책임 밖이다.
+    """
+    cache_dir = _hf_cache_dir()
+    if not cache_dir.is_dir():
+        return []
+    out = []
+    for entry in sorted(cache_dir.iterdir()):
+        if not entry.is_dir() or "whisper" not in entry.name.lower():
+            continue
+        out.append({
+            "name": entry.name.replace("models--", "").replace("--", "/"),
+            "path": str(entry),
+            "size_bytes": _dir_size(entry),
+        })
+    return out
+
+
+def delete_stt_model(path: str) -> None:
+    """모델 캐시 폴더 하나를 지운다.
+
+    경로는 반드시 stt_model_info()가 방금 돌려준 것 중 하나여야 한다 — 임의
+    경로를 받아 지우면 경로 조작으로 캐시 밖 파일도 지울 수 있다. 지우기 전에
+    먼저 언로드한다(메모리에 올라간 모델 파일을 지우면 다음 사용 때 깨질 수
+    있다 — 실제로 겹칠 일은 드물지만 순서를 보장해 둔다).
+    """
+    valid = {Path(m["path"]).resolve(): m["path"] for m in stt_model_info()}
+    target = Path(path).resolve()
+    if target not in valid:
+        raise ValueError(f"알 수 없는 모델 경로: {path}")
+    unload_stt()
+    import shutil
+    shutil.rmtree(target)
+    logger.info(f"STT 모델 캐시 삭제: {target}")
+
+
 async def stt_idle_monitor() -> None:
     """마지막 STT 사용 후 STT_IDLE_UNLOAD_SEC 지나면 모델을 언로드하는 백그라운드 루프."""
     if STT_IDLE_UNLOAD_SEC <= 0:
