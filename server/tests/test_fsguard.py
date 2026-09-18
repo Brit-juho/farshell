@@ -124,11 +124,31 @@ def test_default_boundary_is_github_not_home(monkeypatch, tmp_path):
     assert fsguard.get_roots() == [expected]
 
 
-def test_default_start_root_is_not_home(monkeypatch):
-    """시작 화면은 경계보다 좁게 유지한다 — 첫 화면이 곧 $HOME 전체로 열리면 안 된다."""
+def test_default_start_root_is_not_home(monkeypatch, tmp_path):
+    """시작 화면은 경계보다 좁게 유지한다 — 첫 화면이 곧 $HOME 전체로 열리면 안 된다.
+
+    바로 위 테스트와 같은 이유로 **가짜 홈**에 고정한다. 진짜 홈을 그대로 쓰면
+    이 단언은 "그 기계에 ~/GitHub 이 있는가"에 달린다 — 실제로 CI 러너
+    (`/home/runner`, ~/GitHub 없음)에서만 실패했다. get_roots()는 ~/GitHub 이
+    없으면 완전 잠금을 피하려 $HOME 으로 폴백하도록 **의도적으로** 만들어져
+    있으므로(fsguard.get_roots 독스트링), 그 환경에서 시작 루트가 홈인 것은
+    결함이 아니라 설계다. 아래 두 테스트는 같은 함정을 pytest.skip 으로 피했지만
+    건너뛰는 것보다 두 경우를 다 고정하는 편이 낫다."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     monkeypatch.delenv("VT_BROWSE_ROOTS", raising=False)
-    starts = fsguard.get_start_roots()
-    assert Path.home() not in starts
+
+    # 1. ~/GitHub 이 있는 보통의 환경 — 시작 화면은 거기여야 하고 홈이면 안 된다.
+    github = fake_home / "GitHub"
+    github.mkdir()
+    assert fsguard.get_start_roots() == [github]
+    assert fake_home not in fsguard.get_start_roots()
+
+    # 2. ~/GitHub 이 없는 환경 — 문서화된 폴백대로 홈이 된다. 경계가 넓어져도
+    #    거부 목록은 그대로라는 것이 바로 아래 테스트가 지키는 불변식이다.
+    github.rmdir()
+    assert fsguard.get_start_roots() == [fake_home]
 
 
 def test_default_boundary_still_denies_home_secrets(monkeypatch):
