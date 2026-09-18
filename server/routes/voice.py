@@ -133,6 +133,32 @@ async def stt_unload():
     return {"unloaded": voice_handler.unload_stt(), "loaded": voice_handler.stt_loaded()}
 
 
+@router.get("/voice/stt/model")
+async def stt_model_list():
+    """디스크에 받아둔 whisper 모델 캐시 목록 — 설정 「음성」의 삭제 UI가 쓴다."""
+    loop = asyncio.get_running_loop()
+    models = await loop.run_in_executor(None, voice_handler.stt_model_info)
+    return {"models": models}
+
+
+@router.delete("/voice/stt/model")
+async def stt_model_delete(request: Request):
+    """모델 캐시 폴더 하나를 지운다. body: {"path": "..."} — 반드시 직전
+    /voice/stt/model 응답에 있던 경로여야 한다(voice_handler가 검증)."""
+    body = await request.json()
+    path = body.get("path", "")
+    if not path:
+        return JSONResponse({"error": "path required"}, status_code=400)
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, voice_handler.delete_stt_model, path)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except OSError as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    return {"deleted": True}
+
+
 @router.post("/voice/local/start")
 async def local_mic_start():
     if not local_mic.available():
