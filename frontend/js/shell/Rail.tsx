@@ -26,6 +26,7 @@ import {
   cachedDiffCount,
   diffCountStale,
   setSessionGroup,
+  renameGroup,
 } from './rail-fetch.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
@@ -438,6 +439,20 @@ function Rail(props: { deps: RailDeps }) {
     else await refreshSessions();
   };
 
+  // ADR-29 E — 그룹 이름 짓기. 「묶지 않음」(groupId null)은 대상이 아니다.
+  // 이름을 지으면 groupDisplayLabel()의 "첫 멤버 저장소 이름" 폴백을
+  // 덮어써서, 여러 저장소가 섞인 그룹의 라벨 흠도 같이 없어진다.
+  const onRenameGroup = async (e: MouseEvent, groupId: string, currentLabel: string) => {
+    e.stopPropagation(); // 부모 토글 버튼까지 눌리면 접혔다 펴진다.
+    const next = window.prompt('그룹 이름', currentLabel);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed) return;
+    const result = await renameGroup(props.deps, groupId, trimmed);
+    if (result.error) (window as any).showToast?.(`이름 변경 실패: ${result.error}`, 'error');
+    else await refreshGroups();
+  };
+
   const ctxMenuItems = () => {
     const m = ctxMenu();
     if (!m) return [];
@@ -716,6 +731,19 @@ function Rail(props: { deps: RailDeps }) {
                         <span class="vt-wgrail-group-label">{section.label}</span>
                         <span class="vt-wgrail-group-count">{section.rows.length}</span>
                       </button>
+                    </Show>
+                    {/* ADR-29 E — 「묶지 않음」·「개입 필요」는 실제 그룹이
+                        아니라 이름 지을 대상이 없다. */}
+                    <Show when={section.kind === 'group' && section.groupId}>
+                      <button
+                        type="button"
+                        class="vt-icon-btn xs vt-wgrail-group-rename"
+                        aria-label={`${section.label} 이름 바꾸기`}
+                        data-tip="그룹 이름 바꾸기"
+                        data-tip-side="bottom"
+                        onClick={(e) => onRenameGroup(e, section.groupId as string, section.label)}
+                        innerHTML={icon('pencil', 12, 2)}
+                      />
                     </Show>
                   </div>
                 </Show>

@@ -182,3 +182,19 @@ export async function setSessionGroup(
     return { ok: false, error: e?.data?.error || e?.message || '그룹 변경 실패' };
   }
 }
+
+// ADR-29 E — 그룹 이름 짓기. group_store.py는 처음 만지는 그룹(예: 저장소
+// 자동 제안 id)이면 이 호출로 처음 레코드를 만든다 — 그 전까지는
+// groupDisplayLabel()의 "첫 멤버 저장소 이름" 폴백만 보인다.
+export async function renameGroup(
+  deps: RailDeps, groupId: string, label: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await deps.vtFetch(`/api/groups/${encodeURIComponent(groupId)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label }),
+    });
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.data?.reason || e?.data?.error || e?.message || '이름 변경 실패' };
+  }
+}
