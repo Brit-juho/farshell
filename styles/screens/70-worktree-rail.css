@@ -72,10 +72,56 @@
 .vt-wgrail-collapse.collapsed > svg { transform:rotate(-90deg); }
 
 .vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; }
+/* 98 §2 — 이름표 한 줄이던 그룹 헤더가 버튼 줄이 됐다. 글자 모양(대문자 단)은
+   그대로 patterns.css가 맡고, 여기서는 이 줄의 조판만 정한다. */
 .vt-wgrail-group-head {
-  padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1);
+  padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 1.5) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5);
   background:var(--win);
 }
+/* 캐럿+이름+개수 전체가 클릭 영역(§2). 버튼이지만 머리글처럼 보여야 하므로
+   색·자간은 부모(그룹 헤더)에서 상속받는다. */
+.vt-wgrail-group-toggle {
+  flex:1; min-width:0;
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1);
+  padding:0; border:0; background:none; cursor:pointer;
+  color:inherit; font:inherit; letter-spacing:inherit; text-transform:inherit; text-align:left;
+}
+.vt-wgrail-group-toggle:hover { color:var(--color-txt); }
+.vt-wgrail-group-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* 접었을 때 "몇 개가 숨었나"를 말하는 유일한 글자라 항상 보인다. */
+.vt-wgrail-group-count { flex:none; opacity:.7; }
+/* 새 아이콘을 만들지 않는다 — chevron-down 하나를 돌려 쓴다(레일 접기 버튼·
+   호스트 캐럿·키바 토글이 전부 같은 관용구다, DESIGN.md 아이콘 규칙). */
+.vt-wgrail-group-caret {
+  flex:none; display:inline-flex; align-items:center;
+  transition:transform var(--dur-fast) var(--ease-out-quint);
+}
+.vt-wgrail-group-toggle.collapsed .vt-wgrail-group-caret { transform:rotate(-90deg); }
+@media (prefers-reduced-motion:reduce) {
+  .vt-wgrail-group-caret { transition:none; }
+}
+/* ⚙ — 저장소 표시 설정(§3). 평소엔 물러나 있다가 헤더에 올리면 드러난다:
+   목록을 훑는 동안 매 그룹 머리에서 같은 밝기로 경쟁하면 안 된다. */
+.vt-wgrail-group-settings { flex:none; opacity:.55; }
+.vt-wgrail-group-head:hover .vt-wgrail-group-settings,
+.vt-wgrail-group-settings:focus-visible { opacity:1; }
+
+/* §1/§3 — 목록 아래 한 줄짜리 각주(잘림·숨김 개수). 행으로 오해되면 안 되므로
+   색점 막대도 배경도 주지 않는다. */
+.vt-wgrail-note {
+  display:block; width:100%; box-sizing:border-box;
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+  color:var(--color-sub); font:400 var(--fs-3xs) var(--font-mono); text-align:left;
+  border:0; background:none;
+}
+.vt-wgrail-note-btn { cursor:pointer; }
+.vt-wgrail-note-btn:hover { color:var(--color-txt); text-decoration:underline; }
+
+/* §4 — 행 둘째 줄의 `github/fornerds`. 상태 문장과 같은 줄에 살지만 정체(누구
+   것인가)라서 한 단계 더 물러난 톤으로 둔다. */
+.vt-wgrail-owner { font-size:var(--fs-3xs); opacity:.85; }
+.vt-wgrail-sub-sep { opacity:.5; }
 
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-srow`가 맡는다. 데스크톱은 기본 크기 */
 /* 20-design-system.md §5(O2) — 색점 램프. 상태색 막대(.vt-wgrail-bar, 아래)와
@@ -257,3 +303,43 @@
 .vt-wtd-submit { background:var(--acc); border:1px solid var(--acc); color:var(--win); }
 .vt-wtd-submit:hover { filter:brightness(1.08); }
 .vt-wtd-submit:disabled { opacity:.5; cursor:not-allowed; filter:none; }
+
+/* ── 98 §3 — 「저장소 표시」 시트 ──────────────────────────────────────
+   틀(백드롭·카드·머리·본문)은 워크트리 만들기 다이얼로그를 그대로 쓴다
+   (vt-wtd-*). 여기 있는 것은 목록 행과 바닥의 「탐색 경계」 줄뿐이다. */
+.vt-repovis-card { width:min(440px, 92vw); }
+.vt-repovis-body { max-height:min(56vh, 420px); overflow-y:auto; gap:0; }
+.vt-repovis-row {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 1.5) 0; cursor:pointer;
+}
+.vt-repovis-row + .vt-repovis-row { border-top:1px solid var(--line); }
+/* 숨긴 행은 레일에서 세션 없는 행을 흐리게 그리는 것과 같은 규칙으로 흐리게 —
+   체크박스 하나만 보고 상태를 읽게 하지 않는다.
+   클래스가 `hidden`이 아니라 `off`인 이유는 RepoVisibility.tsx 주석 참고
+   (확장 프로그램의 `.hidden{display:none}`에 행이 통째로 먹혔다). */
+.vt-repovis-row.off { opacity:.55; }
+.vt-repovis-row.off:hover { opacity:.8; }
+.vt-repovis-name { flex:none; font:600 var(--fs-sm) var(--font-mono); color:var(--color-txt); }
+.vt-repovis-path {
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  text-align:right; color:var(--color-sub); font:400 var(--fs-3xs) var(--font-mono);
+}
+.vt-repovis-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--color-sub); font:400 var(--fs-sm) var(--font-mono); }
+.vt-repovis-error { margin:0 calc(var(--spacing) * 3); }
+/* "왜 이것들이 목록에 있나"의 답. 읽기 전용이다 — ~/.vt.env의 단일 소유자는
+   lib/vt_env.sh다(§3). */
+.vt-repovis-foot {
+  display:flex; align-items:baseline; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  border-top:1px solid var(--line);
+}
+.vt-repovis-foot-label {
+  flex:none; color:var(--color-sub);
+  font:var(--weight-semibold) var(--fs-3xs) var(--font-mono);
+  letter-spacing:var(--tracking-caps); text-transform:uppercase;
+}
+.vt-repovis-foot-value {
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--color-txt); font:400 var(--fs-3xs) var(--font-mono);
+}

@@ -46,19 +46,50 @@ export interface RailSectionOut<TRow = RailRow> {
   rows: TRow[];
 }
 
+// 98 §2 — 「유휴」를 버렸다. 사용자가 두 번 "유휴가 뭐냐"고 물었고, 그 13행은
+// "세션은 있는데 노는 중"이 아니라 **세션이 아예 없는 것**이었다(§0-2). 라벨이
+// 사실과 달랐던 것이지 표현이 어려웠던 게 아니다. `done`은 §6-1 확정으로
+// 「작업 중」으로 옮겨서, 이 그룹에는 정말로 안 열린 것만 남는다.
 const GROUP_LABEL: Record<RailGroup, string> = {
   attention: '개입 필요',
   working: '작업 중',
-  idle: '유휴',
+  idle: '열려 있지 않음',
 };
 export { GROUP_LABEL };
 
+// §2 — 접을 수 있는 그룹. `attention`은 여기 없다: 승인 대기가 접힌 채 숨으면
+// 그 그룹이 존재하는 이유가 사라진다(접기 버튼 자체를 안 그린다).
+export const COLLAPSIBLE_GROUPS: RailGroup[] = ['working', 'idle'];
+export function groupCollapseKey(group: RailGroup): string {
+  return `rail.group.${group}.collapsed`;
+}
+
+/** 설정을 아직 못 읽었을 때 쓸 기본값.
+ *
+ * ⚠ `core/settings.js`의 SCHEMA `def`와 **같은 값이어야 한다**. 지연 청크는
+ * core를 정적 import할 수 없어(Rail.tsx 머리말) 여기 한 벌 더 적는다 —
+ * 어긋나면 `rail-data.test.js`의 「기본값이 스키마와 같다」가 실패한다.
+ *
+ * 왜 필요한가(실측): Rail이 마운트되는 시점에 `window.vtSettingsGet`이 아직
+ * 없을 수 있다. `Boolean(undefined)`는 false라, 그 순간 "기본은 접힘"이
+ * 조용히 "펼침"으로 뒤집혔다 — 같은 화면이 새로고침마다 다르게 열리는
+ * 레이스였다. 값이 없으면 스키마 기본으로 떨어지고, 설정이 늦게 도착하면
+ * 구독(`vtSettingsSubscribe`)이 다시 맞춘다. */
+export const GROUP_COLLAPSED_DEFAULT: Record<string, boolean> = {
+  working: false,
+  idle: true,
+};
+
 // 10-shell-layout.md §5: "그룹 순서 고정: 개입 필요(waiting·error) →
-// 작업 중(working) → 유휴(idle·done)". done은 유휴에 남는다 — 완료
-// 자체는 급한 게 아니고, 「읽지 않음」(N37) 배지가 행 안에서 따로 알린다.
+// 작업 중(working) → 유휴(idle·done)".
+//
+// ⚠ 2026-09-18(98 §6-1) — **`done`을 「작업 중」으로 옮겼다.** 10 §5의 원래
+// 결정("done은 유휴에 남는다")을 뒤집은 것이다. 유휴 그룹의 이름이
+// 「열려 있지 않음」이 되면서 완료된 세션이 그 이름에 안 맞게 됐다 — 완료는
+// 열려 있는 세션이고, 오히려 결과를 보러 가야 하는 쪽에 가깝다.
 function groupOf(status: AgentState): RailGroup {
   if (status === 'waiting' || status === 'error') return 'attention';
-  if (status === 'working') return 'working';
+  if (status === 'working' || status === 'done') return 'working';
   return 'idle';
 }
 
@@ -158,6 +189,10 @@ export interface WorktreeRailRowInput {
    * 이미 달고 있던 마크를 레일 행·플릿 행도 같이 달기 위한 필드다. 모르면
    * null/undefined이고 그때는 마크를 그리지 않는다("셸"과 "모름"은 다르다). */
   agent?: string | null;
+  /** 98 §4 — `.git/config`의 origin에서 서버가 뽑아 준 `{host, owner, name}`.
+   * remote가 없는 저장소는 null이고, 그때 둘째 줄은 비고 색은 이름 해시로
+   * 떨어진다(동작 변화 없음). */
+  remote?: RailRemote | null;
 }
 
 export interface OtherRailRowInput {
@@ -202,7 +237,33 @@ export function fnv1a(str: string): number {
   return hash >>> 0; // unsigned 32비트로 정규화
 }
 
-/** §5 해시: fnv1a(repoName) % 8 → --color-hash-(index+1)에 쓸 0~7 인덱스. */
+/** §5 해시: fnv1a(key) % 8 → --color-hash-(index+1)에 쓸 0~7 인덱스. */
 export function hashRepoColorIndex(repoName: string): number {
   return fnv1a(repoName) % 8;
+}
+
+/** git 원격 — `.git/config`의 origin에서 서버가 파싱해 준다(98 §4). */
+export interface RailRemote {
+  host: string;   // github | gitlab | bitbucket | <호스트명>
+  owner: string;
+  name: string;
+}
+
+/** 98 §4 — 행 둘째 줄의 `github/fornerds`. remote가 없으면 빈 문자열이고,
+ * 그때 그 줄은 `:empty`로 접힌다(80-dock.css). */
+export function remoteLabel(remote: RailRemote | null | undefined): string {
+  if (!remote?.host || !remote?.owner) return '';
+  return `${remote.host}/${remote.owner}`;
+}
+
+/** 98 §4 — 색 배정의 입력을 **소유자**로 바꾼다.
+ *
+ * 이름 해시(fnv1a(repoName))는 상태도 언어도 조직도 아닌 글자에서 나온 색이라
+ * 정보가 없었다(디자인 리뷰 S1 「의미 없는 장식」). 소유자로 바꾸면 같은 조직의
+ * 저장소가 같은 색이 되어 색이 처음으로 뜻을 갖는다. remote가 없으면 예전처럼
+ * 이름으로 떨어진다 — 동작이 바뀌지 않는다.
+ */
+export function repoColorKey(repoName: string, remote?: RailRemote | null): string {
+  if (remote?.owner) return `${remote.host || ''}/${remote.owner}`;
+  return repoName;
 }

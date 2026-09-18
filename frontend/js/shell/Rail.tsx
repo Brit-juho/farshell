@@ -12,6 +12,8 @@ import { createSignal, createMemo, createEffect, onCleanup, onMount, For, Show }
 import { render } from 'solid-js/web';
 import {
   buildRailSections, mostUrgentStatus, GROUP_LABEL, hashRepoColorIndex,
+  COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT,
+  type RailGroup,
   type WorktreeRailRowInput, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
 import {
@@ -34,6 +36,7 @@ import { placeMicButton } from '../term/keybar.js';
 export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WorktreeDialog } from './WorktreeDialog.js';
+import { RepoVisibility } from './RepoVisibility.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 const SESSIONS_POLL_MS = 5000;   // tmux 목록(attached·cwd) — 자주 안 바뀌어도 짧게, 값싸다.
@@ -66,6 +69,51 @@ function Rail(props: { deps: RailDeps }) {
   // 한 응답에 둘 다 있을 거라 짐작했다가 마크가 한 개도 안 그려졌다.
   const [agentNames, setAgentNames] = createSignal<Record<string, string>>({});
   const [worktrees, setWorktrees] = createSignal<any[]>([]);
+  // §1 — 탐색이 200개 상한에서 잘렸다. 조용히 자르면 "몇 개가 안 보인다"가
+  // 정확히 이 기능을 만들게 한 그 버그로 읽힌다.
+  const [truncated, setTruncated] = createSignal(false);
+  const [hiddenCount, setHiddenCount] = createSignal(0);
+  const [repoSheet, setRepoSheet] = createSignal(false);
+  // §2 — 그룹 접힘. device 스코프 설정이 정본이고(폰에서 접은 게 맥에 새면
+  // 안 된다) 여기 시그널은 그 값을 화면에 반영하기 위한 거울이다.
+  //
+  // 값이 **없을 때**와 **false일 때**를 구분한다. 예전엔 `Boolean(get(...))`
+  // 하나였는데, 이 지연 청크가 `window.vtSettingsGet`보다 먼저 마운트되는
+  // 순간이 있어서 `undefined → false`가 되어 "기본은 접힘"이 조용히 뒤집혔다
+  // (실서버에서 새로고침마다 결과가 달라지는 것으로 재현).
+  const readGroupCollapsed = (g: RailGroup): boolean => {
+    const v = (window as any).vtSettingsGet?.(groupCollapseKey(g));
+    return v === undefined || v === null ? GROUP_COLLAPSED_DEFAULT[g] : Boolean(v);
+  };
+  const [groupCollapsed, setGroupCollapsed] = createSignal<Record<string, boolean>>(
+    Object.fromEntries(COLLAPSIBLE_GROUPS.map((g) => [g, readGroupCollapsed(g)])),
+  );
+  // 설정이 나중에 도착하면(load 완료 시 전체 키로 한 번 통지된다) 그때 맞춘다.
+  // 페이로드에 있는 키만 반영한다 — 다른 설정 하나를 바꾼 통지가 그룹 상태까지
+  // 되돌리면 안 된다.
+  const unsubGroupSettings = (window as any).vtSettingsSubscribe?.((changed: any) => {
+    if (!changed) return;
+    setGroupCollapsed((prev) => {
+      let next = prev;
+      for (const g of COLLAPSIBLE_GROUPS) {
+        const key = groupCollapseKey(g);
+        if (!(key in changed)) continue;
+        const v = Boolean(changed[key]);
+        if (v === prev[g]) continue;
+        if (next === prev) next = { ...prev };
+        next[g] = v;
+      }
+      return next;
+    });
+  });
+  onCleanup(() => unsubGroupSettings?.());
+  const toggleGroup = (g: RailGroup) => {
+    const next = !groupCollapsed()[g];
+    setGroupCollapsed((prev) => ({ ...prev, [g]: next }));
+    (window as any).vtSettingsSet?.(groupCollapseKey(g), next);
+  };
+  const isGroupCollapsed = (g: RailGroup) =>
+    COLLAPSIBLE_GROUPS.includes(g) && !!groupCollapsed()[g];
 
   // 헤더가 세는 것을 사실대로 말한다. `worktrees()`에는 각 저장소의 **본체
   // 체크아웃**(isMain)이 함께 들어 있다 — git 용어로는 그것도 worktree가
@@ -101,8 +149,12 @@ function Rail(props: { deps: RailDeps }) {
     setAgentNames(await fetchAgentNames(props.deps));
   };
   const refreshWorktrees = async () => {
-    const data = await safeFetch<{ worktrees?: any[] }>(props.deps, '/api/worktrees');
+    const data = await safeFetch<{ worktrees?: any[]; truncated?: boolean; hiddenCount?: number }>(
+      props.deps, '/api/worktrees',
+    );
     setWorktrees(data?.worktrees || []);
+    setTruncated(!!data?.truncated);
+    setHiddenCount(Number(data?.hiddenCount) || 0);
   };
 
   // C1 — 로컬+원격을 한 목록으로. 실패하면(라우터가 없는 옛 서버 등) 빈 배열이
@@ -206,6 +258,9 @@ function Rail(props: { deps: RailDeps }) {
         changed: wt.changed || null,
         question,
         options,
+        // §4 — 서버가 `.git/config`에서 뽑아 준 origin. 둘째 줄의
+        // `github/fornerds`와 소유자 기반 색 배정의 입력이다.
+        remote: wt.remote || null,
       };
     });
 
@@ -435,8 +490,51 @@ function Rail(props: { deps: RailDeps }) {
               {/* 접었을 때도 그룹 경계는 남긴다 — 라벨만 못 읽는 것과 「개입
                   필요」와 「유휴」가 한 덩어리로 붙어 보이는 것은 다르다. */}
               <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
-                <div class="vt-wgrail-group-head">{GROUP_LABEL[section.group]}</div>
+                {/* §2 — 그룹 헤더가 이름표에서 **버튼 줄**이 됐다.
+                    캐럿+이름+개수 전체가 여닫기 클릭 영역이고, 오른쪽 ⚙는
+                    저장소 표시 설정(§3)을 연다. 개수를 붙이는 이유는 접었을 때
+                    "몇 개가 숨었나"가 보여야 하기 때문이다(Fleet.tsx의 그룹
+                    헤더가 이미 같은 모양이다).
+                    「개입 필요」는 접기 버튼을 아예 안 그린다 — 승인 대기가
+                    접힌 채 숨으면 그 그룹이 존재할 이유가 사라진다. */}
+                <div class="vt-wgrail-group-head">
+                  <Show
+                    when={COLLAPSIBLE_GROUPS.includes(section.group)}
+                    fallback={(
+                      <span class="vt-wgrail-group-label">
+                        {GROUP_LABEL[section.group]}
+                        <span class="vt-wgrail-group-count">{section.rows.length}</span>
+                      </span>
+                    )}
+                  >
+                    <button
+                      type="button"
+                      class="vt-wgrail-group-toggle"
+                      classList={{ collapsed: isGroupCollapsed(section.group) }}
+                      aria-expanded={!isGroupCollapsed(section.group)}
+                      onClick={() => toggleGroup(section.group)}
+                    >
+                      <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                      <span class="vt-wgrail-group-label">{GROUP_LABEL[section.group]}</span>
+                      <span class="vt-wgrail-group-count">{section.rows.length}</span>
+                    </button>
+                  </Show>
+                  {/* ⚙는 「열려 있지 않음」에만 둔다. 숨김은 이 그룹을 채우는
+                      저장소들에 대한 판단이고, 세 그룹 머리마다 같은 버튼을
+                      반복하면 그게 잡음이다. */}
+                  <Show when={section.group === 'idle'}>
+                    <button
+                      type="button"
+                      class="vt-icon-btn sm vt-wgrail-group-settings"
+                      aria-label="저장소 표시 설정"
+                      title={hiddenCount() ? `저장소 표시 설정 (숨김 ${hiddenCount()})` : '저장소 표시 설정'}
+                      onClick={() => setRepoSheet(true)}
+                      innerHTML={icon('settings', 13, 2)}
+                    />
+                  </Show>
+                </div>
               </Show>
+              <Show when={!isGroupCollapsed(section.group) || collapsed()}>
               <For each={section.rows}>
                 {(row) => (
                   <Row
@@ -448,9 +546,20 @@ function Rail(props: { deps: RailDeps }) {
                   />
                 )}
               </For>
+              </Show>
             </>
           )}
         </For>
+        {/* §1 — 목록이 200개 상한에서 잘렸다. 여기 한 줄이 없으면 "몇 개가
+            빠졌다"가 이번에 고친 깊이 버그와 똑같은 증상으로 보인다. */}
+        <Show when={truncated() && !collapsed()}>
+          <div class="vt-wgrail-note">저장소가 200개를 넘어 일부만 표시합니다.</div>
+        </Show>
+        <Show when={!truncated() && hiddenCount() > 0 && !collapsed()}>
+          <button type="button" class="vt-wgrail-note vt-wgrail-note-btn" onClick={() => setRepoSheet(true)}>
+            숨긴 저장소 {hiddenCount()}개
+          </button>
+        </Show>
       </div>
       <div class="vt-wgrail-footer">
         {/* 워크트리 생성은 로컬 전용이다(원격 워크트리는 2.2 범위) — 원격을 보고
@@ -494,6 +603,13 @@ function Rail(props: { deps: RailDeps }) {
       </Show>
       <Show when={hostMenu()}>
         {(m) => <Menu x={m().x} y={m().y} onClose={() => setHostMenu(null)} items={hostMenuItems()} />}
+      </Show>
+      <Show when={repoSheet()}>
+        <RepoVisibility
+          deps={props.deps}
+          onClose={() => setRepoSheet(false)}
+          onChanged={() => refreshWorktrees()}
+        />
       </Show>
       <Show when={dialogOpen()}>
         <WorktreeDialog deps={props.deps} defaultRepo={defaultRepo()} onClose={() => setDialogOpen(false)} onCreated={onCreated} />

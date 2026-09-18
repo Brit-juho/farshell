@@ -86,6 +86,18 @@ export const SCHEMA = {
   // 등록이 풀린 id가 남아 있으면 shell/host-data.js의 resolveActiveHost가 로컬로
   // 되돌린다(값 자체는 지우지 않는다 — 호스트를 다시 추가하면 그대로 살아난다).
   'ui.activeHostId':        { type: 'str',  def: 'local', scope: 'device' },
+
+  // 98-rail-repos-2.1.6.md §2 — 레일 그룹 여닫기. **device 스코프**다:
+  // 폰에서 접은 것이 맥까지 접히면 안 된다(ui.rail.collapsed와 같은 이유).
+  // 같은 문서 §3의 「저장소 숨김」은 반대로 서버에 둔다 — 접힘은 화면 상태고
+  // 숨김은 "이게 내 프로젝트인가"라는 사람의 판단이라 기기를 타면 안 된다.
+  //
+  // `idle`만 기본 접힘이다. 이 기능의 출발점이 "열려 있지 않음 13개가 깔려
+  // 있어 그 위의 「작업 중」이 화면 밖으로 밀린다"였다. `attention`은 스키마에
+  // 두지 않는다 — 승인 대기가 접힌 채 숨으면 그 그룹이 존재할 이유가 사라져
+  // Rail.tsx가 접기 버튼 자체를 그리지 않는다.
+  'rail.group.idle.collapsed':    { type: 'bool', def: true,  scope: 'device' },
+  'rail.group.working.collapsed': { type: 'bool', def: false, scope: 'device' },
 };
 
 function _scopeOf(key) {

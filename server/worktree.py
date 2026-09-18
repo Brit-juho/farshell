@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -41,6 +42,8 @@ from worktree_ports import (  # noqa: F401
 from worktree_parse import (  # noqa: F401
     _PORT_KEYS,
     _branch_from_block,
+    parse_git_config_origin,
+    parse_remote_url,
     parse_shortstat,
     parse_worktree_porcelain,
     substitute_env_ports,
@@ -48,9 +51,35 @@ from worktree_parse import (  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL_SEC = 5.0
+# 폴링 주기(Rail.tsx WORKTREES_POLL_MS)보다 **길어야** 한다. 짧으면 모든 폴링이
+# 캐시를 빗나가 매번 전체 탐색이 돈다 — 5초 TTL에 8초 폴링이라 적중률이 0이었다.
+CACHE_TTL_SEC = 20.0
+# 이 나이를 넘은 값은 더 이상 그대로 내주지 않고 호출자를 기다리게 한다.
+# 서버가 오래 idle이었다가 처음 열린 화면이 2분 전 상태를 보면 안 된다.
+CACHE_STALE_SEC = 120.0
 GIT_TIMEOUT = 10.0
 MAX_SCAN_DEPTH = 3
+
+# 98-rail-repos-2.1.6.md §1 — 탐색 경계가 `$HOME`이면 깊이 3으로는 진짜 프로젝트가
+# 밀려난다(`~/GitHub/side_project/tools/farshell`이 깊이 4라 통째로 빠졌다).
+# 모든 루트의 깊이를 올리면 `~/Library`까지 파고들므로, **컨테이너로 흔히 쓰는
+# 이름 밑에서만** 한 단계를 더 준다. 루트 자신이 아니라 루트 **바로 밑**의
+# 디렉터리 이름으로 판정한다 — 경계가 `$HOME`이어도 `GitHub/` 밑이 깊어진다.
+SCAN_CONTAINER_NAMES = {"github", "projects", "project", "src", "repos", "work", "dev", "workspace"}
+SCAN_DEPTH_BONUS = 1
+
+# 저장소 탐색에서만 건너뛸 디렉터리. **`fsguard.EXCLUDE_DIRS`에 넣지 않는다** —
+# 그쪽은 파일 브라우저(routes/files.py)도 같이 쓰므로, 거기에 넣으면
+# `~/Downloads`를 열람조차 못 하게 된다. 여기는 "git 저장소가 있을 리 없는 곳"
+# 목록이지 "보면 안 되는 곳" 목록이 아니다.
+SCAN_EXCLUDE_DIRS = {
+    "Library", "Applications", "Downloads", "Pictures", "Music", "Movies",
+    "Public", "Desktop", "go", ".cargo", ".rustup", "Parallels", "VirtualBox VMs",
+}
+
+# 한 번의 탐색이 모을 저장소 상한(§6-3 확정). 넘으면 멈추고 응답에
+# `truncated: true`를 싣는다 — 무한히 자라는 목록은 레일이 감당하지 못한다.
+MAX_REPOS = 200
 
 _LOCKFILE_NAMES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 
@@ -140,32 +169,99 @@ def _sessions_for_path(path: Path, all_panes) -> list[str]:
 # --- 저장소 탐색 ---------------------------------------------------------------
 
 
-def _find_git_entrypoints(roots: list[Path], max_depth: int = MAX_SCAN_DEPTH) -> list[Path]:
+def _root_depth(root: Path, base_depth: int) -> int:
+    """루트 자체가 컨테이너 이름이면 한 단계 더 준다(`~/GitHub` 경계일 때)."""
+    if root.name.lower() in SCAN_CONTAINER_NAMES:
+        return base_depth + SCAN_DEPTH_BONUS
+    return base_depth
+
+
+def _find_git_entrypoints(
+    roots: list[Path], max_depth: int = MAX_SCAN_DEPTH, limit: int = MAX_REPOS,
+) -> tuple[list[Path], bool]:
+    """git 저장소 진입점 목록과 "상한에 걸렸는가"를 돌려준다.
+
+    깊이는 루트마다 다르다(§1). 루트 이름이 컨테이너면 +1, 그리고 탐색 중에
+    만난 디렉터리 이름이 컨테이너면 그 아래로 다시 +1을 준다 — 경계가
+    `$HOME`이어도 `GitHub/side_project/tools/farshell`(깊이 4)이 들어오고,
+    `~/Library` 쪽은 보너스를 못 받아 예전 깊이 그대로다.
+    """
     found: list[Path] = []
+    truncated = False
 
     def walk(d: Path, depth_left: int) -> None:
+        nonlocal truncated
+        if truncated or len(found) >= limit:
+            truncated = truncated or len(found) >= limit
+            return
         try:
-            entries = list(os.scandir(d))
+            # `with`로 닫는다 — routes/files.py와 같은 규칙. 예외 경로에서
+            # 디렉터리 fd가 GC까지 남지 않도록.
+            with os.scandir(d) as it:
+                entries = list(it)
         except OSError:
             return
         if any(e.name == ".git" for e in entries):
             found.append(d)
+            if len(found) >= limit:
+                truncated = True
             return
         if depth_left <= 0:
             return
         for e in entries:
+            if truncated:
+                return
             if not e.is_dir(follow_symlinks=False):
                 continue
-            if e.name in fsguard.EXCLUDE_DIRS or (e.name.startswith(".") and e.name != ".worktrees"):
+            if e.name in fsguard.EXCLUDE_DIRS or e.name in SCAN_EXCLUDE_DIRS:
                 continue
-            walk(Path(e.path), depth_left - 1)
+            if e.name.startswith(".") and e.name != ".worktrees":
+                continue
+            bonus = SCAN_DEPTH_BONUS if e.name.lower() in SCAN_CONTAINER_NAMES else 0
+            walk(Path(e.path), depth_left - 1 + bonus)
 
     for root in roots:
-        walk(root, max_depth)
-    return found
+        if truncated:
+            break
+        walk(root, _root_depth(root, max_depth))
+    return found, truncated
 
 
-def _build_entry(block: dict, repo_top: Path, all_panes, ports_map: dict) -> dict | None:
+def _read_origin_remote(repo_top: Path) -> dict | None:
+    """저장소의 `origin` 원격 → `{host, owner, name}`. §4.
+
+    `.git`이 디렉터리면 그 안의 config, 파일이면(부가 워크트리·submodule)
+    `gitdir:` 를 따라간 뒤 `commondir`로 본체를 찾는다. 어느 쪽도 못 읽으면
+    None — 여기서 git을 실행하지는 않는다(서브프로세스를 늘리지 않는 것이
+    §4 수용 기준이다).
+    """
+    git_path = repo_top / ".git"
+    try:
+        if git_path.is_dir():
+            config_path = git_path / "config"
+        elif git_path.is_file():
+            head = git_path.read_text(encoding="utf-8", errors="replace").strip()
+            if not head.startswith("gitdir:"):
+                return None
+            gitdir = Path(head.split(":", 1)[1].strip())
+            if not gitdir.is_absolute():
+                gitdir = (repo_top / gitdir).resolve()
+            common = gitdir / "commondir"
+            if common.is_file():
+                rel = common.read_text(encoding="utf-8", errors="replace").strip()
+                gitdir = (gitdir / rel).resolve() if rel else gitdir
+            config_path = gitdir / "config"
+        else:
+            return None
+        text = config_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return parse_remote_url(parse_git_config_origin(text))
+
+
+def _build_entry(
+    block: dict, repo_top: Path, all_panes, ports_map: dict, remote: dict | None = None,
+) -> dict | None:
     raw_path = block.get("path")
     if not raw_path:
         return None
@@ -198,12 +294,20 @@ def _build_entry(block: dict, repo_top: Path, all_panes, ports_map: dict) -> dic
         "sessions": sessions,
         "ports": ports,
         "host": "local",
+        # §4 — 레일 둘째 줄의 `github/fornerds`와 소유자 기반 색 배정의 입력.
+        # remote가 없는 저장소는 None이고, 그때 프런트는 예전처럼 이름 해시로
+        # 떨어진다.
+        "remote": remote,
     }
 
 
 def _discover_all() -> list[dict]:
+    """저장소 목록. 상한에 걸렸으면 `_scan_truncated`에 남긴다 — 반환 모양은
+    `list[dict]` 그대로다(캐시·테스트가 이 계약에 걸려 있다)."""
+    global _scan_truncated
     roots = fsguard.get_roots()
-    entrypoints = _find_git_entrypoints(roots)
+    entrypoints, truncated = _find_git_entrypoints(roots)
+    _scan_truncated = truncated
     visited: set[str] = set()
     all_panes = tmux_runner.get_all_panes()
     ports_map = _load_ports_map()
@@ -235,29 +339,110 @@ def _discover_all() -> list[dict]:
             except OSError:
                 pass
 
+        remote = _read_origin_remote(repo_top)
+
         for b in blocks:
-            item = _build_entry(b, repo_top, all_panes, ports_map)
+            item = _build_entry(b, repo_top, all_panes, ports_map, remote)
             if item:
                 out.append(item)
     return out
 
 
+# `_discover_all()`이 MAX_REPOS에 걸렸는지. 라우트가 응답에 실어 레일이
+# "…외 더 있음"을 그린다. 캐시된 목록과 짝이라 갱신 시점이 같다.
+_scan_truncated = False
+
+
+def last_scan_truncated() -> bool:
+    return _scan_truncated
+
+
+# `_discover_all()`은 저장소 25개 기준 실측 1.0~1.7초가 걸리는 **동기** 작업이다
+# (디렉터리 순회 0.003초 + 저장소마다 git 서브프로세스 여러 번). 잠금이 없으면
+# 동시에 들어온 요청이 각자 전체 탐색을 직렬로 반복해 1.3초가 15~20초로 불어난다
+# — 실측으로 확인한 정지의 실제 모양이다. 그래서 두 개의 잠금을 둔다:
+#   _cache_lock    : 캐시 딕셔너리 읽기/쓰기만 감싸는 짧은 잠금
+#   _discover_lock : 탐색은 한 번에 하나(single-flight). 기다렸다 깨어난 쪽은
+#                    그 사이 채워진 값을 그대로 쓰고 다시 돌지 않는다
+# ⚠ 잠금 순서는 항상 _discover_lock → _cache_lock 이다. 반대로 잡지 말 것.
 _cache: dict = {"at": 0.0, "data": None}
+_cache_lock = threading.Lock()
+_discover_lock = threading.Lock()
+_refresh_thread: threading.Thread | None = None
+
+
+def _refresh_locked(accept_age: float) -> list[dict]:
+    """탐색을 한 번만 돌린다. 잠금을 기다리는 사이 다른 호출자가 `accept_age`
+    이내로 갱신해 뒀으면 그 결과를 그대로 반환한다(중복 탐색 제거).
+
+    `accept_age=0.0`이면 어떤 값도 받아들이지 않으므로 항상 새로 탐색한다 —
+    `force=True`가 이 경로다.
+    """
+    with _discover_lock:
+        with _cache_lock:
+            data, at = _cache["data"], _cache["at"]
+        if data is not None and time.time() - at < accept_age:
+            return data
+        data = _discover_all()
+        with _cache_lock:
+            _cache["at"] = time.time()
+            _cache["data"] = data
+        return data
+
+
+def _schedule_background_refresh() -> None:
+    """낡은 값을 이미 응답에 실어 보낸 뒤, 다음 호출을 위해 뒤에서 갱신한다.
+    이미 도는 중이면 아무것도 하지 않는다 — 폴링 주체가 여럿이라 이 검사가 없으면
+    갱신 스레드가 요청 수만큼 생긴다."""
+    global _refresh_thread
+    with _cache_lock:
+        if _refresh_thread is not None and _refresh_thread.is_alive():
+            return
+        _refresh_thread = threading.Thread(
+            target=_background_refresh, name="worktree-refresh", daemon=True
+        )
+        thread = _refresh_thread
+    thread.start()
+
+
+def _background_refresh() -> None:
+    try:
+        _refresh_locked(CACHE_TTL_SEC)
+    except Exception:
+        # 갱신 실패는 조용히 넘긴다 — 캐시에는 직전 값이 그대로 남아 있고,
+        # 다음 요청이 같은 경로를 다시 밟는다. 여기서 예외가 새면 스레드만 죽는다.
+        logger.debug("워크트리 배경 갱신 실패", exc_info=True)
 
 
 def list_worktrees(force: bool = False) -> list[dict]:
-    now = time.time()
-    if not force and _cache["data"] is not None and now - _cache["at"] < CACHE_TTL_SEC:
-        return _cache["data"]
-    data = _discover_all()
-    _cache["at"] = now
-    _cache["data"] = data
-    return data
+    """워크트리 목록. **동기·블로킹**이므로 async 핸들러에서는 반드시
+    `asyncio.to_thread`로 감싸 부른다(routes/worktree.py). 이벤트 루프 위에서
+    직접 부르면 그 1~2초 동안 서버 전체(HTTP·WS·PTY 출력)가 멈춘다.
+    """
+    if force:
+        return _refresh_locked(0.0)
+
+    with _cache_lock:
+        data, at = _cache["data"], _cache["at"]
+
+    if data is not None:
+        age = time.time() - at
+        if age < CACHE_TTL_SEC:
+            return data
+        if age < CACHE_STALE_SEC:
+            # stale-while-revalidate: 낡았어도 즉시 돌려주고 갱신은 뒤에서.
+            # 워크트리 목록은 몇 초 늦어도 해가 없는 종류의 정보이고, 호출자를
+            # 1초 넘게 붙잡는 비용이 훨씬 크다.
+            _schedule_background_refresh()
+            return data
+
+    return _refresh_locked(CACHE_TTL_SEC)
 
 
 def invalidate_cache() -> None:
-    _cache["at"] = 0.0
-    _cache["data"] = None
+    with _cache_lock:
+        _cache["at"] = 0.0
+        _cache["data"] = None
 
 
 def find_by_id(wt_id: str, *, force: bool = True) -> dict | None:

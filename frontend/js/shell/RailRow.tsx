@@ -8,7 +8,9 @@
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
 import { For, Show, onCleanup } from 'solid-js';
 
-import { GROUP_LABEL, hashRepoColorIndex, type WorktreeRailRowInput } from './rail-data.js';
+import {
+  GROUP_LABEL, hashRepoColorIndex, remoteLabel, repoColorKey, type WorktreeRailRowInput,
+} from './rail-data.js';
 import { actionSessionId, type DesktopRailRow } from './rail-fetch.js';
 import { agentIcon, agentLabel } from '../ui/icons.js';
 
@@ -27,6 +29,10 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
     return props.row.diffFiles != null && props.row.diffFiles > 0 ? `파일 ${props.row.diffFiles}` : null;
   };
   const rowName = () => (props.row.kind === 'worktree' ? props.row.label : props.row.name);
+  // 98 §4 — `github/fornerds`. 워크트리 행에만 있다(「기타」 세션 행은 저장소가
+  // 없다). remote를 못 읽은 저장소는 빈 문자열이라 아무것도 안 그린다.
+  const remoteText = () =>
+    props.row.kind === 'worktree' ? remoteLabel(props.row.remote) : '';
   // 48px 접힘에서는 이름·상태 문장이 숨는다(10-shell-layout.md §5: "마크+색점만.
   // 호버 시 툴팁에 2줄"). 그 두 줄이 title이다 — 없으면 접힌 레일은 정체를
   // 알 수 없는 색 막대 기둥이 된다. 펼친 상태에서는 달지 않는다(글자가 이미
@@ -35,7 +41,9 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
   // 툴팁이 `이름\n`이 되어 빈 줄이 한 칸 붙는다(실브라우저 확인).
   const compactTitle = () => {
     if (!props.compact) return undefined;
-    const sub = props.row.statusSentence;
+    // 접힌 레일은 글자가 하나도 안 보이므로, 펼친 상태의 둘째 줄(소유자·상태)을
+    // 그대로 툴팁에 옮긴다 — 둘 다 없으면 이름만.
+    const sub = [remoteText(), props.row.statusSentence].filter(Boolean).join(' · ');
     return sub ? `${rowName()}\n${sub}` : rowName();
   };
 
@@ -74,7 +82,11 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
           (--color-hash-1..8). 그 오른쪽의 기존 막대가 상태색(30-worktree.md
           §4/10-shell-layout.md §5)을 그대로 맡는다. 「기타」 세션 행은 저장소가
           없어 둘 다 "색점 없음"(kind-session이 CSS에서 투명 처리). */}
-      <span class={`vt-wgrail-hash ${isWt() ? `hash-${hashRepoColorIndex((props.row as WorktreeRailRowInput).repoName)}` : 'kind-session'}`} />
+      {/* 98 §4 — 해시의 입력이 저장소 **이름**에서 **소유자**로 바뀌었다.
+          같은 조직의 저장소가 같은 색이 되어, 이 막대가 처음으로 정보를 갖는다
+          (이름 해시는 디자인 리뷰에서 S1 「의미 없는 장식」이었다). remote를
+          못 읽은 저장소는 예전과 똑같이 이름 해시로 떨어진다. */}
+      <span class={`vt-wgrail-hash ${isWt() ? `hash-${hashRepoColorIndex(repoColorKey((props.row as WorktreeRailRowInput).repoName, (props.row as WorktreeRailRowInput).remote))}` : 'kind-session'}`} />
       <span class={`vt-srow-mark vt-wgrail-bar ${isWt() ? `tone-${props.row.status}` : 'kind-session'}`} />
       {/* 접힘 전용 에이전트 마크. 펼친 상태의 마크는 아래 row-main 안에 있고
           그 블록이 접히면 통째로 숨으므로, 같은 마크를 이 자리에 한 번 더
@@ -103,6 +115,13 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
           </Show>
         </div>
         <div class="vt-srow-sub vt-wgrail-row-sub">
+          {/* 98 §4 — 이 줄은 세션 없는 저장소 행에서 비어 있었다(`:empty`로
+              접힌다). 거기에 "이게 어느 소유자의 저장소인가"를 넣는다. 상태
+              문장이 같이 있으면 가운뎃점으로 잇는다. */}
+          <Show when={remoteText()}>
+            <span class="vt-wgrail-owner">{remoteText()}</span>
+            <Show when={props.row.statusSentence}><span class="vt-wgrail-sub-sep"> · </span></Show>
+          </Show>
           {props.row.statusSentence}
           <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>

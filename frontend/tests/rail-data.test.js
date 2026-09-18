@@ -44,10 +44,59 @@ test('waiting과 error는 같은 그룹(개입 필요)에 모인다', async () =
   assert.strictEqual(sections[0].rows.length, 2);
 });
 
-test('done은 유휴 그룹에 남는다(완료 자체는 급하지 않다 — 문서 원문)', async () => {
+// 2026-09-18(98 §6-1) — 10 §5의 "done은 유휴에 남는다"를 **뒤집었다**. 유휴
+// 그룹의 이름이 「열려 있지 않음」이 되면서(§2) 완료된 세션이 그 이름에 안 맞다 —
+// 완료는 열려 있는 세션이다.
+test('done은 작업 중 그룹으로 간다(유휴는 이제 「열려 있지 않음」이다)', async () => {
   const { buildRailSections } = await mod();
   const sections = buildRailSections([row({ sessionId: 'a', status: 'done' })], NOW);
-  assert.strictEqual(sections[0].group, 'idle');
+  assert.strictEqual(sections[0].group, 'working');
+});
+
+test('유휴 그룹 라벨은 「열려 있지 않음」이다', async () => {
+  const { GROUP_LABEL } = await mod();
+  assert.strictEqual(GROUP_LABEL.idle, '열려 있지 않음');
+});
+
+test('개입 필요는 접을 수 없다(접히면 그 그룹이 존재할 이유가 사라진다)', async () => {
+  const { COLLAPSIBLE_GROUPS } = await mod();
+  assert.deepStrictEqual(Array.from(COLLAPSIBLE_GROUPS), ['working', 'idle']);
+});
+
+// 실측 레이스(2026-09-18, 실서버): Rail이 `window.vtSettingsGet`보다 먼저
+// 마운트되면 `Boolean(undefined)`가 false가 되어 「기본은 접힘」이 조용히
+// 뒤집혔다. 지연 청크는 core/settings.js를 정적 import할 수 없어 기본값을
+// 한 벌 더 들고 있는데, 그 두 벌이 어긋나면 같은 증상이 다시 난다.
+test('레일의 그룹 기본값이 설정 스키마의 def와 같다', async () => {
+  const { GROUP_COLLAPSED_DEFAULT, COLLAPSIBLE_GROUPS, groupCollapseKey, SETTINGS_SCHEMA } = await mod();
+  for (const g of Array.from(COLLAPSIBLE_GROUPS)) {
+    const spec = SETTINGS_SCHEMA[groupCollapseKey(g)];
+    assert.ok(spec, `${g} 그룹의 설정 키가 스키마에 없다`);
+    assert.strictEqual(spec.scope, 'device');
+    assert.strictEqual(GROUP_COLLAPSED_DEFAULT[g], spec.def);
+  }
+  assert.strictEqual(GROUP_COLLAPSED_DEFAULT.idle, true);
+});
+
+test('색 배정 키는 소유자다 — 같은 조직의 저장소는 같은 색', async () => {
+  const { repoColorKey, hashRepoColorIndex } = await mod();
+  const a = repoColorKey('rapa-ai', { host: 'github', owner: 'fornerds', name: 'rapa-ai' });
+  const b = repoColorKey('namdongrun', { host: 'github', owner: 'fornerds', name: 'namdongrun' });
+  assert.strictEqual(a, b);
+  assert.strictEqual(hashRepoColorIndex(a), hashRepoColorIndex(b));
+});
+
+test('remote가 없으면 예전처럼 이름 해시로 떨어진다', async () => {
+  const { repoColorKey, hashRepoColorIndex } = await mod();
+  assert.strictEqual(repoColorKey('solo', null), 'solo');
+  assert.strictEqual(hashRepoColorIndex(repoColorKey('solo', null)), hashRepoColorIndex('solo'));
+});
+
+test('둘째 줄 라벨은 host/owner — remote가 없으면 빈 문자열', async () => {
+  const { remoteLabel } = await mod();
+  assert.strictEqual(remoteLabel({ host: 'github', owner: 'fornerds', name: 'x' }), 'github/fornerds');
+  assert.strictEqual(remoteLabel(null), '');
+  assert.strictEqual(remoteLabel({ host: '', owner: '', name: '' }), '');
 });
 
 test('없는 그룹은 아예 안 나온다(빈 섹션 헤더를 그리지 않는다)', async () => {
@@ -84,8 +133,10 @@ test('statusSentence — waiting/working/error/done/idle', async () => {
   assert.strictEqual(statusSentence('working', since, null, NOW), '작업 중 · 2분');
   assert.strictEqual(statusSentence('error', since, null, NOW), '에러');
   assert.strictEqual(statusSentence('done', since, null, NOW), '완료');
-  assert.strictEqual(statusSentence('idle', since, null, NOW), '유휴 · 2분');
-  assert.strictEqual(statusSentence('idle', null, null, NOW), '유휴');
+  // idle은 그룹 헤더가 이미 「유휴」라고 말하므로 행에서는 반복하지 않는다.
+  // 남기는 것은 그룹 헤더가 말해주지 않는 "마지막 활동 시각"뿐이다.
+  assert.strictEqual(statusSentence('idle', since, null, NOW), '2분');
+  assert.strictEqual(statusSentence('idle', null, null, NOW), '');
 });
 
 // N8/N44(30-worktree.md §4) — "상태는 sessions 중 가장 '시급한' 것(waiting >
