@@ -96,13 +96,12 @@ function fakeDeps(doc, overrides = {}) {
     buildSessionCard: overrides.buildSessionCard || ((sess, onSelect) => {
       const el = doc.createElement('div');
       el.dataset.name = sess.name;
-      el.innerHTML = '<div class="card-title"></div><div class="card-preview"></div>';
+      el.innerHTML = '<div class="card-title"></div><div class="card-meta"></div>';
       el.querySelector('.card-title').textContent = sess.name;
       el.onclick = onSelect;
       return el;
     }),
     updateSessionCard: overrides.updateSessionCard || (() => {}),
-    ensurePreviewWs: overrides.ensurePreviewWs || (() => {}),
     setVtSkin: (skin) => calls.setVtSkin.push(skin),
     listKeymapActions: overrides.listKeymapActions || (() => []),
     invokeKeymapAction: overrides.invokeKeymapAction || (() => {}),

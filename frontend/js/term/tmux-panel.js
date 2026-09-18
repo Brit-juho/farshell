@@ -6,12 +6,14 @@
 import { getSession } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { addSession, switchTo, removeSession } from './session.js';
+import { addSession, switchTo } from './session.js';
+import { killSession, killWarning } from './session-actions.js';
 import { saveWorkspace } from './workspace.js';
 import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 import { icon } from '../ui/icons.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
+import { getStatus } from '../agent/state.js';
 
 async function showTmuxSessions() {
   // 토글: 이미 열려 있으면 닫기
@@ -78,12 +80,15 @@ function buildTmuxRow(menu, s) {
   label.onclick = async () => { menu.remove(); await attachTmux(s.name); };
   row.appendChild(label);
 
-  // 완전 종료 — 2단계 인라인 확인 (실수 방지, 네이티브 dialog 미사용)
+  // 완전 종료 — 2단계 인라인 확인 (실수 방지, 네이티브 dialog 미사용).
+  // 2.1 D3 — 실제 종료는 session-actions.js의 killSession 하나로 모았다
+  // (Rail.tsx가 쓰는 것과 같은 구현). 이 버튼이 계속 갖고 있는 건 "무는 순서를
+  // 2단계로 두는" 이 자리만의 확인 UI다.
   const kill = document.createElement('button');
   const reset = () => {
     kill.innerHTML = icon('trash-2', 14); kill.style.color = 'var(--sub)';
+    kill.title = '완전 종료 (tmux 세션 kill — 되돌릴 수 없음)';
   };
-  kill.title = '완전 종료 (tmux 세션 kill — 되돌릴 수 없음)';
   kill.setAttribute('aria-label', `${s.name} 완전 종료`);
   kill.style.cssText = 'flex-shrink:0;background:transparent;border:none;cursor:pointer;padding:2px 6px;border-radius:5px;display:inline-flex;align-items:center;';
   reset();
@@ -93,34 +98,19 @@ function buildTmuxRow(menu, s) {
     if (!armed) {
       armed = true;
       kill.textContent = '종료?'; kill.style.color = 'var(--err)'; kill.style.fontSize = '11px';
+      // waiting/working이면 무는 순간의 툴팁에 그 사실을 적는다 — 개입을
+      // 기다리는 세션을 무심코 지우는 사고를 막기 위해서다(D3).
+      kill.title = killWarning(s.name, getStatus(s.name));
       armTimer = setTimeout(() => { armed = false; reset(); }, 3000);
       return;
     }
     clearTimeout(armTimer);
     kill.textContent = '…';
-    await killTmuxSession(s.name, s.web_session_id);
+    await killSession(s.name, s.web_session_id);
     if (document.body.contains(menu)) await renderTmuxMenu(menu);
   };
   row.appendChild(kill);
   return row;
-}
-
-// tmux 세션 완전 종료. 웹에 열린 탭이 있으면 먼저 정리해 무한 재연결을 막는다.
-async function killTmuxSession(name, webSessionId) {
-  // 서버 kill이 웹 PTY까지 destroy하므로, 열린 탭을 그대로 두면 WS가 끊긴 뒤
-  // 재연결 루프에 빠진다. 클라이언트 탭을 먼저 정리(= detach)한 뒤 kill한다.
-  if (webSessionId && getSession(webSessionId)) {
-    await removeSession(webSessionId);
-  }
-  try {
-    const res = await apiFetch(`${API_BASE}/api/tmux/kill/${encodeURIComponent(name)}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(`완전 종료 실패: ${name} (${res.status})`); return false; }
-    showToast(`완전 종료됨: ${name}`);
-    return true;
-  } catch (_) {
-    showToast(`완전 종료 오류: ${name}`);
-    return false;
-  }
 }
 
 export async function attachTmux(tmuxName) {

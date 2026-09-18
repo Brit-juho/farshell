@@ -122,6 +122,40 @@ export async function openWorktree(deps: RailDeps, wtId: string): Promise<string
   }
 }
 
+// 2.1 D5 — 서버엔 있었지만 어느 화면도 안 부르던 삭제 API를 여기서 처음
+// 연결한다(30-worktree.md §3). 확인은 두 단계다: 먼저 평범한 확인, 서버가
+// 409(더러움)로 거절하면 "그래도 지울지"를 한 번 더 물어 force로 재시도한다
+// — 뜻하지 않게 커밋 안 된 변경을 날리는 사고를 막기 위해서다. 메인
+// 워크트리는 애초에 호출자(Rail.tsx)가 메뉴에 안 띄운다(서버도 400으로
+// 거절하지만, 거절당하는 것 자체가 이미 "왜 안 되지"라는 물음표다).
+export async function deleteWorktreeRow(
+  deps: RailDeps, wtId: string, label: string, hasSessions: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const firstWarn = hasSessions
+    ? `'${label}' 워크트리를 삭제합니다. 열려 있는 세션의 tmux는 그대로 남지만 다음에 자동으로 재연결되지는 않습니다. 되돌릴 수 없습니다.`
+    : `'${label}' 워크트리를 삭제합니다. 되돌릴 수 없습니다.`;
+  if (!window.confirm(firstWarn)) return { ok: false };
+  try {
+    await deps.vtFetch(`/api/worktrees/${encodeURIComponent(wtId)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    return { ok: true };
+  } catch (e: any) {
+    if (e?.status === 409 && e?.data?.dirty) {
+      if (!window.confirm(`'${label}'에 커밋하지 않은 변경사항이 있습니다. 그래도 삭제할까요? 그 변경은 사라집니다.`)) {
+        return { ok: false };
+      }
+      try {
+        await deps.vtFetch(`/api/worktrees/${encodeURIComponent(wtId)}`, {
+          method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }),
+        });
+        return { ok: true };
+      } catch (e2: any) {
+        return { ok: false, error: e2?.data?.error || e2?.message || '삭제 실패' };
+      }
+    }
+    return { ok: false, error: e?.data?.error || e?.message || '삭제 실패' };
+  }
+}
+
 // 행이 가리키는 "열 수 있는" 대상. 워크트리 행 중 세션이 전혀 없는(흐리게
 // 표시된) 행은 null — 컨텍스트 메뉴(세션 대상 액션)를 못 연다, 클릭은 openRow가
 // 별도로 open API로 처리한다.

@@ -1,25 +1,24 @@
-"""레일 저장소 목록 — 탐색 깊이·상한·원격 파싱·숨김 (98-rail-repos-2.1.6.md).
+"""워크트리 탐색 — 탐색 깊이·상한·원격 파싱 (98-rail-repos-2.1.6.md §1/§4).
 
-고정하는 것 네 가지:
+고정하는 것 둘:
   §1 컨테이너 디렉터리 아래로 한 단계를 더 판다. `~/Library` 계열은 안 판다.
      200개를 넘으면 멈추고 `truncated`를 올린다.
   §4 `.git/config`에서 origin을 읽고 URL을 파싱한다. **자격증명은 응답에
      실리지 않는다** — 이게 이 파일에서 가장 중요한 한 줄이다.
-  §3 숨긴 저장소가 목록에서 빠지고, `include_hidden=1`이면 플래그를 달고 온다.
+
+§3(숨김 저장소)은 2.1 D1에서 `rail_repos_store.py`가 `repo_store.py`로
+흡수되며 `test_repo_store.py`로 옮겼다.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 
 import pytest
 
-import fsguard
-import rail_repos_store
-import worktree
 from worktree_parse import parse_git_config_origin, parse_remote_url
+import worktree
 
 
 def _mkrepo(path: Path, origin: str | None = None) -> Path:
@@ -139,85 +138,3 @@ def test_read_origin_remote_follows_gitdir_file(tmp_path):
     assert worktree._read_origin_remote(linked) == {
         "host": "github", "owner": "o", "name": "r",
     }
-
-
-# --- §3 숨김 저장소 -----------------------------------------------------------
-
-
-@pytest.fixture
-def store(tmp_path, monkeypatch):
-    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
-    return rail_repos_store
-
-
-def test_hide_and_unhide_roundtrip(store):
-    assert store.list_hidden() == []
-    assert store.set_hidden("/repos/a", True)["ok"] is True
-    assert store.list_hidden() == ["/repos/a"]
-    store.set_hidden("/repos/a", True)          # 중복은 멱등
-    assert store.list_hidden() == ["/repos/a"]
-    store.set_hidden("/repos/a", False)
-    assert store.list_hidden() == []
-
-
-def test_hidden_file_is_owner_only(store, tmp_path):
-    store.set_hidden("/repos/a", True)
-    path = tmp_path / "state" / "rail-repos.json"
-    assert path.is_file()
-    assert (path.stat().st_mode & 0o777) == 0o600
-    assert json.loads(path.read_text())["version"] == 1
-
-
-def test_trailing_slash_is_the_same_repo(store):
-    store.set_hidden("/repos/a/", True)
-    assert store.is_hidden({"path": "/repos/a"}, store.hidden_set()) is True
-
-
-def test_hiding_a_repo_hides_its_worktrees(store):
-    hidden = {"/repos/a"}
-    assert store.is_hidden({"path": "/wt/feature", "repo": "/repos/a"}, hidden) is True
-    assert store.is_hidden({"path": "/repos/b", "repo": "/repos/b"}, hidden) is False
-
-
-def test_empty_path_is_rejected(store):
-    result = store.set_hidden("   ", True)
-    assert result["ok"] is False and result["error"] == "empty_path"
-
-
-def test_vanished_repo_in_list_is_ignored(store):
-    """삭제된 저장소가 목록에 남아도 오류 없이 무시된다(§3 수용 기준)."""
-    store.set_hidden("/repos/gone", True)
-    assert store.is_hidden({"path": "/repos/still-here"}, store.hidden_set()) is False
-    assert store.list_hidden() == ["/repos/gone"]
-
-
-def test_corrupt_file_falls_back_to_empty(store, tmp_path):
-    state = tmp_path / "state"
-    state.mkdir(parents=True, exist_ok=True)
-    (state / "rail-repos.json").write_text("{not json", encoding="utf-8")
-    assert store.list_hidden() == []
-
-
-# --- §3 라우트 ----------------------------------------------------------------
-
-
-def test_route_filters_hidden(monkeypatch, tmp_path):
-    import routes.worktree as worktree_routes
-
-    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
-    items = [
-        {"id": "1", "path": "/repos/a", "repo": "/repos/a"},
-        {"id": "2", "path": "/repos/b", "repo": "/repos/b"},
-    ]
-    monkeypatch.setattr(worktree, "list_worktrees", lambda: items)
-    monkeypatch.setattr(worktree, "last_scan_truncated", lambda: False)
-    monkeypatch.setattr(fsguard, "get_roots", lambda: [Path("/repos")])
-    rail_repos_store.set_hidden("/repos/a", True)
-
-    visible = asyncio.run(worktree_routes.list_worktrees())
-    assert [w["id"] for w in visible["worktrees"]] == ["2"]
-    assert visible["hiddenCount"] == 1
-    assert visible["roots"] == ["/repos"]
-
-    everything = asyncio.run(worktree_routes.list_worktrees(include_hidden=1))
-    assert [(w["id"], w["hidden"]) for w in everything["worktrees"]] == [("1", True), ("2", False)]

@@ -11,7 +11,8 @@
 //  - 워크트리에 안 속한 세션은 그대로 둔다(레일의 「기타」 그룹과 같은 규칙).
 import { allSessions, setSessionDisplayName } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
-import { setWorktreeSessionMap } from '../layout/tabbar.js';
+import { setRepoSessionMap } from '../layout/tabbar.js';
+import { setBranchChipMap } from '../layout/panes.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 // 정본은 `/ws-workspace`의 `worktrees_changed` push(맨 아래). 이 폴링은 WS가
@@ -51,12 +52,28 @@ function applyLabels(map) {
   }
 }
 
-/** 세션 이름 → worktreeId. 탭 바가 "이 세션이 이 탭 소속인가"를 판정할 때 쓴다.
+/** 세션 이름 → repoId(저장소 최상위 경로, `wt.repo`). 탭 바가 "이 세션이 이
+ * 탭 소속인가"를 판정할 때 쓴다(D4: 탭의 정체성은 워크트리가 아니라
+ * 저장소다 — 같은 저장소의 두 워크트리 세션은 같은 탭 소속이어야 한다).
  * 라벨 지도와 같은 응답에서 뽑으므로 조회가 한 번이면 된다. */
-export function worktreeOwnerMap(worktrees) {
+export function repoOwnerMap(worktrees) {
   const map = new Map();
   for (const wt of worktrees || []) {
-    for (const name of wt.sessions || []) if (!map.has(name)) map.set(name, wt.id);
+    for (const name of wt.sessions || []) if (!map.has(name)) map.set(name, wt.repo);
+  }
+  return map;
+}
+
+/** 세션 이름 → 브랜치. **저장소에 워크트리가 둘 이상일 때만** 항목이
+ * 생긴다(D4: "워크트리가 1개뿐인 저장소는 축이 안 보인다") — 구분할 대상이
+ * 하나뿐이면 칩은 정보가 아니라 잡음이다. */
+export function branchChipMap(worktrees) {
+  const perRepo = new Map();
+  for (const wt of worktrees || []) perRepo.set(wt.repo, (perRepo.get(wt.repo) || 0) + 1);
+  const map = new Map();
+  for (const wt of worktrees || []) {
+    if ((perRepo.get(wt.repo) || 0) < 2) continue;
+    for (const name of wt.sessions || []) if (!map.has(name)) map.set(name, wt.branch);
   }
   return map;
 }
@@ -65,7 +82,8 @@ export async function refreshTabWorktreeLabels() {
   try {
     const data = await vtFetch('/api/worktrees');
     applyLabels(worktreeLabelMap(data?.worktrees));
-    setWorktreeSessionMap(worktreeOwnerMap(data?.worktrees));
+    setRepoSessionMap(repoOwnerMap(data?.worktrees));
+    setBranchChipMap(branchChipMap(data?.worktrees));
   } catch (_) { /* 워크트리 API가 없거나 실패 — 탭은 기존 이름 그대로 쓴다 */ }
 }
 

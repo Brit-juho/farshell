@@ -110,21 +110,27 @@ export function makeResolver(sessions) {
 // ── 저장 ──────────────────────────────────────────────────────────────────
 // 10 §4 2단계 — v2: 화면에 pane 트리가 **탭마다 하나씩** 있다. v1은 트리가
 // 하나뿐인 스냅샷이라 "탭 1개짜리 v2"와 정확히 같은 의미다 — 복원에서 그렇게
-// 승격한다(_applySnapshot). 저장은 언제나 v2로만 한다.
+// 승격한다(_applySnapshot).
+// 2.1 D4 — v3: 탭 레코드에 `repoId`/`hostId`가 붙었다(탭의 정체성이 워크트리에서
+// 저장소로 바뀐 것 — layout/store.js 머리말 참고). `worktreeId`는 v2와 같은
+// 자리에 **계속 적는다** — 옛 기기(2.1.6 이하)가 이 스냅샷을 읽어도 최소한
+// "어느 워크트리였는지"는 알아보게 하기 위해서다. 저장은 언제나 v3로만 한다.
 function _snapshot() {
   const tabs = getTabsWithTrees();
   return {
-    v: 2,
+    v: 3,
     savedAt: Date.now(),
     activeTab: getActiveTabId(),
     // v1 필드도 계속 적는다 — **되돌리기 위한 것**이다. 2.1.2를 롤백하면 옛
-    // 코드가 이 스냅샷을 읽는데, v2만 있으면 배치가 통째로 날아간다.
+    // 코드가 이 스냅샷을 읽는데, 없으면 배치가 통째로 날아간다.
     // 활성 탭의 트리를 v1 자리에 그대로 둔다(그게 옛 코드가 보던 화면이다).
     active: getActivePaneId(),
     tree: serializeTree(getTree(), _lookupLive),
     tabs: tabs.map((t) => ({
       id: t.id,
+      repoId: t.repoId || null,
       worktreeId: t.worktreeId || null,
+      hostId: t.hostId || 'local',
       label: t.label,
       active: t.activePaneId,
       tree: serializeTree(t.tree, _lookupLive),
@@ -166,17 +172,17 @@ function _readLocal() {
   } catch (_) { return null; }
 }
 
-// v1(트리 하나) / v2(탭 배열) 둘 다 받는다.
+// v1(트리 하나) / v2·v3(탭 배열) 다 받는다.
 function _isSnapshot(s) {
   if (!s) return false;
-  if (s.v === 2 && Array.isArray(s.tabs) && s.tabs.length) return true;
+  if ((s.v === 2 || s.v === 3) && Array.isArray(s.tabs) && s.tabs.length) return true;
   return s.v === 1 && !!s.tree;
 }
 
 /** 스냅샷 → 항상 "탭 배열" 모양으로. v1은 탭 1개로 승격한다. */
 export function snapshotTabs(snap) {
-  if (snap.v === 2 && Array.isArray(snap.tabs)) return snap.tabs;
-  return [{ id: 'tab-legacy', worktreeId: null, label: '작업 공간',
+  if ((snap.v === 2 || snap.v === 3) && Array.isArray(snap.tabs)) return snap.tabs;
+  return [{ id: 'tab-legacy', repoId: null, worktreeId: null, hostId: 'local', label: '작업 공간',
             active: snap.active, tree: snap.tree }];
 }
 
@@ -190,7 +196,8 @@ function _applySnapshot(snap) {
   for (const raw of snapshotTabs(snap)) {
     const tree = deserializeTree(raw.tree, resolve, taken);
     if (!tree) continue;
-    tabs.push({ id: raw.id, worktreeId: raw.worktreeId || null,
+    tabs.push({ id: raw.id, repoId: raw.repoId || null, worktreeId: raw.worktreeId || null,
+                hostId: raw.hostId || 'local',
                 label: raw.label || '작업 공간', tree, activePaneId: raw.active });
   }
   if (!tabs.length) return false;
@@ -240,7 +247,10 @@ export async function restoreLayout() {
   try {
     const ws = await vtFetch('/api/workspace');
     const remote = ws?.ui?.layout;
-    if (remote && remote.v === 1 && remote.tree) {
+    // ⚠ 예전엔 `remote.v === 1`만 봤다 — 저장은 2.1.2부터 이미 v2로만 나가므로
+    // (그 뒤 v3) 원격 정본은 사실상 한 번도 이 분기를 못 탔다(기기를 바꿔도
+    // 서버 스냅샷이 안 먹혔다는 뜻). v1과 같은 판정 함수(_isSnapshot)로 맞춘다.
+    if (_isSnapshot(remote)) {
       const newer = !local || (remote.savedAt || 0) > (local.savedAt || 0);
       if (newer && _applySnapshot(remote)) applied = true;
     }

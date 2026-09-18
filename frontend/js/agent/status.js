@@ -132,8 +132,7 @@ async function _refreshTmuxCwdMap() {
 }
 
 // /ws-agent 스냅샷(agent_snapshot)의 active 목록을 카드/탭 강조에 반영.
-// 그리드를 연 시점에 이미 도구를 쓰고 있던 세션도 놓치지 않기 위함.
-// preview.js의 refreshGrid가 그리드를 늦게 열었을 때 이 캐시로 즉시 반영한다
+// 카드 목록을 연 시점에 이미 도구를 쓰고 있던 세션도 놓치지 않기 위함
 // (import한 시점 값이 아니라 매번 최신값을 봐야 하므로 함수로 노출한다).
 export let agent_status_active_cache = [];
 export function _applyActiveHighlights(active) {

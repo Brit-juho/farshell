@@ -96,6 +96,10 @@ class PaneInfo:
     # A2: tmux pane id("%12"). 훅이 자기보고한 $TMUX_PANE과 정확 매칭하는 키다
     # — cwd 문자열 일치는 같은 디렉토리에 세션이 둘이면 답을 못 낸다.
     pane_id: str = ""
+    # 2.1 D2 — 세션이 어느 워크트리 소속인지 tmux 자신에게 물어본 값
+    # (`@fsh_wt` 커스텀 옵션, worktree._sessions_for_path의 1차 판정 기준).
+    # 아직 안 심겨 있으면 빈 문자열 — cwd 추론(폴백)으로 넘어간다.
+    wt_tag: str = ""
 
 
 def get_all_panes() -> list[PaneInfo]:
@@ -103,7 +107,7 @@ def get_all_panes() -> list[PaneInfo]:
 
     purplemux getAllPanesInfo 패턴: list-panes -a 한 번으로 N개 세션 처리.
     """
-    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}"
+    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}\t#{@fsh_wt}"
     text = run_text(["list-panes", "-a", "-F", fmt])
     if not text:
         return []
@@ -125,6 +129,7 @@ def get_all_panes() -> list[PaneInfo]:
                 pid=pid,
                 path=parts[3] if len(parts) > 3 else "",
                 pane_id=parts[4] if len(parts) > 4 else "",
+                wt_tag=parts[5] if len(parts) > 5 else "",
             )
         )
     return panes
@@ -132,7 +137,7 @@ def get_all_panes() -> list[PaneInfo]:
 
 def list_sessions() -> list[dict]:
     """세션 메타 정보를 단일 호출로 수집."""
-    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}"
+    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{@fsh_wt}"
     text = run_text(["list-sessions", "-F", fmt])
     if not text:
         return []
@@ -149,9 +154,22 @@ def list_sessions() -> list[dict]:
                 "windows": int(parts[1]) if parts[1].isdigit() else 0,
                 "attached": parts[2] == "1",
                 "created": int(parts[3]) if parts[3].isdigit() else 0,
+                "wt_id": parts[4] if len(parts) > 4 else "",
             }
         )
     return sessions
+
+
+def set_option(session: str, key: str, value: str) -> bool:
+    """세션에 커스텀 옵션을 심는다(`@fsh_wt` 등).
+
+    2.1 D2 — 세션↔워크트리 소속을 서버 메모리(재시작에 사라짐)가 아니라
+    tmux 세션 자신에 적어, 서버 재시작을 그대로 견디게 한다. 다른
+    tmux_runner 헬퍼처럼 실패해도 예외를 던지지 않는다(호출자는 이미 열린
+    세션을 막을 이유가 없는 부가 기록이라 rc만 보고 넘어간다).
+    """
+    rc, _, _ = run(["set-option", "-t", session, key, value], timeout=2.0)
+    return rc == 0
 
 
 def is_installed() -> bool:
@@ -198,3 +216,8 @@ async def get_all_panes_async(*args, **kwargs) -> list[PaneInfo]:
 async def has_session_async(*args, **kwargs) -> bool:
     """`has_session`의 async 버전. 인자는 그대로 넘긴다."""
     return await asyncio.to_thread(functools.partial(has_session, *args, **kwargs))
+
+
+async def set_option_async(*args, **kwargs) -> bool:
+    """`set_option`의 async 버전. 인자는 그대로 넘긴다."""
+    return await asyncio.to_thread(functools.partial(set_option, *args, **kwargs))

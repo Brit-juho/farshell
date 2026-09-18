@@ -25,12 +25,20 @@ function _genId(prefix) {
 // 그게 이 층을 스토어 안에 넣은 이유다. 바깥에서 보면 달라진 게 없고, 탭을
 // 아는 코드(탭 바·영속화)만 새 API를 쓴다.
 //
-// 탭 하나의 모양: `{ id, worktreeId, label, tree, activePaneId }`.
-// `worktreeId`가 null인 탭은 어떤 워크트리에도 속하지 않는 작업 공간이다
-// (레일의 「기타」와 같은 개념 — 워크트리가 0개인 환경에서도 화면이 성립한다).
-function _makeTab({ worktreeId = null, label = '작업 공간', tree = null } = {}) {
+// 탭 하나의 모양: `{ id, repoId, worktreeId, hostId, label, tree, activePaneId }`.
+// 2.1 D4("저장소 1급화" 4단계) 전에는 `worktreeId`가 탭의 정체성이었다 — 저장소
+// 하나에 워크트리가 둘이면 탭도 둘이었다. 이제 **`repoId`가 정체성**이고
+// `worktreeId`는 "이 탭에서 지금 보고 있는 워크트리"라는 부가 정보로
+// 내려간다(pane 헤더 옆 브랜치 칩이 이 값을 읽는다) — 같은 저장소의 두
+// 워크트리를 각각 탭으로 열 수는 없다는 뜻이고(분할 pane을 쓰면 된다), 그
+// 대가로 탭 개수가 "내가 지금 보는 저장소 수"와 일치한다.
+// `repoId`가 null인 탭은 어떤 저장소에도 속하지 않는 작업 공간이다(레일의
+// 「기타」와 같은 개념 — 워크트리가 0개인 환경에서도 화면이 성립한다).
+// `hostId`는 2.2 원격 호스트 기반이다(지금은 항상 'local') — 다른 호스트의
+// 같은 경로 저장소가 탭을 공유하지 않도록 미리 자리를 잡아 둔다.
+function _makeTab({ repoId = null, worktreeId = null, hostId = 'local', label = '작업 공간', tree = null } = {}) {
   const t = tree || makeLeaf(_genId('pane'), activeSessionId());
-  return { id: _genId('tab'), worktreeId, label, tree: t, activePaneId: _firstLeafId(t) };
+  return { id: _genId('tab'), repoId, worktreeId, hostId, label, tree: t, activePaneId: _firstLeafId(t) };
 }
 
 const _tabs = [_makeTab()];
@@ -187,18 +195,29 @@ function _firstLeafId(node) {
 
 /** 읽기 전용 사본 — 바깥에서 tree를 직접 바꾸지 못하게 얕은 복사로 준다. */
 export function getTabs() {
-  return _tabs.map((t) => ({ id: t.id, worktreeId: t.worktreeId, label: t.label }));
+  return _tabs.map((t) => ({ id: t.id, repoId: t.repoId, worktreeId: t.worktreeId, hostId: t.hostId, label: t.label }));
 }
 
 export function getActiveTabId() {
   return _tabs[_activeTabIndex].id;
 }
 
-/** 워크트리 id로 이미 열린 탭 찾기 — 같은 워크트리를 두 번 열지 않는다. */
-export function findTabByWorktree(worktreeId) {
-  if (!worktreeId) return null;
-  const t = _tabs.find((x) => x.worktreeId === worktreeId);
+/** 저장소 id로 이미 열린 탭 찾기 — 같은 저장소를 두 번 열지 않는다(D4:
+ * 탭의 정체성은 이제 워크트리가 아니라 저장소다). */
+export function findTabByRepo(repoId) {
+  if (!repoId) return null;
+  const t = _tabs.find((x) => x.repoId === repoId);
   return t ? t.id : null;
+}
+
+/** 이 탭에서 지금 보는 워크트리를 바꾼다(같은 저장소의 다른 워크트리로
+ * 이동할 때 — 탭은 그대로, "지금 보는 브랜치"만 갱신). */
+export function setTabWorktree(tabId, worktreeId) {
+  const t = _tabs.find((x) => x.id === tabId);
+  if (!t) return false;
+  t.worktreeId = worktreeId || null;
+  _notify();
+  return true;
 }
 
 export function switchLayoutTab(tabId) {
@@ -212,12 +231,17 @@ export function switchLayoutTab(tabId) {
   return true;
 }
 
-/** 새 탭. 같은 워크트리 탭이 이미 있으면 그 탭으로 전환만 한다. */
-export function openLayoutTab({ worktreeId = null, label = '작업 공간', sessionId = null } = {}) {
-  const existing = findTabByWorktree(worktreeId);
-  if (existing) { switchLayoutTab(existing); return existing; }
+/** 새 탭. 같은 저장소 탭이 이미 있으면 전환만 하고, 다른 워크트리를 보는
+ * 중이었다면 그 탭의 `worktreeId`를 지금 연 워크트리로 갱신한다(D4). */
+export function openLayoutTab({ repoId = null, worktreeId = null, hostId = 'local', label = '작업 공간', sessionId = null } = {}) {
+  const existing = findTabByRepo(repoId);
+  if (existing) {
+    switchLayoutTab(existing);
+    if (worktreeId) setTabWorktree(existing, worktreeId);
+    return existing;
+  }
   _sync();
-  const tab = _makeTab({ worktreeId, label });
+  const tab = _makeTab({ repoId, worktreeId, hostId, label });
   if (sessionId) tab.tree = _setSession(tab.tree, tab.tree.id, sessionId);
   _tabs.push(tab);
   _activeTabIndex = _tabs.length - 1;
@@ -259,7 +283,9 @@ export function replaceTabs(tabs, activeTabId = null) {
   for (const t of clean) {
     _tabs.push({
       id: t.id || _genId('tab'),
+      repoId: t.repoId || null,
       worktreeId: t.worktreeId || null,
+      hostId: t.hostId || 'local',
       label: t.label || '작업 공간',
       tree: t.tree,
       activePaneId: (t.activePaneId && findNode(t.tree, t.activePaneId)) ? t.activePaneId : _firstLeafId(t.tree),

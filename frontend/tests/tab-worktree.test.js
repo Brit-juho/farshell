@@ -8,6 +8,11 @@ const { createDomEnv } = require('./helpers/dom-env');
 const { importFresh } = require('./helpers/vm-esm');
 
 const MOD = path.join(__dirname, '../js/term/tab-worktree.js');
+// 2.1 D4 — 이 모듈이 이제 layout/panes.js(브랜치 칩)를 끌어오는데, 그 파일이
+// pane-picker.js를 거쳐 agent/preview.js까지 끌고 온다. 그 파일은 UMD 전역
+// VTAnsiLex를 모듈 최상단에서 읽으므로(layout-panes-cap.test.js와 같은 이유)
+// 먼저 심어 둬야 한다.
+const ANSILEX_JS = path.join(__dirname, '../js/lib/ansilex.js');
 
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
@@ -20,7 +25,9 @@ async function load() {
   env.window.API_BASE = '';
   env.window._tokenQuery = '';
   env.window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ worktrees: [] }) });
-  _m = await importFresh(MOD, env.context, new Map());
+  const cache = new Map();
+  await importFresh(ANSILEX_JS, env.context, cache);
+  _m = await importFresh(MOD, env.context, cache);
   return _m;
 }
 

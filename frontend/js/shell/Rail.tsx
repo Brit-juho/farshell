@@ -22,7 +22,7 @@ import {
 } from './host-data.js';
 import {
   actionSessionId, fetchAgentDetails, fetchDiffCount, openWorktree, safeFetch,
-  useAgentVersion, useSessionsVersion, fetchAgentNames,
+  useAgentVersion, useSessionsVersion, fetchAgentNames, deleteWorktreeRow,
   type DesktopRailRow, type RailDeps, type AgentDetail,
   cachedDiffCount,
   diffCountStale,
@@ -141,7 +141,12 @@ function Rail(props: { deps: RailDeps }) {
       ? Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY))
       : defaultRailCollapsed(window.innerWidth, REGULAR_MAX),
   );
-  const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; sessionId: string } | null>(null);
+  const [ctxMenu, setCtxMenu] = createSignal<{
+    x: number; y: number; sessionId: string | null;
+    // 2.1 D5 — 삭제는 세션이 아니라 워크트리를 대상으로 한다(세션이 하나도
+    // 없는 워크트리도 지울 수 있어야 한다), 그래서 별도 필드로 둔다.
+    worktree: { id: string; label: string; hasSessions: boolean } | null;
+  } | null>(null);
   const [dialogOpen, setDialogOpen] = createSignal(false);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
@@ -261,6 +266,8 @@ function Rail(props: { deps: RailDeps }) {
         path: wt.path,
         primarySessionId,
         primaryTmuxName: primarySessionId ? null : attachTarget,
+        repoPath: wt.repo,
+        host: wt.host || 'local',
         status,
         since,
         tool,
@@ -323,7 +330,9 @@ function Rail(props: { deps: RailDeps }) {
     // 자기 pane 트리를 가지므로, 여기서 탭을 안 맞추면 다른 워크트리의 배치
     // 위에 남의 세션을 얹게 된다.
     if (row.kind === 'worktree') {
-      w.openWorktreeTab?.(row.worktreeId, row.label);
+      // D4 — 탭은 저장소 단위다. 라벨은 저장소 이름만(브랜치는 탭이 아니라
+      // pane 헤더 옆 칩이 보여준다).
+      w.openWorktreeTab?.({ repoId: row.repoPath, worktreeId: row.worktreeId, hostId: row.host, label: row.repoName });
     }
     const sid = actionSessionId(row);
     if (sid) {
@@ -346,20 +355,44 @@ function Rail(props: { deps: RailDeps }) {
   const contextRow = (e: MouseEvent, row: DesktopRailRow) => {
     e.preventDefault();
     const sid = actionSessionId(row);
-    if (!sid) return; // 세션 없는 워크트리 행은 세션 대상 메뉴가 성립하지 않는다.
-    setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid });
+    // 2.1 D5 — 메인 워크트리는 삭제할 수 없다(서버도 400으로 거절한다,
+    // worktree.py delete_worktree) — 메뉴에 애초에 안 띄운다.
+    const worktree = (row.kind === 'worktree' && !row.isMain)
+      ? { id: row.worktreeId, label: row.label, hasSessions: !!actionSessionId(row) }
+      : null;
+    if (!sid && !worktree) return; // 세션도 없고 지울 워크트리도 아니면 메뉴가 성립하지 않는다.
+    setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, worktree });
   };
 
   const ctxMenuItems = () => {
     const m = ctxMenu();
     if (!m) return [];
     const w = window as any;
-    return [
-      { label: '새 세션', run: () => w.createSession?.() },
-      { label: '지금 이 세션 맥에서 열기', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('session.open-on-mac') as (() => void) | undefined)?.(); } },
-      { label: '연결된 화면', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('clients.show') as (() => void) | undefined)?.(); } },
-      { label: '닫기', run: () => w.removeSession?.(m.sessionId) },
-    ];
+    const items: MenuItem[] = [];
+    if (m.sessionId) {
+      items.push(
+        { label: '새 세션', run: () => w.createSession?.() },
+        { label: '지금 이 세션 맥에서 열기', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('session.open-on-mac') as (() => void) | undefined)?.(); } },
+        { label: '연결된 화면', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('clients.show') as (() => void) | undefined)?.(); } },
+        // 2.1 D3 — "닫기"는 화면마다 다른 뜻이었다. 이 메뉴가 하는 건 웹
+        // 세션을 놓는 것뿐(tmux는 계속 산다)이라 이제 그 이름으로 부른다.
+        // 실제 동작은 term/session-actions.js 하나로 모았다(vtDetachSession).
+        { label: '세션 놓기', run: () => w.vtDetachSession?.(m.sessionId) },
+      );
+    }
+    if (m.worktree) {
+      const wt = m.worktree;
+      items.push({
+        label: '워크트리 삭제',
+        detail: '되돌릴 수 없음',
+        run: async () => {
+          const result = await deleteWorktreeRow(props.deps, wt.id, wt.label, wt.hasSessions);
+          if (result.error) w.showToast?.(`워크트리 삭제 실패: ${result.error}`, 'error');
+          else if (result.ok) await refreshWorktrees();
+        },
+      });
+    }
+    return items;
   };
 
   // "⋯ 더보기" — §5가 기존 48px 아이콘 레일을 완전히 대체하기로 하면서 갈 곳을
@@ -482,19 +515,40 @@ function Rail(props: { deps: RailDeps }) {
             </button>
           </Show>
         </Show>
-        {/* 2026-09-18 — 글리프(‹ ›)를 쓰고 있었다. DESIGN.md §아이콘: icons.js의
-            인라인 SVG가 유일한 아이콘 소스다. chevron 하나를 CSS로 돌리는
-            관용구(키바 토글·호스트 캐럿과 같다)로 맞춘다. */}
-        <button
-          type="button"
-          class="vt-icon-btn sm vt-wgrail-collapse"
-          classList={{ collapsed: collapsed() }}
-          onClick={toggleCollapse}
-          aria-label={collapsed() ? '펼치기' : '접기'}
-          data-tip={collapsed() ? '레일 펼치기' : '레일 접기'}
-          data-tip-side="bottom"
-          innerHTML={icon('chevron-down', 14, 2)}
-        />
+        <div class="vt-wgrail-head-actions">
+          {/* 2026-09-18 — 이 버튼은 예전엔 「열려 있지 않음」 그룹 머리에만
+              있었다. buildRailSections()가 빈 그룹을 통째로 지우므로, 모든
+              저장소에 세션이 붙어 있으면(=idle 그룹이 안 생기면) 이 버튼이
+              화면에서 완전히 사라져 "저장소 표시" 설정에 닿을 방법이 없었다
+              (숨긴 게 하나도 없으면 밑단의 "숨긴 저장소 N개" 링크도 안 뜬다 —
+              그 경로도 hiddenCount() > 0 조건이라 똑같이 막혀 있었다). 레일
+              헤더 줄은 섹션 유무와 무관하게 항상 그려지므로 여기 하나만 둔다. */}
+          <Show when={!collapsed()}>
+            <button
+              type="button"
+              class="vt-icon-btn sm vt-wgrail-settings"
+              aria-label="저장소 표시 설정"
+              data-tip="저장소 표시 설정"
+              data-tip-sub={hiddenCount() ? `${hiddenCount()}개 숨김` : undefined}
+              data-tip-side="bottom"
+              onClick={() => setRepoSheet(true)}
+              innerHTML={icon('settings', 13, 2)}
+            />
+          </Show>
+          {/* 2026-09-18 — 글리프(‹ ›)를 쓰고 있었다. DESIGN.md §아이콘: icons.js의
+              인라인 SVG가 유일한 아이콘 소스다. chevron 하나를 CSS로 돌리는
+              관용구(키바 토글·호스트 캐럿과 같다)로 맞춘다. */}
+          <button
+            type="button"
+            class="vt-icon-btn sm vt-wgrail-collapse"
+            classList={{ collapsed: collapsed() }}
+            onClick={toggleCollapse}
+            aria-label={collapsed() ? '펼치기' : '접기'}
+            data-tip={collapsed() ? '레일 펼치기' : '레일 접기'}
+            data-tip-side="bottom"
+            innerHTML={icon('chevron-down', 14, 2)}
+          />
+        </div>
       </div>
       <div class="vt-wgrail-body">
         <Show when={totalRows() === 0 && !collapsed() && !isRemoteHost()}>
@@ -545,21 +599,6 @@ function Rail(props: { deps: RailDeps }) {
                       <span class="vt-wgrail-group-label">{GROUP_LABEL[section.group]}</span>
                       <span class="vt-wgrail-group-count">{section.rows.length}</span>
                     </button>
-                  </Show>
-                  {/* ⚙는 「열려 있지 않음」에만 둔다. 숨김은 이 그룹을 채우는
-                      저장소들에 대한 판단이고, 세 그룹 머리마다 같은 버튼을
-                      반복하면 그게 잡음이다. */}
-                  <Show when={section.group === 'idle'}>
-                    <button
-                      type="button"
-                      class="vt-icon-btn sm vt-wgrail-group-settings"
-                      aria-label="저장소 표시 설정"
-                      data-tip="저장소 표시 설정"
-                      data-tip-sub={hiddenCount() ? `${hiddenCount()}개 숨김` : undefined}
-                      data-tip-side="right"
-                      onClick={() => setRepoSheet(true)}
-                      innerHTML={icon('settings', 13, 2)}
-                    />
                   </Show>
                 </div>
               </Show>

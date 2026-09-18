@@ -32,7 +32,7 @@ SERVER = pathlib.Path(__file__).resolve().parent.parent
 BLOCKING = {
     "tmux_runner.run", "tmux_runner.run_text",
     "tmux_runner.get_all_panes", "tmux_runner.has_session",
-    "tmux_runner.list_sessions",
+    "tmux_runner.list_sessions", "tmux_runner.set_option",
     "subprocess.run", "subprocess.check_output", "subprocess.check_call",
     "subprocess.call", "subprocess.Popen",
     "worktree.list_worktrees",

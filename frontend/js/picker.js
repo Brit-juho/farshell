@@ -9,7 +9,8 @@ import { activeSession, activeSessionId, allSessions, sessionDisplayName } from 
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
-import { switchTo, removeSession, renameSession } from './term/session.js';
+import { switchTo, renameSession } from './term/session.js';
+import { detachSession } from './term/session-actions.js';
 import { sendPaste } from './term/clipboard.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
@@ -92,8 +93,8 @@ function renderSessionManager(backdrop) {
       if (await renameSession(id, next)) renderSessionManager(backdrop);
     };
     const close = document.createElement('button');
-    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 닫기`);
-    close.onclick = async () => { await removeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
+    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 세션 놓기`);
+    close.onclick = async () => { await detachSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
     row.append(select, rename, close); list.appendChild(row);
   }
 

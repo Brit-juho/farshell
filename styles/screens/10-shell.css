@@ -360,6 +360,24 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   white-space:nowrap;
   text-overflow:ellipsis;
 }
+/* 2.1 D4 — 워크트리 브랜치 칩. 저장소에 워크트리가 둘 이상일 때만 채워진다
+   (layout/panes.js의 setBranchChipMap) — 하나뿐이면 구분할 게 없으니
+   `[hidden]`으로 완전히 빠진다. `.vt-chip`(필터용, 클릭 가능)과 달리 이건
+   읽기 전용 메타데이터라 커서·hover 상태가 없다 — 분할·닫기 버튼과 헷갈리면
+   안 된다. */
+.vt-pane-branch {
+  flex:0 1 auto;
+  min-width:0;
+  max-width:9em;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  padding:0 calc(var(--spacing) * 1);
+  border:1px solid var(--color-line);
+  border-radius:var(--radius-sm);
+  font-size:var(--fs-3xs);
+  color:var(--color-sub);
+}
 /* 헤더 버튼 셋(분할 2 · 닫기)은 평소 물러나 있는다 — pane이 넷이면 아이콘이
    열두 개고, 그중 사용자가 지금 쓸 건 많아야 하나다. 호버하거나 활성인 pane
    에서만 올라온다. 포커스가 키보드로 들어오면 당연히 보여야 한다.

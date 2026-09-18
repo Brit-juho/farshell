@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 import fsguard
-import rail_repos_store
+import repo_store
 import worktree
 
 logger = logging.getLogger(__name__)
@@ -40,21 +40,21 @@ async def list_worktrees(include_hidden: int = 0):
     # 경계 설정이 아니다(경계는 VT_BROWSE_ROOTS다).
     items, hidden = await asyncio.gather(
         asyncio.to_thread(worktree.list_worktrees),
-        asyncio.to_thread(rail_repos_store.hidden_set),
+        asyncio.to_thread(repo_store.hidden_set),
     )
     if include_hidden:
         out = [
-            {**w, "hidden": rail_repos_store.is_hidden(w, hidden)}
+            {**w, "hidden": repo_store.is_hidden(w, hidden)}
             for w in items
         ]
     else:
-        out = [w for w in items if not rail_repos_store.is_hidden(w, hidden)]
+        out = [w for w in items if not repo_store.is_hidden(w, hidden)]
     return {
         "worktrees": out,
         # §1 — 탐색이 MAX_REPOS에서 잘렸다. 레일이 "목록이 전부가 아니다"를
         # 사용자에게 말할 수 있어야 한다(조용히 자르면 §1과 같은 버그로 읽힌다).
         "truncated": worktree.last_scan_truncated(),
-        "hiddenCount": sum(1 for w in items if rail_repos_store.is_hidden(w, hidden)),
+        "hiddenCount": sum(1 for w in items if repo_store.is_hidden(w, hidden)),
         # §3 시트 하단의 "왜 이것들이 목록에 있나" — 읽기 전용 표시.
         "roots": [str(r) for r in fsguard.get_roots()],
     }
@@ -81,7 +81,7 @@ async def set_worktree_hidden(request: Request):
     except fsguard.FsDenied as e:
         return JSONResponse({"error": e.reason}, status_code=403)
     hidden = bool(body.get("hidden", True))
-    result = await asyncio.to_thread(rail_repos_store.set_hidden, str(path), hidden)
+    result = await asyncio.to_thread(repo_store.set_hidden, str(path), hidden)
     if not result.get("ok"):
         return JSONResponse(result, status_code=400)
     await _broadcast_worktrees_changed()

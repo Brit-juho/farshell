@@ -699,18 +699,12 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-qo-row.selected{ background:var(--menu-hover); }
 .vt-qo-card-slot{ display:contents; }
 .vt-qo-hint{ margin-left:auto; flex:0 0 auto; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
-/* L6: 세션 목록에 얹는 라이브 프리뷰 썸네일(ADR-7) — .vt-card를 그대로 재사용하되
-   목록 행 안에 들어가므로 그리드 카드(최대 240px)보다 훨씬 낮게 자른다. 나머지
-   레이아웃(테두리·hover·상태 dot)은 그리드/pane-picker와 동일하게 유지 — "썸네일"이
-   같은 시각 언어를 쓰는 게 핵심이다. */
-.vt-qo-session-card{ border-radius:var(--radius-sm); margin:0 calc(var(--spacing) * 1); }
-.vt-qo-session-card .card-preview{ max-height:52px; }
-/* 2.1.6 — 팔레트가 560px로 좁아지면서 이 카드 안의 터미널 미리보기가 카드
-   밖으로 흘러넘쳤다(실브라우저에서 확인: 마지막 출력 줄이 팔레트 왼쪽 바깥
-   화면까지 그려졌다). 미리보기는 줄바꿈 없는 터미널 텍스트라 폭을 안 주면
-   자기 내용만큼 넓어진다 — 카드가 폭을 가두고, 넘치는 줄은 잘라야 한다. */
-.vt-qo-session-card{ max-width:100%; overflow:hidden; }
-.vt-qo-session-card .card-preview{ overflow:hidden; }
+/* L6: 세션 목록에 얹는 세션 카드(ADR-7) — .vt-card를 그대로 재사용한다.
+   나머지 레이아웃(테두리·hover·상태 dot)은 pane-picker와 동일하게 유지 —
+   같은 시각 언어를 쓰는 게 핵심이다. 2.1 D5부터 .card-meta는 cwd 한 줄
+   텍스트라(agent/preview.js 참고) 팔레트가 좁아져도 자체 말줄임으로
+   끝난다 — 예전 여러 줄 터미널 미리보기 때 필요했던 높이 제한은 없앴다. */
+.vt-qo-session-card{ border-radius:var(--radius-sm); margin:0 calc(var(--spacing) * 1); max-width:100%; overflow:hidden; }
 
 /* ── 팔레트 치수 (2.1.6) ──────────────────────────────────────────────────
    **이 규칙이 components.css가 아니라 여기 있는 이유**: 팔레트 카드는 코드
