@@ -140,7 +140,7 @@ export function RepoVisibility(props: Props) {
                   onChange={() => toggle(item)}
                 />
                 <span class="vt-repovis-name">{item.repoName}</span>
-                <span class="vt-repovis-path" title={item.path}>{shortenPath(item.path, roots())}</span>
+                <span class="vt-repovis-path" data-tip={item.path}>{shortenPath(item.path, roots())}</span>
               </label>
             )}
           </For>
@@ -151,7 +151,7 @@ export function RepoVisibility(props: Props) {
             소유자이고, 설정 파일을 다른 경로로 고쳐 쓰지 않는다는 규칙이 있다. */}
         <div class="vt-repovis-foot">
           <span class="vt-repovis-foot-label">탐색 경계</span>
-          <span class="vt-repovis-foot-value" title="~/.vt.env의 VT_BROWSE_ROOTS">
+          <span class="vt-repovis-foot-value" data-tip="VT_BROWSE_ROOTS" data-tip-sub="~/.vt.env">
             {roots().join(' · ') || '—'}
           </span>
         </div>

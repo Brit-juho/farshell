@@ -53,7 +53,7 @@ function WorkspaceChip(props: { deps: HeaderDeps }) {
   };
 
   return (
-    <button type="button" id="vt-workspace-chip" onClick={onClick} title="빠른 열기">
+    <button type="button" id="vt-workspace-chip" onClick={onClick} data-tip="빠른 열기" data-tip-side="bottom">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="5" /><path d="m7 9 3 3-3 3" /><path d="M12 15h5" /></svg>
       <span class="vt-workspace-name">farshell</span>
       <Show when={hostname()}>

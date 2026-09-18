@@ -16,7 +16,7 @@ function apply() {
   RAIL.classList.toggle('collapsed', collapsed);
   if (BTN) {
     BTN.textContent = collapsed ? '‹' : '›';
-    BTN.title = collapsed ? '펼치기' : '접기';
+    BTN.setAttribute('data-tip', collapsed ? '우측 레일 펼치기' : '우측 레일 접기');
     BTN.setAttribute('aria-label', collapsed ? '우측 레일 펼치기' : '우측 레일 접기');
     BTN.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }

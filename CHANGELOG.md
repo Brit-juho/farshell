@@ -10,6 +10,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **분할 화면에서 활성 pane 표시가 엉뚱한 칸을 가리켰다.** `layout/store.js`가
+  설계 원칙으로 적어둔 "활성 pane은 xterm에 **focus 이벤트가 뜰 때만** 바꾼다
+  (그래야 테두리는 A인데 타이핑은 B로 들어가는 상태가 안 생긴다)"는 배선이
+  **한 번도 붙은 적이 없었다** — `panes.js`는 `setActivePane`을 import만 하고
+  부르지 않았고, 실제 호출부는 pane 선택 시트와 compact 스와이프뿐이었다.
+  터미널을 클릭해도 표시가 안 따라왔다. 이제 pane이 `focusin`을 듣는다(xterm의
+  숨은 textarea가 받는 포커스가 거기까지 버블링된다). 원문은 이 배선을
+  `xterm-setup.js`에 두려 했는데 그쪽은 자기가 어느 pane에 있는지 모른다 —
+  터미널이 pane 안으로 들어오면서 비로소 가능해졌다. click이 아니라 focusin인
+  이유도 같은 원칙이다: 클릭으로 바꾸면 뷰어 칸을 눌렀을 때 표시만 옮겨가고 키
+  입력은 터미널에 남는다.
+
+- **pane·split의 DOM id에 접두사가 두 번 붙어 있었다**(`vt-pane-pane-<uuid>` ·
+  `vt-split-split-<uuid>`). `layout/store.js`의 `_genId('pane')`이 이미 종류를
+  포함한 id를 만드는데 `panes.js`가 `vt-pane-`을 또 붙였다. 규칙을 아는 곳이
+  만드는 쪽과 찾는 쪽(`resize-overlay.js`) 둘이라 한쪽만 고치면 조회가 조용히
+  실패하므로, 의존성 없는 잎 모듈 `layout/dom-ids.js`로 규칙을 하나로 모았다
+  (`panes.js`가 `resize-overlay.js`를 import하므로 반대 방향 import는 순환이 된다).
+
+- **pane 사이에 설명 안 되는 빈 틈이 있었다.** xterm은 `cols × cellWidth`로만
+  그리므로 pane 상자에 늘 잔여가 생기는데(1440px 실측: 본문 574×818 / 화면
+  552×810 → 오른쪽 22px·아래 8px), pane에 테두리가 없어서 그 잔여가 "분할선
+  앞의 빈 구멍"으로 읽혔다. 잔여 자체는 없앨 수 없다 — pane을 테두리 있는
+  상자로 만들어 같은 22px이 그 pane의 안쪽 여백이 되게 했다.
+
+- **dock 탭이 배지 수치에 밀려 잘렸다.** 접힌 dock은 36px 고정인데 탭 내용물이
+  아이콘 16 + gap 4 + 배지 `min-width` 18 = 38px이었다. `.vt-dock-tabs`가
+  `overflow:hidden`이라 넘친 3px이 그대로 잘려 나갔다(1440px 실브라우저에서
+  `clientWidth` 35 / `scrollWidth` 38로 확인). 수치를 6px 액센트 점으로 바꾸고
+  `position:absolute`로 흐름 밖에 두어 탭 폭에 0px 기여하게 했다 — 펼친 쪽도
+  배지 둘이면 탭 행이 304px을 먹어 `MIN_W` 320px에서 16px밖에 안 남던 것이
+  같이 풀렸다. 정확한 개수는 툴팁과 패널이 말한다.
+
 - **붙여넣기가 두 번 들어갔다.** `term/selection.js`가 wrapper의 capture 단계에서
   paste를 가로채 `sendPaste`로 보낸 뒤 `preventDefault`만 했는데, xterm은 paste
   리스너를 textarea와 element에 따로 걸어두고 그 핸들러가 `defaultPrevented`를
@@ -22,6 +55,51 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   위 결함과 겹쳐 두 번 붙여넣기가 됐다.
 
 ### Changed
+
+- **터미널이 자기 pane 안으로 돌아왔다 — 표면 레이어(N16)를 걷어냈다.** 2.1.0
+  이후 xterm wrapper는 전부 `#vt-surface`라는 별도 절대좌표 레이어에 살면서,
+  pane은 빈 상자만 그리고 둘을 `transform`으로만 이어 붙였다. 그 구조를 정당화하던
+  실측 근거 4건 중 셋(크롬 DOM 전체 교체·보이는 전 세션 fit·활성 전환 재fit)은
+  이미 다른 방식으로 해결돼 있었고(panes.js의 id 재사용 + refit 게이트, 둘 다
+  유지), 남은 하나인 "DOM 이동은 WebGL 컨텍스트를 잃는다"는 실측으로 반증됐다:
+  WebGL2 렌더러가 붙은 wrapper를 `.vt-pane-body`로 옮겨도 `isContextLost()`는
+  false, `webglcontextlost`는 0건, 캔버스 버퍼(1128×828)도 그대로였고 이동 뒤
+  강제한 GL 드로우도 정상이었다. 분리를 유지하는 대가가 더 컸다 — 터미널이
+  pane의 후손이 아니라서 pane의 `overflow:hidden`·`border-radius`가 안 먹었고,
+  활성 표시를 1px outline 말고는 쓸 수 없었으며(면을 깔면 터미널이 덮는다),
+  좌표계 둘을 ResizeObserver로 영원히 동기화해야 했다. 지금 구조는
+  `.vt-pane > .vt-pane-body > .vt-term-wrap`이고, `#vt-term-stage`는 **아직
+  어느 pane에도 안 올라간 세션**의 대기실로만 남는다. `layout/surface.js`에
+  남은 로직은 refit 게이트 하나다.
+
+- **pane이 진짜 상자가 됐고, 활성 pane을 세 번 말한다.** 테두리 1px
+  `--color-line` + `--radius-sm` + pane 사이 2px 고랑(분할선까지 5px). 활성은
+  액센트 테두리 + 10% 액센트 헤더 면 + `--color-txt` 이름 — 그전에는 1px 액센트
+  outline 하나뿐이라 같은 두께의 1px 선 셋(분할선·헤더 밑줄·outline)과 섞여
+  밝은 스킨에서 어느 게 활성인지 구별되지 않았다. 분할을 안 쓰는 화면
+  (`#vt-chrome-tree > .vt-pane`)은 테두리를 안 그린다. 헤더 높이는 22 → 24px
+  (디자인 시스템의 행 높이 24/28/36 중 어디에도 없던 값이었다)이고, 분할·닫기
+  버튼은 호버·활성·키보드 포커스에서만 올라온다(거친 포인터에서는 상시 노출).
+
+- **분할 비율을 되돌릴 수 있다.** 지금까지 비율은 드래그로만 바뀌고 되돌릴
+  경로가 없었다. 분할선을 **더블클릭**하면 그 분할만 반반으로, 「분할 균등
+  정렬」 액션(`paneEven`, 기본 `Mod+Alt+D` · 비-mac `Ctrl+Alt+D`, 팔레트 `:`
+  모드)은 트리 전체를 반반으로 돌린다. 분할선을 끄는 동안 리사이즈 오버레이가
+  "분할선 두 번 누르면 반반" 한 줄을 띄운다.
+
+
+- **호버 툴팁을 네이티브 `title`에서 공용 툴팁 레이어로 바꿨다**
+  (`frontend/js/ui/tooltip.js`, `.vt-tip`). `title`은 지연이 브라우저 고정값(약
+  1초)이라 아이콘만 있는 접힌 dock·레일에서 제때 답을 못 했고, 6스킨을 만들어
+  놓고도 툴팁만 OS 기본 상자였으며, 터치에서는 아무 일도 안 했다. 이제
+  `data-tip`(이름) + `data-tip-sub`(수치·단축키·사유, mono/tabular-nums) 두 단으로
+  그리고, `data-tip-side`가 안 들어가면 반대편으로 뒤집는다. 400ms 뒤 열리고,
+  직전 툴팁이 닫힌 지 300ms 안이면 지연 없이 바로 뜬다.
+  dock·워크트리 레일·헤더·키바·pane 헤더·상태 dot·에이전트 마크 등 상시 표면
+  38곳을 옮겼다(패널 내부는 다음 차례). CSS `::after` 툴팁을 안 쓴 이유는
+  `.vt-dock-tabs` 같은 `overflow:hidden` 컨테이너가 그대로 잘라내기 때문이다.
+  아이콘 전용 버튼의 이름은 계속 `aria-label`이 맡는다 — 툴팁은 설명이지
+  이름이 아니고, 터치 기기가 받는 유일한 라벨이 그쪽이다.
 
 - **음성 데몬 전역 핫키 기본값이 `ctrl+shift+m`이다**(이전 `ctrl+shift+v`). 웹 UI의
   붙여넣기 단축키와 같은 조합이라, 데몬을 켜면 한 번 누를 때 붙여넣기와 녹음 토글이

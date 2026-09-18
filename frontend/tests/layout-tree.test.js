@@ -178,3 +178,32 @@ test('setSession — 뷰어 칸에 세션을 넣으면 다시 터미널 칸이 �
     t: 'leaf', id: 'p1', session: 's9', kind: 'terminal', file: null, worktree: null, host: 'local',
   });
 });
+
+// 2026-09-18 — 「분할 균등 정렬」. 비율은 그동안 드래그로만 바뀌었고 되돌릴
+// 경로가 아예 없었다(분할선 더블클릭 = 그 분할 하나, paneEven = 트리 전체).
+test('evenRatios — 중첩된 분할까지 전부 반반으로 돌린다', async () => {
+  const T = await loadTree();
+  let tree = T.splitPane(T.makeLeaf('p1', 's1'), 'p1', 'row', T.makeLeaf('p2', 's2'), 'sp1');
+  tree = T.splitPane(tree, 'p2', 'col', T.makeLeaf('p3', 's3'), 'sp2');
+  tree = T.setRatio(tree, 'sp1', 0.8);
+  tree = T.setRatio(tree, 'sp2', 0.15);
+
+  const even = T.evenRatios(tree);
+  assert.strictEqual(T.findNode(even, 'sp1').ratio, 0.5);
+  assert.strictEqual(T.findNode(even, 'sp2').ratio, 0.5);
+  // leaf는 손대지 않는다 — 세션 배정이 비율 정리로 흔들리면 안 된다.
+  assert.deepEqual(T.findNode(even, 'p3'), T.findNode(tree, 'p3'));
+});
+
+test('evenRatios — 이미 전부 반반이면 같은 트리를 그대로 돌려준다', async () => {
+  const T = await loadTree();
+  const tree = T.splitPane(T.makeLeaf('p1', 's1'), 'p1', 'row', T.makeLeaf('p2', 's2'), 'sp1');
+  // 참조가 그대로여야 store가 "바뀐 게 없다"를 알고 재렌더를 건너뛴다.
+  assert.strictEqual(T.evenRatios(tree), tree);
+});
+
+test('evenRatios — 분할이 없는 트리(leaf 하나)도 안전하다', async () => {
+  const T = await loadTree();
+  const one = T.makeLeaf('p1', 's1');
+  assert.strictEqual(T.evenRatios(one), one);
+});

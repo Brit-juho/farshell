@@ -22,6 +22,7 @@ import './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에
 import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
+import { initTooltips } from './ui/tooltip.js';  // 2026-09-18 — 네이티브 title 대체(data-tip)
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
 import './lib/ansilex.js';
 import './lib/difflex.js';
@@ -103,6 +104,9 @@ import './layout/rail.js';
 // 실행한다) bootApp()을 바로 불러도 안전하다 — classic script 시절엔 toast.js가
 // "먼저 로드"됨을 명시적으로 기다려야 했지만 이제 그 문제 자체가 없다.
 try {
+  // 문서 전체에 위임 리스너 하나만 건다 — 트리거가 언제 생기든 상관없으므로
+  // bootApp()보다 먼저 불러도 된다(오히려 첫 화면의 버튼을 놓치지 않는다).
+  initTooltips();
   bootApp();
   // N34 §7 — 상태바 HUD(Solid). **동적 import**인 이유는 ADR-26의 번들 게이트다:
   // solid-js 런타임(~32KB)을 app.js에 정적으로 넣으면 300KiB 상한을 바로 넘긴다

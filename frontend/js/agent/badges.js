@@ -12,7 +12,7 @@ export function _applyCardAgent(card, info) {
   const badge = card.querySelector('.card-agent');
   if (!badge) return;
   badge.innerHTML = (info && info.agent) ? agentIcon(info.agent) : '';
-  if (info && info.label) badge.title = info.label; else badge.removeAttribute('title');
+  if (info && info.label) badge.setAttribute('data-tip', info.label); else badge.removeAttribute('data-tip');
 }
 
 export function applyAgentBadges(agents) {

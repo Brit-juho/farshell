@@ -14,15 +14,22 @@ async function _refreshPushLabel() {
       const reason = VTPush.blockReason();
       if (reason) {
         label.textContent = '푸시 알림 — 사용 불가';
-        if (btn) { btn.title = reason; btn.classList.add('disabled'); }
+        if (btn) {
+          btn.setAttribute('data-tip', '푸시 알림 — 사용 불가');
+          btn.setAttribute('data-tip-sub', reason);
+          btn.classList.add('disabled');
+        }
         return;
       }
       const on = await VTPush.isSubscribed();
       label.textContent = on ? '푸시 알림 (켜짐)' : '푸시 알림';
       if (btn) {
-        btn.title = on
-          ? '켜져 있습니다 — 앱을 닫아도 작업 완료 알림이 옵니다 (눌러서 끄기)'
-          : '앱을 닫아도 작업 완료 알림을 받습니다';
+        // 2026-09-18 — 한 줄 title을 두 단으로 나눈다(ui/tooltip.js): 무엇인지와
+        // 지금 어떤 상태인지가 같은 크기로 붙어 있으면 둘 다 안 읽힌다.
+        btn.setAttribute('data-tip', on ? '푸시 알림 끄기' : '푸시 알림 켜기');
+        btn.setAttribute('data-tip-sub', on
+          ? '켜짐 — 앱을 닫아도 작업 완료 알림이 온다'
+          : '앱을 닫아도 작업 완료 알림을 받는다');
         btn.classList.remove('disabled');
       }
     }

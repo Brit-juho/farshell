@@ -191,6 +191,14 @@ function Dock(props: { deps: DockDeps }) {
   };
 
   const badgeOf = (t: DockTab) => (t.badge ? badges()[t.badge] || 0 : 0);
+  // 수치는 탭에서 내려가고 툴팁으로 올라간다(아래 vt-dock-tab-dot 주석).
+  // 단위를 붙이는 이유: 툴팁에는 자리가 있고, "14"보다 "14개 열림"이 한 번에
+  // 읽힌다. 배지 칸에서는 못 하던 일이다.
+  const tipSub = (t: DockTab) => {
+    const n = badgeOf(t);
+    if (!n) return undefined;
+    return t.badge === 'queue' ? `${n}개 대기` : `${n}개 열림`;
+  };
 
   return (
     <aside id="vt-dock" class="vt-sidepanel right" classList={{ collapsed: collapsed() }} aria-label="dock">
@@ -203,7 +211,10 @@ function Dock(props: { deps: DockDeps }) {
               classList={{ active: !collapsed() && activeTab() === t.id }}
               role="tab"
               aria-selected={!collapsed() && activeTab() === t.id}
-              title={t.label}
+              aria-label={t.label}
+              data-tip={t.label}
+              data-tip-sub={tipSub(t)}
+              data-tip-side="left"
               onClick={() => onTabClick(t.id)}
             >
               {/* 접힘 36px에서는 **아이콘만** 보인다. 이전에는 CSS의
@@ -211,17 +222,24 @@ function Dock(props: { deps: DockDeps }) {
                   한글은 세로쓰기에서 음절이 한 자씩 쌓여 "소/스/컨/트/롤"이
                   되고 모노스페이스까지 겹쳐 읽을 수 없었다. 세로 라벨은
                   영문을 전제한 패턴이라 한글에는 성립하지 않는다.
-                  title 속성이 이미 전체 라벨을 들고 있어 툴팁으로 남는다. */}
+                  전체 이름은 data-tip이 들고 있다(ui/tooltip.js). dock은 화면
+                  오른쪽 끝이라 툴팁은 왼쪽으로 나온다. */}
               <span class="vt-dock-tab-ico" innerHTML={icon(t.icon, 16)} />
               <span class="vt-dock-tab-label">{t.label}</span>
+              {/* 2026-09-18 — 배지가 수치(.vt-badge)에서 점으로 내려왔다. 수치는
+                  흐름 안에 있던 탓에 **탭 폭을 밀었다**: 접힘 36px에서 탭의
+                  clientWidth 35에 scrollWidth가 38이 되어(아이콘 16 + gap 4 +
+                  배지 min-width 18) .vt-dock-tabs의 overflow:hidden에 잘렸다.
+                  점은 absolute라 폭에 0px 기여한다 — 다시는 안 밀린다.
+                  정확한 수는 툴팁과 패널이 말한다(치수 근거는 80-dock.css). */}
               <Show when={badgeOf(t) > 0}>
-                <span class="vt-badge accent">{badgeOf(t) > 99 ? '99+' : badgeOf(t)}</span>
+                <span class="vt-dock-tab-dot" aria-hidden="true" />
               </Show>
             </button>
           )}
         </For>
         <Show when={!collapsed()}>
-          <button type="button" class="vt-icon-btn sm vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" title="접기"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button type="button" class="vt-icon-btn sm vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" data-tip="dock 접기" data-tip-side="bottom"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         </Show>
       </div>
       {/* 탭 내용은 전부 패널 렌더러가 여기 붙인다(panels/panel.js의 dock 호스트). */}

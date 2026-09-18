@@ -73,6 +73,9 @@ const ACTIONS = [
   // (2026-09-18 점검). mac은 브라우저가 안 쓰는 `Ctrl+Shift+…`로, 비-mac은 그
   // 자리(Ctrl=Mod)가 바로 그 창 닫기라 `Alt+Shift+…`로 간다.
   { id: 'paneClose',  def: 'Ctrl+Shift+W', defNonMac: 'Alt+Shift+W',  label: 'pane 닫기' },
+  // 2026-09-18 — 분할 비율은 드래그로만 바뀌고 되돌릴 방법이 없었다.
+  // 분할선 더블클릭은 그 분할 하나만, 이 키는 트리 전체를 반반으로 돌린다.
+  { id: 'paneEven',   def: 'Mod+Alt+D',    defNonMac: 'Ctrl+Alt+D',   label: '분할 균등 정렬' },
   { id: 'railToggle', def: 'Mod+B',        defNonMac: 'Alt+Shift+B',  label: '사이드바 토글' },
   // N44(30-worktree.md §3) — 워크트리 만들기. 시크릿 창이 양쪽 플랫폼에서 이
   // 자리를 먼저 먹는다(mac `Cmd+Shift+N`, 비-mac `Ctrl+Shift+N`) — paneClose와

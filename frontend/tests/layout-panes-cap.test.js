@@ -64,7 +64,7 @@ function splitButtons(document) {
   return Array.from(document.querySelectorAll('.vt-pane-split-row, .vt-pane-split-col'));
 }
 
-test('상한 미만이면 분할 버튼이 활성이고 title은 그대로', async () => {
+test('상한 미만이면 분할 버튼이 활성이고 툴팁은 이름만', async () => {
   const { window, addSession, store } = await buildWindow(1280); // wide 상한 6
   addSession('a');
   store.splitActivePane('row'); // leaf 2개 — 여유 있음
@@ -72,10 +72,12 @@ test('상한 미만이면 분할 버튼이 활성이고 title은 그대로', asy
   const btns = splitButtons(window.document);
   assert.ok(btns.length >= 2);
   assert.ok(btns.every((b) => b.disabled === false), '전부 활성이어야 한다');
-  assert.strictEqual(window.document.querySelector('.vt-pane-split-row').title, '오른쪽 분할');
+  const row = window.document.querySelector('.vt-pane-split-row');
+  assert.strictEqual(row.getAttribute('data-tip'), '오른쪽 분할');
+  assert.strictEqual(row.getAttribute('data-tip-sub'), null, '여유가 있으면 사유 줄이 없어야 한다');
 });
 
-test('상한에 도달하면 모든 분할 버튼이 disabled + 이유가 title/aria-label에 붙는다', async () => {
+test('상한에 도달하면 모든 분할 버튼이 disabled + 이유가 툴팁/aria-label에 붙는다', async () => {
   const { window, addSession, store } = await buildWindow(390); // compact 폭 상한 2
   addSession('a');
   store.splitActivePane('row'); // leaf 2개 = 상한 도달
@@ -83,7 +85,7 @@ test('상한에 도달하면 모든 분할 버튼이 disabled + 이유가 title/
   const btns = splitButtons(window.document);
   assert.ok(btns.length >= 2);
   assert.ok(btns.every((b) => b.disabled === true), '전부 비활성이어야 한다');
-  assert.match(btns[0].title, /최대 2개/);
+  assert.match(btns[0].getAttribute('data-tip-sub'), /최대 2개/);
   assert.match(btns[0].getAttribute('aria-label'), /분할 한도/);
 });
 
