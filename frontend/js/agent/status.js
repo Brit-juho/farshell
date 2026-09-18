@@ -9,6 +9,7 @@ import { API_BASE, WS_BASE, _tokenQuery } from '../core/env.js';
 import { getSession } from '../core/store.js';
 import { applyAgentBadges } from './badges.js';
 import { applySnapshot, applyEvent } from './state.js';
+import { showToast } from '../ui/toast.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
 // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
@@ -77,6 +78,14 @@ whenAuthed(() => (async () => {
   const s = document.createElement('script');
   s.type = 'module';
   s.src = '/static/dist/voice.js';
+  // capability는 true인데 산출물(voice.js)이 없거나 깨진 경우(빌드 누락 등,
+  // 2026-09-18 실사고) — 지금까지는 콘솔 404만 남고 버튼은 눌리는 채로
+  // 방치돼 "눌러도 반응 없음"으로만 보였다. .needs-voice를 그대로 두면
+  // 사용자가 계속 죽은 버튼을 누르게 되므로 여기서 끈다.
+  s.onerror = () => {
+    showToast('음성 모듈을 불러오지 못했습니다 — 서버를 다시 빌드/재시작해 보세요.', 'error');
+    document.querySelectorAll('.needs-voice').forEach((el) => { el.disabled = true; });
+  };
   document.body.appendChild(s);
 })());
 
