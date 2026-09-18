@@ -265,29 +265,72 @@
 .vt-wtd-submit:hover { filter:brightness(1.08); }
 .vt-wtd-submit:disabled { opacity:.5; cursor:not-allowed; filter:none; }
 
-/* ── 98 §3 — 「저장소 표시」 시트 ──────────────────────────────────────
+/* ── 98 §3 → ADR-29 C — 「저장소 관리」 시트(저장소→워크트리→세션) ─────
    틀(백드롭·카드·머리·본문)은 워크트리 만들기 다이얼로그를 그대로 쓴다
-   (vt-wtd-*). 여기 있는 것은 목록 행과 바닥의 「탐색 경계」 줄뿐이다. */
+   (vt-wtd-*). 여기 있는 것은 저장소 행·펼친 워크트리/세션 목록·바닥의
+   「탐색 경계」 줄이다. */
 .vt-repovis-card { width:min(440px, 92vw); }
 .vt-repovis-body { max-height:min(56vh, 420px); overflow-y:auto; gap:0; }
+.vt-repovis-group + .vt-repovis-group { border-top:1px solid var(--line); }
 .vt-repovis-row {
   display:flex; align-items:center; gap:calc(var(--spacing) * 2);
-  padding:calc(var(--spacing) * 1.5) 0; cursor:pointer;
+  padding:calc(var(--spacing) * 1.5) 0;
 }
-.vt-repovis-row + .vt-repovis-row { border-top:1px solid var(--line); }
 /* 숨긴 행은 레일에서 세션 없는 행을 흐리게 그리는 것과 같은 규칙으로 흐리게 —
    체크박스 하나만 보고 상태를 읽게 하지 않는다.
    클래스가 `hidden`이 아니라 `off`인 이유는 RepoVisibility.tsx 주석 참고
    (확장 프로그램의 `.hidden{display:none}`에 행이 통째로 먹혔다). */
 .vt-repovis-row.off { opacity:.55; }
 .vt-repovis-row.off:hover { opacity:.8; }
-.vt-repovis-name { flex:none; font:600 var(--fs-sm) var(--font-mono); color:var(--color-txt); }
+/* 펼치기 화살표 — 저장소 자체를 지우거나 만드는 동작이 아니라 순수 화면
+   상태라 체크박스·이름과 뚜렷이 다른 조작임을 회전으로 표시한다(레일 그룹
+   캐럿과 같은 관용구). */
+.vt-repovis-expand {
+  flex:none; width:16px; height:16px; padding:0; border:0; background:none;
+  color:var(--color-sub); font-size:10px; line-height:1; cursor:pointer;
+  transition:transform .12s ease;
+}
+.vt-repovis-expand.expanded { transform:rotate(90deg); }
+.vt-repovis-name { flex:none; font:600 var(--fs-sm) var(--font-mono); color:var(--color-txt); cursor:pointer; }
+.vt-repovis-count {
+  flex:none; color:var(--color-muted); font:400 var(--fs-3xs) var(--font-mono);
+  font-variant-numeric:tabular-nums;
+}
 .vt-repovis-path {
   flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   text-align:right; color:var(--color-sub); font:400 var(--fs-3xs) var(--font-mono);
 }
 .vt-repovis-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--color-sub); font:400 var(--fs-sm) var(--font-mono); }
 .vt-repovis-error { margin:0 calc(var(--spacing) * 3); }
+
+/* 펼친 저장소 아래 워크트리·세션 목록. 저장소 행보다 한 단 들여써서
+   3단(저장소→워크트리→세션) 위계를 눈으로도 보여준다. */
+.vt-repovis-wts {
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5);
+  padding:0 0 calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+}
+.vt-repovis-wt {
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1);
+  padding:calc(var(--spacing) * 1.5); border:1px solid var(--line); border-radius:6px;
+}
+.vt-repovis-wt-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
+.vt-repovis-wt-branch {
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:600 var(--fs-xs) var(--font-mono); color:var(--color-txt);
+}
+.vt-repovis-wt-empty { color:var(--color-muted); font:400 var(--fs-3xs) var(--font-mono); }
+.vt-repovis-sessions { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1); }
+/* 세션 칩 — 클릭하면 열거나(웹 세션 있으면 전환) 깨운다(없으면 attach),
+   Rail.tsx의 openRow와 같은 의미론. 이 시트의 일은 탐색이 아니라 관리라
+   깨어있음/잠듦을 색으로 구분하지 않는다 — 주 탐색(잠듦 표시 포함)은
+   레일이 한다(ADR-29 B). */
+.vt-repovis-session {
+  padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
+  border:1px solid var(--line); border-radius:4px; background:none;
+  color:var(--color-txt); font:400 var(--fs-3xs) var(--font-mono); cursor:pointer;
+}
+.vt-repovis-session:hover { background:var(--menu-hover); }
+.vt-repovis-add-wt { align-self:flex-start; }
 /* "왜 이것들이 목록에 있나"의 답. 읽기 전용이다 — ~/.vt.env의 단일 소유자는
    lib/vt_env.sh다(§3). */
 .vt-repovis-foot {
