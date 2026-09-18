@@ -79,6 +79,9 @@
   padding:calc(var(--spacing) * 1.75) calc(var(--spacing) * 1.5) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5);
   background:var(--win);
 }
+/* ADR-29 E — 드래그로 세션을 이 그룹으로 옮기는 중. 배경만 바꾼다(테두리를
+   추가하면 그 1px만큼 다른 행들이 밀려 레이아웃이 들썩인다). */
+.vt-wgrail-group-head.drag-over { background:color-mix(in srgb, var(--color-acc) 14%, var(--win)); }
 /* 캐럿+이름+개수 전체가 클릭 영역(§2). 버튼이지만 머리글처럼 보여야 하므로
    색·자간은 부모(그룹 헤더)에서 상속받는다. */
 .vt-wgrail-group-toggle {

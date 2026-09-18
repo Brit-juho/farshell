@@ -55,7 +55,6 @@ import './term/keybar.js';
 import './term/ws.js';
 import './term/settings-apply.js';  // S2 — 설정 변경을 살아있는 xterm에 즉시 반영
 import './term/keymap-actions.js'; // S3 — 분할·rail 토글 등 남은 액션 배선 + wire()
-import './term/tmux-panel.js';
 import './term/session.js';
 import './term/guide.js';
 // N38(70-mobile.md §1/§2) — 모바일 골격(상단 바·하단 내비) + 플릿 홈 지연
@@ -93,9 +92,11 @@ import './snippets-lazy.js';
 // term/session.js·agent/preview.js 뒤에 둔다(그 값들을 deps로 담아간다).
 import './palette-lazy.js';
 import './pushui.js';
-// L4 — 좌측 rail. queue.js/ports.js(data-action 대상)·agent/preview.js(세션
-// 카드)·term/session.js 뒤에 둔다 — 전부 rail.js가 값으로 소비한다.
-import './layout/rail.js';
+// ADR-29 E — 48px 아이콘 레일 자체(layout/rail.js)는 지웠다: 데스크톱
+// 레일(shell/Rail.tsx)이 세션 목록을, 정식 Settings 패널이 설정 정적
+// 컨텐츠를 이미 대신하고 있어(2026-09-18 CHANGELOG) 실제로 쓰이던 건
+// clients.show 액션 하나뿐이었다 — 그 하나만 옮겼다.
+import './layout/connected-screens.js';
 
 // LEGACY_APP_SCRIPTS(classic <script> 순차 로더)는 F5에서 제거했다 — 위 정적
 // import가 전부 대체했고, main.js가 실행되는 시점엔 이미 모든 모듈이 평가돼

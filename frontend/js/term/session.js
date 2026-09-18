@@ -21,7 +21,6 @@ import { applyMouseMode } from './mouse-mode.js';
 import { startSessionSocket } from './ws.js';
 import { saveWorkspace } from './workspace.js';
 import { showOnboarding } from './boot.js';
-import { createTmuxSession } from './tmux-panel.js';
 import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
@@ -109,6 +108,67 @@ async function createPlainSession() {
   const { id } = await res.json();
   if (id) addSession(id);
 }
+
+// ADR-29 E — term/tmux-panel.js(목록 팝업 + 이 둘)에서 옮겨왔다. 팝업 자체는
+// 레일(shell/Rail.tsx)·모바일 세션 시트(picker.js)가 각자 자기 목록에서
+// 깨우기/완전 종료를 이미 제공하게 되면서 완전히 중복이 됐지만, 이 둘
+// (attachTmux/createTmuxSession)은 그 목록들이 공통으로 부르는 진짜 동작이라
+// 그대로 옮긴다 — createPlainSession의 tmux 버전이라 바로 옆이 제자리다.
+export async function attachTmux(tmuxName) {
+  const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: tmuxName }),
+  });
+  // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
+  // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
+  if (!res.ok) { showToast(`세션 열기 실패: ${tmuxName} (${res.status})`); return; }
+  const data = await res.json();
+  if (!data.id) { showToast(`세션 열기 실패: ${tmuxName}`); return; }
+  // 이미 웹에 열려 있으면 해당 탭으로 전환
+  if (getSession(data.id)) {
+    switchTo(data.id);
+  } else {
+    addSession(data.id, data.name || data.id);
+    // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
+    const s = getSession(data.id);
+    if (s) s.tmuxName = data.tmux_session || tmuxName;
+    // L8에서 발견: addSession() 안의 saveWorkspace()는 tmuxName이 붙기 **전에**
+    // 돌기 때문에, 마지막으로 붙인 세션은 스냅샷에 tmux_name:null로 남아
+    // 있었다(그 뒤에 또 다른 세션이 붙어 다시 저장되지 않는 한). 그러면 다음
+    // 부팅에서 그 탭은 "순수 PTY"로 복원돼 tmuxName이 영영 안 채워지고,
+    // openSessionOnMac()·레이아웃 복원이 그 세션을 tmux로 못 알아본다.
+    saveWorkspace();
+  }
+}
+
+// export — showAddMenu의 "tmux 세션" 메뉴 항목이 부른다.
+export async function createTmuxSession() {
+  // "맥에서도 열기"가 켜져 있으면 서버가 osascript로 iTerm 창도 함께 연다.
+  // E2: DOM이 아니라 설정 스토어가 이 값의 주인이다.
+  const autoMac = setting('session.openOnMac');
+  const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(autoMac ? { auto_open_on_mac: true } : {}),
+  });
+  if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
+  const data = await res.json();
+  if (!data.id) { showToast('tmux 세션 생성 실패'); return; }
+  addSession(data.id, data.name || data.id);
+  // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
+  const s = getSession(data.id);
+  if (s) s.tmuxName = data.tmux_session;
+}
+
+// showOnboarding()(boot.js)이 만드는 온보딩 화면의 버튼은 innerHTML 문자열
+// onclick="...createTmuxSession()"이라 모듈 경계와 무관하게 window를 거쳐야 한다.
+window.createTmuxSession = createTmuxSession;
+// N8/N44(30-worktree.md §4) — Rail.tsx(지연 청크)가 이 모듈을 정적 import
+// 못 하므로(Rail.tsx 상단 주석과 같은 이유) 워크트리 행 클릭 시 tmux 세션을
+// 여는 경로를 window로 노출한다. attachTmux 자체의 동작은 그대로(이미 웹에
+// 열려 있으면 전환, 아니면 새 탭으로 붙인다).
+window.attachTmux = attachTmux;
 
 // opts: 세션 레코드에 **소켓이 열리기 전에** 얹어야 하는 필드(N7/N39 3단계의
 // remote/host가 그렇다 — startSessionSocket이 그 값을 보고 WS 경로를 고른다).
@@ -268,8 +328,10 @@ export async function removeSession(id) {
   saveWorkspace();
 }
 
-// F3(c): data-action 위임용 등록. session.tmux-list/guide.show는 그 함수를
-// 소유한 tmux-panel.js/guide.js가 각자 등록한다.
+// F3(c): data-action 위임용 등록. guide.show는 그 함수를 소유한 guide.js가
+// 등록한다. session.tmux-list는 ADR-29 E에서 없앴다 — 그 목록 팝업이 하던
+// 일(tmux 세션 목록 + 깨우기 + 완전 종료)은 이제 picker.js의 세션 관리
+// 시트(session.manager)가 직접 한다.
 registerAction('session.add-menu', (el, e) => showAddMenu(e));
 
 // 외부(picker.js/quickopen.js/grid.js/snippets.js/viewer.js/moreMenu.js/voice.js)가

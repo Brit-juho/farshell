@@ -3,8 +3,7 @@
 // 끼어 있다"고 지적했는데, 실제로 뽑아보니 tmux-panel.js/session.js/workspace.js
 // 사이 의존이 얽혀 있어 결국 이 파일이 그 세 모듈을 조립하는 최상위가 됐다.
 // 계획서가 예상한 panels/onboarding.js로의 흡수(L4)는 이번 F4 범위가 아니다.
-import { addSession, createSession } from './session.js';
-import { attachTmux } from './tmux-panel.js';
+import { addSession, createSession, attachTmux } from './session.js';
 import { restoreWorkspace, reconcileMissingTmuxSessions } from './workspace.js';
 import { restoreLayout } from '../layout/persist.js';
 import { load as loadSettings } from '../core/settings.js';

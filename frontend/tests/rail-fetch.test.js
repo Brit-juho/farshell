@@ -108,3 +108,45 @@ test('세션이 열려 있으면 확인 문구가 그 사실을 언급한다', a
   await env.deleteWorktreeRow(deps, 'wt-1', 'farshell/feat', true);
   assert.match(seenMsg, /세션/);
 });
+
+// ── ADR-29 E — 드래그로 그룹 재편성(setSessionGroup) ────────────────────────
+// 확인 없이 바로 보낸다(D3/D4의 "되돌릴 수 없는 것만 확인받는다" 원칙과
+// 같다 — 그룹은 다시 드래그하면 되돌릴 수 있는 조작이다).
+
+test('setSessionGroup — 세션 이름과 그룹 id를 그대로 POST한다', async () => {
+  const env = await load();
+  const calls = [];
+  const deps = { vtFetch: async (path, opts) => { calls.push({ path, opts }); return {}; }, getAction: () => undefined };
+  const result = await env.setSessionGroup(deps, 'dev', 'repo-a-id');
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(calls.length, 1);
+  assert.strictEqual(calls[0].path, '/api/tmux/dev/group');
+  assert.strictEqual(calls[0].opts.method, 'POST');
+  assert.deepStrictEqual(JSON.parse(calls[0].opts.body), { groupId: 'repo-a-id' });
+});
+
+test('setSessionGroup — groupId null이면 그룹에서 뺀다(묶지 않음으로)', async () => {
+  const env = await load();
+  const deps = { vtFetch: async (path, opts) => JSON.parse(opts.body), getAction: () => undefined };
+  const result = await env.setSessionGroup(deps, 'dev', null);
+  assert.strictEqual(result.ok, true);
+});
+
+test('setSessionGroup — tmux 이름에 특수문자가 있어도 경로를 안전하게 이스케이프한다', async () => {
+  const env = await load();
+  const calls = [];
+  const deps = { vtFetch: async (path) => { calls.push(path); return {}; }, getAction: () => undefined };
+  await env.setSessionGroup(deps, 'my session/1', 'g1');
+  assert.strictEqual(calls[0], '/api/tmux/my%20session%2F1/group');
+});
+
+test('setSessionGroup — 서버 실패는 에러 메시지로 떨어진다(호출부가 토스트로 보여준다)', async () => {
+  const env = await load();
+  const deps = {
+    vtFetch: async () => { const e = new Error('boom'); e.data = { error: '그룹이 없습니다' }; throw e; },
+    getAction: () => undefined,
+  };
+  const result = await env.setSessionGroup(deps, 'dev', 'g1');
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.error, '그룹이 없습니다');
+});

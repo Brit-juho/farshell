@@ -127,6 +127,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **드래그로 그룹 재편성 + 옛 팝업 둘 제거(ADR-29 E, ADR-29 마무리).** 세션
+  행을 끌어 그룹 헤더에 놓으면 `POST /api/tmux/{name}/group`(A에서 만들고
+  아무도 안 부르던 라우트)을 불러 `@fsh_grp`를 바꾼다 — 「묶지 않음」
+  헤더에 놓으면 그룹에서 뺀다. 「개입 필요」·「잠자는 중」은 드롭 타깃이
+  아니다(전자는 필터링된 보기일 뿐 실제 그룹이 아니고, 후자는 재편성이
+  깨어있을 때만 의미가 있다). isolated 서버로 실제 드래그 이벤트(dragstart→
+  dragover→drop)를 흉내 내 확인: 다른 저장소 세션을 끌어다 놓으면
+  `grp_id`가 그 그룹의 저장소 id로 바뀌고 레일이 즉시 하나로 묶어 보여준다.
+  **알려진 흠**: 이렇게 저장소가 다른 세션들이 한 그룹에 섞이면, 그룹
+  이름이 사용자가 직접 안 지었을 때 아무 멤버의 저장소 이름으로나
+  떨어질 수 있다(`groupDisplayLabel`이 "첫 번째로 찾은 저장소 이름"을
+  쓰기 때문 — 이 폴백은 그룹이 원래 저장소 하나에서만 자동 제안되던 B
+  시절에 만들어져 다저장소 그룹을 구분하지 못한다). 이름을 직접 지으면
+  (`PATCH /api/groups/{id}`, A에서 이미 있다) 정확해지지만 그걸 하는 UI는
+  아직 없다 — 다음에 그룹 이름 짓기 화면을 붙일 때 같이 봐야 한다.
+
+  이 김에 ADR-29가 처음부터 목표로 했던 정리 둘도 끝냈다. **`layout/rail.js`**
+  (48px 아이콘 레일 + 사이드 플라이아웃, ADR-29 B/설정 이식으로 이미
+  대체돼 있었다) — 등록하는 액션 중 아직 살아 있던 건 `clients.show`
+  (HUD "연결된 화면" 칩, 레일 세션 메뉴) 하나뿐이라, 그 하나만
+  `layout/connected-screens.js`(새 파일, backdrop+card 모양은 다른 시트와
+  같다)로 옮기고 파일 자체와 그 검증 스위트(`rail.test.js`, 13개 — 전부
+  삭제된 UI를 보던 것)를 지웠다. **`term/tmux-panel.js`**의 tmux 목록
+  팝업(`showTmuxSessions`) — 삭제 전에 확인해 보니 데스크톱이 아니라
+  모바일 세션 관리 시트(`picker.js`)와 헤더 chevron(`session.tmux-list`
+  액션)이 여전히 쓰고 있었다(사용자 확인 후 모바일도 같이 정리하기로
+  결정). `picker.js`의 시트가 그 일(잠든 tmux 세션 보기·깨우기·완전
+  종료)을 직접 흡수하도록 넓히고 — 웹 세션이 없는 tmux 세션을
+  `/api/tmux/sessions`에서 추가로 받아 흐리게(`.sleeping`) 그리고,
+  깨어있는 tmux 행에도 완전 종료 버튼을 새로 달았다(지금까지 모바일에서
+  이 동작에 닿는 유일한 길이 이 팝업이었다) — 헤더 chevron은
+  `session.manager`(같은 시트)를 열도록 바꿨다. `attachTmux`/
+  `createTmuxSession`(팝업 말고 진짜 동작)은 `term/session.js`의
+  `createPlainSession` 옆으로 옮겨 tmux-panel.js를 완전히 지웠다(그
+  둘의 순환 import 관계도 이걸로 없어졌다). isolated 서버 + 실브라우저로
+  「연결된 화면」 다이얼로그와 모바일 시트의 잠든 세션 깨우기·완전 종료를
+  확인했다.
+
 - **탭의 정체성이 그룹이 됐고, 닫기가 재우기가 됐다(ADR-29 D).** B가 레일
   행을 세션으로 되돌리면서 세션을 열 때 탭을 옮기는 동작이 조용히
   빠져 있었다 — `switchTo`/`attachTmux`는 항상 **지금 활성 탭**에 배정하는데
