@@ -36,6 +36,11 @@ BLOCKING = {
     "subprocess.run", "subprocess.check_output", "subprocess.check_call",
     "subprocess.call", "subprocess.Popen",
     "worktree.list_worktrees",
+    # ADR-29 A0 — 2026-09-18에 발견: 이 셋이 to_thread 없이 직접 불렸다.
+    # create_worktree는 git worktree add + node_modules 복사(수십 초 가능),
+    # open_worktree/delete_worktree는 find_by_id(force=True)로 캐시를 무시한
+    # 전체 재탐색(실측 1.0~1.7초)을 돈다 — 클릭 한 번마다 서버 전체가 멎었다.
+    "worktree.create_worktree", "worktree.open_worktree", "worktree.delete_worktree",
     # 서브프로세스를 도는 상태 프로브. 실측 53.6ms / 32.9ms라 둘만으로
     # `/api/capabilities`가 87ms를 먹었다(2026-09-16).
     "tailscale.get_status", "tailscale.get_status_dict",
