@@ -82,6 +82,9 @@
 /* ADR-29 E — 드래그로 세션을 이 그룹으로 옮기는 중. 배경만 바꾼다(테두리를
    추가하면 그 1px만큼 다른 행들이 밀려 레이아웃이 들썩인다). */
 .vt-wgrail-group-head.drag-over { background:color-mix(in srgb, var(--color-acc) 14%, var(--win)); }
+/* 2026-09-18 후속 — 세션 행 위에 세션을 놓으면(둘 다 안 묶였으면 새 그룹을
+   만든다) 같은 배경 강조를 쓴다 — 그룹 헤더 드롭과 같은 의미의 시각 언어. */
+.vt-wgrail-row.drag-over { background:color-mix(in srgb, var(--color-acc) 14%, var(--win)); }
 /* 캐럿+이름+개수 전체가 클릭 영역(§2). 버튼이지만 머리글처럼 보여야 하므로
    색·자간은 부모(그룹 헤더)에서 상속받는다. */
 .vt-wgrail-group-toggle {
@@ -113,6 +116,13 @@
    되므로 옅게 뒀다가 호버에서만 또렷해진다(위 설정 ⚙과 같은 판단). */
 .vt-wgrail-group-rename { flex:none; opacity:.45; }
 .vt-wgrail-group-rename:hover, .vt-wgrail-group-rename:focus-visible { opacity:1; }
+/* 제자리 편집 입력 — window.prompt 대신(네이티브 다이얼로그를 안 쓴다).
+   토글 버튼 자리를 그대로 대신하므로 크기·글꼴을 맞춘다. */
+.vt-wgrail-group-edit {
+  flex:1; min-width:0; height:auto;
+  padding:calc(var(--spacing) * 0.25) calc(var(--spacing) * 0.75);
+  font:inherit; letter-spacing:inherit; text-transform:none;
+}
 
 /* §1/§3 — 목록 아래 한 줄짜리 각주(잘림·숨김 개수). 행으로 오해되면 안 되므로
    색점 막대도 배경도 주지 않는다. */
@@ -277,53 +287,40 @@
    (vt-wtd-*). 여기 있는 것은 저장소 행·펼친 워크트리/세션 목록·바닥의
    「탐색 경계」 줄이다. */
 .vt-repovis-card { width:min(440px, 92vw); }
-.vt-repovis-body { max-height:min(56vh, 420px); overflow-y:auto; gap:0; }
-.vt-repovis-group + .vt-repovis-group { border-top:1px solid var(--line); }
-.vt-repovis-row {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
-  padding:calc(var(--spacing) * 1.5) 0;
-}
-/* 숨긴 행은 레일에서 세션 없는 행을 흐리게 그리는 것과 같은 규칙으로 흐리게 —
-   체크박스 하나만 보고 상태를 읽게 하지 않는다.
-   클래스가 `hidden`이 아니라 `off`인 이유는 RepoVisibility.tsx 주석 참고
-   (확장 프로그램의 `.hidden{display:none}`에 행이 통째로 먹혔다). */
-.vt-repovis-row.off { opacity:.55; }
-.vt-repovis-row.off:hover { opacity:.8; }
-/* 펼치기 화살표 — 저장소 자체를 지우거나 만드는 동작이 아니라 순수 화면
-   상태라 체크박스·이름과 뚜렷이 다른 조작임을 회전으로 표시한다(레일 그룹
-   캐럿과 같은 관용구). */
-.vt-repovis-expand {
-  flex:none; width:16px; height:16px; padding:0; border:0; background:none;
-  color:var(--color-sub); font-size:10px; line-height:1; cursor:pointer;
-  transition:transform .12s ease;
-}
-.vt-repovis-expand.expanded { transform:rotate(90deg); }
-.vt-repovis-name { flex:none; font:600 var(--fs-sm) var(--font-mono); color:var(--color-txt); cursor:pointer; }
-.vt-repovis-count {
-  flex:none; color:var(--color-muted); font:400 var(--fs-3xs) var(--font-mono);
-  font-variant-numeric:tabular-nums;
-}
-.vt-repovis-path {
-  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  text-align:right; color:var(--color-sub); font:400 var(--fs-3xs) var(--font-mono);
-}
+.vt-repovis-body { max-height:min(56vh, 420px); overflow-y:auto; }
+/* 2026-09-18 후속 — 저장소 계층(접기/펼치기)을 없앴다: 실제로 하는 일이
+   숨기기(저장소 단위)와 워크트리 만들기 진입점뿐이었는데, 대부분 저장소는
+   워크트리가 본체 하나뿐이라 3단(저장소→워크트리→세션)과 2단(워크트리→
+   세션)이 실질적으로 같았다 — 저장소는 이제 각 워크트리 카드의 라벨로만
+   남는다(본체 카드의 표시 체크박스가 그 저장소 전체를 숨긴다). */
+.vt-repovis-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-repovis-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--color-sub); font:400 var(--fs-sm) var(--font-mono); }
 .vt-repovis-error { margin:0 calc(var(--spacing) * 3); }
 
-/* 펼친 저장소 아래 워크트리·세션 목록. 저장소 행보다 한 단 들여써서
-   3단(저장소→워크트리→세션) 위계를 눈으로도 보여준다. */
-.vt-repovis-wts {
-  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5);
-  padding:0 0 calc(var(--spacing) * 2) calc(var(--spacing) * 4);
-}
 .vt-repovis-wt {
   display:flex; flex-direction:column; gap:calc(var(--spacing) * 1);
   padding:calc(var(--spacing) * 1.5); border:1px solid var(--line); border-radius:6px;
 }
+/* 숨긴 저장소의 카드(본체+부가 워크트리 전부)는 레일에서 세션 없는 행을
+   흐리게 그리는 것과 같은 규칙으로 흐리게 — 체크박스 하나만 보고 상태를
+   읽게 하지 않는다. 클래스가 `hidden`이 아니라 `off`인 이유는
+   RepoVisibility.tsx 주석 참고(확장 프로그램의 `.hidden{display:none}`에
+   행이 통째로 먹혔다). */
+.vt-repovis-wt.off { opacity:.55; }
+.vt-repovis-wt.off:hover { opacity:.8; }
 .vt-repovis-wt-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
 .vt-repovis-wt-branch {
   flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font:600 var(--fs-xs) var(--font-mono); color:var(--color-txt);
+}
+/* 부가 워크트리 카드에서만 보이는 소속 저장소 이름 — 본체 카드는 이름
+   자체가 저장소 이름이라 따로 안 붙인다. */
+.vt-repovis-wt-repo {
+  flex:none; color:var(--color-muted); font:400 var(--fs-3xs) var(--font-mono);
+}
+.vt-repovis-path {
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  text-align:right; color:var(--color-sub); font:400 var(--fs-3xs) var(--font-mono);
 }
 .vt-repovis-wt-empty { color:var(--color-muted); font:400 var(--fs-3xs) var(--font-mono); }
 .vt-repovis-sessions { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1); }

@@ -22,6 +22,11 @@ export function Row(props: {
   /** ADR-29 E — 드래그로 그룹 재편성. tmux 이름이 있는(=재편성 대상이 될 수
    * 있는) 행만 끌 수 있다. */
   draggable?: boolean; onDragStart?: (e: DragEvent) => void;
+  /** 2026-09-18 후속 — 행 자체도 드롭 타깃이다(세션을 세션 위에 놓아 새
+   * 그룹을 만드는 동작). dragOver는 지금 이 행 위에 끌린 것이 있다는 뜻 —
+   * 시각 피드백에만 쓴다. */
+  onDragOver?: (e: DragEvent) => void; onDragLeave?: (e: DragEvent) => void; onDrop?: (e: DragEvent) => void;
+  dragOver?: boolean;
   onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void;
 }) {
   const isRemote = () => !!props.row.remote;
@@ -68,12 +73,15 @@ export function Row(props: {
   return (
     <div
       class="vt-srow vt-wgrail-row"
-      classList={{ active: props.active, sleeping: !!props.sleeping }}
+      classList={{ active: props.active, sleeping: !!props.sleeping, 'drag-over': !!props.dragOver }}
       onClick={props.onOpen}
       onContextMenu={props.onContext}
       onKeyDown={onKeyDown}
       draggable={!!props.draggable}
       onDragStart={props.onDragStart}
+      onDragOver={props.onDragOver}
+      onDragLeave={props.onDragLeave}
+      onDrop={props.onDrop}
       role="button"
       tabindex="0"
       // 지금 어느 것을 보고 있는지가 **클래스로만** 표시돼 있었다 — 눈으로는

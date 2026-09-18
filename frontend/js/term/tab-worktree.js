@@ -11,10 +11,10 @@
 //  - 워크트리에 안 속한 세션은 그대로 둔다(레일의 「묶지 않음」과 같은 규칙).
 //
 // ADR-29 D(2026-09-18) — 탭 소속 판정(setGroupSessionMap이 먹이는 지도)이
-// `/api/worktrees`의 저장소 **경로**가 아니라 `/api/repos`의 저장소 **id**
-// (sha1, ADR-29 B가 레일 그룹 자동 제안에 쓰는 것과 같은 값)로 바뀌었고,
-// `@fsh_grp`가 있으면 그게 우선이다(`/api/tmux/sessions`의 `grp_id`) —
-// 그래야 이 탭 소속 판정이 레일의 그룹 판정과 항상 같은 답을 낸다.
+// `@fsh_grp`(`/api/tmux/sessions`의 `grp_id`) 하나만 본다 — 레일의 groupId
+// 계산과 같은 값이어야 탭과 레일이 항상 같은 답을 낸다. 저장소로 자동
+// 묶는 폴백은 2026-09-18 후속에서 없앴다(사용자 요청 — 드래그로 직접
+// 묶은 것만 그룹).
 import { allSessions, setSessionDisplayName } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
 import { setGroupSessionMap } from '../layout/tabbar.js';
@@ -58,29 +58,15 @@ function applyLabels(map) {
   }
 }
 
-/** 세션 이름 → 저장소 id(sha1, `repo.id` — ADR-29 A/B와 같은 자동 제안
- * 그룹 값). 저장소별로 이미 묶인 `/api/repos` 응답을 받는다(worktreeLabelMap/
- * branchChipMap용 평평한 목록과는 다른 모양이라 별도 인자). */
-export function repoOwnerMap(repos) {
-  const map = new Map();
-  for (const repo of repos || []) {
-    for (const wt of repo.worktrees || []) {
-      for (const name of wt.sessions || []) if (!map.has(name)) map.set(name, repo.id);
-    }
-  }
-  return map;
-}
-
 /** 탭 바가 "이 세션이 이 탭(그룹) 소속인가"를 판정할 때 쓰는 최종 지도 —
- * ADR-29 D: 탭의 정체성은 그룹이다. `@fsh_grp`(사용자가 직접 묶은 것)가
- * 있으면 그게 우선이고, 없으면 저장소 자동 제안(`repoOwnerMap`)으로
- * 떨어진다 — 레일의 groupId 계산(rail-data.ts)과 같은 폴백 순서. */
-export function effectiveGroupMap(repos, tmuxSessions) {
-  const owner = repoOwnerMap(repos);
+ * ADR-29 D: 탭의 정체성은 그룹이다. `@fsh_grp`가 없으면(2026-09-18 후속:
+ * 저장소 자동 제안 폴백을 없앴다) null — 레일의 groupId 계산(rail-data.ts)과
+ * 같은 값이다. */
+export function effectiveGroupMap(tmuxSessions) {
   const map = new Map();
   for (const t of tmuxSessions || []) {
     if (!t || !t.name) continue;
-    map.set(t.name, t.grp_id || owner.get(t.name) || null);
+    map.set(t.name, t.grp_id || null);
   }
   return map;
 }
@@ -107,7 +93,7 @@ export async function refreshTabWorktreeLabels() {
     ]);
     const worktrees = (repoData?.repos || []).flatMap((r) => r.worktrees || []);
     applyLabels(worktreeLabelMap(worktrees));
-    setGroupSessionMap(effectiveGroupMap(repoData?.repos, tmuxSessions));
+    setGroupSessionMap(effectiveGroupMap(tmuxSessions));
     setBranchChipMap(branchChipMap(worktrees));
   } catch (_) { /* 워크트리 API가 없거나 실패 — 탭은 기존 이름 그대로 쓴다 */ }
 }

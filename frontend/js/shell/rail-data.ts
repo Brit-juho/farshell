@@ -180,9 +180,10 @@ export interface OtherRailRowInput {
    * 「잠자는 중」 구역에 산다. tmux에는 살아 있지만 이 기기에서 안 열어둔
    * 상태(다른 기기가 열어뒀을 수도 있다 — 재우기/깨우기는 기기별 개념). */
   awake: boolean;
-  /** 유효 그룹 id — `@fsh_grp`가 있으면 그것, 없으면 이 세션의 워크트리가
-   * 속한 저장소 id로 자동 제안, 그것도 없으면 null(「묶지 않음」). null인
-   * 세션은 그룹 섹션이 아니라 「묶지 않음」/개별 잠자는 행으로 간다. */
+  /** 유효 그룹 id — `@fsh_grp`가 있으면 그것, 없으면 null(「묶지 않음」).
+   * 저장소로 자동 묶어 보여주던 폴백은 2026-09-18 후속에서 없앴다(사용자
+   * 요청 — 드래그로 직접 묶은 것만 그룹). null인 세션은 그룹 섹션이 아니라
+   * 「묶지 않음」/개별 잠자는 행으로 간다. */
   groupId: string | null;
   status: AgentState;
   since: number | null;
@@ -233,10 +234,22 @@ export interface SessionSectionOut {
   rows: (OtherRailRowInput & { statusSentence: string })[];
 }
 
-/** 그룹 표시 이름 — 사용자가 지었으면 그것, 아니면 이 그룹의 세션이 속한
- * 저장소 이름으로 떨어진다(자동 제안 그룹의 groupId는 그 저장소의 id이므로
- * 멤버 아무나의 repoName을 보면 된다). 둘 다 없으면(사용자가 지정한 임의
- * 그룹인데 아직 이름이 없는 경우) "그룹"이라는 자리표시자. */
+/** 새 그룹 id — `server/routes/groups.py`의 `_GROUP_ID_RE`(`[0-9a-f]{12}`)와
+ * 같은 모양이다. group_store는 이름·순서만 관리하고 "그룹이 존재하는가"는
+ * 세션들의 `@fsh_grp` 값 자체가 정의하므로, 서버에 미리 등록할 필요 없이
+ * 클라이언트가 생성해 세션 둘에 그대로 심으면 그게 곧 새 그룹이다(2026-09-18
+ * 후속 — 세션을 세션에 끌어다 놓아 그룹을 만드는 동작의 기반). */
+export function newGroupId(): string {
+  const hasCrypto = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function';
+  const raw = hasCrypto ? crypto.randomUUID().replace(/-/g, '') : Math.random().toString(16).slice(2).padEnd(24, '0');
+  return raw.slice(0, 12);
+}
+
+/** 그룹 표시 이름 — 사용자가 지었으면 그것, 아니면 멤버 아무나의 저장소
+ * 이름으로 떨어진다(드래그로 막 만든, 아직 이름을 안 지은 그룹의 임시
+ * 이름표 — 그룹 헤더의 연필 아이콘으로 바로 고칠 수 있다). 멤버 중
+ * 저장소가 있는 세션이 하나도 없으면(순수 셸끼리만 묶었을 때) "그룹"이라는
+ * 자리표시자. */
 export function groupDisplayLabel(
   groupId: string, customLabels: Record<string, string>, members: { repoName?: string | null }[],
 ): string {
@@ -277,9 +290,9 @@ export function buildSessionSections(
     }
   }
 
-  // 순서: 사용자가 정한 순서(group_store)가 먼저, 그 안에 없는 그룹(대부분
-  // 아직 안 만진 저장소 자동 제안)은 라벨 가나다순으로 뒤에 붙는다 — 그래야
-  // "한 번도 안 만지면 지금과 같은 화면"이 매번 같은 순서로 보인다.
+  // 순서: 사용자가 정한 순서(group_store)가 먼저, 그 안에 없는 그룹(드래그로
+  // 막 만들었지만 아직 순서가 저장 안 된 것)은 라벨 가나다순으로 뒤에
+  // 붙는다 — 그래야 매번 같은 순서로 보인다.
   const known = new Set(groupOrder);
   const rest = Array.from(byGroup.keys()).filter((id) => !known.has(id));
   rest.sort((a, b) => groupDisplayLabel(a, customLabels, byGroup.get(a)!)
