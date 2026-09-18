@@ -147,9 +147,16 @@
 /* N8/N44(30-worktree.md §4) — "「기타」 그룹: ... 색점 없음". 어떤 워크트리에도
    안 속하는 세션 행은 저장소가 없어 색점 막대·상태색 막대 둘 다 투명. */
 .vt-wgrail-bar.kind-session { background:transparent; }
-/* 30 §4: "워크트리는 있는데 세션이 없는 행: 흐리게, 클릭 → open." */
-.vt-wgrail-row.no-session { opacity:.55; }
-.vt-wgrail-row.no-session:hover { opacity:.8; }
+/* ADR-29 B — 잠자는 행(옛 no-session의 후계자, 30 §4 "흐리게, 클릭 → open"과
+   같은 시각 언어). 뜻은 "세션이 없다"에서 "지금 이 기기 화면에 없다"로
+   바뀌었지만, 흐리게+클릭으로 깨운다는 상호작용은 그대로다. */
+.vt-wgrail-row.sleeping { opacity:.55; }
+.vt-wgrail-row.sleeping:hover { opacity:.8; }
+/* ADR-29 B — 잠자는 그룹 덩어리(개별 Row가 아니라 Rail.tsx가 직접 그리는
+   커스텀 행). .vt-wgrail-row를 그대로 쓰므로 위 sleeping 톤도 같이 먹지만,
+   커서만 별도로 명시한다 — role="button"만으로는 일부 브라우저가 기본
+   커서를 안 바꾼다. */
+.vt-wgrail-sleep-cluster { cursor:pointer; }
 
 .vt-wgrail-empty {
   padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;

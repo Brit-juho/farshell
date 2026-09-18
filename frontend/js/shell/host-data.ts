@@ -112,6 +112,10 @@ export function remoteSessionRows(host: HostEntry): OtherRailRowInput[] {
     since: null,
     tool: null,
     diffFiles: null,
+    // ADR-29 B — 원격은 아직 수면·그룹 개념이 없다(2.2 범위) — 항상 깨어있는
+    // 것으로, 어디에도 안 묶인 것으로 취급한다.
+    awake: true,
+    groupId: null,
     remote: true,
   }));
 }

@@ -9,10 +9,10 @@
 // 파일에 있으면 폴링 주기·캐시 같은 것을 고칠 때 JSX 400줄을 지나쳐야 한다.
 import { createSignal, onCleanup } from 'solid-js';
 
-import type { WorktreeRailRowInput, OtherRailRowInput } from './rail-data.js';
+import type { OtherRailRowInput } from './rail-data.js';
 
-// §5 원문: "60초 캐시" — 「기타」 세션 행에만 쓴다(워크트리 행은 changed
-// 요약을 서버가 준다).
+// §5 원문: "60초 캐시" — 워크트리에 안 속한(changed 요약을 서버가 안 주는)
+// 세션에만 쓴다.
 const GIT_CACHE_MS = 60000;
 
 export interface RailDeps {
@@ -24,9 +24,7 @@ export function safeFetch<T>(deps: RailDeps, path: string): Promise<T | null> {
   return deps.vtFetch(path).then((v) => v as T).catch(() => null);
 }
 
-export type DesktopRailRow =
-  | (WorktreeRailRowInput & { statusSentence: string })
-  | (OtherRailRowInput & { statusSentence: string });
+export type DesktopRailRow = OtherRailRowInput & { statusSentence: string };
 
 // ---- window 브리지 시그널 어댑터 (core/signals.ts의 지연-청크 안전 버전) ----
 
@@ -111,8 +109,9 @@ export async function fetchDiffCount(deps: RailDeps, cwd: string): Promise<numbe
   return files;
 }
 
-// 30-worktree.md §2: 세션이 하나도 없는 워크트리를 여는 API. 흐리게 표시된
-// 행을 클릭했을 때만 탄다(대부분은 이미 tmux 세션이 있어 attachTmux로 충분).
+// 30-worktree.md §2: 세션이 하나도 없는 워크트리를 여는 API. ADR-29 B부터
+// 레일에는 이걸 부를 자리(워크트리 행)가 없다 — C단계(저장소 시트)가
+// 이어받는다. 그때까지 쓰이지 않고 대기한다.
 export async function openWorktree(deps: RailDeps, wtId: string): Promise<string | null> {
   try {
     const data = await deps.vtFetch(`/api/worktrees/${encodeURIComponent(wtId)}/open`, { method: 'POST' }) as { tmux_session?: string };
@@ -123,11 +122,13 @@ export async function openWorktree(deps: RailDeps, wtId: string): Promise<string
 }
 
 // 2.1 D5 — 서버엔 있었지만 어느 화면도 안 부르던 삭제 API를 여기서 처음
-// 연결한다(30-worktree.md §3). 확인은 두 단계다: 먼저 평범한 확인, 서버가
-// 409(더러움)로 거절하면 "그래도 지울지"를 한 번 더 물어 force로 재시도한다
-// — 뜻하지 않게 커밋 안 된 변경을 날리는 사고를 막기 위해서다. 메인
-// 워크트리는 애초에 호출자(Rail.tsx)가 메뉴에 안 띄운다(서버도 400으로
-// 거절하지만, 거절당하는 것 자체가 이미 "왜 안 되지"라는 물음표다).
+// 연결했다(30-worktree.md §3). ADR-29 C(저장소 시트)가 호출자를 이어받는다
+// — B단계부터 레일에는 워크트리 행 자체가 없어 이 함수를 부를 자리가
+// 없다(잠시 미사용, C가 곧 이어받는다). 확인은 두 단계다: 먼저 평범한 확인,
+// 서버가 409(더러움)로 거절하면 "그래도 지울지"를 한 번 더 물어 force로
+// 재시도한다 — 뜻하지 않게 커밋 안 된 변경을 날리는 사고를 막기 위해서다.
+// 메인 워크트리는 애초에 호출자가 메뉴에 안 띄운다(서버도 400으로 거절하지만,
+// 거절당하는 것 자체가 이미 "왜 안 되지"라는 물음표다).
 export async function deleteWorktreeRow(
   deps: RailDeps, wtId: string, label: string, hasSessions: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -156,12 +157,28 @@ export async function deleteWorktreeRow(
   }
 }
 
-// 행이 가리키는 "열 수 있는" 대상. 워크트리 행 중 세션이 전혀 없는(흐리게
-// 표시된) 행은 null — 컨텍스트 메뉴(세션 대상 액션)를 못 연다, 클릭은 openRow가
-// 별도로 open API로 처리한다.
-export function actionSessionId(row: DesktopRailRow): string | null {
+// 행이 가리키는 "열 수 있는" 대상. 잠자는 세션(awake=false)은 sessionId가
+// 빈 문자열이라 null로 떨어진다 — switchTo 등 웹 세션 id가 필요한 동작은
+// 못 하고, 깨우기(attachTmux)만 가능하다(Rail.tsx의 openRow가 그 갈림을 본다).
+export function actionSessionId(row: OtherRailRowInput): string | null {
   // C1: 원격 세션의 sessionId는 `remote:<host>:<name>` 합성 키라 로컬 세션 맵에
   // 없다 — 여기서 null로 잘라야 활성 표시·컨텍스트 메뉴가 로컬 id와 엉키지 않는다.
-  if (row.kind === 'session') return row.remote ? null : row.sessionId;
-  return row.primarySessionId;
+  if (row.remote) return null;
+  return row.sessionId || null;
+}
+
+// ADR-29 A(group_store.py)를 여기서 처음 부른다 — 세션 하나를 그룹에
+// 넣거나(groupId) 뺀다(null). E단계(드래그 재편성)의 주 소비처가 될
+// 예정이지만, 컨텍스트 메뉴 "그룹으로 옮기기"도 이걸 쓴다.
+export async function setSessionGroup(
+  deps: RailDeps, tmuxName: string, groupId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await deps.vtFetch(`/api/tmux/${encodeURIComponent(tmuxName)}/group`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groupId }),
+    });
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.data?.error || e?.message || '그룹 변경 실패' };
+  }
 }
