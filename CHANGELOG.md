@@ -125,6 +125,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   매칭되지 않았다. 우리가 못 잡으니 크롬의 "서식 없이 붙여넣기"가 그대로 발동해
   위 결함과 겹쳐 두 번 붙여넣기가 됐다.
 
+### Added
+
+- **세션 그룹 저장 뼈대(ADR-29 A) — 화면 변화 없음.** 세션 소속을 `@fsh_wt`로
+  tmux에 적었던 D2와 같은 방식으로, 세션이 어느 **그룹**에 속하는지도
+  `@fsh_grp` 커스텀 옵션에 적는다. 읽기는 이미 배치 호출인 `list-panes -a`·
+  `list-sessions`에 필드 하나씩 추가하는 것뿐이라 subprocess 증가는 0회다.
+  그룹의 이름·순서(사용자가 지은 것만)는 `server/group_store.py` →
+  `~/.vt/repos.json`과 같은 규칙의 `~/.vt/groups.json`에 저장한다 — 소속
+  자체는 저장하지 않는다, 그건 tmux 세션 자신이 들고 있어서 세션이 죽으면
+  같이 사라지고 정리할 게 없다. 새 라우트 셋: `GET /api/groups`,
+  `PATCH /api/groups/{id}`(이름 짓기/바꾸기, 처음 만지는 그룹이면 그때
+  레코드가 생긴다), `POST /api/groups/reorder`, `POST /api/tmux/{name}/group`
+  (세션 하나를 그룹에 넣거나 `groupId: null`로 뺀다). **지금은 어느 화면도
+  이 라우트를 안 부른다** — B/C/D단계가 레일 행·탭·드래그를 세션 단위로
+  바꿀 때 이 위에 얹인다. `@fsh_grp`가 없는 세션은 아직 아무 의미가 없고,
+  B단계부터 "이 세션의 `@fsh_wt`(저장소)를 그룹으로 자동 제안"하는 폴백이
+  붙는다 — 그래야 한 번도 안 만진 화면이 지금과 같은(저장소별로 묶인)
+  모습으로 보인다.
+
 ### Changed
 
 - **세션이 어느 워크트리 소속인지, 이제 tmux 자신에게 물어본다("저장소 1급화" 1단계).**

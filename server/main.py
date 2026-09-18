@@ -51,6 +51,7 @@ from routes.mcp import router as mcp_router, elevated_router as mcp_elevated_rou
 from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
 from routes.worktree import router as worktree_router
 from routes.repos import router as repos_router
+from routes.groups import router as groups_router
 from routes.security import router as security_router
 from routes.share import elevated_router as share_elevated_router, public_router as share_public_router
 from routes.peer import router as peer_router
@@ -424,6 +425,7 @@ app.include_router(git_accounts_router)
 app.include_router(git_accounts_elevated_router)
 app.include_router(worktree_router)
 app.include_router(repos_router)
+app.include_router(groups_router)
 app.include_router(security_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)

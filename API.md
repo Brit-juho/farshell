@@ -144,6 +144,17 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/worktrees/{id}/open` | Attach to its existing tmux session, or create `wt-<repoName>-<branch>` if none exists |
 | GET | `/api/repos?include_hidden` | 2.1 D1 groundwork — the same worktrees grouped by repo (`{id, host, path, name, remote, hidden, worktrees: [...]}`). Not yet used by the rail; exists for the repo-as-tab work to build on |
 
+## Session Groups (ADR-29 A)
+
+> Groundwork only — no screen calls these yet. B/C/D steps build the session-first rail/tabs on top of them. Membership itself (`@fsh_grp`) lives on the tmux session, not in a store; only names and order persist server-side (`~/.vt/groups.json`).
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/groups` | `{groups: [{id, label}]}` in saved display order. A group with no custom name yet has `label: null` — the caller falls back to something derived (e.g. the repo name) |
+| PATCH | `/api/groups/{id}` | Rename (`{label}`). First call for a given id creates its record (e.g. naming a repo's auto-suggested group for the first time) |
+| POST | `/api/groups/reorder` | Replace the whole display order (`{order: [id, ...]}`). A group dropped from the list also loses its saved name |
+| POST | `/api/tmux/{name}/group` | Set or clear a session's group (`{groupId: string \| null}`) by writing `@fsh_grp` on that tmux session directly. `null` means "ungrouped" |
+
 ## Port Dashboard
 
 | Method | Path | Description |
