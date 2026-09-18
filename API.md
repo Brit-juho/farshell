@@ -136,10 +136,11 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/worktrees` | List every discovered git worktree across all repos under `VT_BROWSE_ROOTS` (+ `~/.worktrees`), with session mapping and diff summary. 5s cache |
+| GET | `/api/worktrees?include_hidden` | List every discovered git worktree across all repos under `VT_BROWSE_ROOTS` (+ `~/.worktrees`), with session mapping, diff summary and `remote: {host, owner, name}`. 20s cache. Rail-hidden repos are filtered out; `include_hidden=1` keeps them with `hidden: true`. Also returns `truncated` (scan hit the 200-repo cap), `hiddenCount` and `roots` |
 | GET | `/api/worktrees/precheck?repo&base` | Lockfile-mismatch banner check ahead of the create dialog (`warnings: ["lockfile_mismatch"]`) |
 | POST | `/api/worktrees` | Create a worktree (`git worktree add` + node_modules/`.env`/port-band/agent steps). Rolls back on failure |
 | DELETE | `/api/worktrees/{id}` | Remove a worktree. 409 + `dirty:true` if it has changes unless `force:true`; `killSessions:true` also kills its tmux sessions |
+| POST | `/api/worktrees/hidden` | Hide or unhide a repo in the rail (`{path, hidden}`). Stored server-side in `~/.vt/rail-repos.json`, so it applies on every device |
 | POST | `/api/worktrees/{id}/open` | Attach to its existing tmux session, or create `wt-<repoName>-<branch>` if none exists |
 
 ## Port Dashboard

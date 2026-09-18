@@ -3,8 +3,9 @@
 // 검사 대상 TS 모듈을 여기 모아 실제로 컴파일한 뒤 그 산출물을 jsdom에
 // 로드한다. 새 .ts/.tsx를 테스트하려면 여기에 re-export만 추가하면 된다.
 export { mountSmoke } from './smoke.js';
+export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
 export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
-export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, mostUrgentStatus, fnv1a, hashRepoColorIndex } from '../../js/shell/rail-data.js';
+export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, mostUrgentStatus, fnv1a, hashRepoColorIndex, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, remoteLabel, repoColorKey } from '../../js/shell/rail-data.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,
