@@ -44,14 +44,33 @@ test('탭마다 자기 트리를 가진다 — 돌아오면 분할이 그대로�
   assert.strictEqual(S.countLeaves(), 1);
 });
 
-test('같은 워크트리를 두 번 열면 새 탭이 아니라 전환이다', async () => {
+// D4("저장소 1급화" 4단계) — 탭의 정체성이 워크트리에서 저장소로 바뀌었다.
+test('같은 저장소를 두 번 열면 새 탭이 아니라 전환이다', async () => {
   const { S } = await load();
-  const a = S.openLayoutTab({ worktreeId: 'wt-1', label: 'repo/a' });
+  const a = S.openLayoutTab({ repoId: 'repo-a', worktreeId: 'wt-1', label: 'a' });
   S.switchLayoutTab(S.getTabs()[0].id);
-  const b = S.openLayoutTab({ worktreeId: 'wt-1', label: 'repo/a' });
+  const b = S.openLayoutTab({ repoId: 'repo-a', worktreeId: 'wt-1', label: 'a' });
   assert.strictEqual(a, b);
-  assert.strictEqual(S.getTabs().length, 2, '탭이 늘어나면 안 된다(기본 탭 + wt-1)');
+  assert.strictEqual(S.getTabs().length, 2, '탭이 늘어나면 안 된다(기본 탭 + repo-a)');
   assert.strictEqual(S.getActiveTabId(), a);
+});
+
+test('같은 저장소의 다른 워크트리를 열면 탭은 그대로, worktreeId만 바뀐다', async () => {
+  const { S } = await load();
+  const a = S.openLayoutTab({ repoId: 'repo-a', worktreeId: 'wt-main', label: 'a' });
+  const b = S.openLayoutTab({ repoId: 'repo-a', worktreeId: 'wt-feature', label: 'a' });
+  assert.strictEqual(a, b, '탭 자체는 저장소 단위라 새로 생기지 않는다');
+  assert.strictEqual(S.getTabs().length, 2, '기본 탭 + repo-a, 늘어나지 않는다');
+  assert.strictEqual(S.getTabs().find((t) => t.id === a).worktreeId, 'wt-feature',
+    '지금 보는 워크트리가 갱신돼야 pane 헤더의 브랜치 칩이 맞는 걸 보여준다');
+});
+
+test('저장소가 다르면 워크트리가 없어도(repoId만 있어도) 별도 탭이다', async () => {
+  const { S } = await load();
+  const a = S.openLayoutTab({ repoId: 'repo-a', label: 'a' });
+  const b = S.openLayoutTab({ repoId: 'repo-b', label: 'b' });
+  assert.notStrictEqual(a, b);
+  assert.strictEqual(S.getTabs().length, 3);
 });
 
 test('마지막 탭은 닫히지 않는다 — 트리가 0개면 그릴 대상이 없다', async () => {

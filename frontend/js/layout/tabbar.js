@@ -9,30 +9,32 @@
 // 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
 // 닫기·이름 변경은 레일 세션 행으로, 에이전트 마크·상태 dot·읽지 않음은
 // 이 파일의 워크트리 탭으로.
-import { getTabs, getActiveTabId, switchLayoutTab, closeLayoutTab, openLayoutTab, onLayoutChange } from './store.js';
+import { getTabs, getActiveTabId, switchLayoutTab, openLayoutTab, onLayoutChange } from './store.js';
 import { allSessions } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
+import { removeFromLayout } from '../term/session-actions.js';
 import { icon, agentIcon } from '../ui/icons.js';
 import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
 
 const HOST = 'vt-wtabs';
 
-/** 이 탭에 속한 세션인가 — 탭의 워크트리에 속한 세션만. 워크트리가 없는
- * 탭(기타 작업 공간)은 **어디에도 안 속한 세션**을 받는다. 워크트리 정보가 아직
- * 없으면(목록 로딩 전) 전부 속한 것으로 본다 — 잠깐 전부 비는 것보다 낫다. */
-export function sessionBelongsToTab(tmuxName, tabWorktreeId, worktreeSessions) {
-  if (!worktreeSessions || worktreeSessions.size === 0) return true;
-  const owner = tmuxName ? worktreeSessions.get(tmuxName) : undefined;
-  if (tabWorktreeId) return owner === tabWorktreeId;
+/** 이 탭에 속한 세션인가 — D4부터 탭의 정체성은 저장소다, 그 저장소 밑
+ * 워크트리 어디에 속하든 이 탭 소속이다. 저장소가 없는 탭(기타 작업 공간)은
+ * **어디에도 안 속한 세션**을 받는다. 워크트리 정보가 아직 없으면(목록
+ * 로딩 전) 전부 속한 것으로 본다 — 잠깐 전부 비는 것보다 낫다. */
+export function sessionBelongsToTab(tmuxName, tabRepoId, repoSessions) {
+  if (!repoSessions || repoSessions.size === 0) return true;
+  const owner = tmuxName ? repoSessions.get(tmuxName) : undefined;
+  if (tabRepoId) return owner === tabRepoId;
   return owner === undefined;      // 「기타」 탭
 }
 
-let _worktreeSessions = new Map();   // tmux 세션 이름 → worktreeId
+let _repoSessions = new Map();   // tmux 세션 이름 → repoId(저장소 최상위 경로)
 
 /** term/tab-worktree.js가 워크트리 목록을 받을 때마다 여기에 알려준다 —
  * 같은 응답을 두 번 조회하지 않는다. */
-export function setWorktreeSessionMap(map) {
-  _worktreeSessions = map || new Map();
+export function setRepoSessionMap(map) {
+  _repoSessions = map || new Map();
   paintTabs();
 }
 
@@ -47,7 +49,7 @@ function tabSessionNames(tab) {
   for (const s of Object.values(allSessions())) {
     const tmux = s && (s.tmuxName || s.tmux_name);
     if (!tmux) continue;
-    if (sessionBelongsToTab(tmux, tab.worktreeId, _worktreeSessions)) out.push(tmux);
+    if (sessionBelongsToTab(tmux, tab.repoId, _repoSessions)) out.push(tmux);
   }
   return out;
 }
@@ -152,8 +154,7 @@ function render() {
       // 끄는 게 아니다(세션 탭 닫기가 detach인 것과 같은 규칙).
       x.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeLayoutTab(t.id);
-        saveLayoutNow();
+        removeFromLayout(t.id);
       });
       el.appendChild(x);
     }
@@ -164,9 +165,10 @@ function render() {
   paintTabs();
 }
 
-/** 워크트리를 탭으로 연다(레일·팔레트가 부른다). 이미 열려 있으면 전환만. */
-export function openWorktreeTab(worktreeId, label) {
-  const id = openLayoutTab({ worktreeId, label: label || '작업 공간' });
+/** 저장소를 탭으로 연다(레일·팔레트가 부른다). 이미 열려 있으면 전환하고,
+ * 다른 워크트리를 보던 중이었으면 `worktreeId`만 갱신한다(D4: 탭=저장소). */
+export function openWorktreeTab({ repoId, worktreeId = null, hostId = 'local', label } = {}) {
+  const id = openLayoutTab({ repoId, worktreeId, hostId, label: label || '작업 공간' });
   saveLayoutNow();
   return id;
 }

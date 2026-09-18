@@ -35,7 +35,6 @@ export interface PaletteDeps {
   setPaneSession: (sessionId: string, paneId?: string) => void;
   buildSessionCard: (sess: any, onSelect: () => void) => HTMLElement;
   updateSessionCard: (card: HTMLElement, sess: any, agentInfo: any) => void;
-  ensurePreviewWs: (name: string) => void;
   setVtSkin: (skin: string) => void;
   listKeymapActions: () => KeymapBinding[];
   invokeKeymapAction: (id: string) => void;
@@ -220,7 +219,6 @@ function PaletteBody(props: PaletteBodyProps) {
   function openSessionRow(sess: SessionTab): Row {
     const tmuxSess = tmuxByWebId()[sess.id];
     if (tmuxSess) {
-      deps.ensurePreviewWs(tmuxSess.name);
       return {
         key: `session:${sess.id}`,
         kind: 'session',

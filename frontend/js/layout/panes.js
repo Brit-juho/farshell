@@ -88,6 +88,37 @@ function _paneSessionId(paneId) {
   return node && node.t === 'leaf' ? node.session : null;
 }
 
+// 2.1 D4 — 워크트리는 탭이 아니라 "pane 헤더 옆 브랜치 칩"으로 보여준다(탭은
+// 이제 저장소 단위라 워크트리 여러 개를 탭 이름 하나로는 구분 못 한다).
+// term/tab-worktree.js가 워크트리 목록을 받을 때마다 setBranchChipMap을
+// 부른다 — 그 지도는 **저장소에 워크트리가 둘 이상일 때만** 항목을 담는다
+// (워크트리가 하나뿐이면 구분할 게 없으니 칩 자체가 안 보여야 한다).
+let _branchChips = new Map();   // tmux 세션 이름 → 브랜치
+
+export function setBranchChipMap(map) {
+  _branchChips = map || new Map();
+  _paintAllChips();
+}
+
+function _paintChip(paneEl) {
+  const chip = paneEl.querySelector('.vt-pane-branch');
+  if (!chip) return;
+  const sid = _paneSessionId(paneEl.dataset.paneId);
+  const s = sid ? getSession(sid) : null;
+  const tmux = s && (s.tmuxName || s.tmux_name);
+  const branch = tmux ? _branchChips.get(tmux) : null;
+  chip.textContent = branch || '';
+  chip.hidden = !branch;
+  if (branch) chip.setAttribute('data-tip', '이 세션이 속한 워크트리 브랜치'); else chip.removeAttribute('data-tip');
+}
+
+// 트리가 안 바뀌어도(브랜치 지도만 새로 왔을 때) 이미 그려진 pane들의 칩만
+// 다시 칠한다 — 트리 전체를 다시 그리면 렌더 중인 다른 화면과 경합한다.
+function _paintAllChips() {
+  if (!_rootEl) return;
+  for (const paneEl of _rootEl.querySelectorAll('.vt-pane')) _paintChip(paneEl);
+}
+
 function _buildPaneEl(paneId) {
   const paneEl = document.createElement('div');
   paneEl.id = paneElId(paneId);
@@ -96,6 +127,7 @@ function _buildPaneEl(paneId) {
   paneEl.innerHTML = `
     <div class="vt-pane-head">
       <span class="vt-pane-name"></span>
+      <span class="vt-pane-branch" hidden></span>
       <button type="button" class="vt-icon-btn xs vt-pane-split-row" data-tip="오른쪽 분할" data-tip-side="bottom" aria-label="오른쪽 분할">${icon('columns-2', 13)}</button>
       <button type="button" class="vt-icon-btn xs vt-pane-split-col" data-tip="아래쪽 분할" data-tip-side="bottom" aria-label="아래쪽 분할">${icon('rows-2', 13)}</button>
       <button type="button" class="vt-icon-btn xs danger vt-pane-close" data-tip="pane 닫기" data-tip-side="bottom" aria-label="pane 닫기">${icon('x', 13)}</button>
@@ -308,6 +340,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
   // 경우) → 조용히 빈 pane 취급. 트리 자체는 안 건드린다(다음 실제 배정이
   // 오면 자연히 덮어써진다), 렌더링에서만 관대하게 처리한다.
   const nameEl = paneEl.querySelector('.vt-pane-name');
+  _paintChip(paneEl);
 
   // N35 §6 — 뷰어 칸: 세션이 아니라 파일 하나를 그린다. 표면 레이어에는 아무
   // 것도 안 넘긴다(placement에 안 들어가므로 xterm이 이 자리를 덮지 않는다).

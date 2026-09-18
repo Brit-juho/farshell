@@ -177,6 +177,12 @@ export interface WorktreeRailRowInput {
   primarySessionId: string | null;
   /** 서버가 준 tmux 세션 이름(primarySessionId가 없을 때 attach 대상). */
   primaryTmuxName: string | null;
+  /** 저장소 최상위 경로(서버 `wt.repo`) — 2.1 D4, 탭의 정체성(repoId)으로
+   * 그대로 쓴다. 같은 저장소의 워크트리는 전부 같은 값을 갖는다. */
+  repoPath: string;
+  /** 지금은 항상 `"local"`(서버 `wt.host`) — 2.2에서 원격 호스트가 생기면
+   * 탭 dedup 키(repoId)가 호스트까지 구분해야 한다. */
+  host: string;
   status: AgentState;
   since: number | null;
   tool: string | null;

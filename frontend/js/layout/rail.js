@@ -10,7 +10,7 @@ import { API_BASE } from '../core/env.js';
 import { allSessions, getSession, activeSessionId, subscribe, sessionDisplayName } from '../core/store.js';
 import { getAction, registerAction } from '../core/dom.js';
 import { switchTo, removeSession, renameSession, createSession } from '../term/session.js';
-import { buildSessionCard, updateSessionCard, ensurePreviewWs } from '../agent/preview.js';
+import { buildSessionCard, updateSessionCard } from '../agent/preview.js';
 import { wireRatioResizer } from './resizer.js';
 import { COMPACT_MAX, REGULAR_MAX } from './breakpoints.js';
 import { icon } from '../ui/icons.js';
@@ -187,7 +187,6 @@ function initRail() {
         row = buildSessionCard(tmuxSess, () => switchTo(id));
         row.classList.add('vt-rail-session-row', 'vt-rail-session-card');
         updateSessionCard(row, tmuxSess, undefined);
-        ensurePreviewWs(tmuxSess.name);
       } else {
         row = document.createElement('div');
         row.className = 'vt-rail-session-row';

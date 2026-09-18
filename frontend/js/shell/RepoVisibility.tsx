@@ -5,7 +5,8 @@
 // 통째로 좁히는 것** 말고 손쓸 방법이 없었는데, 그러면 진짜 프로젝트까지 같이
 // 사라진다(실제로 그 맞바꿈이 §1 버그의 원인이었다).
 //
-// 숨김은 **서버에 저장한다**(`~/.vt/rail-repos.json`). 그룹 접힘(§2, device
+// 숨김은 **서버에 저장한다**(`~/.vt/repos.json`, 2.1 D1부터 — 이전엔
+// `rail-repos.json`이었다). 그룹 접힘(§2, device
 // 스코프)과 반대 판단이다 — 접힘은 화면 상태고, "이게 내 프로젝트인가"는
 // 사람의 판단이라 폰에서 숨긴 것이 맥에서도 숨겨져야 한다.
 //
@@ -65,7 +66,7 @@ export function RepoVisibility(props: Props) {
         { worktrees?: RepoItem[]; roots?: string[] } | null;
       const all = data?.worktrees || [];
       // 저장소 단위로 접는다. 시트에서 고르는 단위는 "이 저장소"이고, 부가
-      // 워크트리는 본체를 숨기면 같이 숨는다(rail_repos_store.is_hidden).
+      // 워크트리는 본체를 숨기면 같이 숨는다(repo_store.is_hidden).
       const seen = new Set<string>();
       const repos: RepoItem[] = [];
       for (const w of all) {

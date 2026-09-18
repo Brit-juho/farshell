@@ -18,7 +18,7 @@ import { switchTo } from './term/session.js';
 import { splitActivePane, setPaneSession } from './layout/store.js';
 import { loadViewer, openFileInPane } from './panels/viewer-lazy.js';
 import { setVtSkin } from './theme.js';
-import { buildSessionCard, updateSessionCard, ensurePreviewWs } from './agent/preview.js';
+import { buildSessionCard, updateSessionCard } from './agent/preview.js';
 import { showToast } from './ui/toast.js';
 
 // 이름의 출처는 세션 레코드다(core/store.js의 sessionDisplayName) — 예전엔
@@ -49,7 +49,6 @@ const deps = {
   setPaneSession,
   buildSessionCard,
   updateSessionCard,
-  ensurePreviewWs,
   setVtSkin,
   listKeymapActions: keymapList,
   invokeKeymapAction: keymapInvoke,

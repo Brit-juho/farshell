@@ -144,15 +144,16 @@ body.vt-rail-overlay #vt-rail-panel { z-index:110; box-shadow:0 0 24px rgba(0,0,
 .vt-rail-session-actions { display:flex; flex-shrink:0; }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 행 끝의 이름변경·닫기 */
 .vt-rail-session-empty { }
-/* 라이브 프리뷰 카드(tmux 세션) — .vt-qo-session-card와 같은 목적, 목록
-   레이아웃만 다르다(패딩·테두리는 .vt-card가 이미 갖고 있어 감쌀 필요 없음). */
+/* 세션 카드(tmux 세션) — .vt-qo-session-card와 같은 목적, 목록 레이아웃만
+   다르다(패딩·테두리는 .vt-card가 이미 갖고 있어 감쌀 필요 없음). */
 /* 이 요소는 .vt-card(flex-direction:column)와 .vt-rail-session-row
    (align-items:center)를 동시에 갖는다 — 후자가 파일 뒤쪽이라 이겨서, 컬럼
-   방향 flex의 자식이 stretch되지 않고 max-content 폭을 갖는다. 그 결과
-   .card-preview가 카드 밖으로 1008px 삐져나와(실측: x=-314.5) 패널과 터미널
-   위를 덮고 있었다. 카드 경로에서만 stretch를 되돌린다. */
+   방향 flex의 자식이 stretch되지 않고 max-content 폭을 갖는다. 그 결과 예전
+   여러 줄 터미널 미리보기(.card-preview)가 카드 밖으로 1008px 삐져나와(실측:
+   x=-314.5) 패널과 터미널 위를 덮고 있었다. 카드 경로에서만 stretch를
+   되돌린다 — 2.1 D5로 .card-meta가 한 줄 텍스트가 된 지금도 이 stretch
+   자체는 카드의 다른 자식(card-head 등) 정렬에 여전히 필요하다. */
 .vt-rail-session-card { padding-right:calc(var(--spacing) * 1); align-items:stretch; }
-.vt-rail-session-card .card-preview { max-height:64px; }
 .vt-rail-session-footer {
   display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
   margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2.5); border-top:1px solid var(--line);

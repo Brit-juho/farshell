@@ -167,12 +167,14 @@ test('복원 전에는 저장하지 않는다 — 빈 초기 트리로 정본을
   const puts = calls.filter((c) => c.url.includes('/api/workspace') && c.opts && c.opts.method === 'PUT');
   assert.strictEqual(puts.length, 1);
   const body = JSON.parse(puts[0].opts.body);
-  // 10 §4 2단계에서 스키마가 v2(탭 배열)로 올라갔다. v1 필드(tree/active)는
-  // **롤백용으로 계속 적는다** — 2.1.2를 되돌리면 옛 코드가 이 스냅샷을 읽는다.
-  assert.strictEqual(body.ui.layout.v, 2);
+  // 2.1 D4에서 스키마가 v3(탭에 repoId/hostId)로 올라갔다. v1 필드(tree/active)는
+  // **롤백용으로 계속 적는다** — 되돌리면 옛 코드가 이 스냅샷을 읽는다.
+  assert.strictEqual(body.ui.layout.v, 3);
   assert.strictEqual(body.ui.layout.tree.t, 'split', '롤백용 v1 필드가 유지돼야 한다');
   assert.strictEqual(body.ui.layout.tabs.length, 1);
   assert.strictEqual(body.ui.layout.tabs[0].tree.t, 'split');
+  assert.strictEqual(body.ui.layout.tabs[0].repoId, null);
+  assert.strictEqual(body.ui.layout.tabs[0].hostId, 'local');
   assert.ok(window.localStorage.getItem('vt-layout-v1'), 'localStorage에도 같이 써야 한다');
 });
 
@@ -202,6 +204,71 @@ test('restoreLayout — 서버 정본이 더 최신이면 로컬을 덮어쓴다
 
   await P.restoreLayout();
   assert.strictEqual(S.getTree().id, 'remote-leaf');
+});
+
+// ⚠ 2.1 D4에서 발견: 저장은 2.1.2부터 이미 v2로만 나가는데, 이 분기는
+// `remote.v === 1`만 봤다 — 즉 원격 정본은 한 번도 이 경로를 못 탔다(기기를
+// 바꿔도 서버 스냅샷이 안 먹혔다는 뜻). _isSnapshot과 같은 판정으로 맞췄다.
+test('restoreLayout — 서버 정본이 v3(탭 배열)여도 더 최신이면 반영한다', async () => {
+  const env = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(env.dom);
+  env.window.API_BASE = '';
+  env.window._tokenQuery = '';
+  env.window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'local-leaf',
+    tree: { t: 'leaf', id: 'local-leaf', session: null },
+  }));
+  env.window.fetch = (url, opts) => {
+    if (opts && opts.method === 'PUT') return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ ui: { layout: {
+        v: 3, savedAt: 999, activeTab: 'ta',
+        tabs: [{ id: 'ta', repoId: 'repo-a', worktreeId: 'wt-1', hostId: 'local', label: 'a',
+                 active: 'remote-leaf', tree: { t: 'leaf', id: 'remote-leaf', session: null } }],
+      } } }),
+    });
+  };
+  const cache = new Map();
+  await importFresh(CORE_STORE_JS, env.context, cache);
+  const S = await importFresh(LAYOUT_STORE_JS, env.context, cache);
+  const P = await importFresh(PERSIST_JS, env.context, cache);
+
+  await P.restoreLayout();
+  assert.strictEqual(S.getTree().id, 'remote-leaf');
+  assert.strictEqual(S.getTabs()[0].repoId, 'repo-a');
+});
+
+// ── 2.1 D4 — v2 → v3 마이그레이션(탭에 repoId/hostId 추가) ──────────────────
+
+test('v2 스냅샷(repoId 없음)도 그대로 복원된다 — repoId는 null로 떨어진다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-build', 'build');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 2, savedAt: 100, activeTab: 'tb',
+    tabs: [{ id: 'tb', worktreeId: 'wt-9', label: 'repo/feat', active: 'p2',
+             tree: { t: 'leaf', id: 'p2', session: { id: 'y', tmux: 'build' } } }],
+  }));
+  await P.restoreLayout();
+  assert.strictEqual(S.getTabs()[0].worktreeId, 'wt-9');
+  assert.strictEqual(S.getTabs()[0].repoId, null);
+  assert.strictEqual(S.getTabs()[0].hostId, 'local');
+});
+
+test('v3 — 탭의 repoId/worktreeId/hostId가 그대로 복원된다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-build', 'build');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 3, savedAt: 100, activeTab: 'tb',
+    tabs: [{ id: 'tb', repoId: 'repo-a', worktreeId: 'wt-9', hostId: 'local', label: 'repo/feat',
+             active: 'p2', tree: { t: 'leaf', id: 'p2', session: { id: 'y', tmux: 'build' } } }],
+  }));
+  await P.restoreLayout();
+  const tab = S.getTabs()[0];
+  assert.strictEqual(tab.repoId, 'repo-a');
+  assert.strictEqual(tab.worktreeId, 'wt-9');
+  assert.strictEqual(tab.hostId, 'local');
+  assert.strictEqual(S.getTree().session, 'live-build');
 });
 
 test('replaceTree — 잘못된 입력은 트리를 건드리지 않는다', async () => {

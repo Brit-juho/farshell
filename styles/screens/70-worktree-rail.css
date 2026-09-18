@@ -101,11 +101,11 @@
 @media (prefers-reduced-motion:reduce) {
   .vt-wgrail-group-caret { transition:none; }
 }
-/* ⚙ — 저장소 표시 설정(§3). 평소엔 물러나 있다가 헤더에 올리면 드러난다:
-   목록을 훑는 동안 매 그룹 머리에서 같은 밝기로 경쟁하면 안 된다. */
-.vt-wgrail-group-settings { flex:none; opacity:.55; }
-.vt-wgrail-group-head:hover .vt-wgrail-group-settings,
-.vt-wgrail-group-settings:focus-visible { opacity:1; }
+/* ⚙(저장소 표시 설정)은 2026-09-18부터 그룹 머리가 아니라 레일 헤더줄
+   (.vt-wgrail-head-actions)에 산다 — 이유는 Rail.tsx의 그 자리 주석. */
+.vt-wgrail-head-actions { display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); flex:none; }
+.vt-wgrail-settings { opacity:.65; }
+.vt-wgrail-settings:hover, .vt-wgrail-settings:focus-visible { opacity:1; }
 
 /* §1/§3 — 목록 아래 한 줄짜리 각주(잘림·숨김 개수). 행으로 오해되면 안 되므로
    색점 막대도 배경도 주지 않는다. */

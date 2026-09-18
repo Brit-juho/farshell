@@ -197,21 +197,19 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-menu-item-detail { display:block; color:var(--sub); font-size:var(--fs-2xs); margin-top:2px; }
 .vt-menu-sep { border-top:1px solid var(--line); margin:calc(var(--spacing) * 1) 0; }
 
-/* L3 4단계: 그리드 뷰(#grid-view)는 폐지됐지만 카드 스타일은 남긴다 —
-   agent/preview.js의 refreshGrid()가 만드는 카드 마크업 자체는 5단계(빈 pane
-   클릭 → 썸네일 기반 세션 선택 시트)와 팔레트(L6)가 그대로 재사용할 예정이다
-   (ADR-7 "프리뷰 카드는 썸네일로 축소돼 재사용된다"). 지금은 이 카드를 렌더할
-   컨테이너가 없어 당장은 아무도 안 쓰지만, 다음 단계가 여기 다시 연결한다. */
+/* L3 4단계: 그리드 뷰(#grid-view)는 폐지됐지만 카드 스타일은 남는다 —
+   agent/preview.js의 카드 마크업을 pane-picker.js(빈 pane 클릭 → 세션 선택
+   시트)와 팔레트(Palette.tsx)가 그대로 재사용한다. */
 .vt-card {
   background:var(--bar); border:1px solid var(--line); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1);
   cursor:pointer; display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
   transition:border-color .15s, box-shadow .15s;
   position:relative;
   /* grid item의 기본 min-width는 auto(=내용의 min-content) — 안 밀어주면
-     preview 안의 안 끊기는 긴 줄(경로 등) 하나가 이 카드의, 그리고 같은 행의
-     다른 트랙까지 억지로 넓혀서 repeat(2,1fr)이 반반이 아니라 비대칭으로
-     깨진다(실측: "1398px 982px"). 0으로 눌러서 지정한 트랙 폭을 그대로 따르게
-     하고, 넘치는 내용은 카드 안(각 자식의 overflow:hidden)에서 처리한다. */
+     한 줄짜리 meta(경로 등)가 이 카드의, 그리고 같은 행의 다른 트랙까지
+     억지로 넓혀서 repeat(2,1fr)이 반반이 아니라 비대칭으로 깨진다(실측:
+     "1398px 982px"). 0으로 눌러서 지정한 트랙 폭을 그대로 따르게 하고,
+     넘치는 내용은 카드 안(각 자식의 overflow:hidden)에서 처리한다. */
   min-width:0;
 }
 .vt-card:hover { border-color:var(--acc); }
@@ -219,10 +217,8 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-card .card-agent { flex:0 0 auto; line-height:1; display:flex; }
 .vt-card .card-agent svg { color:var(--sub); }
 /* D3 — 탭의 에이전트 마크. 문서 §4 "탭 구성: [마크 14px][이름][dot][배지]" */
-/* 카드 위계 3단: 제목(가장 밝고 큼) > 프리뷰(중간 톤 --txt2, 실제 내용) >
-   명령어(가장 어두운 --sub, 메타데이터). 이전엔 제목·프리뷰가 둘 다 --txt +
-   13/11px 1px 차이뿐이라 무게만으로 구분해야 했던 걸, 크기·색을 함께 벌려
-   스캔했을 때 즉시 구분되게 한다. */
+/* 카드 위계: 제목(가장 밝고 큼) > cwd(중간 톤 --txt2, 어디서 도는지) >
+   명령어(가장 어두운 --sub, 메타데이터). */
 .vt-card .card-title {
   flex:1 1 auto;
   min-width:0;
@@ -237,15 +233,16 @@ body.voice-only-mode .vt-onboarding { display:none; }
   font-size:var(--fs-2xs);
   color:var(--sub);
 }
-.vt-card .card-preview {
-  margin:0; background:var(--crust); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 1); font-family:var(--mono);
-  font-size:var(--fs-2xs); color:var(--txt2); white-space:pre-wrap; overflow:hidden; max-height:240px; line-height:1.2;
-  /* max-height로 잘려나가는 마지막 줄이 단어 중간에서 뚝 끊긴 채로 보이던 것을,
-     하단 페이드로 부드럽게 흐려지게 해 "미리보기이므로 잘렸다"는 게 자연스럽게
-     읽히도록 한다. */
-  mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent 100%);
-  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent 100%);
+/* 2.1 D5 — 세션당 `/ws-preview` 소켓으로 실시간 갱신하던 여러 줄 터미널
+   미리보기를 걷어내고, cwd 한 줄만 정적으로 보여준다(agent/preview.js
+   머리말 참고). 한 줄이라 예전의 max-height/하단 페이드 마스크가 필요 없다 —
+   넘치면 그냥 말줄임한다. */
+.vt-card .card-meta {
+  margin:0; font-family:var(--mono);
+  font-size:var(--fs-2xs); color:var(--txt2);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+.vt-card .card-meta:empty { display:none; }
 
 /* 이미 탭으로 열려 있는 세션 — 클릭 결과(전환 vs attach)가 다르므로 미리 구분해둔다.
    여백을 늘리지 않고 카드 자체의 왼쪽 테두리만 강조한다. */

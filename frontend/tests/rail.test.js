@@ -170,7 +170,7 @@ test('세션 닫기 버튼 → removeSession이 불리고 패널이 다시 그�
   assert.strictEqual(window.document.querySelectorAll('.vt-rail-session-row').length, 1);
 });
 
-test('tmux 세션은 라이브 프리뷰 카드(썸네일)로 나온다', async () => {
+test('tmux 세션은 카드형으로 나오고 cwd가 정적 텍스트로 보인다(2.1 D5 — 라이브 프리뷰 소켓 제거)', async () => {
   const { window, addSession } = await buildWindow({
     tmuxSessions: [{ name: 'dev', command: 'claude', cwd: '/repo', web_session_id: 'a' }],
   });
@@ -180,6 +180,7 @@ test('tmux 세션은 라이브 프리뷰 카드(썸네일)로 나온다', async 
   const card = window.document.querySelector('.vt-rail-session-card');
   assert.ok(card, 'tmux 세션은 카드형이어야 한다');
   assert.ok(card.classList.contains('vt-card'));
+  assert.strictEqual(card.querySelector('.card-meta').textContent, '/repo');
 });
 
 test('설정 버튼 클릭 → ⋯ 메뉴에서 옮겨온 정적 컨텐츠(테마 칩 등)가 패널에 보인다', async () => {

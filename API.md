@@ -140,8 +140,9 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | GET | `/api/worktrees/precheck?repo&base` | Lockfile-mismatch banner check ahead of the create dialog (`warnings: ["lockfile_mismatch"]`) |
 | POST | `/api/worktrees` | Create a worktree (`git worktree add` + node_modules/`.env`/port-band/agent steps). Rolls back on failure |
 | DELETE | `/api/worktrees/{id}` | Remove a worktree. 409 + `dirty:true` if it has changes unless `force:true`; `killSessions:true` also kills its tmux sessions |
-| POST | `/api/worktrees/hidden` | Hide or unhide a repo in the rail (`{path, hidden}`). Stored server-side in `~/.vt/rail-repos.json`, so it applies on every device |
+| POST | `/api/worktrees/hidden` | Hide or unhide a repo in the rail (`{path, hidden}`). Stored server-side in `~/.vt/repos.json` (2.1 D1; migrated once from the old `rail-repos.json`), so it applies on every device |
 | POST | `/api/worktrees/{id}/open` | Attach to its existing tmux session, or create `wt-<repoName>-<branch>` if none exists |
+| GET | `/api/repos?include_hidden` | 2.1 D1 groundwork — the same worktrees grouped by repo (`{id, host, path, name, remote, hidden, worktrees: [...]}`). Not yet used by the rail; exists for the repo-as-tab work to build on |
 
 ## Port Dashboard
 

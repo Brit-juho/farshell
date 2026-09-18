@@ -150,10 +150,31 @@ def _changed_stat(path: Path) -> dict:
 # --- 세션 매핑 -----------------------------------------------------------------
 
 
-def _sessions_for_path(path: Path, all_panes) -> list[str]:
+def _sessions_for_path(path: Path, all_panes, wt_id: str | None = None) -> list[str]:
+    """이 워크트리에 속한 세션 이름들.
+
+    2.1 D2 — 1차 판정은 tmux가 들고 있는 `@fsh_wt` 태그다(재시작을 견딘다).
+    태그가 하나도 없으면(롤아웃 이전 세션, 또는 사용자가 `-L fsh` 소켓을 직접
+    건드려 태그가 빠진 경우) cwd 포함 여부로 추론하던 예전 방식으로 폴백하고,
+    그 자리에서 태그를 심어 다음 조회부터는 1차 판정만으로 끝나게 한다
+    (self-healing — `open_worktree`/`_open_agent`가 새 세션에 태그를 남기는
+    것과 같은 메커니즘).
+    """
     names: list[str] = []
     seen: set[str] = set()
+    if wt_id:
+        for pane in all_panes:
+            if pane.wt_tag == wt_id and pane.session not in seen:
+                seen.add(pane.session)
+                names.append(pane.session)
+    if names:
+        return names
+
+    fallback: list[str] = []
     for pane in all_panes:
+        # 다른 워크트리 태그가 이미 붙은 세션은 cwd가 겹쳐 보여도 훔쳐오지 않는다.
+        if pane.wt_tag and pane.wt_tag != wt_id:
+            continue
         if not pane.path:
             continue
         try:
@@ -162,8 +183,12 @@ def _sessions_for_path(path: Path, all_panes) -> list[str]:
             continue
         if _is_within(pane_path, path) and pane.session not in seen:
             seen.add(pane.session)
-            names.append(pane.session)
-    return names
+            fallback.append(pane.session)
+
+    if fallback and wt_id:
+        for name in fallback:
+            tmux_runner.set_option(name, "@fsh_wt", wt_id)
+    return fallback
 
 
 # --- 저장소 탐색 ---------------------------------------------------------------
@@ -277,7 +302,7 @@ def _build_entry(
     wt_id = hashlib.sha1(f"{repo_top}{path}".encode()).hexdigest()[:12]
     ahead, behind = _ahead_behind(path)
     changed = _changed_stat(path)
-    sessions = _sessions_for_path(path, all_panes)
+    sessions = _sessions_for_path(path, all_panes, wt_id)
     ports = ports_map.get(wt_id, {}).get("ports")
 
     return {
@@ -528,9 +553,11 @@ def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dic
     # `tmux set-environment`에 값을 직접 넘기면 `ps`로 다른 계정에 보인다).
     # MCP를 못 읽어도 세션은 열려야 하므로 실패는 삼킨다.
     prefix = ""
+    wt_id_for_tag: str | None = None
     try:
         wt = next((w for w in list_worktrees() if w.get("path") == str(path)), None)
-        env_file = mcp_env.prepare(tmux_name, wt.get("id") if wt else None)
+        wt_id_for_tag = wt.get("id") if wt else None
+        env_file = mcp_env.prepare(tmux_name, wt_id_for_tag)
         prefix = mcp_env.source_prefix(env_file)
         if env_file:
             tmux_runner.run(
@@ -539,6 +566,12 @@ def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dic
             )
     except Exception:
         logger.exception("MCP 환경 준비 실패 — 키 없이 세션을 연다")
+
+    # 2.1 D2 — 이 세션이 어느 워크트리 소속인지 tmux 자신에게 적어 둔다.
+    # 서버 재시작에도 살아남아야 하는 사실이라 서버 메모리(session_store,
+    # 재시작하면 비는 저장소)가 아니라 여기 적는다.
+    if wt_id_for_tag:
+        tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id_for_tag)
 
     tmux_runner.run(["send-keys", "-t", tmux_name, prefix + spec.command, "Enter"],
                     timeout=GIT_TIMEOUT)
@@ -679,6 +712,8 @@ def open_worktree(wt_id: str) -> dict:
         )
         if rc != 0:
             raise WorktreeError(500, {"error": "tmux 세션 생성 실패", "detail": err.decode("utf-8", errors="replace")})
+        # 2.1 D2 — 방금 만든 세션이 이 워크트리 소속임을 tmux에 적어 둔다.
+        tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id)
     invalidate_cache()
     return {"ok": True, "tmux_session": tmux_name, "created": True}
 
