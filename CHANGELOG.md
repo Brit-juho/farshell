@@ -127,6 +127,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **세션 행의 저장소 해시 색점(왼쪽 세로 막대) 제거 + 관련 레거시 일괄
+  정리(사용자 피드백).** 저장소가 레일의 주어에서 내려온 뒤(ADR-29)에도
+  각 세션 행 맨 앞에 저장소 이름/소유자 해시로 색을 매기는 점(`.vt-wgrail-
+  hash`, `--color-hash-1..8`)이 남아 있던 걸 사용자가 지적했다 — 상태색
+  막대(`.vt-wgrail-bar`, `tone-${status}`)만으로 충분하다(행 자체가 항상
+  세션이므로 상태는 항상 의미가 있다). 전체 소비 체인을 추적해 하나도
+  안 남기고 지웠다: `rail-data.ts`의 `fnv1a`/`hashRepoColorIndex`/
+  `repoColorKey`, `RailRow.tsx`의 `.vt-wgrail-hash` span, `Rail.tsx`의
+  `gitRemote` 필드(이 색점 계산 하나만을 위해 `wtInfo`를 거쳐 흘러오고
+  있었다), `tokens.css`/`skins.css`(스킨 5개 블록)의 `--color-hash-*` 토큰,
+  `theme-import.js`의 동적 생성 루프. 조사 중 `remoteLabel`/`RailRemote`
+  (이미 화면 어디서도 안 부르던, B단계 이전부터의 진짜 죽은 코드)와
+  `.vt-wgrail-bar.kind-session { background:transparent; }`(RailRow.tsx가
+  항상 `tone-${status}`를 그리게 된 뒤로 죽어 있던 규칙)도 같이 찾아
+  지웠다 — 지적받은 것만 고치지 않고 같은 조사로 드러난 죽은 코드는
+  그대로 제거한다는 원칙. 테스트 6개(색점/해시 관련)와 `--color-hash-*`
+  참조를 검증하던 항목도 같이 지웠다(540개로 감소). isolated 서버(
+  `VT_STATE_DIR` 포함 격리) + 실브라우저로 확인: 세션 행에 상태색 막대만
+  남고 색점이 없는 것, 저장소 관리 시트·그룹 기능은 그대로 동작하는 것,
+  콘솔 에러 없음.
+
 - **레일 머리글·바닥의 남은 저장소 흔적 정리(사용자 피드백).** "숨긴
   저장소로 자동 묶기 제거"(바로 아래 항목) 이후에도, 레일 상단
   머리글(`.vt-wgrail-head`)이 여전히 "저장소 15 · 워크트리 1" 같은

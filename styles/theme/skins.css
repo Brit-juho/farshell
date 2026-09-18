@@ -43,17 +43,6 @@
     --color-term-fg: #e6e6ea;
     /* T3 — hover 오버레이(알파 0.09)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .18);
-    /* 20-design-system.md §5 — 색점 램프 8색(상속 금지, §2 규칙). farshell
-     * 목업(팔레트 줄)의 파스텔 톤(S 42~58%, L 61~75%)에 맞춰 산출 — 상태 4색
-     * (idle 제외 · 무채색이라 회피 불필요)·acc와 색상환에서 안 겹치게. */
-    --color-hash-1: #d8b697;
-    --color-hash-2: #c0d897;
-    --color-hash-3: #a2d897;
-    --color-hash-4: #97d8d3;
-    --color-hash-5: #9a97d8;
-    --color-hash-6: #bb97d8;
-    --color-hash-7: #d897d4;
-    --color-hash-8: #d897b4;
   }
 
   html[data-skin="catppuccin"] {
@@ -84,17 +73,6 @@
     --color-term-fg: #cdd6f4;
     /* T3 — hover 오버레이(알파 0.08)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .16);
-    /* 20-design-system.md §5 — 색점 램프 8색. 라벤더 acc(#cba6f7, ~271°)도
-     * 회피 대상에 넣었다 — catppuccin은 acc가 상태색과 별개 색상대라 제외하면
-     * 남는 원호가 좁아져 다른 스킨보다 버킷이 촘촘하다. */
-    --color-hash-1: #debdaf;
-    --color-hash-2: #d6deaf;
-    --color-hash-3: #c7deaf;
-    --color-hash-4: #afdec1;
-    --color-hash-5: #afded3;
-    --color-hash-6: #afd7de;
-    --color-hash-7: #b2afde;
-    --color-hash-8: #ddafde;
   }
 
   html[data-skin="windows"] {
@@ -127,15 +105,6 @@
     --color-term-fg: #cccccc;
     /* T3 — hover 오버레이(알파 0.10)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .20);
-    /* 20-design-system.md §5 — 색점 램프 8색. */
-    --color-hash-1: #d8b297;
-    --color-hash-2: #bfd897;
-    --color-hash-3: #97d8b0;
-    --color-hash-4: #97d8cd;
-    --color-hash-5: #a297d8;
-    --color-hash-6: #bd97d8;
-    --color-hash-7: #d897d7;
-    --color-hash-8: #d897bc;
   }
 
   html[data-skin="vscode"] {
@@ -168,15 +137,6 @@
     --color-term-fg: #cccccc;
     /* T3 — hover 오버레이(알파 0.08)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .16);
-    /* 20-design-system.md §5 — 색점 램프 8색. */
-    --color-hash-1: #d3ad92;
-    --color-hash-2: #bdd392;
-    --color-hash-3: #92d3aa;
-    --color-hash-4: #92d3c7;
-    --color-hash-5: #9392d3;
-    --color-hash-6: #b392d3;
-    --color-hash-7: #d392d2;
-    --color-hash-8: #d392b2;
   }
 
   /* 유일한 라이트 스킨. --color-line은 검정 오버레이로 뒤집어야 대비가 산다
@@ -218,17 +178,6 @@
     --color-st-error: #d93025;
     --color-term-bg: #fffefb;
     --color-term-fg: #2b2a25;
-    /* 20-design-system.md §5 — 색점 램프 8색. 유일한 라이트 스킨이라 다른
-     * 5스킨보다 명도를 낮췄다(L 48%) — 밝은 배경(bg-0 #faf8f4) 위에서 3px
-     * 얇은 막대가 식별되려면 어두워야 한다. */
-    --color-hash-1: #abae47;
-    --color-hash-2: #80ae47;
-    --color-hash-3: #56ae47;
-    --color-hash-4: #47aeaa;
-    --color-hash-5: #5147ae;
-    --color-hash-6: #8347ae;
-    --color-hash-7: #ae47a6;
-    --color-hash-8: #ae4773;
     /* T3 — 유일한 라이트 스킨이라 오버레이가 검정이고, 같은 배수(0.055x2=0.11)로는
      * 다크 스킨만큼 안 벌어진다(실측 hover 대비 1.13:1 vs 다크 1.31~1.39:1).
      * 0.18로 올려 1.35:1을 맞춘다 — 배수가 아니라 결과를 맞추는 게 기준이다. */

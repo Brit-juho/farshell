@@ -273,12 +273,8 @@ export function deriveTokens(parsed) {
     '--color-surface-active': _rgbaTint(fg0, 0.18),
   };
 
-  // 색점 램프 8색 — 세션 색깔 구분용이라 서로만 구별되면 된다. 테마의 밝기에
-  // 맞춘 고정 색상환(다크는 밝은 파스텔, 라이트는 진한 톤)으로 만든다.
-  const hues = [30, 90, 140, 180, 240, 280, 310, 350];
-  hues.forEach((h, i) => {
-    tokens[`--color-hash-${i + 1}`] = _hsl(h, 45, isDark ? 68 : 38);
-  });
+  // 2026-09-18 후속 — 색점 램프(--color-hash-1..8) 생성을 지웠다. 저장소
+  // 색점 기능 자체가 없어졌다(rail-data.ts/RailRow.tsx/tokens.css/skins.css 참고).
 
   return tokens;
 }

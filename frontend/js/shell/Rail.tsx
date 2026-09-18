@@ -66,7 +66,8 @@ function Rail(props: { deps: RailDeps }) {
   // 정체(어떤 CLI인가)는 상태(무엇을 하는 중인가)와 **다른 엔드포인트**다.
   // 한 응답에 둘 다 있을 거라 짐작했다가 마크가 한 개도 안 그려졌다.
   const [agentNames, setAgentNames] = createSignal<Record<string, string>>({});
-  // ADR-29 B — 워크트리 행 대신 배지·자동 그룹 제안의 입력으로만 쓴다.
+  // ADR-29 B — 워크트리 행 대신 저장소·브랜치 배지 텍스트의 입력으로만
+  // 쓴다(자동 그룹 제안·색점은 둘 다 2026-09-18 후속에서 없앴다).
   // /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임, 2단계에서
   // 만들고 아무도 안 쓰던 그 라우트)를 쓴다 — wt_id → repoId 매핑을 직접
   // 계산할 필요가 없어진다.
@@ -258,14 +259,14 @@ function Rail(props: { deps: RailDeps }) {
     }
 
     // wt_id → 저장소·브랜치 배지 정보. /api/repos(저장소별로 이미 묶임)에서
-    // 뽑는다. repoId는 안 담는다 — 그룹 자동 제안을 없앤 뒤로(2026-09-18
-    // 후속) 배지 표시 말고는 쓸 데가 없다.
-    const wtInfo = new Map<string, { repoName: string; branch: string; isMain: boolean; gitRemote: any; changed: any }>();
+    // 뽑는다. repoId·gitRemote는 안 담는다 — 그룹 자동 제안(repoId)과 저장소
+    // 색점(gitRemote)을 둘 다 없앤 뒤로(2026-09-18 후속) 배지 텍스트 표시
+    // 말고는 쓸 데가 없다.
+    const wtInfo = new Map<string, { repoName: string; branch: string; isMain: boolean; changed: any }>();
     for (const repo of repos()) {
       for (const wt of repo.worktrees || []) {
         wtInfo.set(wt.id, {
-          repoName: repo.name, branch: wt.branch, isMain: !!wt.isMain,
-          gitRemote: repo.remote || null, changed: wt.changed || null,
+          repoName: repo.name, branch: wt.branch, isMain: !!wt.isMain, changed: wt.changed || null,
         });
       }
     }
@@ -302,7 +303,6 @@ function Rail(props: { deps: RailDeps }) {
         repoName: info?.repoName ?? null,
         branch: info?.branch ?? null,
         isMainWorktree: info?.isMain ?? false,
-        gitRemote: info?.gitRemote ?? null,
         worktreeId: t.wt_id || null,
       });
       if (cwd && diffCountStale(cwd)) {
@@ -330,7 +330,6 @@ function Rail(props: { deps: RailDeps }) {
         repoName: null,
         branch: null,
         isMainWorktree: false,
-        gitRemote: null,
       });
     }
     void labels; // groupLabels()는 sections()가 별도로 구독한다 — 여기선 구독 트리거만 필요 없음
@@ -857,7 +856,6 @@ function Rail(props: { deps: RailDeps }) {
                         data-tip={collapsed() ? entry.label : undefined}
                         data-tip-side="right"
                       >
-                        <span class="vt-wgrail-hash kind-session" />
                         <span class="vt-srow-mark vt-wgrail-bar" />
                         <div class="vt-srow-main vt-wgrail-row-main">
                           <div class="vt-srow-top vt-wgrail-row-top">

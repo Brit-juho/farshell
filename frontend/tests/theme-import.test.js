@@ -149,7 +149,6 @@ test('deriveTokens — 스킨이 쓰는 토큰을 빠짐없이 만든다', async
     '--color-acc', '--color-acc-dim', '--color-acc-surface', '--color-acc-ink',
     '--color-st-idle', '--color-st-working', '--color-st-waiting', '--color-st-done',
     '--color-st-error', '--color-term-bg', '--color-term-fg', '--color-surface-active',
-    '--color-hash-1', '--color-hash-8',
   ];
   for (const k of required) assert.ok(tokens[k], `${k}가 비어 있다`);
   assert.strictEqual(tokens['--color-bg-0'], '#1d2021');
