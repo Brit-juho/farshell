@@ -9,11 +9,15 @@
 // core/store.js·term/session.js 같은 **상태를 가진 모듈을 정적 import 하지
 // 않는다**(ADR-26/N35 — Vite lib 모드가 청크 안에 복제해 넣어 앱과 다른
 // 객체가 된다). 상수 모듈(breakpoints·resizer)만 예외다.
-import { batch, createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { batch, createSignal, createMemo, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
 import { icon } from '../ui/icons.js';
 import { render } from 'solid-js/web';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WIDE_MAX } from '../layout/breakpoints.js';
+// 마이크 노드를 이 탭 줄 밑으로 옮긴다. 자리를 정하는 곳이 keybar.js 하나뿐이어야
+// 데스크톱/터치가 갈리는 판정이 두 군데로 흩어지지 않는다(L7, Rail.tsx에 있던
+// 것과 같은 이유 — 2026-09-18(2차)에 그 레일에서 여기로 옮겨왔다).
+import { placeMicButton } from '../term/keybar.js';
 
 const MIN_W = 320, MAX_W = 560, DEFAULT_W = 392, COLLAPSED_W = 36;
 // N3(60-settings-palette.md §1) — device-settings 정식 스토어. Rail.tsx와
@@ -65,6 +69,10 @@ function Dock(props: { deps: DockDeps }) {
   );
 
   let bodyRef: HTMLDivElement | undefined;
+
+  // keybar.js는 모듈 평가 시점에 한 번 자리를 잡는데, 그때 이 dock은 아직 없다
+  // (지연 로드). 마운트된 뒤 한 번 더 부른다 — 이미 제자리면 아무 일도 안 한다.
+  onMount(() => placeMicButton());
 
   const tabs = createMemo(() => {
     const c = caps();
@@ -238,6 +246,20 @@ function Dock(props: { deps: DockDeps }) {
             </button>
           )}
         </For>
+        {/* 2026-09-18(2차) — 설정·마이크(사용자 요청으로 왼쪽 레일 바닥에서
+            이식). 탭이 아니라서 role="tab"도, activeTab 동기화도 없다 —
+            그냥 액션 버튼 둘이다. */}
+        <button
+          type="button"
+          class="vt-icon-btn sm vt-dock-settings-btn"
+          aria-label="설정"
+          data-tip="설정"
+          data-tip-sub="Mod+,"
+          data-tip-side="left"
+          onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
+          innerHTML={icon('settings', 15, 2)}
+        />
+        <div id="vt-dock-mic-home" class="vt-dock-mic-home" />
         <Show when={!collapsed()}>
           <button type="button" class="vt-icon-btn sm vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" data-tip="dock 접기" data-tip-side="bottom"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         </Show>

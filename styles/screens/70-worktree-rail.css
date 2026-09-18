@@ -195,56 +195,10 @@
   min-width:0;
 }
 .vt-wgrail-new:hover { background:var(--menu-hover); color:var(--txt); }
-/* 2026-09-18 — 접힘 푸터는 「+」 하나만 남긴다. 48px 안에 「+」(flex:1) +
-   설정 32px + 마이크 32px가 같이 있어 고정 폭만 64px였다 — 넘치고, flex:1인
-   「+」는 0폭으로 눌려 사라졌다. 설정은 Mod+, 와 팔레트가, 마이크는 접기를
-   푸는 쪽이 입구다. */
-#vt-wgrail.collapsed .vt-wgrail-icon,
-#vt-wgrail.collapsed .vt-wgrail-mic-home { display:none; }
+/* 2026-09-18(2차) — 설정·마이크가 dock으로 옮겨가며 이 푸터엔 「+」 하나만
+   남는다(styles/screens/80-dock.css에 그 자리 규칙이 있다). */
 #vt-wgrail.collapsed .vt-wgrail-new { justify-content:center; padding:0; }
 .vt-wgrail-new-mark { display:inline-flex; flex:none; }
-/* 2.1.6 — 레일 바닥의 아이콘 버튼(설정·더보기). 예전 .vt-wgrail-more 한 칸을
-   같은 모양의 여러 칸으로 일반화했다. 32px는 행 높이 3단(24/28/36) 밖이지만
-   레일 바닥 줄 높이가 32px로 이미 고정돼 있어 그 줄에 맞춘다. */
-/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 레일 바닥 줄 높이(32px)에 맞춘 lg + 칸 사이 구분선 */
-.vt-wgrail-icon { border-left:1px solid var(--line); border-radius:0; }
-
-/* 2026-09-18 — 마이크의 데스크톱 자리(⋯ 더보기가 있던 칸).
-   버튼을 새로 만들지 않고 index.html의 `#mic-btn-wrap` **노드 자체**를 여기로
-   옮겨 온다(keybar.js의 placeMicButton) — voice.js가 그 id를 캐시해 `.recording`
-   으로 녹음 상태를 그리므로 같은 노드여야 한다. 대신 그 노드는 메뉴 항목
-   (.vt-menu-item)으로 생겨서 가로로 길다. 여기서만 옆의 설정 버튼과 같은
-   아이콘 칸으로 보이게 한다 — 클래스를 JS로 갈아끼우면 터치 기기에서 keybar로
-   옮겨갈 때 그 클래스가 따라가 버린다. */
-.vt-wgrail-mic-home { display:flex; align-items:stretch; flex:none; }
-.vt-wgrail-mic-home:empty { display:none; }   /* 음성 미설치 — 빈 칸을 남기지 않는다 */
-.vt-wgrail-mic-home .vt-rail-mic-btn {
-  display:flex; align-items:center; justify-content:center;
-  /* min-height도 같이 눌러야 한다 — .vt-menu-item의 --menu-item-h(36px)가
-     min-height로 들어 있어서 height만 주면 32px 줄을 4px 뚫는다(실측). */
-  width:32px; height:32px; min-height:32px; padding:0; gap:0;
-  border:0; border-left:1px solid var(--line); border-radius:0;
-  background:transparent; color:var(--sub); cursor:pointer;
-}
-.vt-wgrail-mic-home .vt-rail-mic-btn:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-wgrail-mic-home .vt-rail-mic-btn > svg { width:15px; height:15px; flex:none; }
-/* 아이콘 칸이므로 글자는 숨긴다 — 이름은 title/aria-label이 말한다. */
-.vt-wgrail-mic-home .vt-rail-mic-btn .label { display:none; }
-/* keybar(터치)에서는 마이크가 액센트로 채워진다 — 폰에서는 그게 주 액션이라
-   맞다. 레일 바닥은 다르다: 옆의 설정·워크트리 칸이 전부 조용한데 여기만
-   채우면 「화면당 채움 버튼 1개」(20-design-system.md §3)를 이 칸이 가져가 버린다.
-   ⋯가 있던 자리를 그대로 받는 것이므로 평소엔 조용하고, **녹음 중일 때만** 색이
-   생긴다 — 색이 장식이 아니라 상태를 말하게 된다.
-   ⚠ #mic-btn-wrap.mic(id+클래스)이 상대라 클래스만으로는 못 이긴다. */
-#vt-rail-mic-home #mic-btn-wrap.mic,
-#vt-rail-mic-home #mic-btn-wrap.mic:hover {
-  background:transparent; color:var(--sub); filter:none;
-}
-#vt-rail-mic-home #mic-btn-wrap.mic:hover { background:var(--menu-hover); color:var(--txt); }
-#vt-rail-mic-home #mic-btn-wrap.mic:active { transform:none; background:var(--color-surface-active); }
-#vt-rail-mic-home #mic-btn-wrap.mic.recording {
-  background:var(--err); color:var(--color-on-solid);
-}
 
 .vt-wgrail-resizer {
   right:-3px;

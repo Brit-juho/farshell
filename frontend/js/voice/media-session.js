@@ -54,7 +54,7 @@ function toggleMediaKeyTrigger() {
 
 // --- 음성 전용 모드 ---
 
-// L7: 마이크는 평소 #vt-rail-mic-slot(데스크톱) 또는 #keybar-slot-mic(터치) 중
+// L7: 마이크는 평소 #vt-dock-mic-home(데스크톱) 또는 #keybar-slot-mic(터치) 중
 // 하나에 산다(keybar.js가 부팅 시 결정). 음성 전용 모드의 "화면 가득 큰 마이크"
 // 연출(body.voice-only-mode #mic-btn-wrap.mic, legacy.css)은 #topbar가
 // flex-column 가운데 정렬 컨테이너로 바뀌는 것에 얹혀 있어, 마이크가 실제로
