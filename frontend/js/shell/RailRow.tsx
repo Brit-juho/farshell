@@ -9,7 +9,7 @@
 import { For, Show, onCleanup } from 'solid-js';
 
 import { type DesktopRailRow } from './rail-fetch.js';
-import { agentIcon, agentLabel } from '../ui/icons.js';
+import { agentIcon, agentLabel, icon } from '../ui/icons.js';
 
 // ADR-29 B — 행은 이제 언제나 세션이다(워크트리 행이 없어졌다). `sleeping`은
 // 이 행이 레일의 「잠자는 중」 구역에 그려지는 것인지를 부모(Rail.tsx)가
@@ -137,6 +137,20 @@ export function Row(props: {
           </Show>
           <Show when={props.row.managed && props.row.agent === 'codex'}>
             <span class="vt-srow-mode" data-mode="managed">관리형</span>
+          </Show>
+          {/* 2026-09-19 후속(사용자 지적: "이름에 붙는 게 아니라 다른 방식으로
+              구분되게") — tmux 세션인지 일반 터미널인지는 예전에 이름 앞에
+              "tmux:" 문자열을 붙여서 구분했다. 이름을 munging하지 않고
+              작은 아이콘 배지로 옮긴다 — 일반 세션엔 아무것도 안 그린다
+              (에이전트 마크와 같은 "모르면 안 그린다" 관용구). */}
+          <Show when={props.row.tmuxName && !props.editing}>
+            <span
+              class="vt-srow-tmux vt-wgrail-tmux"
+              data-tip="tmux 세션"
+              data-tip-sub="창을 닫아도 계속 실행됩니다"
+              data-tip-side="right"
+              innerHTML={icon('plug', 12, 2)}
+            />
           </Show>
           {/* ADR-29 B — 브랜치 배지. 그룹 헤더가 이미 저장소를 말하므로 여기는
               브랜치만(main은 "기본"이라 생략, branchText()가 그 규칙을 안다). */}

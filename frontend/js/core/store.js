@@ -60,13 +60,18 @@ export function allSessions() {
 export function sessionDisplayName(id) {
   const s = sessions[id];
   if (!s) return String(id || '').slice(0, 8);
-  if (s.displayName) return s.displayName;
   const tmux = s.tmuxName || s.tmux_name;
+  // 2026-09-19 후속(사용자 지적) — 예전 서버 코드가 tmux 세션의 이름을
+  // `tmux:<이름>` 꼴로 붙여서 돌려줬다. 그 값이 이 세션의 displayName에
+  // 이미 저장돼 있으면(워크스페이스 스냅샷에 박혀 서버를 고쳐도, 재시작해도
+  // 안 지워진다) 계속 "tmux:1"처럼 보인다 — 진짜 사용자가 지은 이름이
+  // 아니라 그 옛 접두사이므로 무시하고 깨끗한 tmux 이름으로 되돌린다.
+  // 사용자가 그 뒤 정말로 이름을 바꾸면(renameSession) 이 조건에 안
+  // 걸리므로 새 이름이 그대로 보인다.
+  if (s.displayName && s.displayName !== `tmux:${tmux}`) return s.displayName;
   if (tmux) return tmux;
-  // 2026-09-18 후속(사용자 지적) — 일반(비 tmux) 세션의 폴백 이름이 id를
-  // 8자로 잘라 붙인 의미 없는 문자열이었다("겁나 tmux 표시가 강제된다"와
-  // 짝을 이루는 지적: tmux 세션은 이미 의미 있는 이름이 있는데, 일반
-  // 세션은 오히려 구분이 안 됐다). 열린 순서대로 "터미널 1", "터미널 2"…
+  // 일반(비 tmux) 세션의 폴백 이름이 id를 8자로 잘라 붙인 의미 없는
+  // 문자열이었다 — 열린 순서대로 "터미널 1", "터미널 2"…
   return `터미널 ${plainSessionOrdinal(id)}`;
 }
 
