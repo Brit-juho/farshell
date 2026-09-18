@@ -121,13 +121,12 @@
   }
 
   /* ── 3px 세로 막대 ────────────────────────────────────────────────────
-   * 행 왼쪽 끝에 서는 띠. 저장소 색점(--color-hash-*)과 상태색 둘 다 이 모양을
-   * 쓴다(20-design-system.md §5: "원형 dot은 상태 전용이므로 색점은 절대
-   * 원형이 아니다"). */
+   * 행 왼쪽 끝에 서는 상태색 띠(20-design-system.md §5: "원형 dot은 상태
+   * 전용이므로 이 띠는 절대 원형이 아니다"). 저장소 색점(`--color-hash-*`)도
+   * 한때 이 모양을 같이 썼지만 2026-09-18 후속에서 그 기능 자체를 지웠다. */
   .vt-sidebar-mark,
   .vt-srow-mark,
   .vt-fleet-bar,
-  .vt-wgrail-hash,
   .vt-wgrail-bar {
     flex: none;
     width: 3px;

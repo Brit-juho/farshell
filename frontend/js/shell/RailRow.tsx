@@ -8,7 +8,6 @@
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
 import { For, Show, onCleanup } from 'solid-js';
 
-import { hashRepoColorIndex, repoColorKey } from './rail-data.js';
 import { type DesktopRailRow } from './rail-fetch.js';
 import { agentIcon, agentLabel } from '../ui/icons.js';
 
@@ -92,18 +91,10 @@ export function Row(props: {
       data-tip-sub={compactSub()}
       data-tip-side="right"
     >
-      {/* 20-design-system.md §5(O2): 레일 행 왼쪽 끝 세로 막대는 저장소 해시
-          색점(원형 dot과 헷갈리지 않는 "막대") — 상태 5색·acc와는 별개 램프
-          (--color-hash-1..8). 그 오른쪽의 기존 막대가 상태색(30-worktree.md
-          §4/10-shell-layout.md §5)을 그대로 맡는다. ADR-29 B — 워크트리에 안
-          속한 세션(순수 셸)은 저장소가 없어 색점만 "없음"(kind-session이
-          CSS에서 투명 처리); 상태색 막대는 이제 모든 세션 행에 그린다 —
-          행 자체가 언제나 진짜 세션이므로 상태가 항상 의미 있다. */}
-      {/* 98 §4 — 해시의 입력이 저장소 **이름**에서 **소유자**로 바뀌었다.
-          같은 조직의 저장소가 같은 색이 되어, 이 막대가 처음으로 정보를 갖는다
-          (이름 해시는 디자인 리뷰에서 S1 「의미 없는 장식」이었다). remote를
-          못 읽은 저장소는 예전과 똑같이 이름 해시로 떨어진다. */}
-      <span class={`vt-wgrail-hash ${props.row.repoName ? `hash-${hashRepoColorIndex(repoColorKey(props.row.repoName, props.row.gitRemote))}` : 'kind-session'}`} />
+      {/* 2026-09-18 후속 — 저장소 해시 색점(왼쪽 세로 막대)을 지웠다. 저장소가
+          레일의 주어에서 내려온 뒤(ADR-29) 각 세션 행 맨 앞에 저장소 색이
+          남아 있는 게 사용자 지적으로 드러났다 — 상태색 막대(아래)만 남는다,
+          행 자체가 언제나 진짜 세션이므로 상태는 항상 의미가 있다. */}
       <span class={`vt-srow-mark vt-wgrail-bar tone-${props.row.status}`} />
       {/* 접힘 전용 에이전트 마크. 펼친 상태의 마크는 아래 row-main 안에 있고
           그 블록이 접히면 통째로 숨으므로, 같은 마크를 이 자리에 한 번 더

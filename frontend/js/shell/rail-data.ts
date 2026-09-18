@@ -166,8 +166,7 @@ export function buildRailSections<T extends { status: AgentState; since: number 
 // 언제나 세션이다. Fleet.tsx는 이 타입을 안 쓴다(모바일은 원래부터 세션
 // 단위, 70-mobile.md 범위 밖 — `RailRowInput` 그대로).
 //
-// `remote?: boolean`(C1, 다른 호스트의 세션)과 `gitRemote?: RailRemote`(git
-// origin)는 이름이 겹치면 안 돼서 따로 뒀다 — 뜻이 전혀 다르다.
+// `remote?: boolean`(C1, 다른 호스트의 세션)는 뜻이 전혀 다른 별개 필드다.
 export interface OtherRailRowInput {
   kind: 'session';
   /** 웹 세션 id. **잠든 세션은 빈 문자열**(브라우저 탭이 없다) — `awake`로
@@ -208,8 +207,6 @@ export interface OtherRailRowInput {
    * "지금 보는 워크트리"로 넘겨 pane 헤더 브랜치 칩이 맞게 뜨도록 한다
    * (layout/store.js의 setTabWorktree). 워크트리에 안 속하면 null. */
   worktreeId?: string | null;
-  /** 98 §4 — `.git/config`의 origin. remote가 없으면 null. */
-  gitRemote?: RailRemote | null;
   /** C1 — 다른 호스트의 세션. 로컬 세션 id 경로(switchTo 등)가 성립하지 않으므로
    * 클릭·컨텍스트 메뉴가 막히고 행이 흐리게 그려진다(원격 attach는 멀티호스트
    * 3단계). 선택 필드라 기존 호출부는 그대로 동작한다. */
@@ -352,54 +349,14 @@ export function buildSleepingEntries(
 }
 
 // ---------------------------------------------------------------------------
-// 20-design-system.md §5(O2) — 색점 램프. 저장소 이름 → --color-hash-1..8
-// 중 하나. 순수 함수(DOM·fetch 없음, 파일 상단 주석과 같은 원칙) — 고정
-// 입력에 고정 출력이 나와야 rail-hash.test.js가 검증할 수 있다.
-//
-// FNV-1a 32비트 (offset basis 2166136261 / prime 16777619). 호스트가 달라도
-// 저장소 이름이 같으면 같은 색이 나와야 하므로(§5 "호스트가 달라도 저장소가
-// 같으면 같은 색") 입력은 오직 repoName 문자열 하나 — 경로·호스트명은 섞지
-// 않는다.
-export function fnv1a(str: string): number {
-  let hash = 0x811c9dc5; // 2166136261
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i);
-    // Math.imul로 32비트 곱셈 오버플로를 표준과 동일하게 재현한다.
-    hash = Math.imul(hash, 0x01000193); // 16777619
-  }
-  return hash >>> 0; // unsigned 32비트로 정규화
-}
-
-/** §5 해시: fnv1a(key) % 8 → --color-hash-(index+1)에 쓸 0~7 인덱스. */
-export function hashRepoColorIndex(repoName: string): number {
-  return fnv1a(repoName) % 8;
-}
-
-/** git 원격 — `.git/config`의 origin에서 서버가 파싱해 준다(98 §4). */
-export interface RailRemote {
-  host: string;   // github | gitlab | bitbucket | <호스트명>
-  owner: string;
-  name: string;
-}
-
-/** 98 §4 — 행 둘째 줄의 `github/fornerds`. remote가 없으면 빈 문자열이고,
- * 그때 그 줄은 `:empty`로 접힌다(80-dock.css). */
-export function remoteLabel(remote: RailRemote | null | undefined): string {
-  if (!remote?.host || !remote?.owner) return '';
-  return `${remote.host}/${remote.owner}`;
-}
-
-/** 98 §4 — 색 배정의 입력을 **소유자**로 바꾼다.
- *
- * 이름 해시(fnv1a(repoName))는 상태도 언어도 조직도 아닌 글자에서 나온 색이라
- * 정보가 없었다(디자인 리뷰 S1 「의미 없는 장식」). 소유자로 바꾸면 같은 조직의
- * 저장소가 같은 색이 되어 색이 처음으로 뜻을 갖는다. remote가 없으면 예전처럼
- * 이름으로 떨어진다 — 동작이 바뀌지 않는다.
- */
-export function repoColorKey(repoName: string, remote?: RailRemote | null): string {
-  if (remote?.owner) return `${remote.host || ''}/${remote.owner}`;
-  return repoName;
-}
+// 2026-09-18 후속 — 저장소 색점 램프(fnv1a/hashRepoColorIndex/repoColorKey,
+// 「98 §4 — 색 배정의 입력을 소유자로」)와 그 배지(remoteLabel/RailRemote)를
+// 여기서 완전히 지웠다. ADR-29로 저장소가 레일의 주어에서 내려온 뒤에도
+// 세션 행 맨 앞에 저장소 색이 남아 있던 게 사용자 지적으로 드러났다 —
+// "저장소를 없앴으면 이 색도 없어져야 하는 거 아니냐"는 게 정확한 지적이라,
+// 코드도 지웠다(레거시로 반쯤 남겨두지 않는다). `--color-hash-1..8` 디자인
+// 토큰(tokens.css/skins.css/theme-import.js)도 이 기능 하나만을 위한
+// 것이었어서 함께 지웠다.
 
 /**
  * 레일을 접은 채로 시작할지 — **저장된 값이 없을 때만** 쓰는 기본값.
