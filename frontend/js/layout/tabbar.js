@@ -12,29 +12,30 @@
 import { getTabs, getActiveTabId, switchLayoutTab, openLayoutTab, onLayoutChange } from './store.js';
 import { allSessions } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
-import { removeFromLayout } from '../term/session-actions.js';
+import { sleepTab } from '../term/session-actions.js';
 import { icon, agentIcon } from '../ui/icons.js';
 import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
 
 const HOST = 'vt-wtabs';
 
-/** 이 탭에 속한 세션인가 — D4부터 탭의 정체성은 저장소다, 그 저장소 밑
- * 워크트리 어디에 속하든 이 탭 소속이다. 저장소가 없는 탭(기타 작업 공간)은
- * **어디에도 안 속한 세션**을 받는다. 워크트리 정보가 아직 없으면(목록
- * 로딩 전) 전부 속한 것으로 본다 — 잠깐 전부 비는 것보다 낫다. */
-export function sessionBelongsToTab(tmuxName, tabRepoId, repoSessions) {
-  if (!repoSessions || repoSessions.size === 0) return true;
-  const owner = tmuxName ? repoSessions.get(tmuxName) : undefined;
-  if (tabRepoId) return owner === tabRepoId;
-  return owner === undefined;      // 「기타」 탭
+/** 이 탭에 속한 세션인가 — ADR-29 D부터 탭의 정체성은 그룹이다(D4의 저장소
+ * 정체성을 한 단 더 일반화한 것 — 커스텀 그룹이 생기기 전까지 groupId는
+ * 실질적으로 저장소 id다). 그룹이 없는 탭(묶지 않음 작업 공간)은 **어디에도
+ * 안 속한 세션**을 받는다. 그룹 정보가 아직 없으면(목록 로딩 전) 전부 속한
+ * 것으로 본다 — 잠깐 전부 비는 것보다 낫다. */
+export function sessionBelongsToTab(tmuxName, tabGroupId, groupSessions) {
+  if (!groupSessions || groupSessions.size === 0) return true;
+  const owner = tmuxName ? groupSessions.get(tmuxName) : undefined;
+  if (tabGroupId) return owner === tabGroupId;
+  return owner === undefined;      // 「묶지 않음」 탭
 }
 
-let _repoSessions = new Map();   // tmux 세션 이름 → repoId(저장소 최상위 경로)
+let _groupSessions = new Map();   // tmux 세션 이름 → groupId(@fsh_grp 또는 저장소 자동 제안)
 
-/** term/tab-worktree.js가 워크트리 목록을 받을 때마다 여기에 알려준다 —
+/** term/tab-worktree.js가 세션·저장소 목록을 받을 때마다 여기에 알려준다 —
  * 같은 응답을 두 번 조회하지 않는다. */
-export function setRepoSessionMap(map) {
-  _repoSessions = map || new Map();
+export function setGroupSessionMap(map) {
+  _groupSessions = map || new Map();
   paintTabs();
 }
 
@@ -49,7 +50,7 @@ function tabSessionNames(tab) {
   for (const s of Object.values(allSessions())) {
     const tmux = s && (s.tmuxName || s.tmux_name);
     if (!tmux) continue;
-    if (sessionBelongsToTab(tmux, tab.repoId, _repoSessions)) out.push(tmux);
+    if (sessionBelongsToTab(tmux, tab.groupId, _groupSessions)) out.push(tmux);
   }
   return out;
 }
@@ -149,12 +150,16 @@ function render() {
       x.type = 'button';
       x.className = 'vt-icon-btn xs vt-wtab-close';
       x.innerHTML = icon('x', 11);
-      x.setAttribute('aria-label', `${t.label} 탭 닫기`);
-      // **세션은 죽이지 않는다** — 탭을 닫는 건 배치를 치우는 것이지 tmux를
-      // 끄는 게 아니다(세션 탭 닫기가 detach인 것과 같은 규칙).
+      x.setAttribute('aria-label', `${t.label} 재우기`);
+      x.setAttribute('data-tip', '재우기');
+      x.setAttribute('data-tip-sub', 'tmux는 계속 삽니다 · 레일에서 다시 깨울 수 있습니다');
+      x.setAttribute('data-tip-side', 'bottom');
+      // **tmux는 죽이지 않는다** — 이 탭에 있던 세션들의 웹 세션만 놓는다
+      // (ADR-29 D: 탭 = 그룹이라, 탭을 닫는 것은 그 그룹 전체를 재우는
+      // 것과 같다). 완전 종료는 별도 동작(레일 세션 메뉴)이다.
       x.addEventListener('click', (e) => {
         e.stopPropagation();
-        removeFromLayout(t.id);
+        sleepTab(t.id);
       });
       el.appendChild(x);
     }
@@ -165,10 +170,12 @@ function render() {
   paintTabs();
 }
 
-/** 저장소를 탭으로 연다(레일·팔레트가 부른다). 이미 열려 있으면 전환하고,
- * 다른 워크트리를 보던 중이었으면 `worktreeId`만 갱신한다(D4: 탭=저장소). */
-export function openWorktreeTab({ repoId, worktreeId = null, hostId = 'local', label } = {}) {
-  const id = openLayoutTab({ repoId, worktreeId, hostId, label: label || '작업 공간' });
+/** 그룹을 탭으로 연다(레일·저장소 시트가 세션을 열기 전에 부른다 — ADR-29 D).
+ * 이미 열려 있으면 전환하고, 다른 워크트리를 보던 중이었으면 `worktreeId`만
+ * 갱신한다. D4 시절엔 `openWorktreeTab`/`repoId`였다 — 이름을 그룹에 맞춰
+ * 바꿨다(값 자체는 커스텀 그룹이 생기기 전까진 그대로 저장소 id다). */
+export function openGroupTab({ groupId, worktreeId = null, hostId = 'local', label } = {}) {
+  const id = openLayoutTab({ groupId, worktreeId, hostId, label: label || '작업 공간' });
   saveLayoutNow();
   return id;
 }
@@ -180,5 +187,5 @@ onStatusChange(paintTabs);
 render();
 
 // 지연 청크(shell/Rail.tsx)가 정적 import 없이 부를 수 있게 — 이 저장소의 관행.
-window.openWorktreeTab = openWorktreeTab;
+window.openGroupTab = openGroupTab;
 window.vtSetTabAgentInfo = setAgentInfo;

@@ -203,6 +203,10 @@ export interface OtherRailRowInput {
   repoName?: string | null;
   branch?: string | null;
   isMainWorktree?: boolean;
+  /** ADR-29 D — 이 세션이 속한 워크트리의 id. 세션을 열 때 그 그룹의 탭에
+   * "지금 보는 워크트리"로 넘겨 pane 헤더 브랜치 칩이 맞게 뜨도록 한다
+   * (layout/store.js의 setTabWorktree). 워크트리에 안 속하면 null. */
+  worktreeId?: string | null;
   /** 98 §4 — `.git/config`의 origin. remote가 없으면 null. */
   gitRemote?: RailRemote | null;
   /** C1 — 다른 호스트의 세션. 로컬 세션 id 경로(switchTo 등)가 성립하지 않으므로

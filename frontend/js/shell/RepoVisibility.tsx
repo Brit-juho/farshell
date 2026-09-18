@@ -78,10 +78,12 @@ export function RepoVisibility(props: Props) {
   // 저장소 숨김은 path로, 워크트리 조작은 id로 키를 잡는다(서로 다른 API).
   const [busyRepo, setBusyRepo] = createSignal<Record<string, boolean>>({});
   const [busyWt, setBusyWt] = createSignal<Record<string, boolean>>({});
-  // "+ 워크트리" — 이 값이 그 저장소의 경로면 WorktreeDialog가 그 저장소를
-  // 기본값으로 띄운다. Rail.tsx가 예전에 하던 "기본 저장소 추측"을 여기서는
-  // 안 한다 — 사용자가 이미 어느 저장소 카드에서 눌렀는지로 정해진다.
-  const [wtDialogRepo, setWtDialogRepo] = createSignal<string | null>(null);
+  // "+ 워크트리" — 이 값이 있으면 WorktreeDialog가 그 저장소를 기본값으로
+  // 띄운다. Rail.tsx가 예전에 하던 "기본 저장소 추측"을 여기서는 안 한다 —
+  // 사용자가 이미 어느 저장소 카드에서 눌렀는지로 정해진다. groupId/label을
+  // 함께 들고 있는 이유는 생성 완료 후 그 그룹의 탭을 열어야 하기 때문이다
+  // (ADR-29 D, onWorktreeCreated).
+  const [wtDialogRepo, setWtDialogRepo] = createSignal<{ path: string; groupId: string; label: string } | null>(null);
 
   const load = async () => {
     try {
@@ -133,8 +135,13 @@ export function RepoVisibility(props: Props) {
   // 이미 있으면 전환, 없으면 attach). 여기서는 항상 클릭 = 열기이므로 행
   // 자체가 그룹/수면 개념을 가질 필요가 없다(이 시트의 일은 탐색이 아니라
   // 관리 — 주 탐색은 레일이 한다).
-  const openSession = async (tmuxName: string) => {
+  // ADR-29 D — 세션을 열기 전에 그 그룹의 탭부터 연다(Rail.tsx의 openRow와
+  // 같은 순서 — switchTo/attachTmux는 항상 "지금 활성 탭"에 배정하므로
+  // 먼저 탭을 옮겨야 한다). 커스텀 그룹(E, 아직 미구현)이 없는 지금은
+  // group.id(저장소 sha1)가 곧 groupId 자동 제안 값과 같다.
+  const openSession = async (tmuxName: string, groupId: string, worktreeId: string, label: string) => {
     const w = window as any;
+    w.openGroupTab?.({ groupId, worktreeId, hostId: 'local', label });
     const all = w.allSessions ? w.allSessions() : {};
     let sid: string | null = null;
     for (const [id, s] of Object.entries<any>(all)) {
@@ -146,12 +153,13 @@ export function RepoVisibility(props: Props) {
     props.onClose();
   };
 
-  const newSessionIn = async (wt: WorktreeItem) => {
+  const newSessionIn = async (wt: WorktreeItem, groupId: string, label: string) => {
     setBusyWt((b) => ({ ...b, [wt.id]: true }));
     try {
       const tmuxName = await openWorktree(props.deps, wt.id);
       if (!tmuxName) { setErrorMsg('세션을 여는 데 실패했습니다'); return; }
       setErrorMsg(null);
+      (window as any).openGroupTab?.({ groupId, worktreeId: wt.id, hostId: 'local', label });
       await (window as any).attachTmux?.(tmuxName);
       props.onChanged();
       props.onClose();
@@ -173,12 +181,14 @@ export function RepoVisibility(props: Props) {
   };
 
   const onWorktreeCreated = async (result: any) => {
+    const target = wtDialogRepo();
     setWtDialogRepo(null);
     const tmuxName = result?.opened?.tmux_session || null;
     setErrorMsg(null);
     await load();
     props.onChanged();
     if (tmuxName) {
+      if (target) (window as any).openGroupTab?.({ groupId: target.groupId, hostId: 'local', label: target.label });
       await (window as any).attachTmux?.(tmuxName);
       props.onClose();
     }
@@ -244,7 +254,7 @@ export function RepoVisibility(props: Props) {
                                 type="button"
                                 class="vt-btn sm quiet"
                                 disabled={!!busyWt()[wt.id]}
-                                onClick={() => newSessionIn(wt)}
+                                onClick={() => newSessionIn(wt, group.id, group.name)}
                               >+ 새 세션</button>
                               {/* 30-worktree.md §3: 메인 워크트리는 삭제할 수 없다
                                   (서버도 400으로 거절한다) — 메뉴에 애초에 안 띄운다. */}
@@ -264,7 +274,7 @@ export function RepoVisibility(props: Props) {
                               <div class="vt-repovis-sessions">
                                 <For each={wt.sessions}>
                                   {(name) => (
-                                    <button type="button" class="vt-repovis-session" onClick={() => openSession(name)}>
+                                    <button type="button" class="vt-repovis-session" onClick={() => openSession(name, group.id, wt.id, group.name)}>
                                       {name}
                                     </button>
                                   )}
@@ -274,7 +284,11 @@ export function RepoVisibility(props: Props) {
                           </div>
                         )}
                       </For>
-                      <button type="button" class="vt-btn sm quiet vt-repovis-add-wt" onClick={() => setWtDialogRepo(group.path)}>
+                      <button
+                        type="button"
+                        class="vt-btn sm quiet vt-repovis-add-wt"
+                        onClick={() => setWtDialogRepo({ path: group.path, groupId: group.id, label: group.name })}
+                      >
                         + 워크트리
                       </button>
                     </div>
@@ -296,10 +310,10 @@ export function RepoVisibility(props: Props) {
         </div>
       </div>
       <Show when={wtDialogRepo()}>
-        {(repoPath) => (
+        {(target) => (
           <WorktreeDialog
             deps={props.deps}
-            defaultRepo={repoPath()}
+            defaultRepo={target().path}
             onClose={() => setWtDialogRepo(null)}
             onCreated={onWorktreeCreated}
           />
