@@ -137,6 +137,12 @@ jobs:
 
   server:
     runs-on: ubuntu-latest
+    # 2026-09-19 — 이 잡이 2026-09-07부터 매번 **45분을 돌다** "The hosted runner
+    # lost communication with the server"로 죽었다. 그렇게 죽으면 로그가 업로드되지
+    # 않아 어디서 멈췄는지조차 알 수 없다(실제로 못 봤다). 상한을 걸어 **깨끗하게
+    # 실패**시킨다 — 취소된 잡은 로그가 남는다. 로컬 실측은 3.11/3.14 모두 45~70초라
+    # 12분이면 정상 실행에는 한참 여유가 있다.
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -154,4 +160,8 @@ jobs:
       # 2026-09-03 실측: voice 없이 332 passed / 2 skipped (Python 3.12/3.14 확인).
       # pytest·httpx 는 이미 requirements-core.txt 에 있어 추가 설치 불필요.
       - run: pip install -r requirements-core.txt
-      - run: pytest server/tests -q
+      # `faulthandler_timeout`은 pytest 내장이다(플러그인 불필요) — 한 테스트가
+      # 이 시간을 넘기면 **모든 스레드의 트레이스백을 찍는다.** 위 timeout-minutes가
+      # "45분을 버리지 않는다"를 맡고, 이쪽이 "어디서 멈췄는지 말한다"를 맡는다.
+      # 로컬에서 가장 느린 테스트가 3초대라 60초면 오탐이 없다.
+      - run: pytest server/tests -q -o faulthandler_timeout=60

@@ -87,6 +87,12 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
                         레이아웃·설정이 저장된다.
       VT_TMUX_SOCKET    안 주면 사용자의 `-L vt` 소켓을 그대로 본다 — 진짜 작업
                         세션이 목록에 뜨고, 조작하면 실제로 영향을 준다.
+      VT_STATE_DIR      안 주면 **`~/.vt/` 그 자체**에 쓴다. 서버 모듈 20여 개가
+                        이 값을 읽는다(기기 설정·기기 목록·스니펫·큐·파일·푸시
+                        구독·스크롤백·MCP). 2026-09-19에 실제로 겪었다: 이
+                        스위트가 `~/.vt/device-settings/local.json`을 만들고
+                        레일 폭·dock 탭을 거기 써 넣었다. 같은 실수가
+                        `~/.vt/groups.json`에서 한 번 더 있었다(2026-09-18).
 
     VT_NETWORK_MODE=localhost로 두는 건 테스트 서버가 LAN에 노출되지 않게 하기
     위해서다. 짧게 뜨는 서버라도 인증 토큰이 프로세스 목록에 보이는 창은 안 만든다.
@@ -102,6 +108,7 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         VT_WORKSPACE_PATH=str(tmp / "workspace.json"),
         VT_TMUX_SOCKET=f"fsh-e2e-{port}",
         VT_NETWORK_MODE="localhost",
+        VT_STATE_DIR=str(tmp / "state"),      # ~/.vt/ 대신 여기에 쓰게
         VT_CONFIG=str(tmp / "no-such.env"),   # ~/.vt.env를 읽지 않게
         # dock 소스컨트롤 탭이 볼 저장소를 이 저장소 자신으로 고정한다. 기본값
         # (~/GitHub)은 CI에 없고 로컬에선 사람마다 달라 결과가 흔들린다. 열람은
@@ -241,10 +248,20 @@ def page(browser, server, request):
     ctx = browser.new_context(viewport=WIDE)
     pg = ctx.new_page()
     errors: list[str] = []
+    bad_responses: list[str] = []
     pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    # 콘솔의 "Failed to load resource: … 401"에는 **URL이 없다.** 어떤 요청이
+    # 실패했는지 모르면 그 줄을 무시할지 말지 판단할 수 없어서(2026-09-19에
+    # 실제로 겪었다) 응답을 따로 모은다.
+    pg.on(
+        "response",
+        lambda r: bad_responses.append(f"{r.request.method} {r.url} → {r.status}")
+        if r.status >= 400 else None,
+    )
     _boot(pg, f"{base}/?token={token}")
     pg.console_errors = errors  # 개별 테스트가 필요하면 본다
+    pg.bad_responses = bad_responses
     yield pg
     if getattr(request.node, "stash_failed", False):
         safe = "".join(c if c.isalnum() else "_" for c in request.node.name)[:80]
@@ -330,10 +347,34 @@ def _open_dock(pg, label: str) -> None:
 
 # ── 부팅 ──────────────────────────────────────────────────────────────────
 
+# 2026-09-17부터 서버는 **기계 토큰(VT_AUTH_TOKEN)으로 세션 쿠키를 발급하지
+# 않는다.** 그런데 `core/env.js`의 부트스트랩은 `?token=`이 있으면 지금도
+# 한 번 `POST /api/auth`로 쿠키 교환을 시도하고, 실패해도 query 토큰으로 계속
+# 인증되므로 접속에는 지장이 없다(그 파일의 주석이 그렇게 적어 뒀다). 이
+# 스위트는 레거시 `?token=` 링크로 들어가므로 그 401이 매번 한 번 찍힌다 —
+# **예상된 유일한 실패 응답**이라 여기서만 면제한다. 다른 401/403이 섞이면
+# 아래 단언이 그대로 잡는다.
+EXPECTED_BAD = ("POST", "/api/auth", 401)
+
+
+def _unexpected(responses: list[str]) -> list[str]:
+    m, path, code = EXPECTED_BAD
+    return [r for r in responses
+            if not (r.startswith(m + " ") and path in r and r.endswith(f"→ {code}"))]
+
+
 def test_페이지가_JS_에러_없이_뜬다(page):
     page.wait_for_timeout(1200)
     # 서버가 인증을 요구하는 401/403은 없어야 하고, 모듈 평가 에러도 없어야 한다.
-    fatal = [e for e in page.console_errors if "favicon" not in e.lower()]
+    unexpected = _unexpected(page.bad_responses)
+    assert unexpected == [], "예상 밖 실패 응답:\n  " + "\n  ".join(unexpected)
+    fatal = [
+        e for e in page.console_errors
+        if "favicon" not in e.lower()
+        # 위 EXPECTED_BAD가 내는 줄. URL이 없어 문구로만 걸러야 하는데, 정작
+        # 어떤 요청인지는 바로 위 bad_responses 단언이 이미 확인했다.
+        and "Failed to load resource" not in e
+    ]
     assert fatal == [], "콘솔 에러:\n  " + "\n  ".join(fatal)
 
 
@@ -394,15 +435,18 @@ def test_레일_행_레이아웃이_행_안에_갇힌다(page):
         """() => {
           const list = document.querySelector('#vt-wgrail .vt-wgrail-body');
           const row = document.createElement('div');
-          row.className = 'vt-wgrail-row';
+          // 2026-09-19 — 실제 행은 `vt-srow vt-wgrail-row` 두 클래스를 함께
+          // 단다(RailRow.tsx). 레이아웃(display:flex 등)은 `vt-srow` 쪽이
+          // 들고 있어서, 옛 이름만 붙이면 flex가 아닌 블록을 재게 된다.
+          row.className = 'vt-srow vt-wgrail-row';
           row.innerHTML = `
-            <span class="vt-wgrail-bar tone-waiting"></span>
-            <div class="vt-wgrail-row-main">
-              <div class="vt-wgrail-row-top">
+            <span class="vt-srow-mark vt-wgrail-bar tone-waiting"></span>
+            <div class="vt-srow-main vt-wgrail-row-main">
+              <div class="vt-srow-top vt-wgrail-row-top">
                 <span class="vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
                 <span class="vt-wgrail-diff">파일 7</span>
               </div>
-              <div class="vt-wgrail-row-sub">/Users/x/GitHub/side_project/tools/farshell/very/long/path/that/never/wraps</div>
+              <div class="vt-srow-sub vt-wgrail-row-sub">/Users/x/GitHub/side_project/tools/farshell/very/long/path/that/never/wraps</div>
             </div>`;
           list.appendChild(row);
           const c = row.getBoundingClientRect();
@@ -500,8 +544,21 @@ def test_테마_칩_6개가_서로_다른_색을_보인다(page):
     `--color-acc`는 현재 스킨 것만 알려주므로, 칩이 그걸 쓰면 6개가 전부 같은
     색이 된다. 정적 검사(인라인 style이 없는가)만으로는 이 실패를 못 본다.
     """
+    # 2026-09-19 — 칩은 레일 플라이아웃에서 **설정 패널 「모양」**으로 이식됐다
+    # (플라이아웃 자체가 없어지면서 네 기능이 도달 불가능해졌던 그 이송).
+    # 열지 않으면 DOM에 아예 없으므로 먼저 연다.
+    # 액션(`settings.show`)은 지연 청크(panels/settings-lazy.js)가 등록하므로
+    # 로드 전에는 `getAction`이 undefined다 — 실제 버튼을 눌러 그 청크까지
+    # 받아오게 한다(dock 우측의 ⚙, `_open_dock`과 같은 이유).
+    page.wait_for_selector("#vt-dock .vt-dock-settings-btn", timeout=10000)
+    page.locator("#vt-dock .vt-dock-settings-btn").click()
+    # 설정은 섹션 하나만 그린다(기본 「터미널」) — 「모양」으로 옮겨야 칩이 생긴다.
+    page.wait_for_selector("#vt-settings .vt-set-navitem", timeout=15000)
+    page.locator("#vt-settings .vt-set-navitem", has_text="모양").first.click()
+    page.wait_for_selector("#vt-settings .theme-chip .dot", timeout=10000)
     colors = page.eval_on_selector_all(
-        ".theme-chip .dot", "els => els.map(e => getComputedStyle(e).backgroundColor)"
+        "#vt-settings .theme-chip .dot",
+        "els => els.map(e => getComputedStyle(e).backgroundColor)",
     )
     assert len(colors) == len(SKINS), f"칩 개수가 {len(colors)}개"
     assert len(set(colors)) == len(SKINS), f"칩 색이 안 갈린다: {colors}"
@@ -520,11 +577,14 @@ def test_레일_상태막대가_색_단독이_아니고_실제로_그려진다(p
           const out = {};
           for (const tone of ['waiting', 'working', 'error', 'idle']) {
             const row = document.createElement('div');
-            row.className = 'vt-wgrail-row';
-            row.innerHTML = `<span class="vt-wgrail-bar tone-${tone}"></span><div class="vt-wgrail-row-main"><div class="vt-wgrail-row-top"><span class="vt-wgrail-name">x</span></div></div>`;
+            // 폭(3px, patterns.css)도 상태색(components.css)도 `vt-srow-mark`가
+            // 준다 — `vt-wgrail-bar`만 붙이면 span이 inline으로 남아 폭 0이고
+            // 배경도 안 붙는다. 실제 마크업(RailRow.tsx)과 같은 조합으로 잰다.
+            row.className = 'vt-srow vt-wgrail-row';
+            row.innerHTML = `<span class="vt-srow-mark vt-wgrail-bar tone-${tone}"></span><div class="vt-srow-main vt-wgrail-row-main"><div class="vt-srow-top vt-wgrail-row-top"><span class="vt-wgrail-name">x</span></div></div>`;
             list.appendChild(row);
-            const b = row.querySelector('.vt-wgrail-bar').getBoundingClientRect();
-            const cs = getComputedStyle(row.querySelector('.vt-wgrail-bar'));
+            const b = row.querySelector('.vt-srow-mark').getBoundingClientRect();
+            const cs = getComputedStyle(row.querySelector('.vt-srow-mark'));
             out[tone] = { w: Math.round(b.width), h: Math.round(b.height), bg: cs.backgroundColor };
             row.remove();
           }
@@ -566,20 +626,40 @@ def test_온보딩이_모바일_상하단_내비를_덮지_않는다(page):
     24px·하단 내비 52px에서도 그대로 재현됐다(z-index 90/100 vs onboarding의
     500). 부팅 직후(세션 0개)에 하단 내비 버튼을 실제로 누를 수 있는지 본다."""
     page.set_viewport_size(COMPACT)
-    page.wait_for_selector(".vt-onboarding", timeout=10000)
+    # 2026-09-19 — compact의 기본 탭은 **플릿 홈**이고, 그게 떠 있는 동안에는
+    # 온보딩을 숨긴다(60-mobile-hud.css: z-index 500이 플릿 슬롯 90을 덮어
+    # 호스트 스위처가 클릭을 못 받던 결함). 그래서 이 테스트가 보려는 상태
+    # ―「온보딩이 떠 있고, 그게 내비를 덮지 않는가」― 는 **터미널 탭**에서
+    # 재현된다. 탭을 옮긴 뒤 본다.
+    page.click('#vt-mnav-bottom .vt-mnav-btn[data-mnav="terminal"]')
+    page.wait_for_selector(".vt-onboarding", state="visible", timeout=10000)
     page.wait_for_timeout(300)
+    # 상단 바는 **보여줄 게 하나도 없으면 스스로 숨는다**(mobile-nav.js의
+    # `_syncTopBar` — 헤더가 이미 호스트명을 말하고 대기 세션도 없을 때).
+    # 이 스위트가 딱 그 상태라 상단 바는 정상적으로 숨어 있다. 그때 지켜야
+    # 할 불변식은 "덮이지 않는가"가 아니라 **"비운 24px이 같이 닫히는가"**다
+    # (60-mobile-hud.css의 `--mnav-top-h` 주석: 안 닫히면 그 틈으로 뒤의
+    # 터미널이 비쳐 보였다). 보일 때만 히트 테스트를 한다.
     hit = page.evaluate(
         """() => {
-          const top = document.getElementById('vt-mnav-top').getBoundingClientRect();
+          const topEl = document.getElementById('vt-mnav-top');
           const bottom = document.getElementById('vt-mnav-bottom').getBoundingClientRect();
           const at = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-mnav-top, #vt-mnav-bottom, .vt-onboarding')?.id || 'onboarding';
+          const tr = topEl.getBoundingClientRect();
+          const ob = document.querySelector('.vt-onboarding').getBoundingClientRect();
           return {
-            top: at(top.left + top.width / 2, top.top + top.height / 2),
+            topHidden: topEl.hidden || tr.height === 0,
+            topGap: getComputedStyle(document.documentElement).getPropertyValue('--mnav-top-h').trim(),
+            obTop: Math.round(ob.top),
+            top: tr.height ? at(tr.left + tr.width / 2, tr.top + tr.height / 2) : null,
             bottom: at(bottom.left + bottom.width / 2, bottom.top + bottom.height / 2),
           };
         }"""
     )
-    assert hit["top"] == "vt-mnav-top", f"온보딩이 상단 내비를 덮었다: {hit}"
+    if hit["topHidden"]:
+        assert hit["topGap"] == "0px", f"상단 바가 숨었는데 자리가 남았다: {hit}"
+    else:
+        assert hit["top"] == "vt-mnav-top", f"온보딩이 상단 내비를 덮었다: {hit}"
     assert hit["bottom"] == "vt-mnav-bottom", f"온보딩이 하단 내비를 덮었다: {hit}"
 
 
@@ -668,10 +748,20 @@ def test_레일_폭이_기기_설정으로_저장되고_새로고침에도_유�
         "() => document.documentElement.dataset.appBooted === 'true'", timeout=20000
     )
     page.wait_for_timeout(500)
-    got = page.evaluate(
+    # 2026-09-19 — `--vt-wgrail-w`는 이제 **원시 px이 아니라 식**이다:
+    # `min(<저장값>px, 40vw)` (Rail.tsx의 applyCssVar — 창을 좁히면 레일이
+    # 화면의 40%에서 걸리되 저장값 자체는 안 지운다). 커스텀 속성은 계산된
+    # px으로 내려오지 않으므로 문자열 비교는 그 식을 그대로 받는다. 이
+    # 테스트가 지키려는 것은 표기가 아니라 **복원된 폭**이므로 실제로 그려진
+    # 폭을 잰다. 뷰포트는 WIDE(1440)라 40vw=576px, 즉 min은 300px이다.
+    var = page.evaluate(
         "() => getComputedStyle(document.documentElement).getPropertyValue('--vt-wgrail-w')"
     )
-    assert got.strip() == "300px", f"새로고침 후 레일 폭이 안 돌아왔다: {got}"
+    assert "300px" in var, f"저장값이 CSS 변수에 안 들어왔다: {var}"
+    got = page.evaluate(
+        "() => Math.round(document.getElementById('vt-wgrail').getBoundingClientRect().width)"
+    )
+    assert got == 300, f"새로고침 후 레일 폭이 안 돌아왔다: {got}px (변수 {var})"
 
 
 # ── N43 §8 리사이즈 오버레이 ────────────────────────────────────────────────
@@ -904,12 +994,18 @@ def test_dock_폭_리사이저가_범위를_지킨다(page):
         box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
 
 
-# ── 2.1.2: 워크트리 탭(10 §4 2단계) · dock 파일 탭(50 §4) ────────────────────
+# ── 2.1.2: 화면 탭(10 §4 2단계) · dock 파일 탭(50 §4) ────────────────────────
+#
+# 2026-09-19 — 탭을 여는 전역 함수 이름과 시그니처가 두 번 바뀌었다:
+# `openWorktreeTab(id, label)`(D4) → `openGroupTab({groupId, …})`(ADR-29 D) →
+# `openGroupTab({sessionId, worktreeId, hostId, label})`(그룹 재정의). 이 잡이
+# CI에서 한 번도 실행되지 못한 사이(setup-python 캐시 에러로 10일간 막혀 있었다)
+# 테스트만 옛 이름에 남아 있었다. 탭의 DOM 구조 자체는 그대로다.
 
 def test_워크트리_탭은_하나뿐이면_안_보이고_열면_나타난다(page):
     """탭 줄은 고를 게 둘 이상일 때만 존재한다 — 2.1.1까지의 화면과 같아야 한다."""
     assert page.evaluate("() => document.getElementById('vt-wtabs').hidden") is True
-    page.evaluate("() => window.openWorktreeTab('wt-smoke', 'repo/smoke')")
+    page.evaluate("() => window.openGroupTab({ worktreeId: 'wt-smoke', label: 'repo/smoke' })")
     page.wait_for_timeout(200)
     assert page.evaluate("() => document.getElementById('vt-wtabs').hidden") is False
     labels = page.evaluate(
@@ -927,7 +1023,7 @@ def test_워크트리_탭이_에이전트_마크와_상태_자리를_갖는다(p
     CI에는 에이전트도 tmux 세션도 없으니 **idle일 때의 규칙**을 본다: 자리는
     있되 비어 있고, 빈 자리가 폭을 먹지 않는다(:empty 접힘). 회색 점이 상시로
     붙어 있으면 그건 정보가 아니라 노이즈라는 게 이 규칙의 이유다."""
-    page.evaluate("() => window.openWorktreeTab('wt-marks', 'repo/marks')")
+    page.evaluate("() => window.openGroupTab({ worktreeId: 'wt-marks', label: 'repo/marks' })")
     page.wait_for_timeout(250)
     shape = page.evaluate(
         """() => {
@@ -961,7 +1057,7 @@ def test_탭마다_자기_pane_트리를_가진다(page):
     first_count = panes()
     assert first_count >= 2, f"분할이 안 됐다: {first_count}"
 
-    page.evaluate("() => window.openWorktreeTab('wt-b', 'repo/b')")
+    page.evaluate("() => window.openGroupTab({ worktreeId: 'wt-b', label: 'repo/b' })")
     page.wait_for_timeout(250)
     assert panes() == 1, "새 탭은 빈 한 칸에서 시작해야 한다"
 
@@ -972,7 +1068,7 @@ def test_탭마다_자기_pane_트리를_가진다(page):
 
 
 def test_워크트리_탭을_닫아도_마지막_하나는_남는다(page):
-    page.evaluate("() => window.openWorktreeTab('wt-c', 'repo/c')")
+    page.evaluate("() => window.openGroupTab({ worktreeId: 'wt-c', label: 'repo/c' })")
     page.wait_for_timeout(200)
     n = page.evaluate("() => document.querySelectorAll('#vt-wtabs .vt-wtab').length")
     assert n >= 2
@@ -993,9 +1089,11 @@ def test_dock_파일_탭이_dock_안에_마운트되고_용량_게이지를_그�
     받아 dock 본문에 붙는지, 푸터 게이지까지 그리는지 실제로 확인한다."""
     _open_dock(page, "파일")
     page.wait_for_selector("#vt-dock #vt-files", timeout=15000)
-    page.wait_for_selector("#vt-dock #vt-fl-chips .vt-fl-chip", timeout=10000)
+    # 칩은 공용 `.vt-chip`으로 그린다(전용 클래스 `.vt-fl-chip`은 없다) —
+    # 컨테이너 id로 좁힌다.
+    page.wait_for_selector("#vt-dock #vt-fl-chips .vt-chip", timeout=10000)
     chips = page.evaluate(
-        "() => [...document.querySelectorAll('#vt-fl-chips .vt-fl-chip')].map(e => e.textContent.trim())")
+        "() => [...document.querySelectorAll('#vt-fl-chips .vt-chip')].map(e => e.textContent.trim())")
     assert any(c.startswith("전체") for c in chips), chips
     page.wait_for_selector("#vt-dock .vt-fl-footer .vt-fl-gauge", timeout=10000)
     # 모달이 아니라 dock 안이어야 한다(패널이 backdrop으로 새면 이 검사가 잡는다).
@@ -1021,10 +1119,22 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
                  '"sessions":[{"name":"train","status":"working"}]}]}',
         ),
     )
+    # dock은 **기기 설정**에 마지막 활성 탭과 접힘 여부를 남긴다. 진짜 폰은
+    # 자기만의 기기 id를 갖고, 폰 폭에서는 접힘이 기본이라 부팅 직후 dock
+    # 패널이 뜨지 않는다. 그런데 이 스위트는 컨텍스트마다 쿠키가 없어 **모든
+    # 테스트가 같은 기기("local")로 잡힌다** — 앞서 데스크톱 폭에서 dock 탭을
+    # 연 테스트가 `collapsed=false`를 남기면, compact에서 그 탭이 자동으로
+    # 열리면서 풀스크린 시트(panel.js는 compact에서 backdrop으로 폴백한다)가
+    # 플릿 홈을 통째로 덮는다. 폰의 기본 상태를 명시해 그 전이를 끊는다.
+    page.evaluate("() => window.vtSettingsSet('ui.dock.collapsed', true)")
+    page.wait_for_timeout(300)
     page.set_viewport_size(COMPACT)
     page.reload(wait_until="load")
     page.wait_for_function(
         "() => document.documentElement.dataset.appBooted === 'true'", timeout=20000)
+    # 하단 내비의 선택도 같은 기기 설정에 남는다(위 주석과 같은 이유) — 앞
+    # 테스트가 「터미널」을 골라 뒀으면 플릿 홈이 숨어 있다. 명시적으로 연다.
+    page.click('#vt-mnav-bottom .vt-mnav-btn[data-mnav="fleet"]')
 
     bar = page.wait_for_selector("#vt-fleet .vt-fleet-hostbar", timeout=15000)
     assert bar.is_visible(), "폰에서 호스트 칩이 보여야 한다"
