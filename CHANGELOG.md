@@ -127,6 +127,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **그룹 이름 짓기 UI(ADR-29 E 후속).** `PATCH /api/groups/{id}`는 A에서
+  만들고 아무 화면도 안 부르던 라우트였다 — 그룹 헤더(저장소 자동 제안이든
+  드래그로 만든 다저장소 그룹이든, 「묶지 않음」·「개입 필요」는 제외)에
+  연필 아이콘을 달아 처음 연결했다. 클릭하면 `window.prompt`(세션
+  이름변경과 같은 관용구)로 이름을 받아 `renameGroup()`(`shell/rail-fetch.ts`)이
+  저장하고, 성공하면 `refreshGroups()`로 반영한다. 이름을 지으면
+  `groupDisplayLabel()`의 "첫 멤버 저장소 이름" 폴백을 덮어써서, E에서
+  기록해 둔 다저장소 그룹 라벨 흠도 실질적으로 없어진다(폴백 로직 자체를
+  고친 게 아니라 우회할 방법이 생긴 것 — 이름을 안 지으면 흠은 그대로다).
+  isolated 서버 + 실브라우저로 확인: 이름을 지으면 그룹 헤더가 즉시 바뀌고
+  `/api/groups`에 저장되며, 취소하면 아무 요청도 안 나간다.
+
 - **드래그로 그룹 재편성 + 옛 팝업 둘 제거(ADR-29 E, ADR-29 마무리).** 세션
   행을 끌어 그룹 헤더에 놓으면 `POST /api/tmux/{name}/group`(A에서 만들고
   아무도 안 부르던 라우트)을 불러 `@fsh_grp`를 바꾼다 — 「묶지 않음」

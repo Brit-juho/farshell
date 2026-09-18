@@ -150,3 +150,28 @@ test('setSessionGroup — 서버 실패는 에러 메시지로 떨어진다(호�
   assert.strictEqual(result.ok, false);
   assert.strictEqual(result.error, '그룹이 없습니다');
 });
+
+// ── ADR-29 E — 그룹 이름 짓기(renameGroup) ──────────────────────────────────
+
+test('renameGroup — 그룹 id로 PATCH하고 label을 그대로 보낸다', async () => {
+  const env = await load();
+  const calls = [];
+  const deps = { vtFetch: async (path, opts) => { calls.push({ path, opts }); return { ok: true }; }, getAction: () => undefined };
+  const result = await env.renameGroup(deps, 'repo-a-id', '내 프로젝트');
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(calls.length, 1);
+  assert.strictEqual(calls[0].path, '/api/groups/repo-a-id');
+  assert.strictEqual(calls[0].opts.method, 'PATCH');
+  assert.deepStrictEqual(JSON.parse(calls[0].opts.body), { label: '내 프로젝트' });
+});
+
+test('renameGroup — 서버 실패(예: 그룹 40개 상한)는 이유를 그대로 돌려준다', async () => {
+  const env = await load();
+  const deps = {
+    vtFetch: async () => { const e = new Error('boom'); e.data = { reason: '그룹은 최대 200개까지 만들 수 있습니다' }; throw e; },
+    getAction: () => undefined,
+  };
+  const result = await env.renameGroup(deps, 'repo-a-id', '새 이름');
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.error, '그룹은 최대 200개까지 만들 수 있습니다');
+});
