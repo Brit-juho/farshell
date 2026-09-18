@@ -19,6 +19,9 @@ import { agentIcon, agentLabel } from '../ui/icons.js';
 // "지금 화면에 없다"로 바뀌었다).
 export function Row(props: {
   row: DesktopRailRow; active: boolean; compact?: boolean; sleeping?: boolean;
+  /** ADR-29 E — 드래그로 그룹 재편성. tmux 이름이 있는(=재편성 대상이 될 수
+   * 있는) 행만 끌 수 있다. */
+  draggable?: boolean; onDragStart?: (e: DragEvent) => void;
   onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void;
 }) {
   const isRemote = () => !!props.row.remote;
@@ -69,6 +72,8 @@ export function Row(props: {
       onClick={props.onOpen}
       onContextMenu={props.onContext}
       onKeyDown={onKeyDown}
+      draggable={!!props.draggable}
+      onDragStart={props.onDragStart}
       role="button"
       tabindex="0"
       // 지금 어느 것을 보고 있는지가 **클래스로만** 표시돼 있었다 — 눈으로는

@@ -25,6 +25,7 @@ import {
   type RailDeps, type AgentDetail,
   cachedDiffCount,
   diffCountStale,
+  setSessionGroup,
 } from './rail-fetch.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
@@ -411,6 +412,32 @@ function Rail(props: { deps: RailDeps }) {
     setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, tmuxName: row.tmuxName });
   };
 
+  // ADR-29 E — 드래그로 재편성. 끄는 대상은 항상 세션 하나(tmuxName으로
+  // 식별 — @fsh_grp는 세션 이름으로 세팅한다), 놓는 대상은 그룹 섹션
+  // 헤더다. 잠자는 구역·개입 필요 섹션은 드롭 타깃이 아니다 — 「개입
+  // 필요」는 필터링된 보기일 뿐 실제 그룹이 아니고, 잠든 세션은 그룹을
+  // 옮겨도 보이는 자리가 없다(재편성은 깨어있을 때만 의미가 있다).
+  const [dragOverKey, setDragOverKey] = createSignal<string | null>(null);
+  const onRowDragStart = (e: DragEvent, row: OtherRailRowInput) => {
+    if (!row.tmuxName) { e.preventDefault(); return; }
+    e.dataTransfer?.setData('text/vt-tmux-name', row.tmuxName);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+  };
+  const onGroupDragOver = (e: DragEvent, key: string) => {
+    if (!e.dataTransfer?.types.includes('text/vt-tmux-name')) return;
+    e.preventDefault();
+    setDragOverKey(key);
+  };
+  const onGroupDrop = async (e: DragEvent, groupId: string | null) => {
+    e.preventDefault();
+    setDragOverKey(null);
+    const tmuxName = e.dataTransfer?.getData('text/vt-tmux-name');
+    if (!tmuxName) return;
+    const result = await setSessionGroup(props.deps, tmuxName, groupId);
+    if (result.error) (window as any).showToast?.(`그룹 변경 실패: ${result.error}`, 'error');
+    else await refreshSessions();
+  };
+
   const ctxMenuItems = () => {
     const m = ctxMenu();
     if (!m) return [];
@@ -662,7 +689,13 @@ function Rail(props: { deps: RailDeps }) {
             {(section) => (
               <>
                 <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
-                  <div class="vt-wgrail-group-head">
+                  <div
+                    class="vt-wgrail-group-head"
+                    classList={{ 'drag-over': section.kind !== 'attention' && dragOverKey() === section.key }}
+                    onDragOver={(e) => { if (section.kind !== 'attention') onGroupDragOver(e, section.key); }}
+                    onDragLeave={() => setDragOverKey((k) => (k === section.key ? null : k))}
+                    onDrop={(e) => { if (section.kind !== 'attention') onGroupDrop(e, section.groupId); }}
+                  >
                     <Show
                       when={section.kind !== 'attention'}
                       fallback={(
@@ -693,6 +726,8 @@ function Rail(props: { deps: RailDeps }) {
                       row={row}
                       compact={collapsed()}
                       active={actionSessionId(row) === activeId()}
+                      draggable={!!row.tmuxName}
+                      onDragStart={(e) => onRowDragStart(e, row)}
                       onOpen={(e) => openRow(e, row)}
                       onContext={(e) => contextRow(e, row)}
                     />

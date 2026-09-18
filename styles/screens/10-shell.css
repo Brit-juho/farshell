@@ -108,6 +108,9 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .vt-session-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-session-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-height:52px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); border:1px solid var(--line); border-radius:var(--radius-sm); }
 .vt-session-row.active { border-color:var(--acc); }
+/* ADR-29 E — tmux는 살아 있는데 이 기기에 웹 세션이 없는 행(레일의 「잠자는
+   중」과 같은 뜻, ADR-29 B). 흐리게 그리는 규칙도 레일과 같다. */
+.vt-session-row.sleeping { opacity:.6; }
 /* 2.1.6 — 모양은 components.css의 `.vt-name-btn`. 여기 남은 건 없다 */
 .vt-session-empty { }
 /* L1: ⋯ 메뉴 「세션」 3항목의 임시 자리(rail 이관 전까지). 목록과 시각적으로
