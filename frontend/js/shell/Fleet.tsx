@@ -115,12 +115,12 @@ function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) 
               폰에서는 "어떤 CLI가 도는 세션인지"를 이름으로 추측해야 했다. */}
           <Show when={props.row.agent}>
             {(a) => (
-              <span class="vt-srow-agent vt-fleet-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
+              <span class="vt-srow-agent vt-fleet-agent" data-tip={agentLabel(a())} innerHTML={agentIcon(a())} />
             )}
           </Show>
           <span class="vt-srow-name vt-fleet-name">{props.row.name}</span>
           <Show when={isUnseenDone()}>
-            <span class="vt-fleet-unseen-badge" aria-label="확인 안 함" title="확인 안 함" />
+            <span class="vt-fleet-unseen-badge" aria-label="확인 안 함" data-tip="확인 안 함" />
           </Show>
           <Show when={props.row.diffFiles != null && props.row.diffFiles! > 0}>
             <span class="vt-srow-meta vt-fleet-diff">+{props.row.diffFiles}</span>

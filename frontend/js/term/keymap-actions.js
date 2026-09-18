@@ -10,12 +10,13 @@
 // document 리스너 자체는 core/keymap.js가 모듈 평가 시점에 건다 — 등록 순서와
 // 무관하므로(핸들러는 키를 받은 순간 조회된다) 이 파일이 늦게 로드돼도 된다.
 import { register as registerKey } from '../core/keymap.js';
-import { splitActivePane, closePane, getActivePaneId } from '../layout/store.js';
+import { splitActivePane, closePane, getActivePaneId, evenRatios } from '../layout/store.js';
 import { canSplit } from '../layout/panes.js';
 
 registerKey('splitRight', () => { if (canSplit()) splitActivePane('row'); });
 registerKey('splitDown', () => { if (canSplit()) splitActivePane('col'); });
 registerKey('paneClose', () => closePane(getActivePaneId()));
+registerKey('paneEven', () => evenRatios());
 
 // rail 토글 — rail.js는 자기 DOM만 알면 되도록 data-action 위임을 쓰고 있다.
 // 그 진입점을 그대로 눌러준다(중복 구현하지 않는다).

@@ -83,7 +83,7 @@ function paintTabs() {
     const info = names.map((n) => _agents[n]).find((i) => i && i.agent);
     if (mark) {
       mark.innerHTML = info ? agentIcon(info.agent) : '';
-      if (info && info.label) mark.title = info.label; else mark.removeAttribute('title');
+      if (info && info.label) mark.setAttribute('data-tip', info.label); else mark.removeAttribute('data-tip');
     }
 
     // 상태 dot — idle이면 안 그린다(세션 탭과 같은 규칙: "아무 일도 없음"은
@@ -137,7 +137,8 @@ function render() {
     const unread = document.createElement('span');
     unread.className = 'vt-wtab-unread';
     unread.hidden = true;
-    unread.title = '완료됐지만 아직 확인하지 않았습니다';
+    unread.setAttribute('data-tip', '완료됐지만 아직 확인하지 않았습니다');
+    unread.setAttribute('data-tip-side', 'bottom');
     unread.setAttribute('aria-label', '읽지 않음');
     el.appendChild(unread);
 

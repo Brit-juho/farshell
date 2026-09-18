@@ -473,7 +473,9 @@ function Rail(props: { deps: RailDeps }) {
               class="vt-host-btn vt-wgrail-host"
               classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: isRemoteHost() }}
               onClick={openHostMenu}
-              title={activeHost() ? `${activeHost()!.label} · ${hostDetail(activeHost()!)}` : '호스트 선택'}
+              data-tip={activeHost()?.label || '호스트 선택'}
+              data-tip-sub={activeHost() ? hostDetail(activeHost()!) : undefined}
+              data-tip-side="bottom"
             >
               <span class="vt-wgrail-host-name">{activeHost()?.label || effectiveHostId()}</span>
               <span class="vt-wgrail-host-caret"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
@@ -489,7 +491,8 @@ function Rail(props: { deps: RailDeps }) {
           classList={{ collapsed: collapsed() }}
           onClick={toggleCollapse}
           aria-label={collapsed() ? '펼치기' : '접기'}
-          title={collapsed() ? '펼치기' : '접기'}
+          data-tip={collapsed() ? '레일 펼치기' : '레일 접기'}
+          data-tip-side="bottom"
           innerHTML={icon('chevron-down', 14, 2)}
         />
       </div>
@@ -551,7 +554,9 @@ function Rail(props: { deps: RailDeps }) {
                       type="button"
                       class="vt-icon-btn sm vt-wgrail-group-settings"
                       aria-label="저장소 표시 설정"
-                      title={hiddenCount() ? `저장소 표시 설정 (숨김 ${hiddenCount()})` : '저장소 표시 설정'}
+                      data-tip="저장소 표시 설정"
+                      data-tip-sub={hiddenCount() ? `${hiddenCount()}개 숨김` : undefined}
+                      data-tip-side="right"
                       onClick={() => setRepoSheet(true)}
                       innerHTML={icon('settings', 13, 2)}
                     />
@@ -592,7 +597,9 @@ function Rail(props: { deps: RailDeps }) {
           type="button"
           class="vt-wgrail-new"
           disabled={isRemoteHost()}
-          title={isRemoteHost() ? '원격 호스트에는 워크트리를 만들 수 없습니다(2.2)' : (collapsed() ? '워크트리 만들기' : '')}
+          data-tip={isRemoteHost() ? '워크트리 만들기' : (collapsed() ? '워크트리 만들기' : undefined)}
+          data-tip-sub={isRemoteHost() ? '원격 호스트에서는 불가 (2.2)' : undefined}
+          data-tip-side="right"
           onClick={() => setDialogOpen(true)}
         >
           <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 워크트리 만들기</Show>
@@ -606,7 +613,9 @@ function Rail(props: { deps: RailDeps }) {
           type="button"
           class="vt-icon-btn lg vt-wgrail-icon"
           aria-label="설정"
-          title="설정 (Mod+,)"
+          data-tip="설정"
+          data-tip-sub="Mod+,"
+          data-tip-side="right"
           onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
           innerHTML={icon('settings', 15, 2)}
         />

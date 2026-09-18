@@ -8,7 +8,7 @@
 // 들어간다" 같은 상태 불일치가 애초에 생길 수 없다 — 착수 전 설계 리뷰에서
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
 import { activeSessionId } from '../core/store.js';
-import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setRatio as _setRatio, countLeaves as _countLeaves, findNode } from './tree.js';
+import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode } from './tree.js';
 
 function _genId(prefix) {
   const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -158,6 +158,20 @@ export function replaceTree(tree, activePaneId = null) {
 export function setRatio(splitId, ratio) {
   _tree = _setRatio(_tree, splitId, ratio);
   _notify('ratio', splitId);
+}
+
+/**
+ * 모든 분할을 반반으로 되돌린다. 바뀐 게 없으면 알리지 않는다.
+ * 'ratio'가 아니라 'layout'으로 알리는 이유: 'ratio'의 경량 경로는
+ * (panes.js `_applyRatioOnly`) **분할 하나**의 flex만 고치도록 되어 있어서,
+ * 트리 전체가 바뀐 이 경우를 표현할 수 없다.
+ */
+export function evenRatios() {
+  const next = _evenRatios(_tree);
+  if (next === _tree) return false;
+  _tree = next;
+  _notify('layout');
+  return true;
 }
 
 export function countLeaves() {

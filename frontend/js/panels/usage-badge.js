@@ -26,9 +26,13 @@ export function paintRailBadge(data) {
     || btn.appendChild(Object.assign(document.createElement('span'), { className: 'vt-rail-badge' }));
   const live = (data?.profiles || []).filter((p) => p.has_live_session).map((p) => p.name);
   const active = data?.active_profile;
-  btn.title = data?.available
-    ? `사용량${active ? ` — 활성: ${active}` : ''}${live.length ? ` · 실행 중: ${live.join(', ')}` : ''}`
-    : '사용량';
+  // 2026-09-18 — 한 줄짜리 title을 두 단 툴팁으로 나눈다(ui/tooltip.js): 이름은
+  // 「사용량」 하나뿐이고, 활성 프로필·실행 중 목록은 값이므로 보조 단(mono)이다.
+  btn.setAttribute('data-tip', '사용량');
+  const detail = data?.available
+    ? [active ? `활성: ${active}` : '', live.length ? `실행 중: ${live.join(', ')}` : ''].filter(Boolean).join(' · ')
+    : '';
+  if (detail) btn.setAttribute('data-tip-sub', detail); else btn.removeAttribute('data-tip-sub');
   badge.hidden = !live.length;
   // ● 글리프를 .status-dot 컴포넌트로. 배지가 "몇 개"가 아니라 "돌고 있다"를
   // 뜻하는 자리라 숫자가 아닌 점이 맞지만, 글리프는 상태색과 연결돼 있지 않았다.

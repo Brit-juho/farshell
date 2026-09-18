@@ -59,6 +59,7 @@
 }
 .vt-dock-tab {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:none;
+  position:relative;   /* 배지 점의 기준. 2026-09-18 — 아래 .vt-dock-tab-dot 참고 */
   padding:0 calc(var(--spacing) * 2); border:0; border-right:1px solid var(--line);
   background:transparent; color:var(--color-sub); cursor:pointer;
   font:var(--weight-medium) var(--fs-xs) var(--font-ui); white-space:nowrap;
@@ -82,11 +83,35 @@
   color:var(--color-txt);
   box-shadow:inset 0 -2px 0 var(--color-acc);
 }
-/* 2.1.6 — dock 탭 배지는 components.css의 .vt-badge를 쓴다(Dock.tsx가 클래스를
-   바꿔 단다). 여기 남은 건 배지가 탭 안에서 자리를 안 밀도록 하는 배치뿐이다.
-   채움 알약이던 것을 테두리 배지로 바꾼 이유: 채우면 "화면당 채움 하나"인
-   주 액션과 시각 무게가 같아진다(20-design-system.md §3). */
-.vt-dock-tab .vt-badge { flex:none; }
+/* 2026-09-18 — 배지가 수치에서 **점**으로 내려왔다.
+   2.1.6까지는 .vt-badge(테두리 + 숫자)가 탭 흐름 안에 들어 있었다. 그게
+   탭 폭을 밀었다(1440px 실브라우저 실측):
+     - 접힘 36px — 탭의 clientWidth 35에 scrollWidth가 38이 된다(아이콘 16 +
+       gap 4 + 배지 min-width 18). .vt-dock-tabs가 overflow:hidden이라 3px이
+       잘렸다 — 사용자 보고 "UI가 밀리면서 깨진다"가 이것이다.
+     - 펼침 — 당장 깨지지는 않지만 여유가 거의 없다: 배지 둘을 달면 탭 행이
+       280 + 접기 24 = 304px을 먹어 MIN_W 320px에서 남는 게 16px뿐이다.
+       세 자릿수 수치("99+")나 탭 하나만 늘어도 같은 방식으로 잘린다.
+   점은 position:absolute라 **탭 폭에 0px 기여한다**. 어느 폭에서도 안 밀린다.
+   잃는 것은 정확한 수치인데, 그 수가 필요한 순간은 탭을 여는 순간이고 툴팁이
+   먼저 "12개 열림"으로 말한다(ui/tooltip.js).
+   1.5px 링을 두르는 이유: 접힘에서 점이 아이콘 글리프 모서리에 얹히는데,
+   링이 없으면 아이콘 획과 붙어 획의 일부로 읽힌다.
+
+   ⚠ 처음에는 patterns.css의 공용 `.vt-dot`을 같이 달았다. 그런데 이 파일보다
+   **앞선 레거시**인 10-shell.css:48에 같은 이름의 규칙이 또 있고
+   (`width:7px; margin-right:6px`) patterns.css는 components 레이어라 그쪽이
+   진다. 새어 들어온 margin-right가 absolute 요소의 오른쪽 기준을 6px 더
+   밀어서, 점이 아이콘 모서리가 아니라 아이콘 **위**에 앉았다(실브라우저 확인:
+   점 오른쪽 1427 / 아이콘 오른쪽 1431). 그래서 여기서 모양까지 직접 정한다 —
+   공용 규칙을 쓰려면 10-shell.css의 중복부터 지워야 한다. */
+.vt-dock-tab-dot {
+  position:absolute; top:6px; right:4px;
+  width:6px; height:6px; border-radius:var(--radius-full);
+  background:var(--color-acc);
+  box-shadow:0 0 0 1.5px var(--bar);
+}
+#vt-dock.collapsed .vt-dock-tab-dot { top:8px; right:7px; }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 글리프(›) + 오른쪽 끝 고정 */
 .vt-dock-collapse { margin-left:auto; font:600 var(--fs-base) var(--ui); }
 
@@ -105,7 +130,9 @@
    세로쓰기에서 음절이 한 자씩 쌓여 36px 폭에 "소/스/컨/트/롤"이 늘어섰고
    글꼴까지 모노스페이스라 더 읽기 어려웠다. 세로 라벨은 영문(글자가 옆으로
    눕는다)을 전제한 패턴이라 한글에는 성립하지 않는다.
-   전체 이름은 button의 title 속성에 그대로 남아 툴팁으로 나온다. */
+   전체 이름은 button의 data-tip에 남아 공용 툴팁으로 나온다(2026-09-18 이전에는
+   네이티브 title이었고, 1초 지연에 OS 기본 모양이라 이 자리에서 제 일을
+   못 했다 — frontend/js/ui/tooltip.js 상단 주석). */
 #vt-dock.collapsed .vt-dock-tab {
   padding:calc(var(--spacing) * 2.5) 0;
   border-right:0; border-bottom:1px solid var(--line); justify-content:center;
@@ -190,6 +217,10 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 #vt-resize-overlay.vt-ro-hide { opacity:0; }
 .vt-ro-cells { font:500 var(--fs-xs) var(--mono); color:var(--sub); }
 .vt-ro-defer { font:400 var(--fs-3xs) var(--mono); color:var(--sub); margin-top:2px; }
+/* 2026-09-18 — 되돌리는 법을 **되돌리고 싶어지는 순간**에 말한다. 분할선을
+   끌고 있는 중이 그 순간이고, 다른 데 적어두면 아무도 안 읽는다.
+   ui 글꼴인 이유: 위 두 줄은 수치(mono)지만 이건 문장이다. */
+.vt-ro-hint { font:400 var(--fs-3xs) var(--font-ui); color:var(--color-muted); margin-top:calc(var(--spacing) * 1); }
 @media (prefers-reduced-motion: reduce) {
   #vt-resize-overlay { transition:none; }
 }

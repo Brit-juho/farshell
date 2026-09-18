@@ -89,7 +89,7 @@ export function updateSessionCard(card, sess, agentInfo) {
   // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.
   const isOpenTab = !!(sess.web_session_id && getSession(sess.web_session_id));
   card.classList.toggle('open-tab', isOpenTab);
-  card.title = isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속';
+  card.setAttribute('data-tip', isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속');
   _applyCardAgent(card, agentInfo);
 }
 

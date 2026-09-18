@@ -132,9 +132,11 @@ test('addSession: 세션 레코드가 등록되고 즉시 활성 세션이 된�
 
   const wrapper = document.getElementById('term-sess-1');
   assert.ok(wrapper, '터미널 wrapper가 생성돼야 한다');
-  // N16: 표면 레이어부터는 display가 아니라 visibility로 보임/숨김을 표현한다
-  // (10-shell-layout.md §1) — DOM에서 떼지 않고 화면 밖으로만 옮긴다.
-  assert.strictEqual(wrapper.style.visibility, 'visible', '활성 세션의 wrapper는 보여야 한다');
+  // 2026-09-18 — 보임/숨김이 **부모가 누구인가**로 바뀌었다. 그 전에는 인라인
+  // visibility였다(표면 레이어 시절: 전부 #vt-surface에 살면서 안 보이는 건
+  // 화면 밖으로 translate). 지금은 보이는 세션이 자기 pane-body 안에 실제로
+  // 들어가고, 배치 안 된 세션만 대기실(#vt-term-stage)에 남는다.
+  assert.strictEqual(wrapper.parentElement.className, 'vt-pane-body', '활성 세션은 pane 안에 있어야 한다');
 });
 
 test('addSession: id 없이 호출되면 유령 세션을 만들지 않는다', async () => {
@@ -150,14 +152,16 @@ test('switchTo: 이전 세션은 숨고, 새 세션이 활성/표시로 전환�
   addSession('a', 'A');
   addSession('b', 'B'); // addSession이 내부에서 switchTo(b)까지 호출
 
+  // 보임 = pane-body의 자식, 숨김 = 대기실(#vt-term-stage)의 자식.
+  const where = (id) => window.document.getElementById(`term-${id}`).parentElement;
   assert.strictEqual(window.activeId, 'b');
-  assert.strictEqual(window.document.getElementById('term-a').style.visibility, 'hidden');
-  assert.strictEqual(window.document.getElementById('term-b').style.visibility, 'visible');
+  assert.strictEqual(where('a').id, 'vt-term-stage');
+  assert.strictEqual(where('b').className, 'vt-pane-body');
 
   switchTo('a');
   assert.strictEqual(window.activeId, 'a');
-  assert.strictEqual(window.document.getElementById('term-a').style.visibility, 'visible');
-  assert.strictEqual(window.document.getElementById('term-b').style.visibility, 'hidden');
+  assert.strictEqual(where('a').className, 'vt-pane-body');
+  assert.strictEqual(where('b').id, 'vt-term-stage');
 });
 
 test('switchTabByOffset: 세션 목록 끝에서 순환한다', async () => {

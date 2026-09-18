@@ -953,3 +953,66 @@
   .vt-fleet-agent { margin-right: calc(var(--spacing) * 1.5); }
   .vt-wgrail-agent { margin-right: calc(var(--spacing) * 1.5); }
 }
+
+/* ── 툴팁 (2026-09-18) ─────────────────────────────────────────────────────────
+ * 네이티브 `title`을 대체하는 단 하나의 떠 있는 상자(frontend/js/ui/tooltip.js).
+ * body 직계라 어떤 `overflow:hidden` 컨테이너에도 안 갇힌다 — dock 탭 행이
+ * 정확히 그 상자였고, 그래서 CSS ::after 방식은 후보에서 빠졌다.
+ *
+ * 왜 화살표가 없나: 화살표는 배경과 테두리를 **두 번** 따라가야 해서(삼각형
+ * 채움 + 1px 변) 6개 스킨 중 하나에서는 반드시 어긋난다. 대신 트리거 쪽을
+ * 원점으로 잡고 자라게 해서(JS가 transform-origin을 심는다) 어디서 나왔는지를
+ * 모션으로 말한다.
+ *
+ * 위계는 두 단이다 — 이름(txt/ui)과 수치(sub/mono). 수치를 mono로 두는 건
+ * 취향이 아니라 tabular-nums 때문이다: 15초마다 갱신되는 "14개 열림"이 자릿수
+ * 때문에 흔들리면 가만히 있는 툴팁이 움직이는 것처럼 보인다. */
+@layer components {
+  .vt-tip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;   /* 모달(600)·오버레이(700)·풀스크린(900) 위. 오프라인 배너(9999)만 위에 둔다. */
+    display: flex;
+    align-items: baseline;
+    gap: calc(var(--spacing) * 1.5);
+    max-width: 280px;
+    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--menu);
+    box-shadow: var(--shadow-e1);
+    color: var(--color-txt);
+    font: var(--weight-medium) var(--fs-2xs) / 1.45 var(--font-ui);
+    /* nowrap이 아닌 이유: 경로처럼 긴 값을 그대로 싣는 자리가 있다(저장소
+       표시 설정의 경로 줄). 280px에서 접히게 두고, 호출부가 명시한 \n만
+       줄바꿈으로 존중한다. */
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    pointer-events: none;   /* 커서를 절대 가로채지 않는다 — 가로채면 pointerout이 튄다 */
+    /* display:none이 아닌 이유: JS가 뜨기 전에 폭·높이를 재야 자리를 잡는다.
+       visibility:hidden은 레이아웃을 남기므로 offsetWidth가 진짜 값이다. */
+    visibility: hidden;
+    opacity: 0;
+    transform: scale(0.96);
+    transition:
+      opacity var(--dur-fast) var(--ease-out-quint),
+      transform var(--dur-fast) var(--ease-out-quint),
+      visibility 0s linear var(--dur-fast);
+  }
+  .vt-tip.open {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+    transition-delay: 0s;
+  }
+  .vt-tip-sub {
+    color: var(--color-sub);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  /* 움직임만 걷어낸다(색·불투명도는 남긴다 — 그게 상태 전달이다). */
+  @media (prefers-reduced-motion: reduce) {
+    .vt-tip { transform: none; }
+  }
+}

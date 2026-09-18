@@ -98,8 +98,10 @@ test('빈 pane 클릭 → 시트가 열리고 "+ 새 세션" 버튼이 있다', 
   const { window, addSession, store } = await buildWindow();
   addSession('a');
   const emptyPaneId = store.splitActivePane('row'); // 빈 leaf 하나 추가, 활성이 됨
+  // DOM id 규칙은 layout/dom-ids.js가 정한다 — 노드 id가 이미 `pane-<uuid>`라
+  // 네임스페이스 `vt-`만 붙는다(예전엔 `vt-pane-pane-<uuid>`로 접두사가 겹쳤다).
 
-  window.document.getElementById(`vt-pane-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
+  window.document.getElementById(`vt-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
   await flush();
 
   assert.ok(window.document.getElementById('vt-pane-pick'), '시트가 열려야 한다');
@@ -111,7 +113,7 @@ test('"+ 새 세션" 클릭 → 그 pane에 새 세션이 배정되고 시트가
   addSession('a');
   const emptyPaneId = store.splitActivePane('row');
 
-  window.document.getElementById(`vt-pane-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
+  window.document.getElementById(`vt-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
   await flush();
   window.document.querySelector('.vt-pp-new').click();
   await flush();
@@ -128,7 +130,7 @@ test('아직 안 열린 tmux 세션 카드 클릭 → attach 후 그 pane에 배
   addSession('a');
   const emptyPaneId = store.splitActivePane('row');
 
-  window.document.getElementById(`vt-pane-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
+  window.document.getElementById(`vt-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
   await flush();
   window.document.querySelector('[data-name="dev"]').click();
   await flush();
@@ -146,7 +148,7 @@ test('이미 다른 pane에 열려 있는 tmux 세션 선택 → 이동(원래 p
   const rootPaneId = store.getActivePaneId();
   const emptyPaneId = store.splitActivePane('row'); // rootPaneId(=a)와 별개인 새 빈 leaf
 
-  window.document.getElementById(`vt-pane-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
+  window.document.getElementById(`vt-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
   await flush();
   const card = window.document.querySelector('[data-name="dev"]');
   assert.ok(card.classList.contains('open-tab'), '이미 열린 세션은 open-tab 표시가 있어야 한다');
@@ -167,7 +169,7 @@ test('tmux가 아닌 일반 터미널 열린 세션도 목록에 나오고, 선�
   const rootPaneId = store.getActivePaneId();
   const emptyPaneId = store.splitActivePane('row');
 
-  window.document.getElementById(`vt-pane-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
+  window.document.getElementById(`vt-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
   await flush();
 
   const plainCard = window.document.querySelector('#vt-pp-cards .vt-card.open-tab');

@@ -324,8 +324,8 @@
          add-btn/chevron을 그 안에 두면 함께 사라져 좁은 화면에서 "새 세션"
          자체가 막힌다 — 항상 보여야 하는 컨트롤이라 밖(flex-shrink:0 형제)에 둔다. -->
     <div id="vt-wtabs" role="tablist" aria-label="워크트리 탭"></div>
-    <div id="add-btn" data-action="session.add-menu" title="새 세션 (일반 터미널 / tmux)" role="button" tabindex="0" aria-haspopup="true" aria-label="새 세션"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
-    <div class="wt-chevron" data-action="session.tmux-list" title="세션 프로파일" role="button" tabindex="0" aria-label="세션 프로파일">
+    <div id="add-btn" data-action="session.add-menu" data-tip="새 세션" data-tip-sub="일반 터미널 / tmux" data-tip-side="bottom" role="button" tabindex="0" aria-haspopup="true" aria-label="새 세션"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+    <div class="wt-chevron" data-action="session.tmux-list" data-tip="세션 프로파일" data-tip-side="bottom" role="button" tabindex="0" aria-label="세션 프로파일">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
     </div>
 
@@ -346,7 +346,7 @@
          목록에서 제외). 터미널 내 검색 자체는 Ctrl/Cmd+F로 그대로
          쓸 수 있다(팔레트 `/` 접두사는 60-settings-palette.md §3부터 파일 검색으로 바뀌었다) — ⋯ 메뉴의 동일 항목("터미널 내 검색"·"빠른 열기")은 L1 잔여
          항목에서 제거했다(상단바 ↔ ⋯ 중복 제거). -->
-    <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" title="빠른 열기 (Ctrl/Cmd+K)">
+    <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" data-tip="빠른 열기" data-tip-sub="Ctrl/Cmd+K" data-tip-side="bottom">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
     <!-- N37 §4 — 「연결된 화면」. shell/HeaderExtras.tsx가 채우고, 데이터가 없으면
@@ -379,7 +379,7 @@
        "⋯ 더보기" 메뉴가 그 버튼들을 그대로 다시 누른다(shell/Rail.tsx). -->
   <div id="vt-wgrail-slot"></div>
   <nav id="vt-rail" aria-label="사이드바">
-    <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" title="세션">
+    <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" data-tip="세션" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-session" hidden></span>
     </button>
@@ -387,20 +387,20 @@
          버튼이 열 것 자체가 없어졌고, 파일을 고르는 자리는 팔레트(상단바 🔍 ·
          Mod+K)로 옮겨갔다. 새 레일의 "⋯ 더보기"에는 「파일 열기」 항목이 있고
          그건 팔레트를 연다(js/panels/viewer-lazy.js의 viewer.show). -->
-    <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" title="프롬프트 큐">
+    <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" data-tip="프롬프트 큐" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-queue" hidden></span>
     </button>
-    <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" title="프롬프트 스니펫">
+    <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" data-tip="프롬프트 스니펫" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
     </button>
     <!-- 50-files-share.md §4 — 파일 저장소 탭. 위 주석의 「파일」(코드 뷰어)과는
          다른 것이다: 그건 저장소의 소스를 읽는 화면이고, 이건 업로드된 파일을
          관리·공유하는 화면이다(dock 파일 탭과 같은 렌더러). -->
-    <button type="button" class="vt-rail-btn" id="vt-rail-files" data-rail="files" data-action="files.show" aria-label="파일" title="파일 — 저장소 · 공유 링크">
+    <button type="button" class="vt-rail-btn" id="vt-rail-files" data-rail="files" data-action="files.show" aria-label="파일" data-tip="파일" data-tip-sub="저장소 · 공유 링크" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
     </button>
-    <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" title="포트 대시보드">
+    <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" data-tip="포트 대시보드" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-ports" hidden></span>
     </button>
@@ -409,11 +409,11 @@
          실패 시 기본 표시 폴백까지 동일)으로 숨긴다. 정적 hidden을 안 거는
          이유는 그 폴백과 일관성을 맞추기 위해서다 — U가 실제로 caps.usage를
          추가하는 순간 이 파일을 다시 안 건드려도 자동으로 나타난다. -->
-    <button type="button" class="vt-rail-btn needs-usage" id="vt-rail-usage" data-rail="usage" data-action="usage.open" aria-label="사용량" title="사용량">
+    <button type="button" class="vt-rail-btn needs-usage" id="vt-rail-usage" data-rail="usage" data-action="usage.open" aria-label="사용량" data-tip="사용량" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     </button>
     <div class="vt-rail-spacer"></div>
-    <button type="button" class="vt-rail-btn" id="vt-rail-settings" data-rail="settings" aria-label="설정" aria-pressed="false" title="설정">
+    <button type="button" class="vt-rail-btn" id="vt-rail-settings" data-rail="settings" aria-label="설정" aria-pressed="false" data-tip="설정" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </nav>
@@ -457,7 +457,7 @@
   <aside id="vt-right-rail" class="needs-usage" aria-label="사용량">
     <div class="vt-rr-head">
       <span class="vt-rr-title">사용량</span>
-      <button type="button" class="vt-icon-btn sm vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" title="접기">›</button>
+      <button type="button" class="vt-icon-btn sm vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" data-tip="우측 레일 접기" data-tip-side="left">›</button>
     </div>
     <div class="vt-rr-body" id="vt-right-rail-body"></div>
   </aside>
@@ -475,7 +475,7 @@
          keybar.js가 부팅 시 pointer:coarse면 이 슬롯 대신 #keybar-slot-mic로
          이 버튼 자체를 옮긴다(재생성 아님, appendChild). -->
     <div id="vt-rail-mic-slot">
-      <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" title="음성 입력">
+      <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" data-tip="음성 입력" data-tip-side="right">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>
         <span class="label">음성 입력</span>
       </button>
@@ -492,18 +492,18 @@
       <button class="theme-chip" data-skin="notepad" data-action="theme.set"><span class="dot"></span>Notepad</button>
     </div>
     <button class="vt-menu-item mi needs-push" id="push-btn" role="menuitem" data-action="push.toggle"
-      title="앱을 닫아도 작업 완료 알림을 받습니다">
+      data-tip="앱을 닫아도 작업 완료 알림을 받습니다">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       <span id="push-label">푸시 알림</span>
     </button>
     <label class="vt-menu-item mi" id="autocopy-toggle" role="menuitemcheckbox"
-      title="드래그 선택 · vim/tmux copy-mode(OSC52) · fsh clip(맥 클립보드 폴링) 전부 자동 동기화 여부. 꺼도 우클릭/Ctrl+Shift+C로 수동 복사는 가능">
+      data-tip="자동 클립보드 동기화" data-tip-sub="드래그 선택 · vim/tmux copy-mode(OSC52) · fsh clip. 꺼도 우클릭·Ctrl+Shift+C로 수동 복사는 된다">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/></svg>
       드래그 시 자동 복사
       <input type="checkbox" id="autocopy-checkbox" />
     </label>
     <label class="vt-menu-item mi" id="auto-mac-toggle" role="menuitemcheckbox"
-      title="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
+      data-tip="새 세션 생성 시 맥북에서도 iTerm 창이 자동으로 열림">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>
       새 세션을 맥에서도 열기
       <input type="checkbox" id="auto-mac-checkbox" />
@@ -540,18 +540,18 @@
     <div id="keybar-top">
       <div id="keybar-slots">
         <div id="keybar-slot-mic"></div>
-        <button type="button" class="kb kb-slot" id="keybar-slot-queue" aria-label="프롬프트 큐" title="프롬프트 큐">
+        <button type="button" class="kb kb-slot" id="keybar-slot-queue" aria-label="프롬프트 큐" data-tip="프롬프트 큐">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           <span class="vt-rail-badge" id="keybar-badge-queue" hidden></span>
         </button>
-        <button type="button" class="kb kb-slot" id="keybar-slot-upload" aria-label="파일 업로드" title="파일 업로드">
+        <button type="button" class="kb kb-slot" id="keybar-slot-upload" aria-label="파일 업로드" data-tip="파일 업로드">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         </button>
       </div>
       <!-- 접기/펴기 토글 -->
       <!-- D5 관용구: ui/icons.js의 'chevron-down'과 같은 path. 접히면 keybar.js가
            .flipped를 붙여 CSS로 뒤집는다(아이콘을 두 개 두지 않는다). -->
-      <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" title="특수키 바 접기/펴기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" data-tip="특수키 바 접기/펴기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
     </div>
     <div id="keybar-keys">
       <button type="button" class="kb" data-key="esc">Esc</button>
@@ -564,19 +564,19 @@
       <!-- [M4] 롱프레스 키 변형 — 짝이 뚜렷한 기호는 같은 자리에 겹쳐 둔다.
            키바는 자리가 12칸뿐이라 `_`·`\`·백틱을 새 버튼으로 넣을 수 없다. -->
       <button type="button" class="kb" data-seq="|" data-longpress-seq="\"
-        title="짧게: | 입력 · 길게: \ 입력">|</button>
+        data-tip="| 입력" data-tip-sub="길게: \ 입력">|</button>
       <button type="button" class="kb" data-seq="/" data-longpress-seq="?"
-        title="짧게: / 입력 · 길게: ? 입력">/</button>
+        data-tip="/ 입력" data-tip-sub="길게: ? 입력">/</button>
       <button type="button" class="kb" data-seq="~" data-longpress-seq="`"
-        title="짧게: ~ 입력 · 길게: ` 입력">~</button>
+        data-tip="~ 입력" data-tip-sub="길게: ` 입력">~</button>
       <button type="button" class="kb" data-seq="-" data-longpress-seq="_"
-        title="짧게: - 입력 · 길게: _ 입력">-</button>
+        data-tip="- 입력" data-tip-sub="길게: _ 입력">-</button>
       <!-- R4: 짧게 누르면 문자 n/p 입력, 길게 누르면 tmux 창 전환(Ctrl-B n/p).
            전 세션이 tmux라 조건 분기 없이 바로 적용(swell.sh 패턴). -->
       <button type="button" class="kb" data-seq="n" data-longpress-tmux="n"
-        title="짧게: n 입력 · 길게: tmux 다음 창">n</button>
+        data-tip="n 입력" data-tip-sub="길게: tmux 다음 창">n</button>
       <button type="button" class="kb" data-seq="p" data-longpress-tmux="p"
-        title="짧게: p 입력 · 길게: tmux 이전 창">p</button>
+        data-tip="p 입력" data-tip-sub="길게: tmux 이전 창">p</button>
     </div>
   </div>
 

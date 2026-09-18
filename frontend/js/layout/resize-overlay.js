@@ -9,6 +9,7 @@
 // (지연되는 건 xterm 내부 fit()뿐이다) 이 추정치는 실제 fit 결과와 거의 같다.
 import { getTree, getActivePaneId } from './store.js';
 import { findNode } from './tree.js';
+import { paneElId } from './dom-ids.js';
 import { getSession } from '../core/store.js';
 import * as surface from './surface.js';
 
@@ -28,6 +29,7 @@ function _ensureEl() {
     <div class="vt-ro-dims"></div>
     <div class="vt-ro-cells"></div>
     <div class="vt-ro-defer"></div>
+    <div class="vt-ro-hint">분할선 두 번 누르면 반반</div>
   `;
   document.body.appendChild(_overlayEl);
   return _overlayEl;
@@ -36,7 +38,7 @@ function _ensureEl() {
 function _activePane() {
   const paneId = getActivePaneId();
   const leaf = findNode(getTree(), paneId);
-  const paneEl = document.getElementById(`vt-pane-${paneId}`);
+  const paneEl = document.getElementById(paneElId(paneId));
   return { leaf, paneEl };
 }
 

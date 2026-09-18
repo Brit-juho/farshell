@@ -34,17 +34,18 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
   const remoteText = () =>
     props.row.kind === 'worktree' ? remoteLabel(props.row.remote) : '';
   // 48px 접힘에서는 이름·상태 문장이 숨는다(10-shell-layout.md §5: "마크+색점만.
-  // 호버 시 툴팁에 2줄"). 그 두 줄이 title이다 — 없으면 접힌 레일은 정체를
+  // 호버 시 툴팁에 2줄"). 그 두 줄이 툴팁이다 — 없으면 접힌 레일은 정체를
   // 알 수 없는 색 막대 기둥이 된다. 펼친 상태에서는 달지 않는다(글자가 이미
   // 보이는 자리에 툴팁이 뜨면 잡음이다).
-  // 상태 문장이 빈 행(세션 없는 저장소)은 둘째 줄을 만들지 않는다 — 안 그러면
-  // 툴팁이 `이름\n`이 되어 빈 줄이 한 칸 붙는다(실브라우저 확인).
-  const compactTitle = () => {
+  // 2.1.6까지는 `이름\n소유자 · 상태` 한 덩어리를 title에 넣었다. 네이티브
+  // 툴팁은 두 줄을 같은 크기·같은 색으로 그려서 무엇이 이름인지 안 보였다 —
+  // 공용 툴팁(ui/tooltip.js)은 이름(ui)과 값(mono/sub)을 다른 단으로 그리므로
+  // 여기서도 둘을 data-tip / data-tip-sub로 나눠 넘긴다.
+  const compactSub = () => {
     if (!props.compact) return undefined;
-    // 접힌 레일은 글자가 하나도 안 보이므로, 펼친 상태의 둘째 줄(소유자·상태)을
-    // 그대로 툴팁에 옮긴다 — 둘 다 없으면 이름만.
-    const sub = [remoteText(), props.row.statusSentence].filter(Boolean).join(' · ');
-    return sub ? `${rowName()}\n${sub}` : rowName();
+    // 상태 문장이 빈 행(세션 없는 저장소)은 보조 단을 아예 안 만든다 — 빈
+    // 문자열을 넘기면 툴팁에 빈 칸이 한 칸 붙는다.
+    return [remoteText(), props.row.statusSentence].filter(Boolean).join(' · ') || undefined;
   };
 
   // `role="button"` + `tabindex=0`으로 포커스는 갔지만 **Enter·Space가 아무
@@ -75,7 +76,9 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
       // 배경색으로 보이지만 스크린리더에는 아무 말도 안 했다. 목록에서 "현재
       // 것"을 가리키는 표준 표기가 aria-current다.
       aria-current={props.active ? 'true' : undefined}
-      title={compactTitle()}
+      data-tip={props.compact ? rowName() : undefined}
+      data-tip-sub={compactSub()}
+      data-tip-side="right"
     >
       {/* 20-design-system.md §5(O2): 레일 행 왼쪽 끝 세로 막대는 저장소 해시
           색점(원형 dot과 헷갈리지 않는 "막대") — 상태 5색·acc와는 별개 램프
@@ -94,7 +97,8 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
       <Show when={props.compact && props.row.agent}>
         <span
           class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
-          title={agentLabel(props.row.agent!)}
+          data-tip={agentLabel(props.row.agent!)}
+          data-tip-side="right"
           innerHTML={agentIcon(props.row.agent!)}
         />
       </Show>
@@ -106,7 +110,7 @@ export function Row(props: { row: DesktopRailRow; active: boolean; compact?: boo
               (agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
           <Show when={props.row.agent}>
             {(a) => (
-              <span class="vt-srow-agent vt-wgrail-agent" title={agentLabel(a())} innerHTML={agentIcon(a())} />
+              <span class="vt-srow-agent vt-wgrail-agent" data-tip={agentLabel(a())} data-tip-side="right" innerHTML={agentIcon(a())} />
             )}
           </Show>
           <span class="vt-srow-name vt-wgrail-name">{rowName()}</span>

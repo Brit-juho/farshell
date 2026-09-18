@@ -273,21 +273,38 @@ Windows Terminal**.
 ## 3. Shell layout
 
 2.0's `⋯` overflow menu is gone entirely (ADR-8, 2.0). 2.1.0 rebuilt that
-skeleton on top of a surface layer (N16~N18, ADR-26) — **`#vt-chrome`**
-(everything Solid owns: header, rail, dock, HUD, pane chrome) **is separate
-from `#vt-surface`** (the layer that owns only position/size for xterm
-wrappers), so resizing panes or switching the active one never recreates
-xterm or sends an unnecessary `resize` to the server. Each `.vt-term` inside
-`#vt-surface` is attached to the DOM exactly once and never moved again —
-`layout/surface.js` only ever updates its `transform`. A refit (and the
-`resize` sent to the server) fires only when a rect's width/height actually
-changed.
+skeleton on a surface layer (N16~N18, ADR-26): `#vt-chrome` owned the pane
+chrome while a separate absolutely-positioned `#vt-surface` owned every xterm
+wrapper, and the two were joined by coordinates only — `layout/surface.js`
+read each pane body's rect and wrote it back as a `transform`.
+
+**2026-09-18 — the surface layer is gone. A terminal now lives inside the
+pane that shows it** (`.vt-pane > .vt-pane-body > .vt-term-wrap`). The plan
+doc listed four measured problems behind N16; three were about excessive
+refits and are solved by things that survive (`panes.js` reuses split/pane
+elements by id, and the refit gate still fires only when a rect's width or
+height actually changed). The fourth — "moving an xterm wrapper in the DOM is
+dangerous" — was measured and did not hold: re-parenting a live **WebGL2**
+terminal left `isContextLost()` false, raised no `webglcontextlost`, kept the
+1128×828 buffer, and kept drawing.
+
+Keeping the two apart had a real cost, because the terminal was not a
+descendant of its pane: `overflow: hidden` and `border-radius` on the pane
+could not clip it, an accent *surface* could not be used for the active pane
+(the terminal painted over it, leaving a single 1px outline as the only
+signal), and xterm's cell quantization remainder (measured 22×8px) was
+stranded on one side with no way for the pane to treat it as padding. What
+is left of `layout/surface.js` is the refit gate — which never needed
+coordinates — plus `#vt-term-stage`, a hidden **waiting room** holding the
+wrappers of sessions that are not currently placed in any pane (they must
+stay in the DOM, and `visibility: hidden` keeps their box measurable so
+cols/rows survive).
 
 ```
 ┌ header 36 ────────────────────────────────────────────────────────────┐
 │ [workspace chip] [tabs…] [+]                     [⌘K] [screens N] [⚙]│
 ├──────────┬───────────────────────────────────────────┬───────────────┤
-│ rail 252 │ pane tree (surface layer)                  │ dock 392      │
+│ rail 252 │ pane tree                                  │ dock 392      │
 │(worktree)│ ┌ pane header 24 ┐                         │ ┌ tabs 28 ┐   │
 │          │ │ cwd · agent     │                        │ │scm|q|…  │   │
 │          │ └─────────────────┘                        │ └─────────┘  │
@@ -380,7 +397,7 @@ rotate each label with `writing-mode: vertical-rl`, which works for Latin
 (glyphs lie on their side) but not for CJK: Korean syllables *stack*, so
 「소스컨트롤」 became a five-character tower, in a monospace face. Each tab now
 carries an icon from `js/ui/icons.js` (`git-branch · list · folder · plug ·
-gauge`), shown only while collapsed; the full label stays in `title`. The
+gauge`), shown only while collapsed; the full label stays in `data-tip`. The
 expanded strip is text-only on purpose — five tabs in a row with icons as well
 is crowded. The frame owns only tab switching, collapse, the width resizer
 (320~560), and device-scoped persistence — each tab's content is drawn by the
@@ -616,6 +633,22 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
 - **Badges** (`.vt-badge`): 1px `--color-line` border, no fill, `--radius-sm`.
   Only status badges get a status-colored border. A badge **counts** something —
   a diff count, an unread count, a port count.
+  **A badge needs room of its own.** It sits in the flow, so it widens whatever
+  holds it: an 18px `min-width` badge inside a 36px collapsed dock tab made the
+  tab 38px wide and `overflow: hidden` cut the rest off. Where the container is
+  a fixed strip, drop the number for a 6px `--color-acc` dot positioned
+  `absolute` (contributing 0px of width) and let the tooltip say the count.
+- **Tooltips** (`.vt-tip`, `js/ui/tooltip.js`): one `position: fixed` element on
+  `body`, driven by `data-tip` (name) and optional `data-tip-sub` (the value —
+  a count, a shortcut, a reason; `--font-mono`, `tabular-nums`, `--color-sub`).
+  `data-tip-side` picks `top|bottom|left|right` and flips when the side doesn't
+  fit. **Never the native `title` attribute**: its ~1s delay can't be tuned, it
+  can't be themed across the 6 skins, and it does nothing under touch. 400ms to
+  open, instant within 300ms of the last one closing, 120ms
+  opacity+scale growing from the trigger. No arrow — an arrow has to track both
+  the fill and the 1px edge, and always drifts in one skin.
+  A tooltip is a *description*, not a name: icon-only controls still carry
+  `aria-label`, which is also the only label a touch device ever gets.
 - **Tags** (`.vt-tag`): a filled faint tint, no border, `--radius-sm`. A
   different species from `.vt-badge` — a tag doesn't count, it states a
   *property* (public exposure, trust tier, "this device", a plan name like
@@ -626,6 +659,27 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   `color-mix` were folded into one component.
 - **Tabs (header, dock)**: active = a 2px `--color-acc` bottom underline +
   `--color-acc-surface` background. Inactive = `--color-sub` text.
+- **Panes** (`.vt-pane`): a real box — `--term` background, 1px
+  `--color-line` border, `--radius-sm`, with a 2px `gap` between siblings (so
+  the gutter between two panes is 2+1+2 = 5px and belongs to neither). The
+  single-pane case (`#vt-chrome-tree > .vt-pane`) drops the border and radius:
+  a border separates *several* things, and there is nothing to separate.
+  This is what absorbs xterm's cell-quantization remainder — it can't be
+  removed, so the box makes it read as the pane's own padding instead of a
+  gap before the divider.
+- **The active pane says so three times**: accent border, 10% accent-tinted
+  head, `--color-txt` name (inactive: `--color-sub`). One 1px accent outline
+  was the entire signal until 2026-09-18, competing with three other 1px
+  lines on the same screen. When one signal is too weak, add signals — don't
+  thicken the line (2px eats a pixel of terminal width).
+  **Which pane is active is decided by focus, never by a click** — the pane
+  listens for `focusin` (xterm's hidden textarea bubbles it up). A click
+  would let you make a viewer pane "active" while the keys still go to a
+  terminal, which is the exact mismatch the rule exists to prevent.
+- **Pane head buttons hide until needed**: `opacity: 0` unless the pane is
+  hovered, active, or the button has `:focus-visible`. Four panes means
+  twelve icons and at most one of them is wanted. Always visible under a
+  coarse pointer — there is no hover to reveal them with.
 - **Buttons**: default = outline only. The primary action (commit, issue
   link, create-and-switch) = filled `--color-acc` + `--color-on-solid` text.
   **One filled button per screen.**
@@ -643,7 +697,8 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   mode), `Ctrl/Cmd+Shift+F` (in-pane search), Esc to close,
   `:focus-visible` outline (`--color-acc`).
 - **Screen readers:** icon buttons carry `aria-label`; mic status is
-  `role="status" aria-live="polite"`.
+  `role="status" aria-live="polite"`. A visible tooltip puts
+  `aria-describedby="vt-tip"` on its trigger and removes it on close.
 - **`prefers-reduced-motion`:** globally disables animation/transition;
   `waiting` falls back to an outline.
 - **safe-area-inset:** padding applied on top/bottom/left (notch, gesture bar).
@@ -660,8 +715,8 @@ design.
 | `styles/theme/skins.css` | Color remapping for the other 5 skins |
 | `styles/layers/components.css` | `.status-dot` — the home for new components |
 | `styles/layers/legacy.css` | Every existing component + `.vt-*` overlays + the rail/dock/HUD frame's CSS (unlayered) |
-| `frontend/index.html` | Boot theme script (anti-FOUC), login gate, `#vt-chrome`/`#vt-surface` mount points, mobile bottom nav, keybar |
-| `frontend/js/layout/surface.js` | Surface layer placement · refit gate (N16) |
+| `frontend/index.html` | Boot theme script (anti-FOUC), login gate, `#vt-chrome` mount point, mobile bottom nav, keybar |
+| `frontend/js/layout/surface.js` | Terminal placement (which pane holds which session) · refit gate · `#vt-term-stage` waiting room |
 | `frontend/js/core/signals.ts` | Bridge from `core/store.js`/`layout/store.js` to Solid signals |
 | `frontend/js/core/types.ts` | Shared TS types |
 | `frontend/js/shell/Rail.tsx` | Worktree rail, 252px (N36) |
@@ -673,11 +728,13 @@ design.
 | `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider (N43) |
 | `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'` (N4) |
 | `frontend/js/layout/breakpoints.js` | The 4 responsive-tier boundaries (single source) |
+| `frontend/js/layout/dom-ids.js` | Tree node id → DOM element id, in one place (the maker and the finder both read it) |
 | `frontend/js/layout/panes.js` · `compact.js` · `dnd.js` | Pane-tree rect computation · compact mode · drop zones |
 | `frontend/js/core/settings.js` | Server-backed settings store — global/device scope (N3) |
 | `frontend/js/core/keymap.js` | Keymap registry |
 | `frontend/js/panels/viewer/scm.js` | Dock source-control tab renderer (read-only) |
 | `frontend/js/ui/icons.js` | Inline SVG icon registry (the only icon source) — includes the 5 agent marks |
+| `frontend/js/ui/tooltip.js` | The one tooltip layer — `data-tip` / `data-tip-sub` / `data-tip-side`, replaces native `title` |
 | `frontend/js/term/xterm-setup.js` | xterm instance creation, applies `getVtXtermTheme()` |
 | `server/usage/base.py` · `clauth.py` · `counter_jsonl.py` · `ollama.py` | LimitProvider/CounterProvider (N10/N41) |
 | `server/device_settings.py` | Device-scoped settings storage (N3) |

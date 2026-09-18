@@ -197,7 +197,7 @@ test('refreshGrid: 사라진 세션의 카드는 다음 새로고침에서 제�
 test('refreshGrid: 에이전트 배지 정보를 카드에 반영한다', async () => {
   // D3(20-design-system.md §4) — 이모지가 아니라 agent 이름으로 SVG 마크를
   // 그린다(icons.js의 agentIcon). 배지가 비어 있는지가 아니라, 실제로 svg가
-  // 채워졌는지와 title(접근성 라벨)이 맞는지를 본다.
+  // 채워졌는지와 툴팁 문구(data-tip)가 맞는지를 본다.
   const window = buildGridWindow({
     tmuxSessions: [{ name: 'dev', command: 'claude', cwd: '/repo' }],
     agents: { dev: { agent: 'claude', label: 'Claude Code' } },
@@ -206,6 +206,8 @@ test('refreshGrid: 에이전트 배지 정보를 카드에 반영한다', async 
 
   const badge = window.document.querySelector('[data-name="dev"] .card-agent');
   assert.ok(badge.querySelector('svg'), '에이전트 마크(svg)가 그려져야 한다');
-  assert.strictEqual(badge.title, 'Claude Code');
-  assert.strictEqual(badge.getAttribute('title'), 'Claude Code');
+  assert.strictEqual(badge.getAttribute('data-tip'), 'Claude Code');
+  // 2026-09-18 — 네이티브 title은 공용 툴팁(ui/tooltip.js)으로 넘어갔다. 남아
+  // 있으면 OS 상자와 우리 툴팁이 **둘 다** 뜬다.
+  assert.strictEqual(badge.getAttribute('title'), null);
 });

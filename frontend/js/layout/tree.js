@@ -123,6 +123,19 @@ export function setSession(tree, paneId, sessionId) {
 
 // splitId가 가리키는 split의 ratio를 바꾼다. 0.1~0.9로 clamp — 어느 한쪽이
 // 완전히 0이 되면 구분선을 다시 잡을 수 없는 상태가 된다.
+// 트리의 **모든** 분할을 반반으로. 드래그로 흐트러진 배치를 한 번에 되돌린다 —
+// 지금까지 비율은 드래그로만 바뀌었고 되돌릴 경로가 아예 없었다.
+// 이미 전부 0.5면 같은 트리 참조를 그대로 돌려준다(불필요한 재렌더 방지).
+export function evenRatios(tree) {
+  function walk(node) {
+    if (node.t === 'leaf') return node;
+    const a = walk(node.a), b = walk(node.b);
+    if (node.ratio === 0.5 && a === node.a && b === node.b) return node;
+    return { ...node, ratio: 0.5, a, b };
+  }
+  return walk(tree);
+}
+
 export function setRatio(tree, splitId, ratio) {
   const clamped = Math.min(0.9, Math.max(0.1, ratio));
   function walk(node) {

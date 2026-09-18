@@ -140,8 +140,9 @@ function statusDot(status) {
   const el = document.createElement('span');
   el.className = 'status-dot';
   el.dataset.state = status || IDLE;
-  el.title = STATE_LABEL[status] || STATE_LABEL.idle;
-  el.setAttribute('aria-label', el.title);
+  const label = STATE_LABEL[status] || STATE_LABEL.idle;
+  el.setAttribute('data-tip', label);
+  el.setAttribute('aria-label', label);
   return el;
 }
 
@@ -156,8 +157,9 @@ export function applyStatusDot(container, status) {
   }
   if (dot.dataset.state !== (status || IDLE)) {
     dot.dataset.state = status || IDLE;
-    dot.title = STATE_LABEL[status] || STATE_LABEL.idle;
-    dot.setAttribute('aria-label', dot.title);
+    const label = STATE_LABEL[status] || STATE_LABEL.idle;
+    dot.setAttribute('data-tip', label);
+    dot.setAttribute('aria-label', label);
   }
   return dot;
 }

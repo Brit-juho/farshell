@@ -1,22 +1,24 @@
 // L3 1·3단계 — 트리를 DOM으로 그리는 재귀 렌더러 + 분할 UI. split은 flex
-// 컨테이너, leaf(.vt-pane-body)는 **빈 상자일 뿐이다** — 실제 xterm wrapper는
-// N16(표면 레이어, layout/surface.js)이 절대좌표로 따로 얹는다. 이 파일은
-// "어느 pane-body가 어느 세션을 보여줘야 하는가"만 계산해 surface.setPlacement로
-// 넘기고, 실제 배치·refit 게이트·드래그 유예는 전부 surface.js 책임이다.
-// 구조용 div(.vt-split/.vt-pane)는 매 렌더마다 새로 만들어도 무해하다(진짜
-// 상태를 담은 건 세션의 wrapper 하나뿐이고, 그건 이제 여기서 아예 건드리지
-// 않는다).
+// 컨테이너, leaf는 `.vt-pane > .vt-pane-head + .vt-pane-body`이고 xterm
+// wrapper는 **그 body 안에 실제로 들어간다**(2026-09-18 — 그전까지는
+// #vt-surface 레이어에 얹혀 좌표로만 붙어 있었다. 경위는 layout/surface.js
+// 상단 주석). 이 파일은 여전히 "어느 pane-body가 어느 세션을 보여줘야
+// 하는가"만 계산해 surface.setPlacement로 넘기고, 실제 이동·refit 게이트·
+// 드래그 유예는 surface.js 책임이다.
+// 구조용 div(.vt-split/.vt-pane)는 id로 재사용한다 — 매 렌더마다 새로 만들면
+// 그 안의 터미널까지 같이 떨어져 나간다.
 //
 // pane 헤더의 분할·닫기 버튼은 "환경 무관 베이스라인"이다(착수 전 설계
 // 리뷰 원칙) — 클릭이든 탭이든 항상 이걸로 전부 가능하다. 탭/헤더를 pane
 // 위로 드래그하는 DnD(L5, layout/dnd.js)는 이 baseline 위에 얹는 "있으면
 // 편한" 추가 경로다.
-import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
+import { getSession, sessionDisplayName } from '../core/store.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
   splitPane, closePane, setRatio,
 } from './store.js';
 import { findNode } from './tree.js';
+import { paneElId, splitElId } from './dom-ids.js';
 import { wireRatioResizer } from './resizer.js';
 import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
 import { openPanePicker } from './pane-picker.js';
@@ -41,20 +43,23 @@ function _applySplitCap(paneEl) {
     const btn = paneEl.querySelector(sel);
     if (!btn) continue;
     btn.disabled = !ok;
-    btn.title = ok ? label : reason;
+    // 2026-09-18 — 한도에 걸린 버튼은 이름(「오른쪽 분할」)은 그대로 두고 **왜 못
+    // 누르는지**를 보조 단으로 내린다. 한 줄에 붙여 쓰던 때는 버튼 이름이
+    // 사유 문장에 묻혔다.
+    btn.setAttribute('data-tip', label);
+    if (ok) btn.removeAttribute('data-tip-sub'); else btn.setAttribute('data-tip-sub', reason);
     btn.setAttribute('aria-label', ok ? label : `${label} — ${reason}`);
   }
 }
 
 let _rootEl = null;
 
-// N16 — _rootEl은 더 이상 #terminal-container 자신이 아니라 그 안의
-// #vt-chrome-tree(신규, 페인 크롬 전용 마운트 포인트)다. #terminal-container를
-// 직접 replaceChildren 대상으로 쓰면 형제인 #vt-surface(표면 레이어)까지
-// 통째로 날아간다 — 실측으로 재현: 트리 렌더가 한 번이라도 일어나면 surface.js가
-// 이미 만들어 둔 #vt-surface가 사라지고 다음 setPlacement가 새 걸 만들면서
-// 그 안의 wrapper들과 완전히 분리된다. 이 파일은 §3 전면 개편(index.html에
-// #vt-chrome 도입) 전까지 이 div를 JS로 lazy 생성해 그 문제를 막는다.
+// _rootEl은 #terminal-container 자신이 아니라 그 안의 #vt-chrome-tree다.
+// #terminal-container를 직접 replaceChildren 대상으로 쓰면 형제인 대기실
+// (#vt-term-stage)까지 통째로 날아간다 — 실측으로 재현했다(트리 렌더가 한 번
+// 일어나면 surface.js가 만들어 둔 대기실이 사라지고, 다음 setPlacement가 새
+// 걸 만들면서 그 안에서 대기하던 wrapper들과 완전히 분리된다). 표면 레이어를
+// 걷어낸 뒤에도 이 형제 관계는 그대로라 같은 함정이 남아 있다.
 function _ensureContainers() {
   if (!_rootEl) {
     const container = document.getElementById('terminal-container');
@@ -67,7 +72,8 @@ function _ensureContainers() {
       container.appendChild(_rootEl);
     }
     // L3 2단계: "터미널 영역 한정"(§8) — 스와이프 리스너는 컨테이너 전체에 건다
-    // (표면 레이어의 wrapper도 이 컨테이너의 후손이라 이벤트가 그대로 버블링된다).
+    // (pane 안의 wrapper도 대기실의 wrapper도 이 컨테이너의 후손이라 이벤트가
+    // 그대로 버블링된다).
     wireCompactSwipe(container);
   }
   return _rootEl != null;
@@ -84,15 +90,15 @@ function _paneSessionId(paneId) {
 
 function _buildPaneEl(paneId) {
   const paneEl = document.createElement('div');
-  paneEl.id = `vt-pane-${paneId}`;
+  paneEl.id = paneElId(paneId);
   paneEl.dataset.paneId = paneId;
   paneEl.className = 'vt-pane';
   paneEl.innerHTML = `
     <div class="vt-pane-head">
       <span class="vt-pane-name"></span>
-      <button type="button" class="vt-icon-btn xs vt-pane-split-row" title="오른쪽 분할" aria-label="오른쪽 분할">${icon('columns-2', 13)}</button>
-      <button type="button" class="vt-icon-btn xs vt-pane-split-col" title="아래쪽 분할" aria-label="아래쪽 분할">${icon('rows-2', 13)}</button>
-      <button type="button" class="vt-icon-btn xs danger vt-pane-close" title="pane 닫기" aria-label="pane 닫기">${icon('x', 13)}</button>
+      <button type="button" class="vt-icon-btn xs vt-pane-split-row" data-tip="오른쪽 분할" data-tip-side="bottom" aria-label="오른쪽 분할">${icon('columns-2', 13)}</button>
+      <button type="button" class="vt-icon-btn xs vt-pane-split-col" data-tip="아래쪽 분할" data-tip-side="bottom" aria-label="아래쪽 분할">${icon('rows-2', 13)}</button>
+      <button type="button" class="vt-icon-btn xs danger vt-pane-close" data-tip="pane 닫기" data-tip-side="bottom" aria-label="pane 닫기">${icon('x', 13)}</button>
     </div>
     <div class="vt-pane-body"></div>
   `;
@@ -103,6 +109,25 @@ function _buildPaneEl(paneId) {
     if (canSplit()) splitPane(paneId, 'col');
   });
   paneEl.querySelector('.vt-pane-close').addEventListener('click', () => closePane(paneId));
+
+  // 활성 pane을 **포커스가** 정한다. layout/store.js 상단이 L3 설계 원칙으로
+  // 적어둔 그대로다("각 pane의 xterm에 실제로 focus 이벤트가 뜰 때만
+  // setActivePane()을 부른다 — 그래야 테두리는 A인데 타이핑은 B로 들어가는
+  // 상태가 애초에 생길 수 없다"). 그런데 그 배선이 **한 번도 붙은 적이
+  // 없었다**: 이 파일은 setActivePane을 import만 해두고 부르지 않았고, 실제
+  // 호출부는 pane 선택 시트와 compact 스와이프뿐이었다. 그래서 분할된 화면에서
+  // 터미널을 클릭해도 활성 표시가 따라오지 않았다 — 표시가 약한 것과 별개로
+  // **가리키는 대상 자체가 틀려 있었다**.
+  //
+  // 원문은 이 배선을 xterm-setup.js에 두려 했는데 그쪽은 자기가 어느 pane에
+  // 있는지 모른다. 터미널이 pane 안으로 들어온 지금은(2026-09-18, 표면 레이어
+  // 제거) 그냥 pane에서 focusin을 들으면 된다 — xterm의 숨은 textarea가 받는
+  // 포커스가 여기까지 버블링된다.
+  //
+  // click이 아니라 focusin인 게 핵심이다. 클릭으로 바꾸면 뷰어 칸을 눌렀을 때
+  // 활성 표시만 그쪽으로 가고 키 입력은 여전히 터미널로 들어간다 — 위 원칙이
+  // 막으려던 바로 그 상태다. setActivePane은 이미 활성이면 아무것도 안 한다.
+  paneEl.addEventListener('focusin', () => setActivePane(paneId));
 
   // L5: 레일 세션 행이나 다른 pane 헤더(아래)를 이 pane 위로 드래그하면
   // 5구역 드롭존으로 배정한다 — 마우스는 네이티브 HTML5 DnD, 터치는 헤더 쪽
@@ -214,11 +239,11 @@ async function _retryUnreachable(node, subEl, btn) {
 // 보고 어느 wrapper를 어디로 옮길지 정한다(DOM 트리 자체는 안 건드린다).
 function _renderNode(node, activePaneId, isRootOnly, placement) {
   if (node.t === 'split') {
-    let el = document.getElementById(`vt-split-${node.id}`);
+    let el = document.getElementById(splitElId(node.id));
     let resizerEl;
     if (!el) {
       el = document.createElement('div');
-      el.id = `vt-split-${node.id}`;
+      el.id = splitElId(node.id);
       el.className = 'vt-split';
       resizerEl = document.createElement('div');
       resizerEl.className = 'vt-split-resizer';
@@ -231,6 +256,13 @@ function _renderNode(node, activePaneId, isRootOnly, placement) {
 
     if (!resizerEl._wired) {
       resizerEl._wired = true;
+      // 더블클릭 = 이 분할만 반반으로. VS Code·iTerm의 관용구라 따로 배우지
+      // 않아도 되고, UI를 하나도 안 늘린다. 트리 전체는 `paneEven` 액션
+      // (기본 Mod+Alt+D · 팔레트 `:` 모드)이 맡는다.
+      resizerEl.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        setRatio(node.id, 0.5);
+      });
       wireRatioResizer(resizerEl, {
         dir: node.dir,
         getContainerSize: () => (node.dir === 'row' ? el.clientWidth : el.clientHeight),
@@ -264,7 +296,7 @@ function _renderNode(node, activePaneId, isRootOnly, placement) {
 // compact의 위치 표시(" · 2/3")용. N16부터는 wrapper를 직접 옮기지 않고
 // placement에 "이 세션은 이 pane-body"라고만 적어 둔다.
 function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = '') {
-  let paneEl = document.getElementById(`vt-pane-${node.id}`);
+  let paneEl = document.getElementById(paneElId(node.id));
   if (!paneEl) paneEl = _buildPaneEl(node.id);
   paneEl.classList.toggle('active', node.id === activePaneId);
   _applySplitCap(paneEl);
@@ -281,7 +313,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
   // 것도 안 넘긴다(placement에 안 들어가므로 xterm이 이 자리를 덮지 않는다).
   if (node.kind === 'viewer') {
     nameEl.textContent = (node.file ? node.file.split('/').pop() : '파일 없음') + labelSuffix;
-    nameEl.title = node.file || '';
+    if (node.file) nameEl.setAttribute('data-tip', node.file); else nameEl.removeAttribute('data-tip');
     _renderViewerBody(bodyEl, node.file);
     return paneEl;
   }
@@ -298,7 +330,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
     // C3 — 원격 호스트가 잠깐 꺼진 칸. 빈 pane으로 강등하지 않고 배치를 지킨다
     // (강등하면 호스트를 다시 켜도 배치가 영영 사라진다, layout/persist.js 참고).
     nameEl.textContent = `${node.unreachable.tmux} · ${node.unreachable.host}` + labelSuffix;
-    nameEl.title = `${node.unreachable.host}에 연결할 수 없습니다`;
+    nameEl.setAttribute('data-tip', `${node.unreachable.host}에 연결할 수 없습니다`);
     _renderUnreachableBody(bodyEl, node);
   } else {
     nameEl.textContent = '빈 pane' + labelSuffix;
@@ -360,7 +392,7 @@ function _applyActiveOnly() {
 // ResizeObserver(surface.js)가 알아서 하므로, 여기서는 CSS만 만지고 끝난다.
 function _applyRatioOnly(splitId) {
   const node = findNode(getTree(), splitId);
-  const el = document.getElementById(`vt-split-${splitId}`);
+  const el = document.getElementById(splitElId(splitId));
   if (!node || node.t !== 'split' || !el || el.children.length !== 3) return;
   el.children[0].style.flex = `${node.ratio} 1 0`;
   el.children[2].style.flex = `${1 - node.ratio} 1 0`;
@@ -382,15 +414,13 @@ function _renderFull() {
     : _renderNode(tree, activePaneId, leaves.length === 1, placement);
   if (_rootEl.children[0] !== rootEl) _rootEl.replaceChildren(rootEl);
 
-  for (const [id, s] of Object.entries(allSessions())) {
-  }
   // N35 §6 — 뷰어 칸이 하나라도 있으면 화면이 비어 있는 게 아니다. 온보딩은
   // position:fixed + z-index:500이라 페인 위를 덮으므로 CSS로 눌러둔다.
   // "열 때 remove()"에 기대지 않는 이유: 세션 목록 응답이 늦게 오는 경로가
   // 온보딩을 **다시** 붙인다(실브라우저에서 그대로 재현됐다).
   document.body.classList.toggle('vt-has-viewer-pane', leaves.some((l) => l.kind === 'viewer'));
-  // 표면 레이어에게 최종 배치를 넘긴다 — 빠진 세션은 숨기고, 새로 들어온
-  // 세션은 즉시 실측해 transform·fit을 건다(surface.js 책임).
+  // 최종 배치를 넘긴다 — 빠진 세션은 대기실로 보내고, 새로 들어온 세션은
+  // 그 pane-body 안으로 옮긴 뒤 즉시 실측해 fit을 건다(surface.js 책임).
   surface.setPlacement(placement);
 }
 
