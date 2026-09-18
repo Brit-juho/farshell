@@ -35,9 +35,16 @@
 }
 .vt-font-badge[hidden] { display:none; }
 
+/* 재연결 오버레이(#conn-overlay) 전용 — 다른 소비자는 없다.
+   z-index는 모달(.vt-viewer-backdrop 600 · .vt-session-backdrop 540 ·
+   메뉴 520)보다 **위**여야 한다. 400이던 시절엔 설정·큐·소스컨트롤을 열어 둔
+   채로 서버가 끊기면 이 오버레이가 모달 밑에 깔려서, 경과 시간도 「끊기/다시
+   연결」 버튼도 화면에 없었다 — 남는 건 뒤에 가려진 작은 pill뿐이라 "왜 아무
+   반응이 없지"로 읽혔다. "서버가 사라졌다"는 어떤 패널보다 상위 상태다.
+   토스트(9999)보다는 아래 — 재연결 알림 자체는 계속 보여야 한다. */
 .vt-overlay {
   position:fixed; inset:0; background:color-mix(in srgb, var(--win) 88%, transparent);
-  z-index:400; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--spacing) * 4);
+  z-index:700; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--spacing) * 4);
   -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); text-align:center; padding:calc(var(--spacing) * 6);
 }
 .vt-overlay .vt-ov-icon { color:var(--err); }

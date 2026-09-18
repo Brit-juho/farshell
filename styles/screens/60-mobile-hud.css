@@ -21,14 +21,21 @@
    좌/우 그룹 사이를 .vt-hud-spacer(flex:1)가 벌린다(고정 그리드가 아니다).
 
    compact(<720px)에서는 통째로 숨는다: 그 폭에서는 하단 내비가 이 자리를
-   쓰고(70-mobile.md), 24px짜리 정보 띠는 폰에서 읽히지도 않는다. */
+   쓰고(70-mobile.md), 24px짜리 정보 띠는 폰에서 읽히지도 않는다.
+
+   regular 티어(720~1279px)에서 워크트리 레일 + dock이 폭을 많이 가져가면
+   칩 전체 너비가 컨테이너보다 넓어질 수 있다 — overflow:hidden이면 뒤쪽 칩
+   (codex, 버전)이 스크롤도 안 되고 조용히 사라진다("값이 없으면 숨긴다"는
+   규칙이지 "자리가 없으면 숨긴다"가 아니다). overflow-x:auto로 최소한
+   스크롤해서는 보이게 한다 — #vt-wtabs/#keybar-keys와 같은 패턴. */
 #vt-hud {
   display:none;   /* 아래 미디어쿼리에서만 켠다 */
   align-items:stretch; height:var(--hud-h); flex:none;
   background:var(--bar); border-top:1px solid var(--line);
   font:400 var(--fs-2xs) var(--mono); color:var(--sub);
-  overflow:hidden; user-select:none;
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:none; user-select:none;
 }
+#vt-hud::-webkit-scrollbar { display:none; }
 @media (min-width:720px) { #vt-hud { display:flex; } }
 
 .vt-hud-spacer { flex:1; min-width:0; }

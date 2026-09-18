@@ -77,6 +77,17 @@ def _run(args: list[str], timeout: float) -> str:
 # lsof NAME 컬럼: "*:7777", "127.0.0.1:6379", "[::1]:5432"
 _ADDR_RE = re.compile(r"^(?P<addr>.*?):(?P<port>\d+)$")
 
+# lsof는 COMMAND 컬럼(공백으로 필드를 나누므로)에서 스페이스·비ASCII를
+# "\xHH"로, 리터럴 백슬래시를 "\\"로 이스케이프한다("Google Chrome" →
+# "Google\x20Chrome"). 안 풀면 화면에 이스케이프 시퀀스가 그대로 샌다.
+_LSOF_ESCAPE_RE = re.compile(r"\\x([0-9a-fA-F]{2})|\\\\")
+
+
+def _unescape_lsof(s: str) -> str:
+    return _LSOF_ESCAPE_RE.sub(
+        lambda m: chr(int(m.group(1), 16)) if m.group(1) else "\\", s
+    )
+
 
 def _parse_lsof(text: str) -> dict[tuple[int, int], dict]:
     rows: dict[tuple[int, int], dict] = {}
@@ -87,7 +98,7 @@ def _parse_lsof(text: str) -> dict[tuple[int, int], dict]:
         # 컬럼: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
         #        0       1   2    3  4    5      6       7    8
         # TYPE(4)이 IPv4/IPv6, NODE(7)이 TCP. 둘을 헷갈리면 중복 병합이 깨진다.
-        cmd, pid_s, user = parts[0], parts[1], parts[2]
+        cmd, pid_s, user = _unescape_lsof(parts[0]), parts[1], parts[2]
         family = parts[4]
         name = parts[8]
         m = _ADDR_RE.match(name)

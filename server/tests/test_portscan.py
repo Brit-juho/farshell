@@ -47,6 +47,22 @@ def test_bracketed_ipv6_address_parses():
     assert "[::1]" in redis["addrs"] and "127.0.0.1" in redis["addrs"]
 
 
+def test_lsof_hex_escapes_in_command_are_decoded():
+    # macOS lsof는 COMMAND 컬럼(공백 구분)의 스페이스를 "\xHH"로 이스케이프한다 —
+    # "Google Chrome"이 "Google\x20Chrome"으로 나온다. 안 풀면 화면에 그대로 샌다.
+    sample = (
+        "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n"
+        "Google\\x20Chrome 13461 neo 214u IPv4 0x1 0t0 TCP 127.0.0.1:9222 (LISTEN)\n"
+    )
+    rows = portscan._parse_lsof(sample)
+    assert rows[(9222, 13461)]["cmd"] == "Google Chrome"
+
+
+def test_unescape_lsof_handles_literal_backslash():
+    assert portscan._unescape_lsof("back\\\\slash") == "back\\slash"
+    assert portscan._unescape_lsof("plain") == "plain"
+
+
 def test_vt_server_port_is_protected(monkeypatch):
     monkeypatch.setenv("VT_PORT", "7777")
     rows = portscan._parse_lsof(LSOF_SAMPLE)
