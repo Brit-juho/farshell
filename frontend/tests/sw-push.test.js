@@ -141,3 +141,22 @@ test('캐시 키가 bump 돼 있다 (vendor는 SWR이라 필수)', () => {
   assert.ok(m, 'CACHE 상수를 찾을 수 없다');
   assert.ok(Number(m[1]) >= 6, `캐시 키가 v6 미만이다(v${m[1]})`);
 });
+
+// 2026-09-18 — 실제로 난 사고를 잠근다. icon-192/512.png와 /favicon.ico가
+// "vendor immutable" stale-while-revalidate 경로에 있었다. SWR은 캐시가 먼저
+// 답하므로, 마이크 아이콘을 FarShell 마크로 바꿨는데도 이미 방문한 브라우저에는
+// 계속 마이크가 나왔다(서버는 새 바이트를 주고 있었다). 브랜드 마크는 immutable이
+// 아니다 — 바뀐다. CACHE 키를 올리면 그 한 번은 풀리지만 다음 교체에서 같은 일이
+//반복되므로 경로 자체를 network-first로 옮겼다.
+test('아이콘은 network-first다 (immutable 경로에 두면 교체가 반영되지 않는다)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const m = /const NETWORK_FIRST = (\/.*\/);/.exec(src);
+  assert.ok(m, 'NETWORK_FIRST 상수를 찾을 수 없다');
+  // eslint-disable-next-line no-eval
+  const re = eval(m[1]);
+  for (const p of ['/static/icon-192.png', '/static/icon-512.png', '/favicon.ico']) {
+    assert.ok(re.test(p), `${p}가 network-first가 아니다`);
+  }
+  // vendor는 진짜 immutable이라 SWR로 남아야 한다(속도 이득이 이 파일의 목적 중 하나다).
+  assert.ok(!re.test('/static/vendor/xterm.min.js'), 'vendor는 SWR로 남아야 한다');
+});

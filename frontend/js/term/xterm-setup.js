@@ -120,6 +120,31 @@ export function createXtermInstance(id) {
 
   term.open(wrapper);
 
+  // ── 유령 스크롤바 15px 회수 ────────────────────────────────────────────
+  // FitAddon은 칸 수를 이렇게 센다(vendor/addon-fit.min.js):
+  //     availableWidth = 부모폭 - padding - viewport.scrollBarWidth
+  // 그리고 xterm의 Viewport 생성자는 그 값을 이렇게 잡는다:
+  //     scrollBarWidth = viewportEl.offsetWidth - scrollAreaEl.offsetWidth || 15
+  //
+  // 우리는 스크롤바를 CSS로 숨긴다(10-shell.css의 `.xterm-viewport`에
+  // `scrollbar-width:none` + `::-webkit-scrollbar{display:none}`). 그러면 저 뺄셈이
+  // **정확히 0**이 되는데, 자바스크립트의 `0 || 15`는 15다 — 숨겼기 **때문에**
+  // 15px짜리 유령 스크롤바가 생기는 셈이다. 그 15px은 아무것도 안 그려지면서
+  // 마지막 글자와 분할선 사이의 빈 띠로 남는다.
+  //
+  // 실측(1440×900, 2분할): wrapper 576px · 셀 8px · 스크롤바 실제 0px인데
+  // scrollBarWidth는 15 → available 561 → cols 70(560px). 눈에 보이는 잔여 16px
+  // 중 **15px이 이것**이고 진짜 셀 양자화는 1px뿐이었다. 0으로 되돌리면
+  // 576/8 = 72칸이 그대로 들어가 잔여가 0이 된다.
+  //
+  // 생성자에서 한 번만 계산되는 값이라(위 vendor 코드가 콤마 초기화 목록 안에
+  // 있다) 여기서 한 번 덮어쓰면 유지된다. 내부 API라 낙관하지 않고 감싼다 —
+  // 실패해도 예전 동작(15px 손해)으로 돌아갈 뿐이다.
+  try {
+    const vp = term._core && term._core.viewport;
+    if (vp && vp.scrollBarWidth) vp.scrollBarWidth = 0;
+  } catch (_) { /* 내부 구조가 바뀌면 조용히 포기한다 */ }
+
   // 모바일 소프트 키보드의 자동수정/자동대문자/맞춤법을 끈다. xterm은 입력을
   // 숨은 textarea(.xterm-helper-textarea)로 받는데, iOS/Android IME는 여기에도
   // 평문 규칙을 그대로 적용한다 — `git`을 `Git`으로, `--force`를 `—force`(em

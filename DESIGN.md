@@ -659,19 +659,31 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   `color-mix` were folded into one component.
 - **Tabs (header, dock)**: active = a 2px `--color-acc` bottom underline +
   `--color-acc-surface` background. Inactive = `--color-sub` text.
-- **Panes** (`.vt-pane`): a real box — `--term` background, 1px
-  `--color-line` border, `--radius-sm`, with a 2px `gap` between siblings (so
-  the gutter between two panes is 2+1+2 = 5px and belongs to neither). The
-  single-pane case (`#vt-chrome-tree > .vt-pane`) drops the border and radius:
-  a border separates *several* things, and there is nothing to separate.
-  This is what absorbs xterm's cell-quantization remainder — it can't be
-  removed, so the box makes it read as the pane's own padding instead of a
-  gap before the divider.
-- **The active pane says so three times**: accent border, 10% accent-tinted
-  head, `--color-txt` name (inactive: `--color-sub`). One 1px accent outline
-  was the entire signal until 2026-09-18, competing with three other 1px
-  lines on the same screen. When one signal is too weak, add signals — don't
-  thicken the line (2px eats a pixel of terminal width).
+- **Panes** (`.vt-pane`): flush, like iTerm2. No border, no radius, no `gap`
+  between siblings, no padding on `#terminal-container` — the boundary is the
+  1px `--color-line` divider and nothing else. `--term` background and
+  `overflow: hidden` stay (the terminal lives inside the pane, so without the
+  clip it spills over its neighbour while a pane shrinks).
+  A bordered, gutter-separated box was tried first, to make xterm's
+  cell-quantization remainder read as the pane's own padding. It did the
+  opposite — it *added* 5px of gutter to the empty strip it was meant to
+  explain. The remainder is not the kind of thing you fix by adding space.
+- **Pane sizes snap to whole terminal cells** (`layout/snap.js`). A split pins
+  its **first** child to a multiple of the cell (`flex: 0 0 568px`) and lets
+  the second take the rest; both can't be multiples at once, because
+  `multiple + 1px divider + multiple` isn't one. What that buys is that the
+  leftover stops appearing at *every* boundary and collects at one outer edge
+  instead. Vertical snapping measures from below the 24px head, so a pane is
+  `head + rows × cellHeight`. Dragging a divider therefore moves in whole
+  columns. Before this, a half-drawn column showed up as a blank strip
+  between the last glyph and the divider.
+- **The active pane says so through its head**, three ways at once: a 10%
+  accent-tinted surface, a 2px accent underline, and a `--color-txt` name
+  (inactive: `--color-sub`). The pane itself can't carry the signal — with no
+  gutter, two neighbours each drawing a border would stack three 1px lines at
+  the divider. The underline is an inset `box-shadow`, never a thicker
+  `border-bottom`: a border would eat terminal height, so every focus change
+  would refit and send a `SIGWINCH`.
   **Which pane is active is decided by focus, never by a click** — the pane
   listens for `focusin` (xterm's hidden textarea bubbles it up). A click
   would let you make a viewer pane "active" while the keys still go to a
@@ -729,6 +741,7 @@ design.
 | `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'` (N4) |
 | `frontend/js/layout/breakpoints.js` | The 4 responsive-tier boundaries (single source) |
 | `frontend/js/layout/dom-ids.js` | Tree node id → DOM element id, in one place (the maker and the finder both read it) |
+| `frontend/js/layout/snap.js` | Cell-multiple snapping for pane sizes — pure, unit-tested |
 | `frontend/js/layout/panes.js` · `compact.js` · `dnd.js` | Pane-tree rect computation · compact mode · drop zones |
 | `frontend/js/core/settings.js` | Server-backed settings store — global/device scope (N3) |
 | `frontend/js/core/keymap.js` | Keymap registry |

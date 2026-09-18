@@ -14,7 +14,13 @@
 //     따라오지만, 실브라우저 검증에서 **예전 index.html이 그대로 나오는 걸
 //     실제로 재현**했다(캐시를 지우니 바로 새 글꼴이 붙었다). 글꼴이 안 바뀌면
 //     화면 전체가 예전 그대로라 "고쳤는데 안 바뀐다"로 보이므로 키를 올린다.
-const CACHE = 'vt-static-v9';
+// v10(2026-09-18): icon-192/512.png를 voice-terminal 시절 마이크에서 FarShell
+//     마크로 교체했다. 이 둘은 PRECACHE에 있고 vendor와 같은
+//     stale-while-revalidate 경로를 타므로(아래 fetch 핸들러), 키를 안 올리면
+//     **이미 설치된 사용자는 계속 마이크를 본다** — 캐시가 먼저 응답하고
+//     갱신은 다음 방문에야 반영된다. activate가 CACHE와 다른 키를 전부 지우므로
+//     이 한 줄이 옛 아이콘을 확실히 몰아낸다.
+const CACHE = 'vt-static-v10';
 
 const PRECACHE = [
   '/static/icon-192.png',
@@ -91,7 +97,15 @@ const NETWORK_ONLY = /^\/(api\/|ws|voice\/)/;
 // 막으려던 사고(브라우저가 옛 app.js를 계속 캐시)가 재현된다.
 // F4: voice.js(최상위 파일)는 frontend/js/voice/ 아래 ES 모듈로 옮겨가 이미
 // `static/js/`로 매치된다 — 최상위 특례(`^\/static\/voice\.js$`)는 삭제.
-const NETWORK_FIRST = /^\/$|^\/manifest\.json$|^\/static\/sw\.js$|^\/static\/(css|js|dist)\//;
+// 2026-09-18: **아이콘을 여기로 옮긴다.** icon-192/512.png와 /favicon.ico는
+// 그전까지 아래 "vendor immutable" SWR 경로로 떨어져 있었다 — 그런데 이 파일들은
+// immutable이 아니다. 브랜드 마크라 실제로 바뀐다(이번에 마이크 → FarShell 마크로
+// 바꿨다). SWR은 캐시가 **먼저** 답하고 갱신은 다음 방문으로 미루므로, 파일을
+// 바꿔도 이미 방문한 사용자에게는 옛 아이콘이 계속 나온다(실제로 그렇게
+// 보고됐다: 서버는 새 바이트를 주는데 탭은 마이크). CACHE 키를 올리면 그 한 번은
+// 풀리지만, 다음에 아이콘을 또 바꿀 때 같은 사고가 반복된다 — 바로 위 dist/
+// 주석이 app.js에 대해 말하는 그 사고와 같은 종류다. 경로로 고쳐 둔다.
+const NETWORK_FIRST = /^\/$|^\/manifest\.json$|^\/favicon\.ico$|^\/static\/sw\.js$|^\/static\/icon-\d+\.png$|^\/static\/(css|js|dist)\//;
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;

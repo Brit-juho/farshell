@@ -1,7 +1,20 @@
 /* VT 동적 파비콘 — 탭 아이콘을 canvas로 그려 16px에서도 선명하게 + 작업 상태 뱃지.
    보라(FarShell/Claude 아이덴티티) 라운드 사각 배경 + 흰 터미널(">_") 글리프 → 라이트/다크 탭바 양쪽에서 보임.
-   우하단 상태 점: 유휴=없음, 작업중=그린, 승인대기=앰버(가장 급함), 완료=블루.
-   색은 D3 상태 토큰(--color-st-*)과 같은 값이다.
+   상태 뱃지는 **우상단 모서리를 접은 삼각형**: 유휴=없음, 작업중=그린,
+   승인대기=앰버(가장 급함), 완료=블루. 색은 D3 상태 토큰(--color-st-*)과 같은 값이다.
+
+   2026-09-18 — 그전까지는 우하단 **점**이었다. 그 점은 반지름 11(지름 22)로
+   64 캔버스의 34%였고 중심이 (48,48)이라 `_` 커서(32~48, y=46) 위에 정확히
+   얹혔다. 실제 탭 크기인 16px에서 재보니 글리프가 통째로 사라지고 색 덩어리만
+   남았다 — 알리려던 신호가 브랜드 마크를 잡아먹고 있었다(사용자 보고:
+   "우측 하단에 점이 먼지를 모르겠네").
+
+   왜 점이 아니라 모서리인가: 16px에서 4px 점은 색으로만 말하는데, 그 크기의
+   색은 탭바 배경·옆 탭과 섞여 "뭔가 붙어 있다"까지만 전달된다. 모서리를
+   접으면 **실루엣이 바뀐다** — 색을 구별하지 못해도 "모양이 다른 아이콘"으로
+   먼저 읽힌다. 그리고 삼각형이 차지하는 우상단은 글리프가 비어 있는 자리라
+   `>`(x≤28)도 `_`(y=46)도 건드리지 않는다.
+   네 안을 실제 탭바에 얹어 비교한 페이지: frontend/static/farshell-favicon.html
 
    theme.js/grid.js/voice.js보다 먼저 로드. window.VTFavicon.set('idle'|'working'|'done').
    - grid.js: agent_event(도구 시작) → 'working'
@@ -19,7 +32,7 @@
   // 있었다 — 같은 화면에서 탭 dot과 파비콘이 서로 다른 색으로 같은 상태를
   // 가리키고 있었다는 뜻이다. canvas라 CSS 변수를 못 읽어 리터럴이지만,
   // 값은 styles/theme/skins.css의 --color-st-*와 같게 유지한다.
-  var DOT = { working: '#32d74b', waiting: '#ffd60a', done: '#0a84ff' };
+  var BADGE = { working: '#32d74b', waiting: '#ffd60a', done: '#0a84ff' };
 
   var _status = 'idle';
   var _canvas = null;
@@ -81,17 +94,23 @@
     ctx.lineTo(48, 46);          // "_" 커서
     ctx.stroke();
 
-    // 상태 점 (우하단) — 배경색 링으로 마이크와 분리 후 컬러 점
-    var dotColor = DOT[status];
-    if (dotColor) {
-      ctx.fillStyle = BG;
+    // 상태 뱃지 — 우상단 모서리를 접은 삼각형.
+    // 라운드 사각으로 clip하는 게 핵심이다: 안 하면 삼각형의 직각 꼭짓점이
+    // 판 밖으로 튀어나와 라운드가 한 군데만 깨진 것처럼 보인다. clip을 걸면
+    // 모서리의 둥근 곡선을 따라 잘려서 "접힌 것"으로 읽힌다.
+    var badge = BADGE[status];
+    if (badge) {
+      ctx.save();
+      roundRect(ctx, 2, 2, 60, 60, 15);
+      ctx.clip();
+      ctx.fillStyle = badge;
       ctx.beginPath();
-      ctx.arc(48, 48, 15, 0, 2 * Math.PI);
+      ctx.moveTo(62, 2);
+      ctx.lineTo(62, 30);
+      ctx.lineTo(34, 2);
+      ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = dotColor;
-      ctx.beginPath();
-      ctx.arc(48, 48, 11, 0, 2 * Math.PI);
-      ctx.fill();
+      ctx.restore();
     }
 
     var link = ensureLink();
@@ -116,7 +135,10 @@
     if (!document.hidden && _status === 'done') set('idle');
   });
 
-  window.VTFavicon = { set: set };
+  // draw·mark도 노출한다 — 같은 마크를 쓰는 다른 자리(앱 아이콘 생성기
+  // scripts/gen-icons.html)가 색·좌표를 여기서 읽어갈 수 있게. 탭 아이콘과
+  // 앱 아이콘이 서로 다른 코드로 그려지면 반드시 어긋난다.
+  window.VTFavicon = { set: set, draw: draw, mark: { bg: BG, fg: FG, badge: BADGE } };
 
   // 초기 렌더 — muddy PNG 대체
   draw('idle');

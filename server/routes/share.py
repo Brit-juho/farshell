@@ -121,6 +121,7 @@ def _pin_page(token: str, error: str = "") -> str:
     err_html = f'<p class="err">{error}</p>' if error else ""
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/png" href="/static/icon-192.png">
 <title>FarShell — 공유 파일</title>
 <style>
 body{{font-family:-apple-system,sans-serif;background:#111;color:#eee;display:flex;
