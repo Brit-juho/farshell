@@ -954,6 +954,20 @@
   .vt-wgrail-agent { margin-right: calc(var(--spacing) * 1.5); }
 }
 
+/* 2026-09-19 후속 — tmux 세션 배지. 예전엔 이름 앞에 "tmux:" 문자열을 붙여
+ * 구분했다(사용자 지적: "이름에 붙는 게 아니라 다른 방식으로"). 위 에이전트
+ * 마크와 같은 톤·크기 규칙 — 정보이지 장식이 아니므로 muted, 활성 행에서만
+ * 액센트. 일반 세션은 이 배지 자체가 없다(마크와 같은 "모르면 안 그린다"). */
+@layer components {
+  .vt-wgrail-tmux {
+    display: inline-flex;
+    flex: none;
+    color: var(--color-muted);
+    margin-right: calc(var(--spacing) * 1);
+  }
+  .vt-wgrail-row.active .vt-wgrail-tmux { color: var(--color-acc); }
+}
+
 /* ── 툴팁 (2026-09-18) ─────────────────────────────────────────────────────────
  * 네이티브 `title`을 대체하는 단 하나의 떠 있는 상자(frontend/js/ui/tooltip.js).
  * body 직계라 어떤 `overflow:hidden` 컨테이너에도 안 갇힌다 — dock 탭 행이
