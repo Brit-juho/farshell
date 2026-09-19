@@ -105,13 +105,18 @@ def test_output_batching_coalesces_rapid_reads(loop):
     loop.run_until_complete(_run())
     # 3번의 read가 한 번의 broadcast로 합쳐졌는가 — 그게 이 테스트의 전부다.
     #
-    # **내용을 통째로 비교하면 안 된다.** 이 세션은 진짜 PTY라 그 안의 셸이
-    # 프롬프트를 뱉고, 그 바이트도 같은 배치 창에 합류한다(리눅스 컨테이너에서
-    # 루트 프롬프트 `# `가 붙어 실패한 것으로 2026-09-19에 확인). 그건 결함이
-    # 아니라 배치가 제대로 동작한다는 증거다 — 합쳐진 게 하나뿐인지와,
-    # 우리가 넣은 3개가 앞에 붙어 있는지만 본다.
-    assert len(received) == 1, f"broadcast가 한 번으로 안 합쳐졌다: {received}"
-    assert received[0].startswith(b"chunkchunkchunk"), received[0]
+    # **received 전체를 비교하면 안 된다.** 이 세션은 진짜 PTY라 그 안의 셸이
+    # 프롬프트를 뱉는데, 그게 언제 어디로 갈지는 환경마다 다르다(2026-09-19
+    # 실측: macOS는 아예 안 옴 · 리눅스 컨테이너는 같은 배치에 합류해
+    # `b'chunkchunkchunk# '` · CI는 별도 broadcast로 `[b'chunkchunkchunk', b'$ ']`).
+    # 셋 다 배치가 올바로 동작한 모습이다.
+    #
+    # 환경과 무관하게 성립하는 불변식만 본다: **우리가 넣은 3개가 한 덩어리로
+    # 뭉쳐 단 하나의 broadcast에만 나타난다.** 배치가 깨지면 `chunk`를 담은
+    # broadcast가 3개가 되므로 이 단언이 바로 잡는다.
+    with_chunk = [b for b in received if b"chunk" in b]
+    assert len(with_chunk) == 1, f"chunk가 여러 broadcast로 쪼개졌다: {received}"
+    assert b"chunkchunkchunk" in with_chunk[0], received
     mgr.destroy_session("test-batch")
 
 
