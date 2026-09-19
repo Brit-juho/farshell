@@ -12,10 +12,25 @@ vendor/* 는 immutable 전제(파일명 고정 + sw.js 캐시 키 bump 로 관�
 여기에 no-cache 를 붙이면 SWR 캐시 이득이 사라진다.
 """
 
+from pathlib import Path
+
 import pytest
 from starlette.testclient import TestClient
 
 import main
+
+# `dist/`는 커밋하지 않는다(ADR-2) — Vite가 만든다. 그래서 이 파일의 두
+# 파라미터(`/static/dist/app.{js,css}`)는 **빌드를 돌린 환경에서만** 의미가
+# 있다. CI의 server 잡은 node를 쓰지 않으므로 항상 404였고, 그 두 건이
+# 2026-09-19까지 CI에서 조용히 빨간 상태로 있었다(잡이 러너째 죽는 문제에
+# 가려 아무도 못 봤다). 산출물 자체의 존재·형태는 `frontend` 잡의 「산출물
+# 형태 검증」이 이미 게이트로 잡고 있으므로, 여기서는 빌드가 없으면 건너뛴다 —
+# 이 파일이 지키려는 것은 "산출물이 있는가"가 아니라 "Cache-Control이 붙는가"다.
+_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+_needs_build = pytest.mark.skipif(
+    not (_DIST / "app.js").exists(),
+    reason="frontend/dist/ 없음 — `npm run build` 뒤에만 의미가 있는 경로다",
+)
 
 
 @pytest.fixture
@@ -34,8 +49,8 @@ def client():
     # F1(Vite/Tailwind 도입) — frontend/css/app.css 는 폐기되고 frontend/dist/app.{js,css}
     # 로 대체됐다. 옛날 css/app.css 가 겪었던 것과 똑같은 브라우저 고정 캐싱 사고가
     # 빌드 산출물에서도 재현될 수 있어 같은 회귀 테스트로 묶는다.
-    "/static/dist/app.js",
-    "/static/dist/app.css",
+    pytest.param("/static/dist/app.js", marks=_needs_build),
+    pytest.param("/static/dist/app.css", marks=_needs_build),
 ])
 def test_app_code_is_revalidated(client, path):
     r = client.get(path)
