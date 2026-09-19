@@ -14,15 +14,47 @@
  */
 
 /* ── S4 설정 화면 ──────────────────────────────────────────────────────────
-   wide는 좌측 섹션 목록 + 우측 내용 2단, compact(<720px)는 섹션 목록이 위로
-   가로 스크롤되는 한 줄이 된다(계획서 §3: "wide 2단 / compact 시트"). */
+   wide는 좌측 섹션 목록 + 우측 내용 2단, compact(<720px)는 더보기 목록에서
+   설정 상세로 들어가는 단일 열 화면이다. */
 .vt-settings .vt-vw-body { display:flex; gap:0; padding:0; overflow:hidden; }
+.vt-settings .vt-viewer-card { width:min(880px, 100%); max-height:min(84vh, 760px); }
+.vt-settings .vt-viewer-head { min-height:44px; }
+.vt-set-save { font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-set-save[data-state="saving"] { color:var(--color-st-waiting); }
+.vt-set-save[data-state="failed"] { color:var(--color-st-error); }
+.vt-set-search { margin-bottom:calc(var(--spacing) * 2); }
+.vt-set-search-input {
+  width:100%; height:32px; box-sizing:border-box; padding:0 10px;
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  background:var(--color-term-bg); color:var(--txt); font:400 var(--fs-xs) var(--ui);
+}
+.vt-set-search-results { display:flex; flex-direction:column; margin-top:4px; }
+.vt-set-search-result {
+  display:flex; flex-direction:column; align-items:flex-start; gap:2px;
+  width:100%; padding:8px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--txt); text-align:left; cursor:pointer;
+}
+.vt-set-search-result:hover { background:var(--menu-hover); }
+.vt-set-search-result strong { font:500 var(--fs-xs) var(--ui); }
+.vt-set-search-result small,
+.vt-set-search-empty { color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
+.vt-set-search-empty { padding:8px 0; }
 .vt-set-nav {
-  display:flex; flex-direction:column; gap:2px; flex-shrink:0; width:150px;
-  padding:calc(var(--spacing) * 1.5); border-right:1px solid var(--line); overflow-y:auto;
+  display:flex; flex-direction:column; gap:2px; flex-shrink:0; width:184px;
+  padding:calc(var(--spacing) * 2); border-right:1px solid var(--line); overflow-y:auto;
 }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 설정 왼쪽 내비(sm). 활성은 .active */
-.vt-set-content { flex:1; min-width:0; padding:calc(var(--spacing) * 2); overflow-y:auto; }
+.vt-set-content { flex:1; min-width:0; padding:calc(var(--spacing) * 4); overflow-y:auto; }
+.vt-set-content > * { max-width:620px; margin-left:auto; margin-right:auto; }
+.vt-set-intro { position:relative; margin-bottom:calc(var(--spacing) * 5); padding-right:72px; }
+.vt-set-title { margin:0; color:var(--txt); font:600 var(--fs-lg) var(--ui); }
+.vt-set-description { margin:4px 0 0; color:var(--sub); font:400 var(--fs-xs) var(--ui); }
+.vt-set-device { position:absolute; right:0; top:0; }
+.vt-set-group { margin:0 0 calc(var(--spacing) * 6); }
+.vt-set-group-title {
+  margin:0 0 calc(var(--spacing) * 1.5); color:var(--sub);
+  font:600 var(--fs-xs) var(--ui); letter-spacing:.02em;
+}
 
 .vt-set-row {
   display:flex; align-items:flex-start; justify-content:space-between; gap:calc(var(--spacing) * 2);
@@ -30,8 +62,16 @@
 }
 .vt-set-row:last-child { border-bottom:0; }
 .vt-set-row.conflict .vt-set-combo { color:var(--color-st-error); border-color:var(--color-st-error); }
+.vt-set-meta { min-width:0; }
 .vt-set-label { font:500 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-set-scope { margin-left:calc(var(--spacing) * 1.5); vertical-align:middle; color:var(--sub); }
 .vt-set-help { margin-top:4px; font:400 var(--fs-xs) var(--ui); color:var(--sub); max-width:42ch; }
+.vt-set-default {
+  display:block; margin-top:6px; padding:0; border:0; background:transparent;
+  color:var(--acc); font:500 var(--fs-xs) var(--ui); cursor:pointer;
+}
+.vt-set-default:hover { text-decoration:underline; }
+.vt-set-default[hidden] { display:none; }
 .vt-set-note {
   margin:0 0 calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5);
   background:var(--menu-hover); border-radius:var(--radius-sm);
@@ -69,6 +109,15 @@
 .vt-set-reset:disabled:hover { background:transparent; }
 
 .vt-set-btns { display:flex; gap:calc(var(--spacing) * 1); flex-shrink:0; }
+.vt-range-number {
+  width:58px; height:28px; padding:0 6px; text-align:right;
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  background:var(--color-term-bg); color:var(--txt); font:500 var(--fs-xs) var(--mono);
+}
+.vt-range-unit { min-width:1.5em; color:var(--sub); font:400 var(--fs-xs) var(--ui); }
+.vt-range.has-presets { flex-wrap:wrap; justify-content:flex-end; max-width:300px; }
+.vt-range-presets { display:flex; justify-content:flex-end; gap:4px; width:100%; }
+.vt-set-mobile-home { display:none; }
 .vt-set-about { font:400 var(--fs-sm) var(--ui); color:var(--txt); }
 
 /* 2026-09-18(3차) — 설정 「음성」의 「다운로드된 모델」 목록. .vt-set-row의
@@ -180,16 +229,49 @@
   background:color-mix(in srgb, var(--color-st-working) 16%, transparent);
 }
 
-@media (max-width: 720px) {
-  .vt-settings .vt-vw-body { flex-direction:column; }
-  .vt-set-nav {
-    flex-direction:row; width:auto; overflow-x:auto; overflow-y:hidden;
-    border-right:0; border-bottom:1px solid var(--line);
+@media (max-width: 719px) {
+  .vt-settings { padding:0; }
+  .vt-settings .vt-viewer-card {
+    width:100%; height:100vh; height:100dvh; max-height:none;
+    border:0; border-radius:0;
   }
+  .vt-settings .vt-vw-body { flex-direction:column; }
+  .vt-set-nav { display:none; }
+  .vt-set-content { padding:calc(var(--spacing) * 3); }
+  .vt-set-content > * { max-width:none; }
+  .vt-set-intro { padding-right:0; margin-bottom:calc(var(--spacing) * 4); }
+  .vt-set-back { margin-bottom:calc(var(--spacing) * 2); min-height:44px; }
+  .vt-set-device { position:static; display:inline-flex; margin-top:calc(var(--spacing) * 2); }
   /* 좁은 화면에서는 라벨과 컨트롤을 위아래로 — 가로로 붙이면 라벨이 잘린다 */
-  .vt-set-row { flex-direction:column; align-items:stretch; gap:calc(var(--spacing) * 1); }
+  .vt-set-row { flex-direction:column; align-items:stretch; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2.5) 0; }
+  .vt-settings .vt-toggle,
+  .vt-settings .vt-select,
+  .vt-settings .vt-set-combo,
+  .vt-settings .vt-set-content .vt-btn { min-height:44px; }
+  .vt-settings .vt-range input[type="range"] { height:44px; flex:1; min-width:0; }
+  .vt-settings .vt-range-number { height:44px; }
+  .vt-settings .vt-range.has-presets { max-width:none; }
+  .vt-settings .vt-range-presets { justify-content:flex-start; }
+  .vt-settings .vt-range-presets .vt-btn { flex:1; }
+  .vt-settings .vt-set-pt { min-height:44px; }
   .vt-set-keyrow { flex-wrap:wrap; }
   .vt-set-secrow { flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 1); }
+  .vt-set-mobile-home { display:block; width:100%; padding:calc(var(--spacing) * 3); overflow-y:auto; }
+  .vt-set-mobile-home .vt-set-search { margin-bottom:calc(var(--spacing) * 3); }
+  .vt-set-search-input { height:44px; font-size:var(--fs-sm); }
+  .vt-set-mobile-home .vt-set-search-result { min-height:52px; border-bottom:1px solid var(--line); }
+  .vt-set-mobile-group { margin:calc(var(--spacing) * 3) 0 calc(var(--spacing) * 1); color:var(--sub); font:600 var(--fs-xs) var(--ui); }
+  .vt-set-mobile-group:first-child { margin-top:0; }
+  .vt-set-mobile-link {
+    width:100%; min-height:56px; display:flex; align-items:center; justify-content:space-between;
+    gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) 0;
+    border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--txt);
+    text-align:left; font:400 var(--fs-sm) var(--ui); cursor:pointer;
+  }
+  .vt-set-mobile-link > span:first-child { display:flex; flex-direction:column; gap:2px; }
+  .vt-set-mobile-link strong { font-weight:500; }
+  .vt-set-mobile-link small { color:var(--sub); font-size:var(--fs-xs); }
+  .vt-set-mobile-link > span:last-child { color:var(--sub); font-size:var(--fs-lg); }
 }
 
 /* ── U2 사용량 게이지 ──────────────────────────────────────────────────────

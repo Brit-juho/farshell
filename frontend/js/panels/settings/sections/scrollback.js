@@ -13,6 +13,7 @@ export function renderScrollbackSection() {
     '재접속할 때: 최근 256KB만 (현재 — 이 설정과 무관하게 항상 그대로입니다). '
       + '켜면 출력을 서버 디스크에도 이어붙여 "더 불러오기"로 더 과거 출력을 볼 수 있게 됩니다. '
       + '타이핑한 입력은 저장되지 않습니다 — 출력 스트림만 기록합니다. 7일 뒤 자동 삭제.',
+    { scope: 'global' },
   ));
   const usageHost = document.createElement('div');
   usageHost.className = 'vt-set-sechost';
@@ -27,4 +28,3 @@ export function renderScrollbackSection() {
   });
   return frag;
 }
-
