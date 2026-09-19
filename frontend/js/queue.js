@@ -18,6 +18,20 @@ import { isMac } from './core/env.js';
 
 function closeQueue() { closePanel('vt-queue'); }
 
+/** U8 — 「지금 실행」은 **큐에 투입할 게 있을 때만** 누를 수 있다.
+ *
+ * 빈 큐에서도 눌렸고, 눌러봐야 서버가 할 일이 없다. 누를 수 없는 이유를
+ * `title`로 말해 준다 — 비활성 버튼이 이유 없이 회색이면 "고장났나"로 읽힌다.
+ * `refreshQueue`가 목록을 그릴 때마다 부른다(폴링 5초). export하는 이유는
+ * 단위 테스트가 DOM 없이도 규칙을 고정할 수 있게 하기 위해서다. */
+export function syncRunButton(root, count) {
+  const btn = root?.querySelector?.('#vt-q-run');
+  if (!btn) return null;
+  btn.disabled = count === 0;
+  btn.title = count === 0 ? '큐가 비어 있습니다' : '한 건 지금 투입';
+  return btn;
+}
+
 export function showQueue() {
       const panel = openPanel({
         id: 'vt-queue',
@@ -54,6 +68,9 @@ export function showQueue() {
         if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); addQueueItem(); }
       });
 
+      // 첫 응답이 오기 전까지는 개수를 모른다 — 모르는 동안은 막아둔다.
+      // 열자마자 누를 수 있으면 그 찰나에 빈 큐로 요청이 나간다.
+      syncRunButton(panel.el, 0);
       _loadQueueTargets();
       refreshQueue();
       // 5초 폴링. 패널이 열려 있을 때만 돈다 — 닫으면 setPanelPoll이 정리한다.
@@ -118,9 +135,13 @@ export function showQueue() {
       // U9: "자동" 옵션이 실제로 가리키는 세션을 드롭다운 라벨에 바로 반영.
       _updateAutoTargetLabel(d.auto_target, d.auto_target_mode);
 
+      syncRunButton(document, d.items.length);
+
       if (!d.items.length) {
+        // 「지금 실행」이 방금 비활성이 됐으므로 그쪽을 가리키지 않는다 —
+        // 못 누르는 버튼을 쓰라고 안내하면 그게 더 헷갈린다.
         body.innerHTML = `<div class="vt-vw-empty">큐가 비어 있습니다.<br>`
-          + `${d.autodrain ? '작업이 끝나면 자동으로 투입됩니다.' : '자동 투입이 꺼져 있습니다 — "지금 실행"을 쓰세요.'}</div>`;
+          + `${d.autodrain ? '작업이 끝나면 자동으로 투입됩니다.' : '자동 투입이 꺼져 있습니다 — 항목을 추가한 뒤 「지금 실행」으로 투입하세요.'}</div>`;
         return;
       }
 
