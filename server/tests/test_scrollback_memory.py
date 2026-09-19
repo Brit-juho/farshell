@@ -10,7 +10,9 @@ from pty_manager import PTYManager, PTYSession
 
 
 def _session():
-    return PTYSession(session_id="t", pid=1, fd=1)
+    # 이 파일은 TestClient를 쓰지 않아 `destroy_all()`이 안 돌았을 뿐,
+    # 값 자체는 같은 지뢰였다(pid 1=init, fd 1=stdout). 같이 치운다.
+    return PTYSession(session_id="t", pid=0, fd=-1)
 
 
 def test_scrollback_capped_by_bytes():

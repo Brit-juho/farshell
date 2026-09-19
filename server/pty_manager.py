@@ -626,10 +626,15 @@ class PTYManager:
         # add_reader 등록이 새 fd에 걸려 콜백이 영영 발화하지 않는다(실측 확인).
         self._unregister_reader(session)
         self._unregister_writer(session)
-        try:
-            os.close(session.fd)
-        except OSError:
-            pass
+        # 표준 스트림(0·1·2)은 **절대 닫지 않는다.** 진짜 PTY master fd는 항상
+        # 3 이상이라 정상 경로에서는 걸릴 일이 없지만, 어떤 경로로든 fd가 1로
+        # 들어오면 서버가 자기 stdout을 닫는다 — 로그가 그 자리에서 끊기고
+        # 이후 write가 실패한다(2026-09-19 CI에서 실제로 그렇게 물렸다).
+        if session.fd is not None and session.fd > 2:
+            try:
+                os.close(session.fd)
+            except OSError:
+                pass
 
         # [C2] 좀비 프로세스 방지
         pid = session.pid
@@ -645,26 +650,52 @@ class PTYManager:
         # → 자식이 자기 그룹의 리더(pgid == pid)임이 확인될 때만 그룹 kill을 하고,
         #   그 외에는 자식 프로세스만 개별 kill한다 (부모 그룹은 절대 건드리지 않음).
         own_pgid = os.getpgrp()
-        group_kill_safe = pgid is not None and pgid == pid and pgid != own_pgid
-        for sig in (signal.SIGTERM, signal.SIGKILL):
-            try:
-                if group_kill_safe:
-                    os.killpg(pgid, sig)
-                else:
-                    os.kill(pid, sig)
-            except (OSError, ProcessLookupError):
-                pass
+        # **pid 0·1과 음수는 시그널을 보내지 않는다.** POSIX에서 이 값들은
+        # "그 프로세스"를 뜻하지 않는다: 0은 내 프로세스 그룹 전체, -1은
+        # (권한이 닿는) 모든 프로세스, 1은 init/systemd다. 진짜 자식 pid는
+        # 항상 2 이상이므로 정상 경로에서는 걸릴 일이 없고, 이 자리에서 막지
+        # 않으면 잘못된 값 하나가 **머신 전체를 내린다**.
+        #
+        # 2026-09-19에 실제로 겪었다: 두 테스트가 가짜 세션을 `pid=1`로 만들고
+        # TestClient를 썼는데, 앱 lifespan 종료가 `destroy_all()`을 부르면서
+        # 여기로 내려왔다. `os.getpgid(1)`은 1이고 `1 != own_pgid`라 group kill이
+        # "안전"으로 판정돼 `killpg(1, SIGKILL)`이 나갔다 — GitHub 러너 VM이
+        # 그대로 죽었고(그래서 로그조차 업로드되지 않았다) 2026-09-07부터
+        # server 잡이 매번 45분을 돌다 사라진 원인이 이것이었다.
+        # macOS와 컨테이너에서 재현되지 않은 이유도 여기 있다: 맥은 EPERM으로
+        # 튕기고, 컨테이너 안에서는 pytest 자신이 pgid 1이라 group kill 조건이
+        # 성립하지 않는다(그리고 PID 1은 핸들러 없는 시그널을 무시한다).
+        if pid is None or pid <= 1:
+            logger.warning(f"destroy_session({session_id}): 시그널을 보내지 않는다 — pid={pid}")
+            pgid = None
+        else:
+            group_kill_safe = pgid is not None and pgid > 1 and pgid == pid and pgid != own_pgid
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    if group_kill_safe:
+                        os.killpg(pgid, sig)
+                    else:
+                        os.kill(pid, sig)
+                except (OSError, ProcessLookupError):
+                    pass
 
         # 백그라운드 스레드에서 blocking waitpid (이벤트 루프 블로킹 방지).
         # SIGCHLD 핸들러가 먼저 회수할 수도 있으므로 ChildProcessError는 정상 종료로 본다.
-        import threading
-        def _reap():
-            try:
-                os.waitpid(pid, 0)  # blocking — 자식이 죽을 때까지 대기
-            except ChildProcessError:
-                pass  # SIGCHLD 핸들러가 이미 회수함
+        #
+        # 위와 같은 이유로 pid 0·1·음수는 여기서도 거른다 — `waitpid`에서도 그
+        # 값들은 "그 자식"이 아니다(0은 내 프로세스 그룹의 아무 자식, -1은 아무
+        # 자식). 자식이 없으면 ECHILD로 즉시 돌아오지만 **있으면 그 자식이 죽을
+        # 때까지 이 스레드가 블록된다** — 엉뚱한 프로세스를 기다리는 셈이다.
+        if pid is not None and pid > 1:
+            import threading
 
-        threading.Thread(target=_reap, daemon=True).start()
+            def _reap():
+                try:
+                    os.waitpid(pid, 0)  # blocking — 자식이 죽을 때까지 대기
+                except ChildProcessError:
+                    pass  # SIGCHLD 핸들러가 이미 회수함
+
+            threading.Thread(target=_reap, daemon=True).start()
 
         logger.info(f"Session {session_id} destroyed (pid={session.pid})")
 

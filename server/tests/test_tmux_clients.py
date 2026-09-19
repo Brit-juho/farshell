@@ -33,7 +33,9 @@ def env(monkeypatch):
     monkeypatch.setattr(tmux_runner, "run_text", fake_run_text)
     monkeypatch.setattr(tmux_runner, "run", fake_run)
 
-    sess = PTYSession(session_id="web-1", pid=1, fd=-1, tty="/dev/ttys001")
+    # pid=1(init)은 절대 쓰지 않는다 — 앱 lifespan 종료의 `destroy_all()`이
+    # 그 값으로 `killpg(1, SIGKILL)`을 보내 CI 러너 VM을 죽였다(2026-09-19).
+    sess = PTYSession(session_id="web-1", pid=0, fd=-1, tty="/dev/ttys001")
     pty_mgr._sessions["web-1"] = sess
     yield calls
     pty_mgr._sessions.pop("web-1", None)

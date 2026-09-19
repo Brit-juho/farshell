@@ -21,7 +21,16 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def _clean_sessions():
+def _isolated_state(monkeypatch, tmp_path):
+    """이 검사는 **영속 로그까지** 훑는다(`scrollback_persist.logged_session_ids`).
+    그 경로는 `VT_STATE_DIR`이 없으면 `~/.vt/scrollback`, 즉 **이 기계를 쓰는
+    사람의 진짜 터미널 출력**이다. 2026-09-19에 확인했다: 이 파일만 따로 돌리면
+    거기 쌓인 9.5MB를 읽어 `truncated: True`가 나오면서 두 건이 깨졌다. 전체
+    스위트에서는 앞선 테스트가 `VT_STATE_DIR`을 tmp로 돌려놔서 우연히 통과했다 —
+    통과 여부가 실행 순서에 달려 있었던 셈이고, 남의 데이터를 읽는 건 그 자체로
+    막아야 한다. 빈 tmp 디렉터리로 고정한다.
+    """
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
     # 다른 테스트/이전 실행이 남긴 세션이 섞이지 않도록 앞뒤로 비운다.
     pty_mgr._sessions.clear()
     yield
@@ -29,7 +38,12 @@ def _clean_sessions():
 
 
 def _seed_session(session_id: str, name: str, lines: list[str]):
-    s = PTYSession(session_id=session_id, pid=1, fd=1)
+    # pid·fd는 **의도적으로 "프로세스도 파일도 아닌 값"**이다. 예전엔 `pid=1,
+    # fd=1`이었는데 1은 init이고 fd 1은 이 프로세스의 stdout이다 — 앱 lifespan이
+    # 끝나며 `destroy_all()`이 돌면 그 값으로 `killpg(1, SIGKILL)`과 `close(1)`이
+    # 나갔다(2026-09-19, GitHub 러너 VM이 이걸로 죽었다). pty_manager가 이제 0·1과
+    # fd 0~2를 거르지만, 테스트가 위험한 값을 적어두는 것부터 그만둔다.
+    s = PTYSession(session_id=session_id, pid=0, fd=-1)
     pty_mgr._sessions[session_id] = s
     # 실제 PTY 출력처럼 각 줄이 개행으로 끝나되, 마지막 줄 뒤에는 아직 개행이
     # 안 왔을 수도 있는 상태(진행 중인 출력)를 그대로 흉내 — 트레일링 빈 줄을
