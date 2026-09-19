@@ -29,6 +29,9 @@ const onOff = (v) => v !== 'off';
 
 export const SCHEMA = {
   // scope 없음 = 'global'(문서 §1: "기본은 global").
+  // ⚠ `scope: 'device'`를 빼지 말 것 — 폰에서 핀치 줌으로 키운 글씨가 맥
+  // 터미널까지 키운다(`term/touch.js`의 `_setGlobalFontSize`가 이 키에 쓴다).
+  // `frontend/tests/settings.test.js`가 스코프와 **실제 라우팅**을 함께 잠근다.
   'terminal.fontSize':      { type: 'int',  def: 14, min: 8, max: 28, migrate: 'vt_font_size', scope: 'device' },
   'terminal.cursorStyle':   { type: 'enum', def: 'block', values: ['block', 'underline', 'bar'] },
   'terminal.cursorBlink':   { type: 'bool', def: true },
