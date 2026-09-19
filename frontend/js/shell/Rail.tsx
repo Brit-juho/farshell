@@ -9,7 +9,7 @@
 // ADR-26/N35 커밋 참고). 전부 그 파일들이 이미 노출해 둔 window 브리지로만
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
-import { render } from 'solid-js/web';
+import { render, Portal } from 'solid-js/web';
 import {
   buildRailSections, buildSessionSections, buildSleepingEntries,
   GROUP_LABEL, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
@@ -879,12 +879,23 @@ function Rail(props: { deps: RailDeps }) {
       <Show when={hostMenu()}>
         {(m) => <Menu x={m().x} y={m().y} onClose={() => setHostMenu(null)} items={hostMenuItems()} />}
       </Show>
+      {/* 2026-09-20 — **Portal로 body에 붙인다.** 이 시트는 레일 JSX 안에
+          있었는데, `.vt-sidepanel`이 `position:fixed; z-index:70`이라 **쌓임
+          맥락**을 만든다. 그 안에서는 시트 백드롭의 `z-index:600`이 레일 밖으로
+          나가지 못해, 루트 맥락에 있는 `.vt-onboarding`(z:500)이 시트를 통째로
+          덮었다 — 세션이 0개일 때(부팅 직후·마지막 탭을 닫은 직후) 시트가 화면에
+          보이기는 하는데 클릭이 온보딩으로 가버린다. 실브라우저로 확인한 모습:
+          시트 카드 중앙의 최상위 요소가 `DIV#onboarding.vt-onboarding`이었다.
+          z-index 숫자를 올려도 소용없다 — 맥락 안의 값이라 바깥과 비교되지
+          않는다. 맥락 밖으로 꺼내는 것이 유일한 해법이다. */}
       <Show when={repoSheet()}>
-        <RepoVisibility
-          deps={props.deps}
-          onClose={() => setRepoSheet(false)}
-          onChanged={() => refreshRepos()}
-        />
+        <Portal>
+          <RepoVisibility
+            deps={props.deps}
+            onClose={() => setRepoSheet(false)}
+            onChanged={() => refreshRepos()}
+          />
+        </Portal>
       </Show>
     </aside>
   );

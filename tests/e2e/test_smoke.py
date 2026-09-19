@@ -598,6 +598,46 @@ def test_레일_상태막대가_색_단독이_아니고_실제로_그려진다(p
     assert len({v["bg"] for v in bars.values()}) == len(bars), f"상태별 색이 겹친다: {bars}"
 
 
+def test_레일에서_연_시트가_온보딩_위에_뜬다(page):
+    """2026-09-20 — 같은 회귀의 네 번째 자리, 이번엔 **쌓임 맥락** 쪽이다.
+
+    `.vt-sidepanel`은 `position:fixed; z-index:70`이라 자기 안에 쌓임 맥락을
+    만든다. 저장소 시트가 레일 JSX 안에 있던 동안에는 그 백드롭의
+    `z-index:600`이 레일 밖으로 나가지 못해, 루트 맥락의 `.vt-onboarding`
+    (z:500)이 시트를 통째로 덮었다 — 시트는 **보이는데** 클릭이 온보딩으로
+    갔다(실측: 카드 중앙의 최상위 요소가 `DIV#onboarding`). z-index를 올려도
+    안 풀린다. `Portal`로 body에 붙이는 것이 해법이고, 이 테스트는 그 상태를
+    숫자가 아니라 **히트 테스트**로 고정한다 — CSS 값만 보면 600 > 500이라
+    통과해 버린다.
+    """
+    page.wait_for_function(
+        "() => document.documentElement.dataset.appBooted === 'true'", timeout=20000)
+    page.wait_for_selector(".vt-onboarding", state="visible", timeout=10000)
+    # 로그인 게이트의 스피너는 z-index 700이라 **온보딩보다도 위**다. 그게 아직
+    # 떠 있는 동안 히트 테스트를 하면 이 테스트가 재려는 것(시트 vs 온보딩)이
+    # 아니라 스피너를 잰다 — 실제로 한 번 그렇게 깨졌다. 걷힐 때까지 기다린다.
+    page.wait_for_function(
+        "() => { const s = document.getElementById('login-spinner');"
+        "        return !s || s.offsetParent === null; }", timeout=15000)
+    page.evaluate("() => window.vtOpenWorktreeDialog()")
+    page.wait_for_selector(".vt-wtd-backdrop .vt-viewer-card", timeout=10000)
+    got = page.evaluate(
+        """() => {
+          const bd = document.querySelector('.vt-wtd-backdrop');
+          const card = bd.querySelector('.vt-viewer-card');
+          const r = card.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return {
+            inRail: document.getElementById('vt-wgrail').contains(bd),
+            hitInSheet: !!(hit && bd.contains(hit)),
+            hit: hit ? (hit.tagName + '.' + (hit.className || '')) : null,
+          };
+        }"""
+    )
+    assert got["inRail"] is False, "시트가 레일 안에 있으면 쌓임 맥락에 갇힌다"
+    assert got["hitInSheet"], f"시트 중앙이 다른 것에 덮였다: {got}"
+
+
 def test_온보딩이_레일과_dock을_덮지_않는다(page):
     """L4에서 한 번 잡았던 회귀의 재발 방지. `.vt-onboarding`은 position:fixed +
     z-index:500이라 body의 padding(레일·dock 자리)을 안 따라간다 — 세션이 0개인
