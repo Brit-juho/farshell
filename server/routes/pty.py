@@ -9,13 +9,14 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import APIRouter, File, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import auth
 import crypto_channel
+import deps as _deps  # 전역 카운터 직접 수정용
 import file_store
 import paste_prepare
 import scrollback_persist
@@ -46,7 +47,27 @@ WS_QUEUE_LOW = 50
 # 발화해 "새로고침하면 클립보드 동기화 토스트가 한꺼번에 여러 개" 뜨는 버그가 났다.
 _SCROLLBACK_END = object()
 
-import deps as _deps  # 전역 카운터 직접 수정용
+
+def _resume_queue_backpressure_if_drained(
+    send_queue: asyncio.Queue,
+    pty_paused: bool,
+    resume: Callable[[], None],
+) -> bool:
+    """송신 큐가 충분히 비었으면 큐 기반 PTY pause를 해제한다.
+
+    이 판정은 새 PTY 출력이 들어오는 ``_on_data``가 아니라 큐를 실제로
+    비우는 send worker에서 호출해야 한다. pause_read() 뒤에는 PTY reader가
+    등록 해제되므로 새 ``_on_data`` 자체가 오지 않아, 그쪽에서만 LOW를
+    검사하면 연결이 영구 정지한다.
+
+    반환값은 갱신된 ``pty_paused`` 상태다. render pause는 별도 requester를
+    사용하므로 여기서는 큐 requester만 해제한다.
+    """
+    if pty_paused and send_queue.qsize() < WS_QUEUE_LOW:
+        resume()
+        return False
+    return pty_paused
+
 
 def _ws_auth_token(ws: WebSocket) -> Optional[str]:
     """WS 인증: HTTP 미들웨어와 동일한 다중 소스(cookie/query/Bearer)를 수용.
@@ -429,18 +450,24 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             if qs > WS_QUEUE_HIGH and not pty_paused:
                 pty_paused = True
                 pty_mgr.pause_read(session_id, ws_id)
-            elif qs < WS_QUEUE_LOW and pty_paused:
-                pty_paused = False
-                pty_mgr.resume_read(session_id, ws_id)
 
         async def _send_worker():
+            nonlocal pty_paused
             while True:
                 try:
                     data = await send_queue.get()
                     if data is _SCROLLBACK_END:
                         await ws.send_text(json.dumps({"type": "scrollback_end"}))
-                        continue
-                    await ws.send_bytes(data)
+                    else:
+                        await ws.send_bytes(data)
+                    # 큐를 비우는 주체가 재개도 책임진다. PTY reader가 pause된 뒤엔
+                    # _on_data가 더 호출되지 않으므로 그 경로에서는 LOW 도달을
+                    # 관찰할 수 없다.
+                    pty_paused = _resume_queue_backpressure_if_drained(
+                        send_queue,
+                        pty_paused,
+                        lambda: pty_mgr.resume_read(session_id, ws_id),
+                    )
                 except (WebSocketDisconnect, RuntimeError):
                     break
                 except Exception as e:
