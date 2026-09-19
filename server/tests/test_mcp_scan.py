@@ -21,6 +21,7 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_MCP_HOME", str(tmp_path))
     monkeypatch.delenv("VT_CODEX_HOME", raising=False)
     monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **kwargs: ([], None))
     (tmp_path / ".codex").mkdir()
     (tmp_path / ".gemini").mkdir()
     return tmp_path
@@ -94,6 +95,26 @@ def test_tools_filter_limits_scan(home, wt):
     result = mcp_scan.scan(tools=("codex",))
     assert result["servers"] == []
     assert set(result["facts"]) == {"codex"}
+
+
+def test_codex_auth_status_is_merged_without_credentials(home, monkeypatch):
+    (home / ".codex" / "config.toml").write_text(
+        '[mcp_servers.needs_login]\nurl = "https://example.invalid/mcp"\n')
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **kwargs: ([{
+        "name": "needs_login", "enabled": True, "auth_status": "not_logged_in",
+    }], None))
+    server = mcp_scan.scan(tools=("codex",))["servers"][0]
+    assert server["auth_status"] == "not_logged_in"
+    assert any("codex mcp login needs_login" in note for note in server["notes"])
+
+
+def test_codex_auth_probe_failure_keeps_server_visible(home, monkeypatch):
+    (home / ".codex" / "config.toml").write_text(
+        '[mcp_servers.keep]\ncommand = "x"\n')
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **kwargs: (None, "timeout"))
+    result = mcp_scan.scan(tools=("codex",))
+    assert [s["name"] for s in result["servers"]] == ["keep"]
+    assert result["errors"][-1]["reason"] == "timeout"
 
 
 def test_group_by_name_keeps_scopes_separate(home):

@@ -44,6 +44,7 @@ from typing import Optional
 
 import mcp_adapters
 import mcp_scan
+import codex_cli
 
 TOOLS = ("claude", "codex", "agy", "opencode")
 
@@ -257,13 +258,15 @@ def _agy_set(name: str, enabled: bool) -> dict:
 _TOML_TABLE_RE = re.compile(r"^\s*\[")
 
 
-def _codex_header_re(name: str) -> re.Pattern:
-    """`[mcp_servers.name]` 과 `[mcp_servers."name"]` 둘 다 받는다."""
+def _codex_header_re(name: str, table: str = "mcp_servers") -> re.Pattern:
+    """`[table.name]` 과 `[table."name"]` 둘 다 받는다."""
     esc = re.escape(name)
-    return re.compile(rf'^\s*\[mcp_servers\.(?:{esc}|"{esc}")\]\s*$')
+    prefix = re.escape(table)
+    return re.compile(rf'^\s*\[{prefix}\.(?:{esc}|"{esc}")\]\s*$')
 
 
-def toml_set_enabled(text: str, name: str, enabled: bool) -> tuple[str, bool]:
+def toml_set_enabled(text: str, name: str, enabled: bool,
+                     *, table: str = "mcp_servers") -> tuple[str, bool]:
     """TOML **텍스트 수술** — 구조체로 파싱해 재직렬화하지 않는다.
 
     파이썬 `tomllib`은 읽기 전용이라 되돌려 쓰려면 직접 직렬화해야 하는데,
@@ -273,7 +276,7 @@ def toml_set_enabled(text: str, name: str, enabled: bool) -> tuple[str, bool]:
     반환 (새 텍스트, 서버를 찾았는가).
     """
     lines = text.splitlines(keepends=True)
-    header = _codex_header_re(name)
+    header = _codex_header_re(name, table)
     start = None
     for i, line in enumerate(lines):
         if header.match(line):
@@ -664,6 +667,76 @@ def set_plugin_enabled(name: str, enabled: bool, *, tool: str = "claude",
     "켰다고 표시했는데 아무 일도 안 일어난다"가 이 화면이 가장 피해야 할
     상태다.
     """
+    if tool == "codex":
+        if scope != "global":
+            return {"status": "failed", "reason": "Codex 플러그인은 전역 스코프만 지원한다",
+                    "changed": False}
+        path = mcp_adapters.codex_paths()["global"]
+        try:
+            with _locked(path):
+                before, err = mcp_adapters._read_toml(path)
+                if err:
+                    raise WriteRefused(f"{path.name}: {err} — 쓰기를 중단했다")
+                if before is None:
+                    raise WriteRefused(f"{path} 가 없다")
+
+                installed, install_err = codex_cli.installed_plugin_ids()
+                if install_err:
+                    raise WriteRefused(f"설치 여부를 확인하지 못했다: {install_err}")
+                if name not in installed:
+                    raise WriteRefused(
+                        f"`{name}` 플러그인이 설치 목록에 없다 — 먼저 `codex plugin add`로 설치할 것")
+
+                plugins = before.get("plugins")
+                if plugins is not None and not isinstance(plugins, dict):
+                    raise WriteRefused("plugins가 테이블이 아니다 — 쓰기를 중단했다")
+                current = mcp_adapters._as_mapping(plugins).get(name)
+                if current is None and enabled:
+                    # 설정이 없으면 Codex 기본값이 켜짐이다. 불필요한 키를 만들지 않는다.
+                    return {"status": "ok", "changed": False}
+                if current is not None and not isinstance(current, dict):
+                    raise WriteRefused("플러그인 설정이 테이블이 아니다 — 쓰기를 중단했다")
+
+                text = path.read_text(encoding="utf-8")
+                if current is None:
+                    suffix = "" if text.endswith("\n") or not text else "\n"
+                    escaped = name.replace("\\", "\\\\").replace('"', '\\"')
+                    new_text = f'{text}{suffix}\n[plugins."{escaped}"]\nenabled = false\n'
+                else:
+                    new_text, found = toml_set_enabled(text, name, enabled, table="plugins")
+                    if not found:
+                        raise WriteRefused(
+                            f"`{name}` 테이블을 텍스트에서 찾지 못했다 — 쓰기를 중단했다")
+                if new_text == text:
+                    return {"status": "ok", "changed": False}
+
+                parsed, perr = mcp_adapters._read_toml_text(new_text)
+                if perr or parsed is None:
+                    raise WriteRefused(f"수정 결과가 올바른 TOML이 아니다: {perr}")
+                expected = json.loads(json.dumps(before, default=str))
+                expected.setdefault("plugins", {}).setdefault(name, {})["enabled"] = enabled
+                if json.loads(json.dumps(parsed, default=str)) != expected:
+                    raise WriteRefused("수정이 `enabled` 말고 다른 곳까지 바꾼다 — 쓰기를 중단했다")
+
+                stamp = _stamp(path)
+                if _stamp(path) != stamp:
+                    raise WriteRefused("쓰는 사이 외부에서 파일이 바뀌었다 — 다시 시도할 것")
+                _atomic_write(path, new_text)
+                reread, rerr = mcp_adapters._read_toml(path)
+                if rerr or reread is None:
+                    raise WriteUnverified(f"쓴 뒤 다시 읽지 못했다: {rerr or '파일 없음'}")
+                got = mcp_adapters._as_mapping(reread.get("plugins")).get(name) or {}
+                if bool(got.get("enabled", True)) != enabled:
+                    raise WriteUnverified("쓴 내용이 다시 읽은 파일과 다르다")
+                return {"status": "ok", "changed": True}
+        except WriteRefused as e:
+            return {"status": "failed", "reason": str(e), "changed": False}
+        except WriteUnverified as e:
+            return {"status": "unknown", "reason": str(e), "changed": None}
+        except OSError as e:
+            return {"status": "failed", "reason": f"파일 오류: {e.__class__.__name__}",
+                    "changed": False}
+
     if tool != "claude":
         return {"status": "failed", "changed": False,
                 "reason": f"{tool} 플러그인 토글은 아직 지원하지 않는다 — "

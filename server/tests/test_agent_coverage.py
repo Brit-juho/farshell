@@ -22,6 +22,7 @@ from routes import agents as agents_route
 def client(monkeypatch, tmp_path):
     # 훅 등록 안 된 상태를 기본으로 — 없는 경로를 가리켜 "unreadable"이 나게 한다.
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "no-such-claude-config"))
+    monkeypatch.setenv("VT_CODEX_HOME", str(tmp_path / "no-such-codex-config"))
     # N9 — 커버리지가 자기보고 기록(~/.vt/agent-report-seen.json)을 읽는다.
     # 격리하지 않으면 **개발자 실제 홈의 파일**이 결과를 바꾼다.
     monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))

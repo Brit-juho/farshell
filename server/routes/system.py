@@ -266,22 +266,43 @@ async def safe_mode_status(request: Request):
 
 @router.get("/api/hooks/status")
 async def hooks_status():
-    """A0/S4 — Claude Code 훅 등록 상태.
+    """A0/S4 — Claude Code와 Codex 훅 등록 상태.
 
     설정 화면 「정보」가 읽는다. 훅이 없으면 상태 배지·프롬프트 큐 자동 투입·
     TTS 요약이 전부 **조용히** 동작하지 않으므로("왜 아무 일도 안 일어나지"의
     1번 원인), 사용자가 화면에서 확인할 수 있어야 한다.
     """
     import claude_hooks
+    import codex_hooks
 
     try:
         settings = claude_hooks.load_settings(claude_hooks.settings_path())
     except ValueError as e:
         return {"ok": False, "error": "unreadable", "reason": str(e), "events": {}}
-    plan = claude_hooks.plan(settings)
+    claude_plan = claude_hooks.plan(settings)
+    try:
+        codex_plan = codex_hooks.plan_text(codex_hooks.load_text(codex_hooks.settings_path()))
+        codex_error = None
+    except ValueError as e:
+        codex_plan = {}
+        codex_error = str(e)
+    tools = {
+        "claude": {
+            "ok": all(state == "ok" for state, _ in claude_plan.values()),
+            "events": {event: state for event, (state, _) in claude_plan.items()},
+        },
+        "codex": {
+            "ok": bool(codex_plan) and all(state == "ok" for state, _ in codex_plan.values()),
+            "events": {event: state for event, (state, _) in codex_plan.items()},
+        },
+    }
+    if codex_error:
+        tools["codex"]["error"] = codex_error
     return {
-        "ok": all(state == "ok" for state, _ in plan.values()),
-        "events": {event: state for event, (state, _) in plan.items()},
+        "ok": all(tool["ok"] for tool in tools.values()),
+        # 기존 클라이언트 호환: 최상위 events는 계속 Claude 이벤트다.
+        "events": tools["claude"]["events"],
+        "tools": tools,
     }
 
 

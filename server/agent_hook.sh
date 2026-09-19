@@ -12,6 +12,7 @@
 set -uo pipefail
 
 EVENT="${1:-stop}"
+AGENT="${2:-claude}"
 SERVER="${VT_SERVER:-http://localhost:${VT_PORT:-7777}}"
 
 # stdin 백업 — Stop 이벤트는 tts_hook.sh로도 전달해야 함
@@ -20,10 +21,10 @@ trap 'rm -f "$TMPINPUT"' EXIT
 cat > "$TMPINPUT"
 
 # 서버에 이벤트 전송 (timeout 짧게 — 훅이 Claude를 막으면 안 됨)
-python3 - "$EVENT" "$TMPINPUT" "$SERVER" "$(dirname "$0")" << 'PYEOF' || true
+python3 - "$EVENT" "$TMPINPUT" "$SERVER" "$(dirname "$0")" "$AGENT" << 'PYEOF' || true
 import json, os, sys, urllib.error, urllib.request
 
-event, input_file, server, hook_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+event, input_file, server, hook_dir, agent = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 try:
     with open(input_file) as f:
         payload = json.load(f)
@@ -95,6 +96,7 @@ try:
         "payload": payload,
         "pane": os.environ.get("TMUX_PANE"),
         "tmux": os.environ.get("TMUX"),
+        "agent": agent,
     }).encode()
     headers = {"Content-Type": "application/json"}
     if token:

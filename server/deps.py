@@ -83,6 +83,31 @@ def _push_waiting_notice() -> None:
 
 _prompt_detector = agent_prompt_detect.get_global_detector(_on_waiting_change)
 
+
+def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> None:
+    """PTY 입력과 훅 기반 waiting 상태를 한 경로에서 해제한다.
+
+    훅이 PTY 감지보다 먼저 waiting을 만들거나 PTY 패턴이 렌더 잡음 때문에
+    누락돼도, 실제 사용자 입력은 대기를 끝내는 확실한 신호다. Escape는 Codex의
+    승인 취소이므로 `done`, 그 밖의 답은 도구 실행이 이어질 수 있어 `working`.
+    """
+    info = session_store.get(pty_session_id)
+    tmux_name = info.tmux_name if info else None
+    was_waiting = agent_status.status_for_session(tmux_name) == agent_status.WAITING
+    is_cancel = data == b"\x1b" or data == "\x1b"
+
+    # 먼저 done으로 바꾸면 detector의 waiting=False 콜백은 done을 다시 working으로
+    # 내리지 않는다(agent_status.on_waiting의 기존 계약).
+    if was_waiting and is_cancel:
+        agent_status.finish_waiting_for_session(tmux_name)
+
+    _prompt_detector.on_user_input(pty_session_id)
+
+    # 훅만 waiting을 만들었고 detector 내부는 그 상태를 모를 수 있다. 이 경우
+    # on_user_input이 콜백을 내지 않으므로 명시적으로 한 번 동기화한다.
+    if was_waiting and not is_cancel and agent_status.status_for_session(tmux_name) == agent_status.WAITING:
+        _on_waiting_change(pty_session_id, False)
+
 # Phase 8 G2: WS 연결 한도 카운터 (single-worker 전용 — TODOS.md D1)
 ws_count_per_session: dict[str, int] = {}
 ws_total_count = 0

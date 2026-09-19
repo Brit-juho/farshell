@@ -143,6 +143,19 @@ test('반영 시점을 항상 같이 보여준다', async () => {
   assert.match(host.textContent, /Claude: 다음 세션부터/);
 });
 
+test('Codex MCP 로그인 필요 상태와 명령을 표시한다', async () => {
+  const scan = scanPayload();
+  scan.groups[0].entries.push({
+    name: 'private-mcp', tool: 'codex', scope: 'global', shared: false,
+    enabled: true, transport: 'http', auth_status: 'not_logged_in',
+    env: [], headers: [], notes: [],
+  });
+  const { host } = await build({ scan });
+  const warning = Array.from(host.querySelectorAll('.vt-mcp-authwarn'))[0];
+  assert.equal(warning.textContent, '로그인 필요');
+  assert.equal(warning.title, 'codex mcp login private-mcp');
+});
+
 test('모르는 것은 모른다고 쓴다 — off 즉시성이 null이면 단정하지 않는다', async () => {
   const { host } = await build();
   assert.match(host.textContent, /즉시 적용되는지는 확인되지 않았습니다/);
@@ -408,6 +421,21 @@ test('플러그인 토글은 이름·스코프를 그대로 보낸다', async ()
   const sent = posts.find((p) => p._url === '/api/mcp/plugins/toggle');
   assert.deepEqual({ name: sent.name, enabled: sent.enabled, scope: sent.scope },
                    { name: 'p@m', enabled: false, scope: 'global' });
+});
+
+test('Codex 플러그인은 포함된 스킬과 MCP를 함께 표시한다', async () => {
+  const { host } = await build({
+    pluginData: { plugins: [{ name: 'bundle@m', plugin: 'bundle', marketplace: 'm',
+                              tool: 'codex', scope: 'global', enabled: true,
+                              explicit: true, version: '1.2.3', skill_count: 2,
+                              skills: ['review', 'ship'], bundles_mcp: true }] },
+  });
+  assert.match(host.textContent, /Codex/);
+  assert.match(host.textContent, /스킬 2/);
+  assert.match(host.textContent, /MCP 포함/);
+  const skill = Array.from(host.querySelectorAll('.vt-mcp-meta'))
+    .find((el) => el.textContent === '스킬 2');
+  assert.equal(skill.title, 'review, ship');
 });
 
 test('플러그인 조회가 실패해도 MCP 목록은 그려진다', async () => {

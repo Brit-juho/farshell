@@ -6,11 +6,11 @@ FarShell은 각 tmux 세션이 지금 무슨 상태인지 서버가 판정해서
 | 상태 | 뜻 | 어떻게 들어오나 |
 |---|---|---|
 | `idle` | 아무것도 안 함 | 초기값 · 완료 확인(ack) · TTL 만료 |
-| `working` | 도구 실행 중 | Claude Code `PreToolUse` 훅 |
-| `waiting` | 승인·입력 대기 | 출력 패턴 감지 (준비 중) |
-| `done` | 응답 완료 | Claude Code `Stop` 훅 |
+| `working` | 프롬프트 처리·도구 실행 중 | Claude Code/Codex 시작 훅 |
+| `waiting` | 승인·입력 대기 | Codex `PermissionRequest` 훅 또는 출력 패턴 감지 |
+| `done` | 응답·세션 완료 | Claude Code/Codex 완료 훅 |
 
-## Claude Code — 훅으로 자동
+## Claude Code · Codex — 훅으로 자동
 
 ```bash
 fsh hooks status      # 등록 상태 확인 (fsh doctor 에도 표시된다)
@@ -22,13 +22,16 @@ fsh hooks uninstall   # FarShell 항목만 제거
 큐 자동 투입도, TTS 요약도 전부 동작하지 않는다** — 그런데 눈에 띄게 실패하는
 게 아니라 조용히 아무 일도 안 일어나므로, 뭔가 안 뜬다면 여기부터 확인한다.
 
-`~/.claude/settings.json`에 등록되는 것은 `agent_hook.sh {pre,post,stop}` 3종이다.
+Claude Code의 `~/.claude/settings.json`에는 `agent_hook.sh {pre,post,stop}` 3종이,
+Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/session 6종이 등록된다.
+두 설정 모두 FarShell 항목만 관리하고 기존 훅은 보존한다.
 `tts_hook.sh`를 `Stop`에 **직접** 걸면 안 된다 — `agent_hook.sh stop`이 내부에서
 그걸 호출하므로 TTS가 두 번 재생된다.
 
 ## 그 외 에이전트 — 직접 보고
 
-codex·aider·gemini에는 Claude Code 같은 훅이 없다. 그 pane에서 직접 알린다.
+aider·gemini처럼 관리형 훅이 없는 에이전트는 그 pane에서 직접 알린다. Codex도
+훅을 설치하지 않은 환경에서는 같은 명령을 임시 폴백으로 쓸 수 있다.
 
 ```bash
 fsh pane report --state working --agent codex

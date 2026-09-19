@@ -202,6 +202,36 @@ test('정보 — 훅이 전부 등록돼 있으면 그대로 보여준다', asyn
   assert.deepEqual(rows, ['PreToolUse — 등록됨', 'PostToolUse — 등록됨', 'Stop — 등록됨']);
 });
 
+test('정보 — Claude Code와 Codex 훅을 도구별로 모두 보여준다', async () => {
+  const hooks = {
+    ok: false,
+    events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' },
+    tools: {
+      claude: {
+        ok: true,
+        events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' },
+      },
+      codex: {
+        ok: false,
+        events: {
+          PreToolUse: 'ok', PermissionRequest: 'add', PostToolUse: 'ok',
+          UserPromptSubmit: 'ok', Stop: 'ok', SessionEnd: 'ok',
+        },
+      },
+    },
+  };
+  const { document, P } = await build({ hooks });
+  P.showSettings();
+  sectionButton(document, '정보').click();
+  await flush();
+  const block = document.querySelectorAll('.vt-set-about')[0];
+  const titles = Array.from(block.querySelectorAll('.vt-set-label')).map((r) => r.textContent);
+  assert.deepEqual(titles, ['Claude Code 훅', 'Codex 훅']);
+  assert.match(block.textContent, /PermissionRequest — 미등록/);
+  assert.match(block.textContent, /SessionEnd — 등록됨/);
+  assert.match(block.querySelector('.vt-set-help').textContent, /fsh hooks install/);
+});
+
 // U1 회귀 — clauth가 schema 2로 올라가자 사용량이 통째로, 아무 말 없이 꺼졌다.
 // 게이팅상 탭도 칩도 사라지므로 「정보」가 유일하게 이유를 볼 수 있는 곳이다.
 function capsFetch(usage) {

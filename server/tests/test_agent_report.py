@@ -84,6 +84,20 @@ def test_hook_event_keeps_session_when_later_event_lacks_clues(client):
     assert agent_status.status_for_session("a") == "done"
 
 
+def test_codex_permission_and_session_end_hooks_reach_api(client):
+    first = client.post("/api/agent/event", json={
+        "event": "permission",
+        "payload": {"session_id": "codex-1", "tool_name": "Bash", "cwd": "/Users/x"},
+        "pane": "%2", "tmux": "/tmp/tmux-501/fsh,1,0",
+    }).json()["state"]
+    assert first["status"] == "waiting" and first["tmux_session"] == "b"
+    ended = client.post("/api/agent/event", json={
+        "event": "session_end", "payload": {"session_id": "codex-1"},
+    }).json()["state"]
+    assert ended["status"] == "done"
+    assert agent_status.status_for_session("b") == "done"
+
+
 def test_tmux_sessions_response_exposes_pane_id(client, monkeypatch):
     """프런트(A5)가 cwd 추측 대신 pane_id로 카드를 특정할 수 있어야 한다."""
     def fake_run_text(args, timeout=None):

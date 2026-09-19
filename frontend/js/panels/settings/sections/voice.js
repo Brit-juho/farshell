@@ -63,7 +63,11 @@ export function renderVoiceSection() {
   notifyRow.querySelector('.vt-set-label').appendChild(notifyStatus);
   frag.appendChild(notifyRow);
   vtFetch('/api/hooks/status').then((r) => {
-    const events = r && r.events ? Object.entries(r.events) : [];
+    // TTS 요약은 Claude Stop 훅만 사용한다. Codex 훅 수를 합치면 실제 음성
+    // 기능과 무관한 이벤트 때문에 분모가 바뀐다.
+    const events = r && r.tools && r.tools.claude
+      ? Object.entries(r.tools.claude.events || {})
+      : (r && r.events ? Object.entries(r.events) : []);
     if (!events.length) { notifyStatus.textContent = '훅 상태를 확인할 수 없습니다.'; return; }
     const ok = events.filter(([, s]) => s === 'ok').length;
     notifyStatus.textContent = `TTS 요약 · 훅 ${ok}/${events.length} 설치됨`;
@@ -213,4 +217,3 @@ export function renderVoiceSection() {
 
   return frag;
 }
-

@@ -115,8 +115,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/mcp/creds` | Requires elevation (this path receives a secret). Body `{server, key, secret, env?, fingerprint?}`. A blank `env` defaults to `FSH_MCP_<SERVER>_<KEY>`. The value is stored **in plaintext** in `~/.vt/mcp.json` (0600) — not dressed up as encrypted (§2-1: unattended operation and at-rest protection cannot both hold). The real defence is never writing values into CLI config files |
 | POST | `/api/mcp/creds/delete` | Requires elevation. Body `{id}` |
 | POST | `/api/mcp/deploy` | Requires elevation. Body `{name, defn, tool, scope?, shared?, env_map?, worktree?}` — brings one definition into that tool/scope. Values never travel: the fields named by `env_map` become references instead (Claude `${VAR}`; Codex drops the value slot and lists the name under `env_vars` — §0-3, since a single syntax breaks silently on Codex). **If any value would remain after substitution it returns 409 and never opens the file.** Codex targets are refused outright — synthesising a new TOML table by text surgery carries different risk, so it points at `codex mcp add` |
-| GET | `/api/mcp/plugins` | Installed plugins (claude `enabledPlugins`, global + project). **"absent" and "false" are different**: the former was never touched and follows the tool's default, the latter was explicitly turned off (`explicit` distinguishes them). Plugins can bundle MCP servers, so they share the "name + scope + enabled" mechanism (§0-2) |
-| POST | `/api/mcp/plugins/toggle` | Requires elevation (a plugin can bundle MCP servers, so this changes what the agent can do). Body `{name, enabled, tool?, scope?, worktree?}`. **It never installs** — an unknown name returns 409, because flipping `enabled` on an uninstalled plugin does nothing and claiming otherwise would be a lie |
+| GET | `/api/mcp/plugins` | Installed plugins for Claude Code and Codex. Claude is read from `enabledPlugins` (global + project); Codex is read from `codex plugin list --json` and includes `version`, bundled `skills`/`skill_count`, `bundles_mcp`, and auth policy when available. **"absent" and "false" are different**: the former was never explicitly configured and follows the tool's default, the latter was explicitly turned off (`explicit` distinguishes them). CLI/config parse failures are returned in `errors` without hiding the other tool's plugins |
+| POST | `/api/mcp/plugins/toggle` | Requires elevation (a plugin can bundle MCP servers, so this changes what the agent can do). Body `{name, enabled, tool?, scope?, worktree?}`. Supports Claude Code and globally installed Codex plugins; Codex changes only `[plugins."<id>"].enabled` while preserving the rest of `config.toml`. **It never installs** — an unknown name returns 409, because flipping `enabled` on an uninstalled plugin does nothing and claiming otherwise would be a lie |
 
 ## Scrollback Search
 
@@ -258,11 +258,11 @@ a peer signature opens.
 | GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low"}]`, read live from `detect/*.toml` |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
-| GET | `/api/hooks/status` | Claude Code hook registration status (A0/S4) — `{ok, events:{PreToolUse,PostToolUse,Stop}}` |
+| GET | `/api/hooks/status` | Claude Code and Codex hook registration status (A0/S4). `tools.claude.events` contains `PreToolUse`/`PostToolUse`/`Stop`; `tools.codex.events` contains those plus `PermissionRequest`/`UserPromptSubmit`/`SessionEnd`. Top-level `events` remains the Claude map for older clients |
 | GET | `/api/usage` | Usage snapshot (U1) — `{available:false, reason}` when no source. Tokens/credentials are excluded by a field whitelist |
 | GET | `/api/usage/counter` | N41 — CounterProvider (unlimited, e.g. local LLM) snapshot. `?since=<epoch>` filters totals; the 7-day sparkline is a fixed window regardless |
 | POST | `/api/usage/counter` | N41 — record a usage event (`{model, tokens, seconds}`) — same store as `fsh usage add` |
-| POST | `/api/agent/event` | Endpoint called by the Claude Code Pre/Post/StopToolUse hooks |
+| POST | `/api/agent/event` | Endpoint called by Claude Code and Codex lifecycle hooks. Body may include `agent`; prompt/tool start maps to `working`, permission request to `waiting`, and stop/session end to `done` |
 | GET | `/api/safe-mode` | Whether prompt queue safe_mode is active |
 | GET | `/api/tailscale/status` | Tailscale install/connection/IP/MagicDNS hostname |
 | GET | `/api/tunnel/status` | Cloudflare tunnel (main) connection status |

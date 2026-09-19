@@ -17,6 +17,8 @@ import workspace
 def client(tmp_path, monkeypatch):
     # 실제 ~/.config/vt/workspace.json을 건드리지 않도록 격리.
     monkeypatch.setattr(workspace, "WS_PATH", tmp_path / "workspace.json")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    monkeypatch.setenv("VT_CODEX_HOME", str(tmp_path / "codex"))
     with TestClient(main.app) as c:
         yield c
 
@@ -117,13 +119,17 @@ def test_hooks_status_endpoint_reports_per_event(client, tmp_path, monkeypatch):
     assert body["ok"] is False, "빈 설정이면 미등록"
     assert set(body["events"]) == {"PreToolUse", "PostToolUse", "Stop"}
     assert body["events"]["Stop"] == "add"
+    assert set(body["tools"]) == {"claude", "codex"}
+    assert body["tools"]["codex"]["events"]["PermissionRequest"] == "add"
 
 
 def test_hooks_status_after_install(client, tmp_path, monkeypatch):
     import claude_hooks
+    import codex_hooks
 
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
     claude_hooks._cmd_install()
+    codex_hooks._cmd_install()
     body = client.get("/api/hooks/status").json()
     assert body["ok"] is True
     assert set(body["events"].values()) == {"ok"}

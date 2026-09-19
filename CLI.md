@@ -32,8 +32,8 @@ fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <n
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (N30 — built but unused, ADR-27)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
-fsh hooks [status|install|uninstall]  # register Claude Code hooks (prerequisite for status badges/queue/TTS)
-fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without hooks)
+fsh hooks [status|install|uninstall]  # register Claude Code + Codex hooks (status badges/queue; Claude Stop also drives TTS)
+fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
 fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
 fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)
 fsh password [clear]   # set web login password (stores a hash) / clear=unset
@@ -113,9 +113,10 @@ fsh queue unblock <id>          # resume an item blocked by safe_mode
 fsh queue clear                 # clear everything
 ```
 
-Automatic feeding is triggered **only by Claude Code's Stop hook**. codex/aider/gemini
-have no such hook, so you must feed items manually via `fsh queue run` or "Run now"
-in the web UI. Four gates apply before feeding: grace period (the user may have
+Automatic feeding is triggered by a `done` transition from the installed Claude Code
+or Codex lifecycle hooks. aider/gemini have no managed hook, so they must feed items
+manually via `fsh queue run` or "Run now" in the web UI. Four gates apply before feeding:
+grace period (the user may have
 started typing directly) → safe_mode (a dangerous command is left as blocked instead
 of being fed) → confirming the target pane is still alive → one item at a time.
 
