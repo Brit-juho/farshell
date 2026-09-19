@@ -279,16 +279,15 @@ function Rail(props: { deps: RailDeps }) {
       if (tn && !(tn in tmuxToWebSid)) tmuxToWebSid[tn] = sid;
     }
 
-    // wt_id → 저장소·브랜치 배지 정보. /api/repos(저장소별로 이미 묶임)에서
-    // 뽑는다. repoId·gitRemote는 안 담는다 — 그룹 자동 제안(repoId)과 저장소
-    // 색점(gitRemote)을 둘 다 없앤 뒤로(2026-09-18 후속) 배지 텍스트 표시
-    // 말고는 쓸 데가 없다.
-    const wtInfo = new Map<string, { repoName: string; branch: string; isMain: boolean; changed: any }>();
+    // wt_id → 브랜치 배지 정보. /api/repos(저장소별로 이미 묶임)에서 뽑는다.
+    // repoId·gitRemote는 안 담는다 — 그룹 자동 제안(repoId)과 저장소 색점
+    // (gitRemote)을 둘 다 없앤 뒤로(2026-09-18 후속) 쓸 데가 없다.
+    // 2026-09-20 — `repoName`도 같은 이유로 뺐다. 마지막 소비처였던 그룹 라벨
+    // 폴백이 ADR-29 후속 #4에서 사라진 뒤로 아무도 읽지 않았다.
+    const wtInfo = new Map<string, { branch: string; isMain: boolean; changed: any }>();
     for (const repo of repos()) {
       for (const wt of repo.worktrees || []) {
-        wtInfo.set(wt.id, {
-          repoName: repo.name, branch: wt.branch, isMain: !!wt.isMain, changed: wt.changed || null,
-        });
+        wtInfo.set(wt.id, { branch: wt.branch, isMain: !!wt.isMain, changed: wt.changed || null });
       }
     }
 
@@ -317,7 +316,6 @@ function Rail(props: { deps: RailDeps }) {
         question: detail?.question ?? null,
         options: detail?.options ?? null,
         agent: agentNames()[t.name] ?? null,
-        repoName: info?.repoName ?? null,
         branch: info?.branch ?? null,
         isMainWorktree: info?.isMain ?? false,
         worktreeId: t.wt_id || null,
@@ -344,7 +342,6 @@ function Rail(props: { deps: RailDeps }) {
         tool: null,
         diffFiles: null,
         agent: null,
-        repoName: null,
         branch: null,
         isMainWorktree: false,
       });

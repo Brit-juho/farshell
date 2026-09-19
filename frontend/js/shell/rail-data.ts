@@ -198,10 +198,13 @@ export interface OtherRailRowInput {
   /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 모르면 null/undefined — "셸"과
    * "모름"은 다르다. */
   agent?: string | null;
-  /** 이 세션이 속한 워크트리의 저장소 이름·브랜치(있으면). 배지 표시와
-   * 그룹 라벨 폴백(사용자가 그룹 이름을 안 지었을 때)의 입력이다. 워크트리에
-   * 안 속하는 세션(순수 셸 등)은 셋 다 null. */
-  repoName?: string | null;
+  /** 이 세션이 속한 워크트리의 브랜치(있으면). 행의 부제에 배지로 뜬다 —
+   * `main`은 "기본"이라 생략한다(RailRow.tsx의 `branchText()`).
+   * 2026-09-20 — 짝이던 `repoName`을 지웠다. 그건 **그룹 라벨 폴백**의
+   * 입력이었는데, 그 폴백(`groupDisplayLabel`)이 ADR-29 후속 #4에서 통째로
+   * 사라졌다(그룹 이름은 이제 탭의 `label`, 없으면 구성원 이름을 잇는다 —
+   * `layout/store.js`의 `tabDisplayLabel`). 그 뒤로 아무도 읽지 않는 채
+   * 남아 있었다. 워크트리에 안 속하는 세션(순수 셸 등)은 둘 다 null. */
   branch?: string | null;
   isMainWorktree?: boolean;
   /** ADR-29 D — 이 세션이 속한 워크트리의 id. 세션을 열 때 그 그룹의 탭에
