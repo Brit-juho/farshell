@@ -114,6 +114,7 @@ const _stores = {
 
 let _loaded = false;
 const _listeners = new Set();
+const _persistenceListeners = new Set();
 
 function _coerce(key, raw) {
   const spec = SCHEMA[key];
@@ -168,6 +169,19 @@ export function subscribe(fn) {
   return () => _listeners.delete(fn);
 }
 
+// 설정 화면의 고정 저장 상태 표시가 쓴다. 토스트는 실패를 알리지만 사라지므로,
+// 패널 안에서도 마지막 저장 결과를 계속 확인할 수 있어야 한다.
+export function subscribePersistence(fn) {
+  _persistenceListeners.add(fn);
+  return () => _persistenceListeners.delete(fn);
+}
+
+function _notifyPersistence(detail) {
+  for (const fn of _persistenceListeners) {
+    try { fn(detail); } catch (_) { /* 상태 표시 하나가 저장을 막으면 안 된다 */ }
+  }
+}
+
 function _notify(changed) {
   for (const fn of _listeners) {
     try { fn(changed); } catch (_) { /* 소비자 하나가 터져도 나머지는 받는다 */ }
@@ -191,7 +205,12 @@ export function set(key, value) {
   _stores[scope].values[key] = v;
   _writeCache(scope);
   _notify({ [key]: v });
-  return scope === 'device' ? _pushDevice() : _pushGlobal();
+  _notifyPersistence({ status: 'saving', key, scope });
+  const push = scope === 'device' ? _pushDevice() : _pushGlobal();
+  return push.then((ok) => {
+    _notifyPersistence({ status: ok ? 'saved' : 'failed', key, scope });
+    return ok;
+  });
 }
 
 function _pushFailToast() {
@@ -313,3 +332,4 @@ window.vtSettingsGet = get;
 window.vtSettingsSet = set;
 window.vtSettingsHas = has;
 window.vtSettingsSubscribe = subscribe;
+window.vtSettingsSubscribePersistence = subscribePersistence;

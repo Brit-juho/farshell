@@ -18,12 +18,13 @@ const TOAST_JS = path.join(__dirname, '../js/ui/toast.js');
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
-async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' } }, fetchExtra } = {}) {
+async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' } }, fetchExtra, compact = false } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
   window.API_BASE = '';
   window._tokenQuery = '';
+  window.fitAndResize = () => {};
   const puts = [];
   const posts = [];
   window.fetch = (url, opts) => {
@@ -40,7 +41,7 @@ async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolU
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   };
-  window.matchMedia = (q) => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  window.matchMedia = (q) => ({ matches: compact && /max-width:\s*719px/.test(q), addEventListener() {}, removeEventListener() {} });
   const cache = new Map();
   await importFresh(TOAST_JS, env.context, cache);
   const S = await importFresh(SETTINGS_JS, env.context, cache);
@@ -65,7 +66,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '마우스 · 선택', '접근성', '음성', '에이전트', '키맵', '모양', 'MCP', '보안', '스크롤백', '정보'],
+    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '계정 및 보안', '정보 및 진단'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -95,6 +96,90 @@ test('range 컨트롤의 min/max도 스키마에서 온다', async () => {
   assert.strictEqual(Number(input.max), S.SCHEMA['terminal.fontSize'].max);
 });
 
+test('접근성 — 행 라벨과 도움말이 주 컨트롤에 연결된다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  const sliderRow = rowByLabel(document, '글자 크기');
+  const slider = sliderRow.querySelector('input[type="range"]');
+  assert.strictEqual(slider.getAttribute('aria-labelledby'), sliderRow.querySelector('.vt-set-label').id);
+  assert.strictEqual(slider.getAttribute('aria-valuetext'), '14px');
+  const selectRow = rowByLabel(document, '스크린 리더 모드');
+  const select = selectRow.querySelector('select');
+  assert.strictEqual(select.getAttribute('aria-labelledby'), selectRow.querySelector('.vt-set-label').id);
+  assert.strictEqual(select.getAttribute('aria-describedby'), selectRow.querySelector('.vt-set-help').id);
+});
+
+test('설정 범위 — device/global이 행에서 글자로 구분된다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  assert.strictEqual(rowByLabel(document, '글자 크기').querySelector('.vt-set-scope').textContent, '이 기기');
+  assert.strictEqual(rowByLabel(document, '커서 모양').querySelector('.vt-set-scope').textContent, '모든 기기');
+});
+
+test('기본값과 다른 설정은 행에서 바로 되돌릴 수 있다', async () => {
+  const { document, P, S } = await build();
+  S.set('terminal.cursorBlink', false);
+  P.showSettings();
+  const row = rowByLabel(document, '커서 깜빡임');
+  const reset = row.querySelector('.vt-set-default');
+  assert.strictEqual(reset.hidden, false);
+  reset.click();
+  assert.strictEqual(S.get('terminal.cursorBlink'), true);
+  assert.strictEqual(row.querySelector('[role="switch"]').getAttribute('aria-checked'), 'true');
+  assert.strictEqual(reset.hidden, true);
+});
+
+test('스크롤백은 자주 쓰는 값으로 한 번에 바꿀 수 있다', async () => {
+  const { document, P, S } = await build();
+  P.showSettings();
+  const row = rowByLabel(document, '스크롤백 줄 수');
+  const preset = Array.from(row.querySelectorAll('.vt-range-presets button')).find((b) => b.textContent === '5,000줄');
+  preset.click();
+  assert.strictEqual(S.get('terminal.scrollback'), 5000);
+  assert.strictEqual(row.querySelector('.vt-range-number').value, '5000');
+});
+
+test('검색 결과에서 원하는 설정이 있는 섹션으로 이동한다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  const search = document.querySelector('.vt-set-search-input');
+  search.value = '로그아웃';
+  search.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+  const result = document.querySelector('.vt-set-search-result');
+  assert.match(result.textContent, /로그아웃.*계정 및 보안/);
+  result.click();
+  await flush();
+  assert.strictEqual(document.querySelector('.vt-set-title').textContent, '계정 및 보안');
+});
+
+test('검색은 사용자가 흔히 쓰는 동의어도 찾고 해당 행으로 포커스를 옮긴다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  const search = document.querySelector('.vt-set-search-input');
+  search.value = '폰트';
+  search.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+  document.querySelector('.vt-set-search-result').click();
+  await flush();
+  assert.strictEqual(document.activeElement, rowByLabel(document, '글자 크기').querySelector('.vt-set-label'));
+});
+
+test('compact — 더보기 첫 화면에 도구와 7개 설정 진입점이 나온다', async () => {
+  const { document, P } = await build({ compact: true });
+  P.showSettings();
+  const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
+  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '키맵', '모양', '계정 및 보안', '정보 및 진단']);
+  assert.strictEqual(document.querySelector('.vt-set-nav'), null, 'compact 첫 화면은 숨은 가로 탭을 만들지 않는다');
+});
+
+test('compact — 상세에서 돌아오면 검색 입력으로 포커스가 복귀한다', async () => {
+  const { document, P } = await build({ compact: true });
+  P.showSettings();
+  Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).find((e) => e.textContent === '터미널').closest('button').click();
+  document.querySelector('.vt-set-back').click();
+  await flush();
+  assert.strictEqual(document.activeElement, document.querySelector('.vt-set-search-input'));
+});
+
 // 2.1.6 — 불리언 컨트롤이 네이티브 체크박스에서 [ON][OFF] 세그먼트
 // (button[role=switch])로 바뀌었다. 검사하는 것은 그대로다: 누르면 스토어에
 // 즉시 반영되고 서버로 나간다. aria-checked까지 보는 이유는, 이 토글이 상태를
@@ -103,7 +188,7 @@ test('range 컨트롤의 min/max도 스키마에서 온다', async () => {
 test('불리언 토글 변경 → 스토어에 즉시 반영되고 서버로 나간다', async () => {
   const { document, P, S, puts } = await build();
   P.showSettings();
-  sectionButton(document, '마우스 · 선택').click();
+  sectionButton(document, '터미널').click();
   const tg = rowByLabel(document, '앱에 마우스 이벤트 전달').querySelector('.vt-toggle');
   assert.strictEqual(tg.getAttribute('role'), 'switch');
   assert.strictEqual(tg.getAttribute('aria-checked'), 'true');
@@ -117,7 +202,7 @@ test('불리언 토글 변경 → 스토어에 즉시 반영되고 서버로 나
 test('접근성 — screenReaderMode가 UI에 노출된다(S4 이전엔 콘솔로만 가능했다)', async () => {
   const { document, P } = await build();
   P.showSettings();
-  sectionButton(document, '접근성').click();
+  sectionButton(document, '터미널').click();
   const row = rowByLabel(document, '스크린 리더 모드');
   assert.ok(row, '항목이 있어야 한다');
   assert.match(row.querySelector('.vt-set-help').textContent, /새로 여는 탭부터/,
@@ -195,7 +280,7 @@ test('키맵 — 충돌하면 행에 표시하고 이유를 적는다', async ()
 test('정보 — 훅이 전부 등록돼 있으면 그대로 보여준다', async () => {
   const { document, P } = await build();
   P.showSettings();
-  sectionButton(document, '정보').click();
+  sectionButton(document, '정보 및 진단').click();
   await flush();
   const block = document.querySelectorAll('.vt-set-about')[0];
   const rows = Array.from(block.querySelectorAll('.vt-set-hookrow')).map((r) => r.textContent);
@@ -222,7 +307,7 @@ test('정보 — Claude Code와 Codex 훅을 도구별로 모두 보여준다', 
   };
   const { document, P } = await build({ hooks });
   P.showSettings();
-  sectionButton(document, '정보').click();
+  sectionButton(document, '정보 및 진단').click();
   await flush();
   const block = document.querySelectorAll('.vt-set-about')[0];
   const titles = Array.from(block.querySelectorAll('.vt-set-label')).map((r) => r.textContent);
@@ -245,7 +330,7 @@ test('정보 — 사용량 소스가 켜져 있으면 프로필 수까지 보여
     fetchExtra: capsFetch({ available: true, provider: 'clauth', profiles: 2 }),
   });
   P.showSettings();
-  sectionButton(document, '정보').click();
+  sectionButton(document, '정보 및 진단').click();
   await flush();
   const block = Array.from(document.querySelectorAll('.vt-set-about')).at(-1);
   assert.match(block.textContent, /clauth — 사용 중 \(프로필 2개\)/);
@@ -260,7 +345,7 @@ test('정보 — 모르는 피드 schema면 본 값과 지원 범위를 적는�
     }),
   });
   P.showSettings();
-  sectionButton(document, '정보').click();
+  sectionButton(document, '정보 및 진단').click();
   await flush();
   const help = Array.from(document.querySelectorAll('.vt-set-about .vt-set-help')).at(-1);
   assert.match(help.textContent, /schema 3/);
@@ -270,7 +355,7 @@ test('정보 — 모르는 피드 schema면 본 값과 지원 범위를 적는�
 test('정보 — 훅이 빠져 있으면 해결 방법을 함께 안내한다', async () => {
   const { document, P } = await build({ hooks: { ok: false, events: { PreToolUse: 'add', PostToolUse: 'add', Stop: 'update' } } });
   P.showSettings();
-  sectionButton(document, '정보').click();
+  sectionButton(document, '정보 및 진단').click();
   await flush();
   const help = document.querySelector('.vt-set-about .vt-set-help');
   assert.match(help.textContent, /fsh hooks install/);
@@ -291,7 +376,7 @@ test('정보 — 훅 상태 조회가 실패해도 패널이 죽지 않는다', 
   await importFresh(KEYMAP_JS, env.context, cache);
   const P = await importFresh(SETTINGS_PANEL_JS, env.context, cache);
   P.showSettings();
-  sectionButton(env.window.document, '정보').click();
+  sectionButton(env.window.document, '정보 및 진단').click();
   await flush();
   assert.match(env.window.document.querySelector('.vt-set-about').textContent, /확인할 수 없습니다/);
 });
@@ -300,7 +385,7 @@ test('정보 — 훅 상태 조회가 실패해도 패널이 죽지 않는다', 
 test('음성 — 5항목이 모두 그려진다', async () => {
   const { document, P } = await build();
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   for (const label of ['웹 푸시', '작업 완료 알림', 'Whisper 모델', '맥에서 음성만 쓰기']) {
     assert.ok(rowByLabel(document, label), `${label} 행이 있어야 한다`);
   }
@@ -313,7 +398,7 @@ test('음성 — 웹 푸시 상태가 /api/push/status에서 채워진다', asyn
       : null),
   });
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   await flush();
   const help = rowByLabel(document, '웹 푸시').querySelector('.vt-set-help');
   assert.match(help.textContent, /구독 2대 · VAPID 확인됨/);
@@ -328,7 +413,7 @@ test('음성 — 웹 푸시 테스트 발송 버튼이 실호출 + 토스트를 
   });
   window.showToast = (msg) => toasts.push(msg);
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   // 2026-09-18 — 웹 푸시 행에 구독 켜기/끄기(#push-btn, 이식된 pushui.js
   // 버튼)가 테스트 발송 앞에 추가됐다. 라벨로 정확히 고른다.
   const btn = Array.from(rowByLabel(document, '웹 푸시').querySelectorAll('button'))
@@ -345,7 +430,7 @@ test('음성 — 구독 켜기/끄기 버튼(#push-btn)이 이식됐고 pushui.j
   // 도달 불가능해졌다. 이 섹션으로 이식한 게 유일한 복구 경로다.
   const { document, P } = await build({});
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   const subBtn = rowByLabel(document, '웹 푸시').querySelector('#push-btn');
   assert.ok(subBtn, '#push-btn id가 유지돼야 한다(pushui.js가 getElementById로 찾는다)');
   assert.ok(subBtn.querySelector('#push-label'), '#push-label id가 유지돼야 한다');
@@ -358,7 +443,7 @@ test('음성 — 작업 완료 알림 소리 듣기 버튼이 /api/notify/test�
       : null),
   });
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   const btn = rowByLabel(document, '작업 완료 알림').querySelector('button');
   btn.click();
   await flush();
@@ -372,7 +457,7 @@ test('음성 — Whisper 모델 상태에 따라 적재/내리기 버튼이 토�
       : null),
   });
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   await flush();
   const row = rowByLabel(document, 'Whisper 모델');
   assert.match(row.querySelector('.vt-set-help').textContent, /메모리 상주 · faster-whisper/);
@@ -390,7 +475,7 @@ test('음성 — 맥에서 음성만 쓰기 버튼이 시작→중지로 토글�
     },
   });
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   const btn = rowByLabel(document, '맥에서 음성만 쓰기').querySelector('button');
   assert.strictEqual(btn.textContent, '시작');
   btn.click();
@@ -406,7 +491,7 @@ test('음성 — 맥에서 음성만 쓰기 버튼이 시작→중지로 토글�
 test('음성 — 다른 탭으로 이동해도 죽지 않는다(clients.js 폴링 정리 경로)', async () => {
   const { document, P } = await build();
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   sectionButton(document, '터미널').click();
   assert.ok(rowByLabel(document, '글자 크기'), '터미널 섹션으로 정상 전환돼야 한다');
 });
@@ -414,7 +499,7 @@ test('음성 — 다른 탭으로 이동해도 죽지 않는다(clients.js 폴�
 test('음성 — 패널을 닫아도 죽지 않는다(onClose cleanup 경로)', async () => {
   const { document, P } = await build();
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   P.showSettings();
   assert.strictEqual(document.getElementById('vt-settings'), null);
 });
@@ -491,7 +576,7 @@ function securityFetch({ status = {}, devices = SEC_DEVICES, elevation = {} } = 
 async function openSecurity(opts) {
   const built = await build({ fetchExtra: securityFetch(opts) });
   built.P.showSettings();
-  sectionButton(built.document, '보안').click();
+  sectionButton(built.document, '계정 및 보안').click();
   await flush();
   await flush();
   return built;
@@ -561,7 +646,7 @@ test('보안 — API 실패 시 표 대신 안내 문구', async () => {
       : null),
   });
   P.showSettings();
-  sectionButton(document, '보안').click();
+  sectionButton(document, '계정 및 보안').click();
   await flush();
   await flush();
   assert.strictEqual(document.querySelector('.vt-set-devtable'), null);
@@ -580,7 +665,7 @@ test('스크롤백 — 토글 변경이 스토어와 서버로 나간다', async
       : null),
   });
   P.showSettings();
-  sectionButton(document, '스크롤백').click();
+  sectionButton(document, '터미널').click();
   const tg = rowByLabel(document, '스크롤백 영속화').querySelector('.vt-toggle');
   assert.strictEqual(tg.getAttribute('aria-checked'), 'false'); // 기본 OFF
   tg.click();
@@ -596,7 +681,7 @@ test('스크롤백 — 디스크 사용량을 보여준다', async () => {
       : null),
   });
   P.showSettings();
-  sectionButton(document, '스크롤백').click();
+  sectionButton(document, '터미널').click();
   await flush();
   const texts = Array.from(document.querySelectorAll('.vt-set-help, .vt-set-sechost'))
     .map((e) => e.textContent);
@@ -610,7 +695,7 @@ test('스크롤백 — API 실패 시 안내 문구', async () => {
       : null),
   });
   P.showSettings();
-  sectionButton(document, '스크롤백').click();
+  sectionButton(document, '터미널').click();
   await flush();
   const texts = Array.from(document.querySelectorAll('.vt-set-sechost')).map((e) => e.textContent);
   assert.ok(texts.some((t) => t.includes('디스크 사용량을 확인할 수 없습니다')));
@@ -620,7 +705,7 @@ test('음성 — 음성 전용 모드 버튼(#voiceonly-btn)이 이식됐고 med
   // 2026-09-18 — legacy rail 플라이아웃 도달 불가 사고로 이 섹션에 옮긴 것.
   const { document, P } = await build({});
   P.showSettings();
-  sectionButton(document, '음성').click();
+  sectionButton(document, '음성 및 알림').click();
   const btn = rowByLabel(document, '음성 전용 모드').querySelector('#voiceonly-btn');
   assert.ok(btn, '#voiceonly-btn id가 유지돼야 한다(toggleVoiceOnly가 getElementById로 찾는다)');
   assert.strictEqual(btn.textContent, '켜기');
