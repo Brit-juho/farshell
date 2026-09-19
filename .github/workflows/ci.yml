@@ -149,39 +149,54 @@ jobs:
   # 러너째 죽었다.** 2차는 8분할로 그 둘을 각각 반으로 가른다.
   # 살아남은 묶음의 로그는 정상 업로드되므로, 죽은 묶음이 바로 범위다.
   # 범인을 찾으면 이 잡은 원래의 버전 매트릭스로 되돌린다.
+  # ⚠ 2026-09-19 — **임시 이분탐색 구성 3차. 파일당 잡 하나.**
+  # 1차(4분할, run 35436528538): 묶음 2·3이 러너째 죽었다.
+  # 2차(8분할, run 35437559314): 그 둘이 묶음 3·6으로 갈렸고 나머지는 통과했다.
+  #   (묶음 2·4의 빠른 실패는 이 임시 구성 자체가 원인이다 — install_guard가
+  #    ci.yml에서 python 매트릭스를 찾지 못했고, 수집 0건인 파일이 exit 5를
+  #    돌려줬다. 둘 다 원래 매트릭스를 되돌리면 사라진다.)
+  # 3차는 그 두 묶음의 22개 파일을 **각각 독립 잡**으로 돌린다 —
+  # 죽는 잡의 이름이 곧 범인이다. 한 번의 사이클로 확정된다.
   server:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
-        chunk: [0, 1, 2, 3, 4, 5, 6, 7]
+        file:
+          - test_agent_report
+          - test_auth_elevate
+          - test_auto_responder
+          - test_claude_hooks
+          - test_fsguard
+          - test_git_stage_commit
+          - test_mcp_adapters
+          - test_mcp_route
+          - test_middleware_xff
+          - test_notify_fallback
+          - test_portscan
+          - test_pty_manager
+          - test_release_notes
+          - test_routes_hosts
+          - test_routes_search
+          - test_scrollback_memory
+          - test_snippets
+          - test_tmux_clients
+          - test_tmux_target_session_for_cwd
+          - test_tunnel_registry
+          - test_voice_stt_model
+          - test_workspace
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
           cache: 'pip'
-          # 위 e2e 잡의 주석 참고 — 파일명이 requirements.txt가 아니면 이 액션은
-          # 에러로 끝난다. 이 잡은 core 하나만 설치하므로 그것만 적는다.
           cache-dependency-path: requirements-core.txt
-      # requirements-voice.txt는 설치하지 않는다 — faster-whisper/torch가 수 GB.
-      # pytest·httpx 는 이미 requirements-core.txt 에 있어 추가 설치 불필요.
       - run: pip install -r requirements-core.txt
-      - name: "묶음 ${{ matrix.chunk }} 파일 목록"
-        run: ls server/tests/test_*.py | awk 'NR % 8 == ${{ matrix.chunk }}'
-      # 파일 하나씩 돌리고 **이름을 먼저 찍는다** — 러너가 죽어도 그때까지
-      # 스트리밍된 줄이 남을 수 있고, 남지 않더라도 "이 묶음이 죽었다"는
-      # 사실만으로 범위가 1/4로 준다.
-      - name: "묶음 ${{ matrix.chunk }} 실행"
+      - name: "${{ matrix.file }}"
         env:
           PYTHONFAULTHANDLER: "1"
         run: |
-          set -o pipefail
-          rc=0
-          for f in $(ls server/tests/test_*.py | awk 'NR % 8 == ${{ matrix.chunk }}'); do
-            echo "::group::$f"
-            timeout --signal=ABRT 120 python -m pytest "$f" -q -o faulthandler_timeout=60 || rc=$?
-            echo "::endgroup::"
-          done
-          exit $rc
+          timeout --signal=ABRT 120 python -m pytest "server/tests/${{ matrix.file }}.py" \
+            -q -o addopts= -o faulthandler_timeout=30
