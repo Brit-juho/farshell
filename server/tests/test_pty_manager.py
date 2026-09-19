@@ -196,3 +196,46 @@ def test_keystrokes_around_a_paste_are_still_filtered(loop):
 
     mgr.write("test-paste-mixed", b"a\x1b[0c" + PS + b"\x1b[0c" + PE + b"b")
     assert written == [b"a" + PS + b"\x1b[0c" + PE + b"b"]
+
+
+# ── destroy_session 이 시스템 프로세스·표준 스트림을 건드리지 않는가 ──────────
+#
+# 2026-09-19 사고의 회귀 가드. 가짜 세션이 `pid=1, fd=1`로 만들어진 채 앱
+# lifespan 종료의 `destroy_all()`을 타자, `os.getpgid(1)`이 1이고 그게 우리
+# 프로세스 그룹과 달라 group kill이 "안전"으로 판정돼 **`killpg(1, SIGKILL)`**
+# 이 나갔다. GitHub 러너 VM이 그대로 죽어 2026-09-07부터 server 잡이 매번
+# 45분을 돌다 사라졌고, 그렇게 죽은 잡은 로그조차 업로드되지 않아 원인이
+# 10일 넘게 보이지 않았다. macOS(EPERM)와 컨테이너(pytest 자신이 pgid 1)에서는
+# 재현되지 않는다 — 그래서 실측이 아니라 **불변식**으로 고정한다.
+
+@pytest.mark.parametrize("pid", [0, 1, -1])
+def test_destroy_session_never_signals_system_pids(loop, monkeypatch, pid):
+    from pty_manager import PTYManager, PTYSession
+
+    mgr = PTYManager()
+    mgr._sessions["fake"] = PTYSession(session_id="fake", pid=pid, fd=-1)
+
+    killed: list = []
+    monkeypatch.setattr("pty_manager.os.kill", lambda *a: killed.append(("kill", a)))
+    monkeypatch.setattr("pty_manager.os.killpg", lambda *a: killed.append(("killpg", a)))
+    monkeypatch.setattr("pty_manager.os.waitpid", lambda *a: killed.append(("waitpid", a)))
+
+    mgr.destroy_session("fake")
+
+    assert killed == [], f"pid={pid}에 시그널이 나갔다: {killed}"
+
+
+@pytest.mark.parametrize("fd", [0, 1, 2])
+def test_destroy_session_never_closes_standard_streams(loop, monkeypatch, fd):
+    """fd 1을 닫으면 서버가 자기 stdout을 잃는다 — 로그가 그 자리에서 끊긴다."""
+    from pty_manager import PTYManager, PTYSession
+
+    mgr = PTYManager()
+    mgr._sessions["fake"] = PTYSession(session_id="fake", pid=0, fd=fd)
+
+    closed: list = []
+    monkeypatch.setattr("pty_manager.os.close", lambda f: closed.append(f))
+
+    mgr.destroy_session("fake")
+
+    assert closed == [], f"표준 스트림 fd={fd}를 닫았다"

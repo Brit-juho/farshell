@@ -159,44 +159,33 @@ jobs:
   # 죽는 잡의 이름이 곧 범인이다. 한 번의 사이클로 확정된다.
   server:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # 2026-09-19 — 이 잡은 2026-09-07부터 매번 러너 VM째로 죽었다. 원인은
+    # `destroy_session`이 가짜 세션의 `pid=1`로 `killpg(1, SIGKILL)`을 보낸
+    # 것이었고(테스트 두 개가 그 값을 썼다), 그렇게 죽은 잡은 로그가 업로드되지
+    # 않아 원인이 10일 넘게 보이지 않았다. 고친 뒤에도 상한은 남겨 둔다 —
+    # 같은 종류의 사고에서 45분을 버리지 않기 위해서다(로컬 실측 45~70초).
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
-        file:
-          - test_agent_report
-          - test_auth_elevate
-          - test_auto_responder
-          - test_claude_hooks
-          - test_fsguard
-          - test_git_stage_commit
-          - test_mcp_adapters
-          - test_mcp_route
-          - test_middleware_xff
-          - test_notify_fallback
-          - test_portscan
-          - test_pty_manager
-          - test_release_notes
-          - test_routes_hosts
-          - test_routes_search
-          - test_scrollback_memory
-          - test_snippets
-          - test_tmux_clients
-          - test_tmux_target_session_for_cwd
-          - test_tunnel_registry
-          - test_voice_stt_model
-          - test_workspace
+        python: ['3.11', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '${{ matrix.python }}'
           cache: 'pip'
+          # 위 e2e 잡의 주석 참고 — 파일명이 requirements.txt가 아니면 이 액션은
+          # 에러로 끝난다. 이 잡은 core 하나만 설치하므로 그것만 적는다.
           cache-dependency-path: requirements-core.txt
+      # requirements-voice.txt는 설치하지 않는다 — faster-whisper/torch가 수 GB.
+      # 2026-09-03 실측: voice 없이 332 passed / 2 skipped (Python 3.12/3.14 확인).
+      # pytest·httpx 는 이미 requirements-core.txt 에 있어 추가 설치 불필요.
       - run: pip install -r requirements-core.txt
-      - name: "${{ matrix.file }}"
+      # 멈춘 자리를 로그로 받아내는 두 장치. `faulthandler_timeout`(pytest 내장)은
+      # 한 테스트가 60초를 넘기면 모든 스레드의 스택을 찍고, 바깥 `timeout`은
+      # 8분에 SIGABRT로 끊어 **스텝이 스스로 끝나게** 한다 — 잡이 밖에서
+      # 취소되면 GitHub이 로그를 통째로 버린다(2026-09-19 실측).
+      - run: timeout --signal=ABRT 480 python -m pytest server/tests -q -o faulthandler_timeout=60
         env:
           PYTHONFAULTHANDLER: "1"
-        run: |
-          timeout --signal=ABRT 120 python -m pytest "server/tests/${{ matrix.file }}.py" \
-            -q -o addopts= -o faulthandler_timeout=30
