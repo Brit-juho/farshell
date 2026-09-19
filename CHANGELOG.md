@@ -20,6 +20,80 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **CI가 2026-09-07부터 죽어 있었다 — 테스트가 러너 VM을 죽이고 있었다.**
+  `server` 잡 3개가 매번 45분을 돌다 "The runner has received a shutdown
+  signal"로 사라졌고, 그렇게 죽은 잡은 GitHub이 로그를 업로드하지 않아 원인이
+  10일 넘게 **보이지 않았다.** 연쇄로 쌓여 있던 결함 다섯을 벗겨냈다.
+
+  1. **`actions/setup-python`의 `cache: 'pip'`이 의존성 파일을 못 찾았다.**
+     기본 탐색 대상이 `requirements.txt`/`pyproject.toml`뿐인데 이 저장소는
+     `requirements-<프로필>.txt` 셋이라 하나도 안 걸렸고, 액션은 그걸 경고가
+     아니라 에러로 끝낸다 — **`pip install`도 `pytest`도 실행되기 전에** 잡이
+     5초 만에 죽었다. `cache-dependency-path`로 각 잡이 실제로 설치하는 파일을
+     명시한다. 이 에러가 아래 넷을 전부 가리고 있었다.
+
+  2. **`os.pathconf(fd, …)`에 음수 fd가 들어가면 리눅스에서 프로세스가 죽는다.**
+     CPython은 `-1`을 "fd가 주어지지 않았다"는 센티넬로 쓰므로(`path_t.fd`)
+     정수 -1을 넘기면 fd 분기가 아니라 **경로 문자열 분기**로 빠져
+     `pathconf(NULL, …)`을 부른다. macOS libc는 EFAULT를 돌려줘 기존 `except
+     OSError`가 받아냈지만 glibc는 NULL을 그대로 역참조해 SIGSEGV로 끝난다
+     (실측: 3.11~3.13은 EFAULT, 3.14는 EBADF로 고쳐짐). 세션이 방금 죽어
+     `fd = -1`인 경우는 `input_mode`가 실제로 다루는 상황이라 가정이 아니다.
+
+  3. **가짜 `pid=1`이 `killpg(1, SIGKILL)`로 러너 VM을 죽였다 — 45분 행의 진짜
+     원인.** 테스트 둘이 `PTYSession(pid=1, fd=1)`로 가짜 세션을 만들고
+     `TestClient`를 썼는데, 앱 lifespan 종료의 `destroy_all()`이 거기로
+     내려오면서 `os.getpgid(1)`=1이고 그게 우리 프로세스 그룹과 달라 group kill이
+     "안전"으로 판정됐다. **프로세스 그룹 1에 SIGKILL**이다. `fd=1`은 덤으로
+     서버 자신의 stdout을 닫았다. `destroy_session`에 불변식 둘을 세운다:
+     **pid가 `None`·0·1·음수면 시그널도 `waitpid`도 보내지 않고**(POSIX에서 그
+     값들은 "그 프로세스"가 아니다 — 0은 내 프로세스 그룹, -1은 닿는 모든
+     프로세스, 1은 init), **fd 0·1·2는 닫지 않는다.** 진짜 자식 pid는 2 이상,
+     PTY master fd는 3 이상이라 정상 경로는 그대로다. 회귀 가드 6건 추가.
+     macOS(EPERM)와 컨테이너(pytest 자신이 pgid 1)에서는 재현되지 않는다 —
+     그 조합이 원인을 오래 가렸다.
+
+  4. **리눅스 전용 실측 단언 둘.** `_PC_MAX_CANON`은 리눅스에서 **255**다
+     (POSIX `_POSIX_MAX_CANON`) — 주석이 "4096(N_TTY_BUF_SIZE), 미측정"이라고
+     적어둔 추정은 틀렸다(한 줄 한계는 커널 버퍼 크기가 아니다). 그리고 출력
+     배치 테스트가 셸 프롬프트의 도착 시점에 기대고 있었다(맥은 안 옴 ·
+     컨테이너는 같은 배치 · CI는 별도 broadcast — 셋 다 정상 동작이다).
+
+  5. **tmux 테스트 셋이 소켓 이름을 공유해 경쟁했다.** 픽스처의 `kill-server`는
+     요청만 보내고 돌아오는데, 서버가 실제로 내려가기 전에 다음 테스트가 같은
+     소켓에 `new-session`을 치면 죽는다. 느린 러너에서만 드러난다.
+     `test_tmux_paste.py`가 이미 쓰던 uuid 소켓 관용구를 나머지에도 적용했다.
+
+  진단 장치도 남겼다 — `timeout --signal=ABRT`로 **스텝이 스스로 끝나게** 만들고
+  (잡이 밖에서 취소되면 GitHub이 로그를 통째로 버린다) `faulthandler_timeout`이
+  멈춘 자리의 스레드 스택을 찍는다. 범인은 테스트 파일을 4→8묶음→**파일당 잡**
+  으로 쪼개 특정했다.
+
+- **`e2e` 잡이 추가된 이래 한 번도 실행된 적이 없었다.** 2026-09-08에 들어왔는데
+  바로 위 캐시 에러에 막혀 있었고, 그 사이 화면이 ADR-29로 크게 바뀌어 테스트만
+  옛 DOM에 남았다. 12건을 되살렸다 — 대부분 낡은 선택자·API였지만(`openWorktreeTab`
+  → `openGroupTab`, 스킨 칩의 설정 패널 이식, 레일 행 클래스 조합, `--vt-wgrail-w`가
+  `min()` 식으로 바뀐 것 등) **진짜 결함이 하나 있었다**: `.vt-onboarding`(z 500)이
+  폰의 홈 화면인 `#vt-fleet-slot`(z 90)을 통째로 덮어, 세션이 0개일 때 호스트
+  스위처가 클릭을 못 받았다 — C1이 없애려던 "폰에서는 호스트를 바꿀 방법이
+  아예 없다"로 되돌아가 있었다. 온보딩이 뜨는 조건과 그 화면을 여는 조건이 같아
+  **항상** 겹친다. 플릿 홈이 떠 있으면 온보딩을 숨긴다(코드 뷰어 페인의
+  `body.vt-has-viewer-pane` 규칙과 같은 관용구).
+
+- **테스트가 사용자의 실제 `~/.vt/`를 읽고 썼다.** e2e의 격리 환경에
+  `VT_STATE_DIR`이 빠져 있어 기기 설정이 진짜 홈에 쓰였고(서버 모듈 20여 개가
+  그 값을 읽는다), `test_routes_search`는 영속 로그를 훑느라
+  `~/.vt/scrollback`의 **실제 터미널 출력 9.5MB**를 읽고 있었다 — 그래서 그
+  파일만 단독으로 돌리면 `truncated: True`가 나와 깨졌고, 전체 스위트에서는
+  앞선 테스트가 우연히 tmp로 돌려놔 통과했다(통과 여부가 실행 순서에 달려
+  있었다는 뜻이다). 둘 다 tmp로 고정했다.
+
+- **`test_static_cache`의 `dist/` 경로 2건은 CI에서 통과한 적이 없다.**
+  `dist/`는 커밋하지 않고(ADR-2) Vite가 만드는데 `server` 잡은 node를 쓰지
+  않는다. 산출물의 존재·형태는 `frontend` 잡이 이미 게이트로 잡으므로, 빌드가
+  없으면 그 두 파라미터만 건너뛴다.
+
+
 - **서버가 기동조차 되지 않았다 — 없는 심볼을 import 하고 있었다.**
   `server/main.py`가 `routes.agents`에 존재하지 않는 `close_managed_codex`를
   가져오고 있었다. 관리형 Codex(App Server 직접 제어) 경로는 `API.md`에
