@@ -5,14 +5,21 @@
 """
 
 import subprocess
+import uuid
 
 import pytest
 
 import tmux_target
 
 
-SOCKET = "vt-test-pane-label"
-BASE = ["tmux", "-L", SOCKET]
+# ⚠ 소켓 이름은 **테스트마다 새로 만든다**(`test_tmux_paste.py`가 이미 쓰는
+# 관용구). 고정 이름을 쓰면 픽스처의 `kill-server`와 다음 테스트의
+# `new-session`이 경쟁한다 — `kill-server`는 요청만 보내고 바로 돌아오는데,
+# 서버가 실제로 내려가기 전에 다음 `new-session`이 붙으면 exit 1로 죽는다.
+# 2026-09-19 CI(python 3.11)에서 실제로 그렇게 깨졌다(같은 런의 3.13·3.14는
+# 통과 — 느린 러너에서만 드러나는 경쟁이다).
+SOCKET = ""          # 픽스처가 채운다
+BASE: list[str] = []  # 〃
 
 
 def _tmux(*args: str) -> str:
@@ -22,6 +29,9 @@ def _tmux(*args: str) -> str:
 
 @pytest.fixture
 def tmux_server(monkeypatch):
+    global SOCKET, BASE
+    SOCKET = f"vt-test-pane-label-{uuid.uuid4().hex[:8]}"
+    BASE = ["tmux", "-L", SOCKET]
     monkeypatch.setattr(tmux_target, "TMUX_BASE", BASE)
     _tmux("new-session", "-d", "-s", "dev", "-x", "80", "-y", "24")
     yield
