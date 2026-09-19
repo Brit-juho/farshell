@@ -214,3 +214,35 @@ test('load — 서버가 죽어 있어도 캐시 값으로 계속 동작한다',
   await S.load();
   assert.strictEqual(S.get('terminal.fontSize'), 22);
 });
+
+// N3-1 — 핀치 줌이 바꾸는 값이 **기기 스코프**인가.
+//
+// 폰에서 두 손가락으로 키운 글씨가 맥 터미널까지 키우면 안 된다. 그 규칙은
+// `terminal.fontSize`의 `scope: 'device'` 한 글자에 달려 있는데, 그걸 고정하는
+// 검사가 없었다 — 스키마 한 줄이 지워져도 아무도 못 잡는다는 뜻이다.
+// 스코프 이름만 보지 않고 **실제로 기기 엔드포인트로 나가는지**까지 본다:
+// 스코프는 라우팅을 통해서만 의미를 갖는다.
+test('terminal.fontSize는 기기 스코프다 — 폰에서 키워도 맥은 그대로', async () => {
+  const { S, calls } = await load();
+  assert.strictEqual(S.scopeOf('terminal.fontSize'), 'device');
+
+  calls.length = 0;
+  await S.set('terminal.fontSize', 22);
+  const puts = calls.filter((c) => c.opts && c.opts.method === 'PUT');
+  assert.strictEqual(puts.length, 1, `PUT이 한 번이어야 한다: ${JSON.stringify(puts)}`);
+  assert.match(puts[0].url, /device-settings/,
+    `기기 엔드포인트로 나가야 한다: ${puts[0].url}`);
+});
+
+test('theme.skin은 전역 스코프다 — 스킨은 모든 기기에서 같아야 한다', async () => {
+  // 짝이 되는 반대 사례. 둘 다 고정해야 "스코프 분리"가 검사된 것이다 —
+  // 한쪽만 보면 전부 device로 바꿔도 통과한다.
+  const { S, calls } = await load();
+  assert.strictEqual(S.scopeOf('theme.skin'), 'global');
+
+  calls.length = 0;
+  await S.set('theme.skin', 'macos');
+  const puts = calls.filter((c) => c.opts && c.opts.method === 'PUT');
+  assert.strictEqual(puts.length, 1);
+  assert.doesNotMatch(puts[0].url, /device-settings/, puts[0].url);
+});
