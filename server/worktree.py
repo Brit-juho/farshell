@@ -51,9 +51,12 @@ from worktree_parse import (  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
-# 폴링 주기(Rail.tsx WORKTREES_POLL_MS)보다 **길어야** 한다. 짧으면 모든 폴링이
-# 캐시를 빗나가 매번 전체 탐색이 돈다 — 5초 TTL에 8초 폴링이라 적중률이 0이었다.
-CACHE_TTL_SEC = 20.0
+# 폴링 주기(Rail.tsx WORKTREES_POLL_MS=60초)보다 **길어야** 한다. 짧으면 모든
+# 폴링이 캐시를 빗나가 매번 전체 탐색이 돈다 — 5초 TTL에 8초 폴링이던 과거와
+# 같은 결함이, 폴링만 60초로 늦춘 뒤 TTL 20초를 그대로 둬 다시 생겼다.
+# 75초면 첫 안전망 폴링은 캐시를 쓰므로, 변경 이벤트가 없을 때 전체 탐색은
+# 매 폴링마다가 아니라 최대 두 번째 폴링에서만 실행된다.
+CACHE_TTL_SEC = 75.0
 # 이 나이를 넘은 값은 더 이상 그대로 내주지 않고 호출자를 기다리게 한다.
 # 서버가 오래 idle이었다가 처음 열린 화면이 2분 전 상태를 보면 안 된다.
 CACHE_STALE_SEC = 120.0

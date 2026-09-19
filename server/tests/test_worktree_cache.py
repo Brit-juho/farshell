@@ -10,7 +10,7 @@ HTTP·WebSocket·PTY 출력 브로드캐스트가 같이 멈춘다 — 터미널
 
   1. 라우트가 이벤트 루프 위에서 동기 탐색을 직접 호출했다
      (`routes/worktree.py`. 같은 저장소의 `routes/git.py`는 to_thread를 쓴다)
-  2. TTL(5초)이 프런트 폴링 주기(8초)보다 짧아 **캐시 적중률이 0**이었다
+  2. TTL이 프런트 폴링 주기보다 짧아 **캐시 적중률이 0**이었다
   3. single-flight가 없어 동시 요청이 각자 전체 탐색(실측 1.0~1.7초)을 직렬로
      반복했다 — 1.3초가 15~20초로 불어난 경로가 이것이다
 
@@ -162,7 +162,7 @@ def test_cache_ttl_exceeds_client_poll_interval():
     없는 것과 같아지는, 조용히 틀리는 종류의 결함이다. 실제로 TTL 5초에 폴링
     8초라 적중률이 0이었고 아무도 몰랐다.
     """
-    poll_ms = 8000  # frontend/js/shell/Rail.tsx WORKTREES_POLL_MS
+    poll_ms = 60000  # frontend/js/shell/Rail.tsx WORKTREES_POLL_MS
     assert worktree.CACHE_TTL_SEC > poll_ms / 1000.0
 
 
@@ -172,7 +172,7 @@ def test_concurrent_calls_run_discovery_once(monkeypatch):
     """동시 호출이 탐색을 한 번만 돌린다.
 
     잠금이 없으면 N개 요청이 각자 1.3초짜리 탐색을 직렬 반복해 정지가 N배가
-    된다. 폴링 주체가 Rail(8초)·tab-worktree(10초)·Fleet이고 여기에 탭·기기
+    된다. 폴링 주체가 Rail·tab-worktree·Fleet이고 여기에 탭·기기
     수가 곱해지므로 N은 쉽게 커진다.
     """
     calls = []

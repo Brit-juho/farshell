@@ -20,13 +20,13 @@ Cursor, Jules and others. Claude Code reads `CLAUDE.md`; Gemini CLI reads `GEMIN
 ## Commands
 
 ```bash
-npm test                      # tsc --noEmit, then node:test + jsdom (524 tests)
+npm test                      # tsc --noEmit, then node:test + jsdom (535 tests)
 npm run typecheck             # tsc --noEmit alone. Vite only transpiles — it does NOT
                               #   type-check, so a `.tsx` referencing an undefined name
                               #   builds and ships. That shipped a real ReferenceError
                               #   that killed the rail (2026-09-17); `npm test` runs this first now.
 npm run build                 # Vite, two separate passes — see vite.config.js header
-.venv/bin/python -m pytest    # server (1245 tests), testpaths = server/tests
+.venv/bin/python -m pytest    # server (1270 tests), testpaths = server/tests
                               #   ⚠ the repo root `tests/` is NOT in testpaths and CI does
                               #   not run it — put new server tests in server/tests/
 pytest tests/e2e -v           # real-browser smoke, needs playwright (requirements-dev.txt)

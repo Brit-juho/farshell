@@ -159,16 +159,28 @@ function Rail(props: { deps: RailDeps }) {
     String((window as any).vtSettingsGet?.(SETTINGS_HOST_KEY) || LOCAL_HOST),
   );
 
+  // compact(<720px)에서는 이 데스크톱 Rail이 CSS로 숨고 mobile-nav가 Fleet을
+  // 마운트한다. 예전엔 숨은 Rail도 계속 살아 있어 Fleet과 똑같은 tmux·agent·git
+  // 조회를 중복 실행했다. 마운트 자체는 반응형 전환을 위해 유지하되, 보이지 않는
+  // 동안 네트워크/서브프로세스 폴링만 쉰다.
+  const desktopMq = typeof window.matchMedia === 'function'
+    ? window.matchMedia('(min-width: 720px)')
+    : null;
+  const railPollingActive = () => desktopMq ? desktopMq.matches : window.innerWidth >= 720;
+
   const refreshSessions = async () => {
+    if (!railPollingActive()) return;
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
     if (list) setTmuxSessions(list);
   };
   const refreshAgent = async () => {
+    if (!railPollingActive()) return;
     setAgentDetails(await fetchAgentDetails(props.deps));
     setAgentNames(await fetchAgentNames(props.deps));
   };
   // ADR-29 B — /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임).
   const refreshRepos = async () => {
+    if (!railPollingActive()) return;
     const data = await safeFetch<{ repos?: any[]; truncated?: boolean; hiddenCount?: number }>(
       props.deps, '/api/repos',
     );
@@ -179,14 +191,23 @@ function Rail(props: { deps: RailDeps }) {
   // C1 — 로컬+원격을 한 목록으로. 실패하면(라우터가 없는 옛 서버 등) 빈 배열이
   // 남아 스위처가 아예 안 그려진다 — 멀티호스트를 안 쓰는 사람에게는 그게 맞다.
   const refreshHosts = async () => {
+    if (!railPollingActive()) return;
     const data = await safeFetch<{ hosts?: HostEntry[] }>(props.deps, '/api/hosts');
     if (data?.hosts) setHosts(data.hosts);
   };
 
-  refreshSessions();
-  refreshAgent();
-  refreshRepos();
-  refreshHosts();
+  const refreshAll = () => {
+    refreshSessions();
+    refreshAgent();
+    refreshRepos();
+    refreshHosts();
+  };
+  refreshAll();
+  const onViewportChange = (e: MediaQueryListEvent) => {
+    // compact에서 쉴 동안 놓친 상태를 데스크톱으로 돌아오는 즉시 한 번 맞춘다.
+    if (e.matches) refreshAll();
+  };
+  desktopMq?.addEventListener('change', onViewportChange);
   const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_POLL_MS);
   const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
   const t3 = setInterval(() => { if (!document.hidden) refreshRepos(); }, WORKTREES_POLL_MS);
@@ -196,6 +217,7 @@ function Rail(props: { deps: RailDeps }) {
   const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshRepos(); });
   onCleanup(() => {
     clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
+    desktopMq?.removeEventListener('change', onViewportChange);
     offWt();
   });
 
