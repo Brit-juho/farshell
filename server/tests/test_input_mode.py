@@ -121,10 +121,19 @@ def test_master_fd_sees_the_slave_switching_to_canonical_mode(shell_pty):
 
 
 def test_max_canon_matches_the_measured_limit(shell_pty):
+    """플랫폼별 실측값. `>= 256` 같은 하한으로 두면 안 된다 — **리눅스의 진짜
+    값이 255**여서 그 단언이 리눅스에서만 깨졌다(2026-09-19, Docker
+    python:3.11-slim으로 재현). 255는 POSIX `_POSIX_MAX_CANON`이고 glibc가
+    `_PC_MAX_CANON`으로 그대로 돌려준다.
+
+    값을 정확히 못 박는 것이 하한보다 낫다: 폴백(`FALLBACK_MAX_CANON`=1024)이
+    잘못 걸리면 리눅스에서 1024가 나오는데, 하한 단언은 그걸 통과시킨다."""
     limit = input_mode.max_canon(shell_pty)
-    assert limit >= 256, "말이 안 되는 값이면 폴백이 잘못 걸린 것이다"
+    assert limit > 0, f"말이 안 되는 값이면 폴백이 잘못 걸린 것이다: {limit}"
     if sys.platform == "darwin":
         assert limit == 1024, "macOS 실측값(개행 포함 1024)"
+    elif sys.platform.startswith("linux"):
+        assert limit == 255, "리눅스 실측값(_POSIX_MAX_CANON)"
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="한계 동작을 실측한 것은 macOS뿐")

@@ -33,8 +33,12 @@ logger = logging.getLogger(__name__)
 _BRACKET_MODE_RE = re.compile(rb"\x1b\[\?([0-9;]*)2004([hl])")
 
 # 정규 모드 한 줄 한계의 폴백. pathconf가 답을 못 줄 때만 쓴다 —
-# macOS/BSD는 1024(실측), Linux n_tty는 4096(N_TTY_BUF_SIZE)이지만 **미측정**이라
-# 작은 쪽을 기본값으로 둔다(거절이 조용한 소실보다 낫다).
+# macOS/BSD는 1024, Linux는 **255**다(둘 다 실측 — 리눅스는 2026-09-19에
+# python:3.11-slim 컨테이너에서 쟀다. glibc가 `_PC_MAX_CANON`으로 POSIX
+# `_POSIX_MAX_CANON`=255를 그대로 돌려준다. 커널 n_tty 버퍼가 4096이라
+# 4096일 것이라고 적어뒀던 건 틀렸다 — 한 줄 한계는 그 버퍼 크기가 아니다).
+# 이 상수는 pathconf가 답을 못 줄 때만 쓰므로 둘 중 큰 값을 골라 두지 않는다 —
+# 조용한 소실보다 거절이 낫다는 원칙은 같고, 실제 값은 위 두 경로가 준다.
 FALLBACK_MAX_CANON = 1024
 
 

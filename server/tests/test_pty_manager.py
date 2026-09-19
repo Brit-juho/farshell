@@ -103,8 +103,15 @@ def test_output_batching_coalesces_rapid_reads(loop):
         await asyncio.sleep(mgr.BATCH_WINDOW_SEC * 3)
 
     loop.run_until_complete(_run())
-    # 3번의 read가 한 번의 broadcast로 합쳐짐.
-    assert received == [b"chunkchunkchunk"]
+    # 3번의 read가 한 번의 broadcast로 합쳐졌는가 — 그게 이 테스트의 전부다.
+    #
+    # **내용을 통째로 비교하면 안 된다.** 이 세션은 진짜 PTY라 그 안의 셸이
+    # 프롬프트를 뱉고, 그 바이트도 같은 배치 창에 합류한다(리눅스 컨테이너에서
+    # 루트 프롬프트 `# `가 붙어 실패한 것으로 2026-09-19에 확인). 그건 결함이
+    # 아니라 배치가 제대로 동작한다는 증거다 — 합쳐진 게 하나뿐인지와,
+    # 우리가 넣은 3개가 앞에 붙어 있는지만 본다.
+    assert len(received) == 1, f"broadcast가 한 번으로 안 합쳐졌다: {received}"
+    assert received[0].startswith(b"chunkchunkchunk"), received[0]
     mgr.destroy_session("test-batch")
 
 
