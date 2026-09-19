@@ -407,6 +407,7 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
    그냥 두면 한글 글줄에서 살짝 내려앉는다. */
 .vt-set-help-warn{ display:flex; align-items:flex-start; gap:calc(var(--spacing) * 1.5); }
 .vt-set-help-ico{ flex:none; display:inline-flex; margin-top:1px; color:var(--warn, var(--color-st-waiting)); }
+.vt-mcp-authwarn{ color:var(--color-st-waiting); }
 
 .vt-fl-footer{ padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-top:1px solid var(--line); }
 .vt-fl-gauge{ height:6px; background:var(--tab); border-radius:999px; overflow:hidden; }

@@ -57,6 +57,25 @@ def test_stop_makes_done_and_keeps_entry():
     assert "s" in A._state, "엔트리가 남아야 새로고침 후에도 done이 보인다"
 
 
+def test_codex_prompt_permission_and_session_end_lifecycle():
+    ent = A.on_event("prompt", {"session_id": "s", "cwd": "/repo"}, session="dev")
+    assert ent["status"] == A.WORKING
+    ent = A.on_event("permission", {
+        "session_id": "s", "tool_name": "Bash", "tool_input": {"command": "touch x"},
+    })
+    assert ent["status"] == A.WAITING
+    assert ent["question"] == "Bash 실행 승인이 필요합니다"
+    ent = A.on_event("session_end", {"session_id": "s"})
+    assert ent["status"] == A.DONE and ent["question"] is None
+
+
+def test_post_clears_resolved_permission_wait():
+    A.on_event("permission", {"session_id": "s", "tool_name": "Bash"})
+    ent = A.on_event("post", {"session_id": "s"})
+    assert ent["status"] == A.WORKING
+    assert ent["question"] is None
+
+
 def test_pre_after_done_returns_to_working():
     A.on_event("stop", {"session_id": "s"})
     A.on_event("pre", {"session_id": "s", "tool_name": "Read"})
@@ -95,6 +114,19 @@ def test_pre_and_stop_win_over_waiting():
 def test_waiting_clear_on_unknown_session_is_noop():
     assert A.on_waiting("never-seen", False) is None
     assert A._state == {}
+
+
+def test_escape_cancel_finishes_only_waiting_entries_in_target_session():
+    A.on_event("permission", {"session_id": "s1", "tool_name": "Bash"}, session="dev")
+    A.on_event("permission", {"session_id": "s2", "tool_name": "Bash"}, session="other")
+    A.on_event("pre", {"session_id": "s3", "tool_name": "Read"}, session="dev")
+
+    assert A.finish_waiting_for_session("dev") == 1
+    assert A.get_status("s1") == A.DONE
+    assert A.get_state("s1")["tool"] is None
+    assert A.get_state("s1")["question"] is None
+    assert A.get_status("s2") == A.WAITING
+    assert A.get_status("s3") == A.WORKING
 
 
 # ── N38(70-mobile.md §2) — 인라인 승인용 question/options ───────────────────

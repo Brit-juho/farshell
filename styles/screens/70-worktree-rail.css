@@ -173,6 +173,10 @@
 #vt-wgrail.collapsed .vt-wgrail-row-main { display:none; }
 #vt-wgrail.collapsed .vt-wgrail-bar { width:4px; }
 .vt-wgrail-agent-compact { align-items:center; }
+.vt-wgrail-agent[data-state="working"] { color:var(--color-st-working); }
+.vt-wgrail-agent[data-state="waiting"] { color:var(--color-st-waiting); }
+.vt-wgrail-agent[data-state="done"] { color:var(--color-st-done); }
+.vt-wgrail-agent[data-state="error"] { color:var(--color-st-error); }
 
 /* 접힘에서 그룹 라벨 대신 남는 경계선(Rail.tsx의 group-sep). 첫 그룹 위에는
    머리 밑줄이 이미 있어 겹치므로 그 하나는 그리지 않는다. */

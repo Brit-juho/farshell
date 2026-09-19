@@ -44,8 +44,11 @@ logger = logging.getLogger(__name__)
 
 DETECT_DIR = Path(os.environ.get("VT_DETECT_DIR", Path(__file__).parent / "detect"))
 
-# auto_responder와 같은 크기 — 큰 출력이 여러 청크로 쪼개져도 마지막 N바이트에서 찾는다.
-WINDOW_SIZE = 2048
+# Codex ratatui는 승인 overlay를 그릴 때 전체 화면을 다시 그린다. 144×38 실측에서
+# 질문과 마지막 선택지 사이 제어 출력이 2KB를 넘어, 예전 창에서는 질문이 먼저
+# 밀려난 뒤 y/p/esc를 추출할 수 없었다. 한 화면+ANSI 여유를 담되 오래된 프롬프트가
+# 과도하게 남지 않도록 16KiB로 제한한다.
+WINDOW_SIZE = 16 * 1024
 # 같은 세션에서 상태를 연속으로 뒤집지 않기 위한 최소 간격.
 FLAP_GUARD_SEC = 1.0
 
@@ -120,6 +123,24 @@ def load_patterns(force: bool = False) -> dict:
     return out
 
 
+def _locate_prompt(pats: dict, joined: bytes) -> tuple[Optional[dict], Optional[bytes], int]:
+    """가장 구체적인 최신 enter 패턴의 spec·리터럴·위치를 반환한다."""
+    prompt_spec: Optional[dict] = None
+    prompt_pos = -1
+    prompt_priority = 1_000_000
+    prompt_pattern: Optional[bytes] = None
+    for spec in pats.values():
+        for priority, pattern in enumerate(spec["enter"]):
+            pos = joined.rfind(pattern)
+            if pos >= 0 and (priority < prompt_priority
+                             or (priority == prompt_priority and pos > prompt_pos)):
+                prompt_priority = priority
+                prompt_pos = pos
+                prompt_pattern = pattern
+                prompt_spec = spec
+    return prompt_spec, prompt_pattern, prompt_pos
+
+
 def _extract_prompt(pats: dict, joined: bytes) -> tuple[Optional[str], Optional[list]]:
     """enter 패턴이 히트한 윈도우에서 질문 1줄과 번호 선택지를 뽑는다.
 
@@ -135,32 +156,36 @@ def _extract_prompt(pats: dict, joined: bytes) -> tuple[Optional[str], Optional[
         return None, None
 
     question: Optional[str] = None
-    for spec in pats.values():
-        for p in spec["enter"]:
-            if p in joined:
-                needle = p.decode("utf-8", errors="ignore")
-                for line in text.splitlines():
-                    if needle in line:
-                        question = line.strip()
-                        break
-                if question is None:
-                    question = needle
+    # 각 detect 파일은 구체적인 질문을 먼저, 짧은 폴백 문구를 뒤에 둔다.
+    # Codex 선택지의 "don't ask again"이 Claude의 폴백 enter와 겹치므로,
+    # 더 앞에 선언된 패턴을 우선하고 같은 우선순위에서만 최신 위치를 고른다.
+    prompt_spec, prompt_pattern, _ = _locate_prompt(pats, joined)
+    if prompt_pattern is not None:
+        needle = prompt_pattern.decode("utf-8", errors="ignore")
+        for line in text.splitlines():
+            if needle in line:
+                question = line.strip()
                 break
-        if question:
-            break
+        if question is None:
+            question = needle
 
     options: Optional[list] = None
-    for spec in pats.values():
-        for regex in spec.get("options") or []:
+    if prompt_spec:
+        for regex in prompt_spec.get("options") or []:
             found = regex.findall(text)
             if found:
-                options = [
-                    {"key": str(m[0]).strip(), "label": str(m[1]).strip()}
-                    for m in found
-                ][:6]  # 화면에 6개 넘게 그릴 일은 없다 — 방어적 상한
+                options = []
+                for match in found[:6]:  # 화면에 6개 넘게 그릴 일은 없다 — 방어적 상한
+                    # 기존 패턴은 (번호, 라벨), Codex는 (라벨, 실제 단축키)다.
+                    # named group이 있으면 우선하고, 없으면 기존 2튜플 계약을 유지한다.
+                    if isinstance(match, tuple) and len(match) >= 2:
+                        if "key" in regex.groupindex and "label" in regex.groupindex:
+                            key = match[regex.groupindex["key"] - 1]
+                            label = match[regex.groupindex["label"] - 1]
+                        else:
+                            key, label = match[0], match[1]
+                        options.append({"key": str(key).strip(), "label": str(label).strip()})
                 break
-        if options:
-            break
 
     return question, options
 
@@ -168,8 +193,11 @@ def _extract_prompt(pats: dict, joined: bytes) -> tuple[Optional[str], Optional[
 class PromptDetector:
     """세션별 출력 윈도우 + enter/exit 패턴 매처.
 
-    on_change(session_id, waiting: bool)로 상태 변화만 알린다 — **변화가 있을
-    때만** 부른다(매 청크마다 부르면 WS 브로드캐스트가 폭주한다).
+    on_change(session_id, waiting: bool)로 상태 변화를 알린다. 이미 waiting이어도
+    질문/선택지가 뒤 청크에서 새로 완성되면 한 번 더 알린다. 실제 TUI는 질문과
+    옵션을 여러 write로 나눠 그리므로, 이 갱신이 없으면 훅이 먼저 만든 waiting
+    엔트리의 `options`가 영원히 None으로 남는다. 같은 메타데이터의 단순 재렌더는
+    알리지 않아 WS 브로드캐스트 폭주를 막는다.
     """
 
     def __init__(self, on_change: Callable[[str, bool], None]):
@@ -177,12 +205,16 @@ class PromptDetector:
         # 실기기 검증(2.1.0)에서 발견 — 예전엔 `deque(maxlen=4)`로 **청크 개수**를
         # 제한했다. 실제 터미널은 커서 깜빡임·tmux 상태줄 자동 갱신 같은 잡음이
         # 초 단위로 끼어들어 한 프롬프트 렌더가 4개 넘는 write로 쪼개지는 일이
-        # 흔하다 — 그러면 청구 개수 상한이 옵션 1번이 담긴 앞쪽 청크를 (2048바이트
-        # 안에 여전히 들어가는데도) 밀어내 버려서, 선택지가 레이스 컨디션으로
+        # 흔하다 — 그러면 청크 개수 상한이 옵션 1번이 담긴 앞쪽 청크를 (바이트
+        # 창 안에 여전히 들어가는데도) 밀어내 버려서, 선택지가 레이스 컨디션으로
         # 들쭉날쭉 사라졌다. bytearray로 바꿔 **바이트 수**만으로 자른다.
         self._windows: dict[str, bytearray] = {}
         self._waiting: dict[str, bool] = {}
         self._changed_at: dict[str, float] = {}
+        # 승인 질문을 실제로 낸 CLI의 패턴 spec. 서로 다른 CLI가 같은 문구를
+        # 쓰므로(Codex footer의 `esc to cancel` == Gemini exit), 활성 spec의
+        # exit만 적용해야 한다.
+        self._active_specs: dict[str, dict] = {}
         # N38 — 마지막으로 감지된 질문/선택지. waiting=False가 되면 지운다
         # (더 이상 답할 대상이 없다).
         self._prompts: dict[str, tuple[Optional[str], Optional[list]]] = {}
@@ -202,19 +234,35 @@ class PromptDetector:
 
         joined = bytes(buf)
 
-        hit_exit = any(p in joined for spec in pats.values() for p in spec["exit"])
-        hit_enter = any(p in joined for spec in pats.values() for p in spec["enter"])
+        # PTY 윈도우는 현재 화면이 아니라 **출력 이력**이다. Codex는 작업 상태줄
+        # (`esc to interrupt`)을 찍은 뒤 같은 2KB 안에서 승인 질문을 그리므로,
+        # exit이 한 번이라도 있으면 무조건 우선하던 옛 규칙은 실제 승인 화면을
+        # working으로 남겼다. 가장 마지막에 출력된 신호가 현재 상태다.
+        prompt_spec, _, enter_at = _locate_prompt(pats, joined)
+        if prompt_spec is not None:
+            self._active_specs[session_id] = prompt_spec
+        active_spec = prompt_spec or self._active_specs.get(session_id)
+        exit_at = max(
+            (joined.rfind(p) for p in (active_spec or {}).get("exit", [])),
+            default=-1,
+        )
 
-        # exit이 우선이다 — 프롬프트가 떴다가 방금 사라진 윈도우에는 둘 다 들어
-        # 있을 수 있는데, 그 경우 현재 화면 상태는 "사라진 뒤"다.
-        if hit_exit:
+        if exit_at >= 0 and exit_at > enter_at:
             self._set(session_id, False)
-        elif hit_enter:
+        elif enter_at >= 0:
             if _auto_trust_suppressed(session_id):
                 logger.debug(f"[waiting] sid={session_id} auto_responder cooldown — 억제")
                 return
-            self._prompts[session_id] = _extract_prompt(pats, joined)
-            self._set(session_id, True)
+            prompt = _extract_prompt(pats, joined)
+            previous_prompt = self._prompts.get(session_id)
+            # TUI가 같은 질문 줄을 지우고 다시 그리면 윈도우에는 문구가 두 번
+            # 남아 질문 문자열만 달라질 수 있다. 그 재렌더는 통지하지 않고,
+            # 인라인 승인에 실제로 필요한 선택지가 바뀔 때만 갱신한다.
+            options_changed = (
+                previous_prompt is not None and previous_prompt[1] != prompt[1]
+            )
+            self._prompts[session_id] = prompt
+            self._set(session_id, True, refresh=options_changed)
 
     def on_user_input(self, session_id: str) -> None:
         """그 pane에 사용자가 뭔가 입력했다 → 승인 대기는 끝난 것으로 본다.
@@ -236,16 +284,21 @@ class PromptDetector:
             return None, None
         return self._prompts.get(session_id, (None, None))
 
-    def _set(self, session_id: str, waiting: bool) -> None:
-        if self._waiting.get(session_id, False) == waiting:
+    def _set(self, session_id: str, waiting: bool, *, refresh: bool = False) -> None:
+        same_state = self._waiting.get(session_id, False) == waiting
+        if same_state and not (waiting and refresh):
             return
         now = time.monotonic()
-        if now - self._changed_at.get(session_id, 0.0) < FLAP_GUARD_SEC:
+        # 질문/선택지 보강은 상태 flap이 아니다. 질문 청크 직후 옵션 청크가
+        # 1초 안에 오는 것이 정상이라 이 경로를 guard로 막으면 다시 유실된다.
+        if not same_state and now - self._changed_at.get(session_id, 0.0) < FLAP_GUARD_SEC:
             return
         self._waiting[session_id] = waiting
-        self._changed_at[session_id] = now
+        if not same_state:
+            self._changed_at[session_id] = now
         if not waiting:
             self._prompts.pop(session_id, None)
+            self._active_specs.pop(session_id, None)
         try:
             self._on_change(session_id, waiting)
         except Exception as e:  # 감지가 서버를 죽이지 않는다
@@ -256,6 +309,7 @@ class PromptDetector:
         self._waiting.pop(session_id, None)
         self._changed_at.pop(session_id, None)
         self._prompts.pop(session_id, None)
+        self._active_specs.pop(session_id, None)
 
 
 def _auto_trust_suppressed(session_id: str) -> bool:

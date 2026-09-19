@@ -484,6 +484,11 @@ function renderServer(group, facts, tags, data) {
     if (entry.transport && entry.transport !== 'unknown') {
       row.appendChild(el('span', 'vt-mcp-meta', entry.transport));
     }
+    if (entry.auth_status === 'not_logged_in') {
+      const auth = el('span', 'vt-mcp-meta vt-mcp-authwarn', '로그인 필요');
+      auth.title = `codex mcp login ${entry.name}`;
+      row.appendChild(auth);
+    }
     // 어떤 파일을 고치게 되는지 — 특히 `.mcp.json`은 저장소에 커밋된다.
     if (entry.shared) row.appendChild(el('span', 'vt-mcp-meta', '저장소 공유'));
 
@@ -625,7 +630,7 @@ function renderPlugins(data) {
   if (!list.length) {
     box.appendChild(help(
       '설치된 플러그인이 없습니다. 설치는 각 CLI의 공식 명령을 쓰세요 — '
-      + '`claude plugin install`. FarShell은 설치된 것의 켜기·끄기만 다룹니다.'));
+      + '`claude plugin install`, `codex plugin add`. FarShell은 설치된 것의 켜기·끄기만 다룹니다.'));
     return box;
   }
 
@@ -658,6 +663,14 @@ function renderPlugins(data) {
     row.appendChild(btn);
 
     if (p.marketplace) row.appendChild(el('span', 'vt-mcp-meta', p.marketplace));
+    if (p.version) row.appendChild(el('span', 'vt-mcp-meta', `v${p.version}`));
+    if (p.skill_count) {
+      const names = (p.skills || []).join(', ');
+      const skill = el('span', 'vt-mcp-meta', `스킬 ${p.skill_count}`);
+      if (names) skill.title = names;
+      row.appendChild(skill);
+    }
+    if (p.bundles_mcp) row.appendChild(el('span', 'vt-mcp-meta', 'MCP 포함'));
     box.appendChild(row);
   }
   return box;

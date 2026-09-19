@@ -507,7 +507,38 @@ def test_plugin_toggle_does_not_disturb_mcp_settings(home, wt):
     assert _read_claude(home)["mcpServers"]["keep"] == {"command": "x"}
 
 
-def test_plugin_toggle_for_other_tools_is_refused(home):
+def test_codex_plugin_toggle_requires_installed_plugin(home, monkeypatch):
     import mcp_write
-    out = mcp_write.set_plugin_enabled("p", True, tool="codex")
+    (home / ".codex" / "config.toml").write_text('[plugins."p@m"]\nenabled = true\n')
+    monkeypatch.setattr("codex_cli.installed_plugin_ids", lambda: (set(), None))
+    out = mcp_write.set_plugin_enabled("p@m", False, tool="codex")
+    assert out["status"] == "failed"
+    assert "설치 목록" in out["reason"]
+
+
+def test_codex_plugin_disable_adds_missing_table(home, monkeypatch):
+    import mcp_write
+    path = home / ".codex" / "config.toml"
+    path.write_text('model = "keep"\n')
+    monkeypatch.setattr("codex_cli.installed_plugin_ids", lambda: ({"p@m"}, None))
+    out = mcp_write.set_plugin_enabled("p@m", False, tool="codex")
+    assert out == {"status": "ok", "changed": True}
+    parsed = tomllib.loads(path.read_text())
+    assert parsed["model"] == "keep"
+    assert parsed["plugins"]["p@m"]["enabled"] is False
+
+
+def test_codex_plugin_toggle_preserves_comments(home, monkeypatch):
+    import mcp_write
+    path = home / ".codex" / "config.toml"
+    path.write_text('[plugins."p@m"]\n# keep this\nenabled = true\n')
+    monkeypatch.setattr("codex_cli.installed_plugin_ids", lambda: ({"p@m"}, None))
+    out = mcp_write.set_plugin_enabled("p@m", False, tool="codex")
+    assert out["status"] == "ok"
+    assert path.read_text() == '[plugins."p@m"]\n# keep this\nenabled = false\n'
+
+
+def test_plugin_toggle_for_unknown_tool_is_refused(home):
+    import mcp_write
+    out = mcp_write.set_plugin_enabled("p", True, tool="other")
     assert out["status"] == "failed"

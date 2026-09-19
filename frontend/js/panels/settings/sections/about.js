@@ -6,27 +6,32 @@ export function renderAboutSection() {
   const frag = document.createDocumentFragment();
   const hooks = document.createElement('div');
   hooks.className = 'vt-set-about';
-  hooks.textContent = 'Claude Code 훅 상태 확인 중…';
+  hooks.textContent = '에이전트 훅 상태 확인 중…';
   frag.appendChild(hooks);
 
   // A0 연동 — 훅이 등록돼 있지 않으면 상태 배지·큐 자동 투입·TTS가 전부 조용히
   // 동작하지 않는다. "왜 아무 일도 안 일어나지"의 1번 원인이라 여기 보여준다.
   vtFetch('/api/hooks/status').then((r) => {
-    const rows = r && r.events ? Object.entries(r.events) : [];
-    if (!rows.length) { hooks.textContent = '훅 상태를 확인할 수 없습니다.'; return; }
+    const tools = r && r.tools ? r.tools : { claude: { events: r && r.events } };
+    if (!Object.keys(tools).length) { hooks.textContent = '훅 상태를 확인할 수 없습니다.'; return; }
     hooks.textContent = '';
-    const title = document.createElement('div');
-    title.className = 'vt-set-label';
-    title.textContent = 'Claude Code 훅';
-    hooks.appendChild(title);
-    for (const [event, state] of rows) {
-      const line = document.createElement('div');
-      line.className = 'vt-set-hookrow';
-      line.textContent = `${event} — ${state === 'ok' ? '등록됨' : state === 'add' ? '미등록' : '다른 경로'}`;
-      line.dataset.state = state;
-      hooks.appendChild(line);
+    let missing = false;
+    for (const [tool, detail] of Object.entries(tools)) {
+      const rows = Object.entries((detail && detail.events) || {});
+      const title = document.createElement('div');
+      title.className = 'vt-set-label';
+      title.textContent = tool === 'codex' ? 'Codex 훅' : 'Claude Code 훅';
+      hooks.appendChild(title);
+      for (const [event, state] of rows) {
+        const line = document.createElement('div');
+        line.className = 'vt-set-hookrow';
+        line.textContent = `${event} — ${state === 'ok' ? '등록됨' : state === 'add' ? '미등록' : '다른 경로'}`;
+        line.dataset.state = state;
+        hooks.appendChild(line);
+        if (state !== 'ok') missing = true;
+      }
     }
-    if (rows.some(([, s]) => s !== 'ok')) {
+    if (missing) {
       const hint = document.createElement('div');
       hint.className = 'vt-set-help';
       hint.textContent = "터미널에서 'fsh hooks install'을 실행하면 등록됩니다. 등록 전에는 상태 배지·프롬프트 큐 자동 투입·TTS 요약이 동작하지 않습니다.";
@@ -101,4 +106,3 @@ export function renderAboutSection() {
 
   return frag;
 }
-

@@ -100,7 +100,10 @@ export function Row(props: {
         <span
           class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
           data-tip={agentLabel(props.row.agent!)}
+          data-tip-sub={props.row.statusSentence || undefined}
           data-tip-side="right"
+          data-state={props.row.status}
+          aria-label={`${agentLabel(props.row.agent!)} · ${props.row.statusSentence || '대기 중'}`}
           innerHTML={agentIcon(props.row.agent!)}
         />
       </Show>
@@ -112,7 +115,15 @@ export function Row(props: {
               (agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
           <Show when={props.row.agent}>
             {(a) => (
-              <span class="vt-srow-agent vt-wgrail-agent" data-tip={agentLabel(a())} data-tip-side="right" innerHTML={agentIcon(a())} />
+              <span
+                class="vt-srow-agent vt-wgrail-agent"
+                data-tip={agentLabel(a())}
+                data-tip-sub={props.row.statusSentence || undefined}
+                data-tip-side="right"
+                data-state={props.row.status}
+                aria-label={`${agentLabel(a())} · ${props.row.statusSentence || '대기 중'}`}
+                innerHTML={agentIcon(a())}
+              />
             )}
           </Show>
           {/* 이름 제자리 편집 — window.prompt 안 씀(사용자 지적: "절대 기본

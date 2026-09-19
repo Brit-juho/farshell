@@ -28,11 +28,12 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+import codex_cli
 import mcp_adapters
 
 logger = logging.getLogger(__name__)
 
-TOOLS = ("claude",)   # codex 플러그인은 2026-03 신설이라 포맷 확인 후 추가한다
+TOOLS = ("claude", "codex")
 
 
 def _plugin_entry(*, name: str, tool: str, scope: str, path: Path,
@@ -74,7 +75,93 @@ def scan_claude_plugins(worktree_path: Optional[str] = None,
     return {"plugins": out, "errors": []}
 
 
-SCANNERS = {"claude": scan_claude_plugins}
+def _codex_skill_names(plugin_root: Path) -> list[str]:
+    """manifest가 가리키는 skills 디렉터리에서 실제 SKILL.md만 센다."""
+    manifest = plugin_root / ".codex-plugin" / "plugin.json"
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        data = {}
+
+    raw = data.get("skills") if isinstance(data, dict) else None
+    refs = raw if isinstance(raw, list) else [raw or "skills"]
+    names: set[str] = set()
+    try:
+        root = plugin_root.resolve()
+    except OSError:
+        return []
+    for ref in refs:
+        if not isinstance(ref, str) or not ref:
+            continue
+        try:
+            skill_root = (root / ref).resolve()
+            if not skill_root.is_relative_to(root) or not skill_root.is_dir():
+                continue
+            for skill_file in skill_root.glob("*/SKILL.md"):
+                names.add(skill_file.parent.name)
+        except OSError:
+            continue
+    return sorted(names)[:200]
+
+
+def _codex_manifest_has_mcp(plugin_root: Path) -> bool:
+    manifest = plugin_root / ".codex-plugin" / "plugin.json"
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return False
+    return isinstance(data, dict) and bool(data.get("mcpServers"))
+
+
+def scan_codex_plugins(worktree_path: Optional[str] = None,
+                       worktree_id: Optional[str] = None) -> dict:
+    """`codex plugin list --json`이 확인한 설치 플러그인과 번들 기능."""
+    del worktree_path, worktree_id  # Codex 플러그인은 현재 전역 스코프다.
+    data, err = codex_cli.run_json(["plugin", "list", "--json"])
+    source = "codex plugin list --json"
+    if err:
+        return {"plugins": [], "errors": [{"source": source, "reason": err}]}
+    if not isinstance(data, dict) or not isinstance(data.get("installed"), list):
+        return {"plugins": [], "errors": [{
+            "source": source, "reason": "응답 형식이 예상과 다릅니다",
+        }]}
+
+    config_path = mcp_adapters.codex_paths()["global"]
+    config, config_err = mcp_adapters._read_toml(config_path)
+    explicit = mcp_adapters._as_mapping((config or {}).get("plugins"))
+    errors = ([{"source": str(config_path), "reason": config_err}] if config_err else [])
+    out: list[dict] = []
+    for row in data["installed"]:
+        if not isinstance(row, dict) or not row.get("pluginId"):
+            continue
+        plugin_id = str(row["pluginId"])
+        plugin_name = str(row.get("name") or plugin_id.split("@", 1)[0])
+        marketplace = row.get("marketplaceName")
+        source_obj = row.get("source") if isinstance(row.get("source"), dict) else {}
+        source_path = source_obj.get("path")
+        root = Path(source_path) if isinstance(source_path, str) and source_path else None
+        skills = _codex_skill_names(root) if root else []
+        entry = _plugin_entry(
+            name=plugin_id, tool="codex", scope="global", path=config_path,
+            state=bool(row.get("enabled", True)), worktree_id=None,
+        )
+        entry.update({
+            "plugin": plugin_name,
+            "marketplace": str(marketplace) if marketplace else entry["marketplace"],
+            "version": str(row.get("version") or ""),
+            "installed": bool(row.get("installed", True)),
+            "explicit": plugin_id in explicit,
+            "skills": skills,
+            "skill_count": len(skills),
+            "bundles_mcp": _codex_manifest_has_mcp(root) if root else False,
+            "auth_policy": row.get("authPolicy"),
+        })
+        out.append(entry)
+    out.sort(key=lambda p: (p["plugin"].lower(), p["name"]))
+    return {"plugins": out, "errors": errors}
+
+
+SCANNERS = {"claude": scan_claude_plugins, "codex": scan_codex_plugins}
 
 
 def scan(worktree_id: Optional[str] = None) -> dict:

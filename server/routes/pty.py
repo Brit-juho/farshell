@@ -20,7 +20,10 @@ import file_store
 import paste_prepare
 import scrollback_persist
 import tmux_runner
-from deps import pty_mgr, session_store, output_watcher, _auto_responder, _prompt_detector
+from deps import (
+    pty_mgr, session_store, output_watcher, _auto_responder, _prompt_detector,
+    on_terminal_input,
+)
 from session_store import new_session_id
 
 logger = logging.getLogger(__name__)
@@ -189,7 +192,7 @@ async def send_keys(session_id: str, request: Request):
     try:
         # WS 입력 경로와 같은 해제 판정: 이 세션에 뭔가 써 넣는 것 자체가
         # "사람이 답했다"는 가장 확실한 신호다(§2: 버튼도 답이다).
-        _prompt_detector.on_user_input(session_id)
+        on_terminal_input(session_id, text)
         pty_mgr.write(session_id, text.encode())
     except ValueError:
         return JSONResponse({"error": "not_found"}, status_code=404)
@@ -212,7 +215,7 @@ async def paste_session(session_id: str, request: Request):
     if not isinstance(text, str) or not text:
         return JSONResponse({"error": "bad_request", "reason": "text required"}, status_code=400)
     try:
-        _prompt_detector.on_user_input(session_id)
+        on_terminal_input(session_id, text)
         info = session_store.get(session_id)
         pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name),
                       tmux_name=info.tmux_name if info else None)
@@ -527,7 +530,7 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                         # N25(3/n)가 tmux 자신에게 위임한다.
                         text = data.get("text")
                         if isinstance(text, str) and text:
-                            _prompt_detector.on_user_input(session_id)
+                            on_terminal_input(session_id, text)
                             info = session_store.get(session_id)
                             try:
                                 pty_mgr.paste(session_id, text, is_tmux=bool(info and info.tmux_name),
@@ -566,7 +569,7 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                     try:
                         # A3 해제 판정: 사용자가 이 pane에 직접 입력했다면 승인
                         # 대기는 끝났다(사람이 실제로 답한 가장 확실한 신호).
-                        _prompt_detector.on_user_input(session_id)
+                        on_terminal_input(session_id, payload)
                         pty_mgr.write(session_id, payload)
                     except ValueError:
                         # kill 버튼으로 세션이 방금 destroy된 것과 클라이언트의 마지막 입력이

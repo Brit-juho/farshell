@@ -85,6 +85,7 @@ async def agent_coverage():
     """
     import agent_prompt_detect as detect
     import claude_hooks
+    import codex_hooks
 
     hook_ok = False
     try:
@@ -93,6 +94,12 @@ async def agent_coverage():
         hook_ok = bool(plan) and all(state == "ok" for state, _ in plan.values())
     except ValueError:
         hook_ok = False  # settings.json이 깨져 있어도 커버리지 표는 떠야 한다
+    try:
+        codex_plan = codex_hooks.plan_text(codex_hooks.load_text(codex_hooks.settings_path()))
+        codex_hook_ok = bool(codex_plan) and all(
+            state == "ok" for state, _ in codex_plan.values())
+    except ValueError:
+        codex_hook_ok = False
 
     # force=True — 방금 고친 toml이 캐시 때문에 안 보이면 "줄 수를 반영한다"는
     # 수용 기준을 못 지킨다. 이 표는 자주 열리는 화면이 아니라 매번 다시
@@ -125,7 +132,7 @@ async def agent_coverage():
 
         # 훅이 자기보고보다 우선한다 — claude에 훅이 걸려 있으면 그게 정본이다
         # (자기보고도 같이 썼다면 어차피 둘 다 high라 표시만 달라진다).
-        if cli == "claude" and hook_ok:
+        if ((cli == "claude" and hook_ok) or (cli == "codex" and codex_hook_ok)):
             path_kind = "hook"
         elif cli in reported:
             path_kind = "report"
@@ -180,6 +187,7 @@ async def agent_event(request: Request):
         logger.debug("훅이 우리 소켓이 아닌 tmux에서 왔다 — pane id 폐기")
 
     state = agent_status.on_event(event, payload, session=session)
+    report_seen.mark(body.get("agent"))
 
     # P4: 작업이 끝났다는 가장 정확한 신호가 stop 훅이다. 여기서 큐를 한 건 흘린다.
     # 유예 시간(VT_QUEUE_GRACE_SEC)은 queue_runner가 둔다 — 사용자가 곧바로

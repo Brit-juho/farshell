@@ -29,3 +29,9 @@ enter = [
 exit = [
   "esc to interrupt",
 ]
+
+# Codex 0.155.0 실측: 승인 overlay가 `› 1. Yes, proceed (y)`와 같은 번호
+# 선택지를 그린다. 키 입력은 숫자가 아니라 괄호 안 단축키이므로 모바일
+# 인라인 응답에는 y/p/esc를 보내야 한다. named group을 사용해 라벨과 실제
+# 전송 키의 순서를 명시한다.
+options = '^\s*[›❯>]?\s*\d+\.\s+(?P<label>.+?)\s+\((?P<key>y|p|esc)\)\s*$'

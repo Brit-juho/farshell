@@ -37,6 +37,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_MCP_HOME", str(home))
     monkeypatch.delenv("VT_CODEX_HOME", raising=False)
     monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(
+        "codex_cli.run_json",
+        lambda args, **kwargs: (([], None) if args[:2] == ["mcp", "list"]
+                                else ({"installed": []}, None)),
+    )
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -453,6 +458,31 @@ def test_plugins_list_distinguishes_absent_from_disabled(client):
     assert by["on@m"]["marketplace"] == "m" and by["on@m"]["plugin"] == "on"
 
 
+def test_plugins_list_includes_codex_skills_and_mcp_bundle(client, monkeypatch):
+    _login(client)
+    _write_claude(client, {"enabledPlugins": {}})
+    plugin = client.vt_home / "plugin-a"
+    (plugin / ".codex-plugin").mkdir(parents=True)
+    (plugin / "skills" / "review").mkdir(parents=True)
+    (plugin / "skills" / "review" / "SKILL.md").write_text("# review")
+    (plugin / ".codex-plugin" / "plugin.json").write_text(json.dumps({
+        "skills": "./skills/", "mcpServers": "./.mcp.json",
+    }))
+    (client.vt_home / ".codex" / "config.toml").write_text(
+        '[plugins."bundle@market"]\nenabled = false\n')
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **kwargs: ({"installed": [{
+        "pluginId": "bundle@market", "name": "bundle", "marketplaceName": "market",
+        "version": "1.2.3", "installed": True, "enabled": False,
+        "source": {"source": "local", "path": str(plugin)}, "authPolicy": "ON_USE",
+    }]}, None))
+
+    by = {p["name"]: p for p in client.get("/api/mcp/plugins").json()["plugins"]}
+    codex = by["bundle@market"]
+    assert codex["tool"] == "codex" and codex["scope"] == "global"
+    assert codex["skills"] == ["review"] and codex["skill_count"] == 1
+    assert codex["bundles_mcp"] is True and codex["version"] == "1.2.3"
+
+
 def test_plugin_toggle_requires_elevation(client):
     _login(client)
     r = client.post("/api/mcp/plugins/toggle", json={"name": "p@m", "enabled": False})
@@ -465,6 +495,18 @@ def test_plugin_toggle_writes_after_elevation(client):
     r = client.post("/api/mcp/plugins/toggle", json={"name": "p@m", "enabled": False})
     assert r.status_code == 200 and r.json()["status"] == "ok"
     assert _read_claude(client)["enabledPlugins"]["p@m"] is False
+
+
+def test_codex_plugin_toggle_writes_only_enabled(client, monkeypatch):
+    _elevate(client)
+    config = client.vt_home / ".codex" / "config.toml"
+    config.write_text('model = "keep"\n\n[plugins."p@m"]\n# keep\nenabled = true\n')
+    monkeypatch.setattr("codex_cli.installed_plugin_ids", lambda: ({"p@m"}, None))
+    r = client.post("/api/mcp/plugins/toggle", json={
+        "name": "p@m", "enabled": False, "tool": "codex", "scope": "global",
+    })
+    assert r.status_code == 200 and r.json()["changed"] is True
+    assert config.read_text() == 'model = "keep"\n\n[plugins."p@m"]\n# keep\nenabled = false\n'
 
 
 def test_plugin_toggle_of_an_uninstalled_plugin_is_409(client):

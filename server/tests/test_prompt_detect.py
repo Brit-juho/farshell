@@ -81,6 +81,52 @@ def test_no_duplicate_events_while_still_waiting(det):
     assert events == [("s1", True)], "상태가 안 바뀌면 통지하지 않는다(WS 폭주 방지)"
 
 
+def test_late_options_refresh_waiting_metadata_once(det):
+    """실측 회귀: Codex TUI는 질문을 먼저, y/p/esc 옵션을 뒤 청크에 그린다.
+
+    첫 청크에서 waiting 콜백이 끝났다는 이유로 뒤 옵션을 통지하지 않으면
+    detector 내부에는 옵션이 있어도 agent_status/API에는 영원히 None이 남는다.
+    """
+    d, events = det
+    d.feed("s1", b"Would you like to run the following command?\r\n")
+    assert d.get_prompt("s1")[1] is None
+    d.feed("s1", (
+        "› 1. Yes, proceed (y)\r\n"
+        "  2. Yes, and don't ask again (p)\r\n"
+        "  3. No, and tell Codex what to do differently (esc)\r\n"
+    ).encode())
+    assert d.get_prompt("s1")[1] == [
+        {"key": "y", "label": "Yes, proceed"},
+        {"key": "p", "label": "Yes, and don't ask again"},
+        {"key": "esc", "label": "No, and tell Codex what to do differently"},
+    ]
+    assert events == [("s1", True), ("s1", True)]
+
+
+def test_codex_full_screen_redraw_keeps_prompt_until_late_options(det):
+    """0.155.0 실측: 144×38 전체화면 재렌더가 질문과 옵션 사이 2KB를 넘는다."""
+    d, events = det
+    d.feed("s1", b"Would you like to run the following command?\r\n")
+    # 실제 출력은 ANSI 커서 이동/지우기지만, 여기서는 창 용량 계약만 정확히
+    # 검증하도록 무해한 화면 채움 줄로 8KiB를 만든다.
+    d.feed("s1", ("screen repaint\r\n" * 550).encode())
+    d.feed("s1", (
+        "› 1. Yes, proceed (y)\r\n"
+        "  2. Yes, and don't ask again (p)\r\n"
+        "  3. No, and tell Codex what to do differently (esc)\r\n"
+    ).encode())
+    assert d.get_prompt("s1")[1] == [
+        {"key": "y", "label": "Yes, proceed"},
+        {"key": "p", "label": "Yes, and don't ask again"},
+        {"key": "esc", "label": "No, and tell Codex what to do differently"},
+    ]
+    assert events[-1] == ("s1", True)
+
+    # 같은 화면 재렌더는 다시 알리지 않는다.
+    d.feed("s1", b"\r\n")
+    assert events == [("s1", True), ("s1", True)]
+
+
 def test_pattern_split_across_chunks_is_caught(det):
     """PTY는 문자열을 임의 위치에서 쪼갠다 — 슬라이딩 윈도우가 그걸 잇는다."""
     d, _ = det
@@ -229,7 +275,7 @@ def test_options_survive_many_small_writes_before_enter_hit(det):
     """실기기 검증(2.1.0)에서 재현 — 실제 터미널은 커서 깜빡임·tmux 상태줄
     갱신 같은 잡음 청크가 초 단위로 끼어들어, 프롬프트 한 번 렌더가 4개
     넘는 write로 쪼개지는 일이 흔하다. 예전 `deque(maxlen=4)`는 **청크 개수**로
-    잘라서 앞쪽(1번 선택지) 청크가 2048바이트 안에 여전히 들어가는데도
+    잘라서 앞쪽(1번 선택지) 청크가 바이트 창 안에 여전히 들어가는데도
     밀려났다 — bytearray 기반 바이트 수 상한이면 살아남아야 한다."""
     d, _ = det
     d.feed("s1", b"Do you want to make this edit to legacy.css?\r\n")
@@ -304,6 +350,44 @@ def test_codex_status_line_clears_waiting(det):
     d.feed("s1", b"Would you like to make the following edits?")
     d.feed("s1", b"\r\nWorking (2s \xe2\x80\xa2 esc to interrupt)")
     assert d.is_waiting("s1") is False
+
+
+def test_codex_newer_approval_wins_over_old_working_line(det):
+    """실측 회귀: 같은 2KB에 이전 working 상태줄과 새 승인 질문이 함께 있다."""
+    d, _ = det
+    d.feed("s1", b"Working (2s \xe2\x80\xa2 esc to interrupt)\r\n")
+    d.feed("s1", b"Would you like to run the following command?\r\n")
+    assert d.is_waiting("s1") is True
+
+
+def test_codex_options_use_real_shortcut_keys(det):
+    d, _ = det
+    d.feed("s1", (
+        "Would you like to run the following command?\r\n"
+        "› 1. Yes, proceed (y)\r\n"
+        "  2. Yes, and don't ask again (p)\r\n"
+        "  3. No, and tell Codex what to do differently (esc)\r\n"
+    ).encode())
+    assert d.get_prompt("s1")[1] == [
+        {"key": "y", "label": "Yes, proceed"},
+        {"key": "p", "label": "Yes, and don't ask again"},
+        {"key": "esc", "label": "No, and tell Codex what to do differently"},
+    ]
+
+
+def test_codex_footer_does_not_trigger_gemini_exit(det):
+    """0.155.0 실측: Codex footer도 Gemini exit와 같은 `esc to cancel`을 쓴다."""
+    d, events = det
+    d.feed("s1", (
+        "Would you like to run the following command?\r\n"
+        "› 1. Yes, proceed (y)\r\n"
+        "  2. Yes, and don't ask again (p)\r\n"
+        "  3. No, and tell Codex what to do differently (esc)\r\n"
+        "Press enter to confirm or esc to cancel\r\n"
+    ).encode())
+    assert d.is_waiting("s1") is True
+    assert d.get_prompt("s1")[1][0] == {"key": "y", "label": "Yes, proceed"}
+    assert events == [("s1", True)]
 
 
 def test_gemini_patterns_load_from_toml():

@@ -192,6 +192,31 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
     # cwd로 매칭해 카드/큐 타깃을 특정한다(pane 자기보고는 A2에서 추가된다).
     cwd = payload.get("cwd")
 
+    if event in ("prompt", "user_prompt_submit"):
+        ent = _entry(sid, cwd, host)
+        if session:
+            ent["tmux_session"] = session
+        ent["tool"] = None
+        ent["since"] = time.time()
+        _set_status(ent, WORKING)
+        ent["question"] = None
+        ent["options"] = None
+        return ent
+
+    if event in ("permission", "permission_request"):
+        ent = _entry(sid, cwd, host)
+        if session:
+            ent["tmux_session"] = session
+        tool = payload.get("tool_name") or payload.get("tool")
+        ent["tool"] = tool
+        ent["since"] = time.time()
+        ent["count"] = ent.get("count", 0) + 1
+        ent["input"] = payload.get("tool_input", {})
+        _set_status(ent, WAITING)
+        ent["question"] = (f"{tool} 실행 승인이 필요합니다" if tool else "실행 승인이 필요합니다")
+        ent["options"] = None
+        return ent
+
     if event == "pre":
         ent = _entry(sid, cwd, host)
         if session:
@@ -218,9 +243,13 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         ent["last_tool"] = ent.get("tool")
         ent["tool"] = None
         ent["last_done"] = time.time()
+        if ent.get("status") == WAITING:
+            _set_status(ent, WORKING)
+            ent["question"] = None
+            ent["options"] = None
         return ent
 
-    if event == "stop":
+    if event in ("stop", "session_end"):
         ent = _entry(sid, cwd, host)
         if session:
             ent["tmux_session"] = session
@@ -326,6 +355,34 @@ def status_for_session(name: Optional[str], host: str = LOCAL_HOST) -> str:
     if not found:
         return IDLE
     return min(found, key=lambda s: _URGENCY.get(s, 9))
+
+
+def finish_waiting_for_session(name: Optional[str], host: str = LOCAL_HOST) -> int:
+    """승인 화면에서 취소(Escape)한 세션을 `done`으로 마친다.
+
+    Codex는 PermissionRequest 훅은 보내지만 승인 화면을 Escape로 취소할 때
+    Stop/SessionEnd 훅을 보내지 않는다(0.155.0 실측). 입력 감지만으로 waiting을
+    풀면 working으로 돌아가 15분간 남는다. Escape는 실행 승인이 아니라 현재
+    요청 중단이므로, 그 순간 waiting이던 **해당 tmux 세션의 로컬 엔트리만**
+    완료 처리한다. 다른 상태·호스트는 건드리지 않는다.
+    """
+    if not name:
+        return 0
+    sweep()
+    now = time.time()
+    changed = 0
+    for ent in _state.values():
+        if (ent.get("tmux_session") != name
+                or ent.get("host", LOCAL_HOST) != host
+                or ent.get("status") != WAITING):
+            continue
+        _set_status(ent, DONE, now)
+        ent["tool"] = None
+        ent["question"] = None
+        ent["options"] = None
+        ent["last_done"] = now
+        changed += 1
+    return changed
 
 
 def get_status(sid: str, host: str = LOCAL_HOST) -> str:

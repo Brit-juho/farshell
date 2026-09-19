@@ -30,6 +30,8 @@ import tomllib
 from pathlib import Path
 from typing import Optional
 
+import codex_cli
+
 # `${VAR}` / `${VAR:-기본}` / `$VAR` — claude가 확장하는 형태
 _REF_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}$|^\$([A-Za-z_][A-Za-z0-9_]*)$")
 
@@ -388,6 +390,20 @@ def scan_codex(worktree_path: Optional[str] = None, worktree_id: Optional[str] =
                 notes.append("이 프로젝트는 codex에 신뢰 등록되지 않았다 — 프로젝트 설정이 무시된다")
             servers += _codex_servers(
                 ldata, path=local, scope="local", worktree_id=worktree_id, notes_common=notes)
+
+    # config.toml에는 인증 결과가 없다. Codex 자신이 내놓는 상태만 이름으로
+    # 합친다. 조회 실패는 MCP 정의 자체를 숨기지 않고 진단으로만 남긴다.
+    if servers:
+        auth_by_name, auth_err = codex_cli.mcp_auth_statuses()
+        if auth_err:
+            errors.append({"source": "codex mcp list --json", "reason": auth_err})
+        for server in servers:
+            status = auth_by_name.get(server["name"])
+            if status:
+                server["auth_status"] = status
+            if status == "not_logged_in":
+                server["notes"].append(
+                    f"인증이 필요합니다 — `codex mcp login {server['name']}`")
 
     return {"servers": servers, "errors": errors}
 

@@ -267,10 +267,14 @@ function Fleet(props: { deps: FleetDeps }) {
   };
 
   const answerRow = (row: RailRow, key: string) => {
+    // Codex의 y/p는 문자 선택 뒤 Enter로 확정하지만 `esc`는 문자열 "esc"가
+    // 아니라 실제 ESC 바이트여야 취소된다. 그대로 보내면 프롬프트 입력란에
+    // e·s·c가 찍히고 waiting이 풀리지 않는다.
+    const text = key === 'esc' ? '\x1b' : `${key}\r`;
     props.deps.vtFetch(`/api/sessions/${encodeURIComponent(row.sessionId)}/keys`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: `${key}\r` }),
+      body: JSON.stringify({ text }),
     }).catch(() => {}); // 실패해도 화면은 다음 폴링(agent status)이 정정한다
   };
 
