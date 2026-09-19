@@ -143,7 +143,10 @@ jobs:
   # 1258 passed로 완주하고, 스텝 안에 건 8분 상한(`timeout --signal=ABRT`)조차
   # 발화하지 못한다(그 시점엔 셸이 이미 없다는 뜻).
   #
-  # 그래서 파일을 4묶음으로 쪼개 **어느 묶음이 러너를 죽이는지**만 본다.
+  # 그래서 파일을 묶음으로 쪼개 **어느 묶음이 러너를 죽이는지**만 본다.
+  # 1차(4분할, run 35436528538): 묶음 1은 49초에 통과, 묶음 0은 28초에 실패
+  # (test_static_cache가 dist/를 요구 — 별건, 고쳤다), **묶음 2와 3이 둘 다
+  # 러너째 죽었다.** 2차는 8분할로 그 둘을 각각 반으로 가른다.
   # 살아남은 묶음의 로그는 정상 업로드되므로, 죽은 묶음이 바로 범위다.
   # 범인을 찾으면 이 잡은 원래의 버전 매트릭스로 되돌린다.
   server:
@@ -152,7 +155,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chunk: [0, 1, 2, 3]
+        chunk: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -166,7 +169,7 @@ jobs:
       # pytest·httpx 는 이미 requirements-core.txt 에 있어 추가 설치 불필요.
       - run: pip install -r requirements-core.txt
       - name: "묶음 ${{ matrix.chunk }} 파일 목록"
-        run: ls server/tests/test_*.py | awk 'NR % 4 == ${{ matrix.chunk }}'
+        run: ls server/tests/test_*.py | awk 'NR % 8 == ${{ matrix.chunk }}'
       # 파일 하나씩 돌리고 **이름을 먼저 찍는다** — 러너가 죽어도 그때까지
       # 스트리밍된 줄이 남을 수 있고, 남지 않더라도 "이 묶음이 죽었다"는
       # 사실만으로 범위가 1/4로 준다.
@@ -176,7 +179,7 @@ jobs:
         run: |
           set -o pipefail
           rc=0
-          for f in $(ls server/tests/test_*.py | awk 'NR % 4 == ${{ matrix.chunk }}'); do
+          for f in $(ls server/tests/test_*.py | awk 'NR % 8 == ${{ matrix.chunk }}'); do
             echo "::group::$f"
             timeout --signal=ABRT 120 python -m pytest "$f" -q -o faulthandler_timeout=60 || rc=$?
             echo "::endgroup::"
