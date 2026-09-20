@@ -249,6 +249,18 @@ test('모바일 세션 관리: 이름 변경은 레코드와 진입점에 함께
   assert.strictEqual(window.document.getElementById('voice-session-picker').textContent, '새 이름');
 });
 
+test('모바일 세션 피커는 현재 세션의 전체 위치를 함께 표시한다', async () => {
+  const { window, addSession } = await buildTerminalWindow();
+  Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+  addSession('a', '첫 세션');
+  addSession('b', '둘째 세션');
+
+  assert.strictEqual(
+    window.document.getElementById('voice-session-picker').textContent,
+    '둘째 세션 · 2/2'
+  );
+});
+
 test('이름 변경은 공용 API 요청을 보내고 레코드를 갱신한다', async () => {
   // N37 3단계 전에는 탭 이름 더블클릭이 이 경로의 진입점이었다. 그 DOM은
   // 사라졌고, 지금 진입점은 레일 세션 행·세션 시트·팔레트다 — 셋 다 같은

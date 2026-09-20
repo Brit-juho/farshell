@@ -88,6 +88,13 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 @media (max-width:719px) {
   html[data-skin="macos"] .traffic { display:none; }
   #viewer-toggle { display:none; }
+
+  /* 모바일 상단은 현재 화면에 필요한 컨텍스트만 남긴다. 작업 홈에서는
+     워크스페이스/호스트를, 터미널에서는 세션과 빠른 열기를 보여준다. */
+  #vt-wtabs, .wt-chevron { display:none; }
+  html[data-mobile-tab="fleet"] #voice-session-picker,
+  html[data-mobile-tab="fleet"] #palette-toggle { display:none; }
+  html[data-mobile-tab]:not([data-mobile-tab="fleet"]) #vt-workspace-chip-slot { display:none; }
 }
 
 /* 모바일 세션 관리 시트. 좁은 화면에서 세션의 모든 기본 조작을 제공한다. */

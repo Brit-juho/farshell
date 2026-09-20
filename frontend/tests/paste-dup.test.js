@@ -94,3 +94,16 @@ test('붙일 것이 없으면 가로채지 않는다 — xterm 기본 동작을 
   assert.strictEqual(sock.sent.length, 0);
   assert.strictEqual(xtermPastes, 1);
 });
+
+test('모바일 텍스트 선택 모드의 롱프레스 메뉴는 네이티브 선택에 양보한다', async () => {
+  const { window, Sel } = await load();
+  const wrapper = window.document.getElementById('w');
+  wrapper.classList.add('vt-term-select-mode');
+  Sel.wireClipboard('a', fakeTerm(), wrapper);
+
+  const event = new window.Event('contextmenu', { bubbles: true, cancelable: true });
+  const allowed = wrapper.dispatchEvent(event);
+
+  assert.strictEqual(allowed, true, 'contextmenu 기본 동작을 막으면 Android 선택 핸들이 열리지 않는다');
+  assert.strictEqual(event.defaultPrevented, false);
+});

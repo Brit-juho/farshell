@@ -1,4 +1,4 @@
-// L3 2단계 — compact(<720px + pointer:coarse) 렌더 모드. leaf가 2개 이상이면
+// L3 2단계 — compact(<720px) 렌더 모드. leaf가 2개 이상이면
 // 활성 leaf 하나만 화면 전체로 그리고, 나머지는 표면 레이어(layout/surface.js)가
 // 화면 밖으로 숨긴다(렌더링은 layout/panes.js가 한다 — 이 파일은 "지금이
 // compact인가"와 "leaf를 어떤 순서로 나열할까"만 안다). 트리 자체는 건드리지
@@ -16,7 +16,7 @@ import { orderedSessionIds, activeSessionId } from '../core/store.js';
 import { switchTo } from '../term/session.js';
 
 export function isCompactMode() {
-  return _isCoarsePointer() && window.innerWidth < COMPACT_MAX;
+  return window.innerWidth < COMPACT_MAX;
 }
 
 // depth-first(a→b) leaf 나열. dir 값(row/col)은 여기서 안 본다 — 설계 원칙 1:
@@ -88,7 +88,7 @@ export function wireCompactSwipe(containerEl) {
   let startX = 0, startY = 0, tracking = false, decided = false, horizontal = false;
 
   containerEl.addEventListener('touchstart', (e) => {
-    if (!isCompactMode() || e.touches.length !== 1) { tracking = false; return; }
+    if (!isCompactMode() || !_isCoarsePointer() || e.touches.length !== 1) { tracking = false; return; }
     const x = e.touches[0].clientX;
     if (x > EDGE_PX && x < window.innerWidth - EDGE_PX) { tracking = false; return; }
     startX = x;

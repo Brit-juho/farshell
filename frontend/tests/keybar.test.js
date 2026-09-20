@@ -61,10 +61,10 @@ async function buildWindow({ coarse = false, search = '', visualViewport = null 
   const cache = new Map();
   await importFresh(KEYSEQ_JS, env.context, cache);
   const domNs = await importFresh(DOM_JS, env.context, cache);
-  await importFresh(CORE_STORE_JS, env.context, cache);
+  const store = await importFresh(CORE_STORE_JS, env.context, cache);
   const keybarNs = await importFresh(KEYBAR_JS, env.context, cache);
 
-  return { window, dom: domNs, vv, ...keybarNs };
+  return { window, dom: domNs, store, vv, ...keybarNs };
 }
 
 test('데스크톱(포인터 정밀) — keybar는 hidden 그대로, 마이크는 rail 설정 슬롯에 남는다', async () => {
@@ -112,6 +112,56 @@ test('업로드 슬롯 클릭 → #file-input을 클릭한다', async () => {
   assert.strictEqual(clicked, true);
 });
 
+test('텍스트 선택 모드 — 터미널 포커스를 해제하고 네이티브 선택 레이어를 활성화한다', async () => {
+  const { window, store, setTerminalSelectionMode, isTerminalSelectionMode } = await buildWindow({ coarse: true });
+  let blurred = 0;
+  store.registerSession('select-me', { term: { blur() { blurred++; }, getSelection() { return ''; } } });
+  store.setActive('select-me');
+  const wrapper = window.document.createElement('div');
+  wrapper.id = 'term-select-me';
+  wrapper.className = 'vt-term-wrap';
+  const helper = window.document.createElement('textarea');
+  helper.className = 'xterm-helper-textarea';
+  wrapper.appendChild(helper);
+  window.document.body.appendChild(wrapper);
+
+  setTerminalSelectionMode(true);
+  assert.strictEqual(isTerminalSelectionMode(), true);
+  assert.strictEqual(blurred, 1, '숨은 xterm textarea의 포커스를 해제해야 키보드가 닫힌다');
+  assert.ok(wrapper.classList.contains('vt-term-select-mode'));
+  assert.strictEqual(helper.disabled, true, 'xterm이 롱프레스 때 숨은 입력을 다시 focus하지 못해야 한다');
+  assert.ok(window.document.body.classList.contains('vt-term-selecting'));
+  assert.strictEqual(window.document.getElementById('keybar-selection-actions').hidden, false);
+  assert.strictEqual(window.document.getElementById('keybar-slot-select').getAttribute('aria-pressed'), 'true');
+
+  setTerminalSelectionMode(false);
+  assert.strictEqual(isTerminalSelectionMode(), false);
+  assert.ok(!wrapper.classList.contains('vt-term-select-mode'));
+  assert.strictEqual(helper.disabled, false, '선택을 끝내면 터미널 입력을 다시 받을 수 있어야 한다');
+  assert.strictEqual(window.document.getElementById('keybar-selection-actions').hidden, true);
+});
+
+test('텍스트 선택 복사 — 네이티브 범위는 권한 팝업 없는 copy 명령을 우선한다', async () => {
+  const { window, store, setTerminalSelectionMode, isTerminalSelectionMode } = await buildWindow({ coarse: true });
+  store.registerSession('copy-me', { term: { blur() {}, getSelection() { return ''; } } });
+  store.setActive('copy-me');
+  const wrapper = window.document.createElement('div');
+  wrapper.id = 'term-copy-me';
+  window.document.body.appendChild(wrapper);
+  window.getSelection = () => ({ toString: () => '선택한 범위', removeAllRanges() {} });
+  window.showToast = () => {};
+  let copied = 0;
+  window.document.execCommand = (command) => { if (command === 'copy') copied++; return true; };
+
+  setTerminalSelectionMode(true);
+  window.document.getElementById('keybar-selection-copy')
+    .dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.strictEqual(copied, 1);
+  assert.strictEqual(isTerminalSelectionMode(), false, '복사 성공 뒤에는 입력 가능한 상태로 돌아가야 한다');
+});
+
 test('접기 토글 — "키들" 줄만 접히고 입력 슬롯 줄은 클래스 구조상 별도로 남는다', async () => {
   const { window } = await buildWindow({ coarse: true });
   const bar = window.document.getElementById('keybar');
@@ -152,6 +202,7 @@ test('키보드가 없을 때 — kb-height는 바의 실측 높이, kb-overlap�
   assert.strictEqual(root.style.getPropertyValue('--kb-height'), '96px');
   assert.strictEqual(root.style.getPropertyValue('--kb-overlap'), '0px');
   assert.strictEqual(bar.style.transform, '');
+  assert.strictEqual(window.document.body.classList.contains('vt-keyboard-open'), false);
 });
 
 test('키보드가 올라오면 — kb-overlap에 키보드 높이가 실리고 바도 그만큼 떠오른다', async () => {
@@ -167,6 +218,8 @@ test('키보드가 올라오면 — kb-overlap에 키보드 높이가 실리고 
   const root = window.document.documentElement;
   assert.strictEqual(root.style.getPropertyValue('--kb-overlap'), `${kbHeight}px`);
   assert.strictEqual(bar.style.transform, `translateY(-${kbHeight}px)`);
+  assert.strictEqual(window.document.body.classList.contains('vt-keyboard-open'), true,
+    '키보드가 열린 동안 하단 내비를 숨길 상태를 표시해야 한다');
   // 여백 = 바 높이 + 키보드 높이. 둘 중 하나라도 빠지면 프롬프트가 가려진다.
   assert.strictEqual(root.style.getPropertyValue('--kb-height'), '96px');
 });

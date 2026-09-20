@@ -158,7 +158,9 @@ let _persistenceUnsub = null;
 function isCompact() { return window.matchMedia('(max-width:719px)').matches; }
 
 function openTool(action) {
-  closePanel(PANEL_ID);
+  // 모바일 더보기는 브라우저 history에 한 단계로 올라간다. 여기서 도구 화면으로
+  // 갈 때는 뒤에 빈 설정 패널 이력을 남기지 않고 같은 단계에서 교체한다.
+  closePanel(PANEL_ID, { history: 'replace' });
   getAction(action)?.();
 }
 

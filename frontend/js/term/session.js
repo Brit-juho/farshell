@@ -216,6 +216,7 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
 }
 
 export function switchTo(id) {
+  document.dispatchEvent(new CustomEvent('vt:session-switch', { detail: { id } }));
   setActive(id);
   const s = getSession(id);
   // L3 1단계: wrapper를 여기서 직접 보이기/숨기기 하지 않는다 — 활성 pane에

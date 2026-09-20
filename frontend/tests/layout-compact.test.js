@@ -46,17 +46,15 @@ test('flattenLeaves — depth-first(a→b) 순서로 나열된다', async () => 
   assert.deepEqual(ids, [rootId, midId, leafId]);
 });
 
-test('isCompactMode — matchMedia가 없으면(기본 jsdom) 항상 false', async () => {
-  const { C } = await loadCompact();
-  assert.strictEqual(C.isCompactMode(), false);
-});
-
-test('isCompactMode — pointer:coarse + <720px일 때만 true', async () => {
+test('isCompactMode — 포인터 종류와 무관하게 폭이 720px 미만이면 true', async () => {
   const { window, C } = await loadCompact();
-  window.matchMedia = (q) => ({ matches: q === '(pointer:coarse)' });
   Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true });
   assert.strictEqual(C.isCompactMode(), true);
+});
 
+test('isCompactMode — 720px 이상이면 coarse 포인터여도 false', async () => {
+  const { window, C } = await loadCompact();
+  window.matchMedia = (q) => ({ matches: q === '(pointer:coarse)' });
   Object.defineProperty(window, 'innerWidth', { value: 900, configurable: true });
   assert.strictEqual(C.isCompactMode(), false, '720px 이상이면 pointer:coarse여도 compact가 아니다');
 });

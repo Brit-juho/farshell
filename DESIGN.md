@@ -562,20 +562,24 @@ is demoted to `⌘⇧F` (rebindable).
 ## 7. Mobile (compact, < 720px)
 
 ```
-┌ top 24 ── [host chip]                             [waiting N] ┐
+┌ app bar ── work: [workspace / host]                           ┐
+│             terminal: [session · n/N]              [search]  │
 │                                                                 │
-│   tab content (fleet / terminal / changes / queue / settings)  │
+│   tab content (work / terminal / changes / queue / more)       │
 │                                                                 │
 ├ keybar (terminal tab only) ────────────────────────────────────┤
-├ bottom nav 52 ── fleet | terminal | changes | queue | settings ┤
+├ bottom nav 52 ─── work | terminal | changes | queue | more ────┤
 └──────────────────────────────────────────────────────────────┘
 ```
 
 Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`). The
 dock's 4 tabs (source control, queue, ports, usage) get promoted here into
 "Changes" (= source control) and "Queue"; ports, usage, and files live under
-"Settings" instead. There's no HUD; the 24px top bar shows only a host chip
-and the waiting count.
+"More" instead. Each full-screen panel stays inside the mobile navigation
+shell and Android/browser Back closes that panel first. There's no HUD or
+second status row: waiting count is a badge on Work. When the software
+keyboard opens, the bottom nav hides and the keybar moves down to the keyboard
+edge so both bars do not consume the same vertical space.
 
 **Fleet home** (`shell/Fleet.tsx`, ADR-27) is the first screen
 (`ui.mobile.home` defaults to `fleet`) — most of what you do on a phone in
@@ -585,6 +589,11 @@ the same** data source, grouping, and sort as the worktree rail
 too. When a `waiting` row's detect pattern captured numbered choices, an
 **inline approval button** appears (`1 · Yes` / `3 · No`) — otherwise just a
 "Go to terminal" button.
+
+The keybar's selection action enters a dedicated native text-selection mode.
+It blurs xterm's hidden textarea (closing the software keyboard), stops touch
+scroll/canvas tap forwarding, and exposes Copy/Done actions while the browser
+selection handles are active.
 
 ## 8. Usage (dock "Usage" tab)
 

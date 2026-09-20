@@ -19,7 +19,11 @@ export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
   if (!picker) return;
   const s = activeSession();
-  picker.textContent = s ? sessionDisplayName(activeSessionId()) : '세션';
+  const entries = Object.keys(allSessions());
+  const activeId = activeSessionId();
+  const position = entries.indexOf(activeId) + 1;
+  const suffix = window.innerWidth < 720 && position > 0 ? ` · ${position}/${entries.length}` : '';
+  picker.textContent = s ? `${sessionDisplayName(activeId)}${suffix}` : '세션';
   const sheet = document.getElementById('session-manager');
   if (sheet) renderSessionManager(sheet);
 }

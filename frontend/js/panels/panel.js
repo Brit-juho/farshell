@@ -51,6 +51,17 @@ const FOCUSABLE_SEL = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+const MOBILE_ROUTE_IDS = new Set([
+  'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-files', 'vt-ports', 'vt-usage',
+]);
+
+function _withoutPanelState(state) {
+  if (!state || typeof state !== 'object') return state;
+  const next = { ...state };
+  delete next.vtPanel;
+  return next;
+}
+
 // picker.js의 세션 시트도 같은 트랩 로직을 쓴다(별도 모달 구현이라 openPanel을
 // 못 쓰지만, "포커스가 배경으로 새면 안 된다"는 규칙은 같다).
 export function _focusables(el) {
@@ -89,7 +100,10 @@ export function openPanel(opts) {
       if (host === 'stale') return null;
       const el = document.createElement('div');
       el.id = opts.id;
-      el.className = (host ? 'vt-dock-panel' : 'vt-viewer-backdrop') + (opts.extraClass ? ' ' + opts.extraClass : '');
+      const mobileRoute = !host && window.innerWidth < COMPACT_MAX && MOBILE_ROUTE_IDS.has(opts.id);
+      el.className = (host ? 'vt-dock-panel' : 'vt-viewer-backdrop')
+        + (mobileRoute ? ' vt-mobile-route' : '')
+        + (opts.extraClass ? ' ' + opts.extraClass : '');
       el.innerHTML = `
         <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="${opts.ariaLabel}">
           <div class="vt-viewer-head">${opts.headHTML}<button class="vt-icon-btn vt-vw-x" aria-label="닫기">${icon('x', 14)}</button></div>
@@ -137,6 +151,14 @@ export function openPanel(opts) {
       document.addEventListener('keydown', keyHandler);
       document.body.appendChild(el);
 
+      if (mobileRoute) {
+        el._vtMobileHistory = true;
+        try {
+          history.pushState({ ...(history.state || {}), vtPanel: opts.id }, '', location.href);
+        } catch (_) { /* history를 쓸 수 없는 임베디드 브라우저 */ }
+      }
+      document.dispatchEvent(new CustomEvent('vt:panel-open', { detail: { id: opts.id, mobileRoute } }));
+
       // D7: 초기 포커스 — 첫 포커스 가능 요소(대개 닫기 버튼)로. 패널 자신의
       // 검색창 등 더 적절한 대상이 있으면 opts.onOpen()이 openPanel() 리턴 직후
       // 그 위에 다시 focus()를 걸면 된다(quickopen.js가 이렇게 한다).
@@ -146,9 +168,17 @@ export function openPanel(opts) {
       return { el, body: document.getElementById(opts.bodyId) };
     }
 
-export function closePanel(id) {
+export function closePanel(id, options = {}) {
       const el = document.getElementById(id);
       if (!el) return;
+      if (el._vtMobileHistory && options.history !== 'replace' && options.fromHistory !== true) {
+        try {
+          if (history.state?.vtPanel === id) { history.back(); return; }
+        } catch (_) { /* 즉시 닫기 폴백 */ }
+      }
+      if (el._vtMobileHistory && options.history === 'replace') {
+        try { history.replaceState(_withoutPanelState(history.state), '', location.href); } catch (_) {}
+      }
       if (el._vtTimer) clearInterval(el._vtTimer);
       // 폴링과 짝인 visibilitychange 리스너 — 같이 떼지 않으면 닫힌 패널의
       // 핸들러가 document에 남는다(탭을 오갈 때마다 쌓인다).
@@ -156,6 +186,9 @@ export function closePanel(id) {
       document.removeEventListener('keydown', el._vtKeyHandler);
       el.remove();
       if (el._vtOnClose) el._vtOnClose();
+      document.dispatchEvent(new CustomEvent('vt:panel-close', {
+        detail: { id, mobileRoute: Boolean(el._vtMobileHistory) },
+      }));
       // D7: 트리거로 포커스 복귀 — DOM에서 사라졌을 수 있으니(탭 닫힘 등) 방어.
       if (el._vtTriggerEl && el._vtTriggerEl.isConnected && typeof el._vtTriggerEl.focus === 'function') {
         el._vtTriggerEl.focus();
@@ -163,6 +196,11 @@ export function closePanel(id) {
       // 패널이 레이아웃을 건드렸을 수 있으므로 터미널 크기를 다시 맞춘다.
       try { setTimeout(() => window.fitAndResize(window.activeId), 60); } catch (_) {}
     }
+
+window.addEventListener('popstate', () => {
+  const el = document.querySelector('.vt-viewer-backdrop.vt-mobile-route');
+  if (el) closePanel(el.id, { fromHistory: true });
+});
 
     // 패널이 열려 있는 동안만 도는 폴링 — 닫히면 스스로 정리한다.
     //

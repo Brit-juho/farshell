@@ -23,6 +23,10 @@ export function wireClipboard(id, term, wrapper) {
 
   // 2) 우클릭 — 선택 있으면 복사, 없으면 붙여넣기 (PuTTY 스타일)
   wrapper.addEventListener('contextmenu', (e) => {
+    // Android Chrome은 텍스트 롱프레스를 contextmenu로도 보낸다. 선택 모드에서
+    // 이걸 PuTTY 붙여넣기로 처리하면 클립보드 읽기 권한 팝업이 뜨고 브라우저의
+    // 네이티브 범위 선택이 취소된다. 이 모드에서는 기본 선택 메뉴에 양보한다.
+    if (wrapper.classList.contains('vt-term-select-mode')) return;
     e.preventDefault();
     const sel = term.getSelection && term.getSelection();
     if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });

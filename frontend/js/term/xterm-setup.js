@@ -158,6 +158,15 @@ export function createXtermInstance(id) {
     helper.setAttribute('spellcheck', 'false');
   }
 
+  // 선택 모드에서 접근성 텍스트를 길게 누르면 xterm이 숨은 textarea를 다시
+  // focus할 수 있다(Android Chrome 실기기에서 재현). 이벤트 전파를 막으면
+  // 브라우저의 선택 핸들까지 사라지므로, focus가 돌아온 경우에만 즉시 해제한다.
+  wrapper.addEventListener('focusin', (e) => {
+    if (!wrapper.classList.contains('vt-term-select-mode') || e.target !== helper) return;
+    helper.blur();
+    try { navigator.virtualKeyboard?.hide?.(); } catch (_) {}
+  });
+
   // M5: xterm은 접근성 텍스트 레이어(.xterm-accessibility)에 기본
   // pointer-events:none을 건다 — 스크린리더가 "읽기만" 하도록 캔버스 위에 투명
   // 오버레이로만 존재하고, 실제 마우스/터치는 그 밑 캔버스로 그대로 통과시키기
@@ -173,9 +182,11 @@ export function createXtermInstance(id) {
       a11yLayer.style.pointerEvents = 'auto';
       let _tapStart = null; // {x,y,t} — 롱프레스/드래그로 번진 탭은 전달하지 않는다
       a11yLayer.addEventListener('pointerdown', (e) => {
+        if (wrapper.classList.contains('vt-term-select-mode')) return;
         _tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
       });
       a11yLayer.addEventListener('pointerup', (e) => {
+        if (wrapper.classList.contains('vt-term-select-mode')) { _tapStart = null; return; }
         const s = _tapStart; _tapStart = null;
         if (!s) return;
         const moved = Math.hypot(e.clientX - s.x, e.clientY - s.y);

@@ -7,12 +7,76 @@
 // VTKeySeq는 아직 UMD(globalThis.VTKeySeq)라 bare identifier로 읽는다(F2 판단 유지).
 import { activeSessionId, activeSession } from '../core/store.js';
 import { icon } from '../ui/icons.js';
-import { sendToPty } from './clipboard.js';
+import { copyToClipboard, sendToPty } from './clipboard.js';
 import { fitAndResize } from './resize.js';
 import { _isCoarsePointer } from '../core/env.js';
 import { getAction } from '../core/dom.js';
 
 let _ctrlArmed = false;
+let _selectionSessionId = null;
+
+function _activeSelectionText(term) {
+  const nativeText = String(window.getSelection?.()?.toString?.() || '');
+  if (nativeText.trim()) return nativeText;
+  return String(term?.getSelection?.() || '');
+}
+
+export function isTerminalSelectionMode() {
+  return Boolean(_selectionSessionId);
+}
+
+export function setTerminalSelectionMode(on) {
+  const current = activeSession();
+  const previous = _selectionSessionId && document.getElementById(`term-${_selectionSessionId}`);
+  previous?.classList.remove('vt-term-select-mode');
+  const previousHelper = previous?.querySelector?.('.xterm-helper-textarea');
+  if (previousHelper) previousHelper.disabled = false;
+
+  _selectionSessionId = on && current ? activeSessionId() : null;
+  const wrapper = _selectionSessionId && document.getElementById(`term-${_selectionSessionId}`);
+  wrapper?.classList.add('vt-term-select-mode');
+  const helper = wrapper?.querySelector?.('.xterm-helper-textarea');
+  if (helper) helper.disabled = true;
+  document.body.classList.toggle('vt-term-selecting', Boolean(_selectionSessionId));
+
+  const selectBtn = document.getElementById('keybar-slot-select');
+  selectBtn?.setAttribute('aria-pressed', String(Boolean(_selectionSessionId)));
+  if (selectBtn) selectBtn.setAttribute('aria-label', _selectionSessionId ? '텍스트 선택 종료' : '터미널 텍스트 선택');
+  const actions = document.getElementById('keybar-selection-actions');
+  if (actions) actions.hidden = !_selectionSessionId;
+
+  if (_selectionSessionId) {
+    _setCtrlArmed(false);
+    try { current.term.blur(); } catch (_) {}
+    try { document.activeElement?.blur?.(); } catch (_) {}
+    try { navigator.virtualKeyboard?.hide?.(); } catch (_) {}
+  } else {
+    try { window.getSelection?.()?.removeAllRanges?.(); } catch (_) {}
+  }
+  document.dispatchEvent(new CustomEvent('vt:terminal-selection', { detail: { active: Boolean(_selectionSessionId) } }));
+}
+
+async function _copyTerminalSelection() {
+  const term = activeSession()?.term;
+  const text = _activeSelectionText(term);
+  if (!text.trim()) {
+    showToast('복사할 텍스트 범위를 먼저 선택하세요.');
+    return false;
+  }
+  // 네이티브 Range가 살아 있고 이 버튼의 사용자 제스처 안이라면 브라우저의
+  // copy 명령을 먼저 쓴다. Android Chrome의 async Clipboard API는 첫 복사에서
+  // "클립보드 확인" 권한 팝업을 띄워 선택 흐름을 끊지만, 현재 선택 복사는
+  // execCommand가 권한 팝업 없이 정확히 같은 범위를 복사한다.
+  const nativeText = String(window.getSelection?.()?.toString?.() || '');
+  let ok = false;
+  if (nativeText.trim()) {
+    try { ok = Boolean(document.execCommand?.('copy')); } catch (_) {}
+  }
+  if (!ok) ok = await copyToClipboard(text);
+  showToast(ok ? '선택한 텍스트를 복사했습니다.' : '클립보드에 복사하지 못했습니다.');
+  if (ok) setTerminalSelectionMode(false);
+  return ok;
+}
 
 // L7: 마이크의 물리적 위치 결정 — voice.js가 `#mic-btn-wrap`을 모듈 최상위에서
 // `const`로 한 번만 캐시하므로(voice/recording.js), *어디에 있든* id만 유지되면
@@ -90,6 +154,7 @@ export function initKeybar() {
   // 그대로 클릭한다.
   document.getElementById('keybar-slot-queue')?.addEventListener('click', () => getAction('queue.show')?.());
   document.getElementById('keybar-slot-upload')?.addEventListener('click', () => document.getElementById('file-input')?.click());
+  document.addEventListener('vt:session-switch', () => setTerminalSelectionMode(false));
 
   // M3: ←/→ 버튼을 누른 채 드래그하면 끈 거리만큼 같은 방향으로 연속 이동.
   const ARROW_DRAG_STEP_PX = 14;
@@ -100,6 +165,12 @@ export function initKeybar() {
   // pointerdown에서 preventDefault → 터미널 textarea 포커스를 뺏지 않아
   // 소프트 키보드가 내려가지 않는다. (버튼 탭마다 키보드가 닫히면 못 씀)
   bar.addEventListener('pointerdown', (e) => {
+    const selectionCopy = e.target.closest('#keybar-selection-copy');
+    if (selectionCopy) { e.preventDefault(); void _copyTerminalSelection(); return; }
+    const selectionDone = e.target.closest('#keybar-selection-done');
+    if (selectionDone) { e.preventDefault(); setTerminalSelectionMode(false); return; }
+    const selectionToggle = e.target.closest('#keybar-slot-select');
+    if (selectionToggle) { e.preventDefault(); setTerminalSelectionMode(!isTerminalSelectionMode()); return; }
     // 접기/펴기 토글 — .kb가 아니므로 먼저 가로챈다.
     const toggle = e.target.closest('#keybar-toggle');
     if (toggle) {
@@ -205,6 +276,7 @@ export function initKeybar() {
     const overlap = vv
       ? Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
       : 0;
+    document.body.classList.toggle('vt-keyboard-open', overlap > 0);
     if (vv) bar.style.transform = overlap > 0 ? `translateY(${-overlap}px)` : '';
     // hidden(데스크톱)이면 offsetHeight가 0 — 그대로 0을 내보내면 된다.
     const height = bar.hidden ? 0 : bar.offsetHeight;

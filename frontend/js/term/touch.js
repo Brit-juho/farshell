@@ -29,6 +29,7 @@ export function wireTouchScroll(id, term, wrapper) {
     let pinchStartDist = null, pinchStartSize = null;
 
     wrapper.addEventListener('touchstart', (e) => {
+      if (wrapper.classList.contains('vt-term-select-mode')) return;
       multi = e.touches.length > 1;
       if (e.touches.length === 2) {
         pinchStartDist = _touchDist(e.touches);
@@ -43,6 +44,7 @@ export function wireTouchScroll(id, term, wrapper) {
     }, { passive: true });
 
     wrapper.addEventListener('touchmove', (e) => {
+      if (wrapper.classList.contains('vt-term-select-mode')) return;
       if (e.touches.length === 2 && pinchStartDist) {
         e.preventDefault();
         const ratio = _touchDist(e.touches) / pinchStartDist;

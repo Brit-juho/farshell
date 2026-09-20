@@ -355,17 +355,6 @@
     <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
   </header>
 
-  <!-- N38(70-mobile.md §1) — 모바일 상단 24px. compact(<720px)에서만 보인다.
-       #topbar는 그대로 둔다(세션 탭·팔레트 진입점을 이미 compact에서도
-       제공한다, L4/L6 주석) — 이 바는 그 아래 얇은 두 번째 줄로 호스트
-       컨텍스트 + 대기 수만 얹는다(2.1.0엔 호스트 전환이 없어 칩은 정적
-       텍스트, N39가 붙는 2.1.2부터 탭 가능해진다). 내용은
-       layout/mobile-nav.js가 채운다. -->
-  <div id="vt-mnav-top" aria-label="상태 요약">
-    <span id="vt-mnav-host-chip">farshell</span>
-    <span id="vt-mnav-waiting" hidden></span>
-  </div>
-
   <!-- L4: 좌측 rail — ADR-8("⋯ 폐지 → 좌측 rail(포인터) + 커맨드 팔레트(키보드)")의
        포인터 경로. compact(<720px)에서는 CSS로 통째로 숨는다(팔레트 + 바텀시트가
        대신한다). 항목 7개는 팔레트(L6)의 기본/설정 명령과 내용이 같다(문서 §3
@@ -531,6 +520,14 @@
         <button type="button" class="kb kb-slot" id="keybar-slot-upload" aria-label="파일 업로드" data-tip="파일 업로드">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         </button>
+        <button type="button" class="kb kb-slot" id="keybar-slot-select" aria-label="터미널 텍스트 선택" aria-pressed="false" data-tip="텍스트 선택">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2"/><path d="M16 4h2a2 2 0 0 1 2 2v4"/><path d="M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>
+        </button>
+      </div>
+      <div id="keybar-selection-actions" hidden>
+        <span id="keybar-selection-hint">텍스트 범위를 길게 눌러 선택</span>
+        <button type="button" class="vt-btn sm solid" id="keybar-selection-copy">복사</button>
+        <button type="button" class="vt-btn sm quiet" id="keybar-selection-done">완료</button>
       </div>
       <!-- 접기/펴기 토글 -->
       <!-- D5 관용구: ui/icons.js의 'chevron-down'과 같은 path. 접히면 keybar.js가
@@ -578,25 +575,26 @@
        혼용 금지 규칙은 "같은 출처의 같은 도형"을 요구하는 것이지 인라인을
        금지하는 게 아니다). -->
   <nav id="vt-mnav-bottom" aria-label="하단 내비">
-    <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="플릿" aria-pressed="false">
+    <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="작업" aria-pressed="false">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg>
-      <span class="vt-mnav-label">플릿</span>
+      <span class="vt-mnav-label">작업</span>
+      <span class="vt-mnav-badge" id="vt-mnav-badge-waiting" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="terminal" aria-label="터미널" aria-pressed="false">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       <span class="vt-mnav-label">터미널</span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-action="scm.show" aria-label="변경">
+    <button type="button" class="vt-mnav-btn" data-mnav="changes" data-action="scm.show" aria-label="변경" aria-pressed="false">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
       <span class="vt-mnav-label">변경</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-action="queue.show" aria-label="큐">
+    <button type="button" class="vt-mnav-btn" data-mnav="queue" data-action="queue.show" aria-label="큐" aria-pressed="false">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/></svg>
       <span class="vt-mnav-label">큐</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-queue" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-action="settings.show" aria-label="더보기">
+    <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="더보기" aria-pressed="false">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span class="vt-mnav-label">더보기</span>
     </button>

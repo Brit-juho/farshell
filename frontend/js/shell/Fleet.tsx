@@ -107,7 +107,18 @@ function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) 
   };
 
   return (
-    <div class="vt-srow lg vt-fleet-row" classList={{ 'is-waiting': props.row.status === 'waiting' }} onClick={onRowClick} role="button" tabindex="0">
+    <div
+      class="vt-srow lg vt-fleet-row"
+      classList={{ 'is-waiting': props.row.status === 'waiting' }}
+      onClick={onRowClick}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        onRowClick();
+      }}
+      role="button"
+      tabindex="0"
+    >
       <span class={`vt-srow-mark vt-fleet-bar tone-${props.row.status}`} />
       <div class="vt-srow-main vt-fleet-row-main">
         <div class="vt-srow-top vt-fleet-row-top">
@@ -182,13 +193,25 @@ function Fleet(props: { deps: FleetDeps }) {
     if (data?.hosts) setHosts(data.hosts);
   };
 
-  refreshSessions();
-  refreshAgent();
-  refreshHosts();
-  const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_POLL_MS);
-  const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
-  const t3 = setInterval(() => { if (!document.hidden) refreshHosts(); }, HOSTS_POLL_MS);
-  onCleanup(() => { clearInterval(t1); clearInterval(t2); clearInterval(t3); });
+  const isFleetActive = () => document.documentElement.dataset.mobileTab === 'fleet';
+  const refreshAll = () => {
+    if (document.hidden || !isFleetActive()) return;
+    void refreshSessions();
+    void refreshAgent();
+    void refreshHosts();
+  };
+  refreshAll();
+  const t1 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshSessions(); }, SESSIONS_POLL_MS);
+  const t2 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshAgent(); }, STATUS_POLL_MS);
+  const t3 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshHosts(); }, HOSTS_POLL_MS);
+  const onMobileTab = (e: Event) => {
+    if ((e as CustomEvent).detail?.tab === 'fleet') refreshAll();
+  };
+  document.addEventListener('vt:mobile-tab', onMobileTab);
+  onCleanup(() => {
+    clearInterval(t1); clearInterval(t2); clearInterval(t3);
+    document.removeEventListener('vt:mobile-tab', onMobileTab);
+  });
 
   // 레일에서 호스트를 바꿔도(창을 넓혔다 줄이는 동안 둘 다 살아 있다) 여기가
   // 따라오도록 설정 변경을 구독한다 — 안 하면 같은 화면의 두 스위처가 서로
@@ -331,7 +354,15 @@ function Fleet(props: { deps: FleetDeps }) {
         <div class="vt-fleet-empty">{hostDetail(activeHost()!)}</div>
       </Show>
       <Show when={sections().length === 0 && !(isRemoteHost() && activeHost() && !activeHost()!.online)}>
-        <div class="vt-fleet-empty">세션이 없습니다</div>
+        <div class="vt-fleet-empty">
+          <div>세션이 없습니다</div>
+          <Show when={!isRemoteHost()}>
+            <div class="vt-fleet-empty-actions">
+              <button type="button" class="vt-btn solid" onClick={() => { (window as any).createTmuxSession?.(); props.deps.onOpenTerminal(); }}>tmux 세션 시작</button>
+              <button type="button" class="vt-btn" onClick={() => { (window as any).createSession?.(); props.deps.onOpenTerminal(); }}>일반 터미널</button>
+            </div>
+          </Show>
+        </div>
       </Show>
       <For each={sections()}>
         {(section) => (

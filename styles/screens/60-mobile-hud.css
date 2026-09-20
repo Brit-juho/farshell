@@ -71,10 +71,10 @@
 .vt-hud-chip.clickable { cursor:pointer; }
 .vt-hud-chip.clickable:hover { background:var(--menu-hover); color:var(--txt); }
 
-/* ── N38(70-mobile.md §1/§2) — 모바일 골격: 상단 24px · 플릿 홈 · 하단 내비 52px
+/* ── N38(70-mobile.md §1/§2) — 모바일 골격: 작업 홈 · 하단 내비 52px
    compact(<720px)에서만 보인다(같은 문턱값을 HUD/rail/dock이 이미 쓴다).
    기본값은 숨김 — 아래 @media 블록에서만 켠다. */
-#vt-mnav-top, #vt-mnav-bottom, #vt-fleet-slot { display:none; }
+#vt-mnav-bottom, #vt-fleet-slot { display:none; }
 
 @media (max-width:719px) {
   /* N35/N38 — L4·N35에서 두 번 났던 것과 같은 회귀: `.vt-onboarding`은
@@ -83,17 +83,8 @@
      세션이 0개인 흔한 상태(부팅 직후)에서 하단 내비 자체가 클릭이 안 먹는
      것으로 실측 확인됐다 — 데스크톱 레일·dock 때와 같은 원인, 같은 처방:
      onboarding을 그 자리만큼 비켜 세운다. */
-  /* 상단 바의 높이를 **한 곳**에서 정한다. 이 값을 쓰는 곳이 셋(온보딩·플릿
-     홈·이 바 자신)인데 24px이 각각 박혀 있어서, 바가 숨는 순간 나머지 둘이
-     여전히 24px을 비워 뒀다 — 그 틈으로 뒤에 있는 터미널이 비쳐 보였다
-     (실브라우저에서 확인: 헤더 아래 24px 줄에 diff 초록색이 그대로 나왔다).
-     `:has()`로 "바가 숨었는가"를 CSS가 직접 읽게 해서, JS가 따로 치수를
-     계산하거나 클래스를 붙이지 않아도 셋이 항상 같이 움직이게 한다. */
-  :root { --mnav-top-h: 24px; }
-  html:has(#vt-mnav-top[hidden]) { --mnav-top-h: 0px; }
-
   .vt-onboarding {
-    top:calc(var(--topbar-h) + var(--mnav-top-h) + env(safe-area-inset-top,0px));
+    top:calc(var(--topbar-h) + env(safe-area-inset-top,0px));
     bottom:calc(52px + env(safe-area-inset-bottom,0px));
   }
   /* 2026-09-19 — 같은 회귀의 **세 번째** 자리. 위 두 줄은 온보딩을 상·하단
@@ -107,27 +98,6 @@
      `body.vt-has-viewer-pane .vt-onboarding`(80-dock.css)과 같은 관용구다. */
   html:has(#vt-fleet-slot:not([hidden])) .vt-onboarding { display:none; }
 
-  /* #topbar는 그대로 둔다(세션 탭·팔레트가 이미 거기 있다) — 이 바는 그
-     아래 얇은 두 번째 줄로, 정상 flex 흐름에 얹혀 자기 높이(24px)만큼
-     terminal-container를 자연스럽게 밀어낸다(JS 계산 없이 body가 flex-column). */
-  #vt-mnav-top {
-    display:flex; align-items:center; justify-content:space-between;
-    height:var(--mnav-top-h); flex:none; padding:0 calc(var(--spacing) * 2);
-    background:var(--bar); border-bottom:1px solid var(--line);
-    font:400 var(--fs-2xs) var(--mono); color:var(--sub); overflow:hidden;
-  }
-  /* id 셀렉터의 display:flex는 UA의 `[hidden]{display:none}`을 이긴다 —
-     JS가 `bar.hidden = true`로 숨겼는데 화면에서는 24px 줄이 그대로 남았다
-     (실브라우저에서 재현). 이 파일의 #vt-rail-panel[hidden]이 같은 이유로
-     이미 존재하는 것과 같은 관용구다. 상단 바는 "보여줄 게 하나도 없을 때"
-     사라져야 하므로 이 한 줄이 필요하다. */
-  #vt-mnav-top[hidden] { display:none; }
-  #vt-mnav-host-chip { }
-  /* 칩이 비면(헤더가 이미 호스트명을 말하고 있으면) 자리를 차지하지 않는다. */
-  #vt-mnav-host-chip:empty { display:none; }
-  #vt-mnav-waiting { color:var(--warn); white-space:nowrap; flex:none; }
-  #vt-mnav-waiting[hidden] { display:none; }
-
   /* 플릿 홈은 #terminal-container를 절대 display:none으로 언마운트하지
      않는다(표면 레이어가 그 안에서 xterm WebGL 컨텍스트를 들고 있다 —
      display:none이면 자손 rect가 0×0이 되어 ResizeObserver가 SIGWINCH를
@@ -135,7 +105,7 @@
      position:fixed 오버레이로 그린다 — 터미널은 그 아래서 그대로 살아있다. */
   #vt-fleet-slot {
     display:block; position:fixed; z-index:90;
-    top:calc(var(--topbar-h, 38px) + var(--mnav-top-h) + env(safe-area-inset-top,0px));
+    top:calc(var(--topbar-h, 38px) + env(safe-area-inset-top,0px));
     left:0; right:0; bottom:calc(52px + env(safe-area-inset-bottom,0px));
     overflow-y:auto; background:var(--win);
     padding:calc(var(--spacing) * 2);
@@ -145,11 +115,15 @@
   #vt-fleet-slot[hidden] { display:none; }
 
   #vt-mnav-bottom {
-    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:100;
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:650;
     height:calc(52px + env(safe-area-inset-bottom,0px));
     padding-bottom:env(safe-area-inset-bottom,0px);
     background:var(--bar); border-top:1px solid var(--line);
   }
+  .vt-viewer-backdrop.vt-mobile-route {
+    bottom:calc(52px + env(safe-area-inset-bottom,0px));
+  }
+  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-card { height:100%; }
   .vt-mnav-btn {
     flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:2px; position:relative; background:none; border:0; color:var(--sub);
@@ -180,6 +154,8 @@
      탭이 '터미널'이 아니면 keybar 자체를 완전히 숨긴다(§1: "keybar는 터미널
      탭에서만") — html[data-mobile-tab]의 특이성이 #keybar 단독 규칙을 이긴다. */
   #keybar { bottom:calc(52px + env(safe-area-inset-bottom,0px)); }
+  body.vt-keyboard-open #vt-mnav-bottom { display:none; }
+  body.vt-keyboard-open #keybar { bottom:0; }
   html[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar { display:none; }
 
   /* 플릿 홈(N38 §2) 행 — Rail.tsx(N36 §5)의 .vt-wgrail-row와 같은 시각
@@ -230,6 +206,11 @@
   /* 한글 문장인데 mono였다 — JetBrains Mono에 한글이 없어 폴백으로 새고 있었다
      (dock 탭 라벨과 같은 버그). 빈 상태 문장은 patterns.css의 조판을 따른다. */
   .vt-fleet-empty { padding:calc(var(--spacing) * 4) 0; text-align:center; color:var(--color-muted); font:400 var(--fs-xs)/var(--leading-body) var(--font-ui); }
+  .vt-fleet-empty-actions {
+    display:flex; justify-content:center; flex-wrap:wrap; gap:calc(var(--spacing) * 2);
+    margin-top:calc(var(--spacing) * 3);
+  }
+  .vt-fleet-empty-actions .vt-btn { min-height:44px; }
   .vt-fleet-group-head {
   padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1);
 }

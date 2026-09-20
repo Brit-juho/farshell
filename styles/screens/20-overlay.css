@@ -305,6 +305,33 @@ body.voice-only-mode .vt-onboarding { display:none; }
    주석 참고). .kb-slot은 배지(.vt-rail-badge 재사용)의 위치 기준. */
 #keybar-top { display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 1.5); }
 #keybar-slots { flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
+#keybar-selection-actions {
+  min-width:0; flex:1; display:flex; align-items:center; justify-content:flex-end;
+  gap:calc(var(--spacing) * 1.5);
+}
+#keybar-selection-actions[hidden] { display:none; }
+#keybar-selection-hint {
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--sub); font:500 var(--fs-xs) var(--ui);
+}
+#keybar-slot-select[aria-pressed="true"] {
+  color:var(--acc-ink); background:var(--color-acc-surface); border-color:var(--acc);
+}
+body.vt-term-selecting #keybar-slots > :not(#keybar-slot-select),
+body.vt-term-selecting #keybar-toggle,
+body.vt-term-selecting #keybar-keys { display:none; }
+.vt-term-wrap.vt-term-select-mode .xterm-helper-textarea { pointer-events:none; }
+.vt-term-wrap.vt-term-select-mode .xterm-accessibility {
+  pointer-events:auto !important;
+  user-select:text !important;
+  -webkit-user-select:text !important;
+  touch-action:auto;
+}
+.vt-term-wrap.vt-term-select-mode .xterm-accessibility-tree,
+.vt-term-wrap.vt-term-select-mode .xterm-accessibility-tree > div {
+  user-select:text !important;
+  -webkit-user-select:text !important;
+}
 .kb-slot { position:relative; }
 /* 키 버튼들만 가로 스크롤 */
 #keybar-keys {
