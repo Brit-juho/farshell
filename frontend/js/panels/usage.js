@@ -12,7 +12,7 @@
 //
 // **이 파일은 지연 청크(panels.js)다.** 상시 동작(rail 배지 폴링 · 액션 등록)은
 // panels/usage-badge.js에 있고, 여기는 "볼 때" 필요한 렌더러만 담는다.
-import { openPanel } from './panel.js';
+import { openPanel, setPanelPoll } from './panel.js';
 import { emptyState } from '../ui/empty.js';
 import { vtFetch } from '../core/api.js';
 import { paintRailBadge } from './usage-badge.js';
@@ -288,7 +288,6 @@ export function renderBody(limitData, counterData, target) {
 // 그래서 rail 버튼에 전역 지표만 단다: 활성 프로필 이름(title) + 라이브 점.
 // 세션별 귀속은 2.1의 `fsh agent claude --profile`(우리가 실행 주체가 되는 시점)
 // 이후에 정확해진다.
-let _timer = null;
 
 // N41 — 한도형(/api/usage)과 누적형(/api/usage/counter)을 따로 요청한다.
 // 하나가 실패/없음이어도 다른 하나는 그려야 한다(clauth 없이 로컬 LLM만
@@ -303,25 +302,36 @@ async function fetchBoth() {
   return { limitData, counterData };
 }
 
-async function refresh() {
+// N4 — 그릴 대상을 인자로 받는다. 인스턴스가 여럿이면 "그 인스턴스의 body"가
+// 어디인지 호출자만 안다.
+async function refresh(bodyEl) {
   const { limitData, counterData } = await fetchBoth();
-  renderBody(limitData, counterData);
+  if (bodyEl) renderBody(limitData, counterData, bodyEl);
+  // 2.0의 우측 레일은 인스턴스와 무관한 전역 자리다 — 그대로 둔다.
   renderBody(limitData, counterData, document.getElementById('vt-right-rail-body'));
   paintRailBadge(limitData);
 }
 
-export function showUsage() {
+// N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다.
+export function showUsage(opts = {}) {
   const panel = openPanel({
+    paneHost: opts.paneHost || null,
+    paneId: opts.paneId || null,
     id: PANEL_ID,
     ariaLabel: '사용량',
     headHTML: '<div class="vt-vw-title">사용량</div>',
     bodyId: 'vt-usage-body',
     extraClass: 'vt-usage',
-    onClose: () => { clearInterval(_timer); _timer = null; },
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
-  refresh();
-  _timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+  const bodyEl = panel.ctx.byId('vt-usage-body');
+  refresh(bodyEl);
+  // 손으로 돌리던 `setInterval` + 모듈 레벨 `_timer`를 `setPanelPoll`로 바꿨다.
+  // 그 한 벌짜리 타이머는 인스턴스가 둘이 되는 순간 하나가 다른 하나를 덮어쓴다
+  // (뒤에 열린 쪽이 `_timer`를 가로채고, 앞의 것은 영원히 도는 고아가 된다).
+  // `setPanelPoll`은 엘리먼트에 묶이고 `document.hidden`·정리까지 이미 한다 —
+  // 직접 짠 것과 같은 일을 하면서 인스턴스별로 갈린다.
+  setPanelPoll(panel.el, POLL_MS, () => refresh(bodyEl));
 }
 
 // `usage.open` 액션 등록과 배지 폴링은 panels/usage-badge.js에 있다.

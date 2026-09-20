@@ -3,14 +3,18 @@
 //
 // 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panels/panel.js·core/api.js가 공유한다.
 // 리스트 행만 .vt-pt-* 로 따로 둔다. F5에서 classic script에서 ES 모듈로 전환.
-import { openPanel, closePanel, setPanelPoll } from '../panel.js';
+import { openPanel, setPanelPoll } from '../panel.js';
 import { vtFetch, vtEsc } from '../../core/api.js';
 import { _isCoarsePointer } from '../../core/env.js';
 
-function closePorts() { closePanel('vt-ports'); }
 
-function showPorts() {
+// N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다. dock에 떠 있는 것과
+// 공존하므로 이 파일의 DOM 조회·폴링은 전부 인스턴스(`ctx`·`panel.el`)를
+// 거친다. 큐와 같은 전환이고 같은 이유다(panels/panel.js 머리말).
+function showPorts(opts = {}) {
       const panel = openPanel({
+        paneHost: opts.paneHost || null,
+        paneId: opts.paneId || null,
         id: 'vt-ports',
         ariaLabel: '포트 대시보드',
         headHTML: `
@@ -20,13 +24,14 @@ function showPorts() {
         bodyId: 'vt-pt-body',
       });
       if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
+      const ctx = panel.ctx;
 
-      panel.el.querySelector('#vt-pt-refresh').addEventListener('click', () => refreshPorts(true));
+      ctx.byId('vt-pt-refresh').addEventListener('click', () => refreshPorts(ctx, true));
 
-      refreshPorts(true);
+      refreshPorts(ctx, true);
       // U4/D4(60-settings-palette.md §6): 2초 폴링. 패널이 열려 있을 때만 돈다 —
       // 닫으면 setPanelPoll이 정리한다.
-      setPanelPoll('vt-ports', 2000, () => refreshPorts(false));
+      setPanelPoll(panel.el, 2000, () => refreshPorts(ctx, false));
     }
 
     function _fmtMem(kb) {
@@ -133,7 +138,7 @@ function showPorts() {
     }
 
     // isSub: 같은 pid 그룹 안에서 대표 포트가 아닌 나머지 — 들여써서(↳) 보여준다.
-    function _buildRow(p, isSub) {
+    function _buildRow(ctx, p, isSub) {
       const row = document.createElement('div');
       row.className = isSub ? 'vt-pt-row vt-pt-row-sub' : 'vt-pt-row';
 
@@ -190,14 +195,14 @@ function showPorts() {
         } else {
           ex.textContent = '공개';
           ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
-          ex.onclick = () => exposePort(p.port);
+          ex.onclick = () => exposePort(ctx, p.port);
         }
         actions.appendChild(ex);
         if (!swipeKillOnTouch) {
           const kb = document.createElement('button');
           kb.className = 'vt-btn sm quiet danger';
           kb.textContent = '종료';
-          kb.onclick = () => killPort(p.port, p.pid, p.cmd);
+          kb.onclick = () => killPort(ctx, p.port, p.pid, p.cmd);
           actions.appendChild(kb);
         }
       }
@@ -219,7 +224,7 @@ function showPorts() {
       const kill = document.createElement('button');
       kill.className = 'vt-pt-swipe-kill';
       kill.textContent = '종료';
-      kill.onclick = () => { _closeSwipe(row); killPort(p.port, p.pid, p.cmd); };
+      kill.onclick = () => { _closeSwipe(row); killPort(ctx, p.port, p.pid, p.cmd); };
 
       row.appendChild(kill);
       row.appendChild(inner);
@@ -230,7 +235,7 @@ function showPorts() {
 // N22(50-files-share.md §5) — 노출 중인 터널(메인 + fsh tunnel expose한 포트) 요약을
 // 포트 목록 아래에 얹는다. 해제는 이미 있는 DELETE /api/ports/{port}/expose를 그대로 쓴다
 // — 메인 터널은 fsh 쪽 명령이 아니라 여기서 해제 대상이 아니므로 행에 해제 버튼이 없다.
-async function _renderTunnelSection(body) {
+async function _renderTunnelSection(ctx, body) {
   let d;
   try {
     d = await vtFetch('/api/tunnel/list');
@@ -266,7 +271,7 @@ async function _renderTunnelSection(body) {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'vt-btn sm quiet danger';
       closeBtn.textContent = '해제';
-      closeBtn.addEventListener('click', () => _unexposeTunnel(t.port));
+      closeBtn.addEventListener('click', () => _unexposeTunnel(ctx, t.port));
       actions.appendChild(closeBtn);
     }
     row.appendChild(actions);
@@ -284,7 +289,7 @@ async function _copyText(text) {
   }
 }
 
-async function _unexposeTunnel(port) {
+async function _unexposeTunnel(ctx, port) {
   if (!confirm(`포트 ${port} 터널을 해제할까요?`)) return;
   try {
     await vtFetch(`/api/ports/${port}/expose`, { method: 'DELETE' });
@@ -292,11 +297,11 @@ async function _unexposeTunnel(port) {
   } catch (e) {
     showToast(`해제 실패: ${e.message}`);
   }
-  refreshPorts(true);
+  refreshPorts(ctx, true);
 }
 
-    async function refreshPorts(fresh) {
-      const body = document.getElementById('vt-pt-body');
+    async function refreshPorts(ctx, fresh) {
+      const body = ctx.byId('vt-pt-body');
       if (!body) return;
       let d;
       try {
@@ -307,7 +312,7 @@ async function _unexposeTunnel(port) {
       }
       if (!d.ports.length) {
         body.innerHTML = '<div class="vt-vw-empty">리스닝 중인 포트가 없습니다.</div>';
-        await _renderTunnelSection(body);
+        await _renderTunnelSection(ctx, body);
         return;
       }
 
@@ -336,8 +341,8 @@ async function _unexposeTunnel(port) {
           head.textContent = '보호됨 / 시스템';
           list.appendChild(head);
         }
-        list.appendChild(_buildRow(rep, false));
-        subs.forEach(p => list.appendChild(_buildRow(p, true)));
+        list.appendChild(_buildRow(ctx, rep, false));
+        subs.forEach(p => list.appendChild(_buildRow(ctx, p, true)));
       });
       body.innerHTML = '';
       body.appendChild(list);
@@ -347,10 +352,10 @@ async function _unexposeTunnel(port) {
         n.textContent = '포트가 많아 일부만 표시했습니다.';
         body.appendChild(n);
       }
-      await _renderTunnelSection(body);
+      await _renderTunnelSection(ctx, body);
     }
 
-    async function killPort(port, pid, cmd) {
+    async function killPort(ctx, port, pid, cmd) {
       if (!confirm(`포트 ${port} (${cmd}, pid ${pid}) 를 종료할까요?`)) return;
       try {
         // pid를 함께 보낸다 — 조회 후 프로세스가 바뀌었으면 서버가 409로 거부한다.
@@ -359,10 +364,10 @@ async function _unexposeTunnel(port) {
       } catch (e) {
         showToast(`종료 실패: ${e.message}`);
       }
-      refreshPorts(true);
+      refreshPorts(ctx, true);
     }
 
-    async function exposePort(port) {
+    async function exposePort(ctx, port) {
       // 2단계 확인. 서버도 confirm 없으면 428로 거부하지만, 오탭을 UI에서 먼저 막는다.
       if (!confirm(`포트 ${port} 를 공개 인터넷에 노출합니다.\n\n누구나 URL만 알면 접근할 수 있습니다. 계속할까요?`)) return;
       showToast(`포트 ${port} 터널 여는 중…`);
@@ -377,7 +382,7 @@ async function _unexposeTunnel(port) {
         showToast(`공개 실패: ${e.message}`);
       }
       // L5: 성공하면 그 행의 버튼이 "공개"→"미리보기"로 바뀌어야 하니 목록을 새로 받는다.
-      refreshPorts(true);
+      refreshPorts(ctx, true);
     }
 
     // L5: 이미 열려 있는 터널을 앱 안 iframe으로 바로 확인. X-Frame-Options/CSP로

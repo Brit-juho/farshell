@@ -74,8 +74,13 @@ function _renderHead(headEl, repo, d) {
   // 계정 칩 없음(ADR-27) — 40 §1의 계정 저장소는 구현만 되고 dock에 연결하지 않는다.
 }
 
-export async function showScm() {
+// N4 — `opts.paneHost`가 있으면 dock/모달이 아니라 그 pane 칸에 그린다.
+// 이 패널은 이식 비용이 거의 없었다: 본문 조회를 이미 `panel.body`·
+// `panel.el.querySelector`로 하고 있어서 전역 id에 기대는 곳이 헤더 둘뿐이다.
+export async function showScm(opts = {}) {
   const panel = openPanel({
+    paneHost: opts.paneHost || null,
+    paneId: opts.paneId || null,
     id: PANEL_ID,
     ariaLabel: '소스컨트롤',
     headHTML: '<div class="vt-scm-head" id="vt-scm-head"></div>'
@@ -85,7 +90,8 @@ export async function showScm() {
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
 
   const body = panel.body;
-  const headEl = panel.el.querySelector('#vt-scm-head');
+  // pane 인스턴스는 안쪽 id에 접미사가 붙는다 — ctx가 그걸 안다.
+  const headEl = panel.ctx.byId('vt-scm-head');
 
   // 파일을 뷰어 페인(N35 §6 리프 타입 viewer)으로 연다. entry.file은 저장소
   // 상대경로라 repo(절대경로)와 합쳐야 /api/fs/*(fsguard)가 받는 절대경로가
@@ -125,7 +131,7 @@ export async function showScm() {
     _renderHead(headEl, repo, d);
   };
 
-  panel.el.querySelector('#vt-scm-refresh').addEventListener('click', paint);
+  panel.ctx.byId('vt-scm-refresh').addEventListener('click', paint);
   // 세션을 바꾸면 보는 저장소도 바뀐다 — dock은 "지금 보고 있는 페인"을 따라간다.
   const unsub = window.storeSubscribe ? window.storeSubscribe(() => paint()) : null;
   panel.el._vtOnClose = () => { if (unsub) unsub(); };

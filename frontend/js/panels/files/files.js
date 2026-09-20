@@ -42,8 +42,14 @@ const TTLS = [
   { v: 2592000, label: '30일' },
 ];
 
-let _filter = 'all';
-let _lastItems = [];
+// N4 — 필터·마지막 목록은 **인스턴스별** 상태다. 모듈 레벨 변수 한 벌로
+// 두면 dock과 pane에 동시에 띄웠을 때 한쪽에서 「공유 중」을 고르는 순간
+// 다른 쪽 칩도 같이 바뀐다(그리고 목록은 안 바뀐다 — 그리는 쪽이 하나뿐이라).
+// 열려 있는 인스턴스를 모아 두고 각자의 상태를 그 안에 담는다.
+//
+// `isConnected`로 걸러 읽는 이유: pane 칸이 다른 것으로 바뀌면 렌더러가
+// `replaceChildren()`으로 통째로 떼어내므로 `closePanel`이 안 불린다 —
+// 그때 `onClose`에 기대면 죽은 인스턴스가 집합에 남는다.
 // shareId → 토큰. **서버는 목록 API로 토큰을 내려주지 않는다** — 목록은 승격
 // 없이도 읽을 수 있는데 토큰이 거기 실리면 그게 곧 파일을 받아갈 수 있는
 // 자격이라, 승격으로 막아 둔 발급을 우회하는 셈이 된다. 그래서 이 세션에서
@@ -83,8 +89,24 @@ export function shareLabel(item) {
 
 function closeFiles() { closePanel('vt-files'); }
 
-function showFiles() {
+const _instances = new Set();
+
+function _liveInstances() {
+  for (const inst of [...(_instances)]) if (!inst.el.isConnected) _instances.delete(inst);
+  return [..._instances];
+}
+
+/** 목록을 바꾸는 동작(삭제·링크 발급/취소)은 **열려 있는 모든** 파일 패널을
+ * 새로 고친다. 한쪽에서 지운 파일이 다른 쪽에 남아 있으면 그게 더 헷갈린다. */
+function refreshAllFiles() {
+  for (const inst of _liveInstances()) refreshFiles(inst);
+}
+
+// N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다.
+function showFiles(opts = {}) {
   const panel = openPanel({
+    paneHost: opts.paneHost || null,
+    paneId: opts.paneId || null,
     id: 'vt-files',
     ariaLabel: '파일',
     headHTML: `
@@ -98,59 +120,64 @@ function showFiles() {
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
 
+  const inst = { ctx: panel.ctx, el: panel.el, filter: 'all', lastItems: [] };
+  _instances.add(inst);
+
   // 계약(파일 상단 1번): 새 input을 만들지 않고 기존 하나를 누른다.
-  panel.el.querySelector('#vt-fl-upload').addEventListener('click', () => {
+  // `#file-input`은 인스턴스가 아니라 **문서에 하나뿐인** 요소다(AGENTS.md
+  // 계약 4) — 여기서만 전역 조회가 맞다.
+  panel.ctx.byId('vt-fl-upload').addEventListener('click', () => {
     document.getElementById('file-input')?.click();
   });
 
-  renderChips();
-  refreshFiles();
+  renderChips(inst);
+  refreshFiles(inst);
   // 목록은 자주 안 바뀌지만(업로드는 사용자가 직접 한다) 다른 기기에서 올린
   // 파일·TTL 정리 결과가 반영돼야 해서 느리게 돈다. 패널이 닫히면 자동 정리.
-  setPanelPoll('vt-files', 10000, refreshFiles);
+  setPanelPoll(panel.el, 10000, () => refreshFiles(inst));
 }
 
-function renderChips() {
-  const host = document.getElementById('vt-fl-chips');
+function renderChips(inst) {
+  const host = inst.ctx.byId('vt-fl-chips');
   if (!host) return;
   host.innerHTML = '';
   for (const f of FILTERS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'vt-chip' + (_filter === f.id ? ' active' : '');
+    b.className = 'vt-chip' + (inst.filter === f.id ? ' active' : '');
     b.setAttribute('role', 'tab');
-    b.setAttribute('aria-selected', String(_filter === f.id));
-    const n = f.id === 'shared' ? _lastItems.filter((x) => (x.shares || []).length).length
-      : f.id === 'expiring' ? _lastItems.filter((x) => x.expiring_soon).length
+    b.setAttribute('aria-selected', String(inst.filter === f.id));
+    const n = f.id === 'shared' ? inst.lastItems.filter((x) => (x.shares || []).length).length
+      : f.id === 'expiring' ? inst.lastItems.filter((x) => x.expiring_soon).length
         : 0;
     b.textContent = n ? `${f.label} ${n}` : f.label;
-    b.addEventListener('click', () => { _filter = f.id; renderChips(); refreshFiles(); });
+    b.addEventListener('click', () => { inst.filter = f.id; renderChips(inst); refreshFiles(inst); });
     host.appendChild(b);
   }
 }
 
-async function refreshFiles() {
-  const body = document.getElementById('vt-fl-body');
+async function refreshFiles(inst) {
+  const body = inst.ctx.byId('vt-fl-body');
   if (!body) return;
   let data;
   try {
-    data = await vtFetch(`/api/files?filter=${encodeURIComponent(_filter)}`);
+    data = await vtFetch(`/api/files?filter=${encodeURIComponent(inst.filter)}`);
   } catch (e) {
     // 2.1.6 — 서버 원문(예: "unauthorized")을 제목 자리에 그대로 놓으면 그게
     // 이 화면의 이름처럼 읽힌다. 제목은 사람 말로, 원문은 detail로, 그리고
     // 다시 해볼 수 있는 일이므로 [다시 시도]를 단다.
     body.innerHTML = '';
-    body.appendChild(errorState('파일 목록을 불러오지 못했습니다', e, refreshFiles));
+    body.appendChild(errorState('파일 목록을 불러오지 못했습니다', e, () => refreshFiles(inst)));
     return;
   }
   const items = data?.items || [];
   // 칩의 개수는 **전체 기준**이라 필터가 'all'일 때만 갱신한다 — 'shared'로
   // 걸러진 응답으로 개수를 세면 "공유 중 2"가 필터를 누르는 순간 자기 자신을
   // 세어 항상 전체 개수와 같아진다.
-  if (_filter === 'all') { _lastItems = items; renderChips(); }
+  if (inst.filter === 'all') { inst.lastItems = items; renderChips(inst); }
 
   const quota = data?.quota || {};
-  const title = document.getElementById('vt-fl-title');
+  const title = inst.ctx.byId('vt-fl-title');
   if (title) {
     title.textContent = `파일 · ${items.length}개${quota.used != null ? ` · ${fmtBytes(quota.used)}` : ''}`;
   }
@@ -159,7 +186,7 @@ async function refreshFiles() {
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'vt-vw-loading';
-    empty.textContent = _filter === 'all'
+    empty.textContent = inst.filter === 'all'
       ? '저장된 파일이 없습니다. 「올리기」 또는 터미널에 이미지 붙여넣기로 추가됩니다.'
       : '해당하는 파일이 없습니다.';
     body.appendChild(empty);
@@ -310,7 +337,7 @@ async function deleteFile(item) {
   } catch (e) {
     showToast('삭제 실패: ' + e.message, 'error');
   }
-  refreshFiles();
+  refreshAllFiles();
 }
 
 // ── 링크 발급 다이얼로그 (§3 화면 3b) ────────────────────────────────────────
@@ -408,7 +435,7 @@ async function issueShare(item, wrap) {
   showToast('링크 발급됨', 'success');
   try { await navigator.clipboard.writeText(absoluteShareUrl(res.url)); showToast('링크가 복사되었습니다', 'success'); } catch (_) {}
   await renderShareList(item, wrap);
-  refreshFiles();
+  refreshAllFiles();
 }
 
 /** 상대 경로(`/s/<token>`)를 지금 보고 있는 출처 기준 절대 URL로. 공유 링크는
@@ -478,7 +505,7 @@ async function renderShareList(item, wrap) {
         } else { showToast('취소 실패: ' + e.message, 'error'); }
       }
       await renderShareList(item, wrap);
-      refreshFiles();
+      refreshAllFiles();
     }));
     row.appendChild(label);
     row.appendChild(acts);

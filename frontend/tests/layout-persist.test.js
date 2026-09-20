@@ -503,3 +503,53 @@ test('같은 세션이 두 탭에 동시에 배정되지 않는다 (wrapper는 �
   S.switchLayoutTab('tb');
   assert.strictEqual(S.getTree().session, null, '두 번째 탭까지 같은 세션을 가져가면 안 된다');
 });
+
+// ── N4: 패널 칸(kind:'panel')의 왕복 ────────────────────────────────────────
+//
+// 패널 칸은 뷰어 칸과 같은 성격이다 — 저장할 것이 **이름 하나**뿐이고(내용은
+// 열릴 때 서버에서 다시 받는다) 새로고침 뒤에도 그 이름이 그대로 유효하다.
+// 세션 id처럼 부팅마다 바뀌지 않으므로 복원이 단순하다.
+
+test('serializeTree — 패널 칸은 패널 이름을 적는다', async () => {
+  const { S, P } = await load();
+  S.openPanelPane('queue', S.getActivePaneId());
+  const snap = P.serializeTree(S.getTree(), () => null);
+  assert.strictEqual(snap.kind, 'panel');
+  assert.strictEqual(snap.panel, 'queue');
+  assert.strictEqual(snap.session, null, '패널 칸에 세션이 남으면 표면 레이어가 그 자리에 xterm을 얹는다');
+});
+
+test('deserializeTree — 패널 이름이 그대로 돌아온다', async () => {
+  const { P } = await load();
+  const node = { t: 'leaf', id: 'p1', session: null, kind: 'panel', panel: 'ports' };
+  const out = P.deserializeTree(node, () => null);
+  assert.strictEqual(out.kind, 'panel');
+  assert.strictEqual(out.panel, 'ports');
+});
+
+test('deserializeTree — 모르는 패널 이름은 빈 pane으로 떨어진다', async () => {
+  // 옛 스냅샷·오타로 그릴 수 없는 이름이 들어올 수 있다. 그리지 못할 이름을
+  // 들고 있느니 사용자가 고를 수 있는 빈 칸이 낫다.
+  const { P } = await load();
+  const out = P.deserializeTree(
+    { t: 'leaf', id: 'p1', session: null, kind: 'panel', panel: 'no-such-panel' }, () => null);
+  assert.strictEqual(out.kind, 'terminal');
+  assert.strictEqual(out.panel, null);
+});
+
+test('패널 칸과 터미널 칸이 한 트리에 섞여도 각자 복원된다', async () => {
+  const { S, P } = await load();
+  const rootId = S.getActivePaneId();
+  const secondId = S.splitPane(rootId, 'row');
+  S.setPaneSession('web-1', rootId);
+  S.openPanelPane('files', secondId);
+
+  const snap = P.serializeTree(S.getTree(), (sid) => ({ id: sid, tmux: 'dev' }));
+  const back = P.deserializeTree(snap, () => 'web-1');
+
+  assert.strictEqual(back.t, 'split');
+  assert.strictEqual(back.a.kind, 'terminal');
+  assert.strictEqual(back.a.session, 'web-1');
+  assert.strictEqual(back.b.kind, 'panel');
+  assert.strictEqual(back.b.panel, 'files');
+});
