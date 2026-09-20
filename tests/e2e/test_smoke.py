@@ -661,45 +661,37 @@ def test_온보딩이_레일과_dock을_덮지_않는다(page):
     assert hit["dock"] == "vt-dock", f"온보딩이 dock을 덮었다: {hit}"
 
 
-def test_온보딩이_모바일_상하단_내비를_덮지_않는다(page):
-    """N38 — 데스크톱 레일·dock에서 두 번 났던 것과 같은 회귀가 모바일 상단
-    24px·하단 내비 52px에서도 그대로 재현됐다(z-index 90/100 vs onboarding의
-    500). 부팅 직후(세션 0개)에 하단 내비 버튼을 실제로 누를 수 있는지 본다."""
+def test_온보딩이_모바일_하단_내비를_덮지_않는다(page):
+    """N38 — 데스크톱 레일·dock에서 두 번 났던 것과 같은 회귀가 모바일 하단
+    내비 52px에서도 그대로 재현됐다(z-index 100 vs onboarding의 500). 부팅
+    직후(세션 0개)에 하단 내비 버튼을 실제로 누를 수 있는지 본다.
+
+    2026-09-20 — **상단 바(`#vt-mnav-top`)가 없어졌다.** 모바일 탐색 개편
+    (`71cf429`)이 그 24px 상태 요약 줄을 걷어내고 「대기 N」 배지를 하단 내비의
+    「작업」 버튼 안으로 옮겼다. 이 테스트는 그 뒤로 없는 요소를 잡으려다
+    `getBoundingClientRect` of null로 죽고 있었다 — 화면이 바뀌었는데 같이
+    안 고쳐진 것이지, 회귀가 아니다. 남은 불변식(하단 내비)만 본다.
+    """
     page.set_viewport_size(COMPACT)
-    # 2026-09-19 — compact의 기본 탭은 **플릿 홈**이고, 그게 떠 있는 동안에는
-    # 온보딩을 숨긴다(60-mobile-hud.css: z-index 500이 플릿 슬롯 90을 덮어
-    # 호스트 스위처가 클릭을 못 받던 결함). 그래서 이 테스트가 보려는 상태
-    # ―「온보딩이 떠 있고, 그게 내비를 덮지 않는가」― 는 **터미널 탭**에서
-    # 재현된다. 탭을 옮긴 뒤 본다.
+    # compact의 기본 탭은 **작업(플릿 홈)**이고, 그게 떠 있는 동안에는 온보딩을
+    # 숨긴다(60-mobile-hud.css: z-index 500이 플릿 슬롯 90을 덮어 호스트
+    # 스위처가 클릭을 못 받던 결함). 이 테스트가 보려는 상태 ―「온보딩이 떠
+    # 있고, 그게 내비를 덮지 않는가」― 는 **터미널 탭**에서 재현된다.
     page.click('#vt-mnav-bottom .vt-mnav-btn[data-mnav="terminal"]')
     page.wait_for_selector(".vt-onboarding", state="visible", timeout=10000)
     page.wait_for_timeout(300)
-    # 상단 바는 **보여줄 게 하나도 없으면 스스로 숨는다**(mobile-nav.js의
-    # `_syncTopBar` — 헤더가 이미 호스트명을 말하고 대기 세션도 없을 때).
-    # 이 스위트가 딱 그 상태라 상단 바는 정상적으로 숨어 있다. 그때 지켜야
-    # 할 불변식은 "덮이지 않는가"가 아니라 **"비운 24px이 같이 닫히는가"**다
-    # (60-mobile-hud.css의 `--mnav-top-h` 주석: 안 닫히면 그 틈으로 뒤의
-    # 터미널이 비쳐 보였다). 보일 때만 히트 테스트를 한다.
     hit = page.evaluate(
         """() => {
-          const topEl = document.getElementById('vt-mnav-top');
           const bottom = document.getElementById('vt-mnav-bottom').getBoundingClientRect();
-          const at = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-mnav-top, #vt-mnav-bottom, .vt-onboarding')?.id || 'onboarding';
-          const tr = topEl.getBoundingClientRect();
+          const at = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-mnav-bottom, .vt-onboarding')?.id || 'onboarding';
           const ob = document.querySelector('.vt-onboarding').getBoundingClientRect();
           return {
-            topHidden: topEl.hidden || tr.height === 0,
-            topGap: getComputedStyle(document.documentElement).getPropertyValue('--mnav-top-h').trim(),
-            obTop: Math.round(ob.top),
-            top: tr.height ? at(tr.left + tr.width / 2, tr.top + tr.height / 2) : null,
+            obBottom: Math.round(ob.bottom),
+            navTop: Math.round(bottom.top),
             bottom: at(bottom.left + bottom.width / 2, bottom.top + bottom.height / 2),
           };
         }"""
     )
-    if hit["topHidden"]:
-        assert hit["topGap"] == "0px", f"상단 바가 숨었는데 자리가 남았다: {hit}"
-    else:
-        assert hit["top"] == "vt-mnav-top", f"온보딩이 상단 내비를 덮었다: {hit}"
     assert hit["bottom"] == "vt-mnav-bottom", f"온보딩이 하단 내비를 덮었다: {hit}"
 
 
