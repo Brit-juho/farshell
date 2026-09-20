@@ -527,6 +527,27 @@ test('deserializeTree — 패널 이름이 그대로 돌아온다', async () => 
   assert.strictEqual(out.panel, 'ports');
 });
 
+test('restoreLayout — 살아있는 세션이 없어도 패널 전용 배치를 복원하고 이후 저장을 연다', async () => {
+  const { window, S, P, calls } = await load();
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 4, savedAt: 100, activeTab: 'panel-tab',
+    tabs: [{
+      id: 'panel-tab', worktreeId: null, hostId: 'local', label: null, active: 'panel-pane',
+      tree: { t: 'leaf', id: 'panel-pane', session: null, kind: 'panel', panel: 'queue' },
+    }],
+  }));
+
+  assert.strictEqual(await P.restoreLayout(), true);
+  assert.strictEqual(S.getTree().kind, 'panel');
+  assert.strictEqual(S.getTree().panel, 'queue');
+
+  S.openPanelPane('files', S.getActivePaneId());
+  P.saveLayoutNow();
+  const put = calls.find((c) => c.opts?.method === 'PUT');
+  assert.ok(put, '세션 없는 부팅에서도 복원 뒤 변경은 서버에 저장돼야 한다');
+  assert.strictEqual(JSON.parse(put.opts.body).ui.layout.tree.panel, 'files');
+});
+
 test('deserializeTree — 모르는 패널 이름은 빈 pane으로 떨어진다', async () => {
   // 옛 스냅샷·오타로 그릴 수 없는 이름이 들어올 수 있다. 그리지 못할 이름을
   // 들고 있느니 사용자가 고를 수 있는 빈 칸이 낫다.

@@ -415,8 +415,9 @@ stage/unstage/commit/push/PR creation need an elevated session (`POST
 
 **The code viewer isn't in the dock at all.** Picking a file in the palette's
 `/` mode opens it **as a pane** (leaf generalization, N4 — `layout/tree.js`'s
-leaf now carries `kind: 'terminal' | 'viewer'`. A `viewer` leaf always has
-`session: null` and only a file path). 2.0's modal code-viewer backdrop is gone.
+leaf now carries `kind: 'terminal' | 'viewer' | 'panel'`. A `viewer` leaf has
+only a file path; a `panel` leaf has one registered dock panel name. Both keep
+`session: null`). 2.0's modal code-viewer backdrop is gone.
 
 ### HUD 24px (`shell/Hud.tsx`)
 
@@ -747,7 +748,7 @@ design.
 | `frontend/js/shell/Fleet.tsx` | Mobile fleet home (N38) |
 | `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 7+1 modes (N5/N40/N46) |
 | `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider (N43) |
-| `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'` (N4) |
+| `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'\|'panel'` (N4) |
 | `frontend/js/layout/breakpoints.js` | The 4 responsive-tier boundaries (single source) |
 | `frontend/js/layout/dom-ids.js` | Tree node id → DOM element id, in one place (the maker and the finder both read it) |
 | `frontend/js/layout/snap.js` | Cell-multiple snapping for pane sizes — pure, unit-tested |

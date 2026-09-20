@@ -535,11 +535,20 @@ function _renderFull() {
     : _renderNode(tree, activePaneId, leaves.length === 1, placement);
   if (_rootEl.children[0] !== rootEl) _rootEl.replaceChildren(rootEl);
 
-  // N35 §6 — 뷰어 칸이 하나라도 있으면 화면이 비어 있는 게 아니다. 온보딩은
-  // position:fixed + z-index:500이라 페인 위를 덮으므로 CSS로 눌러둔다.
+  // N35 §6 — 세션이 아닌 칸이 하나라도 있으면 화면이 비어 있는 게 아니다.
+  // 온보딩은 position:fixed + z-index:500이라 페인 위를 덮으므로 CSS로 눌러둔다.
   // "열 때 remove()"에 기대지 않는 이유: 세션 목록 응답이 늦게 오는 경로가
   // 온보딩을 **다시** 붙인다(실브라우저에서 그대로 재현됐다).
-  document.body.classList.toggle('vt-has-viewer-pane', leaves.some((l) => l.kind === 'viewer'));
+  //
+  // N4(2026-09-20) — **패널 칸도 같다.** 뷰어만 보던 이 판정 때문에, 세션이
+  // 0개일 때 패널 pane을 열면 1152×844 칸이 온보딩 밑에 통째로 깔려 클릭이
+  // 안 갔다(실측: 칸 중앙의 최상위 요소가 `DIV#onboarding`). `.vt-onboarding`을
+  // 둘러싼 같은 회귀의 다섯 번째 자리다 — 레일·dock → 모바일 내비 → 플릿 홈
+  // → 레일 시트(쌓임 맥락) → 이번 패널 칸. 클래스 이름은 그대로 둔다:
+  // 이미 CSS 두 곳이 쓰고 있고(80-dock.css의 규칙과 60-mobile-hud.css의 주석),
+  // 뜻은 처음부터 "뷰어"가 아니라 **"세션 아닌 칸이 있다"**였다.
+  const hasNonTerminalPane = leaves.some((l) => l.kind === 'viewer' || l.kind === 'panel');
+  document.body.classList.toggle('vt-has-viewer-pane', hasNonTerminalPane);
   // 최종 배치를 넘긴다 — 빠진 세션은 대기실로 보내고, 새로 들어온 세션은
   // 그 pane-body 안으로 옮긴 뒤 즉시 실측해 fit을 건다(surface.js 책임).
   surface.setPlacement(placement);

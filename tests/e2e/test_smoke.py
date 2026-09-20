@@ -384,6 +384,42 @@ def test_세션이_없으면_온보딩이_보인다(page):
     assert page.locator(".vt-onboarding").is_visible()
 
 
+def test_세션이_없어도_패널_전용_배치를_복원하고_다음_변경을_저장한다(page):
+    """N4 후속 — 세션 복원 분기를 하나도 타지 않아도 layout 복원은 끝나야 한다.
+
+    이 호출이 빠지면 패널 칸은 새로고침과 함께 사라지고, persist의 저장 가드도
+    영원히 닫힌다. 실제 Chromium에서 부팅 순서·지연 패널 마운트·400ms 저장
+    디바운스까지 한 번에 확인한다.
+    """
+    page.evaluate(
+        """() => localStorage.setItem('vt-layout-v1', JSON.stringify({
+          v: 4, savedAt: Date.now(), activeTab: 'panel-tab',
+          active: 'panel-pane',
+          tree: { t:'leaf', id:'panel-pane', session:null, kind:'panel', panel:'queue' },
+          tabs: [{
+            id:'panel-tab', worktreeId:null, hostId:'local', label:null,
+            active:'panel-pane',
+            tree:{ t:'leaf', id:'panel-pane', session:null, kind:'panel', panel:'queue' }
+          }]
+        }))"""
+    )
+    page.reload(wait_until="load")
+    page.wait_for_function("() => document.documentElement.dataset.appBooted === 'true'")
+    page.wait_for_selector(".vt-pane-panel-root", state="visible", timeout=15000)
+
+    assert page.locator(".vt-onboarding").is_hidden()
+    assert page.evaluate("() => document.body.classList.contains('vt-has-viewer-pane')")
+
+    page.evaluate("() => window.openPanelPane('files')")
+    page.wait_for_function(
+        """() => {
+          const s = JSON.parse(localStorage.getItem('vt-layout-v1') || 'null');
+          return s?.tree?.kind === 'panel' && s.tree.panel === 'files';
+        }""",
+        timeout=5000,
+    )
+
+
 # ── 레이아웃 봉쇄 — 2026-09-08 버그의 클래스 ──────────────────────────────
 #
 # 그날의 버그: rail 세션 카드의 `.card-preview`가 카드 밖으로 1008px 삐져나왔다.
