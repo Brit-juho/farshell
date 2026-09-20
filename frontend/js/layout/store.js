@@ -8,7 +8,7 @@
 // 들어간다" 같은 상태 불일치가 애초에 생길 수 없다 — 착수 전 설계 리뷰에서
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
 import { activeSessionId, sessionDisplayName } from '../core/store.js';
-import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, collectSessions } from './tree.js';
+import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setLeafPanel as _setLeafPanel, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, collectSessions } from './tree.js';
 
 function _genId(prefix) {
   const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -133,6 +133,23 @@ export function openViewerPane(file, paneId = _activePaneId) {
     if (split) target = split;
   }
   _tree = _setLeafViewer(_tree, target, file);
+  _activePaneId = target;
+  _notify();
+  return target;
+}
+
+// N4 — 패널을 pane 칸에 연다. `openViewerPane`과 **같은 규칙**이다: 지정한
+// 칸이 이미 세션을 들고 있으면 덮지 않고 옆으로 쪼갠다(사용자가 보고 있던
+// 터미널을 말없이 지우면 안 된다). 빈 칸·뷰어 칸·다른 패널 칸이면 그 자리를
+// 그대로 쓴다.
+export function openPanelPane(panel, paneId = _activePaneId) {
+  const node = findNode(_tree, paneId);
+  let target = paneId;
+  if (node && node.t === 'leaf' && node.session && node.kind === 'terminal') {
+    const split = splitPane(paneId, 'row');
+    if (split) target = split;
+  }
+  _tree = _setLeafPanel(_tree, target, panel);
   _activePaneId = target;
   _notify();
   return target;
@@ -345,6 +362,9 @@ export function tabGroups() {
 // 분할에 필요한 splitActivePane와, 레일이 그룹을 그리는 데 필요한 tabGroups만
 // 다른 파일들처럼 window로 노출한다.
 window.splitActivePane = splitActivePane;
+// N4 — 팔레트·빈 pane 시트가 지연 청크라서 이 모듈을 정적 import 할 수
+// 없다(ADR-26). `openFileInPane`이 같은 이유로 같은 브리지를 쓴다.
+window.openPanelPane = openPanelPane;
 window.getTabGroups = tabGroups;
 // Rail.tsx가 화면(pane 트리)이 바뀔 때마다 그룹을 다시 계산하려면 이
 // 이벤트가 필요하다 — 세션 스토어 구독(storeSubscribe)만으로는 "이미 있는

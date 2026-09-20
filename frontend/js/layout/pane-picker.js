@@ -17,7 +17,10 @@ import { allSessions, sessionDisplayName } from '../core/store.js';
 import { openPanel, closePanel } from '../panels/panel.js';
 import { switchTo, createSession } from '../term/session.js';
 import { buildSessionCard, updateSessionCard, attachTmuxSession } from '../agent/preview.js';
-import { setActivePane } from './store.js';
+import { setActivePane, openPanelPane } from './store.js';
+// N4 — 이 시트가 고를 수 있는 것이 세션만은 아니게 됐다. 목록은
+// panels/registry.js 하나에서 온다(dock 탭과 짝이 맞아야 한다).
+import { PANELS } from '../panels/registry.js';
 import { icon } from '../ui/icons.js';
 
 const PANEL_ID = 'vt-pane-pick';
@@ -37,6 +40,8 @@ export function openPanePicker(paneId) {
     bodyHTML: `
       <button type="button" class="vt-btn vt-pp-new">${icon('plus', 15)}새 세션</button>
       <div class="vt-card-grid" id="vt-pp-cards"><div class="vt-vw-loading">불러오는 중…</div></div>
+      <div class="vt-pp-sep">또는 패널을 이 칸에</div>
+      <div class="vt-pp-panels" id="vt-pp-panels"></div>
     `,
   });
   if (!panel) return; // 토글 — 이미 열려 있어서 닫기만 했다
@@ -48,6 +53,26 @@ export function openPanePicker(paneId) {
   });
 
   _renderCandidates(paneId, panel.body.querySelector('#vt-pp-cards'));
+  _renderPanelChoices(paneId, panel.body.querySelector('#vt-pp-panels'));
+}
+
+// N4 — "이 칸에 큐/포트/…를 띄운다". 세션 카드와 **다른 줄**에 둔다: 고르는
+// 대상의 종류가 다르고(세션 vs 화면), 세션 목록은 서버를 기다리지만 이쪽은
+// 즉시 그릴 수 있다.
+function _renderPanelChoices(paneId, host) {
+  if (!host) return;
+  host.replaceChildren();
+  for (const [name, meta] of Object.entries(PANELS)) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vt-btn sm quiet vt-pp-panel';
+    b.innerHTML = `${icon(meta.icon, 14)}<span>${meta.label}</span>`;
+    b.addEventListener('click', () => {
+      openPanelPane(name, paneId);
+      closePanel(PANEL_ID);
+    });
+    host.appendChild(b);
+  }
 }
 
 async function _renderCandidates(paneId, cardsEl) {

@@ -11,12 +11,11 @@
 // 워크트리/세션)만 구현했다 — 스니펫 쪽 "새 섹션"과 용어를 공유할 뿐 큐 자체의
 // 드레인 동작을 바꾸는 지시는 아니라고 판단(불명확한 지점, 90-verification.md
 // §4 12항 취지상 문서화하고 진행).
-import { openPanel, closePanel, setPanelPoll } from './panels/panel.js';
+import { openPanel, setPanelPoll } from './panels/panel.js';
 import { icon } from './ui/icons.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { isMac } from './core/env.js';
 
-function closeQueue() { closePanel('vt-queue'); }
 
 /** U8 — 「지금 실행」은 **큐에 투입할 게 있을 때만** 누를 수 있다.
  *
@@ -25,15 +24,24 @@ function closeQueue() { closePanel('vt-queue'); }
  * `refreshQueue`가 목록을 그릴 때마다 부른다(폴링 5초). export하는 이유는
  * 단위 테스트가 DOM 없이도 규칙을 고정할 수 있게 하기 위해서다. */
 export function syncRunButton(root, count) {
-  const btn = root?.querySelector?.('#vt-q-run');
+  // `root`는 인스턴스 ctx(`byId`를 가진 것)이거나 평범한 DOM 루트다. pane
+  // 인스턴스는 안쪽 id가 `vt-q-run--pane-p3`처럼 옮겨져 있어서 `'#vt-q-run'`
+  // 셀렉터로는 못 찾는다 — ctx가 그 접미사를 안다.
+  const btn = root?.byId ? root.byId('vt-q-run') : root?.querySelector?.('#vt-q-run');
   if (!btn) return null;
   btn.disabled = count === 0;
   btn.title = count === 0 ? '큐가 비어 있습니다' : '한 건 지금 투입';
   return btn;
 }
 
-export function showQueue() {
+// N4 — `opts.paneHost`가 있으면 dock/모달이 아니라 **그 pane 칸**에 그린다.
+// 같은 패널이 dock에도 동시에 떠 있을 수 있으므로(사용자 결정, 2026-09-20)
+// 이 함수 안의 모든 DOM 조회는 전역 id가 아니라 `ctx`(자기 인스턴스)를 거친다.
+// 그 전환이 이 패널 이식의 전부다 — 나머지 로직은 손대지 않았다.
+export function showQueue(opts = {}) {
       const panel = openPanel({
+        paneHost: opts.paneHost || null,
+        paneId: opts.paneId || null,
         id: 'vt-queue',
         ariaLabel: '프롬프트 큐',
         headHTML: `
@@ -55,32 +63,34 @@ export function showQueue() {
         onKey: (ev) => {
           // 입력창에서 Esc를 누르면 패널이 닫히는 게 자연스럽지만,
           // 작성 중이던 내용이 날아가므로 입력이 비어 있을 때만 기본 닫기로 넘긴다.
-          const inp = document.getElementById('vt-q-input');
+          const inp = ctx.byId('vt-q-input');
           if (inp && document.activeElement === inp && inp.value.trim()) { inp.value = ''; return true; }
         },
       });
       if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
+      // 이 인스턴스 안에서만 찾는다. dock/모달에서는 전역 조회와 같다.
+      const ctx = panel.ctx;
 
-      panel.el.querySelector('#vt-q-add').addEventListener('click', addQueueItem);
-      panel.el.querySelector('#vt-q-run').addEventListener('click', runQueueOnce);
-      panel.el.querySelector('#vt-q-input').addEventListener('keydown', (ev) => {
+      ctx.byId('vt-q-add').addEventListener('click', () => addQueueItem(ctx));
+      ctx.byId('vt-q-run').addEventListener('click', () => runQueueOnce(ctx));
+      ctx.byId('vt-q-input').addEventListener('keydown', (ev) => {
         // Enter는 줄바꿈(멀티라인 지시가 흔하다), Ctrl/Cmd+Enter가 추가.
-        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); addQueueItem(); }
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); addQueueItem(ctx); }
       });
 
       // 첫 응답이 오기 전까지는 개수를 모른다 — 모르는 동안은 막아둔다.
       // 열자마자 누를 수 있으면 그 찰나에 빈 큐로 요청이 나간다.
-      syncRunButton(panel.el, 0);
-      _loadQueueTargets();
-      refreshQueue();
+      syncRunButton(ctx, 0);
+      _loadQueueTargets(ctx);
+      refreshQueue(ctx);
       // 5초 폴링. 패널이 열려 있을 때만 돈다 — 닫으면 setPanelPoll이 정리한다.
-      setPanelPoll('vt-queue', 5000, refreshQueue);
+      setPanelPoll(panel.el, 5000, () => refreshQueue(ctx));
     }
 
     // 대상 세션 드롭다운 — tmux 세션 목록으로 채운다. 실패해도 "자동"만 남기고 조용히 넘어간다
     // (큐 자체를 쓰는 데는 지장이 없어야 한다).
-    async function _loadQueueTargets() {
-      const sel = document.getElementById('vt-q-target');
+    async function _loadQueueTargets(ctx) {
+      const sel = ctx.byId('vt-q-target');
       if (!sel) return;
       let sessions;
       try {
@@ -113,7 +123,7 @@ export function showQueue() {
     // U9: 드롭다운 첫 옵션("자동")의 문구를 실제 타깃으로 갱신.
     // lock:<세션> 모드면 "그 세션으로 고정돼 있다"까지 드러내야 음성 타깃(fsh voice-target)과
     // 헷갈리지 않는다 — auto가 항상 "현재 보고 있는 세션"은 아니기 때문.
-    function _updateAutoTargetLabel(label, mode) {
+    function _updateAutoTargetLabel(ctx, label, mode) {
       const opt = document.querySelector('#vt-q-target option[value=""]');
       if (!opt) return;
       if (!label) { opt.textContent = '자동 (대상 없음)'; return; }
@@ -122,8 +132,8 @@ export function showQueue() {
         : `자동 (→ ${label})`;
     }
 
-    async function refreshQueue() {
-      const body = document.getElementById('vt-q-body');
+    async function refreshQueue(ctx) {
+      const body = ctx.byId('vt-q-body');
       if (!body) return;
       let d;
       try {
@@ -133,9 +143,9 @@ export function showQueue() {
         return;
       }
       // U9: "자동" 옵션이 실제로 가리키는 세션을 드롭다운 라벨에 바로 반영.
-      _updateAutoTargetLabel(d.auto_target, d.auto_target_mode);
+      _updateAutoTargetLabel(ctx, d.auto_target, d.auto_target_mode);
 
-      syncRunButton(document, d.items.length);
+      syncRunButton(ctx, d.items.length);
 
       if (!d.items.length) {
         // 「지금 실행」이 방금 비활성이 됐으므로 그쪽을 가리키지 않는다 —
@@ -192,13 +202,13 @@ export function showQueue() {
           const ub = document.createElement('button');
           ub.className = 'vt-btn';
           ub.textContent = '재개';
-          ub.onclick = () => unblockQueueItem(it.id);
+          ub.onclick = () => unblockQueueItem(ctx, it.id);
           act.appendChild(ub);
         }
         const rm = document.createElement('button');
         rm.className = 'vt-btn danger';
         rm.textContent = '삭제';
-        rm.onclick = () => removeQueueItem(it.id);
+        rm.onclick = () => removeQueueItem(ctx, it.id);
         act.appendChild(rm);
 
         row.appendChild(idx); row.appendChild(meta); row.appendChild(act);
@@ -215,9 +225,9 @@ export function showQueue() {
       body.appendChild(foot);
     }
 
-    async function addQueueItem() {
-      const inp = document.getElementById('vt-q-input');
-      const sel = document.getElementById('vt-q-target');
+    async function addQueueItem(ctx) {
+      const inp = ctx.byId('vt-q-input');
+      const sel = ctx.byId('vt-q-target');
       const text = (inp.value || '').trim();
       if (!text) return;
       // N6(60 §4): target 스키마가 `{worktree?|session?}`로 바뀌었다 — 2.1.0엔
@@ -239,29 +249,29 @@ export function showQueue() {
       } catch (e) {
         showToast(`추가 실패: ${e.message}`);
       }
-      refreshQueue();
+      refreshQueue(ctx);
     }
 
-    async function removeQueueItem(id) {
+    async function removeQueueItem(ctx, id) {
       try { await vtFetch(`/api/queue/${id}`, { method: 'DELETE' }); }
       catch (e) { showToast(`삭제 실패: ${e.message}`); }
-      refreshQueue();
+      refreshQueue(ctx);
     }
 
-    async function unblockQueueItem(id) {
+    async function unblockQueueItem(ctx, id) {
       try { await vtFetch(`/api/queue/${id}/unblock`, { method: 'POST' }); }
       catch (e) { showToast(`재개 실패: ${e.message}`); }
-      refreshQueue();
+      refreshQueue(ctx);
     }
 
-    async function runQueueOnce() {
+    async function runQueueOnce(ctx) {
       try {
         const r = await vtFetch('/api/queue/run', { method: 'POST' });
         showToast(r.drained ? `투입됨 (남은 ${r.remaining}건)` : '큐가 비었습니다');
       } catch (e) {
         showToast(e.message);
       }
-      refreshQueue();
+      refreshQueue(ctx);
     }
 
 // F3(c): data-action 위임용 등록.

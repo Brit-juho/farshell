@@ -23,6 +23,9 @@ import { paneElId, splitElId } from './dom-ids.js';
 import { snapPx, cellSizeFrom } from './snap.js';
 import { wireRatioResizer } from './resizer.js';
 import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSource } from './dnd.js';
+// N4 — 패널 칸. 레지스트리는 상수 + **동적** import 로더만 들고 있어서
+// 여기서 정적으로 가져와도 panels 청크가 core로 승격되지 않는다(ADR-26).
+import { mountPanelInPane, panelLabel } from '../panels/registry.js';
 import { openPanePicker } from './pane-picker.js';
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
@@ -366,6 +369,15 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
     return paneEl;
   }
 
+  // N4 — 패널 칸. 뷰어와 같은 자리, 같은 규칙: 표면 레이어에 아무것도 넘기지
+  // 않으므로(placement에 안 들어간다) xterm이 이 자리를 덮지 않는다.
+  if (node.kind === 'panel') {
+    nameEl.textContent = panelLabel(node.panel) + labelSuffix;
+    nameEl.removeAttribute('data-tip');
+    _renderPanelBody(bodyEl, node.panel, node.id);
+    return paneEl;
+  }
+
   const s = node.session ? getSession(node.session) : null;
   if (s && s.wrapper) {
     placement.set(node.session, bodyEl);
@@ -410,6 +422,30 @@ function _renderViewerBody(bodyEl, file) {
   loadViewer()
     .then((v) => v.renderFile(host, file))
     .catch((e) => { host.textContent = String(e && e.message ? e.message : e); });
+}
+
+// N4 — 패널 칸의 내용. 뷰어와 같은 이유로 **같은 패널을 다시 그리지 않는다**:
+// 렌더는 트리 구조가 바뀔 때마다 도는데(분할선을 끌기만 해도) 그때마다 패널을
+// 다시 마운트하면 스크롤·입력 중이던 값·폴링이 전부 날아간다.
+//
+// 마운트는 비동기다(패널 화면은 지연 청크). 그 사이에 이 칸이 다른 것으로
+// 바뀌었을 수 있으므로, 도착했을 때 **아직 같은 패널을 기다리는 자리인지**
+// 다시 확인하고 붙인다 — 안 그러면 사용자가 이미 다른 걸 띄운 칸에 뒤늦게
+// 도착한 패널이 겹쳐 붙는다(dock 탭이 같은 종류의 경쟁을 'stale'로 다룬다).
+function _renderPanelBody(bodyEl, panel, paneId) {
+  bodyEl.classList.remove('vt-pane-viewer');
+  delete bodyEl.dataset.viewerFile;
+  if (bodyEl.dataset.panelKind === panel) return;
+  bodyEl.dataset.panelKind = panel || '';
+  bodyEl.replaceChildren();
+  if (!panel) return;
+  bodyEl.classList.add('vt-pane-panel');
+  mountPanelInPane(panel, bodyEl, paneId).then(() => {
+    if (bodyEl.dataset.panelKind !== panel) {
+      // 기다리는 동안 이 칸이 다른 것으로 바뀌었다 — 방금 붙인 것을 걷어낸다.
+      bodyEl.replaceChildren();
+    }
+  });
 }
 
 // L3 2단계 — compact(<720px + pointer:coarse) 렌더 모드: 활성 leaf 하나만

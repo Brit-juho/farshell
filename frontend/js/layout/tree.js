@@ -13,22 +13,39 @@
 // leaf: 화면에 실제로 배치되는 한 칸. session이 null이면 빈 pane(세션 선택 시트로 이어짐).
 // worktree/host는 ADR-10이 미리 뚫어둔 확장 자리 — 2.0에서는 항상 이 값(null/'local')이다.
 //
-// N35 §6 — kind로 "이 칸이 무엇을 보여주는가"가 갈린다. 2.1.0의 값은 둘뿐이다:
+// N35 §6 — kind로 "이 칸이 무엇을 보여주는가"가 갈린다:
 //   'terminal' — 세션(표면 레이어가 xterm wrapper를 얹는다). 기본값.
 //   'viewer'   — 파일 하나(file 경로). 세션과 무관하므로 session은 항상 null이다.
+//   'panel'    — dock 패널 하나(panel 이름: 'queue'·'ports'·'files'·'scm'·'usage').
+//                N4, 2026-09-20. 같은 패널이 dock에도 동시에 떠 있을 수 있다.
 // 트리·분할·닫기·비율은 kind를 전혀 모른다(같은 자료구조 그대로) — 렌더러만
 // 갈라진다. 그래야 "뷰어 칸을 세로로 쪼개 터미널을 붙이는" 조합이 공짜로 된다.
-export function makeLeaf(id, session = null, kind = 'terminal', file = null) {
-  return { t: 'leaf', id, session, kind, file, worktree: null, host: 'local' };
+// 'panel'을 더할 때 이 파일에서 바꾼 것이 **필드 하나뿐**인 이유가 그것이다.
+export function makeLeaf(id, session = null, kind = 'terminal', file = null, panel = null) {
+  return { t: 'leaf', id, session, kind, file, panel, worktree: null, host: 'local' };
 }
 
 // paneId(leaf)를 파일 뷰어 칸으로 바꾼다. 세션은 비운다 — 한 칸이 터미널이면서
 // 동시에 파일일 수는 없고, 남겨두면 표면 레이어가 그 자리에 xterm을 계속 얹는다.
+// paneId(leaf)를 패널 칸으로 바꾼다. 뷰어와 같은 이유로 세션·파일을 비운다 —
+// 한 칸이 동시에 두 가지일 수는 없다.
+export function setLeafPanel(tree, paneId, panel) {
+  function walk(node) {
+    if (node.t === 'leaf') {
+      if (node.id !== paneId) return node;
+      return { ...node, kind: 'panel', panel, file: null, session: null };
+    }
+    const a = walk(node.a), b = walk(node.b);
+    return a === node.a && b === node.b ? node : { ...node, a, b };
+  }
+  return walk(tree);
+}
+
 export function setLeafViewer(tree, paneId, file) {
   function walk(node) {
     if (node.t === 'leaf') {
       if (node.id !== paneId) return node;
-      return { ...node, kind: 'viewer', file, session: null };
+      return { ...node, kind: 'viewer', file, panel: null, session: null };
     }
     const a = walk(node.a), b = walk(node.b);
     return a === node.a && b === node.b ? node : { ...node, a, b };

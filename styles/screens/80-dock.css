@@ -522,3 +522,34 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 /* idle 행은 서브라인이 비는 경우가 있다(마지막 활동 시각이 없을 때). 빈 줄이
    높이를 차지하면 행마다 들쭉날쭉해 보이므로 내용이 없으면 아예 접는다. */
 .vt-wgrail-row-sub:empty, .vt-fleet-row-sub:empty { display:none; }
+
+/* ── N4: pane 칸 안의 패널 (2026-09-20) ──────────────────────────────────
+ *
+ * 패널을 pane 리프로도 띄울 수 있게 되면서 같은 마크업이 서는 자리가 셋이
+ * 됐다: 모달(backdrop) · dock 본문 · pane 칸. dock에서 껍데기를 벗기는 규칙
+ * (`.vt-dock-panel`, 위)을 pane도 그대로 쓴다 — 같은 마크업이 자리마다 다르게
+ * 보이면 안 된다는 판단이 여기서도 같다.
+ *
+ * dock과 **다른 점은 닫기 X 하나**다. dock에서는 탭이 곧 닫기라 X가 중복이지만
+ * (그래서 `display:none`), pane 칸에는 그 탭이 없다 — 칸을 비우는 길은 pane
+ * 헤더의 닫기뿐인데 그건 칸 자체를 없앤다. "이 칸을 계속 쓰되 다른 걸 띄운다"는
+ * 길을 남긴다. */
+.vt-pane-panel-root { height:100%; }
+.vt-pane-panel-root .vt-vw-x { display:block; }
+/* pane 본문은 이미 스크롤 컨테이너다 — 패널이 그 안에서 또 늘어나지 않게
+ * 높이를 칸에 맞춰 가둔다(안 가두면 긴 목록이 pane 밖으로 흘러 터미널 위를
+ * 덮는다, `.vt-pane-viewer`가 같은 이유로 같은 처리를 한다). */
+.vt-pane-body.vt-pane-panel { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+
+/* 빈 pane 시트의 「또는 패널을 이 칸에」 줄. 세션 카드 격자와 **다른 줄**로
+ * 분리한다 — 고르는 대상의 종류가 다르다(세션 vs 화면). */
+.vt-pp-sep {
+  margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2);
+  border-top:1px solid var(--line);
+  font:400 var(--fs-2xs) var(--ui); color:var(--sub);
+}
+.vt-pp-panels {
+  display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5);
+  margin-top:calc(var(--spacing) * 2);
+}
+.vt-pp-panel { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); }

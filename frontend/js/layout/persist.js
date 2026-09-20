@@ -17,6 +17,9 @@
 import { allSessions, getSession } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
 import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves, getTabsWithTrees, getActiveTabId, replaceTabs } from './store.js';
+// N4 — 스냅샷의 `panel` 이름을 검증할 때만 쓴다(상수 Set 하나). 화면 모듈은
+// 여기서 import 하지 않는다 — 그러면 panels 청크가 core로 승격된다(ADR-26).
+import { PANEL_KINDS } from '../panels/registry.js';
 
 const LS_KEY = 'vt-layout-v1';
 const SAVE_DEBOUNCE_MS = 400;
@@ -36,6 +39,10 @@ export function serializeTree(tree, lookup) {
     // N35 §6 — 뷰어 칸은 세션이 아니라 **경로**를 저장한다. 경로는 새로고침
     // 뒤에도 그대로 유효하므로(세션 id와 달리) 그대로 되살아난다.
     if (tree.kind === 'viewer') return { t: 'leaf', id: tree.id, session: null, kind: 'viewer', file: tree.file || null };
+    // N4 — 패널 칸은 **패널 이름**만 저장한다. 그 이름이 곧 무엇을 그릴지이고,
+    // 내용은 열릴 때 서버에서 다시 받으므로 저장할 상태가 따로 없다(뷰어의
+    // 경로와 같은 성격).
+    if (tree.kind === 'panel') return { t: 'leaf', id: tree.id, session: null, kind: 'panel', panel: tree.panel || null };
     // C3 — 아직 못 닿은(unreachable) 칸은 세션 객체가 없다. 그대로 저장하면
     // 다음 저장 한 번에 배치가 사라지므로(레이아웃은 아무 변경에나 저장된다)
     // 무엇을 기다리는 중이었는지를 그대로 다시 적는다.
@@ -64,14 +71,21 @@ export function deserializeTree(node, resolve, taken = new Set()) {
     if (node.kind === 'viewer') {
       // 경로는 서버가 다시 검사한다(fsguard) — 여기서는 문자열인지만 본다.
       const file = typeof node.file === 'string' ? node.file : null;
-      return { t: 'leaf', id: node.id, session: null, kind: 'viewer', file, worktree: null, host: 'local' };
+      return { t: 'leaf', id: node.id, session: null, kind: 'viewer', file, panel: null, worktree: null, host: 'local' };
+    }
+    if (node.kind === 'panel') {
+      // 모르는 패널 이름(옛 스냅샷·오타)은 빈 pane으로 떨어뜨린다 — 그리지
+      // 못할 이름을 들고 있느니 고를 수 있는 빈 칸이 낫다.
+      const panel = PANEL_KINDS.has(node.panel) ? node.panel : null;
+      if (!panel) return { t: 'leaf', id: node.id, session: null, kind: 'terminal', file: null, panel: null, worktree: null, host: 'local' };
+      return { t: 'leaf', id: node.id, session: null, kind: 'panel', panel, file: null, worktree: null, host: 'local' };
     }
     let session = resolve(node.session);
     if (session && taken.has(session)) session = null;
     if (session) taken.add(session);
     // C3 — 호스트는 leaf(신규) → 저장된 session 정보(구버전 스냅샷) 순으로 읽는다.
     const host = node.host || (node.session && node.session.host) || 'local';
-    const leaf = { t: 'leaf', id: node.id, session, kind: 'terminal', file: null, worktree: null, host };
+    const leaf = { t: 'leaf', id: node.id, session, kind: 'terminal', file: null, panel: null, worktree: null, host };
     // 원격 호스트의 세션을 못 찾았다 = 세션이 죽었을 수도 있지만 **호스트가
     // 잠깐 꺼진 것일 수도** 있다. 강등하지 않고 `unreachable`로 남겨 배치를
     // 지킨다. 로컬은 그대로 강등한다 — 로컬 tmux에 이름이 없으면 그 세션은
