@@ -46,7 +46,9 @@ from __future__ import annotations
 import os
 import re
 import socket
+import json
 import subprocess
+import urllib.request
 import sys
 import time
 from pathlib import Path
@@ -246,6 +248,44 @@ def browser(_pw):
 def page(browser, server, request):
     base, token = server
     ctx = browser.new_context(viewport=WIDE)
+    # 2026-09-21 — **저장된 배치를 매 테스트 앞에서 지운다.**
+    #
+    # `f09535f`(세션 0개에서도 레이아웃 복원)부터 이 스위트의 배치가 실제로
+    # 저장된다. 그런데 서버는 세션 스코프로 한 벌뿐이라, 앞 테스트가 만든
+    # 패널·뷰어 pane이 **다음 테스트의 시작 화면**으로 복원된다. 그러면
+    # `layout/panes.js`가 `body.vt-has-viewer-pane`을 켜 온보딩을 숨기고,
+    # 온보딩을 전제하는 테스트들이 줄줄이 무너진다(실측: 6건).
+    #
+    # 브라우저 저장소(컨텍스트마다 새로 생긴다)만으로는 부족하다 — 정본은
+    # 서버의 workspace.json이다. 둘 다 비운다.
+    def _reset_saved_layout():
+        # 브라우저 컨텍스트가 **닫힌 뒤에도** 불러야 하므로(아래 teardown)
+        # `ctx.request`를 쓰지 않는다 — 컨텍스트와 수명을 같이하기 때문이다.
+        try:
+            req = urllib.request.Request(
+                f"{base}/api/workspace?token={token}",
+                data=json.dumps({"ui": {"layout": None}}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="PUT",
+            )
+            urllib.request.urlopen(req, timeout=5).close()
+        except Exception:
+            pass   # 정리 실패가 테스트 결과를 덮으면 안 된다
+
+    _reset_saved_layout()
+    # ⚠ **첫 문서에서만** 지운다. init 스크립트는 `page.reload()`에서도 다시
+    # 도는데, 배치 복원을 검사하는 테스트는 localStorage에 스냅샷을 심고
+    # 새로고침하는 방식이다 — 매번 지우면 그 전제를 지워 버린다(실측으로 그
+    # 테스트 하나가 깨졌다). sessionStorage는 같은 탭의 새로고침을 건너뛰고
+    # 컨텍스트가 바뀌면 함께 비므로 "테스트마다 한 번"이 정확히 된다.
+    ctx.add_init_script(
+        "try {"
+        "  if (!sessionStorage.getItem('__vtE2eLayoutCleared')) {"
+        "    sessionStorage.setItem('__vtE2eLayoutCleared', '1');"
+        "    localStorage.removeItem('vt-layout-v1');"
+        "  }"
+        "} catch (e) {}"
+    )
     pg = ctx.new_page()
     errors: list[str] = []
     bad_responses: list[str] = []
@@ -269,7 +309,13 @@ def page(browser, server, request):
             pg.screenshot(path=f"/tmp/e2e-{safe}.png", full_page=True)
         except Exception:  # 스크린샷 실패가 테스트 결과를 덮으면 안 된다
             pass
+    # ⚠ **컨텍스트를 닫은 뒤 한 번 더 지운다.** 레이아웃 저장은 400ms 디바운스
+    # 뒤 fire-and-forget PUT이라, 앞 테스트의 저장이 **다음 테스트의 초기화보다
+    # 늦게** 서버에 닿을 수 있다(실측: 같은 스위트를 연달아 돌리면 5건이
+    # 들쭉날쭉 깨졌다 — 온보딩을 기다리는데 복원된 패널 칸이 그걸 숨긴다).
+    # 컨텍스트를 먼저 닫아 더 이상 저장이 나가지 않게 한 뒤 지우면 그 창이 닫힌다.
     ctx.close()
+    _reset_saved_layout()
 
 
 # 이 파일의 나머지 테스트는 전부 세션 스코프 `browser`(Chromium 프로세스 하나)를
