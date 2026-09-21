@@ -33,13 +33,35 @@ VT_TUNNEL_HOOK='내-스크립트 또는 셸 한 줄'
 ```
 
 훅이 호출되는 시점: `fsh start` / `fsh mobile` / `fsh voice`(터널 시작),
-`fsh tunnel expose`, `fsh tunnel unexpose`, `fsh tunnel hook`(수동).
+`fsh tunnel expose`, `fsh tunnel unexpose`, `fsh stop`(터널 종료),
+`fsh tunnel hook`(수동).
 
 | 전달 경로 | 내용 |
 |---|---|
 | **stdin** | `라벨<TAB>URL` 줄들. 메인 터널이 첫 줄, 이후 `expose`한 포트들 |
-| `$VT_TUNNEL_EVENT` | `start` / `expose` / `unexpose` / `manual` |
+| `$VT_TUNNEL_EVENT` | `start` / `expose` / `unexpose` / `stop` / `manual` |
 | `$VT_TUNNEL_MAIN_URL` | 메인 터널 URL (없으면 빈 값) |
+
+### `stop` 이벤트
+
+`stop`은 **stdin이 비어서 오는 유일한 이벤트**입니다. "알릴 URL이 없다"가 아니라
+**"이제 접속할 곳이 없다"**는 뜻이므로, 게시 대상에 그 사실을 반영하세요.
+
+익명 터널은 내릴 때마다 주소가 죽습니다. 이 이벤트를 처리하지 않으면 게시해 둔
+페이지가 **죽은 URL을 계속 가리킵니다** — 보는 사람은 훅이 고장난 건지 그냥 꺼진
+건지 구분할 수 없습니다.
+
+```bash
+# 훅 안에서 이렇게 갈라 쓰면 됩니다
+if [ "$VT_TUNNEL_EVENT" = "stop" ]; then
+  echo "접속 종료됨" > ~/Documents/fsh-urls.txt
+else
+  cat > ~/Documents/fsh-urls.txt
+fi
+```
+
+터널이 **떠 있었을 때만** 쏩니다. 이미 꺼진 상태에서 `fsh stop`을 다시 쳐도
+훅은 호출되지 않습니다.
 
 stdin 예시:
 
