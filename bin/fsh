@@ -676,6 +676,24 @@ _run_tunnel_hook() {
     [ -n "$url_now" ] && printf '%s' "$url_now" > "$stamp"
   fi
 
+  # 2026-09-21: `fsh restart`가 생기면서 **cloudflare 익명 터널도 같은 사정**이
+  # 됐다. restart는 cloudflared를 살려 두고 서버만 재기동하므로 start 시점에
+  # URL이 그대로다(실측: 백엔드를 죽였다 살려도 quick tunnel URL 불변, 502 →
+  # 200 자동 복구). 그대로인 주소를 다시 게시하면 노션 블록 타임스탬프만
+  # 의미 없이 바뀐다 — 계약이 "URL이 바뀔 때 호출"이므로 제공자와 무관하게
+  # start는 게이트한다.
+  #
+  # **start에만 건다.** expose/unexpose는 메인 URL이 그대로여도 목록이 바뀌니
+  # 게이트하면 새 포트가 영영 안 알려지고, manual은 사용자가 직접 부른 것이라
+  # 언제나 나가야 하며, stop은 URL이 없는 것 자체가 알릴 내용이다.
+  if [ "$event" = "start" ]; then
+    url_now="$(_main_tunnel_url)"
+    if [ -n "$url_now" ] && [ -f "$stamp" ] && [ "$url_now" = "$(cat "$stamp" 2>/dev/null)" ]; then
+      return 0
+    fi
+    [ -n "$url_now" ] && printf '%s' "$url_now" > "$stamp"
+  fi
+
   local entries
   # 2026-09-21 실측으로 발견 — `stop`인데도 `_tunnel_entries()`를 그대로 부르면
   # 죽은 URL이 나온다. `_main_tunnel_url()`(cloudflare 기본값)은 프로세스
@@ -699,12 +717,24 @@ _run_tunnel_hook() {
     return 0
   fi
 
+  # `stop`의 메인 URL도 비워야 한다 — entries와 같은 이유다. _main_tunnel_url()은
+  # 로그 grep이라 터널을 내린 뒤에도 방금 죽은 주소를 돌려준다. 훅이
+  # `$VT_TUNNEL_MAIN_URL`로 분기하면(계약상 "없으면 빈 값") 죽은 주소를 살아있는
+  # 것으로 읽는다.
+  local main_url=""
+  [ "$event" = "stop" ] || main_url="$(_main_tunnel_url)"
+
   local out rc
   out="$(printf '%s\n' "$entries" | \
     VT_TUNNEL_EVENT="$event" \
-    VT_TUNNEL_MAIN_URL="$(_main_tunnel_url)" \
+    VT_TUNNEL_MAIN_URL="$main_url" \
     /bin/sh -c "$VT_TUNNEL_HOOK" 2>&1)"
   rc=$?
+  # 종료했으면 마지막 게시 주소 기록도 지운다 — 안 지우면 다음 start가 같은
+  # URL을 받았을 때(터널을 새로 띄웠는데 우연히 같을 일은 없지만, 명명 터널과
+  # ngrok 고정 도메인은 항상 같다) 위 게이트에 걸려 "다시 살아났다"는 사실이
+  # 영영 게시되지 않는다.
+  [ "$event" = "stop" ] && rm -f "$stamp"
   if [ $rc -eq 0 ]; then
     echo "  ✓ 훅 실행${out:+: $out}"
   else
@@ -2235,15 +2265,24 @@ cmd_manage() {
 
 cmd_stop() {
   # Wave 1 W1-4: --purge 옵션으로 tmux까지 종료
-  local purge=0
+  #
+  # --keep-tunnel: 공개 입구(cloudflared/ngrok + 워치독)는 남기고 서버만 내린다.
+  # 익명 quick tunnel은 **프로세스가 살아 있는 동안 URL이 유지된다** — 백엔드를
+  # 죽였다 살려도 같은 주소로 돌아온다(2026-09-21 실측: 내리는 동안 502, 복구 후
+  # 200, URL 불변). 그래서 서버만 재기동할 때 터널까지 죽이면 북마크·열어둔 탭·
+  # 폰 홈화면이 **재시작할 때마다 통째로 죽는다.** `fsh restart`가 이 옵션을 쓴다.
+  local purge=0 keep_tunnel=0
   for arg in "$@"; do
     case "$arg" in
-      --purge|-p) purge=1 ;;
+      --purge|-p)    purge=1 ;;
+      --keep-tunnel) keep_tunnel=1 ;;
     esac
   done
 
   echo ""
-  echo "  ⏹  fsh stop"
+  local _hdr="  ⏹  fsh stop"
+  [ "$keep_tunnel" -eq 1 ] && _hdr="$_hdr — 터널은 유지합니다 (URL 보존)"
+  echo "$_hdr"
   echo ""
 
   # 터널이 **떠 있었는지**를 죽이기 전에 기억해 둔다. 종료 훅은 이 값으로만
@@ -2252,7 +2291,9 @@ cmd_stop() {
   local had_tunnel
   had_tunnel="$(_main_tunnel_pids)"
 
-  for svc in voice clip tunnel-watchdog tunnel server; do
+  local _svcs="voice clip tunnel-watchdog tunnel server"
+  [ "$keep_tunnel" -eq 1 ] && _svcs="voice clip server"
+  for svc in $_svcs; do
     local pidfile="$PID_DIR/$svc.pid"
     if [ -f "$pidfile" ]; then
       local pid
@@ -2274,17 +2315,21 @@ cmd_stop() {
   done
 
   # 추가 포트 터널 (fsh tunnel expose)
-  for pidfile in "$PID_DIR"/tunnel-*.pid; do
-    [ -f "$pidfile" ] || continue
-    local epid
-    epid="$(cat "$pidfile")"
-    if kill -0 "$epid" 2>/dev/null; then
-      kill "$epid" 2>/dev/null
-      echo "  ✓ $(basename "$pidfile" .pid) 종료 (PID $epid)"
-    fi
-    rm -f "$pidfile"
-  done
-  rm -f "$TUNNEL_REGISTRY"
+  # --keep-tunnel이면 이것도 남긴다 — expose한 포트는 우리 서버가 아니라 **다른
+  # 앱**을 내보내는 입구라, 우리 서버를 재기동한다고 같이 끊을 이유가 없다.
+  if [ "$keep_tunnel" -eq 0 ]; then
+    for pidfile in "$PID_DIR"/tunnel-*.pid; do
+      [ -f "$pidfile" ] || continue
+      local epid
+      epid="$(cat "$pidfile")"
+      if kill -0 "$epid" 2>/dev/null; then
+        kill "$epid" 2>/dev/null
+        echo "  ✓ $(basename "$pidfile" .pid) 종료 (PID $epid)"
+      fi
+      rm -f "$pidfile"
+    done
+    rm -f "$TUNNEL_REGISTRY"
+  fi
 
   # 혹시 남은 프로세스 정리 — pidfile을 잃어버린 고아만 대상이다.
   #
@@ -2298,14 +2343,18 @@ cmd_stop() {
   # 데몬 3종은 `$VT_DIR/server/*.py` 절대경로로 뜨므로 그 경로째로 매칭하면
   # 트리가 다른 인스턴스와 자연히 갈린다. cloudflared는 포트로 갈린다 —
   # 위에서 이미 쓰는 _main_tunnel_pids()와 같은 기준.
-  for d in voice_daemon clipboard_daemon tunnel_watchdog; do
+  local _daemons="voice_daemon clipboard_daemon tunnel_watchdog"
+  [ "$keep_tunnel" -eq 1 ] && _daemons="voice_daemon clipboard_daemon"
+  for d in $_daemons; do
     pkill -f "$VT_DIR/server/$d.py" 2>/dev/null || true
   done
   # cloudflared는 **포트가 명시된 익명 터널만** 정리한다. 명명 터널
   # (`cloudflared tunnel run <name>`)은 명령줄에 포트가 없어서 내 것인지
   # 남의 것인지 구별할 방법이 없다 — 정리 경로에서 확신 없이 죽이느니
   # 놔두는 쪽이 옳다(위 pidfile 루프가 정상 경로에서 이미 처리한다).
-  if command -v pgrep >/dev/null 2>&1; then
+  # --keep-tunnel이면 이 정리를 통째로 건너뛴다. 여기를 안 막으면 pidfile 루프를
+  # 비켜간 터널이 바로 이 줄에서 죽어, 옵션이 있으나 마나가 된다.
+  if [ "$keep_tunnel" -eq 0 ] && command -v pgrep >/dev/null 2>&1; then
     local leftover
     leftover="$(pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null | tr '\n' ' ')"
     [ -n "${leftover// /}" ] && kill $leftover 2>/dev/null || true
@@ -2316,12 +2365,19 @@ cmd_stop() {
     fuser -k $VT_PORT/tcp 2>/dev/null || true
   fi
 
-  echo "  ✓ 서버/터널/음성 데몬 종료"
+  if [ "$keep_tunnel" -eq 1 ]; then
+    echo "  ✓ 서버/음성 데몬 종료 (터널은 그대로 — URL 유지)"
+  else
+    echo "  ✓ 서버/터널/음성 데몬 종료"
+  fi
   echo ""
 
   # 종료를 알린다. **전부 내린 뒤**에 쏜다 — 훅이 보고하는 상태가 실제와
   # 어긋나면 안 되고, 이 시점엔 _tunnel_entries()가 비어 있는 게 맞다.
-  if [ -n "${had_tunnel// /}" ]; then
+  #
+  # --keep-tunnel이면 쏘지 않는다: 입구는 그대로 살아 있으니 "종료됨"은 거짓이다.
+  # 이때 서버가 잠깐 죽은 것은 터널이 502로 답하는 것으로 드러나고, 곧 복구된다.
+  if [ "$keep_tunnel" -eq 0 ] && [ -n "${had_tunnel// /}" ]; then
     _run_tunnel_hook stop
   fi
 
@@ -2347,6 +2403,46 @@ cmd_stop() {
     fi
     echo ""
   fi
+}
+
+cmd_restart() {
+  # 서버만 다시 띄운다. **공개 입구(cloudflared/ngrok)는 건드리지 않는다.**
+  #
+  # 왜 이 명령이 필요한가 (2026-09-21):
+  #   익명 quick tunnel은 주소가 프로세스 수명에 묶여 있다. 그동안 코드를 고치고
+  #   반영하려면 `fsh stop && fsh start` 말고는 방법이 없었는데, 그 stop이 터널까지
+  #   죽여서 **재시작할 때마다 URL이 통째로 바뀌었다.** 북마크·열어둔 탭·폰 홈화면
+  #   아이콘이 전부 죽고, Service Worker가 캐시 셸을 내주는 바람에 화면은 멀쩡해
+  #   보여서 원인도 안 보였다(서버 로그엔 요청이 한 줄도 안 남는다).
+  #
+  #   그런데 터널을 죽일 이유가 없었다. 실측: cloudflared를 살려 둔 채 백엔드만
+  #   죽였다 살리면 내리는 동안 502를 내다가 복구되고 **URL은 그대로다.**
+  #   `_start_tunnel`은 이미 떠 있는 cloudflared를 재사용하도록 돼 있었으므로
+  #   (같은 파일의 "외부에서 떠있는 cloudflared도 발견하여 재사용"),
+  #   stop 쪽만 터널을 남기게 하면 끝난다.
+  #
+  # 인자는 cmd_start로 그대로 넘긴다(--voice 등).
+  echo ""
+  echo "  ♻️  fsh restart — 서버만 재기동 (입구 유지)"
+
+  local url_before
+  url_before="$(_main_tunnel_url)"
+
+  cmd_stop --keep-tunnel
+  cmd_start "$@"
+
+  local url_after
+  url_after="$(_main_tunnel_url)"
+  echo ""
+  if [ -n "$url_before" ] && [ "$url_before" = "$url_after" ]; then
+    echo "  ✓ 접속 주소 유지됨: $url_after"
+    echo "    열어둔 탭·북마크를 그대로 쓰시면 됩니다."
+  elif [ -n "$url_after" ]; then
+    # 터널이 죽어 있었거나(맥 재부팅 직후 등) 새로 떴다는 뜻 — 주소가 바뀌었다.
+    echo "  ⚠ 접속 주소가 바뀌었습니다: $url_after"
+    [ -n "$url_before" ] && echo "    이전: $url_before"
+  fi
+  echo ""
 }
 
 cmd_doctor() {
@@ -4140,6 +4236,7 @@ case "${1:-help}" in
   mobile)  cmd_mobile ;;
   start)   shift 2>/dev/null || true; cmd_start "$@" ;;
   stop)    shift 2>/dev/null || true; cmd_stop "$@" ;;
+  restart) shift 2>/dev/null || true; cmd_restart "$@" ;;
   status)  cmd_status ;;
   claude)   shift; cmd_claude "$@" ;;
   agent)    shift; cmd_agent "$@" ;;
@@ -4182,7 +4279,9 @@ case "${1:-help}" in
     echo "                          모바일 접속 (--e2e: 암호화, --safe: 위험명령 차단,"
     echo "                          --force: 인증 미설정이어도 공개 터널 강행 — 비권장)"
     echo "    fsh start [--voice]    전체 시작 (서버+터널, --voice로 음성도 함께)"
-    echo "    fsh stop               모든 프로세스 종료"
+    echo "    fsh restart [--voice]  서버만 재기동 — 터널은 유지해 접속 주소가 안 바뀜"
+    echo "    fsh stop [--purge] [--keep-tunnel]"
+    echo "                          종료 (--purge: tmux까지, --keep-tunnel: 입구는 남김)"
     echo "    fsh status             상태 확인"
     echo "    fsh password [clear]   웹 로그인 비밀번호 설정 (해시 저장) / clear=해제"
     echo "    fsh otp [setup|status|disable]"

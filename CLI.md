@@ -18,7 +18,10 @@ Control FarShell from any terminal with the `fsh` command:
 
 ```bash
 fsh start [--voice]    # start everything (server+tunnel, --voice also starts the voice daemon)
-fsh stop [--purge]     # stop (--purge: also fully kill tmux sessions)
+fsh restart [--voice]  # restart the server only, keeping the tunnel — the access URL stays the same
+fsh stop [--purge] [--keep-tunnel]
+                       # stop (--purge: also fully kill tmux sessions;
+                       #       --keep-tunnel: leave the public entrance up)
 fsh status             # check current status
 fsh mobile [--e2e]     # mobile access URL + QR (--e2e: encrypt payload)
 fsh manage             # TUI management tool (sessions/target/hotkeys/status) — Wave 4

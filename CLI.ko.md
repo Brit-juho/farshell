@@ -16,7 +16,10 @@
 
 ```bash
 fsh start [--voice]    # 전체 시작 (서버+터널, --voice로 음성 데몬도 함께)
-fsh stop [--purge]     # 종료 (--purge: tmux 세션까지 완전 종료)
+fsh restart [--voice]  # 서버만 재기동 — 터널을 유지해 접속 주소가 안 바뀜
+fsh stop [--purge] [--keep-tunnel]
+                       # 종료 (--purge: tmux 세션까지 완전 종료,
+                       #       --keep-tunnel: 공개 입구는 남김)
 fsh status             # 현재 상태 확인
 fsh mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
 fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave 4
