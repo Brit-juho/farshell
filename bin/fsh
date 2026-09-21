@@ -677,7 +677,21 @@ _run_tunnel_hook() {
   fi
 
   local entries
-  entries="$(_tunnel_entries)"
+  # 2026-09-21 실측으로 발견 — `stop`인데도 `_tunnel_entries()`를 그대로 부르면
+  # 죽은 URL이 나온다. `_main_tunnel_url()`(cloudflare 기본값)은 프로세스
+  # 생사가 아니라 **로그 파일을 grep**해서 URL을 구하는데(단일 진실 원천 —
+  # 파일 상단 주석), `fsh stop`은 프로세스만 죽이고 로그는 안 지운다. 그래서
+  # 터널을 내린 직후에도 로그엔 방금 죽은 URL이 그대로 남아 있어, `entries`가
+  # 비지 않고 옛 URL을 그대로 돌려준다 — 훅은 "알릴 게 있다"로 착각해
+  # 종료 마커 대신 그 죽은 URL을 다시 게시해 버린다(노션 콜아웃 실측으로 확인:
+  # 타임스탬프만 갱신되고 URL은 그대로였다). `stop`의 계약 자체가 "stdin이
+  # 비어야 종료로 읽힌다"이므로, 여기서 아예 `_tunnel_entries()`를 부르지
+  # 않고 강제로 비운다.
+  if [ "$event" = "stop" ]; then
+    entries=""
+  else
+    entries="$(_tunnel_entries)"
+  fi
   # `stop`은 비어 있는 게 정상이자 알려야 할 내용 그 자체다 — 여기서 걸러내면
   # 종료 사실이 영영 전달되지 않는다. 나머지 이벤트는 알릴 게 없으면 안 쏜다.
   if [ -z "$entries" ] && [ "$event" != "stop" ]; then
