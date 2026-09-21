@@ -63,6 +63,13 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# 격리 서버가 쓴 tmux 소켓을 뒷정리하려고 server/ 의 공용 헬퍼를 쓴다.
+# pytest.ini의 `pythonpath = server` 로 이미 경로에 있지만, 이 파일은 경로를
+# 명시해서 돌리는 일이 많아(`pytest tests/e2e`) 여기서 한 번 더 보장한다.
+if str(ROOT / "server") not in sys.path:
+    sys.path.insert(0, str(ROOT / "server"))
+import tmux_sockets  # noqa: E402
+
 # 반응형 3구간 — frontend/js/layout/breakpoints.js와 같은 경계값.
 COMPACT = {"width": 390, "height": 780}
 REGULAR = {"width": 900, "height": 800}
@@ -108,7 +115,7 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         VT_PORT=str(port),
         VT_AUTH_TOKEN=token,
         VT_WORKSPACE_PATH=str(tmp / "workspace.json"),
-        VT_TMUX_SOCKET=f"fsh-e2e-{port}",
+        VT_TMUX_SOCKET=_tmux_socket(port),
         VT_NETWORK_MODE="localhost",
         VT_STATE_DIR=str(tmp / "state"),      # ~/.vt/ 대신 여기에 쓰게
         VT_CONFIG=str(tmp / "no-such.env"),   # ~/.vt.env를 읽지 않게
@@ -119,6 +126,11 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         PYTHONUNBUFFERED="1",
     )
     return env
+
+
+def _tmux_socket(port: int) -> str:
+    """이 격리 서버가 쓸 전용 tmux 소켓 이름 — 이름을 만드는 유일한 곳."""
+    return f"fsh-e2e-{port}"
 
 
 def _read_log(path, tail: int = 4000) -> str:
@@ -178,6 +190,10 @@ def server(tmp_path_factory):
         except subprocess.TimeoutExpired:
             proc.kill()
         log_file.close()
+        # 격리 서버가 띄운 tmux 서버는 **서버 프로세스를 죽여도 남는다** — 별도
+        # 프로세스라서 부모를 따라 내려가지 않는다. 여기서 죽이지 않으면 tmux
+        # 서버가 계속 돌고, 죽이더라도 소켓 파일은 /tmp/tmux-<uid>/ 에 쌓인다.
+        tmux_sockets.kill_server(_tmux_socket(port))
 
 
 @pytest.fixture(scope="session")

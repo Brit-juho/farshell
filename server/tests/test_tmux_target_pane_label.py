@@ -9,6 +9,7 @@ import uuid
 
 import pytest
 
+import tmux_sockets
 import tmux_target
 
 
@@ -35,7 +36,7 @@ def tmux_server(monkeypatch):
     monkeypatch.setattr(tmux_target, "TMUX_BASE", BASE)
     _tmux("new-session", "-d", "-s", "dev", "-x", "80", "-y", "24")
     yield
-    subprocess.run(BASE + ["kill-server"], capture_output=True, timeout=5)
+    tmux_sockets.kill_server(SOCKET)
 
 
 def test_pane_label_formats_session_window_pane(tmux_server):

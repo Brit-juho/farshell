@@ -14,6 +14,7 @@ import pytest
 
 import preview
 import tmux_runner
+import tmux_sockets
 
 # ⚠ 소켓 이름은 **테스트마다 새로 만든다**(`test_tmux_paste.py`가 이미 쓰는
 # 관용구). 고정 이름을 쓰면 픽스처의 `kill-server`와 다음 테스트의
@@ -38,7 +39,7 @@ def tmux_server(monkeypatch, tmp_path):
     monkeypatch.setattr(tmux_runner, "VT_TMUX_SOCKET", SOCKET)
     monkeypatch.setattr(tmux_runner, "VT_TMUX_CONF", None)
     yield tmp_path
-    subprocess.run(BASE + ["kill-server"], capture_output=True, timeout=5)
+    tmux_sockets.kill_server(SOCKET)
 
 
 def test_capture_survives_tall_window_with_short_content(tmux_server):

@@ -5,7 +5,7 @@
 끈다(우리가 이미 위험 제어문자를 제거했고, vis(3)는 비ASCII를 오염시킬 수 있다).
 
 실제 tmux 서버가 필요한 테스트는 **전용 소켓**(VT_TMUX_SOCKET)을 쓰고 끝나면
-그 소켓만 kill-server한다 — 사용자 실세션과 섞지 않는다.
+그 소켓만 정리한다(`tmux_sockets.kill_server`) — 사용자 실세션과 섞지 않는다.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import uuid
 import pytest
 
 import tmux_paste
+import tmux_sockets
 
 pytestmark = pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux 미설치")
 
@@ -56,7 +57,7 @@ SOCKET = f"fsh-paste-test-{uuid.uuid4().hex[:8]}"
 
 @pytest.fixture
 def isolated_tmux(monkeypatch):
-    """전용 소켓 + 전용 세션. 끝나면 그 소켓만 kill-server."""
+    """전용 소켓 + 전용 세션. 끝나면 그 소켓만 정리한다(소켓 파일까지)."""
     monkeypatch.setenv("VT_TMUX_SOCKET", SOCKET)
     import importlib
     import tmux_runner
@@ -72,7 +73,7 @@ def isolated_tmux(monkeypatch):
     )
     time.sleep(0.4)
     yield session, out_file
-    subprocess.run(["tmux", "-L", SOCKET, "kill-server"], capture_output=True, timeout=5)
+    tmux_sockets.kill_server(SOCKET)
     try:
         os.remove(out_file)
     except OSError:

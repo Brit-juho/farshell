@@ -10,6 +10,7 @@ import uuid
 import pytest
 
 import tmux_runner
+import tmux_sockets
 import tmux_target
 
 # ⚠ 소켓 이름은 **테스트마다 새로 만든다**(`test_tmux_paste.py`가 이미 쓰는
@@ -35,7 +36,7 @@ def tmux_server(monkeypatch, tmp_path):
     monkeypatch.setattr(tmux_runner, "VT_TMUX_SOCKET", SOCKET)
     monkeypatch.setattr(tmux_runner, "VT_TMUX_CONF", None)
     yield tmp_path
-    subprocess.run(BASE + ["kill-server"], capture_output=True, timeout=5)
+    tmux_sockets.kill_server(SOCKET)
 
 
 def test_session_for_cwd_returns_none_when_no_match(tmux_server):
