@@ -342,6 +342,11 @@ def check_claude_md_is_an_index(problems: list[str]) -> None:
 # 넓게 잡으면 오탐이 쌓이고 아무도 안 보게 된다.
 PERSONAL_PATTERNS = (
     (r"\b[a-z0-9-]+\.ngrok-free\.(app|dev)\b", "실제 ngrok 도메인으로 보인다"),
+    # 2026-09-21: ngrok과 ts.net은 보면서 **정작 기본 제공자인 cloudflare는 안 봤다.**
+    # 그래서 `docs/help/tunnel-hook.md`가 실제로 떴던 quick tunnel 주소 두 개를
+    # stdin 예시로 들고 공개 리포에 남아 있었다. 익명 터널 주소는 금방 죽어 위험은
+    # 낮지만, "언제 떠 있었는지"를 말해주는 값이고 계약 7은 예외를 두지 않는다.
+    (r"\b[a-z0-9-]+\.trycloudflare\.com\b", "실제 cloudflare quick tunnel 주소로 보인다"),
     (r"\b[a-z0-9-]+\.ts\.net\b", "Tailscale MagicDNS 이름으로 보인다"),
     (r"/Users/(?!<user>|you\b|USER\b)[a-z][a-z0-9_-]{1,}/", "개인 홈 경로로 보인다"),
     (r"\b(?!127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|100\.64\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
