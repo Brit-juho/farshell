@@ -954,8 +954,20 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
     """
     page = isolated_page
     page.evaluate("() => window.createSession && window.createSession()")
-    page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
-    page.wait_for_timeout(800)   # PTY 연결 + 셸 프롬프트
+    # ⚠ `.vt-pane-body`를 기다리는 것으로는 부족하다 — **빈 pane에도 있다.**
+    # 세션이 아직 그 칸에 안 들어왔는데 드롭하면 `_paneSessionId()`가 null이라
+    # 업로드만 되고 경로는 안 꽂힌다(CI에서 실제로 그렇게 깨졌다, 로컬은
+    # 800ms 대기로 우연히 가려져 있었다). 터미널이 그 칸 안에 실제로 붙었고
+    # WS가 열렸는지를 직접 본다.
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=20000)
+    page.wait_for_function(
+        """() => {
+          const s = Object.values(window.allSessions())[0];
+          return !!(s && s.ws && s.ws.readyState === 1 && s.wrapper);
+        }""",
+        timeout=20000,
+    )
+    page.wait_for_timeout(500)   # 셸 프롬프트가 한 번 찍힐 여유
     session_ids = page.evaluate("() => Object.keys(window.allSessions())")
     try:
         name = f"e2e-pane-{int(time.time())}.txt"
@@ -970,7 +982,18 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
             }""",
             [name],
         )
-        # 업로드 → sendPaste → PTY 에코. **DOM이 아니라 xterm 버퍼를 읽는다** —
+        # 단계를 나눠 본다: 먼저 **올라갔는지**. 한 번에 버퍼만 기다리면 실패했을
+        # 때 "업로드가 안 된 것"과 "경로가 안 꽂힌 것"을 구분할 수 없다.
+        page.wait_for_function(
+            """async (n) => {
+              const r = await fetch('/api/files', { credentials: 'same-origin' });
+              const j = await r.json().catch(() => null);
+              return !!(j && (j.files || j).some?.((f) => (f.name || '').includes(n)));
+            }""",
+            arg=name, timeout=15000,
+        )
+
+        # 그다음 **경로가 꽂혔는지**. DOM이 아니라 xterm 버퍼를 읽는다 —
         # 렌더러가 WebGL이라 화면은 캔버스고 `.xterm-screen`의 textContent는 비어
         # 있다(실측으로 한 번 헛다리를 짚었다).
         read_buf = """() => {
