@@ -64,6 +64,7 @@ fsh voice                 # 음성 데몬이 도는 터미널이 열린다
                           # 거기서 세션을 고른다 (예: claude --resume)
 Ctrl+Shift+M              # 말하면 tmux에 바로 입력된다
                           # 결과는 이어폰에 TTS로 돌아온다
+fsh restart               # 서버만 재기동 — 접속 주소가 안 바뀐다
 fsh stop                  # 끝나면 종료
 ```
 

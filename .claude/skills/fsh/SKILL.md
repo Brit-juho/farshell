@@ -150,10 +150,25 @@ fsh mobile --e2e      # cloudflared 터널 너머 페이로드 암호화
 fsh status
 ```
 
+#### 재시작 ("재시작", "서버만 다시", "코드 반영")
+
+**`fsh stop && fsh start` 대신 이걸 쓰세요.** 서버만 다시 띄우고 터널은 그대로
+두므로 **접속 주소가 안 바뀝니다** — 열어둔 탭·북마크·폰 홈화면이 그대로 삽니다.
+
+```bash
+fsh restart          # 서버만 재기동 (입구 유지)
+fsh restart --voice  # 음성 데몬까지 함께
+```
+
+익명 터널은 주소가 cloudflared 프로세스 수명에 묶여 있어서, `fsh stop`으로 터널을
+내리면 그 주소는 영영 죽습니다. tmux 세션은 두 경우 모두 살아남습니다.
+
 #### 종료
 
 ```bash
-fsh stop
+fsh stop                 # 전부 종료 (터널도 내려가 주소가 죽음)
+fsh stop --keep-tunnel   # 서버만 내리고 입구는 유지
+fsh stop --purge         # tmux 세션까지 완전 종료
 ```
 
 ### 프로세스 수명
@@ -162,6 +177,8 @@ fsh stop
 - Claude 세션을 닫아도 계속 실행됨
 - `fsh stop` 또는 맥 재시작 전까지 유지
 - 아무 터미널에서나 `fsh stop`으로 종료 가능
+- **터널 URL은 cloudflared 프로세스가 사는 동안만 유효** — `fsh stop` 후
+  `fsh start`하면 주소가 바뀐다. 주소를 지키려면 `fsh restart`
 
 ### 트러블슈팅
 

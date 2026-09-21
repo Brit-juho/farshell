@@ -65,6 +65,7 @@ fsh voice                 # opens a terminal running the voice daemon
                           # pick your session there, e.g. claude --resume
 Ctrl+Shift+M              # speak -> typed straight into tmux
                           # the result comes back as TTS in your earbuds
+fsh restart               # restart the server only — the access URL stays the same
 fsh stop                  # shut everything down
 ```
 
