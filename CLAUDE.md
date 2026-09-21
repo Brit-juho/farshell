@@ -88,7 +88,7 @@ two drift.
 
 ---
 
-## Two rules that are easy to get wrong
+## Three rules that are easy to get wrong
 
 **Personal values never enter this repo.** Machine-specific config lives in `~/.vt.env`
 (gitignored) and personal agent instructions live in `~/.claude/CLAUDE.md` — not here.
@@ -96,4 +96,11 @@ Real hostnames, reserved domains, usernames, tailnet names and public IPs are no
 acceptable as "examples"; `scripts/check_docs.py` scans for them.
 
 **The single tmux server principle:** the `fsh` CLI, the server, the voice daemon and the
-hooks all use the isolated `-L fsh` socket, kept separate from your own `tmux ls`.
+hooks all use the isolated `-L fsh` socket, kept separate from your own `tmux ls`. A bare
+`tmux ls` therefore reports "no server running" while FarShell's sessions are alive and well —
+that is correct, not a fault.
+
+**`fsh restart`, never `fsh stop && fsh start`.** An anonymous tunnel's URL lives and dies with
+the cloudflared process, so a `stop` that takes the tunnel with it burns the address — bookmarks,
+open tabs and the phone's home-screen icon all die. `fsh restart` bounces the server and leaves
+the entrance up, keeping the URL. Details and the measurements: [`docs/ref/tunnel.md`](./docs/ref/tunnel.md).

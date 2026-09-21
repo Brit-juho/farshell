@@ -346,8 +346,33 @@ PERSONAL_PATTERNS = (
     (r"/Users/(?!<user>|you\b|USER\b)[a-z][a-z0-9_-]{1,}/", "개인 홈 경로로 보인다"),
     (r"\b(?!127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|100\.64\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
      "공인 IP로 보인다"),
+    # 툴체인 절대경로. 2026-09-21에 `.claude/skills/fsh-{start,voice}.md`가
+    # `/opt/homebrew/Caskroom/miniforge/base/envs/whisper/bin/python`을 박아둔 채
+    # 이 검사를 통과하고 있었다 — 위 패턴들은 홈 경로·IP·도메인만 봤다. 이런
+    # 경로는 **사람마다 다르다**(Homebrew 접두사, conda 배포판, 환경 이름 전부).
+    # 문서가 시키는 대로 따라 한 사람은 "no such file"을 보게 된다. 올바른 답은
+    # 언제나 `~/.vt.env`의 VT_PYTHON이나 `fsh`/`run_server.sh`에 맡기는 것이다.
+    (r"(/opt/homebrew|/usr/local/Caskroom|/opt/miniforge|/opt/anaconda|/opt/miniconda)/\S*/bin/\S+",
+     "개인 툴체인 절대경로로 보인다 — VT_PYTHON이나 fsh/run_server.sh에 맡길 것"),
 )
+# 문서에는 모든 패턴을 적용한다 — 예시로 적힌 IP·도메인도 실제 값이면 곤란하다.
 PERSONAL_SCAN_GLOBS = ("*.md", "config/*.env", ".claude/skills/**/*.md", "docs/ref/*.md", "docs/help/*.md", "docs/guide/*.md")
+
+# 2026-09-21: 문서만 보다가 **소스에 박힌 개인 경로를 6주 동안 놓쳤다** —
+# server/tests/test_notify_fallback.py가 실제 홈 경로(사용자명 + 사내 프로젝트명)를
+# 테스트 픽스처로 들고 공개 리포에 올라가 있었다. 다른 테스트들은 전부 `/Users/x`,
+# `/Users/example` 자리표시자를 쓰고 있었으니 관례가 없던 게 아니라 검사가 없던 것이다.
+#
+# **소스에는 경로 패턴만 적용한다.** IP를 같이 보면 오탐이 37건 쏟아진다 —
+# 합성 테스트 픽스처(1.1.1.1, 9.9.9.9), RFC 5737 문서용 대역(203.0.113.x),
+# network_access.py의 대역 상수(172.16.0.0, 169.254.0.0)가 전부 걸린다. 그건
+# 정상적인 코드다. 반면 **실제 홈 경로나 개인 툴체인 경로가 소스에 있을 정당한
+# 이유는 없다** — 사람마다 다르므로 그대로는 아무 데서도 동작하지 않는다.
+SOURCE_SCAN_GLOBS = (
+    "server/**/*.py", "tests/**/*.py", "scripts/**/*.py",
+    "frontend/js/**/*.js", "bin/*", "lib/*.sh", "*.sh",
+)
+SOURCE_PATTERN_REASONS = ("개인 홈 경로로 보인다", "개인 툴체인 절대경로로 보인다")
 
 # 명백한 자리표시자는 통과시킨다. 이게 없으면 "예시를 쓰라"고 해놓고 예시를
 # 잡아내는 검사가 되어, 사람들이 검사를 끄는 쪽으로 간다.
@@ -358,9 +383,17 @@ PLACEHOLDER_ANGLE = re.compile(r"<[a-z][a-z0-9_-]*>")
 
 
 def check_no_personal_values(problems: list[str]) -> None:
-    for pattern in PERSONAL_SCAN_GLOBS:
+    _scan(problems, PERSONAL_SCAN_GLOBS, PERSONAL_PATTERNS)
+    # 이 파일 자신은 패턴 문자열을 들고 있을 수밖에 없다 — 스스로를 검사하면
+    # 검사기를 고칠 때마다 검사기가 빨개진다.
+    source_pats = tuple(pr for pr in PERSONAL_PATTERNS if pr[1].startswith(SOURCE_PATTERN_REASONS))
+    _scan(problems, SOURCE_SCAN_GLOBS, source_pats, skip={pathlib.Path(__file__).resolve()})
+
+
+def _scan(problems: list[str], globs, patterns, skip=frozenset()) -> None:
+    for pattern in globs:
         for path in ROOT.glob(pattern):
-            if not path.is_file():
+            if not path.is_file() or path.resolve() in skip:
                 continue
             try:
                 text = path.read_text()
@@ -369,7 +402,7 @@ def check_no_personal_values(problems: list[str]) -> None:
             for line_no, line in enumerate(text.splitlines(), 1):
                 if any(h in line for h in PLACEHOLDER_HINTS) or PLACEHOLDER_ANGLE.search(line):
                     continue
-                for regex, why in PERSONAL_PATTERNS:
+                for regex, why in patterns:
                     m = re.search(regex, line)
                     if m:
                         rel = path.relative_to(ROOT)

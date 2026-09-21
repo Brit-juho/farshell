@@ -20,21 +20,33 @@ Cursor, Jules and others. Claude Code reads `CLAUDE.md`; Gemini CLI reads `GEMIN
 ## Commands
 
 ```bash
-npm test                      # tsc --noEmit, then node:test + jsdom (535 tests)
+npm test                      # tsc --noEmit, then node:test + jsdom (585 tests)
 npm run typecheck             # tsc --noEmit alone. Vite only transpiles — it does NOT
                               #   type-check, so a `.tsx` referencing an undefined name
                               #   builds and ships. That shipped a real ReferenceError
                               #   that killed the rail (2026-09-17); `npm test` runs this first now.
 npm run build                 # Vite, two separate passes — see vite.config.js header
-.venv/bin/python -m pytest    # server (1270 tests), testpaths = server/tests
+.venv/bin/python -m pytest    # server (1276 tests), testpaths = server/tests
                               #   ⚠ the repo root `tests/` is NOT in testpaths and CI does
                               #   not run it — put new server tests in server/tests/
 pytest tests/e2e -v           # real-browser smoke, needs playwright (requirements-dev.txt)
 python3 scripts/check_docs.py --strict      # CI gate: routes ↔ API.md, fsh help ↔ docs/help/
 python3 scripts/check_css_vars.py --strict  # CI gate: no undefined CSS vars
-./run_server.sh               # start the server locally
+./run_server.sh               # start the server locally (foreground, no tunnel)
 fsh status                    # runtime state (server, tunnel, tmux, voice)
+fsh restart                   # apply code changes to a running instance — see below
 ```
+
+**To apply a change to a running instance, use `fsh restart`, never `fsh stop && fsh start`.**
+An anonymous Cloudflare quick tunnel's URL is bound to the **cloudflared process lifetime**,
+not to the server, so a `stop` that also kills the tunnel burns the address: every bookmark,
+open tab and phone home-screen icon dies with it. Measured 2026-09-21: killing only the
+backend returns 502 for the gap and then recovers to 200 on the **same URL**. `fsh restart`
+is `fsh stop --keep-tunnel` plus `fsh start`, and `_start_tunnel` reuses the live cloudflared.
+
+This is easy to get wrong because the failure is invisible from both ends: `frontend/sw.js`
+serves the cached app shell when `fetch` rejects, so a dead address still renders the full UI,
+and the server log shows nothing at all because nothing reached it.
 
 Run all four checks before committing. CI runs the same ones.
 
