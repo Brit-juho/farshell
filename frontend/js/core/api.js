@@ -6,10 +6,21 @@
 // API_BASE/_tokenQuery는 core/env.js가 window에 심어둔 값을 그때그때 읽는다 —
 // _tokenQuery는 쿠키 교환 완료 시 ''로 재할당되므로 매번 최신값을 봐야 한다.
 
+import { noteNetworkError, noteResponse } from './reachability.js';
+
 export async function vtFetch(path, opts) {
   const tokenQuery = window._tokenQuery || '';
   const sep = path.includes('?') ? '&' : '?';
-  const res = await fetch(`${window.API_BASE}${path}${sep}${tokenQuery.replace(/^[?&]/, '')}`, opts);
+  // 도달 여부를 여기서 센다 — 앱의 거의 모든 서버 호출이 이 한 곳을 지난다.
+  // 호출부는 아무것도 안 바뀐다(예외/반환값 동일): 실패를 기록만 하고 그대로 던진다.
+  let res;
+  try {
+    res = await fetch(`${window.API_BASE}${path}${sep}${tokenQuery.replace(/^[?&]/, '')}`, opts);
+  } catch (e) {
+    noteNetworkError();
+    throw e;
+  }
+  noteResponse(res.status);
   let data = null;
   try { data = await res.json(); } catch (_) { data = null; }
   if (!res.ok) {
@@ -41,7 +52,13 @@ export function apiFetch(url, opts = {}) {
   if (token && typeof url === 'string' && url.startsWith(window.API_BASE)) {
     opts = { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` } };
   }
-  return fetch(url, opts);
+  // vtFetch와 같은 이유로 도달 여부를 기록한다. 단 **Response를 그대로 돌려주는
+  // 계약은 건드리지 않는다** — 호출부가 res.ok/res.json()을 직접 보는 코드라서
+  // 여기서 던지거나 감싸면 25곳 넘는 호출부가 조용히 깨진다.
+  return fetch(url, opts).then(
+    (res) => { noteResponse(res.status); return res; },
+    (e) => { noteNetworkError(); throw e; },
+  );
 }
 
 // 서버가 준 문자열은 절대 innerHTML 로 넣지 않는다 — textContent 경유로 이스케이프.
