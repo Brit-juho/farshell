@@ -47,29 +47,23 @@ export function allSessions() {
 /**
  * 세션의 표시 이름 — **단일 출처**.
  *
- * 2.1.2까지 이 값의 출처는 탭 DOM이었다(`.tab-name`의 textContent). 그래서
- * 이름이 필요한 곳마다 DOM을 뒤졌고, 그 자리가 10개 파일에 흩어져 있었다.
- * 세션 탭 줄(#tabs)을 워크트리 탭 안으로 흡수하려면(10-shell-layout.md §4
- * 3단계) 그 DOM이 사라져야 했고, 그러면 이름도 같이 사라진다 — 먼저 출처를
- * 레코드로 옮겼다.
+ * 2026-09-21 설계 — tmux 세션의 이름은 **tmux 세션 이름 그 자체**다. 예전엔
+ * 사용자가 지은 `displayName`이 tmux 진짜 이름보다 우선이었는데, 그러면 이
+ * 세션을 rename한 뒤 tmux 밖(iTerm2, 다른 기기)에서 이름이 또 바뀌어도 이
+ * 화면만 옛 이름을 계속 보여주는 두 번째 진실이 생겼다. `s.tmuxName`은
+ * 살아있는 동안 계속 최신으로 동기화되므로(Rail.tsx의 폴링, renameSession의
+ * 즉시 갱신) 그냥 그대로 읽으면 된다.
  *
- * 이름을 **쓰는** 곳은 세 군데뿐이다: 세션 생성(addSession), 사용자 변경
- * (renameSession), 워크트리 자동 라벨(term/tab-worktree.js). 그 셋이
- * `displayName`을 갱신하고, 나머지는 전부 이 함수로 읽는다.
+ * 비 tmux(일반) 세션은 tmux 정체성이 없어 이 정책의 대상이 아니다 — 여전히
+ * `displayName`(세션 생성 시 addSession, 사용자 변경 시 renameSession이 쓴다)
+ * 을 쓴다.
  */
 export function sessionDisplayName(id) {
   const s = sessions[id];
   if (!s) return String(id || '').slice(0, 8);
   const tmux = s.tmuxName || s.tmux_name;
-  // 2026-09-19 후속(사용자 지적) — 예전 서버 코드가 tmux 세션의 이름을
-  // `tmux:<이름>` 꼴로 붙여서 돌려줬다. 그 값이 이 세션의 displayName에
-  // 이미 저장돼 있으면(워크스페이스 스냅샷에 박혀 서버를 고쳐도, 재시작해도
-  // 안 지워진다) 계속 "tmux:1"처럼 보인다 — 진짜 사용자가 지은 이름이
-  // 아니라 그 옛 접두사이므로 무시하고 깨끗한 tmux 이름으로 되돌린다.
-  // 사용자가 그 뒤 정말로 이름을 바꾸면(renameSession) 이 조건에 안
-  // 걸리므로 새 이름이 그대로 보인다.
-  if (s.displayName && s.displayName !== `tmux:${tmux}`) return s.displayName;
   if (tmux) return tmux;
+  if (s.displayName) return s.displayName;
   // 일반(비 tmux) 세션의 폴백 이름이 id를 8자로 잘라 붙인 의미 없는
   // 문자열이었다 — 열린 순서대로 "터미널 1", "터미널 2"…
   return `터미널 ${plainSessionOrdinal(id)}`;
@@ -94,6 +88,18 @@ export function setSessionDisplayName(id, name) {
   const s = sessions[id];
   if (!s) return;
   s.displayName = name;
+  notify();
+}
+
+/** tmux 세션 이름의 로컬 캐시를 최신으로 맞춘다(2026-09-21 설계 — tmux 세션
+ * 이름이 단일 진실이라 이 필드가 sessionDisplayName의 실제 출처다). 이 UI로
+ * rename한 직후(term/session.js)와, 레일의 5초 폴링이 살아있는 세션의 실시간
+ * tmux 이름을 다시 확인할 때(shell/Rail.tsx) 둘 다 이 함수를 거친다 — 값이
+ * 같으면 굳이 구독자를 깨우지 않는다(폴링마다 매번 재렌더되는 걸 막는다). */
+export function setSessionTmuxName(id, tmuxName) {
+  const s = sessions[id];
+  if (!s || !tmuxName || s.tmuxName === tmuxName) return;
+  s.tmuxName = tmuxName;
   notify();
 }
 
@@ -193,5 +199,6 @@ window.orderedSessionIds = orderedSessionIds;
 window.setActive = setActive;
 window.registerSession = registerSession;
 window.sessionDisplayName = sessionDisplayName;
+window.setSessionTmuxName = setSessionTmuxName;
 window.removeSessionRecord = removeSessionRecord;
 window.storeSubscribe = subscribe;

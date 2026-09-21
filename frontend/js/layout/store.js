@@ -91,10 +91,40 @@ export function setActivePane(paneId) {
   _notify('active');
 }
 
+// 2026-09-21 버그 수정 — 같은 세션이 두 탭에 동시에 떠 있던 문제. tree.js의
+// setSession()은 **같은 트리 안**의 중복만 지운다(파일 111행 주석). 세션
+// 행을 레일에서 다른 탭의 pane으로 끌어다 놓아 그룹을 만들면(dnd.js) 그
+// 세션의 원래(혼자였던) 탭은 전혀 안 건드려져서, 같은 세션이 옛 탭과 새
+// 그룹 탭 양쪽에 동시에 남았다 — 옛 탭이 "그룹을 만들어도 위에 그대로
+// 떠 있다"로 보였고, findTabBySessionId가 배열에서 먼저 만나는 탭(대개
+// 옛 탭)을 돌려줘서 레일에서 그 세션을 클릭하면 그룹이 아니라 옛 솔로
+// 탭으로 가버렸다("그룹에서 떨어져 나가는 것처럼" 보인 증상).
+//
+// 활성 탭이 아닌 다른 탭에 이 세션이 남아 있으면 거기서 지운다. 그 탭에
+// 남은 세션이 하나도 없어지면(원래 혼자였던 탭) 탭 자체를 닫는다 — 그
+// 탭도 그룹이었다면(다른 멤버가 남아있다면) 그 자리만 비우고 탭은 그대로
+// 둔다(빈 pane은 이미 다른 곳에서도 쓰는 정상적인 자리표시자 상태다).
+function _detachFromOtherTabs(sessionId) {
+  const activeId = _tabs[_activeTabIndex].id;
+  for (let i = _tabs.length - 1; i >= 0; i--) {
+    const t = _tabs[i];
+    if (t.id === activeId) continue;
+    if (!collectSessions(t.tree).includes(sessionId)) continue;
+    const cleared = _setSession(t.tree, null, sessionId);
+    if (collectSessions(cleared).length === 0) {
+      _tabs.splice(i, 1);
+      if (i < _activeTabIndex) _activeTabIndex -= 1;
+    } else {
+      t.tree = cleared;
+    }
+  }
+}
+
 // 탭 클릭 등 "이 세션을 화면에 보여줘"의 유일한 진입점. 기본은 활성
 // pane에 배정 — term/session.js의 switchTo()가 1단계에서 기존 hide/show
 // 직접 조작 대신 이 함수를 부르도록 바뀐다.
 export function setPaneSession(sessionId, paneId = _activePaneId) {
+  if (sessionId) _detachFromOtherTabs(sessionId);
   _tree = _setSession(_tree, paneId, sessionId);
   _notify();
 }
@@ -175,8 +205,15 @@ export function setPanePanel(panel, paneId = _activePaneId) {
 }
 
 // 키맵(`Mod+D` 등, S3)처럼 "지금 활성 pane"을 대상으로 하는 짧은 표기.
+// sessionId가 있으면(Rail.tsx의 ⌘클릭 분할) **빈 leaf로 먼저 나누고 나서
+// setPaneSession으로 배정한다** — dnd.js와 같은 두 단계 관용구다(dnd.js
+// 88행 주석 참고). splitPane이 sessionId를 바로 makeLeaf에 넣는 경로는
+// dedup을 안 거쳐서, 이미 다른 탭에 떠 있는 세션을 ⌘클릭으로 분할하면
+// 두 탭에 동시에 남는 같은 버그가 났다.
 export function splitActivePane(dir, sessionId = null) {
-  return splitPane(_activePaneId, dir, sessionId);
+  const paneId = splitPane(_activePaneId, dir, null);
+  if (paneId && sessionId) setPaneSession(sessionId, paneId);
+  return paneId;
 }
 
 // paneId를 닫는다. 닫힌 pane이 활성 pane이었으면(부모가 collapse되며

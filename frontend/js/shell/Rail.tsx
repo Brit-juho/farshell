@@ -251,7 +251,23 @@ function Rail(props: { deps: RailDeps }) {
     return (window as any).getTabGroups?.() || [];
   });
 
-  const rows = createMemo<DesktopRailRowInput[]>(() => {
+  // 이름 제자리 편집 중인 키 — rows 메모보다 먼저 선언해야 그 메모 안에서
+  // 참조할 수 있다(아래 "편집 중엔 얼린다" 가드). 그룹/세션 이름 편집 UI
+  // 자체(레이블 signal·핸들러)는 그대로 원래 자리(더 아래)에 있다.
+  const [editingGroupKey, setEditingGroupKey] = createSignal<string | null>(null);
+  const [editingSessionKey, setEditingSessionKey] = createSignal<string | null>(null);
+
+  // 2026-09-21 버그 수정 — 5초/4초 폴링(SESSIONS_POLL_MS/STATUS_POLL_MS)마다
+  // 이 메모가 매번 **새 객체 배열**을 반환했다. 값이 실제로 안 바뀌어도
+  // 새 참조라 Solid의 <For>가 모든 행 DOM을 통째로 다시 만들었고, 이름을
+  // 편집 중이던 <input>도 그 순간 뜯겨나가며 강제 blur → 저장·Enter 전에
+  // 타이핑 중이던 값이 그대로 커밋돼버렸다(사용자 보고). 이름 편집 중에는
+  // 이 메모가 직전 결과를 그대로 재사용하도록 얼려서, 편집이 끝날 때까지
+  // 행 DOM 자체가 재생성되지 않게 막는다 — 편집 중엔 어차피 그 행의 상태
+  // 변화를 실시간으로 보여줄 필요가 없다(끝나면 다음 폴링이 바로 따라잡는다).
+  let lastRows: DesktopRailRowInput[] = [];
+  const rows = createMemo<DesktopRailRowInput[]>((prev) => {
+    if (editingGroupKey() || editingSessionKey()) return prev ?? lastRows;
     sessionsVersion(); agentVersion(); // 구독 트리거용 — 값 자체는 안 씀
     const w = window as any;
 
@@ -305,7 +321,12 @@ function Rail(props: { deps: RailDeps }) {
         kind: 'session',
         sessionId: sid,
         tmuxName: t.name,
-        name: awake && w.sessionDisplayName ? w.sessionDisplayName(sid) : t.name,
+        // 2026-09-21 설계 — tmux 세션의 이름은 tmux 세션 이름 그 자체다
+        // (core/store.js의 sessionDisplayName). awake일 때만 그걸 따로
+        // 조회하던 옛 분기는 항상 t.name과 같은 값을 내는 동어반복이었다
+        // (awake=true는 tmuxToWebSid 매칭이 s.tmuxName===t.name일 때만
+        // 성립하므로).
+        name: t.name,
         awake,
         groupId: (sid && sessionIdToGroup.get(sid)) || null,
         status,
@@ -346,6 +367,7 @@ function Rail(props: { deps: RailDeps }) {
         isMainWorktree: false,
       });
     }
+    lastRows = out;
     return out;
   });
 
@@ -425,8 +447,7 @@ function Rail(props: { deps: RailDeps }) {
 
   // 그룹 이름 짓기, 제자리 편집(window.prompt 안 씀). 「묶지 않음」
   // (groupId null)은 대상이 아니다 — 이름은 탭 자체(layout/store.js의
-  // label)에 붙는다.
-  const [editingGroupKey, setEditingGroupKey] = createSignal<string | null>(null);
+  // label)에 붙는다. editingGroupKey 자체는 rows 메모 앞으로 옮겼다(위 참고).
   const [editingGroupValue, setEditingGroupValue] = createSignal('');
   const startRenameGroup = (e: MouseEvent, groupId: string, currentLabel: string) => {
     e.stopPropagation(); // 부모 토글 버튼까지 눌리면 접혔다 펴진다.
@@ -448,7 +469,7 @@ function Rail(props: { deps: RailDeps }) {
   // 씀) — layout/tabbar.js의 주석은 "닫기·이름 변경은 레일 세션 행으로"
   // 옮겼다고 했지만 실제로는 이 메뉴에 빠져 있었다(사용자 지적으로 발견한
   // 회귀). 웹 세션이 있어야 한다(term/session.js의 renameSession).
-  const [editingSessionKey, setEditingSessionKey] = createSignal<string | null>(null);
+  // editingSessionKey 자체는 rows 메모 앞으로 옮겼다(위 참고).
   const [editingSessionValue, setEditingSessionValue] = createSignal('');
   const startRenameSession = (sessionId: string, currentName: string) => {
     setEditingSessionValue(currentName);

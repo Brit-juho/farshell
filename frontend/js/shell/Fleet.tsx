@@ -257,6 +257,9 @@ function Fleet(props: { deps: FleetDeps }) {
       out.push({
         sessionId: sid,
         tmuxName,
+        // 2026-09-21 설계 — tmux 세션의 이름은 tmux 세션 이름 그 자체다
+        // (core/store.js의 sessionDisplayName). w.sessionDisplayName이 이미
+        // tmuxName을 최우선으로 돌려주므로 여기서 따로 분기하지 않는다.
         name: w.sessionDisplayName ? w.sessionDisplayName(sid) : (tmuxName || sid.slice(0, 8)),
         status,
         since: detail?.since ?? null,

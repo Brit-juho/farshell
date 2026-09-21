@@ -73,6 +73,50 @@ test('applyPaneDrop — center 배정은 다른 leaf에 있던 세션을 그쪽�
   assert.strictEqual(tree.b.session, 'sess-x', '드롭한 pane(otherId)에 배정돼야 한다');
 });
 
+// 2026-09-21 버그 수정 — 위 테스트는 **같은 탭 안**의 중복만 본다. 레일에서
+// 세션을 끌어 **다른 탭**의 pane에 떨어뜨려 그룹을 만드는 경우(그룹을 만드는
+// 유일한 방법, ADR-29)는 이 케이스를 못 잡았다 — 원래 있던 솔로 탭이 안
+// 지워져서 같은 세션이 두 탭에 동시에 남았다(사용자 보고: "그룹을 만들어도
+// 그 세션의 옛 탭이 상단에 그대로 떠 있다", "레일에서 그룹 세션을 클릭하면
+// 그룹이 아니라 엉뚱한(옛) 화면으로 간다").
+test('applyPaneDrop — 다른 탭의 pane에 떨어뜨리면 원래 솔로 탭이 닫힌다(교차 탭 중복 금지)', async () => {
+  const { S, D } = await loadDnd();
+  const soloTabId = S.getActiveTabId();
+  S.setPaneSession('sess-a', S.getActivePaneId()); // soloTabId는 sess-a 혼자만의 탭
+
+  const groupTabId = S.openLayoutTab({ label: 'group-tab' });
+  const groupPaneId = S.getActivePaneId();
+
+  D.applyPaneDrop(groupPaneId, 'right', 'sess-a'); // sess-a를 groupTab으로 드래그
+
+  assert.deepStrictEqual(
+    S.getTabs().map((t) => t.id).includes(soloTabId), false,
+    '세션이 빠져나가 텅 빈 옛 솔로 탭은 자동으로 닫혀야 한다',
+  );
+  assert.strictEqual(S.findTabBySessionId('sess-a'), groupTabId, '레일 클릭 시 찾아가야 할 탭은 그룹 탭 하나뿐이어야 한다');
+});
+
+test('applyPaneDrop — 다른 탭의 pane에 떨어뜨려도 그 탭에 다른 멤버가 남아있으면 탭은 안 닫힌다', async () => {
+  const { S, D } = await loadDnd();
+  const sourceTabId = S.getActiveTabId();
+  S.setPaneSession('sess-a', S.getActivePaneId());
+  S.splitActivePane('row', 'sess-b'); // sourceTab = {sess-a, sess-b} 그룹
+
+  const groupTabId = S.openLayoutTab({ label: 'group-tab' });
+  const groupPaneId = S.getActivePaneId();
+  D.applyPaneDrop(groupPaneId, 'right', 'sess-a'); // 그룹 중 sess-a만 다른 탭으로
+
+  assert.deepStrictEqual(
+    S.getTabs().map((t) => t.id).includes(sourceTabId), true,
+    'sess-b가 남아있으므로 원래 탭은 닫히면 안 된다',
+  );
+  S.switchLayoutTab(sourceTabId);
+  const remaining = S.getTree();
+  const leaves = [remaining.a, remaining.b].filter(Boolean);
+  assert.deepStrictEqual(leaves.map((l) => l.session).sort(), [null, 'sess-b'], 'sess-a 자리만 비고 sess-b는 그대로');
+  assert.strictEqual(S.findTabBySessionId('sess-a'), groupTabId);
+});
+
 test('applyPaneDrop — 가장자리는 그 방향으로 분할한 새 leaf에 배정한다', async () => {
   const { S, D } = await loadDnd();
   const paneId = S.getActivePaneId();

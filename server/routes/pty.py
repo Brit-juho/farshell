@@ -264,43 +264,38 @@ async def rename_session(session_id: str, request: Request):
     if not name:
         return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name}
 
-    # Wave 1 W1-1: tmux 세션 이름도 같이 변경 (이전엔 메타데이터만 변경)
+    # tmux 세션의 이름은 이제 tmux 세션 이름 그 자체가 단일 진실이다(2026-09-21
+    # 설계) — "웹 라벨만 조용히 바꾸는" 폴백을 없앴다. 그게 있으면 이 화면·다른
+    # 기기·원격 호스트가 서로 다른 이름을 보게 되는 두 번째 진실이 생긴다.
     tmux_renamed = False
-    warning = None
     if info.tmux_name and info.tmux_name != name:
         import re
         import tmux_runner
         # tmux 세션명 안전 문자 검증 (영숫자, dash, underscore만 허용)
-        if re.fullmatch(r"[A-Za-z0-9_\-]+", name):
-            # 충돌 검사
-            if await tmux_runner.has_session_async(name):
-                return JSONResponse(
-                    {"error": "tmux session name already exists", "name": name},
-                    status_code=409,
-                )
-            rc, _, err = await tmux_runner.run_async(
-                ["rename-session", "-t", info.tmux_name, name],
-                timeout=2.0,
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+", name):
+            return JSONResponse(
+                {"error": "tmux session name must be alphanumeric/dash/underscore only", "name": name},
+                status_code=400,
             )
-            if rc != 0:
-                return JSONResponse(
-                    {"error": "tmux rename-session failed", "detail": err.decode("utf-8", errors="ignore")},
-                    status_code=500,
-                )
-            session_store.update_tmux_name(session_id, name)
-            tmux_renamed = True
-        else:
-            # 안전하지 않은 문자 포함 — tmux는 안 건드리고 메타데이터만 변경 + 경고 명시
-            warning = (
-                "tmux 세션 이름은 변경되지 않음 — 영숫자/dash/underscore만 허용. "
-                "웹 라벨만 변경됨."
+        # 충돌 검사
+        if await tmux_runner.has_session_async(name):
+            return JSONResponse(
+                {"error": "tmux session name already exists", "name": name},
+                status_code=409,
             )
-            logger.warning(f"rename {session_id}: unsafe chars in '{name}' — tmux unchanged")
+        rc, _, err = await tmux_runner.run_async(
+            ["rename-session", "-t", info.tmux_name, name],
+            timeout=2.0,
+        )
+        if rc != 0:
+            return JSONResponse(
+                {"error": "tmux rename-session failed", "detail": err.decode("utf-8", errors="ignore")},
+                status_code=500,
+            )
+        session_store.update_tmux_name(session_id, name)
+        tmux_renamed = True
     info.name = name
-    resp = {"id": session_id, "name": info.name, "tmux_name": info.tmux_name, "tmux_renamed": tmux_renamed}
-    if warning:
-        resp["warning"] = warning
-    return resp
+    return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name, "tmux_renamed": tmux_renamed}
 
 
 # --------------------------------------------------------------------------
