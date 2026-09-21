@@ -379,27 +379,25 @@ function Rail(props: { deps: RailDeps }) {
       return;
     }
     const meta = e.metaKey || e.ctrlKey;
-    // 세션을 열기 전에 그 세션이 이미 떠 있는 화면(탭)으로 먼저 옮긴다 —
-    // 다른 세션과 같은 화면을 공유 중이면(그룹) 그 화면으로, 혼자 있는
-    // 탭이면 그 탭으로. switchTo/attachTmux는 항상 **지금 활성 탭**에
-    // 배정하므로(addSession의 마지막 줄) 순서가 바뀌면 엉뚱한 탭에 얹힌다.
-    // ⌘클릭 분할은 예외다 — "지금 보는 화면 옆에 놓기"라는 뜻이라 탭을
-    // 바꾸면 안 된다. 아직 안 깨어난 세션도 예외 — 탭 소속은 웹 세션 id로만
-    // 알 수 있고(2026-09-18 후속, 그룹 재정의), 깨우면 새 탭이 생긴다.
-    if (!meta && row.awake) {
-      w.openGroupTab?.({ sessionId: actionSessionId(row), worktreeId: row.worktreeId || null, hostId: 'local' });
-    }
     // ADR-29 B — 잠자는 세션을 클릭하면 깨운다(attach). 여는 것은 언제나
-    // 세션이라는 원칙이다.
+    // 세션이라는 원칙이다. 아직 안 깨어난 세션은 탭 소속을 미리 알 수
+    // 없다(2026-09-18 후속, 그룹 재정의 — 탭 소속은 웹 세션 id로만 안다).
     if (!row.awake) {
       if (row.tmuxName) await w.attachTmux?.(row.tmuxName);
       return;
     }
     const sid = actionSessionId(row);
-    if (sid) {
-      if (meta) w.splitActivePane?.('row', sid);
-      else w.switchTo?.(sid);
-    }
+    if (!sid) return;
+    // ⌘클릭 분할은 "지금 보는 화면 옆에 놓기"라는 뜻이라 탭을 바꾸면 안
+    // 된다 — 그대로 splitActivePane.
+    if (meta) { w.splitActivePane?.('row', sid); return; }
+    // 2026-09-21(사용자 지적) — 예전엔 여기서 `openGroupTab`으로 탭까지만
+    // 옮긴 뒤 `switchTo`로 "보여주려" 했는데, switchTo는 실은 "지금 활성
+    // pane에 배정"이라 그 탭의 활성 pane이 **짝 세션의 칸**이면 짝을 그
+    // 칸에서 밀어냈다(그룹인데 하나만 열리는 것처럼 보인 원인). revealSession
+    // (term/session.js)이 탭·pane을 함께 찾아 트리를 건드리지 않고 그
+    // 자리로만 이동한다.
+    w.revealSession?.(sid);
   };
 
   const contextRow = (e: MouseEvent, row: OtherRailRowInput) => {

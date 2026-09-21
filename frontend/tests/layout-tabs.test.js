@@ -121,3 +121,44 @@ test('getTabs는 트리를 내주지 않는다 — 바깥에서 직접 변형하
   assert.ok(!('tree' in S.getTabs()[0]));
   assert.ok('tree' in S.getTabsWithTrees()[0]);
 });
+
+// 2026-09-21(사용자 지적) — 레일에서 그룹화된 세션을 클릭했더니 "바로가기"가
+// 아니라 활성 pane에 배정돼(switchTo의 실제 동작) 짝 세션을 그 칸에서 밀어냈다.
+// revealSessionPane은 트리를 전혀 바꾸지 않고 탭·pane만 이동해야 한다.
+test('revealSessionPane — 다른 탭의 그룹 칸으로 이동한다, 트리는 그대로', async () => {
+  const { S } = await load();
+  const leaf = (id, session = null) => ({ t: 'leaf', id, session, kind: 'terminal', file: null, worktree: null, host: 'local' });
+  const split = { t: 'split', id: 'sp1', dir: 'row', ratio: 0.5, a: leaf('pA', 's1'), b: leaf('pB', 's2') };
+  const ok = S.replaceTabs([
+    { id: 't1', worktreeId: null, label: null, tree: leaf('p1', 's3'), activePaneId: 'p1' },
+    { id: 't2', worktreeId: null, label: null, tree: split, activePaneId: 'pA' },
+  ], 't1');
+  assert.strictEqual(ok, true);
+  const beforeTree = S.getTabsWithTrees().find((t) => t.id === 't2').tree;
+
+  assert.strictEqual(S.revealSessionPane('s2'), true);
+  assert.strictEqual(S.getActiveTabId(), 't2', '그 세션이 있는 탭으로 옮겨야 한다');
+  assert.strictEqual(S.getActivePaneId(), 'pB', '짝(s1)이 아니라 s2가 든 칸이 활성이어야 한다');
+  const afterTree = S.getTabsWithTrees().find((t) => t.id === 't2').tree;
+  assert.deepStrictEqual(afterTree, beforeTree, '트리 구조는 손대지 않는다 — 짝(s1)이 밀려나면 안 된다');
+});
+
+test('revealSessionPane — 같은 탭 안이면 탭 전환 없이 pane만 옮긴다', async () => {
+  const { S } = await load();
+  S.splitActivePane('row', 's2');
+  const rootId = S.getTabsWithTrees()[0].tree.a.id;
+  S.setActivePane(rootId); // 짝 칸(s2가 아닌 쪽)을 다시 활성으로
+
+  assert.strictEqual(S.revealSessionPane('s2'), true);
+  assert.strictEqual(S.getTabs().length, 1);
+  assert.notStrictEqual(S.getActivePaneId(), rootId);
+});
+
+test('revealSessionPane — 어느 탭에도 없으면 false, 상태는 그대로', async () => {
+  const { S } = await load();
+  const before = { tab: S.getActiveTabId(), pane: S.getActivePaneId() };
+  assert.strictEqual(S.revealSessionPane('no-such-session'), false);
+  assert.strictEqual(S.revealSessionPane(null), false);
+  assert.strictEqual(S.getActiveTabId(), before.tab);
+  assert.strictEqual(S.getActivePaneId(), before.pane);
+});

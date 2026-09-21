@@ -14,7 +14,7 @@ import { registerAction, getAction } from './core/dom.js';
 import { register as registerKey, getBinding, displayCombo, list as keymapList, invoke as keymapInvoke } from './core/keymap.js';
 import { vtFetch } from './core/api.js';
 import { allSessions, sessionDisplayName } from './core/store.js';
-import { switchTo } from './term/session.js';
+import { revealSession } from './term/session.js';
 import { splitActivePane, setPaneSession } from './layout/store.js';
 import { loadViewer, openFileInPane } from './panels/viewer-lazy.js';
 import { setVtSkin, vtSkins, vtSkinLabel } from './theme.js';
@@ -42,7 +42,12 @@ const deps = {
   gateOk,
   listSessions,
   getSession,
-  switchTo,
+  // 2026-09-21(사용자 지적) — 팔레트가 여는 대상은 전부 **이미 열려 있는**
+  // 세션(웹 세션 목록·원격 스크롤백 결과)이다. switchTo를 그대로 넘기면
+  // Rail.tsx가 겪은 것과 같은 증상이 난다(그룹의 짝을 활성 pane에서 밀어냄).
+  // Palette.tsx 쪽 프로퍼티 이름(`switchTo`)은 그대로 두고 구현만 바꾼다 —
+  // 타입·호출부를 다시 손댈 이유가 없다.
+  switchTo: revealSession,
   loadViewer,
   openFileInPane,
   splitActivePane,

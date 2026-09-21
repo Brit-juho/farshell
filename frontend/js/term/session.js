@@ -25,7 +25,8 @@ import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
-import { setPaneSession } from '../layout/store.js';
+import { setPaneSession, revealSessionPane, openLayoutTab } from '../layout/store.js';
+import { saveLayoutNow } from '../layout/persist.js';
 
 export async function createSession() {
   // "맥에서도 열기"가 켜져 있으면 tmux 세션으로 생성하고 서버에 osascript로
@@ -134,9 +135,11 @@ export async function attachTmux(tmuxName) {
   if (!res.ok) { showToast(`세션 열기 실패: ${tmuxName} (${res.status})`); return; }
   const data = await res.json();
   if (!data.id) { showToast(`세션 열기 실패: ${tmuxName}`); return; }
-  // 이미 웹에 열려 있으면 해당 탭으로 전환
+  // 이미 웹에 열려 있으면 해당 탭으로 전환. 2026-09-21(사용자 지적) —
+  // switchTo는 "배정"이라 그 세션이 다른 세션과 화면을 공유 중이면(그룹)
+  // 짝을 밀어냈다 — revealSession이 트리를 안 건드리고 그 자리로만 이동한다.
   if (getSession(data.id)) {
-    switchTo(data.id);
+    revealSession(data.id);
   } else {
     addSession(data.id, data.name || data.id);
     // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
@@ -232,6 +235,32 @@ export function switchTo(id) {
   // 사라졌다(옛 classic script 시절엔 picker.js가 이 파일보다 늦게 로드돼
   // 부팅 직후엔 이 함수가 미정의였다 — 이제는 정적 import라 항상 준비돼 있다).
   updateSessionPicker();
+  saveWorkspace();
+}
+
+// 2026-09-21(사용자 지적) — 레일·팔레트·플릿의 "세션을 클릭한다"는 진입점이
+// switchTo()를 직접 부르면, 그 세션이 이미 다른 세션과 화면(pane 트리)을
+// 공유 중일 때(=그룹) 짝을 그 칸에서 밀어냈다. switchTo는 이름과 달리 "가서
+// 보여줘"가 아니라 "지금 활성 pane에 이 세션을 배정해"라서다(활성 pane이
+// 하필 짝이 있던 칸이면 그 칸을 뺏는다).
+//
+// 이 함수가 실제 "가서 보여줘"다: 그 세션이 어느 탭의 어느 pane에 이미
+// 떠 있는지 찾아(store.js `revealSessionPane`) 그 탭·그 pane으로 이동할
+// 뿐, 트리는 손대지 않는다 — 그룹 배치가 그대로 보존된다.
+//
+// 찾지 못하면(트리에 아직 없는, 방금 만들었거나 다른 세션에 자리를 내준
+// 세션) **그냥 switchTo로 떨어지지 않는다** — 지금 활성 pane이 하필 다른
+// 그룹의 칸일 수 있고, switchTo는 그 칸을 그대로 덮어써 버린다(위에서 막으려는
+// 것과 같은 사고). 대신 이 세션만을 위한 새 탭을 연다 — `openGroupTab`이
+// 원래 "아직 어디에도 없으면 새 화면" 몫으로 하던 일 그대로다(레일 openRow가
+// 예전엔 이 함수와 switchTo를 나란히 불렀다).
+export function revealSession(id) {
+  if (!revealSessionPane(id)) openLayoutTab({ sessionId: id });
+  document.dispatchEvent(new CustomEvent('vt:session-switch', { detail: { id } }));
+  setActive(id);
+  getSession(id).term.focus();
+  updateSessionPicker();
+  saveLayoutNow();
   saveWorkspace();
 }
 
@@ -353,6 +382,7 @@ registerAction('session.add-menu', (el, e) => showAddMenu(el, e));
 // 외부(picker.js/quickopen.js/grid.js/snippets.js/viewer.js/moreMenu.js/voice.js)가
 // bare identifier 또는 window.foo(e) 형태로 참조하므로 브리지 필요.
 window.switchTo = switchTo;
+window.revealSession = revealSession;
 window.addSession = addSession;
 window.removeSession = removeSession;
 window.renameSession = renameSession;

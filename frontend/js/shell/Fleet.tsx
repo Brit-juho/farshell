@@ -285,7 +285,10 @@ function Fleet(props: { deps: FleetDeps }) {
       }
       return;
     }
-    w.switchTo?.(row.sessionId);
+    // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유로 revealSession.
+    // buildRailSections는 awake 행만 넘기므로 row.sessionId는 항상 열려 있는
+    // 세션이다 — "가서 보여줘"가 맞는 동작이지 "배정"이 아니다.
+    w.revealSession?.(row.sessionId);
     props.deps.onOpenTerminal();
   };
 

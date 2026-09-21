@@ -1,7 +1,7 @@
 // 세션 피커(모바일 세션 관리 시트) + 맥에서 열기 + 파일 업로드 — F5에서
 // classic script에서 ES 모듈로 전환.
 //
-// term/session.js와 순환 import 관계다 — 여기는 switchTo/removeSession/
+// term/session.js와 순환 import 관계다 — 여기는 revealSession/removeSession/
 // renameSession을 부르고, term/session.js는 탭 전환/제거 시 updateSessionPicker를
 // 부른다. panels/viewer의 shell.js↔tree.js와 같은 이유로 그대로 유지한다(모든
 // 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
@@ -9,7 +9,7 @@ import { activeSession, activeSessionId, allSessions, sessionDisplayName } from 
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
-import { switchTo, renameSession, attachTmux } from './term/session.js';
+import { revealSession, renameSession, attachTmux } from './term/session.js';
 import { detachSession, confirmAndKillSession } from './term/session-actions.js';
 import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
@@ -101,7 +101,10 @@ async function renderSessionManager(backdrop) {
     const select = document.createElement('button');
     select.type = 'button'; select.className = 'vt-name-btn vt-session-select'; select.textContent = sessionName(id);
     select.setAttribute('aria-current', id === activeIdNow ? 'true' : 'false');
-    select.onclick = () => { switchTo(id); closeSessionManager(); };
+    // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유로 revealSession.
+    // entries는 allSessions()라 이미 열려 있는 세션뿐이다 — "가서 보여줘"가
+    // 맞는 동작이지 "배정"이 아니다.
+    select.onclick = () => { revealSession(id); closeSessionManager(); };
     const rename = document.createElement('button');
     rename.type = 'button'; rename.className = 'vt-icon-btn xl vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id)} 이름 변경`);
     rename.onclick = async () => {

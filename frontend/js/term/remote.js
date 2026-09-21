@@ -11,7 +11,7 @@
 // 지연 청크(shell/Rail.tsx)와 layout/panes.js의 「다시 시도」가 이 경로를 불러야
 // 하는데, 그쪽은 상태 모듈을 정적 import 할 수 없다(ADR-26).
 import { getSession } from '../core/store.js';
-import { addSession, switchTo } from './session.js';
+import { addSession, revealSession } from './session.js';
 import { saveWorkspace } from './workspace.js';
 import { showToast } from '../ui/toast.js';
 import { vtFetch } from '../core/api.js';
@@ -27,7 +27,9 @@ export function remoteSessionId(hostId, tmuxName) {
 export async function attachRemoteSession(hostId, tmuxName) {
   if (!hostId || !tmuxName) return null;
   const id = remoteSessionId(hostId, tmuxName);
-  if (getSession(id)) { switchTo(id); return id; }
+  // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유. 이미 열려 있는
+  // 세션이 다른 세션과 화면을 공유 중이면 switchTo가 그 짝을 밀어냈다.
+  if (getSession(id)) { revealSession(id); return id; }
 
   // 호스트가 살아 있는지 먼저 본다 — 죽은 호스트에 탭을 만들면 재연결 스톰의
   // 입구가 된다(ws.js 상단 주석의 그 사고와 같은 모양).

@@ -8,7 +8,7 @@
 // 들어간다" 같은 상태 불일치가 애초에 생길 수 없다 — 착수 전 설계 리뷰에서
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
 import { activeSessionId, sessionDisplayName } from '../core/store.js';
-import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setLeafPanel as _setLeafPanel, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, collectSessions } from './tree.js';
+import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setLeafPanel as _setLeafPanel, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, findPaneBySession, collectSessions } from './tree.js';
 
 function _genId(prefix) {
   const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -252,6 +252,39 @@ export function findTabBySessionId(sessionId) {
     if (collectSessions(t.tree).includes(sessionId)) return t.id;
   }
   return null;
+}
+
+// 2026-09-21(사용자 지적) — "레일에서 세션을 클릭하면 그 화면으로 간다"의
+// **이동** 버전. `openLayoutTab`+`switchTo` 조합은 탭까지는 맞게 옮겨도,
+// switchTo가 실은 `setPaneSession`(활성 pane에 배정)이라 그 탭의 기억된
+// 활성 pane이 **짝 세션의 칸**이면 짝을 밀어내고 자기 자리를 차지했다 —
+// 화면은 분할된 채인데 짝이 사라지는 증상이 그래서 났다. 이 함수는 트리를
+// **전혀 바꾸지 않는다**: 탭을 전환하고, 그 세션이 이미 들어 있는 pane을
+// 활성 pane으로 삼을 뿐이다. 어느 탭에도 없으면 false — 호출자
+// (term/session.js `revealSession`)가 `openLayoutTab`으로 새 탭을 연다.
+// switchTo로 그냥 떨어지지 않는 이유는 지금 활성 pane 자체가 다른 그룹의
+// 칸일 수 있어서다(그러면 이 함수가 막으려던 것과 같은 사고가 난다).
+export function revealSessionPane(sessionId) {
+  if (!sessionId) return false;
+  _sync();
+  for (let i = 0; i < _tabs.length; i++) {
+    const paneId = findPaneBySession(_tabs[i].tree, sessionId);
+    if (!paneId) continue;
+    // 탭을 바꿨으면(다른 트리를 그려야 한다) 기본 kind('layout')로 알려
+    // panes.js가 DOM을 통째로 다시 그리게 한다 — 'active'는 지금 그려진
+    // DOM에 `.active` 클래스만 옮기는 경량 경로라, 다른 탭의 트리에는
+    // 애초에 대응하는 pane 엘리먼트가 없다(같은 탭 안에서 활성 pane만
+    // 바뀔 때 쓰는 경로, xterm-setup.js의 focusin이 그 경우다).
+    const switchedTab = i !== _activeTabIndex;
+    if (switchedTab) {
+      _activeTabIndex = i;
+      _tree = _tabs[i].tree;
+    }
+    _activePaneId = paneId;
+    _notify(switchedTab ? 'layout' : 'active');
+    return true;
+  }
+  return false;
 }
 
 /** 이 탭에서 지금 보는 워크트리를 바꾼다(같은 저장소의 다른 워크트리로

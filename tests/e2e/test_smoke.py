@@ -244,35 +244,43 @@ def browser(_pw):
 # 레이아웃 실패는 로그만으로 재구성하기 어려워서 실패 시 화면을 남긴다 —
 # CI가 /tmp/e2e-*.png를 아티팩트로 올린다. `stash_failed`를 세우는 훅은
 # conftest.py에 있다(테스트 모듈 안의 훅은 pytest가 수집하지 않는다).
+# 2026-09-21 — **저장된 배치를 매 테스트 앞에서 지운다.**
+#
+# `f09535f`(세션 0개에서도 레이아웃 복원)부터 이 스위트의 배치가 실제로
+# 저장된다. 그런데 서버는 세션 스코프로 한 벌뿐이라, 앞 테스트가 만든
+# 패널·뷰어 pane이 **다음 테스트의 시작 화면**으로 복원된다. 그러면
+# `layout/panes.js`가 `body.vt-has-viewer-pane`을 켜 온보딩을 숨기고,
+# 온보딩을 전제하는 테스트들이 줄줄이 무너진다(실측: 6건).
+#
+# 브라우저 저장소(컨텍스트마다 새로 생긴다)만으로는 부족하다 — 정본은
+# 서버의 workspace.json이다. 둘 다 비운다.
+#
+# 원래 `page` 픽스처 안의 지역 클로저였다 — `isolated_page`도 **같은 서버**를
+# 공유하면서 이 초기화를 빼먹고 있었다. 그쪽 테스트(splitActivePane +
+# createSession으로 그룹을 만드는 것들)가 만드는 split은 `removeSession()`
+# 정리로 세션만 지워질 뿐 트리 구조(빈 leaf 2개)는 그대로 남아 **다음
+# isolated_page 테스트가 그 유령 split 위에서 시작**했다(실측: 새 세션 2개만
+# 만들었는데 pane이 3개였다). 모듈 최상위로 뽑아 두 픽스처가 함께 쓴다.
+def _reset_saved_layout(base: str, token: str) -> None:
+    # 브라우저 컨텍스트가 **닫힌 뒤에도** 불러야 하므로(page 픽스처의 teardown)
+    # `ctx.request`를 쓰지 않는다 — 컨텍스트와 수명을 같이하기 때문이다.
+    try:
+        req = urllib.request.Request(
+            f"{base}/api/workspace?token={token}",
+            data=json.dumps({"ui": {"layout": None}}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        urllib.request.urlopen(req, timeout=5).close()
+    except Exception:
+        pass   # 정리 실패가 테스트 결과를 덮으면 안 된다
+
+
 @pytest.fixture
 def page(browser, server, request):
     base, token = server
     ctx = browser.new_context(viewport=WIDE)
-    # 2026-09-21 — **저장된 배치를 매 테스트 앞에서 지운다.**
-    #
-    # `f09535f`(세션 0개에서도 레이아웃 복원)부터 이 스위트의 배치가 실제로
-    # 저장된다. 그런데 서버는 세션 스코프로 한 벌뿐이라, 앞 테스트가 만든
-    # 패널·뷰어 pane이 **다음 테스트의 시작 화면**으로 복원된다. 그러면
-    # `layout/panes.js`가 `body.vt-has-viewer-pane`을 켜 온보딩을 숨기고,
-    # 온보딩을 전제하는 테스트들이 줄줄이 무너진다(실측: 6건).
-    #
-    # 브라우저 저장소(컨텍스트마다 새로 생긴다)만으로는 부족하다 — 정본은
-    # 서버의 workspace.json이다. 둘 다 비운다.
-    def _reset_saved_layout():
-        # 브라우저 컨텍스트가 **닫힌 뒤에도** 불러야 하므로(아래 teardown)
-        # `ctx.request`를 쓰지 않는다 — 컨텍스트와 수명을 같이하기 때문이다.
-        try:
-            req = urllib.request.Request(
-                f"{base}/api/workspace?token={token}",
-                data=json.dumps({"ui": {"layout": None}}).encode(),
-                headers={"Content-Type": "application/json"},
-                method="PUT",
-            )
-            urllib.request.urlopen(req, timeout=5).close()
-        except Exception:
-            pass   # 정리 실패가 테스트 결과를 덮으면 안 된다
-
-    _reset_saved_layout()
+    _reset_saved_layout(base, token)
     # ⚠ **첫 문서에서만** 지운다. init 스크립트는 `page.reload()`에서도 다시
     # 도는데, 배치 복원을 검사하는 테스트는 localStorage에 스냅샷을 심고
     # 새로고침하는 방식이다 — 매번 지우면 그 전제를 지워 버린다(실측으로 그
@@ -315,7 +323,7 @@ def page(browser, server, request):
     # 들쭉날쭉 깨졌다 — 온보딩을 기다리는데 복원된 패널 칸이 그걸 숨긴다).
     # 컨텍스트를 먼저 닫아 더 이상 저장이 나가지 않게 한 뒤 지우면 그 창이 닫힌다.
     ctx.close()
-    _reset_saved_layout()
+    _reset_saved_layout(base, token)
 
 
 # 이 파일의 나머지 테스트는 전부 세션 스코프 `browser`(Chromium 프로세스 하나)를
@@ -335,12 +343,19 @@ def isolated_page(_pw, server):
         b = _pw.chromium.launch()
     except PlaywrightError as e:
         pytest.skip(f"chromium 없음 — `playwright install chromium` 필요 ({e})")
+    # `page` 픽스처와 같은 이유로 같은 초기화가 필요하다 — 이 스위트의 서버는
+    # 세션 스코프로 한 벌이라, 이 테스트들이 만드는 세션·split도 같은
+    # workspace.json을 공유한다. `removeSession()`(테스트 cleanup)은 세션만
+    # 지우고 split 구조(빈 leaf들)는 남기므로, 리셋 없이는 다음 isolated_page
+    # 테스트가 유령 split 위에서 시작한다.
+    _reset_saved_layout(base, token)
     ctx = b.new_context(viewport=WIDE)
     pg = ctx.new_page()
     _boot(pg, f"{base}/?token={token}")
     yield pg
     ctx.close()
     b.close()
+    _reset_saved_layout(base, token)
 
 
 def _boot(pg, url: str) -> None:
@@ -943,6 +958,77 @@ def test_리사이즈_오버레이가_분할선_드래그_중에만_보인다(is
         for sid in session_ids:
             page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
         page.wait_for_timeout(300)   # saveWorkspace()가 서버에 반영될 시간
+
+
+def test_그룹의_세션을_클릭하면_짝을_밀어내지_않고_그_칸으로만_이동한다(isolated_page):
+    """2026-09-21(사용자 지적) — 레일에서 그룹화된 세션을 클릭하면 "바로가기"가
+    아니라 그 세션이 활성 pane에 배정돼(옛 `switchTo` 경로) 짝 세션을 그 칸에서
+    밀어냈다: 화면은 분할된 채로 남는데 짝은 트리에서 사라지고 클릭한 세션만
+    보였다. `window.revealSession`(term/session.js)이 그 대체다.
+
+    재현에 두 번째 탭은 필요 없다 — **같은 탭 안에서 활성 pane이 클릭한
+    세션의 칸이 아닌 짝의 칸일 때**(방금 짝 쪽에 포커스가 있었을 때, 즉 rail을
+    누르기 직전의 가장 흔한 상태) 옛 코드의 `setSession`이 두 칸을 동시에
+    건드렸다: 클릭한 세션이 이미 있던 칸을 지우고, 활성 pane(짝의 칸)을
+    덮어썼다.
+    """
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
+    page.wait_for_timeout(500)
+    page.evaluate("() => window.splitActivePane && window.splitActivePane('row')")
+    page.wait_for_selector(".vt-split-resizer", timeout=10000)
+    # 방금 분할한 새 pane이 활성이다 — 거기에 두 번째 세션을 만들면 그 칸에
+    # 배정된다(addSession의 마지막 줄이 switchTo). 이제 A는 첫 칸에, B는
+    # 활성 칸(둘째)에 있다 — 그룹이 만들어진 상태이자, "짝(A) 쪽이 아니라
+    # B 쪽이 활성"이라는 버그 재현에 필요한 조건이다.
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_timeout(500)
+    session_ids = page.evaluate("() => Object.keys(window.allSessions())")
+    assert len(session_ids) == 2, f"두 세션이 만들어져야 한다: {session_ids}"
+    sid_a, sid_b = session_ids
+    try:
+        page.wait_for_function(
+            "() => document.querySelectorAll('.vt-pane .xterm').length === 2", timeout=15000
+        )
+        before = page.evaluate(
+            """([a, b]) => ({
+              panes: document.querySelectorAll('.vt-pane').length,
+              aSession: !!Object.values(window.allSessions())[0],
+            })""",
+            session_ids,
+        )
+        assert before["panes"] == 2
+
+        # 레일 클릭을 흉내낸다 — A(첫 칸, 지금은 비활성)를 연다.
+        page.evaluate("(id) => window.revealSession && window.revealSession(id)", sid_a)
+        page.wait_for_timeout(200)
+
+        got = page.evaluate(
+            """([a, b]) => {
+              const paneOf = (sid) => {
+                const w = window.allSessions()[sid];
+                return w && w.wrapper ? w.wrapper.closest('.vt-pane')?.dataset.paneId : null;
+              };
+              return {
+                panes: document.querySelectorAll('.vt-pane').length,
+                paneA: paneOf(a),
+                paneB: paneOf(b),
+                activePaneHasA: document.querySelector('.vt-pane.active')
+                  ?.contains(window.allSessions()[a]?.wrapper) || false,
+              };
+            }""",
+            session_ids,
+        )
+        assert got["panes"] == 2, f"분할 자체가 없어지면 안 된다: {got}"
+        assert got["paneA"], f"A가 여전히 어느 칸엔가 있어야 한다: {got}"
+        assert got["paneB"], f"짝(B)이 트리에서 사라지면 안 된다(이게 버그였다): {got}"
+        assert got["paneA"] != got["paneB"], f"둘이 같은 칸에 겹치면 안 된다: {got}"
+        assert got["activePaneHasA"], f"A를 열었으니 A가 있는 칸이 활성이어야 한다: {got}"
+    finally:
+        for sid in session_ids:
+            page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+        page.wait_for_timeout(300)
 
 
 def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isolated_page):

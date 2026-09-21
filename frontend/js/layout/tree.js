@@ -100,6 +100,25 @@ export function collectSessions(tree) {
   return out;
 }
 
+// 이 세션이 들어 있는 leaf의 id. 없으면 null.
+// 2026-09-21 — 레일·팔레트의 세션 클릭이 "그 세션이 있는 화면으로 간다"가
+// 되려면 탭뿐 아니라 **어느 칸인지**까지 알아야 한다. 그 전까지는 탭만 찾고
+// (layout/store.js `findTabBySessionId`) 실제 표시는 `switchTo`가 맡았는데,
+// 그건 이동이 아니라 "활성 pane에 배정"이라 짝 세션을 그 칸에서 밀어냈다.
+export function findPaneBySession(tree, sessionId) {
+  if (!sessionId) return null;
+  let found = null;
+  (function walk(node) {
+    if (!node || found) return;
+    if (node.t === 'leaf') {
+      if (node.session === sessionId) found = node.id;
+      return;
+    }
+    walk(node.a); walk(node.b);
+  })(tree);
+  return found;
+}
+
 // targetId를 가진 노드를 replacement로 통째로 바꾼 새 트리를 반환한다.
 // targetId가 트리에 없으면 원본과 구조적으로 동일한(그러나 새로 만들어진) 트리를 반환한다.
 function _replace(node, targetId, replacement) {

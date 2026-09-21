@@ -207,3 +207,20 @@ test('evenRatios — 분할이 없는 트리(leaf 하나)도 안전하다', asyn
   const one = T.makeLeaf('p1', 's1');
   assert.strictEqual(T.evenRatios(one), one);
 });
+
+// 2026-09-21(사용자 지적) — 레일·팔레트가 "세션을 클릭하면 그 화면으로 간다"를
+// 구현하려면 탭뿐 아니라 어느 pane인지도 알아야 한다(layout/store.js
+// revealSessionPane가 쓴다).
+test('findPaneBySession — 세션이 든 leaf id를 찾는다', async () => {
+  const T = await loadTree();
+  const tree = T.splitPane(T.makeLeaf('p1', 's1'), 'p1', 'row', T.makeLeaf('p2', 's2'), 'sp1');
+  assert.strictEqual(T.findPaneBySession(tree, 's1'), 'p1');
+  assert.strictEqual(T.findPaneBySession(tree, 's2'), 'p2');
+});
+
+test('findPaneBySession — 없는 세션·null이면 null', async () => {
+  const T = await loadTree();
+  const tree = T.makeLeaf('p1', 's1');
+  assert.strictEqual(T.findPaneBySession(tree, 's-nope'), null);
+  assert.strictEqual(T.findPaneBySession(tree, null), null);
+});

@@ -138,8 +138,11 @@ export function RepoVisibility(props: Props) {
       if (tn === tmuxName) { sid = id; break; }
     }
     if (sid) {
-      w.openGroupTab?.({ sessionId: sid, worktreeId, hostId: 'local' });
-      w.switchTo?.(sid);
+      // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 수정. openGroupTab
+      // 으로 탭까지만 옮긴 뒤 switchTo로 "배정"하면 그 탭의 활성 pane이
+      // 짝 세션의 칸일 때 짝을 밀어냈다. revealSession이 탭·pane을 함께
+      // 찾아 트리를 건드리지 않고 이동한다.
+      w.revealSession?.(sid);
     } else {
       await w.attachTmux?.(tmuxName);
     }
