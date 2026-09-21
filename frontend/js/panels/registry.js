@@ -46,6 +46,14 @@ export const PANELS = {
   },
 };
 
+// N4 3단계 — dock 탭을 pane으로 끌어낼 때 dataTransfer에 싣는 mime.
+// 값은 **패널 이름**(위 PANELS의 키)이라 이 파일이 제자리다. 세션 드래그의
+// `SESSION_MIME`(layout/dnd.js)과 짝을 이루고, 드롭 타겟은 어느 쪽이 실렸는지
+// 보고 갈라진다. dnd.js에 두지 않은 이유: `shell/Dock.tsx`가 이 상수를 읽어야
+// 하는데 dnd.js는 상태 모듈(store.js)을 정적 import 해서 지연 청크가 건드리면
+// 안 된다(ADR-26) — 이 파일은 정적 import가 없어 안전하다.
+export const PANEL_MIME = 'text/vt-panel-name';
+
 /** 스냅샷 검증용 — 상수만 쓰는 쪽(persist.js)이 이것만 import 한다. */
 export const PANEL_KINDS = new Set(Object.keys(PANELS));
 

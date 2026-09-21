@@ -74,6 +74,24 @@ function Dock(props: { deps: DockDeps }) {
   // (지연 로드). 마운트된 뒤 한 번 더 부른다 — 이미 제자리면 아무 일도 안 한다.
   onMount(() => placeMicButton());
 
+  // ── N4 3단계: 탭을 pane으로 끌어내기 ────────────────────────────────────
+  // 배선 자체는 core(layout/dnd.js)에 있고 여기서는 브리지로 부른다 — 이
+  // 파일은 지연 청크라 dnd.js를 정적 import 하면 그쪽이 들고 있는
+  // layout/store.js가 복제된다(ADR-26, 파일 머리말의 그 제약).
+  const wireDrag = (el: HTMLElement, id: string) =>
+    (window as any).vtWirePanelDragSource?.(el, id);
+
+  // 끌어낸 탭이 지금 dock에 펼쳐져 있던 그 탭이면 dock을 접는다. 같은 패널이
+  // dock과 pane에 동시에 떠 있으면(1단계 인스턴스 계약상 기술적으로는 가능하다)
+  // 어느 쪽이 "그" 화면인지 알 수 없고, 무엇보다 끌어낸다는 동작과 화면 결과가
+  // 어긋난다. 활성 탭이 아니었다면 애초에 안 보이던 것이라 할 일이 없다.
+  const onPanelDropped = (e: Event) => {
+    const panel = (e as CustomEvent).detail?.panel;
+    if (panel && panel === activeTab() && !collapsed()) setCollapsedPersist(true);
+  };
+  window.addEventListener('vt-panel-pane-drop', onPanelDropped);
+  onCleanup(() => window.removeEventListener('vt-panel-pane-drop', onPanelDropped));
+
   const tabs = createMemo(() => {
     const c = caps();
     // capabilities 응답 전에는 게이팅 대상 탭을 그리지 않는다 — 나타났다
@@ -236,6 +254,7 @@ function Dock(props: { deps: DockDeps }) {
                 data-tip={t.label}
                 data-tip-sub={tipSub(t)}
                 data-tip-side="left"
+                ref={(el) => wireDrag(el, t.id)}
                 onClick={() => onTabClick(t.id)}
               >
                 {/* 접힘 36px에서는 **아이콘만** 보인다. 이전에는 CSS의

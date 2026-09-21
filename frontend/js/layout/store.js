@@ -155,6 +155,25 @@ export function openPanelPane(panel, paneId = _activePaneId) {
   return target;
 }
 
+// N4 3단계 — 지정한 칸을 **그대로** 패널 칸으로 만든다(쪼개지 않는다).
+// `openPanelPane`과 갈라놓은 이유: 그쪽의 "터미널이 들어 있으면 옆으로
+// 쪼갠다"는 휴리스틱은 **사용자가 칸을 고르지 않았을 때**의 보험이다
+// (팔레트·액션은 활성 pane을 기본값으로 쓸 뿐이다). dock 탭을 끌어다
+// 떨어뜨린 경우는 사용자가 그 칸을 직접 겨냥한 것이라 보험이 오히려
+// 방해가 된다 — 겨냥한 자리가 아닌 옆 칸에 열리기 때문이다. 5구역 중
+// 가장자리를 고르면 분할이 되는데, 중앙까지 분할이면 center와 edge가
+// 같은 결과가 되어 구역 판정이 의미를 잃는다.
+// 세션은 tree.js `setLeafPanel`이 비운다 — 한 칸이 터미널이면서 동시에
+// 패널일 수는 없다. 세션 자체는 죽지 않고 탭·레일에 그대로 살아 있다.
+export function setPanePanel(panel, paneId = _activePaneId) {
+  const node = findNode(_tree, paneId);
+  if (!node || node.t !== 'leaf') return false;
+  _tree = _setLeafPanel(_tree, paneId, panel);
+  _activePaneId = paneId;
+  _notify();
+  return true;
+}
+
 // 키맵(`Mod+D` 등, S3)처럼 "지금 활성 pane"을 대상으로 하는 짧은 표기.
 export function splitActivePane(dir, sessionId = null) {
   return splitPane(_activePaneId, dir, sessionId);

@@ -179,3 +179,51 @@ test('wireSessionDragSource — 세션 id가 없으면 드래그를 시작하지
   assert.strictEqual(e._data[D.SESSION_MIME], undefined);
   assert.ok(!el.classList.contains('dragging'));
 });
+
+// ── N4 3단계: dock 탭을 pane으로 끌어내기 ────────────────────────────────
+// applyPaneDrop과 같은 5구역을 쓰되 center의 의미가 다르다 — 패널은
+// "그 칸을 직접 겨냥한" 드롭이라 쪼개지 않고 교체한다(store.setPanePanel).
+test('applyPanelDrop — center는 그 칸을 패널 칸으로 교체한다(터미널이 들어 있어도)', async () => {
+  const { S, D } = await loadDnd();
+  const paneId = S.getActivePaneId();
+  S.setPaneSession('sess-a', paneId);
+  assert.strictEqual(S.getTree().session, 'sess-a');
+
+  assert.strictEqual(D.applyPanelDrop(paneId, 'center', 'queue'), true);
+  const leaf = S.getTree();
+  assert.strictEqual(leaf.kind, 'panel');
+  assert.strictEqual(leaf.panel, 'queue');
+  assert.strictEqual(leaf.session, null, '한 칸이 터미널이면서 동시에 패널일 수는 없다');
+});
+
+test('applyPanelDrop — 가장자리는 그 방향으로 쪼개고 새 leaf를 패널 칸으로 만든다', async () => {
+  const { S, D } = await loadDnd();
+  const paneId = S.getActivePaneId();
+  assert.strictEqual(D.applyPanelDrop(paneId, 'bottom', 'ports'), true);
+
+  const tree = S.getTree();
+  assert.strictEqual(tree.t, 'split');
+  assert.strictEqual(tree.dir, 'col');
+  assert.strictEqual(tree.a.id, paneId, 'bottom이면 기존 pane이 위(a)에 남는다');
+  assert.strictEqual(tree.b.kind, 'panel');
+  assert.strictEqual(tree.b.panel, 'ports');
+});
+
+test('applyPanelDrop — 모르는 패널 이름은 트리에 들이지 않는다', async () => {
+  const { S, D } = await loadDnd();
+  const before = S.getTree();
+  assert.strictEqual(D.applyPanelDrop(S.getActivePaneId(), 'center', 'nope'), false);
+  assert.strictEqual(D.applyPanelDrop(S.getActivePaneId(), 'center', ''), false);
+  assert.strictEqual(S.getTree(), before);
+});
+
+test('applyPanelDrop — pane 상한에 걸리면 가장자리 드롭도 분할하지 않는다', async () => {
+  const { S, D } = await loadDnd();
+  let id = S.getActivePaneId();
+  for (let i = 0; i < 5; i++) id = S.splitActivePane('row');
+  assert.strictEqual(D.canSplit(), false);
+
+  const before = S.getTree();
+  assert.strictEqual(D.applyPanelDrop(id, 'right', 'usage'), false);
+  assert.strictEqual(S.getTree(), before);
+});

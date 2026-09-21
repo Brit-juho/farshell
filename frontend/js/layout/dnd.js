@@ -12,10 +12,25 @@
 //
 // 판정 함수(computeDropZone)와 반영 함수(applyPaneDrop)는 DOM 이벤트와 분리된
 // 순수 로직이라 단위 테스트 대상이다(layout-dnd.test.js).
-import { splitPane, setPaneSession, countLeaves } from './store.js';
+import { splitPane, setPaneSession, setPanePanel, countLeaves } from './store.js';
 import { COMPACT_MAX, REGULAR_MAX, WIDE_MAX } from './breakpoints.js';
+// N4 3단계 — 패널 드래그의 mime과 이름 집합. 상수만 쓰고, registry.js는 정적
+// import가 없어 이 방향(core → registry)은 청크를 오염시키지 않는다.
+import { PANEL_MIME, PANEL_KINDS } from '../panels/registry.js';
 
 export const SESSION_MIME = 'text/vt-tab-id';
+export { PANEL_MIME };
+
+// 드롭 이벤트에 실린 mime 중 우리가 아는 것 하나를 고른다. dragover 단계에서는
+// 브라우저가 보호 모드라 getData()가 빈 문자열이라 **types만** 읽을 수 있다 —
+// 그래서 판정과 값 읽기를 이렇게 나눠 둔다.
+function _dragMime(dataTransfer) {
+  const types = dataTransfer && dataTransfer.types;
+  if (!types) return null;
+  if (types.includes(PANEL_MIME)) return PANEL_MIME;
+  if (types.includes(SESSION_MIME)) return SESSION_MIME;
+  return null;
+}
 
 // 반응형 4구간별 pane 상한(breakpoints.js와 같은 경계값, 10-shell-layout.md
 // §3). "새로 분할하는 액션"만 막는 게이트다 — 이미 만들어진 트리는 화면이
@@ -79,6 +94,26 @@ export function applyPaneDrop(paneId, zone, sessionId) {
   if (newPaneId) setPaneSession(sessionId, newPaneId);
 }
 
+// N4 3단계 — dock 탭을 pane 위에 떨어뜨렸을 때. applyPaneDrop과 **같은 5구역**을
+// 쓰되 배정 대상이 세션이 아니라 패널 이름이다.
+//  - center: 그 칸을 그대로 패널 칸으로 만든다(사용자가 그 칸을 직접 겨냥했다).
+//    터미널이 들어 있었다면 교체된다 — 세션 드래그의 center와 같은 규칙이고,
+//    세션은 탭·레일에 그대로 살아 있으므로 잃는 것이 없다.
+//  - 가장자리: 그 방향으로 분할한 뒤 새 leaf를 패널 칸으로 만든다.
+//  - pane 상한(canSplit)에 걸리면 조용히 무시한다(세션 드롭과 동일).
+// 모르는 패널 이름은 받지 않는다 — 트리에 들어가면 그리지도 못하면서
+// 스냅샷으로 저장까지 된다. 반영했으면 true를 반환한다(배선 쪽이 이 값을 보고
+// "끌어내기가 성사됐다" 이벤트를 쏜다).
+export function applyPanelDrop(paneId, zone, panel) {
+  if (!panel || !PANEL_KINDS.has(panel)) return false;
+  if (zone === 'center') return setPanePanel(panel, paneId);
+  const spec = ZONE_TO_SPLIT[zone];
+  if (!spec || !canSplit()) return false;
+  const newPaneId = splitPane(paneId, spec.dir, null, spec.newFirst);
+  if (!newPaneId) return false;
+  return setPanePanel(panel, newPaneId);
+}
+
 // ── 마우스(네이티브 HTML5 DnD) 드롭 타겟 배선 ───────────────────────────
 // paneEl에 dragover/dragleave/drop을 걸어 data-dropzone 속성으로 오버레이를
 // 표시하고(CSS가 소비), drop에서 applyPaneDrop을 부른다. 드래그 소스(세션 —
@@ -86,7 +121,7 @@ export function applyPaneDrop(paneId, zone, sessionId) {
 // id를 실어 보내기만 하면 된다.
 export function wirePaneDropTarget(paneEl, paneId) {
   paneEl.addEventListener('dragover', (e) => {
-    if (!e.dataTransfer.types.includes(SESSION_MIME)) return;
+    if (!_dragMime(e.dataTransfer)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     paneEl.dataset.dropzone = computeDropZone(paneEl.getBoundingClientRect(), e.clientX, e.clientY);
@@ -97,12 +132,26 @@ export function wirePaneDropTarget(paneEl, paneId) {
     if (!paneEl.contains(e.relatedTarget)) delete paneEl.dataset.dropzone;
   });
   paneEl.addEventListener('drop', (e) => {
-    if (!e.dataTransfer.types.includes(SESSION_MIME)) return;
+    const mime = _dragMime(e.dataTransfer);
+    if (!mime) return;
     e.preventDefault();
     const zone = paneEl.dataset.dropzone || 'center';
     delete paneEl.dataset.dropzone;
-    applyPaneDrop(paneId, zone, e.dataTransfer.getData(SESSION_MIME));
+    const value = e.dataTransfer.getData(mime);
+    if (mime === PANEL_MIME) {
+      if (applyPanelDrop(paneId, zone, value)) _notifyPanelDropped(value, paneId);
+      return;
+    }
+    applyPaneDrop(paneId, zone, value);
   });
+}
+
+// 끌어내기가 성사됐다고 dock에 알린다. dock(shell/Dock.tsx)은 지연 청크라
+// 이 모듈을 import 할 수 없어서(ADR-26) 단방향 이벤트로만 이어 둔다 — dock은
+// 자기가 열어둔 탭이 밖으로 나갔으면 접는다.
+function _notifyPanelDropped(panel, paneId) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('vt-panel-pane-drop', { detail: { panel, paneId } }));
 }
 
 // ── 세션 드래그 소스(마우스+터치 한 번에) ──────────────────────────────
@@ -124,6 +173,27 @@ export function wireSessionDragSource(el, getSessionId) {
   });
   el.addEventListener('dragend', () => el.classList.remove('dragging'));
   wireTouchDragSource(el, getSessionId);
+}
+
+// ── 패널 드래그 소스(dock 탭 → pane) ──────────────────────────────────
+// N4 3단계. 세션 소스와 달리 **마우스 전용**이다: dock은 1600px 미만에서 기본
+// 접힘이고 compact는 pane 상한이 2라 터치에서 끌어낼 자리가 사실상 없다.
+// wireTouchDragSource를 패널까지 받도록 일반화하면 이미 검증된 세션 드래그
+// 경로를 건드리게 되는데, 실익보다 회귀 위험이 크다.
+//
+// `shell/Dock.tsx`는 지연 청크라 이 모듈을 import 할 수 없어서(ADR-26 —
+// store.js가 복제된다) 아래 window 브리지로 부른다.
+export function wirePanelDragSource(el, getPanelName) {
+  if (!el) return;
+  el.draggable = true;
+  el.addEventListener('dragstart', (e) => {
+    const name = typeof getPanelName === 'function' ? getPanelName() : getPanelName;
+    if (!name || !PANEL_KINDS.has(name)) { e.preventDefault(); return; }
+    e.dataTransfer.setData(PANEL_MIME, name);
+    e.dataTransfer.effectAllowed = 'move';
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
 }
 
 // ── 터치(pointer:coarse) long-press 드래그 ──────────────────────────────
@@ -233,3 +303,7 @@ export function wireTouchDragSource(sourceEl, getSessionId) {
     }
   }, true);
 }
+
+// dock(지연 청크)이 위 소스 배선을 쓰기 위한 브리지. layout/store.js의
+// `window.openPanelPane`·`window.splitActivePane`과 같은 관용구다.
+if (typeof window !== 'undefined') window.vtWirePanelDragSource = wirePanelDragSource;

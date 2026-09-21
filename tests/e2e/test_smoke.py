@@ -998,6 +998,63 @@ def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
     assert page.evaluate("() => !document.getElementById('vt-queue')"), "접었는데 패널이 남았다"
 
 
+def test_dock_탭을_페인으로_끌어내면_그_칸이_패널_칸이_되고_dock은_접힌다(page):
+    """N4 3단계 — dock 탭 → pane 드래그.
+
+    브라우저 없이 못 보는 것이 둘이다. 첫째, **네이티브 HTML5 DnD가 실제로
+    성립하는가** — `draggable` 속성, `dataTransfer` mime, 드롭 타겟의
+    `preventDefault`가 하나라도 어긋나면 jsdom에서는 티가 안 나고 실브라우저에서만
+    조용히 아무 일도 안 일어난다. 둘째, 5구역 판정이 **실제 좌표**로 돌아가는가
+    (`computeDropZone`의 단위 테스트는 가짜 rect를 쓴다).
+
+    시작 상태로 뷰어 칸을 먼저 연다. 세션이 0개면 온보딩이 화면 전체를 덮어
+    (position:fixed·z-index:500) pane이 드롭을 받을 수 없다 — 뷰어/패널 칸이
+    하나라도 생기면 `body.vt-has-viewer-pane`이 그걸 눌러준다(panes.js).
+    PTY를 띄우지 않고 그 상태를 만드는 가장 싼 방법이다."""
+    page.evaluate("(p) => window.openFileInPane(p)", str(ROOT / "VERSION"))
+    page.wait_for_selector(".vt-pane-viewer", timeout=15000)
+
+    _open_dock(page, "큐")
+    tab = page.locator("#vt-dock .vt-dock-tab", has_text="큐").first
+    pane = page.locator(".vt-pane").first
+    box = pane.bounding_box()
+
+    # 오른쪽 가장자리(폭의 10% 지점) = 그 방향으로 분할. 가운데였다면 교체다.
+    tab.drag_to(pane, target_position={"x": box["width"] * 0.9, "y": box["height"] / 2})
+
+    page.wait_for_selector(".vt-pane-body .vt-pane-panel-root", timeout=15000)
+    got = page.evaluate(
+        """() => {
+          const root = document.querySelector('.vt-pane-body .vt-pane-panel-root');
+          const pane = root.closest('.vt-pane');
+          const panes = [...document.querySelectorAll('.vt-pane')];
+          const pr = pane.getBoundingClientRect();
+          return {
+            id: root.id,
+            panes: panes.length,
+            // 분할이면 패널 칸이 **오른쪽**에 와야 한다.
+            isRightmost: panes.every((p) => p.getBoundingClientRect().left <= pr.left + 1),
+            head: pane.querySelector('.vt-pane-name')?.textContent.trim(),
+            dockCollapsed: document.getElementById('vt-dock').classList.contains('collapsed'),
+            stillInDock: !!document.querySelector('#vt-dock .vt-dock-body #vt-queue'),
+            overflow: [...root.querySelectorAll('*')].filter((el) => {
+              const r = el.getBoundingClientRect();
+              if (!r.width && !r.height) return false;
+              return r.right > pr.right + 1 || r.left < pr.left - 1;
+            }).length,
+          };
+        }"""
+    )
+    assert got["id"].startswith("vt-queue--pane-"), f"pane 인스턴스 id 규칙이 깨졌다: {got}"
+    assert got["panes"] == 2, f"오른쪽 가장자리 드롭인데 분할이 안 됐다: {got}"
+    assert got["isRightmost"], f"새 칸이 오른쪽에 안 왔다: {got}"
+    assert got["head"] == "큐", f"pane 헤더 이름이 패널 라벨이 아니다: {got}"
+    # 끌어낸 탭이 dock에 그대로 남아 있으면 같은 화면이 두 곳에 뜬다.
+    assert got["dockCollapsed"], f"끌어냈는데 dock이 안 접혔다: {got}"
+    assert not got["stillInDock"], f"dock 본문에 큐가 남았다: {got}"
+    assert got["overflow"] == 0, f"패널 내용이 pane 밖으로 넘쳤다: {got}"
+
+
 def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
     """40 §3 — 머리말(저장소·브랜치)과 목록이 실제 API 응답으로 채워지는가."""
     _open_dock(page, "소스컨트롤")

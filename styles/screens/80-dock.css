@@ -97,6 +97,10 @@
    탭이 시야 밖으로 밀려나 이 border-right는 안 보이니, 경계선은 항상 고정
    위치인 마이크 칸의 border-left 하나에만 맡긴다. */
 .vt-dock-tabs-scroll > .vt-dock-tab:last-child { border-right:0; }
+/* N4 3단계 — 탭을 pane으로 끌어내는 중. 레일 세션 행(.vt-rail-session-row)과
+   같은 규칙이다(40-rail-legacy.css) — 드래그 중 표시가 표면마다 다르면
+   같은 제스처가 다른 기능처럼 보인다. */
+.vt-dock-tab.dragging { opacity:.45; cursor:grabbing; }
 /* 2026-09-17 — 20-design-system.md §3의 탭 규격으로 되돌린다: 활성 = 하단 2px
    액센트 밑줄 + 아주 옅은 액센트 면, 비활성 = --color-sub 텍스트.
    직전까지는 배경이 --color-surface-active여서 밑줄이 아니라 **채움 박스**가
