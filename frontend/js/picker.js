@@ -11,7 +11,7 @@ import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
 import { switchTo, renameSession, attachTmux } from './term/session.js';
 import { detachSession, confirmAndKillSession } from './term/session-actions.js';
-import { sendPaste } from './term/clipboard.js';
+import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
 
@@ -174,26 +174,13 @@ async function openSessionOnMac() {
 // index.html의 <input type="file" onchange="uploadFile(this)">가 직접 부른다 —
 // 인라인 핸들러라 window 브리지가 필요하다(F3(c)에서도 data-action으로 못 옮긴
 // 것과 같은 종류: change 이벤트 위임은 F3(c)의 클릭 위임 범위 밖이었다).
+//
+// R6 — 알맹이는 term/upload.js 하나다. 드롭(터미널 칸·파일 패널)과 이 input이
+// **같은 코드**를 타야 "여러 개를 올렸을 때 경로가 어떻게 들어가는가" 같은
+// 규칙이 진입점마다 갈라지지 않는다. 여기는 input을 비우는 일만 더 한다 —
+// 같은 파일을 연달아 두 번 고를 수 있어야 하므로.
 async function uploadFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const formData = new FormData();
-  formData.append('file', file);
-  const sid = activeSessionId() || '';
-  try {
-    const res = await apiFetch(`${API_BASE}/api/upload?session_id=${sid}`, { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data.ok && data.path && activeSession()) {
-      // 화면에 찍기만 하면(term.write) 드래그 선택 말고는 경로를 집어낼 수 없다.
-      // 이미지 붙여넣기(pasteImageUpload)와 동일하게 경로를 명령줄에 실제로 타이핑해
-      // Claude 등에 그대로 넘길 수 있게 한다.
-      // N24 — 실행되지 않고 사용자가 이어서 완성할 텍스트라 붙여넣기 경로.
-      sendPaste(activeSessionId(), data.path + ' ');
-      showToast('업로드 완료 — 경로 삽입됨', 'success');
-    }
-  } catch (e) {
-    showToast('업로드 실패: ' + e.message, 'error');
-  }
+  await uploadFiles(input.files, { insertPath: true });
   input.value = '';
 }
 window.uploadFile = uploadFile;

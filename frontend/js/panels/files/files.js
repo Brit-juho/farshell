@@ -130,11 +130,51 @@ function showFiles(opts = {}) {
     document.getElementById('file-input')?.click();
   });
 
+  wireFileDrop(panel.el);
+
   renderChips(inst);
   refreshFiles(inst);
   // 목록은 자주 안 바뀌지만(업로드는 사용자가 직접 한다) 다른 기기에서 올린
   // 파일·TTL 정리 결과가 반영돼야 해서 느리게 돈다. 패널이 닫히면 자동 정리.
   setPanelPoll(panel.el, 10000, () => refreshFiles(inst));
+}
+
+// R6 — 패널 전체가 드롭존이다(50-files-share.md §4 「드롭존: dock 탭 전체」).
+// dock 인스턴스와 pane 인스턴스 양쪽에 그대로 붙는다 — 배선이 `panel.el`에
+// 달리므로 어디에 떠 있든 같다.
+//
+// 업로드 구현은 `term/upload.js` 하나뿐인데 여기서 **정적 import 하지 않는다**:
+// 그쪽은 core/store.js를 쓰고 이 파일은 지연 청크(panels.js)라, 끌어오면 세션
+// 싱글톤이 청크 안에 복제된다(ADR-26 — 파일 상단 경고와 같은 이유).
+//
+// 경로는 터미널에 **안 넣는다**(사용자 확정): 파일을 정리하는 중에 터미널로
+// 글자가 끼어들면 방해가 된다. 터미널 칸에 놓았을 때만 꽂힌다(layout/dnd.js).
+function wireFileDrop(rootEl) {
+  const hasFiles = (dt) => !!dt && Array.prototype.includes.call(dt.types || [], 'Files');
+  rootEl.addEventListener('dragover', (e) => {
+    if (!hasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    // pane 안에 떠 있으면 바깥 `.vt-pane`도 파일 드롭을 받는다(그쪽은 세션에
+    // 경로를 꽂는다) — 더 안쪽인 우리가 이긴다.
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    rootEl.dataset.dropfile = '1';
+  });
+  rootEl.addEventListener('dragleave', (e) => {
+    if (!rootEl.contains(e.relatedTarget)) delete rootEl.dataset.dropfile;
+  });
+  rootEl.addEventListener('drop', async (e) => {
+    if (!hasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    delete rootEl.dataset.dropfile;
+    const up = window.vtUploadFiles;
+    if (typeof up !== 'function') return;   // core가 아직 안 올라온 창(방어)
+    await up(e.dataTransfer, { insertPath: false });
+    // 올린 것이 바로 보여야 한다. 열려 있는 **모든** 파일 패널을 새로 고친다 —
+    // 삭제·링크 발급과 같은 규칙(refreshAllFiles 주석).
+    refreshAllFiles();
+  });
 }
 
 function renderChips(inst) {

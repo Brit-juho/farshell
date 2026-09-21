@@ -327,6 +327,22 @@ html[data-skin="windows"] .caption { display:flex; }
 .vt-pane[data-dropzone="top"]::after { left:0; right:0; top:0; height:50%; }
 .vt-pane[data-dropzone="bottom"]::after { left:0; right:0; bottom:0; height:50%; }
 
+/* R6 — OS 파일 드롭. 위 5구역과 **다른 속성**을 쓴다: 파일은 "이 칸을 어떻게
+   쪼갤까"가 아니라 "이 칸에 넘긴다"라 방향이 없다. 같은 data-dropzone으로
+   그리면 가장자리에 갖다 댔을 때 분할되는 줄 알게 된다 — 칸 전체를 한 덩어리로
+   표시해 그 오해를 없앤다. 파일 패널(.vt-fl-drop)도 같은 규칙을 쓴다. */
+.vt-pane[data-dropfile]::after,
+[data-dropfile].vt-dock-panel::after {
+  content:'여기에 놓으면 올라갑니다';
+  position:absolute; inset:0; z-index:9; pointer-events:none;
+  display:flex; align-items:center; justify-content:center;
+  background:color-mix(in srgb, var(--acc) 18%, transparent);
+  border:2px dashed var(--acc); border-radius:var(--radius-sm); box-sizing:border-box;
+  color:var(--color-txt); font:var(--weight-medium) var(--fs-sm) var(--font-ui);
+}
+/* 패널 루트는 기본이 static이라 ::after의 inset:0이 기준을 못 잡는다. */
+[data-dropfile].vt-dock-panel { position:relative; }
+
 /* L5: 터치 long-press 드래그 고스트 — 네이티브 DnD의 드래그 이미지를 흉내낸
    대체물(터치는 브라우저가 그런 프리뷰를 안 그려준다). 포인터를 그대로
    따라다니다 손을 떼면 사라진다. */

@@ -945,6 +945,56 @@ def test_리사이즈_오버레이가_분할선_드래그_중에만_보인다(is
         page.wait_for_timeout(300)   # saveWorkspace()가 서버에 반영될 시간
 
 
+def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isolated_page):
+    """R6 — 터미널 칸 드롭은 **올리고 나서 그 칸의 세션에 경로를 붙여넣는다**.
+
+    파일 패널 드롭(위)과 규칙이 갈리는 지점이라 따로 본다. 살아 있는 PTY가
+    있어야 붙여넣기가 관찰되므로 전용 브라우저 픽스처를 쓴다 — 실제 터미널을
+    렌더링하는 테스트가 공유 Chromium에서 열화되는 문제(픽스처 주석) 때문이다.
+    """
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
+    page.wait_for_timeout(800)   # PTY 연결 + 셸 프롬프트
+    session_ids = page.evaluate("() => Object.keys(window.allSessions())")
+    try:
+        name = f"e2e-pane-{int(time.time())}.txt"
+        page.evaluate(
+            """([name]) => {
+              const dt = new DataTransfer();
+              dt.items.add(new File(['x'], name, { type: 'text/plain' }));
+              const pane = document.querySelector('.vt-pane');
+              for (const type of ['dragover', 'drop']) {
+                pane.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+              }
+            }""",
+            [name],
+        )
+        # 업로드 → sendPaste → PTY 에코. **DOM이 아니라 xterm 버퍼를 읽는다** —
+        # 렌더러가 WebGL이라 화면은 캔버스고 `.xterm-screen`의 textContent는 비어
+        # 있다(실측으로 한 번 헛다리를 짚었다).
+        read_buf = """() => {
+          const s = Object.values(window.allSessions())[0];
+          const b = s && s.term && s.term.buffer && s.term.buffer.active;
+          if (!b) return '';
+          let out = '';
+          for (let i = 0; i < b.length; i++) out += (b.getLine(i)?.translateToString(true) || '') + '\\n';
+          return out;
+        }"""
+        page.wait_for_function(
+            "(n) => { const f = " + read_buf + "; return f().includes(n); }",
+            arg=name, timeout=20000,
+        )
+        screen = page.evaluate(read_buf)
+        assert name in screen, screen[-300:]
+        # 붙여넣기지 실행이 아니다 — 경로만 들어가고 명령은 안 돌아야 한다.
+        assert "command not found" not in screen, f"경로가 실행돼 버렸다: {screen[-300:]}"
+    finally:
+        for sid in session_ids:
+            page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+        page.wait_for_timeout(300)
+
+
 # ── N35 §6 dock ───────────────────────────────────────────────────────────
 
 def test_dock_탭_행이_문서대로_그려진다(page):
@@ -1269,6 +1319,50 @@ def test_dock_파일_탭이_dock_안에_마운트되고_용량_게이지를_그�
     page.wait_for_selector("#vt-dock .vt-fl-footer .vt-fl-gauge", timeout=10000)
     # 모달이 아니라 dock 안이어야 한다(패널이 backdrop으로 새면 이 검사가 잡는다).
     assert page.evaluate("() => !!document.querySelector('#vt-dock #vt-files.vt-dock-panel')")
+
+
+def test_파일을_패널에_끌어다_놓으면_올라간다(page):
+    """R6 — OS 파일 드롭 업로드.
+
+    실브라우저로만 볼 수 있는 것: `DataTransfer`에 실린 **진짜 파일**이
+    `FormData`로 서버까지 가서 저장소에 편입되는가. jsdom 테스트
+    (`upload.test.js`)는 fetch를 가짜로 바꿔 "몇 번 어떤 순서로 보내는가"만
+    보므로 이 경로 전체는 여기서만 닫힌다.
+
+    파일 패널에 놓았으므로 **터미널에 경로를 넣지 않는다**(사용자 확정 규칙).
+    터미널 칸 드롭은 살아 있는 PTY가 있어야 해서 이 스위트의 범위 밖이다.
+    """
+    _open_dock(page, "파일")
+    page.wait_for_selector("#vt-dock #vt-files", timeout=15000)
+    before = page.evaluate("() => document.querySelectorAll('#vt-dock .vt-fl-row').length")
+
+    name = f"e2e-drop-{int(time.time())}.txt"
+    page.evaluate(
+        """([name]) => {
+          const dt = new DataTransfer();
+          dt.items.add(new File(['drop me'], name, { type: 'text/plain' }));
+          const root = document.getElementById('vt-files');
+          for (const type of ['dragover', 'drop']) {
+            root.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+          }
+        }""",
+        [name],
+    )
+
+    page.wait_for_function(
+        "(n) => [...document.querySelectorAll('#vt-dock .vt-fl-name')].some(e => e.textContent.includes(n))",
+        arg=name, timeout=15000,
+    )
+    got = page.evaluate(
+        """(n) => {
+          const rows = [...document.querySelectorAll('#vt-dock .vt-fl-row')];
+          const mine = rows.find(r => r.querySelector('.vt-fl-name')?.textContent.includes(n));
+          return { rows: rows.length, sub: mine?.querySelector('.vt-fl-sub')?.textContent.trim() || '' };
+        }""",
+        name,
+    )
+    assert got["rows"] == before + 1, f"행이 하나 늘어야 한다: {got}"
+    assert "7B" in got["sub"], f"크기가 안 맞는다(내용 'drop me' = 7바이트): {got}"
 
 
 def test_모바일_플릿_홈에_호스트_스위처가_있다(page):

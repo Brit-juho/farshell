@@ -12,11 +12,14 @@
 //
 // 판정 함수(computeDropZone)와 반영 함수(applyPaneDrop)는 DOM 이벤트와 분리된
 // 순수 로직이라 단위 테스트 대상이다(layout-dnd.test.js).
-import { splitPane, setPaneSession, setPanePanel, countLeaves } from './store.js';
+import { splitPane, setPaneSession, setPanePanel, countLeaves, getTree } from './store.js';
+import { findNode } from './tree.js';
 import { COMPACT_MAX, REGULAR_MAX, WIDE_MAX } from './breakpoints.js';
 // N4 3단계 — 패널 드래그의 mime과 이름 집합. 상수만 쓰고, registry.js는 정적
 // import가 없어 이 방향(core → registry)은 청크를 오염시키지 않는다.
 import { PANEL_MIME, PANEL_KINDS } from '../panels/registry.js';
+// R6 — OS 파일 드롭. 업로드 구현은 한 곳(term/upload.js)이고 여기는 부르기만 한다.
+import { hasFiles, filesFromDataTransfer, uploadFiles } from '../term/upload.js';
 
 export const SESSION_MIME = 'text/vt-tab-id';
 export { PANEL_MIME };
@@ -120,6 +123,7 @@ export function applyPanelDrop(paneId, zone, panel) {
 // 레일 행, pane 헤더 — panes.js)는 이 mime 타입으로 dataTransfer에 세션
 // id를 실어 보내기만 하면 된다.
 export function wirePaneDropTarget(paneEl, paneId) {
+  wirePaneFileDrop(paneEl, paneId);
   paneEl.addEventListener('dragover', (e) => {
     if (!_dragMime(e.dataTransfer)) return;
     e.preventDefault();
@@ -144,6 +148,49 @@ export function wirePaneDropTarget(paneEl, paneId) {
     }
     applyPaneDrop(paneId, zone, value);
   });
+}
+
+// ── OS 파일 드롭(R6) ───────────────────────────────────────────────────
+// 위 세션/패널 드롭과 **같은 엘리먼트, 다른 화물**이다. 앱 내부 드래그는 자기
+// mime을 싣고 OS 파일 드래그는 'Files'를 싣기 때문에 섞이지 않는다.
+//
+// 5구역 판정을 쓰지 않는다: 파일은 "이 칸을 어떻게 쪼갤까"가 아니라 "이 칸의
+// 세션에 넘긴다"라 방향이라는 개념이 없다. 그래서 오버레이도 칸 전체다
+// (`data-dropfile`, 10-shell.css) — 같은 속성으로 두 모양을 그리면 사용자가
+// 가장자리에 갖다 댔을 때 분할되는 줄 안다.
+//
+// 세션이 없는 칸(빈 pane · 뷰어 · 패널 칸)에 놓아도 **업로드는 된다** — 다만
+// 꽂을 데가 없으니 경로는 안 넣는다. 올린 파일은 파일 패널에서 찾을 수 있다.
+function wirePaneFileDrop(paneEl, paneId) {
+  paneEl.addEventListener('dragover', (e) => {
+    if (!hasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    paneEl.dataset.dropfile = '1';
+  });
+  paneEl.addEventListener('dragleave', (e) => {
+    if (!paneEl.contains(e.relatedTarget)) delete paneEl.dataset.dropfile;
+  });
+  paneEl.addEventListener('drop', (e) => {
+    if (!hasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    // window의 기본 동작 차단 핸들러까지 올라가면 "아무도 안 받았다" 안내가
+    // 같이 뜬다(term/upload.js) — 우리가 받았으므로 여기서 끊는다.
+    e.stopPropagation();
+    delete paneEl.dataset.dropfile;
+    const files = filesFromDataTransfer(e.dataTransfer);
+    if (!files.length) return;
+    const sessionId = _paneSessionId(paneId);
+    uploadFiles(files, { sessionId, insertPath: !!sessionId });
+  });
+}
+
+// 이 pane에 지금 배치된 세션 id. layout/panes.js가 헤더 드래그 소스에 쓰는 것과
+// 같은 값이지만, 그쪽은 렌더러 내부 함수라 여기서 쓸 수 없다 — 트리에서 직접 본다.
+function _paneSessionId(paneId) {
+  const node = findNode(getTree(), paneId);
+  return node && node.t === 'leaf' && node.kind === 'terminal' ? node.session || null : null;
 }
 
 // 끌어내기가 성사됐다고 dock에 알린다. dock(shell/Dock.tsx)은 지연 청크라

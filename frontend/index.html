@@ -494,7 +494,9 @@
        업로드" 명령)와 keybar의 📎 슬롯(L7, 아래) 둘이 이 하나의 input을
        공유한다. 어디서 부르든 `.click()`만 하면 되므로 input은 어느 한쪽
        DOM 밑에 있을 필요가 없다 — 최상위에 숨겨서 둔다. -->
-  <input type="file" id="file-input" hidden onchange="uploadFile(this)" />
+  <!-- R6 — multiple: 드롭은 원래 여러 개가 오는데 선택 대화상자만 하나면
+       같은 기능의 규칙이 진입점마다 달라진다. term/upload.js가 순차로 올린다. -->
+  <input type="file" id="file-input" hidden multiple onchange="uploadFile(this)" />
 
   <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
   <div id="mic-status" role="status" aria-live="polite"></div>
