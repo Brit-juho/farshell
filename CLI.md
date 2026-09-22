@@ -44,7 +44,7 @@ fsh otp [status|setup|disable]   # require OTP when registering a new device (fu
 fsh device [list|rename <id> <name>|revoke <id>]  # list/rename registered devices, revoke (also invalidates sessions if a phone is lost)
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 fsh claude             # open new terminal window with tmux dev + claude --resume (internally fsh agent claude)
-fsh agent <name>       # start with any agent — claude/codex/aider/gemini (generalization of fsh claude)
+fsh agent <name>       # start with any agent — claude/codex/aider/agy/qwen (generalization of fsh claude)
 fsh template [save|apply|list|rm] <name>  # save/apply CLAUDE.md templates
 fsh popup <action>     # quick fsh command invocation via tmux 3.2+ popup
 fsh run "..."          # run headless `claude -p` in background + TTS notification on completion

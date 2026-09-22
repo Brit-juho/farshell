@@ -3129,7 +3129,7 @@ PYEOF
 }
 
 cmd_agent() {
-  # fsh agent <claude|codex|aider|gemini> — 지정한 AI CLI를 tmux dev에서 시작
+  # fsh agent <claude|codex|aider|agy|qwen> — 지정한 AI CLI를 tmux dev에서 시작
   local agent="${1:-claude}"
   shift || true
 
@@ -3141,10 +3141,13 @@ cmd_agent() {
     claude) exec_cmd="claude --resume --disallowedTools \"$disallowed\""; bin_name="claude"; icon="🟣"; label="Claude" ;;
     codex)  exec_cmd="codex"; bin_name="codex"; icon="🟢"; label="Codex" ;;
     aider)  exec_cmd="aider"; bin_name="aider"; icon="🔵"; label="Aider" ;;
-    gemini) exec_cmd="gemini"; bin_name="gemini"; icon="🟡"; label="Gemini" ;;
+    # 2026-09-23 — 구글이 2026-06-18로 Gemini CLI를 종료하고 Antigravity(agy)로
+    # 통합해서 gemini 항목을 agy로 바꿨다(server/agents.py와 같은 결정).
+    agy)    exec_cmd="agy"; bin_name="agy"; icon="🟡"; label="Antigravity" ;;
+    qwen)   exec_cmd="qwen"; bin_name="qwen"; icon="🟣"; label="Qwen" ;;
     *)
       echo "  ✗ 지원되지 않는 agent: $agent"
-      echo "  사용법: fsh agent <claude|codex|aider|gemini>"
+      echo "  사용법: fsh agent <claude|codex|aider|agy|qwen>"
       return 1
       ;;
   esac
@@ -4480,7 +4483,7 @@ case "${1:-help}" in
     echo "    fsh device [list|revoke <id>]"
     echo "                          등록된 기기 조회 / 폐기 (폰 분실 시)"
     echo "    fsh claude             tmux dev 안에서 claude --resume 시작"
-    echo "    fsh agent <name>       claude/codex/aider/gemini 시작"
+    echo "    fsh agent <name>       claude/codex/aider/agy/qwen 시작"
     echo "    fsh template [save|apply|list|rm] <이름>"
     echo "                          CLAUDE.md 템플릿 관리"
     echo "    fsh popup <action>     tmux 3.2+ popup으로 빠른 호출"

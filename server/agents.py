@@ -1,6 +1,6 @@
 """지원 AI CLI 에이전트 표 — 단일 정의 (N44, 30-worktree.md §3-5).
 
-`bin/fsh`의 `cmd_agent()`가 갖고 있던 `claude|codex|aider|gemini` 표를 여기로
+`bin/fsh`의 `cmd_agent()`가 갖고 있던 `claude|codex|aider|agy|qwen` 표를 여기로
 옮겼다. 워크트리 만들기(§3 5단계: 만들자마자 붙일 에이전트)와 `fsh worktree
 add --agent`가 이 표를 그대로 참조한다 — 두 곳에 같은 매핑을 다시 적지 않는다.
 
@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AgentSpec:
-    name: str          # 'claude' | 'codex' | 'aider' | 'gemini'
+    name: str          # 'claude' | 'codex' | 'aider' | 'agy' | 'qwen'
     bin_name: str       # PATH에서 찾을 실행 파일명
     command: str        # tmux send-keys로 넣을 기동 커맨드
     label: str          # 사람이 읽을 이름
@@ -29,7 +29,11 @@ AGENTS: dict[str, AgentSpec] = {
     "claude": AgentSpec("claude", "claude", "claude", "Claude"),
     "codex": AgentSpec("codex", "codex", "codex", "Codex"),
     "aider": AgentSpec("aider", "aider", "aider", "Aider"),
-    "gemini": AgentSpec("gemini", "gemini", "gemini", "Gemini"),
+    # 2026-09-23 — Google이 2026-06-18로 Gemini CLI를 종료하고 Antigravity
+    # CLI(agy)로 통합해서 gemini 항목을 agy로 바꿨다(사용자 지시, agent_detector.py
+    # 쪽과 같은 결정). qwen-code도 codex/aider급 독립 에이전트로 추가.
+    "agy": AgentSpec("agy", "agy", "agy", "Antigravity"),
+    "qwen": AgentSpec("qwen", "qwen", "qwen", "Qwen"),
 }
 
 

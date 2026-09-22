@@ -42,7 +42,7 @@ fsh otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전�
 fsh device [list|rename <id> <별명>|revoke <id>]  # 등록된 기기 조회 / 이름 변경 / 폐기(폰 분실 시 세션까지 함께 무효)
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 fsh claude             # 새 터미널 창에 tmux dev + claude --resume (내부적으로 fsh agent claude)
-fsh agent <name>       # claude/codex/aider/gemini 등 임의 에이전트로 시작 (fsh claude의 일반화)
+fsh agent <name>       # claude/codex/aider/agy/qwen 등 임의 에이전트로 시작 (fsh claude의 일반화)
 fsh template [save|apply|list|rm] <name>  # CLAUDE.md 템플릿 저장/적용 관리
 fsh popup <action>     # tmux 3.2+ popup으로 fsh 명령 빠른 호출
 fsh run "..."          # headless `claude -p` 백그라운드 실행 + 완료 시 TTS 알림

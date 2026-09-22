@@ -20,16 +20,19 @@ interface Props {
 }
 
 // 30-worktree.md §3 5단계: 워크트리를 만들자마자 붙일 에이전트 — server/agents.py의
-// AGENTS 표와 같은 이름(claude/codex/aider/gemini). 그 표를 노출하는 API가 없어
+// AGENTS 표와 같은 이름(claude/codex/aider/agy/qwen). 그 표를 노출하는 API가 없어
 // (새 API 금지, 위 주석과 같은 이유) 여기 작은 고정 목록으로 중복 정의한다 —
-// bin/fsh 도움말에도 이미 같은 네 이름이 공개돼 있어(CLAUDE.md 기능표) 숨은
+// bin/fsh 도움말에도 이미 같은 이름들이 공개돼 있어(CLAUDE.md 기능표) 숨은
 // 구현 세부사항은 아니다. server/agents.py가 늘어나면 이 목록도 같이 늘려야 한다.
+// 2026-09-23 — gemini는 Google이 종료하고 Antigravity(agy)로 통합해서 뺐다
+// (server/agents.py와 같은 결정). qwen-code 추가.
 const AGENT_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: '없음' },
   { value: 'claude', label: 'Claude' },
   { value: 'codex', label: 'Codex' },
   { value: 'aider', label: 'Aider' },
-  { value: 'gemini', label: 'Gemini' },
+  { value: 'agy', label: 'Antigravity' },
+  { value: 'qwen', label: 'Qwen' },
 ];
 
 const NAME_RE = /^[A-Za-z0-9_-]+$/;
