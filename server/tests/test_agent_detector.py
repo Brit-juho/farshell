@@ -54,6 +54,41 @@ def test_detect_prefers_agent_over_ssh_across_panes(monkeypatch):
     assert info["agent"] == "claude"
 
 
+@pytest.mark.parametrize("raw_cmd", ["python", "python3", "Python"])
+def test_detect_finds_python_by_raw_command(monkeypatch, raw_cmd):
+    """homebrew/framework 빌드는 comm이 대문자 'Python'으로 온다 — 셋 다 잡아야 한다."""
+    _patch_list_panes(monkeypatch, f"{raw_cmd}\t444")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "python"
+    assert info["label"] == "Python"
+
+
+def test_detect_finds_node_by_raw_command(monkeypatch):
+    _patch_list_panes(monkeypatch, "node\t555")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "node"
+    assert info["label"] == "Node"
+
+
+def test_detect_finds_docker_by_raw_command(monkeypatch):
+    _patch_list_panes(monkeypatch, "docker\t666")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "docker"
+    assert info["label"] == "Docker"
+
+
+def test_detect_prefers_ssh_over_tool_across_panes(monkeypatch):
+    _patch_list_panes(monkeypatch, "python\t1\nssh\t2")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "ssh"
+
+
+def test_detect_prefers_agent_over_tool_across_panes(monkeypatch):
+    _patch_list_panes(monkeypatch, "node\t1\nclaude\t2")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "claude"
+
+
 def test_detect_no_panes_stays_none(monkeypatch):
     """세션 자체가 없어 판정 불가 — "shell"과는 다른, 진짜 모름."""
     _patch_list_panes(monkeypatch, "")
@@ -69,12 +104,18 @@ def test_detect_all_labels_every_session(monkeypatch):
         PaneInfo(session="ai", command="claude", pid=1, pane_id="%1"),
         PaneInfo(session="remote", command="ssh", pid=2, pane_id="%2"),
         PaneInfo(session="plain", command="zsh", pid=3, pane_id="%3"),
+        PaneInfo(session="py", command="Python", pid=4, pane_id="%4"),
+        PaneInfo(session="js", command="node", pid=5, pane_id="%5"),
+        PaneInfo(session="ctr", command="docker", pid=6, pane_id="%6"),
     ]
     monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: panes)
     result = agent_detector.detect_all()
     assert result["ai"]["agent"] == "claude"
     assert result["remote"]["agent"] == "ssh"
     assert result["plain"]["agent"] == "shell"
+    assert result["py"]["agent"] == "python"
+    assert result["js"]["agent"] == "node"
+    assert result["ctr"]["agent"] == "docker"
 
 
 def test_detect_all_no_panes_is_empty(monkeypatch):

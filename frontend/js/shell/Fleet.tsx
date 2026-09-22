@@ -102,8 +102,14 @@ function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) 
   const onRowClick = () => {
     // §2: 「완료 · 확인 안 함」 행은 탭하면 seen 처리(이동하지 않는다) —
     // 나머지는 전부 터미널로 이동한다.
-    if (isUnseenDone()) props.onSeen();
-    else props.onOpen();
+    //
+    // 2026-09-22(사용자 지적) — 어느 쪽이든 먼저 onSeen을 부른다(이제
+    // ackLocal이라 done→idle까지 내린다). 안 그러면 이미 「확인함」 상태로
+    // 넘어온 완료 행(다른 기기가 먼저 봤거나, 방금 이 탭으로 확인 처리된 뒤
+    // 재렌더 전)은 else 분기로 곧장 onOpen만 타서 파란 tone이 안 풀린다.
+    const ackOnly = isUnseenDone();
+    props.onSeen();
+    if (!ackOnly) props.onOpen();
   };
 
   return (
@@ -308,7 +314,10 @@ function Fleet(props: { deps: FleetDeps }) {
   };
 
   const seenRow = (row: RailRow) => {
-    if (row.tmuxName) (window as any).markSeen?.(row.tmuxName);
+    // ackLocal — markSeen의 상위집합(unseen 해제 + done이면 idle로도 내림).
+    // 데스크톱 레일(RailRow.tsx)의 data-session-id 배선과 같은 목적, 폰은
+    // 세션 카드에 그 속성이 없어 같은 델리게이트를 못 타므로 직접 부른다.
+    if (row.tmuxName) (window as any).ackLocal?.(row.tmuxName);
   };
 
   return (

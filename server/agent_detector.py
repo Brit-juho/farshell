@@ -37,6 +37,23 @@ KNOWN_AGENTS = {
 SSH_INFO = {"icon": "", "label": "SSH", "color": "#64748B"}
 SHELL_INFO = {"icon": "", "label": "Shell", "color": "#94A3B8"}
 
+# AI CLI도 ssh도 아니지만 "뭘 돌리는지" 구분할 가치가 있는 것들 — python/node/
+# docker. ssh와 같은 원칙(§164 주석 참고)으로 raw pane_current_command만
+# 본다: 서버냐 스크립트냐(uvicorn/flask 등 argv 패턴)까지 구분하려면 child
+# scan급 비용과 계속 늘어나는 패턴 목록이 필요해서 범위 밖으로 뒀다(2026-09-22
+# 설계 승인 — "python이면 뭘 하든 그냥 agent-python"). homebrew/framework
+# 빌드의 python3는 comm이 "Python"(대문자)으로 온다 — 실측 확인.
+TOOL_INFO = {
+    "python": {"icon": "", "label": "Python", "color": "#3776AB"},
+    "node": {"icon": "", "label": "Node", "color": "#5FA04E"},
+    "docker": {"icon": "", "label": "Docker", "color": "#2496ED"},
+}
+_RAW_TOOL_CMDS = {
+    "python": "python", "python3": "python", "Python": "python",
+    "node": "node",
+    "docker": "docker",
+}
+
 # panePID → resolved command (5초 TTL)
 _cmd_cache: TTLCache[str] = TTLCache(ttl=5.0)
 
@@ -131,7 +148,8 @@ def detect(session_name: str) -> Optional[dict]:
     """단일 세션의 AI CLI 감지 — 없으면 ssh/shell로 폴백(그래도 그냥 None은 아니다).
 
     Returns:
-        {"agent": "claude"|"codex"|"aider"|"gemini"|"ssh"|"shell", "icon": ..., "label": ..., "color": "#..."}
+        {"agent": "claude"|"codex"|"aider"|"gemini"|"ssh"|"python"|"node"|"docker"|"shell",
+         "icon": ..., "label": ..., "color": "#..."}
         세션 자체가 없거나(no panes) session_name이 비어 있으면 None(=판정 불가, "shell"과는 다르다).
     """
     if not session_name:
@@ -146,6 +164,7 @@ def detect(session_name: str) -> Optional[dict]:
         return None
 
     found_ssh = False
+    found_tool: Optional[str] = None
     for line in text.strip().split("\n"):
         if not line:
             continue
@@ -166,7 +185,13 @@ def detect(session_name: str) -> Optional[dict]:
         # 무게의 child scan이 매 세션마다 하나씩 더 붙는다. 값싼 신호만 쓴다.
         if cmd == "ssh":
             found_ssh = True
-    return {"agent": "ssh", **SSH_INFO} if found_ssh else {"agent": "shell", **SHELL_INFO}
+        elif found_tool is None and cmd in _RAW_TOOL_CMDS:
+            found_tool = _RAW_TOOL_CMDS[cmd]
+    if found_ssh:
+        return {"agent": "ssh", **SSH_INFO}
+    if found_tool:
+        return {"agent": found_tool, **TOOL_INFO[found_tool]}
+    return {"agent": "shell", **SHELL_INFO}
 
 
 def detect_all() -> dict[str, dict]:
@@ -186,6 +211,7 @@ def detect_all() -> dict[str, dict]:
     result: dict[str, dict] = {}
     for session, session_panes in by_session.items():
         found_ssh = False
+        found_tool: Optional[str] = None
         matched = None
         for pane in session_panes:
             resolved = _resolve_command(pane.pid, pane.command)
@@ -194,10 +220,14 @@ def detect_all() -> dict[str, dict]:
                 break
             if pane.command == "ssh":
                 found_ssh = True
+            elif found_tool is None and pane.command in _RAW_TOOL_CMDS:
+                found_tool = _RAW_TOOL_CMDS[pane.command]
         if matched:
             result[session] = {"agent": matched, **KNOWN_AGENTS[matched]}
         elif found_ssh:
             result[session] = {"agent": "ssh", **SSH_INFO}
+        elif found_tool:
+            result[session] = {"agent": found_tool, **TOOL_INFO[found_tool]}
         else:
             result[session] = {"agent": "shell", **SHELL_INFO}
     return result

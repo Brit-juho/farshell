@@ -511,9 +511,14 @@ Registered in `frontend/js/ui/icons.js`: a 14px square, stroke 1.75,
 |---|---|---|
 | `agent-claude` | Spark (4-point star) | claude |
 | `agent-codex` | Bracket `[ ]` | codex |
-| `agent-local` | Chip (square + 4 pins) | local LLMs (ollama, lmstudio, qwen, etc.) |
+| `agent-aider` | Two overlapping circles (pair programming) | aider (2026-09-22) |
+| `agent-gemini` | Two overlapping diamonds ("twins") | gemini (2026-09-22) |
+| `agent-local` | Chip (square + 4 pins) | local LLMs (ollama, lmstudio, qwen, etc. — detection not implemented yet) |
 | `agent-ssh` | Globe (circle + meridians) | remote SSH sessions (2.1.2, N39) |
-| `agent-shell` | Prompt `>_` | plain shell (no agent), unknown names, gemini/aider (2.1.0 only — whether they get a dedicated mark is revisited in 2.1.1) |
+| `agent-python` | Two joined coils | plain `python`/`python3`/`Python` foreground process, not an AI CLI (2026-09-22) |
+| `agent-node` | Hexagon | plain `node` foreground process (2026-09-22) |
+| `agent-docker` | Stacked squares | plain `docker` foreground process (2026-09-22) |
+| `agent-shell` | Prompt `>_` | plain shell (no agent), unknown names |
 
 ## 6. Settings · palette
 

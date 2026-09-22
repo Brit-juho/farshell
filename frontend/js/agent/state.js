@@ -176,3 +176,9 @@ window.sortByUrgency = sortByUrgency;
 // 탭 처리에 쓴다. 위 값들과 같은 이유로 window 브리지만 노출한다.
 window.markSeen = markSeen;
 window.allStatuses = allStatuses;
+// 2026-09-22(사용자 지적) — Fleet.tsx가 markSeen만 불러서 폰에서는 완료(파란
+// tone)가 「확인 안 함」 배지만 지우고 영원히 안 풀렸다(데스크톱 레일도 같은
+// 증상이었고, 거긴 data-session-id 배선 누락이 원인 — 여기는 애초에 markSeen을
+// 불렀다). ackLocal이 markSeen의 상위집합(unseen 해제 + done→idle)이라
+// Fleet.tsx 쪽 호출을 이걸로 바꾼다.
+window.ackLocal = ackLocal;

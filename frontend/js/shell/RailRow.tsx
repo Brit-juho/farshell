@@ -83,6 +83,11 @@ export function Row(props: {
       // 배경색으로 보이지만 스크린리더에는 아무 말도 안 했다. 목록에서 "현재
       // 것"을 가리키는 표준 표기가 aria-current다.
       aria-current={props.active ? 'true' : undefined}
+      // agent/paint.js의 전역 클릭 위임(문서 캡처 단계)이 `[data-session-id]`로
+      // "봤다"를 판정한다 — 이 속성이 없어서 레일 행을 눌러도 완료(파란 tone)가
+      // 절대 안 풀렸다(사용자 지적, 2026-09-22). 잠자는 행은 sessionId가 빈
+      // 문자열이라 자연히 제외된다(어차피 attach만 하고 done일 수가 없다).
+      data-session-id={props.row.sessionId || undefined}
       data-tip={props.compact ? rowName() : undefined}
       data-tip-sub={compactSub()}
       data-tip-side="right"

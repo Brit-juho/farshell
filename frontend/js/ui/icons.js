@@ -74,6 +74,13 @@ const PATHS = {
   // 은유, claude의 스파크·codex의 대괄호와 겹치지 않는 형태).
   'agent-aider': '<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>',
   'agent-gemini': '<rect x="3" y="7" width="9" height="9" transform="rotate(45 7.5 11.5)"/><rect x="11" y="7" width="9" height="9" transform="rotate(45 15.5 11.5)"/>',
+  // 2026-09-22 — AI CLI가 아니라 그냥 돌고 있는 런타임/툴(python/node/docker,
+  // 사용자 요청). agent-local(로컬 LLM 칩)과 헷갈리면 안 돼서 — 이건 "LLM이
+  // 아니다" — 도형 계열을 완전히 분리했다: 육각형(node, Node.js 로고 모티프)
+  // / 계단식 사각형 2개(docker, 쌓인 컨테이너) / 겹친 코일 2개(python).
+  'agent-python': '<path d="M9 8a3 3 0 0 1 3-3h1a3 3 0 0 1 0 6h-2a3 3 0 0 0 0 6h1a3 3 0 0 0 3-3"/>',
+  'agent-node': '<path d="M12 2 3 7v10l9 5 9-5V7z"/>',
+  'agent-docker': '<rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/><rect x="8.5" y="4" width="7" height="7"/>',
 };
 
 // server/agent_detector.py가 돌려주는 agent 문자열 → 마크. AI CLI가 없는
@@ -86,6 +93,9 @@ const AGENT_MARK = {
   aider: 'agent-aider',
   gemini: 'agent-gemini',
   ssh: 'agent-ssh',
+  python: 'agent-python',
+  node: 'agent-node',
+  docker: 'agent-docker',
   shell: 'agent-shell',
 };
 export function agentMarkFor(agentName) {
@@ -122,6 +132,9 @@ const AGENT_LABEL = {
   aider: 'Aider',
   gemini: 'Gemini',
   ssh: 'SSH',
+  python: 'Python',
+  node: 'Node',
+  docker: 'Docker',
   shell: '셸',
 };
 export function agentLabel(agentName) {
