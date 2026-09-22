@@ -145,20 +145,6 @@ export function Row(props: {
               onBlur={() => props.onEditCommit?.()}
             />
           </Show>
-          {/* 2026-09-19 후속(사용자 지적: "이름에 붙는 게 아니라 다른 방식으로
-              구분되게") — tmux 세션인지 일반 터미널인지는 예전에 이름 앞에
-              "tmux:" 문자열을 붙여서 구분했다. 이름을 munging하지 않고
-              작은 아이콘 배지로 옮긴다 — 일반 세션엔 아무것도 안 그린다
-              (에이전트 마크와 같은 "모르면 안 그린다" 관용구). */}
-          <Show when={props.row.tmuxName && !props.editing}>
-            <span
-              class="vt-srow-tmux vt-wgrail-tmux"
-              data-tip="tmux 세션"
-              data-tip-sub="창을 닫아도 계속 실행됩니다"
-              data-tip-side="right"
-              innerHTML={icon('plug', 12, 2)}
-            />
-          </Show>
           {/* ADR-29 B — 브랜치 배지. 그룹 헤더가 이미 저장소를 말하므로 여기는
               브랜치만(main은 "기본"이라 생략, branchText()가 그 규칙을 안다). */}
           <Show when={branchText()}>
@@ -169,6 +155,23 @@ export function Row(props: {
           </Show>
         </div>
         <div class="vt-srow-sub vt-wgrail-row-sub">
+          {/* 2026-09-19 후속(사용자 지적: "이름에 붙는 게 아니라 다른 방식으로
+              구분되게") — tmux 세션인지 일반 터미널인지는 예전에 이름 앞에
+              "tmux:" 문자열을 붙여서 구분했다. 이름을 munging하지 않고
+              작은 아이콘 배지로 옮긴다 — 일반 세션엔 아무것도 안 그린다
+              (에이전트 마크와 같은 "모르면 안 그린다" 관용구).
+              2026-09-21 후속 — 원래 이름 옆(top line)이었으나, 브랜치·diff
+              배지까지 겹치면 이름의 flex:1 공간을 갉아먹어 좁은 레일에서
+              줄어들었다. sub 줄은 보통 상태 문장 한 단어라 여유가 있다. */}
+          <Show when={props.row.tmuxName && !props.editing}>
+            <span
+              class="vt-srow-tmux vt-wgrail-tmux"
+              data-tip="tmux 세션"
+              data-tip-sub="창을 닫아도 계속 실행됩니다"
+              data-tip-side="right"
+              innerHTML={icon('plug', 12, 2)}
+            />
+          </Show>
           {props.row.statusSentence}
           <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>
