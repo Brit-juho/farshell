@@ -28,6 +28,15 @@ KNOWN_AGENTS = {
     "gemini": {"icon": "🟡", "label": "Gemini", "color": "#EAB308"},
 }
 
+# AI CLI가 아닐 때도 "무엇이 떠 있는가"를 구분한다 — DESIGN.md §4가 처음부터
+# `agent-ssh`/`agent-shell` 마크를 정의해뒀는데(N39, 2.1.2), 여기가 항상 None을
+# 돌려주는 바람에 프런트에서 그 마크가 죽은 코드로 남아 있었다. `icon`은 다른
+# 항목들과 형태를 맞추려고 둔 필드일 뿐 프런트는 안 읽는다(SVG 마크는
+# frontend/js/ui/icons.js가 `agent` 문자열만 보고 자체적으로 고른다) — 그래서
+# 이모지를 새로 추가하지 않는다.
+SSH_INFO = {"icon": "", "label": "SSH", "color": "#64748B"}
+SHELL_INFO = {"icon": "", "label": "Shell", "color": "#94A3B8"}
+
 # panePID → resolved command (5초 TTL)
 _cmd_cache: TTLCache[str] = TTLCache(ttl=5.0)
 
@@ -119,10 +128,11 @@ def _resolve_command(pane_pid: int, raw_cmd: str) -> str:
 
 
 def detect(session_name: str) -> Optional[dict]:
-    """단일 세션의 AI CLI 감지.
+    """단일 세션의 AI CLI 감지 — 없으면 ssh/shell로 폴백(그래도 그냥 None은 아니다).
 
     Returns:
-        {"agent": "claude", "icon": "🟣", "label": "Claude", "color": "#..."} 또는 None
+        {"agent": "claude"|"codex"|"aider"|"gemini"|"ssh"|"shell", "icon": ..., "label": ..., "color": "#..."}
+        세션 자체가 없거나(no panes) session_name이 비어 있으면 None(=판정 불가, "shell"과는 다르다).
     """
     if not session_name:
         return None
@@ -135,6 +145,7 @@ def detect(session_name: str) -> Optional[dict]:
     if not text:
         return None
 
+    found_ssh = False
     for line in text.strip().split("\n"):
         if not line:
             continue
@@ -150,26 +161,45 @@ def detect(session_name: str) -> Optional[dict]:
         if resolved in KNOWN_AGENTS:
             info = KNOWN_AGENTS[resolved]
             return {"agent": resolved, **info}
-    return None
+        # raw pane_current_command만 본다(자식 프로세스까지 스캔하지 않는다) —
+        # zsh 안에서 alias/스크립트로 실행된 ssh까지 잡으려면 AI 판정과 같은
+        # 무게의 child scan이 매 세션마다 하나씩 더 붙는다. 값싼 신호만 쓴다.
+        if cmd == "ssh":
+            found_ssh = True
+    return {"agent": "ssh", **SSH_INFO} if found_ssh else {"agent": "shell", **SHELL_INFO}
 
 
 def detect_all() -> dict[str, dict]:
-    """모든 tmux 세션의 agent 상태 (batch 패턴 — 1회 호출)."""
+    """모든 tmux 세션의 agent 상태 (batch 패턴 — 1회 호출).
+
+    AI를 못 찾은 세션도 이제 결과에 들어간다(ssh/shell) — `detect()`와 같은
+    폴백. 세션당 판정은 하나뿐이라 먼저 세션별로 pane을 모아 확정 짓는다.
+    """
     panes = tmux_runner.get_all_panes()
     if not panes:
         return {}
 
-    # 세션별 첫 번째 매칭 AI 반환
-    seen: set[str] = set()
-    result: dict[str, dict] = {}
+    by_session: dict[str, list] = {}
     for pane in panes:
-        if pane.session in seen:
-            continue
-        resolved = _resolve_command(pane.pid, pane.command)
-        if resolved in KNOWN_AGENTS:
-            info = KNOWN_AGENTS[resolved]
-            result[pane.session] = {"agent": resolved, **info}
-            seen.add(pane.session)
+        by_session.setdefault(pane.session, []).append(pane)
+
+    result: dict[str, dict] = {}
+    for session, session_panes in by_session.items():
+        found_ssh = False
+        matched = None
+        for pane in session_panes:
+            resolved = _resolve_command(pane.pid, pane.command)
+            if resolved in KNOWN_AGENTS:
+                matched = resolved
+                break
+            if pane.command == "ssh":
+                found_ssh = True
+        if matched:
+            result[session] = {"agent": matched, **KNOWN_AGENTS[matched]}
+        elif found_ssh:
+            result[session] = {"agent": "ssh", **SSH_INFO}
+        else:
+            result[session] = {"agent": "shell", **SHELL_INFO}
     return result
 
 

@@ -63,21 +63,30 @@ const PATHS = {
   // D3(20-design-system.md §4) — 에이전트 마크. 탭·rail 행이 "어떤 CLI가
   // 떠 있는가"를 이모지 대신 이 세트로 그린다(icons.js가 D5에서 이미 이모지를
   // 걷어낸 원칙과 같다 — 플랫폼마다 렌더가 갈리지 않는다). 미지 agent 이름은
-  // agent-shell로 떨어진다(문서 §4 매핑 규칙). gemini·aider는 2.1.0에서
-  // agent-shell로 두고(문서가 "2.1.1에서 결정 — 디자인에 없음"이라 명시)
-  // 2.1.1에서 전용 마크를 만들지 결정한다.
+  // agent-shell로 떨어진다(문서 §4 매핑 규칙).
   'agent-claude': '<path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z"/>',
   'agent-codex': '<path d="M8 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3"/>',
   'agent-local': '<rect x="6" y="6" width="12" height="12" rx="1"/><line x1="9" y1="2" x2="9" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="9" y1="18" x2="9" y2="22"/><line x1="15" y1="18" x2="15" y2="22"/>',
   'agent-ssh': '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>',
   'agent-shell': '<polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="18" y2="16"/>',
+  // 2026-09-22 — aider·gemini 전용 마크(그 결정을 미뤄뒀던 "2.1.1" 이후 처음
+  // 실제로 내림). 겹친 원 2개(페어 프로그래밍 은유) / 겹친 마름모 2개("쌍둥이"
+  // 은유, claude의 스파크·codex의 대괄호와 겹치지 않는 형태).
+  'agent-aider': '<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>',
+  'agent-gemini': '<rect x="3" y="7" width="9" height="9" transform="rotate(45 7.5 11.5)"/><rect x="11" y="7" width="9" height="9" transform="rotate(45 15.5 11.5)"/>',
 };
 
-// server/agent_detector.py의 KNOWN_AGENTS 키 → 마크. 없는 이름(gemini·aider
-// 포함, 위 주석 참고)은 agent-shell로 떨어진다.
+// server/agent_detector.py가 돌려주는 agent 문자열 → 마크. AI CLI가 없는
+// 세션도 이제 "ssh"/"shell"로 명시적으로 온다(2026-09-22 전까지는 감지 실패시
+// None이라 배지 자체가 안 그려졌다 — RailRow.tsx/Fleet.tsx의 Show 게이트 참고).
+// 정말 모르는 이름만 agent-shell로 떨어진다.
 const AGENT_MARK = {
   claude: 'agent-claude',
   codex: 'agent-codex',
+  aider: 'agent-aider',
+  gemini: 'agent-gemini',
+  ssh: 'agent-ssh',
+  shell: 'agent-shell',
 };
 export function agentMarkFor(agentName) {
   return AGENT_MARK[agentName] || 'agent-shell';
@@ -110,6 +119,10 @@ export function agentIcon(agentName) {
 const AGENT_LABEL = {
   claude: 'Claude',
   codex: 'Codex',
+  aider: 'Aider',
+  gemini: 'Gemini',
+  ssh: 'SSH',
+  shell: '셸',
 };
 export function agentLabel(agentName) {
   if (!agentName) return '';
