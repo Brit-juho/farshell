@@ -10,6 +10,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **`fsh start`/`voice`/`mobile`이 더 이상 "dev" tmux 세션을 자동 생성하지 않는다.**
+  세 명령 모두 `_ensure_tmux`를 호출해 세션이 없으면 조용히 "dev"를 만들었고,
+  끝에서는 `_print_attach_guide`가 새 OS 터미널 창까지 열어 그 안에서
+  `tmux new -A -s dev 'claude --resume'`를 실행했다. Voice Daemon은 애초에
+  활성 pane을 동적으로 찾고(세션 0개면 로그+TTS 안내 후 조용히 리턴) 서버/웹
+  UI도 세션 0개를 정상 처리(빈 rail + onboarding + "+")하므로 이 안전망은
+  불필요했다. `fsh agent`/`fsh handoff`/`fsh ssh`처럼 "dev"라는 이름 자체에
+  의도적으로 의존하는 명령은 이번 변경 범위 밖이다.
+
 - **토스트가 더 이상 터미널 한가운데를 가리지 않는다.** 지금까지 모든 알림은 화면
   하단 **중앙**에 고정된 카드(`bottom:96px`)였다 — 터미널에서 하단 중앙은 프롬프트
   줄이고, 폰에서 그 자리는 keybar 대역이라 카드가 특수키 위에 그대로 앉았다. 게다가

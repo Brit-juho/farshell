@@ -1281,27 +1281,6 @@ APPLESCRIPT
   return 1
 }
 
-_print_attach_guide() {
-  echo ""
-  if [ -n "${TMUX:-}" ]; then
-    echo "  ✓ 이미 tmux 안 ($(tmux display -p '#S')). 이 창에서 작업을 계속하세요."
-    return
-  fi
-  _open_tmux_terminal
-  local rc=$?
-  if [ "$rc" -eq 0 ]; then
-    local opened="${TERM_PROGRAM:-터미널}"
-    echo "  ✓ 새 ${opened} 창에 tmux 'dev' 세션이 열렸습니다."
-    echo "    → resume 목록에서 현재 대화를 고르면 음성/모바일이 그 Claude로 연결됩니다."
-  elif [ "$rc" -eq 2 ]; then
-    : # 이미 열려 있음 — 안내 메시지는 _tmux_already_open이 이미 출력했다.
-  else
-    echo "  ⓘ 자동 오픈 실패. 다른 터미널에서 다음 명령을 실행하세요:"
-    echo "      tmux -L $VT_TMUX_SOCKET new -A -s dev 'claude --resume'"
-    _autoopen_failure_hint
-  fi
-}
-
 cmd_voice() {
   echo ""
   echo "  🎤 fsh voice — 음성 모드"
@@ -1310,7 +1289,6 @@ cmd_voice() {
 
   _onboarding_check  # W5-2: 첫 실행 시 안내
 
-  _ensure_tmux
   _start_server
   _start_voice_daemon
 
@@ -1327,8 +1305,6 @@ cmd_voice() {
   echo "  │                                         │"
   echo "  │  종료: fsh stop                          │"
   echo "  └─────────────────────────────────────────┘"
-
-  _print_attach_guide
   echo ""
 }
 
@@ -1419,7 +1395,6 @@ cmd_mobile() {
   echo "  📱 fsh mobile — 모바일 접속${mode_tag}"
   echo ""
 
-  _ensure_tmux
   _start_server
 
   # localhost/lan 모드에선 Cloudflare Tunnel 안 띄움
@@ -1504,8 +1479,6 @@ cmd_mobile() {
     echo "  📱 Android 기기 감지. Chrome에서 열기..."
     adb shell am start -a android.intent.action.VIEW -d "$full_url" com.android.chrome 2>/dev/null || true
   fi
-
-  _print_attach_guide
 }
 
 cmd_start() {
@@ -1529,7 +1502,6 @@ cmd_start() {
   echo "  🚀 fsh start — 전체 시작"
   echo ""
 
-  _ensure_tmux
   _start_server
   _start_tunnel
   if [ $want_voice -eq 1 ]; then
@@ -1541,8 +1513,6 @@ cmd_start() {
   echo ""
   echo "  모든 서비스 시작 완료."
   echo "  fsh status 로 상태 확인"
-
-  _print_attach_guide
   echo ""
 }
 
