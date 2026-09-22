@@ -69,11 +69,17 @@ const PATHS = {
   'agent-local': '<rect x="6" y="6" width="12" height="12" rx="1"/><line x1="9" y1="2" x2="9" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="9" y1="18" x2="9" y2="22"/><line x1="15" y1="18" x2="15" y2="22"/>',
   'agent-ssh': '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>',
   'agent-shell': '<polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="18" y2="16"/>',
-  // 2026-09-22 — aider·gemini 전용 마크(그 결정을 미뤄뒀던 "2.1.1" 이후 처음
-  // 실제로 내림). 겹친 원 2개(페어 프로그래밍 은유) / 겹친 마름모 2개("쌍둥이"
-  // 은유, claude의 스파크·codex의 대괄호와 겹치지 않는 형태).
+  // 2026-09-22 — aider 전용 마크. 겹친 원 2개(페어 프로그래밍 은유).
   'agent-aider': '<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>',
-  'agent-gemini': '<rect x="3" y="7" width="9" height="9" transform="rotate(45 7.5 11.5)"/><rect x="11" y="7" width="9" height="9" transform="rotate(45 15.5 11.5)"/>',
+  // 원래 이름은 agent-gemini였다 — 구글이 2026-06-18로 Gemini CLI를 종료하고
+  // Antigravity(agy)로 통합해서(2026-09-23) 키를 바꿨다. 겹친 마름모 2개
+  // ("쌍둥이" 은유, claude 스파크·codex 대괄호와 안 겹치는 형태)는 그대로 —
+  // 같은 제품 계보라 도형까지 새로 만들 이유가 없다.
+  'agent-agy': '<rect x="3" y="7" width="9" height="9" transform="rotate(45 7.5 11.5)"/><rect x="11" y="7" width="9" height="9" transform="rotate(45 15.5 11.5)"/>',
+  // 2026-09-23 — qwen-code 전용 마크(사용자 승인 A안, 로컬 LLM 칩과 분리).
+  // 나비/모래시계 모양(마주 보는 삼각형 2개) — 기존 별/괄호/원쌍/마름모쌍과
+  // 실루엣이 겹치지 않는다.
+  'agent-qwen': '<path d="M5 5h14L12 12Z"/><path d="M5 19h14L12 12Z"/>',
   // 2026-09-22 — AI CLI가 아니라 그냥 돌고 있는 런타임/툴(python/node/docker,
   // 사용자 요청). agent-local(로컬 LLM 칩)과 헷갈리면 안 돼서 — 이건 "LLM이
   // 아니다" — 도형 계열을 완전히 분리했다: 육각형(node, Node.js 로고 모티프)
@@ -91,11 +97,17 @@ const AGENT_MARK = {
   claude: 'agent-claude',
   codex: 'agent-codex',
   aider: 'agent-aider',
-  gemini: 'agent-gemini',
+  agy: 'agent-agy',
+  qwen: 'agent-qwen',
   ssh: 'agent-ssh',
   python: 'agent-python',
   node: 'agent-node',
   docker: 'agent-docker',
+  // 로컬 LLM 러너 3종 — 각자 라벨은 다르지만 마크는 agent-local(칩) 하나를
+  // 공유한다(DESIGN.md §5 원 설계: "로컬 LLM"은 종류를 따지지 않는다).
+  ollama: 'agent-local',
+  lms: 'agent-local',
+  llamacpp: 'agent-local',
   shell: 'agent-shell',
 };
 export function agentMarkFor(agentName) {
@@ -130,11 +142,15 @@ const AGENT_LABEL = {
   claude: 'Claude',
   codex: 'Codex',
   aider: 'Aider',
-  gemini: 'Gemini',
+  agy: 'Antigravity',
+  qwen: 'Qwen',
   ssh: 'SSH',
   python: 'Python',
   node: 'Node',
   docker: 'Docker',
+  ollama: 'Ollama',
+  lms: 'LM Studio',
+  llamacpp: 'llama.cpp',
   shell: '셸',
 };
 export function agentLabel(agentName) {

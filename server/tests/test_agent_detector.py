@@ -54,6 +54,41 @@ def test_detect_prefers_agent_over_ssh_across_panes(monkeypatch):
     assert info["agent"] == "claude"
 
 
+def test_detect_finds_agy(monkeypatch):
+    """Gemini CLI 종료(2026-06-18) 후 후계자 Antigravity — 바이너리 agy."""
+    _patch_list_panes(monkeypatch, "agy\t777")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "agy"
+    assert info["label"] == "Antigravity"
+
+
+def test_detect_no_longer_knows_gemini(monkeypatch):
+    """옛 gemini 바이너리는 더 이상 AI CLI로 안 잡힌다(사용자 지시로 제거) — shell로 떨어진다."""
+    _patch_list_panes(monkeypatch, "gemini\t778")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "shell"
+
+
+def test_detect_finds_qwen(monkeypatch):
+    """qwen-code — codex/aider와 같은 급의 독립 코딩 에이전트(로컬 LLM 칩이 아니다)."""
+    _patch_list_panes(monkeypatch, "qwen\t888")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == "qwen"
+    assert info["label"] == "Qwen"
+
+
+@pytest.mark.parametrize("raw_cmd,expected_agent,expected_label", [
+    ("ollama", "ollama", "Ollama"),
+    ("lms", "lms", "LM Studio"),
+    ("llama-cli", "llamacpp", "llama.cpp"),
+])
+def test_detect_finds_local_llm_runners(monkeypatch, raw_cmd, expected_agent, expected_label):
+    _patch_list_panes(monkeypatch, f"{raw_cmd}\t999")
+    info = agent_detector.detect("dev")
+    assert info["agent"] == expected_agent
+    assert info["label"] == expected_label
+
+
 @pytest.mark.parametrize("raw_cmd", ["python", "python3", "Python"])
 def test_detect_finds_python_by_raw_command(monkeypatch, raw_cmd):
     """homebrew/framework 빌드는 comm이 대문자 'Python'으로 온다 — 셋 다 잡아야 한다."""
@@ -107,6 +142,9 @@ def test_detect_all_labels_every_session(monkeypatch):
         PaneInfo(session="py", command="Python", pid=4, pane_id="%4"),
         PaneInfo(session="js", command="node", pid=5, pane_id="%5"),
         PaneInfo(session="ctr", command="docker", pid=6, pane_id="%6"),
+        PaneInfo(session="antigrav", command="agy", pid=7, pane_id="%7"),
+        PaneInfo(session="qwencoder", command="qwen", pid=8, pane_id="%8"),
+        PaneInfo(session="localllm", command="ollama", pid=9, pane_id="%9"),
     ]
     monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: panes)
     result = agent_detector.detect_all()
@@ -116,6 +154,9 @@ def test_detect_all_labels_every_session(monkeypatch):
     assert result["py"]["agent"] == "python"
     assert result["js"]["agent"] == "node"
     assert result["ctr"]["agent"] == "docker"
+    assert result["antigrav"]["agent"] == "agy"
+    assert result["qwencoder"]["agent"] == "qwen"
+    assert result["localllm"]["agent"] == "ollama"
 
 
 def test_detect_all_no_panes_is_empty(monkeypatch):

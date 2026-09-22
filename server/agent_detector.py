@@ -25,7 +25,16 @@ KNOWN_AGENTS = {
     "claude": {"icon": "🟣", "label": "Claude", "color": "#A855F7"},
     "codex":  {"icon": "🟢", "label": "Codex",  "color": "#22C55E"},
     "aider":  {"icon": "🔵", "label": "Aider",  "color": "#3B82F6"},
-    "gemini": {"icon": "🟡", "label": "Gemini", "color": "#EAB308"},
+    # 2026-09-23(사용자 승인) — 구글이 2026-06-18로 Gemini CLI를
+    # 무료/Pro/Ultra 사용자 대상으로 종료하고 Antigravity CLI(바이너리 `agy`)로
+    # 통합했다. `gemini` 바이너리 감지는 제거(사용자 지시) — 남은 건 엔터프라이즈/
+    # 유료 API 키 사용자뿐이라 비중이 없다고 판단. 같은 제품 계보라 프런트
+    # 마크(agent-gemini, 겹친 마름모)는 그대로 재사용하고 라벨만 바꾼다.
+    "agy":    {"icon": "🟡", "label": "Antigravity", "color": "#EAB308"},
+    # qwen-code(Alibaba, npm @qwen-code/qwen-code, 바이너리 `qwen`) — codex/aider와
+    # 같은 급의 독립 코딩 에이전트 CLI라 로컬 LLM 칩이 아니라 여기(전용 마크)로
+    # 넣는다(2026-09-23 설계 승인, A안).
+    "qwen":   {"icon": "🟣", "label": "Qwen", "color": "#7C3AED"},
 }
 
 # AI CLI가 아닐 때도 "무엇이 떠 있는가"를 구분한다 — DESIGN.md §4가 처음부터
@@ -47,11 +56,22 @@ TOOL_INFO = {
     "python": {"icon": "", "label": "Python", "color": "#3776AB"},
     "node": {"icon": "", "label": "Node", "color": "#5FA04E"},
     "docker": {"icon": "", "label": "Docker", "color": "#2496ED"},
+    # 2026-09-23(사용자 승인) — 로컬 LLM 러너 3종. "터미널에서 지금 보고 있는
+    # CLI"라는 이 기능 취지와 맞는 것만 골랐다(값싼 신호 원칙은 위와 같음) —
+    # vLLM/Docker Model Runner는 서버로 띄워두는 용도라 뺐다. 프런트에서 셋 다
+    # agent-local(칩) 마크를 공유하고 라벨만 다르다 — DESIGN.md §5가 원래도
+    # "로컬 LLM 하나"로 뭉뚱그린 설계였다.
+    "ollama": {"icon": "", "label": "Ollama", "color": "#94A3B8"},
+    "lms": {"icon": "", "label": "LM Studio", "color": "#94A3B8"},
+    "llamacpp": {"icon": "", "label": "llama.cpp", "color": "#94A3B8"},
 }
 _RAW_TOOL_CMDS = {
     "python": "python", "python3": "python", "Python": "python",
     "node": "node",
     "docker": "docker",
+    "ollama": "ollama",
+    "lms": "lms",
+    "llama-cli": "llamacpp",
 }
 
 # panePID → resolved command (5초 TTL)
@@ -148,7 +168,8 @@ def detect(session_name: str) -> Optional[dict]:
     """단일 세션의 AI CLI 감지 — 없으면 ssh/shell로 폴백(그래도 그냥 None은 아니다).
 
     Returns:
-        {"agent": "claude"|"codex"|"aider"|"gemini"|"ssh"|"python"|"node"|"docker"|"shell",
+        {"agent": "claude"|"codex"|"aider"|"agy"|"qwen"|"ssh"
+                  |"python"|"node"|"docker"|"ollama"|"lms"|"llamacpp"|"shell",
          "icon": ..., "label": ..., "color": "#..."}
         세션 자체가 없거나(no panes) session_name이 비어 있으면 None(=판정 불가, "shell"과는 다르다).
     """
