@@ -25,6 +25,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createDomEnv } = require('./helpers/dom-env');
 const { importFresh } = require('./helpers/vm-esm');
+const { answerPrompt } = require('./helpers/dialog-stub');
 
 // 인라인 <script>(src 없는 것)는 걷어내고 마크업만 쓴다 — index.html의 부팅 인라인
 // 스크립트(인증/SW 등록 등)는 이 테스트와 무관하고, jsdom이 그 자리에서 실행해
@@ -240,9 +241,11 @@ test('모바일 세션 관리: 좁은 화면에서도 세션 전환과 닫기가
 test('모바일 세션 관리: 이름 변경은 레코드와 진입점에 함께 반영된다', async () => {
   const { window, addSession, getAction } = await buildTerminalWindow();
   addSession('a', '이전 이름');
-  window.prompt = () => '새 이름';
   getAction('session.manager')();
   window.document.querySelector('.vt-session-action').click();
+  // rename.onclick이 promptDialog(core/dialog.js)를 부른다 — window.prompt가
+  // 아니라 실제 카드가 뜨므로 입력값을 채우고 확인을 누른다.
+  await answerPrompt(window.document, { value: '새 이름' });
   await new Promise(resolve => setTimeout(resolve, 0));
 
   assert.strictEqual(window.sessionDisplayName('a'), '새 이름');

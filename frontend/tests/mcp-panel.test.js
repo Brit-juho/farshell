@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createDomEnv } = require('./helpers/dom-env');
 const { importFresh } = require('./helpers/vm-esm');
+const { answerPrompt } = require('./helpers/dialog-stub');
 
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
@@ -336,11 +337,13 @@ test('보관된 값은 마스킹으로만 보인다 — 원문은 화면에 다�
 });
 
 test('값 보관 요청에 서버·키가 함께 간다', async () => {
-  const { host, posts, setPrompt } = await build();
-  setPrompt(() => 'sk-typed-by-user');
+  const { host, posts, document } = await build();
   const add = Array.from(host.querySelectorAll('.vt-mcp-tagadd'))
     .find((b) => b.textContent === '값 보관');
   add.click();
+  // credRow의 클릭 핸들러가 promptDialog(core/dialog.js)를 부른다 — 이제
+  // window.prompt가 아니라 실제 카드가 뜨므로 입력값을 채우고 확인을 누른다.
+  await answerPrompt(document, { value: 'sk-typed-by-user' });
   await flush(); await flush();
   const sent = posts.find((p) => p._url === '/api/mcp/creds');
   assert.strictEqual(sent.server, 'notion');
