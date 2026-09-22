@@ -32,19 +32,29 @@ def _load_tickets() -> list:
     return [t for t in (items or []) if int(t.get("exp", 0)) > now]
 
 
-def issue_ticket(label: str = "") -> str:
+def issue_ticket(label: str = "", ttl: int | None = None, **extra) -> str:
     """1회용 기기 등록 티켓 발급 → URL/QR에 실을 원문 반환.
 
     QR을 띄우는 시점에 맥에 대한 물리적 접근이 이미 증명된 것이므로, 스캔을
     기기 등록 승인으로 인정한다(상시 토큰을 URL에 박는 기존 방식의 대체).
+
+    `ttl`·`extra`는 2.2의 노출 포트 `session` 모드가 쓴다(plan-2.2 §3): 티켓을
+    특정 share와 기기에 **묶어서** 발급하고, 수명을 기본 5분이 아니라 60초로
+    줄인다. 티켓이 URL에 실리는 것은 감수하는 대신 창을 좁히는 쪽이다.
+    묶인 값은 `consume_ticket`이 그대로 돌려주므로 호출부가 대조할 수 있다.
     """
     raw = secrets.token_urlsafe(24)
     tickets = _load_tickets()
-    tickets.append({
+    rec = {
         "hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
-        "exp": int(time.time()) + auth.TICKET_TTL,
+        "exp": int(time.time()) + int(ttl if ttl is not None else auth.TICKET_TTL),
         "label": (label or "")[:60],
-    })
+    }
+    # 예약어를 덮어쓰지 못하게 한다 — 호출부가 exp를 늘려버리면 수명 제한이 무의미해진다.
+    for k, v in extra.items():
+        if k not in ("hash", "exp", "label"):
+            rec[k] = v
+    tickets.append(rec)
     fileio._write_json_secure(auth.TICKETS_PATH, {"version": 1, "tickets": tickets})
     return raw
 

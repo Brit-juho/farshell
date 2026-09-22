@@ -50,8 +50,13 @@ fsh popup <action>     # quick fsh command invocation via tmux 3.2+ popup
 fsh run "..."          # run headless `claude -p` in background + TTS notification on completion
 fsh handoff mobile     # hand off the current tmux session to your phone (QR + #tmux=)
 fsh handoff desktop    # bring a phone session back to the Mac terminal
-fsh tunnel expose 3000 "app name"  # expose another local port through a separate Cloudflare tunnel
-fsh tunnel unexpose 3000          # stop the tunnel for that port
+fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|30d]
+                                   # expose another local port through FarShell's own reverse
+                                   # proxy (2.2). Default --mode is session (logged-in devices
+                                   # only) — pass --mode public for the old unauthenticated behavior
+fsh tunnel unexpose 3000          # stop the tunnel and its share policy for that port
+fsh tunnel pin 3000                # reissue the access PIN without touching the tunnel/URL
+fsh tunnel mode 3000 session       # change who can access without touching the tunnel/URL
 fsh tunnel list                   # list all open tunnels (main + extra ports)
 fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
 fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook

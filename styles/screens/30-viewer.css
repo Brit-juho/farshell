@@ -566,6 +566,9 @@ body.vt-resizing #terminal-container{ transition:none; }
   border-bottom:1px solid var(--line); font:400 var(--fs-sm) var(--ui);
 }
 .vt-pt-tunnel-label{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-3xs) var(--mono); }
+/* 2.2 — 「누가 열 수 있나」 모드 라벨과 리스너 바인드 실패 경고(ADR-31). */
+.vt-pt-tunnel-mode{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-3xs) var(--ui); }
+.vt-pt-tunnel-broken{ flex:0 0 auto; color:var(--warn); font:600 var(--fs-3xs) var(--ui); }
 .vt-pt-tunnel-url{
   flex:1 1 auto;
   min-width:0;

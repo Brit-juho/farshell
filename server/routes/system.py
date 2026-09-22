@@ -382,3 +382,70 @@ async def ws_workspace(websocket: WebSocket):
     finally:
         session_watchdog.cancel()
         _workspace_clients.discard(websocket)
+
+
+# ---------------------------------------------------------------------------
+# 노출 포트 session 모드 핸드셰이크 (2.2, plan-2.2/00-port-access.md §3)
+# ---------------------------------------------------------------------------
+#
+# 노출 포트는 메인 터널과 **다른 호스트**라 `vt_session` 쿠키가 거기로 전송되지
+# 않는다(host-only). 파일 공유의 device 모드는 같은 origin(`/s/{token}`)이라
+# 이 문제가 없었다. 그래서 여기서 로그인·기기를 확인하고, 그 결과를 1회용
+# 티켓으로 바꿔 노출 호스트로 넘긴다.
+#
+# **오픈 리다이렉트를 구조로 막는다.** 이 라우트는 목적지 파라미터를 받지
+# 않는다 — `share`(= shareId)만 받고, 실제 주소는 서버가 레지스트리에서 읽는다.
+# 클라이언트가 목적지에 영향을 줄 수단이 없으면 검증 로직도 필요 없다.
+
+PORT_TICKET_TTL = 60  # 기기 등록 티켓(5분)과 별개 — URL에 실리므로 창을 좁힌다
+
+
+@router.get("/p/authorize")
+async def port_share_authorize(request: Request):
+    from urllib.parse import quote
+
+    import auth
+    import port_share_store as pshare
+    import tunnel_registry
+    from fastapi.responses import RedirectResponse
+    from routes.port_proxy_app import safe_next
+
+    share_id = request.query_params.get("share", "")
+    next_path = safe_next(request.query_params.get("next"))
+
+    share = await asyncio.to_thread(pshare.find_by_share_id, share_id)
+    if share is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    if share.get("mode") != "session":
+        return JSONResponse({"error": "not_session_mode"}, status_code=400)
+
+    # 미로그인/미등록 기기면 기존 로그인 게이트로 보낸다. 돌아올 주소는 지금
+    # 이 요청 그대로 — frontend/js/gate.js가 `?next=`를 따라 재진입시킨다.
+    device = auth.verify_device(request.cookies.get("vt_device", ""))
+    session_cookie = request.cookies.get("vt_session", "")
+    if not (device and auth.verify_session(session_cookie)):
+        back = f"/p/authorize?share={quote(share_id, safe='')}&next={quote(next_path, safe='')}"
+        return RedirectResponse(f"/?next={quote(back, safe='')}", status_code=302)
+
+    # 목적지는 **레지스트리에서** 읽는다. 클라이언트 입력이 아니다.
+    tunnels = await asyncio.to_thread(tunnel_registry.exposed_ports)
+    entry = tunnels.get(share["port"])
+    if not entry or not entry.get("url"):
+        return JSONResponse(
+            {"error": "tunnel_not_found",
+             "reason": "이 포트의 공개 주소를 찾을 수 없습니다. 노출이 내려갔을 수 있습니다."},
+            status_code=404,
+        )
+
+    # 티켓을 share와 기기에 묶는다 — 다른 share로는 못 쓰고, 기기를 폐기하면
+    # 그 티켓으로 받은 쿠키까지 함께 죽는다(port_proxy_app.verify_cookie).
+    device_id = device.get("id") or "-"
+    ticket = await asyncio.to_thread(
+        auth.issue_ticket, "port-share", PORT_TICKET_TTL,
+        share=share["shareId"], device=device_id,
+    )
+    target = (
+        f"{entry['url'].rstrip('/')}/__fsh/cb"
+        f"?t={quote(ticket, safe='')}&next={quote(next_path, safe='')}"
+    )
+    return RedirectResponse(target, status_code=302)

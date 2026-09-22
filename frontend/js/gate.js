@@ -75,10 +75,15 @@
   window.__vtAuthed=false;
   // 공유 링크(N21) device 모드가 미등록 세션을 `/?next=/s/<token>`으로 보낸다 —
   // 로그인/등록이 끝나면 원래 열려던 공유 다운로드로 자동 재진입해야 한다.
-  // open-redirect 방지: 같은 출처의 `/s/`로 시작하는 경로만 허용한다.
+  // 노출 포트 session 모드(2.2)도 같은 패턴으로 `/?next=/p/authorize?...`를
+  // 보낸다(server/routes/system.py의 port_share_authorize) — 실기기 검증
+  // 2026-09-22에서 이 화이트리스트가 `/s/`만 허용해 로그인 후 메인 화면에
+  // 멈추는 걸 발견했다(원래 노출 앱으로 못 돌아감).
+  // open-redirect 방지: 같은 출처의 정해진 접두사로 시작하는 경로만 허용한다.
   function safeNext(){
     var n=params.get('next');
-    return (n && n.charAt(0)==='/' && n.indexOf('//')!==0 && n.indexOf('/s/')===0) ? n : null;
+    if(!n || n.charAt(0)!=='/' || n.indexOf('//')===0) return null;
+    return (n.indexOf('/s/')===0 || n.indexOf('/p/authorize')===0) ? n : null;
   }
   function goNextOrHide(){
     var n=safeNext();

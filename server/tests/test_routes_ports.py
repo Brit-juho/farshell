@@ -20,6 +20,42 @@ def client():
         yield c
 
 
+@pytest.fixture
+def elevated(tmp_path, monkeypatch):
+    """2.2부터 expose/unexpose는 **승격**을 요구한다(plan-2.2 §5) — 포트를 외부에
+    여는 것은 공유 링크 발급과 같은 등급의 쓰기 액션이다. 로그인 → 승격까지
+    거친 클라이언트를 돌려준다(test_auth_elevate.py와 같은 패턴)."""
+    import auth as _auth
+    import port_proxy
+    import port_share_store
+
+    state_dir = tmp_path / "vt"
+    monkeypatch.setattr(_auth, "STATE_DIR", state_dir)
+    monkeypatch.setattr(_auth, "DEVICES_PATH", state_dir / "devices.json")
+    monkeypatch.setattr(_auth, "TOTP_PATH", state_dir / "totp.json")
+    monkeypatch.setattr(_auth, "TICKETS_PATH", state_dir / "tickets.json")
+    monkeypatch.setattr(_auth, "VT_AUTH_SESSION_KEY", "test-session-signing-key")
+    monkeypatch.setattr(_auth, "VT_AUTH_PASSWORD_HASH", _auth.hash_password("s3cret-pw"))
+    monkeypatch.setenv("VT_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("VT_NETWORK_MODE", "all")
+    monkeypatch.setenv("VT_PORT_PROXY_BASE", "7960")
+
+    # 리스너 자체는 test_port_proxy_listener.py가 본다 — 여기선 라우터만 본다.
+    async def _start(share):
+        return True
+
+    async def _stop(port):
+        return None
+
+    monkeypatch.setattr(port_proxy, "start", _start)
+    monkeypatch.setattr(port_proxy, "stop", _stop)
+
+    with TestClient(main.app) as c:
+        assert c.post("/api/auth", json={"token": "s3cret-pw"}).status_code == 200
+        assert c.post("/api/auth/elevate", json={"password": "s3cret-pw"}).status_code == 200
+        yield c
+
+
 # --- GET /api/ports ------------------------------------------------------------
 
 
@@ -67,15 +103,27 @@ def test_kill_port_success(client, monkeypatch):
 # --- POST /api/ports/{port}/expose ---------------------------------------------
 
 
+def test_expose_requires_elevation(client, monkeypatch):
+    """승격 없이는 포트를 외부에 열 수 없다 — 2.2의 새 계약."""
+    monkeypatch.setenv("VT_NETWORK_MODE", "all")
+    r = client.post("/api/ports/3000/expose", json={"confirm": True})
+    assert r.status_code in (401, 403)
+    assert r.json()["error"] in ("elevation_required", "password_required")
+
+
+def test_unexpose_requires_elevation(client):
+    r = client.delete("/api/ports/3000/expose")
+    assert r.status_code in (401, 403)
+
+
 @pytest.mark.parametrize("port", [0, 70000])
-def test_expose_rejects_out_of_range_port(client, port):
-    r = client.post(f"/api/ports/{port}/expose", json={"confirm": True})
+def test_expose_rejects_out_of_range_port(elevated, port):
+    r = elevated.post(f"/api/ports/{port}/expose", json={"confirm": True})
     assert r.status_code == 400
 
 
-def test_expose_requires_explicit_confirm(client, monkeypatch):
-    monkeypatch.setenv("VT_NETWORK_MODE", "all")
-    r = client.post("/api/ports/3000/expose", json={})
+def test_expose_requires_explicit_confirm(elevated):
+    r = elevated.post("/api/ports/3000/expose", json={})
     assert r.status_code == 428
     assert r.json()["error"] == "confirm_required"
 
@@ -83,6 +131,7 @@ def test_expose_requires_explicit_confirm(client, monkeypatch):
 def test_expose_rejected_when_network_mode_restricted(client, monkeypatch):
     # NetworkAccessMiddleware도 VT_NETWORK_MODE를 보므로, 라우트 자체의 판정(409)에
     # 도달하려면 미들웨어의 IP 필터는 통과시켜 둬야 한다(라우터 레이어만 검증하는 게 목적).
+    # 비밀번호 미설정 + network_mode != all 이면 require_elevated는 그냥 통과한다.
     monkeypatch.setattr(network_access, "get_current_spec", lambda: network_access.AccessSpec(networks=[], allow_all=True))
     monkeypatch.setenv("VT_NETWORK_MODE", "lan")
     r = client.post("/api/ports/3000/expose", json={"confirm": True})
@@ -90,20 +139,19 @@ def test_expose_rejected_when_network_mode_restricted(client, monkeypatch):
     assert r.json()["error"] == "network_mode"
 
 
-def test_expose_success_parses_url(client, monkeypatch):
-    monkeypatch.setenv("VT_NETWORK_MODE", "all")
+def test_expose_success_parses_url(elevated, monkeypatch):
     monkeypatch.setattr(ports_mod, "_run_vt", lambda *a: (0, "tunnel up at https://example.trycloudflare.com\n"))
-    r = client.post("/api/ports/3000/expose", json={"confirm": True, "label": "dev"})
-    assert r.status_code == 200
+    r = elevated.post("/api/ports/3000/expose", json={"confirm": True, "label": "dev"})
+    assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
     assert body["url"] == "https://example.trycloudflare.com"
+    assert body["mode"] == "session"  # ADR-32 — 기본은 로그인 기기만
 
 
-def test_expose_failure_returns_500(client, monkeypatch):
-    monkeypatch.setenv("VT_NETWORK_MODE", "all")
+def test_expose_failure_returns_500(elevated, monkeypatch):
     monkeypatch.setattr(ports_mod, "_run_vt", lambda *a: (1, "cloudflared not found"))
-    r = client.post("/api/ports/3000/expose", json={"confirm": True})
+    r = elevated.post("/api/ports/3000/expose", json={"confirm": True})
     assert r.status_code == 500
     assert r.json()["error"] == "expose_failed"
 
@@ -111,16 +159,16 @@ def test_expose_failure_returns_500(client, monkeypatch):
 # --- DELETE /api/ports/{port}/expose -------------------------------------------
 
 
-def test_unexpose_success(client, monkeypatch):
+def test_unexpose_success(elevated, monkeypatch):
     monkeypatch.setattr(ports_mod, "_run_vt", lambda *a: (0, "unexposed"))
-    r = client.delete("/api/ports/3000/expose")
+    r = elevated.delete("/api/ports/3000/expose")
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
 
-def test_unexpose_failure_returns_500(client, monkeypatch):
+def test_unexpose_failure_returns_500(elevated, monkeypatch):
     monkeypatch.setattr(ports_mod, "_run_vt", lambda *a: (1, "no tunnel running"))
-    r = client.delete("/api/ports/3000/expose")
+    r = elevated.delete("/api/ports/3000/expose")
     assert r.status_code == 500
     assert r.json()["error"] == "unexpose_failed"
 

@@ -3,10 +3,21 @@
 //
 // 패널 껍데기 · fetch · 닫기/폴링 뼈대는 panels/panel.js·core/api.js가 공유한다.
 // 리스트 행만 .vt-pt-* 로 따로 둔다. F5에서 classic script에서 ES 모듈로 전환.
-import { openPanel, setPanelPoll } from '../panel.js';
+import { openPanel, closePanel, setPanelPoll } from '../panel.js';
 import { vtFetch, vtEsc } from '../../core/api.js';
 import { _isCoarsePointer } from '../../core/env.js';
-import { confirmDialog } from '../../core/dialog.js';
+import { confirmDialog, alertDialog, promptDialog, openDialog, nextId } from '../../core/dialog.js';
+
+// 2.2 — 노출 모드 3가지(plan-2.2/00-port-access.md §1). files.js의 공유 링크
+// 다이얼로그와 같은 화면 언어(`.vt-fl-*`)를 재사용한다 — "파일을 공유"와
+// "포트를 공개"는 사용자에게 같은 종류의 결정이라 같은 모양이어야 한다.
+const MODE_LABEL = { public: '공개', session: '내 기기만', pin: '코드' };
+const TTLS = [
+  { v: 3600, label: '1시간' },
+  { v: 86400, label: '24시간' },
+  { v: 604800, label: '7일' },
+  { v: 2592000, label: '30일' },
+];
 
 
 // N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다. dock에 떠 있는 것과
@@ -256,9 +267,14 @@ async function _renderTunnelSection(ctx, body) {
   rows.forEach((t) => {
     const row = document.createElement('div');
     row.className = 'vt-pt-tunnel-row';
+    // 2.2 — 모드 라벨(누가 열 수 있나) + 리스너가 못 뜬 경우의 경고(§8, ADR-31
+    // 바인드 실패 시 broken). 메인 터널(d.main)은 노출 정책이 없어 mode가 없다.
+    const modeLabel = t.mode ? (MODE_LABEL[t.mode] || t.mode) : '';
     row.innerHTML = `
       <span class="vt-pt-port">:${vtEsc(String(t.port))}</span>
       <span class="vt-pt-tunnel-label">${vtEsc(t.label)}</span>
+      ${modeLabel ? `<span class="vt-pt-tunnel-mode">${vtEsc(modeLabel)}</span>` : ''}
+      ${t.broken ? '<span class="vt-pt-tunnel-broken" title="내부 프록시가 뜨지 못했습니다 — 지금은 접속이 안 됩니다">⚠ 고장</span>' : ''}
       <a class="vt-pt-tunnel-url" href="${vtEsc(t.url)}" target="_blank" rel="noopener noreferrer">${vtEsc(t.url.replace(/^https:\/\//, ''))}</a>
     `;
     const actions = document.createElement('span');
@@ -268,6 +284,14 @@ async function _renderTunnelSection(ctx, body) {
     copyBtn.textContent = '복사';
     copyBtn.addEventListener('click', () => _copyText(t.url));
     actions.appendChild(copyBtn);
+    if (t.mode === 'pin') {
+      const pinBtn = document.createElement('button');
+      pinBtn.className = 'vt-btn sm quiet';
+      pinBtn.textContent = '코드 재발급';
+      pinBtn.title = '터널·URL은 그대로 두고 접속 코드만 새로 만듭니다';
+      pinBtn.addEventListener('click', () => reissuePin(ctx, t.port));
+      actions.appendChild(pinBtn);
+    }
     if (t !== d.main) {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'vt-btn sm quiet danger';
@@ -368,23 +392,101 @@ async function _unexposeTunnel(ctx, port) {
       refreshPorts(ctx, true);
     }
 
-    async function exposePort(ctx, port) {
-      // 2단계 확인. 서버도 confirm 없으면 428로 거부하지만, 오탭을 UI에서 먼저 막는다.
-      if (!await confirmDialog(`포트 ${port} 를 공개 인터넷에 노출합니다.\n\n누구나 URL만 알면 접근할 수 있습니다. 계속할까요?`, { title: '공개 노출', okLabel: '공개', danger: true })) return;
-      showToast(`포트 ${port} 터널 여는 중…`);
+    // 2.2 — 「누가 열 수 있나」 3지 선택 + 만료. files.js openShareDialog와 같은
+    // 뼈대(core/dialog.js의 openDialog)를 쓴다. 취소/배경클릭/Esc는 null.
+    function openExposeDialog(port) {
+      const id = nextId();
+      return new Promise((resolve) => {
+        let result = null;
+        let settled = false;
+        const finish = () => { if (!settled) { settled = true; resolve(result); } };
+        const { body } = openDialog({
+          id, title: `포트 ${port} 공개`, onClose: finish,
+          bodyHTML: `
+            <div class="vt-fl-field">
+              <div class="vt-fl-field-label">누가 열 수 있나</div>
+              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="session" checked> 내 기기만 <span class="vt-fl-hint">이 FarShell에 로그인한 기기에서만 열립니다</span></label>
+              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="pin"> 접속 코드 <span class="vt-fl-hint">서버가 코드를 만들어 보여줍니다 — 코드를 아는 사람이면 누구나</span></label>
+              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="public"> 누구나 <span class="vt-fl-hint">URL을 아는 사람 모두 — 인증 없음</span></label>
+            </div>
+            <div class="vt-fl-field">
+              <div class="vt-fl-field-label">만료 · 필수</div>
+              <select id="vt-pt-ttl" class="vt-input lg">
+                ${TTLS.map((t) => `<option value="${t.v}"${t.v === 3600 ? ' selected' : ''}>${vtEsc(t.label)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="vt-dialog-actions">
+              <button type="button" class="vt-btn vt-dialog-cancel">취소</button>
+              <button type="button" class="vt-btn solid vt-dialog-ok">공개</button>
+            </div>`,
+        });
+        if (!body) { resolve(null); return; }
+        body.querySelector('.vt-dialog-ok').addEventListener('click', () => {
+          const checked = body.querySelector('input[name="vt-pt-mode"]:checked');
+          result = { mode: checked ? checked.value : 'session', ttl: Number(body.querySelector('#vt-pt-ttl').value) };
+          closePanel(id);
+        });
+        body.querySelector('.vt-dialog-cancel').addEventListener('click', () => closePanel(id));
+      });
+    }
+
+    // 승격(require_elevated) — 포트를 여는 것도 공유 링크 발급과 같은 등급의
+    // 쓰기 액션이다. files.js의 elevate()와 같은 패턴(비밀번호 확인 후 재시도).
+    async function elevate() {
+      const pw = await promptDialog('이 동작에는 비밀번호 확인이 필요합니다.', { title: '비밀번호 확인', password: true });
+      if (pw === null) return false;
       try {
-        const r = await vtFetch(`/api/ports/${port}/expose`, {
+        await vtFetch('/api/auth/elevate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ confirm: true }),
+          body: JSON.stringify({ password: pw }),
         });
-        showToast(r.url ? `공개됨: ${r.url}` : '공개됨');
+        return true;
       } catch (e) {
-        showToast(`공개 실패: ${e.message}`);
+        showToast('비밀번호 확인 실패');
+        return false;
+      }
+    }
+
+    async function _elevatedFetch(url, opts) {
+      try {
+        return await vtFetch(url, opts);
+      } catch (e) {
+        if (!/elevation_required|401/.test(e.message || '')) throw e;
+        if (!(await elevate())) return null;
+        return vtFetch(url, opts);
+      }
+    }
+
+    async function _showPinOnce(pin) {
+      // 저장은 해시뿐이라 이 응답이 원문을 보는 유일한 기회다.
+      await alertDialog(`접속 코드: ${pin}\n\n다시 표시되지 않습니다 — 잊으면 재발급하세요.`, { title: '접속 코드' });
+    }
+
+    async function exposePort(ctx, port) {
+      const choice = await openExposeDialog(port);
+      if (!choice) return;
+      showToast(`포트 ${port} 터널 여는 중…`);
+      const r = await _elevatedFetch(`/api/ports/${port}/expose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true, mode: choice.mode, ttl: choice.ttl }),
+      }).catch((e) => { showToast(`공개 실패: ${e.message}`); return null; });
+      if (r) {
+        if (r.pin) await _showPinOnce(r.pin);
+        else showToast(r.url ? `공개됨: ${r.url}` : '공개됨');
       }
       // L5: 성공하면 그 행의 버튼이 "공개"→"미리보기"로 바뀌어야 하니 목록을 새로 받는다.
       refreshPorts(ctx, true);
     }
+
+    async function reissuePin(ctx, port) {
+      const r = await _elevatedFetch(`/api/ports/${port}/share/pin`, { method: 'POST' })
+        .catch((e) => { showToast(`재발급 실패: ${e.message}`); return null; });
+      if (r?.pin) await _showPinOnce(r.pin);
+      refreshPorts(ctx, true);
+    }
+
 
     // L5: 이미 열려 있는 터널을 앱 안 iframe으로 바로 확인. X-Frame-Options/CSP로
     // 대상 서버가 프레임을 거부하는 건 우리가 감지도 우회도 할 수 없는 영역이라

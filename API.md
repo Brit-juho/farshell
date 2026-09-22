@@ -150,11 +150,14 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/ports[?fresh=1]` | List listening ports (3-second cache) |
-| DELETE | `/api/ports/{port}[?pid=N]` | Kill the process. Returns 409 on a `pid` mismatch (the VT server itself, and cloudflared/tailscaled/sshd, cannot be killed) |
-| POST | `/api/ports/{port}/expose` | Expose via a Cloudflare tunnel. Requires body `{"confirm":true}` (428 without it) |
-| DELETE | `/api/ports/{port}/expose` | Tear down that port's tunnel |
-| GET | `/api/tunnel/list` | N22 — summary of every currently open tunnel (main + `fsh tunnel expose`d ports) for the Ports tab's "exposed" section. Unexposing reuses `DELETE /api/ports/{port}/expose` above |
+| GET | `/api/ports[?fresh=1]` | List listening ports (3-second cache). Internal proxy listeners (2.2) are hidden — see `docs/ref/tunnel.md` |
+| DELETE | `/api/ports/{port}[?pid=N]` | Kill the process. Returns 409 on a `pid` mismatch (the VT server itself, cloudflared/tailscaled/sshd, and a port's own internal proxy listener, cannot be killed) |
+| POST | `/api/ports/{port}/expose` | **Elevated** (2.2). Expose via a Cloudflare tunnel routed through FarShell's own reverse proxy. Body `{"confirm":true, "mode":"public"\|"session"\|"pin", "ttl":3600\|86400\|604800\|2592000}` — `mode` defaults to `session`, `ttl` to `3600`. 428 without `confirm`. Response includes `pin` (shown once, only for `mode:"pin"`) and `share` (public view, no secret) |
+| DELETE | `/api/ports/{port}/expose` | **Elevated.** Tear down that port's tunnel and share policy — a re-expose issues a new share id and PIN |
+| POST | `/api/ports/{port}/share/pin` | **Elevated.** Reissue the PIN without touching the tunnel (URL survives) |
+| PATCH | `/api/ports/{port}/share` | **Elevated.** Body `{"mode":...}` — change who can access without touching the tunnel |
+| POST | `/api/ports/_proxy/sync` | Not elevated — tells the running server to (re)start listeners for whatever `port_share_store` currently says. `fsh tunnel expose/pin/mode` call this after writing the policy directly (CLI trust level, not the web session's elevation gate) |
+| GET | `/api/tunnel/list` | N22 — summary of every currently open tunnel (main + `fsh tunnel expose`d ports), each with `mode`/`broken` (2.2). Unexposing reuses `DELETE /api/ports/{port}/expose` above |
 
 ## Prompt Snippets
 
@@ -200,6 +203,7 @@ Public download entry point (not under the api prefix, and not behind the usual 
 |--------|------|------|
 | GET | `/s/{token}` | Share download. `device` mode: serves if `vt_device`+`vt_session` are valid, else 302 to `/?next=/s/{token}`. `pin` mode: PIN entry page unless a valid one-time download cookie is present |
 | POST | `/s/{token}/pin` | Verify a PIN (form: `pin`) → 60s one-time download cookie + redirect. 5 failed attempts cancels the share |
+| GET | `/p/authorize?share=&next=` | **2.2** — cross-origin handshake for an exposed port's `session` mode (`docs/ref/tunnel.md`). Verifies login + registered device on the **main** origin, then redirects to the exposed host's `/__fsh/cb` with a 60-second one-time ticket bound to that share and device. Takes no destination parameter from the client — the target URL is looked up from the tunnel registry by `share` id, so there is no open-redirect surface |
 
 ## Multi-host peering (N7/N39, stage 1)
 

@@ -31,6 +31,7 @@ _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 import auth
 import file_store
 import network_access
+import port_proxy
 import scrollback_persist
 import tunnel
 from deps import pty_mgr, output_watcher
@@ -43,6 +44,7 @@ from routes.clipboard import router as clipboard_router
 from routes.files import router as files_router
 from routes.git import router as git_router
 from routes.ports import router as ports_router
+from routes.ports import elevated_router as ports_elevated_router
 from routes.push import router as push_router
 from routes.queue import router as queue_router
 from routes.snippets import router as snippets_router
@@ -123,10 +125,15 @@ class TokenAuthMiddleware:
         if path in (
             "/", "/sw.js", "/manifest.json", "/favicon.ico",
             "/api/auth", "/api/auth/status", "/api/auth/logout",
-        ) or path.startswith("/static") or path.startswith("/s/") or path.startswith("/api/peer/"):
+        ) or path.startswith("/static") or path.startswith("/s/") or path.startswith("/api/peer/") \
+                or path == "/p/authorize":
             # /s/{token} — 공유 링크(N21)의 공개 진입점. 이 표준 인증 체크를
             # 우회하지만 미인증 상태로 통과시키는 게 아니다 — routes/share.py가
             # 토큰 서명·만료·모드(device/pin)별 자체 검증을 반드시 거친다.
+            # /p/authorize — 노출 포트 session 모드 핸드셰이크(2.2 §3). 최상위
+            # 브라우저 내비게이션이라 JSON 401이 아니라 **로그인 게이트로
+            # 리다이렉트**해야 한다(/s/ 와 같은 이유). routes/system.py가 세션·
+            # 기기를 직접 확인하고, 통과하지 못하면 `/?next=`로 돌려보낸다.
             # /api/peer/* — 원격 호스트(N7/N39)의 진입점. 브라우저 세션 쿠키가
             # 있을 리 없으므로 여기를 우회하고, routes/peer.py가 HMAC 서명·시간창·
             # nonce 재생 차단을 직접 검증한다. peer가 닿을 수 있는 라우트는
@@ -325,9 +332,27 @@ async def lifespan(_app: FastAPI):
     files_cleanup_task = asyncio.create_task(_file_store_cleanup_loop())
     # N13 — 스크롤백 영속 로그도 같은 6시간 주기로 7일 보관 정리(scrollback_persist.py).
     scrollback_cleanup_task = asyncio.create_task(_scrollback_cleanup_loop())
+
+    # 2.2 — 노출 포트 프록시 리스너 복구(ADR-31). `fsh stop --keep-tunnel`은 추가
+    # 포트 터널을 일부러 살려두므로, 재기동한 우리가 **같은 proxyPort**에 다시
+    # 붙어야 살아남은 cloudflared가 길을 찾는다. 실패해도 서버 기동 자체는
+    # 막지 않는다 — 터미널이 안 뜨는 것이 공유가 안 되는 것보다 훨씬 나쁘다.
+    try:
+        restored = await port_proxy.sync()
+        if restored["active"]:
+            logger.info(f"[port-proxy] 노출 포트 리스너 복구: {restored['active']}")
+        if restored["failed"]:
+            logger.warning(
+                f"[port-proxy] 리스너 복구 실패: {restored['failed']} — "
+                "해당 포트 공유는 동작하지 않습니다(포트 대시보드에 표시됨)."
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[port-proxy] 리스너 복구 중 오류: {e}")
+
     try:
         yield
     finally:
+        await port_proxy.shutdown_all()
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
         scrollback_cleanup_task.cancel()
@@ -416,6 +441,7 @@ app.include_router(clipboard_router)
 app.include_router(files_router)
 app.include_router(git_router)
 app.include_router(ports_router)
+app.include_router(ports_elevated_router)
 app.include_router(queue_router)
 app.include_router(snippets_router)
 app.include_router(push_router)

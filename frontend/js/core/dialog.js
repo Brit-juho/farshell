@@ -7,9 +7,11 @@ import { openPanel, closePanel } from '../panels/panel.js';
 import { vtEsc } from './api.js';
 
 let seq = 0;
-const nextId = () => `vt-dialog-${++seq}`;
+export const nextId = () => `vt-dialog-${++seq}`;
 
-function openDialog({ id, title, bodyHTML, onClose }) {
+/** 확인/입력/알림 셋에 안 맞는 커스텀 다이얼로그용 하부 조립 — 호출부가 직접
+ * 마크업과 이벤트를 붙인다(포트 노출의 모드 선택처럼 라디오+선택 조합이 필요할 때). */
+export function openDialog({ id, title, bodyHTML, onClose }) {
   const r = openPanel({
     id,
     ariaLabel: title,

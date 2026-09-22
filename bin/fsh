@@ -459,8 +459,57 @@ _registry_prune() {
   mv "$TUNNEL_REGISTRY.tmp" "$TUNNEL_REGISTRY"
 }
 
+_port_share_cli() {
+  # `fsh tunnel expose/pin/mode`가 서버 프로세스 없이 정책을 직접 읽고 쓴다 —
+  # `_m auth otp-setup` 등과 같은 방식(bin/fsh:2046 근방). 실제로 리스너를
+  # 띄우는 건 실행 중인 서버만 할 수 있으므로, 이 CLI로 쓴 뒤 반드시
+  # _request_proxy_sync로 그 서버를 깨워야 한다.
+  (cd "$VT_DIR/server" && "$VT_PYTHON" -m port_share_store "$@")
+}
+
+_authed_curl() {
+  local token="${VT_AUTH_TOKEN:-${VT_TOKEN:-}}"
+  if [ -n "$token" ]; then
+    curl -H "Authorization: Bearer $token" "$@"
+  else
+    curl "$@"
+  fi
+}
+
+_request_proxy_sync() {
+  # 2.2 — CLI가 방금 쓴 정책(생성/삭제/모드/PIN)을 실행 중인 서버의 리스너에
+  # 즉시 반영시킨다. 승격이 필요 없다(routes/ports.py의 sync_port_proxy 참고) —
+  # 접근 결정은 이미 디스크에 적혀 있고, 이 호출은 그 상태를 리스너에 맞출 뿐이다.
+  _authed_curl -sf -X POST "http://localhost:$VT_PORT/api/ports/_proxy/sync" -o /dev/null 2>/dev/null
+}
+
+_json_field() {
+  # "$1" = JSON 문자열, "$2" = 키. 없으면 빈 문자열.
+  python3 -c "import json,sys
+try:
+    v = json.loads(sys.argv[1]).get(sys.argv[2])
+    print(v if v is not None else '')
+except Exception:
+    print('')" "$1" "$2" 2>/dev/null
+}
+
+_ttl_word_to_seconds() {
+  case "$1" in
+    1h) echo 3600 ;;
+    24h) echo 86400 ;;
+    7d) echo 604800 ;;
+    30d) echo 2592000 ;;
+    *) return 1 ;;
+  esac
+}
+
 _start_extra_tunnel() {
-  local port="${1:-}" label="${2:-}"
+  # target_port — cloudflared가 실제로 가리킬 로컬 포트. 기본은 $port 자신
+  # (레거시/내부 호출)이지만, 2.2부터 사람이 직접 `fsh tunnel expose`를 치면
+  # `cmd_tunnel_expose`가 여기에 **내부 프록시 포트**를 넘긴다(ADR-30 — 노출
+  # 트래픽은 항상 FarShell 프록시를 거친다). registry·로그 파일 이름 등
+  # 부기(bookkeeping)는 전부 원래 앱 포트($port) 기준으로 그대로 둔다.
+  local port="${1:-}" label="${2:-}" target_port="${3:-${1:-}}"
 
   case "$port" in
     ''|*[!0-9]*) echo "  ✗ 포트는 숫자여야 합니다: '${port}'"; return 1 ;;
@@ -494,19 +543,22 @@ _start_extra_tunnel() {
     return 0
   fi
 
+  if [ "$target_port" != "$port" ] && ! _port_in_use "$target_port"; then
+    echo "  ⚠ 내부 프록시(:$target_port)가 아직 응답하지 않습니다 — 서버가 막 떴다면 잠시 후 다시 시도하세요"
+  fi
   if ! _port_in_use "$port"; then
     echo "  ⚠ localhost:$port 에 응답하는 서비스가 없습니다 — 터널은 띄우지만 앱을 먼저 켜세요"
   fi
 
   local log; log="$(_extra_tunnel_log "$port")"
-  echo "  ▸ localhost:$port 터널 시작 중..."
+  echo "  ▸ localhost:$target_port 터널 시작 중..."
   : > "$log"
   if [ "$provider" = "ngrok" ]; then
     # 고정 도메인은 계정당 1개(=메인 터널이 쓴다). 추가 포트는 임시 주소이고,
     # 그건 제약이지 결함이 아니다 — 대신 아래 출력에서 그 사실을 말한다.
-    nohup ngrok http "$port" --log "$log" --log-format logfmt >/dev/null 2>&1 &
+    nohup ngrok http "$target_port" --log "$log" --log-format logfmt >/dev/null 2>&1 &
   else
-    nohup cloudflared tunnel --url "http://localhost:$port" > "$log" 2>&1 &
+    nohup cloudflared tunnel --url "http://localhost:$target_port" > "$log" 2>&1 &
   fi
   echo $! > "$PID_DIR/tunnel-$port.pid"
 
@@ -544,7 +596,118 @@ _stop_extra_tunnel() {
   kill "$pid" 2>/dev/null && echo "  ✓ 포트 $port 터널 종료 (PID $pid)" || echo "  ⓘ 이미 종료됨 (PID $pid)"
   rm -f "$pidfile"
   _registry_del "$port"
+  # 2.2 — 정책도 함께 지운다. 재노출하면 새 shareId·PIN이 발급된다(plan §1).
+  # 정책이 아예 없던 레거시/내부 호출일 수 있으니 실패는 무시한다.
+  _port_share_cli cli-remove "$port" >/dev/null 2>&1
+  _request_proxy_sync
   _run_tunnel_hook unexpose
+}
+
+# ── fsh tunnel expose/pin/mode — 사람이 직접 치는 CLI 진입점 ──────────────────
+#
+# `--proxy-port`가 오면 **내부 호출**이다(routes/ports.py의 expose 핸들러가
+# Python에서 정책·리스너를 이미 만든 뒤 cloudflared만 이 스크립트에 맡긴다).
+# 그 외에는 사람이 직접 친 것 — 정책이 아직 없으므로 여기서 전부 만든다.
+cmd_tunnel_expose() {
+  local port="${1:-}"; shift || true
+  local label="" mode="session" ttl="1h" proxy_port=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --mode) mode="${2:-}"; shift 2 ;;
+      --ttl) ttl="${2:-}"; shift 2 ;;
+      --proxy-port) proxy_port="${2:-}"; shift 2 ;;
+      --*) echo "  ✗ 알 수 없는 옵션: $1"; return 1 ;;
+      *) [ -z "$label" ] && label="$1"; shift ;;
+    esac
+  done
+
+  if [ -n "$proxy_port" ]; then
+    _start_extra_tunnel "$port" "$label" "$proxy_port"
+    return $?
+  fi
+
+  # 여기부터 사람이 직접 친 경로 — 정책이 아직 없다.
+  local net_mode="${VT_NETWORK_MODE:-all}"
+  if [ "$net_mode" != "all" ]; then
+    # HTTP 라우트(routes/ports.py)와 같은 판정: 인증 붙은 모드도 함께 막는다
+    # — "접근 범위를 좁혀놓고 거기서 다시 뚫지 않는다"(plan §10-3).
+    echo "  ✗ 접근 범위가 '$net_mode'로 제한된 상태입니다. 공개 터널을 여는 대신 같은 망에서 직접 접속하세요."
+    return 1
+  fi
+  case "$mode" in
+    public|session|pin) ;;
+    *) echo "  ✗ 알 수 없는 모드: $mode (public|session|pin)"; return 1 ;;
+  esac
+  local ttl_sec; ttl_sec="$(_ttl_word_to_seconds "$ttl")" || {
+    echo "  ✗ 알 수 없는 만료: $ttl (1h|24h|7d|30d)"; return 1
+  }
+  if ! curl -sf "http://localhost:$VT_PORT/" -o /dev/null 2>/dev/null; then
+    echo "  ✗ FarShell 서버가 실행 중이 아닙니다 — 리스너는 서버 프로세스 안에서만 뜹니다. 'fsh start' 먼저 실행하세요."
+    return 1
+  fi
+
+  local out
+  out="$(_port_share_cli cli-create "$port" "${label:-localhost:$port}" "$mode" "$ttl_sec" 2>&1)"
+  if [ $? -ne 0 ]; then
+    echo "  ✗ 정책 생성 실패: $out"
+    return 1
+  fi
+  proxy_port="$(_json_field "$out" proxyPort)"
+  if [ -z "$proxy_port" ]; then
+    echo "  ✗ 서버 응답을 해석할 수 없습니다: $out"
+    return 1
+  fi
+  local pin; pin="$(_json_field "$out" pin)"
+
+  if ! _request_proxy_sync; then
+    echo "  ✗ 실행 중인 서버에 리스너 시작을 알리지 못했습니다(비밀번호/토큰을 확인하세요)."
+    _port_share_cli cli-remove "$port" >/dev/null 2>&1
+    return 1
+  fi
+
+  if ! _start_extra_tunnel "$port" "$label" "$proxy_port"; then
+    _port_share_cli cli-remove "$port" >/dev/null 2>&1  # 되감기 — 터널 없는 정책을 남기지 않는다
+    _request_proxy_sync
+    return 1
+  fi
+
+  case "$mode" in
+    session) echo "     ⓘ 접근: 이 FarShell에 로그인한 기기만" ;;
+    pin) echo "     ⓘ 접속 코드: $pin — 다시 표시되지 않습니다 (재발급: fsh tunnel pin $port)" ;;
+    public) echo "     ⚠ 접근: URL을 아는 누구나 (공개)" ;;
+  esac
+}
+
+cmd_tunnel_pin() {
+  local port="${1:-}"
+  if [ -z "$port" ]; then
+    echo "  사용법: fsh tunnel pin <port>"; return 1
+  fi
+  local out; out="$(_port_share_cli cli-regenerate-pin "$port" 2>&1)"
+  if [ $? -ne 0 ]; then
+    echo "  ✗ $out"; return 1
+  fi
+  _request_proxy_sync
+  echo "  ✓ 새 접속 코드: $(_json_field "$out" pin) — 다시 표시되지 않습니다. 터널·URL은 그대로입니다."
+}
+
+cmd_tunnel_mode() {
+  local port="${1:-}" mode="${2:-}"
+  if [ -z "$port" ] || [ -z "$mode" ]; then
+    echo "  사용법: fsh tunnel mode <port> <public|session|pin>"; return 1
+  fi
+  case "$mode" in
+    public|session|pin) ;;
+    *) echo "  ✗ 알 수 없는 모드: $mode (public|session|pin)"; return 1 ;;
+  esac
+  local out; out="$(_port_share_cli cli-set-mode "$port" "$mode" 2>&1)"
+  if [ $? -ne 0 ]; then
+    echo "  ✗ $out"; return 1
+  fi
+  _request_proxy_sync
+  echo "  ✓ 모드 변경: $mode. 터널·URL은 그대로입니다."
+  local pin; pin="$(_json_field "$out" pin)"
+  [ -n "$pin" ] && echo "     ⓘ 새 접속 코드: $pin — 다시 표시되지 않습니다"
 }
 
 # ── 터널 URL 변경 훅 (VT_TUNNEL_HOOK) ────────────────────────────────
@@ -3454,7 +3617,7 @@ cmd_tunnel() {
       ;;
     expose)
       echo ""
-      _start_extra_tunnel "${2:-}" "${3:-}"
+      cmd_tunnel_expose "${@:2}"
       local rc=$?
       echo ""
       return $rc
@@ -3462,6 +3625,16 @@ cmd_tunnel() {
     unexpose)
       echo ""
       _stop_extra_tunnel "${2:-}"
+      echo ""
+      ;;
+    pin)
+      echo ""
+      cmd_tunnel_pin "${2:-}"
+      echo ""
+      ;;
+    mode)
+      echo ""
+      cmd_tunnel_mode "${2:-}" "${3:-}"
       echo ""
       ;;
     list)
@@ -3482,7 +3655,7 @@ cmd_tunnel() {
       echo ""
       ;;
     *)
-      echo "사용법: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [라벨]|unexpose <port>|setup|teardown|switch <anon|named>]"
+      echo "사용법: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [라벨] [--mode public|session|pin] [--ttl 1h|24h|7d|30d]|unexpose <port>|pin <port>|mode <port> <mode>|setup|teardown|switch <anon|named>]"
       return 1
       ;;
   esac
@@ -3500,11 +3673,29 @@ _tunnel_list() {
   fi
   _registry_prune
   if [ -s "$TUNNEL_REGISTRY" ]; then
-    awk -F'\t' '{printf "  %-6s %-22s %s\n", $1, ($3==""?"-":$3), $2}' "$TUNNEL_REGISTRY"
+    # 2.2 — port_shares.json에서 포트별 모드를 읽어 같이 보여준다(plan §6).
+    # 정책이 없는 행(레거시/내부 호출)은 "-"로 둔다.
+    local modes; modes="$(_port_share_cli cli-list 2>/dev/null)"
+    awk -F'\t' -v modes="$modes" '
+      BEGIN {
+        n = split(modes, lines, "\n")
+        for (i = 1; i <= n; i++) {
+          split(lines[i], f, "\t")
+          if (f[1] != "") {
+            mode_of[f[1]] = f[2]
+            if (f[3] == "1") mode_of[f[1]] = mode_of[f[1]] " ⚠broken"
+          }
+        }
+      }
+      { m = ($1 in mode_of) ? mode_of[$1] : "-"
+        printf "  %-6s %-22s %-16s %s\n", $1, ($3==""?"-":$3), m, $2 }
+    ' "$TUNNEL_REGISTRY"
   fi
   echo ""
-  echo "  추가:  fsh tunnel expose 3000 \"RAPA 앱\""
-  echo "  해제:  fsh tunnel unexpose 3000"
+  echo "  추가:      fsh tunnel expose 3000 \"RAPA 앱\" [--mode public|session|pin] [--ttl 1h|24h|7d|30d]"
+  echo "  해제:      fsh tunnel unexpose 3000"
+  echo "  코드 재발급: fsh tunnel pin 3000"
+  echo "  모드 변경:  fsh tunnel mode 3000 <public|session|pin>"
   echo ""
 }
 
@@ -4318,10 +4509,13 @@ case "${1:-help}" in
     echo "    fsh tunnel restart     좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동"
     echo "    fsh tunnel watchdog    좀비 재연결 자동 감지 데몬 상태 확인/시작"
     echo "                          (fsh start/voice/mobile 시 자동 기동, 감지 시 자동 restart)"
-    echo "    fsh tunnel expose <port> [라벨]"
-    echo "                          다른 로컬 앱(예: 3000)을 별도 터널로 공개"
+    echo "    fsh tunnel expose <port> [라벨] [--mode public|session|pin] [--ttl 1h|24h|7d|30d]"
+    echo "                          다른 로컬 앱(예: 3000)을 별도 터널로 공개. 기본 모드는 session(로그인 기기만)"
     echo "    fsh tunnel unexpose <port>"
-    echo "                          해당 포트 터널 종료"
+    echo "                          해당 포트 터널·공유 정책 종료"
+    echo "    fsh tunnel pin <port>  접속 코드 재발급 (터널·URL 유지)"
+    echo "    fsh tunnel mode <port> <public|session|pin>"
+    echo "                          공유 모드 변경 (터널·URL 유지)"
     echo "                          URL을 어딘가에 자동 게시: fsh help tunnel-hook"
     echo "    fsh mobile --network <localhost|lan|tailscale|all>"
     echo "                          모바일 모드 — localhost(같은 머신) / lan(같은 네트워크) / tailscale(같은 tailnet) / all(터널, default)"

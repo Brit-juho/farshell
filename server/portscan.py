@@ -48,6 +48,7 @@ _SYSTEM_PATH_PREFIXES = (
 
 # 목록에서 감추지는 않되 kill을 막는 이유들.
 PROTECT_SELF = "VT 서버 — 죽이면 이 화면이 끊깁니다"
+PROTECT_PROXY = "노출 포트 공유의 내부 프록시 — 죽이면 그 공유가 끊깁니다"
 PROTECT_CRITICAL = "원격 접속 인프라 — 죽이면 외부에서 못 들어옵니다"
 PROTECT_FOREIGN = "다른 사용자의 프로세스입니다"
 PROTECT_SYSTEM = "macOS 기본 시스템 프로세스입니다"
@@ -152,9 +153,26 @@ def _ps_info(pids: list[int]) -> dict[int, dict]:
     return info
 
 
-def _classify(row: dict, me: str, vt_port: int) -> tuple[bool, str]:
+def _proxy_ports() -> set:
+    """노출 포트 공유의 내부 프록시 리스너(2.2 ADR-31).
+
+    이 리스너들은 **VT 서버 자신의 프로세스**가 연 포트라, 죽이면 PID가 같은
+    서버가 통째로 죽는다. `vt_port` 검사는 메인 포트 하나만 보므로 여기가
+    따로 필요하다. 지연 import — portscan은 기동 아주 이른 시점에 import될 수
+    있고, 그때 프록시 모듈까지 끌어올 이유가 없다.
+    """
+    try:
+        import port_proxy
+        return port_proxy.proxy_ports()
+    except Exception:
+        return set()
+
+
+def _classify(row: dict, me: str, vt_port: int, proxy_ports: set | None = None) -> tuple[bool, str]:
     if row["port"] == vt_port:
         return True, PROTECT_SELF
+    if row["port"] in (proxy_ports or ()):
+        return True, PROTECT_PROXY
     full_path = (row.get("command") or row["cmd"]).split()[0]
     base = full_path.rsplit("/", 1)[-1]
     if base in _CRITICAL_NAMES or row["cmd"] in _CRITICAL_NAMES:
@@ -177,6 +195,7 @@ def scan(use_cache: bool = True) -> dict:
     ps = _ps_info(sorted({pid for (_, pid) in rows}))
     me = os.environ.get("USER") or ""
     vt_port = _vt_port()
+    proxy_ports = _proxy_ports()
 
     out: list[dict] = []
     truncated = False
@@ -185,7 +204,7 @@ def scan(use_cache: bool = True) -> dict:
             truncated = True
             break
         row.update(ps.get(row["pid"], {}))
-        protected, reason = _classify(row, me, vt_port)
+        protected, reason = _classify(row, me, vt_port, proxy_ports)
         row["protected"] = protected
         row["protected_reason"] = reason
         # 루프백에만 열린 것과 전 인터페이스에 열린 것은 위험도가 다르다 — UI에서 구분한다.
@@ -221,6 +240,11 @@ def kill_port(port: int, expected_pid: int | None = None) -> dict:
     vt_port = _vt_port()
     if port == vt_port:
         return {"ok": False, "error": "protected", "reason": PROTECT_SELF}
+    # 목록에서 감추는 것만으로는 부족하다 — 이 엔드포인트는 포트 번호를 직접
+    # 받으므로 목록을 거치지 않고도 호출된다. 실제 방어는 여기다.
+    proxy_ports = _proxy_ports()
+    if port in proxy_ports:
+        return {"ok": False, "error": "protected", "reason": PROTECT_PROXY}
 
     pid = pid_for_port(port)
     if pid is None:
@@ -234,7 +258,7 @@ def kill_port(port: int, expected_pid: int | None = None) -> dict:
     row = rows.get((port, pid))
     if row:
         row.update(_ps_info([pid]).get(pid, {}))
-        protected, reason = _classify(row, os.environ.get("USER") or "", vt_port)
+        protected, reason = _classify(row, os.environ.get("USER") or "", vt_port, proxy_ports)
         if protected:
             return {"ok": False, "error": "protected", "reason": reason}
 

@@ -8,6 +8,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **노출 포트에 접근 제어 3모드 — `public`/`session`/`pin`.** `fsh tunnel expose`가
+  지금까지 "URL 아는 사람 누구나"뿐이었다. 이제 `--mode session`(로그인한 기기만,
+  **기본값**) · `--mode pin`(서버가 만들어주는 코드) · `--mode public`(기존 동작,
+  명시해야 열림)을 고를 수 있다. `fsh tunnel pin <port>`로 코드만 재발급하거나
+  `fsh tunnel mode <port> <mode>`로 모드만 바꿀 수 있고, 둘 다 터널·URL을 그대로
+  둔다. 웹 UI(포트 대시보드의 "공개" 버튼)도 같은 3지 선택 다이얼로그를 띄운다.
+  **동작 변경**: 기존에 `fsh tunnel expose`로 열던 스크립트는 이제 로그인 없이는
+  못 들어온다 — 예전과 같은 공개 동작이 필요하면 `--mode public`을 명시해야 한다.
+  구조: 모든 모드가 FarShell 자신의 리버스 프록시를 거친다(노출 포트마다 전용
+  loopback 리스너, 라우트 3개뿐 — FarShell API는 거기 없다). 설계 근거와 폐기한
+  대안: `docs/plan-2.2/00-port-access.md`(ADR-30~32).
+
 ### Changed
 
 - **`fsh restart` — 서버만 다시 띄우고 접속 주소는 그대로 둔다.** 지금까지 코드를

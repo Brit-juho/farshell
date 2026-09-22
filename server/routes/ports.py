@@ -11,16 +11,26 @@ import os
 import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
+import auth
+import port_proxy
+import port_share_store as pshare
 import portscan
 import tunnel
 import tunnel_registry
+from routes.port_proxy_app import invalidate_share
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 노출을 켜고 끄고 자격을 바꾸는 것은 전부 **승격**을 요구한다(plan-2.2 §5).
+# 포트를 공개 인터넷에 여는 것은 공유 링크 발급과 같은 등급의 쓰기 액션이고,
+# routes/share.py의 elevated_router가 이미 같은 판단을 했다. 라우터 단위로 묶는
+# 이유는 핸들러마다 붙이면 하나쯤 빠뜨리기 때문이다(R4).
+elevated_router = APIRouter(dependencies=[Depends(auth.require_elevated)])
 
 # fsh tunnel expose 는 cloudflared 기동 + URL 확보까지 최대 30초를 기다린다(bin/fsh:305, _start_extra_tunnel).
 VT_TIMEOUT = 45.0
@@ -32,10 +42,18 @@ async def list_ports(fresh: bool = Query(False)):
     # L5: 이미 공개 터널이 열려 있는 포트는 행에 tunnel_url을 얹어준다 — ports.js가
     # 이걸로 "공개" 대신 "미리보기" 버튼을 보여준다.
     tunnels = await asyncio.to_thread(tunnel_registry.exposed_ports)
+    shares = {s["port"]: s for s in await asyncio.to_thread(pshare.list_shares)}
+    # 프록시 리스너는 우리가 띄운 내부 포트다 — 목록에 섞이면 사용자가 자기
+    # 공유를 끊는 kill 버튼을 누르게 된다. portscan이 보호도 함께 건다.
+    internal = port_proxy.proxy_ports()
+    result["ports"] = [r for r in result["ports"] if r["port"] not in internal]
     for row in result["ports"]:
         t = tunnels.get(row["port"])
         if t:
             row["tunnel_url"] = t["url"]
+        s = shares.get(row["port"])
+        if s:
+            row["share"] = pshare.public_view(s)
     return result
 
 
@@ -83,8 +101,22 @@ def _run_vt(*args: str) -> tuple[int, str]:
     return p.returncode, p.stdout.decode("utf-8", errors="replace")
 
 
-@router.post("/api/ports/{port}/expose")
+def _first_url(out: str) -> str:
+    for tok in out.split():
+        if tok.startswith("https://"):
+            return tok
+    return ""
+
+
+@elevated_router.post("/api/ports/{port}/expose")
 async def expose_port(port: int, request: Request):
+    """노출을 켠다 — 정책 기록 → 프록시 리스너 → cloudflared 순서로.
+
+    2.2부터 cloudflared는 앱이 아니라 **우리 프록시**를 향한다(ADR-30). 그래서
+    proxyPort를 먼저 확보하고 리스너를 띄운 뒤에야 터널을 연다. 중간에 실패하면
+    **전부 되감는다** — 터널 없는 share나 share 없는 터널이 남으면 그 상태가
+    조용히 틀린 채로 굴러간다.
+    """
     if port < 1 or port > 65535:
         return JSONResponse({"ok": False, "error": "bad_port"}, status_code=400)
 
@@ -96,39 +128,126 @@ async def expose_port(port: int, request: Request):
     if not body.get("confirm"):
         return JSONResponse(
             {"ok": False, "error": "confirm_required",
-             "reason": "이 포트를 공개 인터넷에 노출합니다. confirm=true 로 다시 요청하세요."},
+             "reason": "이 포트를 외부에서 접근 가능하게 만듭니다. confirm=true 로 다시 요청하세요."},
             status_code=428,
         )
 
-    mode = os.environ.get("VT_NETWORK_MODE", "all")
-    if mode != "all":
+    net_mode = os.environ.get("VT_NETWORK_MODE", "all")
+    if net_mode != "all":
+        # 인증이 붙은 모드(session/pin)도 함께 막는다 — "접근 범위를 좁혀놓고
+        # 거기서 다시 뚫지 않는다"는 원래 의도를 지키는 쪽(plan §10-3).
         return JSONResponse(
             {"ok": False, "error": "network_mode",
-             "reason": f"접근 범위가 '{mode}'로 제한된 상태입니다. "
+             "reason": f"접근 범위가 '{net_mode}'로 제한된 상태입니다. "
                        f"공개 터널을 여는 대신 같은 망에서 직접 접속하세요."},
             status_code=409,
         )
 
+    # 값이 **없으면** 기본값, 있으면 반드시 검증을 통과해야 한다. `or` 한 방으로
+    # 합치면 `ttl: 0`이나 `mode: ""` 같은 명시적 오류가 조용히 기본값이 된다.
+    raw_mode = body.get("mode")
+    share_mode = "session" if raw_mode is None else str(raw_mode)  # 기본 = 로그인 기기만 (ADR-32)
+    if share_mode not in pshare.VALID_MODES:
+        return JSONResponse({"ok": False, "error": "bad_mode"}, status_code=400)
+    raw_ttl = body.get("ttl")
+    try:
+        ttl = 3600 if raw_ttl is None else int(raw_ttl)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "bad_ttl"}, status_code=400)
+    if ttl not in pshare.VALID_TTLS:
+        return JSONResponse({"ok": False, "error": "bad_ttl"}, status_code=400)
+
     label = str(body.get("label") or f"localhost:{port}")[:64]
-    rc, out = await asyncio.to_thread(_run_vt, "tunnel", "expose", str(port), label)
+
+    share, pin = await asyncio.to_thread(pshare.create_share, port, label, share_mode, ttl)
+    invalidate_share(port)
+    if not await port_proxy.start(share):
+        await asyncio.to_thread(pshare.remove_share, port)
+        return JSONResponse(
+            {"ok": False, "error": "proxy_bind_failed",
+             "reason": f"내부 프록시 포트 {share['proxyPort']} 를 열 수 없습니다."},
+            status_code=500,
+        )
+
+    rc, out = await asyncio.to_thread(
+        _run_vt, "tunnel", "expose", str(port), label, "--proxy-port", str(share["proxyPort"])
+    )
     if rc != 0:
+        await port_proxy.stop(port)
+        await asyncio.to_thread(pshare.remove_share, port)
         return JSONResponse({"ok": False, "error": "expose_failed", "reason": out.strip()},
                             status_code=500)
-    url = ""
-    for tok in out.split():
-        if tok.startswith("https://"):
-            url = tok
-            break
-    return {"ok": True, "port": port, "url": url, "output": out.strip()}
+
+    return {
+        "ok": True, "port": port, "url": _first_url(out), "mode": share_mode,
+        "share": pshare.public_view(share),
+        # PIN 원문이 나가는 **유일한** 응답이다. 저장은 해시뿐이라 이후 어떤
+        # 조회로도 다시 꺼낼 수 없다 — 잊으면 재발급이다.
+        "pin": pshare.format_pin(pin) if pin else None,
+        "output": out.strip(),
+    }
 
 
-@router.delete("/api/ports/{port}/expose")
+@elevated_router.delete("/api/ports/{port}/expose")
 async def unexpose_port(port: int):
+    await port_proxy.stop(port)
+    await asyncio.to_thread(pshare.remove_share, port)
+    invalidate_share(port)
     rc, out = await asyncio.to_thread(_run_vt, "tunnel", "unexpose", str(port))
     if rc != 0:
         return JSONResponse({"ok": False, "error": "unexpose_failed", "reason": out.strip()},
                             status_code=500)
     return {"ok": True, "port": port, "output": out.strip()}
+
+
+@elevated_router.post("/api/ports/{port}/share/pin")
+async def reissue_pin(port: int):
+    """PIN만 새로 발급 — 터널도 proxyPort도 건드리지 않으므로 **공개 URL이 산다.**"""
+    share = await asyncio.to_thread(pshare.get_share, port)
+    if share is None:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    if share.get("mode") != "pin":
+        return JSONResponse(
+            {"ok": False, "error": "not_pin_mode",
+             "reason": "PIN 모드가 아닌 노출에는 코드가 없습니다."},
+            status_code=409,
+        )
+    result = await asyncio.to_thread(pshare.regenerate_pin, port)
+    if result is None:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    updated, pin = result
+    invalidate_share(port)
+    return {"ok": True, "port": port, "pin": pshare.format_pin(pin),
+            "share": pshare.public_view(updated)}
+
+
+@elevated_router.patch("/api/ports/{port}/share")
+async def change_share_mode(port: int, request: Request):
+    """모드 변경 — 터널을 재시작하지 않으므로 주소가 죽지 않는다(ADR-30의 이득)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    mode = str(body.get("mode") or "")
+    if mode not in pshare.VALID_MODES:
+        return JSONResponse({"ok": False, "error": "bad_mode"}, status_code=400)
+
+    share = await asyncio.to_thread(pshare.get_share, port)
+    if share is None:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+
+    pin = None
+    if mode == "pin" and not share.get("pinHash"):
+        # PIN 없이 pin 모드로 바꾸면 아무도 못 들어온다 — 그 상태를 만들지 않는다.
+        result = await asyncio.to_thread(pshare.regenerate_pin, port)
+        if result is not None:
+            _updated, pin = result
+
+    updated = await asyncio.to_thread(pshare.set_mode, port, mode)
+    invalidate_share(port)
+    return {"ok": True, "port": port, "mode": mode,
+            "pin": pshare.format_pin(pin) if pin else None,
+            "share": pshare.public_view(updated)}
 
 
 # --- 노출 포트 섹션 (N22, 50-files-share.md §5) --------------------------------
@@ -137,6 +256,37 @@ async def unexpose_port(port: int):
 # 만들지 않고 위의 기존 `DELETE /api/ports/{port}/expose`를 그대로 쓴다 — 이미
 # 같은 일을 하는 라우트가 있는데 이름만 다른 걸 하나 더 만들면 그 자체가
 # 유지보수 부담이 되는 레거시라, 목록 조회만 새로 추가한다.
+
+
+@router.post("/api/ports/_proxy/sync")
+async def sync_port_proxy():
+    """실행 중인 서버에게 노출 정책 변경을 지금 반영하라고 알린다.
+
+    **승격을 요구하지 않는다.** 이 호출 자체는 누가 접근할 수 있는지를 정하지
+    않는다 — 그 결정은 이미 디스크의 `port_shares.json`에 적혀 있고(로컬
+    파일시스템 접근은 이미 사용자 신뢰 수준이다), 여기서는 그 상태를 리스너에
+    반영할 뿐이다. `fsh tunnel expose/pin/mode`가 `port_share_store` CLI로
+    정책을 직접 쓴 뒤(§ CLI 참고) 이 엔드포인트로 서버를 깨운다 — 리스너는
+    서버 프로세스 안에서만 뜰 수 있어서다.
+
+    **무효화는 sync 전후 포트의 합집합에 건다.** sync **후** 살아있는 share만
+    무효화하면, "지금 막 제거된" 포트(예: `fsh tunnel unexpose` 직후 같은 포트를
+    다른 모드로 재노출)는 무효화 대상에서 빠진다. 그 자리에 새 share가 같은
+    proxyPort로 재할당되면(포트 번호는 재사용된다), 프록시 앱의 `_shares`
+    TTLCache(2초)가 옛 share를 그대로 들고 있어 — 실측(2026-09-22, 로컬
+    E2E 스모크): `expose(public)` → `unexpose` → 즉시 `expose(pin)`을 캐시
+    TTL 안에 연달아 호출하면 **PIN 게이트를 건너뛰고 그대로 통과**했다. 이건
+    HTTP 승격 경로(routes/ports.py의 expose/unexpose 핸들러들)에는 없는
+    구멍이다 — 그쪽은 변경한 포트를 그 자리에서 바로 invalidate하기 때문이다.
+    CLI 경로(`fsh tunnel ...`)만 이 범용 sync 엔드포인트를 거치므로 여기서
+    막아야 한다.
+    """
+    before = {row["port"] for row in port_proxy.status()}
+    result = await port_proxy.sync()
+    after = {s["port"] for s in await asyncio.to_thread(pshare.list_shares)}
+    for port in before | after:
+        invalidate_share(port)
+    return {"ok": True, **result}
 
 
 @router.get("/api/tunnel/list")
@@ -151,8 +301,16 @@ async def list_tunnels():
             "url": main_status["url"],
             "named": main_status["mode"] == "named",
         }
-    extra_rows = [
-        {"port": port, "label": info["label"], "url": info["url"], "named": False}
-        for port, info in sorted(extra.items())
-    ]
+    shares = {s["port"]: s for s in await asyncio.to_thread(pshare.list_shares)}
+    extra_rows = []
+    for port, info in sorted(extra.items()):
+        row = {"port": port, "label": info["label"], "url": info["url"], "named": False}
+        s = shares.get(port)
+        if s:
+            # mode·broken은 UI가 "누가 열 수 있나"와 "지금 고장났나"를 말하는 근거다.
+            # public_view가 pinHash를 뺀다 — 이 라우트는 승격을 요구하지 않는다.
+            row["share"] = pshare.public_view(s)
+            row["mode"] = s.get("mode")
+            row["broken"] = bool(s.get("broken"))
+        extra_rows.append(row)
     return {"main": main, "extra": extra_rows, "count": (1 if main else 0) + len(extra_rows)}
