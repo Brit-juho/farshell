@@ -103,9 +103,9 @@ const SECTIONS = [
   // N9/N45(80-multihost-agents.md §2) — CLI별 승인 대기 감지 커버리지 표.
   { id: 'agents', label: '에이전트', description: '에이전트 감지 상태와 MCP 서버를 확인합니다.', custom: renderAgentSection },
   { id: 'keymap', label: '키맵', description: '단축키와 터미널 전달 여부를 바꿉니다.', custom: () => renderKeymapSection(rerender) },
-  // N14 — Ghostty/Warp 테마 가져오기 + 기본 6스킨 칩(2026-09-18부터 이 탭이
-  // 유일한 자리 — 위 주석 참고).
-  { id: 'appearance', label: '모양', description: '스킨을 고르거나 터미널 테마를 가져옵니다.', custom: renderAppearanceSection },
+  // 기본 6스킨 칩(2026-09-18부터 이 탭이 유일한 자리 — 위 주석 참고).
+  // 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
+  { id: 'appearance', label: '모양', description: '스킨을 고릅니다.', custom: renderAppearanceSection },
   { id: 'security', label: '계정 및 보안', description: '로그인, OTP, 등록 기기와 현재 세션을 확인합니다.', custom: renderSecuritySection },
   // N13(80-multihost-agents.md §3) — 토글 자체는 스키마 항목이지만, 디스크
   // 사용량은 서버에 물어봐야 하는 값이라(보안 섹션과 같은 이유로) custom.
@@ -121,7 +121,7 @@ const SEARCH_ITEMS = [
   ['voice', '로컬 음성 입력'], ['voice', '음성 전용 모드'],
   ['agents', '에이전트 감지 상태'], ['agents', 'MCP 서버'],
   ['keymap', '단축키와 터미널 전달'],
-  ['appearance', '스킨'], ['appearance', '테마 가져오기'],
+  ['appearance', '스킨'],
   ['security', '로그인과 OTP'], ['security', '등록 기기'], ['security', '로그아웃'],
   ['about', '에이전트 훅'], ['about', '사용량 공급자'], ['about', '버전과 진단'],
 ].map(([sectionId, label]) => ({ sectionId, label }));

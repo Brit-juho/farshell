@@ -136,7 +136,6 @@ export default defineConfig(({ mode }) => {
           // - `shell.js`    — solid-js 런타임 + js/shell/(HUD·레일·독). bootApp() 직후.
           // - `panels.js`   — dock 탭이 여는 화면(뷰어·소스컨트롤·파일·포트·큐).
           // - `settings.js` — 설정 패널이 여는 화면(설정 9개 섹션·MCP·스니펫·사용량).
-          // - `theme-import.js` — 테마 파일을 실제로 가져올 때만.
           // panels와 settings를 나눈 이유는 아래 해당 규칙의 주석에 있다.
           //
           // ⚠ 그래서 크기 게이트는 app.js 하나가 아니라 **app.js + core.js 합계**를
@@ -173,12 +172,6 @@ export default defineConfig(({ mode }) => {
             // 사용량 화면. **`panels/usage-badge.js`는 아니다** — rail 배지
             // 폴링은 상시 동작이라 core에 남는다(endsWith라 안 걸린다).
             if (p.endsWith('/frontend/js/panels/usage.js')) return 'settings';
-            // N14 테마 파서 — 「모양」 섹션이 **파일을 실제로 가져올 때만**
-            // 동적 import한다. 예전에는 이름을 안 줘도 Rollup 자동 판정이 별도
-            // 청크로 뽑아줬지만, 아래 포괄 규칙이 생긴 지금은 명시하지 않으면
-            // core로 빨려 들어가 상시 로드된다. panels에 합치지도 않는다 —
-            // 설정을 여는 것과 테마 파일을 가져오는 것은 빈도가 한참 다르다.
-            if (p.endsWith('/frontend/js/theme-import.js')) return 'theme-import';
             // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야
             // 한다(entry를 청크에 배정하면 Rollup이 app.js를 빈 껍데기로 만든다).
             if (p.includes('/frontend/js/') && !p.endsWith('/frontend/js/main.js')) return 'core';
