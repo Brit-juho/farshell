@@ -33,6 +33,16 @@ import { showToast } from '../ui/toast.js';
 const TOOL_LABEL = { claude: 'Claude', codex: 'Codex', agy: 'agy', opencode: 'opencode' };
 const SCOPE_LABEL = { global: '전역', local: '이 워크트리' };
 
+// 2026-09-22(사용자 지적: "가독성이 너무 떨어져") — server/mcp_adapters.py가
+// 워크트리를 안 골랐을 때 local-scope 항목마다 이 문장을 넣어준다
+// (`notes.append("켜짐/꺼짐은 프로젝트마다 따로 기록된다 — 워크트리를
+// 골라야 알 수 있다")`). 서버가 여러 개면 카드마다 같은 문장이 반복되는데,
+// paint()가 이미 화면 맨 위에서 같은 내용을 한 번 말한다(host.appendChild
+// 첫 줄, `wt` 없을 때). 뜻이 같은 문장을 카드 수만큼 복붙해 보여줄 이유가
+// 없어 프론트에서만 걸러낸다 — 백엔드는 그대로 둔다(다른 소비처가 이
+// notes를 쓸 수도 있어 API 응답 자체를 바꾸지 않는 편이 안전하다).
+const REDUNDANT_WT_NOTE = '켜짐/꺼짐은 프로젝트마다 따로 기록된다 — 워크트리를 골라야 알 수 있다';
+
 // 워크트리 id는 settings.js가 넘겨준다.
 let _worktreeId = null;
 
@@ -498,7 +508,11 @@ function renderServer(group, facts, tags, data) {
     if (refs.length) row.appendChild(el('span', 'vt-mcp-meta', `필요: ${refs.join(', ')}`));
 
     box.appendChild(row);
-    for (const note of entry.notes || []) box.appendChild(help(note));
+    const hasWorktree = !!(data && data.worktree);
+    for (const note of entry.notes || []) {
+      if (!hasWorktree && note === REDUNDANT_WT_NOTE) continue;
+      box.appendChild(help(note));
+    }
   }
 
   // 3단계 — 값 보관 / 가져오기. 보관할 칸이 없으면 자격증명 줄은 안 그린다.

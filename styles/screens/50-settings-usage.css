@@ -17,7 +17,17 @@
    wide는 좌측 섹션 목록 + 우측 내용 2단, compact(<720px)는 더보기 목록에서
    설정 상세로 들어가는 단일 열 화면이다. */
 .vt-settings .vt-vw-body { display:flex; gap:0; padding:0; overflow:hidden; }
-.vt-settings .vt-viewer-card { width:min(880px, 100%); max-height:min(84vh, 760px); }
+/* 2026-09-22(사용자 지적: "렌더링이 뒤늦게 되면서 창이 늘어난다") — 카드에
+   height가 없고 max-height만 있으면 flex-column 컨테이너는 콘텐츠 높이로
+   잡힌다. 에이전트 감지표·등록 기기표·MCP 목록·음성 모델 목록이 열린 뒤
+   비동기로 DOM에 붙는 화면이라, 카드 바깥틀이 데이터가 도착할 때마다 실제로
+   커졌다(트랜지션도 없어 팝 하고 튐). 모바일 코드뷰어 시트가 같은 증상을
+   height 고정으로 이미 고친 전례가 있다(30-viewer.css의 `.vt-viewer-card`
+   모바일 규칙 주석 참고) — 여기도 height를 max-height와 같은 값으로 고정해
+   열자마자 최종 크기로 뜨게 한다. 이후 데이터는 안쪽 스크롤 영역
+   (.vt-set-content)만 채운다. 대가: 내용이 짧은 섹션(예: 「모양」)은 카드
+   아래쪽에 빈 공간이 남는다 — 매번 크기가 바뀌는 것보다 낫다는 판단. */
+.vt-settings .vt-viewer-card { width:min(880px, 100%); height:min(84vh, 760px); max-height:min(84vh, 760px); }
 .vt-settings .vt-viewer-head { min-height:44px; }
 .vt-set-save { font:400 var(--fs-xs) var(--ui); color:var(--sub); }
 .vt-set-save[data-state="saving"] { color:var(--color-st-waiting); }
@@ -66,6 +76,13 @@
 .vt-set-label { font:500 var(--fs-sm) var(--ui); color:var(--txt); }
 .vt-set-scope { margin-left:calc(var(--spacing) * 1.5); vertical-align:middle; color:var(--sub); }
 .vt-set-help { margin-top:4px; font:400 var(--fs-xs) var(--ui); color:var(--sub); max-width:42ch; }
+/* 2026-09-22(사용자 지적: "버튼이랑 텍스트가 딱 붙어 있다") — 로그아웃처럼
+   라벨+설명+버튼 세 단이 오는 행은 .vt-set-help의 margin-top:4px만으로는
+   버튼 바로 위 문단과의 간격이 하나도 안 생긴다(문단→문단 간격이지
+   문단→버튼 간격이 아니다). column flex로 세 단 사이 간격을 균일하게 주고,
+   align-items:flex-start로 버튼이 행 전체 폭으로 안 늘어나게 한다. */
+.vt-set-logoutrow { display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 1.5); }
+.vt-set-logoutrow .vt-set-help { margin-top:0; }
 .vt-set-default {
   display:block; margin-top:6px; padding:0; border:0; background:transparent;
   color:var(--acc); font:500 var(--fs-xs) var(--ui); cursor:pointer;
@@ -94,18 +111,6 @@
 .vt-set-pt { display:flex; align-items:center; gap:4px; font:400 var(--fs-xs) var(--ui); color:var(--sub); white-space:nowrap; }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 설정 행 끝의 되돌리기·실행 버튼(sm quiet) */
 .vt-set-reset:disabled { color:var(--sub); opacity:.5; cursor:default; }
-/* N14 — 테마 가져오기 입력. 붙여넣는 것이 설정 파일 원문이라 등폭이어야
-   하고(정렬된 색 목록), 세로로 늘릴 수 있어야 한다. */
-.vt-set-themeinput {
-  width:100%; box-sizing:border-box; resize:vertical;
-  margin:calc(var(--spacing) * 1.5) 0;
-  padding:calc(var(--spacing) * 1.5);
-  background:var(--color-term-bg); color:var(--txt);
-  border:1px solid var(--line); border-radius:var(--radius-sm);
-  font:400 var(--fs-2xs) var(--mono); line-height:1.5;
-}
-.vt-set-themeinput:focus { outline:2px solid var(--acc); outline-offset:-1px; }
-.vt-set-themeactions { display:flex; gap:calc(var(--spacing) * 1.5); }
 .vt-set-reset:disabled:hover { background:transparent; }
 
 .vt-set-btns { display:flex; gap:calc(var(--spacing) * 1); flex-shrink:0; }
@@ -154,8 +159,15 @@
    아니라 배지를 오른쪽에 두는 자체 행을 쓴다. 표는 커버리지 표를 그대로 재사용. */
 .vt-set-sechost { margin:calc(var(--spacing) * 2) 0; }
 /* 97번 1단계 — 설정 →「MCP」. 토글 칩은 상태를 색으로만 구분하지 않는다
-   (켬/끔을 글자로도 쓴다) — 색만으로 구분하면 못 읽는 사람이 생긴다. */
-.vt-mcp-group { margin:calc(var(--spacing) * 3) 0; }
+   (켬/끔을 글자로도 쓴다) — 색만으로 구분하면 못 읽는 사람이 생긴다.
+   2026-09-22(사용자 지적: "가독성이 너무 떨어져") — 서버 카드마다 라벨과
+   설명 문단이 같은 크기·색이라 카드 경계가 안 보이고 전부 한 덩어리
+   회색으로 읽혔다. 위 border-top으로 카드 사이 경계를 긋고(첫 카드는
+   구분선이 필요 없어 제외), 이름을 굵고 한 단 키워 "이건 헤더다"를
+   글자 크기로도 말하게 한다. */
+.vt-mcp-group { margin:calc(var(--spacing) * 3) 0; padding-top:calc(var(--spacing) * 3); border-top:1px solid var(--line); }
+.vt-mcp-group:first-child { margin-top:0; padding-top:0; border-top:0; }
+.vt-mcp-servhead .vt-set-label { font:600 var(--fs-md) var(--ui); }
 .vt-mcp-facts { margin-bottom:calc(var(--spacing) * 2); }
 .vt-mcp-row {
   display:flex; align-items:center; flex-wrap:wrap;
@@ -166,6 +178,14 @@
   font:500 var(--fs-xs) var(--ui); color:var(--sub);
 }
 .vt-mcp-meta { font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
+/* 행 아래 딸린 설명(entry.notes)은 그 행의 부연이지 새 문단이 아니다 —
+   .vt-mcp-tool 폭(4.5em)+gap만큼 들여써서 "이 행에 속한다"는 걸 위치로도
+   보여준다. 폭도 42ch에서 더 좁혀 카드 하나가 세로로 너무 길어지지 않게.
+   direct child로 건 이유 — 노트가 여러 줄이면 매번 .vt-mcp-row 바로 다음이
+   아니라 이전 노트 뒤에 이어 붙으므로 인접 형제 선택자로는 둘째 줄부터
+   못 잡는다. .vt-mcp-group의 직계 자식 중 .vt-set-help는 entry.notes뿐이라
+   (헤더는 vt-mcp-servhead, 값 보관은 vt-mcp-row) 이걸로 전부 잡힌다. */
+.vt-mcp-group > .vt-set-help { margin-left:calc(4.5em + var(--spacing) * 1.5); max-width:36ch; }
 /* 2.1.6 — 모양(높이·여백·모서리·글꼴·5상태)은 `.vt-chip.sm`이 맡는다. 여기 남은
    것은 **이 칩만의 사실**뿐이다: 켜진 서버는 "지금 도구로 살아 있다"는 뜻이라
    액센트가 아니라 working 상태색을 쓴다. 알약(radius-full)은 버렸다 — 화면

@@ -97,6 +97,7 @@ export function renderSecuritySection() {
 // 없다 — 서버 응답을 받은 뒤 통째로 다시 연다(로그인 게이트가 뜬다).
 function _logoutRow() {
   const wrap = document.createElement('div');
+  wrap.className = 'vt-set-logoutrow';
 
   const label = document.createElement('div');
   label.className = 'vt-set-label';
@@ -110,9 +111,12 @@ function _logoutRow() {
     + "터미널에서 'fsh device revoke <id>'를 씁니다.";
   wrap.appendChild(help);
 
+  // 2026-09-22(사용자 지적) — danger(빨강)는 이 저장소에서 되돌릴 수 없는
+  // 동작 전용이다(스니펫·큐 항목·포트 프로세스·음성 모델·워크트리 삭제).
+  // 로그아웃은 바로 위 문구가 말하듯 되돌리기 쉬운 동작이라 그 등급이 아니다.
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'vt-btn sm danger';
+  btn.className = 'vt-btn sm';
   btn.textContent = '로그아웃';
   btn.addEventListener('click', async () => {
     btn.disabled = true;

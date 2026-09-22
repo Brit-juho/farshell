@@ -11,4 +11,27 @@
  */
 @layer base {
   * { margin:0; padding:0; box-sizing:border-box; }
+
+  /* 2026-09-22(사용자 지적: "기본 스크롤이라 이상해") — 전역 기본값 하나로
+     스크롤바를 얇게 정리한다. base 레이어(가장 약한 기준선)에 둬서, 이미
+     스크롤바를 완전히 숨기는 화면별 규칙들(legacy 레이어의 `display:none`
+     — 터미널·dock 탭 줄·HUD·키바 등)이 셀렉터 특정성과 무관하게 그대로
+     이긴다. 트랙은 투명(막대만 보이게), 엄지는 옅은 라인 색으로 있는 듯
+     없는 듯 있다가 호버에서만 또렷해진다 — 이 저장소 곳곳의 "옅음→호버"
+     관용구(그룹 이름 바꾸기 버튼 등)와 같은 판단. 스킨마다 --color-line-strong/
+     --color-muted 값이 다르므로 6스킨 전부에 자동으로 맞는다. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  *::-webkit-scrollbar { width:10px; height:10px; }
+  *::-webkit-scrollbar-track { background:transparent; }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-strong);
+    border-radius: var(--radius-full);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: var(--color-muted); }
+  *::-webkit-scrollbar-corner { background:transparent; }
 }
