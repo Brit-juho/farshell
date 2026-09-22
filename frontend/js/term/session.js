@@ -99,6 +99,13 @@ export function showAddMenu(el, e) {
   menu.appendChild(mkItem('tmux 세션', 'detach 유지 · 맥/모바일 공유', createTmuxSession));
   document.body.appendChild(menu);
 
+  // 레일 하단 버튼처럼 뷰포트 맨 아래에 붙은 경우, 아래로 펼치면 body의
+  // overflow:hidden에 잘려 안 보인다 — 실제 높이를 측정해 필요하면 위로 뒤집는다.
+  const menuHeight = menu.offsetHeight;
+  if (r.bottom + 6 + menuHeight > window.innerHeight) {
+    menu.style.top = `${Math.round(r.top - menuHeight - 6)}px`;
+  }
+
   setTimeout(() => {
     document.addEventListener('click', function _close(ev) {
       if (!document.body.contains(menu)) { document.removeEventListener('click', _close); return; }
