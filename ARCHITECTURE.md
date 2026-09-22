@@ -1,6 +1,6 @@
 # FarShell Architecture
 
-> **Version:** v2.1.6 — the frontend was substantially restructured in September 2026
+> **Version:** v2.2.0 — the frontend was substantially restructured in September 2026
 > (2.0: ES modules, Vite, tokens; 2.1: surface layer, Solid + TypeScript chrome).
 > The plan sets for both are archived locally under `docs/archive/` (gitignored).
 > See [CHANGELOG.md](./CHANGELOG.md) for the release history and [API.md](./API.md)

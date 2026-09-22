@@ -1,6 +1,6 @@
 # FarShell — project overview
 
-> **v2.1.6** (2026-09-18) — release history in [CHANGELOG.md](./CHANGELOG.md)
+> **v2.2.0** (2026-09-22) — release history in [CHANGELOG.md](./CHANGELOG.md)
 
 > **Other agents:** this file is the project overview for any AI coding agent, not just
 > Claude. Cross-tool rules and the hard contracts live in [`AGENTS.md`](./AGENTS.md)

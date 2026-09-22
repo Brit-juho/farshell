@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-09-22
+
 ### Added
 
 - **노출 포트에 접근 제어 3모드 — `public`/`session`/`pin`.** `fsh tunnel expose`가
