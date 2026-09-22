@@ -1,7 +1,7 @@
 """VT_TUNNEL_PROVIDER — 공개 입구 제공자 전환(2026-09-17).
 
-`/api/tunnel/status`는 HUD가 30초마다 폴링하는 화면이다. 제공자가 ngrok인데
-cloudflared만 쳐다보면 **터널이 멀쩡히 살아 있는데 "끊김"이라고 표시**된다.
+`tunnel.get_tunnel_status()`는 `/api/capabilities`·포트 패널이 쓰는 상태 소스다.
+제공자가 ngrok인데 cloudflared만 쳐다보면 **터널이 멀쩡히 살아 있는데 "끊김"이라고 표시**된다.
 그 거짓말을 막는 게 이 테스트의 목적이고, 동시에 기존 cloudflare 경로가
 그대로인지도 같이 고정한다.
 """

@@ -31,7 +31,7 @@ test('capabilities가 오기 전에는 서버 칩도 안 그린다', async () =>
   const { buildHudChips } = await mod();
   // 부팅 중 "터널 없음" 같은 틀린 상태를 잠깐 보여주는 게 아무것도 안 보여주는
   // 것보다 나쁘다 — caps가 null이면 통째로 비운다.
-  const chips = buildHudChips({ port: '7801', tunnel: { running: true, mode: 'named' } });
+  const chips = buildHudChips({ port: '7801' });
   assert.ok(!ids(chips).includes('server'));
 });
 
@@ -43,17 +43,6 @@ test('서버 칩은 포트를 그대로 싣는다', async () => {
   assert.strictEqual(server.value, ':7801');
   assert.strictEqual(server.dot, true);
   assert.strictEqual(server.side, 'left');
-});
-
-test('터널이 안 돌면 터널 칩이 없다 / 돌면 모드를 싣는다', async () => {
-  const { buildHudChips } = await mod();
-  assert.ok(!ids(buildHudChips({ caps: {}, tunnel: { running: false } })).includes('tunnel'));
-
-  const named = buildHudChips({ caps: {}, tunnel: { running: true, mode: 'named' } });
-  assert.strictEqual(named.find((c) => c.id === 'tunnel').value, 'named');
-
-  const anon = buildHudChips({ caps: {}, tunnel: { running: true, mode: 'anonymous' } });
-  assert.strictEqual(anon.find((c) => c.id === 'tunnel').value, '익명');
 });
 
 test('E2E·세이프모드는 켜졌을 때만 칩이 생긴다', async () => {
@@ -186,10 +175,10 @@ test('사용량은 한도가 임박할 때만 앞자리로 올라온다', async 
   const at = (pct) => buildHudChips({
     caps: {}, usage: { available: true, profiles: [{ name: 'alpha', windows: [{ pct }] }] },
   }).find((c) => c.id === 'usage:alpha');
-  // 평상시에는 터널보다 뒤, 위험할 때는 터널보다 앞.
-  const tunnel = buildHudChips({ caps: {}, tunnel: { running: true } }).find((c) => c.id === 'tunnel');
-  assert.ok(at(30).priority > tunnel.priority, '평상시 사용량이 터널보다 앞이면 안 된다');
-  assert.ok(at(95).priority < tunnel.priority, '위험한 사용량은 터널보다 앞이어야 한다');
+  // 평상시에는 "다른 화면이 붙음" 경고보다 뒤, 위험할 때는 그보다 앞.
+  const screensAlert = buildHudChips({ caps: {}, screens: 2 }).find((c) => c.id === 'screens');
+  assert.ok(at(30).priority > screensAlert.priority, '평상시 사용량이 화면 경고보다 앞이면 안 된다');
+  assert.ok(at(95).priority < screensAlert.priority, '위험한 사용량은 화면 경고보다 앞이어야 한다');
 });
 
 test('연결된 화면 — 나 혼자일 때보다 여럿일 때 더 오래 남는다', async () => {

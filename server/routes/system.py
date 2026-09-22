@@ -214,11 +214,6 @@ async def usage_counter_post(request: Request):
     return r
 
 
-@router.get("/api/tunnel/status")
-async def tunnel_status(request: Request):
-    return _etag_response(await asyncio.to_thread(tunnel.get_tunnel_status), request)
-
-
 @router.get("/api/tailscale/status")
 async def tailscale_status(request: Request):
     return _etag_response(await asyncio.to_thread(tailscale.get_status_dict), request)

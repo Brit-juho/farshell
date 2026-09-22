@@ -36,9 +36,8 @@ async function safeFetch<T>(deps: HudDeps, path: string): Promise<T | null> {
 async function collect(deps: HudDeps): Promise<HudInput> {
   const tmuxName = deps.activeTmuxName();
 
-  const [caps, tunnel, safeMode, usage, clients] = await Promise.all([
+  const [caps, safeMode, usage, clients] = await Promise.all([
     safeFetch<HudInput['caps']>(deps, '/api/capabilities'),
-    safeFetch<HudInput['tunnel']>(deps, '/api/tunnel/status'),
     safeFetch<HudInput['safeMode']>(deps, '/api/safe-mode'),
     safeFetch<HudInput['usage']>(deps, '/api/usage'),
     tmuxName
@@ -49,7 +48,6 @@ async function collect(deps: HudDeps): Promise<HudInput> {
   return {
     port: location.port,
     caps,
-    tunnel,
     e2e: deps.e2eEnabled,
     safeMode,
     usage,

@@ -45,8 +45,6 @@ const PRIORITY = {
   usageAlert: 2,
   /** 나 말고 다른 화면이 붙음 — 화면이 오락가락하는 원인이라 경고로 취급한다. */
   screensAlert: 3,
-  /** 바깥에서 접근 가능한 상태인가. 보안 감각에 직결된다. */
-  tunnel: 4,
   /** 평상시 사용량 — dock 사용량 탭에 같은 값이 더 자세히 있다. */
   usage: 5,
   /** 화면 1개(=나뿐). 알아두면 좋지만 없어도 곤란하지 않다. */
@@ -62,8 +60,6 @@ export interface HudInput {
   port?: string;
   /** /api/capabilities 응답. null이면 아직 로드 전(서버 칩도 안 그린다). */
   caps?: { version?: string; tunnel?: unknown } | null;
-  /** /api/tunnel/status 응답. */
-  tunnel?: { running?: boolean; mode?: string; url?: string } | null;
   /** term/e2e.js의 E2E_ENABLED — 켜졌을 때만 칩이 생긴다. */
   e2e?: boolean;
   /** /api/safe-mode 응답. */
@@ -144,17 +140,6 @@ export function buildHudChips(input: HudInput): HudChip[] {
       dot: true,
       side: 'left',
       priority: PRIORITY.server,
-    });
-  }
-
-  if (input.tunnel?.running) {
-    chips.push({
-      id: 'tunnel',
-      label: '터널',
-      value: input.tunnel.mode === 'named' ? 'named' : '익명',
-      tone: 'plain',
-      side: 'left',
-      priority: PRIORITY.tunnel,
     });
   }
 

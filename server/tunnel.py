@@ -1,13 +1,13 @@
 """Cloudflare Tunnel 상태 관리 (Phase 8 G1, 옵션 A+B+C).
 
 옵션 A: 자동 감지 + 기존 URL 재사용
-옵션 B: 상태 노출 (/api/tunnel/status)
+옵션 B: 상태 노출 (/api/capabilities의 tunnel 필드, 포트 패널)
 옵션 C: 명명 터널 옵트인 (VT_TUNNEL_NAME, VT_TUNNEL_HOSTNAME)
 
 2026-09-17: 공개 입구 제공자가 하나가 아니게 됐다(`VT_TUNNEL_PROVIDER` =
 cloudflare | ngrok | none, bin/fsh와 같은 키). 파일 이름은 그대로 두되
-`get_tunnel_status()`만 제공자를 본다 — 이 함수 하나가 `/api/tunnel/status`를
-거쳐 HUD까지 먹이므로, 여기를 안 고치면 ngrok으로 도는 내내 화면이
+`get_tunnel_status()`만 제공자를 본다 — 이 함수 하나가 `/api/capabilities`와
+포트 패널까지 먹이므로, 여기를 안 고치면 ngrok으로 도는 내내 화면이
 "터널 끊김"이라고 **거짓말**한다. 파일을 쪼개지 않는 이유는 그 소비자들을
 같이 흔들기 때문이다.
 
