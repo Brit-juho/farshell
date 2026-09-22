@@ -54,7 +54,7 @@ export async function showTree(opts = {}) {
       return;
     }
     window.sendToPty(window.activeSessionId(), path + ' ');
-    showToast('경로 삽입됨: ' + path.split('/').pop());
+    // 성공을 말하지 않는다 — 터미널에 경로가 실제로 타이핑된 것이 증거다.
   };
 
   const openAtTerminalCwd = async () => {

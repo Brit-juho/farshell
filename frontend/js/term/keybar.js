@@ -73,7 +73,10 @@ async function _copyTerminalSelection() {
     try { ok = Boolean(document.execCommand?.('copy')); } catch (_) {}
   }
   if (!ok) ok = await copyToClipboard(text);
-  showToast(ok ? '선택한 텍스트를 복사했습니다.' : '클립보드에 복사하지 못했습니다.');
+  // 성공은 말하지 않는다 — 바로 아래에서 선택 모드가 닫히는 것(선택 바가
+  // 사라지고 키들 줄이 돌아온다)이 증거고, 폰에서 그 토스트는 방금 복사한
+  // 그 선택 영역 위에 떴다.
+  if (!ok) showToast('클립보드에 복사하지 못했습니다.', 'error');
   if (ok) setTerminalSelectionMode(false);
   return ok;
 }

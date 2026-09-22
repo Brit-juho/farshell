@@ -762,61 +762,145 @@
    * legacy.css에서 옮겨왔다(그쪽 규칙은 지웠다 — 남겨두면 unlayered가 이겨서
    * 여기 고친 게 화면에 안 나온다).
    *
-   * 색은 글자에만 준다. 배경까지 상태색으로 채우면 토스트 세 개가 겹쳤을 때
-   * 화면 아래가 색 덩어리가 된다. */
+   * 색은 글자와 2px 선두 막대에만 준다. 배경까지 상태색으로 채우면 토스트
+   * 세 개가 겹쳤을 때 화면 구석이 색 덩어리가 된다. 막대는 border-left가
+   * 아니라 inset box-shadow다 — DESIGN.md §0의 "border-left + border-radius를
+   * 같이 쓰지 않는다"(막대가 모서리에서 잘린다). 레일 행의 상태 막대와 같은
+   * 관용구이고, 같은 5상태 색을 쓴다: 토스트는 레일 행이 잠깐 떠 있는 것이다.
+   *
+   * 배치는 **여기 한 곳**뿐이다. 2.2.0까지는 .vt-toast 자체에도 position:fixed
+   * 배치가 따로 있었는데(voice.js가 body에 직접 붙이던 시절의 잔재, D6에서 그
+   * 경로가 사라졌다) 정의가 두 벌이라 한쪽만 고치면 어긋났다.
+   *
+   * 2.2.1 — 하단 **중앙** 고정(bottom:96px)을 버린 이유와 등급별 목적지는
+   * js/ui/toast.js 상단 주석에. 요지: 하단 중앙은 터미널의 프롬프트 줄이고,
+   * 폰에서는 keybar 대역이다. 그리고 96px은 keybar.js가 실측 변수로 이미
+   * 걷어낸 매직 넘버였다. */
   #vt-toasts {
     position: fixed;
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-    left: 50%;
-    transform: translateX(-50%);
     z-index: 200;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     gap: calc(var(--spacing) * 1.5);
-    max-width: 90vw;
     pointer-events: none;
+    /* compact — keybar(실측 --kb-height) + 하단 내비 52px 위. 폰에서 손이
+     * 닿는 건 하단뿐이다(탭해서 치우려면 닿아야 한다). */
+    left: calc(var(--spacing) * 3 + env(safe-area-inset-left, 0px));
+    right: calc(var(--spacing) * 3 + env(safe-area-inset-right, 0px));
+    bottom: calc(52px + var(--kb-height, 0px) + var(--spacing) * 2 + env(safe-area-inset-bottom, 0px));
   }
+  /* 소프트 키보드가 올라오면 하단 내비는 숨고(60-mobile-hud.css) keybar는
+   * 키보드 위로 transform 된다 — 토스트도 같은 두 값으로 따라간다. */
+  body.vt-keyboard-open #vt-toasts {
+    bottom: calc(var(--kb-overlap, 0px) + var(--kb-height, 0px) + var(--spacing) * 2);
+  }
+  /* regular 이상 — HUD(24px) 바로 위 우측. 프롬프트 줄(하단 좌측)과 HUD를
+   * 둘 다 비켜난다. 우측 오프셋은 .vt-onboarding과 **같은 티어 규칙**을 쓴다:
+   * 720~1279에서 dock은 펼쳐도 오버레이라 본문을 36px만 밀고, 1280부터는
+   * --vt-dock-w(접힘 36px / 펼침 실제 폭, Dock.tsx가 갱신)만큼 민다. */
+  @media (min-width: 720px) {
+    #vt-toasts {
+      left: auto;
+      right: calc(36px + var(--spacing) * 3 + env(safe-area-inset-right, 0px));
+      bottom: calc(var(--hud-h) + var(--spacing) * 2);
+      width: min(420px, 45vw);
+      align-items: flex-end;
+    }
+  }
+  @media (min-width: 1280px) {
+    #vt-toasts {
+      right: calc(var(--vt-dock-w, 392px) + var(--spacing) * 3 + env(safe-area-inset-right, 0px));
+    }
+  }
+
   .vt-toast {
-    position: fixed;
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 200;
     display: flex;
     align-items: center;
     gap: calc(var(--spacing) * 2);
-    max-width: 90vw;
-    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3.5);
+    min-height: 36px;              /* §10 — 행은 24/28/36 세 단만 */
+    max-width: 100%;
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+    padding-left: calc(var(--spacing) * 3 + 2px);   /* 선두 막대 2px만큼 */
     border: 1px solid var(--color-line-strong);
     border-radius: var(--radius-sm);
     background: var(--menu);
-    box-shadow: var(--shadow-e2);
+    box-shadow:
+      inset 2px 0 0 var(--vt-toast-tone, var(--color-line-strong)),
+      var(--shadow-e2);
     color: var(--color-txt);
     font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
-  }
-  /* 컨테이너 안에 들어온 것만 정적 배치로 되돌려 세로로 쌓는다. voice.js의
-   * showNotification은 아직 body에 .vt-toast를 직접 붙이므로 위의 fixed 배치도
-   * 남겨둔다(D6에서 통합 예정). */
-  #vt-toasts .vt-toast {
-    position: static;
-    transform: none;
-    bottom: auto;
-    left: auto;
     pointer-events: auto;
+    cursor: pointer;               /* 탭/클릭하면 즉시 사라진다 */
+    transition: opacity var(--dur-fast) var(--ease-out-quint);
   }
-  .vt-toast.err { color: var(--err); border-color: color-mix(in srgb, var(--color-st-error) 45%, var(--color-line-strong)); }
-  .vt-toast.ok  { color: var(--ok); }
-  .vt-toast.info { color: var(--color-txt); }
+  /* 등장은 처음 뜰 때 한 번만(toast.js가 .entering을 120ms 뒤 뗀다). 퇴장은
+   * 등장보다 조용하게 — 투명도만, 움직임 없이. */
+  .vt-toast.entering { animation: vt-toast-in var(--dur-fast) var(--ease-out-quint); }
+  .vt-toast.leaving  { opacity: 0; }
+  @keyframes vt-toast-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .vt-toast.err  { --vt-toast-tone: var(--color-st-error);   color: var(--err); border-color: color-mix(in srgb, var(--color-st-error) 45%, var(--color-line-strong)); }
+  .vt-toast.warn { --vt-toast-tone: var(--color-st-waiting); color: var(--color-st-waiting); }
+  .vt-toast.ok   { --vt-toast-tone: var(--color-st-working); color: var(--ok); }
+  .vt-toast.info { --vt-toast-tone: var(--color-line-strong); color: var(--color-txt); }
+
+  /* 문구는 전용 span에 담는다 — HUD 줄에서 문구만 말줄임하고 횟수 배지는
+   * 남겨야 하기 때문이다. */
+  .vt-toast-text { flex: 1 1 auto; min-width: 0; }
   /* 같은 토스트가 반복해서 뜰 때 몇 번째인지 — 같은 문구 세 줄을 쌓는 대신
    * (2.1.5까지의 동작) 한 줄에 횟수를 붙인다. ui/toast.js가 채운다. */
   .vt-toast-count {
+    flex: none;
     margin-left: auto;
     padding-left: calc(var(--spacing) * 2);
     color: var(--color-muted);
     font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
+
+  /* ── HUD 줄 메시지 (#vt-hud-msg) ───────────────────────────────────────
+   * info/success는 카드로 띄우지 않고 이 줄이 받는다. #vt-hud는 normal flow
+   * 안의 24px 띠라 터미널을 1px도 가리지 않는다 — 터미널 메시지가 원래 있어야
+   * 할 자리다(tmux status line·vim echo area).
+   *
+   * 칩을 숨기는 규칙(#vt-hud.vt-hud-busy …)은 여기 둘 수 없다 — .vt-hud-chip이
+   * styles/screens/60-mobile-hud.css의 **unlayered** 규칙이라 layer는 무조건
+   * 진다. 그래서 그쪽 파일에 있다(2.1.6의 CSS 레이어 함정과 같은 건이다). */
+  #vt-hud-msg {
+    order: -1;                     /* 칩이 하나라도 남아도 메시지가 왼쪽 끝 */
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 calc(var(--spacing) * 2);
+    padding-left: calc(var(--spacing) * 2 + 2px);
+    box-shadow: inset 2px 0 0 var(--vt-toast-tone, var(--color-line-strong));
+    color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-2xs) / 1 var(--font-ui);
+    cursor: pointer;
+    /* 카드와 달리 움직이지 않고 밝기만 바뀐다 — 24px 띠는 overflow-y:hidden이라
+     * 4px 슬라이드가 첫 프레임에서 잘리고, 애초에 이 줄은 "제자리의 칩이 잠깐
+     * 다른 말로 바뀌는 것"이지 어딘가에서 날아온 게 아니다. */
+    animation: vt-hud-msg-in var(--dur-fast) var(--ease-out-quint);
+    transition: opacity var(--dur-fast) var(--ease-out-quint);
+  }
+  @keyframes vt-hud-msg-in { from { opacity: 0; } to { opacity: 1; } }
+  #vt-hud-msg[hidden] { display: none; }
+  #vt-hud-msg.leaving { opacity: 0; }
+  /* 띠가 좁으면 문구만 말줄임한다 — 전문은 data-tip 툴팁에 남는다. */
+  #vt-hud-msg > .vt-toast-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  #vt-hud-msg[data-tone="ok"]   { --vt-toast-tone: var(--color-st-working); color: var(--ok); }
+  #vt-hud-msg[data-tone="info"] { --vt-toast-tone: var(--color-line-strong); }
+
+  /* 누른 자리에서 끝나는 성공 표시 — ui/okflash.js가 900ms 동안 아이콘을
+   * 체크로 바꾸고 이 클래스를 얹는다. 같은 16px 상자 안이라 줄이 안 밀린다. */
+  .vt-ok-flash,
+  .vt-ok-flash:hover { color: var(--color-st-working); }
 }
 
 /* ── 팔레트 (Mod+K) ────────────────────────────────────────────────────────

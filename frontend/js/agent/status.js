@@ -198,8 +198,12 @@ function connectAgentWs() {
       // 세션 카드도 cwd로 매칭해 같은 규칙(pre=작업중, stop=완료)을 적용한다.
       // (세션 단위 상태의 정본은 A5의 agent/state.js다 — 여기 카드 강조는
       // cwd밖에 모르던 T6 시절 경로가 카드에만 남은 것이다.)
+      // 2.2.1 — 도구마다 띄우던 "X 실행 중..." 토스트(2.5초, key:'agent')는
+      // 지웠다. 에이전트가 일하는 동안 화면 한구석이 계속 깜빡였는데, 같은
+      // 정보를 바로 아래 두 줄(파비콘·세션 카드 강조)과 레일의 에이전트 마크가
+      // 이미 실시간으로 말하고 있었다. 토스트는 "지나가면 다시 볼 수 없는 말"에만
+      // 쓴다 — 상태는 상태를 보여주는 자리가 맡는다.
       if (msg.state && msg.state.tool) {
-        showToast(`${msg.state.tool} 실행 중...`, 'info', { key: 'agent', duration: 2500 });
         if (window.VTFavicon) VTFavicon.set('working');
         const card = _cardByCwd(msg.state.cwd);
         if (card) { card.classList.add('working'); card.classList.remove('done'); }

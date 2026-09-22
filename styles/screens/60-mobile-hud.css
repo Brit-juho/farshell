@@ -36,6 +36,15 @@
   overflow-x:auto; overflow-y:hidden; scrollbar-width:none; user-select:none;
 }
 #vt-hud::-webkit-scrollbar { display:none; }
+/* 2.2.1 — info/success 토스트는 카드로 뜨지 않고 이 띠를 잠시 덮는다(§10,
+   js/ui/toast.js). 칩은 DOM에서 빼지 않고 클래스로만 숨긴다 — Solid <For>가
+   관리하는 노드를 뒤에서 지우면 실제 DOM과 어긋난다(Hud.tsx에 기록된 사고,
+   아래 fitChips의 .overflow-hidden 토글과 같은 관용구).
+   이 규칙이 components.css가 아니라 **여기** 있는 이유: .vt-hud-chip이 이
+   파일의 unlayered 규칙이라 @layer components는 무조건 진다. 메시지 칸
+   자체의 모양은 components.css가 맡는다(경쟁 상대가 없다). */
+#vt-hud.vt-hud-busy .vt-hud-chip,
+#vt-hud.vt-hud-busy .vt-hud-spacer { display:none; }
 /* Hud.tsx의 fitChips가 폭이 모자랄 때 순위가 낮은 칩부터 붙인다. Solid <For>가
    관리하는 노드라 DOM에서 빼지 않고 클래스로만 감춘다. */
 .vt-hud-chip.overflow-hidden { display:none; }

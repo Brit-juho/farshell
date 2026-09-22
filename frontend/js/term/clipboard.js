@@ -100,26 +100,29 @@ export async function pasteFromClipboard(id) {
 
 // 이미지 붙여넣기 → 서버 업로드 → 저장 경로를 터미널에 삽입 (Claude에 그대로 넘길 수 있게)
 export async function pasteImageUpload(id, file) {
+  // 한 동작이 토스트를 둘 연달아 띄우지 않는다 — "올리는 중"과 그 결과는
+  // 같은 key로 제자리에서 교체한다(2.2.1).
+  const TOAST = { key: 'paste-image' };
   try {
-    showToast('이미지 업로드 중...');
+    showToast('이미지 업로드 중...', 'info', TOAST);
     const ext = ((file.type.split('/')[1] || 'png')).replace('jpeg', 'jpg').replace('svg+xml', 'svg');
     const fd = new FormData();
     fd.append('file', file, `pasted-${Date.now()}.${ext}`);
     const res = await apiFetch(`${API_BASE}/api/upload?session_id=${encodeURIComponent(id)}`, {
       method: 'POST', body: fd,
     });
-    if (!res.ok) { showToast(`이미지 업로드 실패 (${res.status})`); return; }
+    if (!res.ok) { showToast(`이미지 업로드 실패 (${res.status})`, 'error', TOAST); return; }
     const data = await res.json();
     if (data && data.path) {
       // N24 — 경로 삽입도 붙여넣기 경로로: 사용자가 이어서 명령을 완성하고
       // 직접 Enter를 눌러야 하므로(자동 실행 아님) 의미상 paste지 keys가 아니다.
       sendPaste(id, data.path + ' ');
-      showToast('이미지 경로 삽입됨');
+      showToast('이미지 경로 삽입됨', 'success', TOAST);
     } else {
-      showToast('업로드 응답에 경로 없음');
+      showToast('업로드 응답에 경로 없음', 'error', TOAST);
     }
   } catch (_) {
-    showToast('이미지 업로드 오류');
+    showToast('이미지 업로드 오류', 'error', TOAST);
   }
 }
 

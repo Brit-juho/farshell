@@ -664,6 +664,36 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   the fill and the 1px edge, and always drifts in one skin.
   A tooltip is a *description*, not a name: icon-only controls still carry
   `aria-label`, which is also the only label a touch device ever gets.
+- **Toasts** (`.vt-toast` / `#vt-hud-msg`, `js/ui/toast.js`): a toast reads as a
+  rail row that floated off the rail — the same 2px leading status bar (an inset
+  `box-shadow`, never `border-left`, which the radius would clip), the same
+  5 status colors, 12px `--font-ui`, `--font-mono` `tabular-nums` for the `×N`
+  repeat badge. Color goes on the text and the bar only; filling the background
+  with a status color turns three stacked toasts into a block of colour.
+  **Where it lands is decided by severity, because the goal is to not cover the
+  terminal.** `info`/`success` take over the 24px HUD strip (`#vt-hud`), which
+  lives in normal flow and therefore hides nothing — the terminal's own message
+  line, like tmux's status line or vim's echo area. Only `warn`/`error` float,
+  as a card just above the HUD on the right, clear of the prompt line at the
+  bottom left. In compact (<720px) there is no HUD, so everything is a card,
+  sitting on the **measured** height of the keybar and bottom nav
+  (`--kb-height`/`--kb-overlap`) and following the software keyboard up.
+  Translucency is not an answer here: behind a toast is monospace text, so a
+  see-through card makes both layers unreadable, and `backdrop-filter` over the
+  constantly repainting xterm canvas re-blurs every frame.
+  **Say a success only when the screen doesn't already show it.** A deleted row
+  disappears, an inserted path is typed into the terminal, a closed selection bar
+  is its own receipt — none of those need a toast. Work that leaves no trace on
+  screen (a clipboard copy) is confirmed **at the trigger**: `okFlash()`
+  (`js/ui/okflash.js`) swaps the button's icon for a check for 900ms inside the
+  same 16px box, so nothing shifts. One action never fires two toasts — issuing
+  and copying a share link is one sentence, and a progress message is replaced
+  in place by its outcome through a shared `key`.
+  At most 3 cards at once; past that the oldest goes, but an `error`/`warn`
+  outlives an `info` — letting information evict a failure inverts severity.
+  Tapping dismisses; hovering (fine pointer) holds the timer. Default duration is
+  3s for `info`/`success`, 6s for `warn`/`error` — a success confirms something
+  already seen, a failure has to be read.
 - **Tags** (`.vt-tag`): a filled faint tint, no border, `--radius-sm`. A
   different species from `.vt-badge` — a tag doesn't count, it states a
   *property* (public exposure, trust tier, "this device", a plan name like

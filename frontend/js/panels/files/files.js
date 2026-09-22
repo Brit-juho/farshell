@@ -21,6 +21,7 @@ import { errorState } from '../../ui/empty.js';
 import { vtFetch, vtEsc } from '../../core/api.js';
 import { showToast } from '../../ui/toast.js';
 import { icon } from '../../ui/icons.js';
+import { okFlash } from '../../ui/okflash.js';
 import { confirmDialog, promptDialog } from '../../core/dialog.js';
 
 // ⚠ ADR-26 — 이 파일은 지연 청크(panels.js)에 들어가므로 core/store.js를
@@ -274,7 +275,7 @@ function renderRow(item) {
   const acts = document.createElement('div');
   acts.className = 'vt-fl-acts';
   acts.appendChild(iconBtn('download', '다운로드', 'dl', () => downloadFile(item)));
-  acts.appendChild(iconBtn('clipboard-copy', '경로 복사', 'copy', () => copyPath(item)));
+  acts.appendChild(iconBtn('clipboard-copy', '경로 복사', 'copy', (e) => copyPath(item, e.currentTarget)));
   acts.appendChild(iconBtn('keyboard', '터미널에 삽입', 'ins', () => insertFile(item)));
   acts.appendChild(iconBtn('link', '링크 발급', 'share', () => openShareDialog(item)));
   acts.appendChild(iconBtn('trash-2', '삭제', 'rm', () => deleteFile(item)));
@@ -313,7 +314,7 @@ function downloadFile(item) {
   window.location.href = `/api/files/${encodeURIComponent(item.id)}/download`;
 }
 
-async function copyPath(item) {
+async function copyPath(item, btn) {
   // 경로는 목록 응답에 없다(API는 id만 다룬다는 §1 원칙) — 사용자가 실제로
   // 원하는 건 "터미널에 붙일 수 있는 값"이라 다운로드 URL이 아니라 서버가
   // 삽입에 쓰는 경로와 같은 것을 줘야 한다. 그래서 삽입 API와 같은 모양의
@@ -321,7 +322,9 @@ async function copyPath(item) {
   try {
     const r = await vtFetch(`/api/files/${encodeURIComponent(item.id)}/path`);
     await navigator.clipboard.writeText(r.path);
-    showToast('경로 복사됨', 'success');
+    // 성공은 누른 버튼에서 끝낸다(ui/okflash.js) — 클립보드는 화면에 증거가
+    // 남지 않지만, 알려야 할 범위도 이 버튼 하나다.
+    okFlash(btn);
   } catch (e) {
     showToast('복사 실패: ' + e.message, 'error');
   }
@@ -360,7 +363,7 @@ async function insertFile(item) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session: tmuxName }),
     });
-    showToast(`${tmuxName}에 경로 삽입됨`, 'success');
+    // 성공을 말하지 않는다 — 터미널에 경로가 실제로 타이핑된 것이 증거다.
   } catch (e) {
     showToast('삽입 실패: ' + e.message, 'error');
   }
@@ -374,7 +377,7 @@ async function deleteFile(item) {
   if (!await confirmDialog(msg, { title: '파일 삭제', okLabel: '삭제', danger: true })) return;
   try {
     await vtFetch(`/api/files/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
-    showToast('삭제됨', 'success');
+    // 성공을 말하지 않는다 — 아래 refreshAllFiles()로 행이 사라지는 것이 증거다.
   } catch (e) {
     showToast('삭제 실패: ' + e.message, 'error');
   }
@@ -473,8 +476,11 @@ async function issueShare(item, wrap) {
   }
 
   if (res?.share?.shareId && res?.token) _issuedTokens.set(res.share.shareId, res.token);
-  showToast('링크 발급됨', 'success');
-  try { await navigator.clipboard.writeText(absoluteShareUrl(res.url)); showToast('링크가 복사되었습니다', 'success'); } catch (_) {}
+  // 한 동작이 토스트를 둘 연달아 띄우지 않는다 — 발급과 복사는 한 번의 조작이라
+  // 결과도 한 줄이어야 한다. 복사까지 됐는지가 유일하게 다른 정보다.
+  let copied = false;
+  try { await navigator.clipboard.writeText(absoluteShareUrl(res.url)); copied = true; } catch (_) {}
+  showToast(copied ? '링크 발급됨 — 클립보드에 복사했습니다' : '링크 발급됨', 'success');
   await renderShareList(item, wrap);
   refreshAllFiles();
 }
@@ -528,14 +534,18 @@ async function renderShareList(item, wrap) {
     const acts = document.createElement('div');
     acts.className = 'vt-fl-acts';
     const token = _issuedTokens.get(s.shareId);
-    const copyBtn = iconBtn('복사', token ? '링크 복사' : '이 링크의 주소는 발급한 그 순간에만 알 수 있습니다(서버가 보관하지 않음) — 필요하면 취소 후 새로 발급하세요', 'copy', async () => {
+    // 2.2.1 — 첫 인자는 **아이콘 이름**인데(iconBtn 시그니처) 이 두 자리만
+    // 사람이 읽는 낱말('복사'·'지금 취소')을 넘기고 있었다. icons.js에 그런
+    // 이름이 없으니 icon()이 빈 문자열을 돌려줘서, 공유 목록의 두 버튼은
+    // 아이콘 없이 빈 상자로 그려지고 있었다(console.warn만 남았다).
+    const copyBtn = iconBtn('clipboard-copy', token ? '링크 복사' : '이 링크의 주소는 발급한 그 순간에만 알 수 있습니다(서버가 보관하지 않음) — 필요하면 취소 후 새로 발급하세요', 'copy', async (e) => {
       if (!token) return;
-      try { await navigator.clipboard.writeText(absoluteShareUrl(`/s/${token}`)); showToast('복사됨', 'success'); }
-      catch (e) { showToast('복사 실패: ' + e.message, 'error'); }
+      try { await navigator.clipboard.writeText(absoluteShareUrl(`/s/${token}`)); okFlash(e.currentTarget); }
+      catch (err) { showToast('복사 실패: ' + err.message, 'error'); }
     });
     copyBtn.disabled = !token;
     acts.appendChild(copyBtn);
-    acts.appendChild(iconBtn('지금 취소', '공유 취소', 'rm', async () => {
+    acts.appendChild(iconBtn('trash-2', '공유 취소', 'rm', async () => {
       try {
         await vtFetch(`/api/files/${encodeURIComponent(item.id)}/share/${encodeURIComponent(s.shareId)}`, { method: 'DELETE' });
         showToast('취소됨 — 링크가 즉시 404가 됩니다', 'success');
