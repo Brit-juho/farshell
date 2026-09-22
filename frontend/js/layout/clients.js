@@ -114,9 +114,10 @@ export function mountClients(container, tmuxName, remote = null) {
       if (stopped) return;
       list.innerHTML = '';
       const clients = data.clients || [];
-      // 클라이언트가 하나뿐이면(=나만 붙어 있으면) 관리할 게 없다. 블록을
-      // 통째로 숨긴다 — 빈 목록을 보여주는 것보다 낫다(§4 "빈 패널 금지").
-      wrap.hidden = clients.length < 2;
+      // 열람은 사용자가 직접 요청한 것(칩/메뉴 클릭)이라 결과가 나만 있어도
+      // 그대로 보여준다 — "혼자입니다"를 목록으로 보여주는 게 통째로 숨기는
+      // 것보다 낫다. 조회 실패(catch 블록)만 숨긴다.
+      wrap.hidden = false;
       // 남길 화면을 특정할 수 없으면 solo는 서버가 400으로 거부한다.
       // 눌러서 실패하게 두지 말고 미리 비활성화한다.
       solo.disabled = !data.me_tty || readOnly;
