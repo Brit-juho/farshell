@@ -148,10 +148,9 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
   height:26px; padding:0 calc(var(--spacing) * 2); margin-right:calc(var(--spacing) * 1);
   flex:none; border:none; border-radius:var(--radius-sm); background:transparent;
-  color:var(--sub); cursor:pointer; font:var(--weight-normal) var(--fs-3xs) var(--font-mono);
+  color:var(--sub); font:var(--weight-normal) var(--fs-3xs) var(--font-mono);
   letter-spacing:var(--tracking-wide); white-space:nowrap;
 }
-#vt-workspace-chip:hover { background:var(--menu-hover); color:var(--txt); }
 #vt-workspace-chip svg { color:var(--acc); flex:none; }
 /* 2026-09-17 — 이 줄은 화면에서 가장 오래 떠 있는 이름인데 이름과 경로가 둘 다
    11px/mono라 "farshell/Work-MacBook"이 한 덩어리 경로로 읽혔다. 이름은

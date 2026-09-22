@@ -74,7 +74,6 @@ export function Row(props: {
       class="vt-srow vt-wgrail-row"
       classList={{ active: props.active, sleeping: !!props.sleeping }}
       onClick={props.onOpen}
-      onContextMenu={props.onContext}
       onKeyDown={onKeyDown}
       draggable={!!props.draggable}
       onDragStart={props.onDragStart}
@@ -177,6 +176,28 @@ export function Row(props: {
           <div class="vt-srow-question vt-wgrail-question">? {props.row.question}</div>
         </Show>
       </div>
+      {/* 2026-09-21(사용자 요청) — 이름변경·재우기·완전종료는 우클릭 메뉴
+          전용이었다. 왼쪽 클릭 하나로 닿는 길을 만든다 — 행 자체의 좌클릭은
+          이미 "열기/전환"을 쓰고 있어서 자리를 나눠 쓸 수 없으므로, 메뉴는
+          이 버튼으로만 연다(우클릭은 없앴다 — RailRow.tsx는 이제 onContext를
+          안 받는다는 뜻이 아니라, 트리거만 버튼으로 옮겼다).
+          2026-09-22(회귀 수정) — compact(48px 접힘)에서도 무조건 그렸더니
+          mark+agent 아이콘만 들어가던 좁은 행에 18px가 더 끼어 넘쳐서
+          레일 전체에 가로 스크롤이 생겼다(사용자 지적, 실측: 47px 컨테이너에
+          36px+gap 요구). compact에서는 다른 텍스트·배지도 다 숨기는 것과
+          같은 원칙으로 이 버튼도 숨긴다 — 접힘에서는 애초에 펼쳐야 메뉴에
+          닿을 수 있다. */}
+      <Show when={!isRemote() && !props.compact}>
+        <button
+          type="button"
+          class="vt-icon-btn xs vt-srow-menu"
+          aria-label={`${rowName()} 메뉴`}
+          data-tip="메뉴"
+          data-tip-side="left"
+          onClick={(e) => { e.stopPropagation(); props.onContext(e); }}
+          innerHTML={icon('more-horizontal', 14, 2)}
+        />
+      </Show>
     </div>
   );
 }

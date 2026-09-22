@@ -45,21 +45,23 @@ function WorkspaceChip(props: { deps: HeaderDeps }) {
     if (c?.hostname) setHostname(c.hostname);
   });
 
+  // 2026-09-21: 클릭(팔레트 @ 모드)을 뗐다 — 이 칩을 호스트 전환 진입점으로
+  // 착각하기 쉬운데, @ 모드는 세션 이름 검색일 뿐이고 실제 호스트 전환은
+  // Rail/Fleet의 호스트 스위처(80-multihost-agents.md C1)에 따로 있다.
+  // getAction 배선은 다른 용도로 재활용할 수 있어 남겨둔다.
   const onClick = () => {
-    // §4: "클릭 → 팔레트 @ 모드". @ 접두사 자체는 60-settings-palette.md
-    // §3(N5/N40/N46) 몫이라 아직 없다 — 그게 생기기 전까지는 팔레트를 그냥 연다.
     const fn = props.deps.getAction('quickopen.open');
     if (typeof fn === 'function') (fn as () => void)();
   };
 
   return (
-    <button type="button" id="vt-workspace-chip" onClick={onClick} data-tip="빠른 열기" data-tip-side="bottom">
+    <div id="vt-workspace-chip">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="5" /><path d="m7 9 3 3-3 3" /><path d="M12 15h5" /></svg>
       <span class="vt-workspace-name">farshell</span>
       <Show when={hostname()}>
         <span class="vt-workspace-host">/ {hostname()}</span>
       </Show>
-    </button>
+    </div>
   );
 }
 

@@ -71,7 +71,13 @@
 }
 .vt-wgrail-collapse.collapsed > svg { transform:rotate(-90deg); }
 
-.vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; }
+/* 2026-09-22 — overflow-y만 auto로 두면 스펙상 overflow-x도 auto로 계산돼,
+   행 안의 flex:none 아이콘·배지 합이 좁은 레일 폭을 넘칠 때마다 가로
+   스크롤바가 생겼다(사용자 지적 — 메뉴 버튼 회귀와 겹쳐 드러남). 레일은
+   세로 목록이라 가로로 스크롤할 이유가 없다 — 넘치는 텍스트는 이미
+   ellipsis로 말줄임되므로(.vt-srow-name 등) hidden으로 막아도 잘리는 건
+   말줄임표 이후의 여백뿐이다. */
+.vt-wgrail-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; }
 /* 98 §2 — 이름표 한 줄이던 그룹 헤더가 버튼 줄이 됐다. 글자 모양(대문자 단)은
    그대로 patterns.css가 맡고, 여기서는 이 줄의 조판만 정한다. */
 .vt-wgrail-group-head {
@@ -110,6 +116,13 @@
    되므로 옅게 뒀다가 호버에서만 또렷해진다(위 설정 ⚙과 같은 판단). */
 .vt-wgrail-group-rename { flex:none; opacity:.45; }
 .vt-wgrail-group-rename:hover, .vt-wgrail-group-rename:focus-visible { opacity:1; }
+/* 2026-09-21(사용자 요청) — 이름변경·재우기·완전종료 메뉴가 우클릭 전용이던
+   것을 좌클릭으로도 열게 한다(RailRow.tsx). 행 자체의 좌클릭은 이미
+   열기/전환을 쓰므로 이 버튼이 유일한 진입점이다 — 위 그룹 ⚙·연필과 같은
+   옅음→호버 관용구를 그대로 쓴다. `.vt-srow`가 align-items:stretch라
+   align-self:center로 세로 중앙에 고정한다. */
+.vt-srow-menu { flex:none; align-self:center; opacity:.45; }
+.vt-srow-menu:hover, .vt-srow-menu:focus-visible { opacity:1; }
 /* 제자리 편집 입력 — window.prompt 대신(네이티브 다이얼로그를 안 쓴다).
    토글 버튼 자리를 그대로 대신하므로 크기·글꼴을 맞춘다. */
 .vt-wgrail-group-edit {
