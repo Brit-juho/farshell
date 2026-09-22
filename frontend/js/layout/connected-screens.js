@@ -24,11 +24,15 @@ function closePanel() {
   if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
 }
 
-function openPanel() {
+// explicitSessionId: 레일 컨텍스트 메뉴가 "지금 안 보고 있는 세션"을 대상으로
+// 부를 때 쓴다 — activeSessionId를 그 세션으로 바꿔치기하지 않는다(예전엔 그걸
+// 위해 switchTo를 불렀는데, switchTo가 지금 포커싱된 pane 자리를 그 세션으로
+// 덮어써 버렸다 — 사용자 보고로 발견).
+function openPanel(explicitSessionId) {
   // 토글 — HUD 칩·컨텍스트 메뉴 둘 다에서 반복 클릭될 수 있다.
   if (document.getElementById('vt-connected-screens')) { closePanel(); return; }
 
-  const activeSess = getSession(activeSessionId());
+  const activeSess = getSession(explicitSessionId || activeSessionId());
   const tmuxName = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
   if (!tmuxName) {
     if (typeof window.showToast === 'function') window.showToast('tmux 세션이 아닙니다');
@@ -72,3 +76,5 @@ function openPanel() {
 }
 
 registerAction('clients.show', openPanel);
+// Rail.tsx가 특정 세션을 지정해 부르는 자리 — 정적 import 불가(레일 지연 청크 제약).
+window.vtShowClients = openPanel;

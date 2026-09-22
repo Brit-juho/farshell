@@ -5,7 +5,7 @@
 // renameSession을 부르고, term/session.js는 탭 전환/제거 시 updateSessionPicker를
 // 부른다. panels/viewer의 shell.js↔tree.js와 같은 이유로 그대로 유지한다(모든
 // 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
-import { activeSession, activeSessionId, allSessions, sessionDisplayName } from './core/store.js';
+import { activeSession, activeSessionId, allSessions, sessionDisplayName, getSession } from './core/store.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
@@ -155,8 +155,11 @@ async function renderSessionManager(backdrop) {
 }
 
 // --- 이 세션 맥에서 열기 (tmux 세션을 iTerm에 나중에 attach) ---
-async function openSessionOnMac() {
-  const s = activeSession();
+// explicitSessionId: 레일 컨텍스트 메뉴처럼 "지금 보고 있지 않은 세션"을 대상으로
+// 부를 때 쓴다 — activeSessionId를 그 세션으로 바꿔치기하면(예전 방식) 포커스가
+// 딴 데로 튀므로, 여기서 대상만 직접 지정해 activeSession을 건드리지 않는다.
+async function openSessionOnMac(explicitSessionId) {
+  const s = explicitSessionId ? getSession(explicitSessionId) : activeSession();
   if (!s) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
   const tmuxName = s.tmuxName || s.tmux_name;
   if (!tmuxName) { showToast('이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다', 'error'); return; }
@@ -189,6 +192,9 @@ async function uploadFile(input) {
 }
 window.uploadFile = uploadFile;
 
-// F3(c): data-action 위임용 등록.
+// F3(c): data-action 위임용 등록. (인자 없이 호출 — 대상은 항상 activeSession.)
 registerAction('session.manager', () => openSessionManager());
 registerAction('session.open-on-mac', () => openSessionOnMac());
+// Rail.tsx가 특정 세션을 지정해 부르는 자리 — 정적 import 불가(레일 지연 청크
+// 제약, session-actions.js 머리말과 같은 이유)라 window로 브리지한다.
+window.vtOpenSessionOnMac = openSessionOnMac;

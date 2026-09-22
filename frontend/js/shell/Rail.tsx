@@ -492,8 +492,14 @@ function Rail(props: { deps: RailDeps }) {
       items.push(
         { label: '이름 변경', run: () => startRenameSession(m.sessionId as string, w.sessionDisplayName?.(m.sessionId) || '') },
         { label: '새 세션', run: () => w.createSession?.() },
-        { label: '지금 이 세션 맥에서 열기', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('session.open-on-mac') as (() => void) | undefined)?.(); } },
-        { label: '연결된 화면', run: () => { w.switchTo?.(m.sessionId); (props.deps.getAction('clients.show') as (() => void) | undefined)?.(); } },
+        // 2026-09-22(사용자 지적) — 예전엔 여기서도 switchTo로 activeSessionId를
+        // m.sessionId로 바꾼 뒤 인자 없는 액션을 불렀다. switchTo는 "지금 활성
+        // pane에 배정"이라 포커싱 중이던 세션을 그 자리에서 밀어냈다(위 revealSession
+        // 주석과 같은 사고). 이 둘은 화면을 옮길 필요가 전혀 없으므로, 대상 세션을
+        // 직접 받는 함수(vtOpenSessionOnMac/vtShowClients)를 따로 불러 activeSessionId
+        // 자체를 건드리지 않는다.
+        { label: '지금 이 세션 맥에서 열기', run: () => w.vtOpenSessionOnMac?.(m.sessionId) },
+        { label: '연결된 화면', run: () => w.vtShowClients?.(m.sessionId) },
         // 2.1 D3 — "닫기"는 화면마다 다른 뜻이었다. 이 메뉴가 하는 건 웹
         // 세션을 놓는 것뿐(tmux는 계속 산다)이라 "세션 놓기"로 불렀다.
         // ADR-29 D — 레일이 이미 쓰는 잠·깸 어휘와 맞춰 "재우기"로 다시

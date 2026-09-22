@@ -10,7 +10,7 @@ import { allSessions, getSession, activeSessionId, orderedSessionIds,
   sessionDisplayName, setSessionOrder } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { addSession, switchTo } from './session.js';
+import { addSession, revealSession } from './session.js';
 import { attachRemoteSession } from './remote.js';
 
 const WORKSPACE_KEY = 'vt-workspace-v1';
@@ -122,7 +122,12 @@ export async function restoreWorkspace() {
       showToast(`탭 ${failed}개 복원 실패 (세션이 이미 종료됨)`);
     }
     if (restored > 0 && firstNewId) {
-      switchTo(firstNewId);
+      // addSession이 이제 활성 pane이 이미 차 있으면 새 탭을 연다(2026-09-22)
+      // — 루프를 도는 동안 firstNewId는 이미 어딘가(원래 있던 빈 자리 또는
+      // 자기 새 탭)에 놓여 있다. switchTo(=지금 활성 pane에 강제 배정)를 쓰면
+      // 루프 중 마지막에 놓인 세션의 자리를 뺏으므로, 그 자리로 이동만 하는
+      // revealSession을 쓴다.
+      revealSession(firstNewId);
     }
     return restored > 0;
   } catch (e) { return false; }
@@ -133,7 +138,7 @@ export async function restoreWorkspace() {
 // 이 스냅샷에 없으면 restoreWorkspace()가 절대 못 찾는다. 서버의 진짜 tmux
 // 목록과 대조해 빠진 것만 추가로 붙인다(활성 탭은 건드리지 않는다).
 export async function reconcileMissingTmuxSessions() {
-  const keepActive = activeSessionId(); // addSession()이 매번 switchTo()를 호출하므로 복원해야 함
+  const keepActive = activeSessionId(); // addSession()이 활성 pane이 차 있으면 새 탭을 열어 루프 중 화면이 옮겨다니므로 끝나면 복원해야 함
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
     const tmuxList = await res.json();
@@ -182,7 +187,9 @@ export async function reconcileMissingTmuxSessions() {
         added = true;
       }
     }
-    if (added && keepActive && getSession(keepActive)) switchTo(keepActive);
+    // revealSession — switchTo였다면 방금 새로 붙인 세션이 놓인 pane을 keepActive가
+    // 그대로 덮어써 버렸을 것이다(같은 사고, 2026-09-22 수정).
+    if (added && keepActive && getSession(keepActive)) revealSession(keepActive);
   } catch (e) { /* 서버 통신 실패 시 조용히 무시 — 복원된 탭은 이미 정상 동작 중 */ }
 }
 

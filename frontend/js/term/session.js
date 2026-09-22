@@ -25,8 +25,9 @@ import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
-import { setPaneSession, revealSessionPane, openLayoutTab } from '../layout/store.js';
+import { setPaneSession, revealSessionPane, openLayoutTab, getTree, getActivePaneId } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
+import { findNode } from '../layout/tree.js';
 
 export async function createSession() {
   // "맥에서도 열기"가 켜져 있으면 tmux 세션으로 생성하고 서버에 osascript로
@@ -222,7 +223,20 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // 여기서는 "새로 생긴 세션"만 챙긴다.)
   applyMouseMode(getSession(id));
 
-  switchTo(id);
+  // 2026-09-22(사용자 지적) — 예전엔 무조건 switchTo(id)였다. 두 호출자가
+  // 서로 다른 걸 원한다: pane-picker.js("이 화면에 표시할 세션" 시트)는
+  // 사용자가 **직접 고른 빈 pane**을 setActivePane으로 미리 맞춰둔 뒤 이
+  // 함수를 불러 "바로 그 자리"에 채워지길 기대하고(pane-picker.test.js),
+  // 레일 메뉴/버튼의 "새 세션"은 활성 pane을 고른 적이 없다 — 그때의 활성
+  // pane은 그냥 "포커싱 중이던 세션의 자리"라 뺏으면 안 된다. 활성 pane이
+  // 비어 있는지로 둘을 가른다: 비어 있으면(명시적으로 고른 자리) 채우고,
+  // 이미 세션이 있으면 revealSession의 "못 찾으면 새 탭" 경로로 새 탭을 연다.
+  const activeNode = findNode(getTree(), getActivePaneId());
+  if (activeNode && activeNode.t === 'leaf' && !activeNode.session) {
+    switchTo(id);
+  } else {
+    revealSession(id);
+  }
 }
 
 export function switchTo(id) {
