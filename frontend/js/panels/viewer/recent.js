@@ -19,3 +19,8 @@ export function _pushRecent(path) {
     localStorage.setItem(VT_RECENT_KEY, JSON.stringify(list.slice(0, VT_RECENT_MAX)));
   } catch (_) { /* 사생활 보호 모드 등 — 최근 목록 없이 그냥 동작한다 */ }
 }
+
+// dock "파일" 탭(viewer/tree.js)의 「지우기」 버튼 — 키를 이 파일 하나만 안다.
+export function _clearRecent() {
+  try { localStorage.removeItem(VT_RECENT_KEY); } catch (_) { /* 위와 같음 */ }
+}

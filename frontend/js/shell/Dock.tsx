@@ -47,10 +47,14 @@ interface DockTab {
 // 문서 §6의 탭 행 그대로: 소스컨트롤 | 큐 N | 포트 N | 사용량 | ›(접기).
 // 스니펫은 dock 탭이 아니다(60 §4에서 큐 탭 안의 스코프로 들어간다) — 그때까지
 // 레일 "⋯ 더보기"의 팝업으로 남는다.
+// 「파일」(디렉토리 트리)은 N35 §6에서 지운 폴더 트리를 되살린 것(2026-09-22,
+// 사용자 확인 — N35 번복). 업로드 파일을 관리하던 옛 「파일」 탭은 그 이름을
+// 내주고 「첨부」로 물러났다 — 둘 다 "파일"이면 구분이 안 된다.
 const TABS: DockTab[] = [
   { id: 'scm',   label: '소스컨트롤', icon: 'git-branch', panelId: 'vt-dock-scm', action: 'scm.show' },   // 40 §3 (2.1.0은 읽기 전용)
+  { id: 'dir',   label: '파일', icon: 'folder',    panelId: 'vt-dir', action: 'dir.show' },
   { id: 'queue', label: '큐', icon: 'list',        panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
-  { id: 'files', label: '파일', icon: 'folder',      panelId: 'vt-files', action: 'files.show' },  // 50 §4
+  { id: 'files', label: '첨부', icon: 'paperclip',   panelId: 'vt-files', action: 'files.show' },  // 50 §4
   { id: 'ports', label: '포트', icon: 'plug',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
   { id: 'usage', label: '사용량', icon: 'gauge',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
 ];

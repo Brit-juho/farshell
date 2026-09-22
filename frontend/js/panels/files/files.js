@@ -21,6 +21,7 @@ import { errorState } from '../../ui/empty.js';
 import { vtFetch, vtEsc } from '../../core/api.js';
 import { showToast } from '../../ui/toast.js';
 import { icon } from '../../ui/icons.js';
+import { confirmDialog, promptDialog } from '../../core/dialog.js';
 
 // ⚠ ADR-26 — 이 파일은 지연 청크(panels.js)에 들어가므로 core/store.js를
 // **정적 import 하지 않는다**. 하면 Vite가 세션 싱글톤을 청크 안에 복제해
@@ -370,7 +371,7 @@ async function deleteFile(item) {
   const msg = shared
     ? `${item.name} 을(를) 삭제합니다.\n\n공유 링크 ${shared}개도 함께 무효가 됩니다. 계속할까요?`
     : `${item.name} 을(를) 삭제할까요?`;
-  if (!confirm(msg)) return;
+  if (!await confirmDialog(msg, { title: '파일 삭제', okLabel: '삭제', danger: true })) return;
   try {
     await vtFetch(`/api/files/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
     showToast('삭제됨', 'success');
@@ -485,7 +486,7 @@ export function absoluteShareUrl(url) {
 }
 
 async function elevate() {
-  const pw = prompt('공유 링크 발급에는 비밀번호 확인이 필요합니다.');
+  const pw = await promptDialog('공유 링크 발급에는 비밀번호 확인이 필요합니다.', { title: '비밀번호 확인', password: true });
   if (pw === null) return false;
   try {
     await vtFetch('/api/auth/elevate', {

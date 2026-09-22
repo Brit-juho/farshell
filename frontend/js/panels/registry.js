@@ -26,9 +26,15 @@ export const PANELS = {
     panelId: 'vt-queue',
     load: () => import('../queue.js').then((m) => m.showQueue),
   },
-  files: {
+  dir: {
     label: '파일',
     icon: 'folder',
+    panelId: 'vt-dir',
+    load: () => import('./viewer/tree.js').then((m) => m.showTree),
+  },
+  files: {
+    label: '첨부',
+    icon: 'paperclip',
     panelId: 'vt-files',
     load: () => import('./files/files.js').then((m) => m.showFiles),
   },

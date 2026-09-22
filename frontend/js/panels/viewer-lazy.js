@@ -61,6 +61,18 @@ registerAction('scm.show', () => {
     .finally(() => { _scmOpening = false; });
 });
 
+// dock 「파일」 탭(디렉토리 트리, N35 번복 — 2026-09-22) — scm.show와 같은
+// 재진입 가드 이유.
+let _dirOpening = false;
+registerAction('dir.show', () => {
+  if (_dirOpening) return;
+  _dirOpening = true;
+  import('./viewer/tree.js')
+    .then((m) => m.showTree())
+    .catch((e) => console.error('[FarShell dir]', e))
+    .finally(() => { _dirOpening = false; });
+});
+
 // window 브리지 — 이 저장소의 관행대로(core/store.js·term/resize.js 하단)
 // "밖에서 부를 수 있어야 하는" 함수 하나를 전역에 둔다. 인자를 받는 동작이라
 // registerAction(무인자 계약)에는 안 맞고, 실브라우저 스모크와 향후 팔레트
