@@ -27,6 +27,7 @@ import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { getSession } from '../core/store.js';
 import { getStatus } from '../agent/state.js';
+import { confirmDialog } from '../core/dialog.js';
 
 /** 재우기(세션 하나) — 이 브라우저의 웹 세션을 놓는다. tmux 세션은 그대로 산다. */
 export async function detachSession(sessionId) {
@@ -80,14 +81,14 @@ export async function killSession(name, webSessionId) {
 }
 
 /** Rail.tsx 컨텍스트 메뉴처럼 확인 UI를 직접 못 그리는 자리를 위한 얇은 조합:
- * `window.confirm`으로 한 번 확인받고 죽인다. tmux-panel.js는 이미 자기
- * 자리에 2단계 인라인 확인(누르면 "종료?"로 바뀌는 버튼)이 있으므로 이 함수를
- * 안 쓰고 killSession을 직접 부른다 — 확인 UI는 화면마다 다를 수 있고, 이
+ * 커스텀 확인 다이얼로그(core/dialog.js)로 한 번 확인받고 죽인다. tmux-panel.js는
+ * 이미 자기 자리에 2단계 인라인 확인(누르면 "종료?"로 바뀌는 버튼)이 있으므로 이
+ * 함수를 안 쓰고 killSession을 직접 부른다 — 확인 UI는 화면마다 다를 수 있고, 이
  * 파일이 강제하는 건 "죽이기 전엔 반드시 물어보고, 문구엔 상태를 적는다"는
  * 규칙이지 위젯 모양이 아니다. */
 export async function confirmAndKillSession(name, webSessionId) {
   const status = getStatus(name);
-  if (!window.confirm(killWarning(name, status))) return false;
+  if (!await confirmDialog(killWarning(name, status), { title: '완전 종료', okLabel: '완전 종료', danger: true })) return false;
   return killSession(name, webSessionId);
 }
 

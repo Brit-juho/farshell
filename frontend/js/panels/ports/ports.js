@@ -6,6 +6,7 @@
 import { openPanel, setPanelPoll } from '../panel.js';
 import { vtFetch, vtEsc } from '../../core/api.js';
 import { _isCoarsePointer } from '../../core/env.js';
+import { confirmDialog } from '../../core/dialog.js';
 
 
 // N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다. dock에 떠 있는 것과
@@ -290,7 +291,7 @@ async function _copyText(text) {
 }
 
 async function _unexposeTunnel(ctx, port) {
-  if (!confirm(`포트 ${port} 터널을 해제할까요?`)) return;
+  if (!await confirmDialog(`포트 ${port} 터널을 해제할까요?`, { title: '터널 해제', okLabel: '해제', danger: true })) return;
   try {
     await vtFetch(`/api/ports/${port}/expose`, { method: 'DELETE' });
     showToast(`포트 ${port} 터널 해제됨`);
@@ -356,7 +357,7 @@ async function _unexposeTunnel(ctx, port) {
     }
 
     async function killPort(ctx, port, pid, cmd) {
-      if (!confirm(`포트 ${port} (${cmd}, pid ${pid}) 를 종료할까요?`)) return;
+      if (!await confirmDialog(`포트 ${port} (${cmd}, pid ${pid}) 를 종료할까요?`, { title: '프로세스 종료', okLabel: '종료', danger: true })) return;
       try {
         // pid를 함께 보낸다 — 조회 후 프로세스가 바뀌었으면 서버가 409로 거부한다.
         const r = await vtFetch(`/api/ports/${port}?pid=${pid}`, { method: 'DELETE' });
@@ -369,7 +370,7 @@ async function _unexposeTunnel(ctx, port) {
 
     async function exposePort(ctx, port) {
       // 2단계 확인. 서버도 confirm 없으면 428로 거부하지만, 오탭을 UI에서 먼저 막는다.
-      if (!confirm(`포트 ${port} 를 공개 인터넷에 노출합니다.\n\n누구나 URL만 알면 접근할 수 있습니다. 계속할까요?`)) return;
+      if (!await confirmDialog(`포트 ${port} 를 공개 인터넷에 노출합니다.\n\n누구나 URL만 알면 접근할 수 있습니다. 계속할까요?`, { title: '공개 노출', okLabel: '공개', danger: true })) return;
       showToast(`포트 ${port} 터널 여는 중…`);
       try {
         const r = await vtFetch(`/api/ports/${port}/expose`, {

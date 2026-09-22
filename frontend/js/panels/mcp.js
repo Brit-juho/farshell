@@ -29,6 +29,7 @@
 import { vtFetch } from '../core/api.js';
 import { icon } from '../ui/icons.js';
 import { showToast } from '../ui/toast.js';
+import { promptDialog } from '../core/dialog.js';
 
 const TOOL_LABEL = { claude: 'Claude', codex: 'Codex', agy: 'agy', opencode: 'opencode' };
 const SCOPE_LABEL = { global: '전역', local: '이 워크트리' };
@@ -81,7 +82,7 @@ function offNote(fact) {
 }
 
 async function elevate() {
-  const pw = prompt('MCP 설정을 바꾸려면 비밀번호 확인이 필요합니다.');
+  const pw = await promptDialog('MCP 설정을 바꾸려면 비밀번호 확인이 필요합니다.', { title: '비밀번호 확인', password: true });
   if (pw === null) return false;
   try {
     await vtFetch('/api/auth/elevate', {
@@ -299,7 +300,7 @@ function tagEditor(name, tags) {
   add.textContent = '+ 태그';
   add.title = '이 서버를 그룹에 넣습니다 — 그룹은 FarShell 안에만 기록되고 CLI 설정 파일은 건드리지 않습니다';
   add.addEventListener('click', async () => {
-    const t = prompt(`「${name}」에 붙일 그룹 이름`);
+    const t = await promptDialog(`「${name}」에 붙일 그룹 이름`, { title: '그룹 추가' });
     if (t == null) return;
     if (!t.trim()) return;
     add.disabled = true;
@@ -373,11 +374,12 @@ function credRow(group, slot, creds) {
     add.textContent = '값 보관';
     add.title = 'FarShell이 보관하고, 설정 파일에는 참조만 씁니다';
     add.addEventListener('click', async () => {
-      const secret = prompt(
+      const secret = await promptDialog(
         `${group.name} · ${slot.key} 값\n\n`
         + 'FarShell이 ~/.vt/mcp.json(0600)에 평문으로 보관합니다. '
         + '암호화하지 않습니다 — 무인으로 도는 서버는 자기가 쓰는 값을 '
-        + '언제든 읽을 수 있어야 하기 때문입니다. GitHub 토큰과 같은 수준입니다.');
+        + '언제든 읽을 수 있어야 하기 때문입니다. GitHub 토큰과 같은 수준입니다.',
+        { title: '값 보관', password: true });
       if (!secret) return;
       add.disabled = true;
       try {

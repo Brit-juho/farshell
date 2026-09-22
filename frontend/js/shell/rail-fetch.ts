@@ -10,6 +10,7 @@
 import { createSignal, onCleanup } from 'solid-js';
 
 import type { OtherRailRowInput } from './rail-data.js';
+import { confirmDialog } from '../core/dialog.js';
 
 // §5 원문: "60초 캐시" — 워크트리에 안 속한(changed 요약을 서버가 안 주는)
 // 세션에만 쓴다.
@@ -146,13 +147,13 @@ export async function deleteWorktreeRow(
   const firstWarn = hasSessions
     ? `'${label}' 워크트리를 삭제합니다. 열려 있는 세션의 tmux는 그대로 남지만 다음에 자동으로 재연결되지는 않습니다. 되돌릴 수 없습니다.`
     : `'${label}' 워크트리를 삭제합니다. 되돌릴 수 없습니다.`;
-  if (!window.confirm(firstWarn)) return { ok: false };
+  if (!await confirmDialog(firstWarn, { title: '워크트리 삭제', okLabel: '삭제', danger: true })) return { ok: false };
   try {
     await deps.vtFetch(`/api/worktrees/${encodeURIComponent(wtId)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
     return { ok: true };
   } catch (e: any) {
     if (e?.status === 409 && e?.data?.dirty) {
-      if (!window.confirm(`'${label}'에 커밋하지 않은 변경사항이 있습니다. 그래도 삭제할까요? 그 변경은 사라집니다.`)) {
+      if (!await confirmDialog(`'${label}'에 커밋하지 않은 변경사항이 있습니다. 그래도 삭제할까요? 그 변경은 사라집니다.`, { title: '변경사항 있음', okLabel: '그래도 삭제', danger: true })) {
         return { ok: false };
       }
       try {

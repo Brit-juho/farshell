@@ -14,6 +14,7 @@ import { detachSession, confirmAndKillSession } from './term/session-actions.js'
 import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
+import { promptDialog } from './core/dialog.js';
 
 export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
@@ -108,7 +109,7 @@ async function renderSessionManager(backdrop) {
     const rename = document.createElement('button');
     rename.type = 'button'; rename.className = 'vt-icon-btn xl vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id)} 이름 변경`);
     rename.onclick = async () => {
-      const next = window.prompt('새 세션 이름', sessionName(id));
+      const next = await promptDialog('새 세션 이름', { title: '이름 변경', defaultValue: sessionName(id) });
       if (next === null) return;
       if (await renameSession(id, next)) renderSessionManager(backdrop);
     };

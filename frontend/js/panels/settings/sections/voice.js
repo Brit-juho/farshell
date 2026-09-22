@@ -4,6 +4,7 @@ import { mountClients } from '../../../layout/clients.js';
 import { row, statusLine, toast } from '../controls.js';
 import { togglePush, refreshPushLabel } from '../../../pushui.js';
 import { getAction } from '../../../core/dom.js';
+import { confirmDialog } from '../../../core/dialog.js';
 
 // ── 「음성」 (N42 · 알림·음성 진단) ──────────────────────────────────────
 // (다른 탭 클릭 · 패널 닫기) 반드시 cleanup을 불러야 폴링 타이머가 안 샌다.
@@ -149,7 +150,7 @@ export function renderVoiceSection() {
         delBtn.className = 'vt-btn sm quiet vt-set-reset danger';
         delBtn.textContent = '삭제';
         delBtn.addEventListener('click', async () => {
-          if (!confirm(`${m.name} 모델(${fmtSize(m.size_bytes)})을 지울까요?\n\n다음에 음성 입력을 쓰면 다시 받습니다.`)) return;
+          if (!await confirmDialog(`${m.name} 모델(${fmtSize(m.size_bytes)})을 지울까요?\n\n다음에 음성 입력을 쓰면 다시 받습니다.`, { title: '모델 삭제', okLabel: '삭제', danger: true })) return;
           try {
             await vtFetch('/voice/stt/model', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: m.path }) });
             toast('모델을 지웠습니다');

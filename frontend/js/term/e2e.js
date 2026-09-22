@@ -4,6 +4,7 @@
 // bare `nacl`로 읽는다(모듈로 감싸지 않음 — core/vendor.js를 새로 만들 이유가
 // 아직 없다는 F1의 판단을 그대로 따른다).
 import { VT_TOKEN } from '../core/env.js';
+import { confirmDialog, alertDialog } from '../core/dialog.js';
 
 const _urlParams = new URLSearchParams(location.search);
 const _hashParams = new URLSearchParams(location.hash.slice(1));
@@ -46,14 +47,14 @@ function _e2eSetPinned(identityPub) {
   try { localStorage.setItem(_e2eTofuKey(), identityPub); } catch { /* localStorage 불가 — 핀닝 생략 */ }
 }
 // 사용자가 재신뢰를 명시적으로 승인했을 때만 핀을 갱신한다 (silent fallback 금지).
+// 이모지(⚠️)는 VS16이 붙어 플랫폼마다 컬러 그림으로 갈리므로 걷어내고, 경고의
+// 무게는 문장 자체가 지게 한다 — 보안 경고에 장식은 필요 없다.
 function _e2eConfirmRetrust(newIdentityPub) {
-  return window.confirm(
-    // window.confirm은 순수 텍스트만 받아 SVG를 넣을 수 없다. 이모지(⚠️)는
-    // VS16이 붙어 플랫폼마다 컬러 그림으로 갈리므로 걷어내고, 경고의 무게는
-    // 문장 자체가 지게 한다 — 보안 경고에 장식은 필요 없다.
+  return confirmDialog(
     '이 서버의 E2E 암호화 identity 키가 이전과 다릅니다.\n' +
     '서버를 재설치했거나 키를 재발급했다면 정상이지만, 중간자 공격(MITM)일 수도 있습니다.\n\n' +
-    '새 키를 신뢰하고 계속하시겠습니까? (신뢰하지 않으면 연결을 종료합니다)'
+    '새 키를 신뢰하고 계속하시겠습니까? (신뢰하지 않으면 연결을 종료합니다)',
+    { title: 'E2E identity 키 변경', okLabel: '신뢰하고 계속', cancelLabel: '연결 종료', danger: true }
   );
 }
 
@@ -76,15 +77,22 @@ export function wrapE2E(ws, onReady, onData, onE2EError) {
     console.error('[E2E]', msg);
     try { ws.close(); } catch {}
     if (typeof onE2EError === 'function') onE2EError(msg);
-    else alert('E2E 암호화 핸드셰이크 실패: ' + msg);
+    else alertDialog('E2E 암호화 핸드셰이크 실패: ' + msg, { title: 'E2E 오류' });
   };
   let sharedKey = null;
-  ws.addEventListener('message', (e) => {
+  // 재신뢰 확인이 비동기(커스텀 다이얼로그)로 바뀌면서, 응답을 기다리는 동안
+  // 서버가 hello를 또 보내면(비정상 상황) 두 번째 확인창이 겹쳐 뜰 수 있다 —
+  // window.confirm이던 시절엔 그게 메인 스레드를 막아 자동으로 막혔던 동작이라,
+  // 같은 보장을 이 플래그로 되살린다.
+  let handshaking = false;
+  ws.addEventListener('message', async (e) => {
     // 핸드셰이크: 첫 텍스트로 서버 공개키 수신
     if (typeof e.data === 'string' && !sharedKey) {
+      if (handshaking) return;
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.type !== 'e2e-hello' || !msg.pub) return;
+      handshaking = true;
 
       // identity_pub/sig가 없는 서버(구버전) — 서명 검증 없이 진행하면 능동 MITM을
       // 막을 수 없으므로 명시적으로 거부한다. 조용한 평문 폴백은 하지 않는다.
@@ -111,7 +119,7 @@ export function wrapE2E(ws, onReady, onData, onE2EError) {
       if (!pinned) {
         _e2eSetPinned(msg.identity_pub);
       } else if (pinned !== msg.identity_pub) {
-        if (_e2eConfirmRetrust(msg.identity_pub)) {
+        if (await _e2eConfirmRetrust(msg.identity_pub)) {
           _e2eSetPinned(msg.identity_pub);
         } else {
           fail('identity 키 변경을 사용자가 거부했습니다 — 연결을 중단합니다');
