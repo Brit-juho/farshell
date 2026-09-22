@@ -34,6 +34,16 @@ test('fmtBytes — 단위가 넘어가는 경계에서 자릿수가 뭉개지지
   assert.strictEqual(fmtBytes(2 * 1024 ** 3), '2.0GB');
 });
 
+test('fmtUploadDate — 같은 해면 월-일 시:분, 해가 다르면 연도까지', async () => {
+  const { fmtUploadDate } = await load();
+  const now = new Date(NOW * 1000);
+  const sameYear = new Date(now.getFullYear(), 8, 5, 14, 7).getTime() / 1000; // 9월 5일 14:07
+  assert.strictEqual(fmtUploadDate({ created: sameYear }, now), '09-05 14:07');
+  const lastYear = new Date(now.getFullYear() - 1, 11, 25, 9, 3).getTime() / 1000;
+  assert.strictEqual(fmtUploadDate({ created: lastYear }, now), `${now.getFullYear() - 1}-12-25 09:03`);
+  assert.strictEqual(fmtUploadDate({ created: 0 }, now), '');
+});
+
 test('fmtRemaining — 공유 중·고정 파일은 기간 대신 이유를 쓴다(§1 정리 제외 규칙)', async () => {
   const { fmtRemaining } = await load();
   assert.strictEqual(fmtRemaining({ pin: true, expires_at: null }, NOW), '고정됨');

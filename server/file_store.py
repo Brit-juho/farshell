@@ -27,8 +27,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-MAX_UPLOAD_BYTES = int(os.environ.get("VT_MAX_UPLOAD_MB", "200")) * 1024 * 1024
-MAX_TOTAL_BYTES = int(float(os.environ.get("VT_FILES_MAX_GB", "2")) * 1024 * 1024 * 1024)
+MAX_UPLOAD_BYTES = int(os.environ.get("VT_MAX_UPLOAD_MB", "2048")) * 1024 * 1024
+MAX_TOTAL_BYTES = int(float(os.environ.get("VT_FILES_MAX_GB", "5")) * 1024 * 1024 * 1024)
 TTL_SECONDS = int(os.environ.get("VT_FILES_TTL_DAYS", "30")) * 86400
 CLEANUP_INTERVAL_SECONDS = 6 * 3600
 

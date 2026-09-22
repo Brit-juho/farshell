@@ -14,8 +14,8 @@
 // 개는 여기서 순차로 보낸다 — 병렬로 쏘면 큰 파일 여러 개가 동시에
 // `MAX_UPLOAD_BYTES` 검사를 통과하며 디스크를 함께 밀어낸다.
 import { activeSessionId } from '../core/store.js';
-import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
+import { noteNetworkError, noteResponse } from '../core/reachability.js';
 import { sendPaste } from './clipboard.js';
 import { showToast } from '../ui/toast.js';
 
@@ -52,31 +52,72 @@ export function filesFromDataTransfer(dataTransfer) {
   return Array.from(dataTransfer.files || []);
 }
 
+function _uploadClientId() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `up-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// vt:upload-progress — 첨부 패널(panels/files/files.js)이 정적 import 없이
+// 듣는 전역 브리지다(vt:session-switch·vt:panel-open과 같은 관용구, ADR-26).
+// 패널이 안 열려 있으면 아무도 안 듣고 버려진다 — 완료/실패 토스트는 별도로 뜨므로
+// 정보 손실은 없다.
+function _emitProgress(detail) {
+  document.dispatchEvent(new CustomEvent('vt:upload-progress', { detail }));
+}
+
 /** 파일 하나를 올린다. 성공하면 서버가 준 레코드를, 실패하면 null을 반환한다.
  *  **던지지 않는다** — 여러 개를 순차로 올리는 중에 하나가 실패해도 나머지는
- *  계속 가야 한다. */
-async function _uploadOne(file, sessionId) {
-  const formData = new FormData();
-  formData.append('file', file);
-  try {
-    const res = await apiFetch(`${API_BASE}/api/upload?session_id=${sessionId || ''}`, {
-      method: 'POST',
-      body: formData,
+ *  계속 가야 한다.
+ *
+ *  fetch가 아니라 XMLHttpRequest를 쓰는 이유: fetch는 업로드(요청 바디 전송)
+ *  방향 진행률을 표준적으로 못 준다 — `xhr.upload.onprogress`만 그걸 준다. */
+function _uploadOne(file, sessionId) {
+  return new Promise((resolve) => {
+    const clientId = _uploadClientId();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    const url = `${API_BASE}/api/upload?session_id=${sessionId || ''}`;
+    xhr.open('POST', url);
+    xhr.withCredentials = true;
+    // apiFetch와 같은 인증 계약: API_BASE로 가는 요청에만 토큰을 붙인다.
+    const token = window.VT_TOKEN;
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    _emitProgress({ clientId, name: file.name, size: file.size, loaded: 0, phase: 'start' });
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (!e.lengthComputable) return;
+      _emitProgress({ clientId, name: file.name, size: e.total, loaded: e.loaded, phase: 'progress' });
     });
-    const data = await res.json().catch(() => null);
-    // 413(용량 초과)은 서버가 max_mb를 실어 준다 — 왜 실패했는지 말해 준다.
-    if (!data || !data.ok) {
-      const why = data && data.error === 'file too large'
-        ? `${data.max_mb}MB를 넘습니다`
-        : (data && data.error) || '알 수 없는 오류';
+
+    const fail = (why) => {
+      _emitProgress({ clientId, name: file.name, size: file.size, loaded: 0, phase: 'error' });
       showToast(`${file.name} 업로드 실패 — ${why}`, 'error');
-      return null;
-    }
-    return data;
-  } catch (e) {
-    showToast(`${file.name} 업로드 실패 — ${e.message}`, 'error');
-    return null;
-  }
+      resolve(null);
+    };
+
+    xhr.addEventListener('error', () => { noteNetworkError(); fail('네트워크 오류'); });
+    xhr.addEventListener('abort', () => fail('중단됨'));
+    xhr.addEventListener('load', () => {
+      noteResponse(xhr.status);
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (_) { data = null; }
+      // 413(용량 초과)은 서버가 max_mb를 실어 준다 — 왜 실패했는지 말해 준다.
+      if (xhr.status < 200 || xhr.status >= 300 || !data || !data.ok) {
+        fail(data && data.error === 'file too large'
+          ? `${data.max_mb}MB를 넘습니다`
+          : (data && data.error) || '알 수 없는 오류');
+        return;
+      }
+      _emitProgress({ clientId, name: file.name, size: file.size, loaded: file.size, phase: 'done' });
+      resolve(data);
+    });
+
+    xhr.send(formData);
+  });
 }
 
 /**

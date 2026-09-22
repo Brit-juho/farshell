@@ -366,12 +366,21 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-row:hover{ background:var(--menu-hover); }
 .vt-fl-row-main{ flex:1 1 auto; min-width:0; }
 .vt-fl-name{
-  font:500 var(--fs-sm) var(--mono);
+  font:600 var(--fs-sm) var(--mono);
   color:var(--txt);
 }
-.vt-fl-sub{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-top:2px; }
-.vt-fl-sub.warn{ color:var(--warn); }
+/* 2026-09-22 — 이름 아래 2단 위계. meta("지금 상태": 용량·남은기간)가
+   sub("상세 기록": 공유 여부·업로드 시각)보다 한 단 진하고 커서, 항상
+   같은 2줄 구조인데도 뭐가 "지금 봐야 할 정보"인지 헷갈리지 않는다. */
+.vt-fl-meta{ font:500 var(--fs-2xs) var(--mono); color:var(--txt2); margin-top:3px; }
+.vt-fl-meta.warn{ color:var(--warn); }
+.vt-fl-sub{ font:400 var(--fs-3xs) var(--mono); color:var(--sub); margin-top:1px; }
 .vt-fl-acts{ display:flex; gap:calc(var(--spacing) * 0.5); flex:0 0 auto; }
+/* 업로드 진행 행 — 아직 서버 레코드가 없어 동작 버튼 없이 진행률 바만 있다.
+   .vt-fl-gauge(용량 게이지)와 같은 클래스라 새 토큰은 없다. */
+.vt-fl-row-uploading{ background:var(--menu-hover); }
+.vt-fl-row-progress{ margin-top:calc(var(--spacing) * 1.5); }
+.vt-fl-row-progress .vt-fl-gauge-fill{ transition:width .15s linear; }
 /* 2.1.6 — 모양·상태는 `.vt-btn.sm.quiet`가 맡는다. 여기 남은 셋만 이 버튼의
    고유한 성질이다.
    - 44px은 못 주더라도(행 5개가 392px dock 안에 들어가야 한다) 터치 표적이

@@ -66,6 +66,20 @@ export function fmtBytes(n) {
   return (n / 1024 / 1024 / 1024).toFixed(1) + 'GB';
 }
 
+// 업로드 일자·시각. 분까지 보여달라는 요구(2026-09-22)라 연도가 같아도
+// "MM-DD HH:mm"까지 나간다 — 연도가 다르면 연도까지 앞에 붙는다. 전체 시각은
+// 그래도 title로 한 번 더(초 단위까지, 로케일 표기).
+export function fmtUploadDate(item, now = new Date()) {
+  if (!item.created) return '';
+  const d = new Date(item.created * 1000);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const date = d.getFullYear() === now.getFullYear() ? `${mm}-${dd}` : `${d.getFullYear()}-${mm}-${dd}`;
+  return `${date} ${hh}:${mi}`;
+}
+
 // "남은 기간" 열. 공유 중이거나 pin된 파일은 TTL 정리에서 제외되므로(§1)
 // 서버가 expires_at을 null로 내려준다 — 그 경우 기간이 아니라 이유를 쓴다.
 export function fmtRemaining(item, nowSec = Date.now() / 1000) {
@@ -104,6 +118,28 @@ function refreshAllFiles() {
   for (const inst of _liveInstances()) refreshFiles(inst);
 }
 
+// 업로드 진행 표시 — term/upload.js가 쏘는 `vt:upload-progress`를 듣는다.
+// 그쪽은 이 모듈을 정적 import 못 하므로(ADR-26, 파일 상단 경고) 전역 CustomEvent로
+// 만 연결된다. 모듈은 세션당 한 번만 평가되므로 리스너도 한 번만 붙으면 된다.
+document.addEventListener('vt:upload-progress', (e) => {
+  const { clientId, name, size, loaded, phase } = e.detail || {};
+  if (!clientId) return;
+  for (const inst of _liveInstances()) {
+    if (phase === 'done') {
+      inst.uploading.delete(clientId);
+      refreshFiles(inst);   // 실제 레코드가 생겼으니 서버에서 다시 받아 교체
+      continue;
+    }
+    if (phase === 'error') {
+      inst.uploading.delete(clientId);
+      _paintBody(inst);     // 새 레코드는 없다 — 진행 행만 지운다(네트워크 재요청 불필요)
+      continue;
+    }
+    inst.uploading.set(clientId, { name, size, loaded });
+    _paintBody(inst);
+  }
+});
+
 // N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다.
 function showFiles(opts = {}) {
   const panel = openPanel({
@@ -122,7 +158,11 @@ function showFiles(opts = {}) {
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
 
-  const inst = { ctx: panel.ctx, el: panel.el, filter: 'all', lastItems: [] };
+  const inst = {
+    ctx: panel.ctx, el: panel.el, filter: 'all', lastItems: [],
+    uploading: new Map(),   // clientId → {name, size, loaded} — 업로드 진행 중인 파일
+    _items: [], _quota: {}, // 마지막으로 받아온 목록 — 진행률만 바뀔 때 재요청 없이 다시 그린다
+  };
   _instances.add(inst);
 
   // 계약(파일 상단 1번): 새 input을 만들지 않고 기존 하나를 누른다.
@@ -224,8 +264,23 @@ async function refreshFiles(inst) {
     title.textContent = `파일 · ${items.length}개${quota.used != null ? ` · ${fmtBytes(quota.used)}` : ''}`;
   }
 
+  inst._items = items;
+  inst._quota = quota;
+  _paintBody(inst);
+}
+
+// refreshFiles(네트워크 재요청)와 진행률 이벤트(재요청 없음) 양쪽이 공유하는
+// 그리기 단계. inst._items/_quota는 마지막으로 받아온 서버 목록 — 업로드 중
+// 파일이 늘거나 줄 때마다 그걸 다시 fetch할 필요는 없다.
+function _paintBody(inst) {
+  const body = inst.ctx.byId('vt-fl-body');
+  if (!body) return;
+  const items = inst._items || [];
+  const uploadingRows = [...inst.uploading.values()].map(renderUploadingRow);
+
   body.innerHTML = '';
-  if (!items.length) {
+  for (const row of uploadingRows) body.appendChild(row);
+  if (!items.length && !uploadingRows.length) {
     const empty = document.createElement('div');
     empty.className = 'vt-vw-loading';
     empty.textContent = inst.filter === 'all'
@@ -235,7 +290,37 @@ async function refreshFiles(inst) {
   } else {
     for (const item of items) body.appendChild(renderRow(item));
   }
-  body.appendChild(renderFooter(quota));
+  body.appendChild(renderFooter(inst._quota || {}));
+}
+
+// 업로드 중인 행 — 아직 서버 레코드가 없으니 동작 버튼은 없고 진행률 바만 있다.
+// 기존 용량 게이지(.vt-fl-gauge)와 같은 클래스를 재사용한다(새 토큰 없음).
+function renderUploadingRow(entry) {
+  const row = document.createElement('div');
+  row.className = 'vt-fl-row vt-fl-row-uploading';
+
+  const main = document.createElement('div');
+  main.className = 'vt-fl-row-main';
+  const name = document.createElement('div');
+  name.className = 'vt-fl-name';
+  name.textContent = entry.name;
+  name.title = entry.name;
+  const pct = entry.size ? Math.min(100, Math.round((entry.loaded / entry.size) * 100)) : 0;
+  const sub = document.createElement('div');
+  sub.className = 'vt-fl-sub';
+  sub.textContent = `업로드 중 · ${fmtBytes(entry.loaded)} / ${fmtBytes(entry.size)}`;
+  const bar = document.createElement('div');
+  bar.className = 'vt-fl-gauge vt-fl-row-progress';
+  const fill = document.createElement('div');
+  fill.className = 'vt-fl-gauge-fill';
+  fill.style.width = pct + '%';
+  bar.appendChild(fill);
+
+  main.appendChild(name);
+  main.appendChild(sub);
+  main.appendChild(bar);
+  row.appendChild(main);
+  return row;
 }
 
 // 2026-09-16 — 이모지(⬇📋⌨🔗🗑)를 SVG로 바꿨다. DESIGN.md §0의 "No emoji as a
@@ -264,12 +349,24 @@ function renderRow(item) {
   name.className = 'vt-fl-name';
   name.textContent = item.name;
   name.title = item.name;
+
+  // 2026-09-22 — 항상 2줄 구조로 고정한다(사용자 확정). 예전엔 한 줄에 공유
+  // 라벨·용량·날짜시각·남은기간을 전부 점으로 이어붙여서, 공유 없는 파일은
+  // 1줄인데 공유 중인 파일만 줄바꿈되어 행 높이가 들쑥날쑥했다. "지금 상태"
+  // (용량·남은기간)와 "상세 기록"(공유 여부·업로드 시각)을 애초에 다른 줄로
+  // 나누면 내용과 무관하게 항상 2줄이고, 위계도 굵기/색으로 또렷해진다.
+  const meta = document.createElement('div');
+  meta.className = 'vt-fl-meta';
+  meta.textContent = [fmtBytes(item.size), fmtRemaining(item)].filter(Boolean).join(' · ');
+  if (item.expiring_soon) meta.classList.add('warn');
+
   const sub = document.createElement('div');
   sub.className = 'vt-fl-sub';
-  const share = shareLabel(item);
-  sub.textContent = [share, fmtBytes(item.size), fmtRemaining(item)].filter(Boolean).join(' · ');
-  if (item.expiring_soon) sub.classList.add('warn');
+  sub.textContent = [shareLabel(item), fmtUploadDate(item)].filter(Boolean).join(' · ');
+  if (item.created) sub.title = new Date(item.created * 1000).toLocaleString();
+
   main.appendChild(name);
+  main.appendChild(meta);
   main.appendChild(sub);
 
   const acts = document.createElement('div');
