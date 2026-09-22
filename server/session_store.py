@@ -25,6 +25,10 @@ class SessionInfo:
     created_at: float = field(default_factory=time.time)
     cmd: str = "/bin/bash"
     tmux_name: str | None = None
+    # attach 요청의 vt_session 쿠키로 알아낸 등록 기기 별명 — 「연결된 화면」이
+    # 이 세션의 tty를 tmux client_name(대개 tty 경로 그대로)이 아니라 사람이
+    # 알아볼 라벨로 보여주는 데 쓴다. 기기 등록이 없으면(비보호 서버 등) None.
+    device_label: str | None = None
 
 
 class SessionStore:
@@ -35,8 +39,8 @@ class SessionStore:
         # 역인덱스: tmux_name → session_id (find_by_tmux_name O(N) → O(1))
         self._by_tmux_name: dict[str, str] = {}
 
-    def add(self, session_id: str, name: str = "", cmd: str = "/bin/bash") -> SessionInfo:
-        info = SessionInfo(session_id=session_id, name=name or session_id, cmd=cmd)
+    def add(self, session_id: str, name: str = "", cmd: str = "/bin/bash", device_label: str | None = None) -> SessionInfo:
+        info = SessionInfo(session_id=session_id, name=name or session_id, cmd=cmd, device_label=device_label)
         self._sessions[session_id] = info
         return info
 

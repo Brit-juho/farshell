@@ -21,7 +21,7 @@ class _FakeRequest:
 
 @pytest.fixture(autouse=True)
 def fake_attach(monkeypatch):
-    async def _fake_attach_tmux(name, cols, rows):
+    async def _fake_attach_tmux(name, cols, rows, request=None):
         return {"id": "sess-1", "name": name, "tmux_session": name}
     monkeypatch.setattr(tmux_route, "_attach_tmux", _fake_attach_tmux)
 

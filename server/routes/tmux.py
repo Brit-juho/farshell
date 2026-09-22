@@ -51,7 +51,31 @@ def _generate_default_session_name() -> str:
 # 내부 헬퍼
 # --------------------------------------------------------------------------
 
-async def _attach_tmux(tmux_name: str, cols: int, rows: int):
+def _device_label_for_request(request: Request | None) -> str | None:
+    """vt_session 쿠키 → 등록된 기기의 별명(설정에서 사용자가 바꿀 수 있음).
+
+    「연결된 화면」이 tmux client_name(대개 tty 경로 그대로라 서로 구별이 안 됨)
+    대신 보여줄 라벨이다. 비보호 서버(토큰 없음)거나 기기 등록이 없으면 None —
+    이 경우 호출부는 기존 client_name/tty 폴백으로 조용히 떨어진다.
+    """
+    if request is None:
+        return None
+    try:
+        import auth
+        from auth import devices as device_store
+
+        device_id = auth.session_device(request.cookies.get("vt_session", ""))
+        if not device_id:
+            return None
+        for d in device_store.list_devices():
+            if d.get("id") == device_id:
+                return d.get("label") or None
+    except Exception:
+        pass
+    return None
+
+
+async def _attach_tmux(tmux_name: str, cols: int, rows: int, request: Request | None = None):
     # 존재하지 않는 tmux 세션에 attach하면 `tmux attach-session`이 즉시 실패하지만,
     # 그 전에 유령 web 세션(PTY)이 이미 생성·등록돼 /api/sessions에 남는다. 클라이언트는
     # 그 id로 WS를 열었다가 죽은 세션에 재연결을 반복하고, restoreWorkspace가 stale 탭마다
@@ -70,7 +94,7 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int):
         cols=cols,
         rows=rows,
     )
-    session_store.add(session_id, name=tmux_name)
+    session_store.add(session_id, name=tmux_name, device_label=_device_label_for_request(request))
     session_store.update_tmux_name(session_id, tmux_name)
     output_watcher.add_session(session_id)
     return {"id": session_id, "name": tmux_name, "tmux_session": tmux_name}
@@ -194,7 +218,7 @@ async def create_tmux_session(request: Request):
             logger.warning(f"맥 터미널 자동 오픈 실패: {e}")
 
     async with _get_attach_lock(tmux_name):
-        return await _attach_tmux(tmux_name, cols, rows)
+        return await _attach_tmux(tmux_name, cols, rows, request)
 
 
 # open-on-mac 동시 클릭(더블클릭 등) 시 레이스로 중복 스폰되는 걸 막는 세션명 단위 락.
@@ -273,7 +297,7 @@ async def attach_tmux_session(request: Request):
         if existing and existing.session_id in pty_mgr.sessions:
             return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
 
-        return await _attach_tmux(tmux_name, cols, rows)
+        return await _attach_tmux(tmux_name, cols, rows, request)
 
 
 @router.delete("/api/tmux/kill/{tmux_name}")
@@ -347,11 +371,33 @@ def _tty_of_web_session(session_id: str | None) -> str | None:
     return tty or None
 
 
-def _label(row: dict, my_tty: str | None) -> str:
+def _known_web_device_labels() -> dict[str, str]:
+    """tty → 등록 기기 라벨. 나뿐 아니라 지금 붙어 있는 모든 웹 세션에 대해 구한다.
+
+    이게 없으면 나 아닌 다른 웹 탭은 tmux client_name(대개 tty 경로 그대로라 서로
+    구별이 안 됨)으로만 보인다. 여기서 확실히 아는 것(그 tty가 어느 등록 기기의
+    web attach인지)만 채운다 — 매칭 안 되는 tty(맥북 iTerm2 등 웹을 안 거친 진짜
+    외부 클라이언트)는 손대지 않고 호출부가 기존 client_name/tty로 폴백한다.
+    """
+    labels: dict[str, str] = {}
+    for info in session_store.list_all():
+        if not info.device_label:
+            continue
+        tty = _tty_of_web_session(info.session_id)
+        if tty:
+            labels[tty] = info.device_label
+    return labels
+
+
+def _label(row: dict, my_tty: str | None, device_labels: dict[str, str] | None = None) -> str:
     """사람이 알아볼 라벨. tmux는 클라이언트 종류를 알려주지 않으므로 추정이다 —
-    추정임이 드러나게 '웹(추정)' 같은 표기는 쓰지 않고, 확실한 것(나)만 단정한다."""
+    추정임이 드러나게 '웹(추정)' 같은 표기는 쓰지 않고, 확실한 것(나·등록 기기)만 단정한다."""
     if my_tty and row["tty"] == my_tty:
         return "이 화면"
+    if device_labels:
+        label = device_labels.get(row["tty"])
+        if label:
+            return label
     return row.get("name") or row["tty"]
 
 
@@ -361,11 +407,12 @@ async def tmux_clients(session: str, me: str | None = None):
     if not _CLIENT_SESSION_RE.fullmatch(session or ""):
         return JSONResponse({"error": "invalid session name"}, status_code=400)
     my_tty = _tty_of_web_session(me)
+    device_labels = _known_web_device_labels()
     # 블로킹은 _client_rows 안의 tmux 호출이다 — 헬퍼째로 스레드에 넘긴다.
     rows = await asyncio.to_thread(_client_rows, session)
     for r in rows:
         r["is_me"] = bool(my_tty and r["tty"] == my_tty)
-        r["label"] = _label(r, my_tty)
+        r["label"] = _label(r, my_tty, device_labels)
     return {"session": session, "clients": rows, "me_tty": my_tty}
 
 

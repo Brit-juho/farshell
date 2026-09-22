@@ -9,9 +9,10 @@
 import pytest
 from starlette.testclient import TestClient
 
+import auth
 import main
 import tmux_runner
-from deps import pty_mgr
+from deps import pty_mgr, session_store
 from pty_manager import PTYSession
 
 
@@ -103,6 +104,59 @@ def test_solo_rejects_bad_session_name(client, env):
     r = client.post("/api/tmux/clients/solo", json={"session": "; rm -rf /", "me": "web-1"})
     assert r.status_code == 400
     assert env == []
+
+
+def test_clients_shows_device_label_for_other_web_session(client, env):
+    """다른 웹 탭도 기기 등록이 있으면 tty(=client_name)가 아니라 그 별명으로 보인다.
+
+    web-2가 web-1(나)이 아닌데도 등록 기기 라벨이 붙는지 — 자기 자신만 판정하던
+    옛 동작이면 이 케이스는 그냥 client_name('iterm')으로 남는다.
+    """
+    pty_mgr._sessions["web-2"] = PTYSession(session_id="web-2", pid=0, fd=-1, tty="/dev/ttys002")
+    session_store.add("web-2", name="dev", device_label="아이폰")
+    try:
+        body = client.get("/api/tmux/clients?session=dev&me=web-1").json()
+        other = [c for c in body["clients"] if c["tty"] == "/dev/ttys002"][0]
+        assert other["is_me"] is False
+        assert other["label"] == "아이폰"
+    finally:
+        pty_mgr._sessions.pop("web-2", None)
+        session_store.remove("web-2")
+
+
+def test_clients_unmatched_tty_falls_back_to_client_name(client, env):
+    """등록 기기와 매칭 안 되는 tty(맥북 iTerm2 등 진짜 외부 클라이언트)는 그대로 client_name."""
+    body = client.get("/api/tmux/clients?session=dev&me=web-1").json()
+    other = [c for c in body["clients"] if c["tty"] == "/dev/ttys002"][0]
+    assert other["label"] == "iterm"
+
+
+def test_device_label_for_request_resolves_from_session_cookie(monkeypatch, tmp_path):
+    from routes.tmux import _device_label_for_request
+
+    # conftest.py가 스위트 전체에서 VT_AUTH_SESSION_KEY를 비워두므로(사용자의 실제
+    # 비보호 상태와 섞이지 않게), 서명 세션을 실제로 검증하려면 이 테스트에서만
+    # 키를 되살려야 한다 — 안 그러면 make_session이 서명 없는 레거시 토큰을 내놓는다.
+    monkeypatch.setattr(auth, "VT_AUTH_SESSION_KEY", "test-only-session-key")
+    monkeypatch.setattr(auth, "STATE_DIR", tmp_path / ".vt")
+    monkeypatch.setattr(auth, "DEVICES_PATH", tmp_path / ".vt" / "devices.json")
+    _, device_id = auth.register_device("아이폰")
+    token = auth.make_session(device_id=device_id)
+
+    class FakeRequest:
+        cookies = {"vt_session": token}
+
+    assert _device_label_for_request(FakeRequest()) == "아이폰"
+
+
+def test_device_label_for_request_without_cookie_is_none():
+    from routes.tmux import _device_label_for_request
+
+    class FakeRequest:
+        cookies: dict = {}
+
+    assert _device_label_for_request(FakeRequest()) is None
+    assert _device_label_for_request(None) is None
 
 
 def test_pty_session_records_slave_tty():

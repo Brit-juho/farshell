@@ -26,7 +26,7 @@ class _FakeRequest:
 def fake_attach(monkeypatch):
     """new-session 이후의 attach 파이프라인(실 PTY 스폰)은 이 테스트의 관심사가
     아니다 — 최소 스텁으로 대체한다."""
-    async def _fake_attach_tmux(name, cols, rows):
+    async def _fake_attach_tmux(name, cols, rows, request=None):
         return {"id": "sess-1", "name": name, "tmux_session": name}
     monkeypatch.setattr(tmux_route, "_attach_tmux", _fake_attach_tmux)
 
