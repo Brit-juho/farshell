@@ -7,6 +7,7 @@ import { isMobile, _isCoarsePointer } from '../core/env.js';
 import { wireClipboard } from './selection.js';
 import { wireLinks } from './links.js';
 import { wireTouchScroll } from './touch.js';
+import { wireTouchSelect } from './touch-select.js';
 import { getVtXtermFont, getVtXtermTheme } from '../theme.js';
 import { adoptWrapper } from '../layout/surface.js';
 
@@ -247,6 +248,11 @@ export function createXtermInstance(id) {
 
   // 모바일 터치 스크롤 (tmux mouse on 이면 xterm이 터치를 앱으로 넘겨 스크롤이 죽는다)
   wireTouchScroll(id, term, wrapper);
+
+  // 모바일 텍스트 선택 — 꾹 눌러 단어를 고르고 핸들로 넓힌다(term/touch-select.js
+  // 머리말 — xterm 자신의 선택 모델만 쓰는 이유). wireTouchScroll처럼 터치가
+  // 없는 기기에서는 pointerType 검사로 조용히 아무 일도 안 한다.
+  wireTouchSelect(id, term, wrapper);
 
   return { term, fitAddon, searchAddon, wrapper };
 }

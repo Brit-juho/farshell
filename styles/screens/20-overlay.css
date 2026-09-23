@@ -329,24 +329,52 @@ body.voice-only-mode .vt-onboarding { display:none; }
   min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   color:var(--sub); font:500 var(--fs-xs) var(--ui);
 }
-#keybar-slot-select[aria-pressed="true"] {
-  color:var(--acc-ink); background:var(--color-acc-surface); border-color:var(--acc);
-}
-body.vt-term-selecting #keybar-slots > :not(#keybar-slot-select),
+/* 2026-09-23 — 선택 모드로 "들어가는" 슬롯 버튼이 없어져서(터미널 꾹 누르기가
+   대신한다) 예전의 `:not(#keybar-slot-select)` 예외가 무의미해졌다 — 이제
+   선택 중엔 입력 슬롯 줄 전체를 숨긴다(음성 녹음 등을 하다 말고 선택하는
+   조합은 어차피 없다). */
+body.vt-term-selecting #keybar-slots,
 body.vt-term-selecting #keybar-toggle,
 body.vt-term-selecting #keybar-keys { display:none; }
 .vt-term-wrap.vt-term-select-mode .xterm-helper-textarea { pointer-events:none; }
-.vt-term-wrap.vt-term-select-mode .xterm-accessibility {
-  pointer-events:auto !important;
-  user-select:text !important;
-  -webkit-user-select:text !important;
-  touch-action:auto;
-}
+/* 2026-09-23 — 예전엔 여기서 접근성 레이어에 **네이티브** 텍스트 선택을 켰다
+   (user-select:text). xterm 5.5의 접근성 레이어가 PTY 출력마다(스피너·tmux
+   상태줄 등) 보이는 행을 통째로 다시 그리면서 그 네이티브 Range를 끊는다는
+   걸 알게 된 뒤(term/touch-select.js 머리말), 선택 자체를 xterm 내부 모델
+   (term.select/getSelection/clearSelection)로 옮겼다 — 이 레이어에 네이티브
+   선택을 열어 둘 이유가 없어졌고, 오히려 OS 자체 콜아웃·선택 핸들이 우리
+   핸들과 겹쳐 뜨는 새 문제만 만든다. 그래서 정반대로, 항상 막는다. */
+.vt-term-wrap.vt-term-select-mode .xterm-accessibility,
 .vt-term-wrap.vt-term-select-mode .xterm-accessibility-tree,
 .vt-term-wrap.vt-term-select-mode .xterm-accessibility-tree > div {
-  user-select:text !important;
-  -webkit-user-select:text !important;
+  -webkit-user-select:none !important;
+  user-select:none !important;
+  -webkit-touch-callout:none !important;
 }
+/* 자체 핸들 — term/touch-select.js가 wrapper 안에 만든다(xterm 위 오버레이).
+   컨테이너 자신은 클릭을 다 통과시키고(pointer-events:none), 손잡이 노브만
+   받는다(auto) — 그래야 두 노브 사이 빈 공간을 눌러도 밑의 터미널이 반응한다. */
+.vt-term-select-handles {
+  position:absolute; inset:0; pointer-events:none; z-index:5;
+}
+.vt-term-handle {
+  position:absolute; top:0; left:0; pointer-events:auto; touch-action:none;
+  width:32px; height:32px; margin:0 0 0 -16px;
+  /* 손잡이 자체(선 + 물방울)는 절반만 차지하고, 나머지 절반은 손가락이
+     실제 글자를 안 가리도록 여백으로 둔다(WCAG 2.5.5 — 44px에는 못 미치지만
+     둘이 붙어 있는 좁은 선택 구간에서 44px는 서로를 삼킨다, 32px가 절충). */
+}
+.vt-term-handle::before {
+  content:""; position:absolute; left:15px; top:0; width:2px; height:8px;
+  background:var(--acc);
+}
+.vt-term-handle::after {
+  content:""; position:absolute; left:8px; top:6px; width:16px; height:16px;
+  border-radius:50% 50% 50% 0; background:var(--acc);
+  transform:rotate(45deg);
+}
+.vt-term-handle.end::before { left:15px; }
+.vt-term-handle.end::after { border-radius:50% 50% 0 50%; }
 .kb-slot { position:relative; }
 /* 키 버튼들만 가로 스크롤 */
 #keybar-keys {

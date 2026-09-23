@@ -95,15 +95,36 @@ test('붙일 것이 없으면 가로채지 않는다 — xterm 기본 동작을 
   assert.strictEqual(xtermPastes, 1);
 });
 
-test('모바일 텍스트 선택 모드의 롱프레스 메뉴는 네이티브 선택에 양보한다', async () => {
+// 2026-09-23 — 예전엔 "선택 모드일 때만" contextmenu(Android 롱프레스)를
+// 브라우저 네이티브 선택에 양보했다. 이제 롱프레스는 전부 term/touch-select.js가
+// xterm 자신의 select() 모델로 처리하므로(그 파일 머리말 — 접근성 레이어
+// 재렌더가 네이티브 Range를 끊는다) 네이티브 선택에 양보할 이유 자체가
+// 없어졌다 — 터치 기기에서는 선택 모드 여부와 무관하게 이 이벤트를 항상
+// 막아 OS의 콜아웃/컨텍스트 메뉴가 우리 핸들 위에 겹쳐 뜨는 것만 막는다
+// (PuTTY 스타일 복사/붙여넣기도 같이 죽는다 — 그건 이제 keybar 버튼이 한다).
+test('터치 기기 — contextmenu는 PuTTY 복사/붙여넣기로 안 새고 그냥 막힌다', async () => {
   const { window, Sel } = await load();
+  window.matchMedia = (q) => ({ matches: q.includes('coarse') });
   const wrapper = window.document.getElementById('w');
-  wrapper.classList.add('vt-term-select-mode');
   Sel.wireClipboard('a', fakeTerm(), wrapper);
 
   const event = new window.Event('contextmenu', { bubbles: true, cancelable: true });
   const allowed = wrapper.dispatchEvent(event);
 
-  assert.strictEqual(allowed, true, 'contextmenu 기본 동작을 막으면 Android 선택 핸들이 열리지 않는다');
-  assert.strictEqual(event.defaultPrevented, false);
+  assert.strictEqual(allowed, false, '터치의 네이티브 콜아웃/컨텍스트 메뉴는 항상 막아야 자체 핸들과 안 겹친다');
+  assert.strictEqual(event.defaultPrevented, true);
+});
+
+test('데스크톱(포인터 정밀) — contextmenu는 그대로 PuTTY 스타일을 유지한다(막되, 붙여넣기 시도)', async () => {
+  const { window, Sel } = await load();
+  window.matchMedia = (q) => ({ matches: false }); // 정밀 포인터
+  window.navigator.clipboard = undefined; // jsdom 기본값과 동일 — 읽기는 실패하지만 시도는 한다
+  const wrapper = window.document.getElementById('w');
+  Sel.wireClipboard('a', fakeTerm(), wrapper); // fakeTerm().getSelection()은 항상 ''
+
+  const event = new window.Event('contextmenu', { bubbles: true, cancelable: true });
+  const allowed = wrapper.dispatchEvent(event);
+
+  assert.strictEqual(allowed, false, '데스크톱은 이전과 같이 항상 막고 복사 또는 붙여넣기를 시도한다');
+  assert.strictEqual(event.defaultPrevented, true);
 });

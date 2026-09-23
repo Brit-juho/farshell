@@ -505,7 +505,10 @@
          안 쓰이는 진짜 이유가 이 가시성 부재다"가 접힘으로 다시 묻히면
          의미가 없다는 게 예전 구조의 문제였다 — 구 M7). #keybar-slot-mic는
          빈 컨테이너 — keybar.js가 부팅 시 #mic-btn-wrap을 여기로 옮겨 붙인다
-         (coarse pointer일 때만; 아니면 rail 설정 패널에 그대로 남는다). -->
+         (coarse pointer일 때만; 아니면 rail 설정 패널에 그대로 남는다).
+         2026-09-23 — 「텍스트 선택」 슬롯을 없앴다. 선택은 이제 터미널을
+         직접 꾹 눌러 들어간다(term/touch-select.js) — 버튼을 한 번 더
+         눌러야 하는 중간 단계가 사라졌다. -->
     <div id="keybar-top">
       <div id="keybar-slots">
         <div id="keybar-slot-mic"></div>
@@ -516,12 +519,13 @@
         <button type="button" class="kb kb-slot" id="keybar-slot-upload" aria-label="파일 업로드" data-tip="파일 업로드">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         </button>
-        <button type="button" class="kb kb-slot" id="keybar-slot-select" aria-label="터미널 텍스트 선택" aria-pressed="false" data-tip="텍스트 선택">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2"/><path d="M16 4h2a2 2 0 0 1 2 2v4"/><path d="M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>
-        </button>
       </div>
+      <!-- term/touch-select.js가 터미널 꾹 누르기로 켠다(keybar 버튼 아님).
+           복사/모두 선택/완료 셋만 여기 있다 — "무엇을 고를지"는 핸들 드래그,
+           "그 다음 뭘 할지"만 이 바의 몫이다. -->
       <div id="keybar-selection-actions" hidden>
-        <span id="keybar-selection-hint">텍스트 범위를 길게 눌러 선택</span>
+        <span id="keybar-selection-hint">텍스트를 길게 눌러 선택</span>
+        <button type="button" class="vt-btn sm" id="keybar-selection-all">모두 선택</button>
         <button type="button" class="vt-btn sm solid" id="keybar-selection-copy">복사</button>
         <button type="button" class="vt-btn sm quiet" id="keybar-selection-done">완료</button>
       </div>

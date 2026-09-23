@@ -112,10 +112,13 @@ test('업로드 슬롯 클릭 → #file-input을 클릭한다', async () => {
   assert.strictEqual(clicked, true);
 });
 
-test('텍스트 선택 모드 — 터미널 포커스를 해제하고 네이티브 선택 레이어를 활성화한다', async () => {
+test('텍스트 선택 모드 — 터미널 포커스를 해제하고 xterm 자신의 선택 하이라이트를 켠다', async () => {
   const { window, store, setTerminalSelectionMode, isTerminalSelectionMode } = await buildWindow({ coarse: true });
   let blurred = 0;
-  store.registerSession('select-me', { term: { blur() { blurred++; }, getSelection() { return ''; } } });
+  let cleared = 0;
+  store.registerSession('select-me', {
+    term: { blur() { blurred++; }, getSelection() { return ''; }, clearSelection() { cleared++; } },
+  });
   store.setActive('select-me');
   const wrapper = window.document.createElement('div');
   wrapper.id = 'term-select-me';
@@ -132,23 +135,35 @@ test('텍스트 선택 모드 — 터미널 포커스를 해제하고 네이티�
   assert.strictEqual(helper.disabled, true, 'xterm이 롱프레스 때 숨은 입력을 다시 focus하지 못해야 한다');
   assert.ok(window.document.body.classList.contains('vt-term-selecting'));
   assert.strictEqual(window.document.getElementById('keybar-selection-actions').hidden, false);
-  assert.strictEqual(window.document.getElementById('keybar-slot-select').getAttribute('aria-pressed'), 'true');
+  // 2026-09-23 — 선택 모드에 "들어가는" keybar 버튼(#keybar-slot-select)은
+  // 없앴다(term/touch-select.js의 꾹 누르기가 대신한다) — 더는 존재하지
+  // 않아야 한다.
+  assert.strictEqual(window.document.getElementById('keybar-slot-select'), null);
 
   setTerminalSelectionMode(false);
   assert.strictEqual(isTerminalSelectionMode(), false);
   assert.ok(!wrapper.classList.contains('vt-term-select-mode'));
   assert.strictEqual(helper.disabled, false, '선택을 끝내면 터미널 입력을 다시 받을 수 있어야 한다');
   assert.strictEqual(window.document.getElementById('keybar-selection-actions').hidden, true);
+  assert.strictEqual(cleared, 1, '끌 때 xterm 자신의 선택 하이라이트도 지워야 다음번에 이전 범위가 겹쳐 보이지 않는다');
 });
 
-test('텍스트 선택 복사 — 네이티브 범위는 권한 팝업 없는 copy 명령을 우선한다', async () => {
+test('텍스트 선택 복사 — xterm 자신의 선택(term.getSelection)만 읽는다', async () => {
+  // 2026-09-23 — 예전엔 브라우저 네이티브 Range(window.getSelection())를
+  // 먼저 읽었다. 이제 선택은 전부 xterm의 select() 모델로만 만들어지므로
+  // (term/touch-select.js 머리말 — 접근성 레이어 재렌더가 네이티브 Range를
+  // 끊는다), window.getSelection이 뭘 돌려주든 무시하고 term.getSelection()만
+  // 봐야 한다.
   const { window, store, setTerminalSelectionMode, isTerminalSelectionMode } = await buildWindow({ coarse: true });
-  store.registerSession('copy-me', { term: { blur() {}, getSelection() { return ''; } } });
+  store.registerSession('copy-me', {
+    term: { blur() {}, getSelection() { return '선택한 범위'; }, clearSelection() {} },
+  });
   store.setActive('copy-me');
   const wrapper = window.document.createElement('div');
   wrapper.id = 'term-copy-me';
   window.document.body.appendChild(wrapper);
-  window.getSelection = () => ({ toString: () => '선택한 범위', removeAllRanges() {} });
+  // 네이티브 Range가 뭔가를 들고 있어도(예: 다른 위젯이 남긴 찌꺼기) 무시돼야 한다.
+  window.getSelection = () => ({ toString: () => '이건 무시돼야 한다', removeAllRanges() {} });
   window.showToast = () => {};
   let copied = 0;
   window.document.execCommand = (command) => { if (command === 'copy') copied++; return true; };
@@ -160,6 +175,28 @@ test('텍스트 선택 복사 — 네이티브 범위는 권한 팝업 없는 co
 
   assert.strictEqual(copied, 1);
   assert.strictEqual(isTerminalSelectionMode(), false, '복사 성공 뒤에는 입력 가능한 상태로 돌아가야 한다');
+});
+
+test('모두 선택 — 뷰포트 전체(rows×cols)를 term.select로 고른다, 스크롤백은 포함하지 않는다', async () => {
+  const { window, store, setTerminalSelectionMode } = await buildWindow({ coarse: true });
+  const calls = [];
+  store.registerSession('all-me', {
+    term: {
+      rows: 24, cols: 80,
+      blur() {}, getSelection() { return ''; }, clearSelection() {},
+      select(col, row, length) { calls.push([col, row, length]); },
+    },
+  });
+  store.setActive('all-me');
+  const wrapper = window.document.createElement('div');
+  wrapper.id = 'term-all-me';
+  window.document.body.appendChild(wrapper);
+
+  setTerminalSelectionMode(true);
+  window.document.getElementById('keybar-selection-all')
+    .dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
+
+  assert.deepStrictEqual(calls, [[0, 0, 24 * 80]]);
 });
 
 test('접기 토글 — "키들" 줄만 접히고 입력 슬롯 줄은 클래스 구조상 별도로 남는다', async () => {

@@ -5,7 +5,7 @@
 // 순수 키-시퀀스 로직(_KEYBAR_SEQ, ctrlByte, Ctrl+화살표, sticky 변환)은
 // lib/keyseq.js(window.VTKeySeq)로 분리돼 있다 — DOM/세션 상태가 없어 단위 테스트 대상.
 // VTKeySeq는 아직 UMD(globalThis.VTKeySeq)라 bare identifier로 읽는다(F2 판단 유지).
-import { activeSessionId, activeSession } from '../core/store.js';
+import { activeSessionId, activeSession, getSession } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { copyToClipboard, sendToPty } from './clipboard.js';
 import { fitAndResize } from './resize.js';
@@ -15,9 +15,12 @@ import { getAction } from '../core/dom.js';
 let _ctrlArmed = false;
 let _selectionSessionId = null;
 
+// 2026-09-23 — 예전엔 브라우저 네이티브 Range(window.getSelection())를 먼저
+// 보고 xterm 자신의 선택(term.getSelection())으로 폴백했다. 이제 모바일 선택은
+// 전부 term/touch-select.js가 xterm의 select() 모델로만 만든다(왜: 그 파일
+// 머리말 참고 — 접근성 레이어 재렌더가 네이티브 Range를 끊는다) — 네이티브
+// Range가 채워질 길이 없어졌으므로 그 분기를 걷어냈다.
 function _activeSelectionText(term) {
-  const nativeText = String(window.getSelection?.()?.toString?.() || '');
-  if (nativeText.trim()) return nativeText;
   return String(term?.getSelection?.() || '');
 }
 
@@ -27,10 +30,16 @@ export function isTerminalSelectionMode() {
 
 export function setTerminalSelectionMode(on) {
   const current = activeSession();
-  const previous = _selectionSessionId && document.getElementById(`term-${_selectionSessionId}`);
+  const previousId = _selectionSessionId;
+  const previous = previousId && document.getElementById(`term-${previousId}`);
   previous?.classList.remove('vt-term-select-mode');
   const previousHelper = previous?.querySelector?.('.xterm-helper-textarea');
   if (previousHelper) previousHelper.disabled = false;
+  // xterm 자신의 하이라이트(term.select 모델)는 클래스를 떼도 저절로 안
+  // 사라진다 — 명시적으로 지운다. `on`/`off` 어느 방향이든 지워야 할 대상은
+  // "방금까지 선택 모드였던 세션"(previousId)뿐이다 — 그게 없으면(막 처음
+  // 켜는 참이라 지울 하이라이트가 아직 없다) 아무것도 하지 않는다.
+  try { if (previousId) getSession(previousId)?.term?.clearSelection?.(); } catch (_) {}
 
   _selectionSessionId = on && current ? activeSessionId() : null;
   const wrapper = _selectionSessionId && document.getElementById(`term-${_selectionSessionId}`);
@@ -39,9 +48,6 @@ export function setTerminalSelectionMode(on) {
   if (helper) helper.disabled = true;
   document.body.classList.toggle('vt-term-selecting', Boolean(_selectionSessionId));
 
-  const selectBtn = document.getElementById('keybar-slot-select');
-  selectBtn?.setAttribute('aria-pressed', String(Boolean(_selectionSessionId)));
-  if (selectBtn) selectBtn.setAttribute('aria-label', _selectionSessionId ? '텍스트 선택 종료' : '터미널 텍스트 선택');
   const actions = document.getElementById('keybar-selection-actions');
   if (actions) actions.hidden = !_selectionSessionId;
 
@@ -50,8 +56,6 @@ export function setTerminalSelectionMode(on) {
     try { current.term.blur(); } catch (_) {}
     try { document.activeElement?.blur?.(); } catch (_) {}
     try { navigator.virtualKeyboard?.hide?.(); } catch (_) {}
-  } else {
-    try { window.getSelection?.()?.removeAllRanges?.(); } catch (_) {}
   }
   document.dispatchEvent(new CustomEvent('vt:terminal-selection', { detail: { active: Boolean(_selectionSessionId) } }));
 }
@@ -63,22 +67,27 @@ async function _copyTerminalSelection() {
     showToast('복사할 텍스트 범위를 먼저 선택하세요.');
     return false;
   }
-  // 네이티브 Range가 살아 있고 이 버튼의 사용자 제스처 안이라면 브라우저의
-  // copy 명령을 먼저 쓴다. Android Chrome의 async Clipboard API는 첫 복사에서
-  // "클립보드 확인" 권한 팝업을 띄워 선택 흐름을 끊지만, 현재 선택 복사는
-  // execCommand가 권한 팝업 없이 정확히 같은 범위를 복사한다.
-  const nativeText = String(window.getSelection?.()?.toString?.() || '');
-  let ok = false;
-  if (nativeText.trim()) {
-    try { ok = Boolean(document.execCommand?.('copy')); } catch (_) {}
-  }
-  if (!ok) ok = await copyToClipboard(text);
+  const ok = await copyToClipboard(text);
   // 성공은 말하지 않는다 — 바로 아래에서 선택 모드가 닫히는 것(선택 바가
   // 사라지고 키들 줄이 돌아온다)이 증거고, 폰에서 그 토스트는 방금 복사한
   // 그 선택 영역 위에 떴다.
   if (!ok) showToast('클립보드에 복사하지 못했습니다.', 'error');
   if (ok) setTerminalSelectionMode(false);
   return ok;
+}
+
+// "모두 선택" — 화면에 보이는 범위 전체(뷰포트, term.rows×term.cols)를 고른다.
+// xterm의 selectAll()은 스크롤백을 포함한 버퍼 전체를 고르는데, 여기서
+// "모두"는 사용자가 지금 보고 있는 화면 전체를 뜻한다 — 안 보이는 스크롤백
+// 수천 줄까지 복사되면 "모두 선택"을 누른 사람이 기대한 결과가 아니다.
+function _selectAllVisible() {
+  const s = activeSession();
+  if (!s || !s.term) return;
+  try { s.term.select(0, 0, s.term.rows * s.term.cols); } catch (_) {}
+  // term/touch-select.js가 자기 핸들을 이 새 범위로 다시 그리도록 알린다 —
+  // 이 파일이 그 파일을 직접 import하면 순환 참조가 생긴다(그 파일은 이미
+  // 이 파일의 setTerminalSelectionMode를 쓴다), 그래서 이벤트로 느슨하게 묶는다.
+  document.dispatchEvent(new CustomEvent('vt:terminal-selection-changed'));
 }
 
 // L7: 마이크의 물리적 위치 결정 — voice.js가 `#mic-btn-wrap`을 모듈 최상위에서
@@ -170,10 +179,12 @@ export function initKeybar() {
   bar.addEventListener('pointerdown', (e) => {
     const selectionCopy = e.target.closest('#keybar-selection-copy');
     if (selectionCopy) { e.preventDefault(); void _copyTerminalSelection(); return; }
+    // 2026-09-23 — 선택 모드로 "들어가는" 버튼은 없앴다(term/touch-select.js의
+    // 터미널 꾹 누르기가 대신한다). 안에서 쓰는 이 셋만 남는다.
+    const selectionAll = e.target.closest('#keybar-selection-all');
+    if (selectionAll) { e.preventDefault(); _selectAllVisible(); return; }
     const selectionDone = e.target.closest('#keybar-selection-done');
     if (selectionDone) { e.preventDefault(); setTerminalSelectionMode(false); return; }
-    const selectionToggle = e.target.closest('#keybar-slot-select');
-    if (selectionToggle) { e.preventDefault(); setTerminalSelectionMode(!isTerminalSelectionMode()); return; }
     // 접기/펴기 토글 — .kb가 아니므로 먼저 가로챈다.
     const toggle = e.target.closest('#keybar-toggle');
     if (toggle) {

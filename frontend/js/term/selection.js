@@ -5,6 +5,7 @@ import { get as setting } from '../core/settings.js';
 import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste } from './clipboard.js';
 import { getSession } from '../core/store.js';
 import { getAction } from '../core/dom.js';
+import { _isCoarsePointer } from '../core/env.js';
 import { wireKittyKeyboard, encodeKey } from './kitty-keys.js';
 
 export function wireClipboard(id, term, wrapper) {
@@ -13,7 +14,15 @@ export function wireClipboard(id, term, wrapper) {
   //    Shift(또는 Option/Alt)+드래그에서 발생한다.
   //    "⋯ → 설정 → 드래그 시 자동 복사"로 끌 수 있다 — 꺼도 선택 자체는 그대로
   //    되고(브라우저 네이티브), 실제 복사만 우클릭으로 넘어간다.
+  //
+  //    2026-09-23(사용자 요청) — 터치 기기에서는 이 항목 자체를 무시한다.
+  //    모바일은 이제 꾹 눌러 만든 선택(term/touch-select.js, xterm 자신의
+  //    select() 모델)만 쓰고 그 복사는 keybar의 「복사」 버튼(명시적 탭)이
+  //    맡는다. 손가락으로 아무거나 훑었을 뿐인데 자동으로 복사되는 동작은
+  //    "필요 없으니 제거"가 요청 그대로였다 — 설정값과 무관하게 항상 끈다
+  //    (데스크톱 마우스 드래그는 이 변경과 무관, 설정을 그대로 따른다).
   wrapper.addEventListener('mouseup', () => {
+    if (_isCoarsePointer()) return;
     // S2: 같은 키를 세 파일이 각자 localStorage에서 읽고 있었다(여기 2곳 +
     // moreMenu.js + voice/notify.js). 이제 설정 스토어 하나만 본다.
     if (!setting('mouse.autocopyOnSelect')) return;
@@ -22,11 +31,16 @@ export function wireClipboard(id, term, wrapper) {
   });
 
   // 2) 우클릭 — 선택 있으면 복사, 없으면 붙여넣기 (PuTTY 스타일)
+  //
+  //    2026-09-23(사용자 요청) — 터치 기기는 이 핸들러를 아예 안 탄다. Android
+  //    Chrome은 롱프레스를 contextmenu로도 보내는데, 예전엔 "선택 모드가 아닐
+  //    때"만 이 PuTTY 동작(선택 없으면 곧장 붙여넣기)을 태워서 — 막 시작한
+  //    롱프레스가 선택 모드에 들어가기도 전에 클립보드 읽기 권한 팝업을 띄우고
+  //    (그 요청 자체가) 브라우저의 제스처를 가로챘다. 이제 롱프레스는 전부
+  //    term/touch-select.js가 맡으므로 여기서는 그 네이티브 컨텍스트 메뉴/
+  //    콜아웃 자체를 막기만 하고 아무 일도 하지 않는다.
   wrapper.addEventListener('contextmenu', (e) => {
-    // Android Chrome은 텍스트 롱프레스를 contextmenu로도 보낸다. 선택 모드에서
-    // 이걸 PuTTY 붙여넣기로 처리하면 클립보드 읽기 권한 팝업이 뜨고 브라우저의
-    // 네이티브 범위 선택이 취소된다. 이 모드에서는 기본 선택 메뉴에 양보한다.
-    if (wrapper.classList.contains('vt-term-select-mode')) return;
+    if (_isCoarsePointer()) { e.preventDefault(); return; }
     e.preventDefault();
     const sel = term.getSelection && term.getSelection();
     if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });

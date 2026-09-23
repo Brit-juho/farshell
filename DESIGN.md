@@ -677,14 +677,49 @@ own "+ 새 세션" — `Fleet.tsx` now takes `getAction` as a dep (from
 `core/dom.js`, passed in by `mobile-nav.js`) for this, the same way
 `Rail.tsx`/`Hud.tsx`/`Dock.tsx` already do.
 
-The keybar's selection action enters a dedicated native text-selection mode.
-It blurs xterm's hidden textarea (closing the software keyboard), stops touch
-scroll/canvas tap forwarding, and exposes Copy/Done actions while the browser
-selection handles are active. **Known broken** (found during this pass'
-investigation, not yet fixed): xterm's accessibility layer redraws on every
-PTY render and collapses the browser's native selection mid-drag, so this
-mode rarely survives long enough to copy anything — see the mobile-shell-revamp
-work log for the root cause.
+**Text selection (`term/touch-select.js`, 2026-09-23) does not use the
+browser's native selection at all anymore.** The step-1 investigation found
+the actual defect: xterm 5.5's accessibility layer redraws every visible row
+on each PTY render (a spinner, a tmux status-line clock — anything), and that
+redraw replaces the row's text nodes, which collapses whatever DOM `Range`
+was sitting on them. A drag-selected range surviving long enough to copy was
+close to accidental. The fix isn't a patch on that mechanism — it stops using
+it: long-pressing the terminal now selects the word under your finger through
+**xterm's own selection model** (`term.select()`/`getSelection()`/
+`clearSelection()`, the same API a desktop mouse-drag already used), which a
+separate renderer paints and which the accessibility layer's churn never
+touches. Two self-drawn handles (teardrops, `.vt-term-select-handles`) sit at
+the range's ends; dragging either recomputes a flat `row*cols+col` index pair
+and calls `select()` again — no live DOM `Range` is ever created, so there's
+nothing for a redraw to collapse. Verified directly (not just reasoned about):
+selecting text, then having the pane print five lines over five seconds
+(forcing the accessibility redraw repeatedly), left `term.getSelection()`
+byte-for-byte unchanged throughout.
+
+`keybar.js`'s `setTerminalSelectionMode` still owns entry/exit (blur the
+hidden textarea, hide the software keyboard, toggle the
+`vt-term-select-mode` class, show/hide the 복사·모두 선택·완료 bar) — this
+file only changed *what triggers it* (a long-press on the terminal, not a
+keybar button, which is gone) and *what happens inside it* (handle-driven
+`select()` calls instead of a native range). "모두 선택" selects the visible
+viewport (`rows×cols`), not `selectAll()`'s full scrollback — buffer text you
+can't see isn't what "select all" means to someone looking at a phone screen.
+
+**Auto-copy and the Android long-press-to-paste fallback are now
+touch-only-disabled** (`term/selection.js`) — `mouse.autocopyOnSelect` still
+governs desktop drag-select unchanged, but on a coarse pointer neither path
+runs at all, regardless of the setting. They were the second half of the
+original complaint: a drag that copied without being asked, and a long-press
+that sometimes fired the OS clipboard-read permission prompt and pasted
+before the user had decided to select anything. Both were built for a native-
+selection world that no longer exists on touch.
+
+**Not verified on a real device** — the mechanism was checked via
+CDP-synthesized pointer events against an isolated server (word selection,
+handle drag across a line boundary, selection survival across live PTY
+output, copy closing the mode, auto-copy/paste both confirmed inert on a
+coarse pointer). Real-finger geometry (handle hit-testing, drag feel) still
+needs an actual phone.
 
 ## 8. Usage (dock "Usage" tab)
 
