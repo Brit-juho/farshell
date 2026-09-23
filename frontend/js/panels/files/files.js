@@ -118,26 +118,26 @@ function refreshAllFiles() {
   for (const inst of _liveInstances()) refreshFiles(inst);
 }
 
-// 업로드 진행 표시 — term/upload.js가 쏘는 `vt:upload-progress`를 듣는다.
-// 그쪽은 이 모듈을 정적 import 못 하므로(ADR-26, 파일 상단 경고) 전역 CustomEvent로
-// 만 연결된다. 모듈은 세션당 한 번만 평가되므로 리스너도 한 번만 붙으면 된다.
-document.addEventListener('vt:upload-progress', (e) => {
-  const { clientId, name, size, loaded, phase } = e.detail || {};
-  if (!clientId) return;
-  for (const inst of _liveInstances()) {
-    if (phase === 'done') {
-      inst.uploading.delete(clientId);
-      refreshFiles(inst);   // 실제 레코드가 생겼으니 서버에서 다시 받아 교체
-      continue;
-    }
-    if (phase === 'error') {
-      inst.uploading.delete(clientId);
-      _paintBody(inst);     // 새 레코드는 없다 — 진행 행만 지운다(네트워크 재요청 불필요)
-      continue;
-    }
-    inst.uploading.set(clientId, { name, size, loaded });
-    _paintBody(inst);
-  }
+// 업로드 진행 표시 — term/upload.js가 진행 상태의 유일한 주인이다(2026-09-23,
+// 설계 2번). 그쪽은 이 모듈을 정적 import 못 하므로(ADR-26, 파일 상단 경고)
+// window 브리지(vtUploadJobs/vtCancelUpload)와 "다시 그려라" 신호뿐인 전역
+// CustomEvent로만 연결된다 — 이벤트엔 페이로드가 없다, 상태는 항상
+// vtUploadJobs()에서 읽는다. 그래서 패널을 업로드 도중에 열어도(예전엔
+// 다음 progress 이벤트가 올 때까지 비어 있었다) 그 즉시 대기열 전체가 보인다.
+function _liveJobs() {
+  return (typeof window.vtUploadJobs === 'function') ? window.vtUploadJobs() : [];
+}
+
+let _lastJobIds = new Set();
+document.addEventListener('vt:upload-progress', () => {
+  const ids = new Set(_liveJobs().map((j) => j.clientId));
+  // 있던 작업이 이번엔 없다 = 끝났다(done/error/cancelled 중 하나) — 완료라면
+  // 실제 서버 레코드가 새로 생겼을 수 있으니 다시 받아온다. 진행 중 틱은
+  // 재요청 없이 진행 바만 다시 그린다.
+  const finished = [..._lastJobIds].some((id) => !ids.has(id));
+  _lastJobIds = ids;
+  if (finished) { refreshAllFiles(); return; }   // refreshFiles가 _paintBody까지 한다
+  for (const inst of _liveInstances()) _paintBody(inst);
 });
 
 // N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다.
@@ -149,10 +149,12 @@ function showFiles(opts = {}) {
     ariaLabel: '파일',
     headHTML: `
       <div class="vt-vw-title" id="vt-fl-title">파일</div>
+      <button class="vt-btn sm quiet" id="vt-fl-select-toggle" title="여러 개 골라 한 번에 정리" aria-pressed="false">선택</button>
       <button class="vt-btn sm vt-vw-diff" id="vt-fl-upload" title="파일 올리기">올리기</button>
     `,
     extraHTML: `
       <div class="vt-fl-chips" id="vt-fl-chips" role="tablist"></div>
+      <div class="vt-fl-selectbar" id="vt-fl-selectbar" hidden></div>
     `,
     bodyId: 'vt-fl-body',
   });
@@ -160,8 +162,8 @@ function showFiles(opts = {}) {
 
   const inst = {
     ctx: panel.ctx, el: panel.el, filter: 'all', lastItems: [],
-    uploading: new Map(),   // clientId → {name, size, loaded} — 업로드 진행 중인 파일
     _items: [], _quota: {}, // 마지막으로 받아온 목록 — 진행률만 바뀔 때 재요청 없이 다시 그린다
+    selectMode: false, selected: new Set(),   // 2026-09-23 — 일괄 정리(설계 4번)
   };
   _instances.add(inst);
 
@@ -171,6 +173,7 @@ function showFiles(opts = {}) {
   panel.ctx.byId('vt-fl-upload').addEventListener('click', () => {
     document.getElementById('file-input')?.click();
   });
+  panel.ctx.byId('vt-fl-select-toggle').addEventListener('click', () => _toggleSelectMode(inst));
 
   wireFileDrop(panel.el);
 
@@ -266,6 +269,14 @@ async function refreshFiles(inst) {
 
   inst._items = items;
   inst._quota = quota;
+  // 목록이 새로 왔으니, 그 사이 사라진 파일(다른 기기가 지웠거나 TTL 정리로
+  // 없어진)의 선택은 버린다 — 유령 id를 들고 있다가 일괄 삭제에 실려 보내면
+  // 서버가 그냥 missing으로 무시하긴 하지만, 화면의 "N개 선택" 숫자가
+  // 실제로 보이는 행 수와 안 맞게 된다.
+  if (inst.selected.size) {
+    const live = new Set(items.map((x) => x.id));
+    for (const id of [...inst.selected]) if (!live.has(id)) inst.selected.delete(id);
+  }
   _paintBody(inst);
 }
 
@@ -276,7 +287,7 @@ function _paintBody(inst) {
   const body = inst.ctx.byId('vt-fl-body');
   if (!body) return;
   const items = inst._items || [];
-  const uploadingRows = [...inst.uploading.values()].map(renderUploadingRow);
+  const uploadingRows = _liveJobs().map((job) => renderUploadingRow(job));
 
   body.innerHTML = '';
   for (const row of uploadingRows) body.appendChild(row);
@@ -288,14 +299,19 @@ function _paintBody(inst) {
       : '해당하는 파일이 없습니다.';
     body.appendChild(empty);
   } else {
-    for (const item of items) body.appendChild(renderRow(item));
+    for (const item of items) body.appendChild(renderRow(item, inst));
   }
   body.appendChild(renderFooter(inst._quota || {}));
+  _renderSelectBar(inst);
 }
 
-// 업로드 중인 행 — 아직 서버 레코드가 없으니 동작 버튼은 없고 진행률 바만 있다.
-// 기존 용량 게이지(.vt-fl-gauge)와 같은 클래스를 재사용한다(새 토큰 없음).
-function renderUploadingRow(entry) {
+// 업로드 중인 행 — 아직 서버 레코드가 없으니 삭제·공유 같은 동작은 없고
+// 진행률 바 + 취소뿐이다. 기존 용량 게이지(.vt-fl-gauge)와 같은 클래스를
+// 재사용한다(새 토큰 없음). 2026-09-23 — 상태의 주인이 term/upload.js로
+// 옮겨가며(설계 2번) job.phase를 세 단계로 그대로 보여준다: 대기 중 · 업로드
+// 중 · 서버 저장 중(이 단계는 취소를 끈다 — 바이트가 이미 다 넘어가 서버가
+// 파일을 만들고 있을 수 있는 구간이라, 취소를 받아 주면 화면·서버가 어긋난다).
+function renderUploadingRow(job) {
   const row = document.createElement('div');
   row.className = 'vt-fl-row vt-fl-row-uploading';
 
@@ -303,24 +319,132 @@ function renderUploadingRow(entry) {
   main.className = 'vt-fl-row-main';
   const name = document.createElement('div');
   name.className = 'vt-fl-name';
-  name.textContent = entry.name;
-  name.title = entry.name;
-  const pct = entry.size ? Math.min(100, Math.round((entry.loaded / entry.size) * 100)) : 0;
+  name.textContent = job.name;
+  name.title = job.name;
+  const pct = job.size ? Math.min(100, Math.round((job.loaded / job.size) * 100)) : 0;
+  const label = job.phase === 'queued' ? '대기 중'
+    : job.phase === 'saving' ? '서버 저장 중'
+      : `업로드 중 · ${fmtBytes(job.loaded)} / ${fmtBytes(job.size)}`;
   const sub = document.createElement('div');
   sub.className = 'vt-fl-sub';
-  sub.textContent = `업로드 중 · ${fmtBytes(entry.loaded)} / ${fmtBytes(entry.size)}`;
+  sub.textContent = label;
   const bar = document.createElement('div');
   bar.className = 'vt-fl-gauge vt-fl-row-progress';
   const fill = document.createElement('div');
   fill.className = 'vt-fl-gauge-fill';
-  fill.style.width = pct + '%';
+  fill.style.width = (job.phase === 'queued' ? 0 : pct) + '%';
   bar.appendChild(fill);
 
   main.appendChild(name);
   main.appendChild(sub);
   main.appendChild(bar);
   row.appendChild(main);
+
+  const acts = document.createElement('div');
+  acts.className = 'vt-fl-acts';
+  const cancelBtn = iconBtn('x', '취소', 'rm', () => window.vtCancelUpload?.(job.clientId));
+  if (job.phase === 'saving') {
+    cancelBtn.disabled = true;
+    cancelBtn.title = '서버가 저장하는 중이라 취소할 수 없습니다';
+  }
+  acts.appendChild(cancelBtn);
+  row.appendChild(acts);
   return row;
+}
+
+// ── 일괄 선택/삭제 (2026-09-23, 설계 4번 — 첨부 파일 정리. 30일 자동 정리와
+// 별개로 사용자가 필터 칩으로 조건을 고르고 그 결과 전체를 한 번에 지운다.
+// 프로젝트 파일 트리(코드 뷰어)는 이 범위가 아니다 — files.md의 읽기 전용
+// 계약은 그대로다.) ────────────────────────────────────────────────────────
+
+function _toggleSelectMode(inst) {
+  inst.selectMode = !inst.selectMode;
+  if (!inst.selectMode) inst.selected.clear();
+  const btn = inst.ctx.byId('vt-fl-select-toggle');
+  if (btn) { btn.setAttribute('aria-pressed', String(inst.selectMode)); btn.classList.toggle('active', inst.selectMode); }
+  _paintBody(inst);
+}
+
+/** 지금 필터로 보이는 항목(업로드 중 행 제외) 기준 — "만료 임박"을 고르고
+ * 전체 선택하면 그 조건에 맞는 것만 골라진다(설계 4번의 핵심). */
+function _visibleSelectableIds(inst) {
+  return (inst._items || []).map((x) => x.id);
+}
+
+function _renderSelectBar(inst) {
+  const bar = inst.ctx.byId('vt-fl-selectbar');
+  if (!bar) return;
+  if (!inst.selectMode) { bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  const visible = _visibleSelectableIds(inst);
+  const allSelected = visible.length > 0 && visible.every((id) => inst.selected.has(id));
+  bar.innerHTML = '';
+
+  const count = document.createElement('span');
+  count.className = 'vt-fl-selectbar-count';
+  count.textContent = `${inst.selected.size}개 선택`;
+  bar.appendChild(count);
+
+  const selectAllBtn = document.createElement('button');
+  selectAllBtn.type = 'button';
+  selectAllBtn.className = 'vt-btn sm quiet';
+  selectAllBtn.textContent = allSelected ? '선택 해제' : '보이는 항목 전체 선택';
+  selectAllBtn.disabled = visible.length === 0;
+  selectAllBtn.addEventListener('click', () => {
+    if (allSelected) for (const id of visible) inst.selected.delete(id);
+    else for (const id of visible) inst.selected.add(id);
+    _paintBody(inst);
+  });
+  bar.appendChild(selectAllBtn);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'vt-btn sm danger';
+  deleteBtn.textContent = '삭제';
+  deleteBtn.disabled = inst.selected.size === 0;
+  deleteBtn.addEventListener('click', () => bulkDeleteSelected(inst));
+  bar.appendChild(deleteBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'vt-btn sm quiet';
+  cancelBtn.textContent = '취소';
+  cancelBtn.addEventListener('click', () => _toggleSelectMode(inst));
+  bar.appendChild(cancelBtn);
+}
+
+function _toggleRowSelected(inst, id) {
+  if (inst.selected.has(id)) inst.selected.delete(id); else inst.selected.add(id);
+  _paintBody(inst);
+}
+
+async function bulkDeleteSelected(inst) {
+  const ids = [...inst.selected];
+  if (!ids.length) return;
+  const items = (inst._items || []).filter((x) => ids.includes(x.id));
+  const totalSize = items.reduce((n, x) => n + (x.size || 0), 0);
+  const sharedCount = items.filter((x) => (x.shares || []).length).length;
+  const lines = [`${ids.length}개(${fmtBytes(totalSize)})를 삭제합니다.`];
+  if (sharedCount) lines.push(`공유 링크가 걸린 파일 ${sharedCount}개도 함께 무효가 됩니다.`);
+  lines.push('계속할까요?');
+  if (!await confirmDialog(lines.join('\n\n'), { title: '파일 일괄 삭제', okLabel: '삭제', danger: true })) return;
+  try {
+    const r = await vtFetch('/api/files/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+    });
+    if (r.missing && r.missing.length) {
+      // 화면에 있던 항목이 서버엔 없었다 — 다른 기기가 먼저 지웠거나 TTL
+      // 정리와 겹쳤다. 나머지는 성공했으니 조용히 넘기지 않고 한 줄만 남긴다.
+      showToast(`${r.missing.length}개는 이미 지워져 있었습니다`, 'info');
+    }
+  } catch (e) {
+    showToast('일괄 삭제 실패: ' + e.message, 'error');
+  }
+  inst.selectMode = false;
+  inst.selected.clear();
+  const btn = inst.ctx.byId('vt-fl-select-toggle');
+  if (btn) { btn.setAttribute('aria-pressed', 'false'); btn.classList.remove('active'); }
+  refreshAllFiles();
 }
 
 // 2026-09-16 — 이모지(⬇📋⌨🔗🗑)를 SVG로 바꿨다. DESIGN.md §0의 "No emoji as a
@@ -338,10 +462,25 @@ function iconBtn(iconName, title, cls, onClick) {
   return b;
 }
 
-function renderRow(item) {
+function renderRow(item, inst) {
   const row = document.createElement('div');
   row.className = 'vt-fl-row';
   row.dataset.id = item.id;
+
+  // 선택 모드(설계 4번)에서는 행 앞에 체크박스가 붙고, 동작 버튼(다운로드·
+  // 삭제 등)은 지운다 — 두 삭제 경로(행별 즉시 삭제 · 일괄 삭제)가 같은
+  // 화면에 동시에 있으면 "지금 누르면 뭐가 지워지나"가 애매해진다.
+  if (inst && inst.selectMode) {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'vt-fl-select-cb';
+    cb.checked = inst.selected.has(item.id);
+    cb.setAttribute('aria-label', `${item.name} 선택`);
+    cb.addEventListener('change', () => _toggleRowSelected(inst, item.id));
+    row.appendChild(cb);
+    row.classList.add('vt-fl-row-selectable');
+    if (cb.checked) row.classList.add('selected');
+  }
 
   const main = document.createElement('div');
   main.className = 'vt-fl-row-main';
@@ -368,17 +507,18 @@ function renderRow(item) {
   main.appendChild(name);
   main.appendChild(meta);
   main.appendChild(sub);
-
-  const acts = document.createElement('div');
-  acts.className = 'vt-fl-acts';
-  acts.appendChild(iconBtn('download', '다운로드', 'dl', () => downloadFile(item)));
-  acts.appendChild(iconBtn('clipboard-copy', '경로 복사', 'copy', (e) => copyPath(item, e.currentTarget)));
-  acts.appendChild(iconBtn('keyboard', '터미널에 삽입', 'ins', () => insertFile(item)));
-  acts.appendChild(iconBtn('link', '링크 발급', 'share', () => openShareDialog(item)));
-  acts.appendChild(iconBtn('trash-2', '삭제', 'rm', () => deleteFile(item)));
-
   row.appendChild(main);
-  row.appendChild(acts);
+
+  if (!inst || !inst.selectMode) {
+    const acts = document.createElement('div');
+    acts.className = 'vt-fl-acts';
+    acts.appendChild(iconBtn('download', '다운로드', 'dl', () => downloadFile(item)));
+    acts.appendChild(iconBtn('clipboard-copy', '경로 복사', 'copy', (e) => copyPath(item, e.currentTarget)));
+    acts.appendChild(iconBtn('keyboard', '터미널에 삽입', 'ins', () => insertFile(item)));
+    acts.appendChild(iconBtn('link', '링크 발급', 'share', () => openShareDialog(item)));
+    acts.appendChild(iconBtn('trash-2', '삭제', 'rm', () => deleteFile(item)));
+    row.appendChild(acts);
+  }
   return row;
 }
 

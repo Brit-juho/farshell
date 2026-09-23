@@ -193,6 +193,7 @@ download API — `/api/files/{file_id}/download` is id-only by design.
 | GET | `/api/files/{file_id}/download` | Download by id (`attachment` + `nosniff` + `no-store`) |
 | GET | `/api/files/{file_id}/path` | Disk path of a stored file (dock file tab's "copy path"; id-only input, so no traversal surface) |
 | DELETE | `/api/files/{file_id}` | Delete a stored file |
+| POST | `/api/files/delete` | Bulk delete (JSON: `{ids:[...]}`, max 500) → `{ok, deleted:[...], missing:[...]}`. Not elevated — same reason single delete isn't (repeated single calls would bypass it anyway) |
 | POST | `/api/files/{file_id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
 | POST | `/api/files/{file_id}/send` | Copy the file to a remote host (JSON: `host`, optional `session`) and, with `session`, have that host type its own path into the pane. Ordinary login auth here; the outbound leg carries the peer signature. Re-sending the same file is skipped by origin |
 | POST | `/api/files/{file_id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |

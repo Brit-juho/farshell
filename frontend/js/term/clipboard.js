@@ -3,6 +3,7 @@
 import { getSession } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
+import { uploadFiles } from './upload.js';
 
 // 시스템 클립보드에 쓰기. HTTPS/localhost가 아니면 clipboard API가 막히므로
 // execCommand('copy') 폴백을 둔다.
@@ -99,31 +100,14 @@ export async function pasteFromClipboard(id) {
 }
 
 // 이미지 붙여넣기 → 서버 업로드 → 저장 경로를 터미널에 삽입 (Claude에 그대로 넘길 수 있게)
+//
+// 2026-09-23 — 예전엔 여기서 `apiFetch`로 직접 올렸다. `term/upload.js` 상단
+// 계약("업로드 구현은 여기 하나뿐")을 이 함수만 어기고 있었고, 그래서
+// 첨부 탭의 진행 표시·취소가 이미지 붙여넣기에는 닿지 않았다. `uploadFiles`로
+// 합쳐서 나머지 세 진입점과 같은 진행/취소/완료 경로를 타게 한다.
 export async function pasteImageUpload(id, file) {
-  // 한 동작이 토스트를 둘 연달아 띄우지 않는다 — "올리는 중"과 그 결과는
-  // 같은 key로 제자리에서 교체한다(2.2.1).
-  const TOAST = { key: 'paste-image' };
-  try {
-    showToast('이미지 업로드 중...', 'info', TOAST);
-    const ext = ((file.type.split('/')[1] || 'png')).replace('jpeg', 'jpg').replace('svg+xml', 'svg');
-    const fd = new FormData();
-    fd.append('file', file, `pasted-${Date.now()}.${ext}`);
-    const res = await apiFetch(`${API_BASE}/api/upload?session_id=${encodeURIComponent(id)}`, {
-      method: 'POST', body: fd,
-    });
-    if (!res.ok) { showToast(`이미지 업로드 실패 (${res.status})`, 'error', TOAST); return; }
-    const data = await res.json();
-    if (data && data.path) {
-      // N24 — 경로 삽입도 붙여넣기 경로로: 사용자가 이어서 명령을 완성하고
-      // 직접 Enter를 눌러야 하므로(자동 실행 아님) 의미상 paste지 keys가 아니다.
-      sendPaste(id, data.path + ' ');
-      showToast('이미지 경로 삽입됨', 'success', TOAST);
-    } else {
-      showToast('업로드 응답에 경로 없음', 'error', TOAST);
-    }
-  } catch (_) {
-    showToast('이미지 업로드 오류', 'error', TOAST);
-  }
+  const ext = ((file.type.split('/')[1] || 'png')).replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+  await uploadFiles([file], { sessionId: id, insertPath: true, name: `pasted-${Date.now()}.${ext}` });
 }
 
 window.copyToClipboard = copyToClipboard;

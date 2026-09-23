@@ -25,9 +25,11 @@ import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
-import { setPaneSession, revealSessionPane, openLayoutTab, getTree, getActivePaneId } from '../layout/store.js';
+import { setPaneSession, revealSessionPane, openLayoutTab, getTree, getActivePaneId,
+  getTabsWithTrees, getActiveTabId, switchLayoutTab, moveLayoutTab } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { findNode } from '../layout/tree.js';
+import { COMPACT_MAX } from '../layout/breakpoints.js';
 
 export async function createSession() {
   // "맥에서도 열기"가 켜져 있으면 tmux 세션으로 생성하고 서버에 osascript로
@@ -331,10 +333,19 @@ export async function renameSession(id, rawName, previousNameOverride) {
   }
 }
 
-// 세션 좌/우 이동. 순서의 출처는 **세션 레코드**다(core/store.js의 order) —
-// 2.1.3까지는 `#tabs .tab`의 DOM 순서였는데, 그 DOM은 N37 3단계에서 사라진다.
-// 끝에서 순환하는 동작은 그대로 유지한다.
-export function switchTabByOffset(delta) {
+// 2026-09-23(사용자 확정) — 데스크톱은 이제 드래그로 헤더 탭을 직접 재정렬할
+// 수 있어서(layout/tabbar.js), 이 단축키를 헤더 탭 기준으로 되돌린다. 모바일
+// (<720px)은 헤더 탭 바 자체가 숨겨져 있고(80-dock.css) 좌우 스와이프가 세션
+// 순서(layout/compact.js의 sessionOrder → core/store.js order)를 읽으므로
+// 거기서는 그대로 세션 기준으로 둔다 — 폭에 따라 "탭"의 정체가 다르다.
+function _desktopTabs() {
+  return window.innerWidth >= COMPACT_MAX;
+}
+
+// 세션 좌/우 이동(모바일). 순서의 출처는 **세션 레코드**다(core/store.js의
+// order) — 2.1.3까지는 `#tabs .tab`의 DOM 순서였는데, 그 DOM은 N37 3단계에서
+// 사라진다. 끝에서 순환하는 동작은 그대로 유지한다.
+function _switchSessionByOffset(delta) {
   const ids = orderedSessionIds();
   if (ids.length < 2) return;
   const activeId = activeSessionId();
@@ -344,10 +355,38 @@ export function switchTabByOffset(delta) {
   if (nid && nid !== activeId) switchTo(nid);
 }
 
+function _switchHeaderTabByOffset(delta) {
+  const tabs = getTabsWithTrees();
+  if (tabs.length < 2) return;
+  const activeId = getActiveTabId();
+  let idx = tabs.findIndex((t) => t.id === activeId);
+  if (idx === -1) idx = 0;
+  const nid = tabs[(idx + delta + tabs.length) % tabs.length].id;
+  if (nid !== activeId) { switchLayoutTab(nid); saveLayoutNow(); }
+}
+
+export function switchTabByOffset(delta) {
+  if (_desktopTabs()) _switchHeaderTabByOffset(delta);
+  else _switchSessionByOffset(delta);
+}
+
 // 순서 자체를 바꾸는 경로. 탭 줄이 사라진 뒤에도 재정렬 수단이 남아야 한다 —
 // 레일 목록은 긴급도로 정렬되므로(agent/state.js의 sortByUrgency) 거기서
-// 드래그 재정렬은 의미가 없다. 그래서 키보드를 재정렬 UI로 둔다.
+// 드래그 재정렬은 의미가 없다. 헤더 탭은 이제 드래그가 있지만(위), 키보드
+// 경로는 마우스 없는 사용자를 위해 남긴다. 끝에서는 멈춘다(세션 쪽과 같은
+// 규칙 — 순환하면 "끝까지 밀었다"는 걸 알 수 없다).
+function _moveHeaderTabByOffset(delta) {
+  const tabs = getTabsWithTrees();
+  const activeId = getActiveTabId();
+  const idx = tabs.findIndex((t) => t.id === activeId);
+  if (idx === -1) return;
+  const to = idx + delta;
+  if (to < 0 || to >= tabs.length) return;
+  if (moveLayoutTab(activeId, to)) saveLayoutNow();
+}
+
 export function moveTabByOffset(delta) {
+  if (_desktopTabs()) return _moveHeaderTabByOffset(delta);
   const id = activeSessionId();
   if (!id) return;
   if (moveSessionByOffset(id, delta)) saveWorkspace();

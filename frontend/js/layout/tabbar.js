@@ -9,7 +9,7 @@
 // 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
 // 닫기·이름 변경은 레일 세션 행으로, 에이전트 마크·상태 dot·읽지 않음은
 // 이 파일의 워크트리 탭으로.
-import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, setTabLabel, tabDisplayLabel, onLayoutChange } from './store.js';
+import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, setTabLabel, moveLayoutTab, tabDisplayLabel, onLayoutChange } from './store.js';
 import { collectSessions } from './tree.js';
 import { allSessions } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
@@ -18,6 +18,11 @@ import { icon, agentIcon } from '../ui/icons.js';
 import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
 
 const HOST = 'vt-wtabs';
+
+// 2026-09-23 — 헤더 탭 순서 변경(데스크톱 전용). 레일의 세션 드래그(dnd.js
+// SESSION_MIME)나 OS 파일 드롭과 섞이면 안 되므로 전용 mime을 쓴다. 모바일은
+// 이 탭 바 자체가 숨겨져 있어(80-dock.css @media max-width:719px) 손댈 게 없다.
+const TAB_MIME = 'application/x-fsh-tab';
 
 // ── 탭 하나의 상태 ─────────────────────────────────────────────────────────
 // 10-shell-layout.md §4: 탭 구성은 `[에이전트 마크][이름][상태 dot][읽지 않음]`.
@@ -86,6 +91,74 @@ function paintTabs() {
   }
 }
 
+// 스크롤바를 숨겼으니(80-dock.css) 잘린 쪽을 알려줄 길이 마스크뿐이다 —
+// 스크롤 위치를 볼 때마다 data-fade를 갱신한다. host는 index.html 정적
+// 마크업이라 모듈 평가 시점에 이미 있다 — render()가 replaceChildren으로
+// 자식만 갈아 끼우므로 이 리스너는 한 번만 걸면 된다.
+function _updateFade(host) {
+  const max = host.scrollWidth - host.clientWidth;
+  if (max <= 1) { host.removeAttribute('data-fade'); return; }
+  const left = host.scrollLeft > 1;
+  const right = host.scrollLeft < max - 1;
+  host.dataset.fade = left && right ? 'both' : left ? 'left' : right ? 'right' : '';
+  if (!host.dataset.fade) host.removeAttribute('data-fade');
+}
+
+function _wireScroll(host) {
+  if (host.dataset.vtScrollWired) return;
+  host.dataset.vtScrollWired = '1';
+  host.addEventListener('scroll', () => _updateFade(host));
+  // 세로 휠만 있는 트랙패드/마우스에서도 넘친 탭에 닿을 수 있게 — 가로
+  // 스크롤이 이미 필요한 상황(deltaX가 없는 세로 휠)에서만 가로로 돌린다.
+  host.addEventListener('wheel', (e) => {
+    if (e.deltaY === 0 || e.deltaX !== 0) return;
+    if (host.scrollWidth <= host.clientWidth) return;
+    e.preventDefault();
+    host.scrollLeft += e.deltaY;
+  }, { passive: false });
+  new ResizeObserver(() => _updateFade(host)).observe(host);
+}
+
+// ── 드래그 재정렬(데스크톱) ──────────────────────────────────────────────
+// 탭 안(가운데 지점 기준)을 기준으로 앞/뒤 중 가까운 쪽에 놓인다. dragover마다
+// 매번 클래스를 다시 계산해도 탭 개수가 적어 비용이 미미하다.
+function _clearDropMarks(host) {
+  for (const el of host.querySelectorAll('.vt-wtab-drop-before, .vt-wtab-drop-after')) {
+    el.classList.remove('vt-wtab-drop-before', 'vt-wtab-drop-after');
+  }
+}
+
+function _wireDrag(el, t, host) {
+  el.draggable = true;
+  el.addEventListener('dragstart', (e) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(TAB_MIME, t.id);
+  });
+  el.addEventListener('dragover', (e) => {
+    if (!e.dataTransfer.types.includes(TAB_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const before = (e.clientX - el.getBoundingClientRect().left) < el.offsetWidth / 2;
+    _clearDropMarks(host);
+    el.classList.add(before ? 'vt-wtab-drop-before' : 'vt-wtab-drop-after');
+  });
+  el.addEventListener('dragleave', () => el.classList.remove('vt-wtab-drop-before', 'vt-wtab-drop-after'));
+  el.addEventListener('drop', (e) => {
+    if (!e.dataTransfer.types.includes(TAB_MIME)) return;
+    e.preventDefault();
+    _clearDropMarks(host);
+    const draggedId = e.dataTransfer.getData(TAB_MIME);
+    if (!draggedId || draggedId === t.id) return;
+    const before = (e.clientX - el.getBoundingClientRect().left) < el.offsetWidth / 2;
+    const tabs = getTabsWithTrees();
+    let toIndex = tabs.findIndex((x) => x.id === t.id);
+    if (!before) toIndex += 1;
+    const fromIndex = tabs.findIndex((x) => x.id === draggedId);
+    if (fromIndex < toIndex) toIndex -= 1;   // 자기 자신이 빠지며 뒤 인덱스가 하나 당겨진다
+    if (moveLayoutTab(draggedId, toIndex)) saveLayoutNow();
+  });
+}
+
 function render() {
   const host = document.getElementById(HOST);
   if (!host) return;
@@ -95,6 +168,7 @@ function render() {
   // 고를 게 없는 탭 한 줄은 세로 공간만 먹는다(레일 호스트 칩과 같은 판단).
   host.hidden = tabs.length < 2;
   host.replaceChildren();
+  _wireScroll(host);
 
   for (const t of tabs) {
     const el = document.createElement('div');
@@ -147,8 +221,13 @@ function render() {
     }
 
     el.addEventListener('click', () => { switchLayoutTab(t.id); saveLayoutNow(); });
+    _wireDrag(el, t, host);
     host.appendChild(el);
+    // 지금 활성 탭이면 넘친 목록 밖에 숨어 있을 수 있으니 보이는 자리로
+    // 끌어온다(예: 키보드로 마지막 탭까지 이동한 경우).
+    if (t.id === activeId) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  _updateFade(host);
   paintTabs();
 }
 

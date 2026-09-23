@@ -39,15 +39,28 @@ function installFakeXHR(env, calls, responder = defaultResponder) {
   class FakeXHR {
     constructor() {
       this._handlers = {};
-      this.upload = { addEventListener: (ev, cb) => { this._uploadHandlers = this._uploadHandlers || {}; this._uploadHandlers[ev] = cb; } };
+      this._uploadHandlers = {};
+      this.upload = { addEventListener: (ev, cb) => { this._uploadHandlers[ev] = cb; } };
     }
     open(method, url) { this.method = method; this.url = url; }
     setRequestHeader(k, v) { this.headers = this.headers || {}; this.headers[k] = v; }
     addEventListener(ev, cb) { this._handlers[ev] = cb; }
+    // 취소 테스트용 — 진짜 xhr처럼 abort 핸들러를 깨우고, 이미 끝난 요청은
+    // 무시한다(브라우저 계약과 같다).
+    abort() {
+      if (this._done) return;
+      this._done = true;
+      if (this._handlers.abort) this._handlers.abort();
+    }
     send(body) {
       calls.push({ url: this.url, body });
       const name = body && typeof body.get === 'function' ? (body.get('file') || {}).name : null;
+      if (this._uploadHandlers.progress) {
+        this._uploadHandlers.progress({ lengthComputable: true, loaded: 1, total: 1 });
+      }
       Promise.resolve().then(() => {
+        if (this._done) return;   // abort()가 먼저 왔다
+        this._done = true;
         const r = responder({ url: this.url, body, name, index: calls.length });
         this.status = r.status;
         this.responseText = JSON.stringify(r.json);
@@ -158,19 +171,69 @@ test('uploadFiles — 빈 입력은 요청을 만들지 않는다', async () => 
   assert.strictEqual(calls.length, 0);
 });
 
-test('uploadFiles — 첨부 패널이 vt:upload-progress로 진행 상태를 듣는다(start→done)', async () => {
+// 2026-09-23 — vt:upload-progress는 이제 "다시 그려라" 신호일 뿐 페이로드가
+// 없다(파일 상단 주석). 상태는 항상 U.uploadJobs()로 읽는다 — 이벤트가 올
+// 때마다 그 시점의 스냅샷을 기록해 phase 흐름을 검증한다.
+test('uploadFiles — 첨부 패널이 uploadJobs()로 진행 상태를 읽는다(queued→uploading→saving→done)', async () => {
   const { env, U } = await load();
   const phases = [];
-  env.window.document.addEventListener('vt:upload-progress', (e) => phases.push(e.detail.phase));
+  env.window.document.addEventListener('vt:upload-progress', () => {
+    const jobs = U.uploadJobs();
+    phases.push(jobs.length ? jobs[0].phase : 'gone');
+  });
   await U.uploadFiles([mkFile(env, 'a.txt')], { sessionId: 's', insertPath: false });
-  assert.deepStrictEqual(phases, ['start', 'done']);
+  assert.deepStrictEqual(phases, ['queued', 'uploading', 'saving', 'gone']);
 });
 
-test('uploadFiles — 실패한 파일은 error 페이즈를 쏜다(진행 행이 남지 않게)', async () => {
+test('uploadFiles — 실패한 파일은 목록에서 빠진다(진행 행이 남지 않게)', async () => {
   const { env, U, calls } = await load();
   installFakeXHR(env, calls, () => ({ status: 413, json: { error: 'file too large', max_mb: 1 } }));
-  const phases = [];
-  env.window.document.addEventListener('vt:upload-progress', (e) => phases.push(e.detail.phase));
   await U.uploadFiles([mkFile(env, 'big.bin')], { sessionId: 's', insertPath: false });
-  assert.deepStrictEqual(phases, ['start', 'error']);
+  assert.strictEqual(U.uploadJobs().length, 0);
+});
+
+test('uploadFiles — 여러 개를 올리면 나머지는 queued로 대기열에 보인다', async () => {
+  const { env, U } = await load();
+  let sawQueuedDuringFirstUpload = false;
+  env.window.document.addEventListener('vt:upload-progress', () => {
+    const jobs = U.uploadJobs();
+    if (jobs.some((j) => j.phase === 'uploading') && jobs.some((j) => j.phase === 'queued')) {
+      sawQueuedDuringFirstUpload = true;
+    }
+  });
+  await U.uploadFiles(['a.txt', 'b.txt'].map((n) => mkFile(env, n)), { sessionId: 's', insertPath: false });
+  assert.strictEqual(sawQueuedDuringFirstUpload, true);
+});
+
+test('cancelUpload — 대기 중인 파일은 아예 요청을 보내지 않는다', async () => {
+  const { env, U, calls } = await load();
+  env.window.document.addEventListener('vt:upload-progress', () => {
+    const uploading = U.uploadJobs().find((j) => j.phase === 'uploading');
+    const queued = U.uploadJobs().find((j) => j.phase === 'queued');
+    if (uploading && queued) U.cancelUpload(queued.clientId);
+  });
+  const files = ['a.txt', 'b.txt'].map((n) => mkFile(env, n));
+  const done = await U.uploadFiles(files, { sessionId: 's', insertPath: false });
+  assert.strictEqual(done.length, 1, '취소된 두 번째 파일은 요청조차 나가지 않아야 한다');
+  assert.strictEqual(calls.length, 1);
+});
+
+test('cancelUpload — 업로드 중인 파일은 abort되고 경로가 삽입되지 않는다', async () => {
+  const { env, U, calls } = await load();
+  // 진행 이벤트가 오면(=uploading으로 전환됐으면) 바로 취소한다. FakeXHR.send()가
+  // progress를 동기로 한 번 쏘므로, 이 시점엔 아직 load가 안 왔다(load는
+  // Promise.resolve().then()이라 마이크로태스크 한 틀 뒤).
+  env.window.document.addEventListener('vt:upload-progress', () => {
+    const j = U.uploadJobs().find((x) => x.phase === 'uploading' || x.phase === 'saving');
+    if (j) U.cancelUpload(j.clientId);
+  });
+  const done = await U.uploadFiles([mkFile(env, 'a.txt')], { sessionId: 's', insertPath: false });
+  assert.strictEqual(done.length, 0);
+  assert.strictEqual(U.uploadJobs().length, 0);
+});
+
+test('cancelUpload — 알 수 없는 clientId나 이미 끝난 작업은 조용히 0을 반환한다', async () => {
+  const { U } = await load();
+  assert.strictEqual(U.cancelUpload('no-such-id'), 0);
+  assert.strictEqual(U.cancelUpload('all'), 0);
 });

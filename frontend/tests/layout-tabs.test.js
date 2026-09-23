@@ -90,6 +90,38 @@ test('활성 탭을 닫으면 남은 탭으로 활성이 옮겨간다', async ()
   assert.strictEqual(S.getTabs().length, 1);
 });
 
+// 2026-09-23 — 헤더 탭 드래그 재정렬(layout/tabbar.js)의 순수 로직.
+test('moveLayoutTab — 순서를 옮기고, 활성 탭은 그대로 유지된다(id로 다시 찾는다)', async () => {
+  const { S } = await load();
+  const a = S.getActiveTabId();
+  const b = S.openLayoutTab({ worktreeId: 'wt-b', label: 'b' });
+  const c = S.openLayoutTab({ worktreeId: 'wt-c', label: 'c' });
+  // 지금 순서: [a, b, c], 활성 = c
+  assert.strictEqual(S.getActiveTabId(), c);
+
+  assert.strictEqual(S.moveLayoutTab(a, 2), true);   // [b, c, a]
+  assert.strictEqual(S.getTabs().map((t) => t.id).join(','), [b, c, a].join(','));
+  assert.strictEqual(S.getActiveTabId(), c, '옮긴 탭이 a인데 활성은 c였다 — 그대로여야 한다');
+});
+
+test('moveLayoutTab — 자기 자신 위치로 옮기면(변화 없음) false, 범위 밖 인덱스는 끝으로 clamp', async () => {
+  const { S } = await load();
+  const a = S.getActiveTabId();
+  const b = S.openLayoutTab({ worktreeId: 'wt-b', label: 'b' });
+  assert.strictEqual(S.moveLayoutTab(a, 0), false, '이미 0번이라 바뀐 게 없다');
+  assert.strictEqual(S.moveLayoutTab(a, 99), true);
+  assert.strictEqual(S.getTabs().map((t) => t.id).join(','), [b, a].join(','));
+});
+
+test('moveLayoutTab — 탭이 하나뿐이거나 없는 id면 false, 트리는 안 바뀐다', async () => {
+  const { S } = await load();
+  const only = S.getActiveTabId();
+  assert.strictEqual(S.moveLayoutTab(only, 0), false, '탭이 하나뿐이면 옮길 데가 없다');
+  const b = S.openLayoutTab({ worktreeId: 'wt-b', label: 'b' });
+  assert.strictEqual(S.moveLayoutTab('no-such-tab', 0), false);
+  assert.strictEqual(S.getTabs().map((t) => t.id).join(','), [only, b].join(','));
+});
+
 test('탭 전환은 구독자에게 알린다 — 렌더러가 다시 그려야 한다', async () => {
   const { S } = await load();
   const seen = [];

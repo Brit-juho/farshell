@@ -318,6 +318,61 @@ def test_delete_file_removes_it(client, file_state):
     assert client.delete(f"/api/files/{body['id']}").status_code == 404
 
 
+# --- 일괄 삭제 (2026-09-23) -----------------------------------------------------
+
+
+def test_bulk_delete_removes_given_ids_and_keeps_the_rest(client, file_state):
+    a = _upload_via_api(client, name="a.txt")
+    b = _upload_via_api(client, name="b.txt")
+    c = _upload_via_api(client, name="c.txt")
+    r = client.post("/api/files/delete", json={"ids": [a["id"], b["id"]]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert sorted(body["deleted"]) == sorted([a["id"], b["id"]])
+    assert body["missing"] == []
+    remaining = {x["id"] for x in client.get("/api/files").json()["items"]}
+    assert remaining == {c["id"]}
+
+
+def test_bulk_delete_reports_missing_ids_instead_of_failing(client, file_state):
+    a = _upload_via_api(client, name="a.txt")
+    r = client.post("/api/files/delete", json={"ids": [a["id"], "nope"]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["deleted"] == [a["id"]]
+    assert body["missing"] == ["nope"]
+
+
+def test_bulk_delete_rejects_empty_ids(client, file_state):
+    r = client.post("/api/files/delete", json={"ids": []})
+    assert r.status_code == 400
+
+
+def test_bulk_delete_rejects_missing_ids_field(client, file_state):
+    r = client.post("/api/files/delete", json={})
+    assert r.status_code == 400
+
+
+def test_bulk_delete_rejects_non_string_ids(client, file_state):
+    r = client.post("/api/files/delete", json={"ids": [1, 2]})
+    assert r.status_code == 400
+
+
+def test_bulk_delete_rejects_over_the_cap(client, file_state):
+    r = client.post("/api/files/delete", json={"ids": [f"id-{i}" for i in range(501)]})
+    assert r.status_code == 400
+
+
+def test_bulk_delete_does_not_require_elevation(client, file_state):
+    # 단건 삭제가 승격을 요구하지 않으므로(설계 4번 근거) 일괄도 그대로다 —
+    # 별도 비밀번호 프롬프트 없이 바로 처리돼야 한다.
+    a = _upload_via_api(client, name="a.txt")
+    r = client.post("/api/files/delete", json={"ids": [a["id"]]})
+    assert r.status_code == 200
+    assert r.json()["deleted"] == [a["id"]]
+
+
 def test_insert_types_path_without_enter(client, file_state, monkeypatch):
     body = _upload_via_api(client)
     monkeypatch.setattr(tmux_target, "session_pane", lambda name: "%3" if name == "dev" else None)

@@ -383,6 +383,22 @@ export function closeLayoutTab(tabId) {
   return true;
 }
 
+/** 탭 순서를 바꾼다(헤더 탭 바 드래그 재정렬, 데스크톱 전용 — layout/tabbar.js).
+ * toIndex는 **이동 후** 그 탭이 있어야 할 위치. 활성 탭은 id로 다시 찾으므로
+ * 순서가 바뀌어도 활성 탭 자체는 안 바뀐다. 탭이 하나거나 범위 밖이면 false. */
+export function moveLayoutTab(tabId, toIndex) {
+  const from = _tabs.findIndex((t) => t.id === tabId);
+  if (from < 0 || _tabs.length < 2) return false;
+  const activeId = _tabs[_activeTabIndex].id;
+  const clamped = Math.max(0, Math.min(toIndex, _tabs.length - 1));
+  if (clamped === from) return false;
+  const [moved] = _tabs.splice(from, 1);
+  _tabs.splice(clamped, 0, moved);
+  _activeTabIndex = _tabs.findIndex((t) => t.id === activeId);
+  _notify();
+  return true;
+}
+
 export function setTabLabel(tabId, label) {
   const t = _tabs.find((x) => x.id === tabId);
   if (!t || !label) return false;

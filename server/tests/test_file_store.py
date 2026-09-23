@@ -68,6 +68,54 @@ def test_delete_removes_meta_and_disk(store, tmp_path):
     assert store.delete(item["id"]) is False  # 이미 지워짐 → False
 
 
+# --- 일괄 삭제(2026-09-23, 첨부 탭 「선택 삭제」) -------------------------------
+
+
+def test_delete_many_removes_all_given_ids(store, tmp_path):
+    a = _upload(store, tmp_path, name="a.txt")
+    b = _upload(store, tmp_path, name="b.txt")
+    c = _upload(store, tmp_path, name="c.txt")
+    fp_a, fp_b = store.real_path_for(a["id"]), store.real_path_for(b["id"])
+    result = store.delete_many([a["id"], b["id"]])
+    assert sorted(result["deleted"]) == sorted([a["id"], b["id"]])
+    assert result["missing"] == []
+    assert not fp_a.exists()
+    assert not fp_b.exists()
+    assert store.get_item(a["id"]) is None
+    assert store.get_item(b["id"]) is None
+    assert store.get_item(c["id"]) is not None  # 나머지는 그대로
+
+
+def test_delete_many_reports_missing_ids_without_failing(store, tmp_path):
+    a = _upload(store, tmp_path, name="a.txt")
+    result = store.delete_many([a["id"], "nope-1", "nope-2"])
+    assert result["deleted"] == [a["id"]]
+    assert sorted(result["missing"]) == ["nope-1", "nope-2"]
+
+
+def test_delete_many_dedupes_repeated_ids(store, tmp_path):
+    a = _upload(store, tmp_path, name="a.txt")
+    result = store.delete_many([a["id"], a["id"]])
+    assert result["deleted"] == [a["id"]]
+    assert result["missing"] == []
+
+
+def test_delete_many_empty_list_is_a_noop(store, tmp_path):
+    a = _upload(store, tmp_path, name="a.txt")
+    result = store.delete_many([])
+    assert result == {"deleted": [], "missing": []}
+    assert store.get_item(a["id"]) is not None
+
+
+def test_delete_many_removes_share_records_with_the_file(store, tmp_path):
+    a = _upload(store, tmp_path, name="a.txt")
+    store.add_share(a["id"], "device", 3600, False)
+    assert store.get_item(a["id"])["shares"]
+    result = store.delete_many([a["id"]])
+    assert result["deleted"] == [a["id"]]
+    assert store.get_item(a["id"]) is None  # 파일과 함께 공유 레코드도 사라진다
+
+
 # --- TTL/상한 정리 순서 ---------------------------------------------------------
 
 

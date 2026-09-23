@@ -384,6 +384,29 @@ async def delete_file(file_id: str):
     return {"ok": True}
 
 
+MAX_BULK_DELETE = 500
+
+
+@router.post("/api/files/delete")
+async def delete_files(request: Request):
+    """일괄 정리(2026-09-23, 첨부 탭 「선택 삭제」) — 30일 자동 정리와 별개로
+    사용자가 직접 조건(필터 칩)으로 골라 한 번에 지우는 경로. `DELETE
+    /api/files/{id}`를 N번 부르지 않는 이유는 file_store.delete_many 주석
+    참고. 승격(require_elevated)은 **요구하지 않는다** — 단건 삭제가 이미
+    요구하지 않는데 일괄에만 걸면 단건 삭제를 반복 호출하는 것으로 그냥
+    우회된다(의미가 없다)."""
+    body = await _read_json_body(request)
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) and i for i in ids):
+        return JSONResponse({"error": "bad_request", "reason": "ids must be a non-empty list of strings"},
+                             status_code=400)
+    if len(ids) > MAX_BULK_DELETE:
+        return JSONResponse({"error": "bad_request", "reason": f"max {MAX_BULK_DELETE} ids per request"},
+                             status_code=400)
+    result = await asyncio.to_thread(file_store.delete_many, ids)
+    return {"ok": True, **result}
+
+
 @router.get("/api/files/{file_id}/path")
 async def file_path(file_id: str):
     """저장된 파일의 디스크 경로 — dock 파일 탭의 「경로 복사」(50 §4의 5개 동작 중

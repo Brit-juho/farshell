@@ -214,6 +214,32 @@ def delete(file_id: str) -> bool:
     return True
 
 
+def delete_many(file_ids: list[str]) -> dict:
+    """일괄 정리(2026-09-23, 첨부 탭 「선택 삭제」) — `delete()`를 N번 부르지
+    않는 이유: 락을 한 번만 잡고 메타데이터를 한 번만 쓴다. 이걸 N번 반복하면
+    호출 사이에 10초 폴링(files.js setPanelPoll)이 중간 상태를 읽을 수 있고,
+    락 경합도 N배가 된다. 중복 id는 한 번만 처리한다."""
+    wanted = list(dict.fromkeys(file_ids))  # 순서 보존 dedup
+    deleted: list[str] = []
+    with _locked():
+        items = _read_unlocked()
+        wanted_set = set(wanted)
+        rest = []
+        for x in items:
+            if x["id"] in wanted_set:
+                try:
+                    _real_path(x).unlink(missing_ok=True)
+                except OSError as e:
+                    logger.warning(f"파일 삭제 실패({x['id']}): {e}")
+                deleted.append(x["id"])
+            else:
+                rest.append(x)
+        if deleted:
+            _write_unlocked(rest)
+    missing = [fid for fid in wanted if fid not in deleted]
+    return {"deleted": deleted, "missing": missing}
+
+
 def _is_protected(item: dict, now: float) -> bool:
     """정리 대상에서 뺀다 — 공유 중이거나 사용자가 고정한 파일."""
     return bool(item.get("shares")) or bool(item.get("pin"))

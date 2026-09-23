@@ -399,6 +399,20 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
   .vt-fl-act.rm:focus-visible{ opacity:1; }
 }
 
+/* 2026-09-23 — 일괄 정리(설계 4번). 「선택」을 누르면 각 행 앞에 체크박스가
+   붙고 칩 줄 아래에 이 바가 뜬다. 업로드 진행 행은 선택 대상이 아니라서
+   체크박스가 안 붙는다(renderUploadingRow는 애초에 이 클래스를 안 쓴다). */
+.vt-fl-select-cb{ flex:0 0 auto; width:16px; height:16px; accent-color:var(--acc); }
+.vt-fl-row-selectable.selected{ background:var(--color-acc-surface); }
+.vt-fl-selectbar{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+  background:var(--bar); border-bottom:1px solid var(--line); flex:0 0 auto;
+}
+.vt-fl-selectbar[hidden]{ display:none; }
+.vt-fl-selectbar-count{ font:500 var(--fs-2xs) var(--mono); color:var(--sub); flex:1 1 auto; }
+#vt-fl-select-toggle.active{ background:var(--color-acc-surface); color:var(--acc-ink); }
+
 /* 경고 한 줄의 아이콘 자리 — 아이콘과 글줄의 광학 정렬. 아이콘을 baseline에
    그냥 두면 한글 글줄에서 살짝 내려앉는다. */
 .vt-set-help-warn{ display:flex; align-items:flex-start; gap:calc(var(--spacing) * 1.5); }
@@ -452,13 +466,34 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 }
 
 /* 10-shell-layout.md §4 — 워크트리 탭 바. 3단계에서 세션 탭 줄이 사라져
-   이제 상단 바의 탭은 이것 하나뿐이다: 활성 탭만 강조색 밑줄. */
+   이제 상단 바의 탭은 이것 하나뿐이다: 활성 탭만 강조색 밑줄.
+   2026-09-23 — `flex:0 0 auto; max-width:40%`는 아래 세션 탭 줄(#tabs)과
+   헤더를 나눠 쓰던 시절 값이었다(그 줄은 3단계에서 사라졌다, 위 주석).
+   지운 뒤에도 이 값만 남아서, 탭이 적을 땐 헤더 오른쪽 40%가 빈 채로
+   .spacer에 먹혔고 탭이 많을 땐 진작 스크롤이 필요한데도 숨겨진
+   스크롤바(아래)라 만질 방법이 없었다(사용자 리포트). flex:1로 열어
+   오른쪽 버튼들 앞까지 채우고, 그래도 넘치면 스크롤한다 — 넘침 여부는
+   tabbar.js가 data-fade로 알린다(아래 마스크). */
 #vt-wtabs{
-  display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); flex:0 0 auto;
-  max-width:40%; overflow-x:auto; scrollbar-width:none;
+  display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); flex:1 1 auto; min-width:0;
+  overflow-x:auto; scrollbar-width:none;
 }
 #vt-wtabs[hidden]{ display:none; }
 #vt-wtabs::-webkit-scrollbar{ display:none; }
+/* 스크롤바를 숨겼으니(위) 잘린 쪽 가장자리를 흐리게 해서 "더 있다"를
+   알린다 — tabbar.js가 스크롤 위치를 볼 때마다 data-fade를 갱신한다. */
+#vt-wtabs[data-fade="left"]{
+  -webkit-mask-image:linear-gradient(to right, transparent, #000 20px);
+  mask-image:linear-gradient(to right, transparent, #000 20px);
+}
+#vt-wtabs[data-fade="right"]{
+  -webkit-mask-image:linear-gradient(to left, transparent, #000 20px);
+  mask-image:linear-gradient(to left, transparent, #000 20px);
+}
+#vt-wtabs[data-fade="both"]{
+  -webkit-mask-image:linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+  mask-image:linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+}
 .vt-wtab{
   display:flex; align-items:center; gap:calc(var(--spacing) * 1);
   padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2); cursor:pointer; white-space:nowrap;
@@ -467,6 +502,14 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 }
 .vt-wtab:hover{ background:var(--menu-hover); color:var(--txt); }
 .vt-wtab.active{ color:var(--txt); border-bottom-color:var(--acc); }
+/* 2026-09-23 — 탭 드래그 재정렬(데스크톱, layout/tabbar.js) 중 놓일 자리 표시.
+   border-bottom과 자리가 겹치지 않게 좌/우 세로선으로 그린다. */
+.vt-wtab{ position:relative; }
+.vt-wtab-drop-before::before, .vt-wtab-drop-after::after{
+  content:''; position:absolute; top:2px; bottom:2px; width:2px; background:var(--acc);
+}
+.vt-wtab-drop-before::before{ left:-1px; }
+.vt-wtab-drop-after::after{ right:-1px; }
 .vt-wtab-name{ overflow:hidden; text-overflow:ellipsis; max-width:18ch; }
 /* 10 §4 탭 구성 — [에이전트 마크][이름][상태 dot][읽지 않음][닫기].
    빈 칸이 자리를 먹지 않게 :empty를 접는다(마크는 에이전트가 없으면 비고,
