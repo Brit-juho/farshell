@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 import pytest
 from starlette.testclient import TestClient
@@ -207,6 +208,87 @@ def test_agy_toggle_round_trip(client):
     # 조회에도 그대로 반영된다 — 저장된 상태가 아니라 파일을 다시 읽기 때문.
     servers = client.get("/api/mcp").json()["servers"]
     assert [s["enabled"] for s in servers if s["tool"] == "agy"] == [False]
+
+
+# --------------------------------------------------- 토글 배치 (P3-1, ADR-37)
+
+def test_toggle_batch_requires_elevation(client):
+    _login(client)
+    r = client.post("/api/mcp/toggle-batch", json={
+        "tool": "claude", "worktree": "wt1",
+        "changes": [{"name": "g", "enabled": False}],
+    })
+    assert r.status_code == 401
+
+
+def test_toggle_batch_writes_after_elevation(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"a": {"command": "x"}, "b": {"command": "y"}},
+                          "projects": {}})
+    r = client.post("/api/mcp/toggle-batch", json={
+        "tool": "claude", "worktree": "wt1",
+        "changes": [{"name": "a", "enabled": False}, {"name": "b", "enabled": False}],
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert {res["name"] for res in body["results"]} == {"a", "b"}
+    entry = _read_claude(client)["projects"][str(client.vt_repo)]
+    assert sorted(entry["disabledMcpServers"]) == ["a", "b"]
+
+
+def test_toggle_batch_reports_partial_ok_false(client):
+    _elevate(client)
+    _write_claude(client, {"projects": {}})
+    r = client.post("/api/mcp/toggle-batch", json={
+        "tool": "claude", "worktree": None,  # 워크트리 없음 → claude는 이 항목만 실패
+        "changes": [{"name": "a", "enabled": False}],
+    })
+    body = r.json()
+    assert body["ok"] is False
+    assert body["results"][0]["status"] == "failed"
+
+
+def test_toggle_batch_invalid_tool_is_400(client):
+    _elevate(client)
+    r = client.post("/api/mcp/toggle-batch",
+                    json={"tool": "nope", "changes": [{"name": "a", "enabled": False}]})
+    assert r.status_code == 400 and r.json()["error"] == "invalid_tool"
+
+
+def test_toggle_batch_missing_changes_is_400(client):
+    _elevate(client)
+    r = client.post("/api/mcp/toggle-batch", json={"tool": "claude"})
+    assert r.status_code == 400 and r.json()["error"] == "missing_changes"
+
+
+def test_toggle_batch_empty_changes_is_400(client):
+    _elevate(client)
+    r = client.post("/api/mcp/toggle-batch", json={"tool": "claude", "changes": []})
+    assert r.status_code == 400 and r.json()["error"] == "missing_changes"
+
+
+def test_toggle_batch_over_the_cap_is_400(client):
+    _elevate(client)
+    changes = [{"name": f"s{i}", "enabled": False} for i in range(65)]
+    r = client.post("/api/mcp/toggle-batch", json={"tool": "claude", "changes": changes})
+    assert r.status_code == 400 and r.json()["error"] == "batch_too_large"
+
+
+def test_toggle_batch_non_boolean_enabled_is_rejected(client):
+    _elevate(client)
+    r = client.post("/api/mcp/toggle-batch", json={
+        "tool": "claude", "changes": [{"name": "a", "enabled": "false"}],
+    })
+    assert r.status_code == 400 and r.json()["error"] == "invalid_enabled"
+
+
+def test_toggle_batch_missing_change_name_is_400(client):
+    _elevate(client)
+    r = client.post("/api/mcp/toggle-batch", json={
+        "tool": "claude", "changes": [{"enabled": False}],
+    })
+    assert r.status_code == 400 and r.json()["error"] == "missing_name"
 
 
 # ------------------------------------------------------------ 그룹 태그 (2단계)
@@ -522,3 +604,83 @@ def test_plugin_toggle_validates_input(client):
                        json={"enabled": True}).json()["error"] == "missing_name"
     assert client.post("/api/mcp/plugins/toggle",
                        json={"name": "p@m", "enabled": "true"}).json()["error"] == "invalid_enabled"
+
+
+# ------------------------------------------------------------- 검증(P3-2)
+
+_STUB_MINIMAL = """
+import sys, json
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    msg = json.loads(line)
+    method = msg.get("method")
+    if method == "initialize":
+        resp = {"jsonrpc": "2.0", "id": msg["id"],
+                "result": {"protocolVersion": "2024-11-05", "capabilities": {},
+                           "serverInfo": {"name": "stub", "version": "0"}}}
+        sys.stdout.write(json.dumps(resp) + "\\n"); sys.stdout.flush()
+    elif method == "notifications/initialized":
+        continue
+    elif method == "tools/list":
+        resp = {"jsonrpc": "2.0", "id": msg["id"], "result": {"tools": [{"name": "a"}]}}
+        sys.stdout.write(json.dumps(resp) + "\\n"); sys.stdout.flush()
+"""
+
+
+def test_verify_requires_elevation(client):
+    _login(client)
+    r = client.post("/api/mcp/servers/global/n/verify", json={"tool": "claude"})
+    assert r.status_code == 401 and r.json()["error"] == "elevation_required"
+
+
+def test_verify_stdio_reports_connected(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"n": {
+        "command": sys.executable, "args": ["-c", _STUB_MINIMAL]}}})
+    r = client.post("/api/mcp/servers/global/n/verify", json={"tool": "claude"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["state"] == "connected"
+    assert body["tool_count"] == 1
+
+
+def test_verify_unknown_server_is_404(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {}})
+    r = client.post("/api/mcp/servers/global/nope/verify", json={"tool": "claude"})
+    assert r.status_code == 404
+
+
+def test_verify_invalid_scope_is_400(client):
+    _elevate(client)
+    r = client.post("/api/mcp/servers/weird/n/verify", json={"tool": "claude"})
+    assert r.status_code == 400
+
+
+def test_verify_invalid_tool_is_400(client):
+    _elevate(client)
+    r = client.post("/api/mcp/servers/global/n/verify", json={"tool": "not-a-tool"})
+    assert r.status_code == 400
+
+
+def test_verify_http_without_confirmation_is_rejected(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"n": {"url": "https://e.example/mcp"}}})
+    r = client.post("/api/mcp/servers/global/n/verify", json={"tool": "claude"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["state"] == "error"
+    assert "확인" in body["error"]
+
+
+def test_verify_never_leaks_env_values(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"n": {
+        "command": sys.executable,
+        "args": ["-c", "import sys; sys.stderr.write('sk-should-never-appear'); sys.exit(1)"],
+        "env": {"TOKEN": "sk-should-never-appear"},
+    }}})
+    r = client.post("/api/mcp/servers/global/n/verify", json={"tool": "claude"})
+    assert "sk-should-never-appear" not in r.text

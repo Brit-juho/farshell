@@ -14,7 +14,6 @@ API가 절대경로를 그대로 받아 fsguard 없이 `is_relative_to` 하나�
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import logging
@@ -24,6 +23,9 @@ import secrets
 import time
 from contextlib import contextmanager
 from pathlib import Path
+
+import store_lock
+import vt_paths
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,10 @@ LEGACY_UPLOAD_DIR = Path(os.environ.get("VT_RUN_DIR", "/tmp")) / "vt-uploads"
 
 
 def _state_dir() -> Path:
-    return Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()
+    # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
+    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    return vt_paths.state_dir()
 
 
 def files_dir() -> Path:
@@ -68,16 +73,8 @@ def _locked():
     fd_dir = files_dir()
     fd_dir.mkdir(parents=True, exist_ok=True)
     _chmod_quiet(fd_dir, 0o700)
-    lp = _lock_path()
-    fd = os.open(str(lp), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with store_lock.exclusive(_lock_path()):
         yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 def _read_unlocked() -> list[dict]:

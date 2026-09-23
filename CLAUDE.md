@@ -63,7 +63,7 @@ is expensive to rediscover.
 | Area | What lives there | Document |
 |------|------------------|----------|
 | Auth, devices, boundary values | Password login, device registration + OTP, one-time tickets, cross-site blocking, the machine token, and why config-file values beat stale environment variables | [`docs/ref/auth.md`](./docs/ref/auth.md) |
-| Terminal, panes, shell surface | tmux sessions, split panes, rail + palette, scrollback (+persistence), paste, kitty keys, themes, clipboard | [`docs/ref/terminal.md`](./docs/ref/terminal.md) |
+| Terminal, panes, shell surface | tmux sessions, split panes, rail + palette, scrollback, paste, kitty keys, themes, clipboard | [`docs/ref/terminal.md`](./docs/ref/terminal.md) |
 | Agent state, queue, MCP | Claude Code hooks, `idle`/`working`/`waiting`/`done`, approval detection and its coverage, prompt queue, snippets, usage gauge, MCP servers | [`docs/ref/agents.md`](./docs/ref/agents.md) |
 | Files, sharing, code viewer | Upload store, share links, the read-only viewer and `fsguard`'s three layers | [`docs/ref/files.md`](./docs/ref/files.md) |
 | Tunnels, ports, remote access | `VT_TUNNEL_PROVIDER` (cloudflare/ngrok/none), extra ports, URL-change hook, zombie-reconnect watchdog, Tailscale, port dashboard | [`docs/ref/tunnel.md`](./docs/ref/tunnel.md) |

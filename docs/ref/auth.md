@@ -2,6 +2,82 @@
 
 > `CLAUDE.md`의 영역 색인에서 갈라져 나온 문서다(2026-09-18). 이 영역을 만지기 전에 읽는다.
 
+## Authorization order (P2-5, ADR-42)
+
+There are seven layers and, until this section, no document said what order they run
+in — each layer's own reasoning was well-commented, but the relationship *between*
+layers wasn't written anywhere. Three symptoms already showed why that's a problem:
+the same "this bypasses standard auth, but X does its own check" justification was
+written out **three separate times** in `server/main.py`'s exception list (once each
+for `/s/`, `/p/authorize`, `/api/peer/`); which transport (HTTP/WS) each layer covers
+was nowhere but the source; and the two exception lists (token auth vs. IP filter)
+differ from each other in a way that's a deliberate defense-in-depth choice, not
+something a reader could tell from just reading the code.
+
+**Starlette runs the *last*-registered middleware outermost** (`add_middleware`
+prepends to `user_middleware`), so execution order is the **reverse** of the
+registration order in `main.py`.
+
+| # | Layer | Transport | Decides | Implementation | On failure |
+|---:|---|---|---|---|---|
+| 1 | Origin guard `OriginGuardMiddleware` <!-- mw --> | HTTP + WS | Is the request's origin this server itself? No `Origin` header (non-browser) passes; `""`/`"null"` (opaque origin) is rejected | `server/main.py`, `OriginGuardMiddleware` | 403 `cross_origin` |
+| 2 | CORS (opt-in) `CORSMiddleware` <!-- mw:cors --> | HTTP | Is this an explicitly allowed external origin? If `_allowed_origins()` is empty, **this layer doesn't exist at all** | `server/main.py` (conditional `add_middleware`) | Browser can't read the response body |
+| 3 | Token auth `TokenAuthMiddleware` <!-- mw --> | **HTTP only** | Is the session cookie / `?token=` / `Bearer` valid? If `auth.is_protected()` is false, everyone passes | `server/main.py`, `TokenAuthMiddleware` → `auth.check_request` | 401 `unauthorized` |
+| 3′ | WS handshake auth | **WS only** | Same question as #3, done by the route itself at handshake time + a separate expiry re-check | route-level `_ws_auth` (e.g. `routes/pty.py`) | Handshake refused |
+| 4 | Network access `NetworkAccessMiddleware` <!-- mw --> | HTTP + WS | Does the client IP fall inside `VT_NETWORK_MODE`'s CIDR ranges? | `server/main.py`, `NetworkAccessMiddleware` | 403 `ip_not_allowed` |
+| 5 | Device + OTP | Login time | Is this a registered device? Does the TOTP code match? **Not a middleware** — checked directly by login and a few routes | `server/auth/devices.py`, `server/auth/totp.py` | Login refused / per-route |
+| 6 | Per-resource verification | The route itself | Share-link token signature/expiry/mode · port PIN · port session · peer HMAC + time window + nonce | `routes/share.py`, `routes/system.py` (`/p/authorize`), `routes/peer.py` | Per-route |
+| 7 | File boundary (`fsguard`) | The route itself | Root resolution → `resolve()` + `is_relative_to` → deny list | `server/fsguard.py` (3 layers) | 403 / 404 |
+| 8 | Dangerous command (`safe_mode`) | PTY input · queue | Does it match a dangerous pattern? Only when `VT_SAFE_MODE=1` | `server/safe_mode.py` | Input blocked / queue `blocked` |
+| 9 | Elevated session | The route itself | Git-account writes etc. require re-confirming the password (ADR-22) | `server/auth/__init__.py`, `require_elevated` | Elevation required |
+
+**Every layer is an AND gate. A later layer can only make the result stricter, never
+undo what an earlier layer blocked.** Passing one layer only answers that layer's
+question — it is not a universal bypass. Two things follow directly:
+
+- **Adding a path to an exception list turns that layer off for that path.** Don't add
+  one without writing, in the table below, which numbered layer it turns off and what
+  takes its place.
+- **A route that only exercises part of the chain (WS) still keeps the same relative
+  order.** #3′ *replaces* #3, it doesn't skip past it — a change to #3's logic needs the
+  same check applied to #3′.
+
+### Exceptions — what's turned off, and what takes its place
+
+| Path(s) | Layer(s) off | Layer(s) still applied | What replaces the missing layer |
+|---|---|---|---|
+| `/`, `/sw.js`, `/manifest.json`, `/favicon.ico` | 3, 4 (HTTP) | 1 | Nothing — this is the login gate itself, it has to render unauthenticated |
+| `/static/*` | 3, 4 (HTTP) | 1 | Nothing — static assets |
+| `/api/auth`, `/api/auth/status`, `/api/auth/logout` | 3 | 1, 4 | These routes **are** the authentication mechanism |
+| `/s/{token}` | 3 | 1, 4 | `routes/share.py` verifies the share token's signature, expiry and mode (device/pin) directly |
+| `/p/authorize` | 3 | 1, 4 | `routes/system.py` checks session + device directly. On failure it redirects to `/?next=` rather than a JSON 401 — this is a top-level navigation, not an API call |
+| `/api/peer/*` | 3 | 1, 4 | `routes/peer.py` verifies HMAC signature, time window and nonce replay directly. **A peer can only ever reach routes in that one file** |
+
+The single most useful line in that table: **nothing turns off layer 4 (the IP
+filter).** Right now that fact only exists as the difference between two exception
+lists that a reader has to diff by hand.
+
+### Two things this table makes visible (observed, not fixed here)
+
+Writing the table down is the point — these two are visible now. Neither is a
+vulnerability, and neither is being changed in this pass; they're recorded as
+footnotes for whoever picks this up next.
+
+**The cheapest gate sits innermost.** The IP filter (#4) runs *after* token auth (#3).
+Both are AND gates so the end result is the same, but the path there differs: a
+disallowed IP with no token gets a **401**, not a 403 — that response tells the
+client "auth is turned on here" before the IP filter ever gets a say, and a
+disallowed IP's request still runs the full session/HMAC check before being rejected.
+Reordering them isn't done here without a reason — `/`/`/static`'s exception handling
+would need to move in lockstep, and that changes what the login screen does before
+anyone's looked closely at it.
+
+**#3 and #3′ implement the same check twice.** HTTP re-runs `check_request` on every
+request via the middleware; WS checks once at handshake plus a separate expiry
+re-check. The 24-hour session hole described just below came directly out of this
+duplication — whoever next adds a condition to #3 has to remember #3′ exists and
+needs the same condition, because it's a replacement for #3, not a shortcut around it.
+
 ## Features
 
 | Feature | Description |

@@ -494,7 +494,11 @@ function renderServer(group, facts, tags, data) {
     row.appendChild(toggleButton(entry, facts));
 
     if (entry.transport && entry.transport !== 'unknown') {
-      row.appendChild(el('span', 'vt-mcp-meta', entry.transport));
+      // P2-2(ADR-35) — 서버가 이제 선언된 transport 값을 그대로 돌려준다
+      // (stdio/sse/http, 또는 우리가 모르는 값). `unknown`(정보 없음)과
+      // 우리가 모르는 선언값은 사용자에게 다른 말이라 구분한다.
+      const known = entry.transport === 'stdio' || entry.transport === 'sse' || entry.transport === 'http';
+      row.appendChild(el('span', 'vt-mcp-meta', known ? entry.transport : `모르는 전송: ${entry.transport}`));
     }
     if (entry.auth_status === 'not_logged_in') {
       const auth = el('span', 'vt-mcp-meta vt-mcp-authwarn', '로그인 필요');

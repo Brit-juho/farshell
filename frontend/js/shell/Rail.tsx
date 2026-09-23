@@ -336,6 +336,7 @@ function Rail(props: { deps: RailDeps }) {
         changed: info?.changed ?? null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
+        promptId: detail?.promptId ?? null,
         agent: agentNames()[t.name] ?? null,
         branch: info?.branch ?? null,
         isMainWorktree: info?.isMain ?? false,

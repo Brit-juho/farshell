@@ -80,6 +80,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: requirements-core.txt
+      # P2-3(ADR-38) — check_api_contract가 `server/main.py`를 프로세스 안에서
+      # 임포트해 FastAPI openapi 스펙을 꺼낸다. fastapi가 없으면 임포트가
+      # 실패해 "스킵 + 경고"로만 떨어지고(app_openapi의 계약) 이 검사 전체가
+      # 조용히 장식이 된다 — 그래서 이 잡도 core를 설치한다.
+      - run: pip install -r requirements-core.txt
       - name: 문서 일관성 검사 (I3)
         run: python3 scripts/check_docs.py --strict
 

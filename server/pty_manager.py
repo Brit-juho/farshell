@@ -32,7 +32,6 @@ from typing import Callable, Optional
 
 import input_mode
 import paste_prepare
-import scrollback_persist
 import tmux_paste
 
 logger = logging.getLogger(__name__)
@@ -120,6 +119,13 @@ class PTYSession:
     rows: int = 24
     # [C1] broadcast: 여러 subscriber에 데이터 전달
     _subscribers: set = field(default_factory=set, repr=False)  # set[Callable[[bytes], None]]
+    # P3-3(60-observability.md §1) — 예외로 떨어뜨린 구독자 누적 수 + 마지막
+    # 시각. 예전엔 `dead.add(cb)` 후 조용히 집합에서 뺄 뿐 아무 데도 안 셌다.
+    # 「E2E 스모크 17번째 붕괴」가 바로 이 broadcast 경로의 포화(이벤트 루프
+    # 정지)였다 — 증상이 보이는 데까지 시간이 걸린 전례가 있어, crush의
+    # dropCount 노출(Publish/PublishMustDeliver)과 같은 이유로 센다.
+    dropped_subscribers: int = 0
+    last_drop_at: float = 0.0
     # S2: loop.add_reader로 등록된 상태인지 — pause/resume/destroy가 중복
     # add_reader/remove_reader를 호출하면 asyncio가 예외를 던지므로 가드용.
     _reader_registered: bool = field(default=False, repr=False)
@@ -594,16 +600,20 @@ class PTYManager:
 
         # scrollback에 저장 (바이트 예산으로 트리밍)
         self._append_scrollback(session, data)
-        # N13 — 옵트인 디스크 영속화. 입력(session.write)이 아니라 출력 스트림
-        # 여기서만 호출하므로 비밀번호 타이핑 등 입력은 절대 로그에 안 남는다.
-        scrollback_persist.append(session_id, data)
         # broadcast to all subscribers
         dead = set()
         for cb in list(session._subscribers):
             try:
                 cb(data)
-            except Exception:
+            except Exception as e:
                 dead.add(cb)
+                session.dropped_subscribers += 1
+                session.last_drop_at = time.time()
+                # 예외 타입만 남긴다 — data(터미널 출력)는 로그에 절대 안 싣는다.
+                logger.warning(
+                    f"session {session_id}: 구독자 콜백이 {e.__class__.__name__}로 끊김 "
+                    f"(누적 {session.dropped_subscribers})"
+                )
         session._subscribers -= dead
 
     def destroy_session(self, session_id: str) -> None:

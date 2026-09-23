@@ -16,11 +16,16 @@ import os
 import time
 from pathlib import Path
 
+import vt_paths
+
 logger = logging.getLogger(__name__)
 
 
 def _state_dir() -> Path:
-    return Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()
+    # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
+    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    return vt_paths.state_dir()
 
 
 def _chmod_quiet(p: Path, mode: int) -> None:
@@ -34,7 +39,8 @@ def _chmod_quiet(p: Path, mode: int) -> None:
 
 # 공유 링크(routes/share.py)가 실패를 logger.warning으로만 남기는 것과 달리, 이쪽은
 # 성공까지 전부 남긴다 — 나중에 "저 맥이 언제 뭘 봤나"를 되짚을 수 있어야 하기 때문.
-# 한 줄 JSON(JSONL) — 회전은 scrollback_persist와 같은 방식으로 단순하게.
+# 한 줄 JSON(JSONL) — 회전은 단순하게: AUDIT_MAX_BYTES를 넘으면 `.log.1`로 한 세대만
+# 밀어내고(기존 `.1`은 버림), 무한정 쌓이는 걸 막는다.
 
 AUDIT_MAX_BYTES = 5 * 1024 * 1024
 

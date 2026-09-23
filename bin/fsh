@@ -2979,6 +2979,15 @@ PYEOF
     _check "fzf" warn "fzf 미설치 — 'fsh attach' 시 텍스트 입력만 가능"
   fi
 
+  # 20. ADR-43(2.3.0) — 스크롤백 영속화 제거 잔여 로그. 서버가 기동할 때마다
+  # 1회 정리하지만(main.py), 서버를 안 띄운 채 업그레이드했거나 그 정리가
+  # 실패했을 경우를 위한 안전망.
+  if [ -d "$HOME/.vt/scrollback" ]; then
+    _check "스크롤백 잔여 로그" warn "~/.vt/scrollback/ 에 옛 로그가 남아 있습니다 (2.3.0에서 제거된 기능) — 정리: rm -rf ~/.vt/scrollback"
+  else
+    _check "스크롤백 잔여 로그" ok "없음"
+  fi
+
   echo ""
   echo "  결과: ✓ $ok  ⚠ $warn  ✗ $fail"
   echo ""

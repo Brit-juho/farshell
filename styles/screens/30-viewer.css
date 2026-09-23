@@ -343,6 +343,81 @@ body.vt-resizing #terminal-container{ transition:none; }
    리프로 다시 쓰이면서 모드 개념 자체가 사라졌고 CSS만 남았다. 지운다. */
 
 /* -------------------------------------------------------------------------
+   ADR-44 — 파일 뷰어 오버레이(panels/viewer/overlay.js). #terminal-container 안에
+   붙어 터미널 영역만 덮는다. 바깥은 클릭이 통과한다 — 코드를 띄운 채 터미널에
+   입력할 수 있어야 한다. 터미널을 밀어내는 규칙(옛 body.vt-docked 같은 것)은
+   만들지 않는다 — 그게 이 작업이 없애려는 리플로우 자체다.
+   z-index 20: 컨테이너 안 기존 최고값(드롭 오버레이 9) 위, body의 fixed 레이어 아래.
+   ------------------------------------------------------------------------- */
+.vt-file-overlay{ position:absolute; inset:0; z-index:20; pointer-events:none; }
+.vt-file-overlay > .vt-viewer-card{
+  position:absolute; pointer-events:auto;
+  max-height:none; box-shadow:var(--shadow-e2);
+}
+.vt-file-overlay.surface-sheet > .vt-viewer-card{
+  top:0; left:0; right:0; width:auto;
+  /* %는 컨테이너 높이 기준이다. vh는 topbar·하단 내비를 뺀 실제 높이와 어긋난다. */
+  height:var(--vt-sheet-h, 45%); min-height:120px;
+  border-radius:0; border-width:0 0 1px 0;
+}
+/* 값은 overlay.js가 px로 넣는다. fallback은 JS가 넣기 전 한 프레임용 기본 사각형(오른쪽 위). */
+.vt-file-overlay.surface-float > .vt-viewer-card{
+  left:var(--vt-file-x, calc(45% - 24px)); top:var(--vt-file-y, 24px);
+  width:var(--vt-file-w, 55%); height:var(--vt-file-h, 70%);
+}
+.vt-file-overlay.surface-float .vt-viewer-head{ cursor:grab; touch-action:none; }
+.vt-file-overlay.surface-float.dragging .vt-viewer-head{ cursor:grabbing; }
+.vt-file-overlay.dragging .vt-viewer-card{ user-select:none; }
+
+.vt-file-title{ flex:1; min-width:0; display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); }
+.vt-file-name{ font:600 var(--fs-sm) var(--ui); white-space:nowrap; }
+.vt-file-dir{
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:400 var(--fs-2xs) var(--mono); color:var(--sub);
+}
+
+.vt-file-grip, .vt-file-corner{ display:none; }
+.vt-file-overlay.surface-sheet .vt-file-grip{
+  display:block; position:absolute; left:0; right:0; bottom:0; height:8px;
+  cursor:row-resize; touch-action:none;
+}
+.vt-file-overlay.surface-sheet .vt-file-grip::after{
+  content:''; position:absolute; left:50%; bottom:2px; width:36px; height:3px;
+  transform:translateX(-50%); border-radius:2px;
+  background:color-mix(in srgb, var(--sub) 45%, transparent);
+}
+.vt-file-overlay.surface-sheet .vt-file-grip:hover::after,
+.vt-file-overlay.surface-sheet .vt-file-grip.dragging::after{ background:var(--acc); }
+.vt-file-overlay.surface-float .vt-file-corner{
+  display:block; position:absolute; right:0; bottom:0; width:14px; height:14px;
+  cursor:nwse-resize; touch-action:none;
+}
+.vt-file-overlay.surface-float .vt-file-corner::after{
+  content:''; position:absolute; right:3px; bottom:3px; width:7px; height:7px;
+  border-right:2px solid var(--line); border-bottom:2px solid var(--line);
+}
+.vt-file-overlay.surface-float .vt-file-corner:hover::after{ border-color:var(--acc); }
+/* 가로로 돌린 폰·태블릿은 compact 경계를 넘어 이 표면을 쓴다. 보이는 모양은 그대로 두고
+   잡는 영역만 24px로 넓힌다. */
+@media (pointer:coarse){
+  .vt-file-overlay.surface-sheet .vt-file-grip{ height:24px; }
+  .vt-file-overlay.surface-float .vt-file-corner{ width:24px; height:24px; }
+}
+
+/* compact(<720px)은 표면과 무관하게 전체화면 시트다. 위의 max-width:560px 바텀시트
+   규칙은 compact 경계(720px)보다 좁아서, 560~720px에서는 뷰어만 따로 펴 준다. */
+.vt-file-compact .vt-file-topane{ display:none; }
+@media (max-width:719.98px){
+  .vt-viewer-backdrop.vt-file-compact{ align-items:flex-end; padding:0; }
+  .vt-viewer-backdrop.vt-file-compact > .vt-viewer-card{
+    width:100%; height:100vh; height:100dvh; max-height:none;
+    border-radius:0; border:none;
+    animation:vtSheetIn .18s ease-out;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+}
+
+/* -------------------------------------------------------------------------
    계층 트리 + 2단 분할 (dock/full 전용) — 좌측 트리, 우측 코드/diff가 동시에 보인다.
    sheet(폰)는 폭이 없어 트리 → 코드 전환 방식을 그대로 쓴다(분할 안 함).
    ------------------------------------------------------------------------- */

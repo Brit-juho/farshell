@@ -82,6 +82,23 @@ curl -s -X PATCH "http://localhost:7777/api/sessions/$SID" \
 # 7. Scrollback test — check that previous output is visible after a browser refresh
 ```
 
+### Storage locking
+
+디스크에 쓰는 저장소(`queue_store`·`snippet_store`·`mcp_catalog`·`workspace` 등
+12곳 + `workspace.py`)는 전부 `server/store_lock.py` 하나를 통해 flock을 잡는다
+(2026-09-23, `docs/plan-2.3/20-store-durability.md` P1-2). 전체 규약과 근거는
+그 파일의 모듈 docstring에 있다 — 요점만: **기한 있는 대기**(기본 5초, `async def`
+라우트에서 동기로 불리므로 무기한 대기는 서버 전체를 세운다)와 **락 파일을
+절대 지우지 않는다**(inode가 아니라 경로로 다시 열면 상호배제가 깨진다).
+
+감사 명령(락 파일을 지우는 코드가 없는지):
+
+```bash
+grep -rn "lock" --include='*.py' server | grep -iE "unlink|remove|rmtree"
+```
+
+빈 결과가 정상이다. 2026-09-23 마지막 실행 — 위반 0건.
+
 ### Installing for new users
 
 **The default path is `./install.sh`** (one-line installer, added 2026-04-14). The steps below are only for when interactive guidance is needed.

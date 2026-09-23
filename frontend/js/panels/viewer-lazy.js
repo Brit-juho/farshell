@@ -10,6 +10,7 @@
 // 소비처는 정적 import를 쓰면 안 된다 — 정적 import는 그 모듈을 참조하는
 // 쪽의 청크에 도로 끌어들인다(N34 커밋에서 core/*가 복제됐던 함정).
 import { registerAction, getAction } from '../core/dom.js';
+import { get as getSetting } from '../core/settings.js';
 import { openViewerPane } from '../layout/store.js';
 
 let _loading = null;
@@ -23,7 +24,8 @@ export function loadViewer() {
   return _loading;
 }
 
-/** 파일을 페인으로 연다 — 모달 뷰어를 대체한 유일한 경로(§6). */
+/** 파일을 **페인**으로 연다. 표면 설정과 무관하다 — 「새 pane에 열기」·「페인으로」 버튼처럼
+ * 정말로 pane을 원하는 자리가 쓴다(ADR-44). */
 export function openFileInPane(path) {
   if (!path) return;
   // 온보딩(세션 0개 안내)은 position:fixed + z-index:500이라 페인 위를 덮는다.
@@ -32,6 +34,21 @@ export function openFileInPane(path) {
   document.getElementById('onboarding')?.remove();
   loadViewer().then((v) => v._pushRecent(path)).catch(() => {});
   openViewerPane(path);
+}
+
+/** 파일 열기의 기본 진입점. `viewer.surface`에 따라 오버레이(sheet/float) 또는 페인으로 연다. */
+export function openFile(path) {
+  if (!path) return;
+  if (getSetting('viewer.surface') === 'pane') { openFileInPane(path); return; }
+  document.getElementById('onboarding')?.remove();
+  loadViewer().then((v) => v._pushRecent(path)).catch(() => {});
+  import('./viewer/overlay.js')
+    .then((m) => m.openFileOverlay(path))
+    .catch((e) => {
+      // 지연 청크를 못 받았을 때 클릭이 아무 일도 안 한 것처럼 보이면 안 된다.
+      console.error('[FarShell viewer]', e);
+      openViewerPane(path);
+    });
 }
 
 // 「파일」 진입점(레일 ⋯ · 키맵 Ctrl+Shift+E · 팔레트 명령)은 이제 **팔레트**를
@@ -78,3 +95,4 @@ registerAction('dir.show', () => {
 // registerAction(무인자 계약)에는 안 맞고, 실브라우저 스모크와 향후 팔레트
 // 파일 모드(60 §3)가 같은 경로를 쓴다.
 window.openFileInPane = openFileInPane;
+window.openFile = openFile;

@@ -9,7 +9,7 @@
 // 컴파일러/린터/git 출력에 흔한 `:줄:열` 접미사는 인식한다.
 import { getSession } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
-import { openFileInPane } from '../panels/viewer-lazy.js';
+import { openFile } from '../panels/viewer-lazy.js';
 
 const _URL_RE = /https?:\/\/[^\s<>"'\)\]]+/g;
 const _PATH_RE = /(?:\.{0,2}\/(?:[\w.\-]+\/)*[\w.\-]+\.\w{1,10}|(?:[\w.\-]+\/)+[\w.\-]+\.\w{1,10})(?::\d+(?::\d+)?)?/g;
@@ -50,8 +50,8 @@ async function _openLinkAsPath(id, rawText) {
     const cwd = await _getSessionCwd(id);
     if (cwd) full = cwd.replace(/\/$/, '') + '/' + full;
   }
-  // N35 §6 — 모달 코드 뷰어가 사라져서 파일은 **페인**으로 연다.
-  openFileInPane(full);
+  // ADR-44 — 표면 설정(sheet/float/pane)에 따라 연다.
+  openFile(full);
 }
 
 export function wireLinks(id, term) {

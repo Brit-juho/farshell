@@ -61,6 +61,9 @@ export interface AgentDetail {
   tool: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
+  /** P1-1(ADR-33) — 서버 `agent_status.py`의 `prompt_id`. 승인 응답 경쟁을
+   * 막는 토큰(rail-data.ts의 `RailRowInput.promptId` 참고). */
+  promptId: string | null;
 }
 
 /** tmux 세션 이름 → 떠 있는 CLI. 헤더 탭(layout/tabbar.js)이 쓰던 것과 **같은
@@ -88,6 +91,7 @@ export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, 
       tool: (entry as any).tool || (entry as any).last_tool || null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
+      promptId: (entry as any).prompt_id ?? null,
     };
   }
   return out;

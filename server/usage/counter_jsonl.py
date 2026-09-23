@@ -23,7 +23,6 @@ append-only라 read-modify-write 경쟁은 없지만, 두 프로세스가 동시
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import time
@@ -31,6 +30,9 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+import store_lock
+import vt_paths
 
 MAX_MODEL_LEN = 80
 MAX_TOKENS = 100_000_000       # 한 이벤트당 상한 — 오기입 방어(예: 초당 토큰을 누적으로 착각)
@@ -41,7 +43,10 @@ SPARKLINE_DAYS = 7
 
 
 def _state_dir() -> Path:
-    return Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()
+    # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
+    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    return vt_paths.state_dir()
 
 
 def _path() -> Path:
@@ -60,15 +65,8 @@ def _locked():
         os.chmod(d, 0o700)
     except OSError:
         pass
-    fd = os.open(str(_lock_path()), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with store_lock.exclusive(_lock_path()):
         yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 def _day(ts: float) -> str:

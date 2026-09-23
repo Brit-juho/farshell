@@ -34,7 +34,6 @@ SSH 키는 이 셋 중 무엇도 못 한다.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import hmac
 import json
@@ -45,6 +44,9 @@ import socket
 import time
 from contextlib import contextmanager
 from pathlib import Path
+
+import store_lock
+import vt_paths
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,10 @@ LABEL_MAX_LEN = 60
 
 
 def _state_dir() -> Path:
-    return Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()
+    # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
+    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    return vt_paths.state_dir()
 
 
 def _path() -> Path:
@@ -87,15 +92,8 @@ def _locked():
     d = _state_dir()
     d.mkdir(parents=True, exist_ok=True)
     _chmod_quiet(d, 0o700)
-    fd = os.open(str(_lock_path()), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with store_lock.exclusive(_lock_path()):
         yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 def _read_unlocked() -> dict:

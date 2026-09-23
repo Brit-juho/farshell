@@ -246,3 +246,55 @@ test('theme.skin은 전역 스코프다 — 스킨은 모든 기기에서 같아
   assert.strictEqual(puts.length, 1);
   assert.doesNotMatch(puts[0].url, /device-settings/, puts[0].url);
 });
+
+// ADR-44 — 파일 뷰어 표면·시트 높이·창 위치는 기기 스코프다. 폰에서 고른 표면이나
+// 외부 모니터에서 옮겨 둔 창 위치가 맥 화면까지 따라 바뀌면 안 된다.
+test('viewer.* 3키는 기기 스코프로 저장된다', async () => {
+  const cases = [
+    ['viewer.surface', 'float'],
+    ['viewer.sheet.height', 60],
+    ['viewer.float.rect', '{"x":10,"y":10,"w":400,"h":300}'],
+  ];
+  for (const [key, value] of cases) {
+    const { S, calls } = await load();
+    assert.strictEqual(S.scopeOf(key), 'device', key);
+    calls.length = 0;
+    await S.set(key, value);
+    const puts = calls.filter((c) => c.opts && c.opts.method === 'PUT');
+    assert.strictEqual(puts.length, 1, key);
+    assert.match(puts[0].url, /device-settings/, `${key}: ${puts[0].url}`);
+  }
+});
+
+test('viewer.* 기본값과 시트 높이 클램프(20~85)', async () => {
+  const { S } = await load();
+  assert.strictEqual(S.get('viewer.surface'), 'sheet');
+  assert.strictEqual(S.get('viewer.sheet.height'), 45);
+  assert.strictEqual(S.get('viewer.float.rect'), '{}');
+  await S.set('viewer.sheet.height', 5);
+  assert.strictEqual(S.get('viewer.sheet.height'), 20);
+  await S.set('viewer.sheet.height', 99);
+  assert.strictEqual(S.get('viewer.sheet.height'), 85);
+  assert.strictEqual(await S.set('viewer.surface', 'modal'), false, '모르는 표면은 거부한다');
+  assert.strictEqual(S.get('viewer.surface'), 'sheet');
+});
+
+// voice.js는 별도 빌드라 이 모듈의 사본을 하나 더 갖고 부팅 뒤에 로드된다. 그 사본이
+// window 브리지를 덮으면 Rail·Dock의 쓰기가 다른 저장소로 간다(2026-09-23 e2e로 발견).
+test('나중에 로드된 사본은 window 브리지를 덮지 않는다', async () => {
+  const env = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(env.dom);
+  const { window } = env;
+  window.API_BASE = '';
+  window._tokenQuery = '';
+  window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+  const first = await importFresh(SETTINGS_JS, env.context, new Map());
+  const second = await importFresh(SETTINGS_JS, env.context, new Map());
+  assert.notStrictEqual(first.set, second.set, '전제: 두 사본은 별개 인스턴스다');
+  assert.strictEqual(window.vtSettingsSet, first.set);
+  assert.strictEqual(window.vtSettingsGet, first.get);
+  assert.strictEqual(window.vtSettingsSubscribe, first.subscribe);
+
+  await window.vtSettingsSet('viewer.sheet.height', 60);
+  assert.strictEqual(first.get('viewer.sheet.height'), 60, '브리지 쓰기는 먼저 뜬 저장소로 간다');
+});

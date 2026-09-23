@@ -27,9 +27,45 @@ router = APIRouter()
 _agent_event_clients: set[WebSocket] = set()
 
 
+# P1-1(ADR-33) — agent_status 엔트리가 클라이언트로 나가는 자리마다 거친다.
+# `_prompt_fp`(내부 지문)가 새지 않게 하는 것이 목적이다(agent_status.py
+# public_entry 참고). 이 파일에 네 자리(GET /api/agent/status, ws-agent의
+# 스냅샷·하트비트, agent_event/agent_report의 단건 상태) — 하나씩 개별로
+# 필터링하면 하나는 반드시 빠지므로 이 두 헬퍼로 모은다.
+def _public_state(state: dict) -> dict:
+    return {k: agent_status.public_entry(v) for k, v in state.items()}
+
+
+def _public_active(active: list) -> list:
+    return [agent_status.public_entry(e) for e in active]
+
+
+def _apply_entry_agent_overrides(result: dict) -> dict:
+    """P2-1(ADR-34) — 1차 신호(엔트리의 `agent`, 자기보고/훅)가 2차 추측
+    (`agent_detector`, tmux pane 프로세스 스캔)을 이긴다. 세션 전환 순간
+    탐지기는 `_cmd_cache` TTL만큼 옛 CLI를 계속 말하지만, 엔트리는 새
+    에이전트의 첫 이벤트로 즉시 갱신된다(agent_status._apply_agent).
+
+    host를 거른다 — 안 그러면 원격 호스트의 같은 이름 세션(`dev`는 기본
+    이름이라 흔하다)이 로컬 결과에 섞인다(agent_status.py 「호스트 차원」과
+    같은 위험).
+    """
+    for ent in agent_status.get_state().values():
+        if ent.get("host", agent_status.LOCAL_HOST) != agent_status.LOCAL_HOST:
+            continue
+        name = ent.get("tmux_session")
+        agent = ent.get("agent")
+        if not name or not agent:
+            continue
+        info = agent_detector.KNOWN_AGENTS.get(agent)
+        # 미지의 이름(E10 — 오타 등)도 그대로 내보낸다. 아이콘만 안 뜬다.
+        result[name] = {"agent": agent, **(info or {})}
+    return result
+
+
 @router.get("/api/agents")
 async def list_agents():
-    return agent_detector.detect_all()
+    return _apply_entry_agent_overrides(agent_detector.detect_all())
 
 
 # N9/N45(80-multihost-agents.md §2) — CLI마다 waiting을 실제로 얼마나 정확히
@@ -161,6 +197,13 @@ async def agent_coverage():
 
 @router.get("/api/agents/{tmux_name}")
 async def get_agent(tmux_name: str):
+    # P2-1(ADR-34) — 같은 우선순위를 단일 세션 조회에도 적용한다.
+    # `_entries_for`는 이미 host=LOCAL_HOST로 거른다.
+    for ent in agent_status._entries_for(tmux_name):
+        agent = ent.get("agent")
+        if agent:
+            info = agent_detector.KNOWN_AGENTS.get(agent)
+            return {"agent": agent, **(info or {})}
     info = agent_detector.detect(tmux_name)
     return info or {"agent": None}
 
@@ -186,7 +229,10 @@ async def agent_event(request: Request):
     if how == "foreign-tmux":
         logger.debug("훅이 우리 소켓이 아닌 tmux에서 왔다 — pane id 폐기")
 
-    state = agent_status.on_event(event, payload, session=session)
+    # P2-1(ADR-34) — 훅이 자기 이름을 이미 실어 보내는데(`report_seen.mark` 아래
+    # 줄이 그 값을 쓰고 있었다) 정작 엔트리에는 안 갔다. `on_event`가 1차 신호로
+    # 받아 세션(agent_detector)보다 우선 적용한다.
+    state = agent_status.on_event(event, payload, session=session, agent=body.get("agent"))
     report_seen.mark(body.get("agent"))
 
     # P4: 작업이 끝났다는 가장 정확한 신호가 stop 훅이다. 여기서 큐를 한 건 흘린다.
@@ -213,7 +259,8 @@ async def agent_event(request: Request):
         except Exception as e:                       # 큐 문제로 훅 응답이 깨지면 안 된다
             logger.warning(f"큐 드레인 예약 실패: {e}")
 
-    msg = {"type": "agent_event", "event": event, "state": state, "resolved_by": how}
+    public_state = agent_status.public_entry(state) if state else state
+    msg = {"type": "agent_event", "event": event, "state": public_state, "resolved_by": how}
     dead = set()
     for ws in list(_agent_event_clients):
         try:
@@ -222,7 +269,7 @@ async def agent_event(request: Request):
             dead.add(ws)
     _agent_event_clients.difference_update(dead)
 
-    return {"ok": True, "state": state, "queue_scheduled": queued}
+    return {"ok": True, "state": public_state, "queue_scheduled": queued}
 
 
 @router.post("/api/agent/report")
@@ -256,7 +303,8 @@ async def agent_report(request: Request):
     # 없으면 어느 CLI인지 알 수 없으므로 기록하지 않는다(추측 금지).
     report_seen.mark(body.get("agent"))
 
-    msg = {"type": "agent_event", "event": "report", "state": ent, "resolved_by": how}
+    public_ent = agent_status.public_entry(ent)
+    msg = {"type": "agent_event", "event": "report", "state": public_ent, "resolved_by": how}
     dead = set()
     for ws in list(_agent_event_clients):
         try:
@@ -264,14 +312,14 @@ async def agent_report(request: Request):
         except Exception:
             dead.add(ws)
     _agent_event_clients.difference_update(dead)
-    return {"ok": True, "session": session, "resolved_by": how, "state": ent}
+    return {"ok": True, "session": session, "resolved_by": how, "state": public_ent}
 
 
 @router.get("/api/agent/status")
 async def agent_status_get():
     # 기존 필드(active/all)는 그대로 둔다 — 하위호환. A1에서 각 엔트리에
     # status가 추가됐고, 소비자는 그걸 그대로 쓰면 된다(파생 금지).
-    return {"active": agent_status.all_active(), "all": agent_status.get_state()}
+    return {"active": _public_active(agent_status.all_active()), "all": _public_state(agent_status.get_state())}
 
 
 @router.websocket("/ws-agent")
@@ -310,7 +358,7 @@ async def ws_agent(websocket: WebSocket):
                 # 여기 넣지 않는다(비싸다 — 그건 agents_change 때만).
                 await websocket.send_json({
                     "type": "agent_status_sync",
-                    "all": agent_status.get_state(),
+                    "all": _public_state(agent_status.get_state()),
                 })
             except Exception:
                 return
@@ -321,10 +369,10 @@ async def ws_agent(websocket: WebSocket):
         # snapshot: active state + 현재 detect 결과 (frontend가 폴링 안 해도 즉시 반영)
         await websocket.send_json({
             "type": "agent_snapshot",
-            "active": agent_status.all_active(),
+            "active": _public_active(agent_status.all_active()),
             # A1: 재접속·새로고침 시 done/waiting까지 복원되려면 active(=도구
             # 실행 중)만으론 부족하다 — 상태를 가진 엔트리 전체를 함께 보낸다.
-            "all": agent_status.get_state(),
+            "all": _public_state(agent_status.get_state()),
             "agents": agent_detector.detect_all(),
         })
         while True:

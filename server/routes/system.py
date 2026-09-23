@@ -25,6 +25,7 @@ import device_settings
 import usage
 import voice_handler
 import workspace
+from deps import pty_mgr
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,9 @@ def _capabilities_payload() -> dict:
         "version": _version(),
         # N37: 헤더 워크스페이스 칩. 빈 문자열이면 "/ 호스트" 부분을 안 그린다.
         "hostname": _hostname(),
+        # P3-3(60-observability.md §1) — 세션별 broadcast 드롭 누적을 합친
+        # 값. `fsh doctor`가 0이 아니면 경고한다(60-observability.md).
+        "dropped_subscribers": sum(s.dropped_subscribers for s in pty_mgr.sessions.values()),
     }
     return payload
 

@@ -542,3 +542,155 @@ def test_plugin_toggle_for_unknown_tool_is_refused(home):
     import mcp_write
     out = mcp_write.set_plugin_enabled("p", True, tool="other")
     assert out["status"] == "failed"
+
+
+# --------------------------------------------------- P3-1(ADR-37) 쓰기 배치
+
+def test_plan_changes_needs_no_file_and_drops_already_satisfied():
+    """순수 함수 — dict만으로 동작한다. 이미 원하는 상태인 항목은 뺀다."""
+    current = {"a": True, "b": False}
+    wanted = [{"name": "a", "enabled": True}, {"name": "b", "enabled": True}]
+    assert mcp_write.plan_changes(current, wanted) == [{"name": "b", "enabled": True}]
+
+
+def test_plan_changes_keeps_only_the_last_duplicate():
+    current = {"a": False}
+    wanted = [
+        {"name": "a", "enabled": True},
+        {"name": "a", "enabled": False},
+        {"name": "a", "enabled": True},
+    ]
+    assert mcp_write.plan_changes(current, wanted) == [{"name": "a", "enabled": True}]
+
+
+def test_plan_changes_empty_wanted_is_empty_result():
+    assert mcp_write.plan_changes({"a": True}, []) == []
+
+
+def test_plan_changes_unknown_current_name_is_treated_as_a_real_change():
+    """current에 없는 이름은 "확실히 다르다"로 본다 — None != True/False."""
+    assert mcp_write.plan_changes({}, [{"name": "a", "enabled": True}]) == \
+        [{"name": "a", "enabled": True}]
+
+
+def test_batch_of_five_writes_the_file_exactly_once(home, wt, monkeypatch):
+    """핵심 단언 — 서버 5개를 배치로 켜도 os.replace가 한 번만 불린다."""
+    _claude(home, {
+        "mcpServers": {f"s{i}": {"command": "x"} for i in range(5)},
+        "projects": {},
+    })
+    calls = []
+    real_replace = mcp_write.os.replace
+    monkeypatch.setattr(mcp_write.os, "replace",
+                        lambda *a, **k: (calls.append(1), real_replace(*a, **k))[1])
+
+    changes = [{"name": f"s{i}", "enabled": False} for i in range(5)]
+    results = mcp_write.set_enabled_batch("claude", changes, worktree_id="wt1")
+
+    assert len(calls) == 1, f"파일이 {len(calls)}번 쓰였다 — 배치가 아니라 개별 쓰기다"
+    assert all(r["status"] == "ok" and r["changed"] for r in results)
+    entry = _read_claude(home)["projects"][wt["path"]]
+    assert sorted(entry["disabledMcpServers"]) == [f"s{i}" for i in range(5)]
+
+
+def test_batch_skips_the_file_write_when_everything_already_matches(home, wt, monkeypatch):
+    _claude(home, {
+        "mcpServers": {"a": {"command": "x"}},
+        "projects": {wt["path"]: {"disabledMcpServers": ["a"]}},
+    })
+    calls = []
+    monkeypatch.setattr(mcp_write.os, "replace", lambda *a, **k: calls.append(1))
+
+    results = mcp_write.set_enabled_batch(
+        "claude", [{"name": "a", "enabled": False}], worktree_id="wt1",
+    )
+    assert calls == []
+    assert results == [{"name": "a", "status": "ok", "changed": False}]
+
+
+def test_batch_conflict_detection_leaves_the_file_untouched(home, wt, monkeypatch):
+    """쓰기 직전 외부 변경(mtime/size 충돌)을 감지하면 **원자 교체 전에** 멈춘다
+    — 배치가 여러 항목을 담고 있어도 파일은 한 글자도 안 바뀐다(공짜 롤백,
+    _commit_json의 스탬프 재확인이 write 전에 있어서 성립한다)."""
+    original = {"mcpServers": {"a": {"command": "x"}, "b": {"command": "y"}}, "projects": {}}
+    _claude(home, original)
+
+    real_stamp = mcp_write._stamp
+    calls = {"n": 0}
+
+    def flaky_stamp(path):
+        calls["n"] += 1
+        # 첫 호출(쓰기 전 기준값)은 진짜 값, 두 번째 호출(쓰기 직전 재확인)은
+        # 다른 값을 돌려줘 "쓰는 사이 외부에서 바뀌었다"를 흉내 낸다.
+        return real_stamp(path) if calls["n"] == 1 else (0, 0)
+
+    monkeypatch.setattr(mcp_write, "_stamp", flaky_stamp)
+
+    results = mcp_write.set_enabled_batch(
+        "claude", [{"name": "a", "enabled": False}, {"name": "b", "enabled": False}],
+        worktree_id="wt1",
+    )
+    assert all(r["status"] == "failed" for r in results)
+    assert all("바뀌었다" in r["reason"] for r in results)
+    assert _read_claude(home) == original, "충돌 감지됐는데 파일이 바뀌었다"
+
+
+def test_batch_mixed_worktrees_are_planned_independently(home, monkeypatch):
+    """서로 다른 프로젝트를 같은 배치에 섞어도 각자의 현재 상태 기준으로 판단한다."""
+    p1, p2 = "/repo/one", "/repo/two"
+    _claude(home, {
+        "mcpServers": {"a": {"command": "x"}},
+        "projects": {p1: {"disabledMcpServers": ["a"]}, p2: {}},
+    })
+    monkeypatch.setattr(
+        "worktree.list_worktrees",
+        lambda force=False: [
+            {"id": "w1", "path": p1, "repoName": "one", "branch": "main"},
+            {"id": "w2", "path": p2, "repoName": "two", "branch": "main"},
+        ],
+    )
+    # w1에서는 이미 꺼져 있으니 무해, w2에서는 실제로 꺼야 한다.
+    for wt_id, path in (("w1", p1), ("w2", p2)):
+        results = mcp_write.set_enabled_batch(
+            "claude", [{"name": "a", "enabled": False}], worktree_id=wt_id,
+        )
+        assert results == [{"name": "a", "status": "ok",
+                            "changed": False if path == p1 else True}]
+    data = _read_claude(home)
+    assert data["projects"][p1]["disabledMcpServers"] == ["a"]
+    assert data["projects"][p2]["disabledMcpServers"] == ["a"]
+
+
+def test_single_toggle_api_still_works_after_batch_added(home, wt):
+    """회귀 — 배치를 추가해도 기존 단건 API 동작은 그대로다."""
+    _claude(home, {"mcpServers": {"github": {"command": "x"}}, "projects": {}})
+    r = mcp_write.set_enabled("claude", "github", False, worktree_id="wt1")
+    assert r["status"] == "ok" and r["changed"] is True
+
+
+def test_batch_for_non_claude_tool_falls_back_to_per_item_calls(home, monkeypatch):
+    """codex는 아직 파일당 1회로 안 묶는다(문서화된 범위) — 그래도 배치 계약
+    (항목별 결과)은 지킨다."""
+    path = home / ".codex" / "config.toml"
+    path.write_text(
+        '[mcp_servers.a]\nenabled = true\n\n[mcp_servers.b]\nenabled = true\n'
+    )
+    results = mcp_write.set_enabled_batch(
+        "codex", [{"name": "a", "enabled": False}, {"name": "b", "enabled": False}],
+    )
+    assert [r["name"] for r in results] == ["a", "b"]
+    assert all(r["status"] == "ok" for r in results)
+
+
+def test_batch_reports_per_item_failure_when_worktree_is_missing():
+    results = mcp_write.set_enabled_batch(
+        "claude", [{"name": "a", "enabled": False}], worktree_id=None,
+    )
+    assert results[0]["status"] == "failed"
+    assert "워크트리" in results[0]["reason"]
+
+
+def test_batch_rejects_unknown_tool():
+    results = mcp_write.set_enabled_batch("bogus", [{"name": "a", "enabled": True}])
+    assert results[0]["status"] == "failed"
+    assert "모르는 도구" in results[0]["reason"]

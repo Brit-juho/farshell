@@ -93,15 +93,13 @@ export async function showScm(opts = {}) {
   // pane 인스턴스는 안쪽 id에 접미사가 붙는다 — ctx가 그걸 안다.
   const headEl = panel.ctx.byId('vt-scm-head');
 
-  // 파일을 뷰어 페인(N35 §6 리프 타입 viewer)으로 연다. entry.file은 저장소
-  // 상대경로라 repo(절대경로)와 합쳐야 /api/fs/*(fsguard)가 받는 절대경로가
-  // 된다. window.openFileInPane은 viewer-lazy.js가 다는 전역 브리지 —
-  // dock 청크(panels.js)에서 app.js의 store.js를 정적 import할 수 없어서
-  // (ADR-26) 이 저장소 관행대로 브리지를 쓴다.
+  // 파일을 연다(ADR-44 표면 설정을 따른다). entry.file은 저장소 상대경로라
+  // repo(절대경로)와 합쳐야 /api/fs/*(fsguard)가 받는 절대경로가 된다.
+  // window.openFile은 viewer-lazy.js가 다는 전역 브리지다.
   const openInViewer = (repo, file) => {
-    if (typeof window.openFileInPane !== 'function' || !repo || !file) return;
+    if (typeof window.openFile !== 'function' || !repo || !file) return;
     const abs = `${repo.replace(/\/+$/, '')}/${file}`;
-    window.openFileInPane(abs);
+    window.openFile(abs);
   };
 
   const paint = async () => {

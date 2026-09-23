@@ -25,6 +25,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 import vt_env
+import vt_paths
 
 logger = logging.getLogger("tunnel-watchdog")
 if not logger.handlers:
@@ -44,7 +45,11 @@ WINDOW_SEC = float(_vt_getenv("VT_TUNNEL_WATCHDOG_WINDOW_SEC", "90"))
 FAILURE_THRESHOLD = int(_vt_getenv("VT_TUNNEL_WATCHDOG_THRESHOLD", "4"))
 COOLDOWN_SEC = float(_vt_getenv("VT_TUNNEL_WATCHDOG_COOLDOWN_SEC", "120"))
 
-TUNNEL_LOG = Path("/tmp/cloudflared.log")
+# P2-4(ADR-41) §1(a) — 하드코딩된 `/tmp/cloudflared.log`가 VT_RUN_DIR 격리를
+# 무시했다. `tunnel.py`(진짜 소비자)와 반드시 같은 값을 봐야 하므로
+# `vt_paths.tunnel_log()`를 그대로 쓴다 — 호출 시점 해석이라 여기서도 모듈
+# 임포트 시점에 굳지 않는다.
+TUNNEL_LOG = vt_paths.tunnel_log()
 VT_BIN = _HERE.parent / "bin" / "vt"
 
 FAILURE_PATTERN = re.compile(

@@ -55,6 +55,8 @@ from typing import Optional
 # 다만 이 프로젝트는 fastapi/starlette가 항상 설치돼 있는 걸 전제한다(requirements-core.txt).
 from starlette.requests import Request
 
+import vt_paths
+
 def _env(*names, default=""):
     """새 이름 우선, 없으면 레거시 이름으로 fallback."""
     for n in names:
@@ -76,7 +78,17 @@ ELEVATION_TTL = 900  # 승격 세션(N31) 수명 15분 — git 쓰기 등 위험
 _N, _R, _P, _DKLEN = 16384, 8, 1, 32
 
 # 런타임 상태 디렉토리 (~/.vt). bin/vt도 같은 경로를 쓴다.
-STATE_DIR = Path(os.environ.get("VT_STATE_DIR", "") or (Path.home() / ".vt"))
+#
+# P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "") or (Path.home()
+# / ".vt"))`였다. `VT_STATE_DIR=""`이면 폴백이 안 걸려 빈 문자열이 그대로
+# `Path("")`(서버 CWD)가 됐고, `VT_STATE_DIR="~/vt-test"`는 `~`를 안 펴서
+# 리터럴 `~` 디렉터리가 됐다 — 인증 저장소(기기·OTP·티켓)만 다른 15곳과
+# 갈라지는 사고였다(docs/plan-2.3/80-vt-paths.md §1). 값은 여기서 **한 번**
+# 계산하고 그 뒤로는 그대로 쓴다 — 아래 세 파생 경로처럼 이 모듈 attribute를
+# 통해서만 읽히고(`devices.py` 등은 `auth.STATE_DIR`로 매번 다시 읽는다),
+# 테스트는 env가 아니라 이 attribute 자체를 monkeypatch한다
+# (test_auth_isolation.py) — 그 계약은 그대로 둔다.
+STATE_DIR = vt_paths.state_dir()
 DEVICES_PATH = STATE_DIR / "devices.json"
 TOTP_PATH = STATE_DIR / "totp.json"
 TICKETS_PATH = STATE_DIR / "tickets.json"

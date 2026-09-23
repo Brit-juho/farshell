@@ -29,9 +29,11 @@ import logging
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
+import mcp_adapters
 import mcp_catalog
 import mcp_plugins
 import mcp_scan
+import mcp_verify
 import mcp_write
 from auth import require_elevated
 
@@ -205,6 +207,66 @@ async def toggle_mcp(request: Request):
     return result
 
 
+# P3-1(ADR-37) — 위 단건과 같은 검증·승격 규칙이지만, 같은 파일을 겨냥한
+# 변경을 한 사이클로 묶는다(mcp_write.set_enabled_batch 참고). 상한 64는
+# 한 요청이 남의 설정 파일을 오래 잡고 있지 않게 하는 방어다.
+MAX_BATCH = 64
+
+
+@elevated_router.post("/api/mcp/toggle-batch")
+async def toggle_mcp_batch(request: Request):
+    """서버 여러 개를 스코프 하나에서 한 번에 켜거나 끈다.
+
+    단건(`/api/mcp/toggle`)과 같은 목표-상태 계약이다. 응답은 부분 실패를
+    항목별로 담는다 — 배치 전체가 성공/실패로 뭉뚱그려지지 않는다.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    tool = str(body.get("tool", "") or "")
+    scope = str(body.get("scope", "global") or "global")
+    worktree_id = body.get("worktree") or None
+    changes = body.get("changes")
+
+    if tool not in mcp_write.TOOLS:
+        return JSONResponse(
+            {"error": "invalid_tool", "reason": f"tool은 {sorted(mcp_write.TOOLS)} 중 하나"},
+            status_code=400,
+        )
+    if scope not in ("global", "local"):
+        return JSONResponse({"error": "invalid_scope"}, status_code=400)
+    if not isinstance(changes, list) or not changes:
+        return JSONResponse({"error": "missing_changes"}, status_code=400)
+    if len(changes) > MAX_BATCH:
+        return JSONResponse(
+            {"error": "batch_too_large", "reason": f"한 번에 최대 {MAX_BATCH}개"},
+            status_code=400,
+        )
+
+    cleaned = []
+    for c in changes:
+        if not isinstance(c, dict):
+            return JSONResponse({"error": "invalid_change"}, status_code=400)
+        name = str(c.get("name", "") or "")
+        enabled = c.get("enabled")
+        if not name:
+            return JSONResponse({"error": "missing_name"}, status_code=400)
+        if not isinstance(enabled, bool):
+            return JSONResponse(
+                {"error": "invalid_enabled", "reason": "enabled는 true/false 여야 한다"},
+                status_code=400,
+            )
+        cleaned.append({"name": name, "enabled": enabled, "shared": bool(c.get("shared", False))})
+
+    results = await asyncio.to_thread(
+        mcp_write.set_enabled_batch, tool, cleaned, scope=scope, worktree_id=worktree_id,
+    )
+    ok = all(r.get("status") == "ok" for r in results)
+    return {"ok": ok, "results": results}
+
+
 # ------------------------------------------------------ 자격증명 (97번 3단계)
 #
 # **원문은 어떤 응답에도 실리지 않는다.** 조회는 mcp_catalog.cred_public()이
@@ -346,4 +408,46 @@ async def toggle_plugin(request: Request):
     )
     if result["status"] == "failed":
         return JSONResponse({"error": "toggle_refused", **result}, status_code=409)
+    return result
+
+
+# P3-2(40-mcp.md §3, ADR-36) — 사용자가 명시적으로 누르는 1회성 검증. 실제로
+# 명령을 스폰(stdio)하거나 네트워크 요청(http/sse)을 하므로 토글과 같은
+# 승격 등급을 요구한다. **결과를 저장하지 않는다**(§3.4) — 매 호출이 새로
+# 검증한다.
+@elevated_router.post("/api/mcp/servers/{scope}/{name}/verify")
+async def verify_mcp_server(scope: str, name: str, request: Request):
+    if scope not in ("global", "local"):
+        return JSONResponse({"error": "invalid_scope"}, status_code=400)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    tool = str(body.get("tool", "") or "")
+    if tool not in mcp_adapters.ADAPTERS:
+        return JSONResponse(
+            {"error": "invalid_tool", "reason": f"tool은 {sorted(mcp_adapters.ADAPTERS)} 중 하나"},
+            status_code=400,
+        )
+    worktree_id = body.get("worktree") or None
+    confirmed = bool(body.get("confirm_network", False))
+
+    wt = await asyncio.to_thread(mcp_scan.find_worktree, worktree_id)
+    worktree_path = wt.get("path") if wt else None
+    if scope == "local" and not worktree_path:
+        return JSONResponse({"error": "missing_worktree"}, status_code=400)
+
+    launch = await asyncio.to_thread(
+        mcp_adapters.resolve_launch, tool, scope, name,
+        worktree_path=worktree_path, worktree_id=worktree_id,
+    )
+    if launch is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+
+    if launch["transport"] == "stdio":
+        result = await mcp_verify.verify_stdio(launch["command"], launch["args"], launch["env"])
+    else:
+        # E21 — 네트워크 행위는 사용자 확인 없이 부르지 않는다.
+        result = await mcp_verify.verify_http(launch["url"], confirmed=confirmed)
     return result

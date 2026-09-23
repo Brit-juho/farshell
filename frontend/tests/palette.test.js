@@ -79,7 +79,7 @@ test('DEFAULT_COMMANDS — 패널 명령(.show/.open) 6개가 rail과 짝지을 
 // 조용히 삼켜져(에러 바운더리) "카드가 안 나온다"로만 드러나는 버그를 실제로
 // 겪었다(디버깅 기록: 세션이 tmux 라이브 프리뷰 후보인 테스트만 실패했다).
 function fakeDeps(doc, overrides = {}) {
-  const calls = { switchTo: [], showToast: [], setVtSkin: [], openFileInPane: [] };
+  const calls = { switchTo: [], showToast: [], setVtSkin: [], openFile: [], openFileInPane: [] };
   const gated = new Set(overrides.gatedOff || []);
   return {
     calls,
@@ -90,6 +90,7 @@ function fakeDeps(doc, overrides = {}) {
     getSession: overrides.getSession || (() => null),
     switchTo: (id) => calls.switchTo.push(id),
     loadViewer: overrides.loadViewer || (async () => ({ _loadRecent: () => [], _hl: (t) => t })),
+    openFile: (p) => calls.openFile.push(p),
     openFileInPane: (p) => calls.openFileInPane.push(p),
     splitActivePane: overrides.splitActivePane || (() => 'pane-2'),
     setPaneSession: overrides.setPaneSession || (() => {}),
@@ -406,4 +407,37 @@ test('Tab — 파일/스크롤백 결과를 큐로 보낸다', async () => {
   document.dispatchEvent(kd);
   await waitFor(() => queuePosts.length > 0);
   assert.deepStrictEqual(queuePosts, [{ text: '/repo/notes.md' }]);
+});
+
+// ADR-44 — 파일 행 Enter는 표면 설정을 따르는 openFile, Cmd/Ctrl+Enter(「새 pane에
+// 열기」)는 **여전히 pane**이어야 한다. 후자가 오버레이로 가면 splitActivePane이
+// 만든 빈 pane만 남는다(계획서 §8.1이 짚은 실제 회귀).
+async function openFileRow(mods) {
+  const { mountPalette, document, window, root } = await mountFresh();
+  const splits = [];
+  const deps = fakeDeps(document, {
+    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'], _hl: (t) => t }),
+    splitActivePane: (dir) => { splits.push(dir); return 'pane-2'; },
+  });
+  const api = mountPalette(root, deps);
+  api.open('file');
+  await waitFor(() => Array.from(document.querySelectorAll('.vt-qo-row')).some((r) => r.textContent.includes('notes.md')));
+  const Kb = window.KeyboardEvent || document.defaultView.KeyboardEvent;
+  document.dispatchEvent(new Kb('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...mods }));
+  await flush();
+  return { calls: deps.calls, splits };
+}
+
+test('파일 행 Enter — 표면 설정을 따르는 openFile로 연다', async () => {
+  const { calls, splits } = await openFileRow({});
+  assert.deepStrictEqual(calls.openFile, ['/repo/notes.md']);
+  assert.deepStrictEqual(calls.openFileInPane, []);
+  assert.deepStrictEqual(splits, []);
+});
+
+test('파일 행 Cmd/Ctrl+Enter(새 pane에 열기) — 칸을 만들고 그 칸에 pane으로 연다', async () => {
+  const { calls, splits } = await openFileRow({ ctrlKey: true });
+  assert.deepStrictEqual(splits, ['right']);
+  assert.deepStrictEqual(calls.openFileInPane, ['/repo/notes.md']);
+  assert.deepStrictEqual(calls.openFile, [], '오버레이로 가면 빈 pane만 남는다');
 });

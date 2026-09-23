@@ -19,13 +19,15 @@ id 해시에 넣어 두는 것이 2.2(멀티호스트) 기반이다 — 나중�
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
+
+import store_lock
+import vt_paths
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,10 @@ def repo_id(host: str, path: str) -> str:
 
 
 def _state_dir() -> Path:
-    return Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()
+    # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
+    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    return vt_paths.state_dir()
 
 
 def _path() -> Path:
@@ -66,15 +71,8 @@ def _locked():
         os.chmod(d, 0o700)
     except OSError:
         pass
-    fd = os.open(str(_lock_path()), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with store_lock.exclusive(_lock_path()):
         yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 def _normalize(path: str) -> str:

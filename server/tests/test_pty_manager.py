@@ -244,3 +244,74 @@ def test_destroy_session_never_closes_standard_streams(loop, monkeypatch, fd):
     mgr.destroy_session("fake")
 
     assert closed == [], f"표준 스트림 fd={fd}를 닫았다"
+
+
+# ------------------------------------------------- P3-3(60-observability.md §1)
+
+def test_flush_session_counts_and_drops_a_raising_subscriber(loop):
+    """예외를 던지는 구독자를 붙이고 flush → 카운터 1, 구독자 집합에서 제거,
+    남은 구독자는 정상 수신."""
+    mgr = make_manager_with_session(loop, "test-drop")
+    session = mgr._sessions["test-drop"]
+
+    good_received = []
+    def bad(_data):
+        raise RuntimeError("boom")
+    session._subscribers.add(bad)
+    session._subscribers.add(good_received.append)
+
+    session._out_buf.extend(b"hello")
+    mgr._flush_session("test-drop")
+
+    assert session.dropped_subscribers == 1
+    assert session.last_drop_at > 0
+    assert bad not in session._subscribers
+    assert good_received.append in session._subscribers
+    assert good_received == [b"hello"], "정상 구독자는 그대로 데이터를 받아야 한다"
+    mgr.destroy_session("test-drop")
+
+
+def test_flush_session_repeated_failures_accumulate(loop):
+    mgr = make_manager_with_session(loop, "test-drop2")
+    session = mgr._sessions["test-drop2"]
+
+    def bad(_data):
+        raise ValueError("nope")
+    session._subscribers.add(bad)
+
+    for chunk in (b"a", b"b", b"c"):
+        session._subscribers.add(bad)  # 매번 다시 끊기므로 다시 붙인다
+        session._out_buf.extend(chunk)
+        mgr._flush_session("test-drop2")
+
+    assert session.dropped_subscribers == 3
+    mgr.destroy_session("test-drop2")
+
+
+def test_new_session_starts_with_zero_drops(loop):
+    mgr = make_manager_with_session(loop, "test-drop3")
+    session = mgr._sessions["test-drop3"]
+    assert session.dropped_subscribers == 0
+    assert session.last_drop_at == 0.0
+    mgr.destroy_session("test-drop3")
+
+
+# ---------------------------------------------- /api/capabilities exposure
+
+def test_capabilities_reports_the_dropped_subscriber_total():
+    """P3-3 노출 — /api/capabilities가 세션별 dropped_subscribers 합계를 낸다."""
+    from starlette.testclient import TestClient
+
+    import main
+    from deps import pty_mgr
+
+    with TestClient(main.app) as client:
+        r = client.post("/api/sessions", json={})
+        sid = r.json()["id"]
+        try:
+            session = pty_mgr._sessions[sid]
+            session.dropped_subscribers = 3
+            body = client.get("/api/capabilities").json()
+            assert body["dropped_subscribers"] >= 3
+        finally:
+            client.delete(f"/api/sessions/{sid}")

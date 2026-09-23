@@ -44,6 +44,8 @@ ROUTE_RE = re.compile(
 # 경로 파라미터는 문서에서 이름이 다를 수 있다(`{id}` vs `{session_id}`).
 # 비교는 **모양**으로 한다 — 파라미터 이름 차이로 거짓 경보를 내면 아무도 안 본다.
 PARAM_RE = re.compile(r"\{[^}]+\}")
+# P2-3 — check_api_contract는 반대로 **이름까지** 비교하므로 캡처 그룹이 필요하다.
+PARAM_RE_NAMED = re.compile(r"\{([^}]+)\}")
 
 
 def norm(path: str) -> str:
@@ -104,6 +106,184 @@ def check_api_docs(problems: list[str]) -> None:
             problems.append(f"{name}: 코드에 있는데 문서에 없음 — {p}")
         for p in extra:
             problems.append(f"{name}: 문서에 있는데 코드에 없음 — {p}")
+
+
+# ── 1b. API.md ↔ FastAPI openapi 스펙 (P2-3, ADR-38) ─────────────────────
+#
+# 위 check_api_docs는 "경로 집합"만 본다 — 메서드가 바뀌거나(POST→PUT), 경로
+# 파라미터 이름이 바뀌거나(norm()이 지운다), 필수 쿼리 파라미터가 새로 생겨도
+# 못 잡는다. FastAPI는 이 정보를 이미 `app.openapi()`로 들고 있다 — 안 쓰고
+# 있었을 뿐이다(docs/plan-2.3/50-contract.md §1).
+
+_METHODS = ("get", "post", "put", "patch", "delete")
+
+
+def app_openapi() -> dict | None:
+    """FastAPI가 만든 스펙을 읽는다. 서버를 띄우지 않는다 — app 객체에서 바로 꺼낸다.
+
+    **임포트 부작용 주의.** `server/main.py`는 모듈 임포트 시점에
+    `vt_env.apply_boundary_overrides()`로 **실제 `~/.vt.env`를 읽어
+    os.environ에 적용**한다. 이 스크립트가 그걸 그대로 맞으면 개발자의
+    실제 인증·네트워크 설정이 프로세스 환경에 새어 들어온다 — 그래서
+    `server/tests/conftest.py`가 격리에 쓰는 것과 같은 여섯 변수
+    (`VT_PORT`·`VT_TMUX_SOCKET`·`VT_STATE_DIR`·`VT_RUN_DIR`·`VT_CONFIG`·
+    `VT_WORKSPACE_PATH`)를 전부 임시 경로로 고정한다. 임포트가 실패하면
+    `None` — 문서 검사가 서버 초기화에 인질로 잡히면 안 된다(§2.1).
+    """
+    import os
+    import sys
+    import tempfile
+
+    server_dir = str(ROOT / "server")
+    added = server_dir not in sys.path
+    if added:
+        sys.path.insert(0, server_dir)
+    try:
+        with tempfile.TemporaryDirectory(prefix="fsh-check-docs-") as tmp:
+            empty_cfg = str(Path(tmp) / "empty.env")
+            open(empty_cfg, "w", encoding="utf-8").close()
+            env_overrides = {
+                "VT_PORT": "0",
+                "VT_TMUX_SOCKET": "fsh-check-docs",
+                "VT_STATE_DIR": str(Path(tmp) / "state"),
+                "VT_RUN_DIR": tmp,
+                "VT_CONFIG": empty_cfg,
+                "VT_WORKSPACE_PATH": str(Path(tmp) / "workspace.json"),
+            }
+            saved = {k: os.environ.get(k) for k in env_overrides}
+            os.environ.update(env_overrides)
+            try:
+                sys.modules.pop("main", None)  # 이미 임포트돼 있으면(같은 프로세스 재호출) 새로 읽는다
+                from main import app  # noqa: PLC0415
+                return app.openapi()
+            finally:
+                for k, v in saved.items():
+                    if v is None:
+                        os.environ.pop(k, None)
+                    else:
+                        os.environ[k] = v
+    except Exception:
+        return None
+    finally:
+        if added and server_dir in sys.path:
+            sys.path.remove(server_dir)
+
+
+# API.md 표 행에서 (메서드, 원문 경로)를 뽑는다. `WS`는 스펙에 대응이 없어
+# (OpenAPI에 웹소켓 오퍼레이션 개념이 없다) 따로 거른다.
+_DOC_ROW_RE = re.compile(
+    r"^\|\s*(GET|POST|PUT|PATCH|DELETE|WS)\s*\|\s*`([^`]+)`", re.M
+)
+
+
+def _doc_rows() -> list[tuple[str, str]]:
+    doc = ROOT / "API.md"
+    if not doc.exists():
+        return []
+    return [(m, p) for m, p in _DOC_ROW_RE.findall(doc.read_text()) if m != "WS"]
+
+
+def _doc_query_params(raw_path: str) -> tuple[set[str], set[str]]:
+    """(항상 보이는 파라미터, `[...]` 안 선택 파라미터).
+
+    이 문서의 관례가 이미 그 구분이다 — `norm()`이 대괄호를 "선택"으로 보고
+    지우는 것과 같은 근거(§2.2 "필수 쿼리 파라미터").
+    """
+    bracketed = re.findall(r"\[([^\]]*)\]", raw_path)
+    optional: set[str] = set()
+    for b in bracketed:
+        optional |= set(re.findall(r"[?&]([a-zA-Z_]\w*)=", b))
+    # 분리 후 다시 정규식을 태우지 않는다 — split()이 구분자 `?`를 삼켜버리면
+    # 남은 문자열이 `q=X`처럼 시작해 `[?&]` 앵커가 하나도 안 걸린다(실측
+    # 오류 — /api/fs/search?q=X의 필수 쿼리를 못 찾았다). 원문 전체에 바로 돌린다.
+    stripped = re.sub(r"\[[^\]]*\]", "", raw_path)
+    required = set(re.findall(r"[?&]([a-zA-Z_]\w*)=", stripped))
+    return required, optional
+
+
+def _doc_path_params(raw_path: str) -> list[str]:
+    """`{name}` 순서 그대로 — 스펙과 **문자까지** 비교하므로 norm()을 안 쓴다."""
+    return PARAM_RE_NAMED.findall(raw_path.split("?", 1)[0])
+
+
+def _spec_routes(spec: dict) -> dict[tuple[str, str], dict]:
+    """(METHOD, norm 경로) → {path_params, required_query, has_response_model, raw_path}."""
+    out: dict[tuple[str, str], dict] = {}
+    for raw_path, methods in (spec.get("paths") or {}).items():
+        npath = norm(raw_path)
+        for method, op in (methods or {}).items():
+            if method not in _METHODS:
+                continue
+            params = op.get("parameters") or []
+            path_params = [p["name"] for p in params if p.get("in") == "path"]
+            required_query = {
+                p["name"] for p in params if p.get("in") == "query" and p.get("required")
+            }
+            schema = (
+                op.get("responses", {}).get("200", {})
+                .get("content", {}).get("application/json", {}).get("schema", {})
+            )
+            out[(method.upper(), npath)] = {
+                "path_params": path_params,
+                "required_query": required_query,
+                "has_response_model": bool(schema),
+                "raw_path": raw_path,
+            }
+    return out
+
+
+def check_api_contract(problems: list[str]) -> None:
+    spec = app_openapi()
+    if spec is None:
+        print("⚠ check_api_contract: server/main.py를 임포트하지 못해 건너뛴다 "
+              "(스펙 대조는 스킵 — 다른 검사는 계속된다)")
+        return
+
+    spec_routes = _spec_routes(spec)
+    doc_by_path: dict[str, dict[str, str]] = {}  # norm_path -> {method: raw_doc_path}
+    for method, raw in _doc_rows():
+        doc_by_path.setdefault(norm(raw), {})[method] = raw
+
+    spec_by_path: dict[str, dict[str, dict]] = {}
+    for (method, npath), info in spec_routes.items():
+        spec_by_path.setdefault(npath, {})[method] = info
+
+    declared = 0
+    total = 0
+    for npath, spec_methods in spec_by_path.items():
+        doc_methods = doc_by_path.get(npath)
+        if doc_methods is None:
+            continue  # check_api_docs가 이미 "문서에 없음"으로 잡는다 — 중복 보고 안 함
+        if set(spec_methods) != set(doc_methods):
+            problems.append(
+                f"API.md: {npath} — 메서드가 다르다. 코드 {sorted(spec_methods)} / "
+                f"문서 {sorted(doc_methods)}"
+            )
+        for method in set(spec_methods) & set(doc_methods):
+            info = spec_methods[method]
+            total += 1
+            if info["has_response_model"]:
+                declared += 1
+
+            doc_raw = doc_methods[method]
+            doc_path_params = _doc_path_params(doc_raw)
+            if doc_path_params != info["path_params"]:
+                problems.append(
+                    f"API.md: {method} {npath} — 경로 파라미터 이름이 다르다. "
+                    f"코드 {info['path_params']} / 문서 {doc_path_params}"
+                )
+
+            doc_required, _doc_optional = _doc_query_params(doc_raw)
+            missing_query = sorted(info["required_query"] - doc_required)
+            if missing_query:
+                problems.append(
+                    f"API.md: {method} {npath} — 필수 쿼리 파라미터가 문서에 없다: "
+                    f"{missing_query} (대괄호 없이 적어야 필수로 읽힌다)"
+                )
+
+    if total:
+        print(f"  (참고) response_model 미선언 라우트: {total - declared}/{total} "
+              "— 새 라우트에는 붙일 것")
 
 
 def check_claude_md(problems: list[str]) -> None:
@@ -492,6 +672,68 @@ def check_config_keys_documented(problems: list[str]) -> None:
         )
 
 
+# ── 10. 인가 계층 순서 (P2-5, ADR-42) ─────────────────────────────────────
+#
+# Starlette는 **마지막 등록을 가장 바깥**에 둔다(add_middleware가
+# user_middleware.insert(0, …)) — 그래서 실행 순서는 등록의 역순이다. 그
+# 뒤집기를 사람이 매번 암산하면 언젠가 틀린다. `docs/ref/auth.md`의 순서
+# 표가 `main.py`의 실제 등록과 어긋나면 없느니만 못하다 — CLAUDE.md가 자체
+# 엔드포인트 표를 들었다가 API.md와 갈라진 것(계약 9)과 같은 병이다.
+#
+# 표의 미들웨어 행에만 `<!-- mw -->` 마커를 단다 — 표에는 미들웨어가 아닌
+# 층(기기+OTP, 자원별 검증 등)도 섞여 있어서, 표 전체를 긁으면 그 행들까지
+# "미들웨어"로 오인한다.
+_AUTH_MW_ROW_RE = re.compile(r"`(\w+Middleware)`\s*<!-- mw")
+
+# CORS는 조건부 등록(`if _cors: app.add_middleware(CORSMiddleware, ...)`)이라
+# 코드 쪽 정규식이 무조건 잡아낸다. 문서 표에도 CORS 행이 있지만 "옵트인"이라
+# 항상 있는 건 아니므로, 양쪽에서 같은 이름을 제외하고 비교한다(그래야 "CORS를
+# 껐다"가 거짓 드리프트로 안 잡힌다).
+_AUTH_ORDER_EXEMPT = {"CORSMiddleware"}
+
+
+def _auth_md_layer_names() -> list[str] | None:
+    doc = ROOT / "docs" / "ref" / "auth.md"
+    if not doc.exists():
+        return None
+    return [m for m in _AUTH_MW_ROW_RE.findall(doc.read_text()) if m not in _AUTH_ORDER_EXEMPT]
+
+
+def check_auth_order(problems: list[str]) -> None:
+    """main.py의 미들웨어 등록 순서 ↔ auth.md 순서 표."""
+    main_py = ROOT / "server" / "main.py"
+    if not main_py.exists():
+        return
+    registered = [
+        m for m in re.findall(r"app\.add_middleware\(\s*(\w+)", main_py.read_text())
+        if m not in _AUTH_ORDER_EXEMPT
+    ]
+    documented = _auth_md_layer_names()
+    if documented is None:
+        return  # 문서 자체가 없다 — 다른 검사(파일 존재)가 이미 신경 쓸 일
+    # 양쪽 다 "찾았는데 0개"와 "찾을 대상이 없다"를 구분하지 않는다 — 빈
+    # 집합끼리 비교해 조용히 통과하는 게 최악이다(미들웨어가 다른 파일로
+    # 옮겨지면 이 검사가 아예 없는 것처럼 굴면 안 된다).
+    if not registered:
+        problems.append(
+            "main.py에서 app.add_middleware(...) 등록을 하나도 못 찾았다 — "
+            "미들웨어가 다른 파일로 옮겨졌다면 docs/ref/auth.md 순서 표도 같이 옮길 것"
+        )
+        return
+    if not documented:
+        problems.append(
+            "docs/ref/auth.md 「Authorization order」 표에 미들웨어 행(`<!-- mw -->`)이 "
+            "하나도 없다"
+        )
+        return
+    execution_order = list(reversed(registered))  # 마지막 등록이 가장 바깥
+    if execution_order != documented:
+        problems.append(
+            "docs/ref/auth.md 인가 순서 표가 main.py 등록 순서와 다르다 — "
+            f"코드(실행 순서) {execution_order} / 문서 {documented}"
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="문서 일관성 검사 (I3)")
     ap.add_argument("--strict", action="store_true", help="발견 시 종료코드 1")
@@ -499,6 +741,7 @@ def main() -> int:
 
     problems: list[str] = []
     check_api_docs(problems)
+    check_api_contract(problems)
     check_claude_md(problems)
     check_help_topics(problems)
     check_version(problems)
@@ -507,6 +750,7 @@ def main() -> int:
     check_no_personal_values(problems)
     check_skill_copy_in_sync(problems)
     check_config_keys_documented(problems)
+    check_auth_order(problems)
 
     if not problems:
         print("✓ 문서 일관성 OK")

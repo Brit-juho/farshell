@@ -166,7 +166,19 @@ def _fingerprint(defn: dict) -> str:
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
+# P2-2(ADR-35) — MCP 스펙에서 sse는 http과 별개 전송이다(둘 다 url을 갖지만
+# 프로토콜이 다르다). `type`/`transport`를 안 보고 url 유무만으로 추론하면
+# `type: "sse"` 서버가 화면에 "http"로 뜬다.
 def _transport(defn: dict) -> str:
+    # 1) 선언이 있으면 선언이 이긴다 — 모순(예: type:"http" + command)이어도
+    #    화면이 사실을 그대로 보여준다. 인식 못 하는 값(예: "websocket")도
+    #    원문 그대로 싣는다 — "unknown"으로 뭉개면 정보가 있는데 없다고
+    #    말하는 셈이다. `type`/`transport` 외 도구별 동의어는 아직 없다 —
+    #    확인 전엔 추측으로 키를 늘리지 않는다(docs/plan-2.3/40-mcp.md §1).
+    declared = str(defn.get("type") or defn.get("transport") or "").strip().lower()
+    if declared:
+        return declared
+    # 2) 선언이 없을 때만 추론(현행 유지)
     if defn.get("url") or defn.get("httpUrl") or defn.get("serverUrl"):
         return "http"
     if defn.get("command"):
@@ -450,6 +462,123 @@ def scan_agy(worktree_path: Optional[str] = None, worktree_id: Optional[str] = N
 
 
 ADAPTERS = {"claude": scan_claude, "codex": scan_codex, "agy": scan_agy}
+
+
+# ------------------------------------------------------------ 검증(P3-2) 전용
+#
+# 위 scan_*()는 **값을 절대 안 담는다**(97번 §2-3) — 화면에 나가기 때문이다.
+# 검증은 정반대로 실제 명령을 스폰해야 하므로 값이 필요하다. 그래서 별도
+# 경로를 둔다: `find_raw_defn`이 원본 정의(dict, 값 그대로)를 찾고,
+# `resolve_launch`가 스폰 인자로 조립한다. **이 두 함수의 반환값은 절대
+# API 응답에 그대로 실으면 안 된다** — `mcp_verify`에 넘기는 용도로만 쓴다.
+
+
+def find_raw_defn(
+    tool: str, scope: str, name: str, *,
+    worktree_path: Optional[str] = None, worktree_id: Optional[str] = None,
+) -> tuple[Optional[dict], Optional[Path]]:
+    """이름으로 원본 정의 하나를 찾는다. scan_*()와 같은 파일을 같은 순서로 본다."""
+    if tool == "claude":
+        path = claude_paths()["global"]
+        data, err = _read_json(path)
+        if err or data is None:
+            return None, path
+        if scope == "global":
+            defn = _as_mapping(data.get("mcpServers")).get(name)
+            return (defn if isinstance(defn, dict) else None), path
+        project = _claude_project_entry(data, worktree_path)
+        defn = _as_mapping(project.get("mcpServers")).get(name)
+        if isinstance(defn, dict):
+            return defn, path
+        if worktree_path:
+            mcp_json = Path(worktree_path) / ".mcp.json"
+            pdata, perr = _read_json(mcp_json)
+            if not perr and pdata:
+                defn = _as_mapping(pdata.get("mcpServers")).get(name)
+                if isinstance(defn, dict):
+                    return defn, mcp_json
+        return None, path
+
+    if tool == "codex":
+        path = codex_paths()["global"]
+        data, err = _read_toml(path)
+        if not err and data:
+            defn = _as_mapping(data.get("mcp_servers")).get(name)
+            if isinstance(defn, dict):
+                return defn, path
+        if worktree_path:
+            local = Path(worktree_path) / ".codex" / "config.toml"
+            ldata, lerr = _read_toml(local)
+            if not lerr and ldata:
+                defn = _as_mapping(ldata.get("mcp_servers")).get(name)
+                if isinstance(defn, dict):
+                    return defn, local
+        return None, path
+
+    if tool == "agy":
+        path = agy_paths()["global"]
+        data, err = _read_json(path)
+        if err or data is None:
+            return None, path
+        defn = _as_mapping(data.get("mcpServers")).get(name)
+        return (defn if isinstance(defn, dict) else None), path
+
+    return None, None
+
+
+def resolve_launch(
+    tool: str, scope: str, name: str, *,
+    worktree_path: Optional[str] = None, worktree_id: Optional[str] = None,
+) -> Optional[dict]:
+    """검증(`mcp_verify`)에 넘길 스폰 정보. **값이 실려 있다 — 응답으로 내보내지 않는다.**
+
+    stdio: `{"transport": "stdio", "command", "args", "env"}`.
+    http/sse: `{"transport": "http"|"sse", "url"}`.
+    못 찾거나 command/url이 없으면 None.
+    """
+    defn, _path = find_raw_defn(tool, scope, name, worktree_path=worktree_path, worktree_id=worktree_id)
+    if defn is None:
+        return None
+
+    transport = _transport(defn)
+    if transport in ("http", "sse"):
+        url = defn.get("url") or defn.get("httpUrl") or defn.get("serverUrl")
+        if not isinstance(url, str) or not url:
+            return None
+        return {"transport": transport, "url": url}
+
+    command = defn.get("command")
+    if not isinstance(command, str) or not command:
+        return None
+    args = [a for a in (defn.get("args") or []) if isinstance(a, str)]
+
+    resolved_env: dict[str, str] = {}
+    if tool == "codex":
+        # codex는 env 값을 파일에 안 적는다 — `env_vars`가 이름만 나열하고,
+        # 실제 값은 codex 자신의 프로세스 환경에서 가져온다. 우리도 우리
+        # 프로세스 환경에 이미 있는 것만 넘긴다 — 없으면 그 서버는 codex
+        # 안에서도 우리 안에서도 똑같이 그 변수 없이 뜬다.
+        for key in _as_name_list(defn.get("env_vars")):
+            val = os.environ.get(key)
+            if val:
+                resolved_env[key] = val
+    else:
+        style = "brace_env" if tool == "opencode" else "dollar"
+        for key, value in _as_mapping(defn.get("env")).items():
+            if not isinstance(value, str):
+                continue
+            ref, literal = _classify_ref(value, style=style)
+            if literal or ref is None:
+                resolved_env[key] = value
+                continue
+            # 참조 — 우리 자격증명 저장소에서 지문이 맞는 것만 찾아 채운다.
+            # 없으면 원문 그대로 넘긴다(값을 지어내지 않는다) — 서버가 그
+            # 변수 없이 스스로 실패하면 그게 곧 정확한 검증 결과다.
+            import mcp_catalog
+            creds = mcp_catalog.env_for([{"name": name, "fingerprint": _fingerprint(defn)}])
+            resolved_env[key] = creds.get(ref) or creds.get(key) or value
+
+    return {"transport": "stdio", "command": command, "args": args, "env": resolved_env}
 
 
 # ------------------------------------------------------------ 참조 쓰기 (3단계)

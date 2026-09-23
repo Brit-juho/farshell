@@ -162,3 +162,66 @@ def test_all_active_reports_host_per_entry():
     a.on_event("pre", {**payload, "session_id": "s2"}, host="gpu-box")
     rows = {r["session_id"]: r["host"] for r in a.all_active()}
     assert rows == {"s1": a.LOCAL_HOST, "s2": "gpu-box"}
+
+
+# ---------------------------------------------------------------------------
+# P2-1(ADR-34) — 에이전트 귀속을 엔트리에 박는다. docs/plan-2.3/30-agent-attribution.md §5.
+
+def test_agent_param_on_event_sets_the_entry_agent():
+    result = agent_status.on_event(
+        "pre", {"session_id": "s1", "cwd": "/x", "tool_name": "Bash"}, agent="codex",
+    )
+    assert result["agent"] == "codex"
+
+
+def test_e1_missing_agent_does_not_clear_the_existing_value():
+    """구버전 훅 설치는 `agent`를 안 실어 보낼 수 있다 — 그 요청이 이미 박힌
+    이름을 지우면 안 된다."""
+    agent_status.on_event("pre", {"session_id": "s1", "cwd": "/x"}, agent="claude")
+    result = agent_status.on_event("post", {"session_id": "s1"})  # agent 없음
+    assert result["agent"] == "claude"
+
+
+def test_e2_repeated_same_agent_does_not_touch_other_fields():
+    agent_status.on_event("pre", {"session_id": "s1", "cwd": "/x"}, agent="claude")
+    since_before = agent_status.get_state("s1")["since"]
+    ent = agent_status._state[agent_status._key("s1")]
+    ent["since"] = 0  # since가 실제로 갱신 안 되는지 보려고 인위적으로 되돌린다
+    agent_status._apply_agent(ent, "claude")  # 같은 값 재적용
+    assert ent["since"] == 0, "같은 agent 재적용이 다른 필드를 건드리면 안 된다"
+
+
+def test_e6_empty_string_agent_is_ignored():
+    agent_status.on_event("pre", {"session_id": "s1", "cwd": "/x"}, agent="claude")
+    result = agent_status.on_event("post", {"session_id": "s1"}, agent="")
+    assert result["agent"] == "claude"
+
+
+def test_e11_overlong_or_invalid_agent_names_are_rejected():
+    too_long = "a" * 33
+    result = agent_status.on_event("pre", {"session_id": "s1", "cwd": "/x"}, agent=too_long)
+    assert result.get("agent") is None
+
+    result2 = agent_status.on_event(
+        "post", {"session_id": "s1"}, agent="claude; rm -rf /",
+    )
+    assert result2.get("agent") is None
+
+    result3 = agent_status.on_event("post", {"session_id": "s1"}, agent="qwen-code")
+    assert result3["agent"] == "qwen-code"  # 하이픈은 허용
+
+
+def test_last_primary_signal_wins_between_self_report_and_hook():
+    """자기보고(report)와 훅(on_event)이 같은 엔트리에 섞여도 **마지막으로
+    도착한 1차 신호**가 이긴다 — 어느 경로든 자기 이름이 정확하다고 믿는다."""
+    agent_status.report("s1", agent_status.WORKING, agent="aider")
+    assert agent_status.get_state("s1")["agent"] == "aider"
+    agent_status.on_event("pre", {"session_id": "s1", "cwd": "/x"}, agent="codex")
+    assert agent_status.get_state("s1")["agent"] == "codex"
+
+
+def test_report_validates_agent_through_the_same_gate_as_hooks():
+    """`_apply_agent`가 유일한 진입점이다 — `fsh pane report --agent`도
+    E11(길이·문자 제한)을 통과해야 한다."""
+    agent_status.report("s1", agent_status.WORKING, agent="claude; rm -rf /")
+    assert agent_status.get_state("s1").get("agent") is None

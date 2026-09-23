@@ -4,6 +4,11 @@ pty_manager.py의 scrollback 링버퍼(test_scrollback_memory.py가 트리밍 �
 단위 테스트한다)를 새 세션을 실제로 스폰하지 않고도 검사하기 위해, deps.pty_mgr의
 내부 세션 딕셔너리에 PTYSession을 직접 심고 _append_scrollback으로 채운다 —
 test_scrollback_memory.py와 같은 요령이다.
+
+ADR-43(2.3.0)으로 영속 로그 확장이 없어졌다 — 이제 이 라우트는 **디스크를
+전혀 읽지 않는다**(인메모리 링버퍼만). 그래서 이 파일도 더 이상 `VT_STATE_DIR`
+격리가 필요 없다 — 예전엔 실제 `~/.vt/scrollback`을 읽어버리는 사고가 있었지만
+(2026-09-19), 그 경로 자체가 사라졌다.
 """
 
 import pytest
@@ -21,17 +26,8 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def _isolated_state(monkeypatch, tmp_path):
-    """이 검사는 **영속 로그까지** 훑는다(`scrollback_persist.logged_session_ids`).
-    그 경로는 `VT_STATE_DIR`이 없으면 `~/.vt/scrollback`, 즉 **이 기계를 쓰는
-    사람의 진짜 터미널 출력**이다. 2026-09-19에 확인했다: 이 파일만 따로 돌리면
-    거기 쌓인 9.5MB를 읽어 `truncated: True`가 나오면서 두 건이 깨졌다. 전체
-    스위트에서는 앞선 테스트가 `VT_STATE_DIR`을 tmp로 돌려놔서 우연히 통과했다 —
-    통과 여부가 실행 순서에 달려 있었던 셈이고, 남의 데이터를 읽는 건 그 자체로
-    막아야 한다. 빈 tmp 디렉터리로 고정한다.
-    """
-    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
-    # 다른 테스트/이전 실행이 남긴 세션이 섞이지 않도록 앞뒤로 비운다.
+def _clean_sessions():
+    """다른 테스트/이전 실행이 남긴 세션이 섞이지 않도록 앞뒤로 비운다."""
     pty_mgr._sessions.clear()
     yield
     pty_mgr._sessions.clear()
@@ -123,73 +119,13 @@ def test_result_cap_sets_truncated(client):
     assert data["truncated"] is True
 
 
-# --- 영속 로그까지 확장 (2.1.2, 80-multihost-agents.md §3) -------------------------
-
-
-@pytest.fixture
-def logs(tmp_path, monkeypatch):
-    """격리된 ~/.vt/scrollback/. scrollback_persist는 매 호출 시 env를 다시 읽는다."""
-    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path))
-    d = tmp_path / "scrollback"
-    d.mkdir()
-    return d
-
-
-def _write_log(logs, session_id, text, rotated=None):
-    if rotated is not None:
-        (logs / f"{session_id}.log.1").write_text(rotated)
-    (logs / f"{session_id}.log").write_text(text)
-
-
-def test_search_finds_output_of_a_session_that_no_longer_exists(client, logs):
-    """이 확장의 핵심 — 서버 재시작·세션 종료로 링버퍼가 사라진 뒤에도 찾힌다."""
-    _write_log(logs, "dead-1", "build ok\nTypeError: boom\ndone\n")
-    r = client.get("/api/search/scrollback?q=TypeError")
-    assert r.status_code == 200
-    results = r.json()["results"]
-    assert len(results) == 1
-    assert results[0]["session_id"] == "dead-1"
-    assert results[0]["source"] == "log"
-    assert results[0]["line"] == "TypeError: boom"
-
-
-def test_rotated_generation_is_searched_before_the_current_log(client, logs):
-    _write_log(logs, "s9", "recent line\n", rotated="older marker line\n")
-    lines = [x["line"] for x in client.get("/api/search/scrollback?q=marker").json()["results"]]
-    assert lines == ["older marker line"]
-
-
-def test_live_session_with_a_log_is_not_reported_twice(client, logs):
-    """세션 하나당 한 소스만 본다 — 링버퍼는 로그의 꼬리라 겹친다."""
+def test_result_source_is_always_live(client):
+    """ADR-43 이후 소스는 하나뿐이다. 필드 자체는 원격 피어(구버전 호스트)와의
+    응답 형태 호환을 위해 남겨뒀다 — 값이 항상 `"live"`인지 여기서 고정한다."""
     _seed_session("s1", "dev", ["needle here"])
-    _write_log(logs, "s1", "needle here\n")
-    results = client.get("/api/search/scrollback?q=needle").json()["results"]
-    assert len(results) == 1
-    assert results[0]["source"] == "log"
-
-
-def test_live_session_without_a_log_still_uses_the_ring_buffer(client, logs):
-    _seed_session("s2", "dev", ["needle here"])
     results = client.get("/api/search/scrollback?q=needle").json()["results"]
     assert len(results) == 1
     assert results[0]["source"] == "live"
-
-
-def test_sessions_filter_also_applies_to_logged_only_sessions(client, logs):
-    _write_log(logs, "keep", "needle\n")
-    _write_log(logs, "skip", "needle\n")
-    results = client.get("/api/search/scrollback?q=needle&sessions=keep").json()["results"]
-    assert [x["session_id"] for x in results] == ["keep"]
-
-
-def test_huge_log_is_scanned_from_the_tail_and_marked_truncated(client, logs, monkeypatch):
-    """오래된 쪽을 자른다 — 사람이 찾는 건 대개 최근이고, 잘렸다는 사실은 알린다."""
-    import routes.search as search_mod
-    monkeypatch.setattr(search_mod, "MAX_LOG_SCAN_BYTES", 64)
-    _write_log(logs, "big", "old needle\n" + "x" * 200 + "\nnew needle\n")
-    body = client.get("/api/search/scrollback?q=needle").json()
-    assert body["truncated"] is True
-    assert [x["line"] for x in body["results"]] == ["new needle"]
 
 
 def test_peer_mirror_sessions_are_excluded(client):

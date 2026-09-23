@@ -18,22 +18,38 @@ const { importFresh } = require('./helpers/vm-esm');
 const CORE_STORE_JS = path.join(__dirname, '../js/core/store.js');
 const LAYOUT_STORE_JS = path.join(__dirname, '../js/layout/store.js');
 const VIEWER_LAZY_JS = path.join(__dirname, '../js/panels/viewer-lazy.js');
+const SETTINGS_JS = path.join(__dirname, '../js/core/settings.js');
 
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
-async function load() {
-  const env = createDomEnv('<!doctype html><html><body></body></html>');
+async function load(bodyHTML = '') {
+  const env = createDomEnv(`<!doctype html><html><body>${bodyHTML}</body></html>`);
   _doms.push(env.dom);
   const { window } = env;
-  window.fetch = async () => ({ ok: true, json: async () => ({}) });
+  window.fetch = async () => ({ ok: true, status: 200, json: async () => ({ content: '' }) });
   window.showToast = () => {};
+  window.fitAndResize = () => {};
+  window.API_BASE = '';
+  window._tokenQuery = '';
+  window.VTDiffLex = { normalize: (s) => String(s ?? ''), langForPath: () => null };
 
   const cache = new Map();
   const core = await importFresh(CORE_STORE_JS, env.context, cache);
   const layout = await importFresh(LAYOUT_STORE_JS, env.context, cache);
+  const settings = await importFresh(SETTINGS_JS, env.context, cache);
   const lazy = await importFresh(VIEWER_LAZY_JS, env.context, cache);
-  return { window, core, layout, lazy };
+  return { window, document: env.document, core, layout, settings, lazy };
+}
+
+async function waitFor(fn, ms = 2000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  return fn();
 }
 
 test('openFileInPane — 앱과 같은 레이아웃 스토어의 트리를 바꾼다(싱글톤 공유)', async () => {
@@ -72,4 +88,40 @@ test('빈 경로는 아무것도 하지 않는다', async () => {
   const before = layout.getTree();
   lazy.openFileInPane('');
   assert.strictEqual(layout.getTree(), before);
+});
+
+// ADR-44 — 파일 열기의 기본 진입점이 openFile로 갈렸다. openFileInPane은 의미 그대로
+// (위 테스트들이 계속 그걸 지킨다), openFile은 표면 설정을 따른다.
+test('openFile — 기본 표면(sheet)은 pane 트리를 건드리지 않고 오버레이로 연다', async () => {
+  const { document, core, layout, lazy } = await load('<div id="terminal-container"></div>');
+  core.registerSession('sess-1', { wsHandle: null, tabEl: null, tmuxName: 'dev' });
+  layout.setPaneSession('sess-1');
+  const before = layout.getTree();
+
+  lazy.openFile('/tmp/example.txt');
+  const el = await waitFor(() => document.getElementById('vt-file'));
+
+  assert.ok(el, '오버레이가 열린다');
+  assert.strictEqual(el.dataset.viewerFile, '/tmp/example.txt');
+  assert.strictEqual(layout.getTree(), before, '터미널 pane을 쪼개지 않는다 — 리플로우가 없다');
+});
+
+test('openFile — 표면이 pane이면 지금까지처럼 터미널 옆을 쪼갠다', async () => {
+  const { document, core, layout, settings, lazy } = await load('<div id="terminal-container"></div>');
+  await settings.set('viewer.surface', 'pane');
+  core.registerSession('sess-1', { wsHandle: null, tabEl: null, tmuxName: 'dev' });
+  layout.setPaneSession('sess-1');
+
+  lazy.openFile('/tmp/example.txt');
+
+  const tree = layout.getTree();
+  assert.strictEqual(tree.t, 'split');
+  assert.strictEqual(tree.b.file, '/tmp/example.txt');
+  assert.strictEqual(document.getElementById('vt-file'), null);
+});
+
+test('window.openFile·window.openFileInPane 브리지가 둘 다 등록된다', async () => {
+  const { window, lazy } = await load();
+  assert.strictEqual(window.openFile, lazy.openFile);
+  assert.strictEqual(window.openFileInPane, lazy.openFileInPane, 'e2e 스모크가 이 이름으로 pane 경로를 검증한다');
 });

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import logging
 import os
@@ -14,12 +13,12 @@ from typing import Callable, Optional
 from fastapi import APIRouter, File, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+import agent_status
 import auth
 import crypto_channel
 import deps as _deps  # 전역 카운터 직접 수정용
 import file_store
 import paste_prepare
-import scrollback_persist
 import tmux_runner
 from deps import (
     pty_mgr, session_store, output_watcher, _auto_responder, _prompt_detector,
@@ -164,33 +163,6 @@ async def delete_session(session_id: str):
     return {"ok": True, "tmux_detached": tmux_name}
 
 
-@router.get("/api/sessions/{session_id}/scrollback")
-async def session_scrollback(session_id: str, before: Optional[int] = Query(None), limit: int = Query(64 * 1024)):
-    """N13(80-multihost-agents.md §3) — 영속 스크롤백 「더 불러오기」.
-
-    WS 재접속 시 자동 복원되는 인메모리 scrollback(최근 256KB, pty_manager)과는
-    다른 경로다. 이건 scrollback.persist가 켜져 있을 때만 쌓인 디스크 로그를
-    역방향(최신 → 과거)으로 페이지네이션해서 읽는다. persist가 꺼져 있었으면
-    로그 자체가 없어 빈 결과가 나간다 — 별도 에러가 아니라 "더 없음"과 같은 모양.
-    """
-    limit = max(1, min(limit, 1024 * 1024))
-    result = await asyncio.to_thread(scrollback_persist.read_before, session_id, before, limit)
-    return {
-        "data_b64": base64.b64encode(result["data"]).decode("ascii"),
-        "next_before": result["next_before"],
-        "total": result["total"],
-    }
-
-
-@router.get("/api/scrollback/usage")
-async def scrollback_usage():
-    return {
-        "enabled": scrollback_persist.is_enabled(),
-        "bytes": await asyncio.to_thread(scrollback_persist.disk_usage_bytes),
-        "retention_days": scrollback_persist.RETENTION_DAYS,
-    }
-
-
 @router.post("/api/sessions/{session_id}/keys")
 async def send_keys(session_id: str, request: Request):
     """N38(70-mobile.md §2) — 모바일 플릿 홈의 인라인 승인 버튼이 부르는 경로.
@@ -210,6 +182,18 @@ async def send_keys(session_id: str, request: Request):
     text = body.get("text")
     if not isinstance(text, str) or not text:
         return JSONResponse({"error": "bad_request", "reason": "text required"}, status_code=400)
+
+    # P1-1(ADR-33) — 승인 응답 경쟁. `prompt_id`가 실려 오면 이 요청이 그
+    # 토큰을 소비했을 때만 아래로 내려간다 — 부수효과(PTY 쓰기)는 경쟁을
+    # 이긴 뒤에만 일어난다(docs/plan-2.3/10-approval-race.md §2.3/§3.3).
+    # `prompt_id`가 없으면(터미널 직접 타이핑, WS 입력, 구버전 클라이언트)
+    # 기존 동작 그대로 통과한다.
+    prompt_id = body.get("prompt_id")
+    if prompt_id is not None:
+        info = session_store.get(session_id)
+        tmux_name = info.tmux_name if info else None
+        if not tmux_name or not agent_status.consume_prompt(tmux_name, str(prompt_id)):
+            return JSONResponse({"error": "stale_prompt"}, status_code=409)
     try:
         # WS 입력 경로와 같은 해제 판정: 이 세션에 뭔가 써 넣는 것 자체가
         # "사람이 답했다"는 가장 확실한 신호다(§2: 버튼도 답이다).

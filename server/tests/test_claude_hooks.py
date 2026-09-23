@@ -32,7 +32,8 @@ def test_install_on_empty_config_registers_three_events(cfg):
     for event, arg in ch.EVENTS.items():
         cmds = _cmds(data, event)
         assert len(cmds) == 1, f"{event}에 항목이 정확히 하나여야 한다: {cmds}"
-        assert cmds[0].endswith(f"agent_hook.sh {arg}")
+        # P2-1(ADR-34) — claude_hooks도 codex_hooks처럼 에이전트 이름을 명시한다.
+        assert cmds[0].endswith(f"agent_hook.sh {arg} claude")
     # 도구 훅은 모든 도구를 봐야 하므로 matcher "*", Stop은 matcher 자체가 없다.
     assert data["hooks"]["PreToolUse"][0]["matcher"] == "*"
     assert "matcher" not in data["hooks"]["Stop"][0]
@@ -59,7 +60,7 @@ def test_install_preserves_foreign_hooks(cfg):
     assert data["model"] == "opus", "훅과 무관한 키는 그대로여야 한다"
     assert "/home/x/other_stop.sh" in _cmds(data, "Stop")
     assert _cmds(data, "UserPromptSubmit") == ["/home/x/coach.sh"]
-    assert any("agent_hook.sh stop" in c for c in _cmds(data, "Stop"))
+    assert any("agent_hook.sh stop claude" in c for c in _cmds(data, "Stop"))
     # 남의 훅에 붙어 있던 timeout 같은 필드도 그대로 보존돼야 한다
     assert any(
         h.get("timeout") == 10
@@ -81,7 +82,7 @@ def test_direct_tts_hook_entry_is_replaced_not_duplicated(cfg):
     ch._cmd_install()
     stop = _cmds(json.loads(cfg.read_text()), "Stop")
     assert len(stop) == 1, f"항목이 늘어나면 안 된다: {stop}"
-    assert stop[0].endswith("agent_hook.sh stop")
+    assert stop[0].endswith("agent_hook.sh stop claude")
 
 
 def test_moved_repo_path_is_updated_not_appended(cfg):
@@ -106,7 +107,7 @@ def test_our_hook_sharing_a_group_with_foreign_hook_keeps_both(cfg):
     ch._cmd_install()
     stop = _cmds(json.loads(cfg.read_text()), "Stop")
     assert "/home/x/other.sh" in stop
-    assert any(c.endswith("agent_hook.sh stop") for c in stop)
+    assert any(c.endswith("agent_hook.sh stop claude") for c in stop)
     assert len(stop) == 2
 
 

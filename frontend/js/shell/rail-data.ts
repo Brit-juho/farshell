@@ -35,6 +35,14 @@ export interface RailRowInput {
   /** toml `options` 캡처로 뽑은 번호 선택지. 못 뽑았으면 null(또는 undefined)
    * — 그 경우 Fleet.tsx는 버튼 대신 「터미널로」를 그린다. */
   options?: { key: string; label: string }[] | null;
+  /** P1-1(ADR-33) — 지금 이 질문을 가리키는 토큰. 화면 둘이 같은 선택지를
+   * 동시에 눌러도 먼저 도착한 요청만 이 토큰을 소비하고, 나머지는 409로
+   * 떨어져 PTY에 아무것도 쓰지 않는다(docs/plan-2.3/10-approval-race.md).
+   * 같은 질문이 다시 렌더돼도(ANSI 잔여·후행 공백) 토큰은 그대로다 — 서버가
+   * 질문+선택지 키로 지문을 내 판정한다. null/undefined면 구버전 서버이거나
+   * 토큰을 소비할 질문이 아직 없다는 뜻이고, 그때는 필드 없이 보낸다(기존
+   * 동작 그대로 통과). */
+  promptId?: string | null;
 }
 
 export interface RailRow extends RailRowInput {
@@ -195,6 +203,8 @@ export interface OtherRailRowInput {
   changed?: { files: number; add: number; del: number } | null;
   question?: string | null;
   options?: { key: string; label: string }[] | null;
+  /** P1-1(ADR-33) — RailRowInput의 같은 이름 필드와 같은 뜻. */
+  promptId?: string | null;
   /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 모르면 null/undefined — "셸"과
    * "모름"은 다르다. */
   agent?: string | null;

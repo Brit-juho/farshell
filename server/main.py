@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import re
+import shutil
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -32,8 +33,8 @@ import auth
 import file_store
 import network_access
 import port_proxy
-import scrollback_persist
 import tunnel
+import vt_paths
 from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
 from routes.tmux import router as tmux_router
@@ -119,6 +120,8 @@ class TokenAuthMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        # HTTP만 본다(P2-5 표 #3) — WS는 라우트가 핸드셰이크에서 직접 검사한다
+        # (#3′, docs/ref/auth.md). 전송 범위를 바꾸면 그 표도 고칠 것.
         if scope["type"] != "http" or not auth.is_protected():
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
@@ -127,17 +130,10 @@ class TokenAuthMiddleware:
             "/api/auth", "/api/auth/status", "/api/auth/logout",
         ) or path.startswith("/static") or path.startswith("/s/") or path.startswith("/api/peer/") \
                 or path == "/p/authorize":
-            # /s/{token} — 공유 링크(N21)의 공개 진입점. 이 표준 인증 체크를
-            # 우회하지만 미인증 상태로 통과시키는 게 아니다 — routes/share.py가
-            # 토큰 서명·만료·모드(device/pin)별 자체 검증을 반드시 거친다.
-            # /p/authorize — 노출 포트 session 모드 핸드셰이크(2.2 §3). 최상위
-            # 브라우저 내비게이션이라 JSON 401이 아니라 **로그인 게이트로
-            # 리다이렉트**해야 한다(/s/ 와 같은 이유). routes/system.py가 세션·
-            # 기기를 직접 확인하고, 통과하지 못하면 `/?next=`로 돌려보낸다.
-            # /api/peer/* — 원격 호스트(N7/N39)의 진입점. 브라우저 세션 쿠키가
-            # 있을 리 없으므로 여기를 우회하고, routes/peer.py가 HMAC 서명·시간창·
-            # nonce 재생 차단을 직접 검증한다. peer가 닿을 수 있는 라우트는
-            # 그 파일에 있는 것뿐이라 토큰이 새도 다른 API로는 못 넘어간다.
+            # 이 예외들이 각각 어느 층을 끄고 무엇이 그 자리를 대신하는지는
+            # docs/ref/auth.md 「Authorization order」 §Exceptions 표. 여기 목록을
+            # 고치면 그 표도 고친다(scripts/check_docs.py는 층 순서만 검사하고
+            # 이 표는 검사하지 않는다 — 사람이 맞춰야 한다).
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
         token = (
@@ -202,6 +198,7 @@ class OriginGuardMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        # HTTP + WS 둘 다(P2-5 표 #1). 전송 범위를 바꾸면 docs/ref/auth.md도 고칠 것.
         if scope["type"] not in ("http", "websocket"):
             return await self.app(scope, receive, send)
         headers = _scope_headers(scope)
@@ -256,6 +253,7 @@ class NetworkAccessMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        # HTTP + WS 둘 다(P2-5 표 #4). 전송 범위를 바꾸면 docs/ref/auth.md도 고칠 것.
         if scope["type"] not in ("http", "websocket"):
             return await self.app(scope, receive, send)
         spec = network_access.get_current_spec()
@@ -326,12 +324,26 @@ async def lifespan(_app: FastAPI):
 
     # N19 — 레거시 업로드(/tmp/vt-uploads)를 ~/.vt/files/로 편입 + 고아 정리 +
     # TTL/용량 정리를 기동 시 1회, 그 뒤 6시간마다 반복. 블로킹 I/O라 to_thread.
-    await asyncio.to_thread(file_store.migrate_legacy)
+    #
+    # P2-4(ADR-41) §2.4 — 격리를 선언한 프로세스(VT_STATE_DIR·VT_RUN_DIR 중
+    # 하나라도 명시)는 레거시 편입을 건너뛴다. `LEGACY_UPLOAD_DIR`이 이미
+    # `VT_RUN_DIR`을 따라가므로 지금 당장 사고가 나는 건 아니지만
+    # (docs/plan-2.3/80-vt-paths.md §2.4), 그건 우연이지 규칙이 아니었다 —
+    # 다음에 레거시 마이그레이션이 하나 더 생기면 같은 판단을 처음부터 다시
+    # 해야 한다. 여기서 명문화한다.
+    if vt_paths.is_isolated():
+        logger.info("[vt_paths] 격리된 프로세스 — 레거시 업로드 편입을 건너뛴다")
+    else:
+        await asyncio.to_thread(file_store.migrate_legacy)
     await asyncio.to_thread(file_store.reconcile_orphans)
     await asyncio.to_thread(file_store.cleanup)
     files_cleanup_task = asyncio.create_task(_file_store_cleanup_loop())
-    # N13 — 스크롤백 영속 로그도 같은 6시간 주기로 7일 보관 정리(scrollback_persist.py).
-    scrollback_cleanup_task = asyncio.create_task(_scrollback_cleanup_loop())
+    # ADR-43(2.3.0) — 스크롤백 영속화 기능 자체를 없앴다(옵트인 토글이 한
+    # 번도 켜진 적이 없어 위험만 있고 값어치는 없었다). 기능과 함께 7일 보관
+    # 정리 루프도 사라지므로, 남은 로그를 여기서 1회 청소하지 않으면
+    # **영원히 남는다** — 비밀값 노출을 줄이려다 오히려 회수 불가로 만드는
+    # 셈이다(docs/plan-2.3/87-remove-scrollback-persist.md §5).
+    await asyncio.to_thread(_purge_legacy_scrollback)
 
     # 2.2 — 노출 포트 프록시 리스너 복구(ADR-31). `fsh stop --keep-tunnel`은 추가
     # 포트 터널을 일부러 살려두므로, 재기동한 우리가 **같은 proxyPort**에 다시
@@ -355,13 +367,10 @@ async def lifespan(_app: FastAPI):
         await port_proxy.shutdown_all()
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
-        scrollback_cleanup_task.cancel()
         with suppress(asyncio.CancelledError):
             await stt_idle_task
         with suppress(asyncio.CancelledError):
             await files_cleanup_task
-        with suppress(asyncio.CancelledError):
-            await scrollback_cleanup_task
         output_watcher.stop()
         pty_mgr.destroy_all()
 
@@ -375,20 +384,39 @@ async def _file_store_cleanup_loop() -> None:
             logger.warning(f"file_store 주기 정리 실패: {e}")
 
 
-async def _scrollback_cleanup_loop() -> None:
-    while True:
-        await asyncio.sleep(file_store.CLEANUP_INTERVAL_SECONDS)
-        try:
-            await asyncio.to_thread(scrollback_persist.cleanup_old)
-        except Exception as e:
-            logger.warning(f"scrollback_persist 주기 정리 실패: {e}")
+def _purge_legacy_scrollback() -> None:
+    """2.3.0 — 스크롤백 영속화 제거(ADR-43)에 따른 잔여 로그 1회성 정리.
+
+    기능과 함께 7일 정리 태스크도 사라지므로, 남은 파일을 여기서 치우지
+    않으면 영원히 남는다. `scrollback` **하위 디렉터리만** 지운다 —
+    상태 디렉터리 자체(`vt_paths.state_dir()`)는 절대 안 건드린다.
+
+    실패를 조용히 삼키지 않는다 — 정리가 안 됐으면 경로를 로그에 남겨
+    사용자가 직접 지울 수 있게 한다(서버 기동 자체는 막지 않는다).
+    """
+    d = vt_paths.state_dir() / "scrollback"
+    if not d.is_dir():
+        return
+    try:
+        n = sum(1 for _ in d.glob("*.log*"))
+        shutil.rmtree(d)
+        logger.info(f"[migrate] 스크롤백 영속 로그 {n}개 제거 (기능 폐지, ADR-43)")
+    except OSError as e:
+        logger.warning(f"[migrate] 스크롤백 로그 정리 실패 — 수동 삭제 필요: {d} ({e})")
 
 
 # ---------------------------------------------------------------------------
 # 앱 구성
 # ---------------------------------------------------------------------------
 
-app = FastAPI(lifespan=lifespan)
+# P2-3(ADR-38) — Swagger UI(/docs)·ReDoc(/redoc)·원문 스펙(/openapi.json)을
+# 끈다. FarShell은 공개 터널 뒤에 있고, 전체 API 표면을 그려주는 것은
+# 접근 제어 사상(ADR-30~32 계열)과 어긋난다. `TokenAuthMiddleware` 예외
+# 목록에 이 경로들이 없어 인증이 켜진 배포에서는 로그인 뒤였지만(단독
+# 취약점은 아니었다), 인증을 끈 구성에서는 그대로 열려 있었다. 스펙 자체는
+# `app.openapi()`를 프로세스 안에서 호출해 CI에서만 꺼낸다 — 엔드포인트가
+# 필요 없다(docs/plan-2.3/50-contract.md §2.4).
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(NetworkAccessMiddleware)
 app.add_middleware(TokenAuthMiddleware)
 # 프론트엔드는 이 서버가 직접 서빙하므로(동일 출처) CORS가 필요 없다. 예전엔 `*`로

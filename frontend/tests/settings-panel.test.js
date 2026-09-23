@@ -656,50 +656,10 @@ test('보안 — API 실패 시 표 대신 안내 문구', async () => {
   assert.ok(helps.some((t) => t.includes('승격 상태를 확인할 수 없습니다')));
 });
 
-// ── 「스크롤백」(N13, 80-multihost-agents.md §3) ──────────────────────────
-
-test('스크롤백 — 토글 변경이 스토어와 서버로 나간다', async () => {
-  const { document, P, S, puts } = await build({
-    fetchExtra: (u) => (u.includes('/api/scrollback/usage')
-      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ bytes: 1234 }) })
-      : null),
-  });
-  P.showSettings();
-  sectionButton(document, '터미널').click();
-  const tg = rowByLabel(document, '스크롤백 영속화').querySelector('.vt-toggle');
-  assert.strictEqual(tg.getAttribute('aria-checked'), 'false'); // 기본 OFF
-  tg.click();
-  await flush();
-  assert.strictEqual(S.get('scrollback.persist'), true);
-  assert.strictEqual(puts.at(-1).settings['scrollback.persist'], true);
-});
-
-test('스크롤백 — 디스크 사용량을 보여준다', async () => {
-  const { document, P } = await build({
-    fetchExtra: (u) => (u.includes('/api/scrollback/usage')
-      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ bytes: 2 * 1024 * 1024 }) })
-      : null),
-  });
-  P.showSettings();
-  sectionButton(document, '터미널').click();
-  await flush();
-  const texts = Array.from(document.querySelectorAll('.vt-set-help, .vt-set-sechost'))
-    .map((e) => e.textContent);
-  assert.ok(texts.some((t) => t.includes('2.0MB')));
-});
-
-test('스크롤백 — API 실패 시 안내 문구', async () => {
-  const { document, P } = await build({
-    fetchExtra: (u) => (u.includes('/api/scrollback/usage')
-      ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
-      : null),
-  });
-  P.showSettings();
-  sectionButton(document, '터미널').click();
-  await flush();
-  const texts = Array.from(document.querySelectorAll('.vt-set-sechost')).map((e) => e.textContent);
-  assert.ok(texts.some((t) => t.includes('디스크 사용량을 확인할 수 없습니다')));
-});
+// ADR-43(2.3.0)으로 「스크롤백」 섹션의 영속화 토글(N13)이 통째로 없어졌다 —
+// 여기 있던 테스트 3개(토글 왕복·디스크 사용량 표시·API 실패 안내)도 함께
+// 지웠다. 줄 수 프리셋 테스트(132행 "스크롤백은 자주 쓰는 값…")는 별개
+// 기능(xterm.js 버퍼)이라 그대로 남는다.
 
 test('음성 — 음성 전용 모드 버튼(#voiceonly-btn)이 이식됐고 media-session.js 계약 id를 유지한다', async () => {
   // 2026-09-18 — legacy rail 플라이아웃 도달 불가 사고로 이 섹션에 옮긴 것.

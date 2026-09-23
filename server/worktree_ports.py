@@ -15,11 +15,13 @@ worktree.py에서 떼어낸 이유: **이 모듈은 자기 완결적이다.** �
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
+
+import store_lock
+import vt_paths
 
 # 워크트리마다 100씩 띄운다 — 한 워크트리가 프런트·API·스토리북처럼 여러
 # 포트를 쓰는 걸 전제한 간격이다.
@@ -30,7 +32,10 @@ PORT_STEP = 100
 
 
 def _state_dir() -> Path:
-    return Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()
+    # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
+    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    return vt_paths.state_dir()
 
 
 def _state_path() -> Path:
@@ -49,15 +54,8 @@ def _locked():
         os.chmod(d, 0o700)
     except OSError:
         pass
-    fd = os.open(str(_lock_path()), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with store_lock.exclusive(_lock_path()):
         yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 def _load_ports_map() -> dict:

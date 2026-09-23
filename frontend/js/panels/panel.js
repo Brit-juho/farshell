@@ -37,6 +37,11 @@ import { COMPACT_MAX } from '../layout/breakpoints.js';
     //   onKey(ev)      — Escape 처리를 가로채고 싶을 때. true를 반환하면 기본 닫기를 건너뛴다
     //                     (큐의 "입력 중이던 텍스트만 지우고 패널은 유지" 케이스, 도킹 모드의
     //                     "Esc는 터미널/vim에 쓰이므로 패널을 닫지 않는다" 케이스 등).
+    //   mount          — 붙일 부모. 기본 document.body. 주면 dock 호스트를 묻지 않는다
+    //                     (ADR-44: 파일 뷰어 오버레이는 #terminal-container에 붙어 레일·dock·
+    //                     topbar를 가리지 않는다).
+    //   modal          — 기본 true. false면 모달 관용구 셋(배경 클릭 닫기 · 포커스 트랩 ·
+    //                     aria-modal)을 끈다. Esc는 그대로 onKey가 결정한다.
     //   onClose()      — 패널이 실제로 닫힐 때(X · 배경 클릭 · Esc · 재호출 토글 전부) 호출된다.
     //                     showViewer()가 직접 부르는 게 아니라 X/배경/Esc는 panel.js가 스스로
     //                     closePanel()을 부르므로, "닫힐 때 정리할 것"은 여기로 등록해야
@@ -52,7 +57,7 @@ const FOCUSABLE_SEL = [
 ].join(',');
 
 const MOBILE_ROUTE_IDS = new Set([
-  'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-files', 'vt-dir', 'vt-ports', 'vt-usage',
+  'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-files', 'vt-dir', 'vt-ports', 'vt-usage', 'vt-file',
 ]);
 
 function _withoutPanelState(state) {
@@ -156,7 +161,8 @@ export function openPanel(opts) {
       // 떠 있는 것과도 공존한다(사용자 결정, 2026-09-20).
       if (!opts.paneHost && document.getElementById(opts.id)) { closePanel(opts.id); return null; }
 
-      const host = opts.paneHost || _dockHost(opts.id);
+      const host = opts.paneHost || (opts.mount ? null : _dockHost(opts.id));
+      const modal = opts.modal !== false;
       // 'stale' = dock이 "이 패널은 이제 필요 없다"고 말한 것(요청과 도착 사이에
       // 탭이 바뀌었다). 모달로 폴백하면 안 된다 — 사용자가 안 누른 화면이 뜬다.
       if (host === 'stale') return null;
@@ -167,11 +173,12 @@ export function openPanel(opts) {
       // pane 인스턴스도 "끼워 넣는 자리"라 dock과 같은 껍데기 벗기기가 필요하다
       // — 같은 규칙을 다시 쓰되(`.vt-dock-panel`) 자리를 구분할 수 있게 표시
       // 클래스를 하나 더 붙인다(닫기 X는 pane에서는 살려둔다, 아래 CSS).
-      el.className = (opts.paneHost ? 'vt-dock-panel vt-pane-panel-root' : host ? 'vt-dock-panel' : 'vt-viewer-backdrop')
+      el.className = (opts.paneHost ? 'vt-dock-panel vt-pane-panel-root'
+          : host ? 'vt-dock-panel' : modal ? 'vt-viewer-backdrop' : 'vt-file-overlay')
         + (mobileRoute ? ' vt-mobile-route' : '')
         + (opts.extraClass ? ' ' + opts.extraClass : '');
       el.innerHTML = `
-        <div class="vt-viewer-card" role="dialog" aria-modal="true" aria-label="${opts.ariaLabel}">
+        <div class="vt-viewer-card" role="dialog" aria-modal="${modal}" aria-label="${opts.ariaLabel}">
           <div class="vt-viewer-head">${opts.headHTML}<button class="vt-icon-btn vt-vw-x" aria-label="닫기">${icon('x', 14)}</button></div>
           ${opts.extraHTML || ''}
           <div class="vt-vw-body" id="${opts.bodyId}">${opts.bodyHTML || '<div class="vt-vw-loading">불러오는 중…</div>'}</div>
@@ -198,7 +205,7 @@ export function openPanel(opts) {
         return { el, body: ctx.byId(opts.bodyId), ctx };
       }
 
-      el.addEventListener('click', (ev) => { if (ev.target === el) closePanel(opts.id); });
+      if (modal) el.addEventListener('click', (ev) => { if (ev.target === el) closePanel(opts.id); });
 
       const keyHandler = (ev) => {
         if (ev.key === 'Escape') {
@@ -208,7 +215,7 @@ export function openPanel(opts) {
           return;
         }
         // D7: 포커스 트랩 — Tab이 배경(터미널 등)으로 새지 않게 첫/끝 사이를 순환시킨다.
-        if (ev.key !== 'Tab') return;
+        if (!modal || ev.key !== 'Tab') return;
         const items = _focusables(el);
         if (items.length === 0) return;
         const first = items[0], last = items[items.length - 1];
@@ -223,7 +230,7 @@ export function openPanel(opts) {
       };
       el._vtKeyHandler = keyHandler;
       document.addEventListener('keydown', keyHandler);
-      document.body.appendChild(el);
+      (opts.mount || document.body).appendChild(el);
 
       if (mobileRoute) {
         el._vtMobileHistory = true;

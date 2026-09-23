@@ -129,6 +129,17 @@ def test_public_vs_loopback_flag(monkeypatch):
     assert by_port[6379]["public"] is False        # 127.0.0.1 / [::1]
 
 
+def test_scan_rows_carry_service_identification(monkeypatch):
+    """P3-5 — redis-server 행은 cmd 매칭으로 "Redis"가 붙어야 한다."""
+    monkeypatch.setattr(portscan, "_run", lambda *a, **k: LSOF_SAMPLE)
+    monkeypatch.setattr(portscan, "_ps_info", lambda pids: {})
+    monkeypatch.setenv("USER", "alice")
+    monkeypatch.setenv("VT_PORT", "7777")
+    by_port = {p["port"]: p for p in portscan.scan(use_cache=False)["ports"]}
+    assert by_port[6379]["service"] == {"service": "Redis", "confidence": "cmd"}
+    assert by_port[7777]["service"] is None  # python3.13 — 알려진 이름 아님
+
+
 def test_scan_uses_cache(monkeypatch):
     calls = []
 

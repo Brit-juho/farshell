@@ -31,7 +31,6 @@ Claude Code 자신도 쓰고, flock은 협조적 락이라 상대가 지키지 �
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -42,9 +41,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
+import codex_cli
 import mcp_adapters
 import mcp_scan
-import codex_cli
+import store_lock
+import vt_paths
 
 TOOLS = ("claude", "codex", "agy", "opencode")
 
@@ -57,10 +58,43 @@ class WriteUnverified(Exception):
     """썼지만 확인하지 못했다 — 바뀌었을 수도, 아닐 수도 있다."""
 
 
+# --------------------------------------------------------- P3-1(ADR-37) 배치
+#
+# `set_enabled`을 토글 하나마다 부르면 `~/.claude.json`에 그만큼(재읽기→충돌
+# 검사→쓰기→재읽기) 사이클이 돈다. 웹 UI에서 서버 5개를 켜면 같은 파일에
+# 5번 — 그 파일은 Claude Code 자신도 쓰므로, 사이클마다 "외부 변경 충돌"
+# 창이 한 번씩 새로 열린다. 위험 노출이 변경 건수에 비례한다.
+#
+# 판단(뭘 바꿀지)과 I/O(어떻게 바꿀지)를 분리한다 — `plan_changes`는 파일도
+# 전역도 안 만지는 순수 함수라 dict만으로 테스트된다.
+
+def plan_changes(current: dict[str, bool], wanted: list[dict]) -> list[dict]:
+    """파일에서 읽은 현재 상태 + 원하는 변경들 → 실제로 적용할 변경 목록.
+
+    순수 함수. `current`는 `{name: enabled}` — 파일 형식은 도구마다 다르므로
+    파싱은 호출자 몫이고, 여기는 "무엇을 적용해야 하는가"만 판단한다.
+
+    - 이미 원하는 상태인 항목은 뺀다 — 파일을 아예 안 열 수도 있게 한다.
+    - 같은 이름에 대한 중복 변경은 **마지막 것만** 남긴다. 순서를 지켜서
+      "나중에 오는 것이 이긴다"가 그대로 `wanted`의 뒤쪽이 이긴다는 뜻이 되게 한다.
+    """
+    latest: dict[str, dict] = {}
+    order: list[str] = []
+    for w in wanted:
+        name = w["name"]
+        if name not in latest:
+            order.append(name)
+        latest[name] = w
+    return [latest[name] for name in order if current.get(name) != latest[name]["enabled"]]
+
+
 # ------------------------------------------------------------------ 잠금
 
 def _lock_dir() -> Path:
-    d = Path(os.environ.get("VT_STATE_DIR") or (Path.home() / ".vt")) / "locks"
+    # P2-4(ADR-41) — 예전 관용구(`os.environ.get("VT_STATE_DIR") or (Path.home()
+    # / ".vt")`)는 `VT_STATE_DIR=""`에서 빈 문자열이 falsy라 우연히 폴백이
+    # 걸렸지만, `"~/vt-test"`에서는 `~`를 안 펴서 다른 16곳과 갈라졌다.
+    d = vt_paths.state_dir() / "locks"
     d.mkdir(parents=True, exist_ok=True, mode=0o700)
     return d
 
@@ -68,17 +102,16 @@ def _lock_dir() -> Path:
 @contextmanager
 def _locked(target: Path):
     """대상 파일 하나에 대한 잠금. 잠금 파일은 사용자의 설정 디렉토리를
-    더럽히지 않도록 `~/.vt/locks/` 아래에 둔다."""
+    더럽히지 않도록 `~/.vt/locks/` 아래에 둔다.
+
+    기한이 다른 저장소보다 길다(10초) — 상대(Claude Code 자신)가 협조하지
+    않을 수 있는 파일이라 정직한 경쟁에 더 여유를 준다
+    (`docs/plan-2.3/20-store-durability.md` §3.3).
+    """
     key = hashlib.sha1(str(target).encode()).hexdigest()[:16]
-    fd = os.open(str(_lock_dir() / f"{key}.lock"), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    lock_path = _lock_dir() / f"{key}.lock"
+    with store_lock.exclusive(lock_path, deadline=10.0):
         yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 # -------------------------------------------------------- 원자적 교체·검증
@@ -219,6 +252,141 @@ def _claude_set(name: str, enabled: bool, *, worktree_path: Optional[str], share
             return (name in mcp_adapters._as_name_list(e.get("disabledMcpServers"))) != enabled
 
         return _commit_json(path, before, after, "projects", verify)
+
+
+def _claude_current(entry: dict, name: str, shared: bool) -> bool:
+    """이 프로젝트 항목에서 `name`이 지금 켜져 있는가 — `mcp_adapters.scan_claude`의
+    같은 판정을 여기서도 쓴다(공유는 승인 목록 멤버십, 비공유는 차단 목록 부재)."""
+    if shared:
+        return name in mcp_adapters._as_name_list(entry.get("enabledMcpjsonServers"))
+    return name not in mcp_adapters._as_name_list(entry.get("disabledMcpServers"))
+
+
+def _claude_set_batch(changes: list[dict]) -> list[dict]:
+    """여러 서버를 **한 번의 락+검증+쓰기**로 `~/.claude.json`에 반영한다.
+
+    `changes`: `[{"name", "enabled", "worktree_path", "shared"}, ...]`.
+    이미 원하는 상태인 항목은 `plan_changes`가 걸러낸다 — 프로젝트별로
+    "현재 상태"가 다르므로 (worktree_path, shared) 조합마다 따로 판단한다.
+    검증 실패는 **파일 전체를 롤백**한다(원자 교체 전이라 공짜) — 반쯤
+    적용된 파일을 만들지 않는다.
+    """
+    results: list[dict] = []
+    applicable = []
+    for c in changes:
+        if not c.get("worktree_path"):
+            results.append({"name": c["name"], "status": "failed", "changed": False,
+                            "reason": "claude는 켜짐/꺼짐을 프로젝트별로 기록한다 — 워크트리를 지정해야 한다"})
+        else:
+            applicable.append(c)
+    if not applicable:
+        return results
+
+    path = mcp_adapters.claude_paths()["global"]
+    with _locked(path):
+        before = _load_json_for_write(path)
+        after = json.loads(json.dumps(before))
+        projects = after.setdefault("projects", {})
+        if not isinstance(projects, dict):
+            for c in applicable:
+                results.append({"name": c["name"], "status": "failed", "changed": False,
+                                "reason": "projects가 객체가 아니다 — 쓰기를 중단했다"})
+            return results
+
+        # (worktree_path, shared)별로 묶어 plan_changes를 돌린다 — 같은 조합
+        # 안에서만 "이미 원하는 상태"·"중복 이름" 판단이 성립한다.
+        buckets: dict[tuple, list[dict]] = {}
+        for c in applicable:
+            buckets.setdefault((c["worktree_path"], bool(c.get("shared"))), []).append(c)
+
+        applied: list[dict] = []
+        for (wt_path, shared), bucket in buckets.items():
+            entry = projects.get(wt_path)
+            if entry is not None and not isinstance(entry, dict):
+                for c in bucket:
+                    results.append({"name": c["name"], "status": "failed", "changed": False,
+                                    "reason": "projects 항목이 객체가 아니다 — 쓰기를 중단했다"})
+                continue
+            current = {c["name"]: _claude_current(entry or {}, c["name"], shared) for c in bucket}
+            todo = plan_changes(current, bucket)
+            skipped = {c["name"] for c in bucket} - {c["name"] for c in todo}
+            for name in skipped:
+                results.append({"name": name, "status": "ok", "changed": False})
+            if not todo:
+                continue
+            entry = projects.setdefault(wt_path, {})
+            for c in todo:
+                if shared:
+                    _set_membership(entry, "enabledMcpjsonServers", c["name"], c["enabled"])
+                    _set_membership(entry, "disabledMcpjsonServers", c["name"], not c["enabled"])
+                else:
+                    _set_membership(entry, "disabledMcpServers", c["name"], not c["enabled"])
+                applied.append(c)
+
+        if not applied:
+            return results
+
+        def verify(d):
+            for c in applied:
+                e = (d.get("projects") or {}).get(c["worktree_path"]) or {}
+                if _claude_current(e, c["name"], bool(c.get("shared"))) != c["enabled"]:
+                    return False
+            return True
+
+        try:
+            commit = _commit_json(path, before, after, "projects", verify)
+        except WriteRefused as e:
+            for c in applied:
+                results.append({"name": c["name"], "status": "failed", "changed": False, "reason": str(e)})
+            return results
+        except WriteUnverified as e:
+            for c in applied:
+                results.append({"name": c["name"], "status": "unknown", "changed": None, "reason": str(e)})
+            return results
+        for c in applied:
+            results.append({"name": c["name"], **commit})
+        return results
+
+
+def set_enabled_batch(
+    tool: str,
+    changes: list[dict],
+    *,
+    scope: str = "global",
+    worktree_id: Optional[str] = None,
+) -> list[dict]:
+    """여러 서버를 한 번에 목표 상태로 맞춘다. `changes`: `[{"name","enabled","shared"?}, ...]`.
+
+    **지금은 `claude`만 파일당 한 사이클로 배치한다** — `~/.claude.json`이
+    이 항목의 동기가 된 파일이고(Claude Code 자신도 쓴다), 나머지 세 도구는
+    토글이 훨씬 드물게 몰린다. codex/agy/opencode는 항목마다
+    `set_enabled`을 그대로 부른다 — 배치 API 계약(항목별 결과)은 지키지만
+    파일 사이클 절감은 claude만 받는다. 여기가 다음에 늘릴 자리다.
+    """
+    if tool not in TOOLS:
+        return [{"name": c.get("name"), "status": "failed", "changed": False,
+                 "reason": f"모르는 도구: {tool}"} for c in changes]
+
+    if tool == "claude":
+        wt = mcp_scan.find_worktree(worktree_id)
+        wt_path = wt.get("path") if wt else None
+        batch = [{"name": c["name"], "enabled": c["enabled"],
+                  "worktree_path": wt_path, "shared": bool(c.get("shared", False))}
+                 for c in changes]
+        try:
+            return _claude_set_batch(batch)
+        except OSError as e:
+            return [{"name": c["name"], "status": "failed", "changed": False,
+                     "reason": f"파일 오류: {e.__class__.__name__}"} for c in changes]
+
+    results = []
+    for c in changes:
+        out = set_enabled(
+            tool, c["name"], c["enabled"],
+            scope=scope, worktree_id=worktree_id, shared=bool(c.get("shared", False)),
+        )
+        results.append({"name": c["name"], **out})
+    return results
 
 
 # -------------------------------------------------------------------- agy

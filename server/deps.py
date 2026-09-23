@@ -44,10 +44,10 @@ def _on_waiting_change(pty_session_id: str, waiting: bool) -> None:
     # 훅이 만든 엔트리가 있으면 그쪽을, 없으면 pane 자기보고와 같은 키를 쓴다.
     # PTY는 이 서버가 직접 돌리는 것이므로 항상 로컬 엔트리만 본다 — host를 안
     # 거르면 원격 호스트의 같은 이름 세션(`dev`는 기본 이름이라 흔하다)이 여기
-    # 걸려들어 남의 pane 상태를 로컬 것으로 바꿔버린다.
-    targets = [e.get("session_id", sid) for sid, e in agent_status.get_state().items()
-               if e.get("tmux_session") == tmux_name
-               and e.get("host", agent_status.LOCAL_HOST) == agent_status.LOCAL_HOST]
+    # 걸려들어 남의 pane 상태를 로컬 것으로 바꿔버린다. P1-1(ADR-33) —
+    # `agent_status._entries_for`와 같은 규칙을 쓴다(consume_prompt도 이걸
+    # 쓴다) — 두 곳이 각자 조건을 들면 하나만 고쳐질 위험이 있다.
+    targets = [e.get("session_id") for e in agent_status._entries_for(tmux_name)]
     for sid in targets or [f"pane:{tmux_name}"]:
         agent_status.on_waiting(sid, waiting, question=question, options=options)
         if not targets:

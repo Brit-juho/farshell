@@ -41,3 +41,60 @@ both plays the TTS summary twice.
 # Test the hook (with the server running)
 echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 ```
+
+### Hook aggregation (P3-6, current behavior — no engine, by design)
+
+crush's `internal/hooks/` runs a `deny > allow > none` aggregation with sticky halt
+because **one crush process runs every matched hook itself** and must fold their exit
+codes into a single decision before continuing the agent loop. We are not that
+process — Claude Code and Codex are, and hook-decision aggregation across matched
+groups happens **inside their own runtimes**, which we don't own and can't observe.
+So the question this section actually answers is narrower: does *our own* installed
+hook (`agent_hook.sh`) ever end up invoked more than once for what a human would call
+"one event," and if so, what does our server do about it?
+
+**Yes, more than one hook group for the same event is a normal, expected outcome —
+not an edge case:**
+- Both installers (`claude_hooks.apply_install`, `codex_hooks.apply_install`)
+  explicitly preserve any pre-existing hook the user already had for that event
+  (`kept.append(g)` for a foreign Claude group; text outside the `farshell:hooks`
+  markers for Codex). If the user had their own `Stop` hook before running
+  `fsh hooks install`, both it and ours are registered afterward, and Claude
+  Code/Codex run both when a session stops.
+- Our `PreToolUse`/`PostToolUse` matcher is always `"*"` (`apply_install`, both
+  files) — every tool call matches it. A user with a tool-specific hook (matcher
+  `"Bash"`, say) will see **both** groups fire on every Bash call. This isn't
+  hypothetical; it's true for anyone who had hooks configured before installing
+  FarShell.
+- Two copies of *our own* hook for one event is the one case the installers
+  actively prevent, not something that can currently happen: `claude_hooks.
+  apply_install` has an explicit "우리 항목이 두 개 이상 — 첫 번째만 남기고 나머지는
+  버린다" dedup branch (the branch existing at all says it was seen or anticipated
+  before the current idempotent installer shipped), and `codex_hooks.apply_install`
+  replaces the whole managed block as one unit, so a second copy can't accumulate
+  from repeated `fsh hooks install` runs. `plan()`/`plan_text()` are what `fsh hooks
+  status`/`fsh doctor` read to report this without touching the file.
+
+**What our server does when that happens: nothing needs to merge, because nothing
+converges on one process.** Each matched hook group is a separate OS subprocess
+started directly by Claude Code/Codex — a foreign hook script never talks to our
+server, and Claude Code's own decision-aggregation across groups (if the hooks
+return allow/deny) happens before or after `agent_hook.sh` runs, entirely inside the
+CLI. `POST /api/agent/event` (`server/routes/agents.py:212`) only ever hears from
+invocations of `agent_hook.sh` itself, and there is exactly one such registration
+per event by construction (see dedup above). `agent_status.on_event()` mutates the
+in-memory entry directly with no merge step — if it were ever called twice for the
+same logical moment, the second call's fields simply overwrite the first's
+(last-write-wins), which is a non-issue in practice because that double-call
+scenario is the one thing the installers rule out.
+
+**Conclusion: no aggregation engine to build.** The situation crush's `hooks.go
+aggregate()` exists for — one process reconciling conflicting decisions from
+multiple hooks it itself ran — doesn't arise on our side. If we ever become the
+process that runs multiple hooks ourselves (not just receives one call from one),
+revisit this and bring over crush's `deny > allow > none` + sticky-halt rule rather
+than inventing a new one — it's already proven. The one crush detail worth carrying
+over regardless of that: `runner.go:172`'s rule to **never read a timed-out/killed
+child's stdout or stderr after abandoning it** (data race on the buffer). It doesn't
+apply to hook running today, but it applies directly to the health-check timeout
+handling in `40-mcp.md` §3 (P3-2) — note it there when that item is picked up.

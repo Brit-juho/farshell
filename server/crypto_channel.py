@@ -45,6 +45,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+import vt_paths
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -59,7 +61,10 @@ except ImportError:
 
 # 장기 identity 키 저장 경로. auth 패키지의 STATE_DIR과 동일한 ~/.vt 아래에 둔다
 # (bin/vt·server가 공유하는 런타임 상태 디렉토리 관례를 따름).
-STATE_DIR = Path(os.environ.get("VT_STATE_DIR", "") or (Path.home() / ".vt"))
+#
+# P2-4(ADR-41) — `auth/__init__.py`와 같은 이유로 같은 수정. 예전 관용구는
+# `VT_STATE_DIR=""`·`"~/vt-test"`에서 `auth.STATE_DIR`과 갈라졌다.
+STATE_DIR = vt_paths.state_dir()
 IDENTITY_KEY_PATH = STATE_DIR / "e2e_identity.json"
 
 

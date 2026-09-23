@@ -841,6 +841,104 @@ def test_파일이_모달이_아니라_페인으로_열린다(page):
     assert got["overflow"] == 0, f"뷰어 내용이 pane 밖으로 넘쳤다: {got}"
 
 
+def _term_size(page, sid):
+    return page.evaluate("(id) => { const t = window.getSession(id).term; return [t.cols, t.rows]; }", sid)
+
+
+def test_파일_오버레이는_터미널_칸수를_바꾸지_않는다(isolated_page):
+    """ADR-44 — 이 작업의 성공 기준 그 자체. 파일을 열고 닫아도 xterm의 cols×rows가
+    그대로여야 한다(fit도 SIGWINCH도 없다). 대조군으로 `pane` 표면에서는 칸 수가
+    **바뀌어야** 한다 — 그래야 이 테스트가 실제로 무언가를 재고 있다는 게 증명된다.
+    실제 터미널을 렌더링하므로 전용 브라우저(isolated_page)를 쓴다."""
+    page = isolated_page
+    target = str(ROOT / "VERSION")
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_timeout(600)
+    sid = page.evaluate("() => Object.keys(window.allSessions())[0]")
+    try:
+        before = _term_size(page, sid)
+
+        page.evaluate("(p) => window.openFile(p)", target)
+        page.wait_for_selector("#vt-file .vt-vw-cl", timeout=15000)
+        page.wait_for_timeout(500)
+        opened = _term_size(page, sid)
+        geo = page.evaluate(
+            """() => {
+              const c = document.getElementById('terminal-container').getBoundingClientRect();
+              const k = document.querySelector('#vt-file .vt-viewer-card').getBoundingClientRect();
+              const below = document.elementFromPoint(c.left + c.width / 2, c.bottom - 8);
+              return {
+                inside: k.left >= c.left - 1 && k.right <= c.right + 1 && k.top >= c.top - 1 && k.bottom <= c.bottom + 1,
+                parent: document.getElementById('vt-file').parentElement.id,
+                belowIsOverlay: !!below?.closest('#vt-file'),
+              };
+            }"""
+        )
+        page.click("#vt-file .vt-vw-x")
+        page.wait_for_selector("#vt-file", state="detached", timeout=5000)
+        page.wait_for_timeout(500)
+        closed = _term_size(page, sid)
+
+        assert opened == before, f"오버레이를 열었더니 터미널 크기가 바뀌었다: {before} → {opened}"
+        assert closed == before, f"오버레이를 닫았더니 터미널 크기가 바뀌었다: {before} → {closed}"
+        assert geo["parent"] == "terminal-container", geo
+        assert geo["inside"], f"오버레이가 터미널 영역 밖(레일·dock·topbar)까지 덮었다: {geo}"
+        assert not geo["belowIsOverlay"], f"시트 아래(프롬프트 자리)가 가려졌다: {geo}"
+
+        # 대조군 — pane 표면은 터미널 옆을 쪼개므로 칸 수가 줄어야 한다.
+        page.evaluate("() => window.vtSettingsSet('viewer.surface', 'pane')")
+        page.evaluate("(p) => window.openFile(p)", target)
+        page.wait_for_selector(".vt-pane-viewer .vt-vw-cl", timeout=15000)
+        page.wait_for_timeout(600)
+        as_pane = _term_size(page, sid)
+        assert as_pane[0] < before[0], f"대조군: pane으로 열면 cols가 줄어야 한다: {before} → {as_pane}"
+    finally:
+        page.evaluate("() => window.vtSettingsSet('viewer.surface', 'sheet')")
+        page.wait_for_timeout(300)
+        page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+
+
+def test_떠_있는_창은_헤더로_옮겨지고_화면_밖으로_안_나간다(page):
+    """ADR-44 §6 — float 표면. 헤더를 끌면 창이 움직이고, 컨테이너 밖으로 크게
+    끌어도 헤더를 다시 잡을 수 있는 만큼(48×28)은 안에 남는다."""
+    page.evaluate("() => window.vtSettingsSet('viewer.surface', 'float')")
+    page.evaluate("() => window.vtSettingsSet('viewer.float.rect', '{}')")
+    page.wait_for_timeout(300)
+    try:
+        page.evaluate("(p) => window.openFile(p)", str(ROOT / "VERSION"))
+        page.wait_for_selector("#vt-file.surface-float .vt-vw-cl", timeout=15000)
+        card = page.locator("#vt-file .vt-viewer-card")
+        start = card.bounding_box()
+        head = page.locator("#vt-file .vt-file-title").bounding_box()
+        hx, hy = head["x"] + 20, head["y"] + head["height"] / 2
+
+        page.mouse.move(hx, hy)
+        page.mouse.down()
+        page.mouse.move(hx - 120, hy + 60, steps=6)
+        page.mouse.up()
+        moved = card.bounding_box()
+        assert round(moved["x"] - start["x"]) == -120, (start, moved)
+        assert round(moved["y"] - start["y"]) == 60, (start, moved)
+
+        page.mouse.move(moved["x"] + 20, moved["y"] + 10)
+        page.mouse.down()
+        page.mouse.move(moved["x"] + 5000, moved["y"] + 5000, steps=6)
+        page.mouse.up()
+        far = card.bounding_box()
+        c = page.locator("#terminal-container").bounding_box()
+        assert far["x"] <= c["x"] + c["width"] - 48 + 1, (far, c)
+        assert far["y"] <= c["y"] + c["height"] - 28 + 1, (far, c)
+
+        saved = page.evaluate("() => JSON.parse(window.vtSettingsGet('viewer.float.rect'))")
+        assert round(saved["x"]) == round(far["x"] - c["x"]), (saved, far, c)
+    finally:
+        page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el); }")
+        page.evaluate("() => window.vtSettingsSet('viewer.surface', 'sheet')")
+        page.evaluate("() => window.vtSettingsSet('viewer.float.rect', '{}')")
+        page.wait_for_timeout(300)
+
+
 def test_이미지가_페인_안에_인라인으로_그려진다(page):
     """[T3] 예전엔 이미지도 "바이너리 파일 — 미리보기를 지원하지 않습니다"였다.
     스크린샷·다이어그램은 원격에서 코드만큼 자주 열어보는 파일이다.
@@ -1282,9 +1380,9 @@ def test_dock_소스컨트롤_stage_commit은_실동작하고_push_PR은_렌더�
         assert got["stageDisabled"] is False, "스테이지 +/− 버튼이 아직 비활성이다"
 
 
-def test_dock_소스컨트롤_파일_클릭시_뷰어_페인으로_연다(page):
-    """40 §5 — 파일 행의 「뷰어」 버튼이 페인을 N35 §6 리프 타입 viewer로 바꾼다.
-    변경된 파일이 없으면 건너뛴다."""
+def test_dock_소스컨트롤_파일_클릭시_뷰어로_연다(page):
+    """40 §5 — 파일 행의 「뷰어」 버튼이 파일을 연다. ADR-44부터 표면 설정을 따르므로
+    기본값(sheet)에서는 오버레이로 열린다. 변경된 파일이 없으면 건너뛴다."""
     _open_dock(page, "소스컨트롤")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
@@ -1300,7 +1398,7 @@ def test_dock_소스컨트롤_파일_클릭시_뷰어_페인으로_연다(page):
     open_btns.first.locator("xpath=..").hover()
     expect(open_btns.first).to_be_visible()
     open_btns.first.click()
-    page.wait_for_selector(".vt-pane-viewer .vt-vw-code-pane", timeout=15000)
+    page.wait_for_selector("#vt-file .vt-vw-code-pane", timeout=15000)
 
 
 def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
@@ -1433,7 +1531,8 @@ def test_워크트리_탭을_닫아도_마지막_하나는_남는다(page):
 def test_dock_파일_탭이_dock_안에_마운트되고_용량_게이지를_그린다(page):
     """50 §4 — 파일 탭은 백엔드만 있고 UI가 없던 자리다. 지연 청크(panels.js)를
     받아 dock 본문에 붙는지, 푸터 게이지까지 그리는지 실제로 확인한다."""
-    _open_dock(page, "파일")
+    # 업로드 탭은 「첨부」다(4039376에서 「파일」은 디렉토리 트리로 넘어갔다).
+    _open_dock(page, "첨부")
     page.wait_for_selector("#vt-dock #vt-files", timeout=15000)
     # 칩은 공용 `.vt-chip`으로 그린다(전용 클래스 `.vt-fl-chip`은 없다) —
     # 컨테이너 id로 좁힌다.
@@ -1457,7 +1556,8 @@ def test_파일을_패널에_끌어다_놓으면_올라간다(page):
     파일 패널에 놓았으므로 **터미널에 경로를 넣지 않는다**(사용자 확정 규칙).
     터미널 칸 드롭은 살아 있는 PTY가 있어야 해서 이 스위트의 범위 밖이다.
     """
-    _open_dock(page, "파일")
+    # 업로드 탭은 「첨부」다(4039376에서 「파일」은 디렉토리 트리로 넘어갔다).
+    _open_dock(page, "첨부")
     page.wait_for_selector("#vt-dock #vt-files", timeout=15000)
     before = page.evaluate("() => document.querySelectorAll('#vt-dock .vt-fl-row').length")
 
@@ -1545,3 +1645,4 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
     )
     # 그리고 그 선택이 기기 설정에 남는다(레일과 같은 키).
     assert page.evaluate("() => window.vtSettingsGet('ui.activeHostId')") == "gpu"
+

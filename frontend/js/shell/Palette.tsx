@@ -30,6 +30,7 @@ export interface PaletteDeps {
   getSession: (id: string) => any;
   switchTo: (id: string) => void;
   loadViewer: () => Promise<{ _loadRecent: () => string[]; _hl: (text: string, lang?: string | null) => string }>;
+  openFile: (path: string) => void;
   openFileInPane: (path: string) => void;
   splitActivePane: (dir: string, sessionId?: string | null) => string | null;
   setPaneSession: (sessionId: string, paneId?: string) => void;
@@ -260,7 +261,7 @@ function PaletteBody(props: PaletteBodyProps) {
       key: `file:${path}`,
       kind: 'file',
       label: `${name}  ${dir}`,
-      onOpen: () => { deps.openFileInPane(path); props.onRequestClose(); },
+      onOpen: () => { deps.openFile(path); props.onRequestClose(); },
       onOpenNewPane: () => {
         const paneId = deps.splitActivePane('right');
         if (paneId) deps.openFileInPane(path);
@@ -345,10 +346,11 @@ function PaletteBody(props: PaletteBodyProps) {
     return {
       key: `sb:${remoteHost || ''}:${r.session_id || r.session_name}:${r.line_no}:${i}`,
       kind: 'scrollback',
-      // 2.1.2 — `source: "log"`는 **끝난 세션이나 재시작 이전의 출력**일 수 있다.
-      // 그 표시가 없으면 클릭했는데 전환할 세션이 없는 이유를 알 수 없다.
+      // ADR-43(2.3.0) — 영속 로그 검색을 없애면서 `source`는 항상 "live"가
+      // 됐다("(기록)" 표시가 가리키던 `"log"`는 더 이상 안 나온다). 필드
+      // 자체는 원격 피어 호환을 위해 남아 있다(server/routes/search.py).
       label: `${remoteHost ? `${r.host_label || remoteHost} / ` : ''}${r.session_name}`
-        + `${r.source === 'log' ? ' (기록)' : ''} · ${r.line.trim()}`,
+        + ` · ${r.line.trim()}`,
       onOpen: open,
       onOpenNewPane: () => {
         if (remoteHost) { open(); return; }

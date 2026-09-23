@@ -26,7 +26,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-CLOUDFLARED_LOG = "/tmp/cloudflared.log"
+import vt_paths
+
 URL_PATTERN = re.compile(r"https://[\w-]+\.trycloudflare\.com")
 
 
@@ -49,9 +50,15 @@ def find_active_pids() -> list[int]:
         return []
 
 
-def parse_url_from_log(log_path: str = CLOUDFLARED_LOG) -> Optional[str]:
-    """log 파일에서 마지막 trycloudflare URL 추출."""
-    p = Path(log_path)
+def parse_url_from_log(log_path: Optional[str] = None) -> Optional[str]:
+    """log 파일에서 마지막 trycloudflare URL 추출.
+
+    P2-4(ADR-41) §1(a) — 기본값이 하드코딩 `/tmp/cloudflared.log`였다. 그러면
+    `VT_RUN_DIR`로 격리한 테스트 서버가 **실제 메인 터널의 로그**를 읽는다.
+    기본 인자에 함수 호출 결과를 바로 박으면 그 값이 임포트 시점에 굳는
+    같은 함정이라(§3.1 "왜 함수인가"), `None`을 받아 호출 시점에 해석한다.
+    """
+    p = Path(log_path) if log_path else vt_paths.tunnel_log()
     if not p.is_file():
         return None
     try:
@@ -227,7 +234,7 @@ def _get_tunnel_status_uncached() -> dict:
         "name": name or None,
         "hostname": hostname or None,
         "started_at": started_at,
-        "log_path": CLOUDFLARED_LOG,
+        "log_path": str(vt_paths.tunnel_log()),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
 

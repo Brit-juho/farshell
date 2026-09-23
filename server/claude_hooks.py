@@ -60,7 +60,11 @@ def settings_path() -> Path:
 
 def hook_command(event: str, repo_root: Path | None = None) -> str:
     root = repo_root or REPO_ROOT
-    return f"{root / 'server' / 'agent_hook.sh'} {EVENTS[event]}"
+    # P2-1(ADR-34) — `agent_hook.sh`의 `$2`(에이전트 이름)는 안 실으면 기본값
+    # "claude"로 떨어지지만, `codex_hooks.py:39`는 이미 "codex"를 명시한다.
+    # 암묵적 기본값에 기대지 말고 여기도 명시한다 — 훅 스크립트의 기본값이
+    # 나중에 바뀌면 여기 아무 변경 없이 조용히 깨지는 걸 막는다.
+    return f"{root / 'server' / 'agent_hook.sh'} {EVENTS[event]} claude"
 
 
 def load_settings(path: Path) -> dict:

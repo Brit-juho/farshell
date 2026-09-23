@@ -4,10 +4,8 @@
 // 없다 — 그건 소스컨트롤 탭(scm.js) 몫이라 겹치지 않는다.
 //
 // 구버전과 다른 점: 모달 셸(shell.js, 1230줄) 전체가 아니라 트리 화면만 가져온다.
-// 파일을 고르면 이 패널 안에서 열지 않고 기존 뷰어 페인 브리지
-// (window.openFileInPane, N35가 만든 유일한 파일 열기 경로)로 넘긴다 — 좌우
-// 분할·표시모드(sheet/dock/full) 전환 같은 모달 전용 배선은 되살리지 않는다
-// (그 화면 자체가 없어졌으므로 대상이 없다).
+// 파일을 고르면 이 패널 안에서 열지 않고 파일 열기 브리지(window.openFile —
+// ADR-44 표면 설정을 따른다)로 넘긴다.
 import { openPanel } from '../panel.js';
 import { icon } from '../../ui/icons.js';
 import { vtFetch } from '../../core/api.js';
@@ -43,8 +41,8 @@ export async function showTree(opts = {}) {
   let treeEl = null;   // navigateRoot가 처음 채운 뒤로는 body를 통째로 안 갈아엎는다
 
   const openInPane = (path) => {
-    if (typeof window.openFileInPane !== 'function' || !path) return;
-    window.openFileInPane(path);
+    if (typeof window.openFile !== 'function' || !path) return;
+    window.openFile(path);
     _pushRecent(path);
   };
 

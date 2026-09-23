@@ -7,10 +7,18 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# server/를 sys.path에 넣는 건 진입점(tui_manager.py)의 책임이다 — 이 패키지는
+# 항상 그걸 거쳐 임포트되므로(fsh manage · pytest conftest.py 둘 다) 여기서
+# 다시 하지 않는다.
+import vt_paths
+
 VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "fsh")
 VT_PORT = int(os.environ.get("VT_PORT", "7777"))
-VT_TARGET_FILE = Path.home() / ".vt" / "voice_target"
-VT_ENV_FILE = Path.home() / ".vt.env"
+# P2-4(ADR-41) §1(b) — 예전엔 `Path.home()`을 직접 박아 VT_STATE_DIR·VT_CONFIG를
+# 완전히 무시했다("이름만 VT_*이고 환경변수를 안 읽는다"). `fsh manage`가
+# 격리 서버를 가리키고 있어도 이 파일만 실제 홈을 봤다.
+VT_TARGET_FILE = vt_paths.state_dir() / "voice_target"
+VT_ENV_FILE = vt_paths.config_path()
 VT_TOKEN = os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN", "")
 
 

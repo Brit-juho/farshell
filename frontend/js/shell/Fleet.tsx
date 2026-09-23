@@ -57,6 +57,8 @@ interface AgentDetail {
   tool: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
+  /** P1-1(ADR-33) — rail-fetch.ts의 같은 이름 필드와 같은 뜻. */
+  promptId: string | null;
 }
 
 // Rail.tsx와 같은 이유로 여기서도 따로 부른다(지연 청크 정적 import 금지).
@@ -79,6 +81,7 @@ async function fetchAgentDetails(deps: FleetDeps): Promise<Record<string, AgentD
       tool: (entry as any).tool || (entry as any).last_tool || null,
       question: (entry as any).question ?? null,
       options: (entry as any).options ?? null,
+      promptId: (entry as any).prompt_id ?? null,
     };
   }
   return out;
@@ -94,10 +97,23 @@ async function fetchDiffCount(deps: FleetDeps, cwd: string): Promise<number | nu
   return files;
 }
 
-function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) => void; onSeen: () => void }) {
+function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) => Promise<void>; onSeen: () => void }) {
   const w = () => window as any;
   const isUnseenDone = () => props.row.status === 'done' && w().isUnseen?.(props.row.tmuxName);
   const hasOptions = () => props.row.status === 'waiting' && props.row.options && props.row.options.length > 0;
+  // P1-1(ADR-33) — 같은 화면의 이중 탭을 여기서 먼저 막는다(서버 409는
+  // 그 다음 방어선 — 다른 화면·느린 네트워크가 만드는 경쟁까지는 이걸로 못
+  // 막는다). 응답이 돌아오기 전까지 이 행의 버튼을 다시 못 누르게 한다.
+  const [answering, setAnswering] = createSignal(false);
+  const handleAnswer = async (key: string) => {
+    if (answering()) return;
+    setAnswering(true);
+    try {
+      await props.onAnswer(key);
+    } finally {
+      setAnswering(false);
+    }
+  };
 
   const onRowClick = () => {
     // §2: 「완료 · 확인 안 함」 행은 탭하면 seen 처리(이동하지 않는다) —
@@ -159,7 +175,7 @@ function Row(props: { row: RailRow; onOpen: () => void; onAnswer: (key: string) 
             >
               <For each={props.row.options}>
                 {(opt) => (
-                  <button type="button" class="vt-btn sm" onClick={() => props.onAnswer(opt.key)}>
+                  <button type="button" class="vt-btn sm" disabled={answering()} onClick={() => void handleAnswer(opt.key)}>
                     {opt.key} · {opt.label}
                   </button>
                 )}
@@ -273,6 +289,7 @@ function Fleet(props: { deps: FleetDeps }) {
         diffFiles: cwd ? (_gitCache.get(cwd)?.files ?? null) : null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
+        promptId: detail?.promptId ?? null,
         agent: tmuxName ? (agentNames()[tmuxName] ?? null) : null,
       });
       if (cwd && (!_gitCache.has(cwd) || Date.now() - (_gitCache.get(cwd)?.at ?? 0) >= GIT_CACHE_MS)) {
@@ -301,16 +318,24 @@ function Fleet(props: { deps: FleetDeps }) {
     props.deps.onOpenTerminal();
   };
 
-  const answerRow = (row: RailRow, key: string) => {
+  const answerRow = (row: RailRow, key: string): Promise<void> => {
     // Codex의 y/p는 문자 선택 뒤 Enter로 확정하지만 `esc`는 문자열 "esc"가
     // 아니라 실제 ESC 바이트여야 취소된다. 그대로 보내면 프롬프트 입력란에
     // e·s·c가 찍히고 waiting이 풀리지 않는다.
     const text = key === 'esc' ? '\x1b' : `${key}\r`;
-    props.deps.vtFetch(`/api/sessions/${encodeURIComponent(row.sessionId)}/keys`, {
+    // P1-1(ADR-33) — 토큰이 있으면 함께 보낸다. 서버가 먼저 도착한 요청만
+    // 통과시키고 나머지는 409로 떨어뜨린다(docs/plan-2.3/10-approval-race.md
+    // §3.3). promptId가 없으면(구버전 서버 등) 필드 자체를 안 보내 기존
+    // 동작 그대로 통과한다.
+    const body: Record<string, string> = row.promptId ? { text, prompt_id: row.promptId } : { text };
+    return props.deps.vtFetch(`/api/sessions/${encodeURIComponent(row.sessionId)}/keys`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    }).catch(() => {}); // 실패해도 화면은 다음 폴링(agent status)이 정정한다
+      body: JSON.stringify(body),
+    }).then(() => {}).catch(() => {
+      // 409(경쟁에서 짐)도 그 외 실패도 여기서 조용히 넘긴다 — 재시도하지
+      // 않는다. 다음 폴링(agent status)이 화면을 정정한다.
+    });
   };
 
   const seenRow = (row: RailRow) => {

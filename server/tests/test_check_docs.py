@@ -21,11 +21,151 @@ def test_repo_is_currently_consistent():
     """지금 저장소가 통과 상태여야 한다 — 안 그러면 CI를 strict로 못 올린다."""
     problems = []
     check_docs.check_api_docs(problems)
+    check_docs.check_api_contract(problems)
     check_docs.check_claude_md(problems)
     check_docs.check_help_topics(problems)
     check_docs.check_version(problems)
     check_docs.check_design_md(problems)
+    check_docs.check_auth_order(problems)
     assert problems == [], "문서 드리프트:\n" + "\n".join(problems)
+
+
+# ── check_api_contract (P2-3, ADR-38) ───────────────────────────────────
+#
+# check_api_docs(위)는 경로 **집합**만 본다. 여기서 확인하는 건 그게 못 잡는
+# 세 가지 — 메서드 변경·경로 파라미터 개명·필수 쿼리 파라미터 누락 — 를
+# openapi 스펙 대조가 실제로 잡아내는가다.
+
+
+def _fake_spec(paths: dict) -> dict:
+    return {"paths": paths}
+
+
+def _op(*, path_params=(), required_query=()) -> dict:
+    params = [{"name": n, "in": "path", "required": True} for n in path_params]
+    params += [{"name": n, "in": "query", "required": True} for n in required_query]
+    return {"parameters": params, "responses": {"200": {"description": "ok"}}}
+
+
+def test_method_mismatch_is_detected(monkeypatch):
+    spec = _fake_spec({"/api/x/{id}": {"put": _op(path_params=["id"])}})
+    monkeypatch.setattr(check_docs, "app_openapi", lambda: spec)
+    monkeypatch.setattr(
+        check_docs, "_doc_rows", lambda: [("POST", "/api/x/{id}")],
+    )
+    problems = []
+    check_docs.check_api_contract(problems)
+    assert any("메서드가 다르다" in p and "PUT" in p and "POST" in p for p in problems)
+
+
+def test_path_param_rename_is_not_caught_by_the_old_check_but_is_caught_here(monkeypatch):
+    """계획서 §4-2의 증명 — 이름만 바뀐 경로는 check_api_docs(집합 비교)는
+    통과시키지만 이 검사는 잡아야 한다."""
+    spec = _fake_spec({"/api/x/{session_id}": {"get": _op(path_params=["session_id"])}})
+    monkeypatch.setattr(check_docs, "app_openapi", lambda: spec)
+    monkeypatch.setattr(check_docs, "_doc_rows", lambda: [("GET", "/api/x/{id}")])
+
+    old_check_problems = []
+    monkeypatch.setattr(check_docs, "code_routes", lambda: {"/api/x/{}"})
+    monkeypatch.setattr(check_docs, "doc_routes", lambda doc: {"/api/x/{}"})
+    check_docs.check_api_docs(old_check_problems)
+    assert old_check_problems == [], "이건 현행 통과 조건의 전제일 뿐 — 이 항목의 증명이 아니다"
+
+    problems = []
+    check_docs.check_api_contract(problems)
+    assert any("경로 파라미터 이름이 다르다" in p for p in problems)
+    assert any("session_id" in p and "id" in p for p in problems)
+
+
+def test_missing_required_query_param_is_detected(monkeypatch):
+    spec = _fake_spec({"/api/x": {"get": _op(required_query=["q"])}})
+    monkeypatch.setattr(check_docs, "app_openapi", lambda: spec)
+    monkeypatch.setattr(check_docs, "_doc_rows", lambda: [("GET", "/api/x")])
+    problems = []
+    check_docs.check_api_contract(problems)
+    assert any("필수 쿼리 파라미터가 문서에 없다" in p and "q" in p for p in problems)
+
+
+def test_bracketed_required_query_param_still_counts_as_missing(monkeypatch):
+    """대괄호는 이 문서 관례상 "선택"이다 — 실제로 필수인 파라미터를 대괄호
+    안에 적으면 여전히 드리프트여야 한다."""
+    spec = _fake_spec({"/api/x": {"get": _op(required_query=["q"])}})
+    monkeypatch.setattr(check_docs, "app_openapi", lambda: spec)
+    monkeypatch.setattr(check_docs, "_doc_rows", lambda: [("GET", "/api/x[?q=X]")])
+    problems = []
+    check_docs.check_api_contract(problems)
+    assert any("필수 쿼리 파라미터가 문서에 없다" in p for p in problems)
+
+
+def test_matching_route_produces_no_findings(monkeypatch):
+    spec = _fake_spec({
+        "/api/x/{item_id}": {"delete": _op(path_params=["item_id"], required_query=["scope"])},
+    })
+    monkeypatch.setattr(check_docs, "app_openapi", lambda: spec)
+    monkeypatch.setattr(
+        check_docs, "_doc_rows", lambda: [("DELETE", "/api/x/{item_id}?scope=X")],
+    )
+    problems = []
+    check_docs.check_api_contract(problems)
+    assert problems == []
+
+
+def test_undocumented_route_is_skipped_here_not_double_reported(monkeypatch):
+    """check_api_docs가 이미 "문서에 없음"을 보고한다 — 여기서 또 보고하면
+    같은 드리프트가 두 번 찍힌다."""
+    spec = _fake_spec({"/api/brand-new": {"get": _op()}})
+    monkeypatch.setattr(check_docs, "app_openapi", lambda: spec)
+    monkeypatch.setattr(check_docs, "_doc_rows", lambda: [])
+    problems = []
+    check_docs.check_api_contract(problems)
+    assert problems == []
+
+
+def test_websocket_doc_rows_are_excluded():
+    """OpenAPI엔 웹소켓 오퍼레이션 개념이 없다 — WS 행을 스펙과 대조하려 하면
+    안 된다(오탐만 낸다)."""
+    rows = check_docs._DOC_ROW_RE.findall(
+        "| WS | `/ws/{id}` | x |\n| GET | `/api/y` | z |\n"
+    )
+    assert ("WS", "/ws/{id}") in rows  # 정규식 자체는 WS도 뽑는다
+    doc_rows = [(m, p) for m, p in rows if m != "WS"]
+    assert doc_rows == [("GET", "/api/y")]  # _doc_rows()가 여기서 거른다
+
+
+def test_app_openapi_returns_none_on_unexpected_failure(monkeypatch):
+    """무엇이 됐든(임포트 실패 포함) 예외가 나면 None으로 떨어진다 — 문서
+    검사가 서버 초기화에 인질로 잡히면 안 된다(§2.1).
+
+    `sys.path` 조작으로 임포트 실패를 흉내 내면 conftest.py가 이미 진짜
+    `server/`를 경로에 꽂아둔 상태라 그쪽으로 폴백해 통과해버린다 — 그래서
+    함수 안에서 실제로 도는 호출(`tempfile.TemporaryDirectory`)을 직접
+    터뜨린다.
+    """
+    import tempfile
+
+    def _boom(*a, **k):
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", _boom)
+    assert check_docs.app_openapi() is None
+
+
+def test_app_openapi_restores_the_real_environment_afterwards(monkeypatch):
+    """스펙을 꺼내려고 VT_WORKSPACE_PATH 등을 임시로 바꾸는데, 끝나면 실제
+    개발자 환경(이 프로세스의 env)을 원래대로 되돌려야 한다 — 안 그러면 이
+    스크립트를 부른 다음 코드가 격리된 값을 계속 보게 된다."""
+    import os
+
+    before = os.environ.get("VT_WORKSPACE_PATH")
+    check_docs.app_openapi()
+    assert os.environ.get("VT_WORKSPACE_PATH") == before
+
+
+def test_app_openapi_real_call_returns_a_spec_with_paths():
+    """진짜 main.py를 임포트해도 동작해야 한다 — 여기서만 실물로 확인한다."""
+    spec = check_docs.app_openapi()
+    assert spec is not None, "server/main.py를 못 읽었다 — 이 환경엔 fastapi가 있어야 한다"
+    assert "/api/sessions" in spec.get("paths", {})
 
 
 # ── check_design_md (T5) ─────────────────────────────────────────────────
@@ -200,3 +340,90 @@ def test_version_ignores_unreleased(tmp_path, monkeypatch):
     problems = []
     check_docs.check_version(problems)
     assert problems == []
+
+
+# ── check_auth_order (P2-5, ADR-42) ─────────────────────────────────────
+
+def test_current_repo_auth_order_matches():
+    problems = []
+    check_docs.check_auth_order(problems)
+    assert problems == [], "\n".join(problems)
+
+
+def test_auth_order_mismatch_is_detected(tmp_path, monkeypatch):
+    """등록 순서를 일부러 바꾸면 잡아야 한다."""
+    server = tmp_path / "server"
+    server.mkdir()
+    (server / "main.py").write_text(
+        "app.add_middleware(NetworkAccessMiddleware)\n"
+        "app.add_middleware(TokenAuthMiddleware)\n"
+        "app.add_middleware(OriginGuardMiddleware)\n"
+    )
+    docs_ref = tmp_path / "docs" / "ref"
+    docs_ref.mkdir(parents=True)
+    (docs_ref / "auth.md").write_text(
+        "| 1 | X `TokenAuthMiddleware` <!-- mw --> | ... |\n"
+        "| 2 | Y `OriginGuardMiddleware` <!-- mw --> | ... |\n"
+        "| 3 | Z `NetworkAccessMiddleware` <!-- mw --> | ... |\n"
+    )
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    problems = []
+    check_docs.check_auth_order(problems)
+    assert len(problems) == 1
+    assert "다르다" in problems[0]
+
+
+def test_auth_order_ignores_cors_on_both_sides(tmp_path, monkeypatch):
+    server = tmp_path / "server"
+    server.mkdir()
+    (server / "main.py").write_text(
+        "app.add_middleware(NetworkAccessMiddleware)\n"
+        "app.add_middleware(TokenAuthMiddleware)\n"
+        "if _cors:\n"
+        "    app.add_middleware(CORSMiddleware, allow_origins=x)\n"
+        "app.add_middleware(OriginGuardMiddleware)\n"
+    )
+    docs_ref = tmp_path / "docs" / "ref"
+    docs_ref.mkdir(parents=True)
+    (docs_ref / "auth.md").write_text(
+        "| 1 | Origin `OriginGuardMiddleware` <!-- mw --> | ... |\n"
+        "| 2 | CORS `CORSMiddleware` <!-- mw:cors --> | ... |\n"
+        "| 3 | Token `TokenAuthMiddleware` <!-- mw --> | ... |\n"
+        "| 4 | Net `NetworkAccessMiddleware` <!-- mw --> | ... |\n"
+    )
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    problems = []
+    check_docs.check_auth_order(problems)
+    assert problems == [], "\n".join(problems)
+
+
+def test_auth_order_warns_instead_of_silently_passing_when_no_middleware_found(
+    tmp_path, monkeypatch,
+):
+    """미들웨어가 다른 파일로 옮겨져 이 파일에서 하나도 안 잡히면, 빈 집합끼리
+    비교해 조용히 통과하면 안 된다 — 검사 자체가 무의미해진 것이므로 경고해야 한다."""
+    server = tmp_path / "server"
+    server.mkdir()
+    (server / "main.py").write_text("# 미들웨어 없음\n")
+    docs_ref = tmp_path / "docs" / "ref"
+    docs_ref.mkdir(parents=True)
+    (docs_ref / "auth.md").write_text("표 없음\n")
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    problems = []
+    check_docs.check_auth_order(problems)
+    assert len(problems) == 1
+    assert "하나도 못 찾았다" in problems[0]
+
+
+def test_auth_order_warns_when_doc_has_no_middleware_rows(tmp_path, monkeypatch):
+    server = tmp_path / "server"
+    server.mkdir()
+    (server / "main.py").write_text("app.add_middleware(TokenAuthMiddleware)\n")
+    docs_ref = tmp_path / "docs" / "ref"
+    docs_ref.mkdir(parents=True)
+    (docs_ref / "auth.md").write_text("표가 아직 없다\n")
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    problems = []
+    check_docs.check_auth_order(problems)
+    assert len(problems) == 1
+    assert "미들웨어 행" in problems[0]

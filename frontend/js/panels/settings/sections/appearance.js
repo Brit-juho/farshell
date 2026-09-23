@@ -1,4 +1,5 @@
 import { vtSkins, vtSkinLabel, getVtSkin } from '../../../theme.js';
+import { renderItems, group } from '../controls.js';
 
 // 2026-09-18 — 스킨 칩(#theme-row)의 유일한 자리였다. 48px 아이콘 레일
 // (#vt-rail)이 새 레일(shell/Rail.tsx)로 대체되며 display:none이 됐는데, 그 ⚙
@@ -47,6 +48,13 @@ export function renderAppearanceSection() {
   frag.appendChild(renderSkinRow());
   // registerAction('theme.set', ...)이 data-action 위임으로 클릭을 처리한다
   // (core/dom.js) — 여기서 직접 리스너를 달 필요가 없다.
+
+  // ADR-44 — 시트 높이·창 위치는 여기 안 낸다. 드래그가 그 값의 입력 수단이다.
+  frag.appendChild(group('파일 뷰어', renderItems({ items: [
+    { key: 'viewer.surface', label: '파일 뷰어 표시 방식', kind: 'select',
+      labels: { sheet: '상단 시트', float: '떠 있는 창', pane: '페인 (터미널 옆을 쪼갬)' },
+      help: '파일을 열었을 때 어디에 띄울지 고릅니다. 시트와 창은 터미널 크기를 바꾸지 않습니다.' },
+  ] })));
 
   return frag;
 }

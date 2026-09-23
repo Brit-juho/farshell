@@ -18,12 +18,11 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 |--------|------|------|
 | GET | `/api/sessions` | List sessions |
 | POST | `/api/sessions` | Create a session (JSON: cols, rows, name) |
-| DELETE | `/api/sessions/{id}` | Delete a session |
-| PATCH | `/api/sessions/{id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
-| POST | `/api/sessions/{id}/keys` | Write text straight into the PTY (JSON: text) — same privilege as typing in the terminal WS. 404 for an unknown session. Used by the mobile fleet home's inline approval buttons (N38) |
-| POST | `/api/sessions/{id}/paste` | Paste-only entry point (JSON: text) — the server decides bracketed-paste markers, newline normalization, and unsafe control-char stripping instead of the browser guessing (N24). Same function as the WS `{"type":"paste"}` message. 404 for an unknown session |
-| GET | `/api/sessions/{id}/scrollback[?before=&limit=]` | N13 — "load more" from the persisted scrollback log (only has data when `scrollback.persist` is on). `data_b64`-encoded, paginated newest→oldest via `next_before` |
-| POST | `/api/watch/{id}` | Toggle output watching ON/OFF (JSON: enabled, timeout) |
+| DELETE | `/api/sessions/{session_id}` | Delete a session |
+| PATCH | `/api/sessions/{session_id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
+| POST | `/api/sessions/{session_id}/keys` | Write text straight into the PTY (JSON: text) — same privilege as typing in the terminal WS. 404 for an unknown session. Used by the mobile fleet home's inline approval buttons (N38) |
+| POST | `/api/sessions/{session_id}/paste` | Paste-only entry point (JSON: text) — the server decides bracketed-paste markers, newline normalization, and unsafe control-char stripping instead of the browser guessing (N24). Same function as the WS `{"type":"paste"}` message. 404 for an unknown session |
+| POST | `/api/watch/{session_id}` | Toggle output watching ON/OFF (JSON: enabled, timeout) |
 
 ## tmux
 
@@ -32,9 +31,9 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | GET | `/api/tmux/sessions` | List tmux sessions |
 | POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name) |
 | POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd) |
-| DELETE | `/api/tmux/kill/{name}` | Fully kill a tmux session |
+| DELETE | `/api/tmux/kill/{tmux_name}` | Fully kill a tmux session |
 | POST | `/api/tmux/open-on-mac` | Attach an existing tmux session in a new window on the server's (macOS) terminal (JSON: name). Returns 400 if the server isn't macOS |
-| GET | `/api/tmux/preview/{name}?lines=20&ansi=1` | Capture recent tmux pane output for the Grid view |
+| GET | `/api/tmux/preview/{tmux_name}?lines=20&ansi=1` | Capture recent tmux pane output for the Grid view |
 | GET | `/api/tmux/clients?session=X&me=Y` | Clients attached to a session (C1). `me` is the caller's web session id — the server derives its tty and marks `is_me` |
 | POST | `/api/tmux/detach-client` | Detach one client (C1, JSON: tty, me). Detaching yourself returns 400 — there'd be no way back |
 | POST | `/api/tmux/clients/solo` | "Keep only this screen" (C2, JSON: session, me). The client never sends a tty to keep — the server derives it. Returns 400 if it can't, rather than detaching everything |
@@ -89,7 +88,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/git/unstage` | Unstage — only reverts the index, leaves the working tree untouched (JSON: repo, files) |
 | POST | `/api/git/commit` | Commit staged changes (JSON: repo, message). Returns 400 if nothing is staged |
 | GET | `/api/git/log?repo=X[&file=Y]` | Recent commit list |
-| GET | `/api/git/show?repo=X&rev=Y` | Diff of one commit |
+| GET | `/api/git/show?repo=X&sha=Y` | Diff of one commit |
 
 ## Git accounts & binding (N30, elevated session required except GET)
 
@@ -107,6 +106,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 |--------|------|------|
 | GET | `/api/mcp?worktree=<id>` | MCP servers defined across claude/codex/agy, for the global scope plus that worktree's local scope. **Nothing is cached or stored** — the real config files are read on every call, so edits made in a terminal show up immediately. Values are never returned: `env`/`headers` come back as `{key, ref, literal}` only. Also returns `facts` (per-tool hot-reload behaviour) and `errors` (per-file parse failures, which never abort the whole scan) |
 | POST | `/api/mcp/toggle` | Requires elevation. Body `{tool, name, enabled, scope?, worktree?, shared?}` — **declares the target state rather than flipping**, so retrying the same request is safe. Returns `status`: `ok` (written and verified), `unknown` (written but verification failed — 200, never reported as success), or `failed` (409, file left untouched) |
+| POST | `/api/mcp/toggle-batch` | Requires elevation. Body `{tool, scope?, worktree?, changes: [{name, enabled, shared?}, ...]}`, up to 64 items. Same target-state contract as the single toggle, but for `claude` all changes to `~/.claude.json` land in **one** read→verify→write cycle instead of one per item (ADR-37) — codex/agy/opencode still apply per-item internally. Returns `{ok, results: [{name, status, ...}, ...]}`; `ok` is false if any item didn't reach `status:"ok"` |
 | POST | `/api/mcp/group` | Requires elevation. Body `{tag, enabled, worktree?}` — brings **every** server carrying that tag to the target state (not a flip). Entries already in the target state are never opened at all (`results[].skipped`). Returns `status`: `ok` / `partial` (some failed — **`results` names exactly which**) / `unknown` / `failed` (409). A tag with no tagged servers returns 409 |
 | POST | `/api/mcp/tags` | Body `{name, tags:[…]}` — replaces the group tags on one server name wholesale; an empty array means "no tags". **Does not require elevation**: tags are a FarShell-side label and never touch a CLI config file (`~/.vt/mcp.json`, 0600). Tags attach to the **server name**, not to each per-tool/per-scope entry |
 | POST | `/api/mcp/tags/rename` | Body `{from, to}` — renames a tag across every server at once, so a typo can't split a group in two and leave "turn group on" flipping only half of it. Merges if the target name already exists |
@@ -117,12 +117,13 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/mcp/deploy` | Requires elevation. Body `{name, defn, tool, scope?, shared?, env_map?, worktree?}` — brings one definition into that tool/scope. Values never travel: the fields named by `env_map` become references instead (Claude `${VAR}`; Codex drops the value slot and lists the name under `env_vars` — §0-3, since a single syntax breaks silently on Codex). **If any value would remain after substitution it returns 409 and never opens the file.** Codex targets are refused outright — synthesising a new TOML table by text surgery carries different risk, so it points at `codex mcp add` |
 | GET | `/api/mcp/plugins` | Installed plugins for Claude Code and Codex. Claude is read from `enabledPlugins` (global + project); Codex is read from `codex plugin list --json` and includes `version`, bundled `skills`/`skill_count`, `bundles_mcp`, and auth policy when available. **"absent" and "false" are different**: the former was never explicitly configured and follows the tool's default, the latter was explicitly turned off (`explicit` distinguishes them). CLI/config parse failures are returned in `errors` without hiding the other tool's plugins |
 | POST | `/api/mcp/plugins/toggle` | Requires elevation (a plugin can bundle MCP servers, so this changes what the agent can do). Body `{name, enabled, tool?, scope?, worktree?}`. Supports Claude Code and globally installed Codex plugins; Codex changes only `[plugins."<id>"].enabled` while preserving the rest of `config.toml`. **It never installs** — an unknown name returns 409, because flipping `enabled` on an uninstalled plugin does nothing and claiming otherwise would be a lie |
+| POST | `/api/mcp/servers/{scope}/{name}/verify` | Requires elevation (P3-2, ADR-36) — a one-shot health check that actually spawns the configured command (stdio, its own process group, killed+group-killed when done) or makes one network request (http/sse). Body `{tool, worktree?, confirm_network?}`. stdio never needs `confirm_network`; http/sse is refused without it (a network call to a URL from the config file). Returns `{state: "connected"\|"error", tool_count, error, checked_at}` — **never stored**, the caller only holds it for the session. 404 if the server isn't found, 400 for a bad `scope`/`tool` |
 
 ## Scrollback Search
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | Greps scrollback (N40 — command palette `~` mode). **One source per session**: the persisted log if that session has one, else the live ring buffer (the ring is the log's tail, so searching both would double every hit) — each result says which in `source: "log"|"live"`. Because logs outlive their sessions, output from a finished session or from before a server restart is found too. `sessions=all` (default) covers every open session plus every session with a log; a comma list restricts to those ids. Up to 50 matches total (20 per session) with 3 lines of context; a log is scanned from its tail up to 4MB and sets `truncated` |
+| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | Greps the live scrollback ring buffer of open sessions (N40 — command palette `~` mode). `sessions=all` (default) covers every open session; a comma list restricts to those ids. Up to 50 matches total (20 per session) with 3 lines of context. Each result carries `source: "live"` (fixed — kept for older peer hosts' response shape, ADR-43 removed the once-persisted-log alternative) |
 
 ## Prompt Queue
 
@@ -130,8 +131,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 |--------|------|------|
 | GET | `/api/queue` | List the queue |
 | POST | `/api/queue` | Add to the queue (JSON: text, target). Cap of 50, returns 409 if exceeded |
-| DELETE | `/api/queue/{id}` | Delete an item. `id=all` clears everything |
-| POST | `/api/queue/{id}/unblock` | Resume an item blocked by safe_mode |
+| DELETE | `/api/queue/{item_id}` | Delete an item. `id=all` clears everything |
+| POST | `/api/queue/{item_id}/unblock` | Resume an item blocked by safe_mode |
 | POST | `/api/queue/run` | Manual drain — dispatch one item |
 
 ## Worktrees (N8/N44)
@@ -139,11 +140,11 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/api/worktrees?include_hidden` | List every discovered git worktree across all repos under `VT_BROWSE_ROOTS` (+ `~/.worktrees`), with session mapping, diff summary and `remote: {host, owner, name}`. 20s cache. Rail-hidden repos are filtered out; `include_hidden=1` keeps them with `hidden: true`. Also returns `truncated` (scan hit the 200-repo cap), `hiddenCount` and `roots` |
-| GET | `/api/worktrees/precheck?repo&base` | Lockfile-mismatch banner check ahead of the create dialog (`warnings: ["lockfile_mismatch"]`) |
+| GET | `/api/worktrees/precheck?repo=X&base=Y` | Lockfile-mismatch banner check ahead of the create dialog (`warnings: ["lockfile_mismatch"]`) |
 | POST | `/api/worktrees` | Create a worktree (`git worktree add` + node_modules/`.env`/port-band/agent steps). Rolls back on failure |
-| DELETE | `/api/worktrees/{id}` | Remove a worktree. 409 + `dirty:true` if it has changes unless `force:true`; `killSessions:true` also kills its tmux sessions |
+| DELETE | `/api/worktrees/{wt_id}` | Remove a worktree. 409 + `dirty:true` if it has changes unless `force:true`; `killSessions:true` also kills its tmux sessions |
 | POST | `/api/worktrees/hidden` | Hide or unhide a repo in the rail (`{path, hidden}`). Stored server-side in `~/.vt/repos.json` (2.1 D1; migrated once from the old `rail-repos.json`), so it applies on every device |
-| POST | `/api/worktrees/{id}/open` | Attach to its existing tmux session, or create `wt-<repoName>-<branch>` if none exists |
+| POST | `/api/worktrees/{wt_id}/open` | Attach to its existing tmux session, or create `wt-<repoName>-<branch>` if none exists |
 | GET | `/api/repos?include_hidden` | 2.1 D1 groundwork — the same worktrees grouped by repo (`{id, host, path, name, remote, hidden, worktrees: [...]}`). Not yet used by the rail; exists for the repo-as-tab work to build on |
 
 ## Port Dashboard
@@ -166,7 +167,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | GET | `/api/snippets` | List saved prompt snippets |
 | GET | `/api/snippets/project?cwd=` | Resolve a cwd to its snippet project key (repo top, or null) |
 | POST | `/api/snippets` | Add a snippet (JSON: text, label, scope: global\|project, cwd) |
-| DELETE | `/api/snippets/{id}` | Delete a snippet |
+| DELETE | `/api/snippets/{item_id}` | Delete a snippet |
+| PATCH | `/api/snippets/{item_id}` | Change a saved snippet's run mode (JSON: mode) — auto-run-in-new-section vs paste-only. Text/label can't be edited (delete and re-save) |
 
 ## Web Push
 
@@ -182,19 +184,19 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 
 `/tmp/vt-uploads` (path-based) has been replaced by `~/.vt/files/` (id-based).
 Old uploads are migrated automatically on server startup. There is no path-based
-download API — `/api/files/{id}/download` is id-only by design.
+download API — `/api/files/{file_id}/download` is id-only by design.
 
 | Method | Path | Description |
 |--------|------|------|
 | POST | `/api/upload?session_id=X` | Upload a file (multipart/form-data) → stored in file_store, response includes `id` |
 | GET | `/api/files?filter=all\|shared\|expiring` | List stored files → `{items, quota:{used,max,ttl_days}}` (quota is always the whole store, not the filtered subset) |
-| GET | `/api/files/{id}/download` | Download by id (`attachment` + `nosniff` + `no-store`) |
-| GET | `/api/files/{id}/path` | Disk path of a stored file (dock file tab's "copy path"; id-only input, so no traversal surface) |
-| DELETE | `/api/files/{id}` | Delete a stored file |
-| POST | `/api/files/{id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
-| POST | `/api/files/{id}/send` | Copy the file to a remote host (JSON: `host`, optional `session`) and, with `session`, have that host type its own path into the pane. Ordinary login auth here; the outbound leg carries the peer signature. Re-sending the same file is skipped by origin |
-| POST | `/api/files/{id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
-| DELETE | `/api/files/{id}/share/{shareId}` | **Elevated.** Cancel a share — the URL 404s immediately even with a still-valid signature |
+| GET | `/api/files/{file_id}/download` | Download by id (`attachment` + `nosniff` + `no-store`) |
+| GET | `/api/files/{file_id}/path` | Disk path of a stored file (dock file tab's "copy path"; id-only input, so no traversal surface) |
+| DELETE | `/api/files/{file_id}` | Delete a stored file |
+| POST | `/api/files/{file_id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
+| POST | `/api/files/{file_id}/send` | Copy the file to a remote host (JSON: `host`, optional `session`) and, with `session`, have that host type its own path into the pane. Ordinary login auth here; the outbound leg carries the peer signature. Re-sending the same file is skipped by origin |
+| POST | `/api/files/{file_id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
+| DELETE | `/api/files/{file_id}/share/{share_id}` | **Elevated.** Cancel a share — the URL 404s immediately even with a still-valid signature |
 
 Public download entry point (not under the api prefix, and not behind the usual session/token auth —
 `server/routes/share.py` does its own token/mode verification):
@@ -240,11 +242,11 @@ a peer signature opens.
 |--------|------|------|
 | GET | `/api/hosts[?fresh=1]` | Local host (always first, id `local`) + every registered peer, each with its session list. Remote lookups run in parallel and are cached 30s; an unreachable host degrades to `online:false` + `reason` instead of failing the list |
 | GET | `/api/hosts/self` | This host's id/label (pairing guidance, settings screen) |
-| POST | `/api/hosts/{id}/ping` | Liveness + clock-skew/latency refresh. A failed connection returns **200 with `online:false`** — it's a state, not a server error |
-| GET | `/api/hosts/{id}/clients?session=&screen=` | Remote "connected screens" list — proxied to the peer route of the same name. The remote's status code (403 for insufficient level, etc.) is passed through as-is |
-| POST | `/api/hosts/{id}/clients/detach` | Proxies a remote detach (JSON: `tty`, `screen`). 403 if the peer only granted `view` — the UI then hides the detach buttons and says why |
-| POST | `/api/hosts/{id}/clients/solo` | Proxies remote "keep only this screen" (JSON: `session`, `screen`) |
-| GET | `/api/hosts/{id}/search?q=` | Proxies remote scrollback search. `host`/`host_label` are attached to each row **here** — whatever the remote calls itself, the label comes from this side's registry |
+| POST | `/api/hosts/{host_id}/ping` | Liveness + clock-skew/latency refresh. A failed connection returns **200 with `online:false`** — it's a state, not a server error |
+| GET | `/api/hosts/{host_id}/clients?session=&screen=` | Remote "connected screens" list — proxied to the peer route of the same name. The remote's status code (403 for insufficient level, etc.) is passed through as-is |
+| POST | `/api/hosts/{host_id}/clients/detach` | Proxies a remote detach (JSON: `tty`, `screen`). 403 if the peer only granted `view` — the UI then hides the detach buttons and says why |
+| POST | `/api/hosts/{host_id}/clients/solo` | Proxies remote "keep only this screen" (JSON: `session`, `screen`) |
+| GET | `/api/hosts/{host_id}/search?q=` | Proxies remote scrollback search. `host`/`host_label` are attached to each row **here** — whatever the remote calls itself, the label comes from this side's registry |
 | WS | `/ws/remote/{host_id}/{tmux_name}` | Remote pane proxy: the browser's usual login auth on this side, the peer signature on the other. **Creates no PTY, feeds no output watcher, writes no scrollback** — the host that owns the PTY is the one that notifies and persists, so nothing is duplicated here |
 
 ## Misc
@@ -252,13 +254,12 @@ a peer signature opens.
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel/version, etc.) |
-| GET | `/api/scrollback/usage` | N13 — whether persistence is on + total disk bytes used by `~/.vt/scrollback/` (settings screen) |
 | GET | `/api/workspace` | Fetch workspace sync state (tabs/UI state) |
 | PUT | `/api/workspace` | Save workspace state |
 | GET | `/api/device-settings` | Fetch this device's settings (N3 — scoped by the `vt_device` cookie, `local` without it) |
 | PUT | `/api/device-settings` | Save this device's settings |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |
-| GET | `/api/agents/{name}` | Active agent info for a specific tmux session |
+| GET | `/api/agents/{tmux_name}` | Active agent info for a specific tmux session |
 | GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low"}]`, read live from `detect/*.toml` |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
@@ -269,7 +270,6 @@ a peer signature opens.
 | POST | `/api/agent/event` | Endpoint called by Claude Code and Codex lifecycle hooks. Body may include `agent`; prompt/tool start maps to `working`, permission request to `waiting`, and stop/session end to `done` |
 | GET | `/api/safe-mode` | Whether prompt queue safe_mode is active |
 | GET | `/api/tailscale/status` | Tailscale install/connection/IP/MagicDNS hostname |
-| GET | `/api/tunnel/status` | Cloudflare tunnel (main) connection status |
 | GET | `/api/notify/status` | Whether ntfy/Telegram notifications are configured |
 | POST | `/api/notify/test` | Send a test notification (JSON: title, message, priority) |
 | POST | `/api/notify/client-event` | For the tmux client-attached/detached hook only — surfaces SSH connections |

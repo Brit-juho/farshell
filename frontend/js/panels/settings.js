@@ -18,7 +18,6 @@ import { renderVoiceSection, cleanupVoiceClients } from './settings/sections/voi
 import { renderAppearanceSection } from './settings/sections/appearance.js';
 import { renderAgentsSection } from './settings/sections/agents.js';
 import { renderSecuritySection } from './settings/sections/security.js';
-import { renderScrollbackSection } from './settings/sections/scrollback.js';
 import { renderAboutSection } from './settings/sections/about.js';
 import { getTabs, getActiveTabId } from '../layout/store.js';
 import { getAction } from '../core/dom.js';
@@ -28,12 +27,13 @@ import { vtFetch } from '../core/api.js';
 const PANEL_ID = 'vt-settings';
 
 function renderScrollbackGroup() {
-  const frag = document.createDocumentFragment();
-  frag.appendChild(renderItems({ items: [
+  // ADR-43(2.3.0) — 서버 디스크 영속화 토글(`renderScrollbackSection`)을
+  // 없앴다. 옵트인 기능이 한 번도 켜진 적이 없어(실측 0건) 위험만 있고
+  // 값어치가 없었다(docs/plan-2.3/87-remove-scrollback-persist.md). 줄 수
+  // 설정(브라우저 쪽 xterm.js 버퍼)은 별개 기능이라 그대로 남는다.
+  return renderItems({ items: [
     { key: 'terminal.scrollback', label: '스크롤백 줄 수', kind: 'range', step: 500, unit: '줄', presets: [2000, 5000, 10000] },
-  ] }));
-  frag.appendChild(renderScrollbackSection());
-  return frag;
+  ] });
 }
 
 // 섹션 정의 — 자주 함께 쓰는 항목을 7개 범주로 묶는다. 「세션」은 rail 자체가
@@ -105,7 +105,7 @@ const SECTIONS = [
   { id: 'keymap', label: '키맵', description: '단축키와 터미널 전달 여부를 바꿉니다.', custom: () => renderKeymapSection(rerender) },
   // 기본 6스킨 칩(2026-09-18부터 이 탭이 유일한 자리 — 위 주석 참고).
   // 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
-  { id: 'appearance', label: '모양', description: '스킨을 고릅니다.', custom: renderAppearanceSection },
+  { id: 'appearance', label: '모양', description: '스킨과 파일 뷰어 표시 방식을 고릅니다.', custom: renderAppearanceSection },
   { id: 'security', label: '계정 및 보안', description: '로그인, OTP, 등록 기기와 현재 세션을 확인합니다.', custom: renderSecuritySection },
   // N13(80-multihost-agents.md §3) — 토글 자체는 스키마 항목이지만, 디스크
   // 사용량은 서버에 물어봐야 하는 값이라(보안 섹션과 같은 이유로) custom.
@@ -116,12 +116,12 @@ const SEARCH_ITEMS = [
   ['terminal', '글자 크기'], ['terminal', '커서 모양'], ['terminal', '커서 깜빡임'],
   ['terminal', '새 세션 생성 시 맥에서도 iTerm 열기'], ['terminal', '앱에 마우스 이벤트 전달'],
   ['terminal', '드래그 시 자동 복사'], ['terminal', '터치 탭을 앱에 전달'],
-  ['terminal', '스크린 리더 모드'], ['terminal', '스크롤백 줄 수'], ['terminal', '스크롤백 저장'],
+  ['terminal', '스크린 리더 모드'], ['terminal', '스크롤백 줄 수'],
   ['voice', '웹 푸시 알림'], ['voice', '완료 알림'], ['voice', '음성 모델'],
   ['voice', '로컬 음성 입력'], ['voice', '음성 전용 모드'],
   ['agents', '에이전트 감지 상태'], ['agents', 'MCP 서버'],
   ['keymap', '단축키와 터미널 전달'],
-  ['appearance', '스킨'],
+  ['appearance', '스킨'], ['appearance', '파일 뷰어 표시 방식'],
   ['security', '로그인과 OTP'], ['security', '등록 기기'], ['security', '로그아웃'],
   ['about', '에이전트 훅'], ['about', '사용량 공급자'], ['about', '버전과 진단'],
 ].map(([sectionId, label]) => ({ sectionId, label }));
@@ -130,6 +130,7 @@ const SEARCH_ALIASES = {
   '글자 크기': '폰트 글꼴 확대 축소',
   '커서 모양': '캐럿',
   '스킨': '테마 색상 컬러',
+  '파일 뷰어 표시 방식': '코드 뷰어 시트 팝업 창 페인',
   '웹 푸시 알림': '브라우저 알림 구독',
   'MCP 서버': '도구 플러그인',
   '등록 기기': '디바이스 장치',

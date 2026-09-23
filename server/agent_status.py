@@ -46,6 +46,7 @@ cwd도 같은 문제를 갖는다 — 두 맥의 홈 경로(`/Users/<같은이�
 
 import logging
 import os
+import re
 import time
 from typing import Optional
 
@@ -136,9 +137,43 @@ def sweep(now: Optional[float] = None) -> int:
     return changed
 
 
+# P1-1(ADR-33) — 승인 응답 경쟁. 화면 둘이 같은 선택지를 거의 동시에 눌러도
+# 첫 요청만 통과시키기 위한 토큰. 모듈 전역 단조 증가 — 서버 재시작 시 0으로
+# 돌아가도 안전하다(`_state`도 함께 비므로 옛 토큰을 든 엔트리가 없다, E8).
+_prompt_seq = 0
+
+
+def _prompt_fingerprint(ent: dict) -> str:
+    """'같은 질문인가'의 판정 기준.
+
+    질문 원문을 그대로 비교하면 안 된다 — PTY 감지는 화면이 다시 그려질 때마다
+    같은 프롬프트를 재추출하는데, ANSI 잔여·말줄임·후행 공백 때문에 문자열이
+    미세하게 달라질 수 있다. 그때마다 토큰을 새로 내면 사용자가 보고 있는
+    토큰이 탭하기 전에 만료된다(docs/plan-2.3/10-approval-race.md §4 E5).
+
+    그래서 공백을 접어 정규화하고, 선택지는 **키만** 본다(라벨은 잘릴 수 있다).
+    """
+    q = " ".join((ent.get("question") or "").split())
+    keys = ",".join(o.get("key", "") for o in (ent.get("options") or []))
+    return f"{q}\x00{keys}"
+
+
 def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
+    global _prompt_seq
+    prev = ent.get("status")
     ent["status"] = status
     ent["updated_at"] = time.time() if now is None else now
+    if status != WAITING:
+        # 해소된 프롬프트가 "아직 활성"으로 남지 않게 한다(crush 「소비 뒤
+        # 활성 표식을 지운다」 규율의 우리 번역).
+        ent["prompt_id"] = None
+        ent["_prompt_fp"] = None
+        return
+    fp = _prompt_fingerprint(ent)
+    if prev != WAITING or ent.get("_prompt_fp") != fp:
+        _prompt_seq += 1
+        ent["prompt_id"] = str(_prompt_seq)
+        ent["_prompt_fp"] = fp
 
 
 def _entry(sid: str, cwd: Optional[str] = None, host: str = LOCAL_HOST) -> dict:
@@ -164,8 +199,34 @@ def _entry(sid: str, cwd: Optional[str] = None, host: str = LOCAL_HOST) -> dict:
     return ent
 
 
+# P2-1(ADR-34) — 에이전트 이름은 클라이언트로 나가고 report_seen 파일명 근처로도
+# 간다(device_settings._SAFE_ID와 같은 규율). 길이 상한 + 문자 제한을 여기 하나에
+# 모은다 — _apply_agent가 이 값의 유일한 진입점이 되므로 여기 하나면 된다(E11).
+_AGENT_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+
+
+def _apply_agent(ent: dict, agent: Optional[str]) -> None:
+    """1차 신호(자기보고·훅)로 받은 에이전트 이름을 엔트리에 박는다.
+
+    - 값이 없거나(None/빈 문자열) 형식이 이상하면 아무것도 안 한다 —
+      **기존 값을 지우지 않는다.** 훅이 agent를 안 실어 보내는 구버전
+      설치가 있고, 그 요청이 이미 박힌 이름을 날리면 안 된다(E1/E6/E11).
+    - 이미 같은 값이면 건드리지 않는다 — `since` 같은 인접 필드를 덩달아
+      갱신하지 않는다(crush `reportLocked`, E2).
+    - 아직 없으면 무조건 채운다(crush `registerInitial`, E3).
+    - **1차 신호가 2차 추측(`agent_detector`)을 이긴다**는 게 이 항목
+      전체의 요점이다(§2.4) — 탐지기와 값이 달라도 여기서 지우지 않는다.
+      TTL이 옛 값을 자연 만료시킨다(§3.4).
+    """
+    if not agent or not _AGENT_NAME_RE.match(agent):
+        return
+    if ent.get("agent") == agent:
+        return
+    ent["agent"] = agent
+
+
 def on_event(event: str, payload: dict, session: Optional[str] = None,
-             host: str = LOCAL_HOST) -> Optional[dict]:
+             host: str = LOCAL_HOST, agent: Optional[str] = None) -> Optional[dict]:
     """훅 이벤트 처리.
 
     Args:
@@ -178,6 +239,9 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
                  이미 있던 값을 지우지 않는다** — pre에서 pane id로 확실히
                  특정해뒀는데 stop 페이로드가 어쩌다 단서를 못 실어 왔다고
                  해서 그 정보를 잃을 이유가 없다.
+        agent: P2-1(ADR-34) — 훅이 자기 이름을 실어 보내면(`--agent codex` 등)
+               `_apply_agent`로 엔트리에 박는다. 세션(컨테이너)에서 추측하는
+               `agent_detector`보다 우선하는 1차 신호다(§2.4).
 
     Returns:
         해당 세션의 갱신된 상태(엔트리 전체). 알 수 없는 세션의 알 수 없는
@@ -194,6 +258,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
 
     if event in ("prompt", "user_prompt_submit"):
         ent = _entry(sid, cwd, host)
+        _apply_agent(ent, agent)
         if session:
             ent["tmux_session"] = session
         ent["tool"] = None
@@ -205,6 +270,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
 
     if event in ("permission", "permission_request"):
         ent = _entry(sid, cwd, host)
+        _apply_agent(ent, agent)
         if session:
             ent["tmux_session"] = session
         tool = payload.get("tool_name") or payload.get("tool")
@@ -212,13 +278,18 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         ent["since"] = time.time()
         ent["count"] = ent.get("count", 0) + 1
         ent["input"] = payload.get("tool_input", {})
-        _set_status(ent, WAITING)
+        # P1-1 — question/options를 _set_status보다 먼저 채운다. _set_status가
+        # 그 자리에서 지문(_prompt_fingerprint)을 계산하므로, 순서가 바뀌면
+        # 항상 빈 질문으로 계산돼 토큰이 매번 같아진다(docs/plan-2.3/
+        # 10-approval-race.md §3.1의 경고).
         ent["question"] = (f"{tool} 실행 승인이 필요합니다" if tool else "실행 승인이 필요합니다")
         ent["options"] = None
+        _set_status(ent, WAITING)
         return ent
 
     if event == "pre":
         ent = _entry(sid, cwd, host)
+        _apply_agent(ent, agent)
         if session:
             ent["tmux_session"] = session
         ent["tool"] = payload.get("tool_name") or payload.get("tool", "?")
@@ -238,6 +309,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         # 상태는 그대로 둔다(파일 상단 규칙). 도구가 끝났을 뿐 다음 도구가
         # 곧바로 이어질 수 있어서다.
         ent = _entry(sid, cwd, host)
+        _apply_agent(ent, agent)
         if session:
             ent["tmux_session"] = session
         ent["last_tool"] = ent.get("tool")
@@ -251,6 +323,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
 
     if event in ("stop", "session_end"):
         ent = _entry(sid, cwd, host)
+        _apply_agent(ent, agent)
         if session:
             ent["tmux_session"] = session
         ent["tool"] = None
@@ -292,11 +365,18 @@ def on_waiting(
     if cwd:
         ent["cwd"] = cwd
     if waiting:
-        if ent["status"] == WORKING:
-            _set_status(ent, WAITING)
-        if ent["status"] == WAITING:
+        # waiting은 working일 때만 받아들인다(done/idle에 뒤늦게 도착한 감지가
+        # 완료 표시를 되돌리면 안 된다는 기존 규칙). 이미 waiting이면 "같은
+        # 프롬프트 재확인"이거나 "다음 질문으로 넘어감"일 수 있는데 둘 다
+        # 여기로 들어와야 한다 — question/options를 먼저 갱신한 뒤 매번
+        # _set_status를 불러 지문을 다시 판정한다. 그래야 같은 질문이면
+        # 토큰이 그대로 있고(E4), 선택지가 바뀌면 새 토큰이 나간다(E6) —
+        # 두 if로 나눠 앞쪽만 상태를 바꾸던 예전 코드는 이미 waiting인 채
+        # 질문만 바뀌는 경우 _set_status를 안 태워 토큰이 갱신되지 않았다.
+        if ent["status"] in (WORKING, WAITING):
             ent["question"] = question
             ent["options"] = options
+            _set_status(ent, WAITING)
     elif ent["status"] == WAITING:
         _set_status(ent, WORKING)
         ent["question"] = None
@@ -317,6 +397,46 @@ def ack(sid: str, host: str = LOCAL_HOST) -> Optional[dict]:
     return ent
 
 
+def _entries_for(tmux_name: str, host: str = LOCAL_HOST) -> list[dict]:
+    """tmux 세션 이름으로 엔트리를 찾는다.
+
+    `deps.py`의 `_on_waiting_change`가 targets를 계산하던 것과 **같은 규칙**
+    (tmux_session == tmux_name 이고 host == 주어진 host)이다. 두 곳이 각자
+    조건을 들고 있으면 하나만 고쳐질 위험이 있어 여기 하나로 모았다 —
+    `deps.py`도 이 헬퍼를 쓴다. host 기본값이 LOCAL_HOST인 이유: 두 맥의
+    기본 tmux 세션 이름(`dev`)이 흔히 같아서, host를 안 거르면 원격의 같은
+    이름 세션이 로컬 조회에 걸려든다.
+    """
+    return [e for e in _state.values()
+            if e.get("tmux_session") == tmux_name and e.get("host", LOCAL_HOST) == host]
+
+
+def consume_prompt(tmux_name: str, prompt_id: str, host: str = LOCAL_HOST) -> bool:
+    """토큰이 맞으면 **즉시 비우고** True. 어긋나면 아무것도 안 하고 False.
+
+    P1-1(ADR-33) — 승인 응답 경쟁의 핵심. 화면 둘이 같은 선택지를 거의 동시에
+    눌러도 먼저 도착한 요청만 여기를 통과하고, 나머지는 이미 비워진 토큰을
+    보고 False를 받는다.
+
+    ⚠ 이 함수는 동기이고, 검사와 대입 사이에 **절대 `await`를 넣지 않는다.**
+    asyncio 단일 이벤트 루프에서 await 없는 구간은 원자적으로 실행되므로,
+    crush가 뮤텍스로 얻는 것(csync.Map.Take)을 우리는 이 규칙으로 얻는다.
+    await가 하나라도 들어가면 두 요청이 같은 토큰을 통과한다
+    (docs/plan-2.3/10-approval-race.md §4 E13).
+    """
+    sweep()
+    for ent in _entries_for(tmux_name, host):
+        if ent.get("status") == WAITING and ent.get("prompt_id") == prompt_id:
+            ent["prompt_id"] = None       # 검사와 같은 스텝에서 소비한다.
+            return True
+    return False
+
+
+def public_entry(ent: dict) -> dict:
+    """클라이언트로 내려가는 형태. `_` 접두 키(내부용, 예: `_prompt_fp`)는 뺀다."""
+    return {k: v for k, v in ent.items() if not k.startswith("_")}
+
+
 def report(sid: str, status: str, session: Optional[str] = None,
            cwd: Optional[str] = None, agent: Optional[str] = None,
            host: str = LOCAL_HOST) -> dict:
@@ -332,8 +452,10 @@ def report(sid: str, status: str, session: Optional[str] = None,
     ent = _entry(sid, cwd, host)
     if session:
         ent["tmux_session"] = session
-    if agent:
-        ent["agent"] = agent
+    # P2-1(ADR-34) — `_apply_agent`가 유일한 진입점이 되도록 자기보고도
+    # 여길 거친다. 예전엔 여기서 직접 대입해 길이/문자 제한(E11)이 훅
+    # 경로에만 걸리고 `fsh pane report --agent`에는 안 걸렸다.
+    _apply_agent(ent, agent)
     if status != WORKING:
         ent["tool"] = None
     _set_status(ent, status)

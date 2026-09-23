@@ -16,7 +16,7 @@ import { vtFetch } from './core/api.js';
 import { allSessions, sessionDisplayName } from './core/store.js';
 import { revealSession } from './term/session.js';
 import { splitActivePane, setPaneSession } from './layout/store.js';
-import { loadViewer, openFileInPane } from './panels/viewer-lazy.js';
+import { loadViewer, openFile, openFileInPane } from './panels/viewer-lazy.js';
 import { setVtSkin, vtSkins, vtSkinLabel } from './theme.js';
 import { buildSessionCard, updateSessionCard } from './agent/preview.js';
 import { showToast } from './ui/toast.js';
@@ -49,6 +49,7 @@ const deps = {
   // 타입·호출부를 다시 손댈 이유가 없다.
   switchTo: revealSession,
   loadViewer,
+  openFile,
   openFileInPane,
   splitActivePane,
   setPaneSession,

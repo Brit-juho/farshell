@@ -63,10 +63,10 @@ export const SCHEMA = {
   // 섹션이 늘어나면(변경 파일·최근 diff) 그때 폭도 설정으로 뺀다.
   // 문서 §1 표: "ui.rail.collapsed/width · ui.dock.* → device"와 같은 부류.
   'rightRail.collapsed':    { type: 'bool', def: false, scope: 'device' },
-  // N13(80-multihost-agents.md §3) — 옵트인 스크롤백 영속화. 기본 OFF.
-  // 재접속 시 클라이언트가 받는 양(256KB)은 이 설정과 무관하게 항상 그대로다 —
-  // 이건 그 뒤의 "더 불러오기"/검색을 위해 서버 디스크에 계속 쌓을지 여부다.
-  'scrollback.persist':     { type: 'bool', def: false },
+  // ADR-43(2.3.0) — 옵트인 스크롤백 영속화 자체를 없앴다(한 번도 켜진 적
+  // 없어 위험만 있고 값어치가 없었다). 스키마에서 뺐다 — 이미 이 키를 저장한
+  // workspace.json이 있어도 무해하다(서버는 값의 의미를 모르고 보관만 하고,
+  // 프런트도 스키마에 없는 키는 무시한다. 마이그레이션 불필요).
 
   // N36/N35가 정식 스토어가 생기기 전까지 localStorage 전용으로 뒀던 값들
   // (Rail.tsx/Dock.tsx 커밋 주석 "N3 전이라 임시로 localStorage" 참고).
@@ -81,6 +81,15 @@ export const SCHEMA = {
   // N38(70-mobile.md §1) — compact 하단 내비의 시작 탭. 기기 스코프인 이유는
   // rail/dock 폭과 같다: 폰에서 고른 첫 화면이 맥 터미널 시작 화면에 새면 안 된다.
   'ui.mobile.home':         { type: 'enum', def: 'fleet', values: ['fleet', 'terminal'], scope: 'device' },
+
+  // ADR-44(docs/plan-2.3/95-viewer-surface.md §3) — 파일 뷰어 표면. `pane`은 2.2.0까지의
+  // 동작(터미널 옆을 쪼갠다)이라 값으로 남긴다. 표면·높이·창 위치가 폰과 맥 사이에 새면
+  // 안 되므로 셋 다 device. 높이를 %로 두는 건 외부 모니터에서 맞춘 px 값이 노트북에서
+  // 화면을 다 덮지 않게 하려는 것이고, 창 위치를 JSON 한 덩어리로 두는 건 부분 저장된
+  // 중간 상태를 막으려는 것이다(keymap.overrides와 같은 이유).
+  'viewer.surface':         { type: 'enum', def: 'sheet', values: ['sheet', 'float', 'pane'], scope: 'device' },
+  'viewer.sheet.height':    { type: 'int',  def: 45, min: 20, max: 85, scope: 'device' },
+  'viewer.float.rect':      { type: 'str',  def: '{}', scope: 'device' },
 
   // C1(80-multihost-agents.md §1) — 레일이 지금 보고 있는 호스트. **device 스코프**인
   // 이유가 이 파일의 존재 이유 그 자체다: `/api/workspace`는 모든 기기가 공유하는
@@ -331,8 +340,14 @@ export async function load() {
 // N35/N43 — shell/*.tsx(Rail.tsx·Dock.tsx)는 지연 청크라 이 모듈을 정적
 // import하면 안 된다(core/store.js와 같은 이유 — Vite lib 모드가 청크마다
 // 복제해 별개 싱글톤이 된다). 그 파일들이 window로만 읽도록 브리지를 둔다.
-window.vtSettingsGet = get;
-window.vtSettingsSet = set;
-window.vtSettingsHas = has;
-window.vtSettingsSubscribe = subscribe;
-window.vtSettingsSubscribePersistence = subscribePersistence;
+//
+// 먼저 뜬 사본이 브리지를 소유한다. voice.js는 별도 Rollup 빌드라 이 모듈을 자기 안에
+// 한 벌 더 들고 있고 부팅 뒤에 로드된다 — 그 사본이 브리지를 덮으면 Rail·Dock의 쓰기가
+// 다른 저장소로 가서 두 사본이 서로의 기기 설정을 서버에서 덮어쓴다(2026-09-23 e2e로 발견).
+if (typeof window.vtSettingsGet !== 'function') {
+  window.vtSettingsGet = get;
+  window.vtSettingsSet = set;
+  window.vtSettingsHas = has;
+  window.vtSettingsSubscribe = subscribe;
+  window.vtSettingsSubscribePersistence = subscribePersistence;
+}

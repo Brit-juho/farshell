@@ -25,6 +25,8 @@ import signal
 import subprocess
 import time
 
+import portdetect
+
 logger = logging.getLogger(__name__)
 
 LSOF_TIMEOUT = 5.0
@@ -209,6 +211,8 @@ def scan(use_cache: bool = True) -> dict:
         row["protected_reason"] = reason
         # 루프백에만 열린 것과 전 인터페이스에 열린 것은 위험도가 다르다 — UI에서 구분한다.
         row["public"] = any(a in ("*", "0.0.0.0", "[::]") for a in row["addrs"])
+        # P3-5 — 포트 3000과 11434를 구분한다. 못 알아보면 None(화면은 명령줄만 보여준다).
+        row["service"] = portdetect.identify(row)
         out.append(row)
 
     # U3: 포트 번호 순 하나로만 늘어놓으면 내가 실제로 만지는 개발 서버가

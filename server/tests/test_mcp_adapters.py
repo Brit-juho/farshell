@@ -265,6 +265,41 @@ def test_transport_is_classified(home):
     assert kinds == {"s": "stdio", "h": "http", "u": "unknown"}
 
 
+# ── P2-2(ADR-35) — sse는 http과 별개 전송이다 ───────────────────────────────
+
+def test_declared_sse_type_is_not_flattened_into_http():
+    assert mcp_adapters._transport({"type": "sse", "url": "https://e.example"}) == "sse"
+
+
+def test_e1_undeclared_url_still_infers_http():
+    assert mcp_adapters._transport({"url": "https://e.example"}) == "http"
+
+
+def test_e3_declared_type_wins_over_contradicting_command():
+    """모순된 정의(type:http인데 command도 있음)에서도 선언이 이긴다 —
+    화면이 모순을 그대로 보여주는 게 조용히 고르는 것보다 낫다."""
+    assert mcp_adapters._transport({"type": "http", "command": "npx"}) == "http"
+
+
+def test_e4_unknown_declared_transport_passes_through_verbatim():
+    assert mcp_adapters._transport({"type": "websocket", "url": "x"}) == "websocket"
+
+
+def test_e5_declared_type_is_case_normalized():
+    assert mcp_adapters._transport({"type": "SSE", "url": "x"}) == "sse"
+
+
+def test_e6_non_string_type_does_not_crash():
+    """숫자·객체가 와도 500이 아니라 str()로 정규화해 그대로 보여준다 —
+    깨진 설정 하나가 표 전체를 막으면 안 된다."""
+    assert mcp_adapters._transport({"type": 42, "command": "x"}) == "42"
+    assert mcp_adapters._transport({"type": {"nested": True}}) == "{'nested': true}"
+
+
+def test_empty_definition_is_unknown():
+    assert mcp_adapters._transport({}) == "unknown"
+
+
 # ── 참조 쓰기 (97번 3단계) ─────────────────────────────────────────────────
 #
 # §0-3의 핵심: **문법을 통일하면 Codex에서 조용히 깨진다.** Codex는 값 자리의
@@ -396,3 +431,85 @@ def test_opencode_project_file_warns_about_committing_with_its_own_syntax():
                       path=_Path("/repo/opencode.json"), enabled=True,
                       defn={"env": {"T": "sk-literal"}}, expands=True, shared=True)
     assert any("{env:VAR}" in n for n in entry["notes"])
+
+
+# ------------------------------------------------------ 검증(P3-2) 전용 경로
+#
+# scan_*()와 정반대 불변식이다 — 여기는 **값이 실려야 한다**(스폰해야 하므로).
+# find_raw_defn/resolve_launch가 API 응답으로 나가는 일이 없어야 한다는 건
+# 라우트 테스트(test_mcp_route.py)가 지킨다.
+
+
+def test_find_raw_defn_returns_the_literal_value(home):
+    _write_claude(home, {"mcpServers": {"n": {
+        "command": "npx", "args": ["-y", "n"], "env": {"TOKEN": "sk-literal-value"}}}})
+    defn, path = mcp_adapters.find_raw_defn("claude", "global", "n")
+    assert defn["env"]["TOKEN"] == "sk-literal-value"
+    assert path == home / ".claude.json"
+
+
+def test_find_raw_defn_missing_name_returns_none(home):
+    _write_claude(home, {"mcpServers": {"n": {"command": "x"}}})
+    defn, _path = mcp_adapters.find_raw_defn("claude", "global", "does-not-exist")
+    assert defn is None
+
+
+def test_find_raw_defn_local_scope_checks_project_then_shared_mcp_json(home, tmp_path):
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    _write_claude(home, {"projects": {str(wt): {"mcpServers": {"a": {"command": "proj"}}}}})
+    (wt / ".mcp.json").write_text(json.dumps({"mcpServers": {"b": {"command": "shared"}}}))
+
+    defn_a, _ = mcp_adapters.find_raw_defn("claude", "local", "a", worktree_path=str(wt))
+    assert defn_a["command"] == "proj"
+    defn_b, path_b = mcp_adapters.find_raw_defn("claude", "local", "b", worktree_path=str(wt))
+    assert defn_b["command"] == "shared"
+    assert path_b == wt / ".mcp.json"
+
+
+def test_resolve_launch_stdio_passes_literal_env_through(home):
+    _write_claude(home, {"mcpServers": {"n": {
+        "command": "npx", "args": ["-y", "n"], "env": {"TOKEN": "sk-literal-value"}}}})
+    launch = mcp_adapters.resolve_launch("claude", "global", "n")
+    assert launch == {
+        "transport": "stdio", "command": "npx", "args": ["-y", "n"],
+        "env": {"TOKEN": "sk-literal-value"},
+    }
+
+
+def test_resolve_launch_resolves_dollar_ref_from_credential_store(home, monkeypatch):
+    _write_claude(home, {"mcpServers": {"n": {"command": "npx", "env": {"TOKEN": "${TOKEN}"}}}})
+    defn = {"command": "npx", "env": {"TOKEN": "${TOKEN}"}}
+    fp = mcp_adapters._fingerprint(defn)
+    monkeypatch.setattr(
+        "mcp_catalog.env_for",
+        lambda servers: {"TOKEN": "resolved-from-vault"} if servers[0]["fingerprint"] == fp else {},
+    )
+    launch = mcp_adapters.resolve_launch("claude", "global", "n")
+    assert launch["env"]["TOKEN"] == "resolved-from-vault"
+
+
+def test_resolve_launch_leaves_unresolvable_ref_as_is(home, monkeypatch):
+    _write_claude(home, {"mcpServers": {"n": {"command": "npx", "env": {"TOKEN": "${MISSING}"}}}})
+    monkeypatch.setattr("mcp_catalog.env_for", lambda servers: {})
+    launch = mcp_adapters.resolve_launch("claude", "global", "n")
+    assert launch["env"]["TOKEN"] == "${MISSING}"  # 지어내지 않는다 — 서버가 스스로 실패한다
+
+
+def test_resolve_launch_http_returns_url_not_env(home):
+    _write_claude(home, {"mcpServers": {"n": {"url": "https://e.example/mcp"}}})
+    launch = mcp_adapters.resolve_launch("claude", "global", "n")
+    assert launch == {"transport": "http", "url": "https://e.example/mcp"}
+
+
+def test_resolve_launch_codex_pulls_named_vars_from_our_own_environment(home, monkeypatch):
+    (home / ".codex" / "config.toml").write_text(
+        '[mcp_servers.n]\ncommand = "npx"\nenv_vars = ["MY_TOKEN"]\n'
+    )
+    monkeypatch.setenv("MY_TOKEN", "from-process-env")
+    launch = mcp_adapters.resolve_launch("codex", "global", "n")
+    assert launch["env"] == {"MY_TOKEN": "from-process-env"}
+
+
+def test_resolve_launch_returns_none_when_not_found(home):
+    assert mcp_adapters.resolve_launch("claude", "global", "nope") is None
