@@ -12,6 +12,8 @@ import json
 import os
 import shutil
 import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -68,8 +70,41 @@ def run_json(args: list[str], *, timeout: float = 10.0) -> tuple[object | None, 
         return None, "Codex CLI JSON을 해석하지 못했습니다"
 
 
+# `codex plugin list --json`은 원격 마켓플레이스까지 조회해 단독으로 19초가 걸린다
+# (0.155.1, 2026-09-23 실측). 10초 제한으로는 매번 시간 초과였고, MCP 설정 화면
+# 전체와 codex 플러그인 토글이 그 10초를 기다린 뒤 실패했다(ADR-48). 설치 목록은
+# 거의 안 바뀌므로 성공한 결과만 캐시한다. 켬/끔은 여기서 쓰지 않는다 — 부르는 쪽이
+# config.toml에서 매번 읽는다(파일이 진실).
+PLUGIN_LIST_TTL_SEC = 600.0
+PLUGIN_LIST_TIMEOUT_SEC = 30.0
+_plugin_lock = threading.Lock()
+_plugin_cache: dict = {"at": 0.0, "data": None}
+
+
+def reset_plugin_cache() -> None:
+    with _plugin_lock:
+        _plugin_cache.update(at=0.0, data=None)
+
+
+def plugin_list(*, refresh: bool = False) -> tuple[object | None, str | None]:
+    """캐시된 `codex plugin list --json`. 동시 호출은 실행 한 번으로 합친다(락).
+    새로 받다 실패하면 옛 결과가 있으면 그걸 준다 — 설치 목록은 거의 안 변한다."""
+    with _plugin_lock:
+        cached = _plugin_cache["data"]
+        fresh = time.monotonic() - _plugin_cache["at"] < PLUGIN_LIST_TTL_SEC
+        if cached is not None and fresh and not refresh:
+            return cached, None
+        data, err = run_json(["plugin", "list", "--json"], timeout=PLUGIN_LIST_TIMEOUT_SEC)
+        if err is None and isinstance(data, dict) and isinstance(data.get("installed"), list):
+            _plugin_cache.update(at=time.monotonic(), data=data)
+            return data, None
+        if cached is not None:
+            return cached, None
+        return data, err
+
+
 def installed_plugin_ids() -> tuple[set[str], Optional[str]]:
-    data, err = run_json(["plugin", "list", "--json"])
+    data, err = plugin_list()
     if err:
         return set(), err
     if not isinstance(data, dict) or not isinstance(data.get("installed"), list):

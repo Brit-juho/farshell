@@ -706,3 +706,48 @@ def test_verify_missing_env_is_unverified_without_spawning(client, monkeypatch):
     assert body["missing"] == ["ABSENT_ROUTE_TOK"]
     assert spawned == []
     assert "sk-literal-secret" not in r.text
+
+
+def test_codex_plugin_state_comes_from_config_not_the_cached_list(client, monkeypatch):
+    """ADR-48 — 설치 목록은 캐시지만 켬/끔은 매번 config.toml에서 읽는다(파일이 진실)."""
+    _login(client)
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **kwargs: ({"installed": [{
+        "pluginId": "p@m", "name": "p", "enabled": True, "source": {}}]}, None))
+    config = client.vt_home / ".codex" / "config.toml"
+    config.write_text("")
+    by = {p["name"]: p for p in client.get("/api/mcp/plugins").json()["plugins"]}
+    assert by["p@m"]["enabled"] is True
+    config.write_text('[plugins."p@m"]\nenabled = false\n')
+    by = {p["name"]: p for p in client.get("/api/mcp/plugins").json()["plugins"]}
+    assert by["p@m"]["enabled"] is False, "캐시된 옛 enabled가 이기면 안 된다"
+
+
+def test_codex_plugin_toggle_does_not_hold_the_lock_while_asking_the_cli(client, monkeypatch):
+    """설치 확인(느린 CLI)은 config.toml 락 밖에서 해야 한다."""
+    import mcp_write
+    _elevate(client)
+    (client.vt_home / ".codex" / "config.toml").write_text('[plugins."p@m"]\nenabled = true\n')
+    held = []
+    real_locked = mcp_write._locked
+
+    def spy_ids():
+        held.append(getattr(mcp_write, "_spy_inside", False))
+        return {"p@m"}, None
+
+    def spy_locked(path):
+        cm = real_locked(path)
+
+        class _Wrap:
+            def __enter__(self):
+                mcp_write._spy_inside = True
+                return cm.__enter__()
+
+            def __exit__(self, *a):
+                mcp_write._spy_inside = False
+                return cm.__exit__(*a)
+        return _Wrap()
+    monkeypatch.setattr("codex_cli.installed_plugin_ids", spy_ids)
+    monkeypatch.setattr(mcp_write, "_locked", spy_locked)
+    r = client.post("/api/mcp/plugins/toggle", json={
+        "name": "p@m", "enabled": False, "tool": "codex", "scope": "global"})
+    assert r.status_code == 200 and held == [False]

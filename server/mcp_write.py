@@ -849,6 +849,15 @@ def set_plugin_enabled(name: str, enabled: bool, *, tool: str = "claude",
             return {"status": "failed", "reason": "Codex 플러그인은 전역 스코프만 지원한다",
                     "changed": False}
         path = mcp_adapters.codex_paths()["global"]
+        # 설치 목록 확인은 락 **밖에서** 한다 — CLI 호출이 길어질 수 있는데 그동안
+        # config.toml 락을 쥐고 있으면 다른 쓰기가 전부 막힌다(ADR-48).
+        installed, install_err = codex_cli.installed_plugin_ids()
+        if install_err:
+            return {"status": "failed", "changed": False,
+                    "reason": f"설치 여부를 확인하지 못했다: {install_err}"}
+        if name not in installed:
+            return {"status": "failed", "changed": False,
+                    "reason": f"`{name}` 플러그인이 설치 목록에 없다 — 먼저 `codex plugin add`로 설치할 것"}
         try:
             with _locked(path):
                 before, err = mcp_adapters._read_toml(path)
@@ -856,13 +865,6 @@ def set_plugin_enabled(name: str, enabled: bool, *, tool: str = "claude",
                     raise WriteRefused(f"{path.name}: {err} — 쓰기를 중단했다")
                 if before is None:
                     raise WriteRefused(f"{path} 가 없다")
-
-                installed, install_err = codex_cli.installed_plugin_ids()
-                if install_err:
-                    raise WriteRefused(f"설치 여부를 확인하지 못했다: {install_err}")
-                if name not in installed:
-                    raise WriteRefused(
-                        f"`{name}` 플러그인이 설치 목록에 없다 — 먼저 `codex plugin add`로 설치할 것")
 
                 plugins = before.get("plugins")
                 if plugins is not None and not isinstance(plugins, dict):

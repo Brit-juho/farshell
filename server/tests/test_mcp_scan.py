@@ -133,3 +133,37 @@ def test_scan_never_leaks_values_end_to_end(home, wt):
     (home / ".claude.json").write_text(json.dumps({"mcpServers": {"n": {
         "command": "x", "env": {"TOKEN": "top-secret-xyz"}}}}))
     assert "top-secret-xyz" not in json.dumps(mcp_scan.scan("wt1"))
+
+
+# ADR-48 — `codex plugin list --json`은 원격 조회로 19초가 걸려 10초 제한에 매번 걸렸다.
+def test_codex_plugin_list_is_cached_and_single_flight(monkeypatch):
+    import codex_cli
+    calls = []
+
+    def fake(args, **kwargs):
+        calls.append(kwargs.get("timeout"))
+        return {"installed": [{"pluginId": "p@m", "enabled": True}]}, None
+    monkeypatch.setattr("codex_cli.run_json", fake)
+    a, _ = codex_cli.plugin_list()
+    b, _ = codex_cli.plugin_list()
+    assert a is b and len(calls) == 1, "두 번째는 캐시에서"
+    assert calls[0] >= 30, "원격 조회가 끝날 시간을 준다"
+    codex_cli.plugin_list(refresh=True)
+    assert len(calls) == 2, "새로고침은 캐시를 버린다"
+
+
+def test_codex_plugin_list_keeps_stale_result_on_failure(monkeypatch):
+    import codex_cli
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **k: ({"installed": [{"pluginId": "p@m"}]}, None))
+    codex_cli.plugin_list()
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **k: (None, "Codex CLI 응답 시간이 초과됐습니다"))
+    data, err = codex_cli.plugin_list(refresh=True)
+    assert err is None and data["installed"][0]["pluginId"] == "p@m"
+
+
+def test_codex_plugin_failure_is_not_cached(monkeypatch):
+    import codex_cli
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **k: (None, "timeout"))
+    assert codex_cli.plugin_list()[1] == "timeout"
+    monkeypatch.setattr("codex_cli.run_json", lambda args, **k: ({"installed": []}, None))
+    assert codex_cli.plugin_list() == ({"installed": []}, None)

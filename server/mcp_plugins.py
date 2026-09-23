@@ -114,10 +114,11 @@ def _codex_manifest_has_mcp(plugin_root: Path) -> bool:
 
 
 def scan_codex_plugins(worktree_path: Optional[str] = None,
-                       worktree_id: Optional[str] = None) -> dict:
-    """`codex plugin list --json`이 확인한 설치 플러그인과 번들 기능."""
+                       worktree_id: Optional[str] = None, *, refresh: bool = False) -> dict:
+    """`codex plugin list --json`이 확인한 설치 플러그인과 번들 기능.
+    설치 목록은 캐시(`codex_cli.plugin_list`), 켬/끔은 매번 config.toml에서 읽는다."""
     del worktree_path, worktree_id  # Codex 플러그인은 현재 전역 스코프다.
-    data, err = codex_cli.run_json(["plugin", "list", "--json"])
+    data, err = codex_cli.plugin_list(refresh=refresh)
     source = "codex plugin list --json"
     if err:
         return {"plugins": [], "errors": [{"source": source, "reason": err}]}
@@ -141,9 +142,15 @@ def scan_codex_plugins(worktree_path: Optional[str] = None,
         source_path = source_obj.get("path")
         root = Path(source_path) if isinstance(source_path, str) and source_path else None
         skills = _codex_skill_names(root) if root else []
+        # 캐시된 행의 enabled는 옛 값일 수 있다 — 지금 파일에 적힌 값이 이긴다.
+        table = explicit.get(plugin_id)
+        if isinstance(table, dict) and "enabled" in table:
+            state = table.get("enabled") is not False
+        else:
+            state = bool(row.get("enabled", True))
         entry = _plugin_entry(
             name=plugin_id, tool="codex", scope="global", path=config_path,
-            state=bool(row.get("enabled", True)), worktree_id=None,
+            state=state, worktree_id=None,
         )
         entry.update({
             "plugin": plugin_name,
@@ -164,7 +171,7 @@ def scan_codex_plugins(worktree_path: Optional[str] = None,
 SCANNERS = {"claude": scan_claude_plugins, "codex": scan_codex_plugins}
 
 
-def scan(worktree_id: Optional[str] = None) -> dict:
+def scan(worktree_id: Optional[str] = None, *, refresh: bool = False) -> dict:
     import mcp_scan
 
     wt = mcp_scan.find_worktree(worktree_id)
@@ -176,7 +183,8 @@ def scan(worktree_id: Optional[str] = None) -> dict:
         fn = SCANNERS.get(tool)
         if fn is None:
             continue
-        result = fn(wt_path, wt.get("id") if wt else None)
+        kwargs = {"refresh": refresh} if fn is scan_codex_plugins else {}
+        result = fn(wt_path, wt.get("id") if wt else None, **kwargs)
         plugins.extend(result["plugins"])
         errors.extend(result["errors"])
     return {"plugins": plugins, "errors": errors}

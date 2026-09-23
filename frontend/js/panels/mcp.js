@@ -50,6 +50,11 @@ let _worktreeId = null;
 // 마지막으로 그린 데이터 — 태그를 고치거나 그룹을 누른 뒤 다시 그릴 때 쓴다.
 let _host = null;
 
+// ADR-48 — 플러그인 목록은 따로 받는다. codex 쪽이 원격 조회라 느려서(첫 조회 최대
+// 수십 초), 서버 목록과 한 번에 기다리면 섹션 전체가 그만큼 멈췄다. null = 아직 안 옴.
+let _plugins = null;
+let _pluginSeq = 0;
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -575,6 +580,7 @@ function paint(host, data) {
   const groups = data.groups || [];
   if (!groups.length) {
     host.appendChild(help('정의된 MCP 서버가 없습니다. 추가는 각 CLI의 공식 명령을 쓰세요 — `claude mcp add`, `codex mcp add`, `agy mcp add`.'));
+    host.appendChild(renderPlugins());
     return;
   }
 
@@ -596,27 +602,42 @@ function paint(host, data) {
 
   for (const g of groups) host.appendChild(renderServer(g, data.facts || {}, data.tags || {}, data));
 
-  host.appendChild(renderPlugins(data));
+  host.appendChild(renderPlugins());
 }
 
-/** 스캔 + 자격증명을 함께 읽는다. 자격증명은 **마스킹된 형태만** 온다.
- *  둘을 따로 요청하는 이유: 스캔은 CLI 파일을 읽은 사실이고 자격증명은 우리
- *  저장소라, 한쪽이 실패해도 다른 쪽은 보여야 한다. */
+function _q() {
+  return _worktreeId ? `?worktree=${encodeURIComponent(_worktreeId)}` : '';
+}
+
+/** 스캔 + 자격증명. 둘 다 빠르다(파일 읽기). 자격증명은 **마스킹된 형태만** 온다.
+ *  따로 요청하는 이유: 스캔은 CLI 파일을 읽은 사실이고 자격증명은 우리 저장소라,
+ *  한쪽이 실패해도 다른 쪽은 보여야 한다. */
 function load() {
-  const q = _worktreeId ? `?worktree=${encodeURIComponent(_worktreeId)}` : '';
   return Promise.all([
-    vtFetch(`/api/mcp${q}`),
+    vtFetch(`/api/mcp${_q()}`),
     vtFetch('/api/mcp/creds').catch(() => ({ creds: [], refs: [] })),
-    vtFetch(`/api/mcp/plugins${q}`).catch(() => ({ plugins: [] })),
-  ]).then(([scan, credData, pluginData]) => ({
+  ]).then(([scan, credData]) => ({
     ...scan, creds: credData.creds || [], refs: credData.refs || [],
-    plugins: pluginData.plugins || [],
   }));
 }
 
-/** 서버에서 다시 읽어 그린다. 토글·그룹·태그·자격증명 조작 뒤 항상 이걸
+/** 플러그인만 다시 받아 그 칸만 바꾼다. 늦게 온 옛 응답은 버린다. */
+function loadPlugins({ refresh: force = false } = {}) {
+  const seq = ++_pluginSeq;
+  const sep = _q() ? '&' : '?';
+  return vtFetch(`/api/mcp/plugins${_q()}${force ? `${sep}refresh=1` : ''}`)
+    .catch((e) => ({ plugins: [], errors: [{ source: '플러그인', reason: e.message || '읽지 못했습니다' }] }))
+    .then((d) => {
+      if (seq !== _pluginSeq) return;
+      _plugins = { list: d.plugins || [], errors: d.errors || [] };
+      const box = _host && _host.querySelector('.vt-mcp-plugins');
+      if (box) box.replaceWith(renderPlugins());
+    });
+}
+
+/** 서버 목록을 다시 읽어 그린다. 토글·그룹·태그·자격증명 조작 뒤 항상 이걸
  *  거친다 — 화면이 자기 기억으로 상태를 추측하면 파일을 직접 고친 사용자와
- *  어긋난다. */
+ *  어긋난다. 플러그인은 안 다시 읽는다(바뀐 게 없다). */
 function refresh() {
   if (!_host) return;
   return load()
@@ -628,12 +649,14 @@ function refresh() {
 export function mount(host, worktreeId) {
   _worktreeId = worktreeId || null;
   _host = host;
+  _plugins = null;
   load()
     .then((data) => paint(host, data))
     .catch((e) => {
       host.innerHTML = '';
       host.appendChild(help(`MCP 설정을 읽지 못했습니다: ${e.message || ''}`));
     });
+  loadPlugins();
 }
 
 // ── 플러그인 (97번 4단계) ──────────────────────────────────────────────────
@@ -642,11 +665,32 @@ export function mount(host, worktreeId) {
 // 켜는 버튼을 그리면 "켰는데 아무 일도 안 일어난다"가 되는데, 그게 이 화면이
 // 가장 피해야 할 상태다.
 
-function renderPlugins(data) {
-  const list = data.plugins || [];
-  const box = el('div', 'vt-mcp-group');
-  box.appendChild(el('div', 'vt-set-label', '플러그인'));
+function renderPlugins() {
+  const box = el('div', 'vt-mcp-group vt-mcp-plugins');
+  const head = el('div', 'vt-mcp-servhead');
+  head.appendChild(el('div', 'vt-set-label', '플러그인'));
+  const again = el('button', 'vt-chip sm vt-mcp-tagadd', '새로고침');
+  again.type = 'button';
+  again.title = 'CLI에서 새로 설치한 플러그인을 바로 반영합니다 — codex는 원격 조회라 오래 걸릴 수 있습니다';
+  again.disabled = _plugins === null;
+  again.addEventListener('click', () => {
+    again.disabled = true;
+    _plugins = null;
+    box.replaceWith(renderPlugins());
+    loadPlugins({ refresh: true });
+  });
+  head.appendChild(again);
+  box.appendChild(head);
 
+  if (_plugins === null) {
+    box.appendChild(help('불러오는 중… (codex는 원격 마켓플레이스를 조회해 처음 한 번은 오래 걸릴 수 있습니다)'));
+    return box;
+  }
+  // 예전엔 codex 조회 실패가 버려져 「설치된 플러그인이 없습니다」로 보였다 — 실패는 실패로 말한다.
+  for (const err of _plugins.errors) {
+    box.appendChild(help(`${err.source}: ${err.reason}`));
+  }
+  const list = _plugins.list;
   if (!list.length) {
     box.appendChild(help(
       '설치된 플러그인이 없습니다. 설치는 각 CLI의 공식 명령을 쓰세요 — '
@@ -678,7 +722,7 @@ function renderPlugins(data) {
         }
       } catch (e) {
         showToast(e.message || '바꾸지 못했습니다', 'error');
-      } finally { refresh(); }
+      } finally { loadPlugins(); }
     });
     row.appendChild(btn);
 

@@ -52,15 +52,17 @@ function scanPayload(over = {}) {
 
 async function build({ scan = scanPayload(), toggle, group,
                        credData = { creds: [], refs: [] },
-                       pluginData = { plugins: [] } } = {}) {
+                       pluginData = { plugins: [] }, pluginGate = null } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
   window.API_BASE = '';
   window._tokenQuery = '';
   const posts = [];
+  const gets = [];
   window.fetch = (url, opts) => {
     const u = String(url);
+    if (!opts || !opts.method || opts.method === 'GET') gets.push(u.replace(/^.*\/api/, '/api'));
     if (opts && opts.method === 'POST' && u.includes('/api/mcp/toggle')) {
       posts.push(JSON.parse(opts.body));
       const r = toggle || { status: 'ok', changed: true };
@@ -81,7 +83,8 @@ async function build({ scan = scanPayload(), toggle, group,
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
       }
       if (pluginData === null) return Promise.reject(new Error('plugins unavailable'));
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(pluginData) });
+      const reply = { ok: true, json: () => Promise.resolve(pluginData) };
+      return pluginGate ? pluginGate.then(() => reply) : Promise.resolve(reply);
     }
     if (u.includes('/api/mcp/creds')) {
       if (opts && opts.method === 'POST') {
@@ -116,7 +119,7 @@ async function build({ scan = scanPayload(), toggle, group,
   M.mount(host, 'wt1');
   await flush();
   await flush();
-  return { window, document: window.document, host, posts, M, setPrompt };
+  return { window, document: window.document, host, posts, gets, M, setPrompt };
 }
 
 const texts = (host, sel) => Array.from(host.querySelectorAll(sel)).map((n) => n.textContent);
@@ -444,4 +447,44 @@ test('Codex 플러그인은 포함된 스킬과 MCP를 함께 표시한다', asy
 test('플러그인 조회가 실패해도 MCP 목록은 그려진다', async () => {
   const { host } = await build({ pluginData: null });
   assert.ok(texts(host, '.vt-set-label').includes('notion'));
+});
+
+
+// ADR-48 — codex 플러그인 조회는 원격이라 느리다(첫 조회 19초 실측). 서버 목록이
+// 그걸 기다리면 섹션 전체가 멈춘다.
+test('플러그인이 오기 전에 서버 목록이 먼저 그려진다', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { host } = await build({ pluginGate: gate, pluginData: { plugins: [] } });
+  assert.ok(texts(host, '.vt-set-label').includes('notion'), '서버 목록은 이미 보여야 한다');
+  assert.match(host.querySelector('.vt-mcp-plugins').textContent, /불러오는 중/);
+  release();
+  await flush(); await flush();
+  assert.match(host.querySelector('.vt-mcp-plugins').textContent, /설치된 플러그인이 없습니다/);
+});
+
+test('플러그인 조회 실패는 「없다」가 아니라 실패로 보여준다', async () => {
+  const { host } = await build({ pluginData: { plugins: [], errors: [
+    { source: 'codex plugin list --json', reason: 'Codex CLI 응답 시간이 초과됐습니다' }] } });
+  assert.match(host.querySelector('.vt-mcp-plugins').textContent, /응답 시간이 초과/);
+});
+
+test('서버 쪽 조작 뒤 다시 읽을 때 플러그인은 다시 받지 않는다', async () => {
+  const { host, gets, document } = await build();
+  const count = (re) => gets.filter((u) => re.test(u.split('?')[0])).length;
+  const pluginsBefore = count(/^\/api\/mcp\/plugins$/);
+  const scanBefore = count(/^\/api\/mcp$/);
+  Array.from(host.querySelectorAll('.vt-mcp-tagadd')).find((b) => b.textContent === '+ 태그').click();
+  await answerPrompt(document, { value: '검증용' });
+  await flush(); await flush(); await flush();
+  assert.ok(count(/^\/api\/mcp$/) > scanBefore, '전제: 서버 목록은 다시 읽는다(refresh)');
+  assert.equal(count(/^\/api\/mcp\/plugins$/), pluginsBefore, '느린 플러그인 조회를 다시 부르면 안 된다');
+});
+
+test('플러그인 새로고침은 refresh=1로 캐시를 버린다', async () => {
+  const { host, gets } = await build();
+  const btn = Array.from(host.querySelectorAll('.vt-mcp-plugins button')).find((b) => b.textContent === '새로고침');
+  btn.click();
+  await flush(); await flush();
+  assert.ok(gets.some((u) => u.startsWith('/api/mcp/plugins') && u.includes('refresh=1')));
 });

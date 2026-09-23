@@ -374,9 +374,10 @@ async def deploy(request: Request):
 
 
 @router.get("/api/mcp/plugins")
-async def list_plugins(worktree: str | None = Query(default=None)):
+async def list_plugins(worktree: str | None = Query(default=None),
+                       refresh: bool = Query(default=False)):
     try:
-        return await asyncio.to_thread(mcp_plugins.scan, worktree)
+        return await asyncio.to_thread(mcp_plugins.scan, worktree, refresh=refresh)
     except Exception:
         logger.exception("플러그인 scan 실패")
         return JSONResponse({"error": "scan_failed"}, status_code=500)

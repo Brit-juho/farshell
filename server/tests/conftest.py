@@ -34,3 +34,16 @@ _EMPTY_CFG = os.path.join(tempfile.gettempdir(), "vt-tests-empty.env")
 with open(_EMPTY_CFG, "w", encoding="utf-8") as _f:
     _f.write("# server/tests 전용 빈 설정 — conftest.py가 만든다\n")
 os.environ["VT_CONFIG"] = _EMPTY_CFG
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_codex_plugin_cache():
+    """codex 플러그인 목록은 모듈 전역 캐시다(ADR-48). 한 테스트가 채운 결과가 다음
+    테스트의 `run_json` 스텁을 가리면 안 된다."""
+    import codex_cli
+    codex_cli.reset_plugin_cache()
+    yield
+    codex_cli.reset_plugin_cache()
