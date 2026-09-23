@@ -116,3 +116,14 @@ test('1600px 이상(xwide)에서는 페인 상한이 없다', async () => {
   for (let i = 0; i < 8; i++) store.splitActivePane('row'); // 옛 상한(6)을 넘겨도
   assert.ok(splitButtons(window.document).every((b) => b.disabled === false), 'xwide에서는 계속 활성이어야 한다');
 });
+
+// 세션이 하나도 없으면 트리 렌더가 한 번도 안 일어나 컨테이너가 없다. 그 상태에서 창
+// 크기를 바꾸면(폰 회전) resize 핸들러가 null.children으로 죽었다(2026-09-23 실브라우저에서 발견).
+test('세션이 없을 때 창 크기를 바꿔도 예외가 안 난다', async () => {
+  const { window } = await buildWindow(1280);
+  const errors = [];
+  window.addEventListener('error', (e) => errors.push(String(e.error || e.message)));
+  window.dispatchEvent(new window.Event('resize'));
+  await new Promise((r) => setTimeout(r, 200));
+  assert.deepEqual(errors, []);
+});

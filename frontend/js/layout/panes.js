@@ -601,5 +601,7 @@ onLayoutChange(renderLayout);
 let _resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(_resizeTimer);
-  _resizeTimer = setTimeout(_renderFull, 120);
+  // renderLayout과 같은 가드 — 세션이 하나도 없으면 트리 렌더가 한 번도 안 일어나
+  // 컨테이너가 없다. 그 상태에서 창 크기를 바꾸면(폰 회전) 여기서 null.children으로 죽었다.
+  _resizeTimer = setTimeout(() => { if (_ensureContainers()) _renderFull(); }, 120);
 });
