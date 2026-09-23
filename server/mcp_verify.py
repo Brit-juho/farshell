@@ -40,6 +40,11 @@ MAX_STDERR_CHARS = 2000
 
 CONNECTED = "connected"
 ERROR = "error"
+# 값을 구하지 못해 띄우지 않았다(ADR-46). 실패가 아니다 — 에이전트 안에서는 동작할 수 있다.
+UNVERIFIED = "unverified"
+
+_PLAIN_ENV = frozenset({"HOME", "LOGNAME", "PATH", "SHELL", "USER", "LANG", "LC_ALL",
+                        "TERM", "TMPDIR", "TZ", "__CF_USER_TEXT_ENCODING"})
 
 # 97번 §2-3과 같은 원칙 — 우리가 env로 넘긴 자격증명 값은 정확히 알고 있으므로
 # 문자열 치환으로 확실히 지운다. 그 외에 stderr에 우연히 찍히는(env로 넘기지
@@ -128,15 +133,25 @@ async def verify_stdio(
     args: Optional[list[str]] = None,
     env: Optional[dict[str, str]] = None,
     *,
+    inherit: Optional[list[str]] = None,
     timeout: float = DEFAULT_TIMEOUT_SEC,
 ) -> dict:
     """stdio MCP 서버를 실제로 한 번 띄워 initialize+tools/list를 해본다.
 
+    `inherit`: 우리 환경에서 물려줄 이름. None이면 전부 — 도구가 서버에 주는 환경을
+    그대로 흉내 내기 위한 것이다(codex는 허용 목록만 준다, `mcp_adapters._CODEX_DEFAULT_ENV`).
+
     반환: `{"state", "tool_count", "error", "checked_at"}`.
     """
     checked_at = time.time()
+    base = dict(os.environ) if inherit is None else {
+        k: os.environ[k] for k in inherit if k in os.environ}
     known_secrets = [v for v in (env or {}).values() if v]
-    full_env = {**os.environ, **(env or {})}
+    if inherit is not None:
+        # 허용 목록으로 물려준 값 중 경로·로캘이 아닌 것(codex `env_vars`로 넘긴 토큰)도
+        # 가린다. 경로까지 가리면 "명령을 못 찾음" 같은 메시지가 읽을 수 없게 된다.
+        known_secrets += [v for k, v in base.items() if v and k not in _PLAIN_ENV]
+    full_env = {**base, **(env or {})}
 
     try:
         proc = await asyncio.create_subprocess_exec(

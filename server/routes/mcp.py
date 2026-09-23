@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -446,7 +447,12 @@ async def verify_mcp_server(scope: str, name: str, request: Request):
         return JSONResponse({"error": "not_found"}, status_code=404)
 
     if launch["transport"] == "stdio":
-        result = await mcp_verify.verify_stdio(launch["command"], launch["args"], launch["env"])
+        if launch.get("missing"):
+            # ADR-46 — 값을 모르는 채로 띄우면 "실패"라는 틀린 말을 하게 된다. 이름만 알려준다.
+            return {"state": mcp_verify.UNVERIFIED, "tool_count": None, "error": None,
+                    "missing": launch["missing"], "checked_at": time.time()}
+        result = await mcp_verify.verify_stdio(
+            launch["command"], launch["args"], launch["env"], inherit=launch.get("inherit"))
     else:
         # E21 — 네트워크 행위는 사용자 확인 없이 부르지 않는다.
         result = await mcp_verify.verify_http(launch["url"], confirmed=confirmed)

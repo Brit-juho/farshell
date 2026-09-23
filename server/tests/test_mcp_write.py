@@ -694,3 +694,25 @@ def test_batch_rejects_unknown_tool():
     results = mcp_write.set_enabled_batch("bogus", [{"name": "a", "enabled": True}])
     assert results[0]["status"] == "failed"
     assert "모르는 도구" in results[0]["reason"]
+
+
+# ADR-46 — agy는 참조를 확장하지 않는다(1.2.7 실측). 자격증명이 있는 정의를 옮기면
+# 값을 평문으로 적거나 `${…}` 글자를 적는 수밖에 없다 — 둘 다 조용히 깨진다.
+def test_deploy_to_agy_with_credentials_is_refused(home):
+    import mcp_write
+    out = mcp_write.deploy(
+        "notion", {"command": "npx", "env": {"TOKEN": "sk-real"}},
+        tool="agy", scope="global", env_map={"env": {"TOKEN": "FSH_MCP_NOTION_TOKEN"}},
+    )
+    assert out["status"] == "failed" and out["changed"] is False
+    assert "확장하지 않는다" in out["reason"]
+    assert not (home / ".gemini" / "config" / "mcp_config.json").exists() or \
+        "FSH_MCP" not in (home / ".gemini" / "config" / "mcp_config.json").read_text()
+
+
+def test_deploy_to_agy_without_credentials_still_works(home):
+    import mcp_write
+    _agy(home, {"mcpServers": {}})
+    out = mcp_write.deploy("plain", {"command": "npx", "args": ["-y", "x"]}, tool="agy", scope="global")
+    assert out["status"] == "ok", out
+    assert "plain" in _read_agy(home)["mcpServers"]

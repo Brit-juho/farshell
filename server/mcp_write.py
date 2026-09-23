@@ -718,6 +718,15 @@ def deploy(
                 "reason": "OAuth를 쓰는 서버는 다른 스코프로 복제할 수 없다 — "
                           "대상 도구에서 직접 인증할 것"}
 
+    # ADR-46 — 참조를 쓸 방법이 없는 도구(agy, 1.2.7 실측)에 env/headers가 있는 정의를
+    # 옮기면 값을 평문으로 적거나 `${…}` 글자를 적는 수밖에 없다. 둘 다 안 된다.
+    if mcp_adapters.ref_syntax(tool) == "none" and (
+            any(isinstance(defn.get(s), dict) and defn.get(s) for s in ("env", "headers"))
+            or any((env_map or {}).get(s) for s in ("env", "headers"))):
+        return {"status": "failed", "changed": False,
+                "reason": f"{tool}는 설정의 환경변수 참조를 확장하지 않는다 — 자격증명(env·headers)이 "
+                          f"있는 서버는 {tool}로 복제할 수 없다. {tool}에서 직접 등록할 것"}
+
     # 1) 값 → 참조.
     ready = mcp_adapters.apply_refs(tool, defn, env_map or {})
 

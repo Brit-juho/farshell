@@ -156,3 +156,26 @@ def test_http_verify_reports_connection_failure_when_confirmed():
     )
     assert result["state"] == "error"
     assert result["tool_count"] is None
+
+
+# ADR-46 — codex는 허용 목록만 물려준다. 검증이 우리 환경을 통째로 주면 codex 안에서는
+# 실패할 서버가 검증에서는 통과한다(거짓 통과).
+STUB_NEEDS_LEAKED_VAR = STUB_MINIMAL.replace(
+    "import sys, json", "import sys, json, os\nif not os.environ.get('VT_ONLY_IN_OUR_ENV'):\n    sys.exit(3)")
+
+
+def test_inherit_allowlist_excludes_everything_else(monkeypatch):
+    monkeypatch.setenv("VT_ONLY_IN_OUR_ENV", "1")
+    full = asyncio.run(mcp_verify.verify_stdio(sys.executable, _stub_args(STUB_NEEDS_LEAKED_VAR)))
+    assert full["state"] == "connected", "전제: 환경을 통째로 주면 통과한다"
+    limited = asyncio.run(mcp_verify.verify_stdio(
+        sys.executable, _stub_args(STUB_NEEDS_LEAKED_VAR), inherit=["PATH", "HOME"]))
+    assert limited["state"] == "error"
+
+
+def test_inherited_secret_is_masked(monkeypatch):
+    monkeypatch.setenv("FSH_TEST_SECRET", "sk-inherited-secret-value")
+    result = asyncio.run(mcp_verify.verify_stdio(
+        sys.executable, _stub_args(STUB_LEAKS_SECRET), inherit=["PATH", "FSH_TEST_SECRET"]))
+    assert result["state"] == "error"
+    assert "sk-inherited-secret-value" not in json.dumps(result)

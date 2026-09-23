@@ -19,6 +19,9 @@
                   그래서 codex의 env에 `${VAR}`를 적으면 확장되지 않고
                   **리터럴 7글자가 그대로 서버에 전달된다** — 조용히 깨지는
                   종류라 진단으로 잡아 알려준다.
+- agy           : **확장 없음**(1.2.7 격리 HOME 실측, 2026-09-23 — `${VAR}`·`$VAR`
+                  둘 다 글자 그대로 전달). 대신 agy 자신의 환경을 통째로 물려준다.
+                  이름만 적는 칸도 없어서 **참조를 쓸 방법이 없다**(ADR-46).
 """
 
 from __future__ import annotations
@@ -135,8 +138,8 @@ def _describe_fields(mapping, *, expands: Optional[bool],
 
     `expands`는 그 도구가 `${VAR}`를 실제 값으로 바꿔주는지다.
     - True(claude)  : 참조로 인정
-    - False(codex)  : 확장이 없으므로 리터럴로 분류하고 호출부가 경고를 붙인다
-    - None(agy)     : **확인하지 못했다.** 참조로 보되 그 사실을 표시한다 —
+    - False(codex·agy) : 확장이 없으므로 리터럴로 분류하고 호출부가 경고를 붙인다
+    - None          : **확인하지 못한 도구.** 참조로 보되 그 사실을 표시한다 —
                       둘 중 어느 쪽으로 단정해도 사용자에게 거짓말이 된다.
     """
     out = []
@@ -432,6 +435,11 @@ def scan_codex(worktree_path: Optional[str] = None, worktree_id: Optional[str] =
 #   - on/off는 정의 안의 `"disabled": true`. codex의 `enabled`와 **방향이 반대**다.
 #   - `agy mcp disable` → `disabled: true` 기록, `agy mcp enable` → **키를 제거**.
 #     즉 키가 없으면 켜진 것이다.
+#
+# 2026-09-23, agy 1.2.7에서 같은 방식(격리 HOME + env를 파일에 적는 스텁)으로 추가 확인:
+#   - `agy mcp list`는 서버를 띄우지 않는다. `agy -p`는 인증 전에 서버를 띄운다.
+#   - env의 `${VAR}`·`$VAR`는 **확장되지 않고** 글자 그대로 전달된다.
+#   - agy 자신의 프로세스 환경은 서버에 **통째로** 물려준다.
 
 def agy_paths() -> dict:
     return {"global": _home() / ".gemini" / "config" / "mcp_config.json"}
@@ -455,8 +463,8 @@ def scan_agy(worktree_path: Optional[str] = None, worktree_id: Optional[str] = N
             name=name, tool="agy", scope="global", path=path,
             # 키가 없으면 켜진 것 — `agy mcp enable`이 키를 지우기 때문이다.
             enabled=defn.get("disabled", False) is not True,
-            # `${VAR}` 확장 여부는 확인하지 못했다(§_describe_fields).
-            defn=defn, expands=None, worktree_id=None,
+            # 1.2.7 실측: 확장하지 않는다(모듈 상단 §0-3). 참조 모양은 dead_ref로 경고된다.
+            defn=defn, expands=False, worktree_id=None,
         ))
     return {"servers": servers, "errors": []}
 
@@ -526,13 +534,31 @@ def find_raw_defn(
     return None, None
 
 
+# codex-rs `rmcp-client/src/utils.rs` (0.155.1) — codex는 stdio 서버에 자기 환경을
+# **통째로 주지 않는다.** 이 목록 + CA 인증서 변수 + `env_vars`에 적힌 이름만 넘기고,
+# 그 위에 `env`를 얹는다(같은 키면 `env`가 이긴다). 검증도 같은 모양으로 띄운다 —
+# 우리 환경을 통째로 주면 codex 안에서는 실패할 서버가 검증에서는 통과한다.
+_CODEX_DEFAULT_ENV = (
+    "HOME", "LOGNAME", "PATH", "SHELL", "USER", "__CF_USER_TEXT_ENCODING",
+    "LANG", "LC_ALL", "TERM", "TMPDIR", "TZ",
+)
+_CODEX_CA_ENV = (
+    "CODEX_CA_CERTIFICATE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
+    "NODE_EXTRA_CA_CERTS", "GIT_SSL_CAINFO", "CARGO_HTTP_CAINFO", "PIP_CERT",
+    "BUNDLE_SSL_CA_CERT", "npm_config_cafile", "NPM_CONFIG_CAFILE",
+)
+_REF_DEFAULT_RE = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}$")
+
+
 def resolve_launch(
     tool: str, scope: str, name: str, *,
     worktree_path: Optional[str] = None, worktree_id: Optional[str] = None,
 ) -> Optional[dict]:
     """검증(`mcp_verify`)에 넘길 스폰 정보. **값이 실려 있다 — 응답으로 내보내지 않는다.**
 
-    stdio: `{"transport": "stdio", "command", "args", "env"}`.
+    stdio: `{"transport": "stdio", "command", "args", "env", "inherit", "missing"}`.
+    - `inherit`: 우리 환경에서 물려줄 이름 목록. None이면 전부(claude·agy·opencode).
+    - `missing`: 값을 구하지 못한 변수 **이름**. 비어 있지 않으면 검증하지 않는다(ADR-46).
     http/sse: `{"transport": "http"|"sse", "url"}`.
     못 찾거나 command/url이 없으면 None.
     """
@@ -553,32 +579,48 @@ def resolve_launch(
     args = [a for a in (defn.get("args") or []) if isinstance(a, str)]
 
     resolved_env: dict[str, str] = {}
+    missing: list[str] = []
+    inherit: Optional[list[str]] = None
+    literal_env = {k: v for k, v in _as_mapping(defn.get("env")).items() if isinstance(v, str)}
+
     if tool == "codex":
-        # codex는 env 값을 파일에 안 적는다 — `env_vars`가 이름만 나열하고,
-        # 실제 값은 codex 자신의 프로세스 환경에서 가져온다. 우리도 우리
-        # 프로세스 환경에 이미 있는 것만 넘긴다 — 없으면 그 서버는 codex
-        # 안에서도 우리 안에서도 똑같이 그 변수 없이 뜬다.
+        inherit = list(_CODEX_DEFAULT_ENV + _CODEX_CA_ENV)
         for key in _as_name_list(defn.get("env_vars")):
-            val = os.environ.get(key)
-            if val:
-                resolved_env[key] = val
+            # codex는 자기를 띄운 셸에서 이 이름을 찾는다. 우리 서버 환경에 없으면
+            # "실패"가 아니라 "확인 불가"다 — pane 안에서는 있을 수 있다.
+            if os.environ.get(key):
+                inherit.append(key)
+            else:
+                missing.append(key)
+        # codex는 env를 확장하지 않는다 — 글자 그대로가 codex의 실제 동작이다.
+        resolved_env.update(literal_env)
+    elif tool == "agy":
+        # agy도 확장하지 않고(1.2.7 실측) 자기 환경을 통째로 물려준다 — 그대로 흉내 낸다.
+        resolved_env.update(literal_env)
     else:
         style = "brace_env" if tool == "opencode" else "dollar"
-        for key, value in _as_mapping(defn.get("env")).items():
-            if not isinstance(value, str):
-                continue
+        creds = None
+        for key, value in literal_env.items():
             ref, literal = _classify_ref(value, style=style)
             if literal or ref is None:
                 resolved_env[key] = value
                 continue
-            # 참조 — 우리 자격증명 저장소에서 지문이 맞는 것만 찾아 채운다.
-            # 없으면 원문 그대로 넘긴다(값을 지어내지 않는다) — 서버가 그
-            # 변수 없이 스스로 실패하면 그게 곧 정확한 검증 결과다.
-            import mcp_catalog
-            creds = mcp_catalog.env_for([{"name": name, "fingerprint": _fingerprint(defn)}])
-            resolved_env[key] = creds.get(ref) or creds.get(key) or value
+            # 참조 — 우리 자격증명 저장소, 그다음 우리 환경. 값을 지어내지 않는다.
+            if creds is None:
+                import mcp_catalog
+                creds = mcp_catalog.env_for([{"name": name, "fingerprint": _fingerprint(defn)}])
+            val = creds.get(ref) or creds.get(key) or os.environ.get(ref)
+            if val:
+                resolved_env[key] = val
+                continue
+            m = _REF_DEFAULT_RE.match(value.strip()) if style == "dollar" else None
+            if m:
+                resolved_env[key] = m.group(1)   # `${VAR:-기본값}` — 도구도 이렇게 푼다
+            else:
+                missing.append(ref)
 
-    return {"transport": "stdio", "command": command, "args": args, "env": resolved_env}
+    return {"transport": "stdio", "command": command, "args": args, "env": resolved_env,
+            "inherit": inherit, "missing": sorted(set(missing))}
 
 
 # ------------------------------------------------------------ 참조 쓰기 (3단계)
@@ -592,10 +634,14 @@ def resolve_launch(
 def ref_syntax(tool: str) -> str:
     """그 도구가 설정 파일 **값 자리**에서 쓰는 참조 문법의 종류.
 
-    - `dollar_brace` — `${VAR}`를 값 자리에 그대로 쓴다(claude·agy)
+    - `dollar_brace` — `${VAR}`를 값 자리에 그대로 쓴다(claude)
     - `brace_env`    — `{env:VAR}` 고유 문법(opencode). **`${VAR}`는 안 먹는다**
     - `name_only`    — 값 자리에 참조를 못 쓴다. **이름만 따로 적는다**(codex)
+    - `none`         — 참조를 쓸 방법이 아예 없다(agy, 1.2.7 실측). 자격증명이 있는
+                       정의는 이 도구로 옮길 수 없다(`mcp_write.deploy`가 거절)
     """
+    if tool == "agy":
+        return "none"
     if tool == "codex":
         return "name_only"
     if tool == "opencode":
@@ -607,7 +653,7 @@ def render_ref(tool: str, env_name: str) -> Optional[str]:
     """값 자리에 넣을 문자열. `name_only` 도구는 None — 부르는 쪽이
     `env_vars` 같은 별도 칸에 이름을 넣어야 한다."""
     style = ref_syntax(tool)
-    if style == "name_only":
+    if style in ("name_only", "none"):
         return None
     if style == "brace_env":
         return "{env:%s}" % env_name
@@ -624,6 +670,9 @@ def apply_refs(tool: str, defn: dict, mapping: dict) -> dict:
     그대로 CLI 설정 파일에 남고, `.mcp.json`이라면 git에 커밋된다(§2-2 —
     레퍼런스 agent-deck이 실제로 밟고 있는 경로).
     """
+    if ref_syntax(tool) == "none" and any(mapping.get(s) for s in ("env", "headers")):
+        # 참조를 쓸 수 없는 도구에 참조를 적으면 값 대신 `${…}` 글자가 전달된다.
+        raise ValueError(f"{tool}는 환경변수 참조를 지원하지 않는다")
     out = json.loads(json.dumps(defn))   # 깊은 복사
     name_only = ref_syntax(tool) == "name_only"
     names: list[str] = []

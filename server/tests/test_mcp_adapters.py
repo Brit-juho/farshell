@@ -239,14 +239,14 @@ def test_agy_ignores_worktree_because_it_has_no_project_scope(home, tmp_path):
     assert names == ["g"]
 
 
-def test_agy_reference_is_marked_unverified(home):
-    """agy가 `${VAR}`를 확장하는지는 확인하지 못했다 — 확장된다고도,
-    안 된다고도 단정하지 않는다."""
+def test_agy_reference_is_a_dead_reference(home):
+    """ADR-46 — agy 1.2.7은 `${VAR}`를 확장하지 않는다(격리 HOME 실측). 참조 모양이면
+    글자 그대로 전달된다고 경고해야 한다 — codex와 같은 처리."""
     _write_agy(home, {"mcpServers": {"n": {"command": "x", "env": {"T": "${TOK}"}}}})
     s = mcp_adapters.scan_agy()["servers"][0]
-    assert s["env"][0]["ref"] == "TOK"
-    assert s["env"][0]["ref_unverified"] is True
-    assert any("확인되지 않았다" in n for n in s["notes"])
+    assert s["env"][0]["ref"] is None
+    assert s["env"][0]["dead_ref"] == "TOK"
+    assert any("확장하지 않는다" in n for n in s["notes"])
 
 
 def test_agy_broken_json_is_reported(home):
@@ -391,7 +391,7 @@ def test_has_literal_secret_respects_the_tool_syntax():
 
 def test_ref_syntax_per_tool():
     assert _a.ref_syntax("claude") == "dollar_brace"
-    assert _a.ref_syntax("agy") == "dollar_brace"
+    assert _a.ref_syntax("agy") == "none"
     assert _a.ref_syntax("codex") == "name_only"
     assert _a.ref_syntax("opencode") == "brace_env"
 
@@ -473,7 +473,7 @@ def test_resolve_launch_stdio_passes_literal_env_through(home):
     launch = mcp_adapters.resolve_launch("claude", "global", "n")
     assert launch == {
         "transport": "stdio", "command": "npx", "args": ["-y", "n"],
-        "env": {"TOKEN": "sk-literal-value"},
+        "env": {"TOKEN": "sk-literal-value"}, "inherit": None, "missing": [],
     }
 
 
@@ -489,11 +489,31 @@ def test_resolve_launch_resolves_dollar_ref_from_credential_store(home, monkeypa
     assert launch["env"]["TOKEN"] == "resolved-from-vault"
 
 
-def test_resolve_launch_leaves_unresolvable_ref_as_is(home, monkeypatch):
-    _write_claude(home, {"mcpServers": {"n": {"command": "npx", "env": {"TOKEN": "${MISSING}"}}}})
+def test_resolve_launch_reports_unresolvable_ref_as_missing(home, monkeypatch):
+    """ADR-46 — 값을 모르면 지어내지도, `${…}` 글자로 띄워 "실패"라고 말하지도 않는다."""
+    _write_claude(home, {"mcpServers": {"n": {"command": "npx", "env": {"TOKEN": "${MISSING_X}"}}}})
     monkeypatch.setattr("mcp_catalog.env_for", lambda servers: {})
+    monkeypatch.delenv("MISSING_X", raising=False)
     launch = mcp_adapters.resolve_launch("claude", "global", "n")
-    assert launch["env"]["TOKEN"] == "${MISSING}"  # 지어내지 않는다 — 서버가 스스로 실패한다
+    assert launch["missing"] == ["MISSING_X"]
+    assert "TOKEN" not in launch["env"]
+
+
+def test_resolve_launch_claude_ref_falls_back_to_our_environment(home, monkeypatch):
+    """claude는 `${VAR}`를 자기 프로세스 환경에서 푼다 — 우리 환경이 그 대응물이다."""
+    _write_claude(home, {"mcpServers": {"n": {"command": "npx", "env": {"TOKEN": "${MY_TOK}"}}}})
+    monkeypatch.setattr("mcp_catalog.env_for", lambda servers: {})
+    monkeypatch.setenv("MY_TOK", "from-env")
+    launch = mcp_adapters.resolve_launch("claude", "global", "n")
+    assert launch["env"]["TOKEN"] == "from-env" and launch["missing"] == []
+
+
+def test_resolve_launch_uses_ref_default_when_unset(home, monkeypatch):
+    _write_claude(home, {"mcpServers": {"n": {"command": "npx", "env": {"LVL": "${LOG_LVL_X:-debug}"}}}})
+    monkeypatch.setattr("mcp_catalog.env_for", lambda servers: {})
+    monkeypatch.delenv("LOG_LVL_X", raising=False)
+    launch = mcp_adapters.resolve_launch("claude", "global", "n")
+    assert launch["env"]["LVL"] == "debug" and launch["missing"] == []
 
 
 def test_resolve_launch_http_returns_url_not_env(home):
@@ -508,7 +528,52 @@ def test_resolve_launch_codex_pulls_named_vars_from_our_own_environment(home, mo
     )
     monkeypatch.setenv("MY_TOKEN", "from-process-env")
     launch = mcp_adapters.resolve_launch("codex", "global", "n")
-    assert launch["env"] == {"MY_TOKEN": "from-process-env"}
+    # 값은 `inherit` 허용 목록으로 물려준다 — codex가 하는 방식 그대로(utils.rs).
+    assert "MY_TOKEN" in launch["inherit"]
+    assert launch["missing"] == []
+
+
+def test_resolve_launch_codex_passes_literal_env(home, monkeypatch):
+    """ADR-46 (a) — codex의 리터럴 `env`를 통째로 버리던 버그. 화면은 "값 있음"이라
+    말하는데 검증은 키 없이 띄워 틀린 실패를 보고했다."""
+    (home / ".codex" / "config.toml").write_text(
+        '[mcp_servers.n]\ncommand = "npx"\nenv = { API_KEY = "sk-literal", RAW = "${NOPE}" }\n'
+    )
+    launch = mcp_adapters.resolve_launch("codex", "global", "n")
+    # codex는 확장하지 않는다 — `${NOPE}`도 글자 그대로가 codex의 실제 동작이다.
+    assert launch["env"] == {"API_KEY": "sk-literal", "RAW": "${NOPE}"}
+    assert launch["missing"] == []
+
+
+def test_resolve_launch_codex_missing_env_var_is_reported(home, monkeypatch):
+    (home / ".codex" / "config.toml").write_text(
+        '[mcp_servers.n]\ncommand = "npx"\nenv_vars = ["ABSENT_TOKEN_X"]\n'
+    )
+    monkeypatch.delenv("ABSENT_TOKEN_X", raising=False)
+    launch = mcp_adapters.resolve_launch("codex", "global", "n")
+    assert launch["missing"] == ["ABSENT_TOKEN_X"]
+
+
+def test_resolve_launch_codex_inherits_only_the_allowlist(home, monkeypatch):
+    """codex는 자기 환경을 통째로 주지 않는다 — 검증이 더 관대하면 거짓 통과가 된다."""
+    (home / ".codex" / "config.toml").write_text('[mcp_servers.n]\ncommand = "npx"\n')
+    launch = mcp_adapters.resolve_launch("codex", "global", "n")
+    assert "PATH" in launch["inherit"] and "HOME" in launch["inherit"]
+    assert "VT_AUTH_TOKEN" not in launch["inherit"]
+
+
+def test_resolve_launch_agy_passes_env_literally(home):
+    """agy 1.2.7은 확장하지 않고 자기 환경을 통째로 물려준다 — 그대로 흉내 낸다."""
+    _write_agy(home, {"mcpServers": {"n": {"command": "x", "env": {"A": "lit", "B": "${REF}"}}}})
+    launch = mcp_adapters.resolve_launch("agy", "global", "n")
+    assert launch["env"] == {"A": "lit", "B": "${REF}"}
+    assert launch["inherit"] is None and launch["missing"] == []
+
+
+def test_apply_refs_refuses_tools_without_reference_support():
+    with pytest.raises(ValueError):
+        _a.apply_refs("agy", {"command": "x", "env": {"T": "sk"}}, {"env": {"T": "V"}})
+    assert _a.render_ref("agy", "V") is None
 
 
 def test_resolve_launch_returns_none_when_not_found(home):

@@ -684,3 +684,25 @@ def test_verify_never_leaks_env_values(client):
     }}})
     r = client.post("/api/mcp/servers/global/n/verify", json={"tool": "claude"})
     assert "sk-should-never-appear" not in r.text
+
+
+def test_verify_missing_env_is_unverified_without_spawning(client, monkeypatch):
+    """ADR-46 — 값을 모르면 띄우지 않고 이름만 알려준다. 실패가 아니다."""
+    import mcp_verify
+    _elevate(client)
+    monkeypatch.delenv("ABSENT_ROUTE_TOK", raising=False)
+    monkeypatch.setattr("mcp_catalog.env_for", lambda servers: {})
+    spawned = []
+
+    async def _no_spawn(*a, **k):
+        spawned.append(a)
+        return {"state": "connected"}
+    monkeypatch.setattr(mcp_verify, "verify_stdio", _no_spawn)
+    _write_claude(client, {"mcpServers": {"n": {
+        "command": sys.executable, "env": {"T": "${ABSENT_ROUTE_TOK}", "L": "sk-literal-secret"}}}})
+    r = client.post("/api/mcp/servers/global/n/verify", json={"tool": "claude"})
+    body = r.json()
+    assert body["state"] == "unverified"
+    assert body["missing"] == ["ABSENT_ROUTE_TOK"]
+    assert spawned == []
+    assert "sk-literal-secret" not in r.text
