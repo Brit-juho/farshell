@@ -29,7 +29,7 @@
 import { vtFetch } from '../core/api.js';
 import { icon } from '../ui/icons.js';
 import { showToast } from '../ui/toast.js';
-import { promptDialog } from '../core/dialog.js';
+import { promptDialog, confirmDialog } from '../core/dialog.js';
 
 const TOOL_LABEL = { claude: 'Claude', codex: 'Codex', agy: 'agy', opencode: 'opencode' };
 const SCOPE_LABEL = { global: '전역', local: '이 워크트리' };
@@ -164,6 +164,91 @@ function toggleButton(entry, facts, onDone) {
     }
   });
   return btn;
+}
+
+// ── 검증 (ADR-36 서버 · ADR-48 화면) ───────────────────────────────────────
+//
+// 설정대로 실제로 한 번 띄워 initialize + tools/list까지 해본다. 결과는 **저장하지
+// 않는다** — 이 화면을 연 동안만 기억한다(새로고침하면 사라진다). 다시 그려도
+// 남아 있도록 모듈 변수에 둔다.
+const _verified = new Map();
+
+function verifyKey(entry) {
+  return [entry.tool, entry.scope, entry.name, entry.worktree_id || _worktreeId || ''].join('|');
+}
+
+function _ago(ts) {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (s < 10) return '방금';
+  if (s < 60) return `${s}초 전`;
+  return `${Math.round(s / 60)}분 전`;
+}
+
+/** 결과 한 줄. 상태를 **색으로만 말하지 않는다** — 글자가 같이 간다. */
+function verifyResult(r) {
+  const span = el('span', 'vt-mcp-verify');
+  if (!r) return span;
+  span.dataset.state = r.state;
+  if (r.state === 'running') {
+    span.textContent = '확인 중…';
+  } else if (r.state === 'connected') {
+    // http/sse는 initialize까지만 확인한다(tool_count null) — 「도구 0개」라고 하면 거짓말이다.
+    span.textContent = r.tool_count == null ? '연결됨 · 초기화 확인' : `연결됨 · 도구 ${r.tool_count}개`;
+  } else if (r.state === 'unverified') {
+    // 실패가 아니다 — 에이전트 셸에는 그 변수가 있을 수 있다(ADR-46).
+    span.textContent = `확인 불가 — 이 서버 환경에 없음: ${(r.missing || []).join(', ')}`;
+    span.title = '값을 모르는 채로 띄우면 틀린 실패를 보고하게 되어 실행하지 않았습니다. 에이전트 안에서는 동작할 수 있습니다.';
+  } else {
+    span.textContent = `실패 — ${r.error || '알 수 없는 오류'}`;
+  }
+  if (r.checked_at && r.state !== 'running') {
+    span.title = `${span.title ? `${span.title}\n` : ''}${_ago(r.checked_at)} 확인`;
+  }
+  return span;
+}
+
+/** [검증] 버튼 + 결과. 승격이 필요하다(토글과 같은 흐름) — 설정에 적힌 명령을 실제로
+ *  실행하기 때문이다. http/sse는 네트워크 요청이라 먼저 묻는다. */
+function verifyControl(entry) {
+  const box = el('span', 'vt-mcp-verifybox');
+  const btn = el('button', 'vt-chip sm vt-mcp-verifybtn', '검증');
+  btn.type = 'button';
+  btn.title = '설정대로 한 번 실행해 연결되는지 확인합니다 — 결과는 저장하지 않습니다';
+  let result = verifyResult(_verified.get(verifyKey(entry)));
+  box.append(btn, result);
+
+  const show = (r) => {
+    const next = verifyResult(r);
+    result.replaceWith(next);
+    result = next;
+  };
+
+  btn.addEventListener('click', async () => {
+    const remote = entry.transport === 'http' || entry.transport === 'sse';
+    if (remote) {
+      const ok = await confirmDialog(
+        `${entry.name} 서버에 요청을 한 번 보냅니다: ${entry.url_host || '(주소 확인 불가)'}`,
+        { title: '네트워크 요청', okLabel: '보내기' });
+      if (!ok) return;
+    }
+    btn.disabled = true;
+    show({ state: 'running' });
+    try {
+      const r = await postElevated(
+        `/api/mcp/servers/${encodeURIComponent(entry.scope)}/${encodeURIComponent(entry.name)}/verify`,
+        { tool: entry.tool, worktree: entry.worktree_id || _worktreeId, confirm_network: remote });
+      if (!r) { show(_verified.get(verifyKey(entry))); return; }   // 비밀번호 입력 취소
+      _verified.set(verifyKey(entry), r);
+      show(r);
+    } catch (e) {
+      const r = { state: 'error', error: e.message || '검증 요청이 실패했습니다', checked_at: Date.now() / 1000 };
+      _verified.set(verifyKey(entry), r);
+      show(r);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  return box;
 }
 
 // ── 그룹 태그 (2단계) ─────────────────────────────────────────────────────
@@ -512,6 +597,7 @@ function renderServer(group, facts, tags, data) {
     }
     // 어떤 파일을 고치게 되는지 — 특히 `.mcp.json`은 저장소에 커밋된다.
     if (entry.shared) row.appendChild(el('span', 'vt-mcp-meta', '저장소 공유'));
+    row.appendChild(verifyControl(entry));
 
     // 필요한 환경변수 이름은 보여준다(시크릿이 아니라 "무엇이 필요한지"다).
     const refs = [...(entry.env || []), ...(entry.headers || [])]
@@ -691,6 +777,8 @@ function renderPlugins() {
     box.appendChild(help(`${err.source}: ${err.reason}`));
   }
   const list = _plugins.list;
+  // 조회가 실패했는데 「설치된 플러그인이 없습니다」까지 쓰면 서로 모순이다.
+  if (!list.length && _plugins.errors.length) return box;
   if (!list.length) {
     box.appendChild(help(
       '설치된 플러그인이 없습니다. 설치는 각 CLI의 공식 명령을 쓰세요 — '

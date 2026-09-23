@@ -30,6 +30,7 @@ import json
 import os
 import re
 import tomllib
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Optional
 
@@ -253,6 +254,14 @@ def _entry(
         "headers": headers,
         "notes": notes,
     }
+    # ADR-48 — 검증 화면이 "이 주소로 요청을 보냅니다"를 물을 때 쓴다. **호스트 이름만**
+    # 내보낸다 — URL 전체는 쿼리에 토큰이 붙는 경우가 있어 안 내보낸다.
+    raw_url = defn.get("url") or defn.get("httpUrl") or defn.get("serverUrl")
+    if isinstance(raw_url, str) and raw_url:
+        try:
+            out["url_host"] = urlparse(raw_url).hostname or None
+        except ValueError:
+            out["url_host"] = None
     if extra:
         out.update(extra)
     return out

@@ -198,6 +198,21 @@ async def verify_stdio(
         await _kill_group(proc)
 
 
+def _net_error(e: BaseException) -> str:
+    """사람이 읽는 말로. `str(URLError)`는 `<urlopen error [Errno 61] …>`라 화면에 못 낸다."""
+    import urllib.error
+    if isinstance(e, urllib.error.HTTPError):
+        return f"서버가 HTTP {e.code}로 응답했습니다"
+    reason = getattr(e, "reason", e)
+    if isinstance(e, TimeoutError) or isinstance(reason, TimeoutError):
+        return "응답 시간 초과"
+    if isinstance(reason, ConnectionRefusedError):
+        return "연결이 거부됐습니다 — 서버가 떠 있지 않거나 주소가 다릅니다"
+    if isinstance(reason, OSError) and reason.strerror:
+        return f"연결하지 못했습니다 — {reason.strerror}"
+    return f"연결하지 못했습니다 — {reason}"
+
+
 async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIMEOUT_SEC) -> dict:
     """http/sse MCP 서버에 `initialize` 1회. 네트워크 행위라 명시 확인이 필수(E21)."""
     checked_at = time.time()
@@ -228,7 +243,8 @@ async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIM
     try:
         data = await asyncio.to_thread(_do)
     except (urllib.error.URLError, OSError, TimeoutError) as e:
-        return {"state": ERROR, "tool_count": None, "error": str(e), "checked_at": checked_at}
+        return {"state": ERROR, "tool_count": None, "error": _redact(_net_error(e), []),
+                "checked_at": checked_at}
     except ValueError:
         return {"state": ERROR, "tool_count": None,
                 "error": "initialize 응답을 JSON으로 읽을 수 없음", "checked_at": checked_at}

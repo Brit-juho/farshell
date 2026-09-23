@@ -200,6 +200,14 @@
 /* 쓰기가 진행 중일 때 — `.vt-chip:disabled`는 not-allowed 커서인데, 이건
    "못 누른다"가 아니라 "기다리는 중"이라 커서만 다르게 둔다. */
 .vt-mcp-toggle:disabled { cursor:progress; }
+/* ADR-48 — 검증 결과. 상태는 글자로 말하고 색은 거든다. 「확인 불가」는 실패가
+   아니라서 빨강이 아니라 waiting 색이다 — 에이전트 셸에는 그 변수가 있을 수 있다. */
+.vt-mcp-verifybox { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
+.vt-mcp-verifybtn:disabled { cursor:progress; }
+.vt-mcp-verify { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow-wrap:anywhere; }
+.vt-mcp-verify[data-state="connected"] { color:var(--color-st-working); }
+.vt-mcp-verify[data-state="error"] { color:var(--color-st-error); }
+.vt-mcp-verify[data-state="unverified"] { color:var(--color-st-waiting); }
 
 /* 97번 2단계 — 그룹 태그. 토글 칩과 같은 규칙: 상태를 **색으로만 구분하지
    않는다**(전부 켬/전부 끔/섞임을 글자로도 쓴다). 「섞임」은 세 번째 색이

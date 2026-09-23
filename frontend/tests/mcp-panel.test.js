@@ -13,7 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createDomEnv } = require('./helpers/dom-env');
 const { importFresh } = require('./helpers/vm-esm');
-const { answerPrompt } = require('./helpers/dialog-stub');
+const { answerPrompt, answerConfirm } = require('./helpers/dialog-stub');
 
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
   .replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '');
@@ -52,7 +52,8 @@ function scanPayload(over = {}) {
 
 async function build({ scan = scanPayload(), toggle, group,
                        credData = { creds: [], refs: [] },
-                       pluginData = { plugins: [] }, pluginGate = null } = {}) {
+                       pluginData = { plugins: [] }, pluginGate = null,
+                       verify = () => ({ state: 'connected', tool_count: 3, error: null, checked_at: Date.now() / 1000 }) } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
@@ -96,6 +97,11 @@ async function build({ scan = scanPayload(), toggle, group,
       }
       if (credData === null) return Promise.reject(new Error('creds unavailable'));
       return Promise.resolve({ ok: true, json: () => Promise.resolve(credData) });
+    }
+    if (opts && opts.method === 'POST' && u.includes('/verify')) {
+      const body = JSON.parse(opts.body);
+      posts.push({ _url: u.replace(/^.*\/api/, '/api').split('?')[0], ...body });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(verify(u, body)) });
     }
     if (opts && opts.method === 'POST' && u.includes('/api/mcp/deploy')) {
       posts.push({ _url: '/api/mcp/deploy', ...JSON.parse(opts.body) });
@@ -487,4 +493,89 @@ test('플러그인 새로고침은 refresh=1로 캐시를 버린다', async () =
   btn.click();
   await flush(); await flush();
   assert.ok(gets.some((u) => u.startsWith('/api/mcp/plugins') && u.includes('refresh=1')));
+});
+
+
+// ── 검증 화면 (ADR-48) ────────────────────────────────────────────────────
+
+function verifyBtn(host) {
+  return host.querySelector('.vt-mcp-verifybtn');
+}
+
+test('검증 — 누르면 그 항목의 도구·워크트리로 요청하고 결과를 글자로 보여준다', async () => {
+  const { host, posts } = await build();
+  verifyBtn(host).click();
+  await flush(); await flush();
+  const sent = posts.find((p) => p._url && p._url.endsWith('/verify'));
+  assert.equal(sent._url, '/api/mcp/servers/global/notion/verify');
+  assert.deepEqual({ tool: sent.tool, worktree: sent.worktree, net: sent.confirm_network },
+                   { tool: 'claude', worktree: 'wt1', net: false });
+  const res = host.querySelector('.vt-mcp-verify');
+  assert.equal(res.dataset.state, 'connected');
+  assert.match(res.textContent, /연결됨 · 도구 3개/);
+});
+
+test('검증 — 확인 불가는 실패와 구분되고 모자란 변수 이름을 말한다', async () => {
+  const { host } = await build({ verify: () => ({
+    state: 'unverified', tool_count: null, error: null, missing: ['GITHUB_TOKEN'], checked_at: 1 }) });
+  verifyBtn(host).click();
+  await flush(); await flush();
+  const res = host.querySelector('.vt-mcp-verify');
+  assert.equal(res.dataset.state, 'unverified');
+  assert.match(res.textContent, /확인 불가.*GITHUB_TOKEN/);
+  assert.doesNotMatch(res.textContent, /실패/);
+});
+
+test('검증 — 실패 메시지는 글자로만 들어간다(마크업이 실행되지 않는다)', async () => {
+  const { host } = await build({ verify: () => ({
+    state: 'error', tool_count: null, error: '<img src=x onerror=alert(1)>', checked_at: 1 }) });
+  verifyBtn(host).click();
+  await flush(); await flush();
+  const res = host.querySelector('.vt-mcp-verify');
+  assert.equal(res.querySelector('img'), null);
+  assert.match(res.textContent, /실패 — <img/);
+});
+
+test('검증 — http 서버는 호스트를 보여주고 묻는다. 취소하면 요청하지 않는다', async () => {
+  const scan = scanPayload();
+  Object.assign(scan.groups[0].entries[0], { transport: 'http', url_host: 'mcp.example.com', env: [] });
+  const { host, posts, document } = await build({ scan });
+  verifyBtn(host).click();
+  const dialog = await (require('./helpers/dialog-stub').waitForDialog)(document);
+  assert.match(dialog.textContent, /mcp\.example\.com/);
+  await answerConfirm(document, { accept: false });
+  await flush(); await flush();
+  assert.equal(posts.filter((p) => p._url && p._url.endsWith('/verify')).length, 0);
+
+  verifyBtn(host).click();
+  await answerConfirm(document, { accept: true });
+  await flush(); await flush();
+  const sent = posts.find((p) => p._url && p._url.endsWith('/verify'));
+  assert.equal(sent.confirm_network, true);
+});
+
+test('검증 결과는 다시 그려도 남는다(이 화면을 연 동안)', async () => {
+  const { host, document } = await build();
+  verifyBtn(host).click();
+  await flush(); await flush();
+  Array.from(host.querySelectorAll('.vt-mcp-tagadd')).find((b) => b.textContent === '+ 태그').click();
+  await answerPrompt(document, { value: 'x' });
+  await flush(); await flush(); await flush();
+  assert.match(host.querySelector('.vt-mcp-verify').textContent, /연결됨/);
+});
+
+test('검증 — http는 도구 수를 재지 않으므로 「도구 0개」라고 하지 않는다', async () => {
+  const { host } = await build({ verify: () => ({ state: 'connected', tool_count: null, error: null, checked_at: 1 }) });
+  verifyBtn(host).click();
+  await flush(); await flush();
+  const text = host.querySelector('.vt-mcp-verify').textContent;
+  assert.match(text, /연결됨/);
+  assert.doesNotMatch(text, /도구 0개/);
+});
+
+test('플러그인 조회가 실패했으면 「없습니다」를 함께 쓰지 않는다', async () => {
+  const { host } = await build({ pluginData: { plugins: [], errors: [{ source: 'codex', reason: '종료 코드 1' }] } });
+  const box = host.querySelector('.vt-mcp-plugins').textContent;
+  assert.match(box, /종료 코드 1/);
+  assert.doesNotMatch(box, /설치된 플러그인이 없습니다/);
 });

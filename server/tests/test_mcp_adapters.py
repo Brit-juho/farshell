@@ -578,3 +578,12 @@ def test_apply_refs_refuses_tools_without_reference_support():
 
 def test_resolve_launch_returns_none_when_not_found(home):
     assert mcp_adapters.resolve_launch("claude", "global", "nope") is None
+
+
+def test_scan_exposes_only_the_url_host(home):
+    """ADR-48 — 검증 화면의 네트워크 확인용. URL 전체는 쿼리에 토큰이 붙는 경우가 있어
+    호스트 이름만 내보낸다."""
+    _write_claude(home, {"mcpServers": {"n": {"url": "https://mcp.example.com/v1/sse?api_key=sk-secret"}}})
+    s = mcp_adapters.scan_claude()["servers"][0]
+    assert s["url_host"] == "mcp.example.com"
+    assert "sk-secret" not in json.dumps(s)

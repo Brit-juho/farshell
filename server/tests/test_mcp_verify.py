@@ -179,3 +179,14 @@ def test_inherited_secret_is_masked(monkeypatch):
         sys.executable, _stub_args(STUB_LEAKS_SECRET), inherit=["PATH", "FSH_TEST_SECRET"]))
     assert result["state"] == "error"
     assert "sk-inherited-secret-value" not in json.dumps(result)
+
+
+def test_http_connection_refused_is_a_readable_message():
+    """`str(URLError)`(`<urlopen error [Errno 61] …>`)을 화면에 그대로 내지 않는다."""
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    r = asyncio.run(mcp_verify.verify_http(f"http://127.0.0.1:{port}/mcp", confirmed=True, timeout=3))
+    assert r["state"] == "error"
+    assert "urlopen" not in r["error"] and "거부" in r["error"]
