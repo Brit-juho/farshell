@@ -562,6 +562,41 @@ terminal** — that's how you get `Mod+F` back as the shell's `forward-char`.
 Turning off "forward mouse events to the app" in the mouse section makes
 drag-select always work even under vim/tmux mouse mode.
 
+**Mobile bug pass (2026-09-24, 2.1 D6, step 6a — narrow fixes, not a visual
+redesign).** Five compact-viewport defects, each confirmed live before/after
+in an isolated server + real mobile viewport:
+
+- **Registered-device table overflowed the screen.** `agents.js`'s coverage
+  table wraps itself in `.vt-set-covtable-host` (`overflow-x:auto`);
+  `security.js`'s device table never got the same wrapper, so on a phone the
+  four columns (기기/id/등록/마지막 사용) just ran off the right edge instead
+  of scrolling. Same fix, same wrapper class.
+- **ON/OFF toggles stretched to the full row width.** The compact media
+  query's `.vt-set-row { flex-direction:column; align-items:stretch }` (for
+  putting label above control on narrow screens) stretches every row child
+  to full width by default — fine for a `<select>` or a button, wrong for a
+  two-cell segmented switch, which ends up as a giant bar with no visual
+  target. `align-self:flex-start` on `.vt-toggle` only.
+- **Range slider thumb stayed 12px on touch.** The desktop affordance is
+  `:hover { transform:scale(1.15) }`, which never fires on a touch device —
+  so the knob a mouse user sees grow on approach is permanently tiny on a
+  phone. Enlarged to 20px under the same compact media query (both
+  `::-webkit-slider-thumb` and `::-moz-range-thumb`).
+- **MCP server rows' Korean explanatory text rendered in the monospace
+  font** (`.vt-mcp-meta`/`.vt-mcp-verify` — "OAuth 서버는 다른 스코프로 복제할
+  수 없습니다", "확인 불가 — 이 서버 환경에 없음: …", etc.). These classes were
+  built for a mix of prose and the occasional embedded identifier (a masked
+  secret, a version number), but ended up mono for everything — Hangul in a
+  monospace face has uneven glyph spacing and reads worse than in the UI
+  font. Switched both to `--ui`; a lone identifier inside a sentence doesn't
+  need its own font to be legible.
+- **MCP server row buttons (켬/끔, 검증) were `.vt-chip.sm` — 20px tall**,
+  sized for desktop list density (12 servers × several chips a row). 44px
+  would overlap the adjacent tag chips (only a 12px gap between them, same
+  crowding tradeoff already documented for the terminal-selection handles in
+  § 7) — 32px is the compromise, applied only to the two primary-action
+  chips, not the tag chips that are meant to stay small and packed.
+
 ### Command palette (`Mod+K`, `shell/Palette.tsx`)
 
 Merges 2.0's `quickopen.js` (3 prefixes: `/` file, `:` command, and no `>`)

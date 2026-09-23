@@ -177,7 +177,12 @@
   flex:none; min-width:4.5em;
   font:500 var(--fs-xs) var(--ui); color:var(--sub);
 }
-.vt-mcp-meta { font:400 var(--fs-3xs) var(--mono); color:var(--sub); }
+/* 2026-09-24(2.1 D6) — mono였다. 이 클래스가 실제로 담는 건 "OAuth 서버는
+   다른 스코프로 복제할 수 없습니다" 같은 한글 문장이 대부분이고(마스킹된
+   값·버전 번호처럼 진짜 식별자인 자리는 극히 일부다) — 한글을 모노스페이스로
+   그리면 자모 간격이 고르지 않아 읽기 나쁘다. 식별자 한 단어가 문장 속에
+   섞여도(예: "v1.2.3") 같은 UI 폰트로 충분히 읽힌다. */
+.vt-mcp-meta { font:400 var(--fs-3xs) var(--ui); color:var(--sub); }
 /* 행 아래 딸린 설명(entry.notes)은 그 행의 부연이지 새 문단이 아니다 —
    .vt-mcp-tool 폭(4.5em)+gap만큼 들여써서 "이 행에 속한다"는 걸 위치로도
    보여준다. 폭도 42ch에서 더 좁혀 카드 하나가 세로로 너무 길어지지 않게.
@@ -204,7 +209,7 @@
    아니라서 빨강이 아니라 waiting 색이다 — 에이전트 셸에는 그 변수가 있을 수 있다. */
 .vt-mcp-verifybox { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
 .vt-mcp-verifybtn:disabled { cursor:progress; }
-.vt-mcp-verify { font:400 var(--fs-3xs) var(--mono); color:var(--sub); overflow-wrap:anywhere; }
+.vt-mcp-verify { font:400 var(--fs-3xs) var(--ui); color:var(--sub); overflow-wrap:anywhere; }
 .vt-mcp-verify[data-state="connected"] { color:var(--color-st-working); }
 .vt-mcp-verify[data-state="error"] { color:var(--color-st-error); }
 .vt-mcp-verify[data-state="unverified"] { color:var(--color-st-waiting); }
@@ -343,8 +348,20 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
   .vt-settings .vt-select,
   .vt-settings .vt-set-combo,
   .vt-settings .vt-set-content .vt-btn { min-height:44px; }
+  /* .vt-set-row가 방금 위에서 column + align-items:stretch로 바뀐다 — .vt-toggle은
+     inline-flex라 그 stretch를 그대로 받아 화면 폭 전체로 늘어난 세그먼트가
+     됐다(실측된 회귀). select/콤보/버튼은 폭 전체가 자연스럽지만(값 하나를
+     고르는 줄), ON/OFF 두 칸짜리 스위치가 전체 폭이면 어색하고 손가락이 갈
+     곳도 모호해진다 — 원래 크기(콘텐츠 폭)로 되돌린다. */
+  .vt-settings .vt-toggle { align-self:flex-start; }
   .vt-settings .vt-range input[type="range"] { height:44px; flex:1; min-width:0; }
   .vt-settings .vt-range-number { height:44px; }
+  /* MCP 서버 행의 주 액션(켬/끔·검증) 칩은 데스크톱 밀도용 20px(.vt-chip.sm)
+     그대로면 손가락 표적이 안 된다. 44px는 같은 줄의 태그 칩들과 12px gap
+     밖에 없어 서로 삼킨다(20-overlay.css의 선택 핸들과 같은 트레이드오프) —
+     32px 절충. 태그 칩(vt-mcp-tagchip 등)은 의도적으로 그대로 둔다: 여러 개가
+     다닥다닥 붙는 자리라 여기서 키우면 정확히 그 문제가 난다. */
+  .vt-mcp-toggle, .vt-mcp-verifybtn { min-height:32px; padding-left:calc(var(--spacing) * 2); padding-right:calc(var(--spacing) * 2); }
   .vt-settings .vt-range.has-presets { max-width:none; }
   .vt-settings .vt-range-presets { justify-content:flex-start; }
   .vt-settings .vt-range-presets .vt-btn { flex:1; }

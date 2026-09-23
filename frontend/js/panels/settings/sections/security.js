@@ -72,7 +72,13 @@ export function renderSecuritySection() {
       devHost.appendChild(statusLine('등록된 기기가 없습니다. 휴대폰에서 QR로 처음 접속하면 등록됩니다.'));
       return;
     }
-    devHost.appendChild(renderDeviceTable(rows));
+    // 2026-09-24(2.1 D6) — 폭이 좁은 화면(폰)에서 열(기기/id/등록/마지막
+    // 사용) 4개가 다 안 들어가면 표가 화면 밖으로 그냥 넘쳤다 — 감지
+    // 커버리지 표(agents.js)가 이미 쓰는 가로 스크롤 host를 똑같이 씌운다.
+    const tableHost = document.createElement('div');
+    tableHost.className = 'vt-set-covtable-host';
+    tableHost.appendChild(renderDeviceTable(rows));
+    devHost.appendChild(tableHost);
     devHost.appendChild(statusLine("기기 폐기는 터미널에서 'fsh device revoke <id>'로 합니다 — 그 기기의 세션도 함께 끊깁니다."));
   }).catch(() => { devHost.innerHTML = ''; devHost.appendChild(statusLine('기기 목록을 확인할 수 없습니다.')); });
 

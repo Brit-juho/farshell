@@ -179,6 +179,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **설정 화면 모바일 결함 다섯 가지** (계정 및 보안·MCP·범용 컨트롤). 등록 기기
+  표가 화면 밖으로 넘쳤던 것(감지 커버리지 표처럼 `.vt-set-covtable-host`로
+  가로 스크롤을 씌웠다). ON/OFF 토글이 화면 폭 전체로 늘어났던 것(좁은 화면용
+  `.vt-set-row{align-items:stretch}`를 그대로 받은 것 — `.vt-toggle`만
+  `align-self:flex-start`로 되돌렸다). 슬라이더 손잡이가 터치에서 계속 12px
+  이었던 것(호버로 커지는 데스크톱 어포던스라 터치에선 절대 안 커졌다 —
+  20px로). MCP 서버 행의 한글 설명이 모노스페이스로 그려지던 것(`.vt-mcp-meta`/
+  `.vt-mcp-verify`를 `--ui`로). MCP 켬/끔·검증 칩이 20px라 손가락 표적이 안
+  되던 것(태그 칩은 그대로 두고 이 둘만 32px로 — 44px는 옆 태그 칩과 겹친다).
+
 - **빠른 열기 "모든 기능" 목록이 10개인데 화면엔 3개만 보이고 스크롤도 안 되던 것.**
   결과 목록 칸(`vt-qo-body`)이 코드 뷰어의 스크롤 칸(`vt-vw-body`)과 이름만 닮았지
   실은 같은 규칙을 하나도 안 물려받고 있었다 — `flex:1 1 auto`도 `overflow:auto`도
