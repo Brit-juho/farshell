@@ -74,6 +74,21 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 }
 @media (min-width:720px) { #voice-session-picker { display:none; } } /* 넓은 화면에선 탭으로 충분 */
 
+/* N45 — 모바일 헤더 환경 칩. 기본은 숨김(desktop) — layout/env-chip.js가
+   데이터를 받으면 `hidden` 속성을 지우므로, 넓은 화면에서도 새지 않게
+   여기서 명시적으로 숨겨 둔다. 실제로 보이는 폭은 아래 max-width:719px
+   블록이 연다 — **이 규칙보다 나중에 나와야** 미디어쿼리 쪽이 이긴다(같은
+   #vt-env-chip 단일 선택자라 소스 순서가 우선순위를 가른다. 처음엔 이
+   블록을 파일 뒤쪽에 둬서 미디어쿼리를 도리어 이겨버렸다 — 실브라우저로
+   잡은 버그, 2026-09-23). `#vt-workspace-chip`과 같은 시각 언어(mono·11px·
+   sub색)를 쓴다 — 둘 다 "이 화면이 어디인가"를 말하는 같은 역할의 다른 값이다. */
+#vt-env-chip {
+  display:none; align-items:center; gap:calc(var(--spacing) * 1);
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--sub); font:var(--weight-normal) var(--fs-3xs) var(--font-mono);
+  letter-spacing:var(--tracking-wide);
+}
+
 /* 좁은 화면 상단 바 정리 — 390px에서 요소 9개가 경쟁하면서 탭 이름이 두 글자
    ("tm…")로 잘렸다. 회수한 ~190px는 워크트리 탭 바(#vt-wtabs)로 간다.
      · 신호등(42px): macOS 창 장식이라 터치 환경에서 아무 기능이 없다.
@@ -89,12 +104,14 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
   html[data-skin="macos"] .traffic { display:none; }
   #viewer-toggle { display:none; }
 
-  /* 모바일 상단은 현재 화면에 필요한 컨텍스트만 남긴다. 작업 홈에서는
-     워크스페이스/호스트를, 터미널에서는 세션과 빠른 열기를 보여준다. */
-  #vt-wtabs, .wt-chevron { display:none; }
-  html[data-mobile-tab="fleet"] #voice-session-picker,
-  html[data-mobile-tab="fleet"] #palette-toggle { display:none; }
-  html[data-mobile-tab]:not([data-mobile-tab="fleet"]) #vt-workspace-chip-slot { display:none; }
+  /* 2026-09-23 — 모바일 헤더를 탭에 따라 바뀌지 않는 고정 구성으로 통일한다:
+     환경 칩 · 현재 세션 · 빠른 열기, 세 가지뿐이다. 예전엔 탭마다 다른 걸
+     보여줬다(작업 홈=워크스페이스 칩, 그 외=세션 피커+검색) — 세션 탭이
+     세션 이동·관리를 전부 떠맡으면서(작업/70-mobile.md) 헤더가 그 역할을
+     또 가질 이유가 없어졌다. 워크스페이스 칩(저장소/호스트)은 모바일에서
+     통째로 뺀다 — 그 자리는 #vt-env-chip(기기 정체)이 대신한다. */
+  #vt-wtabs, .wt-chevron, #vt-workspace-chip-slot { display:none; }
+  #vt-env-chip { display:flex; }
 }
 
 /* 모바일 세션 관리 시트. 좁은 화면에서 세션의 모든 기본 조작을 제공한다. */

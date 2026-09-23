@@ -295,8 +295,17 @@
     <div class="traffic" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i></div>
 
     <!-- N37 §4 — 워크스페이스 칩("farshell / 호스트"). 내용은 shell/HeaderExtras.tsx
-         (Solid, 지연 로드)가 채운다. 클릭 → 팔레트(§4: "@ 모드"는 60 §3이 생기면). -->
+         (Solid, 지연 로드)가 채운다. 클릭 → 팔레트(§4: "@ 모드"는 60 §3이 생기면).
+         2026-09-23 — compact(<720px)에서는 항상 숨긴다(10-shell.css). 대신
+         아래 #vt-env-chip이 "이 기기가 무엇인가"를 보여준다 — 리포지토리
+         이름은 폰에서 매번 훑을 정보가 아니라는 사용자 판단. -->
     <div id="vt-workspace-chip-slot"></div>
+
+    <!-- N45 — 모바일 헤더 환경 칩("macOS · MacBook Pro M1 Pro"). 탭이 바뀌어도
+         그대로 남는다 — 세션 목록·전환은 이제 세션 탭(#vt-fleet-slot) 하나가
+         전담하므로, 헤더가 탭마다 다른 걸 보여줄 이유가 없어졌다(70-mobile.md).
+         값은 layout/env-chip.js가 /api/capabilities에서 한 번 읽어 채운다. -->
+    <div id="vt-env-chip" hidden></div>
 
     <!-- 10-shell-layout.md §4 3단계 — **탭 = 열려 있는 워크트리**. 탭마다 자기
          pane 트리를 가진다(layout/store.js의 탭 집합). 세션 탭 줄(#tabs)은
@@ -550,10 +559,15 @@
 
   <!-- N38(70-mobile.md §1) — 하단 내비 52px 5탭. compact(<720px)에서만 보인다.
        배지는 dock 배지(shell/Dock.tsx)와 같은 소스(같은 엔드포인트)를 재사용한
-       폴링이다(layout/mobile-nav.js). 「변경」·「큐」·「설정」은 이미 있는
-       data-action(scm.show/queue.show/settings.show)을 그대로 위임 클릭한다
-       (core/dom.js가 모든 [data-action]을 이미 배선한다) — 「플릿」·「터미널」만
-       새 탭 전환 로직이 필요해 data-mnav로 따로 잡는다. -->
+       폴링이다(layout/mobile-nav.js). 「변경」·「첨부」·「설정」은 이미 있는
+       data-action(scm.show/files.show/settings.show)을 그대로 위임 클릭한다
+       (core/dom.js가 모든 [data-action]을 이미 배선한다) — 「세션」·「터미널」만
+       새 탭 전환 로직이 필요해 data-mnav로 따로 잡는다.
+       2026-09-23 — 「작업」을 「세션」으로 바꿨다: 세션 이동·이름 변경·재우기·
+       완전 종료를 전부 이 탭 하나가 맡는다(헤더의 탭 줄·세션 이동 UI는 없앴다).
+       「큐」는 뺐다 — 실사용이 적어 빠른 열기(:mode)에서 찾게 하고, 그 자리를
+       업로드 진행 상황을 보여줄 「첨부」에 내줬다. 「더보기」는 「설정」으로 —
+       파일/포트/사용량 바로가기였던 홈은 이제 곧장 설정 화면이 연다(70-mobile.md). -->
   <!-- 2.1.6: 하단 내비에 아이콘을 넣는다. 글자만 있을 때는 다섯 칸이 전부
        같은 회색 글자라, 지금 어느 탭인지와 어디를 눌러야 하는지가 **읽어야만**
        구분됐다(엄지로 쓰는 화면에서 가장 비싼 비용이다). 아이콘 path는 전부
@@ -562,9 +576,9 @@
        혼용 금지 규칙은 "같은 출처의 같은 도형"을 요구하는 것이지 인라인을
        금지하는 게 아니다). -->
   <nav id="vt-mnav-bottom" aria-label="하단 내비">
-    <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="작업" aria-pressed="false">
+    <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="세션" aria-pressed="false">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg>
-      <span class="vt-mnav-label">작업</span>
+      <span class="vt-mnav-label">세션</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-waiting" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="terminal" aria-label="터미널" aria-pressed="false">
@@ -576,14 +590,14 @@
       <span class="vt-mnav-label">변경</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="queue" data-action="queue.show" aria-label="큐" aria-pressed="false">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/></svg>
-      <span class="vt-mnav-label">큐</span>
-      <span class="vt-mnav-badge" id="vt-mnav-badge-queue" hidden></span>
+    <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="files.show" aria-label="첨부" aria-pressed="false">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      <span class="vt-mnav-label">첨부</span>
+      <span class="vt-mnav-badge" id="vt-mnav-badge-files" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="더보기" aria-pressed="false">
+    <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="설정" aria-pressed="false">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span class="vt-mnav-label">더보기</span>
+      <span class="vt-mnav-label">설정</span>
     </button>
   </nav>
 

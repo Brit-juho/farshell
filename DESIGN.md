@@ -587,24 +587,46 @@ is demoted to `⌘⇧F` (rebindable).
 ## 7. Mobile (compact, < 720px)
 
 ```
-┌ app bar ── work: [workspace / host]                           ┐
-│             terminal: [session · n/N]              [search]  │
-│                                                                 │
-│   tab content (work / terminal / changes / queue / more)       │
-│                                                                 │
-├ keybar (terminal tab only) ────────────────────────────────────┤
-├ bottom nav 52 ─── work | terminal | changes | queue | more ────┤
-└──────────────────────────────────────────────────────────────┘
+┌ app bar ── [macOS · MacBook Pro M1 Pro]  [session · n/N]  [search] ┐
+│                                                                     │
+│   tab content (session / terminal / changes / files / settings)    │
+│                                                                     │
+├ keybar (terminal tab only) ──────────────────────────────────────  │
+├ bottom nav 52 ── session | terminal | changes | files | settings ──┤
+└─────────────────────────────────────────────────────────────────  ┘
 ```
 
-Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`). The
-dock's 4 tabs (source control, queue, ports, usage) get promoted here into
-"Changes" (= source control) and "Queue"; ports, usage, and files live under
-"More" instead. Each full-screen panel stays inside the mobile navigation
-shell and Android/browser Back closes that panel first. There's no HUD or
-second status row: waiting count is a badge on Work. When the software
-keyboard opens, the bottom nav hides and the keybar moves down to the keyboard
-edge so both bars do not consume the same vertical space.
+**2026-09-23 rework, step 1 of a larger pass (this repo's mobile-shell-revamp
+branch).** The header no longer changes per tab — earlier it showed the
+workspace chip on the Fleet tab and the session picker + search elsewhere,
+which meant the same screen real estate meant different things depending on
+which bottom-nav tab you were on. Now it's three things, always: an **env
+chip** (`#vt-env-chip`, `layout/env-chip.js`) reading `os`/`machine` off
+`/api/capabilities` (`"macOS · MacBook Pro M1 Pro"` — machine is macOS-only,
+read once via `system_profiler` and cached for the process lifetime, same
+pattern as the `hostname`/`version` fields), the session picker
+(`#voice-session-picker`, still opens the rename/sleep/kill sheet — full
+parity with the session tab below is step 2's job, not done yet), and the
+command-palette search icon. The workspace chip (repo name + host) is
+desktop-only now; a phone doesn't need to see the repo name on every screen.
+
+Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`):
+**Session · Terminal · Changes · Files · Settings**. Queue was dropped from
+the bar — usage was low enough that it wasn't worth a permanent slot — but
+the feature itself is untouched and still reachable from the command
+palette's `:` mode. Files (attachments) took the freed slot and shows a badge
+of in-flight upload jobs (`window.vtUploadJobs()`, event-driven off
+`vt:upload-progress` rather than polled). Settings replaces the old "More"
+home (which was just shortcuts to Files/Ports/Usage) — it opens straight into
+Settings now, whose own first screen already lists those as "Tools". Each
+full-screen panel stays inside the mobile navigation shell and Android/browser
+Back closes that panel first. There's no HUD or second status row: waiting
+count is a badge on the Session tab. When the software keyboard opens, the
+bottom nav hides and the keybar moves down to the keyboard edge so both bars
+do not consume the same vertical space — and `#terminal-container`'s bottom
+padding accounts for the 52px bottom nav in addition to the keybar (a gap
+that, before this pass, left the prompt line and tmux status line hidden
+behind the keybar whenever the nav was showing).
 
 **Fleet home** (`shell/Fleet.tsx`, ADR-27) is the first screen
 (`ui.mobile.home` defaults to `fleet`) — most of what you do on a phone in
@@ -613,12 +635,19 @@ the same** data source, grouping, and sort as the worktree rail
 (`rail-data.ts`), so "top of the desktop rail" is always "top of the phone"
 too. When a `waiting` row's detect pattern captured numbered choices, an
 **inline approval button** appears (`1 · Yes` / `3 · No`) — otherwise just a
-"Go to terminal" button.
+"Go to terminal" button. **Not yet done (step 2):** sleeping sessions,
+long-press row menu (rename/sleep/kill/wake), and dropping the now-redundant
+`GROUP_LABEL.idle` wording ("열려 있지 않음") once this screen becomes the one
+place mobile session management lives.
 
 The keybar's selection action enters a dedicated native text-selection mode.
 It blurs xterm's hidden textarea (closing the software keyboard), stops touch
 scroll/canvas tap forwarding, and exposes Copy/Done actions while the browser
-selection handles are active.
+selection handles are active. **Known broken** (found during this pass'
+investigation, not yet fixed): xterm's accessibility layer redraws on every
+PTY render and collapses the browser's native selection mid-drag, so this
+mode rarely survives long enough to copy anything — see the mobile-shell-revamp
+work log for the root cause.
 
 ## 8. Usage (dock "Usage" tab)
 

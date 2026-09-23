@@ -406,6 +406,19 @@ body.vt-term-selecting #keybar-keys { display:none; }
     padding-bottom:calc(var(--kb-height, calc(var(--spacing) * 24)) + var(--kb-overlap, 0px));
   }
 }
+/* compact(<720px) — 위 여백은 keybar 몫뿐이라 하단 내비 52px(60-mobile-hud.css)
+   위로 프롬프트 줄 3줄 안팎이 항상 가려졌다(실측, 2026-09-23). 소프트
+   키보드가 뜨면 내비 자체가 사라지므로(같은 파일 body.vt-keyboard-open
+   규칙) 그때는 52px를 더하지 않는다 — #vt-toasts가 이미 쓰는 것과 같은
+   두 갈래 패턴(components.css:787-797). */
+@media (max-width:719px) {
+  #terminal-container {
+    padding-bottom:calc(var(--kb-height, calc(var(--spacing) * 24)) + var(--kb-overlap, 0px) + 52px + env(safe-area-inset-bottom,0px));
+  }
+  body.vt-keyboard-open #terminal-container {
+    padding-bottom:calc(var(--kb-height, calc(var(--spacing) * 24)) + var(--kb-overlap, 0px));
+  }
+}
 
 /* 서버 도달 불가 배너(#vt-unreachable-banner) — core/reachability.js가 만든다.
    자세한 배경은 그 파일 상단 주석. 요약하면: sw.js가 네트워크 실패 시 캐시 셸을

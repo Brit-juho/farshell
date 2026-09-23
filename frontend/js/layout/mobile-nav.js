@@ -1,11 +1,16 @@
-// N38(70-mobile.md §1/§2) — 모바일 골격: 작업 홈(탭) · 하단 내비
-// 52px(작업|터미널|변경|큐|더보기). compact.js(L3
+// N38(70-mobile.md §1/§2) — 모바일 골격: 세션 홈(탭) · 하단 내비
+// 52px(세션|터미널|변경|첨부|설정). compact.js(L3
 // 2단계)와 같은 위치(layout/)에 두지만 역할은 다르다 — compact.js는 "지금이
 // compact인가"와 "leaf를 어떤 순서로 스와이프하나"만 안다(트리는 안 건드림).
-// 이 파일은 그 위에 얹히는 **탭 골격**(플릿/터미널/변경/큐/설정) 하나를
+// 이 파일은 그 위에 얹히는 **탭 골격**(플릿/터미널/변경/첨부/설정) 하나를
 // 새로 갖는다 — 기존 1페인 스와이프·keybar 동작은 그대로 둔 채, 플릿 탭일
 // 때만 `#vt-fleet-slot`을 터미널 위에 오버레이한다(§1 지시: "그 위에 하단
 // 내비 구조를 얹는다").
+// 2026-09-23 — 「큐」 탭을 뺐다(실사용 적음, 빠른 열기 `:`에서 여전히 연다).
+// 「작업」은 「세션」으로 이름을 바꿨다 — 세션 이동·이름 변경·재우기·완전
+// 종료를 전부 이 탭(shell/Fleet.tsx)이 맡으므로 헤더의 세션 이동 UI는
+// 없앴다(70-mobile.md). 「더보기」는 「설정」이 됐다 — 예전 홈(파일/포트/
+// 사용량 바로가기)은 설정 화면 자체의 첫 화면(panels/settings.js)이 대신한다.
 //
 // 이 파일은 main.js가 다른 layout/* 모듈처럼 **정적 import**한다(지연 청크
 // 아님) — 그래서 core/settings.js·core/store.js·agent/state.js·term/session.js를
@@ -39,11 +44,14 @@ let _tab = null;
 let _baseTab = null;
 let _fleetMountPromise = null;
 
+// 2026-09-23 — 'vt-queue' 항목을 뺐다: 큐 탭 자체가 하단 내비에서 없어져서,
+// 팔레트로 큐 패널을 열어도 칠할 하단 내비 탭이 더는 없다(칠하지 않는 게
+// 맞다 — 없는 탭을 억지로 켜면 다른 탭이 눌린 것처럼 보인다).
+// 'vt-files'는 'more'(설정 홈의 도구 바로가기)가 아니라 전용 「첨부」 탭이 됐다.
 const PANEL_TAB = {
   'vt-dock-scm': 'changes',
-  'vt-queue': 'queue',
   'vt-settings': 'more',
-  'vt-files': 'more',
+  'vt-files': 'files',
   'vt-ports': 'more',
   'vt-usage': 'more',
 };
@@ -107,19 +115,22 @@ function _refreshWaitingCount() {
 }
 
 // ── 하단 내비 배지 — Dock.tsx(N35 §6)의 배지 폴링과 **같은 소스·같은 응답**
-// (`/api/queue`·`/api/git/status`)을 재사용한다. Dock.tsx를 직접 import할 수
-// 없는 이유(지연 청크 정적 import 금지)는 같지만, 이 파일은 지연 청크가
-// 아니므로 굳이 window 브리지를 거칠 필요 없이 같은 호출을 반복한다
-// (Dock.tsx 자신의 주석에도 있는 관행 — "응답 두 개, 15초"). -->
-async function _refreshQueueBadge() {
-  const badge = document.getElementById('vt-mnav-badge-queue');
+// (`/api/git/status`)을 재사용한다. Dock.tsx를 직접 import할 수 없는
+// 이유(지연 청크 정적 import 금지)는 같지만, 이 파일은 지연 청크가 아니므로
+// 굳이 window 브리지를 거칠 필요 없이 같은 호출을 반복한다(Dock.tsx 자신의
+// 주석에도 있는 관행 — "응답 두 개, 15초"). -->
+
+// 「첨부」 배지 — 진행 중인 업로드 개수. term/upload.js(지연 로드가 아니다 —
+// 파일 input이 최상위 정적 마크업이라 부팅 시 항상 로드됨)의 `vtUploadJobs`
+// 브리지를 읽는다. fetch가 필요 없는 로컬 상태라 폴링보다 `vt:upload-progress`
+// 이벤트(업로드 진행마다 발생)에 얹는 쪽이 더 정확하고 더 싸다.
+function _refreshFilesBadge() {
+  const badge = document.getElementById('vt-mnav-badge-files');
   if (!badge) return;
-  try {
-    const data = await vtFetch('/api/queue');
-    const n = ((data && data.items) || []).length;
-    if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? '99+' : String(n); }
-    else badge.hidden = true;
-  } catch (_) { badge.hidden = true; }
+  const jobs = (typeof window.vtUploadJobs === 'function') ? window.vtUploadJobs() : [];
+  const n = jobs.filter((j) => j.phase === 'queued' || j.phase === 'uploading' || j.phase === 'saving').length;
+  if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? '99+' : String(n); }
+  else badge.hidden = true;
 }
 
 // 「변경」 배지 — 지금 보고 있는 세션(활성 탭)의 cwd 기준 git diff 파일 수.
@@ -144,7 +155,7 @@ async function _refreshChangesBadge() {
 
 function _refreshBadges() {
   if (!_mq.matches || document.hidden) return;
-  _refreshQueueBadge();
+  _refreshFilesBadge();
   _refreshChangesBadge();
 }
 
@@ -181,6 +192,11 @@ function _init() {
 
   onStatusChange(_refreshWaitingCount);
   _refreshWaitingCount();
+
+  // 업로드 배지는 폴링이 아니라 진행 이벤트에 얹는다 — 로컬 상태라 fetch가
+  // 필요 없고, 15초를 기다리지 않고 즉시 갱신된다.
+  document.addEventListener('vt:upload-progress', _refreshFilesBadge);
+  _refreshFilesBadge();
 
   _refreshBadges();
   setInterval(_refreshBadges, BADGE_POLL_MS);

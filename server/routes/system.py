@@ -9,6 +9,7 @@ import logging
 import os
 import shutil
 import socket
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
@@ -17,6 +18,7 @@ from fastapi.responses import JSONResponse
 import fsguard
 import network_access
 import notify
+import platform_utils
 import push
 import safe_mode
 import tailscale
@@ -63,6 +65,40 @@ def _hostname() -> str:
         except Exception:
             _HOSTNAME = ""
     return _HOSTNAME
+
+
+# N45(모바일 헤더 환경 칩) — "macOS · MacBook Pro M1 Pro"의 뒷부분. hostname과
+# 달리 사용자가 짓지 않는, 기기 자체의 정체다. macOS만 system_profiler로 읽는다
+# (Linux/WSL2는 상응하는 표준 조회가 없어 빈 문자열 — hostname/version과 같은
+# "값 없으면 프런트가 칩을 안 그린다" 규칙에 맡긴다).
+_MACHINE: str | None = None
+
+
+def _machine() -> str:
+    """실측(2026-09-23, M1 Pro): `system_profiler SPHardwareDataType` 170ms.
+    tailscale/tunnel 프로브만큼 무겁진 않지만 매 `/api/capabilities` 호출마다
+    돌릴 이유가 없다 — 재부팅 전엔 안 바뀌므로 `_hostname()`/`_version()`과
+    같은 프로세스-수명 캐시로 한 번만 계산한다."""
+    global _MACHINE
+    if _MACHINE is None:
+        _MACHINE = ""
+        if platform_utils.IS_MACOS:
+            try:
+                out = subprocess.run(
+                    ["system_profiler", "SPHardwareDataType"],
+                    capture_output=True, text=True, timeout=3,
+                ).stdout
+                name = chip = ""
+                for line in out.splitlines():
+                    line = line.strip()
+                    if line.startswith("Model Name:"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.startswith("Chip:"):
+                        chip = line.split(":", 1)[1].strip()
+                _MACHINE = " ".join(p for p in (name, chip.replace("Apple ", "")) if p)
+            except Exception:
+                _MACHINE = ""
+    return _MACHINE
 
 
 def _etag_response(payload, request: Request, stable_for_etag=None) -> Response:
@@ -132,6 +168,10 @@ def _capabilities_payload() -> dict:
         "version": _version(),
         # N37: 헤더 워크스페이스 칩. 빈 문자열이면 "/ 호스트" 부분을 안 그린다.
         "hostname": _hostname(),
+        # N45: 모바일 헤더 환경 칩("macOS · MacBook Pro M1 Pro"). machine이
+        # 빈 문자열이면(비-macOS) 프런트가 os만 보여준다.
+        "os": platform_utils.PLATFORM_NAME,
+        "machine": _machine(),
         # P3-3(60-observability.md §1) — 세션별 broadcast 드롭 누적을 합친
         # 값. `fsh doctor`가 0이 아니면 경고한다(60-observability.md).
         "dropped_subscribers": sum(s.dropped_subscribers for s in pty_mgr.sessions.values()),
