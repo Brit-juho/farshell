@@ -1,7 +1,7 @@
 // N36 §5 — 워크트리 레일 252px. 2.1.1(N8/N44)~2.1.6은 행 = Worktree였다
 // (30-worktree.md §4). ADR-29(2026-09-18)로 되돌렸다 — 행은 다시 세션이고,
 // 워크트리는 저장소·브랜치 배지로만 남는다(로컬 호스트에 한함). 원격
-// 호스트는 아직 옛 3버킷(개입 필요/작업 중/열려 있지 않음) 그대로다(2.2 범위).
+// 호스트는 아직 옛 3버킷(개입 필요/작업 중/열려 있음, 2026-09-23 개명) 그대로다(2.2 범위).
 //
 // ⚠ 이 파일은 core/store.js·layout/store.js·agent/state.js·term/session.js를
 // 직접 import하지 않는다(panels/viewer-lazy.js·shell/Hud.tsx와 같은 이유 —
@@ -374,7 +374,7 @@ function Rail(props: { deps: RailDeps }) {
 
   // ADR-29 B — 두 갈래: 깨어있는 세션의 그룹 섹션(개입 필요 고정 뷰 포함),
   // 잠자는 세션의 구역(그룹째 잠들었으면 덩어리, 아니면 낱개). 원격
-  // 호스트는 옛 3버킷(개입 필요/작업 중/열려 있지 않음) 그대로 — 거긴
+  // 호스트는 옛 3버킷(개입 필요/작업 중/열려 있음) 그대로 — 거긴
   // 그룹·수면 개념이 아직 없다(2.2 범위).
   const localSessionRows = createMemo<OtherRailRowInput[]>(() =>
     isRemoteHost() ? [] : (rows() as OtherRailRowInput[]));
@@ -688,7 +688,7 @@ function Rail(props: { deps: RailDeps }) {
         <Show when={isRemoteHost() && !collapsed() && totalRows() === 0 && activeHost()?.online}>
           <div class="vt-wgrail-empty">이 호스트에 tmux 세션이 없습니다.</div>
         </Show>
-        {/* 원격 호스트: 옛 3버킷 그대로(개입 필요/작업 중/열려 있지 않음) —
+        {/* 원격 호스트: 옛 3버킷 그대로(개입 필요/작업 중/열려 있음) —
             그룹·수면 개념은 2.2 범위(로컬 전용, ADR-29 결정문 참고). */}
         <Show when={isRemoteHost()}>
           <For each={remoteSections()}>

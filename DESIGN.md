@@ -596,8 +596,8 @@ is demoted to `⌘⇧F` (rebindable).
 └─────────────────────────────────────────────────────────────────  ┘
 ```
 
-**2026-09-23 rework, step 1 of a larger pass (this repo's mobile-shell-revamp
-branch).** The header no longer changes per tab — earlier it showed the
+**2026-09-23 rework (this repo's mobile-shell-revamp branch, steps 1–2 of a
+larger pass).** The header no longer changes per tab — earlier it showed the
 workspace chip on the Fleet tab and the session picker + search elsewhere,
 which meant the same screen real estate meant different things depending on
 which bottom-nav tab you were on. Now it's three things, always: an **env
@@ -605,10 +605,16 @@ chip** (`#vt-env-chip`, `layout/env-chip.js`) reading `os`/`machine` off
 `/api/capabilities` (`"macOS · MacBook Pro M1 Pro"` — machine is macOS-only,
 read once via `system_profiler` and cached for the process lifetime, same
 pattern as the `hostname`/`version` fields), the session picker
-(`#voice-session-picker`, still opens the rename/sleep/kill sheet — full
-parity with the session tab below is step 2's job, not done yet), and the
-command-palette search icon. The workspace chip (repo name + host) is
+(`#voice-session-picker`, kept for now as a display + the same rename/sleep/
+kill sheet it always opened — the session tab below now has full parity with
+it, so a later pass can drop the sheet trigger and make this pure display),
+and the command-palette search icon. The workspace chip (repo name + host) is
 desktop-only now; a phone doesn't need to see the repo name on every screen.
+`#vt-wtabs`(the desktop tab strip) needed `!important` to actually stay
+hidden here — `80-dock.css`'s unconditional `display:flex` (added for the
+strip's horizontal-scroll behavior, loads later in the same `legacy` layer)
+otherwise won whenever 2+ tabs were open; a single-tab test during step 1
+missed this because `tabbar.js` hides a lone tab on its own.
 
 Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`):
 **Session · Terminal · Changes · Files · Settings**. Queue was dropped from
@@ -628,17 +634,48 @@ padding accounts for the 52px bottom nav in addition to the keybar (a gap
 that, before this pass, left the prompt line and tmux status line hidden
 behind the keybar whenever the nav was showing).
 
-**Fleet home** (`shell/Fleet.tsx`, ADR-27) is the first screen
-(`ui.mobile.home` defaults to `fleet`) — most of what you do on a phone in
-compact is "what's waiting on me right now," not typing. It reuses **exactly
-the same** data source, grouping, and sort as the worktree rail
-(`rail-data.ts`), so "top of the desktop rail" is always "top of the phone"
-too. When a `waiting` row's detect pattern captured numbered choices, an
-**inline approval button** appears (`1 · Yes` / `3 · No`) — otherwise just a
-"Go to terminal" button. **Not yet done (step 2):** sleeping sessions,
-long-press row menu (rename/sleep/kill/wake), and dropping the now-redundant
-`GROUP_LABEL.idle` wording ("열려 있지 않음") once this screen becomes the one
-place mobile session management lives.
+**Fleet home** (`shell/Fleet.tsx`, ADR-27, renamed "세션" on the bottom nav) is
+the first screen (`ui.mobile.home` defaults to `fleet`) — most of what you do
+on a phone in compact is "what's waiting on me right now," not typing. Its
+data source moved from "this browser's open web sessions" to the same
+`/api/tmux/sessions` + `allSessions()` join as the desktop rail's local path
+(`Rail.tsx`) — so **sleeping tmux sessions show up here too now**, in their
+own dimmed "잠자는 중" section at the bottom (`buildSleepingEntries`), same
+name and same behavior as the rail: tap wakes and opens, no ack/unseen
+handling (that's an awake-only concept). The three urgency buckets above it
+(개입 필요 / 작업 중 / 열려 있음) are still `buildRailSections`, now fed only the
+awake rows — a sleeping-but-waiting session doesn't jump into 개입 필요, same
+rule as the desktop's `buildSessionSections`. `GROUP_LABEL.idle` itself was
+renamed from "열려 있지 않음" to **"열려 있음"** (`rail-data.ts`) — that bucket
+has only ever meant "session open, agent idle" since ADR-29, never "no
+session," so the old label was backwards; this also fixed the same wording on
+the desktop rail's remote-host view, which shares the constant.
+
+**Long-press a row for a bottom-sheet menu** — awake rows get 이름 변경 · 재우기
+· 맥에서 열기 · 연결된 화면 · 완전 종료(tmux only, red); sleeping rows get 깨우기 ·
+완전 종료. Same actions, same window bridges as the desktop rail's ⋯ menu
+(`ctxMenuItems`), just a sheet instead of a coordinate popup — a touch menu
+that opens where you pressed can walk off-screen. Detection is a plain
+pointer-event timer (500ms / 8px cancel, touch-only — mouse is left to the
+desktop's ⋯ button) since `layout/dnd.js`'s long-press is wired to actual
+drag-and-drop and isn't reusable as-is. **Two real bugs surfaced building
+this, both fixed:** the sheet's action callbacks originally read the
+render-prop's resolved value (`m()`) *after* `closeMenu()` had already torn
+down that `<Show>` block, so e.g. 재우기 silently did nothing from a real tap
+while working fine when called directly from a console — fixed by capturing
+the row into a plain variable before closing. And the shared
+`.vt-session-sheet` (also used by the older `#voice-session-picker` sheet)
+padded its bottom for the safe-area only, not the 52px bottom nav, so a
+sheet's last row/button could sit behind the nav and be untappable — same
+fix as `#terminal-container` in step 1, applied once to the shared class so
+both sheets got it.
+
+A permanent **"+ 새 세션"** button sits at the bottom of the list (hidden
+only in the true empty state, where two dedicated buttons already do the
+same job) and opens the same `session.add-menu` popover as the desktop rail's
+own "+ 새 세션" — `Fleet.tsx` now takes `getAction` as a dep (from
+`core/dom.js`, passed in by `mobile-nav.js`) for this, the same way
+`Rail.tsx`/`Hud.tsx`/`Dock.tsx` already do.
 
 The keybar's selection action enters a dedicated native text-selection mode.
 It blurs xterm's hidden textarea (closing the software keyboard), stops touch

@@ -44,18 +44,20 @@ test('waiting과 error는 같은 그룹(개입 필요)에 모인다', async () =
   assert.strictEqual(sections[0].rows.length, 2);
 });
 
-// 2026-09-18(98 §6-1) — 10 §5의 "done은 유휴에 남는다"를 **뒤집었다**. 유휴
-// 그룹의 이름이 「열려 있지 않음」이 되면서(§2) 완료된 세션이 그 이름에 안 맞다 —
-// 완료는 열려 있는 세션이다.
-test('done은 작업 중 그룹으로 간다(유휴는 이제 「열려 있지 않음」이다)', async () => {
+// 2026-09-18(98 §6-1) — 10 §5의 "done은 유휴에 남는다"를 **뒤집었다**. 완료는
+// 열려 있는 세션이니 작업 중 쪽이 더 맞다.
+test('done은 작업 중 그룹으로 간다', async () => {
   const { buildRailSections } = await mod();
   const sections = buildRailSections([row({ sessionId: 'a', status: 'done' })], NOW);
   assert.strictEqual(sections[0].group, 'working');
 });
 
-test('유휴 그룹 라벨은 「열려 있지 않음」이다', async () => {
+// 2026-09-23(사용자 지적) — 「열려 있지 않음」도 틀렸다: idle 그룹은 항상
+// "열려 있는" 세션이다(잠자는 세션은 이 함수가 아니라 buildSleepingEntries가
+// 별도로 다룬다). 「열려 있음」이 사실과 맞다.
+test('idle 그룹 라벨은 「열려 있음」이다', async () => {
   const { GROUP_LABEL } = await mod();
-  assert.strictEqual(GROUP_LABEL.idle, '열려 있지 않음');
+  assert.strictEqual(GROUP_LABEL.idle, '열려 있음');
 });
 
 test('개입 필요는 접을 수 없다(접히면 그 그룹이 존재할 이유가 사라진다)', async () => {

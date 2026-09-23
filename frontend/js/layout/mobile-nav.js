@@ -19,6 +19,7 @@
 // (ADR-26 — solid-js 런타임을 app.js에 정적으로 넣으면 300KiB 상한을 넘는다).
 import { get as settingsGet, set as settingsSet } from '../core/settings.js';
 import { vtFetch } from '../core/api.js';
+import { getAction } from '../core/dom.js';
 import { getSession, activeSessionId } from '../core/store.js';
 import { allStatuses, onStatusChange } from '../agent/state.js';
 
@@ -77,6 +78,7 @@ function _ensureFleetMounted() {
   _fleetMountPromise = import('../shell/Fleet.tsx')
     .then(({ mountFleet }) => mountFleet(_fleetSlot, {
       vtFetch,
+      getAction,
       onOpenTerminal: () => setTab('terminal'),
     }))
     .catch((e) => { console.error('[FarShell fleet]', e); _fleetMountPromise = null; });

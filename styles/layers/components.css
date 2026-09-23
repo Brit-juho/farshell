@@ -540,6 +540,10 @@
   .vt-menu-item.on > svg { color: var(--color-acc); }
   .vt-menu-item.dim { opacity: .6; }
   .vt-menu-item.new { color: var(--ok); }
+  /* 2026-09-23 — `.vt-btn.danger`와 같은 값의 목록-행 버전. 되돌릴 수 없는
+   * 항목(세션 완전 종료 등) 하나만 위험색으로 눈에 띄게 한다. */
+  .vt-menu-item.danger { color: var(--color-st-error); }
+  .vt-menu-item.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--color-st-error) 14%, transparent); }
 
   /* ── 칩(필터) ──────────────────────────────────────────────────────────
    * 알약(radius-full)이 아니다. 모서리는 화면 전체가 한 단계(5px)로 통일돼

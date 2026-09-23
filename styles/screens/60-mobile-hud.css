@@ -167,6 +167,22 @@
   body.vt-keyboard-open #keybar { bottom:0; }
   html[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar { display:none; }
 
+  /* 2026-09-23 — `.vt-session-sheet`(10-shell.css)는 바닥에 붙는 시트인데
+     아래쪽 padding이 safe-area만 보고 하단 내비 52px는 안 봤다 — 시트
+     내용이 그 높이만큼 있으면 마지막 줄이 내비(z-index 650) 밑에 깔려서
+     눌리지 않는다. Fleet.tsx의 꾹 눌러 메뉴가 같은 클래스를 재사용하면서
+     "취소" 버튼이 정확히 그 자리에 있어서 실브라우저로 잡았다 — 기존
+     세션 관리 시트(picker.js)도 같은 결함을 안고 있었다(내용이 짧아 아직
+     아무도 못 봤을 뿐). 키보드가 뜨면 내비가 사라지므로(위 규칙) 그때는
+     원래 padding으로 되돌린다 — #terminal-container·#vt-toasts와 같은
+     두 갈래 패턴. */
+  .vt-session-sheet {
+    padding-bottom:calc(calc(var(--spacing) * 3.5) + 52px + env(safe-area-inset-bottom,0px));
+  }
+  body.vt-keyboard-open .vt-session-sheet {
+    padding-bottom:calc(var(--spacing) * 3.5);
+  }
+
   /* 플릿 홈(N38 §2) 행 — Rail.tsx(N36 §5)의 .vt-wgrail-row와 같은 시각
      언어(색점 막대 3px·같은 톤 토큰)를 쓴다: "레일에서 맨 위인 게 폰에서도
      맨 위"뿐 아니라 생김새도 같은 화면이라는 확신을 준다. */
@@ -248,4 +264,27 @@
   /* 2.1.6 — `.vt-btn.sm`(선택지) / `.vt-btn.sm.solid`(「터미널로」 대표 액션)으로
      대체. 승인 버튼은 폰에서 가장 중요한 액션인데 hover·active만 있고
      focus-visible·disabled가 없었다 — 컴포넌트가 다섯 상태를 다 갖는다. */
+
+  /* 2026-09-23 — 잠든 행. Rail.tsx의 `.vt-wgrail-row.sleeping`과 같은 값 —
+     같은 뜻(열린 pane이 없다)에 같은 흐림 정도를 쓴다. */
+  .vt-fleet-row.sleeping { opacity:.55; }
+  .vt-fleet-row.sleeping:active { opacity:.8; }
+  /* 꾹 눌러 메뉴 — 이 행은 버튼이지 선택할 텍스트가 아닌데, 롱프레스 중
+     OS의 텍스트 선택·콜아웃이 먼저 끼어들면(iOS 실측) 메뉴 대신 파란 선택
+     하이라이트가 뜬다. manipulation은 더블탭 확대만 끄고 세로 스크롤은
+     그대로 둔다. */
+  .vt-fleet-row {
+    -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
+    touch-action:manipulation;
+  }
+  /* Rail.tsx 하단 "+ 새 세션"의 모바일 버전 — 목록 맨 아래 항상 있는
+     진입점(목록이 비었을 때는 위 empty-state 버튼 둘이 대신한다). 점선
+     테두리로 "행이 아니라 추가 동작"임을 다른 시각 언어로 말한다. */
+  .vt-fleet-add-btn {
+    display:block; width:100%; min-height:44px; margin-top:calc(var(--spacing) * 2);
+    padding:calc(var(--spacing) * 3) 0; text-align:center;
+    background:none; border:1px dashed var(--line); border-radius:var(--radius-sm);
+    color:var(--sub); font:500 var(--fs-sm) var(--font-ui); cursor:pointer;
+  }
+  .vt-fleet-add-btn:hover, .vt-fleet-add-btn:active { border-color:var(--color-line-strong); color:var(--txt); }
 }
