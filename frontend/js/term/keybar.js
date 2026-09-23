@@ -10,7 +10,7 @@ import { icon } from '../ui/icons.js';
 import { copyToClipboard, sendToPty } from './clipboard.js';
 import { fitAndResize } from './resize.js';
 import { _isCoarsePointer } from '../core/env.js';
-import { getAction } from '../core/dom.js';
+import { get as settingGet, set as settingSet, subscribe as settingSubscribe } from '../core/settings.js';
 
 let _ctrlArmed = false;
 let _selectionSessionId = null;
@@ -159,13 +159,9 @@ export function initKeybar() {
   if (_force) bar.classList.add('force-show');
   bar.hidden = false;
 
-  // L7: 좌측 고정 슬롯 — 큐/업로드. 마이크는 이미 _placeMicButton()이 옮겨뒀다.
-  // 이 둘은 keybar 밖의 다른 곳(rail·팔레트)과 액션을 공유하므로 재구현하지
-  // 않는다 — queue.show는 rail.js가 등록한 게 아니라 queue.js가 F5에서 이미
-  // registerAction해둔 진짜 소스이고, 업로드는 L4가 만들어둔 단일 #file-input을
-  // 그대로 클릭한다.
-  document.getElementById('keybar-slot-queue')?.addEventListener('click', () => getAction('queue.show')?.());
-  document.getElementById('keybar-slot-upload')?.addEventListener('click', () => document.getElementById('file-input')?.click());
+  // 2026-09-23 — 큐/업로드 슬롯을 없앴다(하단 내비 「첨부」·빠른 열기 `:`가
+  // 이미 같은 액션에 닿는다, DESIGN.md §7). 마이크만 남는다 —
+  // _placeMicButton()이 이미 옮겨뒀다.
   document.addEventListener('vt:session-switch', () => setTerminalSelectionMode(false));
 
   // M3: ←/→ 버튼을 누른 채 드래그하면 끈 거리만큼 같은 방향으로 연속 이동.
@@ -317,8 +313,13 @@ export function initKeybar() {
     new ResizeObserver(() => positionBar()).observe(bar);
   }
 
-  // 접기/펴기 — 상태를 localStorage에 기억. 접으면 우하단 알약만 남고
-  // 터미널 하단 여백이 줄어 화면을 더 쓴다. (함수 선언이라 위 핸들러에서 참조 가능)
+  // 접기/펴기 — #keybar-extra-keys(덜 쓰는 나머지 키)만 여닫는다(위 CSS
+  // 주석 참고, Esc·Ctrl·Tab·화살표는 이제 안 접힌다). 상태는 기기별 설정
+  // (core/settings.js)에 남긴다 — 2026-09-23 이전엔 localStorage를 직접
+  // 썼는데, core/settings.js에 이미 있던 `keybar.collapsed` 스키마와 남남
+  // (settings 화면에 노출될 일이 없는 값이라도, "값 하나에 저장소 두 곳"은
+  // 언젠가 어긋난다). 스키마의 migrate가 옛 localStorage 값을 1회 흡수한다.
+  // (함수 선언이라 위 핸들러에서 참조 가능)
   function _setKeybarCollapsed(collapsed) {
     // armed Ctrl이 접힘 상태로 넘어가면 하이라이트가 숨겨진 채 다음 입력이
     // Ctrl 조합으로 나가버린다(놀람). 접기/펴기 시 항상 해제.
@@ -334,17 +335,35 @@ export function initKeybar() {
       tg.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       tg.setAttribute('aria-label', collapsed ? '특수키 바 펴기' : '특수키 바 접기');
     }
-    try { localStorage.setItem('vt_keybar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+    settingSet('keybar.collapsed', collapsed);
     // 하단 여백이 바뀌었으니 xterm 칸 수 재계산.
     const activeId = activeSessionId();
     if (activeId) setTimeout(() => fitAndResize(activeId), 60);
     positionBar();
   }
 
-  // 초기 상태 복원 (기본: 펼침)
-  let _startCollapsed = false;
-  try { _startCollapsed = localStorage.getItem('vt_keybar_collapsed') === '1'; } catch (_) {}
-  if (_startCollapsed) _setKeybarCollapsed(true);
+  // 초기 상태 복원. index.html의 #keybar는 이미 class="collapsed"로 시작하므로
+  // (기본값이 참일 때 깜빡임 없이 첫 페인트가 맞아떨어지게) 설정이 거짓이면
+  // 여기서 명시적으로 펴야 한다 — 그래서 조건 없이 항상 부른다.
+  _setKeybarCollapsed(Boolean(settingGet('keybar.collapsed')));
+  // 기기 설정(device scope)은 /api/device-settings에서 비동기로 온다 — 이
+  // 시점엔 아직 스키마 기본값(true)으로 그렸을 수 있다. 실제 값이 늦게
+  // 도착해 다르면 다시 맞춘다(rail-data.ts의 GROUP_COLLAPSED_DEFAULT와 같은
+  // 이유 — "설정 없음"과 "이미 도착한 설정" 둘 다 화면과 어긋나면 안 된다).
+  //
+  // ⚠ subscribe 콜백 인자는 **항상 전체 스냅샷이 아니다** — set() 한 번은
+  // `{ [바뀐 키]: 값 }`만 넘긴다(core/settings.js:225). "이 알림에
+  // keybar.collapsed가 실제로 들어 있는가"를 먼저 확인하지 않으면, 다른
+  // 아무 설정(예: 하단 내비 탭 전환이 쓰는 ui.mobile.home)이 바뀔 때마다
+  // `all['keybar.collapsed']`가 undefined→false로 오독돼 펼침 상태로
+  // 튀고 그 잘못된 false가 그대로 저장됐다(실측, 2026-09-23 — 탭만
+  // 바꿔도 키바가 저절로 펴졌다). 초기 로드 시(getAll() 결과)는 키가
+  // 있으므로 그 경로는 그대로 동작한다.
+  settingSubscribe((all) => {
+    if (!all || !('keybar.collapsed' in all)) return;
+    const v = Boolean(all['keybar.collapsed']);
+    if (v !== bar.classList.contains('collapsed')) _setKeybarCollapsed(v);
+  });
 
   positionBar();
 }

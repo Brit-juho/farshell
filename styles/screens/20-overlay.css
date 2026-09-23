@@ -315,13 +315,20 @@ body.voice-only-mode .vt-onboarding { display:none; }
   will-change:transform;
 }
 #keybar[hidden] { display:none; }
-/* L7: 입력 슬롯[🎤][큐][📎] + 접기/펴기 토글 — 이 줄(#keybar-top)은 별도 줄이라
-   "키들"(#keybar-keys) 줄을 접어도 안 사라진다(구 M7 관련 — 아래 .collapsed
-   주석 참고). .kb-slot은 배지(.vt-rail-badge 재사용)의 위치 기준. */
-#keybar-top { display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 1.5); }
-#keybar-slots { flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
+/* 2026-09-23 — 한 줄로 다시 짰다: [마이크] Esc Ctrl Tab ↑↓←→ [펼치기].
+   접었을 때 보이는 게 이 한 줄 전부다 — 예전엔 이 줄(#keybar-top)과 "키들"
+   줄(#keybar-keys, 접으면 사라짐)이 따로였는데, 자주 쓰는 방향키·Esc·Ctrl이
+   접힘 상태에선 안 보이는 게 오히려 더 불편했다. 이제 접고 펴는 대상은
+   덜 쓰는 나머지 키(#keybar-extra-keys)뿐이다. */
+#keybar-main { display:flex; align-items:center; gap:calc(var(--spacing) * 1); }
+/* 마이크(#keybar-slot-mic)·토글은 고정 폭, 나머지 폭을 core-keys 7개가
+   나눠 쓴다 — 390px 화면에서 칸당 약 36px(아래 .kb 축소값과 맞물린다). */
+#keybar-core-keys {
+  flex:1 1 auto; min-width:0; display:flex; gap:calc(var(--spacing) * 1);
+}
+#keybar-core-keys .kb { flex:1 1 0; min-width:0; padding:0; }
 #keybar-selection-actions {
-  min-width:0; flex:1; display:flex; align-items:center; justify-content:flex-end;
+  min-width:0; display:flex; align-items:center; justify-content:flex-end;
   gap:calc(var(--spacing) * 1.5);
 }
 #keybar-selection-actions[hidden] { display:none; }
@@ -329,13 +336,11 @@ body.voice-only-mode .vt-onboarding { display:none; }
   min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   color:var(--sub); font:500 var(--fs-xs) var(--ui);
 }
-/* 2026-09-23 — 선택 모드로 "들어가는" 슬롯 버튼이 없어져서(터미널 꾹 누르기가
-   대신한다) 예전의 `:not(#keybar-slot-select)` 예외가 무의미해졌다 — 이제
-   선택 중엔 입력 슬롯 줄 전체를 숨긴다(음성 녹음 등을 하다 말고 선택하는
-   조합은 어차피 없다). */
-body.vt-term-selecting #keybar-slots,
-body.vt-term-selecting #keybar-toggle,
-body.vt-term-selecting #keybar-keys { display:none; }
+/* 선택 중엔 메인 줄 대신 이 줄이 그 자리를 대신한다(음성 녹음 등을 하다
+   말고 선택하는 조합은 어차피 없다) — #keybar-extra-keys는 펼침 상태와
+   무관하게 선택 중엔 항상 숨는다. */
+body.vt-term-selecting #keybar-main,
+body.vt-term-selecting #keybar-extra-keys { display:none; }
 .vt-term-wrap.vt-term-select-mode .xterm-helper-textarea { pointer-events:none; }
 /* 2026-09-23 — 예전엔 여기서 접근성 레이어에 **네이티브** 텍스트 선택을 켰다
    (user-select:text). xterm 5.5의 접근성 레이어가 PTY 출력마다(스피너·tmux
@@ -375,15 +380,13 @@ body.vt-term-selecting #keybar-keys { display:none; }
 }
 .vt-term-handle.end::before { left:15px; }
 .vt-term-handle.end::after { border-radius:50% 50% 0 50%; }
-.kb-slot { position:relative; }
-/* 키 버튼들만 가로 스크롤 */
-#keybar-keys {
-  min-width:0;
-  display:flex; gap:calc(var(--spacing) * 1.5); align-items:center;
-  overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
-  -webkit-overflow-scrolling:touch; touch-action:pan-x;
+/* 2026-09-23 — 둘째 줄(펼쳤을 때만)은 가로 스크롤 대신 줄바꿈 격자다. 큐·
+   업로드가 첫 줄에서 빠지면서 남은 6개(`| / ~ - n p`)는 390px 한 줄에도
+   보통 다 들어가지만, 폰트를 키우거나 키가 늘어도 옆으로 숨는 대신 다음
+   줄로 내려간다 — "가로 스크롤 자체를 없앤다"는 설계 그대로다. */
+#keybar-extra-keys {
+  display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5);
 }
-#keybar-keys::-webkit-scrollbar { display:none; }
 .kb {
   flex:0 0 auto; min-width:42px; height:38px; padding:0 calc(var(--spacing) * 3);
   display:inline-flex; align-items:center; justify-content:center;
@@ -396,11 +399,16 @@ body.vt-term-selecting #keybar-keys { display:none; }
 /* R4: n/p 롱프레스(tmux 창 전환) 시각 피드백 — 누르고 있는 동안, 발화되는 순간. */
 .kb.holding { background:var(--menu-hover); border-color:var(--acc); }
 .kb.longpress-fired { background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
-/* M3: ←/→는 누른 채 드래그로 연속 이동을 받는다 — 부모 #keybar-keys의
-   touch-action:pan-x(버튼 줄 가로 스크롤용)가 이 드래그를 스크롤로 가로채지
-   않도록 이 버튼들만 touch-action:none으로 덮어쓴다. */
 .kb-arrow { min-width:38px; font-size:var(--fs-lg); touch-action:none; }
 .kb-mod.armed { background:var(--color-acc-surface); color:var(--acc-ink); border-color:var(--acc); }
+/* 2026-09-23 — #keybar-core-keys 안의 7개는 자리를 나눠 써야 한다(390px에
+   7개+마이크+토글) — 위 `.kb`의 고정 padding/min-width를 이 컨텍스트에서만
+   덮는다. 글자 크기도 한 단 낮춘다("Ctrl"이 좁은 칸에서 안 잘리게). 정확한
+   치수는 나중 디자인 패스에서 다듬는다(이 커밋은 기능만 맞춘다). */
+#keybar-core-keys .kb {
+  flex:1 1 0; min-width:0; padding:0; font-size:var(--fs-sm);
+}
+#keybar-core-keys .kb-arrow { min-width:0; font-size:var(--fs-md); }
 /* 접기/펴기 토글 버튼 */
 #keybar-toggle {
   flex:0 0 auto; width:34px; height:38px;
@@ -410,14 +418,13 @@ body.vt-term-selecting #keybar-keys { display:none; }
   cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation;
 }
 #keybar-toggle:active { background:var(--menu-hover); }
-/* 접힘: "키들"(#keybar-keys, Esc/Ctrl/Tab/화살표 등 스크롤 줄)만 숨긴다.
-   L7 이전에는 바 전체가 우하단 작은 알약으로 줄어들었는데, 그러면 입력
-   슬롯(마이크/큐/업로드)까지 함께 사라졌다 — "큐 배지가 접힘으로 다시
-   묻히면 가시성 개선이 무의미하다"(§3)는 게 바로 이 문제였다(구 M7 "숨긴
-   키바가 빈 공간을 남기지 않게"의 반대쪽 증상: 접었다고 유용한 걸 통째로
-   숨기면 안 됨). 이제 접힘은 폭을 그대로 두고 "키들" 줄만 걷어낸다 —
-   슬롯 + 토글은 항상 한 줄로 남는다. */
-#keybar.collapsed #keybar-keys { display:none; }
+/* 2026-09-23 — 접기/펴기 대상이 바뀌었다: 예전엔 "키들" 줄 전체(Esc·Ctrl·
+   Tab·화살표까지)가 접히면 사라졌는데, 그게 자주 쓰는 키까지 숨겨서 오히려
+   불편했다(§4). 이제 그 7개는 #keybar-main에 항상 있고, .collapsed가
+   접는 건 #keybar-extra-keys(덜 쓰는 나머지)뿐이다. 기본값도 뒤집었다 —
+   자주 안 쓰는 줄이니 기본은 접힘이고, 펼쳐야 나온다(keybar.js의 설정
+   기본값과 짝을 맞춘다). */
+#keybar.collapsed #keybar-extra-keys { display:none; }
 /* 정밀 포인터(데스크톱, 물리 키보드)에서는 항상 숨김 — 단, 강제 오버라이드는 예외 */
 @media (pointer:fine) { #keybar:not(.force-show) { display:none !important; } }
 /* 터치 기기: 터미널 하단 여백 = keybar 실제 높이 + 소프트 키보드가 덮은 높이.

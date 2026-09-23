@@ -96,20 +96,22 @@ test('강제 노출(?keybar=1)이어도 마이크 배치는 포인터 타입만 
   );
 });
 
-test('큐 슬롯 클릭 → queue.show 액션을 부른다', async () => {
-  const { window, dom } = await buildWindow({ coarse: true });
-  let called = 0;
-  dom.registerAction('queue.show', () => { called++; });
-  window.document.getElementById('keybar-slot-queue').click();
-  assert.strictEqual(called, 1);
+// 2026-09-23 — 큐·업로드 슬롯을 없앴다(하단 내비 「첨부」·빠른 열기 `:`가
+// 이미 같은 액션에 닿는다). 남은 건 마이크뿐이다.
+test('큐·업로드 슬롯이 더 이상 없다', async () => {
+  const { window } = await buildWindow({ coarse: true });
+  assert.strictEqual(window.document.getElementById('keybar-slot-queue'), null);
+  assert.strictEqual(window.document.getElementById('keybar-slot-upload'), null);
 });
 
-test('업로드 슬롯 클릭 → #file-input을 클릭한다', async () => {
+test('한 줄 구성 — 마이크·핵심 키 7개·토글이 모두 #keybar-main 하나에 있다', async () => {
   const { window } = await buildWindow({ coarse: true });
-  let clicked = false;
-  window.document.getElementById('file-input').addEventListener('click', () => { clicked = true; });
-  window.document.getElementById('keybar-slot-upload').click();
-  assert.strictEqual(clicked, true);
+  const main = window.document.getElementById('keybar-main');
+  assert.ok(main.contains(window.document.getElementById('keybar-slot-mic')));
+  assert.ok(main.contains(window.document.getElementById('keybar-core-keys')));
+  assert.ok(main.contains(window.document.getElementById('keybar-toggle')));
+  const coreKeys = [...window.document.querySelectorAll('#keybar-core-keys .kb')].map((b) => b.dataset.key || b.dataset.mod);
+  assert.deepStrictEqual(coreKeys, ['esc', 'ctrl', 'tab', 'up', 'down', 'left', 'right']);
 });
 
 test('텍스트 선택 모드 — 터미널 포커스를 해제하고 xterm 자신의 선택 하이라이트를 켠다', async () => {
@@ -199,21 +201,26 @@ test('모두 선택 — 뷰포트 전체(rows×cols)를 term.select로 고른다
   assert.deepStrictEqual(calls, [[0, 0, 24 * 80]]);
 });
 
-test('접기 토글 — "키들" 줄만 접히고 입력 슬롯 줄은 클래스 구조상 별도로 남는다', async () => {
+test('접기 토글 — 기본은 접힘(추가 키 줄만), 마이크·핵심 키·토글은 항상 남는다', async () => {
   const { window } = await buildWindow({ coarse: true });
   const bar = window.document.getElementById('keybar');
   const toggle = window.document.getElementById('keybar-toggle');
-  assert.strictEqual(bar.classList.contains('collapsed'), false);
-  // #keybar-top(슬롯+토글)과 #keybar-keys가 별개 자식이라 접힘 클래스가
-  // #keybar-keys만 골라 숨길 수 있다 — 이 구조 자체가 회귀 대상(구 M7).
-  assert.ok(window.document.getElementById('keybar-top').contains(toggle));
-  assert.ok(!window.document.getElementById('keybar-top').contains(window.document.getElementById('keybar-keys')));
+  // 2026-09-23 — 기본값이 뒤집혔다(settings.js SCHEMA keybar.collapsed
+  // def:true와 짝). 접는 대상도 #keybar-extra-keys(덜 쓰는 나머지)뿐이고
+  // #keybar-main(마이크·Esc·Ctrl·Tab·화살표·토글)은 접힘과 무관하게 같은
+  // 부모 밑에 항상 있다 — 예전처럼 별개 컨테이너로 분리해 둘 필요가 없다
+  // (그 분리 자체가 "자주 쓰는 키까지 접힘에 묻힌다"는 회귀의 원인이었다).
+  assert.strictEqual(bar.classList.contains('collapsed'), true);
+  const main = window.document.getElementById('keybar-main');
+  assert.ok(main.contains(toggle));
+  assert.ok(main.contains(window.document.getElementById('keybar-core-keys')));
 
   toggle.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
-  assert.strictEqual(bar.classList.contains('collapsed'), true);
-  // 접힌 상태에도 슬롯은 여전히 DOM에 존재(감춰지지 않음) — jsdom은 app.css를
-  // 안 불러오므로 실제 display 계산은 실브라우저 검증으로 확인했다(별도).
-  assert.ok(window.document.getElementById('keybar-slots').isConnected);
+  assert.strictEqual(bar.classList.contains('collapsed'), false);
+  // 펼치든 접든 #keybar-main은 그대로 DOM에 있다(감춰지지 않음) — jsdom은
+  // app.css를 안 불러오므로 실제 display 계산은 실브라우저 검증으로
+  // 확인했다(별도).
+  assert.ok(window.document.getElementById('keybar-extra-keys').isConnected);
 });
 
 // --- 소프트 키보드 겹침 → 터미널 하단 여백 -------------------------------

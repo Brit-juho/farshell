@@ -496,54 +496,47 @@
   <div id="mic-status" role="status" aria-live="polite"></div>
 
   <!-- 모바일 특수키 바 (keybar) — 소프트 키보드에 없는 Esc/Tab/화살표/Ctrl 등을 PTY로 전송.
-       기본 hidden; term/keybar.js가 터치 기기(pointer:coarse)에서만 노출하고 배선/위치 조정. -->
-  <div id="keybar" role="toolbar" aria-label="특수키" hidden>
-    <!-- L7: 좌측 고정 슬롯 3개 [🎤][큐][📎] + 접기/펴기 토글을 한 줄(#keybar-top)로
-         묶었다 — 이 줄은 접혀도(.collapsed) 항상 보인다. "키들"(#keybar-keys,
-         Esc/Ctrl/Tab/화살표 등 스크롤 줄)만 별도 줄이라 접었을 때 그 줄
-         자체가 통째로 없어져 실제로 세로 공간이 줄어든다(§3 "큐 기능이
-         안 쓰이는 진짜 이유가 이 가시성 부재다"가 접힘으로 다시 묻히면
-         의미가 없다는 게 예전 구조의 문제였다 — 구 M7). #keybar-slot-mic는
-         빈 컨테이너 — keybar.js가 부팅 시 #mic-btn-wrap을 여기로 옮겨 붙인다
-         (coarse pointer일 때만; 아니면 rail 설정 패널에 그대로 남는다).
-         2026-09-23 — 「텍스트 선택」 슬롯을 없앴다. 선택은 이제 터미널을
-         직접 꾹 눌러 들어간다(term/touch-select.js) — 버튼을 한 번 더
-         눌러야 하는 중간 단계가 사라졌다. -->
-    <div id="keybar-top">
-      <div id="keybar-slots">
-        <div id="keybar-slot-mic"></div>
-        <button type="button" class="kb kb-slot" id="keybar-slot-queue" aria-label="프롬프트 큐" data-tip="프롬프트 큐">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          <span class="vt-rail-badge" id="keybar-badge-queue" hidden></span>
-        </button>
-        <button type="button" class="kb kb-slot" id="keybar-slot-upload" aria-label="파일 업로드" data-tip="파일 업로드">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        </button>
+       기본 hidden; term/keybar.js가 터치 기기(pointer:coarse)에서만 노출하고 배선/위치 조정.
+       2026-09-23 — 한 줄로 다시 짰다: [마이크] Esc Ctrl Tab ↑↓←→ [펼치기] 하나뿐이다.
+       큐·업로드 슬롯은 없앴다(업로드는 하단 내비 「첨부」, 큐는 빠른 열기 `:`로 이미
+       닿는다 — 여기 있던 건 지름길일 뿐 유일한 길이 아니었다). 「텍스트 선택」 슬롯도
+       없앴다(터미널 꾹 누르기가 대신한다, term/touch-select.js). #keybar-slot-mic는
+       빈 컨테이너 — keybar.js가 부팅 시 #mic-btn-wrap을 여기로 옮겨 붙인다(coarse
+       pointer일 때만; 아니면 rail 설정 패널에 그대로 남는다). -->
+  <!-- class="collapsed" 기본값 — settings.js SCHEMA의 keybar.collapsed
+       def:true와 같은 값. JS가 개입하기 전(첫 페인트)에도 최종 모습과
+       같아야 추가 키 줄이 잠깐 보였다 접히는 깜빡임이 없다(rail-data.ts의
+       GROUP_COLLAPSED_DEFAULT와 같은 이유). -->
+  <div id="keybar" class="collapsed" role="toolbar" aria-label="특수키" hidden>
+    <div id="keybar-main">
+      <div id="keybar-slot-mic"></div>
+      <!-- 늘 보이는 7개 — 접어도 안 사라진다(밑의 #keybar-extra-keys만 접힌다). -->
+      <div id="keybar-core-keys">
+        <button type="button" class="kb" data-key="esc">Esc</button>
+        <button type="button" class="kb kb-mod" data-mod="ctrl" aria-pressed="false">Ctrl</button>
+        <button type="button" class="kb" data-key="tab">Tab</button>
+        <button type="button" class="kb kb-arrow" data-key="up" aria-label="위쪽 화살표">↑</button>
+        <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표">↓</button>
+        <button type="button" class="kb kb-arrow" data-key="left" aria-label="왼쪽 화살표">←</button>
+        <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표">→</button>
       </div>
-      <!-- term/touch-select.js가 터미널 꾹 누르기로 켠다(keybar 버튼 아님).
-           복사/모두 선택/완료 셋만 여기 있다 — "무엇을 고를지"는 핸들 드래그,
-           "그 다음 뭘 할지"만 이 바의 몫이다. -->
-      <div id="keybar-selection-actions" hidden>
-        <span id="keybar-selection-hint">텍스트를 길게 눌러 선택</span>
-        <button type="button" class="vt-btn sm" id="keybar-selection-all">모두 선택</button>
-        <button type="button" class="vt-btn sm solid" id="keybar-selection-copy">복사</button>
-        <button type="button" class="vt-btn sm quiet" id="keybar-selection-done">완료</button>
-      </div>
-      <!-- 접기/펴기 토글 -->
+      <!-- 접기/펴기 토글 — #keybar-extra-keys(아래)만 여닫는다. -->
       <!-- D5 관용구: ui/icons.js의 'chevron-down'과 같은 path. 접히면 keybar.js가
            .flipped를 붙여 CSS로 뒤집는다(아이콘을 두 개 두지 않는다). -->
-      <button type="button" id="keybar-toggle" aria-label="특수키 바 접기" aria-expanded="true" data-tip="특수키 바 접기/펴기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button type="button" id="keybar-toggle" aria-label="특수키 바 펼치기" aria-expanded="false" data-tip="추가 키 펴기/접기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
     </div>
-    <div id="keybar-keys">
-      <button type="button" class="kb" data-key="esc">Esc</button>
-      <button type="button" class="kb kb-mod" data-mod="ctrl" aria-pressed="false">Ctrl</button>
-      <button type="button" class="kb" data-key="tab">Tab</button>
-      <button type="button" class="kb kb-arrow" data-key="up" aria-label="위쪽 화살표">↑</button>
-      <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표">↓</button>
-      <button type="button" class="kb kb-arrow" data-key="left" aria-label="왼쪽 화살표">←</button>
-      <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표">→</button>
-      <!-- [M4] 롱프레스 키 변형 — 짝이 뚜렷한 기호는 같은 자리에 겹쳐 둔다.
-           키바는 자리가 12칸뿐이라 `_`·`\`·백틱을 새 버튼으로 넣을 수 없다. -->
+    <!-- term/touch-select.js가 터미널 꾹 누르기로 켠다(keybar 버튼 아님). 선택
+         모드일 땐 #keybar-main 대신 이 줄이 그 자리를 대신한다(CSS). -->
+    <div id="keybar-selection-actions" hidden>
+      <span id="keybar-selection-hint">텍스트를 길게 눌러 선택</span>
+      <button type="button" class="vt-btn sm" id="keybar-selection-all">모두 선택</button>
+      <button type="button" class="vt-btn sm solid" id="keybar-selection-copy">복사</button>
+      <button type="button" class="vt-btn sm quiet" id="keybar-selection-done">완료</button>
+    </div>
+    <!-- 펼쳤을 때만 보이는 둘째 줄 — 가로 스크롤 대신 줄바꿈 격자다(넘치면
+         그냥 한 줄 더 생긴다, 옆으로 숨는 키가 없다). -->
+    <div id="keybar-extra-keys">
+      <!-- [M4] 롱프레스 키 변형 — 짝이 뚜렷한 기호는 같은 자리에 겹쳐 둔다. -->
       <button type="button" class="kb" data-seq="|" data-longpress-seq="\"
         data-tip="| 입력" data-tip-sub="길게: \ 입력">|</button>
       <button type="button" class="kb" data-seq="/" data-longpress-seq="?"

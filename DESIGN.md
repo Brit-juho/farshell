@@ -591,12 +591,13 @@ is demoted to `⌘⇧F` (rebindable).
 │                                                                     │
 │   tab content (session / terminal / changes / files / settings)    │
 │                                                                     │
-├ keybar (terminal tab only) ──────────────────────────────────────  │
+├ keybar (terminal tab only) — [mic] Esc Ctrl Tab ↑↓←→ [expand] ────┤
+│   (expanded) │ ~ - n p ──────────────────────────────────────────  │
 ├ bottom nav 52 ── session | terminal | changes | files | settings ──┤
 └─────────────────────────────────────────────────────────────────  ┘
 ```
 
-**2026-09-23 rework (this repo's mobile-shell-revamp branch, steps 1–2 of a
+**2026-09-23 rework (this repo's mobile-shell-revamp branch, steps 1–4 of a
 larger pass).** The header no longer changes per tab — earlier it showed the
 workspace chip on the Fleet tab and the session picker + search elsewhere,
 which meant the same screen real estate meant different things depending on
@@ -720,6 +721,38 @@ handle drag across a line boundary, selection survival across live PTY
 output, copy closing the mode, auto-copy/paste both confirmed inert on a
 coarse pointer). Real-finger geometry (handle hit-testing, drag feel) still
 needs an actual phone.
+
+**The keybar (`term/keybar.js`) is one row by default now, not two.**
+Previously `#keybar-top` (mic/queue/upload slots + collapse toggle) and
+`#keybar-keys` (Esc/Ctrl/Tab/arrows + `| / ~ - n p`, horizontally scrolling)
+were separate rows, and collapsing hid the *second* row entirely — which
+meant the keys people reach for constantly (arrows, Esc, Ctrl) vanished along
+with the ones they rarely touch. Queue and upload slots are gone too (both
+have a home now that didn't exist when the keybar was built: 첨부 on the
+bottom nav, and the command palette's `:` mode for queue) — freeing the row
+for what actually needs to always be visible: `[mic] Esc Ctrl Tab ↑ ↓ ← →
+[expand]`, nine items sharing one row (the seven text/arrow keys flex evenly,
+~38px each at 390px — a first functional pass, not the final visual polish).
+Collapsing now only hides `| / ~ - n p` (`#keybar-extra-keys`, a wrapping
+flex row instead of the old horizontal scroll — nothing to scroll to
+anymore), and the default flipped: a device that's never touched the toggle
+now starts collapsed (`keybar.collapsed` schema `def` in `core/settings.js`),
+since the row worth hiding by default changed meaning.
+
+That collapse state moved from raw `localStorage` into `core/settings.js`'s
+existing (until now unused) `keybar.collapsed` device-scoped key — one
+storage instead of two that could drift. **Verified, and worth recording
+because it was a real bug, not a hypothetical:** the first wiring read the
+settings-change subscription callback as if it always received the full
+settings snapshot. `settings.js`'s `set()` only broadcasts `{ [key]: value }`
+for the one key that changed — so switching mobile tabs (which persists
+`ui.mobile.home`) fired the keybar's listener with a payload that didn't
+mention `keybar.collapsed` at all, the listener read that absence as `false`,
+and the bar silently sprang open and **wrote that wrong value back to the
+device's stored settings** — a real cross-feature data-corruption bug caught
+only by testing tab switches after wiring the toggle, not by reasoning about
+the code. Fixed by checking the key is actually present in the notification
+before acting on it.
 
 ## 8. Usage (dock "Usage" tab)
 

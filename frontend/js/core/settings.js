@@ -54,7 +54,13 @@ export const SCHEMA = {
                               parse: (v) => (v === '1' ? 'on' : v === '0' ? 'off' : 'auto') },
   'theme.skin':             { type: 'str',  def: 'farshell', migrate: 'vt-skin' },
   // 문서 §1 표: "keybar.collapsed · keybar.* → device".
-  'keybar.collapsed':       { type: 'bool', def: false, migrate: 'vt_keybar_collapsed', parse: (v) => v === '1', scope: 'device' },
+  // 2026-09-23 — 이 키가 접는 대상이 "키들 줄 전체"에서 "덜 쓰는 추가 키
+  // 줄"로 바뀌었다(자주 쓰는 Esc·Ctrl·Tab·화살표는 이제 항상 보인다,
+  // term/keybar.js). 기본값도 함께 뒤집었다 — 한 번도 안 건드린 기기는
+  // 이제 접힘(추가 키 숨김)으로 시작한다. 예전에 실제로 이 토글을 만졌던
+  // 기기는(localStorage 이관값이 있으면) 그 값이 그대로 이긴다 — 지금은
+  // "그 줄"의 뜻이 달라졌을 뿐 "작게 보고 싶다"는 의도 자체는 이어진다.
+  'keybar.collapsed':       { type: 'bool', def: true, migrate: 'vt_keybar_collapsed', parse: (v) => v === '1', scope: 'device' },
   // S3: 키맵 재정의({id: {binding, passthrough}})를 JSON 문자열로 한 덩어리
   // 저장한다. 항목마다 스키마 키를 만들면 스키마가 키맵의 사본이 되어 반드시
   // 어긋난다 — 키맵의 진짜 스키마는 core/keymap.js의 ACTIONS 하나뿐이다.
