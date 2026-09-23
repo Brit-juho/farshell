@@ -390,6 +390,9 @@ def _boot(pg, url: str) -> None:
     )
     failed = pg.evaluate("() => document.documentElement.dataset.appBootFailed === 'true'")
     assert not failed, "앱 부팅이 실패했다 (main.js의 bootApp 예외)"
+    # `appBooted`는 배선 끝이고 bootApp()의 fetch는 아직 돌고 있을 수 있다. 그 사이에
+    # 테스트가 새로고침하면 진행 중인 부팅이 끊긴다(ADR-45가 찾은 경쟁) — 끝까지 기다린다.
+    pg.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
 
 
 def _open_dock(pg, label: str) -> None:

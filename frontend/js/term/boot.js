@@ -3,7 +3,7 @@
 // 끼어 있다"고 지적했는데, 실제로 뽑아보니 tmux-panel.js/session.js/workspace.js
 // 사이 의존이 얽혀 있어 결국 이 파일이 그 세 모듈을 조립하는 최상위가 됐다.
 // 계획서가 예상한 panels/onboarding.js로의 흡수(L4)는 이번 F4 범위가 아니다.
-import { addSession, createSession, attachTmux } from './session.js';
+import { addSession, attachTmux } from './session.js';
 import { restoreWorkspace, reconcileMissingTmuxSessions } from './workspace.js';
 import { restoreLayout } from '../layout/persist.js';
 import { load as loadSettings } from '../core/settings.js';
@@ -12,6 +12,7 @@ import { API_BASE } from '../core/env.js';
 import { getSession, allSessions } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
+import { showToast } from '../ui/toast.js';
 
 export function showOnboarding() {
   const el = document.createElement('div');
@@ -117,6 +118,10 @@ async function renderOnboardingSessions() {
 // 보다 먼저 평가된다). 그대로 즉시 실행하면 showToast가 아직 없는 채로 restoreWorkspace
 // 등이 그걸 부를 수 있다(레이스). main.js가 toast.js 로드 완료를 기다린 뒤 bootApp()을
 // 명시적으로 호출한다.
+// 떠나는 문서의 부팅은 fetch가 중단되며 예외로 끝난다. 그건 실패가 아니다.
+let _leaving = false;
+window.addEventListener('pagehide', () => { _leaving = true; });
+
 export async function bootApp() {
   // S2: 설정은 캐시로 이미 동기 적용돼 있고(core/settings.js 모듈 평가 시점),
   // 여기서는 서버 값으로 맞추기만 한다 — 다른 기기에서 바꾼 설정이 이 시점에
@@ -185,6 +190,12 @@ export async function bootApp() {
     // 세션이 있어도 가려서 조작이 안 되는 것처럼 보인다).
     if (Object.keys(allSessions()).length === 0) showOnboarding();
   } catch (e) {
-    createSession();
+    // ADR-45 — 여기서 세션을 만들면 안 된다. 예전엔 createSession()이었고, 부팅 중
+    // 새로고침·터널 끊김만으로 서버에 요청하지 않은 셸이 하나씩 생겼다(e2e 온보딩
+    // 간헐 실패의 원인). 세션은 온보딩 버튼으로 사용자가 만든다.
+    if (_leaving) return;
+    console.error('[FarShell boot]', e);
+    if (Object.keys(allSessions()).length === 0) showOnboarding();
+    showToast('서버에서 세션 목록을 받지 못했습니다 — 새로고침해 보세요', 'warn');
   }
 }

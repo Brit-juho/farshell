@@ -107,7 +107,9 @@ try {
   // 문서 전체에 위임 리스너 하나만 건다 — 트리거가 언제 생기든 상관없으므로
   // bootApp()보다 먼저 불러도 된다(오히려 첫 화면의 버튼을 놓치지 않는다).
   initTooltips();
-  bootApp();
+  // `appBooted`(아래)는 "배선 끝"이고 이건 "부팅 끝"이다(성공·실패 무관). 부팅 도중에
+  // 새로고침하는 테스트가 진행 중인 부팅을 끊지 않도록 e2e가 이걸 기다린다(ADR-45).
+  bootApp().finally(() => { document.documentElement.dataset.appReady = 'true'; });
   // N34 §7 — 상태바 HUD(Solid). **동적 import**인 이유는 ADR-26의 번들 게이트다:
   // solid-js 런타임(~32KB)을 app.js에 정적으로 넣으면 300KiB 상한을 바로 넘긴다
   // (실측 303,733 → 336,179B). 상한을 올리는 건 금지돼 있으므로, 문서가 지정한

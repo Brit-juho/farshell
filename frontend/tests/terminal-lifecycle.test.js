@@ -77,7 +77,7 @@ function fakeFetch(url) {
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
-async function buildTerminalWindow() {
+async function buildTerminalWindow({ fetchImpl = fakeFetch } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
@@ -89,7 +89,7 @@ async function buildTerminalWindow() {
   window.FitAddon = { FitAddon: class { fit() {} } };
   window.SearchAddon = { SearchAddon: class {} };
   window.__fetches = [];
-  window.fetch = (...args) => { window.__fetches.push(args); return fakeFetch(...args); };
+  window.fetch = (...args) => { window.__fetches.push(args); return fetchImpl(...args); };
 
   // 한 buildTerminalWindow() 호출 = 한 테스트 = 새 cache. core/store.js의
   // sessions/activeId 같은 모듈 스코프 싱글톤이 테스트마다 새로 시작한다.
@@ -117,7 +117,7 @@ async function buildTerminalWindow() {
   // 노출된다(data-action="session.manager") — 실제 소비 경로와 같은 방식으로 호출.
   const { getAction } = await importFresh(DOM_JS, env.context, cache);
 
-  return { window, getAction, ...sessionNs };
+  return { window, getAction, cache, context: env.context, ...sessionNs };
 }
 
 test('addSession: 세션 레코드가 등록되고 즉시 활성 세션이 된다', async () => {
@@ -276,4 +276,37 @@ test('이름 변경은 공용 API 요청을 보내고 레코드를 갱신한다'
   assert.ok(renameRequest, '바뀐 이름은 PATCH API로 저장돼야 한다');
   assert.strictEqual(JSON.parse(renameRequest[1].body).name, '바꾼 이름');
   assert.strictEqual(window.sessionDisplayName('a'), '바꾼 이름');
+});
+
+// ADR-45 — 부팅 중 예외가 세션을 만들던 결함. 부팅 도중 새로고침(fetch 중단)·터널
+// 끊김만으로 서버에 요청하지 않은 셸이 생겼고, e2e 온보딩 테스트가 간헐적으로 깨졌다.
+const BOOT_JS = path.join(__dirname, '../js/term/boot.js');
+
+function failingTmuxFetch(url, opts) {
+  if (String(url).includes('/api/tmux/sessions')) return Promise.reject(new TypeError('Failed to fetch'));
+  return fakeFetch(url, opts);
+}
+
+async function bootWithFailure({ leaving = false } = {}) {
+  const built = await buildTerminalWindow({ fetchImpl: failingTmuxFetch });
+  const { bootApp } = await importFresh(BOOT_JS, built.context, built.cache);
+  if (leaving) built.window.dispatchEvent(new built.window.Event('pagehide'));
+  const origError = built.window.console.error;
+  built.window.console.error = () => {};
+  try { await bootApp(); } finally { built.window.console.error = origError; }
+  const posts = built.window.__fetches.filter(([url, opts]) =>
+    /\/api\/sessions$/.test(String(url).split('?')[0]) && opts && opts.method === 'POST');
+  return { ...built, posts };
+}
+
+test('bootApp — 부팅 중 요청이 실패해도 세션을 만들지 않고 온보딩을 띄운다', async () => {
+  const { window, posts } = await bootWithFailure();
+  assert.strictEqual(posts.length, 0, '부팅 실패가 서버에 셸을 띄우면 안 된다');
+  assert.ok(window.document.getElementById('onboarding'), '세션을 만들 수 있는 온보딩이 떠야 한다');
+});
+
+test('bootApp — 떠나는 문서(pagehide)의 부팅 실패는 아무것도 하지 않는다', async () => {
+  const { window, posts } = await bootWithFailure({ leaving: true });
+  assert.strictEqual(posts.length, 0);
+  assert.strictEqual(window.document.getElementById('onboarding'), null);
 });
