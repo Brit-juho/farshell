@@ -194,6 +194,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **모바일 터미널에서 선택 손잡이를 드래그해도 전혀 안 움직이던 것 — 실기기로만
+  잡히던 버그.** 지금까지의 검증은 전부 CDP 에뮬레이션이었는데, 실제 안드로이드
+  폰 + Chrome 원격 디버깅(`chrome://inspect`)으로 진짜 `Input.dispatchTouchEvent`를
+  꽂아보니 손잡이(`.vt-term-handle`)가 터치 이벤트를 하나도 못 받고 있었다.
+  원인: xterm의 `AccessibilityManager`가 `.xterm-accessibility`에 인라인
+  `style="pointer-events:auto"`를 직접 박는다(벤더 CSS의 `:not(.debug)` 규칙은
+  `pointer-events:none`인데 인라인이 항상 이긴다) — 그 레이어의 `z-index:10`이
+  손잡이 컨테이너의 `z-index:5`보다 위였다. 둘 다 `.vt-term-wrap`의 형제이고
+  그 사이에 stacking context를 만드는 조상이 없어 같은 스택에서 숫자로 경합하고,
+  손잡이는 시각적으로만 맨 위지 실제 히트테스트는 접근성 레이어의 숨은 행
+  `<div>`가 먼저 먹었다. 꾹 눌러 선택 "시작"은 무사했다(그 리스너는 wrapper에
+  달려 버블링만 타면 됐다) — 손잡이 드래그만 죽어 있었다(리스너가 손잡이 자신에
+  직접 달려 버블링 경로 밖이었다). `.vt-term-select-handles`를 `z-index:11`로
+  올려 고쳤다. 계측된 리스너로 확인: 고치기 전엔 손잡이에 `pointerdown`조차
+  0번, 고친 뒤엔 드래그 전체 시퀀스가 정상 수신되고 화면의 파란 선택 영역도
+  실제로 늘어났다.
+
 - **설정 화면 모바일 결함 다섯 가지** (계정 및 보안·MCP·범용 컨트롤). 등록 기기
   표가 화면 밖으로 넘쳤던 것(감지 커버리지 표처럼 `.vt-set-covtable-host`로
   가로 스크롤을 씌웠다). ON/OFF 토글이 화면 폭 전체로 늘어났던 것(좁은 화면용

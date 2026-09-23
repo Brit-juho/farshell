@@ -819,12 +819,31 @@ that sometimes fired the OS clipboard-read permission prompt and pasted
 before the user had decided to select anything. Both were built for a native-
 selection world that no longer exists on touch.
 
-**Not verified on a real device** — the mechanism was checked via
-CDP-synthesized pointer events against an isolated server (word selection,
-handle drag across a line boundary, selection survival across live PTY
-output, copy closing the mode, auto-copy/paste both confirmed inert on a
-coarse pointer). Real-finger geometry (handle hit-testing, drag feel) still
-needs an actual phone.
+**Real-device verification (2026-09-24) found a real bug the CDP-emulated
+testing above could not — the drag handles were completely non-functional on
+actual touch hardware.** Tested via a physical Android phone (`adb`) with
+Chrome remote debugging (`chrome://inspect` over USB) driving real
+`Input.dispatchTouchEvent` calls and `elementFromPoint`/computed-style
+inspection, not just screenshots. Root cause: xterm's `AccessibilityManager`
+sets an **inline** `style="pointer-events:auto"` on `.xterm-accessibility`
+(the vendor CSS's `.xterm-accessibility:not(.debug){pointer-events:none}`
+never wins against an inline style) with `z-index:10` — one point above
+`.vt-term-select-handles`' `z-index:5`. Both sit in the same stacking context
+(`.vt-term-wrap` never establishes one), so the accessibility layer's hidden
+row `<div>`s — not the visibly-on-top handle — won every hit-test over the
+terminal text. Long-press-to-select still worked (that listener is on the
+wrapper and only needs the event to *bubble* through, indifferent to which
+descendant was the real target); handle-drag was dead (its listener is
+attached directly to `.vt-term-handle`, which was never actually in the
+bubble path of a touch aimed at it). Confirmed with an instrumented listener:
+zero `pointerdown`/`pointermove` events on the handle before the fix, the
+full sequence after. Fixed by raising `.vt-term-select-handles` to
+`z-index:11`. **Also observed, not yet root-caused:** the very first
+long-press's selection is confirmed live by `term.getSelection()`
+immediately, but the blue highlight overlay sometimes doesn't visually paint
+until a second selection-changing action (e.g. the first handle-drag
+movement) — copying and dragging both work correctly regardless, so this is
+cosmetic, not functional, but is unexplained and left as a known open item.
 
 **The keybar (`term/keybar.js`) is one row by default now, not two.**
 Previously `#keybar-top` (mic/queue/upload slots + collapse toggle) and
