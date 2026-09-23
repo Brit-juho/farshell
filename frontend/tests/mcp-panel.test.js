@@ -364,8 +364,9 @@ test('가져오기는 보관된 자격증명의 참조만 싣는다 — 값은 �
     credData: { creds: [{ id: 'c1', server: 'notion', key: 'NOTION_TOKEN',
                           env: 'FSH_MCP_NOTION_TOKEN', masked: 'sk…a' }], refs: [] },
   });
+  // agy는 자격증명 있는 서버의 대상에서 빠진다(ADR-46) — 참조를 쓸 수 있는 opencode로.
   const btn = Array.from(host.querySelectorAll('.vt-mcp-tagadd'))
-    .find((b) => b.textContent === 'agy 전역');
+    .find((b) => b.textContent === 'opencode 전역');
   btn.click();
   await flush(); await flush();
   const sent = posts.find((p) => p._url === '/api/mcp/deploy');
@@ -373,11 +374,51 @@ test('가져오기는 보관된 자격증명의 참조만 싣는다 — 값은 �
   assert.ok(!JSON.stringify(sent).includes('sk-'), '값이 요청에 실렸다');
 });
 
-test('이미 그 도구·스코프에 있으면 가져오기 버튼이 잠긴다', async () => {
-  const { host } = await build();   // notion은 claude/global에 이미 있다
-  const btn = Array.from(host.querySelectorAll('.vt-mcp-tagadd'))
-    .find((b) => b.textContent === 'Claude 전역');
-  assert.strictEqual(btn.disabled, true);
+test('복제 대상은 지금 누를 수 있는 것만 — 이미 있는 곳·자격증명 때문에 막힌 곳은 안 그린다', async () => {
+  // ADR-48 — 예전엔 비활성 칩으로 그려 화면 전체에 죽은 칩이 60개였다.
+  const { host } = await build();   // notion은 claude/global에 이미 있고 env가 있다
+  const labels = texts(host, '.vt-mcp-tagadd');
+  assert.ok(!labels.includes('Claude 전역'), '이미 있는 곳');
+  assert.ok(!labels.includes('agy 전역'), 'agy는 env 있는 서버를 거절한다(ADR-46)');
+  assert.ok(labels.includes('opencode 전역'));
+  assert.equal(host.querySelectorAll('.vt-mcp-tagadd:disabled').length, 0, '죽은 칩이 없어야 한다');
+});
+
+test('접힌 줄 — 이름·도구별 상태·경고가 보이고, 검증 결과 요약이 따라온다', async () => {
+  const { host } = await build({ verify: () => ({ state: 'error', error: 'x', checked_at: 1 }) });
+  const sum = host.querySelector('.vt-mcp-server > summary');
+  assert.match(sum.textContent, /notion/);
+  assert.match(sum.textContent, /Claude 켬/);
+  assert.match(sum.textContent, /값이 파일에 있음/, '평문 값 경고는 접혀도 보여야 한다');
+  assert.equal(sum.querySelector('button'), null, '<summary> 안에 버튼을 두지 않는다');
+  verifyBtn(host).click();
+  await flush(); await flush();
+  const badge = host.querySelector('.vt-mcp-server > summary .vt-mcp-sumverify');
+  assert.equal(badge.dataset.state, 'error');
+  assert.equal(badge.textContent, '검증 실패');
+  assert.ok(badge.querySelector('svg'), '실패는 경고처럼 아이콘을 단다');
+});
+
+test('펼친 서버는 다시 그려도 펼쳐져 있다', async () => {
+  const { host, document } = await build();
+  const d = host.querySelector('.vt-mcp-server');
+  d.open = true;
+  d.dispatchEvent(new document.defaultView.Event('toggle'));
+  Array.from(host.querySelectorAll('.vt-mcp-tagadd')).find((b) => b.textContent === '+ 태그').click();
+  await answerPrompt(document, { value: 'x' });
+  await flush(); await flush(); await flush();
+  assert.equal(host.querySelector('.vt-mcp-server').open, true);
+});
+
+test('검색은 목록만 거르고 입력칸은 그대로 둔다(타이핑 중 포커스가 안 튄다)', async () => {
+  const scan = scanPayload();
+  scan.groups.push({ name: 'github', entries: [{ ...scan.groups[0].entries[0], name: 'github', env: [] }] });
+  const { host, document } = await build({ scan });
+  const input = host.querySelector('.vt-mcp-search');
+  input.value = 'git';
+  input.dispatchEvent(new document.defaultView.Event('input'));
+  assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((d) => d.dataset.name), ['github']);
+  assert.equal(host.querySelector('.vt-mcp-search'), input, '입력칸을 다시 만들면 안 된다');
 });
 
 test('심어둔 참조의 위치를 보여준다 — 회수의 유일한 근거다', async () => {
@@ -510,7 +551,7 @@ test('검증 — 누르면 그 항목의 도구·워크트리로 요청하고 �
   assert.equal(sent._url, '/api/mcp/servers/global/notion/verify');
   assert.deepEqual({ tool: sent.tool, worktree: sent.worktree, net: sent.confirm_network },
                    { tool: 'claude', worktree: 'wt1', net: false });
-  const res = host.querySelector('.vt-mcp-verify');
+  const res = host.querySelector('.vt-mcp-verifybox .vt-mcp-verify');
   assert.equal(res.dataset.state, 'connected');
   assert.match(res.textContent, /연결됨 · 도구 3개/);
 });
@@ -520,7 +561,7 @@ test('검증 — 확인 불가는 실패와 구분되고 모자란 변수 이름
     state: 'unverified', tool_count: null, error: null, missing: ['GITHUB_TOKEN'], checked_at: 1 }) });
   verifyBtn(host).click();
   await flush(); await flush();
-  const res = host.querySelector('.vt-mcp-verify');
+  const res = host.querySelector('.vt-mcp-verifybox .vt-mcp-verify');
   assert.equal(res.dataset.state, 'unverified');
   assert.match(res.textContent, /확인 불가.*GITHUB_TOKEN/);
   assert.doesNotMatch(res.textContent, /실패/);
@@ -531,7 +572,7 @@ test('검증 — 실패 메시지는 글자로만 들어간다(마크업이 실�
     state: 'error', tool_count: null, error: '<img src=x onerror=alert(1)>', checked_at: 1 }) });
   verifyBtn(host).click();
   await flush(); await flush();
-  const res = host.querySelector('.vt-mcp-verify');
+  const res = host.querySelector('.vt-mcp-verifybox .vt-mcp-verify');
   assert.equal(res.querySelector('img'), null);
   assert.match(res.textContent, /실패 — <img/);
 });
@@ -561,14 +602,14 @@ test('검증 결과는 다시 그려도 남는다(이 화면을 연 동안)', as
   Array.from(host.querySelectorAll('.vt-mcp-tagadd')).find((b) => b.textContent === '+ 태그').click();
   await answerPrompt(document, { value: 'x' });
   await flush(); await flush(); await flush();
-  assert.match(host.querySelector('.vt-mcp-verify').textContent, /연결됨/);
+  assert.match(host.querySelector('.vt-mcp-verifybox .vt-mcp-verify').textContent, /연결됨/);
 });
 
 test('검증 — http는 도구 수를 재지 않으므로 「도구 0개」라고 하지 않는다', async () => {
   const { host } = await build({ verify: () => ({ state: 'connected', tool_count: null, error: null, checked_at: 1 }) });
   verifyBtn(host).click();
   await flush(); await flush();
-  const text = host.querySelector('.vt-mcp-verify').textContent;
+  const text = host.querySelector('.vt-mcp-verifybox .vt-mcp-verify').textContent;
   assert.match(text, /연결됨/);
   assert.doesNotMatch(text, /도구 0개/);
 });

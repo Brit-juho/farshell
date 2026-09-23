@@ -209,6 +209,73 @@
 .vt-mcp-verify[data-state="error"] { color:var(--color-st-error); }
 .vt-mcp-verify[data-state="unverified"] { color:var(--color-st-waiting); }
 
+/* ADR-48 — 한 서버 = 한 줄(<details>/<summary>). 이 화면의 초점은 "무엇이 켜져 있고
+   어디가 이상한가"라 접힌 줄이 그 둘만 말한다: 이름(굵게) → 도구별 상태(글자) → 오른쪽 끝에
+   경고·전송·검증 결과. 조작(토글·검증·복제·태그)은 펼친 쪽에만 있다 — <summary> 안에
+   버튼을 두면 중첩 인터랙티브가 된다. 깊이는 이 설정 화면 그대로 선(1px var(--line))만. */
+.vt-mcp-top { display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); margin-bottom:calc(var(--spacing) * 1.5); }
+.vt-mcp-count { font:600 var(--fs-sm) var(--ui); color:var(--txt); font-variant-numeric:tabular-nums; }
+.vt-mcp-applyinfo { margin-bottom:calc(var(--spacing) * 2); }
+.vt-mcp-applyinfo > summary {
+  list-style:none; cursor:pointer; width:max-content; max-width:100%;
+  display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  font:400 var(--fs-xs) var(--ui); color:var(--sub);
+}
+.vt-mcp-applyinfo > summary::-webkit-details-marker { display:none; }
+.vt-mcp-applyinfo > summary:hover { color:var(--txt); }
+.vt-mcp-applyinfo > .vt-set-help:first-of-type, .vt-mcp-applyinfo > .vt-mcp-facts { margin-top:calc(var(--spacing) * 1.5); }
+.vt-mcp-filter {
+  display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 2);
+  margin:calc(var(--spacing) * 3) 0 calc(var(--spacing) * 1.5);
+}
+.vt-mcp-search { flex:0 1 220px; min-width:140px; height:28px; }
+.vt-mcp-list { border-bottom:1px solid var(--line); }
+
+/* 목록 안의 서버·플러그인은 .vt-mcp-group의 카드 여백을 쓰지 않는다 — 줄이다. */
+.vt-mcp-group.vt-mcp-server,
+.vt-mcp-group.vt-mcp-plugins { margin:0; padding:0; border-top:1px solid var(--line); }
+.vt-mcp-group.vt-mcp-plugins { margin-top:calc(var(--spacing) * 4); border-bottom:1px solid var(--line); }
+.vt-mcp-sum {
+  list-style:none; cursor:pointer;
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  min-height:36px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1);
+  border-radius:var(--radius-sm);
+}
+.vt-mcp-sum::-webkit-details-marker { display:none; }
+.vt-mcp-sum:hover { background:var(--menu-hover); }
+.vt-mcp-chev { flex:none; display:inline-flex; color:var(--sub); transform:rotate(-90deg); transition:transform var(--dur-fast) var(--ease-out-quint); }
+details[open] > .vt-mcp-sum .vt-mcp-chev,
+details[open] > summary > .vt-mcp-chev { transform:none; }
+.vt-mcp-sum .vt-mcp-name {
+  flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:600 var(--fs-sm) var(--ui);
+}
+/* 켬이 기본이고(실데이터 12개 중 11개) 끔이 예외다 — 전부 초록이면 초록이 아무 말도 안 한다.
+   켬은 본문색, 끔은 흐리게. 줄에서 튀는 건 경고(주황)뿐이어야 한다. */
+.vt-mcp-sumtools { flex:0 1 auto; min-width:0; font:400 var(--fs-xs) var(--ui); color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-mcp-sumtools [data-on="0"] { color:var(--sub); }
+.vt-mcp-sumright { margin-left:auto; flex:none; display:inline-flex; align-items:center; gap:calc(var(--spacing) * 2); }
+.vt-mcp-warnbadge {
+  display:inline-flex; align-items:center; gap:4px;
+  font:500 var(--fs-3xs) var(--ui); color:var(--color-st-waiting); white-space:nowrap;
+}
+.vt-mcp-sumverify:empty { display:none; }
+.vt-mcp-sumverify { display:inline-flex; align-items:center; gap:4px; font:500 var(--fs-3xs) var(--ui); white-space:nowrap; }
+/* 펼친 쪽은 이름 글자 선에 맞춰 들인다(chevron 12 + gap) — "이 줄에 속한다"를 위치로 말한다. */
+.vt-mcp-body { padding:0 0 calc(var(--spacing) * 3) calc(12px + var(--spacing) * 3); }
+.vt-mcp-body > .vt-set-help { margin-left:calc(4.5em + var(--spacing) * 1.5); max-width:48ch; }
+
+/* 폰 폭 — 접힌 줄을 두 줄로: 이름·결과 / 도구 상태·경고. */
+@media (max-width:560px){
+  .vt-mcp-sum { flex-wrap:wrap; row-gap:2px; }
+  .vt-mcp-sumtools { order:3; flex-basis:100%; padding-left:calc(12px + var(--spacing) * 2); white-space:normal; }
+  .vt-mcp-sumright { order:2; }
+  .vt-mcp-body { padding-left:calc(var(--spacing) * 2); }
+  .vt-mcp-body > .vt-set-help { margin-left:0; }
+  .vt-mcp-search { flex-basis:100%; }
+}
+@media (prefers-reduced-motion:reduce){ .vt-mcp-chev { transition:none; } }
+
 /* 97번 2단계 — 그룹 태그. 토글 칩과 같은 규칙: 상태를 **색으로만 구분하지
    않는다**(전부 켬/전부 끔/섞임을 글자로도 쓴다). 「섞임」은 세 번째 색이
    아니라 점선 테두리로 구분한다 — 색을 하나 더 만들면 스킨 6개에서 대비를
