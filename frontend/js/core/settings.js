@@ -65,6 +65,10 @@ export const SCHEMA = {
   // 저장한다. 항목마다 스키마 키를 만들면 스키마가 키맵의 사본이 되어 반드시
   // 어긋난다 — 키맵의 진짜 스키마는 core/keymap.js의 ACTIONS 하나뿐이다.
   'keymap.overrides':       { type: 'str', def: '{}' },
+  // 2026-09-23(2.1 D6) — 빠른 열기(팔레트) 기본 화면의 "최근 사용 기능" 2개.
+  // action id(레이블 아님 — 레이블은 바뀔 수 있다) 배열을 최신순 JSON
+  // 문자열로 저장한다. 기기마다 쓰는 기능이 달라 device 스코프다.
+  'palette.recentCommands': { type: 'str', def: '[]', scope: 'device' },
   // L8: 우측 레일(사용량) 접힘 상태. 폭은 지금 섹션이 하나뿐이라 고정으로 두고,
   // 섹션이 늘어나면(변경 파일·최근 diff) 그때 폭도 설정으로 뺀다.
   // 문서 §1 표: "ui.rail.collapsed/width · ui.dock.* → device"와 같은 부류.

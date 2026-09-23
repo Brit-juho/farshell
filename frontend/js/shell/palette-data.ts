@@ -91,6 +91,13 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
   { label: '터미널 내 검색', action: 'search.toggle' },
   { label: '음성 전용 모드', action: 'voice.only-toggle', gate: 'voice' },
   { label: '새 세션', action: 'session.add-menu' },
+  // 2026-09-23(2.1 D6) — 「모든 기능」에서 찾을 수 없던 셋. rail에는 이
+  // 셋과 짝지을 data-action 버튼이 없다(설정·세션은 rail이 임베디드
+  // 패널로 직접 그리고, 변경·연결된 화면은 dock/모바일 하단내비 몫이다)
+  // — isPanel을 안 붙여 rail-palette-parity(ADR-8) 대상에서 뺀다.
+  { label: '설정', action: 'settings.show' },
+  { label: '변경', action: 'scm.show' },
+  { label: '연결된 화면', action: 'clients.show' },
 ];
 
 // `>` 접두사(설정 — 2.0에서 이어받은 부가 기능, 위 PREFIX_MODE 주석 참고).

@@ -772,7 +772,16 @@ body.vt-resizing #terminal-container{ transition:none; }
   text-align:left;
 }
 
-/* 빠른 열기 (Quick open, D) — 세션·최근 파일·명령 통합 검색. */
+/* 빠른 열기 (Quick open, D) — 세션·최근 파일·명령 통합 검색.
+   2026-09-23(2.1 D6, 실기기 확인된 회귀) — 이 body는 코드 뷰어의
+   `.vt-vw-body`와 같은 역할(카드 안에서 유일하게 스크롤하는 칸)인데
+   여태 그 클래스를 안 물려받고 이름만 닮은 `.vt-qo-body`를 썼다 —
+   flex:1 1 auto도 overflow:auto도 자기 것이 하나도 없어서 내용
+   높이만큼 그냥 늘어났다. 카드는 max-height + overflow:hidden으로
+   덮여 있으니 "스크롤이 안 되는" 게 아니라 "스크롤할 대상이 아예
+   없어서 나머지가 통째로 잘렸다" — 사용자가 보고한 "10개인데 3개만
+   보인다"가 정확히 이 증상이다. */
+.vt-qo-body{ flex:1 1 auto; min-height:0; overflow:auto; overscroll-behavior:contain; }
 .vt-qo-section-head{
   padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
 }
@@ -800,6 +809,20 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-qo-backdrop .vt-viewer-card{ width:min(560px, 100%); max-height:min(60vh, 560px); }
 @media (min-width:900px){
   .vt-qo-backdrop .vt-viewer-card:has(.vt-qo-body.two-col){ width:min(880px, 100%); }
+}
+
+/* 2026-09-23(2.1 D6) — compact(<720px)는 60vh 카드가 아니라 위(407 §)의
+   파일 오버레이 compact 시트와 같은 전체높이 바텀시트다. 60vh 카드는
+   한 화면에 명령 서너 줄만 보이고 "모든 기능" 스크롤 영역이 좁아
+   손가락으로 다루기 나쁘다 — 세로 공간을 다 준다. */
+@media (max-width:719.98px){
+  .vt-qo-backdrop{ align-items:flex-end; padding:0; }
+  .vt-qo-backdrop .vt-viewer-card{
+    width:100%; height:100vh; height:100dvh; max-height:none;
+    border-radius:0; border:none;
+    animation:vtSheetIn .18s ease-out;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
 }
 
 /* N46 — 2단 레이아웃(결과 | 미리보기). 코드 뷰어의 tree/code 분할(위 §)과

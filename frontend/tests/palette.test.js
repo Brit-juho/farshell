@@ -163,29 +163,33 @@ test('open()/close() 토글 — 같은 모드로 다시 열면 닫힌다', async
   assert.strictEqual(document.getElementById('vt-qo-input'), null);
 });
 
-test('접두사 없음 — 세션·명령이 함께 나열되고, capability 게이팅이 적용된다', async () => {
+test('접두사 없음 — 세션은 없고 명령만 나열되며, capability 게이팅이 적용된다', async () => {
+  // 2026-09-23(2.1 D6) — 세션 이동/관리는 세션 탭이 맡고, 빠른 열기
+  // 기본 화면에는 더 이상 세션이 안 나온다(`@`로만 찾는다).
   const { mountPalette, document, root } = await mountFresh();
   const deps = fakeDeps(document, {
     listSessions: () => [{ id: 'a', name: 'alpha' }],
-    getAction: (name) => (name === 'queue.show' ? () => {} : (name === 'search.toggle' ? () => {} : undefined)),
+    getAction: (name) => (['queue.show', 'search.toggle', 'settings.show', 'scm.show'].includes(name) ? () => {} : undefined),
     gatedOff: ['ports', 'usage', 'voice'],
   });
   const api = mountPalette(root, deps);
   api.open();
   const rows = await waitFor(() => {
     const list = Array.from(document.querySelectorAll('.vt-qo-row, .vt-qo-session-card'));
-    return list.some((r) => r.textContent.includes('alpha')) ? list : null;
+    return list.some((r) => r.textContent.includes('터미널 내 검색')) ? list : null;
   });
-  assert.ok(rows.some((r) => r.textContent.includes('alpha')), '세션 행이 보여야 한다');
+  assert.ok(!rows.some((r) => r.textContent.includes('alpha')), '세션 행은 기본 화면에 없어야 한다');
   assert.ok(rows.some((r) => r.textContent.includes('터미널 내 검색')), '명령 행이 보여야 한다');
+  assert.ok(rows.some((r) => r.textContent.includes('설정')), '「설정」 명령이 「모든 기능」에 있어야 한다');
+  assert.ok(rows.some((r) => r.textContent.includes('변경')), '「변경」 명령이 「모든 기능」에 있어야 한다');
   assert.ok(!rows.some((r) => r.textContent.includes('포트 대시보드')), 'ports 게이트가 꺼져 있으면 숨어야 한다');
 });
 
-test('세션 클릭 — 전환되고 팔레트가 닫힌다', async () => {
+test('`@` 접두사 — 세션 클릭 시 전환되고 팔레트가 닫힌다', async () => {
   const { mountPalette, document, root } = await mountFresh();
   const deps = fakeDeps(document, { listSessions: () => [{ id: 'a', name: 'alpha' }] });
   const api = mountPalette(root, deps);
-  api.open();
+  api.open('session');
   // waitFor가 반환한 참조로 바로 클릭하지 않는다 — await로 넘어가는 사이
   // (onMount의 loadViewer/refreshTmux 이펙트가 정리되며) Solid가 이 행의 DOM을
   // 다시 만들면, 들고 있던 참조는 문서에서 떨어져 나가 클릭 이벤트가 document
@@ -200,7 +204,7 @@ test('세션 클릭 — 전환되고 팔레트가 닫힌다', async () => {
   assert.strictEqual(api.isOpen(), false);
 });
 
-test('세션이 tmux 라이브 프리뷰 후보면 카드로 나온다', async () => {
+test('`@` 접두사 — 세션이 tmux 라이브 프리뷰 후보면 카드로 나온다', async () => {
   const { mountPalette, document, root } = await mountFresh();
   const deps = fakeDeps(document, {
     listSessions: () => [{ id: 'a', name: 'dev' }],
@@ -211,9 +215,31 @@ test('세션이 tmux 라이브 프리뷰 후보면 카드로 나온다', async (
     },
   });
   const api = mountPalette(root, deps);
-  api.open();
+  api.open('session');
   const card = await waitFor(() => document.querySelector('.vt-qo-session-card'));
   assert.ok(card, '라이브 프리뷰 카드가 나와야 한다');
+});
+
+test('명령을 실행하면 「최근 사용 기능」으로 기본 화면 위에 올라온다', async () => {
+  // window.vtSettingsGet/Set은 core/settings.js가 앱 부팅 시 공개하는
+  // 브리지다(테스트는 solid-env가 만든 jsdom window를 직접 스텁한다).
+  const { mountPalette, document, window, root } = await mountFresh();
+  let stored = '[]';
+  window.vtSettingsGet = (key) => (key === 'palette.recentCommands' ? stored : null);
+  window.vtSettingsSet = (key, v) => { if (key === 'palette.recentCommands') stored = v; };
+  const deps = fakeDeps(document, {
+    getAction: (name) => (name === 'search.toggle' ? () => {} : undefined),
+  });
+  const api = mountPalette(root, deps);
+  api.open();
+  const findRow = () => Array.from(document.querySelectorAll('.vt-qo-row')).find((r) => r.textContent.includes('터미널 내 검색'));
+  await waitFor(findRow);
+  findRow().click();
+  assert.deepStrictEqual(JSON.parse(stored), ['cmd:터미널 내 검색']);
+
+  api.open();
+  const recentSection = await waitFor(() => Array.from(document.querySelectorAll('.vt-qo-sec-label')).find((s) => s.textContent === '최근 사용'));
+  assert.ok(recentSection, '「최근 사용」 구획 머리가 나와야 한다');
 });
 
 test('`/` 접두사 — 최근 파일 + 서버 검색 결과(디바운스 후)', async () => {

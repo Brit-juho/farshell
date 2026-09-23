@@ -148,6 +148,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   900ms 동안 체크로 바뀐다**(`ui/okflash.js`). 공유 링크 발급도 "발급됨"+"복사됨"
   두 줄에서 한 줄로 합쳤다.
 
+- **빠른 열기(`shell/Palette.tsx`) 기본 화면에서 세션을 뺐다.** 세션 이동·관리는
+  이제 세션 탭 하나가 맡고, 팔레트에서는 `@`로만 찾는다. 대신 명령이 훨씬 늘었다 —
+  `settings.show`/`scm.show`/`clients.show`(감사해보니 빠져 있었다 — rail에 이
+  셋과 짝지을 data-action 버튼이 없어 `isPanel`은 안 붙였다, ADR-8 패리티 대상
+  아님)와 `core/keymap.js`에 등록된 모든 명령(`:` 모드가 이미 보여주던 것과 같은
+  목록)까지 합쳐 "모든 기능"이 한곳에서 검색된다. 기본 화면 순서는 **최근 사용
+  기능 2개 → 최근 파일 2개 → 모든 기능**(종류별로 묶여 스크롤됨) — 최근은 레이블이
+  아니라 action id로 추적한다(기기별 새 설정 `palette.recentCommands`, JSON
+  배열·최신순·최대 10개, 레이블은 같아도 대상이 바뀌는 `__toggle:` 계열이 있어
+  레이블 비교로는 못 믿는다). 검색어를 입력하면 최근/전체 구분 없이 매치되는
+  걸 평평하게 보여준다. 모바일에서는 60vh 카드 대신 전체높이 바텀시트다.
+
 ### Removed
 
 - **스크롤백 영속화(N13)를 완전히 없앴다(ADR-43).** 켜면 터미널 출력을
@@ -166,6 +178,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   설정 화면 「스크롤백」 절의 영속화 토글도 함께 사라졌다(줄 수 설정은 남는다).
 
 ### Fixed
+
+- **빠른 열기 "모든 기능" 목록이 10개인데 화면엔 3개만 보이고 스크롤도 안 되던 것.**
+  결과 목록 칸(`vt-qo-body`)이 코드 뷰어의 스크롤 칸(`vt-vw-body`)과 이름만 닮았지
+  실은 같은 규칙을 하나도 안 물려받고 있었다 — `flex:1 1 auto`도 `overflow:auto`도
+  자기 몫이 없어 내용 높이만큼 그냥 늘어났고(실측: `getComputedStyle().overflow`가
+  `visible`, `scrollHeight === clientHeight`), 바깥 카드가 `max-height` +
+  `overflow:hidden`으로 덮여 있어 그 늘어난 부분이 스크롤 없이 그냥 잘렸다 —
+  "스크롤이 안 됨"이 아니라 "스크롤할 대상 자체가 없어서 넘친 게 통째로 잘림"이었다.
+  `.vt-qo-body{ flex:1 1 auto; min-height:0; overflow:auto; }`로 고쳤다.
+
+- **키맵의 `viewer`(⌃⇧E 코드 뷰어)와 `paste`(⌃⇧V 붙여넣기)가 눌러도 아무 일도
+  안 하던 것.** `core/keymap.js`의 `ACTIONS` 표에 레이블·기본 조합은 있었는데
+  `register()`가 아예 없어 죽은 단축키였다(감사 중 전수 grep으로 발견 — 실행
+  핸들러가 있는 액션은 하나도 없었다). `viewer`는 기존 `viewer.show`(빠른 열기를
+  연다)로, `paste`는 `activeSessionId()`가 가리키는 세션에 `pasteFromClipboard`를
+  호출하도록 연결했다(`term/keymap-actions.js` — 소유 모듈이 키보드를 몰라도 되게
+  분리해 둔, 이미 있던 그 파일).
 
 - **설정 구독 콜백이 다른 설정이 바뀔 때마다 키바 접힘 상태를 잘못 덮어쓰던 것.**
   `core/settings.js`의 `set()`은 바뀐 키 하나만(`{ [키]: 값 }`) 구독자에게

@@ -47,7 +47,7 @@ export interface PaletteDeps {
 
 interface Row {
   key: string;
-  kind: 'session' | 'file' | 'command' | 'queue' | 'port' | 'scrollback' | 'keymap' | 'empty';
+  kind: 'session' | 'file' | 'command' | 'queue' | 'port' | 'scrollback' | 'keymap' | 'empty' | 'recent';
   label: string;
   hint?: string;
   el?: HTMLElement;            // 이미 만들어진 DOM(세션 라이브 프리뷰 카드)
@@ -65,6 +65,7 @@ interface Row {
 // 않으므로 선택 인덱스(selected)와 키보드 이동은 그대로다. 헤더에 .vt-qo-row를
 // 붙이지 않는 것도 같은 이유다(행 수를 세는 곳이 헤더를 행으로 세면 안 된다).
 const KIND_META: Record<string, { label: string; icon: string }> = {
+  recent:     { label: '최근 사용', icon: 'list' },
   session:    { label: '세션',     icon: 'agent-shell' },
   file:       { label: '파일',     icon: 'file' },
   command:    { label: '명령',     icon: 'list' },
@@ -104,6 +105,32 @@ function PaletteBody(props: PaletteBodyProps) {
   const parsed = createMemo(() => parseQuery(props.query()));
 
   const [recentFiles, setRecentFiles] = createSignal<string[]>([]);
+  // 2026-09-23(2.1 D6) — 기본 화면의 "최근 사용 기능" 2개. 레이블이 아니라
+  // action id(Row.key)로 기록한다 — 레이블은 그대로인 채 동작만 바뀔 수
+  // 있는 __toggle: 계열도 있어서, 레이블 비교로는 같은 기능인지 못 믿는다.
+  // 이 팔레트 모듈은 core/settings.js를 직접 import하지 않으므로(§ 위
+  // 주석) 그 모듈이 공개한 window.vtSettingsGet/Set 브리지를 쓴다 —
+  // __toggle: 처리(commandRow)가 이미 쓰는 것과 같은 경로다.
+  const RECENT_KEY = 'palette.recentCommands';
+  const RECENT_MAX = 10;
+  function readRecentIds(): string[] {
+    try {
+      const raw = (window as any).vtSettingsGet?.(RECENT_KEY);
+      const arr = JSON.parse(raw || '[]');
+      return Array.isArray(arr) ? arr : [];
+    } catch (_) { return []; }
+  }
+  const [recentCommandIds, setRecentCommandIds] = createSignal<string[]>(readRecentIds());
+  function recordRecent(id: string) {
+    const next = [id, ...recentCommandIds().filter((x) => x !== id)].slice(0, RECENT_MAX);
+    setRecentCommandIds(next);
+    (window as any).vtSettingsSet?.(RECENT_KEY, JSON.stringify(next));
+  }
+  function withRecent(row: Row): Row {
+    if (!row.onOpen) return row;
+    const orig = row.onOpen;
+    return { ...row, onOpen: () => { recordRecent(row.key); orig(); } };
+  }
   const [fileResults, setFileResults] = createSignal<{ path: string; name: string }[]>([]);
   const [fileLoading, setFileLoading] = createSignal(false);
   // 검색 요청이 실패했는데 결과 0건으로만 그리면 "그런 파일이 없다"로 읽힌다 —
@@ -387,8 +414,12 @@ function PaletteBody(props: PaletteBodyProps) {
         return [...themeRows(), ...SETTINGS_COMMANDS.filter((c) => fuzzyMatch(c.label, q)).map(commandRow).filter(Boolean) as Row[]]
           .filter((r) => fuzzyMatch(r.label, q));
       default: {
-        const sessionRows = deps.listSessions().filter((s) => fuzzyMatch(s.name, q)).map(openSessionRow);
-        const fileRows = recentFiles().filter((f) => fuzzyMatch(f, q)).map(fileRow);
+        // 2026-09-23(2.1 D6) — 세션은 여기서 뺐다(사용자 요청 — 세션 이동·
+        // 관리는 세션 탭에서 하고, 팔레트에서는 `@`로만 찾는다). 순서는
+        // 최근 사용 기능 2개 → 최근 파일 2개 → 모든 기능(스크롤).
+        const fileMatches = recentFiles().filter((f) => fuzzyMatch(f, q));
+        const fileRows = (q ? fileMatches : fileMatches.slice(0, 2)).map(fileRow);
+
         const cmdRows = DEFAULT_COMMANDS.map(commandRow).filter(Boolean) as Row[];
         // 파일 업로드 — registerAction 대상이 아니라(quickopen.js 시절부터
         // #file-input을 직접 클릭하는 run 트리거였다) DEFAULT_COMMANDS(action
@@ -399,8 +430,30 @@ function PaletteBody(props: PaletteBodyProps) {
           label: '파일 업로드',
           onOpen: () => { props.onRequestClose(); document.getElementById('file-input')?.click(); },
         };
-        const filteredCmdRows = [...cmdRows, uploadRow].filter((r) => fuzzyMatch(r.label, q));
-        return [...sessionRows, ...fileRows, ...filteredCmdRows];
+        // 키맵 명령도 「모든 기능」에 합류한다 — 예전엔 `:` 접두사로만
+        // 닿았는데, "한곳에 모아서 찾을 수 있게" 해달라는 요청은 접두사를
+        // 아는 사람만을 위한 게 아니었다. unavailable(일반 탭이 못 잡는
+        // 조합)은 `:` 모드와 마찬가지로 뺀다 — 눌러도 안 되는 걸 보여주지
+        // 않는다.
+        const keymapRows = deps.listKeymapActions().filter((b) => !b.unavailable).map(keymapRow);
+        const allCommandRows = [...cmdRows, uploadRow, ...keymapRows]
+          .map(withRecent)
+          .filter((r) => fuzzyMatch(r.label, q));
+
+        // 검색어가 있으면 "최근" 구분이 오히려 결과를 가린다 — 매치되는 걸
+        // 전부 평평하게 보여준다.
+        if (q) return [...fileRows, ...allCommandRows];
+
+        const byKey = new Map(allCommandRows.map((r) => [r.key, r] as const));
+        const recentRows: Row[] = [];
+        for (const id of recentCommandIds()) {
+          const r = byKey.get(id);
+          if (r) recentRows.push({ ...r, kind: 'recent' });
+          if (recentRows.length >= 2) break;
+        }
+        const recentKeys = new Set(recentRows.map((r) => r.key));
+        const restRows = allCommandRows.filter((r) => !recentKeys.has(r.key));
+        return [...recentRows, ...fileRows, ...restRows];
       }
     }
   });

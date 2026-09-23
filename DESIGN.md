@@ -569,9 +569,9 @@ and the in-pane `search.js` into one (N5/N40/N46). 8 prefixes:
 
 | Prefix | Mode | Source |
 |---|---|---|
-| (none) | `default` | Sessions, files, and commands mixed into the top results |
+| (none) | `default` | Recent commands (2) → recent files (2) → every command, grouped and scrollable — **no sessions** (see below) |
 | `/` | `file` | File fuzzy search (`GET /api/fs/search?q=`, debounced) |
-| `@` | `session` | Sessions (worktrees from 2.1.1) |
+| `@` | `session` | Sessions (worktrees from 2.1.1) — this is now the *only* place the default screen's sessions moved to |
 | `:` | `keymap` | Commands — shows **the current key binding** next to each (read from the `core/keymap.js` registry, so a rebind shows up here too) |
 | `#` | `queue` | Prompt queue items |
 | `!` | `port` | Open ports |
@@ -583,6 +583,60 @@ highlighted excerpt of its start, a session shows its last lines + state, a
 scrollback result shows surrounding context). The preview hides on narrow
 widths. `⌘F` is rewired to the palette's `~` mode; the old in-pane search bar
 is demoted to `⌘⇧F` (rebindable).
+
+### Default screen redesign (2026-09-23, 2.1 D6)
+
+Sessions moved out of the no-prefix screen entirely (session switching lives
+in the 세션 tab now, `@` is the only palette path left) and the command list
+grew to include everything: `settings.show`/`scm.show`/`clients.show` (found
+missing during the audit — no rail button pairs with these, so they're added
+to `DEFAULT_COMMANDS` **without** `isPanel: true`, which keeps
+`rail-palette-parity.test.js`'s ADR-8 check from firing on them) plus every
+non-`unavailable` `core/keymap.js` action, so the palette is a real "search
+every command" surface and not just files+a fixed list.
+
+Order on the empty-query screen: 2 most-recently-used commands → 2 most-
+recent files → everything else, grouped by kind (existing
+`sectionHeadAt`/`KIND_META` machinery, no new grouping code needed). Recency
+is tracked by **action id** (`Row.key`, e.g. `cmd:settings.show`), not label —
+a `__toggle:` command's label never changes but its target does, so id is the
+only stable identity — in the new device-scoped setting
+`palette.recentCommands` (JSON array, newest first, capped at 10, read/written
+through `window.vtSettingsGet/Set` since `shell/Palette.tsx` can't statically
+import `core/settings.js`, ADR-26). Typing a query drops the recent/files
+split and just flattens everything that matches — recency ordering only
+matters when you're browsing, not searching.
+
+**Two dead keymap shortcuts, found and fixed in the same pass**: `viewer`
+(⌃⇧E) and `paste` (⌃⇧V) were defined in `core/keymap.js`'s `ACTIONS` table
+with labels and default bindings, but **nobody had ever called
+`register()` for them** — pressing either did nothing, silently, since
+`core/keymap.js`'s dispatcher just no-ops when `_handlers.get(id)` is
+`undefined`. `viewer` now delegates to the existing `viewer.show` action
+(`panels/viewer-lazy.js`); `paste` calls `clipboard.js`'s
+`pasteFromClipboard(activeSessionId())` from `term/keymap-actions.js` (the
+file that already exists for exactly this — actions whose owning module
+shouldn't need to know about the keymap).
+
+**Scroll-clipping bug, root-caused live (not by reading CSS)**: the reported
+"10개인데 3개만 보인다" wasn't a missing scrollbar — nothing was clipping
+correctly *or* scrolling. The palette's results container carries the class
+`vt-qo-body`, which only *looks* like the code viewer's `vt-vw-body` — they
+don't share a rule. `vt-vw-body{flex:1 1 auto; overflow:auto}` never applied
+to it, so the div had no `flex-grow` (stayed at content size inside the
+column-flex card) and no `overflow:auto` (nothing to scroll internally) —
+confirmed via `getBoundingClientRect()`/`getComputedStyle()` in a real
+browser: `overflow` measured `visible`, `scrollHeight === clientHeight`. The
+outer `.vt-viewer-card` clips at `max-height` with `overflow:hidden`, so
+anything past that height was just gone, unreachable — a hard cut, not a
+disabled scrollbar. Fixed with `.vt-qo-body{ flex:1 1 auto; min-height:0;
+overflow:auto; }` in `styles/screens/30-viewer.css`.
+
+**Mobile is now a full-height bottom sheet** (`@media (max-width:719.98px)`,
+mirroring the existing file-overlay `vt-file-compact` pattern) instead of the
+60vh-capped card — the scroll region needs real height to be usable with a
+thumb, and 60vh was tuned for a handful of file-search rows, not a "browse
+every command" list.
 
 ## 7. Mobile (compact, < 720px)
 
@@ -753,6 +807,13 @@ device's stored settings** — a real cross-feature data-corruption bug caught
 only by testing tab switches after wiring the toggle, not by reasoning about
 the code. Fixed by checking the key is actually present in the notification
 before acting on it.
+
+**Quick open (step 5) is now a full-height bottom sheet on compact** instead
+of the 60vh-capped card shared with the desktop layout — see § 6's "Default
+screen redesign" for the full writeup (sessions moved out of the default
+screen, recent-commands tracking, the two dead keymap shortcuts, and the
+`vt-qo-body`/`vt-vw-body` scroll-clipping bug that caused the reported
+"10개인데 3개만 보인다").
 
 ## 8. Usage (dock "Usage" tab)
 

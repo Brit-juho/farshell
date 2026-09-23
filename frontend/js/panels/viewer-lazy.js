@@ -10,6 +10,7 @@
 // 소비처는 정적 import를 쓰면 안 된다 — 정적 import는 그 모듈을 참조하는
 // 쪽의 청크에 도로 끌어들인다(N34 커밋에서 core/*가 복제됐던 함정).
 import { registerAction, getAction } from '../core/dom.js';
+import { register as registerKey } from '../core/keymap.js';
 import { get as getSetting } from '../core/settings.js';
 import { openViewerPane } from '../layout/store.js';
 
@@ -58,6 +59,15 @@ export function openFile(path) {
 // 목록으로만 열린다(사용자와 합의된 범위).
 registerAction('viewer.show', () => {
   const open = getAction('quickopen.open');
+  if (typeof open === 'function') open();
+});
+
+// 2026-09-23(2.1 D6) — 'viewer' 키맵 액션(기본 Ctrl+Shift+E)에 실행 핸들러가
+// 아예 없었다(core/keymap.js의 ACTIONS에는 있었지만 아무도 register하지
+// 않았다 — 누른다고 아무 일도 안 일어나는 죽은 단축키). 위 viewer.show와
+// 같은 동작이므로 그대로 위임한다.
+registerKey('viewer', () => {
+  const open = getAction('viewer.show');
   if (typeof open === 'function') open();
 });
 
