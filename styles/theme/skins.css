@@ -189,4 +189,96 @@
     --shadow-e2: 0 4px 12px rgb(0 0 0 / .12), 0 12px 32px rgb(0 0 0 / .08);
     --shadow-e3: 0 -2px 16px rgb(0 0 0 / .12);
   }
+
+  /* 2026-09-24(2.1 D6) — 3스킨 추가. 앞선 6스킨(D1)이 "이미 있던 색을 토큰
+   * 이름으로 재매핑"이었던 것과 달리, 이 셋은 값 자체를 새로 고른다 —
+   * 값은 scripts/check_contrast.py의 6개 규칙(txt≥8.5·sub≥6·muted≥4.2·
+   * faint≥3, 전부 bg-0/1/2 기준)과 램프 간격(≥1.25배)을 만족하도록
+   * 역산했다(눈대중이 아니라 그 스크립트가 쓰는 것과 같은 WCAG 공식으로
+   * 계산 후 대입 — 세부는 커밋 메시지 참고).
+   *
+   * Warp — 근흑에 보라 색조, 액센트는 산호→라벤더→하늘색 그라디언트 계열
+   * (토큰 하나(--color-acc)는 그 중 라벤더만 담는다 — 그라디언트 자체는
+   * 스킨 블록이 아니라 그 값을 쓰는 컴포넌트가 그린다, 예: 설정 화면
+   * 제목의 그라디언트 텍스트). */
+  html[data-skin="warp"] {
+    --color-bg-0: #0d0b14;
+    --color-bg-1: #17131f;
+    --color-bg-2: #120f1a;
+    --color-bg-3: #221c30;
+    --color-line: rgb(196 166 255 / .10);
+    --color-line-strong: rgb(196 166 255 / .18);
+    --color-txt: #f3f1fb;
+    --color-sub: #a49cc4;
+    --color-muted: #8078a0;
+    --color-faint: #6c6489;
+    --color-acc: var(--acc-warp);
+    --color-acc-dim: #a17ee0;
+    --color-acc-ink: #1a1424;
+    --color-st-idle: #8078a0;
+    --color-st-working: #5be3a8;
+    --color-st-waiting: #ffb37a;
+    --color-st-done: #7fdcff;
+    --color-st-error: #ff6b81;
+    --color-term-bg: #0d0b14;
+    --color-term-fg: #f3f1fb;
+    --color-surface-active: rgb(196 166 255 / .18);
+  }
+
+  /* Linear — 거의 무채색인 근흑, 액센트는 단일 인디고 하나뿐(그 흔한
+   * "액센트가 여러 색"이 아니다 — 파격은 색 개수가 아니라 절제된 무광 표면
+   * 자체에서 나온다). 흰 글자가 인디고 원색 위에서 4.5:1을 못 넘겨(3.70)
+   * macos와 같은 이유로 acc-surface만 진하게 뗐다. */
+  html[data-skin="linear"] {
+    --color-bg-0: #08090a;
+    --color-bg-1: #0e0f11;
+    --color-bg-2: #0b0c0e;
+    --color-bg-3: #17181c;
+    --color-line: rgb(255 255 255 / .05);
+    --color-line-strong: rgb(255 255 255 / .10);
+    --color-txt: #f2f3f5;
+    --color-sub: #9599a1;
+    --color-muted: #767a82;
+    --color-faint: #616469;
+    --color-acc: var(--acc-linear);
+    --color-acc-dim: #8891f5;
+    --color-acc-surface: #4c56d8;
+    --color-acc-ink: #ffffff;
+    --color-st-idle: #767a82;
+    --color-st-working: #4cb782;
+    --color-st-waiting: #e0a72e;
+    --color-st-done: var(--acc-linear);
+    --color-st-error: #e5484d;
+    --color-term-bg: #08090a;
+    --color-term-fg: #f2f3f5;
+    --color-surface-active: rgb(255 255 255 / .12);
+  }
+
+  /* Vercel/Geist — 완전한 흑백 + 단색(파랑) 하나. 테두리를 다른 다크
+   * 스킨보다 진하게 뒀다(.14/.24) — 그라디언트·그림자 없이 "각진 표면"만으로
+   * 위계를 만드는 미학이라 경계선 자체가 더 또렷해야 한다. */
+  html[data-skin="vercel"] {
+    --color-bg-0: #000000;
+    --color-bg-1: #0a0a0a;
+    --color-bg-2: #050505;
+    --color-bg-3: #171717;
+    --color-line: rgb(255 255 255 / .14);
+    --color-line-strong: rgb(255 255 255 / .24);
+    --color-txt: #ffffff;
+    --color-sub: #a0a0a0;
+    --color-muted: #7a7a7a;
+    --color-faint: #636363;
+    --color-acc: var(--acc-vercel);
+    --color-acc-dim: #3d9bff;
+    --color-acc-surface: #0060c0;
+    --color-acc-ink: #ffffff;
+    --color-st-idle: #7a7a7a;
+    --color-st-working: #17c964;
+    --color-st-waiting: #f5a524;
+    --color-st-done: var(--acc-vercel);
+    --color-st-error: #f31260;
+    --color-term-bg: #000000;
+    --color-term-fg: #ffffff;
+    --color-surface-active: rgb(255 255 255 / .16);
+  }
 }

@@ -6,7 +6,11 @@ import { registerAction } from './core/dom.js';
 
 // D1(ADR-3): farshell이 새 기본 스킨 — 목록 순서가 곧 설정 화면 칩 순서이자
 // "미지의 스킨" 폴백 우선순위 의도를 나타내므로 맨 앞에 둔다.
-const VT_SKINS = ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad'];
+// 2026-09-24(2.1 D6) — warp/linear/vercel 3개 추가. 사용자가 직접 고른
+// 레퍼런스(Warp 터미널의 그라디언트 액센트 · Linear의 무광 인디고 ·
+// Vercel/Geist의 흑백+단색)를 그대로 새 스킨으로 얹었다 — 기존 6개처럼
+// "이미 있던 색의 재매핑"이 아니라 값 자체가 새로 고른 것들이다.
+const VT_SKINS = ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad', 'warp', 'linear', 'vercel'];
 
 // 칩·팔레트 행에 쓰는 표시 이름 — 두 소비처(설정 「모양」 칩, 커맨드 팔레트)가
 // 각자 표를 갖던 게 이번 사고(테마 칩이 DOM에서 사라지자 팔레트도 같이
@@ -14,6 +18,7 @@ const VT_SKINS = ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notep
 export const VT_SKIN_LABELS = {
   farshell: 'FarShell', macos: 'macOS', catppuccin: 'Catppuccin',
   windows: 'Windows', vscode: 'VS Code', notepad: 'Notepad',
+  warp: 'Warp', linear: 'Linear', vercel: 'Vercel/Geist',
 };
 
 export function vtSkins() {
@@ -82,6 +87,41 @@ const VT_XTERM_THEMES = {
     blue:'#0366d6', magenta:'#5a32a3', cyan:'#0598bc', white:'#6a737d',
     brightBlack:'#959da5', brightRed:'#cb2431', brightGreen:'#28a745', brightYellow:'#dbab09',
     brightBlue:'#005cc5', brightMagenta:'#8250df', brightCyan:'#3192aa', brightWhite:'#2b2a25',
+  },
+  // 2026-09-24(2.1 D6) — Warp 터미널 느낌. black/white는 styles/theme/
+  // skins.css의 warp 블록(--color-bg-3/--color-txt)과 같은 값, red/green/
+  // yellow/blue는 상태 램프(st-error/working/waiting/done)와 맞췄다(다른
+  // 6스킨과 같은 관행) — magenta/cyan은 그라디언트 액센트 계열(라벤더·하늘)
+  // 에서 골랐다.
+  warp: {
+    background:'#0d0b14', foreground:'#f3f1fb', cursor:'#c4a6ff', cursorAccent:'#0d0b14',
+    selectionBackground:'rgba(196,166,255,0.28)',
+    black:'#221c30', red:'#ff6b81', green:'#5be3a8', yellow:'#ffb37a',
+    blue:'#7fdcff', magenta:'#c4a6ff', cyan:'#7fdcff', white:'#a49cc4',
+    brightBlack:'#8078a0', brightRed:'#ff8fa0', brightGreen:'#7eeac0', brightYellow:'#ffc79a',
+    brightBlue:'#a3e6ff', brightMagenta:'#dcc4ff', brightCyan:'#a3e6ff', brightWhite:'#ffffff',
+  },
+  // Linear — 거의 무채색, 액센트는 인디고 하나. magenta/cyan은 다른 6스킨과
+  // 같은 이유로 그 넷과 안 부딪히는 보색을 새로 골랐다(Linear 실제 브랜드에
+  // ANSI 팔레트가 없어 참고할 "공식값"이 없다).
+  linear: {
+    background:'#08090a', foreground:'#f2f3f5', cursor:'#6e79f2', cursorAccent:'#08090a',
+    selectionBackground:'rgba(110,121,242,0.28)',
+    black:'#17181c', red:'#e5484d', green:'#4cb782', yellow:'#e0a72e',
+    blue:'#6e79f2', magenta:'#c168e0', cyan:'#4fc8e0', white:'#9599a1',
+    brightBlack:'#767a82', brightRed:'#ff6369', brightGreen:'#66d69a', brightYellow:'#f5c052',
+    brightBlue:'#8891f5', brightMagenta:'#d98cf0', brightCyan:'#6fe0f5', brightWhite:'#ffffff',
+  },
+  // Vercel/Geist — 흑백 + 단색 파랑. magenta도 팔레트엔 있어야 하는 ANSI
+  // 계약이라 모노톤을 깨지 않는 보라 하나만 더한다(UI 어디에도 쓰지 않는다,
+  // 터미널 색만).
+  vercel: {
+    background:'#000000', foreground:'#ffffff', cursor:'#0084ff', cursorAccent:'#000000',
+    selectionBackground:'rgba(0,132,255,0.28)',
+    black:'#171717', red:'#f31260', green:'#17c964', yellow:'#f5a524',
+    blue:'#0084ff', magenta:'#9750dd', cyan:'#17c1c9', white:'#a0a0a0',
+    brightBlack:'#7a7a7a', brightRed:'#ff5c8a', brightGreen:'#3ddb82', brightYellow:'#ffc14d',
+    brightBlue:'#3d9bff', brightMagenta:'#b57ee8', brightCyan:'#4fd8de', brightWhite:'#ffffff',
   },
 };
 

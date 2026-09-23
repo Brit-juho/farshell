@@ -136,6 +136,32 @@ html[data-skin="notepad"] {
   --wrad:6px; --trad:4px;
 }
 
+/* 2026-09-24(2.1 D6) — 3스킨 추가(사용자가 고른 레퍼런스: Warp/Linear/
+   Vercel-Geist). 모서리 반경이 각 정체성의 핵심이라 --wrad/--trad를 다른
+   값으로 뗀다 — Warp는 라운드가 큰 편(그라디언트 카드 느낌), Linear는
+   중간(플랫 표면), Vercel/Geist는 거의 각짐(하드엣지). */
+html[data-skin="warp"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-2); --menu-hover:rgb(196 166 255 / .09); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
+  --wrad:16px; --trad:9px;
+}
+html[data-skin="linear"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .04); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
+  --wrad:10px; --trad:6px;
+}
+html[data-skin="vercel"] {
+  --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
+  --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
+  --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .08); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
+  --wrad:2px; --trad:2px;
+}
+
 /* 3단 텍스트 램프의 중간 톤 — 헤딩(--txt)·메타(--sub) 둘뿐이던 텍스트 색을
    본문 등급 하나로 넓힌다. Grid 카드처럼 제목/본문/메타 3단이 필요한 곳에서
    본문(card-meta 등)이 제목과 똑같은 밝기로 경쟁하던 걸 막는다. 스킨마다

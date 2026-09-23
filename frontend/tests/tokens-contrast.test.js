@@ -132,10 +132,10 @@ const GRAPHIC_TOKENS = [
 // 파서가 조용히 빈 객체를 돌려주면 아래 모든 테스트가 0회 반복으로 통과한다.
 // 검사기가 "통과하는데 아무것도 안 보는" 상태가 되는 걸 먼저 막는다.
 
-test('토큰 파서가 6스킨을 모두 읽는다', () => {
+test('토큰 파서가 9스킨을 모두 읽는다', () => {
   assert.deepStrictEqual(
     SKIN_NAMES.sort(),
-    ['catppuccin', 'farshell', 'macos', 'notepad', 'vscode', 'windows'],
+    ['catppuccin', 'farshell', 'linear', 'macos', 'notepad', 'vercel', 'vscode', 'warp', 'windows'],
   );
 });
 

@@ -250,6 +250,10 @@ html[data-skin="windows"] .caption { display:flex; }
 /* notepad는 유일한 라이트 스킨이라 점이 밝은 배경에 묻힌다 — 테두리를 덧댄다.
    (인라인에 있던 border:1px solid #ccc를 여기로 옮겼다.) */
 .theme-chip[data-skin="notepad"]    .dot { background:var(--acc-notepad); border:1px solid #ccc; }
+/* 2026-09-24(2.1 D6) — 3스킨 추가분. */
+.theme-chip[data-skin="warp"]       .dot { background:var(--acc-warp); }
+.theme-chip[data-skin="linear"]     .dot { background:var(--acc-linear); }
+.theme-chip[data-skin="vercel"]     .dot { background:var(--acc-vercel); }
 .theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--menu-hover); }
 
 /* ---- 터미널 ------------------------------------------------------------ */

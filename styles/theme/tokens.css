@@ -169,6 +169,12 @@
   --acc-catppuccin: #cba6f7;
   --acc-windows:    #4cc2ff;
   --acc-vscode:     #007acc;
+  /* 2026-09-24(2.1 D6) — 3스킨 추가(Warp/Linear/Vercel-Geist, 사용자가 직접
+   * 고른 레퍼런스). 나머지 6스킨과 같은 계약: 이 상수가 단일 소스, 스킨
+   * 블록의 --color-acc와 테마 칩의 점이 둘 다 여기를 가리킨다. */
+  --acc-warp:       #c4a6ff;
+  --acc-linear:     #6e79f2;
+  --acc-vercel:     #0084ff;
   /* notepad(유일한 라이트 스킨)의 액센트는 2.1.6에서 바뀌었다. 이전 값
    * #0060df는 브라우저·OS 기본 파랑이라 화면이 제품이 아니라 브라우저처럼
    * 보이는 가장 큰 원인이었고, 나머지 5스킨과 아무 관계도 없는 색이었다.

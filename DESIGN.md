@@ -116,7 +116,7 @@ steps are the 20%, and the accent is the 10%.
 
 ---
 
-## 1. Skins — 6
+## 1. Skins — 9
 
 Switched via `<html data-skin="...">`. **Every color is referenced through a
 token** — no hardcoded hex (checked across `frontend/js` and `styles/layers`;
@@ -131,6 +131,21 @@ JS-generated overlays (palette, dock) also inherit tokens through `.vt-*` classe
 | `windows` | Windows Terminal — caption buttons, Cascadia, Fluent blue, square UI (`--radius-sm` overridden to 2px) | |
 | `vscode` | VS Code integrated terminal — dark gray, Fluent blue accent, square UI (`--radius-sm` 2px) | |
 | `notepad` | Notepad/paper feel — the only **light theme**, warm off-white background | |
+| `warp` | Warp terminal — near-black with a violet cast, single-token accent (`--color-acc`) drawn from a coral→lavender→sky gradient family that surface CSS (e.g. the settings page title) can paint as a gradient text-fill; rounder corners (`--wrad` 16px) than any other skin | |
+| `linear` | Linear — near-black, one flat indigo accent, almost-invisible hairline borders (`--color-line` alpha .05, half of every other dark skin) | |
+| `vercel` | Vercel/Geist — pure black/white + one blue signal color, hard edges (`--wrad`/`--trad` 2px, sharpest of all 9) | |
+
+2026-09-24 addition (2.1 D6) — the user picked these three directly from a
+comparison mockup (three real products in FarShell's own category: a
+terminal app and two dev-tool dashboards) rather than a from-scratch design
+pass; DESIGN.md's "restraint" language in § 0 was never something the user
+asked for (see the project's own decision log) — these three intentionally
+depart from it, which is the point. Every value (backgrounds, the 4-step
+text ramp, the accent, status colors) was solved algorithmically against
+`scripts/check_contrast.py`'s thresholds rather than picked by eye — same
+process the original 6 skins used, just run in the other direction (values
+first, contrast computed, adjusted until passing, rather than values
+inherited from an existing UI and reverse-checked).
 
 Switched from the header's ⚙ settings, or the theme chip in the command
 palette (`Mod+K`, shows up mixed into a bare search, or under the `>`
@@ -238,7 +253,7 @@ testing it).
 
 | Key | Value | Source |
 |---|---|---|
-| `skins` | `farshell, macos, catppuccin, windows, vscode, notepad` | `frontend/js/theme.js` — `VT_SKINS` |
+| `skins` | `farshell, macos, catppuccin, windows, vscode, notepad, warp, linear, vercel` | `frontend/js/theme.js` — `VT_SKINS` |
 | `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `2/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` (compact/regular/wide; xwide is `Infinity`, so it isn't captured in the table) |
 | `rail-items` | `8` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS in 2.1.0** — see §3. The new shell's worktree rail `#vt-wgrail` is not counted here). `7`→`8` when `dir` came back alongside `files` (2026-09-22, N35 reversal) |

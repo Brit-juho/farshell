@@ -10,6 +10,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **스킨 6종 → 9종. Warp · Linear · Vercel/Geist 추가** (`styles/theme/
+  skins.css`, `frontend/js/theme.js`). 사용자가 설정 화면 리뉴얼 레퍼런스로
+  실제 제품 셋(터미널 앱 하나 + 개발자 도구 대시보드 둘)을 골랐는데, "이
+  화면만" 대신 "이 셋을 스킨으로 추가"를 요청해서 앱 전체(색 토큰 17개 +
+  xterm ANSI 16색 + 모서리 반경)를 새 스킨 셋으로 완성했다. 색은 기존
+  6스킨과 같은 절차 — `scripts/check_contrast.py`의 기준(본문 8.5:1·보조
+  6:1·약한 보조 4.2:1·장식 3:1, 전부 bg-0/1/2 기준 + 4단 램프 간격 1.25배)
+  으로 역산했다(그 스크립트가 쓰는 것과 같은 WCAG 공식으로 먼저 계산하고
+  대입 — 6스킨 다 통과, `scripts/check_contrast.py`도 9개로 확장). Warp는
+  보라 색조의 근흑 + 라벤더 액센트(모서리 16px, 셋 중 가장 둥글다), Linear는
+  거의 무채색 근흑 + 인디고 하나(테두리 알파 .05, 다른 다크 스킨의 절반),
+  Vercel/Geist는 완전한 흑백 + 파랑 신호색 하나(모서리 2px, 가장 각짐).
+  `frontend/index.html`의 FOUC 방지 부팅 스크립트 허용 목록도 같이 늘렸다
+  — 안 늘리면 새 스킨을 고르고 새로고침할 때마다 farshell로 튕겼을 것이다.
+
 - **모바일 터미널을 꾹 누르면 단어를 고르고, 핸들 두 개로 범위를 늘릴 수 있다**
   (`term/touch-select.js`). 예전엔 브라우저 네이티브 선택(xterm 접근성 레이어
   위)이었는데, 그 레이어가 PTY 출력마다(스피너·tmux 상태줄 등) 보이는 행을

@@ -671,20 +671,21 @@ test('음성 — 음성 전용 모드 버튼(#voiceonly-btn)이 이식됐고 med
   assert.strictEqual(btn.textContent, '켜기');
 });
 
-test('모양 — 기본 스킨 6개가 #theme-row 칩으로 나온다', async () => {
+test('모양 — 기본 스킨 9개가 #theme-row 칩으로 나온다', async () => {
   // 2026-09-18 — 이 칩들이 살던 legacy rail 플라이아웃이 통째로 도달
   // 불가능해진 사고를 고친 자리. 커맨드 팔레트(Palette.tsx)도 이제 DOM이
   // 아니라 theme.js의 vtSkins()를 직접 읽으므로, 이 섹션이 열려 있지 않아도
   // 팔레트의 "테마 · X" 목록은 별개로 살아있다(palette.test.js 참고).
+  // 2026-09-24 — warp/linear/vercel 3개 추가(2.1 D6).
   const { document, P } = await build({});
   P.showSettings();
   sectionButton(document, '모양').click();
   const row = document.getElementById('theme-row');
   assert.ok(row, '#theme-row가 렌더돼야 한다');
   const chips = Array.from(row.querySelectorAll('.theme-chip'));
-  assert.strictEqual(chips.length, 6);
+  assert.strictEqual(chips.length, 9);
   assert.deepStrictEqual(chips.map((c) => c.dataset.skin),
-    ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad']);
+    ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad', 'warp', 'linear', 'vercel']);
   assert.ok(chips.find((c) => c.dataset.skin === 'farshell').classList.contains('sel'),
     '기본 스킨(farshell)이 선택 표시돼야 한다');
 });

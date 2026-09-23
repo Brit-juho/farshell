@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TOKENS = ROOT / "styles" / "theme" / "tokens.css"
 SKINS = ROOT / "styles" / "theme" / "skins.css"
 
-SKIN_NAMES = ["farshell", "macos", "catppuccin", "windows", "vscode", "notepad"]
+SKIN_NAMES = ["farshell", "macos", "catppuccin", "windows", "vscode", "notepad", "warp", "linear", "vercel"]
 
 # (전경 토큰, 배경 토큰들, 최소 대비, 설명)
 # 텍스트 램프는 bg-0/1/2에서만 본다(위 docstring의 bg-3 예외).
