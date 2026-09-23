@@ -472,10 +472,28 @@ untouched — Rail.tsx's "more" overflow reopens the same button inside it.
 
 ## 4. Code viewer / file pane
 
-A `layout/tree.js` leaf with `kind: 'viewer'`. Picking a file in the
-palette's `/` mode opens that file as a new pane — one file at a time, no
-file tree. It shares the same split/drag/resize rules as a session pane
-(leaf generalization, N4). **Read-only**, with no write API
+Where a file opens is the `viewer.surface` setting (Settings → 모양, per
+device; ADR-44, 2.3):
+
+- **`sheet`** (default) — a card pinned to the top of the terminal area,
+  full width, height dragged from a grip at its bottom edge (20–85%).
+- **`float`** — a movable, resizable card; header drags it, the corner grip
+  resizes it, and it can never be dragged somewhere it can't be grabbed back.
+- **`pane`** — the 2.2 behavior: a `layout/tree.js` leaf with
+  `kind: 'viewer'` that splits the active terminal pane.
+
+`sheet` and `float` are overlays mounted **inside `#terminal-container`**, so
+they cover only the terminal area — never the rail, dock, header or mobile
+nav — and they don't resize any pane, so the terminal never refits. Clicks
+outside the card pass through to the terminal; Esc closes the card only while
+focus is inside it (in the terminal it still belongs to vim/less). Opening
+another file replaces the content instead of toggling the card closed. The
+header carries the file name, a shortened directory (full path in the
+tooltip) and a 「페인으로」 button (`columns-2` icon) that moves the file into
+a side-by-side pane. On compact (< 720px) every surface becomes the
+full-screen bottom sheet that closes with the back button. The card reuses
+`.vt-viewer-card`'s tokens; its CSS lives in `styles/screens/30-viewer.css`
+(legacy layer, next to the card it styles). **Read-only**, with no write API
 (`server/fsguard.py`'s three-layer defense is unchanged from 2.0 — a fixed
 root `VT_BROWSE_ROOTS`, `Path.resolve()` + `is_relative_to`, and a filename
 denylist).
