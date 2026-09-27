@@ -855,3 +855,76 @@ def test_session_management_is_audited(env, fake_tmux):
     actions = [(r["action"], r["ok"]) for r in rows]
     assert ("sessions/create", True) in actions
     assert ("sessions/kill", False) in actions
+
+
+# --- attach PTY가 끝났을 때: 세션이 사라졌으면 곧바로 4404 ------------------------
+
+
+class _FakePty:
+    """attach PTY 흉내. subscribe되면 잠시 뒤 EOF를 흘리고 목록에서 빠진다
+    (pty_manager의 EOF 분기와 같은 순서). `extra`가 있으면 그 뒤에 한 번 더 보낸다."""
+
+    def __init__(self, extra: bool = False):
+        self.sessions: dict = {}
+        self.extra = extra
+
+    def create_session(self, sid, **_):
+        self.sessions[sid] = object()
+
+    def subscribe(self, sid, cb):
+        import asyncio
+        loop = asyncio.get_running_loop()
+
+        def eof():
+            cb(b"\r\n[process exited]\r\n")
+            self.sessions.pop(sid, None)
+        loop.call_later(0.05, eof)
+        if self.extra:
+            loop.call_later(0.3, lambda: cb(b"still-open"))
+
+    def unsubscribe(self, sid, cb):
+        pass
+
+    def destroy_session(self, sid):
+        self.sessions.pop(sid, None)
+
+    def write(self, *a):
+        pass
+
+    def resize(self, *a):
+        pass
+
+
+def _ws_with_fake_pty(env, monkeypatch, *, session_alive: bool, extra: bool):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    import deps
+    import tmux_runner
+    monkeypatch.setattr(deps, "pty_mgr", _FakePty(extra=extra))
+    monkeypatch.setattr(tmux_runner, "has_session", lambda name: True)   # 붙을 때는 있다
+    # 붙은 뒤의 정확 매칭 질의(`=dev`)만 이 값을 따른다.
+    monkeypatch.setattr(tmux_runner, "run",
+                        lambda args, timeout=2.0, **k: ((0 if session_alive else 1), b"", b""))
+    headers = _sign_headers(hs, "laptop", secret, "GET", "/api/peer/ws/dev")
+    return client, headers
+
+
+def test_peer_ws_closes_4404_when_the_tmux_session_disappears(env, monkeypatch):
+    """세션이 없어지면 다음 재연결을 기다리지 않고 바로 4404 — A의 프록시가 4004로
+    옮겨 브라우저가 "재연결 중단 — 세션 종료"를 즉시 보여준다."""
+    from starlette.websockets import WebSocketDisconnect as WSD
+    client, headers = _ws_with_fake_pty(env, monkeypatch, session_alive=False, extra=False)
+    with client.websocket_connect("/api/peer/ws/dev", headers=headers) as ws:
+        assert b"process exited" in ws.receive_bytes()
+        with pytest.raises(WSD) as e:
+            ws.receive_bytes()
+    assert e.value.code == 4404
+
+
+def test_peer_ws_stays_open_when_only_this_screen_was_detached(env, monkeypatch):
+    """세션은 살아 있는데 이 화면만 끊긴 경우(「이 화면만 남기기」)엔 닫지 않는다 —
+    닫으면 브라우저가 다시 붙어 그 기능을 무력화한다."""
+    client, headers = _ws_with_fake_pty(env, monkeypatch, session_alive=True, extra=True)
+    with client.websocket_connect("/api/peer/ws/dev", headers=headers) as ws:
+        assert b"process exited" in ws.receive_bytes()
+        assert ws.receive_bytes() == b"still-open"   # 닫혔다면 여기서 끊김 예외

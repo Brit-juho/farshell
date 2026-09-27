@@ -588,6 +588,16 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
         while True:
             data = await queue.get()
             await ws.send_bytes(data)
+            # 2026-09-28 — attach PTY가 끝났는가. pty_manager는 EOF 때 `[process
+            # exited]`를 흘린 **직후** PTY를 목록에서 뺀다. 예전엔 여기서 아무것도 안
+            # 봐서, 세션이 사라져도 이 소켓은 열린 채 죽은 화면만 남았다(재연결 때에야
+            # 4404). 세션 자체가 없어졌을 때만 닫는다 — 세션은 살아 있는데 이 화면만
+            # 끊긴 경우(「이 화면만 남기기」 등)에 닫으면 브라우저가 다시 붙어 그
+            # 기능을 무력화한다.
+            if queue.empty() and session_id not in pty_mgr.sessions:
+                if not await _has_exact(tmux_name):
+                    await ws.close(code=4404, reason="tmux session gone")
+                    return
 
     out_task = asyncio.create_task(_pump_out())
     try:
