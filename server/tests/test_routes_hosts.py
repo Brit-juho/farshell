@@ -231,3 +231,81 @@ def test_host_search_labels_rows_from_our_own_registry(env, monkeypatch):
     row = client.get("/api/hosts/gpu-box/search?q=boom").json()["results"][0]
     assert row["host"] == "gpu-box"
     assert row["host_label"] == "작업실"
+
+
+# --- 원격 세션 생성 · 종료 · 이름 바꾸기 중계 ---------------------------------------
+
+
+def _record_calls(mod, monkeypatch, result=None, error=None):
+    seen = []
+
+    async def fake_call(peer, method, path, body=None):
+        seen.append((peer["id"], method, path, body))
+        if error:
+            raise error
+        return result if result is not None else {"ok": True}
+
+    monkeypatch.setattr(mod.peer_client, "call", fake_call)
+    return seen
+
+
+def test_host_session_create_proxies_and_drops_the_cache(env, monkeypatch):
+    """방금 만든 세션이 레일에 바로 보여야 한다 — 30초 캐시를 기다리게 하면 "안
+    됐나?" 하고 또 누른다."""
+    client, hs, mod, _ = env
+    _add_peer(hs)
+    fetches = []
+    monkeypatch.setattr(mod, "_fetch_remote", lambda p: fetches.append(1) or {"online": True, "sessions": []})
+    client.get("/api/hosts")                       # 캐시를 채운다
+    seen = _record_calls(mod, monkeypatch, {"ok": True, "name": "dev"})
+    r = client.post("/api/hosts/gpu-box/sessions", json={"name": "dev"})
+    assert r.status_code == 200 and r.json()["name"] == "dev"
+    assert seen == [("gpu-box", "POST", "/api/peer/sessions/create", {"name": "dev"})]
+    client.get("/api/hosts")                       # 캐시가 비었으니 다시 가져온다
+    assert len(fetches) == 2
+
+
+def test_host_session_kill_and_rename_proxy_bodies(env, monkeypatch):
+    client, hs, mod, _ = env
+    _add_peer(hs)
+    seen = _record_calls(mod, monkeypatch)
+    assert client.delete("/api/hosts/gpu-box/sessions/dev").status_code == 200
+    assert client.patch("/api/hosts/gpu-box/sessions/dev", json={"name": "work"}).status_code == 200
+    assert seen == [
+        ("gpu-box", "POST", "/api/peer/sessions/kill", {"name": "dev"}),
+        ("gpu-box", "POST", "/api/peer/sessions/rename", {"name": "dev", "new": "work"}),
+    ]
+
+
+@pytest.mark.parametrize("status,reason", [(403, "읽기 전용"), (409, "이미 있는 이름")])
+def test_host_session_passes_remote_refusals_through(env, monkeypatch, status, reason):
+    client, hs, mod, _ = env
+    _add_peer(hs)
+    _record_calls(mod, monkeypatch, error=mod.peer_client.PeerError(reason, status))
+    r = client.post("/api/hosts/gpu-box/sessions", json={"name": "dev"})
+    assert r.status_code == status
+    assert reason in r.json()["reason"]
+
+
+def test_host_session_missing_session_stays_404(env, monkeypatch):
+    client, hs, mod, _ = env
+    _add_peer(hs)
+    _record_calls(mod, monkeypatch, error=mod.peer_client.PeerError("session_not_found", 404))
+    r = client.delete("/api/hosts/gpu-box/sessions/dev")
+    assert r.status_code == 404
+
+
+def test_host_session_on_outdated_peer_says_update(env, monkeypatch):
+    """라우트 자체가 없는 404는 "세션 없음"이 아니라 "상대가 옛 버전"이다 — 둘을
+    같은 404로 두면 화면이 "업데이트하세요"를 말할 수 없다."""
+    client, hs, mod, _ = env
+    _add_peer(hs)
+    _record_calls(mod, monkeypatch, error=mod.peer_client.PeerError("HTTP 404", 404))
+    r = client.post("/api/hosts/gpu-box/sessions", json={})
+    assert r.status_code == 501
+    assert r.json()["error"] == "peer_outdated"
+
+
+def test_host_session_unknown_host_is_404(env):
+    client, _, _, _ = env
+    assert client.post("/api/hosts/nope/sessions", json={}).status_code == 404

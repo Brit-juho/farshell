@@ -648,3 +648,210 @@ def test_search_with_empty_query_returns_nothing(env):
     path = "/api/peer/search"
     r = client.get(f"{path}?q=%20", headers=_sign_headers(hs, "laptop", secret, "GET", path))
     assert r.json() == {"results": [], "truncated": False}
+
+
+# --- 세션 생성 · 종료 · 이름 바꾸기 (control) --------------------------------------
+#
+# tmux는 가짜로 둔다 — 여기서 보는 건 등급 경계·이름 검증·**정확 매칭**이다.
+# 가짜는 tmux의 실제 대상 규칙을 흉내 낸다: `-t name`은 정확한 이름이 없으면
+# 접두사로도 맞고, `-t =name`만 정확 매칭이다(2026-09-28 실측). 새 엔드포인트가
+# 접두사 매칭에 기대면 `dev` 종료가 `dev-2`를 끄는데, 이 가짜가 그걸 잡는다.
+
+
+class _FakeTmux:
+    def __init__(self, names=()):
+        self.names = list(names)
+        self.calls: list[list[str]] = []
+
+    def _resolve(self, target: str):
+        if target.startswith("="):
+            return target[1:] if target[1:] in self.names else None
+        if target in self.names:
+            return target
+        hits = [n for n in self.names if n.startswith(target)]
+        return hits[0] if len(hits) == 1 else None
+
+    def run(self, args, timeout=2.0, **_):
+        self.calls.append(list(args))
+        cmd = args[0]
+        if cmd == "has-session":
+            return (0 if self._resolve(args[2]) else 1), b"", b""
+        if cmd == "new-session":
+            name = args[args.index("-s") + 1]
+            if name in self.names:
+                return 1, b"", b"duplicate session"
+            self.names.append(name)
+            return 0, b"", b""
+        if cmd == "kill-session":
+            hit = self._resolve(args[2])
+            if not hit:
+                return 1, b"", b"can't find session"
+            self.names.remove(hit)
+            return 0, b"", b""
+        if cmd == "rename-session":
+            hit = self._resolve(args[2])
+            if not hit:
+                return 1, b"", b"can't find session"
+            self.names[self.names.index(hit)] = args[3]
+            return 0, b"", b""
+        return 0, b"", b""
+
+
+@pytest.fixture
+def fake_tmux(monkeypatch):
+    import tmux_runner
+    fake = _FakeTmux(["dev-2"])
+    monkeypatch.setattr(tmux_runner, "run", fake.run)
+    monkeypatch.setattr(tmux_runner, "has_session", lambda n: fake.run(["has-session", "-t", n])[0] == 0)
+    return fake
+
+
+def _signed_post(client, hs, secret, path, body, peer_id="laptop"):
+    return client.post(path, json=body, headers=_sign_headers(hs, peer_id, secret, "POST", path))
+
+
+@pytest.mark.parametrize("action,body", [
+    ("create", {"name": "x"}),
+    ("kill", {"name": "dev-2"}),
+    ("rename", {"name": "dev-2", "new": "y"}),
+])
+def test_session_management_requires_control_level(env, fake_tmux, action, body):
+    """view 등급은 보기만 허락받은 관계다 — 세션을 만들고 끄는 건 입력과 같은 무게."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    r = _signed_post(client, hs, secret, f"/api/peer/sessions/{action}", body)
+    assert r.status_code == 403
+    assert fake_tmux.names == ["dev-2"]  # 아무것도 안 바뀌었다
+
+
+def test_session_management_without_signature_is_401(env, fake_tmux):
+    client, _, _ = env
+    r = client.post("/api/peer/sessions/create", json={"name": "x"})
+    assert r.status_code == 401
+    assert fake_tmux.names == ["dev-2"]
+
+
+def test_create_named_session_at_control_level(env, fake_tmux, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    import platform_utils
+    monkeypatch.setattr(platform_utils, "default_start_dir", lambda: "/home-x")
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": "dev"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "name": "dev"}
+    assert "dev" in fake_tmux.names
+    new = [c for c in fake_tmux.calls if c[0] == "new-session"][-1]
+    assert new[new.index("-c") + 1] == "/home-x"   # 시작 폴더는 이 호스트가 정한다
+
+
+def test_create_does_not_take_prefix_match_as_a_conflict(env, fake_tmux):
+    """`dev-2`만 있을 때 `dev`는 새 이름이다 — 접두사 매칭이면 409로 잘못 막힌다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": "dev"})
+    assert r.status_code == 200
+
+
+def test_create_existing_name_is_409(env, fake_tmux):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": "dev-2"})
+    assert r.status_code == 409
+
+
+def test_create_without_name_uses_the_local_default_rule(env, fake_tmux, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    import routes.tmux as tmux_mod
+    monkeypatch.setattr(tmux_mod, "_generate_default_session_name", lambda: "server-3")
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {})
+    assert r.json()["name"] == "server-3"
+    assert "server-3" in fake_tmux.names
+
+
+@pytest.mark.parametrize("bad", ["a:b", "a.b", "a b", "x" * 33, "-t", "$(id)"])
+def test_create_rejects_unsafe_names(env, fake_tmux, bad):
+    """tmux 대상 문법(`:`·`.`)·공백·과도한 길이·`-`로 시작(옵션으로 읽힘)은
+    tmux 인자로 가기 전에 막는다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": bad})
+    assert r.status_code == 400
+    assert r.json()["error"] == "bad_name"
+    assert not [c for c in fake_tmux.calls if c[0] == "new-session"]
+
+
+def test_kill_is_exact_match_only(env, fake_tmux):
+    """`dev` 종료 요청이 `dev-2`를 끄면 안 된다 — 정확한 이름이 없으면 404."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/kill", {"name": "dev"})
+    assert r.status_code == 404
+    assert r.json()["error"] == "session_not_found"
+    assert fake_tmux.names == ["dev-2"]
+
+
+def test_kill_existing_session(env, fake_tmux):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/kill", {"name": "dev-2"})
+    assert r.status_code == 200, r.text
+    assert fake_tmux.names == []
+
+
+def test_rename_session(env, fake_tmux):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "work"})
+    assert r.status_code == 200, r.text
+    assert fake_tmux.names == ["work"]
+    ren = [c for c in fake_tmux.calls if c[0] == "rename-session"][-1]
+    assert ren[2] == "=dev-2"   # 대상은 정확 매칭으로 지목한다
+
+
+def test_rename_prefix_is_not_a_target(env, fake_tmux):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev", "new": "work"})
+    assert r.status_code == 404
+    assert fake_tmux.names == ["dev-2"]
+
+
+def test_rename_to_existing_name_is_409(env, fake_tmux):
+    client, hs, _ = env
+    fake_tmux.names.append("other")
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "other"})
+    assert r.status_code == 409
+    assert fake_tmux.names == ["dev-2", "other"]
+
+
+def test_rename_rejects_unsafe_new_name(env, fake_tmux):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "a:b"})
+    assert r.status_code == 400
+    assert fake_tmux.names == ["dev-2"]
+
+
+def test_session_management_is_audited(env, fake_tmux):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": "dev"})
+    _signed_post(client, hs, secret, "/api/peer/sessions/kill", {"name": "nope"})
+    rows = hs.read_audit("laptop")
+    actions = [(r["action"], r["ok"]) for r in rows]
+    assert ("sessions/create", True) in actions
+    assert ("sessions/kill", False) in actions

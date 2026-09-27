@@ -26,20 +26,25 @@ export function startSessionSocket(id, term) {
   // WebSocket URL 구성 — E2E 활성 시 ?e2e=1 (토큰 있으면 ?token=...&e2e=1)
   // N7/N39 3단계 — 원격 세션은 이 서버의 프록시를 거친다(브라우저는 peer 서명
   // 헤더를 못 보내므로 상대 서버에 직접 붙을 수 없다, routes/peer_proxy.py).
-  const _s = getSession(id);
-  // screen — 상대 호스트가 이 탭의 attach PTY를 식별하는 토큰(term/remote.js).
-  // 「연결된 화면」이 원격에서 "이게 나"를 판정하는 유일한 근거다.
-  const _screen = _s && _s.remote && _s.remote.screen
-    ? `${_wsQuery() ? '&' : '?'}screen=${encodeURIComponent(_s.remote.screen)}` : '';
-  const _wsPath = _s && _s.remote
-    ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}${_screen}`
-    : `/ws/${id}${_wsQuery()}`;
+  // 경로는 **연결할 때마다** 레코드에서 다시 만든다. 원격 세션 이름을 바꾸면
+  // (term/remote.js renameRemoteSession) 레코드의 `remote.tmux`만 새 이름이 된다 —
+  // 처음 한 번 만든 경로를 계속 쓰면 끊긴 뒤 옛 이름으로 붙으려다 "세션 없음"이 된다.
+  const _wsPath = () => {
+    const _s = getSession(id);
+    // screen — 상대 호스트가 이 탭의 attach PTY를 식별하는 토큰(term/remote.js).
+    // 「연결된 화면」이 원격에서 "이게 나"를 판정하는 유일한 근거다.
+    const _screen = _s && _s.remote && _s.remote.screen
+      ? `${_wsQuery() ? '&' : '?'}screen=${encodeURIComponent(_s.remote.screen)}` : '';
+    return _s && _s.remote
+      ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}${_screen}`
+      : `/ws/${id}${_wsQuery()}`;
+  };
   let _retries = 0;
   let _stableTimer = null;
 
   function connectTerminalWs() {
     if (!getSession(id)) return;
-    const sock = new WebSocket(`${WS_BASE}${_wsPath}`);
+    const sock = new WebSocket(`${WS_BASE}${_wsPath()}`);
     sock.binaryType = 'arraybuffer';
     getSession(id).ws = sock;
 

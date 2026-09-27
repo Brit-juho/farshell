@@ -214,6 +214,56 @@ async def host_search(host_id: str, q: str):
     return payload
 
 
+# ── 원격 세션 생성 · 종료 · 이름 바꾸기 ─────────────────────────────────────
+# 원격의 `/api/peer/sessions/*`(control 등급)를 중계한다. 성공하면 그 호스트의
+# 세션 목록 캐시를 비운다 — 30초 TTL을 기다리면 방금 만든 세션이 레일에 안 보여
+# "안 됐나?" 하고 한 번 더 누르게 된다. 원격이 거절한 코드는 그대로 넘긴다:
+# 403(등급 부족)·409(이름 중복)·404(세션 없음, 또는 **상대가 이 기능이 없는 옛
+# 버전** — 화면이 둘을 `error` 필드로 구분한다).
+
+
+async def _peer_session_call(host_id: str, action: str, body: dict):
+    peer, err = await _peer_or_404(host_id)
+    if err:
+        return err
+    try:
+        result = await peer_client.call(peer, "POST", f"/api/peer/sessions/{action}", body)
+    except peer_client.PeerError as e:
+        if e.status == 404 and not e.reason.startswith("session_not_found"):
+            # 라우트 자체가 없는 404 — 상대가 2.2.1 이전 버전이다.
+            return JSONResponse(
+                {"error": "peer_outdated",
+                 "reason": f"{peer['label']}의 FarShell이 이 기능을 모릅니다 — 그 맥을 업데이트하세요"},
+                status_code=501,
+            )
+        return _peer_error(e)
+    _sessions_cache.invalidate(f"sessions:{host_id}")
+    return result
+
+
+@router.post("/api/hosts/{host_id}/sessions")
+async def host_session_create(host_id: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return await _peer_session_call(host_id, "create", {"name": str(body.get("name") or "")})
+
+
+@router.delete("/api/hosts/{host_id}/sessions/{name}")
+async def host_session_kill(host_id: str, name: str):
+    return await _peer_session_call(host_id, "kill", {"name": name})
+
+
+@router.patch("/api/hosts/{host_id}/sessions/{name}")
+async def host_session_rename(host_id: str, name: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return await _peer_session_call(host_id, "rename", {"name": name, "new": str(body.get("name") or "")})
+
+
 @router.post("/api/hosts/{host_id}/ping")
 async def ping_host(host_id: str):
     peer = await asyncio.to_thread(host_store.find_peer, host_id)

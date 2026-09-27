@@ -232,6 +232,9 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | POST | `/api/peer/clients/detach` | Signed, **`control` level** — detach one client (JSON: `tty`, `screen`). Detaching your own screen (identified by `screen`) is refused with 400 |
 | POST | `/api/peer/clients/solo` | Signed, **`control` level** — "keep only this screen" (JSON: `session`, `screen`). If `screen` doesn't resolve to a tty, **nothing is detached** and it returns 400 — detaching everything has no way back |
 | GET | `/api/peer/search?q=` | Signed, `view` level — scrollback search on this host (same caps as the local `/api/search/scrollback`). `session_id` is stripped from the results: it only means something inside this host, and the caller would open the wrong session with it |
+| POST | `/api/peer/sessions/create` | Signed, **`control` level** — create a tmux session on this host (JSON: optional `name`). Empty name → the same default-name rule as local `POST /api/tmux/create`. Names are `[A-Za-z0-9_][A-Za-z0-9_-]{0,31}` (a leading `-` would be read as a tmux option). **No `cwd`, no command** — the session starts in this host's default directory with the default shell, so "create a session" never becomes a second way to run an arbitrary command. Existing name → 409 |
+| POST | `/api/peer/sessions/kill` | Signed, **`control` level** — end a tmux session on this host (JSON: `name`). Matched **exactly** (`-t =name`): plain `-t name` falls back to a prefix match, so `dev` would kill `dev-2`. Missing → 404 (`error: session_not_found`). Also cleans up this host's own web tab on that session (reuses the local kill) |
+| POST | `/api/peer/sessions/rename` | Signed, **`control` level** — rename a tmux session on this host (JSON: `name`, `new`). Exact match on the target, 409 if `new` exists, and this host's own web-session record follows the new name |
 
 ## Hosts (N7/N39, stage 2 — what the browser calls)
 
@@ -248,6 +251,9 @@ a peer signature opens.
 | POST | `/api/hosts/{host_id}/clients/detach` | Proxies a remote detach (JSON: `tty`, `screen`). 403 if the peer only granted `view` — the UI then hides the detach buttons and says why |
 | POST | `/api/hosts/{host_id}/clients/solo` | Proxies remote "keep only this screen" (JSON: `session`, `screen`) |
 | GET | `/api/hosts/{host_id}/search?q=` | Proxies remote scrollback search. `host`/`host_label` are attached to each row **here** — whatever the remote calls itself, the label comes from this side's registry |
+| POST | `/api/hosts/{host_id}/sessions` | Proxies remote session creation (JSON: optional `name`) → `{ok, name}`. Drops that host's 30s session-list cache so the new session shows up immediately. The remote's refusal passes through (403 `view`-only, 409 name taken, 404 no such session); a peer whose FarShell predates these routes → **501 `peer_outdated`** so the UI can say "update that Mac" instead of "not found" |
+| DELETE | `/api/hosts/{host_id}/sessions/{name}` | Proxies a remote kill. Same cache drop |
+| PATCH | `/api/hosts/{host_id}/sessions/{name}` | Proxies a remote rename (JSON: `name` = the new name). Same cache drop |
 | WS | `/ws/remote/{host_id}/{tmux_name}` | Remote pane proxy: the browser's usual login auth on this side, the peer signature on the other. **Creates no PTY, feeds no output watcher, writes no scrollback** — the host that owns the PTY is the one that notifies and persists, so nothing is duplicated here |
 
 ## Misc

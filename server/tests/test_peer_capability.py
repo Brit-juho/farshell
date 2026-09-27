@@ -191,3 +191,18 @@ def test_peer_file_strips_b_local_identifiers():
     files_py = (_PEER_PY.parent / "files.py").read_text(encoding="utf-8")
     assert '("id", "path", "reused", "typed")' not in files_py, (
         "routes/files.py가 B의 id·path를 화면으로 다시 흘린다")
+
+
+# --- 원격 pane 프록시: 상대의 종료 코드를 브라우저로 옮긴다 -------------------------
+
+
+def test_proxy_maps_terminal_upstream_codes():
+    """B가 "세션 없음(4404)"·"인증 거부(4401)"로 닫으면 브라우저도 재시도를 멈춰야
+    한다(term/ws.js의 TERMINAL_CLOSE_CODES = 4001/4004). 예전엔 1000으로 뭉개서
+    사라진 원격 세션에 영원히 재연결했다."""
+    from routes.peer_proxy import browser_close_for
+
+    assert browser_close_for(4404)[0] == 4004
+    assert browser_close_for(4401)[0] == 4001
+    assert browser_close_for(1000) == (1000, "")   # 평범한 종료 → 재연결 허용
+    assert browser_close_for(None) == (1000, "")

@@ -8,7 +8,7 @@
 // 지연 청크가 이들을 정적 import하면 Vite lib 모드가 상태를 복제한다,
 // ADR-26/N35 커밋 참고). 전부 그 파일들이 이미 노출해 둔 window 브리지로만
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
-import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, onCleanup, untrack, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import {
   buildRailSections, buildSessionSections, buildSleepingEntries,
@@ -152,6 +152,8 @@ function Rail(props: { deps: RailDeps }) {
   // 없어도 할 수 있는 일이다.
   const [ctxMenu, setCtxMenu] = createSignal<{
     x: number; y: number; sessionId: string | null; tmuxName: string | null;
+    /** 원격 행의 메뉴면 그 호스트 id — 로컬 메뉴 항목(맥에서 열기 등)은 안 맞는다. */
+    remoteHost?: string | null;
   } | null>(null);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
@@ -215,6 +217,11 @@ function Rail(props: { deps: RailDeps }) {
   // 서버가 워크트리 생성·삭제·열기 때 쏘는 push. 폴링(60초)보다 훨씬 빠르게
   // 반영되고, 평시에는 요청이 아예 나가지 않는다.
   const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshRepos(); });
+  // 2026-09-28 — 원격 세션 생성·종료·이름 변경 직후(term/remote.js). 15초 주기를
+  // 기다리면 방금 만든 세션이 목록에 없어 "안 됐나?" 하고 또 누른다.
+  const onHostsChanged = () => { refreshHosts(); };
+  window.addEventListener('vt:hosts-changed', onHostsChanged);
+  onCleanup(() => window.removeEventListener('vt:hosts-changed', onHostsChanged));
   onCleanup(() => {
     clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
     desktopMq?.removeEventListener('change', onViewportChange);
@@ -425,7 +432,14 @@ function Rail(props: { deps: RailDeps }) {
 
   const contextRow = (e: MouseEvent, row: OtherRailRowInput) => {
     e.preventDefault();
-    if (row.remote) return; // 원격 세션은 로컬 액션(맥에서 열기 등)이 안 맞는다 — 지금까지도 메뉴가 없었다.
+    // 원격 행은 로컬 액션(맥에서 열기·연결된 화면 등)이 안 맞는다. 2026-09-28부터
+    // 원격 전용 메뉴(이름 변경·완전 종료)를 따로 연다 — 상대의 control 등급으로 간다.
+    if (row.remote) {
+      if (row.tmuxName) {
+        setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: row.sessionId, tmuxName: row.tmuxName, remoteHost: effectiveHostId() });
+      }
+      return;
+    }
     const sid = actionSessionId(row);
     if (!sid && !row.tmuxName) return; // 웹 세션도 tmux 이름도 없으면 메뉴가 성립하지 않는다.
     setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, tmuxName: row.tmuxName });
@@ -472,15 +486,25 @@ function Rail(props: { deps: RailDeps }) {
   // 회귀). 웹 세션이 있어야 한다(term/session.js의 renameSession).
   // editingSessionKey 자체는 rows 메모 앞으로 옮겼다(위 참고).
   const [editingSessionValue, setEditingSessionValue] = createSignal('');
-  const startRenameSession = (sessionId: string, currentName: string) => {
+  // 원격 행을 편집 중이면 그 대상 — 원격 세션은 이 브라우저의 웹 세션이 아니라
+  // 상대 호스트의 tmux 이름으로 바꾼다(term/remote.js renameRemoteSession).
+  const [editingRemote, setEditingRemote] = createSignal<{ host: string; tmux: string } | null>(null);
+  const startRenameSession = (sessionId: string, currentName: string, remote: { host: string; tmux: string } | null = null) => {
+    setEditingRemote(remote);
     setEditingSessionValue(currentName);
     setEditingSessionKey(sessionId);
   };
   const commitRenameSession = async (sessionId: string) => {
     if (editingSessionKey() !== sessionId) return;
     setEditingSessionKey(null);
+    const remote = editingRemote();
+    setEditingRemote(null);
     const trimmed = editingSessionValue().trim();
     if (!trimmed) return;
+    if (remote) {
+      await (window as any).vtRenameRemoteSession?.(remote.host, remote.tmux, trimmed);
+      return;
+    }
     await (window as any).renameSession?.(sessionId, trimmed);
   };
 
@@ -489,6 +513,15 @@ function Rail(props: { deps: RailDeps }) {
     if (!m) return [];
     const w = window as any;
     const items: MenuItem[] = [];
+    if (m.remoteHost && m.tmuxName) {
+      const host = m.remoteHost;
+      const tmux = m.tmuxName;
+      return [
+        { label: '열기', run: () => w.attachRemoteSession?.(host, tmux) },
+        { label: '이름 변경', run: () => startRenameSession(m.sessionId || `remote:${host}:${tmux}`, tmux, { host, tmux }) },
+        { label: '완전 종료', detail: '되돌릴 수 없음', run: () => w.vtKillRemoteSession?.(host, tmux) },
+      ];
+    }
     if (m.sessionId) {
       items.push(
         { label: '이름 변경', run: () => startRenameSession(m.sessionId as string, w.sessionDisplayName?.(m.sessionId) || '') },
@@ -537,10 +570,32 @@ function Rail(props: { deps: RailDeps }) {
     refreshHosts(); // 열 때 한 번 더 — 목록이 15초 지나 있을 수 있다.
     setHostMenu({ x: r.left, y: r.bottom + 4 });
   };
-  const selectHost = (id: string) => {
+  // 2026-09-28(사용자 지적) — 스위처가 "목록 필터"이기만 해서, M5로 바꿔도 터미널
+  // 칸과 헤더 칩은 그대로 M1을 말했다. 이제 고르면 화면도 그 호스트로 간다
+  // (term/remote.js focusHost — 열린 세션 칸, 없으면 그 호스트의 빈 탭).
+  // 화면 이동(focusHost)은 비동기다(빈 칸에 그릴 호스트 이름을 먼저 받는다). 그
+  // 사이에 아래 "따라가기"가 돌면 아직 옛 칸을 보고 스위처를 되돌려 버린다 —
+  // 이동이 끝날 때까지 따라가기를 쉰다.
+  let focusing = false;
+  const selectHost = async (id: string) => {
     setActiveHostId(id);
     (window as any).vtSettingsSet?.(SETTINGS_HOST_KEY, id);
+    focusing = true;
+    try { await (window as any).vtFocusHost?.(id); } finally { focusing = false; }
   };
+  // 반대 방향 — 사용자가 다른 탭·칸을 누르면 스위처가 그 칸의 호스트로 따라간다.
+  // 안 그러면 로컬 탭을 눌렀는데 스위처는 M5인 채로 남아 같은 어긋남이 다시 생긴다.
+  // activeHostId는 untrack으로 읽는다 — 추적하면 스위처를 고르는 순간 이 효과가
+  // 다시 돌아 (화면이 아직 안 옮겨졌으니) 방금 고른 값을 되돌린다.
+  createEffect(() => {
+    sessionsVersion(); layoutVersion();
+    if (focusing) return;
+    const h = (window as any).vtActiveViewHost?.();
+    if (h && h !== untrack(activeHostId)) {
+      setActiveHostId(h);
+      (window as any).vtSettingsSet?.(SETTINGS_HOST_KEY, h);
+    }
+  });
   // 폰의 플릿 홈(Fleet.tsx)에도 같은 키를 쓰는 스위처가 있다. 창 폭을 오가면
   // 둘 다 살아 있으므로, 저쪽에서 바꾼 값을 여기서도 따라간다.
   const unsubHostSetting = (window as any).vtSettingsSubscribe?.((all: any) => {
@@ -726,6 +781,11 @@ function Rail(props: { deps: RailDeps }) {
                       row={row}
                       compact={collapsed()}
                       active={actionSessionId(row) === activeId()}
+                      editing={!!row.sessionId && editingSessionKey() === row.sessionId}
+                      editingValue={editingSessionValue()}
+                      onEditInput={setEditingSessionValue}
+                      onEditCommit={() => commitRenameSession(row.sessionId as string)}
+                      onEditCancel={() => { setEditingSessionKey(null); setEditingRemote(null); }}
                       onOpen={(e) => openRow(e, row)}
                       onContext={(e) => contextRow(e, row)}
                     />
@@ -883,14 +943,20 @@ function Rail(props: { deps: RailDeps }) {
             지웠다). session.add-menu는 원격을 보고 있을 때 누르면 "맥에"
             세션이 생겨 화면과 결과가 어긋나므로 워크트리 만들기와 같은
             이유로 막는다. */}
+        {/* 2026-09-28 — 원격 호스트를 보고 있으면 **그 호스트에** tmux 세션을 만든다
+            (term/remote.js createRemoteSession → 상대의 control 등급). 메뉴를 거치지
+            않는다: 원격에는 "일반 터미널(tmux 아님)"이 없다. 꺼진 호스트에서만 막는다. */}
         <button
           type="button"
           class="vt-wgrail-new"
-          disabled={isRemoteHost()}
-          data-tip={isRemoteHost() ? '새 세션' : (collapsed() ? '새 세션' : undefined)}
-          data-tip-sub={isRemoteHost() ? '원격 호스트에서는 불가 (2.2)' : undefined}
+          disabled={isRemoteHost() && !(activeHost()?.online)}
+          data-tip={isRemoteHost() ? `${activeHost()?.label || '원격'}에 새 세션` : (collapsed() ? '새 세션' : undefined)}
+          data-tip-sub={isRemoteHost() ? (activeHost()?.online ? 'tmux 세션 · 상대의 control 권한 필요' : '호스트에 연결할 수 없습니다') : undefined}
           data-tip-side="right"
-          onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
+          onClick={(e) => {
+            if (isRemoteHost()) { (window as any).vtCreateRemoteSession?.(effectiveHostId()); return; }
+            (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e);
+          }}
         >
           <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 새 세션</Show>
         </button>

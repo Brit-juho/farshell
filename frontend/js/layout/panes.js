@@ -15,7 +15,7 @@
 import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
-  splitPane, closePane, setRatio,
+  splitPane, closePane, setRatio, getActiveTabHostId,
 } from './store.js';
 import { findNode, collectSessions } from './tree.js';
 import { detachSession } from '../term/session-actions.js';
@@ -207,6 +207,11 @@ function _buildPaneEl(paneId) {
 function _renderEmptyBody(bodyEl, paneId) {
   bodyEl.classList.remove('vt-pane-viewer');
   delete bodyEl.dataset.viewerFile;
+  // 2026-09-28 — 원격 호스트 탭(레일 스위처가 연 빈 탭)의 빈 칸은 로컬 「세션
+  // 선택」 시트를 열면 안 된다: 그 시트는 **이 맥의** 세션만 고른다.
+  const host = getActiveTabHostId();
+  if (host !== 'local') { _renderRemoteEmptyBody(bodyEl, host); return; }
+  delete bodyEl.dataset.remoteEmpty;
   if (bodyEl.querySelector('.vt-pane-empty')) return;
   bodyEl.replaceChildren();
   const ph = document.createElement('button');
@@ -218,6 +223,43 @@ function _renderEmptyBody(bodyEl, paneId) {
   bodyEl.appendChild(ph);
 }
 
+// 원격 호스트 탭의 빈 칸 — "이 호스트에 열린 화면이 없다"와 그 자리에서 새 세션을
+// 여는 버튼. 모양은 C3 자리표시자를 빌린다(둘 다 "원격 호스트의 칸" 안내다).
+// 기존 세션은 레일(이미 이 호스트로 맞춰져 있다)에서 고른다.
+function _renderRemoteEmptyBody(bodyEl, hostId) {
+  if (bodyEl.dataset.remoteEmpty === hostId) return;
+  // 같은 칸 DOM을 다른 자리표시자가 쓰다 넘어온 경우 그쪽 표식을 지운다 —
+  // 안 지우면 그쪽 가드가 "이미 그렸다"고 오판해 다시 안 그린다.
+  delete bodyEl.dataset.unreachable;
+  bodyEl.dataset.remoteEmpty = hostId;
+  bodyEl.replaceChildren();
+  const label = (typeof window.vtHostLabelSync === 'function' && window.vtHostLabelSync(hostId)) || hostId;
+
+  const box = document.createElement('div');
+  box.className = 'vt-pane-unreachable vt-pane-remote-empty';
+  const title = document.createElement('div');
+  title.className = 'vt-pane-unreachable-title';
+  title.textContent = `${label} · 열린 화면 없음`;
+  const sub = document.createElement('div');
+  sub.className = 'vt-pane-unreachable-sub';
+  sub.textContent = '왼쪽 목록에서 세션을 고르거나 새로 만드세요.';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'vt-btn sm';
+  btn.textContent = `+ ${label}에 새 세션`;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try { await window.vtCreateRemoteSession?.(hostId); } finally { btn.disabled = false; }
+  });
+  const row = document.createElement('div');
+  row.className = 'vt-pane-unreachable-acts';
+  row.appendChild(btn);
+  box.appendChild(title);
+  box.appendChild(sub);
+  box.appendChild(row);
+  bodyEl.appendChild(box);
+}
+
 // C3 — "못 닿는 중" 자리표시자. 빈 pane(세션을 고르는 자리)과 **다르게** 보여야
 // 한다: 여기는 이미 주인이 정해져 있고 그 주인을 기다리는 칸이다. 그래서
 // 세션 선택 시트를 열지 않고, 호스트 상태를 다시 확인하는 「다시 시도」만 준다.
@@ -225,6 +267,7 @@ function _renderUnreachableBody(bodyEl, node) {
   bodyEl.classList.remove('vt-pane-viewer');
   delete bodyEl.dataset.viewerFile;
   if (bodyEl.dataset.unreachable === node.unreachable.tmux) return;
+  delete bodyEl.dataset.remoteEmpty;
   bodyEl.dataset.unreachable = node.unreachable.tmux;
   bodyEl.replaceChildren();
 
@@ -386,6 +429,11 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
     nameEl.textContent = _sessionLabel(node.session) + labelSuffix;
     const empty = bodyEl.querySelector('.vt-pane-empty');
     if (empty) empty.remove();
+    // 원격 빈 칸에서 「새 세션」을 누르면 **같은 칸**에 세션이 들어온다(pane DOM은
+    // id로 재사용된다) — 자리표시자를 치우지 않으면 터미널 옆에 그대로 남는다.
+    const remoteEmpty = bodyEl.querySelector('.vt-pane-remote-empty');
+    if (remoteEmpty) remoteEmpty.remove();
+    delete bodyEl.dataset.remoteEmpty;
   } else if (node.unreachable) {
     // C3 — 원격 호스트가 잠깐 꺼진 칸. 빈 pane으로 강등하지 않고 배치를 지킨다
     // (강등하면 호스트를 다시 켜도 배치가 영영 사라진다, layout/persist.js 참고).

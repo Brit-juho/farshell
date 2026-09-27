@@ -41,6 +41,22 @@ def _screen_token(raw: str | None) -> str:
     return raw if _SCREEN_RE.fullmatch(raw) else ""
 
 
+# 상대(B)가 "다시 붙어도 소용없다"는 뜻으로 닫은 코드 → 브라우저가 같은 뜻으로
+# 알아듣는 코드(term/ws.js의 TERMINAL_CLOSE_CODES). 예전엔 B의 종료 코드를 버리고
+# 기본값(1000)으로 닫아서, 원격 세션이 사라진 탭(B에서 종료·이름 변경)이 없는
+# 세션에 영원히 재연결을 시도했다.
+_TERMINAL_UPSTREAM_CODES = {
+    4404: (4004, "원격 세션이 없습니다"),
+    4401: (4001, "원격 호스트가 인증을 거부했습니다"),
+}
+
+
+def browser_close_for(upstream_code: int | None) -> tuple[int, str]:
+    """B의 종료 코드로 브라우저 쪽 종료 코드·이유를 정한다. 재시도해서 달라지지
+    않는 경우만 옮기고, 나머지는 평소처럼(1000) 닫아 브라우저가 재연결하게 둔다."""
+    return _TERMINAL_UPSTREAM_CODES.get(upstream_code or 0, (1000, ""))
+
+
 def _ws_url(base_url: str, path: str) -> str:
     u = base_url.rstrip("/")
     if u.startswith("https://"):
@@ -125,7 +141,8 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
             await upstream.close()
         except Exception:
             pass
+        code, reason = browser_close_for(upstream.close_code)
         try:
-            await ws.close()
+            await ws.close(code=code, reason=reason)
         except Exception:
             pass

@@ -36,14 +36,40 @@ async function safeFetch<T>(deps: HeaderDeps, path: string): Promise<T | null> {
   }
 }
 
-// 워크스페이스 칩 — "farshell / <호스트>". 호스트는 재부팅 전엔 안 바뀌므로
-// 한 번만 읽는다(HUD처럼 상태 폴링이 필요한 값이 아니다).
+// 워크스페이스 칩 — "farshell / <호스트>".
+//
+// 2026-09-28(사용자 지적) — 예전엔 로그인한 서버의 이름을 부팅 때 한 번 읽어
+// 고정했다. 레일 스위처로 M5를 고르고 M5 원격 칸을 보고 있어도 칩은 계속 M1이라,
+// 세 곳(칩·스위처·터미널 칸)이 서로 다른 호스트를 말했다. 이제 **활성 칸이
+// 보여주는 호스트**를 따라간다(term/host-view.js가 판정, window.vtActiveViewHost).
+// 원격 칸이면 이 화면이 어느 서버를 거쳐 그 호스트에 닿았는지도 같이 적는다 —
+// 로그인한 서버는 여전히 이 맥이고, 원격 칸은 이 맥의 프록시를 지난다.
 function WorkspaceChip(props: { deps: HeaderDeps }) {
   const [hostname, setHostname] = createSignal('');
+  const [viewHostId, setViewHostId] = createSignal('local');
+  const [viewLabel, setViewLabel] = createSignal('');
 
   safeFetch<Caps>(props.deps, '/api/capabilities').then((c) => {
     if (c?.hostname) setHostname(c.hostname);
   });
+
+  let seq = 0;
+  const syncView = async () => {
+    const w = window as any;
+    const id = String(w.vtActiveViewHost?.() || 'local');
+    if (id === viewHostId() && (id === 'local' || viewLabel())) return;
+    const mine = ++seq;
+    setViewHostId(id);
+    if (id === 'local') { setViewLabel(''); return; }
+    setViewLabel(w.vtHostLabelSync?.(id) || id);
+    const label = await w.vtHostLabel?.(id);
+    if (mine === seq && label) setViewLabel(label);   // 그 사이 다른 칸으로 옮겼으면 버린다
+  };
+  // 세션 추가·삭제·전환(store)과 칸·탭 이동(layout) 둘 다 활성 칸을 바꾼다.
+  const offStore = (window as any).storeSubscribe?.(() => { syncView(); });
+  const offLayout = (window as any).onLayoutChange?.(() => { syncView(); });
+  onCleanup(() => { offStore?.(); offLayout?.(); });
+  syncView();
 
   // 2026-09-21: 클릭(팔레트 @ 모드)을 뗐다 — 이 칩을 호스트 전환 진입점으로
   // 착각하기 쉬운데, @ 모드는 세션 이름 검색일 뿐이고 실제 호스트 전환은
@@ -58,8 +84,14 @@ function WorkspaceChip(props: { deps: HeaderDeps }) {
     <div id="vt-workspace-chip">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="5" /><path d="m7 9 3 3-3 3" /><path d="M12 15h5" /></svg>
       <span class="vt-workspace-name">farshell</span>
-      <Show when={hostname()}>
-        <span class="vt-workspace-host">/ {hostname()}</span>
+      <Show
+        when={viewHostId() !== 'local'}
+        fallback={<Show when={hostname()}><span class="vt-workspace-host">/ {hostname()}</span></Show>}
+      >
+        <span class="vt-workspace-host remote">/ {viewLabel()}</span>
+        <Show when={hostname()}>
+          <span class="vt-workspace-via">· {hostname()} 경유</span>
+        </Show>
       </Show>
     </div>
   );

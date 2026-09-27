@@ -377,6 +377,146 @@ async def peer_input(request: Request, grant: dict):
     return {"ok": True}, detail
 
 
+# --- 세션 생성 · 종료 · 이름 바꾸기 (control) -------------------------------------
+#
+# 2.2까지 원격 호스트는 "이미 떠 있는 세션을 보고 조작"하는 데서 멈췄다 — 레일의
+# 「+ 새 세션」은 원격에서 꺼져 있었고, 원격 행에는 메뉴가 없었다. 셋 다 **control
+# 등급**이다: control은 이미 셸 입력 전부를 할 수 있으므로(`/api/peer/input`) 셸
+# 하나를 더 띄우거나 끄는 것이 새 권한을 만들지 않는다. 반대로 view에게 열면
+# "보기만 허락한 상대가 내 작업 세션을 끈다"가 된다.
+#
+# **시작 폴더·실행 명령은 받지 않는다.** 세션은 이 호스트의 기본 폴더에서 기본
+# 셸로만 시작한다 — 경로는 이 맥 안에서만 뜻이 있는 값이고(머리말의 strip 원칙과
+# 같은 이유), 명령을 받으면 "세션 만들기"가 "임의 명령 실행"의 다른 입구가 된다.
+
+# 첫 글자에 `-`를 막는다 — `rename-session -t =a -x`처럼 새 이름이 위치 인자로
+# 들어가는 명령에서 tmux가 그걸 옵션으로 읽는다.
+_TMUX_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_\-]{0,31}")
+
+
+def _tmux_name_or_none(raw) -> str | None:
+    """로컬 rename(`routes/pty.py`)과 같은 문자셋 + 길이 상한. tmux 인자로 바로
+    들어가므로 여기서 걸러야 한다(`-t` 대상 문법의 `:`·`.` 등을 막는다)."""
+    name = str(raw or "").strip()
+    return name if _TMUX_NAME_RE.fullmatch(name) else None
+
+
+async def _has_exact(name: str) -> bool:
+    """정확히 이 이름의 세션이 있는가. `tmux_runner.has_session`은 `-t name`이라
+    정확한 이름이 없으면 **접두사로도** 맞춘다(`dev`가 `dev-2`에 걸린다) — 종료·
+    이름 바꾸기 대상이 엉뚱한 세션이 되지 않게 `=name`(정확 매칭)으로 묻는다."""
+    import tmux_runner
+
+    rc, _, _ = await tmux_runner.run_async(["has-session", "-t", f"={name}"], timeout=1.0)
+    return rc == 0
+
+
+def _bad_name(raw) -> tuple[JSONResponse, str]:
+    return JSONResponse(
+        {"error": "bad_name", "reason": "세션 이름은 영숫자·dash·underscore 1~32자만 가능합니다(첫 글자 dash 불가)"},
+        status_code=400,
+    ), f"잘못된 이름: {str(raw)[:40]!r}"
+
+
+@router.post("/api/peer/sessions/create")
+@capability("sessions/create", level=host_store.LEVEL_CONTROL, strip=())
+async def peer_sessions_create(request: Request, grant: dict):
+    """이 호스트에 tmux 세션을 만든다(`control` 등급). 이름이 비면 로컬 생성과
+    같은 기본 이름 규칙(`routes/tmux.py`)을 쓴다 — 같은 맥에서 만든 세션이 어디서
+    만들었느냐에 따라 이름 모양이 달라지지 않게."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    import platform_utils
+    import tmux_runner
+    from routes.tmux import _generate_default_session_name
+
+    raw = body.get("name")
+    if raw is None or str(raw).strip() == "":
+        name = await asyncio.to_thread(_generate_default_session_name)
+    else:
+        name = _tmux_name_or_none(raw)
+        if name is None:
+            return _bad_name(raw)
+        if await _has_exact(name):
+            return JSONResponse(
+                {"error": "exists", "reason": f"이미 있는 이름입니다: {name}"}, status_code=409,
+            ), f"중복: {name}"
+    rc, _, err = await tmux_runner.run_async(
+        ["new-session", "-d", "-s", name, "-c", platform_utils.default_start_dir()],
+        timeout=5.0,
+    )
+    if rc != 0:
+        return JSONResponse(
+            {"error": "create_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
+            status_code=500,
+        ), f"생성 실패: {name}"
+    return {"ok": True, "name": name}, name
+
+
+@router.post("/api/peer/sessions/kill")
+@capability("sessions/kill", level=host_store.LEVEL_CONTROL, strip=())
+async def peer_sessions_kill(request: Request, grant: dict):
+    """이 호스트의 tmux 세션을 끝낸다(`control` 등급). 이 맥의 웹 탭이 같은 세션을
+    열고 있으면 그 PTY·상태도 함께 정리한다 — 로컬 종료(`DELETE /api/tmux/kill`)를
+    그대로 부르는 이유다(정리 순서를 두 군데서 따로 관리하지 않는다)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    from routes.tmux import kill_tmux_session
+
+    name = _tmux_name_or_none(body.get("name"))
+    if name is None:
+        return _bad_name(body.get("name"))
+    if not await _has_exact(name):
+        return JSONResponse({"error": "session_not_found"}, status_code=404), f"세션 없음: {name}"
+    result = await kill_tmux_session(name)
+    if isinstance(result, JSONResponse):
+        return result, f"종료 실패: {name}"
+    return {"ok": True, "name": name}, name
+
+
+@router.post("/api/peer/sessions/rename")
+@capability("sessions/rename", level=host_store.LEVEL_CONTROL, strip=())
+async def peer_sessions_rename(request: Request, grant: dict):
+    """이 호스트의 tmux 세션 이름을 바꾼다(`control` 등급). tmux 세션 이름이 이름의
+    단일 진실이라(`routes/pty.py` rename 주석) 이 맥의 웹 탭 레코드도 새 이름으로
+    맞춘다 — 안 그러면 이 맥의 화면이 옛 이름으로 다시 붙으려다 실패한다."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    import tmux_runner
+    from deps import session_store
+
+    old = _tmux_name_or_none(body.get("name"))
+    if old is None:
+        return _bad_name(body.get("name"))
+    new = _tmux_name_or_none(body.get("new"))
+    if new is None:
+        return _bad_name(body.get("new"))
+    if old == new:
+        return {"ok": True, "name": new}, "변경 없음"
+    if not await _has_exact(old):
+        return JSONResponse({"error": "session_not_found"}, status_code=404), f"세션 없음: {old}"
+    if await _has_exact(new):
+        return JSONResponse(
+            {"error": "exists", "reason": f"이미 있는 이름입니다: {new}"}, status_code=409,
+        ), f"중복: {new}"
+    rc, _, err = await tmux_runner.run_async(["rename-session", "-t", f"={old}", new], timeout=2.0)
+    if rc != 0:
+        return JSONResponse(
+            {"error": "rename_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
+            status_code=500,
+        ), f"변경 실패: {old}"
+    local = session_store.find_by_tmux_name(old)
+    if local:
+        session_store.update_tmux_name(local.session_id, new)
+    return {"ok": True, "name": new}, f"{old} → {new}"
+
+
 @router.websocket("/api/peer/ws/{tmux_name}")
 async def peer_ws(ws: WebSocket, tmux_name: str):
     """원격 pane의 출력 스트림(+ control이면 입력). 상대 서버(A)의 프록시가 연결한다.

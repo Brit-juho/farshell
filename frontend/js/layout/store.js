@@ -278,6 +278,27 @@ export function getActiveTabId() {
   return _tabs[_activeTabIndex].id;
 }
 
+/** 활성 탭이 속한 호스트 — 활성 칸이 비었을 때 "지금 어느 호스트를 보나"의
+ * 답이다(term/host-view.js). 2.2까지는 늘 'local'이던 자리. */
+export function getActiveTabHostId() {
+  return _tabs[_activeTabIndex].hostId || 'local';
+}
+
+// 세션·자리표시자·뷰어·패널이 하나도 없는 트리 — "그냥 비어 있는 화면".
+function _isBlankTree(tree) {
+  if (!tree) return true;
+  if (tree.t === 'leaf') {
+    return !tree.session && !tree.unreachable && (tree.kind || 'terminal') === 'terminal';
+  }
+  return _isBlankTree(tree.a) && _isBlankTree(tree.b);
+}
+
+/** 호스트 스위처(term/remote.js `focusHost`)가 재사용할 빈 탭을 찾을 때 쓰는 요약. */
+export function getTabHostSummaries() {
+  _sync();
+  return _tabs.map((t) => ({ id: t.id, hostId: t.hostId || 'local', empty: _isBlankTree(t.tree) }));
+}
+
 /** 이 세션이 지금 어느 탭의 pane 트리에 떠 있는가 — 없으면 null(아직 어느
  * 화면에도 없다: 처음 여는 세션, 또는 방금 깨운 세션). 2026-09-18 후속
  * (그룹 재정의)의 핵심 조회 — "같은 화면에 이미 떠 있으면 그 화면으로,
@@ -358,7 +379,12 @@ export function openLayoutTab({ worktreeId = null, hostId = 'local', label = nul
     return existing;
   }
   _sync();
-  const tab = _makeTab({ worktreeId, hostId, label });
+  // 세션 없이 여는 **다른 호스트의** 탭은 정말로 비어 있어야 한다. `_makeTab`의
+  // 기본 트리는 지금 활성 세션을 담아 시작하므로(탭 하나뿐인 부팅 상태를 위한
+  // 기본값), 그대로 두면 호스트 스위처가 연 "M5 빈 탭"에 로컬 세션이 들어가
+  // 활성 칸이 다시 로컬이 된다(2026-09-28 실브라우저에서 확인).
+  const blank = !sessionId && hostId !== 'local' ? makeLeaf(_genId('pane'), null) : null;
+  const tab = _makeTab({ worktreeId, hostId, label, tree: blank });
   if (sessionId) tab.tree = _setSession(tab.tree, tab.tree.id, sessionId);
   _tabs.push(tab);
   _activeTabIndex = _tabs.length - 1;
