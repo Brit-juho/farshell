@@ -4406,7 +4406,7 @@ cmd_status() {
 case "${1:-help}" in
   voice)   cmd_voice ;;
   clip)    cmd_clip ;;
-  mobile)  cmd_mobile ;;
+  mobile)  shift; cmd_mobile "$@" ;;
   start)   shift 2>/dev/null || true; cmd_start "$@" ;;
   stop)    shift 2>/dev/null || true; cmd_stop "$@" ;;
   restart) shift 2>/dev/null || true; cmd_restart "$@" ;;
