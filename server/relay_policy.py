@@ -1,0 +1,117 @@
+"""호스트 전환 중계(relay)가 **상대 맥의 어느 API까지** 닿을 수 있는가 — 허용 목록.
+
+2026-09-28(사용자 요청) — 레일 스위처로 M5를 고르면 세션만이 아니라 탭·포트·
+파일·첨부·설정까지 전부 M5 것이 되어야 한다. 그래서 브라우저 → 로그인한 서버(A)
+→ 상대 서버(B)로 일반 API를 통째로 중계한다(`routes/host_relay.py` → `routes/
+peer_relay.py`). `routes/peer.py` 머리말의 "peer는 별도 네임스페이스로만 닿는다"
+원칙을 여기서 **넓히는 것**이므로, 넓히는 범위를 이 파일 한 곳에 목록으로 둔다.
+
+## 규칙
+- **허용 목록이다(거부 목록이 아니다).** 새 API가 생기면 기본은 중계 불가 —
+  여기에 적어야 열린다. 거꾸로 하면 인증 라우트가 새로 생기는 날 조용히 뚫린다.
+- 판정은 **B가** 한다(`peer_relay.py`). A도 같은 함수로 미리 거르지만 그건 헛걸음을
+  줄이려는 것일 뿐, A를 믿는 게 아니다(등급 판정을 B가 하는 것과 같은 이유).
+- 절대 열지 않는 것: 로그인·기기·OTP·승격(`/api/auth*`, `/api/devices`), peer·호스트
+  관리(`/api/peer*`, `/api/hosts*`, `/ws/remote`, `/ws/hosts` — 여기를 열면 A→B→C
+  전이 중계가 된다), 공유 링크·포트 노출·git 계정·MCP 쓰기(승격 라우트), 푸시·
+  클립보드·음성(그 기기에 붙은 것), 훅 이벤트(기계 계약, AGENTS.md 계약 8).
+"""
+
+from __future__ import annotations
+
+import re
+
+_GET = frozenset({"GET"})
+_ANY = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+
+# (패턴, 허용 메서드). 패턴은 경로 **전체**와 맞춘다(fullmatch).
+_HTTP_RULES: tuple[tuple[re.Pattern, frozenset], ...] = tuple(
+    (re.compile(p), m) for p, m in (
+        # 터미널 세션·tmux
+        (r"/api/sessions(/[^/]+(/(keys|paste))?)?", _ANY),
+        (r"/api/tmux/(sessions|create|attach|clients|clients/solo|detach-client)", _ANY),
+        (r"/api/tmux/kill/[^/]+", _ANY),
+        (r"/api/tmux/preview/[^/]+", _GET),
+        # 에이전트 상태
+        (r"/api/agents(/coverage|/[^/]+)?", _GET),
+        (r"/api/agent/status", _GET),
+        # 첨부·파일·코드 뷰어 (공유 링크는 승격 라우트라 제외, send는 전이라 제외)
+        (r"/api/files", _GET),
+        (r"/api/files/delete", _ANY),
+        (r"/api/files/[^/]+", _ANY),
+        (r"/api/files/[^/]+/(download|path)", _GET),
+        (r"/api/files/[^/]+/insert", _ANY),
+        (r"/api/upload", _ANY),
+        (r"/api/fs/(file|raw|roots|search|tree)", _GET),
+        # git (계정·바인딩 제외)
+        (r"/api/git/(status|diff|log|show)", _GET),
+        (r"/api/git/(stage|unstage|commit)", _ANY),
+        # 포트 (노출·공유는 승격 라우트라 제외)
+        (r"/api/ports", _GET),
+        (r"/api/ports/\d+", _ANY),
+        # 큐·스니펫·검색·사용량
+        (r"/api/queue(/run|/[^/]+(/unblock)?)?", _ANY),
+        (r"/api/snippets(/project|/[^/]+)?", _ANY),
+        (r"/api/search/scrollback", _GET),
+        (r"/api/usage(/counter)?", _ANY),
+        # 워크스페이스(탭·레이아웃)·워크트리·저장소
+        (r"/api/workspace", _ANY),
+        (r"/api/worktrees(/precheck|/hidden|/[^/]+(/open)?)?", _ANY),
+        (r"/api/repos", _GET),
+        # 읽기 전용 상태
+        (r"/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)", _GET),
+        (r"/api/mcp(/plugins)?", _GET),
+        (r"/api/watch/[^/]+", _ANY),
+    )
+)
+
+# 탭의 files 규칙이 넓어서(`/api/files/[^/]+`) 아래를 먼저 막는다 — 공유 링크
+# 생성(승격)과 다른 peer로 보내기(전이).
+_HTTP_DENY = (
+    re.compile(r"/api/files/[^/]+/(share|send)(/.*)?"),
+    re.compile(r"/api/(tmux|sessions)/open-on-mac"),
+)
+
+_WS_RULES = (
+    re.compile(r"/ws/[A-Za-z0-9_\-:.]+"),
+    re.compile(r"/ws-agent"),
+    re.compile(r"/ws-workspace"),
+    re.compile(r"/ws-preview/[^/]+"),
+)
+# `/ws/remote/...`·`/ws/hosts/...`는 _WS_RULES 첫 줄(한 세그먼트)에 안 걸린다.
+
+
+def _clean(path: str) -> str | None:
+    """경로 우회 차단. `..`·빈 세그먼트·역슬래시·NUL이 있으면 거부한다 —
+    라우터와 이 목록이 같은 경로를 다르게 읽는 틈을 없앤다."""
+    if not path.startswith("/") or "\\" in path or "\x00" in path or "//" in path:
+        return None
+    if any(seg in (".", "..") for seg in path.split("/")):
+        return None
+    return path
+
+
+def http_allowed(method: str, path: str) -> bool:
+    p = _clean(path)
+    if p is None:
+        return False
+    if any(d.fullmatch(p) for d in _HTTP_DENY):
+        return False
+    m = method.upper()
+    return any(rx.fullmatch(p) and m in methods for rx, methods in _HTTP_RULES)
+
+
+def ws_allowed(path: str) -> bool:
+    p = _clean(path)
+    return p is not None and any(rx.fullmatch(p) for rx in _WS_RULES)
+
+
+def strip_token(query: str) -> str:
+    """쿼리에서 `token`을 뺀다 — **A의 기계 토큰이 B로 새지 않게.** 브라우저는
+    인증용으로 `?token=`을 붙여 보내는데, 그건 A에서만 뜻이 있는 비밀이다."""
+    from urllib.parse import parse_qsl, urlencode
+
+    if not query:
+        return ""
+    pairs = [(k, v) for k, v in parse_qsl(query, keep_blank_values=True) if k != "token"]
+    return urlencode(pairs)

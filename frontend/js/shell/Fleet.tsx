@@ -14,7 +14,7 @@ import {
   buildRailSections, buildSleepingEntries, GROUP_LABEL, type OtherRailRowInput,
 } from './rail-data.js';
 import {
-  buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, LOCAL_HOST,
+  buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
 } from './host-data.js';
 
@@ -35,7 +35,6 @@ const GIT_CACHE_MS = 60000;
 
 // C1 — Rail.tsx와 **같은 설정 키**를 읽고 쓴다. 폰과 데스크톱이 각자 다른
 // 호스트를 기억하면 창 폭을 바꿨을 때 목록이 이유 없이 바뀐 것처럼 보인다.
-const SETTINGS_HOST_KEY = 'ui.activeHostId';
 
 export interface FleetDeps {
   vtFetch: (path: string, opts?: RequestInit) => Promise<unknown>;
@@ -266,9 +265,9 @@ function Fleet(props: { deps: FleetDeps }) {
   const [diffTick, setDiffTick] = createSignal(0);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenuOpen, setHostMenuOpen] = createSignal(false);
-  const [activeHostId, setActiveHostId] = createSignal<string>(
-    String((window as any).vtSettingsGet?.(SETTINGS_HOST_KEY) || LOCAL_HOST),
-  );
+  // 2026-09-28(사용자 요청) — 스위처는 목록 필터가 아니라 화면 전체의 전환이다
+  // (core/host-route.js, Rail.tsx와 같은 규칙). 세션 목록은 그 맥의 API에서 온다.
+  const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
 
   const refreshSessions = async () => {
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
@@ -303,24 +302,12 @@ function Fleet(props: { deps: FleetDeps }) {
     document.removeEventListener('vt:mobile-tab', onMobileTab);
   });
 
-  // 레일에서 호스트를 바꿔도(창을 넓혔다 줄이는 동안 둘 다 살아 있다) 여기가
-  // 따라오도록 설정 변경을 구독한다 — 안 하면 같은 화면의 두 스위처가 서로
-  // 다른 호스트를 가리킨다.
-  const unsubSettings = (window as any).vtSettingsSubscribe?.((all: any) => {
-    const v = String(all?.[SETTINGS_HOST_KEY] || LOCAL_HOST);
-    if (v !== activeHostId()) setActiveHostId(v);
-  });
-  onCleanup(() => unsubSettings?.());
-
-  const effectiveHostId = createMemo(() =>
-    hosts().length === 0 ? activeHostId() : resolveActiveHost(hosts(), activeHostId()));
-  const isRemoteHost = createMemo(() => effectiveHostId() !== LOCAL_HOST);
-  const activeHost = createMemo(() => hosts().find((h) => h.id === effectiveHostId()) || null);
+  const activeHost = createMemo(() => hosts().find((h) => h.id === viewHostId) || null);
+  const viewHostOffline = createMemo(() => viewHostId !== LOCAL_HOST && !!activeHost() && !activeHost()!.online);
 
   const selectHost = (id: string) => {
-    setActiveHostId(id);
-    (window as any).vtSettingsSet?.(SETTINGS_HOST_KEY, id);
     setHostMenuOpen(false);
+    if (id !== viewHostId) (window as any).vtSwitchHost?.(id);
   };
 
   // ADR-29 B와 같은 소스 — `/api/tmux/sessions`(잠든 것까지) + `allSessions()`
@@ -330,13 +317,6 @@ function Fleet(props: { deps: FleetDeps }) {
     sessionsVersion(); agentVersion();
     const w = window as any;
 
-    // C1 — 원격 호스트를 고르면 그 호스트의 세션만 그린다(Rail.tsx와 같은
-    // 규칙: 스위처는 필터일 뿐, 이미 열린 pane은 건드리지 않는다). 원격은
-    // 아직 수면 개념이 없다(host-data.ts의 remoteSessionRows — 항상 awake).
-    if (isRemoteHost()) {
-      const h = activeHost();
-      return h ? remoteSessionRows(h) : [];
-    }
     const all = w.allSessions ? w.allSessions() : {};
 
     // tmux 이름 → 이 브라우저의 웹 세션 id(있으면). "깨어있음"은 기기별
@@ -407,18 +387,10 @@ function Fleet(props: { deps: FleetDeps }) {
   // 수도 없다 — 데스크톱 buildSessionSections와 같은 원칙).
   const awakeRows = createMemo(() => rows().filter((r) => r.awake));
   const sections = createMemo(() => { diffTick(); return buildRailSections(awakeRows()); });
-  const sleepingEntries = createMemo(() => (isRemoteHost() ? [] : buildSleepingEntries(rows())));
+  const sleepingEntries = createMemo(() => buildSleepingEntries(rows()));
 
   const openRow = async (row: FleetRow) => {
     const w = window as any;
-    // C1+3단계 — 원격 행은 프록시 경로로 연다(term/remote.js가 window에 건다).
-    if ((row as any).remote && row.tmuxName) {
-      if (typeof w.attachRemoteSession === 'function') {
-        await w.attachRemoteSession(effectiveHostId(), row.tmuxName);
-        props.deps.onOpenTerminal();
-      }
-      return;
-    }
     // ADR-29 B와 같은 규칙 — 잠든 행은 열면 곧장 깨운다. attachTmux(term/
     // session.js)가 attach 후 그 세션을 직접 화면에 앉힌다(desktop의
     // Rail.tsx openRow도 이 호출 하나로 끝낸다 — 뒤이어 revealSession을 또
@@ -497,12 +469,12 @@ function Fleet(props: { deps: FleetDeps }) {
           <button
             type="button"
             class="vt-host-btn vt-fleet-host"
-            classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: isRemoteHost(), open: hostMenuOpen() }}
+            classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: viewHostId !== LOCAL_HOST, open: hostMenuOpen() }}
             aria-haspopup="listbox"
             aria-expanded={hostMenuOpen()}
             onClick={() => setHostMenuOpen((v) => !v)}
           >
-            <span class="vt-fleet-host-name">{activeHost()?.label || effectiveHostId()}</span>
+            <span class="vt-fleet-host-name">{activeHost()?.label || viewHostId}</span>
             <span class="vt-fleet-host-detail">{activeHost() ? hostDetail(activeHost()!) : ''}</span>
             {/* 캐럿은 SVG 하나를 CSS로 뒤집는다(.open일 때 180도) — 글리프
                 ▴▾는 폰트마다 중심이 달라 옆 글자와 광학 정렬이 안 맞았다. */}
@@ -511,7 +483,7 @@ function Fleet(props: { deps: FleetDeps }) {
         </div>
         <Show when={hostMenuOpen()}>
           <div class="vt-fleet-hostmenu" role="listbox">
-            <For each={buildHostMenu(hosts(), activeHostId())}>
+            <For each={buildHostMenu(hosts(), viewHostId)}>
               {(h) => (
                 <button
                   type="button"
@@ -531,7 +503,7 @@ function Fleet(props: { deps: FleetDeps }) {
       </Show>
       {/* 원격은 "세션이 없다"와 "연결이 안 됐다"를 구분해 보여준다(레일과 같은
           이유 — 둘을 뭉개면 "세션이 없는 건가?"로 읽힌다). */}
-      <Show when={isRemoteHost() && activeHost() && !activeHost()!.online}>
+      <Show when={viewHostOffline()}>
         <div class="vt-fleet-empty">{hostDetail(activeHost()!)}</div>
       </Show>
       {/* 2026-09-23 — 잠든 세션도 이제 이 화면의 데이터에 들어오므로(위
@@ -539,15 +511,13 @@ function Fleet(props: { deps: FleetDeps }) {
           세션이 있는데도 이 빈 화면이 뜬다. 잠든 것까지 0개일 때만 진짜
           빈 상태다. */}
       <Show when={sections().length === 0 && sleepingEntries().length === 0
-        && !(isRemoteHost() && activeHost() && !activeHost()!.online)}>
+        && !viewHostOffline()}>
         <div class="vt-fleet-empty">
           <div>세션이 없습니다</div>
-          <Show when={!isRemoteHost()}>
-            <div class="vt-fleet-empty-actions">
-              <button type="button" class="vt-btn solid" onClick={() => { (window as any).createTmuxSession?.(); props.deps.onOpenTerminal(); }}>tmux 세션 시작</button>
-              <button type="button" class="vt-btn" onClick={() => { (window as any).createSession?.(); props.deps.onOpenTerminal(); }}>일반 터미널</button>
-            </div>
-          </Show>
+          <div class="vt-fleet-empty-actions">
+            <button type="button" class="vt-btn solid" onClick={() => { (window as any).createTmuxSession?.(); props.deps.onOpenTerminal(); }}>tmux 세션 시작</button>
+            <button type="button" class="vt-btn" onClick={() => { (window as any).createSession?.(); props.deps.onOpenTerminal(); }}>일반 터미널</button>
+          </div>
         </div>
       </Show>
       <For each={sections()}>
@@ -594,7 +564,7 @@ function Fleet(props: { deps: FleetDeps }) {
       {/* Rail.tsx 하단의 "+ 새 세션"과 같은 액션(session.add-menu) — 목록이
           비었을 때는 위 empty-state 버튼 둘이 이미 같은 일을 하므로 겹치지
           않게 뺀다. */}
-      <Show when={!isRemoteHost() && (sections().length > 0 || sleepingEntries().length > 0)}>
+      <Show when={sections().length > 0 || sleepingEntries().length > 0}>
         <button
           type="button"
           class="vt-fleet-add-btn"

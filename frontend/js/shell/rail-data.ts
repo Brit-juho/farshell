@@ -155,7 +155,7 @@ export function statusSentence(status: AgentState, since: number | null, tool: s
 
 // 그룹 순서 고정 + 그룹 안은 최근 활동순(since 내림차순, 없으면 맨 뒤).
 // 제네릭: status/since/tool만 요구한다 — Fleet.tsx의 RailRowInput, Rail.tsx의
-// OtherRailRowInput(원격 호스트 경로), remoteSessionRows 전부 이 최소 모양을
+// OtherRailRowInput(원격 호스트 경로) 전부 이 최소 모양을
 // 만족한다. 로컬 세션 경로(ADR-29 B)는 buildSessionSections를 쓴다.
 export function buildRailSections<T extends { status: AgentState; since: number | null; tool: string | null }>(
   inputs: T[],

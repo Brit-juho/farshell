@@ -42,8 +42,9 @@ async function safeFetch<T>(deps: HeaderDeps, path: string): Promise<T | null> {
 // 고정했다. 레일 스위처로 M5를 고르고 M5 원격 칸을 보고 있어도 칩은 계속 M1이라,
 // 세 곳(칩·스위처·터미널 칸)이 서로 다른 호스트를 말했다. 이제 **활성 칸이
 // 보여주는 호스트**를 따라간다(term/host-view.js가 판정, window.vtActiveViewHost).
-// 원격 칸이면 이 화면이 어느 서버를 거쳐 그 호스트에 닿았는지도 같이 적는다 —
-// 로그인한 서버는 여전히 이 맥이고, 원격 칸은 이 맥의 프록시를 지난다.
+// 2026-09-28(사용자 지적) — "/ M5 · M1 경유"처럼 두 호스트를 적던 것을 뺐다.
+// 칩은 **선택한 맥 하나만** 말한다. 레일 스위처로 전환해 있으면 앱 전체가 그
+// 맥의 API로 가므로(core/host-route.js) `/api/capabilities`의 hostname이 곧 그 맥이다.
 function WorkspaceChip(props: { deps: HeaderDeps }) {
   const [hostname, setHostname] = createSignal('');
   const [viewHostId, setViewHostId] = createSignal('local');
@@ -56,7 +57,10 @@ function WorkspaceChip(props: { deps: HeaderDeps }) {
   let seq = 0;
   const syncView = async () => {
     const w = window as any;
-    const id = String(w.vtActiveViewHost?.() || 'local');
+    // 호스트 전환 중이면(core/host-route.js) 그 맥이 곧 이 화면 전체의 호스트다 —
+    // 스위처와 같은 라벨(/api/hosts, 로컬 호출)로 적는다.
+    const relayed = String(w.vtRelayHost?.() || 'local');
+    const id = relayed !== 'local' ? relayed : String(w.vtActiveViewHost?.() || 'local');
     if (id === viewHostId() && (id === 'local' || viewLabel())) return;
     const mine = ++seq;
     setViewHostId(id);
@@ -89,9 +93,6 @@ function WorkspaceChip(props: { deps: HeaderDeps }) {
         fallback={<Show when={hostname()}><span class="vt-workspace-host">/ {hostname()}</span></Show>}
       >
         <span class="vt-workspace-host remote">/ {viewLabel()}</span>
-        <Show when={hostname()}>
-          <span class="vt-workspace-via">· {hostname()} 경유</span>
-        </Show>
       </Show>
     </div>
   );

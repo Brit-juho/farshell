@@ -8,15 +8,15 @@
 // 지연 청크가 이들을 정적 import하면 Vite lib 모드가 상태를 복제한다,
 // ADR-26/N35 커밋 참고). 전부 그 파일들이 이미 노출해 둔 window 브리지로만
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
-import { createSignal, createMemo, createEffect, onCleanup, untrack, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import {
-  buildRailSections, buildSessionSections, buildSleepingEntries,
-  GROUP_LABEL, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
+  buildSessionSections, buildSleepingEntries,
+  COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
   type RailGroup, type OtherRailRowInput, type DesktopRailRowInput,
 } from './rail-data.js';
 import {
-  buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, LOCAL_HOST,
+  buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
 } from './host-data.js';
 import {
@@ -53,7 +53,6 @@ const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
 // 같은 이유) window 브리지(vtSettingsGet/Set)로만 읽는다.
 const SETTINGS_W_KEY = 'ui.rail.width';
 const SETTINGS_COLLAPSE_KEY = 'ui.rail.collapsed';
-const SETTINGS_HOST_KEY = 'ui.activeHostId';
 
 function Rail(props: { deps: RailDeps }) {
   const sessionsVersion = useSessionsVersion();
@@ -152,14 +151,13 @@ function Rail(props: { deps: RailDeps }) {
   // 없어도 할 수 있는 일이다.
   const [ctxMenu, setCtxMenu] = createSignal<{
     x: number; y: number; sessionId: string | null; tmuxName: string | null;
-    /** 원격 행의 메뉴면 그 호스트 id — 로컬 메뉴 항목(맥에서 열기 등)은 안 맞는다. */
-    remoteHost?: string | null;
   } | null>(null);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
-  const [activeHostId, setActiveHostId] = createSignal<string>(
-    String((window as any).vtSettingsGet?.(SETTINGS_HOST_KEY) || LOCAL_HOST),
-  );
+  // 2026-09-28(사용자 요청) — 스위처는 이제 목록 필터가 아니라 **화면 전체의
+  // 전환**이다(core/host-route.js). 이 화면이 보고 있는 맥은 부팅 때 정해지고,
+  // 레일의 세션 행은 그 맥의 API(중계)에서 오므로 로컬과 같은 경로로 그린다.
+  const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
 
   // compact(<720px)에서는 이 데스크톱 Rail이 CSS로 숨고 mobile-nav가 Fleet을
   // 마운트한다. 예전엔 숨은 Rail도 계속 살아 있어 Fleet과 똑같은 tmux·agent·git
@@ -240,10 +238,9 @@ function Rail(props: { deps: RailDeps }) {
   // 다시 구성한다 — window.allSessions()가 진짜 웹 세션 맵의 단일 출처다.
   // C1 — 저장된 값이 아직 등록된 호스트를 가리키는지. 목록이 아직 안 왔을 때
   // (hosts()가 빈 배열) 로컬로 튕기지 않도록 목록이 비면 저장값을 그대로 쓴다.
-  const effectiveHostId = createMemo(() =>
-    hosts().length === 0 ? activeHostId() : resolveActiveHost(hosts(), activeHostId()));
-  const isRemoteHost = createMemo(() => effectiveHostId() !== LOCAL_HOST);
-  const activeHost = createMemo(() => hosts().find((h) => h.id === effectiveHostId()) || null);
+  const activeHost = createMemo(() => hosts().find((h) => h.id === viewHostId) || null);
+  // 전환해 둔 맥이 꺼져 있으면 세션 목록이 비는데, 그걸 "세션이 없다"로 보이면 안 된다.
+  const viewHostOffline = createMemo(() => viewHostId !== LOCAL_HOST && !!activeHost() && !activeHost()!.online);
 
   // ADR-29 B — 행은 이제 tmux 세션 목록이 출처다(잠자는 것까지 나온다).
   // 예전엔 웹 세션 맵(w.allSessions())이 출처라 이 브라우저에 안 열어둔
@@ -278,12 +275,6 @@ function Rail(props: { deps: RailDeps }) {
     sessionsVersion(); agentVersion(); // 구독 트리거용 — 값 자체는 안 씀
     const w = window as any;
 
-    // 원격 호스트를 고른 상태: 워크트리 API는 로컬 전용이라(2.2 범위) 전부
-    // 세션 행이다. 이미 열린 pane은 건드리지 않는다 — 스위처는 필터일 뿐이다.
-    if (isRemoteHost()) {
-      const h = activeHost();
-      return h ? remoteSessionRows(h) : [];
-    }
     const all = w.allSessions ? w.allSessions() : {};
     const details = agentDetails();
 
@@ -383,31 +374,20 @@ function Rail(props: { deps: RailDeps }) {
   // 잠자는 세션의 구역(그룹째 잠들었으면 덩어리, 아니면 낱개). 원격
   // 호스트는 옛 3버킷(개입 필요/작업 중/열려 있음) 그대로 — 거긴
   // 그룹·수면 개념이 아직 없다(2.2 범위).
-  const localSessionRows = createMemo<OtherRailRowInput[]>(() =>
-    isRemoteHost() ? [] : (rows() as OtherRailRowInput[]));
+  const localSessionRows = createMemo<OtherRailRowInput[]>(() => rows() as OtherRailRowInput[]);
   const groupLabelMap = createMemo(() => new Map(liveTabGroups().map((g) => [g.id, g.label])));
   const sessionSections = createMemo(() => {
     diffTick();
     return buildSessionSections(localSessionRows(), groupLabelMap());
   });
   const sleepingEntries = createMemo(() => buildSleepingEntries(localSessionRows()));
-  const remoteSections = createMemo(() => (isRemoteHost() ? buildRailSections(rows() as OtherRailRowInput[]) : []));
-  const totalRows = createMemo(() => isRemoteHost()
-    ? remoteSections().reduce((n, s) => n + s.rows.length, 0)
-    : sessionSections().reduce((n, s) => n + s.rows.length, 0) + sleepingEntries().length);
+  const totalRows = createMemo(() =>
+    sessionSections().reduce((n, s) => n + s.rows.length, 0) + sleepingEntries().length);
 
   const activeId = createMemo(() => { sessionsVersion(); return (window as any).activeSessionId?.() ?? null; });
 
   const openRow = async (e: MouseEvent, row: OtherRailRowInput) => {
     const w = window as any;
-    // C1+3단계 — 원격 행은 프록시 경로로 연다(term/remote.js가 window에 건다).
-    if (row.remote) {
-      const host = effectiveHostId();
-      if (typeof w.attachRemoteSession === 'function' && row.tmuxName) {
-        await w.attachRemoteSession(host, row.tmuxName);
-      }
-      return;
-    }
     const meta = e.metaKey || e.ctrlKey;
     // ADR-29 B — 잠자는 세션을 클릭하면 깨운다(attach). 여는 것은 언제나
     // 세션이라는 원칙이다. 아직 안 깨어난 세션은 탭 소속을 미리 알 수
@@ -432,14 +412,6 @@ function Rail(props: { deps: RailDeps }) {
 
   const contextRow = (e: MouseEvent, row: OtherRailRowInput) => {
     e.preventDefault();
-    // 원격 행은 로컬 액션(맥에서 열기·연결된 화면 등)이 안 맞는다. 2026-09-28부터
-    // 원격 전용 메뉴(이름 변경·완전 종료)를 따로 연다 — 상대의 control 등급으로 간다.
-    if (row.remote) {
-      if (row.tmuxName) {
-        setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: row.sessionId, tmuxName: row.tmuxName, remoteHost: effectiveHostId() });
-      }
-      return;
-    }
     const sid = actionSessionId(row);
     if (!sid && !row.tmuxName) return; // 웹 세션도 tmux 이름도 없으면 메뉴가 성립하지 않는다.
     setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, tmuxName: row.tmuxName });
@@ -486,25 +458,15 @@ function Rail(props: { deps: RailDeps }) {
   // 회귀). 웹 세션이 있어야 한다(term/session.js의 renameSession).
   // editingSessionKey 자체는 rows 메모 앞으로 옮겼다(위 참고).
   const [editingSessionValue, setEditingSessionValue] = createSignal('');
-  // 원격 행을 편집 중이면 그 대상 — 원격 세션은 이 브라우저의 웹 세션이 아니라
-  // 상대 호스트의 tmux 이름으로 바꾼다(term/remote.js renameRemoteSession).
-  const [editingRemote, setEditingRemote] = createSignal<{ host: string; tmux: string } | null>(null);
-  const startRenameSession = (sessionId: string, currentName: string, remote: { host: string; tmux: string } | null = null) => {
-    setEditingRemote(remote);
+  const startRenameSession = (sessionId: string, currentName: string) => {
     setEditingSessionValue(currentName);
     setEditingSessionKey(sessionId);
   };
   const commitRenameSession = async (sessionId: string) => {
     if (editingSessionKey() !== sessionId) return;
     setEditingSessionKey(null);
-    const remote = editingRemote();
-    setEditingRemote(null);
     const trimmed = editingSessionValue().trim();
     if (!trimmed) return;
-    if (remote) {
-      await (window as any).vtRenameRemoteSession?.(remote.host, remote.tmux, trimmed);
-      return;
-    }
     await (window as any).renameSession?.(sessionId, trimmed);
   };
 
@@ -513,15 +475,6 @@ function Rail(props: { deps: RailDeps }) {
     if (!m) return [];
     const w = window as any;
     const items: MenuItem[] = [];
-    if (m.remoteHost && m.tmuxName) {
-      const host = m.remoteHost;
-      const tmux = m.tmuxName;
-      return [
-        { label: '열기', run: () => w.attachRemoteSession?.(host, tmux) },
-        { label: '이름 변경', run: () => startRenameSession(m.sessionId || `remote:${host}:${tmux}`, tmux, { host, tmux }) },
-        { label: '완전 종료', detail: '되돌릴 수 없음', run: () => w.vtKillRemoteSession?.(host, tmux) },
-      ];
-    }
     if (m.sessionId) {
       items.push(
         { label: '이름 변경', run: () => startRenameSession(m.sessionId as string, w.sessionDisplayName?.(m.sessionId) || '') },
@@ -570,41 +523,14 @@ function Rail(props: { deps: RailDeps }) {
     refreshHosts(); // 열 때 한 번 더 — 목록이 15초 지나 있을 수 있다.
     setHostMenu({ x: r.left, y: r.bottom + 4 });
   };
-  // 2026-09-28(사용자 지적) — 스위처가 "목록 필터"이기만 해서, M5로 바꿔도 터미널
-  // 칸과 헤더 칩은 그대로 M1을 말했다. 이제 고르면 화면도 그 호스트로 간다
-  // (term/remote.js focusHost — 열린 세션 칸, 없으면 그 호스트의 빈 탭).
-  // 화면 이동(focusHost)은 비동기다(빈 칸에 그릴 호스트 이름을 먼저 받는다). 그
-  // 사이에 아래 "따라가기"가 돌면 아직 옛 칸을 보고 스위처를 되돌려 버린다 —
-  // 이동이 끝날 때까지 따라가기를 쉰다.
-  let focusing = false;
-  const selectHost = async (id: string) => {
-    setActiveHostId(id);
-    (window as any).vtSettingsSet?.(SETTINGS_HOST_KEY, id);
-    focusing = true;
-    try { await (window as any).vtFocusHost?.(id); } finally { focusing = false; }
+  // 2026-09-28(사용자 요청) — 고르면 화면 **전체**가 그 맥으로 간다: 세션·탭·
+  // 포트·파일·첨부·설정. 같은 주소에서 새로고침한다(core/host-route.js 머리말).
+  const selectHost = (id: string) => {
+    if (id === viewHostId) return;
+    (window as any).vtSwitchHost?.(id);
   };
-  // 반대 방향 — 사용자가 다른 탭·칸을 누르면 스위처가 그 칸의 호스트로 따라간다.
-  // 안 그러면 로컬 탭을 눌렀는데 스위처는 M5인 채로 남아 같은 어긋남이 다시 생긴다.
-  // activeHostId는 untrack으로 읽는다 — 추적하면 스위처를 고르는 순간 이 효과가
-  // 다시 돌아 (화면이 아직 안 옮겨졌으니) 방금 고른 값을 되돌린다.
-  createEffect(() => {
-    sessionsVersion(); layoutVersion();
-    if (focusing) return;
-    const h = (window as any).vtActiveViewHost?.();
-    if (h && h !== untrack(activeHostId)) {
-      setActiveHostId(h);
-      (window as any).vtSettingsSet?.(SETTINGS_HOST_KEY, h);
-    }
-  });
-  // 폰의 플릿 홈(Fleet.tsx)에도 같은 키를 쓰는 스위처가 있다. 창 폭을 오가면
-  // 둘 다 살아 있으므로, 저쪽에서 바꾼 값을 여기서도 따라간다.
-  const unsubHostSetting = (window as any).vtSettingsSubscribe?.((all: any) => {
-    const v = String(all?.[SETTINGS_HOST_KEY] || LOCAL_HOST);
-    if (v !== activeHostId()) setActiveHostId(v);
-  });
-  onCleanup(() => unsubHostSetting?.());
   const hostMenuItems = (): MenuItem[] =>
-    buildHostMenu(hosts(), activeHostId()).map((h) => ({
+    buildHostMenu(hosts(), viewHostId).map((h) => ({
       label: h.label,
       detail: h.detail,
       dim: !h.online,
@@ -678,13 +604,13 @@ function Rail(props: { deps: RailDeps }) {
             <button
               type="button"
               class="vt-host-btn vt-wgrail-host"
-              classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: isRemoteHost() }}
+              classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: viewHostId !== LOCAL_HOST }}
               onClick={openHostMenu}
               data-tip={activeHost()?.label || '호스트 선택'}
               data-tip-sub={activeHost() ? hostDetail(activeHost()!) : undefined}
               data-tip-side="bottom"
             >
-              <span class="vt-wgrail-host-name">{activeHost()?.label || effectiveHostId()}</span>
+              <span class="vt-wgrail-host-name">{activeHost()?.label || viewHostId}</span>
               <span class="vt-wgrail-host-caret"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
             </button>
           </Show>
@@ -725,7 +651,7 @@ function Rail(props: { deps: RailDeps }) {
         </div>
       </div>
       <div class="vt-wgrail-body">
-        <Show when={totalRows() === 0 && !collapsed() && !isRemoteHost()}>
+        <Show when={totalRows() === 0 && !collapsed() && !viewHostOffline()}>
           <div class="vt-wgrail-empty">
             아직 세션이 없습니다.
             <button
@@ -735,69 +661,12 @@ function Rail(props: { deps: RailDeps }) {
             >+ 새 세션</button>
           </div>
         </Show>
-        {/* C1 — 원격 호스트가 꺼져 있으면 "빈 목록"과 "연결 안 됨"을 구분해서
-            보여준다. 둘을 같은 빈 화면으로 뭉개면 "세션이 없는 건가?"로 읽힌다. */}
-        <Show when={isRemoteHost() && !collapsed() && activeHost() && !activeHost()!.online}>
+        {/* 전환해 둔 맥이 꺼져 있으면 "빈 목록"과 "연결 안 됨"을 구분해서 보여준다. */}
+        <Show when={viewHostOffline() && !collapsed()}>
           <div class="vt-wgrail-empty">{hostDetail(activeHost()!)}</div>
         </Show>
-        <Show when={isRemoteHost() && !collapsed() && totalRows() === 0 && activeHost()?.online}>
-          <div class="vt-wgrail-empty">이 호스트에 tmux 세션이 없습니다.</div>
-        </Show>
-        {/* 원격 호스트: 옛 3버킷 그대로(개입 필요/작업 중/열려 있음) —
-            그룹·수면 개념은 2.2 범위(로컬 전용, ADR-29 결정문 참고). */}
-        <Show when={isRemoteHost()}>
-          <For each={remoteSections()}>
-            {(section) => (
-              <>
-                <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
-                  <div class="vt-wgrail-group-head">
-                    <Show
-                      when={COLLAPSIBLE_GROUPS.includes(section.group)}
-                      fallback={(
-                        <span class="vt-wgrail-group-label">
-                          {GROUP_LABEL[section.group]}
-                          <span class="vt-wgrail-group-count">{section.rows.length}</span>
-                        </span>
-                      )}
-                    >
-                      <button
-                        type="button"
-                        class="vt-wgrail-group-toggle"
-                        classList={{ collapsed: isGroupCollapsed(section.group) }}
-                        aria-expanded={!isGroupCollapsed(section.group)}
-                        onClick={() => toggleGroup(section.group)}
-                      >
-                        <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                        <span class="vt-wgrail-group-label">{GROUP_LABEL[section.group]}</span>
-                        <span class="vt-wgrail-group-count">{section.rows.length}</span>
-                      </button>
-                    </Show>
-                  </div>
-                </Show>
-                <Show when={!isGroupCollapsed(section.group) || collapsed()}>
-                <For each={section.rows}>
-                  {(row) => (
-                    <Row
-                      row={row}
-                      compact={collapsed()}
-                      active={actionSessionId(row) === activeId()}
-                      editing={!!row.sessionId && editingSessionKey() === row.sessionId}
-                      editingValue={editingSessionValue()}
-                      onEditInput={setEditingSessionValue}
-                      onEditCommit={() => commitRenameSession(row.sessionId as string)}
-                      onEditCancel={() => { setEditingSessionKey(null); setEditingRemote(null); }}
-                      onOpen={(e) => openRow(e, row)}
-                      onContext={(e) => contextRow(e, row)}
-                    />
-                  )}
-                </For>
-                </Show>
-              </>
-            )}
-          </For>
-        </Show>
         {/* 로컬 호스트: ADR-29 B — 깨어있는 세션의 그룹 섹션. */}
-        <Show when={!isRemoteHost()}>
+        <Show when={!viewHostOffline()}>
           <For each={sessionSections()}>
             {(section) => (
               <>
@@ -943,18 +812,16 @@ function Rail(props: { deps: RailDeps }) {
             지웠다). session.add-menu는 원격을 보고 있을 때 누르면 "맥에"
             세션이 생겨 화면과 결과가 어긋나므로 워크트리 만들기와 같은
             이유로 막는다. */}
-        {/* 2026-09-28 — 원격 호스트를 보고 있으면 **그 호스트에** tmux 세션을 만든다
-            (term/remote.js createRemoteSession → 상대의 control 등급). 메뉴를 거치지
-            않는다: 원격에는 "일반 터미널(tmux 아님)"이 없다. 꺼진 호스트에서만 막는다. */}
+        {/* 2026-09-28 — 다른 맥으로 전환해 있으면 이 버튼도 그 맥에 만든다(모든 API가
+            그 맥으로 중계된다, core/host-route.js). 꺼진 맥에서만 막는다. */}
         <button
           type="button"
           class="vt-wgrail-new"
-          disabled={isRemoteHost() && !(activeHost()?.online)}
-          data-tip={isRemoteHost() ? `${activeHost()?.label || '원격'}에 새 세션` : (collapsed() ? '새 세션' : undefined)}
-          data-tip-sub={isRemoteHost() ? (activeHost()?.online ? 'tmux 세션 · 상대의 control 권한 필요' : '호스트에 연결할 수 없습니다') : undefined}
+          disabled={viewHostOffline()}
+          data-tip={collapsed() ? '새 세션' : undefined}
+          data-tip-sub={viewHostOffline() ? '호스트에 연결할 수 없습니다' : undefined}
           data-tip-side="right"
           onClick={(e) => {
-            if (isRemoteHost()) { (window as any).vtCreateRemoteSession?.(effectiveHostId()); return; }
             (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e);
           }}
         >

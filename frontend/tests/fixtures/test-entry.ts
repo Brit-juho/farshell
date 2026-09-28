@@ -12,6 +12,6 @@ export {
 } from '../../js/shell/palette-data.js';
 export { mountPalette } from '../../js/shell/Palette.tsx';
 export {
-  buildHostMenu, remoteSessionRows, resolveActiveHost, hostDetail, reasonLabel, LOCAL_HOST,
+  buildHostMenu, resolveActiveHost, hostDetail, reasonLabel, LOCAL_HOST,
 } from '../../js/shell/host-data.js';
 export { deleteWorktreeRow } from '../../js/shell/rail-fetch.js';

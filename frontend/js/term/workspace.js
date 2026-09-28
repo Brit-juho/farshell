@@ -9,11 +9,13 @@
 import { allSessions, getSession, activeSessionId, orderedSessionIds,
   sessionDisplayName, setSessionOrder } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
+import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
 import { addSession, revealSession } from './session.js';
 import { attachRemoteSession } from './remote.js';
 
-const WORKSPACE_KEY = 'vt-workspace-v1';
+// 호스트 전환(core/host-route.js) — 맥마다 따로 둔다.
+const WORKSPACE_KEY = hostKey('vt-workspace-v1');
 
 export function saveWorkspace() {
   try {

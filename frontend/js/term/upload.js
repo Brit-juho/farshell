@@ -15,6 +15,7 @@
 // `MAX_UPLOAD_BYTES` 검사를 통과하며 디스크를 함께 밀어낸다.
 import { activeSessionId } from '../core/store.js';
 import { API_BASE } from '../core/env.js';
+import { relayUrl } from '../core/host-route.js';
 import { noteNetworkError, noteResponse } from '../core/reachability.js';
 import { sendPaste } from './clipboard.js';
 import { showToast } from '../ui/toast.js';
@@ -119,7 +120,7 @@ function _uploadOne(job, sessionId) {
     formData.append('file', file, job.name);
 
     const xhr = new XMLHttpRequest();
-    const url = `${API_BASE}/api/upload?session_id=${sessionId || ''}`;
+    const url = relayUrl(`${API_BASE}/api/upload?session_id=${sessionId || ''}`);
     xhr.open('POST', url);
     xhr.withCredentials = true;
     // apiFetch와 같은 인증 계약: API_BASE로 가는 요청에만 토큰을 붙인다.

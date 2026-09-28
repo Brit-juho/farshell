@@ -20,15 +20,6 @@ export function viewHost(activeSession, tabHostId) {
   return hostOfSession(activeSession) || tabHostId || LOCAL_HOST;
 }
 
-/** 그 호스트의 열린 세션 중 첫 번째 id(열린 순서) — 없으면 null.
- * @param entries [id, session][] — 열린 순서대로 */
-export function firstSessionForHost(entries, hostId) {
-  for (const [id, s] of entries) {
-    if (hostOfSession(s) === hostId) return id;
-  }
-  return null;
-}
-
 /** 이미 열려 있는 원격 세션의 id. **id 문자열이 아니라 레코드로 찾는다** — 원격
  * 세션 이름을 바꾸면 레코드의 `remote.tmux`는 새 이름이 되지만 id(`remote:<host>:
  * <옛 이름>`)는 그대로라, id로 찾으면 같은 세션을 탭 두 개로 연다. */
@@ -37,11 +28,4 @@ export function findRemoteSession(entries, hostId, tmuxName) {
     if (s && s.remote && s.remote.host === hostId && s.remote.tmux === tmuxName) return id;
   }
   return null;
-}
-
-/** 이 호스트용으로 비어 있는 탭 — 스위처를 오갈 때마다 빈 탭이 쌓이지 않게
- * 재사용한다. @param tabs {id, hostId, empty}[] */
-export function emptyTabForHost(tabs, hostId) {
-  const t = tabs.find((x) => x.empty && (x.hostId || LOCAL_HOST) === hostId);
-  return t ? t.id : null;
 }

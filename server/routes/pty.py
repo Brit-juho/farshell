@@ -79,6 +79,11 @@ def _ws_auth_token(ws: WebSocket) -> Optional[str]:
     """
     if not auth.is_protected():
         return ""
+    # 0) 호스트 전환 중계(routes/peer_relay.py)가 peer 서명을 검증한 뒤 넘긴
+    #    소켓. `vt_relay`는 서버 코드만 scope에 심을 수 있는 키다. 재검사할 세션
+    #    토큰이 없으므로 ""(인증 꺼짐과 같은 뜻)를 돌려준다.
+    if ws.scope.get("vt_relay"):
+        return ""
     # 1) HttpOnly 세션 쿠키 (/api/auth 후)
     cookie = ws.cookies.get("vt_session", "")
     if auth.check_request(cookie):

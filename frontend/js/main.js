@@ -11,6 +11,9 @@ import '../../styles/main.css';
 
 import './core/env.js';
 import './core/api.js';
+// 호스트 전환 — 전환해 둔 맥에 닿을 수 없는 이유(삭제·권한 회수·구버전)면 이 맥으로 되돌린다.
+import { verifyRelayHost } from './core/host-route.js';
+verifyRelayHost();
 import './core/store.js';
 // N34 — HUD(지연 청크)에 넘겨줄 것들. 위 부수효과 import와 같은 모듈 인스턴스라
 // 여기서 이름으로 한 번 더 가져와도 중복 평가는 없다(ES 모듈 캐시).

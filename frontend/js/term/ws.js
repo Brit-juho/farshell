@@ -12,6 +12,7 @@
 //       (2) 연결이 STABLE_MS 이상 안정적으로 유지된 뒤에만 백오프 카운터를 리셋.
 import { getSession } from '../core/store.js';
 import { WS_BASE } from '../core/env.js';
+import { relayWsPath } from '../core/host-route.js';
 import { E2E_ENABLED, wrapE2E, _wsQuery } from './e2e.js';
 import { fitAndResize } from './resize.js';
 import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
@@ -37,7 +38,7 @@ export function startSessionSocket(id, term) {
       ? `${_wsQuery() ? '&' : '?'}screen=${encodeURIComponent(_s.remote.screen)}` : '';
     return _s && _s.remote
       ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}${_screen}`
-      : `/ws/${id}${_wsQuery()}`;
+      : relayWsPath(`/ws/${id}${_wsQuery()}`);
   };
   let _retries = 0;
   let _stableTimer = null;

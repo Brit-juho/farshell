@@ -16,12 +16,14 @@
 // (그 전엔 allSessions()가 비어 있어 전부 빈 pane으로 강등돼 버린다).
 import { allSessions, getSession } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
+import { hostKey } from '../core/host-route.js';
 import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves, getTabsWithTrees, getActiveTabId, replaceTabs } from './store.js';
 // N4 — 스냅샷의 `panel` 이름을 검증할 때만 쓴다(상수 Set 하나). 화면 모듈은
 // 여기서 import 하지 않는다 — 그러면 panels 청크가 core로 승격된다(ADR-26).
 import { PANEL_KINDS } from '../panels/registry.js';
 
-const LS_KEY = 'vt-layout-v1';
+// 호스트 전환(core/host-route.js) — 맥마다 탭 배치를 따로 둔다.
+const LS_KEY = hostKey('vt-layout-v1');
 const SAVE_DEBOUNCE_MS = 400;
 
 // ── 직렬화 ────────────────────────────────────────────────────────────────

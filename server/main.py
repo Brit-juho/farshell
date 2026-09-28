@@ -59,6 +59,8 @@ from routes.share import elevated_router as share_elevated_router, public_router
 from routes.peer import router as peer_router
 from routes.hosts import router as hosts_router
 from routes.peer_proxy import router as peer_proxy_router
+from routes.peer_relay import router as peer_relay_router
+from routes.host_relay import router as host_relay_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -484,6 +486,8 @@ app.include_router(share_public_router)
 app.include_router(peer_router)
 app.include_router(hosts_router)
 app.include_router(peer_proxy_router)
+app.include_router(peer_relay_router)
+app.include_router(host_relay_router)
 app.include_router(mcp_router)
 app.include_router(mcp_elevated_router)
 

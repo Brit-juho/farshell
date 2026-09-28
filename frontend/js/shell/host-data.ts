@@ -3,12 +3,8 @@
 // 받아 드롭다운에 그릴 항목과, 원격 호스트를 골랐을 때 레일이 그릴 행
 // 목록으로 바꾼다.
 //
-// 왜 "필터만"인가(인계 문서의 결정 완료 사항): pane 트리는 호스트가 섞여도
-// 된다 — 맥의 세션과 gpu-box의 세션을 한 화면에 나란히 두는 게 원래 목적이다.
-// 스위처가 바꾸는 건 "레일에서 뭘 고를지"뿐이고, 이미 열린 pane은 건드리지
-// 않는다. 그래서 이 파일에는 pane/레이아웃 개념이 아예 없다.
-import type { OtherRailRowInput } from './rail-data.js';
-import type { AgentState } from '../core/types.js';
+// 2026-09-28부터 스위처는 필터가 아니라 **화면 전체의 전환**이다(core/host-route.js,
+// docs/ref/multihost.md 「Host switch」). 이 파일은 여전히 메뉴 모양만 만든다.
 
 /** 로컬 호스트의 예약 id — 서버(`agent_status.LOCAL_HOST`)와 같은 값. */
 export const LOCAL_HOST = 'local';
@@ -89,33 +85,4 @@ export function buildHostMenu(hosts: HostEntry[], activeId: string): HostMenuIte
 export function resolveActiveHost(hosts: HostEntry[], activeId: string): string {
   if (!activeId || activeId === LOCAL_HOST) return LOCAL_HOST;
   return hosts.some((h) => h.id === activeId) ? activeId : LOCAL_HOST;
-}
-
-const STATUSES: AgentState[] = ['idle', 'working', 'waiting', 'done', 'error'];
-function coerceStatus(s: string | undefined): AgentState {
-  return STATUSES.includes(s as AgentState) ? (s as AgentState) : 'idle';
-}
-
-/**
- * 원격 호스트를 고른 상태의 레일 행. 원격에는 워크트리 API가 없으므로(2.2 범위)
- * 전부 "행 = 세션"이다. sessionId는 웹 세션 id가 아니라 `remote:<host>:<name>`
- * 합성 키다 — 로컬 세션 id와 절대 겹치지 않게 하고, 클릭 경로가 로컬 세션
- * 전환으로 새는 것을 막는다(원격 attach는 멀티호스트 3단계).
- */
-export function remoteSessionRows(host: HostEntry): OtherRailRowInput[] {
-  return (host.sessions || []).map((s) => ({
-    kind: 'session',
-    sessionId: `remote:${host.id}:${s.name}`,
-    tmuxName: s.name,
-    name: s.name,
-    status: coerceStatus(s.status),
-    since: null,
-    tool: null,
-    diffFiles: null,
-    // ADR-29 B — 원격은 아직 수면·그룹 개념이 없다(2.2 범위) — 항상 깨어있는
-    // 것으로, 어디에도 안 묶인 것으로 취급한다.
-    awake: true,
-    groupId: null,
-    remote: true,
-  }));
 }

@@ -8,6 +8,7 @@ import { restoreWorkspace, reconcileMissingTmuxSessions } from './workspace.js';
 import { restoreLayout } from '../layout/persist.js';
 import { load as loadSettings } from '../core/settings.js';
 import { apiFetch } from '../core/api.js';
+import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
 import { getSession, allSessions } from '../core/store.js';
 import { icon } from '../ui/icons.js';
@@ -42,7 +43,7 @@ export function showOnboarding() {
 // localStorage에 캐시해뒀다가 즉시(비활성 상태로) 그리고, 실제 fetch 결과가
 // 오면 그걸로 다시 그려 갱신 + 캐시 반영한다 — 첫 실행(캐시 없음)만 빈 칸에서
 // 시작하고 그 이후로는 항상 레이아웃이 안정적이다.
-const OB_SESSIONS_CACHE_KEY = 'vt_ob_sessions_cache';
+const OB_SESSIONS_CACHE_KEY = hostKey('vt_ob_sessions_cache');
 function _drawOnboardingSessions(list, tmuxList, interactive) {
   if (!Array.isArray(tmuxList) || tmuxList.length === 0) {
     list.hidden = true;

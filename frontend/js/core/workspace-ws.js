@@ -14,6 +14,7 @@
 // ⚠ 이 모듈은 core 청크에 들어간다. 의존성을 늘리지 말 것(env.js만 본다).
 
 import { WS_BASE, _tokenQuery } from './env.js';
+import { relayWsPath } from './host-route.js';
 
 const _subs = new Map();   // type -> Set<fn>
 let _ws = null;
@@ -53,7 +54,7 @@ function _scheduleReconnect() {
 
 function connect() {
   try {
-    _ws = new WebSocket(`${WS_BASE}/ws-workspace${_tokenQuery}`);
+    _ws = new WebSocket(`${WS_BASE}${relayWsPath(`/ws-workspace${_tokenQuery}`)}`);
   } catch (_) {
     return _scheduleReconnect();
   }

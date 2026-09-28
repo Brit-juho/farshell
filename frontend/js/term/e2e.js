@@ -4,6 +4,7 @@
 // bare `nacl`로 읽는다(모듈로 감싸지 않음 — core/vendor.js를 새로 만들 이유가
 // 아직 없다는 F1의 판단을 그대로 따른다).
 import { VT_TOKEN } from '../core/env.js';
+import { relayHost } from '../core/host-route.js';
 import { confirmDialog, alertDialog } from '../core/dialog.js';
 
 const _urlParams = new URLSearchParams(location.search);
@@ -38,7 +39,9 @@ function _b64uEnc(bytes) {
 // 공개키에 서명해 보내면, 클라이언트는 그 서명을 검증하고 identity_pub을 첫 접속 때
 // 신뢰(Trust On First Use)한 뒤 이후 접속마다 같은 키인지 대조한다.
 function _e2eTofuKey() {
-  return `vt_e2e_identity_pub:${location.hostname}`;
+  // 중계 중이면 신원 키는 상대 맥의 것이다 — 맥마다 따로 핀닝한다.
+  const h = relayHost();
+  return `vt_e2e_identity_pub:${location.hostname}${h === 'local' ? '' : `@${h}`}`;
 }
 function _e2eGetPinned() {
   try { return localStorage.getItem(_e2eTofuKey()); } catch { return null; }

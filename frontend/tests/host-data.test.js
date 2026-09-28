@@ -56,20 +56,3 @@ test('오프라인이라는 이유로는 되돌리지 않는다 (사용자의 �
   assert.strictEqual(items[1].active, true);
   assert.strictEqual(items[1].online, false);
 });
-
-test('원격 세션 행은 합성 키를 쓰고 remote 플래그가 붙는다', async () => {
-  const { remoteSessionRows } = await mod();
-  const rows = remoteSessionRows(peer({ sessions: [{ name: 'dev', status: 'waiting' }, { name: 'x', status: 'nonsense' }] }));
-  assert.deepStrictEqual(rows.map((r) => r.sessionId), ['remote:gpu-box:dev', 'remote:gpu-box:x']);
-  assert.strictEqual(rows[0].status, 'waiting');
-  // 서버가 모르는 상태 문자열을 보내도 레일이 깨지지 않게 idle로 눕힌다.
-  assert.strictEqual(rows[1].status, 'idle');
-  assert.ok(rows.every((r) => r.remote === true && r.kind === 'session'));
-});
-
-test('세션 목록이 없는 호스트도 빈 배열로 동작한다', async () => {
-  const { remoteSessionRows } = await mod();
-  // Array.from: 번들은 jsdom 렐름에서 돌아 Array 프로토타입이 달라 deepStrictEqual이
-  // 빈 배열끼리도 실패한다(rail-data.test.js가 같은 이유로 쓰는 관용구).
-  assert.deepStrictEqual(Array.from(remoteSessionRows({ id: 'a', label: 'a', online: false })), []);
-});

@@ -20,10 +20,9 @@ import { saveWorkspace } from './workspace.js';
 import { showToast } from '../ui/toast.js';
 import { vtFetch } from '../core/api.js';
 import { confirmDialog } from '../core/dialog.js';
-import { getTree, getActivePaneId, getActiveTabHostId, getTabHostSummaries,
-  switchLayoutTab, openLayoutTab } from '../layout/store.js';
+import { getTree, getActivePaneId, getActiveTabHostId } from '../layout/store.js';
 import { findNode } from '../layout/tree.js';
-import { LOCAL_HOST, viewHost, firstSessionForHost, findRemoteSession, emptyTabForHost } from './host-view.js';
+import { LOCAL_HOST, viewHost, findRemoteSession } from './host-view.js';
 
 export function remoteSessionId(hostId, tmuxName) {
   return `remote:${hostId}:${tmuxName}`;
@@ -120,23 +119,6 @@ export function activeViewHost() {
   return viewHost(s, getActiveTabHostId());
 }
 
-/** 레일 스위처에서 호스트를 고르면 화면도 그 호스트로 간다. 그 호스트의 열린
- * 세션이 있으면 그 칸으로(트리는 안 건드린다 — revealSession), 없으면 그 호스트
- * 전용 빈 탭으로(이미 있으면 재사용). 빈 원격 칸은 layout/panes.js가 "이
- * 호스트에 새 세션" 자리표시자로 그린다. */
-export async function focusHost(hostId) {
-  if (!hostId || activeViewHost() === hostId) return;
-  const sid = firstSessionForHost(_entries(), hostId);
-  if (sid) { revealSession(sid); return; }
-  // 빈 칸 자리표시자가 id 대신 이름을 그리도록 먼저 이름을 받아 둔다(그리는
-  // 쪽은 동기라 기다릴 수 없다).
-  if (hostId !== LOCAL_HOST) await hostLabel(hostId);
-  if (activeViewHost() === hostId) return;   // 기다리는 사이 사용자가 이미 옮겼다
-  const tab = emptyTabForHost(getTabHostSummaries(), hostId);
-  if (tab) { switchLayoutTab(tab); return; }
-  openLayoutTab({ hostId });
-}
-
 // ── 원격 세션 생성 · 종료 · 이름 바꾸기 ──────────────────────────────────────
 
 const _json = (method, body) => ({
@@ -217,7 +199,6 @@ export async function renameRemoteSession(hostId, oldName, newName) {
 window.attachRemoteSession = attachRemoteSession;
 window.isRemoteSession = isRemoteSession;
 window.vtActiveViewHost = activeViewHost;
-window.vtFocusHost = focusHost;
 window.vtHostLabel = hostLabel;
 window.vtHostLabelSync = hostLabelSync;
 window.vtCreateRemoteSession = createRemoteSession;

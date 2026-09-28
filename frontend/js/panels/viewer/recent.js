@@ -1,7 +1,10 @@
 // 최근 연 파일 — 구 viewer/tree.js에서 이관(N35 §6에서 모달 코드 뷰어를
 // 없애면서 트리 렌더러는 사라졌지만, 이 목록은 팔레트의 「최근 파일」 섹션이
 // 그대로 쓴다). 경로만 저장하므로 파일 내용은 남지 않는다.
-const VT_RECENT_KEY = 'vt_viewer_recent';
+import { hostKey } from '../../core/host-route.js';
+
+// 경로는 그 맥의 것이라 호스트마다 따로 둔다(core/host-route.js).
+const VT_RECENT_KEY = hostKey('vt_viewer_recent');
 const VT_RECENT_MAX = 8;
 
 export function _loadRecent() {

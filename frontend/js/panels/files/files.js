@@ -18,7 +18,7 @@
 //     서버 쪽에서 만든다.
 import { openPanel, closePanel, setPanelPoll } from '../panel.js';
 import { errorState } from '../../ui/empty.js';
-import { vtFetch, vtEsc } from '../../core/api.js';
+import { vtFetch, vtEsc, vtUrl } from '../../core/api.js';
 import { showToast } from '../../ui/toast.js';
 import { icon } from '../../ui/icons.js';
 import { okFlash } from '../../ui/okflash.js';
@@ -548,7 +548,7 @@ function renderFooter(quota) {
 function downloadFile(item) {
   // 서버가 attachment + nosniff로 내려주므로 같은 탭 내비게이션으로 충분하다
   // (새 창을 열면 모바일에서 빈 탭이 남는다).
-  window.location.href = `/api/files/${encodeURIComponent(item.id)}/download`;
+  window.location.href = vtUrl(`/api/files/${encodeURIComponent(item.id)}/download`);
 }
 
 async function copyPath(item, btn) {

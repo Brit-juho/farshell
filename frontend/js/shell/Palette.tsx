@@ -217,14 +217,9 @@ function PaletteBody(props: PaletteBodyProps) {
     const rawSnapshot = p.raw;
     setScrollbackLoading(true);
     setSearchError('');
-    // 2.1.3 — 호스트 스위처가 원격을 가리키고 있으면 **그 호스트의** 과거 출력을
-    // 찾는다. 로컬만 뒤지면 원격 탭에서 검색이 늘 빈손이라, "기능이 고장났나"로
-    // 읽힌다. 모든 호스트를 동시에 뒤지지 않는 건 타자마다 왕복이 늘기 때문이고,
-    // "지금 이 호스트를 보고 있다"는 스위처의 의미와도 어긋난다.
-    const host = String((window as any).vtSettingsGet?.('ui.activeHostId') || 'local');
-    const url = host && host !== 'local'
-      ? `/api/hosts/${encodeURIComponent(host)}/search?q=${encodeURIComponent(p.query)}`
-      : `/api/search/scrollback?q=${encodeURIComponent(p.query)}&sessions=all`;
+    // 2026-09-28 — 호스트 스위처로 다른 맥에 전환해 있으면 이 호출 자체가 그 맥으로
+    // 중계된다(core/host-route.js). 예전처럼 호스트별 검색 경로를 따로 고르지 않는다.
+    const url = `/api/search/scrollback?q=${encodeURIComponent(p.query)}&sessions=all`;
     deps.vtFetch(url)
       .then((data) => {
         if (parseQuery(props.query()).raw !== rawSnapshot) return;

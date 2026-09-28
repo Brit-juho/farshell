@@ -6,6 +6,7 @@
 // 보여줄지)와는 관심사가 다르다: 여긴 "일하는 중이냐"만 본다.
 import { apiFetch } from '../core/api.js';
 import { API_BASE, WS_BASE, _tokenQuery } from '../core/env.js';
+import { relayWsPath } from '../core/host-route.js';
 import { getSession } from '../core/store.js';
 import { applyAgentBadges } from './badges.js';
 import { applySnapshot, applyEvent } from './state.js';
@@ -158,7 +159,7 @@ let _wsAgentRetries = 0;
 let _wsAgentStableTimer = null;
 function connectAgentWs() {
   try {
-    wsAgent = new WebSocket(`${WS_BASE}/ws-agent${_tokenQuery}`);
+    wsAgent = new WebSocket(`${WS_BASE}${relayWsPath(`/ws-agent${_tokenQuery}`)}`);
   } catch (e) { return scheduleAgentReconnect(); }
   // [회귀 fb827a6와 동일 패턴] 3초 이상 안정적으로 열린 뒤에만 백오프 리셋 —
   // accept 직후 닫히는 flap에서 지수가 자라지 못하고 빠르게 재연결하는 것을 방지.

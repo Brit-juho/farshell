@@ -284,21 +284,6 @@ export function getActiveTabHostId() {
   return _tabs[_activeTabIndex].hostId || 'local';
 }
 
-// 세션·자리표시자·뷰어·패널이 하나도 없는 트리 — "그냥 비어 있는 화면".
-function _isBlankTree(tree) {
-  if (!tree) return true;
-  if (tree.t === 'leaf') {
-    return !tree.session && !tree.unreachable && (tree.kind || 'terminal') === 'terminal';
-  }
-  return _isBlankTree(tree.a) && _isBlankTree(tree.b);
-}
-
-/** 호스트 스위처(term/remote.js `focusHost`)가 재사용할 빈 탭을 찾을 때 쓰는 요약. */
-export function getTabHostSummaries() {
-  _sync();
-  return _tabs.map((t) => ({ id: t.id, hostId: t.hostId || 'local', empty: _isBlankTree(t.tree) }));
-}
-
 /** 이 세션이 지금 어느 탭의 pane 트리에 떠 있는가 — 없으면 null(아직 어느
  * 화면에도 없다: 처음 여는 세션, 또는 방금 깨운 세션). 2026-09-18 후속
  * (그룹 재정의)의 핵심 조회 — "같은 화면에 이미 떠 있으면 그 화면으로,

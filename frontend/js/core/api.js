@@ -7,8 +7,11 @@
 // _tokenQuery는 쿠키 교환 완료 시 ''로 재할당되므로 매번 최신값을 봐야 한다.
 
 import { noteNetworkError, noteResponse } from './reachability.js';
+import { relayPath, relayUrl } from './host-route.js';
 
 export async function vtFetch(path, opts) {
+  // 호스트 전환 중이면 선택한 맥으로(core/host-route.js). 로컬이면 그대로.
+  path = relayPath(path);
   const tokenQuery = window._tokenQuery || '';
   const sep = path.includes('?') ? '&' : '?';
   // 도달 여부를 여기서 센다 — 앱의 거의 모든 서버 호출이 이 한 곳을 지난다.
@@ -37,6 +40,7 @@ export async function vtFetch(path, opts) {
  * 실어야 한다(WebSocket URL을 만드는 `_wsQuery`와 같은 사정).
  */
 export function vtUrl(path) {
+  path = relayPath(path);
   const tokenQuery = (window._tokenQuery || '').replace(/^[?&]/, '');
   if (!tokenQuery) return `${window.API_BASE}${path}`;
   return `${window.API_BASE}${path}${path.includes('?') ? '&' : '?'}${tokenQuery}`;
@@ -48,6 +52,7 @@ export function vtUrl(path) {
 // vtFetch와 달리 파싱된 JSON이 아니라 Response를 그대로 반환한다 — 기존 fetch(...)
 // 호출부를 1:1로 치환하기 위한 설계.
 export function apiFetch(url, opts = {}) {
+  url = relayUrl(url);
   const token = window.VT_TOKEN;
   if (token && typeof url === 'string' && url.startsWith(window.API_BASE)) {
     opts = { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` } };

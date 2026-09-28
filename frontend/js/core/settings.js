@@ -23,6 +23,7 @@
 //   - **스코프는 스키마가 정한다 — 사용자가 바꾸지 않는다**(문서 §1의 화면
 //     2b 규칙: 배지는 읽기 전용).
 import { vtFetch } from './api.js';
+import { hostKey, isRelayed } from './host-route.js';
 
 // parse: 옛 localStorage 문자열 → 새 값. 없으면 그대로 쓴다.
 const onOff = (v) => v !== 'off';
@@ -107,6 +108,8 @@ export const SCHEMA = {
   // 바뀐다. 기본값 `local`은 서버의 예약 id(`agent_status.LOCAL_HOST`)와 같은 값이고,
   // 등록이 풀린 id가 남아 있으면 shell/host-data.js의 resolveActiveHost가 로컬로
   // 되돌린다(값 자체는 지우지 않는다 — 호스트를 다시 추가하면 그대로 살아난다).
+  // 2026-09-28부터 읽는 곳 없음 — 호스트 선택은 core/host-route.js(localStorage)로 옮겼다.
+  // 이미 저장된 기기 설정과 어긋나지 않게 스키마에서만 남겨 둔다.
   'ui.activeHostId':        { type: 'str',  def: 'local', scope: 'device' },
 
   // 98-rail-repos-2.1.6.md §2 — 레일 그룹 여닫기. **device 스코프**다:
@@ -130,7 +133,8 @@ function _scopeOf(key) {
 // 같은 모양이라 객체 하나로 묶는다 — get/set/load가 이 객체를 스코프로
 // 골라 쓰기만 하면 되므로 로직이 중복되지 않는다.
 const _stores = {
-  global: { values: {}, cacheKey: 'vt-settings-v1' },
+  // global은 그 맥의 /api/workspace에 저장된다 — 호스트 전환 시 캐시도 맥마다.
+  global: { values: {}, cacheKey: hostKey('vt-settings-v1') },
   device: { values: {}, cacheKey: 'vt-settings-device-v1' },
 };
 
@@ -275,6 +279,9 @@ function _migrate() {
   for (const [key, spec] of Object.entries(SCHEMA)) {
     const scope = _scopeOf(key);
     if (!spec.migrate || key in _stores[scope].values) continue;
+    // 옛 localStorage 키는 이 맥(로그인한 서버) 시절의 값이다 — 다른 맥의
+    // 설정으로 올리지 않는다.
+    if (scope === 'global' && isRelayed()) continue;
     let raw = null;
     try { raw = localStorage.getItem(spec.migrate); } catch (_) { continue; }
     if (raw === null) continue;

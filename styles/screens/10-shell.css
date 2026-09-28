@@ -189,7 +189,6 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
    (.vt-fleet-host.remote)와 같은 강조색으로 "지금 다른 맥을 보고 있다"를 표시하고,
    거쳐 온 서버(로그인한 이 맥)는 한 단 더 흐리게 덧붙인다. */
 .vt-workspace-host.remote { color:var(--acc); }
-.vt-workspace-via { color:var(--color-muted); opacity:.7; }
 
 /* N37 §4 — 「연결된 화면」. 평소(나 혼자)엔 아이콘만 있는 조용한 버튼이고,
    2명 이상 붙으면 숫자 배지가 붙어 존재감이 생긴다(tmux가 가장 작은
