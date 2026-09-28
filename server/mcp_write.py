@@ -834,6 +834,21 @@ def _opencode_set(name: str, enabled: bool, *, scope: str,
 
 # ------------------------------------------------------------ 플러그인 (4단계)
 
+def _git_ignored(path: Path) -> bool:
+    """git이 이 경로를 무시하는가. git 저장소가 아니거나 확인 실패면 True
+    (커밋될 위험이 없거나, 모르는 걸 경고로 부풀리지 않는다)."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(path.parent.parent), "check-ignore", "-q", str(path)],
+            capture_output=True, timeout=2.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True
+    # 0 = 무시됨, 1 = 무시 안 됨, 128 = 저장소 아님/오류
+    return r.returncode != 1
+
+
 def set_plugin_enabled(name: str, enabled: bool, *, tool: str = "claude",
                        scope: str = "global",
                        worktree_id: Optional[str] = None) -> dict:
@@ -920,52 +935,58 @@ def set_plugin_enabled(name: str, enabled: bool, *, tool: str = "claude",
         return {"status": "failed", "changed": False,
                 "reason": f"{tool} 플러그인 토글은 아직 지원하지 않는다 — "
                           f"공식 명령을 쓸 것"}
+    import mcp_plugins
+
+    # project(`<프로젝트>/.claude/settings.json`)는 저장소에 커밋되는 팀 공유
+    # 파일이라 읽기만 한다(2026-09-28 확정) — mcp_plugins 머리말 참고.
+    if scope == "project":
+        return {"status": "failed", "changed": False,
+                "reason": "프로젝트 공유 설정(.claude/settings.json)은 팀 전체에 적용되는 "
+                          "커밋 파일이라 여기서 바꾸지 않는다 — 저장소에서 직접 고칠 것"}
     if scope not in ("global", "local"):
         return {"status": "failed", "reason": "scope는 global/local", "changed": False}
 
     wt = mcp_scan.find_worktree(worktree_id)
     if scope == "local" and wt is None:
-        return {"status": "failed", "reason": "로컬 스코프는 워크트리를 지정해야 한다",
+        return {"status": "failed", "reason": "로컬 스코프는 기준 프로젝트를 지정해야 한다",
                 "changed": False}
     wt_path = wt.get("path") if wt else None
-    path = mcp_adapters.claude_paths()["global"]
+
+    installed, ierr = mcp_plugins.claude_installed(wt_path)
+    if ierr:
+        return {"status": "failed", "changed": False,
+                "reason": f"설치 여부를 확인하지 못했다: {ierr}"}
+    if name not in installed:
+        return {"status": "failed", "changed": False,
+                "reason": f"`{name}` 플러그인이 설치되지 않은 상태다 — 값만 바꿔도 켜지지 "
+                          f"않는다. 먼저 `claude plugin install`로 설치할 것"}
+
+    path = mcp_plugins.claude_settings_paths(wt_path)["user" if scope == "global" else "local"]
+    warning = None
+    if scope == "local" and not path.exists() and not _git_ignored(path):
+        warning = (f"{path.name}이 git에 무시되지 않는다 — 커밋되지 않게 "
+                   f".gitignore에 추가할 것")
 
     try:
         with _locked(path):
             before = _load_json_for_write(path)
             after = json.loads(json.dumps(before))
-
-            if scope == "local":
-                projects = after.setdefault("projects", {})
-                if not isinstance(projects, dict):
-                    raise WriteRefused("projects가 객체가 아니다 — 쓰기를 중단했다")
-                container = projects.setdefault(wt_path, {})
-                touched = "projects"
-            else:
-                container = after
-                touched = "enabledPlugins"
-            if not isinstance(container, dict):
-                raise WriteRefused("설정 블록이 객체가 아니다 — 쓰기를 중단했다")
-
-            block = container.get("enabledPlugins")
-            if not isinstance(block, dict) or name not in block:
-                raise WriteRefused(
-                    f"`{name}` 플러그인이 목록에 없다 — 설치되지 않은 플러그인은 "
-                    f"값만 바꿔도 켜지지 않는다. 먼저 `claude plugin install`로 설치할 것")
+            block = after.setdefault("enabledPlugins", {})
+            if not isinstance(block, dict):
+                raise WriteRefused("enabledPlugins가 객체가 아니다 — 쓰기를 중단했다")
             block[name] = enabled
-
             if before == after:
                 return {"status": "ok", "changed": False}
 
             def verify(d):
-                if scope == "local":
-                    c = (d.get("projects") or {}).get(wt_path) or {}
-                else:
-                    c = d
-                return bool((c.get("enabledPlugins") or {}).get(name)) == enabled
+                got = (d.get("enabledPlugins") or {}).get(name)
+                return isinstance(got, bool) and got == enabled
 
-            return _commit_json(path, before, after, touched, verify,
-                                allow_new_key=(scope == "global"))
+            out = _commit_json(path, before, after, "enabledPlugins", verify,
+                               allow_new_key=True)
+            if warning:
+                out["warning"] = warning
+            return out
     except WriteRefused as e:
         return {"status": "failed", "reason": str(e), "changed": False}
     except WriteUnverified as e:

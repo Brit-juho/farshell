@@ -19,7 +19,7 @@ import { renderAppearanceSection } from './settings/sections/appearance.js';
 import { renderAgentsSection } from './settings/sections/agents.js';
 import { renderSecuritySection } from './settings/sections/security.js';
 import { renderAboutSection } from './settings/sections/about.js';
-import { getTabs, getActiveTabId } from '../layout/store.js';
+import { mcpContext } from './mcp-open.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
 import { vtFetch } from '../core/api.js';
@@ -145,9 +145,9 @@ const SEARCH_ALIASES = {
 function renderMcpSection() {
   const host = document.createElement('div');
   host.className = 'vt-set-sechost';
-  const tab = getTabs().find((t) => t.id === getActiveTabId());
+  const ctx = mcpContext();
   import('./mcp.js')
-    .then((m) => m.mount(host, (tab && tab.worktreeId) || null))
+    .then((m) => m.mount(host, ctx))
     .catch(() => { host.textContent = '불러오지 못했습니다'; });
   return host;
 }

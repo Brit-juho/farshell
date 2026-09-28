@@ -190,6 +190,14 @@ def _transport(defn: dict) -> str:
     return "unknown"
 
 
+def _level(tool: str, scope: str, shared: bool) -> str:
+    """user(나, 모든 프로젝트) / local(나, 이 프로젝트) / project(저장소에 커밋)."""
+    if scope == "global":
+        return "user"
+    # 로컬 스코프 중 커밋되지 않는 곳은 Claude의 `~/.claude.json` projects 블록뿐이다.
+    return "local" if tool == "claude" and not shared else "project"
+
+
 def _entry(
     *,
     name: str,
@@ -240,6 +248,10 @@ def _entry(
         "tool": tool,
         "oauth": has_oauth,
         "scope": scope,
+        # 화면 표시·거르기 전용. `scope`는 쓰기 경로의 기준이라 그대로 두고,
+        # "누구에게 적용되는가"를 따로 싣는다 — Claude의 local(나만, 이
+        # 프로젝트)과 project(`.mcp.json`, 팀 공유)가 `scope`로는 둘 다 local이다.
+        "level": _level(tool, scope, shared),
         "source": str(path),
         "shared": shared,
         "worktree_id": worktree_id,
@@ -271,6 +283,15 @@ def _entry(
 
 def claude_paths() -> dict:
     return {"global": _home() / ".claude.json"}
+
+
+def claude_settings_dir() -> Path:
+    """`~/.claude` — settings.json·plugins/가 있는 곳. `CLAUDE_CONFIG_DIR`을 따른다.
+    테스트 격리(VT_MCP_HOME)가 켜져 있으면 그쪽이 이긴다."""
+    if os.environ.get("VT_MCP_HOME"):
+        return _home() / ".claude"
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    return Path(override).expanduser() if override else _home() / ".claude"
 
 
 def _claude_project_entry(data: dict, worktree_path: Optional[str]) -> dict:

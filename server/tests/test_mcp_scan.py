@@ -167,3 +167,76 @@ def test_codex_plugin_failure_is_not_cached(monkeypatch):
     assert codex_cli.plugin_list()[1] == "timeout"
     monkeypatch.setattr("codex_cli.run_json", lambda args, **k: ({"installed": []}, None))
     assert codex_cli.plugin_list() == ({"installed": []}, None)
+
+
+# ── 포커스된 칸 기준(session:<이름>) ───────────────────────────────────────
+
+def _tmux_cwd(monkeypatch, cwd, want="=dev:"):
+    def fake(args, timeout=2.0):
+        assert args[:4] == ["display-message", "-p", "-t", want]
+        return f"{cwd}\n" if cwd else None
+    monkeypatch.setattr("tmux_runner.run_text", fake)
+
+
+def test_session_context_climbs_to_git_root_and_reuses_known_worktree(home, wt, monkeypatch):
+    import subprocess
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(home))
+    subprocess.run(["git", "init", "-q", wt["path"]], check=True)
+    sub = Path(wt["path"]) / "a" / "b"
+    sub.mkdir(parents=True)
+    _tmux_cwd(monkeypatch, str(sub))
+    got = mcp_scan.find_worktree("session:dev")
+    assert got["id"] == "wt1" and got["session"] == "dev"
+
+
+def test_session_context_outside_roots_falls_back_to_global(home, wt, monkeypatch, tmp_path_factory):
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(home / "repo"))
+    outside = tmp_path_factory.mktemp("outside")
+    _tmux_cwd(monkeypatch, str(outside))
+    assert mcp_scan.find_worktree("session:dev") is None
+
+
+def test_session_context_unknown_dir_gets_session_id(home, wt, monkeypatch):
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(home))
+    plain = home / "plain"
+    plain.mkdir()
+    _tmux_cwd(monkeypatch, str(plain))
+    got = mcp_scan.find_worktree("session:dev")
+    assert got["id"] == "session:dev" and got["path"] == str(plain.resolve())
+    (home / ".claude.json").write_text("{}")
+    (plain / ".mcp.json").write_text(json.dumps({"mcpServers": {"p": {"command": "x"}}}))
+    result = mcp_scan.scan("session:dev", tools=("claude",))
+    assert result["worktree"]["session"] == "dev"
+    assert [s["level"] for s in result["servers"]] == ["project"]
+
+
+def test_session_missing_pane_is_global_only(home, wt, monkeypatch):
+    _tmux_cwd(monkeypatch, None)
+    assert mcp_scan.find_worktree("session:dev") is None
+
+
+def test_level_separates_claude_local_from_project(home, wt):
+    (home / ".claude.json").write_text(json.dumps({
+        "mcpServers": {"u": {"command": "x"}},
+        "projects": {wt["path"]: {"mcpServers": {"l": {"command": "y"}}}},
+    }))
+    (Path(wt["path"]) / ".mcp.json").write_text(json.dumps({"mcpServers": {"p": {"command": "z"}}}))
+    by = {s["name"]: s for s in mcp_scan.scan("wt1", tools=("claude",))["servers"]}
+    assert (by["u"]["level"], by["l"]["level"], by["p"]["level"]) == ("user", "local", "project")
+    assert by["l"]["scope"] == by["p"]["scope"] == "local"  # 쓰기 기준은 그대로
+
+
+def test_session_id_is_mapped_to_its_tmux_name(home, wt, monkeypatch):
+    """화면은 FarShell 세션 id를 보낸다 — tmux 이름은 서버의 세션 저장소가 안다."""
+    from deps import session_store
+    session_store.add("sid-1", name="x")
+    session_store.update_tmux_name("sid-1", "dev")
+    try:
+        monkeypatch.setenv("VT_BROWSE_ROOTS", str(home))
+        plain = home / "plain2"
+        plain.mkdir()
+        _tmux_cwd(monkeypatch, str(plain))
+        got = mcp_scan.find_worktree("session:sid-1")
+        assert got["id"] == "session:sid-1" and got["session"] == "dev"
+    finally:
+        session_store.remove("sid-1")

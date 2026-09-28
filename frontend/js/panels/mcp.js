@@ -32,7 +32,23 @@ import { showToast } from '../ui/toast.js';
 import { promptDialog, confirmDialog } from '../core/dialog.js';
 
 const TOOL_LABEL = { claude: 'Claude', codex: 'Codex', agy: 'agy', opencode: 'opencode' };
-const SCOPE_LABEL = { global: '전역', local: '이 워크트리' };
+// 2026-09-28 — 「누구에게 적용되는가」 세 단계. 서버가 `level`로 내려준다
+// (`scope`는 쓰기 기준이라 그대로다 — Claude의 local과 project가 둘 다 `local`).
+const LEVEL_LABEL = { user: '유저', local: '로컬', project: '프로젝트' };
+const LEVEL_HINT = {
+  user: '나 · 모든 프로젝트',
+  local: '나 · 이 프로젝트만 (커밋되지 않음)',
+  project: '팀 공유 · 저장소에 커밋되는 파일',
+};
+const levelOf = (x) => x.level || (x.scope === 'global' ? 'user' : 'project');
+
+function levelBadge(x) {
+  const lv = levelOf(x);
+  const b = el('span', 'vt-mcp-level', LEVEL_LABEL[lv] || lv);
+  b.dataset.level = lv;
+  b.title = `${LEVEL_HINT[lv] || ''}${x.source ? `\n${x.source}` : ''}`;
+  return b;
+}
 
 // 2026-09-22(사용자 지적: "가독성이 너무 떨어져") — server/mcp_adapters.py가
 // 워크트리를 안 골랐을 때 local-scope 항목마다 이 문장을 넣어준다
@@ -57,8 +73,7 @@ let _pluginSeq = 0;
 
 // ADR-48 — 다시 그려도(refresh) 사용자가 펼쳐 둔 것·걸러 둔 것은 그대로 둔다.
 const _open = new Set();
-let _pluginsOpen = false;
-let _filter = { q: '', tool: 'all' };
+let _filter = { q: '', tool: 'all', level: 'all', onlyOn: false, view: 'servers' };
 let _lastData = null;
 
 function el(tag, cls, text) {
@@ -140,7 +155,8 @@ async function toggle(entry, enabled) {
 function toggleButton(entry, facts, onDone) {
   const btn = el('button', 'vt-chip sm vt-mcp-toggle');
   const paint = () => {
-    btn.textContent = `${SCOPE_LABEL[entry.scope] || entry.scope} · ${entry.enabled ? '켬' : '끔'}`;
+    btn.textContent = entry.enabled ? '켬' : '끔';
+    btn.setAttribute('aria-label', `${entry.name} ${TOOL_LABEL[entry.tool] || entry.tool} ${LEVEL_LABEL[levelOf(entry)]} — ${entry.enabled ? '켜짐' : '꺼짐'}`);
     btn.dataset.on = entry.enabled ? '1' : '0';
   };
   paint();
@@ -518,7 +534,7 @@ function deployControls(group, data) {
     ['opencode', 'local', 'opencode 이 워크트리'],
   ].filter(([tool, scope]) =>
     !group.entries.some((e) => e.tool === tool && e.scope === scope)
-    && !(scope === 'local' && !_worktreeId)
+    && !(scope === 'local' && !data.worktree)
     // ADR-46 — agy는 참조를 확장하지 않아 서버가 env·headers를 가지면 복제를 거절한다.
     && !(tool === 'agy' && hasCreds));
   if (!targets.length) return null;
@@ -615,12 +631,13 @@ function renderServer(group, facts, tags, data) {
   sum.appendChild(chev);
   sum.appendChild(el('span', 'vt-set-label vt-mcp-name', group.name));
 
+  const shownEntries = group.entries.filter(_entryMatches);
   const states = el('span', 'vt-mcp-sumtools');
-  group.entries.forEach((e, i) => {
+  shownEntries.forEach((e, i) => {
     if (i) states.appendChild(document.createTextNode(' · '));
-    const s = el('span', null, `${TOOL_LABEL[e.tool] || e.tool} ${e.enabled ? '켬' : '끔'}`);
+    const s = el('span', null, `${TOOL_LABEL[e.tool] || e.tool} ${LEVEL_LABEL[levelOf(e)]} ${e.enabled ? '켬' : '끔'}`);
     s.dataset.on = e.enabled ? '1' : '0';
-    if (e.scope === 'local') s.title = '이 워크트리';
+    s.title = LEVEL_HINT[levelOf(e)] || '';
     states.appendChild(s);
   });
   sum.appendChild(states);
@@ -649,9 +666,10 @@ function renderServer(group, facts, tags, data) {
   // ── 펼친 쪽 ──
   const body = el('div', 'vt-mcp-body');
 
-  for (const entry of group.entries) {
+  for (const entry of shownEntries) {
     const row = el('div', 'vt-mcp-row');
     row.appendChild(el('span', 'vt-mcp-tool', TOOL_LABEL[entry.tool] || entry.tool));
+    row.appendChild(levelBadge(entry));
     row.appendChild(toggleButton(entry, facts, refresh));
 
     if (entry.transport && entry.transport !== 'unknown') {
@@ -665,8 +683,6 @@ function renderServer(group, facts, tags, data) {
       auth.title = `codex mcp login ${entry.name}`;
       row.appendChild(auth);
     }
-    // 어떤 파일을 고치게 되는지 — 특히 `.mcp.json`은 저장소에 커밋된다.
-    if (entry.shared) row.appendChild(el('span', 'vt-mcp-meta', '저장소 공유'));
     row.appendChild(verifyControl(entry, syncSummary));
 
     // 필요한 환경변수 이름은 보여준다(시크릿이 아니라 "무엇이 필요한지"다).
@@ -725,76 +741,159 @@ function infoSummary(text) {
   return s;
 }
 
-function _matches(group) {
-  const q = _filter.q.trim().toLowerCase();
-  if (q && !group.name.toLowerCase().includes(q)) return false;
-  if (_filter.tool !== 'all' && !group.entries.some((e) => e.tool === _filter.tool)) return false;
+// ── 거르기 ─────────────────────────────────────────────────────────────────
+// 2026-09-28(사용자 지적: "필터도 제대로 적용되게") — 예전엔 도구 칩이 **그룹**
+// 단위로만 걸러 Codex를 골라도 같은 서버의 Claude 줄이 그대로 보였고, 도구가
+// 하나뿐이면 칩 줄이 통째로 사라졌다. 이제 모든 조건이 **항목 단위**로 걸리고
+// 서버·플러그인 두 목록에 같은 막대가 걸린다.
+
+function _entryMatches(e) {
+  if (_filter.tool !== 'all' && e.tool !== _filter.tool) return false;
+  if (_filter.level !== 'all' && levelOf(e) !== _filter.level) return false;
+  if (_filter.onlyOn && !e.enabled) return false;
   return true;
+}
+
+function _textMatches(...fields) {
+  const q = _filter.q.trim().toLowerCase();
+  return !q || fields.some((f) => f && String(f).toLowerCase().includes(q));
+}
+
+function _matches(group, tags) {
+  const t = (tags && tags[group.name]) || [];
+  if (!_textMatches(group.name, ...t)) return false;
+  return group.entries.some(_entryMatches);
 }
 
 function renderList(listHost, data) {
   listHost.innerHTML = '';
-  const shown = (data.groups || []).filter(_matches);
+  const shown = (data.groups || []).filter((g) => _matches(g, data.tags));
   if (!shown.length) {
-    listHost.appendChild(help('조건에 맞는 서버가 없습니다.'));
+    listHost.appendChild(help((data.groups || []).length
+      ? '조건에 맞는 서버가 없습니다.'
+      : '정의된 MCP 서버가 없습니다. 추가는 각 CLI의 공식 명령을 쓰세요 — `claude mcp add`, `codex mcp add`, `agy mcp add`.'));
     return;
   }
   for (const g of shown) listHost.appendChild(renderServer(g, data.facts || {}, data.tags || {}, data));
 }
 
-/** 검색 + 도구 거르기. 목록만 다시 그린다 — 입력칸을 다시 만들면 타이핑 중 포커스가 튄다. */
-function renderFilter(listHost, data) {
+function chipRow(label, options, current, onPick) {
+  const row = el('div', 'vt-mcp-chips');
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', label);
+  for (const [value, text, hint] of options) {
+    const c = el('button', 'vt-chip sm vt-mcp-filterchip', text);
+    c.type = 'button';
+    if (hint) c.title = hint;
+    c.dataset.value = value;
+    c.setAttribute('aria-pressed', String(current === value));
+    c.addEventListener('click', () => {
+      for (const b of row.children) b.setAttribute('aria-pressed', String(b === c));
+      onPick(value);
+    });
+    row.appendChild(c);
+  }
+  return row;
+}
+
+/** 검색 + 도구 + 적용 범위 + 켬만. 목록만 다시 그린다 — 입력칸을 다시 만들면 타이핑 중 포커스가 튄다. */
+function renderFilter(data, rerender) {
   const bar = el('div', 'vt-mcp-filter');
   const input = el('input', 'vt-input vt-mcp-search');
   input.type = 'search';
-  input.placeholder = '서버 이름';
-  input.setAttribute('aria-label', 'MCP 서버 이름으로 찾기');
+  input.placeholder = '이름 · 태그 · 마켓플레이스';
+  input.setAttribute('aria-label', 'MCP 서버·플러그인 찾기');
   input.value = _filter.q;
-  input.addEventListener('input', () => { _filter.q = input.value; renderList(listHost, data); });
+  input.addEventListener('input', () => { _filter.q = input.value; rerender(); });
   bar.appendChild(input);
 
-  const tools = ['all', ...Object.keys(TOOL_LABEL).filter((tool) =>
-    (data.groups || []).some((g) => g.entries.some((e) => e.tool === tool)))];
-  if (tools.length > 2) {
-    const chips = el('div', 'vt-mcp-chips');
-    chips.setAttribute('role', 'group');
-    chips.setAttribute('aria-label', '도구로 거르기');
-    for (const tool of tools) {
-      const c = el('button', 'vt-chip sm', tool === 'all' ? '전체' : TOOL_LABEL[tool]);
-      c.type = 'button';
-      c.setAttribute('aria-pressed', String(_filter.tool === tool));
-      c.addEventListener('click', () => {
-        _filter.tool = tool;
-        for (const b of chips.children) b.setAttribute('aria-pressed', String(b === c));
-        renderList(listHost, data);
-      });
-      chips.appendChild(c);
-    }
-    bar.appendChild(chips);
-  }
+  bar.appendChild(toolChips(data, rerender));
+  bar.appendChild(chipRow('적용 범위로 거르기',
+    [['all', '모든 범위'], ...Object.keys(LEVEL_LABEL).map((lv) => [lv, LEVEL_LABEL[lv], LEVEL_HINT[lv]])],
+    _filter.level, (v) => { _filter.level = v; rerender(); }));
+
+  const on = el('button', 'vt-chip sm vt-mcp-filterchip vt-mcp-onlyon', '켜진 것만');
+  on.type = 'button';
+  on.setAttribute('aria-pressed', String(_filter.onlyOn));
+  on.addEventListener('click', () => {
+    _filter.onlyOn = !_filter.onlyOn;
+    on.setAttribute('aria-pressed', String(_filter.onlyOn));
+    rerender();
+  });
+  bar.appendChild(on);
   return bar;
+}
+
+/** 도구 칩 — 플러그인 조회가 늦게 끝나면 그 도구가 더해지므로 이 줄만 다시 만든다. */
+function toolChips(data, rerender) {
+  const seen = new Set([
+    ...(data.servers || []).map((e) => e.tool),
+    ...((_plugins && _plugins.list) || []).map((p) => p.tool),
+  ]);
+  const tools = Object.keys(TOOL_LABEL).filter((t) => seen.has(t) || _filter.tool === t);
+  const row = chipRow('도구로 거르기',
+    [['all', '모든 도구'], ...tools.map((t) => [t, TOOL_LABEL[t]])],
+    _filter.tool, (v) => { _filter.tool = v; rerender(); });
+  row.classList.add('vt-mcp-toolchips');
+  row._rerender = rerender;
+  return row;
+}
+
+/** 서버 | 플러그인. 둘 다 그려 두고 `hidden`만 바꾼다 — 느린 플러그인 조회가
+ *  탭을 눌렀을 때 비로소 시작되면 그만큼 빈 화면을 보게 된다. */
+function renderTabs(counts, onPick) {
+  const tabs = el('div', 'vt-mcp-tabs');
+  tabs.setAttribute('role', 'tablist');
+  for (const [view, label] of [['servers', 'MCP 서버'], ['plugins', '플러그인']]) {
+    const t = el('button', 'vt-mcp-tab');
+    t.type = 'button';
+    t.setAttribute('role', 'tab');
+    t.dataset.view = view;
+    t.setAttribute('aria-selected', String(_filter.view === view));
+    t.appendChild(document.createTextNode(label));
+    const n = el('span', 'vt-mcp-tabcount', counts[view]);
+    t.appendChild(n);
+    t.addEventListener('click', () => {
+      _filter.view = view;
+      for (const b of tabs.children) b.setAttribute('aria-selected', String(b === t));
+      onPick();
+    });
+    tabs.appendChild(t);
+  }
+  return tabs;
+}
+
+function contextBar(wt) {
+  const top = el('div', 'vt-mcp-top');
+  const ctx = el('div', 'vt-mcp-ctx');
+  ctx.appendChild(el('span', 'vt-mcp-ctxlabel', '기준'));
+  if (wt) {
+    const name = el('span', 'vt-mcp-ctxname', wt.label || wt.path);
+    name.title = wt.path || '';
+    ctx.appendChild(name);
+    if (wt.session) ctx.appendChild(el('span', 'vt-mcp-meta', `포커스된 칸 · ${wt.session}`));
+  } else {
+    ctx.appendChild(el('span', 'vt-mcp-ctxname', '유저 설정만'));
+    ctx.appendChild(el('span', 'vt-mcp-meta', '프로젝트 안의 칸을 포커스하면 그 프로젝트 기준으로 보여줍니다'));
+  }
+  top.appendChild(ctx);
+  return top;
 }
 
 function paint(host, data) {
   _lastData = data;
   host.innerHTML = '';
   const groups = data.groups || [];
-
-  // 한 줄 요약 — 이 화면에 들어온 사람이 제일 먼저 알고 싶은 것.
-  const onCount = groups.filter((g) => g.entries.some((e) => e.enabled)).length;
-  const top = el('div', 'vt-mcp-top');
-  top.appendChild(el('span', 'vt-mcp-count', groups.length ? `서버 ${groups.length} · 켬 ${onCount}` : '서버 없음'));
   const wt = data.worktree;
-  top.appendChild(el('span', 'vt-mcp-meta', wt ? `기준: ${wt.label}` : '전역 설정만 — 워크트리를 열면 그 위치 기준'));
-  host.appendChild(top);
+
+  host.appendChild(contextBar(wt));
 
   // 설명 3문단 → 「적용 시점」 한 줄. 내용은 그대로, 펼치면 나온다(정직함은 유지).
   const facts = el('details', 'vt-mcp-applyinfo');
   facts.appendChild(infoSummary('적용 시점 — 켜고 끈 것은 대부분 다음 세션부터 반영됩니다'));
+  for (const lv of Object.keys(LEVEL_LABEL)) facts.appendChild(help(`${LEVEL_LABEL[lv]}: ${LEVEL_HINT[lv]}`));
   if (!wt) {
-    facts.appendChild(help('Claude는 켜짐/꺼짐을 프로젝트마다 따로 기록하므로, 워크트리를 열면 그 위치 기준으로 다시 보여줍니다.'));
-  } else {
-    facts.appendChild(help(`「이 워크트리」 토글은 ${wt.label}에만 적용됩니다.`));
+    facts.appendChild(help('Claude는 켜짐/꺼짐을 프로젝트마다 따로 기록하므로, 프로젝트 칸을 포커스하면 그 위치 기준으로 다시 보여줍니다.'));
   }
   facts.appendChild(renderFacts(data.facts));
   host.appendChild(facts);
@@ -810,30 +909,60 @@ function paint(host, data) {
     host.appendChild(warnRow);
   }
 
-  if (!groups.length) {
-    host.appendChild(help('정의된 MCP 서버가 없습니다. 추가는 각 CLI의 공식 명령을 쓰세요 — `claude mcp add`, `codex mcp add`, `agy mcp add`.'));
-    host.appendChild(renderPlugins());
-    return;
-  }
+  const onCount = groups.filter((g) => g.entries.some((e) => e.enabled)).length;
+  const serverPane = el('div', 'vt-mcp-pane');
+  serverPane.dataset.view = 'servers';
+  const pluginPane = el('div', 'vt-mcp-pane');
+  pluginPane.dataset.view = 'plugins';
+
+  const listHost = el('div', 'vt-mcp-list');
+  const rerender = () => {
+    renderList(listHost, data);
+    const box = pluginPane.querySelector('.vt-mcp-plugins');
+    if (box) box.replaceWith(renderPlugins());
+  };
+  const sync = () => {
+    serverPane.hidden = _filter.view !== 'servers';
+    pluginPane.hidden = _filter.view !== 'plugins';
+  };
+  host.appendChild(renderTabs({
+    servers: groups.length ? `${onCount}/${groups.length}` : '0',
+    plugins: '',
+  }, sync));
+  host.appendChild(renderFilter(data, rerender));
 
   // 그룹 줄은 목록 **위** — "한 번에 켜고 끄기"가 이 화면에서 가장 값싼 동작이다.
   const bar = renderGroupBar(data);
-  if (bar) host.appendChild(bar);
+  if (bar) serverPane.appendChild(bar);
 
   // §2-5 회수 경로 — 우리가 **어디에** 참조를 심었는지.
   if ((data.refs || []).length) {
     const box = el('details', 'vt-mcp-applyinfo');
     box.appendChild(infoSummary(`심어둔 참조 ${data.refs.length}개`));
     for (const r of data.refs) box.appendChild(help(`${r.server} · ${r.env} → ${r.source}`));
-    host.appendChild(box);
+    serverPane.appendChild(box);
   }
-
-  const listHost = el('div', 'vt-mcp-list');
-  host.appendChild(renderFilter(listHost, data));
-  host.appendChild(listHost);
+  serverPane.appendChild(listHost);
   renderList(listHost, data);
 
-  host.appendChild(renderPlugins());
+  pluginPane.appendChild(renderPlugins());
+  host.appendChild(serverPane);
+  host.appendChild(pluginPane);
+  sync();
+  _syncPluginCount();
+}
+
+function _syncPluginCount() {
+  const n = _host && _host.querySelector('.vt-mcp-tab[data-view="plugins"] .vt-mcp-tabcount');
+  if (!n) return;
+  if (_plugins === null) { n.textContent = '…'; return; }
+  const names = new Map();
+  for (const p of _plugins.list) {
+    const k = `${p.tool}|${p.name}`;
+    names.set(k, names.get(k) || (p.effective ?? p.enabled) === true);
+  }
+  const on = [...names.values()].filter(Boolean).length;
+  n.textContent = names.size ? `${on}/${names.size}` : '0';
 }
 
 function _q() {
@@ -863,6 +992,9 @@ function loadPlugins({ refresh: force = false } = {}) {
       _plugins = { list: d.plugins || [], errors: d.errors || [] };
       const box = _host && _host.querySelector('.vt-mcp-plugins');
       if (box) box.replaceWith(renderPlugins());
+      _syncPluginCount();
+      const chips = _host && _host.querySelector('.vt-mcp-toolchips');
+      if (chips && _lastData) chips.replaceWith(toolChips(_lastData, chips._rerender));
     });
 }
 
@@ -896,38 +1028,101 @@ export function mount(host, worktreeId) {
 // 켜는 버튼을 그리면 "켰는데 아무 일도 안 일어난다"가 되는데, 그게 이 화면이
 // 가장 피해야 할 상태다.
 
-function renderPlugins() {
-  // ADR-48 — 접힌 요약이 기본이다(codex만 20개가 넘는다). 펼친 상태는 다시 그려도 유지.
-  const box = el('details', 'vt-mcp-group vt-mcp-plugins');
-  if (_pluginsOpen) box.open = true;
-  box.addEventListener('toggle', () => { _pluginsOpen = box.open; });
-
-  const sum = el('summary', 'vt-mcp-sum');
-  const chev = el('span', 'vt-mcp-chev');
-  chev.innerHTML = icon('chevron-down', 12);
-  sum.appendChild(chev);
-  sum.appendChild(el('span', 'vt-set-label vt-mcp-name', '플러그인'));
-  const status = el('span', 'vt-mcp-sumtools');
-  if (_plugins === null) {
-    status.textContent = '불러오는 중…';
-  } else {
-    const n = _plugins.list.length;
-    const on = _plugins.list.filter((p) => p.enabled).length;
-    status.textContent = n ? `${n}개 · 켬 ${on}` : '없음';
+/** 플러그인 하나(도구+id)의 여러 적용 범위 항목을 한 줄로 묶는다. */
+function groupPlugins(list) {
+  const out = new Map();
+  for (const p of list) {
+    const k = `${p.tool}|${p.name}`;
+    if (!out.has(k)) out.set(k, { key: k, head: p, entries: [] });
+    out.get(k).entries.push(p);
   }
-  sum.appendChild(status);
-  if (_plugins && _plugins.errors.length) {
-    const right = el('span', 'vt-mcp-sumright');
+  return [...out.values()];
+}
+
+function pluginToggle(p) {
+  const btn = el('button', 'vt-chip sm vt-mcp-toggle vt-mcp-plugtoggle');
+  btn.type = 'button';
+  const lv = levelOf(p);
+  const state = p.enabled === true ? '켬' : (p.enabled === false ? '끔' : '미지정');
+  btn.textContent = `${LEVEL_LABEL[lv]} · ${state}`;
+  btn.dataset.on = p.enabled ? '1' : '0';
+  btn.dataset.level = lv;
+  btn.title = `${LEVEL_HINT[lv]}${p.source ? `\n${p.source}` : ''}`;
+  if (p.writable === false) {
+    // 팀 공유 파일(프로젝트) · 설치 안 됨 — 누르면 안 되는 이유를 글로 남긴다.
+    btn.disabled = true;
+    btn.classList.add('is-readonly');
+    btn.title += lv === 'project'
+      ? '\n팀 공유 파일이라 여기서 바꾸지 않습니다 — 저장소에서 직접 고치세요'
+      : '\n설치되지 않은 플러그인이라 값만 바꿔도 켜지지 않습니다';
+    return btn;
+  }
+  btn.addEventListener('click', async () => {
+    const next = p.enabled !== true;
+    btn.disabled = true;
+    try {
+      const r = await postElevated('/api/mcp/plugins/toggle', {
+        name: p.name, enabled: next, tool: p.tool,
+        scope: p.scope, worktree: p.worktree_id || _worktreeId,
+      });
+      if (!r) return;
+      if (r.status === 'unknown') {
+        showToast('반영 여부를 확인하지 못했습니다 — 다시 시도해 주세요', 'error');
+      } else {
+        showToast(`${p.plugin} ${LEVEL_LABEL[lv]} ${next ? '켬' : '끔'} — 다음 세션부터 반영됩니다`);
+        if (r.warning) showToast(r.warning, 'error');
+      }
+    } catch (e) {
+      showToast(e.message || '바꾸지 못했습니다', 'error');
+    } finally { loadPlugins(); }
+  });
+  return btn;
+}
+
+function renderPluginRow(g) {
+  const p = g.head;
+  const shown = g.entries.filter(_entryMatches);
+  const row = el('div', 'vt-mcp-plugrow');
+  const eff = g.entries.find((e) => e.effective !== undefined);
+  const effective = eff ? eff.effective : p.enabled;
+  row.dataset.on = effective === true ? '1' : '0';
+
+  const main = el('div', 'vt-mcp-plugmain');
+  const dot = el('span', 'vt-mcp-dot');
+  dot.dataset.on = effective === true ? '1' : (effective === false ? '0' : '');
+  dot.title = effective === true ? '지금 적용: 켬' : (effective === false ? '지금 적용: 끔' : '지금 적용: 도구 기본값');
+  main.appendChild(dot);
+  main.appendChild(el('span', 'vt-set-label vt-mcp-name', p.plugin));
+  main.appendChild(el('span', 'vt-mcp-tool', TOOL_LABEL[p.tool] || p.tool));
+  const meta = [];
+  if (p.marketplace) meta.push(p.marketplace);
+  if (p.version) meta.push(`v${p.version}`);
+  if (meta.length) main.appendChild(el('span', 'vt-mcp-meta', meta.join(' · ')));
+  if (p.skill_count) {
+    const skill = el('span', 'vt-mcp-meta', `스킬 ${p.skill_count}`);
+    skill.title = (p.skills || []).join(', ');
+    main.appendChild(skill);
+  }
+  if (p.bundles_mcp) main.appendChild(el('span', 'vt-mcp-meta', 'MCP 포함'));
+  if (p.installed === false) {
     const b = el('span', 'vt-mcp-warnbadge');
     b.innerHTML = icon('alert-triangle', 11);
-    b.appendChild(document.createTextNode('일부 조회 실패'));
-    right.appendChild(b);
-    sum.appendChild(right);
+    b.appendChild(document.createTextNode('설치 안 됨'));
+    main.appendChild(b);
   }
-  box.appendChild(sum);
+  row.appendChild(main);
 
-  const body = el('div', 'vt-mcp-body');
-  box.appendChild(body);
+  const toggles = el('div', 'vt-mcp-plugtoggles');
+  for (const e of shown) toggles.appendChild(pluginToggle(e));
+  row.appendChild(toggles);
+  return row;
+}
+
+function renderPlugins() {
+  const box = el('div', 'vt-mcp-plugins');
+
+  const tools = el('div', 'vt-mcp-plughead');
+  tools.appendChild(el('span', 'vt-mcp-meta', '설치는 각 CLI에서 — `claude plugin install`, `codex plugin add`. 여기서는 켜기·끄기만 합니다.'));
   const again = el('button', 'vt-chip sm vt-mcp-tagadd', '새로고침');
   again.type = 'button';
   again.title = 'CLI에서 새로 설치한 플러그인을 바로 반영합니다 — codex는 원격 조회라 오래 걸릴 수 있습니다';
@@ -936,68 +1131,41 @@ function renderPlugins() {
     again.disabled = true;
     _plugins = null;
     box.replaceWith(renderPlugins());
+    _syncPluginCount();
     loadPlugins({ refresh: true });
   });
-  const tools = el('div', 'vt-mcp-row');
   tools.appendChild(again);
-  body.appendChild(tools);
+  box.appendChild(tools);
 
   if (_plugins === null) {
-    body.appendChild(help('codex는 원격 마켓플레이스를 조회해 처음 한 번은 오래 걸릴 수 있습니다.'));
+    box.appendChild(help('불러오는 중… codex는 원격 마켓플레이스를 조회해 처음 한 번은 오래 걸릴 수 있습니다.'));
     return box;
   }
   // 예전엔 codex 조회 실패가 버려져 「설치된 플러그인이 없습니다」로 보였다 — 실패는 실패로 말한다.
   for (const err of _plugins.errors) {
-    body.appendChild(help(`${err.source}: ${err.reason}`));
+    const w = help(`${err.source}: ${err.reason}`);
+    w.classList.add('vt-set-help-warn');
+    box.appendChild(w);
   }
   const list = _plugins.list;
   // 조회가 실패했는데 「설치된 플러그인이 없습니다」까지 쓰면 서로 모순이다.
   if (!list.length && _plugins.errors.length) return box;
   if (!list.length) {
-    body.appendChild(help(
+    box.appendChild(help(
       '설치된 플러그인이 없습니다. 설치는 각 CLI의 공식 명령을 쓰세요 — '
       + '`claude plugin install`, `codex plugin add`. FarShell은 설치된 것의 켜기·끄기만 다룹니다.'));
     return box;
   }
 
-  for (const p of list) {
-    const row = el('div', 'vt-mcp-row');
-    row.appendChild(el('span', 'vt-mcp-tool', TOOL_LABEL[p.tool] || p.tool));
-
-    const btn = el('button', 'vt-chip sm vt-mcp-toggle');
-    btn.type = 'button';
-    btn.textContent = `${p.plugin} · ${p.enabled ? '켬' : '끔'}`;
-    btn.dataset.on = p.enabled ? '1' : '0';
-    btn.title = `${SCOPE_LABEL[p.scope] || p.scope}${p.marketplace ? ` · ${p.marketplace}` : ''}`;
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      try {
-        const r = await postElevated('/api/mcp/plugins/toggle', {
-          name: p.name, enabled: !p.enabled, tool: p.tool,
-          scope: p.scope, worktree: _worktreeId,
-        });
-        if (!r) return;
-        if (r.status === 'unknown') {
-          showToast('반영 여부를 확인하지 못했습니다 — 다시 시도해 주세요', 'error');
-        } else {
-          showToast(`${p.plugin} ${!p.enabled ? '켬' : '끔'} — 다음 세션부터 반영됩니다`);
-        }
-      } catch (e) {
-        showToast(e.message || '바꾸지 못했습니다', 'error');
-      } finally { loadPlugins(); }
-    });
-    row.appendChild(btn);
-
-    if (p.marketplace) row.appendChild(el('span', 'vt-mcp-meta', p.marketplace));
-    if (p.version) row.appendChild(el('span', 'vt-mcp-meta', `v${p.version}`));
-    if (p.skill_count) {
-      const names = (p.skills || []).join(', ');
-      const skill = el('span', 'vt-mcp-meta', `스킬 ${p.skill_count}`);
-      if (names) skill.title = names;
-      row.appendChild(skill);
-    }
-    if (p.bundles_mcp) row.appendChild(el('span', 'vt-mcp-meta', 'MCP 포함'));
-    body.appendChild(row);
+  const groups = groupPlugins(list).filter((g) =>
+    _textMatches(g.head.plugin, g.head.name, g.head.marketplace, ...(g.head.skills || []))
+    && g.entries.some(_entryMatches));
+  if (!groups.length) {
+    box.appendChild(help('조건에 맞는 플러그인이 없습니다.'));
+    return box;
   }
+  const listEl = el('div', 'vt-mcp-pluglist');
+  for (const g of groups) listEl.appendChild(renderPluginRow(g));
+  box.appendChild(listEl);
   return box;
 }

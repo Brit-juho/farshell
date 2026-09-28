@@ -134,7 +134,8 @@ const texts = (host, sel) => Array.from(host.querySelectorAll(sel)).map((n) => n
 test('목록 — 서버 이름으로 묶어 스코프 토글을 그린다', async () => {
   const { host } = await build();
   assert.ok(texts(host, '.vt-set-label').includes('notion'));
-  assert.deepEqual(texts(host, '.vt-mcp-toggle'), ['전역 · 켬']);
+  assert.deepEqual(texts(host, '.vt-mcp-toggle'), ['켬']);
+  assert.deepEqual(texts(host, '.vt-mcp-level'), ['유저']);
   assert.ok(texts(host, '.vt-mcp-tool').includes('Claude'));
 });
 
@@ -181,9 +182,12 @@ test('파싱 실패는 숨기지 않고, 건드리지 않는다고 알린다', a
 test('저장소 공유 파일임을 표시한다 — 키가 커밋될 수 있는 자리다', async () => {
   const scan = scanPayload();
   scan.groups[0].entries[0].shared = true;
+  scan.groups[0].entries[0].scope = 'local';
+  scan.groups[0].entries[0].level = 'project';
   scan.groups[0].entries[0].notes = ['이 파일은 저장소에 커밋된다 — `${VAR}` 참조를 쓸 것'];
   const { host } = await build({ scan });
-  assert.ok(texts(host, '.vt-mcp-meta').includes('저장소 공유'));
+  assert.deepEqual(texts(host, '.vt-mcp-level'), ['프로젝트']);
+  assert.match(host.querySelector('.vt-mcp-level').title, /저장소에 커밋/);
   assert.match(host.textContent, /커밋된다/);
 });
 
@@ -196,7 +200,7 @@ test('토글 — 목표 상태를 보내고(뒤집기가 아니다) 화면에 �
     tool: 'claude', name: 'notion', enabled: false,
     scope: 'global', shared: false, worktree: 'wt1',
   }]);
-  assert.deepEqual(texts(host, '.vt-mcp-toggle'), ['전역 · 끔']);
+  assert.deepEqual(texts(host, '.vt-mcp-toggle'), ['끔']);
 });
 
 test('unknown — 켠 것처럼 보이면 안 된다', async () => {
@@ -206,7 +210,7 @@ test('unknown — 켠 것처럼 보이면 안 된다', async () => {
   host.querySelector('.vt-mcp-toggle').click();
   await flush();
   await flush();
-  assert.deepEqual(texts(host, '.vt-mcp-toggle'), ['전역 · 켬'], '상태를 바꾸면 안 된다');
+  assert.deepEqual(texts(host, '.vt-mcp-toggle'), ['켬'], '상태를 바꾸면 안 된다');
 });
 
 test('서버가 하나도 없으면 공식 추가 방법을 안내한다', async () => {
@@ -388,7 +392,7 @@ test('접힌 줄 — 이름·도구별 상태·경고가 보이고, 검증 결�
   const { host } = await build({ verify: () => ({ state: 'error', error: 'x', checked_at: 1 }) });
   const sum = host.querySelector('.vt-mcp-server > summary');
   assert.match(sum.textContent, /notion/);
-  assert.match(sum.textContent, /Claude 켬/);
+  assert.match(sum.textContent, /Claude 유저 켬/);
   assert.match(sum.textContent, /값이 파일에 있음/, '평문 값 경고는 접혀도 보여야 한다');
   assert.equal(sum.querySelector('button'), null, '<summary> 안에 버튼을 두지 않는다');
   verifyBtn(host).click();
@@ -467,8 +471,8 @@ test('플러그인 토글은 이름·스코프를 그대로 보낸다', async ()
                               tool: 'claude', scope: 'global', enabled: true,
                               explicit: true }] },
   });
-  const btn = Array.from(host.querySelectorAll('.vt-mcp-toggle'))
-    .find((b) => b.textContent.startsWith('p ·'));
+  const btn = host.querySelector('.vt-mcp-plugtoggle');
+  assert.equal(btn.textContent, '유저 · 켬');
   btn.click();
   await flush(); await flush();
   const sent = posts.find((p) => p._url === '/api/mcp/plugins/toggle');
@@ -619,4 +623,85 @@ test('플러그인 조회가 실패했으면 「없습니다」를 함께 쓰지
   const box = host.querySelector('.vt-mcp-plugins').textContent;
   assert.match(box, /종료 코드 1/);
   assert.doesNotMatch(box, /설치된 플러그인이 없습니다/);
+});
+
+
+// ── 2026-09-28 — 적용 범위 · 항목 단위 거르기 · Claude 플러그인 ─────────────
+
+function twoToolScan() {
+  const scan = scanPayload();
+  const base = scan.groups[0].entries[0];
+  scan.groups[0].entries.push({ ...base, tool: 'codex', enabled: false, env: [] });
+  scan.servers = scan.groups[0].entries;
+  return scan;
+}
+
+function clickFilter(host, label, value) {
+  const row = host.querySelector(`.vt-mcp-filter [aria-label="${label}"]`);
+  Array.from(row.children).find((b) => b.dataset.value === value).click();
+}
+
+test('도구 필터는 그룹 안의 다른 도구 줄까지 걸러낸다', async () => {
+  const { host } = await build({ scan: twoToolScan() });
+  clickFilter(host, '도구로 거르기', 'codex');
+  const rows = Array.from(host.querySelectorAll('.vt-mcp-server .vt-mcp-row'))
+    .filter((r) => r.querySelector('.vt-mcp-level'));
+  assert.deepEqual(rows.map((r) => r.querySelector('.vt-mcp-tool').textContent), ['Codex']);
+});
+
+test('도구가 하나뿐이어도 필터 칩이 보인다', async () => {
+  const { host } = await build();
+  assert.ok(host.querySelector('.vt-mcp-filter [aria-label="도구로 거르기"]'));
+  assert.ok(host.querySelector('.vt-mcp-filter [aria-label="적용 범위로 거르기"]'));
+});
+
+test('켜진 것만 — 꺼진 항목만 있는 서버는 목록에서 빠진다', async () => {
+  const scan = twoToolScan();
+  scan.groups.push({ name: 'off-only', entries: [{ ...scan.groups[0].entries[1], name: 'off-only' }] });
+  const { host } = await build({ scan });
+  host.querySelector('.vt-mcp-onlyon').click();
+  assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((d) => d.dataset.name), ['notion']);
+});
+
+test('기준 — 포커스된 칸의 세션을 보여준다', async () => {
+  const scan = scanPayload({ worktree: { id: 'session:dev', path: '/r', label: 'r/main', session: 'dev' } });
+  const { host } = await build({ scan });
+  assert.match(host.querySelector('.vt-mcp-top').textContent, /r\/main/);
+  assert.match(host.querySelector('.vt-mcp-top').textContent, /포커스된 칸 · dev/);
+});
+
+test('Claude 플러그인 — 적용 범위별 토글, 프로젝트는 읽기 전용', async () => {
+  const base = { name: 'p@m', plugin: 'p', marketplace: 'm', tool: 'claude', installed: true, effective: false };
+  const { host, posts } = await build({
+    pluginData: { plugins: [
+      { ...base, scope: 'global', level: 'user', enabled: true, writable: true },
+      { ...base, scope: 'project', level: 'project', enabled: false, writable: false },
+      { ...base, scope: 'local', level: 'local', enabled: null, writable: true, worktree_id: 'wt1' },
+    ] },
+  });
+  assert.deepEqual(texts(host, '.vt-mcp-plugtoggle'), ['유저 · 켬', '프로젝트 · 끔', '로컬 · 미지정']);
+  const proj = host.querySelector('.vt-mcp-plugtoggle[data-level="project"]');
+  assert.equal(proj.disabled, true);
+  host.querySelector('.vt-mcp-plugtoggle[data-level="local"]').click();
+  await flush(); await flush();
+  const sent = posts.find((p) => p._url === '/api/mcp/plugins/toggle');
+  assert.deepEqual({ scope: sent.scope, enabled: sent.enabled, worktree: sent.worktree },
+                   { scope: 'local', enabled: true, worktree: 'wt1' });
+});
+
+test('플러그인도 같은 검색·도구 필터가 걸린다', async () => {
+  const { host, document } = await build({
+    pluginData: { plugins: [
+      { name: 'a@m', plugin: 'alpha', tool: 'claude', scope: 'global', level: 'user', enabled: true },
+      { name: 'b@m', plugin: 'beta', tool: 'codex', scope: 'global', level: 'user', enabled: true },
+    ] },
+  });
+  await flush();
+  clickFilter(host, '도구로 거르기', 'codex');
+  assert.deepEqual(texts(host, '.vt-mcp-plugrow .vt-mcp-name'), ['beta']);
+  clickFilter(host, '도구로 거르기', 'all');
+  const input = host.querySelector('.vt-mcp-search');
+  input.value = 'alp';
+  input.dispatchEvent(new document.defaultView.Event('input'));
+  assert.deepEqual(texts(host, '.vt-mcp-plugrow .vt-mcp-name'), ['alpha']);
 });

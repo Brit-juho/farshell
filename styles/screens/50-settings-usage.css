@@ -229,17 +229,71 @@
 .vt-mcp-applyinfo > summary::-webkit-details-marker { display:none; }
 .vt-mcp-applyinfo > summary:hover { color:var(--txt); }
 .vt-mcp-applyinfo > .vt-set-help:first-of-type, .vt-mcp-applyinfo > .vt-mcp-facts { margin-top:calc(var(--spacing) * 1.5); }
+/* 2026-09-28 — 거르기 막대: 검색 한 줄 + 칩 줄들. 칩 줄 사이 세로선으로
+   "도구 | 적용 범위 | 켜진 것만"이 서로 다른 조건이라는 걸 위치로 보인다. */
 .vt-mcp-filter {
-  display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 2);
-  margin:calc(var(--spacing) * 3) 0 calc(var(--spacing) * 1.5);
+  display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+  margin:0 0 calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) 0;
+  border-bottom:1px solid var(--line);
 }
-.vt-mcp-search { flex:0 1 220px; min-width:140px; height:28px; }
+.vt-mcp-search { flex:1 1 100%; min-width:140px; height:30px; }
+.vt-mcp-filter > .vt-mcp-chips { margin-top:0; }
+.vt-mcp-filter > .vt-mcp-chips + .vt-mcp-chips,
+.vt-mcp-filter > .vt-mcp-onlyon { padding-left:calc(var(--spacing) * 3); border-left:1px solid var(--line); }
+
+/* 기준 막대 — 이 화면이 어느 프로젝트를 보고 있는지가 가장 먼저 읽혀야 한다. */
+.vt-mcp-ctx { display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); min-width:0; }
+.vt-mcp-ctxlabel { font:600 var(--fs-3xs) var(--ui); color:var(--sub); text-transform:uppercase; letter-spacing:var(--tracking-wide); }
+.vt-mcp-ctxname { font:600 var(--fs-md) var(--ui); color:var(--txt); overflow-wrap:anywhere; }
+
+/* 서버 | 플러그인 탭 — 밑줄 한 줄. 개수는 "켬/전체". */
+.vt-mcp-tabs { display:flex; gap:calc(var(--spacing) * 4); border-bottom:1px solid var(--line); margin-top:calc(var(--spacing) * 2); }
+.vt-mcp-tab {
+  display:inline-flex; align-items:baseline; gap:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 2) 0; margin-bottom:-1px;
+  border:0; border-bottom:2px solid transparent; background:none; cursor:pointer;
+  font:600 var(--fs-sm) var(--ui); color:var(--sub);
+}
+.vt-mcp-tab:hover { color:var(--txt); }
+.vt-mcp-tab[aria-selected="true"] { color:var(--txt); border-bottom-color:var(--color-acc); }
+.vt-mcp-tab:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
+.vt-mcp-tabcount { font:500 var(--fs-3xs) var(--ui); color:var(--sub); font-variant-numeric:tabular-nums; }
+.vt-mcp-pane[hidden] { display:none; }
+
+/* 적용 범위 배지 — 글자가 주인이고 색은 거든다. 프로젝트(팀 공유)만 경고색. */
+.vt-mcp-level {
+  flex:none; display:inline-flex; align-items:center; height:18px; padding:0 6px;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
+  font:500 var(--fs-3xs) var(--ui); color:var(--sub); cursor:help;
+}
+.vt-mcp-level[data-level="local"] { color:var(--color-acc); border-color:color-mix(in srgb, var(--color-acc) 45%, transparent); }
+.vt-mcp-level[data-level="project"] {
+  color:var(--color-st-waiting);
+  border-color:color-mix(in srgb, var(--color-st-waiting) 55%, transparent);
+}
+
+/* 플러그인 목록 — 한 플러그인 한 줄: 왼쪽 정체(이름·도구·메타), 오른쪽 범위별 토글. */
+.vt-mcp-plughead { display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2); }
+.vt-mcp-plughead > .vt-mcp-meta { flex:1; min-width:0; }
+.vt-mcp-pluglist { border-bottom:1px solid var(--line); }
+.vt-mcp-plugrow {
+  display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1); border-top:1px solid var(--line);
+}
+.vt-mcp-plugrow:hover { background:var(--menu-hover); }
+.vt-mcp-plugmain { flex:1 1 240px; min-width:0; display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); }
+.vt-mcp-plugmain .vt-mcp-name { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-mcp-plugmain .vt-mcp-tool { min-width:0; }
+.vt-mcp-plugrow[data-on="0"] .vt-mcp-name { color:var(--sub); }
+.vt-mcp-plugtoggles { flex:none; display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1); }
+.vt-mcp-plugtoggle.is-readonly { border-style:dashed; cursor:not-allowed; opacity:1; }
+.vt-mcp-dot { flex:none; align-self:center; width:7px; height:7px; border-radius:var(--radius-full); border:1px solid var(--color-line-strong); }
+.vt-mcp-dot[data-on="1"] { background:var(--color-st-working); border-color:var(--color-st-working); }
+.vt-mcp-dot[data-on="0"] { background:transparent; }
 .vt-mcp-list { border-bottom:1px solid var(--line); }
 
 /* 목록 안의 서버·플러그인은 .vt-mcp-group의 카드 여백을 쓰지 않는다 — 줄이다. */
-.vt-mcp-group.vt-mcp-server,
-.vt-mcp-group.vt-mcp-plugins { margin:0; padding:0; border-top:1px solid var(--line); }
-.vt-mcp-group.vt-mcp-plugins { margin-top:calc(var(--spacing) * 4); border-bottom:1px solid var(--line); }
+.vt-mcp-group.vt-mcp-server { margin:0; padding:0; border-top:1px solid var(--line); }
 .vt-mcp-sum {
   list-style:none; cursor:pointer;
   display:flex; align-items:center; gap:calc(var(--spacing) * 2);

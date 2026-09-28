@@ -467,44 +467,96 @@ def test_oauth_servers_are_never_deployed(home):
 
 # ── 플러그인 (97번 4단계) ──────────────────────────────────────────────────
 
+def _cc(home):
+    return home / ".claude"
+
+
+def _install(home, pid, scope="user", project=None):
+    d = _cc(home) / "plugins"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / "installed_plugins.json"
+    data = json.loads(f.read_text()) if f.exists() else {"version": 2, "plugins": {}}
+    row = {"scope": scope, "installPath": str(home / "nowhere"), "version": "1.0.0"}
+    if project:
+        row["projectPath"] = project
+    data["plugins"].setdefault(pid, []).append(row)
+    f.write_text(json.dumps(data))
+
+
+def _user_settings(home, data):
+    _cc(home).mkdir(exist_ok=True)
+    (_cc(home) / "settings.json").write_text(json.dumps(data, indent=2))
+
+
+def _read_user_settings(home):
+    return json.loads((_cc(home) / "settings.json").read_text())
+
+
 def test_plugin_toggle_flips_an_installed_plugin(home, wt):
-    import mcp_write
-    _claude(home, {"enabledPlugins": {"p@market": True}})
+    _install(home, "p@market")
+    _user_settings(home, {"enabledPlugins": {"p@market": True}, "model": "keep"})
     out = mcp_write.set_plugin_enabled("p@market", False)
     assert out["status"] == "ok" and out["changed"] is True
-    assert _read_claude(home)["enabledPlugins"]["p@market"] is False
+    saved = _read_user_settings(home)
+    assert saved["enabledPlugins"]["p@market"] is False and saved["model"] == "keep"
 
 
 def test_plugin_toggle_refuses_an_uninstalled_plugin(home, wt):
     """미설치 플러그인은 값만 바꿔도 안 켜진다 — 켠 척하면 안 된다(§0-2)."""
-    import mcp_write
-    _claude(home, {"enabledPlugins": {}})
+    _user_settings(home, {"enabledPlugins": {"nope@market": False}})
     out = mcp_write.set_plugin_enabled("nope@market", True)
     assert out["status"] == "failed"
     assert "설치되지 않은" in out["reason"]
+    assert _read_user_settings(home)["enabledPlugins"]["nope@market"] is False
 
 
 def test_plugin_toggle_is_idempotent(home, wt):
-    import mcp_write
-    _claude(home, {"enabledPlugins": {"p@market": True}})
+    _install(home, "p@market")
+    _user_settings(home, {"enabledPlugins": {"p@market": True}})
     assert mcp_write.set_plugin_enabled("p@market", False)["changed"] is True
     assert mcp_write.set_plugin_enabled("p@market", False)["changed"] is False
 
 
-def test_plugin_local_scope_writes_into_the_project_block(home, wt):
-    import mcp_write
-    _claude(home, {"projects": {wt["path"]: {"enabledPlugins": {"p@m": True}}}})
+def test_plugin_toggle_creates_missing_user_settings(home, wt):
+    _install(home, "p@m")
+    out = mcp_write.set_plugin_enabled("p@m", False)
+    assert out["status"] == "ok"
+    assert _read_user_settings(home) == {"enabledPlugins": {"p@m": False}}
+
+
+def test_plugin_local_scope_writes_settings_local_json(home, wt):
+    _install(home, "p@m")
     out = mcp_write.set_plugin_enabled("p@m", False, scope="local", worktree_id="wt1")
     assert out["status"] == "ok"
-    assert _read_claude(home)["projects"][wt["path"]]["enabledPlugins"]["p@m"] is False
+    local = Path(wt["path"]) / ".claude" / "settings.local.json"
+    assert json.loads(local.read_text())["enabledPlugins"]["p@m"] is False
+    assert not (_cc(home) / "settings.json").exists()
 
 
-def test_plugin_toggle_does_not_disturb_mcp_settings(home, wt):
-    import mcp_write
-    _claude(home, {"enabledPlugins": {"p@m": True},
-                   "mcpServers": {"keep": {"command": "x"}}})
-    mcp_write.set_plugin_enabled("p@m", False)
-    assert _read_claude(home)["mcpServers"]["keep"] == {"command": "x"}
+def test_plugin_project_scope_is_read_only(home, wt):
+    """`.claude/settings.json`은 커밋되는 팀 공유 파일 — 쓰지 않는다."""
+    _install(home, "p@m")
+    shared = Path(wt["path"]) / ".claude" / "settings.json"
+    shared.parent.mkdir()
+    shared.write_text('{"enabledPlugins": {"p@m": true}}')
+    out = mcp_write.set_plugin_enabled("p@m", False, scope="project", worktree_id="wt1")
+    assert out["status"] == "failed" and out["changed"] is False
+    assert shared.read_text() == '{"enabledPlugins": {"p@m": true}}'
+
+
+def test_plugin_project_install_applies_only_to_its_project(home, wt):
+    _install(home, "p@m", scope="project", project="/elsewhere")
+    out = mcp_write.set_plugin_enabled("p@m", False, scope="local", worktree_id="wt1")
+    assert out["status"] == "failed" and "설치되지 않은" in out["reason"]
+
+
+def test_plugin_toggle_refuses_unreadable_settings(home, wt):
+    _install(home, "p@m")
+    _cc(home).mkdir(exist_ok=True)
+    (_cc(home) / "settings.json").write_text("{broken")
+    out = mcp_write.set_plugin_enabled("p@m", False)
+    assert out["status"] == "failed"
+    assert (_cc(home) / "settings.json").read_text() == "{broken"
 
 
 def test_codex_plugin_toggle_requires_installed_plugin(home, monkeypatch):

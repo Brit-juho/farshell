@@ -53,26 +53,135 @@ def _plugin_entry(*, name: str, tool: str, scope: str, path: Path,
     }
 
 
-def scan_claude_plugins(worktree_path: Optional[str] = None,
-                        worktree_id: Optional[str] = None) -> dict:
-    """`~/.claude.json`의 `enabledPlugins` — 전역 + 프로젝트 블록."""
-    path = mcp_adapters.claude_paths()["global"]
+# ---------------------------------------------------------------- claude
+#
+# 2026-09-28 정정 — 예전 구현은 `~/.claude.json`의 `enabledPlugins`를 읽었는데
+# Claude Code는 그 파일에 플러그인 상태를 두지 않는다. 그래서 Claude 플러그인은
+# 한 번도 화면에 나온 적이 없었다. 실제 위치:
+#
+#   설치 목록  ~/.claude/plugins/installed_plugins.json  (스코프·projectPath·버전)
+#   켬/끔      ~/.claude/settings.json                    user    — 나, 모든 프로젝트
+#              <프로젝트>/.claude/settings.json           project — 저장소에 커밋, 팀 공유
+#              <프로젝트>/.claude/settings.local.json     local   — 나, 이 프로젝트
+#
+# 우선순위는 local > project > user. project는 **읽기만 한다**(2026-09-28 확정)
+# — 폰에서 누른 토글 하나가 팀원 환경까지 바꾸는 커밋으로 새면 안 된다.
+
+CLAUDE_LEVELS = (("user", "global"), ("project", "project"), ("local", "local"))
+
+
+def claude_settings_paths(worktree_path: Optional[str]) -> dict:
+    out = {"user": mcp_adapters.claude_settings_dir() / "settings.json"}
+    if worktree_path:
+        base = Path(worktree_path) / ".claude"
+        out["project"] = base / "settings.json"
+        out["local"] = base / "settings.local.json"
+    return out
+
+
+def _same_path(a: Optional[str], b: Optional[str]) -> bool:
+    if not a or not b:
+        return False
+    try:
+        return Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return False
+
+
+def claude_installed(worktree_path: Optional[str]) -> tuple[dict, Optional[str]]:
+    """{플러그인 id: [적용되는 설치 기록]}. user 설치는 어디서나, project/local
+    설치는 그 projectPath에서만 적용된다."""
+    path = mcp_adapters.claude_settings_dir() / "plugins" / "installed_plugins.json"
     data, err = mcp_adapters._read_json(path)
     if err:
-        return {"plugins": [], "errors": [{"source": str(path), "reason": err}]}
-    if data is None:
-        return {"plugins": [], "errors": []}
+        return {}, f"{path}: {err}"
+    out: dict[str, list[dict]] = {}
+    for pid, rows in mcp_adapters._as_mapping((data or {}).get("plugins")).items():
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            scope = row.get("scope")
+            if scope == "user" or _same_path(row.get("projectPath"), worktree_path):
+                out.setdefault(str(pid), []).append(row)
+    return out, None
+
+
+def _claude_bundle(install_path: Optional[str]) -> tuple[list[str], bool]:
+    """설치 디렉터리의 skills/*/SKILL.md 이름과 MCP 번들 여부."""
+    if not isinstance(install_path, str) or not install_path:
+        return [], False
+    try:
+        root = Path(install_path).resolve()
+        skills_dir = root / "skills"
+        skills = sorted(p.parent.name for p in skills_dir.glob("*/SKILL.md")) \
+            if skills_dir.is_dir() else []
+        has_mcp = (root / ".mcp.json").is_file()
+        if not has_mcp:
+            manifest = root / ".claude-plugin" / "plugin.json"
+            try:
+                m = json.loads(manifest.read_text(encoding="utf-8"))
+                has_mcp = isinstance(m, dict) and bool(m.get("mcpServers"))
+            except (OSError, UnicodeDecodeError, ValueError):
+                pass
+    except OSError:
+        return [], False
+    return skills[:200], has_mcp
+
+
+def scan_claude_plugins(worktree_path: Optional[str] = None,
+                        worktree_id: Optional[str] = None) -> dict:
+    errors: list[dict] = []
+    installed, ierr = claude_installed(worktree_path)
+    if ierr:
+        errors.append({"source": "installed_plugins.json", "reason": ierr})
+
+    paths = claude_settings_paths(worktree_path)
+    values: dict[str, dict] = {}
+    for level, path in paths.items():
+        data, err = mcp_adapters._read_json(path)
+        if err:
+            errors.append({"source": str(path), "reason": err})
+            continue
+        values[level] = {str(k): bool(v) for k, v in
+                         mcp_adapters._as_mapping((data or {}).get("enabledPlugins")).items()}
+
+    names = set(installed)
+    for v in values.values():
+        names.update(v)
 
     out: list[dict] = []
-    for name, state in sorted(mcp_adapters._as_mapping(data.get("enabledPlugins")).items()):
-        out.append(_plugin_entry(name=name, tool="claude", scope="global", path=path,
-                                 state=bool(state), worktree_id=None))
-
-    project = mcp_adapters._claude_project_entry(data, worktree_path)
-    for name, state in sorted(mcp_adapters._as_mapping(project.get("enabledPlugins")).items()):
-        out.append(_plugin_entry(name=name, tool="claude", scope="local", path=path,
-                                 state=bool(state), worktree_id=worktree_id))
-    return {"plugins": out, "errors": []}
+    for name in sorted(names, key=str.lower):
+        rows = installed.get(name, [])
+        latest = max(rows, key=lambda r: str(r.get("lastUpdated") or ""), default={})
+        skills, has_mcp = _claude_bundle(latest.get("installPath"))
+        explicit = {lv: values[lv][name] for lv in values if name in values[lv]}
+        effective = next((explicit[lv] for lv in ("local", "project", "user") if lv in explicit), None)
+        for level, scope in CLAUDE_LEVELS:
+            if level not in paths:
+                continue
+            # project는 읽기 전용이라 값이 적혀 있을 때만 보여준다.
+            if level == "project" and level not in explicit:
+                continue
+            state = explicit.get(level)
+            entry = _plugin_entry(
+                name=name, tool="claude", scope=scope, path=paths[level], state=state,
+                worktree_id=None if level == "user" else worktree_id,
+            )
+            entry.update({
+                "level": level,
+                "writable": level != "project" and bool(rows),
+                "installed": bool(rows),
+                "install_scopes": sorted({str(r.get("scope")) for r in rows if r.get("scope")}),
+                "version": str(latest.get("version") or ""),
+                "skills": skills,
+                "skill_count": len(skills),
+                "bundles_mcp": has_mcp,
+                "effective": effective,
+            })
+            out.append(entry)
+    return {"plugins": out, "errors": errors}
 
 
 def _codex_skill_names(plugin_root: Path) -> list[str]:
@@ -153,6 +262,9 @@ def scan_codex_plugins(worktree_path: Optional[str] = None,
             state=state, worktree_id=None,
         )
         entry.update({
+            "level": "user",
+            "writable": True,
+            "effective": state,
             "plugin": plugin_name,
             "marketplace": str(marketplace) if marketplace else entry["marketplace"],
             "version": str(row.get("version") or ""),

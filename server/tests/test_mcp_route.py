@@ -529,20 +529,64 @@ def test_deploy_validates_its_input(client):
 
 # ──────────────────────────────────────────────────────── 플러그인 (4단계)
 
+def _cc_install(client, pid, scope="user", project=None):
+    d = client.vt_home / ".claude" / "plugins"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / "installed_plugins.json"
+    data = json.loads(f.read_text()) if f.exists() else {"version": 2, "plugins": {}}
+    row = {"scope": scope, "installPath": str(client.vt_home / "nowhere"), "version": "2.0.0"}
+    if project:
+        row["projectPath"] = project
+    data["plugins"].setdefault(pid, []).append(row)
+    f.write_text(json.dumps(data))
+
+
+def _cc_settings(client, data, where=None):
+    path = (where or client.vt_home) / ".claude" / ("settings.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data))
+    return path
+
+
 def test_plugins_list_distinguishes_absent_from_disabled(client):
     """"목록에 없음"과 "false"는 다르다 — 뭉개면 "끈 적 없는데 꺼져 보인다"."""
     _login(client)
-    _write_claude(client, {"enabledPlugins": {"on@m": True, "off@m": False}})
+    for pid in ("on@m", "off@m", "never@m"):
+        _cc_install(client, pid)
+    _cc_settings(client, {"enabledPlugins": {"on@m": True, "off@m": False}})
     body = client.get("/api/mcp/plugins").json()
-    by = {p["name"]: p for p in body["plugins"]}
+    by = {p["name"]: p for p in body["plugins"] if p["tool"] == "claude"}
     assert by["on@m"]["enabled"] is True and by["on@m"]["explicit"] is True
     assert by["off@m"]["enabled"] is False
+    assert by["never@m"]["enabled"] is None and by["never@m"]["explicit"] is False
     assert by["on@m"]["marketplace"] == "m" and by["on@m"]["plugin"] == "on"
+    assert by["on@m"]["level"] == "user" and by["on@m"]["version"] == "2.0.0"
+
+
+def test_plugins_list_shows_three_levels_with_project_read_only(client):
+    _login(client)
+    _cc_install(client, "p@m")
+    _cc_settings(client, {"enabledPlugins": {"p@m": True}})
+    _cc_settings(client, {"enabledPlugins": {"p@m": False}}, where=client.vt_repo)
+    rows = [p for p in client.get("/api/mcp/plugins?worktree=wt1").json()["plugins"]
+            if p["name"] == "p@m"]
+    by = {p["level"]: p for p in rows}
+    assert set(by) == {"user", "project", "local"}
+    assert by["project"]["writable"] is False and by["project"]["enabled"] is False
+    assert by["local"]["writable"] is True and by["local"]["enabled"] is None
+    # local 미지정 → project가 user를 이긴다
+    assert all(p["effective"] is False for p in rows)
+
+
+def test_plugins_list_reports_enabled_but_uninstalled(client):
+    _login(client)
+    _cc_settings(client, {"enabledPlugins": {"ghost@m": True}})
+    by = {p["name"]: p for p in client.get("/api/mcp/plugins").json()["plugins"]}
+    assert by["ghost@m"]["installed"] is False and by["ghost@m"]["writable"] is False
 
 
 def test_plugins_list_includes_codex_skills_and_mcp_bundle(client, monkeypatch):
     _login(client)
-    _write_claude(client, {"enabledPlugins": {}})
     plugin = client.vt_home / "plugin-a"
     (plugin / ".codex-plugin").mkdir(parents=True)
     (plugin / "skills" / "review").mkdir(parents=True)
@@ -573,10 +617,19 @@ def test_plugin_toggle_requires_elevation(client):
 
 def test_plugin_toggle_writes_after_elevation(client):
     _elevate(client)
-    _write_claude(client, {"enabledPlugins": {"p@m": True}})
+    _cc_install(client, "p@m")
+    path = _cc_settings(client, {"enabledPlugins": {"p@m": True}})
     r = client.post("/api/mcp/plugins/toggle", json={"name": "p@m", "enabled": False})
     assert r.status_code == 200 and r.json()["status"] == "ok"
-    assert _read_claude(client)["enabledPlugins"]["p@m"] is False
+    assert json.loads(path.read_text())["enabledPlugins"]["p@m"] is False
+
+
+def test_plugin_toggle_project_scope_is_409(client):
+    _elevate(client)
+    _cc_install(client, "p@m")
+    r = client.post("/api/mcp/plugins/toggle", json={
+        "name": "p@m", "enabled": False, "scope": "project", "worktree": "wt1"})
+    assert r.status_code == 409
 
 
 def test_codex_plugin_toggle_writes_only_enabled(client, monkeypatch):
@@ -593,7 +646,6 @@ def test_codex_plugin_toggle_writes_only_enabled(client, monkeypatch):
 
 def test_plugin_toggle_of_an_uninstalled_plugin_is_409(client):
     _elevate(client)
-    _write_claude(client, {"enabledPlugins": {}})
     r = client.post("/api/mcp/plugins/toggle", json={"name": "nope@m", "enabled": True})
     assert r.status_code == 409 and "설치되지 않은" in r.json()["reason"]
 

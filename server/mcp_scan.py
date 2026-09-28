@@ -16,10 +16,26 @@ FarShell이 값어치를 더하는 지점은 "여러 프로젝트에 흩어진 �
 
 from __future__ import annotations
 
+import logging
+import subprocess
+from pathlib import Path
 from typing import Optional
 
+import fsguard
 import mcp_adapters
+import tmux_runner
 import worktree
+
+logger = logging.getLogger(__name__)
+
+# 포커스된 칸 기준(2026-09-28) — 화면은 경로 대신 `session:<FarShell 세션 id>`를
+# 워크트리 id 자리에 넘긴다. 경로는 서버가 tmux에 직접 묻는다 — 클라이언트가
+# 임의 경로를 지정하는 길을 만들지 않기 위해서다(mcp_write 머리말 「경로는
+# 클라이언트에서 받지 않는다」). 기존 호출부는 전부 find_worktree()를 거치므로
+# 쓰기·검증·배포 경로가 손대지 않고 같은 기준을 쓴다.
+SESSION_PREFIX = "session:"
+_SESSION_NAME_MAX = 256
+_GIT_TIMEOUT = 2.0
 
 # 도구별로 "지금 이 순간"이 어떻게 다른지. 화면이 안내 문구를 만드는 근거이고,
 # 전부 공식 문서나 소스 확인으로 뒷받침된 것만 적는다(97번 §0-4).
@@ -58,9 +74,86 @@ TOOL_FACTS = {
 TOOLS = ("claude", "codex", "agy", "opencode")
 
 
+def _git_toplevel(path: Path) -> Optional[Path]:
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    top = r.stdout.strip()
+    return Path(top) if r.returncode == 0 and top else None
+
+
+def _git_branch(path: Path) -> str:
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    out = r.stdout.strip()
+    return out if r.returncode == 0 and out != "HEAD" else ""
+
+
+def _tmux_name_for(session: str) -> str:
+    """FarShell 세션 id → tmux 세션 이름. 저장소에 없으면 받은 값을 tmux 이름으로
+    본다(CLI·테스트). 어느 쪽이든 tmux에 cwd를 **읽기만** 한다."""
+    try:
+        from deps import session_store
+        info = session_store.get(session)
+    except Exception:
+        info = None
+    return (getattr(info, "tmux_name", None) or session)
+
+
+def _session_context(session: str) -> Optional[dict]:
+    """tmux 세션의 활성 칸 cwd → git 루트(아니면 cwd 그대로) → 허용 경계 검사.
+
+    Claude가 프로젝트 설정(`projects[...]`, `.mcp.json`)을 git 루트 기준으로
+    찾으므로 하위 폴더에서 연 칸도 루트로 올린다. 경계 밖이면 None — 전역만 본다.
+    """
+    if not session or len(session) > _SESSION_NAME_MAX:
+        return None
+    name = _tmux_name_for(session)
+    # `=`는 정확 일치 — 없으면 tmux가 접두어로 다른 세션을 골라버린다.
+    cwd = tmux_runner.run_text(
+        ["display-message", "-p", "-t", f"={name}:", "#{pane_current_path}"])
+    cwd = (cwd or "").strip()
+    if not cwd:
+        return None
+    base = Path(cwd)
+    root = _git_toplevel(base) or base
+    try:
+        safe = fsguard.resolve_under_roots(str(root))
+    except fsguard.FsDenied:
+        logger.info("MCP 기준 경로가 허용 경계 밖이라 전역만 본다: session=%s", name)
+        return None
+    if not safe.is_dir():
+        return None
+    # 이미 아는 워크트리면 그 항목을 그대로 쓴다 — 라벨·id가 워크트리 화면과 일치한다.
+    for wt in worktree.list_worktrees():
+        try:
+            if Path(wt.get("path") or "").resolve() == safe:
+                return {**wt, "session": name, "id": wt["id"]}
+        except OSError:
+            continue
+    return {
+        "id": f"{SESSION_PREFIX}{session}",
+        "path": str(safe),
+        "repoName": safe.name,
+        "branch": _git_branch(safe),
+        "session": name,
+    }
+
+
 def find_worktree(worktree_id: Optional[str]) -> Optional[dict]:
     if not worktree_id:
         return None
+    if worktree_id.startswith(SESSION_PREFIX):
+        return _session_context(worktree_id[len(SESSION_PREFIX):])
     for wt in worktree.list_worktrees():
         if wt.get("id") == worktree_id:
             return wt
@@ -89,11 +182,18 @@ def scan(worktree_id: Optional[str] = None, tools: Optional[tuple] = None) -> di
         errors.extend(result["errors"])
 
     return {
-        "worktree": {"id": wt_id, "path": wt_path, "label": _label(wt)} if wt else None,
+        "worktree": _public(wt),
         "servers": servers,
         "errors": errors,
         "facts": {t: TOOL_FACTS[t] for t in (tools or TOOLS) if t in TOOL_FACTS},
     }
+
+
+def _public(wt: Optional[dict]) -> Optional[dict]:
+    if not wt:
+        return None
+    return {"id": wt.get("id"), "path": wt.get("path"), "label": _label(wt),
+            "session": wt.get("session")}
 
 
 def _label(wt: Optional[dict]) -> Optional[str]:
