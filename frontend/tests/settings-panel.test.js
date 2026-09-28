@@ -66,7 +66,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '음성 및 알림', '에이전트', 'MCP', '키맵', '모양', '계정 및 보안', '정보 및 진단'],
+    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '계정 및 보안', '정보 및 진단'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -152,6 +152,16 @@ test('검색 결과에서 원하는 설정이 있는 섹션으로 이동한다',
   assert.strictEqual(document.querySelector('.vt-set-title').textContent, '계정 및 보안');
 });
 
+test('MCP는 설정 목록과 설정 검색에 나타나지 않는다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  assert.strictEqual(sectionButton(document, 'MCP'), undefined);
+  const search = document.querySelector('.vt-set-search-input');
+  search.value = 'MCP';
+  search.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+  assert.strictEqual(document.querySelector('.vt-set-search-result'), null);
+});
+
 test('검색은 사용자가 흔히 쓰는 동의어도 찾고 해당 행으로 포커스를 옮긴다', async () => {
   const { document, P } = await build();
   P.showSettings();
@@ -163,11 +173,11 @@ test('검색은 사용자가 흔히 쓰는 동의어도 찾고 해당 행으로 
   assert.strictEqual(document.activeElement, rowByLabel(document, '글자 크기').querySelector('.vt-set-label'));
 });
 
-test('compact — 더보기 첫 화면에 도구와 8개 설정 진입점이 나온다', async () => {
+test('compact — 더보기 첫 화면에 도구와 7개 설정 진입점이 나온다', async () => {
   const { document, P } = await build({ compact: true });
   P.showSettings();
   const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
-  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', 'MCP', '키맵', '모양', '계정 및 보안', '정보 및 진단']);
+  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '키맵', '모양', '계정 및 보안', '정보 및 진단']);
   assert.strictEqual(document.querySelector('.vt-set-nav'), null, 'compact 첫 화면은 숨은 가로 탭을 만들지 않는다');
 });
 

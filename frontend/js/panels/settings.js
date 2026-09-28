@@ -19,7 +19,6 @@ import { renderAppearanceSection } from './settings/sections/appearance.js';
 import { renderAgentsSection } from './settings/sections/agents.js';
 import { renderSecuritySection } from './settings/sections/security.js';
 import { renderAboutSection } from './settings/sections/about.js';
-import { mcpContext } from './mcp-open.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
 import { vtFetch } from '../core/api.js';
@@ -101,8 +100,6 @@ const SECTIONS = [
   { id: 'voice', label: '음성 및 알림', description: '알림과 음성 입력 엔진을 관리합니다.', custom: renderVoiceSection },
   // N9/N45(80-multihost-agents.md §2) — CLI별 승인 대기 감지 커버리지 표.
   { id: 'agents', label: '에이전트', description: '에이전트 감지 상태를 확인합니다.', custom: renderAgentSection },
-  // ADR-48 — 에이전트 섹션 안에서는 감지 표 아래 3천 px가 붙어 있었다. 독립 섹션으로 뗀다.
-  { id: 'mcp', label: 'MCP', description: '에이전트가 쓰는 MCP 서버와 플러그인을 켜고 끄고 검증합니다.', custom: renderMcpSection },
   { id: 'keymap', label: '키맵', description: '단축키와 터미널 전달 여부를 바꿉니다.', custom: () => renderKeymapSection(rerender) },
   // 기본 6스킨 칩(2026-09-18부터 이 탭이 유일한 자리 — 위 주석 참고).
   // 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
@@ -120,7 +117,7 @@ const SEARCH_ITEMS = [
   ['terminal', '스크린 리더 모드'], ['terminal', '스크롤백 줄 수'],
   ['voice', '웹 푸시 알림'], ['voice', '완료 알림'], ['voice', '음성 모델'],
   ['voice', '로컬 음성 입력'], ['voice', '음성 전용 모드'],
-  ['agents', '에이전트 감지 상태'], ['mcp', 'MCP 서버'], ['mcp', 'MCP 검증'], ['mcp', '플러그인'],
+  ['agents', '에이전트 감지 상태'],
   ['keymap', '단축키와 터미널 전달'],
   ['appearance', '스킨'], ['appearance', '파일 뷰어 표시 방식'],
   ['security', '로그인과 OTP'], ['security', '등록 기기'], ['security', '로그아웃'],
@@ -133,24 +130,9 @@ const SEARCH_ALIASES = {
   '스킨': '테마 색상 컬러',
   '파일 뷰어 표시 방식': '코드 뷰어 시트 팝업 창 페인',
   '웹 푸시 알림': '브라우저 알림 구독',
-  'MCP 서버': '도구 플러그인',
   '등록 기기': '디바이스 장치',
   '에이전트 훅': 'hook codex claude',
 };
-
-// ── 「MCP」 ───────────────────────────────────────────────────────────────
-// 97번 — 조회·토글. 실제 화면은 지연 청크(panels/mcp.js)다. 워크트리 id는 여기서
-// 구해 넘긴다 — 지연 청크가 layout/store.js를 직접 import하면 탭 상태가 복제된다
-// (실측: 싱글톤이 통째로 panels.js로 옮겨갔다).
-function renderMcpSection() {
-  const host = document.createElement('div');
-  host.className = 'vt-set-sechost';
-  const ctx = mcpContext();
-  import('./mcp.js')
-    .then((m) => m.mount(host, ctx))
-    .catch(() => { host.textContent = '불러오지 못했습니다'; });
-  return host;
-}
 
 // ── 패널 ──────────────────────────────────────────────────────────────────
 let _activeSection = 'terminal';

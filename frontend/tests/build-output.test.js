@@ -81,9 +81,9 @@ test('core.js는 실제 세션 싱글톤을 그대로 갖고 있다(위 검사�
   assert.match(coreJs, /let activeId\s*=\s*null/);
 });
 
-test('settings.js(설정·MCP·스니펫·사용량 지연 청크)도 core 싱글톤을 복제하지 않는다', () => {
+test('settings 청크(설정·MCP 팝업·스니펫·사용량)도 core 싱글톤을 복제하지 않는다', () => {
   // panels.js와 같은 규칙. 이 청크는 dock 화면과 **일부러 분리**돼 있다 —
-  // 「큐」탭 한 번에 설정 9개 섹션까지 받게 하지 않으려고(vite.config.js).
+  // 「큐」탭 한 번에 설정 7개 섹션까지 받게 하지 않으려고(vite.config.js).
   assert.doesNotMatch(settingsJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
   assert.doesNotMatch(settingsJs, /let activeId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
   assert.doesNotMatch(settingsJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');

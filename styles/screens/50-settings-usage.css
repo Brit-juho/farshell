@@ -157,8 +157,7 @@
 
 /* 60 §2 — 설정 「보안」 탭. 상태만 보여주는 행(조작 컨트롤 없음)이라 vt-set-row가
    아니라 배지를 오른쪽에 두는 자체 행을 쓴다. 표는 커버리지 표를 그대로 재사용. */
-.vt-set-sechost { margin:calc(var(--spacing) * 2) 0; }
-/* 97번 1단계 — 설정 →「MCP」. 토글 칩은 상태를 색으로만 구분하지 않는다
+/* MCP 독립 팝업. 토글 칩은 상태를 색으로만 구분하지 않는다
    (켬/끔을 글자로도 쓴다) — 색만으로 구분하면 못 읽는 사람이 생긴다.
    2026-09-22(사용자 지적: "가독성이 너무 떨어져") — 서버 카드마다 라벨과
    설명 문단이 같은 크기·색이라 카드 경계가 안 보이고 전부 한 덩어리
@@ -223,8 +222,8 @@
 
 /* ADR-48 — 한 서버 = 한 줄(<details>/<summary>). 이 화면의 초점은 "무엇이 켜져 있고
    어디가 이상한가"라 접힌 줄이 그 둘만 말한다: 이름(굵게) → 도구별 상태(글자) → 오른쪽 끝에
-   경고·전송·검증 결과. 조작(토글·검증·복제·태그)은 펼친 쪽에만 있다 — <summary> 안에
-   버튼을 두면 중첩 인터랙티브가 된다. 깊이는 이 설정 화면 그대로 선(1px var(--line))만. */
+   경고·검증 결과. 전송 방식과 조작(토글·검증·복제·태그)은 펼친 쪽에만 있다 — <summary> 안에
+   버튼을 두면 중첩 인터랙티브가 된다. 깊이는 선(1px var(--line))만 쓴다. */
 .vt-mcp-top { display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); margin-bottom:calc(var(--spacing) * 1.5); }
 .vt-mcp-count { font:600 var(--fs-sm) var(--ui); color:var(--txt); font-variant-numeric:tabular-nums; }
 .vt-mcp-applyinfo { margin-bottom:calc(var(--spacing) * 2); }

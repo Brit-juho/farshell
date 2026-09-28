@@ -135,7 +135,7 @@ export default defineConfig(({ mode }) => {
           //               app.js가 정적 import하므로 **초기 페이로드**다.
           // - `shell.js`    — solid-js 런타임 + js/shell/(HUD·레일·독). bootApp() 직후.
           // - `panels.js`   — dock 탭이 여는 화면(뷰어·소스컨트롤·파일·포트·큐).
-          // - `settings.js` — 설정 패널이 여는 화면(설정 9개 섹션·MCP·스니펫·사용량).
+          // - `settings.js` — 설정 패널과 MCP 팝업이 여는 화면(설정 7개 섹션·스니펫·사용량).
           // panels와 settings를 나눈 이유는 아래 해당 규칙의 주석에 있다.
           //
           // ⚠ 그래서 크기 게이트는 app.js 하나가 아니라 **app.js + core.js 합계**를
@@ -157,10 +157,10 @@ export default defineConfig(({ mode }) => {
             if (p.endsWith('/frontend/js/queue.js')) return 'panels';
             // ── `settings` 청크 ────────────────────────────────────────────
             // dock 화면들과 **한 청크에 묶지 않는다.** 묶으면 「큐」탭 한 번
-            // 누르는 데 설정 9개 섹션·MCP·스니펫·사용량까지 같이 받는다 —
+            // 누르는 데 설정 7개 섹션·MCP·스니펫·사용량까지 같이 받는다 —
             // 실측으로 드러난 문제다: panels.js가 79KB에서 119KB가 되자
             // 큐 패널이 클릭 후 제때 안 떠서 실브라우저 스모크가 잡아냈다.
-            // 열리는 경로가 다르면(dock 탭 / 설정 패널) 청크도 나눈다.
+            // 열리는 경로가 다르면(dock 탭 / 설정·MCP 팝업) 청크도 나눈다.
             //
             // `panels/settings.js`·`panels/settings/**`만 해당한다.
             // **`core/settings.js`(설정 스토어 싱글톤)는 아니다** — 아래 포괄

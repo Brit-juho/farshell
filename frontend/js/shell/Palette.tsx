@@ -425,13 +425,25 @@ function PaletteBody(props: PaletteBodyProps) {
           label: '파일 업로드',
           onOpen: () => { props.onRequestClose(); document.getElementById('file-input')?.click(); },
         };
+        // 모바일에는 dock MCP 버튼이 없으므로 빠른 열기에서도 독립 팝업으로 연다.
+        const mcpRow: Row = {
+          key: 'cmd:mcp',
+          kind: 'command',
+          label: 'MCP 서버 · 플러그인',
+          onOpen: () => {
+            props.onRequestClose();
+            import('../panels/mcp-open.js')
+              .then((m) => m.showMcp())
+              .catch(() => deps.showToast('MCP 화면을 열지 못했습니다', 'error'));
+          },
+        };
         // 키맵 명령도 「모든 기능」에 합류한다 — 예전엔 `:` 접두사로만
         // 닿았는데, "한곳에 모아서 찾을 수 있게" 해달라는 요청은 접두사를
         // 아는 사람만을 위한 게 아니었다. unavailable(일반 탭이 못 잡는
         // 조합)은 `:` 모드와 마찬가지로 뺀다 — 눌러도 안 되는 걸 보여주지
         // 않는다.
         const keymapRows = deps.listKeymapActions().filter((b) => !b.unavailable).map(keymapRow);
-        const allCommandRows = [...cmdRows, uploadRow, ...keymapRows]
+        const allCommandRows = [...cmdRows, uploadRow, mcpRow, ...keymapRows]
           .map(withRecent)
           .filter((r) => fuzzyMatch(r.label, q));
 
