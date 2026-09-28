@@ -336,7 +336,7 @@ function Dock(props: { deps: DockDeps }) {
           class="vt-dock-tab vt-dock-action vt-dock-settings-btn"
           aria-label="설정"
           data-tip="설정"
-          data-tip-sub="Mod+,"
+          data-tip-keys="Mod+,"
           data-tip-side="left"
           onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
           innerHTML={icon('settings', 16, 2)}

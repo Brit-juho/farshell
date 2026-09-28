@@ -9,7 +9,8 @@
 // 폴링도 같은 이유로 각자 반복하고 있다 — 이 파일도 그 관행을 따른다.
 import { createSignal, createMemo, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
-import { agentIcon, agentLabel } from '../ui/icons.js';
+import { agentLabel } from '../ui/icons.js';
+import { agentMark } from './agent-mark.js';
 import {
   buildRailSections, buildSleepingEntries, GROUP_LABEL, type OtherRailRowInput,
 } from './rail-data.js';
@@ -213,7 +214,7 @@ function Row(props: {
               폰에서는 "어떤 CLI가 도는 세션인지"를 이름으로 추측해야 했다. */}
           <Show when={props.row.agent}>
             {(a) => (
-              <span class="vt-srow-agent vt-fleet-agent" data-tip={agentLabel(a())} innerHTML={agentIcon(a())} />
+              <span class="vt-srow-agent vt-fleet-agent" data-tip={agentLabel(a())} innerHTML={agentMark(a())} />
             )}
           </Show>
           <span class="vt-srow-name vt-fleet-name">{props.row.name}</span>

@@ -11,7 +11,8 @@ export function renderKeymapSection(rerender) {
   if (!keymap.isStandalone()) {
     const note = document.createElement('p');
     note.className = 'vt-set-note';
-    note.textContent = '일부 조합(⌘W·⌘T·⌘N 등)은 브라우저가 먼저 사용해 일반 탭에서는 지정할 수 없습니다. 홈 화면에 추가해 앱으로 실행하면 사용할 수 있습니다.';
+    const combos = ['Mod+W', 'Mod+T', 'Mod+N'].map((c) => keymap.displayComboHtml(c)).join('·');
+    note.innerHTML = `일부 조합(${combos} 등)은 브라우저가 먼저 사용해 일반 탭에서는 지정할 수 없습니다. 홈 화면에 추가해 앱으로 실행하면 사용할 수 있습니다.`;
     frag.appendChild(note);
   }
 
@@ -22,7 +23,8 @@ export function renderKeymapSection(rerender) {
     const combo = document.createElement('button');
     combo.type = 'button';
     combo.className = 'vt-set-combo';
-    combo.textContent = keymap.displayCombo(b.combo);
+    combo.innerHTML = keymap.displayComboHtml(b.combo);
+    combo.setAttribute('aria-label', keymap.displayCombo(b.combo));
     combo.title = '클릭한 뒤 새 조합을 누르세요';
     combo.addEventListener('click', () => startRebind(b.id, combo, rerender));
     if (b.unavailable) combo.classList.add('unavailable');

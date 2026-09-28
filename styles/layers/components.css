@@ -980,18 +980,24 @@
     white-space: nowrap;
     font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
   }
+  /* 단축키(⌘⇧D 등) — 기호가 설명 글자 크기면 안 보인다. screens/30-viewer.css의
+   * 같은 규칙이 레이어상 이기므로 두 곳의 크기를 같이 맞춘다. */
   .vt-qo-body .vt-qo-row:not(.vt-card) .vt-qo-hint {
     flex: none;
     color: var(--color-muted);
-    font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono);
+    font: var(--weight-normal) var(--fs-sm) / 1 var(--font-mono);
   }
   /* 선택된 줄에만 ↵. 장식이므로 DOM이 아니라 ::after로 그린다 — 행의
    * textContent에 섞이면 행을 이름으로 찾는 쪽이 전부 어긋난다. */
   .vt-qo-body .vt-qo-row.selected:not(.vt-card)::after {
-    content: "\21b5";
+    /* ui/icons.js 'key-enter'와 같은 도형. 장식이라 DOM 대신 마스크로 칠한다. */
+    content: "";
     flex: none;
-    color: var(--color-acc);
-    font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono);
+    width: 13px;
+    height: 13px;
+    background: var(--color-acc);
+    -webkit-mask: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%229%2010%204%2015%209%2020%22/%3E%3Cpath%20d%3D%22M20%204v7a4%204%200%200%201-4%204H4%22/%3E%3C/svg%3E') center / contain no-repeat;
+    mask: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%229%2010%204%2015%209%2020%22/%3E%3Cpath%20d%3D%22M20%204v7a4%204%200%200%201-4%204H4%22/%3E%3C/svg%3E') center / contain no-repeat;
   }
   /* 선택 표시는 배경 + 왼쪽 2px 막대. 배경만으로는 라이트 스킨에서 약하고,
    * 막대만으로는 마우스로 훑을 때 따라오는 느낌이 없다. */
@@ -1014,6 +1020,16 @@
     white-space: nowrap;
     overflow: hidden;
   }
+  /* 키 기호는 SVG(core/keymap.js displayComboHtml, ui/icons.js key-*). 유니코드
+   * 기호는 모노 글꼴에 없는 것이 섞여 기기마다 모양이 갈렸다. */
+  .vt-qo-key { display: inline-flex; align-items: center; gap: 1px; color: var(--color-muted); vertical-align: middle; }
+  .vt-qo-hint { display: inline-flex; align-items: center; gap: 2px; }
+  .vt-key { display: inline-flex; align-items: center; }
+  /* 문장·툴팁 안의 단축키 — 글자 줄에 맞춰 세운다. */
+  .vt-tip-keys, .vt-set-note .vt-key, .vt-ob-hint .vt-key { vertical-align: middle; }
+  .vt-tip-keys { display: inline-flex; align-items: center; gap: 2px; }
+  .vt-key-icon svg { display: block; }
+  .vt-key-sep { opacity: .6; }
   .vt-qo-foot-modes { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
   /* 폰에서는 키 조합 힌트가 쓸모없다(키보드가 없다) — 모드 힌트만 남긴다. */
   @media (max-width: 719px) {

@@ -60,6 +60,27 @@ const PATHS = {
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
   gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
 
+  // 2026-09-29 — index.html에만 인라인돼 있던 것들을 여기로 모았다(hydrateIcons).
+  'layout-panels': '<rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  'clipboard': '<path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>',
+  'briefcase': '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/>',
+  'bar-chart': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  'music': '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  'help-circle': '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+
+  // 2026-09-29 — 단축키 기호. 유니코드(⌘⇧⌥⌃↵)는 모노 글꼴에 없는 것이 섞여
+  // 기기마다 대체 글꼴로 그려지고 크기·굵기가 들쭉날쭉했다(core/keymap.js
+  // displayComboHtml). Lucide 도형.
+  'key-command': '<path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/>',
+  'key-shift': '<path d="M9 18v-6H5l7-7 7 7h-4v6H9z"/>',
+  'key-option': '<path d="M3 3h6l6 18h6"/><path d="M14 3h7"/>',
+  'key-ctrl': '<path d="m18 15-6-6-6 6"/>',
+  'key-enter': '<polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
+  'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  'arrow-right': '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  'arrow-up': '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  'arrow-down': '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+
   // D3(20-design-system.md §4) — 에이전트 마크. 탭·rail 행이 "어떤 CLI가
   // 떠 있는가"를 이모지 대신 이 세트로 그린다(icons.js가 D5에서 이미 이모지를
   // 걷어낸 원칙과 같다 — 플랫폼마다 렌더가 갈리지 않는다). 미지 agent 이름은
@@ -111,7 +132,7 @@ const AGENT_MARK = {
   shell: 'agent-shell',
 };
 export function agentMarkFor(agentName) {
-  return AGENT_MARK[agentName] || 'agent-shell';
+  return Object.prototype.hasOwnProperty.call(AGENT_MARK, agentName) ? AGENT_MARK[agentName] : 'agent-shell';
 }
 
 // icon(name, size?) → SVG 마크업 문자열. innerHTML/템플릿 리터럴에 그대로
@@ -130,9 +151,47 @@ export function icon(name, size, strokeWidth) {
     + `aria-hidden="true" focusable="false">${body}</svg>`;
 }
 
-// 에이전트 마크 전용 — 문서 §4: "14px 정사각, stroke 1.75".
+// 정적 HTML(index.html)의 `<svg data-icon="이름">` 빈 자리를 채운다. 크기·
+// stroke·class 같은 루트 속성은 HTML에 그대로 두고 안쪽 도형만 여기서 넣는다 —
+// 도형의 원본을 이 파일 하나로 두려는 것이다(예전엔 HTML에 path를 복사해 둬서
+// 모바일 「설정」 톱니가 dock 톱니와 조용히 어긋났다). 로그인 게이트의 두 개는
+// 번들 전에 보여야 해서 예외로 인라인이다(icons.test.js가 같은 path인지 본다).
+export function hydrateIcons(root = document) {
+  for (const el of root.querySelectorAll('svg[data-icon]')) {
+    const body = Object.prototype.hasOwnProperty.call(PATHS, el.dataset.icon) ? PATHS[el.dataset.icon] : null;
+    if (body) el.innerHTML = body;
+    else console.warn('[icons] 등록되지 않은 아이콘:', el.dataset.icon);
+  }
+}
+
+// 브랜드 로고(ui/brand-icons.js, 18KB)는 초기 페이로드 상한(300KiB) 때문에
+// 지연 청크다. 도착하면 'vt:brand-icons'를 쏜다 — 마크를 그리는 곳(탭·카드·
+// 레일·플릿)은 그걸 듣고 다시 그린다. 그 전까진 선 기호로 그린다.
+let _brand = null;
+export const brandIconsReady = import('./brand-icons.js').then((m) => {
+  _brand = m.BRAND;
+  try { window.dispatchEvent(new CustomEvent('vt:brand-icons')); } catch (_) { /* window 없음 */ }
+}).catch(() => { /* 청크를 못 받으면 선 기호로 계속 그린다 */ });
+
+// 에이전트 마크 전용 — 문서 §4: 14px 정사각. 브랜드 로고가 있으면 채움
+// 로고로, 없으면(또는 아직 안 왔으면) 선 기호(stroke 1.75)로 그린다.
 export function agentIcon(agentName) {
+  const brand = _brand && Object.prototype.hasOwnProperty.call(_brand, agentName) ? _brand[agentName] : null;
+  if (brand) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" '
+      + `fill="currentColor"${brand[0] ? ' fill-rule="evenodd"' : ''} aria-hidden="true" focusable="false">${brand[1]}</svg>`;
+  }
   return icon(agentMarkFor(agentName), 14, 1.75);
+}
+
+// 마크를 요소에 칠한다 — 에이전트가 같고 로고 도착 여부도 같으면 DOM을 건드리지
+// 않는다. 상태 스냅샷이 올 때마다 탭·카드 전부의 innerHTML을 다시 쓰던 것을 막는다.
+// 이름이 없으면 비운다(셸 확정과 "아직 모름"은 다르다 — agent/badges.js 참고).
+export function setAgentMark(el, agentName) {
+  const key = agentName ? `${agentName}|${_brand ? 1 : 0}` : '';
+  if (el.dataset.agentMark === key) return;
+  el.dataset.agentMark = key;
+  el.innerHTML = agentName ? agentIcon(agentName) : '';
 }
 
 // 마크 옆에 붙는 사람이 읽는 이름(title·aria-label용). 마크는 도형이라 그
@@ -144,6 +203,12 @@ const AGENT_LABEL = {
   aider: 'Aider',
   agy: 'Antigravity',
   qwen: 'Qwen',
+  opencode: 'opencode',
+  'cursor-agent': 'Cursor',
+  copilot: 'Copilot',
+  amp: 'Amp',
+  goose: 'Goose',
+  kimi: 'Kimi',
   ssh: 'SSH',
   python: 'Python',
   node: 'Node',

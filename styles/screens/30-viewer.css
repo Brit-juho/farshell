@@ -788,7 +788,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-qo-row{ cursor:pointer; }
 .vt-qo-row.selected{ background:var(--menu-hover); }
 .vt-qo-card-slot{ display:contents; }
-.vt-qo-hint{ margin-left:auto; flex:0 0 auto; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+.vt-qo-hint{ margin-left:auto; flex:0 0 auto; font:400 var(--fs-sm) var(--mono); color:var(--sub); }
 /* L6: 세션 목록에 얹는 세션 카드(ADR-7) — .vt-card를 그대로 재사용한다.
    나머지 레이아웃(테두리·hover·상태 dot)은 pane-picker와 동일하게 유지 —
    같은 시각 언어를 쓰는 게 핵심이다. 2.1 D5부터 .card-meta는 cwd 한 줄

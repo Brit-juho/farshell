@@ -9,7 +9,8 @@
 import { For, Show, onCleanup } from 'solid-js';
 
 import { type DesktopRailRow } from './rail-fetch.js';
-import { agentIcon, agentLabel, icon } from '../ui/icons.js';
+import { agentLabel, icon } from '../ui/icons.js';
+import { agentMark } from './agent-mark.js';
 
 // ADR-29 B — 행은 이제 언제나 세션이다(워크트리 행이 없어졌다). `sleeping`은
 // 이 행이 레일의 「잠자는 중」 구역에 그려지는 것인지를 부모(Rail.tsx)가
@@ -108,7 +109,7 @@ export function Row(props: {
           data-tip-side="right"
           data-state={props.row.status}
           aria-label={`${agentLabel(props.row.agent!)} · ${props.row.statusSentence || '대기 중'}`}
-          innerHTML={agentIcon(props.row.agent!)}
+          innerHTML={agentMark(props.row.agent!)}
         />
       </Show>
       <div class="vt-srow-main vt-wgrail-row-main">
@@ -126,7 +127,7 @@ export function Row(props: {
                 data-tip-side="right"
                 data-state={props.row.status}
                 aria-label={`${agentLabel(a())} · ${props.row.statusSentence || '대기 중'}`}
-                innerHTML={agentIcon(a())}
+                innerHTML={agentMark(a())}
               />
             )}
           </Show>

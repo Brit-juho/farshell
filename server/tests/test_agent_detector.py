@@ -162,3 +162,9 @@ def test_detect_all_labels_every_session(monkeypatch):
 def test_detect_all_no_panes_is_empty(monkeypatch):
     monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [])
     assert agent_detector.detect_all() == {}
+
+
+def test_new_coding_clis_are_known():
+    """2026-09-29 — 브랜드 로고가 붙은 CLI들이 감지 대상에 있다(키 = 바이너리 이름)."""
+    for name in ("opencode", "cursor-agent", "copilot", "amp", "goose", "kimi"):
+        assert name in agent_detector.KNOWN_AGENTS

@@ -64,6 +64,9 @@ export default defineConfig(({ mode }) => {
     // vite-plugin-solid의 기본 include가 확장자로만 걸린다). lib 모드·2회 분리
     // 빌드·해시 없는 파일명은 그대로 유지된다(ADR-26).
     plugins: [tailwindcss(), solid()],
+    // 식별자는 줄이지 않는다 — 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이
+    // 남아야 build-output.test.js가 청크 간 싱글톤 복제를 잡는다.
+    esbuild: { minifyIdentifiers: false, minifyWhitespace: !isTest, minifySyntax: !isTest },
     build: {
       lib: isTest ? {
         entry: 'frontend/tests/fixtures/test-entry.ts',
@@ -85,9 +88,11 @@ export default defineConfig(({ mode }) => {
       // 같은 디렉토리에 추가하는 순서를 전제한다. test 빌드는 아예 다른
       // outDir이라 매번 비워도 안전하다.
       emptyOutDir: isTest || !isVoice,
-      // 디버깅 시 원본을 그대로 읽기 위해 끈다. 크기 이득보다 가치가 크다
-      // (지금 앱 JS 총합이 ~9천줄이라 minify 안 해도 I2의 300KB 상한에 여유가 있다).
-      minify: false,
+      // 2026-09-29 — minify를 켰다. 끈 채로는 초기 페이로드가 300KiB 상한에
+      // 110B 남기고 닿아 기능 하나 못 넣는 상태였다. 원본은 소스맵으로 읽는다.
+      // test 빌드는 산출물 문자열을 검사하는 테스트가 있어 그대로 둔다.
+      minify: !isTest,
+      sourcemap: !isTest,
       rollupOptions: {
         // 벤더(xterm 등)는 아직 ES 모듈로 import하지 않는다 — index.html의 classic
         // <script>가 로드하고 sw.js가 개별 프리캐시한다(F4에서 core/vendor.js가
@@ -175,6 +180,9 @@ export default defineConfig(({ mode }) => {
             // 사용량 화면. **`panels/usage-badge.js`는 아니다** — rail 배지
             // 폴링은 상시 동작이라 core에 남는다(endsWith라 안 걸린다).
             if (p.endsWith('/frontend/js/panels/usage.js')) return 'settings';
+            // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
+            // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
+            if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
             // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야
             // 한다(entry를 청크에 배정하면 Rollup이 app.js를 빈 껍데기로 만든다).
             if (p.includes('/frontend/js/') && !p.endsWith('/frontend/js/main.js')) return 'core';

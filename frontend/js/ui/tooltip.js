@@ -26,6 +26,8 @@
 //   data-tip-side: top(기본) | bottom | left | right. 안 들어가면 반대편으로
 //   뒤집고, 그래도 안 되면 들어가는 변을 찾는다.
 
+import { displayComboHtml } from '../core/keymap.js';
+
 const OPEN_DELAY = 400;   // 처음 머물렀을 때. 스쳐 지나가는 커서에는 안 뜬다.
 const WARM_MS = 300;      // 방금 닫힌 직후 옆 버튼으로 옮기면 지연 없이 뜬다.
 const GAP = 8;            // 트리거와의 간격
@@ -108,6 +110,14 @@ function render(trigger) {
     s.textContent = sub;
     el.appendChild(s);
   }
+  // 단축키는 글자가 아니라 조합(`Mod+K`)으로 받아 SVG 기호로 그린다(core/keymap.js).
+  const keys = trigger.getAttribute('data-tip-keys');
+  if (keys) {
+    const k = document.createElement('span');
+    k.className = 'vt-tip-sub vt-tip-keys';
+    k.innerHTML = displayComboHtml(keys);
+    el.appendChild(k);
+  }
   place(trigger, trigger.getAttribute('data-tip-side') || 'top');
 }
 
@@ -123,7 +133,7 @@ function show(trigger) {
     trigger.setAttribute('aria-describedby', 'vt-tip');
     trigger._vtTipAria = true;
   }
-  if (liveObserver) liveObserver.observe(trigger, { attributes: true, attributeFilter: ['data-tip', 'data-tip-sub'] });
+  if (liveObserver) liveObserver.observe(trigger, { attributes: true, attributeFilter: ['data-tip', 'data-tip-sub', 'data-tip-keys'] });
 }
 
 export function hideTip() {

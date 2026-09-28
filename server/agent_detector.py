@@ -33,6 +33,14 @@ KNOWN_AGENTS = {
     # 같은 급의 독립 코딩 에이전트 CLI라 로컬 LLM 칩이 아니라 여기(전용 마크)로
     # 넣는다(2026-09-23 설계 승인, A안).
     "qwen":   {"icon": "🟣", "label": "Qwen", "color": "#7C3AED"},
+    # 2026-09-29(사용자 요청) — 브랜드 로고가 있는 코딩 에이전트 CLI 추가. 키는
+    # 실행 바이너리 이름이다(자식 프로세스 args의 basename과 맞춘다).
+    "opencode":     {"icon": "", "label": "opencode", "color": "#94A3B8"},
+    "cursor-agent": {"icon": "", "label": "Cursor", "color": "#94A3B8"},
+    "copilot":      {"icon": "", "label": "Copilot", "color": "#94A3B8"},
+    "amp":          {"icon": "", "label": "Amp", "color": "#94A3B8"},
+    "goose":        {"icon": "", "label": "Goose", "color": "#94A3B8"},
+    "kimi":         {"icon": "", "label": "Kimi", "color": "#94A3B8"},
 }
 
 # AI CLI가 아닐 때도 "무엇이 떠 있는가"를 구분한다 — DESIGN.md §4가 처음부터
@@ -166,7 +174,7 @@ def detect(session_name: str) -> Optional[dict]:
     """단일 세션의 AI CLI 감지 — 없으면 ssh/shell로 폴백(그래도 그냥 None은 아니다).
 
     Returns:
-        {"agent": "claude"|"codex"|"aider"|"agy"|"qwen"|"ssh"
+        {"agent": "claude"|"codex"|"aider"|"agy"|"qwen"|"opencode"|"cursor-agent"|"copilot"|"amp"|"goose"|"kimi"|"ssh"
                   |"python"|"node"|"docker"|"ollama"|"lms"|"llamacpp"|"shell",
          "icon": ..., "label": ..., "color": "#..."}
         세션 자체가 없거나(no panes) session_name이 비어 있으면 None(=판정 불가, "shell"과는 다르다).

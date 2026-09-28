@@ -12,6 +12,7 @@ import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
 import { getSession, allSessions } from '../core/store.js';
 import { icon } from '../ui/icons.js';
+import { displayComboHtml } from '../core/keymap.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 import { showToast } from '../ui/toast.js';
 
@@ -28,7 +29,7 @@ export function showOnboarding() {
       <button class="vt-btn solid lg" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
       <button class="vt-btn lg" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
     </div>
-    <p class="vt-ob-hint">맥북에서 Ctrl+Shift+V로 음성 입력 (voice daemon 실행 시)</p>
+    <p class="vt-ob-hint">맥북에서 ${displayComboHtml('Ctrl+Shift+V')}로 음성 입력 (voice daemon 실행 시)</p>
   `;
   document.body.appendChild(el);
   renderOnboardingSessions();

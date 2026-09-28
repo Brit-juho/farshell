@@ -216,6 +216,18 @@ test('displayCombo — mac은 기호, 그 외는 텍스트', async () => {
   assert.strictEqual(linux.K.displayCombo('Mod+Shift+ArrowLeft'), 'Ctrl+Shift+←');
 });
 
+test('displayComboHtml — mac 수식키·방향키·Enter는 svg, 글자는 이스케이프된 텍스트', async () => {
+  const mac = await load({ platform: 'MacIntel' });
+  const h = mac.K.displayComboHtml('Mod+Shift+F');
+  assert.strictEqual((h.match(/<svg/g) || []).length, 2);
+  assert.match(h, /<span class="vt-key">F<\/span>/);
+  const linux = await load({ platform: 'Linux' });
+  const l = linux.K.displayComboHtml('Mod+Shift+ArrowLeft');
+  assert.strictEqual((l.match(/<svg/g) || []).length, 1, '리눅스는 방향키만 svg');
+  assert.match(l, /Ctrl.*Shift/);
+  assert.doesNotMatch(linux.K.displayComboHtml('Mod+<'), /<span class="vt-key"><</);
+});
+
 test('깨진 재정의 JSON이어도 기본 바인딩으로 동작한다', async () => {
   const { K, S, window } = await load({ platform: 'Linux' });
   await S.set('keymap.overrides', '{oops');

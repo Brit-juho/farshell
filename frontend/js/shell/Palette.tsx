@@ -42,6 +42,7 @@ export interface PaletteDeps {
   listKeymapActions: () => KeymapBinding[];
   invokeKeymapAction: (id: string) => void;
   displayCombo: (combo: string) => string;
+  displayComboHtml?: (combo: string) => string;
   showToast: (msg: string, type?: string, opts?: any) => void;
 }
 
@@ -50,6 +51,7 @@ interface Row {
   kind: 'session' | 'file' | 'command' | 'queue' | 'port' | 'scrollback' | 'keymap' | 'empty' | 'recent';
   label: string;
   hint?: string;
+  hintHtml?: string;            // 단축키 — SVG 기호가 섞인 마크업(core/keymap.js displayComboHtml)
   el?: HTMLElement;            // 이미 만들어진 DOM(세션 라이브 프리뷰 카드)
   onOpen?: () => void;
   onOpenNewPane?: () => void;
@@ -332,6 +334,7 @@ function PaletteBody(props: PaletteBodyProps) {
       kind: 'keymap',
       label: b.label,
       hint: b.unavailable ? '' : deps.displayCombo(b.combo),
+      hintHtml: b.unavailable || !deps.displayComboHtml ? undefined : deps.displayComboHtml(b.combo),
       onOpen: () => { props.onRequestClose(); deps.invokeKeymapAction(b.id); },
     };
   }
@@ -570,7 +573,11 @@ function PaletteBody(props: PaletteBodyProps) {
                 >
                   <span class="vt-qo-mark" aria-hidden="true" innerHTML={markFor(row)} />
                   <div class="vt-vw-name">{row.label}</div>
-                  <Show when={row.hint}><div class="vt-qo-hint">{row.hint}</div></Show>
+                  <Show when={row.hint}>
+                    <Show when={row.hintHtml} fallback={<div class="vt-qo-hint">{row.hint}</div>}>
+                      <div class="vt-qo-hint" aria-label={row.hint} innerHTML={row.hintHtml} />
+                    </Show>
+                  </Show>
                   {/* 선택된 줄의 ↵ 표시는 CSS ::after로 그린다(.vt-qo-row.selected).
                       DOM에 글자로 넣으면 행의 textContent가 "alpha↵"가 되어,
                       행 이름으로 찾는 쪽(테스트·접근성 이름)이 전부 어긋난다 —
@@ -694,9 +701,9 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
                 방법이 placeholder 한 줄뿐이었다. 목업 4a처럼 아래에 상시
                 고정한다 — 키 힌트와 모드 힌트를 한 줄에 같이 둔다. */}
             <div class="vt-qo-foot" aria-hidden="true">
-              <span>↑↓ 이동</span>
-              <span>↵ 열기</span>
-              <span>⌘↵ 새 pane</span>
+              <span><kbd class="vt-qo-key" innerHTML={icon('arrow-up', 13, 2) + icon('arrow-down', 13, 2)} /> 이동</span>
+              <span><kbd class="vt-qo-key" innerHTML={icon('key-enter', 13, 2)} /> 열기</span>
+              <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Mod+Enter') : '⌘↵'} /> 새 pane</span>
               <span class="vt-qo-foot-modes">/ 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백</span>
             </div>
           </div>

@@ -43,7 +43,9 @@ steps are the 20%, and the accent is the 10%.
   icons are the only exceptions.
 - If the icon doesn't carry information the user needs, remove it.
 - Icons do work in actions (buttons, nav) — they're not decoration on info cards.
-- Don't mix libraries — there's one registry, `frontend/js/ui/icons.js`, inline SVG.
+- Don't mix libraries — there's one registry, `frontend/js/ui/icons.js`, inline SVG. Static HTML
+  (`index.html`) holds only empty `<svg data-icon="name">` slots that `hydrateIcons()` fills;
+  the login gate's two icons are the one exception (shown before the bundle loads, test-guarded).
 - **No emoji as a UI asset.** User-generated content (terminal output, etc.) is
   the exception.
 
@@ -537,8 +539,19 @@ icon badge) must still handle all 5.
 
 ### 5 agent marks (N33)
 
-Registered in `frontend/js/ui/icons.js`: a 14px square, stroke 1.75,
-`currentColor`.
+Registered in `frontend/js/ui/icons.js`: a 14px square, `currentColor`, **monochrome
+always** (no brand colours — 2026-09-29 decision).
+
+**Brand logos first (2026-09-29).** Where a real logo exists it wins over the drawn
+mark: filled paths copied into `frontend/js/ui/brand-icons.js` from
+`@lobehub/icons-static-svg` 1.95.1 (MIT) and `simple-icons` 16.33.0 (CC0) — never loaded
+from a CDN at runtime. That file is its own lazy chunk (`brand.js`, kept out of the
+initial-payload budget); until it arrives the stroke mark below is drawn, then
+`vt:brand-icons` repaints tabs, cards, rail and fleet. Brand logos:
+claude, codex, agy (Antigravity), qwen, ollama, lms (LM Studio), python,
+node, docker, opencode, cursor-agent, copilot, amp, goose, kimi. The stroke marks
+(stroke 1.75) remain for aider, llama.cpp, ssh, shell and unknown names, and as the
+pre-load fallback.
 
 | Key | Shape | For |
 |---|---|---|

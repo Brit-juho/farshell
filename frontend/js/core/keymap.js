@@ -8,6 +8,7 @@
 //
 // 표기법: `Mod+Shift+F` 형태. `Mod`는 macOS에서 Cmd, 그 외에서 Ctrl로 해석된다
 // (두 플랫폼에 각각 기본값을 적지 않아도 되고, 사용자가 바꾼 값도 그대로 이식된다).
+import { icon } from '../ui/icons.js';
 import { get as setting, set as setSetting, subscribe as onSettings } from './settings.js';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
@@ -284,6 +285,24 @@ onSettings((changed) => {
 });
 
 // 사람이 읽는 표기 — 팔레트·설정 화면이 쓴다(`Mod` → 플랫폼 기호).
+// displayCombo의 HTML판 — 기호 키(⌘⇧⌥⌃, 방향키, Enter)는 SVG로, 나머지 글자는
+// 텍스트로. 유니코드 기호는 모노 글꼴에 없는 것이 섞여 기기마다 모양이 갈렸다.
+// Mac이 아니면 수식키는 글자(Ctrl/Shift/Alt)이고 방향키·Enter만 SVG다.
+const _KEY_ICON = { ArrowLeft: 'arrow-left', ArrowRight: 'arrow-right', ArrowUp: 'arrow-up', ArrowDown: 'arrow-down', Enter: 'key-enter' };
+const _MOD_ICON = { mod: 'key-command', shift: 'key-shift', alt: 'key-option', ctrl: 'key-ctrl' };
+const _esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export function displayComboHtml(combo) {
+  const parts = String(combo || '').split('+').filter(Boolean).map((p) => {
+    const low = p.toLowerCase();
+    const name = _KEY_ICON[p] || (IS_MAC ? _MOD_ICON[low] : null);
+    if (name) return `<span class="vt-key vt-key-icon">${icon(name, 13, 2)}</span>`;
+    const text = low === 'mod' || low === 'ctrl' ? 'Ctrl' : low === 'shift' ? 'Shift' : low === 'alt' ? 'Alt'
+      : (p.length === 1 ? p.toUpperCase() : p);
+    return `<span class="vt-key">${_esc(text)}</span>`;
+  });
+  return parts.join(IS_MAC ? '' : '<span class="vt-key-sep">+</span>');
+}
+
 export function displayCombo(combo) {
   return String(combo || '')
     .split('+')

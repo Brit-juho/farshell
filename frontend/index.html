@@ -283,11 +283,11 @@
   <!-- 터미널 검색 바 -->
   <div id="search-bar">
     <input id="search-input" class="vt-input" type="text" placeholder="검색..." aria-label="터미널 검색" />
-    <!-- D5 관용구: ui/icons.js의 'chevron-down'과 같은 path. 이전 결과는 CSS로 뒤집는다. -->
-    <button data-action="search.prev" aria-label="이전 결과" class="flipped"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
-    <button data-action="search.next" aria-label="다음 결과"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
-    <!-- D5: ui/icons.js의 'x'와 같은 path -->
-    <button data-action="search.close" aria-label="검색 닫기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <!-- 도형은 ui/icons.js 'chevron-down'(hydrateIcons). 이전 결과는 CSS로 뒤집는다. -->
+    <button data-action="search.prev" aria-label="이전 결과" class="flipped"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
+    <button data-action="search.next" aria-label="다음 결과"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
+    <!-- 도형은 ui/icons.js 'x'(hydrateIcons) -->
+    <button data-action="search.close" aria-label="검색 닫기"><svg data-icon="x" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
   </div>
 
   <!-- 상단 통합 바 -->
@@ -318,7 +318,7 @@
          않는다). -->
     <div id="vt-wtabs" role="tablist" aria-label="워크트리 탭"></div>
     <div class="wt-chevron" data-action="session.manager" data-tip="세션 프로파일" data-tip-side="bottom" role="button" tabindex="0" aria-label="세션 프로파일">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      <svg data-icon="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"></svg>
     </div>
 
     <!-- 좁은 화면의 세션 관리 진입점. 탭 영역이 눌려도 전환·이름 변경·닫기가 남는다. -->
@@ -338,8 +338,8 @@
          목록에서 제외). 터미널 내 검색 자체는 Ctrl/Cmd+F로 그대로
          쓸 수 있다(팔레트 `/` 접두사는 60-settings-palette.md §3부터 파일 검색으로 바뀌었다) — ⋯ 메뉴의 동일 항목("터미널 내 검색"·"빠른 열기")은 L1 잔여
          항목에서 제거했다(상단바 ↔ ⋯ 중복 제거). -->
-    <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" data-tip="빠른 열기" data-tip-sub="Ctrl/Cmd+K" data-tip-side="bottom">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" data-tip="빠른 열기" data-tip-keys="Mod+K" data-tip-side="bottom">
+      <svg data-icon="search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <!-- N37 §4 — 「연결된 화면」. shell/HeaderExtras.tsx가 채우고, 데이터가 없으면
          (활성 세션이 tmux가 아님 등) 스스로 빈 상태로 남는다. -->
@@ -361,31 +361,31 @@
   <div id="vt-wgrail-slot"></div>
   <nav id="vt-rail" aria-label="사이드바">
     <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" data-tip="세션" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <svg data-icon="layout-panels" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-session" hidden></span>
     </button>
     <!-- N35 §6이 지운 폴더 트리를 dock 탭으로 되살렸다(2026-09-22, 사용자 확인
          — N35 "코드뷰어는 dock에 안 들어간다" 결정 번복). git diff/커밋은 여기
          없다 — 그건 소스컨트롤(vt-rail-*scm 없음, dock 첫 탭)의 몫. -->
     <button type="button" class="vt-rail-btn" id="vt-rail-dir" data-rail="dir" data-action="dir.show" aria-label="파일" data-tip="파일" data-tip-sub="디렉토리 탐색" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+      <svg data-icon="folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" data-tip="프롬프트 큐" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <svg data-icon="list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-queue" hidden></span>
     </button>
     <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" data-tip="프롬프트 스니펫" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+      <svg data-icon="clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <!-- 50-files-share.md §4 — 업로드 파일 저장소 탭. 위의 「파일」(디렉토리
          트리)과는 다른 것이다: 그건 저장소 소스를 읽는 화면이고, 이건 업로드된
          파일을 관리·공유하는 화면이다(dock 첨부 탭과 같은 렌더러). 이름이
          겹치면 구분이 안 돼 「첨부」로 부른다. -->
     <button type="button" class="vt-rail-btn" id="vt-rail-files" data-rail="files" data-action="files.show" aria-label="첨부" data-tip="첨부" data-tip-sub="저장소 · 공유 링크" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      <svg data-icon="paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" data-tip="포트 대시보드" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><line x1="7" y1="12" x2="7" y2="16"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="16"/></svg>
+      <svg data-icon="briefcase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-ports" hidden></span>
     </button>
     <!-- U 마일스톤(읽기 전용 clauth 사용량) 전이라 /api/capabilities가 usage를
@@ -394,18 +394,18 @@
          이유는 그 폴백과 일관성을 맞추기 위해서다 — U가 실제로 caps.usage를
          추가하는 순간 이 파일을 다시 안 건드려도 자동으로 나타난다. -->
     <button type="button" class="vt-rail-btn needs-usage" id="vt-rail-usage" data-rail="usage" data-action="usage.open" aria-label="사용량" data-tip="사용량" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <svg data-icon="bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <div class="vt-rail-spacer"></div>
     <button type="button" class="vt-rail-btn" id="vt-rail-settings" data-rail="settings" aria-label="설정" aria-pressed="false" data-tip="설정" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <svg data-icon="settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
   </nav>
   <div id="vt-rail-panel" role="region" aria-label="사이드 패널" hidden>
     <div class="vt-rail-panel-head">
       <div class="vt-rail-panel-title" id="vt-rail-panel-title"></div>
       <button type="button" class="vt-icon-btn sm vt-rail-panel-close" aria-label="패널 닫기">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <svg data-icon="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       </button>
     </div>
     <div class="vt-rail-panel-body" id="vt-rail-panel-body"></div>
@@ -471,15 +471,15 @@
          이 버튼 자체를 옮긴다(재생성 아님, appendChild). -->
     <div id="vt-rail-mic-slot">
       <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" data-tip="음성 입력" data-tip-side="right">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>
+        <svg data-icon="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
         <span class="label">음성 입력</span>
       </button>
     </div>
     <button class="vt-menu-item mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>이어폰 미디어키
+      <svg data-icon="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>이어폰 미디어키
     </button>
     <button class="vt-menu-item mi" role="menuitem" data-action="guide.show">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <svg data-icon="help-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       가이드 보기
     </button>
   </div>
@@ -521,9 +521,9 @@
         <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표">→</button>
       </div>
       <!-- 접기/펴기 토글 — #keybar-extra-keys(아래)만 여닫는다. -->
-      <!-- D5 관용구: ui/icons.js의 'chevron-down'과 같은 path. 접히면 keybar.js가
+      <!-- 도형은 ui/icons.js 'chevron-down'(hydrateIcons). 접히면 keybar.js가
            .flipped를 붙여 CSS로 뒤집는다(아이콘을 두 개 두지 않는다). -->
-      <button type="button" id="keybar-toggle" aria-label="특수키 바 펼치기" aria-expanded="false" data-tip="추가 키 펴기/접기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button type="button" id="keybar-toggle" aria-label="특수키 바 펼치기" aria-expanded="false" data-tip="추가 키 펴기/접기"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
     </div>
     <!-- term/touch-select.js가 터미널 꾹 누르기로 켠다(keybar 버튼 아님). 선택
          모드일 땐 #keybar-main 대신 이 줄이 그 자리를 대신한다(CSS). -->
@@ -567,33 +567,32 @@
        파일/포트/사용량 바로가기였던 홈은 이제 곧장 설정 화면이 연다(70-mobile.md). -->
   <!-- 2.1.6: 하단 내비에 아이콘을 넣는다. 글자만 있을 때는 다섯 칸이 전부
        같은 회색 글자라, 지금 어느 탭인지와 어디를 눌러야 하는지가 **읽어야만**
-       구분됐다(엄지로 쓰는 화면에서 가장 비싼 비용이다). 아이콘 path는 전부
-       ui/icons.js에 있는 것과 같은 것을 쓴다 — 이 파일은 정적 HTML이라 그
-       모듈을 부를 수 없어 D5의 관용구대로 같은 path를 인라인한다(라이브러리
-       혼용 금지 규칙은 "같은 출처의 같은 도형"을 요구하는 것이지 인라인을
-       금지하는 게 아니다). -->
+       구분됐다(엄지로 쓰는 화면에서 가장 비싼 비용이다). 2026-09-29부터
+       아이콘은 `<svg data-icon="이름">` 빈 자리로만 두고 도형은 ui/icons.js의
+       hydrateIcons()가 채운다(예전엔 path를 복사해 둬서 「설정」 톱니가 dock과
+       어긋났다). -->
   <nav id="vt-mnav-bottom" aria-label="하단 내비">
     <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="세션" aria-pressed="false">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg>
+      <svg data-icon="list" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
       <span class="vt-mnav-label">세션</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-waiting" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="terminal" aria-label="터미널" aria-pressed="false">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      <svg data-icon="terminal" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
       <span class="vt-mnav-label">터미널</span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="changes" data-action="scm.show" aria-label="변경" aria-pressed="false">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      <svg data-icon="git-branch" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
       <span class="vt-mnav-label">변경</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="files.show" aria-label="첨부" aria-pressed="false">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      <svg data-icon="paperclip" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
       <span class="vt-mnav-label">첨부</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-files" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="설정" aria-pressed="false">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <svg data-icon="settings" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
       <span class="vt-mnav-label">설정</span>
     </button>
   </nav>

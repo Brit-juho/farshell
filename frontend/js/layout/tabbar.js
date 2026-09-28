@@ -14,7 +14,7 @@ import { collectSessions } from './tree.js';
 import { allSessions } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
 import { sleepTab } from '../term/session-actions.js';
-import { icon, agentIcon } from '../ui/icons.js';
+import { icon, setAgentMark } from '../ui/icons.js';
 import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
 
 const HOST = 'vt-wtabs';
@@ -61,8 +61,9 @@ export function setAgentInfo(agents) {
 function paintTabs() {
   const host = document.getElementById(HOST);
   if (!host) return;
+  const byId = new Map(getTabsWithTrees().map((t) => [t.id, t]));
   for (const el of host.querySelectorAll('.vt-wtab')) {
-    const tab = getTabsWithTrees().find((t) => t.id === el.dataset.tabId);
+    const tab = byId.get(el.dataset.tabId);
     if (!tab) continue;
     const names = tabSessionNames(tab);
     const status = mostUrgent(names.map((n) => getStatus(n)));
@@ -72,7 +73,7 @@ function paintTabs() {
     const mark = el.querySelector('.vt-wtab-agent');
     const info = names.map((n) => _agents[n]).find((i) => i && i.agent);
     if (mark) {
-      mark.innerHTML = info ? agentIcon(info.agent) : '';
+      setAgentMark(mark, info && info.agent);
       if (info && info.label) mark.setAttribute('data-tip', info.label); else mark.removeAttribute('data-tip');
     }
 
@@ -159,14 +160,21 @@ function _wireDrag(el, t, host) {
   });
 }
 
+// 마지막으로 그린 탭 줄의 모양. onLayoutChange는 pane 포커스·분할 같은 탭 줄과
+// 무관한 변경에도 불리므로, 모양이 같으면 DOM을 갈아 끼우지 않고 마크만 칠한다.
+let _renderedKey = '';
+
 function render() {
   const host = document.getElementById(HOST);
   if (!host) return;
   const tabs = getTabsWithTrees();
   const activeId = getActiveTabId();
-  // 탭이 하나뿐이면 바를 그리지 않는다 — 2.1.1까지의 화면과 같아야 하고,
-  // 고를 게 없는 탭 한 줄은 세로 공간만 먹는다(레일 호스트 칩과 같은 판단).
-  host.hidden = tabs.length < 2;
+  const key = JSON.stringify([activeId, tabs.map((t) => [t.id, tabDisplayLabel(t)])]);
+  if (key === _renderedKey && host.childElementCount === tabs.length) { paintTabs(); return; }
+  _renderedKey = key;
+  // 2026-09-29(사용자 결정) — 탭이 하나여도 바를 그린다. 예전엔 하나뿐이면
+  // 숨겼는데, 세션이 하나인 맥으로 전환하면 탭 줄이 통째로 사라져 고장처럼 보였다.
+  host.hidden = tabs.length === 0;
   host.replaceChildren();
   _wireScroll(host);
 
@@ -253,6 +261,8 @@ export function renameTab(tabId, label) {
 }
 
 onLayoutChange(render);
+// 브랜드 로고 청크 도착(ui/icons.js) — 마크만 다시 칠한다.
+window.addEventListener('vt:brand-icons', paintTabs);
 // 상태가 바뀌면 탭 마크만 다시 칠한다(다시 그리지 않는다 — 렌더는 DOM을
 // 통째로 갈아 끼우므로 클릭 중에 탭이 사라질 수 있다).
 onStatusChange(paintTabs);

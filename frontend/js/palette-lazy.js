@@ -11,7 +11,7 @@
 // 청크) 쪽에는 이 모듈들의 참조만 deps 인자로 건네고, 그쪽에서 직접
 // import하지 않는다(Hud.tsx 상단 주석과 동일한 이유, ADR-26).
 import { registerAction, getAction } from './core/dom.js';
-import { register as registerKey, getBinding, displayCombo, list as keymapList, invoke as keymapInvoke } from './core/keymap.js';
+import { register as registerKey, getBinding, displayCombo, displayComboHtml, list as keymapList, invoke as keymapInvoke } from './core/keymap.js';
 import { vtFetch } from './core/api.js';
 import { allSessions, sessionDisplayName } from './core/store.js';
 import { revealSession } from './term/session.js';
@@ -61,6 +61,7 @@ const deps = {
   listKeymapActions: keymapList,
   invokeKeymapAction: keymapInvoke,
   displayCombo,
+  displayComboHtml,
   showToast,
 };
 
