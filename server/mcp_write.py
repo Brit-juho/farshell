@@ -575,6 +575,7 @@ def apply_group(
     enabled: bool,
     *,
     worktree_id: Optional[str] = None,
+    tool: Optional[str] = None,
 ) -> dict:
     """태그가 붙은 서버 전부를 **목표 상태로 맞춘다**(97번 §1-3, 2단계).
 
@@ -602,7 +603,8 @@ def apply_group(
                 "tag": tag, "results": [], "changed": 0}
 
     scan = mcp_scan.scan(worktree_id)
-    targets = [s for s in scan["servers"] if s["name"] in names]
+    targets = [s for s in scan["servers"] if s["name"] in names
+               and (tool is None or s["tool"] == tool)]
     if not targets:
         # 태그는 있는데 지금 이 워크트리 기준으로는 아무 항목도 안 보인다.
         # 실패가 아니라 "여기엔 없다"이므로 그대로 말한다.

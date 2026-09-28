@@ -1,9 +1,8 @@
 // MCP 독립 팝업 (97번 1단계 4/n). **지연 청크** — 팝업을 열 때 처음 내려온다
 // (app.js 상한까지 여유가 410B뿐이다).
 //
-// 이 화면이 하는 일은 딱 둘이다: 지금 어디에 무엇이 켜져 있는지 **보여주기**,
-// 그리고 **켜고 끄기**. 서버 정의를 만들거나 고치지 않는다 — 그건 각 CLI의
-// 공식 명령(`claude mcp add` 등)이 이미 한다.
+// 도구별로 서버·플러그인을 탐색하고 켜고 끈다. 서버 정의 생성은 각 CLI의
+// 공식 명령(`claude mcp add` 등)에 맡긴다.
 //
 // ## 2단계 — 그룹 태그
 //
@@ -11,8 +10,7 @@
 // 설정 파일에 전혀 기록되지 않는다**(§1-3) — FarShell 화면 안에만 있는
 // 라벨이라, 도구가 설정을 다시 써도 사라지지 않고 도구가 모르는 키를 남기지도
 // 않는다. 태그가 붙는 단위는 **서버 이름**이다(도구·스코프별 항목이 아니라):
-// 같은 서버를 세 번 태그하게 만들면 한 곳이 빠진 채 그룹 켜기가 그 항목을
-// 조용히 건너뛴다.
+// 태그 자체는 이름 기준이지만, 그룹 켜고 끄기는 현재 선택한 도구에만 적용한다.
 //
 // 그룹 버튼은 **뒤집기가 아니라 목표 상태 지정**이다 — 섞인 상태에서 눌러도
 // 결과가 결정적이고, 일부 실패 뒤 그대로 다시 눌러도 안전하다.
@@ -32,6 +30,13 @@ import { showToast } from '../ui/toast.js';
 import { promptDialog, confirmDialog } from '../core/dialog.js';
 
 const TOOL_LABEL = { claude: 'Claude', codex: 'Codex', agy: 'agy', opencode: 'opencode' };
+const TOOL_STORAGE_KEY = 'farshell.mcp.lastTool';
+const TOOL_GUIDE = {
+  claude: ['Claude Code', 'claude mcp add', 'claude plugin install'],
+  codex: ['Codex', 'codex mcp add', 'codex plugin add'],
+  agy: ['Antigravity', 'agy mcp add', null],
+  opencode: ['OpenCode', 'opencode mcp add', null],
+};
 // 2026-09-28 — 「누구에게 적용되는가」 세 단계. 서버가 `level`로 내려준다
 // (`scope`는 쓰기 기준이라 그대로다 — Claude의 local과 project가 둘 다 `local`).
 const LEVEL_LABEL = { user: '유저', local: '로컬', project: '프로젝트' };
@@ -306,7 +311,7 @@ function groupState(tag, data) {
       .filter(([, vals]) => vals.some((v) => v.toLowerCase() === tag.toLowerCase()))
       .map(([name]) => name),
   );
-  const entries = (data.servers || []).filter((s) => names.has(s.name));
+  const entries = allServers(data).filter((s) => names.has(s.name) && s.tool === _filter.tool);
   if (!entries.length) return 'empty';
   const on = entries.filter((s) => s.enabled).length;
   if (on === entries.length) return 'on';
@@ -317,11 +322,13 @@ function groupState(tag, data) {
 /** 그룹 버튼 줄. 태그가 하나도 없으면 아무것도 안 그린다 — 빈 줄을 보여주는
  *  것보다 없는 편이 낫다(50 §4 "빈 패널을 보여주지 않는다"와 같은 규칙). */
 function renderGroupBar(data) {
-  const tags = data.allTags || [];
+  if (_filter.tool === 'all') return null;
+  const tags = (data.allTags || []).filter((tag) => groupState(tag, data) !== 'empty');
   if (!tags.length) return null;
 
   const bar = el('div', 'vt-mcp-groupbar');
-  bar.appendChild(el('div', 'vt-set-label', '그룹'));
+  bar.appendChild(el('div', 'vt-set-label', `${TOOL_LABEL[_filter.tool]} 그룹`));
+  bar.appendChild(help('태그는 같은 이름의 서버가 공유합니다. 여기서 켜고 끄는 것은 현재 도구에만 적용됩니다.'));
   const chips = el('div', 'vt-mcp-chips');
 
   for (const tag of tags) {
@@ -346,7 +353,7 @@ function renderGroupBar(data) {
       btn.disabled = true;
       try {
         const r = await postElevated('/api/mcp/group', {
-          tag, enabled: next, worktree: _worktreeId,
+          tag, enabled: next, tool: _filter.tool, worktree: _worktreeId,
         });
         if (!r) return;                       // 비밀번호 입력을 취소했다
         reportGroupResult(tag, next, r, data.facts || {});
@@ -413,7 +420,7 @@ function tagEditor(name, tags) {
   const add = el('button', 'vt-chip sm vt-mcp-tagadd');
   add.type = 'button';
   add.textContent = '+ 태그';
-  add.title = '이 서버를 그룹에 넣습니다 — 그룹은 FarShell 안에만 기록되고 CLI 설정 파일은 건드리지 않습니다';
+  add.title = '같은 이름의 서버가 이 태그를 공유합니다. 그룹 켜고 끄기는 선택한 도구에만 적용됩니다.';
   add.addEventListener('click', async () => {
     const t = await promptDialog(`「${name}」에 붙일 그룹 이름`, { title: '그룹 추가' });
     if (t == null) return;
@@ -535,7 +542,7 @@ function deployControls(group, data) {
     ['opencode', 'global', 'opencode 전역'],
     ['opencode', 'local', 'opencode 이 워크트리'],
   ].filter(([tool, scope]) =>
-    !group.entries.some((e) => e.tool === tool && e.scope === scope)
+    !allServers(data).some((e) => e.name === group.name && e.tool === tool && e.scope === scope)
     && !(scope === 'local' && !data.worktree)
     // ADR-46 — agy는 참조를 확장하지 않아 서버가 env·headers를 가지면 복제를 거절한다.
     && !(tool === 'agy' && hasCreds));
@@ -618,10 +625,12 @@ function summaryVerify(group) {
 
 function renderServer(group, facts, tags, data) {
   const box = el('details', 'vt-mcp-group vt-mcp-server');
+  const key = `${group.tool}|${group.name}`;
   box.dataset.name = group.name;
-  if (_open.has(group.name)) box.open = true;
+  box.dataset.tool = group.tool;
+  if (_open.has(key)) box.open = true;
   box.addEventListener('toggle', () => {
-    if (box.open) _open.add(group.name); else _open.delete(group.name);
+    if (box.open) _open.add(key); else _open.delete(key);
   });
 
   // ── 접힌 줄 ──
@@ -733,6 +742,25 @@ function renderFacts(facts) {
   return box;
 }
 
+function toolOverview(data) {
+  const tool = _filter.tool;
+  const head = el('div', 'vt-mcp-overview');
+  const title = el('div', 'vt-mcp-overviewtitle', tool === 'all' ? '도구별 MCP 관리' : TOOL_GUIDE[tool][0]);
+  head.appendChild(title);
+  const count = tool === 'all'
+    ? new Set(allServers(data).map((e) => `${e.tool}|${e.name}`)).size
+    : toolGroups(data, tool).length;
+  head.appendChild(el('div', 'vt-mcp-overviewtext', tool === 'all'
+    ? `서버 ${count}개 · 도구를 선택하면 그 도구의 서버, 플러그인, 그룹을 관리합니다.`
+    : `이 도구에 등록된 서버 ${count}개 · 그룹 변경도 ${TOOL_LABEL[tool]}에만 적용됩니다.`));
+  if (tool !== 'all') {
+    const guide = TOOL_GUIDE[tool];
+    head.appendChild(el('div', 'vt-mcp-overviewhint',
+      `서버 추가: ${guide[1]}${guide[2] ? ` · 플러그인 설치: ${guide[2]}` : ''}`));
+  }
+  return head;
+}
+
 /** 부연 설명용 접기 줄 — 서버 줄과 같은 chevron을 쓴다(브라우저 기본 ▶ 대신). */
 function infoSummary(text) {
   const s = el('summary');
@@ -767,16 +795,44 @@ function _matches(group, tags) {
   return group.entries.some(_entryMatches);
 }
 
+function allServers(data) {
+  // API의 servers가 기준이다. 오래된 호출자는 groups만 보낼 수 있다.
+  return (data.servers && data.servers.length)
+    ? data.servers : (data.groups || []).flatMap((g) => g.entries || []);
+}
+
+function toolGroups(data, tool) {
+  const groups = new Map();
+  for (const entry of allServers(data).filter((e) => e.tool === tool)) {
+    if (!groups.has(entry.name)) groups.set(entry.name, { name: entry.name, tool, entries: [] });
+    groups.get(entry.name).entries.push(entry);
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function toolSection(tool, count) {
+  const head = el('div', 'vt-mcp-sectionhead');
+  head.append(el('strong', null, TOOL_LABEL[tool] || tool),
+    el('span', 'vt-mcp-meta', `${count}개 서버`));
+  return head;
+}
+
 function renderList(listHost, data) {
   listHost.innerHTML = '';
-  const shown = (data.groups || []).filter((g) => _matches(g, data.tags));
-  if (!shown.length) {
+  const tools = _filter.tool === 'all' ? Object.keys(TOOL_LABEL) : [_filter.tool];
+  let total = 0;
+  for (const tool of tools) {
+    const shown = toolGroups(data, tool).filter((g) => _matches(g, data.tags));
+    if (_filter.tool === 'all' && !shown.length) continue;
+    listHost.appendChild(toolSection(tool, shown.length));
+    for (const g of shown) listHost.appendChild(renderServer(g, data.facts || {}, data.tags || {}, data));
+    total += shown.length;
+  }
+  if (!total) {
     listHost.appendChild(help((data.groups || []).length
       ? '조건에 맞는 서버가 없습니다.'
       : '정의된 MCP 서버가 없습니다. 추가는 각 CLI의 공식 명령을 쓰세요 — `claude mcp add`, `codex mcp add`, `agy mcp add`.'));
-    return;
   }
-  for (const g of shown) listHost.appendChild(renderServer(g, data.facts || {}, data.tags || {}, data));
 }
 
 function chipRow(label, options, current, onPick) {
@@ -815,16 +871,14 @@ function renderFilter(data, rerender) {
   const summary = infoSummary('필터');
   const updateSummary = () => {
     const active = [
-      _filter.tool !== 'all' ? TOOL_LABEL[_filter.tool] || _filter.tool : null,
       _filter.level !== 'all' ? LEVEL_LABEL[_filter.level] || _filter.level : null,
       _filter.onlyOn ? '켜진 것만' : null,
     ].filter(Boolean);
-    summary.lastChild.textContent = active.length ? `필터 · ${active.join(' · ')}` : '필터 · 모든 도구와 범위';
+    summary.lastChild.textContent = active.length ? `필터 · ${active.join(' · ')}` : '필터 · 모든 범위';
   };
   updateSummary();
   more.appendChild(summary);
   const controls = el('div', 'vt-mcp-filtercontrols');
-  controls.appendChild(toolChips(data, () => { updateSummary(); rerender(); }));
   controls.appendChild(chipRow('적용 범위로 거르기',
     [['all', '모든 범위'], ...Object.keys(LEVEL_LABEL).map((lv) => [lv, LEVEL_LABEL[lv], LEVEL_HINT[lv]])],
     _filter.level, (v) => { _filter.level = v; updateSummary(); rerender(); }));
@@ -845,18 +899,31 @@ function renderFilter(data, rerender) {
 }
 
 /** 도구 칩 — 플러그인 조회가 늦게 끝나면 그 도구가 더해지므로 이 줄만 다시 만든다. */
-function toolChips(data, rerender) {
-  const seen = new Set([
-    ...(data.servers || []).map((e) => e.tool),
-    ...((_plugins && _plugins.list) || []).map((p) => p.tool),
-  ]);
-  const tools = Object.keys(TOOL_LABEL).filter((t) => seen.has(t) || _filter.tool === t);
-  const row = chipRow('도구로 거르기',
-    [['all', '모든 도구'], ...tools.map((t) => [t, TOOL_LABEL[t]])],
-    _filter.tool, (v) => { _filter.tool = v; rerender(); });
-  row.classList.add('vt-mcp-toolchips');
-  row._rerender = rerender;
-  return row;
+function toolChips(data) {
+  const nav = el('nav', 'vt-mcp-toolnav');
+  nav.setAttribute('aria-label', 'MCP 도구');
+  for (const tool of ['all', ...Object.keys(TOOL_LABEL)]) {
+    const btn = el('button', 'vt-mcp-toolnavitem');
+    btn.type = 'button';
+    btn.dataset.tool = tool;
+    btn.setAttribute('aria-current', _filter.tool === tool ? 'page' : 'false');
+    const serverCount = tool === 'all'
+      ? new Set(allServers(data).map((e) => `${e.tool}|${e.name}`)).size
+      : toolGroups(data, tool).length;
+    const pluginCount = _plugins === null ? '…' : new Set(_plugins.list
+      .filter((p) => tool === 'all' || p.tool === tool)
+      .map((p) => `${p.tool}|${p.name}`)).size;
+    btn.append(el('span', null, tool === 'all' ? '전체' : TOOL_LABEL[tool]),
+      el('span', 'vt-mcp-toolcount', `${serverCount} · ${pluginCount}`));
+    btn.title = `${tool === 'all' ? '전체' : TOOL_LABEL[tool]} · 서버 ${serverCount}개 · 플러그인 ${pluginCount}개`;
+    btn.addEventListener('click', () => {
+      _filter.tool = tool;
+      try { window.localStorage.setItem(TOOL_STORAGE_KEY, tool); } catch (_) { /* 저장 불가 환경 */ }
+      paint(_host, _lastData);
+    });
+    nav.appendChild(btn);
+  }
+  return nav;
 }
 
 /** 서버 | 플러그인. 둘 다 그려 두고 `hidden`만 바꾼다 — 느린 플러그인 조회가
@@ -903,10 +970,11 @@ function contextBar(wt) {
 function paint(host, data) {
   _lastData = data;
   host.innerHTML = '';
-  const groups = data.groups || [];
   const wt = data.worktree;
 
   host.appendChild(contextBar(wt));
+  host.appendChild(toolChips(data));
+  host.appendChild(toolOverview(data));
 
   // 설명 3문단 → 「적용 시점」 한 줄. 내용은 그대로, 펼치면 나온다(정직함은 유지).
   const facts = el('details', 'vt-mcp-applyinfo');
@@ -915,7 +983,9 @@ function paint(host, data) {
   if (!wt) {
     facts.appendChild(help('Claude는 켜짐/꺼짐을 프로젝트마다 따로 기록하므로, 프로젝트 칸을 포커스하면 그 위치 기준으로 다시 보여줍니다.'));
   }
-  facts.appendChild(renderFacts(data.facts));
+  const selectedFact = (data.facts || {})[_filter.tool];
+  facts.appendChild(renderFacts(_filter.tool === 'all' ? data.facts :
+    (selectedFact ? { [_filter.tool]: selectedFact } : {})));
   host.appendChild(facts);
 
   for (const err of data.errors || []) {
@@ -929,7 +999,9 @@ function paint(host, data) {
     host.appendChild(warnRow);
   }
 
-  const onCount = groups.filter((g) => g.entries.some((e) => e.enabled)).length;
+  const visibleGroups = (_filter.tool === 'all' ? Object.keys(TOOL_LABEL) : [_filter.tool])
+    .flatMap((tool) => toolGroups(data, tool));
+  const onCount = visibleGroups.filter((g) => g.entries.some((e) => e.enabled)).length;
   const serverPane = el('div', 'vt-mcp-pane');
   serverPane.dataset.view = 'servers';
   const pluginPane = el('div', 'vt-mcp-pane');
@@ -946,7 +1018,7 @@ function paint(host, data) {
     pluginPane.hidden = _filter.view !== 'plugins';
   };
   host.appendChild(renderTabs({
-    servers: groups.length ? `${onCount}/${groups.length}` : '0',
+    servers: visibleGroups.length ? `${onCount}/${visibleGroups.length}` : '0',
     plugins: '',
   }, sync));
   host.appendChild(renderFilter(data, rerender));
@@ -984,7 +1056,7 @@ function _syncPluginCount() {
   if (!n) return;
   if (_plugins === null) { n.textContent = '…'; return; }
   const names = new Map();
-  for (const p of _plugins.list) {
+  for (const p of _plugins.list.filter((p) => _filter.tool === 'all' || p.tool === _filter.tool)) {
     const k = `${p.tool}|${p.name}`;
     names.set(k, names.get(k) || (p.effective ?? p.enabled) === true);
   }
@@ -1020,8 +1092,8 @@ function loadPlugins({ refresh: force = false } = {}) {
       const box = _host && _host.querySelector('.vt-mcp-plugins');
       if (box) box.replaceWith(renderPlugins());
       _syncPluginCount();
-      const chips = _host && _host.querySelector('.vt-mcp-toolchips');
-      if (chips && _lastData) chips.replaceWith(toolChips(_lastData, chips._rerender));
+      const nav = _host && _host.querySelector('.vt-mcp-toolnav');
+      if (nav && _lastData) nav.replaceWith(toolChips(_lastData));
     });
 }
 
@@ -1040,6 +1112,10 @@ export function mount(host, worktreeId) {
   _worktreeId = worktreeId || null;
   _host = host;
   _plugins = null;
+  try {
+    const saved = window.localStorage.getItem(TOOL_STORAGE_KEY);
+    if (saved === 'all' || Object.hasOwn(TOOL_LABEL, saved)) _filter.tool = saved;
+  } catch (_) { /* 저장 불가 환경에서는 현재 선택을 쓴다 */ }
   load()
     .then((data) => paint(host, data))
     .catch((e) => {
@@ -1192,7 +1268,12 @@ function renderPlugins() {
     return box;
   }
   const listEl = el('div', 'vt-mcp-pluglist');
-  for (const g of groups) listEl.appendChild(renderPluginRow(g));
+  for (const tool of (_filter.tool === 'all' ? Object.keys(TOOL_LABEL) : [_filter.tool])) {
+    const own = groups.filter((g) => g.head.tool === tool);
+    if (!own.length) continue;
+    if (_filter.tool === 'all') listEl.appendChild(toolSection(tool, own.length));
+    for (const g of own) listEl.appendChild(renderPluginRow(g));
+  }
   box.appendChild(listEl);
   return box;
 }

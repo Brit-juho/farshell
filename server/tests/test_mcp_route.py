@@ -343,6 +343,26 @@ def test_group_off_turns_every_member_off(client):
     assert sorted(disabled) == ["a", "b"]   # 태그 없는 keep은 그대로 켜져 있다
 
 
+def test_group_target_tool_never_changes_other_tool(client, monkeypatch):
+    _elevate(client)
+    import mcp_scan, mcp_write
+    from mcp_catalog import set_tags
+    set_tags("shared", ["검증용"])
+    entries = [
+        {"name": "shared", "tool": tool, "scope": "global", "enabled": True}
+        for tool in ("claude", "codex")
+    ]
+    monkeypatch.setattr(mcp_scan, "scan", lambda _: {"servers": entries})
+    changed = []
+    monkeypatch.setattr(mcp_write, "set_enabled", lambda tool, name, enabled, **kwargs:
+                        changed.append(tool) or {"status": "ok", "changed": True})
+    r = client.post("/api/mcp/group", json={"tag": "검증용", "enabled": False,
+                                             "tool": "codex", "worktree": "wt1"})
+    assert r.status_code == 200
+    assert changed == ["codex"]
+    assert [x["tool"] for x in r.json()["results"]] == ["codex"]
+
+
 def test_group_on_from_a_mixed_state_turns_all_on(client):
     """섞인 상태(일부만 켜짐)에서 눌러도 결과가 결정적이어야 한다 — §1-3."""
     _elevate(client)

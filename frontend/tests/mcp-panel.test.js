@@ -125,6 +125,7 @@ async function build({ scan = scanPayload(), toggle, group,
   M.mount(host, 'wt1');
   await flush();
   await flush();
+  if (scan.allTags && scan.allTags.length) host.querySelector('.vt-mcp-toolnavitem[data-tool="claude"]').click();
   return { window, document: window.document, host, posts, gets, M, setPrompt };
 }
 
@@ -636,7 +637,50 @@ function twoToolScan() {
   return scan;
 }
 
+test('같은 이름도 Claude와 Codex에서 별도 서버 행으로 관리한다', async () => {
+  const { host } = await build({ scan: twoToolScan() });
+  assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((e) => e.dataset.tool),
+                   ['claude', 'codex']);
+  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((e) => e.dataset.tool),
+                   ['codex']);
+});
+
+test('다시 열면 마지막으로 본 도구를 바로 연다', async () => {
+  const { host, M, window } = await build({ scan: twoToolScan() });
+  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  M.mount(host, 'wt1');
+  await flush(); await flush();
+  assert.equal(host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]')
+    .getAttribute('aria-current'), 'page');
+  assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((e) => e.dataset.tool),
+                   ['codex']);
+});
+
+test('도구별 행에서 복제할 때 다른 도구의 기존 정의를 대상에서 제외한다', async () => {
+  const scan = twoToolScan();
+  const { host } = await build({ scan });
+  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  const labels = texts(host, '.vt-mcp-tagadd');
+  assert.ok(!labels.includes('Claude 전역'));
+});
+
+test('그룹 변경은 선택한 도구만 요청한다', async () => {
+  const scan = twoToolScan();
+  scan.tags = { notion: ['검증용'] };
+  scan.allTags = ['검증용'];
+  const { host, posts } = await build({ scan });
+  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  host.querySelector('.vt-mcp-groupchip').click();
+  await flush(); await flush();
+  assert.equal(posts.find((p) => p._url === '/api/mcp/group').tool, 'codex');
+});
+
 function clickFilter(host, label, value) {
+  if (label === '도구로 거르기') {
+    host.querySelector(`.vt-mcp-toolnavitem[data-tool="${value}"]`).click();
+    return;
+  }
   const row = host.querySelector(`.vt-mcp-filter [aria-label="${label}"]`);
   Array.from(row.children).find((b) => b.dataset.value === value).click();
 }
@@ -649,9 +693,9 @@ test('도구 필터는 그룹 안의 다른 도구 줄까지 걸러낸다', asyn
   assert.deepEqual(rows.map((r) => r.querySelector('.vt-mcp-tool').textContent), ['Codex']);
 });
 
-test('도구가 하나뿐이어도 필터 칩이 보인다', async () => {
+test('도구가 하나뿐이어도 모든 도구의 탐색 항목이 보인다', async () => {
   const { host } = await build();
-  assert.ok(host.querySelector('.vt-mcp-filter [aria-label="도구로 거르기"]'));
+  assert.equal(host.querySelectorAll('.vt-mcp-toolnavitem').length, 5);
   assert.ok(host.querySelector('.vt-mcp-filter [aria-label="적용 범위로 거르기"]'));
 });
 
@@ -661,7 +705,7 @@ test('검색은 바로 보이고 상세 필터는 선택 상태를 접힌 제목
   const more = host.querySelector('.vt-mcp-filtermore');
   assert.equal(more.open, false);
   clickFilter(host, '도구로 거르기', 'codex');
-  assert.match(more.querySelector('summary').textContent, /Codex/);
+  assert.equal(host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').getAttribute('aria-current'), 'page');
   assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((d) => d.dataset.name), ['notion']);
 });
 

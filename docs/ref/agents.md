@@ -16,6 +16,15 @@
 | Detection coverage trust (N9) | The table in Settings → "Agents". `trust: high` means a **first-party signal** exists — a Claude Code hook (`hook`) or `fsh pane report --agent <name>` self-reporting (`report`). Through 2.1.3 only `hook` was high and that value was only ever set for claude, so other CLIs stayed at mid no matter how many patterns you added. Self-reporting is recorded in `~/.vt/agent-report-seen.json` — the same kind of durable fact as "a hook is installed" (status entries expire on a TTL, which would make the grade flicker) |
 | Stale-server warning (N28) | `fsh doctor` and `fsh status` compare the newest mtime under `server/*.py` against the server process start time and tell you to restart when the code is newer. Python loads modules at import time, so without a restart a fix is **not** live at all — the preventive measure for a real incident where paste truncation was chased as a code bug for hours |
 
+The MCP popup now navigates by tool first: All, Claude, Codex, agy and OpenCode. A
+server name shared across tools appears as a separate row in each tool. The last
+selected tool is saved per browser and restored when the popup opens. The server
+and plugin tabs keep the same tool selection. Tags remain name-based in the
+existing catalog, but a group on/off request carries the selected tool so it
+cannot change another tool's configuration. Copy targets are checked against
+the complete scan, including other tools. The All view is for comparison;
+group writes are available within a selected tool.
+
 ### Claude Code and Codex hooks
 
 `server/agent_hook.sh` is the shared entry point. Claude Code posts `{pre,post,stop}`;
