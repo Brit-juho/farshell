@@ -285,6 +285,26 @@ def set_grant_level(peer_id: str, level: str) -> dict | None:
         return {k: v for k, v in g.items() if k != "secret"}
 
 
+def set_grant_agent(peer_id: str, on: bool) -> dict | None:
+    """에이전트 메시지 수신 스위치(agent_msg.py). control과 **따로** 켠다 — 다른 맥의
+    에이전트가 이 맥의 에이전트에게 일을 시키는 길이라, 셸 입력(control)을 허용했다고
+    저절로 열리면 안 된다. 받을 때는 control **과** 이 스위치 둘 다 본다."""
+    pid = normalize_id(peer_id)
+    if pid is None:
+        return None
+    with _locked():
+        data = _read_unlocked()
+        g = next((x for x in data["grants"] if x["id"] == pid), None)
+        if g is None:
+            return None
+        if on:
+            g["agentMessages"] = True
+        else:
+            g.pop("agentMessages", None)
+        _write_unlocked(data)
+        return {k: v for k, v in g.items() if k != "secret"}
+
+
 def touch_grant(peer_id: str) -> None:
     """lastSeen 갱신 — 매 요청마다 디스크를 쓰지 않도록 하루 단위로만
     (auth.verify_device의 같은 절충)."""
@@ -478,7 +498,8 @@ def _cli(argv: list[str]) -> int:
         if not grants:
             print("      없음")
         for g in grants:
-            print(f"      {g['id']:<16} {g['label']:<16} 등급 {g['level']}"
+            agent = " · 에이전트 메시지 수신" if g.get("agentMessages") else ""
+            print(f"      {g['id']:<16} {g['label']:<16} 등급 {g['level']}{agent}"
                   f" · 마지막 접속 {_fmt_when(g.get('lastSeen', 0))}")
         print()
         print("  추가: fsh host pair (상대 맥) → fsh host add <url> --ticket <티켓> (내 맥)")
@@ -612,6 +633,25 @@ def _cli(argv: list[str]) -> int:
             print("      같은 수준의 노출입니다. 되돌리려면: fsh host deny-control " + g["id"])
         else:
             print(f"  ✓ {g['id']} 등급 → view (읽기 전용)")
+        return 0
+
+    if cmd in ("allow-agent", "deny-agent"):
+        if not rest:
+            print("  ✗ id가 필요합니다", file=sys.stderr)
+            return 2
+        on = cmd == "allow-agent"
+        g = set_grant_agent(rest[0], on)
+        if g is None:
+            print(f"  ✗ '{rest[0]}' 를 허용 목록에서 찾을 수 없습니다", file=sys.stderr)
+            return 1
+        if on:
+            print(f"  ✓ {g['id']} 에이전트 메시지 수신 → 켬")
+            print("    ⚠ 그 맥의 에이전트가 이 맥 에이전트에게 일을 시킬 수 있습니다(작업이 끝난 뒤")
+            print("      큐로 전달). control 등급도 함께 있어야 동작합니다. 끄려면: fsh host deny-agent " + g["id"])
+            if g.get("level") != LEVEL_CONTROL:
+                print("    ⓘ 지금은 등급이 view라 아직 받지 않습니다 — fsh host allow-control " + g["id"])
+        else:
+            print(f"  ✓ {g['id']} 에이전트 메시지 수신 → 끔")
         return 0
 
     if cmd == "log":

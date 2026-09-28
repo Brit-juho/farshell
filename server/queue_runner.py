@@ -125,6 +125,20 @@ def _is_waiting(target: str | None, host: str = "local") -> bool:
 
 def drain_once(session: str | None = None, session_scoped: bool = False) -> dict:
     """pending 한 건을 투입한다. blocking — 호출부가 to_thread 로 감싼다."""
+    result = _drain_once(session, session_scoped)
+    item = result.get("item")
+    if item and item.get("source"):
+        # 에이전트 메시지 항목이면 그 메시지의 상태(전달됨/막힘)를 맞춘다.
+        try:
+            import agent_msg
+            agent_msg.on_queue_result(item, bool(result.get("drained")),
+                                      "" if result.get("drained") else result.get("reason", ""))
+        except Exception as e:  # noqa: BLE001 — 기록 실패가 큐를 멈추면 안 된다
+            logger.warning(f"에이전트 메시지 상태 갱신 실패: {e}")
+    return result
+
+
+def _drain_once(session: str | None, session_scoped: bool) -> dict:
     item = queue_store.pop_next(session, session_scoped=session_scoped)
     if item is None:
         return {"ok": True, "drained": 0, "reason": "큐가 비었습니다"}

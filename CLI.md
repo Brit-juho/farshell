@@ -31,7 +31,9 @@ fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
 fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
 fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue (P4)
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links (N19/N23)
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|log|revoke-all]  # pair another Mac's FarShell (N7/N39)
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|allow-agent <id>|log|revoke-all]  # pair another Mac's FarShell (N7/N39)
+fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
+fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (N30 — built but unused, ADR-27)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
@@ -104,6 +106,24 @@ Tunnel, and also restricts the network policy to the tailnet CIDR
 (`100.64.0.0/10`) + localhost only.
 
 ---
+
+## Agent-to-agent messages (`fsh msg`, `fsh mcp`)
+
+One agent can hand a message to another agent's session — on this Mac or a paired one.
+Delivery rides the prompt queue: the message is typed into the target pane **after the
+agent's stop hook** (Claude Code, Codex), or right away if that agent is known to be idle.
+Agents without hooks keep it queued until `fsh queue run` / "Run now".
+
+```bash
+claude mcp add farshell -- fsh mcp      # give an agent the tools (Codex/agy: add the same command)
+fsh msg agents                          # where can I send?
+fsh msg send M5/api "run the tests"     # from a shell, e.g. for agents without MCP
+fsh msg log                             # history with delivery status
+fsh host allow-agent <id>               # on the receiving Mac — needs allow-control too
+```
+
+Limits: 10 exchanges per conversation, 20 messages/min per sending Mac, 4000 chars.
+The receiving agent sees a one-line header saying the text came from another agent.
 
 ## Prompt Queue (`fsh queue`)
 

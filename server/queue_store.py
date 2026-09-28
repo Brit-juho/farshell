@@ -163,7 +163,9 @@ def list_items() -> list[dict]:
         return _read_unlocked()
 
 
-def add(text: str, target: str | dict | None = None) -> dict:
+def add(text: str, target: str | dict | None = None, source: dict | None = None) -> dict:
+    """`source`는 항목을 만든 쪽이 결과를 되돌려 받을 표식이다(예: 에이전트 메시지
+    id, agent_msg.py). 큐 자신은 뜻을 보지 않고 그대로 싣는다."""
     text = (text or "").strip()
     if not text:
         return {"ok": False, "error": "empty", "reason": "빈 내용은 넣을 수 없습니다"}
@@ -183,6 +185,8 @@ def add(text: str, target: str | dict | None = None) -> dict:
             "status": STATUS_PENDING,
             "created_at": time.time(),
         }
+        if source:
+            item["source"] = source
         items.append(item)
         _write_unlocked(items)
     return {"ok": True, "item": item, "count": len(items)}

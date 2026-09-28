@@ -633,6 +633,58 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
         host_store.audit(grant["id"], "ws", True, f"{tmux_name} 종료")
 
 
+@router.post("/api/peer/agent/message")
+# 응답의 `id`는 보낸 쪽이 정한 메시지 id를 그대로 돌려주는 것이라 양쪽에서 뜻이
+# 같다(답장이 이 id로 대화를 잇는다) — 지우지 않는다.
+@capability("agent/message", level=host_store.LEVEL_CONTROL, strip=(), body=True)
+async def peer_agent_message(request: Request, grant: dict, data: bytes):
+    """다른 맥의 에이전트가 보낸 메시지를 받아 이 맥 세션의 큐에 넣는다(agent_msg.py).
+
+    control 등급 **과** `fsh host allow-agent` 스위치 둘 다 있어야 받는다 — 에이전트에게
+    일을 시키는 길이라 셸 입력 허용만으로 저절로 열리면 안 된다. 본문 해시까지
+    서명한다(메시지 내용이 곧 받는 에이전트가 실행할 지시다).
+    """
+    import agent_msg
+
+    if not grant.get("agentMessages"):
+        return JSONResponse(
+            {"error": "agent_messages_off", "reason":
+             "상대 맥이 에이전트 메시지를 받지 않습니다 — 그 맥에서 "
+             "'fsh host allow-agent <이 맥 id>'를 실행해야 합니다"},
+            status_code=403,
+        ), "에이전트 메시지 수신 꺼짐"
+    try:
+        body = json.loads(data.decode("utf-8") or "{}")
+    except ValueError:
+        return JSONResponse({"error": "bad_body"}, status_code=400), "본문이 JSON이 아님"
+    to_session = str(body.get("to") or "")
+    if not agent_msg.SESSION_RE.match(to_session):
+        return JSONResponse({"error": "bad_target", "reason": "받는 세션 이름이 올바르지 않습니다"},
+                            status_code=400), f"잘못된 대상: {to_session[:40]!r}"
+    if not await _has_exact(to_session):
+        return JSONResponse({"error": "session_not_found",
+                             "reason": f"이 맥에 '{to_session}' 세션이 없습니다"},
+                            status_code=404), f"세션 없음: {to_session}"
+    try:
+        msg = await asyncio.to_thread(
+            agent_msg.receive,
+            from_host=grant["id"], from_label=grant.get("label") or grant["id"],
+            from_session=str(body.get("from") or ""), to_session=to_session,
+            text=str(body.get("text") or ""), reply_to=body.get("replyTo") or None,
+            claimed_hop=int(body.get("hop") or 0), msg_id=str(body.get("id") or ""),
+            conv=str(body.get("conv") or ""),
+        )
+    except agent_msg.MessageError as e:
+        return JSONResponse({"error": e.code, "reason": e.reason},
+                            status_code=e.status), f"거절: {e.code}"
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "bad_body"}, status_code=400), "잘못된 필드"
+    immediate = agent_msg.maybe_drain(to_session)
+    return ({"ok": True, "id": msg["id"], "conv": msg["conv"], "hop": msg["hop"],
+             "status": msg["status"], "immediate": immediate},
+            f"{msg['from']['session'] or '?'} → {to_session} #{msg['id']}")
+
+
 @router.post("/api/peer/file")
 # `id`는 **B의 파일 저장소 키**이고 `path`는 **B의 절대 경로**다. 둘 다
 # A에서는 아무 뜻이 없는데 모양은 A의 것과 똑같아서, 화면이 이 `id`로

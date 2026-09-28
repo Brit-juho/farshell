@@ -1878,14 +1878,66 @@ cmd_host() {
   fi
   local sub="${1:-list}"
   case "$sub" in
-    list|ls|pair|add|ping|rm|remove|rename|allow-control|deny-control|log|revoke-all)
+    list|ls|pair|add|ping|rm|remove|rename|allow-control|deny-control|allow-agent|deny-agent|log|revoke-all)
       shift 2>/dev/null || true
       (cd "$VT_DIR/server" && "$VT_PYTHON" -m host_store "$sub" "$@")
       ;;
     *)
       echo "사용법: fsh host [list|pair [별명]|add <url> --ticket <티켓> [--label 별명]"
       echo "                 |ping <id>|rm <id>|rename <id|self> <별명>"
-      echo "                 |allow-control <id>|deny-control <id>|log [id]|revoke-all]"
+      echo "                 |allow-control <id>|deny-control <id>"
+      echo "                 |allow-agent <id>|deny-agent <id>|log [id]|revoke-all]"
+      return 1 ;;
+  esac
+}
+
+# 에이전트 간 메시지 (2026-09-28) — `fsh mcp`는 에이전트가 쓰는 MCP 서버(stdio)를
+# 띄우고, `fsh msg`는 같은 기능을 사람이 셸에서 쓰는 길이다(MCP가 없는 에이전트도
+# 셸 명령으로 보낼 수 있다). 둘 다 서버(agent_msg.py)를 부르므로 서버가 떠 있어야 한다.
+cmd_mcp() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요." >&2
+    return 1
+  fi
+  # stdout은 MCP 채널이다 — 여기서 아무것도 찍지 않는다.
+  cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" exec "$VT_PYTHON" mcp_farshell.py
+}
+
+cmd_msg() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요."
+    return 1
+  fi
+  local sub="${1:-log}"
+  case "$sub" in
+    send|log|ls|agents)
+      shift 2>/dev/null || true
+      (cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" "$VT_PYTHON" - "$sub" "$@" <<'PYEOF'
+import sys
+import mcp_farshell as m
+
+sub, args = sys.argv[1], sys.argv[2:]
+if sub == "send":
+    reply = ""
+    if "--reply" in args:
+        i = args.index("--reply")
+        reply = args[i + 1] if i + 1 < len(args) else ""
+        args = args[:i] + args[i + 2:]
+    if len(args) < 2:
+        print("  사용법: fsh msg send <[호스트/]세션> \"내용\" [--reply <id>]", file=sys.stderr)
+        sys.exit(2)
+    text, err = m.tool_send_message({"to": args[0], "text": " ".join(args[1:]), "reply_to": reply})
+elif sub == "agents":
+    text, err = m.tool_list_agents({"fresh": True})
+else:
+    text, err = m.tool_read_messages({"conv": args[0] if args else "", "limit": 30})
+print(("  ✗ " if err else "") + text)
+sys.exit(1 if err else 0)
+PYEOF
+)
+      ;;
+    *)
+      echo "사용법: fsh msg [log [대화id]|agents|send <[호스트/]세션> \"내용\" [--reply <id>]]"
       return 1 ;;
   esac
 }
@@ -4427,6 +4479,8 @@ case "${1:-help}" in
   queue)    shift; cmd_queue "$@" ;;
   files)    shift; cmd_files "$@" ;;
   host|hosts) shift; cmd_host "$@" ;;
+  mcp)      shift; cmd_mcp "$@" ;;
+  msg)      shift; cmd_msg "$@" ;;
   worktree|wt) shift; cmd_worktree "$@" ;;
   usage)    shift; cmd_usage "$@" ;;
   help)     shift 2>/dev/null || true; cmd_help "$@" ;;
@@ -4468,6 +4522,9 @@ case "${1:-help}" in
     echo "    fsh popup <action>     tmux 3.2+ popup으로 빠른 호출"
     echo "    fsh run \"명령\"          headless claude -p 백그라운드 실행"
     echo "    fsh queue [add|run|rm]  프롬프트 큐 (작업 중 지시를 쌓아뒀다 순차 투입)"
+    echo "    fsh msg [send|log|agents]"
+    echo "                          에이전트 간 메시지 (다른 세션·다른 맥의 에이전트에게)"
+    echo "    fsh mcp                에이전트용 MCP 서버(stdio) — 예: claude mcp add farshell -- fsh mcp"
     echo "    fsh files [ls|add|rm|share|unshare|insert]"
     echo "                          파일 저장소 관리 + 공유 링크 발급/취소 (N19/N23)"
     echo "    fsh host [list|pair|add|ping|rm|rename|allow-control|log]"

@@ -98,3 +98,15 @@ over regardless of that: `runner.go:172`'s rule to **never read a timed-out/kill
 child's stdout or stderr after abandoning it** (data race on the buffer). It doesn't
 apply to hook running today, but it applies directly to the health-check timeout
 handling in `40-mcp.md` §3 (P3-2) — note it there when that item is picked up.
+
+## Agent-to-agent messages (2026-09-28, stage 1)
+
+One agent sends a message to another agent's tmux session, on this Mac or a paired one. Stage 1 = MCP server + peer delivery + store + CLI; a UI panel is stage 2.
+
+- **Delivery is a queue item** (`server/agent_msg.py` → `queue_store.add(..., source={"agentMsg": id})`). Typing into a pane at an arbitrary moment either lands mid-task or gets **consumed as an approval answer**; the queue already refuses both (stop hook only, never into `waiting`, safe_mode, one at a time). One addition: if the target is **known** idle/done (`agent_status.known_status_for_session` — unlike `status_for_session` it returns None for "no entry"), it is drained after the grace period, because no stop hook will come. Unknown state is never guessed; it stays queued for `fsh queue run`. `queue_runner.drain_once` reports back so the message becomes `delivered`/`blocked`.
+- **Sender identity is resolved, not claimed.** `/api/agent/message` runs the hook's 3-step `pane_resolve` on the caller's `$TMUX_PANE`; the remote side takes the sender host from the signed grant. The reply address in the header comes from there.
+- **Receiving from another Mac needs `control` plus `fsh host allow-agent <id>`** (`grant.agentMessages`). Making another Mac's agent do work is remote execution; `control` alone must not open it silently. The body is covered by the signature hash.
+- **Ping-pong guard**: hop limit 10 per conversation, counted from the receiver's own records as well as the sender's claim (the larger wins); 20/min per sending host.
+- **The header** tells the receiving agent the text came from another agent, with `reply_to`/`to` for the answer. The body is flattened to one line — the queue submits with Enter, and a multi-line body would be split into several prompts.
+- **`fsh mcp`** (`server/mcp_farshell.py`) is a dependency-free stdio JSON-RPC server with three tools: `list_agents`, `send_message`, `read_messages`. It only calls the local FarShell API with the machine token (env, else `~/.vt.env`). `fsh msg` exposes the same for shells and agents without MCP.
+- Automatic delivery works for agents with lifecycle hooks (Claude Code, Codex). Others (aider, agy, …) receive the message but it is fed manually.

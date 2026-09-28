@@ -462,6 +462,19 @@ def report(sid: str, status: str, session: Optional[str] = None,
     return ent
 
 
+def known_status_for_session(name: Optional[str], host: str = LOCAL_HOST) -> Optional[str]:
+    """`status_for_session`과 같지만 엔트리가 없으면 IDLE이 아니라 None —
+    "쉬고 있다"와 "모른다"를 가려야 하는 호출부용(에이전트 메시지의 즉시 전달)."""
+    if not name:
+        return None
+    sweep()
+    found = [e.get("status", IDLE) for e in _state.values()
+             if e.get("tmux_session") == name and e.get("host", LOCAL_HOST) == host]
+    if not found:
+        return None
+    return min(found, key=lambda s: _URGENCY.get(s, 9))
+
+
 def status_for_session(name: Optional[str], host: str = LOCAL_HOST) -> str:
     """tmux 세션 이름으로 상태를 찾는다 — A2 이후의 **정확한** 경로.
 

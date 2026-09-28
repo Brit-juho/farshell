@@ -29,7 +29,9 @@ fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
 fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐 (P4)
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크 (N19/N23)
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링 (N7/N39)
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|allow-agent <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링 (N7/N39)
+fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
+fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리 (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (N30 — 구현만 됐고 미사용, ADR-27)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
@@ -95,6 +97,24 @@ fsh mobile --force                     # 인증(비밀번호/토큰) 미설정�
 네트워크 정책도 tailnet CIDR(`100.64.0.0/10`)+localhost로만 제한합니다.
 
 ---
+
+## 에이전트 간 메시지 (`fsh msg`, `fsh mcp`)
+
+한 에이전트가 다른 세션(이 맥 또는 페어링된 맥)의 에이전트에게 메시지를 보냅니다.
+전달은 프롬프트 큐를 탑니다 — 받는 에이전트의 **작업이 끝난 뒤**(Claude Code·Codex의
+stop 훅), 이미 쉬고 있다고 확실히 알면 바로 입력됩니다. 훅이 없는 에이전트는
+`fsh queue run` / "지금 실행"까지 큐에 남습니다.
+
+```bash
+claude mcp add farshell -- fsh mcp      # 에이전트에게 도구 주기 (Codex/agy도 같은 명령 등록)
+fsh msg agents                          # 보낼 수 있는 곳
+fsh msg send M5/api "테스트 돌려줘"       # 셸에서 보내기 (MCP 없는 에이전트도 가능)
+fsh msg log                             # 기록과 전달 상태
+fsh host allow-agent <id>               # 받는 맥에서 — allow-control도 함께 필요
+```
+
+제한: 대화당 10번 왕복, 보내는 맥당 분당 20건, 4000자. 받는 에이전트에게는 "다른
+에이전트가 보낸 요청"이라는 한 줄 머리글이 붙습니다.
 
 ## 프롬프트 큐 (`fsh queue`)
 
