@@ -123,9 +123,10 @@ def _is_waiting(target: str | None, host: str = "local") -> bool:
     return agent_status.status_for_session(name, host) == agent_status.WAITING
 
 
-def drain_once(session: str | None = None, session_scoped: bool = False) -> dict:
+def drain_once(session: str | None = None, session_scoped: bool = False,
+               targeted_only: bool = False) -> dict:
     """pending 한 건을 투입한다. blocking — 호출부가 to_thread 로 감싼다."""
-    result = _drain_once(session, session_scoped)
+    result = _drain_once(session, session_scoped, targeted_only)
     item = result.get("item")
     if item and item.get("source"):
         # 에이전트 메시지 항목이면 그 메시지의 상태(전달됨/막힘)를 맞춘다.
@@ -138,8 +139,9 @@ def drain_once(session: str | None = None, session_scoped: bool = False) -> dict
     return result
 
 
-def _drain_once(session: str | None, session_scoped: bool) -> dict:
-    item = queue_store.pop_next(session, session_scoped=session_scoped)
+def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool = False) -> dict:
+    item = queue_store.pop_next(session, session_scoped=session_scoped,
+                                targeted_only=targeted_only)
     if item is None:
         return {"ok": True, "drained": 0, "reason": "큐가 비었습니다"}
 
@@ -197,13 +199,13 @@ def _drain_once(session: str | None, session_scoped: bool) -> dict:
 
 
 async def drain_after_grace(delay: float | None = None, session: str | None = None,
-                             session_scoped: bool = False) -> dict:
+                             session_scoped: bool = False, targeted_only: bool = False) -> dict:
     """유예 시간을 두고 한 건 투입. stop 훅이 호출한다."""
     wait = _grace_sec() if delay is None else delay
     if wait > 0:
         await asyncio.sleep(wait)
     async with _drain_lock:
-        return await asyncio.to_thread(drain_once, session, session_scoped)
+        return await asyncio.to_thread(drain_once, session, session_scoped, targeted_only)
 
 
 async def drain_now() -> dict:
@@ -212,7 +214,8 @@ async def drain_now() -> dict:
         return await asyncio.to_thread(drain_once)
 
 
-def schedule_drain(session: str | None = None, session_scoped: bool = False) -> bool:
+def schedule_drain(session: str | None = None, session_scoped: bool = False,
+                   targeted_only: bool = False) -> bool:
     """stop 이벤트에서 호출. 이미 예약된 드레인이 있으면 중복 예약하지 않는다.
 
     session_scoped=True면 멈춘 세션(session) 몫이거나 타깃 미지정인 항목만
@@ -227,7 +230,8 @@ def schedule_drain(session: str | None = None, session_scoped: bool = False) -> 
         return False
     try:
         _pending_task = asyncio.create_task(
-            drain_after_grace(session=session, session_scoped=session_scoped)
+            drain_after_grace(session=session, session_scoped=session_scoped,
+                              targeted_only=targeted_only)
         )
     except RuntimeError:
         # 이벤트 루프 밖에서 불린 경우 — 무시한다(수동 실행 경로가 있다).

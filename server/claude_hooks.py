@@ -44,6 +44,20 @@ EVENTS = {
     "PreToolUse": "pre",
     "PostToolUse": "post",
     "Stop": "stop",
+    # 2026-09-28 — 막 띄운 에이전트는 턴을 한 번 돌기 전까지 상태 엔트리가 없어
+    # "모른다"였고, 그 사이 온 에이전트 메시지·큐 항목이 첫 지시를 사람이 칠 때까지
+    # 묶여 있었다(M1↔M5 실측). 세션이 열리면 idle로 알린다.
+    "SessionStart": "session_start",
+}
+
+# 이벤트별 matcher. Pre/PostToolUse는 도구 이름으로 거른다 — 우리는 모든 도구를 본다.
+# SessionStart는 시작 이유로 거른다: `compact`(대화 압축)는 **작업 도중**에도 오므로
+# 거기서 idle로 알리면 작업 중인 pane에 큐가 끼어든다. 서버도 같은 값을 한 번 더
+# 거른다(agent_status.on_event) — 옛 설정·수동 등록이 matcher 없이 와도 안전하게.
+MATCHERS = {
+    "PreToolUse": "*",
+    "PostToolUse": "*",
+    "SessionStart": "startup|resume|clear",
 }
 
 # 우리 소유로 간주하는 스크립트 이름. 경로가 어디로 옮겨졌든 파일명으로 알아본다.
@@ -176,10 +190,8 @@ def apply_install(settings: dict, repo_root: Path | None = None) -> tuple[dict, 
 
         if not replaced:
             entry: dict = {"hooks": [{"type": "command", "command": want}]}
-            # PreToolUse/PostToolUse는 도구 이름으로 거르는 matcher를 받는다 —
-            # 우리는 모든 도구를 봐야 하므로 "*".
-            if event != "Stop":
-                entry["matcher"] = "*"
+            if event in MATCHERS:
+                entry["matcher"] = MATCHERS[event]
             kept.append(entry)
             changes.append(f"{event}: 등록 ({want})")
 

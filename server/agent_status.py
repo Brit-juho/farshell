@@ -321,6 +321,22 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
             ent["options"] = None
         return ent
 
+    if event == "session_start":
+        # 에이전트가 막 열렸다 — 아직 아무 일도 안 했으니 idle. 압축(compact) 뒤에도
+        # 이 훅이 오는데 그건 작업 도중일 수 있어 무시한다(claude_hooks.MATCHERS와
+        # 같은 규칙을 여기서도 건다 — matcher 없이 등록된 옛 설정 대비).
+        if payload.get("source") == "compact":
+            return _state.get(key)
+        ent = _entry(sid, cwd, host)
+        _apply_agent(ent, agent)
+        if session:
+            ent["tmux_session"] = session
+        ent["tool"] = None
+        _set_status(ent, IDLE)
+        ent["question"] = None
+        ent["options"] = None
+        return ent
+
     if event in ("stop", "session_end"):
         ent = _entry(sid, cwd, host)
         _apply_agent(ent, agent)

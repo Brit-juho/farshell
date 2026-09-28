@@ -206,18 +206,32 @@ def resolve_conv(reply_to: str | None, claimed_hop: int = 0) -> tuple[str, int]:
 
 
 def envelope(msg: dict) -> str:
-    """받는 에이전트의 pane에 실제로 입력되는 글. 한 줄 머리글 + 본문 + 답장 안내.
+    """받는 에이전트의 pane에 실제로 입력되는 글. 한 줄 머리글 + 본문 + 안내.
 
     본문 줄바꿈은 공백으로 편다 — 큐는 Enter를 붙여 한 번에 입력하므로, 여러 줄이면
     에이전트 CLI가 첫 줄에서 제출해 나머지가 다음 입력으로 쪼개진다.
+
+    **요청과 답장의 머리글을 가른다**(2026-09-28, M1↔M5 실측). 예전엔 모든 메시지가
+    "요청"이고 끝에 답장 방법을 안내했더니, 답장을 받은 에이전트가 그걸 다시 요청으로
+    읽고 또 답장했다(hop 2까지 실제로 갔다). 답장에는 "더 답할 필요 없다"를 밝히고
+    답장 방법은 "이어서 물을 게 있을 때만"으로 낮춘다. hop 상한은 그대로 최후 방어선이다.
     """
     frm = msg.get("from") or {}
     who = f"{frm.get('hostLabel') or frm.get('host') or '?'}/{frm.get('session') or '?'}"
+    to = f"{frm.get('host') or 'local'}/{frm.get('session') or ''}"
     body = " ".join(str(msg.get("text", "")).split())
-    return (f"[FarShell 에이전트 메시지 #{msg['id']} · 보낸 쪽 {who} · 사람이 아니라 다른 "
-            f"에이전트가 보낸 요청입니다] {body} "
-            f"(답장: farshell send_message 도구에 reply_to=\"{msg['id']}\", to=\"{frm.get('host') or 'local'}/"
-            f"{frm.get('session') or ''}\")")
+    if msg.get("replyTo"):
+        return (f"[FarShell 에이전트 답장 #{msg['id']} · {who}가 내 메시지 #{msg['replyTo']}에 답함 · "
+                f"사람이 아니라 다른 에이전트의 답장입니다] {body} "
+                f"(이건 답장이라 다시 답할 필요가 없습니다. 이어서 물어볼 게 있을 때만 "
+                f"farshell send_message에 reply_to=\"{msg['id']}\", to=\"{to}\")")
+    if not frm.get("session"):
+        tail = "(보낸 쪽 세션을 알 수 없어 답장할 수 없습니다)"
+    else:
+        tail = (f"(요청을 처리한 뒤 결과를 farshell send_message로 답장하세요: "
+                f"reply_to=\"{msg['id']}\", to=\"{to}\")")
+    return (f"[FarShell 에이전트 요청 #{msg['id']} · 보낸 쪽 {who} · 사람이 아니라 다른 "
+            f"에이전트가 보낸 요청입니다] {body} {tail}")
 
 
 def receive(*, from_host: str, from_label: str, from_session: str, to_session: str,
@@ -287,7 +301,7 @@ def maybe_drain(session: str) -> bool:
     known = agent_status.known_status_for_session(session)
     if known not in (agent_status.IDLE, agent_status.DONE):
         return False
-    return queue_runner.schedule_drain(session=session, session_scoped=True)
+    return queue_runner.schedule_drain(session=session, session_scoped=True, targeted_only=True)
 
 
 def on_queue_result(item: dict, delivered: bool, reason: str = "") -> None:

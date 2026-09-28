@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import time
 
 import tmux_runner
 import vt_env
@@ -147,11 +148,29 @@ def pane_exists(pane_id: str) -> bool:
         return False
 
 
+# 텍스트와 Enter 사이 간격. 0이어도 별도 호출이면 제출되는 것을 실측했지만(아래),
+# 두 호출이 한 입력 묶음으로 합쳐지지 않게 아주 짧게 띄운다.
+_ENTER_GAP_SEC = 0.05
+
+
 def send_to_tmux(pane_id: str, text: str) -> bool:
-    """tmux pane에 텍스트 전송 (끝에 Enter)."""
+    """tmux pane에 텍스트를 넣고 Enter를 누른다.
+
+    2026-09-28(실측) — 예전엔 `send-keys -- text Enter` **한 번의 호출**이었다.
+    Claude Code는 한꺼번에 몰려 들어온 입력을 붙여넣기로 받고 그 안의 Enter를
+    줄바꿈으로 처리해서, 큐·에이전트 메시지가 입력창에 들어가기만 하고 제출되지
+    않았다(M1↔M5 실제 Claude 테스트, 같은 조건 5회 중 0회 제출). 텍스트를 `-l`로
+    넣고 Enter를 **따로 호출**하면 5회 중 5회 제출됐다. `-l`은 텍스트가 키 이름
+    (`Enter`·`Up`)과 같을 때 그 키로 해석되는 것도 막는다.
+    """
     try:
         subprocess.run(
-            TMUX_BASE + ["send-keys", "-t", pane_id, "--", text, "Enter"],
+            TMUX_BASE + ["send-keys", "-t", pane_id, "-l", "--", text],
+            timeout=2, check=True,
+        )
+        time.sleep(_ENTER_GAP_SEC)
+        subprocess.run(
+            TMUX_BASE + ["send-keys", "-t", pane_id, "Enter"],
             timeout=2, check=True,
         )
         return True
@@ -168,7 +187,9 @@ def type_to_tmux(pane_id: str, text: str) -> bool:
     """
     try:
         subprocess.run(
-            TMUX_BASE + ["send-keys", "-t", pane_id, "--", text],
+            # `-l` — 텍스트 전체가 키 이름(`Enter` 등)과 같으면 tmux가 그 키를 눌러
+            # "Enter 없이 타이핑"이라는 약속이 깨진다(send_to_tmux 주석).
+            TMUX_BASE + ["send-keys", "-t", pane_id, "-l", "--", text],
             timeout=2, check=True,
         )
         return True

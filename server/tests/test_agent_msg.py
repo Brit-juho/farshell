@@ -61,6 +61,25 @@ def test_envelope_is_one_line_and_says_it_is_from_an_agent(env):
     assert "첫 줄 둘째 줄 셋째" in out
 
 
+def test_reply_envelope_says_no_answer_needed(env):
+    """M1↔M5 실측: 답장을 받은 에이전트가 그걸 새 요청으로 읽고 또 답했다.
+    답장 머리글은 요청과 달라야 하고 "다시 답할 필요 없다"를 밝혀야 한다."""
+    _, _, am, _ = env
+    msg = {"id": "b" * 12, "replyTo": "a" * 12,
+           "from": {"host": "m5", "hostLabel": "M5", "session": "beta"}, "text": "결과: 통과"}
+    out = am.envelope(msg)
+    assert "에이전트 답장" in out and "요청" not in out.split("]")[0]
+    assert "다시 답할 필요가 없습니다" in out
+    assert "#aaaaaaaaaaaa에 답함" in out
+
+
+def test_request_without_sender_session_says_it_cannot_be_answered(env):
+    _, _, am, _ = env
+    out = am.envelope({"id": "c" * 12, "from": {"host": "m1", "hostLabel": "M1", "session": ""},
+                       "text": "hi"})
+    assert "답장할 수 없습니다" in out and "reply_to" not in out
+
+
 def test_hop_limit_counts_from_own_records_not_only_the_claim(env):
     _, _, am, _ = env
     first = am.receive(from_host="m1", from_label="M1", from_session="dev",
@@ -252,3 +271,73 @@ def test_mcp_send_message_passes_pane_and_reports_failure(monkeypatch):
     assert r["result"]["isError"] is True
     assert "세션이 없습니다" in r["result"]["content"][0]["text"]
     assert seen["body"]["pane"] == "%7" and seen["path"] == "/api/agent/message"
+
+
+# --- 전달 경로(2026-09-28 M1↔M5 실측 수정) -----------------------------------------
+
+
+def test_send_to_tmux_sends_text_literally_then_enter_separately(monkeypatch):
+    """한 번의 send-keys에 텍스트와 Enter를 같이 실으면 Claude Code가 붙여넣기로 받아
+    Enter를 줄바꿈으로 처리했다(5회 중 0회 제출). 텍스트는 `-l`로, Enter는 따로."""
+    import tmux_target
+    calls = []
+    monkeypatch.setattr(tmux_target.subprocess, "run", lambda args, **kw: calls.append(args))
+    monkeypatch.setattr(tmux_target, "_ENTER_GAP_SEC", 0)
+    assert tmux_target.send_to_tmux("%3", "Enter") is True
+    assert len(calls) == 2
+    assert calls[0][-5:] == ["-t", "%3", "-l", "--", "Enter"]   # 글자 그대로 — 키로 해석 안 함
+    assert calls[1][-3:] == ["-t", "%3", "Enter"]
+
+
+def test_type_to_tmux_is_literal(monkeypatch):
+    import tmux_target
+    calls = []
+    monkeypatch.setattr(tmux_target.subprocess, "run", lambda args, **kw: calls.append(args))
+    tmux_target.type_to_tmux("%3", "Enter")
+    assert len(calls) == 1 and "-l" in calls[0] and calls[0][-1] == "Enter"
+
+
+def test_targeted_only_skips_untargeted_items(env):
+    _, _, _, qs = env
+    qs.add("아무 세션에나", None)
+    qs.add("api 전용", {"session": "api"})
+    item = qs.pop_next("api", session_scoped=True, targeted_only=True)
+    assert item["text"] == "api 전용"
+    assert qs.pop_next("api", session_scoped=True, targeted_only=True) is None
+    assert [x["text"] for x in qs.list_items()] == ["아무 세션에나"]
+
+
+def test_session_start_marks_idle_but_compact_does_not(env):
+    import agent_status
+    agent_status._state.clear()
+    ent = agent_status.on_event("session_start", {"session_id": "s1", "source": "startup"}, session="api")
+    assert ent["status"] == agent_status.IDLE
+    assert agent_status.known_status_for_session("api") == agent_status.IDLE
+    agent_status.on_event("pre", {"session_id": "s1", "tool_name": "Bash"}, session="api")
+    agent_status.on_event("session_start", {"session_id": "s1", "source": "compact"}, session="api")
+    assert agent_status.known_status_for_session("api") == agent_status.WORKING
+
+
+def test_session_start_event_drains_only_targeted_items(env, monkeypatch):
+    client, _, _, _ = env
+    import agent_status
+    import pane_resolve
+    import queue_runner
+    agent_status._state.clear()
+    monkeypatch.setattr(pane_resolve, "resolve", lambda pane, tmux, cwd: ("api", "pane"))
+    seen = {}
+    monkeypatch.setattr(queue_runner, "schedule_drain",
+                        lambda **kw: seen.update(kw) or True)
+    r = client.post("/api/agent/event", json={"event": "session_start", "pane": "%1",
+                                              "payload": {"session_id": "s9", "source": "startup"}})
+    assert r.status_code == 200 and r.json()["queue_scheduled"] is True
+    assert seen == {"session": "api", "session_scoped": True, "targeted_only": True}
+
+
+def test_claude_hooks_register_session_start_without_compact():
+    import claude_hooks
+    settings, _ = claude_hooks.apply_install({})
+    groups = settings["hooks"]["SessionStart"]
+    assert groups[0]["matcher"] == "startup|resume|clear"
+    assert groups[0]["hooks"][0]["command"].endswith("agent_hook.sh session_start claude")
+    assert "matcher" not in settings["hooks"]["Stop"][0]
