@@ -655,6 +655,27 @@ test('도구가 하나뿐이어도 필터 칩이 보인다', async () => {
   assert.ok(host.querySelector('.vt-mcp-filter [aria-label="적용 범위로 거르기"]'));
 });
 
+test('검색은 바로 보이고 상세 필터는 선택 상태를 접힌 제목에 표시한다', async () => {
+  const { host } = await build({ scan: twoToolScan() });
+  assert.ok(host.querySelector('.vt-mcp-search'));
+  const more = host.querySelector('.vt-mcp-filtermore');
+  assert.equal(more.open, false);
+  clickFilter(host, '도구로 거르기', 'codex');
+  assert.match(more.querySelector('summary').textContent, /Codex/);
+  assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((d) => d.dataset.name), ['notion']);
+});
+
+test('접힌 서버 줄은 상태와 경고를 보여주고 전송 방식은 상세에서 보여준다', async () => {
+  const scan = scanPayload();
+  scan.groups[0].entries[0].transport = 'stdio';
+  const { host } = await build({ scan });
+  const summary = host.querySelector('.vt-mcp-server > summary');
+  assert.match(summary.textContent, /Claude 유저 켬/);
+  assert.match(summary.textContent, /값이 파일에 있음/);
+  assert.doesNotMatch(summary.textContent, /stdio/);
+  assert.match(host.querySelector('.vt-mcp-body').textContent, /stdio/);
+});
+
 test('켜진 것만 — 꺼진 항목만 있는 서버는 목록에서 빠진다', async () => {
   const scan = twoToolScan();
   scan.groups.push({ name: 'off-only', entries: [{ ...scan.groups[0].entries[1], name: 'off-only' }] });

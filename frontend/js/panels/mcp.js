@@ -74,6 +74,8 @@ let _pluginSeq = 0;
 // ADR-48 — 다시 그려도(refresh) 사용자가 펼쳐 둔 것·걸러 둔 것은 그대로 둔다.
 const _open = new Set();
 let _filter = { q: '', tool: 'all', level: 'all', onlyOn: false, view: 'servers' };
+let _filterExpanded = false;
+let _bulkExpanded = false;
 let _lastData = null;
 
 function el(tag, cls, text) {
@@ -652,8 +654,7 @@ function renderServer(group, facts, tags, data) {
   // 검증 결과는 전송 방식(메타)보다 **앞** — 상태가 메타보다 먼저 읽혀야 한다.
   let sv = summaryVerify(group);
   right.appendChild(sv);
-  const transports = [...new Set(group.entries.map((e) => e.transport).filter((x) => x && x !== 'unknown'))];
-  if (transports.length) right.appendChild(el('span', 'vt-mcp-meta', transports.join('·')));
+  right.hidden = !right.textContent.trim();
   sum.appendChild(right);
   box.appendChild(sum);
 
@@ -661,6 +662,7 @@ function renderServer(group, facts, tags, data) {
     const next = summaryVerify(group);
     sv.replaceWith(next);
     sv = next;
+    right.hidden = !right.textContent.trim();
   };
 
   // ── 펼친 쪽 ──
@@ -807,10 +809,25 @@ function renderFilter(data, rerender) {
   input.addEventListener('input', () => { _filter.q = input.value; rerender(); });
   bar.appendChild(input);
 
-  bar.appendChild(toolChips(data, rerender));
-  bar.appendChild(chipRow('적용 범위로 거르기',
+  const more = el('details', 'vt-mcp-filtermore');
+  more.open = _filterExpanded;
+  more.addEventListener('toggle', () => { _filterExpanded = more.open; });
+  const summary = infoSummary('필터');
+  const updateSummary = () => {
+    const active = [
+      _filter.tool !== 'all' ? TOOL_LABEL[_filter.tool] || _filter.tool : null,
+      _filter.level !== 'all' ? LEVEL_LABEL[_filter.level] || _filter.level : null,
+      _filter.onlyOn ? '켜진 것만' : null,
+    ].filter(Boolean);
+    summary.lastChild.textContent = active.length ? `필터 · ${active.join(' · ')}` : '필터 · 모든 도구와 범위';
+  };
+  updateSummary();
+  more.appendChild(summary);
+  const controls = el('div', 'vt-mcp-filtercontrols');
+  controls.appendChild(toolChips(data, () => { updateSummary(); rerender(); }));
+  controls.appendChild(chipRow('적용 범위로 거르기',
     [['all', '모든 범위'], ...Object.keys(LEVEL_LABEL).map((lv) => [lv, LEVEL_LABEL[lv], LEVEL_HINT[lv]])],
-    _filter.level, (v) => { _filter.level = v; rerender(); }));
+    _filter.level, (v) => { _filter.level = v; updateSummary(); rerender(); }));
 
   const on = el('button', 'vt-chip sm vt-mcp-filterchip vt-mcp-onlyon', '켜진 것만');
   on.type = 'button';
@@ -818,9 +835,12 @@ function renderFilter(data, rerender) {
   on.addEventListener('click', () => {
     _filter.onlyOn = !_filter.onlyOn;
     on.setAttribute('aria-pressed', String(_filter.onlyOn));
+    updateSummary();
     rerender();
   });
-  bar.appendChild(on);
+  controls.appendChild(on);
+  more.appendChild(controls);
+  bar.appendChild(more);
   return bar;
 }
 
@@ -931,9 +951,16 @@ function paint(host, data) {
   }, sync));
   host.appendChild(renderFilter(data, rerender));
 
-  // 그룹 줄은 목록 **위** — "한 번에 켜고 끄기"가 이 화면에서 가장 값싼 동작이다.
+  // 일괄 조작은 목록 앞에 두되, 평소에는 서버 상태 읽기를 가리지 않는다.
   const bar = renderGroupBar(data);
-  if (bar) serverPane.appendChild(bar);
+  if (bar) {
+    const groupsBox = el('details', 'vt-mcp-bulk');
+    groupsBox.open = _bulkExpanded;
+    groupsBox.addEventListener('toggle', () => { _bulkExpanded = groupsBox.open; });
+    groupsBox.appendChild(infoSummary('그룹 일괄 관리'));
+    groupsBox.appendChild(bar);
+    serverPane.appendChild(groupsBox);
+  }
 
   // §2-5 회수 경로 — 우리가 **어디에** 참조를 심었는지.
   if ((data.refs || []).length) {

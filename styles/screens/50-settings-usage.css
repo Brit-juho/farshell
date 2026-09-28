@@ -165,6 +165,10 @@
    회색으로 읽혔다. 위 border-top으로 카드 사이 경계를 긋고(첫 카드는
    구분선이 필요 없어 제외), 이름을 굵고 한 단 키워 "이건 헤더다"를
    글자 크기로도 말하게 한다. */
+#vt-mcp .vt-vw-body { padding:calc(var(--spacing) * 3); }
+#vt-mcp .vt-viewer-card { width:min(760px, 100%); height:min(84vh, 760px); max-height:min(84vh, 760px); }
+#vt-mcp.vt-dock-panel .vt-viewer-card { width:100%; height:100%; max-height:none; }
+#vt-mcp .vt-vw-title { font-size:var(--fs-md); }
 .vt-mcp-group { margin:calc(var(--spacing) * 3) 0; padding-top:calc(var(--spacing) * 3); border-top:1px solid var(--line); }
 .vt-mcp-group:first-child { margin-top:0; padding-top:0; border-top:0; }
 .vt-mcp-servhead .vt-set-label { font:600 var(--fs-md) var(--ui); }
@@ -183,6 +187,9 @@
    그리면 자모 간격이 고르지 않아 읽기 나쁘다. 식별자 한 단어가 문장 속에
    섞여도(예: "v1.2.3") 같은 UI 폰트로 충분히 읽힌다. */
 .vt-mcp-meta { font:400 var(--fs-3xs) var(--ui); color:var(--sub); }
+.vt-mcp-tool { font-size:var(--fs-sm); }
+.vt-mcp-meta { font-size:var(--fs-xs); }
+.vt-mcp-row .vt-chip.sm { min-height:28px; padding-inline:calc(var(--spacing) * 2); font-size:var(--fs-xs); }
 /* 행 아래 딸린 설명(entry.notes)은 그 행의 부연이지 새 문단이 아니다 —
    .vt-mcp-tool 폭(4.5em)+gap만큼 들여써서 "이 행에 속한다"는 걸 위치로도
    보여준다. 폭도 42ch에서 더 좁혀 카드 하나가 세로로 너무 길어지지 않게.
@@ -232,14 +239,21 @@
 /* 2026-09-28 — 거르기 막대: 검색 한 줄 + 칩 줄들. 칩 줄 사이 세로선으로
    "도구 | 적용 범위 | 켜진 것만"이 서로 다른 조건이라는 걸 위치로 보인다. */
 .vt-mcp-filter {
-  display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
   margin:0 0 calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) 0;
   border-bottom:1px solid var(--line);
 }
-.vt-mcp-search { flex:1 1 100%; min-width:140px; height:30px; }
-.vt-mcp-filter > .vt-mcp-chips { margin-top:0; }
-.vt-mcp-filter > .vt-mcp-chips + .vt-mcp-chips,
-.vt-mcp-filter > .vt-mcp-onlyon { padding-left:calc(var(--spacing) * 3); border-left:1px solid var(--line); }
+.vt-mcp-search { display:block; width:100%; height:36px; font-size:var(--fs-sm); }
+.vt-mcp-filtermore { margin-top:calc(var(--spacing) * 2); }
+.vt-mcp-filtermore > summary,
+.vt-mcp-bulk > summary { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); list-style:none; cursor:pointer; color:var(--sub); font:500 var(--fs-xs) var(--ui); }
+.vt-mcp-filtermore > summary::-webkit-details-marker,
+.vt-mcp-bulk > summary::-webkit-details-marker { display:none; }
+.vt-mcp-filtermore > summary:hover,
+.vt-mcp-bulk > summary:hover { color:var(--txt); }
+.vt-mcp-filtercontrols { display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1); }
+.vt-mcp-filtercontrols > .vt-mcp-chips { margin:0; }
+.vt-mcp-bulk { margin:0 0 calc(var(--spacing) * 2); }
+.vt-mcp-bulk .vt-mcp-groupbar { margin:calc(var(--spacing) * 2) 0 0; }
 
 /* 기준 막대 — 이 화면이 어느 프로젝트를 보고 있는지가 가장 먼저 읽혀야 한다. */
 .vt-mcp-ctx { display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); min-width:0; }
@@ -296,8 +310,9 @@
 .vt-mcp-group.vt-mcp-server { margin:0; padding:0; border-top:1px solid var(--line); }
 .vt-mcp-sum {
   list-style:none; cursor:pointer;
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
-  min-height:36px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1);
+  display:grid; grid-template-columns:12px minmax(0,1fr); align-items:center;
+  column-gap:calc(var(--spacing) * 2); row-gap:calc(var(--spacing) * 1);
+  min-height:36px; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1);
   border-radius:var(--radius-sm);
 }
 .vt-mcp-sum::-webkit-details-marker { display:none; }
@@ -306,14 +321,15 @@
 details[open] > .vt-mcp-sum .vt-mcp-chev,
 details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-mcp-sum .vt-mcp-name {
-  flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font:600 var(--fs-sm) var(--ui);
+  min-width:0; overflow-wrap:anywhere;
+  font:600 var(--fs-md) var(--ui);
 }
 /* 켬이 기본이고(실데이터 12개 중 11개) 끔이 예외다 — 전부 초록이면 초록이 아무 말도 안 한다.
    켬은 본문색, 끔은 흐리게. 줄에서 튀는 건 경고(주황)뿐이어야 한다. */
-.vt-mcp-sumtools { flex:0 1 auto; min-width:0; font:400 var(--fs-xs) var(--ui); color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-mcp-sumtools { grid-column:2; min-width:0; font:400 var(--fs-xs) var(--ui); color:var(--txt); overflow-wrap:anywhere; }
 .vt-mcp-sumtools [data-on="0"] { color:var(--sub); }
-.vt-mcp-sumright { margin-left:auto; flex:none; display:inline-flex; align-items:center; gap:calc(var(--spacing) * 2); }
+.vt-mcp-sumright { grid-column:2; display:flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 1) calc(var(--spacing) * 2); }
+.vt-mcp-sumright[hidden] { display:none; }
 .vt-mcp-warnbadge {
   display:inline-flex; align-items:center; gap:4px;
   font:500 var(--fs-3xs) var(--ui); color:var(--color-st-waiting); white-space:nowrap;
@@ -323,15 +339,12 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 /* 펼친 쪽은 이름 글자 선에 맞춰 들인다(chevron 12 + gap) — "이 줄에 속한다"를 위치로 말한다. */
 .vt-mcp-body { padding:0 0 calc(var(--spacing) * 3) calc(12px + var(--spacing) * 3); }
 .vt-mcp-body > .vt-set-help { margin-left:calc(4.5em + var(--spacing) * 1.5); max-width:48ch; }
+.vt-mcp-body > .vt-mcp-row { padding:calc(var(--spacing) * 2) 0; border-top:1px solid var(--line); }
 
 /* 폰 폭 — 접힌 줄을 두 줄로: 이름·결과 / 도구 상태·경고. */
 @media (max-width:560px){
-  .vt-mcp-sum { flex-wrap:wrap; row-gap:2px; }
-  .vt-mcp-sumtools { order:3; flex-basis:100%; padding-left:calc(12px + var(--spacing) * 2); white-space:normal; }
-  .vt-mcp-sumright { order:2; }
   .vt-mcp-body { padding-left:calc(var(--spacing) * 2); }
   .vt-mcp-body > .vt-set-help { margin-left:0; }
-  .vt-mcp-search { flex-basis:100%; }
 }
 @media (prefers-reduced-motion:reduce){ .vt-mcp-chev { transition:none; } }
 
@@ -384,6 +397,10 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 }
 
 @media (max-width: 719px) {
+  #vt-mcp { padding:0; }
+  #vt-mcp .vt-viewer-card { width:100%; height:100%; max-height:none; border:0; border-radius:0; }
+  #vt-mcp .vt-vw-body { padding:calc(var(--spacing) * 3); }
+  #vt-mcp .vt-mcp-toggle, #vt-mcp .vt-mcp-verifybtn { min-height:36px; }
   .vt-settings { padding:0; }
   .vt-settings .vt-viewer-card {
     width:100%; height:100vh; height:100dvh; max-height:none;

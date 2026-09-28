@@ -57,7 +57,7 @@ const FOCUSABLE_SEL = [
 ].join(',');
 
 const MOBILE_ROUTE_IDS = new Set([
-  'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-files', 'vt-dir', 'vt-ports', 'vt-usage', 'vt-file',
+  'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-mcp', 'vt-files', 'vt-dir', 'vt-ports', 'vt-usage', 'vt-file',
 ]);
 
 function _withoutPanelState(state) {
