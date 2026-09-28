@@ -5,7 +5,7 @@
 > **Other agents:** this file is the project overview for any AI coding agent, not just
 > Claude. Cross-tool rules and the hard contracts live in [`AGENTS.md`](./AGENTS.md)
 > ([agents.md](https://agents.md) convention — Codex, opencode, Amp, Cursor, …);
-> `GEMINI.md` and `.aider.conf.yml` point there too.
+> `.aider.conf.yml` points there too.
 
 FarShell puts your Mac terminal on your phone: a tmux-backed web terminal reachable from
 anywhere, with voice input, file transfer, a code viewer and agent-state awareness.

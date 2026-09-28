@@ -434,8 +434,8 @@ def scan_codex(worktree_path: Optional[str] = None, worktree_id: Optional[str] =
 
 # ------------------------------------------------------------------- agy
 
-# agy = Antigravity CLI. 홈으로 `~/.gemini`를 쓰지만 구 Gemini CLI와는 **다른
-# 제품**이고 구조도 다르다 — 2026-09-16 이 맥의 agy 1.1.27을 격리된 HOME에서
+# agy = Antigravity CLI. 설정 폴더 이름은 agy가 정한 것이라(`~/.gemini`) 그대로
+# 따른다. 구글의 이전 CLI와는 **다른 제품**이고 구조도 다르다 — 2026-09-16 이 맥의 agy 1.1.27을 격리된 HOME에서
 # 직접 돌려 확인한 것만 여기 적는다(사용자 실제 설정은 건드리지 않았다):
 #
 #   - 설정은 `~/.gemini/config/mcp_config.json` 하나. `settings.json`이 아니다.

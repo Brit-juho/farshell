@@ -4,7 +4,7 @@
 갈아치우면 patternLines가 그 즉시(서버 재시작 없이) 바뀌어야 한다. 그래서
 DETECT_DIR을 tmp_path로 몽키패치해 실제 파일을 건드리지 않고 검증한다.
 
-codex/gemini/aider의 실제 프롬프트 문구는 이 테스트에서도 추측해 채우지
+codex/aider의 실제 프롬프트 문구는 이 테스트에서도 추측해 채우지
 않는다 — 빈 toml(스텁)과 채워진 toml(claude 흉내) 두 가지만 다룬다.
 """
 
@@ -48,9 +48,9 @@ def test_lists_all_known_clis_even_without_toml(client, monkeypatch, tmp_path):
     assert r.status_code == 200
     rows = {row["cli"]: row for row in r.json()}
 
-    # 알려진 4개 CLI가 전부 나온다 — toml이 없는 것도 "none"으로.
-    assert set(rows) >= {"claude", "codex", "aider", "gemini"}
-    for cli in ("codex", "aider", "gemini"):
+    # 알려진 CLI가 전부 나온다 — toml이 없는 것도 "none"으로.
+    assert set(rows) >= {"claude", "codex", "aider"}
+    for cli in ("codex", "aider"):
         assert rows[cli]["path"] == "none"
         assert rows[cli]["patternLines"] == 0
         assert rows[cli]["states"] == []
@@ -71,7 +71,7 @@ def test_claude_without_hook_is_pty_not_hook(client, monkeypatch, tmp_path):
 
 
 def test_empty_toml_stub_is_none(client, monkeypatch, tmp_path):
-    """codex/aider/gemini 스텁(enter=exit=[])은 파일이 있어도 실효 패턴이 없다."""
+    """codex/aider 스텁(enter=exit=[])은 파일이 있어도 실효 패턴이 없다."""
     detect_dir = tmp_path / "detect"
     detect_dir.mkdir()
     _write_toml(detect_dir / "codex.toml", "codex", enter=[], exit_=[])
@@ -90,19 +90,19 @@ def test_pattern_lines_reflects_toml_edit_without_restart(client, monkeypatch, t
     """핵심 수용 기준 — toml을 고치면(줄 수가 바뀌면) 다음 호출에 바로 반영."""
     detect_dir = tmp_path / "detect"
     detect_dir.mkdir()
-    toml_path = detect_dir / "gemini.toml"
-    _write_toml(toml_path, "gemini", enter=["question?"], exit_=["done"])
+    toml_path = detect_dir / "aider.toml"
+    _write_toml(toml_path, "aider", enter=["question?"], exit_=["done"])
     monkeypatch.setattr(detect, "DETECT_DIR", detect_dir)
 
     r1 = client.get("/api/agents/coverage")
-    before = next(row for row in r1.json() if row["cli"] == "gemini")["patternLines"]
+    before = next(row for row in r1.json() if row["cli"] == "aider")["patternLines"]
 
     # 줄을 5줄 더 늘려 다시 쓴다 — "서버를 고치는 대신 toml만 고친다"는
     # 원칙(agent_prompt_detect.py 모듈 docstring)이 이 엔드포인트에도 지켜지는지.
-    _write_toml(toml_path, "gemini", enter=["question?"], exit_=["done"], extra_lines=5)
+    _write_toml(toml_path, "aider", enter=["question?"], exit_=["done"], extra_lines=5)
 
     r2 = client.get("/api/agents/coverage")
-    after = next(row for row in r2.json() if row["cli"] == "gemini")["patternLines"]
+    after = next(row for row in r2.json() if row["cli"] == "aider")["patternLines"]
 
     assert after == before + 5
 
@@ -129,7 +129,7 @@ def test_trust_thresholds_documented_function(monkeypatch):
 
 # ── N9(2.1.4) — 자기보고를 커버리지에 반영 ────────────────────────────────
 # 2.1.3까지 trust:high는 `path_kind == "hook"`일 때만 나왔고 그 값은 claude일
-# 때만 세워졌다 — codex/aider/gemini는 패턴을 아무리 넣어도 영원히 mid였다.
+# 때만 세워졌다 — codex/aider는 패턴을 아무리 넣어도 영원히 mid였다.
 # 자기보고(`fsh pane report`)는 훅과 같은 1차 신호라 같은 등급을 준다.
 
 def test_self_reported_cli_is_report_path_and_high_trust(client, monkeypatch, tmp_path):

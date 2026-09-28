@@ -2,8 +2,8 @@
 
 Instructions for AI coding agents working in this repository.
 Follows the [agents.md](https://agents.md) convention — read by Codex, opencode, Amp,
-Cursor, Jules and others. Claude Code reads `CLAUDE.md`; Gemini CLI reads `GEMINI.md`.
-**All three point here or to `CLAUDE.md` — there is one source of truth per topic.**
+Cursor, Jules, Antigravity (agy) and others. Claude Code reads `CLAUDE.md`.
+**Both point here or to `CLAUDE.md` — there is one source of truth per topic.**
 
 ## Read first
 

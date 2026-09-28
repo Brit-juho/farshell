@@ -122,7 +122,7 @@ fsh queue clear                 # clear everything
 ```
 
 Automatic feeding is triggered by a `done` transition from the installed Claude Code
-or Codex lifecycle hooks. aider/gemini have no managed hook, so they must feed items
+or Codex lifecycle hooks. aider/agy have no managed hook, so they must feed items
 manually via `fsh queue run` or "Run now" in the web UI. Four gates apply before feeding:
 grace period (the user may have
 started typing directly) → safe_mode (a dangerous command is left as blocked instead

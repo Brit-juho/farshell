@@ -43,7 +43,7 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | `options` | 정규식(문자열 또는 문자열 목록). 캡처 그룹 1=번호, 2=라벨. 매치되면 모바일 플릿 홈에 번호 버튼이 뜬다. 실패해도 `enter`/`exit`는 그대로 산다 |
 
 `enter`/`exit`가 둘 다 비어 있으면(2026-09-11 이후로는 해당 없음 — 아래
-「codex/gemini/aider 채움」 참고) 그 CLI는
+「codex/aider 채움」 참고) 그 CLI는
 `/api/agents/coverage`에서 `path: "none"`, `trust: "low"`로 보고된다 — toml
 파일은 있지만 실효 패턴이 없다는 뜻이다.
 
@@ -59,7 +59,7 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
   텍스트(`_strip_ansi()` 결과)를 대상으로 매칭한다는 걸 가정하면 된다 —
   직접 이스케이프 시퀀스를 정규식에 넣을 필요는 없다.
 
-## codex/gemini/aider 채움 — 근거와 한계 (2026-09-11)
+## codex/aider 채움 — 근거와 한계 (2026-09-11)
 
 2.1.1 계획(`80-multihost-agents.md` §2)은 이 세 CLI의 실제 출력 문구를
 **추측해서 넣지 말라**고 명시한다. 실제 CLI를 손으로 돌려 샘플을 받는 대신
@@ -69,7 +69,6 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | CLI | enter/exit | 근거 |
 |---|---|---|
 | `codex` | 채움 | `openai/codex` Rust TUI 소스(`approval_overlay.rs`, `status_indicator_widget.rs`) |
-| `gemini` | 채움 | `google-gemini/gemini-cli` TSX 소스(`ToolConfirmationMessage.tsx`, `LoadingIndicator.tsx`) |
 | `aider` | enter만 채움, exit 없음 | `Aider-AI/aider` 소스(`io.py`, `base_coder.py`) — 풀스크린 상태줄이 없어 안전한 exit 리터럴을 못 찾았다(추측 금지 원칙 유지) |
 
 **한계**: 소스 코드 확인이지 실제 터미널 렌더 확인이 아니다 — ANSI 코드·줄
@@ -96,7 +95,7 @@ printf 'Do you want to proceed?\n'
 **2. 상태 자체를 직접 주입 — 훅이 없는 CLI 흉내**
 
 `enter`/`exit` 패턴과 무관하게, `working`/`done` 등 상태 자체를 강제로 보고할
-수도 있다(codex/aider/gemini가 실제로 쓰는 경로):
+수도 있다(codex/aider/agy처럼 훅이 없는 CLI가 쓰는 경로):
 
 ```bash
 fsh pane report --state working --agent codex

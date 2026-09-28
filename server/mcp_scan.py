@@ -35,7 +35,7 @@ TOOL_FACTS = {
         "off_is_immediate": None,
     },
     # agy(Antigravity CLI)는 설정이 전역 파일 하나뿐이라 워크트리 개념이 없다.
-    # 핫리로드 여부는 **확인하지 못했다** — 구 Gemini CLI 조사 결과는 다른
+    # 핫리로드 여부는 **확인하지 못했다** — 구글의 이전 CLI 조사 결과는 다른
     # 제품의 것이라 그대로 가져다 쓰지 않는다(2026-09-16 정정).
     "agy": {
         "hot_reload": None,

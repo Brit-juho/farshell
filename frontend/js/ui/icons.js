@@ -71,8 +71,8 @@ const PATHS = {
   'agent-shell': '<polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="18" y2="16"/>',
   // 2026-09-22 — aider 전용 마크. 겹친 원 2개(페어 프로그래밍 은유).
   'agent-aider': '<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>',
-  // 원래 이름은 agent-gemini였다 — 구글이 2026-06-18로 Gemini CLI를 종료하고
-  // Antigravity(agy)로 통합해서(2026-09-23) 키를 바꿨다. 겹친 마름모 2개
+  // 2026-09-23 — 구글의 이전 CLI 종료(2026-06-18)로 Antigravity(agy) 마크가 됐다.
+  // 겹친 마름모 2개
   // ("쌍둥이" 은유, claude 스파크·codex 대괄호와 안 겹치는 형태)는 그대로 —
   // 같은 제품 계보라 도형까지 새로 만들 이유가 없다.
   'agent-agy': '<rect x="3" y="7" width="9" height="9" transform="rotate(45 7.5 11.5)"/><rect x="11" y="7" width="9" height="9" transform="rotate(45 15.5 11.5)"/>',

@@ -10,7 +10,7 @@
 > 내 터미널을 어디서든. 한 줄로 설치.
 
 FarShell은 macOS/Linux 머신을 개인 개발 서버로 씁니다 — 같은 tmux 세션을 음성으로도,
-폰으로도 그대로 씁니다. Claude Code든 Codex든 Aider든 Gemini CLI든, 아니면 그냥 셸이든
+폰으로도 그대로 씁니다. Claude Code든 Codex든 Aider든 Antigravity(agy)든, 아니면 그냥 셸이든
 음성 입력·모바일 접속·tmux 공유는 똑같이 동작합니다. (Windows는 WSL2에서만)
 
 - **폰에서 터미널** — QR 스캔하면 바로 tmux

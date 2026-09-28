@@ -69,7 +69,7 @@ async def list_agents():
 
 
 # N9/N45(80-multihost-agents.md §2) — CLI마다 waiting을 실제로 얼마나 정확히
-# 잡을 수 있는지 사용자가 스스로 판단할 근거. 코드가 codex/gemini/aider의
+# 잡을 수 있는지 사용자가 스스로 판단할 근거. 코드가 codex/aider의
 # 실제 프롬프트 문구를 추측해서 채우는 건 금지(문서가 명시) — 이 엔드포인트는
 # "지금 detect/*.toml에 뭐가 있는지"만 정직하게 보고한다.
 #
@@ -77,7 +77,7 @@ async def list_agents():
 # Starlette는 등록 순서대로 매치를 시도하므로, {tmux_name}이 먼저면
 # "/api/agents/coverage" 요청의 tmux_name이 문자열 "coverage"로 해석되어
 # 이 라우트에 절대 도달하지 못한다.
-KNOWN_CLIS = ("claude", "codex", "aider", "gemini")  # bin/fsh `agent <name>`과 동일 목록
+KNOWN_CLIS = ("claude", "codex", "aider")  # detect/*.toml이 있는 CLI
 
 
 def _coverage_trust(path_kind: str, states: list[str]) -> str:
@@ -276,7 +276,7 @@ async def agent_event(request: Request):
 async def agent_report(request: Request):
     """A2 — pane 자기보고 (`fsh pane report`).
 
-    Claude Code는 훅이 있지만 codex/aider/gemini는 없다. 그 pane들이 스스로
+    Claude Code는 훅이 있지만 codex/aider/agy는 없다. 그 pane들이 스스로
     "나 지금 working이야"를 알릴 수 있는 유일한 경로다. pane id는 호출자가
     `$TMUX_PANE`으로 실어 보내고, 서버는 훅과 **같은 3단 해석**을 태운다.
     """

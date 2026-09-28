@@ -25,11 +25,9 @@ KNOWN_AGENTS = {
     "claude": {"icon": "🟣", "label": "Claude", "color": "#A855F7"},
     "codex":  {"icon": "🟢", "label": "Codex",  "color": "#22C55E"},
     "aider":  {"icon": "🔵", "label": "Aider",  "color": "#3B82F6"},
-    # 2026-09-23(사용자 승인) — 구글이 2026-06-18로 Gemini CLI를
-    # 무료/Pro/Ultra 사용자 대상으로 종료하고 Antigravity CLI(바이너리 `agy`)로
-    # 통합했다. `gemini` 바이너리 감지는 제거(사용자 지시) — 남은 건 엔터프라이즈/
-    # 유료 API 키 사용자뿐이라 비중이 없다고 판단. 같은 제품 계보라 프런트
-    # 마크(agent-gemini, 겹친 마름모)는 그대로 재사용하고 라벨만 바꾼다.
+    # 2026-09-23(사용자 승인) — 구글이 2026-06-18로 이전 CLI를 종료하고
+    # Antigravity CLI(바이너리 `agy`)로 통합했다. 이전 바이너리 감지는 제거했다
+    # (사용자 지시). 프런트 마크(겹친 마름모)는 같은 제품 계보라 그대로 쓴다.
     "agy":    {"icon": "🟡", "label": "Antigravity", "color": "#EAB308"},
     # qwen-code(Alibaba, npm @qwen-code/qwen-code, 바이너리 `qwen`) — codex/aider와
     # 같은 급의 독립 코딩 에이전트 CLI라 로컬 LLM 칩이 아니라 여기(전용 마크)로

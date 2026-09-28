@@ -442,7 +442,7 @@ def report(sid: str, status: str, session: Optional[str] = None,
            host: str = LOCAL_HOST) -> dict:
     """pane 자기보고(`fsh pane report`)로 상태를 직접 세팅한다.
 
-    훅이 없는 에이전트(codex/aider/gemini)를 위한 경로다 — 그쪽은 Claude Code
+    훅이 없는 에이전트(codex/aider/agy)를 위한 경로다 — 그쪽은 Claude Code
     훅 같은 게 없으니 사용자가 래퍼/스크립트에서 직접 알려주는 수밖에 없다.
     알 수 없는 status 문자열은 거부한다(오타가 조용히 새 상태를 만들면 안 된다).
     """

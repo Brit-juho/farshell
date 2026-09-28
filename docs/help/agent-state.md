@@ -30,7 +30,7 @@ Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/session 6종�
 
 ## 그 외 에이전트 — 직접 보고
 
-aider·gemini처럼 관리형 훅이 없는 에이전트는 그 pane에서 직접 알린다. Codex도
+aider·agy처럼 관리형 훅이 없는 에이전트는 그 pane에서 직접 알린다. Codex도
 훅을 설치하지 않은 환경에서는 같은 명령을 임시 폴백으로 쓸 수 있다.
 
 ```bash

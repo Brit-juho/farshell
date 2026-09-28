@@ -111,7 +111,7 @@ fsh queue unblock <id>          # safe_mode에 막힌 항목 재개
 fsh queue clear                 # 전체 비우기
 ```
 
-자동 투입은 **Claude Code의 Stop 훅에서만** 걸립니다. codex/aider/gemini는 훅이
+자동 투입은 **Claude Code의 Stop 훅에서만** 걸립니다. codex/aider/agy는 훅이
 없어 `fsh queue run` 또는 웹 UI의 "지금 실행"으로 수동 투입해야 합니다. 투입 전
 관문 4개: 유예 시간(사용자가 직접 타이핑을 시작했을 수 있음) → safe_mode(위험
 명령이면 투입하지 않고 blocked로 남김) → 타깃 pane 생존 확인 → 한 번에 한 건.

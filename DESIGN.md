@@ -545,7 +545,7 @@ Registered in `frontend/js/ui/icons.js`: a 14px square, stroke 1.75,
 | `agent-claude` | Spark (4-point star) | claude |
 | `agent-codex` | Bracket `[ ]` | codex |
 | `agent-aider` | Two overlapping circles (pair programming) | aider (2026-09-22) |
-| `agent-agy` | Two overlapping diamonds ("twins") | Antigravity CLI, `agy` (2026-09-23 — renamed from `agent-gemini`/gemini after Google retired the standalone Gemini CLI on 2026-06-18 and folded it into Antigravity; same shape, same product lineage) |
+| `agent-agy` | Two overlapping diamonds ("twins") | Antigravity CLI, `agy` (2026-09-23 — Google folded its previous CLI into Antigravity on 2026-06-18; the mark kept its shape, same product lineage) |
 | `agent-qwen` | Two triangles apex-to-apex (bowtie) | qwen-code CLI, `qwen` (2026-09-23 — independent coding-agent CLI, not lumped into `agent-local`) |
 | `agent-local` | Chip (square + 4 pins) | local LLM runners detected via raw foreground command: `ollama`, `lms` (LM Studio), `llama-cli` (llama.cpp) — all three share this one mark, labels differ (2026-09-23) |
 | `agent-ssh` | Globe (circle + meridians) | remote SSH sessions (2.1.2, N39) |

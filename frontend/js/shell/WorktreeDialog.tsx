@@ -24,7 +24,7 @@ interface Props {
 // (새 API 금지, 위 주석과 같은 이유) 여기 작은 고정 목록으로 중복 정의한다 —
 // bin/fsh 도움말에도 이미 같은 이름들이 공개돼 있어(CLAUDE.md 기능표) 숨은
 // 구현 세부사항은 아니다. server/agents.py가 늘어나면 이 목록도 같이 늘려야 한다.
-// 2026-09-23 — gemini는 Google이 종료하고 Antigravity(agy)로 통합해서 뺐다
+// 2026-09-23 — 구글의 이전 CLI 종료로 Antigravity(agy)로 대체했다
 // (server/agents.py와 같은 결정). qwen-code 추가.
 const AGENT_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: '없음' },

@@ -11,7 +11,7 @@
 
 FarShell turns a macOS/Linux machine into a personal dev server: the same tmux
 session, reachable by voice or from your phone. Run Claude Code, Codex, Aider,
-Gemini CLI or just a shell — voice input, mobile access and tmux sharing work the
+Antigravity (agy) or just a shell — voice input, mobile access and tmux sharing work the
 same either way. (Windows only through WSL2.)
 
 - **Terminal on your phone** — scan a QR code, you're in tmux

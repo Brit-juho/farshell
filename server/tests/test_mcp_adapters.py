@@ -196,7 +196,7 @@ def test_broken_toml_is_reported(home):
 
 # --------------------------------------------------------------------- agy
 
-# agy(Antigravity CLI)는 구 Gemini CLI와 다른 제품이다 — 2026-09-16 격리된
+# agy(Antigravity CLI)는 구글의 이전 CLI와 다른 제품이다 — 2026-09-16 격리된
 # HOME에서 agy 1.1.27을 직접 돌려 확인한 구조만 여기에 고정한다.
 
 def _write_agy(home, data):

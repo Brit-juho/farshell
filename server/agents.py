@@ -29,9 +29,9 @@ AGENTS: dict[str, AgentSpec] = {
     "claude": AgentSpec("claude", "claude", "claude", "Claude"),
     "codex": AgentSpec("codex", "codex", "codex", "Codex"),
     "aider": AgentSpec("aider", "aider", "aider", "Aider"),
-    # 2026-09-23 — Google이 2026-06-18로 Gemini CLI를 종료하고 Antigravity
-    # CLI(agy)로 통합해서 gemini 항목을 agy로 바꿨다(사용자 지시, agent_detector.py
-    # 쪽과 같은 결정). qwen-code도 codex/aider급 독립 에이전트로 추가.
+    # 2026-09-23 — 구글의 이전 CLI가 2026-06-18로 종료되고 Antigravity CLI(agy)로
+    # 통합돼 그 자리를 agy로 바꿨다(사용자 지시, agent_detector.py 쪽과 같은
+    # 결정). qwen-code도 codex/aider급 독립 에이전트로 추가.
     "agy": AgentSpec("agy", "agy", "agy", "Antigravity"),
     "qwen": AgentSpec("qwen", "qwen", "qwen", "Qwen"),
 }

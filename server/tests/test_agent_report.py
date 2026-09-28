@@ -1,6 +1,6 @@
 """A2 — POST /api/agent/report (`fsh pane report`)와 세션 단위 상태 조회.
 
-훅이 없는 에이전트(codex/aider/gemini)가 자기 상태를 알리는 유일한 경로라,
+훅이 없는 에이전트(codex/aider/agy)가 자기 상태를 알리는 유일한 경로라,
 훅 경로와 **같은 3단 해석**을 타는지가 핵심이다.
 """
 

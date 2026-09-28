@@ -212,7 +212,7 @@ class PromptDetector:
         self._waiting: dict[str, bool] = {}
         self._changed_at: dict[str, float] = {}
         # 승인 질문을 실제로 낸 CLI의 패턴 spec. 서로 다른 CLI가 같은 문구를
-        # 쓰므로(Codex footer의 `esc to cancel` == Gemini exit), 활성 spec의
+        # 쓸 수 있으므로(예: 한 CLI의 상태줄 문구가 다른 CLI의 exit와 같음), 활성 spec의
         # exit만 적용해야 한다.
         self._active_specs: dict[str, dict] = {}
         # N38 — 마지막으로 감지된 질문/선택지. waiting=False가 되면 지운다

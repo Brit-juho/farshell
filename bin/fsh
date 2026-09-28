@@ -1933,7 +1933,7 @@ cmd_usage() {
   esac
 }
 
-# A2: pane 자기보고. 관리형 훅이 없는 에이전트(aider/gemini 등)의 폴백 —
+# A2: pane 자기보고. 관리형 훅이 없는 에이전트(aider/agy 등)의 폴백 —
 # 그 pane들이 "나 지금 working이야"를 서버에 알릴 수 있는 유일한 경로다.
 # tmux 안에서 실행해야 의미가 있다($TMUX_PANE/$TMUX를 그대로 실어 보낸다).
 cmd_pane() {
@@ -3120,8 +3120,8 @@ cmd_agent() {
     claude) exec_cmd="claude --resume --disallowedTools \"$disallowed\""; bin_name="claude"; icon="🟣"; label="Claude" ;;
     codex)  exec_cmd="codex"; bin_name="codex"; icon="🟢"; label="Codex" ;;
     aider)  exec_cmd="aider"; bin_name="aider"; icon="🔵"; label="Aider" ;;
-    # 2026-09-23 — 구글이 2026-06-18로 Gemini CLI를 종료하고 Antigravity(agy)로
-    # 통합해서 gemini 항목을 agy로 바꿨다(server/agents.py와 같은 결정).
+    # 2026-09-23 — 구글의 이전 CLI 종료(2026-06-18)로 agy(Antigravity)가 그 자리를
+    # 대신한다(server/agents.py와 같은 결정).
     agy)    exec_cmd="agy"; bin_name="agy"; icon="🟡"; label="Antigravity" ;;
     qwen)   exec_cmd="qwen"; bin_name="qwen"; icon="🟣"; label="Qwen" ;;
     *)

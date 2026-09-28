@@ -323,9 +323,9 @@ def test_get_prompt_clears_after_user_input(det):
     assert d.get_prompt("s1") == (None, None)
 
 
-# ── N9/N45 — codex/gemini/aider 실제 프롬프트 문구 회귀 테스트 ──────────────
-# 문구 출처는 server/detect/{codex,gemini,aider}.toml 상단 주석 참고
-# (openai/codex, google-gemini/gemini-cli, Aider-AI/aider 공식 저장소 소스 확인).
+# ── N9/N45 — codex/aider 실제 프롬프트 문구 회귀 테스트 ──────────────
+# 문구 출처는 server/detect/{codex,aider}.toml 상단 주석 참고
+# (openai/codex, Aider-AI/aider 공식 저장소 소스 확인).
 
 def test_codex_patterns_load_from_toml():
     pats = D.load_patterns(force=True)
@@ -375,8 +375,9 @@ def test_codex_options_use_real_shortcut_keys(det):
     ]
 
 
-def test_codex_footer_does_not_trigger_gemini_exit(det):
-    """0.155.0 실측: Codex footer도 Gemini exit와 같은 `esc to cancel`을 쓴다."""
+def test_codex_footer_esc_to_cancel_keeps_waiting(det):
+    """0.155.0 실측: Codex 승인 footer에 `esc to cancel`이 들어 있다 — 다른 CLI의
+    exit 문구와 겹쳐도 활성 spec(codex)의 exit만 적용돼 waiting이 유지돼야 한다."""
     d, events = det
     d.feed("s1", (
         "Would you like to run the following command?\r\n"
@@ -388,27 +389,6 @@ def test_codex_footer_does_not_trigger_gemini_exit(det):
     assert d.is_waiting("s1") is True
     assert d.get_prompt("s1")[1][0] == {"key": "y", "label": "Yes, proceed"}
     assert events == [("s1", True)]
-
-
-def test_gemini_patterns_load_from_toml():
-    pats = D.load_patterns(force=True)
-    assert "gemini" in pats
-    assert any(b"Allow execution of" == p for p in pats["gemini"]["enter"])
-    assert any(b"esc to cancel" == p for p in pats["gemini"]["exit"])
-
-
-def test_gemini_shell_confirmation_sets_waiting(det):
-    d, events = det
-    d.feed("s1", b"Allow execution of [Shell]?\r\n\xe2\x9d\xaf 1. Allow once\r\n")
-    assert d.is_waiting("s1") is True
-    assert events == [("s1", True)]
-
-
-def test_gemini_esc_to_cancel_clears_waiting(det):
-    d, _ = det
-    d.feed("s1", b"Apply this change?")
-    d.feed("s1", b"\r\nGenerating\xe2\x80\xa6 (esc to cancel, 3s)")
-    assert d.is_waiting("s1") is False
 
 
 def test_aider_patterns_load_from_toml():

@@ -3,7 +3,7 @@
 N9(2.1.4) — 감지 커버리지 표(`/api/agents/coverage`)가 claude 외 CLI에는
 영원히 `trust: mid`를 주고 있었다. 이유가 패턴 깊이가 아니라 등급 함수에
 있었다: `path_kind == "hook"`일 때만 high를 주는데 그 값은 claude일 때만
-세워진다. codex/aider/gemini는 toml에 패턴을 100줄 넣어도 mid였다.
+세워진다. codex/aider는 toml에 패턴을 100줄 넣어도 mid였다.
 
 자기보고는 훅과 같은 **1차 정보**다 — 에이전트 자신이 "지금 승인 대기다"라고
 말하는 것이라 출력 grep보다 정확하다. 그래서 report도 high로 인정한다.
