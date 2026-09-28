@@ -98,6 +98,15 @@ async def import_skill(request: Request):
     body = await request.json()
     result = await asyncio.to_thread(mcp_skills.import_skill, str(body.get("id") or ""),
                                      str(body.get("tool") or ""), str(body.get("scope") or ""),
+                                     body.get("worktree") or None, str(body.get("token") or ""))
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@router.post("/api/mcp/skills/preview")
+async def preview_skill_import(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_skills.preview_import, str(body.get("id") or ""),
+                                     str(body.get("tool") or ""), str(body.get("scope") or ""),
                                      body.get("worktree") or None)
     return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
 

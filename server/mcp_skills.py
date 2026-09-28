@@ -85,6 +85,61 @@ def _find(skill_id: str, worktree_id: str | None) -> dict | None:
     return next((x for x in scan(worktree_id)["skills"] if x["id"] == skill_id), None)
 
 
+def _import_target(source: dict, tool: str, scope: str, worktree_id: str | None) -> tuple[Path | None, str | None]:
+    if tool not in ("claude", "codex") or scope not in ("global", "local"):
+        return None, "이 도구와 범위에는 스킬을 가져올 수 없습니다"
+    wt = mcp_scan.find_worktree(worktree_id)
+    if scope == "local" and not wt:
+        return None, "프로젝트 기준이 없습니다"
+    roots = _roots(tool, wt)
+    destination_root = (next((root for root, level, _ in roots if level == "user"), None)
+                        if scope == "global" else
+                        next((root for root, level, _ in roots if level == "project"), None))
+    if destination_root is None:
+        return None, "대상 위치를 찾지 못했습니다"
+    return destination_root / source["name"], None
+
+
+def _source_digest(src: Path) -> tuple[str | None, int, str | None]:
+    digest = hashlib.sha256()
+    count = 0
+    try:
+        paths = sorted(src.rglob("*"), key=lambda p: str(p.relative_to(src)))
+        if len(paths) > 500:
+            return None, 0, "스킬 파일이 너무 많습니다"
+        for path in paths:
+            if path.is_symlink() or not (path.is_dir() or path.is_file()):
+                return None, 0, "심볼릭 링크나 특수 파일이 있는 스킬은 가져올 수 없습니다"
+            relative = str(path.relative_to(src)).encode()
+            digest.update(len(relative).to_bytes(4, "big") + relative)
+            if path.is_file():
+                count += 1
+                if path.stat().st_size > 20 * 1024 * 1024:
+                    return None, 0, "스킬 파일이 너무 큽니다"
+                digest.update(path.read_bytes())
+        return digest.hexdigest(), count, None
+    except OSError as exc:
+        return None, 0, exc.__class__.__name__
+
+
+def preview_import(skill_id: str, tool: str, scope: str, worktree_id: str | None) -> dict:
+    source = _find(skill_id, worktree_id)
+    if not source:
+        return {"status": "failed", "reason": "원본 스킬을 찾지 못했습니다"}
+    destination, err = _import_target(source, tool, scope, worktree_id)
+    if err:
+        return {"status": "failed", "reason": err}
+    if destination.exists() or destination.is_symlink():
+        return {"status": "failed", "reason": "같은 이름이 대상에 이미 있습니다", "conflict": True}
+    digest, count, err = _source_digest(Path(source["source"]).parent)
+    if err:
+        return {"status": "failed", "reason": err}
+    token = hashlib.sha256(json.dumps([skill_id, tool, scope, worktree_id, str(destination), digest]).encode()).hexdigest()
+    return {"status": "ok", "name": source["name"], "tool": tool, "scope": scope,
+            "target": str(destination), "file_count": count, "token": token,
+            "apply": "다음 세션부터 반영됩니다"}
+
+
 def _set_codex_config(text: str, path: str, enabled: bool) -> str:
     lines = text.splitlines(keepends=True)
     starts = [i for i, line in enumerate(lines) if line.strip() == "[[skills.config]]"]
@@ -147,22 +202,18 @@ def set_enabled(skill_id: str, enabled: bool, worktree_id: str | None) -> dict:
         return {"status": "failed", "reason": exc.__class__.__name__}
 
 
-def import_skill(skill_id: str, tool: str, scope: str, worktree_id: str | None) -> dict:
+def import_skill(skill_id: str, tool: str, scope: str, worktree_id: str | None,
+                 token: str) -> dict:
+    fresh = preview_import(skill_id, tool, scope, worktree_id)
+    if fresh["status"] != "ok":
+        return fresh
+    if not token or token != fresh["token"]:
+        return {"status": "failed", "reason": "미리보기 뒤 스킬이 바뀌었습니다. 다시 확인하세요"}
     source = _find(skill_id, worktree_id)
     if not source:
         return {"status": "failed", "reason": "원본 스킬을 찾지 못했습니다"}
-    if tool not in ("claude", "codex") or scope not in ("global", "local"):
-        return {"status": "failed", "reason": "이 도구와 범위에는 스킬을 가져올 수 없습니다"}
-    wt = mcp_scan.find_worktree(worktree_id)
-    if scope == "local" and not wt:
-        return {"status": "failed", "reason": "프로젝트 기준이 없습니다"}
-    roots = _roots(tool, wt)
-    destination_root = (next((root for root, level, _ in roots if level == "user"), None)
-                        if scope == "global" else
-                        next((root for root, level, _ in roots if level == "project"), None))
-    if destination_root is None:
-        return {"status": "failed", "reason": "대상 위치를 찾지 못했습니다"}
-    destination = destination_root / source["name"]
+    destination = Path(fresh["target"])
+    destination_root = destination.parent
     if destination.exists() or destination.is_symlink():
         return {"status": "failed", "reason": "같은 이름이 대상에 이미 있습니다", "conflict": True}
     src = Path(source["source"]).parent
@@ -184,6 +235,10 @@ def import_skill(skill_id: str, tool: str, scope: str, worktree_id: str | None) 
                 raise mcp_write.WriteRefused("심볼릭 링크가 있는 스킬은 가져올 수 없습니다")
             if not (temp / "SKILL.md").is_file():
                 raise mcp_write.WriteRefused("복사한 스킬을 확인하지 못했습니다")
+            copied_digest, _, digest_err = _source_digest(temp)
+            source_digest, _, source_err = _source_digest(src)
+            if digest_err or source_err or copied_digest != source_digest:
+                raise mcp_write.WriteRefused("복사 중 원본 스킬이 바뀌었습니다. 다시 확인하세요")
             with mcp_write._locked(destination):
                 if destination.exists() or destination.is_symlink():
                     raise mcp_write.WriteRefused("같은 이름이 대상에 이미 있습니다")

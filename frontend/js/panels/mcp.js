@@ -1030,12 +1030,15 @@ function renderSkills(data, tool, libraryMode) {
           btn.type = 'button';
           btn.addEventListener('click', async () => {
             const dest = scope === 'global' ? '전역' : data.worktree.label || '이 프로젝트';
-            if (!(await confirmDialog(`${skill.name} 스킬을 ${TOOL_LABEL[tool]} · ${dest}에 복사합니다. 기존 파일은 덮어쓰지 않습니다.`,
-              { title: '스킬 가져오기', okLabel: '추가' }))) return;
             btn.disabled = true;
             try {
+              const payload = { id: skill.id, tool, scope, worktree: _worktreeId };
+              const preview = await postJson('/api/mcp/skills/preview', payload);
+              if (!(await confirmDialog(`${skill.name} → ${TOOL_LABEL[tool]} · ${dest}\n`
+                + `변경 위치: ${preview.target}\n복사할 파일: ${preview.file_count}개\n${preview.apply}`,
+              { title: '스킬 추가 미리보기', okLabel: '추가' }))) return;
               const r = await postElevated('/api/mcp/skills/import',
-                { id: skill.id, tool, scope, worktree: _worktreeId });
+                { ...payload, token: preview.token });
               if (r) { showToast('스킬을 추가했습니다 — 다음 세션부터 반영됩니다'); refresh(); }
             } catch (e) { showToast(e.message || '추가하지 못했습니다', 'error'); }
             finally { btn.disabled = false; }

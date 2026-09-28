@@ -560,14 +560,31 @@ def test_skill_import_to_project_never_overwrites_existing(client):
     skill = next(x for x in client.get("/api/mcp/skills?worktree=wt1").json()["skills"]
                  if x["name"] == "review")
     body = {"id": skill["id"], "tool": "claude", "scope": "local", "worktree": "wt1"}
-    first = client.post("/api/mcp/skills/import", json=body)
+    preview = client.post("/api/mcp/skills/preview", json=body)
+    assert preview.status_code == 200 and preview.json()["file_count"] == 1
+    first = client.post("/api/mcp/skills/import", json={**body, "token": preview.json()["token"]})
     assert first.status_code == 200
     target = client.vt_repo / ".claude" / "skills" / "review" / "SKILL.md"
     assert target.read_text() == "# original"
     target.write_text("# changed")
-    second = client.post("/api/mcp/skills/import", json=body)
+    second = client.post("/api/mcp/skills/import", json={**body, "token": preview.json()["token"]})
     assert second.status_code == 409
     assert target.read_text() == "# changed"
+
+
+def test_skill_import_rejects_changed_source_after_preview(client):
+    _elevate(client)
+    source = client.vt_home / ".agents" / "skills" / "review"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("# original")
+    skill = next(x for x in client.get("/api/mcp/skills?worktree=wt1").json()["skills"]
+                 if x["name"] == "review")
+    body = {"id": skill["id"], "tool": "claude", "scope": "local", "worktree": "wt1"}
+    token = client.post("/api/mcp/skills/preview", json=body).json()["token"]
+    (source / "SKILL.md").write_text("# changed")
+    applied = client.post("/api/mcp/skills/import", json={**body, "token": token})
+    assert applied.status_code == 409
+    assert not (client.vt_repo / ".claude" / "skills" / "review").exists()
 
 
 def test_mcp_library_save_preview_apply_and_conflict(client):
