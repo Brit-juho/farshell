@@ -272,6 +272,37 @@
 .vt-mcp-tab:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
 .vt-mcp-tabcount { font:500 var(--fs-3xs) var(--ui); color:var(--sub); font-variant-numeric:tabular-nums; }
 .vt-mcp-pane[hidden] { display:none; }
+.vt-mcp-toolnav {
+  display:grid; grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:calc(var(--spacing) * 1); margin:calc(var(--spacing) * 3) 0;
+}
+.vt-mcp-toolnavitem {
+  min-width:0; min-height:44px; display:flex; align-items:center; justify-content:space-between;
+  gap:calc(var(--spacing) * 1); padding:calc(var(--spacing) * 2);
+  border:1px solid var(--color-line); border-radius:var(--radius-sm);
+  background:var(--color-bg-2); color:var(--sub); cursor:pointer;
+  font:600 var(--fs-xs) var(--ui); text-align:left;
+}
+.vt-mcp-toolnavitem:hover { background:var(--color-bg-3); color:var(--txt); }
+.vt-mcp-toolnavitem[aria-current="page"] {
+  border-color:var(--color-line-strong); background:var(--color-bg-3); color:var(--txt);
+  box-shadow:inset 0 -2px var(--color-acc);
+}
+.vt-mcp-toolnavitem:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
+.vt-mcp-toolcount { color:var(--sub); font-variant-numeric:tabular-nums; }
+.vt-mcp-overview { padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); }
+.vt-mcp-overviewtitle { font:650 var(--fs-lg) var(--ui); color:var(--txt); }
+.vt-mcp-overviewtext { margin-top:calc(var(--spacing) * 1); font:400 var(--fs-sm) var(--ui); color:var(--sub); }
+.vt-mcp-overviewhint { margin-top:calc(var(--spacing) * 2); font:400 var(--fs-xs) var(--ui); color:var(--sub); overflow-wrap:anywhere; }
+.vt-mcp-sectionhead {
+  display:flex; align-items:baseline; justify-content:space-between; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 4) calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+  color:var(--txt); font:600 var(--fs-sm) var(--ui);
+}
+@media (max-width:560px) {
+  .vt-mcp-toolnav { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .vt-mcp-toolnavitem:first-child { grid-column:1/-1; }
+}
 
 /* 적용 범위 배지 — 글자가 주인이고 색은 거든다. 프로젝트(팀 공유)만 경고색. */
 .vt-mcp-level {

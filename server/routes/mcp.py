@@ -87,6 +87,7 @@ async def apply_group(request: Request):
     tag = mcp_catalog.normalize_tag(body.get("tag"))
     enabled = body.get("enabled")
     worktree_id = body.get("worktree") or None
+    tool = body.get("tool") or None
 
     if tag is None:
         return JSONResponse({"error": "invalid_tag"}, status_code=400)
@@ -96,8 +97,11 @@ async def apply_group(request: Request):
             status_code=400,
         )
 
+    if tool is not None and tool not in mcp_write.TOOLS:
+        return JSONResponse({"error": "invalid_tool"}, status_code=400)
+
     result = await asyncio.to_thread(
-        mcp_write.apply_group, tag, enabled, worktree_id=worktree_id,
+        mcp_write.apply_group, tag, enabled, worktree_id=worktree_id, tool=tool,
     )
     if result["status"] == "failed":
         return JSONResponse({"error": "group_failed", **result}, status_code=409)
