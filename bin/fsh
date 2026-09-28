@@ -2544,8 +2544,14 @@ cmd_stop() {
     leftover="$(pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null | tr '\n' ' ')"
     [ -n "${leftover// /}" ] && kill $leftover 2>/dev/null || true
   fi
+  # **듣는(LISTEN) 소켓만** 대상이다. `lsof -i :PORT`는 그 포트에 *연결한* 프로세스도
+  # 전부 내놓는데, cloudflared는 트래픽을 넘기려고 localhost:$VT_PORT에 늘 연결해
+  # 있다 — 그래서 누가 접속 중일 때 `fsh restart`(--keep-tunnel)를 하면 터널까지
+  # 여기서 죽어 **주소가 바뀌었다**(2026-09-28, M1·M5 둘 다 실측. 가짜 cloudflared가
+  # 포트를 물고 있게 해서 재현). 브라우저·peer 연결 같은 다른 클라이언트도 같이
+  # 죽이던 것이 함께 사라진다.
   if command -v lsof >/dev/null 2>&1; then
-    lsof -i :$VT_PORT -t 2>/dev/null | xargs kill 2>/dev/null || true
+    lsof -nP -iTCP:"$VT_PORT" -sTCP:LISTEN -t 2>/dev/null | xargs kill 2>/dev/null || true
   elif command -v fuser >/dev/null 2>&1; then
     fuser -k $VT_PORT/tcp 2>/dev/null || true
   fi
