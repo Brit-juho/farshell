@@ -301,6 +301,16 @@
 .vt-mcp-skillrow { min-height:44px; display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) 0; border-top:1px solid var(--color-line); }
 .vt-mcp-skillinfo { flex:1 1 200px; min-width:0; display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); overflow-wrap:anywhere; }
 .vt-mcp-skillinfo strong { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-mcp-librarytarget, .vt-mcp-desttool { width:auto; min-width:110px; max-width:100%; min-height:36px; font-size:var(--fs-xs); }
+.vt-mcp-skillcopy { flex:1 1 100%; display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 2); }
+.vt-mcp-skillcopy > summary { cursor:pointer; color:var(--sub); font:500 var(--fs-xs) var(--ui); }
+.vt-mcp-skillcopy:not([open]) > :not(summary) { display:none; }
+.vt-mcp-plugin-children { flex:1 1 100%; margin-left:calc(var(--spacing) * 3); }
+.vt-mcp-plugin-children > summary { cursor:pointer; color:var(--sub); font:500 var(--fs-xs) var(--ui); }
+.vt-mcp-sessionplugin { padding:calc(var(--spacing) * 2) 0; border-top:1px solid var(--color-line); }
+.vt-mcp-sessionplugin > summary { cursor:pointer; color:var(--txt); font:500 var(--fs-sm) var(--ui); }
+.vt-mcp-plugin-skills { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1); margin:calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2) calc(var(--spacing) * 3); }
+.vt-mcp-plugin-skill { padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1.5); border:1px solid var(--color-line); border-radius:var(--radius-sm); color:var(--sub); font:500 var(--fs-xs) var(--ui); }
 .vt-mcp-library > .vt-set-help, .vt-mcp-session > .vt-set-help { margin:calc(var(--spacing) * 2) 0; }
 .vt-mcp-overview { padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); }
 .vt-mcp-overviewtitle { font:650 var(--fs-lg) var(--ui); color:var(--txt); }

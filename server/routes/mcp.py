@@ -65,6 +65,14 @@ async def save_library(request: Request):
     return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
 
 
+@elevated_router.post("/api/mcp/library/targets")
+async def set_library_targets(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.set_targets, str(body.get("id") or ""),
+                                     body.get("targets"))
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
 @router.post("/api/mcp/library/preview")
 async def preview_library(request: Request):
     body = await request.json()

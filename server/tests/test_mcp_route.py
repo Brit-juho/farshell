@@ -596,6 +596,8 @@ def test_mcp_library_save_preview_apply_and_conflict(client):
     item_id = save.json()["id"]
     listing = client.get("/api/mcp/library").json()
     assert listing["servers"][0]["name"] == "docs"
+    assert listing["servers"][0]["audience"] == "common"
+    assert "codex" in listing["servers"][0]["targets"]
     assert "npx" not in str(listing)
     preview = client.post("/api/mcp/library/preview",
                           json={"id": item_id, "tool": "codex", "scope": "global"})
@@ -615,6 +617,32 @@ def test_mcp_library_save_preview_apply_and_conflict(client):
     again = client.post("/api/mcp/library/preview",
                         json={"id": item_id, "tool": "codex", "scope": "global"})
     assert again.status_code == 409 and again.json()["conflict"] is True
+
+
+def test_mcp_library_targets_separate_common_and_tool_specific(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"docs": {"command": "npx"}}})
+    saved = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "docs"}).json()
+    item_id = saved["id"]
+    narrowed = client.post("/api/mcp/library/targets", json={"id": item_id, "targets": ["codex"]})
+    assert narrowed.status_code == 200 and narrowed.json()["changed"] is True
+    item = client.get("/api/mcp/library").json()["servers"][0]
+    assert item["audience"] == "codex" and item["targets"] == ["codex"]
+    refused = client.post("/api/mcp/library/preview", json={"id": item_id, "tool": "claude", "scope": "global"})
+    assert refused.status_code == 409
+    restored = client.post("/api/mcp/library/targets", json={"id": item_id, "targets": item["compatible_tools"]})
+    assert restored.status_code == 200
+    assert client.get("/api/mcp/library").json()["servers"][0]["audience"] == "common"
+
+
+def test_mcp_library_only_offers_tools_that_can_expand_credential_refs(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"docs": {"command": "npx", "env": {"TOKEN": "${DOCS_TOKEN}"}}}})
+    saved = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "docs"}).json()
+    item = client.get("/api/mcp/library").json()["servers"][0]
+    assert "agy" not in item["compatible_tools"]
+    refused = client.post("/api/mcp/library/targets", json={"id": saved["id"], "targets": ["agy"]})
+    assert refused.status_code == 409
 
 
 def test_mcp_library_never_returns_definition_or_literal_secret(client):

@@ -26,8 +26,11 @@ the complete scan, including other tools. The All view is for comparison;
 group writes are available within a selected tool.
 
 The popup now has Library, Tool settings, and Current session views. The library
-stores portable, secret-free MCP definitions in the FarShell catalog and discovers
-installed direct skills for Claude and Codex. Import uses a server-generated
+shows only portable, secret-free MCP definitions saved in the FarShell catalog,
+grouped as common or tool-specific by their configured targets. Installed direct
+skills for Claude and Codex appear in Tool settings; skills supplied by a plugin
+are nested under that plugin instead of appearing as independent installations.
+Import uses a server-generated
 preview bound to the destination file; a changed file or existing name stops the
 write. Codex's `[[skills.config]]` can disable a direct skill without deleting it.
 The Current session view uses the agent reported for the focused tmux session and

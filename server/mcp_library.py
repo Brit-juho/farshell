@@ -73,9 +73,13 @@ def list_items() -> dict:
         if not isinstance(item, dict) or not isinstance(item.get("definition"), dict):
             continue
         d = item["definition"]
+        compatible = _compatible(item)
+        targets = _targets(item, compatible)
         out.append({"id": item_id, "name": item.get("name"), "source_tool": item.get("source_tool"),
                     "transport": "http" if d.get("url") else "stdio",
-                    "env_names": sorted(d.get("env", {}).values())})
+                    "env_names": sorted(d.get("env", {}).values()),
+                    "compatible_tools": compatible, "targets": targets,
+                    "audience": "common" if len(targets) > 1 else (targets[0] if targets else "unknown")})
     return {"servers": sorted(out, key=lambda x: str(x["name"]).casefold())}
 
 
@@ -100,8 +104,10 @@ def save(tool: str, scope: str, name: str, worktree_id: str | None) -> dict:
             if isinstance(item, dict) and item.get("fingerprint") == fingerprint:
                 return {"status": "ok", "changed": False, "id": item_id}
         item_id = uuid.uuid4().hex
-        library[item_id] = {"name": name, "source_tool": tool,
-                            "definition": definition, "fingerprint": fingerprint}
+        item = {"name": name, "source_tool": tool,
+                "definition": definition, "fingerprint": fingerprint}
+        item["targets"] = _compatible(item)
+        library[item_id] = item
         mcp_catalog._write_unlocked(data)
     return {"status": "ok", "changed": True, "id": item_id}
 
@@ -141,6 +147,37 @@ def _definition(item: dict, tool: str) -> tuple[dict | None, str | None]:
     return out, None
 
 
+def _compatible(item: dict) -> list[str]:
+    return [tool for tool in mcp_scan.TOOLS if _definition(item, tool)[1] is None]
+
+
+def _targets(item: dict, compatible: list[str]) -> list[str]:
+    raw = item.get("targets")
+    if not isinstance(raw, list):
+        return compatible  # 이전 보관함 항목은 이식 가능한 모든 도구에서 공용으로 본다.
+    return [tool for tool in compatible if tool in raw]
+
+
+def set_targets(item_id: str, targets: list[str]) -> dict:
+    if not isinstance(targets, list) or not targets or len(set(targets)) != len(targets):
+        return {"status": "failed", "reason": "대상 도구를 선택하세요"}
+    with mcp_catalog._locked():
+        data = mcp_catalog._read_unlocked()
+        library = data.get("library")
+        item = library.get(item_id) if isinstance(library, dict) else None
+        if not isinstance(item, dict) or not isinstance(item.get("definition"), dict):
+            return {"status": "failed", "reason": "보관함 항목을 찾지 못했습니다"}
+        compatible = _compatible(item)
+        if any(tool not in compatible for tool in targets):
+            return {"status": "failed", "reason": "이 MCP가 지원하지 않는 도구가 포함됐습니다"}
+        ordered = [tool for tool in compatible if tool in targets]
+        if _targets(item, compatible) == ordered:
+            return {"status": "ok", "changed": False}
+        item["targets"] = ordered
+        mcp_catalog._write_unlocked(data)
+    return {"status": "ok", "changed": True}
+
+
 def preview(item_id: str, tool: str, scope: str, worktree_id: str | None) -> dict:
     library = _read()
     item = library.get(item_id)
@@ -149,6 +186,8 @@ def preview(item_id: str, tool: str, scope: str, worktree_id: str | None) -> dic
             or not isinstance(item["definition"].get("env"), dict)
             or tool not in mcp_scan.TOOLS or scope not in ("global", "local")):
         return {"status": "failed", "reason": "보관함 항목 또는 대상이 없습니다"}
+    if tool not in _targets(item, _compatible(item)):
+        return {"status": "failed", "reason": "이 MCP의 관리 대상 도구가 아닙니다"}
     wt = mcp_scan.find_worktree(worktree_id)
     target = _target(tool, scope, wt)
     if target is None:

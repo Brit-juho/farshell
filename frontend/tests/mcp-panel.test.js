@@ -690,10 +690,11 @@ test('포커스된 Codex 세션은 Codex만 보여주고 다음 시작 기준임
 test('보관함 MCP는 미리보기를 확인한 뒤 선택한 도구에 추가한다', async () => {
   const { host, posts, document } = await build({
     libraryData: { servers: [{ id: 'saved', name: 'docs', source_tool: 'claude',
-                               transport: 'stdio', env_names: [] }] },
+                               transport: 'stdio', env_names: [],
+                               compatible_tools: ['claude', 'codex'], targets: ['claude', 'codex'] }] },
   });
   host.querySelector('[data-page="library"]').click();
-  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  host.querySelector('.vt-mcp-desttool').value = 'codex';
   Array.from(host.querySelectorAll('.vt-mcp-library button'))
     .find((b) => b.textContent === '전역에 추가').click();
   await answerConfirm(document, { accept: true });
@@ -702,6 +703,51 @@ test('보관함 MCP는 미리보기를 확인한 뒤 선택한 도구에 추가�
   const applied = posts.find((p) => p._url === '/api/mcp/library/apply');
   assert.deepEqual({ id: applied.id, tool: applied.tool, token: applied.token },
                    { id: 'saved', tool: 'codex', token: 'preview-token' });
+});
+
+test('보관함은 FarShell 저장 MCP만 공용·전용으로 보여주고 설치된 스킬은 숨긴다', async () => {
+  const { host } = await build({
+    skillData: { skills: [{ id: 'direct', name: 'installed-review', tool: 'codex', level: 'user' }] },
+    libraryData: { servers: [
+      { id: 'shared', name: 'shared-docs', transport: 'stdio', env_names: [],
+        compatible_tools: ['claude', 'codex'], targets: ['claude', 'codex'] },
+      { id: 'dedicated', name: 'codex-docs', transport: 'stdio', env_names: [],
+        compatible_tools: ['claude', 'codex'], targets: ['codex'] },
+    ] },
+  });
+  host.querySelector('[data-page="library"]').click();
+  const text = host.querySelector('.vt-mcp-library').textContent;
+  assert.match(text, /공용 MCP.*shared-docs/);
+  assert.match(text, /Codex 전용 MCP.*codex-docs/);
+  assert.doesNotMatch(text, /installed-review/);
+  host.querySelector('[data-page="settings"]').click();
+  assert.match(host.textContent, /installed-review/);
+});
+
+test('보관함에서 공용 MCP를 Codex 전용으로 바꾸면 대상 도구만 저장한다', async () => {
+  const { host, posts } = await build({ libraryData: { servers: [
+    { id: 'shared', name: 'docs', transport: 'stdio', env_names: [],
+      compatible_tools: ['claude', 'codex'], targets: ['claude', 'codex'] },
+  ] } });
+  host.querySelector('[data-page="library"]').click();
+  const picker = host.querySelector('.vt-mcp-librarytarget');
+  picker.value = 'codex';
+  picker.dispatchEvent(new host.ownerDocument.defaultView.Event('change', { bubbles: true }));
+  await flush(); await flush();
+  assert.deepEqual(posts.find((p) => p._url === '/api/mcp/library/targets'),
+                   { _url: '/api/mcp/library/targets', id: 'shared', targets: ['codex'] });
+});
+
+test('플러그인 제공 스킬은 플러그인 아래에 묶이고 직접 설치 스킬 목록에 중복되지 않는다', async () => {
+  const { host } = await build({ pluginData: { plugins: [{ name: 'bundle@m', plugin: 'bundle',
+    tool: 'codex', scope: 'global', level: 'user', installed: true, enabled: true,
+    skills: ['review', 'ship'], skill_count: 2 }] } });
+  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  host.querySelector('.vt-mcp-tab[data-view="plugins"]').click();
+  const parent = host.querySelector('.vt-mcp-plugrow');
+  assert.match(parent.textContent, /bundle/);
+  assert.deepEqual(Array.from(parent.querySelectorAll('.vt-mcp-plugin-skill')).map((e) => e.textContent), ['review', 'ship']);
+  assert.doesNotMatch(host.querySelector('.vt-mcp-skillsection').textContent, /review|ship/);
 });
 
 test('Codex 스킬 활성화는 선택한 스킬 ID와 목표 상태를 보낸다', async () => {

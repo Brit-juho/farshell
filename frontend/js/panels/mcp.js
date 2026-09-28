@@ -1003,17 +1003,14 @@ function workspaceTabs() {
   return tabs;
 }
 
-function renderSkills(data, tool, libraryMode) {
+function renderSkills(data, tool) {
   const section = el('section', 'vt-mcp-skillsection');
-  section.appendChild(el('h3', 'vt-mcp-sectiontitle', libraryMode ? '스킬' : '설치된 스킬'));
+  section.appendChild(el('h3', 'vt-mcp-sectiontitle', '직접 설치한 스킬'));
   const skills = (data.skills || []).filter((s) =>
-    (tool === 'all' || s.tool === tool) && (libraryMode || _page === 'session' || _scopeView === 'all'
+    (tool === 'all' || s.tool === tool) && (_page === 'session' || _scopeView === 'all'
       || (_scopeView === 'global' ? s.level === 'user' : s.level !== 'user')));
-  const bundled = (_plugins?.list || []).flatMap((p) =>
-    (tool === 'all' || p.tool === tool) && p.installed !== false
-      ? (p.skills || []).map((name) => ({ name, tool: p.tool, plugin: p.plugin })) : []);
-  if (!skills.length && !bundled.length) {
-    section.appendChild(help(libraryMode ? '가져올 수 있는 스킬이 없습니다.' : '이 범위의 스킬이 없습니다.'));
+  if (!skills.length) {
+    section.appendChild(help('이 범위에 직접 설치한 스킬이 없습니다. 플러그인 스킬은 플러그인 아래에 표시합니다.'));
     return section;
   }
   for (const skill of skills) {
@@ -1022,31 +1019,7 @@ function renderSkills(data, tool, libraryMode) {
     info.append(el('strong', null, skill.name),
       el('span', 'vt-mcp-meta', `${TOOL_LABEL[skill.tool] || skill.tool} · ${LEVEL_LABEL[skill.level] || skill.level} · ${skill.provider || '직접 설치'}`));
     row.appendChild(info);
-    if (libraryMode) {
-      if (tool !== 'all') {
-        for (const [scope, label] of [['global', '전역에 추가'], ['local', '이 프로젝트에 추가']]) {
-          if (scope === 'local' && !data.worktree) continue;
-          const btn = el('button', 'vt-chip sm', label);
-          btn.type = 'button';
-          btn.addEventListener('click', async () => {
-            const dest = scope === 'global' ? '전역' : data.worktree.label || '이 프로젝트';
-            btn.disabled = true;
-            try {
-              const payload = { id: skill.id, tool, scope, worktree: _worktreeId };
-              const preview = await postJson('/api/mcp/skills/preview', payload);
-              if (!(await confirmDialog(`${skill.name} → ${TOOL_LABEL[tool]} · ${dest}\n`
-                + `변경 위치: ${preview.target}\n복사할 파일: ${preview.file_count}개\n${preview.apply}`,
-              { title: '스킬 추가 미리보기', okLabel: '추가' }))) return;
-              const r = await postElevated('/api/mcp/skills/import',
-                { ...payload, token: preview.token });
-              if (r) { showToast('스킬을 추가했습니다 — 다음 세션부터 반영됩니다'); refresh(); }
-            } catch (e) { showToast(e.message || '추가하지 못했습니다', 'error'); }
-            finally { btn.disabled = false; }
-          });
-          row.appendChild(btn);
-        }
-      }
-    } else if (skill.writable) {
+    if (skill.writable) {
       const btn = el('button', 'vt-chip sm vt-mcp-skilltoggle', skill.enabled ? '켬' : '끔');
       btn.type = 'button';
       btn.dataset.on = skill.enabled ? '1' : '0';
@@ -1064,40 +1037,18 @@ function renderSkills(data, tool, libraryMode) {
     } else {
       row.appendChild(el('span', 'vt-mcp-meta', '파일에서 관리'));
     }
-    section.appendChild(row);
-  }
-  const seen = new Set();
-  for (const skill of bundled) {
-    const key = `${skill.tool}|${skill.plugin}|${skill.name}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const row = el('div', 'vt-mcp-skillrow');
-    const info = el('div', 'vt-mcp-skillinfo');
-    info.append(el('strong', null, skill.name),
-      el('span', 'vt-mcp-meta', `${TOOL_LABEL[skill.tool]} · ${skill.plugin} 플러그인에서 제공`));
-    row.appendChild(info);
-    row.appendChild(el('span', 'vt-mcp-meta', '플러그인 설정에서 관리'));
-    section.appendChild(row);
-  }
-  return section;
-}
-
-function renderLibrary(data) {
-  const box = el('div', 'vt-mcp-library');
-  box.appendChild(el('div', 'vt-mcp-overviewtitle', 'FarShell 보관함'));
-  box.appendChild(help('저장한 MCP와 설치된 스킬을 선택한 도구의 전역 또는 프로젝트 설정에 추가합니다.'));
-  if (_filter.tool === 'all') box.appendChild(help('추가할 도구를 위에서 선택하세요.'));
-  box.appendChild(renderSkills(data, _filter.tool, true));
-  const section = el('section', 'vt-mcp-skillsection');
-  section.appendChild(el('h3', 'vt-mcp-sectiontitle', '저장한 MCP'));
-  if (!(data.library || []).length) section.appendChild(help('저장한 MCP가 없습니다. 도구 설정의 서버 상세에서 보관함에 저장할 수 있습니다.'));
-  for (const item of data.library || []) {
-    const row = el('div', 'vt-mcp-skillrow');
-    const info = el('div', 'vt-mcp-skillinfo');
-    info.append(el('strong', null, item.name),
-      el('span', 'vt-mcp-meta', `${TOOL_LABEL[item.source_tool] || item.source_tool}에서 보관 · ${item.transport} · 필요한 값: ${(item.env_names || []).join(', ') || '없음'}`));
-    row.appendChild(info);
-    if (_filter.tool !== 'all') {
+    if (_page === 'settings') {
+      const copy = el('details', 'vt-mcp-skillcopy');
+      copy.appendChild(el('summary', null, '다른 도구에 복사'));
+      const targets = el('select', 'vt-input vt-mcp-desttool');
+      targets.setAttribute('aria-label', `${skill.name} 복사 대상 도구`);
+      for (const destTool of ['claude', 'codex']) {
+        const option = el('option', null, TOOL_LABEL[destTool]);
+        option.value = destTool;
+        if (destTool !== skill.tool) option.selected = true;
+        targets.appendChild(option);
+      }
+      copy.appendChild(targets);
       for (const [scope, label] of [['global', '전역에 추가'], ['local', '이 프로젝트에 추가']]) {
         if (scope === 'local' && !data.worktree) continue;
         const btn = el('button', 'vt-chip sm', label);
@@ -1105,9 +1056,102 @@ function renderLibrary(data) {
         btn.addEventListener('click', async () => {
           btn.disabled = true;
           try {
-            const payload = { id: item.id, tool: _filter.tool, scope, worktree: _worktreeId };
+            const payload = { id: skill.id, tool: targets.value, scope, worktree: _worktreeId };
+            const preview = await postJson('/api/mcp/skills/preview', payload);
+            if (!(await confirmDialog(`${skill.name} → ${TOOL_LABEL[targets.value]} · ${scope === 'global' ? '전역' : '이 프로젝트'}\n`
+              + `변경 위치: ${preview.target}\n복사할 파일: ${preview.file_count}개\n${preview.apply}`,
+            { title: '스킬 복사 미리보기', okLabel: '추가' }))) return;
+            const result = await postElevated('/api/mcp/skills/import', { ...payload, token: preview.token });
+            if (result) { showToast('스킬을 추가했습니다 — 다음 세션부터 반영됩니다'); refresh(); }
+          } catch (e) { showToast(e.message || '복사하지 못했습니다', 'error'); }
+          finally { btn.disabled = false; }
+        });
+        copy.appendChild(btn);
+      }
+      row.appendChild(copy);
+    }
+    section.appendChild(row);
+  }
+  return section;
+}
+
+function renderLibrary(data) {
+  const box = el('div', 'vt-mcp-library');
+  box.appendChild(el('div', 'vt-mcp-overviewtitle', 'FarShell MCP 보관함'));
+  box.appendChild(help('FarShell에 저장한 MCP만 표시합니다. 도구에 설치된 MCP·스킬·플러그인은 도구 설정에서 관리합니다.'));
+  if (!(data.library || []).length) {
+    box.appendChild(help('저장한 MCP가 없습니다. 도구 설정에서 서버를 펼쳐 「보관함에 저장」을 누르세요.'));
+    return box;
+  }
+  const groups = new Map();
+  for (const item of data.library || []) {
+    const compatible = item.compatible_tools || Object.keys(TOOL_LABEL);
+    const targets = item.targets || compatible;
+    const group = targets.length > 1 ? 'common' : targets[0];
+    if (!group) continue;
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(item);
+  }
+  for (const category of ['common', ...Object.keys(TOOL_LABEL)]) {
+    const items = groups.get(category) || [];
+    if (!items.length) continue;
+    const section = el('section', 'vt-mcp-skillsection');
+    section.appendChild(el('h3', 'vt-mcp-sectiontitle', `${category === 'common' ? '공용 MCP' : `${TOOL_LABEL[category]} 전용 MCP`} · ${items.length}개`));
+    for (const item of items) {
+      const compatible = item.compatible_tools || Object.keys(TOOL_LABEL);
+      const targets = item.targets || compatible;
+      const row = el('div', 'vt-mcp-skillrow');
+      const info = el('div', 'vt-mcp-skillinfo');
+      info.append(el('strong', null, item.name),
+        el('span', 'vt-mcp-meta', `${item.transport} · 사용 가능: ${targets.map((t) => TOOL_LABEL[t]).join(', ')} · 필요한 환경변수: ${(item.env_names || []).join(', ') || '없음'}`));
+      row.appendChild(info);
+      const manage = el('select', 'vt-input vt-mcp-librarytarget');
+      manage.setAttribute('aria-label', `${item.name} 관리 대상`);
+      if (compatible.length > 1) {
+        const option = el('option', null, '공용으로 관리');
+        option.value = 'common';
+        manage.appendChild(option);
+      }
+      for (const tool of compatible) {
+        const option = el('option', null, `${TOOL_LABEL[tool]} 전용`);
+        option.value = tool;
+        manage.appendChild(option);
+      }
+      manage.value = targets.length > 1 ? 'common' : targets[0];
+      manage.addEventListener('change', async () => {
+        manage.disabled = true;
+        try {
+          const next = manage.value === 'common' ? compatible : [manage.value];
+          const result = await postElevated('/api/mcp/library/targets', { id: item.id, targets: next });
+          if (!result) { manage.value = targets.length > 1 ? 'common' : targets[0]; return; }
+          showToast(`${item.name} 관리 대상을 바꿨습니다`);
+          refresh();
+        } catch (e) {
+          manage.value = targets.length > 1 ? 'common' : targets[0];
+          showToast(e.message || '관리 대상을 바꾸지 못했습니다', 'error');
+        } finally { manage.disabled = false; }
+      });
+      row.appendChild(manage);
+      const destination = el('select', 'vt-input vt-mcp-desttool');
+      destination.setAttribute('aria-label', `${item.name} 추가할 도구`);
+      for (const tool of targets) {
+        const option = el('option', null, TOOL_LABEL[tool]);
+        option.value = tool;
+        destination.appendChild(option);
+      }
+      if (targets.includes(_filter.tool)) destination.value = _filter.tool;
+      row.appendChild(destination);
+      for (const [scope, label] of [['global', '전역에 추가'], ['local', '이 프로젝트에 추가']]) {
+        if (scope === 'local' && !data.worktree) continue;
+        const btn = el('button', 'vt-chip sm', label);
+        btn.type = 'button';
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            const tool = destination.value;
+            const payload = { id: item.id, tool, scope, worktree: _worktreeId };
             const preview = await postJson('/api/mcp/library/preview', payload);
-            const message = `${item.name} → ${TOOL_LABEL[_filter.tool]} ${scope === 'global' ? '전역' : '이 프로젝트'}\n`
+            const message = `${item.name} → ${TOOL_LABEL[tool]} ${scope === 'global' ? '전역' : '이 프로젝트'}\n`
               + `변경 파일: ${preview.target}\n필요한 환경변수: ${(preview.env_names || []).join(', ') || '없음'}\n${preview.apply}`;
             if (!(await confirmDialog(message, { title: 'MCP 추가 미리보기', okLabel: '추가' }))) return;
             const r = await postElevated('/api/mcp/library/apply', { ...payload, token: preview.token });
@@ -1117,10 +1161,10 @@ function renderLibrary(data) {
         });
         row.appendChild(btn);
       }
+      section.appendChild(row);
     }
-    section.appendChild(row);
+    box.appendChild(section);
   }
-  box.appendChild(section);
   return box;
 }
 
@@ -1156,7 +1200,8 @@ function renderSession(data) {
     }
     if (group.entries.length > 1) box.appendChild(help(`${group.name}: 여러 범위에 정의되어 있습니다. 적용 우선순위는 도구에서 확인하세요.`));
   }
-  box.appendChild(renderSkills(data, tool, false));
+  box.appendChild(renderSkills(data, tool));
+  box.appendChild(renderSessionPluginGroups(tool));
   const add = el('button', 'vt-chip vt-mcp-sessionadd', '보관함에서 추가');
   add.type = 'button';
   add.addEventListener('click', () => { _filter.tool = tool; _page = 'library'; paint(_host, data); });
@@ -1175,11 +1220,11 @@ function paint(host, data) {
     host.appendChild(renderSession(data));
     return;
   }
-  host.appendChild(toolChips(data));
   if (_page === 'library') {
     host.appendChild(renderLibrary(data));
     return;
   }
+  host.appendChild(toolChips(data));
   host.appendChild(toolOverview(data));
 
   const scopes = chipRow('설정 범위', [['all', '전체'], ['global', '전역'],
@@ -1255,7 +1300,7 @@ function paint(host, data) {
   serverPane.appendChild(listHost);
   renderList(listHost, data);
 
-  const skillSection = renderSkills(data, _filter.tool, false);
+  const skillSection = renderSkills(data, _filter.tool);
   serverPane.appendChild(skillSection);
 
   pluginPane.appendChild(renderPlugins());
@@ -1364,6 +1409,31 @@ function groupPlugins(list) {
   return [...out.values()];
 }
 
+function renderSessionPluginGroups(tool) {
+  const section = el('section', 'vt-mcp-skillsection');
+  section.appendChild(el('h3', 'vt-mcp-sectiontitle', '플러그인과 제공 스킬'));
+  if (_plugins === null) {
+    section.appendChild(help('플러그인을 불러오는 중입니다…'));
+    return section;
+  }
+  const groups = groupPlugins(_plugins.list.filter((p) => p.tool === tool && p.installed !== false));
+  if (!groups.length) section.appendChild(help('이 도구에 설치된 플러그인이 없습니다.'));
+  for (const group of groups) {
+    const row = el('details', 'vt-mcp-sessionplugin');
+    const skills = [...new Set(group.entries.flatMap((p) => p.skills || []))];
+    const effective = group.entries.find((p) => p.effective !== undefined)?.effective;
+    row.appendChild(el('summary', null,
+      `${group.head.plugin} · ${effective === false ? '설정상 꺼짐' : '설정상 켜짐 또는 기본값'} · 제공 스킬 ${skills.length}개`));
+    if (skills.length) {
+      const children = el('div', 'vt-mcp-plugin-skills');
+      for (const name of skills) children.appendChild(el('span', 'vt-mcp-plugin-skill', name));
+      row.appendChild(children);
+    }
+    section.appendChild(row);
+  }
+  return section;
+}
+
 function pluginToggle(p) {
   const btn = el('button', 'vt-chip sm vt-mcp-toggle vt-mcp-plugtoggle');
   btn.type = 'button';
@@ -1440,6 +1510,15 @@ function renderPluginRow(g) {
   const toggles = el('div', 'vt-mcp-plugtoggles');
   for (const e of shown) toggles.appendChild(pluginToggle(e));
   row.appendChild(toggles);
+  const names = [...new Set(g.entries.flatMap((e) => e.skills || []))];
+  if (names.length) {
+    const children = el('details', 'vt-mcp-plugin-children');
+    children.appendChild(el('summary', null, `제공 스킬 ${names.length}개`));
+    const list = el('div', 'vt-mcp-plugin-skills');
+    for (const name of names) list.appendChild(el('span', 'vt-mcp-plugin-skill', name));
+    children.appendChild(list);
+    row.appendChild(children);
+  }
   return row;
 }
 
