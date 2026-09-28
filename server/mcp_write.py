@@ -739,6 +739,9 @@ def deploy(
                 "reason": f"값이 그대로 남은 칸이 있다: {', '.join(leaked)} — "
                           f"자격증명을 먼저 등록하고 그 칸을 참조로 지정할 것"}
 
+    if tool == "codex":
+        return _codex_deploy(name, ready, scope=scope, worktree_path=worktree_path)
+
     try:
         path, top_key, project_path = _deploy_target_path(
             tool, scope, worktree_path=worktree_path, shared=shared)
@@ -762,6 +765,9 @@ def deploy(
                 block = after.setdefault(top_key, {})
             if not isinstance(block, dict):
                 raise WriteRefused(f"{top_key}가 객체가 아니다 — 쓰기를 중단했다")
+
+            if name in block and block[name] != ready:
+                raise WriteRefused(f"`{name}` 정의가 이미 있다 — 덮어쓰지 않았다")
 
             block[name] = ready
             if before == after:
@@ -795,6 +801,70 @@ def deploy(
 
     out["target"] = str(path)
     return out
+
+
+def _codex_deploy(name: str, defn: dict, *, scope: str,
+                  worktree_path: Optional[str]) -> dict:
+    """새 Codex 테이블 하나만 추가한다. TOML 전체를 재직렬화하지 않는다."""
+    if scope == "local" and not worktree_path:
+        return {"status": "failed", "reason": "프로젝트 기준이 없습니다", "changed": False}
+    if not name or len(name) > 200 or any(c in name for c in '\n\r[]'):
+        return {"status": "failed", "reason": "서버 이름을 사용할 수 없습니다", "changed": False}
+    allowed = {"command", "args", "url", "env_vars", "bearer_token_env_var", "enabled"}
+    if any(k not in allowed for k in defn):
+        return {"status": "failed", "reason": "Codex에서 지원하지 않는 정의 필드가 있습니다", "changed": False}
+    if bool(defn.get("command")) == bool(defn.get("url")):
+        return {"status": "failed", "reason": "명령 또는 URL 중 하나가 필요합니다", "changed": False}
+    for key in ("command", "url", "bearer_token_env_var"):
+        if key in defn and not isinstance(defn[key], str):
+            return {"status": "failed", "reason": f"{key} 형식이 잘못됐습니다", "changed": False}
+    for key in ("args", "env_vars"):
+        if key in defn and (not isinstance(defn[key], list)
+                            or any(not isinstance(x, str) for x in defn[key])):
+            return {"status": "failed", "reason": f"{key} 형식이 잘못됐습니다", "changed": False}
+    if "enabled" in defn and not isinstance(defn["enabled"], bool):
+        return {"status": "failed", "reason": "enabled 형식이 잘못됐습니다", "changed": False}
+    global_path = mcp_adapters.codex_paths()["global"]
+    path = (Path(worktree_path) / ".codex" / "config.toml") if scope == "local" else global_path
+    try:
+        with _locked(path):
+            stamp = _stamp(path)
+            before, err = mcp_adapters._read_toml(path)
+            if err:
+                raise WriteRefused(f"{path.name}: {err}")
+            before = before or {}
+            if scope == "local":
+                global_config, global_err = mcp_adapters._read_toml(global_path)
+                if global_err or not mcp_adapters.codex_trusted(global_config or {}, worktree_path):
+                    raise WriteRefused("Codex가 이 프로젝트를 신뢰하지 않아 로컬 설정이 적용되지 않습니다")
+            if name in mcp_adapters._as_mapping(before.get("mcp_servers")):
+                raise WriteRefused("같은 이름의 Codex 서버가 이미 있습니다")
+            text = path.read_text(encoding="utf-8") if path.exists() else ""
+            header = f'[mcp_servers.{json.dumps(name, ensure_ascii=False)}]'
+            lines = [header]
+            for key in ("command", "args", "url", "env_vars", "bearer_token_env_var", "enabled"):
+                if key in defn:
+                    value = json.dumps(defn[key], ensure_ascii=False)
+                    lines.append(f"{key} = {value}")
+            new_text = text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(lines) + "\n"
+            parsed, perr = mcp_adapters._read_toml_text(new_text)
+            expected = json.loads(json.dumps(before, default=str))
+            expected.setdefault("mcp_servers", {})[name] = defn
+            if perr or json.loads(json.dumps(parsed, default=str)) != expected:
+                raise WriteRefused("새 설정을 안전하게 검증하지 못했습니다")
+            if stamp != _stamp(path):
+                raise WriteRefused("설정 파일이 바뀌었습니다")
+            _atomic_write(path, new_text)
+            after, aerr = mcp_adapters._read_toml(path)
+            if aerr or mcp_adapters._as_mapping((after or {}).get("mcp_servers")).get(name) != defn:
+                raise WriteUnverified("쓴 뒤 설정을 확인하지 못했습니다")
+        return {"status": "ok", "changed": True, "target": str(path)}
+    except WriteRefused as exc:
+        return {"status": "failed", "reason": str(exc), "changed": False}
+    except WriteUnverified as exc:
+        return {"status": "unknown", "reason": str(exc), "changed": None}
+    except OSError as exc:
+        return {"status": "failed", "reason": exc.__class__.__name__, "changed": False}
 
 
 # --------------------------------------------------------------- opencode

@@ -181,7 +181,7 @@ test('접두사 없음 — 세션은 없고 명령만 나열되며, capability �
   assert.ok(!rows.some((r) => r.textContent.includes('alpha')), '세션 행은 기본 화면에 없어야 한다');
   assert.ok(rows.some((r) => r.textContent.includes('터미널 내 검색')), '명령 행이 보여야 한다');
   assert.ok(rows.some((r) => r.textContent.includes('설정')), '「설정」 명령이 「모든 기능」에 있어야 한다');
-  assert.ok(rows.some((r) => r.textContent.includes('MCP 서버 · 플러그인')), '모바일에서도 빠른 열기로 MCP 팝업에 닿아야 한다');
+  assert.ok(rows.some((r) => r.textContent.includes('MCP · 스킬 관리')), '모바일에서도 빠른 열기로 MCP 팝업에 닿아야 한다');
   assert.ok(rows.some((r) => r.textContent.includes('변경')), '「변경」 명령이 「모든 기능」에 있어야 한다');
   assert.ok(!rows.some((r) => r.textContent.includes('포트 대시보드')), 'ports 게이트가 꺼져 있으면 숨어야 한다');
 });

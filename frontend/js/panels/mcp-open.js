@@ -20,6 +20,7 @@ export function mcpContext() {
   const leaf = findNode(getTree(), getActivePaneId());
   const local = (!tab || (tab.hostId || 'local') === 'local')
     && (!leaf || (leaf.host || 'local') === 'local');
+  if (!local) return null;
   if (local && leaf && leaf.t === 'leaf' && leaf.session) return `session:${leaf.session}`;
   return (tab && tab.worktreeId) || null;
 }
@@ -32,8 +33,8 @@ export function showMcp() {
   let unsub = null;
   const panel = openPanel({
     id: 'vt-mcp',
-    ariaLabel: 'MCP 서버 관리',
-    headHTML: '<div class="vt-vw-title">MCP — 서버 · 플러그인</div>',
+    ariaLabel: 'MCP와 스킬 관리',
+    headHTML: '<div class="vt-vw-title">MCP · 스킬</div>',
     bodyId: 'vt-mcp-body',
     onClose: () => { if (unsub) unsub(); unsub = null; },
   });

@@ -25,6 +25,16 @@ cannot change another tool's configuration. Copy targets are checked against
 the complete scan, including other tools. The All view is for comparison;
 group writes are available within a selected tool.
 
+The popup now has Library, Tool settings, and Current session views. The library
+stores portable, secret-free MCP definitions in the FarShell catalog and discovers
+installed direct skills for Claude and Codex. Import uses a server-generated
+preview bound to the destination file; a changed file or existing name stops the
+write. Codex's `[[skills.config]]` can disable a direct skill without deleting it.
+The Current session view uses the agent reported for the focused tmux session and
+labels its merged configuration as the **next start** state, since a running agent
+may not have loaded later changes. Plugin-provided skills stay linked to the
+plugin that supplies them.
+
 ### Claude Code and Codex hooks
 
 `server/agent_hook.sh` is the shared entry point. Claude Code posts `{pre,post,stop}`;

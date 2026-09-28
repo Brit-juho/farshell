@@ -539,18 +539,19 @@ def find_raw_defn(
 
     if tool == "codex":
         path = codex_paths()["global"]
-        data, err = _read_toml(path)
-        if not err and data:
-            defn = _as_mapping(data.get("mcp_servers")).get(name)
-            if isinstance(defn, dict):
-                return defn, path
-        if worktree_path:
+        if scope == "local" and worktree_path:
             local = Path(worktree_path) / ".codex" / "config.toml"
             ldata, lerr = _read_toml(local)
             if not lerr and ldata:
                 defn = _as_mapping(ldata.get("mcp_servers")).get(name)
                 if isinstance(defn, dict):
                     return defn, local
+            return None, local
+        data, err = _read_toml(path)
+        if not err and data:
+            defn = _as_mapping(data.get("mcp_servers")).get(name)
+            if isinstance(defn, dict):
+                return defn, path
         return None, path
 
     if tool == "agy":
@@ -559,6 +560,14 @@ def find_raw_defn(
         if err or data is None:
             return None, path
         defn = _as_mapping(data.get("mcpServers")).get(name)
+        return (defn if isinstance(defn, dict) else None), path
+
+    if tool == "opencode":
+        path = (Path(worktree_path) / "opencode.json") if scope == "local" and worktree_path else opencode_paths()["global"]
+        data, err = _read_json(path)
+        if err or not data:
+            return None, path
+        defn = _as_mapping(data.get("mcp")).get(name)
         return (defn if isinstance(defn, dict) else None), path
 
     return None, None

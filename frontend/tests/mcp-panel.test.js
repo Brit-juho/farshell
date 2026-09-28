@@ -53,6 +53,8 @@ function scanPayload(over = {}) {
 async function build({ scan = scanPayload(), toggle, group,
                        credData = { creds: [], refs: [] },
                        pluginData = { plugins: [] }, pluginGate = null,
+                       skillData = { skills: [] }, libraryData = { servers: [] },
+                       agents = {},
                        verify = () => ({ state: 'connected', tool_count: 3, error: null, checked_at: Date.now() / 1000 }) } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
@@ -77,6 +79,26 @@ async function build({ scan = scanPayload(), toggle, group,
     if (opts && opts.method === 'POST' && u.includes('/api/mcp/tags')) {
       posts.push({ _url: '/api/mcp/tags', ...JSON.parse(opts.body) });
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+    }
+    if (u.includes('/api/mcp/skills')) {
+      if (opts && opts.method === 'POST') {
+        posts.push({ _url: u.replace(/^.*\/api/, '/api').split('?')[0], ...JSON.parse(opts.body) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(skillData) });
+    }
+    if (u.includes('/api/mcp/library')) {
+      if (opts && opts.method === 'POST') {
+        const body = JSON.parse(opts.body);
+        posts.push({ _url: u.replace(/^.*\/api/, '/api').split('?')[0], ...body });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(
+          u.includes('/preview') ? { status: 'ok', token: 'preview-token', target: '/target/config', env_names: [], apply: '다음 세션부터' }
+            : { status: 'ok' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(libraryData) });
+    }
+    if (u.includes('/api/agents')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(agents) });
     }
     if (u.includes('/api/mcp/plugins')) {
       if (opts && opts.method === 'POST') {
@@ -644,6 +666,52 @@ test('같은 이름도 Claude와 Codex에서 별도 서버 행으로 관리한�
   host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
   assert.deepEqual(Array.from(host.querySelectorAll('.vt-mcp-server')).map((e) => e.dataset.tool),
                    ['codex']);
+});
+
+test('세 탭은 보관함·도구 설정·현재 세션으로 나뉜다', async () => {
+  const { host } = await build();
+  assert.deepEqual(texts(host, '.vt-mcp-worktab'), ['보관함', '도구 설정', '현재 세션']);
+  host.querySelector('[data-page="library"]').click();
+  assert.ok(host.querySelector('.vt-mcp-library'));
+  host.querySelector('[data-page="session"]').click();
+  assert.ok(host.querySelector('.vt-mcp-session'));
+});
+
+test('포커스된 Codex 세션은 Codex만 보여주고 다음 시작 기준임을 말한다', async () => {
+  const scan = twoToolScan();
+  scan.worktree = { ...scan.worktree, session: 'dev', cwd: '/repo/src' };
+  const { host } = await build({ scan, agents: { dev: { agent: 'codex' } } });
+  host.querySelector('[data-page="session"]').click();
+  assert.match(host.querySelector('.vt-mcp-session').textContent, /Codex · 다음 시작 기준/);
+  assert.match(host.querySelector('.vt-mcp-session').textContent, /실행 중 반영 여부는 확인되지 않았습니다/);
+  assert.doesNotMatch(host.querySelector('.vt-mcp-session').textContent, /Claude/);
+});
+
+test('보관함 MCP는 미리보기를 확인한 뒤 선택한 도구에 추가한다', async () => {
+  const { host, posts, document } = await build({
+    libraryData: { servers: [{ id: 'saved', name: 'docs', source_tool: 'claude',
+                               transport: 'stdio', env_names: [] }] },
+  });
+  host.querySelector('[data-page="library"]').click();
+  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  Array.from(host.querySelectorAll('.vt-mcp-library button'))
+    .find((b) => b.textContent === '전역에 추가').click();
+  await answerConfirm(document, { accept: true });
+  await flush(); await flush();
+  assert.ok(posts.some((p) => p._url === '/api/mcp/library/preview'));
+  const applied = posts.find((p) => p._url === '/api/mcp/library/apply');
+  assert.deepEqual({ id: applied.id, tool: applied.tool, token: applied.token },
+                   { id: 'saved', tool: 'codex', token: 'preview-token' });
+});
+
+test('Codex 스킬 활성화는 선택한 스킬 ID와 목표 상태를 보낸다', async () => {
+  const { host, posts } = await build({ skillData: { skills: [{ id: 'review-id', name: 'review',
+    tool: 'codex', level: 'user', provider: '직접 설치', enabled: true, writable: true }] } });
+  host.querySelector('.vt-mcp-toolnavitem[data-tool="codex"]').click();
+  host.querySelector('.vt-mcp-skilltoggle').click();
+  await flush(); await flush();
+  assert.deepEqual(posts.find((p) => p._url === '/api/mcp/skills/toggle'),
+                   { _url: '/api/mcp/skills/toggle', id: 'review-id', enabled: false, worktree: 'wt1' });
 });
 
 test('다시 열면 마지막으로 본 도구를 바로 연다', async () => {

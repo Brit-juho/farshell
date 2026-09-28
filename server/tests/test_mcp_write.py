@@ -339,12 +339,16 @@ def test_deploy_refuses_when_a_value_would_remain(home):
     assert (home / ".claude.json").read_text() == before
 
 
-def test_deploy_to_codex_is_refused_with_the_official_command(home):
-    """config.toml에 새 테이블을 텍스트 수술로 만드는 건 위험이 다르다."""
+def test_deploy_to_codex_adds_table_without_rewriting_existing_settings(home):
+    """기존 TOML 주석과 설정을 보존하면서 새 서버를 등록한다."""
     import mcp_write
+    config = home / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text("# 개인 주석\nmodel = \"test\"\n")
     out = mcp_write.deploy("n", {"command": "x"}, tool="codex", scope="global")
-    assert out["status"] == "failed"
-    assert "codex mcp add" in out["reason"]
+    assert out["status"] == "ok"
+    assert config.read_text() == '# 개인 주석\nmodel = "test"\n[mcp_servers."n"]\ncommand = "x"\n'
+    assert mcp_write.deploy("n", {"command": "y"}, tool="codex", scope="global")["status"] == "failed"
 
 
 def test_deploy_into_shared_mcp_json_still_carries_no_value(home, tmp_path):

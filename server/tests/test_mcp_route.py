@@ -527,11 +527,96 @@ def test_deploy_refuses_to_leave_a_value_behind(client):
     assert (client.vt_home / ".claude.json").read_text() == before
 
 
-def test_deploy_to_codex_is_refused_over_http(client):
+def test_deploy_to_codex_preserves_existing_toml(client):
     _elevate(client)
+    path = client.vt_home / ".codex" / "config.toml"
+    path.write_text("# keep this comment\n[model_providers.demo]\nname = 'demo'\n")
     r = client.post("/api/mcp/deploy",
                     json={"name": "n", "defn": {"command": "x"}, "tool": "codex"})
-    assert r.status_code == 409 and "codex mcp add" in r.json()["reason"]
+    assert r.status_code == 200
+    assert "# keep this comment" in path.read_text()
+    assert '[mcp_servers."n"]' in path.read_text()
+    assert client.get("/api/mcp").json()["servers"][-1]["name"] == "n"
+
+
+def test_skill_scan_and_codex_toggle(client):
+    _elevate(client)
+    root = client.vt_home / ".agents" / "skills" / "review"
+    root.mkdir(parents=True)
+    (root / "SKILL.md").write_text("# review")
+    rows = client.get("/api/mcp/skills").json()["skills"]
+    skill = next(x for x in rows if x["name"] == "review")
+    assert skill["tool"] == "codex" and skill["enabled"] is True
+    r = client.post("/api/mcp/skills/toggle", json={"id": skill["id"], "enabled": False})
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+    assert client.get("/api/mcp/skills").json()["skills"][0]["enabled"] is False
+
+
+def test_skill_import_to_project_never_overwrites_existing(client):
+    _elevate(client)
+    source = client.vt_home / ".agents" / "skills" / "review"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("# original")
+    skill = next(x for x in client.get("/api/mcp/skills?worktree=wt1").json()["skills"]
+                 if x["name"] == "review")
+    body = {"id": skill["id"], "tool": "claude", "scope": "local", "worktree": "wt1"}
+    first = client.post("/api/mcp/skills/import", json=body)
+    assert first.status_code == 200
+    target = client.vt_repo / ".claude" / "skills" / "review" / "SKILL.md"
+    assert target.read_text() == "# original"
+    target.write_text("# changed")
+    second = client.post("/api/mcp/skills/import", json=body)
+    assert second.status_code == 409
+    assert target.read_text() == "# changed"
+
+
+def test_mcp_library_save_preview_apply_and_conflict(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"docs": {"command": "npx", "args": ["docs"],
+                                               "env": {"TOKEN": "${DOCS_TOKEN}"}}}})
+    save = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "docs"})
+    assert save.status_code == 200
+    item_id = save.json()["id"]
+    listing = client.get("/api/mcp/library").json()
+    assert listing["servers"][0]["name"] == "docs"
+    assert "npx" not in str(listing)
+    preview = client.post("/api/mcp/library/preview",
+                          json={"id": item_id, "tool": "codex", "scope": "global"})
+    assert preview.status_code == 200
+    config = client.vt_home / ".codex" / "config.toml"
+    config.write_text("# preserve\n")
+    stale = client.post("/api/mcp/library/apply", json={"id": item_id, "tool": "codex",
+                                                        "scope": "global", "token": preview.json()["token"]})
+    assert stale.status_code == 409
+    fresh = client.post("/api/mcp/library/preview",
+                        json={"id": item_id, "tool": "codex", "scope": "global"}).json()
+    applied = client.post("/api/mcp/library/apply", json={"id": item_id, "tool": "codex",
+                                                          "scope": "global", "token": fresh["token"]})
+    assert applied.status_code == 200
+    assert "DOCS_TOKEN" in config.read_text()
+    assert "# preserve" in config.read_text()
+    again = client.post("/api/mcp/library/preview",
+                        json={"id": item_id, "tool": "codex", "scope": "global"})
+    assert again.status_code == 409 and again.json()["conflict"] is True
+
+
+def test_mcp_library_never_returns_definition_or_literal_secret(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {
+        "safe": {"command": "npx", "env": {"TOKEN": "${SAFE_TOKEN}"}},
+        "unsafe": {"command": "npx", "env": {"TOKEN": "sk-private-value"}},
+    }})
+    rejected = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "unsafe"})
+    assert rejected.status_code == 409
+    saved = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "safe"})
+    assert saved.status_code == 200
+    listing = client.get("/api/mcp/library")
+    preview = client.post("/api/mcp/library/preview", json={"id": saved.json()["id"], "tool": "codex", "scope": "global"})
+    assert preview.status_code == 200
+    for response in (listing, preview):
+        assert "sk-private-value" not in response.text
+        assert "npx" not in response.text
+        assert "${SAFE_TOKEN}" not in response.text
 
 
 def test_deploy_validates_its_input(client):

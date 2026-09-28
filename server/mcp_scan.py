@@ -128,6 +128,7 @@ def _session_context(session: str) -> Optional[dict]:
     root = _git_toplevel(base) or base
     try:
         safe = fsguard.resolve_under_roots(str(root))
+        safe_cwd = fsguard.resolve_under_roots(str(base))
     except fsguard.FsDenied:
         logger.info("MCP 기준 경로가 허용 경계 밖이라 전역만 본다: session=%s", name)
         return None
@@ -137,7 +138,7 @@ def _session_context(session: str) -> Optional[dict]:
     for wt in worktree.list_worktrees():
         try:
             if Path(wt.get("path") or "").resolve() == safe:
-                return {**wt, "session": name, "id": wt["id"]}
+                return {**wt, "session": name, "cwd": str(safe_cwd), "id": wt["id"]}
         except OSError:
             continue
     return {
@@ -146,6 +147,7 @@ def _session_context(session: str) -> Optional[dict]:
         "repoName": safe.name,
         "branch": _git_branch(safe),
         "session": name,
+        "cwd": str(safe_cwd),
     }
 
 
@@ -193,7 +195,7 @@ def _public(wt: Optional[dict]) -> Optional[dict]:
     if not wt:
         return None
     return {"id": wt.get("id"), "path": wt.get("path"), "label": _label(wt),
-            "session": wt.get("session")}
+            "session": wt.get("session"), "cwd": wt.get("cwd")}
 
 
 def _label(wt: Optional[dict]) -> Optional[str]:

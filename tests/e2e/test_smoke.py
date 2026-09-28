@@ -1649,3 +1649,32 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
     # 그리고 그 선택이 기기 설정에 남는다(레일과 같은 키).
     assert page.evaluate("() => window.vtSettingsGet('ui.activeHostId')") == "gpu"
 
+
+def test_mcp_workspace_tabs_fit_desktop_and_mobile(page):
+    """실제 브라우저에서 세 탭과 보관함 미리보기 진입면의 가로 넘침을 잡는다."""
+    page.locator(".vt-dock-mcp-btn").click()
+    page.wait_for_selector("#vt-mcp .vt-mcp-worktabs", timeout=10000)
+    assert page.locator("#vt-mcp .vt-mcp-worktab").all_text_contents() == [
+        "보관함", "도구 설정", "현재 세션"]
+    page.locator('#vt-mcp [data-page="library"]').click()
+    assert page.locator("#vt-mcp .vt-mcp-library").is_visible()
+    page.locator('#vt-mcp [data-page="session"]').click()
+    assert page.locator("#vt-mcp .vt-mcp-session").is_visible()
+    page.screenshot(path="/tmp/fsh-mcp-desktop.png")
+    page.locator("#vt-mcp .vt-vw-x").click()
+    page.set_viewport_size(COMPACT)
+    page.evaluate("window.openPalette()")
+    page.locator("#vt-qo-input").fill("MCP · 스킬")
+    page.get_by_text("MCP · 스킬 관리", exact=True).click()
+    page.wait_for_selector("#vt-mcp.vt-mobile-route .vt-mcp-worktabs", timeout=10000)
+    page.wait_for_timeout(300)  # 모바일 시트 진입 애니메이션이 끝난 뒤 기하를 잰다.
+    page.screenshot(path="/tmp/fsh-mcp-mobile.png")
+    layout = page.evaluate("""() => {
+      const body = document.querySelector('#vt-mcp .vt-vw-body');
+      const card = document.querySelector('#vt-mcp .vt-viewer-card').getBoundingClientRect();
+      const nav = document.querySelector('#vt-mnav-bottom').getBoundingClientRect();
+      return {scrollWidth: body.scrollWidth, clientWidth: body.clientWidth,
+        cardBottom: card.bottom, navTop: nav.top};
+    }""")
+    assert layout["scrollWidth"] <= layout["clientWidth"] + 1, layout
+    assert layout["cardBottom"] <= layout["navTop"] + 1, layout

@@ -165,7 +165,7 @@
    구분선이 필요 없어 제외), 이름을 굵고 한 단 키워 "이건 헤더다"를
    글자 크기로도 말하게 한다. */
 #vt-mcp .vt-vw-body { padding:calc(var(--spacing) * 3); }
-#vt-mcp .vt-viewer-card { width:min(760px, 100%); height:min(84vh, 760px); max-height:min(84vh, 760px); }
+#vt-mcp .vt-viewer-card { width:min(880px, 100%); height:min(88vh, 820px); max-height:min(88vh, 820px); }
 #vt-mcp.vt-dock-panel .vt-viewer-card { width:100%; height:100%; max-height:none; }
 #vt-mcp .vt-vw-title { font-size:var(--fs-md); }
 .vt-mcp-group { margin:calc(var(--spacing) * 3) 0; padding-top:calc(var(--spacing) * 3); border-top:1px solid var(--line); }
@@ -290,6 +290,18 @@
 }
 .vt-mcp-toolnavitem:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
 .vt-mcp-toolcount { color:var(--sub); font-variant-numeric:tabular-nums; }
+.vt-mcp-worktabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:calc(var(--spacing) * 1); border-bottom:1px solid var(--color-line); margin:calc(var(--spacing) * 2) 0; }
+.vt-mcp-worktab { min-height:44px; border:0; border-bottom:2px solid transparent; background:none; color:var(--sub); font:600 var(--fs-sm) var(--ui); cursor:pointer; }
+.vt-mcp-worktab:hover { color:var(--txt); background:var(--color-bg-3); }
+.vt-mcp-worktab[aria-selected="true"] { color:var(--txt); border-bottom-color:var(--color-acc); }
+.vt-mcp-worktab:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+.vt-mcp-scopes { margin:calc(var(--spacing) * 2) 0; }
+.vt-mcp-skillsection { margin-top:calc(var(--spacing) * 5); border-top:1px solid var(--color-line); }
+.vt-mcp-sectiontitle { margin:calc(var(--spacing) * 3) 0 calc(var(--spacing) * 2); font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-mcp-skillrow { min-height:44px; display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) 0; border-top:1px solid var(--color-line); }
+.vt-mcp-skillinfo { flex:1 1 200px; min-width:0; display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); overflow-wrap:anywhere; }
+.vt-mcp-skillinfo strong { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-mcp-library > .vt-set-help, .vt-mcp-session > .vt-set-help { margin:calc(var(--spacing) * 2) 0; }
 .vt-mcp-overview { padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); }
 .vt-mcp-overviewtitle { font:650 var(--fs-lg) var(--ui); color:var(--txt); }
 .vt-mcp-overviewtext { margin-top:calc(var(--spacing) * 1); font:400 var(--fs-sm) var(--ui); color:var(--sub); }

@@ -32,8 +32,10 @@ from fastapi.responses import JSONResponse
 
 import mcp_adapters
 import mcp_catalog
+import mcp_library
 import mcp_plugins
 import mcp_scan
+import mcp_skills
 import mcp_verify
 import mcp_write
 from auth import require_elevated
@@ -42,6 +44,62 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 elevated_router = APIRouter(dependencies=[Depends(require_elevated)])
+
+
+@router.get("/api/mcp/skills")
+async def list_skills(worktree: str | None = Query(default=None)):
+    return await asyncio.to_thread(mcp_skills.scan, worktree)
+
+
+@router.get("/api/mcp/library")
+async def list_library():
+    return await asyncio.to_thread(mcp_library.list_items)
+
+
+@elevated_router.post("/api/mcp/library/save")
+async def save_library(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.save, str(body.get("tool") or ""),
+                                     str(body.get("scope") or ""), str(body.get("name") or ""),
+                                     body.get("worktree") or None)
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@router.post("/api/mcp/library/preview")
+async def preview_library(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.preview, str(body.get("id") or ""),
+                                     str(body.get("tool") or ""), str(body.get("scope") or ""),
+                                     body.get("worktree") or None)
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@elevated_router.post("/api/mcp/library/apply")
+async def apply_library(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.apply, str(body.get("id") or ""),
+                                     str(body.get("tool") or ""), str(body.get("scope") or ""),
+                                     body.get("worktree") or None, str(body.get("token") or ""))
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@elevated_router.post("/api/mcp/skills/toggle")
+async def toggle_skill(request: Request):
+    body = await request.json()
+    if not isinstance(body.get("enabled"), bool):
+        return JSONResponse({"error": "invalid_enabled"}, status_code=400)
+    result = await asyncio.to_thread(mcp_skills.set_enabled, str(body.get("id") or ""),
+                                     body["enabled"], body.get("worktree") or None)
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@elevated_router.post("/api/mcp/skills/import")
+async def import_skill(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_skills.import_skill, str(body.get("id") or ""),
+                                     str(body.get("tool") or ""), str(body.get("scope") or ""),
+                                     body.get("worktree") or None)
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
 
 
 @router.get("/api/mcp")

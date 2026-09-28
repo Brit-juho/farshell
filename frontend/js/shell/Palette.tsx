@@ -429,7 +429,7 @@ function PaletteBody(props: PaletteBodyProps) {
         const mcpRow: Row = {
           key: 'cmd:mcp',
           kind: 'command',
-          label: 'MCP 서버 · 플러그인',
+          label: 'MCP · 스킬 관리',
           onOpen: () => {
             props.onRequestClose();
             import('../panels/mcp-open.js')
