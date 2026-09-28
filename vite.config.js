@@ -168,6 +168,9 @@ export default defineConfig(({ mode }) => {
             if (p.endsWith('/frontend/js/panels/settings.js')) return 'settings';
             if (p.includes('/frontend/js/panels/settings/')) return 'settings';
             if (p.endsWith('/frontend/js/panels/mcp.js')) return 'settings';
+            // dock MCP 버튼(shell/Dock.tsx)이 지연 import하는 열기 로직 —
+            // panels/mcp.js와 항상 같이 쓰이니 같은 청크(mcp-open.js 머리말 참고).
+            if (p.endsWith('/frontend/js/panels/mcp-open.js')) return 'settings';
             if (p.endsWith('/frontend/js/snippets.js')) return 'settings';
             // 사용량 화면. **`panels/usage-badge.js`는 아니다** — rail 배지
             // 폴링은 상시 동작이라 core에 남는다(endsWith라 안 걸린다).

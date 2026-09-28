@@ -28,6 +28,23 @@ const _sSet = (k: string, v: unknown) => (window as any).vtSettingsSet?.(k, v);
 const _sHas = (k: string) => Boolean((window as any).vtSettingsHas?.(k));
 const BADGE_POLL_MS = 15000;
 
+// MCP 버튼(사용자 요청, 2026-09-28) — 'mcp.show'라는 이름의 core 액션을 새로
+// 만드는 대신 여기서 직접 지연 import 한다. core.js(상시 초기 페이로드)의
+// 300KiB 상한이 이미 거의 다 찬 상태라, registerAction 방식으로 만들었더니
+// 몇백 바이트 차이로 그 상한을 넘겼다(실측) — 이 파일(shell.js)은 그 상한
+// 대상이 아니고, panels/mcp-open.js는 vite.config.js가 'settings' 청크로
+// 못박아서 어차피 core에 안 들어간다. 재진입 가드는 ports-lazy.js와 같은
+// 이유(청크 도착 전 두 번 눌리면 토글이 겹친다).
+let _mcpOpening = false;
+function showMcp() {
+  if (_mcpOpening) return;
+  _mcpOpening = true;
+  import('../panels/mcp-open.js').then(
+    (m) => { _mcpOpening = false; m.showMcp(); },
+    (e) => { _mcpOpening = false; console.error('[FarShell mcp]', e); },
+  );
+}
+
 export interface DockDeps {
   vtFetch: (path: string) => Promise<any>;
   getAction: (name: string) => unknown;
@@ -233,77 +250,90 @@ function Dock(props: { deps: DockDeps }) {
   return (
     <aside id="vt-dock" class="vt-sidepanel right" classList={{ collapsed: collapsed() }} aria-label="dock">
       <div class="vt-dock-tabs" role="tablist">
-        {/* 2026-09-18(6차) — MIN_W 320px에서 탭 5개 + 설정·마이크·접기 합계가
-            이미 컨테이너 폭에 거의 닿아 있었다. `.vt-dock-tabs`
-            전체가 overflow:hidden이라 초과분이 **뒤(설정·접기)부터 통째로
-            잘려 보이지도, 눌리지도 않았다** — dock을 좁게 쓰는 사용자는 접기
-            버튼 자체가 사라진다. 탭 개수는 앞으로도 늘 수 있으니(에이전트
-            종류 추가 등) 고정 폭 가정 자체가 깨지기 쉽다. 탭 목록만 따로
-            스크롤되게 감싸고, 액션 버튼(설정·마이크·접기)은 이 래퍼 밖에 둬서
-            폭이 아무리 좁아져도 항상 보이게 한다 — 헤더의 세션 탭 줄
-            (`#vt-wtabs`)이 이미 쓰는 것과 같은 관용구(overflow-x:auto +
-            스크롤바 숨김). 접힘(세로줄)에서는 이 래퍼가 `display:contents`가
-            되어 탭들이 부모의 flex column에 직접 낀 것처럼 동작한다 — 접힘엔
-            이 문제가 없어서(36px 정사각 세로 스택은 폭 제약이 없다) 손 안 댐. */}
-        <div class="vt-dock-tabs-scroll">
-          <For each={tabs()}>
-            {(t) => (
-              <button
-                type="button"
-                class="vt-dock-tab"
-                classList={{ active: !collapsed() && activeTab() === t.id }}
-                role="tab"
-                aria-selected={!collapsed() && activeTab() === t.id}
-                aria-label={t.label}
-                data-tip={t.label}
-                data-tip-sub={tipSub(t)}
-                data-tip-side="left"
-                ref={(el) => wireDrag(el, t.id)}
-                onClick={() => onTabClick(t.id)}
-              >
-                {/* 접힘 36px에서는 **아이콘만** 보인다. 이전에는 CSS의
-                    writing-mode:vertical-rl로 이 한글 라벨을 세로로 세웠는데,
-                    한글은 세로쓰기에서 음절이 한 자씩 쌓여 "소/스/컨/트/롤"이
-                    되고 모노스페이스까지 겹쳐 읽을 수 없었다. 세로 라벨은
-                    영문을 전제한 패턴이라 한글에는 성립하지 않는다.
-                    전체 이름은 data-tip이 들고 있다(ui/tooltip.js). dock은 화면
-                    오른쪽 끝이라 툴팁은 왼쪽으로 나온다. */}
-                <span class="vt-dock-tab-ico" innerHTML={icon(t.icon, 16)} />
-                <span class="vt-dock-tab-label">{t.label}</span>
-                {/* 2026-09-18 — 배지가 수치(.vt-badge)에서 점으로 내려왔던 이유:
-                    접힘 36px에서 탭의 clientWidth 35에 scrollWidth가 38이 되어
-                    (아이콘 16 + gap 4 + 배지 min-width 18) .vt-dock-tabs의
-                    overflow:hidden에 잘렸다. 점은 absolute라 폭에 0px 기여해서
-                    안 밀린다 — 접힘은 지금도 이 이유가 그대로라 점을 유지한다.
-                    2026-09-19(7차) — 펼침은 사정이 다르다: 그 폭 제약이
-                    없고(392px+, 게다가 탭 목록이 이제 자체 스크롤이라 넘쳐도
-                    옆 버튼을 안 밀어낸다), touch 기기는 hover가 없어 점 뒤의
-                    수치를 tooltip으로도 영영 못 본다 — 열어보기 전까진 "몇
-                    개인지" 화면 어디에도 없었다. 펼침엔 수치 배지(.vt-badge,
-                    DESIGN.md §10 — 테두리만·무채움)를 되돌린다. */}
-                <Show when={badgeOf(t) > 0}>
-                  <Show when={collapsed()} fallback={<span class="vt-badge vt-dock-tab-badge">{badgeOf(t)}</span>}>
-                    <span class="vt-dock-tab-dot" aria-hidden="true" />
-                  </Show>
+        {/* 2026-09-28(사용자 지적) — 탭과 설정·마이크·접기가 서로 다른 부모
+            (스크롤 래퍼 안/밖)에 있어서 같은 줄인데도 셋이 제각각 높이·테두리
+            규칙을 따로 들고 있었다(80-dock.css가 :empty·:last-child로 서로
+            보정해야 했던 그 얽힘). 전부 이 한 줄의 **형제**로 편다 — 탭이든
+            액션이든 `.vt-dock-tab` 하나만 공유하면 높이는 부모의
+            align-items:stretch가 채워주므로 개별 px 지정이 필요 없어진다.
+            줄 전체가 넘치면(좁은 dock) 통째로 가로 스크롤된다(아래 CSS) —
+            탭 개수가 늘어도 액션 버튼이 시야 밖으로 사라지는 일은 여전히
+            없다: 다만 이제는 "액션만 항상 보이게"가 아니라 "필요하면
+            사용자가 옆으로 스크롤해서 본다" 쪽으로 트레이드오프를 바꿨다
+            (같은 부모라는 요구가 더 우선이라는 판단, 사용자 확인). */}
+        <For each={tabs()}>
+          {(t) => (
+            <button
+              type="button"
+              class="vt-dock-tab"
+              classList={{ active: !collapsed() && activeTab() === t.id }}
+              role="tab"
+              aria-selected={!collapsed() && activeTab() === t.id}
+              aria-label={t.label}
+              data-tip={t.label}
+              data-tip-sub={tipSub(t)}
+              data-tip-side="left"
+              ref={(el) => wireDrag(el, t.id)}
+              onClick={() => onTabClick(t.id)}
+            >
+              {/* 접힘 36px에서는 **아이콘만** 보인다. 이전에는 CSS의
+                  writing-mode:vertical-rl로 이 한글 라벨을 세로로 세웠는데,
+                  한글은 세로쓰기에서 음절이 한 자씩 쌓여 "소/스/컨/트/롤"이
+                  되고 모노스페이스까지 겹쳐 읽을 수 없었다. 세로 라벨은
+                  영문을 전제한 패턴이라 한글에는 성립하지 않는다.
+                  전체 이름은 data-tip이 들고 있다(ui/tooltip.js). dock은 화면
+                  오른쪽 끝이라 툴팁은 왼쪽으로 나온다. */}
+              <span class="vt-dock-tab-ico" innerHTML={icon(t.icon, 16)} />
+              <span class="vt-dock-tab-label">{t.label}</span>
+              {/* 2026-09-18 — 배지가 수치(.vt-badge)에서 점으로 내려왔던 이유:
+                  접힘 36px에서 탭의 clientWidth 35에 scrollWidth가 38이 되어
+                  (아이콘 16 + gap 4 + 배지 min-width 18) .vt-dock-tabs의
+                  overflow:hidden에 잘렸다. 점은 absolute라 폭에 0px 기여해서
+                  안 밀린다 — 접힘은 지금도 이 이유가 그대로라 점을 유지한다.
+                  2026-09-19(7차) — 펼침은 사정이 다르다: 그 폭 제약이
+                  없고(392px+, 게다가 탭 목록이 이제 자체 스크롤이라 넘쳐도
+                  옆 버튼을 안 밀어낸다), touch 기기는 hover가 없어 점 뒤의
+                  수치를 tooltip으로도 영영 못 본다 — 열어보기 전까진 "몇
+                  개인지" 화면 어디에도 없었다. 펼침엔 수치 배지(.vt-badge,
+                  DESIGN.md §10 — 테두리만·무채움)를 되돌린다. */}
+              <Show when={badgeOf(t) > 0}>
+                <Show when={collapsed()} fallback={<span class="vt-badge vt-dock-tab-badge">{badgeOf(t)}</span>}>
+                  <span class="vt-dock-tab-dot" aria-hidden="true" />
                 </Show>
-              </button>
-            )}
-          </For>
-        </div>
+              </Show>
+            </button>
+          )}
+        </For>
         {/* 2026-09-18(2차) — 설정·마이크(사용자 요청으로 왼쪽 레일 바닥에서
-            이식). 탭이 아니라서 role="tab"도, activeTab 동기화도 없다 —
-            그냥 액션 버튼 둘이다.
-            2026-09-18(6차) — 마이크를 설정보다 앞에 둔다. 접힘(세로줄)은 이미
-            3차 수정에서 "마이크가 더 자주 쓰는 액션이니 탭 바로 다음 자리는
-            마이크 몫"이라고 정해서 order:1/2로 마이크를 앞세웠는데, 펼침(가로줄)은
-            그 근거를 반영한 적이 없어 DOM 순서 그대로(설정 먼저) 남아 있었다 —
-            같은 버튼 두 개가 접힘/펼침에서 순서가 반대였다. DOM 순서를 접힘의
-            근거에 맞춰 마이크 먼저로 바꾼다(접힘 CSS의 order:1/2는 그대로 둬도
-            결과가 같아 손 안 댐). */}
-        <div id="vt-dock-mic-home" class="vt-dock-mic-home" />
+            이식). 탭이 아니라서 role="tab"도, activeTab 동기화도 없다.
+            2026-09-28 — MCP를 마이크·설정 사이에 새로 추가(설정 화면 속
+            「MCP」 절과 같은 화면을 팝업 모달로 띄운다, 위 showMcp()). 셋 다
+            이제 `.vt-dock-tab .vt-dock-action`을 같이 받는다 — 탭과 같은
+            크기 규칙을 쓰되 활성 표시·배지 없이 아이콘만 보인다(아래 CSS).
+            순서는 마이크 → MCP → 설정: 마이크가 탭 무리와 가장 가까운
+            자리라는 6차 결정을 그대로 잇는다.
+            아이콘은 `link`(사용자 지적 — 바로 옆 줄의 「포트」 탭과 같은
+            `plug`를 썼더니 구분이 안 됐다). 새 SVG를 icons.js에 추가하는
+            대신 이미 있는 `link`를 고른 이유는 core.js 예산이다: icons.js는
+            core 전체가 공유해서 core 청크에 들어가는데, 300KiB 상한이 이미
+            거의 다 차 있어 path 하나만 새로 추가해도 실측으로 넘겼다(MCP
+            팝업 자체를 core 밖으로 뺀 것과 같은 제약) — 그래서 이미 정의돼
+            있고 실제로는 아무 데도 안 쓰이던 `link`를 재사용해 비용 0으로
+            해결했다. */}
+        <div id="vt-dock-mic-home" class="vt-dock-tab vt-dock-action vt-dock-mic-home" />
         <button
           type="button"
-          class="vt-icon-btn sm vt-dock-settings-btn"
+          class="vt-dock-tab vt-dock-action vt-dock-mcp-btn"
+          aria-label="MCP"
+          data-tip="MCP"
+          data-tip-sub="서버 · 플러그인"
+          data-tip-side="left"
+          onClick={showMcp}
+          innerHTML={icon('link', 16, 2)}
+        />
+        <button
+          type="button"
+          class="vt-dock-tab vt-dock-action vt-dock-settings-btn"
           aria-label="설정"
           data-tip="설정"
           data-tip-sub="Mod+,"
@@ -321,7 +351,7 @@ function Dock(props: { deps: DockDeps }) {
               회전만 시켜 방향을 맞춘다. 그 왼쪽 레일은 펼침 상태에서 왼쪽
               (접히는 쪽)을 가리키는 90deg를 썼다. dock은 오른쪽으로 접히므로
               거울상인 -90deg(오른쪽을 가리킴). */}
-          <button type="button" class="vt-icon-btn sm vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" data-tip="dock 접기" data-tip-side="bottom" innerHTML={icon('chevron-down', 14, 2)} />
+          <button type="button" class="vt-dock-tab vt-dock-action vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" data-tip="dock 접기" data-tip-side="bottom" innerHTML={icon('chevron-down', 14, 2)} />
         </Show>
       </div>
       {/* 탭 내용은 전부 패널 렌더러가 여기 붙인다(panels/panel.js의 dock 호스트). */}

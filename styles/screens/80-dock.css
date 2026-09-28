@@ -57,30 +57,25 @@
    골랐는데, DESIGN.md §10이 이미 "row는 24/28/36 세 단만"이라고 못박아둔
    규칙과 대조된 적이 없었다(craft 리뷰에서 발견). flex align-items:center로
    내용을 세로 중앙 정렬하므로 정확한 30px일 필요가 없었다 — 가장 가까운
-   기존 단인 28px로 낮춘다(실측: 라벨 텍스트·아이콘 전부 안 잘림). 같은 줄의
-   설정·마이크·접기 정사각도 28px로 맞춘다(아래). */
+   기존 단인 28px로 낮춘다(실측: 라벨 텍스트·아이콘 전부 안 잘림). MCP·설정·
+   마이크·접기도 같은 줄의 형제이니 자연히 같은 높이를 받는다(아래). */
+/* 2026-09-28(사용자 지적) — 탭과 마이크·MCP·설정·접기가 서로 다른 부모
+   (스크롤 래퍼 안/밖)에 있어서 "같은 줄"인데도 크기·테두리 규칙이 셋으로
+   갈렸다(예전엔 :empty·:last-child로 서로 보정해야 했다 — 아래 히스토리는
+   그 흔적). 지금은 전부 이 `.vt-dock-tabs` 한 부모의 **형제**이고 전부
+   `.vt-dock-tab`을 공유한다 — 높이를 개별로 정하지 않고 부모의
+   align-items:stretch가 채워주므로, 28px 대 27px 같은 1px 오차가 애초에
+   생기지 않는다.
+   ⚠ 줄 전체가 이제 하나로 스크롤된다(옛 "탭만 스크롤, 액션은 항상 보임"
+   분리를 버렸다) — 같은 부모라는 요구가 그 분리보다 우선이라는 판단(사용자
+   확인, 2026-09-28). 좁은 dock에서 액션 버튼이 스크롤 밖으로 밀릴 수 있는데,
+   접힘(세로 스택, 아래)에는 이 제약이 없어 그쪽으로 피할 수 있다. */
 .vt-dock-tabs {
   display:flex; align-items:stretch; height:28px; flex:none;
-  border-bottom:1px solid var(--line); overflow:hidden;
+  border-bottom:1px solid var(--line);
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
 }
-/* 2026-09-18(6차) — 탭 목록만 스크롤, 설정·마이크·접기는 항상 보인다(위
-   Dock.tsx 주석). 펼침에서만 실제로 가로 줄이라 스크롤이 의미가 있다 —
-   접힘(세로 스택)에서는 `display:contents`로 자기 자신을 지워서 탭 버튼들이
-   `.vt-dock-tabs`의 flex column에 곧바로 낀 것처럼 만든다(감싸는 div가
-   레이아웃에 안 끼어들게). 헤더 `#vt-wtabs`와 같은 스크롤바 숨김 관용구.
-   ⚠ flex-grow는 0이어야 한다(`flex:0 1 auto`, shrink만 허용) — grow:1로
-   두면 이 스크롤러가 줄의 남는 공간을 전부 먹어버려서, 아래
-   `.vt-dock-settings-btn`의 `margin-left:auto`가 쓸 공간이 하나도 안 남는다
-   (auto margin은 이미 있는 여유 공간을 나눠 갖는 것이라, 형제가 grow로 먼저
-   가져가면 0으로 계산된다 — !important를 걸어도 안 풀리는 이유였다. 실측 중
-   getComputedStyle이 계속 0px을 내놔서 처음엔 레이어/컨테이너쿼리 버그로
-   의심했는데, 진짜 원인은 이 flex-grow였다). */
-.vt-dock-tabs-scroll {
-  display:flex; align-items:stretch; flex:0 1 auto; min-width:0;
-  overflow-x:auto; scrollbar-width:none;
-}
-.vt-dock-tabs-scroll::-webkit-scrollbar { display:none; }
-#vt-dock.collapsed .vt-dock-tabs-scroll { display:contents; }
+.vt-dock-tabs::-webkit-scrollbar { display:none; }
 .vt-dock-tab {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:none;
   position:relative;   /* 배지 점의 기준. 2026-09-18 — 아래 .vt-dock-tab-dot 참고 */
@@ -90,13 +85,16 @@
   transition:background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint);
 }
 .vt-dock-tab:hover { background:var(--menu-hover); color:var(--color-txt); }
-/* 2026-09-19 — 스크롤러의 마지막 탭이 자기 border-right를 그리고, 바로 옆
-   마이크 칸(.vt-dock-mic-home)이 또 자기 border-left를 그려서 같은 경계에
-   선 두 줄이 겹쳐 있었다(실측 제보: "마이크/사용량 사이에 테두리가 2줄").
-   콜랩스(overflow:hidden 없이 스크롤 가능)에서는 어차피 스크롤되면 마지막
-   탭이 시야 밖으로 밀려나 이 border-right는 안 보이니, 경계선은 항상 고정
-   위치인 마이크 칸의 border-left 하나에만 맡긴다. */
-.vt-dock-tabs-scroll > .vt-dock-tab:last-child { border-right:0; }
+/* 한 부모의 형제이니 "마지막"은 항상 실제 마지막 버튼(펼침이면 접기, 접힘이면
+   접기가 안 보이므로 설정)이다 — 옛 :empty 보정(마이크 미설치 시 다음
+   요소가 border-left를 대신 받던 것)이 필요 없어졌다: 자기 border-right를
+   그리지 않는 요소는 이제 자기 하나뿐이고, 나머지는 각자 자기 몫을 그대로
+   그린다. */
+.vt-dock-tab:last-child { border-right:0; }
+/* MCP·설정·접기는 언제나 아이콘만 보인다 — 탭의 펼침/접힘 라벨 토글
+   (.vt-dock-tab-label · .vt-dock-tab-ico)과 얽히지 않는다: 이 버튼들은
+   tabpanel을 열지 않는 딴 종류의 액션이고 라벨 span 자체가 없다. */
+.vt-dock-action { justify-content:center; }
 /* N4 3단계 — 탭을 pane으로 끌어내는 중. 레일 세션 행(.vt-rail-session-row)과
    같은 규칙이다(40-rail-legacy.css) — 드래그 중 표시가 표면마다 다르면
    같은 제스처가 다른 기능처럼 보인다. */
@@ -147,77 +145,61 @@
   box-shadow:0 0 0 1.5px var(--bar);
 }
 #vt-dock.collapsed .vt-dock-tab-dot { top:8px; right:7px; }
-/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다.
-   2026-09-18(6차) — chevron-down을 -90deg 회전시켜 오른쪽을 가리키게 한다
+/* 2026-09-18(6차) — chevron-down을 -90deg 회전시켜 오른쪽을 가리키게 한다
    (Dock.tsx의 주석 참고 — Rail.tsx `.vt-wgrail-collapse`와 거울상 관계).
    회전은 svg 자체에 건다 — 버튼에 걸면 :active의 transform:scale과 합성돼
    버튼 눌림 애니메이션이 기울어져 보인다. */
 .vt-dock-collapse > svg { transform:rotate(-90deg); }
-/* 탭 뒤에 마이크·설정을 순서대로 잇고, 접기만 자기 margin-left:auto로 줄
-   오른쪽 끝에 고정한다(2026-09-22 정리 — 이전엔 설정 버튼도 450px 이상에서
-   따로 margin-left:auto를 받아 접기와 남는 공간을 나눠 가졌는데, 그러면 둘
-   사이에 설정 버튼만 붕 뜬 것처럼 틈이 생겼다(사용자 지적). 마이크·설정은
-   폭에 상관없이 탭 바로 뒤에 붙어 있는 게 맞고, "줄 오른쪽 끝"은 접기 하나의
-   몫이다). 높이는 탭 줄과 같은 28px(`.vt-icon-btn.sm`의 24px 그대로 두면
-   옆 마이크·설정보다 낮아 줄 가운데 붕 떠 보인다). */
-.vt-dock-collapse { font:600 var(--fs-base) var(--ui); width:28px; height:28px; margin-left:auto; }
+/* 접기만 자기 margin-left:auto로 줄 오른쪽 끝에 고정한다(2026-09-22 정리 —
+   이전엔 설정 버튼도 450px 이상에서 따로 margin-left:auto를 받아 접기와 남는
+   공간을 나눠 가졌는데, 그러면 둘 사이에 설정 버튼만 붕 뜬 것처럼 틈이
+   생겼다(사용자 지적). 마이크·MCP·설정은 폭에 상관없이 탭 바로 뒤에 붙어
+   있는 게 맞고, "줄 오른쪽 끝"은 접기 하나의 몫이다). 높이·너비는 이제
+   `.vt-dock-action`(아래)이 다른 액션 버튼들과 함께 정한다. */
+.vt-dock-collapse { font:600 var(--fs-base) var(--ui); margin-left:auto; }
 
-/* 2026-09-18(2차) — 설정·마이크를 왼쪽 레일 바닥에서 여기로 옮긴다(사용자
-   요청). 탭 목록 바로 뒤에 둔다 — 접힘(세로 줄, flex-direction:column, 게다가
-   height:auto라 남는 세로 공간이 없다)에서는 그냥 탭 5개 **바로 아래**에
-   온다(요청한 그 모양). 펼침(가로 줄)도 5차부터 같은 원칙 — 탭 뒤에 순서대로
-   이어 붙인다. border-left 하나로 "탭 무리 끝났다"는 표시는 충분하다.
-   탭(.vt-dock-tab)의 라벨/아이콘 토글 CSS(펼침=글자만·접힘=아이콘만)는
-   재사용하지 않는다 — 이 버튼 둘은 tabpanel을 열지 않는 딴 종류의 액션이라
-   늘 아이콘만 보이는 `.vt-icon-btn`으로 충분하고, 탭 레이아웃과 얽히면 폭이
-   좁은 dock(최소 320px)에서 라벨 텍스트가 탭 줄을 넘친다.
-   6차 — DOM 순서를 마이크 먼저로 바꿨다(Dock.tsx 주석). border-left는 이제
-   마이크가 먼저 받는다 — "탭 무리가 여기서 끝났다"는 경계선은 그 경계에 있는
-   첫 요소가 그리면 되고, 어느 쪽이 먼저인지는 상관없다. */
-.vt-dock-settings-btn {
-  flex:none; border-radius:0;
-  width:28px; height:28px;
-}
-/* 2026-09-18(3차) — 접힘에서 설정·마이크가 30px 정사각으로 남아 탭의 36px
-   정사각(16 §6 §참고)과 어긋났다(칸 안 좌우 여백이 남아 두 줄이 폭 다르게
-   보였다). 접힘 칸은 항상 36px 폭이니 그 폭을 그대로 높이로 쓴다.
-   6차 — DOM 순서가 이미 마이크 먼저(위 Dock.tsx 주석)이므로 여기서 순서를
-   뒤집을 필요가 없어졌다 — `order` 제거, DOM 순서 그대로 둔다. */
-#vt-dock.collapsed .vt-dock-settings-btn {
-  border-left:0; border-top:1px solid var(--line);
-  width:36px; height:36px;
-}
+/* 2026-09-28 — 마이크·MCP·설정은 전부 `.vt-dock-tab.vt-dock-action`이다.
+   탭과 같은 부모의 형제이므로 높이는 위 `.vt-dock-tabs`의 align-items:stretch가
+   채운다(개별로 지정할 필요가 없다 — 예전 28px 고정이 border-box 1px과
+   어긋나 마이크/사용량 사이에 높이가 안 맞던 원인이었다). 너비만 여기서
+   고정한다: 라벨이 없는 아이콘 전용 칸이라 탭처럼 내용에 맞춰 늘어날 이유가
+   없고, 셋이 똑같은 너비여야 "한 그룹"으로 읽힌다. */
+.vt-dock-action { width:32px; padding:0; justify-content:center; }
+/* 접힘에서는 탭도 폭을 명시하지 않고 세로 스택의 stretch로 36px을 채운다
+   (§ 아래 #vt-dock.collapsed .vt-dock-tab) — 액션 버튼의 고정 32px을 풀어
+   같은 방식으로 맞춘다. 패딩·테두리는 `.vt-dock-tab`의 접힘 규칙을 그대로
+   받는다(별도로 다시 정의하지 않는다). */
+#vt-dock.collapsed .vt-dock-action { width:auto; }
+
 /* 마이크는 버튼을 새로 만들지 않고 index.html의 `#mic-btn-wrap` **노드
    자체**를 여기로 옮겨 온다(keybar.js의 placeMicButton) — voice.js가 그 id를
    모듈 최상위에서 캐시해 `.recording`/.label로 상태를 그리므로 같은 노드여야
-   한다. 그 노드는 메뉴 항목(.vt-menu-item)으로 생겨서 가로로 길다 — 여기서만
-   옆의 설정 버튼과 같은 아이콘 칸으로 보이게 한다.
-   6차 — DOM에서 설정보다 앞으로 옮겨왔으니 탭 무리와의 경계선(border-left)은
-   이제 마이크가 그린다. */
-.vt-dock-mic-home { display:flex; align-items:stretch; flex:none; border-left:1px solid var(--line); }
-.vt-dock-mic-home:empty { display:none; border:0; }   /* 음성 미설치 — 빈 칸을 남기지 않는다 */
-/* 음성 미설치라 마이크 칸이 사라지면 탭 무리와의 경계선을 그릴 요소가 없어진다
-   (border-left는 마이크가 들고 있었다) — 그럴 땐 다음 순서인 설정 버튼이 대신 받는다. */
-.vt-dock-mic-home:empty + .vt-dock-settings-btn { border-left:1px solid var(--line); }
-#vt-dock.collapsed .vt-dock-mic-home:empty + .vt-dock-settings-btn { border-left:0; border-top:1px solid var(--line); }
-#vt-dock.collapsed .vt-dock-mic-home { border-left:0; border-top:1px solid var(--line); }
+   한다. `.vt-dock-mic-home`은 그 노드를 담는 `.vt-dock-tab .vt-dock-action`
+   래퍼이고, 노드 자체는 래퍼 칸을 그대로 채운다(너비/높이 100%) — 그래야
+   녹음 중 빨간 배경이 옆 MCP·설정 버튼과 같은 칸 전체를 채운다(패딩 없는
+   래퍼 안에서 안쪽에 따로 테두리가 뜨지 않는다).
+   음성 미설치라 마이크 노드가 없으면 래퍼가 비어(:empty) 사라진다 — 한 부모의
+   형제 구조라 border-right는 이제 각자 자기 몫만 그리므로(위 `.vt-dock-tab`
+   기본 규칙) 옛 :empty 보정(다음 버튼이 대신 border를 받던 것)이 필요 없다. */
+.vt-dock-mic-home { align-items:stretch; }
+.vt-dock-mic-home:empty { display:none; border:0; }
 .vt-dock-mic-home .vt-rail-mic-btn {
   display:flex; align-items:center; justify-content:center;
   /* min-height도 같이 눌러야 한다 — .vt-menu-item의 --menu-item-h(36px)가
-     min-height로 들어 있어서 height만 주면 28px 칸을 뚫는다(실측, 70-worktree-rail.css의
-     예전 규칙과 같은 함정). 7차 — 30에서 28로(위 `.vt-dock-tabs` 주석). */
-  width:28px; height:28px; min-height:28px; padding:0; gap:0;
+     min-height로 들어 있어서 height:100%만으로는 그 바닥을 못 이긴다(실측:
+     접힘에서 마이크 칸만 57px로 옆 MCP·설정보다 커졌다 — 예전에도 같은
+     함정이었다, 70-worktree-rail.css). */
+  width:100%; height:100%; min-height:0; padding:0; gap:0;
   border:0; border-radius:0;
   background:transparent; color:var(--color-sub); cursor:pointer;
 }
-#vt-dock.collapsed .vt-dock-mic-home .vt-rail-mic-btn { width:36px; height:36px; min-height:36px; }
 .vt-dock-mic-home .vt-rail-mic-btn:hover { background:var(--menu-hover); color:var(--color-txt); }
 /* 탭 아이콘(icon(t.icon,16))과 같은 16px로 맞춘다 — 이전엔 15px라 접힘 칸에서
    탭과 나란히 서면 한 단 작아 보였다. */
 .vt-dock-mic-home .vt-rail-mic-btn > svg { width:16px; height:16px; flex:none; }
 .vt-dock-mic-home .vt-rail-mic-btn .label { display:none; } /* 아이콘 칸 — 이름은 aria-label/data-tip이 말한다 */
-/* 녹음 중일 때만 색이 생긴다 — 평소엔 옆의 설정 칸과 같이 조용하다(「화면당
-   채움 버튼 1개」, 20-design-system.md §3). #mic-btn-wrap.mic(id+클래스)이
+/* 녹음 중일 때만 색이 생긴다 — 평소엔 옆의 MCP·설정 칸과 같이 조용하다
+   (「화면당 채움 버튼 1개」, 20-design-system.md §3). #mic-btn-wrap.mic(id+클래스)이
    상대라 클래스만으로는 못 이긴다. */
 .vt-dock-mic-home #mic-btn-wrap.mic,
 .vt-dock-mic-home #mic-btn-wrap.mic:hover {
@@ -238,7 +220,7 @@
    새로 만들지 않고도 어느 탭인지 남긴다(§6 "세로 아이콘 4개 + 배지"의 최소
    구현 — 아이콘은 20 §4 에이전트 마크 작업과 같이 정한다). */
 #vt-dock.collapsed { width:36px !important; }
-#vt-dock.collapsed .vt-dock-tabs { flex-direction:column; height:auto; border-bottom:0; }
+#vt-dock.collapsed .vt-dock-tabs { flex-direction:column; height:auto; border-bottom:0; overflow:visible; }
 /* 접힌 dock은 **아이콘만** 보여준다(2026-09-17 디자인 리뷰 B4).
    이전에는 writing-mode:vertical-rl로 한글 라벨을 세로로 세웠는데, 한글은
    세로쓰기에서 음절이 한 자씩 쌓여 36px 폭에 "소/스/컨/트/롤"이 늘어섰고
