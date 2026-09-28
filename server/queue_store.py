@@ -209,7 +209,8 @@ def clear() -> dict:
     return {"ok": True, "removed": n}
 
 
-def pop_next(session: str | None = None, *, session_scoped: bool = False) -> dict | None:
+def pop_next(session: str | None = None, *, session_scoped: bool = False,
+             targeted_only: bool = False) -> dict | None:
     """맨 앞의 pending 항목을 꺼낸다(FIFO). blocked 는 건너뛴다.
 
     session_scoped=True(자동 드레인, stop 훅)면 다른 세션을 타깃한 항목은
@@ -227,6 +228,12 @@ def pop_next(session: str | None = None, *, session_scoped: bool = False) -> dic
             if session_scoped:
                 target = target_session(x)
                 if target and target != session:
+                    continue
+                # targeted_only — "이 세션을 **지목한** 항목만". 세션이 막 열렸거나
+                # 메시지가 도착해 흘려보낼 때 쓴다: 타깃 미지정 항목은 "먼저 끝난
+                # 에이전트"에게 가는 게 규칙인데, 에이전트를 새로 띄우거나 메시지를
+                # 받았다는 이유로 그걸 가져가면 안 된다.
+                if targeted_only and not target:
                     continue
             items.pop(i)
             _write_unlocked(items)

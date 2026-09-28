@@ -32,7 +32,7 @@ both plays the TTS summary twice.
 - Script: `server/tts_hook.sh` (the TTS half, invoked by `agent_hook.sh stop`
   **only while the voice daemon is running** — same check as `fsh`'s `_is_running voice`.
   The agent-event POST is *not* gated on voice; status badges and the queue need it always.)
-- Config: Claude `hooks.PreToolUse` / `hooks.PostToolUse` / `hooks.Stop` in
+- Config: Claude `hooks.PreToolUse` / `hooks.PostToolUse` / `hooks.Stop` / `hooks.SessionStart` in
   `~/.claude/settings.json`; Codex's six managed events in `~/.codex/config.toml`
 - Behavior: extracts the last assistant response (up to 200 chars) from the transcript → server TTS → plays via `afplay`
 - Fallback: uses macOS `say -v Yuna` if the server isn't running
@@ -61,6 +61,8 @@ not an edge case:**
   markers for Codex). If the user had their own `Stop` hook before running
   `fsh hooks install`, both it and ours are registered afterward, and Claude
   Code/Codex run both when a session stops.
+- `SessionStart` (2026-09-28) uses matcher `"startup|resume|clear"` — **not** `compact`, which
+  fires mid-task; the server ignores `source: "compact"` too, for hooks registered without it.
 - Our `PreToolUse`/`PostToolUse` matcher is always `"*"` (`apply_install`, both
   files) — every tool call matches it. A user with a tool-specific hook (matcher
   `"Bash"`, say) will see **both** groups fire on every Bash call. This isn't
@@ -110,3 +112,7 @@ One agent sends a message to another agent's tmux session, on this Mac or a pair
 - **The header** tells the receiving agent the text came from another agent, with `reply_to`/`to` for the answer. The body is flattened to one line — the queue submits with Enter, and a multi-line body would be split into several prompts.
 - **`fsh mcp`** (`server/mcp_farshell.py`) is a dependency-free stdio JSON-RPC server with three tools: `list_agents`, `send_message`, `read_messages`. It only calls the local FarShell API with the machine token (env, else `~/.vt.env`). `fsh msg` exposes the same for shells and agents without MCP.
 - Automatic delivery works for agents with lifecycle hooks (Claude Code, Codex). Others (aider, agy, …) receive the message but it is fed manually.
+- **Three fixes from the first real M1↔M5 run (2026-09-28):**
+  - `tmux_target.send_to_tmux` typed text and `Enter` in **one** `send-keys` call; Claude Code read the burst as a paste and took the Enter as a newline — the message sat unsubmitted in the input box (0/5 in a repeat test). Now the text goes with `-l` and Enter is a **separate** call (5/5). This also affected the plain prompt queue, voice input and `/api/peer/input` with `enter`. `-l` additionally stops a text that equals a key name (`Enter`, `Up`) from being pressed as that key, in `type_to_tmux` too.
+  - A reply that arrived was read as a new request and answered again (hop 2). Replies now carry a different header ("답장 … 다시 답할 필요가 없습니다"); only requests tell the agent how to answer. The hop limit stays as the backstop.
+  - A freshly started agent had no status entry, so messages waited until a human typed the first prompt. `SessionStart` (startup/resume/clear) now marks the session idle and drains **only items that name that session** (`targeted_only`) — untargeted queue items still belong to whichever agent stops first. Re-run `fsh hooks install` (or `install.sh`) so existing machines register the new hook.

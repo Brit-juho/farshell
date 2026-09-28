@@ -258,6 +258,17 @@ async def agent_event(request: Request):
             queued = queue_runner.schedule_drain(session=target, session_scoped=True)
         except Exception as e:                       # 큐 문제로 훅 응답이 깨지면 안 된다
             logger.warning(f"큐 드레인 예약 실패: {e}")
+    elif event == "session_start" and (state or {}).get("status") == agent_status.IDLE:
+        # 에이전트가 막 열렸다 — 그 세션을 **지목해** 기다리던 항목(주로 에이전트
+        # 메시지)만 흘려보낸다. 타깃 미지정 항목은 여전히 stop(done)의 몫이다.
+        target = session or (state or {}).get("tmux_session")
+        if target:
+            try:
+                import queue_runner
+                queued = queue_runner.schedule_drain(session=target, session_scoped=True,
+                                                     targeted_only=True)
+            except Exception as e:
+                logger.warning(f"큐 드레인 예약 실패: {e}")
 
     public_state = agent_status.public_entry(state) if state else state
     msg = {"type": "agent_event", "event": event, "state": public_state, "resolved_by": how}
