@@ -324,9 +324,8 @@ function Dock(props: { deps: DockDeps }) {
         <button
           type="button"
           class="vt-dock-tab vt-dock-action vt-dock-mcp-btn"
-          aria-label="MCP"
-          data-tip="MCP"
-          data-tip-sub="서버 · 스킬 · 플러그인"
+          aria-label="MCP · 스킬 관리"
+          data-tip="MCP · 스킬 관리"
           data-tip-side="left"
           onClick={showMcp}
           innerHTML={icon('link', 16, 2)}
