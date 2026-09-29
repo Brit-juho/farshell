@@ -1,7 +1,8 @@
-// N45 — 모바일 헤더 환경 칩("macOS · MacBook Pro M1 Pro"). 세션을 옮겨 다녀도
-// 안 바뀌는 값(이 서버가 도는 물리 기기)이라 부팅 시 한 번만 읽는다.
-// `/api/capabilities`의 hostname/version과 같은 "값 없으면 숨긴다" 규칙 —
-// machine이 빈 문자열이면(Linux/WSL2) os만, os마저 없으면 칩 자체를 숨긴다.
+// N45 — 모바일 헤더 환경 칩("MacBook Pro M1 Pro"). 세션을 옮겨 다녀도
+// 안 바뀌는 값(이 서버가 도는 물리 기기)이라 부팅 시 한 번만 읽는다. 호스트를
+// 전환했으면 vtFetch가 중계하므로 그 맥의 값이 나온다.
+// 2026-09-29 — OS 이름("macOS · ")은 뺐다(사용자 요청: 어느 맥인지만 보면 된다).
+// machine이 빈 문자열이면(Linux/WSL2) hostname, 그마저 없으면 칩을 숨긴다.
 //
 // mobile-nav.js처럼 main.js가 정적 import하는 파일이라(지연 청크 아님) core를
 // 그대로 import해도 된다.
@@ -21,9 +22,7 @@ async function _init() {
   } catch (_) {
     return; // 조회 실패 — hidden 유지
   }
-  const os = (cap && cap.os) || '';
-  const machine = (cap && cap.machine) || '';
-  const text = machine ? `${os} · ${machine}` : os;
+  const text = (cap && (cap.machine || cap.hostname)) || '';
   if (!text) return;
   _el.textContent = text;
   _el.hidden = false;

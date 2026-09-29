@@ -704,7 +704,7 @@ every command" list.
 ## 7. Mobile (compact, < 720px)
 
 ```
-┌ app bar ── [macOS · MacBook Pro M1 Pro]  [session · n/N]  [search] ┐
+┌ app bar ── [MacBook Pro M1 Pro]  [session · n/N]  [search] ───────┐
 │                                                                     │
 │   tab content (session / terminal / changes / files / settings)    │
 │                                                                     │
@@ -719,8 +719,9 @@ larger pass).** The header no longer changes per tab — earlier it showed the
 workspace chip on the Fleet tab and the session picker + search elsewhere,
 which meant the same screen real estate meant different things depending on
 which bottom-nav tab you were on. Now it's three things, always: an **env
-chip** (`#vt-env-chip`, `layout/env-chip.js`) reading `os`/`machine` off
-`/api/capabilities` (`"macOS · MacBook Pro M1 Pro"` — machine is macOS-only,
+chip** (`#vt-env-chip`, `layout/env-chip.js`) reading `machine` (falling back
+to `hostname`) off `/api/capabilities` (`"MacBook Pro M1 Pro"` — the OS prefix
+was dropped 2026-09-29 at the user's request; machine is macOS-only,
 read once via `system_profiler` and cached for the process lifetime, same
 pattern as the `hostname`/`version` fields), the session picker
 (`#voice-session-picker`, kept for now as a display + the same rename/sleep/
