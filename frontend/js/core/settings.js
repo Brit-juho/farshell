@@ -83,6 +83,9 @@ export const SCHEMA = {
 
   // N38(70-mobile.md §1) — compact 하단 내비의 시작 탭. 기기 스코프인 이유는
   // rail/dock 폭과 같다: 폰에서 고른 첫 화면이 맥 터미널 시작 화면에 새면 안 된다.
+  // 2026-09-29 — 모바일 키바 열림 여부. 헤더의 키보드 버튼으로만 바뀐다(소프트
+  // 키보드가 떠도 저절로 열지 않는다 — 사용자 결정). 기본은 닫힘.
+  'keybar.open':            { type: 'bool', def: false, scope: 'device' },
   'ui.mobile.home':         { type: 'enum', def: 'fleet', values: ['fleet', 'terminal'], scope: 'device' },
 
   // ADR-44(docs/plan-2.3/95-viewer-surface.md §3) — 파일 뷰어 표면. `pane`은 2.2.0까지의

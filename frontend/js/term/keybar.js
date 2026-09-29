@@ -10,6 +10,7 @@ import { activeSessionId, activeSession, getSession } from '../core/store.js';
 import { copyToClipboard, sendToPty } from './clipboard.js';
 import { fitAndResize } from './resize.js';
 import { _isCoarsePointer } from '../core/env.js';
+import { get as settingGet, set as settingSet, subscribe as settingSubscribe } from '../core/settings.js';
 
 // 수식키 상태. latch: 'off' | 'once'(다음 한 키) | 'lock'(다시 탭할 때까지).
 // held: 지금 그 버튼을 누르고 있는 포인터 id 집합(멀티터치 동시 입력).
@@ -182,6 +183,7 @@ export function initKeybar() {
   // 강제 노출 시엔 CSS의 pointer:fine 숨김을 이기도록 클래스 부여.
   if (_force) bar.classList.add('force-show');
   bar.hidden = false;
+  document.documentElement.classList.add('vt-has-keybar');
 
   document.addEventListener('vt:session-switch', () => setTerminalSelectionMode(false));
 
@@ -351,6 +353,35 @@ export function initKeybar() {
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(() => positionBar()).observe(bar);
   }
+
+  // 여닫기 — 헤더의 키보드 버튼(#keybar-open-btn)으로만 바뀐다. 닫히면 바가
+  // display:none이 되어 positionBar()가 높이 0을 내보내고 터미널이 그만큼 넓어진다.
+  // 텍스트 선택 중에는 복사·완료 줄이 키바 안에 있으므로 닫혀 있어도 보인다(CSS).
+  const openBtn = document.getElementById('keybar-open-btn');
+  const applyOpen = (open) => {
+    bar.classList.toggle('closed', !open);
+    if (openBtn) openBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+    // 닫힌 채 수식키가 켜져 있으면 다음 입력이 보이지 않는 조합으로 나간다.
+    if (!open) resetKeybarMods();
+    positionBar();
+    const activeId = activeSessionId();
+    if (activeId) setTimeout(() => fitAndResize(activeId), 60);
+  };
+  if (openBtn) {
+    // pointerdown에서 막아야 터미널 포커스(소프트 키보드)가 유지된다.
+    openBtn.addEventListener('pointerdown', (e) => e.preventDefault());
+    openBtn.addEventListener('click', () => {
+      settingSet('keybar.open', bar.classList.contains('closed'));
+    });
+  }
+  applyOpen(Boolean(settingGet('keybar.open')));
+  // set()은 바뀐 키만 알린다 — 이 키가 들어 있을 때만 반응한다(다른 설정
+  // 알림을 "닫힘"으로 오독하지 않게, 2026-09-23 keybar.collapsed 사고와 같은 함정).
+  settingSubscribe((all) => {
+    if (!all || !('keybar.open' in all)) return;
+    const open = Boolean(all['keybar.open']);
+    if (open === bar.classList.contains('closed')) applyOpen(open);
+  });
 
   positionBar();
 }

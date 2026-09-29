@@ -283,19 +283,29 @@ test('모바일 세션 관리: 이름 변경은 레코드와 진입점에 함께
   await new Promise(resolve => setTimeout(resolve, 0));
 
   assert.strictEqual(window.sessionDisplayName('a'), '새 이름');
-  assert.strictEqual(window.document.getElementById('voice-session-picker').textContent, '새 이름');
+  assert.strictEqual(window.document.querySelector('#voice-session-picker .vt-sp-name').textContent, '새 이름');
 });
 
-test('모바일 세션 피커는 현재 세션의 전체 위치를 함께 표시한다', async () => {
+test('모바일 세션 피커 — 윗줄 세션 이름, 아랫줄 기기 · 위치(H1)', async () => {
   const { window, addSession } = await buildTerminalWindow();
-  Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
   addSession('a', '첫 세션');
   addSession('b', '둘째 세션');
+  const picker = window.document.getElementById('voice-session-picker');
+  assert.strictEqual(picker.querySelector('.vt-sp-name').textContent, '둘째 세션');
+  assert.strictEqual(picker.querySelector('.vt-sp-meta').textContent, '2/2', '기기 이름이 오기 전엔 위치만');
 
-  assert.strictEqual(
-    window.document.getElementById('voice-session-picker').textContent,
-    '둘째 세션 · 2/2'
-  );
+  // env-chip.js가 기기 이름을 늦게 알려도 다시 그린다.
+  window.document.documentElement.dataset.vtMachine = 'MacBook Pro M1 Pro';
+  window.document.dispatchEvent(new window.CustomEvent('vt:machine'));
+  assert.strictEqual(picker.querySelector('.vt-sp-meta').textContent, 'MacBook Pro M1 Pro · 2/2');
+});
+
+test('모바일 세션 피커 — 세션 이름은 HTML로 해석하지 않는다', async () => {
+  const { window, addSession } = await buildTerminalWindow();
+  addSession('x', '<img src=x onerror=alert(1)>');
+  const picker = window.document.getElementById('voice-session-picker');
+  assert.strictEqual(picker.querySelector('img'), null);
+  assert.strictEqual(picker.querySelector('.vt-sp-name').textContent, '<img src=x onerror=alert(1)>');
 });
 
 test('이름 변경은 공용 API 요청을 보내고 레코드를 갱신한다', async () => {

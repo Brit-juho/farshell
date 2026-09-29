@@ -704,11 +704,12 @@ every command" list.
 ## 7. Mobile (compact, < 720px)
 
 ```
-┌ app bar ── [MacBook Pro M1 Pro]  [session · n/N]  [search] ───────┐
+┌ app bar 52 ── session name ▾                     [keybar] [search] ┐
+│               MacBook Pro M1 Pro · n/N                             │
 │                                                                     │
 │   tab content (session / terminal / changes / files / settings)    │
 │                                                                     │
-├ keybar (terminal tab only) — Ctrl · Alt · Shift (pinned) │   ↑   ─┤
+├ keybar (terminal tab, opened from the app bar) — Ctrl Alt Shift │ ↑ ┤
 │      Esc Tab ⇧Tab ^C Home … F12 ▸ (horizontal scroll)     │ ← ↓ →  │
 ├ bottom nav 52 ── session | terminal | changes | files | settings ──┤
 └─────────────────────────────────────────────────────────────────  ┘
@@ -913,6 +914,24 @@ ring (next key), filled key + solid lamp (locked). Keycaps use `--mono`. The
 strip fades whichever edge has more keys (`.more-left`/`.more-right`) and
 maps vertical wheel to horizontal. Chosen from three candidates rendered on
 the real app (pinned row / two-row scrolling grid / slim single row).
+
+**2026-09-29 — app bar redone (H1, picked from three rendered candidates) and
+the keybar made optional.** The session name is the one focal element
+(600 weight, `--fs-md`, no button chrome — the ▾ says it's pressable); the
+device and position drop to a mono caption under it ("MacBook Pro M1 Pro ·
+2/5"), which absorbed the separate `#vt-env-chip` (`layout/env-chip.js` now
+only publishes `html[data-vt-machine]` + a `vt:machine` event for
+`picker.js`). The bar is 52px on compact; the rule is written as
+`:root, html[data-skin]` because the farshell/macos skin blocks pin
+`--topbar-h:32px` at `html[data-skin=…]` specificity, which silently beat a
+bare `:root` (the older coarse-pointer 44px rule still loses to it on those
+skins). Two 44px icon buttons on the right: `#keybar-open-btn` (keyboard) and
+search. The keybar is **closed by default** and only that button opens it —
+it never opens itself when the soft keyboard appears (user decision); the
+state is the device-scoped `keybar.open`. Closing also releases any latched
+modifier, and text-selection mode still shows its copy/done row while
+closed. Touch leaves `:hover` stuck after a tap, which made a closed toggle
+look pressed — on `(hover:none)` only `aria-pressed` paints it.
 
 **Quick open (step 5) is now a full-height bottom sheet on compact** instead
 of the 60vh-capped card shared with the desktop layout — see § 6's "Default

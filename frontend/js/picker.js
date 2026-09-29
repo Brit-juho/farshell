@@ -23,8 +23,22 @@ export function updateSessionPicker() {
   const entries = Object.keys(allSessions());
   const activeId = activeSessionId();
   const position = entries.indexOf(activeId) + 1;
-  const suffix = window.innerWidth < 720 && position > 0 ? ` · ${position}/${entries.length}` : '';
-  picker.textContent = s ? `${sessionDisplayName(activeId)}${suffix}` : '세션';
+  // 2026-09-29(H1) — 두 줄: 윗줄 세션 이름(주인공) + ▾, 아랫줄 "기기 · 3/5".
+  // 기기 이름은 layout/env-chip.js가 html[data-vt-machine]에 둔다(늦게 오면
+  // 'vt:machine' 이벤트로 다시 그린다). 이름은 사용자 입력이라 textContent로만 넣는다.
+  const name = document.createElement('span');
+  name.className = 'vt-sp-name';
+  name.textContent = s ? sessionDisplayName(activeId) : '세션';
+  const row = document.createElement('span');
+  row.className = 'vt-sp-row';
+  row.append(name);
+  row.insertAdjacentHTML('beforeend', icon('chevron-down', 14));
+  const meta = document.createElement('span');
+  meta.className = 'vt-sp-meta';
+  const machine = document.documentElement.dataset.vtMachine || '';
+  const pos = s && position > 0 ? `${position}/${entries.length}` : '';
+  meta.textContent = [machine, pos].filter(Boolean).join(' · ');
+  picker.replaceChildren(row, ...(meta.textContent ? [meta] : []));
   const sheet = document.getElementById('session-manager');
   if (sheet) renderSessionManager(sheet);
 }
@@ -198,3 +212,5 @@ registerAction('session.open-on-mac', () => openSessionOnMac());
 // Rail.tsx가 특정 세션을 지정해 부르는 자리 — 정적 import 불가(레일 지연 청크
 // 제약, session-actions.js 머리말과 같은 이유)라 window로 브리지한다.
 window.vtOpenSessionOnMac = openSessionOnMac;
+
+document.addEventListener('vt:machine', () => updateSessionPicker());

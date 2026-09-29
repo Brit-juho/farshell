@@ -321,6 +321,28 @@ test('모두 선택 — 뷰포트 전체(rows×cols)를 term.select로 고른다
   assert.deepStrictEqual(calls, [[0, 0, 24 * 80]]);
 });
 
+test('여닫기 — 기본은 닫힘, 헤더 버튼으로 열고 닫는다, 닫으면 켜진 수식키도 풀린다', async () => {
+  const { window, btn, tap } = await buildWired();
+  const doc = window.document;
+  const bar = doc.getElementById('keybar');
+  const openBtn = doc.getElementById('keybar-open-btn');
+  assert.ok(doc.documentElement.classList.contains('vt-has-keybar'));
+  assert.ok(bar.classList.contains('closed'));
+  assert.strictEqual(openBtn.getAttribute('aria-pressed'), 'false');
+  openBtn.click();
+  assert.ok(!bar.classList.contains('closed'));
+  assert.strictEqual(openBtn.getAttribute('aria-pressed'), 'true');
+  tap(btn('#keybar [data-mod="ctrl"]'));
+  openBtn.click();
+  assert.ok(bar.classList.contains('closed'));
+  assert.strictEqual(btn('#keybar [data-mod="ctrl"]').getAttribute('aria-pressed'), 'false');
+});
+
+test('데스크톱 — 키바가 없으면 여닫기 버튼도 드러낼 표시가 없다', async () => {
+  const { window } = await buildWindow({ coarse: false });
+  assert.ok(!window.document.documentElement.classList.contains('vt-has-keybar'));
+});
+
 // --- 소프트 키보드 겹침 → 터미널 하단 여백 -------------------------------
 // 회귀 대상: keybar는 transform으로 키보드 위에 떠오르는데 #terminal-container의
 // 하단 여백은 상수(--spacing*24)였다. 그래서 키보드가 올라오면 터미널 마지막

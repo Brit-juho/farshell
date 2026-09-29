@@ -204,7 +204,10 @@ export function createXtermInstance(id) {
         const target = document.elementFromPoint(e.clientX, e.clientY);
         a11yLayer.style.pointerEvents = 'auto';
         if (!target) return;
-        for (const type of ['mousedown', 'mouseup', 'click']) {
+        // mousemove가 먼저다 — xterm은 링크(term/links.js의 파일 경로·URL)를
+        // "마우스를 올렸을 때" 찾아 두고 mouseup에서 실행한다. 이걸 빼면 탭으로는
+        // 링크가 절대 잡히지 않는다(2026-09-29, 폰에서 경로를 눌러도 안 열리던 원인).
+        for (const type of ['mousemove', 'mousedown', 'mouseup', 'click']) {
           target.dispatchEvent(new MouseEvent(type, {
             bubbles: true, cancelable: true, view: window,
             clientX: e.clientX, clientY: e.clientY, button: 0,

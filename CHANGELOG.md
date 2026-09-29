@@ -82,6 +82,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **모바일 헤더를 세션 이름 중심으로 다시 짜고, 키바를 여닫게 했다**
+  (`picker.js`, `layout/env-chip.js`, `term/keybar.js`, `10-shell.css`). 헤더는
+  윗줄 세션 이름 ▾(주인공), 아랫줄 "기기 · 2/5" 캡션, 오른쪽 44px 아이콘 두 개
+  (키바·검색)다. 따로 있던 기기 칩은 캡션으로 합쳤다. 실제 앱 위에 렌더링한
+  후보 세 개(두 줄 제목 / 한 줄+상태점 / 좌우 넘기기) 중 사용자가 골랐다.
+  키바는 기본 닫힘이고 헤더의 키보드 버튼으로만 열린다(소프트 키보드가 떠도
+  저절로 열지 않는다) — 상태는 기기별 설정 `keybar.open`.
+
 - **모바일 키바를 다시 짰다: 수식키 고정 줄 + 가로 스크롤 키 줄 | 역T자 방향키**
   (`term/keybar.js`, `lib/keyseq.js`, `index.html`). 사용자 지적 두 가지 —
   옆으로 밀려고 대면 키가 눌리고, 동시 입력이 안 돼 단축키를 못 쓴다. 키가
@@ -221,6 +229,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   설정 화면 「스크롤백」 절의 영속화 토글도 함께 사라졌다(줄 수 설정은 남는다).
 
 ### Fixed
+
+- **폰에서 터미널의 파일 경로·URL을 탭해도 열리지 않던 것.** 터치 탭을 캔버스로
+  넘길 때 `mousedown/mouseup/click`만 합성해서, 링크를 "마우스를 올렸을 때"
+  찾아 두는 xterm이 탭에서는 링크를 잡지 못했다(`term/xterm-setup.js`).
+  `mousemove`를 먼저 보낸다. 데스크톱 클릭은 원래부터 정상이었다.
 
 - **헤더 칩·레일 호스트 스위처·터미널 칸이 서로 다른 호스트를 말하던 것**
   (`term/host-view.js`, `shell/Rail.tsx`, `shell/HeaderExtras.tsx`,

@@ -315,6 +315,9 @@ body.voice-only-mode .vt-onboarding { display:none; }
   will-change:transform;
 }
 #keybar[hidden] { display:none; }
+/* 헤더 키보드 버튼으로 닫은 상태. 텍스트 선택 중엔 복사·완료 줄이 여기 있으니 보인다. */
+#keybar.closed { display:none; }
+body.vt-term-selecting #keybar.closed:not([hidden]) { display:flex; }
 /* 2026-09-29 — 왼쪽 두 줄(윗줄 수식키 고정 / 아랫줄 가로 스크롤) + 오른쪽
    역T자 방향키. 방향키가 두 줄 높이를 이미 쓰므로 왼쪽도 두 줄로 나눠, 수식키를
    스크롤에서 빼고 아랫줄 폭을 스크롤 키에 다 준다. */

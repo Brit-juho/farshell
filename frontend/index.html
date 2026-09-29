@@ -297,15 +297,9 @@
     <!-- N37 §4 — 워크스페이스 칩("farshell / 호스트"). 내용은 shell/HeaderExtras.tsx
          (Solid, 지연 로드)가 채운다. 클릭 → 팔레트(§4: "@ 모드"는 60 §3이 생기면).
          2026-09-23 — compact(<720px)에서는 항상 숨긴다(10-shell.css). 대신
-         아래 #vt-env-chip이 "이 기기가 무엇인가"를 보여준다 — 리포지토리
+         세션 버튼 아랫줄이 "이 기기가 무엇인가"를 보여준다 — 리포지토리
          이름은 폰에서 매번 훑을 정보가 아니라는 사용자 판단. -->
     <div id="vt-workspace-chip-slot"></div>
-
-    <!-- N45 — 모바일 헤더 환경 칩("MacBook Pro M1 Pro"). 탭이 바뀌어도
-         그대로 남는다 — 세션 목록·전환은 이제 세션 탭(#vt-fleet-slot) 하나가
-         전담하므로, 헤더가 탭마다 다른 걸 보여줄 이유가 없어졌다(70-mobile.md).
-         값은 layout/env-chip.js가 /api/capabilities에서 한 번 읽어 채운다. -->
-    <div id="vt-env-chip" hidden></div>
 
     <!-- 10-shell-layout.md §4 3단계 — **탭 = 열려 있는 워크트리**. 탭마다 자기
          pane 트리를 가진다(layout/store.js의 탭 집합). 세션 탭 줄(#tabs)은
@@ -321,7 +315,9 @@
       <svg data-icon="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"></svg>
     </div>
 
-    <!-- 좁은 화면의 세션 관리 진입점. 탭 영역이 눌려도 전환·이름 변경·닫기가 남는다. -->
+    <!-- 좁은 화면의 세션 관리 진입점. 탭 영역이 눌려도 전환·이름 변경·닫기가 남는다.
+         2026-09-29(H1) — 모바일 헤더의 주인공. 윗줄 세션 이름 ▾, 아랫줄 "기기 · 3/5"
+         (picker.js가 그린다). 따로 있던 기기 칩(#vt-env-chip)은 이 아랫줄로 합쳤다. -->
     <button id="voice-session-picker" type="button" aria-label="세션 관리" aria-haspopup="dialog"
       aria-expanded="false" data-action="session.manager">세션</button>
 
@@ -338,6 +334,11 @@
          목록에서 제외). 터미널 내 검색 자체는 Ctrl/Cmd+F로 그대로
          쓸 수 있다(팔레트 `/` 접두사는 60-settings-palette.md §3부터 파일 검색으로 바뀌었다) — ⋯ 메뉴의 동일 항목("터미널 내 검색"·"빠른 열기")은 L1 잔여
          항목에서 제거했다(상단바 ↔ ⋯ 중복 제거). -->
+    <!-- 2026-09-29 — 모바일 키바 여닫기. 키바가 있는 기기(터치)의 터미널 탭에서만
+         보인다(CSS, html.vt-has-keybar). 상태는 기기별 설정 keybar.open. -->
+    <button id="keybar-open-btn" type="button" class="vt-icon-btn" aria-label="특수키 바" aria-pressed="false" data-tip="특수키 바 열기/닫기" data-tip-side="bottom">
+      <svg data-icon="keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </button>
     <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" data-tip="빠른 열기" data-tip-keys="Mod+K" data-tip-side="bottom">
       <svg data-icon="search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
