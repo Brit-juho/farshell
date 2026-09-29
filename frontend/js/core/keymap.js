@@ -222,6 +222,28 @@ export function match(e) {
   return null;
 }
 
+// 브라우저가 paste 이벤트를 발생시키는 조합은 키맵 액션으로 다시 읽지 않는다.
+// 기본 Ctrl+Shift+V와 사용자가 macOS Cmd+V로 재지정한 경우도 포함한다.
+export function isNativePasteBinding(binding) {
+  if (binding?.id !== 'paste') return false;
+  const combo = normalize(binding.combo);
+  const native = IS_MAC
+    ? ['mod+v', 'mod+shift+v', 'ctrl+shift+v']
+    : ['mod+shift+v']; // Ctrl+V는 xterm/셸의 quoted-insert 몫이다.
+  return native.includes(combo);
+}
+
+export function isNativePasteShortcut(e, binding) {
+  return isNativePasteBinding(binding)
+    && normalize(binding.combo) === comboFromEvent(e);
+}
+
+const TAB_ACTIONS = new Set(['tabPrev', 'tabNext', 'tabMovePrev', 'tabMoveNext']);
+function isTextField(target) {
+  return target instanceof Element && !target.closest('.xterm')
+    && Boolean(target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+}
+
 // ── 실행 ──────────────────────────────────────────────────────────────────
 const _handlers = new Map();
 
@@ -246,20 +268,29 @@ export function invoke(id) {
 export function handleKeydown(e) {
   const b = match(e);
   if (!b) return false;
+  // 일반 입력창의 붙여넣기는 그 입력창 몫이다. xterm의 숨은 textarea는
+  // isTextField에서 제외돼 터미널 붙여넣기 경로를 계속 탄다.
+  if (b.id === 'paste' && isTextField(e.target)) return false;
+  // 탭 이동 핸들러는 편집 중 실행을 건너뛴다. 키 기본동작도 함께 살려야
+  // Shift+화살표 텍스트 선택을 막지 않는다.
+  if (TAB_ACTIONS.has(b.id) && isTextField(e.target)) return false;
   const fn = _handlers.get(b.id);
   if (!fn) return false;
-  // passthrough면 동작은 하되 키를 터미널로도 흘린다 — `Mod+F`를 셸의
-  // forward-char로 되돌리고 싶은 사용자를 위한 탈출구.
-  if (!b.passthrough) {
+  const nativePaste = isNativePasteShortcut(e, b);
+  // 브라우저 기본 단축키는 어느 경우든 막는다. passthrough는 전파만 남겨
+  // xterm이 같은 키를 PTY로 보내게 한다(예: Ctrl+F → forward-char).
+  // 네이티브 붙여넣기만 예외: paste 이벤트가 올 기회를 주고, 오지 않는
+  // 브라우저는 핸들러의 지연 Clipboard API 폴백으로 처리한다.
+  if (!nativePaste) {
     e.preventDefault();
-    e.stopPropagation();
+    if (!b.passthrough) e.stopPropagation();
   }
   try {
     fn(e);
   } catch (err) {
     console.warn(`[keymap] ${b.id} 실행 실패:`, err);
   }
-  return !b.passthrough;
+  return !nativePaste && !b.passthrough;
 }
 
 let _wired = false;

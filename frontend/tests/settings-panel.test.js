@@ -228,6 +228,15 @@ test('키맵 — 현재 바인딩과 passthrough 체크가 그려진다', async 
   assert.strictEqual(row.querySelector('.vt-set-pt input').checked, false);
 });
 
+test('키맵 — 기본 붙여넣기는 브라우저 이벤트를 쓰므로 터미널 전달 토글을 숨긴다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  sectionButton(document, '키맵').click();
+  const row = rowByLabel(document, '붙여넣기');
+  assert.strictEqual(row.querySelector('.vt-set-pt'), null);
+  assert.match(row.querySelector('.vt-set-help').textContent, /브라우저 붙여넣기를 우선/);
+});
+
 test('키맵 — passthrough 체크가 레지스트리에 반영된다', async () => {
   const { document, P, K } = await build();
   P.showSettings();

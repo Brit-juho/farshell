@@ -10,30 +10,30 @@
 // document 리스너 자체는 core/keymap.js가 모듈 평가 시점에 건다 — 등록 순서와
 // 무관하므로(핸들러는 키를 받은 순간 조회된다) 이 파일이 늦게 로드돼도 된다.
 import { register as registerKey } from '../core/keymap.js';
+import { getBinding, isNativePasteShortcut } from '../core/keymap.js';
 import { splitActivePane, closePane, getActivePaneId, evenRatios } from '../layout/store.js';
 import { canSplit } from '../layout/panes.js';
 import { activeSessionId } from '../core/store.js';
-import { pasteFromClipboard } from './clipboard.js';
+import { pasteFromClipboard, queueNativePasteFallback } from './clipboard.js';
 
 registerKey('splitRight', () => { if (canSplit()) splitActivePane('row'); });
 registerKey('splitDown', () => { if (canSplit()) splitActivePane('col'); });
 registerKey('paneClose', () => closePane(getActivePaneId()));
 registerKey('paneEven', () => evenRatios());
 
-// 2026-09-23(2.1 D6) — 'paste' 키맵 액션(기본 Ctrl+Shift+V)도 'viewer'와
-// 같은 처지였다: core/keymap.js ACTIONS에 정의만 있고 register()가 아예
-// 없어 눌러도 아무 일도 안 났다. clipboard.js는 세션 id를 몰라도 되게
-// 두고(pasteFromClipboard(id) 그대로), "지금 어느 세션이 활성인가"만
-// 여기서 결정한다 — rail 토글·worktreeNew와 같은 이유로 이 파일이 맡는다.
-registerKey('paste', () => {
+// 기본 Ctrl+Shift+V는 브라우저 paste 이벤트를 먼저 기다린다. 이벤트가 없는
+// 브라우저는 지연 Clipboard API 폴백을 쓴다. 팔레트 명령과 다른 사용자
+// 재지정 조합은 바로 Clipboard API를 사용한다.
+registerKey('paste', (e) => {
   const id = activeSessionId();
-  if (id) pasteFromClipboard(id);
+  if (!id) return;
+  if (e && isNativePasteShortcut(e, getBinding('paste'))) queueNativePasteFallback(id);
+  else pasteFromClipboard(id);
 });
 
-// rail 토글 — rail.js는 자기 DOM만 알면 되도록 data-action 위임을 쓰고 있다.
-// 그 진입점을 그대로 눌러준다(중복 구현하지 않는다).
+// 레일 토글 — 현재 Rail.tsx의 접기/펴기 버튼과 같은 경로를 쓴다.
 registerKey('railToggle', () => {
-  const btn = document.querySelector('#vt-rail .vt-rail-btn[data-rail="session"]');
+  const btn = document.querySelector('#vt-wgrail .vt-wgrail-collapse');
   if (btn) btn.click();
 });
 

@@ -9,6 +9,7 @@ const { createDomEnv } = require('./helpers/dom-env');
 const { importFresh } = require('./helpers/vm-esm');
 
 const KEYMAP_JS = path.join(__dirname, '../js/core/keymap.js');
+const KEYMAP_ACTIONS_JS = path.join(__dirname, '../js/term/keymap-actions.js');
 const SETTINGS_JS = path.join(__dirname, '../js/core/settings.js');
 
 const _doms = [];
@@ -26,7 +27,7 @@ async function load({ standalone = false, platform = '' } = {}) {
   const cache = new Map();
   const S = await importFresh(SETTINGS_JS, env.context, cache);
   const K = await importFresh(KEYMAP_JS, env.context, cache);
-  return { window, K, S };
+  return { window, K, S, context: env.context, cache };
 }
 
 const kd = (window, opts) => new window.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...opts });
@@ -92,6 +93,107 @@ test('수식키가 모자라면 매칭되지 않는다', async () => {
   assert.strictEqual(K.match(kd(window, { key: 'k', ctrlKey: true })), null, '비-mac의 Ctrl+K는 셸의 kill-line 몫이다');
 });
 
+test('모든 기본 키맵은 mac과 비-mac에서 충돌 없이 자신의 액션에 매칭된다', async () => {
+  for (const platform of ['MacIntel', 'Linux x86_64']) {
+    const { K, window } = await load({ platform });
+    const bindings = K.list();
+    assert.strictEqual(bindings.length, 16);
+    assert.deepEqual(K.conflicts(), {});
+    for (const b of bindings) {
+      assert.strictEqual(b.unavailable, false, `${platform}: ${b.id}가 브라우저 예약키면 안 된다`);
+      const parts = K.normalize(b.combo).split('+');
+      const key = parts.pop();
+      const e = kd(window, {
+        key,
+        ctrlKey: parts.includes('ctrl') || (platform !== 'MacIntel' && parts.includes('mod')),
+        metaKey: platform === 'MacIntel' && parts.includes('mod'),
+        altKey: parts.includes('alt'),
+        shiftKey: parts.includes('shift'),
+      });
+      assert.strictEqual(K.match(e)?.id, b.id, `${platform}: ${b.id} 바인딩 매칭 실패`);
+    }
+  }
+});
+
+test('붙여넣기를 브라우저 기본 조합으로 재지정해도 네이티브 paste를 사용한다', async () => {
+  for (const { platform, combo } of [
+    { platform: 'MacIntel', combo: 'Mod+V' },
+    { platform: 'Linux x86_64', combo: 'Ctrl+Shift+V' },
+  ]) {
+    const { K, window } = await load({ platform });
+    await K.setBinding('paste', combo);
+    const b = K.getBinding('paste');
+    assert.strictEqual(K.isNativePasteBinding(b), true);
+    let runs = 0;
+    K.register('paste', () => { runs += 1; });
+    const e = kd(window, { key: 'v', ctrlKey: platform !== 'MacIntel',
+      metaKey: platform === 'MacIntel', shiftKey: platform !== 'MacIntel' });
+    K.handleKeydown(e);
+    assert.strictEqual(runs, 1, '네이티브 paste를 기다리는 폴백 핸들러는 예약한다');
+    assert.strictEqual(e.defaultPrevented, false);
+  }
+});
+
+test('비-mac Ctrl+V는 터미널 키이므로 네이티브 붙여넣기로 분류하지 않는다', async () => {
+  const { K } = await load({ platform: 'Linux x86_64' });
+  await K.setBinding('paste', 'Ctrl+V');
+  assert.strictEqual(K.isNativePasteBinding(K.getBinding('paste')), false);
+});
+
+test('탭 이동 조합은 입력창의 텍스트 선택을 막지 않는다', async () => {
+  const { K, window } = await load({ platform: 'Linux x86_64' });
+  let runs = 0;
+  K.register('tabPrev', () => { runs += 1; });
+  const input = window.document.createElement('input');
+  window.document.body.appendChild(input);
+  const e = kd(window, { key: 'ArrowLeft', ctrlKey: true, shiftKey: true });
+  input.dispatchEvent(e);
+  assert.strictEqual(runs, 0);
+  assert.strictEqual(e.defaultPrevented, false);
+});
+
+test('탭 이동 조합은 xterm의 숨은 textarea에서는 실행된다', async () => {
+  const { K, window } = await load({ platform: 'Linux x86_64' });
+  let runs = 0;
+  K.register('tabPrev', () => { runs += 1; });
+  const wrapper = window.document.createElement('div');
+  wrapper.className = 'xterm';
+  const textarea = window.document.createElement('textarea');
+  wrapper.appendChild(textarea);
+  window.document.body.appendChild(wrapper);
+  const e = kd(window, { key: 'ArrowLeft', ctrlKey: true, shiftKey: true });
+  textarea.dispatchEvent(e);
+  assert.strictEqual(runs, 1);
+  assert.strictEqual(e.defaultPrevented, true);
+});
+
+test('일반 입력창의 붙여넣기는 터미널 액션을 실행하지 않는다', async () => {
+  const { K, window } = await load({ platform: 'Linux x86_64' });
+  let runs = 0;
+  K.register('paste', () => { runs += 1; });
+  const input = window.document.createElement('textarea');
+  window.document.body.appendChild(input);
+  const e = kd(window, { key: 'v', ctrlKey: true, shiftKey: true });
+  input.dispatchEvent(e);
+  assert.strictEqual(runs, 0);
+  assert.strictEqual(e.defaultPrevented, false);
+});
+
+test('사이드바 토글은 현재 레일의 접기 버튼을 누른다', async () => {
+  const { K, window, context, cache } = await load({ platform: 'Linux x86_64' });
+  const rail = window.document.createElement('aside');
+  rail.id = 'vt-wgrail';
+  const button = window.document.createElement('button');
+  button.className = 'vt-wgrail-collapse';
+  rail.appendChild(button);
+  window.document.body.appendChild(rail);
+  let clicks = 0;
+  button.addEventListener('click', () => { clicks += 1; });
+  await importFresh(KEYMAP_ACTIONS_JS, context, cache);
+  K.handleKeydown(kd(window, { key: 'b', altKey: true, shiftKey: true }));
+  assert.strictEqual(clicks, 1);
+});
+
 // ── 실행 · passthrough ────────────────────────────────────────────────────
 test('handleKeydown — 등록된 핸들러를 실행하고 기본동작을 막는다', async () => {
   const { K, window } = await load({ platform: 'Linux' });
@@ -114,7 +216,25 @@ test('passthrough — 동작은 하되 키를 터미널로 흘린다(검색 키�
   const consumed = K.handleKeydown(e);
   assert.strictEqual(ran, 1, '동작 자체는 그대로 실행된다');
   assert.strictEqual(consumed, false);
-  assert.strictEqual(e.defaultPrevented, false, '터미널이 키를 받아야 하므로 막지 않는다');
+  assert.strictEqual(e.defaultPrevented, true, '브라우저 기본 동작은 막고 xterm으로 전파한다');
+});
+
+test('passthrough — 브라우저 기본 동작은 막고 xterm 대상까지 이벤트를 전달한다', async () => {
+  const { K, window } = await load({ platform: 'Linux' });
+  let actionRuns = 0;
+  let xtermEvents = 0;
+  K.register('search', () => { actionRuns += 1; });
+  await K.setPassthrough('search', true);
+  const textarea = window.document.createElement('textarea');
+  window.document.body.appendChild(textarea);
+  textarea.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented) xtermEvents += 1;
+  });
+  const e = kd(window, { key: 'f', ctrlKey: true, shiftKey: true });
+  textarea.dispatchEvent(e);
+  assert.strictEqual(actionRuns, 1);
+  assert.strictEqual(xtermEvents, 1);
+  assert.strictEqual(e.defaultPrevented, true);
 });
 
 test('핸들러가 없는 액션은 조용히 통과시킨다', async () => {

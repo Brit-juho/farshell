@@ -676,10 +676,10 @@ with labels and default bindings, but **nobody had ever called
 `register()` for them** — pressing either did nothing, silently, since
 `core/keymap.js`'s dispatcher just no-ops when `_handlers.get(id)` is
 `undefined`. `viewer` now delegates to the existing `viewer.show` action
-(`panels/viewer-lazy.js`); `paste` calls `clipboard.js`'s
-`pasteFromClipboard(activeSessionId())` from `term/keymap-actions.js` (the
-file that already exists for exactly this — actions whose owning module
-shouldn't need to know about the keymap).
+(`panels/viewer-lazy.js`). `paste` is registered in `term/keymap-actions.js`:
+native paste shortcuts use the browser `paste` event when available, then a
+delayed Clipboard API fallback; palette invocation and other rebound shortcuts
+use `pasteFromClipboard(activeSessionId())` directly.
 
 **Scroll-clipping bug, root-caused live (not by reading CSS)**: the reported
 "10개인데 3개만 보인다" wasn't a missing scrollbar — nothing was clipping

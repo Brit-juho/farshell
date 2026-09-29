@@ -19,6 +19,7 @@ export function renderKeymapSection(rerender) {
   for (const b of keymap.list()) {
     const control = document.createElement('div');
     control.className = 'vt-set-keyrow';
+    const browserPaste = keymap.isNativePasteBinding(b);
 
     const combo = document.createElement('button');
     combo.type = 'button';
@@ -45,10 +46,12 @@ export function renderKeymapSection(rerender) {
     reset.textContent = '기본값';
     reset.addEventListener('click', () => keymap.reset(b.id).then(rerender));
 
-    control.append(combo, pt, reset);
+    if (browserPaste) control.append(combo, reset);
+    else control.append(combo, pt, reset);
 
     const conflictIds = conflicts[keymap.normalize(b.combo)];
     const help = [];
+    if (browserPaste) help.push('브라우저 붙여넣기를 우선하고, 지원하지 않으면 클립보드를 읽습니다.');
     if (b.unavailable) help.push('이 브라우저 탭에서는 사용할 수 없습니다.');
     if (conflictIds && conflictIds.length > 1) {
       // S5 검증에서 발견: 액션 id('palette')를 그대로 보여주고 있었다. 사용자는
@@ -81,4 +84,3 @@ function startRebind(id, btn, rerender) {
   };
   document.addEventListener('keydown', onKey, true);
 }
-

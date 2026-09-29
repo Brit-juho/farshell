@@ -14,6 +14,8 @@ const { importFresh } = require('./helpers/vm-esm');
 
 const STORE_JS = path.join(__dirname, '../js/core/store.js');
 const SELECTION_JS = path.join(__dirname, '../js/term/selection.js');
+const KEYMAP_JS = path.join(__dirname, '../js/core/keymap.js');
+const CLIPBOARD_JS = path.join(__dirname, '../js/term/clipboard.js');
 
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
@@ -23,7 +25,7 @@ after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } 
 function fakeTerm() {
   return {
     getSelection: () => '',
-    attachCustomKeyEventHandler() {},
+    attachCustomKeyEventHandler(handler) { this.keyHandler = handler; },
     input() {},
     parser: { registerCsiHandler() {}, registerOscHandler() {} },
   };
@@ -40,7 +42,9 @@ async function load() {
   const cache = new Map();
   const S = await importFresh(STORE_JS, env.context, cache);
   const Sel = await importFresh(SELECTION_JS, env.context, cache);
-  return { window, S, Sel };
+  const K = await importFresh(KEYMAP_JS, env.context, cache);
+  const Clip = await importFresh(CLIPBOARD_JS, env.context, cache);
+  return { window, S, Sel, K, Clip };
 }
 
 // jsdom에는 ClipboardEvent 생성자가 없다 — paste 이벤트에 clipboardData만
@@ -77,6 +81,79 @@ test('붙여넣기는 한 번만 나간다 — xterm의 paste 리스너까지 �
   assert.strictEqual(xtermPastes, 0, 'xterm 쪽 리스너가 돌면 같은 텍스트가 PTY에 두 번 들어간다');
   assert.strictEqual(sock.sent.length, 1);
   assert.strictEqual(JSON.parse(sock.sent[0]).text, 'echo hi');
+});
+
+for (const passthrough of [false, true]) {
+  test(`Ctrl+Shift+V — 터미널에도 전달 ${passthrough ? '켜짐' : '꺼짐'}에서 네이티브 paste 한 번`, async () => {
+    const { window, S, Sel, K, Clip } = await load();
+    const sock = new FakeOpenSocket();
+    S.registerSession('a', { ws: sock });
+    await K.setPassthrough('paste', passthrough);
+    let directReads = 0;
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { readText: async () => { directReads += 1; return 'echo hi'; } }, configurable: true,
+    });
+    K.register('paste', () => Clip.queueNativePasteFallback('a'));
+    const wrapper = window.document.getElementById('w');
+    const term = fakeTerm();
+    Sel.wireClipboard('a', term, wrapper);
+    const textarea = wrapper.querySelector('textarea');
+    const key = new window.KeyboardEvent('keydown', {
+      key: 'V', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
+    });
+    textarea.dispatchEvent(key);
+    assert.strictEqual(key.defaultPrevented, false);
+    assert.strictEqual(term.keyHandler(key), true);
+    assert.strictEqual(directReads, 0, '네이티브 paste 전에 Clipboard API를 읽지 않아야 한다');
+
+    textarea.dispatchEvent(pasteEvent(window, 'echo hi'));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.strictEqual(directReads, 0, 'paste 이벤트가 왔으면 폴백을 취소해야 한다');
+    assert.strictEqual(sock.sent.length, 1);
+    assert.strictEqual(JSON.parse(sock.sent[0]).text, 'echo hi');
+  });
+}
+
+test('Ctrl+Shift+V — paste 이벤트가 없는 브라우저에서는 Clipboard API로 한 번 붙인다', async () => {
+  const { window, S, Sel, K, Clip } = await load();
+  const sock = new FakeOpenSocket();
+  S.registerSession('a', { ws: sock });
+  Object.defineProperty(window.navigator, 'clipboard', {
+    value: { readText: async () => 'echo hi' }, configurable: true,
+  });
+  K.register('paste', () => Clip.queueNativePasteFallback('a'));
+  const wrapper = window.document.getElementById('w');
+  Sel.wireClipboard('a', fakeTerm(), wrapper);
+  wrapper.querySelector('textarea').dispatchEvent(new window.KeyboardEvent('keydown', {
+    key: 'V', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.strictEqual(sock.sent.length, 1);
+  assert.strictEqual(JSON.parse(sock.sent[0]).text, 'echo hi');
+});
+
+test('터미널에도 전달 — 코드 뷰어와 재지정한 붙여넣기 액션은 각각 한 번만 실행한다', async () => {
+  const { window, Sel, K } = await load();
+  const wrapper = window.document.getElementById('w');
+  const term = fakeTerm();
+  Sel.wireClipboard('a', term, wrapper);
+  const textarea = wrapper.querySelector('textarea');
+  for (const { id, key, ctrlKey, altKey } of [
+    { id: 'viewer', key: 'E', ctrlKey: true },
+    { id: 'paste', key: 'V', altKey: true },
+  ]) {
+    if (id === 'paste') await K.setBinding('paste', 'Alt+Shift+V');
+    await K.setPassthrough(id, true);
+    let runs = 0;
+    K.register(id, () => { runs += 1; });
+    const event = new window.KeyboardEvent('keydown', {
+      key, ctrlKey: !!ctrlKey, altKey: !!altKey, shiftKey: true,
+      bubbles: true, cancelable: true,
+    });
+    textarea.dispatchEvent(event);
+    assert.strictEqual(term.keyHandler(event), true);
+    assert.strictEqual(runs, 1, `${id} 액션이 문서와 xterm에서 중복 실행되면 안 된다`);
+  }
 });
 
 test('붙일 것이 없으면 가로채지 않는다 — xterm 기본 동작을 막지 않는다', async () => {

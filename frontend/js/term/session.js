@@ -396,9 +396,11 @@ export function moveTabByOffset(delta) {
 // 한 번만 듣고 preventDefault/stopPropagation까지 처리하므로(PTY로 새지 않는다),
 // 여기서는 "무엇을 할지"만 남는다.
 // 검색창·탭 이름 편집 중에는 텍스트 선택(Shift+화살표)을 방해하지 않는다 —
-// 이 예외는 이 액션 고유의 문맥이라 레지스트리가 아니라 여기 남긴다.
+// 레지스트리가 기본 키 동작까지 살리고, 이 핸들러도 같은 조건을 확인한다.
+// xterm의 숨은 textarea는 편집창이 아니라 터미널 입력이므로 제외한다.
 function _inTextField() {
   const ae = document.activeElement;
+  if (ae?.closest?.('.xterm')) return false;
   return !!(ae && (ae.id === 'search-input' || ae.isContentEditable
     || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'));
 }

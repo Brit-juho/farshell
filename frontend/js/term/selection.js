@@ -2,9 +2,8 @@
 // F4에서 terminal.js(구 :482-565)에서 분리. addSession에서 term.open 직후 호출.
 import { match as matchKey } from '../core/keymap.js';
 import { get as setting } from '../core/settings.js';
-import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste } from './clipboard.js';
+import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste, cancelNativePasteFallback } from './clipboard.js';
 import { getSession } from '../core/store.js';
-import { getAction } from '../core/dom.js';
 import { _isCoarsePointer } from '../core/env.js';
 import { wireKittyKeyboard, encodeKey } from './kitty-keys.js';
 
@@ -62,6 +61,7 @@ export function wireClipboard(id, term, wrapper) {
     const items = (e.clipboardData && e.clipboardData.items) || [];
     for (const it of items) {
       if (it.type && it.type.indexOf('image/') === 0) {
+        cancelNativePasteFallback(id);
         e.preventDefault();
         e.stopPropagation();
         const file = it.getAsFile();
@@ -71,13 +71,14 @@ export function wireClipboard(id, term, wrapper) {
     }
     const text = e.clipboardData && e.clipboardData.getData('text/plain');
     if (text) {
+      cancelNativePasteFallback(id);
       e.preventDefault();
       e.stopPropagation();
       sendPaste(id, text);
     }
   }, true);
 
-  // 4) 붙여넣기 단축키 — Ctrl+Shift+V 하나로 통일 (크로스플랫폼 안전 경로).
+  // 4) 붙여넣기 단축키 — 기본 Ctrl+Shift+V는 브라우저 paste 이벤트를 우선한다.
   //    · Cmd+V(Mac)는 위 3)의 브라우저 네이티브 paste 이벤트로 처리된다(이미지 포함)
   //      — 여기서 안 건드린다.
   //    · 순수 Ctrl+V는 그대로 pty로 흘려보낸다 — bash readline(quoted-insert),
@@ -85,43 +86,25 @@ export function wireClipboard(id, term, wrapper) {
   //    복사 단축키(예전 Cmd+C / Ctrl+Insert)와 붙여넣기 Shift+Insert는 제거했다:
   //    드래그하면 이미 자동 복사(copy-on-select)되고, 수동 복사/붙여넣기는 우클릭으로
   //    되므로 중복이라 오히려 혼란만 준다.
-  //    ⚠ Ctrl+Shift+V는 Chrome/Firefox 등에서 "서식 없이 붙여넣기" 네이티브 단축키와
-  //    겹친다 — preventDefault()로 먼저 막지 않으면 이중 붙여넣기가 된다.
-  // S3: 하드코딩된 두 조합을 키맵 레지스트리로 옮겼다. 여기는 xterm의
-  // attachCustomKeyEventHandler라 성격이 다르다 — xterm이 키를 PTY로 보내기
-  // **전에** 판정해야 하므로, 레지스트리의 match()로 "이 키가 어떤 액션인가"만
-  // 물어보고 실행은 이 자리에서 한다(document 리스너로 옮기면 xterm이 먼저
-  // 먹어서 PTY에 이스케이프가 흘러간다).
-  // passthrough가 켜져 있으면 true를 반환해 터미널로도 흘린다.
+  //    Ctrl+Shift+V는 브라우저의 "서식 없이 붙여넣기"가 만든 paste 이벤트를
+  //    우선한다. 이벤트가 없을 때만 지연 Clipboard API 폴백이 실행된다.
+  // 키맵 액션은 document capture 리스너 한 곳에서 실행한다. 여기서 다시
+  // 실행하면 passthrough가 켜진 키는 두 번 처리된다. xterm에서는 키맵에
+  // 잡힌 키를 kitty 프로토콜로 재인코딩하지 않고 그대로 통과시킨다.
   // N12 — kitty 키보드 프로토콜. 앱이 모드를 켰을 때만 동작한다(협상 2층).
   const kitty = wireKittyKeyboard(term);
 
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== 'keydown') return true;
     const hit = matchKey(e);
-    if (!hit) {
-      // 우리 단축키가 아닌 키만 프로토콜 인코딩 대상이다 — 순서가 반대면
-      // 앱이 모드를 켠 동안 Mod+K 같은 UI 단축키가 PTY로 새어 나간다.
-      const seq = encodeKey(e, kitty.flags);
-      if (seq) {
-        e.preventDefault();
-        term.input(seq, true);
-        return false;
-      }
-      return true;
-    }
-    if (hit.id === 'paste') {
-      if (!hit.passthrough) e.preventDefault();
-      pasteFromClipboard(id);
-      return hit.passthrough;
-    }
-    // 「파일」 — N35 §6부터 이 키는 모달이 아니라 팔레트를 연다(파일을 고르는
-    // 자리가 그리로 옮겨갔다). Ctrl+B는 tmux prefix라 절대 쓰지 않는다.
-    if (hit.id === 'viewer') {
-      if (!hit.passthrough) e.preventDefault();
-      const open = getAction('viewer.show');
-      if (typeof open === 'function') open();
-      return hit.passthrough;
+    if (hit) return true;
+    // 우리 단축키가 아닌 키만 프로토콜 인코딩 대상이다 — 순서가 반대면
+    // 앱이 모드를 켠 동안 Mod+K 같은 UI 단축키가 PTY로 새어 나간다.
+    const seq = encodeKey(e, kitty.flags);
+    if (seq) {
+      e.preventDefault();
+      term.input(seq, true);
+      return false;
     }
     return true;
   });
