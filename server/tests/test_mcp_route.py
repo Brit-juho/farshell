@@ -645,6 +645,28 @@ def test_mcp_library_only_offers_tools_that_can_expand_credential_refs(client):
     assert refused.status_code == 409
 
 
+def test_existing_mcp_candidates_import_only_portable_definitions(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {
+        "portable": {"command": "npx", "env": {"TOKEN": "${DOCS_TOKEN}"}},
+        "literal": {"command": "npx", "env": {"TOKEN": "sk-private-value"}},
+    }})
+    listed = client.get("/api/mcp/library/candidates?worktree=wt1")
+    assert listed.status_code == 200
+    assert "sk-private-value" not in listed.text
+    rows = {item["name"]: item for item in listed.json()["candidates"]}
+    assert rows["portable"]["eligible"] is True
+    assert rows["literal"]["eligible"] is False
+    imported = client.post("/api/mcp/library/import-candidates",
+                           json={"ids": [rows["portable"]["id"]], "worktree": "wt1"})
+    assert imported.status_code == 200 and imported.json()["saved"] == 1
+    assert [item["name"] for item in client.get("/api/mcp/library").json()["servers"]] == ["portable"]
+    refused = client.post("/api/mcp/library/import-candidates",
+                          json={"ids": [rows["literal"]["id"]], "worktree": "wt1"})
+    assert refused.json()["status"] == "partial"
+    assert "sk-private-value" not in refused.text
+
+
 def test_mcp_library_never_returns_definition_or_literal_secret(client):
     _elevate(client)
     _write_claude(client, {"mcpServers": {

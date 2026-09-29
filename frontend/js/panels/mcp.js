@@ -973,15 +973,12 @@ function renderTabs(counts, onPick) {
 function contextBar(wt) {
   const top = el('div', 'vt-mcp-top');
   const ctx = el('div', 'vt-mcp-ctx');
-  ctx.appendChild(el('span', 'vt-mcp-ctxlabel', '기준'));
   if (wt) {
-    const name = el('span', 'vt-mcp-ctxname', wt.label || wt.path);
+    const name = el('span', 'vt-mcp-ctxname', `${wt.label || wt.path}${wt.session ? ` · ${wt.session}` : ''}`);
     name.title = wt.path || '';
     ctx.appendChild(name);
-    if (wt.session) ctx.appendChild(el('span', 'vt-mcp-meta', `포커스된 칸 · ${wt.session}`));
   } else {
-    ctx.appendChild(el('span', 'vt-mcp-ctxname', '유저 설정만'));
-    ctx.appendChild(el('span', 'vt-mcp-meta', '프로젝트 안의 칸을 포커스하면 그 프로젝트 기준으로 보여줍니다'));
+    ctx.appendChild(el('span', 'vt-mcp-ctxname', '전역 설정'));
   }
   top.appendChild(ctx);
   return top;
@@ -1077,11 +1074,14 @@ function renderSkills(data, tool) {
 
 function renderLibrary(data) {
   const box = el('div', 'vt-mcp-library');
-  box.appendChild(el('div', 'vt-mcp-overviewtitle', 'FarShell MCP 보관함'));
-  box.appendChild(help('FarShell에 저장한 MCP만 표시합니다. 도구에 설치된 MCP·스킬·플러그인은 도구 설정에서 관리합니다.'));
+  const candidates = data.candidates || [];
+  const ready = candidates.filter((item) => item.eligible && !item.saved);
+  const manual = candidates.filter((item) => !item.eligible);
+  const header = el('div', 'vt-mcp-librarybar');
+  header.appendChild(el('strong', null, `FarShell 보관함 · ${data.library.length}개`));
+  box.appendChild(header);
   if (!(data.library || []).length) {
-    box.appendChild(help('저장한 MCP가 없습니다. 도구 설정에서 서버를 펼쳐 「보관함에 저장」을 누르세요.'));
-    return box;
+    box.appendChild(help('보관된 MCP가 없습니다.'));
   }
   const groups = new Map();
   for (const item of data.library || []) {
@@ -1164,6 +1164,45 @@ function renderLibrary(data) {
       section.appendChild(row);
     }
     box.appendChild(section);
+  }
+  if (candidates.length) {
+    const importBox = el('details', 'vt-mcp-candidates');
+    importBox.appendChild(el('summary', null, `기존 설정에서 가져오기 · ${ready.length}개 가능${manual.length ? ` · ${manual.length}개 직접 확인` : ''}`));
+    if (!ready.length) importBox.appendChild(help('새로 가져올 수 있는 MCP가 없습니다.'));
+    const chosen = [];
+    for (const item of candidates) {
+      if (item.saved) continue;
+      const label = el('label', 'vt-mcp-candidate');
+      const input = el('input');
+      input.type = 'checkbox';
+      input.value = item.id;
+      input.checked = item.eligible;
+      input.disabled = !item.eligible;
+      if (item.eligible) chosen.push(input);
+      label.append(input, el('span', null, `${item.name} · ${TOOL_LABEL[item.tool] || item.tool}${item.eligible ? '' : ` · ${item.reason || '직접 확인 필요'}`}`));
+      importBox.appendChild(label);
+    }
+    if (ready.length) {
+      const button = el('button', 'vt-chip vt-mcp-importall', `선택한 ${ready.length}개 보관함에 저장`);
+      button.type = 'button';
+      button.addEventListener('click', async () => {
+        const ids = chosen.filter((input) => input.checked).map((input) => input.value);
+        if (!ids.length) { showToast('가져올 MCP를 선택하세요', 'error'); return; }
+        if (!(await confirmDialog(`기존 도구 설정 ${ids.length}개를 FarShell 보관함에 저장합니다. 도구 설정은 변경하지 않습니다.`,
+          { title: 'MCP 가져오기', okLabel: '보관함에 저장' }))) return;
+        button.disabled = true;
+        try {
+          const result = await postElevated('/api/mcp/library/import-candidates', { ids, worktree: _worktreeId });
+          if (!result) return;
+          if (result.status === 'partial') showToast(`${result.saved}개 저장, 일부는 확인이 필요합니다`, 'error');
+          else showToast(`${result.saved}개를 보관함에 저장했습니다`);
+          refresh();
+        } catch (e) { showToast(e.message || '가져오지 못했습니다', 'error'); }
+        finally { button.disabled = false; }
+      });
+      importBox.appendChild(button);
+    }
+    box.appendChild(importBox);
   }
   return box;
 }
@@ -1336,11 +1375,13 @@ function load() {
     vtFetch('/api/mcp/creds').catch(() => ({ creds: [], refs: [] })),
     vtFetch(`/api/mcp/skills${_q()}`).catch(() => ({ skills: [], errors: [] })),
     vtFetch('/api/mcp/library').catch(() => ({ servers: [] })),
+    vtFetch(`/api/mcp/library/candidates${_q()}`).catch(() => ({ candidates: [] })),
     vtFetch('/api/agents').catch(() => ({})),
-  ]).then(([scan, credData, skillData, library, agents]) => ({
+  ]).then(([scan, credData, skillData, library, candidates, agents]) => ({
     ...scan, creds: credData.creds || [], refs: credData.refs || [],
     skills: skillData.skills || [], skillErrors: skillData.errors || [],
     library: library.servers || [],
+    candidates: candidates.candidates || [],
     sessionTool: ((agents || {})[(scan.worktree || {}).session] || {}).agent || null,
   }));
 }

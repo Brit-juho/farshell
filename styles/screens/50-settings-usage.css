@@ -224,7 +224,7 @@
    어디가 이상한가"라 접힌 줄이 그 둘만 말한다: 이름(굵게) → 도구별 상태(글자) → 오른쪽 끝에
    경고·검증 결과. 전송 방식과 조작(토글·검증·복제·태그)은 펼친 쪽에만 있다 — <summary> 안에
    버튼을 두면 중첩 인터랙티브가 된다. 깊이는 선(1px var(--line))만 쓴다. */
-.vt-mcp-top { display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); margin-bottom:calc(var(--spacing) * 1.5); }
+.vt-mcp-top { display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); margin-bottom:calc(var(--spacing) * 1); }
 .vt-mcp-count { font:600 var(--fs-sm) var(--ui); color:var(--txt); font-variant-numeric:tabular-nums; }
 .vt-mcp-applyinfo { margin-bottom:calc(var(--spacing) * 2); }
 .vt-mcp-applyinfo > summary {
@@ -257,7 +257,7 @@
 /* 기준 막대 — 이 화면이 어느 프로젝트를 보고 있는지가 가장 먼저 읽혀야 한다. */
 .vt-mcp-ctx { display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); min-width:0; }
 .vt-mcp-ctxlabel { font:600 var(--fs-3xs) var(--ui); color:var(--sub); text-transform:uppercase; letter-spacing:var(--tracking-wide); }
-.vt-mcp-ctxname { font:600 var(--fs-md) var(--ui); color:var(--txt); overflow-wrap:anywhere; }
+.vt-mcp-ctxname { font:600 var(--fs-sm) var(--ui); color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* 서버 | 플러그인 탭 — 밑줄 한 줄. 개수는 "켬/전체". */
 .vt-mcp-tabs { display:flex; gap:calc(var(--spacing) * 4); border-bottom:1px solid var(--line); margin-top:calc(var(--spacing) * 2); }
@@ -290,7 +290,7 @@
 }
 .vt-mcp-toolnavitem:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
 .vt-mcp-toolcount { color:var(--sub); font-variant-numeric:tabular-nums; }
-.vt-mcp-worktabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:calc(var(--spacing) * 1); border-bottom:1px solid var(--color-line); margin:calc(var(--spacing) * 2) 0; }
+.vt-mcp-worktabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:calc(var(--spacing) * 1); border-bottom:1px solid var(--color-line); margin:calc(var(--spacing) * 1) 0; }
 .vt-mcp-worktab { min-height:44px; border:0; border-bottom:2px solid transparent; background:none; color:var(--sub); font:600 var(--fs-sm) var(--ui); cursor:pointer; }
 .vt-mcp-worktab:hover { color:var(--txt); background:var(--color-bg-3); }
 .vt-mcp-worktab[aria-selected="true"] { color:var(--txt); border-bottom-color:var(--color-acc); }
@@ -312,6 +312,13 @@
 .vt-mcp-plugin-skills { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1); margin:calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2) calc(var(--spacing) * 3); }
 .vt-mcp-plugin-skill { padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1.5); border:1px solid var(--color-line); border-radius:var(--radius-sm); color:var(--sub); font:500 var(--fs-xs) var(--ui); }
 .vt-mcp-library > .vt-set-help, .vt-mcp-session > .vt-set-help { margin:calc(var(--spacing) * 2) 0; }
+.vt-mcp-librarybar { display:flex; flex-wrap:wrap; align-items:baseline; gap:calc(var(--spacing) * 1) calc(var(--spacing) * 2); margin:calc(var(--spacing) * 2) 0; font:600 var(--fs-sm) var(--ui); }
+.vt-mcp-candidates { margin:calc(var(--spacing) * 3) 0; border-top:1px solid var(--color-line); padding-top:calc(var(--spacing) * 2); }
+.vt-mcp-candidates > summary { cursor:pointer; font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-mcp-candidate { display:flex; align-items:flex-start; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) 0; font:400 var(--fs-xs) var(--ui); color:var(--txt); }
+.vt-mcp-candidate:has(input:disabled) { color:var(--sub); }
+.vt-mcp-candidate input { flex:none; margin-top:2px; }
+.vt-mcp-importall { margin-top:calc(var(--spacing) * 2); }
 .vt-mcp-overview { padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); }
 .vt-mcp-overviewtitle { font:650 var(--fs-lg) var(--ui); color:var(--txt); }
 .vt-mcp-overviewtext { margin-top:calc(var(--spacing) * 1); font:400 var(--fs-sm) var(--ui); color:var(--sub); }

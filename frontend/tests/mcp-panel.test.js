@@ -54,6 +54,7 @@ async function build({ scan = scanPayload(), toggle, group,
                        credData = { creds: [], refs: [] },
                        pluginData = { plugins: [] }, pluginGate = null,
                        skillData = { skills: [] }, libraryData = { servers: [] },
+                       candidateData = { candidates: [] },
                        agents = {},
                        verify = () => ({ state: 'connected', tool_count: 3, error: null, checked_at: Date.now() / 1000 }) } = {}) {
   const env = createDomEnv(INDEX_HTML);
@@ -95,6 +96,7 @@ async function build({ scan = scanPayload(), toggle, group,
           u.includes('/preview') ? { status: 'ok', token: 'preview-token', target: '/target/config', env_names: [], apply: '다음 세션부터' }
             : { status: 'ok' }) });
       }
+      if (u.includes('/candidates')) return Promise.resolve({ ok: true, json: () => Promise.resolve(candidateData) });
       return Promise.resolve({ ok: true, json: () => Promise.resolve(libraryData) });
     }
     if (u.includes('/api/agents')) {
@@ -738,6 +740,24 @@ test('보관함에서 공용 MCP를 Codex 전용으로 바꾸면 대상 도구�
                    { _url: '/api/mcp/library/targets', id: 'shared', targets: ['codex'] });
 });
 
+test('비어 있는 보관함에서 기존 도구 설정을 검토하고 안전한 항목만 가져온다', async () => {
+  const { host, posts, document } = await build({ candidateData: { candidates: [
+    { id: 'safe', name: 'docs', tool: 'claude', eligible: true, saved: false },
+    { id: 'secret', name: 'private', tool: 'codex', eligible: false, saved: false,
+      reason: '직접 값이 있어 보관하지 않습니다' },
+  ] } });
+  host.querySelector('[data-page="library"]').click();
+  assert.match(host.querySelector('.vt-mcp-library').textContent, /1개 가능/);
+  host.querySelector('.vt-mcp-candidates').open = true;
+  assert.equal(host.querySelectorAll('.vt-mcp-candidate input:checked').length, 1);
+  assert.equal(host.querySelectorAll('.vt-mcp-candidate input:disabled').length, 1);
+  host.querySelector('.vt-mcp-importall').click();
+  await answerConfirm(document, { accept: true });
+  await flush(); await flush();
+  const sent = posts.find((p) => p._url === '/api/mcp/library/import-candidates');
+  assert.deepEqual(sent.ids, ['safe']);
+});
+
 test('플러그인 제공 스킬은 플러그인 아래에 묶이고 직접 설치 스킬 목록에 중복되지 않는다', async () => {
   const { host } = await build({ pluginData: { plugins: [{ name: 'bundle@m', plugin: 'bundle',
     tool: 'codex', scope: 'global', level: 'user', installed: true, enabled: true,
@@ -846,7 +866,7 @@ test('기준 — 포커스된 칸의 세션을 보여준다', async () => {
   const scan = scanPayload({ worktree: { id: 'session:dev', path: '/r', label: 'r/main', session: 'dev' } });
   const { host } = await build({ scan });
   assert.match(host.querySelector('.vt-mcp-top').textContent, /r\/main/);
-  assert.match(host.querySelector('.vt-mcp-top').textContent, /포커스된 칸 · dev/);
+  assert.match(host.querySelector('.vt-mcp-top').textContent, /dev/);
 });
 
 test('Claude 플러그인 — 적용 범위별 토글, 프로젝트는 읽기 전용', async () => {

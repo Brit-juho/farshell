@@ -30,6 +30,9 @@ shows only portable, secret-free MCP definitions saved in the FarShell catalog,
 grouped as common or tool-specific by their configured targets. Installed direct
 skills for Claude and Codex appear in Tool settings; skills supplied by a plugin
 are nested under that plugin instead of appearing as independent installations.
+An empty FarShell library offers a reviewable import of existing CLI MCP definitions;
+only portable definitions are selected, and definitions with literal values stay in
+their original tool settings for manual review. Import does not change those settings.
 Import uses a server-generated
 preview bound to the destination file; a changed file or existing name stops the
 write. Codex's `[[skills.config]]` can disable a direct skill without deleting it.

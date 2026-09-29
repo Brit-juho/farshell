@@ -54,7 +54,7 @@ def _portable(raw: dict, tool: str) -> tuple[dict | None, str | None]:
         for key, value in mcp_adapters._as_mapping(raw.get("env")).items():
             ref, literal = mcp_adapters._classify_ref(value, style=style)
             if literal or not ref:
-                return None, f"{key}에 직접 값이 있어 보관하지 않습니다"
+                return None, "환경변수에 직접 값이 있어 보관하지 않습니다"
             env[str(key)] = ref
     if len(env) > 32 or len(args) > 64:
         return None, "정의가 보관함 크기 제한을 넘었습니다"
@@ -81,6 +81,47 @@ def list_items() -> dict:
                     "compatible_tools": compatible, "targets": targets,
                     "audience": "common" if len(targets) > 1 else (targets[0] if targets else "unknown")})
     return {"servers": sorted(out, key=lambda x: str(x["name"]).casefold())}
+
+
+def list_candidates(worktree_id: str | None = None) -> dict:
+    """기존 도구 설정 중 보관할 수 있는 정의만 메타데이터로 보여준다."""
+    scanned = mcp_scan.scan(worktree_id)
+    wt = scanned.get("worktree") or {}
+    stored = {item.get("fingerprint") for item in _read().values() if isinstance(item, dict)}
+    out = []
+    for entry in scanned.get("servers", []):
+        tool, scope, name = entry["tool"], entry["scope"], entry["name"]
+        raw, path = mcp_adapters.find_raw_defn(tool, scope, name,
+                          worktree_path=wt.get("path"))
+        candidate_id = _digest([tool, scope, name, entry.get("source")])[:24]
+        if not raw or str(path) != str(entry.get("source")):
+            out.append({"id": candidate_id, "name": name, "tool": tool, "scope": scope,
+                        "eligible": False, "saved": False, "reason": "원본 설정을 특정할 수 없습니다"})
+            continue
+        definition, reason = _portable(raw, tool)
+        fingerprint = _digest({"name": name, "definition": definition}) if definition else None
+        out.append({"id": candidate_id, "name": name, "tool": tool, "scope": scope,
+                    "eligible": definition is not None, "saved": fingerprint in stored,
+                    "reason": reason})
+    return {"candidates": out}
+
+
+def import_candidates(ids: list[str], worktree_id: str | None = None) -> dict:
+    if (not isinstance(ids, list) or not ids or len(ids) > 64
+            or any(not isinstance(item, str) for item in ids) or len(set(ids)) != len(ids)):
+        return {"status": "failed", "reason": "가져올 MCP를 선택하세요"}
+    candidates = {item["id"]: item for item in list_candidates(worktree_id)["candidates"]}
+    results = []
+    for candidate_id in ids:
+        item = candidates.get(candidate_id)
+        if not item or not item["eligible"]:
+            results.append({"id": candidate_id, "status": "failed", "reason": "안전하게 보관할 수 없는 정의입니다"})
+            continue
+        result = save(item["tool"], item["scope"], item["name"], worktree_id)
+        results.append({"id": candidate_id, "status": result["status"],
+                        "changed": result.get("changed", False), "reason": result.get("reason")})
+    return {"status": "ok" if all(r["status"] == "ok" for r in results) else "partial",
+            "saved": sum(r.get("changed") is True for r in results), "results": results}
 
 
 def save(tool: str, scope: str, name: str, worktree_id: str | None) -> dict:

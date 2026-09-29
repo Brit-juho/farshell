@@ -56,6 +56,19 @@ async def list_library():
     return await asyncio.to_thread(mcp_library.list_items)
 
 
+@router.get("/api/mcp/library/candidates")
+async def list_library_candidates(worktree: str | None = Query(default=None)):
+    return await asyncio.to_thread(mcp_library.list_candidates, worktree)
+
+
+@elevated_router.post("/api/mcp/library/import-candidates")
+async def import_library_candidates(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.import_candidates, body.get("ids"),
+                                     body.get("worktree") or None)
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
 @elevated_router.post("/api/mcp/library/save")
 async def save_library(request: Request):
     body = await request.json()

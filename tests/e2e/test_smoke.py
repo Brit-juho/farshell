@@ -1658,7 +1658,7 @@ def test_mcp_workspace_tabs_fit_desktop_and_mobile(page):
         "보관함", "도구 설정", "현재 세션"]
     page.locator('#vt-mcp [data-page="library"]').click()
     assert page.locator("#vt-mcp .vt-mcp-library").is_visible()
-    assert page.locator("#vt-mcp .vt-mcp-library .vt-mcp-overviewtitle").inner_text() == "FarShell MCP 보관함"
+    assert "FarShell 보관함" in page.locator("#vt-mcp .vt-mcp-librarybar").inner_text()
     assert "설치된 스킬" not in page.locator("#vt-mcp .vt-mcp-library").inner_text()
     page.locator('#vt-mcp [data-page="session"]').click()
     assert page.locator("#vt-mcp .vt-mcp-session").is_visible()
