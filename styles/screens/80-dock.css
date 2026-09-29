@@ -517,7 +517,6 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
    안 맞았고, currentColor를 안 따라 상태색과도 어긋났다.
    회전에 transition을 거는 이유: 접기/펴기는 "같은 것이 뒤집힌다"는 인과를
    보여줄 수 있는 몇 안 되는 전이다. 200ms·ease-out으로 짧게 둔다. */
-#keybar-toggle svg,
 .vt-fleet-host-caret svg,
 .vt-wgrail-host-caret svg,
 #search-bar [data-action="search.prev"] svg,
@@ -526,11 +525,9 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
   transition:transform .2s cubic-bezier(.2,0,0,1);
 }
 @media (prefers-reduced-motion: reduce) {
-  #keybar-toggle svg,
   .vt-fleet-host-caret svg,
   .vt-wgrail-host-caret svg { transition:none; }
 }
-#keybar-toggle.flipped svg,
 .vt-fleet-host-caret.open svg,
 #search-bar [data-action="search.prev"] svg { transform:rotate(180deg); }
 /* 캐럿을 감싼 span들이 글줄 baseline에 얹혀 있어 아이콘이 반 픽셀 내려앉았다. */

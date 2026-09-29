@@ -1,4 +1,4 @@
-// L7 — term/keybar.js(입력 슬롯 [🎤][큐][📎] + 접기 구조 변경) 검증.
+// term/keybar.js 검증 — 구성, 누름 판정, 수식키, 선택 모드, 키보드 겹침.
 // quickopen.test.js/rail.test.js와 같은 하네스(vm-esm + 진짜 index.html
 // 마크업)를 쓴다. keybar.js는 모듈 평가 시점에 즉시 initKeybar()를 부르므로
 // (파일 하단 관행), window.matchMedia를 먼저 심어둔 뒤 임포트해야 한다.
@@ -76,12 +76,13 @@ test('데스크톱(포인터 정밀) — keybar는 hidden 그대로, 마이크�
   );
 });
 
-test('터치(포인터 굵음) — keybar가 보이고, 마이크가 keybar 슬롯으로 옮겨간다', async () => {
+test('터치(포인터 굵음) — keybar가 보이고, 마이크는 키바로 오지 않는다', async () => {
   const { window } = await buildWindow({ coarse: true });
   assert.strictEqual(window.document.getElementById('keybar').hidden, false);
+  assert.strictEqual(window.document.getElementById('keybar-slot-mic'), null);
   assert.strictEqual(
     window.document.getElementById('mic-btn-wrap').parentElement.id,
-    'keybar-slot-mic'
+    'vt-rail-mic-slot'
   );
 });
 
@@ -104,14 +105,133 @@ test('큐·업로드 슬롯이 더 이상 없다', async () => {
   assert.strictEqual(window.document.getElementById('keybar-slot-upload'), null);
 });
 
-test('한 줄 구성 — 마이크·핵심 키 7개·토글이 모두 #keybar-main 하나에 있다', async () => {
+test('구성 — 수식키 고정 줄 | 스크롤 키 줄 | 방향키, 마이크·접기 토글·문자 키는 없다', async () => {
   const { window } = await buildWindow({ coarse: true });
-  const main = window.document.getElementById('keybar-main');
-  assert.ok(main.contains(window.document.getElementById('keybar-slot-mic')));
-  assert.ok(main.contains(window.document.getElementById('keybar-core-keys')));
-  assert.ok(main.contains(window.document.getElementById('keybar-toggle')));
-  const coreKeys = [...window.document.querySelectorAll('#keybar-core-keys .kb')].map((b) => b.dataset.key || b.dataset.mod);
-  assert.deepStrictEqual(coreKeys, ['esc', 'ctrl', 'tab', 'up', 'down', 'left', 'right']);
+  const doc = window.document;
+  const main = doc.getElementById('keybar-main');
+  assert.deepStrictEqual([...main.children].map((c) => c.id), ['keybar-mods', 'keybar-scroll', 'keybar-arrows']);
+  assert.deepStrictEqual([...doc.querySelectorAll('#keybar-mods .kb')].map((b) => b.dataset.mod), ['ctrl', 'alt', 'shift']);
+  const keys = [...doc.querySelectorAll('#keybar-scroll .kb')].map((b) => b.dataset.key);
+  assert.deepStrictEqual(keys, [
+    'esc', 'tab', 'backtab', 'ctrlc', 'home', 'end', 'pgup', 'pgdn', 'del', 'prefix',
+    'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
+  ]);
+  const arrows = [...doc.querySelectorAll('#keybar-arrows .kb')].map((b) => b.dataset.key);
+  assert.deepStrictEqual(arrows, ['up', 'left', 'down', 'right']);
+  assert.strictEqual(doc.getElementById('keybar-toggle'), null);
+  assert.strictEqual(doc.getElementById('keybar-extra-keys'), null);
+  assert.strictEqual(doc.querySelectorAll('#keybar [data-seq]').length, 0, '소프트 키보드에 있는 문자 키는 두지 않는다');
+});
+
+// --- 누름 판정 · 수식키 ---------------------------------------------------
+// sendToPty를 가로채려고 활성 세션에 열린 가짜 WebSocket을 단다.
+async function buildWired() {
+  const env = await buildWindow({ coarse: true });
+  const sent = [];
+  const decoder = new TextDecoder();
+  env.store.registerSession('s1', {
+    term: { focus() {}, blur() {}, getSelection() { return ''; }, clearSelection() {} },
+    wsHandle: { readyState: 1, send(data) { sent.push(typeof data === 'string' ? data : decoder.decode(data)); } },
+  });
+  env.store.setActive('s1');
+  const doc = env.window.document;
+  const btn = (sel) => doc.querySelector(sel);
+  const fire = (el, type, id, x = 10, y = 10) => el.dispatchEvent(
+    new env.window.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, clientX: x, clientY: y }));
+  const tap = (el, id = 1) => { fire(el, 'pointerdown', id); fire(el, 'pointerup', id); };
+  return { ...env, sent, btn, fire, tap };
+}
+
+test('스크롤 줄 키 — 누르는 순간이 아니라 손을 뗄 때 보낸다', async () => {
+  const { sent, btn, fire } = await buildWired();
+  const home = btn('#keybar [data-key="home"]');
+  fire(home, 'pointerdown', 1);
+  assert.deepStrictEqual(sent, []);
+  fire(home, 'pointerup', 1);
+  assert.deepStrictEqual(sent, ['\x1b[H']);
+});
+
+test('스크롤 줄 키 — 밀면(8px 초과) 보내지 않는다, 스크롤 시작(pointercancel)도 마찬가지', async () => {
+  const { sent, btn, fire } = await buildWired();
+  const end = btn('#keybar [data-key="end"]');
+  fire(end, 'pointerdown', 1, 10, 10);
+  fire(end, 'pointermove', 1, 30, 10);
+  fire(end, 'pointerup', 1, 30, 10);
+  fire(end, 'pointerdown', 2);
+  fire(end, 'pointercancel', 2);
+  fire(end, 'pointerup', 2);
+  assert.deepStrictEqual(sent, []);
+});
+
+test('방향키 — 누르는 즉시 보낸다', async () => {
+  const { sent, btn, fire } = await buildWired();
+  fire(btn('#keybar-arrows [data-key="up"]'), 'pointerdown', 1);
+  assert.deepStrictEqual(sent, ['\x1b[A']);
+});
+
+test('수식키 탭 — 다음 한 키에만 붙고 풀린다', async () => {
+  const { sent, btn, tap, applyStickyMod } = await buildWired();
+  const ctrl = btn('#keybar [data-mod="ctrl"]');
+  tap(ctrl);
+  assert.strictEqual(ctrl.getAttribute('aria-pressed'), 'true');
+  tap(btn('#keybar [data-key="del"]'));
+  tap(btn('#keybar [data-key="del"]'));
+  assert.deepStrictEqual(sent, ['\x1b[3;5~', '\x1b[3~']);
+  assert.strictEqual(ctrl.getAttribute('aria-pressed'), 'false');
+  tap(ctrl);
+  assert.strictEqual(applyStickyMod('c'), '\x03', '소프트 키보드 입력에도 붙는다');
+  assert.strictEqual(applyStickyMod('c'), 'c');
+});
+
+test('수식키 두 번 탭 — 고정, 세 번째 탭에 풀린다', async () => {
+  const { sent, btn, tap, fire } = await buildWired();
+  const shift = btn('#keybar [data-mod="shift"]');
+  tap(shift); tap(shift);
+  assert.ok(shift.classList.contains('locked'));
+  fire(btn('#keybar-arrows [data-key="left"]'), 'pointerdown', 5);
+  fire(btn('#keybar-arrows [data-key="left"]'), 'pointerup', 5);
+  fire(btn('#keybar-arrows [data-key="left"]'), 'pointerdown', 6);
+  assert.deepStrictEqual(sent, ['\x1b[1;2D', '\x1b[1;2D']);
+  tap(shift);
+  assert.ok(!shift.classList.contains('locked'));
+  assert.strictEqual(shift.getAttribute('aria-pressed'), 'false');
+});
+
+test('수식키 누르고 있기 — 다른 손가락 키와 동시 입력, 떼면 꺼지고 탭으로 치지 않는다', async () => {
+  const { sent, btn, fire, tap, applyStickyMod } = await buildWired();
+  const ctrl = btn('#keybar [data-mod="ctrl"]');
+  const alt = btn('#keybar [data-mod="alt"]');
+  fire(ctrl, 'pointerdown', 1);
+  fire(alt, 'pointerdown', 2);
+  fire(btn('#keybar-arrows [data-key="right"]'), 'pointerdown', 3);
+  assert.strictEqual(applyStickyMod('x'), '\x1b\x18', '누르는 동안 소프트 키보드에도 Ctrl+Alt');
+  fire(ctrl, 'pointerup', 1);
+  fire(alt, 'pointerup', 2);
+  assert.deepStrictEqual(sent, ['\x1b[1;7C']);
+  assert.strictEqual(ctrl.getAttribute('aria-pressed'), 'false', '조합에 쓰였으니 떼도 한 번용으로 남지 않는다');
+  assert.strictEqual(alt.getAttribute('aria-pressed'), 'false');
+  tap(btn('#keybar [data-key="home"]'), 9);
+  assert.strictEqual(sent.at(-1), '\x1b[H');
+});
+
+test('수식키 — 누른 손가락이 조금 흘러도 누름이 유지된다(스크롤 줄 밖이라)', async () => {
+  const { sent, btn, fire } = await buildWired();
+  const ctrl = btn('#keybar [data-mod="ctrl"]');
+  fire(ctrl, 'pointerdown', 1, 10, 10);
+  fire(ctrl, 'pointermove', 1, 40, 10);
+  assert.strictEqual(ctrl.getAttribute('aria-pressed'), 'true');
+  fire(btn('#keybar-arrows [data-key="up"]'), 'pointerdown', 2);
+  fire(ctrl, 'pointerup', 1, 40, 10);
+  assert.deepStrictEqual(sent, ['\x1b[1;5A']);
+  assert.strictEqual(ctrl.getAttribute('aria-pressed'), 'false');
+});
+
+test('수식키 — 브라우저가 누름을 취소하면(pointercancel) 꺼진다', async () => {
+  const { btn, fire } = await buildWired();
+  const ctrl = btn('#keybar [data-mod="ctrl"]');
+  fire(ctrl, 'pointerdown', 1);
+  fire(ctrl, 'pointercancel', 1);
+  assert.strictEqual(ctrl.getAttribute('aria-pressed'), 'false');
 });
 
 test('텍스트 선택 모드 — 터미널 포커스를 해제하고 xterm 자신의 선택 하이라이트를 켠다', async () => {
@@ -199,28 +319,6 @@ test('모두 선택 — 뷰포트 전체(rows×cols)를 term.select로 고른다
     .dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
 
   assert.deepStrictEqual(calls, [[0, 0, 24 * 80]]);
-});
-
-test('접기 토글 — 기본은 접힘(추가 키 줄만), 마이크·핵심 키·토글은 항상 남는다', async () => {
-  const { window } = await buildWindow({ coarse: true });
-  const bar = window.document.getElementById('keybar');
-  const toggle = window.document.getElementById('keybar-toggle');
-  // 2026-09-23 — 기본값이 뒤집혔다(settings.js SCHEMA keybar.collapsed
-  // def:true와 짝). 접는 대상도 #keybar-extra-keys(덜 쓰는 나머지)뿐이고
-  // #keybar-main(마이크·Esc·Ctrl·Tab·화살표·토글)은 접힘과 무관하게 같은
-  // 부모 밑에 항상 있다 — 예전처럼 별개 컨테이너로 분리해 둘 필요가 없다
-  // (그 분리 자체가 "자주 쓰는 키까지 접힘에 묻힌다"는 회귀의 원인이었다).
-  assert.strictEqual(bar.classList.contains('collapsed'), true);
-  const main = window.document.getElementById('keybar-main');
-  assert.ok(main.contains(toggle));
-  assert.ok(main.contains(window.document.getElementById('keybar-core-keys')));
-
-  toggle.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
-  assert.strictEqual(bar.classList.contains('collapsed'), false);
-  // 펼치든 접든 #keybar-main은 그대로 DOM에 있다(감춰지지 않음) — jsdom은
-  // app.css를 안 불러오므로 실제 display 계산은 실브라우저 검증으로
-  // 확인했다(별도).
-  assert.ok(window.document.getElementById('keybar-extra-keys').isConnected);
 });
 
 // --- 소프트 키보드 겹침 → 터미널 하단 여백 -------------------------------

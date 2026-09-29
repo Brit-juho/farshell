@@ -505,9 +505,9 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #terminal-container .xterm-viewport::-webkit-scrollbar { display:none; width:0; height:0; }
 
 /* ---- 음성 버튼 (voice.js 계약: .label 자식 + .recording) --------------------
-   L7: 상단바에서 이관됐다 — 이제 물리적으로 두 곳 중 하나에 산다
-   (#vt-rail-mic-slot 데스크톱 / #keybar-slot-mic 터치, keybar.js가 부팅 시
-   결정) + 음성 전용 모드에서만 잠깐 #topbar로 옮겨간다(media-session.js).
+   L7: 상단바에서 이관됐다 — dock(#vt-dock-mic-home) 또는 rail 설정
+   슬롯(#vt-rail-mic-slot)에 살고(keybar.js), 음성 전용 모드에서만 잠깐
+   #topbar로 옮겨간다(media-session.js). 키바 슬롯은 2026-09-29에 없앴다.
    색·상태(녹음 중)는 어디에 있든 공통이라 컨텍스트 무관 규칙으로 두고,
    크기·배치만 컨텍스트별로 아래에서 오버라이드한다. */
 #mic-btn-wrap.mic { background:var(--color-acc-surface); color:var(--acc-ink); border:0; cursor:pointer; touch-action:manipulation; }
@@ -522,13 +522,6 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
    그대로 쓰고, 여긴 아이콘 크기·라벨 굵기만. */
 #vt-rail-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
 #vt-rail-mic-slot #mic-btn-wrap .label { font-weight:600; }
-/* keybar 컨텍스트 — .kb와 같은 높이의 정사각 아이콘 버튼, 좁아서 라벨은 생략. */
-#keybar-slot-mic #mic-btn-wrap {
-  width:auto; min-width:42px; height:38px; padding:0 calc(var(--spacing) * 3);
-  display:inline-flex; align-items:center; justify-content:center; gap:0; border-radius:var(--radius-sm);
-}
-#keybar-slot-mic #mic-btn-wrap svg { width:16px; height:16px; }
-#keybar-slot-mic #mic-btn-wrap .label { display:none; }
 
 /* 음성 상태 pill — 상단 바 아래 우측에 떠 있음 */
 #mic-status {

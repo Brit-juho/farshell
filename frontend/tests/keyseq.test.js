@@ -51,3 +51,49 @@ test('keybarSeq: Ctrl+Esc/Tab → 표준 시퀀스 없어 평범한 키로 통�
   assert.strictEqual(K.keybarSeq({ key: 'esc', ctrl: true }), '\x1b');
   assert.strictEqual(K.keybarSeq({ key: 'tab', ctrl: true }), '\t');
 });
+
+test('keySeq: 이동·편집 키', () => {
+  assert.strictEqual(K.keySeq({ key: 'home' }), '\x1b[H');
+  assert.strictEqual(K.keySeq({ key: 'end' }), '\x1b[F');
+  assert.strictEqual(K.keySeq({ key: 'pgup' }), '\x1b[5~');
+  assert.strictEqual(K.keySeq({ key: 'pgdn' }), '\x1b[6~');
+  assert.strictEqual(K.keySeq({ key: 'del' }), '\x1b[3~');
+});
+
+test('keySeq: F1~F12', () => {
+  assert.strictEqual(K.keySeq({ key: 'f1' }), '\x1bOP');
+  assert.strictEqual(K.keySeq({ key: 'f4' }), '\x1bOS');
+  assert.strictEqual(K.keySeq({ key: 'f5' }), '\x1b[15~');
+  assert.strictEqual(K.keySeq({ key: 'f10' }), '\x1b[21~');
+  assert.strictEqual(K.keySeq({ key: 'f11' }), '\x1b[23~');
+  assert.strictEqual(K.keySeq({ key: 'f12' }), '\x1b[24~');
+});
+
+test('keySeq: 수식 파라미터 1 + Shift1 + Alt2 + Ctrl4 (xterm)', () => {
+  assert.strictEqual(K.keySeq({ key: 'right', mods: { shift: true } }), '\x1b[1;2C');
+  assert.strictEqual(K.keySeq({ key: 'right', mods: { alt: true } }), '\x1b[1;3C');
+  assert.strictEqual(K.keySeq({ key: 'right', mods: { ctrl: true, shift: true } }), '\x1b[1;6C');
+  assert.strictEqual(K.keySeq({ key: 'end', mods: { shift: true } }), '\x1b[1;2F');
+  assert.strictEqual(K.keySeq({ key: 'del', mods: { ctrl: true } }), '\x1b[3;5~');
+  assert.strictEqual(K.keySeq({ key: 'f2', mods: { shift: true } }), '\x1b[1;2Q');
+  assert.strictEqual(K.keySeq({ key: 'f5', mods: { ctrl: true, alt: true, shift: true } }), '\x1b[15;8~');
+});
+
+test('keySeq: Tab/Esc 수식, 고정 단축 키는 수식 무시', () => {
+  assert.strictEqual(K.keySeq({ key: 'tab', mods: { shift: true } }), '\x1b[Z');
+  assert.strictEqual(K.keySeq({ key: 'tab', mods: { alt: true } }), '\x1b\t');
+  assert.strictEqual(K.keySeq({ key: 'esc', mods: { alt: true } }), '\x1b\x1b');
+  assert.strictEqual(K.keySeq({ key: 'backtab' }), '\x1b[Z');
+  assert.strictEqual(K.keySeq({ key: 'ctrlc', mods: { alt: true } }), '\x03');
+  assert.strictEqual(K.keySeq({ key: 'prefix' }), '\x02');
+});
+
+test('applyModsToInput: 소프트 키보드 문자에 Ctrl/Alt/Shift, 멀티·비ASCII는 원문', () => {
+  assert.strictEqual(K.applyModsToInput('c', { ctrl: true }), '\x03');
+  assert.strictEqual(K.applyModsToInput('f', { alt: true }), '\x1bf');
+  assert.strictEqual(K.applyModsToInput('a', { shift: true }), 'A');
+  assert.strictEqual(K.applyModsToInput('c', { ctrl: true, alt: true }), '\x1b\x03');
+  assert.strictEqual(K.applyModsToInput('ab', { ctrl: true }), 'ab');
+  assert.strictEqual(K.applyModsToInput('안', { alt: true }), '안');
+  assert.strictEqual(K.applyModsToInput('c', {}), 'c');
+});

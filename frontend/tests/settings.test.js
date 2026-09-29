@@ -113,21 +113,19 @@ test('저장 실패 — 조용히 큐잉하지 않고 토스트로 알린다', a
 });
 
 // ── 마이그레이션 (S5의 "기존 값 무손실" 항목) ─────────────────────────────
-test('마이그레이션 — 폰트 크기·스킨·자동복사·a11y·keybar 접기', async () => {
+test('마이그레이션 — 폰트 크기·스킨·자동복사·a11y', async () => {
   const { S } = await load({
     pre: (w) => {
       w.localStorage.setItem('vt_font_size', '20');
       w.localStorage.setItem('vt-skin', 'catppuccin');
       w.localStorage.setItem('vt_autocopy_on_select', 'off');
       w.localStorage.setItem('vt-a11y', '1');
-      w.localStorage.setItem('vt_keybar_collapsed', '1');
     },
   });
   assert.strictEqual(S.get('terminal.fontSize'), 20);
   assert.strictEqual(S.get('theme.skin'), 'catppuccin');
   assert.strictEqual(S.get('mouse.autocopyOnSelect'), false, "'off' → false");
   assert.strictEqual(S.get('a11y.screenReader'), 'on', "'1' → 'on'");
-  assert.strictEqual(S.get('keybar.collapsed'), true);
 });
 
 // E2(2026-09-08) — "맥에서도 열기"가 스토어로 늦게 합류했다. 그전에는 값의 주인이

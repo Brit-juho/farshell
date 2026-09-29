@@ -34,19 +34,67 @@
     return data;
   }
 
-  // keybar 버튼 → 최종 전송 시퀀스. opts: { key, seq, ctrl }
-  //  - seq(문자 버튼)가 있으면 그것, 없으면 key로 KEYBAR_SEQ 조회
-  //  - ctrl(=armed)이면: 화살표는 CTRL_ARROW, 인쇄가능 단일문자는 ctrlByte,
-  //    그 외 명명키(Esc/Tab)는 표준 Ctrl 시퀀스가 없어 평범한 키로 통과
-  function keybarSeq(opts) {
-    var base = opts.seq != null ? opts.seq : (KEYBAR_SEQ[opts.key] || '');
-    if (!base) return '';
-    if (opts.ctrl) {
-      if (opts.key && CTRL_ARROW[opts.key]) return CTRL_ARROW[opts.key];
-      if (base.length === 1 && base >= ' ') return ctrlByte(base);
-    }
-    return base;
+  // 2026-09-29 — 키바가 Home/End/PgUp/PgDn/Del/F1~F12와 Alt·Shift 수식키를
+  // 갖게 됐다. 수식키가 붙은 시퀀스는 xterm 표준(CSI 1;N) 한 가지 규칙으로
+  // 만든다 — 키마다 조합표를 두면 수식키 3개 × 키 20여 개가 되어 반드시 틀린다.
+  //   csi  : ESC [ <final>        → 수식 붙으면 ESC [ 1 ; N <final>
+  //   ss3  : ESC O <final>(F1~F4) → 수식 붙으면 ESC [ 1 ; N <final>
+  //   tilde: ESC [ <n> ~          → 수식 붙으면 ESC [ <n> ; N ~
+  var NAMED = {
+    up: { csi: 'A' }, down: { csi: 'B' }, right: { csi: 'C' }, left: { csi: 'D' },
+    home: { csi: 'H' }, end: { csi: 'F' },
+    del: { tilde: 3 }, pgup: { tilde: 5 }, pgdn: { tilde: 6 },
+    f1: { ss3: 'P' }, f2: { ss3: 'Q' }, f3: { ss3: 'R' }, f4: { ss3: 'S' },
+    f5: { tilde: 15 }, f6: { tilde: 17 }, f7: { tilde: 18 }, f8: { tilde: 19 },
+    f9: { tilde: 20 }, f10: { tilde: 21 }, f11: { tilde: 23 }, f12: { tilde: 24 },
+  };
+  // 수식키와 상관없이 늘 같은 값을 보내는 단축 버튼. ⇧Tab·^C·tmux prefix는
+  // 그 자체가 이미 조합이라 수식키를 또 얹지 않는다.
+  var FIXED = { backtab: '\x1b[Z', ctrlc: '\x03', prefix: '\x02' };
+
+  // xterm 수식 파라미터: 1 + Shift(1) + Alt(2) + Ctrl(4).
+  function modParam(mods) {
+    if (!mods) return 1;
+    return 1 + (mods.shift ? 1 : 0) + (mods.alt ? 2 : 0) + (mods.ctrl ? 4 : 0);
   }
+
+  // 키바 버튼 → 최종 전송 시퀀스. opts: { key, seq, mods: { ctrl, alt, shift } }
+  // (예전 호출부 호환: opts.ctrl도 받는다)
+  //  - FIXED: 수식 무시
+  //  - NAMED: 수식이 있으면 CSI 1;N 형식
+  //  - esc/tab: Shift+Tab → ESC[Z, Alt → ESC 접두, Ctrl은 표준 시퀀스가 없어 무시
+  //  - seq(문자): Ctrl → 제어바이트, Alt → ESC 접두, Shift → 대문자
+  function keySeq(opts) {
+    var mods = opts.mods || { ctrl: !!opts.ctrl };
+    var alt = mods.alt ? '\x1b' : '';
+    if (opts.key && FIXED[opts.key]) return FIXED[opts.key];
+    var n = opts.key && NAMED[opts.key];
+    if (n) {
+      var m = modParam(mods);
+      if (n.tilde) return '\x1b[' + n.tilde + (m > 1 ? ';' + m : '') + '~';
+      if (n.ss3) return m > 1 ? '\x1b[1;' + m + n.ss3 : '\x1bO' + n.ss3;
+      return m > 1 ? '\x1b[1;' + m + n.csi : '\x1b[' + n.csi;
+    }
+    if (opts.key === 'esc') return alt + '\x1b';
+    if (opts.key === 'tab') return mods.shift ? '\x1b[Z' : alt + '\t';
+    var base = opts.seq != null ? String(opts.seq) : '';
+    if (!base) return '';
+    if (base.length === 1 && base >= ' ' && base.charCodeAt(0) < 128) {
+      if (mods.shift) base = base.toUpperCase();
+      if (mods.ctrl) base = ctrlByte(base);
+    }
+    return alt + base;
+  }
+
+  // 소프트 키보드로 친 입력에 키바 수식키 적용. 의미 있는 건 ASCII 단일 문자뿐
+  // (applyCtrlToInput과 같은 이유) — 그 외는 원문 그대로.
+  function applyModsToInput(data, mods) {
+    if (!data || !mods || data.length !== 1 || data.charCodeAt(0) >= 128) return data;
+    return keySeq({ seq: data, mods: mods });
+  }
+
+  // 예전 이름 — 호출부·테스트 호환.
+  function keybarSeq(opts) { return keySeq(opts); }
 
   var api = {
     KEYBAR_SEQ: KEYBAR_SEQ,
@@ -54,6 +102,9 @@
     ctrlByte: ctrlByte,
     applyCtrlToInput: applyCtrlToInput,
     keybarSeq: keybarSeq,
+    keySeq: keySeq,
+    modParam: modParam,
+    applyModsToInput: applyModsToInput,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

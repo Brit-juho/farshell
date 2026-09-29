@@ -1,18 +1,20 @@
 // 모바일 특수키 바(keybar). F4에서 terminal.js(구 :1842-2018)에서 분리.
 // 소프트 키보드에 없는 특수키/조합키를 활성 PTY에 원시 시퀀스로 주입한다.
-// Sticky Ctrl: Ctrl을 한 번 탭하면 "다음 한 키만" Ctrl 조합으로 전송된다
-// (keybar 문자 버튼 · 소프트 키보드 문자 양쪽 모두). Claude Code/셸의 Ctrl 단축키용.
+// 수식키(Ctrl/Alt/Shift): 탭 = 다음 한 키에만, 한 번 더 탭 = 고정, 누르고 있는
+// 동안 = 적용(다른 손가락으로 키바 키나 소프트 키보드를 치면 동시 입력).
+// 키바 버튼 · 소프트 키보드 문자 양쪽 모두에 붙는다.
 // 순수 키-시퀀스 로직(_KEYBAR_SEQ, ctrlByte, Ctrl+화살표, sticky 변환)은
 // lib/keyseq.js(window.VTKeySeq)로 분리돼 있다 — DOM/세션 상태가 없어 단위 테스트 대상.
 // VTKeySeq는 아직 UMD(globalThis.VTKeySeq)라 bare identifier로 읽는다(F2 판단 유지).
 import { activeSessionId, activeSession, getSession } from '../core/store.js';
-import { icon } from '../ui/icons.js';
 import { copyToClipboard, sendToPty } from './clipboard.js';
 import { fitAndResize } from './resize.js';
 import { _isCoarsePointer } from '../core/env.js';
-import { get as settingGet, set as settingSet, subscribe as settingSubscribe } from '../core/settings.js';
 
-let _ctrlArmed = false;
+// 수식키 상태. latch: 'off' | 'once'(다음 한 키) | 'lock'(다시 탭할 때까지).
+// held: 지금 그 버튼을 누르고 있는 포인터 id 집합(멀티터치 동시 입력).
+const MODS = ['ctrl', 'alt', 'shift'];
+const _mods = Object.fromEntries(MODS.map((m) => [m, { latch: 'off', held: new Set(), usedWhileHeld: false }]));
 let _selectionSessionId = null;
 
 // 2026-09-23 — 예전엔 브라우저 네이티브 Range(window.getSelection())를 먼저
@@ -52,7 +54,7 @@ export function setTerminalSelectionMode(on) {
   if (actions) actions.hidden = !_selectionSessionId;
 
   if (_selectionSessionId) {
-    _setCtrlArmed(false);
+    resetKeybarMods();
     try { current.term.blur(); } catch (_) {}
     try { document.activeElement?.blur?.(); } catch (_) {}
     try { navigator.virtualKeyboard?.hide?.(); } catch (_) {}
@@ -93,11 +95,9 @@ function _selectAllVisible() {
 // L7: 마이크의 물리적 위치 결정 — voice.js가 `#mic-btn-wrap`을 모듈 최상위에서
 // `const`로 한 번만 캐시하므로(voice/recording.js), *어디에 있든* id만 유지되면
 // 문제없다. 데스크톱(사용자 확인, 문서에 명시적 근거는 없었음)은 rail 설정
-// 패널(#vt-rail-mic-slot, index.html 정적 마크업)에 그대로 두고, 터치 기기만
-// keybar 슬롯으로 옮긴다 — keybar 자체가 pointer:coarse 전용이므로 그 판정
-// 기준을 그대로 재사용한다. keybar 노출 여부(?keybar=1 강제 등)와는 무관하게
-// "입력 방식이 무엇이냐"만 본다 — 아래 initKeybar()의 이른 return보다 먼저
-// 실행해야 한다(강제 노출 없이 조용히 종료돼도 마이크는 제자리를 찾아가야 함).
+// 패널(#vt-rail-mic-slot, index.html 정적 마크업)에 그대로 둔다 — 아래
+// initKeybar()의 이른 return보다 먼저 실행해야 한다(키바가 없는 환경에서도
+// 마이크는 제자리를 찾아가야 함).
 // 2026-09-18 — 데스크톱 자리가 바뀌었다. 예전엔 숨은 옛 레일의 설정 플라이아웃
 // (#vt-rail-mic-slot)에 있었고 `⋯ 더보기` 메뉴로만 닿을 수 있었다 — 그 메뉴의
 // 나머지 항목이 전부 dock·팔레트·설정으로 옮겨가면서, ⋯는 사실상 **마이크 하나
@@ -113,29 +113,53 @@ function _selectAllVisible() {
 export function placeMicButton() {
   const mic = document.getElementById('mic-btn-wrap');
   if (!mic) return; // .needs-voice로 이미 숨겨졌거나(음성 미설치) 마크업 자체가 없는 테스트 환경
-  const target = _isCoarsePointer()
-    ? document.getElementById('keybar-slot-mic')
-    : (document.getElementById('vt-dock-mic-home') || document.getElementById('vt-rail-mic-slot'));
+  // 2026-09-29 — 터치 기기의 키바 슬롯을 없앴다(사용자: 안 쓰는데 키 자리만
+  // 먹는다). 이제 포인터 종류와 무관하게 dock(없으면 rail 설정 슬롯)에 둔다.
+  const target = document.getElementById('vt-dock-mic-home') || document.getElementById('vt-rail-mic-slot');
   if (target && mic.parentElement !== target) target.appendChild(mic);
 }
 placeMicButton();
 
-function _setCtrlArmed(on) {
-  _ctrlArmed = on;
-  const btn = document.querySelector('#keybar .kb-mod[data-mod="ctrl"]');
-  if (btn) {
+function _activeMods() {
+  const out = {};
+  for (const m of MODS) out[m] = _mods[m].latch !== 'off' || _mods[m].held.size > 0;
+  return out;
+}
+
+function _renderMods() {
+  for (const m of MODS) {
+    const btn = document.querySelector(`#keybar .kb-mod[data-mod="${m}"]`);
+    if (!btn) continue;
+    const st = _mods[m];
+    const on = st.latch !== 'off' || st.held.size > 0;
     btn.classList.toggle('armed', on);
+    btn.classList.toggle('locked', st.latch === 'lock');
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 }
 
-// term.onData 경로(ws.js)에서 호출 — armed Ctrl이면 입력 첫 글자에 Ctrl 조합 적용 후 해제.
-export function applyStickyMod(data) {
-  if (_ctrlArmed && data) {
-    _setCtrlArmed(false);   // 입력이 오면 sticky 상태 소비(해제)
-    return VTKeySeq.applyCtrlToInput(data);
+// 키 하나를 보낸 뒤: 'once'는 소비, 누르고 있는 수식키는 "조합에 쓰였다"로 표시
+// (손을 뗄 때 탭으로 오인해 latch를 바꾸지 않게).
+function _consumeMods() {
+  for (const m of MODS) {
+    const st = _mods[m];
+    if (st.latch === 'once') st.latch = 'off';
+    if (st.held.size > 0) st.usedWhileHeld = true;
   }
-  return data;
+  _renderMods();
+}
+
+export function resetKeybarMods() {
+  for (const m of MODS) { _mods[m].latch = 'off'; _mods[m].held.clear(); _mods[m].usedWhileHeld = false; }
+  _renderMods();
+}
+
+// term.onData 경로(ws.js)에서 호출 — 켜진 수식키를 소프트 키보드 입력에 적용.
+export function applyStickyMod(data) {
+  const mods = _activeMods();
+  if (!data || !MODS.some((m) => mods[m])) return data;
+  _consumeMods();
+  return VTKeySeq.applyModsToInput(data, mods);
 }
 
 function _focusActiveTerm() {
@@ -159,16 +183,45 @@ export function initKeybar() {
   if (_force) bar.classList.add('force-show');
   bar.hidden = false;
 
-  // 2026-09-23 — 큐/업로드 슬롯을 없앴다(하단 내비 「첨부」·빠른 열기 `:`가
-  // 이미 같은 액션에 닿는다, DESIGN.md §7). 마이크만 남는다 —
-  // _placeMicButton()이 이미 옮겨뒀다.
   document.addEventListener('vt:session-switch', () => setTerminalSelectionMode(false));
 
   // M3: ←/→ 버튼을 누른 채 드래그하면 끈 거리만큼 같은 방향으로 연속 이동.
   const ARROW_DRAG_STEP_PX = 14;
   let _dragArrow = null;
-  // R4: 롱프레스 임계값 — 사람이 "누르고 있다"고 인지하는 최소 시간대(400~600ms 범주).
-  const LONGPRESS_MS = 500;
+  // 스크롤 줄에서 이만큼 움직이면 "누름"이 아니라 "밀기"로 본다.
+  const TAP_SLOP_PX = 8;
+  // 스크롤 줄에서 눌린 채 손을 떼기를 기다리는 포인터들(pointerId → 상태).
+  const _pending = new Map();
+
+  const _send = (btn) => {
+    const out = VTKeySeq.keySeq({ key: btn.dataset.key, seq: btn.dataset.seq, mods: _activeMods() });
+    if (!out) return;
+    sendToPty(activeSessionId(), out);
+    _consumeMods();
+    _focusActiveTerm();
+  };
+
+  // 누르던 포인터 하나를 끝낸다. tap=true면 손을 뗀 것(발화), false면 취소.
+  const _finish = (pointerId, tap) => {
+    const p = _pending.get(pointerId);
+    if (!p) return;
+    _pending.delete(pointerId);
+    p.btn.classList.remove('holding');
+    const mod = p.btn.dataset.mod;
+    if (mod) {
+      const st = _mods[mod];
+      st.held.delete(pointerId);
+      // 다른 키와 조합에 쓰였으면 탭이 아니다 — latch를 바꾸지 않는다.
+      if (tap && !p.moved && !st.usedWhileHeld) {
+        st.latch = st.latch === 'off' ? 'once' : st.latch === 'once' ? 'lock' : 'off';
+      }
+      if (st.held.size === 0) st.usedWhileHeld = false;
+      _renderMods();
+      if (tap) _focusActiveTerm();
+      return;
+    }
+    if (tap && !p.moved) _send(p.btn);
+  };
 
   // pointerdown에서 preventDefault → 터미널 textarea 포커스를 뺏지 않아
   // 소프트 키보드가 내려가지 않는다. (버튼 탭마다 키보드가 닫히면 못 씀)
@@ -181,93 +234,79 @@ export function initKeybar() {
     if (selectionAll) { e.preventDefault(); _selectAllVisible(); return; }
     const selectionDone = e.target.closest('#keybar-selection-done');
     if (selectionDone) { e.preventDefault(); setTerminalSelectionMode(false); return; }
-    // 접기/펴기 토글 — .kb가 아니므로 먼저 가로챈다.
-    const toggle = e.target.closest('#keybar-toggle');
-    if (toggle) {
-      e.preventDefault();
-      _setKeybarCollapsed(!bar.classList.contains('collapsed'));
-      _focusActiveTerm();
-      return;
-    }
     const btn = e.target.closest('.kb');
     if (!btn) return;
     e.preventDefault();
-    if (btn.dataset.mod === 'ctrl') { _setCtrlArmed(!_ctrlArmed); _focusActiveTerm(); return; }
 
-    // R4: n/p처럼 data-longpress-tmux가 붙은 버튼은 짧게 누르면 평소처럼 문자를
-    // 입력하고, LONGPRESS_MS 이상 누르고 있으면 그 대신 tmux prefix(Ctrl-B, 0x02)
-    // + n/p를 보내 창을 전환한다(swell.sh 패턴). 다른 키들은 기존처럼 pointerdown
-    // 즉시 발화 — 여기서만 pointerup까지 기다리는 예외를 둔다.
-    // [M4] 롱프레스 키 변형 — R4가 n/p에 만든 그 동작을 **아무 키에나** 붙일 수
-    // 있게 일반화한 것이다. `data-longpress-tmux`는 tmux prefix를 앞에 붙이고,
-    // `data-longpress-seq`는 그 문자를 그대로 보낸다. 폰 키바는 자리가 12칸뿐
-    // 이라 `_`·`\`·백틱 같은 키를 새 버튼으로 넣을 수 없는데, 이 둘은 짝이
-    // 뚜렷해서(`-`↔`_`, `/`↔`\`) 같은 자리에 겹쳐도 헷갈리지 않는다.
-    const lpTmux = btn.dataset.longpressTmux;
-    const lpSeq = btn.dataset.longpressSeq;
-    if (lpTmux || lpSeq) {
-      let fired = false;
-      btn.classList.add('holding');
-      const timer = setTimeout(() => {
-        fired = true;
-        btn.classList.remove('holding');
-        btn.classList.add('longpress-fired');
-        setTimeout(() => btn.classList.remove('longpress-fired'), 150);
-        sendToPty(activeSessionId(), lpTmux ? '\x02' + lpTmux : lpSeq);
-        _focusActiveTerm();
-      }, LONGPRESS_MS);
-      const finish = (sendShort) => {
-        clearTimeout(timer);
-        btn.classList.remove('holding');
-        bar.removeEventListener('pointerup', onUp);
-        bar.removeEventListener('pointercancel', onCancel);
-        if (sendShort && !fired) {
-          const shortOut = VTKeySeq.keybarSeq({ key: btn.dataset.key, seq: btn.dataset.seq, ctrl: _ctrlArmed });
-          if (shortOut) {
-            if (_ctrlArmed) _setCtrlArmed(false);
-            sendToPty(activeSessionId(), shortOut);
-            _focusActiveTerm();
-          }
-        }
-      };
-      const onUp = (ev) => { if (ev.pointerId === e.pointerId) finish(true); };
-      const onCancel = (ev) => { if (ev.pointerId === e.pointerId) finish(false); };
-      bar.addEventListener('pointerup', onUp);
-      bar.addEventListener('pointercancel', onCancel);
+    // 방향키 구역은 스크롤하지 않으므로 누르는 즉시 보낸다(반응성·연속 이동).
+    if (btn.closest('#keybar-arrows')) {
+      _send(btn);
+      if (btn.dataset.key === 'left' || btn.dataset.key === 'right') {
+        _dragArrow = { key: btn.dataset.key, pointerId: e.pointerId, startX: e.clientX, steps: 1 };
+        try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+      }
       return;
     }
 
-    // armed면 keybarSeq가 Ctrl+화살표(단어 이동)·Ctrl+문자를 조합해 준다.
-    const out = VTKeySeq.keybarSeq({ key: btn.dataset.key, seq: btn.dataset.seq, ctrl: _ctrlArmed });
-    if (!out) return;
-    if (_ctrlArmed) _setCtrlArmed(false);
-    sendToPty(activeSessionId(), out);
-    _focusActiveTerm();
-    // M3: ←/→를 누른 채 그 방향으로 더 끌면 끈 거리만큼 같은 방향으로 반복
-    // 전송한다(트랙패드형 연속 이동). 반대로 되끄는 건 무시한다 — 화살표는
-    // 이미 보낸 걸 취소할 수 없어서, "얼마나 더 보냈는지"만 늘어나는 카운터로
-    // 추적해야 화면에 보이는 커서 위치와 어긋나지 않는다.
-    if (btn.dataset.key === 'left' || btn.dataset.key === 'right') {
-      _dragArrow = { key: btn.dataset.key, pointerId: e.pointerId, startX: e.clientX, steps: 1 };
-      try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+    // 스크롤 줄: 손을 뗄 때 보낸다. 수식키는 누르는 순간부터 "누르고 있음"으로
+    // 켜져야 다른 손가락의 키와 동시 입력이 된다.
+    const mod = btn.dataset.mod;
+    if (mod) {
+      const st = _mods[mod];
+      if (st.held.size === 0) st.usedWhileHeld = false;
+      st.held.add(e.pointerId);
+      _renderMods();
     }
+    btn.classList.add('holding');
+    _pending.set(e.pointerId, { btn, x: e.clientX, y: e.clientY, moved: false });
   });
 
   bar.addEventListener('pointermove', (e) => {
+    const p = _pending.get(e.pointerId);
+    if (p && !p.moved && (Math.abs(e.clientX - p.x) > TAP_SLOP_PX || Math.abs(e.clientY - p.y) > TAP_SLOP_PX)) {
+      // 밀기로 판정 — 이 누름은 발화하지 않는다. 수식키는 스크롤 줄 밖에
+      // 고정돼 있어 손가락이 조금 흘러도 "누르고 있음"을 유지한다.
+      if (p.btn.dataset.mod) return;
+      _finish(e.pointerId, false);
+      return;
+    }
     if (!_dragArrow || e.pointerId !== _dragArrow.pointerId) return;
     const dir = _dragArrow.key === 'right' ? 1 : -1;
     const advanced = (e.clientX - _dragArrow.startX) * dir;
     const targetSteps = Math.max(1, 1 + Math.floor(advanced / ARROW_DRAG_STEP_PX));
     while (_dragArrow.steps < targetSteps) {
-      sendToPty(activeSessionId(), VTKeySeq.keybarSeq({ key: _dragArrow.key }));
+      sendToPty(activeSessionId(), VTKeySeq.keySeq({ key: _dragArrow.key, mods: _activeMods() }));
       _dragArrow.steps++;
     }
   });
-  const _endDragArrow = (e) => {
+  bar.addEventListener('pointerup', (e) => {
+    _finish(e.pointerId, true);
     if (_dragArrow && e.pointerId === _dragArrow.pointerId) _dragArrow = null;
-  };
-  bar.addEventListener('pointerup', _endDragArrow);
-  bar.addEventListener('pointercancel', _endDragArrow);
+  });
+  // 브라우저가 가로 스크롤을 시작하면 pointercancel이 온다 — 발화하지 않는다.
+  bar.addEventListener('pointercancel', (e) => {
+    _finish(e.pointerId, false);
+    if (_dragArrow && e.pointerId === _dragArrow.pointerId) _dragArrow = null;
+  });
+
+  // 스크롤 줄의 양 끝 페이드 — 더 밀 수 있는 쪽만 흐리게 해서 "옆에 키가 더
+  // 있다"를 알린다. 마우스 휠(태블릿+마우스)은 세로 휠을 가로 이동으로 바꾼다.
+  const strip = document.getElementById('keybar-scroll');
+  if (strip) {
+    const updateEdges = () => {
+      const max = strip.scrollWidth - strip.clientWidth;
+      strip.classList.toggle('more-left', strip.scrollLeft > 1);
+      strip.classList.toggle('more-right', strip.scrollLeft < max - 1);
+    };
+    strip.addEventListener('scroll', updateEdges, { passive: true });
+    strip.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      strip.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }, { passive: false });
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updateEdges).observe(strip);
+    updateEdges();
+  }
 
   // 키보드 위로 띄우기 — visualViewport로 소프트 키보드 높이를 추정해 transform.
   //
@@ -307,63 +346,11 @@ export function initKeybar() {
     window.visualViewport.addEventListener('scroll', positionBar);
   }
   window.addEventListener('resize', positionBar);
-  // 바 자체의 높이 변화(접힘/펼침, 폰트 로드, 스킨 전환)도 여백에 반영해야
+  // 바 자체의 높이 변화(선택 모드 전환, 폰트 로드, 스킨 전환)도 여백에 반영해야
   // 한다 — 토글 핸들러에만 의존하면 폰트 지연 로드를 놓친다.
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(() => positionBar()).observe(bar);
   }
-
-  // 접기/펴기 — #keybar-extra-keys(덜 쓰는 나머지 키)만 여닫는다(위 CSS
-  // 주석 참고, Esc·Ctrl·Tab·화살표는 이제 안 접힌다). 상태는 기기별 설정
-  // (core/settings.js)에 남긴다 — 2026-09-23 이전엔 localStorage를 직접
-  // 썼는데, core/settings.js에 이미 있던 `keybar.collapsed` 스키마와 남남
-  // (settings 화면에 노출될 일이 없는 값이라도, "값 하나에 저장소 두 곳"은
-  // 언젠가 어긋난다). 스키마의 migrate가 옛 localStorage 값을 1회 흡수한다.
-  // (함수 선언이라 위 핸들러에서 참조 가능)
-  function _setKeybarCollapsed(collapsed) {
-    // armed Ctrl이 접힘 상태로 넘어가면 하이라이트가 숨겨진 채 다음 입력이
-    // Ctrl 조합으로 나가버린다(놀람). 접기/펴기 시 항상 해제.
-    _setCtrlArmed(false);
-    bar.classList.toggle('collapsed', collapsed);
-    document.body.classList.toggle('kb-collapsed', collapsed);
-    const tg = document.getElementById('keybar-toggle');
-    if (tg) {
-      // ▴▾ 글리프는 폰트마다 크기·중심이 제각각이라 다른 키바 버튼과
-      // 광학적으로 안 맞았다. SVG 하나를 CSS로 뒤집어 쓴다.
-      if (!tg.firstElementChild) tg.innerHTML = icon('chevron-down', 14);
-      tg.classList.toggle('flipped', collapsed);
-      tg.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      tg.setAttribute('aria-label', collapsed ? '특수키 바 펴기' : '특수키 바 접기');
-    }
-    settingSet('keybar.collapsed', collapsed);
-    // 하단 여백이 바뀌었으니 xterm 칸 수 재계산.
-    const activeId = activeSessionId();
-    if (activeId) setTimeout(() => fitAndResize(activeId), 60);
-    positionBar();
-  }
-
-  // 초기 상태 복원. index.html의 #keybar는 이미 class="collapsed"로 시작하므로
-  // (기본값이 참일 때 깜빡임 없이 첫 페인트가 맞아떨어지게) 설정이 거짓이면
-  // 여기서 명시적으로 펴야 한다 — 그래서 조건 없이 항상 부른다.
-  _setKeybarCollapsed(Boolean(settingGet('keybar.collapsed')));
-  // 기기 설정(device scope)은 /api/device-settings에서 비동기로 온다 — 이
-  // 시점엔 아직 스키마 기본값(true)으로 그렸을 수 있다. 실제 값이 늦게
-  // 도착해 다르면 다시 맞춘다(rail-data.ts의 GROUP_COLLAPSED_DEFAULT와 같은
-  // 이유 — "설정 없음"과 "이미 도착한 설정" 둘 다 화면과 어긋나면 안 된다).
-  //
-  // ⚠ subscribe 콜백 인자는 **항상 전체 스냅샷이 아니다** — set() 한 번은
-  // `{ [바뀐 키]: 값 }`만 넘긴다(core/settings.js:225). "이 알림에
-  // keybar.collapsed가 실제로 들어 있는가"를 먼저 확인하지 않으면, 다른
-  // 아무 설정(예: 하단 내비 탭 전환이 쓰는 ui.mobile.home)이 바뀔 때마다
-  // `all['keybar.collapsed']`가 undefined→false로 오독돼 펼침 상태로
-  // 튀고 그 잘못된 false가 그대로 저장됐다(실측, 2026-09-23 — 탭만
-  // 바꿔도 키바가 저절로 펴졌다). 초기 로드 시(getAll() 결과)는 키가
-  // 있으므로 그 경로는 그대로 동작한다.
-  settingSubscribe((all) => {
-    if (!all || !('keybar.collapsed' in all)) return;
-    const v = Boolean(all['keybar.collapsed']);
-    if (v !== bar.classList.contains('collapsed')) _setKeybarCollapsed(v);
-  });
 
   positionBar();
 }

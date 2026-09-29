@@ -53,15 +53,3 @@ test('음성 전용 모드 OFF → 마이크가 원래 자리로 정확히 되�
   assert.strictEqual(window.document.body.classList.contains('voice-only-mode'), false);
   assert.strictEqual(mic.parentElement.id, 'vt-rail-mic-slot');
 });
-
-test('음성 전용 모드가 keybar 슬롯에서 켜졌을 때도 그 슬롯으로 정확히 돌아간다', async () => {
-  const { window, toggleVoiceOnly } = await buildWindow();
-  const mic = window.document.getElementById('mic-btn-wrap');
-  // keybar.js가 터치 기기에서 이미 옮겨놓은 상황을 흉내낸다.
-  window.document.getElementById('keybar-slot-mic').appendChild(mic);
-
-  toggleVoiceOnly(); // ON
-  assert.strictEqual(mic.parentElement.id, 'topbar');
-  toggleVoiceOnly(); // OFF
-  assert.strictEqual(mic.parentElement.id, 'keybar-slot-mic', 'rail이 아니라 원래 있던 keybar 슬롯으로 돌아가야 한다');
-});

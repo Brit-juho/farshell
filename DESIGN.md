@@ -708,8 +708,8 @@ every command" list.
 │                                                                     │
 │   tab content (session / terminal / changes / files / settings)    │
 │                                                                     │
-├ keybar (terminal tab only) — [mic] Esc Ctrl Tab ↑↓←→ [expand] ────┤
-│   (expanded) │ ~ - n p ──────────────────────────────────────────  │
+├ keybar (terminal tab only) — Ctrl · Alt · Shift (pinned) │   ↑   ─┤
+│      Esc Tab ⇧Tab ^C Home … F12 ▸ (horizontal scroll)     │ ← ↓ →  │
 ├ bottom nav 52 ── session | terminal | changes | files | settings ──┤
 └─────────────────────────────────────────────────────────────────  ┘
 ```
@@ -889,6 +889,29 @@ device's stored settings** — a real cross-feature data-corruption bug caught
 only by testing tab switches after wiring the toggle, not by reasoning about
 the code. Fixed by checking the key is actually present in the notification
 before acting on it.
+
+**2026-09-29 — keybar reworked again: two left rows (Ctrl·Alt·Shift pinned
+on top, a horizontal scroll strip below) + inverted-T arrows on the right.** The user reported two failures: trying to swipe the row pressed
+whatever key the finger landed on, and there was no way to hold a modifier
+while pressing another key. Both came from keys firing on `pointerdown`. Now
+the strip (`#keybar-scroll`, `touch-action:pan-x`) fires on **release**, and
+cancels past an 8px slop or on the browser's `pointercancel` when it takes
+over the scroll; the arrow cluster (`#keybar-arrows`) does not scroll and
+still fires on press. Ctrl/Alt/Shift share one model — tap = next key only,
+tap again = lock, held = applies while held (to keybar keys and soft-keyboard
+input alike), and a held modifier that was used in a chord does not count as
+a tap on release. The strip carries only keys the soft keyboard lacks (Esc
+Tab ⇧Tab ^C Home End PgUp PgDn Del tmux prefix F1–F12); the character keys,
+their long-press variants, the collapse toggle and `keybar.collapsed` are
+gone, and so is the keybar mic slot (the user never used it and it cost a
+column) — the mic now lives only in the dock / rail slot. Modifiers sit
+outside the strip so a chord is always in the same place and a thumb that
+drifts while holding one does not cancel it. Modifier state reads like a
+Caps Lock light: a 5px lamp top-right — faint ring (off), accent outline +
+ring (next key), filled key + solid lamp (locked). Keycaps use `--mono`. The
+strip fades whichever edge has more keys (`.more-left`/`.more-right`) and
+maps vertical wheel to horizontal. Chosen from three candidates rendered on
+the real app (pinned row / two-row scrolling grid / slim single row).
 
 **Quick open (step 5) is now a full-height bottom sheet on compact** instead
 of the 60vh-capped card shared with the desktop layout — see § 6's "Default

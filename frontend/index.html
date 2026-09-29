@@ -329,8 +329,8 @@
 
     <!-- L7: 마이크를 상단바에서 이관했다(accent 버튼 1개 회수, AFTER 다이어그램의
          최종 상단바 = 탭+ +팔레트뿐). 이제 그 자리는 없고, 정적 마크업은
-         #vt-rail-mic-slot(데스크톱 홈)에 있다 — keybar.js가 부팅 시 포인터
-         타입에 따라 keybar 쪽으로 옮길 수도 있다(아래 #keybar-slot-mic 참고). -->
+         #vt-rail-mic-slot(데스크톱 홈)에 있다 — dock이 뜨면 keybar.js의
+         placeMicButton이 dock으로 옮긴다. 키바에는 두지 않는다(2026-09-29). -->
 
     <!-- L6: 커맨드 팔레트 진입점으로 재배정 — 예전엔 search.toggle(터미널 내 검색)이었다.
          팔레트가 세션·파일·명령을 아우르는 "확인" 진입점(ADR-8)이 되면서, 이 아이콘은
@@ -467,8 +467,7 @@
          음성 입력이 완전히 사라지지 않게 한다(문서에 명시적 근거는 없었으나,
          조용히 기능이 없어지는 쪽보다 안전하다고 판단해 유지하기로 함).
          voice.js 계약(#mic-btn-wrap + .label + .recording)은 그대로 —
-         keybar.js가 부팅 시 pointer:coarse면 이 슬롯 대신 #keybar-slot-mic로
-         이 버튼 자체를 옮긴다(재생성 아님, appendChild). -->
+         dock이 있으면 keybar.js가 이 버튼 자체를 그리로 옮긴다(재생성 아님). -->
     <div id="vt-rail-mic-slot">
       <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" data-tip="음성 입력" data-tip-side="right">
         <svg data-icon="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
@@ -495,62 +494,58 @@
   <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
   <div id="mic-status" role="status" aria-live="polite"></div>
 
-  <!-- 모바일 특수키 바 (keybar) — 소프트 키보드에 없는 Esc/Tab/화살표/Ctrl 등을 PTY로 전송.
+  <!-- 모바일 특수키 바 (keybar) — 소프트 키보드에 없는 키만 PTY로 전송한다.
        기본 hidden; term/keybar.js가 터치 기기(pointer:coarse)에서만 노출하고 배선/위치 조정.
-       2026-09-23 — 한 줄로 다시 짰다: [마이크] Esc Ctrl Tab ↑↓←→ [펼치기] 하나뿐이다.
-       큐·업로드 슬롯은 없앴다(업로드는 하단 내비 「첨부」, 큐는 빠른 열기 `:`로 이미
-       닿는다 — 여기 있던 건 지름길일 뿐 유일한 길이 아니었다). 「텍스트 선택」 슬롯도
-       없앴다(터미널 꾹 누르기가 대신한다, term/touch-select.js). #keybar-slot-mic는
-       빈 컨테이너 — keybar.js가 부팅 시 #mic-btn-wrap을 여기로 옮겨 붙인다(coarse
-       pointer일 때만; 아니면 rail 설정 패널에 그대로 남는다). -->
-  <!-- class="collapsed" 기본값 — settings.js SCHEMA의 keybar.collapsed
-       def:true와 같은 값. JS가 개입하기 전(첫 페인트)에도 최종 모습과
-       같아야 추가 키 줄이 잠깐 보였다 접히는 깜빡임이 없다(rail-data.ts의
-       GROUP_COLLAPSED_DEFAULT와 같은 이유). -->
-  <div id="keybar" class="collapsed" role="toolbar" aria-label="특수키" hidden>
+       2026-09-29 — 왼쪽 두 줄(윗줄 Ctrl·Alt·Shift 고정 / 아랫줄 가로 스크롤 키) +
+       오른쪽 역T자 방향키로 다시 짰다. 마이크·접기/펴기·문자 키(| / ~ - n p)는
+       없앴다(마이크는 안 쓰는데 자리만 먹었고, 문자는 소프트 키보드에 있다).
+       스크롤 줄의 키는 손을 뗄 때 전송한다(밀어서 스크롤하려다 눌리지 않게) —
+       수식키와 방향키는 스크롤하지 않으므로 누르는 즉시 반응한다. -->
+  <div id="keybar" role="toolbar" aria-label="특수키" hidden>
     <div id="keybar-main">
-      <div id="keybar-slot-mic"></div>
-      <!-- 늘 보이는 7개 — 접어도 안 사라진다(밑의 #keybar-extra-keys만 접힌다). -->
-      <div id="keybar-core-keys">
-        <button type="button" class="kb" data-key="esc">Esc</button>
+      <!-- Ctrl/Alt/Shift: 탭 = 다음 한 키, 한 번 더 탭 = 고정, 누르고 있는 동안 = 적용.
+           스크롤로 밀려나지 않게 따로 고정한다 — 동시 입력은 늘 같은 자리여야 한다. -->
+      <div id="keybar-mods">
         <button type="button" class="kb kb-mod" data-mod="ctrl" aria-pressed="false">Ctrl</button>
+        <button type="button" class="kb kb-mod" data-mod="alt" aria-pressed="false">Alt</button>
+        <button type="button" class="kb kb-mod" data-mod="shift" aria-pressed="false">Shift</button>
+      </div>
+      <div id="keybar-scroll">
+        <button type="button" class="kb" data-key="esc">Esc</button>
         <button type="button" class="kb" data-key="tab">Tab</button>
+        <button type="button" class="kb" data-key="backtab" aria-label="Shift+Tab">⇧Tab</button>
+        <button type="button" class="kb" data-key="ctrlc" aria-label="Ctrl+C 중단">^C</button>
+        <button type="button" class="kb" data-key="home">Home</button>
+        <button type="button" class="kb" data-key="end">End</button>
+        <button type="button" class="kb" data-key="pgup" aria-label="Page Up">PgUp</button>
+        <button type="button" class="kb" data-key="pgdn" aria-label="Page Down">PgDn</button>
+        <button type="button" class="kb" data-key="del" aria-label="Delete">Del</button>
+        <button type="button" class="kb" data-key="prefix" aria-label="tmux prefix (Ctrl+B)">prefix</button>
+        <button type="button" class="kb" data-key="f1">F1</button>
+        <button type="button" class="kb" data-key="f2">F2</button>
+        <button type="button" class="kb" data-key="f3">F3</button>
+        <button type="button" class="kb" data-key="f4">F4</button>
+        <button type="button" class="kb" data-key="f5">F5</button>
+        <button type="button" class="kb" data-key="f6">F6</button>
+        <button type="button" class="kb" data-key="f7">F7</button>
+        <button type="button" class="kb" data-key="f8">F8</button>
+        <button type="button" class="kb" data-key="f9">F9</button>
+        <button type="button" class="kb" data-key="f10">F10</button>
+        <button type="button" class="kb" data-key="f11">F11</button>
+        <button type="button" class="kb" data-key="f12">F12</button>
+      </div>
+      <div id="keybar-arrows">
         <button type="button" class="kb kb-arrow" data-key="up" aria-label="위쪽 화살표">↑</button>
-        <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표">↓</button>
         <button type="button" class="kb kb-arrow" data-key="left" aria-label="왼쪽 화살표">←</button>
+        <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표">↓</button>
         <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표">→</button>
       </div>
-      <!-- 접기/펴기 토글 — #keybar-extra-keys(아래)만 여닫는다. -->
-      <!-- 도형은 ui/icons.js 'chevron-down'(hydrateIcons). 접히면 keybar.js가
-           .flipped를 붙여 CSS로 뒤집는다(아이콘을 두 개 두지 않는다). -->
-      <button type="button" id="keybar-toggle" aria-label="특수키 바 펼치기" aria-expanded="false" data-tip="추가 키 펴기/접기"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
     </div>
-    <!-- term/touch-select.js가 터미널 꾹 누르기로 켠다(keybar 버튼 아님). 선택
-         모드일 땐 #keybar-main 대신 이 줄이 그 자리를 대신한다(CSS). -->
     <div id="keybar-selection-actions" hidden>
       <span id="keybar-selection-hint">텍스트를 길게 눌러 선택</span>
       <button type="button" class="vt-btn sm" id="keybar-selection-all">모두 선택</button>
       <button type="button" class="vt-btn sm solid" id="keybar-selection-copy">복사</button>
       <button type="button" class="vt-btn sm quiet" id="keybar-selection-done">완료</button>
-    </div>
-    <!-- 펼쳤을 때만 보이는 둘째 줄 — 가로 스크롤 대신 줄바꿈 격자다(넘치면
-         그냥 한 줄 더 생긴다, 옆으로 숨는 키가 없다). -->
-    <div id="keybar-extra-keys">
-      <!-- [M4] 롱프레스 키 변형 — 짝이 뚜렷한 기호는 같은 자리에 겹쳐 둔다. -->
-      <button type="button" class="kb" data-seq="|" data-longpress-seq="\"
-        data-tip="| 입력" data-tip-sub="길게: \ 입력">|</button>
-      <button type="button" class="kb" data-seq="/" data-longpress-seq="?"
-        data-tip="/ 입력" data-tip-sub="길게: ? 입력">/</button>
-      <button type="button" class="kb" data-seq="~" data-longpress-seq="`"
-        data-tip="~ 입력" data-tip-sub="길게: ` 입력">~</button>
-      <button type="button" class="kb" data-seq="-" data-longpress-seq="_"
-        data-tip="- 입력" data-tip-sub="길게: _ 입력">-</button>
-      <!-- R4: 짧게 누르면 문자 n/p 입력, 길게 누르면 tmux 창 전환(Ctrl-B n/p).
-           전 세션이 tmux라 조건 분기 없이 바로 적용(swell.sh 패턴). -->
-      <button type="button" class="kb" data-seq="n" data-longpress-tmux="n"
-        data-tip="n 입력" data-tip-sub="길게: tmux 다음 창">n</button>
-      <button type="button" class="kb" data-seq="p" data-longpress-tmux="p"
-        data-tip="p 입력" data-tip-sub="길게: tmux 이전 창">p</button>
     </div>
   </div>
 
