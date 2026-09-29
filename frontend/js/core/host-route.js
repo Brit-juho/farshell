@@ -35,7 +35,7 @@ const LOCAL_HTTP = [
   /^\/api\/clipboard(\/|$)/,
   /^\/voice(\/|$)/,
 ];
-const RELAY_WS = [/^\/ws\/[^/]+$/, /^\/ws-agent$/, /^\/ws-workspace$/, /^\/ws-preview\/[^/]+$/];
+const RELAY_WS = [/^\/ws\/[^/]+$/, /^\/ws-agent$/, /^\/ws-workspace$/, /^\/ws-preview\/[^/]+$/, /^\/ws-fs-watch$/];
 
 function _read() {
   try {

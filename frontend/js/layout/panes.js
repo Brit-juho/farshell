@@ -206,7 +206,7 @@ function _buildPaneEl(paneId) {
 // 작은 버튼을 정확히 누를 필요가 없다.
 function _renderEmptyBody(bodyEl, paneId) {
   bodyEl.classList.remove('vt-pane-viewer');
-  delete bodyEl.dataset.viewerFile;
+  _clearViewerFile(bodyEl);
   // 2026-09-28 — 원격 호스트 탭(레일 스위처가 연 빈 탭)의 빈 칸은 로컬 「세션
   // 선택」 시트를 열면 안 된다: 그 시트는 **이 맥의** 세션만 고른다.
   const host = getActiveTabHostId();
@@ -265,7 +265,7 @@ function _renderRemoteEmptyBody(bodyEl, hostId) {
 // 세션 선택 시트를 열지 않고, 호스트 상태를 다시 확인하는 「다시 시도」만 준다.
 function _renderUnreachableBody(bodyEl, node) {
   bodyEl.classList.remove('vt-pane-viewer');
-  delete bodyEl.dataset.viewerFile;
+  _clearViewerFile(bodyEl);
   if (bodyEl.dataset.unreachable === node.unreachable.tmux) return;
   delete bodyEl.dataset.remoteEmpty;
   bodyEl.dataset.unreachable = node.unreachable.tmux;
@@ -425,7 +425,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
   if (s && s.wrapper) {
     placement.set(node.session, bodyEl);
     bodyEl.classList.remove('vt-pane-viewer');
-    delete bodyEl.dataset.viewerFile;
+    _clearViewerFile(bodyEl);
     nameEl.textContent = _sessionLabel(node.session) + labelSuffix;
     const empty = bodyEl.querySelector('.vt-pane-empty');
     if (empty) empty.remove();
@@ -453,6 +453,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
 function _renderViewerBody(bodyEl, file) {
   bodyEl.classList.add('vt-pane-viewer');
   if (!file) {
+    _clearViewerFile(bodyEl);
     bodyEl.replaceChildren();
     bodyEl.dataset.viewerFile = '';
     const empty = document.createElement('div');
@@ -462,14 +463,53 @@ function _renderViewerBody(bodyEl, file) {
     return;
   }
   if (bodyEl.dataset.viewerFile === file) return;
+  _clearViewerFile(bodyEl);
   bodyEl.dataset.viewerFile = file;
   bodyEl.replaceChildren();
+  // 새로고침 버튼은 헤더가 아니라 본문 위에 띄운다 — 페인이 하나뿐이면 헤더가
+  // 통째로 숨는다(isRootOnly). 높이 0인 sticky 줄에 붙여 코드를 밀어내지 않는다.
+  const tools = document.createElement('div');
+  tools.className = 'vt-pane-viewer-tools';
+  const refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.className = 'vt-icon-btn xs vt-pane-refresh';
+  refreshBtn.setAttribute('aria-label', '새로고침');
+  refreshBtn.dataset.tip = '새로고침';
+  refreshBtn.innerHTML = icon('refresh-cw', 13);
+  refreshBtn.addEventListener('click', () => { _refreshViewerBody(bodyEl); });
+  tools.appendChild(refreshBtn);
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
-  bodyEl.appendChild(host);
+  bodyEl.append(tools, host);
   loadViewer()
-    .then((v) => v.renderFile(host, file))
+    .then((v) => {
+      // 청크가 오는 사이 칸이 다른 것으로 바뀌었으면 구독하지 않는다.
+      if (bodyEl.dataset.viewerFile === file) {
+        // 디스크에서 바뀌면 다시 그린다. 칸이 DOM에서 빠졌으면(pane을 닫았다)
+        // 여기서 구독을 푼다 — 닫는 경로가 여럿이라 이쪽에서 거두는 게 확실하다.
+        bodyEl._vtUnwatch = v.watchPath('file', file, v.coalesce(() => {
+          if (!bodyEl.isConnected) { _clearViewerFile(bodyEl); return undefined; }
+          return _refreshViewerBody(bodyEl);
+        }));
+      }
+      return v.renderFile(host, file);
+    })
     .catch((e) => { host.textContent = String(e && e.message ? e.message : e); });
+}
+
+// 뷰어 칸이 다른 것(세션·패널·빈 칸·다른 파일)으로 바뀔 때 — 표시 경로와 감시를 함께 거둔다.
+function _clearViewerFile(bodyEl) {
+  delete bodyEl.dataset.viewerFile;
+  if (bodyEl._vtUnwatch) { bodyEl._vtUnwatch(); bodyEl._vtUnwatch = null; }
+}
+
+// 새로고침 버튼·자동 갱신 공용. 스크롤 위치를 지킨 채 같은 파일을 다시 그린다.
+function _refreshViewerBody(bodyEl) {
+  const file = bodyEl && bodyEl.dataset.viewerFile;
+  if (!file) return Promise.resolve();
+  return loadViewer()
+    .then((v) => v.refreshFile(bodyEl, file, () => bodyEl.isConnected && bodyEl.dataset.viewerFile === file))
+    .catch(() => { /* 다음 변경·클릭 때 다시 시도한다 */ });
 }
 
 // N4 — 패널 칸의 내용. 뷰어와 같은 이유로 **같은 패널을 다시 그리지 않는다**:
@@ -482,7 +522,7 @@ function _renderViewerBody(bodyEl, file) {
 // 도착한 패널이 겹쳐 붙는다(dock 탭이 같은 종류의 경쟁을 'stale'로 다룬다).
 function _renderPanelBody(bodyEl, panel, paneId) {
   bodyEl.classList.remove('vt-pane-viewer');
-  delete bodyEl.dataset.viewerFile;
+  _clearViewerFile(bodyEl);
   if (bodyEl.dataset.panelKind === panel) return;
   bodyEl.dataset.panelKind = panel || '';
   bodyEl.replaceChildren();

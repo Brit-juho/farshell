@@ -16,11 +16,15 @@ import { openViewerPane } from '../layout/store.js';
 
 let _loading = null;
 
-/** 파일 렌더러 + 최근 파일 목록. 두 모듈 다 같은 청크라 요청은 한 번이다. */
+/** 파일 렌더러 + 최근 파일 목록 + 변경 감시. 전부 같은 청크라 요청은 한 번이다. */
 export function loadViewer() {
   if (!_loading) {
     _loading = import('./viewer/file.js')
-      .then(async (file) => ({ ...file, ...(await import('./viewer/recent.js')) }));
+      .then(async (file) => ({
+        ...file,
+        ...(await import('./viewer/recent.js')),
+        ...(await import('./viewer/watch.js')),
+      }));
   }
   return _loading;
 }

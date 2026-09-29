@@ -38,6 +38,7 @@ test('전환 중이면 호스트 범위 API·소켓은 그 맥으로 중계한�
   assert.strictEqual(R.relayUrl('http://x/api/workspace'), 'http://x/api/hosts/m5/relay/api/workspace');
   assert.strictEqual(R.relayWsPath('/ws/abc?token=t'), '/ws/hosts/m5/relay/ws/abc?token=t');
   assert.strictEqual(R.relayWsPath('/ws-workspace'), '/ws/hosts/m5/relay/ws-workspace');
+  assert.strictEqual(R.relayWsPath('/ws-fs-watch?token=t'), '/ws/hosts/m5/relay/ws-fs-watch?token=t');
   assert.strictEqual(R.hostKey('vt-layout-v1'), 'vt-layout-v1@m5');
 });
 

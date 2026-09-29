@@ -300,6 +300,15 @@
 .vt-pane-body.vt-pane-viewer .vt-vw-code-pane {
   min-width:0; padding:calc(var(--spacing) * 1.5) 0;
 }
+/* 새로고침 버튼 — 높이 0인 sticky 줄에 매달아 스크롤해도 오른쪽 위에 남고 코드를
+   밀어내지 않는다. 헤더에 두지 않는 이유는 페인이 하나뿐이면 헤더가 숨기 때문이다. */
+.vt-pane-body.vt-pane-viewer .vt-pane-viewer-tools {
+  position:sticky; top:0; height:0; z-index:2;
+}
+.vt-pane-body.vt-pane-viewer .vt-pane-refresh {
+  position:absolute; top:calc(var(--spacing) * 2); right:calc(var(--spacing) * 3);
+  background:var(--win); border:1px solid var(--line);
+}
 /* 뷰어 페인이 열려 있으면 온보딩(세션 0개 안내)은 나오지 않는다 — 볼 것이 있다. */
 body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 

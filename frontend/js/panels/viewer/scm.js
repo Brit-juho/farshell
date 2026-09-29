@@ -17,6 +17,7 @@ import { vtFetch } from '../../core/api.js';
 import { renderGitStatus, renderCommit, renderCommitFileDiff } from './git.js';
 import { renderFileDiff } from './diff.js';
 import { _viewerState } from './state.js';
+import { watchPath, coalesce } from './watch.js';
 
 const PANEL_ID = 'vt-dock-scm';
 
@@ -102,8 +103,29 @@ export async function showScm(opts = {}) {
     window.openFile(abs);
   };
 
-  const paint = async () => {
+  // 자동 갱신 — 보고 있는 저장소의 작업 디렉토리를 재귀로 구독한다. 변경 목록을
+  // 보고 있을 때만 다시 그린다: diff·커밋 상세를 읽는 중에 목록으로 튕기면 안 된다.
+  let listing = false;
+  let watched = null;
+  let unwatch = null;
+  const refreshIfListing = coalesce(async () => {
+    if (!body.isConnected) { stopWatch(); return; }
+    if (listing) await paint({ quiet: true });
+  });
+  const stopWatch = () => { if (unwatch) unwatch(); unwatch = null; watched = null; };
+  const watchRepo = (repo) => {
+    if (repo === watched) return;
+    stopWatch();
+    if (!repo) return;
+    watched = repo;
+    unwatch = watchPath('repo', repo, refreshIfListing);
+  };
+  const detail = (fn) => (...args) => { listing = false; return fn(...args); };
+
+  const paint = async ({ quiet = false } = {}) => {
+    listing = true;
     const repo = await _currentRepo();
+    watchRepo(repo);
     if (!repo) {
       _renderHead(headEl, null, null);
       body.innerHTML = '';
@@ -116,23 +138,26 @@ export async function showScm(opts = {}) {
     }
     const back = () => paint();
     const d = await renderGitStatus(body, repo, {
+      quiet,
+      isCurrent: () => listing,
       readOnly: false,
-      onFile: (file, staged) => renderFileDiff(body, repo, file, staged, { onBack: back }),
+      onFile: detail((file, staged) => renderFileDiff(body, repo, file, staged, { onBack: back })),
       onOpenFile: (file) => openInViewer(repo, file),
-      onCommit: (sha) => renderCommit(body, repo, sha, {
+      onCommit: detail((sha) => renderCommit(body, repo, sha, {
         onBack: back,
         onFile: (file) => renderCommitFileDiff(body, repo, sha, file, {
           onBack: () => renderCommit(body, repo, sha, { onBack: back, onFile: (f) => renderCommitFileDiff(body, repo, sha, f, { onBack: back }) }),
         }),
-      }),
+      })),
     });
-    _renderHead(headEl, repo, d);
+    // 조용한 갱신이 실패하면(null) 머리말도 지금 것을 둔다.
+    if (d || !quiet) _renderHead(headEl, repo, d);
   };
 
-  panel.ctx.byId('vt-scm-refresh').addEventListener('click', paint);
+  panel.ctx.byId('vt-scm-refresh').addEventListener('click', () => paint());
   // 세션을 바꾸면 보는 저장소도 바뀐다 — dock은 "지금 보고 있는 페인"을 따라간다.
   const unsub = window.storeSubscribe ? window.storeSubscribe(() => paint()) : null;
-  panel.el._vtOnClose = () => { if (unsub) unsub(); };
+  panel.el._vtOnClose = () => { if (unsub) unsub(); stopWatch(); };
 
   await paint();
 }

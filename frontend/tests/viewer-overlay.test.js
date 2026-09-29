@@ -28,6 +28,8 @@ async function build({ width = 1280, surface, rect } = {}) {
   window._tokenQuery = '';
   window.showToast = () => {};
   window.VTDiffLex = { normalize: (s) => s, langForPath: () => null };
+  // 파일을 열면 자동 갱신 구독(/ws-fs-watch)이 붙는다 — 실제 소켓을 열지 않게.
+  window.WebSocket = class { send() {} close() {} };
   const fetches = [];
   window.fetch = async (url, opts) => {
     const u = String(url);

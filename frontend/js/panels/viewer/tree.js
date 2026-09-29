@@ -12,6 +12,7 @@ import { vtFetch } from '../../core/api.js';
 import { _viewerState, _setMsg, _ICON_CHEVRON, _ICON_INSERT } from './state.js';
 import { _loadRecent, _pushRecent, _clearRecent } from './recent.js';
 import { _fmtSize } from './file.js';
+import { watchPath, coalesce } from './watch.js';
 
 const PANEL_ID = 'vt-dir';
 
@@ -39,6 +40,8 @@ export async function showTree(opts = {}) {
   const body = panel.body;
   const pathInput = panel.ctx.byId('vt-dir-path');
   let treeEl = null;   // navigateRoot가 처음 채운 뒤로는 body를 통째로 안 갈아엎는다
+  // 자동 갱신 — 최상단과 펼친 디렉토리마다 비재귀 구독 하나. path -> 해제 함수.
+  const watches = new Map();
 
   const openInPane = (path) => {
     if (typeof window.openFile !== 'function' || !path) return;
@@ -221,7 +224,11 @@ export async function showTree(opts = {}) {
       return;
     }
     chev.innerHTML = prevIcon;   // 펼쳐진 화살표 방향은 .open의 CSS 회전이 담당한다
+    row.after(_childrenFrag(path, depth, data));
+    _syncWatches();
+  }
 
+  function _childrenFrag(path, depth, data) {
     const frag = document.createDocumentFragment();
     const entries = _denoise(data.entries);
     entries.forEach((entry) => {
@@ -242,7 +249,7 @@ export async function showTree(opts = {}) {
       empty.textContent = '빈 디렉토리';
       frag.appendChild(empty);
     }
-    row.after(frag);
+    return frag;
   }
 
   function _collapseDir(row, path) {
@@ -258,7 +265,70 @@ export async function showTree(opts = {}) {
     for (const p of Array.from(_viewerState.expanded)) {
       if (_isDescendant(p, path)) _viewerState.expanded.delete(p);
     }
+    _syncWatches();
   }
+
+  // 구독을 "최상단 + 펼친 디렉토리"에 맞춘다. 접으면 풀고, 펼치면 건다.
+  function _syncWatches() {
+    const want = new Set(_viewerState.root ? [_viewerState.root, ..._viewerState.expanded] : []);
+    for (const [p, off] of watches) {
+      if (!want.has(p)) { off(); watches.delete(p); }
+    }
+    for (const p of want) {
+      if (!watches.has(p)) watches.set(p, watchPath('dir', p, reloadTree));
+    }
+  }
+
+  function _unwatchAll() {
+    for (const off of watches.values()) off();
+    watches.clear();
+  }
+
+  // 디스크가 바뀌면 트리를 다시 그린다. 펼친 디렉토리·선택한 행·스크롤은 지킨다
+  // (새로고침 버튼은 최상단으로 다시 여는 것이라 펼침을 접는다 — 둘은 다른 동작이다).
+  const reloadTree = coalesce(async () => {
+    // pane에 붙었던 인스턴스는 칸이 바뀌면 닫기 훅 없이 떨어져 나간다 — 여기서 거둔다.
+    if (!treeEl || !treeEl.isConnected) { _unwatchAll(); return; }
+    const root = _viewerState.root;
+    if (!root) return;
+    const snap = Array.from(_viewerState.expanded);
+    const fetchTree = (p) => vtFetch(`/api/fs/tree?path=${encodeURIComponent(p)}`);
+    let top;
+    try { top = await fetchTree(root); } catch (_) { return; }
+    const listings = new Map();
+    await Promise.all(snap.map(async (p) => {
+      try { listings.set(p, await fetchTree(p)); } catch (_) { /* 지워진 디렉토리 — 접힌다 */ }
+    }));
+    // 기다리는 사이 사용자가 다른 곳으로 갔거나 펼침을 바꿨으면 이번 결과는 버린다.
+    // 펼침만 바뀐 경우는 구독이 그대로라 다음 변경 때 다시 맞춰진다.
+    if (_viewerState.root !== root || !treeEl.isConnected) return;
+    if (Array.from(_viewerState.expanded).join('\n') !== snap.join('\n')) return;
+
+    const scrollTop = body.scrollTop;
+    const activePath = treeEl.querySelector('.vt-vw-trow.active')?.dataset.path || null;
+    _viewerState.expanded = new Set();
+    _renderTopLevel(top);
+    const expand = (row, path, depth) => {
+      const data = listings.get(path);
+      if (!data) return;
+      row.classList.add('open');
+      _viewerState.expanded.add(path);
+      const frag = _childrenFrag(path, depth, data);
+      const kids = Array.from(frag.children).filter((c) => c.classList.contains('dir'));
+      row.after(frag);
+      for (const k of kids) expand(k, k.dataset.path, depth + 1);
+    };
+    for (const row of Array.from(treeEl.querySelectorAll(':scope > .vt-vw-trow.dir'))) {
+      expand(row, row.dataset.path, 0);
+    }
+    if (activePath) {
+      for (const row of treeEl.querySelectorAll('.vt-vw-trow')) {
+        if (row.dataset.path === activePath) { row.classList.add('active'); break; }
+      }
+    }
+    body.scrollTop = scrollTop;
+    _syncWatches();
+  });
 
   async function navigateRoot(path) {
     let data;
@@ -273,6 +343,7 @@ export async function showTree(opts = {}) {
     _viewerState.expanded = new Set();
     pathInput.value = path;
     _renderTopLevel(data);
+    _syncWatches();
     return true;
   }
 
@@ -293,6 +364,8 @@ export async function showTree(opts = {}) {
   });
   panel.ctx.byId('vt-dir-here').addEventListener('click', openAtTerminalCwd);
   panel.ctx.byId('vt-dir-refresh').addEventListener('click', () => { if (_viewerState.root) navigateRoot(_viewerState.root); });
+
+  panel.el._vtOnClose = _unwatchAll;
 
   body.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
   let startRoot = _viewerState.root;

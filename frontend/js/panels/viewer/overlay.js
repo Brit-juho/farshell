@@ -1,7 +1,8 @@
 // ADR-44(docs/plan-2.3/95-viewer-surface.md) — 파일 뷰어 오버레이. pane 트리 밖에 있어서
 // 열고 닫아도 터미널 cols×rows가 바뀌지 않는다(fit도 SIGWINCH도 안 일어난다).
 import { openPanel, closePanel } from '../panel.js';
-import { renderFile } from './file.js';
+import { renderFile, refreshFile } from './file.js';
+import { watchPath, coalesce } from './watch.js';
 import { _viewerState } from './state.js';
 import { icon } from '../../ui/icons.js';
 import { get, set, subscribe, SCHEMA } from '../../core/settings.js';
@@ -59,7 +60,22 @@ function _surface() {
 
 function _headHTML() {
   return '<div class="vt-file-title"><span class="vt-file-name"></span><span class="vt-file-dir"></span></div>'
+    + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="새로고침" data-tip="새로고침">${icon('refresh-cw', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="페인으로 열기" data-tip="페인으로 열기">${icon('columns-2', 14)}</button>`;
+}
+
+function _refresh(el) {
+  const path = el.dataset.viewerFile;
+  if (!path) return Promise.resolve();
+  const body = el.querySelector('.vt-vw-body');
+  return refreshFile(body, path, () => el.isConnected && el.dataset.viewerFile === path)
+    .catch(() => { /* 다음 변경·클릭 때 다시 시도한다 */ });
+}
+
+// 보고 있는 파일이 디스크에서 바뀌면 다시 그린다. 파일을 바꾸면 구독도 옮긴다.
+function _watch(el, path) {
+  if (el._vtUnwatch) el._vtUnwatch();
+  el._vtUnwatch = watchPath('file', path, coalesce(() => _refresh(el)));
 }
 
 function _setHead(el, path) {
@@ -89,6 +105,7 @@ function _setFile(el, path) {
   body.replaceChildren(host);
   body.scrollTop = 0;
   renderFile(host, path).catch((e) => { host.textContent = String(e && e.message ? e.message : e); });
+  _watch(el, path);
 }
 
 function _setRect(el, r) {
@@ -185,11 +202,15 @@ export function openFileOverlay(path) {
     bodyId: 'vt-file-body',
     extraClass: compact ? 'vt-file-compact' : '',
     ...(mount ? { mount, modal: false, onKey: _escClosesOnlyWhenFocused } : {}),
-    onClose: () => { if (ro) ro.disconnect(); },
+    onClose: () => {
+      if (ro) ro.disconnect();
+      if (panel && panel.el._vtUnwatch) { panel.el._vtUnwatch(); panel.el._vtUnwatch = null; }
+    },
   });
   if (!panel) return;
   const { el, body } = panel;
 
+  el.querySelector('.vt-file-refresh').addEventListener('click', () => { _refresh(el); });
   el.querySelector('.vt-file-topane').addEventListener('click', () => {
     const file = el.dataset.viewerFile;
     closePanel(el);

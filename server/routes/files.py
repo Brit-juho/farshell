@@ -13,15 +13,17 @@ preview.py:91-93 에 같은 교훈이 있다 — 동기 호출 하나가 터미�
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 import file_store
+import fs_watch
 import fsguard
 import tmux_target
 
@@ -299,6 +301,48 @@ async def _read_json_body(request: Request) -> dict:
     except Exception:
         return {}
     return body if isinstance(body, dict) else {}
+
+
+# --- 변경 감시 (코드 뷰어 자동 갱신) -------------------------------------------
+
+# 구독 메시지 한 통의 상한. 구독 64개 × 경로 몇백 바이트면 한참 남는다.
+_WATCH_MSG_MAX = 64 * 1024
+
+
+@router.websocket("/ws-fs-watch")
+async def ws_fs_watch(websocket: WebSocket):
+    """브라우저 → `{"type":"watch","subs":[{kind,path},…]}`(매번 전체 목록),
+    서버 → `{"type":"watching","rejected":[…]}` / `{"type":"changed","subs":[…]}`.
+    판정·감시는 fs_watch.py가 한다."""
+    from routes.pty import _ws_auth_token
+    import auth
+    token = _ws_auth_token(websocket)
+    if token is None:
+        await websocket.close(code=4001)
+        return
+    await websocket.accept()
+    session_watchdog = auth.spawn_session_watchdog(websocket, token)
+    client_id = id(websocket)
+    try:
+        while True:
+            text = await websocket.receive_text()
+            if len(text) > _WATCH_MSG_MAX:
+                continue
+            try:
+                msg = json.loads(text)
+            except ValueError:
+                continue
+            if not isinstance(msg, dict) or msg.get("type") != "watch":
+                continue
+            rejected = await fs_watch.hub.set_subs(client_id, websocket.send_json, msg.get("subs"))
+            await websocket.send_json({"type": "watching", "rejected": rejected})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:  # noqa: BLE001 — 한 연결의 오류가 허브를 흔들면 안 된다
+        logger.info(f"ws-fs-watch 종료: {e}")
+    finally:
+        session_watchdog.cancel()
+        await fs_watch.hub.remove(client_id)
 
 
 # --- 파일 저장소 (N19) ---------------------------------------------------------

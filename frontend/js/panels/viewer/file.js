@@ -60,6 +60,31 @@ function _renderFileDOM(container, content, lang) {
   container.appendChild(wrap);
 }
 
+/**
+ * 이미 열린 파일을 다시 그린다(새로고침 버튼·자동 갱신). 처음 열 때와 달리
+ * "불러오는 중…"으로 비우지 않고 떨어진 호스트에 다 그린 뒤 한 번에 바꾼다 —
+ * 그래야 깜빡이지 않고 스크롤 위치를 되돌릴 수 있다.
+ * `scrollEl`은 호스트(.vt-vw-code-pane)를 담은 스크롤 상자다. 호스트만 바꾸고
+ * 곁에 있는 것(페인 뷰어의 새로고침 버튼)은 둔다. `isCurrent()`는 그 사이 다른
+ * 파일로 바뀌지 않았는지 확인한다.
+ */
+export async function refreshFile(scrollEl, path, isCurrent) {
+  const seq = (scrollEl._vtRefreshSeq || 0) + 1;
+  scrollEl._vtRefreshSeq = seq;
+  const host = document.createElement('div');
+  host.className = 'vt-vw-code-pane';
+  await renderFile(host, path);
+  // 늦게 도착한 이전 새로고침이 최신 것을 덮으면 안 된다.
+  if (scrollEl._vtRefreshSeq !== seq || !isCurrent()) return;
+  const top = scrollEl.scrollTop;
+  const left = scrollEl.scrollLeft;
+  const old = Array.from(scrollEl.children).find((c) => c.classList.contains('vt-vw-code-pane'));
+  if (old) old.replaceWith(host);
+  else scrollEl.appendChild(host);
+  scrollEl.scrollTop = top;
+  scrollEl.scrollLeft = left;
+}
+
 /** 파일 하나를 container에 그린다. N35 §6부터 유일한 소비처는 뷰어 **페인**이다. */
 export async function renderFile(container, path) {
   ensureHljs();   // fire-and-forget — 아래 fetch와 겹쳐 돈다

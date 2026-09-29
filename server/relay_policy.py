@@ -77,6 +77,9 @@ _WS_RULES = (
     re.compile(r"/ws-agent"),
     re.compile(r"/ws-workspace"),
     re.compile(r"/ws-preview/[^/]+"),
+    # 코드 뷰어 자동 갱신. 내용 없이 "바뀌었다"만 알리고 경로는 fsguard가 거른다 —
+    # 이미 열려 있는 /api/fs/(tree|file) GET보다 넓어지지 않는다.
+    re.compile(r"/ws-fs-watch"),
 )
 # `/ws/remote/...`·`/ws/hosts/...`는 _WS_RULES 첫 줄(한 세그먼트)에 안 걸린다.
 

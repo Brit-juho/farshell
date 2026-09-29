@@ -10,6 +10,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **코드 뷰어 자동 갱신 + 파일 뷰어 새로고침 버튼** (`server/fs_watch.py`,
+  `/ws-fs-watch`, `panels/viewer/watch.js`). 파일을 열어 둔 채 에이전트가 고쳐도
+  화면이 그대로라 닫았다 다시 열어야 했다(사용자 지적). 이제 열린 파일(시트·
+  플로트·페인), 「파일」 탭의 펼친 디렉토리, 「소스컨트롤」 탭의 변경 목록이
+  디스크 변경을 따라 다시 그려진다. 스크롤·펼침·선택 행·쓰던 커밋 메시지는
+  유지되고, diff·커밋 상세를 보는 중에는 목록으로 튕기지 않는다. 서버는
+  "바뀌었다"만 알리고 내용은 기존 `/api/fs/*`·`/api/git/*`가 다시 읽으므로 열람
+  경계는 그대로다(구독 경로도 fsguard를 거치고 `.env` 같은 거부 이름의 변경은
+  알리지 않는다). 감시는 `watchfiles`(uvicorn[standard]에 이미 들어 있다)로 모든
+  연결을 합쳐 두 개만 돌린다 — 연결마다 띄우면 Starlette와 같이 쓰는 스레드 풀을
+  갉아먹는다. 저장소 감시는 git 작업 트리 최상위에서만 하고 `.git`은 `index`·
+  `HEAD`·`refs/`만 센다(`git status` 자신이 만드는 변경에 반응해 갱신이 갱신을
+  부르지 않게 — 실측 유휴 6초 동안 추가 요청 0건). 호스트 전환 중에도 중계된다.
+  파일 뷰어 머리에 새로고침 버튼을 달았고, 페인 뷰어는 페인이 하나뿐이면 헤더가
+  숨으므로 본문 오른쪽 위에 띄운다.
+
 - **원격 호스트에 tmux 세션을 만들고·끝내고·이름을 바꾼다** (`server/routes/
   peer.py`의 `/api/peer/sessions/{create,kill,rename}`, `routes/hosts.py`의
   `/api/hosts/{id}/sessions` 중계, `term/remote.js`). 지금까지 원격 호스트는

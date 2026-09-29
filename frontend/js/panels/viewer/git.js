@@ -133,28 +133,47 @@ async function _doCommit(repo, wrap, reload) {
   }
 }
 
-/** git status/커밋상자/로그를 container에 그린다. 성공하면 status 응답을 돌려준다. */
+/** git status/커밋상자/로그를 container에 그린다. 성공하면 status 응답을 돌려준다.
+ * `opts.quiet`(자동 갱신): 로딩 문구로 비우지 않고, 실패하면 지금 화면을 그대로 두며,
+ * 쓰던 커밋 메시지·커서·스크롤을 새 화면으로 옮긴다. */
 export async function renderGitStatus(container, repo, opts = {}) {
   const o = {
     readOnly: false,
     onFile: () => {},
     onCommit: () => {},
     onOpenFile: null,
-    reload: () => renderGitStatus(container, repo, opts),
     ...opts,
+    // 스테이지·커밋 뒤의 다시 그리기는 조용한 갱신이 아니다(커밋한 메시지는 비워야 한다).
+    reload: opts.reload || (() => renderGitStatus(container, repo, { ...opts, quiet: false })),
   };
-  container.innerHTML = '<div class="vt-vw-loading">git status 확인 중…</div>';
+  let carry = null;
+  if (o.quiet) {
+    const prev = container.querySelector('.vt-vw-gmsg');
+    if (prev) {
+      carry = {
+        value: prev.value,
+        focused: document.activeElement === prev,
+        start: prev.selectionStart,
+        end: prev.selectionEnd,
+      };
+    }
+  } else {
+    container.innerHTML = '<div class="vt-vw-loading">git status 확인 중…</div>';
+  }
 
   let d;
   try {
     d = await vtFetch(`/api/git/status?repo=${encodeURIComponent(repo)}`);
   } catch (e) {
+    if (o.quiet) return null;
     // 2.1.6 — 서버 예외 문자열을 제목 자리에 그대로 두면 그게 이 화면의 이름처럼
     // 읽힌다. 제목은 사람 말, 원문은 detail, 그리고 다시 해볼 수 있는 일이다.
     container.innerHTML = '';
     container.appendChild(errorState('변경 사항을 불러오지 못했습니다', e, () => renderGitStatus(container, repo, opts)));
     return null;
   }
+  // 기다리는 사이 사용자가 diff·커밋 상세로 들어갔으면 그 화면을 덮지 않는다.
+  if (o.quiet && typeof o.isCurrent === 'function' && !o.isCurrent()) return null;
   if (!d.repo) {
     // dock의 3분의 1을 차지하면서 "git 저장소가 아닙니다." 한 문장만 있던 자리다
     // (2.1.6 디자인 리뷰 Blocker 1). 빈 상태는 비었다는 사실이 아니라 **다음에
@@ -173,6 +192,7 @@ export async function renderGitStatus(container, repo, opts = {}) {
   const staged = d.files.filter(f => f.index_status && f.status !== '??');
   const unstaged = d.files.filter(f => f.status === '??' || (!f.index_status && f.worktree_status));
 
+  const scrollTop = container.scrollTop;
   container.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'vt-vw-git';
@@ -213,6 +233,18 @@ export async function renderGitStatus(container, repo, opts = {}) {
   wrap.appendChild(logSec);
 
   container.appendChild(wrap);
+  if (o.quiet) {
+    const ta = wrap.querySelector('.vt-vw-gmsg');
+    // 스테이지된 게 없어져 입력창이 잠겨도 쓰던 글은 남긴다 — 다시 스테이지하면 이어 쓴다.
+    if (ta && carry) {
+      ta.value = carry.value;
+      if (carry.focused && !ta.disabled) {
+        ta.focus({ preventScroll: true });
+        try { ta.setSelectionRange(carry.start, carry.end); } catch (_) { /* 선택 불가 — 무시 */ }
+      }
+    }
+    container.scrollTop = scrollTop;
+  }
 
   _renderCommitLog(repo, logSec, 0, o);
   return d;

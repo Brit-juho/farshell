@@ -69,6 +69,7 @@ def test_policy_ws():
     assert relay_policy.ws_allowed("/ws/abc-123")
     assert relay_policy.ws_allowed("/ws-workspace")
     assert relay_policy.ws_allowed("/ws-agent")
+    assert relay_policy.ws_allowed("/ws-fs-watch")
     assert not relay_policy.ws_allowed("/ws/remote/m5/dev")
     assert not relay_policy.ws_allowed("/ws/hosts/m5/relay/ws/x")
     assert not relay_policy.ws_allowed("/ws-notify")

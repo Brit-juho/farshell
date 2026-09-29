@@ -100,6 +100,7 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 | `auth/` | Web login (scrypt password hash + HMAC session cookie), device whitelist + TOTP gate, one-time registration ticket |
 | `crypto_channel.py` | E2E WebSocket encryption (X25519 ephemeral keys + Ed25519 identity signing + NaCl SecretBox) — server side of the handshake whose client side is `frontend/js/term/e2e.js` |
 | `fsguard.py` | Single source of truth for the code-viewer's file-browse root confinement, path resolution, and denylist |
+| `fs_watch.py` | Code-viewer auto-refresh behind `/ws-fs-watch`: validates subscriptions through `fsguard`, runs one shared flat + one recursive `watchfiles` watcher for all connections, and reports only which subscription changed |
 | `safe_mode.py` | Pre-blocks a configurable list of dangerous shell commands |
 | `network_access.py` | `localhost`/`lan`/`tailscale`/`all` network mode → CIDR whitelist, bind host determination |
 

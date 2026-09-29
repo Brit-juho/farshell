@@ -310,3 +310,4 @@ a peer signature opens.
 | `/ws-preview/{name}` | Pushes tmux pane output for the Grid view |
 | `/ws-agent` | Pushes agent activity state |
 | `/ws-workspace` | Pushes workspace changes |
+| `/ws-fs-watch` | Code viewer auto-refresh. The client sends `{"type":"watch","subs":[{kind,path},…]}` (always the full list; `kind` is `file`, `dir` or `repo`), the server answers `{"type":"watching","rejected":[…]}` and later pushes `{"type":"changed","subs":[…]}` with the client's own subscription strings — never file contents or the changed file's path. Every path goes through `fsguard.resolve_under_roots`; `repo` is widened to the enclosing work-tree top and refused outside a git repo; changes to deny-listed names are not reported. At most 64 subscriptions per connection. All connections share one flat and one recursive `watchfiles` watcher (`server/fs_watch.py`). Relayed on host switch |
