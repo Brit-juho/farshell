@@ -14,6 +14,7 @@ import { getBinding, isNativePasteShortcut } from '../core/keymap.js';
 import { splitActivePane, closePane, getActivePaneId, evenRatios } from '../layout/store.js';
 import { canSplit } from '../layout/panes.js';
 import { activeSessionId } from '../core/store.js';
+import { focusedTerminalSessionId } from './clipboard.js';
 import { pasteFromClipboard, queueNativePasteFallback } from './clipboard.js';
 
 registerKey('splitRight', () => { if (canSplit()) splitActivePane('row'); });
@@ -24,8 +25,11 @@ registerKey('paneEven', () => evenRatios());
 // 기본 Ctrl+Shift+V는 브라우저 paste 이벤트를 먼저 기다린다. 이벤트가 없는
 // 브라우저는 지연 Clipboard API 폴백을 쓴다. 팔레트 명령과 다른 사용자
 // 재지정 조합은 바로 Clipboard API를 사용한다.
+// 2026-09-30 — 대상은 "커서가 있는 터미널"이 먼저다. 예전엔 activeSessionId만
+// 봤는데, 붙여넣기 이벤트는 포커스된 터미널이 받으므로 둘이 다르면 폴백이
+// 다른 세션에 한 번 더 들어갈 수 있었다.
 registerKey('paste', (e) => {
-  const id = activeSessionId();
+  const id = focusedTerminalSessionId() || activeSessionId();
   if (!id) return;
   if (e && isNativePasteShortcut(e, getBinding('paste'))) queueNativePasteFallback(id);
   else pasteFromClipboard(id);

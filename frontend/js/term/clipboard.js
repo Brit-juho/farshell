@@ -112,6 +112,13 @@ function removeNativePastePending(id, pending) {
   if (queue.length === 0) nativePastePending.delete(id);
 }
 
+// 포커스가 있는 터미널의 세션 id(없으면 null). 터미널 래퍼는 `term-<id>`다.
+export function focusedTerminalSessionId() {
+  const el = document.activeElement;
+  const wrap = el && el.closest ? el.closest('[id^="term-"]') : null;
+  return wrap ? wrap.id.slice('term-'.length) : null;
+}
+
 export function queueNativePasteFallback(id) {
   const pending = { cancelled: false, timer: null };
   const queue = nativePastePending.get(id) || [];
@@ -125,13 +132,17 @@ export function queueNativePasteFallback(id) {
   }, 250);
 }
 
+// 2026-09-30 — 네이티브 paste 이벤트가 오면 **어느 세션에 걸린 것이든** 예약된
+// 폴백을 모두 취소한다. 예전엔 이벤트를 받은 세션(id)의 것만 지워서, 단축키가
+// 다른 세션에 예약해 둔 폴백이 살아남아 그 세션에도 붙여넣었다.
 export function cancelNativePasteFallback(id) {
-  const queue = nativePastePending.get(id);
-  if (!queue?.length) return;
-  const pending = queue[0];
-  pending.cancelled = true;
-  clearTimeout(pending.timer);
-  removeNativePastePending(id, pending);
+  for (const [sid, queue] of [...nativePastePending.entries()]) {
+    for (const pending of [...queue]) {
+      pending.cancelled = true;
+      clearTimeout(pending.timer);
+      removeNativePastePending(sid, pending);
+    }
+  }
 }
 
 // 이미지 붙여넣기 → 서버 업로드 → 저장 경로를 터미널에 삽입 (Claude에 그대로 넘길 수 있게)

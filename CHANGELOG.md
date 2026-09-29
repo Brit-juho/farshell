@@ -256,6 +256,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   auth.json이 바뀌면(재로그인) 바로 다시 보고, 동시 호출은 조회 한 번을
   같이 쓴다. `/api/usage`는 `asyncio.to_thread`로 넘기고, 블로킹 가드
   (`test_no_blocking_in_async.py`)에 codex 사용량 함수들을 올렸다.
+- **Ctrl+Shift+V 붙여넣기가 다른 세션에도 한 번 더 들어가던 것.** 단축키는
+  0.25초 뒤 "활성 세션"에 대체 붙여넣기를 예약하는데, 브라우저 paste 이벤트는
+  이벤트를 받은 세션의 예약만 취소했다 — 둘이 다르면 다른 세션에 또 들어갔다
+  (`term/keymap-actions.js`, `term/clipboard.js`). 대상은 포커스된 터미널이
+  먼저이고, paste 이벤트는 모든 예약을 취소한다. 서버 로그로 요청당 1건·1세션을
+  확인했다.
+- **터널 로그가 섞이면 `fsh`가 "Binary file … matches"를 주소로 알던 것.** 다른
+  cloudflared가 `/tmp/cloudflared.log`를 덮어쓰면 원래 프로세스가 예전 위치에
+  계속 써서 중간이 NUL로 차고, BSD grep이 주소 대신 그 문구를 냈다 — 재시작이
+  멈추고 주소 변경 훅이 그 문구를 Notion에 보내려 했다(400으로 실패). 로그 읽기를
+  `_quick_tunnel_url_from_log`(`grep -a`, 마지막 주소) 하나로 모으고, 훅은 주소가
+  실제로 응답할 때만 게시한다(000·530은 게시 안 함, 502는 살아 있음).
 
 - **폰에서 터미널의 파일 경로·URL을 탭해도 열리지 않던 것.** 터치 탭을 캔버스로
   넘길 때 `mousedown/mouseup/click`만 합성해서, 링크를 "마우스를 올렸을 때"

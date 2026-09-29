@@ -114,6 +114,25 @@ for (const passthrough of [false, true]) {
   });
 }
 
+test('다른 세션에 예약된 폴백도 네이티브 paste 이벤트가 오면 취소된다(두 세션 중복 방지)', async () => {
+  const { window, S, Sel, Clip } = await load();
+  const sockA = new FakeOpenSocket();
+  const sockB = new FakeOpenSocket();
+  S.registerSession('a', { ws: sockA });
+  S.registerSession('b', { ws: sockB });
+  Object.defineProperty(window.navigator, 'clipboard', {
+    value: { readText: async () => 'echo hi' }, configurable: true,
+  });
+  const wrapper = window.document.getElementById('w');
+  Sel.wireClipboard('a', fakeTerm(), wrapper);
+  // 단축키가 활성 세션(b)에 폴백을 예약했는데, paste 이벤트는 포커스된 a가 받았다.
+  Clip.queueNativePasteFallback('b');
+  wrapper.querySelector('textarea').dispatchEvent(pasteEvent(window, 'echo hi'));
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.strictEqual(sockA.sent.length, 1);
+  assert.strictEqual(sockB.sent.length, 0, 'b에도 들어가면 "모든 세션에 붙여넣기" 버그다');
+});
+
 test('Ctrl+Shift+V — paste 이벤트가 없는 브라우저에서는 Clipboard API로 한 번 붙인다', async () => {
   const { window, S, Sel, K, Clip } = await load();
   const sock = new FakeOpenSocket();
