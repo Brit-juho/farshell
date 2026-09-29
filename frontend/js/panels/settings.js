@@ -21,7 +21,6 @@ import { renderSecuritySection } from './settings/sections/security.js';
 import { renderAboutSection } from './settings/sections/about.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
-import { vtFetch } from '../core/api.js';
 
 const PANEL_ID = 'vt-settings';
 
@@ -245,12 +244,7 @@ function rerender(focusTarget = null) {
   }
   const h = document.createElement('h2'); h.className = 'vt-set-title'; h.tabIndex = -1; h.textContent = section.label;
   const p = document.createElement('p'); p.className = 'vt-set-description'; p.textContent = section.description;
-  const device = document.createElement('span'); device.className = 'vt-chip sm vt-set-device'; device.textContent = '이 기기';
-  vtFetch('/api/devices').then((r) => {
-    const current = ((r && r.devices) || []).find((d) => d.current);
-    if (current && current.label && device.isConnected) device.textContent = `이 기기 · ${current.label}`;
-  }).catch(() => {});
-  intro.append(h, p, device);
+  intro.append(h, p);
   content.appendChild(intro);
   content.appendChild(section.custom ? section.custom() : renderItems(section));
   body.append(nav, content);

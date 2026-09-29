@@ -56,10 +56,9 @@
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 설정 왼쪽 내비(sm). 활성은 .active */
 .vt-set-content { flex:1; min-width:0; padding:calc(var(--spacing) * 4); overflow-y:auto; }
 .vt-set-content > * { max-width:620px; margin-left:auto; margin-right:auto; }
-.vt-set-intro { position:relative; margin-bottom:calc(var(--spacing) * 5); padding-right:72px; }
+.vt-set-intro { margin-bottom:calc(var(--spacing) * 5); }
 .vt-set-title { margin:0; color:var(--txt); font:600 var(--fs-lg) var(--ui); }
 .vt-set-description { margin:4px 0 0; color:var(--sub); font:400 var(--fs-xs) var(--ui); }
-.vt-set-device { position:absolute; right:0; top:0; }
 .vt-set-group { margin:0 0 calc(var(--spacing) * 6); }
 .vt-set-group-title {
   margin:0 0 calc(var(--spacing) * 1.5); color:var(--sub);
@@ -469,9 +468,8 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
   .vt-set-nav { display:none; }
   .vt-set-content { padding:calc(var(--spacing) * 3); }
   .vt-set-content > * { max-width:none; }
-  .vt-set-intro { padding-right:0; margin-bottom:calc(var(--spacing) * 4); }
+  .vt-set-intro { margin-bottom:calc(var(--spacing) * 4); }
   .vt-set-back { margin-bottom:calc(var(--spacing) * 2); min-height:44px; }
-  .vt-set-device { position:static; display:inline-flex; margin-top:calc(var(--spacing) * 2); }
   /* 좁은 화면에서는 라벨과 컨트롤을 위아래로 — 가로로 붙이면 라벨이 잘린다 */
   .vt-set-row { flex-direction:column; align-items:stretch; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2.5) 0; }
   .vt-settings .vt-toggle,
