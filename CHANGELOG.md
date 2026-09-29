@@ -246,6 +246,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **사용량 게이지가 불릴 때마다 서버 전체가 수백 ms씩 멈추던 것.** Codex 토큰이
+  만료된 기계에서는 `usage/codex.py`가 실패 결과를 캐시하지 않아 `/api/usage`·
+  `/api/capabilities`가 호출될 때마다 외부 HTTPS를 새로 쳤고(86분에 380회),
+  `/api/usage`는 그걸 async 핸들러에서 바로 불러 그동안 터미널 입출력까지
+  전부 멎었다. 실측(같은 기계, 옛 서버 → 새 서버): `/api/usage` 190~830ms →
+  1~2ms(캐시 적중), 외부 요청이 실제로 나가는 순간 다른 요청의 최악 지연
+  325ms → 2ms, `/api/capabilities` 90~210ms → 1~2ms. 실패도 60초 캐시하되
+  auth.json이 바뀌면(재로그인) 바로 다시 보고, 동시 호출은 조회 한 번을
+  같이 쓴다. `/api/usage`는 `asyncio.to_thread`로 넘기고, 블로킹 가드
+  (`test_no_blocking_in_async.py`)에 codex 사용량 함수들을 올렸다.
+
 - **폰에서 터미널의 파일 경로·URL을 탭해도 열리지 않던 것.** 터치 탭을 캔버스로
   넘길 때 `mousedown/mouseup/click`만 합성해서, 링크를 "마우스를 올렸을 때"
   찾아 두는 xterm이 탭에서는 링크를 잡지 못했다(`term/xterm-setup.js`).

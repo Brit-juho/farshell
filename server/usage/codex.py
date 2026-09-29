@@ -22,12 +22,17 @@
     폴링해도 서버가 캐시를 돌려준다(429 방지).
   - 429/5xx는 `stale:true`로, 401/403은 clauth의 `auth_status:expired`와
     같은 취급(재인증 필요, 게이지보다 위에 표시).
+  - **실패도 TTL 동안 캐시한다**(2026-09-29). 성공만 캐시하던 때는 토큰이 만료된
+    기계에서 `/api/usage`·`/api/capabilities`가 호출될 때마다 외부 HTTPS를 새로
+    쳤다 — 실측 요청당 ~200ms, 86분에 380회. 대신 auth.json이 바뀌면(재로그인)
+    TTL과 무관하게 다시 조회해, 로그인 직후 1분씩 "만료"로 남지 않게 한다.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -104,11 +109,29 @@ class CodexProvider:
         self._cache_at: float = 0.0
         self._cache: Optional[dict] = None       # 정규화된 스냅샷만(원본 응답 아님)
         self._cache_error: Optional[str] = None
+        # 조회할 때의 auth.json mtime — 바뀌면(재로그인) TTL과 무관하게 다시 본다.
+        self._auth_mtime: Optional[float] = None
+        # 여러 스레드(to_thread로 넘긴 라우트들)가 동시에 캐시가 비었다고 보고
+        # 각자 외부 요청을 치지 않게 한 번에 하나만 조회한다.
+        self._lock = threading.Lock()
 
     def _fetch(self) -> tuple[Optional[dict], Optional[str]]:
+        with self._lock:
+            return self._fetch_locked()
+
+    def _fetch_locked(self) -> tuple[Optional[dict], Optional[str]]:
         now = time.time()
-        if self._cache is not None and (now - self._cache_at) < TTL_SEC:
+        try:
+            mtime: Optional[float] = auth_path().stat().st_mtime
+        except OSError:
+            mtime = None
+        # "no-auth"는 네트워크 없이 파일만 보고 나온 결과라 캐시할 이유가 없다 —
+        # 캐시하면 로그인 직후에도 TTL만큼 없는 걸로 보인다. 그 밖의 결과(성공·
+        # 만료·일시 실패)는 외부 요청을 친 값이므로 TTL 동안 그대로 쓴다.
+        fetched = self._cache is not None or self._cache_error not in (None, "no-auth")
+        if fetched and (now - self._cache_at) < TTL_SEC and mtime == self._auth_mtime:
             return self._cache, self._cache_error
+        self._auth_mtime = mtime
 
         auth = _read_auth()
         if auth is None:

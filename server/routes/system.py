@@ -204,10 +204,13 @@ async def usage_get(request: Request):
     # 합친 프로필 목록)을 결정한다. 설정 →「정보」의 clauth 전용 진단은
     # `usage.capability()`(merged 아님)를 따로 쓴다 — 섞으면 그 진단이
     # codex 상태에 가려 틀린 말을 하게 된다.
-    cap = usage.merged_capability()
+    # 둘 다 동기 I/O다(clauth 파일 읽기, codex는 캐시가 비면 외부 HTTPS — 최대
+    # TIMEOUT_SEC). 이벤트 루프에서 부르면 그동안 터미널 입출력까지 전부 멈춘다
+    # (2026-09-29 실측: 요청당 ~390ms 정지). _capabilities_payload와 같은 관용구.
+    cap = await asyncio.to_thread(usage.merged_capability)
     if not cap.get("available"):
         return _etag_response({"available": False, **cap}, request)
-    snap = usage.merged_snapshot()
+    snap = await asyncio.to_thread(usage.merged_snapshot)
     if snap is None:
         return _etag_response({"available": False, "provider": cap.get("provider"), "reason": "read-failed"}, request)
     payload = {"available": True, **snap}

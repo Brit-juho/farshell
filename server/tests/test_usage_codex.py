@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import time
 from urllib.error import HTTPError, URLError
 
@@ -220,3 +221,89 @@ def test_account_id_header_only_sent_when_present(tmp_path, monkeypatch):
     monkeypatch.setattr("usage.codex.urlopen", capture)
     CodexProvider().snapshot()
     assert "Chatgpt-Account-Id" not in seen["headers"]  # urllib이 헤더 키를 정규화한다
+
+
+def test_failures_are_cached_too_so_an_expired_token_does_not_refetch_every_call(tmp_path, monkeypatch):
+    # 2026-09-29 — 성공만 캐시하던 때는 토큰이 만료된 기계에서 호출마다 외부
+    # HTTPS를 새로 쳤다(/api/usage·/api/capabilities 합쳐 86분에 380회).
+    _auth_file(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def raise_401(req, timeout):
+        calls["n"] += 1
+        raise HTTPError(req.full_url, 401, "unauthorized", {}, io.BytesIO(b""))
+    monkeypatch.setattr("usage.codex.urlopen", raise_401)
+
+    p = CodexProvider()
+    for _ in range(5):
+        assert p.capability()["reason"] == "expired"
+        assert p.snapshot() is None
+    assert calls["n"] == 1
+
+
+def test_network_failure_is_cached_within_ttl(tmp_path, monkeypatch):
+    _auth_file(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def boom(req, timeout):
+        calls["n"] += 1
+        raise URLError("no route to host")
+    monkeypatch.setattr("usage.codex.urlopen", boom)
+
+    p = CodexProvider()
+    p.snapshot()
+    p.capability()
+    assert calls["n"] == 1
+    p._cache_at = time.time() - 61
+    p.snapshot()
+    assert calls["n"] == 2, "TTL이 지나면 다시 시도한다"
+
+
+def test_relogin_bypasses_cached_failure(tmp_path, monkeypatch):
+    # 캐시된 "만료"가 재로그인 뒤에도 1분씩 남으면 안 된다 — auth.json이 바뀌면 다시 본다.
+    _auth_file(tmp_path, monkeypatch)
+    state = {"ok": False}
+
+    def fake(req, timeout):
+        if not state["ok"]:
+            raise HTTPError(req.full_url, 401, "unauthorized", {}, io.BytesIO(b""))
+        return _FakeResponse(_real_shaped_response())
+    monkeypatch.setattr("usage.codex.urlopen", fake)
+
+    p = CodexProvider()
+    assert p.capability()["reason"] == "expired"
+    state["ok"] = True
+    auth = tmp_path / "auth.json"
+    st = auth.stat()
+    os.utime(auth, (st.st_atime, st.st_mtime + 5))
+    assert p.capability()["available"] is True
+
+
+def test_no_auth_is_not_cached(tmp_path, monkeypatch):
+    # 파일만 보고 나온 결과라 캐시하면 로그인 직후에도 TTL만큼 없는 걸로 보인다.
+    monkeypatch.setenv("VT_CODEX_HOME", str(tmp_path))
+    monkeypatch.setattr("usage.codex.urlopen", lambda req, timeout: _FakeResponse(_real_shaped_response()))
+    p = CodexProvider()
+    assert p.capability()["reason"] == "no-auth"
+    _auth_file(tmp_path, monkeypatch)
+    assert p.capability()["available"] is True
+
+
+def test_concurrent_callers_share_one_fetch(tmp_path, monkeypatch):
+    import threading
+    _auth_file(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def slow(req, timeout):
+        calls["n"] += 1
+        time.sleep(0.2)
+        raise HTTPError(req.full_url, 401, "unauthorized", {}, io.BytesIO(b""))
+    monkeypatch.setattr("usage.codex.urlopen", slow)
+
+    p = CodexProvider()
+    threads = [threading.Thread(target=p.capability) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert calls["n"] == 1

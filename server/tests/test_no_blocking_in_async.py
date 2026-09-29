@@ -46,6 +46,10 @@ BLOCKING = {
     "tailscale.get_status", "tailscale.get_status_dict",
     "tailscale.get_ip", "tailscale.get_hostname",
     "tunnel.get_tunnel_status", "tunnel.find_active_pids",
+    # codex 사용량은 캐시가 비면 외부 HTTPS(최대 10초)를 친다. `/api/usage`가
+    # 이걸 async 핸들러에서 바로 불러 요청마다 서버가 ~390ms씩 멎었다(2026-09-29).
+    "usage.merged_capability", "usage.merged_snapshot",
+    "usage.codex_capability", "usage.codex_snapshot",
 }
 
 # 스레드로 넘겨주는 것들 — 여기 첫 인자로 들어간 함수는 안전하다.
