@@ -17,7 +17,7 @@ import { vtFetch } from '../../core/api.js';
 import { renderGitStatus, renderCommit, renderCommitFileDiff } from './git.js';
 import { renderFileDiff } from './diff.js';
 import { _viewerState } from './state.js';
-import { watchPath, coalesce } from './watch.js';
+import { watchPath, coalesce } from '../../shell/fs-watch.js';
 
 const PANEL_ID = 'vt-dock-scm';
 

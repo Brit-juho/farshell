@@ -1,5 +1,5 @@
 'use strict';
-// 코드 뷰어 자동 갱신 — panels/viewer/watch.js(`/ws-fs-watch` 구독)와 파일
+// 코드 뷰어 자동 갱신 — shell/fs-watch.js(`/ws-fs-watch` 구독)와 파일
 // 오버레이의 새로고침. 서버 쪽 감시·매칭은 server/tests/test_fs_watch.py가 맡는다.
 const { test, after } = require('node:test');
 const assert = require('node:assert');
@@ -7,7 +7,7 @@ const path = require('node:path');
 const { createDomEnv } = require('./helpers/dom-env');
 const { importFresh } = require('./helpers/vm-esm');
 
-const WATCH_JS = path.join(__dirname, '../js/panels/viewer/watch.js');
+const WATCH_JS = path.join(__dirname, '../js/shell/fs-watch.js');
 const OVERLAY_JS = path.join(__dirname, '../js/panels/viewer/overlay.js');
 
 const _doms = [];

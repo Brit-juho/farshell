@@ -122,6 +122,21 @@ def _get_attach_lock(tmux_name: str) -> asyncio.Lock:
 
 @router.get("/api/tmux/sessions")
 async def list_tmux_sessions():
+    return await collect_tmux_sessions()
+
+
+def _kick_sessions() -> None:
+    """세션 목록이 바뀌었을 수 있다 — `/ws-workspace` 감시에 바로 확인하라고 알린다."""
+    try:
+        import routes.system as system_routes
+        system_routes.kick_sessions()
+    except Exception:  # noqa: BLE001 — 알림 실패는 다음 주기가 메운다
+        pass
+
+
+async def collect_tmux_sessions() -> list[dict]:
+    """GET /api/tmux/sessions와 `/ws-workspace`의 `tmux_sessions` push가 같은 값을
+    내도록 한 곳에서 만든다."""
     # 2.1 D2: `@fsh_wt`도 같이 받는다 — 세션이 어느 워크트리 소속인지, cwd
     # 추측이 아니라 tmux에 적힌 사실로 답한다(subprocess 호출 수는 그대로다).
     fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}"
@@ -217,6 +232,7 @@ async def create_tmux_session(request: Request):
         except Exception as e:
             logger.warning(f"맥 터미널 자동 오픈 실패: {e}")
 
+    _kick_sessions()
     async with _get_attach_lock(tmux_name):
         return await _attach_tmux(tmux_name, cols, rows, request)
 
@@ -297,7 +313,9 @@ async def attach_tmux_session(request: Request):
         if existing and existing.session_id in pty_mgr.sessions:
             return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
 
-        return await _attach_tmux(tmux_name, cols, rows, request)
+        result = await _attach_tmux(tmux_name, cols, rows, request)
+    _kick_sessions()   # attached 수·web_session_id가 바뀐다
+    return result
 
 
 @router.delete("/api/tmux/kill/{tmux_name}")
@@ -314,6 +332,7 @@ async def kill_tmux_session(tmux_name: str):
     rc, _, _ = await tmux_runner.run_async(["kill-session", "-t", tmux_name], timeout=5.0)
     if rc != 0:
         return JSONResponse({"error": "tmux kill failed", "name": tmux_name}, status_code=500)
+    _kick_sessions()
     return {"ok": True}
 
 

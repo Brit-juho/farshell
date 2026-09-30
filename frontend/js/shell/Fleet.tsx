@@ -7,10 +7,17 @@
 // 직접 다시 구현한다(정적 import 금지 — 지연 청크가 core/store.js 등 상태
 // 모듈을 정적 import하면 Vite lib 모드가 복제한다, ADR-26). Dock.tsx의 배지
 // 폴링도 같은 이유로 각자 반복하고 있다 — 이 파일도 그 관행을 따른다.
-import { createSignal, createMemo, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { agentLabel } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
+// core 청크의 공유 인스턴스로 연결된다(shell.js가 core.js에서 import — 복제되지 않는다).
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
+// git 배지 캐시·변경 알림 구독은 레일과 **같은 캐시**를 쓴다(같은 shell 청크).
+// 예전엔 사본을 따로 들어 같은 저장소를 두 번 셌다.
+import {
+  cachedDiffCount, diffCountStale, fetchDiffCount, createDiffWatcher,
+} from './rail-fetch.js';
 import {
   buildRailSections, buildSleepingEntries, GROUP_LABEL, type OtherRailRowInput,
 } from './rail-data.js';
@@ -29,10 +36,12 @@ import {
 // 쓰는 이유).
 type FleetRow = OtherRailRowInput & { statusSentence: string };
 
-const SESSIONS_POLL_MS = 5000;
-const STATUS_POLL_MS = 4000;
+// 세션 목록의 정본은 `/ws-workspace`의 `tmux_sessions` push다(바뀔 때만 온다).
+// 이건 그 채널이 끊긴 동안의 안전망(예전 5초).
+const SESSIONS_SAFETY_POLL_MS = 60000;
+// 에이전트 정보의 정본은 /ws-agent push다. 이건 끊긴 동안의 안전망(예전 4초).
+const AGENT_SAFETY_POLL_MS = 60000;
 const HOSTS_POLL_MS = 15000;
-const GIT_CACHE_MS = 60000;
 
 // C1 — Rail.tsx와 **같은 설정 키**를 읽고 쓴다. 폰과 데스크톱이 각자 다른
 // 호스트를 기억하면 창 폭을 바꿨을 때 목록이 이유 없이 바뀐 것처럼 보인다.
@@ -78,41 +87,24 @@ interface AgentDetail {
   promptId: string | null;
 }
 
-// Rail.tsx와 같은 이유로 여기서도 따로 부른다(지연 청크 정적 import 금지).
-// **정체는 /api/agents, 상태는 /api/agent/status** — 서로 다른 소스다.
-async function fetchAgentNames(deps: FleetDeps): Promise<Record<string, string>> {
-  const data = await safeFetch<Record<string, { agent?: string }>>(deps, '/api/agents');
-  const out: Record<string, string> = {};
-  for (const [name, v] of Object.entries(data || {})) if (v && v.agent) out[name] = v.agent;
-  return out;
+// Rail.tsx와 같은 이유로 여기서도 따로 둔다(지연 청크 정적 import 금지).
+// 2026-09-30 — 세부·이름은 폴링하지 않고 공용 저장소(agent/state.js, /ws-agent
+// push로 채워진다)에서 읽는다. 서버에서 직접 받는 건 WS가 끊긴 동안을 위한
+// 안전망뿐이고, 그 결과도 같은 저장소에 넣는다 — 화면은 저장소만 본다.
+// **정체(CLI 이름)와 상태 세부는 서버에서 서로 다른 소스다.**
+const readAgentDetails = (): Record<string, AgentDetail> => (window as any).agentDetails?.() || {};
+const readAgentNames = (): Record<string, string> => (window as any).agentNames?.() || {};
+
+async function syncAgentsFromServer(deps: FleetDeps): Promise<void> {
+  const w = window as any;
+  const [st, names] = await Promise.all([
+    safeFetch<{ all?: Record<string, any> }>(deps, '/api/agent/status'),
+    safeFetch<Record<string, { agent?: string }>>(deps, '/api/agents'),
+  ]);
+  if (st && st.all) w.vtApplyAgentSnapshot?.(st.all);
+  if (names) w.vtApplyAgentNames?.(names);
 }
 
-async function fetchAgentDetails(deps: FleetDeps): Promise<Record<string, AgentDetail>> {
-  const data = await safeFetch<{ all?: Record<string, any> }>(deps, '/api/agent/status');
-  const out: Record<string, AgentDetail> = {};
-  for (const entry of Object.values(data?.all || {})) {
-    const name = (entry as any)?.tmux_session;
-    if (!name) continue;
-    out[name] = {
-      since: (entry as any).since ?? null,
-      tool: (entry as any).tool || (entry as any).last_tool || null,
-      question: (entry as any).question ?? null,
-      options: (entry as any).options ?? null,
-      promptId: (entry as any).prompt_id ?? null,
-    };
-  }
-  return out;
-}
-
-const _gitCache = new Map<string, { at: number; files: number | null }>();
-async function fetchDiffCount(deps: FleetDeps, cwd: string): Promise<number | null> {
-  const hit = _gitCache.get(cwd);
-  if (hit && Date.now() - hit.at < GIT_CACHE_MS) return hit.files;
-  const data = await safeFetch<{ repo?: boolean; files?: unknown[] }>(deps, `/api/git/status?repo=${encodeURIComponent(cwd)}`);
-  const files = data?.repo ? (data.files || []).length : null;
-  _gitCache.set(cwd, { at: Date.now(), files });
-  return files;
-}
 
 // 꾹 눌러 메뉴 — dnd.js의 `wireTouchDragSource`와 같은 상수(500ms·8px)를
 // 쓰지만, 그건 드래그 소스를 만드는 함수라 여기 그대로 재사용할 수 없다(끄는
@@ -261,9 +253,15 @@ function Fleet(props: { deps: FleetDeps }) {
   const agentVersion = useAgentVersion();
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
-  const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
-  const [agentNames, setAgentNames] = createSignal<Record<string, string>>({});
+  // 행 메모가 agentVersion()을 구독하므로 저장소가 바뀌면 다시 계산된다.
+  const agentDetails = readAgentDetails;
+  const agentNames = readAgentNames;
   const [diffTick, setDiffTick] = createSignal(0);
+  // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
+  // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
+  const diffWatcher = createDiffWatcher(() => setDiffTick((n) => n + 1));
+  createEffect(() => diffWatcher.sync(tmuxSessions().map((t: any) => t && t.cwd)));
+  onCleanup(() => diffWatcher.dispose());
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenuOpen, setHostMenuOpen] = createSignal(false);
   // 2026-09-28(사용자 요청) — 스위처는 목록 필터가 아니라 화면 전체의 전환이다
@@ -274,10 +272,7 @@ function Fleet(props: { deps: FleetDeps }) {
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
     if (list) setTmuxSessions(list);
   };
-  const refreshAgent = async () => {
-    setAgentDetails(await fetchAgentDetails(props.deps));
-    setAgentNames(await fetchAgentNames(props.deps));
-  };
+  const refreshAgent = () => syncAgentsFromServer(props.deps);
   const refreshHosts = async () => {
     const data = await safeFetch<{ hosts?: HostEntry[] }>(props.deps, '/api/hosts');
     if (data?.hosts) setHosts(data.hosts);
@@ -291,16 +286,20 @@ function Fleet(props: { deps: FleetDeps }) {
     void refreshHosts();
   };
   refreshAll();
-  const t1 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshSessions(); }, SESSIONS_POLL_MS);
-  const t2 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshAgent(); }, STATUS_POLL_MS);
+  const t1 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshSessions(); }, SESSIONS_SAFETY_POLL_MS);
+  const t2 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshAgent(); }, AGENT_SAFETY_POLL_MS);
   const t3 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshHosts(); }, HOSTS_POLL_MS);
   const onMobileTab = (e: Event) => {
     if ((e as CustomEvent).detail?.tab === 'fleet') refreshAll();
   };
   document.addEventListener('vt:mobile-tab', onMobileTab);
+  const offSessions = onWorkspaceEvent('tmux_sessions', (msg: any) => {
+    if (Array.isArray(msg?.sessions)) setTmuxSessions(msg.sessions);
+  });
   onCleanup(() => {
     clearInterval(t1); clearInterval(t2); clearInterval(t3);
     document.removeEventListener('vt:mobile-tab', onMobileTab);
+    offSessions();
   });
 
   const activeHost = createMemo(() => hosts().find((h) => h.id === viewHostId) || null);
@@ -315,7 +314,8 @@ function Fleet(props: { deps: FleetDeps }) {
   // (이 브라우저에서 깨어있는 것). Rail.tsx의 로컬 세션 블록과 사실상 같은
   // 코드다(그룹·워크트리·브랜치 필드만 뺐다 — 위 상단 주석 참고).
   const rows = createMemo<OtherRailRowInput[]>(() => {
-    sessionsVersion(); agentVersion();
+    // diffTick — 세션 목록은 바뀔 때만 push되므로 git 조회 완료·변경 알림도 여기서 받는다.
+    sessionsVersion(); agentVersion(); diffTick();
     const w = window as any;
 
     const all = w.allSessions ? w.allSessions() : {};
@@ -349,13 +349,13 @@ function Fleet(props: { deps: FleetDeps }) {
         status: w.getStatus ? w.getStatus(t.name) : 'idle',
         since: detail?.since ?? null,
         tool: detail?.tool ?? null,
-        diffFiles: cwd ? (_gitCache.get(cwd)?.files ?? null) : null,
+        diffFiles: cwd ? (cachedDiffCount(cwd) ?? null) : null,
         question: detail?.question ?? null,
         options: detail?.options ?? null,
         promptId: detail?.promptId ?? null,
         agent: agentNames()[t.name] ?? null,
       });
-      if (cwd && (!_gitCache.has(cwd) || Date.now() - (_gitCache.get(cwd)?.at ?? 0) >= GIT_CACHE_MS)) {
+      if (cwd && diffCountStale(cwd)) {
         fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
       }
     }

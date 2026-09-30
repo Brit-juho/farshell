@@ -7,9 +7,10 @@
 import { apiFetch } from '../core/api.js';
 import { API_BASE, WS_BASE, _tokenQuery } from '../core/env.js';
 import { relayWsPath } from '../core/host-route.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import { getSession } from '../core/store.js';
 import { applyAgentBadges } from './badges.js';
-import { applySnapshot, applyEvent } from './state.js';
+import { applySnapshot, applyEvent, applyAgentNames } from './state.js';
 import { showToast } from '../ui/toast.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
@@ -130,14 +131,17 @@ function _cardByCwd(cwd) {
 // 한다 — 그게 _tmuxCwdByName이다. (세션 탭 줄도 같은 경로를 탔지만 N37
 // 3단계에서 사라졌다 — 세션 단위 상태는 A5의 agent/state.js가 소유한다.)
 let _tmuxCwdByName = {};
+function _setTmuxCwdMap(list) {
+  if (!Array.isArray(list)) return;
+  const map = {};
+  for (const s of list) if (s && s.name) map[s.name] = s.cwd || '';
+  _tmuxCwdByName = map;
+}
+
 async function _refreshTmuxCwdMap() {
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
-    const list = await res.json();
-    if (!Array.isArray(list)) return;
-    const map = {};
-    for (const s of list) if (s.name) map[s.name] = s.cwd || '';
-    _tmuxCwdByName = map;
+    _setTmuxCwdMap(await res.json());
   } catch (_) { /* 다음 주기에 재시도 */ }
 }
 
@@ -164,6 +168,7 @@ function connectAgentWs() {
   // [회귀 fb827a6와 동일 패턴] 3초 이상 안정적으로 열린 뒤에만 백오프 리셋 —
   // accept 직후 닫히는 flap에서 지수가 자라지 못하고 빠르게 재연결하는 것을 방지.
   wsAgent.onopen = () => {
+    _sendAgentVisibility();
     clearTimeout(_wsAgentStableTimer);
     _wsAgentStableTimer = setTimeout(() => { _wsAgentRetries = 0; }, 3000);
     // T6: 탭 뱃지의 cwd 매핑을 연결 시점에 한 번 채워둔다 — 그리드를 열기 전에도
@@ -181,7 +186,11 @@ function connectAgentWs() {
       // 갱신하고 다른 UI(에이전트 배지 등)는 건드리지 않는다.
       applySnapshot(msg.all || {});
     } else if (msg.type === 'agent_snapshot' || msg.type === 'agents_change') {
-      if (msg.agents) applyAgentBadges(msg.agents);
+      if (msg.agents) {
+        applyAgentBadges(msg.agents);
+        // 레일·플릿의 에이전트 마크도 같은 값을 쓴다(예전엔 따로 4초 폴링).
+        applyAgentNames(msg.agents);
+      }
       // A5: 서버가 판정한 4상태를 상태 스토어에 반영한다. 재접속·새로고침
       // 시에도 done/waiting이 복원되는 근거가 이 스냅샷이다(A1이 stop에서
       // 엔트리를 안 지우게 바꾼 이유).
@@ -218,6 +227,14 @@ function connectAgentWs() {
   wsAgent.onclose = () => { clearTimeout(_wsAgentStableTimer); scheduleAgentReconnect(); };
   wsAgent.onerror = () => { try { wsAgent.close(); } catch (_) {} };
 }
+// 2026-09-30 — 서버의 에이전트 이름 감시는 보이는 화면이 없으면 쉰다(routes/
+// agents.py _agent_hidden). core/workspace-ws.js와 같은 이유로 화면이 알린다.
+function _sendAgentVisibility() {
+  if (!wsAgent || wsAgent.readyState !== 1) return;
+  try { wsAgent.send(JSON.stringify({ type: 'visibility', hidden: !!document.hidden })); } catch (_) { /* 다음 전환 때 다시 */ }
+}
+document.addEventListener('visibilitychange', _sendAgentVisibility);
+
 function scheduleAgentReconnect() {
   if (_wsAgentRetries >= 15) return;
   _wsAgentRetries++;
@@ -226,9 +243,10 @@ function scheduleAgentReconnect() {
 }
 
 whenAuthed(connectAgentWs);
-// T6: 탭 뱃지가 그리드를 열지 않아도 최신 cwd를 알도록 저빈도로 재조회
-// (탭 상시 표시라 그리드 폴링(1초)만큼 자주일 필요는 없다 — 새 tmux 세션이
-// 생기는 빈도에 맞춰 20초면 충분).
+// T6: 탭 뱃지가 그리드를 열지 않아도 최신 cwd를 알도록 한다. 2026-09-30부터
+// 정본은 `/ws-workspace`의 `tmux_sessions` push(목록이 바뀔 때만 온다)이고,
+// 20초 폴링은 그 채널이 끊긴 동안을 위한 60초 안전망으로 줄였다.
 whenAuthed(() => {
-  setInterval(() => { if (!document.hidden) _refreshTmuxCwdMap(); }, 20000);
+  onWorkspaceEvent('tmux_sessions', (msg) => _setTmuxCwdMap(msg.sessions));
+  setInterval(() => { if (!document.hidden) _refreshTmuxCwdMap(); }, 60000);
 });

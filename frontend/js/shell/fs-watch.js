@@ -10,9 +10,13 @@
 //
 // 끊겼다 붙으면 그 사이에 놓친 변경이 있을 수 있으므로 모든 콜백을 한 번씩
 // 부른다. 연결 자체가 안 되면 자동 갱신만 잃는다 — 새로고침 버튼은 남는다.
+//
+// 자리: `shell` 청크(2026-09-30). 뷰어(panels 청크)와 레일(shell 청크)이 같은
+// 인스턴스를 써야 연결이 하나다. core.js는 300KiB 상한 턱밑이라 못 넣고, shell은
+// 부팅 때 어차피 받는 청크라 여기 두면 추가로 내려받는 것이 없다.
 
-import { WS_BASE, _tokenQuery } from '../../core/env.js';
-import { relayWsPath } from '../../core/host-route.js';
+import { WS_BASE, _tokenQuery } from '../core/env.js';
+import { relayWsPath } from '../core/host-route.js';
 
 const _subs = new Map();   // `${kind}\n${path}` -> Set<fn>
 let _ws = null;
@@ -22,6 +26,8 @@ let _retries = 0;
 let _stableTimer = null;
 let _reconnectTimer = null;
 let _syncQueued = false;
+let _failed = false;          // 서버가 감시 실패를 알렸다 — 다음 (재)구독까지
+let _rejected = new Set();    // 서버가 거절한 구독 키(경계 밖·저장소 아님 등)
 
 const _key = (kind, path) => `${kind}\n${path}`;
 
@@ -115,6 +121,14 @@ function _connect() {
   ws.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
+    if (msg && msg.type === 'watching') {
+      _failed = false;
+      _rejected = new Set((Array.isArray(msg.rejected) ? msg.rejected : [])
+        .filter((r) => r && typeof r.kind === 'string' && typeof r.path === 'string')
+        .map((r) => _key(r.kind, r.path)));
+      return;
+    }
+    if (msg && msg.type === 'error') { _failed = true; return; }
     if (!msg || msg.type !== 'changed' || !Array.isArray(msg.subs)) return;
     for (const s of msg.subs) {
       if (s && typeof s.kind === 'string' && typeof s.path === 'string') _emit(_key(s.kind, s.path));
@@ -122,11 +136,22 @@ function _connect() {
   };
   ws.onclose = () => {
     clearTimeout(_stableTimer);
-    if (_ws === ws) { _ws = null; _open = false; }
+    if (_ws === ws) { _ws = null; _open = false; _rejected = new Set(); }
     _scheduleReconnect();
   };
   // onerror 뒤에는 항상 onclose가 온다 — 여기서 재연결을 걸면 두 번 건다.
   ws.onerror = () => {};
+}
+
+/**
+ * 이 구독이 **지금 실제로 감시되고 있는가.** 연결이 열려 있고, 서버가 거절하지
+ * 않았고, 감시가 실패하지 않았을 때만 true다. 변경 알림에 기대어 캐시를 오래
+ * 두는 쪽(레일의 git 배지)은 이게 false면 원래의 짧은 TTL로 돌아가야 한다 —
+ * 안 그러면 알림이 영영 안 오는데 캐시는 "깨끗하다"고 믿는다.
+ */
+export function isWatchLive(kind, path) {
+  const k = _key(kind, path);
+  return _open && !_failed && _subs.has(k) && !_rejected.has(k);
 }
 
 /**

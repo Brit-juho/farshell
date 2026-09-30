@@ -239,3 +239,62 @@ test('unseen — markSeen은 구독자에게 알린다(배지가 즉시 사라�
   S.markSeen('dev');
   assert.strictEqual(calls, 1);
 });
+
+// 2026-09-30 — 레일·플릿이 4초 폴링 대신 이 저장소에서 세부·이름을 읽는다.
+// vm 컨텍스트의 객체는 프로토타입이 달라 deepStrictEqual이 어긋난다 — 평범한 값으로 바꿔 비교.
+const plain = (o) => JSON.parse(JSON.stringify(o));
+test('세부 — 스냅샷의 도구·경과·질문을 세션 이름으로 접는다(더 급한 엔트리 기준)', async () => {
+  const { S } = await load();
+  S.applySnapshot({
+    hook: { status: 'working', tmux_session: 'dev', tool: 'Bash', since: 10, host: 'local', session_id: 'hook' },
+    pane: { status: 'waiting', tmux_session: 'dev', question: '진행할까요?', options: [{ key: 'y', label: '예' }],
+      prompt_id: 'p1', since: 20, host: 'local', session_id: 'pane' },
+  });
+  assert.deepStrictEqual(plain(S.agentDetails().dev), {
+    since: 20, tool: null, question: '진행할까요?', options: [{ key: 'y', label: '예' }], promptId: 'p1',
+  });
+});
+
+test('세부 — 상태는 그대로여도 도구가 바뀌면 통지한다(상태 문장이 바뀌므로)', async () => {
+  const { S } = await load();
+  const base = { status: 'working', tmux_session: 'dev', host: 'local', session_id: 's1', since: 1 };
+  S.applySnapshot({ s1: { ...base, tool: 'Read' } });
+  let n = 0;
+  S.onStatusChange(() => { n += 1; });
+  S.applyEvent({ ...base, tool: 'Bash' });
+  assert.strictEqual(n, 1);
+  assert.strictEqual(S.agentDetails().dev.tool, 'Bash');
+  S.applyEvent({ ...base, tool: 'Bash' });
+  assert.strictEqual(n, 1, '같은 값이면 통지하지 않는다');
+});
+
+test('세부 — 이벤트는 스냅샷의 같은 엔트리를 갱신한다(키가 달라도 host/session_id로 맞춘다)', async () => {
+  const { S } = await load();
+  S.applySnapshot({ opaque: { status: 'working', tmux_session: 'dev', tool: 'Read', host: 'local', session_id: 's1' } });
+  S.applyEvent({ status: 'working', tmux_session: 'dev', tool: 'Edit', host: 'local', session_id: 's1' });
+  assert.strictEqual(S.agentDetails().dev.tool, 'Edit');
+  S.applySnapshot({});
+  assert.deepStrictEqual(plain(S.agentDetails()), {}, '스냅샷에서 사라지면 세부도 사라진다');
+});
+
+test('이름 — 바뀔 때만 통지하고, 순서가 달라도 같은 값이면 조용하다', async () => {
+  const { S } = await load();
+  let n = 0;
+  S.onStatusChange(() => { n += 1; });
+  S.applyAgentNames({ dev: { agent: 'claude', label: 'Claude' }, api: { agent: 'shell' }, x: null });
+  assert.deepStrictEqual(plain(S.agentNames()), { dev: 'claude', api: 'shell' });
+  S.applyAgentNames({ api: { agent: 'shell' }, dev: { agent: 'claude' } });
+  assert.strictEqual(n, 1);
+  S.applyAgentNames({ dev: { agent: 'codex' } });
+  assert.strictEqual(n, 2);
+  assert.deepStrictEqual(plain(S.agentNames()), { dev: 'codex' });
+});
+
+test('window 브리지 — 지연 청크(레일·플릿)가 읽고 쓰는 길', async () => {
+  const { window, S } = await load();
+  window.vtApplyAgentNames({ dev: { agent: 'claude' } });
+  assert.deepStrictEqual(plain(window.agentNames()), { dev: 'claude' });
+  window.vtApplyAgentSnapshot({ a: { status: 'done', tmux_session: 'dev', since: 5 } });
+  assert.strictEqual(window.agentDetails().dev.since, 5);
+  assert.strictEqual(S.getStatus('dev'), 'done');
+});

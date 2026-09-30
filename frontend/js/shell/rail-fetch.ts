@@ -11,17 +11,25 @@ import { createSignal, onCleanup } from 'solid-js';
 
 import type { OtherRailRowInput } from './rail-data.js';
 import { confirmDialog } from '../core/dialog.js';
+import { watchPath, isWatchLive } from './fs-watch.js';
 
 // §5 원문: "60초 캐시" — 워크트리에 안 속한(changed 요약을 서버가 안 주는)
 // 세션에만 쓴다.
-const GIT_CACHE_MS = 60000;
+//
+// 2026-09-30 — 변경 알림(/ws-fs-watch의 `repo` 구독)이 살아 있으면 바뀌었을
+// 때만 다시 센다. 86분에 326회 돌던 git status가, 안 바뀐 저장소에서는 10분에
+// 한 번으로 준다. 알림이 없는 경우(거절·감시 실패·연결 끊김)는 예전 60초 그대로.
+const GIT_CACHE_MS = 60000;              // 감시가 없을 때
+const GIT_WATCHED_MAX_MS = 10 * 60000;   // 감시 중이어도 이만큼 지나면 한 번 확인(놓친 알림 대비)
+const GIT_DIRTY_GAP_MS = 30000;          // 바뀌었어도 이보다 자주는 안 센다 — 에이전트가 쉴 새 없이 고칠 때
+const GIT_NOREPO_MS = 5 * 60000;         // git 저장소가 아닌 곳 — 저장소가 될 일이 드물다
 
 export interface RailDeps {
   vtFetch: (path: string, opts?: RequestInit) => Promise<unknown>;
   getAction: (name: string) => unknown;
 }
 
-export function safeFetch<T>(deps: RailDeps, path: string): Promise<T | null> {
+export function safeFetch<T>(deps: Pick<RailDeps, 'vtFetch'>, path: string): Promise<T | null> {
   return deps.vtFetch(path).then((v) => v as T).catch(() => null);
 }
 
@@ -66,38 +74,54 @@ export interface AgentDetail {
   promptId: string | null;
 }
 
-/** tmux 세션 이름 → 떠 있는 CLI. 헤더 탭(layout/tabbar.js)이 쓰던 것과 **같은
- * 출처**다. `/api/agent/status`에는 이 값이 없다 — 거기서 읽으려다 마크가 한
- * 개도 안 그려지는 걸 실브라우저에서 확인하고 고쳤다. 상태(무엇을 하는 중인가)와
- * 정체(어떤 CLI인가)는 서버에서 아예 다른 소스라, 둘을 한 응답으로 착각하면
- * 조용히 빈 값이 된다. */
-export async function fetchAgentNames(deps: RailDeps): Promise<Record<string, string>> {
-  const data = await safeFetch<Record<string, { agent?: string }>>(deps, '/api/agents');
-  const out: Record<string, string> = {};
-  for (const [name, v] of Object.entries(data || {})) {
-    if (v && v.agent) out[name] = v.agent;
-  }
-  return out;
+/** 2026-09-30 — 상태 문장 세부·에이전트 이름은 폴링하지 않고 공용 저장소
+ * (agent/state.js)에서 읽는다. 그 저장소는 `/ws-agent` push(연결 스냅샷·훅
+ * 이벤트·15초 하트비트·`agents_change`)로 채워진다. 예전엔 여기서 4초마다
+ * /api/agent/status와 /api/agents를 따로 긁었다(86분에 1,850회).
+ *
+ * 정체(어떤 CLI인가)와 상태(무엇을 하는 중인가)는 서버에서 다른 소스다 —
+ * `/api/agent/status`에는 CLI 이름이 없다. 그래서 저장소도 둘을 따로 든다. */
+export function readAgentDetails(): Record<string, AgentDetail> {
+  return (window as any).agentDetails?.() || {};
 }
 
-export async function fetchAgentDetails(deps: RailDeps): Promise<Record<string, AgentDetail>> {
-  const data = await safeFetch<{ all?: Record<string, any> }>(deps, '/api/agent/status');
-  const out: Record<string, AgentDetail> = {};
-  for (const entry of Object.values(data?.all || {})) {
-    const name = (entry as any)?.tmux_session;
-    if (!name) continue;
-    out[name] = {
-      since: (entry as any).since ?? null,
-      tool: (entry as any).tool || (entry as any).last_tool || null,
-      question: (entry as any).question ?? null,
-      options: (entry as any).options ?? null,
-      promptId: (entry as any).prompt_id ?? null,
-    };
-  }
-  return out;
+export function readAgentNames(): Record<string, string> {
+  return (window as any).agentNames?.() || {};
 }
 
-const _gitCache = new Map<string, { at: number; files: number | null }>();
+/** 안전망 — `/ws-agent`가 끊긴 동안(재시도를 포기한 뒤 포함)에도 목록이 멎지
+ * 않게 가끔 직접 받아 **같은 저장소에** 넣는다. 화면은 저장소만 본다. */
+export async function syncAgentsFromServer(deps: RailDeps): Promise<void> {
+  const w = window as any;
+  const [st, names] = await Promise.all([
+    safeFetch<{ all?: Record<string, any> }>(deps, '/api/agent/status'),
+    safeFetch<Record<string, { agent?: string }>>(deps, '/api/agents'),
+  ]);
+  if (st && st.all) w.vtApplyAgentSnapshot?.(st.all);
+  if (names) w.vtApplyAgentNames?.(names);
+}
+
+interface GitCacheEntry {
+  at: number;
+  files: number | null;
+  /** 서버가 "저장소 아님"이라고 답했다(요청 실패로 null이 된 것과 구분한다). */
+  noRepo: boolean;
+  /** 센 뒤로 변경 알림이 왔다. */
+  dirty: boolean;
+}
+const _gitCache = new Map<string, GitCacheEntry>();
+
+function _dueAt(cwd: string, hit: GitCacheEntry): number {
+  if (hit.noRepo) return hit.at + GIT_NOREPO_MS;
+  if (!isWatchLive('repo', cwd)) return hit.at + GIT_CACHE_MS;
+  return hit.at + (hit.dirty ? GIT_DIRTY_GAP_MS : GIT_WATCHED_MAX_MS);
+}
+
+/** 다음 조회까지 남은 시간(ms). 변경 알림을 받고 언제 다시 그릴지 정할 때 쓴다. */
+export function msUntilDiffRefresh(cwd: string): number {
+  const hit = _gitCache.get(cwd);
+  return hit ? Math.max(0, _dueAt(cwd, hit) - Date.now()) : 0;
+}
 
 // Rail.tsx가 이 캐시를 **직접** 들여다보고 있었는데 `_gitCache`도 `GIT_CACHE_MS`도
 // 이 모듈 밖으로 나가지 않는 값이라 런타임에 `ReferenceError: _gitCache is not
@@ -114,15 +138,79 @@ export function cachedDiffCount(cwd: string): number | null | undefined {
 /** 비었거나 낡았으면 true. 호출자가 fetchDiffCount로 채운다. */
 export function diffCountStale(cwd: string): boolean {
   const hit = _gitCache.get(cwd);
-  return !hit || Date.now() - hit.at >= GIT_CACHE_MS;
+  return !hit || Date.now() >= _dueAt(cwd, hit);
 }
-export async function fetchDiffCount(deps: RailDeps, cwd: string): Promise<number | null> {
+// 같은 cwd에 세션이 여럿이면(흔하다 — 한 저장소에 탭 여러 개) 행마다 이 함수를
+// 불러 같은 git status가 동시에 여러 번 나갔다(실측: 세션 3개면 3배). 진행 중인
+// 조회는 cwd별로 하나만 두고 나머지는 그 결과를 기다린다.
+const _inflight = new Map<string, Promise<number | null>>();
+
+export function fetchDiffCount(deps: Pick<RailDeps, 'vtFetch'>, cwd: string): Promise<number | null> {
   const hit = _gitCache.get(cwd);
-  if (hit && Date.now() - hit.at < GIT_CACHE_MS) return hit.files;
-  const data = await safeFetch<{ repo?: boolean; files?: unknown[] }>(deps, `/api/git/status?repo=${encodeURIComponent(cwd)}`);
-  const files = data?.repo ? (data.files || []).length : null;
-  _gitCache.set(cwd, { at: Date.now(), files });
-  return files;
+  if (hit && !diffCountStale(cwd)) return Promise.resolve(hit.files);
+  const running = _inflight.get(cwd);
+  if (running) return running;
+  // 조회 중에 온 변경 알림을 잃지 않도록 dirty는 요청 **전에** 내린다.
+  if (hit) hit.dirty = false;
+  const p = (async () => {
+    const data = await safeFetch<{ repo?: boolean; files?: unknown[] }>(deps, `/api/git/status?repo=${encodeURIComponent(cwd)}`);
+    const files = data?.repo ? (data.files || []).length : null;
+    const dirty = _gitCache.get(cwd)?.dirty ?? false;
+    _gitCache.set(cwd, { at: Date.now(), files, noRepo: data?.repo === false, dirty });
+    return files;
+  })().finally(() => { _inflight.delete(cwd); });
+  _inflight.set(cwd, p);
+  return p;
+}
+
+/**
+ * 세션 cwd들의 변경 알림 구독을 관리한다(레일·플릿이 각자 하나씩). 알림이 오면
+ * 캐시를 dirty로 표시하고, 다시 셀 수 있는 때(msUntilDiffRefresh)에 `onDue()`를
+ * 부른다 — 호출자는 다시 그리기만 하면 행이 fetchDiffCount를 부른다. 탭이
+ * 숨어 있으면 보일 때까지 미룬다(예전 폴링도 숨은 탭에서는 git을 안 돌렸다).
+ * 같은 저장소를 여럿이 구독해도 서버 감시는 하나다.
+ */
+export function createDiffWatcher(onDue: () => void) {
+  const subs = new Map<string, () => void>();
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  let pendingWhileHidden = false;
+  const fire = () => {
+    if (document.hidden) { pendingWhileHidden = true; return; }
+    onDue();
+  };
+  const onVisible = () => {
+    if (!document.hidden && pendingWhileHidden) { pendingWhileHidden = false; onDue(); }
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  const onChange = (cwd: string) => {
+    if (timers.has(cwd)) return;
+    timers.set(cwd, setTimeout(() => { timers.delete(cwd); fire(); }, msUntilDiffRefresh(cwd)));
+  };
+  return {
+    sync(cwds: Iterable<string>) {
+      const want = new Set<string>();
+      for (const c of cwds) if (c) want.add(c);
+      for (const [c, off] of subs) if (!want.has(c)) { off(); subs.delete(c); }
+      for (const c of want) {
+        if (subs.has(c)) continue;
+        // 감시가 서기 전에 센 값이면 그 사이 변경을 놓쳤을 수 있다 — 한 번은 다시 센다.
+        const hit = _gitCache.get(c);
+        if (hit) hit.dirty = true;
+        subs.set(c, watchPath('repo', c, () => {
+          const hit = _gitCache.get(c);
+          if (hit) hit.dirty = true;
+          onChange(c);
+        }));
+      }
+    },
+    dispose() {
+      for (const off of subs.values()) off();
+      subs.clear();
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      document.removeEventListener('visibilitychange', onVisible);
+    },
+  };
 }
 
 // 30-worktree.md §2: 세션이 하나도 없는 워크트리를 여는 API. ADR-29 B부터

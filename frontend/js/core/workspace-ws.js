@@ -60,6 +60,7 @@ function connect() {
   }
 
   _ws.onopen = () => {
+    _sendVisibility();
     // [회귀 fb827a6와 같은 이유] accept 직후 닫히는 half-open flap에서 지수가
     // 자라지 못하는 것을 막기 위해, 3초 이상 안정적으로 열린 뒤에만 리셋한다.
     clearTimeout(_stableTimer);
@@ -83,9 +84,18 @@ function connect() {
   _ws.onerror = () => {};
 }
 
+// 2026-09-30 — 서버의 세션 목록 감시는 보이는 화면이 하나도 없으면 쉰다
+// (routes/system.py _workspace_hidden). 예전 폴링이 `document.hidden`이면 쉬던
+// 것과 같은 효과를 서버 쪽에서 내려면 화면이 알려 줘야 한다.
+function _sendVisibility() {
+  if (!_ws || _ws.readyState !== 1) return;
+  try { _ws.send(JSON.stringify({ type: 'visibility', hidden: !!document.hidden })); } catch (_) { /* 다음 전환 때 다시 */ }
+}
+
 /** 첫 구독자가 생길 때 한 번만 연결한다. */
 export function start() {
   if (_started) return;
   _started = true;
+  document.addEventListener('visibilitychange', _sendVisibility);
   connect();
 }

@@ -18,6 +18,9 @@ import report_seen
 # Phase 9 #5: heartbeat (pty.py와 동일 정책)
 _HB_INTERVAL = float(os.environ.get("VT_WS_HEARTBEAT_INTERVAL", "15.0"))
 _HB_TIMEOUT = float(os.environ.get("VT_WS_HEARTBEAT_TIMEOUT", "45.0"))
+# 에이전트 이름(어떤 CLI인가) 변화 감시 주기. /ws-agent 연결이 하나라도 있을
+# 때만 돈다 — 아래 「에이전트 이름 push」 참고.
+_AGENTS_PUSH_INTERVAL = float(os.environ.get("VT_AGENTS_PUSH_INTERVAL", "5.0"))
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +66,70 @@ def _apply_entry_agent_overrides(result: dict) -> dict:
     return result
 
 
+def _agents_now() -> dict:
+    """지금 각 tmux 세션에 떠 있는 CLI. detect_all()은 tmux 서브프로세스를
+    돌리므로(동기) 호출부는 반드시 스레드로 넘긴다."""
+    return _apply_entry_agent_overrides(agent_detector.detect_all())
+
+
 @router.get("/api/agents")
 async def list_agents():
-    return _apply_entry_agent_overrides(agent_detector.detect_all())
+    return await asyncio.to_thread(_agents_now)
+
+
+# ── 에이전트 이름 push (2026-09-30) ──────────────────────────────────────────
+# 레일·플릿이 같은 값을 4초마다 GET /api/agents로 긁고 있었다(브라우저마다,
+# 호스트 전환 중이면 중계까지 두 번). 서버 쪽 감시 하나로 모아 **바뀌었을 때만**
+# `agents_change`를 쏜다. 프로세스 스캔 비용은 브라우저 수와 무관해지고, 안
+# 바뀌면 아무것도 나가지 않는다. 훅 이벤트(에이전트가 막 뜨거나 바뀌는 순간)는
+# 주기를 기다리지 않고 바로 한 번 확인한다.
+_agents_task: asyncio.Task | None = None
+_agents_kick: asyncio.Event | None = None
+_agents_last: dict | None = None
+# 백그라운드라고 알린 연결 — routes/system.py의 _workspace_hidden과 같은 이유·규칙.
+_agent_hidden: set[WebSocket] = set()
+
+
+def _kick_agents() -> None:
+    if _agents_kick is not None:
+        _agents_kick.set()
+
+
+def _ensure_agents_loop() -> None:
+    global _agents_task, _agents_kick
+    if _agents_task is not None and not _agents_task.done():
+        return
+    # Event는 처음 기다리는 루프에 묶인다 — 새 태스크마다 새로 만든다.
+    _agents_kick = asyncio.Event()
+    _agents_task = asyncio.create_task(_agents_loop(_agents_kick))
+
+
+async def _agents_loop(kick: asyncio.Event) -> None:
+    global _agents_last
+    while _agent_event_clients:
+        try:
+            await asyncio.wait_for(kick.wait(), _AGENTS_PUSH_INTERVAL)
+        except asyncio.TimeoutError:
+            pass
+        kick.clear()
+        if not _agent_event_clients:
+            break
+        if all(ws in _agent_hidden for ws in _agent_event_clients):
+            continue
+        try:
+            cur = await asyncio.to_thread(_agents_now)
+        except Exception as e:  # noqa: BLE001 — 한 번 실패해도 다음 주기에 다시 본다
+            logger.debug(f"에이전트 감지 실패: {e}")
+            continue
+        if cur == _agents_last:
+            continue
+        _agents_last = cur
+        msg = {"type": "agents_change", "agents": cur}
+        for ws in list(_agent_event_clients):
+            try:
+                await ws.send_json(msg)
+            except Exception:  # noqa: BLE001 — 끊긴 연결은 ws_agent의 finally가 치운다
+                pass
 
 
 # N9/N45(80-multihost-agents.md §2) — CLI마다 waiting을 실제로 얼마나 정확히
@@ -204,7 +268,7 @@ async def get_agent(tmux_name: str):
         if agent:
             info = agent_detector.KNOWN_AGENTS.get(agent)
             return {"agent": agent, **(info or {})}
-    info = agent_detector.detect(tmux_name)
+    info = await asyncio.to_thread(agent_detector.detect, tmux_name)
     return info or {"agent": None}
 
 
@@ -279,6 +343,7 @@ async def agent_event(request: Request):
         except Exception:
             dead.add(ws)
     _agent_event_clients.difference_update(dead)
+    _kick_agents()
 
     return {"ok": True, "state": public_state, "queue_scheduled": queued}
 
@@ -323,6 +388,7 @@ async def agent_report(request: Request):
         except Exception:
             dead.add(ws)
     _agent_event_clients.difference_update(dead)
+    _kick_agents()
     return {"ok": True, "session": session, "resolved_by": how, "state": public_ent}
 
 
@@ -335,6 +401,7 @@ async def agent_status_get():
 
 @router.websocket("/ws-agent")
 async def ws_agent(websocket: WebSocket):
+    global _agents_last
     # codex review fix: VT_TOKEN 보호
     from routes.pty import _ws_auth_token
     token = _ws_auth_token(websocket)
@@ -343,6 +410,7 @@ async def ws_agent(websocket: WebSocket):
         return
     await websocket.accept()
     _agent_event_clients.add(websocket)
+    _ensure_agents_loop()
     loop = asyncio.get_running_loop()
     last_pong = loop.time()
 
@@ -377,14 +445,18 @@ async def ws_agent(websocket: WebSocket):
     hb_task = asyncio.create_task(_hb())
     session_watchdog = auth.spawn_session_watchdog(websocket, token)
     try:
-        # snapshot: active state + 현재 detect 결과 (frontend가 폴링 안 해도 즉시 반영)
+        # snapshot: active state + 현재 detect 결과 (frontend가 폴링 안 해도 즉시 반영).
+        # GET /api/agents와 같은 값이어야 한다 — 예전엔 엔트리 우선 규칙(ADR-34)이
+        # 빠진 detect_all()만 보내 레일(폴링)과 탭 마크(스냅샷)가 어긋날 수 있었다.
+        agents_now = await asyncio.to_thread(_agents_now)
+        _agents_last = agents_now
         await websocket.send_json({
             "type": "agent_snapshot",
             "active": _public_active(agent_status.all_active()),
             # A1: 재접속·새로고침 시 done/waiting까지 복원되려면 active(=도구
             # 실행 중)만으론 부족하다 — 상태를 가진 엔트리 전체를 함께 보낸다.
             "all": _public_state(agent_status.get_state()),
-            "agents": agent_detector.detect_all(),
+            "agents": agents_now,
         })
         while True:
             raw = await websocket.receive_text()
@@ -394,6 +466,9 @@ async def ws_agent(websocket: WebSocket):
                 continue
             if msg.get("type") == "pong":
                 last_pong = loop.time()
+            elif msg.get("type") == "visibility":
+                from routes.system import handle_visibility
+                handle_visibility(websocket, _agent_hidden, raw, _kick_agents)
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -402,3 +477,4 @@ async def ws_agent(websocket: WebSocket):
         hb_task.cancel()
         session_watchdog.cancel()
         _agent_event_clients.discard(websocket)
+        _agent_hidden.discard(websocket)

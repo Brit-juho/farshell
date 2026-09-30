@@ -20,11 +20,12 @@ import {
   type HostEntry,
 } from './host-data.js';
 import {
-  actionSessionId, fetchAgentDetails, fetchDiffCount, safeFetch,
-  useAgentVersion, useSessionsVersion, useLayoutVersion, fetchAgentNames,
+  actionSessionId, readAgentDetails, fetchDiffCount, safeFetch,
+  useAgentVersion, useSessionsVersion, useLayoutVersion, readAgentNames, syncAgentsFromServer,
   type RailDeps, type AgentDetail,
   cachedDiffCount,
   diffCountStale,
+  createDiffWatcher,
 } from './rail-fetch.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
@@ -35,8 +36,12 @@ import { wireRatioResizer } from '../layout/resizer.js';
 import { RepoVisibility } from './RepoVisibility.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
-const SESSIONS_POLL_MS = 5000;   // tmux 목록(attached·cwd) — 자주 안 바뀌어도 짧게, 값싸다.
-const STATUS_POLL_MS = 4000;     // since/tool 보강 — 서버가 아직 질문 텍스트를 안 줘서(2.1.0 gap) 상태 문장 갱신용.
+// tmux 목록(attached·cwd)의 정본은 `/ws-workspace`의 `tmux_sessions` push다
+// (서버가 바뀌었을 때만 보낸다). 이 폴링은 그 채널이 끊긴 동안의 안전망(예전 5초).
+const SESSIONS_SAFETY_POLL_MS = 60000;
+// 에이전트 상태·세부·이름의 정본은 /ws-agent push다(agent/state.js). 이 폴링은
+// 그 채널이 끊긴 동안을 위한 안전망이라 길게 둔다(예전 4초 → 60초).
+const AGENT_SAFETY_POLL_MS = 60000;
 // N8(30-worktree.md). **정본은 `/ws-workspace`의 `worktrees_changed` push다** —
 // 이 폴링은 WS가 끊긴 동안과, 터미널에서 직접 `git worktree add`를 해서 서버가
 // 변경을 모르는 경우를 위한 안전망이다. 8초였을 땐 서버가 매번 저장소마다 git
@@ -60,10 +65,11 @@ function Rail(props: { deps: RailDeps }) {
   const layoutVersion = useLayoutVersion();
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
-  const [agentDetails, setAgentDetails] = createSignal<Record<string, AgentDetail>>({});
-  // 정체(어떤 CLI인가)는 상태(무엇을 하는 중인가)와 **다른 엔드포인트**다.
-  // 한 응답에 둘 다 있을 거라 짐작했다가 마크가 한 개도 안 그려졌다.
-  const [agentNames, setAgentNames] = createSignal<Record<string, string>>({});
+  // 공용 저장소(agent/state.js)를 읽는다. 행 메모가 agentVersion()을 구독하므로
+  // 저장소가 바뀌면 다시 계산된다. 정체(어떤 CLI인가)와 상태 세부는 서버에서
+  // 다른 소스라 따로 읽는다.
+  const agentDetails = (): Record<string, AgentDetail> => readAgentDetails();
+  const agentNames = (): Record<string, string> => readAgentNames();
   // ADR-29 B — 워크트리 행 대신 저장소·브랜치 배지 텍스트의 입력으로만
   // 쓴다(자동 그룹 제안·색점은 둘 다 2026-09-18 후속에서 없앴다).
   // /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임, 2단계에서
@@ -136,6 +142,11 @@ function Rail(props: { deps: RailDeps }) {
   // 여기서 총합을 또 셀 필요도 없다.
   const railTitle = () => '세션';
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
+  // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
+  // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
+  const diffWatcher = createDiffWatcher(() => setDiffTick((n) => n + 1));
+  createEffect(() => diffWatcher.sync(tmuxSessions().map((t: any) => t && t.cwd)));
+  onCleanup(() => diffWatcher.dispose());
   // 접힘 기본값은 티어를 따른다(§3 표) — wide(≥1280) 미만에서는 접힘으로 시작.
   // 저장된 값이 있으면 그게 이긴다(사용자가 직접 정한 것이므로). Dock.tsx가
   // 같은 판단을 이미 하고 있었는데 레일에만 없었다: 그래서 좁은 화면에서
@@ -175,8 +186,7 @@ function Rail(props: { deps: RailDeps }) {
   };
   const refreshAgent = async () => {
     if (!railPollingActive()) return;
-    setAgentDetails(await fetchAgentDetails(props.deps));
-    setAgentNames(await fetchAgentNames(props.deps));
+    await syncAgentsFromServer(props.deps);
   };
   // ADR-29 B — /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임).
   const refreshRepos = async () => {
@@ -208,13 +218,16 @@ function Rail(props: { deps: RailDeps }) {
     if (e.matches) refreshAll();
   };
   desktopMq?.addEventListener('change', onViewportChange);
-  const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_POLL_MS);
-  const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, STATUS_POLL_MS);
+  const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_SAFETY_POLL_MS);
+  const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, AGENT_SAFETY_POLL_MS);
   const t3 = setInterval(() => { if (!document.hidden) refreshRepos(); }, WORKTREES_POLL_MS);
   const t4 = setInterval(() => { if (!document.hidden) refreshHosts(); }, HOSTS_POLL_MS);
   // 서버가 워크트리 생성·삭제·열기 때 쏘는 push. 폴링(60초)보다 훨씬 빠르게
   // 반영되고, 평시에는 요청이 아예 나가지 않는다.
   const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshRepos(); });
+  const offSessions = onWorkspaceEvent('tmux_sessions', (msg: any) => {
+    if (Array.isArray(msg?.sessions)) setTmuxSessions(msg.sessions);
+  });
   // 2026-09-28 — 원격 세션 생성·종료·이름 변경 직후(term/remote.js). 15초 주기를
   // 기다리면 방금 만든 세션이 목록에 없어 "안 됐나?" 하고 또 누른다.
   const onHostsChanged = () => { refreshHosts(); };
@@ -224,6 +237,7 @@ function Rail(props: { deps: RailDeps }) {
     clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
     desktopMq?.removeEventListener('change', onViewportChange);
     offWt();
+    offSessions();
   });
 
   // 키맵(worktreeNew, core/keymap.js) · 팔레트 등 이 파일을 정적 import 못 하는
@@ -272,7 +286,10 @@ function Rail(props: { deps: RailDeps }) {
   let lastRows: DesktopRailRowInput[] = [];
   const rows = createMemo<DesktopRailRowInput[]>((prev) => {
     if (editingGroupKey() || editingSessionKey()) return prev ?? lastRows;
-    sessionsVersion(); agentVersion(); // 구독 트리거용 — 값 자체는 안 씀
+    // diffTick — 세션 목록이 바뀔 때만 push되므로(예전엔 5초 폴링이 이 메모를
+    // 계속 다시 돌렸다) git 조회가 끝났거나 변경 알림이 온 것도 여기서 받아야
+    // diffFiles가 갱신되고, 낡은 캐시가 다시 조회된다.
+    sessionsVersion(); agentVersion(); diffTick(); // 구독 트리거용 — 값 자체는 안 씀
     const w = window as any;
 
     const all = w.allSessions ? w.allSessions() : {};

@@ -283,6 +283,8 @@ async def rename_session(session_id: str, request: Request):
             )
         session_store.update_tmux_name(session_id, name)
         tmux_renamed = True
+        from routes.tmux import _kick_sessions
+        _kick_sessions()
     info.name = name
     return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name, "tmux_renamed": tmux_renamed}
 

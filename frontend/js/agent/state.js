@@ -17,6 +17,15 @@ const IDLE = 'idle';
 const _byTmux = new Map();
 const _listeners = new Set();
 
+// 2026-09-30 — 상태만이 아니라 **상태 문장에 쓰는 세부**(도구·경과 시간·질문·
+// 선택지)와 **어떤 CLI인가**(에이전트 이름)도 여기서 들고 있는다. 레일·플릿이
+// 같은 값을 4초마다 /api/agent/status·/api/agents로 따로 긁어 오고 있었는데,
+// 세부는 /ws-agent가 이미 push하고 있었다(86분에 1,850회 — 거의 전부 중복).
+// 엔트리 원본(엔트리 키 → 공개 엔트리)과, 그걸 세션 이름으로 접은 결과.
+const _entries = new Map();
+let _details = {};   // tmux 이름 → { since, tool, question, options, promptId }
+let _names = {};     // tmux 이름 → CLI 이름(claude/codex/ssh/shell …)
+
 // N37 — 「읽지 않음」. 정의(10-shell-layout.md §4): **상태가 `done`인데 그
 // 세션이 그 뒤로 한 번도 사용자 눈에 띈 적이 없음.** done 자체와 구분되는
 // 이유는, done은 서버가 정하고 「읽지 않음」은 **이 브라우저가** 정하기
@@ -79,6 +88,10 @@ function _notify() {
 // 전체를 반영한다. 스냅샷에 없는 세션은 idle로 되돌린다 — 재접속 시 예전 상태가
 // 유령으로 남지 않게(서버가 TTL로 이미 정리했을 수 있다).
 export function applySnapshot(all) {
+  _entries.clear();
+  for (const [k, entry] of Object.entries(all || {})) {
+    if (entry) _entries.set(_entryKey(k, entry), entry);
+  }
   const next = new Map();
   for (const entry of Object.values(all || {})) {
     const name = entry && entry.tmux_session;
@@ -96,7 +109,8 @@ export function applySnapshot(all) {
   for (const name of _byTmux.keys()) if (!next.has(name)) _unseen.delete(name);
   _byTmux.clear();
   for (const [k, v] of next) _byTmux.set(k, v);
-  if (changed) _notify();
+  const detailsChanged = _rebuildDetails();
+  if (changed || detailsChanged) _notify();
 }
 
 // 단일 이벤트(agent_event) 반영. 서버가 세션을 특정하지 못했으면(같은 cwd에
@@ -104,11 +118,75 @@ export function applySnapshot(all) {
 export function applyEvent(state) {
   const name = state && state.tmux_session;
   if (!name) return;
+  const key = _entryKey(null, state);
+  if (key != null) _entries.set(key, state);
+  const detailsChanged = _rebuildDetails();
   const status = state.status || IDLE;
-  if (_byTmux.get(name) === status) return;
+  if (_byTmux.get(name) === status) {
+    // 상태는 그대로여도 도구가 바뀌거나 질문이 붙었으면 상태 문장은 다시 그려야 한다.
+    if (detailsChanged) _notify();
+    return;
+  }
   _trackUnseen(name, _byTmux.get(name), status);
   _byTmux.set(name, status);
   _notify();
+}
+
+// 스냅샷의 키는 서버의 불투명 키, 이벤트에는 키가 없다 — 둘을 같은 엔트리로
+// 맞추려고 엔트리 자신의 host/session_id를 쓴다(agent_status._entry가 넣는다).
+function _entryKey(objKey, ent) {
+  if (ent && ent.session_id != null) return `${ent.host || 'local'}\n${ent.session_id}`;
+  return objKey;
+}
+
+// 키 순서와 무관하게 같은 값이면 같은 문자열 — "실제로 바뀔 때만 통지"용.
+function _canon(obj) {
+  return JSON.stringify(Object.keys(obj).sort().map((k) => [k, obj[k]]));
+}
+
+// 세션마다 세부는 **상태를 정한 엔트리**(더 급한 쪽)에서 가져온다 — 상태는
+// waiting인데 문장은 다른 엔트리의 도구 이름을 말하면 안 된다.
+function _rebuildDetails() {
+  const next = {};
+  const rank = {};
+  for (const ent of _entries.values()) {
+    const name = ent && ent.tmux_session;
+    if (!name) continue;
+    const u = URGENCY[ent.status || IDLE] ?? 9;
+    if (name in next && u >= rank[name]) continue;
+    rank[name] = u;
+    next[name] = {
+      since: ent.since ?? null,
+      tool: ent.tool || ent.last_tool || null,
+      question: ent.question ?? null,
+      options: ent.options ?? null,
+      promptId: ent.prompt_id ?? null,
+    };
+  }
+  if (_canon(next) === _canon(_details)) return false;
+  _details = next;
+  return true;
+}
+
+/** tmux 이름 → 상태 문장 세부. 소비자는 읽기만 한다. */
+export function agentDetails() {
+  return { ..._details };
+}
+
+/** 서버 감지 결과(`/ws-agent`의 agents, GET /api/agents와 같은 모양)를 반영한다. */
+export function applyAgentNames(agents) {
+  const next = {};
+  for (const [name, v] of Object.entries(agents || {})) {
+    if (v && v.agent) next[name] = v.agent;
+  }
+  if (_canon(next) === _canon(_names)) return;
+  _names = next;
+  _notify();
+}
+
+/** tmux 이름 → 떠 있는 CLI 이름. */
+export function agentNames() {
+  return { ..._names };
 }
 
 // 사용자가 완료를 확인했다(탭/카드 클릭) → 로컬에서 즉시 idle로 내린다.
@@ -182,3 +260,9 @@ window.allStatuses = allStatuses;
 // 불렀다). ackLocal이 markSeen의 상위집합(unseen 해제 + done→idle)이라
 // Fleet.tsx 쪽 호출을 이걸로 바꾼다.
 window.ackLocal = ackLocal;
+// 2026-09-30 — 레일·플릿(지연 청크)이 세부·이름을 폴링 대신 여기서 읽는다.
+// 쓰기 쪽 둘은 그 청크들의 저빈도 안전망 폴링이 결과를 이 저장소에 넣는 길이다.
+window.agentDetails = agentDetails;
+window.agentNames = agentNames;
+window.vtApplyAgentSnapshot = applySnapshot;
+window.vtApplyAgentNames = applyAgentNames;

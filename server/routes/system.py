@@ -406,6 +406,83 @@ async def workspace_put(request: Request):
     return {"ok": True, "data": merged}
 
 
+# ── tmux 세션 목록 push (2026-09-30) ─────────────────────────────────────────
+# 레일·플릿이 5초마다, agent/status.js가 20초마다 GET /api/tmux/sessions를
+# 부르고 있었다(86분에 952회 — 호스트 전환 중이면 중계까지 두 번). 서버 쪽
+# 감시 하나로 모아 **바뀌었을 때만** `tmux_sessions`를 쏜다. 서버를 거친 변경
+# (생성·종료·이름 변경·붙기)은 그 자리에서 kick_sessions()로 바로 확인하고,
+# 터미널에서 직접 `tmux new` 한 것처럼 서버를 안 거친 변경은 주기가 잡는다.
+_SESSIONS_PUSH_INTERVAL = float(os.environ.get("VT_SESSIONS_PUSH_INTERVAL", "5.0"))
+_sessions_task: asyncio.Task | None = None
+_sessions_kick: asyncio.Event | None = None
+_sessions_last: list | None = None
+# 화면이 백그라운드라고 알린 연결. 예전 폴링은 `document.hidden`이면 쉬었는데,
+# 서버 감시는 연결만 보면 계속 돌아 백그라운드 탭에서 오히려 일이 늘었다(실측
+# 120초 서버 CPU 0.10s → 0.88s). 보이는 화면이 하나도 없으면 감시도 쉰다.
+# 알리지 않는 옛 화면은 보이는 것으로 친다(예전 동작 그대로).
+_workspace_hidden: set[WebSocket] = set()
+
+
+def _any_visible(clients: set, hidden: set) -> bool:
+    return any(ws not in hidden for ws in clients)
+
+
+def handle_visibility(ws, hidden_set: set, raw: str, on_visible) -> None:
+    """`{"type":"visibility","hidden":bool}` 메시지를 반영한다. 다시 보이게 되면
+    on_visible()로 쉬는 동안의 변화를 바로 따라잡게 한다. 다른 메시지는 무시."""
+    try:
+        msg = _json.loads(raw)
+    except (ValueError, TypeError):
+        return
+    if not isinstance(msg, dict) or msg.get("type") != "visibility":
+        return
+    if msg.get("hidden") is True:
+        hidden_set.add(ws)
+    else:
+        was_hidden = ws in hidden_set
+        hidden_set.discard(ws)
+        if was_hidden:
+            on_visible()
+
+
+def kick_sessions() -> None:
+    if _sessions_kick is not None:
+        _sessions_kick.set()
+
+
+def _ensure_sessions_loop() -> None:
+    global _sessions_task, _sessions_kick
+    if _sessions_task is not None and not _sessions_task.done():
+        return
+    # Event는 처음 기다리는 루프에 묶인다 — 새 태스크마다 새로 만든다.
+    _sessions_kick = asyncio.Event()
+    _sessions_task = asyncio.create_task(_sessions_loop(_sessions_kick))
+
+
+async def _sessions_loop(kick: asyncio.Event) -> None:
+    global _sessions_last
+    from routes.tmux import collect_tmux_sessions
+    while _workspace_clients:
+        try:
+            await asyncio.wait_for(kick.wait(), _SESSIONS_PUSH_INTERVAL)
+        except asyncio.TimeoutError:
+            pass
+        kick.clear()
+        if not _workspace_clients:
+            break
+        if not _any_visible(_workspace_clients, _workspace_hidden):
+            continue
+        try:
+            cur = await collect_tmux_sessions()
+        except Exception as e:  # noqa: BLE001 — 다음 주기에 다시 본다
+            logger.debug(f"tmux 세션 목록 실패: {e}")
+            continue
+        if cur == _sessions_last:
+            continue
+        _sessions_last = cur
+        await broadcast_workspace_event({"type": "tmux_sessions", "sessions": cur})
+
+
 @router.websocket("/ws-workspace")
 async def ws_workspace(websocket: WebSocket):
     # codex review fix: VT_TOKEN 보호
@@ -417,17 +494,23 @@ async def ws_workspace(websocket: WebSocket):
         return
     await websocket.accept()
     _workspace_clients.add(websocket)
+    _ensure_sessions_loop()
     session_watchdog = auth.spawn_session_watchdog(websocket, token)
     try:
         await websocket.send_json({"type": "workspace_snapshot", "data": workspace.load()})
+        # 재연결이면 끊긴 동안의 변경을 놓쳤을 수 있다 — 지금 목록을 이 연결에만 준다.
+        # (_sessions_last는 건드리지 않는다: 다른 연결들은 마지막 브로드캐스트 값을 들고 있다.)
+        from routes.tmux import collect_tmux_sessions
+        await websocket.send_json({"type": "tmux_sessions", "sessions": await collect_tmux_sessions()})
         while True:
-            await websocket.receive_text()
+            handle_visibility(websocket, _workspace_hidden, await websocket.receive_text(), kick_sessions)
     except WebSocketDisconnect:
         pass
     except Exception:
         pass
     finally:
         session_watchdog.cancel()
+        _workspace_hidden.discard(websocket)
         _workspace_clients.discard(websocket)
 
 

@@ -12,7 +12,7 @@ import { vtFetch } from '../../core/api.js';
 import { _viewerState, _setMsg, _ICON_CHEVRON, _ICON_INSERT } from './state.js';
 import { _loadRecent, _pushRecent, _clearRecent } from './recent.js';
 import { _fmtSize } from './file.js';
-import { watchPath, coalesce } from './watch.js';
+import { watchPath, coalesce } from '../../shell/fs-watch.js';
 
 const PANEL_ID = 'vt-dir';
 

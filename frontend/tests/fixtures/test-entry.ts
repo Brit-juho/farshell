@@ -14,4 +14,6 @@ export { mountPalette } from '../../js/shell/Palette.tsx';
 export {
   buildHostMenu, resolveActiveHost, hostDetail, reasonLabel, LOCAL_HOST,
 } from '../../js/shell/host-data.js';
-export { deleteWorktreeRow } from '../../js/shell/rail-fetch.js';
+export {
+  deleteWorktreeRow, fetchDiffCount, diffCountStale, cachedDiffCount, createDiffWatcher, msUntilDiffRefresh,
+} from '../../js/shell/rail-fetch.js';

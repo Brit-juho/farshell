@@ -2,7 +2,7 @@
 // 열고 닫아도 터미널 cols×rows가 바뀌지 않는다(fit도 SIGWINCH도 안 일어난다).
 import { openPanel, closePanel } from '../panel.js';
 import { renderFile, refreshFile } from './file.js';
-import { watchPath, coalesce } from './watch.js';
+import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { _viewerState } from './state.js';
 import { icon } from '../../ui/icons.js';
 import { get, set, subscribe, SCHEMA } from '../../core/settings.js';

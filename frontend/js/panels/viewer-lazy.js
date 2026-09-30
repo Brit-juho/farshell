@@ -23,7 +23,7 @@ export function loadViewer() {
       .then(async (file) => ({
         ...file,
         ...(await import('./viewer/recent.js')),
-        ...(await import('./viewer/watch.js')),
+        ...(await import('../shell/fs-watch.js')),
       }));
   }
   return _loading;
