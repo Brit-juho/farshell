@@ -298,6 +298,10 @@ async def agent_event(request: Request):
     # 받아 세션(agent_detector)보다 우선 적용한다.
     state = agent_status.on_event(event, payload, session=session, agent=body.get("agent"))
     report_seen.mark(body.get("agent"))
+    # 2026-09-30 — 에이전트가 시작·끝나는 순간이 곧 pane의 실행 중 명령이 바뀌는
+    # 순간이다. tmux엔 그 훅이 없어 세션 감시 주기(30초)를 기다리지 않게 알린다.
+    import routes.system as _system_routes
+    _system_routes.kick_sessions()
 
     # P4: 작업이 끝났다는 가장 정확한 신호가 stop 훅이다. 여기서 큐를 한 건 흘린다.
     # 유예 시간(VT_QUEUE_GRACE_SEC)은 queue_runner가 둔다 — 사용자가 곧바로

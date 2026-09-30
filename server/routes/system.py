@@ -22,6 +22,7 @@ import platform_utils
 import push
 import safe_mode
 import tailscale
+import tmux_hooks
 import tunnel
 import device_settings
 import usage
@@ -412,7 +413,13 @@ async def workspace_put(request: Request):
 # 감시 하나로 모아 **바뀌었을 때만** `tmux_sessions`를 쏜다. 서버를 거친 변경
 # (생성·종료·이름 변경·붙기)은 그 자리에서 kick_sessions()로 바로 확인하고,
 # 터미널에서 직접 `tmux new` 한 것처럼 서버를 안 거친 변경은 주기가 잡는다.
-_SESSIONS_PUSH_INTERVAL = float(os.environ.get("VT_SESSIONS_PUSH_INTERVAL", "5.0"))
+# 2026-09-30 — 이제 tmux 훅(tmux_hooks.py)이 생성·종료·이름 변경·붙기·떨어지기를
+# 모든 경로에서 바로 알린다(서버를 안 거친 `tmux new`까지). 주기는 훅이 없는
+# 변화(실행 중 명령·현재 폴더)만 맡으므로 5초 → 30초로 늘렸다 — tmux 조회
+# (명령 2개, 실측 약 16ms)가 화면이 떠 있는 동안 1/6로 준다. 에이전트가 시작·
+# 끝날 때(명령 이름이 실제로 바뀌는 주된 순간)는 routes/agents.py가 따로 알린다.
+_SESSIONS_PUSH_INTERVAL = float(os.environ.get("VT_SESSIONS_PUSH_INTERVAL", "30.0"))
+_hooks_installed = False
 _sessions_task: asyncio.Task | None = None
 _sessions_kick: asyncio.Event | None = None
 _sessions_last: list | None = None
@@ -450,8 +457,20 @@ def kick_sessions() -> None:
         _sessions_kick.set()
 
 
+async def _install_tmux_hooks() -> None:
+    # 서버 시작 때 tmux 서버가 아직 없었으면 설치가 실패한다 — 화면이 붙어 감시가
+    # 시작될 때마다 한 번 더 시도하고, 성공하면 그만한다.
+    global _hooks_installed
+    try:
+        _hooks_installed = await asyncio.to_thread(tmux_hooks.install)
+    except Exception as e:  # noqa: BLE001 — 훅이 없어도 주기가 메운다
+        logger.debug(f"tmux 훅 설치 실패: {e}")
+
+
 def _ensure_sessions_loop() -> None:
     global _sessions_task, _sessions_kick
+    if not _hooks_installed:
+        asyncio.create_task(_install_tmux_hooks())
     if _sessions_task is not None and not _sessions_task.done():
         return
     # Event는 처음 기다리는 루프에 묶인다 — 새 태스크마다 새로 만든다.
@@ -481,6 +500,17 @@ async def _sessions_loop(kick: asyncio.Event) -> None:
             continue
         _sessions_last = cur
         await broadcast_workspace_event({"type": "tmux_sessions", "sessions": cur})
+
+
+@router.post("/api/tmux/kick", status_code=204)   # = tmux_hooks.KICK_PATH (문서 검사가 문자열로 찾는다)
+async def tmux_kick(request: Request):
+    """tmux 훅 전용 — 세션 목록이 바뀌었으니 바로 확인하라는 신호. 일반 인증 대신
+    서버가 시작할 때 만든 비밀값을 확인한다(main.py 예외 목록, docs/ref/auth.md).
+    신호는 합쳐지므로 여러 번 와도 확인은 한 번이다."""
+    if not tmux_hooks.verify(request.headers.get(tmux_hooks.HEADER)):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    kick_sessions()
+    return Response(status_code=204)
 
 
 @router.websocket("/ws-workspace")

@@ -47,3 +47,22 @@ def _reset_codex_plugin_cache():
     codex_cli.reset_plugin_cache()
     yield
     codex_cli.reset_plugin_cache()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_tmux_hooks(request, monkeypatch):
+    """tmux 훅(tmux_hooks.py)을 실제 tmux 서버에 걸거나 지우지 않는다.
+
+    `TestClient(main.app)`는 lifespan을 돌리고, lifespan은 훅을 설치·제거한다.
+    테스트에는 tmux 소켓 격리가 없어 그대로 두면 **개발자의 실제 tmux(-L fsh)에
+    걸린 서버 훅을 테스트 비밀값으로 덮어쓰고 끝날 때 지운다.** 훅 자체를
+    검사하는 테스트는 `real_tmux_hooks` 마커로 이 차단을 끈다(가짜 tmux_runner로).
+    """
+    if request.node.get_closest_marker("real_tmux_hooks"):
+        yield
+        return
+    import tmux_hooks
+    monkeypatch.setattr(tmux_hooks, "install", lambda: True)
+    monkeypatch.setattr(tmux_hooks, "uninstall", lambda: None)
+    yield
+

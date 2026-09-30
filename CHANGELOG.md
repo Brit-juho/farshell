@@ -98,6 +98,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **세션 목록 변화를 tmux 훅이 바로 알린다** (`server/tmux_hooks.py`). 레일·플릿의
+  세션 목록은 서버 감시가 5초마다 tmux를 물어 push했고, 기다리지 않게 서버 코드
+  9곳에서 손으로 신호를 보냈다 — 새 경로가 생길 때마다 빠졌고, 터미널에서 직접
+  `tmux new` 한 것은 늘 주기만큼 늦었다. 이제 서버가 자기 tmux 소켓에
+  session-created/closed/renamed·client-attached/detached 훅을 걸고(사용자 훅을
+  덮지 않게 고정 칸 [77]), 훅은 `POST /api/tmux/kick`을 부른다. 인증은 로그인이
+  아니라 서버가 시작할 때 만든 비밀값 — 비밀번호만 쓰는 서버에서도 닿고, 터널로
+  들어온 요청은 403이다. 주기는 훅이 없는 변화(실행 중 명령·현재 폴더)만 맡아
+  30초로 늘렸고 에이전트 이벤트가 오면 바로 확인한다. 실측(격리 서버): 터미널에서
+  만든 세션이 42ms에 push, 서버 종료 시 훅 5개 제거. 테스트는 실제 tmux 훅을
+  건드리지 않게 conftest가 막는다.
+
 - **모바일 헤더를 세션 이름 중심으로 다시 짜고, 키바를 여닫게 했다**
   (`picker.js`, `layout/env-chip.js`, `term/keybar.js`, `10-shell.css`). 헤더는
   윗줄 세션 이름 ▾(주인공), 아랫줄 "기기 · 2/5" 캡션, 오른쪽 44px 아이콘 두 개

@@ -131,6 +131,7 @@ class TokenAuthMiddleware:
         if path in (
             "/", "/sw.js", "/manifest.json", "/favicon.ico",
             "/api/auth", "/api/auth/status", "/api/auth/logout",
+            "/api/tmux/kick",
         ) or path.startswith("/static") or path.startswith("/s/") or path.startswith("/api/peer/") \
                 or path == "/p/authorize":
             # 이 예외들이 각각 어느 층을 끄고 무엇이 그 자리를 대신하는지는
@@ -364,9 +365,20 @@ async def lifespan(_app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[port-proxy] 리스너 복구 중 오류: {e}")
 
+    # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
+    # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
+    import tmux_hooks
+    import routes.system as _system_routes
+    try:
+        _system_routes._hooks_installed = await asyncio.to_thread(tmux_hooks.install)
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"tmux 훅 설치 실패: {e}")
+
     try:
         yield
     finally:
+        with suppress(Exception):
+            await asyncio.to_thread(tmux_hooks.uninstall)
         await port_proxy.shutdown_all()
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
