@@ -36,12 +36,17 @@ def is_installed() -> bool:
 
 
 def find_active_pids() -> list[int]:
-    """실행 중인 cloudflared 프로세스 PID. pgrep -f."""
+    """실행 중인 cloudflared 프로세스 PID. pgrep -f.
+
+    명령줄이 cloudflared 실행 파일로 **시작하는** 것만 센다. 예전 패턴
+    `cloudflared.*tunnel`은 그 문구를 인자로 담은 아무 셸(예: `pgrep -fl cloudflared
+    || echo "no tunnel"`)에도 걸려, 터널이 없는데 '터널 활성 + IP 필터' 경고를 냈다.
+    """
     if not shutil.which("pgrep"):
         return []
     try:
         out = subprocess.check_output(
-            ["pgrep", "-f", "cloudflared.*tunnel"],
+            ["pgrep", "-f", r"^([^ ]*/)?cloudflared[[:space:]]+tunnel"],
             stderr=subprocess.DEVNULL,
             timeout=2.0,
         ).decode()

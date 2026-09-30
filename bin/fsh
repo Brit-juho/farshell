@@ -362,8 +362,8 @@ _start_tunnel_impl() {
   # 명명 터널(tunnel run) 또는 VT_PORT를 향한 익명 터널만 센다.
   local existing_pids=""
   if command -v pgrep >/dev/null 2>&1; then
-    existing_pids="$(pgrep -f "cloudflared.*tunnel run" 2>/dev/null || true)"
-    existing_pids="$existing_pids $(pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null || true)"
+    existing_pids="$(pgrep -f "^([^ ]*/)?cloudflared[[:space:]].*tunnel run" 2>/dev/null || true)"
+    existing_pids="$existing_pids $(pgrep -f "^([^ ]*/)?cloudflared[[:space:]].*--url http://localhost:$VT_PORT\$" 2>/dev/null || true)"
     existing_pids="$(echo "$existing_pids" | tr ' ' '\n' | grep -v '^$' | tr '\n' ' ' | sed 's/ $//')"
   fi
 
@@ -788,8 +788,8 @@ _main_tunnel_pids() {
     return 0
   fi
   {
-    pgrep -f "cloudflared.*tunnel run" 2>/dev/null || true
-    pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null || true
+    pgrep -f "^([^ ]*/)?cloudflared[[:space:]].*tunnel run" 2>/dev/null || true
+    pgrep -f "^([^ ]*/)?cloudflared[[:space:]].*--url http://localhost:$VT_PORT\$" 2>/dev/null || true
   } | grep -v '^$' | tr '\n' ' ' | sed 's/ $//'
 }
 
@@ -2581,7 +2581,7 @@ cmd_stop() {
   # 비켜간 터널이 바로 이 줄에서 죽어, 옵션이 있으나 마나가 된다.
   if [ "$keep_tunnel" -eq 0 ] && command -v pgrep >/dev/null 2>&1; then
     local leftover
-    leftover="$(pgrep -f "cloudflared.*--url http://localhost:$VT_PORT\$" 2>/dev/null | tr '\n' ' ')"
+    leftover="$(pgrep -f "^([^ ]*/)?cloudflared[[:space:]].*--url http://localhost:$VT_PORT\$" 2>/dev/null | tr '\n' ' ')"
     [ -n "${leftover// /}" ] && kill $leftover 2>/dev/null || true
   fi
   # **듣는(LISTEN) 소켓만** 대상이다. `lsof -i :PORT`는 그 포트에 *연결한* 프로세스도
@@ -2782,13 +2782,18 @@ cmd_doctor() {
   _srv_pid="$(cat "$PID_DIR/server.pid" 2>/dev/null || true)"
   if [ -n "$_srv_pid" ] && kill -0 "$_srv_pid" 2>/dev/null; then
     _srv_stale=""
-    local _k _fileval _procval
+    local _k _fileval _srv_env
+    # 값에 공백이 든 키(VT_TUNNEL_HOOK 등)가 있어서 ps 출력을 공백으로 잘라 읽으면
+    # 첫 단어만 남아 항상 '옛 설정'으로 오판한다. 줄 전체에서 " KEY=값 " 을 통째로 찾는다.
+    _srv_env=" $(ps eww -o command= -p "$_srv_pid" 2>/dev/null) "
     for _k in $VT_ENV_BOUNDARY_KEYS; do
       _fileval="$(vt_env_get "$_k" 2>/dev/null || true)"
       [ -n "$_fileval" ] || continue
-      _procval="$(ps eww "$_srv_pid" 2>/dev/null | tr ' ' '\n' | grep "^$_k=" | head -1 | cut -d= -f2-)"
-      [ -n "$_procval" ] || continue
-      [ "$_procval" = "$_fileval" ] || _srv_stale="${_srv_stale}${_srv_stale:+ }$_k"
+      case "$_srv_env" in *" $_k="*) ;; *) continue ;; esac
+      case "$_srv_env" in
+        *" $_k=$_fileval "*) ;;
+        *) _srv_stale="${_srv_stale}${_srv_stale:+ }$_k" ;;
+      esac
     done
     if [ -n "$_srv_stale" ]; then
       _check "서버 설정" fail "서버가 옛 설정으로 돌고 있습니다: $_srv_stale — 'fsh stop && fsh start' 필요"
@@ -3784,7 +3789,7 @@ _tunnel_print_status() {
   echo "  🌐 Cloudflare Tunnel 상태"
   echo ""
   local pids
-  pids="$(pgrep -f 'cloudflared.*tunnel' 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
+  pids="$(pgrep -f '^([^ ]*/)?cloudflared[[:space:]]+tunnel' 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
   if [ -n "$pids" ]; then
     echo "  실행:    ✓ PID(s) $pids  (메인: $(_main_tunnel_pids))"
   else
