@@ -112,8 +112,7 @@
    * (HUD는 sub, 탭·플릿은 액센트) 모양만 여기서 정한다. */
   .vt-dot,
   .vt-hud-dot,
-  .vt-fleet-unseen-badge,
-  .vt-wtab-unread {
+  .vt-fleet-unseen-badge {
     flex: none;
     width: 6px;
     height: 6px;

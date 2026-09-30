@@ -16,6 +16,7 @@ import { saveLayoutNow } from './persist.js';
 import { sleepTab } from '../term/session-actions.js';
 import { icon, setAgentMark } from '../ui/icons.js';
 import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
+import { STATE_LABEL } from '../design/state-classes.js';
 
 const HOST = 'vt-wtabs';
 
@@ -79,16 +80,26 @@ function paintTabs() {
 
     // 상태 dot — idle이면 안 그린다(세션 탭과 같은 규칙: "아무 일도 없음"은
     // 기본값이라 표시할 필요가 없다. 상시로 붙은 회색 점은 노이즈다).
+    // 2026-09-30 — 「읽지 않음」을 이 dot 하나에 합쳤다. 예전엔 옆에 같은 색
+    // (--info = --color-st-done) 점을 하나 더 그려서, 끝났는데 안 본 탭에는
+    // 파란 점이 두 개 떴다가 보면 하나로 줄었다(사용자: "원이 2개씩, 오락가락").
+    // 이제 안 본 완료는 dot 둘레의 링(.unseen)으로만 말한다 — 자리는 늘 하나다.
     const dotHost = el.querySelector('.vt-wtab-marks');
     if (dotHost) {
-      if (!status || status === 'idle') dotHost.querySelector(':scope > .status-dot')?.remove();
-      else applyStatusDot(dotHost, status);
+      const unseen = names.some((n) => isUnseen(n));
+      // 안 본 완료가 남았는데 상태가 idle로 내려갔으면 done으로 그린다 — 링만
+      // 따로 띄울 자리가 없으니 "확인할 게 있다"를 잃지 않게.
+      const shown = (!status || status === 'idle') && unseen ? 'done' : status;
+      if (!shown || shown === 'idle') {
+        dotHost.querySelector(':scope > .status-dot')?.remove();
+      } else {
+        const dot = applyStatusDot(dotHost, shown);
+        dot.classList.toggle('unseen', unseen);
+        const label = (STATE_LABEL[shown] || shown) + (unseen ? ' · 아직 확인 안 함' : '');
+        dot.setAttribute('data-tip', label);
+        dot.setAttribute('aria-label', label);
+      }
     }
-
-    // 읽지 않음 — done인데 아직 이 기기에서 본 적 없는 세션이 하나라도 있으면.
-    // dot(=지금 상태)과 뜻이 다르므로 둘 다 뜬다.
-    const unread = el.querySelector('.vt-wtab-unread');
-    if (unread) unread.hidden = !names.some((n) => isUnseen(n));
   }
 }
 
@@ -195,19 +206,12 @@ function render() {
     name.textContent = tabDisplayLabel(t);
     el.appendChild(name);
 
-    // dot과 「읽지 않음」은 이름 뒤·닫기 앞이라는 순서가 고정돼야 한다 —
-    // 상태가 바뀔 때마다 위치가 움직이면 닫기 버튼을 잘못 누르게 된다.
+    // dot은 이름 뒤·닫기 앞이라는 순서가 고정돼야 한다 — 상태가 바뀔 때마다
+    // 위치가 움직이면 닫기 버튼을 잘못 누르게 된다. 「읽지 않음」도 이 dot의
+    // 링으로 말한다(아래 paintTabs).
     const marks = document.createElement('span');
     marks.className = 'vt-wtab-marks';
     el.appendChild(marks);
-
-    const unread = document.createElement('span');
-    unread.className = 'vt-wtab-unread';
-    unread.hidden = true;
-    unread.setAttribute('data-tip', '완료됐지만 아직 확인하지 않았습니다');
-    unread.setAttribute('data-tip-side', 'bottom');
-    unread.setAttribute('aria-label', '읽지 않음');
-    el.appendChild(unread);
 
     if (tabs.length > 1) {
       const x = document.createElement('button');

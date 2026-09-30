@@ -375,7 +375,7 @@ button goes disabled **with the reason in its tooltip**.
 
 Left: a workspace chip (repo name + host, clicking it opens the palette's `@`
 mode). Center: tabs — **in 2.1.0 a tab is a session** (a worktree from 2.1.1,
-ADR-20). A tab is `[14px agent mark][name][status dot][unread badge]`. Right:
+ADR-20). A tab is `[14px agent mark][name][status dot]` — "done but not yet seen on this device" is a 2px-gap ring around that same dot (`.status-dot.unseen`, 2026-09-30), not a second dot: the old separate unread dot was the same colour as `done` (`--info` = `--color-st-done`), so a finished tab showed two identical blue dots that dropped to one once viewed. Right:
 `⌘K` (palette), a connected-screens icon + count, settings ⚙. Dragging a tab
 to drop it on a pane still uses the existing `layout/dnd.js`
 (`frontend/js/shell/HeaderExtras.tsx` only draws the new workspace chip and

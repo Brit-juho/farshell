@@ -246,6 +246,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **상단 탭에 상태 원이 두 개씩 떴다 하나로 줄던 것.** 끝났는데 안 본 탭에
+  상태 점(done)과 「읽지 않음」 점이 나란히 그려졌는데, 읽지 않음 색이 `--info`
+  = `--color-st-done`이라 같은 파란 점 두 개로 보였고 탭을 보면 하나로 줄었다.
+  읽지 않음을 별도 점 대신 상태 점 둘레의 링(`.status-dot.unseen`)으로 합쳤다
+  (`layout/tabbar.js`) — 자리는 늘 하나다.
+
 - **레일·플릿이 세션 목록을 5초마다, git 배지를 60초마다 다시 받아 오던 것.**
   세션 목록(`/api/tmux/sessions`)은 이제 `/ws-workspace`의 `tmux_sessions`로 바뀔
   때만 온다(서버 감시 하나, 연결이 있을 때만 5초 주기, API를 거친 생성·종료·이름
