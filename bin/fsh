@@ -809,17 +809,20 @@ _quick_tunnel_url_from_log() {
 
 # 주소가 실제로 응답하는가. 000(연결 불가)·530/1033(Cloudflare: 그런 터널 없음)만
 # 죽음으로 본다 — 502는 터널은 살아 있고 서버만 내려간 상태라 살아 있음이다.
-# 새 quick tunnel은 DNS가 퍼지는 데 몇 초 걸리므로 몇 번 다시 본다.
+# 새 quick tunnel은 DNS가 퍼지는 데 시간이 걸려 몇 번 다시 본다. 처음엔 5회(약
+# 15초)였는데, 부팅 직후 자동 시작(2026-10-01 08:08)에서 막 생긴 터널이 그 안에
+# 안 열려 "죽은 주소"로 판정됐고 새 주소가 게시되지 않았다 — 약 60초(20회×3초)
+# 기다린다. 살아 있는 주소는 첫 시도에서 바로 통과하므로 평소엔 늦어지지 않는다.
 _tunnel_url_alive() {
-  local url="$1" code i
+  local url="$1" code i tries="${VT_TUNNEL_ALIVE_TRIES:-20}"
   [ -n "$url" ] || return 1
-  for i in 1 2 3 4 5; do
+  for i in $(seq 1 "$tries"); do
     code="$(curl -s -o /dev/null -m 6 -w '%{http_code}' "$url" 2>/dev/null || true)"
     case "$code" in
       000|530|1033|"") ;;
       *) return 0 ;;
     esac
-    [ "$i" -lt 5 ] && sleep 3
+    [ "$i" -lt "$tries" ] && sleep 3
   done
   return 1
 }

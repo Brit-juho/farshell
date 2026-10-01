@@ -258,6 +258,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **부팅 직후 자동 시작에서 새 터널 주소가 Notion에 게시되지 않던 것.** 훅 게시 전
+  주소가 살아 있는지 보는 확인(`_tunnel_url_alive`)이 약 15초만 기다려, DNS가 늦게
+  퍼진 새 quick tunnel을 죽은 주소로 판정하고 게시를 건너뛰었다(10/1 08:08). 약
+  60초(20회×3초, `VT_TUNNEL_ALIVE_TRIES`)까지 기다린다. 살아 있는 주소는 첫 시도에
+  통과한다.
+
 - **상단 탭에 상태 원이 두 개씩 떴다 하나로 줄던 것.** 끝났는데 안 본 탭에
   상태 점(done)과 「읽지 않음」 점이 나란히 그려졌는데, 읽지 않음 색이 `--info`
   = `--color-st-done`이라 같은 파란 점 두 개로 보였고 탭을 보면 하나로 줄었다.
