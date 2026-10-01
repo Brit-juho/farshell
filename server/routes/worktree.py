@@ -23,7 +23,8 @@ async def _broadcast_worktrees_changed() -> None:
     try:
         import routes.system as system_routes
         await system_routes.broadcast_workspace_event({"type": "worktrees_changed"})
-        # 워크트리 열기·삭제는 tmux 세션을 만들거나 끝낸다.
+        # 워크트리 열기·삭제는 tmux 세션을 만들거나 끝낸다. 생성·종료는 tmux 훅도
+        # 알리지만 워크트리 표시(@fsh_wt) 변화엔 훅이 없어 여기서 알린다.
         system_routes.kick_sessions()
     except Exception:
         pass

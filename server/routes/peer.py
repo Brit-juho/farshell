@@ -452,8 +452,6 @@ async def peer_sessions_create(request: Request, grant: dict):
             {"error": "create_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
             status_code=500,
         ), f"생성 실패: {name}"
-    from routes.tmux import _kick_sessions
-    _kick_sessions()
     return {"ok": True, "name": name}, name
 
 
@@ -516,8 +514,6 @@ async def peer_sessions_rename(request: Request, grant: dict):
     local = session_store.find_by_tmux_name(old)
     if local:
         session_store.update_tmux_name(local.session_id, new)
-    from routes.tmux import _kick_sessions
-    _kick_sessions()
     return {"ok": True, "name": new}, f"{old} → {new}"
 
 

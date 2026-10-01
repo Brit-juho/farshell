@@ -232,6 +232,8 @@ async def create_tmux_session(request: Request):
         except Exception as e:
             logger.warning(f"맥 터미널 자동 오픈 실패: {e}")
 
+    # session-created 훅(tmux_hooks.py)은 new-session 순간에 온다 — 위에서 붙인
+    # 워크트리 표시(@fsh_wt)는 그 뒤라 옵션 변화엔 훅이 없어 여기서 한 번 더 알린다.
     _kick_sessions()
     async with _get_attach_lock(tmux_name):
         return await _attach_tmux(tmux_name, cols, rows, request)
@@ -314,6 +316,8 @@ async def attach_tmux_session(request: Request):
             return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
 
         result = await _attach_tmux(tmux_name, cols, rows, request)
+    # client-attached 훅(tmux_hooks.py)도 오지만, 붙는 도중의 await 사이에 웹 세션
+    # 등록이 훅보다 늦을 수 있어(web_session_id가 빈 채 push) 여기서도 알린다.
     _kick_sessions()   # attached 수·web_session_id가 바뀐다
     return result
 
@@ -332,7 +336,6 @@ async def kill_tmux_session(tmux_name: str):
     rc, _, _ = await tmux_runner.run_async(["kill-session", "-t", tmux_name], timeout=5.0)
     if rc != 0:
         return JSONResponse({"error": "tmux kill failed", "name": tmux_name}, status_code=500)
-    _kick_sessions()
     return {"ok": True}
 
 
