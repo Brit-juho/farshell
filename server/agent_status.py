@@ -142,6 +142,48 @@ def sweep(now: Optional[float] = None) -> int:
 # 돌아가도 안전하다(`_state`도 함께 비므로 옛 토큰을 든 엔트리가 없다, E8).
 _prompt_seq = 0
 
+# waiting의 유형(kind). 프런트는 이 값으로 「승인 요청 / 선택 요청 / 계획 확인 / 질문」을
+# 고른다. 우선순위: 훅 kind > 화면 패턴 kind > 폴백(`question`).
+KIND_APPROVAL = "approval"
+KIND_CHOICE = "choice"
+KIND_PLAN = "plan"
+KIND_QUESTION = "question"
+KINDS = (KIND_APPROVAL, KIND_CHOICE, KIND_PLAN, KIND_QUESTION)
+
+# 훅 tool_name -> kind. 목록에 없는 도구는 approval(PermissionRequest인데 도구를 모르면
+# 승인 요청이다).
+_TOOL_KINDS = {"AskUserQuestion": KIND_CHOICE, "ExitPlanMode": KIND_PLAN}
+# Codex는 질문을 PermissionRequest가 아니라 PreToolUse로 알린다.
+_CODEX_CHOICE_TOOLS = ("request_user_input",)
+
+_KIND_QUESTIONS = {
+    KIND_CHOICE: "선택이 필요합니다",
+    KIND_PLAN: "계획 확인이 필요합니다",
+    KIND_QUESTION: "입력이 필요합니다",
+}
+
+
+def _tool_options(tool_input) -> Optional[list]:
+    """AskUserQuestion/request_user_input의 `questions[0].options[].label` -> 선택지."""
+    try:
+        opts = tool_input["questions"][0]["options"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    out = []
+    for i, o in enumerate(opts if isinstance(opts, list) else [], 1):
+        label = o.get("label") if isinstance(o, dict) else o if isinstance(o, str) else None
+        if isinstance(label, str) and label.strip():
+            out.append({"key": str(i), "label": label.strip()})
+    return out[:6] or None
+
+
+def _tool_question(tool_input) -> Optional[str]:
+    try:
+        q = tool_input["questions"][0]["question"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return " ".join(q.split()) if isinstance(q, str) and q.strip() else None
+
 
 def _prompt_fingerprint(ent: dict) -> str:
     """'같은 질문인가'의 판정 기준.
@@ -155,7 +197,7 @@ def _prompt_fingerprint(ent: dict) -> str:
     """
     q = " ".join((ent.get("question") or "").split())
     keys = ",".join(o.get("key", "") for o in (ent.get("options") or []))
-    return f"{q}\x00{keys}"
+    return f"{q}\x00{keys}\x00{ent.get('kind') or ''}"
 
 
 def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
@@ -164,6 +206,9 @@ def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
     ent["status"] = status
     ent["updated_at"] = time.time() if now is None else now
     if status != WAITING:
+        # waiting이 풀리면 유형도 같이 사라진다(다음 waiting은 새로 판정).
+        ent.pop("kind", None)
+        ent.pop("_kind_src", None)
         # 해소된 프롬프트가 "아직 활성"으로 남지 않게 한다(crush 「소비 뒤
         # 활성 표식을 지운다」 규율의 우리 번역).
         ent["prompt_id"] = None
@@ -225,6 +270,23 @@ def _apply_agent(ent: dict, agent: Optional[str]) -> None:
     ent["agent"] = agent
 
 
+def _set_hook_prompt(ent: dict, kind: str, tool, tool_input) -> None:
+    """훅이 알려준 waiting의 kind/질문/선택지를 엔트리에 싣는다(`_set_status` 전에 —
+    지문이 kind·질문·선택지를 보므로 순서가 바뀌면 토큰이 안 갱신된다)."""
+    ent["kind"] = kind
+    ent["_kind_src"] = "hook"
+    if kind == KIND_APPROVAL:
+        ent["question"] = f"{tool} 실행 승인이 필요합니다" if tool else "실행 승인이 필요합니다"
+        ent["options"] = None
+    else:
+        ent["question"] = _tool_question(tool_input) or _KIND_QUESTIONS[kind]
+        ent["options"] = _tool_options(tool_input) if kind == KIND_CHOICE else None
+
+
+def _ends_with_question(text) -> bool:
+    return isinstance(text, str) and text.rstrip().endswith(("?", "？"))
+
+
 def on_event(event: str, payload: dict, session: Optional[str] = None,
              host: str = LOCAL_HOST, agent: Optional[str] = None) -> Optional[dict]:
     """훅 이벤트 처리.
@@ -266,6 +328,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         _set_status(ent, WORKING)
         ent["question"] = None
         ent["options"] = None
+        ent.pop("badge", None)
         return ent
 
     if event in ("permission", "permission_request"):
@@ -282,9 +345,22 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         # 그 자리에서 지문(_prompt_fingerprint)을 계산하므로, 순서가 바뀌면
         # 항상 빈 질문으로 계산돼 토큰이 매번 같아진다(docs/plan-2.3/
         # 10-approval-race.md §3.1의 경고).
-        ent["question"] = (f"{tool} 실행 승인이 필요합니다" if tool else "실행 승인이 필요합니다")
-        ent["options"] = None
+        # kind는 훅이 아는 tool_name으로 정한다(훅 > 화면 > 폴백). 도구를 모르면 approval.
+        kind = _TOOL_KINDS.get(tool, KIND_APPROVAL)
+        _set_hook_prompt(ent, kind, tool, ent["input"])
         _set_status(ent, WAITING)
+        return ent
+
+    if event == "notification":
+        # Claude Code Notification(permission_prompt/idle_prompt) — **보조 기록만 한다.**
+        # kind 판정에도 상태 전이에도 쓰지 않는다(문구가 버전마다 달라 근거로 약하다).
+        ent = _state.get(key)
+        if ent is not None:
+            ntype = payload.get("notification_type")
+            ent["last_notification"] = {
+                "type": ntype if isinstance(ntype, str) else None,
+                "at": time.time(),
+            }
         return ent
 
     if event == "pre":
@@ -296,6 +372,14 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         ent["since"] = time.time()
         ent["count"] = ent.get("count", 0) + 1
         ent["input"] = payload.get("tool_input", {})
+        if ((agent or ent.get("agent")) == "codex"
+                and ent["tool"] in _CODEX_CHOICE_TOOLS):
+            # Codex Plan 모드의 질문 — PermissionRequest 없이 PreToolUse로만 온다.
+            ent.pop("badge", None)
+            _set_hook_prompt(ent, KIND_CHOICE, ent["tool"], ent["input"])
+            _set_status(ent, WAITING)
+            return ent
+        ent.pop("badge", None)
         # waiting/done에서 pre가 오면 그것도 working으로 — 새 도구가 시작됐다는
         # 뜻이므로 이전 상태(승인 대기/완료 표시)는 더 이상 유효하지 않다.
         _set_status(ent, WORKING)
@@ -335,6 +419,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         _set_status(ent, IDLE)
         ent["question"] = None
         ent["options"] = None
+        ent.pop("badge", None)
         return ent
 
     if event in ("stop", "session_end"):
@@ -346,6 +431,12 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         _set_status(ent, DONE)
         ent["question"] = None
         ent["options"] = None
+        # 마지막 응답이 `?`로 끝나면 보조 표시만 붙인다. 대기로 올리지 않는다 —
+        # 수사적 질문·인용 때문에 오탐 위험이 커서 큐/푸시를 막을 근거가 못 된다.
+        if _ends_with_question(payload.get("last_assistant_message")):
+            ent["badge"] = KIND_QUESTION
+        else:
+            ent.pop("badge", None)
         return ent
 
     # 알 수 없는 이벤트 — 상태를 건드리지 않는다.
@@ -359,6 +450,7 @@ def on_waiting(
     question: Optional[str] = None,
     options: Optional[list] = None,
     host: str = LOCAL_HOST,
+    kind: Optional[str] = None,
 ) -> Optional[dict]:
     """A3(승인 프롬프트 감지)이 부르는 진입점.
 
@@ -390,8 +482,16 @@ def on_waiting(
         # 두 if로 나눠 앞쪽만 상태를 바꾸던 예전 코드는 이미 waiting인 채
         # 질문만 바뀌는 경우 _set_status를 안 태워 토큰이 갱신되지 않았다.
         if ent["status"] in (WORKING, WAITING):
+            hook_kind = ent["status"] == WAITING and ent.get("_kind_src") == "hook"
             ent["question"] = question
-            ent["options"] = options
+            if hook_kind and options is None:
+                pass  # 훅이 준 선택지를 화면 쪽 빈 값으로 지우지 않는다
+            else:
+                ent["options"] = options
+            if not hook_kind:
+                # 화면 패턴 kind, 없으면 폴백 `question`. 훅 kind가 있으면 그것이 이긴다.
+                ent["kind"] = kind if kind in KINDS else KIND_QUESTION
+                ent["_kind_src"] = "screen"
             _set_status(ent, WAITING)
     elif ent["status"] == WAITING:
         _set_status(ent, WORKING)
@@ -474,8 +574,27 @@ def report(sid: str, status: str, session: Optional[str] = None,
     _apply_agent(ent, agent)
     if status != WORKING:
         ent["tool"] = None
+    else:
+        ent.pop("badge", None)
     _set_status(ent, status)
     return ent
+
+
+def set_badge_for_session(name: Optional[str], badge: Optional[str],
+                          host: str = LOCAL_HOST) -> int:
+    """화면 문구가 알려주는 보조 표시(`badge`)를 그 tmux 세션의 엔트리에 붙이거나(값)
+    뗀다(None). 상태는 바꾸지 않는다 — 대기로 올리지 않는 신호용(agy `/artifact to
+    review` 등). 붙은 엔트리 수를 반환."""
+    if not name:
+        return 0
+    n = 0
+    for ent in _entries_for(name, host):
+        if badge:
+            ent["badge"] = badge
+        else:
+            ent.pop("badge", None)
+        n += 1
+    return n
 
 
 def known_status_for_session(name: Optional[str], host: str = LOCAL_HOST) -> Optional[str]:

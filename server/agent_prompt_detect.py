@@ -51,8 +51,13 @@ DETECT_DIR = Path(os.environ.get("VT_DETECT_DIR", Path(__file__).parent / "detec
 WINDOW_SIZE = 16 * 1024
 # 같은 세션에서 상태를 연속으로 뒤집지 않기 위한 최소 간격.
 FLAP_GUARD_SEC = 1.0
+# CLI 판별(프로세스 스캔) 결과를 세션별로 이만큼 재사용한다.
+AGENT_CACHE_SEC = 5.0
 
 _patterns: Optional[dict] = None
+
+# waiting 유형. 로더가 트리거 우선순위를 만들 때도 쓴다.
+KIND_ORDER = ("plan", "approval", "choice", "question")
 
 # 실기기 검증(2.1.0)에서 발견 — 실제 CLI 출력은 커서 이동·색상·줄지우기 코드가
 # 옵션 줄 사이사이에 낀다(예: `\xe2\x9d\xaf\r\x1b[3S\x1b[46;2H 1. Yes`). 이걸 안
@@ -117,19 +122,65 @@ def load_patterns(force: bool = False) -> dict:
                     options.append(re.compile(str(pat), re.MULTILINE))
                 except re.error as e:
                     logger.warning(f"detect options 정규식 무효 — 건너뜀: {path.name}: {e}")
-            if enter or exit_:
-                out[name] = {"enter": enter, "exit": exit_, "options": options}
+            # `[kinds]` — waiting 유형(kind)별 리터럴. enter와 같은 '리터럴 바이트
+            # 문자열' 규칙이고, 여기 적힌 문구도 waiting 진입 신호다(enter 목록에
+            # 또 적을 필요 없다). enter 히트는 kind=approval.
+            kinds_raw = data.get("kinds") if isinstance(data.get("kinds"), dict) else {}
+            kinds: dict[str, list[bytes]] = {}
+            for k in KIND_ORDER:
+                lits = [str(p).encode() for p in (kinds_raw.get(k) or []) if str(p)]
+                if lits:
+                    kinds[k] = lits
+            for k in kinds_raw:
+                if k not in KIND_ORDER:
+                    logger.warning(f"detect [kinds] 알 수 없는 kind — 무시: {path.name}: {k}")
+            # `[badge]` — 대기로 올리지 않고 done 엔트리에 보조 표시만 붙이는 문구.
+            badge_raw = data.get("badge") if isinstance(data.get("badge"), dict) else {}
+            badges = {
+                str(b): [str(p).encode() for p in (v or []) if str(p)]
+                for b, v in badge_raw.items() if isinstance(v, list)
+            }
+            badges = {b: v for b, v in badges.items() if v}
+            # 이 kind가 히트한 동안은 exit를 무시한다(예: Codex 질문 화면은 상태줄에
+            # `esc to interrupt`를 계속 그린다).
+            ignore_exit_on = {str(k) for k in (data.get("ignore_exit_on") or []) if str(k) in KIND_ORDER}
+            # 트리거 순서 = 우선순위(앞이 우선, 같으면 최신 위치). 구체적인 것 먼저:
+            # plan -> approval -> enter(=approval) -> choice -> question. choice의
+            # 하단 안내줄(`Enter to select`)은 다른 화면에도 있을 수 있어 뒤에 둔다.
+            triggers: list[tuple[bytes, str]] = []
+            for k in ("plan", "approval"):
+                triggers += [(lit, k) for lit in kinds.get(k, [])]
+            triggers += [(lit, "approval") for lit in enter]
+            for k in ("choice", "question"):
+                triggers += [(lit, k) for lit in kinds.get(k, [])]
+            if triggers or exit_ or badges:
+                out[name] = {
+                    "enter": [t[0] for t in triggers],
+                    "enter_kinds": [t[1] for t in triggers],
+                    "exit": exit_, "options": options,
+                    "kinds": kinds, "badge": badges, "ignore_exit_on": ignore_exit_on,
+                }
     _patterns = out
     return out
 
 
 def _locate_prompt(pats: dict, joined: bytes) -> tuple[Optional[dict], Optional[bytes], int]:
     """가장 구체적인 최신 enter 패턴의 spec·리터럴·위치를 반환한다."""
+    spec, pattern, pos, _ = _locate_prompt_kind(pats, joined)
+    return spec, pattern, pos
+
+
+def _locate_prompt_kind(pats: dict, joined: bytes
+                        ) -> tuple[Optional[dict], Optional[bytes], int, Optional[str]]:
+    """`_locate_prompt` + 히트한 패턴의 kind. `pats`가 한 CLI의 spec만 담으면
+    다른 CLI 문구는 애초에 비교 대상이 아니다(kind 판별은 그 CLI의 spec으로만)."""
     prompt_spec: Optional[dict] = None
     prompt_pos = -1
     prompt_priority = 1_000_000
     prompt_pattern: Optional[bytes] = None
+    prompt_kind: Optional[str] = None
     for spec in pats.values():
+        kinds = spec.get("enter_kinds") or []
         for priority, pattern in enumerate(spec["enter"]):
             pos = joined.rfind(pattern)
             if pos >= 0 and (priority < prompt_priority
@@ -138,28 +189,31 @@ def _locate_prompt(pats: dict, joined: bytes) -> tuple[Optional[dict], Optional[
                 prompt_pos = pos
                 prompt_pattern = pattern
                 prompt_spec = spec
-    return prompt_spec, prompt_pattern, prompt_pos
+                prompt_kind = kinds[priority] if priority < len(kinds) else "approval"
+    return prompt_spec, prompt_pattern, prompt_pos, prompt_kind
 
 
-def _extract_prompt(pats: dict, joined: bytes) -> tuple[Optional[str], Optional[list]]:
+def _extract_prompt(pats: dict, joined: bytes
+                    ) -> tuple[Optional[str], Optional[list], Optional[str]]:
     """enter 패턴이 히트한 윈도우에서 질문 1줄과 번호 선택지를 뽑는다.
 
     질문: 히트한 enter 문자열을 담은 실제 줄(더 구체적인 문구를 위해 리터럴이
     아니라 그 줄 전체를 쓴다) — 못 찾으면 리터럴 그대로.
     선택지: `options` 정규식을 텍스트에 돌려 (번호, 라벨) 쌍을 순서대로 모은다.
+    kind: 히트한 패턴의 waiting 유형(`approval|choice|plan|question`).
     디코딩 실패(바이너리 잡음 등)는 조용히 빈 결과로 — waiting 판정 자체는
     이미 끝났으므로 여기서 실패해도 상태 전이는 막지 않는다.
     """
     try:
         text = _strip_ansi(joined.decode("utf-8", errors="ignore"))
     except Exception:
-        return None, None
+        return None, None, None
 
     question: Optional[str] = None
     # 각 detect 파일은 구체적인 질문을 먼저, 짧은 폴백 문구를 뒤에 둔다.
     # Codex 선택지의 "don't ask again"이 Claude의 폴백 enter와 겹치므로,
     # 더 앞에 선언된 패턴을 우선하고 같은 우선순위에서만 최신 위치를 고른다.
-    prompt_spec, prompt_pattern, _ = _locate_prompt(pats, joined)
+    prompt_spec, prompt_pattern, _, kind = _locate_prompt_kind(pats, joined)
     if prompt_pattern is not None:
         needle = prompt_pattern.decode("utf-8", errors="ignore")
         for line in text.splitlines():
@@ -187,7 +241,15 @@ def _extract_prompt(pats: dict, joined: bytes) -> tuple[Optional[str], Optional[
                         options.append({"key": str(key).strip(), "label": str(label).strip()})
                 break
 
-    return question, options
+    return question, options, kind
+
+
+def _spec_for_agent(pats: dict, agent: Optional[str]) -> dict:
+    """detector가 판별한 CLI의 spec만 담은 dict. 모르는 CLI(None)면 전체 그대로
+    (옛 동작) — 판별된 CLI에 toml이 없으면 빈 dict(다른 CLI 문구로 오탐 금지)."""
+    if not agent:
+        return pats
+    return {agent: pats[agent]} if agent in pats else {}
 
 
 class PromptDetector:
@@ -200,8 +262,18 @@ class PromptDetector:
     알리지 않아 WS 브로드캐스트 폭주를 막는다.
     """
 
-    def __init__(self, on_change: Callable[[str, bool], None]):
+    def __init__(self, on_change: Callable[[str, bool], None],
+                 agent_for: Optional[Callable[[str], Optional[str]]] = None,
+                 on_badge: Optional[Callable[[str, Optional[str]], None]] = None):
         self._on_change = on_change
+        # session_id -> 그 pane에서 도는 CLI 이름(없으면 None). kind 패턴은 이 CLI의
+        # spec으로만 매칭한다 — 서로 다른 CLI가 같은 문구(`Do you want to proceed?`)를
+        # 쓰기 때문이다. None을 돌려주거나 resolver가 없으면 옛 동작(전 spec 매칭).
+        self._agent_for = agent_for
+        self._on_badge = on_badge
+        self._agent_cache: dict[str, tuple[Optional[str], float]] = {}
+        self._kinds: dict[str, Optional[str]] = {}
+        self._badges: dict[str, str] = {}
         # 실기기 검증(2.1.0)에서 발견 — 예전엔 `deque(maxlen=4)`로 **청크 개수**를
         # 제한했다. 실제 터미널은 커서 깜빡임·tmux 상태줄 자동 갱신 같은 잡음이
         # 초 단위로 끼어들어 한 프롬프트 렌더가 4개 넘는 write로 쪼개지는 일이
@@ -218,6 +290,54 @@ class PromptDetector:
         # N38 — 마지막으로 감지된 질문/선택지. waiting=False가 되면 지운다
         # (더 이상 답할 대상이 없다).
         self._prompts: dict[str, tuple[Optional[str], Optional[list]]] = {}
+
+    def _agent(self, session_id: str) -> Optional[str]:
+        """resolver 결과를 짧게 캐시한다 — 프롬프트가 떠 있는 동안 청크마다 부르면
+        tmux/ps를 매번 돌리게 된다. 실패는 None(=전 spec 매칭 폴백)."""
+        if self._agent_for is None:
+            return None
+        now = time.monotonic()
+        hit = self._agent_cache.get(session_id)
+        if hit is not None and now - hit[1] < AGENT_CACHE_SEC:
+            return hit[0]
+        try:
+            agent = self._agent_for(session_id)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[waiting] CLI 판별 실패: {e}")
+            agent = None
+        self._agent_cache[session_id] = (agent, now)
+        return agent
+
+    def _scoped(self, session_id: str, pats: dict) -> dict:
+        if self._agent_for is None:
+            return pats
+        return _spec_for_agent(pats, self._agent(session_id))
+
+    def _check_badge(self, session_id: str, pats: dict, joined: bytes) -> None:
+        """대기로 올리지 않는 보조 표시(`[badge]`). 그 CLI의 spec으로만 본다."""
+        if self._on_badge is None:
+            return
+        found: Optional[str] = None
+        for spec in pats.values():
+            for badge, lits in (spec.get("badge") or {}).items():
+                if any(lit in joined for lit in lits):
+                    found = badge
+        if found is not None and self._agent_for is not None:
+            scoped = self._scoped(session_id, pats)
+            if not any(found in (spec.get("badge") or {}) and
+                       any(lit in joined for lit in spec["badge"][found])
+                       for spec in scoped.values()):
+                found = None
+        if found is not None and self._badges.get(session_id) != found:
+            self._badges[session_id] = found
+            self._notify_badge(session_id, found)
+
+    def _notify_badge(self, session_id: str, badge: Optional[str]) -> None:
+        try:
+            if self._on_badge:
+                self._on_badge(session_id, badge)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[badge] 통지 실패: {e}")
 
     # ── 입력 ─────────────────────────────────────────────────────────────
     def feed(self, session_id: str, data: bytes) -> None:
@@ -238,7 +358,13 @@ class PromptDetector:
         # (`esc to interrupt`)을 찍은 뒤 같은 2KB 안에서 승인 질문을 그리므로,
         # exit이 한 번이라도 있으면 무조건 우선하던 옛 규칙은 실제 승인 화면을
         # working으로 남겼다. 가장 마지막에 출력된 신호가 현재 상태다.
-        prompt_spec, _, enter_at = _locate_prompt(pats, joined)
+        scoped = pats
+        prompt_spec, _, enter_at, kind = _locate_prompt_kind(pats, joined)
+        if prompt_spec is not None and self._agent_for is not None:
+            # 어느 CLI의 문구인지는 detector가 판별한 CLI로만 인정한다.
+            scoped = self._scoped(session_id, pats)
+            if scoped is not pats:
+                prompt_spec, _, enter_at, kind = _locate_prompt_kind(scoped, joined)
         if prompt_spec is not None:
             self._active_specs[session_id] = prompt_spec
         active_spec = prompt_spec or self._active_specs.get(session_id)
@@ -246,6 +372,13 @@ class PromptDetector:
             (joined.rfind(p) for p in (active_spec or {}).get("exit", [])),
             default=-1,
         )
+        # 그 kind가 떠 있는 동안 exit를 무시하는 CLI(Codex 질문 화면은 상태줄에
+        # `esc to interrupt`를 같이 그린다) — 같은 윈도우에서 enter가 우선한다.
+        if (enter_at >= 0 and prompt_spec is not None
+                and kind in prompt_spec.get("ignore_exit_on", ())):
+            exit_at = -1
+
+        self._check_badge(session_id, pats, joined)
 
         if exit_at >= 0 and exit_at > enter_at:
             self._set(session_id, False)
@@ -253,14 +386,18 @@ class PromptDetector:
             if _auto_trust_suppressed(session_id):
                 logger.debug(f"[waiting] sid={session_id} auto_responder cooldown — 억제")
                 return
-            prompt = _extract_prompt(pats, joined)
+            question, options, hit_kind = _extract_prompt(scoped, joined)
+            prompt = (question, options)
             previous_prompt = self._prompts.get(session_id)
+            kind_changed = (previous_prompt is not None
+                            and self._kinds.get(session_id) != hit_kind)
+            self._kinds[session_id] = hit_kind
             # TUI가 같은 질문 줄을 지우고 다시 그리면 윈도우에는 문구가 두 번
             # 남아 질문 문자열만 달라질 수 있다. 그 재렌더는 통지하지 않고,
             # 인라인 승인에 실제로 필요한 선택지가 바뀔 때만 갱신한다.
             options_changed = (
                 previous_prompt is not None and previous_prompt[1] != prompt[1]
-            )
+            ) or kind_changed
             self._prompts[session_id] = prompt
             self._set(session_id, True, refresh=options_changed)
 
@@ -270,6 +407,9 @@ class PromptDetector:
         해제 판정 4종 중 가장 확실한 신호다(사람이 실제로 답했다). 윈도우도
         비워서 이미 지나간 프롬프트 문자열이 다시 히트하지 않게 한다.
         """
+        if self._badges.pop(session_id, None) is not None:
+            self._windows.pop(session_id, None)
+            self._notify_badge(session_id, None)
         if self._waiting.get(session_id):
             self._windows.pop(session_id, None)
             self._set(session_id, False)
@@ -283,6 +423,12 @@ class PromptDetector:
         if not self._waiting.get(session_id):
             return None, None
         return self._prompts.get(session_id, (None, None))
+
+    def get_kind(self, session_id: str) -> Optional[str]:
+        """마지막으로 감지된 waiting 유형. waiting이 아니면 None."""
+        if not self._waiting.get(session_id):
+            return None
+        return self._kinds.get(session_id)
 
     def _set(self, session_id: str, waiting: bool, *, refresh: bool = False) -> None:
         same_state = self._waiting.get(session_id, False) == waiting
@@ -298,6 +444,7 @@ class PromptDetector:
             self._changed_at[session_id] = now
         if not waiting:
             self._prompts.pop(session_id, None)
+            self._kinds.pop(session_id, None)
             self._active_specs.pop(session_id, None)
         try:
             self._on_change(session_id, waiting)
@@ -309,6 +456,9 @@ class PromptDetector:
         self._waiting.pop(session_id, None)
         self._changed_at.pop(session_id, None)
         self._prompts.pop(session_id, None)
+        self._kinds.pop(session_id, None)
+        self._badges.pop(session_id, None)
+        self._agent_cache.pop(session_id, None)
         self._active_specs.pop(session_id, None)
 
 
@@ -330,8 +480,11 @@ def _auto_trust_suppressed(session_id: str) -> bool:
 _global_detector: Optional[PromptDetector] = None
 
 
-def get_global_detector(on_change: Callable[[str, bool], None]) -> PromptDetector:
+def get_global_detector(on_change: Callable[[str, bool], None],
+                        agent_for: Optional[Callable[[str], Optional[str]]] = None,
+                        on_badge: Optional[Callable[[str, Optional[str]], None]] = None
+                        ) -> PromptDetector:
     global _global_detector
     if _global_detector is None:
-        _global_detector = PromptDetector(on_change)
+        _global_detector = PromptDetector(on_change, agent_for, on_badge)
     return _global_detector

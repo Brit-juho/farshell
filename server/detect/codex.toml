@@ -35,3 +35,19 @@ exit = [
 # 인라인 응답에는 y/p/esc를 보내야 한다. named group을 사용해 라벨과 실제
 # 전송 키의 순서를 명시한다.
 options = '^\s*[›❯>]?\s*\d+\.\s+(?P<label>.+?)\s+\((?P<key>y|p|esc)\)\s*$'
+
+# 질문 화면에는 상태줄 `esc to interrupt`가 같이 떠 있다 — choice가 히트한 동안은
+# exit를 무시한다(enter 우선).
+ignore_exit_on = ["choice"]
+
+# waiting 유형(kind)별 리터럴 — 여기 적힌 문구도 waiting 진입 신호다. approval은
+# 위 enter가 맡는다. 2026-10-03 실측(codex 0.158.0): 질문(request_user_input)은 Plan
+# 모드에서만 뜨고 `Question 1/1`/`unanswered)`/`enter to submit answer`를 그린다.
+[kinds]
+plan = [
+  "Implement this plan?",
+]
+choice = [
+  "unanswered)",
+  "enter to submit answer",
+]
