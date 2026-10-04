@@ -8,6 +8,13 @@ name = "agy"
 # exit는 비운다. `esc to cancel`은 항상 떠 있어 쓰면 waiting이 즉시 풀린다(금지).
 exit = []
 
+# 거절(`4. No, cancel`)·ESC 뒤 화면에 남는 문구. 훅이 없는 agy는 exit가 비어 있어 이게 없으면 FarShell
+# 밖(실제 터미널)에서 거절한 승인 대기가 TTL까지 남는다. 2026-10-05 실측(agy 1.2.14):
+# `⎿  Interrupted · What should Antigravity CLI do instead?`
+interrupt = [
+  "Interrupted · What should Antigravity CLI do instead?",
+]
+
 [kinds]
 approval = [
   "Requesting permission for:",

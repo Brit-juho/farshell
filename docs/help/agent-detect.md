@@ -42,6 +42,7 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | `exit` | 문자열 목록. 나타나면 즉시 `waiting` 해제 — 프롬프트가 사라졌다는 신호 |
 | `[kinds]` | 표. 키 = waiting 유형(`approval`/`choice`/`plan`/`question`), 값 = 리터럴 문자열 목록(`enter`와 같은 리터럴 바이트 규칙). 여기 적힌 문구도 waiting 진입 신호다. `enter`에 걸리면 `approval`. 같은 윈도우에 여럿이면 plan → approval → enter → choice → question 순으로 이긴다 |
 | `ignore_exit_on` | kind 목록(예: `["choice"]`). 그 kind가 떠 있는 동안 `exit`를 무시한다 — Codex 질문 화면은 상태줄 `esc to interrupt`를 같이 그린다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙) |
+| `interrupt` | 문자열 목록. 사용자가 승인을 **거절**하거나 ESC로 작업을 끊으면 CLI는 Stop 훅을 내지 않고 이 문구만 화면에 남긴다 — 새로 그려지는 순간 그 세션의 `waiting`/`working` 엔트리를 `done`으로 마친다. waiting 진입 신호가 아니다. 문구 뒤에 `enter`/`exit`가 다시 그려졌으면 이미 지난 화면이라 무시한다. `[kinds]` 표 **위**에 쓴다 |
 | `[badge]` | 표. 키 = 보조 표시 값, 값 = 리터럴 목록. 걸려도 waiting으로 올리지 않고 엔트리에 `badge`만 붙인다(agy `/artifact to review` -> `plan`). 사용자 입력이 오면 뗀다 |
 | `options` | 정규식(문자열 또는 문자열 목록). 캡처 그룹 1=번호, 2=라벨. 매치되면 모바일 플릿 홈에 번호 버튼이 뜬다. 실패해도 `enter`/`exit`는 그대로 산다 |
 
@@ -63,13 +64,16 @@ toml을 본다. 우선순위는 훅 kind > 화면 kind > 폴백(`question`).
 
 - ⚠ **오탐 주의**: 빌드 로그·diff에 우연히 들어갈 수 있는 짧은 문자열
   (`"Yes"`, `"y/n"`)은 쓰지 않는다. 실제 프롬프트에만 나오는 긴 문구를 고른다.
-- `enter`/`exit`는 **리터럴 바이트 문자열**로 매칭한다(정규식이 아니다) —
-  `agent_prompt_detect.load_patterns()`가 `str.encode()`로 그대로 쓴다.
+- `enter`/`exit`/`[kinds]`/`interrupt`/`[badge]`는 **리터럴 문자열**로 매칭한다(정규식이 아니다).
   정규식이 필요한 건 `options` 하나뿐이다.
-- 실제 터미널 출력에는 커서 이동·색상·줄지우기 ANSI 코드가 섞여 들어온다.
-  `options` 정규식을 짤 때는 이미 ANSI가 제거되고 줄바꿈이 `\n`으로 통일된
-  텍스트(`_strip_ansi()` 결과)를 대상으로 매칭한다는 걸 가정하면 된다 —
-  직접 이스케이프 시퀀스를 정규식에 넣을 필요는 없다.
+- 실제 터미널 출력에는 커서 이동·색상·줄지우기 ANSI 코드가 섞여 들어온다. 감지 윈도우는
+  **ANSI를 벗기고 NBSP를 공백으로, 줄 머리로 가는 커서 이동(`\x1b[19;1H`)을 `\n`으로** 바꾼
+  텍스트다(`_append_clean`) — 직접 이스케이프를 리터럴이나 정규식에 넣을 필요가 없다.
+  2026-10-05 실측으로 이유가 드러났다: Claude Code는 `Interrupted · What should ...` 를 단어마다
+  색상 코드로 쪼개 그리고, agy는 선택 화면 안내줄(`↑/↓ Navigate · enter Select · esc Skip`)을
+  그렇게 그린다. 원본 바이트로 매칭하던 때는 둘 다 실화면에서 안 걸렸다(합성 문자열 테스트만 통과).
+  줄이 좁은 PTY(80열)에서 줄바꿈되는 문구(`Would you like to` / `proceed?`)는 한 줄로 안 나오므로
+  줄 앞부분만 쓰는 문구를 함께 둔다.
 
 ## codex/aider 채움 — 근거와 한계 (2026-09-11)
 

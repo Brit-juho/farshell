@@ -105,8 +105,16 @@ def _on_badge_change(pty_session_id: str, badge) -> None:
         agent_status.set_badge_for_session(info.tmux_name, badge)
 
 
+def _on_interrupt(pty_session_id: str) -> None:
+    """화면에 거절/중단 문구가 그려졌다 — CLI는 이때 Stop 훅을 내지 않는다."""
+    info = session_store.get(pty_session_id)
+    if info and info.tmux_name:
+        agent_status.finish_interrupted_for_session(info.tmux_name)
+
+
 _prompt_detector = agent_prompt_detect.get_global_detector(
-    _on_waiting_change, agent_for=_agent_for_pty, on_badge=_on_badge_change)
+    _on_waiting_change, agent_for=_agent_for_pty, on_badge=_on_badge_change,
+    on_interrupt=_on_interrupt)
 
 
 def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> None:

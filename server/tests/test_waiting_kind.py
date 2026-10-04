@@ -422,6 +422,29 @@ def test_coverage_reports_kinds_per_cli(client):
     assert rows["aider"]["kinds"] == ["approval", "question"]
 
 
+def test_coverage_claude_hook_kinds_win_over_screen_once_permission_hook_registered(client, tmp_path):
+    import claude_hooks
+    path = tmp_path / "claude" / "settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(claude_hooks.apply_install({})[0]))
+    rows = {r["cli"]: r for r in client.get("/api/agents/coverage").json()}
+    assert rows["claude"]["path"] == "hook"
+    assert rows["claude"]["kindSources"] == {
+        "approval": "hook", "choice": "hook", "plan": "hook", "question": "fallback"}
+
+
+def test_coverage_claude_without_permission_hook_stays_screen(client, tmp_path):
+    import claude_hooks
+    settings, _ = claude_hooks.apply_install({})
+    settings["hooks"].pop("PermissionRequest")
+    path = tmp_path / "claude" / "settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings))
+    rows = {r["cli"]: r for r in client.get("/api/agents/coverage").json()}
+    assert rows["claude"]["path"] == "pty"
+    assert rows["claude"]["kindSources"]["approval"] == "screen"
+
+
 def test_coverage_codex_hook_kinds_win_over_screen(client, tmp_path):
     import codex_hooks
     text, _ = codex_hooks.apply_install("")
@@ -491,3 +514,226 @@ def test_notification_hook_status_and_foreign_hooks_preserved(cfg):
     ch._cmd_uninstall()
     data = json.loads(cfg.read_text())
     assert [h["command"] for g in data["hooks"]["Notification"] for h in g["hooks"]] == ["/home/x/notify.sh"]
+
+
+# ── 실화면 발췌(2026-10-05, Claude Code 2.1.289, 격리 tmux 소켓에서 서버 PTY로 받은 바이트) ──
+# 선택지 줄 사이가 `\r\n`이 아니라 절대 커서 이동(`\x1b[19;1H`)이고, 단어마다 색상 코드가 낀다.
+CLAUDE_APPROVAL_REAL = (
+    b'\x1b[16;1H Do you want to proceed?\x1b[K\r\n \x1b[38;5;153m\xe2\x9d\xaf\x1b[39m '
+    b'\x1b[38;5;246m1.\x1b[39m \x1b[38;5;153mYes\x1b[39m\x1b[K\r\n   \x1b[38;5;246m2.\x1b[39m '
+    b'Yes, and always allow access to \x1b[1m/private/tmp/probe3/repo\x1b(B\x1b[m from this project'
+    b'\x1b[19;1H   \x1b[38;5;246m3.\x1b[39m Yes, and switch to auto mode\x1b[38;5;246m \xc2\xb7\x1b[39m '
+    b'\x1b[38;5;246mauto\x1b[39m \x1b[38;5;246mmode\x1b[39m    \x1b[20;1H   \x1b[38;5;246m4.\x1b[39m No'
+    b'\x1b[K\r\n\x1b[K\r\n \x1b[38;5;246mEsc\x1b[39m \x1b[38;5;246mto\x1b[39m \x1b[38;5;246mcancel\x1b[39m'
+)
+CLAUDE_INTERRUPTED_REAL = (
+    b'\x1b[H  \xe2\x8e\xbf \xc2\xa0\x1b[38;5;246mInterrupted\x1b[39m \x1b[38;5;246m\xc2\xb7\x1b[39m '
+    b'\x1b[38;5;246mWhat\x1b[39m \x1b[38;5;246mshould\x1b[39m \x1b[38;5;246mClaude\x1b[39m '
+    b'\x1b[38;5;246mdo\x1b[39m \x1b[38;5;246minstead?\x1b[39m\x1b[K\r\n'
+)
+CLAUDE_WORKING_STATUS_REAL = (
+    b'\x1b[24;3H\xe2\x8f\xb8 manual mode on \xc2\xb7 esc to interrupt \xc2\xb7 \xe2\x86\x90 for agents'
+)
+# 80열 PTY에서 ExitPlanMode 대화상자 제목이 줄바꿈된다.
+CLAUDE_PLAN_NARROW_REAL = (
+    b' Claude has written up a plan and is ready to execute. Would you like to\r\n proceed?\r\n'
+    b' \xe2\x9d\xaf 1. Yes, and use auto mode\r\n   2. Yes, manually approve edits\r\n'
+)
+
+
+def test_real_claude_approval_options_are_split_by_cursor_moves():
+    d, _, _ = _det("claude")
+    d.feed("s1", CLAUDE_APPROVAL_REAL)
+    assert d.get_kind("s1") == "approval"
+    _, options = d.get_prompt("s1")
+    labels = {o["key"]: o["label"] for o in options}
+    assert labels["1"] == "Yes"
+    assert labels["2"].startswith("Yes, and always allow access to")
+    assert "3." not in labels["2"] and "4. No" not in labels["2"]
+    assert labels["3"].startswith("Yes, and switch to auto mode")
+    assert labels["4"] == "No"
+
+
+def test_real_claude_narrow_plan_dialog_is_plan():
+    d, _, _ = _det("claude")
+    d.feed("s1", CLAUDE_PLAN_NARROW_REAL)
+    assert d.is_waiting("s1") and d.get_kind("s1") == "plan"
+
+
+def _int_det(agent="claude"):
+    ints = []
+    d = D.PromptDetector(lambda *a: None, agent_for=lambda sid: agent,
+                         on_interrupt=lambda sid: ints.append(sid))
+    return d, ints
+
+
+def test_real_claude_interrupted_line_fires_despite_color_codes_and_nbsp():
+    d, ints = _int_det()
+    d.feed("s1", CLAUDE_INTERRUPTED_REAL)
+    assert ints == ["s1"]
+
+
+def test_interrupt_split_across_chunks_still_fires():
+    d, ints = _int_det()
+    cut = len(CLAUDE_INTERRUPTED_REAL) // 2
+    d.feed("s1", CLAUDE_INTERRUPTED_REAL[:cut])
+    d.feed("s1", CLAUDE_INTERRUPTED_REAL[cut:])
+    assert ints == ["s1"]
+
+
+def test_interrupt_ignored_when_working_status_line_redrawn_after_it():
+    """작업이 다시 시작돼 상태줄(`esc to interrupt`)이 같은 구간에 그려지면 옛 줄의 재그리기다."""
+    d, ints = _int_det()
+    d.feed("s1", CLAUDE_INTERRUPTED_REAL + CLAUDE_WORKING_STATUS_REAL)
+    assert ints == []
+
+
+def test_interrupt_not_scoped_to_other_cli_or_agy_without_literal():
+    for agent in ("codex", "agy"):
+        d, ints = _int_det(agent)
+        d.feed("s1", CLAUDE_INTERRUPTED_REAL)
+        assert ints == [], agent
+
+
+def test_interrupt_clears_detector_waiting_even_if_prompt_text_still_in_window():
+    events = []
+    ints = []
+    d = D.PromptDetector(lambda sid, w: events.append((sid, w)), agent_for=lambda sid: "claude",
+                         on_interrupt=lambda sid: ints.append(sid))
+    d.feed("s1", CLAUDE_APPROVAL_REAL)
+    assert d.is_waiting("s1")
+    d.feed("s1", CLAUDE_INTERRUPTED_REAL)  # 사용자가 FarShell 밖(실제 터미널)에서 거절
+    assert ints == ["s1"] and not d.is_waiting("s1")
+    assert events[-1] == ("s1", False)
+
+
+def test_rejecting_approval_ends_hook_working_entry(monkeypatch):
+    """거절(`4. No`)·ESC 중단은 Stop 훅이 없다 — 화면 문구가 훅 엔트리를 done으로 마친다.
+
+    실측: 거절 뒤 화면은 빈 입력줄인데 엔트리가 working(tool=Bash)으로 TTL까지 남았다."""
+    import deps
+
+    class _Info:
+        tmux_name = "dev"
+
+    monkeypatch.setattr(deps.session_store, "get", lambda sid: _Info())
+    A.on_event("pre", {"session_id": "s1", "tool_name": "Bash"}, session="dev")
+    A.on_event("permission", {"session_id": "s1", "tool_name": "Bash"}, session="dev")
+    A.on_event("pre", {"session_id": "s2", "tool_name": "Read"}, session="other")
+    deps.on_terminal_input("p1", "4")           # 거절 번호 입력 -> waiting 해제, working으로
+    assert A.get_status("s1") == A.WORKING
+    deps._on_interrupt("p1")                     # 화면에 `Interrupted ·` 가 그려졌다
+    assert A.get_status("s1") == A.DONE
+    assert A.get_state("s1")["tool"] is None
+    assert A.get_status("s2") == A.WORKING       # 다른 세션은 건드리지 않는다
+
+
+def test_interrupt_does_not_touch_done_or_idle_entries():
+    A.on_event("stop", {"session_id": "s1"}, session="dev")
+    before = A.get_state("s1")["updated_at"]
+    assert A.finish_interrupted_for_session("dev") == 0
+    assert A.get_state("s1")["updated_at"] == before
+
+
+# agy 실화면 발췌(1.2.14): 거절 뒤 줄, 그리고 이어서 뜬 선택 화면
+AGY_INTERRUPTED_REAL = (
+    b"  \xe2\x8e\xbf  Interrupted \xc2\xb7 What should Antigravity CLI do instead?\r\n"
+)
+AGY_CHOICE_REAL = (
+    b"Question 1/1: Pick a color\r\n> 1. Red\r\n  2. Blue\r\n  3. Write-in...\r\n"
+    b"  \xe2\x86\x91/\xe2\x86\x93 Navigate \xc2\xb7 enter Select \xc2\xb7 esc Skip\r\n"
+)
+AGY_APPROVAL_REAL = (
+    b"Requesting permission for:\r\n   touch agy_probe.txt\r\nRun this command?\r\n"
+    b"> 1. Yes, run command\r\n  4. No, cancel\r\n"
+)
+
+
+def test_agy_interrupted_line_ends_waiting_without_exit_pattern():
+    d, ints = _int_det("agy")
+    events = []
+    d._on_change = lambda sid, w: events.append(w)
+    d.feed("s1", AGY_APPROVAL_REAL)
+    assert d.get_kind("s1") == "approval"
+    d.feed("s1", AGY_INTERRUPTED_REAL)
+    assert ints == ["s1"] and not d.is_waiting("s1")
+    d.feed("s1", b"\x1b[24;1H? for shortcuts")  # 이후 잡음이 옛 프롬프트를 되살리지 않는다
+    assert not d.is_waiting("s1")
+
+
+def test_agy_choice_after_cancel_is_waiting_again_on_pane_entry(monkeypatch):
+    """훅이 없는 agy는 취소로 done이 된 뒤 새 턴의 선택 화면도 받아야 한다(2026-10-05 실측:
+    done에 막혀 선택 화면이 떠 있는데도 엔트리가 done이었다)."""
+    import deps
+
+    class _Info:
+        tmux_name = "ag"
+
+    monkeypatch.setattr(deps.session_store, "get", lambda sid: _Info())
+    det = deps._prompt_detector  # _on_waiting_change가 kind/question을 이 인스턴스에서 읽는다
+    monkeypatch.setattr(det, "_agent_for", lambda sid: "agy")
+    det._agent_cache.clear()
+    det.remove("p1")
+    det.feed("p1", AGY_APPROVAL_REAL)
+    assert A.get_status("pane:ag") == A.WAITING
+    det.feed("p1", AGY_INTERRUPTED_REAL)
+    assert A.get_status("pane:ag") == A.DONE
+    det.feed("p1", AGY_CHOICE_REAL)
+    ent = A.get_state("pane:ag")
+    assert ent["status"] == A.WAITING and ent["kind"] == "choice"
+    det.remove("p1")
+
+
+def test_done_by_stop_still_rejects_late_screen_waiting():
+    """`_reopen`은 거절/ESC로 끝난 엔트리에만 붙는다 — 정상 완료(Stop)는 기존 규칙 그대로."""
+    A.on_event("stop", {"session_id": "s"})
+    A.on_waiting("s", True)
+    assert A.get_status("s") == A.DONE
+
+
+# agy 1.2.14 실화면: 선택 화면 안내줄이 단어마다 색상 코드로 쪼개져 온다(바이트 리터럴이 안 맞던 화면).
+AGY_CHOICE_STYLED_REAL = (
+    b'\x1b[1mQuestion 1/1: Pick a color\x1b(B\x1b[m\x1b[K\r\n\x1b[K\x1b[94m\r\n> 1. Red\x1b[39m\x1b[K\r\n'
+    b'  2. Blue\x1b[K\r\n  3. Write-in...\x1b[K\r\n\x1b[K\r\n  \x1b[94m\x1b[1m\xe2\x86\x91/\xe2\x86\x93'
+    b'\x1b(B\x1b[m\x1b[90m Navigate \xc2\xb7 \x1b[94m\x1b[1menter\x1b(B\x1b[m\x1b[90m Select \xc2\xb7 '
+    b'\x1b[94m\x1b[1mesc\x1b(B\x1b[m\x1b[90m Skip\x1b[39m\x1b[K\x1b[90m\r\nesc to cancel\x1b[39m'
+)
+
+
+def test_real_agy_styled_choice_screen_is_choice():
+    d, _, _ = _det("agy")
+    d.feed("s1", AGY_CHOICE_STYLED_REAL)
+    assert d.is_waiting("s1") and d.get_kind("s1") == "choice"
+
+
+def test_styled_screen_split_mid_escape_and_mid_utf8_still_matches():
+    for cut in range(1, len(AGY_CHOICE_STYLED_REAL)):
+        d, _, _ = _det("agy")
+        d.feed("s1", AGY_CHOICE_STYLED_REAL[:cut])
+        d.feed("s1", AGY_CHOICE_STYLED_REAL[cut:])
+        assert d.get_kind("s1") == "choice", cut
+
+
+def test_agy_artifact_badge_matches_through_color_codes():
+    d, _, badges = _det("agy")
+    d.feed("s1", b"\x1b[90m/artifact\x1b[39m to review\r\n")
+    assert badges == [("s1", "plan")]
+
+
+def test_permission_hook_after_screen_keeps_screen_options():
+    """Claude Code는 대화상자를 그린 뒤 PermissionRequest 훅을 부르기도 한다(2.1.289 실측) —
+    화면이 뽑은 선택지를 승인 훅이 None으로 덮으면 모바일 인라인 버튼이 사라진다."""
+    A.on_event("pre", {"session_id": "s", "tool_name": "Bash"}, session="dev")
+    opts = [{"key": "1", "label": "Yes"}, {"key": "4", "label": "No"}]
+    A.on_waiting("s", True, question="Do you want to proceed?", options=opts, kind="approval")
+    ent = _perm("Bash", sid="s", session="dev")
+    assert ent["status"] == A.WAITING and ent["kind"] == "approval"
+    assert ent["options"] == opts
+
+
+def test_permission_hook_first_then_screen_still_fills_options():
+    ent = _perm("Bash", sid="s", session="dev")
+    assert ent["options"] is None
+    opts = [{"key": "1", "label": "Yes"}]
+    A.on_waiting("s", True, question="Do you want to proceed?", options=opts, kind="approval")
+    assert A.get_state("s")["options"] == opts and A.get_state("s")["kind"] == "approval"

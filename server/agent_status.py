@@ -209,6 +209,9 @@ def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
         # waiting이 풀리면 유형도 같이 사라진다(다음 waiting은 새로 판정).
         ent.pop("kind", None)
         ent.pop("_kind_src", None)
+    if status != DONE:
+        ent.pop("_reopen", None)
+    if status != WAITING:
         # 해소된 프롬프트가 "아직 활성"으로 남지 않게 한다(crush 「소비 뒤
         # 활성 표식을 지운다」 규율의 우리 번역).
         ent["prompt_id"] = None
@@ -273,11 +276,17 @@ def _apply_agent(ent: dict, agent: Optional[str]) -> None:
 def _set_hook_prompt(ent: dict, kind: str, tool, tool_input) -> None:
     """훅이 알려준 waiting의 kind/질문/선택지를 엔트리에 싣는다(`_set_status` 전에 —
     지문이 kind·질문·선택지를 보므로 순서가 바뀌면 토큰이 안 갱신된다)."""
+    # 화면이 먼저 선택지를 뽑아 둔 waiting이면 승인 훅이 그걸 지우지 않는다 — Claude Code는
+    # 대화상자를 그린 뒤에 PermissionRequest 훅을 부르는 일이 있어(2.1.289 실측) 순서가 화면
+    # -> 훅이면 모바일 인라인 승인 버튼이 사라지고 「터미널로」로 폴백했다. 승인 훅 자체는
+    # 선택지를 주지 않으므로 화면 값이 유일한 출처다.
+    screen_options = (ent.get("options") if ent.get("status") == WAITING
+                      and ent.get("_kind_src") == "screen" else None)
     ent["kind"] = kind
     ent["_kind_src"] = "hook"
     if kind == KIND_APPROVAL:
         ent["question"] = f"{tool} 실행 승인이 필요합니다" if tool else "실행 승인이 필요합니다"
-        ent["options"] = None
+        ent["options"] = screen_options
     else:
         ent["question"] = _tool_question(tool_input) or _KIND_QUESTIONS[kind]
         ent["options"] = _tool_options(tool_input) if kind == KIND_CHOICE else None
@@ -481,7 +490,10 @@ def on_waiting(
         # 토큰이 그대로 있고(E4), 선택지가 바뀌면 새 토큰이 나간다(E6) —
         # 두 if로 나눠 앞쪽만 상태를 바꾸던 예전 코드는 이미 waiting인 채
         # 질문만 바뀌는 경우 _set_status를 안 태워 토큰이 갱신되지 않았다.
-        if ent["status"] in (WORKING, WAITING):
+        # 거절/ESC로 막 끝난 엔트리(`_reopen`)는 done이어도 다음 화면 프롬프트를 받는다 —
+        # 훅이 없는 CLI(agy 등)는 새 턴 시작을 알릴 pre 훅이 없어 done에서 영영 못 빠져나온다.
+        # 옛 프롬프트가 윈도우에 남아 되살리는 일은 감지기가 윈도우를 비워 막는다.
+        if ent["status"] in (WORKING, WAITING) or (ent["status"] == DONE and ent.get("_reopen")):
             hook_kind = ent["status"] == WAITING and ent.get("_kind_src") == "hook"
             ent["question"] = question
             if hook_kind and options is None:
@@ -627,6 +639,39 @@ def status_for_session(name: Optional[str], host: str = LOCAL_HOST) -> str:
     return min(found, key=lambda s: _URGENCY.get(s, 9))
 
 
+def _finish_session(name: Optional[str], host: str, statuses: tuple) -> int:
+    """그 tmux 세션의 **로컬** 엔트리 중 `statuses`인 것만 `done`으로 마친다."""
+    if not name:
+        return 0
+    sweep()
+    now = time.time()
+    changed = 0
+    for ent in _state.values():
+        if (ent.get("tmux_session") != name
+                or ent.get("host", LOCAL_HOST) != host
+                or ent.get("status") not in statuses):
+            continue
+        _set_status(ent, DONE, now)
+        ent["_reopen"] = True
+        ent["tool"] = None
+        ent["question"] = None
+        ent["options"] = None
+        ent["last_done"] = now
+        changed += 1
+    return changed
+
+
+def finish_interrupted_for_session(name: Optional[str], host: str = LOCAL_HOST) -> int:
+    """승인 거절·ESC 중단으로 끝난 세션의 waiting/working 엔트리를 `done`으로 마친다.
+
+    Claude Code는 사용자가 권한 대화상자를 거절하거나(`4. No`) 작업을 ESC로 끊어도 Stop
+    훅을 내지 않는다(2.1.289 실측: 거절 뒤 화면은 `Interrupted · What should Claude do
+    instead?`와 빈 입력줄인데 엔트리는 `working`으로 15분 TTL까지 남았다). 화면의 중단
+    문구(`detect/*.toml`의 `interrupt`)가 그 순간을 알리는 유일한 신호다.
+    """
+    return _finish_session(name, host, (WAITING, WORKING))
+
+
 def finish_waiting_for_session(name: Optional[str], host: str = LOCAL_HOST) -> int:
     """승인 화면에서 취소(Escape)한 세션을 `done`으로 마친다.
 
@@ -636,23 +681,7 @@ def finish_waiting_for_session(name: Optional[str], host: str = LOCAL_HOST) -> i
     요청 중단이므로, 그 순간 waiting이던 **해당 tmux 세션의 로컬 엔트리만**
     완료 처리한다. 다른 상태·호스트는 건드리지 않는다.
     """
-    if not name:
-        return 0
-    sweep()
-    now = time.time()
-    changed = 0
-    for ent in _state.values():
-        if (ent.get("tmux_session") != name
-                or ent.get("host", LOCAL_HOST) != host
-                or ent.get("status") != WAITING):
-            continue
-        _set_status(ent, DONE, now)
-        ent["tool"] = None
-        ent["question"] = None
-        ent["options"] = None
-        ent["last_done"] = now
-        changed += 1
-    return changed
+    return _finish_session(name, host, (WAITING,))
 
 
 def get_status(sid: str, host: str = LOCAL_HOST) -> str:

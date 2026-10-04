@@ -24,6 +24,13 @@ exit = [
   "esc to interrupt",
 ]
 
+# interrupt: 승인 거절(`4. No`)·ESC 중단 뒤 화면에 남는 문구. Claude Code는 이때 Stop
+# 훅을 내지 않아 훅 엔트리가 working으로 남으므로, 새로 그려지는 순간 done으로 마친다.
+# 2026-10-05 실측(2.1.289): `⎿  Interrupted · What should Claude do instead?`
+interrupt = [
+  "Interrupted · What should Claude do instead?",
+]
+
 # N38(70-mobile.md §2) — 모바일 플릿 홈의 인라인 승인 버튼용. Claude Code의
 # 번호 선택지 줄("❯ 1. Yes" / "  2. Yes, and don't ask again ..." 등)에서
 # 번호(그룹 1)와 라벨(그룹 2)을 뽑는다. 매치 실패(선택지 형태가 아닌 프롬프트)
@@ -37,7 +44,11 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 # 2026-10-03 실측(Claude Code 2.1.287): AskUserQuestion 화면은 아래 안내줄, ExitPlanMode
 # 화면은 `Would you like to proceed?`를 그린다.
 [kinds]
+# 2026-10-05 실측(2.1.289, 80열): ExitPlanMode 대화상자 제목이 `Claude has written up a plan
+# and is ready to execute. Would you like to` / `proceed?`로 줄바꿈된다 — 좁은 PTY에서는
+# `Would you like to proceed?`가 한 줄로 안 나오므로 첫 줄 문구도 넣는다.
 plan = [
+  "Claude has written up a plan and is ready to execute",
   "Would you like to proceed?",
   "Here is Claude's plan:",
 ]

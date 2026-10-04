@@ -146,10 +146,10 @@ KNOWN_CLIS = ("claude", "codex", "aider", "agy")  # detect/*.toml이 있는 CLI
 # 훅이 waiting의 kind를 직접 알려주는 CLI와 그 kind. 이 표는 **설치기가 실제로 등록하는
 # 이벤트**를 따라간다 — Codex는 PermissionRequest(approval)와 PreToolUse
 # `request_user_input`(choice)을 등록한다. Claude Code 설치기(`claude_hooks.EVENTS`)는
-# PermissionRequest를 등록하지 않으므로(Notification은 보조 기록뿐) 훅 kind가 없고, 화면
-# 패턴(`detect/claude.toml [kinds]`)이 맡는다. 서버의 `on_event("permission")`은 사용자가
-# 손으로 등록한 경우를 위해 Claude tool_name(AskUserQuestion/ExitPlanMode)도 해석한다.
-HOOK_KINDS = {"codex": ("approval", "choice")}
+# 2026-10-04부터 PermissionRequest도 등록한다 — tool_name으로 approval/choice(AskUserQuestion)/
+# plan(ExitPlanMode)을 가린다(2026-10-05 실측, 2.1.289). 이 표는 `path == "hook"`일 때만 쓰이고
+# `hook_ok`는 PermissionRequest까지 `ok`여야 하므로, 옛 설치(미등록)는 `pty`로 정직하게 보인다.
+HOOK_KINDS = {"codex": ("approval", "choice"), "claude": ("approval", "choice", "plan")}
 # Stop/done의 마지막 응답이 `?`로 끝날 때 붙는 보조 표시를 낼 수 있는 CLI(훅 경로).
 QUESTION_BADGE_CLIS = ("claude", "codex")
 _KIND_ORDER = ("approval", "choice", "plan", "question")

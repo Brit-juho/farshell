@@ -28,6 +28,7 @@ waiting을 *없애고*, 이쪽은 아무것도 쓰지 않고 상태만 `waiting`
 
 from __future__ import annotations
 
+import codecs
 import logging
 import os
 import re
@@ -51,6 +52,10 @@ DETECT_DIR = Path(os.environ.get("VT_DETECT_DIR", Path(__file__).parent / "detec
 WINDOW_SIZE = 16 * 1024
 # 같은 세션에서 상태를 연속으로 뒤집지 않기 위한 최소 간격.
 FLAP_GUARD_SEC = 1.0
+# `interrupt` 문구가 청크 경계에 걸리거나 단어마다 색상 코드가 끼는 것을 감안한 추가 조회 바이트.
+_INTERRUPT_LOOKBACK = 256
+# 청크 끝에서 잘린 이스케이프(`\x1b[38;5`, `\x1b]0;title`, `\x1b(`) — 다음 청크와 이어 벗긴다.
+_INCOMPLETE_ESC_RE = re.compile(rb"\x1b(?:\[[0-9;?]*[ -/]*|\][^\x07\x1b]*|[()]?)$")
 # CLI 판별(프로세스 스캔) 결과를 세션별로 이만큼 재사용한다.
 AGENT_CACHE_SEC = 5.0
 
@@ -73,6 +78,12 @@ _ANSI_RE = re.compile(
 )
 
 
+# 줄 머리로 가는 절대 커서 이동(`\x1b[19;1H`, `\x1b[H`). tmux가 바뀐 줄만 다시 그릴 때 줄바꿈
+# 대신 이걸 쓴다(Claude Code 2.1.289 실측: 선택지 2번과 3번 사이가 `\r\n`이 아니라
+# `\x1b[19;1H`) — 그냥 지우면 두 줄이 한 줄로 붙어 옵션 라벨이 `... 3. Yes ... 4. No`까지 먹는다.
+_LINE_START_RE = re.compile(r"\x1b\[(?:\d+)?(?:;1)?H")
+
+
 def _strip_ansi(text: str) -> str:
     """ANSI 제거 후 줄바꿈을 `\\n` 하나로 통일한다.
 
@@ -82,6 +93,7 @@ def _strip_ansi(text: str) -> str:
     않으면 질문 추출(`splitlines()`는 `\\r` 단독도 경계로 본다)과 선택지
     추출(`\\n`만 경계로 봄)이 서로 다른 줄 개수를 세게 된다.
     """
+    text = _LINE_START_RE.sub("\n", text)
     return _ANSI_RE.sub("", text).replace("\r\n", "\n").replace("\r", "\n")
 
 
@@ -144,6 +156,10 @@ def load_patterns(force: bool = False) -> dict:
             # 이 kind가 히트한 동안은 exit를 무시한다(예: Codex 질문 화면은 상태줄에
             # `esc to interrupt`를 계속 그린다).
             ignore_exit_on = {str(k) for k in (data.get("ignore_exit_on") or []) if str(k) in KIND_ORDER}
+            # `interrupt` — 사용자가 승인을 거절하거나 ESC로 작업을 끊으면 CLI는 훅(Stop)을
+            # 내지 않고 이 문구만 화면에 남긴다. 훅이 만든 waiting/working 엔트리를 풀 유일한
+            # 신호라 별도 키로 둔다(waiting 진입 신호가 아니다).
+            interrupt = [str(p).encode() for p in (data.get("interrupt") or []) if str(p)]
             # 트리거 순서 = 우선순위(앞이 우선, 같으면 최신 위치). 구체적인 것 먼저:
             # plan -> approval -> enter(=approval) -> choice -> question. choice의
             # 하단 안내줄(`Enter to select`)은 다른 화면에도 있을 수 있어 뒤에 둔다.
@@ -153,8 +169,9 @@ def load_patterns(force: bool = False) -> dict:
             triggers += [(lit, "approval") for lit in enter]
             for k in ("choice", "question"):
                 triggers += [(lit, k) for lit in kinds.get(k, [])]
-            if triggers or exit_ or badges:
+            if triggers or exit_ or badges or interrupt:
                 out[name] = {
+                    "interrupt": interrupt,
                     "enter": [t[0] for t in triggers],
                     "enter_kinds": [t[1] for t in triggers],
                     "exit": exit_, "options": options,
@@ -213,7 +230,7 @@ def _extract_prompt(pats: dict, joined: bytes
     # 각 detect 파일은 구체적인 질문을 먼저, 짧은 폴백 문구를 뒤에 둔다.
     # Codex 선택지의 "don't ask again"이 Claude의 폴백 enter와 겹치므로,
     # 더 앞에 선언된 패턴을 우선하고 같은 우선순위에서만 최신 위치를 고른다.
-    prompt_spec, prompt_pattern, _, kind = _locate_prompt_kind(pats, joined)
+    prompt_spec, prompt_pattern, _, kind = _locate_prompt_kind(pats, text.encode("utf-8"))
     if prompt_pattern is not None:
         needle = prompt_pattern.decode("utf-8", errors="ignore")
         for line in text.splitlines():
@@ -264,8 +281,10 @@ class PromptDetector:
 
     def __init__(self, on_change: Callable[[str, bool], None],
                  agent_for: Optional[Callable[[str], Optional[str]]] = None,
-                 on_badge: Optional[Callable[[str, Optional[str]], None]] = None):
+                 on_badge: Optional[Callable[[str, Optional[str]], None]] = None,
+                 on_interrupt: Optional[Callable[[str], None]] = None):
         self._on_change = on_change
+        self._on_interrupt = on_interrupt
         # session_id -> 그 pane에서 도는 CLI 이름(없으면 None). kind 패턴은 이 CLI의
         # spec으로만 매칭한다 — 서로 다른 CLI가 같은 문구(`Do you want to proceed?`)를
         # 쓰기 때문이다. None을 돌려주거나 resolver가 없으면 옛 동작(전 spec 매칭).
@@ -281,6 +300,9 @@ class PromptDetector:
         # 창 안에 여전히 들어가는데도) 밀어내 버려서, 선택지가 레이스 컨디션으로
         # 들쭉날쭉 사라졌다. bytearray로 바꿔 **바이트 수**만으로 자른다.
         self._windows: dict[str, bytearray] = {}
+        # 청크 경계 처리 상태(잘린 이스케이프·UTF-8) — 윈도우 자체는 `_windows`다.
+        self._pending: dict[str, bytes] = {}
+        self._decoders: dict[str, object] = {}
         self._waiting: dict[str, bool] = {}
         self._changed_at: dict[str, float] = {}
         # 승인 질문을 실제로 낸 CLI의 패턴 spec. 서로 다른 CLI가 같은 문구를
@@ -339,20 +361,77 @@ class PromptDetector:
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[badge] 통지 실패: {e}")
 
+    def _check_interrupt(self, session_id: str, pats: dict, clean: bytes, fresh: int) -> bool:
+        """이번 청크 끝에서 `interrupt` 문구가 가장 마지막 신호로 그려졌는가.
+
+        `clean`은 ANSI를 벗긴 윈도우다(아래 `feed` 참고). 조건: (1) 이번 청크가 더한 꼬리
+        구간(경계에 걸친 문구를 잡을 만큼 `_INTERRUPT_LOOKBACK` 바이트 포함)에 있다 — 윈도우에
+        남은 옛 문구를 되풀이해 세지 않는다. (2) 그 뒤에 프롬프트 문구(enter)나 작업 중
+        상태줄(`esc to interrupt`)이 다시 그려지지 않았다 — 그랬다면 이미 지나간 화면이다.
+        """
+        if self._on_interrupt is None:
+            return False
+        specs = [sp for sp in self._scoped(session_id, pats).values() if sp.get("interrupt")]
+        if not specs:
+            return False
+        start = max(0, len(clean) - fresh - _INTERRUPT_LOOKBACK)
+        for spec in specs:
+            for lit in spec["interrupt"]:
+                at = clean.rfind(lit, start)
+                if at < 0:
+                    continue
+                after = clean[at:]
+                if any(x and x in after for x in list(spec.get("exit", [])) + list(spec.get("enter", []))):
+                    continue
+                try:
+                    self._on_interrupt(session_id)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"[interrupt] 통지 실패: {e}")
+                return True
+        return False
+
+    def _append_clean(self, session_id: str, data: bytes) -> int:
+        """ANSI를 벗긴 윈도우에 `data`를 더하고 이번에 더해진 바이트 수를 돌려준다.
+
+        실제 TUI는 단어 사이마다 색상 코드(`\\x1b[38;5;246m`)를 끼우고 `⎿` 뒤에 NBSP를 쓰며
+        줄 사이를 `\\r\\n`이 아니라 절대 커서 이동으로 잇는다 — 바이트 리터럴 매칭은 그 화면을
+        놓친다(agy 1.2.14 선택 화면 안내줄, Claude Code 2.1.289 `Interrupted ·` 줄 실측).
+        청크 끝에 잘린 이스케이프와 UTF-8 문자는 다음 청크로 넘겨 반쪽이 남지 않게 한다.
+        """
+        pend = self._pending.get(session_id, b"") + data
+        m = _INCOMPLETE_ESC_RE.search(pend)
+        if m and len(pend) - m.start() <= 64:
+            self._pending[session_id] = pend[m.start():]
+            pend = pend[:m.start()]
+        else:
+            self._pending.pop(session_id, None)
+        dec = self._decoders.get(session_id)
+        if dec is None:
+            dec = self._decoders[session_id] = codecs.getincrementaldecoder("utf-8")("ignore")
+        text = _strip_ansi(dec.decode(pend)).replace("\u00a0", " ")
+        add = text.encode("utf-8")
+        win = self._windows.get(session_id)
+        if win is None:
+            win = self._windows[session_id] = bytearray()
+        win.extend(add)
+        if len(win) > WINDOW_SIZE:
+            del win[: len(win) - WINDOW_SIZE]
+        return len(add)
+
+    def _drop_window(self, session_id: str) -> None:
+        for store in (self._windows, self._pending, self._decoders):
+            store.pop(session_id, None)
+
     # ── 입력 ─────────────────────────────────────────────────────────────
     def feed(self, session_id: str, data: bytes) -> None:
         pats = load_patterns()
         if not pats:
             return
-        buf = self._windows.get(session_id)
-        if buf is None:
-            buf = bytearray()
-            self._windows[session_id] = buf
-        buf.extend(data)
-        if len(buf) > WINDOW_SIZE:
-            del buf[: len(buf) - WINDOW_SIZE]
-
-        joined = bytes(buf)
+        # 윈도우는 ANSI를 벗긴 텍스트다(`_append_clean`). 줄 구조는 `\n`으로 남아 질문·선택지
+        # 추출도 같은 윈도우를 쓴다 — 원본 바이트 윈도우를 따로 두면 이스케이프가 많아 먼저
+        # 밀려나 감지(clean)와 추출(raw)의 결과가 갈렸다(agy 선택 화면이 question으로 바뀜).
+        fresh = self._append_clean(session_id, data)
+        joined = bytes(self._windows[session_id])
 
         # PTY 윈도우는 현재 화면이 아니라 **출력 이력**이다. Codex는 작업 상태줄
         # (`esc to interrupt`)을 찍은 뒤 같은 2KB 안에서 승인 질문을 그리므로,
@@ -379,8 +458,13 @@ class PromptDetector:
             exit_at = -1
 
         self._check_badge(session_id, pats, joined)
+        interrupted = self._check_interrupt(session_id, pats, joined, fresh)
 
-        if exit_at >= 0 and exit_at > enter_at:
+        if interrupted:
+            # 거절/중단 — 화면에 남은 이전 프롬프트 문구로 waiting을 되살리지 않는다.
+            self._set(session_id, False)
+            self._drop_window(session_id)
+        elif exit_at >= 0 and exit_at > enter_at:
             self._set(session_id, False)
         elif enter_at >= 0:
             if _auto_trust_suppressed(session_id):
@@ -408,10 +492,10 @@ class PromptDetector:
         비워서 이미 지나간 프롬프트 문자열이 다시 히트하지 않게 한다.
         """
         if self._badges.pop(session_id, None) is not None:
-            self._windows.pop(session_id, None)
+            self._drop_window(session_id)
             self._notify_badge(session_id, None)
         if self._waiting.get(session_id):
-            self._windows.pop(session_id, None)
+            self._drop_window(session_id)
             self._set(session_id, False)
 
     # ── 상태 ─────────────────────────────────────────────────────────────
@@ -452,7 +536,7 @@ class PromptDetector:
             logger.warning(f"[waiting] 상태 통지 실패: {e}")
 
     def remove(self, session_id: str) -> None:
-        self._windows.pop(session_id, None)
+        self._drop_window(session_id)
         self._waiting.pop(session_id, None)
         self._changed_at.pop(session_id, None)
         self._prompts.pop(session_id, None)
@@ -482,9 +566,10 @@ _global_detector: Optional[PromptDetector] = None
 
 def get_global_detector(on_change: Callable[[str, bool], None],
                         agent_for: Optional[Callable[[str], Optional[str]]] = None,
-                        on_badge: Optional[Callable[[str, Optional[str]], None]] = None
+                        on_badge: Optional[Callable[[str, Optional[str]], None]] = None,
+                        on_interrupt: Optional[Callable[[str], None]] = None
                         ) -> PromptDetector:
     global _global_detector
     if _global_detector is None:
-        _global_detector = PromptDetector(on_change, agent_for, on_badge)
+        _global_detector = PromptDetector(on_change, agent_for, on_badge, on_interrupt)
     return _global_detector
