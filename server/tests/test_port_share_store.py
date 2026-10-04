@@ -244,20 +244,29 @@ def test_records_without_required_fields_are_dropped(store, tmp_path):
 # --- 모드·PIN 변경은 터널을 안 건드린다 --------------------------------------------
 
 
-def test_set_mode_keeps_share_id_and_proxy_port(store):
-    """공개 URL이 살아남는 근거 — 이게 깨지면 모드 변경마다 주소가 죽는다."""
+def test_set_mode_keeps_proxy_port_and_rotates_share_id(store):
+    """proxyPort가 공개 URL이 살아남는 근거 — 이게 깨지면 모드 변경마다 주소가 죽는다.
+    shareId는 바뀐다: 이전 모드로 받은 쿠키가 새 모드에서 통하면 안 된다."""
     first, _ = store.create_share(3000, "앱", "public", HOUR)
+    first_id = first["shareId"]
     changed = store.set_mode(3000, "session")
     assert changed["mode"] == "session"
-    assert changed["shareId"] == first["shareId"]
+    assert changed["shareId"] != first_id
     assert changed["proxyPort"] == first["proxyPort"]
 
 
-def test_regenerate_pin_keeps_share_id_and_invalidates_old(store):
+def test_set_same_mode_changes_nothing(store):
+    first, _ = store.create_share(3000, "앱", "pin", HOUR)
+    first_id = first["shareId"]
+    assert store.set_mode(3000, "pin")["shareId"] == first_id
+
+
+def test_regenerate_pin_rotates_share_id_and_invalidates_old(store):
     first, old = store.create_share(3000, "앱", "pin", HOUR)
+    first_id = first["shareId"]
     share, new = store.regenerate_pin(3000)
     assert new != old
-    assert share["shareId"] == first["shareId"]
+    assert share["shareId"] != first_id, "옛 PIN으로 받은 쿠키를 죽이려면 shareId가 바뀌어야 한다"
     assert share["proxyPort"] == first["proxyPort"]
     assert store.verify_pin(store.get_share(3000), old) is False
     assert store.verify_pin(store.get_share(3000), new) is True

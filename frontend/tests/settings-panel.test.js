@@ -634,6 +634,34 @@ test('보안 — 기기 목록과 "이 기기" 배지', async () => {
   assert.strictEqual(trs[1].children[3].textContent, '기록 없음');
 });
 
+test('보안 — 기간 열: 임시·만료·영구를 구분하고, 접속 정보는 기기 셀 보조 줄에', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const { document } = await openSecurity({ devices: { devices: [
+    { id: 'a1b2c3d4', label: 'Android', added_at: now - 60, last_seen: now, current: true,
+      expires_at: now + 3 * 3600 + 30, expired: false, kind: 'temporary',
+      os: 'Android 15', browser: 'Chrome 140', ip_last: '203.0.113.5', via: 'tunnel' },
+    { id: 'ff00aa11', label: 'Windows', added_at: now - 9000, last_seen: now - 9000, current: false,
+      expires_at: now - 100, expired: true, kind: 'temporary' },
+    { id: '0011aabb', label: 'Mac', added_at: now - 86400, last_seen: now, current: false,
+      expires_at: now + 10 * 86400 + 30, expired: false, kind: 'persistent' },
+  ] } });
+  const trs = Array.from(document.querySelectorAll('.vt-set-devtable tbody tr'));
+  const life = trs.map((tr) => [tr.children[4].textContent, tr.children[4].dataset.state]);
+  assert.deepEqual(life, [['임시 · 3시간 남음', 'temp'], ['만료됨', 'expired'], ['10일 남음', 'persistent']]);
+  assert.strictEqual(trs[1].dataset.expired, '1');
+  assert.strictEqual(trs[0].querySelector('.vt-set-devmeta').textContent,
+    'Android 15 · Chrome 140 · 203.0.113.5 (터널)');
+  assert.strictEqual(trs[2].querySelector('.vt-set-devmeta'), null, '정보가 없는 예전 기기는 보조 줄을 그리지 않는다');
+  const helps = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
+  assert.ok(helps.some((t) => t.includes('fsh device prune')), '만료 기기가 있으면 정리 명령을 안내한다');
+});
+
+test('보안 — 만료 기기가 없으면 정리 안내를 띄우지 않는다', async () => {
+  const { document } = await openSecurity();
+  const helps = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
+  assert.ok(!helps.some((t) => t.includes('fsh device prune')));
+});
+
 test('보안 — 설정 변경 UI(입력·버튼)를 두지 않는다', async () => {
   const { document } = await openSecurity();
   const content = document.querySelector('.vt-set-content');

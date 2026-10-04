@@ -25,7 +25,7 @@ fsh stop [--purge] [--keep-tunnel]
                        # stop (--purge: also fully kill tmux sessions;
                        #       --keep-tunnel: leave the public entrance up)
 fsh status             # check current status
-fsh mobile [--e2e] [--session <name>]
+fsh mobile [--e2e] [--session <name>] [--temp]
                        # phone access URL + QR (server must be running; --e2e: encrypt payload)
 fsh manage             # TUI management tool (sessions/target/hotkeys/status) — Wave 4
 fsh attach [name]      # attach any tmux session in a new window
@@ -46,21 +46,27 @@ fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't inst
 fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)
 fsh password [clear]   # set web login password (stores a hash) / clear=unset
 fsh otp [status|setup|disable]   # require OTP when registering a new device (fully disabled until setup)
-fsh device [list|rename <id> <name>|revoke <id>]  # list/rename registered devices, revoke (also invalidates sessions if a phone is lost)
+fsh device [list|rename <id> <name>|revoke <id>|prune]  # list/rename registered devices (lifetime, OS/browser, last IP),
+                       #   revoke (also invalidates sessions if a phone is lost), prune expired devices now
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 fsh template [save|apply|list|rm] <name>  # save/apply CLAUDE.md templates
 fsh popup <action>     # quick fsh command invocation via tmux 3.2+ popup
 fsh run "..."          # run headless `claude -p` in background + TTS notification on completion
 fsh handoff mobile     # hand off the current tmux session to your phone (QR + #tmux=)
 fsh handoff desktop    # bring a phone session back to the Mac terminal
-fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|30d]
+fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]
                                    # expose another local port through FarShell's own reverse
                                    # proxy (2.2). Default --mode is session (logged-in devices
                                    # only) — pass --mode public for the old unauthenticated behavior
+                                   # Remote-control ports (Chrome DevTools 9222, Node inspector 9229, Docker API,
+                                   # ngrok/cloudflared local APIs, FarShell's proxy range) need --force.
+                                   # A session share prints a "처음 열기" link that starts at the main origin's
+                                   # /p/authorize — the public URL alone shows a notice to cookie-less visitors.
+                                   # Expired exposures are torn down (tunnel + listener) within a minute.
 fsh tunnel unexpose 3000          # stop the tunnel and its share policy for that port
-fsh tunnel pin 3000                # reissue the access PIN without touching the tunnel/URL
-fsh tunnel mode 3000 session       # change who can access without touching the tunnel/URL
-fsh tunnel list                   # list all open tunnels (main + extra ports)
+fsh tunnel pin 3000                # reissue the access PIN without touching the tunnel/URL (old-PIN visitors must re-enter)
+fsh tunnel mode 3000 session       # change who can access without touching the tunnel/URL (everyone re-authenticates)
+fsh tunnel list                   # list all open tunnels (main + extra ports), with mode and PIN-failure count
 fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
 fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook
 fsh tunnel watchdog               # check/start the zombie-reconnect auto-detection daemon (normally auto-started by fsh start/voice/mobile)
@@ -100,6 +106,7 @@ fsh start --force                      # Force a public tunnel even without auth
 fsh mobile --e2e                       # X25519 handshake + NaCl SecretBox E2E encryption
                                        #   (signed with the server's long-term identity key — TOFU pinning, trust on first connect)
 fsh mobile --session <tmux-session>    # the phone opens straight into this tmux session (also: fsh handoff mobile)
+fsh mobile --temp                      # The device registered by this QR expires after 1 day (fixed) — for lending access briefly
 ```
 
 To open a public tunnel with `--network all` (the default), you must first set up

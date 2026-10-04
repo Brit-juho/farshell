@@ -132,6 +132,20 @@ async def expose_port(port: int, request: Request):
             status_code=428,
         )
 
+    # 공개하면 그 자체가 원격 제어 수단이 되는 포트(port_share_store.danger_reason).
+    # 막지 않고 한 번 더 확인받는다 — CLI의 --force와 같은 등급. confirm과 따로 두는
+    # 이유: confirm은 "공개 인터넷에 연다"는 일반 확인이고, 이건 "이 포트는 특히
+    # 위험하다"는 별도 사실이라 화면이 그 이유를 보여 줘야 한다.
+    danger = pshare.danger_reason(port)
+    if danger and body.get("force_danger") is not True:
+        return JSONResponse(
+            {"ok": False, "error": "dangerous_port", "reason": danger,
+             "hint": "정말 노출하려면 force_danger=true 로 다시 요청하세요."},
+            status_code=409,
+        )
+    if danger:
+        logger.warning(f"[ports] 위험 포트 노출 확인됨: {port} — {danger}")
+
     net_mode = os.environ.get("VT_NETWORK_MODE", "all")
     if net_mode != "all":
         # 인증이 붙은 모드(session/pin)도 함께 막는다 — "접근 범위를 좁혀놓고
@@ -169,9 +183,8 @@ async def expose_port(port: int, request: Request):
             status_code=500,
         )
 
-    rc, out = await asyncio.to_thread(
-        _run_vt, "tunnel", "expose", str(port), label, "--proxy-port", str(share["proxyPort"])
-    )
+    vt_args = ["tunnel", "expose", str(port), label, "--proxy-port", str(share["proxyPort"])]
+    rc, out = await asyncio.to_thread(_run_vt, *vt_args)
     if rc != 0:
         await port_proxy.stop(port)
         await asyncio.to_thread(pshare.remove_share, port)
@@ -287,6 +300,49 @@ async def sync_port_proxy():
     for port in before | after:
         invalidate_share(port)
     return {"ok": True, **result}
+
+
+# --- 만료된 노출 정리 (2026-10) ---------------------------------------------------
+#
+# 만료된 share는 프록시가 404로 닫지만, 예전엔 cloudflared와 리스너가 계속 떠 있었다
+# (URL이 살아 있어 "닫혔는지"를 바깥에서 알 수 없다). 이제 주기적으로 터널까지 내린다.
+
+SWEEP_INTERVAL_SEC = 60.0
+
+
+async def sweep_expired_shares() -> list[int]:
+    """만료된 노출을 터널·리스너·정책까지 내린다. 내린 포트 목록을 돌려준다."""
+    done: list[int] = []
+    for stale in await asyncio.to_thread(pshare.expired_shares):
+        port = stale["port"]
+        # 그사이 같은 포트가 새로 노출됐으면(새 shareId·새 만료) 건드리지 않는다.
+        current = next((s for s in await asyncio.to_thread(pshare.list_shares, True)
+                        if s["port"] == port), None)
+        if current is None or current.get("shareId") != stale.get("shareId") \
+                or not pshare.is_expired(current):
+            continue
+        await port_proxy.stop(port)
+        invalidate_share(port)
+        rc, out = await asyncio.to_thread(_run_vt, "tunnel", "unexpose", str(port))
+        if rc != 0:
+            logger.warning(f"[ports] 만료된 노출 {port}의 터널 종료 실패: {out.strip()[:200]}")
+        # unexpose가 정책도 지우지만, CLI를 못 찾은 경우에도 정책은 남기지 않는다.
+        await asyncio.to_thread(pshare.remove_share, port)
+        logger.info(f"[ports] 만료된 노출 정리: 포트 {port}")
+        done.append(port)
+    return done
+
+
+async def expiry_sweep_loop() -> None:
+    """main.py lifespan이 띄운다. 예외로 루프가 죽지 않게 매 회 감싼다."""
+    while True:
+        try:
+            await sweep_expired_shares()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[ports] 만료 노출 정리 중 오류: {e}")
+        await asyncio.sleep(SWEEP_INTERVAL_SEC)
 
 
 @router.get("/api/tunnel/list")

@@ -627,12 +627,13 @@ _stop_extra_tunnel() {
 # 그 외에는 사람이 직접 친 것 — 정책이 아직 없으므로 여기서 전부 만든다.
 cmd_tunnel_expose() {
   local port="${1:-}"; shift || true
-  local label="" mode="session" ttl="1h" proxy_port=""
+  local label="" mode="session" ttl="1h" proxy_port="" force=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --mode) mode="${2:-}"; shift 2 ;;
       --ttl) ttl="${2:-}"; shift 2 ;;
       --proxy-port) proxy_port="${2:-}"; shift 2 ;;
+      --force) force=1; shift ;;
       --*) echo "  ✗ 알 수 없는 옵션: $1"; return 1 ;;
       *) [ -z "$label" ] && label="$1"; shift ;;
     esac
@@ -658,6 +659,18 @@ cmd_tunnel_expose() {
   local ttl_sec; ttl_sec="$(_ttl_word_to_seconds "$ttl")" || {
     echo "  ✗ 알 수 없는 만료: $ttl (1h|24h|7d|30d)"; return 1
   }
+  # 공개하면 그 자체가 원격 제어 수단이 되는 포트 — 판정은 웹과 같은 함수
+  # (port_share_store.danger_reason). 막지는 않고 --force로 한 번 더 확인받는다.
+  case "$port" in ''|*[!0-9]*) echo "  ✗ 포트는 숫자여야 합니다: '${port}'"; return 1 ;; esac
+  local danger; danger="$(_port_share_cli cli-danger "$port" 2>/dev/null)"
+  if [ -n "$danger" ]; then
+    echo "  ⚠ 포트 $port: $danger"
+    if [ $force -ne 1 ]; then
+      echo "  ✗ 위험한 포트라 노출하지 않았습니다. 정말 열려면 --force를 붙이세요."
+      return 1
+    fi
+    echo "  ⚠ --force — 경고를 확인하고 노출합니다"
+  fi
   if ! curl -sf "http://localhost:$VT_PORT/" -o /dev/null 2>/dev/null; then
     echo "  ✗ FarShell 서버가 실행 중이 아닙니다 — 리스너는 서버 프로세스 안에서만 뜹니다. 'fsh start' 먼저 실행하세요."
     return 1
@@ -689,7 +702,12 @@ cmd_tunnel_expose() {
   fi
 
   case "$mode" in
-    session) echo "     ⓘ 접근: 이 FarShell에 로그인한 기기만" ;;
+    session)
+      echo "     ⓘ 접근: 이 FarShell에 로그인한 기기만"
+      # 공개 주소를 직접 열면 안내만 뜬다(메인 주소를 드러내지 않는다). 처음엔 아래로 연다.
+      local _main _sid; _main="$(_main_tunnel_url)"; _sid="$(_json_field "$out" shareId)"
+      [ -n "$_main" ] && [ -n "$_sid" ] && echo "     ⓘ 처음 열기: ${_main%/}/p/authorize?share=${_sid}"
+      ;;
     pin) echo "     ⓘ 접속 코드: $pin — 다시 표시되지 않습니다 (재발급: fsh tunnel pin $port)" ;;
     public) echo "     ⚠ 접근: URL을 아는 누구나 (공개)" ;;
   esac
@@ -706,6 +724,7 @@ cmd_tunnel_pin() {
   fi
   _request_proxy_sync
   echo "  ✓ 새 접속 코드: $(_json_field "$out" pin) — 다시 표시되지 않습니다. 터널·URL은 그대로입니다."
+  echo "     ⓘ 이전 코드로 들어와 있던 사람도 새 코드를 입력해야 합니다."
 }
 
 cmd_tunnel_mode() {
@@ -722,9 +741,13 @@ cmd_tunnel_mode() {
     echo "  ✗ $out"; return 1
   fi
   _request_proxy_sync
-  echo "  ✓ 모드 변경: $mode. 터널·URL은 그대로입니다."
+  echo "  ✓ 모드 변경: $mode. 터널·URL은 그대로입니다. 이전에 통과한 사람은 다시 인증해야 합니다."
   local pin; pin="$(_json_field "$out" pin)"
   [ -n "$pin" ] && echo "     ⓘ 새 접속 코드: $pin — 다시 표시되지 않습니다"
+  if [ "$mode" = "session" ]; then
+    local _main _sid; _main="$(_main_tunnel_url)"; _sid="$(_json_field "$out" shareId)"
+    [ -n "$_main" ] && [ -n "$_sid" ] && echo "     ⓘ 처음 열기: ${_main%/}/p/authorize?share=${_sid}"
+  fi
 }
 
 # ── 터널 URL 변경 훅 (VT_TUNNEL_HOOK) ────────────────────────────────
@@ -1399,27 +1422,30 @@ cmd_mobile() {
   # 폰으로 접속할 URL과 QR을 보여준다. 서버·터널은 시작하지 않는다 — 그건 `fsh start`.
   # 옵션: --e2e              E2E 암호화로 열기(URL hash에 #e2e=1 — 서버 로그에 안 남는다)
   #       --session <이름>   폰이 열릴 때 이 tmux 세션을 바로 보도록(#tmux=<이름>)
+  #       --temp             이 QR로 등록되는 기기를 1일짜리 임시 기기로(남의 폰에 잠깐 열어 줄 때)
   #
   # 호환: 예전엔 이 명령이 서버까지 시작해서 --network/--safe/--force를 받았다. 그 옵션은
   # `fsh start`로 옮겼지만, 옛 스크립트(부팅 자동 시작 등)가 깨지지 않게 받으면
   # `fsh start`를 대신 실행한 뒤 QR을 보여준다.
-  local want_e2e=0 session=""
+  local want_e2e=0 want_temp=0 session=""
   local legacy=()
   local args=("$@") i=0
   while [ $i -lt ${#args[@]} ]; do
     local arg="${args[$i]}"
     case "$arg" in
       --e2e) want_e2e=1 ;;
+      --temp) want_temp=1 ;;
       --session) i=$((i+1)); session="${args[$i]:-}" ;;
       --session=*) session="${arg#--session=}" ;;
       --network) legacy+=("$arg" "${args[$((i+1))]:-}"); i=$((i+1)) ;;
       --network=*|--safe|--force) legacy+=("$arg") ;;
       --help|-h)
         echo ""
-        echo "  사용법: fsh mobile [--e2e] [--session <tmux세션>]"
+        echo "  사용법: fsh mobile [--e2e] [--session <tmux세션>] [--temp]"
         echo "    폰으로 접속할 URL과 QR을 보여줍니다. 서버가 떠 있어야 합니다(fsh start)."
         echo "    --e2e       E2E 암호화로 열기"
         echo "    --session   폰이 열릴 때 이 tmux 세션을 바로 보기"
+        echo "    --temp      이 QR로 등록되는 기기는 1일 뒤 만료(남의 폰에 잠깐 열어 줄 때)"
         echo ""
         return 0 ;;
       *) echo "  ✗ 알 수 없는 옵션: $arg (fsh mobile --help)"; return 1 ;;
@@ -1462,7 +1488,11 @@ cmd_mobile() {
   # URL에 박던 예전 방식은 그 값이 로그·히스토리·QR 이미지에 영구히 남는 문제가 있었다.
   local ticket full_url="$url" ticket_label="mobile"
   [ -n "$session" ] && ticket_label="handoff"
-  ticket="$(_issue_ticket "$ticket_label")"
+  if [ $want_temp -eq 1 ]; then
+    ticket="$(_issue_ticket "$ticket_label" temp)"
+  else
+    ticket="$(_issue_ticket "$ticket_label")"
+  fi
   [ -n "$ticket" ] && full_url="${full_url}?ticket=${ticket}"
   # hash fragment는 서버 로그에 남지 않는다. 프런트가 URLSearchParams로 읽으므로 &로 잇는다.
   local frag=""
@@ -1483,6 +1513,11 @@ cmd_mobile() {
   echo "  │                                         │"
   echo "  │  🔒 E2E 암호화 모드                        │"
   echo "  │     터널이 평문을 볼 수 없음               │"
+  fi
+  if [ $want_temp -eq 1 ] && [ -n "$ticket" ]; then
+  echo "  │                                         │"
+  echo "  │  ⏱ 임시 등록: 이 QR로 등록한 기기는       │"
+  echo "  │     1일 뒤 만료됩니다                      │"
   fi
   echo "  │                                         │"
   echo "  │  🎧 음성 전용 모드: 🎧 버튼 탭            │"
@@ -1642,8 +1677,8 @@ cmd_help() {
     fsh restart [옵션]      서버만 재기동 — 접속 주소는 유지됨 (코드·설정 반영은 이걸로)
     fsh stop [--purge]      종료 (--purge: tmux까지 / --keep-tunnel: 서버만)
     fsh status              서버·터널·접속 보안(범위·인증·OTP·기기) 상태
-    fsh mobile [--e2e] [--session <이름>]
-                            폰 접속 URL + QR (서버가 떠 있을 때)
+    fsh mobile [--e2e] [--session <이름>] [--temp]
+                            폰 접속 URL + QR (서버가 떠 있을 때, --temp: 이 QR로 등록한 기기는 1일 뒤 만료)
     fsh tunnel <동작>       터널 관리: list · expose/unexpose · pin · mode · setup/teardown/switch
                             · hook · restart · watchdog · status
     fsh doctor              설치/환경 진단 (doctor paste: 붙여넣기 진단)
@@ -1683,7 +1718,7 @@ cmd_help() {
   보안과 다른 맥
     fsh password [clear]    웹 로그인 비밀번호 설정/해제
     fsh otp                 새 기기 등록 시 OTP 요구 (status / setup / disable)
-    fsh device              등록된 기기 조회 · 이름 변경 · 폐기 (폰 분실 시)
+    fsh device              등록된 기기 조회 · 이름 변경 · 폐기 (폰 분실 시) · 만료 기기 정리 (prune)
     fsh host                다른 맥의 FarShell과 페어링 (별칭: hosts)
     fsh files               파일 저장소 + 공유 링크
     fsh git-account         git 계정 저장소
@@ -2389,8 +2424,20 @@ cmd_device() {
         return 1
       fi
       ;;
+    prune)
+      # 만료된 기기는 7일 뒤 자동으로 지워진다. 그 전에 목록을 비우고 싶을 때 쓴다.
+      local _out _n
+      _out="$(cd "$py_dir" && "$VT_PYTHON" -m auth device-prune)" || {
+        echo "  ✗ 정리 실패 (fsh doctor로 확인)"; return 1; }
+      _n="$(printf '%s' "$_out" | "$VT_PYTHON" -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?")"
+      if [ "$_n" = "0" ]; then
+        echo "  ✓ 정리할 만료 기기가 없습니다"
+      else
+        echo "  ✓ 만료된 기기 ${_n}개를 목록에서 지웠습니다"
+      fi
+      ;;
     *)
-      echo "  사용법: fsh device [list|rename <id> <별명>|revoke <id>]"
+      echo "  사용법: fsh device [list|rename <id> <별명>|revoke <id>|prune]"
       return 1
       ;;
   esac
@@ -2429,10 +2476,11 @@ cmd_git_account() {
 }
 
 # 모바일/핸드오프 URL에 붙일 1회용 기기 등록 티켓. 인증이 꺼져 있으면 빈 문자열.
+# 두 번째 인자가 temp면 이 티켓으로 등록되는 기기가 1일짜리 임시 기기가 된다.
 _issue_ticket() {
   [ -z "${VT_AUTH_PASSWORD_HASH:-${VT_PASSWORD_HASH:-}}" ] && [ -z "${VT_AUTH_TOKEN:-${VT_TOKEN:-}}" ] && return 0
   [ -z "${VT_PYTHON:-}" ] && return 0
-  (cd "$VT_DIR/server" && "$VT_PYTHON" -m auth ticket-new "$1" 2>/dev/null) || true
+  (cd "$VT_DIR/server" && "$VT_PYTHON" -m auth ticket-new "$1" ${2:+"$2"} 2>/dev/null) || true
 }
 
 # Wave 2 W2-4: 음성 daemon 타깃 세션 lock/해제 (V3-R)
@@ -2995,11 +3043,36 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + (' 준비�
   if [ -x "${VT_PYTHON:-}" ]; then
     local _otp_json _ndev
     _otp_json="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m auth otp-status 2>/dev/null)"
-    _ndev="$(cd "$VT_DIR/server" && "$VT_PYTHON" -c 'import auth,sys; sys.stdout.write(str(len(auth.list_devices())))' 2>/dev/null || echo "?")"
+    _ndev="$(cd "$VT_DIR/server" && "$VT_PYTHON" -c 'import auth,sys; d=auth.list_devices(); a=sum(1 for x in d if not x.get("expired")); e=len(d)-a; sys.stdout.write(str(a)+(" + 만료 "+str(e) if e else ""))' 2>/dev/null || echo "?")"
     if echo "$_otp_json" | grep -q '"enabled": *true'; then
       _check "OTP" ok "활성 — 새 기기 등록 시 코드 필요 (등록 기기 ${_ndev}개)"
     else
       _check "OTP" warn "미연동 — 비밀번호만으로 새 기기도 접속 가능 (등록 기기 ${_ndev}개). 'fsh otp setup'"
+    fi
+  fi
+
+  # 11-b2. 노출 중인 포트 — 위험 포트(Chrome 원격 디버깅 등)가 공개돼 있거나 PIN 실패가
+  # 쌓이고 있으면 알린다. 막지 않는다: 이미 열린 노출을 doctor가 내리지는 않는다.
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _shares _row _p _m _att _danger _risky="" _attacked=""
+    _shares="$(_port_share_cli cli-list 2>/dev/null)"
+    if [ -z "$_shares" ]; then
+      _check "노출 포트" ok "열린 노출 없음"
+    else
+      while IFS=$'\t' read -r _p _m _ _att; do
+        [ -z "$_p" ] && continue
+        _danger="$(_port_share_cli cli-danger "$_p" 2>/dev/null)"
+        [ -n "$_danger" ] && _risky="$_risky $_p"
+        [ "${_att:-0}" -ge 10 ] 2>/dev/null && _attacked="$_attacked $_p(${_att}회)"
+      done <<<"$_shares"
+      local _n; _n="$(printf '%s\n' "$_shares" | grep -c .)"
+      if [ -n "$_risky" ]; then
+        _check "노출 포트" warn "위험한 포트가 공개 중:${_risky} — 원격 제어 수단이 될 수 있습니다. 'fsh tunnel unexpose <port>'"
+      elif [ -n "$_attacked" ]; then
+        _check "노출 포트" warn "접속 코드 실패가 많은 포트:${_attacked} — 'fsh tunnel pin <port>'로 재발급하세요"
+      else
+        _check "노출 포트" ok "${_n}개 노출 중 (위험 포트 없음)"
+      fi
     fi
   fi
 
@@ -3736,6 +3809,8 @@ _tunnel_list() {
           if (f[1] != "") {
             mode_of[f[1]] = f[2]
             if (f[3] == "1") mode_of[f[1]] = mode_of[f[1]] " ⚠broken"
+            # PIN 실패 누적 — 공격받고 있는지 알 수 있게(share는 잠그지 않는다)
+            if (f[4] != "" && f[4] != "0") mode_of[f[1]] = mode_of[f[1]] " 실패" f[4]
           }
         }
       }

@@ -31,7 +31,7 @@ fsh tunnel teardown                  # 명명 터널 제거
 FarShell이 아니라 **다른 로컬 서버**(예: 3000번 포트)를 별도 터널로 공개한다. 접근 범위가 `all`일 때만 된다.
 
 ```bash
-fsh tunnel expose 3000 "앱 이름" [--mode public|session|pin] [--ttl 1h|24h|7d|30d]
+fsh tunnel expose 3000 "앱 이름" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]
 fsh tunnel unexpose 3000             # 해당 포트 터널·공유 정책 종료
 fsh tunnel pin 3000                  # 접속 코드 재발급 (터널·URL 유지)
 fsh tunnel mode 3000 <public|session|pin>   # 공유 모드 변경 (터널·URL 유지)
@@ -43,7 +43,8 @@ fsh tunnel mode 3000 <public|session|pin>   # 공유 모드 변경 (터널·URL 
 | `pin` | 접속 코드를 아는 사람만 |
 | `public` | URL을 아는 누구나 (인증 없음) |
 
-공개 인터넷에 여는 동작이라 `expose`는 확인을 요구한다.
+공개 인터넷에 여는 동작이라 `expose`는 확인을 요구한다. Chrome 원격 디버깅(9222) 같은 원격 제어 포트는 `--force`가 있어야 열린다.
+`session` 공유는 공개 주소를 그냥 열면 안내 화면만 뜬다 — `expose` 출력의 「처음 열기」 링크(또는 FarShell 포트 패널)로 시작한다. 기간이 끝난 노출은 1분 안에 터널까지 내려간다.
 
 ## 주소가 바뀔 때 알림
 

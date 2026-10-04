@@ -16,6 +16,11 @@ for _k in ("VT_AUTH_TOKEN", "VT_TOKEN", "VT_AUTH_PASSWORD_HASH", "VT_PASSWORD_HA
     os.environ.pop(_k, None)
 os.environ.pop("VT_ACCESS_SPEC", None)
 os.environ.pop("VT_TRUST_PROXY", None)
+# routes/ports.py의 `_run_vt`는 VT_DIR로 **실제 bin/fsh**를 찾아 실행한다(터널 열기·
+# 내리기). 개발자 셸에는 보통 VT_DIR이 있어서, 그대로 두면 lifespan의 만료 노출
+# 정리 루프나 expose 테스트가 사용자의 진짜 cloudflared를 건드릴 수 있다. 필요한
+# 테스트는 monkeypatch로 직접 넣는다.
+os.environ.pop("VT_DIR", None)
 os.environ.setdefault("VT_NETWORK_MODE", "all")
 
 # ⚠ 이 스위트는 **개발자의 실제 ~/.vt.env를 절대 읽지 않는다.**

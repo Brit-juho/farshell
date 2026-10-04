@@ -74,13 +74,13 @@ def test_cli_regenerate_pin_unknown_port(store, capsys):
     assert store._cli(["cli-regenerate-pin", "9999"]) == 1
 
 
-def test_cli_set_mode_keeps_share_id(store, capsys):
+def test_cli_set_mode_rotates_share_id(store, capsys):
     store._cli(["cli-create", "3000", "앱", "public", HOUR])
     before = json.loads(capsys.readouterr().out)["shareId"]
     store._cli(["cli-set-mode", "3000", "session"])
     after = _out(capsys)
     assert after["mode"] == "session"
-    assert after["shareId"] == before
+    assert after["shareId"] != before
 
 
 def test_cli_set_mode_to_pin_generates_pin(store, capsys):
@@ -104,7 +104,8 @@ def test_cli_list_outputs_tsv(store, capsys):
     capsys.readouterr()
     store._cli(["cli-list"])
     lines = capsys.readouterr().out.strip().splitlines()
-    assert sorted(lines) == ["3000\tpublic\t0", "4000\tpin\t0"]
+    # 열: 포트 · 모드 · broken · PIN 실패 누적
+    assert sorted(lines) == ["3000\tpublic\t0\t0", "4000\tpin\t0\t0"]
 
 
 def test_cli_unknown_command(store, capsys):

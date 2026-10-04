@@ -76,3 +76,18 @@ test('_groupByPid — 빈 목록은 빈 그룹을 반환한다', async () => {
   const { _groupByPid } = await load();
   assert.deepStrictEqual(Array.from(_groupByPid([])), []);
 });
+
+// 2026-10 — session 노출은 공개 주소를 바로 열면 안내 화면만 뜬다(메인 주소를 숨기려고).
+// 패널의 열기 링크는 FarShell 쪽 /p/authorize에서 시작해야 한다.
+test('shareOpenUrl — session 노출만 /p/authorize로 시작한다', async () => {
+  const { shareOpenUrl } = await load();
+  const url = 'https://app.trycloudflare.com';
+  assert.strictEqual(shareOpenUrl(url, { mode: 'session', shareId: 'a b/c' }),
+    '/p/authorize?share=a%20b%2Fc&next=%2F');
+  assert.strictEqual(shareOpenUrl(url, { mode: 'session', shareId: 'x' }, 'https://main.example/'),
+    'https://main.example/p/authorize?share=x&next=%2F', '다른 맥이면 그 맥의 주소를 앞에 붙인다');
+  assert.strictEqual(shareOpenUrl(url, { mode: 'pin', shareId: 'x' }), url);
+  assert.strictEqual(shareOpenUrl(url, { mode: 'public', shareId: 'x' }), url);
+  assert.strictEqual(shareOpenUrl(url, null), url);
+  assert.strictEqual(shareOpenUrl(url, { mode: 'session' }), url, 'shareId가 없으면 만들 수 있는 링크가 없다');
+});

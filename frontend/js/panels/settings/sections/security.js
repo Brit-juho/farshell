@@ -80,6 +80,9 @@ export function renderSecuritySection() {
     tableHost.appendChild(renderDeviceTable(rows));
     devHost.appendChild(tableHost);
     devHost.appendChild(statusLine("기기 폐기는 터미널에서 'fsh device revoke <id>'로 합니다 — 그 기기의 세션도 함께 끊깁니다."));
+    if (rows.some((d) => d.expired)) {
+      devHost.appendChild(statusLine("만료된 기기는 접속할 수 없고 7일 뒤 목록에서 지워집니다. 지금 정리하려면 'fsh device prune'."));
+    }
   }).catch(() => { devHost.innerHTML = ''; devHost.appendChild(statusLine('기기 목록을 확인할 수 없습니다.')); });
 
   vtFetch('/api/auth/elevation').then((r) => {
@@ -146,7 +149,7 @@ function renderDeviceTable(rows) {
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  for (const label of ['기기', 'id', '등록', '마지막 사용']) {
+  for (const label of ['기기', 'id', '등록', '마지막 사용', '기간']) {
     const th = document.createElement('th');
     th.textContent = label;
     headRow.appendChild(th);
@@ -158,6 +161,7 @@ function renderDeviceTable(rows) {
   for (const d of rows) {
     const tr = document.createElement('tr');
     if (d.current) tr.dataset.current = '1';
+    if (d.expired) tr.dataset.expired = '1';
 
     const label = document.createElement('td');
     label.textContent = d.label || '기기';
@@ -166,6 +170,13 @@ function renderDeviceTable(rows) {
       badge.className = 'vt-tag vt-set-devme';
       badge.textContent = '이 기기';
       label.appendChild(badge);
+    }
+    const meta = deviceMeta(d);
+    if (meta) {
+      const sub = document.createElement('span');
+      sub.className = 'vt-set-devmeta';
+      sub.textContent = meta;
+      label.appendChild(sub);
     }
 
     const id = document.createElement('td');
@@ -178,10 +189,44 @@ function renderDeviceTable(rows) {
     const seen = document.createElement('td');
     seen.textContent = fmtWhen(d.last_seen);
 
-    tr.append(label, id, added, seen);
+    const life = document.createElement('td');
+    const [lifeText, lifeState] = deviceLife(d, Date.now() / 1000);
+    life.className = 'vt-set-devlife';
+    life.dataset.state = lifeState;
+    life.textContent = lifeText;
+
+    tr.append(label, id, added, seen, life);
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
   return table;
+}
+
+const VIA_LABEL = { tunnel: '터널', tailscale: 'Tailscale', lan: 'LAN', local: '이 맥', direct: '직접' };
+
+// "Android 15 · Chrome 140 · 203.0.113.5 (터널)". 예전에 등록된 기기는 이 정보가 없어 빈 문자열.
+export function deviceMeta(d) {
+  const parts = [d.os, d.browser].filter(Boolean);
+  if (d.ip_last) {
+    const via = VIA_LABEL[d.via] || '';
+    parts.push(via ? `${d.ip_last} (${via})` : d.ip_last);
+  }
+  return parts.join(' · ');
+}
+
+function span(sec) {
+  const s = Math.max(0, Math.floor(sec));
+  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}분`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간`;
+  return `${Math.floor(s / 86400)}일`;
+}
+
+// [표시 문구, data-state]. state: expired / temp / persistent.
+export function deviceLife(d, nowSec) {
+  const exp = Number(d.expires_at) || 0;
+  if (d.expired || (exp && exp <= nowSec)) return ['만료됨', 'expired'];
+  if (!exp) return ['—', 'persistent'];
+  const left = `${span(exp - nowSec)} 남음`;
+  return d.kind === 'temporary' ? [`임시 · ${left}`, 'temp'] : [left, 'persistent'];
 }
 

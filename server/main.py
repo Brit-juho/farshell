@@ -312,7 +312,7 @@ async def lifespan(_app: FastAPI):
             "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
         )
     if auth.is_protected():
-        n_dev = len(auth.list_devices())
+        n_dev = sum(1 for d in auth.list_devices() if not d.get("expired"))
         if auth.totp_enabled():
             logger.info(f"[보안] OTP 활성 — 새 기기 등록 시 6자리 요구. 등록 기기 {n_dev}개")
         else:
@@ -364,6 +364,9 @@ async def lifespan(_app: FastAPI):
             )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[port-proxy] 리스너 복구 중 오류: {e}")
+    # 만료된 노출은 터널까지 내린다(routes/ports.py). 기동 직후 한 번 돌고 이후 1분마다.
+    import routes.ports as _ports_routes
+    port_expiry_task = asyncio.create_task(_ports_routes.expiry_sweep_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -379,6 +382,9 @@ async def lifespan(_app: FastAPI):
     finally:
         with suppress(Exception):
             await asyncio.to_thread(tmux_hooks.uninstall)
+        port_expiry_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await port_expiry_task
         await port_proxy.shutdown_all()
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
@@ -567,6 +573,11 @@ async def auth_login(request: Request):
     OTP 미연동(`vt otp setup` 전) 상태에서는 3~4가 조용히 기기 등록만 하고 넘어가므로
     동작이 기존과 완전히 같다. 그래서 나중에 OTP를 켜도 쓰던 기기는 잠기지 않는다.
     쿠키에는 비밀번호 원문이 아니라 HMAC 서명된 세션표가 실린다(auth.make_session).
+
+    기기 수명(2026-10): 4번에서만 `remember`(auth.REMEMBER_TTLS의 키)를 본다. 이미
+    등록된 기기(3번)는 그 값을 **무시**한다 — 등록된 기기의 수명을 로그인으로 바꾸는
+    경로를 두지 않는다. 티켓(1번)은 티켓에 묶인 `device_ttl`만 따른다. 세션은 기기보다
+    오래 살지 못하게 `min(SESSION_TTL, 기기 남은 수명)`으로 발급한다.
     """
     if not auth.is_protected():
         return JSONResponse({"ok": True, "no_token": True})
@@ -575,13 +586,22 @@ async def auth_login(request: Request):
         body = await request.json()
     except Exception:
         pass
+    if not isinstance(body, dict):
+        body = {}
     qp = request.query_params
     cred = body.get("token", "") or qp.get("token", "")
     ticket = body.get("ticket", "") or qp.get("ticket", "")
     otp = str(body.get("otp", "") or "")
+    remember = body.get("remember")
+    if remember in (None, ""):
+        remember = auth.REMEMBER_DEFAULT
+    if not isinstance(remember, str) or remember not in auth.REMEMBER_TTLS:
+        return JSONResponse({"error": "invalid_remember"}, status_code=400)
+    meta = auth.request_meta(request)
 
     device_secret = ""
     device_id = ""
+    device_life = 0  # 이 응답 시점의 기기 남은 수명(초) — 세션·쿠키 수명 상한
     # D14/D15: 잠금은 기기/IP 단위로 건다(전역 X) — 한 클라이언트의 실패가 다른
     # 클라이언트의 로그인·기기 등록까지 막지 않도록. 신뢰 프록시 설정을 그대로 따른다
     # (NetworkAccessMiddleware와 동일한 _effective_client_ip).
@@ -590,10 +610,17 @@ async def auth_login(request: Request):
     ) or "unknown"
 
     if ticket:
-        if not auth.consume_ticket(ticket):
+        hit = auth.consume_ticket(ticket)
+        if not hit:
             return JSONResponse({"error": "ticket_invalid"}, status_code=401)
-        device_secret, device_id = auth.register_device(_device_label(request))
-        logger.info(f"[auth] 티켓으로 기기 등록: {device_id} ({_device_label(request)})")
+        device_life = _ticket_device_ttl(hit)
+        device_secret, device_id = auth.register_device(
+            _device_label(request), ttl=device_life, method="ticket", meta=meta,
+        )
+        logger.info(
+            f"[auth] 티켓으로 기기 등록: {device_id} ({_device_label(request)}, "
+            f"{meta.get('via') or '?'} {meta.get('ip') or '?'}, {device_life}s)"
+        )
     else:
         locked = auth.password_lock_remaining(client_key)
         if locked:
@@ -608,9 +635,10 @@ async def auth_login(request: Request):
         auth.password_reset_failures(client_key)
 
         if kind == "password":
-            known = auth.verify_device(request.cookies.get("vt_device", ""))
+            known = auth.verify_device(request.cookies.get("vt_device", ""), meta=meta)
             if known:
                 device_id = known["id"]
+                device_life = auth.device_remaining(known)
             else:
                 if auth.totp_enabled():
                     otp_locked = auth.otp_lock_remaining(client_key)
@@ -628,20 +656,32 @@ async def auth_login(request: Request):
                             status_code=401,
                         )
                     auth.otp_reset_failures(client_key)
-                device_secret, device_id = auth.register_device(_device_label(request))
-                logger.info(f"[auth] 새 기기 등록: {device_id} ({_device_label(request)})")
+                device_life = auth.REMEMBER_TTLS[remember]
+                device_secret, device_id = auth.register_device(
+                    _device_label(request),
+                    ttl=device_life,
+                    method="password+otp" if auth.totp_enabled() else "password",
+                    meta=meta,
+                )
+                logger.info(
+                    f"[auth] 새 기기 등록: {device_id} ({_device_label(request)}, "
+                    f"{meta.get('via') or '?'} {meta.get('ip') or '?'}, {remember})"
+                )
         # kind는 이제 "password"만 가능하다 — 기계 토큰은 로그인 폼에서 받지 않는다
         # (credential_kind 주석 참조). 데몬은 Bearer/?token= 로 각 API를 직접 부른다.
 
     secure = auth.is_https(request)
+    session_ttl = auth.SESSION_TTL
+    if device_id and device_life > 0:
+        session_ttl = min(session_ttl, device_life)
     resp = JSONResponse({"ok": True, "device_id": device_id or None})
     resp.set_cookie(
         "vt_session",
-        auth.make_session(device_id),
+        auth.make_session(device_id, ttl=session_ttl),
         httponly=True,
         samesite="strict",
         secure=secure,
-        max_age=auth.SESSION_TTL,
+        max_age=session_ttl,
         path="/",
     )
     if device_secret:
@@ -651,10 +691,22 @@ async def auth_login(request: Request):
             httponly=True,
             samesite="strict",
             secure=secure,
-            max_age=auth.DEVICE_TTL,
+            max_age=device_life or auth.DEVICE_TTL,
             path="/",
         )
     return resp
+
+
+def _ticket_device_ttl(ticket_rec: dict) -> int:
+    """티켓에 묶인 기기 수명. 없거나 이상한 값이면 기본 수명(DEVICE_TTL).
+
+    티켓은 `python -m auth ticket-new`(맥 로컬)만 만들지만, 파일에서 읽는 값이라
+    형식과 범위를 다시 본다 — DEVICE_TTL보다 긴 값은 register_device도 자른다.
+    """
+    raw = ticket_rec.get("device_ttl") if isinstance(ticket_rec, dict) else None
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw <= 0:
+        return auth.DEVICE_TTL
+    return min(raw, auth.DEVICE_TTL)
 
 
 @app.get("/api/auth/status")
@@ -669,7 +721,11 @@ async def auth_status(request: Request):
         # 사람이 쓸 비밀번호는 없다. 설정 「보안」 탭이 그 둘을 구분해 보여준다.
         "password_set": bool(auth.VT_AUTH_PASSWORD_HASH),
         "otp_enabled": auth.totp_enabled(),
-        "device_known": bool(auth.verify_device(request.cookies.get("vt_device", ""))),
+        # 로그인 화면은 이 값이 false일 때만 "기기 기억" 선택을 보여 준다(등록된 기기는
+        # 수명을 바꾸지 않는다 — auth_login 참조). 마지막 접속 IP도 여기서 하루 단위로 갱신된다.
+        "device_known": bool(auth.verify_device(
+            request.cookies.get("vt_device", ""), meta=auth.request_meta(request)
+        )),
     }
 
 

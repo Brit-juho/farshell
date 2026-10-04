@@ -8,6 +8,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+
+- **노출 포트 보안 점검과 수정** (`server/routes/port_proxy_app.py`, `server/port_share_store.py`,
+  `server/routes/ports.py`). 클라이언트가 보낸 `X-Forwarded-For`·`X-Real-IP` 같은 프록시
+  헤더를 앱에 그대로 넘겨, 앱이 외부 요청을 로컬 요청으로 볼 수 있던 문제를 막았다.
+  PIN 재발급과 모드 변경 시 이전에 통과한 사람의 쿠키도 함께 무효가 된다. 만료된 기기의
+  포트 쿠키를 거절하고, 열린 WebSocket은 60초마다 자격을 다시 확인한다. session 모드는
+  쿠키 없는 방문자에게 터미널 주소를 알려 주지 않고 안내만 띄운다(처음 열기는 포트
+  패널이나 `fsh tunnel expose` 출력의 링크로). Chrome 원격 디버깅(9222) 같은 위험 포트는
+  `--force` 또는 웹 재확인 없이는 노출하지 않는다. PIN 실패는 IP와 함께 기록되고
+  `fsh tunnel list`에 누적 횟수가 보인다(IP별 60초 차단은 그대로, share는 잠그지 않는다).
+  만료된 노출은 1분 안에 터널까지 내려간다.
+
+### Fixed
+
+- **만료된 기기의 세션이 최대 24시간 더 살던 문제 수정** (`server/auth/__init__.py`).
+  세션 검증이 기기의 존재 여부만 보고 만료는 보지 않았다. 이제 쿠키 검증과 세션
+  검증이 같은 만료 판정(`auth/devices.py`의 `_alive`)을 쓰고, 열린 WS도 60초 워치독이
+  닫는다.
+
 ### Added
 - **세션·뷰 규칙 개편 (「Session and view rules」, `docs/ref/terminal.md`).** 재우기/깨우기와 「잠자는 중」 개념을
   없애고 동작을 **열기 / 닫기 / 옮기기 / 종료** 넷으로 정리했다. 닫기는 칸에서 빼기만 하고(tmux는 계속 돈다),
@@ -119,6 +139,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   재연결을 멈춘다. HUD 숫자는 5초마다 갱신한다.
 
 ### Added
+
+- **로그인·PIN 입력 상태 표시** (`frontend/js/gate.js`, PIN 페이지). Caps Lock이 켜져
+  있거나 한글이 입력되고 있으면 칸 아래에 알려 준다(사용자 지적: 한/영·Caps Lock이 안
+  보여 비밀번호를 자꾸 틀림). 키를 누르기 전에는 브라우저가 알려 주지 않아 미리
+  표시하지 않고, 모바일 키보드의 Caps Lock은 감지하지 못한다.
+
+- **임시 기기 등록과 기기 정보 기록** (`server/auth/devices.py`, `server/auth/client_info.py`,
+  `frontend/js/gate.js`). 처음 보는 기기는 로그인 화면에서 기억 기간(90일/24시간/1시간)을
+  고른다. 등록된 기기에는 이 선택이 보이지 않고 서버도 무시한다. `fsh mobile --temp`는
+  QR로 등록되는 기기를 1일짜리로 만든다. 세션은 기기보다 오래 살지 않는다. 기기마다
+  OS·브라우저·등록 방식·첫/마지막 접속 IP·접속 경로(터널/Tailscale/LAN)를 표시용으로
+  기록해 `fsh device list`와 설정 「보안」 탭에 보여 준다(인증에는 쓰지 않는다). 만료된
+  기기는 7일간 "만료"로 남았다가 자동으로 지워지고, `fsh device prune`으로 바로 지울 수
+  있다. 그동안 같은 기종이 여럿이면 목록에서 구분이 안 되던 문제(사용자 지적)에서
+  시작했다.
 
 - **코드 뷰어 자동 갱신 + 파일 뷰어 새로고침 버튼** (`server/fs_watch.py`,
   `/ws-fs-watch`, `shell/fs-watch.js`). 파일을 열어 둔 채 에이전트가 고쳐도

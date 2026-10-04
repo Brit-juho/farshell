@@ -69,8 +69,6 @@ def env(tmp_path, monkeypatch, upstream):
     importlib.reload(papp)
 
     monkeypatch.setattr(auth, "VT_AUTH_SESSION_KEY", "0123456789abcdef", raising=False)
-    monkeypatch.setattr(papp.tunnel, "get_tunnel_status",
-                        lambda: {"running": True, "url": "https://main.example", "mode": "anon"})
     papp._shares.clear()
     papp._pin_lockout._failures.clear()
 
@@ -127,15 +125,17 @@ def test_public_mode_passes_through(env):
     assert r.json()["path"] == "/hello?x=1"
 
 
-def test_session_mode_without_cookie_redirects_to_main_origin(env):
+def test_session_mode_without_cookie_shows_notice_without_main_url(env):
+    """2026-10: 쿠키 없는 방문자에게 메인 FarShell 주소를 알려 주지 않는다 — 예전엔
+    `/p/authorize`로 리다이렉트해서 앱 링크만 받은 사람도 터미널 주소를 알게 됐다."""
     share, _ = env.store.create_share(env.port, "앱", "session", HOUR)
     with env.client() as c:
         r = c.get("/deep/path", follow_redirects=False)
-    assert r.status_code == 302
-    loc = r.headers["location"]
-    assert loc.startswith("https://main.example/p/authorize")
-    assert f"share={share['shareId']}" in loc
-    assert "next=%2Fdeep%2Fpath" in loc
+    assert r.status_code == 403
+    assert "location" not in r.headers
+    assert "포트 패널" in r.text
+    assert "/p/authorize" not in r.text and share["shareId"] not in r.text
+    assert r.headers["x-frame-options"] == "DENY"
 
 
 def test_pin_mode_without_cookie_shows_pin_page(env):
@@ -173,12 +173,12 @@ def test_unknown_mode_is_rejected_not_defaulted_to_public(env):
     assert r.json()["error"] == "bad_mode"
 
 
-def test_session_mode_without_main_tunnel_is_503_not_open(env, monkeypatch):
+def test_session_mode_notice_does_not_depend_on_main_tunnel(env):
+    """안내 화면은 메인 주소를 쓰지 않으므로 메인 터널이 없어도 닫힌 채로 같은 화면이다."""
     env.store.create_share(env.port, "앱", "session", HOUR)
-    monkeypatch.setattr(env.app_mod.tunnel, "get_tunnel_status", lambda: {"running": False, "url": ""})
     with env.client() as c:
         r = c.get("/")
-    assert r.status_code == 503
+    assert r.status_code == 403
 
 
 # --- PIN 흐름 ------------------------------------------------------------------
@@ -303,15 +303,15 @@ def test_revoked_device_loses_port_access(env, monkeypatch):
     """fsh device revoke가 포트 접근까지 죽이는지 — 폰 분실 시의 요구사항."""
     share, _ = env.store.create_share(env.port, "앱", "session", HOUR)
     import auth
-    monkeypatch.setattr(auth, "_find_device", lambda did: {"id": did})
+    monkeypatch.setattr(auth, "find_alive_device", lambda did: {"id": did, "expires_at": time.time() + HOUR})
     value, _ = env.app_mod.mint_cookie(env.store.get_share(env.port), "dev123")
     with env.client() as c:
         c.cookies.set("fsh_pshare", value)
         assert c.get("/", follow_redirects=False).status_code == 200
-    monkeypatch.setattr(auth, "_find_device", lambda did: None)  # 폐기됨
+    monkeypatch.setattr(auth, "find_alive_device", lambda did: None)  # 폐기됨(또는 만료)
     with env.client() as c:
         c.cookies.set("fsh_pshare", value)
-        assert c.get("/", follow_redirects=False).status_code == 302
+        assert c.get("/", follow_redirects=False).status_code == 403
 
 
 # --- 우리 쿠키는 업스트림에 안 간다 -------------------------------------------------

@@ -7,6 +7,30 @@ import { openPanel, closePanel, setPanelPoll } from '../panel.js';
 import { vtFetch, vtEsc } from '../../core/api.js';
 import { _isCoarsePointer } from '../../core/env.js';
 import { confirmDialog, alertDialog, promptDialog, openDialog, nextId } from '../../core/dialog.js';
+import { relayPath } from '../../core/host-route.js';
+
+// 2026-10 — session("내 기기만") 노출의 공개 주소를 쿠키 없이 열면 안내 화면만 뜬다
+// (메인 FarShell 주소를 드러내지 않으려고 — server/routes/port_proxy_app.py
+// _session_only_page). 그래서 이 패널에서 여는 링크는 FarShell 쪽 `/p/authorize`에서
+// 시작한다: 로그인·기기를 확인하고 1회용 티켓을 붙여 공개 주소로 보내 준다.
+// `base`는 그 맥의 FarShell 주소 — 이 맥이면 빈 문자열(같은 origin의 상대 경로).
+export function shareOpenUrl(tunnelUrl, share, base = '') {
+  if (!share || share.mode !== 'session' || !share.shareId) return tunnelUrl;
+  return `${base.replace(/\/$/, '')}/p/authorize?share=${encodeURIComponent(share.shareId)}&next=%2F`;
+}
+
+// 다른 맥으로 전환해 그 맥의 포트를 보고 있으면 로그인 확인도 **그 맥**에서 받아야 한다
+// — 이 맥의 /p/authorize는 그 share를 모른다. 그 맥의 메인 주소를 물어 와서 쓴다.
+async function _openUrlFor(tunnelUrl, share) {
+  if (!share || share.mode !== 'session') return tunnelUrl;
+  if (relayPath('/api/ports') === '/api/ports') return shareOpenUrl(tunnelUrl, share);
+  try {
+    const d = await vtFetch('/api/tunnel/list');
+    if (d && d.main && d.main.url) return shareOpenUrl(tunnelUrl, share, d.main.url);
+  } catch { /* 아래로 */ }
+  showToast('그 맥의 FarShell 주소를 찾지 못했습니다 — 공개 주소로 엽니다(안내 화면이 뜰 수 있습니다)');
+  return tunnelUrl;
+}
 
 // 2.2 — 노출 모드 3가지(plan-2.2/00-port-access.md §1). files.js의 공유 링크
 // 다이얼로그와 같은 화면 언어(`.vt-fl-*`)를 재사용한다 — "파일을 공유"와
@@ -203,7 +227,7 @@ function showPorts(opts = {}) {
         if (p.tunnel_url) {
           ex.textContent = '미리보기';
           ex.title = p.tunnel_url;
-          ex.onclick = () => showPortPreview(p.port, p.tunnel_url);
+          ex.onclick = async () => showPortPreview(p.port, await _openUrlFor(p.tunnel_url, p.share));
         } else {
           ex.textContent = '공개';
           ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
@@ -277,6 +301,15 @@ async function _renderTunnelSection(ctx, body) {
       ${t.broken ? '<span class="vt-pt-tunnel-broken" title="내부 프록시가 뜨지 못했습니다 — 지금은 접속이 안 됩니다">⚠ 고장</span>' : ''}
       <a class="vt-pt-tunnel-url" href="${vtEsc(t.url)}" target="_blank" rel="noopener noreferrer">${vtEsc(t.url.replace(/^https:\/\//, ''))}</a>
     `;
+    // session 노출은 링크를 누를 때 /p/authorize부터 시작한다(shareOpenUrl). 표시·복사는
+    // 공개 주소 그대로 — 남에게 보내면 안내 화면만 보이고 FarShell 주소는 안 드러난다.
+    if (t.mode === 'session' && t.share) {
+      const a = row.querySelector('.vt-pt-tunnel-url');
+      a.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        window.open(await _openUrlFor(t.url, t.share), '_blank', 'noopener,noreferrer');
+      });
+    }
     const actions = document.createElement('span');
     actions.className = 'vt-pt-actions';
     const copyBtn = document.createElement('button');
@@ -467,11 +500,23 @@ async function _unexposeTunnel(ctx, port) {
       const choice = await openExposeDialog(port);
       if (!choice) return;
       showToast(`포트 ${port} 터널 여는 중…`);
-      const r = await _elevatedFetch(`/api/ports/${port}/expose`, {
+      const send = (extra) => _elevatedFetch(`/api/ports/${port}/expose`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true, mode: choice.mode, ttl: choice.ttl }),
-      }).catch((e) => { showToast(`공개 실패: ${e.message}`); return null; });
+        body: JSON.stringify({ confirm: true, mode: choice.mode, ttl: choice.ttl, ...extra }),
+      });
+      const r = await send({}).catch(async (e) => {
+        // 위험 포트(Chrome 원격 디버깅 등) — 서버가 이유를 알려 준다. 한 번 더 확인받는다.
+        if (e.status === 409 && e.data && e.data.error === 'dangerous_port') {
+          const ok = await confirmDialog(
+            `${e.data.reason}\n\n이 포트를 공개 인터넷에 열면 접근 제어가 있어도 위험합니다. 그래도 열까요?`,
+            { title: `포트 ${port}는 위험한 포트입니다`, okLabel: '그래도 공개', danger: true });
+          if (!ok) { showToast('공개를 취소했습니다'); return null; }
+          return send({ force_danger: true }).catch((e2) => { showToast(`공개 실패: ${e2.message}`); return null; });
+        }
+        showToast(`공개 실패: ${e.message}`);
+        return null;
+      });
       if (r) {
         if (r.pin) await _showPinOnce(r.pin);
         else showToast(r.url ? `공개됨: ${r.url}` : '공개됨');

@@ -35,6 +35,7 @@ fsh start --voice                      # Voice Daemon도 함께
 fsh mobile                    # 접속 URL + QR (서버가 떠 있어야 함)
 fsh mobile --e2e              # E2E 암호화로 열기 (터널이 평문을 보지 못함)
 fsh mobile --session dev      # 폰이 열릴 때 tmux 세션 'dev'를 바로 보기
+fsh mobile --temp             # 이 QR로 등록되는 기기는 1일 뒤 만료 (남의 폰에 잠깐 열어 줄 때)
 ```
 
 - URL에는 **5분짜리 1회용 등록 티켓**이 붙는다. 이 URL을 연 기기가 등록된다 — 남에게 보내지 않는다.
@@ -56,7 +57,7 @@ fsh mobile --session dev      # 폰이 열릴 때 tmux 세션 'dev'를 바로 �
 ```bash
 fsh password [clear]          # 웹 로그인 비밀번호 설정/해제
 fsh otp [status|setup|disable]
-fsh device [list|rename|revoke]
+fsh device [list|rename|revoke|prune]
 fsh tunnel list               # 열려 있는 터널 전부
 fsh doctor                    # 설치·환경·인증 점검
 ```
