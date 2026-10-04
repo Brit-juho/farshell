@@ -144,9 +144,8 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
   display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5);
   margin-top:calc(var(--spacing) * 3); padding-top:calc(var(--spacing) * 2.5); border-top:1px solid var(--line);
 }
-/* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 세션 시트 바닥 줄 */
-.vt-session-footer-item:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-session-footer-item input[type="checkbox"] { }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 세션 시트 바닥 줄 버튼은
+   마크업에서 `vt-menu-item`을 같이 달아야 한다(클래스가 빠져 브라우저 기본 버튼이던 적이 있다). */
 @media (min-width:720px) { .vt-session-backdrop { display:none; } }
 
 .spacer { flex:1; }

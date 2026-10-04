@@ -23,6 +23,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **모바일 세션 시트의 「지금 이 세션 맥에서 열기」 버튼이 브라우저 기본 모양이던 문제 수정**
+  (`picker.js`, `styles/screens/10-shell.css`). 마크업에 `vt-menu-item` 클래스가 빠져
+  컴포넌트 스타일이 안 걸렸다. 다른 목록 행 버튼과 같은 모양(아이콘 + 왼쪽 정렬)으로 통일했다.
 - **접힌 레일(48px)에서 「개입 필요」 세션이 아래 목록에 한 번 더 나오던 문제 수정**
   (`shell/rail-data.ts` `compactRailRows`, `Rail.tsx`). 접힌 레일은 구역 머리글이 없어
   하나의 목록으로 그린다 — 개입 필요가 위(이름순), 나머지가 아래(이름순), 각 세션은 한 번만.

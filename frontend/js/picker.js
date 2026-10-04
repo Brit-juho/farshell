@@ -117,7 +117,7 @@ async function renderSessionManager(backdrop) {
   if (_ordering && viewCount() < 2) _ordering = false;
   const toggle = viewCount() >= 2
     ? `<button class="vt-icon-btn xl vt-session-order-toggle${_ordering ? ' active' : ''}" type="button" aria-pressed="${_ordering}" aria-label="뷰 순서 편집">${icon('arrow-up-down', 16)}</button>` : '';
-  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">${_ordering ? '뷰 순서' : '세션 관리'}</h2><div class="vt-session-head-actions">${toggle}<button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div></div><div class="vt-session-list"></div>${_ordering ? '' : '<div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button></div>'}`;
+  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">${_ordering ? '뷰 순서' : '세션 관리'}</h2><div class="vt-session-head-actions">${toggle}<button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div></div><div class="vt-session-list"></div>${_ordering ? '' : `<div class="vt-session-footer"><button type="button" class="vt-menu-item vt-session-footer-item" id="session-open-mac-btn">${icon('terminal', 16)}<span class="vt-menu-item-label">지금 이 세션 맥에서 열기</span></button></div>`}`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
   const tg = sheet.querySelector('.vt-session-order-toggle');
   if (tg) tg.onclick = () => { _ordering = !_ordering; renderSessionManager(backdrop); };
