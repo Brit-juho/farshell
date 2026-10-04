@@ -195,10 +195,6 @@ def last_error() -> str:
     return _last_error
 
 
-def last_timing() -> Optional[dict]:
-    return _last_timing
-
-
 def _touch() -> None:
     global _last_use
     with _state_lock:

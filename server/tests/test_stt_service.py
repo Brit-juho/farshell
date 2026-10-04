@@ -211,7 +211,7 @@ def test_transcribe_basic_and_timing_and_no_download(fx):
     e = ready(fx)
     text, t = stt_service.transcribe_wav(b"wav", "ko")
     assert text == "안녕하세요" and set(t) == {"wait_ms", "load_ms", "stt_ms"}
-    assert stt_service.last_timing() == t and stt_service.last_error() == ""
+    assert stt_service.status_payload()["timing"] == {"last": t} and stt_service.last_error() == ""
     assert stt_service.loaded() and stt_service.loaded_model_id() == "qwen3-asr-0.6b-mlx"
     assert stt_service.loaded_engine_id() == "mlx_qwen3" and stt_service.rss_mb() == 77
     assert [c[1] for c in fx.calls].count("load") == 1
