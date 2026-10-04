@@ -117,7 +117,9 @@ def test_hooks_status_endpoint_reports_per_event(client, tmp_path, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False, "빈 설정이면 미등록"
-    assert set(body["events"]) == {"PreToolUse", "PostToolUse", "Stop", "SessionStart", "Notification"}
+    assert set(body["events"]) == {
+        "PreToolUse", "PostToolUse", "Stop", "SessionStart", "Notification", "PermissionRequest",
+    }
     assert body["events"]["Stop"] == "add"
     assert set(body["tools"]) == {"claude", "codex"}
     assert body["tools"]["codex"]["events"]["PermissionRequest"] == "add"
