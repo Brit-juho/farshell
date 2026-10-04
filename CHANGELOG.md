@@ -9,6 +9,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **음성 인식 엔진을 Qwen3-ASR 중심으로 교체했다.** 설정 「음성 및 알림」의 「음성 입력」에 이 서버가 쓸 수 있는
+  모델만 카드로 보이고 환경마다 하나에 **「권장」**이 붙는다. 카드마다 특징·정확도(CER)·속도·메모리·용량·필요한 것·
+  라이선스를 보여준다(측정: 합성 음성 20문장, Apple Silicon — `scripts/stt_bench.py`).
+  애플 칩 맥은 Qwen3-ASR 0.6B/1.7B(MLX)·Apple 음성 인식(macOS 26+), 모든 플랫폼은 Qwen3-ASR(llama.cpp, CPU).
+  **STT는 FarShell을 돌리는 서버 OS에서만 실행된다**(접속 기기는 녹음만 보낸다). `server/stt_engines/` 엔진 계층,
+  `stt_service.py`(선택·구동·직렬화·카탈로그), `GET /voice/stt/catalog`·`POST /voice/stt/setup` 추가.
+- **받는 것은 전부 확인 창을 거친다(승인제).** 서버·데몬·미리 적재는 이미 받은 것만 쓰고 없으면 「먼저 받아 주세요」로
+  멈춘다(이전에는 첫 음성 입력이 모델을 몰래 받았다). 엔진 실행 파일(llama.cpp)은 승인 후 앱이 받고 **버전 고정·sha256
+  검증**, pip 패키지는 설치 명령만 안내한다. 직접 입력(고급): 엔진 + `owner/repo`(경로·URL 거부).
+- **llama.cpp 엔진은 별도 프로세스**로 뜨고 127.0.0.1에만 열리며 실행마다 임의 API 키가 걸린다. 모델을 내리면 프로세스가
+  끝나 메모리가 OS로 실제로 돌아간다. 안 쓰면 자동으로 내린다(`VT_STT_IDLE_SEC` 기본 600초).
+- **음성 전송 개선.** 브라우저가 지원하는 녹음 형식을 골라 쓰고(webm → mp4(AAC) iPhone Safari 대응), 마이크를 모노·노이즈
+  억제·낮은 비트레이트로 열고, 전송 실패 시 두 번 재시도 후 「다시 보내기」 버튼으로 같은 녹음을 재전송한다.
+  `X-Voice-Id`로 재전송 중복 입력을 막고, 요청은 엔진 단위로 직렬화(대기 상한 4)하며 단계별 시간(`timing`)을 응답과 로그에 남긴다.
+- **작업 완료 알림 설정.** 알림 방식(끔/완료음/낭독)·최소 작업 시간·API 오류 응답 제외·웹 접속 중 제외. 기본은 끔.
+  판정은 `server/voice_notify.py`. `GET /voice/notify/clients` 추가.
+
 
 - **코드 뷰어 자동 갱신 + 파일 뷰어 새로고침 버튼** (`server/fs_watch.py`,
   `/ws-fs-watch`, `shell/fs-watch.js`). 파일을 열어 둔 채 에이전트가 고쳐도
@@ -97,6 +114,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   뒤로가기로 닫힌다.
 
 ### Changed
+- **작업 완료 알림이 음성 데몬 실행 여부와 무관해졌다.** 예전에는 데몬이 떠 있을 때만 낭독해서 웹만 쓰는 사람은
+  받을 수 없었다. 이제 설정(`voice.notifyMode`, 기본 끔)으로만 정한다. **기존에 데몬 때문에 낭독을 받던 사람은 설정에서
+  「응답 요약 낭독」을 켜야 한다.** `VT_NOTIFY_URL`(ntfy)을 둔 경우 푸시는 데몬과 무관하게 항상 나간다.
+
 
 - **세션 목록 변화를 tmux 훅이 바로 알린다** (`server/tmux_hooks.py`). 레일·플릿의
   세션 목록은 서버 감시가 5초마다 tmux를 물어 push했고, 기다리지 않게 서버 코드
@@ -240,6 +261,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   걸 평평하게 보여준다. 모바일에서는 60vh 카드 대신 전체높이 바텀시트다.
 
 ### Removed
+- **Whisper(faster-whisper)와 mlx-whisper 경로.** 맥에서는 CPU 전용이라 같은 정확도에서 MLX보다 약 10배 느렸고,
+  새 엔진이 모든 플랫폼을 덮는다. 이전에 고른 Whisper 모델은 설정에 안내가 뜨고 새 모델을 다시 골라야 한다.
+  저사양 서버(RAM 4GB 이하)에서는 llama.cpp 엔진(약 2GB)이 부담일 수 있다.
+- **Kokoro TTS 분기.** 설치 목록에 없어 한 번도 선택되지 않던 죽은 경로(Paseo의 Kokoro도 영어 전용이라 한국어 대체가 못 된다).
+  TTS는 edge-tts → macOS `say`. 구현이 없던 `VT_STT_BACKEND`·`VT_TTS_BACKEND` 안내도 지웠다(`VT_STT_MODEL`로 대체).
+
 
 - **스크롤백 영속화(N13)를 완전히 없앴다(ADR-43).** 켜면 터미널 출력을
   `~/.vt/scrollback/<session>.log`에 계속 쌓아 세션 종료·서버 재시작 이후에도
@@ -257,6 +284,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   설정 화면 「스크롤백」 절의 영속화 토글도 함께 사라졌다(줄 수 설정은 남는다).
 
 ### Fixed
+- **말하기 전에 2초 넘게 가만히 있으면 음성이 버려지던 것.** 무음 판정이 오디오의 앞 2초만 봤다 — 이제 전체(4샘플마다)를 본다.
+- **Stop 훅 낭독이 실제 트랜스크립트를 읽지 못하던 것.** `tts_hook.sh`는 줄 최상위의 `role`을 찾았지만
+  Claude Code 트랜스크립트는 `{"type":"assistant","message":{"role":...}}`라 일치하는 줄이 0이었다 — 훅이
+  조용히 종료해 응답 낭독이 나온 적이 없었다(실제 트랜스크립트 96개 assistant 줄 중 최상위 role 0건으로 확인).
+  두 형식을 모두 읽도록 고쳤다. 마지막 턴이 도구 호출로 끝나도 직전 text를 읽는다.
+- **음성 데몬 핫키 안내가 `Ctrl+Shift+V`로 남아 있던 것.** 기본값은 `ctrl+shift+m`이다(`fsh voice`·`fsh status`·
+  도움말·CLI 문서 정정).
+- **STT가 이벤트 루프에서 모델을 로드하던 것.** 첫 `transcribe`가 모델 로드(수 초~수십 초)를 루프에서 동기로 했다 — 스레드로 옮겼다.
+- **「다운로드된 모델」의 크기가 틀리고 삭제해도 공간이 안 돌아오던 것.** 캐시의 링크를 따라가며 더해 모든 모델이
+  두 배로 보였고(base 141MB → 296MB), 새 HF 캐시(xet)는 가중치가 폴더 밖 `hub/blobs/`에 있어 어떤 모델은 크기가
+  거의 0으로 보이고 폴더만 지우면 고아 파일이 남았다. 실제 파일을 한 번씩만 세고, 삭제 때 폴더 밖 가중치도 함께 지운다
+  (다른 모델이 같이 쓰는 파일은 남긴다). 직접 입력한 모델도 관리 목록에 보인다.
+
 
 - **‘연결된 화면’에서 웹 브라우저 탭을 각각 세고 끊을 수 있게 수정.** 같은 tmux
   세션을 연 모바일과 데스크톱이 웹 PTY 하나를 공유하던 attach 경로를 화면별 PTY로

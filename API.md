@@ -43,16 +43,19 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| POST | `/voice/input?session_id=X` | Voice → STT → session input |
+| POST | `/voice/input?session_id=X` | Voice → STT → session input. Body is the recording (`Content-Type`: `audio/webm` · `audio/mp4` · `audio/ogg` · `audio/wav`). Optional `X-Voice-Id` header: a re-sent recording with the same id is answered from memory (`duplicate: true`) and typed into the terminal only once. Returns `{text, injected, session_id, timing: {decode_ms, wait_ms, load_ms, stt_ms, total_ms}}`; `error` when the model is not ready (nothing is ever downloaded here); 429 when too many requests are queued |
 | POST | `/voice/output` | Text → TTS → returns audio |
 | POST | `/voice/cancel` | Immediately stop playing TTS (barge-in) |
 | POST | `/voice/local/start` | Start MacBook microphone recording |
 | POST | `/voice/local/stop?session_id=X` | Stop recording → STT → session input |
-| GET | `/voice/stt/status` | Check STT model readiness (does not load the model) |
-| POST | `/voice/stt/preload` | Preload the STT model — removes first-input latency when turning voice mode on |
-| POST | `/voice/stt/unload` | Unload the STT model — reclaims memory (~150MB) when turning voice mode off |
-| GET | `/voice/stt/model` | List downloaded STT model cache folders on disk (name, path, size) |
-| DELETE | `/voice/stt/model` | Delete one downloaded STT model cache folder — body `{"path": "..."}` (must be a path from the GET above) |
+| GET | `/voice/stt/status` | STT state — selected model, loaded model/engine, memory, current setup job, last error. Does not load a model |
+| GET | `/voice/stt/catalog` | Models this server can run (recommended one first, readiness, requirements, measured numbers) and the ones it cannot (with the reason), plus usable engines and the current selection. `?custom=<custom:engine:owner/repo>` adds that custom model |
+| POST | `/voice/stt/setup` | Start ONE preparation step in the background — body `{"model": "<id>", "step": "model" \| "req:<requirement id>"}`. The settings UI calls this only after the user confirms the download. 400 for unknown models/steps or items the app does not install itself (pip packages), 409 while another step runs. Progress is `setup` in `GET /voice/stt/status` |
+| GET | `/voice/notify/clients` | Number of web clients attached to `/ws-notify` — the Stop hook uses it for "don't notify while the web UI is open" |
+| POST | `/voice/stt/preload` | Load the selected model into memory (never downloads; `error` explains what is missing) |
+| POST | `/voice/stt/unload` | Unload the model and give the memory back (a llama.cpp engine process is terminated) |
+| GET | `/voice/stt/model` | Downloaded models (size in bytes, which one is selected) and engine programs the app downloaded |
+| DELETE | `/voice/stt/model` | Delete a downloaded model — body `{"model_id": "..."}` — or the app-downloaded llama.cpp — body `{"binary": "llama-server"}`. Shared weight files outside the repo folder are removed too (unless another model uses them); returns `freed_bytes` |
 
 ## Auth
 
