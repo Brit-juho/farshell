@@ -1,10 +1,10 @@
 import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession } from '../../../core/store.js';
 import { mountClients } from '../../../layout/clients.js';
-import { row, statusLine, toast } from '../controls.js';
+import { row, statusLine, toast, renderItems, group } from '../controls.js';
+import { renderVoiceInput, cleanupVoiceModels } from './voice-models.js';
 import { togglePush, refreshPushLabel } from '../../../pushui.js';
 import { getAction } from '../../../core/dom.js';
-import { confirmDialog } from '../../../core/dialog.js';
 
 // ── 「음성」 (N42 · 알림·음성 진단) ──────────────────────────────────────
 // (다른 탭 클릭 · 패널 닫기) 반드시 cleanup을 불러야 폴링 타이머가 안 샌다.
@@ -14,10 +14,13 @@ let _voiceClientsCleanup = null;
  *  settings.js의 rerender/onClose가 부른다. */
 export function cleanupVoiceClients() {
   if (_voiceClientsCleanup) { _voiceClientsCleanup(); _voiceClientsCleanup = null; }
+  cleanupVoiceModels();  // 모델 받기 진행 폴링
 }
 
 export function renderVoiceSection() {
   const frag = document.createDocumentFragment();
+  const notif = document.createDocumentFragment();  // 「알림」 구역
+  const desk = document.createDocumentFragment();   // 「데스크톱 음성」 구역
 
   // 1. 웹 푸시
   // 2026-09-18 — 구독 켜기/끄기(pushui.js)는 예전 ⋯ 메뉴의 마지막 남은 자리인
@@ -41,7 +44,7 @@ export function renderVoiceSection() {
   const pushRow = row('웹 푸시', pushBtns);
   const pushStatus = statusLine('확인 중…');
   pushRow.querySelector('.vt-set-label').appendChild(pushStatus);
-  frag.appendChild(pushRow);
+  notif.appendChild(pushRow);
   refreshPushLabel();
   vtFetch('/api/push/status').then((r) => {
     if (!r) return;
@@ -62,7 +65,19 @@ export function renderVoiceSection() {
   const notifyRow = row('작업 완료 알림', notifyBtn);
   const notifyStatus = statusLine('확인 중…');
   notifyRow.querySelector('.vt-set-label').appendChild(notifyStatus);
-  frag.appendChild(notifyRow);
+  notif.appendChild(notifyRow);
+  // 작업 완료 때 무엇을 할지. 기본은 끔 — 소리·낭독은 켠 사람에게만 난다.
+  notif.appendChild(renderItems({ items: [
+    { kind: 'select', key: 'voice.notifyMode', label: '알림 방식',
+      labels: { off: '끔', sound: '완료음만', speak: '응답 요약 낭독' },
+      help: 'Claude 작업이 끝났을 때. 음성 데몬을 켜지 않아도 동작합니다.' },
+    { kind: 'range', key: 'voice.notifyMinSec', label: '최소 작업 시간', step: 5, unit: '초',
+      help: '이 시간보다 짧게 끝난 작업은 알리지 않습니다. 0이면 항상 알립니다.' },
+    { kind: 'bool', key: 'voice.notifySuccessOnly', label: 'API 오류로 끝난 응답 제외',
+      help: '한도 초과·연결 오류 같은 오류 응답은 알리지 않습니다.' },
+    { kind: 'bool', key: 'voice.notifyOnlyUnfocused', label: '웹에 접속 중이면 알리지 않기',
+      help: '폰이나 브라우저로 화면을 보고 있는 동안에는 소리를 내지 않습니다.' },
+  ] }));
   vtFetch('/api/hooks/status').then((r) => {
     // TTS 요약은 Claude Stop 훅만 사용한다. Codex 훅 수를 합치면 실제 음성
     // 기능과 무관한 이벤트 때문에 분모가 바뀐다.
@@ -80,90 +95,8 @@ export function renderVoiceSection() {
     } catch (e) { toast(e.message || '발송 실패', 'error'); }
   });
 
-  // 3. Whisper 모델 (STT 메모리 상주 여부)
-  const preloadBtn = document.createElement('button');
-  preloadBtn.type = 'button'; preloadBtn.className = 'vt-btn sm quiet vt-set-reset'; preloadBtn.textContent = '미리 적재';
-  const unloadBtn = document.createElement('button');
-  unloadBtn.type = 'button'; unloadBtn.className = 'vt-btn sm quiet vt-set-reset'; unloadBtn.textContent = '내리기';
-  const sttBtns = document.createElement('div');
-  sttBtns.className = 'vt-set-btns';
-  sttBtns.append(preloadBtn, unloadBtn);
-  const sttRow = row('Whisper 모델', sttBtns);
-  const sttStatus = statusLine('확인 중…');
-  sttRow.querySelector('.vt-set-label').appendChild(sttStatus);
-  frag.appendChild(sttRow);
-  function refreshStt() {
-    vtFetch('/voice/stt/status').then((r) => {
-      if (!r) return;
-      sttStatus.textContent = !r.available ? '사용 불가' : (r.loaded ? `메모리 상주 · ${r.engine}` : '미적재');
-      preloadBtn.disabled = !r.available || r.loaded;
-      unloadBtn.disabled = !r.loaded;
-    }).catch(() => { sttStatus.textContent = '상태를 확인할 수 없습니다.'; });
-  }
-  refreshStt();
-  preloadBtn.addEventListener('click', async () => {
-    try {
-      const r = await vtFetch('/voice/stt/preload', { method: 'POST' });
-      toast(r.loaded ? `적재됨 · ${r.engine}` : '적재 실패');
-    } catch (e) { toast(e.message || '적재 실패', 'error'); }
-    refreshStt();
-  });
-  unloadBtn.addEventListener('click', async () => {
-    try {
-      const r = await vtFetch('/voice/stt/unload', { method: 'POST' });
-      toast(r.unloaded ? '내렸습니다' : '이미 내려가 있습니다');
-    } catch (e) { toast(e.message || '내리기 실패', 'error'); }
-    refreshStt();
-  });
-
-  // 3b. 다운로드된 모델 — 위 「Whisper 모델」이 메모리 적재/내리기(가벼움)라면
-  // 이건 디스크에 받아둔 가중치(~수백MB) 자체를 지우는 것. 별개 행으로
-  // 둔다 — 하나는 "지금 켤지", 하나는 "공간을 돌려받을지"로 성격이 다르다.
-  const modelListEl = document.createElement('div');
-  modelListEl.className = 'vt-set-model-list';
-  const modelRow = row('다운로드된 모델', modelListEl,
-    '지워도 기능은 그대로 켜져 있습니다 — 다음에 쓸 때 다시 받습니다(수백MB, 인터넷 필요).');
-  frag.appendChild(modelRow);
-  const fmtSize = (bytes) => {
-    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)}GB`;
-    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)}MB`;
-    return `${(bytes / 1024).toFixed(0)}KB`;
-  };
-  async function refreshModelList() {
-    modelListEl.textContent = '확인 중…';
-    try {
-      const r = await vtFetch('/voice/stt/model');
-      const models = (r && r.models) || [];
-      modelListEl.textContent = '';
-      if (!models.length) {
-        modelListEl.textContent = '받아둔 모델이 없습니다.';
-        return;
-      }
-      for (const m of models) {
-        const item = document.createElement('div');
-        item.className = 'vt-set-model-item';
-        const label = document.createElement('span');
-        label.className = 'vt-set-model-name';
-        label.textContent = `${m.name} · ${fmtSize(m.size_bytes)}`;
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'vt-btn sm quiet vt-set-reset danger';
-        delBtn.textContent = '삭제';
-        delBtn.addEventListener('click', async () => {
-          if (!await confirmDialog(`${m.name} 모델(${fmtSize(m.size_bytes)})을 지울까요?\n\n다음에 음성 입력을 쓰면 다시 받습니다.`, { title: '모델 삭제', okLabel: '삭제', danger: true })) return;
-          try {
-            await vtFetch('/voice/stt/model', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: m.path }) });
-            toast('모델을 지웠습니다');
-          } catch (e) { toast(e.message || '삭제 실패', 'error'); }
-          refreshStt();
-          refreshModelList();
-        });
-        item.append(label, delBtn);
-        modelListEl.appendChild(item);
-      }
-    } catch (e) { modelListEl.textContent = '상태를 확인할 수 없습니다.'; }
-  }
-  refreshModelList();
+  // 3. 음성 입력 + 받아 둔 항목 관리 — voice-models.js
+  const vm = renderVoiceInput();
 
   // 4. 맥에서 음성만 쓰기 (로컬 마이크 — 서버에 상태 조회 API가 없어
   //    버튼 라벨은 클라이언트가 마지막 응답을 기억해 토글한다)
@@ -184,7 +117,7 @@ export function renderVoiceSection() {
       }
     } catch (e) { toast(e.message || '실패', 'error'); }
   });
-  frag.appendChild(row('맥에서 음성만 쓰기', localBtn,
+  desk.appendChild(row('맥에서 음성만 쓰기', localBtn,
     '터미널 화면 없이 맥 마이크만 켭니다 — 이어폰으로 조작할 때 씁니다.'));
 
   // 5. 음성 전용 모드 — 실제 토글 로직·시각 상태(.active)는
@@ -205,16 +138,17 @@ export function renderVoiceSection() {
   };
   paintVoiceOnly();
   voiceOnlyBtn.addEventListener('click', () => { getAction('voice.only-toggle')?.(); paintVoiceOnly(); });
-  frag.appendChild(row('음성 전용 모드', voiceOnlyBtn,
+  desk.appendChild(row('음성 전용 모드', voiceOnlyBtn,
     '화면을 마이크 하나로 채웁니다 — 이어폰만으로 조작할 때 씁니다.'));
 
   // 6. 연결된 화면 — clients.js의 기존 렌더러를 그대로 이식(중복 구현 금지).
   const clientsHost = document.createElement('div');
-  frag.appendChild(clientsHost);
+  desk.appendChild(clientsHost);
   if (_voiceClientsCleanup) { _voiceClientsCleanup(); _voiceClientsCleanup = null; }
   const activeSess = getSession(activeSessionId());
   const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
   if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote);
 
+  frag.append(group('알림', notif), vm.input, vm.manage, group('데스크톱 음성', desk));
   return frag;
 }

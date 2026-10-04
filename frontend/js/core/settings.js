@@ -51,6 +51,15 @@ export const SCHEMA = {
   // 터치 기기에서 짧은 탭을 앱으로 합성 전달하는 기존 동작(term/xterm-setup.js).
   // 지금까지 끌 방법이 없었다.
   'mouse.touchTapToApp':    { type: 'bool', def: true },
+  // 음성 — STT 모델과 작업 완료 알림. 서버(stt_models.py·voice_notify.py)가 같은 키를
+  // workspace.json에서 읽는다: 서버는 값의 의미를 이 스키마가 아니라 자기 검증으로 다시 본다.
+  // sttModel은 서버 카탈로그의 모델 id 또는 'custom:<엔진>:<owner/repo>'. 빈 값이면 서버가
+  // 환경별 권장 모델로 해석한다. 형식 검증은 서버가 한다.
+  'voice.sttModel':         { type: 'str',  def: '' },
+  'voice.notifyMode':       { type: 'enum', def: 'off', values: ['off', 'sound', 'speak'] },
+  'voice.notifyMinSec':     { type: 'int',  def: 0, min: 0, max: 600 },
+  'voice.notifySuccessOnly':   { type: 'bool', def: true },
+  'voice.notifyOnlyUnfocused': { type: 'bool', def: false },
   'a11y.screenReader':      { type: 'enum', def: 'auto', values: ['auto', 'on', 'off'], migrate: 'vt-a11y',
                               parse: (v) => (v === '1' ? 'on' : v === '0' ? 'off' : 'auto') },
   'theme.skin':             { type: 'str',  def: 'farshell', migrate: 'vt-skin' },

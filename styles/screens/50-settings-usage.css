@@ -127,6 +127,10 @@
 /* 2026-09-18(3차) — 설정 「음성」의 「다운로드된 모델」 목록. .vt-set-row의
    control 칸(오른쪽, 가변폭)에 들어가므로 폭은 그 칸을 그대로 따른다 —
    여기서 새로 고정폭을 주지 않는다. */
+.vt-set-model-pick { display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); min-width:0; }
+.vt-set-model-custom { display:flex; gap:calc(var(--spacing) * 2); min-width:0; }
+.vt-set-model-custom input { flex:1 1 auto; min-width:0; }
+.vt-set-model-custom[hidden] { display:none; }
 .vt-set-model-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); min-width:0; }
 .vt-set-model-item {
   display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2);
@@ -646,3 +650,55 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 /* 메인(터미널 위 온보딩·가이드 등 텍스트 표면)은 기준선을 base로 두고 패딩을
    한 단계 더 준다. 터미널 자체는 xterm이 자기 폰트 크기를 쓰므로 영향 없다. */
 #terminal-container { font-size:var(--fs-base); }
+
+/* 설정 「음성 입력」 — 모델 카드·준비 체크리스트(voice-models.js). 색은 토큰만, 폭은 부모를 따른다. */
+.vt-vm { display:flex; flex-direction:column; gap:calc(var(--spacing) * 3); min-width:0; margin-top:calc(var(--spacing) * 2); }
+.vt-vm-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); min-width:0; }
+.vt-vm-card { min-width:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--menu-hover); }
+.vt-vm-card[data-checked="true"] { border-color:var(--acc); }
+.vt-vm-pick { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 2); cursor:pointer; min-width:0; }
+.vt-vm-pick:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+.vt-vm-head { display:flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 1.5); }
+.vt-vm-name { font:600 var(--fs-sm) var(--ui); color:var(--txt); overflow-wrap:anywhere; }
+.vt-vm-tag-rec { color:var(--acc); }
+.vt-vm-tag-cur { color:var(--color-st-working); }
+.vt-vm-state[data-state="ready"] { color:var(--color-st-working); }
+.vt-vm-state[data-state="get"] { color:var(--color-st-waiting); }
+.vt-vm-state[data-state="need"] { color:var(--color-st-error); }
+.vt-vm-tagline { font:400 var(--fs-xs) var(--ui); color:var(--txt); }
+.vt-vm-metrics { display:grid; grid-template-columns:1fr; gap:calc(var(--spacing) * 1); }
+.vt-vm-metric { display:grid; grid-template-columns:minmax(0, 9em) auto minmax(0, 1fr); align-items:center; gap:calc(var(--spacing) * 2); font:400 var(--fs-xs) var(--ui); }
+.vt-vm-mlabel { color:var(--sub); }
+.vt-vm-mval { color:var(--txt); font-family:var(--mono); white-space:nowrap; }
+.vt-vm-bar { display:block; height:6px; min-width:40px; border-radius:var(--radius-sm); background:var(--line); overflow:hidden; }
+.vt-vm-fill { display:block; height:100%; width:var(--vm-w, 0%); background:var(--acc); }
+.vt-vm-nobench, .vt-vm-facts { font:400 var(--fs-xs) var(--ui); color:var(--sub); overflow-wrap:anywhere; }
+.vt-vm-basis { font:400 var(--fs-3xs) var(--ui); color:var(--sub); overflow-wrap:anywhere; }
+.vt-vm-notes, .vt-vm-fold { font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-vm-notes { padding:0 calc(var(--spacing) * 2) calc(var(--spacing) * 2); }
+.vt-vm-notes summary, .vt-vm-fold summary { cursor:pointer; }
+.vt-vm-notes ul { margin:calc(var(--spacing) * 1) 0 0; padding-left:1.2em; }
+.vt-vm-check { display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2); border:1px solid var(--line); border-radius:var(--radius-sm); min-width:0; }
+.vt-vm-check[hidden], .vt-vm-legacy[hidden], .vt-vm-fold[hidden] { display:none; }
+.vt-vm-check-title { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-vm-req { display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 1); min-width:0; max-width:100%; }
+.vt-vm-req-label { font:500 var(--fs-xs) var(--ui); color:var(--txt); }
+.vt-vm-code { display:flex; align-items:center; gap:calc(var(--spacing) * 2); max-width:100%; min-width:0; }
+.vt-vm-code code { flex:1 1 auto; min-width:0; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1.5); border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--color-term-bg); color:var(--txt); font:400 var(--fs-xs) var(--mono); overflow-wrap:anywhere; user-select:all; }
+.vt-vm-prog { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); }
+.vt-vm-step { display:flex; justify-content:space-between; gap:calc(var(--spacing) * 2); font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-vm-step[data-state="done"] .vt-vm-step-state { color:var(--color-st-working); }
+.vt-vm-step[data-state="error"] .vt-vm-step-state { color:var(--color-st-error); }
+.vt-vm-error { color:var(--color-st-error); font:400 var(--fs-xs) var(--ui); overflow-wrap:anywhere; }
+.vt-vm-actions { flex-wrap:wrap; }
+.vt-vm-unsup, .vt-vm-custom { display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 2); margin-top:calc(var(--spacing) * 2); min-width:0; max-width:100%; }
+.vt-vm-custom .vt-input, .vt-vm-custom .vt-select-wrap { max-width:100%; width:100%; }
+.vt-vm-unsup-item { min-width:0; }
+.vt-vm-manage { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); min-width:0; font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+@media (max-width:560px) {
+  .vt-vm-metric { grid-template-columns:1fr auto; }
+  .vt-vm-metric .vt-vm-bar { grid-column:1 / -1; }
+}
+/* 모델 관리 행은 control 칸이 좁아지지 않게 세로로 쌓는다 */
+.vt-set-row:has(> .vt-vm-manage) { flex-direction:column; }
+.vt-set-row:has(> .vt-vm-manage) .vt-vm-manage { width:100%; }
