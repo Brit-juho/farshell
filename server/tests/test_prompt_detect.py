@@ -249,6 +249,19 @@ def test_options_extracted_on_enter_hit(det):
     ]
 
 
+def test_options_deduped_when_dialog_is_redrawn(det):
+    """전체화면 TUI가 대화상자를 다시 그려도 선택지는 한 벌만 나온다."""
+    d, _ = det
+    one = b"Do you want to proceed?\r\n\xe2\x9d\xaf 1. Yes\r\n  2. Yes, and don't ask again\r\n  3. No\r\n"
+    d.feed("s1", one + b"\x1b[2J\x1b[H" + one)
+    _, options = d.get_prompt("s1")
+    assert options == [
+        {"key": "1", "label": "Yes"},
+        {"key": "2", "label": "Yes, and don't ask again"},
+        {"key": "3", "label": "No"},
+    ]
+
+
 def test_options_extracted_when_output_has_ansi_noise(det):
     """실기기 검증(2.1.0)에서 재현 — 실제 CLI 출력은 옵션 줄 사이에 커서 이동
     (`\\x1b[3S\\x1b[46;2H`)·줄지우기(`\\x1b[K`)·캐리지리턴 단독(`\\r`)이 낀다.

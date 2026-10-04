@@ -246,7 +246,8 @@ def _extract_prompt(pats: dict, joined: bytes
             found = regex.findall(text)
             if found:
                 options = []
-                for match in found[:6]:  # 화면에 6개 넘게 그릴 일은 없다 — 방어적 상한
+                seen_keys: dict[str, int] = {}
+                for match in found:
                     # 기존 패턴은 (번호, 라벨), Codex는 (라벨, 실제 단축키)다.
                     # named group이 있으면 우선하고, 없으면 기존 2튜플 계약을 유지한다.
                     if isinstance(match, tuple) and len(match) >= 2:
@@ -255,7 +256,17 @@ def _extract_prompt(pats: dict, joined: bytes
                             label = match[regex.groupindex["label"] - 1]
                         else:
                             key, label = match[0], match[1]
-                        options.append({"key": str(key).strip(), "label": str(label).strip()})
+                        key = str(key).strip()
+                        entry = {"key": key, "label": str(label).strip()}
+                        # 전체화면 TUI는 같은 대화상자를 다시 그린다 — 윈도우에 같은 선택지가
+                        # 여러 벌 들어 있으면 버튼이 2~3벌로 불어난다(폰 실측 2026-10-05).
+                        # 같은 키는 처음 자리에 두고 가장 최근 라벨로 덮는다.
+                        if key in seen_keys:
+                            options[seen_keys[key]] = entry
+                        else:
+                            seen_keys[key] = len(options)
+                            options.append(entry)
+                options = options[:6]  # 화면에 6개 넘게 그릴 일은 없다 — 방어적 상한
                 break
 
     return question, options, kind

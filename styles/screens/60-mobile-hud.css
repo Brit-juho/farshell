@@ -250,7 +250,11 @@
   font:400 var(--fs-2xs) var(--mono);
   color:var(--sub);
 }
-  .vt-fleet-answers { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); margin-top:2px; }
+  .vt-fleet-answers { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 2); margin-top:2px; }
+  /* 폰 실측(SM_A5260, 2026-10-05): sm 버튼은 높이 24px에 간격 6px라 손가락(44px)으로
+     「Yes」와 「No」를 가려 누를 수 없었다. 승인 버튼은 폰에서 가장 위험한 탭이므로
+     이 줄에서만 키운다(다른 화면의 sm 은 그대로). */
+  .vt-fleet-answers .vt-btn { --btn-h: 44px; }
   /* 2.1.6 — `.vt-btn.sm`(선택지) / `.vt-btn.sm.solid`(「터미널로」 대표 액션)으로
      대체. 승인 버튼은 폰에서 가장 중요한 액션인데 hover·active만 있고
      focus-visible·disabled가 없었다 — 컴포넌트가 다섯 상태를 다 갖는다. */
