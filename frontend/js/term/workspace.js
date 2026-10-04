@@ -1,8 +1,8 @@
 // 부팅 때 저장된 레이아웃의 세션을 다시 붙인다. F4에서 terminal.js에서 분리.
 // 2026-10-03 — 옛 세션 목록 스냅샷(vt-workspace-v1, saveWorkspace/
-// restoreWorkspace)은 없앴다: 세션 목록·순서의 출처는 이제 레이아웃 하나다
+// restoreWorkspace)은 없앴다: 세션 목록·이동 순서의 출처는 이제 레이아웃 하나다
 // (layout/persist.js). session.js와 순환 import지만 호출 시점에만 쓴다.
-import { getSession, setSessionOrder } from '../core/store.js';
+import { getSession } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { screenId } from '../core/screen-id.js';
@@ -17,7 +17,7 @@ import { attachRemoteSession } from './remote.js';
 // 이어서 layout/persist.js restoreLayout이 트리로 놓는다.
 export async function attachLayoutSessions(infos) {
   let failed = 0;
-  const order = [];
+  let opened = 0;
   const seen = new Set();
   let live = null;
   for (const info of infos || []) {
@@ -39,7 +39,7 @@ export async function attachLayoutSessions(infos) {
         });
         const data = res.ok ? await res.json() : null;
         id = data && data.id;
-        if (id && !getSession(id)) addSession(id, data.name || info.tmux, undefined, { place: 'none', tmuxName: info.tmux });
+        if (id && !getSession(id)) addSession(id, data.name || info.tmux, { place: 'none', tmuxName: info.tmux });
       } else if (info.id) {
         // 비-tmux(순수 PTY) 칸 — 서버가 이 브라우저 탭의 그 PTY를 아직 들고 있을 때만.
         if (!live) {
@@ -48,13 +48,12 @@ export async function attachLayoutSessions(infos) {
           if (r && r.ok) for (const x of await r.json()) live.set(x.id, x);
         }
         const x = live.get(info.id);
-        if (x) { id = x.id; if (!getSession(id)) addSession(id, x.name || id, undefined, { place: 'none', ...(x.tmux_name ? { tmuxName: x.tmux_name } : {}) }); }
+        if (x) { id = x.id; if (!getSession(id)) addSession(id, x.name || id, { place: 'none', ...(x.tmux_name ? { tmuxName: x.tmux_name } : {}) }); }
       }
-      if (id) order.push(id); else failed++;
+      if (id) opened++; else failed++;
     } catch (_) { failed++; }
   }
-  if (order.length) setSessionOrder(order);
   if (failed > 0) showToast(`세션 ${failed}개를 열지 못했습니다 (이미 종료됨)`);
-  return order.length;
+  return opened;
 }
 

@@ -75,6 +75,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **세션 이동 순서를 저장되는 레이아웃 하나로 통일했다**(뷰 탭 순서 → 칸 순서). 스와이프·모바일 다음/이전 탭 키·세션 시트(`n/m` 포함)·팔레트가
+  같은 목록을 쓰고, 단일 칸 뷰의 이동이 다른 뷰의 세션을 끌어와 현재 칸을 덮던 문제를 고쳤다(이동만 한다). 별도 순서 배열은 삭제.
+  `Mod+Alt+Shift+←/→`는 모바일에서도 뷰 탭을 옮긴다.
+
 - **`fsh mobile`은 이제 폰 접속 URL과 QR만 보여준다. 서버·터널 시작은 `fsh start`.** `--network`,
   `--safe`, `--force`는 `fsh start`로 옮겼다(`--e2e`는 URL 옵션이라 `mobile`에 남고, `--session <이름>` 추가).
   옛 옵션을 `mobile`에 주면 안내를 내고 `fsh start`를 대신 실행한다(호환). `fsh handoff mobile`은

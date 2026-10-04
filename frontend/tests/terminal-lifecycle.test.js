@@ -135,7 +135,7 @@ test('addSession: 세션 레코드가 등록되고 즉시 활성 세션이 된�
 
   assert.ok(window.sessions['sess-1'], '세션 레코드가 등록돼야 한다');
   assert.strictEqual(window.sessionDisplayName('sess-1'), 'my session');
-  assert.strictEqual(window.orderedSessionIds().join(','), 'sess-1');
+  assert.strictEqual(Object.keys(window.sessions).join(','), 'sess-1');
   assert.strictEqual(window.activeId, 'sess-1');
 
   const wrapper = document.getElementById('term-sess-1');
@@ -151,7 +151,7 @@ test('addSession: id 없이 호출되면 유령 세션을 만들지 않는다', 
   const { window, addSession } = await buildTerminalWindow();
   addSession('', 'no id');
   assert.strictEqual(Object.keys(window.sessions).length, 0);
-  assert.strictEqual(window.orderedSessionIds().length, 0);
+  assert.strictEqual(Object.keys(window.sessions).length, 0);
   assert.strictEqual(window.document.querySelectorAll('[id^="term-"]').length, 0);
 });
 
@@ -172,25 +172,28 @@ test('switchTo: 이전 세션은 숨고, 새 세션이 활성/표시로 전환�
   assert.strictEqual(where('b').id, 'vt-term-stage');
 });
 
-// 2026-09-23 — 데스크톱은 이 단축키의 대상이 헤더 탭(화면)으로 바뀌었다
-// (session.js `_desktopTabs` 분기, 설계 승인). 모바일은 헤더 탭 바 자체가
-// 숨겨져 있어(80-dock.css) 세션 순서 기준을 그대로 쓴다 — 아래 두 테스트로
-// 갈라 검증한다.
-test('switchTabByOffset: 모바일(<720)에서는 세션 목록 끝에서 순환한다', async () => {
-  const { window, addSession } = await buildTerminalWindow();
+// 2026-09-23 — 데스크톱은 이 단축키의 대상이 헤더 탭(화면)이다. 모바일은 헤더 탭
+// 바가 숨겨져 있어(80-dock.css) 스와이프와 같은 함수(compact.js stepSession)로
+// 다음/이전 **세션**을 간다 — 순서는 뷰 탭 → 칸 순서(레이아웃 하나). 아래 두
+// 테스트로 갈라 검증한다.
+test('switchTabByOffset: 모바일(<720)에서는 화면 순서 끝에서 순환하고 세션을 옮기지 않는다', async () => {
+  const { window, addSession, layoutStore } = await buildTerminalWindow();
   Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
-  addSession('a', 'A');
-  addSession('b', 'B');
-  addSession('c', 'C'); // 활성 = c
-
-  // switchTabByOffset은 export되지 않지만, 키보드 단축키 없이 테스트가 직접
-  // 부를 수 있도록 term/session.js가 의도적으로 window 브리지를 유지한다
-  // (term/session.js 하단 주석 참고).
-  window.switchTabByOffset(1); // c → (순환) a
-  assert.strictEqual(window.activeId, 'a');
-
-  window.switchTabByOffset(-1); // a → (역순환) c
+  addSession('a', 'A');                                   // 뷰 1
+  addSession('b', 'B');                                   // 같은 칸을 덮는다(배정)
+  layoutStore.openLayoutTab({ sessionId: 'a' });          // a를 자기 뷰로
+  addSession('c', 'C', { place: 'view' });                // 뷰 3 — 활성 = c
+  const shape = JSON.stringify(layoutStore.getTabsWithTrees().map((t) => t.tree));
+  const order = () => layoutStore.getTabsWithTrees().flatMap((t) => (t.tree.session ? [t.tree.session] : []));
   assert.strictEqual(window.activeId, 'c');
+  const want = order();
+  assert.strictEqual(want.length, 3);
+
+  window.switchTabByOffset(1);                            // 끝 → 처음(순환)
+  assert.strictEqual(window.activeId, want[0]);
+  window.switchTabByOffset(-1);                           // 처음 → 끝(역순환)
+  assert.strictEqual(window.activeId, 'c');
+  assert.strictEqual(JSON.stringify(layoutStore.getTabsWithTrees().map((t) => t.tree)), shape, '이동은 배치를 바꾸지 않는다');
 });
 
 test('switchTabByOffset: 데스크톱(≥720)에서는 헤더 탭 순서로 돈다', async () => {
@@ -226,7 +229,7 @@ test('removeSession: 레코드/wrapper를 정리하고 칸은 빈 칸으로 남�
   await removeSession('b');
 
   assert.strictEqual(window.sessions['b'], undefined, 'sessions 맵에서 제거돼야 한다');
-  assert.strictEqual(window.orderedSessionIds().join(','), 'a', '순서에서도 빠져야 한다');
+  assert.strictEqual(Object.keys(window.sessions).join(','), 'a', '순서에서도 빠져야 한다');
   assert.strictEqual(window.document.getElementById('term-b'), null);
   assert.strictEqual(window.activeId, null, '활성 세션은 칸에서 파생된다 — 빈 칸이면 null');
   const tabs = layoutStore.getTabsWithTrees();
@@ -259,7 +262,7 @@ test('closeView: 묶음 뷰를 닫으면 구성을 기억하고, 칸 ×는 세�
   window.sessions.a.tmuxName = 'ta';
   const right = layoutStore.splitActivePane('row', null);
   layoutStore.setPaneSession(null, right);
-  addSession('b', 'B', undefined, { place: 'pane', tmuxName: 'tb' });
+  addSession('b', 'B', { place: 'pane', tmuxName: 'tb' });
   const tab = layoutStore.getActiveTabId();
   assert.strictEqual(JSON.stringify(layoutStore.tabGroups().map((g) => g.sessionIds)), '[["a","b"]]');
 
@@ -275,7 +278,7 @@ test('closeView: 묶음 뷰를 닫으면 구성을 기억하고, 칸 ×는 세�
 
   // 다시 묶고 뷰 ×.
   const r2 = layoutStore.splitActivePane('row', null);
-  addSession('c', 'C', undefined, { place: 'pane', tmuxName: 'tc' });
+  addSession('c', 'C', { place: 'pane', tmuxName: 'tc' });
   void r2;
   await actions.closeView(tab);
   assert.strictEqual(Object.keys(window.sessions).length, 0, '안의 세션은 전부 닫힌다');
@@ -293,7 +296,7 @@ test('removeSession: 비활성 세션을 닫아도 활성 세션은 그대로 �
   await removeSession('a');
 
   assert.strictEqual(window.activeId, 'b', '비활성 세션을 닫는 건 현재 활성 세션에 영향을 주면 안 된다');
-  assert.strictEqual(window.orderedSessionIds().join(','), 'b');
+  assert.strictEqual(Object.keys(window.sessions).join(','), 'b');
 });
 
 test('모바일 세션 관리: 좁은 화면에서도 세션 전환과 닫기가 가능하다', async () => {

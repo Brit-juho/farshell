@@ -82,6 +82,20 @@ Boot attaches only the sessions in the saved layout's open panes; `restoreWorksp
 "attach every tmux session" fallback and the empty-pane fill-in on restore are gone. Session order (mobile swipe) now
 follows the layout and is no longer persisted on its own.
 
+### Moving between sessions (2026-10-05)
+
+There is **one** move order: view tab order, then pane order inside each view (top-left first), empty panes, viewer/panel
+panes and unreachable remote panes skipped. `layout/compact.js` `openSessionOrder()` builds it from the saved layout and
+`stepSession(delta)` moves along it, wrapping at the ends and crossing view boundaries at a view's first/last pane. Swipe
+(`stepView`), the next/previous-tab keys below 720px, the mobile session sheet (list and `n/m`), and the palette session
+rows all read it, so reload does not change it and dragging a view tab on desktop reorders it on mobile. There is no
+separate order array any more (`core/store.js` `order`, `setSessionOrder`, `moveSessionBy*` are deleted; the remaining
+ordinal for "터미널 N" names is registration order and is only a label). Moving **never assigns**: it goes through
+`revealSession` (switch view, focus that pane) and does not touch the tree. Before this, single-pane swipe and the
+keys called `switchTo`, which assigns the target session to the active pane — it pulled a session out of another view
+and displaced the current one. Rail and Fleet stay in name order. `tabMovePrev/Next` (Mod+Alt+Shift+Left/Right) now
+moves the active **view tab** at every width (it moved a session in the removed array on mobile).
+
 ### View tab
 
 - Label (member names joined with `+`, unless the user named it) and ×. No agent icon, no state icon.

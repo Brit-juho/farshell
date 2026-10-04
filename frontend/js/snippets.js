@@ -303,7 +303,7 @@ export function showSnippets() {
       // addSession()이 탭·xterm·WS를 만들고 switchTo()로 활성 pane(방금 분할한
       // 자리, splitPane이 이미 그쪽으로 activePaneId를 옮겨뒀다)에 배정한다 —
       // layout/dnd.js가 드롭으로 세션을 꽂을 때 쓰는 것과 같은 경로.
-      addSession(data.id, data.name || data.id, undefined, { place: 'pane', tmuxName: data.tmux_session });
+      addSession(data.id, data.name || data.id, { place: 'pane', tmuxName: data.tmux_session });
       const s = getSession(data.id);
       if (s) s.tmuxName = data.tmux_session;
 

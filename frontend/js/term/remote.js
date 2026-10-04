@@ -14,7 +14,7 @@
 // 2026-09-28 — 원격 세션 **생성·종료·이름 바꾸기**와 「지금 어느 호스트를 보나」
 // (host-view.js)가 여기 붙었다. 셋 다 이 서버의 `/api/hosts/{id}/sessions`를
 // 거쳐 상대의 control 등급 엔드포인트로 간다(routes/hosts.py).
-import { getSession, orderedSessionIds, setSessionTmuxName } from '../core/store.js';
+import { getSession, allSessions, setSessionTmuxName } from '../core/store.js';
 import { addSession, revealSession, removeSession } from './session.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { showToast } from '../ui/toast.js';
@@ -28,7 +28,8 @@ export function remoteSessionId(hostId, tmuxName) {
   return `remote:${hostId}:${tmuxName}`;
 }
 
-const _entries = () => orderedSessionIds().map((id) => [id, getSession(id)]);
+// 순서 무관 조회(호스트+tmux 이름으로 찾기)라 등록 순서 그대로 읽는다.
+const _entries = () => Object.keys(allSessions()).map((id) => [id, getSession(id)]);
 
 // 호스트 id → 표시 이름. /api/hosts를 읽을 때마다 채운다 — 헤더 칩과 빈 원격
 // 칸이 "work-mac-a1b2" 같은 id 대신 사람이 붙인 이름을 보여주려고.
@@ -96,7 +97,7 @@ async function attachRemoteSessionAs(id, hostId, tmuxName, place = 'view') {
   // 이름 붙이고, 「연결된 화면」이 그걸로 "이게 나"를 판정한다. 없으면 원격
   // 「이 화면만 남기기」가 자기 자신을 끊을 수 있어서 그 기능을 켤 수 없다.
   const screen = (crypto.randomUUID?.() || String(Math.random()).slice(2)).replace(/-/g, '');
-  addSession(id, `${tmuxName} · ${hostId}`, undefined, {
+  addSession(id, `${tmuxName} · ${hostId}`, {
     tmuxName,
     host: hostId,
     remote: { host: hostId, tmux: tmuxName, screen },

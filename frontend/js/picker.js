@@ -5,7 +5,9 @@
 // renameSession을 부르고, term/session.js는 탭 전환/제거 시 updateSessionPicker를
 // 부른다. panels/viewer의 shell.js↔tree.js와 같은 이유로 그대로 유지한다(모든
 // 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
-import { activeSession, activeSessionId, allSessions, sessionDisplayName, getSession } from './core/store.js';
+import { activeSession, activeSessionId, sessionDisplayName, getSession } from './core/store.js';
+import { openSessionIds } from './layout/compact.js';
+import { onLayoutChange } from './layout/store.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
@@ -20,7 +22,8 @@ export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
   if (!picker) return;
   const s = activeSession();
-  const entries = Object.keys(allSessions());
+  // 화면 순서(뷰 탭 → 칸) — 스와이프·키 이동과 같은 목록(layout/compact.js).
+  const entries = openSessionIds();
   const activeId = activeSessionId();
   const position = entries.indexOf(activeId) + 1;
   // 2026-09-29(H1) — 두 줄: 윗줄 세션 이름(주인공) + ▾, 아랫줄 "기기 · 3/5".
@@ -42,6 +45,10 @@ export function updateSessionPicker() {
   const sheet = document.getElementById('session-manager');
   if (sheet) renderSessionManager(sheet);
 }
+
+// 순서·n/m의 출처가 레이아웃이므로 레이아웃이 바뀌면(부팅 복원, 칸 드롭, 뷰 재정렬)
+// 라벨도 같이 다시 그린다 — 전환 경로만 갱신하면 복원 직후 n/m이 비어 있었다.
+onLayoutChange((_tree, _pane, kind) => { if (kind !== 'ratio') updateSessionPicker(); });
 
 function sessionName(id) {
   return sessionDisplayName(id);
@@ -105,7 +112,7 @@ async function renderSessionManager(backdrop) {
   sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div><div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button></div>`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
   const list = sheet.querySelector('.vt-session-list');
-  const entries = Object.entries(allSessions());
+  const entries = openSessionIds().map((id) => [id, getSession(id)]);
   const activeIdNow = activeSessionId();
   const awakeTmuxNames = new Set();
   for (const [id, s] of entries) {
@@ -117,7 +124,7 @@ async function renderSessionManager(backdrop) {
     select.type = 'button'; select.className = 'vt-name-btn vt-session-select'; select.textContent = sessionName(id);
     select.setAttribute('aria-current', id === activeIdNow ? 'true' : 'false');
     // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유로 revealSession.
-    // entries는 allSessions()라 이미 열려 있는 세션뿐이다 — "가서 보여줘"가
+    // entries는 열린 세션뿐이다 — "가서 보여줘"가
     // 맞는 동작이지 "배정"이 아니다.
     select.onclick = () => { revealSession(id); closeSessionManager(); };
     const rename = document.createElement('button');

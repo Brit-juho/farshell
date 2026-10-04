@@ -62,11 +62,8 @@ const ACTIONS = [
   { id: 'paste',      def: 'Ctrl+Shift+V', label: '붙여넣기' },
   { id: 'tabPrev',    def: 'Mod+Shift+ArrowLeft',  label: '이전 탭' },
   { id: 'tabNext',    def: 'Mod+Shift+ArrowRight', label: '다음 탭' },
-  // N37 3단계 — 세션 순서를 바꾸는 유일한 UI였다(탭 줄이 사라지면 드래그
-  // 재정렬도 같이 사라지고, 레일 목록은 긴급도 정렬이라 그 자리에 드래그를
-  // 달 수 없었다). 2026-09-23 — 데스크톱은 헤더 탭 바로 대상이 옮겨간다
-  // (term/session.js `_desktopTabs` 분기, 드래그 재정렬은 layout/tabbar.js).
-  // 모바일은 여전히 세션 순서 기준이다.
+  // 뷰 탭을 앞/뒤로 옮긴다(드래그 재정렬은 layout/tabbar.js). 이동 순서의 출처가
+  // 뷰 탭 순서이므로 모바일에서도 이 키가 곧 스와이프 순서를 바꾼다.
   { id: 'tabMovePrev', def: 'Mod+Alt+Shift+ArrowLeft',  label: '탭을 앞으로' },
   { id: 'tabMoveNext', def: 'Mod+Alt+Shift+ArrowRight', label: '탭을 뒤로' },
   { id: 'settings',   def: 'Mod+,',        label: '설정' },

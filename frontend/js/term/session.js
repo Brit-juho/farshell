@@ -12,8 +12,8 @@
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
 import { register as registerKey } from '../core/keymap.js';
-import { getSession, registerSession, removeSessionRecord, activeSessionId,
-  sessionDisplayName, setSessionDisplayName, setSessionTmuxName, orderedSessionIds, moveSessionByOffset } from '../core/store.js';
+import { getSession, registerSession, removeSessionRecord,
+  sessionDisplayName, setSessionDisplayName, setSessionTmuxName } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { screenId } from '../core/screen-id.js';
@@ -28,6 +28,7 @@ import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayou
   getTabsWithTrees, getActiveTabId, switchLayoutTab, moveLayoutTab } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { COMPACT_MAX } from '../layout/breakpoints.js';
+import { stepSession } from '../layout/compact.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
 export async function createSession({ place = 'view' } = {}) {
@@ -43,7 +44,7 @@ export async function createSession({ place = 'view' } = {}) {
       body: JSON.stringify({ auto_open_on_mac: true, screen: screenId() }),
     });
     const data = await res.json();
-    addSession(data.id, data.name || data.id, undefined, { place });
+    addSession(data.id, data.name || data.id, { place });
     // ⚠ tmuxName을 안 채우면 openSessionOnMac()의 tmuxName 가드가 항상 실패해
     // "이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다"를 잘못 띄운다 —
     // 실제로는 진짜 tmux 세션인데도(restoreWorkspace 경로는 이걸 항상 채워왔음).
@@ -59,7 +60,7 @@ export async function createSession({ place = 'view' } = {}) {
   // C5: 401(토큰)/500 시 JSON에 id가 없어 addSession(undefined) 방지.
   if (!res.ok) { showToast(`세션 생성 실패 (${res.status})`); return; }
   const { id } = await res.json();
-  if (id) addSession(id, undefined, undefined, { place });
+  if (id) addSession(id, undefined, { place });
 }
 
 // + 버튼: 일반 터미널 / tmux 중 선택하는 드롭다운. (기존 createSession은
@@ -151,7 +152,7 @@ export async function attachTmux(tmuxName, { place = 'view' } = {}) {
   if (getSession(data.id)) {
     if (place !== 'none') revealSession(data.id);
   } else {
-    addSession(data.id, data.name || data.id, undefined, { place, tmuxName: data.tmux_session || tmuxName });
+    addSession(data.id, data.name || data.id, { place, tmuxName: data.tmux_session || tmuxName });
     // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
     const s = getSession(data.id);
     if (s) s.tmuxName = data.tmux_session || tmuxName;
@@ -173,7 +174,7 @@ export async function createTmuxSession() {
   if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
   const data = await res.json();
   if (!data.id) { showToast('tmux 세션 생성 실패'); return; }
-  addSession(data.id, data.name || data.id, undefined, { tmuxName: data.tmux_session });
+  addSession(data.id, data.name || data.id, { tmuxName: data.tmux_session });
   // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
   const s = getSession(data.id);
   if (s) s.tmuxName = data.tmux_session;
@@ -192,7 +193,7 @@ window.attachTmux = attachTmux;
 // remote/host가 그렇다 — startSessionSocket이 그 값을 보고 WS 경로를 고른다).
 // opts.place(레코드엔 안 들어간다, 2026-10-03): 'view' 새 단독 뷰(기본) ·
 // 'pane' 활성 칸(호출자가 칸을 골라 둠) · 'none' 등록만(트리는 호출자가).
-export function addSession(id, displayName, insertBeforeId, opts = null) {
+export function addSession(id, displayName, opts = null) {
   const { place = 'view', ...recordOpts } = opts || {};
   // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
   // 생기므로 무시한다.
@@ -213,8 +214,7 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // 세션은 그 이름을, 없는 일반 세션은 sessionDisplayName의 "터미널 N"
   // 폴백을 그대로 받는다.
   registerSession(id, { term, ws: null, displayName: displayName || null,
-    fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...recordOpts },
-    insertBeforeId);
+    fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...recordOpts });
   // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션의 connectTerminalWs를
   // 부를 수 있도록 참조를 걸어둔다 — startSessionSocket이 채운다.
   const onResize = startSessionSocket(id, term);
@@ -318,26 +318,13 @@ export async function renameSession(id, rawName, previousNameOverride) {
   }
 }
 
-// 2026-09-23(사용자 확정) — 데스크톱은 이제 드래그로 헤더 탭을 직접 재정렬할
-// 수 있어서(layout/tabbar.js), 이 단축키를 헤더 탭 기준으로 되돌린다. 모바일
-// (<720px)은 헤더 탭 바 자체가 숨겨져 있고(80-dock.css) 좌우 스와이프가 세션
-// 순서(layout/compact.js의 sessionOrder → core/store.js order)를 읽으므로
-// 거기서는 그대로 세션 기준으로 둔다 — 폭에 따라 "탭"의 정체가 다르다.
+// 2026-09-23(사용자 확정) — 데스크톱은 드래그로 헤더 탭을 직접 재정렬할 수 있어서
+// (layout/tabbar.js) "다음/이전 탭" 키가 헤더 탭(뷰)을 돈다. 모바일(<720px)은 헤더
+// 탭 바가 숨겨져 있어(80-dock.css) 스와이프와 같은 함수(layout/compact.js
+// stepSession)로 **다음/이전 세션**을 간다 — 순서는 뷰 탭 순서 → 칸 순서, 즉
+// 저장되는 레이아웃 하나다. 이동만 하고 트리는 건드리지 않는다.
 function _desktopTabs() {
   return window.innerWidth >= COMPACT_MAX;
-}
-
-// 세션 좌/우 이동(모바일). 순서의 출처는 **세션 레코드**다(core/store.js의
-// order) — 2.1.3까지는 `#tabs .tab`의 DOM 순서였는데, 그 DOM은 N37 3단계에서
-// 사라진다. 끝에서 순환하는 동작은 그대로 유지한다.
-function _switchSessionByOffset(delta) {
-  const ids = orderedSessionIds();
-  if (ids.length < 2) return;
-  const activeId = activeSessionId();
-  let idx = ids.indexOf(activeId);
-  if (idx === -1) idx = 0;
-  const nid = ids[(idx + delta + ids.length) % ids.length];
-  if (nid && nid !== activeId) switchTo(nid);
 }
 
 function _switchHeaderTabByOffset(delta) {
@@ -352,15 +339,14 @@ function _switchHeaderTabByOffset(delta) {
 
 export function switchTabByOffset(delta) {
   if (_desktopTabs()) _switchHeaderTabByOffset(delta);
-  else _switchSessionByOffset(delta);
+  else stepSession(delta);
 }
 
-// 순서 자체를 바꾸는 경로. 탭 줄이 사라진 뒤에도 재정렬 수단이 남아야 한다 —
-// 레일 목록은 긴급도로 정렬되므로(agent/state.js의 sortByUrgency) 거기서
-// 드래그 재정렬은 의미가 없다. 헤더 탭은 이제 드래그가 있지만(위), 키보드
-// 경로는 마우스 없는 사용자를 위해 남긴다. 끝에서는 멈춘다(세션 쪽과 같은
-// 규칙 — 순환하면 "끝까지 밀었다"는 걸 알 수 없다).
-function _moveHeaderTabByOffset(delta) {
+// 뷰 탭 자체를 앞/뒤로 옮긴다(순서가 바뀌는 유일한 키보드 경로 — 드래그는
+// layout/tabbar.js). 폭과 무관하게 같다: 모바일에서도 이동 순서의 출처가 뷰 탭
+// 순서이므로 이 키가 곧 모바일 이동 순서를 바꾼다. 끝에서는 멈춘다(순환하면
+// "끝까지 밀었다"는 걸 알 수 없다).
+export function moveTabByOffset(delta) {
   const tabs = getTabsWithTrees();
   const activeId = getActiveTabId();
   const idx = tabs.findIndex((t) => t.id === activeId);
@@ -368,13 +354,6 @@ function _moveHeaderTabByOffset(delta) {
   const to = idx + delta;
   if (to < 0 || to >= tabs.length) return;
   if (moveLayoutTab(activeId, to)) saveLayoutNow();
-}
-
-export function moveTabByOffset(delta) {
-  if (_desktopTabs()) return _moveHeaderTabByOffset(delta);
-  const id = activeSessionId();
-  if (!id) return;
-  moveSessionByOffset(id, delta);
 }
 
 // S3: 탭 좌우 이동도 키맵 레지스트리 경유. 레지스트리가 document capture 단계에서

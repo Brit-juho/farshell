@@ -13,7 +13,8 @@
 import { registerAction, getAction } from './core/dom.js';
 import { register as registerKey, getBinding, displayCombo, displayComboHtml, list as keymapList, invoke as keymapInvoke } from './core/keymap.js';
 import { vtFetch } from './core/api.js';
-import { allSessions, sessionDisplayName } from './core/store.js';
+import { sessionDisplayName } from './core/store.js';
+import { openSessionIds } from './layout/compact.js';
 import { revealSession } from './term/session.js';
 import { splitActivePane, setPaneSession } from './layout/store.js';
 import { loadViewer, openFile, openFileInPane } from './panels/viewer-lazy.js';
@@ -24,7 +25,7 @@ import { showToast } from './ui/toast.js';
 // 이름의 출처는 세션 레코드다(core/store.js의 sessionDisplayName) — 예전엔
 // 탭 DOM의 텍스트를 읽었는데, 그 DOM은 10 §4 3단계에서 사라진다.
 function listSessions() {
-  return Object.keys(allSessions()).map((id) => ({ id, name: sessionDisplayName(id).trim() }));
+  return openSessionIds().map((id) => ({ id, name: sessionDisplayName(id).trim() }));
 }
 
 // capability 게이팅 — agent/status.js가 /api/capabilities 응답에 따라
