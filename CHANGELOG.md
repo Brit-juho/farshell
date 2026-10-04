@@ -23,6 +23,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **접힌 레일(48px)에서 「개입 필요」 세션이 아래 목록에 한 번 더 나오던 문제 수정**
+  (`shell/rail-data.ts` `compactRailRows`, `Rail.tsx`). 접힌 레일은 구역 머리글이 없어
+  하나의 목록으로 그린다 — 개입 필요가 위(이름순), 나머지가 아래(이름순), 각 세션은 한 번만.
+  펼친 레일은 그대로다(waiting이 두 구역에 모두 나온다).
 - **만료된 기기의 세션이 최대 24시간 더 살던 문제 수정** (`server/auth/__init__.py`).
   세션 검증이 기기의 존재 여부만 보고 만료는 보지 않았다. 이제 쿠키 검증과 세션
   검증이 같은 만료 판정(`auth/devices.py`의 `_alive`)을 쓰고, 열린 WS도 60초 워치독이

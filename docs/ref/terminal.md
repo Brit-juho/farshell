@@ -134,6 +134,9 @@ moves the active **view tab** at every width (it moved a session in the removed 
 
 - 「개입 필요」 (waiting sessions): collapsible, and switchable on/off in rail settings (like VS Code's Open Editors).
 - 「세션」: every session, **name order only** — no urgency sorting, rows don't jump around.
+- Collapsed rail (48px) has no zone headings, so it draws **one list**: waiting sessions first (name order), the rest after
+  (name order), each session once, a thin separator between (`compactRailRows`). The expanded rail is unchanged — a waiting
+  session appears in both 「개입 필요」 and 「세션」.
 - Row: line 1 state · agent · name; line 2 main/worktree icon · branch (main is shown too) · diff; line 3 state
   keyword · elapsed · origin icon; when applicable "open" mark and the grouped view's name. The plug (tmux) icon goes.
 - Row menu: the ⋯ button and right-click open the same menu (open/close, rename, open on Mac, connected screens, kill).

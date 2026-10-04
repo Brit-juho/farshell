@@ -261,3 +261,29 @@ test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음
   assert.strictEqual(by.cli.otherScreens, 0);
   assert.strictEqual(by.api.agent, 'claude');
 });
+
+test('compactRailRows — 접힌 레일은 개입 필요가 위, 나머지가 아래, 각 세션은 한 번만', async () => {
+  const { buildRailLists, compactRailRows } = await mod();
+  const lists = buildRailLists([
+    row({ name: 'zed', status: 'waiting' }),
+    row({ name: 'amy', status: 'working' }),
+    row({ name: 'bob', status: 'waiting' }),
+    row({ name: 'cat', status: 'idle' }),
+  ], PREFS);
+  const { rows, split } = compactRailRows(lists);
+  assert.deepStrictEqual(names(rows), ['bob', 'zed', 'amy', 'cat']);
+  assert.strictEqual(split, 2, '경계선은 개입 필요 2개 뒤');
+  // 펼친 레일 규칙은 그대로 — waiting은 두 구역에 모두 남는다.
+  assert.deepStrictEqual(names(lists.sessions), ['amy', 'bob', 'cat', 'zed']);
+});
+
+test('compactRailRows — waiting만 있거나 개입 필요가 없으면 경계선 없음', async () => {
+  const { buildRailLists, compactRailRows } = await mod();
+  const only = compactRailRows(buildRailLists([row({ name: 'a', status: 'waiting' })], PREFS));
+  assert.deepStrictEqual(names(only.rows), ['a']);
+  assert.strictEqual(only.split, 0);
+  const off = compactRailRows(buildRailLists(
+    [row({ name: 'b', status: 'waiting' }), row({ name: 'a' })], { ...PREFS, attentionShow: false }));
+  assert.deepStrictEqual(names(off.rows), ['a', 'b']);
+  assert.strictEqual(off.split, 0);
+});

@@ -7,7 +7,7 @@ export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
 export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
-  buildRailLists, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
+  buildRailLists, compactRailRows, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
   HIDEABLE_ORIGINS, normalizeOrigin, normalizeKind, normalizeBadge, rowMenuItems, runRowMenu,
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL,
 } from '../../js/shell/rail-data.js';

@@ -12,7 +12,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import {
-  buildRailLists, rowMenuItems, runRowMenu, defaultRailCollapsed,
+  buildRailLists, compactRailRows, rowMenuItems, runRowMenu, defaultRailCollapsed,
   ATTENTION_COLLAPSED_KEY,
   type SessionRow,
 } from './rail-data.js';
@@ -216,6 +216,7 @@ function Rail(props: { deps: RailDeps }) {
   });
 
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
+  const compact = createMemo(() => compactRailRows(lists()));
   const totalRows = createMemo(() => lists().sessions.length);
 
   const activeId = createMemo(() => { sessionsVersion(); return (window as any).activeSessionId?.() ?? null; });
@@ -446,10 +447,23 @@ function Rail(props: { deps: RailDeps }) {
           <div class="vt-wgrail-empty">{hostDetail(activeHost()!)}</div>
         </Show>
         <Show when={!viewHostOffline()}>
-          {/* 개입 필요 — waiting 세션만. 접을 수 있고(제목 줄 전체가 토글), 레일 설정에서 끈다.
-              접힌 레일(48px)에서는 구역 머리 대신 경계선만 그린다. */}
-          <Show when={lists().attention.length > 0}>
-            <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
+          {/* 접힌 레일(48px)은 구역 머리글이 없어 한 목록이다 — 개입 필요가 위, 나머지가 아래,
+              각 세션은 한 번만(compactRailRows). 펼친 레일은 waiting이 두 구역에 모두 나온다. */}
+          <Show when={collapsed()}>
+            <For each={compact().rows}>
+              {(row, i) => (
+                <>
+                  <Show when={compact().split > 0 && i() === compact().split}>
+                    <div class="vt-wgrail-group-sep" role="separator" />
+                  </Show>
+                  {renderRow(row)}
+                </>
+              )}
+            </For>
+          </Show>
+          {/* 개입 필요 — waiting 세션만. 접을 수 있고(제목 줄 전체가 토글), 레일 설정에서 끈다. */}
+          <Show when={!collapsed() && lists().attention.length > 0}>
+            <Show when={!collapsed()}>
               <div class="vt-wgrail-group-head">
                 <button
                   type="button"
@@ -468,8 +482,8 @@ function Rail(props: { deps: RailDeps }) {
               <For each={lists().attention}>{(row) => renderRow(row)}</For>
             </Show>
           </Show>
-          <Show when={lists().sessions.length > 0}>
-            <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
+          <Show when={!collapsed() && lists().sessions.length > 0}>
+            <Show when={!collapsed()}>
               <div class="vt-wgrail-group-head">
                 <span class="vt-wgrail-group-label">
                   세션

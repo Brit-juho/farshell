@@ -193,6 +193,18 @@ export function buildRailLists<T extends Pick<SessionRow, 'name' | 'status' | 'o
   return { attention, sessions };
 }
 
+/**
+ * 접힌 레일(48px)은 구역 머리글이 없다 — 「개입 필요」와 「세션」을 따로 그리면 waiting 세션이
+ * 두 번 보인다. 하나의 목록으로: 개입 필요 세션이 위(이름순), 나머지가 그 아래(이름순).
+ * `split`은 둘 사이에 경계선을 그릴 위치(위쪽 개수, 0이면 경계선 없음).
+ * 펼친 레일은 이 함수를 안 쓴다 — 거기서는 waiting이 두 구역에 모두 남는 게 규칙이다.
+ */
+export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: number } {
+  const top = new Set<T>(lists.attention);
+  const rest = lists.sessions.filter((r) => !top.has(r));
+  return { rows: [...lists.attention, ...rest], split: rest.length > 0 ? top.size : 0 };
+}
+
 // ── 행 메뉴(⋯ 버튼·우클릭·폰 롱프레스가 같은 항목) ───────────────────────
 
 export type RowMenuId = 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill';
