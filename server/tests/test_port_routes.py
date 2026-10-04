@@ -208,9 +208,11 @@ def test_reissue_pin_keeps_url_alive(routes):
     r = asyncio.run(routes.reissue_pin(3000))
     after = _store().get_share(3000)
     assert r["pin"]
-    assert after["shareId"] == before["shareId"]
+    # URL이 사는 근거는 proxyPort(살아 있는 cloudflared가 같은 주소를 찾는다)다.
     assert after["proxyPort"] == before["proxyPort"]
     assert after["pinHash"] != before["pinHash"]
+    # shareId는 바뀐다(2026-10) — 옛 PIN으로 받은 쿠키를 죽이려고. URL에는 안 들어간다.
+    assert after["shareId"] != before["shareId"]
 
 
 def test_reissue_pin_rejects_non_pin_mode(routes):
@@ -226,13 +228,14 @@ def test_reissue_pin_unknown_port_is_404(routes):
 # --- 모드 변경 -------------------------------------------------------------------
 
 
-def test_change_mode_keeps_share_id(routes):
+def test_change_mode_keeps_proxy_port_and_rotates_share_id(routes):
     asyncio.run(routes.expose_port(3000, _Body({"confirm": True, "mode": "public", "ttl": HOUR})))
     before = _store().get_share(3000)
     r = asyncio.run(routes.change_share_mode(3000, _Body({"mode": "session"})))
     after = _store().get_share(3000)
     assert r["mode"] == "session"
-    assert after["shareId"] == before["shareId"], "주소가 죽지 않아야 한다"
+    assert after["proxyPort"] == before["proxyPort"], "주소가 죽지 않아야 한다"
+    assert after["shareId"] != before["shareId"], "이전 모드로 통과한 쿠키는 죽어야 한다"
 
 
 def test_change_to_pin_mode_generates_a_pin(routes):

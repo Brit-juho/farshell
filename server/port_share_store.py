@@ -52,6 +52,21 @@ PIN_LENGTH = 8
 # min(share 만료, 이 값) — share보다 오래 사는 쿠키는 없다(§2-1).
 COOKIE_MAX_TTL = 12 * 3600
 
+# 공개 터널에 열면 그 자체가 원격 제어 수단이 되는 로컬 포트들(2026-10).
+# 프록시는 업스트림 Host를 `localhost:<port>`로 바꿔 보내므로(Vite 호환), 이
+# 서비스들이 스스로 거는 "Host가 localhost가 아니면 거부" 방어가 **꺼진다** —
+# Chrome 원격 디버깅을 공개하면 로그인된 브라우저 전체가 원격 조작된다.
+# 막지는 않고(정말 필요한 경우가 있다) 확인을 한 번 더 받는다: CLI는 --force,
+# 웹은 `force_danger: true`. VT 서버 포트 자체는 bin/fsh가 무조건 거부한다.
+_DANGEROUS_PORTS: dict[int, str] = {
+    9222: "Chrome 원격 디버깅 — 로그인된 브라우저 전체를 원격으로 조작할 수 있습니다",
+    9229: "Node.js 인스펙터 — 원격에서 임의 코드를 실행할 수 있습니다",
+    2375: "Docker API(평문) — 원격에서 컨테이너와 호스트를 제어할 수 있습니다",
+    2376: "Docker API — 원격에서 컨테이너와 호스트를 제어할 수 있습니다",
+    **{p: "ngrok 에이전트 API — 터널을 원격으로 만들고 끌 수 있습니다" for p in range(4040, 4044)},
+    **{p: "cloudflared 메트릭 — 터널 내부 상태가 드러납니다" for p in range(20241, 20246)},
+}
+
 
 def _state_dir() -> Path:
     # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
@@ -162,6 +177,13 @@ def verify_pin(share: dict, raw: str) -> bool:
 # --- 조회 --------------------------------------------------------------------
 
 
+def danger_reason(port: int) -> str | None:
+    """공개하면 위험한 포트면 그 이유, 아니면 None. 웹과 CLI가 같은 판정을 쓴다."""
+    if PROXY_PORT_BASE <= port < PROXY_PORT_BASE + PROXY_PORT_SPAN:
+        return "FarShell 내부 프록시 포트 — 다른 노출의 접근 제어를 겹쳐 열게 됩니다"
+    return _DANGEROUS_PORTS.get(port)
+
+
 def is_expired(share: dict) -> bool:
     return float(share.get("exp") or 0) <= time.time()
 
@@ -239,7 +261,7 @@ def create_share(port: int, label: str, mode: str, ttl: int) -> tuple[dict, str 
         share = {
             "port": port,
             "label": (label or f"localhost:{port}")[:64],
-            "shareId": secrets.token_urlsafe(6),
+            "shareId": _new_share_id(),
             "mode": mode,
             "proxyPort": proxy_port,
             "created": time.time(),
@@ -284,24 +306,66 @@ def update_share(port: int, **fields) -> dict | None:
     return hit
 
 
+def _new_share_id() -> str:
+    return secrets.token_urlsafe(6)
+
+
 def set_mode(port: int, mode: str) -> dict | None:
     """모드만 바꾼다 — 터널도 proxyPort도 건드리지 않으므로 **공개 URL이 살아남는다.**
-    `pin`으로 바꿀 때는 PIN이 없으면 안 되므로 `regenerate_pin`을 따로 불러야 한다."""
+    `pin`으로 바꿀 때는 PIN이 없으면 안 되므로 `regenerate_pin`을 따로 불러야 한다.
+
+    모드가 실제로 바뀌면 shareId도 새로 만든다 — 프록시 쿠키에 shareId가 들어 있어서
+    이전 모드로 통과한 사람이 전부 다시 인증해야 한다. 같은 모드로 다시 설정하는 건
+    아무것도 바꾸지 않는다.
+    """
     if mode not in VALID_MODES:
         raise ValueError(f"bad mode: {mode}")
-    return update_share(port, mode=mode)
+    with _locked():
+        items = _read_unlocked()
+        hit = next((s for s in items if s["port"] == port), None)
+        if hit is None:
+            return None
+        if hit.get("mode") != mode:
+            hit["mode"] = mode
+            hit["shareId"] = _new_share_id()
+            _write_unlocked(items)
+    return hit
 
 
 def regenerate_pin(port: int) -> tuple[dict, str] | None:
-    """PIN만 새로 발급. 터널·URL·proxyPort 그대로."""
+    """PIN 새로 발급. 터널·URL·proxyPort 그대로.
+
+    shareId도 함께 바꾼다(2026-10). 예전엔 PIN만 바꿔서, PIN이 새 재발급을 했는데도
+    옛 PIN으로 이미 들어온 사람의 쿠키가 최대 COOKIE_MAX_TTL(12h) 살아 있었다 —
+    유출 대응으로 재발급하는 경우가 정확히 그 사람을 끊으려는 것이다.
+    """
     pin = generate_pin()
     with _locked():
         items = _read_unlocked()
-        hit = _update_unlocked(items, port, pinHash=auth.hash_password(pin), attempts=0)
+        hit = _update_unlocked(items, port, pinHash=auth.hash_password(pin), attempts=0,
+                               shareId=_new_share_id())
         if hit is None:
             return None
         _write_unlocked(items)
     return hit, pin
+
+
+def note_pin_failure(port: int) -> int:
+    """PIN 실패 누적(표시용). share를 잠그지는 않는다 — 잠금은 IP 단위 60초뿐이다
+    (port_proxy_app의 모듈 docstring). 반환값은 누적 횟수, share가 없으면 0."""
+    with _locked():
+        items = _read_unlocked()
+        hit = next((s for s in items if s["port"] == port), None)
+        if hit is None:
+            return 0
+        hit["attempts"] = int(hit.get("attempts", 0) or 0) + 1
+        _write_unlocked(items)
+        return hit["attempts"]
+
+
+def expired_shares() -> list[dict]:
+    """만료됐지만 아직 정리되지 않은 share들. 정리 루프(routes/ports.py)가 쓴다."""
+    return [s for s in list_shares(include_expired=True) if is_expired(s)]
 
 
 def note_view(port: int) -> None:
@@ -404,8 +468,16 @@ def _cli(argv: list) -> int:
 
     if cmd == "cli-list":
         for s in list_shares():
-            print(f"{s['port']}\t{s['mode']}\t{1 if s.get('broken') else 0}")
+            print(f"{s['port']}\t{s['mode']}\t{1 if s.get('broken') else 0}\t{int(s.get('attempts', 0) or 0)}")
         return 0
+
+    if cmd == "cli-danger":
+        # 위험 포트면 이유를 찍고 0, 아니면 아무것도 안 찍고 1 — bash가 `if`로 쓴다.
+        reason = danger_reason(int(argv[1]))
+        if reason:
+            print(reason)
+            return 0
+        return 1
 
     print(f"unknown command: {cmd}", file=sys.stderr)
     return 2

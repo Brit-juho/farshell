@@ -72,6 +72,12 @@ VT_AUTH_TOKEN = _env("VT_AUTH_TOKEN", "VT_TOKEN")
 
 SESSION_TTL = 86400  # 24h
 DEVICE_TTL = 90 * 86400  # 등록 기기 쿠키 수명 90일
+# 로그인 화면이 보낼 수 있는 "기기 기억" 값 → 수명(초). 이 표에 없는 값은 400으로 거절한다
+# — 클라이언트가 숫자를 직접 보내게 하면 DEVICE_TTL보다 긴 수명을 만들 길이 생긴다.
+REMEMBER_TTLS = {"90d": DEVICE_TTL, "24h": 86400, "1h": 3600}
+REMEMBER_DEFAULT = "90d"
+TICKET_TEMP_DEVICE_TTL = 86400  # `fsh mobile --temp`로 등록되는 기기의 수명(1일 고정)
+DEVICE_EXPIRED_GRACE = 7 * 86400  # 만료된 기기를 목록에 "만료"로 남겨 두는 기간
 ELEVATION_TTL = 900  # 승격 세션(N31) 수명 15분 — git 쓰기 등 위험 조작 직전 재확인용
 
 # scrypt 파라미터 — 대화형 로그인에 충분하면서 과하지 않은 값
@@ -144,7 +150,10 @@ from auth.devices import (  # noqa: E402,F401
     _find_device,
     _load_devices,
     _save_devices,
+    device_remaining,
+    find_alive_device,
     list_devices,
+    prune_devices,
     register_device,
     rename_device,
     revoke_device,
@@ -164,6 +173,7 @@ from auth.tickets import (  # noqa: E402,F401
     consume_ticket,
     issue_ticket,
 )
+from auth.client_info import request_meta  # noqa: E402,F401
 
 # ---------------------------------------------------------------------------
 # 서명 세션 쿠키
@@ -233,8 +243,11 @@ def session_device(value: str) -> Optional[str]:
             return None
     except (ValueError, TypeError):
         return None
-    # 기기에 묶인 세션인데 그 기기가 revoke됐으면 무효.
-    if did != "-" and not _find_device(did):
+    # 기기에 묶인 세션인데 그 기기가 revoke됐거나 만료됐으면 무효. 예전엔 존재 여부만
+    # 봐서, 기기가 만료돼도 그 전에 받은 세션이 최대 SESSION_TTL(24h) 더 살았다 —
+    # 1시간짜리 임시 기기에서는 수명이 사실상 24배가 되는 틈이다. WS는
+    # spawn_session_watchdog이 같은 check_request를 다시 돌려 닫는다.
+    if did != "-" and not find_alive_device(did):
         return None
     return did
 
@@ -268,7 +281,7 @@ def session_elevated_until(value: str) -> int:
     now = int(time.time())
     if exp <= now:
         return 0
-    if did != "-" and not _find_device(did):
+    if did != "-" and not find_alive_device(did):
         return 0
     if elev <= now:
         return 0
@@ -413,6 +426,52 @@ def spawn_session_watchdog(ws, token: str, interval: float = 60.0):
 # CLI — bin/fsh가 서버 없이 직접 호출한다 (python -m auth <cmd>). 진입점은 __main__.py
 # ---------------------------------------------------------------------------
 
+_VIA_LABEL = {"tunnel": "터널", "tailscale": "Tailscale", "lan": "LAN", "local": "이 맥", "direct": "직접"}
+_METHOD_LABEL = {"password": "비밀번호", "password+otp": "비밀번호+OTP", "ticket": "QR"}
+
+
+def _span(sec: int) -> str:
+    sec = max(0, int(sec))
+    if sec < 3600:
+        return f"{max(1, sec // 60)}분"
+    if sec < 86400:
+        return f"{sec // 3600}시간"
+    return f"{sec // 86400}일"
+
+
+def _ago(sec: int) -> str:
+    return "방금" if sec < 60 else f"{_span(sec)} 전"
+
+
+def _device_line(d: dict, now: int) -> str:
+    """`fsh device list`의 첫 줄 — id, 라벨, 등록/최근 사용, 남은 기간."""
+    added = int(d.get("added_at", now) or now)
+    seen = int(d.get("last_seen", now) or now)
+    exp = int(d.get("expires_at", now) or now)
+    label = d.get("label", "?")
+    tag = "[임시] " if d.get("kind") == "temporary" else ""
+    if d.get("expired"):
+        life = f"만료됨 ({_ago(now - exp)})"
+    else:
+        life = f"남은 기간 {_span(exp - now)}"
+    return (f"    {d['id'][:8]}  {tag}{label:<10} 등록 {_ago(now - added)} / "
+            f"최근 사용 {_ago(now - seen)} / {life}")
+
+
+def _device_detail(d: dict) -> str:
+    """둘째 줄 — OS·브라우저·마지막 IP(경로)·등록 방식. 예전 레코드는 빈 문자열."""
+    client = d.get("client") if isinstance(d.get("client"), dict) else {}
+    parts = [p for p in (client.get("os", ""), client.get("browser", "")) if p]
+    ip = d.get("ip_last") or ""
+    if ip:
+        via = _VIA_LABEL.get(d.get("via", ""), "")
+        parts.append(f"{ip} ({via})" if via else ip)
+    method = _METHOD_LABEL.get(d.get("method", ""), "")
+    if method:
+        parts.append(method)
+    return " · ".join(parts)
+
+
 def _cli(argv: list) -> int:
     cmd = argv[0] if argv else "status"
     arg = argv[1] if len(argv) > 1 else ""
@@ -436,22 +495,32 @@ def _cli(argv: list) -> int:
         return 0
     if cmd == "device-list-pretty":
         devs = list_devices()
-        now = time.time()
+        now = int(time.time())
         print()
         if not devs:
             print("  등록된 기기가 없습니다 (아직 로그인한 기기가 없거나 인증이 꺼져 있음)")
         else:
-            print("  📱 등록된 기기")
+            active = [d for d in devs if not d.get("expired")]
+            expired = [d for d in devs if d.get("expired")]
+            print(f"  📱 등록된 기기 — 유효 {len(active)}개" + (f" · 만료 {len(expired)}개" if expired else ""))
             print()
-            for d in devs:
-                age = int((now - d.get("added_at", now)) / 86400)
-                seen = int((now - d.get("last_seen", now)) / 86400)
-                label = d.get("label", "?")
-                print(f"    {d['id'][:8]}  {label:<10} 등록 {age}일 전 / 최근 사용 {seen}일 전")
+            for d in active + expired:
+                print(_device_line(d, now))
+                detail = _device_detail(d)
+                if detail:
+                    print(f"              {detail}")
             print()
+            if expired:
+                grace = DEVICE_EXPIRED_GRACE // 86400
+                print(f"  만료된 기기는 접속할 수 없고, 만료 {grace}일 뒤 목록에서 자동으로 지워집니다.")
+                print("  지금 정리:  fsh device prune")
             print("  이름 변경: fsh device rename <id앞자리> <별명>")
             print("  폐기:      fsh device revoke <id앞자리>")
         print()
+        return 0
+    if cmd == "device-prune":
+        removed = prune_devices()
+        print(json.dumps(removed, ensure_ascii=False))
         return 0
     if cmd == "device-rename":
         renamed = rename_device(arg, argv[2] if len(argv) > 2 else "")
@@ -464,7 +533,12 @@ def _cli(argv: list) -> int:
         print(json.dumps(removed, ensure_ascii=False))
         return 0 if removed else 1
     if cmd == "ticket-new":
-        print(issue_ticket(label=arg))
+        # `ticket-new <label> temp` → 이 티켓으로 등록되는 기기는 1일짜리 임시 기기가 된다.
+        # 티켓 자체의 수명(5분)과는 별개다.
+        if len(argv) > 2 and argv[2] == "temp":
+            print(issue_ticket(label=arg, device_ttl=TICKET_TEMP_DEVICE_TTL))
+        else:
+            print(issue_ticket(label=arg))
         return 0
     if cmd in ("status", "is-protected"):
         # bin/vt가 서버 프로세스 없이 "인증이 켜져 있는가"만 물을 때 쓴다(예: `vt mobile`이

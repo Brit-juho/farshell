@@ -43,7 +43,8 @@ fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't inst
 fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)
 fsh password [clear]   # set web login password (stores a hash) / clear=unset
 fsh otp [status|setup|disable]   # require OTP when registering a new device (fully disabled until setup)
-fsh device [list|rename <id> <name>|revoke <id>]  # list/rename registered devices, revoke (also invalidates sessions if a phone is lost)
+fsh device [list|rename <id> <name>|revoke <id>|prune]  # list/rename registered devices (lifetime, OS/browser, last IP),
+                       #   revoke (also invalidates sessions if a phone is lost), prune expired devices now
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 fsh claude             # open new terminal window with tmux dev + claude --resume (internally fsh agent claude)
 fsh agent <name>       # start with any agent — claude/codex/aider/agy/qwen (generalization of fsh claude)
@@ -52,14 +53,19 @@ fsh popup <action>     # quick fsh command invocation via tmux 3.2+ popup
 fsh run "..."          # run headless `claude -p` in background + TTS notification on completion
 fsh handoff mobile     # hand off the current tmux session to your phone (QR + #tmux=)
 fsh handoff desktop    # bring a phone session back to the Mac terminal
-fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|30d]
+fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]
                                    # expose another local port through FarShell's own reverse
                                    # proxy (2.2). Default --mode is session (logged-in devices
                                    # only) — pass --mode public for the old unauthenticated behavior
+                                   # Remote-control ports (Chrome DevTools 9222, Node inspector 9229, Docker API,
+                                   # ngrok/cloudflared local APIs, FarShell's proxy range) need --force.
+                                   # A session share prints a "처음 열기" link that starts at the main origin's
+                                   # /p/authorize — the public URL alone shows a notice to cookie-less visitors.
+                                   # Expired exposures are torn down (tunnel + listener) within a minute.
 fsh tunnel unexpose 3000          # stop the tunnel and its share policy for that port
-fsh tunnel pin 3000                # reissue the access PIN without touching the tunnel/URL
-fsh tunnel mode 3000 session       # change who can access without touching the tunnel/URL
-fsh tunnel list                   # list all open tunnels (main + extra ports)
+fsh tunnel pin 3000                # reissue the access PIN without touching the tunnel/URL (old-PIN visitors must re-enter)
+fsh tunnel mode 3000 session       # change who can access without touching the tunnel/URL (everyone re-authenticates)
+fsh tunnel list                   # list all open tunnels (main + extra ports), with mode and PIN-failure count
 fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
 fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook
 fsh tunnel watchdog               # check/start the zombie-reconnect auto-detection daemon (normally auto-started by fsh start/voice/mobile)
@@ -94,6 +100,7 @@ fsh mobile --e2e                       # X25519 handshake + NaCl SecretBox E2E e
 fsh mobile --safe                      # Pre-block dangerous commands (rm -rf /, sudo, etc.)
 fsh mobile --network <mode>            # localhost | lan | tailscale | all (default)
 fsh mobile --force                     # Force a public tunnel even without auth (password/token) set — not recommended
+fsh mobile --temp                      # The device registered by this QR expires after 1 day (fixed) — for lending access briefly
 ```
 
 To open a public tunnel with `--network all` (the default), you must first set up

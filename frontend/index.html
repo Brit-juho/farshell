@@ -159,6 +159,33 @@
     /* type=password 대신 text+마스킹 사용 → Chrome 비밀번호 저장 제안 자체를 차단 (시각적 마스킹은 유지) */
     #login-pass{-webkit-text-security:disc;text-security:disc;}
 
+    #login-pass-state{margin:6px 0 0;font-size:var(--fs-xs,12.5px);
+      color:var(--color-st-waiting,#f0a860);line-height:var(--leading-body,1.6);}
+    #login-pass-state[hidden]{display:none;}
+
+    /* 기기 기억: 세 칸짜리 분절 선택. 라디오 자체는 숨기고 라벨이 칸이 된다 —
+       위 `#login-form input` 규칙(폭 100%·높이 42px)이 라디오에도 걸리므로
+       여기서 되돌린다. 선택 칸만 테두리를 진하게 하고 채우지 않는다: 채움은
+       주 액션(접속 버튼) 하나뿐이다(DESIGN §10). */
+    #login-remember{margin:16px 0 0;padding:0;border:0;min-width:0;}
+    #login-remember[hidden]{display:none;}
+    #login-remember legend{padding:0;}
+    .login-remember-opts{display:flex;gap:6px;}
+    .login-remember-opts label{flex:1;position:relative;cursor:pointer;}
+    #login-form .login-remember-opts input{position:absolute;opacity:0;width:1px;height:1px;
+      min-height:0;padding:0;margin:0;border:0;}
+    .login-remember-opts span{display:flex;align-items:center;justify-content:center;
+      min-height:38px;font-size:var(--fs-sm,13.5px);color:var(--color-sub,#8e9296);
+      border:1px solid var(--color-line,rgb(255 255 255 / .07));
+      border-radius:var(--radius-sm,5px);
+      transition:border-color var(--dur-fast,120ms) ease,color var(--dur-fast,120ms) ease;}
+    .login-remember-opts label:hover span{border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
+    .login-remember-opts input:checked + span{color:var(--color-txt,#e8e9ea);
+      border-color:var(--color-acc,#f0a860);}
+    .login-remember-opts input:focus-visible + span{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;}
+    #login-form .login-remember-hint{margin:8px 0 0;font-size:var(--fs-xs,12.5px);
+      color:var(--color-faint,#5d6164);line-height:var(--leading-body,1.6);}
+
     /* OTP는 "비밀번호 다음에 붙는 칸"이 아니라 **별도 단계**다. 선 하나로
        끊어 주지 않으면 처음 보는 기기에서 갑자기 칸이 하나 늘어난 것처럼만
        보인다. */
@@ -252,7 +279,23 @@
         <input id="login-pass" type="text" name="vt-key" autocomplete="off"
           autocorrect="off" autocapitalize="off" spellcheck="false"
           readonly onfocus="this.removeAttribute('readonly')"
-          aria-label="비밀번호" />
+          aria-label="비밀번호" aria-describedby="login-pass-state" />
+        <!-- 입력 상태 — Caps Lock·한글 입력 중일 때만 뜬다(gate.js). 키를 누르기 전에는
+             브라우저가 알려 주지 않아서 "영문"이라고 미리 말하지 않는다. -->
+        <p id="login-pass-state" role="status" aria-live="polite" hidden></p>
+        <!-- 기기 기억 기간: 처음 보는 기기에서만 나타난다(gate.js가 /api/auth/status의
+             device_known으로 판단). 등록된 기기는 서버가 이 값을 무시한다.
+             value는 server/auth/__init__.py의 REMEMBER_TTLS 키와 같아야 한다 —
+             server/tests/test_login_remember_markup.py가 대조한다. -->
+        <fieldset id="login-remember" hidden>
+          <legend class="login-label">이 기기 기억</legend>
+          <div class="login-remember-opts">
+            <label><input type="radio" name="vt-remember" value="90d" checked /><span>90일</span></label>
+            <label><input type="radio" name="vt-remember" value="24h" /><span>24시간</span></label>
+            <label><input type="radio" name="vt-remember" value="1h" /><span>1시간</span></label>
+          </div>
+          <p class="login-remember-hint">잠깐 쓰는 기기라면 짧게 고르세요. 기간이 끝나면 다시 로그인해야 합니다.</p>
+        </fieldset>
         <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'fsh otp setup'으로 연동한 뒤에만 나타난다 -->
         <div id="login-otp-wrap" hidden>
           <p class="login-otp-hint">처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>

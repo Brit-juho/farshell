@@ -453,6 +453,12 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
   color:var(--color-st-working);
   background:color-mix(in srgb, var(--color-st-working) 16%, transparent);
 }
+/* 기기 셀 아래 보조 줄(OS · 브라우저 · 마지막 IP). 열을 늘리지 않고 한 줄 더 쓴다 —
+   폰 폭에서 열이 넷을 넘으면 표가 가로 스크롤에만 기대게 된다. */
+.vt-set-devmeta { display:block; margin-top:2px; font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-set-devlife[data-state="temp"]    { color:var(--color-st-waiting); }
+.vt-set-devlife[data-state="expired"] { color:var(--sub); }
+.vt-set-devtable tr[data-expired="1"] td { color:var(--sub); }
 
 @media (max-width: 719px) {
   #vt-mcp { padding:0; }

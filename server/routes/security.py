@@ -29,12 +29,24 @@ async def list_devices(request: Request):
     devices = []
     for d in auth.list_devices():
         did = str(d.get("id", ""))
+        client = d.get("client") if isinstance(d.get("client"), dict) else {}
         devices.append({
             "id": did[:_ID_DISPLAY_LEN],
             "label": d.get("label", ""),
             "added_at": int(d.get("added_at", 0) or 0),
             "last_seen": int(d.get("last_seen", 0) or 0),
             "current": bool(did and did == current_id),
+            # 수명. 예전 레코드는 kind/method가 비어 있다(빈 문자열로 내보낸다).
+            "expires_at": int(d.get("expires_at", 0) or 0),
+            "expired": bool(d.get("expired")),
+            "kind": str(d.get("kind", "") or ""),
+            "method": str(d.get("method", "") or ""),
+            # 표시용 — 인증에 쓰지 않는다(auth/client_info.py). UA 원문은 내보내지
+            # 않는다: 화면에 필요한 건 OS·브라우저 요약뿐이고 원문은 CLI JSON에 있다.
+            "os": str(client.get("os", "") or ""),
+            "browser": str(client.get("browser", "") or ""),
+            "ip_last": str(d.get("ip_last", "") or ""),
+            "via": str(d.get("via", "") or ""),
         })
     return {"devices": devices}
 

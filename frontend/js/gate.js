@@ -21,6 +21,8 @@
   var pass=document.getElementById('login-pass');
   var otpWrap=document.getElementById('login-otp-wrap');
   var otp=document.getElementById('login-otp');
+  var rememberWrap=document.getElementById('login-remember');
+  var passState=document.getElementById('login-pass-state');
   var btn=document.getElementById('login-submit');
   var btnLabel=document.getElementById('login-submit-label');
   var err=document.getElementById('login-err');
@@ -99,6 +101,18 @@
     // 공유 링크가 로그인으로 우회된 경우에만 안내를 켠다(그 외에는 거짓말이 된다).
     nextNote.hidden=!safeNext();
     setTimeout(function(){ try{ (otpWrap.hidden?pass:otp).focus(); }catch(e){} }, 50);
+    // 기기 기억 기간은 처음 보는 기기에서만 고른다. 등록된 기기는 서버가 그 값을
+    // 무시하므로(main.py auth_login) 보여 주면 거짓말이 된다. 상태를 못 읽으면 숨긴
+    // 채로 둔다 — 그때는 값을 안 보내고 서버 기본(90일)이 적용된다.
+    fetch('/api/auth/status',{credentials:'include'}).then(function(r){ return r.json(); })
+    .then(function(d){ if(d && d.protected && !d.device_known){ rememberWrap.hidden=false; } })
+    .catch(function(){});
+  }
+  // 숨겨져 있으면 null → payload에 넣지 않는다.
+  function rememberValue(){
+    if(rememberWrap.hidden) return null;
+    var c=rememberWrap.querySelector('input[name="vt-remember"]:checked');
+    return c ? c.value : null;
   }
   // 제출 중 상태. disabled만 걸면 "눌렀는데 아무 일도 없는" 화면이라, 라벨과
   // aria-busy를 같이 바꿔 CSS가 링을 붙이고 스크린리더도 진행 중임을 안다.
@@ -163,6 +177,37 @@
     if(r.status===401){ showForm(); } else { goNextOrHide(); }
   }).catch(function(){ goNextOrHide(); });
 
+  // 입력 상태 표시(2026-10, 사용자 요청: 한/영·Caps Lock이 안 보여 자꾸 틀린다).
+  // - Caps Lock: 키 이벤트의 getModifierState. 모바일 가상 키보드는 알려 주지 않는다.
+  // - 한글: 조합 중인 글자나 칸의 값에 **실제로 한글이 있을 때만** 켠다. 모바일
+  //   키보드는 영문 입력도 isComposing/keyCode 229로 보고해서 그것만으로는 틀린다.
+  //   ASCII 글자 키가 조합 없이 들어오면 끈다. 값은 compositionend가 영문 키로
+  //   되돌리므로(아래) 이 표시는 "바꿔 입력된다"는 사실을 알려 주는 역할이다.
+  var capsOn=false, koOn=false;
+  function renderPassState(){
+    var parts=[];
+    if(capsOn) parts.push('Caps Lock이 켜져 있습니다');
+    if(koOn) parts.push('한글 입력 중 · 영문 키로 바꿔 입력됩니다');
+    passState.textContent=parts.join(' · ');
+    passState.hidden=!parts.length;
+  }
+  function trackKey(e){
+    if(e.getModifierState){ capsOn=!!e.getModifierState('CapsLock'); }
+    if(e.key==='HangulMode'){ koOn=true; }
+    else if(!e.isComposing && e.key && e.key.length===1 && /[A-Za-z]/.test(e.key)){ koOn=false; }
+    renderPassState();
+  }
+  pass.addEventListener('keydown',trackKey);
+  pass.addEventListener('keyup',trackKey);
+  pass.addEventListener('compositionupdate',function(e){
+    if(hasHangul(e.data||'')){ koOn=true; renderPassState(); }
+  });
+  pass.addEventListener('input',function(){
+    if(hasHangul(pass.value)){ koOn=true; renderPassState(); }
+  });
+  // 칸을 떠나면 지운다 — 다른 창에서 Caps Lock을 바꿨을 수 있어 돌아올 때 다시 읽는다.
+  pass.addEventListener('blur',function(){ capsOn=false; koOn=false; renderPassState(); });
+
   // IME 조합이 끝날 때마다(음절 하나가 완성될 때마다) 한글이 섞여 있으면 즉시 되돌린다.
   pass.addEventListener('compositionend',function(){
     var fixed=fixKoreanInput(pass.value);
@@ -174,6 +219,8 @@
     var v=fixKoreanInput(pass.value); if(!v) return;
     if(v!==pass.value) pass.value=v; // 조합 중 상태로 제출된 경우 대비한 마지막 안전망
     var payload={token:v};
+    // OTP 2단계에서 다시 제출할 때도 같은 선택이 실린다(라디오는 그대로 남아 있다).
+    var rem=rememberValue(); if(rem) payload.remember=rem;
     if(!otpWrap.hidden){
       var code=(otp.value||'').replace(/\D/g,'');
       if(code.length!==6){ showErr('인증 코드를 6자리로 입력하세요'); return; }
@@ -201,6 +248,8 @@
           return;
         }
         if(d.error==='ticket_invalid'){ showErr('등록 링크가 만료되었습니다','비밀번호로 접속하세요.'); return; }
+        // 화면의 선택지와 서버 허용값이 어긋난 경우(구버전 캐시 화면 등). 비밀번호 문제가 아니다.
+        if(d.error==='invalid_remember'){ showErr('기기 기억 기간을 처리하지 못했습니다','페이지를 새로고침한 뒤 다시 시도하세요.'); return; }
         // 비밀번호 5회 실패 → IP 단위 10분 잠금(429 password_locked). 이걸 따로
         // 다루지 않으면 잠긴 동안 **정답을 쳐도** "비밀번호가 올바르지 않습니다"가
         // 뜬다 — 실제로 맞는 비밀번호를 놔두고 비밀번호를 새로 바꾸게 만든 문구다.

@@ -58,12 +58,12 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| POST | `/api/auth` | Login — password (+ `otp` for a new device) or a one-time `ticket` → issues `vt_session`/`vt_device` HttpOnly cookies. 401 `otp_required`/`otp_invalid`, 429 `otp_locked` |
-| GET | `/api/auth/status` | Whether auth is active / OTP is linked / this device is registered (accessible unauthenticated, no secrets included) |
+| POST | `/api/auth` | Login — password (+ `otp` for a new device) or a one-time `ticket` → issues `vt_session`/`vt_device` HttpOnly cookies. Optional `remember` (`90d` default / `24h` / `1h`) sets a **new** device's lifetime; a registered device ignores it, a ticket follows its own bound lifetime. The session never outlives its device (`min(24h, device remaining)`). 400 `invalid_remember`, 401 `otp_required`/`otp_invalid`, 429 `otp_locked` |
+| GET | `/api/auth/status` | Whether auth is active / OTP is linked / this device is registered and not expired (accessible unauthenticated, no secrets included). The login screen shows the lifetime choice only when `device_known` is false |
 | POST | `/api/auth/logout` | Clears the session only (device registration is kept) |
 | POST | `/api/auth/elevate` | Re-verify password (+ OTP if linked) → reissues `vt_session` with a 15-minute `elev` claim (N31). Session-scoped, not device-scoped. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
 | GET | `/api/auth/elevation` | Current session's elevation state (`elevated`, `elevated_until`) + `unused: true` / `unused_reason: "ADR-27"` — no path requires elevation today. Read-only (Settings → Security) |
-| GET | `/api/devices` | Registered devices (`~/.vt/devices.json`): id (first 8 chars only), label, added_at, last_seen, `current` for the requesting device. Read-only — registration/revocation is `fsh device` |
+| GET | `/api/devices` | Registered devices (`~/.vt/devices.json`): id (first 8 chars only), label, added_at, last_seen, `current` for the requesting device, `expires_at`/`expired`/`kind` (`persistent`/`temporary`)/`method`, and display-only `os`/`browser`/`ip_last`/`via` (`tunnel`/`tailscale`/`lan`/`local`/`direct`). Expired devices stay listed for 7 days. The raw UA is not returned. Read-only — registration/revocation is `fsh device` |
 
 ## Code Viewer / Diff (read-only)
 
@@ -165,10 +165,10 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 |--------|------|------|
 | GET | `/api/ports[?fresh=1]` | List listening ports (3-second cache). Internal proxy listeners (2.2) are hidden — see `docs/ref/tunnel.md` |
 | DELETE | `/api/ports/{port}[?pid=N]` | Kill the process. Returns 409 on a `pid` mismatch (the VT server itself, cloudflared/tailscaled/sshd, and a port's own internal proxy listener, cannot be killed) |
-| POST | `/api/ports/{port}/expose` | **Elevated** (2.2). Expose via a Cloudflare tunnel routed through FarShell's own reverse proxy. Body `{"confirm":true, "mode":"public"\|"session"\|"pin", "ttl":3600\|86400\|604800\|2592000}` — `mode` defaults to `session`, `ttl` to `3600`. 428 without `confirm`. Response includes `pin` (shown once, only for `mode:"pin"`) and `share` (public view, no secret) |
+| POST | `/api/ports/{port}/expose` | **Elevated** (2.2). Expose via a Cloudflare tunnel routed through FarShell's own reverse proxy. Body `{"confirm":true, "mode":"public"\|"session"\|"pin", "ttl":3600\|86400\|604800\|2592000}` — `mode` defaults to `session`, `ttl` to `3600`. 428 without `confirm`. Ports that are remote-control surfaces once public (Chrome DevTools 9222, Node inspector 9229, Docker API 2375/2376, ngrok agent API 4040–4043, cloudflared metrics 20241–20245, FarShell's own proxy range) return 409 `dangerous_port` with a `reason` unless the body also has `"force_danger": true` (the literal boolean). Response includes `pin` (shown once, only for `mode:"pin"`) and `share` (public view, no secret) |
 | DELETE | `/api/ports/{port}/expose` | **Elevated.** Tear down that port's tunnel and share policy — a re-expose issues a new share id and PIN |
-| POST | `/api/ports/{port}/share/pin` | **Elevated.** Reissue the PIN without touching the tunnel (URL survives) |
-| PATCH | `/api/ports/{port}/share` | **Elevated.** Body `{"mode":...}` — change who can access without touching the tunnel |
+| POST | `/api/ports/{port}/share/pin` | **Elevated.** Reissue the PIN without touching the tunnel (URL survives). Also rotates the share id, so everyone who got in with the old PIN must enter the new one |
+| PATCH | `/api/ports/{port}/share` | **Elevated.** Body `{"mode":...}` — change who can access without touching the tunnel. An actual change rotates the share id, so anyone admitted under the old mode must authenticate again |
 | POST | `/api/ports/_proxy/sync` | Not elevated — tells the running server to (re)start listeners for whatever `port_share_store` currently says. `fsh tunnel expose/pin/mode` call this after writing the policy directly (CLI trust level, not the web session's elevation gate) |
 | GET | `/api/tunnel/list` | N22 — summary of every currently open tunnel (main + `fsh tunnel expose`d ports), each with `mode`/`broken` (2.2). Unexposing reuses `DELETE /api/ports/{port}/expose` above |
 
@@ -218,7 +218,7 @@ Public download entry point (not under the api prefix, and not behind the usual 
 |--------|------|------|
 | GET | `/s/{token}` | Share download. `device` mode: serves if `vt_device`+`vt_session` are valid, else 302 to `/?next=/s/{token}`. `pin` mode: PIN entry page unless a valid one-time download cookie is present |
 | POST | `/s/{token}/pin` | Verify a PIN (form: `pin`) → 60s one-time download cookie + redirect. 5 failed attempts cancels the share |
-| GET | `/p/authorize?share=&next=` | **2.2** — cross-origin handshake for an exposed port's `session` mode (`docs/ref/tunnel.md`). Verifies login + registered device on the **main** origin, then redirects to the exposed host's `/__fsh/cb` with a 60-second one-time ticket bound to that share and device. Takes no destination parameter from the client — the target URL is looked up from the tunnel registry by `share` id, so there is no open-redirect surface |
+| GET | `/p/authorize?share=&next=` | **2.2** — cross-origin handshake for an exposed port's `session` mode (`docs/ref/tunnel.md`). Verifies login + registered device on the **main** origin, then redirects to the exposed host's `/__fsh/cb` with a 60-second one-time ticket bound to that share and device. Takes no destination parameter from the client — the target URL is looked up from the tunnel registry by `share` id, so there is no open-redirect surface. Since 2026-10 this is **the entry point** for a `session` share: the exposed host no longer redirects cookie-less visitors here (it shows a notice instead, so the main URL isn't revealed), and the ports panel / `fsh tunnel expose` link to this route |
 
 ## Multi-host peering (N7/N39, stage 1)
 
