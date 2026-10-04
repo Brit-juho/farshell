@@ -17,13 +17,16 @@ overview and `fsh help concepts` for conceptual background.
 Control FarShell from any terminal with the `fsh` command:
 
 ```bash
-fsh start [--voice]    # start everything (server+tunnel, --voice also starts the voice daemon)
+fsh start [--network <scope>] [--safe] [--force] [--voice]
+                       # start the server + its entrance (default: public tunnel + auth);
+                       # --voice also starts the voice daemon (see `fsh help access`)
 fsh restart [--voice]  # restart the server only, keeping the tunnel — the access URL stays the same
 fsh stop [--purge] [--keep-tunnel]
                        # stop (--purge: also fully kill tmux sessions;
                        #       --keep-tunnel: leave the public entrance up)
 fsh status             # check current status
-fsh mobile [--e2e]     # mobile access URL + QR (--e2e: encrypt payload)
+fsh mobile [--e2e] [--session <name>]
+                       # phone access URL + QR (server must be running; --e2e: encrypt payload)
 fsh manage             # TUI management tool (sessions/target/hotkeys/status) — Wave 4
 fsh attach [name]      # attach any tmux session in a new window
 fsh voice              # voice mode (background, usable while working in Notion)
@@ -45,8 +48,6 @@ fsh password [clear]   # set web login password (stores a hash) / clear=unset
 fsh otp [status|setup|disable]   # require OTP when registering a new device (fully disabled until setup)
 fsh device [list|rename <id> <name>|revoke <id>]  # list/rename registered devices, revoke (also invalidates sessions if a phone is lost)
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
-fsh claude             # open new terminal window with tmux dev + claude --resume (internally fsh agent claude)
-fsh agent <name>       # start with any agent — claude/codex/aider/agy/qwen (generalization of fsh claude)
 fsh template [save|apply|list|rm] <name>  # save/apply CLAUDE.md templates
 fsh popup <action>     # quick fsh command invocation via tmux 3.2+ popup
 fsh run "..."          # run headless `claude -p` in background + TTS notification on completion
@@ -65,47 +66,49 @@ fsh tunnel restart                # force a new tunnel even in a zombie-reconnec
 fsh tunnel watchdog               # check/start the zombie-reconnect auto-detection daemon (normally auto-started by fsh start/voice/mobile)
 fsh ssh [session]      # guidance for connecting directly to a tmux session via Tailscale + SSH (D9, corporate networks, etc.)
 fsh doctor             # installation/environment diagnostics (includes Linux checks)
+fsh terminal           # show / choose the main terminal app fsh uses when it opens a window
 fsh install-profiles   # auto-register terminal app profiles (iTerm2 Dynamic Profile + other snippets)
+fsh setup-keybind [key] [action]  # register a tmux popup keybinding (default: prefix+v → status)
 fsh shell-init zsh     # print the shell init snippet (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
 ```
 
 > **Supported OS**: macOS / Linux (X11) / WSL2 (behaves as Linux). Native Windows is not supported.
 
-**Phase 6 — single tmux server principle:** the fsh CLI, server, Voice Daemon, and hooks all use the `-L vt` isolated socket (the socket name stays `vt` regardless of the CLI's name). The Voice Daemon can override it via the `VT_TMUX_SOCKET` environment variable. This is kept separate from the user's own `tmux ls`.
+**Phase 6 — single tmux server principle:** the fsh CLI, server, Voice Daemon, and hooks all use the `-L fsh` isolated socket. The Voice Daemon can override it via the `VT_TMUX_SOCKET` environment variable. This is kept separate from the user's own `tmux ls`.
 
-**Automatic behavior when running `voice` / `mobile` / `start`:** a new window opens in your current terminal app (iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app) and runs `tmux new -A -s dev 'claude --resume'` inside it. If you're already inside tmux, no new window is opened.
+**Opening a terminal window:** `fsh attach` and `fsh handoff desktop` open a new window in your **main terminal** (see `fsh terminal` below) and attach tmux inside it. `voice` / `mobile` / `start` do not open windows. If you're already inside tmux, no new window is opened, and a session that already has a window attached is not opened twice.
 
 **Voice-coding workflow while working in Notion:**
-1. `fsh voice` → starts in the background (+ auto-opens a new iTerm window with `tmux dev` + `claude --resume`)
+1. `fsh voice` → starts in the background; in a terminal, run `tmux -L fsh new -A -s dev` and start `claude --resume` there
 2. Pick the current conversation from the resume list in the new window → voice/mobile then connects to that Claude
 3. Leave the original window as-is and go back to Notion to work
 4. Ctrl+Shift+M → speak ("git status") → automatically typed into tmux dev
 5. `fsh stop` → shut down
 
 > Calling an `fsh` command from inside tmux already won't open a new window (checked via `$TMUX`).
-> Auto-open is limited to macOS + iTerm. Elsewhere, it prints guidance for the manual command (`tmux new -A -s dev 'claude --resume'`).
+> If a window can't be opened (app missing, or macOS Automation permission denied), the manual command is printed (`tmux new -A -s dev 'claude --resume'`).
 
 
-## `fsh mobile` options
+## `fsh start` and `fsh mobile` options
+
+`fsh start` decides **who can reach the server**; `fsh mobile` shows the URL and QR for your phone.
 
 ```bash
+fsh start --network <scope>            # localhost | lan | tailscale | all (default)
+fsh start --safe                       # Pre-block dangerous commands (rm -rf /, sudo, etc.)
+fsh start --force                      # Force a public tunnel even without auth (password/token) set — not recommended
 fsh mobile --e2e                       # X25519 handshake + NaCl SecretBox E2E encryption
                                        #   (signed with the server's long-term identity key — TOFU pinning, trust on first connect)
-fsh mobile --safe                      # Pre-block dangerous commands (rm -rf /, sudo, etc.)
-fsh mobile --network <mode>            # localhost | lan | tailscale | all (default)
-fsh mobile --force                     # Force a public tunnel even without auth (password/token) set — not recommended
+fsh mobile --session <tmux-session>    # the phone opens straight into this tmux session (also: fsh handoff mobile)
 ```
 
 To open a public tunnel with `--network all` (the default), you must first set up
-authentication via `fsh password` or `VT_AUTH_TOKEN` — if unset, the run is rejected
+authentication via `fsh password` or `VT_AUTH_TOKEN` — if unset, `fsh start` is rejected
 (to prevent unauthenticated remote code execution). To proceed anyway at your own
-risk, pass `--force` explicitly.
+risk, use `fsh start --force`.
 
-`tailscale` mode opens the server only on your own tailnet IP, without a Cloudflare
-Tunnel, and also restricts the network policy to the tailnet CIDR
-(`100.64.0.0/10`) + localhost only.
-
----
+The options used to live on `fsh mobile`; passing `--network`/`--safe`/`--force` to it still
+works (it runs `fsh start` for you) but prints a notice. Details: `fsh help access`.
 
 ## Agent-to-agent messages (`fsh msg`, `fsh mcp`)
 
@@ -199,7 +202,7 @@ RDP/VNC). Tailscale (a WireGuard-based VPN mesh) works via UDP hole punching or
 session via Tailscale + SSH is lighter and faster than full screen sharing.
 
 Since the tmux session is the single source of truth, SSH is just another client
-alongside the desktop iTerm, mobile PWA, and Voice Daemon — connecting via SSH from
+alongside the desktop terminal, mobile PWA, and Voice Daemon — connecting via SSH from
 the office picks up exactly the same screen, scrollback, and running Claude session
 you were looking at at home.
 
@@ -220,24 +223,33 @@ connect/disconnect events.
 | Access method | Requires | Use case |
 |---|---|---|
 | `fsh ssh` | Tailscale + (optional) SSH key | Pure terminal work, keyboard-heavy tasks like vim/IDE |
-| `fsh mobile --network tailscale` | Tailscale + browser | Voice input, touch interaction from a phone |
-| `fsh mobile` (default, `--network all`) | Auth (password/token) | Fully external devices without Tailscale |
+| `fsh start --network tailscale` | Tailscale + browser | Voice input, touch interaction from a phone |
+| `fsh start` (default, `--network all`) | Auth (password/token) | Fully external devices without Tailscale |
 
 For details: `fsh help ssh`.
 
 ---
 
-## Auto-open behavior
+## Main terminal and auto-open
 
-When running `fsh voice` / `mobile` / `start`:
-- Auto-detects your current terminal app → opens a new window → runs `tmux new -A -s dev 'claude --resume'`
-- Supported apps: iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app
+`fsh terminal` shows / sets which app opens the window (stored as `VT_TERMINAL` in `~/.vt.env`):
+
+```bash
+fsh terminal                  # current setting + installed apps
+fsh terminal set ghostty      # auto | ghostty | iterm | terminal | wezterm | warp | kitty | alacritty
+fsh terminal unset            # back to auto
+```
+
+- `auto` (default): your current terminal app (`TERM_PROGRAM`), then installed apps in order
+- An app that isn't installed is rejected by `set`; if the chosen app can't be opened at run time, fsh says so and falls back to auto
+- Ghostty (1.3+) opens the window inside the already-running app via AppleScript, falling back to `open -na`
+- Supported apps: iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app (macOS); common emulators on Linux (auto only)
 - If already inside tmux, continues in the current window without opening a new one (checks `$TMUX`, guaranteeing idempotency)
 
 ## Post-install integration (optional)
 
 Integrate so that opening a new terminal window automatically enters
-`tmux -L vt new -A -s dev`. Choose one of the two approaches below.
+`tmux -L fsh new -A -s dev`. Choose one of the two approaches below.
 
 ### Method A — Auto-register terminal profiles (recommended)
 
@@ -265,6 +277,6 @@ p10k instant prompt active in zsh.
 
 ### Single tmux server principle
 
-The `fsh` CLI, server, Voice Daemon, and hooks all use the isolated `-L vt` socket,
+The `fsh` CLI, server, Voice Daemon, and hooks all use the isolated `-L fsh` socket,
 so every client (desktop, mobile, Voice Daemon) shares the same session. This is
 automatically separate from the user's existing `tmux ls` sessions.

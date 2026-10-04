@@ -32,7 +32,7 @@ ntfy 토픽, 텔레그램 봇, 그냥 iCloud Drive의 텍스트 파일...
 VT_TUNNEL_HOOK='내-스크립트 또는 셸 한 줄'
 ```
 
-훅이 호출되는 시점: `fsh start` / `fsh mobile` / `fsh voice`(터널 시작),
+훅이 호출되는 시점: `fsh start`(터널 시작),
 `fsh tunnel expose`, `fsh tunnel unexpose`, `fsh stop`(터널 종료),
 `fsh tunnel hook`(수동).
 

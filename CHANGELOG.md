@@ -49,6 +49,73 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   판정은 `server/voice_notify.py`. `GET /voice/notify/clients` 추가.
 
 
+
+- **`fsh terminal` — 창을 열 때 쓰는 메인 터미널을 사용자가 고른다.** `VT_TERMINAL`
+  (`auto` 기본 | ghostty | iterm | terminal | wezterm | warp | kitty | alacritty)을
+  `fsh terminal set <앱>`으로 저장한다. 설치 안 된 앱·오타는 거부하고, 실행 중 열지
+  못하면 알린 뒤 자동 선택으로 넘어간다. Ghostty는 `open -na`(매번 앱을 하나 더 실행)
+  대신 이미 켜진 앱에 AppleScript(1.3+)로 창만 추가해 더 빠르다(세션 생성까지
+  0.29초 → 0.15초). 실패하면 `open -na`로 폴백한다.
+
+- **`fsh status`에 「접속 보안」 블록.** 접근 범위(all/tailscale/lan/localhost, 허용 목록),
+  외부 주소(고정 도메인인지 익명 터널인지), 인증(비밀번호/토큰), OTP, 등록 기기 수를 보여준다.
+  공개 접속인데 인증이 없으면 경고한다.
+- **`fsh help` 전면 정리.** 빠져 있던 22개 명령(`restart`, `tunnel`, `password`, `otp`, `device`,
+  `host`, `files`, `worktree`, `mcp`, `msg` 등)을 용도별 그룹으로 넣고, 토픽 목록은 `docs/help/*.md`에서
+  자동으로 만든다. `fsh help <명령>`도 된다(`start`, `mobile`, `attach` …). 새 토픽 `access`(접속 범위와
+  보안), `terminal`, `tunnel`. 알 수 없는 명령은 예전의 두 번째(낡은) 사용법 대신 같은 도움말을 낸다.
+- **`server/code_fingerprint.py`.** 서버 코드의 AST 지문. 주석·docstring만 바꿨을 때 "서버가 옛 코드로
+  돌고 있습니다"가 뜨던 오탐을 없앤다(서버 시작 때 지문을 저장해 두고 비교).
+- **`server/terminal_open.py` — 터미널 창 열기의 단일 구현.** 웹의 「맥에서 열기」와 CLI(`fsh attach`,
+  `fsh handoff desktop`)가 같은 코드를 쓴다. 예전엔 bash와 파이썬에 따로 있어서 웹은 `VT_TERMINAL`을
+  무시하고 iTerm2를 먼저 시도했다. 명령은 임시 스크립트로 넘겨 따옴표 주입 경로가 없다.
+  Ghostty는 AppleScript로 이미 켜진 앱에 창만 추가하고(`activate`는 따로 비동기로 — 같은 스크립트에 넣으면
+  2초 넘게 걸린다), 실패하면 `open -na`로 폴백한다. 창 열기 0.23초. 한계: 이 방식으로 연 Ghostty 창은
+  명령이 끝나도 닫히지 않는다.
+
+### Changed
+
+- **`fsh mobile`은 이제 폰 접속 URL과 QR만 보여준다. 서버·터널 시작은 `fsh start`.** `--network`,
+  `--safe`, `--force`는 `fsh start`로 옮겼다(`--e2e`는 URL 옵션이라 `mobile`에 남고, `--session <이름>` 추가).
+  옛 옵션을 `mobile`에 주면 안내를 내고 `fsh start`를 대신 실행한다(호환). `fsh handoff mobile`은
+  `mobile --session`으로 통합했다. 부팅 자동 시작은 `fsh start`를 쓴다.
+- **`fsh start`가 공개 터널을 열기 전 인증을 확인한다.** 예전엔 이 검사가 `mobile`에만 있어서
+  `fsh start`는 인증 없이도 공개 터널을 열었다. 인증이 없으면 거부하고 `--network tailscale` 등 대안과
+  `--force`를 안내한다. 접근 범위는 `$PID_DIR/network_mode`에 기록돼 `restart`가 이어받는다.
+- **Ghostty 창 제목이 전부 같은 아이콘(👻)이던 것.** tmux가 제목을 안 알려줘서(`set-titles off`) 창이 여러 개면
+  구분이 안 됐다. fsh 전용 tmux 서버에 `set-titles on` + `set-titles-string "#S"`를 걸어 제목이 세션 이름이 된다
+  (서버 시작 때 `tmux_hooks.install`, CLI는 세션을 만들거나 확인할 때). 기본 tmux·`~/.tmux.conf`는 건드리지 않는다.
+- 터널 목록의 기본 라벨 "터미널 (VT)"를 "터미널 (FarShell)"로 바꿨다.
+- 웹 설정 문구 "맥에서도 iTerm 열기"를 "맥 터미널에서도 열기"로 바꿨다(실제로는 메인 터미널을 쓴다).
+
+### Removed
+
+- **`fsh claude` / `fsh agent` 제거.** 웹 서비스는 쓰지 않았고(워크트리 화면의 에이전트
+  표는 `server/agents.py`가 단일 정의) 문서에만 남아 있던 명령이다. 터미널에서
+  직접 `tmux`로 들어가 에이전트를 실행하면 된다.
+
+### Fixed
+
+
+- **`fsh doctor`/`fsh status`가 "`fsh stop && fsh start`로 재시작하세요"라고 안내하던 것.** 이 방법은 터널
+  주소를 날린다(프로젝트가 스스로 금지한 방식). `fsh restart`로 바꿨다.
+- **문서의 tmux 소켓 이름이 `-L vt`로 적혀 있던 것.** 실제 기본값은 `fsh`다(이름 변경 전 잔재).
+- 호출되지 않는 죽은 함수 2개(`_tmux_populate`, `_tmux_attach_or_switch`) 제거.
+- **`fsh handoff desktop`이 창을 못 열던 것.** 창을 열기 직전에 `_ensure_tmux`가
+  빈 `dev` 세션을 먼저 만들어, "세션이 이미 있다"는 판정에 걸려 새 창을 건너뛰었다.
+  이제 붙어 있는 창이 있을 때만 건너뛰고, `dev`가 없으면 창이 세션과 `claude`를
+  함께 만든다.
+- **문서가 `fsh voice`/`mobile`/`start`가 터미널 창을 연다고 적었으나 코드는 열지 않던
+  불일치.** 문서를 실제 동작에 맞췄다.
+
+- **‘연결된 화면’에서 웹 브라우저 탭을 각각 세고 끊을 수 있게 수정.** 같은 tmux
+  세션을 연 모바일과 데스크톱이 웹 PTY 하나를 공유하던 attach 경로를 화면별 PTY로
+  바꿨다. 탭 새로고침은 같은 화면을 복구하고, 탭 종료 뒤 5초면 해당 tmux
+  클라이언트가 목록에서 빠진다. 다른 화면에서 끊긴 탭은 이유를 표시하고 자동
+  재연결을 멈춘다. HUD 숫자는 5초마다 갱신한다.
+
+### Added
+
 - **코드 뷰어 자동 갱신 + 파일 뷰어 새로고침 버튼** (`server/fs_watch.py`,
   `/ws-fs-watch`, `shell/fs-watch.js`). 파일을 열어 둔 채 에이전트가 고쳐도
   화면이 그대로라 닫았다 다시 열어야 했다(사용자 지적). 이제 열린 파일(시트·
@@ -319,12 +386,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   거의 0으로 보이고 폴더만 지우면 고아 파일이 남았다. 실제 파일을 한 번씩만 세고, 삭제 때 폴더 밖 가중치도 함께 지운다
   (다른 모델이 같이 쓰는 파일은 남긴다). 직접 입력한 모델도 관리 목록에 보인다.
 
-
-- **‘연결된 화면’에서 웹 브라우저 탭을 각각 세고 끊을 수 있게 수정.** 같은 tmux
-  세션을 연 모바일과 데스크톱이 웹 PTY 하나를 공유하던 attach 경로를 화면별 PTY로
-  바꿨다. 탭 새로고침은 같은 화면을 복구하고, 탭 종료 뒤 5초면 해당 tmux
-  클라이언트가 목록에서 빠진다. 다른 화면에서 끊긴 탭은 이유를 표시하고 자동
-  재연결을 멈춘다. HUD 숫자는 5초마다 갱신한다.
 
 - **부팅 직후 자동 시작에서 새 터널 주소가 Notion에 게시되지 않던 것.** 훅 게시 전
   주소가 살아 있는지 보는 확인(`_tunnel_url_alive`)이 약 15초만 기다려, DNS가 늦게

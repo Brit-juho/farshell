@@ -35,8 +35,9 @@ fsh status
 #### 음성 모드 ("음성 모드", "voice mode", "음성으로 코딩")
 
 노션/브라우저 작업을 계속하면서 음성으로 코딩하는 모드.
-서버 + tmux + Voice Daemon을 백그라운드로 시작하고,
-**새 iTerm 창에 `tmux dev` + `claude --resume`이 자동으로 열립니다**(macOS).
+서버 + tmux + Voice Daemon을 백그라운드로 시작합니다.
+터미널 창은 자동으로 열리지 않습니다 — 터미널에서 `tmux -L fsh new -A -s dev` 로 들어가 `claude --resume`을 실행하세요
+(`fsh attach` / `fsh handoff desktop`은 고른 메인 터미널에 창을 엽니다, 아래 「메인 터미널 선택」).
 
 ```bash
 fsh voice
@@ -46,40 +47,51 @@ fsh voice
 - Ctrl+Shift+M로 녹음 시작/종료
 - 말한 내용이 자동으로 tmux 터미널에 입력됨
 - 다른 작업을 계속해도 됨 (백그라운드 동작)
-- **새로 열린 iTerm 창에서 resume 목록의 현재 대화 선택** → 이후 음성/모바일이 그 Claude로 연결됨
+- **tmux dev 안의 Claude에서 resume 목록의 현재 대화 선택** → 이후 음성/모바일이 그 Claude로 연결됨
 - 이미 tmux 안이면 새 창을 열지 않음 (`$TMUX` 체크)
 
 #### 모바일 모드 ("모바일", "mobile", "폰에서 접속")
 
-모바일 브라우저에서 터미널에 접속할 수 있는 URL을 제공합니다.
-음성 모드와 마찬가지로 **새 iTerm 창에 `tmux dev` + `claude --resume`이 자동으로 열립니다**.
+서버가 떠 있는 상태에서 폰으로 접속할 URL과 QR을 보여줍니다. 서버와 터널은 `fsh start`가 시작합니다.
+음성 모드와 마찬가지로 터미널 창은 자동으로 열리지 않습니다.
 
 ```bash
-fsh mobile
+fsh start      # 서버 + 터널 (이미 떠 있으면 건너뜀)
+fsh mobile     # 접속 URL + QR
 ```
 
-- Cloudflare Tunnel URL이 생성됨
+- 접속 URL은 `fsh start`가 만든 터널 주소 (1회용 등록 티켓 포함)
 - adb 연결 시 자동으로 Chrome에서 열림
 - QR 코드도 표시 (qrencode 설치 시)
-- 폰이 attach하는 `dev` 세션 = 새 iTerm 창의 Claude가 동작하는 세션 (단일 진실의 원천)
+- 폰이 attach하는 `dev` 세션 = tmux dev 안의 Claude가 동작하는 세션 (단일 진실의 원천)
 
 #### 전체 시작 ("fsh 시작", "전부 시작")
 
-서버 + 터널을 시작하고, 새 터미널 창(iTerm/Ghostty/WezTerm/Kitty/Alacritty/Warp/Terminal.app 중 감지된 앱)에 tmux + Claude를 자동 오픈.
+서버 + 터널을 시작합니다(터미널 창은 열지 않음).
 음성 데몬은 기본으로 켜지지 않는다 — 필요하면 `--voice`를 붙이거나 `fsh voice`를 따로 실행.
+접근 범위는 `fsh start --network <localhost|lan|tailscale|all>`(기본 all = 공개 터널 + 인증, 인증이 없으면 거부).
+자세히: `fsh help access`.
 
 ```bash
 fsh start          # 서버 + 터널만
 fsh start --voice  # 서버 + 터널 + 음성 데몬
 ```
 
-#### Claude 시작 ("클로드 시작", "claude 실행")
+#### 메인 터미널 선택 ("터미널 바꿔줘", "고스티로", "iterm으로")
 
-tmux dev 세션 안에서 `claude --resume`을 즉시 실행.
+fsh가 창을 직접 여는 명령(`fsh attach`, `fsh handoff desktop`)이 쓸 터미널을
+사용자가 고른다. 특정 앱으로 고정돼 있지 않다. 값은 `~/.vt.env`의 `VT_TERMINAL`
+(`auto` 기본 | `ghostty` | `iterm` | `terminal` | `wezterm` | `warp` | `kitty` | `alacritty`).
 
 ```bash
-fsh claude
+fsh terminal                  # 현재 설정 + 설치된 앱 확인
+fsh terminal set ghostty      # 메인 터미널 지정 (설치 안 된 앱·오타는 거부)
+fsh terminal unset            # 자동 선택으로 되돌리기
 ```
+
+- `auto`: 지금 쓰는 터미널(`TERM_PROGRAM`) → 설치된 앱 순서
+- 지정한 앱을 열지 못하면 조용히 바꾸지 않고 알린 뒤 자동 선택으로 넘어간다
+- Ghostty는 이미 켜진 앱에 창만 추가한다(AppleScript, 1.3+). 실패하면 `open -na`로 폴백
 
 #### 기기 간 핸드오프 ("폰으로 넘겨", "맥으로 가져와")
 
@@ -171,6 +183,21 @@ fsh stop --keep-tunnel   # 서버만 내리고 입구는 유지
 fsh stop --purge         # tmux 세션까지 완전 종료
 ```
 
+#### 그 밖의 명령 ("명령어 뭐 있어", "도움말")
+
+전체 목록과 설명은 `fsh help`, 항목별 상세는 `fsh help <토픽|명령>` (예: `fsh help access`, `fsh help terminal`).
+용도별로 정리하면:
+
+| 용도 | 명령 |
+|---|---|
+| 접속 보안 | `fsh password`(웹 비밀번호), `fsh otp`(새 기기 OTP), `fsh device`(등록 기기 조회·폐기), `fsh status`(접속 보안 현황) |
+| 터널 | `fsh tunnel list/expose/unexpose/pin/mode/restart/setup/switch/hook` (`fsh help tunnel`) |
+| 세션·터미널 | `fsh attach`, `fsh handoff mobile|desktop`, `fsh terminal`, `fsh ssh`, `fsh manage`(TUI) |
+| 에이전트 | `fsh hooks`(훅 등록), `fsh pane report`, `fsh queue`(프롬프트 큐), `fsh msg`, `fsh mcp`, `fsh worktree`(별칭 `wt`), `fsh usage`, `fsh clauth`, `fsh run`, `fsh template` |
+| 음성·입력 | `fsh voice`, `fsh voice-target`, `fsh hotkey`, `fsh clip` |
+| 다른 맥·파일 | `fsh host`(페어링), `fsh files`(파일 저장소·공유 링크), `fsh git-account` |
+| 설치 보조 | `fsh doctor`, `fsh shell-init`, `fsh install-profiles`, `fsh setup-keybind`, `fsh popup` |
+
 ### 프로세스 수명
 
 - 서버/터널은 **백그라운드 프로세스**로 실행됨
@@ -188,7 +215,7 @@ fsh stop --purge         # tmux 세션까지 완전 종료
 | Voice Daemon 핫키 안 먹힘 | macOS 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 |
 | 서버 시작 실패 | `cat /tmp/vt-server.log` 확인 |
 | 터널 URL 안 뜸 | `cat /tmp/cloudflared.log` 확인. cloudflared 설치: `brew install cloudflared` |
-| 새 iTerm 창이 안 열림 | iTerm2 미설치이거나 osascript 권한 없음. 출력된 수동 명령(`tmux new -A -s dev 'claude --resume'`)을 다른 터미널에서 실행 |
+| 새 터미널 창이 안 열림 | 고른 터미널(`fsh terminal`)이 설치돼 있지 않거나 osascript(자동화) 권한이 없음. 출력된 수동 명령(`tmux new -A -s dev 'claude --resume'`)을 다른 터미널에서 실행 |
 | `claude --resume`에서 대화 못 찾음 | resume 목록은 시간순. 가장 최근 항목을 고르거나, ID로 직접: `claude --resume <conversation-id>` |
 
 ### 사용자 시나리오: 노션 작업 중 음성 코딩

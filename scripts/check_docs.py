@@ -330,8 +330,13 @@ def check_help_topics(problems: list[str]) -> None:
 
     for topic in sorted((listed | inline) - files):
         problems.append(f"fsh help: 안내하는 토픽에 문서가 없음 — docs/help/{topic}.md")
-    for topic in sorted(files - (listed | inline)):
-        problems.append(f"docs/help/{topic}.md: 문서가 있는데 `fsh help`가 안내하지 않음")
+    # `fsh help`가 토픽 목록을 docs/help/*.md에서 직접 만들면(2026-10-02~) 문서가 있는데 안내되지
+    # 않는 상황이 구조상 생기지 않는다 — 그때는 이 방향의 검사가 필요 없다.
+    m = re.search(r"^cmd_help\(\) \{.*?^\}", fsh, re.S | re.M)
+    dynamic = bool(m and '"$docs_dir"/*.md' in m.group(0))
+    if not dynamic:
+        for topic in sorted(files - (listed | inline)):
+            problems.append(f"docs/help/{topic}.md: 문서가 있는데 `fsh help`가 안내하지 않음")
 
 
 # ── 3. VERSION ↔ CHANGELOG ────────────────────────────────────────────────

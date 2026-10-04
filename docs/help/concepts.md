@@ -53,12 +53,12 @@ iTerm 창을 닫아도 tmux 서버 안의 세션은 살아있음. vim/claude 등
     └─ window 1
        └─ pane 0  ← vim
 
-## 3. 격리 소켓 `-L vt`
+## 3. 격리 소켓 `-L fsh`
 
-FarShell은 별도 tmux 서버(`/tmp/tmux-{uid}/vt` 소켓)를 씀.
+FarShell은 별도 tmux 서버(`/tmp/tmux-{uid}/fsh` 소켓)를 씀.
 
     tmux ls          # 사용자 평소 세션 (default 소켓)
-    tmux -L vt ls    # FarShell 전용 세션 (vt 소켓)
+    tmux -L fsh ls    # FarShell 전용 세션 (fsh 소켓)
 
 → 두 세계가 완전히 분리됨. 사용자 기존 워크플로 안 건드림.
 
@@ -88,7 +88,7 @@ iTerm Dynamic Profile / Ghostty / WezTerm 등에 등록. 새 창 default command
 ## 6. 자주 묻는 질문
 
 - **Q. 기존에 열린 iTerm 창들이 fsh 실행 후 자동 통합되나?**
-  - A. ❌ 안 됨. zsh 가드는 새 창 시작 시에만 동작. 기존 창은 수동 `tmux -L vt attach -t dev`
+  - A. ❌ 안 됨. zsh 가드는 새 창 시작 시에만 동작. 기존 창은 수동 `tmux -L fsh attach -t dev`
 
 - **Q. 모든 iTerm 창을 처음부터 tmux로 시작하면 되나?**
   - A. ✅ 그게 권장 방식. `fsh install-profiles` 또는 `fsh shell-init`이 그것.

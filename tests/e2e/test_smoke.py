@@ -94,7 +94,7 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
                         값으로 인증이 걸려 401이 난다.
       VT_WORKSPACE_PATH 안 주면 사용자의 실제 workspace.json에 테스트가 만든
                         레이아웃·설정이 저장된다.
-      VT_TMUX_SOCKET    안 주면 사용자의 `-L vt` 소켓을 그대로 본다 — 진짜 작업
+      VT_TMUX_SOCKET    안 주면 사용자의 `-L fsh` 소켓을 그대로 본다 — 진짜 작업
                         세션이 목록에 뜨고, 조작하면 실제로 영향을 준다.
       VT_STATE_DIR      안 주면 **`~/.vt/` 그 자체**에 쓴다. 서버 모듈 20여 개가
                         이 값을 읽는다(기기 설정·기기 목록·스니펫·큐·파일·푸시

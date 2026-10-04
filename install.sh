@@ -174,7 +174,7 @@ if [ ! -f "$HOME/.vt.env" ]; then
 VT_DIR=$VT_DIR
 VT_PORT=${VT_PORT:-7777}
 VT_PYTHON=\${VT_DIR}/.venv/bin/python
-# 'fsh mobile'(공개 터널)은 인증이 없으면 실행을 거부합니다 — 아래 둘 중 하나로
+# 'fsh start'(공개 터널)은 인증이 없으면 실행을 거부합니다 — 아래 둘 중 하나로
 # 인증을 먼저 설정하세요(권장: fsh password). localhost/lan/tailscale 모드는 필요 없습니다.
 #   fsh password              대화형으로 비밀번호 설정 (scrypt 해시만 여기 저장됨)
 # VT_AUTH_TOKEN=your-secret  기계용 토큰 (데몬/QR 등, 원한다면 직접 값 채우기)
@@ -204,7 +204,7 @@ fi
 # 7. cloudflared 안내 (선택)
 if ! command -v cloudflared >/dev/null 2>&1; then
   echo ""
-  echo "  ⓘ 원격 접속(fsh mobile)용 cloudflared 미설치."
+  echo "  ⓘ 원격 접속(fsh start)용 cloudflared 미설치."
   if [ "$(uname)" = "Darwin" ]; then
     echo "    설치: brew install cloudflared"
   else
@@ -258,7 +258,8 @@ echo "  │  ✓ 설치 완료                              │"
 echo "  │                                         │"
 echo "  │  다음 명령으로 시작:                        │"
 echo "  │    fsh status   — 상태 확인               │"
-echo "  │    fsh mobile   — 폰 접속 URL             │"
+echo "  │    fsh start    — 서버 + 접속 경로 시작     │"
+echo "  │    fsh mobile   — 폰 접속 URL + QR        │"
 if [ "$PROFILE" = "voice" ]; then
 echo "  │    fsh voice    — 음성 모드               │"
 fi
@@ -266,6 +267,6 @@ echo "  │                                         │"
 echo "  │  새 터미널을 열거나 'source ~/.zshrc' 실행  │"
 echo "  └─────────────────────────────────────────┘"
 echo ""
-echo "  참고: 'fsh mobile'로 공개 터널(원격 접속)을 열려면 먼저 인증을 설정해야"
+echo "  참고: 'fsh start'로 공개 터널(원격 접속)을 열려면 먼저 인증을 설정해야"
 echo "  합니다 — 'fsh password' 실행 (localhost/lan/tailscale 모드는 필요 없음)."
 echo ""

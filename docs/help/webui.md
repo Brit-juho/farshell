@@ -10,8 +10,8 @@
 |------|------|
 | 데스크톱 | `http://localhost:7777` |
 | 같은 와이파이 모바일 | `http://<맥북IP>:7777` (IP: `ipconfig getifaddr en0`) |
-| 어디서든(원격) | `fsh mobile` → 나오는 cloudflare HTTPS URL / QR |
-| 회사망 등 | `fsh mobile --network tailscale` (tailnet 제한) |
+| 어디서든(원격) | `fsh start` 후 `fsh mobile` → 나오는 cloudflare HTTPS URL / QR |
+| 회사망 등 | `fsh start --network tailscale` (tailnet 제한) |
 
 > 토큰(`VT_TOKEN`)이 설정돼 있으면 URL에 `?token=...`이 붙습니다. 첫 접속 시 토큰이
 > HttpOnly 쿠키로 교환되고 URL에서 제거됩니다(로그/공유 노출 차단).
