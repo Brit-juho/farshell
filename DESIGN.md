@@ -763,7 +763,7 @@ to `hostname`) off `/api/capabilities` (`"MacBook Pro M1 Pro"` — the OS prefix
 was dropped 2026-09-29 at the user's request; machine is macOS-only,
 read once via `system_profiler` and cached for the process lifetime, same
 pattern as the `hostname`/`version` fields), the session picker
-(`#voice-session-picker`, kept for now as a display + the same rename/sleep/
+(`#voice-session-picker`, kept for now as a display + the same rename/close/
 kill sheet it always opened — the session tab below now has full parity with
 it, so a later pass can drop the sheet trigger and make this pure display),
 and the command-palette search icon. The workspace chip (repo name + host) is
@@ -815,7 +815,7 @@ desktop's ⋯ button) since `layout/dnd.js`'s long-press is wired to actual
 drag-and-drop and isn't reusable as-is. **Two real bugs surfaced building
 this, both fixed:** the sheet's action callbacks originally read the
 render-prop's resolved value (`m()`) *after* `closeMenu()` had already torn
-down that `<Show>` block, so e.g. 재우기 silently did nothing from a real tap
+down that `<Show>` block, so e.g. the close action (called 재우기 then) silently did nothing from a real tap
 while working fine when called directly from a console — fixed by capturing
 the row into a plain variable before closing. And the shared
 `.vt-session-sheet` (also used by the older `#voice-session-picker` sheet)
