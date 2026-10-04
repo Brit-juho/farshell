@@ -39,6 +39,11 @@ EVENTS = (
     "client-detached",
 )
 HOOK_INDEX = 77
+
+# 터미널 창(탭) 제목을 세션 이름으로 — tmux가 제목을 알려주지 않으면(set-titles off, 기본값)
+# Ghostty는 기본 아이콘(👻)만 보여줘서 창이 여러 개일 때 어느 창이 어느 세션인지 구분이 안 된다.
+# fsh 전용 서버(-L fsh)에만 걸리고, 사용자의 기본 tmux나 ~/.tmux.conf는 건드리지 않는다.
+TITLE_OPTIONS = (("set-titles", "on"), ("set-titles-string", "#S"))
 KICK_PATH = "/api/tmux/kick"
 HEADER = "X-VT-Kick"
 
@@ -63,6 +68,11 @@ def install() -> bool:
     False — 감시 루프가 시작될 때 다시 부른다."""
     cmd = hook_command()
     ok = True
+    for name, value in TITLE_OPTIONS:
+        rc, _, err = tmux_runner.run(["set-option", "-g", name, value])
+        if rc != 0:
+            ok = False
+            logger.debug(f"tmux 제목 옵션 설정 실패({name}): {err!r}")
     for event in EVENTS:
         rc, _, err = tmux_runner.run(["set-hook", "-g", f"{event}[{HOOK_INDEX}]", cmd])
         if rc != 0:

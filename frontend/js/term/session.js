@@ -31,8 +31,8 @@ import { COMPACT_MAX } from '../layout/breakpoints.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
 export async function createSession({ place = 'view' } = {}) {
-  // "맥에서도 열기"가 켜져 있으면 tmux 세션으로 생성하고 서버에 osascript로
-  // iTerm 창을 자동 오픈하도록 요청. E2: 체크박스 엘리먼트의 .checked가 아니라
+  // "맥에서도 열기"가 켜져 있으면 tmux 세션으로 생성하고 서버에
+  // 맥 터미널 창을 자동 오픈하도록 요청. E2: 체크박스 엘리먼트의 .checked가 아니라
   // 설정 스토어를 읽는다 — 그 엘리먼트는 rail 설정 패널 안에 있어서 값의 주인이
   // DOM이면 기기마다 다른 값이 되고, 패널 마크업이 바뀌면 조용히 undefined가 된다.
   const autoMac = setting('session.openOnMac');
@@ -162,13 +162,13 @@ export async function attachTmux(tmuxName, { place = 'view' } = {}) {
 
 // export — showAddMenu의 "tmux 세션" 메뉴 항목이 부른다.
 export async function createTmuxSession() {
-  // "맥에서도 열기"가 켜져 있으면 서버가 osascript로 iTerm 창도 함께 연다.
+  // "맥에서도 열기"가 켜져 있으면 서버가 메인 터미널(VT_TERMINAL) 창도 함께 연다.
   // E2: DOM이 아니라 설정 스토어가 이 값의 주인이다.
   const autoMac = setting('session.openOnMac');
   const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...(autoMac ? { auto_open_on_mac: true } : {}), screen: screenId() }),
+    body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId() }),
   });
   if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
   const data = await res.json();

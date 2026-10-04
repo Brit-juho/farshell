@@ -224,91 +224,21 @@ def open_terminal_with_command(command: str) -> bool:
 def spawn_mac_terminal(command: str) -> bool:
     """macOS에서 새 터미널 창을 열고 지정 명령 실행.
 
-    지원 우선순위: iTerm2 → Ghostty → WezTerm → Kitty → Alacritty → Terminal.app
-    command는 AppleScript/쉘에 넘어가므로 호출측에서 sanitize 필요.
-
-    명령은 `exec`로 실행한다 — 이 창의 유일한 용도가 tmux attach라, 웹에서 세션을
-    kill/detach하면 attach 프로세스가 종료되고 그 즉시 창도 닫혀야 한다. 셸 안에서
-    실행하면(또는 `; exec bash`로 셸을 남기면) tmux가 죽어도 `...attach[exited]`만
-    남은 죽은 터미널 창이 계속 떠 있게 된다. exec로 셸을 대체하면 프로세스 종료 시
-    터미널 앱이 (기본 프로필의 "프로세스 종료 시 창 닫기" 규칙에 따라) 창을 닫는다.
+    구현은 `terminal_open.py` 한 곳에 있다(웹과 `fsh attach`가 같은 코드를 쓴다).
+    `VT_TERMINAL`로 고른 메인 터미널을 먼저 시도하고, 열지 못하면 자동 순서로 넘어간다.
+    명령은 임시 스크립트로 넘기므로 따옴표가 있어도 안전하다.
 
     Returns: True if 터미널 앱에 명령 전달 성공, False if 모든 시도 실패.
     """
     if not IS_MACOS:
         return False
-
-    exec_command = f"exec {command}"
-
-    def _osascript(script: str) -> bool:
-        try:
-            r = subprocess.run(["osascript", "-e", script],
-                               capture_output=True, timeout=5)
-            return r.returncode == 0
-        except Exception:
-            return False
-
-    # 1) iTerm2
-    if os.path.isdir("/Applications/iTerm.app"):
-        script = (
-            'tell application "iTerm"\n'
-            '  activate\n'
-            '  create window with default profile\n'
-            '  tell current session of current window\n'
-            f'    write text "{exec_command}"\n'
-            '  end tell\n'
-            'end tell'
-        )
-        if _osascript(script):
-            return True
-
-    # 2) Ghostty
-    if os.path.isdir("/Applications/Ghostty.app"):
-        try:
-            subprocess.Popen(["open", "-na", "Ghostty", "--args", "-e",
-                              "bash", "-lc", exec_command])
-            return True
-        except Exception:
-            pass
-
-    # 3) WezTerm
-    if shutil.which("wezterm"):
-        try:
-            subprocess.Popen(["wezterm", "cli", "spawn", "--new-window",
-                              "--", "bash", "-lc", exec_command])
-            return True
-        except Exception:
-            pass
-
-    # 4) Kitty
-    if os.path.isdir("/Applications/kitty.app"):
-        try:
-            subprocess.Popen(["open", "-na", "kitty", "--args",
-                              "bash", "-lc", exec_command])
-            return True
-        except Exception:
-            pass
-
-    # 5) Alacritty
-    if os.path.isdir("/Applications/Alacritty.app"):
-        try:
-            subprocess.Popen(["open", "-na", "Alacritty", "--args", "-e",
-                              "bash", "-lc", exec_command])
-            return True
-        except Exception:
-            pass
-
-    # 6) Terminal.app (최후 — 맥 기본 내장)
-    script = (
-        'tell application "Terminal"\n'
-        '  activate\n'
-        f'  do script "{exec_command}"\n'
-        'end tell'
-    )
-    if _osascript(script):
-        return True
-
-    return False
+    import terminal_open
+    res = terminal_open.open_terminal(command)
+    if res.note:
+        logger.info(f"terminal open: {res.note}")
+    if not res.ok:
+        logger.warning(f"terminal open 실패: {res.err}")
+    return res.ok
 
 
 def play_sound(event: str) -> None:

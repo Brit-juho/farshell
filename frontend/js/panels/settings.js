@@ -50,7 +50,7 @@ const TERMINAL_GROUPS = [
       // 2026-09-18 — ui/settings-toggles.js가 진작 스토어에 묶어뒀지만
       // (E2), 그 체크박스가 살던 자리(legacy rail 플라이아웃)가 오늘
       // 도달 불가능해지며 이 키를 끄고 켤 화면이 아예 없어졌다.
-      { key: 'session.openOnMac', label: '새 세션 생성 시 맥에서도 iTerm 열기', kind: 'bool' },
+      { key: 'session.openOnMac', label: '새 세션 생성 시 맥 터미널에서도 열기', kind: 'bool' },
     ],
   },
   {
@@ -111,7 +111,7 @@ const SECTIONS = [
 
 const SEARCH_ITEMS = [
   ['terminal', '글자 크기'], ['terminal', '커서 모양'], ['terminal', '커서 깜빡임'],
-  ['terminal', '새 세션 생성 시 맥에서도 iTerm 열기'], ['terminal', '앱에 마우스 이벤트 전달'],
+  ['terminal', '새 세션 생성 시 맥 터미널에서도 열기'], ['terminal', '앱에 마우스 이벤트 전달'],
   ['terminal', '드래그 시 자동 복사'], ['terminal', '터치 탭을 앱에 전달'],
   ['terminal', '스크린 리더 모드'], ['terminal', '스크롤백 줄 수'],
   ['voice', '웹 푸시 알림'], ['voice', '완료 알림'], ['voice', '알림 방식'], ['voice', '음성 인식 모델'], ['voice', '받아 둔 항목 관리'],
