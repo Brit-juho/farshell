@@ -26,7 +26,10 @@ import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSourc
 // N4 — 패널 칸. 레지스트리는 상수 + **동적** import 로더만 들고 있어서
 // 여기서 정적으로 가져와도 panels 청크가 core로 승격되지 않는다(ADR-26).
 import { mountPanelInPane, panelLabel } from '../panels/registry.js';
-import { openPanePicker } from './pane-picker.js';
+// 빈 칸을 눌렀을 때만 쓰는 세션 선택 시트 — screens 청크(vite.config.js).
+const openPanePicker = (paneId) => import('./pane-picker.js')
+  .then((m) => m.openPanePicker(paneId))
+  .catch((e) => console.error('[FarShell pane-picker]', e));
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
 import { vtFetch } from '../core/api.js';

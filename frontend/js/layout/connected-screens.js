@@ -30,7 +30,7 @@ function closePanel() {
 // 부를 때 쓴다 — activeSessionId를 그 세션으로 바꿔치기하지 않는다(예전엔 그걸
 // 위해 switchTo를 불렀는데, switchTo가 지금 포커싱된 pane 자리를 그 세션으로
 // 덮어써 버렸다 — 사용자 보고로 발견).
-function openPanel(explicitSessionId) {
+export function openPanel(explicitSessionId) {
   const targetId = explicitSessionId || activeSessionId();
   // 같은 세션을 다시 누르면 닫고, 다른 행을 누르면 그 세션의 목록으로 전환한다.
   if (document.getElementById('vt-connected-screens')) {

@@ -4,6 +4,8 @@ import { vtFetch } from '../../core/api.js';
 import { isMac } from '../../core/env.js';
 import { _setMsg } from './state.js';
 import { _hl } from './file.js';
+// UMD 전역 VTDiffLex — 뷰어 전용이라 panels 청크에서 평가한다(마지막 import일 것: file.js 참고).
+import '../../lib/difflex.js';
 
 export function _renderDiffDOM(container, diffText) {
   const files = VTDiffLex.parse(diffText);

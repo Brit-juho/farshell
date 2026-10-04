@@ -157,6 +157,7 @@ export default defineConfig(({ mode }) => {
             // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
             // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
             if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
+            if (p.endsWith('/frontend/js/lib/difflex.js')) return 'panels';  // 뷰어 전용 UMD
             if (p.includes('/frontend/js/panels/files/')) return 'panels';
             if (p.includes('/frontend/js/panels/ports/')) return 'panels';
             if (p.endsWith('/frontend/js/queue.js')) return 'panels';
@@ -183,6 +184,13 @@ export default defineConfig(({ mode }) => {
             // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
             // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
             if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
+            // 「연결된 화면」 모달 + 클라이언트 목록 — HUD 칩·레일 메뉴가 열 때만 쓴다.
+            // layout/connected-screens-lazy.js가 지연 import하고, 설정 > 음성 섹션도
+            // clients.js를 정적 import한다(settings -> screens 단방향, core는 안 따라온다).
+            if (p.endsWith('/frontend/js/layout/connected-screens.js')) return 'screens';
+            if (p.endsWith('/frontend/js/layout/clients.js')) return 'screens';
+            // 빈 칸 클릭 시 열리는 세션 선택 시트(layout/panes.js가 지연 import).
+            if (p.endsWith('/frontend/js/layout/pane-picker.js')) return 'screens';
             // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야
             // 한다(entry를 청크에 배정하면 Rollup이 app.js를 빈 껍데기로 만든다).
             if (p.includes('/frontend/js/') && !p.endsWith('/frontend/js/main.js')) return 'core';
