@@ -375,8 +375,22 @@ button goes disabled **with the reason in its tooltip**.
 ### Header 36px
 
 Left: a workspace chip (repo name + host, clicking it opens the palette's `@`
-mode). Center: tabs — **in 2.1.0 a tab is a session** (a worktree from 2.1.1,
-ADR-20). A tab is `[14px agent mark][name][status dot]` — "done but not yet seen on this device" is a 2px-gap ring around that same dot (`.status-dot.unseen`, 2026-09-30), not a second dot: the old separate unread dot was the same colour as `done` (`--info` = `--color-st-done`), so a finished tab showed two identical blue dots that dropped to one once viewed. Right:
+mode). Center: **view tabs** (`#vt-wtabs`, `layout/tabbar.js`). A tab is a view,
+not a session, and holds only `[label][×]` — no agent mark, no state icon, no dot
+(2026-10-04 rework). The label is the member names joined with `+`, or the name the
+user gave it. State lives in a **state bar** along the tab's bottom edge
+(`.vt-wtab-bar` > `.vt-seg`): one equal-width segment per session in pane order
+(top-left first), a one-segment bar for a single view, empty panes not counted.
+Segment colour = the four state colours (`--color-st-*`), idle a dimmed grey that is
+always visible; only `waiting` breathes (`vt-status-breathe`; under
+`prefers-reduced-motion` it becomes a striped fill, so the shape still says
+"waiting"). **Thickness carries "unseen"**: 6px = changed and not yet looked at,
+3px = seen. The focused pane is never shown by thickness (it would collide) — the
+pane's own border does that. Colour alone is not the signal: the hover tooltip lists
+`name · state[ · 확인 안 함]` per session and the tab's `aria-label` repeats it
+(`api, 작업 중 · web, 입력 대기(확인 안 함)`). The active tab is a filled background
+(the old accent underline gave way to the bar). × is shown even when there is one
+view. Hidden below 720px, as before. Right:
 `⌘K` (palette), a connected-screens icon + count, settings ⚙. Dragging a tab
 to drop it on a pane still uses the existing `layout/dnd.js`
 (`frontend/js/shell/HeaderExtras.tsx` only draws the new workspace chip and
@@ -541,7 +555,7 @@ the danger/failure colour for buttons and toasts.
   are 유휴 / 작업 중 / **입력 대기** / 완료 (waiting reads 입력 대기 everywhere — the
   rail's old 승인 대기 is gone). A tab or group is represented by one state with the
   priority `waiting > done(unseen) > working > done(seen) = idle`
-  (`representativeState`, shared by the tab bar, favicon and rail). Among entries of
+  (`representativeState`, shared by the favicon and rail; the view tab does not fold — it draws one segment per session). Among entries of
   one tmux session the server's `_URGENCY` order decides.
 - **Unseen** = the state changed and the user has not looked at that session yet — any
   state, not only `done`. Drawn as a 2px-gap ring around the dot (`.status-dot.unseen`)
@@ -751,7 +765,8 @@ desktop-only now; a phone doesn't need to see the repo name on every screen.
 hidden here — `80-dock.css`'s unconditional `display:flex` (added for the
 strip's horizontal-scroll behavior, loads later in the same `legacy` layer)
 otherwise won whenever 2+ tabs were open; a single-tab test during step 1
-missed this because `tabbar.js` hides a lone tab on its own.
+missed this because `tabbar.js` hid a lone tab on its own (it no longer does —
+2026-09-29 — so a single view draws its tab bar like any other).
 
 Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`):
 **Session · Terminal · Changes · Files · Settings**. Queue was dropped from

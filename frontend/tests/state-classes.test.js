@@ -96,3 +96,42 @@ test('stateIcon — 4상태는 서로 다른 SVG이고 라벨·링을 단다, �
     assert.doesNotMatch(html, /[✓✔✅❓❗]|[\u{1F300}-\u{1FAFF}]/u);
   }
 });
+
+test('viewSegments — 세션 수·순서·빈 칸 제외·unseen 굵기', async () => {
+  const { viewSegments } = await load(SC_JS);
+  assert.deepStrictEqual(viewSegments([]).length, 0);
+  assert.strictEqual(viewSegments(null).length, 0);
+  // 단독 뷰도 세그먼트 1개
+  const one = viewSegments([{ name: 'api', status: 'idle' }]);
+  assert.strictEqual(one.length, 1);
+  assert.strictEqual(one[0].thick, false);
+  // 칸 순서 유지 + 빈 칸(이름 없음)·null 은 세지 않는다
+  const segs = viewSegments([
+    { name: 'api', status: 'working', unseen: false },
+    { name: '', status: 'waiting', unseen: true },
+    null,
+    { name: 'web', status: 'waiting', unseen: true },
+    { name: 'db', status: 'done', unseen: false },
+    { name: 'wk', status: 'idle', unseen: true },
+  ]);
+  assert.deepStrictEqual(Array.from(segs.map((s) => s.name)), ['api', 'web', 'db', 'wk']);
+  assert.deepStrictEqual(Array.from(segs.map((s) => s.status)), ['working', 'waiting', 'done', 'idle']);
+  assert.deepStrictEqual(Array.from(segs.map((s) => s.thick)), [false, true, false, true]);
+});
+
+test('viewSegments — 알 수 없는 상태(error 등)는 idle 로 접는다', async () => {
+  const { viewSegments } = await load(SC_JS);
+  const s = viewSegments([{ name: 'a', status: 'error' }, { name: 'b', status: undefined }]);
+  assert.deepStrictEqual(Array.from(s.map((x) => x.status)), ['idle', 'idle']);
+  assert.deepStrictEqual(Array.from(s.map((x) => x.label)), ['유휴', '유휴']);
+});
+
+test('segmentsTooltip / segmentsAria — 세션마다 이름·상태, 읽지 않음이면 「확인 안 함」', async () => {
+  const { viewSegments, segmentsTooltip, segmentsAria } = await load(SC_JS);
+  const segs = viewSegments([
+    { name: 'api', status: 'working' },
+    { name: 'web', status: 'waiting', unseen: true },
+  ]);
+  assert.strictEqual(segmentsTooltip(segs), 'api · 작업 중\nweb · 입력 대기 · 확인 안 함');
+  assert.strictEqual(segmentsAria(segs), 'api, 작업 중 · web, 입력 대기(확인 안 함)');
+});

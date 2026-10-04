@@ -7,16 +7,16 @@
 //
 // 3단계(6/n)에서 아래쪽 세션 탭 줄(`#tabs`)은 사라졌다. 그 줄이 하던 일은
 // 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
-// 닫기·이름 변경은 레일 세션 행으로, 에이전트 마크·상태 dot·읽지 않음은
-// 이 파일의 워크트리 탭으로.
+// 닫기·이름 변경은 레일 세션 행으로, 상태·읽지 않음은 이 파일의 탭 아래
+// 가장자리 상태 바로(2026-10-04 리뉴얼 — 탭에는 라벨과 ×만 남는다).
 import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, setTabLabel, moveLayoutTab, tabDisplayLabel, onLayoutChange, isLayoutEmpty } from './store.js';
 import { collectSessions } from './tree.js';
-import { allSessions, activeSessionId, getSession } from '../core/store.js';
+import { allSessions, activeSessionId, getSession, sessionDisplayName } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
 import { closeView } from '../term/session-actions.js';
-import { icon, setAgentMark } from '../ui/icons.js';
-import { getStatus, isUnseen, applyStatusDot, onStatusChange } from '../agent/state.js';
-import { stateLabel, representativeState } from '../design/state-classes.js';
+import { icon } from '../ui/icons.js';
+import { getStatus, isUnseen, onStatusChange } from '../agent/state.js';
+import { viewSegments, segmentsTooltip, segmentsAria } from '../design/state-classes.js';
 
 const HOST = 'vt-wtabs';
 
@@ -25,30 +25,22 @@ const HOST = 'vt-wtabs';
 // 이 탭 바 자체가 숨겨져 있어(80-dock.css @media max-width:719px) 손댈 게 없다.
 const TAB_MIME = 'application/x-fsh-tab';
 
-// ── 탭 하나의 상태 ─────────────────────────────────────────────────────────
-// 10-shell-layout.md §4: 탭 구성은 `[에이전트 마크][이름][상태 dot][읽지 않음]`.
-// 탭은 워크트리라 세션이 여럿일 수 있으므로 **가장 급한 것 하나**로 접는다
-// (레일 워크트리 행과 같은 규칙 — 두 화면이 다른 말을 하면 안 된다).
+// ── 탭 하나의 상태 바 ───────────────────────────────────────────────────
+// 탭 = [라벨][×] + 아래 가장자리 바. 바는 이 뷰의 칸(세션)마다 같은 폭의
+// 세그먼트 하나, 칸 순서(왼쪽 위부터)대로. 대표 상태로 접지 않는다.
+// 색 = 상태(.vt-seg[data-state]), 굵기 = 읽지 않음(.thick). 포커스 칸은
+// 굵기를 쓰지 않는다(굵기 의미와 겹친다) — 칸 테두리가 맡는다.
 
-/** 이 탭(실제 pane 트리)에 떠 있는 세션들의 tmux 이름. 2026-09-18 후속
- * (그룹 재정의) — 태그(`@fsh_grp`)가 아니라 실제 pane 트리에서 뽑는다. */
-function tabSessionNames(tab) {
+/** 이 탭 pane 트리의 세션을 칸 순서로. 이름(tmux)이 없는 칸은 빠진다. */
+function tabEntries(tab) {
   const all = allSessions();
   const out = [];
   for (const sid of collectSessions(tab.tree)) {
     const s = all[sid];
     const tmux = s && (s.tmuxName || s.tmux_name);
-    if (tmux) out.push(tmux);
+    if (tmux) out.push({ name: sessionDisplayName(sid), status: getStatus(tmux), unseen: isUnseen(tmux) });
   }
   return out;
-}
-
-let _agents = {};   // tmux 세션 이름 → { agent, label } (agent/status.js가 준다)
-
-/** agent/badges.js가 스냅샷을 받을 때마다 알려준다 — 같은 응답을 두 번 조회하지 않는다. */
-export function setAgentInfo(agents) {
-  _agents = agents || {};
-  paintTabs();
 }
 
 function paintTabs() {
@@ -58,39 +50,29 @@ function paintTabs() {
   for (const el of host.querySelectorAll('.vt-wtab')) {
     const tab = byId.get(el.dataset.tabId);
     if (!tab) continue;
-    const names = tabSessionNames(tab);
-    // 대표 상태 — 레일·Fleet과 같은 규칙(design/state-classes.js representativeState).
-    const rep = representativeState(names.map((n) => ({ status: getStatus(n), unseen: isUnseen(n) })));
-
-    // 에이전트 마크 — 이 탭에서 돌고 있는 CLI. 여럿이면 첫 번째만(마크는
-    // "무엇이 돌고 있나"의 힌트이지 목록이 아니다. 목록은 레일이 보여준다).
-    const mark = el.querySelector('.vt-wtab-agent');
-    const info = names.map((n) => _agents[n]).find((i) => i && i.agent);
-    if (mark) {
-      setAgentMark(mark, info && info.agent);
-      if (info && info.label) mark.setAttribute('data-tip', info.label); else mark.removeAttribute('data-tip');
+    const segs = viewSegments(tabEntries(tab));
+    const bar = el.querySelector('.vt-wtab-bar');
+    if (!bar) continue;
+    // 개수가 같으면 자식을 재사용한다 — 갈아 끼우면 waiting의 breathing이 처음부터 다시 돈다.
+    while (bar.children.length > segs.length) bar.lastChild.remove();
+    while (bar.children.length < segs.length) {
+      const i = document.createElement('i');
+      i.className = 'vt-seg';
+      bar.appendChild(i);
     }
-
-    // 상태 dot — idle이면 안 그린다(세션 탭과 같은 규칙: "아무 일도 없음"은
-    // 기본값이라 표시할 필요가 없다. 상시로 붙은 회색 점은 노이즈다).
-    // 2026-09-30 — 「읽지 않음」을 이 dot 하나에 합쳤다. 예전엔 옆에 같은 색
-    // (--info = --color-st-done) 점을 하나 더 그려서, 끝났는데 안 본 탭에는
-    // 파란 점이 두 개 떴다가 보면 하나로 줄었다(사용자: "원이 2개씩, 오락가락").
-    // 이제 안 본 변화는 dot 둘레의 링(.unseen)으로만 말한다 — 자리는 늘 하나다.
-    // 읽지 않음이 어떤 상태로든 생길 수 있게 되면서(agent/state.js), 링만 있고
-    // 상태는 idle인 탭도 회색 dot에 링으로 그린다.
-    const dotHost = el.querySelector('.vt-wtab-marks');
-    if (dotHost) {
-      const { status, unseen } = rep;
-      if (status === 'idle' && !unseen) {
-        dotHost.querySelector(':scope > .status-dot')?.remove();
-      } else {
-        const dot = applyStatusDot(dotHost, status);
-        dot.classList.toggle('unseen', unseen);
-        const label = stateLabel(status) + (unseen ? ' · 아직 확인 안 함' : '');
-        dot.setAttribute('data-tip', label);
-        dot.setAttribute('aria-label', label);
-      }
+    segs.forEach((s, n) => {
+      const i = bar.children[n];
+      if (i.dataset.state !== s.status) i.dataset.state = s.status;
+      i.classList.toggle('thick', s.thick);
+    });
+    const label = tabDisplayLabel(tab);
+    if (segs.length) {
+      el.setAttribute('data-tip', segmentsTooltip(segs));
+      el.setAttribute('data-tip-side', 'bottom');
+      el.setAttribute('aria-label', `${label} — ${segmentsAria(segs)}`);
+    } else {
+      el.removeAttribute('data-tip');
+      el.setAttribute('aria-label', label);
     }
   }
 }
@@ -192,21 +174,15 @@ function render() {
     el.setAttribute('aria-selected', String(t.id === activeId));
     el.tabIndex = t.id === activeId ? 0 : -1;
 
-    const mark = document.createElement('span');
-    mark.className = 'vt-wtab-agent';
-    el.appendChild(mark);
-
     const name = document.createElement('span');
     name.className = 'vt-wtab-name';
     name.textContent = tabDisplayLabel(t);
     el.appendChild(name);
 
-    // dot은 이름 뒤·닫기 앞이라는 순서가 고정돼야 한다 — 상태가 바뀔 때마다
-    // 위치가 움직이면 닫기 버튼을 잘못 누르게 된다. 「읽지 않음」도 이 dot의
-    // 링으로 말한다(아래 paintTabs).
-    const marks = document.createElement('span');
-    marks.className = 'vt-wtab-marks';
-    el.appendChild(marks);
+    const bar = document.createElement('span');
+    bar.className = 'vt-wtab-bar';
+    bar.setAttribute('aria-hidden', 'true');
+    el.appendChild(bar);
 
     // 뷰 × — 하나여도 그린다. tmux는 안 죽인다(2026-10-03).
     {
@@ -266,9 +242,7 @@ export function renameTab(tabId, label) {
 }
 
 onLayoutChange(render);
-// 브랜드 로고 청크 도착(ui/icons.js) — 마크만 다시 칠한다.
-window.addEventListener('vt:brand-icons', paintTabs);
-// 상태가 바뀌면 탭 마크만 다시 칠한다(다시 그리지 않는다 — 렌더는 DOM을
+// 상태가 바뀌면 상태 바만 다시 칠한다(다시 그리지 않는다 — 렌더는 DOM을
 // 통째로 갈아 끼우므로 클릭 중에 탭이 사라질 수 있다).
 onStatusChange(paintTabs);
 render();
@@ -276,4 +250,3 @@ render();
 // 지연 청크(shell/Rail.tsx)가 정적 import 없이 부를 수 있게 — 이 저장소의 관행.
 window.openGroupTab = openGroupTab;
 window.vtRenameTab = renameTab;
-window.vtSetTabAgentInfo = setAgentInfo;

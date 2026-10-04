@@ -78,3 +78,30 @@ export function representativeState(entries) {
   }
   return { status, unseen };
 }
+
+// ── 뷰 탭의 상태 바 ─────────────────────────────────────────────────────
+// 탭 하나 = 칸(세션)마다 같은 폭의 세그먼트 하나. 색은 상태, 굵기는 읽지 않음
+// (굵음 = 아직 확인 안 함 / 얇음 = 확인함). 색만으로 말하지 않도록 툴팁과
+// aria-label이 같은 문장을 싣는다. 대표 상태로 접지 않는다 — 칸마다 따로 보인다.
+
+/** entries: 칸 순서(왼쪽 위부터)의 [{ name, status, unseen? }]. 이름 없는 칸(빈 칸)은 세지 않는다. */
+export function viewSegments(entries) {
+  const out = [];
+  for (const e of entries || []) {
+    if (!e || !e.name) continue;
+    const status = normalizeState(e.status);
+    const unseen = !!e.unseen;
+    out.push({ name: e.name, status, unseen, thick: unseen, label: stateLabel(status) });
+  }
+  return out;
+}
+
+/** 호버 툴팁 — 세션마다 한 줄: "이름 · 상태[ · 확인 안 함]". */
+export function segmentsTooltip(segs) {
+  return segs.map((s) => `${s.name} · ${s.label}${s.unseen ? ' · 확인 안 함' : ''}`).join('\n');
+}
+
+/** 스크린 리더용 한 줄 — "api, 작업 중 · web, 입력 대기(확인 안 함)". */
+export function segmentsAria(segs) {
+  return segs.map((s) => `${s.name}, ${s.label}${s.unseen ? '(확인 안 함)' : ''}`).join(' · ');
+}

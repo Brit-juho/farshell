@@ -27,7 +27,7 @@
 | kitty keyboard protocol (N12) | Sends combinations that legacy encodings have no room for — `Ctrl+Shift+<letter>`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+Tab` — as CSI u (`frontend/js/term/kitty-keys.js`). Encoding happens **only while an app has turned the mode on** (`CSI > flags u`); otherwise a shell that never enabled it would literally print `\x1b[97;6u`. The mode is a push/pop stack, so a vim that opens and closes inside a shell restores the previous value. Our own UI shortcuts are matched first, so `Mod+K` never leaks to the PTY even with the mode on. ⚠ **Layer 3 (tmux `extended-keys`) is deliberately absent** — that is a change to the user's tmux server options and needs its own approval. With tmux 3.3+ and that option off, tmux blocks CSI u before it reaches the inner app (`set -s extended-keys on`) |
 | Skins (N14) | Settings → "모양" (Mod+, or rail ⚙ → Settings) is the **only** place to switch skins now — `#theme-row`'s 6 chips (farshell/macos/catppuccin/windows/vscode/notepad, `theme.js`'s `vtSkins()`) render there. The command palette (Mod+K → "테마") also lists all skins, reading `vtSkins()` directly rather than scanning the DOM — so it works even when the Settings panel isn't open. A 7th "import a Ghostty config or Warp theme YAML" skin (`theme-import.js`/`theme-custom.js`, a lazy chunk) shipped 2026-09-14 and was removed 2026-09-22 — 8 days in, no workspace had ever actually saved `theme.skin: "imported"` |
 
-## Session and view rules (target, agreed 2026-10-03 — Terms, Invariants and Actions implemented 2026-10-03; View tab, States, Rail, Origin not yet)
+## Session and view rules (target, agreed 2026-10-03 — Terms, Invariants and Actions implemented 2026-10-03; View tab implemented 2026-10-04; States, Rail, Origin not yet)
 
 > This section is the **target**. Until each step lands, the Features rows above (Session groups, Header tabs)
 > describe what the code does today. When a step ships, update those rows and drop the matching "target" note here.
@@ -82,14 +82,14 @@ Boot attaches only the sessions in the saved layout's open panes; `restoreWorksp
 "attach every tmux session" fallback and the empty-pane fill-in on restore are gone. Session order (mobile swipe) now
 follows the layout and is no longer persisted on its own.
 
-### View tab
+### View tab (implemented 2026-10-04)
 
 - Label (member names joined with `+`, unless the user named it) and ×. No agent icon, no state icon.
 - A **state bar** along the bottom edge, split into one equal segment per session in pane order (top-left first).
   Single views get a one-segment bar.
 - Segment colour = state colour; only `waiting` breathes.
 - **Thick segment = changed and not yet seen; thin = seen.** Idle segments always show (grey).
-- Hover tooltip lists "name · state" per session, since colour alone is not enough.
+- Hover tooltip lists "name · state[ · 확인 안 함]" per session, since colour alone is not enough; the tab's aria-label carries the same. Focus is shown by the pane border, never by thickness. Segments 3px (seen) / 6px (unseen); `waiting` breathes, striped under reduced motion (`layout/tabbar.js`, `viewSegments` in `design/state-classes.js`).
 
 ### States (rail, mobile) — shared parts implemented 2026-10-04; rail/mobile surfaces adopt the icons in the Rail step
 
