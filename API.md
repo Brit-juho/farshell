@@ -16,7 +16,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/sessions?screen=S` | List sessions; `screen` limits tmux web attachments to one browser tab. Without it, lists all sessions for CLI/legacy callers |
+| GET | `/api/sessions?screen=S` | List sessions (each with `tmux_name` and `origin`, same values as `/api/tmux/sessions`); `screen` limits tmux web attachments to one browser tab. Without it, lists all sessions for CLI/legacy callers |
 | POST | `/api/sessions` | Create a session (JSON: cols, rows, name) |
 | DELETE | `/api/sessions/{session_id}` | Delete a session |
 | PATCH | `/api/sessions/{session_id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
@@ -28,7 +28,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/tmux/sessions` | List tmux sessions |
+| GET | `/api/tmux/sessions` | List tmux sessions. Each item carries `origin` — where the session was created: `local` (this UI, incl. worktree open), `peer` (another Mac via `/api/peer/sessions/create`), `agent` (reserved — no creation path exists yet), `external` (no record: `fsh` CLI or plain tmux). Read from tmux option `@fsh_origin` in the same `list-sessions` call; the same field is in `/ws-workspace` `tmux_sessions` |
 | POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name, optional 32-hex `screen`). Each screen gets its own PTY; the same screen reuses its attachment after reload |
 | POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd, optional `screen`) |
 | DELETE | `/api/tmux/kill/{tmux_name}` | Fully kill a tmux session |
@@ -247,7 +247,7 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | POST | `/api/peer/clients/detach` | Signed, **`control` level** — detach one client (JSON: `tty`, `screen`). Detaching your own screen (identified by `screen`) is refused with 400 |
 | POST | `/api/peer/clients/solo` | Signed, **`control` level** — "keep only this screen" (JSON: `session`, `screen`). If `screen` doesn't resolve to a tty, **nothing is detached** and it returns 400 — detaching everything has no way back |
 | GET | `/api/peer/search?q=` | Signed, `view` level — scrollback search on this host (same caps as the local `/api/search/scrollback`). `session_id` is stripped from the results: it only means something inside this host, and the caller would open the wrong session with it |
-| POST | `/api/peer/sessions/create` | Signed, **`control` level** — create a tmux session on this host (JSON: optional `name`). Empty name → the same default-name rule as local `POST /api/tmux/create`. Names are `[A-Za-z0-9_][A-Za-z0-9_-]{0,31}` (a leading `-` would be read as a tmux option). **No `cwd`, no command** — the session starts in this host's default directory with the default shell, so "create a session" never becomes a second way to run an arbitrary command. Existing name → 409 |
+| POST | `/api/peer/sessions/create` | Signed, **`control` level** — create a tmux session on this host (JSON: optional `name`). Empty name → the same default-name rule as local `POST /api/tmux/create`. Names are `[A-Za-z0-9_][A-Za-z0-9_-]{0,31}` (a leading `-` would be read as a tmux option). **No `cwd`, no command** — the session starts in this host's default directory with the default shell, so "create a session" never becomes a second way to run an arbitrary command. Existing name → 409. The server records the new session's `origin` as `peer` itself; nothing in the request body can set it |
 | POST | `/api/peer/sessions/kill` | Signed, **`control` level** — end a tmux session on this host (JSON: `name`). Matched **exactly** (`-t =name`): plain `-t name` falls back to a prefix match, so `dev` would kill `dev-2`. Missing → 404 (`error: session_not_found`). Also cleans up this host's own web tab on that session (reuses the local kill) |
 | POST | `/api/peer/sessions/rename` | Signed, **`control` level** — rename a tmux session on this host (JSON: `name`, `new`). Exact match on the target, 409 if `new` exists, and this host's own web-session record follows the new name |
 

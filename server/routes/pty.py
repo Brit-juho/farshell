@@ -133,7 +133,9 @@ async def list_sessions(screen: str | None = None):
     # 세션으로 전환되어 살아남아 PTY가 EOF되지 않는다 → 죽은 tmux를 가리키는 web 세션이
     # 목록·메모리(PTY·scrollback)·클라이언트 터미널로 계속 쌓인다. 여기서 실제 tmux 존재를
     # 검증해 좀비 세션을 정리하고, 살아있는 것만 반환한다.
-    live_tmux_names = {p.session for p in await tmux_runner.get_all_panes_async()}
+    panes = await tmux_runner.get_all_panes_async()
+    live_tmux_names = {p.session for p in panes}
+    origin_by_tmux = {p.session: p.origin for p in panes}
     result = []
     for s in list(pty_mgr.sessions.values()):
         info = session_store.get(s.session_id)
@@ -154,6 +156,8 @@ async def list_sessions(screen: str | None = None):
             # 예전엔 이 필드가 없어서 페이지 로드 시 복원된 세션은 항상 "tmux 아님"으로
             # 오판됐다(sessions[id].tmuxName을 채울 소스 자체가 없었음).
             "tmux_name": tmux_name,
+            # 만든 곳(local/peer/agent/external) — 같은 list-panes 호출에서 읽는다.
+            "origin": origin_by_tmux.get(tmux_name, "external") if tmux_name else "external",
         })
     return result
 

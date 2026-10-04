@@ -550,6 +550,7 @@ def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dic
         )
         if rc != 0:
             return {"ok": False, "error": err.decode("utf-8", errors="replace")}
+        tmux_runner.set_origin(tmux_name, "local")
 
     # 97번 3단계 §2-4 — MCP 설정에는 참조(`${VAR}`)만 심으므로 값은 여기서
     # 채운다. **값이 아니라 파일 경로만** 명령줄에 실린다(mcp_env 머리말:
@@ -715,6 +716,7 @@ def open_worktree(wt_id: str) -> dict:
         )
         if rc != 0:
             raise WorktreeError(500, {"error": "tmux 세션 생성 실패", "detail": err.decode("utf-8", errors="replace")})
+        tmux_runner.set_origin(tmux_name, "local")
         # 2.1 D2 — 방금 만든 세션이 이 워크트리 소속임을 tmux에 적어 둔다.
         tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id)
     invalidate_cache()

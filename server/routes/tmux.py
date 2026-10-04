@@ -175,7 +175,7 @@ async def collect_tmux_sessions() -> list[dict]:
     내도록 한 곳에서 만든다."""
     # 2.1 D2: `@fsh_wt`도 같이 받는다 — 세션이 어느 워크트리 소속인지, cwd
     # 추측이 아니라 tmux에 적힌 사실로 답한다(subprocess 호출 수는 그대로다).
-    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}"
+    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}\t#{@fsh_origin}"
     # A2: pane_id를 함께 받아 응답에 싣는다 — 프런트가 "이 카드가 그 pane인가"를
     # cwd 추측이 아니라 id로 판정할 수 있게(같은 cwd 세션 둘 문제의 해소).
     fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}"
@@ -215,6 +215,8 @@ async def collect_tmux_sessions() -> list[dict]:
             "pane_id": pane_id,
             "web_session_id": web_session.session_id if web_session else None,
             "wt_id": parts[3] if len(parts) > 3 else "",
+            # 만든 곳(local/peer/agent). 기록이 없으면 external — 같은 list-sessions 호출에서 읽는다.
+            "origin": tmux_runner.normalize_origin(parts[4] if len(parts) > 4 else ""),
         })
     return sessions
 
@@ -254,6 +256,9 @@ async def create_tmux_session(request: Request):
             {"error": "tmux session create failed", "detail": err.decode("utf-8", errors="ignore")},
             status_code=500,
         )
+
+    # 만든 곳 기록 — 이 화면의 새 세션. 값은 서버가 정한다(요청 본문의 origin은 무시).
+    await tmux_runner.set_origin_async(tmux_name, "local")
 
     # 2.1 D2 그루드워크 — 이 세션이 어느 워크트리에서 열렸는지 아는 호출자(스니펫
     # 「새 섹션」, 워크트리 화면 등)는 태그를 같이 보낼 수 있다. 지금은 어느

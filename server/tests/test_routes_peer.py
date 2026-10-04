@@ -928,3 +928,15 @@ def test_peer_ws_stays_open_when_only_this_screen_was_detached(env, monkeypatch)
     with client.websocket_connect("/api/peer/ws/dev", headers=headers) as ws:
         assert b"process exited" in ws.receive_bytes()
         assert ws.receive_bytes() == b"still-open"   # 닫혔다면 여기서 끊김 예외
+
+
+def test_peer_create_records_origin_peer_and_ignores_body(env, fake_tmux):
+    """peer가 만든 세션은 서버가 스스로 origin=peer로 적는다 — 본문의 origin은 믿지 않는다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/create",
+                     {"name": "dev", "origin": "local", "@fsh_origin": "agent"})
+    assert r.status_code == 200, r.text
+    sets = [c for c in fake_tmux.calls if c[0] == "set-option"]
+    assert sets == [["set-option", "-t", "dev", "@fsh_origin", "peer"]]

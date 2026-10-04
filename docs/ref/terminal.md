@@ -128,6 +128,22 @@ follows the layout and is no longer persisted on its own.
 Recorded when a session is created and shown as a rail icon: this browser / another Mac (peer create) / an agent /
 external (no record — `fsh` CLI or plain tmux). Only sessions created in this browser tab open automatically.
 
+**Server record (implemented 2026-10-04; rail icon not yet).** The server writes the tmux user option `@fsh_origin`
+right after `new-session` (same mechanism as `@fsh_wt`, so it survives a server restart). Reads ride the existing
+`list-sessions` / `list-panes` format strings — no extra tmux call. The API field is `origin` on
+`GET /api/tmux/sessions`, `/ws-workspace` `tmux_sessions` and `GET /api/sessions`.
+
+| Value | Written by | Meaning |
+|---|---|---|
+| `local` | `POST /api/tmux/create`, worktree open (`worktree._open_agent`, `open_worktree`) | created from this UI |
+| `peer` | `POST /api/peer/sessions/create` | another Mac created it; the server decides this itself, the request body is never read for it |
+| `agent` | nobody yet | value and `tmux_runner.set_origin(name, "agent")` are ready, but the MCP tools have **no session-creation function**, so no path produces it today |
+| `external` | nothing (absence of the option) | `fsh` CLI, plain `tmux new`, or any unknown option value |
+
+Only `local`/`peer`/`agent` are ever written (`tmux_runner.set_origin` rejects everything else without calling tmux);
+unknown values read back as `external`. The server has no auto-attach path: sessions attach only through explicit
+`POST /api/tmux/attach|create`, so "only this tab's own sessions open automatically" is a frontend rule.
+
 ### tmux-centric session management
 
 The web UI uses tmux sessions as its default:

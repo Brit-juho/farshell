@@ -35,13 +35,13 @@ def test_create_with_worktree_id_tags_the_session(monkeypatch):
     body = {"name": "wt-test", "worktreeId": "abcdef123456"}
     asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
 
-    assert tagged == [("wt-test", "@fsh_wt", "abcdef123456")]
+    assert [t for t in tagged if t[1] == "@fsh_wt"] == [("wt-test", "@fsh_wt", "abcdef123456")]
 
 
 def test_create_without_worktree_id_does_not_tag(monkeypatch):
     monkeypatch.setattr(tmux_runner, "run", lambda args, timeout=None: (0, b"", b""))
-    monkeypatch.setattr(tmux_runner, "set_option", lambda *a: (_ for _ in ()).throw(
-        AssertionError("worktreeId 없이 태그를 심으면 안 된다")))
+    monkeypatch.setattr(tmux_runner, "set_option", lambda s, k, v: (
+        k != "@fsh_wt" or (_ for _ in ()).throw(AssertionError("worktreeId 없이 태그를 심으면 안 된다"))))
 
     body = {"name": "wt-plain"}
     asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
@@ -49,8 +49,8 @@ def test_create_without_worktree_id_does_not_tag(monkeypatch):
 
 def test_create_rejects_malformed_worktree_id(monkeypatch):
     monkeypatch.setattr(tmux_runner, "run", lambda args, timeout=None: (0, b"", b""))
-    monkeypatch.setattr(tmux_runner, "set_option", lambda *a: (_ for _ in ()).throw(
-        AssertionError("형식이 안 맞는 worktreeId는 무시해야 한다")))
+    monkeypatch.setattr(tmux_runner, "set_option", lambda s, k, v: (
+        k != "@fsh_wt" or (_ for _ in ()).throw(AssertionError("형식이 안 맞는 worktreeId는 무시해야 한다"))))
 
     body = {"name": "wt-bad-id", "worktreeId": "not-a-real-id; rm -rf"}
     asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
