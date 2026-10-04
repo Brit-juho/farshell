@@ -270,6 +270,28 @@ def test_sessions_returns_local_tmux_sessions(env, monkeypatch):
     assert body["id"] and body["label"]
 
 
+def test_sessions_carry_origin_like_the_local_list(env, monkeypatch):
+    """이 호스트가 기록한 `@fsh_origin`을 그대로 싣는다 — 기록이 없거나 모르는 값은 external.
+    같은 list-sessions 호출의 네 번째 열이라 추가 tmux 호출이 없다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    import tmux_runner
+    calls = []
+    lines = "\n".join([
+        "a\t1\t0\tlocal", "b\t1\t0\tpeer", "c\t1\t0\tagent",
+        "d\t1\t0\t", "e\t1\t0\tbogus", "f\t1\t0",
+    ])
+    monkeypatch.setattr(tmux_runner, "run_text",
+                        lambda args, *a, **kw: calls.append(args) or lines)
+    monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [])
+    r = client.get("/api/peer/sessions",
+                   headers=_sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions"))
+    got = {s["name"]: s["origin"] for s in r.json()["sessions"]}
+    assert got == {"a": "local", "b": "peer", "c": "agent",
+                   "d": "external", "e": "external", "f": "external"}
+    assert len(calls) == 1 and "#{@fsh_origin}" in calls[0][-1]
+
+
 def test_sessions_reports_local_agent_status_only(env, monkeypatch):
     """**전이 금지(hop 0)** — 내가 등록한 다른 peer의 상태가 섞이면 A↔B 상호
     페어링에서 무한 재귀가 된다. 로컬 엔트리만 실려야 한다."""

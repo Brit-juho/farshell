@@ -136,7 +136,9 @@ async def peer_sessions(request: Request, grant: dict):
     import tmux_runner
 
     def _collect() -> list[dict]:
-        fmt = "#{session_name}\t#{session_windows}\t#{session_attached}"
+        # `@fsh_origin`을 같은 호출에서 읽는다(로컬 `/api/tmux/sessions`와 같은 방식 — 추가
+        # tmux 호출 없음). 이 호스트가 기록한 값이라 상대가 아니라 **이 호스트의 사실**이다.
+        fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_origin}"
         text = tmux_runner.run_text(["list-sessions", "-F", fmt], timeout=2.0)
         if not text:
             return []
@@ -159,6 +161,9 @@ async def peer_sessions(request: Request, grant: dict):
                 # 로컬 엔트리만 본다 — 이 값이 상대에게 건너가 그쪽에서 다시
                 # host=<나>로 기록된다(A1의 host 차원이 여기서 쓰인다).
                 "status": agent_status.status_for_session(name),
+                # local|peer|agent|external — 로컬 목록과 같은 값. 기록이 없거나 모르는 값은
+                # external(`normalize_origin`). 옛 서버는 이 필드를 안 주고, 받는 쪽이 local로 본다.
+                "origin": tmux_runner.normalize_origin(parts[3] if len(parts) > 3 else ""),
             })
         return out
 
