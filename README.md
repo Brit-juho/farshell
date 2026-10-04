@@ -29,7 +29,7 @@ same either way. (Windows only through WSL2.)
 # Terminal only (~50MB)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash
 
-# Terminal + voice mode (~1.5GB, Whisper STT + edge-tts TTS)
+# Terminal + voice mode (a few hundred MB; the speech model is downloaded later, from Settings)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash -s voice
 ```
 

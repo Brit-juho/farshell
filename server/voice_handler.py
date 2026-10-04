@@ -1,8 +1,8 @@
-"""Voice Handler — STT (Whisper) + TTS (Kokoro / Edge TTS).
+"""Voice Handler — 입력 오디오 디코딩 + STT 호출 + TTS (Edge TTS / macOS say).
 
-STT 우선순위: mlx-whisper (Apple Silicon) → faster-whisper → 에러
-TTS 우선순위: Kokoro → edge-tts → macOS say fallback
-음성 입력: webm/opus → ffmpeg으로 WAV 변환 → Whisper
+STT 엔진·모델 선택과 실행은 `stt_service`/`stt_engines`가 맡는다. 여기서는 업로드된 오디오를
+16kHz mono WAV로 바꾸고(무음·길이 상한 처리) 한 번에 하나씩 엔진에 넘긴다.
+TTS 우선순위: edge-tts → macOS say fallback
 """
 
 import asyncio
@@ -16,61 +16,39 @@ import wave
 from pathlib import Path
 from typing import Optional
 
+import stt_service
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# STT Engine
+# STT (엔진은 stt_service가 관리 — 이 함수들은 기존 호출부 호환용 얇은 위임)
 # ---------------------------------------------------------------------------
 
-_stt_engine: Optional[str] = None
-_whisper_model = None
-# 마지막 STT 사용 시각(monotonic). idle 언로드 판단용.
-_last_stt_use: float = 0.0
-# STT 모델을 마지막 사용 후 이 시간(초) 지나면 언로드. 기본 0(끔) — macOS에선 파이썬
-# 객체를 해제해도 CTranslate2 네이티브 메모리가 OS로 반환되지 않아(malloc arena) RSS가
-# 안 줄어든다(실측). 진짜 회수는 '애초에 안 켜면 안 로드'로 해결(capabilities가 더는
-# 모델을 로드하지 않음). 이 옵션은 Linux/서브프로세스 워커 등에서만 의미. VT_STT_IDLE_SEC로 opt-in.
-STT_IDLE_UNLOAD_SEC = float(os.environ.get("VT_STT_IDLE_SEC", "0"))
 
-
-def _init_stt() -> str:
-    """사용 가능한 STT 엔진을 감지하고 모델을 로드한다."""
-    global _stt_engine, _whisper_model
-
-    if _stt_engine is not None:
-        return _stt_engine
-
-    # 1) mlx-whisper (Apple Silicon, 가장 빠름)
-    try:
-        import mlx_whisper  # noqa: F401
-        _stt_engine = "mlx-whisper"
-        logger.info("STT engine: mlx-whisper")
-        return _stt_engine
-    except ImportError:
-        pass
-
-    # 2) faster-whisper
-    try:
-        from faster_whisper import WhisperModel
-        _whisper_model = WhisperModel("base", compute_type="int8")
-        _stt_engine = "faster-whisper"
-        logger.info("STT engine: faster-whisper")
-        return _stt_engine
-    except ImportError:
-        pass
-
-    _stt_engine = "none"
-    logger.warning("No STT engine available. Install mlx-whisper or faster-whisper.")
-    return _stt_engine
+def stt_available() -> bool:
+    """이 서버에서 STT 엔진을 쓸 수 있는가 — 모델을 올리지 않는다(capabilities처럼 자주 불리는 경로용)."""
+    return stt_service.available()
 
 
 def stt_loaded() -> bool:
-    """STT 모델이 현재 메모리에 상주 중인지."""
-    return _stt_engine not in (None, "none")
+    return stt_service.loaded()
+
+
+def preload_stt() -> Optional[str]:
+    """선택된 모델을 미리 올려 첫 인식 지연을 없앤다. 못 올리면 None(이유는 stt_service.last_error())."""
+    return stt_service.preload()
+
+
+def unload_stt() -> bool:
+    return stt_service.unload()
+
+
+async def stt_idle_monitor() -> None:
+    await stt_service.idle_monitor()
 
 
 def _module_available(*names: str) -> bool:
-    """모듈을 import(=모델 로드) 하지 않고 설치 여부만 확인."""
+    """모듈을 import하지 않고 설치 여부만 확인."""
     import importlib.util
     for n in names:
         try:
@@ -81,126 +59,19 @@ def _module_available(*names: str) -> bool:
     return False
 
 
-def stt_available() -> bool:
-    """STT '설치 여부'만 확인 — 모델을 로드하지 않는다.
-
-    ⚠️ _init_stt()는 faster-whisper 모델을 로드(~400MB)하므로, /api/capabilities처럼
-    페이지 로드마다 불리는 경로에서 쓰면 터미널만 쓰는 사용자도 400MB를 물게 된다.
-    설치 여부 체크는 반드시 이 함수(find_spec, 로드 없음)를 쓸 것.
-    """
-    return _module_available("mlx_whisper", "faster_whisper")
-
-
 def tts_available() -> bool:
-    """TTS '설치 여부'만 확인 — 무거운 import(kokoro→torch 등)를 피한다."""
-    if _module_available("kokoro", "edge_tts"):
+    """TTS '설치 여부'만 확인 — import 없이 find_spec으로만 본다."""
+    if _module_available("edge_tts"):
         return True
     import shutil
     return shutil.which("say") is not None  # macOS say fallback
 
 
-def preload_stt() -> str:
-    """음성 모드 진입 시 미리 로드해 첫 STT 지연을 없앤다."""
-    return _init_stt()
+# ---------------------------------------------------------------------------
+# 입력 오디오 → 16kHz mono WAV
+# ---------------------------------------------------------------------------
 
-
-def unload_stt() -> bool:
-    """STT 모델을 메모리에서 내린다. 다음 transcribe 때 lazy 재로드된다.
-
-    idle 타임아웃(STT_IDLE_UNLOAD_SEC)이 STT_TIMEOUT(30s)보다 훨씬 크므로, 언로드 시점엔
-    진행 중인 transcribe가 없다(마지막 사용이 수 분 전). 따라서 별도 락 없이 안전하다.
-    """
-    global _stt_engine, _whisper_model
-    if _stt_engine in (None, "none"):
-        return False
-    _whisper_model = None            # faster-whisper 모델 해제
-    _stt_engine = None               # 다음 호출 시 _init_stt 재실행
-    try:
-        # mlx-whisper는 load_models.load_model이 lru_cache라 별도 해제 필요.
-        import mlx_whisper
-        mlx_whisper.load_models.load_model.cache_clear()
-    except Exception:
-        pass
-    import gc
-    gc.collect()
-    logger.info("STT 모델 언로드 — 메모리 회수")
-    return True
-
-
-def _hf_cache_dir() -> Path:
-    """mlx-whisper·faster-whisper 둘 다 huggingface_hub 캐시에 모델을 받는다.
-    huggingface_hub가 설치돼 있으면 그 상수를 따르고(사용자가 HF_HOME 등으로
-    캐시 위치를 옮겼을 수 있다), 없으면 기본 경로로 떨어진다."""
-    try:
-        from huggingface_hub.constants import HF_HUB_CACHE
-        return Path(HF_HUB_CACHE)
-    except Exception:
-        return Path(os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface"))) / "hub"
-
-
-def _dir_size(path: Path) -> int:
-    total = 0
-    for p in path.rglob("*"):
-        if p.is_file():
-            try:
-                total += p.stat().st_size
-            except OSError:
-                pass
-    return total
-
-
-def stt_model_info() -> list[dict]:
-    """디스크에 받아둔 whisper 모델 캐시 목록(이름·경로·바이트 수).
-
-    HF 캐시 전체가 아니라 이름에 'whisper'가 들어간 리포만 고른다 — 같은
-    캐시를 다른 로컬 모델(예: 사용자가 따로 받은 LLM)과 같이 쓸 수 있어서,
-    전체를 지우는 건 이 기능의 책임 밖이다.
-    """
-    cache_dir = _hf_cache_dir()
-    if not cache_dir.is_dir():
-        return []
-    out = []
-    for entry in sorted(cache_dir.iterdir()):
-        if not entry.is_dir() or "whisper" not in entry.name.lower():
-            continue
-        out.append({
-            "name": entry.name.replace("models--", "").replace("--", "/"),
-            "path": str(entry),
-            "size_bytes": _dir_size(entry),
-        })
-    return out
-
-
-def delete_stt_model(path: str) -> None:
-    """모델 캐시 폴더 하나를 지운다.
-
-    경로는 반드시 stt_model_info()가 방금 돌려준 것 중 하나여야 한다 — 임의
-    경로를 받아 지우면 경로 조작으로 캐시 밖 파일도 지울 수 있다. 지우기 전에
-    먼저 언로드한다(메모리에 올라간 모델 파일을 지우면 다음 사용 때 깨질 수
-    있다 — 실제로 겹칠 일은 드물지만 순서를 보장해 둔다).
-    """
-    valid = {Path(m["path"]).resolve(): m["path"] for m in stt_model_info()}
-    target = Path(path).resolve()
-    if target not in valid:
-        raise ValueError(f"알 수 없는 모델 경로: {path}")
-    unload_stt()
-    import shutil
-    shutil.rmtree(target)
-    logger.info(f"STT 모델 캐시 삭제: {target}")
-
-
-async def stt_idle_monitor() -> None:
-    """마지막 STT 사용 후 STT_IDLE_UNLOAD_SEC 지나면 모델을 언로드하는 백그라운드 루프."""
-    if STT_IDLE_UNLOAD_SEC <= 0:
-        return
-    while True:
-        await asyncio.sleep(30)
-        if stt_loaded() and _last_stt_use > 0 and \
-                time.monotonic() - _last_stt_use > STT_IDLE_UNLOAD_SEC:
-            unload_stt()
-
-
-ALLOWED_AUDIO_FORMATS = {"webm", "wav", "ogg", "mp3", "m4a"}
+ALLOWED_AUDIO_FORMATS = {"webm", "wav", "ogg", "mp3", "m4a", "mp4"}
 
 # 입력이 이미 16kHz mono int16 WAV인지 빠르게 판별 (ffmpeg/pyav 우회)
 def _is_already_target_wav(audio_bytes: bytes) -> bool:
@@ -230,16 +101,19 @@ def _convert_to_wav_pyav(audio_bytes: bytes, input_format: str) -> Optional[byte
         return None
 
     try:
-        container = av.open(_io.BytesIO(audio_bytes), format=input_format)
+        # mp4/m4a는 컨테이너 이름이 여러 개라 형식을 지정하지 않고 판별에 맡긴다(iPhone Safari는 mp4(AAC)로 보낸다).
+        container = av.open(_io.BytesIO(audio_bytes), format=input_format if input_format in ("webm", "ogg", "wav", "mp3") else None)
         stream = container.streams.audio[0]
         resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
         pcm = bytearray()
+        # 프레임 버퍼는 정렬 패딩이 붙어 있을 수 있다 — 실제 샘플 수(f.samples × 2바이트 mono s16)만 쓴다.
+        # 안 자르면 AAC·mp3처럼 프레임이 딱 안 떨어지는 입력(iPhone Safari의 mp4)에서 길이가 늘어난다(2초 → 2.57초).
         for frame in container.decode(stream):
             for f in resampler.resample(frame):
-                pcm.extend(bytes(f.planes[0]))
+                pcm.extend(bytes(f.planes[0])[: f.samples * 2])
         # resampler flush
         for f in resampler.resample(None):
-            pcm.extend(bytes(f.planes[0]))
+            pcm.extend(bytes(f.planes[0])[: f.samples * 2])
         container.close()
 
         buf = _io.BytesIO()
@@ -296,9 +170,8 @@ def _convert_to_wav(audio_bytes: bytes, input_format: str = "webm") -> bytes:
 
 STT_TIMEOUT = 30  # seconds
 
-# faster-whisper/CTranslate2는 긴 오디오를 처리하면 RSS가 급증하고 그 네이티브 메모리를
-# OS로 반환하지 않는다(실측: 60s 오디오 1회 → +800MB, 안 줄어듦). 터미널 음성 명령은
-# 길어야 수 초이므로, transcribe 직전에 이 상한으로 잘라 메모리 폭주를 원천 차단한다.
+# 엔진에 긴 오디오를 넘기면 메모리가 급증한다(과거 CTranslate2는 60s 오디오 1회에 +800MB를 쥐고 안 돌려줬다).
+# 터미널 음성 명령은 길어야 수 초이므로, 인식 직전에 이 상한으로 잘라 폭주를 원천 차단한다.
 # 모바일(/voice/input)·로컬믹·데몬 모든 경로가 이 지점을 통과한다. VT_STT_MAX_SEC로 조정(0=무제한).
 try:
     MAX_STT_SECONDS = float(os.environ.get("VT_STT_MAX_SEC", "60"))
@@ -334,93 +207,67 @@ SILENCE_RMS_THRESHOLD = 600
 
 
 def _is_silent_wav(wav_bytes: bytes) -> bool:
-    """WAV 헤더(44바이트) 이후를 16-bit signed PCM으로 보고 평균 절대값 측정."""
+    """WAV 헤더(44바이트) 이후를 16-bit signed PCM으로 보고 **전체**의 평균 절대값을 잰다.
+
+    예전에는 앞 2초만 봐서, 말하기 전에 2초 넘게 말이 없으면 무음으로 버렸다. 4샘플마다 훑어 비용을 줄인다.
+    """
     if len(wav_bytes) <= 44:
         return True
     try:
-        import struct as _struct
-        pcm = wav_bytes[44:]
-        n = len(pcm) // 2
-        if n == 0:
+        import array
+        pcm = wav_bytes[44:44 + (len(wav_bytes) - 44) // 2 * 2]
+        samples = array.array("h")
+        samples.frombytes(pcm)
+        if len(samples) == 0:
             return True
-        # 너무 길면 앞 32K 샘플(약 2초@16kHz)만 검사 — 충분
-        sample_n = min(n, 32000)
-        samples = _struct.unpack(f"<{sample_n}h", pcm[: sample_n * 2])
-        avg_abs = sum(abs(s) for s in samples) / sample_n
+        picked = samples[::4]
+        avg_abs = sum(abs(x) for x in picked) / len(picked)
         return avg_abs < SILENCE_RMS_THRESHOLD
     except Exception:
         return False
 
 
-async def transcribe(audio_bytes: bytes, input_format: str = "webm",
-                     language: Optional[str] = None) -> str:
-    """음성 바이트 → 텍스트. webm/opus를 WAV로 변환 후 Whisper 실행.
+# 엔진 대기+로드+인식을 합친 상한. 첫 로드(수 초~수십 초)와 줄 서기를 감안한 여유값이다.
+STT_TOTAL_TIMEOUT = 120
 
-    language=None 이면 자동 감지 (Whisper가 한/영/일 등 자동 판별).
-    language="ko"/"en" 등으로 명시 지정 시 해당 언어로 고정.
-    환경변수 VT_STT_LANG=ko 로 기본값 오버라이드 가능.
+
+async def transcribe_timed(audio_bytes: bytes, input_format: str = "webm",
+                           language: Optional[str] = None) -> tuple:
+    """음성 바이트 → (텍스트, 단계별 시간 ms). 모델이 없으면 stt_engines.NotReady, 줄이 길면 stt_service.Busy.
+
+    language=None이면 엔진이 자동 판별한다. 환경변수 VT_STT_LANG=ko로 기본값을 정할 수 있다.
     """
-    global _last_stt_use
-    _last_stt_use = time.monotonic()
-    engine = _init_stt()
-    if engine == "none":
-        raise RuntimeError("STT engine not available")
-
-    # 언어 결정: 명시 인자 > 환경변수 > 자동(None)
-    import os as _os
-    lang = language if language else _os.environ.get("VT_STT_LANG", "").strip() or None
-
+    t0 = time.perf_counter()
+    lang = language if language else os.environ.get("VT_STT_LANG", "").strip() or None
     loop = asyncio.get_running_loop()
     wav_bytes = await loop.run_in_executor(None, _convert_to_wav, audio_bytes, input_format)
+    t1 = time.perf_counter()
 
-    # 메모리 폭주 방어 — CTranslate2에 긴 오디오를 넘기지 않도록 상한으로 절단.
+    # 메모리 폭주 방어 — 엔진에 긴 오디오를 넘기지 않도록 상한으로 절단.
     wav_bytes = _truncate_wav(wav_bytes, MAX_STT_SECONDS)
 
-    # 무음 차단 — Whisper hallucination 방지 (TEST_REPORT.md Bug #8).
+    # 무음 차단 — 모델이 무음에서 지어내는 글자(hallucination) 방지.
     if _is_silent_wav(wav_bytes):
         logger.info("STT: silent input, skipping transcription")
-        return ""
+        return "", {"decode_ms": round((t1 - t0) * 1000), "wait_ms": 0, "load_ms": 0, "stt_ms": 0,
+                    "total_ms": round((time.perf_counter() - t0) * 1000)}
 
-    if engine == "mlx-whisper":
-        import mlx_whisper
+    try:
+        text, t = await asyncio.wait_for(
+            loop.run_in_executor(None, stt_service.transcribe_wav, wav_bytes, lang),
+            timeout=STT_TOTAL_TIMEOUT)
+    except asyncio.TimeoutError as e:
+        raise RuntimeError("음성 인식 시간이 초과됐습니다") from e
+    timing = {"decode_ms": round((t1 - t0) * 1000), **t, "total_ms": round((time.perf_counter() - t0) * 1000)}
+    logger.info("voice.stt timing %s", timing)
+    return text, timing
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(wav_bytes)
-            tmp_path = tmp.name
-        try:
-            def _run():
-                kwargs = {"language": lang} if lang else {}
-                return mlx_whisper.transcribe(tmp_path, **kwargs)
-            result = await asyncio.wait_for(
-                loop.run_in_executor(None, _run),
-                timeout=STT_TIMEOUT,
-            )
-            if not lang and result.get("language"):
-                logger.debug(f"STT detected language: {result['language']}")
-            return result.get("text", "").strip()
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
 
-    elif engine == "faster-whisper":
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(wav_bytes)
-            tmp_path = tmp.name
-        try:
-            def _run():
-                kwargs = {"language": lang} if lang else {}
-                return _whisper_model.transcribe(tmp_path, **kwargs)
-            segments, info = await asyncio.wait_for(
-                loop.run_in_executor(None, _run),
-                timeout=STT_TIMEOUT,
-            )
-            if not lang and hasattr(info, "language"):
-                logger.debug(f"STT detected language: {info.language}")
-            text = "".join(seg.text for seg in segments).strip()
-            return text
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-
-    return ""
+async def transcribe(audio_bytes: bytes, input_format: str = "webm",
+                     language: Optional[str] = None) -> str:
+    """음성 바이트 → 텍스트(타이밍 없이). local_mic 등 기존 호출부용."""
+    text, _ = await transcribe_timed(audio_bytes, input_format, language)
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -437,16 +284,7 @@ def _init_tts() -> str:
     if _tts_engine is not None:
         return _tts_engine
 
-    # 1) Kokoro
-    try:
-        import kokoro  # noqa: F401
-        _tts_engine = "kokoro"
-        logger.info("TTS engine: kokoro")
-        return _tts_engine
-    except ImportError:
-        pass
-
-    # 2) edge-tts
+    # 1) edge-tts
     try:
         import edge_tts  # noqa: F401
         _tts_engine = "edge-tts"
@@ -455,7 +293,7 @@ def _init_tts() -> str:
     except ImportError:
         pass
 
-    # 3) macOS say fallback
+    # 2) macOS say fallback
     import shutil
     if shutil.which("say"):
         _tts_engine = "macos-say"
@@ -471,13 +309,7 @@ async def synthesize(text: str, voice: str = "ko-KR-SunHiNeural") -> bytes:
     """텍스트 → 음성 바이트 (MP3 또는 WAV)."""
     engine = _init_tts()
 
-    if engine == "kokoro":
-        import kokoro
-        loop = asyncio.get_running_loop()
-        audio = await loop.run_in_executor(None, lambda: kokoro.synthesize(text))
-        return audio
-
-    elif engine == "edge-tts":
+    if engine == "edge-tts":
         import edge_tts
         try:
             communicate = edge_tts.Communicate(text, voice)

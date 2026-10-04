@@ -107,11 +107,13 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 **Voice**
 | File | Responsibility |
 |---|---|
-| `voice_handler.py` | STT (mlx-whisper → faster-whisper) · TTS (Kokoro → edge-tts → say) |
+| `voice_handler.py` | Audio decode (webm/ogg/mp4/wav → 16kHz mono) → STT hand-off · TTS (edge-tts → say) |
+| `stt_service.py` | Which STT model is selected (setting `voice.sttModel`), engine load/unload, serialized transcription with per-stage timing, catalog/setup/delete for the settings UI. STT runs **on the server OS only** — browsers just upload audio |
+| `stt_engines/` | Engine layer: `mlx_qwen3` (Apple Silicon), `llamacpp_qwen3` (every platform; `llama-server` child process, local-only + API key), `apple_speech` (macOS 26+, Swift helper built on first use). `catalog.py` holds models + measured numbers, `env.py` detects the host, `llama_release.py` pins + sha256-verifies the llama.cpp download |
 | `output_watcher.py` | Idle detection on PTY output → TTS + push notification |
 | `local_mic.py` | Desktop local-microphone REST API (voice profile only; imported unconditionally so a core-profile install degrades gracefully) |
 | `voice_daemon.py` | Thin shim — real implementation lives in the `server/voice/` package below |
-| `server/voice/` (package) | `daemon.py` (hotkey + media-key main loop) · `config.py` (`~/.vt.env` parsing) · `media_keys.py` (macOS earbud Play/Pause) · `recorder.py` (record → STT → tmux inject) · `stt.py` (mlx-whisper primary, faster-whisper fallback) · `tmux_target.py` (compat shim over the top-level module, avoids importing `pynput` just for target resolution) |
+| `server/voice/` (package) | `daemon.py` (hotkey + media-key main loop) · `config.py` (`~/.vt.env` parsing) · `media_keys.py` (macOS earbud Play/Pause) · `recorder.py` (record → STT → tmux inject) · `stt.py` (hands recorded audio to `stt_service`) · `tmux_target.py` (compat shim over the top-level module, avoids importing `pynput` just for target resolution) |
 
 **Agent status**
 | File | Responsibility |
@@ -246,7 +248,7 @@ precache stays valid:
 ```
 Ctrl+Shift+M (pynput, server/voice/daemon.py)
   → sounddevice 16kHz mono recording (recorder.py)
-  → mlx-whisper / faster-whisper STT (stt.py)
+  → selected STT engine via stt_service (stt.py)
   → tmux_target.py resolves the pane → tmux send-keys "<text>"
 ```
 
@@ -321,8 +323,8 @@ frontend/js/agent/status.js opens /ws-agent once
 Where to make changes when adding a new feature.
 
 ### 4.1 Adding a new STT engine
-- Insert into the priority list in `server/voice_handler.py` (or `server/voice/stt.py` for the daemon path)
-- Follow the mlx-whisper → faster-whisper ordering as a reference
+- Add an `Engine` subclass under `server/stt_engines/` (see `base.py`), register it in `stt_engines/__init__.py`, add its models to `catalog.py` with measured numbers (`scripts/stt_bench.py`)
+- Engines never download anything themselves: `download_model`/`install_requirement` run only from a user-approved setup request
 
 ### 4.2 Adding a new TTS engine
 - The fallback chain in the synthesize() function of `server/voice_handler.py`

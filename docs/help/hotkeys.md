@@ -6,8 +6,8 @@
 
 | 키 | 동작 |
 |---|---|
-| `Ctrl+Shift+V` | 녹음 토글 (시작/종료) |
-| 이어폰 Play/Pause | 녹음 토글 (`Ctrl+Shift+V`와 동일) |
+| `Ctrl+Shift+M` | 녹음 토글 (시작/종료) |
+| 이어폰 Play/Pause | 녹음 토글 (`Ctrl+Shift+M`과 동일) |
 
 ### 웹 UI (모바일/브라우저)
 

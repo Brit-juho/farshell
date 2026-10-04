@@ -1,38 +1,24 @@
-"""STT 엔진 — mlx-whisper 우선, faster-whisper fallback."""
+"""데몬(전역 핫키)용 STT — 서버와 같은 엔진 계층(stt_service)을 쓴다.
+
+데몬은 서버와 **별도 프로세스**라 자기 엔진 인스턴스를 따로 올린다(서버가 안 떠 있어도 동작해야 하므로).
+선택·준비 상태는 서버와 같은 설정(voice.sttModel, VT_STT_MODEL)과 같은 캐시를 본다. 모델이 없으면 몰래
+받지 않고 NotReady로 멈춘다(recorder가 알림으로 이유를 보여준다).
+"""
 import io
 import wave
 
 import numpy as np
 
 from .config import MAX_RECORDING_SECONDS, SAMPLE_RATE, logger
-
-_whisper_model = None
+import stt_service  # server/ 는 config.py가 sys.path에 넣어 둔다
 
 # transcribe에 넘길 오디오 상한. 녹음 상한(MAX_RECORDING_SECONDS)과 같게 두되, 방어적으로
-# 여기서도 한 번 더 자른다 — faster-whisper 긴 오디오 → CTranslate2 네이티브 메모리 폭주 차단.
+# 여기서도 한 번 더 자른다 — 긴 오디오가 엔진 메모리를 폭주시키는 것을 차단.
 _MAX_STT_SAMPLES = int(MAX_RECORDING_SECONDS * SAMPLE_RATE) if MAX_RECORDING_SECONDS > 0 else 0
 
 
-def init_whisper():
-    global _whisper_model
-    if _whisper_model is not None:
-        return
-    try:
-        import mlx_whisper  # noqa: F401
-        _whisper_model = "mlx"
-        logger.info("STT: mlx-whisper")
-        return
-    except ImportError:
-        pass
-    from faster_whisper import WhisperModel
-    _whisper_model = WhisperModel("base", compute_type="int8")
-    logger.info("STT: faster-whisper (base)")
-
-
 def transcribe(audio_np: np.ndarray) -> str:
-    """numpy int16 배열 → 텍스트."""
-    init_whisper()
-
+    """numpy int16 배열 → 텍스트. 모델이 없으면 stt_engines.NotReady."""
     if _MAX_STT_SAMPLES and len(audio_np) > _MAX_STT_SAMPLES:
         logger.warning(
             f"STT 입력 {len(audio_np)/SAMPLE_RATE:.0f}s → {_MAX_STT_SAMPLES/SAMPLE_RATE:.0f}s로 절단 (메모리 폭주 방어)"
@@ -45,15 +31,5 @@ def transcribe(audio_np: np.ndarray) -> str:
         wf.setsampwidth(2)
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(audio_np.tobytes())
-    wav_bytes = buf.getvalue()
-
-    if _whisper_model == "mlx":
-        import mlx_whisper
-        result = mlx_whisper.transcribe(
-            wav_bytes, path_or_hf_repo="mlx-community/whisper-base"
-        )
-        return result.get("text", "").strip()
-    else:
-        buf.seek(0)
-        segments, _ = _whisper_model.transcribe(buf, language="ko")
-        return " ".join(seg.text for seg in segments).strip()
+    text, _timing = stt_service.transcribe_wav(buf.getvalue(), None)
+    return text

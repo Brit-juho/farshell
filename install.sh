@@ -2,7 +2,7 @@
 # FarShell 원라인 설치 스크립트
 # 사용법:
 #   ./install.sh             # 터미널만 (경량, ~50MB)
-#   ./install.sh voice       # 터미널 + 음성 모드 (~1.5GB)
+#   ./install.sh voice       # 터미널 + 음성 모드 (수백MB; 음성 인식 모델은 설정에서 따로 받음)
 #   curl -fsSL <URL>/install.sh | bash       # 원격 설치 (터미널만)
 #   curl -fsSL <URL>/install.sh | bash -s voice
 #

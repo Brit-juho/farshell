@@ -28,7 +28,7 @@ FarShell은 macOS/Linux 머신을 개인 개발 서버로 씁니다 — 같은 t
 # 터미널만 (~50MB)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash
 
-# 터미널 + 음성 모드 (~1.5GB, Whisper STT + edge-tts TTS)
+# 터미널 + 음성 모드 (수백MB, 음성 인식 모델은 나중에 설정에서 받음)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash -s voice
 ```
 

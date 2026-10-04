@@ -113,7 +113,13 @@ def stop_recording_and_process():
     del frames
     logger.info(f"녹음 종료: {len(audio)/SAMPLE_RATE:.1f}초")
 
-    text = transcribe(audio)
+    try:
+        text = transcribe(audio)
+    except Exception as e:
+        # 모델을 아직 안 받았거나 로드에 실패한 경우 — 데몬이 조용히 죽지 않고 이유를 알린다.
+        logger.error(f"STT 실패: {e}")
+        platform_utils.notify("🎙 음성 입력 실패", str(e)[:200])
+        return
     if not text:
         logger.info("인식된 텍스트 없음")
         return

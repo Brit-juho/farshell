@@ -959,7 +959,7 @@ _start_voice_daemon() {
   echo $! > "$PID_DIR/voice.pid"
   sleep 1
   if _is_running voice; then
-    echo "✓ Voice Daemon 시작 (Ctrl+Shift+V 로 녹음)"
+    echo "✓ Voice Daemon 시작 (Ctrl+Shift+M 로 녹음)"
   else
     echo "✗ Voice Daemon 실패. 로그: $DAEMON_LOG"
     return 1
@@ -1339,7 +1339,7 @@ cmd_voice() {
   echo "  ┌─────────────────────────────────────────┐"
   echo "  │  음성 모드 활성화 완료                      │"
   echo "  │                                         │"
-  echo "  │  Ctrl+Shift+V → 녹음 시작/종료           │"
+  echo "  │  Ctrl+Shift+M → 녹음 시작/종료           │"
   echo "  │  말한 내용 → STT → tmux에 자동 입력       │"
   echo "  │  결과 → TTS로 음성 확인                   │"
   echo "  │                                         │"
@@ -2751,8 +2751,19 @@ cmd_doctor() {
   else
     _check "core packages" fail "pip install -r requirements-core.txt"
   fi
-  if "$VT_PYTHON" -c "import faster_whisper, edge_tts, sounddevice" 2>/dev/null; then
-    _check "voice packages" ok "faster-whisper, edge-tts, sounddevice"
+  if "$VT_PYTHON" -c "import edge_tts, sounddevice" 2>/dev/null; then
+    # STT 엔진은 설정에서 고르는 모델에 따라 다르다 — 선택된 모델이 바로 쓸 수 있는 상태인지 서버 코드로 확인한다.
+    local stt_state
+    stt_state="$(PYTHONPATH="$VT_DIR/server" "$VT_PYTHON" -c "
+import stt_service
+d = stt_service.catalog_payload()
+sel = next((m for m in d['models'] if m['selected']), None)
+print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + (' 준비됨' if sel['ready'] else ' — 설정에서 받아 주세요') if sel else '선택된 모델 없음'))" 2>/dev/null || true)"
+    case "$stt_state" in
+      ok\|*)   _check "voice packages" ok "edge-tts, sounddevice · STT ${stt_state#ok|}" ;;
+      warn\|*) _check "voice packages" warn "edge-tts, sounddevice · STT ${stt_state#warn|}" ;;
+      *)       _check "voice packages" ok "edge-tts, sounddevice (STT 상태는 설정에서 확인)" ;;
+    esac
   else
     _check "voice packages" warn "음성 기능 미설치 ('./install.sh voice'로 추가)"
   fi
@@ -4450,7 +4461,7 @@ cmd_status() {
   fi
 
   if _is_running voice; then
-    voice_status="✓ 실행 중 (Ctrl+Shift+V)"
+    voice_status="✓ 실행 중 (Ctrl+Shift+M)"
   fi
 
   if _is_running clip; then

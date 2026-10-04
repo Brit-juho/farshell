@@ -176,7 +176,7 @@ contract 5). The few that decide how you reach this Mac:
 | 1 | Python | Verifies path/version |
 | 2 | venv | `.venv` or legacy conda env |
 | 3 | core packages | fastapi, uvicorn |
-| 4 | voice packages | faster-whisper, edge-tts, sounddevice |
+| 4 | voice packages | edge-tts, sounddevice, and whether the selected STT model is ready |
 | 5 | tmux | Installed and version |
 | 6 | cloudflared | Remote access tool |
 | 7 | ffmpeg | Mobile voice decoding |

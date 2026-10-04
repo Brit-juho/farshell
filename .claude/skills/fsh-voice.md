@@ -95,7 +95,7 @@ fsh stop --keep-tunnel   # 서버·데몬만 내리고 공개 입구는 유지
 | 문제 | 해결 |
 |------|------|
 | 핫키 안 먹힘 | macOS 접근성 권한 확인 (4절) |
-| STT 느림 | Apple Silicon이면 mlx-whisper가 빠르다. `fsh doctor`는 패키지 존재만 보고 엔진 종류는 알려주지 않는다 |
+| STT 느림/무거움 | 설정 「음성 및 알림」에서 더 가벼운 모델(Qwen3-ASR 0.6B)이나 Apple 음성 인식을 고른다. `fsh doctor`가 선택한 모델의 준비 여부를 보여준다 |
 | "활성 tmux pane 없음" | `fsh status`로 세션 확인 후 `fsh voice-target <name>` |
 | 녹음 안 됨 | macOS 마이크 권한 확인 (시스템 설정 → 마이크) |
 | 데몬이 안 뜸 | `cat "${VT_RUN_DIR:-/tmp}/vt-voice-daemon.log"` 확인 |

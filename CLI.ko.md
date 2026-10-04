@@ -72,7 +72,7 @@ fsh shell-init zsh     # 셸 init 스니펫 출력 (eval "$(fsh shell-init zsh)"
 1. `fsh voice` → 백그라운드 시작 (+ 새 iTerm 창에 `tmux dev` + `claude --resume` 자동 오픈)
 2. 새 창의 resume 목록에서 현재 대화 선택 → 이후 음성/모바일이 그 Claude로 연결됨
 3. 원래 창은 그대로 두고 노션으로 돌아가서 작업
-4. Ctrl+Shift+V → 말하기 ("git status") → tmux dev에 자동 입력
+4. Ctrl+Shift+M → 말하기 ("git status") → tmux dev에 자동 입력
 5. `fsh stop` → 종료
 
 > 이미 tmux 안에서 `fsh` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
@@ -163,7 +163,7 @@ fsh queue clear                 # 전체 비우기
 | 1 | Python | 경로·버전 확인 |
 | 2 | venv | `.venv` 또는 legacy conda env |
 | 3 | core packages | fastapi, uvicorn |
-| 4 | voice packages | faster-whisper, edge-tts, sounddevice |
+| 4 | voice packages | edge-tts, sounddevice, 선택한 STT 모델 준비 여부 |
 | 5 | tmux | 설치 여부 및 버전 |
 | 6 | cloudflared | 원격 접속 도구 |
 | 7 | ffmpeg | 모바일 음성 디코딩 |

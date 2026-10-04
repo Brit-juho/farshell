@@ -117,7 +117,7 @@ Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에
 - **🎤 음성 입력**: 탭 → 녹음 → 다시 탭 → STT → 활성 세션에 텍스트 입력
 - **🎧 음성 전용 모드** (`⋯`): 터미널 숨기고 큰 마이크만 — 이어폰 조작용
 - **이어폰 미디어키** (`⋯`): 이어폰 Play/Pause를 녹음 토글로 사용
-- 데스크톱 핫키는 `Ctrl+Shift+V` (voice daemon 실행 시). 자세히는 `fsh help voice`
+- 데스크톱 핫키는 `Ctrl+Shift+M` (voice daemon 실행 시). 자세히는 `fsh help voice`
 
 ---
 

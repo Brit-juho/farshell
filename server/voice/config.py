@@ -37,7 +37,7 @@ VOICE_TARGET_NOTIFY = vt_getenv("VT_VOICE_TARGET_NOTIFY", "on").lower() != "off"
 
 # 토글식 녹음은 '끄기'를 놓치면(미디어 키 오작동/핫키 릴리즈 누락) _recording=True인 채
 # 콜백이 초당 32KB(16kHz·16bit)씩 무한정 프레임을 쌓는다 → 수 시간이면 GB 단위 + 그 거대
-# 오디오를 faster-whisper로 돌리면 CTranslate2 네이티브 메모리(OS 미반환)가 급증해 안 줄어든다.
+# 오디오를 STT 엔진에 넘기면 엔진 메모리가 급증할 수 있다(과거 CTranslate2는 그 메모리를 OS에 돌려주지 않았다).
 # 이 상한을 넘으면 녹음을 강제 종료하고 버퍼를 버린다. VT_MAX_RECORD_SEC로 조정(0=무제한).
 try:
     MAX_RECORDING_SECONDS = float(vt_getenv("VT_MAX_RECORD_SEC", "120"))

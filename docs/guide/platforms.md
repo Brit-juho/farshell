@@ -33,14 +33,14 @@ run the session under X11/Xwayland if you need the hotkey.
 
 ## Voice engine selection
 
-Picked automatically at runtime, in this order:
+Speech recognition (STT) runs **on the machine that runs FarShell** — phones and other PCs only record and
+upload audio. Pick the model in Settings → Voice & notifications; it shows which models this server can run and
+marks one "Recommended".
 
-| STT | TTS |
+| Server | Models |
 |---|---|
-| 1. mlx-whisper (Apple Silicon) | 1. Kokoro (best quality) |
-| 2. faster-whisper (everywhere else) | 2. edge-tts (online, many voices) |
-| | 3. macOS `say` / Windows Speech API (fallback) |
+| Apple Silicon Mac | Qwen3-ASR 0.6B / 1.7B (MLX), Qwen3-ASR (llama.cpp), Apple speech recognition (macOS 26+) |
+| Intel Mac · Linux · WSL2 | Qwen3-ASR (llama.cpp, CPU) |
 
-The Whisper weights are downloaded from Hugging Face on first use (~141MB) and
-cached on disk. Settings → Voice → "Downloaded models" lists what is cached and
-lets you delete it.
+Nothing is downloaded automatically: the engine program (llama.cpp) and the model files are fetched only after
+you confirm in Settings. TTS: edge-tts (online) → macOS `say` / Linux `espeak-ng`.
