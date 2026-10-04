@@ -44,11 +44,9 @@
   .vt-fleet-hostitem-name,
   .vt-fleet-name,
   .vt-fleet-row-sub,
-  .vt-fleet-question,
   .vt-wgrail-host-name,
   .vt-wgrail-name,
   .vt-wgrail-row-sub,
-  .vt-wgrail-question,
   .vt-wgrail-new,
   .vt-fl-name {
     overflow: hidden;
@@ -109,26 +107,12 @@
   /* ── 작은 점(안 읽음 표시) ────────────────────────────────────────────
    * 6px 원. `.status-dot`(8px)과 다르다 — 저건 상태 다섯 가지를 색으로
    * 말하고, 이건 "확인 안 함" 하나만 말한다. 색은 자리마다 다르므로
-   * (HUD는 sub, 탭·플릿은 액센트) 모양만 여기서 정한다. */
+   * (HUD는 sub, 탭은 액센트) 모양만 여기서 정한다. */
   .vt-dot,
-  .vt-hud-dot,
-  .vt-fleet-unseen-badge {
+  .vt-hud-dot {
     flex: none;
     width: 6px;
     height: 6px;
-    border-radius: var(--radius-full);
-  }
-
-  /* ── 3px 세로 막대 ────────────────────────────────────────────────────
-   * 행 왼쪽 끝에 서는 상태색 띠(20-design-system.md §5: "원형 dot은 상태
-   * 전용이므로 이 띠는 절대 원형이 아니다"). 저장소 색점(`--color-hash-*`)도
-   * 한때 이 모양을 같이 썼지만 2026-09-18 후속에서 그 기능 자체를 지웠다. */
-  .vt-sidebar-mark,
-  .vt-srow-mark,
-  .vt-fleet-bar,
-  .vt-wgrail-bar {
-    flex: none;
-    width: 3px;
     border-radius: var(--radius-full);
   }
 

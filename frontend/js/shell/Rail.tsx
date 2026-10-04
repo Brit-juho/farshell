@@ -1,7 +1,8 @@
-// N36 §5 — 워크트리 레일 252px. 2.1.1(N8/N44)~2.1.6은 행 = Worktree였다
-// (30-worktree.md §4). ADR-29(2026-09-18)로 되돌렸다 — 행은 다시 세션이고,
-// 워크트리는 저장소·브랜치 배지로만 남는다(로컬 호스트에 한함). 원격
-// 호스트는 아직 옛 3버킷(개입 필요/작업 중/열려 있음, 2026-09-23 개명) 그대로다(2.2 범위).
+// 레일 252px. 행 = tmux 세션(docs/ref/terminal.md 「Rail」). 구역은 둘 —
+// 「개입 필요」(waiting, 접고 끌 수 있다)와 「세션」(전체, 이름순만). 묶음·묶지 않음·
+// 잠자는 중 구역(폐지)과 상태 우선순위 정렬은 없다. 워크트리는 행의 브랜치 줄로만 남는다.
+// 원격 호스트는 화면 전체를 그 맥으로 전환하는 방식(core/host-route.js)이라 같은
+// 행 구성을 쓴다 — 목록은 그 맥의 API(중계)에서 온다.
 //
 // ⚠ 이 파일은 core/store.js·layout/store.js·agent/state.js·term/session.js를
 // 직접 import하지 않는다(panels/viewer-lazy.js·shell/Hud.tsx와 같은 이유 —
@@ -11,22 +12,21 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import {
-  buildSessionSections, buildSleepingEntries,
-  COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed,
-  type RailGroup, type OtherRailRowInput, type DesktopRailRowInput,
+  buildRailLists, rowMenuItems, runRowMenu, defaultRailCollapsed,
+  ATTENTION_COLLAPSED_KEY,
+  type SessionRow,
 } from './rail-data.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
 } from './host-data.js';
 import {
-  actionSessionId, readAgentDetails, fetchDiffCount, safeFetch,
-  useAgentVersion, useSessionsVersion, useLayoutVersion, readAgentNames, syncAgentsFromServer,
-  type RailDeps, type AgentDetail,
-  cachedDiffCount,
-  diffCountStale,
+  actionSessionId, safeFetch, collectSessionRows,
+  useAgentVersion, useSessionsVersion, useLayoutVersion, syncAgentsFromServer,
+  type RailDeps,
   createDiffWatcher,
 } from './rail-fetch.js';
+import { createRailPrefs } from './rail-prefs.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
 import { icon } from '../ui/icons.js';
@@ -34,6 +34,7 @@ import { icon } from '../ui/icons.js';
 export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { RepoVisibility } from './RepoVisibility.js';
+import { RailSettingsLead } from './RailSettings.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 // tmux 목록(attached·cwd)의 정본은 `/ws-workspace`의 `tmux_sessions` push다
@@ -65,11 +66,8 @@ function Rail(props: { deps: RailDeps }) {
   const layoutVersion = useLayoutVersion();
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
-  // 공용 저장소(agent/state.js)를 읽는다. 행 메모가 agentVersion()을 구독하므로
-  // 저장소가 바뀌면 다시 계산된다. 정체(어떤 CLI인가)와 상태 세부는 서버에서
-  // 다른 소스라 따로 읽는다.
-  const agentDetails = (): Record<string, AgentDetail> => readAgentDetails();
-  const agentNames = (): Record<string, string> => readAgentNames();
+  // 에이전트 상태·세부·이름은 공용 저장소(agent/state.js)에서 읽는다(rail-fetch.ts의
+  // collectSessionRows). 행 메모가 agentVersion()을 구독하므로 저장소가 바뀌면 다시 계산된다.
   // ADR-29 B — 워크트리 행 대신 저장소·브랜치 배지 텍스트의 입력으로만
   // 쓴다(자동 그룹 제안·색점은 둘 다 2026-09-18 후속에서 없앴다).
   // /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임, 2단계에서
@@ -81,65 +79,10 @@ function Rail(props: { deps: RailDeps }) {
   const [truncated, setTruncated] = createSignal(false);
   const [hiddenCount, setHiddenCount] = createSignal(0);
   const [repoSheet, setRepoSheet] = createSignal(false);
-  // ADR-29 B — 그룹 섹션 접힘. 옛 groupCollapsed(아래)는 RailGroup 3종 전용
-  // 열거형 키라 임의 그룹 id를 못 담는다 — 그룹은 사용자가 몇 개든 만들 수
-  // 있으므로 여기는 Set이다. 기기 간 지속은 아직 안 한다(그룹 자체가 이제
-  // 막 생긴 개념이라 "설정에 무엇을 남길지"는 D/E에서 실제 사용을 보고
-  // 정한다 — 지금 잘못 정하면 나중에 마이그레이션이 생긴다). 잠자는 구역만
-  // 기본 접힘으로 시작한다(옛 idle 그룹과 같은 판단 — 당장 볼 일이 적다).
-  const [collapsedSessionGroups, setCollapsedSessionGroups] = createSignal<Set<string>>(new Set(['sleeping']));
-  const toggleSessionGroup = (key: string) => setCollapsedSessionGroups((prev) => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
-  // §2 — 그룹 접힘. device 스코프 설정이 정본이고(폰에서 접은 게 맥에 새면
-  // 안 된다) 여기 시그널은 그 값을 화면에 반영하기 위한 거울이다.
-  //
-  // 값이 **없을 때**와 **false일 때**를 구분한다. 예전엔 `Boolean(get(...))`
-  // 하나였는데, 이 지연 청크가 `window.vtSettingsGet`보다 먼저 마운트되는
-  // 순간이 있어서 `undefined → false`가 되어 "기본은 접힘"이 조용히 뒤집혔다
-  // (실서버에서 새로고침마다 결과가 달라지는 것으로 재현).
-  const readGroupCollapsed = (g: RailGroup): boolean => {
-    const v = (window as any).vtSettingsGet?.(groupCollapseKey(g));
-    return v === undefined || v === null ? GROUP_COLLAPSED_DEFAULT[g] : Boolean(v);
-  };
-  const [groupCollapsed, setGroupCollapsed] = createSignal<Record<string, boolean>>(
-    Object.fromEntries(COLLAPSIBLE_GROUPS.map((g) => [g, readGroupCollapsed(g)])),
-  );
-  // 설정이 나중에 도착하면(load 완료 시 전체 키로 한 번 통지된다) 그때 맞춘다.
-  // 페이로드에 있는 키만 반영한다 — 다른 설정 하나를 바꾼 통지가 그룹 상태까지
-  // 되돌리면 안 된다.
-  const unsubGroupSettings = (window as any).vtSettingsSubscribe?.((changed: any) => {
-    if (!changed) return;
-    setGroupCollapsed((prev) => {
-      let next = prev;
-      for (const g of COLLAPSIBLE_GROUPS) {
-        const key = groupCollapseKey(g);
-        if (!(key in changed)) continue;
-        const v = Boolean(changed[key]);
-        if (v === prev[g]) continue;
-        if (next === prev) next = { ...prev };
-        next[g] = v;
-      }
-      return next;
-    });
-  });
-  onCleanup(() => unsubGroupSettings?.());
-  const toggleGroup = (g: RailGroup) => {
-    const next = !groupCollapsed()[g];
-    setGroupCollapsed((prev) => ({ ...prev, [g]: next }));
-    (window as any).vtSettingsSet?.(groupCollapseKey(g), next);
-  };
-  const isGroupCollapsed = (g: RailGroup) =>
-    COLLAPSIBLE_GROUPS.includes(g) && !!groupCollapsed()[g];
+  // 개입 필요 구역의 표시·접힘(device 스코프 설정의 거울).
+  const { prefs, set: setPref } = createRailPrefs();
+  const toggleAttentionCollapsed = () => setPref(ATTENTION_COLLAPSED_KEY, !prefs().attentionCollapsed);
 
-  // 2026-09-18 후속 — 예전엔 여기가 "저장소 N · 워크트리 N"이었다(그 시절
-  // 헤더 자체가 이미 자기모순을 알고 있었다: "ADR-29로 행의 정체는 세션이
-  // 됐지만 이 요약 문구가 세는 대상은 안 바뀌었다"). 사용자 지적으로 바로
-  // 잡는다 — 이 레일은 이제 세션 목록이지 저장소 목록이 아니므로, 머리글도
-  // 저장소를 안 센다. 아래 각 그룹 헤더가 이미 자기 몫의 개수를 보여주므로
-  // 여기서 총합을 또 셀 필요도 없다.
   const railTitle = () => '세션';
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
@@ -156,13 +99,8 @@ function Rail(props: { deps: RailDeps }) {
       ? Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY))
       : defaultRailCollapsed(window.innerWidth, REGULAR_MAX),
   );
-  // ADR-29 B — 컨텍스트 메뉴 대상은 이제 항상 세션이다(워크트리 삭제는
-  // C단계에서 저장소 시트로 옮겨간다). sessionId가 없어도(잠자는 세션)
-  // tmuxName만 있으면 메뉴가 성립한다 — 「깨우기」·「완전 종료」는 웹 세션이
-  // 없어도 할 수 있는 일이다.
-  const [ctxMenu, setCtxMenu] = createSignal<{
-    x: number; y: number; sessionId: string | null; tmuxName: string | null;
-  } | null>(null);
+  // 행 메뉴 — ⋯ 버튼과 우클릭이 같은 상태를 연다. 대상은 항상 세션 하나다.
+  const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; row: SessionRow } | null>(null);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
   // 2026-09-28(사용자 요청) — 스위처는 이제 목록 필터가 아니라 **화면 전체의
@@ -256,150 +194,29 @@ function Rail(props: { deps: RailDeps }) {
   // 전환해 둔 맥이 꺼져 있으면 세션 목록이 비는데, 그걸 "세션이 없다"로 보이면 안 된다.
   const viewHostOffline = createMemo(() => viewHostId !== LOCAL_HOST && !!activeHost() && !activeHost()!.online);
 
-  // ADR-29 B — 행은 이제 tmux 세션 목록이 출처다(잠자는 것까지 나온다).
-  // 예전엔 웹 세션 맵(w.allSessions())이 출처라 이 브라우저에 안 열어둔
-  // tmux 세션은 화면 어디에도 안 나왔다 — 그게 이 재설계의 발단이었다.
-  // 2026-09-18 후속(그룹 재정의, 사용자 요청: "같은 화면에 묶인 것만
-  // 그룹") — layout/store.js의 tabGroups()를 window 브리지로 읽는다. 태그
-  // (`@fsh_grp`)가 아니라 지금 pane 트리에 2개 이상의 세션이 같이 떠 있는
-  // 탭을 실시간으로 계산한 결과다. layoutVersion(화면 변경)과
-  // sessionsVersion(세션 추가/삭제) 둘 다에 반응한다.
-  const liveTabGroups = createMemo<{ id: string; label: string; sessionIds: string[] }[]>(() => {
-    layoutVersion(); sessionsVersion();
-    return (window as any).getTabGroups?.() || [];
-  });
-
-  // 이름 제자리 편집 중인 키 — rows 메모보다 먼저 선언해야 그 메모 안에서
-  // 참조할 수 있다(아래 "편집 중엔 얼린다" 가드). 그룹/세션 이름 편집 UI
-  // 자체(레이블 signal·핸들러)는 그대로 원래 자리(더 아래)에 있다.
-  const [editingGroupKey, setEditingGroupKey] = createSignal<string | null>(null);
+  // 행은 tmux 세션 목록이 출처다(열려 있지 않은 세션까지 나온다).
+  // 이름을 편집 중에는 메모를 얼린다 — 폴링·push마다 새 객체 배열을 돌려주면 <For>가 행
+  // DOM을 통째로 다시 만들어 편집 중이던 <input>이 뜯겨나가고 강제 blur로 입력값이 그대로
+  // 커밋됐다(2026-09-21 사용자 보고). 끝나면 다음 갱신이 바로 따라잡는다.
   const [editingSessionKey, setEditingSessionKey] = createSignal<string | null>(null);
-
-  // 2026-09-21 버그 수정 — 5초/4초 폴링(SESSIONS_POLL_MS/STATUS_POLL_MS)마다
-  // 이 메모가 매번 **새 객체 배열**을 반환했다. 값이 실제로 안 바뀌어도
-  // 새 참조라 Solid의 <For>가 모든 행 DOM을 통째로 다시 만들었고, 이름을
-  // 편집 중이던 <input>도 그 순간 뜯겨나가며 강제 blur → 저장·Enter 전에
-  // 타이핑 중이던 값이 그대로 커밋돼버렸다(사용자 보고). 이름 편집 중에는
-  // 이 메모가 직전 결과를 그대로 재사용하도록 얼려서, 편집이 끝날 때까지
-  // 행 DOM 자체가 재생성되지 않게 막는다 — 편집 중엔 어차피 그 행의 상태
-  // 변화를 실시간으로 보여줄 필요가 없다(끝나면 다음 폴링이 바로 따라잡는다).
-  let lastRows: DesktopRailRowInput[] = [];
-  const rows = createMemo<DesktopRailRowInput[]>((prev) => {
-    if (editingGroupKey() || editingSessionKey()) return prev ?? lastRows;
-    // diffTick — 세션 목록이 바뀔 때만 push되므로(예전엔 5초 폴링이 이 메모를
-    // 계속 다시 돌렸다) git 조회가 끝났거나 변경 알림이 온 것도 여기서 받아야
-    // diffFiles가 갱신되고, 낡은 캐시가 다시 조회된다.
-    sessionsVersion(); agentVersion(); diffTick(); // 구독 트리거용 — 값 자체는 안 씀
-    const w = window as any;
-
-    const all = w.allSessions ? w.allSessions() : {};
-    const details = agentDetails();
-
-    // 웹 세션 id → 그 세션이 지금 떠 있는 그룹(탭) id. 그룹 아닌(혼자인)
-    // 세션은 이 지도에 없다 — 그때 groupId는 null이다.
-    const sessionIdToGroup = new Map<string, string>();
-    for (const g of liveTabGroups()) for (const sid2 of g.sessionIds) sessionIdToGroup.set(sid2, g.id);
-
-    // tmux 세션 이름 → 웹에 이미 열린 세션 id(있으면). 서버가 준
-    // web_session_id가 아니라 **이 브라우저의 세션 맵**을 출처로 삼는다 —
-    // "깨어있음"은 기기별 개념이라, 다른 기기가 열어둔 걸 이 기기에서
-    // 깨어있다고 하면 안 된다.
-    const tmuxToWebSid: Record<string, string> = {};
-    for (const [sid, s] of Object.entries<any>(all)) {
-      const tn = s.tmuxName || s.tmux_name;
-      if (tn && !(tn in tmuxToWebSid)) tmuxToWebSid[tn] = sid;
-    }
-
-    // wt_id → 브랜치 배지 정보. /api/repos(저장소별로 이미 묶임)에서 뽑는다.
-    // repoId·gitRemote는 안 담는다 — 그룹 자동 제안(repoId)과 저장소 색점
-    // (gitRemote)을 둘 다 없앤 뒤로(2026-09-18 후속) 쓸 데가 없다.
-    // 2026-09-20 — `repoName`도 같은 이유로 뺐다. 마지막 소비처였던 그룹 라벨
-    // 폴백이 ADR-29 후속 #4에서 사라진 뒤로 아무도 읽지 않았다.
-    const wtInfo = new Map<string, { branch: string; isMain: boolean; changed: any }>();
-    for (const repo of repos()) {
-      for (const wt of repo.worktrees || []) {
-        wtInfo.set(wt.id, { branch: wt.branch, isMain: !!wt.isMain, changed: wt.changed || null });
-      }
-    }
-
-    const out: OtherRailRowInput[] = [];
-    const seenTmux = new Set<string>();
-    for (const t of tmuxSessions()) {
-      seenTmux.add(t.name);
-      const sid = tmuxToWebSid[t.name] || '';
-      const awake = !!sid;
-      const info = t.wt_id ? wtInfo.get(t.wt_id) : undefined;
-      const detail = details[t.name];
-      const status = awake && w.getStatus ? w.getStatus(t.name) : (w.getStatus ? w.getStatus(t.name) : 'idle');
-      const cwd = t.cwd || null;
-      out.push({
-        kind: 'session',
-        sessionId: sid,
-        tmuxName: t.name,
-        // 2026-09-21 설계 — tmux 세션의 이름은 tmux 세션 이름 그 자체다
-        // (core/store.js의 sessionDisplayName). awake일 때만 그걸 따로
-        // 조회하던 옛 분기는 항상 t.name과 같은 값을 내는 동어반복이었다
-        // (awake=true는 tmuxToWebSid 매칭이 s.tmuxName===t.name일 때만
-        // 성립하므로).
-        name: t.name,
-        awake,
-        groupId: (sid && sessionIdToGroup.get(sid)) || null,
-        status,
-        since: detail?.since ?? null,
-        tool: detail?.tool ?? null,
-        diffFiles: cwd ? (cachedDiffCount(cwd) ?? null) : null,
-        changed: info?.changed ?? null,
-        question: detail?.question ?? null,
-        options: detail?.options ?? null,
-        promptId: detail?.promptId ?? null,
-        agent: agentNames()[t.name] ?? null,
-        branch: info?.branch ?? null,
-        isMainWorktree: info?.isMain ?? false,
-        worktreeId: t.wt_id || null,
-      });
-      if (cwd && diffCountStale(cwd)) {
-        fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
-      }
-    }
-
-    // 일반(비 tmux) 세션 — 서버 쪽에 지속되는 대상이 없어 늘 깨어있다.
-    for (const [sid, s] of Object.entries<any>(all)) {
-      const tn = s.tmuxName || s.tmux_name;
-      if (tn && seenTmux.has(tn)) continue;
-      if (tn) continue; // tmux 이름은 있는데 목록에 없다 — 방금 죽은 세션, 다음 폴링에서 정리된다.
-      out.push({
-        kind: 'session',
-        sessionId: sid,
-        tmuxName: null,
-        name: w.sessionDisplayName ? w.sessionDisplayName(sid) : sid.slice(0, 8),
-        awake: true,
-        groupId: sessionIdToGroup.get(sid) || null,
-        status: 'idle',
-        since: null,
-        tool: null,
-        diffFiles: null,
-        agent: null,
-        branch: null,
-        isMainWorktree: false,
-      });
-    }
+  let lastRows: SessionRow[] = [];
+  const rows = createMemo<SessionRow[]>((prev) => {
+    if (editingSessionKey()) return prev ?? lastRows;
+    // 구독 트리거용 — 값 자체는 안 쓴다. diffTick: git 조회 완료·변경 알림.
+    sessionsVersion(); agentVersion(); layoutVersion(); diffTick();
+    const out = collectSessionRows({
+      tmux: tmuxSessions(),
+      repos: repos(),
+      groups: (window as any).getTabGroups?.() || [],
+      deps: props.deps,
+      onDiff: () => setDiffTick((n) => n + 1),
+    });
     lastRows = out;
     return out;
   });
 
-  // ADR-29 B — 두 갈래: 깨어있는 세션의 그룹 섹션(개입 필요 고정 뷰 포함),
-  // 잠자는 세션의 구역(그룹째 잠들었으면 덩어리, 아니면 낱개). 원격
-  // 호스트는 옛 3버킷(개입 필요/작업 중/열려 있음) 그대로 — 거긴
-  // 그룹·수면 개념이 아직 없다(2.2 범위).
-  const localSessionRows = createMemo<OtherRailRowInput[]>(() => rows() as OtherRailRowInput[]);
-  const groupLabelMap = createMemo(() => new Map(liveTabGroups().map((g) => [g.id, g.label])));
-  const sessionSections = createMemo(() => {
-    diffTick();
-    return buildSessionSections(localSessionRows(), groupLabelMap());
-  });
-  const sleepingEntries = createMemo(() => buildSleepingEntries(localSessionRows()));
-  const totalRows = createMemo(() =>
-    sessionSections().reduce((n, s) => n + s.rows.length, 0) + sleepingEntries().length);
+  const lists = createMemo(() => buildRailLists(rows(), prefs()));
+  const totalRows = createMemo(() => lists().sessions.length);
 
   const activeId = createMemo(() => { sessionsVersion(); return (window as any).activeSessionId?.() ?? null; });
 
@@ -409,60 +226,35 @@ function Rail(props: { deps: RailDeps }) {
   // 세션 시트·Fleet도 같은 함수). ⌘/Ctrl 클릭으로 현재 뷰를 분할하던 동작은
   // 없앴다 — 묶기는 드래그앤드롭만이다. 이동이 switchTo가 아니라
   // revealSession인 이유(짝을 밀어내지 않는다)는 2026-09-21 수정 그대로다.
-  const openRow = async (_e: MouseEvent, row: OtherRailRowInput) => {
-    const w = window as any;
-    const sid = row.awake ? actionSessionId(row) : null;
-    if (!sid && !row.tmuxName) return;
-    await w.vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName || null });
-  };
-
-  const contextRow = (e: MouseEvent, row: OtherRailRowInput) => {
-    e.preventDefault();
+  const openRow = async (_e: MouseEvent, row: SessionRow) => {
     const sid = actionSessionId(row);
-    if (!sid && !row.tmuxName) return; // 웹 세션도 tmux 이름도 없으면 메뉴가 성립하지 않는다.
-    setCtxMenu({ x: e.clientX, y: e.clientY, sessionId: sid, tmuxName: row.tmuxName });
+    if (!sid && !row.tmuxName) return;
+    await (window as any).vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName || null });
   };
 
-  // 2026-09-18 후속(그룹 재정의, 사용자 요청) — 그룹을 만드는 유일한 길은
-  // 이제 **화면(터미널 pane)에 직접 드래그해서 나란히 놓는 것**이다. 레일
-  // 안에서 세션을 세션/그룹 헤더에 끄는 옛 방식(태그를 직접 썼다)은 없앴다
-  // — 그룹은 태그가 아니라 pane 트리에서 도출되므로 레일 자신이 쓸 수
-  // 있는 "그룹에 넣기" 동작 자체가 없어졌다. 대신 세션 행을 pane 분할
-  // 드롭존(layout/dnd.js)의 드래그 소스로 만든다 — mime 이름은 그 파일의
-  // `SESSION_MIME` 상수와 같은 문자열이어야 한다(이 파일은 레이아웃 모듈을
-  // 정적 import 못 해 리터럴로 맞춘다, 파일 머리말 참고). 잠자는 세션은
-  // 웹 세션 id가 없어 끌 수 없다.
-  const onRowDragStart = (e: DragEvent, row: OtherRailRowInput) => {
-    if (!row.awake || !row.sessionId) { e.preventDefault(); return; }
+  // ⋯ 버튼과 우클릭이 이 함수 하나를 부른다. 버튼은 좌표가 클릭 지점이라 메뉴가
+  // 포인터 옆에 뜬다(우클릭과 같다).
+  const contextRow = (e: MouseEvent, row: SessionRow) => {
+    e.preventDefault();
+    if (!row.sessionId && !row.tmuxName) return; // 웹 세션도 tmux 이름도 없으면 메뉴가 성립하지 않는다.
+    // ⋯ 버튼에서 열었으면 버튼 아래에, 우클릭이면 포인터 옆에 띄운다.
+    const btn = (e.target as HTMLElement | null)?.closest?.('.vt-srow-menu');
+    const r = btn?.getBoundingClientRect();
+    setCtxMenu({ x: r ? r.left : e.clientX, y: r ? r.bottom + 2 : e.clientY, row });
+  };
+
+  // 묶음은 화면(터미널 pane)에 직접 끌어다 놓아 만든다 — 세션 행은 pane 분할 드롭존
+  // (layout/dnd.js)의 드래그 소스다. mime 이름은 그 파일의 `SESSION_MIME`과 같은
+  // 문자열이어야 한다(이 파일은 레이아웃 모듈을 정적 import 못 한다). 열려 있지 않은
+  // 세션은 웹 세션 id가 없어 끌 수 없다.
+  const onRowDragStart = (e: DragEvent, row: SessionRow) => {
+    if (!row.open || !row.sessionId) { e.preventDefault(); return; }
     e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
   };
 
-  // 그룹 이름 짓기, 제자리 편집(window.prompt 안 씀). 「묶지 않음」
-  // (groupId null)은 대상이 아니다 — 이름은 탭 자체(layout/store.js의
-  // label)에 붙는다. editingGroupKey 자체는 rows 메모 앞으로 옮겼다(위 참고).
-  const [editingGroupValue, setEditingGroupValue] = createSignal('');
-  const startRenameGroup = (e: MouseEvent, groupId: string, currentLabel: string) => {
-    e.stopPropagation(); // 부모 토글 버튼까지 눌리면 접혔다 펴진다.
-    setEditingGroupValue(currentLabel);
-    setEditingGroupKey(groupId);
-  };
-  const commitRenameGroup = (groupId: string) => {
-    if (editingGroupKey() !== groupId) return; // blur가 Enter 뒤에도 한 번 더 온다 — 중복 커밋 방지.
-    setEditingGroupKey(null);
-    const trimmed = editingGroupValue().trim();
-    if (!trimmed) return; // 빈 값은 취소로 본다 — 그룹을 이름 없는 상태로 만들 수는 없다.
-    // groupId는 곧 탭 id다(2026-09-18 후속, 그룹 재정의) — 서버 왕복 없이
-    // layout/store.js의 탭 레코드에 바로 쓴다.
-    const ok = (window as any).vtRenameTab?.(groupId, trimmed);
-    if (!ok) (window as any).showToast?.('이름 변경 실패', 'error');
-  };
-
-  // 세션 이름 변경, 제자리 편집(그룹 이름과 같은 관용구, window.prompt 안
-  // 씀) — layout/tabbar.js의 주석은 "닫기·이름 변경은 레일 세션 행으로"
-  // 옮겼다고 했지만 실제로는 이 메뉴에 빠져 있었다(사용자 지적으로 발견한
-  // 회귀). 웹 세션이 있어야 한다(term/session.js의 renameSession).
-  // editingSessionKey 자체는 rows 메모 앞으로 옮겼다(위 참고).
+  // 세션 이름 변경, 제자리 편집(window.prompt 안 씀). 웹 세션이 있어야 한다(term/session.js의
+  // renameSession). editingSessionKey는 rows 메모 앞에서 선언했다.
   const [editingSessionValue, setEditingSessionValue] = createSignal('');
   const startRenameSession = (sessionId: string, currentName: string) => {
     setEditingSessionValue(currentName);
@@ -476,45 +268,15 @@ function Rail(props: { deps: RailDeps }) {
     await (window as any).renameSession?.(sessionId, trimmed);
   };
 
-  const ctxMenuItems = () => {
+  // 메뉴 항목 목록은 rail-data.ts의 rowMenuItems 하나다(폰 Fleet의 롱프레스 시트도 같다).
+  const ctxMenuItems = (): MenuItem[] => {
     const m = ctxMenu();
     if (!m) return [];
-    const w = window as any;
-    const items: MenuItem[] = [];
-    if (m.sessionId) {
-      items.push(
-        { label: '이름 변경', run: () => startRenameSession(m.sessionId as string, w.sessionDisplayName?.(m.sessionId) || '') },
-        { label: '새 세션', run: () => w.createSession?.() },
-        // 2026-09-22(사용자 지적) — 예전엔 여기서도 switchTo로 activeSessionId를
-        // m.sessionId로 바꾼 뒤 인자 없는 액션을 불렀다. switchTo는 "지금 활성
-        // pane에 배정"이라 포커싱 중이던 세션을 그 자리에서 밀어냈다(위 revealSession
-        // 주석과 같은 사고). 이 둘은 화면을 옮길 필요가 전혀 없으므로, 대상 세션을
-        // 직접 받는 함수(vtOpenSessionOnMac/vtShowClients)를 따로 불러 activeSessionId
-        // 자체를 건드리지 않는다.
-        { label: '지금 이 세션 맥에서 열기', run: () => w.vtOpenSessionOnMac?.(m.sessionId) },
-        { label: '연결된 화면', run: () => w.vtShowClients?.(m.sessionId) },
-        // 2026-10-03(세션·뷰 규칙) — 「닫기」. 칸 ×·모바일 시트·Fleet과 같은
-        // 함수다(term/session-actions.js closeSession): 웹 attach만 놓고 칸은
-        // 빈 칸으로 남는다. tmux는 계속 산다.
-        { label: '닫기', run: () => w.vtCloseSession?.(m.sessionId) },
-      );
-    } else if (m.tmuxName) {
-      // 열리지 않은 행의 메뉴: 웹 세션이 없으니 위 넷은 못 쓰지만(맥에서
-      // 열기·연결된 화면은 열린 세션을 전제한다), 열기와 종료는 tmux 이름만으로
-      // 된다. 열기는 행 클릭과 같은 규칙이다.
-      items.push({ label: '열기', run: () => w.vtOpenSessionFromRail?.({ tmuxName: m.tmuxName }) });
-    }
-    if (m.tmuxName) {
-      // ADR-29 B — 지금까지 tmux-panel.js 팝업에만 있던 완전 종료를 레일
-      // 세션 메뉴에도 연결한다(최종 설계안 §4: "완전 종료는 세션 메뉴 맨
-      // 아래 위험 구역"). 확인 문구는 session-actions.js가 상태(waiting/
-      // working)를 보고 만든다 — 여기서 다시 만들지 않는다.
-      items.push({
-        label: '완전 종료', detail: '되돌릴 수 없음',
-        run: () => w.vtConfirmAndKillSession?.(m.tmuxName, m.sessionId || null),
-      });
-    }
-    return items;
+    const row = m.row;
+    return rowMenuItems(row).map((it) => ({
+      label: it.label, detail: it.detail, danger: it.danger,
+      run: () => runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name)),
+    }));
   };
 
   // "⋯ 더보기" — §5가 기존 48px 아이콘 레일을 완전히 대체하기로 하면서 갈 곳을
@@ -596,8 +358,26 @@ function Rail(props: { deps: RailDeps }) {
   };
 
 
+  // 같은 행이 두 구역(개입 필요·세션)에 나올 수 있다 — 같은 세션이라 편집·활성 상태도 같이 따라간다.
+  const renderRow = (row: SessionRow) => (
+    <Row
+      row={row}
+      compact={collapsed()}
+      active={!!row.sessionId && row.sessionId === activeId()}
+      draggable={row.open && !!row.sessionId}
+      onDragStart={(e) => onRowDragStart(e, row)}
+      editing={!!row.sessionId && editingSessionKey() === row.sessionId}
+      editingValue={editingSessionValue()}
+      onEditInput={setEditingSessionValue}
+      onEditCommit={() => commitRenameSession(row.sessionId)}
+      onEditCancel={() => setEditingSessionKey(null)}
+      onOpen={(e) => openRow(e, row)}
+      onContext={(e) => contextRow(e, row)}
+    />
+  );
+
   return (
-    <aside id="vt-wgrail" class="vt-sidepanel left" ref={railRef} classList={{ collapsed: collapsed() }} aria-label="워크트리">
+    <aside id="vt-wgrail" class="vt-sidepanel left" ref={railRef} classList={{ collapsed: collapsed() }} aria-label="세션">
       <div class="vt-wgrail-head">
         <Show when={!collapsed()}>
           {/* C1 — 호스트가 로컬 하나뿐이면 칩을 아예 안 그린다. 멀티호스트를
@@ -621,20 +401,15 @@ function Rail(props: { deps: RailDeps }) {
           </Show>
         </Show>
         <div class="vt-wgrail-head-actions">
-          {/* 2026-09-18 — 이 버튼은 예전엔 「열려 있지 않음」 그룹 머리에만
-              있었다. buildRailSections()가 빈 그룹을 통째로 지우므로, 모든
-              저장소에 세션이 붙어 있으면(=idle 그룹이 안 생기면) 이 버튼이
-              화면에서 완전히 사라져 "저장소 표시" 설정에 닿을 방법이 없었다.
-              레일 헤더 줄은 섹션 유무와 무관하게 항상 그려지므로 여기 하나만
-              둔다(그래서 목록 바닥의 "숨긴 저장소 N개" 링크도 후속에서
-              지울 수 있었다 — 유일한 진입점이라는 이유가 사라졌다). */}
+          {/* 레일 설정 — 개입 필요 표시, 만든 곳별 표시, 저장소 표시. 접히지 않은 때만 그린다.
+              머리글 줄은 구역 유무와 무관하게 항상 있어 설정에 늘 닿는다. */}
           <Show when={!collapsed()}>
             <button
               type="button"
               class="vt-icon-btn sm vt-wgrail-settings"
-              aria-label="저장소 관리"
-              data-tip="저장소 관리"
-              data-tip-sub={hiddenCount() ? `${hiddenCount()}개 숨김` : '표시 · 워크트리 · 세션'}
+              aria-label="레일 설정"
+              data-tip="레일 설정"
+              data-tip-sub={hiddenCount() ? `저장소 ${hiddenCount()}개 숨김` : '개입 필요 · 만든 곳 · 저장소'}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
               innerHTML={icon('settings', 13, 2)}
@@ -656,7 +431,7 @@ function Rail(props: { deps: RailDeps }) {
         </div>
       </div>
       <div class="vt-wgrail-body">
-        <Show when={totalRows() === 0 && !collapsed() && !viewHostOffline()}>
+        <Show when={rows().length === 0 && !collapsed() && !viewHostOffline()}>
           <div class="vt-wgrail-empty">
             아직 세션이 없습니다.
             <button
@@ -670,124 +445,42 @@ function Rail(props: { deps: RailDeps }) {
         <Show when={viewHostOffline() && !collapsed()}>
           <div class="vt-wgrail-empty">{hostDetail(activeHost()!)}</div>
         </Show>
-        {/* 로컬 호스트: ADR-29 B — 깨어있는 세션의 그룹 섹션. */}
         <Show when={!viewHostOffline()}>
-          <For each={sessionSections()}>
-            {(section) => (
-              <>
-                <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
-                  <div class="vt-wgrail-group-head">
-                    <Show when={section.kind === 'attention'}>
-                      <span class="vt-wgrail-group-label">
-                        {section.label}
-                        <span class="vt-wgrail-group-count">{section.rows.length}</span>
-                      </span>
-                    </Show>
-                    {/* ADR-29 후속 — 제자리 편집. window.prompt 같은 네이티브
-                        다이얼로그를 안 쓴다(사용자 지적: "절대 기본 컴포넌트
-                        쓰지 마라"). 편집 중엔 토글·연필 버튼을 통째로
-                        input으로 갈아 끼운다 — 버튼 위에 input을 얹으면
-                        클릭이 토글로 새는 것과 포커스 다툼이 생긴다. */}
-                    <Show when={section.kind !== 'attention' && editingGroupKey() !== section.key}>
-                      <button
-                        type="button"
-                        class="vt-wgrail-group-toggle"
-                        classList={{ collapsed: collapsedSessionGroups().has(section.key) }}
-                        aria-expanded={!collapsedSessionGroups().has(section.key)}
-                        onClick={() => toggleSessionGroup(section.key)}
-                      >
-                        <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                        <span class="vt-wgrail-group-label">{section.label}</span>
-                        <span class="vt-wgrail-group-count">{section.rows.length}</span>
-                      </button>
-                      {/* 「묶지 않음」은 실제 그룹이 아니라 이름 지을 대상이 없다. */}
-                      <Show when={section.kind === 'group' && section.groupId}>
-                        <button
-                          type="button"
-                          class="vt-icon-btn xs vt-wgrail-group-rename"
-                          aria-label={`${section.label} 이름 바꾸기`}
-                          data-tip="그룹 이름 바꾸기"
-                          data-tip-side="bottom"
-                          onClick={(e) => startRenameGroup(e, section.groupId as string, section.label)}
-                          innerHTML={icon('pencil', 12, 2)}
-                        />
-                      </Show>
-                    </Show>
-                    <Show when={section.kind !== 'attention' && editingGroupKey() === section.key}>
-                      <input
-                        type="text"
-                        class="vt-input vt-wgrail-group-edit"
-                        value={editingGroupValue()}
-                        ref={(el) => { queueMicrotask(() => { el.focus(); el.select(); }); }}
-                        onInput={(e) => setEditingGroupValue(e.currentTarget.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') { e.preventDefault(); commitRenameGroup(section.groupId as string); }
-                          else if (e.key === 'Escape') { e.preventDefault(); setEditingGroupKey(null); }
-                        }}
-                        onBlur={() => commitRenameGroup(section.groupId as string)}
-                      />
-                    </Show>
-                  </div>
-                </Show>
-                <Show when={section.kind === 'attention' || !collapsedSessionGroups().has(section.key) || collapsed()}>
-                <For each={section.rows}>
-                  {(row) => (
-                    <Row
-                      row={row}
-                      compact={collapsed()}
-                      active={actionSessionId(row) === activeId()}
-                      draggable={!!row.awake && !!row.sessionId}
-                      onDragStart={(e) => onRowDragStart(e, row)}
-                      editing={!!row.sessionId && editingSessionKey() === row.sessionId}
-                      editingValue={editingSessionValue()}
-                      onEditInput={setEditingSessionValue}
-                      onEditCommit={() => commitRenameSession(row.sessionId)}
-                      onEditCancel={() => setEditingSessionKey(null)}
-                      onOpen={(e) => openRow(e, row)}
-                      onContext={(e) => contextRow(e, row)}
-                    />
-                  )}
-                </For>
-                </Show>
-              </>
-            )}
-          </For>
-          {/* ADR-29 B — 잠자는 구역. 깨어있는 섹션과 절대 안 섞인다(최종
-              설계안 §1의 정정: "잠든 것은 그룹 안에 안 들어간다"). 2026-09-18
-              후속(그룹 재정의)으로 그룹째 잠드는 덩어리 표시는 없앴다(그
-              근거였던 태그 자체가 없어졌다) — 전부 낱개 행이다(Row를 그대로
-              재사용, sleeping=true라서 클릭 한 번으로 그 세션을 깨운다). */}
-          <Show when={sleepingEntries().length > 0}>
+          {/* 개입 필요 — waiting 세션만. 접을 수 있고(제목 줄 전체가 토글), 레일 설정에서 끈다.
+              접힌 레일(48px)에서는 구역 머리 대신 경계선만 그린다. */}
+          <Show when={lists().attention.length > 0}>
             <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
               <div class="vt-wgrail-group-head">
                 <button
                   type="button"
                   class="vt-wgrail-group-toggle"
-                  classList={{ collapsed: collapsedSessionGroups().has('sleeping') }}
-                  aria-expanded={!collapsedSessionGroups().has('sleeping')}
-                  onClick={() => toggleSessionGroup('sleeping')}
+                  classList={{ collapsed: prefs().attentionCollapsed }}
+                  aria-expanded={!prefs().attentionCollapsed}
+                  onClick={toggleAttentionCollapsed}
                 >
                   <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                  <span class="vt-wgrail-group-label">열리지 않음</span>
-                  <span class="vt-wgrail-group-count">{sleepingEntries().length}</span>
+                  <span class="vt-wgrail-group-label">개입 필요</span>
+                  <span class="vt-wgrail-group-count">{lists().attention.length}</span>
                 </button>
               </div>
             </Show>
-            <Show when={!collapsedSessionGroups().has('sleeping') || collapsed()}>
-              <For each={sleepingEntries()}>
-                {(entry) => (
-                  <Row
-                    row={{ ...entry.row, statusSentence: '' }}
-                    compact={collapsed()}
-                    sleeping
-                    active={false}
-                    onOpen={(e) => openRow(e, entry.row)}
-                    onContext={(e) => contextRow(e, entry.row)}
-                  />
-                )}
-              </For>
+            <Show when={!prefs().attentionCollapsed || collapsed()}>
+              <For each={lists().attention}>{(row) => renderRow(row)}</For>
             </Show>
+          </Show>
+          <Show when={lists().sessions.length > 0}>
+            <Show when={!collapsed()} fallback={<div class="vt-wgrail-group-sep" role="separator" />}>
+              <div class="vt-wgrail-group-head">
+                <span class="vt-wgrail-group-label">
+                  세션
+                  <span class="vt-wgrail-group-count">{lists().sessions.length}</span>
+                </span>
+              </div>
+            </Show>
+            <For each={lists().sessions}>{(row) => renderRow(row)}</For>
+          </Show>
+          <Show when={rows().length > lists().sessions.length && !collapsed()}>
+            <div class="vt-wgrail-note">레일 설정에서 {rows().length - lists().sessions.length}개를 숨겼습니다.</div>
           </Show>
         </Show>
         {/* §1 — 목록이 200개 상한에서 잘렸다. 여기 한 줄이 없으면 "몇 개가
@@ -795,13 +488,6 @@ function Rail(props: { deps: RailDeps }) {
         <Show when={truncated() && !collapsed()}>
           <div class="vt-wgrail-note">저장소가 200개를 넘어 일부만 표시합니다.</div>
         </Show>
-        {/* 2026-09-18 후속 — "숨긴 저장소 N개" 링크를 여기서 지웠다. 애초에
-            이 자리에 둔 이유가 "그룹 머리에만 있던 저장소 관리 진입점이
-            그룹이 하나도 없으면 사라진다"는 문제였는데(주석은 head-actions
-            블록에 남아 있다), 지금은 머리글 줄의 ⚙ 버튼이 접힌 상태가
-            아닌 한 항상 떠 있어 같은 문제가 없다 — 게다가 그 ⚙의 툴팁이
-            이미 숨김 개수를 보여준다(hiddenCount 참고). 세션 목록 한복판에
-            저장소 이야기를 또 꺼낼 이유가 없어졌다. */}
       </div>
       {/* 2026-09-18(2차) — 설정 ⚙과 마이크는 여기 살다가 사용자 요청으로 반대편
           dock(Dock.tsx의 .vt-dock-tabs 아래)으로 옮겼다. 이 레일의 발자국을
@@ -868,6 +554,8 @@ function Rail(props: { deps: RailDeps }) {
         <Portal>
           <RepoVisibility
             deps={props.deps}
+            title="레일 설정"
+            lead={<RailSettingsLead />}
             onClose={() => setRepoSheet(false)}
             onChanged={() => refreshRepos()}
           />

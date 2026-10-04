@@ -61,6 +61,15 @@ const PATHS = {
   // "소/스/컨/트/롤"이 세로로 늘어섰다. 모노스페이스까지 겹쳐 더 나빴다.
   // 세로쓰기 자체는 영문 라벨을 전제한 패턴이라 한글에는 성립하지 않는다.
   'git-branch': '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  // 레일 행(2.2 후속) — 둘째 줄의 메인/워크트리 구분. 줄 하나를 가로지르는 점 =
+  // 본선(메인 워크트리), 갈라지는 가지(git-branch) = 딸린 워크트리.
+  'git-commit': '<circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/>',
+  // 만든 곳(origin) — local은 아이콘이 없다. peer = 다른 맥, agent = 에이전트, external = CLI·직접 만든 tmux.
+  laptop: '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+  'square-terminal': '<path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>',
+  // 열림 표시 — 이 브라우저 탭의 칸에 놓여 있다(pane 헤더의 분할 아이콘과 다른 모양: 창 + 제목줄).
+  'app-window': '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>',
   // 팔레트 섹션 마크(2.1.6). 목업 4a의 파일 줄 아이콘과 같은 형태 — 모서리가
   // 접힌 문서. 'file-up'(업로드)과 역할이 다르므로 따로 둔다.
   file: '<path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2Z"/>',

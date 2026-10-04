@@ -398,25 +398,32 @@ connected-screens icon; it doesn't touch the tabs themselves).
 
 ### Worktree rail 252px (`#vt-wgrail`, `shell/Rail.tsx`)
 
-2.1.0 has no worktree model yet (that's 2.1.1's job), so **a session is drawn
-in the worktree row's place** — one session, one row. A row is: a left 3px
-**status bar** (`--color-st-*` tone — idle/working/waiting/done, same
-colors as §5) · agent mark · name · a diff badge on the right (from `GET
-/api/git/status` keyed on the session's cwd, cached 60s) · a second-line
-status sentence. Group order is fixed: **needs attention** (waiting)
-→ **working** → **idle** (idle, done), most-recently-active first within a
-group. Clicking a row focuses that session in the active pane. The rail's
-width resizer spans 240~480px. Collapsed (48px), only the mark and the
-status bar remain.
+A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
+(waiting sessions; collapsible, and switchable on/off in 레일 설정 like VS Code's
+Open Editors) and **세션** (every session, **name order only** — no urgency sorting, so
+rows never jump). There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A row is three lines:
 
-**Repo color bar** (`.vt-wgrail-hash`, 20-design-system.md §5 O2): a worktree
-row carries a *second* 3px bar, left of the status bar, whose color comes from
-`fnv1a(repo name + remote) % 8` → `--color-hash-1..8` (defined per skin, all
-6). The status bar answers "does this need me"; this one answers "which repo
-is this" — two questions that a single bar was collapsing. Session rows
-(`kind-session`) leave it transparent, since a bare session has no repo to
-hash. Implemented in `shell/RailRow.tsx` + `rail-data.ts`
-(`repoColorKey`/`hashRepoColorIndex`).
+1. **State icon** (`stateIcon`; a ring around it = unseen) · agent mark · name (edited in place).
+   A small window icon at the line's end = "open in this browser tab".
+2. **Main/worktree icon** (`git-commit` = main worktree, `git-branch` = linked worktree) ·
+   branch — **main is shown too** — · change size (`+add −del`, or `파일 N`).
+3. **State keyword** · elapsed time · **origin icon** (local has none; `laptop` = created on
+   another Mac, `bot` = created by an agent, `square-terminal` = CLI / plain tmux).
+
+Only when applicable, a fourth line: the grouped view's name and a 「다른 화면 N」 badge
+(tmux clients attached beyond this browser tab's own). The state keyword is short and fixed so
+it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문 for waiting (server `kind`),
+유휴 / 작업 중 (+ tool name, the one place allowed to ellipsize) / 완료 (+ 「질문 있음」 /
+「계획 있음」 from the server `badge`). The old left 3px status bar, the repo color bar, the
+tmux plug icon and the `? question` line are gone — state is the icon's colour **and** shape.
+A session that is not open keeps full opacity but its name steps down to `--color-sub`.
+
+The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
+맥에서 열기 · 연결된 화면 · 종료). The header gear is **레일 설정** (개입 필요 on/off, show
+or hide sessions by origin — peer / agent / external, and the 저장소 표시 list). Hiding an
+origin never hides a session that is open or waiting. The rail's width resizer spans
+240~480px. Collapsed (48px), only the state icon and agent mark remain; name, branch and
+keyword move to the row tooltip.
 
 ### Dock 392px (`shell/Dock.tsx`)
 
@@ -564,7 +571,7 @@ the danger/failure colour for buttons and toasts.
 - **State icons** (`ui/icons.js` `stateIcon`, stroke 1.75, no emoji or Unicode check
   marks): idle = empty circle, working = open arc that rotates, waiting = speech bubble
   with a question mark, done = check in a circle. Shape carries the state, not just
-  colour. The rail rows adopt them in step 5; surfaces still draw `.status-dot` today.
+  colour. The rail rows and the phone Fleet draw them (2026-10-04); the tab bar uses colour segments instead.
 - Without the Claude Code hooks (`fsh hooks install`), this value never
   arrives at all — `fsh doctor` and Settings → About surface the gap.
 
@@ -791,22 +798,17 @@ the first screen (`ui.mobile.home` defaults to `fleet`) — most of what you do
 on a phone in compact is "what's waiting on me right now," not typing. Its
 data source moved from "this browser's open web sessions" to the same
 `/api/tmux/sessions` + `allSessions()` join as the desktop rail's local path
-(`Rail.tsx`) — so **sleeping tmux sessions show up here too now**, in their
-own dimmed "잠자는 중" section at the bottom (`buildSleepingEntries`), same
-name and same behavior as the rail: tap wakes and opens, no ack/unseen
-handling (that's an awake-only concept). The three urgency buckets above it
-(개입 필요 / 작업 중 / 열려 있음) are still `buildRailSections`, now fed only the
-awake rows — a sleeping-but-waiting session doesn't jump into 개입 필요, same
-rule as the desktop's `buildSessionSections`. `GROUP_LABEL.idle` itself was
-renamed from "열려 있지 않음" to **"열려 있음"** (`rail-data.ts`) — that bucket
-has only ever meant "session open, agent idle" since ADR-29, never "no
-session," so the old label was backwards; this also fixed the same wording on
-the desktop rail's remote-host view, which shares the constant.
+(`Rail.tsx`) — and, since the 2026-10-04 rail rules, the **same rows and zones**:
+`collectSessionRows` (`rail-fetch.ts`) builds them, `buildRailLists` (`rail-data.ts`) splits
+them into 개입 필요 and 세션 (name order), and the row parts (state icon + unseen ring,
+keyword line, origin icon) are `RailRow.tsx`'s own components. Only the waiting rows in the
+개입 필요 zone carry the inline approval buttons (the same session also appears below
+without them). The Fleet-only unseen badge is gone — the ring on the state icon replaced it.
 
-**Long-press a row for a bottom-sheet menu** — awake rows get 이름 변경 · 재우기
-· 맥에서 열기 · 연결된 화면 · 완전 종료(tmux only, red); sleeping rows get 깨우기 ·
-완전 종료. Same actions, same window bridges as the desktop rail's ⋯ menu
-(`ctxMenuItems`), just a sheet instead of a coordinate popup — a touch menu
+**Long-press a row for a bottom-sheet menu** — the same items as the desktop ⋯ menu
+(`rowMenuItems`: open rows get 닫기 · 이름 변경 · 맥에서 열기 · 연결된 화면, closed rows get
+열기; tmux sessions add 종료, red), the same window bridges as the desktop rail
+(`runRowMenu`), just a sheet instead of a coordinate popup — a touch menu
 that opens where you pressed can walk off-screen. Detection is a plain
 pointer-event timer (500ms / 8px cancel, touch-only — mouse is left to the
 desktop's ⋯ button) since `layout/dnd.js`'s long-press is wired to actual

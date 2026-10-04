@@ -41,7 +41,7 @@ export const SCHEMA = {
   // 문서 §1 표의 "mouse.forward"에 대응 — 기기 성능/입력 방식에 달린 값이라 device.
   'mouse.forwardToApp':     { type: 'bool', def: true, scope: 'device' },
   'mouse.autocopyOnSelect': { type: 'bool', def: true, migrate: 'vt_autocopy_on_select', parse: onOff },
-  // "맥에서도 열기" — 새 세션을 만들 때 서버가 osascript로 iTerm 창도 함께 연다.
+  // "맥에서도 열기" — 새 세션을 만들 때 서버가 고른 메인 터미널(VT_TERMINAL)로 창도 함께 연다.
   // E2(2026-09-08)에서 스토어로 승격했다. 그전엔 ui/moreMenu.js가 localStorage를
   // 직접 읽고, 소비처(term/session.js·term/tmux-panel.js)는 체크박스 엘리먼트의
   // .checked를 매번 읽는 구조였다 — 값의 주인이 DOM이라 폰에서 켠 게 맥북에
@@ -116,17 +116,18 @@ export const SCHEMA = {
   // 이미 저장된 기기 설정과 어긋나지 않게 스키마에서만 남겨 둔다.
   'ui.activeHostId':        { type: 'str',  def: 'local', scope: 'device' },
 
-  // 98-rail-repos-2.1.6.md §2 — 레일 그룹 여닫기. **device 스코프**다:
-  // 폰에서 접은 것이 맥까지 접히면 안 된다(ui.rail.collapsed와 같은 이유).
-  // 같은 문서 §3의 「저장소 숨김」은 반대로 서버에 둔다 — 접힘은 화면 상태고
-  // 숨김은 "이게 내 프로젝트인가"라는 사람의 판단이라 기기를 타면 안 된다.
-  //
-  // `idle`만 기본 접힘이다. 이 기능의 출발점이 "열려 있지 않음 13개가 깔려
-  // 있어 그 위의 「작업 중」이 화면 밖으로 밀린다"였다. `attention`은 스키마에
-  // 두지 않는다 — 승인 대기가 접힌 채 숨으면 그 그룹이 존재할 이유가 사라져
-  // Rail.tsx가 접기 버튼 자체를 그리지 않는다.
-  'rail.group.idle.collapsed':    { type: 'bool', def: true,  scope: 'device' },
-  'rail.group.working.collapsed': { type: 'bool', def: false, scope: 'device' },
+  // 레일(Session and view rules — Rail). **device 스코프**다: 폰에서 접은 것·끈 것이
+  // 맥에 새면 안 된다(ui.rail.collapsed와 같은 이유). 같은 시트의 「저장소 표시」는
+  // 반대로 서버에 둔다 — 숨김은 "이게 내 프로젝트인가"라는 사람의 판단이다.
+  // 기본값은 shell/rail-data.ts의 RAIL_PREF_DEFAULTS와 같아야 한다(테스트가 대조).
+  // 「개입 필요」 구역: 표시 여부와 접힘. 접힘은 구역에 waiting 세션이 있어도 유지된다 —
+  // 접은 채 숨은 입력 대기는 구역 제목의 개수와 행의 상태 아이콘이 알린다.
+  'rail.attention.show':      { type: 'bool', def: true,  scope: 'device' },
+  'rail.attention.collapsed': { type: 'bool', def: false, scope: 'device' },
+  // 만든 곳별 표시(local은 끌 수 없다). 끄더라도 열려 있는 세션·입력 대기 세션은 남는다.
+  'rail.origin.peer.show':     { type: 'bool', def: true, scope: 'device' },
+  'rail.origin.agent.show':    { type: 'bool', def: true, scope: 'device' },
+  'rail.origin.external.show': { type: 'bool', def: true, scope: 'device' },
 };
 
 function _scopeOf(key) {

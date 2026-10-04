@@ -313,7 +313,7 @@ test('세부 — 스냅샷의 도구·경과·질문을 세션 이름으로 접�
       prompt_id: 'p1', since: 20, host: 'local', session_id: 'pane' },
   });
   assert.deepStrictEqual(plain(S.agentDetails().dev), {
-    since: 20, tool: null, question: '진행할까요?', options: [{ key: 'y', label: '예' }], promptId: 'p1',
+    since: 20, tool: null, question: '진행할까요?', options: [{ key: 'y', label: '예' }], promptId: 'p1', kind: null, badge: null,
   });
 });
 

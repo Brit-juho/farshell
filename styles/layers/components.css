@@ -472,23 +472,50 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* 질문은 "너를 기다린다"라서 메타보다 위다. 경고색을 쓰되 행 전체를 물들이지
-   * 않는다 — 배경은 .is-waiting이 이미 말했다. */
-  .vt-srow-question {
-    color: var(--warn);
-    font: var(--weight-normal) var(--srow-meta) / var(--leading-row) var(--font-mono);
+  /* 행 1줄 앞의 상태 아이콘(ui/icons.js stateIcon) — 색+모양이 상태를 말하고 읽지 않음은
+   * 아이콘 둘레 링이다. 예전의 왼쪽 상태 막대(.vt-srow-mark)를 대체했다. */
+  .vt-srow-state { display: inline-flex; flex: none; align-items: center; margin-left: 2px; }
+
+  /* 행의 2~4줄. 모두 한 줄 flex라 넘치는 것은 말줄임 가능한 자리(브랜치·도구·뷰 이름)가 맡고,
+   * 상태 키워드·경과·아이콘은 flex:none으로 항상 보인다. */
+  .vt-srow-line2,
+  .vt-srow-line3,
+  .vt-srow-line4 {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1.5);
+    min-width: 0;
+  }
+  .vt-srow-wt,
+  .vt-srow-open,
+  .vt-srow-origin { display: inline-flex; flex: none; color: var(--color-muted); }
+  .vt-srow.active .vt-srow-wt,
+  .vt-srow.active .vt-srow-open { color: var(--color-acc); }
+  .vt-srow-branch {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* 행 왼쪽 끝의 상태 막대. 모양(3px·둥근 끝)은 patterns의 .vt-sidebar-mark가,
-   * 뜻(다섯 상태)은 여기가 맡는다. 원형 dot이 아닌 이유는 규칙이다 — 원은
-   * 상태 전용 기호이고 막대는 목록 행의 왼쪽 띠다(20-design-system.md §5).
-   * 2.1.6 이전에는 이 다섯 줄이 레일과 플릿에 각각 있었다. */
-  .vt-srow-mark { background: var(--color-st-idle); }
-  .vt-srow-mark.tone-waiting { background: var(--color-st-waiting); }
-  .vt-srow-mark.tone-working { background: var(--color-st-working); }
-  .vt-srow-mark.tone-done    { background: var(--color-st-done); }
+  /* 상태 키워드 — 짧게 고정이라 잘리지 않는다. 색은 상태 아이콘과 같은 토큰. */
+  .vt-srow-kw { flex: none; color: var(--color-muted); font-weight: var(--weight-medium); }
+  .vt-srow-kw[data-state="working"] { color: var(--color-st-working); }
+  .vt-srow-kw[data-state="waiting"] { color: var(--color-st-waiting); }
+  .vt-srow-kw[data-state="done"]    { color: var(--color-st-done); }
+  .vt-srow-tool { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-srow-badge { flex: none; color: var(--color-sub); }
+  .vt-srow-since { flex: none; font-variant-numeric: tabular-nums; }
+  .vt-srow-since::before { content: "·"; margin-right: calc(var(--spacing) * 1.5); opacity: .6; }
+  .vt-srow-origin { margin-left: auto; }
+  .vt-srow-view { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-srow-screens {
+    flex: none;
+    padding: 0 calc(var(--spacing) * 1.25);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-sm);
+    color: var(--color-sub);
+  }
 
   .vt-srow-agent { display: inline-flex; flex: none; color: var(--color-muted); }
   .vt-srow.active .vt-srow-agent { color: var(--color-acc); }
@@ -1073,24 +1100,6 @@
    * 한 덩어리로 읽힌다. 이름과의 간격만 준다. */
   .vt-fleet-agent { margin-right: calc(var(--spacing) * 1.5); }
   .vt-wgrail-agent { margin-right: calc(var(--spacing) * 1.5); }
-}
-
-/* 2026-09-19 후속 — tmux 세션 배지. 예전엔 이름 앞에 "tmux:" 문자열을 붙여
- * 구분했다(사용자 지적: "이름에 붙는 게 아니라 다른 방식으로"). 위 에이전트
- * 마크와 같은 톤·크기 규칙 — 정보이지 장식이 아니므로 muted, 활성 행에서만
- * 액센트. 일반 세션은 이 배지 자체가 없다(마크와 같은 "모르면 안 그린다").
- * 2026-09-21 후속 — top line(이름 옆)에서 sub line(상태 문장 옆)으로
- * 옮겼다. sub line은 flex가 아니라 일반 텍스트 흐름이라 inline-flex 배지가
- * 글줄 기준선보다 붕 떠 보인다 — 20-overlay.css의 같은 트릭(-2px)으로 맞춘다. */
-@layer components {
-  .vt-wgrail-tmux {
-    display: inline-flex;
-    flex: none;
-    color: var(--color-muted);
-    margin-right: calc(var(--spacing) * 0.25);
-    vertical-align: -2px;
-  }
-  .vt-wgrail-row.active .vt-wgrail-tmux { color: var(--color-acc); }
 }
 
 /* ── 툴팁 (2026-09-18) ─────────────────────────────────────────────────────────

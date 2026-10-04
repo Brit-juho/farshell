@@ -25,7 +25,7 @@ const _listeners = new Set();
 // 세부는 /ws-agent가 이미 push하고 있었다(86분에 1,850회 — 거의 전부 중복).
 // 엔트리 원본(엔트리 키 → 공개 엔트리)과, 그걸 세션 이름으로 접은 결과.
 const _entries = new Map();
-let _details = {};   // tmux 이름 → { since, tool, question, options, promptId }
+let _details = {};   // tmux 이름 → { since, tool, question, options, promptId, kind, badge }
 let _names = {};     // tmux 이름 → CLI 이름(claude/codex/ssh/shell …)
 
 // N37 — 「읽지 않음」. 정의(terminal.md 「States」): **상태가 어떤 값으로든 바뀐 뒤
@@ -174,6 +174,9 @@ function _rebuildDetails() {
       question: ent.question ?? null,
       options: ent.options ?? null,
       promptId: ent.prompt_id ?? null,
+      // 서버가 정한 waiting의 유형(approval/choice/plan/question)과 done의 보조 표시(question/plan).
+      kind: ent.kind ?? null,
+      badge: ent.badge ?? null,
     };
   }
   if (_canon(next) === _canon(_details)) return false;

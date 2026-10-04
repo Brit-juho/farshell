@@ -21,16 +21,16 @@
 | Platform key defaults (2026-09-18) | `Mod` is Cmd on macOS but **Ctrl everywhere else**, so the mac-safe defaults were taking keys the shell and tmux actually use. `keymap.js` now carries a `defNonMac` per action: `search` Ctrl+Shift+F, `palette` Ctrl+Shift+K, `splitRight` Ctrl+Shift+D, `searchInPane` Alt+Shift+F, `splitDown` Alt+Shift+D, `paneClose` Alt+Shift+W, `railToggle` Alt+Shift+B, `worktreeNew` Alt+Shift+N. **`paneClose` and `worktreeNew` moved on macOS too** (Ctrl+Shift+W / Ctrl+Shift+N): their old Cmd+Shift+W / Cmd+Shift+N are the browser's close-window and incognito, so they never reached us in a normal tab. Rule: prefer `Ctrl+Shift+…` (a terminal cannot encode it), drop to `Alt+Shift+…` when that slot is taken or the browser owns it (Ctrl+Shift+W closes the window, Ctrl+Shift+N opens incognito, Ctrl+Shift+B toggles the bookmarks bar); the reserved list now also carries the Shift variants and is compared **normalized**, so a combo recorded in the settings screen ('mod+shift+w') is caught too. `Ctrl+Alt` is avoided because it is AltGr on European layouts. `Mod+…` elsewhere in these docs means the macOS default. A user's own rebinding always wins and stays platform-independent |
 | Connected screens (2.0, corrected 2026-09-29) | Open from the HUD chip or a session row's menu. Each browser tab has its own tmux attach PTY, keyed by a tab-local screen ID that survives reload; previously `/api/tmux/attach` reused one PTY across every browser for the same tmux name, so two web screens appeared as one and could not be detached separately. The panel lists clients with a "me" badge; "Keep only this screen" detaches the rest (including a Mac iTerm2 window). The selected web session id stays fixed while the panel is open; the server derives its tty and refuses to detach it. Five seconds after the last WebSocket leaves, that tab's tmux client is released while the tmux session remains; reconnecting revives it. A failed list request stays visible with a retry button. A remote host that refuses control shows the list as read-only. |
 | Session cards (pane-picker, palette) | The "pick a session" sheet you get from clicking an empty pane, and the command palette's session rows, both reuse the same card builder (`agent/preview.js`). Through 2.1's step 4 each card opened its own `/ws-preview` WebSocket per session to stream a live, ANSI-rendered terminal snippet — with the palette, pane-picker and the (CSS-hidden but still-loaded) legacy rail all doing this at once, one session could have three such sockets open. **2.1 D5 removed the live preview**: the card's meta line is now a static `cwd` string filled from the same `/api/tmux/sessions` response the card already needed for its title/command, no socket required. The `/ws-preview` **server endpoint itself is untouched** (ADR-7) — only the frontend stopped opening it |
-| Session groups (ADR-29, 2026-09-18) | **A group is derived from the screen, not stored** — a tab whose pane tree holds 2+ distinct sessions is a group, one session is an individual. You make one by dragging a session onto the terminal area to split it (`layout/dnd.js`'s existing drop zones; rail rows are `SESSION_MIME` drag sources), and you name it by naming the tab (`window.vtRenameTab`; `tabDisplayLabel()` computes member names when unset). Rail rows are tmux sessions again — open in this browser tab or not (the 「열리지 않음」 zone, formerly 「잠자는 중」), alphabetical, with 열기 / 닫기 / 완전 종료 (`term/session-actions.js`; 재우기·깨우기 retired 2026-10-03 — see "Session and view rules" below), opened from a row's **⋯** button (`RailRow.tsx`'s `Menu`, `Rail.tsx`'s `ctxMenuItems`). Through 2026-09-21 this menu was right-click only; a user pointed out the row's left-click was already spoken for (open/switch), so right-click had no left-click equivalent and was replaced by the button — not the same **⋯** as the pre-2.0 app-wide menu in the row above, which stays gone. The menu (and the host-switcher one, C1) render through a `Portal` now, for the same reason `RepoVisibility`'s sheet does (`.vt-sidepanel`'s `position:fixed` stacking context could otherwise bury `.vt-menu` under another overlay — see the Portal comment in `Rail.tsx`). Remote hosts keep the old three-bucket view. **ADR-29 supersedes ADR-20**, and the `@fsh_grp` tag · `group_store.py` · `/api/groups*` that its first rollout built were all deleted again by the last round of user feedback. Full rollout (steps A–E), the four addenda that reshaped it, the layout-snapshot versions and the known regressions: [`adr29-session-groups.md`](./adr29-session-groups.md) |
+| Rail (ADR-29, reworked 2026-10-04 by "Session and view rules") | **Rail rows are tmux sessions** in two zones — 개입 필요 (waiting; collapsible, switchable in rail settings) and 세션 (all, name order only) — three lines each: state icon (+unseen ring) · agent · name / main-or-worktree icon · branch (main too) · diff / state keyword · elapsed · origin icon, plus open mark, grouped-view name and 「다른 화면 N」 when they apply (`shell/RailRow.tsx`, `rail-data.ts`; details under "Session and view rules → Rail"). **A group is derived from the screen, not stored** — a view whose pane tree holds 2+ sessions is a grouped view; you make one by dragging a rail row onto the terminal area (`layout/dnd.js`) and name it by naming the view (`window.vtRenameTab`; `tabDisplayLabel()` computes member names when unset). Row verbs are 열기 / 닫기 / 종료 (`term/session-actions.js`); the ⋯ button and right-click open the same `Portal`-rendered menu (`rowMenuItems`). 재우기/깨우기 and the 「묶음 / 묶지 않음 / 잠자는 중」 zones are retired. The `@fsh_grp` tag, `group_store.py` and `/api/groups*` of the first ADR-29 rollout were deleted by the last round of user feedback. History and the layout-snapshot versions: [`adr29-session-groups.md`](./adr29-session-groups.md) |
 | Header tabs (10 §4, 2.1 D4, ADR-29 D — mechanics for the row above) | The header has a **tab strip** (`#vt-wtabs`) and **each tab owns its own pane tree** — switch away and back and that layout is exactly as you left it. Through 2.1.6 a tab's identity was the worktree (`repo`+`branch` each got their own tab), 2.1 D4 moved it to the repo and ADR-29 D to the group; the group redefinition then removed tab identity altogether — `openLayoutTab` dedups on `findTabBySessionId(sessionId)` now, because a group *is* its pane-tree members. `worktreeId` remains "which worktree this tab is currently looking at" (`setTabWorktree`), shown as a small **branch chip next to the pane header** (`layout/panes.js`, `term/tab-worktree.js`'s `branchChipMap`) rather than a second tab, and only when its repo actually has more than one worktree open — one worktree means there is nothing to disambiguate. Accepted cost: two worktrees of the same repo can no longer be two separate tabs; open them as split panes instead. The layout snapshot is `v4` (`{tabs:[{id,worktreeId,hostId,label,tree}], activeTab}`); `v1`/`v2`/`v3` are still read, and `repoId`/`groupId` on old snapshots are dropped on load since they no longer mean anything. Since 2026-10-03 the snapshot is `v5` (adds `screen`, `closed`) and is saved per browser tab. Closing a tab (`closeView`) closes every session it held and remembers a grouped tab's composition — tmux is never touched. The last tab can be closed too: the store then keeps one unlabeled empty-pane tab that reads as "no views" (tab bar hidden, onboarding). Clicking a tab focuses its top-left pane. Dragging a session out of another tab leaves an empty pane there, and closes that tab if it ends up wholly empty (`closeViewIfEmptied`; 2026-10-03 rule decision). The same session is never placed in two tabs: the surface layer moves one DOM node around |
 | tmux detach detection | Shows `[process exited]` on PTY EOF |
 | kitty keyboard protocol (N12) | Sends combinations that legacy encodings have no room for — `Ctrl+Shift+<letter>`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+Tab` — as CSI u (`frontend/js/term/kitty-keys.js`). Encoding happens **only while an app has turned the mode on** (`CSI > flags u`); otherwise a shell that never enabled it would literally print `\x1b[97;6u`. The mode is a push/pop stack, so a vim that opens and closes inside a shell restores the previous value. Our own UI shortcuts are matched first, so `Mod+K` never leaks to the PTY even with the mode on. ⚠ **Layer 3 (tmux `extended-keys`) is deliberately absent** — that is a change to the user's tmux server options and needs its own approval. With tmux 3.3+ and that option off, tmux blocks CSI u before it reaches the inner app (`set -s extended-keys on`) |
 | Skins (N14) | Settings → "모양" (Mod+, or rail ⚙ → Settings) is the **only** place to switch skins now — `#theme-row`'s 6 chips (farshell/macos/catppuccin/windows/vscode/notepad, `theme.js`'s `vtSkins()`) render there. The command palette (Mod+K → "테마") also lists all skins, reading `vtSkins()` directly rather than scanning the DOM — so it works even when the Settings panel isn't open. A 7th "import a Ghostty config or Warp theme YAML" skin (`theme-import.js`/`theme-custom.js`, a lazy chunk) shipped 2026-09-14 and was removed 2026-09-22 — 8 days in, no workspace had ever actually saved `theme.skin: "imported"` |
 
-## Session and view rules (target, agreed 2026-10-03 — Terms, Invariants and Actions implemented 2026-10-03; View tab implemented 2026-10-04; States, Rail, Origin not yet)
+## Session and view rules (agreed 2026-10-03 — all steps implemented: Terms, Invariants, Actions 2026-10-03; View tab, States, Rail, Origin 2026-10-04)
 
-> This section is the **target**. Until each step lands, the Features rows above (Session groups, Header tabs)
-> describe what the code does today. When a step ships, update those rows and drop the matching "target" note here.
+> This section is the agreed rule set and now matches the code. The Features rows above (Session groups, Header
+> tabs) were rewritten to the current behaviour when the Rail step shipped.
 > Why it changed: the old model's 재우기/깨우기 meant nothing but "not placed in this browser tab" (the agent keeps
 > running), six close paths each did something different, reload re-attached sessions the user had closed, and the
 > tab and the rail used two different urgency orders.
@@ -91,10 +91,10 @@ follows the layout and is no longer persisted on its own.
 - **Thick segment = changed and not yet seen; thin = seen.** Idle segments always show (grey).
 - Hover tooltip lists "name · state[ · 확인 안 함]" per session, since colour alone is not enough; the tab's aria-label carries the same. Focus is shown by the pane border, never by thickness. Segments 3px (seen) / 6px (unseen); `waiting` breathes, striped under reduced motion (`layout/tabbar.js`, `viewSegments` in `design/state-classes.js`).
 
-### States (rail, mobile) — shared parts implemented 2026-10-04; rail/mobile surfaces adopt the icons in the Rail step
+### States (rail, mobile) — implemented 2026-10-04
 
 - Four states — idle, working, waiting, done — each with its own **SVG shape** as well as colour (implemented:
-  `stateIcon` in `ui/icons.js`; surfaces still draw dots until the Rail step). `error` is removed from the UI until
+  `stateIcon` in `ui/icons.js`; the rail rows and the phone Fleet draw it). `error` is removed from the UI until
   something can actually enter it (implemented; unknown values fold to idle). Representative state
   `waiting > done(unseen) > working > done(seen) = idle` is one function, `representativeState` (implemented).
 - **Unseen** = any state change the user has not looked at yet (not only done). Shown as a ring around the icon
@@ -114,21 +114,39 @@ follows the layout and is no longer persisted on its own.
   entry with no kind is "질문"; a `PermissionRequest` for an unknown tool is "승인 요청". The server used to label
   AskUserQuestion/ExitPlanMode as "tool 실행 승인이 필요합니다". Fixed by the `kind` field (2026-10-03, step 7).
 
-### Rail
+### Rail (implemented 2026-10-04)
 
 - 「개입 필요」 (waiting sessions): collapsible, and switchable on/off in rail settings (like VS Code's Open Editors).
 - 「세션」: every session, **name order only** — no urgency sorting, rows don't jump around.
 - Row: line 1 state · agent · name; line 2 main/worktree icon · branch (main is shown too) · diff; line 3 state
   keyword · elapsed · origin icon; when applicable "open" mark and the grouped view's name. The plug (tmux) icon goes.
 - Row menu: the ⋯ button and right-click open the same menu (open/close, rename, open on Mac, connected screens, kill).
-- The header gear (today 「저장소 관리」) becomes **rail settings**.
+- The header gear (formerly 「저장소 관리」) is **rail settings** (`RailSettings.tsx` on top of `RepoVisibility.tsx`, one
+  sheet): 개입 필요 on/off (`rail.attention.show`; collapse state `rail.attention.collapsed`), per-origin visibility
+  (`rail.origin.{peer,agent,external}.show`; local cannot be hidden), and the 저장소 표시 list. All device-scoped.
+  Hiding an origin never hides a session that is open or waiting; turning 개입 필요 off leaves waiting sessions in
+  「세션」, identified by their keyword.
+- Code: `shell/rail-data.ts` (pure: lists, keyword, menu items, prefs), `shell/rail-fetch.ts` `collectSessionRows`
+  (one row builder shared by the rail and the phone Fleet), `shell/RailRow.tsx` (row, keyword line, origin icon),
+  `shell/rail-prefs.ts`. 「다른 화면 N」 = tmux `session_attached` minus this browser tab's own PTY (1 when the session
+  is open here) — it counts other browser tabs, phones and Mac terminals alike; no extra call. Branch/diff come from
+  `GET /api/repos`, matched through `@fsh_wt` or, failing that, the server's cwd-based `worktrees[].sessions`.
+- Remote hosts use the same rows: switching host reloads the screen against that Mac's relayed API (`core/host-route.js`),
+  so its sessions are rendered like local ones, with whatever `origin` that server reports (absent on an older server
+  = no icon, treated as local).
 
 ### Origin
 
 Recorded when a session is created and shown as a rail icon: this browser / another Mac (peer create) / an agent /
 external (no record — `fsh` CLI or plain tmux). Only sessions created in this browser tab open automatically.
 
-**Server record (implemented 2026-10-04; rail icon not yet).** The server writes the tmux user option `@fsh_origin`
+**Server record and rail icon (implemented 2026-10-04).** The rail and Fleet show a small icon per origin
+(`laptop` = peer, `bot` = agent, `square-terminal` = external; local has none) with a Korean tooltip, and rail settings can
+hide each of the three. Front-end auto-open audit: nothing opens a session by itself except boot restoring the *saved
+layout* (sessions this browser tab had placed itself, whatever their origin) and the explicit `#tmux=<name>` handoff link;
+no path attaches a session because of its origin.
+
+**Server record.** The server writes the tmux user option `@fsh_origin`
 right after `new-session` (same mechanism as `@fsh_wt`, so it survives a server restart). Reads ride the existing
 `list-sessions` / `list-panes` format strings — no extra tmux call. The API field is `origin` on
 `GET /api/tmux/sessions`, `/ws-workspace` `tmux_sessions` and `GET /api/sessions`.

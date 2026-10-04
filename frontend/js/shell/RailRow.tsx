@@ -1,70 +1,95 @@
-// 워크트리 레일의 **행 하나와 컨텍스트 메뉴**. 목록 조립·상태 관리는 Rail.tsx.
+// 레일의 **행 하나와 컨텍스트 메뉴**. 목록 조립·상태 관리는 Rail.tsx.
 //
-// Rail.tsx에서 떼어낸 이유: 두 컴포넌트 다 자기 props만 보고 그리는 순수
-// 표현부라, 400줄짜리 Rail 본체와 섞여 있을 이유가 없다. 색·배지·상태 문장을
-// 고칠 때 폴링·리사이저 코드를 지나치지 않아도 된다.
+// 행은 3줄이다(docs/ref/terminal.md 「Rail」):
+//   1줄  상태 아이콘(읽지 않음이면 둘레 링) · 에이전트 · 이름(제자리 편집)
+//   2줄  메인/워크트리 아이콘 · 브랜치(main도 항상) · 변경량
+//   3줄  상태 키워드 · 경과 시간 · 만든 곳 아이콘
+// 해당할 때만 1줄 끝에 「열림」 표시, 4번째 줄에 묶음 뷰 이름·「다른 화면 N」.
+// 상태 왼쪽 막대(옛 vt-wgrail-bar)와 tmux 플러그 아이콘은 없다 — 상태는 아이콘의
+// 색+모양이 말하고, tmux라는 사실은 행마다 같아서 정보가 아니었다.
 //
 // ⚠ 여기도 `shell` 지연 청크다 — core/store.js 계열을 직접 import하지 않는다
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
-import { For, Show, onCleanup } from 'solid-js';
+import { For, Show, createSignal, onCleanup } from 'solid-js';
 
-import { type DesktopRailRow } from './rail-fetch.js';
-import { agentLabel, icon } from '../ui/icons.js';
+import { agentLabel, icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
+import {
+  stateKeyword, formatRelativeTime, statusSentence, diffLabel, worktreeIconName,
+  ORIGIN_ICON, ORIGIN_LABEL, type SessionRow, type Origin,
+} from './rail-data.js';
 
-// ADR-29 B — 행은 이제 언제나 세션이다(워크트리 행이 없어졌다). `sleeping`은
-// 이 행이 레일의 「잠자는 중」 구역에 그려지는 것인지를 부모(Rail.tsx)가
-// 알려준다 — 잠든 행은 클릭하면 깨우고(openRow가 갈림), 시각적으로도
-// 가라앉은 톤을 쓴다(옛 no-session의 후계자, 뜻은 "세션이 없다"에서
-// "지금 화면에 없다"로 바뀌었다).
+/** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
+function createNow() {
+  const [now, setNow] = createSignal(Date.now());
+  const t = setInterval(() => setNow(Date.now()), 30000);
+  onCleanup(() => clearInterval(t));
+  return now;
+}
+
+/** 만든 곳 아이콘(local은 없다). 레일 행과 Fleet 행이 같이 쓴다. */
+export function OriginMark(props: { origin: Origin }) {
+  return (
+    <Show when={props.origin !== 'local'}>
+      <span
+        class="vt-srow-origin"
+        data-origin={props.origin}
+        data-tip={ORIGIN_LABEL[props.origin]}
+        data-tip-side="right"
+        role="img"
+        aria-label={ORIGIN_LABEL[props.origin]}
+        innerHTML={icon(ORIGIN_ICON[props.origin as Exclude<Origin, 'local'>], 12, 2)}
+      />
+    </Show>
+  );
+}
+
+/** 키워드 줄(상태 키워드 · 도구 · 배지 · 경과). 레일과 Fleet이 같이 쓴다. */
+export function KeywordLine(props: { row: SessionRow; now: () => number }) {
+  const kw = () => stateKeyword(props.row);
+  const rel = () => formatRelativeTime(props.row.since, props.now());
+  return (
+    <>
+      <span
+        class="vt-srow-kw"
+        data-state={props.row.status}
+        data-tip={props.row.status === 'waiting' && props.row.question ? props.row.question : undefined}
+        data-tip-side="right"
+      >{kw().text}</span>
+      <Show when={kw().tool}><span class="vt-srow-tool">{kw().tool}</span></Show>
+      <Show when={kw().badge}><span class="vt-srow-badge">{kw().badge}</span></Show>
+      <Show when={rel()}><span class="vt-srow-since">{rel()}</span></Show>
+    </>
+  );
+}
+
 export function Row(props: {
-  row: DesktopRailRow; active: boolean; compact?: boolean; sleeping?: boolean;
-  /** 2026-09-18 후속(그룹 재정의) — 화면(터미널 pane)에 끌어다 놓으면
-   * 그룹이 생긴다(layout/dnd.js의 드롭존). 깨어있는(웹 세션 id가 있는)
-   * 행만 끌 수 있다 — Rail.tsx의 onRowDragStart가 그 조건을 본다. 행
-   * 자신은 더 이상 드롭 타깃이 아니다(그룹은 화면에서만 만든다). */
+  row: SessionRow; active: boolean; compact?: boolean;
+  /** 열린 행만 끌 수 있다(Rail.tsx의 onRowDragStart가 조건을 본다) — 터미널 칸에 놓으면 분할(묶음)이 생긴다. */
   draggable?: boolean; onDragStart?: (e: DragEvent) => void;
-  /** 이름 제자리 편집 — window.prompt 안 씀(사용자 지적). */
+  /** 이름 제자리 편집 — window.prompt 안 씀. */
   editing?: boolean; editingValue?: string;
   onEditInput?: (v: string) => void; onEditCommit?: () => void; onEditCancel?: () => void;
-  onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void;
+  onOpen: (e: MouseEvent) => void;
+  /** ⋯ 버튼(좌클릭)과 우클릭이 같은 함수를 부른다 — 같은 메뉴가 같은 항목으로 열린다. */
+  onContext: (e: MouseEvent) => void;
 }) {
-  const isRemote = () => !!props.row.remote;
-  const diffLabel = () => {
-    const c = props.row.changed;
-    if (c && c.files > 0) return `+${c.add} −${c.del}`;
-    return props.row.diffFiles != null && props.row.diffFiles > 0 ? `파일 ${props.row.diffFiles}` : null;
-  };
+  const now = createNow();
   const rowName = () => props.row.name;
-  // ADR-29 B — 브랜치 배지. 메인 워크트리 세션은 원래부터 브랜치를 안 보였다
-  // (그룹 헤더가 이미 저장소를 말하므로, main은 "기본"이라 생략). 워크트리에
-  // 안 속한 세션(순수 셸)은 branch 자체가 없다.
-  const branchText = () => (props.row.branch && !props.row.isMainWorktree) ? props.row.branch : '';
-  // 48px 접힘에서는 이름·상태 문장이 숨는다(10-shell-layout.md §5: "마크+색점만.
-  // 호버 시 툴팁에 2줄"). 그 두 줄이 툴팁이다 — 없으면 접힌 레일은 정체를
-  // 알 수 없는 색 막대 기둥이 된다. 펼친 상태에서는 달지 않는다(글자가 이미
-  // 보이는 자리에 툴팁이 뜨면 잡음이다).
-  // 2.1.6까지는 `이름\n소유자 · 상태` 한 덩어리를 title에 넣었다. 네이티브
-  // 툴팁은 두 줄을 같은 크기·같은 색으로 그려서 무엇이 이름인지 안 보였다 —
-  // 공용 툴팁(ui/tooltip.js)은 이름(ui)과 값(mono/sub)을 다른 단으로 그리므로
-  // 여기서도 둘을 data-tip / data-tip-sub로 나눠 넘긴다.
+  const diff = () => diffLabel(props.row);
+  const branch = () => props.row.branch || '';
+  const unseen = () => props.row.unseen && props.row.status !== 'idle';
+
+  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 툴팁(이름 / 브랜치 · 키워드)이 맡는다.
   const compactSub = () => {
     if (!props.compact) return undefined;
-    // 상태 문장이 빈 행(방금 만든 세션 등)은 보조 단을 아예 안 만든다 — 빈
-    // 문자열을 넘기면 툴팁에 빈 칸이 한 칸 붙는다.
-    return [branchText(), props.row.statusSentence].filter(Boolean).join(' · ') || undefined;
+    return [branch(), statusSentence(props.row, now())].filter(Boolean).join(' · ') || undefined;
   };
 
-  // `role="button"` + `tabindex=0`으로 포커스는 갔지만 **Enter·Space가 아무
-  // 일도 안 했다**(실브라우저 확인: 활성 행이 안 바뀜). div에 버튼 역할만
-  // 붙이면 브라우저가 키보드 활성화를 대신 해주지 않는다 — 진짜 <button>이
-  // 공짜로 주는 것을 직접 붙여야 한다. 레일은 세션을 고르는 주 경로이고
-  // 재정렬이 키보드 전용(Mod+Alt+Shift+←/→)이라, 여기서 키보드가 끊기면
-  // 그 경로 전체가 끊긴다.
-  //
-  // Space는 preventDefault가 필수다 — 안 하면 활성화와 동시에 페이지가
-  // 스크롤된다(버튼의 기본 동작에는 그 억제가 이미 들어 있다).
+  // div에 role=button만 붙이면 Enter·Space가 아무 일도 안 한다 — 직접 붙인다.
+  // Space는 preventDefault가 필수(안 하면 활성화와 동시에 페이지가 스크롤된다).
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;   // 이름 입력창의 키 입력을 가로채지 않는다
     if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
     if (e.key !== 'Enter') e.preventDefault();
     props.onOpen(e as unknown as MouseEvent);
@@ -73,66 +98,49 @@ export function Row(props: {
   return (
     <div
       class="vt-srow vt-wgrail-row"
-      classList={{ active: props.active, sleeping: !!props.sleeping }}
+      classList={{ active: props.active, closed: !props.row.open }}
       onClick={props.onOpen}
       onKeyDown={onKeyDown}
+      onContextMenu={(e) => { e.preventDefault(); props.onContext(e); }}
       draggable={!!props.draggable}
       onDragStart={props.onDragStart}
       role="button"
       tabindex="0"
-      // 지금 어느 것을 보고 있는지가 **클래스로만** 표시돼 있었다 — 눈으로는
-      // 배경색으로 보이지만 스크린리더에는 아무 말도 안 했다. 목록에서 "현재
-      // 것"을 가리키는 표준 표기가 aria-current다.
       aria-current={props.active ? 'true' : undefined}
-      // agent/paint.js의 전역 클릭 위임(문서 캡처 단계)이 `[data-session-id]`로
-      // "봤다"를 판정한다 — 이 속성이 없어서 레일 행을 눌러도 완료(파란 tone)가
-      // 절대 안 풀렸다(사용자 지적, 2026-09-22). 잠자는 행은 sessionId가 빈
-      // 문자열이라 자연히 제외된다(어차피 attach만 하고 done일 수가 없다).
+      // agent/paint.js의 전역 클릭 위임이 `[data-session-id]`로 "봤다"를 판정한다.
+      // 열려 있지 않은 행은 sessionId가 없어 자연히 제외된다.
       data-session-id={props.row.sessionId || undefined}
       data-tip={props.compact ? rowName() : undefined}
       data-tip-sub={compactSub()}
       data-tip-side="right"
     >
-      {/* 2026-09-18 후속 — 저장소 해시 색점(왼쪽 세로 막대)을 지웠다. 저장소가
-          레일의 주어에서 내려온 뒤(ADR-29) 각 세션 행 맨 앞에 저장소 색이
-          남아 있는 게 사용자 지적으로 드러났다 — 상태색 막대(아래)만 남는다,
-          행 자체가 언제나 진짜 세션이므로 상태는 항상 의미가 있다. */}
-      <span class={`vt-srow-mark vt-wgrail-bar tone-${props.row.status}`} />
-      {/* 접힘 전용 에이전트 마크. 펼친 상태의 마크는 아래 row-main 안에 있고
-          그 블록이 접히면 통째로 숨으므로, 같은 마크를 이 자리에 한 번 더
-          그린다(둘이 동시에 보이는 일은 없다). */}
-      <Show when={props.compact && props.row.agent}>
-        <span
-          class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
-          data-tip={agentLabel(props.row.agent!)}
-          data-tip-sub={props.row.statusSentence || undefined}
-          data-tip-side="right"
-          data-state={props.row.status}
-          aria-label={`${agentLabel(props.row.agent!)} · ${props.row.statusSentence || '대기 중'}`}
-          innerHTML={agentMark(props.row.agent!)}
-        />
+      {/* 접힘 전용: 상태 아이콘 + 에이전트 마크. 펼친 상태의 둘은 아래 row-main 안에 있고
+          그 블록이 접히면 통째로 숨는다(둘이 동시에 보이는 일은 없다). */}
+      <Show when={props.compact}>
+        <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 14, unseen())} />
+        <Show when={props.row.agent}>
+          <span
+            class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
+            data-state={props.row.status}
+            innerHTML={agentMark(props.row.agent!)}
+          />
+        </Show>
       </Show>
       <div class="vt-srow-main vt-wgrail-row-main">
         <div class="vt-srow-top vt-wgrail-row-top">
-          {/* 2.1.6 — 헤더의 워크트리 탭(layout/tabbar.js)은 이 마크를 달고 있었고
-              레일 행과 폰의 플릿 행은 안 달고 있었다. 같은 세션을 보는 세 화면이
-              서로 다른 것을 말하던 것을 맞춘다. 에이전트를 아직 모르면
-              (agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
+          <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 14, unseen())} />
+          {/* 에이전트를 아직 모르면(agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
           <Show when={props.row.agent}>
             {(a) => (
               <span
                 class="vt-srow-agent vt-wgrail-agent"
                 data-tip={agentLabel(a())}
-                data-tip-sub={props.row.statusSentence || undefined}
                 data-tip-side="right"
                 data-state={props.row.status}
-                aria-label={`${agentLabel(a())} · ${props.row.statusSentence || '대기 중'}`}
                 innerHTML={agentMark(a())}
               />
             )}
           </Show>
-          {/* 이름 제자리 편집 — window.prompt 안 씀(사용자 지적: "절대 기본
-              컴포넌트 쓰지 마라"). 그룹 이름 편집(Rail.tsx)과 같은 관용구. */}
           <Show
             when={props.editing}
             fallback={<span class="vt-srow-name vt-wgrail-name">{rowName()}</span>}
@@ -151,52 +159,54 @@ export function Row(props: {
               onBlur={() => props.onEditCommit?.()}
             />
           </Show>
-          {/* ADR-29 B — 브랜치 배지. 그룹 헤더가 이미 저장소를 말하므로 여기는
-              브랜치만(main은 "기본"이라 생략, branchText()가 그 규칙을 안다). */}
-          <Show when={branchText()}>
-            <span class="vt-srow-meta vt-wgrail-branch">{branchText()}</span>
-          </Show>
-          <Show when={diffLabel()}>
-            <span class="vt-srow-meta vt-wgrail-diff">{diffLabel()}</span>
-          </Show>
-        </div>
-        <div class="vt-srow-sub vt-wgrail-row-sub">
-          {/* 2026-09-19 후속(사용자 지적: "이름에 붙는 게 아니라 다른 방식으로
-              구분되게") — tmux 세션인지 일반 터미널인지는 예전에 이름 앞에
-              "tmux:" 문자열을 붙여서 구분했다. 이름을 munging하지 않고
-              작은 아이콘 배지로 옮긴다 — 일반 세션엔 아무것도 안 그린다
-              (에이전트 마크와 같은 "모르면 안 그린다" 관용구).
-              2026-09-21 후속 — 원래 이름 옆(top line)이었으나, 브랜치·diff
-              배지까지 겹치면 이름의 flex:1 공간을 갉아먹어 좁은 레일에서
-              줄어들었다. sub 줄은 보통 상태 문장 한 단어라 여유가 있다. */}
-          <Show when={props.row.tmuxName && !props.editing}>
+          <Show when={props.row.open}>
             <span
-              class="vt-srow-tmux vt-wgrail-tmux"
-              data-tip="tmux 세션"
-              data-tip-sub="창을 닫아도 계속 실행됩니다"
+              class="vt-srow-open"
+              data-tip="이 화면에 열려 있음"
               data-tip-side="right"
-              innerHTML={icon('plug', 12, 2)}
+              role="img"
+              aria-label="열려 있음"
+              innerHTML={icon('app-window', 12, 2)}
             />
           </Show>
-          {props.row.statusSentence}
-          <Show when={isRemote()}><span class="vt-wgrail-remote-note"> · 원격</span></Show>
         </div>
-        <Show when={props.row.status === 'waiting' && props.row.question}>
-          <div class="vt-srow-question vt-wgrail-question">? {props.row.question}</div>
+        <Show when={branch() || diff()}>
+          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
+            <Show when={branch()}>
+              <span
+                class="vt-srow-wt"
+                data-tip={props.row.isMainWorktree ? '메인 워크트리' : '워크트리'}
+                data-tip-side="right"
+                role="img"
+                aria-label={props.row.isMainWorktree ? '메인 워크트리' : '워크트리'}
+                innerHTML={icon(worktreeIconName(props.row), 12, 2)}
+              />
+              <span class="vt-srow-branch">{branch()}</span>
+            </Show>
+            <Show when={diff()}><span class="vt-srow-meta vt-wgrail-diff">{diff()}</span></Show>
+          </div>
+        </Show>
+        <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
+          <KeywordLine row={props.row} now={now} />
+          <OriginMark origin={props.row.origin} />
+        </div>
+        <Show when={props.row.viewLabel || props.row.otherScreens > 0}>
+          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4">
+            <Show when={props.row.viewLabel}>
+              <span class="vt-srow-view" data-tip="묶음 뷰" data-tip-side="right">{props.row.viewLabel}</span>
+            </Show>
+            <Show when={props.row.otherScreens > 0}>
+              <span class="vt-srow-screens" data-tip="다른 브라우저 탭·기기·맥 터미널에서도 붙어 있음" data-tip-side="right">
+                다른 화면 {props.row.otherScreens}
+              </span>
+            </Show>
+          </div>
         </Show>
       </div>
-      {/* 2026-09-21(사용자 요청) — 이름변경·재우기·완전종료는 우클릭 메뉴
-          전용이었다. 왼쪽 클릭 하나로 닿는 길을 만든다 — 행 자체의 좌클릭은
-          이미 "열기/전환"을 쓰고 있어서 자리를 나눠 쓸 수 없으므로, 메뉴는
-          이 버튼으로만 연다(우클릭은 없앴다 — RailRow.tsx는 이제 onContext를
-          안 받는다는 뜻이 아니라, 트리거만 버튼으로 옮겼다).
-          2026-09-22(회귀 수정) — compact(48px 접힘)에서도 무조건 그렸더니
-          mark+agent 아이콘만 들어가던 좁은 행에 18px가 더 끼어 넘쳐서
-          레일 전체에 가로 스크롤이 생겼다(사용자 지적, 실측: 47px 컨테이너에
-          36px+gap 요구). compact에서는 다른 텍스트·배지도 다 숨기는 것과
-          같은 원칙으로 이 버튼도 숨긴다 — 접힘에서는 애초에 펼쳐야 메뉴에
-          닿을 수 있다. */}
-      <Show when={!isRemote() && !props.compact}>
+      {/* ⋯ 버튼은 우클릭과 같은 메뉴를 연다(행의 좌클릭은 열기/전환이 쓰고 있다).
+          compact(48px)에서는 숨는다 — 좁은 행에 18px가 더 끼어 가로 스크롤이 생긴
+          회귀(2026-09-22)가 있었다. 접힘에서는 우클릭이 메뉴로 가는 길이다. */}
+      <Show when={!props.compact}>
         <button
           type="button"
           class="vt-icon-btn xs vt-srow-menu"
@@ -220,6 +230,8 @@ export interface MenuItem {
    * 이유를 보여주는 게 목적이다. */
   dim?: boolean;
   checked?: boolean;
+  /** 되돌릴 수 없는 항목(종료). */
+  danger?: boolean;
 }
 
 export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[] }) {
@@ -234,7 +246,7 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
         {(it) => (
           <div
             class="vt-menu-item"
-            classList={{ dim: !!it.dim, checked: !!it.checked }}
+            classList={{ dim: !!it.dim, checked: !!it.checked, danger: !!it.danger }}
             onClick={() => { props.onClose(); it.run(); }}
           >
             <span class="vt-menu-item-label">{it.checked ? '✓ ' : ''}{it.label}</span>
