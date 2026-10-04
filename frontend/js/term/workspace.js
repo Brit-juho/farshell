@@ -11,6 +11,7 @@ import { allSessions, getSession, activeSessionId, orderedSessionIds,
 import { apiFetch } from '../core/api.js';
 import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
+import { screenId } from '../core/screen-id.js';
 import { addSession, revealSession } from './session.js';
 import { attachRemoteSession } from './remote.js';
 
@@ -62,7 +63,7 @@ export async function restoreWorkspace() {
     let liveWebIds = new Set();
     let liveTmuxNames = new Map();
     try {
-      const wsRes = await apiFetch(`${API_BASE}/api/sessions`);
+      const wsRes = await apiFetch(`${API_BASE}/api/sessions?screen=${screenId()}`);
       if (wsRes.ok) {
         const live = await wsRes.json();
         liveWebIds = new Set(live.map(s => s.id));
@@ -84,7 +85,7 @@ export async function restoreWorkspace() {
         try {
           const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ name: tab.tmux_name })
+            body: JSON.stringify({ name: tab.tmux_name, screen: screenId() })
           });
           if (res.ok) {
             const data = await res.json();
@@ -169,7 +170,7 @@ export async function reconcileMissingTmuxSessions() {
     for (const s of [...knownFromSnapshot, ...genuinelyNew]) {
       const res2 = await apiFetch(`${API_BASE}/api/tmux/attach`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name: s.name })
+        body: JSON.stringify({ name: s.name, screen: screenId() })
       });
       if (!res2.ok) continue;
       const data = await res2.json();

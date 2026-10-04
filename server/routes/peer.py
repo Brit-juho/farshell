@@ -511,8 +511,7 @@ async def peer_sessions_rename(request: Request, grant: dict):
             {"error": "rename_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
             status_code=500,
         ), f"변경 실패: {old}"
-    local = session_store.find_by_tmux_name(old)
-    if local:
+    for local in session_store.find_all_by_tmux_name(old):
         session_store.update_tmux_name(local.session_id, new)
     return {"ok": True, "name": new}, f"{old} → {new}"
 

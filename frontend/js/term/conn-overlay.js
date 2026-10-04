@@ -87,6 +87,7 @@ export function updateConnStatus(id, connected) {
           <button type="button" class="vt-btn vt-ov-stop-btn">끊기</button>
         `;
         document.body.appendChild(ov);
+        if (s._connDetail) ov.querySelector('.vt-ov-sub').textContent = s._connDetail;
         ov.querySelector('.vt-ov-stop-btn').addEventListener('click', () => _toggleReconnectStop(id));
         _tickConnOverlay(id);
         clearInterval(_connOverlayTickTimer);
@@ -98,7 +99,7 @@ export function updateConnStatus(id, connected) {
     if (_connOverlayTimer) { clearTimeout(_connOverlayTimer); _connOverlayTimer = null; }
     _removeConnOverlay();
     const s = getSession(id);
-    if (s) { s._disconnectedAt = null; s._reconnectStopped = false; }
+    if (s) { s._disconnectedAt = null; s._reconnectStopped = false; s._connDetail = null; }
   }
 }
 
@@ -107,6 +108,8 @@ export function updateConnStatus(id, connected) {
 // 서브텍스트만 갱신 — 실제 세션 출력과 분리된다(ttyd·wetty와 같은 패턴).
 export function _setConnOverlayDetail(id, text) {
   if (id !== activeSessionId()) return;
+  const s = getSession(id);
+  if (s) s._connDetail = text;
   const overlay = document.getElementById('conn-overlay');
   const sub = overlay && overlay.querySelector('.vt-ov-sub');
   if (sub) sub.textContent = text;

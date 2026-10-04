@@ -16,6 +16,7 @@ import { getSession, allSessions, registerSession, removeSessionRecord, activeSe
   sessionDisplayName, setSessionDisplayName, setSessionTmuxName, orderedSessionIds, moveSessionByOffset } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
+import { screenId } from '../core/screen-id.js';
 import { createXtermInstance } from './xterm-setup.js';
 import { applyMouseMode } from './mouse-mode.js';
 import { startSessionSocket } from './ws.js';
@@ -41,7 +42,7 @@ export async function createSession() {
     const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ auto_open_on_mac: true }),
+      body: JSON.stringify({ auto_open_on_mac: true, screen: screenId() }),
     });
     const data = await res.json();
     addSession(data.id, data.name || data.id);
@@ -138,7 +139,7 @@ export async function attachTmux(tmuxName) {
   const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: tmuxName }),
+    body: JSON.stringify({ name: tmuxName, screen: screenId() }),
   });
   // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
   // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
@@ -172,7 +173,7 @@ export async function createTmuxSession() {
   const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(autoMac ? { auto_open_on_mac: true } : {}),
+    body: JSON.stringify({ ...(autoMac ? { auto_open_on_mac: true } : {}), screen: screenId() }),
   });
   if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
   const data = await res.json();

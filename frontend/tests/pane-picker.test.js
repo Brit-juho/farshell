@@ -19,6 +19,7 @@ const ANSILEX_JS = path.join(__dirname, '../js/lib/ansilex.js');
 const SESSION_JS = path.join(__dirname, '../js/term/session.js');
 const PANES_JS = path.join(__dirname, '../js/layout/panes.js');
 const STORE_JS = path.join(__dirname, '../js/layout/store.js');
+const CORE_STORE_JS = path.join(__dirname, '../js/core/store.js');
 
 class FakeTerminal {
   constructor(opts) { this.options = opts; this.cols = 80; this.rows = 24; this._disposed = false; }
@@ -80,8 +81,9 @@ async function buildWindow({ tmuxSessions = [], agents = {} } = {}) {
   const sessionNs = await importFresh(SESSION_JS, env.context, cache);
   await importFresh(PANES_JS, env.context, cache);
   const storeNs = await importFresh(STORE_JS, env.context, cache);
+  const coreStore = await importFresh(CORE_STORE_JS, env.context, cache);
 
-  return { window, ...sessionNs, store: storeNs };
+  return { window, ...sessionNs, store: storeNs, coreStore };
 }
 
 // _renderCandidates()는 fire-and-forget으로 시작되는 비동기 함수라(openPanePicker
@@ -141,10 +143,11 @@ test('아직 안 열린 tmux 세션 카드 클릭 → attach 후 그 pane에 배
 });
 
 test('이미 다른 pane에 열려 있는 tmux 세션 선택 → 이동(원래 pane은 비워진다)', async () => {
-  const { window, addSession, switchTo, store } = await buildWindow({
-    tmuxSessions: [{ name: 'dev', command: 'claude', cwd: '/repo', web_session_id: 'a' }],
+  const { window, addSession, switchTo, store, coreStore } = await buildWindow({
+    tmuxSessions: [{ name: 'dev', command: 'claude', cwd: '/repo' }],
   });
   addSession('a'); // 세션 a가 tmux 'dev'로 이미 열려 있는 상태를 흉내
+  coreStore.getSession('a').tmuxName = 'dev';
   const rootPaneId = store.getActivePaneId();
   const emptyPaneId = store.splitActivePane('row'); // rootPaneId(=a)와 별개인 새 빈 leaf
 

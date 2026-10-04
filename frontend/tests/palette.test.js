@@ -206,11 +206,12 @@ test('`@` 접두사 — 세션 클릭 시 전환되고 팔레트가 닫힌다', 
 });
 
 test('`@` 접두사 — 세션이 tmux 라이브 프리뷰 후보면 카드로 나온다', async () => {
-  const { mountPalette, document, root } = await mountFresh();
+  const { mountPalette, document, window, root } = await mountFresh();
+  window.allSessions = () => ({ a: { tmuxName: 'dev' } });
   const deps = fakeDeps(document, {
     listSessions: () => [{ id: 'a', name: 'dev' }],
     vtFetch: async (path) => {
-      if (path.includes('/api/tmux/sessions')) return [{ name: 'dev', command: 'claude', web_session_id: 'a' }];
+      if (path.includes('/api/tmux/sessions')) return [{ name: 'dev', command: 'claude' }];
       if (path.includes('/api/agents')) return {};
       return {};
     },

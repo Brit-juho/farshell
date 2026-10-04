@@ -1077,6 +1077,85 @@ def test_리사이즈_오버레이가_분할선_드래그_중에만_보인다(is
         page.wait_for_timeout(300)   # saveWorkspace()가 서버에 반영될 시간
 
 
+def test_연결된_화면이_실제_tmux_클라이언트를_표시한다(isolated_page):
+    page = isolated_page
+    try:
+        before = set(page.evaluate("() => Object.keys(window.allSessions())"))
+        page.evaluate("() => window.createTmuxSession()")
+        page.wait_for_function("(n) => Object.keys(window.allSessions()).length > n", arg=len(before), timeout=15000)
+        page.evaluate("() => window.vtShowClients()")
+        page.wait_for_selector("#vt-connected-screens .vt-clients-row.me", timeout=15000)
+        assert page.locator("#vt-connected-screens .vt-clients-badge").inner_text() == "나"
+        assert page.locator("#vt-connected-screens .vt-clients-head button").is_disabled()
+        assert page.locator("#vt-connected-screens .vt-clients-title").is_hidden()
+    finally:
+        page.evaluate("() => window.vtShowClients && document.getElementById('vt-connected-screens') && window.vtShowClients()")
+        for sid in set(page.evaluate("() => Object.keys(window.allSessions())")) - before:
+            page.evaluate("(id) => window.removeSession(id)", sid)
+
+
+def test_두_웹_화면을_따로_세고_상대만_끊는다(isolated_page):
+    first = isolated_page
+    second_context = first.context.browser.new_context(viewport=WIDE)
+    second = second_context.new_page()
+    try:
+        before = set(first.evaluate("() => Object.keys(window.allSessions())"))
+        first.evaluate("() => window.createTmuxSession()")
+        first.wait_for_function("(n) => Object.keys(window.allSessions()).length > n", arg=len(before), timeout=15000)
+        new_id = next(iter(set(first.evaluate("() => Object.keys(window.allSessions())")) - before))
+        name = first.evaluate("(id) => window.allSessions()[id].tmuxName", new_id)
+        _boot(second, first.url)
+        second.evaluate("(name) => window.attachTmux(name)", name)
+        second.wait_for_function("(name) => Object.values(window.allSessions()).some(s => s.tmuxName === name)", arg=name)
+        first.evaluate("() => window.vtShowClients()")
+        first.wait_for_function("() => document.querySelectorAll('#vt-connected-screens .vt-clients-row').length === 2")
+        assert first.locator("#vt-connected-screens .vt-clients-row.me").count() == 1
+        second.evaluate("() => window.vtShowClients()")
+        second.wait_for_function("() => document.querySelectorAll('#vt-connected-screens .vt-clients-row').length === 2")
+        assert second.locator("#vt-connected-screens .vt-clients-row.me").count() == 1
+
+        # 같은 탭 새로고침은 attach를 늘리지 않고 자기 화면을 복구한다.
+        _boot(second, second.url)
+        second.evaluate("(name) => window.vtShowClients(Object.entries(window.allSessions()).find(([, s]) => s.tmuxName === name)?.[0])", name)
+        second.wait_for_function("() => document.querySelectorAll('#vt-connected-screens .vt-clients-row').length === 2")
+        assert second.locator("#vt-connected-screens .vt-clients-row.me").count() == 1
+
+        first.locator("#vt-connected-screens .vt-clients-detach").click()
+        second.wait_for_selector("#conn-overlay", timeout=15000)
+        second.wait_for_function("() => document.querySelector('#conn-overlay')?.textContent.includes('다른 화면에서 이 화면을 끊음')", timeout=15000)
+        assert "다른 화면에서 이 화면을 끊음" in second.locator("#conn-overlay").inner_text()
+        first.wait_for_function("() => document.querySelectorAll('#vt-connected-screens .vt-clients-row').length === 1", timeout=15000)
+        assert first.locator("#vt-connected-screens .vt-clients-row.me").count() == 1
+    finally:
+        second_context.close()
+        for sid in set(first.evaluate("() => Object.keys(window.allSessions())")) - before:
+            first.evaluate("(id) => window.removeSession(id)", sid)
+
+
+def test_브라우저_탭을_닫으면_그_화면만_목록에서_빠진다(isolated_page):
+    first = isolated_page
+    second_context = first.context.browser.new_context(viewport=WIDE)
+    second = second_context.new_page()
+    before = set(first.evaluate("() => Object.keys(window.allSessions())"))
+    try:
+        first.evaluate("() => window.createTmuxSession()")
+        first.wait_for_function("(n) => Object.keys(window.allSessions()).length > n", arg=len(before), timeout=15000)
+        new_id = next(iter(set(first.evaluate("() => Object.keys(window.allSessions())")) - before))
+        name = first.evaluate("(id) => window.allSessions()[id].tmuxName", new_id)
+        _boot(second, first.url)
+        second.evaluate("(name) => window.attachTmux(name)", name)
+        first.evaluate("() => window.vtShowClients()")
+        first.wait_for_function("() => document.querySelectorAll('#vt-connected-screens .vt-clients-row').length === 2")
+        second_context.close()
+        first.wait_for_function("() => document.querySelectorAll('#vt-connected-screens .vt-clients-row').length === 1", timeout=15000)
+        assert first.locator("#vt-connected-screens .vt-clients-row.me").count() == 1
+    finally:
+        if not second.is_closed():
+            second_context.close()
+        for sid in set(first.evaluate("() => Object.keys(window.allSessions())")) - before:
+            first.evaluate("(id) => window.removeSession(id)", sid)
+
+
 def test_그룹의_세션을_클릭하면_짝을_밀어내지_않고_그_칸으로만_이동한다(isolated_page):
     """2026-09-21(사용자 지적) — 레일에서 그룹화된 세션을 클릭하면 "바로가기"가
     아니라 그 세션이 활성 pane에 배정돼(옛 `switchTo` 경로) 짝 세션을 그 칸에서

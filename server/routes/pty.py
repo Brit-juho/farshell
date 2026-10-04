@@ -45,6 +45,23 @@ WS_QUEUE_LOW = 50
 # 쌓인 과거 OSC52 시퀀스가 scrollback과 함께 통째로 재생되며 그때마다 다시
 # 발화해 "새로고침하면 클립보드 동기화 토스트가 한꺼번에 여러 개" 뜨는 버그가 났다.
 _SCROLLBACK_END = object()
+_screen_cleanup_tasks: dict[str, asyncio.Task] = {}
+SCREEN_DISCONNECT_GRACE = 5.0
+
+
+async def _release_idle_screen(session_id: str) -> None:
+    """브라우저가 떠난 attach만 끊는다. tmux 세션과 복구용 메타는 남긴다."""
+    try:
+        await asyncio.sleep(SCREEN_DISCONNECT_GRACE)
+        if _deps.ws_count_per_session.get(session_id, 0):
+            return
+        info = session_store.get(session_id)
+        if info and info.screen_id and info.tmux_name:
+            pty_mgr.destroy_session(session_id)
+            output_watcher.remove_session(session_id)
+    finally:
+        if _screen_cleanup_tasks.get(session_id) is asyncio.current_task():
+            _screen_cleanup_tasks.pop(session_id, None)
 
 
 def _resume_queue_backpressure_if_drained(
@@ -111,7 +128,7 @@ def _ws_auth(ws: WebSocket) -> bool:
 # --------------------------------------------------------------------------
 
 @router.api_route("/api/sessions", methods=["GET", "HEAD"])
-async def list_sessions():
+async def list_sessions(screen: str | None = None):
     # tmux가 `detach-on-destroy off`면 세션이 kill돼도 web의 attach 클라이언트가 다른
     # 세션으로 전환되어 살아남아 PTY가 EOF되지 않는다 → 죽은 tmux를 가리키는 web 세션이
     # 목록·메모리(PTY·scrollback)·클라이언트 터미널로 계속 쌓인다. 여기서 실제 tmux 존재를
@@ -121,6 +138,8 @@ async def list_sessions():
     for s in list(pty_mgr.sessions.values()):
         info = session_store.get(s.session_id)
         tmux_name = info.tmux_name if info else None
+        if screen and tmux_name and info.screen_id != screen:
+            continue
         if tmux_name and tmux_name not in live_tmux_names:
             pty_mgr.destroy_session(s.session_id)
             session_store.remove(s.session_id)
@@ -281,7 +300,9 @@ async def rename_session(session_id: str, request: Request):
                 {"error": "tmux rename-session failed", "detail": err.decode("utf-8", errors="ignore")},
                 status_code=500,
             )
-        session_store.update_tmux_name(session_id, name)
+        for attached in session_store.find_all_by_tmux_name(info.tmux_name):
+            session_store.update_tmux_name(attached.session_id, name)
+            attached.name = name
         tmux_renamed = True
     info.name = name
     return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name, "tmux_renamed": tmux_renamed}
@@ -347,6 +368,23 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         return
     await ws.accept()
 
+    info = session_store.get(session_id)
+    if info and info.screen_id:
+        supplied_screen = ws.query_params.get("screen")
+        if supplied_screen != info.screen_id:
+            await ws.close(code=4001, reason="Screen mismatch")
+            return
+
+    pending_cleanup = _screen_cleanup_tasks.pop(session_id, None)
+    if pending_cleanup:
+        pending_cleanup.cancel()
+
+    if session_id not in pty_mgr.sessions:
+        if info and info.screen_id and info.tmux_name:
+            from routes.tmux import _get_attach_lock, revive_tmux_attach
+            async with _get_attach_lock(info.tmux_name):
+                await revive_tmux_attach(info)
+
     if session_id not in pty_mgr.sessions:
         await ws.close(code=4004, reason="Session not found")
         return
@@ -381,6 +419,25 @@ async def ws_terminal(ws: WebSocket, session_id: str):
     # 살아있었다(auth.py의 `_ws_session_watchdog` 설명 참고). 핸드셰이크 인증에
     # 쓰인 토큰을 들고 연결 내내 주기적으로 재검사한다.
     session_watchdog = auth.spawn_session_watchdog(ws, _auth_token)
+
+    async def _watch_pty_exit():
+        # tmux detach는 PTY만 끝내고 브라우저 WS는 남길 수 있다. 현재 소켓에
+        # 종료 이유를 전달해 자동 재연결이 잘린 화면을 즉시 되살리지 않게 한다.
+        while True:
+            await asyncio.sleep(0.5)
+            if session_id in pty_mgr.sessions:
+                continue
+            info = session_store.get(session_id)
+            still_exists = bool(info and info.tmux_name
+                                and await tmux_runner.has_session_async(info.tmux_name))
+            try:
+                await ws.close(code=4005 if still_exists else 4004,
+                               reason="Screen detached" if still_exists else "Session destroyed")
+            except Exception:
+                pass
+            return
+
+    pty_exit_watch = asyncio.create_task(_watch_pty_exit())
 
     try:
         # E2E 협상
@@ -602,6 +659,7 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         if hb_task is not None:
             hb_task.cancel()
         session_watchdog.cancel()
+        pty_exit_watch.cancel()
         if pty_paused:
             pty_mgr.resume_read(session_id, ws_id)
         # R2: 클라이언트가 render_pause만 보내고 render_resume 전에 끊긴 경우
@@ -612,6 +670,9 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         _deps.ws_count_per_session[session_id] = max(0, _deps.ws_count_per_session.get(session_id, 1) - 1)
         if _deps.ws_count_per_session[session_id] == 0:
             _deps.ws_count_per_session.pop(session_id, None)
+            info = session_store.get(session_id)
+            if info and info.screen_id and info.tmux_name:
+                _screen_cleanup_tasks[session_id] = asyncio.create_task(_release_idle_screen(session_id))
         _deps.ws_total_count = max(0, _deps.ws_total_count - 1)
 
 

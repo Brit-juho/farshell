@@ -16,7 +16,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/sessions` | List sessions |
+| GET | `/api/sessions?screen=S` | List sessions; `screen` limits tmux web attachments to one browser tab. Without it, lists all sessions for CLI/legacy callers |
 | POST | `/api/sessions` | Create a session (JSON: cols, rows, name) |
 | DELETE | `/api/sessions/{session_id}` | Delete a session |
 | PATCH | `/api/sessions/{session_id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
@@ -29,13 +29,13 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/api/tmux/sessions` | List tmux sessions |
-| POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name) |
-| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd) |
+| POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name, optional 32-hex `screen`). Each screen gets its own PTY; the same screen reuses its attachment after reload |
+| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd, optional `screen`) |
 | DELETE | `/api/tmux/kill/{tmux_name}` | Fully kill a tmux session |
 | POST | `/api/tmux/kick` | tmux hooks only — nudges the session-list watcher. Needs the `X-VT-Kick` secret the server makes at start (not the login); 204, or 403 without it |
 | POST | `/api/tmux/open-on-mac` | Attach an existing tmux session in a new window on the server's (macOS) terminal (JSON: name). Returns 400 if the server isn't macOS |
 | GET | `/api/tmux/preview/{tmux_name}?lines=20&ansi=1` | Capture recent tmux pane output for the Grid view |
-| GET | `/api/tmux/clients?session=X&me=Y` | Clients attached to a session (C1). `me` is the caller's web session id — the server derives its tty and marks `is_me` |
+| GET | `/api/tmux/clients?session=X&me=Y` | Clients attached to a session (C1). Each web tab has a distinct tmux client. `me` is that tab's web session id — the server derives its tty and marks `is_me` |
 | POST | `/api/tmux/detach-client` | Detach one client (C1, JSON: tty, me). Detaching yourself returns 400 — there'd be no way back |
 | POST | `/api/tmux/clients/solo` | "Keep only this screen" (C2, JSON: session, me). The client never sends a tty to keep — the server derives it. Returns 400 if it can't, rather than detaching everything |
 

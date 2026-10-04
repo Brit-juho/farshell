@@ -14,7 +14,8 @@
 // 다른 소비처가 남아 있을 수 있고, 엔드포인트 삭제는 이 정리의 범위 밖이다.
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { getSession } from '../core/store.js';
+import { screenId } from '../core/screen-id.js';
+import { allSessions, getSession } from '../core/store.js';
 import { switchTo, addSession } from '../term/session.js';
 import { _applyCardAgent } from './badges.js';
 
@@ -51,7 +52,7 @@ export function updateSessionCard(card, sess, agentInfo) {
   // 포함할 수 있다(card-title과 같은 이유, innerHTML 금지).
   card.querySelector('.card-meta').textContent = sess.cwd || '';
   // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.
-  const isOpenTab = !!(sess.web_session_id && getSession(sess.web_session_id));
+  const isOpenTab = Object.values(allSessions()).some((s) => (s.tmuxName || s.tmux_name) === sess.name);
   card.classList.toggle('open-tab', isOpenTab);
   card.setAttribute('data-tip', isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속');
   _applyCardAgent(card, agentInfo);
@@ -62,7 +63,7 @@ export async function attachTmuxSession(name) {
     const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name, screen: screenId() })
     });
     const data = await res.json();
     if (data.id) {

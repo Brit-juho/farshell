@@ -9,7 +9,7 @@
 // 요청에는 항상 내 web session id(`me`)를 함께 보내 서버가 "이게 너인지"를
 // 판정하게 한다 — 지금 보고 있는 화면을 스스로 끊으면 복구 경로가 없다.
 import { vtFetch } from '../core/api.js';
-import { activeSessionId, getSession } from '../core/store.js';
+import { activeSessionId } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 
 // 훅(`VT_NOTIFY_CLIENT_EVENTS=1`)이 꺼져 있으면 attach/detach를 알 방법이
@@ -68,7 +68,7 @@ function row(client, onDetach, readOnly = false) {
 // 생겼고(`/api/hosts/{id}/clients` → peer), 등급 경계가 그대로 UI가 된다:
 // **목록은 view면 보이고, 끊기는 control이 없으면 403** — 그때는 버튼을 숨기고
 // 이유를 한 줄로 적는다(눌러서 실패하게 두지 않는다).
-export function mountClients(container, tmuxName, remote = null) {
+export function mountClients(container, tmuxName, remote = null, sessionId = activeSessionId()) {
   if (!container || !tmuxName) return () => {};
   const screen = remote ? remote.screen || '' : '';
   const base = remote ? `/api/hosts/${encodeURIComponent(remote.host)}/clients` : '/api/tmux/clients';
@@ -92,6 +92,11 @@ export function mountClients(container, tmuxName, remote = null) {
   const list = document.createElement('div');
   list.className = 'vt-clients-list';
   wrap.appendChild(list);
+  const status = document.createElement('div');
+  status.className = 'vt-clients-status';
+  status.setAttribute('role', 'status');
+  status.textContent = '연결된 화면을 확인하는 중…';
+  wrap.appendChild(status);
   // 원격에서 control 등급이 없으면 끊기 자체가 불가능하다 — 그 사실을 여기 적는다.
   const note = document.createElement('div');
   note.className = 'vt-clients-note';
@@ -101,18 +106,23 @@ export function mountClients(container, tmuxName, remote = null) {
 
   let stopped = false;
   let readOnly = false;   // 원격이 control을 안 준 상태
+  let requestId = 0;
 
-  const me = () => activeSessionId();
+  // 패널을 연 시점의 대상 세션을 고정한다. 다른 행의 메뉴에서 열거나 패널이
+  // 열린 채 활성 pane이 바뀌어도 '나'가 엉뚱한 PTY를 가리키면 안 된다.
+  const me = () => sessionId;
 
   async function refresh() {
     if (stopped) return;
+    const current = ++requestId;
     try {
       const q = remote
         ? `?session=${encodeURIComponent(tmuxName)}&screen=${encodeURIComponent(screen)}`
         : `?session=${encodeURIComponent(tmuxName)}&me=${encodeURIComponent(me() || '')}`;
       const data = await vtFetch(`${listUrl}${q}`);
-      if (stopped) return;
+      if (stopped || current !== requestId) return;
       list.innerHTML = '';
+      status.replaceChildren();
       const clients = data.clients || [];
       // 열람은 사용자가 직접 요청한 것(칩/메뉴 클릭)이라 결과가 나만 있어도
       // 그대로 보여준다 — "혼자입니다"를 목록으로 보여주는 게 통째로 숨기는
@@ -120,13 +130,26 @@ export function mountClients(container, tmuxName, remote = null) {
       wrap.hidden = false;
       // 남길 화면을 특정할 수 없으면 solo는 서버가 400으로 거부한다.
       // 눌러서 실패하게 두지 말고 미리 비활성화한다.
-      solo.disabled = !data.me_tty || readOnly;
+      solo.disabled = !data.me_tty || readOnly || clients.length < 2;
       solo.hidden = readOnly;
-      solo.title = data.me_tty ? '' : '이 화면의 tty를 확인할 수 없어 사용할 수 없습니다';
+      solo.title = !data.me_tty ? '이 화면의 tty를 확인할 수 없어 사용할 수 없습니다'
+        : clients.length < 2 ? '다른 화면이 없습니다' : '';
       note.hidden = !readOnly;
       for (const c of clients) list.appendChild(row(c, detach, readOnly));
-    } catch (_) {
-      wrap.hidden = true;   // 조회 실패는 조용히 — 이건 부가 기능이다
+      if (!clients.length) status.textContent = '연결된 화면이 없습니다';
+    } catch (e) {
+      if (stopped || current !== requestId) return;
+      list.replaceChildren();
+      solo.disabled = true;
+      status.replaceChildren();
+      const message = document.createElement('span');
+      message.textContent = `목록을 불러오지 못했습니다: ${e.message || '연결을 확인하세요'}`;
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'vt-btn sm quiet';
+      retry.textContent = '다시 시도';
+      retry.addEventListener('click', refresh);
+      status.append(message, retry);
     }
   }
 
@@ -134,7 +157,7 @@ export function mountClients(container, tmuxName, remote = null) {
   // 감추고 이유를 적는다 — 등급은 상대 맥에서만 올릴 수 있으므로 여기서
   // 재시도해봐야 계속 실패한다.
   function _handleDenied(e) {
-    if (remote && /403/.test(String(e && e.message))) {
+    if (remote && e && e.status === 403) {
       readOnly = true;
       note.textContent = '읽기 전용(view)으로 연결돼 있어 화면을 끊을 수 없습니다 — 그 호스트에서 '
         + "'fsh host allow-control'로 켜세요.";
@@ -183,5 +206,5 @@ export function mountClients(container, tmuxName, remote = null) {
 
   refresh();
   const timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
-  return () => { stopped = true; clearInterval(timer); wrap.remove(); };
+  return () => { stopped = true; requestId++; clearInterval(timer); wrap.remove(); };
 }

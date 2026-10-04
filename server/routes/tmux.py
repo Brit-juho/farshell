@@ -75,7 +75,11 @@ def _device_label_for_request(request: Request | None) -> str | None:
     return None
 
 
-async def _attach_tmux(tmux_name: str, cols: int, rows: int, request: Request | None = None):
+_SCREEN_RE = re.compile(r"[0-9a-f]{32}")
+
+
+async def _attach_tmux(tmux_name: str, cols: int, rows: int, request: Request | None = None,
+                       screen_id: str | None = None):
     # 존재하지 않는 tmux 세션에 attach하면 `tmux attach-session`이 즉시 실패하지만,
     # 그 전에 유령 web 세션(PTY)이 이미 생성·등록돼 /api/sessions에 남는다. 클라이언트는
     # 그 id로 WS를 열었다가 죽은 세션에 재연결을 반복하고, restoreWorkspace가 stale 탭마다
@@ -94,10 +98,42 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int, request: Request | 
         cols=cols,
         rows=rows,
     )
-    session_store.add(session_id, name=tmux_name, device_label=_device_label_for_request(request))
+    session_store.add(session_id, name=tmux_name, device_label=_device_label_for_request(request),
+                      screen_id=screen_id)
     session_store.update_tmux_name(session_id, tmux_name)
     output_watcher.add_session(session_id)
     return {"id": session_id, "name": tmux_name, "tmux_session": tmux_name}
+
+
+async def revive_tmux_attach(info) -> bool:
+    """잠든 브라우저의 WS가 돌아오면 같은 웹 ID에 새 tmux 클라이언트를 붙인다.
+
+    호출자는 tmux 이름별 attach 락을 잡아야 한다.
+    """
+    if not info.tmux_name or not info.screen_id:
+        return False
+    if info.session_id in pty_mgr.sessions:
+        return True
+    if not await tmux_runner.has_session_async(info.tmux_name):
+        return False
+    pty_mgr.create_session(
+        info.session_id, cmd=platform_utils.find_tmux(),
+        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", info.tmux_name],
+    )
+    output_watcher.add_session(info.session_id)
+    return True
+
+
+async def attach_screen(tmux_name: str, cols: int, rows: int, request: Request,
+                        screen_id: str):
+    """같은 화면은 복구하고 다른 화면에는 새 PTY를 준다. attach 락 안에서 호출."""
+    existing = session_store.find_by_tmux_and_screen(tmux_name, screen_id)
+    if existing:
+        if existing.session_id in pty_mgr.sessions or await revive_tmux_attach(existing):
+            return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
+        session_store.remove(existing.session_id)
+        output_watcher.remove_session(existing.session_id)
+    return await _attach_tmux(tmux_name, cols, rows, request, screen_id)
 
 
 # attach 확인(find_by_tmux_name)과 생성(_attach_tmux)이 원자적이지 않아, 같은 tmux_name에
@@ -168,7 +204,8 @@ async def collect_tmux_sessions() -> list[dict]:
         parts = line.split("\t")
         name = parts[0]
         cmd, cwd, pane_id = pane_by_session.get(name, ("", "", ""))
-        web_session = session_store.find_by_tmux_name(name)
+        web_session = next((info for info in session_store.find_all_by_tmux_name(name)
+                            if info.session_id in pty_mgr.sessions), None)
         sessions.append({
             "name": name,
             "windows": int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1,
@@ -185,6 +222,9 @@ async def collect_tmux_sessions() -> list[dict]:
 @router.post("/api/tmux/create")
 async def create_tmux_session(request: Request):
     body = await request.json()
+    screen_id = body.get("screen") or None
+    if screen_id is not None and not _SCREEN_RE.fullmatch(str(screen_id)):
+        return JSONResponse({"error": "invalid screen id"}, status_code=400)
     # Wave 1 W1-2: 사용자 지정 이름 없으면 cwd 기반 디폴트
     requested_name = body.get("name", "").strip()
     # 이 헬퍼는 이름이 빌 때까지 has_session을 반복 호출한다(동기 tmux).
@@ -236,6 +276,8 @@ async def create_tmux_session(request: Request):
     # 워크트리 표시(@fsh_wt)는 그 뒤라 옵션 변화엔 훅이 없어 여기서 한 번 더 알린다.
     _kick_sessions()
     async with _get_attach_lock(tmux_name):
+        if screen_id:
+            return await attach_screen(tmux_name, cols, rows, request, screen_id)
         return await _attach_tmux(tmux_name, cols, rows, request)
 
 
@@ -282,8 +324,8 @@ async def open_tmux_on_mac(request: Request):
                 total_attached = int(parts[1]) if parts[1].isdigit() else 0
                 break
 
-        web_session = session_store.find_by_tmux_name(tmux_name)
-        web_attached = 1 if web_session and web_session.session_id in pty_mgr.sessions else 0
+        web_attached = sum(info.session_id in pty_mgr.sessions
+                           for info in session_store.find_all_by_tmux_name(tmux_name))
         desktop_attached = total_attached - web_attached
 
         if desktop_attached > 0:
@@ -309,12 +351,19 @@ async def attach_tmux_session(request: Request):
 
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
+    screen_id = body.get("screen") or None
+    if screen_id is not None and not _SCREEN_RE.fullmatch(str(screen_id)):
+        return JSONResponse({"error": "invalid screen id"}, status_code=400)
 
     async with _get_attach_lock(tmux_name):
+        if screen_id:
+            return await attach_screen(tmux_name, cols, rows, request, screen_id)
         existing = session_store.find_by_tmux_name(tmux_name)
-        if existing and existing.session_id in pty_mgr.sessions:
-            return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
-
+        if existing:
+            if existing.session_id in pty_mgr.sessions or await revive_tmux_attach(existing):
+                return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
+            session_store.remove(existing.session_id)
+            output_watcher.remove_session(existing.session_id)
         result = await _attach_tmux(tmux_name, cols, rows, request)
     # client-attached 훅(tmux_hooks.py)도 오지만, 붙는 도중의 await 사이에 웹 세션
     # 등록이 훅보다 늦을 수 있어(web_session_id가 빈 채 push) 여기서도 알린다.
@@ -324,8 +373,7 @@ async def attach_tmux_session(request: Request):
 
 @router.delete("/api/tmux/kill/{tmux_name}")
 async def kill_tmux_session(tmux_name: str):
-    existing = session_store.find_by_tmux_name(tmux_name)
-    if existing:
+    for existing in session_store.find_all_by_tmux_name(tmux_name):
         from deps import _auto_responder
         pty_mgr.destroy_session(existing.session_id)
         session_store.remove(existing.session_id)

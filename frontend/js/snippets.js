@@ -20,6 +20,7 @@
 import { openPanel, closePanel } from './panels/panel.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { activeSession, activeSessionId, getSession } from './core/store.js';
+import { screenId } from './core/screen-id.js';
 import { sendToPty, sendPaste } from './term/clipboard.js';
 import { addSession } from './term/session.js';
 
@@ -293,7 +294,7 @@ export function showSnippets() {
         data = await vtFetch('/api/tmux/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cwd ? { cwd } : {}),
+          body: JSON.stringify({ ...(cwd ? { cwd } : {}), screen: screenId() }),
         });
       } catch (e) {
         showToast(`새 섹션 생성 실패: ${e.message}`, 'error');

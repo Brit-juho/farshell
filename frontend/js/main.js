@@ -133,11 +133,18 @@ try {
     const s = getSession(activeSessionId());
     return (s && (s.tmuxName || s.tmux_name)) || '';
   };
+  const activeClientsPath = () => {
+    const s = getSession(activeSessionId());
+    const name = s && (s.tmuxName || s.tmux_name);
+    if (!name) return '';
+    if (s.remote) return `/api/hosts/${encodeURIComponent(s.remote.host)}/clients?session=${encodeURIComponent(name)}&screen=${encodeURIComponent(s.remote.screen || '')}`;
+    return `/api/tmux/clients?session=${encodeURIComponent(name)}`;
+  };
 
   const hudRoot = document.getElementById('vt-hud');
   if (hudRoot) {
     import('./shell/Hud.tsx')
-      .then(({ mountHud }) => mountHud(hudRoot, { vtFetch, activeTmuxName, getAction, e2eEnabled: E2E_ENABLED }))
+      .then(({ mountHud }) => mountHud(hudRoot, { vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED }))
       .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
   }
 

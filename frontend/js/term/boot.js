@@ -10,6 +10,7 @@ import { load as loadSettings } from '../core/settings.js';
 import { apiFetch } from '../core/api.js';
 import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
+import { screenId } from '../core/screen-id.js';
 import { getSession, allSessions } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { displayComboHtml } from '../core/keymap.js';
@@ -151,7 +152,7 @@ export async function bootApp() {
     }
 
     // 1. 기존 웹 세션 복원
-    const res = await apiFetch(`${API_BASE}/api/sessions`);
+    const res = await apiFetch(`${API_BASE}/api/sessions?screen=${screenId()}`);
     const existing = await res.json();
     if (existing.length > 0) {
       for (const s of existing) {
