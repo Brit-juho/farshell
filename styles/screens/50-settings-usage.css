@@ -567,8 +567,7 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-counter-stat { font:500 var(--fs-xs) var(--mono); color:var(--sub); }
 .vt-counter-spark { width:100%; height:24px; color:var(--acc); display:block; }
 
-/* ── C3 연결된 화면 ────────────────────────────────────────────────────────
-   rail 세션 패널 안. 붙어 있는 클라이언트가 하나뿐이면(=나만) 통째로 숨는다. */
+/* ── C3 연결된 화면 ──────────────────────────────────────────────────────── */
 .vt-clients {
   margin-top:calc(var(--spacing) * 2); padding-top:calc(var(--spacing) * 1.5);
   border-top:1px solid var(--line);
@@ -579,6 +578,10 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
    이 화면에는 이미 액센트를 쓰는 것이 여럿인데 패널 머리의 부차 액션까지
    액센트면 "화면당 하나"라는 규칙이 무너진다(DESIGN.md §0 70/20/10). */
 .vt-clients-list { margin-top:calc(var(--spacing) * 0.5); }
+.vt-clients-status { display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 1); margin-top:calc(var(--spacing) * 1); color:var(--sub); font:400 var(--fs-xs) var(--ui); }
+.vt-clients-status:empty { display:none; }
+#vt-connected-screens .vt-clients { margin-top:0; padding-top:0; border-top:0; }
+#vt-connected-screens .vt-clients-title { display:none; }
 .vt-clients-row {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1);
   padding:4px 0; font:400 var(--fs-xs) var(--ui); color:var(--txt);

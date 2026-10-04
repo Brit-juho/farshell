@@ -147,7 +147,7 @@ export function renderVoiceSection() {
   if (_voiceClientsCleanup) { _voiceClientsCleanup(); _voiceClientsCleanup = null; }
   const activeSess = getSession(activeSessionId());
   const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
-  if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote);
+  if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote, activeSessionId());
 
   frag.append(group('알림', notif), vm.input, vm.manage, group('데스크톱 음성', desk));
   return frag;
