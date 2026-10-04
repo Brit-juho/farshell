@@ -5,6 +5,8 @@
 // 이 map 하나로 충분하다 — 새 아이콘이 필요하면 여기 한 줄만 추가한다.
 // path는 Lucide(ISC 라이선스, 기존에 이미 폰트로 번들하던 것과 같은 세트)의
 // 24x24 stroke 좌표를 그대로 옮겼다.
+import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
+
 const PATHS = {
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
@@ -41,6 +43,12 @@ const PATHS = {
   pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
   'alert-triangle': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  // 에이전트 상태 4종(stateIcon). 색에만 의존하지 않도록 **모양이 서로 다르다**:
+  // 빈 원 / 열린 호(CSS가 돌린다) / 물음표 말풍선(Lucide message-circle-question) / 체크 원.
+  'state-idle': '<circle cx="12" cy="12" r="8"/>',
+  'state-working': '<path d="M12 4a8 8 0 1 0 8 8"/>',
+  'state-waiting': '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  'state-done': '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>',
   // 방향은 이 하나를 CSS로 돌려 만든다(chevron-up/left/right를 따로 두지
   // 않는다) — 여는/접는 토글에서 회전이 상태 전이를 그대로 보여준다.
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
@@ -53,6 +61,15 @@ const PATHS = {
   // "소/스/컨/트/롤"이 세로로 늘어섰다. 모노스페이스까지 겹쳐 더 나빴다.
   // 세로쓰기 자체는 영문 라벨을 전제한 패턴이라 한글에는 성립하지 않는다.
   'git-branch': '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  // 레일 행(2.2 후속) — 둘째 줄의 메인/워크트리 구분. 줄 하나를 가로지르는 점 =
+  // 본선(메인 워크트리), 갈라지는 가지(git-branch) = 딸린 워크트리.
+  'git-commit': '<circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/>',
+  // 만든 곳(origin) — local은 아이콘이 없다. peer = 다른 맥, agent = 에이전트, external = CLI·직접 만든 tmux.
+  laptop: '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+  'square-terminal': '<path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>',
+  // 열림 표시 — 이 브라우저 탭의 칸에 놓여 있다(pane 헤더의 분할 아이콘과 다른 모양: 창 + 제목줄).
+  'app-window': '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>',
   // 팔레트 섹션 마크(2.1.6). 목업 4a의 파일 줄 아이콘과 같은 형태 — 모서리가
   // 접힌 문서. 'file-up'(업로드)과 역할이 다르므로 따로 둔다.
   file: '<path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2Z"/>',
@@ -150,6 +167,17 @@ export function icon(name, size, strokeWidth) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" `
     + `fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" `
     + `aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+// 상태 아이콘 — 유휴(빈 원)·작업 중(회전 호)·입력 대기(물음표 말풍선)·완료(체크).
+// 색·회전은 CSS가 data-state로 맡는다(components.css `.vt-state-icon`). 읽지 않음은
+// `.unseen` 링(아이콘 둘레) — 상태 점의 `.status-dot.unseen`과 같은 방식이다.
+// 알 수 없는 상태(error 등)는 idle로 접는다.
+export function stateIcon(status, size = 14, unseen = false) {
+  const s = normalizeState(status);
+  const label = STATE_LABEL[s] + (unseen ? ' · 아직 확인 안 함' : '');
+  return `<span class="vt-state-icon${unseen ? ' unseen' : ''}" data-state="${s}" role="img" aria-label="${label}">`
+    + `${icon('state-' + s, size, 1.75)}</span>`;
 }
 
 // 정적 HTML(index.html)의 `<svg data-icon="이름">` 빈 자리를 채운다. 크기·

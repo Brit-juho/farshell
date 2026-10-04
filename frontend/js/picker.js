@@ -5,12 +5,14 @@
 // renameSession을 부르고, term/session.js는 탭 전환/제거 시 updateSessionPicker를
 // 부른다. panels/viewer의 shell.js↔tree.js와 같은 이유로 그대로 유지한다(모든
 // 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
-import { activeSession, activeSessionId, allSessions, sessionDisplayName, getSession } from './core/store.js';
+import { activeSession, activeSessionId, sessionDisplayName, getSession } from './core/store.js';
+import { openSessionIds } from './layout/compact.js';
+import { onLayoutChange } from './layout/store.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
-import { revealSession, renameSession, attachTmux } from './term/session.js';
-import { detachSession, confirmAndKillSession } from './term/session-actions.js';
+import { revealSession, renameSession } from './term/session.js';
+import { closeSession, openSessionFromRail, confirmAndKillSession } from './term/session-actions.js';
 import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
@@ -20,7 +22,8 @@ export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
   if (!picker) return;
   const s = activeSession();
-  const entries = Object.keys(allSessions());
+  // 화면 순서(뷰 탭 → 칸) — 스와이프·키 이동과 같은 목록(layout/compact.js).
+  const entries = openSessionIds();
   const activeId = activeSessionId();
   const position = entries.indexOf(activeId) + 1;
   // 2026-09-29(H1) — 두 줄: 윗줄 세션 이름(주인공) + ▾, 아랫줄 "기기 · 3/5".
@@ -42,6 +45,10 @@ export function updateSessionPicker() {
   const sheet = document.getElementById('session-manager');
   if (sheet) renderSessionManager(sheet);
 }
+
+// 순서·n/m의 출처가 레이아웃이므로 레이아웃이 바뀌면(부팅 복원, 칸 드롭, 뷰 재정렬)
+// 라벨도 같이 다시 그린다 — 전환 경로만 갱신하면 복원 직후 n/m이 비어 있었다.
+onLayoutChange((_tree, _pane, kind) => { if (kind !== 'ratio') updateSessionPicker(); });
 
 function sessionName(id) {
   return sessionDisplayName(id);
@@ -85,10 +92,10 @@ function closeSessionManager() {
 }
 
 // ADR-29 E — tmux 목록 팝업(옛 term/tmux-panel.js의 showTmuxSessions)을
-// 없애면서, 그게 하던 일(잠든 tmux 세션 보기 + 깨우기 + 완전 종료)을 이
-// 시트가 직접 흡수한다. `/api/tmux/sessions`는 웹 세션이 없는(잠든) 것까지
-// 포함해 내려주므로, 이미 그려진 웹 세션의 tmux 이름과 겹치는 것만 걸러내면
-// "잠든 것"만 남는다 — 레일의 awake/asleep 판정(ADR-29 B)과 같은 생각이다.
+// 없애면서, 그게 하던 일(열리지 않은 tmux 세션 보기 + 열기 + 종료)을 이
+// 시트가 직접 흡수한다. `/api/tmux/sessions`는 이 브라우저 탭에 열리지 않은
+// 것까지 포함해 내려주므로, 이미 열린 세션의 tmux 이름과 겹치는 것만 걸러내면
+// "열리지 않은 것"만 남는다 — 레일의 판정과 같은 생각이다.
 async function fetchTmuxSessions() {
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
@@ -105,7 +112,7 @@ async function renderSessionManager(backdrop) {
   sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div><div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button></div>`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
   const list = sheet.querySelector('.vt-session-list');
-  const entries = Object.entries(allSessions());
+  const entries = openSessionIds().map((id) => [id, getSession(id)]);
   const activeIdNow = activeSessionId();
   const awakeTmuxNames = new Set();
   for (const [id, s] of entries) {
@@ -117,7 +124,7 @@ async function renderSessionManager(backdrop) {
     select.type = 'button'; select.className = 'vt-name-btn vt-session-select'; select.textContent = sessionName(id);
     select.setAttribute('aria-current', id === activeIdNow ? 'true' : 'false');
     // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유로 revealSession.
-    // entries는 allSessions()라 이미 열려 있는 세션뿐이다 — "가서 보여줘"가
+    // entries는 열린 세션뿐이다 — "가서 보여줘"가
     // 맞는 동작이지 "배정"이 아니다.
     select.onclick = () => { revealSession(id); closeSessionManager(); };
     const rename = document.createElement('button');
@@ -128,8 +135,9 @@ async function renderSessionManager(backdrop) {
       if (await renameSession(id, next)) renderSessionManager(backdrop);
     };
     const close = document.createElement('button');
-    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 재우기`);
-    close.onclick = async () => { await detachSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
+    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 닫기`);
+    // 닫기 — 레일·칸 ×와 같은 함수(term/session-actions.js closeSession).
+    close.onclick = async () => { await closeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
     row.append(select, rename, close);
     // tmux 세션은 완전 종료도 여기서 — 지금까지 모바일에서 이 동작에 닿는
     // 유일한 길이 tmux 목록 팝업이었다(ADR-29 E, 그 팝업을 없앴다).
@@ -151,8 +159,9 @@ async function renderSessionManager(backdrop) {
     row.className = 'vt-session-row sleeping';
     const wake = document.createElement('button');
     wake.type = 'button'; wake.className = 'vt-name-btn vt-session-select'; wake.textContent = s.name;
-    wake.title = '깨워서 열기';
-    wake.onclick = async () => { closeSessionManager(); await attachTmux(s.name); };
+    wake.title = '열기';
+    // 레일 클릭과 같은 규칙 — 기억된 묶음 뷰가 있으면 통째로, 없으면 새 단독 뷰.
+    wake.onclick = async () => { closeSessionManager(); await openSessionFromRail({ tmuxName: s.name }); };
     const kill = document.createElement('button');
     kill.type = 'button'; kill.className = 'vt-icon-btn xl danger vt-session-action'; kill.innerHTML = icon('trash-2', 16);
     kill.setAttribute('aria-label', `${s.name} 완전 종료`);
@@ -184,7 +193,7 @@ async function openSessionOnMac(explicitSessionId) {
     });
     const data = await res.json();
     if (data.skipped) showToast(`'${tmuxName}'은 이미 맥에서 열려 있습니다`, 'success');
-    else if (data.ok) showToast(`맥 iTerm에 '${tmuxName}' 열림`, 'success');
+    else if (data.ok) showToast(`맥 터미널에 '${tmuxName}' 열림`, 'success');
     else showToast('맥에서 열기 실패: ' + (data.error || ''), 'error');
   } catch (e) {
     showToast('맥에서 열기 실패: ' + e.message, 'error');

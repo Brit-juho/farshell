@@ -9,7 +9,8 @@
 // 이름만 키로 쓴다 — 웹 세션 id는 재attach마다 바뀌어 키가 될 수 없다.
 import { allSessions, getSession, subscribe } from '../core/store.js';
 import { onLayoutChange } from '../layout/store.js';
-import { getStatus, onStatusChange, applyStatusDot, ackLocal, markSeen } from './state.js';
+import { getStatus, isUnseen, onStatusChange, applyStatusDot, ackLocal, markSeen, setSeenProbe } from './state.js';
+import { representativeState } from '../design/state-classes.js';
 
 // pane 헤더에서는 **idle이면 dot을 아예 안 그린다.** 세션이 열 개면 회색 점
 // 열 개가 상시로 붙어 있게 되는데, 그건 정보가 아니라 노이즈다("아무 일도
@@ -52,16 +53,14 @@ function paintPanes() {
   });
 }
 
-// 파비콘 — 탭 하나에 하나뿐이라 "가장 급한 세션"을 보여준다.
+// 파비콘 — 탭 하나에 하나뿐이라 "가장 급한 세션"을 보여준다(대표 상태 규칙 공통).
 function paintFavicon() {
   if (!window.VTFavicon) return;
-  let best = 'idle';
-  const rank = { waiting: 0, done: 1, working: 2, idle: 3 };
-  for (const id of Object.keys(allSessions())) {
-    const st = getStatus(_tmuxName(id));
-    if ((rank[st] ?? 9) < (rank[best] ?? 9)) best = st;
-  }
-  window.VTFavicon.set(best);
+  const entries = Object.keys(allSessions()).map((id) => {
+    const name = _tmuxName(id);
+    return { status: getStatus(name), unseen: isUnseen(name) };
+  });
+  window.VTFavicon.set(representativeState(entries).status);
 }
 
 // L8 §8-b — 앱 아이콘 배지(Badging API). PWA라 iOS Live Activity는 못 쓰므로,
@@ -85,15 +84,25 @@ function paintAppBadge() {
   } catch (_) { /* 무시 */ }
 }
 
-// N37 — 「읽지 않음」을 실제로 지우는 지점. 정의가 "그 페인이 활성이 된 적
-// 없음"이므로, 클릭 같은 입력이 아니라 **화면에 활성으로 떠 있다는 사실**이
-// 기준이다: 다른 기기에서 전환했든 레이아웃 복원으로 떴든 눈에 보였으면 본
-// 것이다. paintAll이 상태·세션·레이아웃 변경마다 도므로 여기 얹으면 그 세
-// 경로가 한 번에 커버된다.
-function markActiveSeen() {
+// N37 — 「읽지 않음」을 실제로 지우는 지점. 정의가 "그 세션이 현재 뷰의 포커스
+// 칸이고 창이 보이는 상태"이므로, 클릭 같은 입력이 아니라 **화면에 활성으로 떠
+// 있다는 사실**이 기준이다: 다른 기기에서 전환했든 레이아웃 복원으로 떴든 눈에
+// 보였으면 본 것이다. 창이 가려져 있으면(다른 탭·최소화) 보는 게 아니다.
+// paintAll이 상태·세션·레이아웃·가시성 변경마다 도므로 이 세 경로가 한 번에 커버된다.
+function seenTmuxName() {
+  if (document.visibilityState === 'hidden') return null;
   const activePane = document.querySelector('.vt-pane.active') || document.querySelector('.vt-pane');
   const sid = activePane?.querySelector('.vt-pane-body')?.dataset.vtSessionId;
-  if (sid) markSeen(_tmuxName(sid));
+  return sid ? _tmuxName(sid) : null;
+}
+
+// 상태 전이가 들어오는 순간 "이 세션은 지금 보고 있다"를 state.js가 물을 수 있게 —
+// 보고 있는 세션의 전이는 unseen을 만들지 않는다(rAF 뒤에 지우면 한 프레임 깜박인다).
+setSeenProbe((name) => !!name && name === seenTmuxName());
+
+function markActiveSeen() {
+  const name = seenTmuxName();
+  if (name) markSeen(name);
 }
 
 function paintAll() {
@@ -121,6 +130,8 @@ subscribe(schedulePaint);       // 세션 추가·삭제·전환
 // 안 붙고, 세션이 빠져나간 pane에는 옛 dot이 그대로 남아 있었다(빈 pane에
 // 'waiting'이 붙어 있는 상태를 실제로 재현). 레이아웃 변경도 함께 구독한다.
 onLayoutChange(schedulePaint);
+// 창이 다시 보이게 되면 그때 포커스 칸의 세션이 읽힌다.
+document.addEventListener('visibilitychange', schedulePaint);
 
 // 세션을 클릭하면 그 세션의 done 표시는 "확인했다"는 뜻이다(기존 T6 규칙과
 // 동일 — 그때는 클래스를 직접 지웠고, 이제 상태 스토어를 내린다).

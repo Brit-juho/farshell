@@ -40,12 +40,24 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | `name` | 없으면 파일명(확장자 제외)을 쓴다. `claude.toml` → `claude` |
 | `enter` | 문자열 목록. 최근 출력 윈도우(2048바이트)에 하나라도 나타나면 그 세션을 `waiting`으로 본다 |
 | `exit` | 문자열 목록. 나타나면 즉시 `waiting` 해제 — 프롬프트가 사라졌다는 신호 |
+| `[kinds]` | 표. 키 = waiting 유형(`approval`/`choice`/`plan`/`question`), 값 = 리터럴 문자열 목록(`enter`와 같은 리터럴 바이트 규칙). 여기 적힌 문구도 waiting 진입 신호다. `enter`에 걸리면 `approval`. 같은 윈도우에 여럿이면 plan → approval → enter → choice → question 순으로 이긴다 |
+| `ignore_exit_on` | kind 목록(예: `["choice"]`). 그 kind가 떠 있는 동안 `exit`를 무시한다 — Codex 질문 화면은 상태줄 `esc to interrupt`를 같이 그린다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙) |
+| `[badge]` | 표. 키 = 보조 표시 값, 값 = 리터럴 목록. 걸려도 waiting으로 올리지 않고 엔트리에 `badge`만 붙인다(agy `/artifact to review` -> `plan`). 사용자 입력이 오면 뗀다 |
 | `options` | 정규식(문자열 또는 문자열 목록). 캡처 그룹 1=번호, 2=라벨. 매치되면 모바일 플릿 홈에 번호 버튼이 뜬다. 실패해도 `enter`/`exit`는 그대로 산다 |
 
 `enter`/`exit`가 둘 다 비어 있으면(2026-09-11 이후로는 해당 없음 — 아래
 「codex/aider 채움」 참고) 그 CLI는
 `/api/agents/coverage`에서 `path: "none"`, `trust: "low"`로 보고된다 — toml
 파일은 있지만 실효 패턴이 없다는 뜻이다.
+
+## kind 판별 — CLI별 spec 격리
+
+`kinds`/`enter`는 **detector가 판별한 그 CLI의 toml로만** 매칭한다(훅/자기보고가 박은
+엔트리의 `agent` 우선, 없으면 프로세스 스캔). agy와 Claude Code가 둘 다
+`Do you want to proceed?`를 그리므로 격리하지 않으면 한쪽 문구가 다른 쪽을 대기로
+올린다. toml 없는 CLI는 대기로 올리지 않는다. 판별 못 하면(셸, ssh 등) 옛 동작대로 모든
+toml을 본다. 우선순위는 훅 kind > 화면 kind > 폴백(`question`).
+`GET /api/agents/coverage`의 `kinds`/`kindSources`가 CLI별로 무엇을 가려내는지 보여준다.
 
 ## `enter`/`exit` 정규식 쓸 때 주의
 

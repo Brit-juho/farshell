@@ -18,7 +18,8 @@ allowed-tools:
 
 ```bash
 fsh status     # 서버·터널이 이미 떠 있는지 먼저 본다
-fsh mobile     # 접속 URL + QR 코드 (필요하면 서버·터널도 함께 시작)
+fsh start      # 서버·터널이 안 떠 있으면 시작
+fsh mobile     # 접속 URL + QR 코드
 ```
 
 **URL은 `fsh`가 말하는 것을 쓰세요.** `/tmp/cloudflared.log`를 직접 grep하면 제공자가

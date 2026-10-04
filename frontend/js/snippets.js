@@ -20,6 +20,7 @@
 import { openPanel, closePanel } from './panels/panel.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { activeSession, activeSessionId, getSession } from './core/store.js';
+import { screenId } from './core/screen-id.js';
 import { sendToPty, sendPaste } from './term/clipboard.js';
 import { addSession } from './term/session.js';
 
@@ -293,7 +294,7 @@ export function showSnippets() {
         data = await vtFetch('/api/tmux/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cwd ? { cwd } : {}),
+          body: JSON.stringify({ ...(cwd ? { cwd } : {}), screen: screenId() }),
         });
       } catch (e) {
         showToast(`새 섹션 생성 실패: ${e.message}`, 'error');
@@ -302,7 +303,7 @@ export function showSnippets() {
       // addSession()이 탭·xterm·WS를 만들고 switchTo()로 활성 pane(방금 분할한
       // 자리, splitPane이 이미 그쪽으로 activePaneId를 옮겨뒀다)에 배정한다 —
       // layout/dnd.js가 드롭으로 세션을 꽂을 때 쓰는 것과 같은 경로.
-      addSession(data.id, data.name || data.id);
+      addSession(data.id, data.name || data.id, { place: 'pane', tmuxName: data.tmux_session });
       const s = getSession(data.id);
       if (s) s.tmuxName = data.tmux_session;
 

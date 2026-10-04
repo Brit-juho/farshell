@@ -70,9 +70,22 @@ function buildOnce() {
 async function loadSolidBuild() {
   buildOnce();
   const env = createDomEnv('<!doctype html><html><body></body></html>');
-  const cache = new Map();
-  const ns = await importFresh(DIST_JS, env.context, cache);
-  return { ...env, ...ns };
+  // 다른 테스트 파일 프로세스가 지금 `vite build`를 시작했을 수 있다 — emptyOutDir가 dist-test를
+  // 비우는 사이에 읽으면 ENOENT다(파일이 늘수록 늦게 시작하는 프로세스가 생겨 확률이 올라간다).
+  // 빌드가 끝나기를(락이 풀리고 산출물이 다시 생기기를) 기다렸다가 다시 읽는다.
+  let lastErr;
+  for (let i = 0; i < 40; i++) {
+    try {
+      const cache = new Map();
+      const ns = await importFresh(DIST_JS, env.context, cache);
+      return { ...env, ...ns };
+    } catch (e) {
+      if (!e || e.code !== 'ENOENT') throw e;
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  throw lastErr;
 }
 
 module.exports = { loadSolidBuild, buildOnce, DIST_JS };

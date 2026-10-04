@@ -105,3 +105,12 @@ def test_agent_event_nudges_session_watcher(client, monkeypatch):
     monkeypatch.setattr(system_route, "kick_sessions", lambda: kicked.append(1))
     client.post("/api/agent/event", json={"event": "stop", "payload": {}})
     assert kicked == [1]
+
+
+@pytest.mark.real_tmux_hooks
+def test_install_also_sets_window_title_options(calls):
+    """창 제목이 세션 이름이 되도록 set-titles를 켠다 — 안 켜면 Ghostty 창이 전부 같은 아이콘이다."""
+    assert tmux_hooks.install() is True
+    sets = [c for c in calls["calls"] if c[0] == "set-option"]
+    assert ["set-option", "-g", "set-titles", "on"] in sets
+    assert ["set-option", "-g", "set-titles-string", "#S"] in sets

@@ -28,7 +28,7 @@ FarShell은 macOS/Linux 머신을 개인 개발 서버로 씁니다 — 같은 t
 # 터미널만 (~50MB)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash
 
-# 터미널 + 음성 모드 (~1.5GB, Whisper STT + edge-tts TTS)
+# 터미널 + 음성 모드 (수백MB, 음성 인식 모델은 나중에 설정에서 받음)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash -s voice
 ```
 
@@ -71,7 +71,8 @@ fsh stop                  # 끝나면 종료
 **폰에서 터미널 조작**
 
 ```
-fsh password              # 최초 1회 — 인증이 없으면 fsh mobile이 거부한다
+fsh password              # 최초 1회 — 인증이 없으면 fsh start가 공개 터널을 거부한다
+fsh start                 # 서버와 공개 터널 시작
 fsh mobile                # URL + QR 출력, 스캔하면 끝
 ```
 
@@ -82,7 +83,7 @@ fsh mobile                # URL + QR 출력, 스캔하면 끝
 ## 보안
 
 기본값은 **무인증**입니다. 원격에 노출하기 전에 `fsh password`로 비밀번호를 설정하세요.
-설정하지 않으면 `fsh mobile`이 공개 터널 열기를 거부합니다.
+설정하지 않으면 `fsh start`가 공개 터널 열기를 거부합니다.
 
 | 계층 | 방식 |
 |---|---|

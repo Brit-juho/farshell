@@ -16,7 +16,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/sessions` | List sessions |
+| GET | `/api/sessions?screen=S` | List sessions (each with `tmux_name` and `origin`, same values as `/api/tmux/sessions`); `screen` limits tmux web attachments to one browser tab. Without it, lists all sessions for CLI/legacy callers |
 | POST | `/api/sessions` | Create a session (JSON: cols, rows, name) |
 | DELETE | `/api/sessions/{session_id}` | Delete a session |
 | PATCH | `/api/sessions/{session_id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
@@ -28,14 +28,14 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/tmux/sessions` | List tmux sessions |
-| POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name) |
-| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd) |
+| GET | `/api/tmux/sessions` | List tmux sessions. Each item carries `origin` — where the session was created: `local` (this UI, incl. worktree open), `peer` (another Mac via `/api/peer/sessions/create`), `agent` (reserved — no creation path exists yet), `external` (no record: `fsh` CLI or plain tmux). Read from tmux option `@fsh_origin` in the same `list-sessions` call; the same field is in `/ws-workspace` `tmux_sessions` |
+| POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name, optional 32-hex `screen`). Each screen gets its own PTY; the same screen reuses its attachment after reload |
+| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd, optional `screen`) |
 | DELETE | `/api/tmux/kill/{tmux_name}` | Fully kill a tmux session |
 | POST | `/api/tmux/kick` | tmux hooks only — nudges the session-list watcher. Needs the `X-VT-Kick` secret the server makes at start (not the login); 204, or 403 without it |
 | POST | `/api/tmux/open-on-mac` | Attach an existing tmux session in a new window on the server's (macOS) terminal (JSON: name). Returns 400 if the server isn't macOS |
 | GET | `/api/tmux/preview/{tmux_name}?lines=20&ansi=1` | Capture recent tmux pane output for the Grid view |
-| GET | `/api/tmux/clients?session=X&me=Y` | Clients attached to a session (C1). `me` is the caller's web session id — the server derives its tty and marks `is_me` |
+| GET | `/api/tmux/clients?session=X&me=Y` | Clients attached to a session (C1). Each web tab has a distinct tmux client. `me` is that tab's web session id — the server derives its tty and marks `is_me` |
 | POST | `/api/tmux/detach-client` | Detach one client (C1, JSON: tty, me). Detaching yourself returns 400 — there'd be no way back |
 | POST | `/api/tmux/clients/solo` | "Keep only this screen" (C2, JSON: session, me). The client never sends a tty to keep — the server derives it. Returns 400 if it can't, rather than detaching everything |
 
@@ -43,16 +43,19 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| POST | `/voice/input?session_id=X` | Voice → STT → session input |
+| POST | `/voice/input?session_id=X` | Voice → STT → session input. Body is the recording (`Content-Type`: `audio/webm` · `audio/mp4` · `audio/ogg` · `audio/wav`). Optional `X-Voice-Id` header: a re-sent recording with the same id is answered from memory (`duplicate: true`) and typed into the terminal only once. Returns `{text, injected, session_id, timing: {decode_ms, wait_ms, load_ms, stt_ms, total_ms}}`; `error` when the model is not ready (nothing is ever downloaded here); 429 when too many requests are queued |
 | POST | `/voice/output` | Text → TTS → returns audio |
 | POST | `/voice/cancel` | Immediately stop playing TTS (barge-in) |
 | POST | `/voice/local/start` | Start MacBook microphone recording |
 | POST | `/voice/local/stop?session_id=X` | Stop recording → STT → session input |
-| GET | `/voice/stt/status` | Check STT model readiness (does not load the model) |
-| POST | `/voice/stt/preload` | Preload the STT model — removes first-input latency when turning voice mode on |
-| POST | `/voice/stt/unload` | Unload the STT model — reclaims memory (~150MB) when turning voice mode off |
-| GET | `/voice/stt/model` | List downloaded STT model cache folders on disk (name, path, size) |
-| DELETE | `/voice/stt/model` | Delete one downloaded STT model cache folder — body `{"path": "..."}` (must be a path from the GET above) |
+| GET | `/voice/stt/status` | STT state — selected model, loaded model/engine, memory, current setup job, last error. Does not load a model |
+| GET | `/voice/stt/catalog` | Models this server can run (recommended one first, readiness, requirements, measured numbers) and the ones it cannot (with the reason), plus usable engines and the current selection. `?custom=<custom:engine:owner/repo>` adds that custom model |
+| POST | `/voice/stt/setup` | Start ONE preparation step in the background — body `{"model": "<id>", "step": "model" \| "req:<requirement id>"}`. The settings UI calls this only after the user confirms the download. 400 for unknown models/steps or items the app does not install itself (pip packages), 409 while another step runs. Progress is `setup` in `GET /voice/stt/status` |
+| GET | `/voice/notify/clients` | Number of web clients attached to `/ws-notify` — the Stop hook uses it for "don't notify while the web UI is open" |
+| POST | `/voice/stt/preload` | Load the selected model into memory (never downloads; `error` explains what is missing) |
+| POST | `/voice/stt/unload` | Unload the model and give the memory back (a llama.cpp engine process is terminated) |
+| GET | `/voice/stt/model` | Downloaded models (size in bytes, which one is selected) and engine programs the app downloaded |
+| DELETE | `/voice/stt/model` | Delete a downloaded model — body `{"model_id": "..."}` — or the app-downloaded llama.cpp — body `{"binary": "llama-server"}`. Shared weight files outside the repo folder are removed too (unless another model uses them); returns `freed_bytes` |
 
 ## Auth
 
@@ -247,7 +250,7 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | POST | `/api/peer/clients/detach` | Signed, **`control` level** — detach one client (JSON: `tty`, `screen`). Detaching your own screen (identified by `screen`) is refused with 400 |
 | POST | `/api/peer/clients/solo` | Signed, **`control` level** — "keep only this screen" (JSON: `session`, `screen`). If `screen` doesn't resolve to a tty, **nothing is detached** and it returns 400 — detaching everything has no way back |
 | GET | `/api/peer/search?q=` | Signed, `view` level — scrollback search on this host (same caps as the local `/api/search/scrollback`). `session_id` is stripped from the results: it only means something inside this host, and the caller would open the wrong session with it |
-| POST | `/api/peer/sessions/create` | Signed, **`control` level** — create a tmux session on this host (JSON: optional `name`). Empty name → the same default-name rule as local `POST /api/tmux/create`. Names are `[A-Za-z0-9_][A-Za-z0-9_-]{0,31}` (a leading `-` would be read as a tmux option). **No `cwd`, no command** — the session starts in this host's default directory with the default shell, so "create a session" never becomes a second way to run an arbitrary command. Existing name → 409 |
+| POST | `/api/peer/sessions/create` | Signed, **`control` level** — create a tmux session on this host (JSON: optional `name`). Empty name → the same default-name rule as local `POST /api/tmux/create`. Names are `[A-Za-z0-9_][A-Za-z0-9_-]{0,31}` (a leading `-` would be read as a tmux option). **No `cwd`, no command** — the session starts in this host's default directory with the default shell, so "create a session" never becomes a second way to run an arbitrary command. Existing name → 409. The server records the new session's `origin` as `peer` itself; nothing in the request body can set it |
 | POST | `/api/peer/sessions/kill` | Signed, **`control` level** — end a tmux session on this host (JSON: `name`). Matched **exactly** (`-t =name`): plain `-t name` falls back to a prefix match, so `dev` would kill `dev-2`. Missing → 404 (`error: session_not_found`). Also cleans up this host's own web tab on that session (reuses the local kill) |
 | POST | `/api/peer/sessions/rename` | Signed, **`control` level** — rename a tmux session on this host (JSON: `name`, `new`). Exact match on the target, 409 if `new` exists, and this host's own web-session record follows the new name |
 
@@ -284,8 +287,8 @@ a peer signature opens.
 | PUT | `/api/device-settings` | Save this device's settings |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |
 | GET | `/api/agents/{tmux_name}` | Active agent info for a specific tmux session |
-| GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low"}]`, read live from `detect/*.toml` |
-| GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping |
+| GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low", kinds, kindSources, badges}]`, read live from `detect/*.toml`. `kinds` = the waiting kinds this CLI can tell apart (`approval`/`choice`/`plan`/`question`, empty when it cannot express waiting); `kindSources` maps each kind to `hook`/`screen`/`fallback`; `badges` = auxiliary done-badges it can raise |
+| GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping. A `waiting` entry carries `kind` (`approval`/`choice`/`plan`/`question`; removed when waiting ends — priority: hook `tool_name` > screen pattern of the detected CLI > `question`). A done entry may carry `badge` (`question` when the last assistant message ends with `?`, `plan` for agy's `/artifact to review`) — a helper mark, never a waiting state. The same fields ride on `/ws-agent` entries |
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
 | POST | `/api/agent/message` | Agent-to-agent message from this Mac (`fsh mcp` / `fsh msg`). JSON `{to: "session" or "host/session", text, replyTo?, pane?, tmux?, cwd?}` — the **sender session is resolved by the server** from `pane`/`tmux`/`cwd` (same 3-step resolution as hooks), never claimed. Local target → queued here; remote target → signed to that peer's `/api/peer/agent/message`. 404 unknown host/session, 400 sending to yourself, 501 `peer_outdated` |
 | GET | `/api/agent/messages?conv=&limit=` | Sent and received agent messages, newest last, with delivery status (`queued`/`delivered`/`blocked`/`sent`/`failed`) |

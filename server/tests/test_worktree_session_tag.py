@@ -77,7 +77,7 @@ def test_open_worktree_tags_newly_created_session(monkeypatch, tmp_path):
 
     result = worktree.open_worktree("feedface0001")
     assert result["created"] is True
-    assert tagged == [("wt-farshell-main", "@fsh_wt", "feedface0001")]
+    assert [t for t in tagged if t[1] == "@fsh_wt"] == [("wt-farshell-main", "@fsh_wt", "feedface0001")]
 
 
 def test_open_worktree_skips_tagging_when_session_reused(monkeypatch, tmp_path):

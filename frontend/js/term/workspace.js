@@ -1,201 +1,59 @@
-// localStorage 워크스페이스(탭 목록 스냅샷) 저장/복원. F4에서 terminal.js
-// (구 :1133-1272)에서 분리. Phase 8 G7.
-//
-// restoreWorkspace/reconcileMissingTmuxSessions는 addSession/switchTo(session.js
-// 소유)를 부르고, session.js의 여러 함수(renameSession/switchTo/removeSession)는
-// 반대로 saveWorkspace를 부른다 — 상호 import(순환)이지만 전부 이벤트 콜백 안에서만
-// 쓰여 모듈 평가 시점엔 실행되지 않으므로 안전하다(ES 모듈 circular import는
-// 라이브 바인딩이라 호출 시점에만 실제로 존재하면 된다).
-import { allSessions, getSession, activeSessionId, orderedSessionIds,
-  sessionDisplayName, setSessionOrder } from '../core/store.js';
+// 부팅 때 저장된 레이아웃의 세션을 다시 붙인다. F4에서 terminal.js에서 분리.
+// 2026-10-03 — 옛 세션 목록 스냅샷(vt-workspace-v1, saveWorkspace/
+// restoreWorkspace)은 없앴다: 세션 목록·이동 순서의 출처는 이제 레이아웃 하나다
+// (layout/persist.js). session.js와 순환 import지만 호출 시점에만 쓴다.
+import { getSession } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
-import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
-import { addSession, revealSession } from './session.js';
+import { screenId } from '../core/screen-id.js';
+import { addSession } from './session.js';
 import { attachRemoteSession } from './remote.js';
 
-// 호스트 전환(core/host-route.js) — 맥마다 따로 둔다.
-const WORKSPACE_KEY = hostKey('vt-workspace-v1');
-
-export function saveWorkspace() {
-  try {
-    // 순서·이름 모두 레코드가 출처다(N37 3단계). 탭 DOM을 읽던 시절엔 탭 줄이
-    // 필터로 숨겨진 세션까지 스냅샷에서 통째로 빠질 위험이 있었다.
-    const tabs = orderedSessionIds().map(id => {
-      const s = getSession(id);
-      return {
-        id,
-        name: sessionDisplayName(id),
-        tmux_name: s && s.tmuxName ? s.tmuxName : null,
-        // N7/N39 3단계 — 호스트를 안 적으면 복원이 **로컬의 같은 이름** tmux
-        // 세션에 붙어버린다(이름은 호스트마다 겹친다).
-        host: s && s.remote ? s.remote.host : 'local',
-      };
-    });
-    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({
-      version: 1,
-      active_id: activeSessionId(),
-      tabs,
-    }));
-  } catch (e) { /* localStorage 실패 무시 */ }
-}
-
-export async function restoreWorkspace() {
-  try {
-    const raw = localStorage.getItem(WORKSPACE_KEY);
-    if (!raw) return false;
-    const state = JSON.parse(raw);
-    if (!state || !Array.isArray(state.tabs) || state.tabs.length === 0) return false;
-    let restored = 0;
-    let failed = 0;
-    let firstNewId = null;
-    // 스냅샷의 순서를 그대로 세션 순서로 되돌린다 — tmux 탭은 attach마다 새
-    // 웹 id를 받으므로 "복원된 순서대로 모은 id 목록"이 유일한 연결고리다.
-    const restoredOrder = [];
-    // tmux_name이 없는(순수 PTY) 탭은 서버가 재시작되지 않은 한 session_store에
-    // 그대로 살아있을 수 있다 — /api/sessions로 살아있는 id 목록을 한 번에 확인.
-    // 서버 응답의 tmux_name도 함께 들고 있는다 — 스냅샷에 tmux_name이 비어
-    // 있어도(과거에 저장된 스냅샷, L8에서 고친 저장 시점 문제 등) 서버가
-    // 아는 값으로 채워줄 수 있다. 이게 없으면 그 탭은 "순수 PTY"로 복원돼
-    // tmuxName이 계속 비어 있고, 레이아웃 복원(layout/persist.js)이 tmux
-    // 이름으로 그 세션을 다시 찾지 못한다.
-    let liveWebIds = new Set();
-    let liveTmuxNames = new Map();
+// 2026-10-03(세션·뷰 규칙 2단계) — 부팅은 **저장된 레이아웃의 열린 칸에 있던
+// 세션만** attach한다(layout/persist.js snapshotSessionInfos). 예전의
+// restoreWorkspace(이 파일의 세션 목록 스냅샷 전부)와 reconcileMissingTmuxSessions
+// (서버의 tmux 세션 중 없는 것 전부)는 사용자가 닫은 세션까지 새로고침마다 다시
+// 열었다(불변식 3 위반) — 둘 다 없앴다. 자리는 붙이지 않는다(place:'none') —
+// 이어서 layout/persist.js restoreLayout이 트리로 놓는다.
+export async function attachLayoutSessions(infos) {
+  let failed = 0;
+  let opened = 0;
+  const seen = new Set();
+  let live = null;
+  for (const info of infos || []) {
+    if (!info) continue;
+    const host = info.host || 'local';
+    const key = info.tmux ? `${host}\n${info.tmux}` : `id\n${info.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     try {
-      const wsRes = await apiFetch(`${API_BASE}/api/sessions`);
-      if (wsRes.ok) {
-        const live = await wsRes.json();
-        liveWebIds = new Set(live.map(s => s.id));
-        liveTmuxNames = new Map(live.filter(s => s.tmux_name).map(s => [s.id, s.tmux_name]));
-      }
-    } catch (_) { /* 조회 실패 시 아래에서 전부 유실 처리됨 */ }
-
-    for (const tab of state.tabs) {
-      if (tab.host && tab.host !== 'local' && tab.tmux_name) {
-        // 원격 탭. 호스트가 꺼져 있으면 실패하는 게 정상이고, 그 경우 배치는
-        // layout/persist.js의 unreachable(C3)이 자리를 지킨다.
-        try {
-          const id = await attachRemoteSession(tab.host, tab.tmux_name);
-          if (id) { if (!firstNewId) firstNewId = id; restoredOrder.push(id); restored++; } else { failed++; }
-        } catch (_) { failed++; }
-        continue;
-      }
-      if (tab.tmux_name) {
-        try {
-          const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
-            method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ name: tab.tmux_name })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.id) {
-              if (getSession(data.id)) {
-                // 같은 PTY 이미 있으면 skip
-              } else {
-                addSession(data.id, data.name || tab.tmux_name);
-                const s = getSession(data.id);
-                if (s) s.tmuxName = tab.tmux_name;
-                if (!firstNewId) firstNewId = data.id;
-              }
-              restoredOrder.push(data.id);
-              restored++;
-            } else { failed++; }
-          } else { failed++; }
-        } catch (_) { failed++; }
-      } else {
-        // 비-tmux(순수 PTY) 탭: 원래 조용히 버려지던 부분 — 서버가 아직
-        // 그 PTY를 들고 있으면(=재시작 안 됐으면) 그대로 재연결한다.
-        if (liveWebIds.has(tab.id)) {
-          if (!getSession(tab.id)) {
-            addSession(tab.id, tab.name || tab.id);
-            if (!firstNewId) firstNewId = tab.id;
-          }
-          const rec = getSession(tab.id);
-          if (rec && !rec.tmuxName && liveTmuxNames.has(tab.id)) rec.tmuxName = liveTmuxNames.get(tab.id);
-          restoredOrder.push(tab.id);
-          restored++;
-        } else {
-          failed++;
+      let id = null;
+      if (host !== 'local') {
+        // 원격 호스트가 꺼져 있으면 실패가 정상 — 배치는 unreachable 칸이 지킨다(C3).
+        if (info.tmux) id = await attachRemoteSession(host, info.tmux, { place: 'none' });
+        if (!id) continue;
+      } else if (info.tmux) {
+        const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: info.tmux, screen: screenId() }),
+        });
+        const data = res.ok ? await res.json() : null;
+        id = data && data.id;
+        if (id && !getSession(id)) addSession(id, data.name || info.tmux, { place: 'none', tmuxName: info.tmux });
+      } else if (info.id) {
+        // 비-tmux(순수 PTY) 칸 — 서버가 이 브라우저 탭의 그 PTY를 아직 들고 있을 때만.
+        if (!live) {
+          live = new Map();
+          const r = await apiFetch(`${API_BASE}/api/sessions?screen=${screenId()}`).catch(() => null);
+          if (r && r.ok) for (const x of await r.json()) live.set(x.id, x);
         }
+        const x = live.get(info.id);
+        if (x) { id = x.id; if (!getSession(id)) addSession(id, x.name || id, { place: 'none', ...(x.tmux_name ? { tmuxName: x.tmux_name } : {}) }); }
       }
-    }
-    if (restoredOrder.length > 0) setSessionOrder(restoredOrder);
-    if (failed > 0) {
-      showToast(`탭 ${failed}개 복원 실패 (세션이 이미 종료됨)`);
-    }
-    if (restored > 0 && firstNewId) {
-      // addSession이 이제 활성 pane이 이미 차 있으면 새 탭을 연다(2026-09-22)
-      // — 루프를 도는 동안 firstNewId는 이미 어딘가(원래 있던 빈 자리 또는
-      // 자기 새 탭)에 놓여 있다. switchTo(=지금 활성 pane에 강제 배정)를 쓰면
-      // 루프 중 마지막에 놓인 세션의 자리를 뺏으므로, 그 자리로 이동만 하는
-      // revealSession을 쓴다.
-      revealSession(firstNewId);
-    }
-    return restored > 0;
-  } catch (e) { return false; }
+      if (id) opened++; else failed++;
+    } catch (_) { failed++; }
+  }
+  if (failed > 0) showToast(`세션 ${failed}개를 열지 못했습니다 (이미 종료됨)`);
+  return opened;
 }
 
-// localStorage 워크스페이스 스냅샷은 "마지막 저장 시점"만 기억한다 — 그 이후
-// 다른 탭/기기/CLI(fsh)에서 만들어진 tmux 세션은 서버엔 실제로 살아있어도
-// 이 스냅샷에 없으면 restoreWorkspace()가 절대 못 찾는다. 서버의 진짜 tmux
-// 목록과 대조해 빠진 것만 추가로 붙인다(활성 탭은 건드리지 않는다).
-export async function reconcileMissingTmuxSessions() {
-  const keepActive = activeSessionId(); // addSession()이 활성 pane이 차 있으면 새 탭을 열어 루프 중 화면이 옮겨다니므로 끝나면 복원해야 함
-  try {
-    const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
-    const tmuxList = await res.json();
-    if (!Array.isArray(tmuxList)) return;
-    const sessions = allSessions();
-    const known = new Set(Object.values(sessions).map(s => s.tmuxName).filter(Boolean));
-    const missing = tmuxList.filter(s => !known.has(s.name));
-    if (missing.length === 0) return;
-
-    // 저장된 스냅샷에 있던 순서를 알아야 "원래 자리"에 되돌려 넣을 수 있다
-    // (attach가 일시 실패해서 restoreWorkspace가 놓쳤던 세션 등). 스냅샷에
-    // 없던(=저장 이후 다른 곳에서 새로 생긴) 세션은 원래 자리가 없으므로
-    // 알파벳/숫자 순으로 정렬해 끝에 붙인다.
-    let savedOrder = [];
-    try {
-      const raw = localStorage.getItem(WORKSPACE_KEY);
-      const state = raw ? JSON.parse(raw) : null;
-      if (state && Array.isArray(state.tabs)) savedOrder = state.tabs;
-    } catch (_) { /* 파싱 실패 시 전부 새 세션 취급 */ }
-
-    const knownFromSnapshot = missing.filter(s => savedOrder.some(t => t.tmux_name === s.name));
-    const genuinelyNew = missing.filter(s => !savedOrder.some(t => t.tmux_name === s.name))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    let added = false;
-    for (const s of [...knownFromSnapshot, ...genuinelyNew]) {
-      const res2 = await apiFetch(`${API_BASE}/api/tmux/attach`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name: s.name })
-      });
-      if (!res2.ok) continue;
-      const data = await res2.json();
-      if (data.id && !getSession(data.id)) {
-        // 스냅샷 순서상 이 세션 다음에 와야 할, 이미 DOM에 있는 탭을 찾아 그 앞에 삽입
-        let insertBeforeId = null;
-        const idx = savedOrder.findIndex(t => t.tmux_name === s.name);
-        if (idx !== -1) {
-          for (let i = idx + 1; i < savedOrder.length; i++) {
-            const nextId = Object.keys(sessions).find(sid => sessions[sid].tmuxName === savedOrder[i].tmux_name);
-            if (nextId) { insertBeforeId = nextId; break; }
-          }
-        }
-        addSession(data.id, data.name || s.name, insertBeforeId);
-        const s2 = getSession(data.id);
-        if (s2) s2.tmuxName = s.name;
-        added = true;
-      }
-    }
-    // revealSession — switchTo였다면 방금 새로 붙인 세션이 놓인 pane을 keepActive가
-    // 그대로 덮어써 버렸을 것이다(같은 사고, 2026-09-22 수정).
-    if (added && keepActive && getSession(keepActive)) revealSession(keepActive);
-  } catch (e) { /* 서버 통신 실패 시 조용히 무시 — 복원된 탭은 이미 정상 동작 중 */ }
-}
-
-function clearWorkspace() {
-  localStorage.removeItem(WORKSPACE_KEY);
-}
-window.clearWorkspace = clearWorkspace; // 콘솔에서 호출 가능

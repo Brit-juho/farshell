@@ -13,7 +13,7 @@
 // 동작(setActivePane 후 createSession)을 그대로 옮긴 것뿐이다.
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { allSessions, sessionDisplayName } from '../core/store.js';
+import { allSessions, getSession, sessionDisplayName } from '../core/store.js';
 import { openPanel, closePanel } from '../panels/panel.js';
 import { switchTo, createSession } from '../term/session.js';
 import { buildSessionCard, updateSessionCard, attachTmuxSession } from '../agent/preview.js';
@@ -48,7 +48,7 @@ export function openPanePicker(paneId) {
 
   panel.body.querySelector('.vt-pp-new').addEventListener('click', () => {
     setActivePane(paneId);
-    createSession();
+    createSession({ place: 'pane' });   // 사용자가 고른 이 빈 칸에 놓는다
     closePanel(PANEL_ID);
   });
 
@@ -100,8 +100,12 @@ async function _renderCandidates(paneId, cardsEl) {
       setActivePane(paneId);
       // 이미 탭으로 열려 있으면 그 탭으로 전환(로컬 정보만으로 충분, API
       // 호출 불필요) — Palette.tsx의 카드 클릭과 동일한 분기.
-      if (sess.web_session_id && getSession(sess.web_session_id)) {
-        switchTo(sess.web_session_id);
+      const localId = Object.keys(allSessions()).find((id) => {
+        const s = getSession(id);
+        return s && (s.tmuxName || s.tmux_name) === sess.name;
+      });
+      if (localId) {
+        switchTo(localId);
       } else {
         attachTmuxSession(sess.name);
       }

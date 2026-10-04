@@ -30,15 +30,15 @@ Wayland 컴포지터는 설계상 전역 핫키 가로채기를 거부하므로 
 동작하지 않습니다. 나머지는 전부 동작합니다. 웹 UI의 마이크 버튼을 쓰거나,
 핫키가 꼭 필요하면 X11/Xwayland 세션에서 실행하세요.
 
-## 음성 엔진 선택 순서
+## 음성 엔진 선택
 
-런타임에 아래 순서로 자동 선택됩니다.
+음성 인식(STT)은 **FarShell을 돌리는 컴퓨터에서** 실행됩니다. 폰이나 다른 PC는 녹음해서 올리기만 합니다.
+설정 → 음성 및 알림에서 모델을 고르면, 이 서버가 쓸 수 있는 모델만 보이고 하나에 「권장」이 표시됩니다.
 
-| STT | TTS |
+| 서버 | 쓸 수 있는 모델 |
 |---|---|
-| 1. mlx-whisper (Apple Silicon) | 1. Kokoro (최고 품질) |
-| 2. faster-whisper (그 외 전부) | 2. edge-tts (온라인, 다양한 음성) |
-| | 3. macOS `say` / Windows Speech API (폴백) |
+| 애플 칩 맥 | Qwen3-ASR 0.6B / 1.7B (MLX), Qwen3-ASR (llama.cpp), Apple 음성 인식(macOS 26+) |
+| Intel 맥 · Linux · WSL2 | Qwen3-ASR (llama.cpp, CPU) |
 
-Whisper 가중치는 첫 사용 시 Hugging Face에서 자동 다운로드되어(~141MB) 디스크에
-캐시됩니다. 설정 → 음성 → 「다운로드된 모델」에서 캐시 목록과 삭제를 볼 수 있습니다.
+자동으로 받는 것은 없습니다. 엔진 프로그램(llama.cpp)과 모델 파일은 설정에서 확인 창을 거친 뒤에만 내려받습니다.
+TTS는 edge-tts(온라인) → macOS `say` / Linux `espeak-ng` 순입니다.

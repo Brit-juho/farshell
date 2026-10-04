@@ -18,7 +18,7 @@
 // 주석)은 없다 — Rail이 이미 가진 deps(vtFetch)를 그대로 받고, 세션 열기/깨우기
 // 는 Rail.tsx의 openRow와 같은 방식으로 window 브리지(attachTmux/switchTo/
 // allSessions)를 직접 부른다.
-import { createSignal, onCleanup, onMount, For, Show } from 'solid-js';
+import { createSignal, onCleanup, onMount, For, Show, type JSX } from 'solid-js';
 
 import { openWorktree, deleteWorktreeRow, type RailDeps } from './rail-fetch.js';
 import { WorktreeDialog } from './WorktreeDialog.js';
@@ -46,6 +46,10 @@ interface RepoGroup {
 
 interface Props {
   deps: RepoVisibilityDeps;
+  /** 시트 제목. 기본은 「저장소 관리」 — 레일은 「레일 설정」으로 쓴다. */
+  title?: string;
+  /** 저장소 목록 위에 얹는 구획(레일 설정의 표시 토글). 있으면 목록 앞에 「저장소」 소제목이 붙는다. */
+  lead?: JSX.Element;
   onClose: () => void;
   /** 숨김·워크트리 구성이 바뀌면 레일을 다시 불러오라는 신호. */
   onChanged: () => void;
@@ -156,7 +160,7 @@ export function RepoVisibility(props: Props) {
       if (!tmuxName) { setErrorMsg('세션을 여는 데 실패했습니다'); return; }
       setErrorMsg(null);
       // 방금 만든 세션이라 아직 화면(탭)이 없다 — 지금 활성 탭에 그냥
-      // 얹힌다(switchTo/attachTmux의 기본 동작, Rail.tsx의 잠자는 세션
+      // 얹힌다(switchTo/attachTmux의 기본 동작, Rail.tsx의 열려 있지 않은 세션
       // 깨우기와 같다).
       await (window as any).attachTmux?.(tmuxName);
       props.onChanged();
@@ -201,12 +205,14 @@ export function RepoVisibility(props: Props) {
   return (
     <>
       <div class="vt-viewer-backdrop vt-wtd-backdrop" onClick={onBackdropClick}>
-        <div class="vt-viewer-card vt-wtd-card vt-repovis-card" role="dialog" aria-modal="true" aria-label="저장소 관리">
+        <div class="vt-viewer-card vt-wtd-card vt-repovis-card" role="dialog" aria-modal="true" aria-label={props.title || '저장소 관리'}>
           <div class="vt-wtd-head">
-            <span class="vt-wtd-title">저장소 관리</span>
+            <span class="vt-wtd-title">{props.title || '저장소 관리'}</span>
             <button type="button" class="vt-btn sm quiet vt-wtd-x" onClick={props.onClose} aria-label="닫기">×</button>
           </div>
           <div class="vt-wtd-body vt-repovis-body">
+            {props.lead}
+            <Show when={props.lead}><div class="vt-wtd-section-title">저장소</div></Show>
             <Show when={loading()}><div class="vt-repovis-empty">불러오는 중…</div></Show>
             <Show when={!loading() && groups().length === 0}>
               <div class="vt-repovis-empty">탐색 경계 안에 git 저장소가 없습니다.</div>

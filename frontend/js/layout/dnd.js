@@ -12,7 +12,7 @@
 //
 // 판정 함수(computeDropZone)와 반영 함수(applyPaneDrop)는 DOM 이벤트와 분리된
 // 순수 로직이라 단위 테스트 대상이다(layout-dnd.test.js).
-import { splitPane, setPaneSession, setPanePanel, countLeaves, getTree } from './store.js';
+import { splitPane, setPaneSession, setPanePanel, countLeaves, getTree, findTabBySessionId, closeViewIfEmptied } from './store.js';
 import { findNode } from './tree.js';
 import { COMPACT_MAX, REGULAR_MAX, WIDE_MAX } from './breakpoints.js';
 // N4 3단계 — 패널 드래그의 mime과 이름 집합. 상수만 쓰고, registry.js는 정적
@@ -85,16 +85,23 @@ const ZONE_TO_SPLIT = {
 //    이미 다른 pane에 있던 세션을 또 만들면 두 곳에 중복 배치될 수 있다.
 //  - pane 상한(canSplit)에 걸리면 조용히 무시한다 — 헤더의 분할 버튼과 동일한
 //    게이트 동작(별도 토스트 없음, 이미 그렇게 합의됨).
+//  - 드래그로 다른 뷰의 세션을 끌어왔을 때 그 원래 뷰가 통째로 비면 그 뷰를 닫는다
+//    (2026-10-03 규칙 결정). 칸 ×로 비운 단독 뷰는 빈 칸으로 남는 것과 다른 규칙이다.
 export function applyPaneDrop(paneId, zone, sessionId) {
   if (!sessionId) return;
+  const originTab = findTabBySessionId(sessionId);
   if (zone === 'center') {
     setPaneSession(sessionId, paneId);
+    if (originTab) closeViewIfEmptied(originTab);
     return;
   }
   const spec = ZONE_TO_SPLIT[zone];
   if (!spec || !canSplit()) return;
   const newPaneId = splitPane(paneId, spec.dir, null, spec.newFirst);
-  if (newPaneId) setPaneSession(sessionId, newPaneId);
+  if (newPaneId) {
+    setPaneSession(sessionId, newPaneId);
+    if (originTab) closeViewIfEmptied(originTab);
+  }
 }
 
 // N4 3단계 — dock 탭을 pane 위에 떨어뜨렸을 때. applyPaneDrop과 **같은 5구역**을

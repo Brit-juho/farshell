@@ -29,6 +29,116 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   닫는다.
 
 ### Added
+- **세션·뷰 규칙 개편 (「Session and view rules」, `docs/ref/terminal.md`).** 재우기/깨우기와 「잠자는 중」 개념을
+  없애고 동작을 **열기 / 닫기 / 옮기기 / 종료** 넷으로 정리했다. 닫기는 칸에서 빼기만 하고(tmux는 계속 돈다),
+  종료만 tmux를 끝낸다(항상 확인, 작업 중·입력 대기면 경고, 다른 브라우저 탭의 그 칸은 빈 칸이 된다).
+  레일 클릭은 안 열린 세션이면 새 뷰로, 닫았던 묶음 뷰의 일원이면 묶음 전체를 다시 열고, 이미 열려 있으면 그 칸에
+  포커스한다. 묶는 방법은 칸 가장자리로 드래그 하나뿐이다(⌘/Ctrl-클릭 분할 제거). 뷰 탭 클릭은 왼쪽 위 칸에 포커스한다.
+  `term/session-actions.js`가 레일·모바일 시트·Fleet·칸/뷰 버튼의 단일 구현이다.
+- **뷰 탭이 세그먼트 상태 막대를 가진다.** 세션마다 한 칸(창 순서), 색이 상태, 굵으면 아직 확인 안 한 변화.
+  에이전트/상태 아이콘은 탭에서 빠졌다. 마우스를 올리면 세션별 상태를 글로 보여 준다.
+- **레일: 구역 둘과 3줄 행.** 「개입 필요」(waiting, 접기·끄기 가능)와 「세션」(전체, **이름순만**). 행은 상태·에이전트·이름 /
+  브랜치(main 포함)·변경량 / 상태 키워드·경과·만든 곳 아이콘이고 열림 표시·묶음 뷰 이름·「다른 화면 N」은 해당할 때만 나온다.
+  `⋯`와 우클릭이 같은 메뉴를 연다. 헤더 톱니는 「레일 설정」(개입 필요 표시, 만든 곳별 표시, 저장소 표시).
+- **세션을 만든 곳(origin)** 을 tmux 옵션 `@fsh_origin`으로 기록하고(`local`/`peer`/`agent`, 없으면 `external`)
+  `origin` 필드로 내보낸다(`/api/tmux/sessions`, `/ws-workspace`, `/api/sessions`).
+- **입력 대기에 kind(승인 요청 / 선택 요청 / 계획 확인 / 질문)가 붙는다.** 훅 kind > 화면 패턴 > 폴백 순으로 정하고,
+  질문 원문 대신 이 키워드를 보여 준다. 읽지 않음(링)은 done만이 아니라 모든 상태 전이로 일반화했다.
+- **Claude Code `PermissionRequest` 훅을 등록한다.** 승인 창이 뜨기 직전에 알려 줘 kind를 정확히 얻는다.
+  **마이그레이션: 기존 설치는 `fsh hooks install`을 다시 실행해야 한다**(안 하면 승인은 화면 감지로만 잡힌다).
+- **레이아웃은 브라우저 탭마다 저장하고, 새로고침이 닫은 세션을 다시 열지 않는다.** 새 브라우저 탭은 가장 최근에 저장된
+  레이아웃을 복사해 시작한다. 시작할 때 저장된 레이아웃의 열린 칸만 attach하고 「모든 tmux 세션 attach」 폴백은 없앴다.
+  스냅샷은 `v5`(`screen`, `closed` 추가, 옛 버전은 읽힌다). 서버는 `ui.layouts[screen]`(최대 20)과 `ui.layout`(최근)에 저장한다.
+  **마이그레이션 주의:** 모바일 세션 순서 저장(`vt-workspace-v1`)은 폐기했다 — 순서는 레이아웃을 따른다. 옛 `rail.group.*`
+  설정 키는 삭제됐고 레일 설정은 `rail.attention.*`, `rail.origin.*`를 쓴다.
+- **음성 인식 엔진을 Qwen3-ASR 중심으로 교체했다.** 설정 「음성 및 알림」의 「음성 입력」에 이 서버가 쓸 수 있는
+  모델만 카드로 보이고 환경마다 하나에 **「권장」**이 붙는다. 카드마다 특징·정확도(CER)·속도·메모리·용량·필요한 것·
+  라이선스를 보여준다(측정: 합성 음성 20문장, Apple Silicon — `scripts/stt_bench.py`).
+  애플 칩 맥은 Qwen3-ASR 0.6B/1.7B(MLX)·Apple 음성 인식(macOS 26+), 모든 플랫폼은 Qwen3-ASR(llama.cpp, CPU).
+  **STT는 FarShell을 돌리는 서버 OS에서만 실행된다**(접속 기기는 녹음만 보낸다). `server/stt_engines/` 엔진 계층,
+  `stt_service.py`(선택·구동·직렬화·카탈로그), `GET /voice/stt/catalog`·`POST /voice/stt/setup` 추가.
+- **받는 것은 전부 확인 창을 거친다(승인제).** 서버·데몬·미리 적재는 이미 받은 것만 쓰고 없으면 「먼저 받아 주세요」로
+  멈춘다(이전에는 첫 음성 입력이 모델을 몰래 받았다). 엔진 실행 파일(llama.cpp)은 승인 후 앱이 받고 **버전 고정·sha256
+  검증**, pip 패키지는 설치 명령만 안내한다. 직접 입력(고급): 엔진 + `owner/repo`(경로·URL 거부).
+- **llama.cpp 엔진은 별도 프로세스**로 뜨고 127.0.0.1에만 열리며 실행마다 임의 API 키가 걸린다. 모델을 내리면 프로세스가
+  끝나 메모리가 OS로 실제로 돌아간다. 안 쓰면 자동으로 내린다(`VT_STT_IDLE_SEC` 기본 600초).
+- **음성 전송 개선.** 브라우저가 지원하는 녹음 형식을 골라 쓰고(webm → mp4(AAC) iPhone Safari 대응), 마이크를 모노·노이즈
+  억제·낮은 비트레이트로 열고, 전송 실패 시 두 번 재시도 후 「다시 보내기」 버튼으로 같은 녹음을 재전송한다.
+  `X-Voice-Id`로 재전송 중복 입력을 막고, 요청은 엔진 단위로 직렬화(대기 상한 4)하며 단계별 시간(`timing`)을 응답과 로그에 남긴다.
+- **작업 완료 알림 설정.** 알림 방식(끔/완료음/낭독)·최소 작업 시간·API 오류 응답 제외·웹 접속 중 제외. 기본은 끔.
+  판정은 `server/voice_notify.py`. `GET /voice/notify/clients` 추가.
+
+
+
+- **`fsh terminal` — 창을 열 때 쓰는 메인 터미널을 사용자가 고른다.** `VT_TERMINAL`
+  (`auto` 기본 | ghostty | iterm | terminal | wezterm | warp | kitty | alacritty)을
+  `fsh terminal set <앱>`으로 저장한다. 설치 안 된 앱·오타는 거부하고, 실행 중 열지
+  못하면 알린 뒤 자동 선택으로 넘어간다. Ghostty는 `open -na`(매번 앱을 하나 더 실행)
+  대신 이미 켜진 앱에 AppleScript(1.3+)로 창만 추가해 더 빠르다(세션 생성까지
+  0.29초 → 0.15초). 실패하면 `open -na`로 폴백한다.
+
+- **`fsh status`에 「접속 보안」 블록.** 접근 범위(all/tailscale/lan/localhost, 허용 목록),
+  외부 주소(고정 도메인인지 익명 터널인지), 인증(비밀번호/토큰), OTP, 등록 기기 수를 보여준다.
+  공개 접속인데 인증이 없으면 경고한다.
+- **`fsh help` 전면 정리.** 빠져 있던 22개 명령(`restart`, `tunnel`, `password`, `otp`, `device`,
+  `host`, `files`, `worktree`, `mcp`, `msg` 등)을 용도별 그룹으로 넣고, 토픽 목록은 `docs/help/*.md`에서
+  자동으로 만든다. `fsh help <명령>`도 된다(`start`, `mobile`, `attach` …). 새 토픽 `access`(접속 범위와
+  보안), `terminal`, `tunnel`. 알 수 없는 명령은 예전의 두 번째(낡은) 사용법 대신 같은 도움말을 낸다.
+- **`server/code_fingerprint.py`.** 서버 코드의 AST 지문. 주석·docstring만 바꿨을 때 "서버가 옛 코드로
+  돌고 있습니다"가 뜨던 오탐을 없앤다(서버 시작 때 지문을 저장해 두고 비교).
+- **`server/terminal_open.py` — 터미널 창 열기의 단일 구현.** 웹의 「맥에서 열기」와 CLI(`fsh attach`,
+  `fsh handoff desktop`)가 같은 코드를 쓴다. 예전엔 bash와 파이썬에 따로 있어서 웹은 `VT_TERMINAL`을
+  무시하고 iTerm2를 먼저 시도했다. 명령은 임시 스크립트로 넘겨 따옴표 주입 경로가 없다.
+  Ghostty는 AppleScript로 이미 켜진 앱에 창만 추가하고(`activate`는 따로 비동기로 — 같은 스크립트에 넣으면
+  2초 넘게 걸린다), 실패하면 `open -na`로 폴백한다. 창 열기 0.23초. 한계: 이 방식으로 연 Ghostty 창은
+  명령이 끝나도 닫히지 않는다.
+
+### Changed
+
+- **세션 이동 순서를 저장되는 레이아웃 하나로 통일했다**(뷰 탭 순서 → 칸 순서). 스와이프·모바일 다음/이전 탭 키·세션 시트(`n/m` 포함)·팔레트가
+  같은 목록을 쓰고, 단일 칸 뷰의 이동이 다른 뷰의 세션을 끌어와 현재 칸을 덮던 문제를 고쳤다(이동만 한다). 별도 순서 배열은 삭제.
+  `Mod+Alt+Shift+←/→`는 모바일에서도 뷰 탭을 옮긴다.
+
+- **`fsh mobile`은 이제 폰 접속 URL과 QR만 보여준다. 서버·터널 시작은 `fsh start`.** `--network`,
+  `--safe`, `--force`는 `fsh start`로 옮겼다(`--e2e`는 URL 옵션이라 `mobile`에 남고, `--session <이름>` 추가).
+  옛 옵션을 `mobile`에 주면 안내를 내고 `fsh start`를 대신 실행한다(호환). `fsh handoff mobile`은
+  `mobile --session`으로 통합했다. 부팅 자동 시작은 `fsh start`를 쓴다.
+- **`fsh start`가 공개 터널을 열기 전 인증을 확인한다.** 예전엔 이 검사가 `mobile`에만 있어서
+  `fsh start`는 인증 없이도 공개 터널을 열었다. 인증이 없으면 거부하고 `--network tailscale` 등 대안과
+  `--force`를 안내한다. 접근 범위는 `$PID_DIR/network_mode`에 기록돼 `restart`가 이어받는다.
+- **Ghostty 창 제목이 전부 같은 아이콘(👻)이던 것.** tmux가 제목을 안 알려줘서(`set-titles off`) 창이 여러 개면
+  구분이 안 됐다. fsh 전용 tmux 서버에 `set-titles on` + `set-titles-string "#S"`를 걸어 제목이 세션 이름이 된다
+  (서버 시작 때 `tmux_hooks.install`, CLI는 세션을 만들거나 확인할 때). 기본 tmux·`~/.tmux.conf`는 건드리지 않는다.
+- 터널 목록의 기본 라벨 "터미널 (VT)"를 "터미널 (FarShell)"로 바꿨다.
+- 웹 설정 문구 "맥에서도 iTerm 열기"를 "맥 터미널에서도 열기"로 바꿨다(실제로는 메인 터미널을 쓴다).
+
+### Removed
+
+- **`fsh claude` / `fsh agent` 제거.** 웹 서비스는 쓰지 않았고(워크트리 화면의 에이전트
+  표는 `server/agents.py`가 단일 정의) 문서에만 남아 있던 명령이다. 터미널에서
+  직접 `tmux`로 들어가 에이전트를 실행하면 된다.
+
+### Fixed
+
+
+- **`fsh doctor`/`fsh status`가 "`fsh stop && fsh start`로 재시작하세요"라고 안내하던 것.** 이 방법은 터널
+  주소를 날린다(프로젝트가 스스로 금지한 방식). `fsh restart`로 바꿨다.
+- **문서의 tmux 소켓 이름이 `-L vt`로 적혀 있던 것.** 실제 기본값은 `fsh`다(이름 변경 전 잔재).
+- 호출되지 않는 죽은 함수 2개(`_tmux_populate`, `_tmux_attach_or_switch`) 제거.
+- **`fsh handoff desktop`이 창을 못 열던 것.** 창을 열기 직전에 `_ensure_tmux`가
+  빈 `dev` 세션을 먼저 만들어, "세션이 이미 있다"는 판정에 걸려 새 창을 건너뛰었다.
+  이제 붙어 있는 창이 있을 때만 건너뛰고, `dev`가 없으면 창이 세션과 `claude`를
+  함께 만든다.
+- **문서가 `fsh voice`/`mobile`/`start`가 터미널 창을 연다고 적었으나 코드는 열지 않던
+  불일치.** 문서를 실제 동작에 맞췄다.
+
+- **‘연결된 화면’에서 웹 브라우저 탭을 각각 세고 끊을 수 있게 수정.** 같은 tmux
+  세션을 연 모바일과 데스크톱이 웹 PTY 하나를 공유하던 attach 경로를 화면별 PTY로
+  바꿨다. 탭 새로고침은 같은 화면을 복구하고, 탭 종료 뒤 5초면 해당 tmux
+  클라이언트가 목록에서 빠진다. 다른 화면에서 끊긴 탭은 이유를 표시하고 자동
+  재연결을 멈춘다. HUD 숫자는 5초마다 갱신한다.
+
+### Added
 
 - **로그인·PIN 입력 상태 표시** (`frontend/js/gate.js`, PIN 페이지). Caps Lock이 켜져
   있거나 한글이 입력되고 있으면 칸 아래에 알려 준다(사용자 지적: 한/영·Caps Lock이 안
@@ -132,6 +242,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   뒤로가기로 닫힌다.
 
 ### Changed
+- **작업 완료 알림이 음성 데몬 실행 여부와 무관해졌다.** 예전에는 데몬이 떠 있을 때만 낭독해서 웹만 쓰는 사람은
+  받을 수 없었다. 이제 설정(`voice.notifyMode`, 기본 끔)으로만 정한다. **기존에 데몬 때문에 낭독을 받던 사람은 설정에서
+  「응답 요약 낭독」을 켜야 한다.** `VT_NOTIFY_URL`(ntfy)을 둔 경우 푸시는 데몬과 무관하게 항상 나간다.
+
 
 - **세션 목록 변화를 tmux 훅이 바로 알린다** (`server/tmux_hooks.py`). 레일·플릿의
   세션 목록은 서버 감시가 5초마다 tmux를 물어 push했고, 기다리지 않게 서버 코드
@@ -275,6 +389,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   걸 평평하게 보여준다. 모바일에서는 60vh 카드 대신 전체높이 바텀시트다.
 
 ### Removed
+- **Whisper(faster-whisper)와 mlx-whisper 경로.** 맥에서는 CPU 전용이라 같은 정확도에서 MLX보다 약 10배 느렸고,
+  새 엔진이 모든 플랫폼을 덮는다. 이전에 고른 Whisper 모델은 설정에 안내가 뜨고 새 모델을 다시 골라야 한다.
+  저사양 서버(RAM 4GB 이하)에서는 llama.cpp 엔진(약 2GB)이 부담일 수 있다.
+- **Kokoro TTS 분기.** 설치 목록에 없어 한 번도 선택되지 않던 죽은 경로(Paseo의 Kokoro도 영어 전용이라 한국어 대체가 못 된다).
+  TTS는 edge-tts → macOS `say`. 구현이 없던 `VT_STT_BACKEND`·`VT_TTS_BACKEND` 안내도 지웠다(`VT_STT_MODEL`로 대체).
+
 
 - **스크롤백 영속화(N13)를 완전히 없앴다(ADR-43).** 켜면 터미널 출력을
   `~/.vt/scrollback/<session>.log`에 계속 쌓아 세션 종료·서버 재시작 이후에도
@@ -292,6 +412,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   설정 화면 「스크롤백」 절의 영속화 토글도 함께 사라졌다(줄 수 설정은 남는다).
 
 ### Fixed
+- **말하기 전에 2초 넘게 가만히 있으면 음성이 버려지던 것.** 무음 판정이 오디오의 앞 2초만 봤다 — 이제 전체(4샘플마다)를 본다.
+- **Stop 훅 낭독이 실제 트랜스크립트를 읽지 못하던 것.** `tts_hook.sh`는 줄 최상위의 `role`을 찾았지만
+  Claude Code 트랜스크립트는 `{"type":"assistant","message":{"role":...}}`라 일치하는 줄이 0이었다 — 훅이
+  조용히 종료해 응답 낭독이 나온 적이 없었다(실제 트랜스크립트 96개 assistant 줄 중 최상위 role 0건으로 확인).
+  두 형식을 모두 읽도록 고쳤다. 마지막 턴이 도구 호출로 끝나도 직전 text를 읽는다.
+- **음성 데몬 핫키 안내가 `Ctrl+Shift+V`로 남아 있던 것.** 기본값은 `ctrl+shift+m`이다(`fsh voice`·`fsh status`·
+  도움말·CLI 문서 정정).
+- **STT가 이벤트 루프에서 모델을 로드하던 것.** 첫 `transcribe`가 모델 로드(수 초~수십 초)를 루프에서 동기로 했다 — 스레드로 옮겼다.
+- **「다운로드된 모델」의 크기가 틀리고 삭제해도 공간이 안 돌아오던 것.** 캐시의 링크를 따라가며 더해 모든 모델이
+  두 배로 보였고(base 141MB → 296MB), 새 HF 캐시(xet)는 가중치가 폴더 밖 `hub/blobs/`에 있어 어떤 모델은 크기가
+  거의 0으로 보이고 폴더만 지우면 고아 파일이 남았다. 실제 파일을 한 번씩만 세고, 삭제 때 폴더 밖 가중치도 함께 지운다
+  (다른 모델이 같이 쓰는 파일은 남긴다). 직접 입력한 모델도 관리 목록에 보인다.
+
 
 - **부팅 직후 자동 시작에서 새 터널 주소가 Notion에 게시되지 않던 것.** 훅 게시 전
   주소가 살아 있는지 보는 확인(`_tunnel_url_alive`)이 약 15초만 기다려, DNS가 늦게

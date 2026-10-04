@@ -12,18 +12,26 @@
 // **tmux 이름을 먼저** 살아있는 세션에 매칭한다. tmux가 아닌 순수 PTY 세션은
 // 서버가 재시작되지 않았을 때만 id로 되살아나고, 아니면 빈 pane으로 강등된다.
 //
-// 복원은 항상 term/workspace.js의 세션 복원이 **끝난 뒤에** 불려야 한다
-// (그 전엔 allSessions()가 비어 있어 전부 빈 pane으로 강등돼 버린다).
+// 2026-10-03(세션·뷰 규칙 2단계) — 레이아웃은 **브라우저 탭별**(core/screen-id.js)
+// 로 저장한다. 새 탭(저장본 없음)은 가장 최근 저장본을 복사해 시작한다. 복원은
+// 저장된 레이아웃(열린 뷰 + 기억된 닫힌 묶음 뷰)만 되살린다 — 부팅은 이 스냅샷의
+// 칸에 있던 세션만 attach하고(term/workspace.js attachLayoutSessions) 그 뒤에
+// 적용한다(boot.js).
 import { allSessions, getSession } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
 import { hostKey } from '../core/host-route.js';
-import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves, getTabsWithTrees, getActiveTabId, replaceTabs } from './store.js';
+import { screenId } from '../core/screen-id.js';
+import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves, getTabsWithTrees, getActiveTabId, replaceTabs,
+  getClosedViews, replaceClosedViews } from './store.js';
 // N4 — 스냅샷의 `panel` 이름을 검증할 때만 쓴다(상수 Set 하나). 화면 모듈은
 // 여기서 import 하지 않는다 — 그러면 panels 청크가 core로 승격된다(ADR-26).
 import { PANEL_KINDS } from '../panels/registry.js';
 
-// 호스트 전환(core/host-route.js) — 맥마다 탭 배치를 따로 둔다.
+// 호스트 전환(core/host-route.js) — 맥마다 탭 배치를 따로 둔다. LS_KEY는
+// "가장 최근 저장본"(어느 브라우저 탭이든 마지막으로 저장한 것 — 새 탭의 복사
+// 원본이자 v4 이하 클라이언트가 읽던 자리), _screenKey()는 이 탭 것이다.
 const LS_KEY = hostKey('vt-layout-v1');
+const _screenKey = () => hostKey(`vt-layout-v1.${screenId()}`);
 const SAVE_DEBOUNCE_MS = 400;
 
 // ── 직렬화 ────────────────────────────────────────────────────────────────
@@ -137,11 +145,15 @@ export function makeResolver(sessions) {
 // v3/v4로 저장된 옛 스냅샷은 계속 읽는다(_applySnapshot) — 탭 자체(id·tree·
 // worktreeId·label)는 그대로 복원되고, 이제 뜻이 없어진 groupId/repoId만
 // 버린다. `worktreeId`는 v2와 같은 자리에 계속 적는다.
+// v5(2026-10-03) — `screen`(저장한 브라우저 탭)과 `closed`(기억된 닫힌 묶음 뷰,
+// 트리는 이미 직렬화 모양)가 붙었다. v1~v4도 계속 읽는다.
 function _snapshot() {
   const tabs = getTabsWithTrees();
   return {
-    v: 4,
+    v: 5,
     savedAt: Date.now(),
+    screen: screenId(),
+    closed: getClosedViews(),
     activeTab: getActiveTabId(),
     // v1 필드도 계속 적는다 — **되돌리기 위한 것**이다. 2.1.2를 롤백하면 옛
     // 코드가 이 스냅샷을 읽는데, 없으면 배치가 통째로 날아간다.
@@ -165,12 +177,17 @@ let _enabled = false; // 복원이 끝나기 전엔 저장하지 않는다(빈 �
 export function saveLayoutNow() {
   if (!_enabled) return;
   const snap = _snapshot();
-  try { localStorage.setItem(LS_KEY, JSON.stringify(snap)); } catch (_) { /* 용량 초과 등 무시 */ }
+  try {
+    const raw = JSON.stringify(snap);
+    localStorage.setItem(_screenKey(), raw);
+    localStorage.setItem(LS_KEY, raw);
+  } catch (_) { /* 용량 초과 등 무시 */ }
   // 저장 실패는 조용히 무시 — ADR-5: 실패해도 UI는 현재 메모리 상태로 계속 동작한다.
+  // ui.layouts는 서버가 탭 id별로 병합한다(server/workspace.py) — 다른 탭 것을 안 지운다.
   vtFetch('/api/workspace', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ui: { layout: snap } }),
+    body: JSON.stringify({ ui: { layout: snap, layouts: { [snap.screen]: snap } } }),
   }).catch(() => {});
 }
 
@@ -185,24 +202,59 @@ function _scheduleSave() {
 onLayoutChange(_scheduleSave);
 
 // ── 복원 ──────────────────────────────────────────────────────────────────
-function _readLocal() {
+function _readLocal(key) {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(key);
     const s = raw ? JSON.parse(raw) : null;
     return _isSnapshot(s) ? s : null;
   } catch (_) { return null; }
 }
 
-// v1(트리 하나) / v2·v3·v4(탭 배열) 다 받는다.
+// v1(트리 하나) / v2~v5(탭 배열) 다 받는다. v5는 열린 뷰가 0개여도(마지막 뷰를
+// 닫았다) 유효하다 — 기억된 닫힌 묶음만 남은 상태도 저장할 가치가 있다.
 function _isSnapshot(s) {
   if (!s) return false;
+  if (s.v === 5 && Array.isArray(s.tabs)) return true;
   if ((s.v === 2 || s.v === 3 || s.v === 4) && Array.isArray(s.tabs) && s.tabs.length) return true;
   return s.v === 1 && !!s.tree;
 }
 
+const _newer = (a, b) => (!a ? b : !b ? a : ((b.savedAt || 0) > (a.savedAt || 0) ? b : a));
+
+/** 부팅 때 쓸 스냅샷을 고른다: 이 브라우저 탭의 저장본(로컬·서버 중 최신),
+ * 없으면 가장 최근 저장본의 사본(새 탭). 없으면 null. 서버 실패는 무시한다. */
+export async function loadLayoutSnapshot() {
+  let own = _readLocal(_screenKey());
+  let latest = _readLocal(LS_KEY);
+  try {
+    const ws = await vtFetch('/api/workspace');
+    const mine = ws?.ui?.layouts?.[screenId()];
+    if (_isSnapshot(mine)) own = _newer(own, mine);
+    if (_isSnapshot(ws?.ui?.layout)) latest = _newer(latest, ws.ui.layout);
+  } catch (_) { /* 서버 미응답/미인증 — 로컬만으로 */ }
+  return own || latest || null;
+}
+
+/** 스냅샷의 **열린 뷰** 칸에 있던 세션 정보({id, tmux, host}) — 부팅이 이것만
+ * attach한다(기억된 닫힌 묶음은 레일에서 열 때 attach한다). 트리 순서. */
+export function snapshotSessionInfos(snap) {
+  const out = [];
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.t === 'leaf') {
+      if (node.kind === 'viewer' || node.kind === 'panel' || !node.session) return;
+      out.push({ ...node.session, host: node.host || node.session.host || 'local' });
+      return;
+    }
+    walk(node.a); walk(node.b);
+  };
+  for (const t of snapshotTabs(snap)) walk(t.tree);
+  return out;
+}
+
 /** 스냅샷 → 항상 "탭 배열" 모양으로. v1은 탭 1개로 승격한다. */
 export function snapshotTabs(snap) {
-  if ((snap.v === 2 || snap.v === 3 || snap.v === 4) && Array.isArray(snap.tabs)) return snap.tabs;
+  if ((snap.v === 2 || snap.v === 3 || snap.v === 4 || snap.v === 5) && Array.isArray(snap.tabs)) return snap.tabs;
   return [{ id: 'tab-legacy', worktreeId: null, hostId: 'local', label: null,
             active: snap.active, tree: snap.tree }];
 }
@@ -228,68 +280,24 @@ function _applySnapshot(snap) {
                 hostId: raw.hostId || 'local',
                 label, tree, activePaneId: raw.active });
   }
+  replaceClosedViews(Array.isArray(snap.closed) ? snap.closed : []);
   if (!tabs.length) return false;
-  // 빈 leaf 채우기는 **활성 탭에만** 적용한다(그 화면이 비어 보이는 것이 문제였다).
+  // 2026-10-03 — 예전엔 빈 칸을 남는 살아있는 세션으로 채웠다(_fillEmptyLeaves).
+  // 그건 사용자가 닫은 칸을 새로고침이 다시 채우는 일이라(불변식 3) 없앴다.
   const activeIdx = Math.max(0, tabs.findIndex((t) => t.id === (snap.activeTab || snap.tabs?.[0]?.id)));
-  _fillEmptyLeaves(tabs[activeIdx]?.tree || tabs[0].tree);
   return replaceTabs(tabs, tabs[activeIdx]?.id || tabs[0].id);
 }
 
-// S5 검증에서 발견한 결함: 저장된 트리의 leaf가 전부 비어 있으면(그 세션들이
-// 죽어서 강등됐거나, 애초에 빈 pane 상태로 저장됐거나) **살아있는 세션이
-// 탭에는 있는데 화면에는 빈 pane만 보인다.** 사용자가 탭을 눌러야 비로소
-// 터미널이 나타나는데, 새로고침 직후엔 "세션이 사라졌다"로 읽힌다.
-//
-// 그래서 배정되지 않은 살아있는 세션이 있으면 빈 leaf를 앞에서부터 채운다.
-// 순서는 세션 스토어의 삽입 순서(=탭 순서)를 따른다.
-function _fillEmptyLeaves(tree) {
-  const used = new Set();
-  const empties = [];
-  (function walk(node) {
-    if (node.t === 'leaf') {
-      if (node.session) used.add(node.session);
-      // C3 — unreachable leaf는 "빈 칸"이 아니다. 여기에 엉뚱한 로컬 세션을
-      // 채워 넣으면 호스트가 돌아왔을 때 되살릴 자리가 사라진다.
-      else if (!node.unreachable) empties.push(node);
-      return;
-    }
-    walk(node.a); walk(node.b);
-  })(tree);
-  if (!empties.length) return;
-  const spare = Object.keys(allSessions()).filter((id) => !used.has(id));
-  for (const leaf of empties) {
-    const id = spare.shift();
-    if (!id) break;
-    leaf.session = id;   // deserializeTree가 만든 새 객체라 여기서 직접 채워도 안전하다
-  }
-}
-
-// 부팅 시 1회. 로컬 스냅샷을 먼저 적용(프리렌더)하고, 서버 정본이 더 최신이면
-// 그걸로 다시 적용한다. 서버 조회 실패는 무시한다 — 로컬만으로도 정상 동작.
-export async function restoreLayout() {
-  let applied = false;
-  const local = _readLocal();
-  if (local) applied = _applySnapshot(local);
+// 부팅 시 1회 — boot.js가 loadLayoutSnapshot()으로 고르고 그 칸의 세션을
+// attach한 **뒤에** 부른다. snap이 없거나 뷰가 0개여도 저장 가드는 연다.
+export async function restoreLayout(snap = undefined) {
+  if (snap === undefined) snap = await loadLayoutSnapshot();
+  const applied = snap ? _applySnapshot(snap) : false;
   _enabled = true; // 이 시점 이후의 변경부터 저장한다
-
-  try {
-    const ws = await vtFetch('/api/workspace');
-    const remote = ws?.ui?.layout;
-    // ⚠ 예전엔 `remote.v === 1`만 봤다 — 저장은 2.1.2부터 이미 v2로만 나가므로
-    // (그 뒤 v3) 원격 정본은 사실상 한 번도 이 분기를 못 탔다(기기를 바꿔도
-    // 서버 스냅샷이 안 먹혔다는 뜻). v1과 같은 판정 함수(_isSnapshot)로 맞춘다.
-    if (_isSnapshot(remote)) {
-      const newer = !local || (remote.savedAt || 0) > (local.savedAt || 0);
-      if (newer && _applySnapshot(remote)) applied = true;
-    }
-  } catch (_) { /* 서버 미응답/미인증 — 로컬 복원 결과를 그대로 쓴다 */ }
-
-  // 복원 결과가 leaf 1개짜리 기본 트리와 다를 때만 "복원했다"로 본다 —
-  // 호출자(boot)가 굳이 로그를 남기거나 하진 않지만, 테스트에서 의미가 있다.
   return applied && countLeaves() > 0;
 }
 
 function clearLayout() {
-  try { localStorage.removeItem(LS_KEY); } catch (_) {}
+  try { localStorage.removeItem(LS_KEY); localStorage.removeItem(_screenKey()); } catch (_) {}
 }
 window.clearLayout = clearLayout; // 콘솔에서 호출 가능(clearWorkspace와 같은 관례)

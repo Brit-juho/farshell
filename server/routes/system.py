@@ -26,6 +26,7 @@ import tmux_hooks
 import tunnel
 import device_settings
 import usage
+import stt_service
 import voice_handler
 import workspace
 from deps import pty_mgr
@@ -129,16 +130,15 @@ def _capabilities_payload() -> dict:
     멈춘다 — 터미널 타이핑에서 감지되는 크기다. 두 모듈에 TTL 캐시를 넣어
     호출 빈도도 함께 줄였다(tailscale 30초 · tunnel 10초).
     """
-    # ⚠️ 모델을 로드하지 않고 설치 여부만 확인한다. 예전엔 _init_stt()를 불러서
-    # 페이지 로드마다(capabilities는 grid.js가 시작 시 호출) faster-whisper 모델
-    # ~400MB를 서버에 올렸다 → 터미널만 쓰는 사용자도 400MB를 물었다.
+    # ⚠️ 모델을 로드하지 않고 「이 서버에서 STT 엔진을 쓸 수 있는가」만 확인한다. 예전엔 페이지 로드마다
+    # (capabilities는 grid.js가 시작 시 호출) 모델 ~400MB를 서버에 올렸다 → 터미널만 쓰는 사용자도 물었다.
     stt_ok = voice_handler.stt_available()
     tts_ok = voice_handler.tts_available()
     spec = network_access.get_current_spec()
     payload = {
         "voice": stt_ok or tts_ok,
         # 로드돼 있으면 실제 엔진명, 아니면 설치만 됨(available)/미설치(none)
-        "stt": (voice_handler._stt_engine if voice_handler.stt_loaded()
+        "stt": (stt_service.loaded_engine_id() if voice_handler.stt_loaded()
                 else ("available" if stt_ok else "none")),
         "stt_loaded": voice_handler.stt_loaded(),
         "tts": "available" if tts_ok else "none",

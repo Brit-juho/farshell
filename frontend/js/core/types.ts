@@ -41,8 +41,9 @@ export interface Session {
 // 문자열 인덱스로 열어둔다.
 export type Settings = Record<string, string | number | boolean>;
 
-// agent/state.js가 서버로부터 받는 4+1상태. URGENCY 정렬과 같은 값이어야 한다.
-export type AgentState = 'idle' | 'working' | 'waiting' | 'done' | 'error';
+// agent/state.js가 들고 있는 4상태(design/state-classes.js STATES). 서버의 예약값 error는
+// 프런트에서 idle로 접힌다.
+export type AgentState = 'idle' | 'working' | 'waiting' | 'done';
 
 // 30-worktree.md(2.1.1)에서 확정될 자리 — 지금은 레일이 세션을 워크트리 자리에
 // 임시로 그리는 단계(ADR-10 「기타」 규칙)라 최소 모양만 선언한다. 2.1.1에서

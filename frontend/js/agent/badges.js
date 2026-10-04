@@ -22,12 +22,8 @@ window.addEventListener('vt:brand-icons', () => { if (_lastAgents) applyAgentBad
 export function applyAgentBadges(agents) {
   _lastAgents = agents;
   // N37 3단계 5/n — 세션 탭 줄(`#tabs .tab`)은 사라졌다. 에이전트 마크는
-  // 카드와 워크트리 탭 두 표면에만 그린다.
+  // 카드에만 그린다(뷰 탭은 2026-10-04부터 마크를 그리지 않는다).
   document.querySelectorAll('.vt-card').forEach((card) => {
     _applyCardAgent(card, agents[card.dataset.name]);
   });
-  // 10 §4 — 워크트리 탭도 같은 스냅샷으로 마크를 그린다. layout/tabbar.js를
-  // 직접 import하지 않는 이유는 순환(tabbar → agent/state → …)을 만들지 않기
-  // 위해서다. 이 저장소가 이미 쓰는 window 브리지 관행을 따른다.
-  window.vtSetTabAgentInfo?.(agents);
 }

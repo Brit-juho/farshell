@@ -11,9 +11,9 @@
 // 맞췄다 — 다른 값을 쓰면 기기마다 스와이프 손맛이 갈린다.
 import { _isCoarsePointer } from '../core/env.js';
 import { COMPACT_MAX } from './breakpoints.js';
-import { getTree, getActivePaneId, setActivePane } from './store.js';
-import { orderedSessionIds, activeSessionId } from '../core/store.js';
-import { switchTo } from '../term/session.js';
+import { getActivePaneId, getTabsWithTrees } from './store.js';
+import { getSession } from '../core/store.js';
+import { revealSession } from '../term/session.js';
 
 export function isCompactMode() {
   return window.innerWidth < COMPACT_MAX;
@@ -29,50 +29,64 @@ export function flattenLeaves(node, out = []) {
   return out;
 }
 
-// 활성 leaf를 스와이프 순서상 delta칸 옮긴다(+1=다음, -1=이전, 양끝은 순환).
-// 순수 단계 이동 로직만 따로 export해 스와이프 제스처 없이도(단위 테스트,
-// 나중에 생길 수 있는 키보드 단축키 등) 재사용할 수 있게 한다.
-export function stepActivePane(delta) {
-  const leaves = flattenLeaves(getTree());
-  if (leaves.length < 2) return;
-  const idx = leaves.findIndex((l) => l.id === getActivePaneId());
-  const next = leaves[(((idx < 0 ? 0 : idx) + delta) % leaves.length + leaves.length) % leaves.length];
-  setActivePane(next.id);
+// ── 세션 이동 순서 — 저장되는 레이아웃이 **유일한 출처**다 ─────────────────────
+// 순서 = 뷰 탭 순서 → 뷰 안 칸 순서(왼쪽 위부터, flattenLeaves). 빈 칸·뷰어/패널
+// 칸·스토어에 없는 세션(unreachable 원격 칸)은 건너뛴다. 별도 순서 배열이 없으므로
+// 새로고침 뒤에도 같고, 데스크톱에서 뷰 탭을 드래그하면 모바일 순서가 따라온다.
+// 스와이프·키맵(다음/이전 탭)·모바일 세션 시트·팔레트가 전부 이 목록 하나를 읽는다.
+function _isOpenLeaf(leaf) {
+  return !!leaf.session && leaf.kind !== 'viewer' && leaf.kind !== 'panel' && !!getSession(leaf.session);
 }
 
-// L8 — leaf가 하나뿐일 때(=분할을 안 쓴 상태, 모바일의 일반적인 모습)는
-// 넘길 pane이 없다. 그때는 같은 스와이프를 **세션(탭) 전환**으로 해석한다
-// (§8-a "좌우 스와이프로 세션 전환"). 한 제스처가 "화면에 실제로 보이는 것
-// 중 다음 것"으로 넘어간다는 의미는 두 경우 모두 같다.
-//
-// 순서의 출처는 세션 레코드다(core/store.js의 order — N37 3단계 3/n). 예전엔
-// 탭 DOM 순서를 읽었는데, 그 DOM은 6/n에서 사라졌다. 재정렬(드래그·단축키)의
-// 결과가 곧 이 배열이므로 손맛은 그대로다.
-export function sessionOrder() {
-  return orderedSessionIds();
+/** 열린 세션 목록 — `[{id, tabId, paneId}]`, 화면 순서. */
+export function openSessionOrder() {
+  const out = [];
+  for (const t of getTabsWithTrees()) {
+    for (const leaf of flattenLeaves(t.tree)) {
+      if (_isOpenLeaf(leaf)) out.push({ id: leaf.session, tabId: t.id, paneId: leaf.id });
+    }
+  }
+  return out;
 }
 
-// 순수 선택 로직만 따로 둔다(단위 테스트 대상) — switchTo는 탭 DOM·xterm이
-// 전부 갖춰져야 도는 함수라, "무엇을 고르는가"와 "실제로 전환한다"를 분리해야
-// 고르는 규칙을 독립적으로 검증할 수 있다.
-export function nextSessionId(delta) {
-  const ids = sessionOrder();
-  if (ids.length < 2) return null;
-  const cur = activeSessionId();
-  const idx = ids.indexOf(cur);
-  const next = ids[(((idx < 0 ? 0 : idx) + delta) % ids.length + ids.length) % ids.length];
-  return next && next !== cur ? next : null;
+export function openSessionIds() {
+  return openSessionOrder().map((e) => e.id);
 }
 
-function stepSession(delta) {
-  const next = nextSessionId(delta);
-  if (next) switchTo(next);
+/** 현재 칸에서 delta(+1 다음, -1 이전)만큼 간 세션 — 끝에서는 순환. 활성 칸이
+ *  비었거나 뷰어여도 "그 칸 자리"를 기준으로 가장 가까운 세션을 고른다. 갈 곳이
+ *  없으면(열린 세션이 현재 하나뿐) null. 순수 선택 로직이라 단위 테스트 대상. */
+export function nextOpenSession(delta) {
+  const flat = [];
+  for (const t of getTabsWithTrees()) {
+    for (const leaf of flattenLeaves(t.tree)) flat.push({ leaf, tabId: t.id });
+  }
+  const activePane = getActivePaneId();
+  const cur = flat.findIndex((e) => e.leaf.id === activePane);
+  const n = flat.length;
+  const dir = delta < 0 ? -1 : 1;
+  for (let k = 1; k <= n; k++) {
+    // 현재 칸을 못 찾으면(방어) 처음/끝에서 시작한다.
+    const i = (((cur < 0 ? (dir > 0 ? -1 : n) : cur) + dir * k) % n + n) % n;
+    const e = flat[i];
+    if (!_isOpenLeaf(e.leaf)) continue;
+    if (i === cur) return null;
+    return { id: e.leaf.session, tabId: e.tabId, paneId: e.leaf.id };
+  }
+  return null;
 }
 
-// 스와이프 한 번의 동작 — leaf가 2개 이상이면 pane 이동, 아니면 세션 전환.
+/** 다음/이전 세션으로 **이동만** 한다 — 그 세션의 뷰로 전환하고 그 칸에 포커스.
+ *  트리는 건드리지 않는다(switchTo는 활성 칸에 "배정"하므로 다른 뷰의 세션을
+ *  끌어오고 지금 칸 세션을 밀어냈다). 끝에서 순환. */
+export function stepSession(delta) {
+  const next = nextOpenSession(delta);
+  if (next) revealSession(next.id);
+}
+
+// 스와이프 한 번의 동작 — 키맵 다음/이전 탭(모바일)과 같은 함수.
 export function stepView(delta) {
-  if (flattenLeaves(getTree()).length > 1) stepActivePane(delta);
-  else stepSession(delta);
+  stepSession(delta);
 }
 
 const EDGE_PX = 20;    // §8: 화면 가장자리 20px에서 시작한 것만 인정
@@ -116,7 +130,7 @@ export function wireCompactSwipe(containerEl) {
     if (!touch) return;
     const dx = touch.clientX - startX;
     if (Math.abs(dx) < COMMIT_PX) return;
-    // 왼쪽으로 밀면 다음 leaf, 오른쪽으로 밀면 이전 leaf — 탭/페이지 스와이프의
+    // 왼쪽으로 밀면 다음 세션, 오른쪽으로 밀면 이전 세션 — 탭/페이지 스와이프의
     // 통상적인 방향 관례.
     stepView(dx < 0 ? 1 : -1);
   };

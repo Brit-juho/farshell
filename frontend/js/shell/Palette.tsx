@@ -160,7 +160,12 @@ function PaletteBody(props: PaletteBodyProps) {
       deps.vtFetch('/api/agents').catch(() => ({})),
     ]).then(([sessRes, agentsRes]) => {
       const byWebId: Record<string, any> = {};
-      for (const s of (sessRes || [])) if (s.web_session_id) byWebId[s.web_session_id] = s;
+      const byName = new Map((sessRes || []).map((s: any) => [s.name, s]));
+      const local = (window as any).allSessions?.() || {};
+      for (const [id, session] of Object.entries<any>(local)) {
+        const tmuxName = session.tmuxName || session.tmux_name;
+        if (byName.has(tmuxName)) byWebId[id] = byName.get(tmuxName);
+      }
       setTmuxByWebId(byWebId);
       setAgents(agentsRes || {});
     }).catch(() => {});

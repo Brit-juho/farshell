@@ -29,7 +29,7 @@ same either way. (Windows only through WSL2.)
 # Terminal only (~50MB)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash
 
-# Terminal + voice mode (~1.5GB, Whisper STT + edge-tts TTS)
+# Terminal + voice mode (a few hundred MB; the speech model is downloaded later, from Settings)
 curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.sh | bash -s voice
 ```
 
@@ -72,7 +72,8 @@ fsh stop                  # shut everything down
 **Your terminal from your phone**
 
 ```
-fsh password              # first time only — fsh mobile refuses without auth
+fsh password              # first time only — fsh start refuses to go public without auth
+fsh start                 # starts the server and the public tunnel
 fsh mobile                # prints a URL + QR code; scan it
 ```
 
@@ -83,7 +84,7 @@ fsh mobile                # prints a URL + QR code; scan it
 ## Security
 
 The default is **no authentication**. Set a password with `fsh password` before
-exposing anything; `fsh mobile` refuses to open a public tunnel without it.
+exposing anything; `fsh start` refuses to open a public tunnel without it.
 
 | Layer | Method |
 |---|---|

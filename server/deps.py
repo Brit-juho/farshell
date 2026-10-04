@@ -47,9 +47,10 @@ def _on_waiting_change(pty_session_id: str, waiting: bool) -> None:
     # 걸려들어 남의 pane 상태를 로컬 것으로 바꿔버린다. P1-1(ADR-33) —
     # `agent_status._entries_for`와 같은 규칙을 쓴다(consume_prompt도 이걸
     # 쓴다) — 두 곳이 각자 조건을 들면 하나만 고쳐질 위험이 있다.
+    kind = _prompt_detector.get_kind(pty_session_id) if waiting else None
     targets = [e.get("session_id") for e in agent_status._entries_for(tmux_name)]
     for sid in targets or [f"pane:{tmux_name}"]:
-        agent_status.on_waiting(sid, waiting, question=question, options=options)
+        agent_status.on_waiting(sid, waiting, question=question, options=options, kind=kind)
         if not targets:
             agent_status.get_state(sid)["tmux_session"] = tmux_name
 
@@ -81,7 +82,31 @@ def _push_waiting_notice() -> None:
         pass
 
 
-_prompt_detector = agent_prompt_detect.get_global_detector(_on_waiting_change)
+def _agent_for_pty(pty_session_id: str):
+    """이 PTY 세션의 tmux pane에서 도는 CLI 이름 — kind 패턴을 그 CLI의 spec으로만
+    매칭하기 위한 판별. 1차 신호(엔트리의 `agent`: 훅/자기보고) 다음 프로세스 스캔."""
+    info = session_store.get(pty_session_id)
+    tmux_name = info.tmux_name if info else None
+    if not tmux_name:
+        return None
+    for ent in agent_status._entries_for(tmux_name):
+        if ent.get("agent"):
+            return ent["agent"]
+    import agent_detector
+
+    found = agent_detector.detect(tmux_name)
+    name = (found or {}).get("agent")
+    return name if name in agent_detector.KNOWN_AGENTS else None
+
+
+def _on_badge_change(pty_session_id: str, badge) -> None:
+    info = session_store.get(pty_session_id)
+    if info and info.tmux_name:
+        agent_status.set_badge_for_session(info.tmux_name, badge)
+
+
+_prompt_detector = agent_prompt_detect.get_global_detector(
+    _on_waiting_change, agent_for=_agent_for_pty, on_badge=_on_badge_change)
 
 
 def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> None:

@@ -240,9 +240,6 @@
   padding:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1);
 }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-srow`가 맡는다. 폰은 .lg(이름이 크고 행이 높다) */
-  /* 2.1.6 — 상태 다섯 색은 components.css의 `.vt-srow-mark`가 맡는다. */
-  .vt-fleet-bar.tone-error   { background:var(--color-st-error); }
-  .vt-fleet-bar.tone-done    { background:var(--color-st-done); }
   .vt-fleet-name {
   flex:1;
   min-width:0;
@@ -253,22 +250,11 @@
   font:400 var(--fs-2xs) var(--mono);
   color:var(--sub);
 }
-  .vt-fleet-question {
-  font:400 var(--fs-2xs) var(--mono);
-  color:var(--txt2);
-}
-  .vt-fleet-unseen-badge {
-  background:var(--acc);
-}
   .vt-fleet-answers { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); margin-top:2px; }
   /* 2.1.6 — `.vt-btn.sm`(선택지) / `.vt-btn.sm.solid`(「터미널로」 대표 액션)으로
      대체. 승인 버튼은 폰에서 가장 중요한 액션인데 hover·active만 있고
      focus-visible·disabled가 없었다 — 컴포넌트가 다섯 상태를 다 갖는다. */
 
-  /* 2026-09-23 — 잠든 행. Rail.tsx의 `.vt-wgrail-row.sleeping`과 같은 값 —
-     같은 뜻(열린 pane이 없다)에 같은 흐림 정도를 쓴다. */
-  .vt-fleet-row.sleeping { opacity:.55; }
-  .vt-fleet-row.sleeping:active { opacity:.8; }
   /* 꾹 눌러 메뉴 — 이 행은 버튼이지 선택할 텍스트가 아닌데, 롱프레스 중
      OS의 텍스트 선택·콜아웃이 먼저 끼어들면(iOS 실측) 메뉴 대신 파란 선택
      하이라이트가 뜬다. manipulation은 더블탭 확대만 끄고 세로 스크롤은

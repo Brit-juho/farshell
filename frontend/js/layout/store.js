@@ -7,7 +7,7 @@
 // 이후 xterm-setup.js가 연결). 그래야 "테두리는 A pane인데 타이핑은 B로
 // 들어간다" 같은 상태 불일치가 애초에 생길 수 없다 — 착수 전 설계 리뷰에서
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
-import { activeSessionId, sessionDisplayName } from '../core/store.js';
+import { activeSessionId, setActive, sessionDisplayName } from '../core/store.js';
 import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setLeafPanel as _setLeafPanel, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, findPaneBySession, collectSessions } from './tree.js';
 
 function _genId(prefix) {
@@ -39,8 +39,9 @@ function _genId(prefix) {
 // tabbar.js의 `tabDisplayLabel`이 그 자리에 현재 구성원 이름을 계산해
 // 채운다. "작업 공간" 같은 무의미한 기본값을 붙이지 않는다).
 // `hostId`는 2.2 원격 호스트 기반이다(지금은 항상 'local').
+// 새 탭은 빈 칸 하나로 시작한다(활성 세션을 담으면 두 탭에 중복된다).
 function _makeTab({ worktreeId = null, hostId = 'local', label = null, tree = null } = {}) {
-  const t = tree || makeLeaf(_genId('pane'), activeSessionId());
+  const t = tree || makeLeaf(_genId('pane'), null);
   return { id: _genId('tab'), worktreeId, hostId, label, tree: t, activePaneId: _firstLeafId(t) };
 }
 
@@ -65,7 +66,15 @@ const _listeners = new Set();
 // 늘렸을 뿐 기존 두 인자(tree, activePaneId)는 자리·의미가 안 바뀐다.
 function _notify(kind = 'layout', extra) {
   _sync();
+  _deriveActiveSession();
   for (const fn of _listeners) fn(_tree, _activePaneId, kind, extra);
+}
+
+// 세션·뷰 규칙 불변식 2: 활성 세션 = 활성 뷰의 포커스 칸(비었으면 null).
+function _deriveActiveSession() {
+  const node = findNode(_tree, _activePaneId);
+  const sid = node && node.t === 'leaf' && node.kind !== 'viewer' && node.kind !== 'panel' ? (node.session || null) : null;
+  if (activeSessionId() !== sid) setActive(sid);
 }
 
 // onLayoutChange(fn) → unsubscribe 함수. 1단계의 layout/panes.js가 이걸로
@@ -91,33 +100,42 @@ export function setActivePane(paneId) {
   _notify('active');
 }
 
-// 2026-09-21 버그 수정 — 같은 세션이 두 탭에 동시에 떠 있던 문제. tree.js의
-// setSession()은 **같은 트리 안**의 중복만 지운다(파일 111행 주석). 세션
-// 행을 레일에서 다른 탭의 pane으로 끌어다 놓아 그룹을 만들면(dnd.js) 그
-// 세션의 원래(혼자였던) 탭은 전혀 안 건드려져서, 같은 세션이 옛 탭과 새
-// 그룹 탭 양쪽에 동시에 남았다 — 옛 탭이 "그룹을 만들어도 위에 그대로
-// 떠 있다"로 보였고, findTabBySessionId가 배열에서 먼저 만나는 탭(대개
-// 옛 탭)을 돌려줘서 레일에서 그 세션을 클릭하면 그룹이 아니라 옛 솔로
-// 탭으로 가버렸다("그룹에서 떨어져 나가는 것처럼" 보인 증상).
-//
-// 활성 탭이 아닌 다른 탭에 이 세션이 남아 있으면 거기서 지운다. 그 탭에
-// 남은 세션이 하나도 없어지면(원래 혼자였던 탭) 탭 자체를 닫는다 — 그
-// 탭도 그룹이었다면(다른 멤버가 남아있다면) 그 자리만 비우고 탭은 그대로
-// 둔다(빈 pane은 이미 다른 곳에서도 쓰는 정상적인 자리표시자 상태다).
+// 2026-09-21 — tree.js setSession은 같은 트리 안의 중복만 지운다. 다른 탭으로
+// 끌어 묶으면 옛 탭에도 남던 버그(같은 세션이 두 탭에) 때문에 여기서 지운다.
+// 다른 탭에 남은 이 세션을 지운다. 원래 자리는 빈 칸으로 남는다(2026-10-03).
 function _detachFromOtherTabs(sessionId) {
   const activeId = _tabs[_activeTabIndex].id;
-  for (let i = _tabs.length - 1; i >= 0; i--) {
-    const t = _tabs[i];
+  for (const t of _tabs) {
     if (t.id === activeId) continue;
     if (!collectSessions(t.tree).includes(sessionId)) continue;
-    const cleared = _setSession(t.tree, null, sessionId);
-    if (collectSessions(cleared).length === 0) {
-      _tabs.splice(i, 1);
-      if (i < _activeTabIndex) _activeTabIndex -= 1;
-    } else {
-      t.tree = cleared;
-    }
+    t.tree = _setSession(t.tree, null, sessionId);
   }
+}
+
+/** 닫기: 모든 탭 트리에서 이 세션을 비운다(칸은 빈 칸, 죽은 id를 남기지 않는다). */
+export function clearSessionFromLayout(sessionId) {
+  if (!sessionId) return false;
+  _sync();
+  let changed = false;
+  for (const t of _tabs) {
+    if (!collectSessions(t.tree).includes(sessionId)) continue;
+    t.tree = _setSession(t.tree, null, sessionId);
+    changed = true;
+  }
+  if (!changed) return false;
+  _tree = _tabs[_activeTabIndex].tree;
+  _notify();
+  return true;
+}
+
+/** "뷰 없음" — 스토어는 탭을 0개로 두지 않고, 빈 칸 하나짜리 이름 없는 탭
+ * 하나를 뷰 없음으로 읽는다(탭 바 숨김 + 온보딩). */
+export function isLayoutEmpty() {
+  _sync();
+  if (_tabs.length !== 1) return false;
+  const t = _tabs[0];
+  return t.tree.t === 'leaf' && !t.tree.session && !t.tree.unreachable
+    && (t.tree.kind || 'terminal') === 'terminal' && !t.label;
 }
 
 // 탭 클릭 등 "이 세션을 화면에 보여줘"의 유일한 진입점. 기본은 활성
@@ -205,7 +223,7 @@ export function setPanePanel(panel, paneId = _activePaneId) {
 }
 
 // 키맵(`Mod+D` 등, S3)처럼 "지금 활성 pane"을 대상으로 하는 짧은 표기.
-// sessionId가 있으면(Rail.tsx의 ⌘클릭 분할) **빈 leaf로 먼저 나누고 나서
+// sessionId가 있으면 **빈 leaf로 먼저 나누고 나서
 // setPaneSession으로 배정한다** — dnd.js와 같은 두 단계 관용구다(dnd.js
 // 88행 주석 참고). splitPane이 sessionId를 바로 makeLeaf에 넣는 경로는
 // dedup을 안 거쳐서, 이미 다른 탭에 떠 있는 세션을 ⌘클릭으로 분할하면
@@ -340,13 +358,14 @@ export function setTabWorktree(tabId, worktreeId) {
   return true;
 }
 
+// 전환하면 가장 왼쪽 위 칸(첫 leaf)에 포커스(2026-10-03 규칙).
 export function switchLayoutTab(tabId) {
   const i = _tabs.findIndex((t) => t.id === tabId);
   if (i < 0 || i === _activeTabIndex) return false;
   _sync();                       // 떠나는 탭의 현재 트리를 먼저 굳힌다
   _activeTabIndex = i;
   _tree = _tabs[i].tree;
-  _activePaneId = _tabs[i].activePaneId;
+  _activePaneId = _firstLeafId(_tree);
   _notify();
   return true;
 }
@@ -364,6 +383,17 @@ export function openLayoutTab({ worktreeId = null, hostId = 'local', label = nul
     return existing;
   }
   _sync();
+  // 뷰 없음이면 그 자리 탭을 쓴다.
+  if (sessionId && isLayoutEmpty()) {
+    const t = _tabs[0];
+    t.worktreeId = worktreeId || null; t.hostId = hostId || 'local'; t.label = label || null;
+    t.tree = _setSession(t.tree, t.tree.id, sessionId);
+    _activeTabIndex = 0;
+    _tree = t.tree;
+    _activePaneId = t.tree.id;
+    _notify();
+    return t.id;
+  }
   // 세션 없이 여는 **다른 호스트의** 탭은 정말로 비어 있어야 한다. `_makeTab`의
   // 기본 트리는 지금 활성 세션을 담아 시작하므로(탭 하나뿐인 부팅 상태를 위한
   // 기본값), 그대로 두면 호스트 스위처가 연 "M5 빈 탭"에 로컬 세션이 들어가
@@ -379,12 +409,34 @@ export function openLayoutTab({ worktreeId = null, hostId = 'local', label = nul
   return tab.id;
 }
 
-/** 탭을 닫는다. **마지막 한 개는 닫지 않는다** — 탭이 0개면 화면에 pane
- * 트리가 존재하지 않게 되어 렌더러가 그릴 대상을 잃는다. */
+/** 만든 트리로 새 탭을 연다(닫힌 묶음 뷰 다시 열기). */
+export function openTabWithTree({ id = null, worktreeId = null, hostId = 'local', label = null, tree, focusPaneId = null } = {}) {
+  if (!tree || (tree.t !== 'leaf' && tree.t !== 'split')) return null;
+  _sync();
+  const tab = { id: id && !_tabs.some((t) => t.id === id) ? id : _genId('tab'),
+    worktreeId, hostId, label, tree,
+    activePaneId: focusPaneId && findNode(tree, focusPaneId) ? focusPaneId : _firstLeafId(tree) };
+  if (isLayoutEmpty()) _tabs.splice(0, 1);
+  _tabs.push(tab);
+  _activeTabIndex = _tabs.length - 1;
+  _tree = tab.tree;
+  _activePaneId = tab.activePaneId;
+  _notify();
+  return tab.id;
+}
+
+/** 탭을 닫는다. 마지막 탭이면 "뷰 없음" 자리 탭으로 바꾼다(isLayoutEmpty). */
 export function closeLayoutTab(tabId) {
-  if (_tabs.length <= 1) return false;
   const i = _tabs.findIndex((t) => t.id === tabId);
   if (i < 0) return false;
+  if (_tabs.length <= 1) {
+    _tabs.splice(0, 1, _makeTab());
+    _activeTabIndex = 0;
+    _tree = _tabs[0].tree;
+    _activePaneId = _tabs[0].activePaneId;
+    _notify();
+    return true;
+  }
   _tabs.splice(i, 1);
   if (_activeTabIndex >= _tabs.length) _activeTabIndex = _tabs.length - 1;
   else if (i < _activeTabIndex) _activeTabIndex -= 1;
@@ -392,6 +444,22 @@ export function closeLayoutTab(tabId) {
   _activePaneId = _tabs[_activeTabIndex].activePaneId;
   _notify();
   return true;
+}
+
+/** 드래그로 세션이 빠져나가 비게 된 뷰를 닫는다(2026-10-03 규칙 결정 — 옛 동작).
+ * "비었다"는 모든 칸이 세션 없는 터미널 칸이라는 뜻이다(뷰어·패널 칸이 있으면
+ * 비지 않은 것). 활성 뷰이거나 뷰가 하나뿐이면 닫지 않는다 — 그 경우는
+ * 칸 ×와 같이 빈 칸으로 남는 기존 처리다. 닫았으면 true. */
+export function closeViewIfEmptied(tabId) {
+  _sync();
+  if (_tabs.length <= 1) return false;
+  const t = _tabs.find((x) => x.id === tabId);
+  if (!t || t.id === _tabs[_activeTabIndex].id) return false;
+  const blank = (n) => (n.t === 'leaf'
+    ? !n.session && !n.unreachable && (n.kind || 'terminal') === 'terminal'
+    : blank(n.a) && blank(n.b));
+  if (!blank(t.tree)) return false;
+  return closeLayoutTab(tabId);
 }
 
 /** 탭 순서를 바꾼다(헤더 탭 바 드래그 재정렬, 데스크톱 전용 — layout/tabbar.js).
@@ -442,6 +510,73 @@ export function replaceTabs(tabs, activeTabId = null) {
   return true;
 }
 
+// ── 기억된 닫힌 묶음 뷰(2026-10-03) — 트리는 직렬화 모양(persist.js
+// serializeTree), 구성원은 tmux 이름. 한 세션은 묶음 하나에만 속한다.
+let _closed = [];
+
+function _serialMembers(node, out = []) {
+  if (!node) return out;
+  if (node.t === 'leaf') {
+    if (node.session && node.session.tmux) out.push(node.session.tmux);
+    return out;
+  }
+  _serialMembers(node.a, out); _serialMembers(node.b, out);
+  return out;
+}
+
+function _serialDrop(node, tmuxSet) {
+  if (!node) return node;
+  if (node.t === 'leaf') {
+    return node.session && node.session.tmux && tmuxSet.has(node.session.tmux) ? { ...node, session: null } : node;
+  }
+  return { ...node, a: _serialDrop(node.a, tmuxSet), b: _serialDrop(node.b, tmuxSet) };
+}
+
+export function closedViewMembers(view) {
+  return _serialMembers(view && view.tree);
+}
+
+export function getClosedViews() {
+  return _closed.map((v) => ({ ...v }));
+}
+
+export function rememberClosedView(view) {
+  const members = new Set(_serialMembers(view && view.tree));
+  if (members.size < 2 || typeof view.id !== 'string') return false;
+  forgetClosedMembers([...members]);
+  _closed = _closed.filter((v) => v.id !== view.id);
+  _closed.push({ id: view.id, label: view.label || null, worktreeId: view.worktreeId || null,
+    hostId: view.hostId || 'local', tree: view.tree });
+  return true;
+}
+
+export function forgetClosedMembers(tmuxNames) {
+  const drop = new Set((tmuxNames || []).filter(Boolean));
+  if (!drop.size) return;
+  _closed = _closed
+    .map((v) => ({ ...v, tree: _serialDrop(v.tree, drop) }))
+    .filter((v) => new Set(_serialMembers(v.tree)).size >= 2);
+}
+
+export function findClosedViewByTmux(tmuxName) {
+  if (!tmuxName) return null;
+  const v = _closed.find((x) => _serialMembers(x.tree).includes(tmuxName));
+  return v ? { ...v } : null;
+}
+
+export function takeClosedView(viewId) {
+  const i = _closed.findIndex((v) => v.id === viewId);
+  if (i < 0) return null;
+  return _closed.splice(i, 1)[0];
+}
+
+export function replaceClosedViews(list) {
+  _closed = [];
+  for (const v of Array.isArray(list) ? list : []) {
+    if (v && v.tree && (v.tree.t === 'leaf' || v.tree.t === 'split')) rememberClosedView(v);
+  }
+}
+
 /** 영속화가 읽는 전체 상태(트리 포함). getTabs()와 달리 tree를 그대로 준다. */
 export function getTabsWithTrees() {
   _sync();
@@ -474,9 +609,8 @@ export function tabGroups() {
 }
 
 // N36(워크트리 레일) — shell/Rail.tsx는 지연 청크라 이 모듈을 직접 import하면
-// 트리 상태가 복제된다(ADR-26/N35 커밋의 core/store.js와 같은 이유). ⌘클릭
-// 분할에 필요한 splitActivePane와, 레일이 그룹을 그리는 데 필요한 tabGroups만
-// 다른 파일들처럼 window로 노출한다.
+// 트리 상태가 복제된다(ADR-26/N35 커밋의 core/store.js와 같은 이유).
+// splitActivePane(팔레트·스니펫)와 tabGroups만 window로 노출한다.
 window.splitActivePane = splitActivePane;
 // N4 — 팔레트·빈 pane 시트가 지연 청크라서 이 모듈을 정적 import 할 수
 // 없다(ADR-26). `openFileInPane`이 같은 이유로 같은 브리지를 쓴다.

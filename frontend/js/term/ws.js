@@ -13,12 +13,13 @@
 import { getSession } from '../core/store.js';
 import { WS_BASE } from '../core/env.js';
 import { relayWsPath } from '../core/host-route.js';
+import { screenId } from '../core/screen-id.js';
 import { E2E_ENABLED, wrapE2E, _wsQuery } from './e2e.js';
 import { fitAndResize } from './resize.js';
 import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
 import { applyStickyMod } from './keybar.js';
 
-const TERMINAL_CLOSE_CODES = new Set([4001, 4004]);
+const TERMINAL_CLOSE_CODES = new Set([4001, 4004, 4005]);
 const STABLE_MS = 3000;
 
 // addSession에서 term.open() 직후 호출. onResize 함수를 반환한다 —
@@ -38,7 +39,7 @@ export function startSessionSocket(id, term) {
       ? `${_wsQuery() ? '&' : '?'}screen=${encodeURIComponent(_s.remote.screen)}` : '';
     return _s && _s.remote
       ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}${_screen}`
-      : relayWsPath(`/ws/${id}${_wsQuery()}`);
+      : relayWsPath(`/ws/${id}${_wsQuery()}${_wsQuery() ? '&' : '?'}screen=${screenId()}`);
   };
   let _retries = 0;
   let _stableTimer = null;
@@ -156,7 +157,14 @@ export function startSessionSocket(id, term) {
       updateConnStatus(id, false);
       const code = ev && ev.code;
       if (TERMINAL_CLOSE_CODES.has(code)) {                  // 영구 실패 → 재연결 안 함
-        const why = code === 4001 ? '인증 실패' : '세션이 서버에 없음(종료됨)';
+        // 4004 = 다른 곳에서 종료됨 → 닫기와 같은 경로로 칸을 비운다(2026-10-03).
+        if (code === 4004 && typeof window.vtCloseSession === 'function') {
+          window.vtCloseSession(id);
+          return;
+        }
+        const why = code === 4001 ? '인증 실패'
+          : code === 4005 ? '다른 화면에서 이 화면을 끊음'
+            : '세션이 서버에 없음(종료됨)';
         _setConnOverlayDetail(id, `재연결 중단 — ${why}. 탭을 닫고 새로 여세요.`);
         return;
       }

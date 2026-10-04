@@ -3,14 +3,15 @@
 // 끼어 있다"고 지적했는데, 실제로 뽑아보니 tmux-panel.js/session.js/workspace.js
 // 사이 의존이 얽혀 있어 결국 이 파일이 그 세 모듈을 조립하는 최상위가 됐다.
 // 계획서가 예상한 panels/onboarding.js로의 흡수(L4)는 이번 F4 범위가 아니다.
-import { addSession, attachTmux } from './session.js';
-import { restoreWorkspace, reconcileMissingTmuxSessions } from './workspace.js';
-import { restoreLayout } from '../layout/persist.js';
+import { attachTmux } from './session.js';
+import { attachLayoutSessions } from './workspace.js';
+import { restoreLayout, loadLayoutSnapshot, snapshotSessionInfos } from '../layout/persist.js';
+import { isLayoutEmpty } from '../layout/store.js';
 import { load as loadSettings } from '../core/settings.js';
 import { apiFetch } from '../core/api.js';
 import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
-import { getSession, allSessions } from '../core/store.js';
+import { allSessions } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { displayComboHtml } from '../core/keymap.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
@@ -110,15 +111,13 @@ async function renderOnboardingSessions() {
   } catch (_) { /* localStorage 실패 무시 */ }
 }
 
-// 시작 시: URL hash에 #tmux=<name>이 있으면 해당 세션 우선 attach (handoff 링크)
-//         → localStorage 워크스페이스 복원 (Phase 8 G7)
-//         → 기존 웹 세션 복원 → tmux 세션 자동 attach → 온보딩
+// 시작 시: 저장된 레이아웃 복원 → #tmux=<name> 핸드오프 → 뷰가 없으면 온보딩.
 //
 // F4에서 이 블록은 더 이상 모듈 평가 시점에 자동 실행되지 않는다(구 terminal.js에서는
 // classic script 로드 순서상 이 코드가 실행될 즈음 ui/toast.js가 이미 로드돼 있었지만,
 // 이제 term/*.js는 전부 main.js의 정적 import — legacy classic script(toast.js 포함)
-// 보다 먼저 평가된다). 그대로 즉시 실행하면 showToast가 아직 없는 채로 restoreWorkspace
-// 등이 그걸 부를 수 있다(레이스). main.js가 toast.js 로드 완료를 기다린 뒤 bootApp()을
+// 보다 먼저 평가된다). 그대로 즉시 실행하면 showToast가 아직 없는 채로 복원 경로가
+// 그걸 부를 수 있다(레이스). main.js가 toast.js 로드 완료를 기다린 뒤 bootApp()을
 // 명시적으로 호출한다.
 // 떠나는 문서의 부팅은 fetch가 중단되며 예외로 끝난다. 그건 실패가 아니다.
 let _leaving = false;
@@ -130,67 +129,26 @@ export async function bootApp() {
   // 반영된다. 실패해도 부팅을 막지 않는다(캐시 값으로 그대로 동작).
   loadSettings().catch(() => {});
   try {
-    // 0. handoff 링크 (#tmux=<name>) 처리
-    const hashParams = new URLSearchParams(location.hash.slice(1));
-    const targetTmux = hashParams.get('tmux');
-    if (targetTmux) {
-      await attachTmux(targetTmux);
-      return;
-    }
+    // 2026-10-03(세션·뷰 규칙 2단계) — 저장된 레이아웃만 복원한다(불변식 3).
+    // 이 브라우저 탭의 저장본, 없으면 가장 최근 저장본의 사본(새 탭)을 고르고,
+    // 그 **열린 칸**에 있던 세션만 attach한 뒤 트리를 적용한다. 서버의 tmux
+    // 세션을 전부 붙이던 경로(옛 1·2번, reconcileMissingTmuxSessions)는 없앴다 —
+    // 사용자가 닫은 세션을 새로고침이 다시 열었다. 열리지 않은 세션은 레일·
+    // 온보딩 목록에서 연다.
+    const snap = await loadLayoutSnapshot();
+    if (snap) await attachLayoutSessions(snapshotSessionInfos(snap));
+    // 레이아웃이 없어도 반드시 한 번 부른다 — 저장 가드가 여기서 열린다.
+    // #tmux= 핸드오프도 이 뒤에 처리해 저장이 꺼지지 않게 한다(예전엔 핸드오프가
+    // 레이아웃 복원을 건너뛰어 그 탭은 다시 저장되지 않았다).
+    await restoreLayout(snap);
 
-    // 0.5. localStorage 워크스페이스 복원 (Phase 8 G7)
-    if (await restoreWorkspace()) {
-      // 복원된 스냅샷은 "마지막 저장 시점" 기준이라 그 이후 다른 곳에서 생긴
-      // tmux 세션을 놓칠 수 있다 — 서버 목록과 대조해 누락분만 보충.
-      await reconcileMissingTmuxSessions();
-      // L8: 세션이 다 붙은 뒤에야 분할 레이아웃을 복원한다(그 전엔 살아있는
-      // 세션이 없어 전부 빈 pane으로 강등된다). handoff 링크(#tmux=) 경로는
-      // "이 세션 하나를 지금 보여달라"는 명시적 요청이라 일부러 제외했다.
-      await restoreLayout();
-      return;
-    }
+    // handoff 링크(#tmux=<name>) — 이미 열려 있으면 그 칸으로, 아니면 새 단독 뷰.
+    const targetTmux = new URLSearchParams(location.hash.slice(1)).get('tmux');
+    if (targetTmux) await attachTmux(targetTmux);
 
-    // 1. 기존 웹 세션 복원
-    const res = await apiFetch(`${API_BASE}/api/sessions`);
-    const existing = await res.json();
-    if (existing.length > 0) {
-      for (const s of existing) {
-        addSession(s.id, s.name || s.id);
-        // ⚠ 없으면 openSessionOnMac()이 진짜 tmux 세션도 "tmux 아님"으로 오판한다.
-        if (s.tmux_name) {
-          const rec = getSession(s.id);
-          if (rec) rec.tmuxName = s.tmux_name;
-        }
-      }
-      await restoreLayout();
-      return;
-    }
-
-    // 2. tmux 세션이 있으면 전부 자동 attach (저장된 탭 순서가 없는 상태이므로
-    //    이름 알파벳/숫자 순으로 정렬 — 예전엔 tmuxList[0] 하나만 열고 끝냈다)
-    const tmuxRes = await apiFetch(`${API_BASE}/api/tmux/sessions`);
-    const tmuxList = await tmuxRes.json();
-    if (tmuxList.length > 0) {
-      const sorted = [...tmuxList].sort((a, b) => a.name.localeCompare(b.name));
-      for (const s of sorted) {
-        await attachTmux(s.name);
-      }
-      await restoreLayout();
-      return;
-    }
-
-    // 3. 세션이 없어도 레이아웃 복원은 반드시 한 번 끝낸다. N4부터는 패널만
-    // 놓인 화면도 의미 있는 배치이고, restoreLayout()이 호출돼야 이후 변경의
-    // 저장 가드도 열린다. 패널/뷰어 pane이 복원된 경우 온보딩 DOM은 아래에서
-    // 만들어져도 panes.js가 붙이는 body 상태 클래스로 화면을 덮지 않는다.
-    await restoreLayout();
-
-    // 아무것도 없으면 온보딩 표시. **다만 지금 이 시점에** 없을 때만 —
-    // 여기 도달하기까지 fetch를 두 번(existing·tmuxList) 기다렸고, 그 사이
-    // 사용자가 이미 「새 세션」을 눌렀을 수 있다(빠른 클릭·자동화 스크립트로
-    // 실제 재현됨: 세션은 생겼는데 온보딩이 그 위에 뜬다 — z-index:500이라
-    // 세션이 있어도 가려서 조작이 안 되는 것처럼 보인다).
-    if (Object.keys(allSessions()).length === 0) showOnboarding();
+    // 뷰가 하나도 없으면 온보딩. **지금 이 시점에** 없을 때만 — fetch를 기다리는
+    // 사이 사용자가 이미 「새 세션」을 눌렀을 수 있다(z-index:500이라 세션을 가린다).
+    if (isLayoutEmpty() && Object.keys(allSessions()).length === 0) showOnboarding();
   } catch (e) {
     // ADR-45 — 여기서 세션을 만들면 안 된다. 예전엔 createSession()이었고, 부팅 중
     // 새로고침·터널 끊김만으로 서버에 요청하지 않은 셸이 하나씩 생겼다(e2e 온보딩

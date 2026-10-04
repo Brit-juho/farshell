@@ -101,6 +101,31 @@ def _write_atomic(merged: dict) -> None:
         raise
 
 
+# 2026-10-03(세션·뷰 규칙 2단계) — 레이아웃은 브라우저 탭(screen id)마다 따로
+# 저장된다: `ui.layouts = {screen_id: snapshot}`. `ui`는 얕은 병합이라 그대로
+# 두면 한 탭의 PUT이 다른 탭들의 레이아웃을 통째로 지운다 — 이 키만 탭 id 단위로
+# 병합한다. 탭은 닫혀도 서버가 알 수 없으므로 최근 저장 순(savedAt)으로 상한을 둔다.
+MAX_SCREEN_LAYOUTS = 20
+
+
+def _merge_layouts(cur: dict, patch: dict) -> dict:
+    merged = dict(cur) if isinstance(cur, dict) else {}
+    for key, snap in patch.items():
+        if not isinstance(key, str) or not key:
+            continue
+        if snap is None:
+            merged.pop(key, None)
+        elif isinstance(snap, dict):
+            merged[key] = snap
+    if len(merged) > MAX_SCREEN_LAYOUTS:
+        def saved_at(item):
+            v = item[1].get("savedAt") if isinstance(item[1], dict) else 0
+            return v if isinstance(v, (int, float)) else 0
+        keep = sorted(merged.items(), key=saved_at, reverse=True)[:MAX_SCREEN_LAYOUTS]
+        merged = dict(keep)
+    return merged
+
+
 def save(data: dict) -> None:
     """읽기-수정-쓰기 **전체**가 임계구역이다.
 
@@ -117,7 +142,11 @@ def save(data: dict) -> None:
         cur = load()
         merged = {**cur, **(data or {})}
         if "ui" in (data or {}):
-            merged["ui"] = {**cur.get("ui", {}), **(data["ui"] or {})}
+            cur_ui = cur.get("ui", {})
+            patch_ui = data["ui"] or {}
+            merged["ui"] = {**cur_ui, **patch_ui}
+            if isinstance(patch_ui.get("layouts"), dict):
+                merged["ui"]["layouts"] = _merge_layouts(cur_ui.get("layouts"), patch_ui["layouts"])
         if "settings" in (data or {}):
             # settings도 ui와 같은 얕은 병합 — 프런트가 바뀐 키만 보내도 되고,
             # 두 기기가 서로 다른 항목을 동시에 바꿔도 한쪽이 통째로 지워지지 않는다.

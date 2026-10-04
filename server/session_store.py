@@ -29,18 +29,21 @@ class SessionInfo:
     # 이 세션의 tty를 tmux client_name(대개 tty 경로 그대로)이 아니라 사람이
     # 알아볼 라벨로 보여주는 데 쓴다. 기기 등록이 없으면(비보호 서버 등) None.
     device_label: str | None = None
+    # 한 브라우저 탭의 attach 식별자. None은 이전 버전/비 tmux 세션.
+    screen_id: str | None = None
 
 
 class SessionStore:
-    """세션 메타 저장소. tmux_name 역인덱스로 O(1) 조회 (Phase 8 G6)."""
+    """세션 메타 저장소. 한 tmux 세션에 여러 웹 화면이 붙을 수 있다."""
 
     def __init__(self):
         self._sessions: dict[str, SessionInfo] = {}
-        # 역인덱스: tmux_name → session_id (find_by_tmux_name O(N) → O(1))
-        self._by_tmux_name: dict[str, str] = {}
+        self._by_tmux_name: dict[str, set[str]] = {}
 
-    def add(self, session_id: str, name: str = "", cmd: str = "/bin/bash", device_label: str | None = None) -> SessionInfo:
-        info = SessionInfo(session_id=session_id, name=name or session_id, cmd=cmd, device_label=device_label)
+    def add(self, session_id: str, name: str = "", cmd: str = "/bin/bash", device_label: str | None = None,
+            screen_id: str | None = None) -> SessionInfo:
+        info = SessionInfo(session_id=session_id, name=name or session_id, cmd=cmd,
+                           device_label=device_label, screen_id=screen_id)
         self._sessions[session_id] = info
         return info
 
@@ -53,23 +56,35 @@ class SessionStore:
         if info is None:
             return
         # 옛 인덱스 제거
-        if info.tmux_name and self._by_tmux_name.get(info.tmux_name) == session_id:
-            self._by_tmux_name.pop(info.tmux_name, None)
+        if info.tmux_name:
+            self._unindex(info.tmux_name, session_id)
         info.tmux_name = tmux_name
         if tmux_name:
-            self._by_tmux_name[tmux_name] = session_id
+            self._by_tmux_name.setdefault(tmux_name, set()).add(session_id)
+
+    def _unindex(self, tmux_name: str, session_id: str) -> None:
+        ids = self._by_tmux_name.get(tmux_name)
+        if ids:
+            ids.discard(session_id)
+            if not ids:
+                self._by_tmux_name.pop(tmux_name, None)
 
     def remove(self, session_id: str) -> None:
         info = self._sessions.pop(session_id, None)
-        if info and info.tmux_name and self._by_tmux_name.get(info.tmux_name) == session_id:
-            self._by_tmux_name.pop(info.tmux_name, None)
+        if info and info.tmux_name:
+            self._unindex(info.tmux_name, session_id)
 
     def find_by_tmux_name(self, tmux_name: str) -> SessionInfo | None:
         """O(1) 역인덱스 조회."""
-        sid = self._by_tmux_name.get(tmux_name)
-        if sid is None:
-            return None
-        return self._sessions.get(sid)
+        return next(iter(self.find_all_by_tmux_name(tmux_name)), None)
+
+    def find_all_by_tmux_name(self, tmux_name: str) -> list[SessionInfo]:
+        return sorted((self._sessions[sid] for sid in self._by_tmux_name.get(tmux_name, ())
+                       if sid in self._sessions), key=lambda info: (info.created_at, info.session_id))
+
+    def find_by_tmux_and_screen(self, tmux_name: str, screen_id: str) -> SessionInfo | None:
+        return next((info for info in self.find_all_by_tmux_name(tmux_name)
+                     if info.screen_id == screen_id), None)
 
     def list_all(self) -> list[SessionInfo]:
         return list(self._sessions.values())

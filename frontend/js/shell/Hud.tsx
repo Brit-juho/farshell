@@ -14,11 +14,13 @@ import { render } from 'solid-js/web';
 import { buildHudChips, type HudChip, type HudInput } from './hud-data.js';
 
 const POLL_MS = 30000;
+const SCREEN_POLL_MS = 5000;
 
 export interface HudDeps {
   vtFetch: (path: string) => Promise<unknown>;
   /** 활성 세션의 tmux 이름(없으면 빈 문자열) — 「연결된 화면」 조회에 쓴다. */
   activeTmuxName: () => string;
+  activeClientsPath?: () => string;
   getAction: (name: string) => unknown;
   e2eEnabled: boolean;
 }
@@ -35,13 +37,15 @@ async function safeFetch<T>(deps: HudDeps, path: string): Promise<T | null> {
 
 async function collect(deps: HudDeps): Promise<HudInput> {
   const tmuxName = deps.activeTmuxName();
+  const clientsPath = deps.activeClientsPath?.() ||
+    (tmuxName ? `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}` : '');
 
   const [caps, safeMode, usage, clients] = await Promise.all([
     safeFetch<HudInput['caps']>(deps, '/api/capabilities'),
     safeFetch<HudInput['safeMode']>(deps, '/api/safe-mode'),
     safeFetch<HudInput['usage']>(deps, '/api/usage'),
-    tmuxName
-      ? safeFetch<{ clients?: unknown[] }>(deps, `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}`)
+    clientsPath
+      ? safeFetch<{ clients?: unknown[] }>(deps, clientsPath)
       : Promise.resolve(null),
   ]);
 
@@ -132,15 +136,32 @@ function fitChips(host: HTMLElement) {
 
 function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   const [chips, setChips] = createSignal<HudChip[]>([]);
+  let snapshot: HudInput | null = null;
 
   // 갱신: 30초 폴링(§7). 간격이 긴 이유는 여기 실리는 값이 전부 "천천히 바뀌는
   // 것"(터널 모드·세이프모드·사용량)이기 때문이다 — 빠르게 바뀌는 에이전트
   // 상태는 탭·레일이 이미 실시간으로 보여준다. 백그라운드 탭에서는 쉰다.
-  const refresh = async () => setChips(buildHudChips(await collect(props.deps)));
+  const refresh = async () => {
+    snapshot = await collect(props.deps);
+    setChips(buildHudChips(snapshot));
+  };
+
+  // attach/detach는 사용량보다 빨리 변한다. 다른 HUD 데이터의 30초 주기는
+  // 유지하고 화면 수만 목록 패널과 같은 5초 간격으로 갱신한다.
+  const refreshScreens = async () => {
+    if (!snapshot) return;
+    const tmuxName = props.deps.activeTmuxName();
+    const path = props.deps.activeClientsPath?.() ||
+      (tmuxName ? `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}` : '');
+    const data = path ? await safeFetch<{ clients?: unknown[] }>(props.deps, path) : null;
+    snapshot = { ...snapshot, screens: data?.clients?.length ?? null };
+    setChips(buildHudChips(snapshot));
+  };
 
   refresh();
   const timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
-  onCleanup(() => clearInterval(timer));
+  const screenTimer = setInterval(() => { if (!document.hidden) refreshScreens(); }, SCREEN_POLL_MS);
+  onCleanup(() => { clearInterval(timer); clearInterval(screenTimer); });
 
   const side = (s: 'left' | 'right') => chips().filter((c) => c.side === s);
 

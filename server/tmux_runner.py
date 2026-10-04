@@ -100,6 +100,22 @@ class PaneInfo:
     # (`@fsh_wt` 커스텀 옵션, worktree._sessions_for_path의 1차 판정 기준).
     # 아직 안 심겨 있으면 빈 문자열 — cwd 추론(폴백)으로 넘어간다.
     wt_tag: str = ""
+    # 세션을 만든 곳(`@fsh_origin`). 기록이 없으면 "external"(normalize_origin).
+    origin: str = "external"
+
+
+# 세션을 만든 곳. 기록 값은 이 화이트리스트뿐이고 "external"은 값이 아니라 "기록 없음"이다
+# (fsh CLI·직접 띄운 tmux는 옵션을 안 심는다). 에이전트 경로는 값만 준비돼 있다 — 지금
+# MCP 도구에는 세션 생성 기능이 없다.
+ORIGIN_OPTION = "@fsh_origin"
+RECORDABLE_ORIGINS = frozenset({"local", "peer", "agent"})
+ORIGIN_EXTERNAL = "external"
+
+
+def normalize_origin(raw: str | None) -> str:
+    """tmux가 돌려준 옵션 값을 API 값으로. 모르는 값·빈 값은 모두 external."""
+    v = (raw or "").strip()
+    return v if v in RECORDABLE_ORIGINS else ORIGIN_EXTERNAL
 
 
 def get_all_panes() -> list[PaneInfo]:
@@ -107,7 +123,7 @@ def get_all_panes() -> list[PaneInfo]:
 
     purplemux getAllPanesInfo 패턴: list-panes -a 한 번으로 N개 세션 처리.
     """
-    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}\t#{@fsh_wt}"
+    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}\t#{@fsh_wt}\t#{@fsh_origin}"
     text = run_text(["list-panes", "-a", "-F", fmt])
     if not text:
         return []
@@ -130,6 +146,7 @@ def get_all_panes() -> list[PaneInfo]:
                 path=parts[3] if len(parts) > 3 else "",
                 pane_id=parts[4] if len(parts) > 4 else "",
                 wt_tag=parts[5] if len(parts) > 5 else "",
+                origin=normalize_origin(parts[6] if len(parts) > 6 else ""),
             )
         )
     return panes
@@ -137,7 +154,7 @@ def get_all_panes() -> list[PaneInfo]:
 
 def list_sessions() -> list[dict]:
     """세션 메타 정보를 단일 호출로 수집."""
-    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{@fsh_wt}"
+    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{@fsh_wt}\t#{@fsh_origin}"
     text = run_text(["list-sessions", "-F", fmt])
     if not text:
         return []
@@ -155,6 +172,7 @@ def list_sessions() -> list[dict]:
                 "attached": parts[2] == "1",
                 "created": int(parts[3]) if parts[3].isdigit() else 0,
                 "wt_id": parts[4] if len(parts) > 4 else "",
+                "origin": normalize_origin(parts[5] if len(parts) > 5 else ""),
             }
         )
     return sessions
@@ -170,6 +188,14 @@ def set_option(session: str, key: str, value: str) -> bool:
     """
     rc, _, _ = run(["set-option", "-t", session, key, value], timeout=2.0)
     return rc == 0
+
+
+def set_origin(session: str, origin: str) -> bool:
+    """세션을 만든 곳을 `@fsh_origin`에 적는다. 화이트리스트(local/peer/agent) 밖의 값은
+    tmux를 부르지 않고 False — 호출부가 외부 입력을 그대로 넘겨도 임의 값이 들어가지 않는다."""
+    if origin not in RECORDABLE_ORIGINS:
+        return False
+    return set_option(session, ORIGIN_OPTION, origin)
 
 
 def is_installed() -> bool:
@@ -216,6 +242,11 @@ async def get_all_panes_async(*args, **kwargs) -> list[PaneInfo]:
 async def has_session_async(*args, **kwargs) -> bool:
     """`has_session`의 async 버전. 인자는 그대로 넘긴다."""
     return await asyncio.to_thread(functools.partial(has_session, *args, **kwargs))
+
+
+async def set_origin_async(*args, **kwargs) -> bool:
+    """`set_origin`의 async 버전."""
+    return await asyncio.to_thread(functools.partial(set_origin, *args, **kwargs))
 
 
 async def set_option_async(*args, **kwargs) -> bool:

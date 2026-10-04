@@ -21,7 +21,8 @@ fsh stop [--purge] [--keep-tunnel]
                        # 종료 (--purge: tmux 세션까지 완전 종료,
                        #       --keep-tunnel: 공개 입구는 남김)
 fsh status             # 현재 상태 확인
-fsh mobile [--e2e]     # 모바일 접속 URL + QR (--e2e: 페이로드 암호화)
+fsh mobile [--e2e] [--session <이름>]
+                       # 폰 접속 URL + QR (서버가 떠 있어야 함, --e2e: 페이로드 암호화)
 fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave 4
 fsh attach [name]      # 임의 tmux 세션을 새 창에 attach
 fsh voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
@@ -43,8 +44,6 @@ fsh password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clea
 fsh otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전까지 완전 비활성)
 fsh device [list|rename <id> <별명>|revoke <id>]  # 등록된 기기 조회 / 이름 변경 / 폐기(폰 분실 시 세션까지 함께 무효)
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
-fsh claude             # 새 터미널 창에 tmux dev + claude --resume (내부적으로 fsh agent claude)
-fsh agent <name>       # claude/codex/aider/agy/qwen 등 임의 에이전트로 시작 (fsh claude의 일반화)
 fsh template [save|apply|list|rm] <name>  # CLAUDE.md 템플릿 저장/적용 관리
 fsh popup <action>     # tmux 3.2+ popup으로 fsh 명령 빠른 호출
 fsh run "..."          # headless `claude -p` 백그라운드 실행 + 완료 시 TTS 알림
@@ -58,45 +57,48 @@ fsh tunnel restart                # 좀비 재연결(응답 없음) 상태여도
 fsh tunnel watchdog               # 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 fsh start/voice/mobile가 자동 기동)
 fsh ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내 (D9, 회사망 등)
 fsh doctor             # 설치/환경 진단 (Linux 항목 포함)
+fsh terminal           # fsh가 창을 열 때 쓰는 메인 터미널 확인/선택
 fsh install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
+fsh setup-keybind [key] [action]  # tmux popup 키바인딩 등록 (기본: prefix+v → status)
 fsh shell-init zsh     # 셸 init 스니펫 출력 (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
 ```
 
 > **지원 OS**: macOS / Linux (X11) / WSL2 (Linux로 동작). Windows 네이티브는 미지원.
 
-**Phase 6 — 단일 tmux 서버 원칙:** fsh CLI · server · Voice Daemon · hook이 모두 `-L vt` 격리 소켓 사용(소켓 이름은 CLI 이름과 무관하게 `vt`로 유지). Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
+**Phase 6 — 단일 tmux 서버 원칙:** fsh CLI · server · Voice Daemon · hook이 모두 `-L fsh` 격리 소켓 사용(기본 소켓 이름 `fsh`). Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
 
-**`voice` / `mobile` / `start` 실행 시 자동 동작:** 현재 쓰는 터미널 앱(iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app)에 새 창이 열리고 그 안에서 `tmux new -A -s dev 'claude --resume'`이 실행됩니다. 이미 tmux 안이면 새 창을 열지 않습니다.
+**터미널 창 열기:** `fsh attach`, `fsh handoff desktop`이 **메인 터미널**(아래 `fsh terminal`)에 새 창을 열고 그 안에서 tmux에 붙습니다. `voice` / `mobile` / `start`는 창을 열지 않습니다. 이미 tmux 안이면 새 창을 열지 않고, 창이 이미 붙어 있는 세션은 두 번 열지 않습니다.
 
 **노션 작업 중 음성 코딩 워크플로:**
-1. `fsh voice` → 백그라운드 시작 (+ 새 iTerm 창에 `tmux dev` + `claude --resume` 자동 오픈)
+1. `fsh voice` → 백그라운드 시작, 터미널에서 `tmux -L fsh new -A -s dev` 로 들어가 `claude --resume` 실행
 2. 새 창의 resume 목록에서 현재 대화 선택 → 이후 음성/모바일이 그 Claude로 연결됨
 3. 원래 창은 그대로 두고 노션으로 돌아가서 작업
-4. Ctrl+Shift+V → 말하기 ("git status") → tmux dev에 자동 입력
+4. Ctrl+Shift+M → 말하기 ("git status") → tmux dev에 자동 입력
 5. `fsh stop` → 종료
 
 > 이미 tmux 안에서 `fsh` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
-> 자동 오픈은 macOS + iTerm 환경 한정. 그 외에는 수동 명령(`tmux new -A -s dev 'claude --resume'`) 안내가 출력됩니다.
+> 창을 열지 못하면(앱 없음, macOS 자동화 권한 거부) 수동 명령(`tmux new -A -s dev 'claude --resume'`)이 출력됩니다.
 
 
-## `fsh mobile` 옵션
+## `fsh start` / `fsh mobile` 옵션
+
+`fsh start`가 **누가 접속할 수 있는지**를 정하고, `fsh mobile`은 폰으로 접속할 URL과 QR을 보여줍니다.
 
 ```bash
+fsh start --network <범위>             # localhost | lan | tailscale | all (기본값)
+fsh start --safe                       # 위험 명령(rm -rf /, sudo 등) 사전 차단
+fsh start --force                      # 인증(비밀번호/토큰) 미설정이어도 공개 터널 강행 — 비권장
 fsh mobile --e2e                       # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
                                        #   (서버 장기 신원키로 서명 — TOFU pinning, 첫 접속 신뢰)
-fsh mobile --safe                      # 위험 명령(rm -rf /, sudo 등) 사전 차단
-fsh mobile --network <mode>            # localhost | lan | tailscale | all (기본값)
-fsh mobile --force                     # 인증(비밀번호/토큰) 미설정이어도 공개 터널 강행 — 비권장
+fsh mobile --session <tmux세션>        # 폰이 열릴 때 이 tmux 세션을 바로 보기 (fsh handoff mobile과 같음)
 ```
 
-`--network all`(기본값)로 공개 터널을 열려면 `fsh password` 또는 `VT_AUTH_TOKEN`으로
-인증을 먼저 설정해야 합니다 — 미설정 상태면 실행이 거부됩니다(무인증 원격 코드
-실행을 막기 위함). 위험을 감수하고 강행하려면 `--force`를 명시하세요.
+`--network all`(기본)로 공개 터널을 열려면 먼저 `fsh password` 또는 `VT_AUTH_TOKEN`으로 인증을
+설정해야 합니다 — 설정하지 않으면 `fsh start`가 거부합니다(인증 없는 원격 코드 실행 방지).
+위험을 알고도 진행하려면 `fsh start --force`.
 
-`tailscale` 모드는 Cloudflare Tunnel 없이 자신의 tailnet IP로만 서버를 열고,
-네트워크 정책도 tailnet CIDR(`100.64.0.0/10`)+localhost로만 제한합니다.
-
----
+예전엔 이 옵션들이 `fsh mobile`에 있었습니다. `mobile`에 `--network`/`--safe`/`--force`를 주면
+`fsh start`를 대신 실행하고 안내를 출력합니다. 자세히: `fsh help access`.
 
 ## 에이전트 간 메시지 (`fsh msg`, `fsh mcp`)
 
@@ -163,7 +165,7 @@ fsh queue clear                 # 전체 비우기
 | 1 | Python | 경로·버전 확인 |
 | 2 | venv | `.venv` 또는 legacy conda env |
 | 3 | core packages | fastapi, uvicorn |
-| 4 | voice packages | faster-whisper, edge-tts, sounddevice |
+| 4 | voice packages | edge-tts, sounddevice, 선택한 STT 모델 준비 여부 |
 | 5 | tmux | 설치 여부 및 버전 |
 | 6 | cloudflared | 원격 접속 도구 |
 | 7 | ffmpeg | 모바일 음성 디코딩 |
@@ -184,7 +186,7 @@ Tailscale(WireGuard 기반 VPN 메시)은 UDP 홀펀칭 또는 443 DERP 릴레�
 동작해 이런 방화벽도 대부분 통과합니다. 화면 전체가 아니라 **터미널만** 필요하다면
 Tailscale + SSH로 집 맥북의 tmux 세션에 직접 붙는 쪽이 화면 원격보다 가볍고 빠릅니다.
 
-tmux 세션이 단일 진실의 원천이므로, SSH도 데스크톱 iTerm·모바일 PWA·Voice Daemon과
+tmux 세션이 단일 진실의 원천이므로, SSH도 데스크톱 터미널·모바일 PWA·Voice Daemon과
 같은 하나의 클라이언트일 뿐입니다 — 회사에서 SSH로 붙어도 집에서 보던 것과 완전히
 같은 화면·스크롤백·실행 중인 Claude 세션을 그대로 이어받습니다.
 
@@ -203,23 +205,32 @@ fsh ssh --add-key "ssh-ed25519 AAAA... user@laptop"   # 공개키 등록
 | 접속 방식 | 필요한 것 | 용도 |
 |---|---|---|
 | `fsh ssh` | Tailscale + (선택) SSH 키 | 순수 터미널, vim/IDE 등 키 입력 위주 작업 |
-| `fsh mobile --network tailscale` | Tailscale + 브라우저 | 폰에서 음성 입력, 터치 조작 |
-| `fsh mobile` (기본, `--network all`) | 인증(비밀번호/토큰) | Tailscale 없는 완전 외부 기기 |
+| `fsh start --network tailscale` | Tailscale + 브라우저 | 폰에서 음성 입력, 터치 조작 |
+| `fsh start` (기본, `--network all`) | 인증(비밀번호/토큰) | Tailscale 없는 완전 외부 기기 |
 
 자세한 내용: `fsh help ssh`.
 
 ---
 
-## 자동 오픈 동작
+## 메인 터미널과 자동 오픈
 
-`fsh voice` / `mobile` / `start` 실행 시:
-- 현재 쓰는 터미널 앱 자동 감지 → 새 창 오픈 → `tmux new -A -s dev 'claude --resume'` 실행
-- 지원 앱: iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app
+`fsh terminal`로 창을 여는 앱을 확인/지정합니다(`~/.vt.env`의 `VT_TERMINAL`):
+
+```bash
+fsh terminal                  # 현재 설정 + 설치된 앱
+fsh terminal set ghostty      # auto | ghostty | iterm | terminal | wezterm | warp | kitty | alacritty
+fsh terminal unset            # 자동 선택으로 되돌리기
+```
+
+- `auto`(기본): 지금 쓰는 터미널(`TERM_PROGRAM`) → 설치된 앱 순서
+- 설치되지 않은 앱은 `set`에서 거부되고, 실행 중 지정한 앱을 못 열면 알린 뒤 자동 선택으로 넘어갑니다
+- Ghostty(1.3+)는 이미 켜진 앱에 AppleScript로 창만 추가하고, 실패하면 `open -na`로 폴백합니다
+- 지원 앱: iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app (macOS), Linux는 흔한 에뮬레이터(자동 선택만)
 - 이미 tmux 안에 있으면 새 창 없이 현재 창에서 계속 (`$TMUX` 체크, 멱등성 보장)
 
 ## 설치 후 통합 (선택)
 
-새 터미널 창을 열면 자동으로 `tmux -L vt new -A -s dev` 진입하도록 통합. 둘 중 하나를 선택.
+새 터미널 창을 열면 자동으로 `tmux -L fsh new -A -s dev` 진입하도록 통합. 둘 중 하나를 선택.
 
 ### 방식 A — 터미널 profile 자동 등록 (권장)
 
@@ -246,6 +257,6 @@ fsh shell-init pwsh >> $PROFILE                       # PowerShell
 
 ### 단일 tmux 서버 원칙
 
-`fsh` CLI · server · Voice Daemon · hook이 모두 `-L vt` 격리 소켓을 사용 → 모든
+`fsh` CLI · server · Voice Daemon · hook이 모두 `-L fsh` 격리 소켓을 사용 → 모든
 클라이언트(데스크톱·모바일·Voice Daemon)가 같은 세션을 공유. 사용자의 기존
 `tmux ls` 세션과는 자동 분리됩니다.

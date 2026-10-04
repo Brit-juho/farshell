@@ -48,6 +48,14 @@ EVENTS = {
     # "모른다"였고, 그 사이 온 에이전트 메시지·큐 항목이 첫 지시를 사람이 칠 때까지
     # 묶여 있었다(M1↔M5 실측). 세션이 열리면 idle로 알린다.
     "SessionStart": "session_start",
+    # 2026-10-03 — 입력 대기 알림(`permission_prompt`/`idle_prompt`). waiting의 kind를
+    # 정하는 데는 **쓰지 않는다**(서버는 보조 기록만 한다) — 근거는 tool_name과 화면.
+    "Notification": "notification",
+    # 2026-10-04 — 허가 대화상자가 뜨기 직전에 온다. tool_name(Bash/AskUserQuestion/
+    # ExitPlanMode…)으로 waiting의 kind를 훅이 정한다(훅 > 화면 > 폴백). 출력 없이
+    # 끝나므로 허용·거부를 결정하지 않고 기존 대화상자가 그대로 뜬다(실측 2026-10-03).
+    # 승인·거절 시점을 알리는 이벤트는 없어 해제는 다음 pre/post/stop·화면 패턴이 맡는다.
+    "PermissionRequest": "permission",
 }
 
 # 이벤트별 matcher. Pre/PostToolUse는 도구 이름으로 거른다 — 우리는 모든 도구를 본다.
@@ -58,6 +66,7 @@ MATCHERS = {
     "PreToolUse": "*",
     "PostToolUse": "*",
     "SessionStart": "startup|resume|clear",
+    "Notification": "permission_prompt|idle_prompt",
 }
 
 # 우리 소유로 간주하는 스크립트 이름. 경로가 어디로 옮겨졌든 파일명으로 알아본다.

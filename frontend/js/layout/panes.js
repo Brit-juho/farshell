@@ -15,10 +15,10 @@
 import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
-  splitPane, closePane, setRatio, getActiveTabHostId,
+  splitPane, setRatio, getActiveTabHostId,
 } from './store.js';
-import { findNode, collectSessions } from './tree.js';
-import { detachSession } from '../term/session-actions.js';
+import { findNode } from './tree.js';
+import { closePaneAction } from '../term/session-actions.js';
 import { paneElId, splitElId } from './dom-ids.js';
 import { snapPx, cellSizeFrom } from './snap.js';
 import { wireRatioResizer } from './resizer.js';
@@ -26,7 +26,10 @@ import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSourc
 // N4 — 패널 칸. 레지스트리는 상수 + **동적** import 로더만 들고 있어서
 // 여기서 정적으로 가져와도 panels 청크가 core로 승격되지 않는다(ADR-26).
 import { mountPanelInPane, panelLabel } from '../panels/registry.js';
-import { openPanePicker } from './pane-picker.js';
+// 빈 칸을 눌렀을 때만 쓰는 세션 선택 시트 — screens 청크(vite.config.js).
+const openPanePicker = (paneId) => import('./pane-picker.js')
+  .then((m) => m.openPanePicker(paneId))
+  .catch((e) => console.error('[FarShell pane-picker]', e));
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
 import { vtFetch } from '../core/api.js';
@@ -135,7 +138,7 @@ function _buildPaneEl(paneId) {
       <span class="vt-pane-branch" hidden></span>
       <button type="button" class="vt-icon-btn xs vt-pane-split-row" data-tip="오른쪽 분할" data-tip-side="bottom" aria-label="오른쪽 분할">${icon('columns-2', 13)}</button>
       <button type="button" class="vt-icon-btn xs vt-pane-split-col" data-tip="아래쪽 분할" data-tip-side="bottom" aria-label="아래쪽 분할">${icon('rows-2', 13)}</button>
-      <button type="button" class="vt-icon-btn xs danger vt-pane-close" data-tip="pane 닫기" data-tip-side="bottom" aria-label="pane 닫기">${icon('x', 13)}</button>
+      <button type="button" class="vt-icon-btn xs danger vt-pane-close" data-tip="닫기" data-tip-side="bottom" aria-label="닫기">${icon('x', 13)}</button>
     </div>
     <div class="vt-pane-body"></div>
   `;
@@ -145,19 +148,13 @@ function _buildPaneEl(paneId) {
   paneEl.querySelector('.vt-pane-split-col').addEventListener('click', () => {
     if (canSplit()) splitPane(paneId, 'col');
   });
-  // 2026-09-18 후속(그룹 재정의, 사용자 요청: "제거하면 자동으로 풀리고
-  // 제거한 건 잠잘 것") — 이 pane이 그룹(같은 탭에 세션 2개 이상)의
-  // 일원이었으면, 닫을 때 그 세션을 재운다(웹 세션만 놓는다, tmux는
-  // 계속 산다). 남은 세션은 혼자가 되어 자동으로 "개인"이 된다 — 그룹은
-  // 태그가 아니라 pane 트리에서 도출되므로 따로 "그룹 해제"를 할 필요가
-  // 없다. 드래그로 pane을 옮겨 빼는 경우(dnd.js)는 이 재우기를 안 탄다 —
-  // "옮기는 것"과 "닫는 것"은 다른 의도다.
+  // 2026-10-03(세션·뷰 규칙) — 칸 ×는 레일·모바일 시트·Fleet의 「닫기」와
+  // 같은 함수다(term/session-actions.js `closePaneAction`): 세션이 든 칸이면
+  // 그 세션을 닫고 칸은 **빈 칸으로 남긴다**(묶음에서 빠지며 묶음 판정도 바로
+  // 바뀐다). 빈 칸의 ×는 칸을 없애고, 그게 뷰의 마지막 칸이면 뷰를 닫는다.
+  // 단독/묶음 구분 없이 같다. 드래그로 옮기는 것(dnd.js)은 닫기가 아니다.
   paneEl.querySelector('.vt-pane-close').addEventListener('click', () => {
-    const node = findNode(getTree(), paneId);
-    const sessionId = node && node.t === 'leaf' ? node.session : null;
-    const wasGrouped = sessionId && collectSessions(getTree()).length >= 2;
-    closePane(paneId);
-    if (wasGrouped) detachSession(sessionId);
+    closePaneAction(paneId);
   });
 
   // 활성 pane을 **포커스가** 정한다. layout/store.js 상단이 L3 설계 원칙으로
@@ -314,7 +311,9 @@ async function _retryUnreachable(node, subEl, btn) {
       subEl.textContent = `${host.label} — 아직 연결되지 않습니다.`;
     } else if (typeof window.attachRemoteSession === 'function') {
       // 멀티호스트 3단계가 붙여 주는 경로. 없으면(지금) 아래 안내로 떨어진다.
-      await window.attachRemoteSession(host.id, node.unreachable.tmux);
+      // 이 칸을 다시 채운다 — 활성 칸으로 맞춘 뒤 그 자리에 놓는다.
+      setActivePane(node.id);
+      await window.attachRemoteSession(host.id, node.unreachable.tmux, { place: 'pane' });
       return;
     } else {
       subEl.textContent = `${host.label}는 다시 켜졌습니다 — 원격 세션 열기는 준비 중입니다.`;
@@ -402,6 +401,12 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
   // 오면 자연히 덮어써진다), 렌더링에서만 관대하게 처리한다.
   const nameEl = paneEl.querySelector('.vt-pane-name');
   _paintChip(paneEl);
+  // 칸 ×가 무엇을 하는지는 칸에 세션이 있느냐로 갈린다(closePaneAction).
+  const closeBtn = paneEl.querySelector('.vt-pane-close');
+  const holdsSession = (node.kind || 'terminal') === 'terminal' && node.session && getSession(node.session);
+  const closeTip = holdsSession ? '세션 닫기 — 칸은 빈 칸으로 남습니다' : '칸 없애기';
+  closeBtn.setAttribute('data-tip', closeTip);
+  closeBtn.setAttribute('aria-label', closeTip);
 
   // N35 §6 — 뷰어 칸: 세션이 아니라 파일 하나를 그린다. 표면 레이어에는 아무
   // 것도 안 넘긴다(placement에 안 들어가므로 xterm이 이 자리를 덮지 않는다).

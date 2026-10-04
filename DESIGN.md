@@ -94,7 +94,8 @@ steps are the 20%, and the accent is the 10%.
 - Animation is 120~200ms, subtle, and purposeful — feedback, state change, or
   spatial sense only (`--dur-fast`/`--dur-base`, `--ease-out-quint`).
 - **Only one thing moves per screen.** Of the status dots, only `waiting`
-  breathes — if every dot pulses on a screen full of sessions (rail, fleet
+  breathes (the state *icons* of §5 add the `working` spinner arc and the same
+  `waiting` breathing — both freeze under `prefers-reduced-motion`) — if every dot pulses on a screen full of sessions (rail, fleet
   home), nothing stands out.
 - Under `prefers-reduced-motion`, animation/transition is globally disabled
   and `waiting` falls back to an outline instead of a pulse.
@@ -374,8 +375,22 @@ button goes disabled **with the reason in its tooltip**.
 ### Header 36px
 
 Left: a workspace chip (repo name + host, clicking it opens the palette's `@`
-mode). Center: tabs — **in 2.1.0 a tab is a session** (a worktree from 2.1.1,
-ADR-20). A tab is `[14px agent mark][name][status dot]` — "done but not yet seen on this device" is a 2px-gap ring around that same dot (`.status-dot.unseen`, 2026-09-30), not a second dot: the old separate unread dot was the same colour as `done` (`--info` = `--color-st-done`), so a finished tab showed two identical blue dots that dropped to one once viewed. Right:
+mode). Center: **view tabs** (`#vt-wtabs`, `layout/tabbar.js`). A tab is a view,
+not a session, and holds only `[label][×]` — no agent mark, no state icon, no dot
+(2026-10-04 rework). The label is the member names joined with `+`, or the name the
+user gave it. State lives in a **state bar** along the tab's bottom edge
+(`.vt-wtab-bar` > `.vt-seg`): one equal-width segment per session in pane order
+(top-left first), a one-segment bar for a single view, empty panes not counted.
+Segment colour = the four state colours (`--color-st-*`), idle a dimmed grey that is
+always visible; only `waiting` breathes (`vt-status-breathe`; under
+`prefers-reduced-motion` it becomes a striped fill, so the shape still says
+"waiting"). **Thickness carries "unseen"**: 6px = changed and not yet looked at,
+3px = seen. The focused pane is never shown by thickness (it would collide) — the
+pane's own border does that. Colour alone is not the signal: the hover tooltip lists
+`name · state[ · 확인 안 함]` per session and the tab's `aria-label` repeats it
+(`api, 작업 중 · web, 입력 대기(확인 안 함)`). The active tab is a filled background
+(the old accent underline gave way to the bar). × is shown even when there is one
+view. Hidden below 720px, as before. Right:
 `⌘K` (palette), a connected-screens icon + count, settings ⚙. Dragging a tab
 to drop it on a pane still uses the existing `layout/dnd.js`
 (`frontend/js/shell/HeaderExtras.tsx` only draws the new workspace chip and
@@ -383,25 +398,32 @@ connected-screens icon; it doesn't touch the tabs themselves).
 
 ### Worktree rail 252px (`#vt-wgrail`, `shell/Rail.tsx`)
 
-2.1.0 has no worktree model yet (that's 2.1.1's job), so **a session is drawn
-in the worktree row's place** — one session, one row. A row is: a left 3px
-**status bar** (`--color-st-*` tone — idle/working/waiting/done/error, same
-colors as §5) · agent mark · name · a diff badge on the right (from `GET
-/api/git/status` keyed on the session's cwd, cached 60s) · a second-line
-status sentence. Group order is fixed: **needs attention** (waiting, error)
-→ **working** → **idle** (idle, done), most-recently-active first within a
-group. Clicking a row focuses that session in the active pane. The rail's
-width resizer spans 240~480px. Collapsed (48px), only the mark and the
-status bar remain.
+A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
+(waiting sessions; collapsible, and switchable on/off in 레일 설정 like VS Code's
+Open Editors) and **세션** (every session, **name order only** — no urgency sorting, so
+rows never jump). There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A row is three lines:
 
-**Repo color bar** (`.vt-wgrail-hash`, 20-design-system.md §5 O2): a worktree
-row carries a *second* 3px bar, left of the status bar, whose color comes from
-`fnv1a(repo name + remote) % 8` → `--color-hash-1..8` (defined per skin, all
-6). The status bar answers "does this need me"; this one answers "which repo
-is this" — two questions that a single bar was collapsing. Session rows
-(`kind-session`) leave it transparent, since a bare session has no repo to
-hash. Implemented in `shell/RailRow.tsx` + `rail-data.ts`
-(`repoColorKey`/`hashRepoColorIndex`).
+1. **State icon** (`stateIcon`; a ring around it = unseen) · agent mark · name (edited in place).
+   A small window icon at the line's end = "open in this browser tab".
+2. **Main/worktree icon** (`git-commit` = main worktree, `git-branch` = linked worktree) ·
+   branch — **main is shown too** — · change size (`+add −del`, or `파일 N`).
+3. **State keyword** · elapsed time · **origin icon** (local has none; `laptop` = created on
+   another Mac, `bot` = created by an agent, `square-terminal` = CLI / plain tmux).
+
+Only when applicable, a fourth line: the grouped view's name and a 「다른 화면 N」 badge
+(tmux clients attached beyond this browser tab's own). The state keyword is short and fixed so
+it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문 for waiting (server `kind`),
+유휴 / 작업 중 (+ tool name, the one place allowed to ellipsize) / 완료 (+ 「질문 있음」 /
+「계획 있음」 from the server `badge`). The old left 3px status bar, the repo color bar, the
+tmux plug icon and the `? question` line are gone — state is the icon's colour **and** shape.
+A session that is not open keeps full opacity but its name steps down to `--color-sub`.
+
+The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
+맥에서 열기 · 연결된 화면 · 종료). The header gear is **레일 설정** (개입 필요 on/off, show
+or hide sessions by origin — peer / agent / external, and the 저장소 표시 list). Hiding an
+origin never hides a session that is open or waiting. The rail's width resizer spans
+240~480px. Collapsed (48px), only the state icon and agent mark remain; name, branch and
+keyword move to the row tooltip.
 
 ### Dock 392px (`shell/Dock.tsx`)
 
@@ -524,8 +546,10 @@ WORKING, WAITING, DONE, ERROR)`. Only the first 4 actually have an entry path
 — `error` is marked in the same file as *"reserved — no entry path"*. The
 color token (`--color-st-error`) and the sort priority already have a spot
 reserved. So "4 states" means **the states currently observable**, while
-every consumer (tabs, pane header, worktree rail, fleet home, favicon, app
-icon badge) must still handle all 5.
+the **frontend draws 4**: `error` is gone from the UI (no colour, branch, sentence or
+group) and any unknown value folds to `idle` (`normalizeState`,
+`frontend/js/design/state-classes.js`). The `--color-st-error` token stays — it is
+the danger/failure colour for buttons and toasts.
 
 - The component contract is one thing: `.status-dot[data-state="..."]`
   (`styles/layers/components.css`). Color comes from `--color-st-*`.
@@ -534,6 +558,20 @@ icon badge) must still handle all 5.
 - The `working` indicator on a card/tab/rail row animates only a **single
   small dot**, never the whole element (`opacity`/`transform` are
   compositor-only, so there's no repaint).
+- **One definition of labels and aggregation**, `design/state-classes.js`: labels
+  are 유휴 / 작업 중 / **입력 대기** / 완료 (waiting reads 입력 대기 everywhere — the
+  rail's old 승인 대기 is gone). A tab or group is represented by one state with the
+  priority `waiting > done(unseen) > working > done(seen) = idle`
+  (`representativeState`, shared by the favicon and rail; the view tab does not fold — it draws one segment per session). Among entries of
+  one tmux session the server's `_URGENCY` order decides.
+- **Unseen** = the state changed and the user has not looked at that session yet — any
+  state, not only `done`. Drawn as a 2px-gap ring around the dot (`.status-dot.unseen`)
+  or the icon (`.vt-state-icon.unseen`). "Looking" = the session is the focused pane of
+  the active view and the window is visible (`document.visibilityState`).
+- **State icons** (`ui/icons.js` `stateIcon`, stroke 1.75, no emoji or Unicode check
+  marks): idle = empty circle, working = open arc that rotates, waiting = speech bubble
+  with a question mark, done = check in a circle. Shape carries the state, not just
+  colour. The rail rows and the phone Fleet draw them (2026-10-04); the tab bar uses colour segments instead.
 - Without the Claude Code hooks (`fsh hooks install`), this value never
   arrives at all — `fsh doctor` and Settings → About surface the gap.
 
@@ -725,7 +763,7 @@ to `hostname`) off `/api/capabilities` (`"MacBook Pro M1 Pro"` — the OS prefix
 was dropped 2026-09-29 at the user's request; machine is macOS-only,
 read once via `system_profiler` and cached for the process lifetime, same
 pattern as the `hostname`/`version` fields), the session picker
-(`#voice-session-picker`, kept for now as a display + the same rename/sleep/
+(`#voice-session-picker`, kept for now as a display + the same rename/close/
 kill sheet it always opened — the session tab below now has full parity with
 it, so a later pass can drop the sheet trigger and make this pure display),
 and the command-palette search icon. The workspace chip (repo name + host) is
@@ -734,7 +772,8 @@ desktop-only now; a phone doesn't need to see the repo name on every screen.
 hidden here — `80-dock.css`'s unconditional `display:flex` (added for the
 strip's horizontal-scroll behavior, loads later in the same `legacy` layer)
 otherwise won whenever 2+ tabs were open; a single-tab test during step 1
-missed this because `tabbar.js` hides a lone tab on its own.
+missed this because `tabbar.js` hid a lone tab on its own (it no longer does —
+2026-09-29 — so a single view draws its tab bar like any other).
 
 Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`):
 **Session · Terminal · Changes · Files · Settings**. Queue was dropped from
@@ -759,29 +798,24 @@ the first screen (`ui.mobile.home` defaults to `fleet`) — most of what you do
 on a phone in compact is "what's waiting on me right now," not typing. Its
 data source moved from "this browser's open web sessions" to the same
 `/api/tmux/sessions` + `allSessions()` join as the desktop rail's local path
-(`Rail.tsx`) — so **sleeping tmux sessions show up here too now**, in their
-own dimmed "잠자는 중" section at the bottom (`buildSleepingEntries`), same
-name and same behavior as the rail: tap wakes and opens, no ack/unseen
-handling (that's an awake-only concept). The three urgency buckets above it
-(개입 필요 / 작업 중 / 열려 있음) are still `buildRailSections`, now fed only the
-awake rows — a sleeping-but-waiting session doesn't jump into 개입 필요, same
-rule as the desktop's `buildSessionSections`. `GROUP_LABEL.idle` itself was
-renamed from "열려 있지 않음" to **"열려 있음"** (`rail-data.ts`) — that bucket
-has only ever meant "session open, agent idle" since ADR-29, never "no
-session," so the old label was backwards; this also fixed the same wording on
-the desktop rail's remote-host view, which shares the constant.
+(`Rail.tsx`) — and, since the 2026-10-04 rail rules, the **same rows and zones**:
+`collectSessionRows` (`rail-fetch.ts`) builds them, `buildRailLists` (`rail-data.ts`) splits
+them into 개입 필요 and 세션 (name order), and the row parts (state icon + unseen ring,
+keyword line, origin icon) are `RailRow.tsx`'s own components. Only the waiting rows in the
+개입 필요 zone carry the inline approval buttons (the same session also appears below
+without them). The Fleet-only unseen badge is gone — the ring on the state icon replaced it.
 
-**Long-press a row for a bottom-sheet menu** — awake rows get 이름 변경 · 재우기
-· 맥에서 열기 · 연결된 화면 · 완전 종료(tmux only, red); sleeping rows get 깨우기 ·
-완전 종료. Same actions, same window bridges as the desktop rail's ⋯ menu
-(`ctxMenuItems`), just a sheet instead of a coordinate popup — a touch menu
+**Long-press a row for a bottom-sheet menu** — the same items as the desktop ⋯ menu
+(`rowMenuItems`: open rows get 닫기 · 이름 변경 · 맥에서 열기 · 연결된 화면, closed rows get
+열기; tmux sessions add 종료, red), the same window bridges as the desktop rail
+(`runRowMenu`), just a sheet instead of a coordinate popup — a touch menu
 that opens where you pressed can walk off-screen. Detection is a plain
 pointer-event timer (500ms / 8px cancel, touch-only — mouse is left to the
 desktop's ⋯ button) since `layout/dnd.js`'s long-press is wired to actual
 drag-and-drop and isn't reusable as-is. **Two real bugs surfaced building
 this, both fixed:** the sheet's action callbacks originally read the
 render-prop's resolved value (`m()`) *after* `closeMenu()` had already torn
-down that `<Show>` block, so e.g. 재우기 silently did nothing from a real tap
+down that `<Show>` block, so e.g. the close action (called 재우기 then) silently did nothing from a real tap
 while working fine when called directly from a console — fixed by capturing
 the row into a plain variable before closing. And the shared
 `.vt-session-sheet` (also used by the older `#voice-session-picker` sheet)

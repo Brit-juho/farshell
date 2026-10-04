@@ -185,7 +185,7 @@ jobs:
           # 위 e2e 잡의 주석 참고 — 파일명이 requirements.txt가 아니면 이 액션은
           # 에러로 끝난다. 이 잡은 core 하나만 설치하므로 그것만 적는다.
           cache-dependency-path: requirements-core.txt
-      # requirements-voice.txt는 설치하지 않는다 — faster-whisper/torch가 수 GB.
+      # requirements-voice.txt는 설치하지 않는다 — STT 엔진·모델 의존성이 무겁다(엔진 테스트는 가짜 엔진으로 돈다).
       # 2026-09-03 실측: voice 없이 332 passed / 2 skipped (Python 3.12/3.14 확인).
       # pytest·httpx 는 이미 requirements-core.txt 에 있어 추가 설치 불필요.
       - run: pip install -r requirements-core.txt

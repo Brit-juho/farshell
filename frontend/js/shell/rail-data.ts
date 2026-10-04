@@ -1,127 +1,114 @@
-// N36 §5 — 워크트리 레일의 순수 로직. DOM도 fetch도 모른다 — 여러 소스(세션
-// 목록·에이전트 상태·git status·워크트리 API)를 합친 평범한 입력을 받아
-// 그룹핑된 행 목록을 돌려준다.
+// 레일(Rail.tsx)과 폰 Fleet(Fleet.tsx)의 순수 로직. DOM도 fetch도 모른다.
 //
-// 2.1.1(N8/N44)부터 buildRailSections는 제네릭이다 — Fleet.tsx(모바일 플릿
-// 홈, 70-mobile.md)는 여전히 "행 = 세션" 모양(RailRowInput/RailRow, 아래)을
-// 그대로 쓰고, Rail.tsx(데스크톱)는 "행 = Worktree"(WorktreeRailRow) 또는
-// "행 = 기타 세션"(OtherRailRow)의 합집합(DesktopRailRowInput)을 넘긴다.
-// 그룹핑·정렬·문장 로직은 status/since/tool만 보므로 두 모양 모두에 그대로
-// 재사용된다 — Fleet.tsx의 계약(정확히 RailRowInput 모양)을 바꾸지 않는다.
+// 규칙의 출처는 docs/ref/terminal.md 「Session and view rules」(Rail):
+// - 구역은 둘이다. 「개입 필요」(waiting) · 「세션」(전체, 이름순만).
+//   상태 우선순위 정렬은 없다 — 행이 오락가락하지 않게(2026-09-18 사용자 지적).
+// - 행 3줄: 상태·에이전트·이름 / 메인·워크트리 아이콘·브랜치·변경량 / 상태 키워드·경과·만든 곳.
+// - 만든 곳(origin) 3종(peer·agent·external)은 레일 설정에서 표시를 끈다.
 import type { AgentState } from '../core/types.js';
+import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 
-export type RailGroup = 'attention' | 'working' | 'idle';
+// ── 행 모양 ────────────────────────────────────────────────────────────────
 
-export interface RailRowInput {
+export type Origin = 'local' | 'peer' | 'agent' | 'external';
+export type WaitKind = 'approval' | 'choice' | 'plan' | 'question';
+export type DoneBadge = 'question' | 'plan';
+
+export interface SessionRow {
+  /** 이 브라우저 탭의 웹 세션 id. 열려 있지 않으면 빈 문자열. */
   sessionId: string;
   tmuxName: string | null;
   name: string;
+  /** 이 브라우저 탭의 칸에 놓여 있다(열림). 상태가 아니라 배치다. */
+  open: boolean;
   status: AgentState;
-  /** since epoch초 — 상태 진입 시각. 상대시간·정렬 둘 다 이걸로. */
+  /** 상태 변화를 아직 못 봤다 — 상태 아이콘 둘레 링. */
+  unseen: boolean;
+  /** 상태 진입 시각(epoch초). */
   since: number | null;
-  /** 진행 중인·마지막 도구 이름("Edit" 등). working에서만 의미 있다. */
+  /** 진행 중인·마지막 도구 이름. working에서만 보인다. */
   tool: string | null;
-  diffFiles: number | null; // git 아니거나 아직 조회 전이면 null
-  /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 데스크톱 레일 행과 폰의 플릿 행이
-   * **헤더 탭과 같은 마크**를 달기 위해 필요하다. 모르면 null이고, 그때는
-   * 마크를 그리지 않는다(agent-shell로 떨어뜨리지 않는다 — "셸이다"와
-   * "아직 모른다"는 다르고, 후자에 확신 있는 마크를 그리면 거짓말이 된다.
-   * agent/badges.js가 같은 이유로 같은 선택을 했다). */
-  agent?: string | null;
-  /** N38(70-mobile.md §2) — waiting 상태에서 감지된 질문 1줄. Fleet.tsx가
-   * 이 필드로 인라인 승인 버튼을 그린다. 선택 필드라 Rail.tsx는 안 넘겨도
-   * 그대로 동작한다. */
+  /** 서버가 정한 waiting의 유형. 없으면 질문. */
+  kind: WaitKind | null;
+  /** done에 붙는 보조 표시(질문 있음/계획 있음). */
+  badge: DoneBadge | null;
+  diffFiles: number | null;
+  changed?: { files: number; add: number; del: number } | null;
+  /** waiting에서 감지된 질문 원문. 행에는 안 보이고 툴팁·승인 버튼에만 쓴다. */
   question?: string | null;
-  /** toml `options` 캡처로 뽑은 번호 선택지. 못 뽑았으면 null(또는 undefined)
-   * — 그 경우 Fleet.tsx는 버튼 대신 「터미널로」를 그린다. */
   options?: { key: string; label: string }[] | null;
-  /** P1-1(ADR-33) — 지금 이 질문을 가리키는 토큰. 화면 둘이 같은 선택지를
-   * 동시에 눌러도 먼저 도착한 요청만 이 토큰을 소비하고, 나머지는 409로
-   * 떨어져 PTY에 아무것도 쓰지 않는다(docs/plan-2.3/10-approval-race.md).
-   * 같은 질문이 다시 렌더돼도(ANSI 잔여·후행 공백) 토큰은 그대로다 — 서버가
-   * 질문+선택지 키로 지문을 내 판정한다. null/undefined면 구버전 서버이거나
-   * 토큰을 소비할 질문이 아직 없다는 뜻이고, 그때는 필드 없이 보낸다(기존
-   * 동작 그대로 통과). */
+  /** 승인 응답 경쟁을 막는 토큰(ADR-33). */
   promptId?: string | null;
+  agent?: string | null;
+  branch?: string | null;
+  isMainWorktree?: boolean;
+  worktreeId?: string | null;
+  origin: Origin;
+  /** 이 세션이 속한 묶음 뷰의 이름(묶음이 아니면 null). */
+  viewLabel: string | null;
+  /** 이 브라우저 탭 말고 이 세션에 붙어 있는 화면 수(다른 브라우저 탭·폰·맥 터미널). */
+  otherScreens: number;
 }
 
-export interface RailRow extends RailRowInput {
-  statusSentence: string;
-}
+// ── 만든 곳 ────────────────────────────────────────────────────────────────
 
-export interface RailSectionOut<TRow = RailRow> {
-  group: RailGroup;
-  rows: TRow[];
-}
+export const HIDEABLE_ORIGINS: Origin[] = ['peer', 'agent', 'external'];
 
-// 98 §2 — 「유휴」를 버렸다. 사용자가 두 번 "유휴가 뭐냐"고 물었고, 그 13행은
-// "세션은 있는데 노는 중"이 아니라 **세션이 아예 없는 것**이었다(§0-2, 워크트리
-// 행 시절 — ADR-20이 살아 있을 때는 세션 0개인 워크트리도 행 하나였다). `done`은
-// §6-1 확정으로 「작업 중」으로 옮겼다.
-//
-// 2026-09-23(사용자 지적) — 그 뒤에 붙인 「열려 있지 않음」이 다시 틀렸다.
-// ADR-29로 행의 정체가 세션 하나로 고정된 뒤(Fleet.tsx도, Rail.tsx의 원격
-// 경로도) `idle` 그룹은 항상 **agent 상태가 idle인, 열려 있는 세션**이다 — 위
-// 문단의 "세션이 아예 없는 행"은 이제 이 함수가 보는 두 입력 어느 쪽에도 없는
-// 옛 모양이다(로컬 데스크톱 경로는 진작 buildSessionSections로 갈아탔다).
-// 그러니 사실대로 「열려 있음」으로 부른다 — 잠자는 세션과 짝을 이루는 이름
-// (Fleet.tsx의 「잠자는 중」 구역, rail-data.ts의 buildSleepingEntries)이기도
-// 하다: 하나는 열려 있고, 하나는 잠들어 있다.
-const GROUP_LABEL: Record<RailGroup, string> = {
-  attention: '개입 필요',
-  working: '작업 중',
-  idle: '열려 있음',
-};
-export { GROUP_LABEL };
-
-// §2 — 접을 수 있는 그룹. `attention`은 여기 없다: 승인 대기가 접힌 채 숨으면
-// 그 그룹이 존재하는 이유가 사라진다(접기 버튼 자체를 안 그린다).
-export const COLLAPSIBLE_GROUPS: RailGroup[] = ['working', 'idle'];
-export function groupCollapseKey(group: RailGroup): string {
-  return `rail.group.${group}.collapsed`;
-}
-
-/** 설정을 아직 못 읽었을 때 쓸 기본값.
- *
- * ⚠ `core/settings.js`의 SCHEMA `def`와 **같은 값이어야 한다**. 지연 청크는
- * core를 정적 import할 수 없어(Rail.tsx 머리말) 여기 한 벌 더 적는다 —
- * 어긋나면 `rail-data.test.js`의 「기본값이 스키마와 같다」가 실패한다.
- *
- * 왜 필요한가(실측): Rail이 마운트되는 시점에 `window.vtSettingsGet`이 아직
- * 없을 수 있다. `Boolean(undefined)`는 false라, 그 순간 "기본은 접힘"이
- * 조용히 "펼침"으로 뒤집혔다 — 같은 화면이 새로고침마다 다르게 열리는
- * 레이스였다. 값이 없으면 스키마 기본으로 떨어지고, 설정이 늦게 도착하면
- * 구독(`vtSettingsSubscribe`)이 다시 맞춘다. */
-export const GROUP_COLLAPSED_DEFAULT: Record<string, boolean> = {
-  working: false,
-  idle: true,
+export const ORIGIN_LABEL: Record<Origin, string> = {
+  local: '이 화면에서 만듦',
+  peer: '다른 맥에서 만듦',
+  agent: '에이전트가 만듦',
+  external: '직접 만듦 (CLI·tmux)',
 };
 
-// 10-shell-layout.md §5: "그룹 순서 고정: 개입 필요(waiting·error) →
-// 작업 중(working) → 유휴(idle·done)".
-//
-// ⚠ 2026-09-18(98 §6-1) — **`done`을 「작업 중」으로 옮겼다.** 10 §5의 원래
-// 결정("done은 유휴에 남는다")을 뒤집은 것이다. 유휴 그룹의 이름이
-// 「열려 있지 않음」이 되면서 완료된 세션이 그 이름에 안 맞게 됐다 — 완료는
-// 열려 있는 세션이고, 오히려 결과를 보러 가야 하는 쪽에 가깝다.
-function groupOf(status: AgentState): RailGroup {
-  if (status === 'waiting' || status === 'error') return 'attention';
-  if (status === 'working' || status === 'done') return 'working';
-  return 'idle';
+/** 서버 값이 없거나(구버전 서버) 모르는 값이면 local — 모든 행에 외부 아이콘이 붙는 것보다 안전하다. */
+export function normalizeOrigin(v: unknown): Origin {
+  return v === 'peer' || v === 'agent' || v === 'external' ? v : 'local';
 }
 
-// 30-worktree.md §4: "상태는 sessions 중 가장 '시급한' 것(waiting > error >
-// working > done > idle)". 워크트리 행이 여러 세션을 대표할 때 쓴다. 세션이
-// 하나도 없으면(흐리게 표시되는 행) 'idle'로 취급한다 — groupOf가 idle을
-// 유휴로 보내는 것과 같은 결이다.
-const URGENCY: AgentState[] = ['waiting', 'error', 'working', 'done', 'idle'];
-export function mostUrgentStatus(statuses: AgentState[]): AgentState {
-  if (statuses.length === 0) return 'idle';
-  let best = statuses[0];
-  for (const s of statuses) {
-    if (URGENCY.indexOf(s) < URGENCY.indexOf(best)) best = s;
+/** 서버가 준 kind. 모르는 값은 질문. */
+export function normalizeKind(v: unknown): WaitKind {
+  return v === 'approval' || v === 'choice' || v === 'plan' ? v : 'question';
+}
+
+export function normalizeBadge(v: unknown): DoneBadge | null {
+  return v === 'question' || v === 'plan' ? v : null;
+}
+
+// ── 상태 키워드 ────────────────────────────────────────────────────────────
+
+export const KIND_LABEL: Record<WaitKind, string> = {
+  approval: '승인 요청',
+  choice: '선택 요청',
+  plan: '계획 확인',
+  question: '질문',
+};
+
+export const BADGE_LABEL: Record<DoneBadge, string> = {
+  question: '질문 있음',
+  plan: '계획 있음',
+};
+
+export interface StateKeyword {
+  /** 짧게 고정된 키워드 — 잘리지 않는다. */
+  text: string;
+  /** 작업 중의 도구 이름. 말줄임은 이쪽에서만 허용한다. */
+  tool: string | null;
+  /** done 옆의 보조 표시. */
+  badge: string | null;
+}
+
+export function stateKeyword(
+  row: Pick<SessionRow, 'status' | 'kind' | 'badge' | 'tool'>,
+): StateKeyword {
+  const s = normalizeState(row.status);
+  if (s === 'waiting') return { text: KIND_LABEL[normalizeKind(row.kind)], tool: null, badge: null };
+  if (s === 'working') return { text: STATE_LABEL.working, tool: row.tool || null, badge: null };
+  if (s === 'done') {
+    const b = normalizeBadge(row.badge);
+    return { text: STATE_LABEL.done, tool: null, badge: b ? BADGE_LABEL[b] : null };
   }
-  return best;
+  return { text: STATE_LABEL.idle, tool: null, badge: null };
 }
 
 export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.now()): string {
@@ -135,219 +122,143 @@ export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.no
   return `${Math.round(hr / 24)}일`;
 }
 
-export function statusSentence(status: AgentState, since: number | null, tool: string | null, nowMs = Date.now()): string {
-  const rel = formatRelativeTime(since, nowMs);
-  switch (status) {
-    case 'waiting': return rel ? `승인 대기 · ${rel}` : '승인 대기';
-    case 'working': return tool ? `${tool} 실행 · ${rel}` : (rel ? `작업 중 · ${rel}` : '작업 중');
-    case 'error': return '에러';
-    case 'done': return '완료';
-    // idle은 **그룹 헤더가 이미 「유휴」라고 말한다**(Rail.tsx의 vt-wgrail-group-head,
-    // Fleet.tsx의 vt-fleet-group-head는 개수까지 붙인다). 행마다 또 "유휴"를
-    // 쓰면 목록 전체가 같은 단어로 덮여 이름을 훑는 눈을 방해한다 — 실제로
-    // 저장소 13개 화면이 "유휴"를 14번 반복하고 있었다. 계획서가 상태 dot에
-    // 대해 정한 규칙("idle이면 dot을 안 그린다 — 상시로 붙은 회색 점은 정보가
-    // 아니라 노이즈다")을 글자에도 그대로 적용한다.
-    // 마지막 활동 시각은 그룹 헤더가 말해주지 않는 **행별 정보**라 남긴다.
-    default: return rel || '';
-  }
+/** 접힌 레일·툴팁·스크린리더가 쓰는 한 줄: "승인 요청 · 2분". */
+export function statusSentence(row: Pick<SessionRow, 'status' | 'kind' | 'badge' | 'tool' | 'since'>, nowMs = Date.now()): string {
+  const k = stateKeyword(row);
+  const rel = formatRelativeTime(row.since, nowMs);
+  return [k.text, k.tool, k.badge, rel].filter(Boolean).join(' · ');
 }
 
-// 그룹 순서 고정 + 그룹 안은 최근 활동순(since 내림차순, 없으면 맨 뒤).
-// 제네릭: status/since/tool만 요구한다 — Fleet.tsx의 RailRowInput, Rail.tsx의
-// OtherRailRowInput(원격 호스트 경로) 전부 이 최소 모양을
-// 만족한다. 로컬 세션 경로(ADR-29 B)는 buildSessionSections를 쓴다.
-export function buildRailSections<T extends { status: AgentState; since: number | null; tool: string | null }>(
-  inputs: T[],
-  nowMs = Date.now(),
-): RailSectionOut<T & { statusSentence: string }>[] {
-  const rows: (T & { statusSentence: string })[] = inputs.map((r) => ({
-    ...r,
-    statusSentence: statusSentence(r.status, r.since, r.tool, nowMs),
-  }));
+// ── 설정(표시 켜기/끄기) ───────────────────────────────────────────────────
 
-  const buckets: Record<RailGroup, (T & { statusSentence: string })[]> = { attention: [], working: [], idle: [] };
-  for (const row of rows) buckets[groupOf(row.status)].push(row);
-
-  const order: RailGroup[] = ['attention', 'working', 'idle'];
-  for (const g of order) {
-    buckets[g].sort((a, b) => (b.since ?? -Infinity) - (a.since ?? -Infinity));
-  }
-  return order.map((group) => ({ group, rows: buckets[group] })).filter((s) => s.rows.length > 0);
+export const ATTENTION_SHOW_KEY = 'rail.attention.show';
+export const ATTENTION_COLLAPSED_KEY = 'rail.attention.collapsed';
+export function originShowKey(o: Origin): string {
+  return `rail.origin.${o}.show`;
 }
 
-// ---------------------------------------------------------------------------
-// ADR-29 B — 데스크톱 레일(Rail.tsx) 전용 행 모양. "행 = 세션"(더 이상
-// 워크트리가 아니다 — 그 결정이 ADR-20이었고, ADR-29가 대체했다). 세션 하나가
-// 워크트리에 속하면 그 저장소·브랜치를 배지로 달고 다닐 뿐, 행 자체의 정체는
-// 언제나 세션이다. Fleet.tsx는 이 타입을 안 쓴다(모바일은 원래부터 세션
-// 단위, 70-mobile.md 범위 밖 — `RailRowInput` 그대로).
-//
-// `remote?: boolean`(C1, 다른 호스트의 세션)는 뜻이 전혀 다른 별개 필드다.
-export interface OtherRailRowInput {
-  kind: 'session';
-  /** 웹 세션 id. **잠든 세션은 빈 문자열**(브라우저 탭이 없다) — `awake`로
-   * 그 뜻을 명시적으로도 들고 있다(빈 문자열 하나로 두 가지를 겹쳐 읽지
-   * 않기 위해서). */
-  sessionId: string;
-  tmuxName: string | null;
-  name: string;
-  /** 이 브라우저에 웹 세션이 있는가 — ADR-29의 1차 축. false면 레일의
-   * 「잠자는 중」 구역에 산다. tmux에는 살아 있지만 이 기기에서 안 열어둔
-   * 상태(다른 기기가 열어뒀을 수도 있다 — 재우기/깨우기는 기기별 개념). */
-  awake: boolean;
-  /** 유효 그룹 id — 2026-09-18 후속(그룹 재정의, 사용자 요청: "같은 화면에
-   * 묶인 것만 그룹"). 더 이상 태그(`@fsh_grp`)가 아니라, 이 세션이 지금
-   * 어느 탭(pane 트리)에 다른 세션과 같이 떠 있으면 그 **탭 id** — 혼자면
-   * null(「묶지 않음」). Rail.tsx가 `window.getTabGroups()`로 매 렌더 계산해
-   * 채운다. */
-  groupId: string | null;
-  status: AgentState;
-  since: number | null;
-  tool: string | null;
-  diffFiles: number | null;
-  /** GET /api/repos가 주는 워크트리의 changed 요약(add/del 라인 수) — 있으면
-   * diffFiles보다 우선한다(30 §4 원문 "+142 −38" 서식). 이 세션이 속한
-   * 워크트리를 못 찾았으면 null이고, 그때는 diffFiles(파일 개수)로 떨어진다. */
-  changed?: { files: number; add: number; del: number } | null;
-  question?: string | null;
-  options?: { key: string; label: string }[] | null;
-  /** P1-1(ADR-33) — RailRowInput의 같은 이름 필드와 같은 뜻. */
-  promptId?: string | null;
-  /** 2.1.6 — 이 세션에 떠 있는 CLI 이름. 모르면 null/undefined — "셸"과
-   * "모름"은 다르다. */
-  agent?: string | null;
-  /** 이 세션이 속한 워크트리의 브랜치(있으면). 행의 부제에 배지로 뜬다 —
-   * `main`은 "기본"이라 생략한다(RailRow.tsx의 `branchText()`).
-   * 2026-09-20 — 짝이던 `repoName`을 지웠다. 그건 **그룹 라벨 폴백**의
-   * 입력이었는데, 그 폴백(`groupDisplayLabel`)이 ADR-29 후속 #4에서 통째로
-   * 사라졌다(그룹 이름은 이제 탭의 `label`, 없으면 구성원 이름을 잇는다 —
-   * `layout/store.js`의 `tabDisplayLabel`). 그 뒤로 아무도 읽지 않는 채
-   * 남아 있었다. 워크트리에 안 속하는 세션(순수 셸 등)은 둘 다 null. */
-  branch?: string | null;
-  isMainWorktree?: boolean;
-  /** ADR-29 D — 이 세션이 속한 워크트리의 id. 세션을 열 때 그 그룹의 탭에
-   * "지금 보는 워크트리"로 넘겨 pane 헤더 브랜치 칩이 맞게 뜨도록 한다
-   * (layout/store.js의 setTabWorktree). 워크트리에 안 속하면 null. */
-  worktreeId?: string | null;
-  /** C1 — 다른 호스트의 세션. 로컬 세션 id 경로(switchTo 등)가 성립하지 않으므로
-   * 클릭·컨텍스트 메뉴가 막히고 행이 흐리게 그려진다(원격 attach는 멀티호스트
-   * 3단계). 선택 필드라 기존 호출부는 그대로 동작한다. */
-  remote?: boolean;
+/** 설정을 아직 못 읽었을 때 쓸 기본값. ⚠ core/settings.js의 SCHEMA `def`와 같아야 한다
+ * (지연 청크는 core를 정적 import할 수 없어 한 벌 더 적는다 — 테스트가 대조한다). */
+export const RAIL_PREF_DEFAULTS: Record<string, boolean> = {
+  [ATTENTION_SHOW_KEY]: true,
+  [ATTENTION_COLLAPSED_KEY]: false,
+  [originShowKey('peer')]: true,
+  [originShowKey('agent')]: true,
+  [originShowKey('external')]: true,
+};
+
+export interface RailPrefs {
+  attentionShow: boolean;
+  attentionCollapsed: boolean;
+  hiddenOrigins: Origin[];
 }
 
-export type DesktopRailRowInput = OtherRailRowInput;
-
-// ---------------------------------------------------------------------------
-// ADR-29 B — 세션 행을 그룹 섹션으로 묶는다. buildRailSections(위)와는 다른
-// 축이다: 그건 "얼마나 급한가"로 3버킷, 이건 "누구 것인가"로 N버킷 + 「개입
-// 필요」 고정 뷰 하나. 같은 세션이 「개입 필요」와 자기 그룹 양쪽에 다 나온다
-// — 그룹 안에 접혀 승인 대기가 묻히면 안 된다(최종 설계안 §4).
-
-export interface SessionSectionOut {
-  /** React/Solid key + 접기 상태 키로 쓴다. attention='attention',
-   * ungrouped='ungrouped', 그 외에는 groupId 그대로. */
-  key: string;
-  kind: 'attention' | 'group' | 'ungrouped';
-  groupId: string | null;
-  label: string;
-  rows: (OtherRailRowInput & { statusSentence: string })[];
+/** get: 값이 없으면 undefined/null을 돌려주는 설정 읽기(window.vtSettingsGet). */
+export function readRailPrefs(get: (key: string) => unknown): RailPrefs {
+  const flag = (key: string): boolean => {
+    const v = get(key);
+    return v === undefined || v === null ? RAIL_PREF_DEFAULTS[key] : Boolean(v);
+  };
+  return {
+    attentionShow: flag(ATTENTION_SHOW_KEY),
+    attentionCollapsed: flag(ATTENTION_COLLAPSED_KEY),
+    hiddenOrigins: HIDEABLE_ORIGINS.filter((o) => !flag(originShowKey(o))),
+  };
 }
 
-/** 깨어있는 세션만 대상으로 한다 — 잠자는 세션은 buildSleepingEntries가
- * 별도로 다룬다(둘을 한 함수에 넣으면 "그룹 안에 잠든 게 흐리게 끼어드는"
- * 1판의 실수를 반복하기 쉽다).
+// ── 구역 ───────────────────────────────────────────────────────────────────
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+
+export interface RailLists<T> {
+  attention: T[];
+  sessions: T[];
+}
+
+/**
+ * 「개입 필요」= waiting 세션, 「세션」= 전체. 둘 다 이름순뿐이다.
  *
- * `groupLabels`는 호출자(Rail.tsx)가 `window.getTabGroups()`로 이미 계산해
- * 넘긴다 — 2026-09-18 후속(그룹 재정의)으로 그룹은 태그가 아니라 화면(탭)에서
- * 실시간으로 도출되므로, 그 계산 자체는 여기(순수 데이터 함수)가 아니라
- * layout/store.js의 몫이다. 이 함수는 이미 정해진 groupId·label을 가진
- * 행들을 섹션으로 접는 것만 한다. */
-export function buildSessionSections(
-  inputs: OtherRailRowInput[],
-  groupLabels: Map<string, string>,
-  nowMs = Date.now(),
-): SessionSectionOut[] {
-  const awake = inputs.filter((r) => r.awake);
-  const withSentence = awake.map((r) => ({ ...r, statusSentence: statusSentence(r.status, r.since, r.tool, nowMs) }));
-  // 2026-09-18 후속 — 정렬 기준을 최근 활동(since)에서 이름으로 바꿨다.
-  // since로 정렬하면 상태가 바뀔 때마다(4~5초 폴링) 순서가 흔들려 행이
-  // 오르락내리락했다(사용자 지적: "뭐 할 때마다 움직여서 불편하다"). 이름
-  // 정렬은 그 값이 바뀌지 않는 한 순서가 절대 안 흔들린다.
-  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
-
-  const sections: SessionSectionOut[] = [];
-
-  const attentionRows = withSentence.filter((r) => r.status === 'waiting' || r.status === 'error');
-  if (attentionRows.length) {
-    sections.push({ key: 'attention', kind: 'attention', groupId: null, label: '개입 필요',
-      rows: [...attentionRows].sort(byName) });
-  }
-
-  const byGroup = new Map<string, typeof withSentence>();
-  const ungrouped: typeof withSentence = [];
-  for (const r of withSentence) {
-    if (r.groupId) {
-      if (!byGroup.has(r.groupId)) byGroup.set(r.groupId, []);
-      byGroup.get(r.groupId)!.push(r);
-    } else {
-      ungrouped.push(r);
-    }
-  }
-
-  // 그룹 순서: 라벨 가나다순 — 고정 규칙이라 세션 활동과 무관하게 항상
-  // 같은 순서로 보인다(위 byName과 같은 이유).
-  const order = Array.from(byGroup.keys())
-    .sort((a, b) => (groupLabels.get(a) || '').localeCompare(groupLabels.get(b) || ''));
-  for (const gid of order) {
-    sections.push({
-      key: gid, kind: 'group', groupId: gid,
-      label: groupLabels.get(gid) || '그룹',
-      rows: [...byGroup.get(gid)!].sort(byName),
-    });
-  }
-
-  if (ungrouped.length) {
-    sections.push({ key: 'ungrouped', kind: 'ungrouped', groupId: null, label: '묶지 않음',
-      rows: [...ungrouped].sort(byName) });
-  }
-  return sections;
+ * 만든 곳을 숨겨도 **열려 있는 세션과 waiting 세션은 남긴다** — 지금 보고 있는 세션이
+ * 레일에서 사라지거나, 내 입력을 기다리는 세션이 안 보이면 안 된다.
+ * 개입 필요를 끄면 waiting은 「세션」 안에서 키워드로만 말한다.
+ */
+export function buildRailLists<T extends Pick<SessionRow, 'name' | 'status' | 'origin' | 'open'>>(
+  rows: T[],
+  prefs: RailPrefs,
+): RailLists<T> {
+  const waiting = (r: T) => normalizeState(r.status) === 'waiting';
+  const hidden = new Set<Origin>(prefs.hiddenOrigins);
+  const sessions = rows.filter((r) => !hidden.has(r.origin) || r.open || waiting(r)).sort(byName);
+  const attention = prefs.attentionShow ? rows.filter(waiting).sort(byName) : [];
+  return { attention, sessions };
 }
 
-/** 잠자는 세션 한 행 — 전부 낱개다(아래 함수 주석 참고). */
-export interface SleepEntryOut {
-  key: string;
+// ── 행 메뉴(⋯ 버튼·우클릭·폰 롱프레스가 같은 항목) ───────────────────────
+
+export type RowMenuId = 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill';
+
+export interface RowMenuItem {
+  id: RowMenuId;
   label: string;
-  row: OtherRailRowInput;
+  detail?: string;
+  danger?: boolean;
 }
 
-/** 잠자는 세션 — 전부 낱개 행이다. 2026-09-18 후속(그룹 재정의) — 그룹은
- * 이제 태그가 아니라 **한 탭의 pane 트리에 실시간으로 떠 있는 세션들**이라
- * (사용자 요청: "같은 화면에 묶인 것만 그룹"), 탭을 재우면(sleepTab이 탭을
- * 닫는다) 그 순간 근거 자체가 사라진다 — 잠든 채로 "그룹이었다"를 붙들고
- * 있을 태그가 더 이상 없다(덩어리 잠자는 구역은 이 후속에서 없앴다).
- * 덩어리로 재웠던 세션들은 깨어나서 다시 같은 화면에 놓이면 그룹으로
- * 다시 보인다. */
-export function buildSleepingEntries(
-  inputs: OtherRailRowInput[],
-): SleepEntryOut[] {
-  const asleep = inputs.filter((r) => !r.awake);
-  const entries: SleepEntryOut[] = asleep.map((r) => (
-    { key: r.tmuxName || r.sessionId, label: r.name, row: r }
-  ));
-  entries.sort((a, b) => a.label.localeCompare(b.label));
-  return entries;
+/** 열린 세션이면 닫기, 아니면 열기. 이름 변경·맥에서 열기·연결된 화면은 웹 세션이 있어야 하고,
+ * 종료는 tmux 세션이면 늘 있다(확인창은 vtConfirmAndKillSession). */
+export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'>): RowMenuItem[] {
+  const items: RowMenuItem[] = [];
+  if (row.open) {
+    items.push(
+      { id: 'close', label: '닫기' },
+      { id: 'rename', label: '이름 변경' },
+      { id: 'openOnMac', label: '맥에서 열기' },
+      { id: 'screens', label: '연결된 화면' },
+    );
+  } else {
+    items.push({ id: 'open', label: '열기' });
+  }
+  if (row.tmuxName) items.push({ id: 'kill', label: '종료', detail: '되돌릴 수 없음', danger: true });
+  return items;
 }
 
-// ---------------------------------------------------------------------------
-// 2026-09-18 후속 — 저장소 색점 램프(fnv1a/hashRepoColorIndex/repoColorKey,
-// 「98 §4 — 색 배정의 입력을 소유자로」)와 그 배지(remoteLabel/RailRemote)를
-// 여기서 완전히 지웠다. ADR-29로 저장소가 레일의 주어에서 내려온 뒤에도
-// 세션 행 맨 앞에 저장소 색이 남아 있던 게 사용자 지적으로 드러났다 —
-// "저장소를 없앴으면 이 색도 없어져야 하는 거 아니냐"는 게 정확한 지적이라,
-// 코드도 지웠다(레거시로 반쯤 남겨두지 않는다). `--color-hash-1..8` 디자인
-// 토큰(tokens.css/skins.css/theme-import.js)도 이 기능 하나만을 위한
-// 것이었어서 함께 지웠다.
+/** 메뉴 항목을 실행한다. 지연 청크는 세션 모듈을 정적 import 못 해 window 브리지를 받는다. */
+export function runRowMenu(
+  id: RowMenuId,
+  row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'>,
+  w: any,
+  startRename: () => void,
+): void {
+  const sid = row.sessionId || null;
+  switch (id) {
+    case 'open': w.vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName }); break;
+    case 'close': if (sid) w.vtCloseSession?.(sid); break;
+    case 'rename': if (sid) startRename(); break;
+    case 'openOnMac': if (sid) w.vtOpenSessionOnMac?.(sid); break;
+    case 'screens': if (sid) w.vtShowClients?.(sid); break;
+    case 'kill': w.vtConfirmAndKillSession?.(row.tmuxName, sid); break;
+  }
+}
+
+// ── 아이콘 선택 ────────────────────────────────────────────────────────────
+
+/** 둘째 줄 앞 아이콘 이름. 메인 워크트리 = 본선(git-commit), 딸린 워크트리 = 가지(git-branch). */
+export function worktreeIconName(row: Pick<SessionRow, 'isMainWorktree'>): 'git-commit' | 'git-branch' {
+  return row.isMainWorktree ? 'git-commit' : 'git-branch';
+}
+
+export const ORIGIN_ICON: Record<Exclude<Origin, 'local'>, string> = {
+  peer: 'laptop',
+  agent: 'bot',
+  external: 'square-terminal',
+};
+
+/** 변경량 표기. "+142 −38"(줄 수가 있으면) 또는 "파일 3". 없으면 null. */
+export function diffLabel(row: Pick<SessionRow, 'changed' | 'diffFiles'>): string | null {
+  const c = row.changed;
+  if (c && c.files > 0) return `+${c.add} −${c.del}`;
+  return row.diffFiles != null && row.diffFiles > 0 ? `파일 ${row.diffFiles}` : null;
+}
 
 /**
  * 레일을 접은 채로 시작할지 — **저장된 값이 없을 때만** 쓰는 기본값.
@@ -357,10 +268,7 @@ export function buildSleepingEntries(
  * (DESIGN.md §6). 여기서 정하는 건 "아직 아무 말도 안 한 기기"의 첫 모습뿐이다.
  *
  * wide(≥1280) 미만에서 접는 이유는 자리 다툼이다. 레일 252 + dock 접힘 36을
- * 빼고 나면 터미널과 HUD가 나눠 쓸 폭이 얼마 안 남는다 — 760px 창에서 HUD가
- * 472px밖에 못 받아 칩을 다 못 실었다. Dock.tsx가 이미 같은 판단을
- * (`innerWidth < WIDE_MAX`) 하고 있었는데 레일에만 없어서, 좁은 화면을 처음
- * 여는 기기가 양쪽 다 펼친 상태로 시작했다.
+ * 빼고 나면 터미널과 HUD가 나눠 쓸 폭이 얼마 안 남는다.
  */
 export function defaultRailCollapsed(viewportWidth: number, regularMax: number): boolean {
   return viewportWidth < regularMax;

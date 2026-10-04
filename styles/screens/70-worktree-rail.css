@@ -59,7 +59,6 @@
 .vt-wgrail-host.offline { text-decoration:line-through; }
 .vt-wgrail-host-name { }
 .vt-wgrail-host-caret { font-size:var(--fs-3xs, 9px); opacity:.7; }
-.vt-wgrail-remote-note { opacity:.7; }
 .vt-wgrail-new[disabled] { opacity:.45; cursor:not-allowed; }
 
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다.
@@ -97,6 +96,7 @@
 .vt-wgrail-group-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* 접었을 때 "몇 개가 숨었나"를 말하는 유일한 글자라 항상 보인다. */
 .vt-wgrail-group-count { flex:none; opacity:.7; }
+.vt-wgrail-group-label > .vt-wgrail-group-count { margin-left:calc(var(--spacing) * 1.5); }
 /* 새 아이콘을 만들지 않는다 — chevron-down 하나를 돌려 쓴다(레일 접기 버튼·
    호스트 캐럿·키바 토글이 전부 같은 관용구다, DESIGN.md 아이콘 규칙). */
 .vt-wgrail-group-caret {
@@ -112,10 +112,6 @@
 .vt-wgrail-head-actions { display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); flex:none; }
 .vt-wgrail-settings { opacity:.65; }
 .vt-wgrail-settings:hover, .vt-wgrail-settings:focus-visible { opacity:1; }
-/* ADR-29 E — 그룹 이름 바꾸기. 캐럿+이름+개수(토글 버튼)만큼 눈에 띄면 안
-   되므로 옅게 뒀다가 호버에서만 또렷해진다(위 설정 ⚙과 같은 판단). */
-.vt-wgrail-group-rename { flex:none; opacity:.45; }
-.vt-wgrail-group-rename:hover, .vt-wgrail-group-rename:focus-visible { opacity:1; }
 /* 2026-09-21(사용자 요청) — 이름변경·재우기·완전종료 메뉴가 우클릭 전용이던
    것을 좌클릭으로도 열게 한다(RailRow.tsx). 행 자체의 좌클릭은 이미
    열기/전환을 쓰므로 이 버튼이 유일한 진입점이다 — 위 그룹 ⚙·연필과 같은
@@ -150,48 +146,29 @@
   border:0; background:none;
 }
 
-/* §4 — 행 둘째 줄의 `github/acme`. 상태 문장과 같은 줄에 살지만 정체(누구
-   것인가)라서 한 단계 더 물러난 톤으로 둔다. */
-.vt-wgrail-owner { font-size:var(--fs-3xs); opacity:.85; }
-.vt-wgrail-sub-sep { opacity:.5; }
-
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-srow`가 맡는다. 데스크톱은 기본 크기 */
-/* 2026-09-18 후속 — 저장소 해시 색점(예전엔 이 자리에 `.vt-wgrail-hash` 막대가
-   따로 있었다)을 지웠다. 이제 이 자리엔 상태색 막대 하나뿐이다. */
-.vt-wgrail-bar.tone-error   { background:var(--color-st-error); }
-.vt-wgrail-bar.tone-done    { background:var(--color-st-done); }
-/* N38(70-mobile.md §2)과 같은 패턴 — waiting 상태에서 감지된 질문 1줄 미리보기
-   (10-shell-layout.md §5 목업 "? Allow edit to legacy.css?"). */
-/* ADR-29 B — 잠자는 행(옛 no-session의 후계자, 30 §4 "흐리게, 클릭 → open"과
-   같은 시각 언어). 뜻은 "세션이 없다"에서 "지금 이 기기 화면에 없다"로
-   바뀌었지만, 흐리게+클릭으로 깨운다는 상호작용은 그대로다. */
-.vt-wgrail-row.sleeping { opacity:.55; }
-.vt-wgrail-row.sleeping:hover { opacity:.8; }
+/* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 빈 레일의 "워크트리 만들기" */
+
+/* 열려 있지 않은 세션은 이름이 한 단 물러난다(흐림 처리가 아니다 — 대부분의 행이 이 상태라
+   전부 흐리면 목록이 죽는다). 열림은 1줄 끝의 작은 창 아이콘과 이 색 차이로 읽는다.
+   ⚠ screens 레이어라 components의 `.vt-srow-name`보다 이긴다 — 활성 행(열림이 전제)은 이
+   규칙에 안 걸리게 `.closed`로만 건다. */
+.vt-srow.closed .vt-srow-name { color:var(--color-sub); }
 .vt-wgrail-empty {
   padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
   color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;
 }
-/* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 빈 레일의 "워크트리 만들기" */
-
-/* 접힘: 마크·상태색 막대만 — 이름·상태 문장·그룹 헤더는 숨긴다. 행 자체는
-   막대 하나만 보이는 얇은 줄로(저장소 색점을 지운 뒤로 막대가 하나뿐이다,
-   2026-09-18 후속).
-   2026-09-18 — 여기서 `row-main`을 통째로 숨기면서 **에이전트 마크까지 같이
-   사라져** 48px 기둥에 막대만 남았다. 마크를 `row-main` 밖에 접힘 전용으로
-   다시 그리고(RailRow.tsx), 이름·상태 두 줄은 행의 title 툴팁으로 돌려준다.
-   원형 dot은 만들지 않는다 — 상태는 이미 막대가 말하고, 같은 뜻을 두 기호로
-   쓰면 20-design-system.md §5의 "막대 = 행의 띠 / 원 = 상태 전용" 구분이
-   무너진다. */
+/* 접힘(48px): 상태 아이콘 + 에이전트 마크만 — 이름·키워드·구역 머리는 숨긴다. 이름과
+   브랜치·키워드는 행의 툴팁이 돌려준다(RailRow.tsx의 compactSub). */
 #vt-wgrail.collapsed .vt-wgrail-row { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1); justify-content:center; gap:calc(var(--spacing) * 1.5); }
 #vt-wgrail.collapsed .vt-wgrail-row-main { display:none; }
-#vt-wgrail.collapsed .vt-wgrail-bar { width:4px; }
+#vt-wgrail.collapsed .vt-wgrail-row > .vt-srow-state { margin-left:0; }
 .vt-wgrail-agent-compact { align-items:center; }
 .vt-wgrail-agent[data-state="working"] { color:var(--color-st-working); }
 .vt-wgrail-agent[data-state="waiting"] { color:var(--color-st-waiting); }
 .vt-wgrail-agent[data-state="done"] { color:var(--color-st-done); }
-.vt-wgrail-agent[data-state="error"] { color:var(--color-st-error); }
 
-/* 접힘에서 그룹 라벨 대신 남는 경계선(Rail.tsx의 group-sep). 첫 그룹 위에는
+/* 접힘에서 구역 라벨 대신 남는 경계선(Rail.tsx의 group-sep). 첫 그룹 위에는
    머리 밑줄이 이미 있어 겹치므로 그 하나는 그리지 않는다. */
 .vt-wgrail-group-sep { height:1px; margin:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5); background:var(--line); }
 .vt-wgrail-body > .vt-wgrail-group-sep:first-child { display:none; }
@@ -347,3 +324,14 @@
   min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   color:var(--color-txt); font:400 var(--fs-3xs) var(--font-mono);
 }
+
+/* 레일 설정 시트의 위쪽 구획(RailSettings.tsx). 틀은 저장소 관리 시트(.vt-wtd-*)를 그대로 쓴다. */
+.vt-railset { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); padding-bottom:calc(var(--spacing) * 2); }
+.vt-railset-row {
+  display:grid; grid-template-columns:auto 1fr; column-gap:calc(var(--spacing) * 2); align-items:center;
+  cursor:pointer; min-height:28px;
+}
+.vt-railset-label { font:500 var(--fs-xs) var(--font-ui); color:var(--color-txt); }
+.vt-railset-hint { grid-column:2; font:400 var(--fs-3xs) var(--font-ui); color:var(--color-sub); }
+.vt-railset-note { font:400 var(--fs-3xs) var(--font-ui); color:var(--color-sub); }
+.vt-railset .vt-wtd-section-title:not(:first-child) { margin-top:calc(var(--spacing) * 2); }

@@ -141,7 +141,35 @@ async def _agents_loop(kick: asyncio.Event) -> None:
 # Starlette는 등록 순서대로 매치를 시도하므로, {tmux_name}이 먼저면
 # "/api/agents/coverage" 요청의 tmux_name이 문자열 "coverage"로 해석되어
 # 이 라우트에 절대 도달하지 못한다.
-KNOWN_CLIS = ("claude", "codex", "aider")  # detect/*.toml이 있는 CLI
+KNOWN_CLIS = ("claude", "codex", "aider", "agy")  # detect/*.toml이 있는 CLI
+
+# 훅이 waiting의 kind를 직접 알려주는 CLI와 그 kind. 이 표는 **설치기가 실제로 등록하는
+# 이벤트**를 따라간다 — Codex는 PermissionRequest(approval)와 PreToolUse
+# `request_user_input`(choice)을 등록한다. Claude Code 설치기(`claude_hooks.EVENTS`)는
+# PermissionRequest를 등록하지 않으므로(Notification은 보조 기록뿐) 훅 kind가 없고, 화면
+# 패턴(`detect/claude.toml [kinds]`)이 맡는다. 서버의 `on_event("permission")`은 사용자가
+# 손으로 등록한 경우를 위해 Claude tool_name(AskUserQuestion/ExitPlanMode)도 해석한다.
+HOOK_KINDS = {"codex": ("approval", "choice")}
+# Stop/done의 마지막 응답이 `?`로 끝날 때 붙는 보조 표시를 낼 수 있는 CLI(훅 경로).
+QUESTION_BADGE_CLIS = ("claude", "codex")
+_KIND_ORDER = ("approval", "choice", "plan", "question")
+
+
+def _coverage_kinds(cli: str, spec, path_kind: str, states: list[str]) -> tuple[list, dict]:
+    """CLI가 구분할 수 있는 waiting kind와 각 kind의 근거(`hook`/`screen`/`fallback`).
+    우선순위는 런타임과 같다: 훅 > 화면 > 폴백. waiting을 표현할 수 없으면 비어 있다."""
+    if "waiting" not in states:
+        return [], {}
+    sources: dict[str, str] = {}
+    if spec:
+        for k in set(spec.get("enter_kinds") or []):
+            sources[k] = "screen"
+    if path_kind == "hook":
+        for k in HOOK_KINDS.get(cli, ()):
+            sources[k] = "hook"
+    sources.setdefault("question", "fallback")  # 대기인데 kind 미정이면 항상 question
+    kinds = [k for k in _KIND_ORDER if k in sources]
+    return kinds, {k: sources[k] for k in kinds}
 
 
 def _coverage_trust(path_kind: str, states: list[str]) -> str:
@@ -246,12 +274,21 @@ async def agent_coverage():
             # 직접 말할 수 있다 — PTY 패턴(waiting 하나)보다 넓다.
             states = ["idle", "working", "waiting", "done"]
 
+        kinds, kind_sources = _coverage_kinds(cli, spec, path_kind, states)
+        badges = sorted(set((spec or {}).get("badge") or {})
+                        | ({"question"} if cli in QUESTION_BADGE_CLIS and path_kind == "hook" else set()))
         rows.append({
             "cli": cli,
             "path": path_kind,
             "patternLines": pattern_lines,
             "states": states,
             "trust": _coverage_trust(path_kind, states),
+            # waiting의 유형을 구분할 수 있는 kind와 그 근거(프런트 표시용 필드가 아니라
+            # 「이 CLI는 무엇까지 가려내는가」를 보여주는 진단).
+            "kinds": kinds,
+            "kindSources": kind_sources,
+            # waiting으로 올리지 않는 보조 표시(`badge`)를 낼 수 있는 값.
+            "badges": badges,
             # 자기보고를 마지막으로 받은 시각(epoch). 없으면 null — 화면이
             # "언제부터 이 경로가 살아 있었나"를 보여줄 때만 쓴다.
             "lastReport": reported.get(cli),

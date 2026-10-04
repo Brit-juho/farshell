@@ -53,7 +53,8 @@ test('같은 세션을 두 번 열면 새 탭이 아니라 전환이다', async 
   S.switchLayoutTab(S.getTabs()[0].id);
   const b = S.openLayoutTab({ sessionId: 's1', worktreeId: 'wt-1', label: 'a' });
   assert.strictEqual(a, b);
-  assert.strictEqual(S.getTabs().length, 2, '탭이 늘어나면 안 된다(기본 탭 + s1의 탭)');
+  // 2026-10-03 — 첫 세션은 "뷰 없음" 자리 탭을 그대로 쓴다(빈 탭이 남지 않는다).
+  assert.strictEqual(S.getTabs().length, 1, '탭이 늘어나면 안 된다(s1의 탭 하나)');
   assert.strictEqual(S.getActiveTabId(), a);
 });
 
@@ -62,7 +63,7 @@ test('같은 세션이 있는 탭을 다른 워크트리로 열면 탭은 그대
   const a = S.openLayoutTab({ sessionId: 's1', worktreeId: 'wt-main', label: 'a' });
   const b = S.openLayoutTab({ sessionId: 's1', worktreeId: 'wt-feature', label: 'a' });
   assert.strictEqual(a, b, '세션이 이미 있는 탭이라 새로 생기지 않는다');
-  assert.strictEqual(S.getTabs().length, 2, '기본 탭 + s1의 탭, 늘어나지 않는다');
+  assert.strictEqual(S.getTabs().length, 1, 's1의 탭 하나, 늘어나지 않는다');
   assert.strictEqual(S.getTabs().find((t) => t.id === a).worktreeId, 'wt-feature',
     '지금 보는 워크트리가 갱신돼야 pane 헤더의 브랜치 칩이 맞는 걸 보여준다');
 });
@@ -72,13 +73,44 @@ test('다른 세션을 열면(워크트리가 같아도) 별도 탭이다', asyn
   const a = S.openLayoutTab({ sessionId: 's1', label: 'a' });
   const b = S.openLayoutTab({ sessionId: 's2', label: 'b' });
   assert.notStrictEqual(a, b);
-  assert.strictEqual(S.getTabs().length, 3);
+  assert.strictEqual(S.getTabs().length, 2);
 });
 
-test('마지막 탭은 닫히지 않는다 — 트리가 0개면 그릴 대상이 없다', async () => {
+// 2026-10-03(세션·뷰 규칙 "뷰 ×") — 마지막 뷰도 닫힌다. 스토어는 탭을 0개로
+// 두지 않고 빈 칸 하나짜리 자리 탭(= 뷰 없음)으로 바꾼다.
+test('마지막 탭을 닫으면 "뷰 없음" 자리 탭이 된다', async () => {
   const { S } = await load();
-  assert.strictEqual(S.closeLayoutTab(S.getActiveTabId()), false);
+  const a = S.openLayoutTab({ sessionId: 's1', label: 'a' });
+  assert.strictEqual(S.isLayoutEmpty(), false);
+  assert.strictEqual(S.closeLayoutTab(a), true);
   assert.strictEqual(S.getTabs().length, 1);
+  assert.notStrictEqual(S.getActiveTabId(), a);
+  assert.strictEqual(S.isLayoutEmpty(), true);
+  assert.strictEqual(S.getTree().session, null);
+});
+
+test('뷰 탭 전환은 가장 왼쪽 위 칸에 포커스한다', async () => {
+  const { S } = await load();
+  const a = S.openLayoutTab({ sessionId: 's1' });
+  const right = S.splitActivePane('row', 's2');
+  assert.strictEqual(S.getActivePaneId(), right);
+  S.openLayoutTab({ sessionId: 's3' });
+  S.switchLayoutTab(a);
+  const tree = S.getTree();
+  assert.strictEqual(S.getActivePaneId(), tree.a.id, '왼쪽 위 칸(첫 leaf)');
+});
+
+test('기억된 닫힌 묶음 — 한 세션은 묶음 하나에만 속하고, 2명 미만이 되면 버린다', async () => {
+  const { S } = await load();
+  const leaf = (id, tmux) => ({ t: 'leaf', id, session: tmux ? { id: 'w-' + tmux, tmux } : null });
+  const split = (id, a, b) => ({ t: 'split', id, dir: 'row', ratio: 0.5, a, b });
+  assert.strictEqual(S.rememberClosedView({ id: 'solo', tree: leaf('p0', 'x') }), false, '단독 뷰는 기억 안 함');
+  assert.ok(S.rememberClosedView({ id: 'g1', tree: split('s1', leaf('p1', 'a'), leaf('p2', 'b')) }));
+  assert.ok(S.rememberClosedView({ id: 'g2', tree: split('s2', leaf('p3', 'b'), leaf('p4', 'c')) }));
+  assert.strictEqual(S.findClosedViewByTmux('b').id, 'g2', 'b는 나중 묶음으로 옮겨 간다');
+  assert.strictEqual(S.findClosedViewByTmux('a'), null, 'g1은 a 혼자 남아 버려졌다');
+  S.forgetClosedMembers(['c']);
+  assert.strictEqual(S.getClosedViews().length, 0);
 });
 
 test('활성 탭을 닫으면 남은 탭으로 활성이 옮겨간다', async () => {

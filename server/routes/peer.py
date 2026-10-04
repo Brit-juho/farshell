@@ -452,6 +452,8 @@ async def peer_sessions_create(request: Request, grant: dict):
             {"error": "create_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
             status_code=500,
         ), f"생성 실패: {name}"
+    # 만든 곳 기록 — 서명 검증을 통과한 peer 경로이므로 서버가 "peer"로 정한다(본문 값은 안 본다).
+    await tmux_runner.set_origin_async(name, "peer")
     return {"ok": True, "name": name}, name
 
 
@@ -511,8 +513,7 @@ async def peer_sessions_rename(request: Request, grant: dict):
             {"error": "rename_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
             status_code=500,
         ), f"변경 실패: {old}"
-    local = session_store.find_by_tmux_name(old)
-    if local:
+    for local in session_store.find_all_by_tmux_name(old):
         session_store.update_tmux_name(local.session_id, new)
     return {"ok": True, "name": new}, f"{old} → {new}"
 

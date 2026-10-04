@@ -30,3 +30,17 @@ exit = [
 # 시 프런트는 버튼 대신 「터미널로」로 폴백한다 — 이 패턴 하나가 전부를
 # 못 잡아도 안전하다.
 options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
+
+# waiting 유형(kind)별 리터럴 — enter와 같은 '리터럴 바이트 문자열' 규칙. 여기 적힌
+# 문구도 waiting 진입 신호다. approval은 위 enter(`Do you want to proceed?` 등)가 맡는다.
+# 훅이 알려주는 kind(PermissionRequest의 tool_name)가 있으면 그쪽이 이긴다.
+# 2026-10-03 실측(Claude Code 2.1.287): AskUserQuestion 화면은 아래 안내줄, ExitPlanMode
+# 화면은 `Would you like to proceed?`를 그린다.
+[kinds]
+plan = [
+  "Would you like to proceed?",
+  "Here is Claude's plan:",
+]
+choice = [
+  "Enter to select · ↑/↓ to navigate",
+]

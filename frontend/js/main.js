@@ -31,7 +31,6 @@ import './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참
 import { initTooltips } from './ui/tooltip.js';  // 2026-09-18 — 네이티브 title 대체(data-tip)
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
 import './lib/ansilex.js';
-import './lib/difflex.js';
 import './lib/keyseq.js';
 import './panels/panel.js';
 import './panels/settings-lazy.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
@@ -103,7 +102,7 @@ import './pushui.js';
 // 레일(shell/Rail.tsx)이 세션 목록을, 정식 Settings 패널이 설정 정적
 // 컨텐츠를 이미 대신하고 있어(2026-09-18 CHANGELOG) 실제로 쓰이던 건
 // clients.show 액션 하나뿐이었다 — 그 하나만 옮겼다.
-import './layout/connected-screens.js';
+import './layout/connected-screens-lazy.js';  // 본체는 `screens` 청크
 
 // LEGACY_APP_SCRIPTS(classic <script> 순차 로더)는 F5에서 제거했다 — 위 정적
 // import가 전부 대체했고, main.js가 실행되는 시점엔 이미 모든 모듈이 평가돼
@@ -133,11 +132,18 @@ try {
     const s = getSession(activeSessionId());
     return (s && (s.tmuxName || s.tmux_name)) || '';
   };
+  const activeClientsPath = () => {
+    const s = getSession(activeSessionId());
+    const name = s && (s.tmuxName || s.tmux_name);
+    if (!name) return '';
+    if (s.remote) return `/api/hosts/${encodeURIComponent(s.remote.host)}/clients?session=${encodeURIComponent(name)}&screen=${encodeURIComponent(s.remote.screen || '')}`;
+    return `/api/tmux/clients?session=${encodeURIComponent(name)}`;
+  };
 
   const hudRoot = document.getElementById('vt-hud');
   if (hudRoot) {
     import('./shell/Hud.tsx')
-      .then(({ mountHud }) => mountHud(hudRoot, { vtFetch, activeTmuxName, getAction, e2eEnabled: E2E_ENABLED }))
+      .then(({ mountHud }) => mountHud(hudRoot, { vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED }))
       .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
   }
 

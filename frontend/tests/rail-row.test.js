@@ -1,0 +1,104 @@
+// 레일 행(shell/RailRow.tsx) DOM — 3줄 구성, 우클릭과 ⋯ 버튼이 같은 핸들러, 접힘(compact).
+'use strict';
+const { test, after } = require('node:test');
+const assert = require('node:assert');
+const { loadSolidBuild } = require('./helpers/solid-env');
+
+const _envs = [];
+after(() => { for (const e of _envs) { try { e.dom.window.close(); } catch (_) {} } });
+
+const base = {
+  sessionId: 's1', tmuxName: 'api', name: 'api', open: true, status: 'idle', unseen: false,
+  since: null, tool: null, kind: null, badge: null, diffFiles: null, changed: null,
+  agent: null, branch: null, isMainWorktree: false, origin: 'local', viewLabel: null, otherScreens: 0,
+};
+
+async function mount(rowOver, propsOver = {}) {
+  const env = await loadSolidBuild();
+  _envs.push(env);
+  const { mountRow, document, window } = env;
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  const calls = [];
+  mountRow(root, {
+    row: { ...base, ...rowOver },
+    active: false,
+    onOpen: () => calls.push('open'),
+    onContext: (e) => calls.push(e.type),
+    ...propsOver,
+  });
+  return { root, window, document, calls };
+}
+const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+
+test('우클릭(contextmenu)과 ⋯ 버튼이 같은 onContext를 부른다', async () => {
+  const { root, window, calls } = await mount({});
+  const rowEl = root.querySelector('.vt-wgrail-row');
+  const ev = new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 6 });
+  rowEl.dispatchEvent(ev);
+  assert.strictEqual(ev.defaultPrevented, true, '브라우저 기본 메뉴는 막는다');
+  root.querySelector('.vt-srow-menu').dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  assert.deepStrictEqual(calls, ['contextmenu', 'click'], '둘 다 onContext 하나로 들어가고 행 열기는 안 일어난다');
+});
+
+test('3줄 — 1줄 상태 아이콘·이름, 2줄 브랜치(main도)·변경량, 3줄 키워드·경과·만든 곳', async () => {
+  const { root } = await mount({
+    name: 'api', status: 'waiting', kind: 'approval', unseen: true, since: Date.now() / 1000 - 120,
+    branch: 'main', isMainWorktree: true, changed: { files: 2, add: 10, del: 1 },
+    origin: 'external', agent: 'claude',
+  });
+  const top = root.querySelector('.vt-srow-top');
+  assert.ok(top.querySelector('.vt-state-icon[data-state="waiting"].unseen'), '읽지 않음은 아이콘 링');
+  assert.strictEqual(top.querySelector('.vt-srow-name').textContent, 'api');
+  const l2 = root.querySelector('.vt-srow-line2');
+  assert.strictEqual(l2.querySelector('.vt-srow-branch').textContent, 'main');
+  assert.ok(l2.querySelector('.vt-srow-wt'), '메인/워크트리 아이콘');
+  assert.ok(text(l2).includes('+10 −1'));
+  const l3 = root.querySelector('.vt-srow-line3');
+  assert.strictEqual(l3.querySelector('.vt-srow-kw').textContent, '승인 요청');
+  assert.ok(l3.querySelector('.vt-srow-since'));
+  assert.strictEqual(l3.querySelector('.vt-srow-origin').dataset.origin, 'external');
+  // 옛 요소는 없다.
+  assert.strictEqual(root.querySelector('.vt-wgrail-bar'), null);
+  assert.strictEqual(root.querySelector('.vt-srow-tmux'), null);
+  assert.strictEqual(root.querySelector('.vt-srow-question'), null);
+});
+
+test('local은 만든 곳 아이콘이 없고, 브랜치가 없으면 2줄이 없다', async () => {
+  const { root } = await mount({ origin: 'local' });
+  assert.strictEqual(root.querySelector('.vt-srow-origin'), null);
+  assert.strictEqual(root.querySelector('.vt-srow-line2'), null);
+  assert.strictEqual(root.querySelector('.vt-srow-line4'), null);
+});
+
+test('질문 원문은 행에 안 나오고 키워드만 — kind 없으면 질문', async () => {
+  const { root } = await mount({ status: 'waiting', kind: null, question: '아주 긴 질문 문장입니다?' });
+  assert.strictEqual(root.querySelector('.vt-srow-kw').textContent, '질문');
+  assert.ok(!text(root).includes('아주 긴 질문'));
+});
+
+test('열림 표시·묶음 뷰 이름·다른 화면 N은 해당할 때만', async () => {
+  const on = await mount({ open: true, viewLabel: 'api+web', otherScreens: 2 });
+  assert.ok(on.root.querySelector('.vt-srow-open'));
+  assert.strictEqual(on.root.querySelector('.vt-srow-view').textContent, 'api+web');
+  assert.strictEqual(on.root.querySelector('.vt-srow-screens').textContent.trim(), '다른 화면 2');
+  const off = await mount({ open: false, sessionId: '' });
+  assert.strictEqual(off.root.querySelector('.vt-srow-open'), null);
+  assert.strictEqual(off.root.querySelector('.vt-srow-screens'), null);
+  assert.ok(off.root.querySelector('.vt-wgrail-row.closed'));
+});
+
+test('done 배지·작업 중 도구', async () => {
+  const done = await mount({ status: 'done', badge: 'question' });
+  assert.strictEqual(done.root.querySelector('.vt-srow-badge').textContent, '질문 있음');
+  const work = await mount({ status: 'working', tool: 'Edit' });
+  assert.strictEqual(work.root.querySelector('.vt-srow-tool').textContent, 'Edit');
+});
+
+test('compact — 상태 아이콘이 행 직속에 있고 ⋯ 버튼은 없다, 우클릭은 된다', async () => {
+  const { root, window, calls } = await mount({ status: 'working', agent: 'claude' }, { compact: true });
+  assert.ok(root.querySelector('.vt-wgrail-row > .vt-srow-state .vt-state-icon[data-state="working"]'));
+  assert.strictEqual(root.querySelector('.vt-srow-menu'), null);
+  root.querySelector('.vt-wgrail-row').dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  assert.deepStrictEqual(calls, ['contextmenu']);
+});

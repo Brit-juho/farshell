@@ -96,3 +96,79 @@ test('배경(backdrop) 클릭으로 닫힌다 — 카드 안 클릭은 안 닫�
   window.document.getElementById('vt-connected-screens').click();
   assert.strictEqual(window.document.getElementById('vt-connected-screens'), null);
 });
+
+test('다른 세션의 메뉴에서 열면 그 세션 ID로 나를 조회하고 끊는다', async () => {
+  const { window, core } = await load();
+  const calls = [];
+  window.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return { ok: true, json: async () => opts?.method === 'POST'
+      ? { ok: true } : { me_tty: '/dev/pts/2', clients: [
+        { tty: '/dev/pts/2', label: '이 화면', is_me: true },
+        { tty: '/dev/pts/3', label: '다른 화면', is_me: false },
+      ] } };
+  };
+  core.registerSession('web-1', { tmuxName: 'first' });
+  core.registerSession('web-2', { tmuxName: 'second' });
+  core.setActive('web-1');
+  window.vtShowClients('web-2');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.match(calls[0].url, /session=second&me=web-2/);
+  window.document.querySelector('.vt-clients-detach').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepStrictEqual(JSON.parse(calls[1].opts.body), { tty: '/dev/pts/3', me: 'web-2' });
+});
+
+test('열린 상태에서 다른 세션을 선택하면 그 세션의 목록으로 전환한다', async () => {
+  const { window, core } = await load();
+  const urls = [];
+  window.fetch = async (url) => {
+    urls.push(url);
+    return { ok: true, json: async () => ({ clients: [] }) };
+  };
+  core.registerSession('web-1', { tmuxName: 'first' });
+  core.registerSession('web-2', { tmuxName: 'second' });
+  window.vtShowClients('web-1');
+  window.vtShowClients('web-2');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(window.document.getElementById('vt-connected-screens'));
+  assert.match(urls[urls.length - 1], /session=second&me=web-2/);
+});
+
+test('목록 실패를 보여주고 다시 시도로 복구한다', async () => {
+  const { window, core } = await load();
+  let count = 0;
+  window.fetch = async () => {
+    count++;
+    return count === 1
+      ? { ok: false, status: 503, json: async () => ({ reason: '서버 일시 중단' }) }
+      : { ok: true, json: async () => ({ me_tty: null, clients: [] }) };
+  };
+  core.registerSession('web-1', { tmuxName: 'dev' });
+  core.setActive('web-1');
+  window.vtShowClients();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.match(window.document.querySelector('.vt-clients-status').textContent, /서버 일시 중단/);
+  window.document.querySelector('.vt-clients-status button').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.strictEqual(window.document.querySelector('.vt-clients-status').textContent, '연결된 화면이 없습니다');
+});
+
+test('원격 끊기 403은 읽기 전용 안내로 바뀐다', async () => {
+  const { window, core } = await load();
+  window.fetch = async (_url, opts) => opts?.method === 'POST'
+    ? { ok: false, status: 403, json: async () => ({ reason: '권한이 없습니다' }) }
+    : { ok: true, json: async () => ({ me_tty: '/dev/pts/2', clients: [
+      { tty: '/dev/pts/2', label: '이 화면', is_me: true },
+      { tty: '/dev/pts/3', label: '다른 화면', is_me: false },
+    ] }) };
+  core.registerSession('remote-1', { tmuxName: 'dev', remote: { host: 'peer', screen: 'screen1' } });
+  core.setActive('remote-1');
+  window.vtShowClients();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  window.document.querySelector('.vt-clients-detach').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.match(window.document.querySelector('.vt-clients-note').textContent, /읽기 전용/);
+  assert.strictEqual(window.document.querySelector('.vt-clients-detach'), null);
+  assert.strictEqual(window.document.querySelector('.vt-clients-head button').hidden, true);
+});

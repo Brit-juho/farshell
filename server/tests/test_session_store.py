@@ -51,3 +51,16 @@ def test_none_tmux_name_does_not_corrupt_index():
     s.update_tmux_name("sid1", "tmux-a")
     s.update_tmux_name("sid1", None)  # tmux_name 초기화
     assert s.find_by_tmux_name("tmux-a") is None
+
+
+def test_same_tmux_name_keeps_distinct_browser_screens():
+    s = SessionStore()
+    s.add("phone", screen_id="a" * 32)
+    s.add("desktop", screen_id="b" * 32)
+    s.update_tmux_name("phone", "dev")
+    s.update_tmux_name("desktop", "dev")
+    assert {i.session_id for i in s.find_all_by_tmux_name("dev")} == {"phone", "desktop"}
+    assert s.find_by_tmux_and_screen("dev", "a" * 32).session_id == "phone"
+    assert s.find_by_tmux_and_screen("dev", "b" * 32).session_id == "desktop"
+    s.remove("phone")
+    assert s.find_by_tmux_name("dev").session_id == "desktop"

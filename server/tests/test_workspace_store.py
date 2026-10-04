@@ -166,3 +166,43 @@ def test_written_file_is_valid_json_with_a_trailing_read(ws):
     raw = json.loads(ws.read_text(encoding="utf-8"))
     assert raw["ui"]["theme"] == "light"
     assert raw["tabs"] == [{"id": "t1"}]
+
+
+# ── 2026-10-03 세션·뷰 규칙 2단계 — 브라우저 탭별 레이아웃 ──────────────────
+
+def _snap(saved_at):
+    return {"v": 5, "savedAt": saved_at, "tabs": [], "closed": []}
+
+
+def test_screen_layouts_merge_per_screen_instead_of_replacing(ws):
+    """한 브라우저 탭의 PUT이 다른 탭의 레이아웃을 지우면 안 된다(ui는 얕은 병합)."""
+    workspace.update({"ui": {"layouts": {"a" * 32: _snap(1)}}})
+    out = workspace.update({"ui": {"layouts": {"b" * 32: _snap(2)}, "layout": _snap(2)}})
+    assert set(out["ui"]["layouts"]) == {"a" * 32, "b" * 32}
+    assert out["ui"]["layout"]["savedAt"] == 2
+    # 같은 탭의 재저장은 덮어쓴다.
+    out = workspace.update({"ui": {"layouts": {"a" * 32: _snap(3)}}})
+    assert out["ui"]["layouts"]["a" * 32]["savedAt"] == 3
+    assert out["ui"]["layouts"]["b" * 32]["savedAt"] == 2
+
+
+def test_screen_layouts_keep_other_ui_keys(ws):
+    workspace.update({"ui": {"rail_width": 280}})
+    out = workspace.update({"ui": {"layouts": {"s1": _snap(1)}}})
+    assert out["ui"]["rail_width"] == 280
+    assert out["ui"]["theme"] == "dark"
+
+
+def test_screen_layouts_null_removes_and_bad_values_are_ignored(ws):
+    workspace.update({"ui": {"layouts": {"s1": _snap(1), "s2": _snap(2)}}})
+    out = workspace.update({"ui": {"layouts": {"s1": None, "s3": "not-a-dict", "": _snap(9)}}})
+    assert set(out["ui"]["layouts"]) == {"s2"}
+
+
+def test_screen_layouts_are_capped_by_most_recent_save(ws):
+    for i in range(workspace.MAX_SCREEN_LAYOUTS + 5):
+        workspace.update({"ui": {"layouts": {f"s{i}": _snap(i)}}})
+    layouts = workspace.load()["ui"]["layouts"]
+    assert len(layouts) == workspace.MAX_SCREEN_LAYOUTS
+    assert "s0" not in layouts
+    assert f"s{workspace.MAX_SCREEN_LAYOUTS + 4}" in layouts

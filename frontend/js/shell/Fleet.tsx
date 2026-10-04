@@ -1,7 +1,9 @@
 // N38(70-mobile.md §2) — 모바일 플릿 홈. compact(<720px) 하단 내비의 첫 탭
-// (ui.mobile.home 기본값). Rail.tsx(N36 §5)와 **같은 데이터 소스**를 쓴다 —
-// 같은 그룹핑·정렬 로직(rail-data.ts의 buildRailSections)을 그대로 재사용해,
-// "데스크톱 레일에서 맨 위인 게 폰에서도 맨 위"가 항상 성립하게 한다.
+// (ui.mobile.home 기본값). Rail.tsx와 **같은 데이터·같은 구역 규칙**을 쓴다 —
+// 행 조립(rail-fetch.ts의 collectSessionRows)과 구역(rail-data.ts의 buildRailLists:
+// 개입 필요 · 세션, 이름순)이 하나라서 "데스크톱 레일에서 보이는 게 폰에서도 보인다".
+// 상태 키워드·상태 아이콘·읽지 않음 링·만든 곳 아이콘도 레일과 같은 컴포넌트(RailRow.tsx)다.
+// 폰에만 있는 것은 인라인 승인 버튼(개입 필요 구역의 행)과 꾹 눌러 여는 메뉴 시트다.
 //
 // Rail.tsx와 같은 이유로 데이터 fetch(세션 목록·agent 상태·git diff)를
 // 직접 다시 구현한다(정적 import 금지 — 지연 청크가 core/store.js 등 상태
@@ -9,32 +11,23 @@
 // 폴링도 같은 이유로 각자 반복하고 있다 — 이 파일도 그 관행을 따른다.
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
-import { agentLabel } from '../ui/icons.js';
+import { icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
 // core 청크의 공유 인스턴스로 연결된다(shell.js가 core.js에서 import — 복제되지 않는다).
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
-// git 배지 캐시·변경 알림 구독은 레일과 **같은 캐시**를 쓴다(같은 shell 청크).
-// 예전엔 사본을 따로 들어 같은 저장소를 두 번 셌다.
+// git 배지 캐시·변경 알림 구독·행 조립은 레일과 **같은 것**을 쓴다(같은 shell 청크).
 import {
-  cachedDiffCount, diffCountStale, fetchDiffCount, createDiffWatcher,
+  safeFetch, collectSessionRows, syncAgentsFromServer, createDiffWatcher, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailSections, buildSleepingEntries, GROUP_LABEL, type OtherRailRowInput,
+  buildRailLists, rowMenuItems, runRowMenu, diffLabel, worktreeIconName, type SessionRow,
 } from './rail-data.js';
+import { createRailPrefs } from './rail-prefs.js';
+import { KeywordLine, OriginMark } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
 } from './host-data.js';
-
-// 2026-09-23(70-mobile.md §2, 사용자 요청) — 데스크톱 레일과 같은 소스로
-// 갈아탔다: `/api/tmux/sessions`(잠든 것까지 나온다) + `allSessions()`(이
-// 브라우저에서 깨어있는 것). 예전엔 `allSessions()`만 봐서 잠든 세션이 이
-// 화면에 아예 나올 수 없었다 — Rail.tsx(로컬 경로)와 같은 `OtherRailRowInput`
-// 모양을 그대로 쓴다(그룹/워크트리 필드는 안 채운다 — 모바일 세션 탭은
-// 「개입 필요 → 작업 중 → 열려 있음 → 잠자는 중」 4단만 본다, 탭 그룹 개념
-// 없음. 데스크톱의 buildSessionSections이 아니라 buildRailSections를 계속
-// 쓰는 이유).
-type FleetRow = OtherRailRowInput & { statusSentence: string };
 
 // 세션 목록의 정본은 `/ws-workspace`의 `tmux_sessions` push다(바뀔 때만 온다).
 // 이건 그 채널이 끊긴 동안의 안전망(예전 5초).
@@ -60,10 +53,6 @@ export interface FleetDeps {
   getAction: (name: string) => unknown;
 }
 
-function safeFetch<T>(deps: FleetDeps, path: string): Promise<T | null> {
-  return deps.vtFetch(path).then((v) => v as T).catch(() => null);
-}
-
 function useSessionsVersion() {
   const [v, setV] = createSignal(0);
   const unsub = (window as any).storeSubscribe?.(() => setV((n) => n + 1));
@@ -77,34 +66,6 @@ function useAgentVersion() {
   onCleanup(() => unsub?.());
   return v;
 }
-
-interface AgentDetail {
-  since: number | null;
-  tool: string | null;
-  question: string | null;
-  options: { key: string; label: string }[] | null;
-  /** P1-1(ADR-33) — rail-fetch.ts의 같은 이름 필드와 같은 뜻. */
-  promptId: string | null;
-}
-
-// Rail.tsx와 같은 이유로 여기서도 따로 둔다(지연 청크 정적 import 금지).
-// 2026-09-30 — 세부·이름은 폴링하지 않고 공용 저장소(agent/state.js, /ws-agent
-// push로 채워진다)에서 읽는다. 서버에서 직접 받는 건 WS가 끊긴 동안을 위한
-// 안전망뿐이고, 그 결과도 같은 저장소에 넣는다 — 화면은 저장소만 본다.
-// **정체(CLI 이름)와 상태 세부는 서버에서 서로 다른 소스다.**
-const readAgentDetails = (): Record<string, AgentDetail> => (window as any).agentDetails?.() || {};
-const readAgentNames = (): Record<string, string> => (window as any).agentNames?.() || {};
-
-async function syncAgentsFromServer(deps: FleetDeps): Promise<void> {
-  const w = window as any;
-  const [st, names] = await Promise.all([
-    safeFetch<{ all?: Record<string, any> }>(deps, '/api/agent/status'),
-    safeFetch<Record<string, { agent?: string }>>(deps, '/api/agents'),
-  ]);
-  if (st && st.all) w.vtApplyAgentSnapshot?.(st.all);
-  if (names) w.vtApplyAgentNames?.(names);
-}
-
 
 // 꾹 눌러 메뉴 — dnd.js의 `wireTouchDragSource`와 같은 상수(500ms·8px)를
 // 쓰지만, 그건 드래그 소스를 만드는 함수라 여기 그대로 재사용할 수 없다(끄는
@@ -137,13 +98,17 @@ function useLongPress(onLongPress: () => void) {
 }
 
 function Row(props: {
-  row: FleetRow; sleeping?: boolean;
+  row: SessionRow;
+  /** 인라인 승인 버튼(개입 필요 구역의 행에만). */
+  answers?: boolean;
   onOpen: () => void; onLongPress: () => void;
   onAnswer: (key: string) => Promise<void>; onSeen: () => void;
 }) {
-  const w = () => window as any;
-  const isUnseenDone = () => !props.sleeping && props.row.status === 'done' && w().isUnseen?.(props.row.tmuxName);
+  const [now, setNow] = createSignal(Date.now());
+  const clock = setInterval(() => setNow(Date.now()), 30000);
+  onCleanup(() => clearInterval(clock));
   const hasOptions = () => props.row.status === 'waiting' && props.row.options && props.row.options.length > 0;
+  const diff = () => diffLabel(props.row);
   // P1-1(ADR-33) — 같은 화면의 이중 탭을 여기서 먼저 막는다(서버 409는
   // 그 다음 방어선 — 다른 화면·느린 네트워크가 만드는 경쟁까지는 이걸로 못
   // 막는다). 응답이 돌아오기 전까지 이 행의 버튼을 다시 못 누르게 한다.
@@ -163,21 +128,14 @@ function Row(props: {
   const onRowClick = () => {
     // 꾹 눌러 메뉴가 막 떴으면 뒤이어 오는 click은 삼킨다 — 안 그러면 메뉴가
     // 뜬 그 손가락을 떼는 순간 행이 열리기까지 한다(dnd.js의 `_suppressNextClick`과
-    // 같은 관용구, 여기서는 별도 타이머 없이 `fired` 플래그 하나로 충분하다 —
-    // click은 pointerup 직후 같은 틱에서 오므로 다음 pointerdown 전까지는 값이
-    // 그대로 남아 있다).
+    // 같은 관용구, 별도 타이머 없이 `fired` 플래그 하나로 충분하다).
     if (longPress.fired()) return;
-    // 잠자는 행은 탭하면 곧장 깨워서 연다 — 확인/미확인 개념이 없다(원래부터
-    // 이 브라우저에 열려 있던 적이 없으므로 "확인 안 함" 배지가 성립하지 않는다).
-    if (props.sleeping) { props.onOpen(); return; }
-    // §2: 「완료 · 확인 안 함」 행은 탭하면 seen 처리(이동하지 않는다) —
-    // 나머지는 전부 터미널로 이동한다.
-    //
-    // 2026-09-22(사용자 지적) — 어느 쪽이든 먼저 onSeen을 부른다(이제
-    // ackLocal이라 done→idle까지 내린다). 안 그러면 이미 「확인함」 상태로
-    // 넘어온 완료 행(다른 기기가 먼저 봤거나, 방금 이 탭으로 확인 처리된 뒤
-    // 재렌더 전)은 else 분기로 곧장 onOpen만 타서 파란 tone이 안 풀린다.
-    const ackOnly = isUnseenDone();
+    // 열려 있지 않은 행은 탭하면 곧장 열어서 이동한다 — 확인/미확인 개념이 없다.
+    if (!props.row.open) { props.onOpen(); return; }
+    // 「완료 · 읽지 않음」 행은 탭하면 seen 처리(이동하지 않는다) — 나머지는 전부 터미널로 이동.
+    // 어느 쪽이든 먼저 onSeen을 부른다(ackLocal이라 done→idle까지 내린다) — 안 그러면
+    // 이미 「확인함」으로 넘어온 완료 행이 파란 tone을 못 푼다(2026-09-22).
+    const ackOnly = props.row.status === 'done' && props.row.unseen;
     props.onSeen();
     if (!ackOnly) props.onOpen();
   };
@@ -185,12 +143,13 @@ function Row(props: {
   return (
     <div
       class="vt-srow lg vt-fleet-row"
-      classList={{ 'is-waiting': props.row.status === 'waiting', sleeping: !!props.sleeping }}
+      classList={{ 'is-waiting': props.row.status === 'waiting', closed: !props.row.open }}
       onClick={onRowClick}
       onPointerDown={longPress.onPointerDown}
       onPointerMove={longPress.onPointerMove}
       onPointerUp={longPress.onPointerUp}
       onPointerCancel={longPress.onPointerCancel}
+      onContextMenu={(e) => { e.preventDefault(); props.onLongPress(); }}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
         e.preventDefault();
@@ -199,31 +158,45 @@ function Row(props: {
       role="button"
       tabindex="0"
     >
-      <span class={`vt-srow-mark vt-fleet-bar tone-${props.row.status}`} />
       <div class="vt-srow-main vt-fleet-row-main">
         <div class="vt-srow-top vt-fleet-row-top">
-          {/* 2.1.6 — 데스크톱 레일 행·헤더 탭과 같은 마크. 이 화면에만 없어서
-              폰에서는 "어떤 CLI가 도는 세션인지"를 이름으로 추측해야 했다. */}
+          <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 16, props.row.unseen && props.row.status !== 'idle')} />
           <Show when={props.row.agent}>
-            {(a) => (
-              <span class="vt-srow-agent vt-fleet-agent" data-tip={agentLabel(a())} innerHTML={agentMark(a())} />
-            )}
+            {(a) => <span class="vt-srow-agent vt-fleet-agent" innerHTML={agentMark(a())} />}
           </Show>
           <span class="vt-srow-name vt-fleet-name">{props.row.name}</span>
-          <Show when={isUnseenDone()}>
-            <span class="vt-fleet-unseen-badge" aria-label="확인 안 함" data-tip="확인 안 함" />
-          </Show>
-          <Show when={props.row.diffFiles != null && props.row.diffFiles! > 0}>
-            <span class="vt-srow-meta vt-fleet-diff">+{props.row.diffFiles}</span>
+          <Show when={props.row.open}>
+            <span class="vt-srow-open" role="img" aria-label="열려 있음" innerHTML={icon('app-window', 13, 2)} />
           </Show>
         </div>
-        <div class="vt-srow-sub vt-fleet-row-sub">{props.row.statusSentence}</div>
-        <Show when={props.row.status === 'waiting' && props.row.question}>
-          <div class="vt-srow-question vt-fleet-question">? {props.row.question}</div>
+        <Show when={props.row.branch || diff()}>
+          <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line2">
+            <Show when={props.row.branch}>
+              <span
+                class="vt-srow-wt"
+                role="img"
+                aria-label={props.row.isMainWorktree ? '메인 워크트리' : '워크트리'}
+                innerHTML={icon(worktreeIconName(props.row), 12, 2)}
+              />
+              <span class="vt-srow-branch">{props.row.branch}</span>
+            </Show>
+            <Show when={diff()}><span class="vt-srow-meta vt-fleet-diff">{diff()}</span></Show>
+          </div>
         </Show>
-        {/* 잠자는 세션은 열린 pane이 없어 키를 보낼 곳이 없다 — 인라인 승인
-            버튼 대신 탭해서 깨우게 한다(질문 문구는 위에서 그대로 보인다). */}
-        <Show when={props.row.status === 'waiting' && !props.sleeping}>
+        <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line3">
+          <KeywordLine row={props.row} now={now} />
+          <OriginMark origin={props.row.origin} />
+        </div>
+        <Show when={props.row.viewLabel || props.row.otherScreens > 0}>
+          <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line4">
+            <Show when={props.row.viewLabel}><span class="vt-srow-view">{props.row.viewLabel}</span></Show>
+            <Show when={props.row.otherScreens > 0}>
+              <span class="vt-srow-screens">다른 화면 {props.row.otherScreens}</span>
+            </Show>
+          </div>
+        </Show>
+        {/* 열려 있지 않은 세션은 키를 보낼 곳(열린 pane)이 없다 — 인라인 승인 버튼 대신 탭해서 연다. */}
+        <Show when={props.answers && props.row.status === 'waiting' && props.row.open}>
           <div class="vt-fleet-answers" onClick={(e) => e.stopPropagation()}>
             <Show
               when={hasOptions()}
@@ -253,9 +226,9 @@ function Fleet(props: { deps: FleetDeps }) {
   const agentVersion = useAgentVersion();
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
-  // 행 메모가 agentVersion()을 구독하므로 저장소가 바뀌면 다시 계산된다.
-  const agentDetails = readAgentDetails;
-  const agentNames = readAgentNames;
+  const [repos, setRepos] = createSignal<any[]>([]);
+  // 행 메모가 agentVersion()을 구독하므로 에이전트 저장소가 바뀌면 다시 계산된다.
+  const { prefs } = createRailPrefs();
   const [diffTick, setDiffTick] = createSignal(0);
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
   // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
@@ -272,7 +245,12 @@ function Fleet(props: { deps: FleetDeps }) {
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
     if (list) setTmuxSessions(list);
   };
-  const refreshAgent = () => syncAgentsFromServer(props.deps);
+  const refreshAgent = () => syncAgentsFromServer(props.deps as RailDeps);
+  // 브랜치·변경량(레일과 같은 행)의 출처.
+  const refreshRepos = async () => {
+    const data = await safeFetch<{ repos?: any[] }>(props.deps, '/api/repos');
+    if (data?.repos) setRepos(data.repos);
+  };
   const refreshHosts = async () => {
     const data = await safeFetch<{ hosts?: HostEntry[] }>(props.deps, '/api/hosts');
     if (data?.hosts) setHosts(data.hosts);
@@ -283,6 +261,7 @@ function Fleet(props: { deps: FleetDeps }) {
     if (document.hidden || !isFleetActive()) return;
     void refreshSessions();
     void refreshAgent();
+    void refreshRepos();
     void refreshHosts();
   };
   refreshAll();
@@ -310,103 +289,30 @@ function Fleet(props: { deps: FleetDeps }) {
     if (id !== viewHostId) (window as any).vtSwitchHost?.(id);
   };
 
-  // ADR-29 B와 같은 소스 — `/api/tmux/sessions`(잠든 것까지) + `allSessions()`
-  // (이 브라우저에서 깨어있는 것). Rail.tsx의 로컬 세션 블록과 사실상 같은
-  // 코드다(그룹·워크트리·브랜치 필드만 뺐다 — 위 상단 주석 참고).
-  const rows = createMemo<OtherRailRowInput[]>(() => {
-    // diffTick — 세션 목록은 바뀔 때만 push되므로 git 조회 완료·변경 알림도 여기서 받는다.
-    sessionsVersion(); agentVersion(); diffTick();
-    const w = window as any;
-
-    const all = w.allSessions ? w.allSessions() : {};
-
-    // tmux 이름 → 이 브라우저의 웹 세션 id(있으면). "깨어있음"은 기기별
-    // 개념이라 서버가 주는 web_session_id가 아니라 이 맵을 출처로 삼는다.
-    const tmuxToWebSid: Record<string, string> = {};
-    for (const [sid, s] of Object.entries<any>(all)) {
-      const tn = s.tmuxName || s.tmux_name;
-      if (tn && !(tn in tmuxToWebSid)) tmuxToWebSid[tn] = sid;
-    }
-
-    const out: OtherRailRowInput[] = [];
-    const seenTmux = new Set<string>();
-    for (const t of tmuxSessions()) {
-      seenTmux.add(t.name);
-      const sid = tmuxToWebSid[t.name] || '';
-      const awake = !!sid;
-      const detail = agentDetails()[t.name];
-      const cwd = t.cwd || null;
-      out.push({
-        kind: 'session',
-        sessionId: sid,
-        tmuxName: t.name,
-        // 2026-09-21 설계 — tmux 세션의 이름은 tmux 세션 이름 그 자체다
-        // (core/store.js의 sessionDisplayName). awake일 때만 그걸 따로
-        // 조회하던 옛 분기는 t.name과 같은 값을 내는 동어반복이었다.
-        name: t.name,
-        awake,
-        groupId: null, // 모바일 세션 탭은 탭 그룹 개념이 없다(상단 주석)
-        status: w.getStatus ? w.getStatus(t.name) : 'idle',
-        since: detail?.since ?? null,
-        tool: detail?.tool ?? null,
-        diffFiles: cwd ? (cachedDiffCount(cwd) ?? null) : null,
-        question: detail?.question ?? null,
-        options: detail?.options ?? null,
-        promptId: detail?.promptId ?? null,
-        agent: agentNames()[t.name] ?? null,
-      });
-      if (cwd && diffCountStale(cwd)) {
-        fetchDiffCount(props.deps, cwd).then(() => setDiffTick((n) => n + 1));
-      }
-    }
-
-    // 일반(비 tmux) 세션 — 서버 쪽에 지속되는 대상이 없어 늘 깨어있다.
-    for (const [sid, s] of Object.entries<any>(all)) {
-      const tn = s.tmuxName || s.tmux_name;
-      if (tn && seenTmux.has(tn)) continue;
-      if (tn) continue; // tmux 이름은 있는데 목록에 없다 — 방금 죽은 세션, 다음 폴링에서 정리된다.
-      out.push({
-        kind: 'session',
-        sessionId: sid,
-        tmuxName: null,
-        name: w.sessionDisplayName ? w.sessionDisplayName(sid) : sid.slice(0, 8),
-        awake: true,
-        groupId: null,
-        status: 'idle',
-        since: null,
-        tool: null,
-        diffFiles: null,
-        agent: null,
-      });
-    }
-    return out;
+  // 레일과 같은 행 조립·같은 구역(rail-fetch.ts · rail-data.ts). 개입 필요 구역의 행에만
+  // 인라인 승인 버튼이 붙는다 — 같은 세션이 아래 「세션」에도 있지만 거기엔 버튼이 없다.
+  const rows = createMemo<SessionRow[]>(() => {
+    sessionsVersion(); agentVersion(); diffTick(); // 구독 트리거용
+    return collectSessionRows({
+      tmux: tmuxSessions(),
+      repos: repos(),
+      groups: (window as any).getTabGroups?.() || [],
+      deps: props.deps,
+      onDiff: () => setDiffTick((n) => n + 1),
+    });
   });
+  const lists = createMemo(() => buildRailLists(rows(), prefs()));
 
-  // 깨어있는 것만 3버킷(개입 필요/작업 중/열려 있음) — 잠든 것은
-  // sleepingEntries가 별도 구역으로 다룬다(buildRailSections에 섞으면 잠든
-  // waiting 세션이 「개입 필요」에 끼어드는데, 열린 pane이 없어 답을 보낼
-  // 수도 없다 — 데스크톱 buildSessionSections와 같은 원칙).
-  const awakeRows = createMemo(() => rows().filter((r) => r.awake));
-  const sections = createMemo(() => { diffTick(); return buildRailSections(awakeRows()); });
-  const sleepingEntries = createMemo(() => buildSleepingEntries(rows()));
-
-  const openRow = async (row: FleetRow) => {
+  const openRow = async (row: SessionRow) => {
     const w = window as any;
-    // ADR-29 B와 같은 규칙 — 잠든 행은 열면 곧장 깨운다. attachTmux(term/
-    // session.js)가 attach 후 그 세션을 직접 화면에 앉힌다(desktop의
-    // Rail.tsx openRow도 이 호출 하나로 끝낸다 — 뒤이어 revealSession을 또
-    // 부를 필요가 없다).
-    if (!row.awake) {
-      if (row.tmuxName) await w.attachTmux?.(row.tmuxName);
-      props.deps.onOpenTerminal();
-      return;
-    }
-    // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유로 revealSession.
-    w.revealSession?.(row.sessionId);
+    // 2026-10-03(세션·뷰 규칙) — 레일 클릭과 같은 함수(term/session-actions.js
+    // openSessionFromRail): 열린 세션은 그 자리로, 아니면 기억된 묶음 뷰를
+    // 통째로 다시 열거나 새 단독 뷰로 연다.
+    await w.vtOpenSessionFromRail?.({ sessionId: row.open ? row.sessionId : null, tmuxName: row.tmuxName || null });
     props.deps.onOpenTerminal();
   };
 
-  const answerRow = (row: FleetRow, key: string): Promise<void> => {
+  const answerRow = (row: SessionRow, key: string): Promise<void> => {
     // Codex의 y/p는 문자 선택 뒤 Enter로 확정하지만 `esc`는 문자열 "esc"가
     // 아니라 실제 ESC 바이트여야 취소된다. 그대로 보내면 프롬프트 입력란에
     // e·s·c가 찍히고 waiting이 풀리지 않는다.
@@ -426,7 +332,7 @@ function Fleet(props: { deps: FleetDeps }) {
     });
   };
 
-  const seenRow = (row: FleetRow) => {
+  const seenRow = (row: SessionRow) => {
     // ackLocal — markSeen의 상위집합(unseen 해제 + done이면 idle로도 내림).
     // 데스크톱 레일(RailRow.tsx)의 data-session-id 배선과 같은 목적, 폰은
     // 세션 카드에 그 속성이 없어 같은 델리게이트를 못 타므로 직접 부른다.
@@ -438,11 +344,11 @@ function Fleet(props: { deps: FleetDeps }) {
   // 아니라 시트로 띄운다 — 손가락으로 여는 메뉴가 화면 밖으로 나가면 안 된다
   // (호스트 스위처 시트와 같은 이유). 이름 변경은 그 자리에서 시트 내용을
   // 입력창으로 바꾼다(Rail.tsx가 이미 지킨 규칙 — window.prompt 안 씀).
-  const [menu, setMenu] = createSignal<{ row: FleetRow; sleeping: boolean } | null>(null);
+  const [menu, setMenu] = createSignal<{ row: SessionRow } | null>(null);
   const [renaming, setRenaming] = createSignal(false);
   const [renameValue, setRenameValue] = createSignal('');
 
-  const openMenu = (row: FleetRow, sleeping: boolean) => { setRenaming(false); setMenu({ row, sleeping }); };
+  const openMenu = (row: SessionRow) => { setRenaming(false); setMenu({ row }); };
   const closeMenu = () => { setMenu(null); setRenaming(false); };
   const runMenuAction = (fn: () => void) => { closeMenu(); fn(); };
 
@@ -507,12 +413,7 @@ function Fleet(props: { deps: FleetDeps }) {
       <Show when={viewHostOffline()}>
         <div class="vt-fleet-empty">{hostDetail(activeHost()!)}</div>
       </Show>
-      {/* 2026-09-23 — 잠든 세션도 이제 이 화면의 데이터에 들어오므로(위
-          rows() 주석), "awake 섹션이 0개"만으로 "세션이 없다"고 하면 잠든
-          세션이 있는데도 이 빈 화면이 뜬다. 잠든 것까지 0개일 때만 진짜
-          빈 상태다. */}
-      <Show when={sections().length === 0 && sleepingEntries().length === 0
-        && !viewHostOffline()}>
+      <Show when={rows().length === 0 && !viewHostOffline()}>
         <div class="vt-fleet-empty">
           <div>세션이 없습니다</div>
           <div class="vt-fleet-empty-actions">
@@ -521,51 +422,44 @@ function Fleet(props: { deps: FleetDeps }) {
           </div>
         </div>
       </Show>
-      <For each={sections()}>
-        {(section) => (
-          <div class="vt-fleet-group">
-            <div class="vt-fleet-group-head">{GROUP_LABEL[section.group]} · {section.rows.length}</div>
-            <For each={section.rows}>
-              {(row) => (
-                <Row
-                  row={row}
-                  onOpen={() => { void openRow(row); }}
-                  onLongPress={() => openMenu(row, false)}
-                  onAnswer={(key) => answerRow(row, key)}
-                  onSeen={() => seenRow(row)}
-                />
-              )}
-            </For>
-          </div>
-        )}
-      </For>
-      {/* ADR-29 B와 같은 이름·같은 규칙 — 그룹째 안 섞고 전부 낱개 행이다.
-          statusSentence를 비우는 것도 Rail.tsx의 sleepingEntries 렌더와 같은
-          이유(구역 머리글이 이미 "잠자는 중"이라고 말한다, 행마다 또 안 씀). */}
-      <Show when={sleepingEntries().length > 0}>
+      {/* 개입 필요 — waiting 세션. 인라인 승인 버튼은 여기 행에만 붙는다. */}
+      <Show when={lists().attention.length > 0}>
         <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head">잠자는 중 · {sleepingEntries().length}</div>
-          <For each={sleepingEntries()}>
-            {(entry) => {
-              const row = { ...entry.row, statusSentence: '' };
-              return (
-                <Row
-                  row={row}
-                  sleeping
-                  onOpen={() => { void openRow(row); }}
-                  onLongPress={() => openMenu(row, true)}
-                  onAnswer={() => Promise.resolve()}
-                  onSeen={() => {}}
-                />
-              );
-            }}
+          <div class="vt-fleet-group-head">개입 필요 · {lists().attention.length}</div>
+          <For each={lists().attention}>
+            {(row) => (
+              <Row
+                row={row}
+                answers
+                onOpen={() => { void openRow(row); }}
+                onLongPress={() => openMenu(row)}
+                onAnswer={(key) => answerRow(row, key)}
+                onSeen={() => seenRow(row)}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show when={lists().sessions.length > 0}>
+        <div class="vt-fleet-group">
+          <div class="vt-fleet-group-head">세션 · {lists().sessions.length}</div>
+          <For each={lists().sessions}>
+            {(row) => (
+              <Row
+                row={row}
+                onOpen={() => { void openRow(row); }}
+                onLongPress={() => openMenu(row)}
+                onAnswer={() => Promise.resolve()}
+                onSeen={() => seenRow(row)}
+              />
+            )}
           </For>
         </div>
       </Show>
       {/* Rail.tsx 하단의 "+ 새 세션"과 같은 액션(session.add-menu) — 목록이
           비었을 때는 위 empty-state 버튼 둘이 이미 같은 일을 하므로 겹치지
           않게 뺀다. */}
-      <Show when={sections().length > 0 || sleepingEntries().length > 0}>
+      <Show when={lists().sessions.length > 0}>
         <button
           type="button"
           class="vt-fleet-add-btn"
@@ -581,13 +475,12 @@ function Fleet(props: { deps: FleetDeps }) {
           가서 `m()`을 다시 읽으면 이미 정리된 뒤다(실측: 재우기가 UI 클릭으론
           아무 일도 안 하면서 콘솔 에러도 없었다 — 같은 함수를 `window`에서
           직접 부르면 멀쩡히 됐다). 그래서 값은 여기 진입 시점에 **한 번**
-          꺼내 평범한 변수(`row`/`sleeping`)에 담아 두고, 아래 모든 클릭
+          꺼내 평범한 변수(`row`)에 담아 두고, 아래 모든 클릭
           핸들러는 그 변수만 읽는다 — 시트가 열려 있는 동안 대상이 바뀔 일은
           없다(다른 행을 길게 누르면 새 메뉴가 새로 열린다). */}
       <Show when={menu()}>
         {(m) => {
           const row = m().row;
-          const sleeping = m().sleeping;
           return (
             <div class="vt-session-backdrop vt-fleet-menu-backdrop" onClick={closeMenu}>
               <div class="vt-session-sheet vt-fleet-menu-sheet" onClick={(e) => e.stopPropagation()}>
@@ -612,28 +505,25 @@ function Fleet(props: { deps: FleetDeps }) {
                   </>
                 }>
                   <div class="vt-session-head"><h2>{row.name}</h2></div>
+                  {/* 항목은 레일 메뉴와 같은 목록(rowMenuItems)이다. 이름 변경만 시트 안에서 입력창으로
+                      바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
+                      정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
-                    <Show when={!sleeping}>
-                      <button type="button" class="vt-menu-item" onClick={startRename}>이름 변경</button>
-                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtDetachSession?.(row.sessionId))}>재우기</button>
-                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtOpenSessionOnMac?.(row.sessionId))}>맥에서 열기</button>
-                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtShowClients?.(row.sessionId))}>연결된 화면</button>
-                    </Show>
-                    <Show when={sleeping}>
-                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).attachTmux?.(row.tmuxName))}>깨우기</button>
-                    </Show>
-                    {/* Rail.tsx의 ctxMenuItems와 같은 조건 — tmux 세션일 때만
-                        성립한다(일반 세션은 tmux가 아니라 "완전 종료" 개념이
-                        없다, 놓으면 그걸로 끝이다). */}
-                    <Show when={row.tmuxName}>
-                      <button
-                        type="button"
-                        class="vt-menu-item danger"
-                        onClick={() => runMenuAction(() => (window as any).vtConfirmAndKillSession?.(row.tmuxName, row.sessionId || null))}
-                      >
-                        완전 종료 · 되돌릴 수 없음
-                      </button>
-                    </Show>
+                    <For each={rowMenuItems(row)}>
+                      {(it) => (
+                        <button
+                          type="button"
+                          class="vt-menu-item"
+                          classList={{ danger: !!it.danger }}
+                          onClick={() => {
+                            if (it.id === 'rename') { startRename(); return; }
+                            runMenuAction(() => runRowMenu(it.id, row, window, () => {}));
+                          }}
+                        >
+                          {it.label}{it.detail ? ` · ${it.detail}` : ''}
+                        </button>
+                      )}
+                    </For>
                   </div>
                   <div class="vt-session-footer">
                     <button type="button" class="vt-menu-item vt-session-footer-item" onClick={closeMenu}>취소</button>

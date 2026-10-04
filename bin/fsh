@@ -4,8 +4,8 @@
 #
 # 사용법:
 #   fsh voice    — 음성 모드 (백그라운드, 작업 방해 없음)
-#   fsh mobile   — 모바일 접속 URL 제공 (서버 자동 시작)
-#   fsh start    — 서버 + 터널 시작
+#   fsh start    — 서버 + 접속 경로(터널 등) 시작
+#   fsh mobile   — 폰 접속 URL + QR (서버가 떠 있을 때)
 #   fsh stop     — 모든 fsh 프로세스 종료
 #   fsh status   — 현재 상태 확인
 
@@ -148,10 +148,11 @@ _stale_server_warning() {
   [ -f "$pidfile" ] || return 0
   pid="$(cat "$pidfile" 2>/dev/null)"
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 0
-  "${VT_PYTHON:-python3}" - "$pid" "$VT_DIR/server" <<'PYEOF' 2>/dev/null
+  "${VT_PYTHON:-python3}" - "$pid" "$VT_DIR/server" "$PID_DIR" <<'PYEOF' 2>/dev/null
 import os, subprocess, sys, time
 
 pid, server_dir = sys.argv[1], sys.argv[2]
+pid_dir = sys.argv[3] if len(sys.argv) > 3 else ""
 
 # 프로세스 시작 시각. `etimes`(초)는 Linux 전용이고 **macOS ps에는 없다** —
 # 그쪽은 `etime`([[dd-]hh:]mm:ss)을 파싱한다. 못 재면 아무 말도 하지 않는다
@@ -200,6 +201,20 @@ for root, dirs, files in os.walk(server_dir):
 # 여유 10초 — 서버가 뜨는 순간 자기 소스를 건드리는 경우(설치 스크립트 등)까지
 # 경고로 만들지 않는다.
 if newest > started + 10:
+    # 수정 시각만으로는 주석·docstring만 고친 경우도 "옛 코드"로 오판한다. 서버를 띄울 때 남긴
+    # 코드 지문(AST)과 지금 지문이 같으면 실행에 영향 주는 변경이 없으니 말하지 않는다.
+    # 지문 기록이 없으면(옛 버전 fsh로 띄운 서버) 예전처럼 수정 시각으로 판단한다.
+    try:
+        saved = open(os.path.join(pid_dir, "server.codehash")).read().strip() if pid_dir else ""
+        if saved:
+            sys.path.insert(0, server_dir)
+            import code_fingerprint
+            if code_fingerprint.fingerprint(server_dir) == saved:
+                sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception:
+        pass
     gap = newest - started
     if gap < 3600:
         ago = f"{int(gap / 60)}분"
@@ -208,7 +223,7 @@ if newest > started + 10:
     else:
         ago = f"{gap / 86400:.1f}일"
     print(f"서버가 옛 코드로 돌고 있습니다 — {newest_name}가 서버 시작보다 "
-          f"{ago} 뒤에 바뀌었습니다. `fsh stop && fsh start`로 재시작하세요.")
+          f"{ago} 뒤에 바뀌었습니다. `fsh restart`로 재시작하세요(접속 주소는 유지됩니다).")
 PYEOF
 }
 
@@ -228,6 +243,8 @@ _start_server() {
   # 모든 인터페이스(카페 wifi 포함)에 노출돼 있었다.
   local bind_host
   bind_host="$("$VT_PYTHON" -c 'import network_access as n; print(n.resolve_bind_host(n.get_current_spec()))' 2>/dev/null || echo 0.0.0.0)"
+  # 지금 디스크의 코드 지문을 남긴다 — 나중에 "옛 코드로 돌고 있나"를 주석 수정과 구분하는 기준.
+  "$VT_PYTHON" -m code_fingerprint "$VT_DIR/server" > "$PID_DIR/server.codehash" 2>/dev/null || rm -f "$PID_DIR/server.codehash"
   nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
   echo $! > "$PID_DIR/server.pid"
   # 고정 sleep 대신 서버가 실제로 응답할 때까지 폴링한다. uvicorn 기동 시간은
@@ -868,7 +885,7 @@ _main_tunnel_url() {
 _tunnel_entries() {
   local url
   url="$(_main_tunnel_url)"
-  [ -n "$url" ] && printf '%s\t%s\n' "${VT_TUNNEL_MAIN_LABEL:-터미널 (VT)}" "$url"
+  [ -n "$url" ] && printf '%s\t%s\n' "${VT_TUNNEL_MAIN_LABEL:-터미널 (FarShell)}" "$url"
   _registry_prune
   if [ -f "$TUNNEL_REGISTRY" ]; then
     awk -F'\t' 'NF>=2 && $2!="" {print ($3==""?"localhost:"$1:$3) "\t" $2}' "$TUNNEL_REGISTRY"
@@ -982,7 +999,7 @@ _start_voice_daemon() {
   echo $! > "$PID_DIR/voice.pid"
   sleep 1
   if _is_running voice; then
-    echo "✓ Voice Daemon 시작 (Ctrl+Shift+V 로 녹음)"
+    echo "✓ Voice Daemon 시작 (Ctrl+Shift+M 로 녹음)"
   else
     echo "✗ Voice Daemon 실패. 로그: $DAEMON_LOG"
     return 1
@@ -1011,30 +1028,23 @@ _start_clipboard_daemon() {
 
 # 1단계: detached 세션 보장 (TTY 불필요).
 # 이미 있으면 0, 없으면 생성. -x/-y는 detached에서 tcgetattr 실패 회피.
+# 터미널 창(탭) 제목을 세션 이름으로. tmux가 제목을 알려주지 않으면(set-titles off) Ghostty는
+# 기본 아이콘만 보여줘 창이 여러 개일 때 구분이 안 된다. fsh 전용 서버(-L)에만 적용된다.
+# (서버 쪽은 server/tmux_hooks.py의 TITLE_OPTIONS — 같은 값이어야 한다)
+_tmux_apply_title_options() {
+  "${TMUX_BASE[@]}" set-option -g set-titles on 2>/dev/null
+  "${TMUX_BASE[@]}" set-option -g set-titles-string "#S" 2>/dev/null
+  return 0
+}
+
 _ensure_tmux_session() {
   local name="${1:-dev}"
   if "${TMUX_BASE[@]}" has-session -t "$name" 2>/dev/null; then
+    _tmux_apply_title_options
     return 0
   fi
-  "${TMUX_BASE[@]}" new-session -d -s "$name" -x 200 -y 50 2>/dev/null
-}
-
-# 2단계: 옵션 명령 주입 (TTY 불필요).
-_tmux_populate() {
-  local name="$1"; local cmd="${2:-}"
-  [ -z "$cmd" ] && return 0
-  "${TMUX_BASE[@]}" send-keys -t "$name" "$cmd" C-m 2>/dev/null
-}
-
-# 3단계: attach (호출자가 TTY 컨텍스트 보장).
-# tmux 안이면 switch-client, 밖이면 exec attach.
-_tmux_attach_or_switch() {
-  local name="${1:-dev}"
-  if [ -n "${TMUX:-}" ]; then
-    "${TMUX_BASE[@]}" switch-client -t "$name"
-  else
-    exec "${TMUX_BASE[@]}" attach-session -t "$name"
-  fi
+  "${TMUX_BASE[@]}" new-session -d -s "$name" -x 200 -y 50 2>/dev/null || return 1
+  _tmux_apply_title_options
 }
 
 # 기존 _ensure_tmux는 wrapper로 유지 (회귀 호환).
@@ -1069,16 +1079,6 @@ _maybe_register_client_hooks() {
     "run-shell -b '\"$hook_script\" detached \"#{client_tty}\" \"#{session_name}\"'" 2>/dev/null
 }
 
-# AppleScript 문자열 리터럴에 임의 텍스트를 안전하게 넣기 위한 이스케이프.
-# 백슬래시를 먼저(순서 중요), 그다음 큰따옴표. 이걸 빼먹으면 명령에 포함된
-# 따옴표(예: --disallowedTools "...")가 osascript 문법 오류(-2741)를 낸다.
-_as_escape() {
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  printf '%s' "$s"
-}
-
 # 자동 오픈 실패 원인 안내. osascript 실패 시 stderr가 담긴 VT_AUTOOPEN_ERR을
 # 읽어, 특히 macOS 자동화(Automation) 권한 거부(-1743)를 감지해 해결법을 출력한다.
 # 출력 후 변수를 비워 다음 호출에 이전 오류가 새지 않게 한다.
@@ -1105,64 +1105,6 @@ _autoopen_failure_hint() {
 _open_tmux_terminal() {
   # 호환 wrapper: 디폴트는 dev + claude --resume (W1-3 이전 동작 유지)
   _open_tmux_terminal_with "dev" "claude --resume"
-}
-
-# W3-1: Linux 터미널 emulator 분기로 새 창 띄우기.
-# 인자: $1 = 실행 명령어 문자열
-_open_linux_terminal_with() {
-  local cmd="$1"
-  [ -z "$cmd" ] && return 1
-
-  # WSL2는 글로벌 핫키/터미널 자동 오픈 미지원 — 가드
-  if grep -qi microsoft /proc/version 2>/dev/null; then
-    return 1
-  fi
-
-  # 우선순위 검색
-  local emulators=(
-    "gnome-terminal"
-    "konsole"
-    "alacritty"
-    "kitty"
-    "wezterm"
-    "xfce4-terminal"
-    "xterm"
-  )
-  local em
-  for em in "${emulators[@]}"; do
-    command -v "$em" >/dev/null 2>&1 || continue
-    case "$em" in
-      gnome-terminal)
-        gnome-terminal -- bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
-        return 0
-        ;;
-      konsole)
-        konsole -e bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
-        return 0
-        ;;
-      alacritty)
-        alacritty -e bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
-        return 0
-        ;;
-      kitty)
-        kitty bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
-        return 0
-        ;;
-      wezterm)
-        wezterm start -- bash -lc "$cmd; exec bash" >/dev/null 2>&1 &
-        return 0
-        ;;
-      xfce4-terminal)
-        xfce4-terminal -e "bash -lc '$cmd; exec bash'" >/dev/null 2>&1 &
-        return 0
-        ;;
-      xterm)
-        xterm -e "bash -lc '$cmd; exec bash'" >/dev/null 2>&1 &
-        return 0
-        ;;
-    esac
-  done
-  return 1
 }
 
 # 해당 tmux 세션에 이미 붙어있는 클라이언트의 tty 목록 (없으면 빈 문자열).
@@ -1216,22 +1158,18 @@ _tmux_already_open() {
     fi
     return 0
   fi
-  # 붙어있는 클라이언트가 하나도 없어도 세션 자체는 이미 존재할 수 있다(예: 이전에
-  # 열어둔 창을 닫았거나, 웹에서만 attach 중인 경우). 이때도 매번 새 macOS 창을
-  # 또 열면 fsh start/voice/mobile을 반복 호출할 때마다 창이 계속 늘어난다 —
-  # "세션이 하나도 없을 때만 새로 연다"는 원칙으로, 세션 존재 자체를 마지막 방어선으로 확인.
-  if "${TMUX_BASE[@]}" has-session -t "$name" 2>/dev/null; then
-    echo "  ⓘ tmux 세션 '$name'이 이미 존재해 새 창을 열지 않습니다(다른 창에 붙어있진 않음)."
-    echo "      수동으로 열려면: tmux -L $VT_TMUX_SOCKET attach -t $name"
-    return 0
-  fi
+  # 붙어 있는 클라이언트가 없으면 세션이 이미 있어도 창은 비어 있는 것이다 — 새 창을 열어
+  # attach 한다. 예전엔 "세션이 있으면 안 연다"로 막았는데, handoff desktop이
+  # 창을 열기 직전에 _ensure_tmux로 세션을 먼저 만들어서 항상 이 판정에 걸려 창이 안 열렸다.
+  # (창이 붙어 있는 세션은 위에서 이미 걸러져, 반복 호출해도 창이 늘지 않는다.)
   return 1
 }
 
-# W1-3: 임의 세션을 새 OS 터미널 창에서 attach하는 일반화 헬퍼.
+# 임의 세션을 새 OS 터미널 창에서 attach하는 헬퍼.
 # 인자: $1=session_name, $2=optional command (없으면 attach만)
-# macOS는 osascript 분기, Linux는 emulator 분기 (W3-1)
 # 세션당 창 하나 원칙: 이미 attach된 창이 있으면 새로 열지 않는다.
+# 실제 창 열기는 server/terminal_open.py 한 곳이 한다 — 웹의 "맥에서 열기"와 같은 코드라
+# VT_TERMINAL(fsh terminal)과 Ghostty 처리가 CLI·웹에서 똑같이 적용된다.
 _open_tmux_terminal_with() {
   local session="${1:-dev}"
   local extra_cmd="${2:-}"
@@ -1243,107 +1181,25 @@ _open_tmux_terminal_with() {
 
   local cmd
   if [ -n "$extra_cmd" ]; then
-    cmd="tmux -L $VT_TMUX_SOCKET new -A -s $session \"$extra_cmd\""
+    # 작은따옴표로 감싸 extra_cmd 안의 큰따옴표가 그대로 tmux에 넘어가게 한다.
+    # 안의 작은따옴표는 '\'' 로 바꾼다(bash·zsh 동일 동작).
+    local sq="'"
+    local q=${extra_cmd//$sq/$sq\\$sq$sq}
+    cmd="tmux -L $VT_TMUX_SOCKET new -A -s $session '$q'"
   else
     cmd="tmux -L $VT_TMUX_SOCKET new -A -s $session"
   fi
 
-  # Linux 분기 (W3-1)
-  if [ "$(uname)" = "Linux" ]; then
-    _open_linux_terminal_with "$cmd" && return 0
-    return 1
+  local out rc note
+  out="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m terminal_open -- "$cmd" 2>&1)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    note="$(printf '%s\n' "$out" | sed -n 's/^note://p')"
+    [ -n "$note" ] && echo "  ⓘ $note"
+    return 0
   fi
-
-  [ "$(uname)" = "Darwin" ] || return 1
-
-  local term="${TERM_PROGRAM:-}"
-  # 소문자 정규화 (kitty 등 일부 터미널은 소문자로 설정)
-  local term_lc
-  term_lc="$(printf '%s' "$term" | tr '[:upper:]' '[:lower:]')"
-
-  local cmd_as
-  cmd_as="$(_as_escape "$cmd")"
-
-  _try_iterm() {
-    [ -d "/Applications/iTerm.app" ] || return 1
-    local _err
-    _err="$(osascript 2>&1 <<APPLESCRIPT
-tell application "iTerm"
-  activate
-  create window with default profile
-  tell current session of current window
-    write text "$cmd_as"
-  end tell
-end tell
-APPLESCRIPT
-)" && return 0
-    VT_AUTOOPEN_ERR="$_err"
-    return 1
-  }
-
-  _try_terminal_app() {
-    local _err
-    _err="$(osascript 2>&1 <<APPLESCRIPT
-tell application "Terminal"
-  activate
-  do script "$cmd_as"
-end tell
-APPLESCRIPT
-)" && return 0
-    VT_AUTOOPEN_ERR="$_err"
-    return 1
-  }
-
-  _try_wezterm() {
-    command -v wezterm >/dev/null 2>&1 || return 1
-    wezterm cli spawn --new-window -- bash -lc "$cmd" >/dev/null 2>&1
-  }
-
-  _try_warp() {
-    # Warp는 URL scheme 제한적 — 새 탭을 열되 명령 주입은 클립보드로
-    [ -d "/Applications/Warp.app" ] || return 1
-    open -na Warp 2>/dev/null || return 1
-    # 사용자에게 명령 복사 안내
-    printf '%s' "$cmd" | pbcopy 2>/dev/null
-    echo "  ⓘ Warp 새 창 열림 — 아래 명령이 클립보드에 복사됨. 붙여넣기 하세요:"
-    echo "      $cmd"
-  }
-
-  _try_alacritty() {
-    [ -d "/Applications/Alacritty.app" ] || return 1
-    open -na Alacritty --args -e bash -lc "$cmd; exec bash" 2>/dev/null
-  }
-
-  _try_kitty() {
-    [ -d "/Applications/kitty.app" ] || return 1
-    open -na kitty --args bash -lc "$cmd; exec bash" 2>/dev/null
-  }
-
-  _try_ghostty() {
-    [ -d "/Applications/Ghostty.app" ] || return 1
-    open -na Ghostty --args -e bash -lc "$cmd; exec bash" 2>/dev/null
-  }
-
-  # 1순위: 현재 사용 중인 터미널
-  case "$term" in
-    iTerm.app)        _try_iterm        && return 0 ;;
-    Apple_Terminal)   _try_terminal_app && return 0 ;;
-    WezTerm)          _try_wezterm      && return 0 ;;
-    WarpTerminal)     _try_warp         && return 0 ;;
-  esac
-  case "$term_lc" in
-    ghostty)          _try_ghostty      && return 0 ;;
-    kitty)            _try_kitty        && return 0 ;;
-    alacritty)        _try_alacritty    && return 0 ;;
-  esac
-
-  # 2순위: 설치된 터미널을 우선순위대로 시도
-  _try_iterm        && return 0
-  _try_ghostty      && return 0
-  _try_wezterm      && return 0
-  _try_kitty        && return 0
-  _try_alacritty    && return 0
-  _try_terminal_app && return 0  # Terminal.app은 어디에나 있지만 최후
+  # osascript 오류 원문(자동화 권한 거부 -1743 등)을 _autoopen_failure_hint가 읽는다.
+  VT_AUTOOPEN_ERR="$out"
   return 1
 }
 
@@ -1362,7 +1218,7 @@ cmd_voice() {
   echo "  ┌─────────────────────────────────────────┐"
   echo "  │  음성 모드 활성화 완료                      │"
   echo "  │                                         │"
-  echo "  │  Ctrl+Shift+V → 녹음 시작/종료           │"
+  echo "  │  Ctrl+Shift+M → 녹음 시작/종료           │"
   echo "  │  말한 내용 → STT → tmux에 자동 입력       │"
   echo "  │  결과 → TTS로 음성 확인                   │"
   echo "  │                                         │"
@@ -1390,148 +1246,273 @@ cmd_clip() {
   echo ""
 }
 
-cmd_mobile() {
-  # 옵션: --e2e (E2E 암호화), --safe (위험 명령 차단), --network <mode> (Phase 8 G1),
-  #       --force (인증 미설정 상태에서도 공개 터널을 강행 — 위험, 큰 경고 출력),
-  #       --temp (이 QR로 등록되는 기기를 1일짜리 임시 기기로 — 남의 폰에 잠깐 열어 줄 때)
-  local want_e2e=0
-  local want_safe=0
-  local want_force=0
-  local want_temp=0
-  local network_mode="${VT_NETWORK_MODE:-all}"
-  local i=1
-  for arg in "$@"; do
-    case "$arg" in
-      --e2e) want_e2e=1 ;;
-      --safe) want_safe=1 ;;
-      --force) want_force=1 ;;
-      --temp) want_temp=1 ;;
-      --network) eval "next_arg=\${$((i+1))}"; network_mode="${next_arg:-all}" ;;
-      --network=*) network_mode="${arg#--network=}" ;;
-    esac
-    i=$((i+1))
-  done
+# ── 접근 범위(--network)와 공개 전 인증 확인 — start / mobile 공용 ─────────────────
+# 서버를 어떤 범위로 열지(localhost|lan|tailscale|all)는 `fsh start`가 정한다.
+# `fsh mobile`은 그 결과(주소)를 폰에 보여주기만 하므로, 서버가 어떤 범위로 떠 있는지를
+# start가 $PID_DIR/network_mode에 남겨 mobile·status가 읽는다.
+_NETWORK_MODES="localhost lan tailscale all"
 
-  # 모드 검증
-  case "$network_mode" in
-    localhost|lan|tailscale|all) ;;
-    *)
-      echo "  ✗ 지원되지 않는 --network 모드: $network_mode (localhost|lan|tailscale|all)"
-      return 1 ;;
-  esac
-  export VT_NETWORK_MODE="$network_mode"
+# 지금 떠 있는 서버의 접근 범위. start가 남긴 기록 → 환경변수 → all.
+_current_network_mode() {
+  local m=""
+  [ -f "$PID_DIR/network_mode" ] && m="$(cat "$PID_DIR/network_mode" 2>/dev/null)"
+  [ -n "$m" ] || m="${VT_NETWORK_MODE:-all}"
+  echo "$m"
+}
 
-  # 공개 터널(all 모드)을 열기 전, 인증(비밀번호/VT_AUTH_TOKEN)이 설정돼 있는지 먼저
-  # 확인한다. 서버는 인증 없이도 기동되고 startup()에서 경고만 로그로 남기지만, 그
-  # 경고는 아무도 안 본다 — 공개 URL이 곧 인증 없는 원격 코드 실행이 되는 걸 여기서
-  # 미리 막는다. localhost/lan/tailscale 모드는 네트워크 자체가 좁혀져 있으니 대상이
-  # 아니다. --force는 사용자가 위험을 인지하고 명시적으로 우회하는 경로.
-  if [ "$network_mode" = "all" ] && [ $want_force -eq 0 ]; then
-    if ! (cd "$VT_DIR/server" && "$VT_PYTHON" -m auth status >/dev/null 2>&1); then
-      echo ""
-      echo "  ✗ 인증(비밀번호/VT_AUTH_TOKEN)이 설정되지 않았습니다."
-      echo ""
-      echo "    이 상태로 'fsh mobile'을 실행하면 공개 인터넷에 열리는 Cloudflare"
-      echo "    터널에 아무 인증 없이 터미널이 노출됩니다 — URL을 아는 누구나"
-      echo "    이 맥에서 명령을 실행할 수 있습니다."
-      echo ""
-      echo "    먼저 다음 중 하나를 하세요:"
-      echo "      fsh password              비밀번호 설정 (권장)"
-      echo "      export VT_AUTH_TOKEN=... 기계용 토큰 설정"
-      echo ""
-      echo "    위험을 감수하고 그대로 진행하려면: fsh mobile --force"
-      echo ""
-      return 1
-    fi
-  elif [ "$network_mode" = "all" ] && [ $want_force -eq 1 ]; then
-    if ! (cd "$VT_DIR/server" && "$VT_PYTHON" -m auth status >/dev/null 2>&1); then
-      echo ""
-      echo "  ⚠️  경고: 인증 없이 --force로 공개 터널을 엽니다."
-      echo "     URL을 아는 누구나 이 맥에서 명령을 실행할 수 있습니다."
-      echo ""
-    fi
-  fi
-
-  # --safe 플래그 → 환경변수로 서버에 전달 (서버 시작 전 export)
-  if [ $want_safe -eq 1 ]; then
-    export VT_SAFE_MODE=1
-  fi
-
-  echo ""
-  local mode_tag=" [network=$network_mode]"
-  [ $want_e2e -eq 1 ] && mode_tag="${mode_tag} (E2E)"
-  [ $want_safe -eq 1 ] && mode_tag="${mode_tag} (SAFE)"
-  echo "  📱 fsh mobile — 모바일 접속${mode_tag}"
-  echo ""
-
-  _start_server
-
-  # localhost/lan 모드에선 Cloudflare Tunnel 안 띄움
-  local full_url=""
-  case "$network_mode" in
-    localhost)
-      full_url="http://127.0.0.1:$VT_PORT"
-      echo "  ⓘ localhost 모드: 같은 머신에서만 접속 가능"
-      ;;
+# 접근 범위별 폰/브라우저 접속 주소. all은 터널 주소(없으면 빈 값).
+_mode_access_url() {
+  case "$1" in
+    localhost) echo "http://127.0.0.1:$VT_PORT" ;;
     lan)
       local lan_ip
       lan_ip="$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
-      [ -z "$lan_ip" ] && lan_ip="$(ifconfig 2>/dev/null | awk '/inet 192\\./{print $2; exit}')"
+      [ -z "$lan_ip" ] && lan_ip="$(ifconfig 2>/dev/null | awk '/inet 192\./{print $2; exit}')"
       [ -z "$lan_ip" ] && lan_ip="localhost"
-      full_url="http://${lan_ip}:$VT_PORT"
-      echo "  ⓘ lan 모드: 같은 네트워크에서만 접속 가능"
+      echo "http://${lan_ip}:$VT_PORT"
       ;;
     tailscale)
       local ts_ip
       ts_ip="$(command -v tailscale >/dev/null 2>&1 && tailscale ip -4 2>/dev/null | head -1)"
-      if [ -z "$ts_ip" ]; then
+      [ -n "$ts_ip" ] || return 1
+      echo "http://${ts_ip}:$VT_PORT"
+      ;;
+    all) _main_tunnel_url ;;
+    *) return 1 ;;
+  esac
+}
+
+# 공개 터널(all 범위)을 열기 전, 인증(비밀번호/VT_AUTH_TOKEN)이 설정돼 있는지 먼저
+# 확인한다. 서버는 인증 없이도 기동되고 startup()에서 경고만 로그로 남기지만, 그
+# 경고는 아무도 안 본다 — 공개 URL이 곧 인증 없는 원격 코드 실행이 되는 걸 여기서
+# 미리 막는다. localhost/lan/tailscale 범위는 네트워크 자체가 좁혀져 있으니 대상이
+# 아니다. --force는 사용자가 위험을 인지하고 명시적으로 우회하는 경로.
+# (예전엔 이 검사가 `fsh mobile`에만 있어서 `fsh start`는 인증 없이도 공개 터널을 열었다.)
+_require_auth_for_public() {
+  local force="${1:-0}"
+  (cd "$VT_DIR/server" && "$VT_PYTHON" -m auth status >/dev/null 2>&1) && return 0
+  if [ "$force" -eq 1 ]; then
+    echo ""
+    echo "  ⚠️  경고: 인증 없이 --force로 공개 터널을 엽니다."
+    echo "     URL을 아는 누구나 이 맥에서 명령을 실행할 수 있습니다."
+    echo ""
+    return 0
+  fi
+  echo ""
+  echo "  ✗ 인증(비밀번호/VT_AUTH_TOKEN)이 설정되지 않았습니다."
+  echo ""
+  echo "    이 상태로 'fsh start'를 실행하면 공개 인터넷에 열리는 터널에"
+  echo "    아무 인증 없이 터미널이 노출됩니다 — URL을 아는 누구나"
+  echo "    이 맥에서 명령을 실행할 수 있습니다."
+  echo ""
+  echo "    먼저 다음 중 하나를 하세요:"
+  echo "      fsh password              비밀번호 설정 (권장)"
+  echo "      export VT_AUTH_TOKEN=... 기계용 토큰 설정"
+  echo ""
+  echo "    공개하지 않으려면: fsh start --network tailscale   (또는 lan / localhost)"
+  echo "    위험을 감수하고 그대로 진행하려면: fsh start --force"
+  echo ""
+  return 1
+}
+
+_start_usage() {
+  echo ""
+  echo "  사용법: fsh start [--network <localhost|lan|tailscale|all>] [--safe] [--force] [--voice]"
+  echo "    --network <범위>  누가 접속할 수 있는지 (기본 all = 공개 터널 + 인증)"
+  echo "                      localhost 이 맥만 / lan 같은 네트워크 / tailscale 같은 tailnet"
+  echo "    --safe            위험 명령 차단 모드"
+  echo "    --force           인증 없이도 공개 터널을 강행 (위험)"
+  echo "    --voice           Voice Daemon도 함께 시작"
+  echo ""
+}
+
+cmd_start() {
+  # 서버 + 접속 경로를 시작한다. 폰 접속 주소/QR은 `fsh mobile`.
+  # 음성은 기본 OFF — 켜려면 --voice 명시하거나 별도로 'fsh voice' 실행.
+  # 항상 켜져 있던 예전 동작을 기대하고 핫키가 안 먹는다고 헷갈리지 않도록,
+  # 옵션 없이 실행하면 "필요하면 --voice로" 안내를 남긴다.
+  local want_voice=0 want_safe=0 want_force=0
+  local network_mode=""
+  local args=("$@") i=0
+  while [ $i -lt ${#args[@]} ]; do
+    local arg="${args[$i]}"
+    case "$arg" in
+      --voice) want_voice=1 ;;
+      --safe) want_safe=1 ;;
+      --force) want_force=1 ;;
+      --network)
+        i=$((i+1)); network_mode="${args[$i]:-}"
+        if [ -z "$network_mode" ]; then
+          echo "  ✗ --network 값이 없습니다 (${_NETWORK_MODES// /|})"; return 1
+        fi ;;
+      --network=*) network_mode="${arg#--network=}" ;;
+      --help|-h) _start_usage; return 0 ;;
+      *) echo "  ✗ 알 수 없는 옵션: $arg"; _start_usage; return 1 ;;
+    esac
+    i=$((i+1))
+  done
+
+  # 접근 범위: 옵션 → 환경변수(VT_NETWORK_MODE) → 직전에 start가 남긴 기록 → all.
+  # (restart가 옵션 없이 다시 start해도 이전 범위를 그대로 이어가도록)
+  [ -n "$network_mode" ] || network_mode="${VT_NETWORK_MODE:-}"
+  if [ -z "$network_mode" ] && [ -f "$PID_DIR/network_mode" ]; then
+    network_mode="$(cat "$PID_DIR/network_mode" 2>/dev/null)"
+  fi
+  [ -n "$network_mode" ] || network_mode="all"
+  case " $_NETWORK_MODES " in
+    *" $network_mode "*) ;;
+    *) echo "  ✗ 지원되지 않는 --network 범위: $network_mode (${_NETWORK_MODES// /|})"; return 1 ;;
+  esac
+  export VT_NETWORK_MODE="$network_mode"
+
+  if [ "$network_mode" = "all" ]; then
+    _require_auth_for_public "$want_force" || return 1
+  fi
+  [ $want_safe -eq 1 ] && export VT_SAFE_MODE=1
+
+  local tag=" [network=$network_mode]"
+  [ $want_safe -eq 1 ] && tag="${tag} (SAFE)"
+  echo ""
+  echo "  🚀 fsh start — 전체 시작${tag}"
+  echo ""
+
+  local was_running=0
+  _port_in_use "$VT_PORT" && was_running=1
+  _start_server || return 1
+  if [ $was_running -eq 1 ]; then
+    local prev_mode=""
+    [ -f "$PID_DIR/network_mode" ] && prev_mode="$(cat "$PID_DIR/network_mode" 2>/dev/null)"
+    if [ -n "$prev_mode" ] && [ "$prev_mode" != "$network_mode" ]; then
+      echo "  ⚠ 서버가 이미 '$prev_mode' 범위로 실행 중이라 '$network_mode'는 아직 적용되지 않았습니다."
+      echo "    적용하려면: fsh restart --network $network_mode"
+    fi
+  else
+    printf '%s\n' "$network_mode" > "$PID_DIR/network_mode"
+  fi
+
+  case "$network_mode" in
+    localhost) echo "  ⓘ localhost 범위: 이 맥에서만 접속 가능 (터널 없음)" ;;
+    lan)       echo "  ⓘ lan 범위: 같은 네트워크에서만 접속 가능 (터널 없음)" ;;
+    tailscale)
+      if ! _mode_access_url tailscale >/dev/null; then
         echo "  ✗ tailscale 미실행/미설치. 'tailscale up' 먼저 실행하세요"
         return 1
       fi
-      full_url="http://${ts_ip}:$VT_PORT"
-      echo "  ⓘ tailscale 모드: 같은 tailnet에서만 접속 가능 (회사망에서도 Cloudflare 없이 안전)"
-      ;;
-    all)
-      _start_tunnel
-      ;;
+      echo "  ⓘ tailscale 범위: 같은 tailnet에서만 접속 가능 (터널 없음, 회사망에서도 안전)" ;;
+    all) _start_tunnel ;;
   esac
-
-  # 제공자(cloudflare/ngrok)와 명명 터널 여부를 아는 건 _main_tunnel_url 하나다.
-  # 예전엔 여기서 직접 로그를 grep해서, 제공자가 늘 때마다 QR만 옛 주소를 실었다.
-  local url
-  url="$(_main_tunnel_url)"
-  # localhost/lan 모드는 위에서 full_url 이미 설정됨 — all 모드는 url 사용
-  if [ "$network_mode" = "all" ] && [ -n "$url" ]; then
-    full_url="$url"
+  if [ "$network_mode" != "all" ] && [ -n "$(_main_tunnel_pids)" ]; then
+    echo "  ⚠ 공개 터널(cloudflared)이 아직 실행 중입니다. 접근 범위는 좁혀졌지만 터널 프로세스는"
+    echo "    남아 있으니, 끄려면 'fsh stop' 후 다시 시작하세요."
   fi
+
+  if [ $want_voice -eq 1 ]; then
+    _start_voice_daemon
+  else
+    echo "ⓘ 음성은 기본으로 안 켭니다 — 필요하면 'fsh start --voice' 또는 'fsh voice'"
+  fi
+
+  echo ""
+  echo "  모든 서비스 시작 완료."
+  echo "  fsh status 로 상태 확인 · fsh mobile 로 폰 접속 QR"
+  echo ""
+}
+
+cmd_mobile() {
+  # 폰으로 접속할 URL과 QR을 보여준다. 서버·터널은 시작하지 않는다 — 그건 `fsh start`.
+  # 옵션: --e2e              E2E 암호화로 열기(URL hash에 #e2e=1 — 서버 로그에 안 남는다)
+  #       --session <이름>   폰이 열릴 때 이 tmux 세션을 바로 보도록(#tmux=<이름>)
+  #       --temp             이 QR로 등록되는 기기를 1일짜리 임시 기기로(남의 폰에 잠깐 열어 줄 때)
+  #
+  # 호환: 예전엔 이 명령이 서버까지 시작해서 --network/--safe/--force를 받았다. 그 옵션은
+  # `fsh start`로 옮겼지만, 옛 스크립트(부팅 자동 시작 등)가 깨지지 않게 받으면
+  # `fsh start`를 대신 실행한 뒤 QR을 보여준다.
+  local want_e2e=0 want_temp=0 session=""
+  local legacy=()
+  local args=("$@") i=0
+  while [ $i -lt ${#args[@]} ]; do
+    local arg="${args[$i]}"
+    case "$arg" in
+      --e2e) want_e2e=1 ;;
+      --temp) want_temp=1 ;;
+      --session) i=$((i+1)); session="${args[$i]:-}" ;;
+      --session=*) session="${arg#--session=}" ;;
+      --network) legacy+=("$arg" "${args[$((i+1))]:-}"); i=$((i+1)) ;;
+      --network=*|--safe|--force) legacy+=("$arg") ;;
+      --help|-h)
+        echo ""
+        echo "  사용법: fsh mobile [--e2e] [--session <tmux세션>] [--temp]"
+        echo "    폰으로 접속할 URL과 QR을 보여줍니다. 서버가 떠 있어야 합니다(fsh start)."
+        echo "    --e2e       E2E 암호화로 열기"
+        echo "    --session   폰이 열릴 때 이 tmux 세션을 바로 보기"
+        echo "    --temp      이 QR로 등록되는 기기는 1일 뒤 만료(남의 폰에 잠깐 열어 줄 때)"
+        echo ""
+        return 0 ;;
+      *) echo "  ✗ 알 수 없는 옵션: $arg (fsh mobile --help)"; return 1 ;;
+    esac
+    i=$((i+1))
+  done
+  if [ -n "$session" ] && ! [[ "$session" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "  ✗ tmux 세션 이름이 올바르지 않습니다: $session"
+    return 1
+  fi
+
+  if [ ${#legacy[@]} -gt 0 ]; then
+    echo ""
+    echo "  ⓘ ${legacy[*]} 는 이제 'fsh start' 옵션입니다. 'fsh start ${legacy[*]}'를 실행한 뒤 QR을 보여드립니다."
+    cmd_start "${legacy[@]}" || return $?
+  elif ! _port_in_use "$VT_PORT"; then
+    echo ""
+    echo "  ✗ 서버가 실행 중이 아닙니다. 먼저 'fsh start'로 시작하세요."
+    echo "    (폰 접속 URL과 QR은 서버가 떠 있을 때 'fsh mobile'로 봅니다)"
+    echo ""
+    return 1
+  fi
+
+  local mode url
+  mode="$(_current_network_mode)"
+  url="$(_mode_access_url "$mode")"
+  if [ -z "$url" ]; then
+    echo ""
+    if [ "$mode" = "all" ]; then
+      echo "  ✗ 공개 접속 주소를 찾지 못했습니다 — 터널이 실행 중이 아닙니다. 'fsh start'를 실행하세요."
+    else
+      echo "  ✗ '$mode' 범위의 접속 주소를 찾지 못했습니다. (tailscale 미연결 등) 'fsh status'로 확인하세요."
+    fi
+    echo ""
+    return 1
+  fi
+
   # 상시 토큰 대신 1회용 기기 등록 티켓(5분)을 싣는다. QR을 띄우는 시점에 이 맥에
   # 대한 물리적 접근이 이미 증명됐으므로 스캔 = 기기 등록 승인으로 본다. 상시 토큰을
   # URL에 박던 예전 방식은 그 값이 로그·히스토리·QR 이미지에 영구히 남는 문제가 있었다.
-  local ticket
+  local ticket full_url="$url" ticket_label="mobile"
+  [ -n "$session" ] && ticket_label="handoff"
   if [ $want_temp -eq 1 ]; then
-    ticket="$(_issue_ticket "mobile" temp)"
+    ticket="$(_issue_ticket "$ticket_label" temp)"
   else
-    ticket="$(_issue_ticket "mobile")"
+    ticket="$(_issue_ticket "$ticket_label")"
   fi
-  # E2E 활성화 시 URL hash fragment에 #e2e=1 추가 (서버 로그에 안 남음)
-  local e2e_frag=""
-  [ $want_e2e -eq 1 ] && e2e_frag="#e2e=1"
-
   [ -n "$ticket" ] && full_url="${full_url}?ticket=${ticket}"
-  full_url="${full_url}${e2e_frag}"
+  # hash fragment는 서버 로그에 남지 않는다. 프런트가 URLSearchParams로 읽으므로 &로 잇는다.
+  local frag=""
+  [ -n "$session" ] && frag="tmux=${session}"
+  [ $want_e2e -eq 1 ] && frag="${frag:+$frag&}e2e=1"
+  [ -n "$frag" ] && full_url="${full_url}#${frag}"
 
   echo ""
+  echo "  📱 fsh mobile — 폰 접속 [network=$mode]"
+  echo ""
   echo "  ┌─────────────────────────────────────────┐"
-  echo "  │  모바일 접속 준비 완료                     │"
-  echo "  │                                         │"
   echo "  │  URL: $full_url"
   echo "  │                                         │"
   echo "  │  폰 브라우저에서 위 URL을 열면             │"
   echo "  │  tmux 세션에 자동 연결됩니다               │"
+  [ -n "$session" ] && echo "  │  tmux 세션: $session"
   if [ $want_e2e -eq 1 ]; then
   echo "  │                                         │"
   echo "  │  🔒 E2E 암호화 모드                        │"
-  echo "  │     cloudflared 터널이 평문을 볼 수 없음   │"
+  echo "  │     터널이 평문을 볼 수 없음               │"
   fi
   if [ $want_temp -eq 1 ] && [ -n "$ticket" ]; then
   echo "  │                                         │"
@@ -1559,39 +1540,62 @@ cmd_mobile() {
   fi
 }
 
-cmd_start() {
-  # 음성은 기본 OFF — 켜려면 --voice 명시하거나 별도로 'fsh voice' 실행.
-  # 항상 켜져 있던 예전 동작을 기대하고 핫키가 안 먹는다고 헷갈리지 않도록,
-  # 옵션 없이 실행하면 "필요하면 --voice로" 안내를 남긴다.
-  local want_voice=0
-  for arg in "$@"; do
-    case "$arg" in
-      --voice) want_voice=1 ;;
-      --help|-h)
-        echo ""
-        echo "  사용법: fsh start [--voice]"
-        echo "    --voice   서버+터널과 함께 Voice Daemon도 시작"
-        echo ""
-        return 0 ;;
-    esac
-  done
+# 메인 터미널 선택: fsh terminal [set <앱>|unset]. 값은 ~/.vt.env의 VT_TERMINAL.
+# 창을 여는 명령(fsh attach / handoff desktop)이 이 값을 먼저 따른다.
+# 선택지·설치 여부는 server/terminal_open.py가 정한다 (웹과 같은 판정, 단일 출처).
+_terminal_py() { (cd "$VT_DIR/server" && "$VT_PYTHON" -m terminal_open "$@" 2>/dev/null); }
 
-  echo ""
-  echo "  🚀 fsh start — 전체 시작"
-  echo ""
+# 앱 이름 -> 설치 여부(0=있음).
+_terminal_installed() {
+  case " $(_terminal_py --installed) " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
 
-  _start_server
-  _start_tunnel
-  if [ $want_voice -eq 1 ]; then
-    _start_voice_daemon
-  else
-    echo "ⓘ 음성은 기본으로 안 켭니다 — 필요하면 'fsh start --voice' 또는 'fsh voice'"
-  fi
-
-  echo ""
-  echo "  모든 서비스 시작 완료."
-  echo "  fsh status 로 상태 확인"
-  echo ""
+cmd_terminal() {
+  local sub="${1:-show}" val
+  local _TERMINAL_CHOICES
+  _TERMINAL_CHOICES="$(_terminal_py --choices)"
+  [ -n "$_TERMINAL_CHOICES" ] || _TERMINAL_CHOICES="auto ghostty iterm terminal wezterm warp kitty alacritty"
+  case "$sub" in
+    show|"")
+      local cur="${VT_TERMINAL:-auto}"
+      echo ""
+      echo "  🖥  메인 터미널: $cur"
+      local c inst=""
+      for c in $_TERMINAL_CHOICES; do
+        [ "$c" = "auto" ] && continue
+        _terminal_installed "$c" && inst="$inst $c"
+      done
+      echo "  설치됨:${inst:- (없음)}"
+      if [ "$cur" != "auto" ] && ! _terminal_installed "$cur"; then
+        echo "  ⚠ '$cur'은(는) 설치돼 있지 않아 자동 선택으로 열립니다."
+      fi
+      echo "  변경: fsh terminal set <${_TERMINAL_CHOICES// /|}>   (되돌리기: fsh terminal unset)"
+      echo ""
+      ;;
+    set)
+      val="$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')"
+      if [ -z "$val" ]; then
+        echo "  ✗ 값이 비었습니다 (${_TERMINAL_CHOICES// /|})"; return 1
+      fi
+      case " $_TERMINAL_CHOICES " in
+        *" $val "*) ;;
+        *) echo "  ✗ 지원하지 않는 터미널: '${2:-}' (${_TERMINAL_CHOICES// /|})"; return 1 ;;
+      esac
+      if [ "$val" != "auto" ] && ! _terminal_installed "$val"; then
+        echo "  ✗ '$val'이(가) 설치돼 있지 않습니다. 설치된 앱: fsh terminal"
+        return 1
+      fi
+      vt_env_set VT_TERMINAL "$val" || return 1
+      echo "  ✓ 메인 터미널을 '$val'(으)로 설정했습니다 (다음 창 열기부터 적용)"
+      ;;
+    unset)
+      vt_env_unset VT_TERMINAL && echo "  ✓ 메인 터미널 설정을 지웠습니다 (자동 선택)"
+      ;;
+    *)
+      echo "사용법: fsh terminal [show|set <${_TERMINAL_CHOICES// /|}>|unset]"
+      return 1
+      ;;
+  esac
 }
 
 # Wave 1 W1-3: 임의 tmux 세션을 새 OS 터미널 창에서 attach
@@ -1664,58 +1668,99 @@ cmd_help() {
   if [ -z "$topic" ]; then
     cat <<'HELP'
 
-  fsh — FarShell CLI
+  fsh — FarShell CLI    (자세한 설명: fsh help <토픽>  ·  명령별 도움말: fsh help <명령>)
 
-  주요 명령:
+  시작과 접속
+    fsh start [--network <범위>] [--safe] [--voice]
+                            서버 + 접속 경로 시작 (기본: 공개 터널 + 인증)
+                            범위: all | tailscale | lan | localhost
+    fsh restart [옵션]      서버만 재기동 — 접속 주소는 유지됨 (코드·설정 반영은 이걸로)
+    fsh stop [--purge]      종료 (--purge: tmux까지 / --keep-tunnel: 서버만)
+    fsh status              서버·터널·접속 보안(범위·인증·OTP·기기) 상태
+    fsh mobile [--e2e] [--session <이름>] [--temp]
+                            폰 접속 URL + QR (서버가 떠 있을 때, --temp: 이 QR로 등록한 기기는 1일 뒤 만료)
+    fsh tunnel <동작>       터널 관리: list · expose/unexpose · pin · mode · setup/teardown/switch
+                            · hook · restart · watchdog · status
+    fsh doctor              설치/환경 진단 (doctor paste: 붙여넣기 진단)
+
+  세션과 터미널
+    fsh attach [name]       tmux 세션을 새 터미널 창에 붙임
+    fsh handoff mobile|desktop
+                            현재 세션을 폰으로(= mobile --session) / 맥 터미널로
+    fsh terminal            창을 열 때 쓸 메인 터미널 확인/선택 (fsh terminal set ghostty)
+    fsh ssh [session]       이 맥에 SSH(Tailscale)로 붙는 명령 안내 (실행은 안 함)
+    fsh shell-init <셸>     셸 init 스니펫 출력
+    fsh install-profiles    터미널 앱 프로필 등록
+    fsh setup-keybind       tmux popup 단축키 등록
+    fsh popup <동작>        tmux popup으로 fsh 명령 빠른 호출
+    fsh manage              TUI 관리 도구 (세션/타깃/핫키/상태)  (별칭: tui)
+
+  음성과 입력
     fsh voice               음성 모드 (백그라운드, 노션 작업 중에도)
-    fsh mobile [--e2e] [--temp]  모바일 접속 URL + QR (--temp: 1일짜리 임시 등록)
-    fsh start [--voice]     전체 시작 (서버+터널, --voice로 음성도 함께)
-    fsh stop [--purge]      종료 (--purge: tmux까지 완전 종료)
-    fsh status              현재 상태
-    fsh attach [name]       임의 tmux 세션을 새 창에 attach
-    fsh claude              새 창 + tmux dev + claude --resume
-    fsh handoff mobile      세션을 폰으로
-    fsh handoff desktop     폰 세션을 맥으로
-    fsh ssh [session]       Tailscale + SSH로 tmux 세션 직접 접속 명령 안내
+    fsh voice-target        음성 daemon 타깃 세션 lock/해제
     fsh hotkey              핫키 조회/변경
+    fsh clip                클립보드 동기화 데몬 (맥 클립보드 → 웹)
+
+  에이전트와 작업
     fsh hooks               Claude Code·Codex 훅 등록/조회 (상태 배지·큐의 전제)
     fsh pane report         이 pane의 상태를 서버에 보고 (훅 없는 에이전트용)
                             --agent <이름>을 함께 주면 설정 → 에이전트의 감지
                             커버리지가 그 CLI를 「자기보고 · 높음」으로 올린다
-    fsh voice-target        음성 daemon 타깃 세션 lock/해제
     fsh queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
-    fsh manage              TUI 관리 도구 (세션/타깃/핫키/상태)
-    fsh doctor              설치/환경 진단
-    fsh doctor paste        붙여넣기 진단 — 이 pane에서 직접 실행(N29)
-    fsh install-profiles    터미널 앱 자동 등록 (iTerm2 등)
-    fsh help <topic>        토픽별 상세 도움말
+    fsh msg                 에이전트 간 메시지 (log / agents / send)
+    fsh mcp                 에이전트용 MCP 서버(stdio) — Claude에 등록해 쓴다
+    fsh worktree            git 워크트리 만들기/열기/삭제 (별칭: wt)
+    fsh run "…"             헤드리스 claude -p 백그라운드 실행 + 완료 알림
+    fsh template            CLAUDE.md 템플릿 저장/적용
+    fsh usage               누적 사용량 기록/조회 (로컬 LLM 등)
+    fsh clauth              사용량 조회 (clauth 연동, 읽기 전용)
 
-  도움말 토픽:
-    fsh help webui          웹 UI 사용법 (탭/세션관리/복사·붙여넣기·이미지)
-    fsh help concepts       tmux/세션/음성 개념 (3-레이어 모델)
-    fsh help voice          음성 입력 동작 + 핫키
-    fsh help hotkeys        핫키 전체 목록 + 변경 방법
-    fsh help target         음성 타깃 lock 설명
-    fsh help agent-state    에이전트 상태(훅 등록 · pane 자기보고 · 4상태)
-    fsh help agent-detect   승인 대기 감지 패턴(detect/*.toml 포맷 · 테스트 방법)
-    fsh help clauth         사용량 표시(clauth 연동 · 켜고 끄기)
-    fsh help ssh            Tailscale + SSH 원격 접속 (회사망 등)
-    fsh help tunnel-hook    터널 URL이 바뀔 때 Notion/Slack 등에 자동 게시
-    fsh help troubleshoot   자주 묻는 트러블슈팅
+  보안과 다른 맥
+    fsh password [clear]    웹 로그인 비밀번호 설정/해제
+    fsh otp                 새 기기 등록 시 OTP 요구 (status / setup / disable)
+    fsh device              등록된 기기 조회 · 이름 변경 · 폐기 (폰 분실 시) · 만료 기기 정리 (prune)
+    fsh host                다른 맥의 FarShell과 페어링 (별칭: hosts)
+    fsh files               파일 저장소 + 공유 링크
+    fsh git-account         git 계정 저장소
+
+  도움말
+    fsh help <토픽|명령>    아래 토픽, 또는 명령 이름(start, mobile, attach …)
 HELP
+    echo ""
+    echo "  도움말 토픽:"
+    local f t d
+    for f in "$docs_dir"/*.md; do
+      [ -f "$f" ] || continue
+      t="$(basename "$f" .md)"
+      # 첫 줄 제목("# fsh help <토픽> — 설명")에서 설명만 뽑는다. 토픽이 늘어도 이 목록은 저절로 따라간다.
+      d="$(head -1 "$f" | sed -E 's/^#+ *//; s/^fsh help [a-z-]+ *— *//')"
+      printf "    fsh help %-14s %s\n" "$t" "$d"
+    done
+    echo ""
     return 0
   fi
 
+  # 명령 이름으로도 찾을 수 있게 — 명령은 토픽 문서가 설명하는 쪽으로 연결한다.
+  case "$topic" in
+    start|restart|stop|status|mobile|password|otp|device|devices) topic="access" ;;
+    attach|handoff|terminal) topic="terminal" ;;
+    hooks|pane|queue|msg|mcp) topic="agent-state" ;;
+    voice-target) topic="target" ;;
+    hotkey) topic="hotkeys" ;;
+  esac
+
   local file="$docs_dir/${topic}.md"
   if [ -f "$file" ]; then
-    if command -v less >/dev/null 2>&1; then
+    if command -v less >/dev/null 2>&1 && [ -t 1 ]; then
       less -R "$file"
     else
       cat "$file"
     fi
   else
+    local names
+    names="$(for f in "$docs_dir"/*.md; do basename "$f" .md; done | tr '\n' ' ')"
     echo "  ✗ 도움말 토픽 '$topic' 없음"
-    echo "  사용 가능한 토픽: webui / concepts / voice / hotkeys / target / agent-state / agent-detect / clauth / ssh / tunnel-hook / troubleshoot"
+    echo "  토픽 목록: ${names}"
     return 1
   fi
 }
@@ -2220,7 +2265,7 @@ cmd_password() {
     vt_env_unset "VT_AUTH_PASSWORD_HASH"
     vt_env_unset "VT_PASSWORD_HASH"   # 레거시 이름도 함께 정리
     echo "  ✓ 웹 로그인 비밀번호 해제 (VT_AUTH_PASSWORD_HASH 제거)"
-    echo "  ⓘ 서버 재시작 필요: fsh stop && fsh start"
+    echo "  ⓘ 서버 재시작 필요: fsh restart"
     return 0
   fi
   local pw pw2
@@ -2273,7 +2318,7 @@ print(auth.hash_password(pw))
     echo "  ✓ 세션 서명키(VT_AUTH_SESSION_KEY) 자동 생성"
   fi
   echo "  ✓ 웹 로그인 비밀번호 설정 완료 — 해시만 저장(원문 미저장)"
-  echo "  ⓘ 적용하려면 서버 재시작: fsh stop && fsh start"
+  echo "  ⓘ 적용하려면 서버 재시작: fsh restart"
 }
 
 # OTP(TOTP) 연동 — 여기서 setup을 하기 전까지 OTP는 완전히 비활성이고,
@@ -2590,6 +2635,11 @@ cmd_stop() {
     fi
   done
 
+  # 접근 범위 기록은 전체 종료 때만 지운다. restart(--keep-tunnel)는 이어서 start가 이 값을
+  # 읽어 같은 범위로 다시 띄워야 한다 — 지우면 --network tailscale로 띄운 서버가 restart 한 번에
+  # 기본값(all)으로 되돌아간다.
+  [ "$keep_tunnel" -eq 0 ] && rm -f "$PID_DIR/network_mode"
+
   # 추가 포트 터널 (fsh tunnel expose)
   # --keep-tunnel이면 이것도 남긴다 — expose한 포트는 우리 서버가 아니라 **다른
   # 앱**을 내보내는 입구라, 우리 서버를 재기동한다고 같이 끊을 이유가 없다.
@@ -2799,8 +2849,19 @@ cmd_doctor() {
   else
     _check "core packages" fail "pip install -r requirements-core.txt"
   fi
-  if "$VT_PYTHON" -c "import faster_whisper, edge_tts, sounddevice" 2>/dev/null; then
-    _check "voice packages" ok "faster-whisper, edge-tts, sounddevice"
+  if "$VT_PYTHON" -c "import edge_tts, sounddevice" 2>/dev/null; then
+    # STT 엔진은 설정에서 고르는 모델에 따라 다르다 — 선택된 모델이 바로 쓸 수 있는 상태인지 서버 코드로 확인한다.
+    local stt_state
+    stt_state="$(PYTHONPATH="$VT_DIR/server" "$VT_PYTHON" -c "
+import stt_service
+d = stt_service.catalog_payload()
+sel = next((m for m in d['models'] if m['selected']), None)
+print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + (' 준비됨' if sel['ready'] else ' — 설정에서 받아 주세요') if sel else '선택된 모델 없음'))" 2>/dev/null || true)"
+    case "$stt_state" in
+      ok\|*)   _check "voice packages" ok "edge-tts, sounddevice · STT ${stt_state#ok|}" ;;
+      warn\|*) _check "voice packages" warn "edge-tts, sounddevice · STT ${stt_state#warn|}" ;;
+      *)       _check "voice packages" ok "edge-tts, sounddevice (STT 상태는 설정에서 확인)" ;;
+    esac
   else
     _check "voice packages" warn "음성 기능 미설치 ('./install.sh voice'로 추가)"
   fi
@@ -2847,7 +2908,7 @@ cmd_doctor() {
       esac
     done
     if [ -n "$_srv_stale" ]; then
-      _check "서버 설정" fail "서버가 옛 설정으로 돌고 있습니다: $_srv_stale — 'fsh stop && fsh start' 필요"
+      _check "서버 설정" fail "서버가 옛 설정으로 돌고 있습니다: $_srv_stale — 'fsh restart' 필요"
     else
       _check "서버 설정" ok "돌고 있는 서버가 현재 설정과 일치"
     fi
@@ -3099,7 +3160,10 @@ PYEOF
     [ -d "/Applications/Warp.app" ] && detected+=("Warp")
     # Terminal.app은 맥에 기본 내장이므로 항상 사용 가능
     detected+=("Terminal.app")
-    _check "터미널 앱" ok "감지: ${detected[*]} — 현재 TERM_PROGRAM=${TERM_PROGRAM:-unknown}"
+    _check "터미널 앱" ok "감지: ${detected[*]} — 현재 TERM_PROGRAM=${TERM_PROGRAM:-unknown}, 메인 터미널(VT_TERMINAL)=${VT_TERMINAL:-auto}"
+    if [ -n "${VT_TERMINAL:-}" ] && [ "${VT_TERMINAL}" != "auto" ] && ! _terminal_installed "${VT_TERMINAL}"; then
+      _check "메인 터미널" warn "VT_TERMINAL=${VT_TERMINAL} 이(가) 설치돼 있지 않아 자동 선택으로 열림 (fsh terminal)"
+    fi
   fi
 
   # W3-6: Linux 환경 검사
@@ -3285,86 +3349,6 @@ print(f"  본문 앞 40자        : {body[:40].decode('utf-8','replace')}")
 print(f"  본문 뒤 40자        : {body[-40:].decode('utf-8','replace')}")
 PYEOF
 }
-
-cmd_agent() {
-  # fsh agent <claude|codex|aider|agy|qwen> — 지정한 AI CLI를 tmux dev에서 시작
-  local agent="${1:-claude}"
-  shift || true
-
-  local exec_cmd bin_name icon label
-  # Phase 8 G4: Claude만 --disallowedTools 자동 주입 (다른 CLI는 미지원)
-  local disallowed
-  disallowed="$(_resolve_disallowed_tools)"
-  case "$agent" in
-    claude) exec_cmd="claude --resume --disallowedTools \"$disallowed\""; bin_name="claude"; icon="🟣"; label="Claude" ;;
-    codex)  exec_cmd="codex"; bin_name="codex"; icon="🟢"; label="Codex" ;;
-    aider)  exec_cmd="aider"; bin_name="aider"; icon="🔵"; label="Aider" ;;
-    # 2026-09-23 — 구글의 이전 CLI 종료(2026-06-18)로 agy(Antigravity)가 그 자리를
-    # 대신한다(server/agents.py와 같은 결정).
-    agy)    exec_cmd="agy"; bin_name="agy"; icon="🟡"; label="Antigravity" ;;
-    qwen)   exec_cmd="qwen"; bin_name="qwen"; icon="🟣"; label="Qwen" ;;
-    *)
-      echo "  ✗ 지원되지 않는 agent: $agent"
-      echo "  사용법: fsh agent <claude|codex|aider|agy|qwen>"
-      return 1
-      ;;
-  esac
-
-  if ! command -v "$bin_name" >/dev/null 2>&1; then
-    echo "  ✗ $label CLI 미설치: '$bin_name' 명령을 찾을 수 없습니다"
-    return 1
-  fi
-
-  echo ""
-  echo "  $icon fsh agent $agent — $label 시작 (tmux dev)"
-  echo ""
-
-  _ensure_tmux
-  if [ -n "${TMUX:-}" ]; then
-    echo "  ✓ 이미 tmux 안. 현재 창에서 $label 실행."
-    # exec_cmd 내부 따옴표(--disallowedTools "...")를 셸이 파싱하도록 sh -c 경유.
-    # 단순 단어분할(exec $exec_cmd)은 따옴표를 리터럴로 취급해 인자를 깬다.
-    exec sh -c "$exec_cmd \"\$@\"" sh "$@"
-  fi
-
-  # 세션당 창 하나 원칙: 'dev'가 이미 다른 창에 열려 있으면 새로 열지 않는다.
-  _tmux_already_open "dev" && { echo ""; return 0; }
-
-  # 새 터미널 창에서 실행 — _open_tmux_terminal은 'claude --resume' 하드코딩이므로
-  # 이 경로에선 직접 명령 빌드 후 동등한 로직 사용.
-  # exec_cmd는 큰따옴표(--disallowedTools "...")를 포함하므로 작은따옴표로 감싸
-  # 셸이 그대로 tmux에 넘기게 하고, osascript엔 이스케이프해서 전달한다.
-  local cmd="tmux -L $VT_TMUX_SOCKET new -A -s dev '$exec_cmd'"
-  local cmd_as
-  cmd_as="$(_as_escape "$cmd")"
-  if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/iTerm.app" ]; then
-    local _err
-    if _err="$(osascript 2>&1 <<APPLESCRIPT
-tell application "iTerm"
-  activate
-  create window with default profile
-  tell current session of current window
-    write text "$cmd_as"
-  end tell
-end tell
-APPLESCRIPT
-)"; then
-      echo "  ✓ 새 iTerm 창에서 '$exec_cmd' 시작"
-    else
-      VT_AUTOOPEN_ERR="$_err"
-      echo "  ⓘ 터미널 자동 오픈 실패. 수동으로:"
-      echo "      $cmd"
-      _autoopen_failure_hint
-    fi
-  else
-    echo "  ⓘ 터미널 자동 오픈 실패. 수동으로:"
-    echo "      $cmd"
-  fi
-  echo ""
-}
-
-# 하위 호환: fsh claude → fsh agent claude
-cmd_claude() { cmd_agent claude "$@"; }
 
 cmd_template() {
   # fsh template [save|apply|list|rm] <name>
@@ -3563,12 +3547,11 @@ cmd_handoff() {
 
   case "$target" in
     mobile)
+      # `fsh mobile --session <이름>`과 같은 일이다 — 서버가 안 떠 있으면 먼저 시작한다.
       echo ""
       echo "  📱 fsh handoff mobile — 현재 tmux 세션을 폰으로"
-      echo ""
       _ensure_tmux
-      _start_server
-      _start_tunnel
+      _port_in_use "$VT_PORT" || { cmd_start || return $?; }
 
       # 현재 tmux 세션 결정 (TMUX 안이면 그 세션, 아니면 dev)
       local session=""
@@ -3577,48 +3560,29 @@ cmd_handoff() {
       else
         session="dev"
       fi
-
-      local url
-      url="$(_main_tunnel_url)"
-      local ticket
-      ticket="$(_issue_ticket "handoff")"
-      local full_url="$url"
-      [ -n "$ticket" ] && full_url="${url}?ticket=${ticket}"
-      # 폰이 접속하면 이 tmux 세션을 기본으로 보도록 hash 파라미터 추가
-      full_url="${full_url}#tmux=${session}"
-
-      echo ""
-      echo "  ┌─────────────────────────────────────────┐"
-      echo "  │  핸드오프 준비 완료                        │"
-      echo "  │  tmux 세션: $session"
-      echo "  │  URL: $full_url"
-      echo "  └─────────────────────────────────────────┘"
-      echo ""
-      if command -v qrencode >/dev/null 2>&1; then
-        echo "  QR 코드:"
-        qrencode -t UTF8 "$full_url" 2>/dev/null || true
-      fi
-      if adb devices 2>/dev/null | grep -q "device$"; then
-        echo "  📱 Android 기기 감지. Chrome에서 열기..."
-        adb shell am start -a android.intent.action.VIEW -d "$full_url" com.android.chrome 2>/dev/null || true
-      fi
+      cmd_mobile --session "$session"
       ;;
     desktop|mac)
       echo ""
       echo "  🖥  fsh handoff desktop — 맥북 터미널로 tmux"
       echo ""
-      _ensure_tmux
       if [ -n "${TMUX:-}" ]; then
+        _ensure_tmux
         echo "  ⓘ 이미 tmux 안 ($(tmux display -p '#S')). 추가 동작 없음."
         return
       fi
-      _ensure_tmux
-      if _open_tmux_terminal; then
-        echo "  ✓ 새 ${TERM_PROGRAM:-터미널} 창에 tmux 'dev' + claude --resume 열림"
-      else
-        echo "  ⓘ 터미널 자동 오픈 실패. 수동: tmux new -A -s dev 'claude --resume'"
-        _autoopen_failure_hint
-      fi
+      # dev가 없으면 미리 만들지 않는다 — 창이 `new -A -s dev 'claude --resume'`로 세션과 claude를
+      # 함께 만든다. 빈 세션을 먼저 만들면 창이 그 빈 세션에 붙기만 하고 claude가 안 뜬다.
+      "${TMUX_BASE[@]}" has-session -t dev 2>/dev/null && _ensure_tmux
+      _open_tmux_terminal
+      case $? in
+        0) echo "  ✓ 새 터미널 창에 tmux 'dev' + claude --resume 열림" ;;
+        2) ;;
+        *)
+          echo "  ⓘ 터미널 자동 오픈 실패. 수동: tmux new -A -s dev 'claude --resume'"
+          _autoopen_failure_hint
+          ;;
+      esac
       ;;
     *)
       echo "사용법: fsh handoff [mobile|desktop]"
@@ -3828,9 +3792,9 @@ _tunnel_list() {
   echo ""
   local main; main="$(_main_tunnel_url)"
   if [ -n "$main" ]; then
-    printf "  %-6s %-22s %s\n" "$VT_PORT" "터미널 (VT)" "$main"
+    printf "  %-6s %-22s %s\n" "$VT_PORT" "터미널 (FarShell)" "$main"
   else
-    echo "  (메인 터널 없음 — fsh start 또는 fsh mobile)"
+    echo "  (메인 터널 없음 — fsh start)"
   fi
   _registry_prune
   if [ -s "$TUNNEL_REGISTRY" ]; then
@@ -3972,7 +3936,7 @@ EOF
 
   echo ""
   echo "  ✅ 명명 터널 설정 완료"
-  echo "    이제 'fsh mobile' 시 https://$hostname 사용"
+  echo "    이제 접속 주소로 https://$hostname 를 씁니다 ('fsh mobile'이 이 주소로 QR을 만듭니다)"
   echo "    (DNS 전파 ~1분 소요 가능)"
 }
 
@@ -4479,6 +4443,68 @@ _ngrok_status() {
   fi
   return 1
 }
+# `fsh status`의 "접속 보안" 블록 — 외부에서 이 서버에 누가, 어떻게 들어올 수 있는지.
+# 특정 사용자의 값이 아니라 설정에서 읽은 값만 보여준다. 접속 범위가 열려 있는데 인증이
+# 없으면 그 자체를 경고한다(공개 주소 = 인증 없는 원격 셸).
+_status_security_block() {
+  local mode spec_note="" auth_json protected="false" auth_kind="" otp_state ndev
+  mode="$(_current_network_mode)"
+  [ -n "${VT_ACCESS_SPEC:-}" ] && spec_note=" · 허용 목록(VT_ACCESS_SPEC): ${VT_ACCESS_SPEC}"
+
+  local mode_desc
+  case "$mode" in
+    all)       mode_desc="all — 인터넷 어디서나 도달 가능 (인증으로 보호)" ;;
+    tailscale) mode_desc="tailscale — 같은 tailnet에서만" ;;
+    lan)       mode_desc="lan — 같은 네트워크에서만" ;;
+    localhost) mode_desc="localhost — 이 맥에서만" ;;
+    *)         mode_desc="$mode" ;;
+  esac
+
+  # 외부 주소: 명명 터널(도메인 고정)인지, 익명 터널(재시작하면 바뀜)인지
+  local entry="없음"
+  if [ "$mode" = "all" ]; then
+    local ext
+    ext="$(_mode_access_url all 2>/dev/null)"
+    if [ -n "$ext" ]; then
+      if [ -n "${VT_TUNNEL_NAME:-}" ] && [ -n "${VT_TUNNEL_HOSTNAME:-}" ]; then
+        entry="$ext (고정 도메인)"
+      elif [ "$(_tunnel_provider)" = "ngrok" ] && [ -n "${VT_NGROK_DOMAIN:-}" ]; then
+        entry="$ext (고정 도메인)"
+      else
+        entry="$ext (익명 터널 — 터널을 다시 띄우면 주소가 바뀜)"
+      fi
+    else
+      entry="터널이 실행 중이 아님"
+    fi
+  fi
+
+  auth_json="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m auth status 2>/dev/null)"
+  case "$auth_json" in *'"protected": true'*) protected="true" ;; esac
+  [ -n "${VT_AUTH_PASSWORD_HASH:-}" ] && auth_kind="비밀번호"
+  [ -n "${VT_AUTH_TOKEN:-}" ] && auth_kind="${auth_kind:+$auth_kind + }기계 토큰"
+
+  otp_state="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m auth otp-status 2>/dev/null)"
+  case "$otp_state" in
+    *'"enabled": true'*)  otp_state="✓ 켜짐 (새 기기 등록 시 OTP 요구)" ;;
+    *)                    otp_state="✗ 꺼짐 — 비밀번호만으로 새 기기 등록 가능 (fsh otp setup)" ;;
+  esac
+  ndev="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m auth device-list 2>/dev/null | "$VT_PYTHON" -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)"
+
+  echo "  접속 보안:"
+  echo "    접근 범위:  ${mode_desc}${spec_note}"
+  echo "    외부 주소:  $entry"
+  if [ "$protected" = "true" ]; then
+    echo "    인증:       ✓ ${auth_kind:-설정됨}"
+  else
+    echo "    인증:       ✗ 없음"
+  fi
+  echo "    OTP:        $otp_state"
+  echo "    등록 기기:  ${ndev:-?}개 (fsh device list)"
+  if [ "$mode" = "all" ] && [ "$protected" != "true" ]; then
+    echo "    ⚠ 공개 접속인데 인증이 없습니다 — URL을 아는 누구나 이 맥에서 명령을 실행할 수 있습니다. 'fsh password'로 설정하세요."
+  fi
+}
+
 cmd_status() {
   echo ""
   echo "  📊 fsh status"
@@ -4525,7 +4551,7 @@ cmd_status() {
   fi
 
   if _is_running voice; then
-    voice_status="✓ 실행 중 (Ctrl+Shift+V)"
+    voice_status="✓ 실행 중 (Ctrl+Shift+M)"
   fi
 
   if _is_running clip; then
@@ -4576,7 +4602,8 @@ cmd_status() {
     echo "  URL 변경 훅: ✗ 미설정 (fsh help tunnel-hook)"
   fi
   echo "  터널 워치독: $watchdog_status"
-  echo "  Tailscale:   $ts_status  (원격 SSH 접속: fsh ssh)"
+  _status_security_block
+  echo "  Tailscale:   $ts_status  (이 맥에 SSH로 붙는 명령 안내: fsh ssh)"
   echo "  Voice Daemon: $voice_status"
   echo "  Clipboard:   $clip_status"
   echo "  tmux:        $tmux_status"
@@ -4592,10 +4619,9 @@ case "${1:-help}" in
   stop)    shift 2>/dev/null || true; cmd_stop "$@" ;;
   restart) shift 2>/dev/null || true; cmd_restart "$@" ;;
   status)  cmd_status ;;
-  claude)   shift; cmd_claude "$@" ;;
-  agent)    shift; cmd_agent "$@" ;;
   handoff)  shift; cmd_handoff "$@" ;;
   attach)   shift; cmd_attach "$@" ;;
+  terminal) shift; cmd_terminal "$@" ;;
   ssh)      shift; cmd_ssh "$@" ;;
   doctor)   shift; cmd_doctor "$@" ;;
   shell-init) shift; cmd_shell_init "$@" ;;
@@ -4624,70 +4650,13 @@ case "${1:-help}" in
   voice-target) shift; cmd_voice_target "$@" ;;
   manage)   shift; cmd_manage "$@" ;;
   tui)      shift; cmd_manage "$@" ;;
+  -h|--help)
+    cmd_help
+    ;;
   *)
     echo ""
-    echo "  fsh — FarShell CLI"
-    echo ""
-    echo "  사용법:"
-    echo "    fsh voice              음성 모드 (백그라운드)"
-    echo "    fsh clip               클립보드 동기화 데몬 (맥 클립보드 → 웹, OSC52 보완)"
-    echo "    fsh mobile [--e2e] [--safe] [--force] [--temp]"
-    echo "                          모바일 접속 (--e2e: 암호화, --safe: 위험명령 차단,"
-    echo "                          --force: 인증 미설정이어도 공개 터널 강행 — 비권장,"
-    echo "                          --temp: 이 QR로 등록되는 기기는 1일 뒤 만료)"
-    echo "    fsh start [--voice]    전체 시작 (서버+터널, --voice로 음성도 함께)"
-    echo "    fsh restart [--voice]  서버만 재기동 — 터널은 유지해 접속 주소가 안 바뀜"
-    echo "    fsh stop [--purge] [--keep-tunnel]"
-    echo "                          종료 (--purge: tmux까지, --keep-tunnel: 입구는 남김)"
-    echo "    fsh status             상태 확인"
-    echo "    fsh password [clear]   웹 로그인 비밀번호 설정 (해시 저장) / clear=해제"
-    echo "    fsh otp [setup|status|disable]"
-    echo "                          새 기기 등록 시 OTP 요구 (setup 전까지 비활성)"
-    echo "    fsh device [list|revoke <id>|prune]"
-    echo "                          등록된 기기 조회 / 폐기 (폰 분실 시) / 만료 기기 정리"
-    echo "    fsh claude             tmux dev 안에서 claude --resume 시작"
-    echo "    fsh agent <name>       claude/codex/aider/agy/qwen 시작"
-    echo "    fsh template [save|apply|list|rm] <이름>"
-    echo "                          CLAUDE.md 템플릿 관리"
-    echo "    fsh popup <action>     tmux 3.2+ popup으로 빠른 호출"
-    echo "    fsh run \"명령\"          headless claude -p 백그라운드 실행"
-    echo "    fsh queue [add|run|rm]  프롬프트 큐 (작업 중 지시를 쌓아뒀다 순차 투입)"
-    echo "    fsh msg [send|log|agents]"
-    echo "                          에이전트 간 메시지 (다른 세션·다른 맥의 에이전트에게)"
-    echo "    fsh mcp                에이전트용 MCP 서버(stdio) — 예: claude mcp add farshell -- fsh mcp"
-    echo "    fsh files [ls|add|rm|share|unshare|insert]"
-    echo "                          파일 저장소 관리 + 공유 링크 발급/취소 (N19/N23)"
-    echo "    fsh host [list|pair|add|ping|rm|rename|allow-control|log]"
-    echo "                          다른 맥의 farshell과 페어링 (N7/N39)"
-    echo "    fsh worktree [list|add|rm|open]"
-    echo "                          git 워크트리 만들기/조회/삭제/열기 (N8/N44)"
-    echo "    fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]"
-    echo "                          누적형 사용량 기록/조회 (로컬 LLM 등, 한도 없음)"
-    echo "    fsh handoff mobile     현재 tmux 세션을 폰으로 넘김 (QR)"
-    echo "    fsh handoff desktop    tmux dev를 새 터미널 창으로 가져옴"
-    echo "    fsh ssh [session]      Tailscale + SSH로 tmux 세션 직접 접속 명령 안내"
-    echo "    fsh doctor             설치/환경 진단"
-    echo "    fsh install-profiles [--dry-run]"
-    echo "                          터미널 앱 profile 자동 등록 (iTerm2 등)"
-    echo "    fsh shell-init [zsh|bash|fish|pwsh]"
-    echo "                          셸별 안전 통합 스니펫 출력"
-    echo "    fsh setup-keybind [key] [action]"
-    echo "                          tmux popup 키바인딩 자동 등록 (default: prefix+v → status)"
-    echo "    fsh tunnel [status|list|hook|restart|watchdog|setup|teardown|switch <anon|named>]"
-    echo "                          Cloudflare Tunnel 관리 (명명 터널 옵트인)"
-    echo "    fsh tunnel restart     좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동"
-    echo "    fsh tunnel watchdog    좀비 재연결 자동 감지 데몬 상태 확인/시작"
-    echo "                          (fsh start/voice/mobile 시 자동 기동, 감지 시 자동 restart)"
-    echo "    fsh tunnel expose <port> [라벨] [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]"
-    echo "                          다른 로컬 앱(예: 3000)을 별도 터널로 공개. 기본 모드는 session(로그인 기기만)"
-    echo "    fsh tunnel unexpose <port>"
-    echo "                          해당 포트 터널·공유 정책 종료"
-    echo "    fsh tunnel pin <port>  접속 코드 재발급 (터널·URL 유지)"
-    echo "    fsh tunnel mode <port> <public|session|pin>"
-    echo "                          공유 모드 변경 (터널·URL 유지)"
-    echo "                          URL을 어딘가에 자동 게시: fsh help tunnel-hook"
-    echo "    fsh mobile --network <localhost|lan|tailscale|all>"
-    echo "                          모바일 모드 — localhost(같은 머신) / lan(같은 네트워크) / tailscale(같은 tailnet) / all(터널, default)"
-    echo ""
+    echo "  ✗ 알 수 없는 명령: $1"
+    cmd_help
+    exit 1
     ;;
 esac

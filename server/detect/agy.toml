@@ -1,0 +1,25 @@
+# Antigravity CLI (agy) — 승인/입력 대기 프롬프트 패턴.
+#
+# 2026-10-03 실측(agy 1.1.23, 격리 tmux 소켓). agy는 훅이 없어 화면 문구가 유일한
+# 신호다. Claude Code와 `Do you want to proceed?`가 겹치므로 이 파일에는 넣지 않는다 —
+# kind 패턴은 detector가 판별한 CLI의 spec으로만 매칭된다(claude.toml에 우연히 걸리지 않는다).
+name = "agy"
+
+# exit는 비운다. `esc to cancel`은 항상 떠 있어 쓰면 waiting이 즉시 풀린다(금지).
+exit = []
+
+[kinds]
+approval = [
+  "Requesting permission for:",
+  "Run this command?",
+]
+choice = [
+  "↑/↓ Navigate · enter Select · esc Skip",
+]
+
+# 계획 검토(`/artifact to review`)는 응답을 막는 대화상자가 아니다 — waiting으로
+# 올리지 않고 done 엔트리의 보조 표시(`badge: "plan"`)로만 쓴다.
+[badge]
+plan = [
+  "/artifact to review",
+]

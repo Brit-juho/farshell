@@ -2,6 +2,9 @@
 // 하이라이트, 없으면 이스케이프 폴백)로 파일 내용을 줄 번호와 함께 그린다.
 import { vtEsc, vtFetch, vtUrl } from '../../core/api.js';
 import { _setMsg } from './state.js';
+// UMD 전역 VTDiffLex — 뷰어 전용이라 panels 청크에서 평가한다. ⚠ 마지막 import여야 한다:
+// tests/helpers/vm-esm.js의 IMPORT_RE가 뒤에 `from '…'`이 더 있으면 부작용 import를 삼킨다.
+import '../../lib/difflex.js';
 
 // 파일 크기 표기 — 구 viewer/tree.js에서 이관(그 파일은 모달 뷰어와 함께 사라졌다).
 export function _fmtSize(n) {

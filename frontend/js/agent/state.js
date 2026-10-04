@@ -9,11 +9,13 @@
 // **키는 tmux 세션 이름이다.** 서버 상태 엔트리의 키(훅 session_id)는 프런트가
 // 알 방법이 없고, 웹 세션 id는 재attach마다 바뀐다. A2가 각 엔트리에 붙여주는
 // `tmux_session`이 두 세계를 잇는 안정적인 유일한 키다.
-import { STATE_LABEL } from '../design/state-classes.js';
+import { STATE_LABEL, URGENCY, normalizeState, entryUrgency, stateRank } from '../design/state-classes.js';
+
+export { URGENCY };
 
 const IDLE = 'idle';
 
-// tmux 세션 이름 → 'idle'|'working'|'waiting'|'done'|'error'
+// tmux 세션 이름 → 'idle'|'working'|'waiting'|'done' (알 수 없는 값은 들어올 때 idle로 접는다)
 const _byTmux = new Map();
 const _listeners = new Set();
 
@@ -23,23 +25,31 @@ const _listeners = new Set();
 // 세부는 /ws-agent가 이미 push하고 있었다(86분에 1,850회 — 거의 전부 중복).
 // 엔트리 원본(엔트리 키 → 공개 엔트리)과, 그걸 세션 이름으로 접은 결과.
 const _entries = new Map();
-let _details = {};   // tmux 이름 → { since, tool, question, options, promptId }
+let _details = {};   // tmux 이름 → { since, tool, question, options, promptId, kind, badge }
 let _names = {};     // tmux 이름 → CLI 이름(claude/codex/ssh/shell …)
 
-// N37 — 「읽지 않음」. 정의(10-shell-layout.md §4): **상태가 `done`인데 그
-// 세션이 그 뒤로 한 번도 사용자 눈에 띈 적이 없음.** done 자체와 구분되는
-// 이유는, done은 서버가 정하고 「읽지 않음」은 **이 브라우저가** 정하기
-// 때문이다 — 폰에서 확인한 완료가 맥에서도 읽음이 되면 안 되고, 그 반대도
-// 안 된다(기기마다 본 것이 다르다).
+// N37 — 「읽지 않음」. 정의(terminal.md 「States」): **상태가 어떤 값으로든 바뀐 뒤
+// 사용자가 그 세션을 아직 보지 않았음.** done만이 아니라 working·waiting·idle로
+// 바뀐 것도 해당한다. 「본다」 = 그 세션이 현재 뷰의 포커스 칸이고 창이 보이는
+// 상태(agent/paint.js가 probe로 알려준다). **보고 있는 세션의 전이는 unseen을
+// 만들지 않는다** — 비활성 세션의 전이만 만든다.
 //
-// 여기 담기는 건 "아직 안 본 done"의 tmux 이름들이다. done → 다른 상태로
-// 바뀌면 지운다(더 이상 알릴 완료가 아니다).
+// done 자체와 구분되는 이유는, 상태는 서버가 정하고 「읽지 않음」은 **이
+// 브라우저가** 정하기 때문이다 — 폰에서 확인한 완료가 맥에서도 읽음이 되면
+// 안 되고, 그 반대도 안 된다(기기마다 본 것이 다르다).
 const _unseen = new Set();
 
-// 2-6 정렬 우선순위 — "내 개입이 필요한 것이 항상 맨 위". 서버(agent_status의
-// _URGENCY)와 **같은 순서**여야 한다: 서버는 큐 판정에, 여기는 목록 정렬에
-// 쓰지만 사용자에게는 하나의 규칙으로 보여야 한다.
-export const URGENCY = { waiting: 0, done: 1, working: 2, error: 3, idle: 4 };
+// 「지금 보고 있는 세션인가」 — paint.js가 레이아웃·가시성을 알아서 주입한다.
+// state.js는 core 싱글톤이라 layout/store를 끌어오지 않으려고 의존성을 뒤집었다.
+let _seenProbe = () => false;
+export function setSeenProbe(fn) {
+  _seenProbe = typeof fn === 'function' ? fn : () => false;
+}
+
+// 첫 스냅샷(페이지 로드 직후)은 "방금 바뀐 것"이 아니라 현재 상태의 보고다 —
+// 로드 때마다 작업 중인 세션 전부에 링이 뜨면 노이즈다. done만 예전 규칙 그대로
+// (끝났는데 못 본 완료는 로드 직후에도 알려야 한다).
+let _hydrated = false;
 
 export function getStatus(tmuxName) {
   return (tmuxName && _byTmux.get(tmuxName)) || IDLE;
@@ -61,12 +71,14 @@ export function markSeen(tmuxName) {
   if (tmuxName && _unseen.delete(tmuxName)) _notify();
 }
 
-// 상태 전이에 따라 unseen을 갱신한다. done으로 **새로** 들어올 때만 unseen에
-// 넣는다 — 이미 done인 채로 스냅샷이 다시 와도(폴링) 방금 읽음 처리한 걸
-// 되살리면 안 된다.
-function _trackUnseen(name, prev, next) {
-  if (next === 'done' && prev !== 'done') _unseen.add(name);
-  else if (next !== 'done') _unseen.delete(name);
+// 상태 전이에 따라 unseen을 갱신한다. 값이 **바뀔 때만** 건드린다 — 같은 상태의
+// 스냅샷이 폴링으로 다시 와도 방금 읽음 처리한 걸 되살리면 안 된다.
+function _trackUnseen(name, prev, next, live = false) {
+  const before = prev || IDLE;
+  if (before === next) return;
+  if (_seenProbe(name)) { _unseen.delete(name); return; }
+  if (!_hydrated && !live && next !== 'done') return;
+  _unseen.add(name);
 }
 
 export function allStatuses() {
@@ -96,10 +108,10 @@ export function applySnapshot(all) {
   for (const entry of Object.values(all || {})) {
     const name = entry && entry.tmux_session;
     if (!name) continue;
-    const status = entry.status || IDLE;
+    const status = normalizeState(entry.status);
     // 같은 tmux 세션에 엔트리가 여럿이면(훅 + pane 자기보고) 더 급한 쪽을 쓴다.
     const cur = next.get(name);
-    if (!cur || URGENCY[status] < URGENCY[cur]) next.set(name, status);
+    if (!cur || entryUrgency(status) < entryUrgency(cur)) next.set(name, status);
   }
   const changed = next.size !== _byTmux.size
     || [...next].some(([k, v]) => _byTmux.get(k) !== v);
@@ -107,6 +119,7 @@ export function applySnapshot(all) {
   // 정리했거나 세션이 닫힘)은 알릴 완료도 같이 사라진다.
   for (const [name, status] of next) _trackUnseen(name, _byTmux.get(name), status);
   for (const name of _byTmux.keys()) if (!next.has(name)) _unseen.delete(name);
+  _hydrated = true;
   _byTmux.clear();
   for (const [k, v] of next) _byTmux.set(k, v);
   const detailsChanged = _rebuildDetails();
@@ -121,13 +134,13 @@ export function applyEvent(state) {
   const key = _entryKey(null, state);
   if (key != null) _entries.set(key, state);
   const detailsChanged = _rebuildDetails();
-  const status = state.status || IDLE;
+  const status = normalizeState(state.status);
   if (_byTmux.get(name) === status) {
     // 상태는 그대로여도 도구가 바뀌거나 질문이 붙었으면 상태 문장은 다시 그려야 한다.
     if (detailsChanged) _notify();
     return;
   }
-  _trackUnseen(name, _byTmux.get(name), status);
+  _trackUnseen(name, _byTmux.get(name), status, true);  // 단일 이벤트는 실제 전이다
   _byTmux.set(name, status);
   _notify();
 }
@@ -152,7 +165,7 @@ function _rebuildDetails() {
   for (const ent of _entries.values()) {
     const name = ent && ent.tmux_session;
     if (!name) continue;
-    const u = URGENCY[ent.status || IDLE] ?? 9;
+    const u = entryUrgency(ent.status);
     if (name in next && u >= rank[name]) continue;
     rank[name] = u;
     next[name] = {
@@ -161,6 +174,9 @@ function _rebuildDetails() {
       question: ent.question ?? null,
       options: ent.options ?? null,
       promptId: ent.prompt_id ?? null,
+      // 서버가 정한 waiting의 유형(approval/choice/plan/question)과 done의 보조 표시(question/plan).
+      kind: ent.kind ?? null,
+      badge: ent.badge ?? null,
     };
   }
   if (_canon(next) === _canon(_details)) return false;
@@ -202,14 +218,11 @@ export function ackLocal(tmuxName) {
   }
 }
 
-// 세션 목록 정렬 — rail·팔레트·세션 시트 전용.
+// 세션 목록 정렬 — rail·팔레트·세션 시트 전용(정렬을 이름순으로 바꾸는 건 5단계).
 // **탭 순서는 정렬하지 않는다**(사용자가 드래그로 정한 의도라 건드리면 안 된다).
 export function sortByUrgency(items, getName) {
-  return [...items].sort((a, b) => {
-    const ua = URGENCY[getStatus(getName(a))] ?? 9;
-    const ub = URGENCY[getStatus(getName(b))] ?? 9;
-    return ua - ub;
-  });
+  const rank = (x) => { const n = getName(x); return stateRank(getStatus(n), isUnseen(n)); };
+  return [...items].sort((a, b) => rank(a) - rank(b));
 }
 
 // 상태 dot 하나를 만든다. 색·breathing 애니메이션은 CSS가 data-state로 전부

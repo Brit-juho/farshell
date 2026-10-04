@@ -405,7 +405,7 @@ test('음성 — 5항목이 모두 그려진다', async () => {
   const { document, P } = await build();
   P.showSettings();
   sectionButton(document, '음성 및 알림').click();
-  for (const label of ['웹 푸시', '작업 완료 알림', 'Whisper 모델', '맥에서 음성만 쓰기']) {
+  for (const label of ['웹 푸시', '작업 완료 알림', '음성 인식 상태', '맥에서 음성만 쓰기']) {
     assert.ok(rowByLabel(document, label), `${label} 행이 있어야 한다`);
   }
 });
@@ -469,17 +469,17 @@ test('음성 — 작업 완료 알림 소리 듣기 버튼이 /api/notify/test�
   assert.ok(posts.some((u) => u.includes('/api/notify/test')));
 });
 
-test('음성 — Whisper 모델 상태에 따라 적재/내리기 버튼이 토글된다', async () => {
+test('음성 — 음성 인식 상태에 따라 적재/내리기 버튼이 토글된다', async () => {
   const { document, P } = await build({
     fetchExtra: (u) => (u.includes('/voice/stt/status')
-      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, loaded: true, engine: 'faster-whisper' }) })
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, loaded: true, engine: 'mlx_qwen3', model: 'm1', loaded_model: 'm1', rss_mb: 1200 }) })
       : null),
   });
   P.showSettings();
   sectionButton(document, '음성 및 알림').click();
   await flush();
-  const row = rowByLabel(document, 'Whisper 모델');
-  assert.match(row.querySelector('.vt-set-help').textContent, /메모리 상주 · faster-whisper/);
+  const row = rowByLabel(document, '음성 인식 상태');
+  assert.match(row.querySelector('.vt-set-help').textContent, /메모리에 올라가 있음/);
   const [preload, unload] = row.querySelectorAll('button');
   assert.strictEqual(preload.disabled, true, '이미 적재돼 있으면 미리 적재는 비활성');
   assert.strictEqual(unload.disabled, false);
@@ -557,7 +557,7 @@ test('에이전트 — "보통 이하" 경고 문장이 그대로 노출된다',
   sectionButton(document, '에이전트').click();
   await flush();
   const texts = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
-  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 레일에서 승인 대기를 놓칠 수 있다는 뜻입니다.')));
+  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 레일에서 입력 대기를 놓칠 수 있다는 뜻입니다.')));
   // N9 — 훅이 없는 CLI에도 올라갈 길이 있다는 사실을 같은 자리에서 알려준다.
   assert.ok(texts.some((t) => t.includes('fsh pane report')));
 });
