@@ -42,6 +42,7 @@ const SESSION_JS = path.join(__dirname, '../js/term/session.js');
 const PANES_JS = path.join(__dirname, '../js/layout/panes.js');
 const DOM_JS = path.join(__dirname, '../js/core/dom.js');
 const LAYOUT_STORE_JS = path.join(__dirname, '../js/layout/store.js');
+const SESSION_ACTIONS_JS = path.join(__dirname, '../js/term/session-actions.js');
 
 class FakeTerminal {
   constructor(opts) { this.options = opts; this.cols = 80; this.rows = 24; this._disposed = false; this._dataCb = null; }
@@ -215,8 +216,10 @@ test('switchTabByOffset: 데스크톱(≥720)에서는 헤더 탭 순서로 돈�
   void tabA;
 });
 
-test('removeSession: 레코드/wrapper를 정리하고 다른 세션으로 전환한다', async () => {
-  const { window, addSession, removeSession } = await buildTerminalWindow();
+// 2026-10-03(세션·뷰 규칙 "닫기") — 닫은 세션의 칸은 빈 칸으로 남는다. 다른
+// 세션(remaining[0])을 그 칸으로 끌어오던 대체 로직은 없앴다.
+test('removeSession: 레코드/wrapper를 정리하고 칸은 빈 칸으로 남긴다', async () => {
+  const { window, addSession, removeSession, layoutStore } = await buildTerminalWindow();
   addSession('a', 'A');
   addSession('b', 'B'); // 활성 = b
 
@@ -225,18 +228,61 @@ test('removeSession: 레코드/wrapper를 정리하고 다른 세션으로 전�
   assert.strictEqual(window.sessions['b'], undefined, 'sessions 맵에서 제거돼야 한다');
   assert.strictEqual(window.orderedSessionIds().join(','), 'a', '순서에서도 빠져야 한다');
   assert.strictEqual(window.document.getElementById('term-b'), null);
-  assert.strictEqual(window.activeId, 'a', '닫은 세션이 활성이었다면 남은 세션으로 전환돼야 한다');
+  assert.strictEqual(window.activeId, null, '활성 세션은 칸에서 파생된다 — 빈 칸이면 null');
+  const tabs = layoutStore.getTabsWithTrees();
+  assert.ok(tabs.every((t) => JSON.stringify(t.tree).indexOf('"b"') === -1), '트리에 죽은 id가 남지 않는다');
+  assert.strictEqual(layoutStore.getTree().session, null, 'b가 있던 칸은 빈 칸');
+  assert.strictEqual(layoutStore.findTabBySessionId('a') !== null, true, 'a는 자기 뷰에 그대로');
 });
 
-test('removeSession: 마지막 세션을 닫으면 activeId가 비고 온보딩이 뜬다', async () => {
-  const { window, addSession, removeSession } = await buildTerminalWindow();
+test('removeSession: 마지막 세션을 닫아도 뷰는 빈 칸으로 남는다 — 온보딩은 뷰를 닫을 때', async () => {
+  const { window, addSession, removeSession, layoutStore, cache, context } = await buildTerminalWindow();
   addSession('only', 'Only');
 
   await removeSession('only');
 
   assert.strictEqual(window.activeId, null);
   assert.strictEqual(Object.keys(window.sessions).length, 0);
-  assert.ok(window.document.getElementById('onboarding'), '세션이 하나도 없으면 온보딩이 표시돼야 한다');
+  assert.strictEqual(window.document.getElementById('onboarding'), null, '칸만 비었다 — 뷰는 남아 있다');
+  assert.strictEqual(layoutStore.getTree().session, null);
+
+  // 뷰 × — 마지막 뷰를 닫으면 빈 화면(온보딩).
+  const actions = await importFresh(SESSION_ACTIONS_JS, context, cache);
+  await actions.closeView(layoutStore.getActiveTabId());
+  assert.ok(layoutStore.isLayoutEmpty());
+  assert.ok(window.document.getElementById('onboarding'), '뷰가 하나도 없으면 온보딩');
+});
+
+test('closeView: 묶음 뷰를 닫으면 구성을 기억하고, 칸 ×는 세션만 닫고 빈 칸을 남긴다', async () => {
+  const { window, addSession, layoutStore, cache, context } = await buildTerminalWindow();
+  addSession('a', 'A');
+  window.sessions.a.tmuxName = 'ta';
+  const right = layoutStore.splitActivePane('row', null);
+  layoutStore.setPaneSession(null, right);
+  addSession('b', 'B', undefined, { place: 'pane', tmuxName: 'tb' });
+  const tab = layoutStore.getActiveTabId();
+  assert.strictEqual(JSON.stringify(layoutStore.tabGroups().map((g) => g.sessionIds)), '[["a","b"]]');
+
+  const actions = await importFresh(SESSION_ACTIONS_JS, context, cache);
+  // 칸 × — b만 닫히고 칸은 빈 칸, 묶음 판정은 즉시 풀린다.
+  await actions.closePaneAction(right);
+  assert.strictEqual(window.sessions.b, undefined);
+  assert.strictEqual(layoutStore.countLeaves(), 2, '칸은 남는다');
+  assert.strictEqual(layoutStore.tabGroups().length, 0, '묶음 판정이 즉시 풀린다');
+  // 빈 칸의 × — 칸을 없앤다.
+  await actions.closePaneAction(right);
+  assert.strictEqual(layoutStore.countLeaves(), 1);
+
+  // 다시 묶고 뷰 ×.
+  const r2 = layoutStore.splitActivePane('row', null);
+  addSession('c', 'C', undefined, { place: 'pane', tmuxName: 'tc' });
+  void r2;
+  await actions.closeView(tab);
+  assert.strictEqual(Object.keys(window.sessions).length, 0, '안의 세션은 전부 닫힌다');
+  const remembered = layoutStore.findClosedViewByTmux('tc');
+  assert.ok(remembered, '묶음 구성을 기억한다');
+  assert.strictEqual(JSON.stringify(layoutStore.closedViewMembers(remembered)), '["ta","tc"]');
+  assert.ok(window.document.getElementById('onboarding'));
 });
 
 test('removeSession: 비활성 세션을 닫아도 활성 세션은 그대로 유지된다', async () => {
@@ -326,13 +372,17 @@ test('이름 변경은 공용 API 요청을 보내고 레코드를 갱신한다'
 // 끊김만으로 서버에 요청하지 않은 셸이 생겼고, e2e 온보딩 테스트가 간헐적으로 깨졌다.
 const BOOT_JS = path.join(__dirname, '../js/term/boot.js');
 
+// 2026-10-03 — 부팅은 이제 서버의 tmux 목록을 읽지 않는다(저장된 레이아웃만
+// 복원). 레이아웃 조회 실패는 복원 경로가 흡수하므로, 끝까지 올라오는 실패는
+// #tmux= 핸드오프의 attach 요청이다 — 그걸로 실패를 만든다.
 function failingTmuxFetch(url, opts) {
-  if (String(url).includes('/api/tmux/sessions')) return Promise.reject(new TypeError('Failed to fetch'));
+  if (String(url).includes('/api/tmux/')) return Promise.reject(new TypeError('Failed to fetch'));
   return fakeFetch(url, opts);
 }
 
 async function bootWithFailure({ leaving = false } = {}) {
   const built = await buildTerminalWindow({ fetchImpl: failingTmuxFetch });
+  built.window.location.hash = '#tmux=dev';
   const { bootApp } = await importFresh(BOOT_JS, built.context, built.cache);
   if (leaving) built.window.dispatchEvent(new built.window.Event('pagehide'));
   const origError = built.window.console.error;

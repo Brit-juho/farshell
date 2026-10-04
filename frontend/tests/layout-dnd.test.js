@@ -79,7 +79,9 @@ test('applyPaneDrop — center 배정은 다른 leaf에 있던 세션을 그쪽�
 // 지워져서 같은 세션이 두 탭에 동시에 남았다(사용자 보고: "그룹을 만들어도
 // 그 세션의 옛 탭이 상단에 그대로 떠 있다", "레일에서 그룹 세션을 클릭하면
 // 그룹이 아니라 엉뚱한(옛) 화면으로 간다").
-test('applyPaneDrop — 다른 탭의 pane에 떨어뜨리면 원래 솔로 탭이 닫힌다(교차 탭 중복 금지)', async () => {
+// 2026-10-03(규칙 결정) — 드래그로 단독 뷰가 비면 그 뷰를 자동으로 닫는다(옛 동작).
+// 칸 ×로 비운 단독 뷰가 빈 칸으로 남는 규칙과는 다르다(session-actions.js).
+test('applyPaneDrop — 다른 뷰로 끌어 단독 뷰가 비면 그 뷰는 자동으로 닫힌다(교차 탭 중복 금지)', async () => {
   const { S, D } = await loadDnd();
   const soloTabId = S.getActiveTabId();
   S.setPaneSession('sess-a', S.getActivePaneId()); // soloTabId는 sess-a 혼자만의 탭
@@ -89,11 +91,40 @@ test('applyPaneDrop — 다른 탭의 pane에 떨어뜨리면 원래 솔로 탭�
 
   D.applyPaneDrop(groupPaneId, 'right', 'sess-a'); // sess-a를 groupTab으로 드래그
 
-  assert.deepStrictEqual(
-    S.getTabs().map((t) => t.id).includes(soloTabId), false,
-    '세션이 빠져나가 텅 빈 옛 솔로 탭은 자동으로 닫혀야 한다',
-  );
+  assert.ok(!S.getTabs().some((t) => t.id === soloTabId), '비게 된 원래 뷰는 닫힌다');
+  assert.strictEqual(S.getActiveTabId(), groupTabId, '활성 뷰는 그대로 도착한 뷰');
   assert.strictEqual(S.findTabBySessionId('sess-a'), groupTabId, '레일 클릭 시 찾아가야 할 탭은 그룹 탭 하나뿐이어야 한다');
+});
+
+test('applyPaneDrop — center로 끌어와도 원래 단독 뷰가 비면 닫는다', async () => {
+  const { S, D } = await loadDnd();
+  const soloTabId = S.getActiveTabId();
+  S.setPaneSession('sess-a', S.getActivePaneId());
+  S.openLayoutTab({ label: 'other' });
+  D.applyPaneDrop(S.getActivePaneId(), 'center', 'sess-a');
+  assert.ok(!S.getTabs().some((t) => t.id === soloTabId));
+});
+
+test('applyPaneDrop — 같은 뷰 안에서 옮기면 뷰는 하나뿐이라 닫지 않는다', async () => {
+  const { S, D } = await loadDnd();
+  const tabId = S.getActiveTabId();
+  S.setPaneSession('sess-a', S.getActivePaneId());
+  const otherPane = S.splitActivePane('row');
+  D.applyPaneDrop(otherPane, 'center', 'sess-a');
+  assert.strictEqual(S.getTabs().length, 1);
+  assert.strictEqual(S.getTabs()[0].id, tabId);
+  assert.strictEqual(S.getTree().b.session, 'sess-a');
+});
+
+test('applyPaneDrop — 원래 뷰에 뷰어 칸이 남아 있으면 비지 않은 것으로 보고 닫지 않는다', async () => {
+  const { S, D } = await loadDnd();
+  const srcTabId = S.getActiveTabId();
+  S.setPaneSession('sess-a', S.getActivePaneId());
+  const viewerPane = S.splitActivePane('row');
+  S.openViewerPane('a.txt', viewerPane);
+  S.openLayoutTab({ label: 'other' });
+  D.applyPaneDrop(S.getActivePaneId(), 'right', 'sess-a');
+  assert.ok(S.getTabs().some((t) => t.id === srcTabId), '뷰어가 든 뷰는 남는다');
 });
 
 test('applyPaneDrop — 다른 탭의 pane에 떨어뜨려도 그 탭에 다른 멤버가 남아있으면 탭은 안 닫힌다', async () => {

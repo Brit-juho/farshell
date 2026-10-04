@@ -16,7 +16,7 @@
 // 거쳐 상대의 control 등급 엔드포인트로 간다(routes/hosts.py).
 import { getSession, orderedSessionIds, setSessionTmuxName } from '../core/store.js';
 import { addSession, revealSession, removeSession } from './session.js';
-import { saveWorkspace } from './workspace.js';
+import { saveLayoutNow } from '../layout/persist.js';
 import { showToast } from '../ui/toast.js';
 import { vtFetch } from '../core/api.js';
 import { confirmDialog } from '../core/dialog.js';
@@ -63,23 +63,24 @@ function _hostsChanged(hostId) {
  * 원격 세션을 연다. 이미 열려 있으면 그 탭으로 전환만 한다.
  * @returns 세션 id, 실패면 null
  */
-export async function attachRemoteSession(hostId, tmuxName) {
+// opts.place — term/session.js addSession과 같다('view' 기본 · 'pane' · 'none').
+export async function attachRemoteSession(hostId, tmuxName, { place = 'view' } = {}) {
   if (!hostId || !tmuxName) return null;
   // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유. 이미 열려 있는
   // 세션이 다른 세션과 화면을 공유 중이면 switchTo가 그 짝을 밀어냈다.
   // 레코드로 찾는다(id로 찾지 않는다) — host-view.js findRemoteSession 주석.
   const open = findRemoteSession(_entries(), hostId, tmuxName);
-  if (open) { revealSession(open); return open; }
+  if (open) { if (place !== 'none') revealSession(open); return open; }
   const id = remoteSessionId(hostId, tmuxName);
   if (getSession(id)) {
     // 이 id를 쓰던 세션이 다른 이름으로 바뀐 뒤 옛 이름으로 새 세션이 생긴 경우 —
     // 같은 id를 두 번 등록할 수 없으니 뒤에 표시를 붙인다.
-    return attachRemoteSessionAs(`${id}#${Date.now().toString(36)}`, hostId, tmuxName);
+    return attachRemoteSessionAs(`${id}#${Date.now().toString(36)}`, hostId, tmuxName, place);
   }
-  return attachRemoteSessionAs(id, hostId, tmuxName);
+  return attachRemoteSessionAs(id, hostId, tmuxName, place);
 }
 
-async function attachRemoteSessionAs(id, hostId, tmuxName) {
+async function attachRemoteSessionAs(id, hostId, tmuxName, place = 'view') {
   // 호스트가 살아 있는지 먼저 본다 — 죽은 호스트에 탭을 만들면 재연결 스톰의
   // 입구가 된다(ws.js 상단 주석의 그 사고와 같은 모양).
   try {
@@ -99,8 +100,8 @@ async function attachRemoteSessionAs(id, hostId, tmuxName) {
     tmuxName,
     host: hostId,
     remote: { host: hostId, tmux: tmuxName, screen },
+    place,
   });
-  saveWorkspace();
   return id;
 }
 
@@ -128,7 +129,8 @@ const _json = (method, body) => ({
 });
 
 /** 원격 호스트에 tmux 세션을 만들고 바로 연다. 활성 칸이 비어 있으면(빈 원격
- * 탭의 「새 세션」) 그 자리에, 아니면 새 탭에 열린다(addSession 규칙). */
+ * 탭의 「새 세션」 — 사용자가 그 칸에서 고른 것이다) 그 자리에, 아니면 새 단독
+ * 뷰에 열린다. */
 export async function createRemoteSession(hostId, name = '') {
   if (!hostId || hostId === LOCAL_HOST) return null;
   let data;
@@ -139,7 +141,9 @@ export async function createRemoteSession(hostId, name = '') {
     return null;
   }
   _hostsChanged(hostId);
-  return attachRemoteSession(hostId, data.name);
+  const node = findNode(getTree(), getActivePaneId());
+  const emptyHere = node && node.t === 'leaf' && !node.session && (node.kind || 'terminal') === 'terminal';
+  return attachRemoteSession(hostId, data.name, { place: emptyHere ? 'pane' : 'view' });
 }
 
 /** 원격 세션을 완전히 끝낸다. 열린 탭을 **먼저** 닫는다 — 상대가 세션을 없애면
@@ -190,7 +194,7 @@ export async function renameRemoteSession(hostId, oldName, newName) {
     const s = getSession(open);
     s.remote = { ...s.remote, tmux: next };
     setSessionTmuxName(open, next);
-    saveWorkspace();
+    saveLayoutNow();
   }
   _hostsChanged(hostId);
   return true;

@@ -392,17 +392,10 @@ function Fleet(props: { deps: FleetDeps }) {
 
   const openRow = async (row: FleetRow) => {
     const w = window as any;
-    // ADR-29 B와 같은 규칙 — 잠든 행은 열면 곧장 깨운다. attachTmux(term/
-    // session.js)가 attach 후 그 세션을 직접 화면에 앉힌다(desktop의
-    // Rail.tsx openRow도 이 호출 하나로 끝낸다 — 뒤이어 revealSession을 또
-    // 부를 필요가 없다).
-    if (!row.awake) {
-      if (row.tmuxName) await w.attachTmux?.(row.tmuxName);
-      props.deps.onOpenTerminal();
-      return;
-    }
-    // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유로 revealSession.
-    w.revealSession?.(row.sessionId);
+    // 2026-10-03(세션·뷰 규칙) — 레일 클릭과 같은 함수(term/session-actions.js
+    // openSessionFromRail): 열린 세션은 그 자리로, 아니면 기억된 묶음 뷰를
+    // 통째로 다시 열거나 새 단독 뷰로 연다.
+    await w.vtOpenSessionFromRail?.({ sessionId: row.awake ? row.sessionId : null, tmuxName: row.tmuxName || null });
     props.deps.onOpenTerminal();
   };
 
@@ -544,7 +537,7 @@ function Fleet(props: { deps: FleetDeps }) {
           이유(구역 머리글이 이미 "잠자는 중"이라고 말한다, 행마다 또 안 씀). */}
       <Show when={sleepingEntries().length > 0}>
         <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head">잠자는 중 · {sleepingEntries().length}</div>
+          <div class="vt-fleet-group-head">열리지 않음 · {sleepingEntries().length}</div>
           <For each={sleepingEntries()}>
             {(entry) => {
               const row = { ...entry.row, statusSentence: '' };
@@ -615,12 +608,12 @@ function Fleet(props: { deps: FleetDeps }) {
                   <div class="vt-session-list">
                     <Show when={!sleeping}>
                       <button type="button" class="vt-menu-item" onClick={startRename}>이름 변경</button>
-                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtDetachSession?.(row.sessionId))}>재우기</button>
+                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtCloseSession?.(row.sessionId))}>닫기</button>
                       <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtOpenSessionOnMac?.(row.sessionId))}>맥에서 열기</button>
                       <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtShowClients?.(row.sessionId))}>연결된 화면</button>
                     </Show>
                     <Show when={sleeping}>
-                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).attachTmux?.(row.tmuxName))}>깨우기</button>
+                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => (window as any).vtOpenSessionFromRail?.({ tmuxName: row.tmuxName }))}>열기</button>
                     </Show>
                     {/* Rail.tsx의 ctxMenuItems와 같은 조건 — tmux 세션일 때만
                         성립한다(일반 세션은 tmux가 아니라 "완전 종료" 개념이

@@ -68,7 +68,9 @@ export async function attachTmuxSession(name) {
     const data = await res.json();
     if (data.id) {
       if (!getSession(data.id)) {
-        addSession(data.id, data.name || name);
+        // 등록만 하고(place:'none') 자리는 아래 switchTo가 정한다 — 호출자
+        // (빈 칸 세션 선택 시트)가 고른 활성 칸이다.
+        addSession(data.id, data.name || name, undefined, { place: 'none', tmuxName: name });
         const s = getSession(data.id);
         if (s) s.tmuxName = name;
       }

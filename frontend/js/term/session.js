@@ -12,7 +12,7 @@
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
 import { register as registerKey } from '../core/keymap.js';
-import { getSession, allSessions, registerSession, removeSessionRecord, activeSessionId, setActive,
+import { getSession, registerSession, removeSessionRecord, activeSessionId,
   sessionDisplayName, setSessionDisplayName, setSessionTmuxName, orderedSessionIds, moveSessionByOffset } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
@@ -20,19 +20,17 @@ import { screenId } from '../core/screen-id.js';
 import { createXtermInstance } from './xterm-setup.js';
 import { applyMouseMode } from './mouse-mode.js';
 import { startSessionSocket } from './ws.js';
-import { saveWorkspace } from './workspace.js';
-import { showOnboarding } from './boot.js';
 import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
-import { setPaneSession, revealSessionPane, openLayoutTab, getTree, getActivePaneId,
+import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayout,
   getTabsWithTrees, getActiveTabId, switchLayoutTab, moveLayoutTab } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
-import { findNode } from '../layout/tree.js';
 import { COMPACT_MAX } from '../layout/breakpoints.js';
 
-export async function createSession() {
+// opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
+export async function createSession({ place = 'view' } = {}) {
   // "맥에서도 열기"가 켜져 있으면 tmux 세션으로 생성하고 서버에 osascript로
   // iTerm 창을 자동 오픈하도록 요청. E2: 체크박스 엘리먼트의 .checked가 아니라
   // 설정 스토어를 읽는다 — 그 엘리먼트는 rail 설정 패널 안에 있어서 값의 주인이
@@ -45,7 +43,7 @@ export async function createSession() {
       body: JSON.stringify({ auto_open_on_mac: true, screen: screenId() }),
     });
     const data = await res.json();
-    addSession(data.id, data.name || data.id);
+    addSession(data.id, data.name || data.id, undefined, { place });
     // ⚠ tmuxName을 안 채우면 openSessionOnMac()의 tmuxName 가드가 항상 실패해
     // "이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다"를 잘못 띄운다 —
     // 실제로는 진짜 tmux 세션인데도(restoreWorkspace 경로는 이걸 항상 채워왔음).
@@ -61,7 +59,7 @@ export async function createSession() {
   // C5: 401(토큰)/500 시 JSON에 id가 없어 addSession(undefined) 방지.
   if (!res.ok) { showToast(`세션 생성 실패 (${res.status})`); return; }
   const { id } = await res.json();
-  if (id) addSession(id);
+  if (id) addSession(id, undefined, undefined, { place });
 }
 
 // + 버튼: 일반 터미널 / tmux 중 선택하는 드롭다운. (기존 createSession은
@@ -135,7 +133,8 @@ async function createPlainSession() {
 // 깨우기/완전 종료를 이미 제공하게 되면서 완전히 중복이 됐지만, 이 둘
 // (attachTmux/createTmuxSession)은 그 목록들이 공통으로 부르는 진짜 동작이라
 // 그대로 옮긴다 — createPlainSession의 tmux 버전이라 바로 옆이 제자리다.
-export async function attachTmux(tmuxName) {
+// place는 addSession과 같다. 이미 열려 있으면 그 자리로 간다. 실패하면 null.
+export async function attachTmux(tmuxName, { place = 'view' } = {}) {
   const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -143,26 +142,22 @@ export async function attachTmux(tmuxName) {
   });
   // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
   // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
-  if (!res.ok) { showToast(`세션 열기 실패: ${tmuxName} (${res.status})`); return; }
+  if (!res.ok) { showToast(`세션 열기 실패: ${tmuxName} (${res.status})`); return null; }
   const data = await res.json();
-  if (!data.id) { showToast(`세션 열기 실패: ${tmuxName}`); return; }
+  if (!data.id) { showToast(`세션 열기 실패: ${tmuxName}`); return null; }
   // 이미 웹에 열려 있으면 해당 탭으로 전환. 2026-09-21(사용자 지적) —
   // switchTo는 "배정"이라 그 세션이 다른 세션과 화면을 공유 중이면(그룹)
   // 짝을 밀어냈다 — revealSession이 트리를 안 건드리고 그 자리로만 이동한다.
   if (getSession(data.id)) {
-    revealSession(data.id);
+    if (place !== 'none') revealSession(data.id);
   } else {
-    addSession(data.id, data.name || data.id);
+    addSession(data.id, data.name || data.id, undefined, { place, tmuxName: data.tmux_session || tmuxName });
     // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
     const s = getSession(data.id);
     if (s) s.tmuxName = data.tmux_session || tmuxName;
-    // L8에서 발견: addSession() 안의 saveWorkspace()는 tmuxName이 붙기 **전에**
-    // 돌기 때문에, 마지막으로 붙인 세션은 스냅샷에 tmux_name:null로 남아
-    // 있었다(그 뒤에 또 다른 세션이 붙어 다시 저장되지 않는 한). 그러면 다음
-    // 부팅에서 그 탭은 "순수 PTY"로 복원돼 tmuxName이 영영 안 채워지고,
-    // openSessionOnMac()·레이아웃 복원이 그 세션을 tmux로 못 알아본다.
-    saveWorkspace();
+    if (place !== 'none') saveLayoutNow();
   }
+  return data.id;
 }
 
 // export — showAddMenu의 "tmux 세션" 메뉴 항목이 부른다.
@@ -178,7 +173,7 @@ export async function createTmuxSession() {
   if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
   const data = await res.json();
   if (!data.id) { showToast('tmux 세션 생성 실패'); return; }
-  addSession(data.id, data.name || data.id);
+  addSession(data.id, data.name || data.id, undefined, { tmuxName: data.tmux_session });
   // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
   const s = getSession(data.id);
   if (s) s.tmuxName = data.tmux_session;
@@ -195,7 +190,10 @@ window.attachTmux = attachTmux;
 
 // opts: 세션 레코드에 **소켓이 열리기 전에** 얹어야 하는 필드(N7/N39 3단계의
 // remote/host가 그렇다 — startSessionSocket이 그 값을 보고 WS 경로를 고른다).
+// opts.place(레코드엔 안 들어간다, 2026-10-03): 'view' 새 단독 뷰(기본) ·
+// 'pane' 활성 칸(호출자가 칸을 골라 둠) · 'none' 등록만(트리는 호출자가).
 export function addSession(id, displayName, insertBeforeId, opts = null) {
+  const { place = 'view', ...recordOpts } = opts || {};
   // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
   // 생기므로 무시한다.
   if (!id) { showToast('세션 생성 실패 (id 없음)'); return; }
@@ -215,7 +213,7 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // 세션은 그 이름을, 없는 일반 세션은 sessionDisplayName의 "터미널 N"
   // 폴백을 그대로 받는다.
   registerSession(id, { term, ws: null, displayName: displayName || null,
-    fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...(opts || {}) },
+    fitAddon, searchAddon, wrapper, wsHandle: null, reconnTimer: null, ...recordOpts },
     insertBeforeId);
   // O1: 재연결 오버레이의 "다시 연결" 버튼이 이 세션의 connectTerminalWs를
   // 부를 수 있도록 참조를 걸어둔다 — startSessionSocket이 채운다.
@@ -226,25 +224,14 @@ export function addSession(id, displayName, insertBeforeId, opts = null) {
   // 여기서는 "새로 생긴 세션"만 챙긴다.)
   applyMouseMode(getSession(id));
 
-  // 2026-09-22(사용자 지적) — 예전엔 무조건 switchTo(id)였다. 두 호출자가
-  // 서로 다른 걸 원한다: pane-picker.js("이 화면에 표시할 세션" 시트)는
-  // 사용자가 **직접 고른 빈 pane**을 setActivePane으로 미리 맞춰둔 뒤 이
-  // 함수를 불러 "바로 그 자리"에 채워지길 기대하고(pane-picker.test.js),
-  // 레일 메뉴/버튼의 "새 세션"은 활성 pane을 고른 적이 없다 — 그때의 활성
-  // pane은 그냥 "포커싱 중이던 세션의 자리"라 뺏으면 안 된다. 활성 pane이
-  // 비어 있는지로 둘을 가른다: 비어 있으면(명시적으로 고른 자리) 채우고,
-  // 이미 세션이 있으면 revealSession의 "못 찾으면 새 탭" 경로로 새 탭을 연다.
-  const activeNode = findNode(getTree(), getActivePaneId());
-  if (activeNode && activeNode.t === 'leaf' && !activeNode.session) {
-    switchTo(id);
-  } else {
-    revealSession(id);
-  }
+  // 옛 "활성 칸이 비었으면 채운다" 추측은 없앴다 — 빈 칸이 흔해졌다.
+  if (place === 'pane') switchTo(id);
+  else if (place !== 'none') revealSession(id);
 }
 
 export function switchTo(id) {
   document.dispatchEvent(new CustomEvent('vt:session-switch', { detail: { id } }));
-  setActive(id);
+  // 활성 세션은 칸에서 파생된다(layout/store.js) — setActive를 안 부른다.
   const s = getSession(id);
   // L3 1단계: wrapper를 여기서 직접 보이기/숨기기 하지 않는다 — 활성 pane에
   // 이 세션을 배정한다고만 알리면 layout/panes.js의 renderLayout()이 실제
@@ -259,7 +246,6 @@ export function switchTo(id) {
   // 사라졌다(옛 classic script 시절엔 picker.js가 이 파일보다 늦게 로드돼
   // 부팅 직후엔 이 함수가 미정의였다 — 이제는 정적 import라 항상 준비돼 있다).
   updateSessionPicker();
-  saveWorkspace();
 }
 
 // 2026-09-21(사용자 지적) — 레일·팔레트·플릿의 "세션을 클릭한다"는 진입점이
@@ -281,11 +267,9 @@ export function switchTo(id) {
 export function revealSession(id) {
   if (!revealSessionPane(id)) openLayoutTab({ sessionId: id });
   document.dispatchEvent(new CustomEvent('vt:session-switch', { detail: { id } }));
-  setActive(id);
   getSession(id).term.focus();
   updateSessionPicker();
   saveLayoutNow();
-  saveWorkspace();
 }
 
 // 레일 세션 행과 모바일 세션 관리 시트가 같은 경로로 이름을 바꾼다.
@@ -323,7 +307,7 @@ export async function renameSession(id, rawName, previousNameOverride) {
     // (term/tab-worktree.js의 워크트리 라벨이 첫 소비자다).
     s.renamed = true;
     updateSessionPicker();
-    saveWorkspace();
+    saveLayoutNow();   // 칸의 tmux 이름이 바뀌었다 — 복원이 새 이름으로 찾게
     return true;
   } catch (_) {
     // 편집 중 DOM에 남은 값을 되돌린다 — 실패했는데 새 이름이 남아 있으면
@@ -390,7 +374,7 @@ export function moveTabByOffset(delta) {
   if (_desktopTabs()) return _moveHeaderTabByOffset(delta);
   const id = activeSessionId();
   if (!id) return;
-  if (moveSessionByOffset(id, delta)) saveWorkspace();
+  moveSessionByOffset(id, delta);
 }
 
 // S3: 탭 좌우 이동도 키맵 레지스트리 경유. 레지스트리가 document capture 단계에서
@@ -423,33 +407,17 @@ export async function removeSession(id) {
   if (window.visualViewport) {
     window.visualViewport.removeEventListener('resize', s.onResize);
   }
-  const wasActive = activeSessionId() === id;
   const wasRemote = !!s.remote;
   removeSessionRecord(id);
+  // 칸은 빈 칸으로 남긴다(2026-10-03). 다른 세션(remaining[0])을 끌어오던
+  // 대체 로직은 없앴다.
+  clearSessionFromLayout(id);
   // 원격 세션(N7/N39 3단계)의 PTY는 상대 호스트에 있다 — 여기 세션 id는 서버의
   // session_store에 아예 없으므로 DELETE를 보내면 404만 받는다. 프록시 소켓은
   // 위에서 닫았고, 그게 닫히면 상대가 자기 PTY를 정리한다.
   if (!wasRemote) await apiFetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' });
-  if (wasActive) {
-    const remaining = Object.keys(allSessions());
-    if (remaining.length > 0) {
-      switchTo(remaining[0]);
-    } else {
-      // 마지막 세션을 닫은 경우 — 빈 컨테이너만 남기지 않고 온보딩(빈 상태) 화면으로.
-      setActive(null);
-      // L3 1단계: 이 삭제된 세션이 여전히 트리(유일한 leaf)에 남아있으면
-      // 죽은 참조가 된다 — setPaneSession(null)이 그 leaf를 비우고,
-      // renderLayout()이 알아서 #terminal-container를 빈 상태로 다시 그린다
-      // (수동 innerHTML 클리어보다 이 경로 하나로 일원화).
-      setPaneSession(null);
-      // N35 §6 — 뷰어 페인이 열려 있으면 화면이 비어 있는 게 아니다. 온보딩을
-      // 띄우면 그 위를 덮어버린다(z-index:500).
-      const hasViewer = document.querySelector('.vt-pane-viewer');
-      if (!hasViewer && !document.getElementById('onboarding')) showOnboarding();
-    }
-  }
   updateSessionPicker();
-  saveWorkspace();
+  saveLayoutNow();
 }
 
 // F3(c): data-action 위임용 등록. guide.show는 그 함수를 소유한 guide.js가

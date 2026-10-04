@@ -403,28 +403,17 @@ function Rail(props: { deps: RailDeps }) {
 
   const activeId = createMemo(() => { sessionsVersion(); return (window as any).activeSessionId?.() ?? null; });
 
-  const openRow = async (e: MouseEvent, row: OtherRailRowInput) => {
+  // 2026-10-03(세션·뷰 규칙 "레일 클릭") — 열린 세션이면 그 뷰·칸으로 이동,
+  // 열리지 않았으면 기억된 닫힌 묶음 뷰를 통째로 다시 열거나 새 단독 뷰로 연다.
+  // 판정은 전부 term/session-actions.js `openSessionFromRail` 한 곳이다(모바일
+  // 세션 시트·Fleet도 같은 함수). ⌘/Ctrl 클릭으로 현재 뷰를 분할하던 동작은
+  // 없앴다 — 묶기는 드래그앤드롭만이다. 이동이 switchTo가 아니라
+  // revealSession인 이유(짝을 밀어내지 않는다)는 2026-09-21 수정 그대로다.
+  const openRow = async (_e: MouseEvent, row: OtherRailRowInput) => {
     const w = window as any;
-    const meta = e.metaKey || e.ctrlKey;
-    // ADR-29 B — 잠자는 세션을 클릭하면 깨운다(attach). 여는 것은 언제나
-    // 세션이라는 원칙이다. 아직 안 깨어난 세션은 탭 소속을 미리 알 수
-    // 없다(2026-09-18 후속, 그룹 재정의 — 탭 소속은 웹 세션 id로만 안다).
-    if (!row.awake) {
-      if (row.tmuxName) await w.attachTmux?.(row.tmuxName);
-      return;
-    }
-    const sid = actionSessionId(row);
-    if (!sid) return;
-    // ⌘클릭 분할은 "지금 보는 화면 옆에 놓기"라는 뜻이라 탭을 바꾸면 안
-    // 된다 — 그대로 splitActivePane.
-    if (meta) { w.splitActivePane?.('row', sid); return; }
-    // 2026-09-21(사용자 지적) — 예전엔 여기서 `openGroupTab`으로 탭까지만
-    // 옮긴 뒤 `switchTo`로 "보여주려" 했는데, switchTo는 실은 "지금 활성
-    // pane에 배정"이라 그 탭의 활성 pane이 **짝 세션의 칸**이면 짝을 그
-    // 칸에서 밀어냈다(그룹인데 하나만 열리는 것처럼 보인 원인). revealSession
-    // (term/session.js)이 탭·pane을 함께 찾아 트리를 건드리지 않고 그
-    // 자리로만 이동한다.
-    w.revealSession?.(sid);
+    const sid = row.awake ? actionSessionId(row) : null;
+    if (!sid && !row.tmuxName) return;
+    await w.vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName || null });
   };
 
   const contextRow = (e: MouseEvent, row: OtherRailRowInput) => {
@@ -504,17 +493,16 @@ function Rail(props: { deps: RailDeps }) {
         // 자체를 건드리지 않는다.
         { label: '지금 이 세션 맥에서 열기', run: () => w.vtOpenSessionOnMac?.(m.sessionId) },
         { label: '연결된 화면', run: () => w.vtShowClients?.(m.sessionId) },
-        // 2.1 D3 — "닫기"는 화면마다 다른 뜻이었다. 이 메뉴가 하는 건 웹
-        // 세션을 놓는 것뿐(tmux는 계속 산다)이라 "세션 놓기"로 불렀다.
-        // ADR-29 D — 레일이 이미 쓰는 잠·깸 어휘와 맞춰 "재우기"로 다시
-        // 부른다(동작은 그대로, term/session-actions.js의 vtDetachSession).
-        { label: '재우기', run: () => w.vtDetachSession?.(m.sessionId) },
+        // 2026-10-03(세션·뷰 규칙) — 「닫기」. 칸 ×·모바일 시트·Fleet과 같은
+        // 함수다(term/session-actions.js closeSession): 웹 attach만 놓고 칸은
+        // 빈 칸으로 남는다. tmux는 계속 산다.
+        { label: '닫기', run: () => w.vtCloseSession?.(m.sessionId) },
       );
     } else if (m.tmuxName) {
-      // ADR-29 B — 잠자는 행의 컨텍스트 메뉴: 웹 세션이 없으니 위 넷은 못
-      // 쓰지만(맥에서 열기·연결된 화면은 "지금 활성 세션"을 전제한다), 깨우기와
-      // 완전 종료는 tmux 이름만으로 된다.
-      items.push({ label: '깨우기', run: () => w.attachTmux?.(m.tmuxName) });
+      // 열리지 않은 행의 메뉴: 웹 세션이 없으니 위 넷은 못 쓰지만(맥에서
+      // 열기·연결된 화면은 열린 세션을 전제한다), 열기와 종료는 tmux 이름만으로
+      // 된다. 열기는 행 클릭과 같은 규칙이다.
+      items.push({ label: '열기', run: () => w.vtOpenSessionFromRail?.({ tmuxName: m.tmuxName }) });
     }
     if (m.tmuxName) {
       // ADR-29 B — 지금까지 tmux-panel.js 팝업에만 있던 완전 종료를 레일
@@ -781,7 +769,7 @@ function Rail(props: { deps: RailDeps }) {
                   onClick={() => toggleSessionGroup('sleeping')}
                 >
                   <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                  <span class="vt-wgrail-group-label">잠자는 중</span>
+                  <span class="vt-wgrail-group-label">열리지 않음</span>
                   <span class="vt-wgrail-group-count">{sleepingEntries().length}</span>
                 </button>
               </div>

@@ -48,7 +48,7 @@ export function openPanePicker(paneId) {
 
   panel.body.querySelector('.vt-pp-new').addEventListener('click', () => {
     setActivePane(paneId);
-    createSession();
+    createSession({ place: 'pane' });   // 사용자가 고른 이 빈 칸에 놓는다
     closePanel(PANEL_ID);
   });
 

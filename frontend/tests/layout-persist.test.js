@@ -171,7 +171,11 @@ test('복원 전에는 저장하지 않는다 — 빈 초기 트리로 정본을
   // 이 스냅샷을 읽는다. groupId/repoId(v3/v4 시절 탭 정체성)는 2026-09-18
   // 후속(그룹 재정의)에서 뜻을 잃어 더 이상 쓰지 않는다 — 탭 레코드에 아예
   // 없다.
-  assert.strictEqual(body.ui.layout.v, 4);
+  assert.strictEqual(body.ui.layout.v, 5);
+  // 2026-10-03 — 브라우저 탭별 사본도 같은 PUT에 실린다(서버가 탭 id별로 병합).
+  assert.deepStrictEqual(Object.keys(body.ui.layouts), [body.ui.layout.screen]);
+  assert.match(body.ui.layout.screen, /^[0-9a-f]{32}$/);
+  assert.deepStrictEqual(body.ui.layout.closed, []);
   assert.strictEqual(body.ui.layout.tree.t, 'split', '롤백용 v1 필드가 유지돼야 한다');
   assert.strictEqual(body.ui.layout.tabs.length, 1);
   assert.strictEqual(body.ui.layout.tabs[0].tree.t, 'split');
@@ -317,7 +321,9 @@ test('replaceTree — 잘못된 입력은 트리를 건드리지 않는다', asy
 });
 
 // ── S5 검증에서 발견한 결함: 빈 leaf + 살아있는 세션 ──────────────────────
-test('복원 — leaf가 비어 있는데 살아있는 세션이 있으면 그 자리에 채운다', async () => {
+// 2026-10-03(세션·뷰 규칙 불변식 3) — 예전엔 빈 leaf를 남는 살아있는 세션으로
+// 채웠다. 그건 사용자가 닫은 칸을 새로고침이 다시 채우는 일이라 없앴다.
+test('복원 — 빈 leaf는 살아있는 세션이 있어도 빈 칸으로 남는다', async () => {
   const { window, core, S, P } = await load();
   addLive(core, 'live-1', 'dev');
   window.localStorage.setItem('vt-layout-v1', JSON.stringify({
@@ -327,9 +333,7 @@ test('복원 — leaf가 비어 있는데 살아있는 세션이 있으면 그 �
 
   await P.restoreLayout();
 
-  // 이 보정이 없으면 탭에는 세션이 있는데 화면엔 "빈 pane"만 남아, 새로고침
-  // 직후 사용자에게는 "세션이 사라졌다"로 읽힌다(실브라우저에서 재현했다).
-  assert.strictEqual(S.getTree().session, 'live-1');
+  assert.strictEqual(S.getTree().session, null);
 });
 
 test('복원 — 이미 배정된 세션을 빈 leaf에 중복으로 넣지 않는다', async () => {
@@ -351,7 +355,7 @@ test('복원 — 이미 배정된 세션을 빈 leaf에 중복으로 넣지 않�
   assert.strictEqual(tree.b.session, null, '남는 세션이 없으면 빈 pane 그대로');
 });
 
-test('복원 — 빈 leaf가 여러 개면 세션 순서대로 앞에서부터 채운다', async () => {
+test('복원 — 빈 leaf가 여러 개여도 채우지 않는다', async () => {
   const { window, core, S, P } = await load();
   addLive(core, 'live-a', 'a');
   addLive(core, 'live-b', 'b');
@@ -367,7 +371,7 @@ test('복원 — 빈 leaf가 여러 개면 세션 순서대로 앞에서부터 �
   await P.restoreLayout();
 
   const tree = S.getTree();
-  assert.deepEqual([tree.a.session, tree.b.session], ['live-a', 'live-b']);
+  assert.deepEqual([tree.a.session, tree.b.session], [null, null]);
 });
 
 // ── C3(2.1.2) — 오프라인 호스트 레이아웃 복원 ────────────────────────────────
@@ -573,4 +577,71 @@ test('패널 칸과 터미널 칸이 한 트리에 섞여도 각자 복원된다
   assert.strictEqual(back.a.session, 'web-1');
   assert.strictEqual(back.b.kind, 'panel');
   assert.strictEqual(back.b.panel, 'files');
+});
+
+// ── 2026-10-03 세션·뷰 규칙 2단계 — 브라우저 탭별 저장 + 닫힌 묶음 기억 ──────
+
+test('v5 — 이 브라우저 탭의 저장본이 가장 최근 저장본(다른 탭)보다 우선한다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-a', 'a');
+  addLive(core, 'live-b', 'b');
+  const screen = 'a'.repeat(32);
+  window.sessionStorage.setItem('vt.screenId', screen);   // 이 브라우저 탭의 id
+  window.localStorage.setItem(`vt-layout-v1.${screen}`, JSON.stringify({
+    v: 5, savedAt: 100, screen, activeTab: 't1', closed: [],
+    tabs: [{ id: 't1', tree: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'a' } } }],
+  }));
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 5, savedAt: 999, screen: 'f'.repeat(32), activeTab: 't9', closed: [],
+    tabs: [{ id: 't9', tree: { t: 'leaf', id: 'p9', session: { id: 'y', tmux: 'b' } } }],
+  }));
+  await P.restoreLayout();
+  assert.strictEqual(S.getActiveTabId(), 't1');
+  assert.strictEqual(S.getTree().session, 'live-a');
+});
+
+test('v5 — 새 브라우저 탭(저장본 없음)은 가장 최근 저장본을 복사해 시작한다', async () => {
+  const { window, core, S, P } = await load();
+  addLive(core, 'live-b', 'b');
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 5, savedAt: 999, screen: 'f'.repeat(32), activeTab: 't9', closed: [],
+    tabs: [{ id: 't9', tree: { t: 'leaf', id: 'p9', session: { id: 'y', tmux: 'b' } } }],
+  }));
+  await P.restoreLayout();
+  assert.strictEqual(S.getActiveTabId(), 't9');
+  assert.strictEqual(S.getTree().session, 'live-b');
+});
+
+test('v5 — 기억된 닫힌 묶음 뷰가 저장·복원된다', async () => {
+  const { window, S, P, calls } = await load();
+  const closedTree = {
+    t: 'split', id: 'sx', dir: 'row', ratio: 0.5,
+    a: { t: 'leaf', id: 'pa', session: { id: 'old-a', tmux: 'a' } },
+    b: { t: 'leaf', id: 'pb', session: { id: 'old-b', tmux: 'b' } },
+  };
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 5, savedAt: 1, activeTab: null, tabs: [],
+    closed: [{ id: 'tab-g', label: '묶음', tree: closedTree }],
+  }));
+  await P.restoreLayout();
+  assert.ok(S.isLayoutEmpty(), '열린 뷰 0개 = 뷰 없음');
+  assert.strictEqual(S.findClosedViewByTmux('b').id, 'tab-g');
+  P.saveLayoutNow();
+  const put = calls.filter((c) => c.opts && c.opts.method === 'PUT').pop();
+  const body = JSON.parse(put.opts.body);
+  assert.strictEqual(body.ui.layout.closed.length, 1);
+  assert.strictEqual(body.ui.layout.closed[0].label, '묶음');
+});
+
+test('snapshotSessionInfos — 열린 뷰의 세션 칸만 돌려준다(닫힌 묶음·뷰어·패널 제외)', async () => {
+  const { P } = await load();
+  const infos = P.snapshotSessionInfos({
+    v: 5, tabs: [{ id: 't', tree: {
+      t: 'split', id: 's', dir: 'row', ratio: 0.5,
+      a: { t: 'leaf', id: 'p1', session: { id: 'w1', tmux: 'a' } },
+      b: { t: 'leaf', id: 'p2', session: null, kind: 'viewer', file: '/x' },
+    } }],
+    closed: [{ id: 'g', tree: { t: 'leaf', id: 'p3', session: { id: 'w3', tmux: 'c' } } }],
+  });
+  assert.deepEqual([...infos].map((i) => i.tmux), ['a']);
 });

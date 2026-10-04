@@ -9,11 +9,11 @@
 // 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
 // 닫기·이름 변경은 레일 세션 행으로, 에이전트 마크·상태 dot·읽지 않음은
 // 이 파일의 워크트리 탭으로.
-import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, setTabLabel, moveLayoutTab, tabDisplayLabel, onLayoutChange } from './store.js';
+import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, setTabLabel, moveLayoutTab, tabDisplayLabel, onLayoutChange, isLayoutEmpty } from './store.js';
 import { collectSessions } from './tree.js';
-import { allSessions } from '../core/store.js';
+import { allSessions, activeSessionId, getSession } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
-import { sleepTab } from '../term/session-actions.js';
+import { closeView } from '../term/session-actions.js';
 import { icon, setAgentMark } from '../ui/icons.js';
 import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
 import { STATE_LABEL } from '../design/state-classes.js';
@@ -180,12 +180,15 @@ function render() {
   if (!host) return;
   const tabs = getTabsWithTrees();
   const activeId = getActiveTabId();
-  const key = JSON.stringify([activeId, tabs.map((t) => [t.id, tabDisplayLabel(t)])]);
-  if (key === _renderedKey && host.childElementCount === tabs.length) { paintTabs(); return; }
+  const empty = isLayoutEmpty();
+  const key = JSON.stringify([activeId, empty, tabs.map((t) => [t.id, tabDisplayLabel(t)])]);
+  if (key === _renderedKey && host.childElementCount === (empty ? 0 : tabs.length)) { paintTabs(); return; }
   _renderedKey = key;
   // 2026-09-29(사용자 결정) — 탭이 하나여도 바를 그린다. 예전엔 하나뿐이면
   // 숨겼는데, 세션이 하나인 맥으로 전환하면 탭 줄이 통째로 사라져 고장처럼 보였다.
-  host.hidden = tabs.length === 0;
+  // 뷰 없음(isLayoutEmpty)이면 그리지 않는다.
+  host.hidden = tabs.length === 0 || empty;
+  if (empty) { host.replaceChildren(); return; }
   host.replaceChildren();
   _wireScroll(host);
 
@@ -213,26 +216,32 @@ function render() {
     marks.className = 'vt-wtab-marks';
     el.appendChild(marks);
 
-    if (tabs.length > 1) {
+    // 뷰 × — 하나여도 그린다. tmux는 안 죽인다(2026-10-03).
+    {
       const x = document.createElement('button');
       x.type = 'button';
       x.className = 'vt-icon-btn xs vt-wtab-close';
       x.innerHTML = icon('x', 11);
-      x.setAttribute('aria-label', `${tabDisplayLabel(t)} 재우기`);
-      x.setAttribute('data-tip', '재우기');
-      x.setAttribute('data-tip-sub', 'tmux는 계속 삽니다 · 레일에서 다시 깨울 수 있습니다');
+      x.setAttribute('aria-label', `${tabDisplayLabel(t)} 닫기`);
+      x.setAttribute('data-tip', '뷰 닫기');
+      x.setAttribute('data-tip-sub', collectSessions(t.tree).length >= 2
+        ? '세션은 계속 돕니다 · 묶음 구성은 기억해 두고 레일에서 다시 열 수 있습니다'
+        : '세션은 계속 돕니다 · 레일에서 다시 열 수 있습니다');
       x.setAttribute('data-tip-side', 'bottom');
-      // **tmux는 죽이지 않는다** — 이 탭에 있던 세션들의 웹 세션만 놓는다
-      // (ADR-29 D: 탭 = 그룹이라, 탭을 닫는 것은 그 그룹 전체를 재우는
-      // 것과 같다). 완전 종료는 별도 동작(레일 세션 메뉴)이다.
       x.addEventListener('click', (e) => {
         e.stopPropagation();
-        sleepTab(t.id);
+        closeView(t.id);
       });
       el.appendChild(x);
     }
 
-    el.addEventListener('click', () => { switchLayoutTab(t.id); saveLayoutNow(); });
+    // 전환 + 왼쪽 위 칸의 터미널에 포커스(store.js switchLayoutTab).
+    el.addEventListener('click', () => {
+      if (!switchLayoutTab(t.id)) return;
+      saveLayoutNow();
+      const s = getSession(activeSessionId());
+      if (s && s.term) s.term.focus();
+    });
     _wireDrag(el, t, host);
     host.appendChild(el);
     // 지금 활성 탭이면 넘친 목록 밖에 숨어 있을 수 있으니 보이는 자리로

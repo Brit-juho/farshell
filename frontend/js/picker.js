@@ -9,8 +9,8 @@ import { activeSession, activeSessionId, allSessions, sessionDisplayName, getSes
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
-import { revealSession, renameSession, attachTmux } from './term/session.js';
-import { detachSession, confirmAndKillSession } from './term/session-actions.js';
+import { revealSession, renameSession } from './term/session.js';
+import { closeSession, openSessionFromRail, confirmAndKillSession } from './term/session-actions.js';
 import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
@@ -85,10 +85,10 @@ function closeSessionManager() {
 }
 
 // ADR-29 E — tmux 목록 팝업(옛 term/tmux-panel.js의 showTmuxSessions)을
-// 없애면서, 그게 하던 일(잠든 tmux 세션 보기 + 깨우기 + 완전 종료)을 이
-// 시트가 직접 흡수한다. `/api/tmux/sessions`는 웹 세션이 없는(잠든) 것까지
-// 포함해 내려주므로, 이미 그려진 웹 세션의 tmux 이름과 겹치는 것만 걸러내면
-// "잠든 것"만 남는다 — 레일의 awake/asleep 판정(ADR-29 B)과 같은 생각이다.
+// 없애면서, 그게 하던 일(열리지 않은 tmux 세션 보기 + 열기 + 종료)을 이
+// 시트가 직접 흡수한다. `/api/tmux/sessions`는 이 브라우저 탭에 열리지 않은
+// 것까지 포함해 내려주므로, 이미 열린 세션의 tmux 이름과 겹치는 것만 걸러내면
+// "열리지 않은 것"만 남는다 — 레일의 판정과 같은 생각이다.
 async function fetchTmuxSessions() {
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
@@ -128,8 +128,9 @@ async function renderSessionManager(backdrop) {
       if (await renameSession(id, next)) renderSessionManager(backdrop);
     };
     const close = document.createElement('button');
-    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 재우기`);
-    close.onclick = async () => { await detachSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
+    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 닫기`);
+    // 닫기 — 레일·칸 ×와 같은 함수(term/session-actions.js closeSession).
+    close.onclick = async () => { await closeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
     row.append(select, rename, close);
     // tmux 세션은 완전 종료도 여기서 — 지금까지 모바일에서 이 동작에 닿는
     // 유일한 길이 tmux 목록 팝업이었다(ADR-29 E, 그 팝업을 없앴다).
@@ -151,8 +152,9 @@ async function renderSessionManager(backdrop) {
     row.className = 'vt-session-row sleeping';
     const wake = document.createElement('button');
     wake.type = 'button'; wake.className = 'vt-name-btn vt-session-select'; wake.textContent = s.name;
-    wake.title = '깨워서 열기';
-    wake.onclick = async () => { closeSessionManager(); await attachTmux(s.name); };
+    wake.title = '열기';
+    // 레일 클릭과 같은 규칙 — 기억된 묶음 뷰가 있으면 통째로, 없으면 새 단독 뷰.
+    wake.onclick = async () => { closeSessionManager(); await openSessionFromRail({ tmuxName: s.name }); };
     const kill = document.createElement('button');
     kill.type = 'button'; kill.className = 'vt-icon-btn xl danger vt-session-action'; kill.innerHTML = icon('trash-2', 16);
     kill.setAttribute('aria-label', `${s.name} 완전 종료`);

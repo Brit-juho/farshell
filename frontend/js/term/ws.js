@@ -157,6 +157,11 @@ export function startSessionSocket(id, term) {
       updateConnStatus(id, false);
       const code = ev && ev.code;
       if (TERMINAL_CLOSE_CODES.has(code)) {                  // 영구 실패 → 재연결 안 함
+        // 4004 = 다른 곳에서 종료됨 → 닫기와 같은 경로로 칸을 비운다(2026-10-03).
+        if (code === 4004 && typeof window.vtCloseSession === 'function') {
+          window.vtCloseSession(id);
+          return;
+        }
         const why = code === 4001 ? '인증 실패'
           : code === 4005 ? '다른 화면에서 이 화면을 끊음'
             : '세션이 서버에 없음(종료됨)';

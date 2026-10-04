@@ -11,7 +11,8 @@
 // 무관하므로(핸들러는 키를 받은 순간 조회된다) 이 파일이 늦게 로드돼도 된다.
 import { register as registerKey } from '../core/keymap.js';
 import { getBinding, isNativePasteShortcut } from '../core/keymap.js';
-import { splitActivePane, closePane, getActivePaneId, evenRatios } from '../layout/store.js';
+import { splitActivePane, getActivePaneId, evenRatios } from '../layout/store.js';
+import { closePaneAction } from './session-actions.js';
 import { canSplit } from '../layout/panes.js';
 import { activeSessionId } from '../core/store.js';
 import { focusedTerminalSessionId } from './clipboard.js';
@@ -19,7 +20,8 @@ import { pasteFromClipboard, queueNativePasteFallback } from './clipboard.js';
 
 registerKey('splitRight', () => { if (canSplit()) splitActivePane('row'); });
 registerKey('splitDown', () => { if (canSplit()) splitActivePane('col'); });
-registerKey('paneClose', () => closePane(getActivePaneId()));
+// 칸 ×와 같은 동작(2026-10-03 세션·뷰 규칙 — 닫기 경로 통일).
+registerKey('paneClose', () => closePaneAction(getActivePaneId()));
 registerKey('paneEven', () => evenRatios());
 
 // 기본 Ctrl+Shift+V는 브라우저 paste 이벤트를 먼저 기다린다. 이벤트가 없는
