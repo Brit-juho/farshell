@@ -5,7 +5,7 @@
 export { mountSmoke } from './smoke.js';
 export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
 export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
-export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, mostUrgentStatus, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed, buildSessionSections, buildSleepingEntries } from '../../js/shell/rail-data.js';
+export { buildRailSections, formatRelativeTime, statusSentence, GROUP_LABEL, COLLAPSIBLE_GROUPS, groupCollapseKey, GROUP_COLLAPSED_DEFAULT, defaultRailCollapsed, buildSessionSections, buildSleepingEntries } from '../../js/shell/rail-data.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,

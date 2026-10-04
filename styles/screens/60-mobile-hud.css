@@ -241,7 +241,6 @@
 }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-srow`가 맡는다. 폰은 .lg(이름이 크고 행이 높다) */
   /* 2.1.6 — 상태 다섯 색은 components.css의 `.vt-srow-mark`가 맡는다. */
-  .vt-fleet-bar.tone-error   { background:var(--color-st-error); }
   .vt-fleet-bar.tone-done    { background:var(--color-st-done); }
   .vt-fleet-name {
   flex:1;

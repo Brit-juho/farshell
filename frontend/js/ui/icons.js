@@ -5,6 +5,8 @@
 // 이 map 하나로 충분하다 — 새 아이콘이 필요하면 여기 한 줄만 추가한다.
 // path는 Lucide(ISC 라이선스, 기존에 이미 폰트로 번들하던 것과 같은 세트)의
 // 24x24 stroke 좌표를 그대로 옮겼다.
+import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
+
 const PATHS = {
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
@@ -41,6 +43,12 @@ const PATHS = {
   pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
   'alert-triangle': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  // 에이전트 상태 4종(stateIcon). 색에만 의존하지 않도록 **모양이 서로 다르다**:
+  // 빈 원 / 열린 호(CSS가 돌린다) / 물음표 말풍선(Lucide message-circle-question) / 체크 원.
+  'state-idle': '<circle cx="12" cy="12" r="8"/>',
+  'state-working': '<path d="M12 4a8 8 0 1 0 8 8"/>',
+  'state-waiting': '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  'state-done': '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>',
   // 방향은 이 하나를 CSS로 돌려 만든다(chevron-up/left/right를 따로 두지
   // 않는다) — 여는/접는 토글에서 회전이 상태 전이를 그대로 보여준다.
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
@@ -150,6 +158,17 @@ export function icon(name, size, strokeWidth) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" `
     + `fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" `
     + `aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+// 상태 아이콘 — 유휴(빈 원)·작업 중(회전 호)·입력 대기(물음표 말풍선)·완료(체크).
+// 색·회전은 CSS가 data-state로 맡는다(components.css `.vt-state-icon`). 읽지 않음은
+// `.unseen` 링(아이콘 둘레) — 상태 점의 `.status-dot.unseen`과 같은 방식이다.
+// 알 수 없는 상태(error 등)는 idle로 접는다.
+export function stateIcon(status, size = 14, unseen = false) {
+  const s = normalizeState(status);
+  const label = STATE_LABEL[s] + (unseen ? ' · 아직 확인 안 함' : '');
+  return `<span class="vt-state-icon${unseen ? ' unseen' : ''}" data-state="${s}" role="img" aria-label="${label}">`
+    + `${icon('state-' + s, size, 1.75)}</span>`;
 }
 
 // 정적 HTML(index.html)의 `<svg data-icon="이름">` 빈 자리를 채운다. 크기·

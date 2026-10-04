@@ -32,7 +32,6 @@
   .status-dot[data-state="working"] { background: var(--color-st-working); }
   .status-dot[data-state="waiting"] { background: var(--color-st-waiting); }
   .status-dot[data-state="done"]    { background: var(--color-st-done); }
-  .status-dot[data-state="error"]   { background: var(--color-st-error); }
 
   /* waiting만 breathing 애니메이션 — 레퍼런스 만장일치 결론: "가장 높은
    * 가치의 상태는 실행중도 완료도 아닌 당신의 입력을 기다리는 중"이므로 그
@@ -55,6 +54,26 @@
       outline: 2px solid var(--color-st-waiting);
       outline-offset: 2px;
     }
+  }
+
+  /* ── 상태 아이콘 (ui/icons.js stateIcon) ───────────────────────────────
+   * 점(.status-dot)과 별개의 표면이다: 모양이 상태마다 달라서(빈 원 / 회전 호 /
+   * 물음표 말풍선 / 체크) 색을 못 보는 사람도 읽는다. 읽지 않음 = 둘레 링. */
+  .vt-state-icon {
+    display: inline-flex;
+    flex: none;
+    border-radius: var(--radius-full);
+    color: var(--color-st-idle);
+  }
+  .vt-state-icon[data-state="working"] { color: var(--color-st-working); }
+  .vt-state-icon[data-state="waiting"] { color: var(--color-st-waiting); }
+  .vt-state-icon[data-state="done"]    { color: var(--color-st-done); }
+  .vt-state-icon.unseen { box-shadow: 0 0 0 2px var(--bar), 0 0 0 3.5px currentColor; }
+  @keyframes vt-state-spin { to { transform: rotate(360deg); } }
+  .vt-state-icon[data-state="working"] > svg { animation: vt-state-spin 1.1s linear infinite; }
+  .vt-state-icon[data-state="waiting"] > svg { animation: vt-status-breathe 1.8s var(--ease-out-quint) infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .vt-state-icon > svg { animation: none !important; }
   }
 
   /* ── 버튼 ──────────────────────────────────────────────────────────────
@@ -215,7 +234,6 @@
   .vt-badge[data-state="working"] { border-color: var(--color-st-working); color: var(--color-st-working); }
   .vt-badge[data-state="waiting"] { border-color: var(--color-st-waiting); color: var(--color-st-waiting); }
   .vt-badge[data-state="done"]    { border-color: var(--color-st-done);    color: var(--color-st-done); }
-  .vt-badge[data-state="error"]   { border-color: var(--color-st-error);   color: var(--color-st-error); }
   .vt-badge.accent { border-color: var(--color-acc-dim); color: var(--color-acc); }
 
   /* ── 입력 ──────────────────────────────────────────────────────────────
@@ -470,7 +488,6 @@
   .vt-srow-mark { background: var(--color-st-idle); }
   .vt-srow-mark.tone-waiting { background: var(--color-st-waiting); }
   .vt-srow-mark.tone-working { background: var(--color-st-working); }
-  .vt-srow-mark.tone-error   { background: var(--color-st-error); }
   .vt-srow-mark.tone-done    { background: var(--color-st-done); }
 
   .vt-srow-agent { display: inline-flex; flex: none; color: var(--color-muted); }

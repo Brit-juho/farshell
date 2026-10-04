@@ -91,11 +91,15 @@ follows the layout and is no longer persisted on its own.
 - **Thick segment = changed and not yet seen; thin = seen.** Idle segments always show (grey).
 - Hover tooltip lists "name · state" per session, since colour alone is not enough.
 
-### States (rail, mobile)
+### States (rail, mobile) — shared parts implemented 2026-10-04; rail/mobile surfaces adopt the icons in the Rail step
 
-- Four states — idle, working, waiting, done — each with its own **SVG shape** as well as colour. `error` is
-  removed from the UI until something can actually enter it.
-- **Unseen** = any state change the user has not looked at yet (not only done). Shown as a ring around the icon.
+- Four states — idle, working, waiting, done — each with its own **SVG shape** as well as colour (implemented:
+  `stateIcon` in `ui/icons.js`; surfaces still draw dots until the Rail step). `error` is removed from the UI until
+  something can actually enter it (implemented; unknown values fold to idle). Representative state
+  `waiting > done(unseen) > working > done(seen) = idle` is one function, `representativeState` (implemented).
+- **Unseen** = any state change the user has not looked at yet (not only done). Shown as a ring around the icon
+  (implemented in `agent/state.js`; "looking" = focused pane of the active view with the window visible, injected by
+  `agent/paint.js`; the first snapshot after load flags only `done`).
 - `waiting` shows a fixed keyword instead of the raw question text: 승인 요청 / 선택 요청 / 계획 확인 / 질문
   (fallback). Measured 2026-10-03 (Claude Code 2.1.287, codex 0.158.0, agy 1.1.23, isolated tmux socket):
 

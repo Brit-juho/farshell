@@ -15,8 +15,8 @@ import { allSessions, activeSessionId, getSession } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
 import { closeView } from '../term/session-actions.js';
 import { icon, setAgentMark } from '../ui/icons.js';
-import { getStatus, isUnseen, applyStatusDot, onStatusChange, URGENCY } from '../agent/state.js';
-import { STATE_LABEL } from '../design/state-classes.js';
+import { getStatus, isUnseen, applyStatusDot, onStatusChange } from '../agent/state.js';
+import { stateLabel, representativeState } from '../design/state-classes.js';
 
 const HOST = 'vt-wtabs';
 
@@ -43,14 +43,6 @@ function tabSessionNames(tab) {
   return out;
 }
 
-export function mostUrgent(statuses) {
-  let best = 'idle';
-  for (const st of statuses) {
-    if ((URGENCY[st] ?? 9) < (URGENCY[best] ?? 9)) best = st;
-  }
-  return best;
-}
-
 let _agents = {};   // tmux 세션 이름 → { agent, label } (agent/status.js가 준다)
 
 /** agent/badges.js가 스냅샷을 받을 때마다 알려준다 — 같은 응답을 두 번 조회하지 않는다. */
@@ -67,7 +59,8 @@ function paintTabs() {
     const tab = byId.get(el.dataset.tabId);
     if (!tab) continue;
     const names = tabSessionNames(tab);
-    const status = mostUrgent(names.map((n) => getStatus(n)));
+    // 대표 상태 — 레일·Fleet과 같은 규칙(design/state-classes.js representativeState).
+    const rep = representativeState(names.map((n) => ({ status: getStatus(n), unseen: isUnseen(n) })));
 
     // 에이전트 마크 — 이 탭에서 돌고 있는 CLI. 여럿이면 첫 번째만(마크는
     // "무엇이 돌고 있나"의 힌트이지 목록이 아니다. 목록은 레일이 보여준다).
@@ -83,19 +76,18 @@ function paintTabs() {
     // 2026-09-30 — 「읽지 않음」을 이 dot 하나에 합쳤다. 예전엔 옆에 같은 색
     // (--info = --color-st-done) 점을 하나 더 그려서, 끝났는데 안 본 탭에는
     // 파란 점이 두 개 떴다가 보면 하나로 줄었다(사용자: "원이 2개씩, 오락가락").
-    // 이제 안 본 완료는 dot 둘레의 링(.unseen)으로만 말한다 — 자리는 늘 하나다.
+    // 이제 안 본 변화는 dot 둘레의 링(.unseen)으로만 말한다 — 자리는 늘 하나다.
+    // 읽지 않음이 어떤 상태로든 생길 수 있게 되면서(agent/state.js), 링만 있고
+    // 상태는 idle인 탭도 회색 dot에 링으로 그린다.
     const dotHost = el.querySelector('.vt-wtab-marks');
     if (dotHost) {
-      const unseen = names.some((n) => isUnseen(n));
-      // 안 본 완료가 남았는데 상태가 idle로 내려갔으면 done으로 그린다 — 링만
-      // 따로 띄울 자리가 없으니 "확인할 게 있다"를 잃지 않게.
-      const shown = (!status || status === 'idle') && unseen ? 'done' : status;
-      if (!shown || shown === 'idle') {
+      const { status, unseen } = rep;
+      if (status === 'idle' && !unseen) {
         dotHost.querySelector(':scope > .status-dot')?.remove();
       } else {
-        const dot = applyStatusDot(dotHost, shown);
+        const dot = applyStatusDot(dotHost, status);
         dot.classList.toggle('unseen', unseen);
-        const label = (STATE_LABEL[shown] || shown) + (unseen ? ' · 아직 확인 안 함' : '');
+        const label = stateLabel(status) + (unseen ? ' · 아직 확인 안 함' : '');
         dot.setAttribute('data-tip', label);
         dot.setAttribute('aria-label', label);
       }

@@ -9,6 +9,7 @@
 // 그룹핑·정렬·문장 로직은 status/since/tool만 보므로 두 모양 모두에 그대로
 // 재사용된다 — Fleet.tsx의 계약(정확히 RailRowInput 모양)을 바꾸지 않는다.
 import type { AgentState } from '../core/types.js';
+import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 
 export type RailGroup = 'attention' | 'working' | 'idle';
 
@@ -74,7 +75,7 @@ const GROUP_LABEL: Record<RailGroup, string> = {
 };
 export { GROUP_LABEL };
 
-// §2 — 접을 수 있는 그룹. `attention`은 여기 없다: 승인 대기가 접힌 채 숨으면
+// §2 — 접을 수 있는 그룹. `attention`은 여기 없다: 입력 대기가 접힌 채 숨으면
 // 그 그룹이 존재하는 이유가 사라진다(접기 버튼 자체를 안 그린다).
 export const COLLAPSIBLE_GROUPS: RailGroup[] = ['working', 'idle'];
 export function groupCollapseKey(group: RailGroup): string {
@@ -97,7 +98,7 @@ export const GROUP_COLLAPSED_DEFAULT: Record<string, boolean> = {
   idle: true,
 };
 
-// 10-shell-layout.md §5: "그룹 순서 고정: 개입 필요(waiting·error) →
+// 10-shell-layout.md §5: "그룹 순서 고정: 개입 필요(waiting) →
 // 작업 중(working) → 유휴(idle·done)".
 //
 // ⚠ 2026-09-18(98 §6-1) — **`done`을 「작업 중」으로 옮겼다.** 10 §5의 원래
@@ -105,24 +106,14 @@ export const GROUP_COLLAPSED_DEFAULT: Record<string, boolean> = {
 // 「열려 있지 않음」이 되면서 완료된 세션이 그 이름에 안 맞게 됐다 — 완료는
 // 열려 있는 세션이고, 오히려 결과를 보러 가야 하는 쪽에 가깝다.
 function groupOf(status: AgentState): RailGroup {
-  if (status === 'waiting' || status === 'error') return 'attention';
-  if (status === 'working' || status === 'done') return 'working';
+  const s = normalizeState(status);   // error 등 알 수 없는 값은 idle
+  if (s === 'waiting') return 'attention';
+  if (s === 'working' || s === 'done') return 'working';
   return 'idle';
 }
 
-// 30-worktree.md §4: "상태는 sessions 중 가장 '시급한' 것(waiting > error >
-// working > done > idle)". 워크트리 행이 여러 세션을 대표할 때 쓴다. 세션이
-// 하나도 없으면(흐리게 표시되는 행) 'idle'로 취급한다 — groupOf가 idle을
-// 유휴로 보내는 것과 같은 결이다.
-const URGENCY: AgentState[] = ['waiting', 'error', 'working', 'done', 'idle'];
-export function mostUrgentStatus(statuses: AgentState[]): AgentState {
-  if (statuses.length === 0) return 'idle';
-  let best = statuses[0];
-  for (const s of statuses) {
-    if (URGENCY.indexOf(s) < URGENCY.indexOf(best)) best = s;
-  }
-  return best;
-}
+// 여러 세션을 대표하는 상태(waiting > done(읽지 않음) > working > done(확인함) = idle)는
+// design/state-classes.js의 representativeState 하나다 — 탭·레일·Fleet이 같이 쓴다.
 
 export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.now()): string {
   if (sinceEpochSec == null) return '';
@@ -138,10 +129,9 @@ export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.no
 export function statusSentence(status: AgentState, since: number | null, tool: string | null, nowMs = Date.now()): string {
   const rel = formatRelativeTime(since, nowMs);
   switch (status) {
-    case 'waiting': return rel ? `승인 대기 · ${rel}` : '승인 대기';
-    case 'working': return tool ? `${tool} 실행 · ${rel}` : (rel ? `작업 중 · ${rel}` : '작업 중');
-    case 'error': return '에러';
-    case 'done': return '완료';
+    case 'waiting': return rel ? `${STATE_LABEL.waiting} · ${rel}` : STATE_LABEL.waiting;
+    case 'working': return tool ? `${tool} 실행 · ${rel}` : (rel ? `${STATE_LABEL.working} · ${rel}` : STATE_LABEL.working);
+    case 'done': return STATE_LABEL.done;
     // idle은 **그룹 헤더가 이미 「유휴」라고 말한다**(Rail.tsx의 vt-wgrail-group-head,
     // Fleet.tsx의 vt-fleet-group-head는 개수까지 붙인다). 행마다 또 "유휴"를
     // 쓰면 목록 전체가 같은 단어로 덮여 이름을 훑는 눈을 방해한다 — 실제로
@@ -242,7 +232,7 @@ export type DesktopRailRowInput = OtherRailRowInput;
 // ADR-29 B — 세션 행을 그룹 섹션으로 묶는다. buildRailSections(위)와는 다른
 // 축이다: 그건 "얼마나 급한가"로 3버킷, 이건 "누구 것인가"로 N버킷 + 「개입
 // 필요」 고정 뷰 하나. 같은 세션이 「개입 필요」와 자기 그룹 양쪽에 다 나온다
-// — 그룹 안에 접혀 승인 대기가 묻히면 안 된다(최종 설계안 §4).
+// — 그룹 안에 접혀 입력 대기가 묻히면 안 된다(최종 설계안 §4).
 
 export interface SessionSectionOut {
   /** React/Solid key + 접기 상태 키로 쓴다. attention='attention',
@@ -278,7 +268,7 @@ export function buildSessionSections(
 
   const sections: SessionSectionOut[] = [];
 
-  const attentionRows = withSentence.filter((r) => r.status === 'waiting' || r.status === 'error');
+  const attentionRows = withSentence.filter((r) => normalizeState(r.status) === 'waiting');
   if (attentionRows.length) {
     sections.push({ key: 'attention', kind: 'attention', groupId: null, label: '개입 필요',
       rows: [...attentionRows].sort(byName) });

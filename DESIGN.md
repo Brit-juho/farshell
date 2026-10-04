@@ -94,7 +94,8 @@ steps are the 20%, and the accent is the 10%.
 - Animation is 120~200ms, subtle, and purposeful — feedback, state change, or
   spatial sense only (`--dur-fast`/`--dur-base`, `--ease-out-quint`).
 - **Only one thing moves per screen.** Of the status dots, only `waiting`
-  breathes — if every dot pulses on a screen full of sessions (rail, fleet
+  breathes (the state *icons* of §5 add the `working` spinner arc and the same
+  `waiting` breathing — both freeze under `prefers-reduced-motion`) — if every dot pulses on a screen full of sessions (rail, fleet
   home), nothing stands out.
 - Under `prefers-reduced-motion`, animation/transition is globally disabled
   and `waiting` falls back to an outline instead of a pulse.
@@ -385,10 +386,10 @@ connected-screens icon; it doesn't touch the tabs themselves).
 
 2.1.0 has no worktree model yet (that's 2.1.1's job), so **a session is drawn
 in the worktree row's place** — one session, one row. A row is: a left 3px
-**status bar** (`--color-st-*` tone — idle/working/waiting/done/error, same
+**status bar** (`--color-st-*` tone — idle/working/waiting/done, same
 colors as §5) · agent mark · name · a diff badge on the right (from `GET
 /api/git/status` keyed on the session's cwd, cached 60s) · a second-line
-status sentence. Group order is fixed: **needs attention** (waiting, error)
+status sentence. Group order is fixed: **needs attention** (waiting)
 → **working** → **idle** (idle, done), most-recently-active first within a
 group. Clicking a row focuses that session in the active pane. The rail's
 width resizer spans 240~480px. Collapsed (48px), only the mark and the
@@ -524,8 +525,10 @@ WORKING, WAITING, DONE, ERROR)`. Only the first 4 actually have an entry path
 — `error` is marked in the same file as *"reserved — no entry path"*. The
 color token (`--color-st-error`) and the sort priority already have a spot
 reserved. So "4 states" means **the states currently observable**, while
-every consumer (tabs, pane header, worktree rail, fleet home, favicon, app
-icon badge) must still handle all 5.
+the **frontend draws 4**: `error` is gone from the UI (no colour, branch, sentence or
+group) and any unknown value folds to `idle` (`normalizeState`,
+`frontend/js/design/state-classes.js`). The `--color-st-error` token stays — it is
+the danger/failure colour for buttons and toasts.
 
 - The component contract is one thing: `.status-dot[data-state="..."]`
   (`styles/layers/components.css`). Color comes from `--color-st-*`.
@@ -534,6 +537,20 @@ icon badge) must still handle all 5.
 - The `working` indicator on a card/tab/rail row animates only a **single
   small dot**, never the whole element (`opacity`/`transform` are
   compositor-only, so there's no repaint).
+- **One definition of labels and aggregation**, `design/state-classes.js`: labels
+  are 유휴 / 작업 중 / **입력 대기** / 완료 (waiting reads 입력 대기 everywhere — the
+  rail's old 승인 대기 is gone). A tab or group is represented by one state with the
+  priority `waiting > done(unseen) > working > done(seen) = idle`
+  (`representativeState`, shared by the tab bar, favicon and rail). Among entries of
+  one tmux session the server's `_URGENCY` order decides.
+- **Unseen** = the state changed and the user has not looked at that session yet — any
+  state, not only `done`. Drawn as a 2px-gap ring around the dot (`.status-dot.unseen`)
+  or the icon (`.vt-state-icon.unseen`). "Looking" = the session is the focused pane of
+  the active view and the window is visible (`document.visibilityState`).
+- **State icons** (`ui/icons.js` `stateIcon`, stroke 1.75, no emoji or Unicode check
+  marks): idle = empty circle, working = open arc that rotates, waiting = speech bubble
+  with a question mark, done = check in a circle. Shape carries the state, not just
+  colour. The rail rows adopt them in step 5; surfaces still draw `.status-dot` today.
 - Without the Claude Code hooks (`fsh hooks install`), this value never
   arrives at all — `fsh doctor` and Settings → About surface the gap.
 

@@ -112,10 +112,16 @@ test('sortByUrgency — waiting > done > working > idle', async () => {
   assert.deepEqual(S.sortByUrgency(names, (n) => n), ['q', 'd', 'w', 'i']);
 });
 
-test('URGENCY 순서가 서버(_URGENCY)와 같다', async () => {
+test('URGENCY 순서가 서버(_URGENCY)와 같다 — 서버 파일을 직접 읽어 대조한다', async () => {
   const { S } = await load();
-  // 서버 agent_status._URGENCY = {waiting:0, done:1, working:2, error:3, idle:4}
-  assert.deepEqual(S.URGENCY, { waiting: 0, done: 1, working: 2, error: 3, idle: 4 });
+  const src = require('node:fs').readFileSync(path.join(__dirname, '../../server/agent_status.py'), 'utf8');
+  const body = /^_URGENCY = \{(.*)\}/m.exec(src)[1];
+  const server = {};
+  for (const m of body.matchAll(/(\w+):\s*(\d+)/g)) server[m[1].toLowerCase()] = Number(m[2]);
+  // error는 프런트 UI에서 뺐다 — 남은 4상태의 상대 순서만 같으면 된다.
+  const order = (o) => Object.keys(S.URGENCY).sort((a, b) => o[a] - o[b]);
+  assert.deepEqual(order(S.URGENCY), order(server));
+  assert.ok(!('error' in S.URGENCY));
 });
 
 test('applyStatusDot — dot을 붙이고, 이후에는 재생성하지 않고 갱신만 한다', async () => {
@@ -168,12 +174,65 @@ test('unseen — done으로 들어오면 읽지 않음이 된다', async () => {
   assert.strictEqual(S.unseenCount(), 1);
 });
 
-test('unseen — done이 아닌 상태는 읽지 않음이 아니다', async () => {
+test('unseen — 어떤 상태로든 바뀐 뒤 아직 안 봤으면 읽지 않음이다(작업 중·입력 대기 포함)', async () => {
   const { S } = await load();
-  for (const status of ['working', 'waiting', 'idle', 'error']) {
+  for (const status of ['working', 'waiting', 'done']) {
+    S.markSeen('dev');
     S.applyEvent({ status, tmux_session: 'dev' });
-    assert.strictEqual(S.isUnseen('dev'), false, `${status}는 읽지 않음이 아니다`);
+    assert.strictEqual(S.isUnseen('dev'), true, `${status}로 바뀐 걸 안 봤다`);
   }
+});
+
+test('unseen — 작업 중 → 입력 대기 같은 후속 전이도 새로 읽지 않음을 만든다', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'working', tmux_session: 'dev' });
+  S.markSeen('dev');
+  assert.strictEqual(S.isUnseen('dev'), false);
+  S.applyEvent({ status: 'waiting', tmux_session: 'dev' });
+  assert.strictEqual(S.isUnseen('dev'), true);
+});
+
+test('unseen — 보고 있는 세션(probe)의 전이는 읽지 않음을 만들지 않는다, 비활성 세션만 만든다', async () => {
+  const { S } = await load();
+  S.setSeenProbe((name) => name === 'front');
+  S.applyEvent({ status: 'working', tmux_session: 'front' });
+  S.applyEvent({ status: 'waiting', tmux_session: 'front' });
+  S.applyEvent({ status: 'working', tmux_session: 'back' });
+  S.applyEvent({ status: 'waiting', tmux_session: 'back' });
+  assert.strictEqual(S.isUnseen('front'), false);
+  assert.strictEqual(S.isUnseen('back'), true);
+  // 보고 있던 세션이 비활성이 된 뒤의 전이는 만든다.
+  S.setSeenProbe(() => false);
+  S.applyEvent({ status: 'done', tmux_session: 'front' });
+  assert.strictEqual(S.isUnseen('front'), true);
+});
+
+test('unseen — 첫 스냅샷의 작업 중·입력 대기는 "방금 바뀐 것"이 아니다(done만 예외)', async () => {
+  const { S } = await load();
+  S.applySnapshot({
+    a: { status: 'working', tmux_session: 'w' },
+    b: { status: 'waiting', tmux_session: 'q' },
+    c: { status: 'done', tmux_session: 'd' },
+  });
+  assert.strictEqual(S.isUnseen('w'), false);
+  assert.strictEqual(S.isUnseen('q'), false);
+  assert.strictEqual(S.isUnseen('d'), true);
+  // 이후의 전이는 평소대로.
+  S.applySnapshot({ a: { status: 'waiting', tmux_session: 'w' }, b: { status: 'waiting', tmux_session: 'q' }, c: { status: 'done', tmux_session: 'd' } });
+  assert.strictEqual(S.isUnseen('w'), true);
+  assert.strictEqual(S.isUnseen('q'), false, '변하지 않은 세션은 그대로');
+});
+
+test('error·알 수 없는 상태 — idle로 접힌다(깨지지 않는다)', async () => {
+  const { S } = await load();
+  S.applyEvent({ status: 'error', tmux_session: 'dev' });
+  assert.strictEqual(S.getStatus('dev'), 'idle');
+  S.applySnapshot({ a: { status: 'bogus', tmux_session: 'x' }, b: { tmux_session: 'y' } });
+  assert.strictEqual(S.getStatus('x'), 'idle');
+  assert.strictEqual(S.getStatus('y'), 'idle');
+  // 같은 세션에서 알 수 없는 값은 진짜 상태를 이기지 못한다.
+  S.applySnapshot({ a: { status: 'error', tmux_session: 'z' }, b: { status: 'working', tmux_session: 'z' } });
+  assert.strictEqual(S.getStatus('z'), 'working');
 });
 
 test('unseen — markSeen하면 배지는 사라지지만 done 상태는 그대로다', async () => {
@@ -195,11 +254,14 @@ test('unseen — 이미 읽은 done에 같은 스냅샷이 다시 와도 되살�
   assert.strictEqual(S.isUnseen('dev'), false, '읽음 처리가 폴링에 덮여 되살아나면 안 된다');
 });
 
-test('unseen — done을 벗어나면 읽지 않음도 사라진다', async () => {
+test('unseen — done을 벗어나도 그 전이를 안 봤으면 읽지 않음은 남는다', async () => {
   const { S } = await load();
   S.applyEvent({ status: 'done', tmux_session: 'dev' });
+  S.markSeen('dev');
   S.applyEvent({ status: 'working', tmux_session: 'dev' });
-  assert.strictEqual(S.isUnseen('dev'), false, '더 이상 알릴 완료가 아니다');
+  assert.strictEqual(S.isUnseen('dev'), true, '작업 중으로 바뀐 걸 아직 안 봤다');
+  S.markSeen('dev');
+  assert.strictEqual(S.isUnseen('dev'), false);
 });
 
 test('unseen — done → 다른 상태 → 다시 done이면 새 완료라 또 읽지 않음', async () => {

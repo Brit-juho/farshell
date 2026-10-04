@@ -557,7 +557,7 @@ test('에이전트 — "보통 이하" 경고 문장이 그대로 노출된다',
   sectionButton(document, '에이전트').click();
   await flush();
   const texts = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
-  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 레일에서 승인 대기를 놓칠 수 있다는 뜻입니다.')));
+  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 레일에서 입력 대기를 놓칠 수 있다는 뜻입니다.')));
   // N9 — 훅이 없는 CLI에도 올라갈 길이 있다는 사실을 같은 자리에서 알려준다.
   assert.ok(texts.some((t) => t.includes('fsh pane report')));
 });

@@ -517,7 +517,7 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 }
 .vt-wtab-marks .status-dot.unseen[data-state="working"]{ color:var(--color-st-working); }
 .vt-wtab-marks .status-dot.unseen[data-state="waiting"]{ color:var(--color-st-waiting); }
-.vt-wtab-marks .status-dot.unseen[data-state="error"]{ color:var(--color-st-error); }
+.vt-wtab-marks .status-dot.unseen[data-state="idle"]{ color:var(--color-st-idle); }
 .vt-wtab-marks .status-dot{ margin:0 3px; }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 탭에 마우스를 올려야 드러나는 규칙은 아래 그대로 */
 .vt-wtab-close{ opacity:.6; }

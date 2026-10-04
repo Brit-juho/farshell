@@ -33,15 +33,14 @@ test('그룹 순서는 고정이다: 개입 필요 → 작업 중 → 유휴', a
   assert.deepStrictEqual(Array.from(sections, (s) => s.group), ['attention', 'working', 'idle']);
 });
 
-test('waiting과 error는 같은 그룹(개입 필요)에 모인다', async () => {
+test('waiting만 개입 필요 그룹이다 — error(예약값)는 idle로 접혀 열려 있음에 간다', async () => {
   const { buildRailSections } = await mod();
   const sections = buildRailSections([
     row({ sessionId: 'a', status: 'waiting' }),
     row({ sessionId: 'b', status: 'error' }),
   ], NOW);
-  assert.strictEqual(sections.length, 1);
-  assert.strictEqual(sections[0].group, 'attention');
-  assert.strictEqual(sections[0].rows.length, 2);
+  assert.deepStrictEqual(Array.from(sections, (s) => s.group), ['attention', 'idle']);
+  assert.strictEqual(sections[0].rows.length, 1);
 });
 
 // 2026-09-18(98 §6-1) — 10 §5의 "done은 유휴에 남는다"를 **뒤집었다**. 완료는
@@ -105,32 +104,19 @@ test('formatRelativeTime — 초/분/시간/일 경계', async () => {
   assert.strictEqual(formatRelativeTime(null, NOW), '');
 });
 
-test('statusSentence — waiting/working/error/done/idle', async () => {
+test('statusSentence — waiting/working/done/idle, error는 문장이 없다', async () => {
   const { statusSentence } = await mod();
   const since = NOW / 1000 - 120;
-  assert.strictEqual(statusSentence('waiting', since, null, NOW), '승인 대기 · 2분');
-  assert.strictEqual(statusSentence('waiting', null, null, NOW), '승인 대기');
+  assert.strictEqual(statusSentence('waiting', since, null, NOW), '입력 대기 · 2분');
+  assert.strictEqual(statusSentence('waiting', null, null, NOW), '입력 대기');
   assert.strictEqual(statusSentence('working', since, 'Edit', NOW), 'Edit 실행 · 2분');
   assert.strictEqual(statusSentence('working', since, null, NOW), '작업 중 · 2분');
-  assert.strictEqual(statusSentence('error', since, null, NOW), '에러');
+  assert.strictEqual(statusSentence('error', since, null, NOW), '2분', 'error는 idle처럼 접힌다');
   assert.strictEqual(statusSentence('done', since, null, NOW), '완료');
   // idle은 그룹 헤더가 이미 「유휴」라고 말하므로 행에서는 반복하지 않는다.
   // 남기는 것은 그룹 헤더가 말해주지 않는 "마지막 활동 시각"뿐이다.
   assert.strictEqual(statusSentence('idle', since, null, NOW), '2분');
   assert.strictEqual(statusSentence('idle', null, null, NOW), '');
-});
-
-// N8/N44(30-worktree.md §4) — "상태는 sessions 중 가장 '시급한' 것(waiting >
-// error > working > done > idle)". 워크트리 행이 여러 세션을 대표할 때 쓴다.
-test('mostUrgentStatus — waiting > error > working > done > idle, 세션 없으면 idle', async () => {
-  const { mostUrgentStatus } = await mod();
-  assert.strictEqual(mostUrgentStatus([]), 'idle');
-  assert.strictEqual(mostUrgentStatus(['idle']), 'idle');
-  assert.strictEqual(mostUrgentStatus(['idle', 'done']), 'done');
-  assert.strictEqual(mostUrgentStatus(['done', 'working']), 'working');
-  assert.strictEqual(mostUrgentStatus(['working', 'error']), 'error');
-  assert.strictEqual(mostUrgentStatus(['error', 'waiting']), 'waiting');
-  assert.strictEqual(mostUrgentStatus(['waiting', 'idle', 'working', 'error', 'done']), 'waiting');
 });
 
 // buildRailSections는 제네릭이라(status/since/tool만 요구) Rail.tsx의 워크트리
@@ -146,7 +132,7 @@ test('buildRailSections — 세션 필드가 없는 워크트리 모양도 그�
   ], NOW);
   assert.deepStrictEqual(Array.from(sections, (s) => s.group), ['attention', 'working']);
   assert.strictEqual(sections[0].rows[0].worktreeId, 'a');
-  assert.strictEqual(sections[0].rows[0].statusSentence, '승인 대기 · 1분');
+  assert.strictEqual(sections[0].rows[0].statusSentence, '입력 대기 · 1분');
 });
 
 // ── 레일 접힘 기본값 ───────────────────────────────────────────────────────
@@ -181,11 +167,11 @@ test('buildSessionSections — 잠자는 세션은 아예 안 나온다(수면�
   assert.deepStrictEqual(allIds, ['a']);
 });
 
-test('buildSessionSections — waiting/error는 groupId와 무관하게 개입 필요 섹션에 먼저 모인다', async () => {
+test('buildSessionSections — waiting은 groupId와 무관하게 개입 필요 섹션에 먼저 모인다', async () => {
   const { buildSessionSections } = await mod();
   const sections = buildSessionSections([
     srow({ sessionId: 'a', status: 'waiting', groupId: 'g1' }),
-    srow({ sessionId: 'b', status: 'error', groupId: null }),
+    srow({ sessionId: 'b', status: 'waiting', groupId: null }),
     srow({ sessionId: 'c', status: 'idle', groupId: 'g1' }),
   ], new Map(), NOW);
   assert.strictEqual(sections[0].kind, 'attention');

@@ -158,7 +158,6 @@
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-srow`가 맡는다. 데스크톱은 기본 크기 */
 /* 2026-09-18 후속 — 저장소 해시 색점(예전엔 이 자리에 `.vt-wgrail-hash` 막대가
    따로 있었다)을 지웠다. 이제 이 자리엔 상태색 막대 하나뿐이다. */
-.vt-wgrail-bar.tone-error   { background:var(--color-st-error); }
 .vt-wgrail-bar.tone-done    { background:var(--color-st-done); }
 /* N38(70-mobile.md §2)과 같은 패턴 — waiting 상태에서 감지된 질문 1줄 미리보기
    (10-shell-layout.md §5 목업 "? Allow edit to legacy.css?"). */
@@ -189,7 +188,6 @@
 .vt-wgrail-agent[data-state="working"] { color:var(--color-st-working); }
 .vt-wgrail-agent[data-state="waiting"] { color:var(--color-st-waiting); }
 .vt-wgrail-agent[data-state="done"] { color:var(--color-st-done); }
-.vt-wgrail-agent[data-state="error"] { color:var(--color-st-error); }
 
 /* 접힘에서 그룹 라벨 대신 남는 경계선(Rail.tsx의 group-sep). 첫 그룹 위에는
    머리 밑줄이 이미 있어 겹치므로 그 하나는 그리지 않는다. */
