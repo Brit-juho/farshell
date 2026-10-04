@@ -191,6 +191,8 @@ export default defineConfig(({ mode }) => {
             if (p.endsWith('/frontend/js/layout/clients.js')) return 'screens';
             // 빈 칸 클릭 시 열리는 세션 선택 시트(layout/panes.js가 지연 import).
             if (p.endsWith('/frontend/js/layout/pane-picker.js')) return 'screens';
+            // 모바일 세션 시트의 뷰 순서 편집(picker.js가 편집 모드에서만 지연 import).
+            if (p.endsWith('/frontend/js/layout/session-order.js')) return 'screens';
             // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야
             // 한다(entry를 청크에 배정하면 Rollup이 app.js를 빈 껍데기로 만든다).
             if (p.includes('/frontend/js/') && !p.endsWith('/frontend/js/main.js')) return 'core';

@@ -6,7 +6,7 @@
 // 부른다. panels/viewer의 shell.js↔tree.js와 같은 이유로 그대로 유지한다(모든
 // 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
 import { activeSession, activeSessionId, sessionDisplayName, getSession } from './core/store.js';
-import { openSessionIds } from './layout/compact.js';
+import { openSessionIds, openSessionOrder } from './layout/compact.js';
 import { onLayoutChange } from './layout/store.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
@@ -54,6 +54,10 @@ function sessionName(id) {
   return sessionDisplayName(id);
 }
 
+// 순서 편집 모드(모바일, 뷰 단위 — layout/session-order.js 지연 청크). 시트를 닫으면 해제.
+let _ordering = false;
+const viewCount = () => new Set(openSessionOrder().map((e) => e.tabId)).size;
+
 function openSessionManager() {
   let backdrop = document.getElementById('session-manager');
   if (backdrop) { closeSessionManager(); return; }
@@ -85,6 +89,7 @@ function openSessionManager() {
 function closeSessionManager() {
   const backdrop = document.getElementById('session-manager');
   if (!backdrop) return;
+  _ordering = false;
   if (backdrop._onKeydown) document.removeEventListener('keydown', backdrop._onKeydown);
   backdrop.remove();
   const picker = document.getElementById('voice-session-picker');
@@ -109,9 +114,22 @@ async function renderSessionManager(backdrop) {
   if (!sheet) return;
   // "맥에서도 열기"는 (특정 세션이 아니라) 앞으로 만들 모든 세션에 적용되는
   // 전역 설정이라 ⋯의 「설정」 그룹 쪽에 남긴다(index.html 참고).
-  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2><button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div><div class="vt-session-list"></div><div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button></div>`;
+  if (_ordering && viewCount() < 2) _ordering = false;
+  const toggle = viewCount() >= 2
+    ? `<button class="vt-icon-btn xl vt-session-order-toggle${_ordering ? ' active' : ''}" type="button" aria-pressed="${_ordering}" aria-label="뷰 순서 편집">${icon('arrow-up-down', 16)}</button>` : '';
+  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">${_ordering ? '뷰 순서' : '세션 관리'}</h2><div class="vt-session-head-actions">${toggle}<button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div></div><div class="vt-session-list"></div>${_ordering ? '' : '<div class="vt-session-footer"><button type="button" class="vt-session-footer-item" id="session-open-mac-btn">지금 이 세션 맥에서 열기</button></div>'}`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
+  const tg = sheet.querySelector('.vt-session-order-toggle');
+  if (tg) tg.onclick = () => { _ordering = !_ordering; renderSessionManager(backdrop); };
   const list = sheet.querySelector('.vt-session-list');
+  if (_ordering) {
+    // 편집 모드에서는 세션 행(클릭 이동)을 아예 그리지 않는다 — 오조작 방지.
+    try {
+      const m = await import('./layout/session-order.js');
+      if (backdrop.isConnected && _ordering && list.isConnected) m.renderOrderEditor(list);
+    } catch (e) { console.error('[FarShell order]', e); }
+    return;
+  }
   const entries = openSessionIds().map((id) => [id, getSession(id)]);
   const activeIdNow = activeSessionId();
   const awakeTmuxNames = new Set();

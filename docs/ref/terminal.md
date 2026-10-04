@@ -96,6 +96,8 @@ keys called `switchTo`, which assigns the target session to the active pane — 
 and displaced the current one. Rail and Fleet stay in name order. `tabMovePrev/Next` (Mod+Alt+Shift+Left/Right) now
 moves the active **view tab** at every width (it moved a session in the removed array on mobile).
 
+**Reordering on mobile (2026-10-05).** The session sheet (`picker.js`) has a 「뷰 순서 편집」 toggle (sort icon, shown only with 2+ views, cleared when the sheet closes). On, the sheet lists **views** instead of session rows — a grouped view is one block (label + members), a single view one row — each with 44px up/down buttons (`aria-disabled` at the ends, no wrap). Pressing one calls `moveLayoutTab` + `saveLayoutNow` (the same pair as the desktop tab drag), so reload keeps it and the active view/focus never change; the sheet's list, `n/m`, swipe and keys follow at once. Row-click navigation is not rendered in edit mode. UI lives in `layout/session-order.js` (lazy `screens` chunk). Fleet and the remote-host sheet have no reorder (Fleet is name-ordered by design).
+
 ### View tab
 
 - Label (member names joined with `+`, unless the user named it) and ×. No agent icon, no state icon.

@@ -52,6 +52,8 @@ const PATHS = {
   // 방향은 이 하나를 CSS로 돌려 만든다(chevron-up/left/right를 따로 두지
   // 않는다) — 여는/접는 토글에서 회전이 상태 전이를 그대로 보여준다.
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  // 모바일 세션 시트의 뷰 순서 편집 토글(Lucide arrow-up-down).
+  'arrow-up-down': '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
   // 2.1.6 — 레일 바닥의 「더보기」. 지금까지 문자 `⋯`(U+22EF)였는데, 글꼴마다
   // 점 크기와 세로 위치가 달라 옆 아이콘과 광학 정렬이 안 맞았다.
   'more-horizontal': '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',

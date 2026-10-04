@@ -119,6 +119,16 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 @keyframes vtSheetIn { from { transform:translateY(100%); } to { transform:none; } }
 .vt-session-head { display:flex; align-items:center; justify-content:space-between; margin:0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 2.5); }
 .vt-session-head h2 { font-size:var(--fs-md); }
+.vt-session-head-actions { display:flex; align-items:center; gap:calc(var(--spacing) * 1); }
+/* 뷰 순서 편집(layout/session-order.js) — 행은 세션 행과 같은 모양, 버튼은 44px 터치 표적.
+   위 버튼은 chevron-down 하나를 돌려 쓴다(icons.js 규칙). */
+.vt-order-view { padding-block:calc(var(--spacing) * 1); }
+.vt-order-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5); }
+.vt-order-label { font-size:var(--fs-xs); color:var(--sub); }
+.vt-order-single { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-order-member { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-order-up svg { transform:rotate(180deg); }
+.vt-order-note { margin:0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 1); font-size:var(--fs-xs); color:var(--sub); }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 닫기는 폰 터치 표적이라 xl(44px) */
 .vt-session-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-session-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-height:52px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); border:1px solid var(--line); border-radius:var(--radius-sm); }
