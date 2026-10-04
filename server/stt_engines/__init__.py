@@ -30,7 +30,3 @@ def get_engine(engine_id: str) -> Engine:
         _instances[engine_id] = getattr(importlib.import_module(mod_name), cls_name)()
     return _instances[engine_id]
 
-
-def reset_instances() -> None:
-    """테스트용: 인스턴스 캐시를 비운다(로드된 모델은 먼저 unload 해 둘 것)."""
-    _instances.clear()

@@ -78,14 +78,6 @@ def find_binary() -> Optional[Path]:
     return Path(found) if found else None
 
 
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 class ReleaseError(RuntimeError):
     """다운로드·검증·설치 실패 — 메시지는 사용자에게 그대로 보인다."""
 

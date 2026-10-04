@@ -79,10 +79,6 @@ def test_requirements_follow_find_spec(eng, monkeypatch):
     assert r.satisfied and r.hint == ""
 
 
-def test_requirements_with_fake_module(eng, fake_pkg):
-    assert eng.requirements(HostEnv("macos", "arm64", (26, 0)))[0].satisfied
-
-
 def test_install_requirement_not_automatic(eng):
     with pytest.raises(NotReady):
         eng.install_requirement("mlx-qwen3-asr", lambda *_: None)

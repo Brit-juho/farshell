@@ -219,19 +219,12 @@ def test_timed_truncates_long_audio(svc, monkeypatch):
     assert svc == [(44 + 32000, None)]
 
 
-def test_timed_not_ready_propagates(monkeypatch):
+@pytest.mark.parametrize("exc", [stt_service.Busy("밀림"), NotReady("모델을 받아 주세요")], ids=["busy", "not_ready"])
+def test_timed_engine_errors_propagate(monkeypatch, exc):
     def boom(wav, lang):
-        raise NotReady("모델을 받아 주세요")
+        raise exc
     monkeypatch.setattr(stt_service, "transcribe_wav", boom)
-    with pytest.raises(NotReady, match="모델을 받아"):
-        run(voice_handler.transcribe_timed(make_wav(tone(1.0)), "wav"))
-
-
-def test_timed_busy_propagates(monkeypatch):
-    def boom(wav, lang):
-        raise stt_service.Busy("밀림")
-    monkeypatch.setattr(stt_service, "transcribe_wav", boom)
-    with pytest.raises(stt_service.Busy):
+    with pytest.raises(type(exc)):
         run(voice_handler.transcribe_timed(make_wav(tone(1.0)), "wav"))
 
 

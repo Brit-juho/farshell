@@ -255,12 +255,6 @@ def test_remove_installed(patch_asset):
     assert not lr.install_root().exists()
 
 
-def test_sha256_file(tmp_path):
-    p = tmp_path / "f"
-    p.write_bytes(b"abc")
-    assert lr.sha256_file(p) == hashlib.sha256(b"abc").hexdigest()
-
-
 def test_tar_absolute_path_not_written_outside(patch_asset, tmp_path):
     """절대경로 멤버는 거부되거나 스테이징 안으로 눌려 들어간다 — 실제 절대 위치에는 절대 안 써진다."""
     target = tmp_path / "abs-target" / "evil.txt"

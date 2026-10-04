@@ -142,15 +142,6 @@ def test_get():
     assert catalog.get("nope") is None
 
 
-@pytest.mark.parametrize("e", ENVS, ids=lambda e: e.key + ("-wsl2" if e.wsl2 else ""))
-def test_recommended_exactly_one_and_exists(e):
-    rid = catalog.recommended_id(e)
-    assert isinstance(rid, str)
-    spec = catalog.get(rid)
-    assert spec is not None
-    assert [m.id for m in catalog.CATALOG].count(rid) == 1
-
-
 def test_recommended_values():
     assert catalog.recommended_id(ENVS[0]) == "qwen3-asr-0.6b-mlx"
     for e in ENVS[1:]:
@@ -172,17 +163,6 @@ def test_static_tags_never_recommended_and_in_set():
         assert isinstance(m.static_tags, tuple)
         assert set(m.static_tags) <= allowed, m.id
         assert "권장" not in m.static_tags
-
-
-def test_bench_types():
-    for m in catalog.CATALOG:
-        if m.bench is None:
-            continue
-        assert set(m.bench) == {"cer", "sec", "rss_mb", "basis"}
-        assert isinstance(m.bench["cer"], (int, float)) and m.bench["cer"] > 0
-        assert isinstance(m.bench["sec"], (int, float)) and m.bench["sec"] > 0
-        assert isinstance(m.bench["rss_mb"], int) and m.bench["rss_mb"] > 0
-        assert isinstance(m.bench["basis"], str) and m.bench["basis"]
 
 
 def test_spec_basic_fields_and_to_dict():

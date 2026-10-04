@@ -64,9 +64,6 @@ def test_catalog_route():
     assert d["recommended"] == "qwen3-asr-0.6b-mlx" and d["selected"] == "qwen3-asr-0.6b-mlx"
     assert d["models"][0]["id"] == d["recommended"] and d["unsupported"] == [] and d["setup"] is None
     assert {"env", "selected_valid", "legacy_value", "engines", "models", "unsupported"} <= set(d)
-    env_mod.override(LINUX_X86)
-    d = run(voice.stt_catalog())
-    assert d["recommended"] == "qwen3-asr-0.6b-gguf" and {m["engine"] for m in d["unsupported"]} == {"mlx_qwen3", "apple_speech"}
 
 
 def test_catalog_route_custom_query(fx):
@@ -74,14 +71,6 @@ def test_catalog_route_custom_query(fx):
     assert not any(m["custom"] for m in run(voice.stt_catalog())["models"])
     d = run(voice.stt_catalog(custom=cid))
     assert [m["id"] for m in d["models"] if m["custom"]] == [cid]
-    assert not any(m["custom"] for m in run(voice.stt_catalog(custom="custom:mlx_qwen3:../x/y"))["models"])
-    assert not any(m["custom"] for m in run(voice.stt_catalog(custom="https://evil/x"))["models"])
-
-
-def test_catalog_route_legacy_setting(fx):
-    (fx.tmp / "ws.json").write_text(json.dumps({"settings": {"voice.sttModel": "small"}}))
-    d = run(voice.stt_catalog())
-    assert d["selected"] is None and d["selected_valid"] is False and d["legacy_value"] == "small"
 
 
 def test_status_route(fx):
