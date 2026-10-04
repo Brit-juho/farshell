@@ -21,11 +21,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `fsh tunnel list`에 누적 횟수가 보인다(IP별 60초 차단은 그대로, share는 잠그지 않는다).
   만료된 노출은 1분 안에 터널까지 내려간다.
 
+### Changed
+
+- **「다른 화면 N」 배지를 웹 화면 기준으로 정확히 센다** (`server/routes/tmux.py`
+  `collect_tmux_sessions`, `shell/RailRow.tsx` `ScreensMark`). 세션 목록 응답
+  (`GET /api/tmux/sessions`, `/ws-workspace` `tmux_sessions`)에 `webScreens`(이 서버가 PTY를
+  쥔 웹 화면 수)와 `otherClients`(웹이 아닌 attach: 맥 터미널 등)를 더했다. 배지는 이 탭을
+  뺀 다른 웹 화면만 세고, 맥 터미널 등은 터미널 아이콘 + 개수로 따로 보인다. 추가 tmux
+  호출은 없다.
+
 ### Fixed
 
-- **모바일 세션 시트의 「지금 이 세션 맥에서 열기」 버튼이 브라우저 기본 모양이던 문제 수정**
-  (`picker.js`, `styles/screens/10-shell.css`). 마크업에 `vt-menu-item` 클래스가 빠져
-  컴포넌트 스타일이 안 걸렸다. 다른 목록 행 버튼과 같은 모양(아이콘 + 왼쪽 정렬)으로 통일했다.
 - **접힌 레일(48px)에서 「개입 필요」 세션이 아래 목록에 한 번 더 나오던 문제 수정**
   (`shell/rail-data.ts` `compactRailRows`, `Rail.tsx`). 접힌 레일은 구역 머리글이 없어
   하나의 목록으로 그린다 — 개입 필요가 위(이름순), 나머지가 아래(이름순), 각 세션은 한 번만.

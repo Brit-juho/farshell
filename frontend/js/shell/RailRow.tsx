@@ -44,6 +44,32 @@ export function OriginMark(props: { origin: Origin }) {
   );
 }
 
+/** 같은 세션에 붙은 다른 화면. 「다른 화면 N」은 웹 화면(다른 브라우저 탭·폰, 이 탭 제외),
+ * 터미널 아이콘 + N은 웹이 아닌 attach(맥 터미널 등). 레일 행과 Fleet 행이 같이 쓴다. */
+export function ScreensMark(props: { row: Pick<SessionRow, 'otherScreens' | 'otherClients'> }) {
+  return (
+    <>
+      <Show when={props.row.otherScreens > 0}>
+        <span class="vt-srow-screens" data-tip="이 탭 말고 다른 브라우저 탭·폰에서도 열려 있음" data-tip-side="right">
+          다른 화면 {props.row.otherScreens}
+        </span>
+      </Show>
+      <Show when={props.row.otherClients > 0}>
+        <span
+          class="vt-srow-clients"
+          data-tip={`웹이 아닌 터미널 ${props.row.otherClients}개가 붙어 있음 (맥 터미널 등)`}
+          data-tip-side="right"
+          role="img"
+          aria-label={`웹이 아닌 터미널 ${props.row.otherClients}개가 붙어 있음`}
+        >
+          <span innerHTML={icon('terminal', 12, 2)} />
+          {props.row.otherClients}
+        </span>
+      </Show>
+    </>
+  );
+}
+
 /** 키워드 줄(상태 키워드 · 도구 · 배지 · 경과). 레일과 Fleet이 같이 쓴다. */
 export function KeywordLine(props: { row: SessionRow; now: () => number }) {
   const kw = () => stateKeyword(props.row);
@@ -190,16 +216,12 @@ export function Row(props: {
           <KeywordLine row={props.row} now={now} />
           <OriginMark origin={props.row.origin} />
         </div>
-        <Show when={props.row.viewLabel || props.row.otherScreens > 0}>
+        <Show when={props.row.viewLabel || props.row.otherScreens > 0 || props.row.otherClients > 0}>
           <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4">
             <Show when={props.row.viewLabel}>
               <span class="vt-srow-view" data-tip="묶음 뷰" data-tip-side="right">{props.row.viewLabel}</span>
             </Show>
-            <Show when={props.row.otherScreens > 0}>
-              <span class="vt-srow-screens" data-tip="다른 브라우저 탭·기기·맥 터미널에서도 붙어 있음" data-tip-side="right">
-                다른 화면 {props.row.otherScreens}
-              </span>
-            </Show>
+            <ScreensMark row={props.row} />
           </div>
         </Show>
       </div>

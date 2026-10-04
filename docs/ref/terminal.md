@@ -147,8 +147,11 @@ moves the active **view tab** at every width (it moved a session in the removed 
   「세션」, identified by their keyword.
 - Code: `shell/rail-data.ts` (pure: lists, keyword, menu items, prefs), `shell/rail-fetch.ts` `collectSessionRows`
   (one row builder shared by the rail and the phone Fleet), `shell/RailRow.tsx` (row, keyword line, origin icon),
-  `shell/rail-prefs.ts`. 「다른 화면 N」 = tmux `session_attached` minus this browser tab's own PTY (1 when the session
-  is open here) — it counts other browser tabs, phones and Mac terminals alike; no extra call. Branch/diff come from
+  `shell/rail-prefs.ts`. 「다른 화면 N」 = web screens on the session (server `webScreens`: PTYs the server holds, from the
+  session store) minus this browser tab's own PTY (1 when the session is open here) — other browser tabs and phones only. Non-web
+  attaches (Mac terminal etc., server `otherClients` = `attached − webScreens`, floor 0) get a separate small terminal icon + count
+  with a tooltip (`ScreensMark` in `RailRow.tsx`, shared with Fleet); no extra tmux call. An older server without `webScreens`
+  falls back to the previous `attached − own PTY` count. Branch/diff come from
   `GET /api/repos`, matched through `@fsh_wt` or, failing that, the server's cwd-based `worktrees[].sessions`.
 - Remote hosts use the same rows: switching host reloads the screen against that Mac's relayed API (`core/host-route.js`),
   so its sessions are rendered like local ones, with whatever `origin` that server reports (absent on an older server

@@ -28,7 +28,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/tmux/sessions` | List tmux sessions. Each item carries `origin` — where the session was created: `local` (this UI, incl. worktree open), `peer` (another Mac via `/api/peer/sessions/create`), `agent` (reserved — no creation path exists yet), `external` (no record: `fsh` CLI or plain tmux). Read from tmux option `@fsh_origin` in the same `list-sessions` call; the same field is in `/ws-workspace` `tmux_sessions` |
+| GET | `/api/tmux/sessions` | List tmux sessions. Each item carries `origin` — where the session was created: `local` (this UI, incl. worktree open), `peer` (another Mac via `/api/peer/sessions/create`), `agent` (reserved — no creation path exists yet), `external` (no record: `fsh` CLI or plain tmux). Read from tmux option `@fsh_origin` in the same `list-sessions` call; the same field is in `/ws-workspace` `tmux_sessions`. Also `webScreens` (web screens attached — PTYs this server holds for the session, one per browser tab/phone) and `otherClients` (`attached` minus `webScreens`, floor 0: non-web attaches such as a Mac terminal); both come from the same `list-sessions` call plus the session store, no extra tmux call |
 | POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name, optional 32-hex `screen`). Each screen gets its own PTY; the same screen reuses its attachment after reload |
 | POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd, optional `screen`) |
 | DELETE | `/api/tmux/kill/{tmux_name}` | Fully kill a tmux session |

@@ -517,6 +517,16 @@
     color: var(--color-sub);
   }
 
+  /* 웹이 아닌 attach(맥 터미널 등) — 「다른 화면」과 같은 줄, 아이콘 + 개수만 */
+  .vt-srow-clients {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: calc(var(--spacing) * 1);
+    color: var(--color-sub);
+    font-variant-numeric: tabular-nums;
+  }
+
   .vt-srow-agent { display: inline-flex; flex: none; color: var(--color-muted); }
   .vt-srow.active .vt-srow-agent { color: var(--color-acc); }
 

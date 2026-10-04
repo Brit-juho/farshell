@@ -19,7 +19,7 @@ const PREFS = { attentionShow: true, attentionCollapsed: false, hiddenOrigins: [
 const row = (over) => ({
   sessionId: '', tmuxName: 'x', name: 'x', open: false, status: 'idle', unseen: false,
   since: null, tool: null, kind: null, badge: null, diffFiles: null,
-  origin: 'local', viewLabel: null, otherScreens: 0, ...over,
+  origin: 'local', viewLabel: null, otherScreens: 0, otherClients: 0, ...over,
 });
 const names = (rows) => Array.from(rows, (r) => r.name);
 
@@ -286,4 +286,23 @@ test('compactRailRows — waiting만 있거나 개입 필요가 없으면 경계
     [row({ name: 'b', status: 'waiting' }), row({ name: 'a' })], { ...PREFS, attentionShow: false }));
   assert.deepStrictEqual(names(off.rows), ['a', 'b']);
   assert.strictEqual(off.split, 0);
+});
+
+test('collectSessionRows — 서버의 webScreens/otherClients로 배지를 센다(이 탭 제외), 구버전 서버는 예전 계산', async () => {
+  const { collectSessionRows, window } = await mod();
+  window.allSessions = () => ({ w1: { tmuxName: 'a' }, w2: { tmuxName: 'b' } });
+  const rows = collectSessionRows({
+    tmux: [
+      { name: 'a', attached: 4, webScreens: 3, otherClients: 1 },   // 이 탭 + 다른 웹 2 + 맥 터미널 1
+      { name: 'b', attached: 1, webScreens: 1, otherClients: 0 },   // 이 탭뿐
+      { name: 'c', attached: 2, webScreens: 0, otherClients: 2 },   // 열려 있지 않고 터미널 2
+      { name: 'old', attached: 3 },                                  // 구버전 서버 — 필드 없음
+    ],
+    repos: [], groups: [], deps: { vtFetch: async () => ({}) }, onDiff: () => {},
+  });
+  const by = Object.fromEntries(Array.from(rows, (r) => [r.name, r]));
+  assert.deepStrictEqual([by.a.otherScreens, by.a.otherClients], [2, 1]);
+  assert.deepStrictEqual([by.b.otherScreens, by.b.otherClients], [0, 0]);
+  assert.deepStrictEqual([by.c.otherScreens, by.c.otherClients], [0, 2]);
+  assert.deepStrictEqual([by.old.otherScreens, by.old.otherClients], [3, 0]);
 });

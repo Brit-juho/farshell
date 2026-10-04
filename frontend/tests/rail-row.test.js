@@ -10,7 +10,7 @@ after(() => { for (const e of _envs) { try { e.dom.window.close(); } catch (_) {
 const base = {
   sessionId: 's1', tmuxName: 'api', name: 'api', open: true, status: 'idle', unseen: false,
   since: null, tool: null, kind: null, badge: null, diffFiles: null, changed: null,
-  agent: null, branch: null, isMainWorktree: false, origin: 'local', viewLabel: null, otherScreens: 0,
+  agent: null, branch: null, isMainWorktree: false, origin: 'local', viewLabel: null, otherScreens: 0, otherClients: 0,
 };
 
 async function mount(rowOver, propsOver = {}) {
@@ -86,6 +86,18 @@ test('열림 표시·묶음 뷰 이름·다른 화면 N은 해당할 때만', as
   assert.strictEqual(off.root.querySelector('.vt-srow-open'), null);
   assert.strictEqual(off.root.querySelector('.vt-srow-screens'), null);
   assert.ok(off.root.querySelector('.vt-wgrail-row.closed'));
+});
+
+test('웹이 아닌 attach(맥 터미널 등)는 터미널 아이콘 + 개수로 따로 나온다', async () => {
+  const both = await mount({ open: true, otherScreens: 1, otherClients: 2 });
+  assert.strictEqual(both.root.querySelector('.vt-srow-screens').textContent.trim(), '다른 화면 1');
+  const c = both.root.querySelector('.vt-srow-clients');
+  assert.ok(c.querySelector('svg'));
+  assert.strictEqual(c.textContent.trim(), '2');
+  assert.match(c.getAttribute('data-tip'), /맥 터미널/);
+  const only = await mount({ open: true, otherScreens: 0, otherClients: 1 });
+  assert.ok(only.root.querySelector('.vt-srow-line4'));
+  assert.strictEqual(only.root.querySelector('.vt-srow-screens'), null);
 });
 
 test('done 배지·작업 중 도구', async () => {

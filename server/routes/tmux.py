@@ -197,6 +197,7 @@ async def collect_tmux_sessions() -> list[dict]:
                 parts[3] if len(parts) > 3 else "",
             )
 
+    live_ptys = pty_mgr.sessions  # 복사본이라 한 번만 받는다
     sessions = []
     for line in sessions_text.strip().split("\n"):
         if not line:
@@ -204,12 +205,18 @@ async def collect_tmux_sessions() -> list[dict]:
         parts = line.split("\t")
         name = parts[0]
         cmd, cwd, pane_id = pane_by_session.get(name, ("", "", ""))
-        web_session = next((info for info in session_store.find_all_by_tmux_name(name)
-                            if info.session_id in pty_mgr.sessions), None)
+        web_sessions = [info for info in session_store.find_all_by_tmux_name(name)
+                        if info.session_id in live_ptys]
+        web_session = web_sessions[0] if web_sessions else None
+        attached = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
         sessions.append({
             "name": name,
             "windows": int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1,
-            "attached": int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0,
+            "attached": attached,
+            # 웹 화면 = 이 서버가 PTY를 쥔 attach(브라우저 탭·폰 하나가 1개). 나머지는 웹이 아닌 attach
+            # (맥 터미널 등). 추가 tmux 호출 없이 session_store와 같은 list-sessions 결과로 센다.
+            "webScreens": len(web_sessions),
+            "otherClients": max(0, attached - len(web_sessions)),
             "command": cmd,
             "cwd": cwd,
             "pane_id": pane_id,

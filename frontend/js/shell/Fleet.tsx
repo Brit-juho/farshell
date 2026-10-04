@@ -23,7 +23,7 @@ import {
   buildRailLists, rowMenuItems, runRowMenu, diffLabel, worktreeIconName, type SessionRow,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
-import { KeywordLine, OriginMark } from './RailRow.js';
+import { KeywordLine, OriginMark, ScreensMark } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
@@ -187,12 +187,10 @@ function Row(props: {
           <KeywordLine row={props.row} now={now} />
           <OriginMark origin={props.row.origin} />
         </div>
-        <Show when={props.row.viewLabel || props.row.otherScreens > 0}>
+        <Show when={props.row.viewLabel || props.row.otherScreens > 0 || props.row.otherClients > 0}>
           <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line4">
             <Show when={props.row.viewLabel}><span class="vt-srow-view">{props.row.viewLabel}</span></Show>
-            <Show when={props.row.otherScreens > 0}>
-              <span class="vt-srow-screens">다른 화면 {props.row.otherScreens}</span>
-            </Show>
+            <ScreensMark row={props.row} />
           </div>
         </Show>
         {/* 열려 있지 않은 세션은 키를 보낼 곳(열린 pane)이 없다 — 인라인 승인 버튼 대신 탭해서 연다. */}

@@ -286,6 +286,20 @@ export interface CollectInput {
  *
  * 부수 효과: 낡은 cwd의 변경량 조회를 시작한다(끝나면 onDiff).
  */
+/**
+ * 서버가 준 webScreens(PTY를 쥔 웹 화면 수)·otherClients(웹이 아닌 attach)로 배지 두 값을 만든다.
+ * 웹 화면에는 이 브라우저 탭의 PTY(열려 있으면 1개)가 들어 있어 뺀다.
+ * 구버전 서버처럼 webScreens가 없으면 예전 계산(attached − 내 PTY)을 쓰고 otherClients는 0.
+ */
+function screenCounts(t: any, attached: number, openHere: boolean): { otherScreens: number; otherClients: number } {
+  const own = openHere ? 1 : 0;
+  if (typeof t.webScreens !== 'number') return { otherScreens: Math.max(0, attached - own), otherClients: 0 };
+  return {
+    otherScreens: Math.max(0, t.webScreens - own),
+    otherClients: Math.max(0, Number(t.otherClients) || 0),
+  };
+}
+
 export function collectSessionRows(inp: CollectInput): SessionRow[] {
   const w = window as any;
   const all = w.allSessions ? w.allSessions() : {};
@@ -348,8 +362,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       worktreeId: t.wt_id || null,
       origin: normalizeOrigin(t.origin),
       viewLabel: (sid && sidToView.get(sid)) || null,
-      // tmux가 세는 붙은 클라이언트에는 이 브라우저 탭의 PTY(열려 있으면 1개)가 들어 있다.
-      otherScreens: Math.max(0, attached - (sid ? 1 : 0)),
+      ...screenCounts(t, attached, !!sid),
     });
     if (cwd && diffCountStale(cwd)) fetchDiffCount(inp.deps, cwd).then(inp.onDiff);
   }
@@ -370,6 +383,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       origin: 'local',
       viewLabel: sidToView.get(sid) || null,
       otherScreens: 0,
+      otherClients: 0,
     });
   }
   return out;
