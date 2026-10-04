@@ -118,28 +118,17 @@ except Exception as e:
     _note_failure(f"{type(e).__name__}: {e}")
 PYEOF
 
-# ── Stop → TTS 요약 위임 ────────────────────────────────────────────────
+# ── Stop → 완료 알림 위임 ───────────────────────────────────────────────
 #
-# **음성 데몬이 떠 있을 때만 소리를 낸다**(2026-09-17 결정, 원래 설계로 되돌림).
-# 그 전에는 조건 없이 위임해서, 음성을 쓰지 않는 동안에도 Claude가 멈출 때마다
-# `afplay`/`say`가 응답 끝 200자를 읽었다. 토큰이 드는 일은 아니지만(이 훅은
-# LLM을 부르지 않는다 — transcript 파일에서 마지막 text 블록을 잘라낼 뿐이다)
-# 듣지 않는 소리를 내는 것 자체가 무의미하다.
+# 소리를 낼지는 tts_hook.sh가 설정(voice.notifyMode — 기본 off)으로 정한다.
+# 예전에는 **음성 데몬이 떠 있을 때만** 위임했는데(2026-09-17), 데몬 없이 웹으로만
+# 쓰는 사람은 낭독·완료음을 아예 받을 수 없었다. 이제 데몬 여부는 보지 않는다 —
+# 소리는 켠 사람(설정)에게만 난다.
 #
-# ⚠ **위쪽의 `POST /api/agent/event`는 이 조건에 걸지 않는다.** 그건 상태 배지
-# (idle/working/waiting/done)·프롬프트 큐 자동 투입·감지 커버리지의 전제라,
-# 음성으로 게이팅하면 음성을 안 켠 사람에게서 그 기능들이 통째로 죽는다.
-# 소리를 내는 부분만 잠근다.
-#
-# 판정은 `fsh`의 `_is_running voice`와 **같은 기준**이다(PID 파일 + kill -0).
-# 다른 방법(pgrep 등)을 쓰면 한 머신에서 인스턴스를 둘 돌릴 때 남의 데몬을
-# 자기 것으로 오인한다 — bin/fsh가 pkill을 버린 것과 같은 이유다.
-_voice_running() {
-    local pidfile="${VT_RUN_DIR:-/tmp}/vt-pids/voice.pid"
-    [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null
-}
+# ⚠ **위쪽의 `POST /api/agent/event`는 이 위임과 무관하다.** 그건 상태 배지
+# (idle/working/waiting/done)·프롬프트 큐 자동 투입·감지 커버리지의 전제다.
 
-if [ "$EVENT" = "stop" ] && _voice_running; then
+if [ "$EVENT" = "stop" ]; then
     HOOK_DIR="$(dirname "$0")"
     if [ -x "$HOOK_DIR/tts_hook.sh" ]; then
         cat "$TMPINPUT" | "$HOOK_DIR/tts_hook.sh" || true
