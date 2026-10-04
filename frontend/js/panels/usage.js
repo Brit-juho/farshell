@@ -286,8 +286,8 @@ export function renderBody(limitData, counterData, target) {
 // 탭마다 배지를 붙이면 **틀린 계정을 확신 있게 표시**하게 된다 — A2에서 세운
 // "모호하면 아무것도 강조하지 않는다"와 정면으로 어긋난다.
 // 그래서 rail 버튼에 전역 지표만 단다: 활성 프로필 이름(title) + 라이브 점.
-// 세션별 귀속은 2.1의 `fsh agent claude --profile`(우리가 실행 주체가 되는 시점)
-// 이후에 정확해진다.
+// 세션별 귀속은 세션→프로필 매핑을 정확히 얻을 수 있게 될 때까지 하지 않는다
+// (옛 계획이던 `fsh agent claude --profile`은 2026-10-02에 명령과 함께 제거됐다).
 
 // N41 — 한도형(/api/usage)과 누적형(/api/usage/counter)을 따로 요청한다.
 // 하나가 실패/없음이어도 다른 하나는 그려야 한다(clauth 없이 로컬 LLM만
