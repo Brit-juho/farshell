@@ -1,4 +1,5 @@
-// 모바일 세션 시트의 「순서 편집」 — 뷰 단위로 위/아래 버튼으로 순서를 옮긴다(10-session-order.md C안).
+// 모바일 세션 시트의 「뷰 편집」 — 뷰 단위로 위/아래 버튼으로 순서를 옮기고, 닫기 버튼으로 뷰를 닫는다
+// (10-session-order.md C안 + 2026-10-06 뷰 닫기). 닫기는 탭 ×와 같은 closeView(묶음 구성 기억 포함).
 // 순서의 출처는 저장되는 레이아웃 하나라서(layout/compact.js openSessionOrder) 여기서 하는 일은
 // `moveLayoutTab`(데스크톱 탭 드래그와 같은 함수) + `saveLayoutNow` 뿐이다. 활성 탭은 id로 다시
 // 찾으므로 순서가 바뀌어도 활성 뷰·포커스는 그대로다. 열 때만 받는 지연 청크(`screens`).
@@ -7,8 +8,9 @@ import { getTabsWithTrees, getActiveTabId, moveLayoutTab } from './store.js';
 import { saveLayoutNow } from './persist.js';
 import { sessionDisplayName } from '../core/store.js';
 import { icon } from '../ui/icons.js';
+import { closeView } from '../term/session-actions.js';
 
-let _focus = null;   // 이동 직후 다시 그릴 때 포커스를 돌려줄 버튼 {tabId, dir}
+let _focus = null;   // 이동·닫기 직후 다시 그릴 때 포커스를 돌려줄 버튼 {tabId, dir} | {close:true, index}
 let _note = '';      // 스크린리더용 결과 안내 한 줄
 
 /** 열린 세션이 있는 뷰만, 화면 순서대로. 빈 뷰는 순서 편집 대상이 아니다. */
@@ -42,7 +44,7 @@ export function renderOrderEditor(list) {
   const note = document.createElement('p');
   note.className = 'vt-order-note';
   note.setAttribute('role', 'status');
-  note.textContent = _note || '위·아래 버튼으로 뷰 순서를 바꿉니다. 묶음 뷰는 함께 움직입니다.';
+  note.textContent = _note || '위·아래 버튼으로 뷰 순서를 바꾸고, 닫기 버튼으로 뷰를 닫습니다. 묶음 뷰는 함께 움직이고 닫아도 세션은 살아 있습니다.';
   _note = '';
   list.appendChild(note);
   views.forEach((v, i) => {
@@ -82,9 +84,31 @@ export function renderOrderEditor(list) {
       };
       block.appendChild(b);
     }
+    const label = viewTitle(v);
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'vt-icon-btn xl danger vt-order-close';
+    x.dataset.tab = v.id;
+    x.innerHTML = icon('x', 18);
+    x.setAttribute('aria-label', `${label} 뷰 닫기`);
+    x.onclick = async () => {
+      _focus = { close: true, index: i, until: Date.now() + 1500 };
+      _note = `${label} 뷰를 닫았습니다. 세션은 그대로 남아 있습니다.`;
+      await closeView(v.id);
+      // closeView 뒤에도 세션 정리·저장이 시트를 다시 그린다 — 닫기 포커스는 1.5초간 유지해 그 그림마다 되돌린다.
+      if (list.isConnected) renderOrderEditor(list);
+    };
+    block.appendChild(x);
     list.appendChild(block);
   });
-  if (_focus) {
+  if (_focus && _focus.close && Date.now() > _focus.until) _focus = null;
+  if (_focus && _focus.close) {
+    const xs = [...list.querySelectorAll('.vt-order-close')];
+    // 닫힌 자리로 올라온 이웃 뷰의 닫기 버튼, 없으면 마지막 것. 뷰가 없으면 시트 토글/닫기로.
+    const want = xs[Math.min(_focus.index, xs.length - 1)]
+      || list.closest('.vt-session-sheet')?.querySelector('.vt-session-close');
+    if (want) want.focus();
+  } else if (_focus) {
     const f = _focus; _focus = null;
     const btns = [...list.querySelectorAll('.vt-order-btn')].filter((b) => b.dataset.tab === f.tabId);
     // 끝에 닿아 비활성이 된 쪽이면 반대쪽 버튼으로 — 포커스가 body로 빠지지 않게.

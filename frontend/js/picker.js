@@ -7,7 +7,9 @@
 // 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
 import { activeSession, activeSessionId, sessionDisplayName, getSession } from './core/store.js';
 import { openSessionIds, openSessionOrder } from './layout/compact.js';
-import { onLayoutChange } from './layout/store.js';
+import { onLayoutChange, pruneBlankViews } from './layout/store.js';
+import { isCompactMode } from './layout/compact.js';
+import { saveLayoutNow } from './layout/persist.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
@@ -54,7 +56,7 @@ function sessionName(id) {
   return sessionDisplayName(id);
 }
 
-// 순서 편집 모드(모바일, 뷰 단위 — layout/session-order.js 지연 청크). 시트를 닫으면 해제.
+// 뷰 편집 모드(모바일, 뷰 단위 순서 변경 + 닫기 — layout/session-order.js 지연 청크). 시트를 닫으면 해제.
 let _ordering = false;
 const viewCount = () => new Set(openSessionOrder().map((e) => e.tabId)).size;
 
@@ -67,6 +69,9 @@ function openSessionManager() {
   backdrop.setAttribute('role', 'presentation');
   backdrop.innerHTML = '<section class="vt-session-sheet" role="dialog" aria-modal="true" aria-labelledby="session-manager-title"></section>';
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSessionManager(); });
+  // 모바일: 시트를 열 때 비어 있는 단독 뷰(「빈 화면」)를 정리한다 — 폰에는 뷰 탭 바가 없어
+  // 칸 ×가 남긴 빈 뷰를 치울 길이 없다. 데스크톱은 「칸 ×는 빈 칸으로 남김」 규칙 그대로.
+  if (isCompactMode() && pruneBlankViews() > 0) saveLayoutNow();
   document.body.appendChild(backdrop);
   document.getElementById('voice-session-picker')?.setAttribute('aria-expanded', 'true');
   renderSessionManager(backdrop);
@@ -114,10 +119,12 @@ async function renderSessionManager(backdrop) {
   if (!sheet) return;
   // "맥에서도 열기"는 (특정 세션이 아니라) 앞으로 만들 모든 세션에 적용되는
   // 전역 설정이라 ⋯의 「설정」 그룹 쪽에 남긴다(index.html 참고).
-  if (_ordering && viewCount() < 2) _ordering = false;
-  const toggle = viewCount() >= 2
-    ? `<button class="vt-icon-btn xl vt-session-order-toggle${_ordering ? ' active' : ''}" type="button" aria-pressed="${_ordering}" aria-label="뷰 순서 편집">${icon('arrow-up-down', 16)}</button>` : '';
-  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">${_ordering ? '뷰 순서' : '세션 관리'}</h2><div class="vt-session-head-actions">${toggle}<button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div></div><div class="vt-session-list"></div>${_ordering ? '' : `<div class="vt-session-footer"><button type="button" class="vt-menu-item vt-session-footer-item" id="session-open-mac-btn">${icon('terminal', 16)}<span class="vt-menu-item-label">지금 이 세션 맥에서 열기</span></button></div>`}`;
+  // 편집 중에는 뷰가 하나 남아도 모드를 유지한다(마저 닫을 수 있게). 마지막 뷰를 닫아 0개가 되면
+  // 시트를 닫는다 — 뒤에는 온보딩이 떠 있다.
+  if (_ordering && viewCount() < 1) { closeSessionManager(); return; }
+  const toggle = (viewCount() >= 2 || _ordering)
+    ? `<button class="vt-icon-btn xl vt-session-order-toggle${_ordering ? ' active' : ''}" type="button" aria-pressed="${_ordering}" aria-label="뷰 편집">${icon('square-pen', 16)}</button>` : '';
+  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">${_ordering ? '뷰 편집' : '세션 관리'}</h2><div class="vt-session-head-actions">${toggle}<button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div></div><div class="vt-session-list"></div>${_ordering ? '' : `<div class="vt-session-footer"><button type="button" class="vt-menu-item vt-session-footer-item" id="session-open-mac-btn">${icon('terminal', 16)}<span class="vt-menu-item-label">지금 이 세션 맥에서 열기</span></button></div>`}`;
   sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
   const tg = sheet.querySelector('.vt-session-order-toggle');
   if (tg) tg.onclick = () => { _ordering = !_ordering; renderSessionManager(backdrop); };

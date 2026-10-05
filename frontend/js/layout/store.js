@@ -462,6 +462,23 @@ export function closeViewIfEmptied(tabId) {
   return closeLayoutTab(tabId);
 }
 
+/** 모바일 세션 시트를 열 때 쓰는 정리 — 세션도 이름도 없는 **단독** 빈 뷰(「빈 화면」)를 닫는다.
+ * closeViewIfEmptied와 달리 활성 뷰도 닫는다(활성이 비었고 다른 뷰가 있으면 이웃 뷰로 전환 —
+ * closeLayoutTab의 활성 재배정). 뷰가 하나뿐이면 닫지 않는다(그건 온보딩 상태다). 묶음 뷰와
+ * 이름 붙은 뷰, 뷰어·패널 칸이 있는 뷰는 건드리지 않는다. 데스크톱의 「칸 ×는 빈 칸으로 남김」
+ * 규칙은 이 함수를 부르지 않는 것으로 유지된다. 닫은 뷰 수. */
+export function pruneBlankViews() {
+  _sync();
+  const blank = (t) => !t.label && t.tree.t === 'leaf' && !t.tree.session && !t.tree.unreachable
+    && (t.tree.kind || 'terminal') === 'terminal';
+  let n = 0;
+  for (const t of [..._tabs]) {
+    if (_tabs.length <= 1) break;
+    if (blank(t) && closeLayoutTab(t.id)) n += 1;
+  }
+  return n;
+}
+
 /** 탭 순서를 바꾼다(헤더 탭 바 드래그 재정렬, 데스크톱 전용 — layout/tabbar.js).
  * toIndex는 **이동 후** 그 탭이 있어야 할 위치. 활성 탭은 id로 다시 찾으므로
  * 순서가 바뀌어도 활성 탭 자체는 안 바뀐다. 탭이 하나거나 범위 밖이면 false. */
