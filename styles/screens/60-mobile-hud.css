@@ -278,3 +278,13 @@
   }
   .vt-fleet-add-btn:hover, .vt-fleet-add-btn:active { border-color:var(--color-line-strong); color:var(--txt); }
 }
+
+/* 2026-10-06 폰 실측 — 「연결된 화면」 시트의 닫기(×)·끊기(×)·「이 화면만 남기기」가 24px이라
+   손가락으로 누르기 어려웠다(행 높이도 27~32px). 모바일 시트 안에서만 44px로 키운다.
+   데스크톱 레일의 같은 패널은 그대로. */
+@media (max-width:719px) {
+  #vt-connected-screens .vt-wtd-x { width:44px; height:44px; }
+  #vt-connected-screens .vt-clients-row { min-height:44px; }
+  #vt-connected-screens .vt-clients-detach { width:44px; height:44px; }
+  #vt-connected-screens .vt-clients-head .vt-btn { min-height:44px; }
+}

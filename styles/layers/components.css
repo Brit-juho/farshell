@@ -104,6 +104,10 @@
                 border-color var(--dur-fast) var(--ease-out-quint),
                 color var(--dur-fast) var(--ease-out-quint);
   }
+  /* `display:inline-flex`가 UA의 `[hidden]{display:none}`을 이긴다 — hidden 속성만으로는
+   * 안 숨는다. #mic-retry-btn(index.html, body 직속)이 기본 hidden인데 데스크톱·가로 폰
+   * 상태줄에 「다시 보내기」가 늘 떠 있었다(2026-10-06 가로 실측). */
+  .vt-btn[hidden] { display: none; }
   /* 2026-09-17 — sm의 글자를 11 → 12.5px(fs-xs)로 올린다. 20-design-system.md
    * §3이 정한 값은 "UI 텍스트 12px, 수치·경로·시간만 mono 10.5~11px"인데, 패널
    * 머리말의 버튼(새로고침·올리기·지금 실행)이 전부 sm이라 화면의 **조작**이
