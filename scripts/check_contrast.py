@@ -148,6 +148,25 @@ def main() -> int:
                         f"{skin}: {fg_name} on {bg_name} = {r:.2f}:1 < {minimum}:1 ({label})"
                     )
 
+        # 개입 필요 행: 호박색 틴트(--color-st-waiting-tint) 위의 행 글자(txt/sub) >= 4.5.
+        # 틴트는 투명도라 bg 와 합성해야 한다 — 퍼센트는 tokens.css 의 --waiting-tint-pct.
+        pct_m = re.fullmatch(r"([0-9.]+)%", tokens.get("--waiting-tint-pct", ""))
+        st = to_rgb(resolve(tokens, "--color-st-waiting") or "")
+        if not pct_m or st is None:
+            failures.append(f"{skin}: --waiting-tint-pct 또는 --color-st-waiting 을 못 읽었다")
+        else:
+            a = float(pct_m.group(1)) / 100
+            for bg_name in TEXT_BGS:
+                bg = to_rgb(resolve(tokens, bg_name) or "")
+                comp = tuple(s * a + b * (1 - a) for s, b in zip(st, bg))
+                for fg_name in ("--color-txt", "--color-sub"):
+                    fg = to_rgb(resolve(tokens, fg_name) or "")
+                    r = contrast(fg, comp)
+                    if table:
+                        print(f"  {'ok ' if r >= 4.5 else 'FAIL'} {fg_name:<20} on 개입필요 틴트({bg_name}) {r:5.2f} (>= 4.5)")
+                    if r < 4.5:
+                        failures.append(f"{skin}: {fg_name} on 개입 필요 틴트({bg_name}) = {r:.2f}:1 < 4.5:1")
+
         # 램프가 네 단계로 보이는지 — bg-0 기준 인접 단계 간격
         steps = [(n, ratio(tokens, n, "--color-bg-0")) for n in RAMP]
         for (n1, r1), (n2, r2) in zip(steps, steps[1:]):

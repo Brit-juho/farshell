@@ -231,6 +231,16 @@
    * 배경이 hover 구분. */
   --color-surface-active: rgb(255 255 255 / .18);
 
+  /* 「개입 필요」 행 배경 — 호박색(--color-st-waiting)을 낮은 투명도로 얹은 틴트.
+   * 이전에는 --color-surface-active(흰/검정 오버레이)였는데, light 스킨(notepad)에서
+   * 검정 오버레이는 "눌린 회색 = 비활성"으로 읽혔다. 상태 축(대기)을 말하려면 색상각이
+   * 있어야 한다. 퍼센트는 별도 토큰으로 빼 둔다: scripts/check_contrast.py 와
+   * tokens-contrast.test.js 가 이 값을 읽어 9개 스킨 전부에서 행 텍스트(txt/sub)가 틴트
+   * 위에서 4.5:1 이상인지 계산한다. 10%인 이유: windows(노랑 st-waiting)에서 sub 가
+   * 4.69:1 까지 내려가는 상한이다 — 올리려면 그 검사가 먼저 깨진다. */
+  --waiting-tint-pct: 10%;
+  --color-st-waiting-tint: color-mix(in srgb, var(--color-st-waiting) var(--waiting-tint-pct), transparent);
+
   /* 17개 계약 밖의 보조 토큰 — 상태 배너(--err 등) 위에 얹는 고정 흰 텍스트가
    * legacy.css 여러 곳에 `color:#fff` 리터럴로 흩어져 있던 것(D1 체크리스트
    * "하드코딩 색 제거")을 이걸로 대체한다. 모든 스킨의 상태색(성공/경고/에러)이

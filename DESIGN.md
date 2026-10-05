@@ -189,6 +189,7 @@ that ride alongside. In 2.1.0 the corner radius dropped to one step
 | `--color-st-{idle,working,waiting,done,error}` | `#7c7c84` `#4fd1a5` `#f0a860` `#5b8def` `#f06868` | The 5 agent states (§5) |
 | `--color-term-bg` / `--color-term-fg` | `#0a0a0b` / `#eeeef0` | xterm background / foreground |
 | `--color-surface-active` | `rgb(255 255 255 / .18)` | The "currently selected" surface (rail, fleet home rows). Twice the hover overlay's alpha — the same value would be indistinguishable from hover on a pointer device. The accessibility requirement (WCAG 1.4.11) is carried by the row's left 3px status bar, not by this |
+| `--color-st-waiting-tint` (+ `--waiting-tint-pct: 10%`) | `color-mix(--color-st-waiting 10%, transparent)` | Background of an attention-needed row (`.vt-srow.is-waiting`, Fleet). Replaced `--color-surface-active`, which read as a pressed grey "inactive" row on the light skin. On this tint the row's secondary text rises from muted to sub and the amber keyword to txt; `scripts/check_contrast.py` and `tokens-contrast.test.js` check txt/sub >= 4.5:1 on the tint over bg-0/1/2 in all 9 skins (the percentage is the ceiling — windows' yellow waiting colour leaves sub at 4.69:1) |
 | `--color-on-solid` | `#ffffff` | Fixed white text over status banners, etc. |
 
 ### Contrast rules

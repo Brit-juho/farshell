@@ -297,3 +297,48 @@ test('theme.js가 스킨별 색 표를 다시 갖지 않는다', () => {
   assert.doesNotMatch(js, /VT_BAR_COLOR/,
     'theme-color 메타 색은 CSS의 --bar를 읽는다 — JS에 표를 두면 두 곳이 어긋난다');
 });
+
+// ── 개입 필요 행: 호박색 틴트 위의 글자 대비 ─────────────────────────────
+
+function blend(fg, bg, a) {
+  return fg.map((v, i) => v * a + bg[i] * (1 - a));
+}
+
+test('개입 필요 행 배경은 호박색 틴트 토큰이고 surface-active 가 아니다', () => {
+  const components = stripComments(fs.readFileSync(path.join(ROOT, 'styles/layers/components.css'), 'utf8'));
+  const rule = components.match(/\.vt-srow\.is-waiting\s*\{([^}]*)\}/);
+  assert.ok(rule, '.vt-srow.is-waiting 규칙이 없다');
+  assert.match(rule[1], /background:\s*var\(--color-st-waiting-tint\)/);
+  assert.doesNotMatch(rule[1], /surface-active/);
+  const tokens = readRaw(stripComments(fs.readFileSync(TOKENS, 'utf8')));
+  assert.match(tokens['--color-st-waiting-tint'], /color-mix\(.*--color-st-waiting.*--waiting-tint-pct.*transparent\)/);
+  // 옛 규칙이 남아 있지 않다(같은 선택자의 배경 선언은 하나)
+  assert.strictEqual((components.match(/\.vt-srow\.is-waiting\s*\{/g) || []).length, 1);
+});
+
+test('개입 필요 행 틴트 위에서 txt/sub 가 9스킨 전부 4.5:1 이상이다', () => {
+  const tokens = readRaw(stripComments(fs.readFileSync(TOKENS, 'utf8')));
+  const pct = parseFloat(tokens['--waiting-tint-pct']) / 100;
+  assert.ok(pct > 0 && pct <= 0.2, `틴트 퍼센트가 이상하다: ${tokens['--waiting-tint-pct']}`);
+  let checked = 0;
+  for (const skin of SKIN_NAMES) {
+    const t = SKINS_ALL[skin];
+    const st = hexToRgb(t['--color-st-waiting']);
+    for (const bgName of FAINT_BACKGROUNDS) {
+      const comp = blend(st, hexToRgb(t[bgName]), pct);
+      for (const fg of ['--color-txt', '--color-sub']) {
+        const r = contrast(hexToRgb(t[fg]), comp);
+        assert.ok(r >= 4.5, `${skin}: ${fg} on tint(${bgName}) = ${r.toFixed(2)}:1 < 4.5`);
+        checked += 1;
+      }
+    }
+  }
+  assert.strictEqual(checked, 9 * 3 * 2);
+});
+
+test('개입 필요 행의 보조 글자는 muted 가 아니라 sub 로 올라간다', () => {
+  const components = stripComments(fs.readFileSync(path.join(ROOT, 'styles/layers/components.css'), 'utf8'));
+  const m = components.match(/\.vt-srow\.is-waiting \.vt-srow-meta,[^{]*\{([^}]*)\}/);
+  assert.ok(m, '보조 글자 승격 규칙이 없다');
+  assert.match(m[1], /color:\s*var\(--color-sub\)/);
+});

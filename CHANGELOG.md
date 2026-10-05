@@ -23,6 +23,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **개입 필요 행 배경을 호박색 틴트로** (`styles/layers/components.css` `.vt-srow.is-waiting`,
+  `--color-st-waiting-tint`). light 스킨에서 회색 눌림처럼 보여 비활성으로 읽히던 것을 고쳤다.
+  틴트 위 글자(txt/sub)가 9개 스킨 전부 4.5:1 이상인지 `check_contrast.py`와
+  `tokens-contrast.test.js`가 계산한다. 보조 글자는 muted 대신 sub, 호박색 키워드는 본문색.
 - **「다른 화면 N」 배지를 웹 화면 기준으로 정확히 센다** (`server/routes/tmux.py`
   `collect_tmux_sessions`, `shell/RailRow.tsx` `ScreensMark`). 세션 목록 응답
   (`GET /api/tmux/sessions`, `/ws-workspace` `tmux_sessions`)에 `webScreens`(이 서버가 PTY를
