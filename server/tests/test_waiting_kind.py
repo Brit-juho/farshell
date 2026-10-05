@@ -821,3 +821,14 @@ def test_is_terminal_report_edges():
     assert not r(None) and not r(b"") and not r("")
     assert r(b"\x1b[?1;2c") and r("\x1b[?1;2c")
     assert not r(b"\x1b[?1;2cy")
+
+
+def test_plan_hook_first_then_screen_still_fills_options():
+    # ExitPlanMode 훅은 선택지를 주지 않는다 — 화면의 번호 선택지가 뒤에 오면 채워야 한다
+    # (84eb3b0 이 승인에만 열어 둬 계획 화면의 버튼이 버려졌다 — 2026-10-06 검토).
+    ent = _perm("ExitPlanMode", sid="s", session="dev")
+    assert ent["kind"] == "plan" and ent["options"] is None
+    opts = [{"key": "1", "label": "Yes, and auto-accept edits"}, {"key": "2", "label": "No, keep planning"}]
+    A.on_waiting("s", True, question="Would you like to proceed?", options=opts, kind="plan")
+    st = A.get_state("s")
+    assert st["options"] == opts and st["kind"] == "plan"

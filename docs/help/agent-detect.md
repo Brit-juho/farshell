@@ -42,6 +42,7 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | `exit` | 문자열 목록. 나타나면 즉시 `waiting` 해제 — 프롬프트가 사라졌다는 신호 |
 | `[kinds]` | 표. 키 = waiting 유형(`approval`/`choice`/`plan`/`question`), 값 = 리터럴 문자열 목록(`enter`와 같은 리터럴 바이트 규칙). 여기 적힌 문구도 waiting 진입 신호다. `enter`에 걸리면 `approval`. 같은 윈도우에 여럿이면 plan → approval → enter → choice → question 순으로 이긴다 |
 | `ignore_exit_on` | kind 목록(예: `["choice"]`). 그 kind가 떠 있는 동안 `exit`를 무시한다 — Codex 질문 화면은 상태줄 `esc to interrupt`를 같이 그린다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙) |
+| `prefer_latest_kind` | `true`/`false`(기본 `false`). 서로 다른 대화상자 문구가 출력 이력에 함께 남아 있을 때 **윈도우에서 가장 나중에 나타난 kind**를 고른다(Codex: 승인 문구 위에 계획 문구가 남은 경우). 선택지 번호도 현재 제목 줄 이후에서만 뽑는다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙) |
 | `interrupt` | 문자열 목록. 사용자가 승인을 **거절**하거나 ESC로 작업을 끊으면 CLI는 Stop 훅을 내지 않고 이 문구만 화면에 남긴다 — 새로 그려지는 순간 그 세션의 `waiting`/`working` 엔트리를 `done`으로 마친다. waiting 진입 신호가 아니다. 문구 뒤에 `enter`/`exit`가 다시 그려졌으면 이미 지난 화면이라 무시한다. `[kinds]` 표 **위**에 쓴다 |
 | `[badge]` | 표. 키 = 보조 표시 값, 값 = 리터럴 목록. 걸려도 waiting으로 올리지 않고 엔트리에 `badge`만 붙인다(agy `/artifact to review` -> `plan`). 사용자 입력이 오면 뗀다 |
 | `options` | 정규식(문자열 또는 문자열 목록). 캡처 그룹 1=번호, 2=라벨. 매치되면 모바일 플릿 홈에 번호 버튼이 뜬다. 실패해도 `enter`/`exit`는 그대로 산다 |

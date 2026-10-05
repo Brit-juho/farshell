@@ -456,3 +456,10 @@ def test_aider_waiting_only_clears_via_user_input_or_ttl(det):
     assert d.is_waiting("s1") is True
     d.on_user_input("s1")
     assert d.is_waiting("s1") is False
+
+
+def test_strip_ansi_drops_private_parameter_csi():
+    # agy 가 보내는 `ESC [ > 4 ; 2 m`(수정 키 모드)이 `>4;2m` 글자로 남아 줄 머리 문구를 가렸다(2026-10-06 실측).
+    from agent_prompt_detect import _strip_ansi
+    assert _strip_ansi("\x1b[>4;2m(skipped)") == "(skipped)"
+    assert _strip_ansi("\x1b[<0;30;17M\x1b[=1u\x1b[?25hok") == "ok"
