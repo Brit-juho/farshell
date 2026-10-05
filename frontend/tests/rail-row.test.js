@@ -114,3 +114,25 @@ test('compact — 상태 아이콘이 행 직속에 있고 ⋯ 버튼은 없다,
   root.querySelector('.vt-wgrail-row').dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
   assert.deepStrictEqual(calls, ['contextmenu']);
 });
+
+test('행 메뉴가 뷰포트 아래로 넘치면 안으로 당긴다 — 가로 폰(높이 331px) 실측 2026-10-06', async () => {
+  const env = await loadSolidBuild();
+  _envs.push(env);
+  const { mountMenu, document, window } = env;
+  Object.defineProperty(window, 'innerHeight', { value: 331, configurable: true });
+  Object.defineProperty(window, 'innerWidth', { value: 832, configurable: true });
+  // jsdom 은 레이아웃이 없어 크기가 0 이다 — 메뉴 높이 190, 폭 200 으로 가장한다.
+  window.HTMLElement.prototype.getBoundingClientRect = function () {
+    return { width: 200, height: 190, top: 0, left: 0, right: 200, bottom: 190, x: 0, y: 0, toJSON() {} };
+  };
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  mountMenu(root, { x: 700, y: 276, onClose() {}, items: [{ label: '열기', run() {} }] });
+  const el = root.querySelector('.vt-menu');
+  assert.ok(el);
+  // 276 + 190 > 331 → 위로 당겨 하단 여백(8px)을 남긴다: 331 - 190 - 8 = 133
+  assert.strictEqual(parseFloat(el.style.top), 133);
+  // 700 + 200 > 832 → 왼쪽으로: 832 - 200 - 8 = 624
+  assert.strictEqual(parseFloat(el.style.left), 624);
+  assert.strictEqual(el.style.overflowY, 'auto');
+});

@@ -10,7 +10,7 @@
 //
 // ⚠ 여기도 `shell` 지연 청크다 — core/store.js 계열을 직접 import하지 않는다
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
-import { For, Show, createSignal, onCleanup } from 'solid-js';
+import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 
 import { agentLabel, icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
@@ -262,6 +262,21 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
   const onDocClick = (e: MouseEvent) => { if (ref && !ref.contains(e.target as Node)) props.onClose(); };
   document.addEventListener('mousedown', onDocClick, true);
   onCleanup(() => document.removeEventListener('mousedown', onDocClick, true));
+  // 가로 폰(보이는 높이 331px)에서 아래쪽 행의 메뉴가 뷰포트 밖으로 넘쳐 항목에 닿을 수
+  // 없었다(2026-10-06 폰 실측). 그려진 뒤 크기를 재서 안으로 당기고, 그래도 넘치면 스크롤.
+  onMount(() => {
+    if (!ref) return;
+    const vv = window.visualViewport;
+    const vh = vv ? vv.height : window.innerHeight;
+    const vw = vv ? vv.width : window.innerWidth;
+    const pad = 8;
+    const r = ref.getBoundingClientRect();
+    ref.style.maxHeight = `${Math.max(120, vh - pad * 2)}px`;
+    ref.style.overflowY = 'auto';
+    const h = Math.min(r.height, vh - pad * 2);
+    ref.style.top = `${Math.max(pad, Math.min(props.y, vh - h - pad))}px`;
+    ref.style.left = `${Math.max(pad, Math.min(props.x, vw - r.width - pad))}px`;
+  });
 
   return (
     <div ref={ref} class="vt-menu" style={{ left: `${props.x}px`, top: `${props.y}px`, right: 'auto' }}>
