@@ -90,10 +90,12 @@ export function renderOrderEditor(list) {
     x.className = 'vt-icon-btn xl danger vt-order-close';
     x.dataset.tab = v.id;
     x.innerHTML = icon('x', 18);
-    x.setAttribute('aria-label', `${label} 뷰 닫기`);
+    // 라벨이 이미 '…뷰'로 끝나면(예: 「묶음 뷰」) '뷰'를 또 붙이지 않는다.
+    const viewName = /뷰$/.test(label) ? label : `${label} 뷰`;
+    x.setAttribute('aria-label', `${viewName} 닫기`);
     x.onclick = async () => {
       _focus = { close: true, index: i, until: Date.now() + 1500 };
-      _note = `${label} 뷰를 닫았습니다. 세션은 그대로 남아 있습니다.`;
+      _note = `${viewName}를 닫았습니다. 세션은 그대로 남아 있습니다.`;
       await closeView(v.id);
       // closeView 뒤에도 세션 정리·저장이 시트를 다시 그린다 — 닫기 포커스는 1.5초간 유지해 그 그림마다 되돌린다.
       if (list.isConnected) renderOrderEditor(list);
