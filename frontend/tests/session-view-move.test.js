@@ -1,4 +1,4 @@
-// 모바일 세션 시트의 뷰 순서 편집(layout/session-order.js + picker.js 토글, 10-session-order.md C안).
+// 모바일 세션 시트의 뷰 옮기기(layout/session-order.js + picker.js 토글, 10-session-order.md C안). 뷰 닫기는 session-view-edit.test.js.
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');

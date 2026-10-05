@@ -40,6 +40,23 @@ with open(_EMPTY_CFG, "w", encoding="utf-8") as _f:
     _f.write("# server/tests 전용 빈 설정 — conftest.py가 만든다\n")
 os.environ["VT_CONFIG"] = _EMPTY_CFG
 
+# ⚠ HOME·Claude·tmux 도 격리한다 (2026-10-06 점검).
+#
+# VT_CONFIG만 막아서는 부족했다. HOME 을 임시 폴더로 바꿔 스위트를 돌려 보니 라우트
+# 테스트가 `~/.vt/`(tickets·files·queue·e2e_identity 등)와 `~/.config/vt/workspace.json`
+# 을 **실제 사용자 홈에 만들고 있었다**(실행하는 사람의 레일·레이아웃 상태 파일이다).
+# 그래서 import 전에 HOME 을 전용 임시 디렉터리로 고정하고, Claude 설정 경로와 tmux
+# 소켓도 테스트 전용으로 둔다 — 어느 코드가 새더라도 실제 `~/.claude`·`~/.vt.env`·
+# `tmux -L fsh` 에는 닿지 않는다. 필요한 테스트는 monkeypatch 로 더 좁게 지정한다.
+_TEST_HOME = tempfile.mkdtemp(prefix="vt-tests-home-")
+os.environ["HOME"] = _TEST_HOME
+import atexit, shutil  # noqa: E402
+atexit.register(shutil.rmtree, _TEST_HOME, ignore_errors=True)
+os.environ["CLAUDE_CONFIG_DIR"] = os.path.join(_TEST_HOME, ".claude")
+os.environ["VT_TMUX_SOCKET"] = "fsh-tests-" + str(os.getpid())
+for _k in ("VT_WORKSPACE_PATH", "VT_RUN_DIR", "VT_STATE_DIR"):
+    os.environ.pop(_k, None)
+
 
 import pytest  # noqa: E402
 
