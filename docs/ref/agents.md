@@ -53,6 +53,21 @@ A `waiting` entry carries `kind` = `approval | choice | plan | question` (`GET /
 - **Notification hook** (`permission_prompt|idle_prompt`, registered by `fsh hooks install`): recorded as `last_notification` only — never used to decide kind or status. Re-run `fsh hooks install` to register it; until then `fsh hooks status`/`doctor` show Notification as `add` and coverage reports Claude as `pty`, not `hook`.
 - **`PermissionRequest` (registered by `fsh hooks install`, 2026-10-04):** fires just before Claude Code shows a permission dialog; the script exits with no output, so it never allows or denies anything and the normal dialog appears. It gives the server the exact `tool_name` (kind) at once instead of waiting for the screen. There is no "approved/denied" event, so clearing is still the next pre/post/stop or the screen's exit pattern. Existing installs must re-run `fsh hooks install`; until then Claude's kinds come from screen patterns (`kindSources` reports that honestly).
 
+### Where `waiting` is released (2026-10-06)
+
+| Path | Trigger | Reacts to attach/resize redraw? |
+|---|---|---|
+| Screen exit pattern | `exit` literal (`esc to interrupt`) drawn newer than the prompt (`PromptDetector.feed`) | Only if the redraw contains it; a redrawn dialog does not |
+| Screen `interrupt` phrase | `Interrupted · ...` newest in the window -> `done` | No |
+| User input | any WS binary / `/keys` / paste -> `deps.on_terminal_input` (ESC -> `done`, else `working`) | **Yes, before the fix** (below) |
+| Hook | next `pre`/`post`/`stop`/`prompt` event | No |
+| TTL | `waiting` 2 min -> `working` (`sweep`) | No |
+| Resize | WS `resize` message is not input; tmux redraw has no exit literal | No (measured) |
+
+There is **no** "output resumed" release rule; the redraw hypothesis was wrong. The real cause: on every attach tmux queries the client terminal (`ESC[c`, `ESC[>c`, `ESC[>q`, `ESC]10;?`, `ESC]11;?`, `ESC[?996n`; captured from tmux 3.7c). xterm.js answers through `onData`, the frontend forwards `onData` as WS bytes, and the server could not tell those replies from a keypress. Fix: `terminal_reports.is_terminal_report` — input made only of protocol replies (DA, CPR, DSR, focus, DECRPM, DCS, OSC, APC) is not a human answer (Ctrl+F3 `ESC[1;5R` and any mixed chunk still count as typing). No timeout/cap.
+
+Measured in an isolated server + real tmux (`-L fsh-wk`) with a hook-made `waiting` and a shell dialog, client replies emulated over WS: before — first attach and second attach -> `working`; without replies, attach/second attach/reload/resize all stay `waiting`; after the fix — all four stay `waiting` and a typed ESC still gives `done`. **Not verified with a real Claude Code** (a temp `CLAUDE_CONFIG_DIR` is not logged in) and not with a real browser xterm.js (reply bytes are the standard ones, not captured).
+
 ### Rejecting an approval (2026-10-05, real CLIs)
 
 Measured against Claude Code 2.1.289 in an isolated server/tmux socket. **Rejecting (`4. No`) or pressing ESC at a permission dialog emits no hook at all** (no Stop, no PostToolUse; ESC while a tool runs is the same). The screen goes back to an empty input line (`⎿ Interrupted · What should Claude do instead?`), and the entry stayed `working`/`tool=Bash` until the 15-minute TTL. The earlier "waiting stays 12 s after ESC" observation was a test artefact: ESC sent with `tmux send-keys` bypasses FarShell's PTY, and only PTY input (`deps.on_terminal_input`) clears waiting. Typing/ESC in the web terminal already cleared it (ESC -> `done`, other keys -> `working`).

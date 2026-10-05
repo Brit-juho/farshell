@@ -13,6 +13,7 @@ from output_watcher import OutputWatcher
 import agent_prompt_detect
 import agent_status
 import auto_responder
+import terminal_reports
 
 pty_mgr = PTYManager()
 session_store = SessionStore()
@@ -124,6 +125,10 @@ def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> N
     누락돼도, 실제 사용자 입력은 대기를 끝내는 확실한 신호다. Escape는 Codex의
     승인 취소이므로 `done`, 그 밖의 답은 도구 실행이 이어질 수 있어 `working`.
     """
+    # tmux가 attach마다 보내는 질의(DA/XTVERSION/색/포커스)에 xterm.js가 답하는 바이트는 사람이
+    # 친 키가 아니다 — 새로고침·두 번째 화면 attach가 waiting을 풀던 근본 원인(terminal_reports).
+    if terminal_reports.is_terminal_report(data):
+        return
     info = session_store.get(pty_session_id)
     tmux_name = info.tmux_name if info else None
     was_waiting = agent_status.status_for_session(tmux_name) == agent_status.WAITING

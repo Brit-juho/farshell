@@ -737,3 +737,66 @@ def test_permission_hook_first_then_screen_still_fills_options():
     opts = [{"key": "1", "label": "Yes"}]
     A.on_waiting("s", True, question="Do you want to proceed?", options=opts, kind="approval")
     assert A.get_state("s")["options"] == opts and A.get_state("s")["kind"] == "approval"
+
+
+# ── attach/새로고침이 waiting을 풀던 문제(2026-10-06) ─────────────────────────
+# tmux 3.7c가 attach 직후 클라이언트 터미널에 보낸 질의(실측 바이트 발췌)와, 그에 xterm.js가
+# onData로 내보내는 응답. 응답이 WS 바이너리로 올라와 「사람이 입력했다」로 읽혔다.
+TMUX_ATTACH_QUERIES = b"\x1b[c\x1b[>c\x1b[>q\x1b]10;?\x1b\\\x1b]11;?\x1b\\"
+XTERM_REPLIES_TO_ATTACH = [
+    b"\x1b[?1;2c", b"\x1b[>0;276;0c", b"\x1bP>|xterm.js(5.5.0)\x1b\\",
+    b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\", b"\x1b]11;rgb:0000/0000/0000\x1b\\",
+    b"\x1b[?997;1n", b"\x1b[I", b"\x1b[24;80R",
+]
+
+
+def _waiting_hook_entry(monkeypatch):
+    import deps
+
+    class _Info:
+        tmux_name = "dev"
+
+    monkeypatch.setattr(deps.session_store, "get", lambda sid: _Info())
+    A.on_event("pre", {"session_id": "s1", "tool_name": "Bash"}, session="dev")
+    A.on_event("permission", {"session_id": "s1", "tool_name": "Bash"}, session="dev")
+    assert A.get_status("s1") == A.WAITING
+    return deps
+
+
+@pytest.mark.parametrize("reply", XTERM_REPLIES_TO_ATTACH)
+def test_terminal_protocol_reply_does_not_release_waiting(monkeypatch, reply):
+    deps = _waiting_hook_entry(monkeypatch)
+    deps.on_terminal_input("p1", reply)
+    deps.on_terminal_input("p1", reply.decode("latin-1"))   # /keys 경로는 str
+    assert A.get_status("s1") == A.WAITING
+
+
+def test_attach_reply_burst_keeps_waiting_and_detector_state(monkeypatch):
+    deps = _waiting_hook_entry(monkeypatch)
+    deps.on_terminal_input("p1", b"".join(XTERM_REPLIES_TO_ATTACH))
+    assert A.get_status("s1") == A.WAITING
+
+
+def test_attach_queries_are_what_the_replies_answer():
+    # 질의 목록이 바뀌면(tmux 업그레이드) 이 상수를 다시 채취해야 한다는 표식.
+    for q in (b"\x1b[c", b"\x1b[>c", b"\x1b[>q", b"\x1b]10;?", b"\x1b]11;?"):
+        assert q in TMUX_ATTACH_QUERIES
+
+
+@pytest.mark.parametrize("key,status", [
+    (b"4", A.WORKING), (b"\r", A.WORKING), (b"\x1b[A", A.WORKING),
+    (b"\x1b[1;5R", A.WORKING),            # Ctrl+F3 — CPR와 문법이 같아도 사람 키
+    (b"\x1b[I" + b"y", A.WORKING),        # 응답에 사람 키가 섞이면 사람 입력
+    (b"\x1b", A.DONE),
+])
+def test_real_keys_still_release_waiting(monkeypatch, key, status):
+    deps = _waiting_hook_entry(monkeypatch)
+    deps.on_terminal_input("p1", key)
+    assert A.get_status("s1") == status
+
+
+def test_is_terminal_report_edges():
+    from terminal_reports import is_terminal_report as r
+    assert not r(None) and not r(b"") and not r("")
+    assert r(b"\x1b[?1;2c") and r("\x1b[?1;2c")
+    assert not r(b"\x1b[?1;2cy")
