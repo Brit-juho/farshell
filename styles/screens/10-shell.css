@@ -500,6 +500,19 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 @media (pointer:coarse) {
   .vt-pane-head .vt-icon-btn { opacity:1; }
 }
+/* 터치(2026-10-06) — 칸 ×는 18px 상자. **보이는 크기는 그대로**, 누르는 영역만 44x44(투명 padding 13px,
+   배경은 content-box 에만). 의사 요소로 넓히면 24px 헤더 밖 — 바로 아래 터미널 위쪽 줄과 겹쳐, 터미널을
+   만지다 칸이 닫힌다(파괴적 동작). 그래서 헤더를 44px 로 키워 44px 상자가 헤더 안에 들어가게 한다. 오른쪽
+   padding 을 6→10px 로 늘리는 이유: 칸 사이 구분선(.vt-split-resizer)의 터치 히트 영역이 가장자리 8px 를
+   덮어, 6px 이면 상자의 오른쪽 모서리가 구분선에 먹힌다(실측). 분할 버튼 둘은 이번 범위가 아니다. */
+@media (pointer:coarse) {
+  .vt-pane-head { height:44px; padding-right:calc(var(--spacing) * 2.5); }
+  .vt-pane-head .vt-pane-close {
+    box-sizing:content-box;
+    padding:13px;
+    background-clip:content-box;
+  }
+}
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. pane 헤더 버튼은 18px(xs) */
 /* L8: pane 상한에 걸린 분할 버튼 — 눌러도 아무 일 없는 대신 눌리지 않는 걸
    보이게 한다(이유는 title/aria-label에 붙는다). */

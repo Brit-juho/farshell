@@ -534,6 +534,20 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-wtab-close{ opacity:.6; }
 .vt-wtab:hover .vt-wtab-close{ opacity:1; }
 .vt-wtab-close:hover{ background:var(--tab); color:var(--err); }
+/* 터치(2026-10-06) — 뷰 ×는 18px 상자에 11px 글리프라 손가락으로 못 누른다(폰 실측 대상). **보이는 크기는
+   그대로**, 누르는 영역만 44x44로 넓힌다: 상자 둘레에 투명 padding 13px(18+26=44)를 얹고 배경은 content-box에만
+   칠한다(hover/active 면이 18px 그대로). ::before 의사 요소 대신 padding 으로 한 이유 — #vt-wtabs 가
+   overflow-x:auto 라 overflow-y 도 잘려 의사 요소가 탭 높이 밖으로 못 나가고, 이웃 탭·라벨과 겹치면 안 되기
+   때문이다. padding 은 **레이아웃 자리를 차지하므로** 이웃과 겹칠 수 없다. 탭이 44px 높이(= 터치 상단 바 높이,
+   10-shell.css)가 되도록 위아래 padding 은 0 으로 풀어, 라벨은 가운데 정렬로 남는다. */
+@media (pointer:coarse){
+  .vt-wtab{ padding-block:0; }
+  .vt-wtab-close{
+    box-sizing:content-box;
+    padding:13px;
+    background-clip:content-box;
+  }
+}
 /* 다른 워크트리 탭에 속한 세션 탭은 숨긴다 — 탭 안의 세션 줄이라는 뜻이 된다. */
 
 .vt-wtd-warn-ico{ flex:none; margin-top:2px; }

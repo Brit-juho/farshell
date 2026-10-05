@@ -23,6 +23,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **터치에서 뷰 탭 ×·칸 헤더 ×의 누르는 영역을 44px로** (`styles/screens/80-dock.css`, `10-shell.css`). `@media (pointer: coarse)`에서만, 보이는 크기(18px 상자·11/13px 글리프)는 그대로 두고 투명 padding 13px로 클릭 영역만 넓혔다(hover 면은 content-box). padding이라 이웃과 겹치지 않는다. 대신 터치에서 탭과 칸 헤더가 44px 높이가 된다. 데스크톱은 그대로.
 - **개입 필요 행 배경을 호박색 틴트로** (`styles/layers/components.css` `.vt-srow.is-waiting`,
   `--color-st-waiting-tint`). light 스킨에서 회색 눌림처럼 보여 비활성으로 읽히던 것을 고쳤다.
   틴트 위 글자(txt/sub)가 9개 스킨 전부 4.5:1 이상인지 `check_contrast.py`와

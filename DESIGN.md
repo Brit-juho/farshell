@@ -1140,6 +1140,14 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
 
 - **Touch targets:** under a coarse pointer, the bottom nav and keybar
   buttons keep a 44px tap area. A fine pointer keeps a tighter density.
+  The small **view-tab ×** (`.vt-wtab-close`) and **pane-header ×** (`.vt-pane-close`)
+  keep their visible 18px box and 11/13px glyph and get a 44x44 hit area only under
+  `(pointer: coarse)`: 13px transparent padding with `background-clip: content-box`
+  (hover/active still paints 18px). Padding, not a `::before`, because the tab strip is
+  `overflow-x:auto` (clips a pseudo-element vertically) and padding takes layout space,
+  so it cannot overlap a neighbour; the tab and the pane header grow to 44px (the
+  header's right padding is 10px to clear the split resizer's 8px touch zone). On a
+  fine pointer both stay 18px / 24px-header.
 - **Keyboard:** `Mod+K` palette, `Mod+,` settings, `Ctrl/Cmd+F` (palette `~`
   mode), `Ctrl/Cmd+Shift+F` (in-pane search), Esc to close,
   `:focus-visible` outline (`--color-acc`).
