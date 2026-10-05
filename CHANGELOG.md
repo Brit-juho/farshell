@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- agy의 「계획 있음」 배지가 화면에 안 뜨던 것을 고쳤다. 상태 키워드가 배지를 `done`에서만 읽어 `working` 엔트리에 달린 배지를 버렸다. 이제 working 행에도 「계획 있음」/「질문 있음」을 보조 표시로 낸다(상태는 그대로, RailRow·Fleet 공용).
 - **계획 화면(`ExitPlanMode`)의 선택지 버튼이 버려지던 것** (`server/agent_status.py`). 훅이 먼저 오고
   화면 선택지가 나중에 오면, 선택지를 채우는 조건이 승인에만 열려 있어 계획 화면의 번호 버튼이 사라졌다.
   승인과 계획 둘 다 화면 선택지로 보강한다.

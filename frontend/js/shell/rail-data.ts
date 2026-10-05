@@ -30,7 +30,7 @@ export interface SessionRow {
   tool: string | null;
   /** 서버가 정한 waiting의 유형. 없으면 질문. */
   kind: WaitKind | null;
-  /** done에 붙는 보조 표시(질문 있음/계획 있음). */
+  /** done·working에 붙는 보조 표시(질문 있음/계획 있음). */
   badge: DoneBadge | null;
   diffFiles: number | null;
   changed?: { files: number; add: number; del: number } | null;
@@ -96,7 +96,7 @@ export interface StateKeyword {
   text: string;
   /** 작업 중의 도구 이름. 말줄임은 이쪽에서만 허용한다. */
   tool: string | null;
-  /** done 옆의 보조 표시. */
+  /** done·working 옆의 보조 표시. */
   badge: string | null;
 }
 
@@ -105,11 +105,13 @@ export function stateKeyword(
 ): StateKeyword {
   const s = normalizeState(row.status);
   if (s === 'waiting') return { text: KIND_LABEL[normalizeKind(row.kind)], tool: null, badge: null };
-  if (s === 'working') return { text: STATE_LABEL.working, tool: row.tool || null, badge: null };
-  if (s === 'done') {
-    const b = normalizeBadge(row.badge);
-    return { text: STATE_LABEL.done, tool: null, badge: b ? BADGE_LABEL[b] : null };
-  }
+  // 보조 표시(질문 있음/계획 있음)는 done뿐 아니라 working에도 붙는다 — agy는 턴 종료 신호가
+  // 없어 「계획 있음」 배지가 working 엔트리에 달린다(상태는 바꾸지 않는다). waiting은
+  // 유형 키워드가 이미 그 뜻이라 안 붙이고, idle에 남은 배지는 숨긴다.
+  const b = normalizeBadge(row.badge);
+  const badge = b ? BADGE_LABEL[b] : null;
+  if (s === 'working') return { text: STATE_LABEL.working, tool: row.tool || null, badge };
+  if (s === 'done') return { text: STATE_LABEL.done, tool: null, badge };
   return { text: STATE_LABEL.idle, tool: null, badge: null };
 }
 

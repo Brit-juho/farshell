@@ -415,7 +415,7 @@ Only when applicable, a fourth line: the grouped view's name and a 「다른 화
 (tmux clients attached beyond this browser tab's own). The state keyword is short and fixed so
 it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문 for waiting (server `kind`),
 유휴 / 작업 중 (+ tool name, the one place allowed to ellipsize) / 완료 (+ 「질문 있음」 /
-「계획 있음」 from the server `badge`). The old left 3px status bar, the repo color bar, the
+「계획 있음」 from the server `badge`, which working rows show too — agy's plan badge rides a working entry). The old left 3px status bar, the repo color bar, the
 tmux plug icon and the `? question` line are gone — state is the icon's colour **and** shape.
 A session that is not open keeps full opacity but its name steps down to `--color-sub`.
 

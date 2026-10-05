@@ -126,7 +126,7 @@ moves the active **view tab** at every width (it moved a session in the removed 
   |---|---|---|---|
   | approval | hook (`PermissionRequest` tool_name) | hook | screen only |
   | choice | hook (`tool_name: AskUserQuestion`) | Plan mode only; hook is `PreToolUse request_user_input`, screen `Question 1/1` | screen only |
-  | plan | hook (`tool_name: ExitPlanMode`) | screen only (`Implement this plan?`) | no blocking dialog → **done + plan badge**, not waiting |
+  | plan | hook (`tool_name: ExitPlanMode`) | screen only (`Implement this plan?`) | no blocking dialog → **plan badge** (shown beside `working`, agy has no end-of-turn signal), not waiting |
   | question | `Stop` message ending in `?` → helper badge on done, **never** promoted to waiting | same | same (screen) |
 
   Rules: hook kind wins, then screen pattern (scoped to the detected CLI's own spec), then fallback. A waiting

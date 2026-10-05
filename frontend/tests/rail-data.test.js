@@ -109,7 +109,15 @@ test('stateKeyword — 작업 중은 도구 이름을 따로 싣고, 완료는 �
   assert.strictEqual(stateKeyword({ status: 'done', kind: null, badge: 'question', tool: null }).badge, '질문 있음');
   assert.strictEqual(stateKeyword({ status: 'done', kind: null, badge: 'plan', tool: null }).badge, '계획 있음');
   assert.strictEqual(stateKeyword({ status: 'done', kind: null, badge: null, tool: null }).badge, null);
-  // 배지는 done에서만 — 다른 상태에 남아 있어도 안 보인다.
+  // working에도 보조 표시가 붙는다(agy 「계획 있음」은 working 엔트리에 달린다) — 상태·도구는 그대로.
+  const wb = stateKeyword({ status: 'working', kind: null, badge: 'plan', tool: 'Edit' });
+  assert.strictEqual(wb.badge, '계획 있음');
+  assert.strictEqual(wb.text, '작업 중');
+  assert.strictEqual(wb.tool, 'Edit');
+  assert.strictEqual(stateKeyword({ status: 'working', kind: null, badge: 'question', tool: null }).badge, '질문 있음');
+  assert.strictEqual(stateKeyword({ status: 'working', kind: null, badge: null, tool: null }).badge, null);
+  // waiting은 유형 키워드가 뜻을 이미 말하고, idle에 남은 배지는 안 보인다.
+  assert.strictEqual(stateKeyword({ status: 'waiting', kind: 'plan', badge: 'plan', tool: null }).badge, null);
   assert.strictEqual(stateKeyword({ status: 'idle', kind: null, badge: 'plan', tool: null }).badge, null);
   assert.strictEqual(stateKeyword({ status: 'idle', kind: null, badge: null, tool: null }).text, '유휴');
 });
@@ -119,6 +127,7 @@ test('statusSentence — 키워드 · 도구 · 배지 · 경과를 한 줄로 �
   const since = NOW / 1000 - 120;
   assert.strictEqual(statusSentence({ status: 'waiting', kind: 'approval', badge: null, tool: null, since }, NOW), '승인 요청 · 2분');
   assert.strictEqual(statusSentence({ status: 'working', kind: null, badge: null, tool: 'Bash', since }, NOW), '작업 중 · Bash · 2분');
+  assert.strictEqual(statusSentence({ status: 'working', kind: null, badge: 'plan', tool: null, since }, NOW), '작업 중 · 계획 있음 · 2분');
   assert.strictEqual(statusSentence({ status: 'idle', kind: null, badge: null, tool: null, since: null }, NOW), '유휴');
 });
 
