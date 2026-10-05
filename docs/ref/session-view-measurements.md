@@ -73,6 +73,25 @@ Measured against Claude Code 2.1.289 in an isolated server/tmux socket. **Reject
 
 **Known limits / substitute tests.** Peer and agent origin were exercised by setting the tmux option `@fsh_origin` directly rather than by a real peer host or agent spawn. The 719px/720px boundary was checked by emulation (resized viewport), not by a device that reports that width. A real desktop touch screen (>=720px coarse) was not available; the touch split menu was verified by emulating `pointer: coarse`.
 
+### 3.1 Round 2 (2026-10-06, after the touch/keyboard/waiting fixes)
+
+Same device and method (isolated server on port 17920, `env -i`, real soft keyboard, real `adb input swipe`). Screenshots: local, untracked (`docs/plan-2.5/measurements/`).
+
+| Item | Result |
+|---|---|
+| `waiting` kept across attach, reload, second browser tab, landscape rotation (resize), split-attach | **pass.** The phone's real xterm.js sent OSC 10/11 colour replies and `ESC [ O` on every attach (captured with CDP `framesent`) and the entries stayed `waiting` |
+| Real keys release `waiting` | pass (`yo` typed on the phone: waiting -> working) |
+| A single tap on the terminal | **fail, fixed.** An SGR mouse report (`ESC [ < 0 ; x ; y M/m`) was not recognised as a terminal report, so raising the keyboard by tapping released `waiting`. `terminal_reports.py` now treats SGR mouse (tap, click, wheel) as pointer events; a mouse report mixed with a typed key, or a malformed one, still counts as human input |
+| Amber tint on the waiting row | pass on light and dark skins (contrast from the device's token values: light 12.1:1 text / 6.4:1 secondary, dark 14.9:1 / 6.4:1) |
+| View edit: per-view close (44x44), grouped view close and restore, empty single view cleaned on opening the sheet, last view -> onboarding, up/down regression | pass. Minor: the close label of a grouped view read "묶음 뷰 뷰 닫기" (duplicated word) — fixed |
+| Row-menu summary line (state, kind keyword, non-web clients, origin, branch) | pass; wraps to two lines in the landscape rail menu, never clipped |
+| Touch pane split (>=720px landscape) / absent in portrait | pass. **Fail, fixed:** in landscape the visible height is 331px, so the menu of a bottom rail row ran past the viewport and its items could not be reached. `Menu` now measures itself after mount, pulls itself inside the visible viewport and scrolls if still too tall |
+| Landscape + real soft keyboard focus mode | pass: tab bar, pane headers and rail hide, the pane uses the remaining 111px; everything returns when the keyboard closes. Not distinguished: with/without a connected key bar (it is `display:none` in landscape both before and after) |
+| Hit areas of the tab x and pane-header x (44x44, corner taps do only the intended action) | pass; the 4px gap against the neighbouring 18px split buttons was not stress-tested |
+| Regression: edge swipe order, reload restore, closed-group restore, three origin icons | pass. The 「Connected screens」 sheet could not be reopened in landscape (no open view = no row menu entry) |
+
+Side observations: after a server restart the saved layout refers to PTY ids, so every pane came back empty although the tmux names stayed in the layout (cause not confirmed). The default `waiting` TTL is 2 minutes, so synthetic states turned `working` by themselves until `VT_AGENT_TTL_*` was raised.
+
 ## 4. Bundle size (initial payload `app.js` + `core.js`, ceiling 307,200 B)
 
 310,711 -> 295,839 -> 297,689 -> 297,901 (view-tab status bar) -> 299,215 -> 299,310 -> 300,947 B. Headroom is now about 6.2 KB; the ceiling is asserted by `frontend/tests/build-output.test.js`.

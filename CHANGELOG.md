@@ -420,6 +420,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **폰에서 터미널을 한 번 탭하기만 해도 입력 대기가 풀리던 것** (`server/terminal_reports.py`). 키보드를
+  올리려고 탭하면 SGR 마우스 리포트(`ESC [ < b ; x ; y M/m`)가 올라가는데 터미널 응답으로 알아보지
+  못해 사람의 입력으로 읽었다. 탭·클릭·휠은 이제 포인터 이벤트로 가른다(사람 키가 섞이거나 문법이
+  틀리면 여전히 사람 입력). 실제 폰 Chrome으로 attach·새로고침·두 번째 탭·회전에서 waiting 유지,
+  직접 입력하면 해제되는 것을 확인했다.
+- **가로 폰에서 아래쪽 행의 메뉴가 화면 밖으로 넘치던 것** (`shell/RailRow.tsx` `Menu`). 보이는 높이가
+  331px라 항목에 닿을 수 없었다. 그려진 뒤 크기를 재서 보이는 영역 안으로 당기고 넘치면 스크롤한다.
+- **「뷰 편집」 닫기 버튼의 접근성 라벨이 「묶음 뷰 뷰 닫기」로 단어가 겹치던 것** (`layout/session-order.js`).
+
 - **폰 attach·새로고침 직후 waiting이 working으로 바뀌던 문제의 근본 수정**
   (`server/terminal_reports.py`, `server/deps.py` `on_terminal_input`). tmux는 attach마다
   DA1/DA2/XTVERSION/색 질의를 보내고 xterm.js의 응답이 WS 바이너리로 올라와 「사용자가
