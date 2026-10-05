@@ -645,3 +645,19 @@ test('snapshotSessionInfos — 열린 뷰의 세션 칸만 돌려준다(닫힌 �
   });
   assert.deepEqual([...infos].map((i) => i.tmux), ['a']);
 });
+
+// ── 닫은 묶음 기억 정리(서버 tmux 목록과 대조) ──────────────────────────────
+test('pruneClosedByLive — 목록에 없는 세션을 닫은 묶음 기억에서 빼고 저장한다, 빈 목록은 믿지 않는다', async () => {
+  const { S, P, calls } = await load();
+  await P.restoreLayout();   // 저장 가드를 연다
+  const lf = (id, tmux) => ({ t: 'leaf', id, session: { id: 'x', tmux, host: 'local' }, host: 'local' });
+  S.rememberClosedView({ id: 'v1', label: null, tree: { t: 'split', id: 's', dir: 'row', ratio: 0.5, a: lf('p1', 'a'), b: lf('p2', 'b') } });
+  calls.length = 0;
+
+  assert.strictEqual(P.pruneClosedByLive([]), false, '빈 목록(일시 장애일 수 있음)으로는 지우지 않는다');
+  assert.strictEqual(P.pruneClosedByLive(null), false);
+  assert.strictEqual(S.getClosedViews().length, 1);
+  assert.strictEqual(P.pruneClosedByLive([{ name: 'a' }, { name: 'z' }]), true, 'b가 없으니 1명 남아 항목이 지워진다');
+  assert.strictEqual(S.getClosedViews().length, 0);
+  assert.ok(calls.some((c) => c.opts && c.opts.method === 'PUT'), '정리한 상태를 바로 저장한다');
+});

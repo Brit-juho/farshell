@@ -5,7 +5,8 @@
 // 계획서가 예상한 panels/onboarding.js로의 흡수(L4)는 이번 F4 범위가 아니다.
 import { attachTmux } from './session.js';
 import { attachLayoutSessions } from './workspace.js';
-import { restoreLayout, loadLayoutSnapshot, snapshotSessionInfos } from '../layout/persist.js';
+import { restoreLayout, loadLayoutSnapshot, snapshotSessionInfos, pruneClosedByLive } from '../layout/persist.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import { isLayoutEmpty } from '../layout/store.js';
 import { load as loadSettings } from '../core/settings.js';
 import { apiFetch } from '../core/api.js';
@@ -141,6 +142,9 @@ export async function bootApp() {
     // #tmux= 핸드오프도 이 뒤에 처리해 저장이 꺼지지 않게 한다(예전엔 핸드오프가
     // 레이아웃 복원을 건너뛰어 그 탭은 다시 저장되지 않았다).
     await restoreLayout(snap);
+    // 닫은 묶음 기억 정리 — 연결(재연결 포함)마다 서버가 현재 tmux 목록을 한 번 밀어 주고, 이후
+    // 바뀔 때마다 또 온다. 이미 종료된 세션이 든 항목을 거기서 비운다(session-actions 재열기와 짝).
+    try { onWorkspaceEvent('tmux_sessions', (msg) => { pruneClosedByLive(msg && msg.sessions); }); } catch (_) { /* 정리는 부가 기능 */ }
 
     // handoff 링크(#tmux=<name>) — 이미 열려 있으면 그 칸으로, 아니면 새 단독 뷰.
     const targetTmux = new URLSearchParams(location.hash.slice(1)).get('tmux');

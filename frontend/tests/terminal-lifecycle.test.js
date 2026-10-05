@@ -495,3 +495,57 @@ test('replaceSessionId: 칸 자리·모양은 그대로, 세션 id만 바뀐다'
   assert.strictEqual(JSON.stringify(layoutStore.getTree()), before.replace('"session":"b"', '"session":"X"'));
   assert.strictEqual(layoutStore.replaceSessionId('nope', 'Y'), false);
 });
+
+// ── 닫은 묶음 재열기(2026-10-06) — attach가 실패해도 기억이 사라지지 않는다 ─────────
+function reopenFetch(deadTmux = []) {
+  return (url, opts) => {
+    const u = String(url).split('?')[0];
+    if (u.endsWith('/api/tmux/attach')) {
+      const name = JSON.parse(opts.body).name;
+      if (deadTmux.includes(name)) return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ id: `id-${name}`, name, tmux_session: name }) });
+    }
+    return fakeFetch(url, opts);
+  };
+}
+
+async function rememberedGroup(deadTmux) {
+  const built = await buildTerminalWindow({ fetchImpl: reopenFetch(deadTmux) });
+  const { window, addSession, layoutStore, cache, context } = built;
+  const actions = await importFresh(SESSION_ACTIONS_JS, context, cache);
+  addSession('a', 'A', { tmuxName: 'ta' });
+  window.sessions.a.tmuxName = 'ta';
+  layoutStore.splitActivePane('row', null);
+  addSession('b', 'B', { place: 'pane', tmuxName: 'tb' });
+  await actions.closeView(layoutStore.getActiveTabId());
+  const toasts = [];
+  window.showToast = (m) => toasts.push(m);
+  const view = layoutStore.findClosedViewByTmux('ta');
+  assert.ok(view, '묶음이 기억된다');
+  return { ...built, actions, view, toasts };
+}
+
+test('reopenClosedView — attach가 전부 실패하면 기억을 지우지 않고 알린다', async () => {
+  const { window, actions, view, layoutStore, toasts } = await rememberedGroup(['ta', 'tb']);
+  assert.strictEqual(await actions.reopenClosedView(view.id, 'ta'), false);
+  assert.ok(layoutStore.findClosedViewByTmux('ta'), '기억이 남아 다시 시도할 수 있다');
+  assert.ok(toasts.some((m) => /묶음을 열지 못했습니다/.test(m)));
+  assert.strictEqual(Object.keys(window.sessions).length, 0);
+});
+
+test('reopenClosedView — 일부만 실패하면 열린 만큼 열고 실패한 칸은 빈 칸, 한 줄로 알린다', async () => {
+  const { window, actions, view, layoutStore, toasts } = await rememberedGroup(['tb']);
+  assert.strictEqual(await actions.reopenClosedView(view.id, 'ta'), true);
+  assert.strictEqual(layoutStore.findClosedViewByTmux('ta'), null, '열렸으니 기억에서는 나간다');
+  assert.ok(window.sessions['id-ta']);
+  assert.strictEqual(layoutStore.countLeaves(), 2, '묶음 모양은 그대로(실패한 칸은 빈 칸)');
+  assert.ok(toasts.some((m) => /1개 세션을 열지 못해 빈 칸/.test(m) && /tb/.test(m)));
+});
+
+test('reopenClosedView — 모두 성공하면 기억이 나가고 두 칸이 다 찬다', async () => {
+  const { window, actions, view, layoutStore, toasts } = await rememberedGroup([]);
+  assert.strictEqual(await actions.reopenClosedView(view.id, 'tb'), true);
+  assert.strictEqual(layoutStore.getClosedViews().length, 0);
+  assert.ok(window.sessions['id-ta'] && window.sessions['id-tb']);
+  assert.strictEqual(toasts.length, 0);
+});

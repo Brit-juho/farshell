@@ -551,6 +551,9 @@ export function replaceTabs(tabs, activeTabId = null) {
 // ── 기억된 닫힌 묶음 뷰(2026-10-03) — 트리는 직렬화 모양(persist.js
 // serializeTree), 구성원은 tmux 이름. 한 세션은 묶음 하나에만 속한다.
 let _closed = [];
+// 기억 개수 상한 — 오래된 것부터 버린다. 닫은 묶음은 쌓이기만 하고(구성원이 종료돼도 남는다)
+// 스냅샷에 실려 매 저장마다 PUT되므로 무한히 두지 않는다.
+export const CLOSED_VIEWS_MAX = 10;
 
 function _serialMembers(node, out = []) {
   if (!node) return out;
@@ -585,6 +588,7 @@ export function rememberClosedView(view) {
   _closed = _closed.filter((v) => v.id !== view.id);
   _closed.push({ id: view.id, label: view.label || null, worktreeId: view.worktreeId || null,
     hostId: view.hostId || 'local', tree: view.tree });
+  while (_closed.length > CLOSED_VIEWS_MAX) _closed.shift();
   return true;
 }
 
@@ -600,6 +604,39 @@ export function findClosedViewByTmux(tmuxName) {
   if (!tmuxName) return null;
   const v = _closed.find((x) => _serialMembers(x.tree).includes(tmuxName));
   return v ? { ...v } : null;
+}
+
+/** 꺼내지 않고 본다 — 재열기가 attach에 성공하기 전엔 기억을 지우지 않는다. */
+export function peekClosedView(viewId) {
+  const v = _closed.find((x) => x.id === viewId);
+  return v ? { ...v } : null;
+}
+
+// 로컬 구성원 중 live에 없는 tmux 세션을 빈 칸으로 만든다. 원격 호스트 칸은 그 호스트의
+// 세션이라 이 서버의 목록으로는 판단할 수 없다 — 건드리지 않는다.
+function _serialPrune(node, live) {
+  if (!node) return node;
+  if (node.t === 'leaf') {
+    const host = node.host || (node.session && node.session.host) || 'local';
+    return host === 'local' && node.session && node.session.tmux && !live.has(node.session.tmux)
+      ? { ...node, session: null } : node;
+  }
+  return { ...node, a: _serialPrune(node.a, live), b: _serialPrune(node.b, live) };
+}
+
+/** 이 서버의 tmux 세션 목록(live: 이름 Set)과 대조해 없는 구성원을 기억에서 뺀다. 구성원이
+ * 2명 미만이 되면 항목을 지운다. 바뀌었으면 true. */
+export function pruneClosedViews(live) {
+  let changed = false;
+  const next = [];
+  for (const v of _closed) {
+    const tree = _serialPrune(v.tree, live);
+    if (tree === v.tree || JSON.stringify(tree) === JSON.stringify(v.tree)) { next.push(v); continue; }
+    changed = true;
+    if (new Set(_serialMembers(tree)).size >= 2) next.push({ ...v, tree });
+  }
+  if (changed) _closed = next;
+  return changed;
 }
 
 export function takeClosedView(viewId) {

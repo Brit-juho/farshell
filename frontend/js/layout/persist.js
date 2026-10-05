@@ -22,7 +22,7 @@ import { vtFetch } from '../core/api.js';
 import { hostKey } from '../core/host-route.js';
 import { screenId } from '../core/screen-id.js';
 import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves, getTabsWithTrees, getActiveTabId, replaceTabs,
-  getClosedViews, replaceClosedViews } from './store.js';
+  getClosedViews, replaceClosedViews, pruneClosedViews } from './store.js';
 // N4 — 스냅샷의 `panel` 이름을 검증할 때만 쓴다(상수 Set 하나). 화면 모듈은
 // 여기서 import 하지 않는다 — 그러면 panels 청크가 core로 승격된다(ADR-26).
 import { PANEL_KINDS } from '../panels/registry.js';
@@ -295,6 +295,18 @@ export async function restoreLayout(snap = undefined) {
   const applied = snap ? _applySnapshot(snap) : false;
   _enabled = true; // 이 시점 이후의 변경부터 저장한다
   return applied && countLeaves() > 0;
+}
+
+/** 서버의 tmux 세션 목록(`tmux_sessions` push·GET /api/tmux/sessions의 항목 배열)과 대조해
+ * 이미 없는 세션을 닫은 묶음 기억에서 정리한다. **빈 목록은 믿지 않는다** — 목록 조회가 비어
+ * 돌아온 것이 진짜 전부 종료인지 일시 장애인지 여기서 알 수 없고, 잘못 믿으면 멀쩡한 기억이
+ * 통째로 지워진다(남은 항목은 해가 없다: 세션이 다시 생기면 그때 대조된다). */
+export function pruneClosedByLive(sessions) {
+  if (!Array.isArray(sessions) || !sessions.length) return false;
+  const live = new Set(sessions.map((x) => x && x.name).filter(Boolean));
+  if (!live.size || !pruneClosedViews(live)) return false;
+  saveLayoutNow();
+  return true;
 }
 
 function clearLayout() {

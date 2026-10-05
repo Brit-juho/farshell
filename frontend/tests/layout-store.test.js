@@ -119,3 +119,46 @@ test('setRatio — 스토어를 거쳐도 clamp가 그대로 적용된다', asyn
   S.setRatio(splitId, 5);
   assert.strictEqual(S.getTree().ratio, 0.9);
 });
+
+// ── 닫은 묶음 기억 정책(상한·정리) ──────────────────────────────────────────
+const _lf = (id, tmux, host = 'local') => ({ t: 'leaf', id, session: tmux ? { id: 'x', tmux, host } : null, host });
+const _grp = (id, ...names) => ({
+  id, label: null, tree: names.slice(1).reduce((acc, n, i) => ({ t: 'split', id: `${id}s${i}`, dir: 'row', ratio: 0.5, a: acc, b: _lf(`${id}${n}`, n) }), _lf(`${id}${names[0]}`, names[0])),
+});
+
+test('닫은 묶음 기억 — 10개를 넘으면 오래된 것부터 버린다', async () => {
+  const S = await loadStore();
+  for (let i = 0; i < 12; i++) S.rememberClosedView(_grp(`v${i}`, `a${i}`, `b${i}`));
+  const ids = S.getClosedViews().map((v) => v.id);
+  assert.strictEqual(S.CLOSED_VIEWS_MAX, 10);
+  assert.strictEqual(ids.length, 10);
+  assert.strictEqual(ids[0] + ids[9], 'v2v11', '가장 오래된 v0, v1이 버려진다');
+});
+
+test('pruneClosedViews — tmux 세션이 없는 구성원을 빼고 2명 미만이면 항목을 지운다', async () => {
+  const S = await loadStore();
+  S.rememberClosedView(_grp('g3', 'a', 'b', 'c'));
+  S.rememberClosedView(_grp('g2', 'x', 'y'));
+  assert.strictEqual(S.pruneClosedViews(new Set(['a', 'b', 'c', 'x', 'y'])), false, '다 살아 있으면 그대로');
+  assert.strictEqual(S.pruneClosedViews(new Set(['a', 'b', 'x'])), true);
+  const got = Object.fromEntries(S.getClosedViews().map((v) => [v.id, S.closedViewMembers(v)]));
+  assert.strictEqual(JSON.stringify(got), JSON.stringify({ g3: ['a', 'b'] }), 'c가 빠진 g3은 남고, y가 빠져 1명 된 g2는 지워진다');
+});
+
+test('pruneClosedViews — 원격 호스트 칸은 이 서버의 목록으로 판단하지 않는다', async () => {
+  const S = await loadStore();
+  const v = { id: 'r', label: null, tree: { t: 'split', id: 's', dir: 'row', ratio: 0.5, a: _lf('p1', 'local1'), b: _lf('p2', 'remote1', 'mac-b') } };
+  S.rememberClosedView(v);
+  assert.strictEqual(S.pruneClosedViews(new Set(['local1'])), false, '원격 이름이 로컬 목록에 없어도 건드리지 않는다');
+  assert.strictEqual(S.getClosedViews().length, 1);
+});
+
+test('peekClosedView — 꺼내지 않고 본다(take와 달리 기억이 남는다)', async () => {
+  const S = await loadStore();
+  S.rememberClosedView(_grp('p', 'a', 'b'));
+  assert.strictEqual(S.peekClosedView('p').id, 'p');
+  assert.strictEqual(S.getClosedViews().length, 1);
+  assert.strictEqual(S.peekClosedView('nope'), null);
+  S.takeClosedView('p');
+  assert.strictEqual(S.getClosedViews().length, 0);
+});

@@ -4,7 +4,7 @@
 // 뷰 닫기(묶음 구성 기억) · 종료(항상 확인). 지연 청크(Rail/Fleet)는 정적
 // import를 못 해 맨 아래 window 브리지를 쓴다.
 import { closeLayoutTab, getTabsWithTrees, getTree, getActiveTabId, countLeaves, closePane,
-  isLayoutEmpty, rememberClosedView, findClosedViewByTmux, takeClosedView, forgetClosedMembers,
+  isLayoutEmpty, rememberClosedView, findClosedViewByTmux, peekClosedView, takeClosedView, forgetClosedMembers,
   openTabWithTree, getActivePaneId } from '../layout/store.js';
 import { collectSessions, findNode, findPaneBySession } from '../layout/tree.js';
 import { applyPaneDrop, canSplit } from '../layout/dnd.js';
@@ -72,41 +72,54 @@ export async function closePaneAction(paneId) {
 }
 
 /** 닫힌 묶음 뷰를 통째로 다시 연다. 이미 다른 칸에 열린 구성원은 옮겨 오지
- * 않고 그 자리를 빈 칸으로 둔다. */
+ * 않고 그 자리를 빈 칸으로 둔다. **기억은 attach가 하나라도 성공한 뒤에야 지운다** —
+ * 먼저 꺼내 놓고 전부 실패하면 묶음이 흔적 없이 사라졌다. 일부만 실패하면 그 칸은 빈 칸이
+ * 되고 한 줄로 알린다. 전부 실패하면 기억을 그대로 두고 false. */
+const _reopening = new Set();
 export async function reopenClosedView(viewId, focusTmux = null) {
-  const view = takeClosedView(viewId);
-  if (!view) return false;
-  const byTmux = new Map();
-  const openNow = new Set(Object.values(allSessions()).map((s) => s && (s.tmuxName || s.tmux_name)).filter(Boolean));
-  (function walk(node) {
-    if (!node) return;
-    if (node.t === 'leaf') {
-      const tmux = node.session && node.session.tmux;
-      if (tmux && !openNow.has(tmux)) byTmux.set(tmux, (node.host || node.session.host || 'local'));
-      return;
+  const view = peekClosedView(viewId);
+  if (!view || _reopening.has(viewId)) return false;
+  _reopening.add(viewId);
+  try {
+    const byTmux = new Map();
+    const openNow = new Set(Object.values(allSessions()).map((s) => s && (s.tmuxName || s.tmux_name)).filter(Boolean));
+    (function walk(node) {
+      if (!node) return;
+      if (node.t === 'leaf') {
+        const tmux = node.session && node.session.tmux;
+        if (tmux && !openNow.has(tmux)) byTmux.set(tmux, (node.host || node.session.host || 'local'));
+        return;
+      }
+      walk(node.a); walk(node.b);
+    })(view.tree);
+    const attached = new Map();
+    const failed = [];
+    for (const [tmux, host] of byTmux) {
+      let id = null;
+      if (host && host !== 'local') {
+        id = typeof window.attachRemoteSession === 'function'
+          ? await window.attachRemoteSession(host, tmux, { place: 'none' }) : null;
+      } else {
+        id = await attachTmux(tmux, { place: 'none' });
+      }
+      if (id) attached.set(tmux, id); else failed.push(tmux);
     }
-    walk(node.a); walk(node.b);
-  })(view.tree);
-  const attached = new Map();
-  for (const [tmux, host] of byTmux) {
-    let id = null;
-    if (host && host !== 'local') {
-      id = typeof window.attachRemoteSession === 'function'
-        ? await window.attachRemoteSession(host, tmux, { place: 'none' }) : null;
-    } else {
-      id = await attachTmux(tmux, { place: 'none' });
+    if (byTmux.size > 0 && attached.size === 0) {
+      showToast(`묶음을 열지 못했습니다 — ${failed.join(', ')} (기억은 그대로 둡니다)`);
+      return false;
     }
-    if (id) attached.set(tmux, id);
-  }
-  const tree = deserializeTree(view.tree, (info) => (info && info.tmux && attached.get(info.tmux)) || null);
-  if (!tree) return false;
-  const focusId = focusTmux ? attached.get(focusTmux) : null;
-  openTabWithTree({ id: view.id, label: view.label, worktreeId: view.worktreeId, hostId: view.hostId,
-    tree, focusPaneId: focusId ? findPaneBySession(tree, focusId) : null });
-  document.getElementById('onboarding')?.remove();
-  if (focusId && getSession(focusId)) revealSession(focusId);
-  saveLayoutNow();
-  return true;
+    const tree = deserializeTree(view.tree, (info) => (info && info.tmux && attached.get(info.tmux)) || null);
+    if (!tree) return false;
+    takeClosedView(viewId);
+    if (failed.length) showToast(`묶음의 ${failed.length}개 세션을 열지 못해 빈 칸으로 뒀습니다 — ${failed.join(', ')}`);
+    const focusId = focusTmux ? attached.get(focusTmux) : null;
+    openTabWithTree({ id: view.id, label: view.label, worktreeId: view.worktreeId, hostId: view.hostId,
+      tree, focusPaneId: focusId ? findPaneBySession(tree, focusId) : null });
+    document.getElementById('onboarding')?.remove();
+    if (focusId && getSession(focusId)) revealSession(focusId);
+    saveLayoutNow();
+    return true;
+  } finally { _reopening.delete(viewId); }
 }
 
 /** 행 클릭 = 열기: 열려 있으면 그 칸으로, 기억된 묶음이 있으면 통째로, 아니면
