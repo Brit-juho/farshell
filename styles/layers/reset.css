@@ -12,6 +12,12 @@
 @layer base {
   * { margin:0; padding:0; box-sizing:border-box; }
 
+  /* 2026-10-06 — `hidden` 속성의 display:none은 UA 스타일이라 작성자 CSS의
+     어떤 display 선언(.vt-btn의 inline-flex 등)에도 진다. #mic-retry-btn이
+     처음부터 하단에 보였던 원인. 레이어 안의 !important는 순서가 뒤집혀
+     가장 앞 레이어(base)가 가장 강하므로, 어느 컴포넌트도 hidden을 못 이긴다. */
+  [hidden] { display:none !important; }
+
   /* 2026-09-22(사용자 지적: "기본 스크롤이라 이상해") — 전역 기본값 하나로
      스크롤바를 얇게 정리한다. base 레이어(가장 약한 기준선)에 둬서, 이미
      스크롤바를 완전히 숨기는 화면별 규칙들(legacy 레이어의 `display:none`
