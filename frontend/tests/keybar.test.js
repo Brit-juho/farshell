@@ -399,6 +399,62 @@ test('iOS 대응 — resize 없이 scroll만 와도 겹침이 갱신된다', asy
     window.document.documentElement.style.getPropertyValue('--kb-overlap'), '260px');
 });
 
+// --- 포커스 모드(가로 + 소프트 키보드로 보이는 높이가 작을 때) -------------------
+test('보이는 높이가 300px 미만이면 포커스 모드, 키보드가 내려가 높이가 돌아오면 복귀한다', async () => {
+  const { window, vv, FOCUS_MAX_VISIBLE_H } = await buildWindow({
+    coarse: true, visualViewport: { height: 400 },
+  });
+  assert.strictEqual(FOCUS_MAX_VISIBLE_H, 300);
+  const body = window.document.body;
+  const focus = () => body.classList.contains('vt-kb-focus');
+  _stubHeight(window.document.getElementById('keybar'), 96);
+  window.innerHeight = 400;             // 가로 폰
+  vv.height = 400; vv._emit('resize');
+  assert.strictEqual(focus(), false, '키보드 없음 — 평소 화면');
+  vv.height = 330; vv._emit('resize');
+  assert.strictEqual(focus(), false, '키보드가 떠도 300px 이상이면 그대로');
+  assert.strictEqual(body.classList.contains('vt-keyboard-open'), true);
+  vv.height = 200; vv._emit('resize');
+  assert.strictEqual(focus(), true, '200px — 포커스 모드');
+  vv.height = 299; vv._emit('resize');
+  assert.strictEqual(focus(), true);
+  vv.height = 300; vv._emit('resize');
+  assert.strictEqual(focus(), false, '경계: 300px 는 평소 화면');
+  vv.height = 200; vv._emit('resize');
+  assert.strictEqual(focus(), true);
+  vv.height = 400; vv._emit('resize');
+  assert.strictEqual(focus(), false, '키보드가 내려가면 복귀');
+  assert.strictEqual(body.classList.contains('vt-keyboard-open'), false);
+});
+
+test('포커스 모드 — iOS 처럼 scroll 만 와도 갱신되고, 세로 폰(키보드 올라와도 큼)은 안 켜진다', async () => {
+  const { window, vv } = await buildWindow({ coarse: true, visualViewport: { height: 800 } });
+  _stubHeight(window.document.getElementById('keybar'), 96);
+  window.innerHeight = 800;
+  vv.height = 480; vv._emit('scroll');   // 세로 폰 + 키보드
+  assert.strictEqual(window.document.body.classList.contains('vt-kb-focus'), false);
+  window.innerHeight = 400;
+  vv.height = 190; vv._emit('scroll');
+  assert.strictEqual(window.document.body.classList.contains('vt-kb-focus'), true);
+});
+
+test('포커스 모드 — 데스크톱(키바 없음)에서는 켜지지 않는다', async () => {
+  const { window } = await buildWindow({ coarse: false, visualViewport: { height: 200 } });
+  window.visualViewport._emit('resize');
+  assert.strictEqual(window.document.body.classList.contains('vt-kb-focus'), false);
+});
+
+test('포커스 모드 CSS — 탭 바·칸 헤더·레일을 숨기고 레일/dock 의 body padding 을 푼다, keybar 는 남긴다', () => {
+  const css = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', '..', 'styles/screens/20-overlay.css'), 'utf8');
+  const m = css.match(/body\.vt-kb-focus #topbar,([^{]*)\{\s*display:\s*none;\s*\}/);
+  assert.ok(m, '숨김 규칙이 있다');
+  const sel = `#topbar,${m[1]}`;
+  for (const part of ['#topbar', '#vt-wgrail', '#vt-rail', '.vt-pane-head']) assert.ok(sel.includes(part), part);
+  assert.ok(!sel.includes('#keybar') && !sel.includes('terminal-container'), '입력 수단과 터미널은 남긴다');
+  assert.match(css, /body\.vt-kb-focus\s*\{[^}]*padding-left:[^;]*!important[^}]*padding-right:[^;]*!important/);
+});
+
 // jsdom 기본 innerHeight(768)를 buildWindow 호출 시점에 알 수 없어서 쓰는 상수.
 // createDomEnv가 바꾸지 않는 값이라 안전하다 — 어긋나면 위 테스트가 바로 깨진다.
 function window_innerHeight() { return 768; }

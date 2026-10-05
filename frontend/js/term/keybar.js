@@ -12,6 +12,10 @@ import { fitAndResize } from './resize.js';
 import { _isCoarsePointer } from '../core/env.js';
 import { get as settingGet, set as settingSet, subscribe as settingSubscribe } from '../core/settings.js';
 
+// 보이는 높이가 이보다 작으면 포커스 모드. 가로 폰(≈400px)에 키보드가 뜨면 200px 안팎, 세로 폰은 훨씬 크다.
+// 300px = 상단 바 + 키바(≈96px) + 터미널 몇 줄이 겨우 들어가는 하한이라 그 아래에서는 크롬이 터미널을 먹는다.
+export const FOCUS_MAX_VISIBLE_H = 300;
+
 // 수식키 상태. latch: 'off' | 'once'(다음 한 키) | 'lock'(다시 탭할 때까지).
 // held: 지금 그 버튼을 누르고 있는 포인터 id 집합(멀티터치 동시 입력).
 const MODS = ['ctrl', 'alt', 'shift'];
@@ -320,6 +324,13 @@ export function initKeybar() {
   //   --kb-overlap : 소프트 키보드가 레이아웃 뷰포트를 덮은 높이
   // 예전엔 이 둘을 --spacing*24 / *12 매직 넘버로 근사했는데, 접힘 상태와
   // 스킨별 버튼 높이가 달라지면 바로 어긋났다. 이제 측정값만 쓴다.
+  //
+  // 포커스 모드(2026-10-06): **보이는 높이**(visualViewport.height)가 FOCUS_MAX_VISIBLE_H 미만이면
+  // (가로 폰 + 소프트 키보드: 400px 안팎에서 키보드가 200px 가까이 먹는다) 탭 바·칸 헤더·레일·
+  // dock·HUD를 숨기고 터미널이 남은 높이를 다 쓰게 한다(`body.vt-kb-focus`, 20-overlay.css).
+  // 키보드가 내려가 높이가 돌아오면 같은 함수가 클래스를 걷어 복귀한다 — 별도 상태가 없다.
+  // 기준을 overlap이 아니라 visualViewport.height로 둔 이유: 레이아웃 뷰포트가 같이 줄어드는
+  // 브라우저(overlap=0)에서도 "남은 높이가 작다"는 사실은 같기 때문이다.
   const root = document.documentElement;
   let _lastMetrics = '';
   const positionBar = () => {
@@ -328,10 +339,12 @@ export function initKeybar() {
       ? Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
       : 0;
     document.body.classList.toggle('vt-keyboard-open', overlap > 0);
+    const focus = !!vv && vv.height < FOCUS_MAX_VISIBLE_H;
+    document.body.classList.toggle('vt-kb-focus', focus);
     if (vv) bar.style.transform = overlap > 0 ? `translateY(${-overlap}px)` : '';
     // hidden(데스크톱)이면 offsetHeight가 0 — 그대로 0을 내보내면 된다.
     const height = bar.hidden ? 0 : bar.offsetHeight;
-    const sig = `${height}|${overlap}`;
+    const sig = `${height}|${overlap}|${focus ? 1 : 0}`;
     if (sig === _lastMetrics) return;   // 스크롤 이벤트 폭탄에서 불필요한 fit 방지
     _lastMetrics = sig;
     root.style.setProperty('--kb-height', `${height}px`);

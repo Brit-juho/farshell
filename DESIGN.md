@@ -975,6 +975,22 @@ screen, recent-commands tracking, the two dead keymap shortcuts, and the
 `vt-qo-body`/`vt-vw-body` scroll-clipping bug that caused the reported
 "10개인데 3개만 보인다").
 
+**Soft keyboard (2026-10-06).** Two rules, both driven by `visualViewport` in
+`term/keybar.js` `positionBar` (so they follow the keyboard consistently with
+`--kb-height`/`--kb-overlap`):
+- *Bottom nav hides while the keyboard is open* (`body.vt-keyboard-open
+  #vt-mnav-bottom`, `60-mobile-hud.css`) — **intentional**, not a bug: the
+  keybar sits on the keyboard and the terminal needs the height; the nav
+  returns when the keyboard goes away. The same class swaps the terminal and
+  session-sheet bottom padding to the nav-less value.
+- *Focus mode* — when the **visible height** (`visualViewport.height`) is under
+  300px (landscape phone + keyboard: ~400px minus ~200px), `body.vt-kb-focus`
+  hides the tab bar, pane headers, rail, dock, HUD and bottom nav
+  (`20-overlay.css`) and releases the rail/dock body padding, so the terminal
+  takes the whole remaining height. The keybar stays (it is closed by default
+  anyway). No state is kept: the same function removes the class when the height
+  comes back. Pointer-fine devices never get it (the keybar is not wired there).
+
 ## 8. Usage (dock "Usage" tab)
 
 Two interfaces in `server/usage/base.py` (N10/N41):
