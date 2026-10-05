@@ -37,6 +37,29 @@ def env(tmp_path, monkeypatch):
         yield c, host_store, hosts_mod, agent_status
 
 
+def test_local_entry_sessions_carry_origin_without_extra_tmux_calls(tmp_path, monkeypatch):
+    """로컬 항목의 세션도 원격과 같은 모양(`origin`)이다 — get_all_panes 한 번에서 읽는다."""
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("VT_WORKSPACE_PATH", str(tmp_path / "ws.json"))
+    import host_store
+    importlib.reload(host_store)
+    import routes.hosts as hosts_mod
+    importlib.reload(hosts_mod)  # env 픽스처가 갈아 끼운 _local_entry를 원래대로
+    import tmux_runner
+
+    calls = []
+    monkeypatch.setattr(tmux_runner, "run_text", lambda args, timeout=2.0: (
+        calls.append(args) or "a\t1\t0\nb\t1\t1\nc\t2\t0"))
+    monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [
+        tmux_runner.PaneInfo(session="a", command="zsh", pid=1, path="/x", origin="peer"),
+        tmux_runner.PaneInfo(session="b", command="zsh", pid=2, path="/y", origin="local"),
+    ])
+    entry = hosts_mod._local_entry()
+    got = {s["name"]: s["origin"] for s in entry["sessions"]}
+    assert got == {"a": "peer", "b": "local", "c": "external"}  # 팬 정보가 없으면 기록 없음
+    assert len(calls) == 1, "list-sessions 한 번 외에 tmux를 더 부르지 않는다"
+
+
 def _add_peer(hs, pid="gpu-box"):
     hs.add_peer(pid, "http://127.0.0.1:9", "sekret", label="작업실")
     return pid

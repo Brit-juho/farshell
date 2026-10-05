@@ -262,7 +262,7 @@ a peer signature opens.
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/hosts[?fresh=1]` | Local host (always first, id `local`) + every registered peer, each with its session list. Remote lookups run in parallel and are cached 30s; an unreachable host degrades to `online:false` + `reason` instead of failing the list |
+| GET | `/api/hosts[?fresh=1]` | Local host (always first, id `local`) + every registered peer, each with its session list. Each session carries `name`, `windows`, `attached`, `command`, `cwd`, `status` and `origin` (`local`/`peer`/`agent`/`external`; the local entry reads it from the pane list, a peer that predates it omits it). Remote lookups run in parallel and are cached 30s; an unreachable host degrades to `online:false` + `reason` instead of failing the list |
 | GET | `/api/hosts/self` | This host's id/label (pairing guidance, settings screen) |
 | POST | `/api/hosts/{host_id}/ping` | Liveness + clock-skew/latency refresh. A failed connection returns **200 with `online:false`** — it's a state, not a server error |
 | GET | `/api/hosts/{host_id}/clients?session=&screen=` | Remote "connected screens" list — proxied to the peer route of the same name. The remote's status code (403 for insufficient level, etc.) is passed through as-is |

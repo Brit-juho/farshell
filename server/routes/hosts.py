@@ -94,6 +94,8 @@ def _local_entry() -> dict:
             "attached": int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0,
             "command": pane.command if pane else "",
             "cwd": pane.path if pane else "",
+            # 같은 get_all_panes 결과에서 읽는다(추가 tmux 호출 없음). 팬이 없으면 기록 없음.
+            "origin": pane.origin if pane else "external",
             "status": agent_status.status_for_session(name),
         })
     me = host_store.get_self()
