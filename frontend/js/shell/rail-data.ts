@@ -209,7 +209,7 @@ export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: num
 
 // ── 행 메뉴(⋯ 버튼·우클릭·폰 롱프레스가 같은 항목) ───────────────────────
 
-export type RowMenuId = 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill';
+export type RowMenuId = 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown';
 
 export interface RowMenuItem {
   id: RowMenuId;
@@ -235,19 +235,29 @@ export function rowSummary(
   return parts.join(' · ');
 }
 
+export interface RowMenuOpts {
+  /** 「오른쪽에 나란히 열기」「아래에 열기」를 넣는다. 폭 720px 이상 + 터치일 때만 true로 준다
+   * (term/session-actions.js `touchSplitAvailable`). 터치 드래그를 만들지 않는 대신의 길이다. */
+  split?: boolean;
+}
+
 /** 열린 세션이면 닫기, 아니면 열기. 이름 변경·맥에서 열기·연결된 화면은 웹 세션이 있어야 하고,
  * 종료는 tmux 세션이면 늘 있다(확인창은 vtConfirmAndKillSession). */
-export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'>): RowMenuItem[] {
+export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'>, opts: RowMenuOpts = {}): RowMenuItem[] {
   const items: RowMenuItem[] = [];
+  const split: RowMenuItem[] = opts.split
+    ? [{ id: 'splitRight', label: '오른쪽에 나란히 열기' }, { id: 'splitDown', label: '아래에 열기' }]
+    : [];
   if (row.open) {
     items.push(
       { id: 'close', label: '닫기' },
+      ...split,
       { id: 'rename', label: '이름 변경' },
       { id: 'openOnMac', label: '맥에서 열기' },
       { id: 'screens', label: '연결된 화면' },
     );
   } else {
-    items.push({ id: 'open', label: '열기' });
+    items.push({ id: 'open', label: '열기' }, ...split);
   }
   if (row.tmuxName) items.push({ id: 'kill', label: '종료', detail: '되돌릴 수 없음', danger: true });
   return items;
@@ -268,6 +278,8 @@ export function runRowMenu(
     case 'openOnMac': if (sid) w.vtOpenSessionOnMac?.(sid); break;
     case 'screens': if (sid) w.vtShowClients?.(sid); break;
     case 'kill': w.vtConfirmAndKillSession?.(row.tmuxName, sid); break;
+    case 'splitRight': w.vtSplitOpenSession?.('right', { sessionId: sid, tmuxName: row.tmuxName }); break;
+    case 'splitDown': w.vtSplitOpenSession?.('bottom', { sessionId: sid, tmuxName: row.tmuxName }); break;
   }
 }
 

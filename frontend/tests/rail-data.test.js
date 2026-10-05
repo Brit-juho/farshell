@@ -323,3 +323,27 @@ test('rowSummary — 상태 · (대기면) 유형 · 웹 외 N · 만든 곳 · 
   assert.ok(!rowSummary(r({ status: 'working', kind: 'plan' })).includes('계획 확인'));
   assert.ok(rowSummary(r({ status: 'error' })).startsWith('유휴'));
 });
+
+test('rowMenuItems — split 옵션이 있을 때만 「오른쪽에 나란히 열기」「아래에 열기」가 들어간다', async () => {
+  const { rowMenuItems } = await mod();
+  const ids = (r, o) => Array.from(rowMenuItems(r, o), (i) => i.id);
+  assert.deepStrictEqual(ids({ open: true, tmuxName: 't' }, { split: true }),
+    ['close', 'splitRight', 'splitDown', 'rename', 'openOnMac', 'screens', 'kill']);
+  assert.deepStrictEqual(ids({ open: false, tmuxName: 't' }, { split: true }), ['open', 'splitRight', 'splitDown', 'kill']);
+  assert.deepStrictEqual(ids({ open: false, tmuxName: 't' }, { split: false }), ['open', 'kill']);
+  const labels = rowMenuItems({ open: false, tmuxName: 't' }, { split: true }).map((i) => i.label);
+  assert.ok(labels.includes('오른쪽에 나란히 열기') && labels.includes('아래에 열기'));
+});
+
+test('runRowMenu — 분할 항목은 vtSplitOpenSession(방향, 세션)을 부른다', async () => {
+  const { runRowMenu } = await mod();
+  const calls = [];
+  const w = new Proxy({}, { get: (_, k) => (...a) => calls.push([k, ...a]) });
+  const r = { sessionId: 's1', tmuxName: 't1', name: 'n' };
+  runRowMenu('splitRight', r, w, () => {});
+  runRowMenu('splitDown', { ...r, sessionId: undefined }, w, () => {});
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(calls)), [
+    ['vtSplitOpenSession', 'right', { sessionId: 's1', tmuxName: 't1' }],
+    ['vtSplitOpenSession', 'bottom', { sessionId: null, tmuxName: 't1' }],
+  ]);
+});

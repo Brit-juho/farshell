@@ -269,12 +269,14 @@ function Rail(props: { deps: RailDeps }) {
     await (window as any).renameSession?.(sessionId, trimmed);
   };
 
+  // 폭 720px 이상 + 터치일 때만 「오른쪽에 나란히/아래에 열기」가 들어간다(term/session-actions.js).
+  const splitAvailable = (row: SessionRow): boolean => !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null);
   // 메뉴 항목 목록은 rail-data.ts의 rowMenuItems 하나다(폰 Fleet의 롱프레스 시트도 같다).
   const ctxMenuItems = (): MenuItem[] => {
     const m = ctxMenu();
     if (!m) return [];
     const row = m.row;
-    return rowMenuItems(row).map((it) => ({
+    return rowMenuItems(row, { split: splitAvailable(row) }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger,
       run: () => runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name)),
     }));

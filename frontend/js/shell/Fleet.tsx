@@ -508,7 +508,7 @@ function Fleet(props: { deps: FleetDeps }) {
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
-                    <For each={rowMenuItems(row)}>
+                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null) })}>
                       {(it) => (
                         <button
                           type="button"

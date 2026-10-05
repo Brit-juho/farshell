@@ -5,8 +5,11 @@
 // import를 못 해 맨 아래 window 브리지를 쓴다.
 import { closeLayoutTab, getTabsWithTrees, getTree, getActiveTabId, countLeaves, closePane,
   isLayoutEmpty, rememberClosedView, findClosedViewByTmux, takeClosedView, forgetClosedMembers,
-  openTabWithTree } from '../layout/store.js';
+  openTabWithTree, getActivePaneId } from '../layout/store.js';
 import { collectSessions, findNode, findPaneBySession } from '../layout/tree.js';
+import { applyPaneDrop, canSplit } from '../layout/dnd.js';
+import { COMPACT_MAX } from '../layout/breakpoints.js';
+import { _isCoarsePointer } from '../core/env.js';
 import { saveLayoutNow, serializeTree, deserializeTree } from '../layout/persist.js';
 import { removeSession, attachTmux, revealSession } from './session.js';
 import { showOnboarding } from './boot.js';
@@ -116,6 +119,36 @@ export async function openSessionFromRail({ sessionId = null, tmuxName = null } 
   return attachTmux(tmuxName);
 }
 
+/** 「오른쪽에 나란히 열기」「아래에 열기」를 행 메뉴에 넣을지. **폭 720px 이상 + 터치(pointer: coarse)**
+ * 일 때만이다 — 720 미만은 칸 상한 2의 폰이고, 터치 드래그는 만들지 않으며(롱프레스는 메뉴가 쓴다)
+ * 마우스 기기는 드래그가 있다. 활성 칸이 이미 그 세션이면(제 자리에서 쪼개 봐야 빈 칸만 남는다)
+ * 칸 상한에 걸렸을 때도 넣지 않는다. 「묶기는 드래그로만」 규칙의 터치 한정 완화 —
+ * docs/ref/terminal.md Actions 표. */
+export function touchSplitAvailable(sessionId = null) {
+  if (window.innerWidth < COMPACT_MAX || !_isCoarsePointer()) return false;
+  if (!canSplit()) return false;
+  const active = findNode(getTree(), getActivePaneId());
+  if (!active || active.t !== 'leaf') return false;
+  if (sessionId && active.session === sessionId) return false;
+  return true;
+}
+
+/** 활성 칸을 dir('right'|'bottom') 방향으로 분할해 그 세션을 놓는다 — 드롭의 가장자리 처리
+ * (`applyPaneDrop`)를 그대로 쓴다: 다른 뷰에 있던 세션은 옮겨 오고, 그 뷰가 비면 뷰를 닫는다
+ * (closeViewIfEmptied). 열려 있지 않으면 먼저 attach(자리는 안 정함)한 뒤 놓는다. 놓았으면 id. */
+export async function splitOpenSession(dir, { sessionId = null, tmuxName = null } = {}) {
+  if (dir !== 'right' && dir !== 'bottom') return null;
+  if (!touchSplitAvailable(sessionId)) return null;
+  let id = sessionId && getSession(sessionId) ? sessionId : null;
+  if (!id && tmuxName) id = await attachTmux(tmuxName, { place: 'none' });
+  if (!id || typeof id !== 'string') return null;
+  const paneId = getActivePaneId();
+  applyPaneDrop(paneId, dir, id);
+  saveLayoutNow();
+  revealSession(id);
+  return id;
+}
+
 /** 종료 확인 문구 — waiting/working이면 반드시 적는다. */
 export function killWarning(name, status) {
   const busyNote = status === 'waiting' ? ' 입력을 기다리고 있습니다.'
@@ -156,5 +189,7 @@ window.vtCloseView = closeView;
 window.vtClosePane = closePaneAction;
 window.vtOpenSessionFromRail = openSessionFromRail;
 window.vtKillSession = killSession;
+window.vtTouchSplitAvailable = touchSplitAvailable;
+window.vtSplitOpenSession = splitOpenSession;
 window.vtKillWarning = killWarning;
 window.vtConfirmAndKillSession = confirmAndKillSession;
