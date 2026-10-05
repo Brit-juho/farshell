@@ -1,6 +1,6 @@
 # FarShell — project overview
 
-> **v2.2.0** (2026-09-22) — release history in [CHANGELOG.md](./CHANGELOG.md)
+> **v2.3.0** (2026-10-06) — release history in [CHANGELOG.md](./CHANGELOG.md)
 
 > **Other agents:** this file is the project overview for any AI coding agent, not just
 > Claude. Cross-tool rules and the hard contracts live in [`AGENTS.md`](./AGENTS.md)
@@ -70,6 +70,7 @@ is expensive to rediscover.
 | Worktrees and git | Worktree creation/discovery, dock source control, the git account store (built but unused) | [`docs/ref/worktree.md`](./docs/ref/worktree.md) |
 | Multi-host peering | Server-to-server pairing, remote panes, offline host layout | [`docs/ref/multihost.md`](./docs/ref/multihost.md) |
 | Voice, clipboard, push | Voice daemon, hands-free and voice-only modes, clipboard daemon, Web Push | [`docs/ref/voice.md`](./docs/ref/voice.md) |
+| Measurements: session/view rules, `waiting` release, phone | Per-CLI `waiting` kind results, release-path table, terminal-reply root cause, real-device (touch) findings, bundle-size trend, reproduction | [`docs/ref/session-view-measurements.md`](./docs/ref/session-view-measurements.md) |
 | Running, testing, install | Running the server, mobile testing over adb, the E2E procedure, manual install | [`docs/ref/dev.md`](./docs/ref/dev.md) |
 
 ---

@@ -8,6 +8,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-10-06
+
+> 세션·뷰 모델을 정리한 릴리스다(재우기/깨우기 폐지, 새로고침은 닫은 세션을 되살리지 않음, 레이아웃은 브라우저 탭별 저장).
+> 호환성에 영향이 있어 마이너를 올렸다 — 아래 「마이그레이션 주의」를 먼저 읽는다. 스크롤백 영속화 제거(ADR-43)와 파일 뷰어 표면(ADR-44)도 이 버전이다.
+
+### 마이그레이션 주의
+
+- **`fsh hooks install`을 다시 실행한다.** Claude Code `PermissionRequest` 훅이 새로 등록된다. 안 하면 승인 요청은 화면 감지로만 잡힌다(유형 kind가 덜 정확하다).
+- **재우기/깨우기와 「잠자는 중」이 없어졌다.** 동작은 열기·닫기·옮기기·종료 넷이다. 닫기는 칸에서 빼기만 하고 tmux는 계속 돈다. 종료만 tmux를 끝낸다.
+- **새로고침이 닫은 세션을 다시 열지 않는다.** 시작할 때 저장된 레이아웃의 열린 칸만 attach하고 「모든 tmux 세션 attach」 폴백은 없앴다. 닫은 세션은 레일에서 다시 연다.
+- **레이아웃은 브라우저 탭마다 저장된다.** 새 탭은 가장 최근 레이아웃을 복사해 시작한다. 스냅샷은 `v5`(옛 버전은 읽힌다).
+- **모바일 세션 순서 저장(`vt-workspace-v1`)을 폐기했다.** 순서는 레이아웃(뷰 탭 순서 → 칸 순서)을 따르고, 폰에서는 세션 시트의 「뷰 편집」으로 바꾼다. 옛 값은 무시된다.
+- **옛 `rail.group.*` 설정 키는 삭제됐다.** 레일 설정은 `rail.attention.*`, `rail.origin.*`를 쓴다.
+- **스크롤백 영속화(ADR-43)가 제거됐다.** 서버가 기동할 때 남은 로그를 1회 정리하고, `fsh doctor`가 `~/.vt/scrollback`이 남았는지 알려 준다.
+- **Whisper 경로가 없어졌다.** 이전에 고른 Whisper 모델은 설정에서 새 모델을 다시 골라야 한다.
+
 ### Security
 
 - **노출 포트 보안 점검과 수정** (`server/routes/port_proxy_app.py`, `server/port_share_store.py`,
@@ -21,38 +37,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `fsh tunnel list`에 누적 횟수가 보인다(IP별 60초 차단은 그대로, share는 잠그지 않는다).
   만료된 노출은 1분 안에 터널까지 내려간다.
 
-### Changed
-
-- **터치에서 뷰 탭 ×·칸 헤더 ×의 누르는 영역을 44px로** (`styles/screens/80-dock.css`, `10-shell.css`). `@media (pointer: coarse)`에서만, 보이는 크기(18px 상자·11/13px 글리프)는 그대로 두고 투명 padding 13px로 클릭 영역만 넓혔다(hover 면은 content-box). padding이라 이웃과 겹치지 않는다. 대신 터치에서 탭과 칸 헤더가 44px 높이가 된다. 데스크톱은 그대로.
-- **개입 필요 행 배경을 호박색 틴트로** (`styles/layers/components.css` `.vt-srow.is-waiting`,
-  `--color-st-waiting-tint`). light 스킨에서 회색 눌림처럼 보여 비활성으로 읽히던 것을 고쳤다.
-  틴트 위 글자(txt/sub)가 9개 스킨 전부 4.5:1 이상인지 `check_contrast.py`와
-  `tokens-contrast.test.js`가 계산한다. 보조 글자는 muted 대신 sub, 호박색 키워드는 본문색.
-- **「다른 화면 N」 배지를 웹 화면 기준으로 정확히 센다** (`server/routes/tmux.py`
-  `collect_tmux_sessions`, `shell/RailRow.tsx` `ScreensMark`). 세션 목록 응답
-  (`GET /api/tmux/sessions`, `/ws-workspace` `tmux_sessions`)에 `webScreens`(이 서버가 PTY를
-  쥔 웹 화면 수)와 `otherClients`(웹이 아닌 attach: 맥 터미널 등)를 더했다. 배지는 이 탭을
-  뺀 다른 웹 화면만 세고, 맥 터미널 등은 터미널 아이콘 + 개수로 따로 보인다. 추가 tmux
-  호출은 없다.
-
-### Fixed
-
-- **폰 attach·새로고침 직후 waiting이 working으로 바뀌던 문제의 근본 수정**
-  (`server/terminal_reports.py`, `server/deps.py` `on_terminal_input`). tmux는 attach마다
-  DA1/DA2/XTVERSION/색 질의를 보내고 xterm.js의 응답이 WS 바이너리로 올라와 「사용자가
-  입력했다」로 읽혔다. 터미널 응답으로만 이뤄진 입력은 해제 신호에서 제외한다(사람 키가
-  섞이면 입력). 타임아웃·캡 없음. 실측과 해제 경로 표는 `docs/ref/agents.md`.
-
-- **접힌 레일(48px)에서 「개입 필요」 세션이 아래 목록에 한 번 더 나오던 문제 수정**
-  (`shell/rail-data.ts` `compactRailRows`, `Rail.tsx`). 접힌 레일은 구역 머리글이 없어
-  하나의 목록으로 그린다 — 개입 필요가 위(이름순), 나머지가 아래(이름순), 각 세션은 한 번만.
-  펼친 레일은 그대로다(waiting이 두 구역에 모두 나온다).
-- **만료된 기기의 세션이 최대 24시간 더 살던 문제 수정** (`server/auth/__init__.py`).
-  세션 검증이 기기의 존재 여부만 보고 만료는 보지 않았다. 이제 쿠키 검증과 세션
-  검증이 같은 만료 판정(`auth/devices.py`의 `_alive`)을 쓰고, 열린 WS도 60초 워치독이
-  닫는다.
-
 ### Added
+
 - **가로 폰 + 소프트 키보드에서 포커스 모드** (`term/keybar.js` `positionBar`, `20-overlay.css`). 보이는 높이(`visualViewport.height`)가 300px 미만이면 탭 바·칸 헤더·레일·dock·HUD·하단 내비를 숨기고 터미널이 남은 높이를 모두 쓴다. 키보드가 내려가 높이가 돌아오면 복귀한다.
 - **터치에서 칸 나누기** (`term/session-actions.js` `splitOpenSession`, `rail-data.ts` `rowMenuItems`). 폭 720px 이상 + 터치(`pointer: coarse`)일 때만 레일·Fleet 행 메뉴에 「오른쪽에 나란히 열기」「아래에 열기」가 들어간다. 드래그 드롭의 가장자리 처리(`applyPaneDrop`)를 그대로 써서 활성 칸을 나누고 세션을 놓는다(다른 뷰의 세션은 옮기고, 비게 된 뷰는 닫는다). 터치 드래그는 만들지 않았고, 「묶기는 드래그로만」 규칙의 터치 한정 완화다. 720px 미만에는 넣지 않는다.
 - **행 메뉴 맨 위에 요약 한 줄** (`shell/rail-data.ts` `rowSummary`, `RailRow.tsx` `Menu`, `Fleet.tsx`). 터치에는 호버 툴팁이 없어 행의 숨은 정보를 읽을 길이 없었다. 레일·Fleet 행 메뉴 맨 위에 선택 불가 안내 줄로 상태 · (입력 대기면) 유형 · 웹 외 N · 만든 곳 · 브랜치를 보인다(말줄임 없이 줄바꿈, aria로도 읽힘).
@@ -122,52 +108,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   2초 넘게 걸린다), 실패하면 `open -na`로 폴백한다. 창 열기 0.23초. 한계: 이 방식으로 연 Ghostty 창은
   명령이 끝나도 닫히지 않는다.
 
-### Changed
-
-- **세션 이동 순서를 저장되는 레이아웃 하나로 통일했다**(뷰 탭 순서 → 칸 순서). 스와이프·모바일 다음/이전 탭 키·세션 시트(`n/m` 포함)·팔레트가
-  같은 목록을 쓰고, 단일 칸 뷰의 이동이 다른 뷰의 세션을 끌어와 현재 칸을 덮던 문제를 고쳤다(이동만 한다). 별도 순서 배열은 삭제.
-  `Mod+Alt+Shift+←/→`는 모바일에서도 뷰 탭을 옮긴다.
-
-- **`fsh mobile`은 이제 폰 접속 URL과 QR만 보여준다. 서버·터널 시작은 `fsh start`.** `--network`,
-  `--safe`, `--force`는 `fsh start`로 옮겼다(`--e2e`는 URL 옵션이라 `mobile`에 남고, `--session <이름>` 추가).
-  옛 옵션을 `mobile`에 주면 안내를 내고 `fsh start`를 대신 실행한다(호환). `fsh handoff mobile`은
-  `mobile --session`으로 통합했다. 부팅 자동 시작은 `fsh start`를 쓴다.
-- **`fsh start`가 공개 터널을 열기 전 인증을 확인한다.** 예전엔 이 검사가 `mobile`에만 있어서
-  `fsh start`는 인증 없이도 공개 터널을 열었다. 인증이 없으면 거부하고 `--network tailscale` 등 대안과
-  `--force`를 안내한다. 접근 범위는 `$PID_DIR/network_mode`에 기록돼 `restart`가 이어받는다.
-- **Ghostty 창 제목이 전부 같은 아이콘(👻)이던 것.** tmux가 제목을 안 알려줘서(`set-titles off`) 창이 여러 개면
-  구분이 안 됐다. fsh 전용 tmux 서버에 `set-titles on` + `set-titles-string "#S"`를 걸어 제목이 세션 이름이 된다
-  (서버 시작 때 `tmux_hooks.install`, CLI는 세션을 만들거나 확인할 때). 기본 tmux·`~/.tmux.conf`는 건드리지 않는다.
-- 터널 목록의 기본 라벨 "터미널 (VT)"를 "터미널 (FarShell)"로 바꿨다.
-- 웹 설정 문구 "맥에서도 iTerm 열기"를 "맥 터미널에서도 열기"로 바꿨다(실제로는 메인 터미널을 쓴다).
-
-### Removed
-
-- **`fsh claude` / `fsh agent` 제거.** 웹 서비스는 쓰지 않았고(워크트리 화면의 에이전트
-  표는 `server/agents.py`가 단일 정의) 문서에만 남아 있던 명령이다. 터미널에서
-  직접 `tmux`로 들어가 에이전트를 실행하면 된다.
-
-### Fixed
-
-
-- **`fsh doctor`/`fsh status`가 "`fsh stop && fsh start`로 재시작하세요"라고 안내하던 것.** 이 방법은 터널
-  주소를 날린다(프로젝트가 스스로 금지한 방식). `fsh restart`로 바꿨다.
-- **문서의 tmux 소켓 이름이 `-L vt`로 적혀 있던 것.** 실제 기본값은 `fsh`다(이름 변경 전 잔재).
-- 호출되지 않는 죽은 함수 2개(`_tmux_populate`, `_tmux_attach_or_switch`) 제거.
-- **`fsh handoff desktop`이 창을 못 열던 것.** 창을 열기 직전에 `_ensure_tmux`가
-  빈 `dev` 세션을 먼저 만들어, "세션이 이미 있다"는 판정에 걸려 새 창을 건너뛰었다.
-  이제 붙어 있는 창이 있을 때만 건너뛰고, `dev`가 없으면 창이 세션과 `claude`를
-  함께 만든다.
-- **문서가 `fsh voice`/`mobile`/`start`가 터미널 창을 연다고 적었으나 코드는 열지 않던
-  불일치.** 문서를 실제 동작에 맞췄다.
-
-- **‘연결된 화면’에서 웹 브라우저 탭을 각각 세고 끊을 수 있게 수정.** 같은 tmux
-  세션을 연 모바일과 데스크톱이 웹 PTY 하나를 공유하던 attach 경로를 화면별 PTY로
-  바꿨다. 탭 새로고침은 같은 화면을 복구하고, 탭 종료 뒤 5초면 해당 tmux
-  클라이언트가 목록에서 빠진다. 다른 화면에서 끊긴 탭은 이유를 표시하고 자동
-  재연결을 멈춘다. HUD 숫자는 5초마다 갱신한다.
-
-### Added
 
 - **로그인·PIN 입력 상태 표시** (`frontend/js/gate.js`, PIN 페이지). Caps Lock이 켜져
   있거나 한글이 입력되고 있으면 칸 아래에 알려 준다(사용자 지적: 한/영·Caps Lock이 안
@@ -270,7 +210,40 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   나란히 보기로 옮길 수 있다. 폰에서는 설정과 무관하게 전체화면 시트로 열리고
   뒤로가기로 닫힌다.
 
+- **원격 호스트 세션 목록에 origin을 싣는다** (`server/routes/peer.py`, `GET /api/peer/sessions`). 로컬 목록과 같은 `@fsh_origin` 값을 같은 `list-sessions` 호출의 네 번째 열로 읽어 추가 tmux 호출이 없다. 기록이 없거나 모르는 값은 `external`, 이쪽이 만든 원격 세션은 `peer`로 돌아온다. 필드를 모르는 옛 서버는 프런트가 `local`로 본다.
+
 ### Changed
+
+- **터치에서 뷰 탭 ×·칸 헤더 ×의 누르는 영역을 44px로** (`styles/screens/80-dock.css`, `10-shell.css`). `@media (pointer: coarse)`에서만, 보이는 크기(18px 상자·11/13px 글리프)는 그대로 두고 투명 padding 13px로 클릭 영역만 넓혔다(hover 면은 content-box). padding이라 이웃과 겹치지 않는다. 대신 터치에서 탭과 칸 헤더가 44px 높이가 된다. 데스크톱은 그대로.
+- **개입 필요 행 배경을 호박색 틴트로** (`styles/layers/components.css` `.vt-srow.is-waiting`,
+  `--color-st-waiting-tint`). light 스킨에서 회색 눌림처럼 보여 비활성으로 읽히던 것을 고쳤다.
+  틴트 위 글자(txt/sub)가 9개 스킨 전부 4.5:1 이상인지 `check_contrast.py`와
+  `tokens-contrast.test.js`가 계산한다. 보조 글자는 muted 대신 sub, 호박색 키워드는 본문색.
+- **「다른 화면 N」 배지를 웹 화면 기준으로 정확히 센다** (`server/routes/tmux.py`
+  `collect_tmux_sessions`, `shell/RailRow.tsx` `ScreensMark`). 세션 목록 응답
+  (`GET /api/tmux/sessions`, `/ws-workspace` `tmux_sessions`)에 `webScreens`(이 서버가 PTY를
+  쥔 웹 화면 수)와 `otherClients`(웹이 아닌 attach: 맥 터미널 등)를 더했다. 배지는 이 탭을
+  뺀 다른 웹 화면만 세고, 맥 터미널 등은 터미널 아이콘 + 개수로 따로 보인다. 추가 tmux
+  호출은 없다.
+
+
+- **세션 이동 순서를 저장되는 레이아웃 하나로 통일했다**(뷰 탭 순서 → 칸 순서). 스와이프·모바일 다음/이전 탭 키·세션 시트(`n/m` 포함)·팔레트가
+  같은 목록을 쓰고, 단일 칸 뷰의 이동이 다른 뷰의 세션을 끌어와 현재 칸을 덮던 문제를 고쳤다(이동만 한다). 별도 순서 배열은 삭제.
+  `Mod+Alt+Shift+←/→`는 모바일에서도 뷰 탭을 옮긴다.
+
+- **`fsh mobile`은 이제 폰 접속 URL과 QR만 보여준다. 서버·터널 시작은 `fsh start`.** `--network`,
+  `--safe`, `--force`는 `fsh start`로 옮겼다(`--e2e`는 URL 옵션이라 `mobile`에 남고, `--session <이름>` 추가).
+  옛 옵션을 `mobile`에 주면 안내를 내고 `fsh start`를 대신 실행한다(호환). `fsh handoff mobile`은
+  `mobile --session`으로 통합했다. 부팅 자동 시작은 `fsh start`를 쓴다.
+- **`fsh start`가 공개 터널을 열기 전 인증을 확인한다.** 예전엔 이 검사가 `mobile`에만 있어서
+  `fsh start`는 인증 없이도 공개 터널을 열었다. 인증이 없으면 거부하고 `--network tailscale` 등 대안과
+  `--force`를 안내한다. 접근 범위는 `$PID_DIR/network_mode`에 기록돼 `restart`가 이어받는다.
+- **Ghostty 창 제목이 전부 같은 아이콘(👻)이던 것.** tmux가 제목을 안 알려줘서(`set-titles off`) 창이 여러 개면
+  구분이 안 됐다. fsh 전용 tmux 서버에 `set-titles on` + `set-titles-string "#S"`를 걸어 제목이 세션 이름이 된다
+  (서버 시작 때 `tmux_hooks.install`, CLI는 세션을 만들거나 확인할 때). 기본 tmux·`~/.tmux.conf`는 건드리지 않는다.
+- 터널 목록의 기본 라벨 "터미널 (VT)"를 "터미널 (FarShell)"로 바꿨다.
+- 웹 설정 문구 "맥에서도 iTerm 열기"를 "맥 터미널에서도 열기"로 바꿨다(실제로는 메인 터미널을 쓴다).
+
 - **작업 완료 알림이 음성 데몬 실행 여부와 무관해졌다.** 예전에는 데몬이 떠 있을 때만 낭독해서 웹만 쓰는 사람은
   받을 수 없었다. 이제 설정(`voice.notifyMode`, 기본 끔)으로만 정한다. **기존에 데몬 때문에 낭독을 받던 사람은 설정에서
   「응답 요약 낭독」을 켜야 한다.** `VT_NOTIFY_URL`(ntfy)을 둔 경우 푸시는 데몬과 무관하게 항상 나간다.
@@ -418,6 +391,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   걸 평평하게 보여준다. 모바일에서는 60vh 카드 대신 전체높이 바텀시트다.
 
 ### Removed
+
+- **`fsh claude` / `fsh agent` 제거.** 웹 서비스는 쓰지 않았고(워크트리 화면의 에이전트
+  표는 `server/agents.py`가 단일 정의) 문서에만 남아 있던 명령이다. 터미널에서
+  직접 `tmux`로 들어가 에이전트를 실행하면 된다.
+
 - **Whisper(faster-whisper)와 mlx-whisper 경로.** 맥에서는 CPU 전용이라 같은 정확도에서 MLX보다 약 10배 느렸고,
   새 엔진이 모든 플랫폼을 덮는다. 이전에 고른 Whisper 모델은 설정에 안내가 뜨고 새 모델을 다시 골라야 한다.
   저사양 서버(RAM 4GB 이하)에서는 llama.cpp 엔진(약 2GB)이 부담일 수 있다.
@@ -441,6 +419,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   설정 화면 「스크롤백」 절의 영속화 토글도 함께 사라졌다(줄 수 설정은 남는다).
 
 ### Fixed
+
+- **폰 attach·새로고침 직후 waiting이 working으로 바뀌던 문제의 근본 수정**
+  (`server/terminal_reports.py`, `server/deps.py` `on_terminal_input`). tmux는 attach마다
+  DA1/DA2/XTVERSION/색 질의를 보내고 xterm.js의 응답이 WS 바이너리로 올라와 「사용자가
+  입력했다」로 읽혔다. 터미널 응답으로만 이뤄진 입력은 해제 신호에서 제외한다(사람 키가
+  섞이면 입력). 타임아웃·캡 없음. 실측과 해제 경로 표는 `docs/ref/agents.md`.
+
+- **접힌 레일(48px)에서 「개입 필요」 세션이 아래 목록에 한 번 더 나오던 문제 수정**
+  (`shell/rail-data.ts` `compactRailRows`, `Rail.tsx`). 접힌 레일은 구역 머리글이 없어
+  하나의 목록으로 그린다 — 개입 필요가 위(이름순), 나머지가 아래(이름순), 각 세션은 한 번만.
+  펼친 레일은 그대로다(waiting이 두 구역에 모두 나온다).
+- **만료된 기기의 세션이 최대 24시간 더 살던 문제 수정** (`server/auth/__init__.py`).
+  세션 검증이 기기의 존재 여부만 보고 만료는 보지 않았다. 이제 쿠키 검증과 세션
+  검증이 같은 만료 판정(`auth/devices.py`의 `_alive`)을 쓰고, 열린 WS도 60초 워치독이
+  닫는다.
+
+
+
+- **`fsh doctor`/`fsh status`가 "`fsh stop && fsh start`로 재시작하세요"라고 안내하던 것.** 이 방법은 터널
+  주소를 날린다(프로젝트가 스스로 금지한 방식). `fsh restart`로 바꿨다.
+- **문서의 tmux 소켓 이름이 `-L vt`로 적혀 있던 것.** 실제 기본값은 `fsh`다(이름 변경 전 잔재).
+- 호출되지 않는 죽은 함수 2개(`_tmux_populate`, `_tmux_attach_or_switch`) 제거.
+- **`fsh handoff desktop`이 창을 못 열던 것.** 창을 열기 직전에 `_ensure_tmux`가
+  빈 `dev` 세션을 먼저 만들어, "세션이 이미 있다"는 판정에 걸려 새 창을 건너뛰었다.
+  이제 붙어 있는 창이 있을 때만 건너뛰고, `dev`가 없으면 창이 세션과 `claude`를
+  함께 만든다.
+- **문서가 `fsh voice`/`mobile`/`start`가 터미널 창을 연다고 적었으나 코드는 열지 않던
+  불일치.** 문서를 실제 동작에 맞췄다.
+
+- **‘연결된 화면’에서 웹 브라우저 탭을 각각 세고 끊을 수 있게 수정.** 같은 tmux
+  세션을 연 모바일과 데스크톱이 웹 PTY 하나를 공유하던 attach 경로를 화면별 PTY로
+  바꿨다. 탭 새로고침은 같은 화면을 복구하고, 탭 종료 뒤 5초면 해당 tmux
+  클라이언트가 목록에서 빠진다. 다른 화면에서 끊긴 탭은 이유를 표시하고 자동
+  재연결을 멈춘다. HUD 숫자는 5초마다 갱신한다.
+
 - **말하기 전에 2초 넘게 가만히 있으면 음성이 버려지던 것.** 무음 판정이 오디오의 앞 2초만 봤다 — 이제 전체(4샘플마다)를 본다.
 - **Stop 훅 낭독이 실제 트랜스크립트를 읽지 못하던 것.** `tts_hook.sh`는 줄 최상위의 `role`을 찾았지만
   Claude Code 트랜스크립트는 `{"type":"assistant","message":{"role":...}}`라 일치하는 줄이 0이었다 — 훅이
@@ -649,6 +662,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **첨부 패널 공유 목록의 [복사]·[공유 취소] 버튼이 빈 상자로 그려지던 것.**
   아이콘 이름 자리에 사람이 읽는 낱말('복사'·'지금 취소')이 들어가 있어서
   `icons.js`가 빈 문자열을 돌려주고 있었다(`console.warn`만 남았다).
+
+- **승인 거절·ESC 뒤 working이 남던 문제와 실화면 감지 어긋남** (`server/agent_prompt_detect.py`, `agent_status.py`, `server/detect/*.toml`). Claude Code는 승인을 거절하거나 ESC로 끊어도 훅을 내지 않아 화면은 빈 입력줄인데 엔트리가 working(tool=Bash)으로 TTL까지 남았다. detect toml에 interrupt 문구(`Interrupted`)를 두고 화면이 새로 그려지는 순간 waiting/working을 done으로 마친다. 실제 TUI는 단어마다 색상 코드를 끼우고 줄 사이를 절대 커서 이동으로 잇기 때문에 원본 바이트 매칭이 선택 화면 안내줄을 못 잡았다 — 감지 윈도우를 ANSI 제거 텍스트로 바꿨다. 거절/ESC로 끝난 엔트리는 다음 화면 프롬프트를 받고, PermissionRequest 훅이 화면이 먼저 뽑은 선택지를 지우지 않는다. 실측 표는 `docs/ref/session-view-measurements.md`.
+
+- **폰 Fleet 승인 선택지가 재그림마다 불어나던 것과 승인 버튼 터치 크기** (`server/agent_prompt_detect.py`, `styles/screens/60-mobile-hud.css`). 전체화면 TUI가 대화상자를 다시 그리면 감지 윈도우에 같은 선택지가 여러 벌 들어 Fleet 인라인 승인 버튼이 1·2·3·1·2·3으로 떴다. 같은 키는 한 번만 두고 가장 최근 라벨로 덮는다. 승인 버튼은 높이 24px였던 것을 Fleet 승인 줄에서 44px로, 간격은 8px로 키웠다(실기기 SM_A5260 실측).
+
+- **`hidden` 속성이 컴포넌트 `display`에 지던 것** (`styles/layers/reset.css`, `components.css`). `.vt-btn`의 `inline-flex`가 UA의 `[hidden]`을 이겨 기본 hidden인 「다시 보내기」(`#mic-retry-btn`)가 폭 720px 이상 화면에 늘 떠 있었다. base 레이어에 `[hidden]{display:none !important}`를 둔다. 「연결된 화면」 시트의 닫기·끊기·이 화면만 남기기 버튼과 행은 모바일(720px 미만)에서만 44px로 키웠다.
+
+- **모바일 세션 시트의 「맥에서 열기」 버튼이 브라우저 기본 모양이던 문제 수정** (`picker.js`, `styles/screens/10-shell.css`). 마크업에 `vt-menu-item` 클래스가 빠져 컴포넌트 스타일이 안 걸렸다. 다른 목록 행 버튼과 같은 모양(아이콘 + 왼쪽 정렬)으로 통일했다.
 
 ## [2.2.0] — 2026-09-22
 
