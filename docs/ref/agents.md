@@ -53,46 +53,9 @@ A `waiting` entry carries `kind` = `approval | choice | plan | question` (`GET /
 - **Notification hook** (`permission_prompt|idle_prompt`, registered by `fsh hooks install`): recorded as `last_notification` only — never used to decide kind or status. Re-run `fsh hooks install` to register it; until then `fsh hooks status`/`doctor` show Notification as `add` and coverage reports Claude as `pty`, not `hook`.
 - **`PermissionRequest` (registered by `fsh hooks install`, 2026-10-04):** fires just before Claude Code shows a permission dialog; the script exits with no output, so it never allows or denies anything and the normal dialog appears. It gives the server the exact `tool_name` (kind) at once instead of waiting for the screen. There is no "approved/denied" event, so clearing is still the next pre/post/stop or the screen's exit pattern. Existing installs must re-run `fsh hooks install`; until then Claude's kinds come from screen patterns (`kindSources` reports that honestly).
 
-### Where `waiting` is released (2026-10-06)
+### Measurements: release paths, reject/ESC, per-CLI results
 
-| Path | Trigger | Reacts to attach/resize redraw? |
-|---|---|---|
-| Screen exit pattern | `exit` literal (`esc to interrupt`) drawn newer than the prompt (`PromptDetector.feed`) | Only if the redraw contains it; a redrawn dialog does not |
-| Screen `interrupt` phrase | `Interrupted · ...` newest in the window -> `done` | No |
-| User input | any WS binary / `/keys` / paste -> `deps.on_terminal_input` (ESC -> `done`, else `working`) | **Yes, before the fix** (below) |
-| Hook | next `pre`/`post`/`stop`/`prompt` event | No |
-| TTL | `waiting` 2 min -> `working` (`sweep`) | No |
-| Resize | WS `resize` message is not input; tmux redraw has no exit literal | No (measured) |
-
-There is **no** "output resumed" release rule; the redraw hypothesis was wrong. The real cause: on every attach tmux queries the client terminal (`ESC[c`, `ESC[>c`, `ESC[>q`, `ESC]10;?`, `ESC]11;?`, `ESC[?996n`; captured from tmux 3.7c). xterm.js answers through `onData`, the frontend forwards `onData` as WS bytes, and the server could not tell those replies from a keypress. Fix: `terminal_reports.is_terminal_report` — input made only of protocol replies (DA, CPR, DSR, focus, DECRPM, DCS, OSC, APC) is not a human answer (Ctrl+F3 `ESC[1;5R` and any mixed chunk still count as typing). No timeout/cap.
-
-Measured in an isolated server + real tmux (`-L fsh-wk`) with a hook-made `waiting` and a shell dialog, client replies emulated over WS: before — first attach and second attach -> `working`; without replies, attach/second attach/reload/resize all stay `waiting`; after the fix — all four stay `waiting` and a typed ESC still gives `done`. **Not verified with a real Claude Code** (a temp `CLAUDE_CONFIG_DIR` is not logged in) and not with a real browser xterm.js (reply bytes are the standard ones, not captured).
-
-### Rejecting an approval (2026-10-05, real CLIs)
-
-Measured against Claude Code 2.1.289 in an isolated server/tmux socket. **Rejecting (`4. No`) or pressing ESC at a permission dialog emits no hook at all** (no Stop, no PostToolUse; ESC while a tool runs is the same). The screen goes back to an empty input line (`⎿ Interrupted · What should Claude do instead?`), and the entry stayed `working`/`tool=Bash` until the 15-minute TTL. The earlier "waiting stays 12 s after ESC" observation was a test artefact: ESC sent with `tmux send-keys` bypasses FarShell's PTY, and only PTY input (`deps.on_terminal_input`) clears waiting. Typing/ESC in the web terminal already cleared it (ESC -> `done`, other keys -> `working`).
-
-- **Root cause**: no hook exists for "user declined"; the only signal is the screen. Fix: `interrupt = [...]` in `detect/<cli>.toml` (claude, agy) — when it is drawn newest in the window, `agent_status.finish_interrupted_for_session` marks that tmux session's `waiting`/`working` entries `done`, and the detector drops its window so the old prompt text cannot revive `waiting`. No timeout or cap.
-- **Detection runs on ANSI-stripped text** (`PromptDetector._append_clean`): the real TUIs colour each word separately and join lines with absolute cursor moves, so byte-literal matching missed `Interrupted ·` (Claude) and agy's choice footer, and glued option 2/3/4 labels into one.
-- A `done` entry finished by reject/ESC carries `_reopen`, so the **next** screen prompt is accepted. Without it agy (no hooks, so nothing ever moves `done` back to `working`) ignored its next question. Entries finished by a Stop hook keep the old rule (late screen detection never reverts `done`).
-- `PermissionRequest` can arrive **after** the dialog is drawn; it no longer wipes the options the screen already captured (inline approve buttons).
-- Claude `kindSources` is now `hook` for approval/choice/plan whenever all six hooks are registered (`HOOK_KINDS`); it used to say `screen` although the hook decided.
-
-### Measured behaviour per CLI (2026-10-05)
-
-Isolated: own tmux socket, empty git repo under /tmp, isolated server with `VT_CONFIG`/`VT_STATE_DIR`/`VT_RUN_DIR`/`VT_TUNNEL_PROVIDER=none`, hooks installed into a temp `CLAUDE_CONFIG_DIR`; PTY detection requires a pane on the server's own tmux socket **and** an attached PTY (WebSocket) — a pane nobody has open is never scanned.
-
-| CLI (version) | Scenario | Result |
-|---|---|---|
-| Claude Code 2.1.289 | Bash approval | `approval` (hook `PermissionRequest`, options 1-4 from the screen) - pass |
-| Claude Code 2.1.289 | AskUserQuestion | `choice`, options from the hook - pass |
-| Claude Code 2.1.289 | plan mode ExitPlanMode | `plan` from the hook - pass. Screen-only fallback: the title wraps at 80 columns (`Would you like to` / `proceed?`), so `Claude has written up a plan and is ready to execute` was added |
-| Claude Code 2.1.289 | reject `4. No` / ESC | **mismatch, fixed** (above). Trust-folder dialog -> `approval` (screen) - pass |
-| Claude Code 2.1.289 | `/api/agents/coverage` | `path: hook`, kindSources `hook` for approval/choice/plan (was `screen`; fixed) |
-| agy 1.2.14 | command approval | `approval` (screen) - pass; ESC -> done (PTY), `Interrupted · What should Antigravity CLI do instead?` -> done (non-PTY, new `interrupt`) |
-| agy 1.2.14 | ask-user choice | **mismatch, fixed**: footer is split by colour codes, never matched before; now `choice`. Skipping with ESC outside FarShell leaves `(skipped)` on screen and **stays `waiting` until the TTL** (no stable phrase chosen; PTY ESC works) |
-| agy 1.2.14 | plan mode artifact | badge `plan` appears (`1 artifact · /artifact to review`) but on a **`working`** entry: agy has no end-of-turn signal, so "done + plan" does not occur; the badge is not used to end the turn because the footer persists into later turns |
-| Codex 0.158.0 | approval / plan / choice | **unverified today**: a temp `CODEX_HOME` is not logged in and there is no API key in the environment; the 2026-10-03 measurements in `detect/codex.toml` stand |
+The release-path table, the terminal-reply root cause (DA1/DA2/XTVERSION/OSC 10/11), the reject/ESC findings and the per-CLI measurement table moved to [`session-view-measurements.md`](./session-view-measurements.md) (that file is canonical; this one keeps the rules). Rules in one line each: input made only of terminal protocol replies (`server/terminal_reports.py`) never releases `waiting`; an `interrupt` screen phrase (`detect/<cli>.toml`) ends `waiting`/`working` as `done`; detection runs on ANSI-stripped text.
 
 ### Claude Code and Codex hooks
 
