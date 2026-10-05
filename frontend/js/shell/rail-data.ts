@@ -296,11 +296,15 @@ export const ORIGIN_ICON: Record<Exclude<Origin, 'local'>, string> = {
   external: 'square-terminal',
 };
 
-/** 변경량 표기. "+142 −38"(줄 수가 있으면) 또는 "파일 3". 없으면 null. */
+/** 변경량 표기. "+142 −38"(줄 수가 있으면) · 한쪽이 0이면 그쪽은 생략("+14", "−3") ·
+ * 둘 다 0(이름만 바뀌거나 바이너리)이면 "파일 3". 없으면 null. RailRow·Fleet이 공용한다. */
 export function diffLabel(row: Pick<SessionRow, 'changed' | 'diffFiles'>): string | null {
   const c = row.changed;
-  if (c && c.files > 0) return `+${c.add} −${c.del}`;
-  return row.diffFiles != null && row.diffFiles > 0 ? `파일 ${row.diffFiles}` : null;
+  const add = c && c.add > 0 ? `+${c.add}` : '';
+  const del = c && c.del > 0 ? `−${c.del}` : '';
+  if (add || del) return [add, del].filter(Boolean).join(' ');
+  const files = row.diffFiles != null && row.diffFiles > 0 ? row.diffFiles : (c && c.files > 0 ? c.files : 0);
+  return files > 0 ? `파일 ${files}` : null;
 }
 
 /**

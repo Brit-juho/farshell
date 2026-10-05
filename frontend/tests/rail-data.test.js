@@ -149,6 +149,10 @@ test('worktreeIconName / diffLabel', async () => {
   assert.strictEqual(worktreeIconName({ isMainWorktree: false }), 'git-branch');
   assert.strictEqual(diffLabel({ changed: { files: 2, add: 14, del: 3 }, diffFiles: 2 }), '+14 −3');
   assert.strictEqual(diffLabel({ changed: null, diffFiles: 3 }), '파일 3');
+  // 0인 쪽은 찍지 않는다("-0"은 의미 없는 잡음) — 둘 다 0이면 파일 수로 폴백.
+  assert.strictEqual(diffLabel({ changed: { files: 1, add: 5, del: 0 }, diffFiles: 1 }), '+5');
+  assert.strictEqual(diffLabel({ changed: { files: 1, add: 0, del: 7 }, diffFiles: 1 }), '−7');
+  assert.strictEqual(diffLabel({ changed: { files: 2, add: 0, del: 0 }, diffFiles: 2 }), '파일 2');
   assert.strictEqual(diffLabel({ changed: null, diffFiles: 0 }), null);
   assert.strictEqual(diffLabel({ changed: null, diffFiles: null }), null);
 });
