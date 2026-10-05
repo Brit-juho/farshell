@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Documentation
+
+- agy 1.2.16으로 선택 화면 ESC 스킵 뒤 `waiting` 잔류를 원시 스트림까지 재실측했다. 줄 머리 앵커가 없고 맨 `(skipped)`는 도구 출력과 겹쳐 `interrupt`를 추가하지 않았다(`docs/ref/session-view-measurements.md` §1).
+
 ## [2.3.0] — 2026-10-06
 
 > 세션·뷰 모델을 정리한 릴리스다(재우기/깨우기 폐지, 새로고침은 닫은 세션을 되살리지 않음, 레이아웃은 브라우저 탭별 저장).

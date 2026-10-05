@@ -2,7 +2,7 @@
 
 Evidence behind the session/view rules, the `waiting` kind and release logic, and the phone (touch) work of 2026-10-05/06. Rules live in [`terminal.md`](./terminal.md) (「Session and view rules」) and [`agents.md`](./agents.md); this file keeps the numbers and the procedures. Screenshots are not tracked: they sit in a local, untracked directory (`docs/plan-2.5/measurements/2026-10/`, see its `INDEX.md`).
 
-CLI versions: Claude Code 2.1.287 (first pass) and 2.1.289 (re-measured after fixes); Codex 0.158.0 measured, 0.160.0 installed afterwards; agy (Antigravity CLI) 1.1.23 first, 1.2.14 after. tmux 3.7c.
+CLI versions: Claude Code 2.1.287 (first pass) and 2.1.289 (re-measured after fixes); Codex 0.158.0 measured, 0.160.0 installed afterwards; agy (Antigravity CLI) 1.1.23 first, 1.2.14 after, 1.2.16 re-checked on 2026-10-06. tmux 3.7c.
 
 ## 1. Waiting-kind measurements per CLI (2026-10-05 and 2026-10-06)
 
@@ -16,7 +16,7 @@ Isolated: own tmux socket, empty git repo under /tmp, isolated server with `VT_C
 | Claude Code 2.1.289 | reject `4. No` / ESC | **mismatch, fixed** (above). Trust-folder dialog -> `approval` (screen) - pass |
 | Claude Code 2.1.289 | `/api/agents/coverage` | `path: hook`, kindSources `hook` for approval/choice/plan (was `screen`; fixed) |
 | agy 1.2.14 | command approval | `approval` (screen) - pass; ESC -> done (PTY), `Interrupted · What should Antigravity CLI do instead?` -> done (non-PTY, new `interrupt`) |
-| agy 1.2.14 | ask-user choice | **mismatch, fixed**: footer is split by colour codes, never matched before; now `choice`. Skipping with ESC outside FarShell leaves `(skipped)` on screen and **stays `waiting` until the TTL** (no stable phrase chosen; PTY ESC works) |
+| agy 1.2.14 | ask-user choice | **mismatch, fixed**: footer is split by colour codes, never matched before; now `choice`. Skipping with ESC outside FarShell leaves `(skipped)` on screen and **stays `waiting` until the TTL** (no stable phrase chosen; PTY ESC works). Re-measured 2026-10-06 on agy 1.2.16 with `capture-pane -p -e` x5 plus the raw `pipe-pane` stream replayed through `PromptDetector`: the footer disappears and `? <question>` / `(skipped)` stay, then the model adds free text (`You skipped the question. How would you like to proceed?`, not fixed CLI text). In the cleaned window `(skipped)` is **not at a line head** (glued after stray `>4;2m` residue of an unstripped `CSI > 4;2 m`), so a `\n(skipped)` anchor cannot match; bare `(skipped)` would also hit tool output and end a `working` entry. No `interrupt` phrase added |
 | agy 1.2.14 | plan mode artifact | badge `plan` appears (`1 artifact · /artifact to review`) but on a **`working`** entry: agy has no end-of-turn signal, so "done + plan" does not occur; the badge is not used to end the turn because the footer persists into later turns |
 | Codex 0.160.0 | approval / plan / choice | **pass (2026-10-06)** in an isolated `CODEX_HOME`, git repo and tmux socket. Real approval screen yielded `approval` with `y`/`p`/`esc`; Plan mode `request_user_input` yielded `choice`, then `Implement this plan?` yielded `plan`. A captured real `PreToolUse` payload included the exact question and Yes/No options; combining it with the captured screen kept the hook question and prompt ID. Codex screen kinds now prefer the latest kind in the output window, so an earlier plan/approval cannot mask a later choice; that stale-screen sequence was reproduced in a test, not observed in this live run. |
 
