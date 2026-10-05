@@ -142,6 +142,11 @@ moves the active **view tab** at every width (it moved a session in the removed 
 - Row: line 1 state · agent · name; line 2 main/worktree icon · branch (main is shown too) · diff; line 3 state
   keyword · elapsed · origin icon; when applicable "open" mark and the grouped view's name. The plug (tmux) icon goes.
 - Row menu: the ⋯ button and right-click open the same menu (open/close, rename, open on Mac, connected screens, kill).
+  The menu opens with a **summary line** — a disabled header row (`.vt-menu-summary`, `role="note"` with an `aria-label`,
+  never selectable, wraps instead of ellipsizing): state · (when waiting) the kind keyword · 「웹 외 N」 · where it was
+  created (이 화면에서 만듦 / 다른 맥에서 만듦 / 에이전트가 만듦 / 직접 만듦) · branch (`rowSummary` in `shell/rail-data.ts`,
+  drawn by `Menu`'s `summary` prop in the rail and by the phone Fleet sheet). Why: `ui/tooltip.js` is off for touch pointers
+  (no hover), so on a phone a row's hidden facts — the waiting kind, non-web attaches, origin, branch — had no way to be read.
 - The header gear (formerly 「저장소 관리」) is **rail settings** (`RailSettings.tsx` on top of `RepoVisibility.tsx`, one
   sheet): 개입 필요 on/off (`rail.attention.show`; collapse state `rail.attention.collapsed`), per-origin visibility
   (`rail.origin.{peer,agent,external}.show`; local cannot be hidden), and the 저장소 표시 list. All device-scoped.

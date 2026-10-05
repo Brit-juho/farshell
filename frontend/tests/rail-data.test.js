@@ -306,3 +306,20 @@ test('collectSessionRows — 서버의 webScreens/otherClients로 배지를 센�
   assert.deepStrictEqual([by.c.otherScreens, by.c.otherClients], [0, 2]);
   assert.deepStrictEqual([by.old.otherScreens, by.old.otherClients], [3, 0]);
 });
+
+// ── 행 메뉴 요약 한 줄(터치에는 호버 툴팁이 없다) ──────────────────────────
+
+test('rowSummary — 상태 · (대기면) 유형 · 웹 외 N · 만든 곳 · 브랜치, 값 없는 조각은 건너뛴다', async () => {
+  const { rowSummary } = await mod();
+  const r = (o) => ({ status: 'idle', kind: null, otherClients: 0, origin: 'local', branch: null, ...o });
+  assert.strictEqual(rowSummary(r({})), '유휴 · 이 화면에서 만듦');
+  assert.strictEqual(
+    rowSummary(r({ status: 'waiting', kind: 'approval', otherClients: 2, origin: 'peer', branch: 'feat/x' })),
+    '입력 대기 · 승인 요청 · 웹 외 2 · 다른 맥에서 만듦 · feat/x');
+  assert.strictEqual(rowSummary(r({ status: 'waiting', kind: null })), '입력 대기 · 질문 · 이 화면에서 만듦');
+  assert.strictEqual(rowSummary(r({ status: 'working', origin: 'agent', branch: 'main' })), '작업 중 · 에이전트가 만듦 · main');
+  assert.strictEqual(rowSummary(r({ status: 'done', origin: 'external' })), '완료 · 직접 만듦 (CLI·tmux)');
+  // 입력 대기가 아니면 유형은 안 붙는다, 모르는 상태는 유휴
+  assert.ok(!rowSummary(r({ status: 'working', kind: 'plan' })).includes('계획 확인'));
+  assert.ok(rowSummary(r({ status: 'error' })).startsWith('유휴'));
+});

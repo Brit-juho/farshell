@@ -256,7 +256,8 @@ export interface MenuItem {
   danger?: boolean;
 }
 
-export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[] }) {
+/** `summary`: 맨 위의 선택 불가 요약 한 줄(행 메뉴 — rail-data.ts rowSummary). aria 로도 읽힌다. */
+export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[]; summary?: string }) {
   let ref: HTMLDivElement | undefined;
   const onDocClick = (e: MouseEvent) => { if (ref && !ref.contains(e.target as Node)) props.onClose(); };
   document.addEventListener('mousedown', onDocClick, true);
@@ -264,6 +265,9 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
 
   return (
     <div ref={ref} class="vt-menu" style={{ left: `${props.x}px`, top: `${props.y}px`, right: 'auto' }}>
+      <Show when={props.summary}>
+        <div class="vt-menu-summary" role="note" aria-label={`요약: ${props.summary}`}>{props.summary}</div>
+      </Show>
       <For each={props.items}>
         {(it) => (
           <div

@@ -218,6 +218,23 @@ export interface RowMenuItem {
   danger?: boolean;
 }
 
+/**
+ * 행 메뉴 맨 위의 요약 한 줄 — 호버 툴팁이 없는 터치에서 행의 숨은 정보를 읽는 유일한 자리다
+ * (ui/tooltip.js는 터치 포인터에서 꺼져 있다). 상태 · (입력 대기면) 유형 · 웹 외 attach 수 ·
+ * 만든 곳 · 브랜치. 값이 없는 조각은 건너뛴다. 선택 불가 헤더 행(`.vt-menu-summary`)에 그린다.
+ */
+export function rowSummary(
+  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'branch'>,
+): string {
+  const s = normalizeState(row.status);
+  const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
+  if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
+  if (row.otherClients > 0) parts.push(`웹 외 ${row.otherClients}`);
+  parts.push(ORIGIN_LABEL[normalizeOrigin(row.origin)]);
+  if (row.branch) parts.push(row.branch);
+  return parts.join(' · ');
+}
+
 /** 열린 세션이면 닫기, 아니면 열기. 이름 변경·맥에서 열기·연결된 화면은 웹 세션이 있어야 하고,
  * 종료는 tmux 세션이면 늘 있다(확인창은 vtConfirmAndKillSession). */
 export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'>): RowMenuItem[] {

@@ -20,7 +20,7 @@ import {
   safeFetch, collectSessionRows, syncAgentsFromServer, createDiffWatcher, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, rowMenuItems, runRowMenu, diffLabel, worktreeIconName, type SessionRow,
+  buildRailLists, rowMenuItems, rowSummary, runRowMenu, diffLabel, worktreeIconName, type SessionRow,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { KeywordLine, OriginMark, ScreensMark } from './RailRow.js';
@@ -503,6 +503,7 @@ function Fleet(props: { deps: FleetDeps }) {
                   </>
                 }>
                   <div class="vt-session-head"><h2>{row.name}</h2></div>
+                  <div class="vt-menu-summary" role="note" aria-label={`요약: ${rowSummary(row)}`}>{rowSummary(row)}</div>
                   {/* 항목은 레일 메뉴와 같은 목록(rowMenuItems)이다. 이름 변경만 시트 안에서 입력창으로
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}

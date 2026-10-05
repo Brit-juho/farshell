@@ -12,7 +12,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import {
-  buildRailLists, compactRailRows, rowMenuItems, runRowMenu, defaultRailCollapsed,
+  buildRailLists, compactRailRows, rowMenuItems, rowSummary, runRowMenu, defaultRailCollapsed,
   ATTENTION_COLLAPSED_KEY,
   type SessionRow,
 } from './rail-data.js';
@@ -544,7 +544,7 @@ function Rail(props: { deps: RailDeps }) {
       <Show when={ctxMenu()}>
         {(m) => (
           <Portal>
-            <Menu x={m().x} y={m().y} onClose={() => setCtxMenu(null)} items={ctxMenuItems()} />
+            <Menu x={m().x} y={m().y} onClose={() => setCtxMenu(null)} items={ctxMenuItems()} summary={rowSummary(m().row)} />
           </Portal>
         )}
       </Show>

@@ -606,6 +606,22 @@
   .vt-menu-item.on,
   .vt-menu-item.on > svg { color: var(--color-acc); }
   .vt-menu-item.dim { opacity: .6; }
+  /* 행 메뉴 맨 위의 요약 한 줄(rail-data.ts rowSummary) — 선택 불가 헤더 행이다. 호버 툴팁이 없는 터치에서
+   * 행의 숨은 정보(상태·유형·웹 외 attach·만든 곳·브랜치)를 읽는 자리라 **말줄임 없이 줄바꿈**한다(두 줄 안팎).
+   * 글자는 sub: 메뉴 배경 위 4.5:1 이상(램프 하한이 sub 6.0). 눌러도 아무 일도 없어야 해서 포인터를 받지 않는다. */
+  .vt-menu-summary {
+    max-width: 280px;
+    margin: 0 0 calc(var(--spacing) * 1);
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-sub);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
+    overflow-wrap: anywhere;
+    white-space: normal;
+    pointer-events: none;
+    user-select: none;
+  }
+  .vt-session-sheet .vt-menu-summary { max-width: none; padding-inline: calc(var(--spacing) * 0.5); }
   .vt-menu-item.new { color: var(--ok); }
   /* 2026-09-23 — `.vt-btn.danger`와 같은 값의 목록-행 버전. 되돌릴 수 없는
    * 항목(세션 완전 종료 등) 하나만 위험색으로 눈에 띄게 한다. */

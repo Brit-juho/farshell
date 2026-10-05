@@ -8,11 +8,11 @@ export { buildHudChips, formatResetsIn } from '../../js/shell/hud-data.js';
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, compactRailRows, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
-  HIDEABLE_ORIGINS, normalizeOrigin, normalizeKind, normalizeBadge, rowMenuItems, runRowMenu,
+  HIDEABLE_ORIGINS, normalizeOrigin, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL,
 } from '../../js/shell/rail-data.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
-export { mountRow } from './row-mount.js';
+export { mountRow, mountMenu } from './row-mount.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,

@@ -45,6 +45,7 @@ async function setup({ width = 500 } = {}) {
   await importFresh(J('layout/panes.js'), env.context, cache);
   const dom = await importFresh(J('core/dom.js'), env.context, cache);
   const S = await importFresh(J('layout/store.js'), env.context, cache);
+  const core = await importFresh(J('core/store.js'), env.context, cache);
   const actions = await importFresh(J('term/session-actions.js'), env.context, cache);
   const doc = window.document;
   // 뷰 3개: [a] · [b | c] · [d]
@@ -56,7 +57,7 @@ async function setup({ width = 500 } = {}) {
   sess.addSession('c', 'C', { place: 'pane', tmuxName: 'tc' });
   sess.addSession('d', 'D');
   const t3 = S.getActiveTabId();
-  return { env, window, doc, sess, dom, S, actions, cache, t1, t2, t3 };
+  return { env, window, doc, sess, core, dom, S, actions, cache, t1, t2, t3 };
 }
 
 async function openEdit(ctx) {
@@ -96,7 +97,7 @@ test('닫기 — 단독 뷰는 사라지고 세션은 닫히며 모드·나머�
   await openEdit(ctx);
   closeBtn(ctx, ctx.t1).click(); await flush();
   assert.strictEqual(ctx.S.getTabs().some((t) => t.id === ctx.t1), false);
-  assert.strictEqual(ctx.sess.getSession ? ctx.sess.getSession('a') : undefined, undefined);
+  assert.ok(!ctx.core.getSession('a'), '세션 a 가 닫혔다(웹 attach 해제)');
   assert.strictEqual(ctx.doc.querySelectorAll('.vt-order-view').length, 2, '편집 모드 유지');
   assert.strictEqual(closeBtn(ctx, ctx.t1), null);
   assert.ok(ctx.doc.querySelector('.vt-session-order-toggle').classList.contains('active'));

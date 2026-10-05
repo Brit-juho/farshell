@@ -36,6 +36,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **폰 attach·새로고침 직후 waiting이 working으로 바뀌던 문제의 근본 수정**
+  (`server/terminal_reports.py`, `server/deps.py` `on_terminal_input`). tmux는 attach마다
+  DA1/DA2/XTVERSION/색 질의를 보내고 xterm.js의 응답이 WS 바이너리로 올라와 「사용자가
+  입력했다」로 읽혔다. 터미널 응답으로만 이뤄진 입력은 해제 신호에서 제외한다(사람 키가
+  섞이면 입력). 타임아웃·캡 없음. 실측과 해제 경로 표는 `docs/ref/agents.md`.
+
 - **접힌 레일(48px)에서 「개입 필요」 세션이 아래 목록에 한 번 더 나오던 문제 수정**
   (`shell/rail-data.ts` `compactRailRows`, `Rail.tsx`). 접힌 레일은 구역 머리글이 없어
   하나의 목록으로 그린다 — 개입 필요가 위(이름순), 나머지가 아래(이름순), 각 세션은 한 번만.
@@ -46,6 +52,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   닫는다.
 
 ### Added
+- **행 메뉴 맨 위에 요약 한 줄** (`shell/rail-data.ts` `rowSummary`, `RailRow.tsx` `Menu`, `Fleet.tsx`). 터치에는 호버 툴팁이 없어 행의 숨은 정보를 읽을 길이 없었다. 레일·Fleet 행 메뉴 맨 위에 선택 불가 안내 줄로 상태 · (입력 대기면) 유형 · 웹 외 N · 만든 곳 · 브랜치를 보인다(말줄임 없이 줄바꿈, aria로도 읽힘).
 - **폰에서 뷰 닫기와 빈 뷰 자동 정리.** 세션 시트의 「순서 편집」을 「뷰 편집」으로 넓혔다. 편집 중 뷰마다 「닫기」 버튼(44px)이 있고 탭 ×와 같은 `closeView`를 쓴다(묶음 구성 기억, 마지막 뷰를 닫으면 시작 화면). 폭 720px 미만에서 시트를 열면 비어 있는 단독 뷰(「빈 화면」)가 자동으로 정리된다. 데스크톱의 「칸 ×는 빈 칸으로 남김」 규칙은 그대로다.
 - **모바일 세션 시트에서 뷰 순서 바꾸기.** 시트 위쪽 정렬 아이콘으로 「순서 편집」을 켜면 뷰 단위로 위·아래 버튼(44px)이 나타난다. 묶음 뷰는 구성원이 함께 움직이고, 활성 뷰는 그대로이며, 저장돼 새로고침 뒤에도 같다(스와이프·키·`n/m`이 따라간다).
 - **세션·뷰 규칙 개편 (「Session and view rules」, `docs/ref/terminal.md`).** 재우기/깨우기와 「잠자는 중」 개념을
