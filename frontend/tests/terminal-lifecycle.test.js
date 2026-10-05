@@ -407,3 +407,91 @@ test('bootApp — 떠나는 문서(pagehide)의 부팅 실패는 아무것도 �
   assert.strictEqual(posts.length, 0);
   assert.strictEqual(window.document.getElementById('onboarding'), null);
 });
+
+// ── 서버 재시작 복구(2026-10-06 폰 실측) ───────────────────────────────────
+// 서버가 재시작되면 PTY(웹 세션 id)가 사라져 열려 있던 페이지의 WS가 4004를 받는다.
+// 이걸 곧바로 "종료됨"으로 읽어 칸을 비우면 레이아웃이 tmux 이름 없이 저장돼 새로고침·새
+// 탭이 전부 빈 칸이 된다. tmux 세션이 살아 있으면 같은 이름으로 다시 attach해 칸을 지킨다.
+function recoverFetch({ alive = ['ta'], listFails = false } = {}) {
+  return (url, opts) => {
+    const u = String(url).split('?')[0];
+    const ok = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    if (u.endsWith('/api/tmux/sessions')) {
+      return listFails ? Promise.reject(new TypeError('Failed to fetch')) : ok(alive.map((name) => ({ name })));
+    }
+    if (u.endsWith('/api/tmux/attach')) return ok({ id: 'new-a', name: 'ta', tmux_session: 'ta' });
+    return fakeFetch(url, opts);
+  };
+}
+const _flush = () => new Promise((r) => setTimeout(r, 20));
+
+test('WS 4004 — tmux 세션이 살아 있으면 같은 칸에 다시 attach하고 칸을 비우지 않는다', async () => {
+  const { window, addSession, layoutStore, cache, context } = await buildTerminalWindow({ fetchImpl: recoverFetch() });
+  await importFresh(SESSION_ACTIONS_JS, context, cache);   // window.vtCloseSession 브리지
+  addSession('a', 'A', { tmuxName: 'ta' });
+  window.sessions.a.tmuxName = 'ta';
+  const paneId = layoutStore.getActivePaneId();
+
+  window.sessions.a.ws.onclose({ code: 4004 });
+  await _flush();
+
+  assert.strictEqual(window.sessions.a, undefined, '옛 PTY 레코드는 정리된다');
+  assert.ok(window.sessions['new-a'], '같은 tmux 이름으로 새 PTY가 붙는다');
+  assert.strictEqual(window.sessions['new-a'].tmuxName, 'ta');
+  assert.strictEqual(layoutStore.getTree().session, 'new-a', '칸은 새 id를 가리킨다(빈 칸 아님)');
+  assert.strictEqual(layoutStore.getActivePaneId(), paneId, '칸 자리는 그대로');
+  assert.strictEqual(window.activeId, 'new-a');
+});
+
+test('WS 4004 — tmux 세션이 없으면(종료됨) 칸이 빈 칸이 된다', async () => {
+  const { window, addSession, layoutStore, cache, context } = await buildTerminalWindow({ fetchImpl: recoverFetch({ alive: [] }) });
+  await importFresh(SESSION_ACTIONS_JS, context, cache);
+  addSession('a', 'A', { tmuxName: 'ta' });
+  window.sessions.a.tmuxName = 'ta';
+
+  window.sessions.a.ws.onclose({ code: 4004 });
+  await _flush();
+
+  assert.strictEqual(window.sessions.a, undefined);
+  assert.strictEqual(window.sessions['new-a'], undefined, '죽은 세션을 다시 붙이지 않는다');
+  assert.strictEqual(layoutStore.getTree().session, null, '종료된 세션의 칸은 빈 칸');
+});
+
+test('WS 4004 — tmux 목록을 못 받으면(서버 준비 중) 칸을 비우지 않고 재연결 백오프로 간다', async () => {
+  const { window, addSession, layoutStore, cache, context } = await buildTerminalWindow({ fetchImpl: recoverFetch({ listFails: true }) });
+  await importFresh(SESSION_ACTIONS_JS, context, cache);
+  addSession('a', 'A', { tmuxName: 'ta' });
+  window.sessions.a.tmuxName = 'ta';
+
+  window.sessions.a.ws.onclose({ code: 4004 });
+  await _flush();
+
+  assert.ok(window.sessions.a, '확인 못 했으면 세션을 버리지 않는다');
+  assert.strictEqual(layoutStore.getTree().session, 'a');
+  assert.ok(window.sessions.a.reconnTimer, '일반 재연결 타이머가 걸린다');
+  clearTimeout(window.sessions.a.reconnTimer);
+});
+
+test('WS 4004 — tmux가 아닌 일반 세션은 PTY가 곧 세션이라 그대로 칸을 비운다', async () => {
+  const { window, addSession, layoutStore, cache, context } = await buildTerminalWindow({ fetchImpl: recoverFetch() });
+  await importFresh(SESSION_ACTIONS_JS, context, cache);
+  addSession('p', 'P');
+
+  window.sessions.p.ws.onclose({ code: 4004 });
+  await _flush();
+
+  assert.strictEqual(window.sessions.p, undefined);
+  assert.strictEqual(layoutStore.getTree().session, null);
+});
+
+test('replaceSessionId: 칸 자리·모양은 그대로, 세션 id만 바뀐다', async () => {
+  const { addSession, layoutStore } = await buildTerminalWindow();
+  addSession('a', 'A');
+  layoutStore.splitActivePane('row', null);
+  addSession('b', 'B', { place: 'pane' });
+  const before = JSON.stringify(layoutStore.getTree());
+
+  assert.strictEqual(layoutStore.replaceSessionId('b', 'X'), true);
+  assert.strictEqual(JSON.stringify(layoutStore.getTree()), before.replace('"session":"b"', '"session":"X"'));
+  assert.strictEqual(layoutStore.replaceSessionId('nope', 'Y'), false);
+});

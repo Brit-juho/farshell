@@ -128,6 +128,27 @@ export function clearSessionFromLayout(sessionId) {
   return true;
 }
 
+/** 세션 id 교체 — 서버가 재시작돼 PTY(웹 세션 id)만 사라진 세션을 같은 tmux 이름으로
+ * 다시 attach했을 때(term/session.js recoverSession), 모든 탭 트리의 칸이 새 id를
+ * 가리키게 한다. 칸 자리·뷰·포커스는 그대로이고 빈 칸이 되지 않는다. */
+export function replaceSessionId(oldId, newId) {
+  if (!oldId || !newId || oldId === newId) return false;
+  _sync();
+  const swap = (n) => (n.t === 'leaf'
+    ? (n.session === oldId ? { ...n, session: newId } : n)
+    : { ...n, a: swap(n.a), b: swap(n.b) });
+  let changed = false;
+  for (const t of _tabs) {
+    if (!collectSessions(t.tree).includes(oldId)) continue;
+    t.tree = swap(t.tree);
+    changed = true;
+  }
+  if (!changed) return false;
+  _tree = _tabs[_activeTabIndex].tree;
+  _notify();
+  return true;
+}
+
 /** "뷰 없음" — 스토어는 탭을 0개로 두지 않고, 빈 칸 하나짜리 이름 없는 탭
  * 하나를 뷰 없음으로 읽는다(탭 바 숨김 + 온보딩). */
 export function isLayoutEmpty() {

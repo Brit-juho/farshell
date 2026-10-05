@@ -44,6 +44,25 @@ export function startSessionSocket(id, term) {
   let _retries = 0;
   let _stableTimer = null;
 
+  // 끊김 재연결 — 지수 백오프(아래). 4004 복구가 '확인 못 함'일 때도 같은 길을 쓴다.
+  function _scheduleRetry(s) {
+    _retries++;
+    // M9: 첫 재시도는 기존에 1000ms 밑변으로 시작해 최소 2초를 기다렸다 —
+    // wifi↔LTE 전환 같은 순간적 끊김조차 늘 2초+ 재연결 지연을 강제해,
+    // updateConnStatus의 오버레이 유예(CONN_OVERLAY_GRACE_MS=1.5초)가
+    // 사실상 항상 만료되고 오버레이가 뜬 뒤였다. 밑변을 250ms로 낮춰
+    // 첫 재시도(500ms)가 유예 시간 안에 들어오게 했다 — 지속되는 장애에는
+    // 여전히 지수적으로 늘어나 30초 상한까지 백오프하므로 폭풍 재발 위험은 없음.
+    // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 7로 clamp.
+    const delay = Math.min(250 * Math.pow(2, Math.min(_retries, 7)), 30000);
+    _setConnOverlayDetail(id, `재연결 시도 중... (${_retries}회)`);
+    // O1: "끊기"를 누른 상태면 사용자가 멈춘 것 — 다음 타이머를 새로 걸지 않는다.
+    // "다시 연결"을 누르면 _reconnectNow()가 이 delay를 기다리지 않고 즉시 재시도한다.
+    if (!s._reconnectStopped) {
+      s.reconnTimer = setTimeout(connectTerminalWs, delay);
+    }
+  }
+
   function connectTerminalWs() {
     if (!getSession(id)) return;
     const sock = new WebSocket(`${WS_BASE}${_wsPath()}`);
@@ -157,7 +176,19 @@ export function startSessionSocket(id, term) {
       updateConnStatus(id, false);
       const code = ev && ev.code;
       if (TERMINAL_CLOSE_CODES.has(code)) {                  // 영구 실패 → 재연결 안 함
-        // 4004 = 다른 곳에서 종료됨 → 닫기와 같은 경로로 칸을 비운다(2026-10-03).
+        // 4004 = "서버 재시작으로 PTY만 사라짐"과 "세션이 종료됨"을 둘 다 뜻한다. tmux
+        // 세션이 살아 있으면 같은 이름으로 다시 attach해 칸을 지킨다(session.js
+        // recoverSession). 확인을 못 했으면(null) 일반 재연결 백오프로 간다.
+        if (code === 4004 && typeof window.vtRecoverSession === 'function' && (s.tmuxName || s.tmux_name) && !s.remote) {
+          window.vtRecoverSession(id).then((r) => {
+            if (r === true) return;
+            if (r === false) { if (typeof window.vtCloseSession === 'function') window.vtCloseSession(id); return; }
+            const cur = getSession(id);
+            if (cur) _scheduleRetry(cur);
+          });
+          return;
+        }
+        // (복구 대상이 아니면) 4004 = 다른 곳에서 종료됨 → 닫기와 같은 경로로 칸을 비운다(2026-10-03).
         if (code === 4004 && typeof window.vtCloseSession === 'function') {
           window.vtCloseSession(id);
           return;
@@ -168,21 +199,7 @@ export function startSessionSocket(id, term) {
         _setConnOverlayDetail(id, `재연결 중단 — ${why}. 탭을 닫고 새로 여세요.`);
         return;
       }
-      _retries++;
-      // M9: 첫 재시도는 기존에 1000ms 밑변으로 시작해 최소 2초를 기다렸다 —
-      // wifi↔LTE 전환 같은 순간적 끊김조차 늘 2초+ 재연결 지연을 강제해,
-      // updateConnStatus의 오버레이 유예(CONN_OVERLAY_GRACE_MS=1.5초)가
-      // 사실상 항상 만료되고 오버레이가 뜬 뒤였다. 밑변을 250ms로 낮춰
-      // 첫 재시도(500ms)가 유예 시간 안에 들어오게 했다 — 지속되는 장애에는
-      // 여전히 지수적으로 늘어나 30초 상한까지 백오프하므로 폭풍 재발 위험은 없음.
-      // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 7로 clamp.
-      const delay = Math.min(250 * Math.pow(2, Math.min(_retries, 7)), 30000);
-      _setConnOverlayDetail(id, `재연결 시도 중... (${_retries}회)`);
-      // O1: "끊기"를 누른 상태면 사용자가 멈춘 것 — 다음 타이머를 새로 걸지 않는다.
-      // "다시 연결"을 누르면 _reconnectNow()가 이 delay를 기다리지 않고 즉시 재시도한다.
-      if (!s._reconnectStopped) {
-        s.reconnTimer = setTimeout(connectTerminalWs, delay);
-      }
+      _scheduleRetry(s);
     };
 
     sock.onerror = () => { try { sock.close(); } catch (_) {} };

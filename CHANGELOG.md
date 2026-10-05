@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- 서버를 재시작하면 열려 있던 페이지의 저장된 레이아웃이 전부 빈 칸이 되던 것을 고쳤다. 원인: 서버가 재시작되면 웹 세션(PTY) id가 사라져 열린 페이지의 WS가 4004를 받는데, 이를 항상 「세션 종료됨」으로 읽어 칸을 비웠고, 그 상태가 곧바로 tmux 이름 없이 자동 저장돼 새로고침·새 탭도 빈 칸만 복원했다(재현: 격리 서버 + 뷰 3개). 이제 4004를 받으면 tmux 세션이 살아 있는지 확인하고, 살아 있으면 같은 이름으로 다시 attach해 칸의 id만 바꾼다. tmux 세션이 없으면(종료됨) 이전처럼 그 칸만 빈 칸이 된다. 확인을 못 하면 재연결 백오프로 간다.
+
 ### Documentation
 
 - agy 1.2.16으로 선택 화면 ESC 스킵 뒤 `waiting` 잔류를 원시 스트림까지 재실측했다. 줄 머리 앵커가 없고 맨 `(skipped)`는 도구 출력과 겹쳐 `interrupt`를 추가하지 않았다(`docs/ref/session-view-measurements.md` §1).

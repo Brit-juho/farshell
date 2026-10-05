@@ -90,11 +90,25 @@ Same device and method (isolated server on port 17920, `env -i`, real soft keybo
 | Hit areas of the tab x and pane-header x (44x44, corner taps do only the intended action) | pass; the 4px gap against the neighbouring 18px split buttons was not stress-tested |
 | Regression: edge swipe order, reload restore, closed-group restore, three origin icons | pass. The 「Connected screens」 sheet could not be reopened in landscape (no open view = no row menu entry) |
 
-Side observations: after a server restart the saved layout refers to PTY ids, so every pane came back empty although the tmux names stayed in the layout (cause not confirmed). The default `waiting` TTL is 2 minutes, so synthetic states turned `working` by themselves until `VT_AGENT_TTL_*` was raised.
+Side observations: after a server restart every pane came back empty although the tmux names had been in the layout. **Cause confirmed and fixed (2026-10-06, section 3.2).** The default `waiting` TTL is 2 minutes, so synthetic states turned `working` by themselves until `VT_AGENT_TTL_*` was raised.
+
+### 3.2 Server restart emptied every pane (2026-10-06)
+
+Reproduced in an isolated server (`env -i`, own tmux socket `-L fsh-rs`, port 17931/17932, Chrome for Testing via Playwright; 4 tmux sessions in 3 views: single / grouped 2 / single; desktop 1440px and 500px). Restarting only the server (same state dir) with the page left open:
+
+| Step | Before the fix | After the fix |
+|---|---|---|
+| Open page, `ui.layouts[screen]` | `[[rs1],[rs2,rs3],[rs4]]` | same |
+| Kill + restart server, **no reload** | all views empty; the page's saved layout became `[[null],[null,null],[null]]` | views intact, 4 terminals re-attached; layout names kept |
+| Reload | empty (reads the nulled layout) | restored |
+| New browser tab | empty (copies the nulled latest layout) | restored |
+| One tmux session killed while the server was down (500px) | all empty | only that pane empty (`[rs2, null]`), others kept |
+
+Cause: `session_store` is in memory, so after a restart the page's WS reconnects to a web id the server no longer has -> close 4004. `term/ws.js` treated 4004 as "session was killed" -> `vtCloseSession` -> `removeSession` -> `clearSessionFromLayout` + `saveLayoutNow`, and an empty pane serialises as `session: null`, so the tmux name was lost on the very next autosave (and the server's `ui.layout` "latest" copy, which new tabs and reloads read). Fix: on 4004 for a local tmux session, `recoverSession` (`term/session.js`) asks `/api/tmux/sessions`; alive -> `/api/tmux/attach` with the same name, `replaceSessionId` swaps the pane's id in every tab tree; not listed -> the old close path (killed = empty pane); undetermined (list/attach failed) -> normal reconnect backoff. Plain (non-tmux) PTY sessions die with the server and keep the old behaviour.
 
 ## 4. Bundle size (initial payload `app.js` + `core.js`, ceiling 307,200 B)
 
-310,711 -> 295,839 -> 297,689 -> 297,901 (view-tab status bar) -> 299,215 -> 299,310 -> 300,947 B. Headroom is now about 6.2 KB; the ceiling is asserted by `frontend/tests/build-output.test.js`.
+310,711 -> 295,839 -> 297,689 -> 297,901 (view-tab status bar) -> 299,215 -> 299,310 -> 300,947 -> 303,467 B (server-restart recovery). Headroom is now about 3.7 KB; the ceiling is asserted by `frontend/tests/build-output.test.js`.
 
 ## 5. View-tab mockups
 

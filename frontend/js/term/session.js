@@ -24,7 +24,7 @@ import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
-import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayout,
+import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayout, replaceSessionId,
   getTabsWithTrees, getActiveTabId, switchLayoutTab, moveLayoutTab } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { COMPACT_MAX } from '../layout/breakpoints.js';
@@ -398,6 +398,56 @@ export async function removeSession(id) {
   updateSessionPicker();
   saveLayoutNow();
 }
+
+// 서버가 재시작되면 PTY(웹 세션 id)는 전부 사라지지만 tmux 세션은 산다. 열려 있던
+// 페이지의 WS는 그 id로 다시 붙다가 4004("세션 없음")를 받는데, 이걸 "세션이
+// 종료됨"으로만 읽어 칸을 비우면 레이아웃이 곧바로 tmux 이름 없이 저장돼(2026-10-06
+// 폰 실측) 새로고침·새 탭도 빈 칸만 복원한다. 칸은 tmux 이름이 가리키고 attach는
+// 구현 세부이므로: tmux 세션이 살아 있으면 같은 이름으로 다시 attach해 칸의 id만 바꾼다.
+// 반환: true=복구됨(또는 그 사이 닫힘) · false=tmux 세션이 없다(종료됨 → 호출자가
+// 칸을 비운다) · null=확인 못 함(서버 아직 준비 중 등 → 호출자가 백오프로 재시도).
+const _recovering = new Set();
+export async function recoverSession(id) {
+  const s = getSession(id);
+  const tmux = s && !s.remote && (s.tmuxName || s.tmux_name);
+  if (!tmux) return false;
+  if (_recovering.has(id)) return null;
+  _recovering.add(id);
+  try {
+    let list;
+    try {
+      const r = await apiFetch(`${API_BASE}/api/tmux/sessions`);
+      if (!r.ok) return null;
+      list = await r.json();
+    } catch (_) { return null; }
+    if (!getSession(id)) return true;
+    if (!Array.isArray(list) || !list.some((x) => x && x.name === tmux)) return false;
+    let data;
+    try {
+      const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tmux, screen: screenId() }),
+      });
+      if (!res.ok) return res.status === 404 ? false : null;
+      data = await res.json();
+    } catch (_) { return null; }
+    if (!data || !data.id) return null;
+    if (!getSession(id)) {   // attach하는 사이 사용자가 닫았다 — 새 PTY는 놓는다
+      await apiFetch(`${API_BASE}/api/sessions/${data.id}`, { method: 'DELETE' }).catch(() => {});
+      return true;
+    }
+    if (!getSession(data.id)) {
+      addSession(data.id, data.name || data.id, { place: 'none', tmuxName: data.tmux_session || tmux });
+      const ns = getSession(data.id);
+      if (ns) ns.tmuxName = data.tmux_session || tmux;
+    }
+    replaceSessionId(id, data.id);   // 칸이 새 id를 가리킨다 — 빈 칸이 되지 않는다
+    await removeSession(id);          // 옛 xterm/소켓 정리(트리엔 이미 없어 칸은 안 건드린다)
+    return true;
+  } finally { _recovering.delete(id); }
+}
+window.vtRecoverSession = recoverSession;
 
 // F3(c): data-action 위임용 등록. guide.show는 그 함수를 소유한 guide.js가
 // 등록한다. session.tmux-list는 ADR-29 E에서 없앴다 — 그 목록 팝업이 하던
