@@ -138,6 +138,27 @@ def test_hook_kind_beats_screen_kind():
     assert ent["options"] and ent["options"][0]["label"] == "A안", "화면의 빈 값이 훅 선택지를 지우면 안 된다"
 
 
+def test_codex_hook_question_survives_screen_footer():
+    ent = A.on_event("pre", {"session_id": "s1", "tool_name": "request_user_input",
+                             "tool_input": ASK}, agent="codex")
+    original_id = ent["prompt_id"]
+    ent = A.on_waiting("s1", True, question="Question 1/1 (1 unanswered)",
+                       options=None, kind="choice")
+    assert ent["question"] == "어느 쪽으로 갈까요?"
+    assert ent["prompt_id"] == original_id
+    assert [o["label"] for o in ent["options"]] == ["A안", "B안"]
+
+
+def test_codex_hook_choice_options_survive_stale_approval_screen_options():
+    ent = A.on_event("pre", {"session_id": "s1", "tool_name": "request_user_input",
+                             "tool_input": ASK}, agent="codex")
+    ent = A.on_waiting("s1", True, question="Would you like to run the following command?",
+                       options=[{"key": "y", "label": "Yes, proceed"}], kind="approval")
+    assert ent["kind"] == "choice"
+    assert ent["question"] == "어느 쪽으로 갈까요?"
+    assert [o["label"] for o in ent["options"]] == ["A안", "B안"]
+
+
 def test_waiting_without_any_kind_falls_back_to_question():
     A.on_event("pre", {"session_id": "s1", "tool_name": "Bash"})
     assert A.on_waiting("s1", True, question="Q")["kind"] == "question"

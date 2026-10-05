@@ -14,11 +14,10 @@
 #     L441/L489) — Claude Code와 동일 문구를 codex도 그대로 쓴다(우연이 아니라
 #     둘 다 "esc"를 인터럽트 키로 쓰는 컨벤션이 같다).
 #
-# 못 채운 것: 번호 선택지(`options`) 렌더링 방식을 소스에서 확인하지 못했다
-# (ListSelectionView가 커서 하이라이트만 쓰는지 숫자 접두사도 쓰는지 불명) —
-# 추측해서 넣지 않는다. 모바일 인라인 승인은 이 CLI에서 당장은 번호 버튼 없이
-# enter/exit만 동작한다.
+# 번호 선택지의 실제 응답 키(y/p/esc)는 아래 options 규칙으로 실측해 고정했다.
 name = "codex"
+# 서로 다른 대화상자 문구가 출력 이력에 공존하면 최신 종류를 판별한다.
+prefer_latest_kind = true
 
 enter = [
   "Would you like to run the following command?",
@@ -43,6 +42,8 @@ ignore_exit_on = ["choice"]
 # waiting 유형(kind)별 리터럴 — 여기 적힌 문구도 waiting 진입 신호다. approval은
 # 위 enter가 맡는다. 2026-10-03 실측(codex 0.158.0): 질문(request_user_input)은 Plan
 # 모드에서만 뜨고 `Question 1/1`/`unanswered)`/`enter to submit answer`를 그린다.
+# 2026-10-06 codex 0.160.0 격리 tmux 실측: 세 유형 화면과 request_user_input
+# PreToolUse의 질문/선택지를 다시 확인했다(docs/ref/agents.md).
 [kinds]
 plan = [
   "Implement this plan?",

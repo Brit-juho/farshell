@@ -156,6 +156,7 @@ def load_patterns(force: bool = False) -> dict:
             # 이 kind가 히트한 동안은 exit를 무시한다(예: Codex 질문 화면은 상태줄에
             # `esc to interrupt`를 계속 그린다).
             ignore_exit_on = {str(k) for k in (data.get("ignore_exit_on") or []) if str(k) in KIND_ORDER}
+            prefer_latest_kind = data.get("prefer_latest_kind") is True
             # `interrupt` — 사용자가 승인을 거절하거나 ESC로 작업을 끊으면 CLI는 훅(Stop)을
             # 내지 않고 이 문구만 화면에 남긴다. 훅이 만든 waiting/working 엔트리를 풀 유일한
             # 신호라 별도 키로 둔다(waiting 진입 신호가 아니다).
@@ -176,6 +177,7 @@ def load_patterns(force: bool = False) -> dict:
                     "enter_kinds": [t[1] for t in triggers],
                     "exit": exit_, "options": options,
                     "kinds": kinds, "badge": badges, "ignore_exit_on": ignore_exit_on,
+                    "prefer_latest_kind": prefer_latest_kind,
                 }
     _patterns = out
     return out
@@ -196,10 +198,14 @@ def _locate_prompt_kind(pats: dict, joined: bytes
     prompt_priority = 1_000_000
     prompt_pattern: Optional[bytes] = None
     prompt_kind: Optional[str] = None
+    hits: list[tuple[int, int, dict, bytes, str]] = []
     for spec in pats.values():
         kinds = spec.get("enter_kinds") or []
         for priority, pattern in enumerate(spec["enter"]):
             pos = joined.rfind(pattern)
+            if pos >= 0:
+                hits.append((pos, priority, spec, pattern,
+                             kinds[priority] if priority < len(kinds) else "approval"))
             if pos >= 0 and (priority < prompt_priority
                              or (priority == prompt_priority and pos > prompt_pos)):
                 prompt_priority = priority
@@ -207,6 +213,15 @@ def _locate_prompt_kind(pats: dict, joined: bytes
                 prompt_pattern = pattern
                 prompt_spec = spec
                 prompt_kind = kinds[priority] if priority < len(kinds) else "approval"
+    # Codex 화면의 종류별 제목은 서로 겹치지 않는다. 외부 tmux 입력은 이력 창을
+    # 비우지 않으므로 이전 plan/approval보다 새 choice의 위치를 먼저 본다. 같은
+    # 종류 안에서는 구체적인 제목을 하단 안내 문구보다 우선한다.
+    if hits and prompt_spec and prompt_spec.get("prefer_latest_kind"):
+        latest_kind = max(hits, key=lambda hit: hit[0])[4]
+        relevant = [hit for hit in hits if hit[4] == latest_kind]
+        pos, _, prompt_spec, prompt_pattern, prompt_kind = min(
+            relevant, key=lambda hit: (hit[1], -hit[0]))
+        prompt_pos = pos
     return prompt_spec, prompt_pattern, prompt_pos, prompt_kind
 
 
@@ -230,7 +245,12 @@ def _extract_prompt(pats: dict, joined: bytes
     # 각 detect 파일은 구체적인 질문을 먼저, 짧은 폴백 문구를 뒤에 둔다.
     # Codex 선택지의 "don't ask again"이 Claude의 폴백 enter와 겹치므로,
     # 더 앞에 선언된 패턴을 우선하고 같은 우선순위에서만 최신 위치를 고른다.
-    prompt_spec, prompt_pattern, _, kind = _locate_prompt_kind(pats, text.encode("utf-8"))
+    encoded = text.encode("utf-8")
+    prompt_spec, prompt_pattern, prompt_pos, kind = _locate_prompt_kind(pats, encoded)
+    if prompt_spec and prompt_spec.get("prefer_latest_kind") and prompt_pos >= 0:
+        # 이전 화면의 선택지가 다음 화면으로 넘어오지 않게 현재 제목 줄부터 읽는다.
+        line_start = encoded.rfind(b"\n", 0, prompt_pos) + 1
+        text = encoded[line_start:].decode("utf-8", errors="ignore")
     if prompt_pattern is not None:
         needle = prompt_pattern.decode("utf-8", errors="ignore")
         for line in text.splitlines():

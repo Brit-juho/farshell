@@ -127,6 +127,26 @@ def test_codex_full_screen_redraw_keeps_prompt_until_late_options(det):
     assert events == [("s1", True), ("s1", True)]
 
 
+def test_codex_new_choice_beats_old_plan_in_output_history():
+    d = D.PromptDetector(lambda *a: None, agent_for=lambda _: "codex")
+    d.feed("s1", b"Implement this plan?\r\n")
+    assert d.get_kind("s1") == "plan"
+    # 웹 터미널을 거치지 않고 응답하면 출력 이력은 비워지지 않는다.
+    d.feed("s1", b"Question 1/1 (1 unanswered)\r\nenter to submit answer\r\n")
+    assert d.get_kind("s1") == "choice"
+    assert "unanswered" in d.get_prompt("s1")[0]
+
+
+def test_codex_new_choice_does_not_inherit_old_approval_options():
+    d = D.PromptDetector(lambda *a: None, agent_for=lambda _: "codex")
+    d.feed("s1", b"Would you like to run the following command?\r\n"
+                 b"1. Yes, proceed (y)\r\n")
+    assert d.get_prompt("s1")[1] == [{"key": "y", "label": "Yes, proceed"}]
+    d.feed("s1", b"Question 1/1 (1 unanswered)\r\nenter to submit answer\r\n")
+    assert d.get_kind("s1") == "choice"
+    assert d.get_prompt("s1")[1] is None
+
+
 def test_pattern_split_across_chunks_is_caught(det):
     """PTY는 문자열을 임의 위치에서 쪼갠다 — 슬라이딩 윈도우가 그걸 잇는다."""
     d, _ = det

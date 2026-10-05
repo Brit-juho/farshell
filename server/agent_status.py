@@ -495,15 +495,16 @@ def on_waiting(
         # 옛 프롬프트가 윈도우에 남아 되살리는 일은 감지기가 윈도우를 비워 막는다.
         if ent["status"] in (WORKING, WAITING) or (ent["status"] == DONE and ent.get("_reopen")):
             hook_kind = ent["status"] == WAITING and ent.get("_kind_src") == "hook"
-            ent["question"] = question
-            if hook_kind and options is None:
-                pass  # 훅이 준 선택지를 화면 쪽 빈 값으로 지우지 않는다
-            else:
-                ent["options"] = options
+            # 훅의 구조화된 질문과 선택지는 화면의 안내 문구/이전 프롬프트보다 정확하다.
+            # 단, 승인 훅은 선택지를 주지 않으므로 화면에서 추출한 버튼을 보강한다.
             if not hook_kind:
+                ent["question"] = question
+                ent["options"] = options
                 # 화면 패턴 kind, 없으면 폴백 `question`. 훅 kind가 있으면 그것이 이긴다.
                 ent["kind"] = kind if kind in KINDS else KIND_QUESTION
                 ent["_kind_src"] = "screen"
+            elif ent.get("kind") == KIND_APPROVAL and options is not None:
+                ent["options"] = options
             _set_status(ent, WAITING)
     elif ent["status"] == WAITING:
         _set_status(ent, WORKING)
