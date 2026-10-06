@@ -61,6 +61,7 @@ function connect() {
 
   _ws.onopen = () => {
     _sendVisibility();
+    _emit('ws_open', {});   // 재연결 때 놓친 것을 맞추려는 구독자용(share-lazy.js)
     // [회귀 fb827a6와 같은 이유] accept 직후 닫히는 half-open flap에서 지수가
     // 자라지 못하는 것을 막기 위해, 3초 이상 안정적으로 열린 뒤에만 리셋한다.
     clearTimeout(_stableTimer);

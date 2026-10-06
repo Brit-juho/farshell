@@ -1270,8 +1270,38 @@
     font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-ui);
   }
 
+  /* 승인 모달 */
+  .vt-share-count {
+    margin-left: auto;
+    margin-right: calc(var(--spacing) * 2);
+    color: var(--color-sub);
+    font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui);
+    font-variant-numeric: tabular-nums;
+  }
+  .vt-share-ask {
+    margin: 0 0 calc(var(--spacing) * 2);
+    color: var(--color-txt);
+    font: var(--weight-semibold) var(--fs-md) / var(--leading-tight) var(--font-ui);
+    overflow-wrap: anywhere;
+  }
+  .vt-share-help { margin: 0 0 calc(var(--spacing) * 3); color: var(--color-txt); font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui); }
+  .vt-share-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+    margin: 0 0 calc(var(--spacing) * 3);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
+  }
+  .vt-share-facts dt { color: var(--color-sub); }
+  .vt-share-facts dd { margin: 0; color: var(--color-txt); overflow-wrap: anywhere; }
+  .vt-share-err { min-height: 0; margin: 0 0 calc(var(--spacing) * 2); color: var(--color-st-error); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-share-err:empty { display: none; }
+  .vt-share-acts { flex-wrap: wrap; }
+  .vt-share-later { display: flex; justify-content: flex-start; margin-top: calc(var(--spacing) * 3); }
+
 
   @media (pointer: coarse) {
+    .vt-share-approval .vt-btn,
     .vt-dialog .vt-share-ok,
     .vt-dialog .vt-share-cancel { --btn-h: 44px; }
     .vt-share-mode { min-height: 48px; }
