@@ -40,7 +40,7 @@ fsh mcp                         # MCP server (stdio) for agents: list_agents / s
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (N30 — built but unused, ADR-27)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
-fsh hooks [status|install|uninstall]  # register Claude Code + Codex hooks (status badges/queue; Claude Stop also drives TTS)
+fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude Stop also drives TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
 fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
 fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)

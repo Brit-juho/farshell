@@ -81,6 +81,19 @@ pane list.
 Register both with `fsh hooks install` (idempotent, preserves other hooks, and backs
 up the changed config files). `fsh hooks status` and `fsh doctor` report Claude's
 five events and Codex's six events separately.
+
+**`~/.codex/hooks.json` duplicates (2026-10-06):** the Codex desktop app's "import Claude
+settings" copies Claude's FarShell hooks into `hooks.json` (`agent_hook.sh pre|post|
+permission|stop|session_start claude`, plus untagged `session_end`/`prompt`). Codex reads
+both `config.toml` and `hooks.json`, so every Codex event reaches the server twice, one of
+them tagged `claude` — which mislabels the agent and bypasses the cwd attribution above
+(it only applies to `agent == "codex"`). FarShell never writes `hooks.json`, so anything
+`codex_hooks.find_foreign_farshell_hooks()` finds there is a foreign copy. `fsh hooks status`,
+`fsh hooks install` (one line) and `fsh doctor` warn about it (a warning, not a failure);
+`GET /api/hooks/status` carries `tools.codex.duplicates` (`count`, `events`). The fix is
+`fsh hooks dedupe [--dry-run]`: removes only `agent_hook.sh` entries, keeps other hooks,
+prunes emptied groups/events, writes `hooks.json.vtbak` once and the file atomically with
+its indentation preserved; idempotent. A broken `hooks.json` is left untouched.
 **Register `agent_hook.sh stop`, never `tts_hook.sh` directly** — registering
 both plays the TTS summary twice.
 

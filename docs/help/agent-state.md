@@ -16,6 +16,7 @@ FarShell은 각 tmux 세션이 지금 무슨 상태인지 서버가 판정해서
 fsh hooks status      # 등록 상태 확인 (fsh doctor 에도 표시된다)
 fsh hooks install     # 등록/갱신 (멱등, 직접 넣은 다른 훅은 보존)
 fsh hooks uninstall   # FarShell 항목만 제거
+fsh hooks dedupe      # ~/.codex/hooks.json 에 복제된 FarShell 훅 제거 (--dry-run 으로 미리보기)
 ```
 
 `./install.sh`가 설치 시 대신 실행한다. **등록되지 않으면 상태 배지도, 프롬프트
@@ -25,6 +26,13 @@ fsh hooks uninstall   # FarShell 항목만 제거
 Claude Code의 `~/.claude/settings.json`에는 `agent_hook.sh {pre,post,stop}` 3종이,
 Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/session 6종이 등록된다.
 두 설정 모두 FarShell 항목만 관리하고 기존 훅은 보존한다.
+
+**Codex 앱의 「Claude 설정 가져오기」를 눌렀다면** `~/.codex/hooks.json`에 Claude의
+FarShell 훅(`agent_hook.sh … claude`)이 복제된다. Codex는 `config.toml`과 `hooks.json`을
+모두 읽으므로 한 이벤트가 두 번(그중 하나는 `claude` 태그로) 들어와 에이전트 라벨이
+어긋난다. `fsh hooks status`/`fsh doctor`가 이를 경고하고, `fsh hooks dedupe`가
+`hooks.json`에서 `agent_hook.sh` 항목**만** 지운다(다른 훅은 보존, 백업
+`hooks.json.vtbak`, 멱등). FarShell은 `hooks.json`에 쓰지 않는다.
 `tts_hook.sh`를 `Stop`에 **직접** 걸면 안 된다 — `agent_hook.sh stop`이 내부에서
 그걸 호출하므로 TTS가 두 번 재생된다.
 

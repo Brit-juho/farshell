@@ -7,6 +7,7 @@ Codex 설정은 TOML이고 표준 라이브러리에는 writer가 없다. 전체
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -204,6 +205,185 @@ def _cmd_uninstall() -> int:
     return 0
 
 
+# ── hooks.json 중복 (Codex 앱 「Claude 설정 가져오기」) ─────────────────────
+# FarShell은 hooks.json에 **쓰지 않는다**(계약). 그런데 Codex 데스크톱 앱의
+# 가져오기가 Claude의 FarShell 훅을 거기 복제한다(`agent_hook.sh pre claude` …).
+# Codex는 config.toml과 hooks.json을 모두 읽으므로 같은 이벤트가 두 번(그중 하나는
+# claude 태그로) 들어와 에이전트 라벨이 어긋난다. 여기서 발견되면 전부 외부 복제본이다.
+SCRIPT_NAME = "agent_hook.sh"
+
+
+def hooks_json_path() -> Path:
+    return settings_path().with_name("hooks.json")
+
+
+def display_path(path: Path) -> str:
+    """개인 경로(홈)는 `~` 로 가려서 보여준다."""
+    try:
+        return "~/" + str(path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def _load_hooks_json(path: Path) -> tuple[dict | None, str]:
+    """(데이터, 원문). 없으면 (None, ""). 깨졌으면 ValueError."""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None, ""
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{path} 를 읽을 수 없습니다: {exc}") from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} 를 JSON으로 읽을 수 없습니다: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} 의 최상위가 객체가 아닙니다")
+    return data, raw
+
+
+def _iter_groups(data: dict):
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+    for event, groups in hooks.items():
+        if isinstance(groups, list):
+            yield event, groups
+
+
+def _script_args(command: str) -> str:
+    return command.split(SCRIPT_NAME, 1)[1].strip()
+
+
+def _is_ours(hook) -> bool:
+    return isinstance(hook, dict) and isinstance(hook.get("command"), str) and SCRIPT_NAME in hook["command"]
+
+
+def _entry(event: str, command: str) -> tuple[str, str, str | None]:
+    args = _script_args(command)
+    tokens = args.split()
+    return event, args, tokens[1] if len(tokens) > 1 else None
+
+
+def find_foreign_farshell_hooks(path: Path | None = None) -> list[tuple[str, str, str | None]]:
+    """hooks.json 안의 FarShell 항목 → [(event, 스크립트 인자부분, agent_tag 또는 None)].
+
+    파일이 없거나 깨졌으면 빈 목록(예외 없음).
+    """
+    try:
+        data, _ = _load_hooks_json(path or hooks_json_path())
+    except ValueError:
+        return []
+    found: list[tuple[str, str, str | None]] = []
+    for event, groups in _iter_groups(data or {}):
+        for group in groups:
+            nested = group.get("hooks") if isinstance(group, dict) else None
+            for hook in nested if isinstance(nested, list) else []:
+                if _is_ours(hook):
+                    found.append(_entry(event, hook["command"]))
+    return found
+
+
+def _detect_indent(raw: str):
+    for line in raw.splitlines()[1:]:
+        stripped = line.lstrip(" \t")
+        if stripped and len(stripped) < len(line):
+            lead = line[: len(line) - len(stripped)]
+            return "\t" if lead.startswith("\t") else len(lead)
+    return None  # 한 줄짜리 JSON
+
+
+def apply_dedupe(data: dict) -> tuple[dict, list[tuple[str, str, str | None]]]:
+    """FarShell 항목만 제거(다른 훅 보존, 빈 그룹/이벤트 정리). (새 데이터, 제거 목록)."""
+    removed: list[tuple[str, str, str | None]] = []
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return data, removed
+    new_hooks = {}
+    for event, groups in hooks.items():
+        if not isinstance(groups, list):
+            new_hooks[event] = groups
+            continue
+        kept_groups = []
+        for group in groups:
+            nested = group.get("hooks") if isinstance(group, dict) else None
+            if not isinstance(nested, list):
+                kept_groups.append(group)
+                continue
+            kept = []
+            for hook in nested:
+                if _is_ours(hook):
+                    removed.append(_entry(event, hook["command"]))
+                else:
+                    kept.append(hook)
+            if len(kept) == len(nested):
+                kept_groups.append(group)
+            elif kept:
+                kept_groups.append({**group, "hooks": kept})
+        if kept_groups or not groups:
+            new_hooks[event] = kept_groups
+    return {**data, "hooks": new_hooks}, removed
+
+
+def write_hooks_json(path: Path, data: dict, raw: str) -> Path:
+    backup = path.with_suffix(path.suffix + ".vtbak")
+    shutil.copy2(path, backup)
+    text = json.dumps(data, indent=_detect_indent(raw), ensure_ascii=False)
+    if raw.endswith("\n"):
+        text += "\n"
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".hooks-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write(text)
+        shutil.copymode(path, tmp)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return backup
+
+
+def _cmd_duplicates() -> int:
+    """기계가 읽는 출력: event<TAB>args<TAB>tag(없으면 -). 없으면 아무것도 안 낸다."""
+    for event, args, tag in find_foreign_farshell_hooks():
+        print(f"{event}\t{args}\t{tag or '-'}")
+    return 0
+
+
+def _cmd_dedupe(dry_run: bool) -> int:
+    path = hooks_json_path()
+    try:
+        data, raw = _load_hooks_json(path)
+    except ValueError as exc:
+        print(f"  ✗ {exc}")
+        print("  파일을 고친 뒤 다시 실행하세요 — 건드리지 않았습니다.")
+        return 2
+    if data is None:
+        print(f"  ✓ {display_path(path)} 가 없습니다 — 중복 없음")
+        return 0
+    new_data, removed = apply_dedupe(data)
+    if not removed:
+        print(f"  ✓ {display_path(path)} 에 FarShell 훅이 없습니다 — 중복 없음")
+        return 0
+    verb = "제거 예정" if dry_run else "제거"
+    for event, args, tag in removed:
+        print(f"  · {verb}: {event} — {SCRIPT_NAME} {args}" + (f" [{tag}]" if tag else " [태그 없음]"))
+    if dry_run:
+        print(f"  ⓘ --dry-run: {display_path(path)} 는 바꾸지 않았습니다 ({len(removed)}개)")
+        return 0
+    try:
+        backup = write_hooks_json(path, new_data, raw)
+    except OSError as exc:
+        print(f"  ✗ 쓰기 실패: {exc}")
+        return 2
+    print(f"  ✓ {display_path(path)} 에서 {len(removed)}개 제거 (백업: {display_path(backup)})")
+    print("  ⓘ 이미 실행 중인 codex 세션에는 적용되지 않습니다 — 새로 시작하세요.")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     command = argv[1] if len(argv) > 1 else "status"
     if command == "status":
@@ -212,7 +392,15 @@ def main(argv: list[str]) -> int:
         return _cmd_install()
     if command == "uninstall":
         return _cmd_uninstall()
-    print("사용법: codex_hooks.py [status|install|uninstall]", file=sys.stderr)
+    if command == "duplicates":
+        return _cmd_duplicates()
+    if command == "dedupe":
+        extra = argv[2:]
+        if any(a != "--dry-run" for a in extra):
+            print("사용법: codex_hooks.py dedupe [--dry-run]", file=sys.stderr)
+            return 64
+        return _cmd_dedupe("--dry-run" in extra)
+    print("사용법: codex_hooks.py [status|install|uninstall|duplicates|dedupe]", file=sys.stderr)
     return 64
 
 

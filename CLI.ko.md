@@ -36,7 +36,7 @@ fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리 (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (N30 — 구현만 됐고 미사용, ADR-27)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
-fsh hooks [status|install|uninstall]  # Claude Code 훅 등록(상태 배지·큐·TTS의 전제)
+fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # Claude Code·Codex 훅 등록(상태 배지·큐·TTS의 전제); dedupe는 Codex 앱이 ~/.codex/hooks.json에 복제한 FarShell 훅 제거
 fsh pane report [--state ...] [--agent ...]  # 이 pane의 상태 보고(훅 없는 에이전트용)
 fsh clauth [status|which]  # 사용량 조회(읽기 전용, clauth 미설치면 숨김)
 fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]  # 누적형 사용량 기록/조회 (로컬 LLM 등, 한도 없음)

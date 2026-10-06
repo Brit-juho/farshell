@@ -341,6 +341,9 @@ async def hooks_status():
     }
     if codex_error:
         tools["codex"]["error"] = codex_error
+    # hooks.json 에 복제된 FarShell 훅(Codex 앱 가져오기). 경고일 뿐 ok 에는 영향 없다.
+    dup_events = [event for event, _args, _tag in codex_hooks.find_foreign_farshell_hooks()]
+    tools["codex"]["duplicates"] = {"count": len(dup_events), "events": dup_events}
     return {
         "ok": all(tool["ok"] for tool in tools.values()),
         # 기존 클라이언트 호환: 최상위 events는 계속 Claude 이벤트다.

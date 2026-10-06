@@ -144,3 +144,19 @@ def test_hooks_status_on_broken_settings_json(client, tmp_path, monkeypatch):
     body = client.get("/api/hooks/status").json()
     assert body["ok"] is False
     assert body["error"] == "unreadable"
+
+
+def test_hooks_status_reports_codex_hooks_json_duplicates(client, tmp_path, monkeypatch):
+    """Codex 앱 가져오기가 hooks.json 에 복제한 FarShell 훅 — 경고(duplicates), ok 는 불변."""
+    import json
+
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    monkeypatch.delenv("VT_CODEX_HOME", raising=False)
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    (tmp_path / "codex").mkdir()
+    assert client.get("/api/hooks/status").json()["tools"]["codex"]["duplicates"] == {"count": 0, "events": []}
+    (tmp_path / "codex" / "hooks.json").write_text(json.dumps({"hooks": {
+        "Stop": [{"hooks": [{"type": "command", "command": "/x/server/agent_hook.sh stop claude"}]}],
+    }}))
+    dup = client.get("/api/hooks/status").json()["tools"]["codex"]["duplicates"]
+    assert dup == {"count": 1, "events": ["Stop"]}
