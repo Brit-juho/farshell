@@ -13,13 +13,15 @@ CLI별로 무엇이 채워져 있는지 보여준다.
 CLI가 업데이트되면 프롬프트 문구가 바뀐다. 그때마다 서버 코드를 고치고
 재시작하는 대신, 이 파일 한 줄만 고치면 된다 — `server/agent_prompt_detect.py`의
 `load_patterns()`가 매 서버 시작마다(또는 `force=True` 재적재 시) 읽는다.
+(2026-10-06 실측: 감지 커버리지 표(`/api/agents/coverage`)는 요청마다 다시 읽지만 PTY 감지기는
+캐시를 쓴다 — toml을 고친 뒤 실제 waiting/interrupt 감지에 반영하려면 서버를 재시작해야 한다.)
 파싱이 실패한 파일은 **그 파일만** 건너뛴다(잘못된 정규식 하나가 서버 전체의
 승인 대기 감지를 죽이면 안 된다).
 
 ## 포맷
 
 ```toml
-# codex — 패턴 미조사. 채우면 그 즉시 waiting 감지가 켜진다(서버 재시작 불필요).
+# 예시 CLI — 채우면 waiting 감지가 켜진다(PTY 감지기는 패턴을 캐시하므로 서버 재시작 필요).
 name = "codex"
 
 enter = [
@@ -44,8 +46,9 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | `ignore_exit_on` | kind 목록(예: `["choice"]`). 그 kind가 떠 있는 동안 `exit`를 무시한다 — Codex 질문 화면은 상태줄 `esc to interrupt`를 같이 그린다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙) |
 | `prefer_latest_kind` | `true`/`false`(기본 `false`). 서로 다른 대화상자 문구가 출력 이력에 함께 남아 있을 때 **윈도우에서 가장 나중에 나타난 kind**를 고른다(Codex: 승인 문구 위에 계획 문구가 남은 경우). 선택지 번호도 현재 제목 줄 이후에서만 뽑는다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙) |
 | `interrupt` | 문자열 목록. 사용자가 승인을 **거절**하거나 ESC로 작업을 끊으면 CLI는 Stop 훅을 내지 않고 이 문구만 화면에 남긴다 — 새로 그려지는 순간 그 세션의 `waiting`/`working` 엔트리를 `done`으로 마친다. waiting 진입 신호가 아니다. 문구 뒤에 `enter`/`exit`가 다시 그려졌으면 이미 지난 화면이라 무시한다. `[kinds]` 표 **위**에 쓴다 |
+| `interrupt_stale_after` | 정규식(여러 줄 모드). 그 `interrupt` 문구 **뒤**에 맞으면 새 중단이 아니라 이미 지나간 화면의 재그림이라 무시한다. Codex는 중단 줄이 스크롤백에 남아 다음 턴에도 tmux 부분 재그림에 실려 오므로(0.160.0 실측) 뒤따르는 새 입력(`› `)·응답(`• `) 줄로 가른다. 없으면 문구만 본다. `[kinds]` 표 **위**에 쓴다 |
 | `[badge]` | 표. 키 = 보조 표시 값, 값 = 리터럴 목록. 걸려도 waiting으로 올리지 않고 엔트리에 `badge`만 붙인다(agy `/artifact to review` -> `plan`). 사용자 입력이 오면 뗀다 |
-| `options` | 정규식(문자열 또는 문자열 목록). 캡처 그룹 1=번호, 2=라벨. 매치되면 모바일 플릿 홈에 번호 버튼이 뜬다. 실패해도 `enter`/`exit`는 그대로 산다 |
+| `options` | 정규식(문자열 또는 문자열 목록; 앞에서부터 처음 매치되는 것만 쓴다). 캡처 그룹 1=번호, 2=라벨 — 이름 그룹 `label`/`key`가 있으면 그것(Codex: 보내는 키가 번호가 아니라 `(y)`/`(a)`/`esc`). 매치되면 모바일 플릿 홈에 번호 버튼이 뜬다. 실패해도 `enter`/`exit`는 그대로 산다 |
 
 `enter`/`exit`가 둘 다 비어 있으면(2026-09-11 이후로는 해당 없음 — 아래
 「codex/aider 채움」 참고) 그 CLI는
@@ -92,7 +95,8 @@ toml을 본다. 우선순위는 훅 kind > 화면 kind > 폴백(`question`).
 분할 방식까지 검증된 claude.toml만큼의 신뢰도는 아니다(`/api/agents/coverage`
 가 이 셋을 `trust: "mid"`로 보고하는 이유). 실제 세션에서 오탐/미탐이 보이면
 `fsh pane report`로 캡처해서 이 파일들을 고쳐라. 번호 선택지(`options`)는
-세 CLI 모두 렌더링 방식을 소스만으로 확신할 수 없어 비워뒀다.
+처음엔 소스만으로 확신할 수 없어 비워뒀다. codex는 이후 실화면(0.155.0 → 0.160.0, 2026-10-06)으로 채웠고
+`interrupt`도 실측했다(`docs/ref/session-view-measurements.md` §1).
 
 ## `fsh pane report`로 수동 주입해 테스트하기
 
@@ -125,7 +129,7 @@ tmux 안에서 실행하면 `$TMUX_PANE`으로 정확히 그 pane에 매칭된�
 **3. toml을 고치고 즉시 반영 확인**
 
 ```bash
-# 임시로 라인을 하나 늘려도 서버 재시작 없이 즉시 반영되는지
+# 임시로 라인을 하나 늘려도 커버리지 표에는 서버 재시작 없이 반영된다(PTY 감지기는 재시작 필요)
 echo '# test' >> server/detect/codex.toml
 curl -s http://localhost:7777/api/agents/coverage | python3 -m json.tool
 git checkout -- server/detect/codex.toml   # 실험 후 원복
