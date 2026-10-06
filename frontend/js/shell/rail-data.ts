@@ -11,6 +11,8 @@ import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
 export type Origin = 'local' | 'peer' | 'external';
+/** 에이전트에게 공유된 세션(서버 `share`). 모드는 읽기 전용(read) 또는 읽기·쓰기(readwrite). */
+export interface ShareInfo { nick: string; mode: 'read' | 'readwrite'; }
 export type WaitKind = 'approval' | 'choice' | 'plan' | 'question';
 export type DoneBadge = 'question' | 'plan';
 
@@ -44,6 +46,8 @@ export interface SessionRow {
   isMainWorktree?: boolean;
   worktreeId?: string | null;
   origin: Origin;
+  /** 에이전트 공유 표시. 공유 안 된 세션·구버전 서버는 없다/null. */
+  share?: ShareInfo | null;
   /** 이 세션이 속한 묶음 뷰의 이름(묶음이 아니면 null). */
   viewLabel: string | null;
   /** 이 브라우저 탭 말고 이 세션에 붙은 **웹** 화면 수(다른 브라우저 탭·폰). */
@@ -74,6 +78,26 @@ export function normalizeKind(v: unknown): WaitKind {
 
 export function normalizeBadge(v: unknown): DoneBadge | null {
   return v === 'question' || v === 'plan' ? v : null;
+}
+
+// ── 에이전트 공유 ──────────────────────────────────────────────────────────
+// ⚠ share/share-data.js(지연 청크)와 같은 규칙이다 — shell 청크는 그 청크를 정적 import 할 수 없어 한 벌 더 적는다.
+
+export const SHARE_MODE_LABEL: Record<ShareInfo['mode'], string> = { read: '읽기 전용', readwrite: '읽기·쓰기' };
+const SHARE_NICK_RE = /^[A-Za-z0-9_-]{1,32}$/;
+/** 서버가 받는 세션 이름(`routes/agent_share.py`). 한글 이름 세션은 공유할 수 없다. */
+const SHARE_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/** 서버 값 → 공유 표시. 닉네임 규칙을 못 지키면 공유 아님(서버도 같은 판단을 한다), 모르는 모드는 읽기 전용. */
+export function normalizeShare(v: unknown): ShareInfo | null {
+  const o = v as { nick?: unknown; mode?: unknown } | null;
+  if (!o || typeof o !== 'object' || typeof o.nick !== 'string' || !SHARE_NICK_RE.test(o.nick)) return null;
+  return { nick: o.nick, mode: o.mode === 'readwrite' ? 'readwrite' : 'read' };
+}
+
+/** 「공유 · 닉네임 · 읽기 전용」 — 요약줄·접힌 레일 툴팁이 쓴다. */
+export function shareSentence(share: ShareInfo | null | undefined): string {
+  return share ? `공유 · ${share.nick} · ${SHARE_MODE_LABEL[share.mode]}` : '';
 }
 
 // ── 상태 키워드 ────────────────────────────────────────────────────────────
@@ -209,7 +233,9 @@ export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: num
 
 // ── 행 메뉴(⋯ 버튼·우클릭·폰 롱프레스가 같은 항목) ───────────────────────
 
-export type RowMenuId = 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown';
+export type RowMenuId =
+  | 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown'
+  | 'share' | 'shareSettings' | 'unshare' | 'agentPerms';
 
 export interface RowMenuItem {
   id: RowMenuId;
@@ -224,11 +250,12 @@ export interface RowMenuItem {
  * 만든 곳 · 브랜치. 값이 없는 조각은 건너뛴다. 선택 불가 헤더 행(`.vt-menu-summary`)에 그린다.
  */
 export function rowSummary(
-  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'branch'>,
+  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'branch'> & { share?: ShareInfo | null },
 ): string {
   const s = normalizeState(row.status);
   const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
   if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
+  if (row.share) parts.push(shareSentence(row.share));
   if (row.otherClients > 0) parts.push(`웹 외 ${row.otherClients}`);
   parts.push(ORIGIN_LABEL[normalizeOrigin(row.origin)]);
   if (row.branch) parts.push(row.branch);
@@ -239,11 +266,13 @@ export interface RowMenuOpts {
   /** 「오른쪽에 나란히 열기」「아래에 열기」를 넣는다. 폭 720px 이상 + 터치일 때만 true로 준다
    * (term/session-actions.js `touchSplitAvailable`). 터치 드래그를 만들지 않는 대신의 길이다. */
   split?: boolean;
+  /** 에이전트 공유 항목을 넣는다. **이 맥을 보고 있을 때만** true — 승인·공유는 이 맥 전용이다(다른 맥으로 중계되지 않는다). */
+  share?: boolean;
 }
 
 /** 열린 세션이면 닫기, 아니면 열기. 이름 변경·맥에서 열기·연결된 화면은 웹 세션이 있어야 하고,
  * 종료는 tmux 세션이면 늘 있다(확인창은 vtConfirmAndKillSession). */
-export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'>, opts: RowMenuOpts = {}): RowMenuItem[] {
+export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { share?: ShareInfo | null }, opts: RowMenuOpts = {}): RowMenuItem[] {
   const items: RowMenuItem[] = [];
   const split: RowMenuItem[] = opts.split
     ? [{ id: 'splitRight', label: '오른쪽에 나란히 열기' }, { id: 'splitDown', label: '아래에 열기' }]
@@ -259,6 +288,20 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'>, opts: R
   } else {
     items.push({ id: 'open', label: '열기' }, ...split);
   }
+  // 이름이 `kill` 인 세션은 서버가 공유를 거부한다(해제 URL 이 종료 라우트와 겹친다). 이름 규칙 밖(한글 등)은 공유 항목만 뺀다.
+  if (opts.share && row.tmuxName && row.tmuxName !== 'kill') {
+    if (SHARE_NAME_RE.test(row.tmuxName)) {
+      if (row.share) {
+        items.push(
+          { id: 'shareSettings', label: '공유 설정…' },
+          { id: 'unshare', label: '공유 해제', detail: '권한 모두 삭제' },
+        );
+      } else {
+        items.push({ id: 'share', label: '에이전트와 공유…' });
+      }
+    }
+    items.push({ id: 'agentPerms', label: '에이전트 권한…' });
+  }
   if (row.tmuxName) items.push({ id: 'kill', label: '종료', detail: '되돌릴 수 없음', danger: true });
   return items;
 }
@@ -266,7 +309,7 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'>, opts: R
 /** 메뉴 항목을 실행한다. 지연 청크는 세션 모듈을 정적 import 못 해 window 브리지를 받는다. */
 export function runRowMenu(
   id: RowMenuId,
-  row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'>,
+  row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'> & { share?: ShareInfo | null },
   w: any,
   startRename: () => void,
 ): void {
@@ -277,6 +320,9 @@ export function runRowMenu(
     case 'rename': if (sid) startRename(); break;
     case 'openOnMac': if (sid) w.vtOpenSessionOnMac?.(sid); break;
     case 'screens': if (sid) w.vtShowClients?.(sid); break;
+    case 'share': case 'shareSettings': if (row.tmuxName) w.vtShareOpen?.(row.tmuxName, row.share ?? null); break;
+    case 'unshare': if (row.tmuxName) w.vtShareUnshare?.(row.tmuxName); break;
+    case 'agentPerms': w.vtAgentPerms?.(); break;
     case 'kill': w.vtConfirmAndKillSession?.(row.tmuxName, sid); break;
     case 'splitRight': w.vtSplitOpenSession?.('right', { sessionId: sid, tmuxName: row.tmuxName }); break;
     case 'splitDown': w.vtSplitOpenSession?.('bottom', { sessionId: sid, tmuxName: row.tmuxName }); break;

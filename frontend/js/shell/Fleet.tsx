@@ -23,7 +23,7 @@ import {
   buildRailLists, rowMenuItems, rowSummary, runRowMenu, diffLabel, worktreeIconName, type SessionRow,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
-import { KeywordLine, OriginMark, ScreensMark } from './RailRow.js';
+import { KeywordLine, OriginMark, ScreensMark, ShareMark } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
@@ -185,6 +185,7 @@ function Row(props: {
         </Show>
         <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line3">
           <KeywordLine row={props.row} now={now} />
+          <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>
         <Show when={props.row.viewLabel || props.row.otherScreens > 0 || props.row.otherClients > 0}>
@@ -508,7 +509,7 @@ function Fleet(props: { deps: FleetDeps }) {
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
-                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null) })}>
+                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST })}>
                       {(it) => (
                         <button
                           type="button"

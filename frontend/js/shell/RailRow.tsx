@@ -16,7 +16,7 @@ import { agentLabel, icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
 import {
   stateKeyword, formatRelativeTime, statusSentence, diffLabel, worktreeIconName,
-  ORIGIN_ICON, ORIGIN_LABEL, type SessionRow, type Origin,
+  ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo,
 } from './rail-data.js';
 
 /** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
@@ -40,6 +40,29 @@ export function OriginMark(props: { origin: Origin }) {
         aria-label={ORIGIN_LABEL[props.origin]}
         innerHTML={icon(ORIGIN_ICON[props.origin as Exclude<Origin, 'local'>], 12, 2)}
       />
+    </Show>
+  );
+}
+
+/** 에이전트에게 공유 중인 세션 표시: 아이콘(읽기 전용 = 눈, 읽기·쓰기 = 펜) + 닉네임. 보안 상태라 설정으로 끌 수 없다.
+ * 읽기·쓰기는 모양과 글자(「쓰기」)와 색이 모두 다르다. 레일 행과 Fleet 행이 같이 쓴다. */
+export function ShareMark(props: { share: ShareInfo | null | undefined }) {
+  return (
+    <Show when={props.share}>
+      {(s) => (
+        <span
+          class="vt-srow-share"
+          data-mode={s().mode}
+          data-tip={shareSentence(s())}
+          data-tip-side="right"
+          role="img"
+          aria-label={shareSentence(s())}
+        >
+          <span innerHTML={icon(s().mode === 'readwrite' ? 'share-write' : 'share-read', 12, 2)} />
+          <span class="vt-srow-share-nick">{s().nick}</span>
+          <Show when={s().mode === 'readwrite'}><span class="vt-srow-share-mode">{SHARE_MODE_LABEL.readwrite}</span></Show>
+        </span>
+      )}
     </Show>
   );
 }
@@ -109,7 +132,7 @@ export function Row(props: {
   // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 툴팁(이름 / 브랜치 · 키워드)이 맡는다.
   const compactSub = () => {
     if (!props.compact) return undefined;
-    return [branch(), statusSentence(props.row, now())].filter(Boolean).join(' · ') || undefined;
+    return [branch(), shareSentence(props.row.share), statusSentence(props.row, now())].filter(Boolean).join(' · ') || undefined;
   };
 
   // div에 role=button만 붙이면 Enter·Space가 아무 일도 안 한다 — 직접 붙인다.
@@ -214,6 +237,7 @@ export function Row(props: {
         </Show>
         <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
           <KeywordLine row={props.row} now={now} />
+          <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>
         <Show when={props.row.viewLabel || props.row.otherScreens > 0 || props.row.otherClients > 0}>

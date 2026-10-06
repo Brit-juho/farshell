@@ -276,7 +276,7 @@ function Rail(props: { deps: RailDeps }) {
     const m = ctxMenu();
     if (!m) return [];
     const row = m.row;
-    return rowMenuItems(row, { split: splitAvailable(row) }).map((it) => ({
+    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger,
       run: () => runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name)),
     }));

@@ -189,6 +189,9 @@ export default defineConfig(({ mode }) => {
             // clients.js를 정적 import한다(settings -> screens 단방향, core는 안 따라온다).
             if (p.endsWith('/frontend/js/layout/connected-screens.js')) return 'screens';
             if (p.endsWith('/frontend/js/layout/clients.js')) return 'screens';
+            // 에이전트 세션 공유 — 공유 대화상자·승인 모달·권한 패널. js/share-lazy.js(core)가
+            // 이벤트 수신과 import() 만 한다. 청크 이름이 없으면 포괄 규칙이 core 로 보내 상시 로드가 늘어난다.
+            if (p.includes('/frontend/js/share/')) return 'share';
             // 빈 칸 클릭 시 열리는 세션 선택 시트(layout/panes.js가 지연 import).
             if (p.endsWith('/frontend/js/layout/pane-picker.js')) return 'screens';
             // 모바일 세션 시트의 목록 렌더링 전부(picker.js가 시트를 열 때 지연 import)와 그 안의 뷰 순서 편집.

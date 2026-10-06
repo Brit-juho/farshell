@@ -93,6 +93,7 @@ import './panels/ports-lazy.js';
 import './panels/files-lazy.js';
 import './queue-lazy.js';
 import './snippets-lazy.js';
+import './share-lazy.js';   // 에이전트 세션 공유 — 본체는 `share` 청크
 // N5/N40/N46 — quickopen.js(vanilla)는 shell/Palette.tsx(지연 청크)로
 // 대체됐다. palette-lazy.js는 panels/viewer-lazy.js와 같은 스텁 패턴이라
 // term/session.js·agent/preview.js 뒤에 둔다(그 값들을 deps로 담아간다).

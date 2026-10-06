@@ -1203,3 +1203,77 @@
     .vt-tip { transform: none; }
   }
 }
+
+/* ── 에이전트 세션 공유 ────────────────────────────────────────────────────
+ * 행 표시(.vt-srow-share) · 공유 대화상자 · 승인 모달 · 권한 패널(frontend/js/share/, shell/RailRow.tsx).
+ * 이 화면은 보안 상태를 말한다: 색은 상태에만 쓴다 — 읽기·쓰기(명령 실행 가능)만 대기색(--color-st-waiting)을
+ * 받고, 읽기 전용은 무채색이다. 경고 문구는 상자·아이콘 없이 글자 위계(굵기·색)로만 말한다.
+ * 버튼 높이는 터치에서 44px로 올린다(.vt-btn.lg 는 36px). */
+@layer components {
+  .vt-srow-share {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1);
+    min-width: 0;
+    max-width: 100%;
+    color: var(--color-sub);
+  }
+  .vt-srow-share > svg,
+  .vt-srow-share > span:first-child { display: inline-flex; flex: none; }
+  .vt-srow-share-nick {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vt-srow-share-mode { flex: none; font-weight: var(--weight-medium); }
+  .vt-srow-share[data-mode="readwrite"] { color: var(--color-st-waiting); }
+
+  /* 공유 대화상자 */
+  .vt-share-warn {
+    margin: 0 0 calc(var(--spacing) * 4);
+    color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui);
+  }
+  .vt-share-warn p { margin: 0 0 calc(var(--spacing) * 1.5); }
+  .vt-share-warn p:first-child { font-weight: var(--weight-semibold); }
+  .vt-share-field { margin: 0 0 calc(var(--spacing) * 4); }
+  .vt-share-label {
+    display: block;
+    margin: 0 0 calc(var(--spacing) * 1.5);
+    color: var(--color-sub);
+    font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui);
+  }
+  .vt-share-nick { width: 100%; box-sizing: border-box; font-family: var(--font-mono); }
+  .vt-share-msg {
+    margin-top: calc(var(--spacing) * 1.5);
+    color: var(--color-sub);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
+  }
+  .vt-share-msg.error { color: var(--color-st-error); }
+  .vt-share-msg[hidden] { display: none; }
+  .vt-share-mode {
+    display: flex;
+    align-items: flex-start;
+    gap: calc(var(--spacing) * 2.5);
+    min-height: 44px;
+    padding: calc(var(--spacing) * 2) 0;
+    cursor: pointer;
+  }
+  .vt-share-mode input { flex: none; margin: 3px 0 0; accent-color: var(--color-acc); }
+  .vt-share-mode-text { display: flex; flex-direction: column; gap: 2px; }
+  .vt-share-mode-name { color: var(--color-txt); font: var(--weight-medium) var(--fs-sm) / var(--leading-row) var(--font-ui); }
+  .vt-share-mode-help { color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-share-note {
+    margin: 0 0 calc(var(--spacing) * 4);
+    color: var(--color-sub);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-ui);
+  }
+
+
+  @media (pointer: coarse) {
+    .vt-dialog .vt-share-ok,
+    .vt-dialog .vt-share-cancel { --btn-h: 44px; }
+    .vt-share-mode { min-height: 48px; }
+  }
+}
