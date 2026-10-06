@@ -244,3 +244,22 @@ Guidance for the user:
 
 ---
 
+## Personal-value guard (2026-10-06)
+
+Only **global settings that are identical for everyone who clones the repo** go to GitHub. Anything that carries a
+home path, token, account or device — tool-generated config directories (`.codex/`, `.agents/`, `.gemini/`, `.cursor/` …),
+`auth.json`, `.env*`, keys, local databases, `*.local.md` — is kept out in two layers:
+
+1. **`.gitignore`** (first line of defence) — the patterns above are ignored by name.
+2. **`scripts/guard_personal.py`** (second line, catches `git add -f` and shapes nobody listed yet), run by
+   `scripts/githooks/pre-commit` (staged changes) and `scripts/githooks/pre-push` (the pushed range). It checks the
+   *added* lines and new file names for forbidden paths, token/key shapes (`ntn_…`, `ghp_…`, `sk-…`, scrypt hashes,
+   private-key headers, `VT_AUTH_TOKEN=<real value>`), and **this machine's real home path / user name** — read from
+   `getpass.getuser()` and `$HOME` at run time, so the repo itself never stores a personal value. Values are never echoed
+   back in the output. Fake fixtures (`sk-test…`, `ghp_fake…`) and shell/code references (`$VT_AUTH_TOKEN`, `os.environ.get`)
+   pass.
+
+Turn the hooks on once per clone: `git config core.hooksPath scripts/githooks`. Manual checks:
+`scripts/guard_personal.py range A..B` (any range) and `scripts/guard_personal.py history` (every commit; slow, for audits).
+The only bypass is `FSH_GUARD_SKIP=1`, which prints a warning; agents do not use it. `scripts/check_docs.py` keeps
+scanning the *tracked* files for personal values — the guard covers what is about to be added.

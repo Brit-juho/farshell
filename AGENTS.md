@@ -79,7 +79,12 @@ These are load-bearing. Each one caused a real incident.
    `~/.vt.env` (gitignored) and personal agent instructions in `~/.claude/CLAUDE.md`.
    Real hostnames, reserved domains, usernames, tailnet names and public IPs are not
    acceptable as "examples" — a real reserved ngrok domain shipped as one on 2026-09-18.
-   `scripts/check_docs.py` scans docs, `config/*.env` and skills for them.
+   `scripts/check_docs.py` scans docs, `config/*.env` and skills for them. Only settings that
+   are identical for every clone are shared: tool-generated dirs (`.codex/`, `.agents/`, …),
+   `auth.json`, `.env*`, keys and local DBs are gitignored, and `scripts/guard_personal.py`
+   (pre-commit / pre-push hooks — enable with `git config core.hooksPath scripts/githooks`)
+   blocks them, token shapes and this machine's real home path even under `git add -f`.
+   Never bypass it with `FSH_GUARD_SKIP=1`.
 8. **The agent hook payload format (`POST /api/agent/event`) is a compatibility surface.**
    Remote hosts may run an older `server/agent_hook.sh`.
 9. **Colors go through tokens.** No hex literals in `frontend/js` or `styles/layers`.

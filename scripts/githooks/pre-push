@@ -1,0 +1,8 @@
+#!/bin/sh
+# 푸시되는 커밋 범위에 개인 값·비밀이 있으면 막는다 — scripts/guard_personal.py 참고.
+root="$(git rev-parse --show-toplevel)" || exit 0
+py="${VT_PYTHON:-}"
+[ -x "$py" ] || py="$root/.venv/bin/python"
+[ -x "$py" ] || py="$(command -v python3)"
+[ -n "$py" ] || { echo "guard_personal: python 을 찾지 못해 검사를 건너뜁니다" >&2; exit 0; }
+exec "$py" "$root/scripts/guard_personal.py" push

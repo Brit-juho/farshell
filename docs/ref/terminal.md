@@ -187,8 +187,18 @@ right after `new-session` (same mechanism as `@fsh_wt`, so it survives a server 
 |---|---|---|
 | `local` | `POST /api/tmux/create`, worktree open (`worktree._open_agent`, `open_worktree`) | created from this UI |
 | `peer` | `POST /api/peer/sessions/create` | another Mac created it; the server decides this itself, the request body is never read for it |
-| `agent` | nobody yet | value and `tmux_runner.set_origin(name, "agent")` are ready, but the MCP tools have **no session-creation function**, so no path produces it today |
+| `agent` | nothing, **by decision (2026-10-06)** | agents never create sessions: the user creates the (empty) tmux session and *shares* it with agents by name — see "Agent-shared sessions" below. The value and `tmux_runner.set_origin(name, "agent")` are kept only so old data reads back; no new path will write it |
 | `external` | nothing (absence of the option) | `fsh` CLI, plain `tmux new`, or any unknown option value |
+
+**Agent-shared sessions (design, not implemented).** An agent may only work in a tmux session the user made and
+named. The planned shape: the user creates an ordinary session (an empty terminal), then marks it shared with a
+nickname (tmux user option, e.g. `@fsh_shared`); the MCP server exposes only sessions carrying that mark
+(`list_shared_sessions`, `read_session` = capture the visible pane, `send_to_session` = type into it through the same
+guarded input path as the prompt queue — never into a pane that is `waiting`). Agents cannot create, rename, kill or
+share sessions, and cannot reach an unmarked one by guessing a name. Unsharing is one action for the user. It is the
+opposite trade-off of "agents create sessions": no resource-exhaustion or free-cwd surface, because the user already
+decided which terminal is exposed. Open points: read-only vs read-write share, per-share expiry, and whether sending
+needs a one-time user confirmation.
 
 Only `local`/`peer`/`agent` are ever written (`tmux_runner.set_origin` rejects everything else without calling tmux);
 unknown values read back as `external`. The server has no auto-attach path: sessions attach only through explicit

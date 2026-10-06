@@ -93,3 +93,54 @@ frontend/static/
 
 # QA 점검 로컬 메모리 (커밋 금지)
 .claude/qa-memory/
+
+# ── 개인용 설정·도구 상태는 절대 올리지 않는다 (2026-10-06) ─────────────────────────
+# 이 저장소에서 GitHub 로 공유하는 것은 "누가 클론해도 같은" 전역 설정뿐이다. 내 홈 경로·토큰·
+# 계정·기기 정보가 섞이는 파일은 전부 여기서 막고, 그래도 `git add -f` 로 우회하거나 새 형태가
+# 생기는 경우를 scripts/guard_personal.py(pre-commit·pre-push 훅, scripts/githooks/)가 한 번 더 막는다.
+#
+# 에이전트 도구가 프로젝트 안에 만드는 디렉터리 — Codex 앱의 「Claude 설정 가져오기」가 만든
+# `.codex/hooks.json` 에는 절대 홈 경로(`/Users/…`)가 그대로 들어 있었다.
+.codex/
+.agents/
+.gemini/
+.cursor/
+.windsurf/
+.continue/
+.opencode/
+.zed/
+.kiro/
+.roo/
+.cline/
+.sourcegraph/
+# aider 는 .aider.conf.yml 만 공유한다(AGENTS.md 를 가리키는 팀 설정). 대화·입력·태그 캐시는 개인 것.
+.aider*
+!.aider.conf.yml
+
+# 에이전트 지침의 로컬 덮어쓰기본(개인 선호) — 공유본은 AGENTS.md / CLAUDE.md 하나뿐이다.
+AGENTS.local.md
+CLAUDE.local.md
+*.local.md
+settings.local.json
+.claude/projects/
+
+# 비밀·인증·키 — 어떤 이름으로든 커밋 금지
+.env.*
+!.env.example
+auth.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa*
+id_ed25519*
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+.vt/
+.vt-*/
