@@ -1,18 +1,10 @@
 # Auth, devices, boundary values
 
-> `CLAUDE.md`의 영역 색인에서 갈라져 나온 문서다(2026-09-18). 이 영역을 만지기 전에 읽는다.
-
 ## Authorization order (P2-5, ADR-42)
 
-There are seven layers and, until this section, no document said what order they run
-in — each layer's own reasoning was well-commented, but the relationship *between*
-layers wasn't written anywhere. Three symptoms already showed why that's a problem:
-the same "this bypasses standard auth, but X does its own check" justification was
-written out **three separate times** in `server/main.py`'s exception list (once each
-for `/s/`, `/p/authorize`, `/api/peer/`); which transport (HTTP/WS) each layer covers
-was nowhere but the source; and the two exception lists (token auth vs. IP filter)
-differ from each other in a way that's a deliberate defense-in-depth choice, not
-something a reader could tell from just reading the code.
+The table below shows the middleware order and the additional checks applied
+at login, in routes and during terminal input. Token-auth exemptions do not
+automatically exempt a request from the IP filter or resource checks.
 
 **Starlette runs the *last*-registered middleware outermost** (`add_middleware`
 prepends to `user_middleware`), so execution order is the **reverse** of the

@@ -1,6 +1,7 @@
 # 터널 URL 자동 게시 (VT_TUNNEL_HOOK)
 
-익명 Cloudflare 터널은 **재시작할 때마다 URL이 바뀝니다.**
+익명 Cloudflare 터널은 **터널 프로세스를 다시 만들 때 URL이 바뀝니다.**
+`fsh restart`는 터널을 유지하므로 서버만 재시작하면 주소가 유지됩니다.
 
 ```
 https://example-one.trycloudflare.com   ← 오늘
@@ -19,8 +20,7 @@ ntfy 토픽, 텔레그램 봇, 그냥 iCloud Drive의 텍스트 파일...
 > - **ngrok 예약 도메인** — `VT_TUNNEL_PROVIDER=ngrok` + `VT_NGROK_DOMAIN=...`
 >
 > **ngrok으로 고정 도메인을 쓰면 이 훅은 주소가 실제로 바뀔 때만 발사됩니다**
-> (2026-09-18). 안 그러면 `fsh start` 할 때마다 같은 URL을 노션·슬랙에 계속
-> 덮어쓰게 되고, 그건 이 훅의 이름과 계약("URL이 바뀔 때")에도 어긋납니다.
+> 같은 URL을 재사용한 `start`에서는 호출하지 않습니다.
 > `fsh tunnel hook`으로 직접 부르는 경우는 언제나 그대로 나갑니다.
 
 ---
@@ -67,7 +67,7 @@ stdin 예시:
 
 ```
 터미널 (VT)	https://example-one.trycloudflare.com
-RAPA 앱	https://example-two.trycloudflare.com
+개발 앱	https://example-two.trycloudflare.com
 ```
 
 **훅이 실패해도 터널은 정상 동작합니다.** 종료 코드가 0이 아니면 경고만 찍고 넘어갑니다.
@@ -148,10 +148,10 @@ VT_TUNNEL_HOOK='"$VT_PYTHON" ~/.config/vt/hooks/notion_publish.py'
 ## 주의
 
 - **훅에 들어가는 값은 셸로 실행됩니다.** 신뢰할 수 있는 명령만 넣으세요.
-- **`~/.vt.env`는 bash가 `source`합니다.** 공백·괄호가 든 값은 반드시 따옴표로 감싸세요.
-  안 그러면 다음 실행부터 `syntax error`가 납니다.
-- **터널 URL은 인증 없이 누구나 접근 가능합니다.** 훅으로 URL을 뿌린다는 건
-  그 채널이 곧 접근 통로가 된다는 뜻입니다. `fsh password` 또는 `VT_AUTH_TOKEN`으로
-  웹 UI 인증을 먼저 걸어두세요.
+- **`~/.vt.env`는 실행하지 않고 파싱합니다.** 저장소의 `lib/vt_env.sh`로 값을
+  저장하세요. `VT_TUNNEL_HOOK`에 저장한 명령은 훅을 호출할 때 별도로 실행됩니다.
+- 메인 웹 UI는 `fsh password` 또는 `VT_AUTH_TOKEN`으로 인증을 설정하세요.
+  추가 포트는 공유 모드에 따라 접근 권한이 다릅니다(`fsh help tunnel`).
+  기기 등록 티켓이 포함된 `fsh mobile` URL은 게시하지 마세요.
 - 훅은 터널 시작 흐름 안에서 **동기적으로** 실행됩니다. 오래 걸리는 작업은
   스크립트 쪽에서 백그라운드로 넘기세요.

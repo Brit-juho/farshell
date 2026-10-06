@@ -20,8 +20,8 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | POST | `/api/sessions` | Create a session (JSON: cols, rows, name) |
 | DELETE | `/api/sessions/{session_id}` | Delete a session |
 | PATCH | `/api/sessions/{session_id}` | Rename a session (JSON: name) — also renames the tmux session (alphanumeric/dash/underscore only) |
-| POST | `/api/sessions/{session_id}/keys` | Write text straight into the PTY (JSON: text) — same privilege as typing in the terminal WS. 404 for an unknown session. Used by the mobile fleet home's inline approval buttons (N38) |
-| POST | `/api/sessions/{session_id}/paste` | Paste-only entry point (JSON: text) — the server decides bracketed-paste markers, newline normalization, and unsafe control-char stripping instead of the browser guessing (N24). Same function as the WS `{"type":"paste"}` message. 404 for an unknown session |
+| POST | `/api/sessions/{session_id}/keys` | Write text straight into the PTY (JSON: text) — same privilege as typing in the terminal WS. 404 for an unknown session. Used by the mobile fleet home's inline approval buttons |
+| POST | `/api/sessions/{session_id}/paste` | Paste-only entry point (JSON: text) — the server decides bracketed-paste markers, newline normalization, and unsafe control-char stripping instead of the browser guessing. Same function as the WS `{"type":"paste"}` message. 404 for an unknown session |
 | POST | `/api/watch/{session_id}` | Toggle output watching ON/OFF (JSON: enabled, timeout) |
 
 ## tmux
@@ -66,7 +66,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | POST | `/api/auth` | Login — password (+ `otp` for a new device) or a one-time `ticket` → issues `vt_session`/`vt_device` HttpOnly cookies. Optional `remember` (`90d` default / `24h` / `1h`) sets a **new** device's lifetime; a registered device ignores it, a ticket follows its own bound lifetime. The session never outlives its device (`min(24h, device remaining)`). 400 `invalid_remember`, 401 `otp_required`/`otp_invalid`, 429 `otp_locked` |
 | GET | `/api/auth/status` | Whether auth is active / OTP is linked / this device is registered and not expired (accessible unauthenticated, no secrets included). The login screen shows the lifetime choice only when `device_known` is false |
 | POST | `/api/auth/logout` | Clears the session only (device registration is kept) |
-| POST | `/api/auth/elevate` | Re-verify password (+ OTP if linked) → reissues `vt_session` with a 15-minute `elev` claim (N31). Session-scoped, not device-scoped. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
+| POST | `/api/auth/elevate` | Re-verify password (+ OTP if linked) → reissues `vt_session` with a 15-minute `elev` claim. Session-scoped, not device-scoped. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
 | GET | `/api/auth/elevation` | Current session's elevation state (`elevated`, `elevated_until`) + `unused: true` / `unused_reason: "ADR-27"` — no path requires elevation today. Read-only (Settings → Security) |
 | GET | `/api/devices` | Registered devices (`~/.vt/devices.json`): id (first 8 chars only), label, added_at, last_seen, `current` for the requesting device, `expires_at`/`expired`/`kind` (`persistent`/`temporary`)/`method`, and display-only `os`/`browser`/`ip_last`/`via` (`tunnel`/`tailscale`/`lan`/`local`/`direct`). Expired devices stay listed for 7 days. The raw UA is not returned. Read-only — registration/revocation is `fsh device` |
 
@@ -76,7 +76,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 |--------|------|------|
 | GET | `/api/fs/roots` | List of browsable roots (default `~/GitHub`) |
 | GET | `/api/fs/tree?path=X` | Directory listing. Excludes `.git`/`node_modules` etc. |
-| GET | `/api/fs/search?q=X` | Fuzzy filename search (N5/N40 — command palette `/` mode). `path=` scopes to a subtree, max 50 results |
+| GET | `/api/fs/search?q=X` | Fuzzy filename search (command palette `/` mode). `path=` scopes to a subtree, max 50 results |
 | GET | `/api/fs/file?path=X` | File content. Binaries return only `binary:true`; anything over 512KB is truncated. Images also carry `image:true`, `mime`, and `too_large` — the bytes come from `/api/fs/raw` below |
 | GET | `/api/fs/raw?path=X` | [T3] Raw **image** bytes for inline preview. Same browse boundary as `/api/fs/file`, plus a type allowlist: png/jpeg/gif/webp/bmp/ico only, and only when extension **and** magic bytes agree. SVG, HTML and PDF are excluded — served same-origin they are scriptable documents, i.e. XSS. Over 8MB → 413; not an image → 403. Sent with `nosniff` and `Content-Disposition: inline` |
 | GET | `/api/git/status?repo=X` | Parsed result of `git status --porcelain` |
@@ -96,7 +96,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | GET | `/api/git/log?repo=X[&file=Y]` | Recent commit list |
 | GET | `/api/git/show?repo=X&sha=Y` | Diff of one commit |
 
-## Git accounts & binding (N30, elevated session required except GET)
+## Git accounts & binding (elevated session required except GET)
 
 | Method | Path | Description |
 |--------|------|------|
@@ -147,7 +147,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | Greps the live scrollback ring buffer of open sessions (N40 — command palette `~` mode). `sessions=all` (default) covers every open session; a comma list restricts to those ids. Up to 50 matches total (20 per session) with 3 lines of context. Each result carries `source: "live"` (fixed — kept for older peer hosts' response shape, ADR-43 removed the once-persisted-log alternative) |
+| GET | `/api/search/scrollback?q=X[&sessions=all\|id1,id2]` | Greps the live scrollback ring buffer of open sessions (command palette `~` mode). `sessions=all` (default) covers every open session; a comma list restricts to those ids. Up to 50 matches total (20 per session) with 3 lines of context. Each result carries `source: "live"` (fixed — kept for older peer hosts' response shape, ADR-43 removed the once-persisted-log alternative) |
 
 ## Prompt Queue
 
@@ -159,7 +159,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/queue/{item_id}/unblock` | Resume an item blocked by safe_mode |
 | POST | `/api/queue/run` | Manual drain — dispatch one item |
 
-## Worktrees (N8/N44)
+## Worktrees
 
 | Method | Path | Description |
 |--------|------|------|
@@ -182,7 +182,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/ports/{port}/share/pin` | **Elevated.** Reissue the PIN without touching the tunnel (URL survives). Also rotates the share id, so everyone who got in with the old PIN must enter the new one |
 | PATCH | `/api/ports/{port}/share` | **Elevated.** Body `{"mode":...}` — change who can access without touching the tunnel. An actual change rotates the share id, so anyone admitted under the old mode must authenticate again |
 | POST | `/api/ports/_proxy/sync` | Not elevated — tells the running server to (re)start listeners for whatever `port_share_store` currently says. `fsh tunnel expose/pin/mode` call this after writing the policy directly (CLI trust level, not the web session's elevation gate) |
-| GET | `/api/tunnel/list` | N22 — summary of every currently open tunnel (main + `fsh tunnel expose`d ports), each with `mode`/`broken` (2.2). Unexposing reuses `DELETE /api/ports/{port}/expose` above |
+| GET | `/api/tunnel/list` | summary of every currently open tunnel (main + `fsh tunnel expose`d ports), each with `mode`/`broken` (2.2). Unexposing reuses `DELETE /api/ports/{port}/expose` above |
 
 ## Prompt Snippets
 
@@ -204,7 +204,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/push/test` | Send a test notification |
 | GET | `/api/push/status` | Subscription count / current origin / count of origin-mismatched subscriptions |
 
-## Files (N19)
+## Files
 
 `/tmp/vt-uploads` (path-based) has been replaced by `~/.vt/files/` (id-based).
 Old uploads are migrated automatically on server startup. There is no path-based
@@ -317,20 +317,20 @@ a peer signature opens.
 | GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel/version, etc.) |
 | GET | `/api/workspace` | Fetch workspace sync state (tabs/UI state) |
 | PUT | `/api/workspace` | Save workspace state |
-| GET | `/api/device-settings` | Fetch this device's settings (N3 — scoped by the `vt_device` cookie, `local` without it) |
+| GET | `/api/device-settings` | Fetch this device's settings (scoped by the `vt_device` cookie, `local` without it) |
 | PUT | `/api/device-settings` | Save this device's settings |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |
 | GET | `/api/agents/{tmux_name}` | Active agent info for a specific tmux session |
-| GET | `/api/agents/coverage` | N9/N45 — per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low", kinds, kindSources, badges}]`, read live from `detect/*.toml`. `kinds` = the waiting kinds this CLI can tell apart (`approval`/`choice`/`plan`/`question`, empty when it cannot express waiting); `kindSources` maps each kind to `hook`/`screen`/`fallback`; `badges` = auxiliary done-badges it can raise |
+| GET | `/api/agents/coverage` | per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"report"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low", kinds, kindSources, badges}]`, read live from `detect/*.toml`. `kinds` = the waiting kinds this CLI can tell apart (`approval`/`choice`/`plan`/`question`, empty when it cannot express waiting); `kindSources` maps each kind to `hook`/`screen`/`fallback`; `badges` = auxiliary done-badges it can raise |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping. A `waiting` entry carries `kind` (`approval`/`choice`/`plan`/`question`; removed when waiting ends — priority: hook `tool_name` > screen pattern of the detected CLI > `question`). A done entry may carry `badge` (`question` when the last assistant message ends with `?`, `plan` for agy's `/artifact to review`) — a helper mark, never a waiting state. The same fields ride on `/ws-agent` entries |
 | POST | `/api/agent/report` | Pane self-report (A2) — for agents without hooks (`fsh pane report`) |
 | POST | `/api/agent/message` | Agent-to-agent message from this Mac (`fsh mcp` / `fsh msg`). JSON `{to: "session" or "host/session", text, replyTo?, pane?, tmux?, cwd?}` — the **sender session is resolved by the server** from `pane`/`tmux`/`cwd` (same 3-step resolution as hooks), never claimed. Local target → queued here; remote target → signed to that peer's `/api/peer/agent/message`. 404 unknown host/session, 400 sending to yourself, 501 `peer_outdated` |
 | GET | `/api/agent/messages?conv=&limit=` | Sent and received agent messages, newest last, with delivery status (`queued`/`delivered`/`blocked`/`sent`/`failed`) |
 | GET | `/api/agent/directory?fresh=` | Where a message can go: this Mac and paired Macs, each tmux session with its foreground command and agent status |
-| GET | `/api/hooks/status` | Claude Code and Codex hook registration status (A0/S4). `tools.claude.events` contains `PreToolUse`/`PostToolUse`/`Stop`/`SessionStart`; `tools.codex.events` contains those plus `PermissionRequest`/`UserPromptSubmit`/`SessionEnd`. Top-level `events` remains the Claude map for older clients. `tools.codex.duplicates` (`{count, events}`) lists FarShell hooks copied into `~/.codex/hooks.json` by the Codex app import (warning only, does not affect `ok`; fix with `fsh hooks dedupe`) |
+| GET | `/api/hooks/status` | Claude Code and Codex hook registration status (A0/S4). `tools.claude.events` contains `PreToolUse`/`PostToolUse`/`Stop`/`SessionStart`/`Notification`/`PermissionRequest`; `tools.codex.events` contains `PreToolUse`/`PostToolUse`/`PermissionRequest`/`UserPromptSubmit`/`Stop`/`SessionEnd`. Top-level `events` remains the Claude map for older clients. `tools.codex.duplicates` (`{count, events}`) lists FarShell hooks copied into `~/.codex/hooks.json` by the Codex app import (warning only, does not affect `ok`; fix with `fsh hooks dedupe`) |
 | GET | `/api/usage` | Usage snapshot (U1) — `{available:false, reason}` when no source. Tokens/credentials are excluded by a field whitelist |
-| GET | `/api/usage/counter` | N41 — CounterProvider (unlimited, e.g. local LLM) snapshot. `?since=<epoch>` filters totals; the 7-day sparkline is a fixed window regardless |
-| POST | `/api/usage/counter` | N41 — record a usage event (`{model, tokens, seconds}`) — same store as `fsh usage add` |
+| GET | `/api/usage/counter` | CounterProvider (unlimited, e.g. local LLM) snapshot. `?since=<epoch>` filters totals; the 7-day sparkline is a fixed window regardless |
+| POST | `/api/usage/counter` | record a usage event (`{model, tokens, seconds}`) — same store as `fsh usage add` |
 | POST | `/api/agent/event` | Endpoint called by Claude Code and Codex lifecycle hooks. Body may include `agent`; prompt/tool start maps to `working`, permission request to `waiting`, and stop/session end to `done` |
 | GET | `/api/safe-mode` | Whether prompt queue safe_mode is active |
 | GET | `/api/tailscale/status` | Tailscale install/connection/IP/MagicDNS hostname |

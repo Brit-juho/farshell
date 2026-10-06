@@ -1,40 +1,37 @@
 # fsh CLI 레퍼런스
 
 `fsh`는 터미널 어디서든 실행 가능한 단일 진입점입니다. 이 문서는 전체 명령/옵션의
-상세 레퍼런스입니다 — 개요는 [README.md](./README.md), 개념 설명은 `fsh help concepts`를
+상세 레퍼런스입니다 — 개요는 [README.ko.md](./README.ko.md), 개념 설명은 `fsh help concepts`를
 참고하세요.
 
 ---
 
 ## 명령 목록
 
-> 2026-09-18: `CLAUDE.ko.md`가 따로 들고 있던 목록을 여기로 합쳤다(그 파일은
-> 삭제됐다 — 에이전트가 읽는 문서는 영문 단일본으로 통일). 같은 목록이 두 곳에
-> 살면 반드시 어긋난다.
-
 터미널 어디서든 `fsh` 명령으로 FarShell을 제어합니다:
 
 ```bash
-fsh start [--voice]    # 전체 시작 (서버+터널, --voice로 음성 데몬도 함께)
+fsh start [--network <범위>] [--safe] [--force] [--voice]
+                       # 서버와 접속 경로 시작 (--voice: 음성 데몬도 함께)
 fsh restart [--voice]  # 서버만 재기동 — 터널을 유지해 접속 주소가 안 바뀜
 fsh stop [--purge] [--keep-tunnel]
                        # 종료 (--purge: tmux 세션까지 완전 종료,
                        #       --keep-tunnel: 공개 입구는 남김)
 fsh status             # 현재 상태 확인
-fsh mobile [--e2e] [--session <이름>]
+fsh mobile [--e2e] [--session <이름>] [--temp]
                        # 폰 접속 URL + QR (서버가 떠 있어야 함, --e2e: 페이로드 암호화)
-fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태) — Wave 4
+fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태)
 fsh attach [name]      # 임의 tmux 세션을 새 창에 attach
-fsh voice              # 음성 모드 (백그라운드, 노션 작업 중에도 사용)
+fsh voice              # 음성 모드 (백그라운드, 다른 앱 사용 중에도 사용)
 fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
-fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐 (P4)
-fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크 (N19/N23)
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|allow-agent <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링 (N7/N39)
+fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐
+fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|allow-agent <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
 fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session)
-fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리 (N8/N44)
-fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (N30 — 구현만 됐고 미사용, ADR-27)
+fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
+fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (저장한 자격증명은 push에 사용되지 않음)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # Claude Code·Codex 훅 등록(상태 배지·큐·TTS의 전제); dedupe는 Codex 앱이 ~/.codex/hooks.json에 복제한 FarShell 훅 제거
 fsh pane report [--state ...] [--agent ...]  # 이 pane의 상태 보고(훅 없는 에이전트용)
@@ -42,42 +39,45 @@ fsh clauth [status|which]  # 사용량 조회(읽기 전용, clauth 미설치면
 fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]  # 누적형 사용량 기록/조회 (로컬 LLM 등, 한도 없음)
 fsh password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
 fsh otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전까지 완전 비활성)
-fsh device [list|rename <id> <별명>|revoke <id>]  # 등록된 기기 조회 / 이름 변경 / 폐기(폰 분실 시 세션까지 함께 무효)
+fsh device [list|rename <id> <별명>|revoke <id>|prune]  # 등록된 기기 조회 / 이름 변경 / 폐기(폰 분실 시 세션까지 함께 무효)
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 fsh template [save|apply|list|rm] <name>  # CLAUDE.md 템플릿 저장/적용 관리
 fsh popup <action>     # tmux 3.2+ popup으로 fsh 명령 빠른 호출
 fsh run "..."          # headless `claude -p` 백그라운드 실행 + 완료 시 TTS 알림
 fsh handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
 fsh handoff desktop    # 폰 세션을 맥 터미널로 가져옴
-fsh tunnel expose 3000 "앱 이름"  # 다른 로컬 포트를 별도 Cloudflare 터널로 공개
-fsh tunnel unexpose 3000          # 해당 포트 터널 종료
-fsh tunnel list                   # 열려 있는 터널 전부 (메인 + 추가 포트)
+fsh tunnel expose 3000 "앱 이름" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]
+                                   # 로컬 포트 공유. 기본 session: 로그인한 기기만 접근
+fsh tunnel unexpose 3000          # 해당 포트 터널과 공유 정책 종료
+fsh tunnel pin 3000               # PIN 재발급 (URL 유지)
+fsh tunnel mode 3000 session      # 접근 모드 변경 (URL 유지, 재인증 필요)
+fsh tunnel list                   # 전체 터널, 접근 모드와 PIN 실패 횟수
 fsh tunnel hook                   # URL 변경 훅 확인 + 즉시 실행 (fsh help tunnel-hook)
 fsh tunnel restart                # 좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동 + 훅 재실행
 fsh tunnel watchdog               # 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 fsh start/voice/mobile가 자동 기동)
-fsh ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내 (D9, 회사망 등)
+fsh ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내
 fsh doctor             # 설치/환경 진단 (Linux 항목 포함)
 fsh terminal           # fsh가 창을 열 때 쓰는 메인 터미널 확인/선택
 fsh install-profiles   # 터미널 앱 profile 자동 등록 (iTerm2 Dynamic Profile + 기타 snippet)
 fsh setup-keybind [key] [action]  # tmux popup 키바인딩 등록 (기본: prefix+v → status)
-fsh shell-init zsh     # 셸 init 스니펫 출력 (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
+fsh shell-init zsh     # 셸 init 스니펫 출력 (출력한 스니펫을 ~/.zshrc에 추가)
 ```
 
 > **지원 OS**: macOS / Linux (X11) / WSL2 (Linux로 동작). Windows 네이티브는 미지원.
 
-**Phase 6 — 단일 tmux 서버 원칙:** fsh CLI · server · Voice Daemon · hook이 모두 `-L fsh` 격리 소켓 사용(기본 소켓 이름 `fsh`). Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
+**단일 tmux 서버 원칙:** fsh CLI · server · Voice Daemon · hook이 모두 `-L fsh` 격리 소켓 사용(기본 소켓 이름 `fsh`). Voice Daemon은 `VT_TMUX_SOCKET` 환경변수로 오버라이드 가능. 사용자 기존 `tmux ls`와 분리됨.
 
 **터미널 창 열기:** `fsh attach`, `fsh handoff desktop`이 **메인 터미널**(아래 `fsh terminal`)에 새 창을 열고 그 안에서 tmux에 붙습니다. `voice` / `mobile` / `start`는 창을 열지 않습니다. 이미 tmux 안이면 새 창을 열지 않고, 창이 이미 붙어 있는 세션은 두 번 열지 않습니다.
 
-**노션 작업 중 음성 코딩 워크플로:**
+**다른 앱 사용 중 음성 코딩 워크플로:**
 1. `fsh voice` → 백그라운드 시작, 터미널에서 `tmux -L fsh new -A -s dev` 로 들어가 `claude --resume` 실행
 2. 새 창의 resume 목록에서 현재 대화 선택 → 이후 음성/모바일이 그 Claude로 연결됨
-3. 원래 창은 그대로 두고 노션으로 돌아가서 작업
+3. 원래 창은 그대로 두고 다른 앱에서 작업
 4. Ctrl+Shift+M → 말하기 ("git status") → tmux dev에 자동 입력
 5. `fsh stop` → 종료
 
 > 이미 tmux 안에서 `fsh` 명령을 부르면 새 창을 열지 않습니다 (`$TMUX` 체크).
-> 창을 열지 못하면(앱 없음, macOS 자동화 권한 거부) 수동 명령(`tmux new -A -s dev 'claude --resume'`)이 출력됩니다.
+> 창을 열지 못하면(앱 없음, macOS 자동화 권한 거부) 수동 명령(`tmux -L fsh new -A -s dev 'claude --resume'`)이 출력됩니다.
 
 
 ## `fsh start` / `fsh mobile` 옵션
@@ -90,6 +90,7 @@ fsh start --safe                       # 위험 명령(rm -rf /, sudo 등) 사�
 fsh start --force                      # 인증(비밀번호/토큰) 미설정이어도 공개 터널 강행 — 비권장
 fsh mobile --e2e                       # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
                                        #   (서버 장기 신원키로 서명 — TOFU pinning, 첫 접속 신뢰)
+fsh mobile --temp                      # 이 QR로 등록한 기기는 1일 뒤 만료
 fsh mobile --session <tmux세션>        # 폰이 열릴 때 이 tmux 세션을 바로 보기 (fsh handoff mobile과 같음)
 ```
 
@@ -99,6 +100,10 @@ fsh mobile --session <tmux세션>        # 폰이 열릴 때 이 tmux 세션을 
 
 예전엔 이 옵션들이 `fsh mobile`에 있었습니다. `mobile`에 `--network`/`--safe`/`--force`를 주면
 `fsh start`를 대신 실행하고 안내를 출력합니다. 자세히: `fsh help access`.
+
+포트 공유의 `session` 모드는 「처음 열기」 링크로 접속합니다. `public`은 인증 없이
+열리며, 원격 제어 포트는 `--force`가 필요합니다. 기간이 끝난 공유는 1분 안에 종료됩니다.
+자세히: `fsh help tunnel`.
 
 ## 에이전트 간 메시지 (`fsh msg`, `fsh mcp`)
 
@@ -118,11 +123,13 @@ fsh host allow-agent <id>               # 받는 맥에서 — allow-control도 
 제한: 대화당 10번 왕복, 보내는 맥당 분당 20건, 4000자. 받는 에이전트에게는 "다른
 에이전트가 보낸 요청"이라는 한 줄 머리글이 붙습니다.
 
+공유 세션용 MCP 도구는 `list_shared_sessions`, `read_session`, `send_to_session`입니다.
+사용자가 웹에서 공유한 세션만 접근할 수 있으며, 첫 접근은 브라우저의 사용자 승인이
+필요합니다. 읽기·쓰기 권한은 따로 승인합니다. 자세히: `fsh help agent-state`.
+
 ## 프롬프트 큐 (`fsh queue`)
 
-에이전트가 작업 중일 때 지시를 쌓아뒀다 순차 투입합니다. 음성 모드와 짝을 이루는
-기능 — 지금은 작업 중에 말하면 씹히는데, 큐가 있으면 걸어가며 여러 개를 던져놓고
-순서대로 실행시킬 수 있습니다.
+에이전트가 작업 중일 때 다음 지시를 큐에 저장하고, 완료 후 한 건씩 투입합니다.
 
 ```bash
 fsh queue list                  # 큐 목록
@@ -133,7 +140,7 @@ fsh queue unblock <id>          # safe_mode에 막힌 항목 재개
 fsh queue clear                 # 전체 비우기
 ```
 
-자동 투입은 **Claude Code의 Stop 훅에서만** 걸립니다. codex/aider/agy는 훅이
+자동 투입은 **Claude Code·Codex의 완료 훅**으로 시작됩니다. aider/agy는 관리형 훅이
 없어 `fsh queue run` 또는 웹 UI의 "지금 실행"으로 수동 투입해야 합니다. 투입 전
 관문 4개: 유예 시간(사용자가 직접 타이핑을 시작했을 수 있음) → safe_mode(위험
 명령이면 투입하지 않고 blocked로 남김) → 타깃 pane 생존 확인 → 한 번에 한 건.
@@ -175,7 +182,7 @@ fsh queue clear                 # 전체 비우기
 | 11 | `.vt.env` | 설정 파일 존재 여부 |
 | 12 | 인증 | 비밀번호/토큰 설정 여부 |
 | 13 | 터미널 앱 | 감지된 앱 목록 + 현재 `TERM_PROGRAM` |
-| 14 | Tailscale | 설치/연결 상태 (D9) |
+| 14 | Tailscale | 설치/연결 상태 |
 
 ---
 
@@ -222,7 +229,7 @@ fsh terminal set ghostty      # auto | ghostty | iterm | terminal | wezterm | wa
 fsh terminal unset            # 자동 선택으로 되돌리기
 ```
 
-- `auto`(기본): 지금 쓰는 터미널(`TERM_PROGRAM`) → 설치된 앱 순서
+- `auto`(기본): 자동 선택 순서에서 설치된 첫 앱
 - 설치되지 않은 앱은 `set`에서 거부되고, 실행 중 지정한 앱을 못 열면 알린 뒤 자동 선택으로 넘어갑니다
 - Ghostty(1.3+)는 이미 켜진 앱에 AppleScript로 창만 추가하고, 실패하면 `open -na`로 폴백합니다
 - 지원 앱: iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app (macOS), Linux는 흔한 에뮬레이터(자동 선택만)
@@ -254,9 +261,3 @@ fsh shell-init pwsh >> $PROFILE                       # PowerShell
 
 생성되는 스니펫은 5중 TTY 가드 포함(`interactive` + TTY + `$TMUX` 비어있음 + IDE
 임베디드 셸 차단 + tmux 존재). p10k instant prompt 활성 zsh에서도 콘솔 출력 0건.
-
-### 단일 tmux 서버 원칙
-
-`fsh` CLI · server · Voice Daemon · hook이 모두 `-L fsh` 격리 소켓을 사용 → 모든
-클라이언트(데스크톱·모바일·Voice Daemon)가 같은 세션을 공유. 사용자의 기존
-`tmux ls` 세션과는 자동 분리됩니다.

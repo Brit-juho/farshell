@@ -1,117 +1,59 @@
 # AGENTS.md
 
-Instructions for AI coding agents working in this repository.
-Follows the [agents.md](https://agents.md) convention — read by Codex, opencode, Amp,
-Cursor, Jules, Antigravity (agy) and others. Claude Code reads `CLAUDE.md`.
-**Both point here or to `CLAUDE.md` — there is one source of truth per topic.**
+Shared instructions for AI coding agents working on FarShell.
+Read `CLAUDE.md` for the project overview and the relevant `docs/ref/` document
+before changing an area.
 
-## Read first
+## Validation
 
-| Topic | File |
-|---|---|
-| Project overview + area index | **[`CLAUDE.md`](./CLAUDE.md)** — an index; area detail lives in `docs/ref/*.md` |
-| REST/WebSocket endpoints — **the single source of truth** | [`API.md`](./API.md) |
-| Module map, 3-plane model, data flow | [`ARCHITECTURE.md`](./ARCHITECTURE.md) |
-| CLI subcommands | [`CLI.md`](./CLI.md) |
-| Visual rules, tokens, skins | [`DESIGN.md`](./DESIGN.md) |
-
-`CLAUDE.md` is written for any agent, not just Claude. Read it before your first edit.
-
-## Commands
+Run these checks before committing:
 
 ```bash
-npm test                      # tsc --noEmit, then node:test + jsdom (824 tests)
-npm run typecheck             # tsc --noEmit alone. Vite only transpiles — it does NOT
-                              #   type-check, so a `.tsx` referencing an undefined name
-                              #   builds and ships. That shipped a real ReferenceError
-                              #   that killed the rail (2026-09-17); `npm test` runs this first now.
-npm run build                 # Vite, two separate passes — see vite.config.js header
-.venv/bin/python -m pytest    # server (2416 tests), testpaths = server/tests
-                              #   ⚠ the repo root `tests/` is NOT in testpaths and CI does
-                              #   not run it — put new server tests in server/tests/
-pytest tests/e2e -v           # real-browser smoke, needs playwright (requirements-dev.txt)
-python3 scripts/check_docs.py --strict      # CI gate: routes ↔ API.md, fsh help ↔ docs/help/
-python3 scripts/check_css_vars.py --strict  # CI gate: no undefined CSS vars
-./run_server.sh               # start the server locally (foreground, no tunnel)
-fsh status                    # runtime state (server, tunnel, tmux, voice)
-fsh restart                   # apply code changes to a running instance — see below
+npm test
+.venv/bin/python -m pytest
+python3 scripts/check_docs.py --strict
+python3 scripts/check_css_vars.py --strict
 ```
 
-**To apply a change to a running instance, use `fsh restart`, never `fsh stop && fsh start`.**
-An anonymous Cloudflare quick tunnel's URL is bound to the **cloudflared process lifetime**,
-not to the server, so a `stop` that also kills the tunnel burns the address: every bookmark,
-open tab and phone home-screen icon dies with it. Measured 2026-09-21: killing only the
-backend returns 502 for the gap and then recovers to 200 on the **same URL**. `fsh restart`
-is `fsh stop --keep-tunnel` plus `fsh start`, and `_start_tunnel` reuses the live cloudflared.
+`npm test` includes TypeScript checking; Vite builds do not. Put server tests in
+`server/tests/`; root `tests/` is outside pytest's default test paths.
+Run `npm run build` for frontend build changes and browser checks when UI behavior changes.
+Verify affected behavior with actual responses, operations and logs.
 
-This is easy to get wrong because the failure is invisible from both ends: `frontend/sw.js`
-serves the cached app shell when `fetch` rejects, so a dead address still renders the full UI,
-and the server log shows nothing at all because nothing reached it.
+## Project contracts
 
-Run all four checks before committing. CI runs the same ones.
-
-## Contracts you must not break
-
-These are load-bearing. Each one caused a real incident.
-
-1. **`frontend/sw.js` PRECACHE hardcodes output filenames** (`app.js`, `app.css`, `voice.js`).
-   That is why `vite.config.js` uses library mode with no content hashes, built in two
-   separate Rollup passes. Do not add hashes, rename outputs, or merge the passes —
-   offline PWA support depends on it.
-2. **`server/fsguard.py` is the only place path access is checked.** Fixed roots +
-   `Path.resolve()` + `is_relative_to` + a denylist. Never add a second check elsewhere,
-   and never use `startswith` for path containment.
-3. **`OriginGuardMiddleware` (`server/main.py`) returns 403 for cross-site HTTP and WS.**
-   It is the last line of defense when a browser already holds a valid cookie. Do not add
-   exemptions; widen `VT_ALLOWED_ORIGINS` instead if you truly need to.
-4. **`#file-input` in `frontend/index.html` is shared by every upload trigger.**
-   Never create a second one.
-5. **Never write `~/.vt.env` with `echo`/`sed`.** Use `lib/vt_env.sh`
-   (`vt_env_load/get/set/unset`) — it parses rather than sources, so the config file is
-   never executed, and it enforces 0600.
-6. **Security boundary values are read from `~/.vt.env` first, not from the environment.**
-   `BOUNDARY_KEYS` in `server/vt_env.py` (mirrored in `lib/vt_env.sh`; a test asserts the two
-   lists match) are normalised once at boot by `apply_boundary_overrides()`, and that call
-   **must stay above `import auth` in `server/main.py`** — auth reads its values at import
-   time. A stale exported `VT_BROWSE_ROOTS` once kept the whole home directory served through
-   a public tunnel after it had been narrowed. `VT_CONFIG` is never a boundary key.
-7. **Personal values never enter this repo.** Machine-specific config belongs in
-   `~/.vt.env` (gitignored) and personal agent instructions in `~/.claude/CLAUDE.md`.
-   Real hostnames, reserved domains, usernames, tailnet names and public IPs are not
-   acceptable as "examples" — a real reserved ngrok domain shipped as one on 2026-09-18.
-   `scripts/check_docs.py` scans docs, `config/*.env` and skills for them. Only settings that
-   are identical for every clone are shared: tool-generated dirs (`.codex/`, `.agents/`, …),
-   `auth.json`, `.env*`, keys and local DBs are gitignored, and `scripts/guard_personal.py`
-   (pre-commit / pre-push hooks — enable with `git config core.hooksPath scripts/githooks`)
-   blocks them, token shapes and this machine's real home path even under `git add -f`.
-   Never bypass it with `FSH_GUARD_SKIP=1`.
-8. **The agent hook payload format (`POST /api/agent/event`) is a compatibility surface.**
-   Remote hosts may run an older `server/agent_hook.sh`.
-9. **Colors go through tokens.** No hex literals in `frontend/js` or `styles/layers`.
-   Define in `styles/theme/tokens.css` / `skins.css`; `check_css_vars.py` enforces this.
-10. **`API.md` is the only endpoint table.** `CLAUDE.md` keeps a category list only —
-   the two drifted apart in 2026-08 and `check_docs.py` now enforces the split.
-11. **`docs/*` is gitignored** except three directories: `docs/help/` (read at runtime by
-   `fsh help <topic>` — add a topic and you must add both the `bin/fsh` entry and the
-   file), `docs/ref/` (the area docs `CLAUDE.md` indexes) and `docs/guide/` (user-facing
-   pages `README.md` links to). Everything else under `docs/` is local only.
+1. Preserve the fixed `app.js`, `app.css` and `voice.js` outputs and the two Vite build
+   passes. `frontend/sw.js` precaches those filenames.
+2. Keep path access checks in `server/fsguard.py`. Use resolved paths and
+   `is_relative_to`, never string-prefix containment checks.
+3. Preserve `OriginGuardMiddleware` protection for cross-site HTTP and WebSocket
+   requests. Configure `VT_ALLOWED_ORIGINS` instead of adding exemptions.
+4. Use the shared `#file-input` in `frontend/index.html` for uploads.
+5. Update `~/.vt.env` through `lib/vt_env.sh` (`vt_env_load/get/set/unset`), never
+   through `echo` or `sed`. Configuration must be parsed, not executed, and use mode 0600.
+6. Read security boundary values from `~/.vt.env` before environment values.
+   Keep `BOUNDARY_KEYS` aligned in Python and shell, and keep
+   `apply_boundary_overrides()` above `import auth` in `server/main.py`.
+   `VT_CONFIG` is not a boundary key.
+7. Keep personal settings, credentials, real hostnames, domains, usernames, tailnet
+   names and public IPs out of the repository. Machine configuration belongs in
+   `~/.vt.env`; personal agent instructions belong in the user's global configuration.
+   Respect the existing ignore rules and `scripts/guard_personal.py`; never bypass
+   the guard with `FSH_GUARD_SKIP=1`.
+8. Preserve compatibility with older `server/agent_hook.sh` payloads for
+   `POST /api/agent/event`.
+9. Define colors in `styles/theme/tokens.css` or `skins.css`; do not add hex literals
+   in `frontend/js` or `styles/layers`.
+10. Keep endpoint tables only in `API.md`. Other documents should link to it.
+11. Only `docs/help/`, `docs/ref/` and `docs/guide/` are tracked under `docs/`.
+    New `fsh help` topics need both a `bin/fsh` entry and a `docs/help/` file.
 
 ## Working rules
 
-- **Verify with real behavior**, not mocks: response codes, actual CRUD, logs. Include the
-  evidence in your report. Re-check what your change affects, not just what you edited.
-- **This working tree is shared** with other tmux sessions. Never `git stash`. If unrelated
-  changes are present, use partial staging to keep them out of your commit.
-- **Ask before deciding.** Design direction and policy choices are not yours to guess.
-- Isolated test servers need `VT_CONFIG`, `VT_WORKSPACE_PATH`, `VT_TMUX_SOCKET` and
-  `env -u VT_TOKEN` — otherwise they write to the real user's state and every API returns 401.
-- Commit messages are Korean, `type: summary` plus a body explaining *why*. See `git log`.
-
-## Current work
-
-`docs/` holds the local-only working docs (gitignored apart from the three tracked
-directories in contract 11). If they exist, start with `docs/README.md` — the index —
-and `docs/HANDOFF.md`, which carries the latest session handoff and the open carry-overs.
-The 2.1 design set is done and archived under `docs/archive/v2.1/plan/`; read it for the
-reasoning behind a decision, not as a to-do list. Its working rules (`90-verification.md`
-§4) still apply.
+- Preserve unrelated changes. Do not use `git stash`; stage only the intended changes.
+- Confirm design direction and policy changes with the user.
+- Isolated test servers must set `VT_CONFIG`, `VT_WORKSPACE_PATH` and `VT_TMUX_SOCKET`,
+  and unset `VT_TOKEN`, to avoid accessing the user's runtime state.
+- Apply changes to a running instance with `fsh restart`. Do not use
+  `fsh stop && fsh start`: stopping the tunnel changes its public URL.
+- Use Korean commit messages with `type: summary` and a body explaining why.

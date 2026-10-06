@@ -14,8 +14,9 @@ Native Windows is not supported — use WSL2, which behaves as Linux.
 
 ## Windows (WSL2)
 
-```powershell
-wsl
+Enter the Linux shell with `wsl` from PowerShell, then run from the FarShell repository root:
+
+```bash
 ./install.sh voice
 fsh voice
 ```
@@ -29,7 +30,7 @@ inside WSL2.
 
 Wayland compositors refuse global hotkey grabs by design, so `Ctrl+Shift+M` does
 nothing there. Everything else works. Use the microphone button in the web UI, or
-run the session under X11/Xwayland if you need the hotkey.
+run the session under X11 if you need the hotkey.
 
 ## Voice engine selection
 

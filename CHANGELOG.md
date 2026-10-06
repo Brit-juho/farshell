@@ -2828,7 +2828,7 @@ tmux 세션에 직접 붙을 수 있게 지원.
 
 ## [1.4.0] — 2026-05-09
 
-UX overhaul + Linux 1급 동등화. [docs/PLAN_UX_OVERHAUL.md](./docs/PLAN_UX_OVERHAUL.md) 의 Wave 1-5 적용.
+UX overhaul + Linux 1급 동등화. `PLAN_UX_OVERHAUL.md` (당시 로컬 계획서) 의 Wave 1-5 적용.
 
 ### Added
 - `vt manage` — Textual 기반 TUI 관리 도구 (cross-platform). 세션 목록/rename/kill/attach + 음성 타깃 lock + 서버 상태 + 핫키 표시. 의존성: `textual>=0.50`.
@@ -2870,7 +2870,7 @@ UX overhaul + Linux 1급 동등화. [docs/PLAN_UX_OVERHAUL.md](./docs/PLAN_UX_OV
 > 두 절이 그 커밋에서 함께 작성됐다. 없는 트리를 가리키는 태그를 만들지 않기 위해
 > 소급 태깅(2026-09-08)에서 제외했다.
 
-Phase 9 — 안정성·네트워크 효율 일괄 패치 ([PLAN_PHASE9.md](./docs/PLAN_PHASE9.md), [TEST_REPORT_V3.md](./docs/TEST_REPORT_V3.md)). 10건 적용.
+Phase 9 — 안정성·네트워크 효율 일괄 패치 (당시 로컬 문서 `PLAN_PHASE9.md`, `TEST_REPORT_V3.md`). 10건 적용.
 
 ### Added
 - `/ws-preview/{name}` (`server/routes/tmux.py`) — grid view용 push 채널. `preview.py`에 watcher + subscribe/unsubscribe.

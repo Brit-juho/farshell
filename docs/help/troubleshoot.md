@@ -4,7 +4,7 @@
 
     fsh doctor
 
-설치/환경을 자동 검사 (Python, venv, tmux, cloudflared, ffmpeg, 포트, fsh CLI, PATH, `~/.vt.env`, VT_TOKEN, push 알림, 터미널 앱, TUI, fzf 등). 대부분 문제는 여기서 발견됨.
+설치/환경을 자동 검사 (Python, venv, tmux, cloudflared, ffmpeg, 포트, fsh CLI, PATH, `~/.vt.env`, 인증, push 알림, 터미널 앱, TUI, fzf 등). 대부분 문제는 여기서 발견됨.
 
 ## 자주 발생하는 문제
 
@@ -21,7 +21,7 @@
 
 ### 새 iTerm 창이 자동 tmux로 안 들어감
 - `fsh install-profiles`로 Dynamic Profile 등록 안 됐거나
-- `eval "$(fsh shell-init zsh)" >> ~/.zshrc` 안 됐거나
+- `fsh shell-init zsh`가 출력한 스니펫을 `~/.zshrc`에 추가하지 않았거나
 - 둘 중 하나만 활성화하면 됨. 양쪽 등록 무해 (가드 있음)
 - 기존에 이미 열린 창은 영향 받지 않음 — 새 창부터 적용
 
@@ -50,7 +50,7 @@
 - 안 깔렸으면: `brew install cloudflared` (macOS) / 공식 바이너리 (Linux)
 
 ### tmux 세션 이름 변경했는데 안 바뀜
-- v1.4 이후 `PATCH /api/sessions/{id}`가 tmux 세션도 같이 변경 (W1-1)
+- 웹에서 이름을 변경하면 연결된 tmux 세션 이름도 함께 바뀜
 - 안 바뀌면 이름에 안전하지 않은 문자(공백/특수기호) 포함됐을 가능성
 - 영숫자/dash/underscore만 사용
 
@@ -58,7 +58,7 @@
 - `fsh voice-target <세션명>`으로 lock
 - 또는 `fsh voice-target` 명령으로 현재 타깃 확인
 
-### `fsh ssh` 실행했는데 tailnet 주소를 못 가져옴 (D9)
+### `fsh ssh` 실행했는데 tailnet 주소를 못 가져옴
 - `tailscale status`로 `Running` 상태인지 확인 — `Stopped`면 `tailscale up`
 - 미설치면 `brew install tailscale` (macOS) 또는 공식 설치 스크립트
 - `fsh doctor`에도 Tailscale 항목 포함 — 여기서 먼저 확인
@@ -81,7 +81,7 @@
 |---|---|
 | 서버 | `/tmp/vt-server.log` |
 | Cloudflare Tunnel | `/tmp/cloudflared.log` |
-| Voice Daemon | stdout (tmux 안에서 실행 시 거기) |
-| PID 파일 | `~/.vt/{server,tunnel,voice}.pid` |
+| Voice Daemon | `/tmp/vt-voice-daemon.log` |
+| PID 파일 | `/tmp/vt-pids/` |
 | 음성 타깃 lock | `~/.vt/voice_target` |
 | 환경 설정 | `~/.vt.env` |

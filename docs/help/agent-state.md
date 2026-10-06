@@ -7,7 +7,7 @@ FarShell은 각 tmux 세션이 지금 무슨 상태인지 서버가 판정해서
 |---|---|---|
 | `idle` | 아무것도 안 함 | 초기값 · 완료 확인(ack) · TTL 만료 |
 | `working` | 프롬프트 처리·도구 실행 중 | Claude Code/Codex 시작 훅 |
-| `waiting` | 승인·입력 대기 | Codex `PermissionRequest` 훅 또는 출력 패턴 감지 |
+| `waiting` | 승인·입력 대기 | Claude Code·Codex 승인 훅 또는 출력 패턴 감지 |
 | `done` | 응답·세션 완료 | Claude Code/Codex 완료 훅 |
 
 ## Claude Code · Codex — 훅으로 자동
@@ -20,10 +20,11 @@ fsh hooks dedupe      # ~/.codex/hooks.json 에 복제된 FarShell 훅 제거 (-
 ```
 
 `./install.sh`가 설치 시 대신 실행한다. **등록되지 않으면 상태 배지도, 프롬프트
-큐 자동 투입도, TTS 요약도 전부 동작하지 않는다** — 그런데 눈에 띄게 실패하는
+큐 자동 투입도 동작하지 않는다. Claude Code 완료 알림(TTS)도 훅이 필요하다** — 그런데 눈에 띄게 실패하는
 게 아니라 조용히 아무 일도 안 일어나므로, 뭔가 안 뜬다면 여기부터 확인한다.
 
-Claude Code의 `~/.claude/settings.json`에는 `agent_hook.sh {pre,post,stop}` 3종이,
+Claude Code의 `~/.claude/settings.json`에는 도구 시작·종료, 완료, 세션 시작,
+알림, 승인 요청의 6종이,
 Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/session 6종이 등록된다.
 두 설정 모두 FarShell 항목만 관리하고 기존 훅은 보존한다.
 
@@ -54,13 +55,17 @@ tmux 밖이거나 pane id를 못 쓰는 상황이면 현재 디렉토리(cwd)로
 
 ## 어떻게 매칭하나 (3단)
 
-1. **pane 자기보고** — 훅/CLI가 보낸 `$TMUX_PANE`을 서버의 pane 목록과 정확 매칭
+1. **pane 자기보고** — Claude 훅/CLI가 보낸 `$TMUX_PANE`을 서버의 pane 목록과 정확 매칭
 2. **cwd 일치** — 1이 없을 때. 후보가 정확히 하나일 때만
 3. **포기** — 아무것도 강조하지 않는다
 
 FarShell은 `-L fsh` 격리 소켓을 쓴다. 개인 tmux(`default` 소켓)에서 에이전트를
 띄웠다면 pane id가 우리 소켓의 다른 pane과 우연히 겹칠 수 있으므로, `$TMUX`의
 소켓 이름이 우리 것일 때만 pane id를 신뢰하고 아니면 버리고 2단계로 내려간다.
+
+Codex 훅은 공유 app-server에서 오래된 pane 값을 받을 수 있어 pane 대신 cwd를
+사용합니다. cwd가 정확히 한 세션에 일치할 때만 연결하고, 이후 같은 Codex
+`session_id`의 이벤트는 그 연결을 유지합니다. 자세히는 `docs/ref/agents.md`.
 
 ## 상태가 안 풀릴 때
 

@@ -9,12 +9,12 @@
 | 환경 | 방법 |
 |------|------|
 | 데스크톱 | `http://localhost:7777` |
-| 같은 와이파이 모바일 | `http://<맥북IP>:7777` (IP: `ipconfig getifaddr en0`) |
-| 어디서든(원격) | `fsh start` 후 `fsh mobile` → 나오는 cloudflare HTTPS URL / QR |
+| 같은 와이파이 모바일 | `fsh start --network lan` 후 서버의 LAN IP와 포트로 접속 |
+| 어디서든(원격) | `fsh start` 후 `fsh mobile` → 설정한 터널의 HTTPS URL / QR |
 | 회사망 등 | `fsh start --network tailscale` (tailnet 제한) |
 
-> 토큰(`VT_TOKEN`)이 설정돼 있으면 URL에 `?token=...`이 붙습니다. 첫 접속 시 토큰이
-> HttpOnly 쿠키로 교환되고 URL에서 제거됩니다(로그/공유 노출 차단).
+> 인증이 설정되어 있으면 `fsh mobile` URL에는 5분 유효한 1회용 기기 등록 티켓이
+> 붙습니다. 이 링크를 공개하지 마세요. 일반 접속은 비밀번호로 로그인합니다.
 
 ---
 
@@ -114,7 +114,7 @@ Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에
 
 ### 이미지 워크플로 (Claude Code)
 
-이미지를 붙여넣으면 서버 `/tmp/fsh-uploads/`에 저장되고 그 경로가 터미널에 입력됩니다.
+이미지를 붙여넣으면 서버 `~/.vt/files/`에 저장되고 그 경로가 터미널에 입력됩니다.
 그 경로를 그대로 claude에 넘기면 됩니다. (📎 파일 업로드 버튼으로도 동일하게 가능)
 
 > 터미널은 텍스트(바이트)만 받는 PTY라 이미지 자체를 "붙여넣어" 화면에 띄울 수는 없습니다.
@@ -127,7 +127,7 @@ Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에
 | 기능 | 방법 |
 |------|------|
 | **검색** | `Ctrl+F` / `Cmd+F` → 터미널 내용 검색 (▲▼로 이동) |
-| **파일 업로드** | `⋯ → 파일 업로드` → `/tmp/fsh-uploads/`에 저장 |
+| **파일 업로드** | `⋯ → 파일 업로드` → `~/.vt/files/`에 저장 |
 | **Grid 뷰** | 상단 격자 아이콘 → 모든 tmux 세션 라이브 프리뷰 (변화 시에만 push) |
 | **테마** | 설정(`Cmd+,`) → 모양 → 스킨 전환 (기억됨) |
 | **맥에서도 열기** | `⋯` 토글 ON → 새 세션 생성 시 iTerm 창도 자동 오픈 (macOS) |

@@ -29,12 +29,12 @@
 
 내부적으로 `~/.vt.env`에 다음 변수 저장:
 
-    VT_HOTKEY_VOICE="ctrl+shift+v"
+    VT_HOTKEY_VOICE="ctrl+shift+x"
     VT_HOTKEY_VOICE_DISABLED="false"
 
 변경 후 daemon 재시작 필요:
 
-    fsh stop && fsh voice
+    fsh restart --voice
 
 ## 키 토큰 형식
 
@@ -50,7 +50,7 @@
 | `f1` ~ `f12` | Function 키 |
 
 예시:
-- `ctrl+shift+v` (디폴트)
+- `ctrl+shift+m` (기본값)
 - `cmd+shift+m`
 - `alt+f1`
 
@@ -77,4 +77,4 @@
 ### 데스크톱 (`~/.vt.env`)
     VT_VOICE_MEDIA_KEYS="off"
 
-이후 `fsh stop && fsh voice`로 daemon 재시작.
+이후 `fsh restart --voice`로 daemon 재시작.

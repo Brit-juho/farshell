@@ -19,7 +19,7 @@ same either way. (Windows only through WSL2.)
 - **See what's running** — read-only code viewer + diff, port dashboard, agent state
 - **Claude Code integration** — hooks give you live tool-use state, a TTS summary on
   completion, and a prompt queue that feeds itself
-- **No API keys, no subscriptions** — open-source STT/TTS, entirely free
+- **No required speech API subscription** — local STT, with online or system TTS
 
 ---
 
@@ -37,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.s
 `~/.local/bin/fsh`, writes `~/.vt.env` and registers the Claude Code hooks.
 
 <details>
-<summary>From a clone, or from a release tarball (no Node.js needed)</summary>
+<summary>From source (Node.js required) or a release tarball (no Node.js needed)</summary>
 
 ```bash
 git clone https://github.com/Brit-juho/farshell.git ~/farshell
@@ -58,24 +58,30 @@ tar xzf farshell-<version>.tar.gz && cd farshell-<version>
 
 ## Quick start
 
-**Voice coding while you work on something else** (macOS)
+**Access from your phone**
 
-```
-fsh voice                 # opens a terminal running the voice daemon
-                          # pick your session there, e.g. claude --resume
-Ctrl+Shift+M              # speak -> typed straight into tmux
-                          # the result comes back as TTS in your earbuds
-fsh restart               # restart the server only — the access URL stays the same
-fsh stop                  # shut everything down
+```bash
+fsh password              # first use: set a web login password
+fsh start                 # start the server and public tunnel
+fsh mobile                # print the URL and QR code
 ```
 
-**Your terminal from your phone**
+**Voice input** (requires the voice install profile)
 
+```bash
+tmux -L fsh new -A -s dev  # create or attach a terminal session
+# Start your shell or agent in this session, then:
+fsh voice                 # start the server and voice daemon in the background
+fsh voice-target dev      # lock input to the dev session
 ```
-fsh password              # first time only — fsh start refuses to go public without auth
-fsh start                 # starts the server and the public tunnel
-fsh mobile                # prints a URL + QR code; scan it
-```
+
+Use `Ctrl+Shift+M` to start and stop recording. Speech is sent as text plus Enter
+to the target session. Select and download a model in Settings → Voice & notifications;
+completion speech (TTS) is configured there and is off by default.
+See [supported platforms](./docs/guide/platforms.md) for hotkey availability.
+
+`fsh restart` restarts the server while keeping the tunnel URL. `fsh stop` stops
+the server, tunnel and daemons while leaving tmux sessions alive.
 
 `fsh doctor` diagnoses an install or environment that isn't behaving.
 
@@ -112,8 +118,7 @@ Details: [`docs/ref/auth.md`](./docs/ref/auth.md).
 | Configuration keys | [`config/vt.defaults.env`](./config/vt.defaults.env) — the committed defaults, with a comment per key |
 | Troubleshooting | [`docs/help/troubleshoot.md`](./docs/help/troubleshoot.md) (same as `fsh help troubleshoot`) |
 
-**Feature reference by area** — each file carries the reasoning and the incidents
-behind the design, not just the what:
+**Feature reference by area:**
 
 | Area | Document |
 |---|---|

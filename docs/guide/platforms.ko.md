@@ -14,8 +14,9 @@ Windows 네이티브는 지원하지 않습니다 — Linux와 동일하게 동�
 
 ## Windows (WSL2)
 
-```powershell
-wsl
+PowerShell에서 `wsl`로 Linux 셸에 들어간 뒤, FarShell 저장소 루트에서 실행합니다:
+
+```bash
 ./install.sh voice
 fsh voice
 ```
@@ -28,7 +29,7 @@ fsh voice
 
 Wayland 컴포지터는 설계상 전역 핫키 가로채기를 거부하므로 `Ctrl+Shift+M`이
 동작하지 않습니다. 나머지는 전부 동작합니다. 웹 UI의 마이크 버튼을 쓰거나,
-핫키가 꼭 필요하면 X11/Xwayland 세션에서 실행하세요.
+핫키가 꼭 필요하면 X11 세션에서 실행하세요.
 
 ## 음성 엔진 선택
 

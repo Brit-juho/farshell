@@ -25,24 +25,24 @@ Voice Daemon(`fsh voice` 데스크톱 핫키)이 어느 tmux 세션으로 입력
 
 ## 동작 시나리오
 
-### 시나리오 A: 노션 작업 중 음성으로 코딩
+### 시나리오 A: 다른 앱 사용 중 음성으로 코딩
     fsh voice                # daemon 시작
     fsh voice-target dev     # dev에 lock
-    [노션에서 작업]
-    [Ctrl+Shift+V] "git status"
+    [다른 앱에서 작업]
+    [Ctrl+Shift+M] "git status"
     → 항상 dev 세션의 active pane으로 입력
 
 ### 시나리오 B: 여러 터미널 왔다갔다
     fsh voice                # daemon 시작
     [기본 AUTO]
-    [Ctrl+Shift+V] "ls"     → 마지막 본 세션으로
+    [Ctrl+Shift+M] "ls"     → 마지막 본 세션으로
     [iTerm에서 p9 attach]
-    [Ctrl+Shift+V] "npm run" → 이제 p9으로
+    [Ctrl+Shift+M] "npm run" → 이제 p9으로
 
 ### 시나리오 C: 빌드 중인 세션으로 잘못 가는 거 방지
     fsh voice-target dev     # dev에 lock
     [p9에서 npm test 돌리며 다른 세션 탐색]
-    [Ctrl+Shift+V] "next"
+    [Ctrl+Shift+M] "next"
     → p9로 안 감 (test 세션 안전), dev로 감
 
 ## lock된 세션이 없어진 경우

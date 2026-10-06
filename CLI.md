@@ -10,10 +10,6 @@ overview and `fsh help concepts` for conceptual background.
 
 ## Command list
 
-> 2026-09-18: `CLAUDE.md`가 따로 들고 있던 목록을 여기로 합쳤다. 그쪽이 더 완전했고
-> (`worktree`·`host`·`hooks`·`files`·`usage` 등 8개가 이 표에 없었다), 같은 목록이 두
-> 곳에 살면 반드시 어긋난다 — `API.md`가 같은 이유로 단일 진실이 됐다(AGENTS.md 계약 9).
-
 Control FarShell from any terminal with the `fsh` command:
 
 ```bash
@@ -27,18 +23,18 @@ fsh stop [--purge] [--keep-tunnel]
 fsh status             # check current status
 fsh mobile [--e2e] [--session <name>] [--temp]
                        # phone access URL + QR (server must be running; --e2e: encrypt payload)
-fsh manage             # TUI management tool (sessions/target/hotkeys/status) — Wave 4
+fsh manage             # TUI management tool (sessions/target/hotkeys/status)
 fsh attach [name]      # attach any tmux session in a new window
-fsh voice              # voice mode (background, usable while working in Notion)
+fsh voice              # voice mode (background, usable while using other apps)
 fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
 fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
-fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue (P4)
-fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links (N19/N23)
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|allow-agent <id>|log|revoke-all]  # pair another Mac's FarShell (N7/N39)
+fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue
+fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|allow-agent <id>|log|revoke-all]  # pair another Mac's FarShell
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
 fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session)
-fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees (N8/N44)
-fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (N30 — built but unused, ADR-27)
+fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
+fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude Stop also drives TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
@@ -70,29 +66,29 @@ fsh tunnel list                   # list all open tunnels (main + extra ports), 
 fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
 fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook
 fsh tunnel watchdog               # check/start the zombie-reconnect auto-detection daemon (normally auto-started by fsh start/voice/mobile)
-fsh ssh [session]      # guidance for connecting directly to a tmux session via Tailscale + SSH (D9, corporate networks, etc.)
+fsh ssh [session]      # guidance for connecting directly to a tmux session via Tailscale + SSH
 fsh doctor             # installation/environment diagnostics (includes Linux checks)
 fsh terminal           # show / choose the main terminal app fsh uses when it opens a window
 fsh install-profiles   # auto-register terminal app profiles (iTerm2 Dynamic Profile + other snippets)
 fsh setup-keybind [key] [action]  # register a tmux popup keybinding (default: prefix+v → status)
-fsh shell-init zsh     # print the shell init snippet (eval "$(fsh shell-init zsh)" >> ~/.zshrc)
+fsh shell-init zsh     # print the shell init snippet (add the printed snippet to ~/.zshrc)
 ```
 
 > **Supported OS**: macOS / Linux (X11) / WSL2 (behaves as Linux). Native Windows is not supported.
 
-**Phase 6 — single tmux server principle:** the fsh CLI, server, Voice Daemon, and hooks all use the `-L fsh` isolated socket. The Voice Daemon can override it via the `VT_TMUX_SOCKET` environment variable. This is kept separate from the user's own `tmux ls`.
+**single tmux server principle:** the fsh CLI, server, Voice Daemon, and hooks all use the `-L fsh` isolated socket. The Voice Daemon can override it via the `VT_TMUX_SOCKET` environment variable. This is kept separate from the user's own `tmux ls`.
 
 **Opening a terminal window:** `fsh attach` and `fsh handoff desktop` open a new window in your **main terminal** (see `fsh terminal` below) and attach tmux inside it. `voice` / `mobile` / `start` do not open windows. If you're already inside tmux, no new window is opened, and a session that already has a window attached is not opened twice.
 
-**Voice-coding workflow while working in Notion:**
+**Voice-coding workflow while using other apps:**
 1. `fsh voice` → starts in the background; in a terminal, run `tmux -L fsh new -A -s dev` and start `claude --resume` there
 2. Pick the current conversation from the resume list in the new window → voice/mobile then connects to that Claude
-3. Leave the original window as-is and go back to Notion to work
+3. Leave the original window as-is and continue working in another app
 4. Ctrl+Shift+M → speak ("git status") → automatically typed into tmux dev
 5. `fsh stop` → shut down
 
 > Calling an `fsh` command from inside tmux already won't open a new window (checked via `$TMUX`).
-> If a window can't be opened (app missing, or macOS Automation permission denied), the manual command is printed (`tmux new -A -s dev 'claude --resume'`).
+> If a window can't be opened (app missing, or macOS Automation permission denied), the manual command is printed (`tmux -L fsh new -A -s dev 'claude --resume'`).
 
 
 ## `fsh start` and `fsh mobile` options
@@ -143,10 +139,8 @@ The receiving agent sees a one-line header saying the text came from another age
 
 ## Prompt Queue (`fsh queue`)
 
-Queues up instructions while an agent is working and feeds them in one at a time
-afterward. This pairs with voice mode — right now, speaking while work is in
-progress gets swallowed, but with the queue you can walk around, drop several
-instructions, and have them run in order.
+Stores instructions while an agent is working and feeds them in one at a time
+after the agent finishes.
 
 ```bash
 fsh queue list                  # list queue
@@ -202,7 +196,7 @@ contract 5). The few that decide how you reach this Mac:
 | 11 | `.vt.env` | Whether the config file exists |
 | 12 | Auth | Whether password/token is configured |
 | 13 | Terminal app | Detected app list + current `TERM_PROGRAM` |
-| 14 | Tailscale | Install/connection status (D9) |
+| 14 | Tailscale | Install/connection status |
 
 ---
 
@@ -253,7 +247,7 @@ fsh terminal set ghostty      # auto | ghostty | iterm | terminal | wezterm | wa
 fsh terminal unset            # back to auto
 ```
 
-- `auto` (default): your current terminal app (`TERM_PROGRAM`), then installed apps in order
+- `auto` (default): the first installed app in the automatic selection order
 - An app that isn't installed is rejected by `set`; if the chosen app can't be opened at run time, fsh says so and falls back to auto
 - Ghostty (1.3+) opens the window inside the already-running app via AppleScript, falling back to `open -na`
 - Supported apps: iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Warp, Terminal.app (macOS); common emulators on Linux (auto only)
@@ -287,9 +281,3 @@ fsh shell-init pwsh >> $PROFILE                       # PowerShell
 The generated snippet includes a 5-fold TTY guard (`interactive` + TTY + `$TMUX`
 empty + IDE-embedded shell block + tmux presence). Zero console output even with
 p10k instant prompt active in zsh.
-
-### Single tmux server principle
-
-The `fsh` CLI, server, Voice Daemon, and hooks all use the isolated `-L fsh` socket,
-so every client (desktop, mobile, Voice Daemon) shares the same session. This is
-automatically separate from the user's existing `tmux ls` sessions.

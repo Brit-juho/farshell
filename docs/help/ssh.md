@@ -51,7 +51,7 @@ Cloudflare Tunnel 없이 tailnet IP로만 노출됩니다. 즉:
 |---|---|---|
 | `fsh ssh` | Tailscale + (선택) SSH 키 | 순수 터미널, IDE/vim 등 키 입력이 무거운 작업 |
 | `fsh start --network tailscale` | Tailscale + 브라우저 | 폰에서 음성 입력, 터치 조작 |
-| `fsh start` (기본, `--network all`) | 아무것도 (공개 URL) | 완전 외부망, Tailscale 없는 기기 |
+| `fsh start` (기본, `--network all`) | 비밀번호 또는 기계 토큰 | 완전 외부망, Tailscale 없는 기기 |
 
 셋 다 같은 tmux 세션을 공유하므로 아무 조합이나 섞어 써도 된다.
 

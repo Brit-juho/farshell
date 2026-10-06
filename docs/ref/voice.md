@@ -1,7 +1,5 @@
 # Voice, clipboard, push
 
-> `CLAUDE.md`의 영역 색인에서 갈라져 나온 문서다(2026-09-18). 이 영역을 만지기 전에 읽는다.
-
 ## Features
 
 | Feature | Description |

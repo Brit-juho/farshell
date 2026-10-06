@@ -1,11 +1,7 @@
 # FarShell — project overview
 
-> **v2.3.0** (2026-10-06) — release history in [CHANGELOG.md](./CHANGELOG.md)
-
-> **Other agents:** this file is the project overview for any AI coding agent, not just
-> Claude. Cross-tool rules and the hard contracts live in [`AGENTS.md`](./AGENTS.md)
-> ([agents.md](https://agents.md) convention — Codex, opencode, Amp, Cursor, …);
-> `.aider.conf.yml` points there too.
+Project overview for all AI coding agents. Shared development rules and contracts
+live in [`AGENTS.md`](./AGENTS.md).
 
 FarShell puts your Mac terminal on your phone: a tmux-backed web terminal reachable from
 anywhere, with voice input, file transfer, a code viewer and agent-state awareness.
@@ -37,9 +33,7 @@ Claude Code hooks. Manual/alternative installs: [`docs/ref/dev.md`](./docs/ref/d
 
 ## Document map
 
-**This file is an index.** It deliberately keeps no detail that lives elsewhere — the
-one time it kept its own endpoint table it drifted from `API.md`, and `AGENTS.md`
-contract 9 exists because of it.
+Use the documents below for detailed guidance.
 
 | What | Document |
 |------|----------|
@@ -50,16 +44,12 @@ contract 9 exists because of it.
 | Cross-tool rules + **hard contracts** | [`AGENTS.md`](./AGENTS.md) |
 | Release history | [`CHANGELOG.md`](./CHANGELOG.md) |
 | Other projects we read, and what we took from them | [`docs/ref/references.md`](./docs/ref/references.md) |
-| MCP management research and renewal proposal | [`reports/FarShell MCP 관리 재설계.md`](./reports/FarShell%20MCP%20관리%20재설계.md) · [`docs/ref/mcp-reference-logic.md`](./docs/ref/mcp-reference-logic.md) · [`docs/ref/mcp-openrouter-opencode.md`](./docs/ref/mcp-openrouter-opencode.md) |
-| Local working docs — index, latest handoff, backlog | `docs/README.md` · `docs/HANDOFF.md` · `docs/TODOS.md` (gitignored) |
 
 ---
 
 ## Area index
 
-**Read the area's document before you touch that area.** Each one carries the reasoning
-and the incidents behind the design — that is the part worth keeping, and the part that
-is expensive to rediscover.
+Read the relevant area document before making changes.
 
 | Area | What lives there | Document |
 |------|------------------|----------|
@@ -85,25 +75,6 @@ is expensive to rediscover.
 | `/fsh-mobile` | Mobile testing (adb port forwarding, Chrome, screenshots) |
 | `/fsh-voice` | Install/run the Voice Daemon |
 
-Source of truth is `.claude/skills/` in this repo. The global copy at
-`~/.claude/skills/fsh/SKILL.md` is a manual `cp` — `scripts/check_docs.py` warns when the
+Project-provided skill sources live in `.claude/skills/`. The global copy of `fsh` at
+`~/.claude/skills/fsh/SKILL.md` is a manual `cp` — `scripts/check_docs.py` warns when those
 two drift.
-
----
-
-## Three rules that are easy to get wrong
-
-**Personal values never enter this repo.** Machine-specific config lives in `~/.vt.env`
-(gitignored) and personal agent instructions live in `~/.claude/CLAUDE.md` — not here.
-Real hostnames, reserved domains, usernames, tailnet names and public IPs are not
-acceptable as "examples"; `scripts/check_docs.py` scans for them.
-
-**The single tmux server principle:** the `fsh` CLI, the server, the voice daemon and the
-hooks all use the isolated `-L fsh` socket, kept separate from your own `tmux ls`. A bare
-`tmux ls` therefore reports "no server running" while FarShell's sessions are alive and well —
-that is correct, not a fault.
-
-**`fsh restart`, never `fsh stop && fsh start`.** An anonymous tunnel's URL lives and dies with
-the cloudflared process, so a `stop` that takes the tunnel with it burns the address — bookmarks,
-open tabs and the phone's home-screen icon all die. `fsh restart` bounces the server and leaves
-the entrance up, keeping the URL. Details and the measurements: [`docs/ref/tunnel.md`](./docs/ref/tunnel.md).

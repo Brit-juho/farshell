@@ -38,7 +38,8 @@ fsh doctor            # 피드 신선도까지 함께 진단
 | `none` | 기능 자체를 끈다. 공개 터널로 사용량을 내보내기 싫을 때 |
 
 ```bash
-fsh env set VT_USAGE_PROVIDER none    # 또는 ~/.vt.env를 직접 편집
+source lib/vt_env.sh                 # 저장소 루트에서 실행
+vt_env_set VT_USAGE_PROVIDER none
 ```
 
 ## 표시 규칙
@@ -49,7 +50,7 @@ fsh env set VT_USAGE_PROVIDER none    # 또는 ~/.vt.env를 직접 편집
 - 창(`5h`/`7d`) 정보가 없는 프로필은 빈 바 대신 **"사용량 정보 없음"** —
   0%로 그리면 "안 쓰고 있다"는 거짓 정보가 된다
 
-## 2.0에서 하지 않는 것
+## 프로필 전환과 세션 표시의 범위
 
 **프로필 전환(`clauth <profile>`)은 웹에서 제공하지 않는다.** FarShell은 tmux
 세션을 여러 개 띄우는 도구라, 세션 5개를 돌려놓고 전역 프로필을 바꾸면 기존

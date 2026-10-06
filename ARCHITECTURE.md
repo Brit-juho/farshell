@@ -1,11 +1,6 @@
 # FarShell Architecture
 
-> **Version:** v2.3.0 — the frontend was substantially restructured in September 2026
-> (2.0: ES modules, Vite, tokens; 2.1: surface layer, Solid + TypeScript chrome).
-> The plan sets for both are archived locally under `docs/archive/` (gitignored).
-> See [CHANGELOG.md](./CHANGELOG.md) for the release history and [API.md](./API.md)
-> for the full REST/WebSocket reference (this document intentionally does not
-> duplicate the endpoint table — that caused drift before).
+See [API.md](./API.md) for endpoints and [CHANGELOG.md](./CHANGELOG.md) for release history.
 
 This document is a map for contributors and LLMs to quickly understand the repo
 structure. Instead of switching to a monorepo, it only spells out the
@@ -43,7 +38,7 @@ structure. Instead of switching to a monorepo, it only spells out the
 iTerm, the mobile PWA, and the Voice Daemon all attach to and operate on the
 same tmux session.
 
-### 1.1 Single tmux server principle (Phase 6)
+### 1.1 Single tmux server principle
 
 Every fsh client connects to the isolated tmux socket `-L fsh` (overridable
 via the `VT_TMUX_SOCKET` environment variable). It's kept separate from the
@@ -53,8 +48,8 @@ user's own existing `tmux ls` sessions.
 |------------|-----------|------|
 | `bin/fsh` (CLI) | `${TMUX_BASE[@]} ...` (`tmux -L fsh`) | Defined at the top of `bin/fsh` |
 | `server/main.py` (PTY) | `tmux -L fsh attach-session ...` | `pty_manager.py` |
-| `server/voice/daemon.py` | `TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]` | Phase 6 #6-1 |
-| `server/tui/` (`fsh manage`) | tmux calls via `tmux_runner.py`/`helpers.py` | W4-1 |
+| `server/voice/daemon.py` | `TMUX_BASE = ["tmux", "-L", TMUX_SOCKET]` | `server/voice/daemon.py` |
+| `server/tui/` (`fsh manage`) | tmux calls via `tmux_runner.py`/`helpers.py` | `server/tui/` |
 | Stop hook (`tts_hook.sh`) | (TTS only, no direct tmux call) | — |
 
 Without a unified socket, Voice Daemon input ends up disconnected from
@@ -427,7 +422,7 @@ cleans them all up.
 | Transport | cloudflared HTTPS tunnel | — |
 | Transport (alternative) | Tailscale WireGuard VPN + IP whitelist (D9, `--network tailscale`) | Requires trusting Tailscale itself; tailnet ACLs must be managed separately |
 | Human auth | Password (scrypt hash) → 24h HMAC-signed session cookie (`server/auth/`) | — |
-| Machine auth | `VT_AUTH_TOKEN` via `?token=` or `Authorization: Bearer` — for daemons/QR/URLs | Exchanged for a cookie and stripped from the URL on first use (Phase 9 #8) |
+| Machine auth | `VT_AUTH_TOKEN` via `?token=` or `Authorization: Bearer` — for daemons and scripts | Exchanged for a cookie and stripped from the URL on first use  |
 | Device gate | First-time-device TOTP gate (opt-in, `fsh otp setup`), 90-day `vt_device` cookie after | Fully disabled — and devices quietly accumulate — until OTP is explicitly set up |
 | Cross-site | `OriginGuardMiddleware` rejects any request/WS whose Origin isn't self, before auth even runs | The one thing password/OTP alone can't block |
 | WebSocket auth | Middleware validates before accept | — |
@@ -440,17 +435,6 @@ cleans them all up.
 | Connection visibility | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push (D9) | Off by default; `who`-based remote host extraction is best-effort |
 
 ---
-
-## 7. Status
-
-For what's shipped and when, see [CHANGELOG.md](./CHANGELOG.md) — it's the
-single source of truth for release history; this document intentionally
-doesn't duplicate a roadmap or a "done/remaining" list (that drifted from
-reality before). For frontend-restructure-specific history (the September
-2026 ES-module migration referenced throughout §2), see
-`docs/archive/v2.0/plan-2.0/10-frontend-restructure.md` locally (gitignored,
-not on GitHub).
-
 
 ## MCP source and review pipeline
 

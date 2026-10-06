@@ -18,7 +18,7 @@ FarShell은 macOS/Linux 머신을 개인 개발 서버로 씁니다 — 같은 t
 - **원격에서 상태 확인** — 읽기 전용 코드 뷰어와 diff, 포트 대시보드, 에이전트 상태
 - **Claude Code 연동** — 훅으로 도구 사용 상태를 실시간 반영하고, 완료 시 TTS 요약,
   스스로 다음 항목을 투입하는 프롬프트 큐
-- **API 키도 구독도 없음** — 오픈소스 STT/TTS, 전부 무료
+- **음성 API 구독 불필요** — 로컬 STT와 온라인 또는 시스템 TTS
 
 ---
 
@@ -36,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.s
 `~/.local/bin/fsh` 심링크를 걸고, `~/.vt.env`를 생성하고, Claude Code 훅을 등록합니다.
 
 <details>
-<summary>클론해서 설치 / 릴리스 tarball로 설치 (Node.js 불필요)</summary>
+<summary>소스 설치(Node.js 필요) / 릴리스 tarball 설치(Node.js 불필요)</summary>
 
 ```bash
 git clone https://github.com/Brit-juho/farshell.git ~/farshell
@@ -57,24 +57,30 @@ tar xzf farshell-<버전>.tar.gz && cd farshell-<버전>
 
 ## 빠른 시작
 
-**다른 작업 중에 음성으로 코딩** (macOS)
-
-```
-fsh voice                 # 음성 데몬이 도는 터미널이 열린다
-                          # 거기서 세션을 고른다 (예: claude --resume)
-Ctrl+Shift+M              # 말하면 tmux에 바로 입력된다
-                          # 결과는 이어폰에 TTS로 돌아온다
-fsh restart               # 서버만 재기동 — 접속 주소가 안 바뀐다
-fsh stop                  # 끝나면 종료
-```
-
 **폰에서 터미널 조작**
 
-```
-fsh password              # 최초 1회 — 인증이 없으면 fsh start가 공개 터널을 거부한다
+```bash
+fsh password              # 최초 1회: 웹 로그인 비밀번호 설정
 fsh start                 # 서버와 공개 터널 시작
-fsh mobile                # URL + QR 출력, 스캔하면 끝
+fsh mobile                # URL과 QR 출력
 ```
+
+**음성 입력** (음성 프로필 설치 필요)
+
+```bash
+tmux -L fsh new -A -s dev  # 터미널 세션 생성 또는 연결
+# 이 세션에서 사용할 셸이나 에이전트를 실행한 뒤:
+fsh voice                 # 서버와 음성 데몬을 백그라운드로 시작
+fsh voice-target dev      # 입력을 dev 세션으로 고정
+```
+
+`Ctrl+Shift+M`으로 녹음을 시작하고 끝냅니다. 말한 내용은 타깃 세션에
+텍스트와 Enter로 입력됩니다. 모델 선택·다운로드와 완료 알림(TTS)은
+설정 → 음성 및 알림에서 설정합니다. 완료 알림은 기본으로 꺼져 있습니다.
+지원 환경은 [플랫폼 안내](./docs/guide/platforms.ko.md)를 참고하세요.
+
+`fsh restart`는 터널 주소를 유지하며 서버를 재시작합니다. `fsh stop`은
+서버·터널·데몬을 종료하고 tmux 세션은 남깁니다.
 
 설치나 환경이 이상하면 `fsh doctor`가 진단합니다.
 
@@ -111,8 +117,7 @@ fsh mobile                # URL + QR 출력, 스캔하면 끝
 | 설정 키 | [`config/vt.defaults.env`](./config/vt.defaults.env) — 커밋된 기본값, 키마다 설명 주석 |
 | 문제 해결 | [`docs/help/troubleshoot.md`](./docs/help/troubleshoot.md) (`fsh help troubleshoot`와 같은 내용) |
 
-**영역별 기능 레퍼런스** — 무엇을 하는지만이 아니라 왜 그렇게 설계했고 어떤 사고가
-있었는지가 함께 적혀 있습니다 (영문 단일본).
+**영역별 기능 레퍼런스** (영문 단일본):
 
 | 영역 | 문서 |
 |---|---|

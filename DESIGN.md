@@ -1,13 +1,9 @@
 # FarShell Design System
 
 
-> **As of v2.1.0.** The September 2026 "new shell" overhaul (N15~N46) rewrote
-> the surface layer, the Solid/TS shell, the rail, the dock, the HUD, and the
-> palette — see [ARCHITECTURE.md](./ARCHITECTURE.md) §2 for the module map.
-> 2.1.0 still operates **per session** — the worktree model (N8) and
-> source-control writes (push/PR, N30~32) land in 2.1.1, and multi-host
-> (N39) and the repo-hash color dots (N33 §5) are deferred to 2.1.1~2.1.2
-> (ADR-10, ADR-20). This document describes **only what's in the code today.**
+Visual rules, tokens and component guidance for FarShell. See
+[ARCHITECTURE.md](./ARCHITECTURE.md) for the module map and
+[CHANGELOG.md](./CHANGELOG.md) for release history.
 
 ---
 
@@ -448,16 +444,16 @@ are gone; the existing action ids (`queue.show`, `ports.show`, `usage.open`,
 and keymap still reference those same ids). The ports and usage tabs
 disappear entirely when `/api/capabilities` reports no source for them.
 
-**The source-control tab stays read-only through 2.1.1** (ADR-22) —
-stage/unstage/commit/push/PR creation need an elevated session (`POST
-/api/auth/elevate`) and a git-account store, both of which land in 2.1.1.
-2.1.0 offers status and diff viewing only.
+**The source-control tab supports status, diff, stage, unstage and commit.**
+Push and PR/MR creation are not offered. Commits use the repository's ambient Git
+configuration; the stored git accounts are not connected to this workflow.
+See [docs/ref/worktree.md](./docs/ref/worktree.md) for the guards.
 
-**The code viewer isn't in the dock at all.** Picking a file in the palette's
-`/` mode opens it **as a pane** (leaf generalization, N4 — `layout/tree.js`'s
-leaf now carries `kind: 'terminal' | 'viewer' | 'panel'`. A `viewer` leaf has
+**The code viewer is separate from the dock file tree.** Files open in the configured
+`sheet`, `float` or `pane` surface; compact screens use a fullscreen sheet.
+See [docs/ref/files.md](./docs/ref/files.md). In `layout/tree.js`, a pane leaf carries `kind: 'terminal' | 'viewer' | 'panel'`. A `viewer` leaf has
 only a file path; a `panel` leaf has one registered dock panel name. Both keep
-`session: null`). 2.0's modal code-viewer backdrop is gone.
+`session: null`.
 
 ### HUD 24px (`shell/Hud.tsx`)
 

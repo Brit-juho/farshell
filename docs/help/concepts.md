@@ -68,7 +68,7 @@ FarShell은 별도 tmux 서버(`/tmp/tmux-{uid}/fsh` 소켓)를 씀.
 
 ### 메커니즘 A — 셸 init 스니펫
 
-    eval "$(fsh shell-init zsh)" >> ~/.zshrc
+    echo 'eval "$(fsh shell-init zsh)"' >> ~/.zshrc
 
 새 zsh 시작 시마다 5중 가드 통과 후 자동 attach. iTerm Cmd+N, split, 새 탭 모두 적용.
 
