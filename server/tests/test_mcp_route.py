@@ -590,7 +590,7 @@ def test_skill_import_rejects_changed_source_after_preview(client):
 def test_mcp_library_save_preview_apply_and_conflict(client):
     _elevate(client)
     _write_claude(client, {"mcpServers": {"docs": {"command": "npx", "args": ["docs"],
-                                               "env": {"TOKEN": "${DOCS_TOKEN}"}}}})
+                                               "env": {"DOCS_TOKEN": "${DOCS_TOKEN}"}}}})
     save = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "docs"})
     assert save.status_code == 200
     item_id = save.json()["id"]
@@ -637,7 +637,7 @@ def test_mcp_library_targets_separate_common_and_tool_specific(client):
 
 def test_mcp_library_only_offers_tools_that_can_expand_credential_refs(client):
     _elevate(client)
-    _write_claude(client, {"mcpServers": {"docs": {"command": "npx", "env": {"TOKEN": "${DOCS_TOKEN}"}}}})
+    _write_claude(client, {"mcpServers": {"docs": {"command": "npx", "env": {"DOCS_TOKEN": "${DOCS_TOKEN}"}}}})
     saved = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "docs"}).json()
     item = client.get("/api/mcp/library").json()["servers"][0]
     assert "agy" not in item["compatible_tools"]
@@ -648,7 +648,7 @@ def test_mcp_library_only_offers_tools_that_can_expand_credential_refs(client):
 def test_existing_mcp_candidates_import_only_portable_definitions(client):
     _elevate(client)
     _write_claude(client, {"mcpServers": {
-        "portable": {"command": "npx", "env": {"TOKEN": "${DOCS_TOKEN}"}},
+        "portable": {"command": "npx", "env": {"DOCS_TOKEN": "${DOCS_TOKEN}"}},
         "literal": {"command": "npx", "env": {"TOKEN": "sk-private-value"}},
     }})
     listed = client.get("/api/mcp/library/candidates?worktree=wt1")
@@ -657,20 +657,21 @@ def test_existing_mcp_candidates_import_only_portable_definitions(client):
     rows = {item["name"]: item for item in listed.json()["candidates"]}
     assert rows["portable"]["eligible"] is True
     assert rows["literal"]["eligible"] is False
+    plan = client.post("/api/mcp/library/import-preview", json={"ids": [rows["portable"]["id"]], "worktree": "wt1"}).json()
     imported = client.post("/api/mcp/library/import-candidates",
-                           json={"ids": [rows["portable"]["id"]], "worktree": "wt1"})
+                           json={"ids": [rows["portable"]["id"]], "worktree": "wt1", "token": plan["token"]})
     assert imported.status_code == 200 and imported.json()["saved"] == 1
     assert [item["name"] for item in client.get("/api/mcp/library").json()["servers"]] == ["portable"]
     refused = client.post("/api/mcp/library/import-candidates",
                           json={"ids": [rows["literal"]["id"]], "worktree": "wt1"})
-    assert refused.json()["status"] == "partial"
+    assert refused.status_code == 409
     assert "sk-private-value" not in refused.text
 
 
 def test_mcp_library_never_returns_definition_or_literal_secret(client):
     _elevate(client)
     _write_claude(client, {"mcpServers": {
-        "safe": {"command": "npx", "env": {"TOKEN": "${SAFE_TOKEN}"}},
+        "safe": {"command": "npx", "env": {"SAFE_TOKEN": "${SAFE_TOKEN}"}},
         "unsafe": {"command": "npx", "env": {"TOKEN": "sk-private-value"}},
     }})
     rejected = client.post("/api/mcp/library/save", json={"tool": "claude", "scope": "global", "name": "unsafe"})
@@ -684,6 +685,45 @@ def test_mcp_library_never_returns_definition_or_literal_secret(client):
         assert "sk-private-value" not in response.text
         assert "npx" not in response.text
         assert "${SAFE_TOKEN}" not in response.text
+
+
+def test_opencode_official_definition_import_and_deploy_round_trip(client, monkeypatch):
+    _elevate(client)
+    monkeypatch.setenv("VT_OPENCODE_HOME", str(client.vt_home / ".config"))
+    path = client.vt_home / ".config" / "opencode" / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcp": {"docs": {
+        "type": "local", "command": ["npx", "docs"],
+        "environment": {"TOKEN": "{env:DOCS_TOKEN}"},
+    }}}))
+    saved = client.post("/api/mcp/library/save",
+                        json={"tool": "opencode", "scope": "global", "name": "docs"})
+    assert saved.status_code == 200
+    item_id = saved.json()["id"]
+    preview = client.post("/api/mcp/library/preview",
+                          json={"id": item_id, "tool": "opencode", "scope": "local",
+                                "worktree": "wt1"})
+    assert preview.status_code == 200
+    applied = client.post("/api/mcp/library/apply",
+                          json={"id": item_id, "tool": "opencode", "scope": "local",
+                                "worktree": "wt1", "token": preview.json()["token"]})
+    assert applied.status_code == 200
+    target = json.loads((client.vt_repo / "opencode.json").read_text())["mcp"]["docs"]
+    assert target == {"type": "local", "command": ["npx", "docs"],
+                      "environment": {"TOKEN": "{env:DOCS_TOKEN}"}, "enabled": False}
+
+
+def test_opencode_import_rejects_unportable_cwd(client, monkeypatch):
+    _elevate(client)
+    monkeypatch.setenv("VT_OPENCODE_HOME", str(client.vt_home / ".config"))
+    path = client.vt_home / ".config" / "opencode" / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcp": {"docs": {
+        "type": "local", "command": ["npx", "docs"], "cwd": "/tmp",
+    }}}))
+    saved = client.post("/api/mcp/library/save",
+                        json={"tool": "opencode", "scope": "global", "name": "docs"})
+    assert saved.status_code == 409
 
 
 def test_deploy_validates_its_input(client):
@@ -975,3 +1015,129 @@ def test_codex_plugin_toggle_does_not_hold_the_lock_while_asking_the_cli(client,
     r = client.post("/api/mcp/plugins/toggle", json={
         "name": "p@m", "enabled": False, "tool": "codex", "scope": "global"})
     assert r.status_code == 200 and held == [False]
+
+
+def test_reviewed_sync_preserves_off_state_and_refuses_direct_edit(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"tracked": {"command": "first"}}})
+    saved = client.post('/api/mcp/library/save', json={"tool": "claude", "scope": "global", "name": "tracked"}).json()
+    payload = {"id": saved['id'], "tool": "codex", "scope": "global"}
+    plan = client.post('/api/mcp/library/preview', json=payload).json()
+    assert client.post('/api/mcp/library/apply', json={**payload, "token": plan['token']}).status_code == 200
+    deployment = client.get('/api/mcp/sync').json()['deployments'][0]
+    assert client.post('/api/mcp/sync/toggle', json={"id": deployment['id'], "enabled": True}).status_code == 200
+    _write_claude(client, {"mcpServers": {"tracked": {"command": "second"}}})
+    assert client.get('/api/mcp/sync').json()['rules'][0]['state'] == 'pending'
+    sync_plan = client.post('/api/mcp/sync/preview', json={"id": deployment['id']}).json()
+    assert 'second' not in json.dumps(sync_plan)
+    applied = client.post('/api/mcp/sync/apply', json={"id": deployment['id'], "token": sync_plan['token']})
+    assert applied.status_code == 200, applied.text
+    config = client.vt_home / '.codex' / 'config.toml'
+    assert 'second' in config.read_text() and 'enabled = false' in config.read_text()
+    assert client.get('/api/mcp/sync').json()['rules'][0]['state'] == 'current'
+    assert client.post('/api/mcp/toggle', json={'tool': 'codex', 'scope': 'global', 'name': 'tracked', 'enabled': True}).status_code == 200
+    assert client.get('/api/mcp/sync').json()['rules'][0]['state'] == 'current'
+    assert client.post('/api/mcp/sync/apply', json={"id": deployment['id'], "token": sync_plan['token']}).status_code == 409
+    config.write_text(config.read_text().replace('second', 'user-edit'))
+    _write_claude(client, {"mcpServers": {"tracked": {"command": "third"}}})
+    assert client.get('/api/mcp/sync').json()['rules'][0]['state'] == 'diverged'
+    assert client.post('/api/mcp/sync/preview', json={"id": deployment['id']}).status_code == 409
+    assert 'user-edit' in config.read_text()
+
+
+def test_import_plan_rechecks_source_and_is_single_use(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"tracked": {"command": "first"}}})
+    rows = client.get('/api/mcp/library/candidates').json()['candidates']
+    payload = {"ids": [next(x['id'] for x in rows if x['name'] == 'tracked')]}
+    plan = client.post('/api/mcp/library/import-preview', json=payload).json()
+    _write_claude(client, {"mcpServers": {"tracked": {"command": "second"}}})
+    assert client.post('/api/mcp/library/import-candidates', json={**payload, "token": plan['token']}).status_code == 409
+    assert client.get('/api/mcp/library').json()['servers'] == []
+
+
+def test_codex_import_refuses_environment_variable_rename(client):
+    _elevate(client)
+    _write_claude(client, {"mcpServers": {"tracked": {"command": "first", "env": {"TOKEN": "${DIFFERENT_TOKEN}"}}}})
+    item = client.post('/api/mcp/library/save', json={"tool": "claude", "scope": "global", "name": "tracked"}).json()
+    assert client.post('/api/mcp/library/preview', json={"id": item['id'], "tool": "codex", "scope": "global"}).status_code == 409
+
+
+def test_deploy_plan_refuses_disabled_source_inside_destination_lock(client, monkeypatch):
+    from contextlib import contextmanager
+    import mcp_write
+    _elevate(client)
+    _write_claude(client, {'mcpServers': {'tracked': {'command': 'test'}}})
+    saved = client.post('/api/mcp/library/save', json={'tool': 'claude', 'scope': 'global', 'name': 'tracked', 'worktree': 'wt1'}).json()
+    payload = {'id': saved['id'], 'tool': 'codex', 'scope': 'global', 'worktree': 'wt1'}
+    preview = client.post('/api/mcp/library/preview', json=payload).json()
+    original = mcp_write._locked
+    @contextmanager
+    def changed_source(path):
+        with original(path):
+            data = _read_claude(client)
+            data['projects'] = {str(client.vt_repo): {'disabledMcpServers': ['tracked']}}
+            _write_claude(client, data)
+            yield
+    monkeypatch.setattr(mcp_write, '_locked', changed_source)
+    response = client.post('/api/mcp/library/apply', json={**payload, 'token': preview['token']})
+    assert response.status_code == 409
+    assert not (client.vt_home / '.codex' / 'config.toml').exists()
+
+
+def test_opencode_jsonc_prevents_legacy_toggle_from_changing_json(client, monkeypatch):
+    _elevate(client)
+    monkeypatch.setenv('VT_OPENCODE_HOME', str(client.vt_home / '.config'))
+    root = client.vt_home / '.config' / 'opencode'
+    root.mkdir(parents=True)
+    definition = {'mcp': {'docs': {'type': 'local', 'command': ['test']}}}
+    path = root / 'opencode.json'
+    path.write_text(json.dumps(definition))
+    (root / 'opencode.jsonc').write_text(json.dumps(definition))
+    before = path.read_bytes()
+    response = client.post('/api/mcp/toggle', json={'tool': 'opencode', 'scope': 'global', 'name': 'docs', 'enabled': False})
+    assert response.status_code == 409
+    assert path.read_bytes() == before
+
+
+def test_remote_probe_does_not_discard_cli_authentication(client, monkeypatch):
+    import mcp_verify
+    _elevate(client)
+    _write_claude(client, {'mcpServers': {'remote': {'type': 'http', 'url': 'https://example.invalid/mcp', 'headers': {'Authorization': '${REMOTE_TOKEN}'}}}})
+    async def unexpected_probe(*args, **kwargs):
+        pytest.fail('인증을 생략한 요청은 실제 CLI 검사가 아닙니다')
+    monkeypatch.setattr(mcp_verify, 'verify_http', unexpected_probe)
+    response = client.post('/api/mcp/servers/global/remote/verify', json={'tool': 'claude', 'confirm_network': True})
+    assert response.status_code == 200
+    assert response.json()['state'] == 'unverified'
+    assert response.json()['runtime_state'] == 'unknown'
+    assert 'REMOTE_TOKEN' not in response.text
+
+
+@pytest.mark.parametrize('definition', [
+    {'command': 'test', 'env': ['TOKEN']},
+    {'command': 'test', 'env_vars': ['TOKEN']},
+    {'type': 'http', 'command': 'test'},
+    {'command': 'test', 'enabled': 'false'},
+])
+def test_library_rejects_definitions_that_would_lose_fields(client, definition):
+    _elevate(client)
+    _write_claude(client, {'mcpServers': {'bad': definition}})
+    response = client.post('/api/mcp/library/save', json={'tool': 'claude', 'scope': 'global', 'name': 'bad'})
+    assert response.status_code == 409
+    assert client.get('/api/mcp/library').json()['servers'] == []
+
+
+def test_identical_definitions_from_different_origins_keep_selected_provenance(client):
+    _elevate(client)
+    _write_claude(client, {'mcpServers': {'docs': {'command': 'test'}}})
+    codex = client.vt_home / '.codex' / 'config.toml'
+    codex.write_text('[mcp_servers.docs]\ncommand = "test"\n')
+    first = client.post('/api/mcp/library/save', json={'tool': 'claude', 'scope': 'global', 'name': 'docs'}).json()
+    candidates = client.get('/api/mcp/library/candidates').json()['candidates']
+    assert next(x for x in candidates if x['tool'] == 'claude')['saved'] is True
+    assert next(x for x in candidates if x['tool'] == 'codex')['saved'] is False
+    second = client.post('/api/mcp/library/save', json={'tool': 'codex', 'scope': 'global', 'name': 'docs'}).json()
+    assert first['id'] != second['id']
+    items = client.get('/api/mcp/library').json()['servers']
+    assert {x['source']['tool'] for x in items} == {'claude', 'codex'}

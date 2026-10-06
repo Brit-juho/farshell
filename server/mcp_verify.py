@@ -235,13 +235,24 @@ async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIM
         headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
     )
 
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
     def _do() -> dict:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            raw = r.read().decode("utf-8", errors="replace")
+        opener = urllib.request.build_opener(NoRedirect)
+        with opener.open(req, timeout=timeout) as r:
+            payload = r.read(1024 * 1024 + 1)
+            if len(payload) > 1024 * 1024:
+                raise ValueError("응답 크기 제한")
+            raw = payload.decode("utf-8", errors="replace")
         return json.loads(raw)
 
     try:
         data = await asyncio.to_thread(_do)
+    except urllib.error.HTTPError as e:
+        return {"state": "auth_required" if e.code in (401, 403) else ERROR, "tool_count": None,
+                "error": f"HTTP {e.code}", "checked_at": checked_at, "evidence": "independent_probe", "runtime_state": "unknown"}
     except (urllib.error.URLError, OSError, TimeoutError) as e:
         return {"state": ERROR, "tool_count": None, "error": _redact(_net_error(e), []),
                 "checked_at": checked_at}
@@ -249,9 +260,11 @@ async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIM
         return {"state": ERROR, "tool_count": None,
                 "error": "initialize 응답을 JSON으로 읽을 수 없음", "checked_at": checked_at}
 
-    if not isinstance(data, dict) or "error" in data:
+    if (not isinstance(data, dict) or "error" in data or data.get("id") != 1
+            or not isinstance(data.get("result"), dict)
+            or not data["result"].get("protocolVersion") or not isinstance(data["result"].get("serverInfo"), dict)):
         return {"state": ERROR, "tool_count": None,
-                "error": str(data.get("error")) if isinstance(data, dict) else "unexpected response",
+                "error": "initialize 응답 형식이 올바르지 않습니다",
                 "checked_at": checked_at}
     # http/sse는 initialize 성공만 확인한다 — tools/list까지 요구하면 이 검증이
     # 세션 상태(초기화 완료 통지)를 더 들고 있어야 해서 범위를 넘는다.

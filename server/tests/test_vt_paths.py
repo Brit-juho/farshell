@@ -16,10 +16,12 @@ from vt_paths import PathOverrideError
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch):
+def _clean_env(monkeypatch, tmp_path):
     for k in ("VT_STATE_DIR", "VT_RUN_DIR", "VT_WORKSPACE_PATH", "VT_CONFIG",
               "VT_DETECT_DIR", "VT_START_DIR", "VT_DIR", "HOME"):
         monkeypatch.delenv(k, raising=False)
+    # HOME 미설정은 실제 passwd 홈으로 복귀한다. 경로 테스트도 사용자 상태와 격리한다.
+    monkeypatch.setenv("HOME", str(tmp_path))
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +71,7 @@ def test_e7_home_unavailable_names_the_variable(monkeypatch):
     def _boom(cls=None):
         raise RuntimeError("Could not determine home directory")
 
+    monkeypatch.delenv("HOME", raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: _boom()))
     with pytest.raises(PathOverrideError) as exc:
         vt_paths.user_home()

@@ -135,6 +135,14 @@ def test_denied_names_never_trigger(root):
 # --- 실제 감시 ------------------------------------------------------------------
 
 
+@pytest.fixture
+def polling_watch(monkeypatch):
+    # 실제 파일 이벤트 검증은 OS별 native 감시 권한/시작 지연에 의존하지 않는다.
+    # watchfiles의 공식 polling backend도 같은 구독·매칭·전송 경로를 사용한다.
+    monkeypatch.setenv("WATCHFILES_FORCE_POLLING", "true")
+    monkeypatch.setenv("WATCHFILES_POLL_DELAY_MS", "50")
+
+
 async def _collect(hub_client_msgs, until, timeout=5.0):
     async def wait():
         while not until(hub_client_msgs):
@@ -142,7 +150,7 @@ async def _collect(hub_client_msgs, until, timeout=5.0):
     await asyncio.wait_for(wait(), timeout)
 
 
-def test_real_file_change_is_reported_once_per_subscription(root):
+def test_real_file_change_is_reported_once_per_subscription(root, polling_watch):
     (root / "d").mkdir()
     f = root / "d" / "a.md"
     f.write_text("v1")
@@ -176,7 +184,7 @@ def test_real_file_change_is_reported_once_per_subscription(root):
     asyncio.run(run())
 
 
-def test_other_clients_do_not_see_unsubscribed_paths(root):
+def test_other_clients_do_not_see_unsubscribed_paths(root, polling_watch):
     (root / "a.md").write_text("1")
     (root / "b.md").write_text("1")
 

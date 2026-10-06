@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import tomllib
@@ -78,6 +79,77 @@ def _read_json(path: Path) -> tuple[Optional[dict], Optional[str]]:
     return data, None
 
 
+def _read_jsonc(path: Path) -> tuple[Optional[dict], Optional[str]]:
+    """문자열 안의 //, /* */는 보존하며 주석과 후행 쉼표만 읽기용 제거한다."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None, None
+    except (OSError, UnicodeError):
+        return None, "JSONC 읽기 실패"
+    out, i, quoted, escaped = [], 0, False, False
+    while i < len(text):
+        c = text[i]
+        if quoted:
+            out.append(c)
+            if escaped:
+                escaped = False
+            elif c == "\\":
+                escaped = True
+            elif c == '"':
+                quoted = False
+            i += 1
+        elif c == '"':
+            quoted = True
+            out.append(c)
+            i += 1
+        elif text[i:i + 2] == "//":
+            end = text.find("\n", i)
+            i = len(text) if end < 0 else end
+            out.append(" ")
+        elif text[i:i + 2] == "/*":
+            end = text.find("*/", i + 2)
+            if end < 0:
+                return None, "JSONC 파싱 실패"
+            out.append(" ")
+            i = end + 2
+        else:
+            out.append(c)
+            i += 1
+    text = "".join(out)
+    out, quoted, escaped = [], False, False
+    for i, c in enumerate(text):
+        if not quoted and c == ",":
+            rest = text[i + 1:].lstrip()
+            if rest[:1] in ("}", "]"):
+                continue
+        out.append(c)
+        if quoted and escaped:
+            escaped = False
+        elif quoted and c == "\\":
+            escaped = True
+        elif c == '"':
+            quoted = not quoted
+    try:
+        data = json.loads("".join(out))
+    except ValueError:
+        return None, "JSONC 파싱 실패"
+    return (data, None) if isinstance(data, dict) else (None, "최상위가 객체가 아님")
+
+
+def definition_hash(defn: dict) -> str:
+    return hashlib.sha256(json.dumps(defn, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def file_revision(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except FileNotFoundError:
+        return "absent"
+    except OSError:
+        return "unreadable"
+
+
 def _read_toml_text(text: str) -> tuple[Optional[dict], Optional[str]]:
     try:
         return tomllib.loads(text), None
@@ -109,6 +181,106 @@ def _as_name_list(value) -> list[str]:
     if not isinstance(value, list):
         return []
     return [x for x in value if isinstance(x, str)]
+
+
+def opencode_to_common(defn: dict) -> tuple[Optional[dict], Optional[str]]:
+    """OpenCode의 실제 MCP 스키마를 공통 실행 필드로 옮긴다.
+
+    호출자는 원본 정의도 보존해야 한다. 여기서 표현하지 못하는 필드는
+    보관함 이식 시 별도로 거절한다.
+    """
+    kind = defn.get("type")
+    if kind == "local":
+        argv = defn.get("command")
+        env = defn.get("environment", {})
+        if (not isinstance(argv, list) or not argv or
+                any(not isinstance(x, str) or not x for x in argv) or
+                not isinstance(env, dict) or
+                any(not isinstance(k, str) or not isinstance(v, str) for k, v in env.items())):
+            return None, "OpenCode local 명령 또는 environment 형식이 잘못됐습니다"
+        return {"command": argv[0], "args": argv[1:], "env": env}, None
+    if kind == "remote":
+        url = defn.get("url")
+        headers = defn.get("headers", {})
+        if (not isinstance(url, str) or not url or not isinstance(headers, dict) or
+                any(not isinstance(k, str) or not isinstance(v, str)
+                    for k, v in headers.items())):
+            return None, "OpenCode remote URL 또는 headers 형식이 잘못됐습니다"
+        return {"url": url, "headers": headers}, None
+    return None, "OpenCode MCP type은 local 또는 remote여야 합니다"
+
+
+def common_to_opencode(defn: dict) -> tuple[Optional[dict], Optional[str]]:
+    """검증된 공통 정의만 OpenCode가 읽는 배열 명령/전송 형식으로 쓴다."""
+    allowed = {"command", "args", "url", "env", "headers", "enabled", "oauth"}
+    if set(defn) - allowed:
+        return None, "OpenCode로 변환할 수 없는 정의 필드가 있습니다"
+    command, url = defn.get("command"), defn.get("url")
+    if bool(command) == bool(url):
+        return None, "명령 또는 URL 중 하나가 필요합니다"
+    if "enabled" in defn and not isinstance(defn["enabled"], bool):
+        return None, "enabled 형식이 잘못됐습니다"
+    if command:
+        if "oauth" in defn:
+            return None, "OpenCode local 정의에는 oauth를 쓸 수 없습니다"
+        args, env = defn.get("args", []), defn.get("env", {})
+        if (not isinstance(command, str) or not isinstance(args, list) or
+                any(not isinstance(x, str) for x in args) or not isinstance(env, dict) or
+                any(not isinstance(k, str) or not isinstance(v, str) for k, v in env.items()) or
+                defn.get("headers")):
+            return None, "OpenCode local 명령·환경변수 형식이 잘못됐습니다"
+        out = {"type": "local", "command": [command, *args]}
+        if env:
+            out["environment"] = env
+    else:
+        if defn.get("oauth") is not False:
+            return None, "OpenCode remote 인증 방식을 명시해야 합니다 (oauth: false)"
+        headers = defn.get("headers", {})
+        if (not isinstance(url, str) or defn.get("args") or defn.get("env") or
+                not isinstance(headers, dict) or
+                any(not isinstance(k, str) or not isinstance(v, str) for k, v in headers.items())):
+            return None, "OpenCode remote URL·헤더 형식이 잘못됐습니다"
+        out = {"type": "remote", "url": url, "oauth": False}
+        if headers:
+            out["headers"] = headers
+    if "enabled" in defn:
+        out["enabled"] = defn["enabled"]
+    return out, None
+
+
+def validate_definition(tool: str, defn: dict) -> Optional[str]:
+    """대상 CLI에 쓰기 전 실행 필드와 값 타입을 검증한다."""
+    if tool == "opencode":
+        return common_to_opencode(defn)[1]
+    allowed = {"command", "args", "url", "env", "headers", "type"}
+    if tool == "codex":
+        allowed = {"command", "args", "url", "env_vars", "bearer_token_env_var", "enabled"}
+    elif tool == "agy":
+        allowed.add("disabled")
+    if set(defn) - allowed:
+        return f"{tool}에서 지원하지 않는 정의 필드가 있습니다"
+    if bool(defn.get("command")) == bool(defn.get("url")):
+        return "명령 또는 URL 중 하나가 필요합니다"
+    for key in ("command", "url", "bearer_token_env_var"):
+        if key in defn and (not isinstance(defn[key], str) or not defn[key]):
+            return f"{key} 형식이 잘못됐습니다"
+    for key in ("args", "env_vars"):
+        if key in defn and (not isinstance(defn[key], list) or
+                            any(not isinstance(x, str) for x in defn[key])):
+            return f"{key} 형식이 잘못됐습니다"
+    for key in ("env", "headers"):
+        if key in defn and (not isinstance(defn[key], dict) or
+                any(not isinstance(k, str) or not isinstance(v, str) for k, v in defn[key].items())):
+            return f"{key} 형식이 잘못됐습니다"
+    for key in ("enabled", "disabled"):
+        if key in defn and not isinstance(defn[key], bool):
+            return f"{key} 형식이 잘못됐습니다"
+    kind = defn.get("type")
+    if kind is not None and kind not in ("stdio", "http", "sse"):
+        return "지원하지 않는 전송 형식입니다"
+    if kind and ((kind == "stdio") != bool(defn.get("command"))):
+        return "전송 형식과 명령/URL이 맞지 않습니다"
+    return None
 
 
 def _classify_ref(value, *, style: str = "dollar") -> tuple[Optional[str], bool]:
@@ -162,9 +334,11 @@ def _fingerprint(defn: dict) -> str:
     계산을 여기 두는 이유는 어댑터가 카탈로그를 import하지 않게 하기 위함이고,
     두 벌이 어긋나지 않도록 테스트가 둘을 나란히 비교한다."""
     import hashlib
+    command = defn.get("command")
+    argv = command if isinstance(command, list) else [command, *(defn.get("args") or [])]
     parts = [
-        str(defn.get("command") or ""),
-        " ".join(str(x) for x in (defn.get("args") or [])),
+        str(argv[0] or "") if argv else "",
+        " ".join(str(x) for x in argv[1:]),
         str(defn.get("url") or ""),
     ]
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]
@@ -213,7 +387,8 @@ def _entry(
     extra: Optional[dict] = None,
 ) -> dict:
     style = "brace_env" if tool == "opencode" else "dollar"
-    env = _describe_fields(defn.get("env"), expands=expands, style=style)
+    env = _describe_fields(defn.get("environment") if tool == "opencode" else defn.get("env"),
+                           expands=expands, style=style)
     headers = _describe_fields(defn.get("headers"), expands=expands, style=style)
     notes = list(notes or [])
 
@@ -238,7 +413,9 @@ def _entry(
     # 제약이 있어 API 키처럼 다른 스코프로 복사할 수 없고, 복사해봐야 받는
     # 쪽에서 안 먹거나 조용히 만료된다. 그래서 "있다"는 사실만 표시하고
     # 가져오기 대상에서 뺀다(값은 물론 절대 안 내보낸다).
-    has_oauth = bool(defn.get("oauth")) or "oauth" in _as_mapping(defn.get("auth"))
+    has_oauth = (bool(defn.get("oauth")) or "oauth" in _as_mapping(defn.get("auth"))
+                 or (tool == "opencode" and defn.get("type") == "remote"
+                     and defn.get("oauth") is not False))
     if has_oauth:
         notes.append("OAuth를 쓰는 서버입니다 — 토큰은 다른 스코프로 복제할 수 없어 "
                      "가져오기 대상에서 제외됩니다. 대상 도구에서 직접 인증하세요")
@@ -256,7 +433,9 @@ def _entry(
         "shared": shared,
         "worktree_id": worktree_id,
         "enabled": bool(enabled),
-        "transport": _transport(defn),
+        "transport": ("stdio" if defn.get("type") == "local" else "http")
+                     if tool == "opencode" and defn.get("type") in ("local", "remote")
+                     else _transport(defn),
         # 97번 3단계 §2-5 — 자격증명을 **이름이 아니라 검증된 대상**에 묶기
         # 위한 지문. 같은 이름으로 다른 명령/URL이 걸린 서버에 키가 자동으로
         # 흘러가는 것을 막는 유일한 근거다. 값이 아니라 command/args/url만
@@ -265,6 +444,17 @@ def _entry(
         "env": env,
         "headers": headers,
         "notes": notes,
+        "source_id": definition_hash({"tool": tool, "scope": scope, "source": str(path),
+                                      "name": name, "worktree": worktree_id, "shared": shared})[:24],
+        "raw_hash": definition_hash(defn),
+        "file_revision": file_revision(path),
+        "source_kind": "project" if shared else "direct_file",
+        "owner": tool,
+        "writable": True,
+        "parse_status": "valid",
+        "configuration_state": "approval_pending" if (extra or {}).get("pending_approval")
+                               else ("enabled" if enabled else "disabled"),
+        "runtime_state": "unknown",
     }
     # ADR-48 — 검증 화면이 "이 주소로 요청을 보냅니다"를 물을 때 쓴다. **호스트 이름만**
     # 내보낸다 — URL 전체는 쿼리에 토큰이 붙는 경우가 있어 안 내보낸다.
@@ -315,9 +505,7 @@ def scan_claude(worktree_path: Optional[str] = None, worktree_id: Optional[str] 
     data, err = _read_json(path)
     if err:
         return {"servers": [], "errors": [{"source": str(path), "reason": err}]}
-    if data is None:
-        return {"servers": [], "errors": []}
-
+    data = data or {}
     project = _claude_project_entry(data, worktree_path)
     disabled = set(_as_name_list(project.get("disabledMcpServers")))
     json_enabled = set(_as_name_list(project.get("enabledMcpjsonServers")))
@@ -389,7 +577,7 @@ def _codex_servers(data: dict, *, path: Path, scope: str, worktree_id, notes_com
             continue
         # `env_vars`는 **이름만** 적는 공식 방식 — 시크릿이 파일에 안 남는다.
         env_vars = _as_name_list(defn.get("env_vars"))
-        extra = {"env_vars": env_vars}
+        extra = {"env_vars": env_vars, "policy_effective": not bool(notes_common)}
         bearer = defn.get("bearer_token_env_var")
         if isinstance(bearer, str) and bearer:
             extra["bearer_token_env_var"] = bearer
@@ -591,7 +779,7 @@ _REF_DEFAULT_RE = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}$")
 
 def resolve_launch(
     tool: str, scope: str, name: str, *,
-    worktree_path: Optional[str] = None, worktree_id: Optional[str] = None,
+    worktree_path: Optional[str] = None, worktree_id: Optional[str] = None, raw_definition: Optional[dict] = None,
 ) -> Optional[dict]:
     """검증(`mcp_verify`)에 넘길 스폰 정보. **값이 실려 있다 — 응답으로 내보내지 않는다.**
 
@@ -601,16 +789,30 @@ def resolve_launch(
     http/sse: `{"transport": "http"|"sse", "url"}`.
     못 찾거나 command/url이 없으면 None.
     """
-    defn, _path = find_raw_defn(tool, scope, name, worktree_path=worktree_path, worktree_id=worktree_id)
+    defn = raw_definition
+    if defn is None:
+        defn, _path = find_raw_defn(tool, scope, name, worktree_path=worktree_path, worktree_id=worktree_id)
     if defn is None:
         return None
+
+    requires_cli_auth = bool(defn.get("headers") or defn.get("http_headers")
+                             or defn.get("bearer_token_env_var") or defn.get("oauth") or defn.get("auth")
+                             or (tool == "opencode" and defn.get("type") == "remote" and defn.get("oauth") is not False))
+    if tool == "opencode":
+        # 독립 프로브는 아직 cwd를 전달하지 않는다. 다른 디렉터리에서의
+        # 성공/실패를 실제 OpenCode 실행 결과처럼 표시하지 않는다.
+        if defn.get("cwd"):
+            return None
+        defn, err = opencode_to_common(defn)
+        if err or defn is None:
+            return None
 
     transport = _transport(defn)
     if transport in ("http", "sse"):
         url = defn.get("url") or defn.get("httpUrl") or defn.get("serverUrl")
         if not isinstance(url, str) or not url:
             return None
-        return {"transport": transport, "url": url}
+        return {"transport": transport, "url": url, "requires_cli_auth": requires_cli_auth}
 
     command = defn.get("command")
     if not isinstance(command, str) or not command:
@@ -771,6 +973,19 @@ def opencode_paths() -> dict:
     return {"global": base / "opencode" / "opencode.json"}
 
 
+def opencode_sources(worktree_path: Optional[str] = None) -> list[tuple[Path, str, bool]]:
+    global_path = opencode_paths()["global"]
+    paths = [(global_path, "global", True),
+             (global_path.with_suffix(".jsonc"), "global", False)]
+    if worktree_path:
+        root = Path(worktree_path)
+        paths += [(root / "opencode.json", "local", True),
+                  (root / "opencode.jsonc", "local", False),
+                  (root / ".opencode" / "opencode.json", "local", False),
+                  (root / ".opencode" / "opencode.jsonc", "local", False)]
+    return paths
+
+
 def scan_opencode(worktree_path: Optional[str] = None,
                   worktree_id: Optional[str] = None) -> dict:
     """opencode — 전역 + 프로젝트 `opencode.json`(둘은 **병합**된다).
@@ -786,19 +1001,24 @@ def scan_opencode(worktree_path: Optional[str] = None,
     servers: list[dict] = []
     errors: list[dict] = []
 
-    targets = [(opencode_paths()["global"], "global", False)]
-    if worktree_path:
-        targets.append((Path(worktree_path) / "opencode.json", "local", True))
-
-    for path, scope, shared in targets:
-        data, err = _read_json(path)
+    for priority, (path, scope, writable) in enumerate(opencode_sources(worktree_path)):
+        shared = scope == "local"
+        data, err = (_read_jsonc if path.suffix == ".jsonc" else _read_json)(path)
         if err:
             errors.append({"source": str(path), "reason": err})
             continue
         if data is None:
             continue
+        if "mcp" in data and not isinstance(data["mcp"], dict):
+            errors.append({"source": str(path), "reason": "mcp가 객체가 아님"})
+            continue
         for name, defn in sorted(_as_mapping(data.get("mcp")).items()):
             if not isinstance(defn, dict):
+                errors.append({"source": str(path), "reason": f"{name}: MCP 정의가 객체가 아님"})
+                continue
+            _, schema_error = opencode_to_common(defn)
+            if schema_error:
+                errors.append({"source": str(path), "reason": f"{name}: {schema_error}"})
                 continue
             servers.append(_entry(
                 name=name, tool="opencode", scope=scope, path=path,
@@ -808,6 +1028,8 @@ def scan_opencode(worktree_path: Optional[str] = None,
                 expands=True,
                 shared=shared,
                 worktree_id=worktree_id if scope == "local" else None,
+                extra={"writable": writable, "source_priority": priority,
+                       "ownership": "writable_direct" if writable else "read_only_format"},
             ))
     return {"servers": servers, "errors": errors}
 

@@ -88,3 +88,20 @@ def _no_real_tmux_hooks(request, monkeypatch):
     monkeypatch.setattr(tmux_hooks, "uninstall", lambda: None)
     yield
 
+
+
+@pytest.fixture
+def process_table():
+    """실제 프로세스 표를 읽어야 하는 테스트의 환경 전제조건.
+
+    제한된 실행 환경에서 ps 자체가 EPERM이면 RSS/부모 PID/고아 판정을
+    검증할 수 없다. 일반 환경에서는 실제 프로세스를 그대로 검증한다.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(["ps", "-p", str(os.getpid()), "-o", "pid=,command="],
+                                capture_output=True, text=True)
+    except PermissionError:
+        pytest.skip("실행 환경이 실제 프로세스 표(ps) 조회를 허용하지 않습니다")
+    if result.returncode != 0 or str(os.getpid()) not in result.stdout:
+        pytest.skip("실행 환경이 실제 프로세스 표(ps) 조회를 허용하지 않습니다")

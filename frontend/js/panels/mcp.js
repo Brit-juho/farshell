@@ -143,6 +143,7 @@ async function postToggle(payload) {
 /** 토글 한 번. 승격이 필요하면 한 번 묻고 재시도한다. */
 async function toggle(entry, enabled) {
   const payload = {
+    source_id: entry.source_id,
     tool: entry.tool,
     name: entry.name,
     enabled,
@@ -169,6 +170,7 @@ function toggleButton(entry, facts, onDone) {
     btn.dataset.on = entry.enabled ? '1' : '0';
   };
   paint();
+  if (entry.writable === false) { btn.disabled = true; btn.title = '읽기 전용 출처'; }
 
   btn.addEventListener('click', async () => {
     const next = !entry.enabled;
@@ -205,7 +207,7 @@ function toggleButton(entry, facts, onDone) {
 const _verified = new Map();
 
 function verifyKey(entry) {
-  return [entry.tool, entry.scope, entry.name, entry.worktree_id || _worktreeId || ''].join('|');
+  return [entry.source_id || entry.name, entry.raw_hash || '', entry.tool, entry.scope, entry.worktree_id || _worktreeId || ''].join('|');
 }
 
 function _ago(ts) {
@@ -224,10 +226,12 @@ function verifyResult(r) {
     span.textContent = '확인 중…';
   } else if (r.state === 'connected') {
     // http/sse는 initialize까지만 확인한다(tool_count null) — 「도구 0개」라고 하면 거짓말이다.
-    span.textContent = r.tool_count == null ? '연결됨 · 초기화 확인' : `연결됨 · 도구 ${r.tool_count}개`;
+    span.textContent = r.tool_count == null ? '독립 검사 성공 · 초기화 확인' : `독립 검사 성공 · 도구 ${r.tool_count}개`;
+  } else if (r.state === 'auth_required') {
+    span.textContent = '인증 필요 · 대상 도구에서 로그인하세요';
   } else if (r.state === 'unverified') {
     // 실패가 아니다 — 에이전트 셸에는 그 변수가 있을 수 있다(ADR-46).
-    span.textContent = `확인 불가 — 이 서버 환경에 없음: ${(r.missing || []).join(', ')}`;
+    span.textContent = `확인 불가 — ${r.error || `이 서버 환경에 없음: ${(r.missing || []).join(', ')}`}`;
     span.title = '값을 모르는 채로 띄우면 틀린 실패를 보고하게 되어 실행하지 않았습니다. 에이전트 안에서는 동작할 수 있습니다.';
   } else {
     span.textContent = `실패 — ${r.error || '알 수 없는 오류'}`;
@@ -267,7 +271,7 @@ function verifyControl(entry, onResult) {
     try {
       const r = await postElevated(
         `/api/mcp/servers/${encodeURIComponent(entry.scope)}/${encodeURIComponent(entry.name)}/verify`,
-        { tool: entry.tool, worktree: entry.worktree_id || _worktreeId, confirm_network: remote });
+        { tool: entry.tool, source_id: entry.source_id, worktree: entry.worktree_id || _worktreeId, confirm_network: remote });
       if (!r) { show(_verified.get(verifyKey(entry))); return; }   // 비밀번호 입력 취소
       _verified.set(verifyKey(entry), r);
       show(r);
@@ -616,12 +620,12 @@ function summaryVerify(group) {
   const span = el('span', 'vt-mcp-verify vt-mcp-sumverify');
   const results = group.entries.map((e) => _verified.get(verifyKey(e))).filter(Boolean);
   if (!results.length) return span;
-  const worst = ['error', 'unverified', 'running', 'connected'].find((s) => results.some((r) => r.state === s));
+  const worst = ['error', 'auth_required', 'unverified', 'running', 'connected'].find((s) => results.some((r) => r.state === s));
   span.dataset.state = worst;
   // 실패·확인 불가는 경고와 같은 모양(아이콘 + UI 글꼴) — 가장 나쁜 소식이 가장 낮은 층에 있으면 안 된다.
   if (worst === 'error' || worst === 'unverified') span.innerHTML = icon('alert-triangle', 11);
   span.appendChild(document.createTextNode(
-    { error: '검증 실패', unverified: '확인 불가', running: '확인 중…', connected: '연결됨' }[worst]));
+    { error: '검증 실패', auth_required: '인증 필요', unverified: '확인 불가', running: '확인 중…', connected: '독립 검사 성공' }[worst]));
   return span;
 }
 
@@ -683,6 +687,7 @@ function renderServer(group, facts, tags, data) {
     const row = el('div', 'vt-mcp-row');
     row.appendChild(el('span', 'vt-mcp-tool', TOOL_LABEL[entry.tool] || entry.tool));
     row.appendChild(levelBadge(entry));
+    if (entry.source_id) row.appendChild(el('span', 'vt-mcp-meta', `${entry.writable === false ? '읽기 전용' : '직접 설정'} · ${{ selected: '우선 적용', shadowed: '다른 출처 우선', merged: '필드 병합 참여', policy_blocked: '정책으로 미적용' }[entry.effective_status] || '적용 범위 미확인'} · 실제 실행 미확인`));
     row.appendChild(toggleButton(entry, facts, refresh));
 
     if (entry.transport && entry.transport !== 'unknown') {
@@ -719,14 +724,22 @@ function renderServer(group, facts, tags, data) {
   if (deploy) body.appendChild(deploy);
   const save = el('button', 'vt-chip sm vt-mcp-librarysave', '보관함에 저장');
   save.type = 'button';
+  const sourcePicker = el('select', 'vt-input');
+  sourcePicker.setAttribute('aria-label', `${group.name} 보관할 원본`);
+  for (const [index, source] of group.entries.entries()) {
+    const option = el('option', null, `${TOOL_LABEL[source.tool]} · ${LEVEL_LABEL[levelOf(source)]} · ${source.source || ''}`);
+    option.value = String(index);
+    sourcePicker.appendChild(option);
+  }
+  if (group.entries.length > 1) body.appendChild(sourcePicker);
   save.title = '값이 직접 들어간 정의는 저장하지 않습니다';
   save.addEventListener('click', async () => {
     save.disabled = true;
     try {
-      const src = group.entries[0];
+      const src = group.entries[Number(sourcePicker.value) || 0];
       const r = await postElevated('/api/mcp/library/save', {
         tool: src.tool, scope: src.scope, name: src.name,
-        worktree: src.worktree_id || _worktreeId,
+        worktree: src.worktree_id || _worktreeId, source_id: src.source_id,
       });
       if (r) showToast(`${group.name} 보관함에 저장했습니다`);
     } catch (e) { showToast(e.message || '보관하지 못했습니다', 'error'); }
@@ -1104,6 +1117,19 @@ function renderLibrary(data) {
       const info = el('div', 'vt-mcp-skillinfo');
       info.append(el('strong', null, item.name),
         el('span', 'vt-mcp-meta', `${item.transport} · 사용 가능: ${targets.map((t) => TOOL_LABEL[t]).join(', ')} · 필요한 환경변수: ${(item.env_names || []).join(', ') || '없음'}`));
+      if (item.source) info.appendChild(el('span', 'vt-mcp-meta', `원본: ${TOOL_LABEL[item.source.tool]} · ${item.source.scope} · ${{ current: '원본과 일치', changed: '원본 변경됨', missing: '원본 없음', blocked: '원본 승인·활성화 확인 필요', snapshot: '저장된 사본' }[item.source_state] || '미확인'}`));
+      if (item.source_state === 'changed') {
+        const review = el('button', 'vt-chip sm', '원본 갱신 검토');
+        review.addEventListener('click', async () => {
+          try {
+            const p = await postJson('/api/mcp/library/refresh-preview', { id: item.id });
+            if (await confirmDialog(JSON.stringify(p.diff, null, 2), { title: '원본 갱신', okLabel: '갱신' })) {
+              if (await postElevated('/api/mcp/library/refresh', { id: item.id, token: p.token })) refresh();
+            }
+          } catch (e) { showToast(e.message, 'error'); }
+        });
+        info.appendChild(review);
+      }
       row.appendChild(info);
       const manage = el('select', 'vt-input vt-mcp-librarytarget');
       manage.setAttribute('aria-label', `${item.name} 관리 대상`);
@@ -1145,19 +1171,28 @@ function renderLibrary(data) {
         if (scope === 'local' && !data.worktree) continue;
         const btn = el('button', 'vt-chip sm', label);
         btn.type = 'button';
+        const updateDestination = () => {
+          btn.disabled = (destination.value === 'claude' && scope === 'global') || (destination.value === 'agy' && scope === 'local');
+          btn.title = btn.disabled ? '이 도구는 해당 범위로 꺼진 상태의 배포를 지원하지 않습니다' : '';
+        };
+        updateDestination();
+        destination.addEventListener('change', updateDestination);
         btn.addEventListener('click', async () => {
           btn.disabled = true;
           try {
             const tool = destination.value;
+            if ((tool === 'claude' && scope === 'global') || (tool === 'agy' && scope === 'local')) {
+              showToast(tool === 'claude' ? 'Claude는 이 프로젝트에 꺼진 상태로 추가하세요' : 'agy는 전역 설정만 지원합니다', 'error'); return;
+            }
             const payload = { id: item.id, tool, scope, worktree: _worktreeId };
             const preview = await postJson('/api/mcp/library/preview', payload);
             const message = `${item.name} → ${TOOL_LABEL[tool]} ${scope === 'global' ? '전역' : '이 프로젝트'}\n`
-              + `변경 파일: ${preview.target}\n필요한 환경변수: ${(preview.env_names || []).join(', ') || '없음'}\n${preview.apply}`;
+              + `변경 파일: ${preview.target}\n필요한 환경변수: ${(preview.env_names || []).join(', ') || '없음'}\n${preview.apply}\n${JSON.stringify(preview.diff, null, 2)}`;
             if (!(await confirmDialog(message, { title: 'MCP 추가 미리보기', okLabel: '추가' }))) return;
             const r = await postElevated('/api/mcp/library/apply', { ...payload, token: preview.token });
             if (r) { showToast('MCP를 추가했습니다 — 다음 세션부터 반영됩니다'); refresh(); }
           } catch (e) { showToast(e.message || '추가하지 못했습니다', 'error'); }
-          finally { btn.disabled = false; }
+          finally { updateDestination(); }
         });
         row.appendChild(btn);
       }
@@ -1188,11 +1223,13 @@ function renderLibrary(data) {
       button.addEventListener('click', async () => {
         const ids = chosen.filter((input) => input.checked).map((input) => input.value);
         if (!ids.length) { showToast('가져올 MCP를 선택하세요', 'error'); return; }
-        if (!(await confirmDialog(`기존 도구 설정 ${ids.length}개를 FarShell 보관함에 저장합니다. 도구 설정은 변경하지 않습니다.`,
-          { title: 'MCP 가져오기', okLabel: '보관함에 저장' }))) return;
         button.disabled = true;
         try {
-          const result = await postElevated('/api/mcp/library/import-candidates', { ids, worktree: _worktreeId });
+          const payload = { ids, worktree: _worktreeId };
+          const plan = await postJson('/api/mcp/library/import-preview', payload);
+          const origins = plan.sources.map((x) => `${x.name} · ${TOOL_LABEL[x.tool]} · ${x.scope} · ${x.source}`).join('\n');
+          if (!(await confirmDialog(origins, { title: '가져올 원본 확인', okLabel: '보관함에 저장' }))) return;
+          const result = await postElevated('/api/mcp/library/import-candidates', { ...payload, token: plan.token });
           if (!result) return;
           if (result.status === 'partial') showToast(`${result.saved}개 저장, 일부는 확인이 필요합니다`, 'error');
           else showToast(`${result.saved}개를 보관함에 저장했습니다`);
@@ -1203,6 +1240,31 @@ function renderLibrary(data) {
       importBox.appendChild(button);
     }
     box.appendChild(importBox);
+  }
+  const sync = data.sync || { rules: [], deployments: [] };
+  for (const deployment of sync.deployments || []) {
+    const rule = (sync.rules || []).find((r) => r.id === deployment.id);
+    const row = el('div', 'vt-mcp-skillrow');
+    row.appendChild(el('span', 'vt-mcp-meta', `${deployment.name} → ${TOOL_LABEL[deployment.tool]} · ${deployment.scope} · ${{ paused: '추적 중지', current: '원본과 일치', pending: '원본 변경 검토 필요', diverged: '대상 직접 편집 — 동기화 중단', missing_source: '원본 없음', missing_target: '대상 없음', source_blocked: '원본 검토 필요' }[rule?.state] || '추적 안 함'}`));
+    const toggle = el('button', 'vt-chip sm', rule?.enabled ? '원본 추적 끄기' : '원본 변경 추적');
+    toggle.addEventListener('click', async () => {
+      try { if (await postElevated('/api/mcp/sync/toggle', { id: deployment.id, enabled: !rule?.enabled })) refresh(); }
+      catch (e) { showToast(e.message, 'error'); }
+    });
+    row.appendChild(toggle);
+    if (rule?.state === 'pending') {
+      const review = el('button', 'vt-chip sm', '변경 검토');
+      review.addEventListener('click', async () => {
+        try {
+          const p = await postJson('/api/mcp/sync/preview', { id: rule.id });
+          if (await confirmDialog(`${JSON.stringify(p.diff, null, 2)}\n${p.apply}`, { title: '원본 변경 적용', okLabel: '적용' })) {
+            if (await postElevated('/api/mcp/sync/apply', { id: rule.id, token: p.token })) refresh();
+          }
+        } catch (e) { showToast(e.message, 'error'); }
+      });
+      row.appendChild(review);
+    }
+    box.appendChild(row);
   }
   return box;
 }
@@ -1377,10 +1439,11 @@ function load() {
     vtFetch('/api/mcp/library').catch(() => ({ servers: [] })),
     vtFetch(`/api/mcp/library/candidates${_q()}`).catch(() => ({ candidates: [] })),
     vtFetch('/api/agents').catch(() => ({})),
-  ]).then(([scan, credData, skillData, library, candidates, agents]) => ({
+    vtFetch('/api/mcp/sync').catch(() => ({ rules: [], deployments: [] })),
+  ]).then(([scan, credData, skillData, library, candidates, agents, sync]) => ({
     ...scan, creds: credData.creds || [], refs: credData.refs || [],
     skills: skillData.skills || [], skillErrors: skillData.errors || [],
-    library: library.servers || [],
+    library: library.servers || [], sync,
     candidates: candidates.candidates || [],
     sessionTool: ((agents || {})[(scan.worktree || {}).session] || {}).agent || null,
   }));
@@ -1539,7 +1602,8 @@ function renderPluginRow(g) {
     skill.title = (p.skills || []).join(', ');
     main.appendChild(skill);
   }
-  if (p.bundles_mcp) main.appendChild(el('span', 'vt-mcp-meta', 'MCP 포함'));
+  if (p.bundles_mcp) main.appendChild(el('span', 'vt-mcp-meta', 'MCP 포함 · 플러그인 소유 · 실제 연결 미확인'));
+  for (const server of p.mcp_servers || []) main.appendChild(el('span', 'vt-mcp-meta', `${server.name} · 읽기 전용`));
   if (p.installed === false) {
     const b = el('span', 'vt-mcp-warnbadge');
     b.innerHTML = icon('alert-triangle', 11);

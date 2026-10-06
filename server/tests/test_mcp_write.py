@@ -416,7 +416,7 @@ def oc_home(tmp_path, monkeypatch):
 
 def test_opencode_toggle_sets_enabled_false(oc_home):
     import mcp_write
-    oc_home.write_text(json.dumps({"mcp": {"a": {"command": "x"}}}))
+    oc_home.write_text(json.dumps({"mcp": {"a": {"type": "local", "command": ["x"]}}}))
     out = mcp_write.set_enabled("opencode", "a", False)
     assert out["status"] == "ok" and out["changed"] is True
     assert json.loads(oc_home.read_text())["mcp"]["a"]["enabled"] is False
@@ -424,7 +424,7 @@ def test_opencode_toggle_sets_enabled_false(oc_home):
 
 def test_opencode_toggle_is_idempotent(oc_home):
     import mcp_write
-    oc_home.write_text(json.dumps({"mcp": {"a": {"command": "x"}}}))
+    oc_home.write_text(json.dumps({"mcp": {"a": {"type": "local", "command": ["x"]}}}))
     assert mcp_write.set_enabled("opencode", "a", False)["changed"] is True
     assert mcp_write.set_enabled("opencode", "a", False)["changed"] is False
 
@@ -439,9 +439,18 @@ def test_opencode_toggle_refuses_an_unknown_server(oc_home):
 def test_opencode_toggle_leaves_other_settings_alone(oc_home):
     """opencode.json에는 MCP 말고도 사용자의 설정이 들어 있다."""
     import mcp_write
-    oc_home.write_text(json.dumps({"theme": "dark", "mcp": {"a": {"command": "x"}}}))
+    oc_home.write_text(json.dumps({"theme": "dark", "mcp": {"a": {"type": "local", "command": ["x"]}}}))
     mcp_write.set_enabled("opencode", "a", False)
     assert json.loads(oc_home.read_text())["theme"] == "dark"
+
+
+def test_opencode_toggle_refuses_invalid_existing_definition(oc_home):
+    import mcp_write
+    before = {"mcp": {"a": {"command": "x"}}}
+    oc_home.write_text(json.dumps(before))
+    out = mcp_write.set_enabled("opencode", "a", False)
+    assert out["status"] == "failed"
+    assert json.loads(oc_home.read_text()) == before
 
 
 def test_opencode_deploy_uses_its_own_reference_syntax(oc_home):
@@ -455,6 +464,31 @@ def test_opencode_deploy_uses_its_own_reference_syntax(oc_home):
     assert "sk-real-secret" not in text
     assert "{env:FSH_MCP_NOTION_TOKEN}" in text
     assert "${" not in text
+    assert json.loads(text)["mcp"]["notion"] == {
+        "type": "local", "command": ["npx"],
+        "environment": {"TOKEN": "{env:FSH_MCP_NOTION_TOKEN}"},
+    }
+
+
+def test_opencode_deploy_refuses_fields_it_cannot_render(oc_home):
+    import mcp_write
+    out = mcp_write.deploy("unsafe", {"command": "npx", "cwd": "/tmp"},
+                           tool="opencode")
+    assert out["status"] == "failed"
+    assert not oc_home.exists()
+
+
+def test_opencode_remote_deploy_requires_explicit_auth_mode(oc_home):
+    import mcp_write
+    implicit = mcp_write.deploy("remote", {"url": "https://example.invalid/mcp"},
+                                tool="opencode")
+    assert implicit["status"] == "failed" and not oc_home.exists()
+    explicit = mcp_write.deploy("remote", {"url": "https://example.invalid/mcp",
+                                            "oauth": False}, tool="opencode")
+    assert explicit["status"] == "ok"
+    assert json.loads(oc_home.read_text())["mcp"]["remote"] == {
+        "type": "remote", "url": "https://example.invalid/mcp", "oauth": False,
+    }
 
 
 def test_oauth_servers_are_never_deployed(home):
@@ -772,3 +806,12 @@ def test_deploy_to_agy_without_credentials_still_works(home):
     out = mcp_write.deploy("plain", {"command": "npx", "args": ["-y", "x"]}, tool="agy", scope="global")
     assert out["status"] == "ok", out
     assert "plain" in _read_agy(home)["mcpServers"]
+
+
+def test_deploy_rechecks_source_under_target_lock(home):
+    target = home / '.codex' / 'config.toml'
+    target.write_text('# preserve\n')
+    result = mcp_write.deploy('tracked', {'command': 'test'}, tool='codex',
+                              source_guard=lambda: False)
+    assert result['status'] == 'failed'
+    assert target.read_text() == '# preserve\n'

@@ -263,3 +263,13 @@ Turn the hooks on once per clone: `git config core.hooksPath scripts/githooks`. 
 `scripts/guard_personal.py range A..B` (any range) and `scripts/guard_personal.py history` (every commit; slow, for audits).
 The only bypass is `FSH_GUARD_SKIP=1`, which prints a warning; agents do not use it. `scripts/check_docs.py` keeps
 scanning the *tracked* files for personal values — the guard covers what is about to be added.
+
+
+### 제한된 실행 환경의 서버 검증
+
+실제 파일 감시 통합 테스트는 watchfiles의 polling backend(50ms)를 사용해
+OS별 native 감시 권한·시작 지연과 독립적으로 실제 파일 변경을 확인한다.
+`test_vt_paths`의 기본 HOME도 임시 디렉터리로 고정해 실제 사용자 상태에 쓰지 않는다.
+실제 프로세스 표가 필요한 테스트 5건은 `process_table` 전제조건을 먼저 검사한다.
+`ps` 실행/조회가 차단되면 원인을 적어 skip하며, 이를 기능 통과로 계산하지 않는다.
+일반 개발 환경과 CI에서는 실제 프로세스를 사용한 검증을 계속 수행한다.

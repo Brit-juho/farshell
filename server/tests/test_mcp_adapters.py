@@ -400,11 +400,11 @@ def test_opencode_scan_reads_global_and_project(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_OPENCODE_HOME", str(tmp_path / "cfg"))
     g = tmp_path / "cfg" / "opencode" / "opencode.json"
     g.parent.mkdir(parents=True)
-    g.write_text(json.dumps({"mcp": {"a": {"command": "x"},
-                                     "off": {"command": "y", "enabled": False}}}))
+    g.write_text(json.dumps({"mcp": {"a": {"type": "local", "command": ["x"]},
+                                     "off": {"type": "local", "command": ["y"], "enabled": False}}}))
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "opencode.json").write_text(json.dumps({"mcp": {"b": {"command": "z"}}}))
+    (repo / "opencode.json").write_text(json.dumps({"mcp": {"b": {"type": "local", "command": ["z"]}}}))
 
     out = _a.scan_opencode(str(repo), "wt1")
     by = {s["name"]: s for s in out["servers"]}
@@ -418,8 +418,8 @@ def test_opencode_scan_never_leaks_values(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_OPENCODE_HOME", str(tmp_path / "cfg"))
     g = tmp_path / "cfg" / "opencode" / "opencode.json"
     g.parent.mkdir(parents=True)
-    g.write_text(json.dumps({"mcp": {"a": {"command": "x",
-                                           "env": {"T": "sk-should-never-appear"}}}}))
+    g.write_text(json.dumps({"mcp": {"a": {"type": "local", "command": ["x"],
+                                           "environment": {"T": "sk-should-never-appear"}}}}))
     out = _a.scan_opencode(None, None)
     assert "sk-should-never-appear" not in json.dumps(out, ensure_ascii=False)
     assert out["servers"][0]["env"][0]["key"] == "T"
@@ -429,8 +429,42 @@ def test_opencode_project_file_warns_about_committing_with_its_own_syntax():
     """공유 파일 경고가 `${VAR}`를 예시로 들면 opencode 사용자에겐 틀린 조언이다."""
     entry = _a._entry(name="n", tool="opencode", scope="local",
                       path=_Path("/repo/opencode.json"), enabled=True,
-                      defn={"env": {"T": "sk-literal"}}, expands=True, shared=True)
+                      defn={"environment": {"T": "sk-literal"}}, expands=True, shared=True)
     assert any("{env:VAR}" in n for n in entry["notes"])
+
+
+def test_opencode_official_local_and_remote_are_read_and_launchable(tmp_path, monkeypatch):
+    monkeypatch.setenv("VT_OPENCODE_HOME", str(tmp_path / "cfg"))
+    path = _a.opencode_paths()["global"]
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcp": {
+        "local": {"type": "local", "command": ["python3", "-m", "sample"],
+                  "environment": {"TOKEN": "{env:EXAMPLE_TOKEN}"}},
+        "remote": {"type": "remote", "url": "https://example.invalid/mcp"},
+    }}))
+    scanned = {s["name"]: s for s in _a.scan_opencode()["servers"]}
+    assert scanned["local"]["transport"] == "stdio"
+    assert scanned["local"]["env"] == [{"key": "TOKEN", "ref": "EXAMPLE_TOKEN", "literal": False}]
+    assert scanned["remote"]["transport"] == "http"
+    local = _a.resolve_launch("opencode", "global", "local")
+    assert local["command"] == "python3" and local["args"] == ["-m", "sample"]
+    assert local["missing"] == ["EXAMPLE_TOKEN"]
+    remote = _a.resolve_launch("opencode", "global", "remote")
+    assert remote == {"transport": "http", "url": "https://example.invalid/mcp", "requires_cli_auth": True}
+
+
+def test_opencode_invalid_definition_is_reported_instead_of_listed(tmp_path, monkeypatch):
+    monkeypatch.setenv("VT_OPENCODE_HOME", str(tmp_path / "cfg"))
+    path = _a.opencode_paths()["global"]
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcp": {"broken": {"command": "npx"}}}))
+    result = _a.scan_opencode()
+    assert result["servers"] == []
+    assert "broken" in result["errors"][0]["reason"]
+    path.write_text(json.dumps({"mcp": []}))
+    malformed = _a.scan_opencode()
+    assert malformed["servers"] == []
+    assert malformed["errors"][0]["reason"] == "mcp가 객체가 아님"
 
 
 # ------------------------------------------------------ 검증(P3-2) 전용 경로
@@ -519,7 +553,7 @@ def test_resolve_launch_uses_ref_default_when_unset(home, monkeypatch):
 def test_resolve_launch_http_returns_url_not_env(home):
     _write_claude(home, {"mcpServers": {"n": {"url": "https://e.example/mcp"}}})
     launch = mcp_adapters.resolve_launch("claude", "global", "n")
-    assert launch == {"transport": "http", "url": "https://e.example/mcp"}
+    assert launch == {"transport": "http", "url": "https://e.example/mcp", "requires_cli_auth": False}
 
 
 def test_resolve_launch_codex_pulls_named_vars_from_our_own_environment(home, monkeypatch):
@@ -587,3 +621,14 @@ def test_scan_exposes_only_the_url_host(home):
     s = mcp_adapters.scan_claude()["servers"][0]
     assert s["url_host"] == "mcp.example.com"
     assert "sk-secret" not in json.dumps(s)
+
+
+def test_jsonc_reader_preserves_comment_like_strings(tmp_path):
+    path = tmp_path / 'opencode.jsonc'
+    path.write_text('''{
+      // comment
+      "mcp": {"docs": {"type": "remote", "url": "https://example.com/a//b?x=/*literal*/", "oauth": false,},},
+    }''')
+    data, error = mcp_adapters._read_jsonc(path)
+    assert error is None
+    assert data['mcp']['docs']['url'] == 'https://example.com/a//b?x=/*literal*/'

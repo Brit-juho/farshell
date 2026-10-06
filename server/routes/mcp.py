@@ -38,6 +38,8 @@ import mcp_scan
 import mcp_skills
 import mcp_verify
 import mcp_write
+import mcp_sources
+import mcp_sync
 from auth import require_elevated
 
 logger = logging.getLogger(__name__)
@@ -65,7 +67,7 @@ async def list_library_candidates(worktree: str | None = Query(default=None)):
 async def import_library_candidates(request: Request):
     body = await request.json()
     result = await asyncio.to_thread(mcp_library.import_candidates, body.get("ids"),
-                                     body.get("worktree") or None)
+                                     body.get("worktree") or None, str(body.get("token") or ""))
     return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
 
 
@@ -74,7 +76,54 @@ async def save_library(request: Request):
     body = await request.json()
     result = await asyncio.to_thread(mcp_library.save, str(body.get("tool") or ""),
                                      str(body.get("scope") or ""), str(body.get("name") or ""),
-                                     body.get("worktree") or None)
+                                     body.get("worktree") or None, body.get("source_id") or None)
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@router.post("/api/mcp/library/import-preview")
+async def preview_library_import(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.import_preview, body.get("ids"), body.get("worktree") or None)
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@router.post("/api/mcp/library/refresh-preview")
+async def preview_library_refresh(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.refresh_preview, str(body.get("id") or ""))
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@elevated_router.post("/api/mcp/library/refresh")
+async def refresh_library_source(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_library.refresh_source, str(body.get("id") or ""), str(body.get("token") or ""))
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@router.get("/api/mcp/sync")
+async def list_mcp_sync():
+    return await asyncio.to_thread(mcp_sync.list_rules)
+
+
+@elevated_router.post("/api/mcp/sync/toggle")
+async def toggle_mcp_sync(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_sync.set_enabled, str(body.get("id") or ""), body.get("enabled"))
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@router.post("/api/mcp/sync/preview")
+async def preview_mcp_sync(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_sync.preview, str(body.get("id") or ""))
+    return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
+
+
+@elevated_router.post("/api/mcp/sync/apply")
+async def apply_mcp_sync(request: Request):
+    body = await request.json()
+    result = await asyncio.to_thread(mcp_sync.apply, str(body.get("id") or ""), str(body.get("token") or ""))
     return JSONResponse(result, status_code=409 if result["status"] == "failed" else 200)
 
 
@@ -289,6 +338,11 @@ async def toggle_mcp(request: Request):
     if scope not in ("global", "local"):
         return JSONResponse({"error": "invalid_scope"}, status_code=400)
 
+    if body.get("source_id"):
+        entry, raw, error = await asyncio.to_thread(mcp_sources.find, str(body["source_id"]), worktree_id)
+        if (error or entry is None or not entry.get("writable")
+                or (entry["tool"], entry["scope"], entry["name"], bool(entry.get("shared"))) != (tool, scope, name, shared)):
+            return JSONResponse({"error": "readonly_or_changed_source"}, status_code=409)
     result = await asyncio.to_thread(
         mcp_write.set_enabled,
         tool, name, enabled,
@@ -532,11 +586,20 @@ async def verify_mcp_server(scope: str, name: str, request: Request):
     if scope == "local" and not worktree_path:
         return JSONResponse({"error": "missing_worktree"}, status_code=400)
 
+    raw = None
+    if body.get("source_id"):
+        entry, raw, error = await asyncio.to_thread(mcp_sources.find, str(body["source_id"]), worktree_id)
+        if error or entry is None or (entry["tool"], entry["scope"], entry["name"]) != (tool, scope, name):
+            return JSONResponse({"error": "source_changed"}, status_code=409)
     launch = await asyncio.to_thread(
         mcp_adapters.resolve_launch, tool, scope, name,
-        worktree_path=worktree_path, worktree_id=worktree_id,
+        worktree_path=worktree_path, worktree_id=worktree_id, raw_definition=raw,
     )
     if launch is None:
+        existing, _ = mcp_adapters.find_raw_defn(tool, scope, name, worktree_path=worktree_path, worktree_id=worktree_id)
+        if raw is not None or existing is not None:
+            return {"state": "unverified", "tool_count": None, "error": "독립 검사에서 실행 의미를 보존할 수 없는 정의입니다",
+                    "evidence": "independent_probe", "runtime_state": "unknown", "checked_at": time.time()}
         return JSONResponse({"error": "not_found"}, status_code=404)
 
     if launch["transport"] == "stdio":
@@ -548,5 +611,10 @@ async def verify_mcp_server(scope: str, name: str, request: Request):
             launch["command"], launch["args"], launch["env"], inherit=launch.get("inherit"))
     else:
         # E21 — 네트워크 행위는 사용자 확인 없이 부르지 않는다.
+        if launch.get("requires_cli_auth"):
+            return {"state": "unverified", "tool_count": None, "error": "대상 도구의 인증을 사용하는 원격 MCP입니다 — 대상 도구에서 확인하세요",
+                    "evidence": "independent_probe", "runtime_state": "unknown", "checked_at": time.time()}
+        if launch["transport"] == "sse":
+            return {"state": "unverified", "error": "SSE 독립 검사는 지원하지 않습니다", "runtime_state": "unknown"}
         result = await mcp_verify.verify_http(launch["url"], confirmed=confirmed)
-    return result
+    return {**result, "evidence": "independent_probe", "runtime_state": "unknown"}

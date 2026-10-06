@@ -190,3 +190,34 @@ def test_http_connection_refused_is_a_readable_message():
     r = asyncio.run(mcp_verify.verify_http(f"http://127.0.0.1:{port}/mcp", confirmed=True, timeout=3))
     assert r["state"] == "error"
     assert "urlopen" not in r["error"] and "거부" in r["error"]
+
+
+def test_http_probe_distinguishes_auth_and_validates_initialize():
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+    class Handler(BaseHTTPRequestHandler):
+        code = 401
+        payload = {}
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            self.send_response(self.code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(self.payload).encode())
+        def log_message(self, *args):
+            pass
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f'http://127.0.0.1:{server.server_port}/mcp'
+        assert asyncio.run(mcp_verify.verify_http(url, confirmed=True))['state'] == 'auth_required'
+        Handler.code = 200
+        assert asyncio.run(mcp_verify.verify_http(url, confirmed=True))['state'] == 'error'
+        Handler.payload = {'jsonrpc': '2.0', 'id': 1, 'result': {'protocolVersion': '2024-11-05', 'serverInfo': {'name': 'test', 'version': '1'}}}
+        result = asyncio.run(mcp_verify.verify_http(url, confirmed=True))
+        assert result['state'] == 'connected', result
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()

@@ -55,7 +55,7 @@ async function build({ scan = scanPayload(), toggle, group,
                        pluginData = { plugins: [] }, pluginGate = null,
                        skillData = { skills: [] }, libraryData = { servers: [] },
                        candidateData = { candidates: [] },
-                       agents = {},
+                       agents = {}, syncData = { rules: [], deployments: [] },
                        verify = () => ({ state: 'connected', tool_count: 3, error: null, checked_at: Date.now() / 1000 }) } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
@@ -93,11 +93,18 @@ async function build({ scan = scanPayload(), toggle, group,
         const body = JSON.parse(opts.body);
         posts.push({ _url: u.replace(/^.*\/api/, '/api').split('?')[0], ...body });
         return Promise.resolve({ ok: true, json: () => Promise.resolve(
-          u.includes('/preview') ? { status: 'ok', token: 'preview-token', target: '/target/config', env_names: [], apply: '다음 세션부터' }
+          u.includes('preview') ? { status: 'ok', sources: candidateData.candidates, diff: {}, token: 'preview-token', target: '/target/config', env_names: [], apply: '다음 세션부터' }
             : { status: 'ok' }) });
       }
       if (u.includes('/candidates')) return Promise.resolve({ ok: true, json: () => Promise.resolve(candidateData) });
       return Promise.resolve({ ok: true, json: () => Promise.resolve(libraryData) });
+    }
+    if (u.includes('/api/mcp/sync')) {
+      if (opts?.method === 'POST') {
+        posts.push({ _url: u.replace(/^.*\/api/, '/api').split('?')[0], ...JSON.parse(opts.body) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(syncData) });
     }
     if (u.includes('/api/agents')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(agents) });
@@ -582,7 +589,7 @@ test('검증 — 누르면 그 항목의 도구·워크트리로 요청하고 �
                    { tool: 'claude', worktree: 'wt1', net: false });
   const res = host.querySelector('.vt-mcp-verifybox .vt-mcp-verify');
   assert.equal(res.dataset.state, 'connected');
-  assert.match(res.textContent, /연결됨 · 도구 3개/);
+  assert.match(res.textContent, /독립 검사 성공 · 도구 3개/);
 });
 
 test('검증 — 확인 불가는 실패와 구분되고 모자란 변수 이름을 말한다', async () => {
@@ -631,7 +638,7 @@ test('검증 결과는 다시 그려도 남는다(이 화면을 연 동안)', as
   Array.from(host.querySelectorAll('.vt-mcp-tagadd')).find((b) => b.textContent === '+ 태그').click();
   await answerPrompt(document, { value: 'x' });
   await flush(); await flush(); await flush();
-  assert.match(host.querySelector('.vt-mcp-verifybox .vt-mcp-verify').textContent, /연결됨/);
+  assert.match(host.querySelector('.vt-mcp-verifybox .vt-mcp-verify').textContent, /독립 검사 성공/);
 });
 
 test('검증 — http는 도구 수를 재지 않으므로 「도구 0개」라고 하지 않는다', async () => {
@@ -639,7 +646,7 @@ test('검증 — http는 도구 수를 재지 않으므로 「도구 0개」라�
   verifyBtn(host).click();
   await flush(); await flush();
   const text = host.querySelector('.vt-mcp-verifybox .vt-mcp-verify').textContent;
-  assert.match(text, /연결됨/);
+  assert.match(text, /독립 검사 성공/);
   assert.doesNotMatch(text, /도구 0개/);
 });
 
@@ -697,6 +704,7 @@ test('보관함 MCP는 미리보기를 확인한 뒤 선택한 도구에 추가�
   });
   host.querySelector('[data-page="library"]').click();
   host.querySelector('.vt-mcp-desttool').value = 'codex';
+  host.querySelector('.vt-mcp-desttool').dispatchEvent(new host.ownerDocument.defaultView.Event('change'));
   Array.from(host.querySelectorAll('.vt-mcp-library button'))
     .find((b) => b.textContent === '전역에 추가').click();
   await answerConfirm(document, { accept: true });
@@ -903,4 +911,27 @@ test('플러그인도 같은 검색·도구 필터가 걸린다', async () => {
   input.value = 'alp';
   input.dispatchEvent(new document.defaultView.Event('input'));
   assert.deepEqual(texts(host, '.vt-mcp-plugrow .vt-mcp-name'), ['alpha']);
+});
+
+
+test('원본 추적은 직접 수정된 대상에 변경 적용 버튼을 제공하지 않는다', async () => {
+  const { host, posts } = await build({ syncData: {
+    deployments: [{ id: 'deployed', name: 'docs', tool: 'codex', scope: 'global' }],
+    rules: [{ id: 'deployed', enabled: true, state: 'diverged' }],
+  } });
+  host.querySelector('[data-page="library"]').click();
+  assert.match(host.textContent, /대상 직접 편집 — 동기화 중단/);
+  assert.equal(Array.from(host.querySelectorAll('button')).some((b) => b.textContent === '변경 검토'), false);
+  Array.from(host.querySelectorAll('button')).find((b) => b.textContent === '원본 추적 끄기').click();
+  await flush(); await flush();
+  assert.deepEqual(posts.find((p) => p._url === '/api/mcp/sync/toggle'), { _url: '/api/mcp/sync/toggle', id: 'deployed', enabled: false });
+});
+
+test('독립 검사의 인증 필요 결과는 펼친 행과 요약 행 모두 인증 필요로 표시한다', async () => {
+  const { host } = await build({ verify: () => ({ state: 'auth_required', tool_count: null, error: 'HTTP 401' }) });
+  verifyBtn(host).click();
+  await flush(); await flush();
+  assert.match(host.querySelector('.vt-mcp-verifybox').textContent, /인증 필요/);
+  assert.match(host.querySelector('.vt-mcp-sumverify').textContent, /인증 필요/);
+  assert.doesNotMatch(host.querySelector('.vt-mcp-sumverify').textContent, /undefined|연결됨/);
 });

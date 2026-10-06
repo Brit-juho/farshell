@@ -25,6 +25,15 @@ cannot change another tool's configuration. Copy targets are checked against
 the complete scan, including other tools. The All view is for comparison;
 group writes are available within a selected tool.
 
+OpenCode MCP definitions use its native `type: local` with an array `command` and
+`environment`, or `type: remote` with `url`. FarShell scans and prepares probes from
+those fields, and reports malformed entries as scan errors. The portable library
+accepts local definitions only when no OpenCode-only fields would be lost; its
+OpenCode deployment renderer writes the native local form. Remote OpenCode library
+imports remain unavailable because the library cannot retain the distinction
+between omitted OAuth and `oauth: false`. Direct remote deployment therefore
+requires explicit `oauth: false`. OpenCode's own OAuth credentials stay in OpenCode.
+
 The popup now has Library, Tool settings, and Current session views. The library
 shows only portable, secret-free MCP definitions saved in the FarShell catalog,
 grouped as common or tool-specific by their configured targets. Installed direct
@@ -199,3 +208,24 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
 - `list_shared_sessions` shows each session's nick, mode, state and **my** read/write status (`granted`/`pending`/`denied`/`none`/
   `unavailable`); it never shows session names or folders.
 - The `agent_status` states are only known for sessions with hooks. A plain shell has no state, so sends to it are allowed.
+
+
+### MCP 갱신·출처 추적 (2026-10-06)
+
+- 각 설정 항목에 `source_id`, 파일 revision, 원문 hash, 소유자, 쓰기 가능 여부,
+  설정 상태와 실효 우선순위를 제공한다. OpenCode의 같은 이름 정의는 필드 병합 참여
+  출처로 표시한다. JSONC와 추가 디렉터리 정의는 읽기 전용이다.
+- 보관함 가져오기·원본 갱신·배포·동기화는 서버에 보관한 300초 단회 계획을 검토한
+  뒤 적용한다. 원문 명령·인자·URL·자격증명 값은 미리보기 응답에 포함하지 않는다.
+- 새 배포는 기본 꺼짐이다. Claude는 비공유 프로젝트 설정에만 배포하고, agy는 전역만
+  지원한다. 의미를 보존할 수 없는 자격증명 참조·추가 필드는 복제를 거절한다.
+- 원본 추적은 FarShell이 배포한 대상만 선택적으로 켤 수 있다. 조회 때 원본 변경을
+  발견하지만 쓰기는 사용자의 미리보기 확인 이후에만 한다. 대상 직접 편집은
+  `diverged`로 중단한다. 적용 직전 대상 락 안에서 원본과 대상 revision을 재검사한다.
+  외부 CLI가 FarShell의 락에 협조하지 않으므로 모든 외부 변경의 원자적 차단을
+  보장하는 것은 아니다.
+- 설정 켬/끔, 독립 검사, 실제 CLI 실행 상태는 별개다. 독립 HTTP 검사에서 401/403은
+  인증 필요이며, initialize 응답 형식을 확인한다. 리다이렉트·과대 응답을 거절하고
+  SSE 검사는 미지원으로 표시한다. 실제 실행 상태는 확인 채널이 없어 `unknown`이다.
+- 플러그인 번들의 MCP 이름은 플러그인 아래 읽기 전용으로 표시한다. 인증·플러그인
+  설치·스킬 설치의 양방향 동기화는 수행하지 않는다.

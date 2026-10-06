@@ -308,7 +308,7 @@ def test_corrupt_grants_preserved_before_next_save(web, bad):
     assert len(json.loads(path.read_text())["requests"]) == 1
 
 
-def test_grant_survives_cli_restart_in_same_tmux_session(web):
+def test_grant_survives_cli_restart_in_same_tmux_session(process_table, web):
     """/new·/clear·CLI 재시작 = 같은 tmux 세션의 다른 프로세스. 권한은 Claude session_id 가 아니라 tmux 세션에 묶인다."""
     human, agent, env = web
     env.mk("target")

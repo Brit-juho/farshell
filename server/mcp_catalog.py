@@ -333,9 +333,11 @@ def fingerprint(defn: dict) -> str:
     건 **그 명령/URL로 뜨는 프로세스**다.
     """
     import hashlib
+    command = defn.get("command")
+    argv = command if isinstance(command, list) else [command, *(defn.get("args") or [])]
     parts = [
-        str(defn.get("command") or ""),
-        " ".join(str(x) for x in (defn.get("args") or [])),
+        str(argv[0] or "") if argv else "",
+        " ".join(str(x) for x in argv[1:]),
         str(defn.get("url") or ""),
     ]
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]

@@ -339,7 +339,7 @@ def test_load_health_timeout_kills_child(env, eng, monkeypatch):
     assert _wait_dead(pid)
 
 
-def test_rss_mb(env, eng):
+def test_rss_mb(process_table, env, eng):
     assert eng.rss_mb() == 0
     _put_model(env.hub)
     eng.load(SPEC)
@@ -353,7 +353,7 @@ def _pid_file(env):
     return p
 
 
-def test_kill_orphan_terminates_our_server(env, eng):
+def test_kill_orphan_terminates_our_server(process_table, env, eng):
     port = mod._free_port()
     proc = subprocess.Popen([str(env.exe), "--port", str(port), "--api-key", "k", "--host", "127.0.0.1"],
                             start_new_session=True)
@@ -370,7 +370,7 @@ def test_kill_orphan_terminates_our_server(env, eng):
             proc.wait()
 
 
-def test_kill_orphan_leaves_unrelated_process(env, eng):
+def test_kill_orphan_leaves_unrelated_process(process_table, env, eng):
     other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         _pid_file(env).write_text(str(other.pid))
@@ -391,7 +391,7 @@ def test_kill_orphan_bad_pid_file(env, eng):
     eng2._kill_orphan()
 
 
-def test_load_cleans_orphan_first(env, eng):
+def test_load_cleans_orphan_first(process_table, env, eng):
     _put_model(env.hub)
     port = mod._free_port()
     orphan = subprocess.Popen([str(env.exe), "--port", str(port), "--api-key", "k", "--host", "127.0.0.1"],

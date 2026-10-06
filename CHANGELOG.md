@@ -10,6 +10,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **MCP 출처 관리·검토형 가져오기·선택형 동기화**. 원본 ID와 소유자·우선순위를 표시하고,
+  300초 단회 미리보기 후 원본과 대상 변경을 재검사한다. 새 배포는 기본 꺼짐이며,
+  FarShell 배포 대상의 원본 변경만 검토 후 적용한다. 대상 직접 편집은 보존하고 추적을 중단한다.
+  설정 상태·독립 검사·실제 실행 상태를 분리하고, 플러그인 MCP는 읽기 전용으로 표시한다.
+  OpenCode native 정의 및 JSONC 읽기를 지원하며, 의미를 보존할 수 없는 변환은 거절한다.
+
 - **에이전트 세션 공유** (`server/agent_share.py`, `share_identity.py`, `routes/agent_share.py`,
   `server/mcp_farshell.py`). 에이전트는 세션을 만들 수 없다 — 사용자가 평범한 tmux 세션에 닉네임과 모드
   (`read`/`readwrite`)를 붙여 공유하면(tmux 옵션 `@fsh_share_nick`·`@fsh_share_mode`, 세션 목록의 `share`

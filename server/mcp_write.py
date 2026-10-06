@@ -185,13 +185,15 @@ def _load_json_for_write(path: Path) -> dict:
 
 
 def _commit_json(path: Path, before: dict, after: dict, touched: str, verify,
-                 *, allow_new_key: bool = False) -> dict:
+                 *, allow_new_key: bool = False, expected_revision: Optional[str] = None) -> dict:
     _guard_minimal_change(before, after, touched, allow_new_key=allow_new_key)
     stamp = _stamp(path)
     text = json.dumps(after, indent=2, ensure_ascii=False) + "\n"
 
     if _stamp(path) != stamp:
         raise WriteRefused("쓰는 사이 외부에서 파일이 바뀌었다 — 다시 시도할 것")
+    if expected_revision is not None and mcp_adapters.file_revision(path) != expected_revision:
+        raise WriteRefused("미리보기 뒤 대상 파일이 바뀌었습니다")
     _atomic_write(path, text)
 
     # 재읽기 — 우리가 의도한 상태가 실제로 파일에 있는지.
@@ -545,6 +547,9 @@ def set_enabled(
         return {"status": "failed", "reason": "워크트리를 찾지 못했다", "changed": False}
     wt_path = wt.get("path") if wt else None
 
+    import mcp_library
+    import mcp_sync
+    before_activation, _ = mcp_library.target_raw(tool, scope, name, worktree_id)
     try:
         if tool == "claude":
             out = _claude_set(name, enabled, worktree_path=wt_path, shared=shared)
@@ -564,6 +569,8 @@ def set_enabled(
     except OSError as e:
         return {"status": "failed", "reason": f"파일 오류: {e.__class__.__name__}", "changed": False}
 
+    if out.get("status") == "ok":
+        mcp_sync.record_activation(tool, scope, name, worktree_id, before_activation)
     out.setdefault("reason", None)
     return out
 
@@ -621,6 +628,10 @@ def apply_group(
             results.append({**entry, "status": "ok", "changed": False, "reason": None,
                             "skipped": True})
             continue
+        if not s.get("writable", True):
+            results.append({**entry, "status": "failed", "changed": False,
+                            "reason": "읽기 전용 출처는 그룹에서 변경하지 않습니다", "skipped": False})
+            continue
         out = set_enabled(
             s["tool"], s["name"], enabled,
             scope=s["scope"],
@@ -667,6 +678,9 @@ DEPLOY_TARGETS = {
 
 def _deploy_target_path(tool: str, scope: str, *, worktree_path, shared: bool):
     if tool == "opencode":
+        if any(p.exists() and not writable and s == scope
+               for p, s, writable in mcp_adapters.opencode_sources(worktree_path)):
+            raise WriteRefused("OpenCode 추가 설정/JSONC 출처가 있습니다 — 해당 파일은 읽기 전용입니다")
         if scope == "local":
             if not worktree_path:
                 raise WriteRefused("로컬 스코프는 워크트리를 지정해야 한다")
@@ -697,6 +711,10 @@ def deploy(
     worktree_path: Optional[str] = None,
     shared: bool = False,
     env_map: Optional[dict] = None,
+    expected_revision: Optional[str] = None,
+    replace_hash: Optional[str] = None,
+    initial_enabled: Optional[bool] = None,
+    source_guard=None,
 ) -> dict:
     """서버 정의 하나를 그 도구·스코프에 심는다. **값은 참조로 바꿔서.**
 
@@ -731,6 +749,18 @@ def deploy(
 
     # 1) 값 → 참조.
     ready = mcp_adapters.apply_refs(tool, defn, env_map or {})
+    if initial_enabled is not None:
+        if tool in ("codex", "opencode"):
+            ready["enabled"] = initial_enabled
+        elif tool == "agy":
+            ready["disabled"] = not initial_enabled
+        elif tool == "claude" and (scope == "global" or shared or not worktree_path):
+            return {"status": "failed", "changed": False,
+                    "reason": "Claude는 프로젝트별로 꺼짐을 기록합니다 — 이 프로젝트의 비공유 설정을 선택하세요"}
+
+    schema_error = mcp_adapters.validate_definition(tool, ready)
+    if schema_error:
+        return {"status": "failed", "changed": False, "reason": schema_error}
 
     # 2) **마지막 관문.** 하나라도 값이 남아 있으면 파일을 열지 않는다.
     leaked = mcp_adapters.has_literal_secret(ready, tool=tool)
@@ -739,8 +769,14 @@ def deploy(
                 "reason": f"값이 그대로 남은 칸이 있다: {', '.join(leaked)} — "
                           f"자격증명을 먼저 등록하고 그 칸을 참조로 지정할 것"}
 
+    if tool == "opencode":
+        ready, error = mcp_adapters.common_to_opencode(ready)
+        if error:
+            return {"status": "failed", "reason": error, "changed": False}
+
     if tool == "codex":
-        return _codex_deploy(name, ready, scope=scope, worktree_path=worktree_path)
+        return _codex_deploy(name, ready, scope=scope, worktree_path=worktree_path,
+                             expected_revision=expected_revision, replace_hash=replace_hash, source_guard=source_guard)
 
     try:
         path, top_key, project_path = _deploy_target_path(
@@ -750,6 +786,11 @@ def deploy(
 
     try:
         with _locked(path):
+            if source_guard is not None and not source_guard():
+                raise WriteRefused("적용 직전 원본이 바뀌었습니다")
+            revision = mcp_adapters.file_revision(path)
+            if expected_revision is not None and revision != expected_revision:
+                raise WriteRefused("미리보기 뒤 대상 파일이 바뀌었습니다")
             before = _load_json_for_write(path)
             after = json.loads(json.dumps(before))
 
@@ -761,13 +802,21 @@ def deploy(
                 if not isinstance(entry, dict):
                     raise WriteRefused("projects 항목이 객체가 아니다 — 쓰기를 중단했다")
                 block = entry.setdefault("mcpServers", {})
+                if initial_enabled is not None:
+                    _set_membership(entry, "disabledMcpServers", name, not initial_enabled)
             else:
                 block = after.setdefault(top_key, {})
             if not isinstance(block, dict):
                 raise WriteRefused(f"{top_key}가 객체가 아니다 — 쓰기를 중단했다")
 
-            if name in block and block[name] != ready:
-                raise WriteRefused(f"`{name}` 정의가 이미 있다 — 덮어쓰지 않았다")
+            if name in block:
+                if replace_hash is not None:
+                    if mcp_adapters.definition_hash(block[name]) != replace_hash:
+                        raise WriteRefused("대상 정의가 직접 수정됐습니다 — 덮어쓰지 않았습니다")
+                elif block[name] != ready:
+                    raise WriteRefused(f"`{name}` 정의가 이미 있다 — 덮어쓰지 않았다")
+            elif replace_hash is not None:
+                raise WriteRefused("동기화 대상 정의가 없어졌습니다")
 
             block[name] = ready
             if before == after:
@@ -777,13 +826,15 @@ def deploy(
                 if project_path:
                     e = (d.get("projects") or {}).get(project_path) or {}
                     got = (e.get("mcpServers") or {}).get(name)
+                    if initial_enabled is not None and (name in e.get("disabledMcpServers", [])) == initial_enabled:
+                        return False
                 else:
                     got = (d.get(top_key) or {}).get(name)
                 return got == ready
 
             out = _commit_json(path, before, after,
                                "projects" if project_path else top_key, verify,
-                               allow_new_key=True)
+                               allow_new_key=True, expected_revision=revision)
     except WriteRefused as e:
         return {"status": "failed", "reason": str(e), "changed": False}
     except WriteUnverified as e:
@@ -804,7 +855,8 @@ def deploy(
 
 
 def _codex_deploy(name: str, defn: dict, *, scope: str,
-                  worktree_path: Optional[str]) -> dict:
+                  worktree_path: Optional[str], expected_revision: Optional[str] = None,
+                  replace_hash: Optional[str] = None, source_guard=None) -> dict:
     """새 Codex 테이블 하나만 추가한다. TOML 전체를 재직렬화하지 않는다."""
     if scope == "local" and not worktree_path:
         return {"status": "failed", "reason": "프로젝트 기준이 없습니다", "changed": False}
@@ -828,6 +880,11 @@ def _codex_deploy(name: str, defn: dict, *, scope: str,
     path = (Path(worktree_path) / ".codex" / "config.toml") if scope == "local" else global_path
     try:
         with _locked(path):
+            if source_guard is not None and not source_guard():
+                raise WriteRefused("적용 직전 원본이 바뀌었습니다")
+            revision = mcp_adapters.file_revision(path)
+            if expected_revision is not None and revision != expected_revision:
+                raise WriteRefused("미리보기 뒤 대상 파일이 바뀌었습니다")
             stamp = _stamp(path)
             before, err = mcp_adapters._read_toml(path)
             if err:
@@ -837,8 +894,12 @@ def _codex_deploy(name: str, defn: dict, *, scope: str,
                 global_config, global_err = mcp_adapters._read_toml(global_path)
                 if global_err or not mcp_adapters.codex_trusted(global_config or {}, worktree_path):
                     raise WriteRefused("Codex가 이 프로젝트를 신뢰하지 않아 로컬 설정이 적용되지 않습니다")
-            if name in mcp_adapters._as_mapping(before.get("mcp_servers")):
-                raise WriteRefused("같은 이름의 Codex 서버가 이미 있습니다")
+            existing = mcp_adapters._as_mapping(before.get("mcp_servers")).get(name)
+            if existing is not None:
+                if replace_hash is None or mcp_adapters.definition_hash(existing) != replace_hash:
+                    raise WriteRefused("같은 이름의 Codex 서버가 있거나 직접 수정됐습니다")
+            elif replace_hash is not None:
+                raise WriteRefused("동기화 대상 정의가 없어졌습니다")
             text = path.read_text(encoding="utf-8") if path.exists() else ""
             header = f'[mcp_servers.{json.dumps(name, ensure_ascii=False)}]'
             lines = [header]
@@ -847,12 +908,21 @@ def _codex_deploy(name: str, defn: dict, *, scope: str,
                     value = json.dumps(defn[key], ensure_ascii=False)
                     lines.append(f"{key} = {value}")
             new_text = text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(lines) + "\n"
+            if replace_hash is not None:
+                original = text.splitlines(keepends=True)
+                starts = [i for i, line in enumerate(original) if _codex_header_re(name).match(line)]
+                if len(starts) != 1:
+                    raise WriteRefused("Codex 테이블을 안전하게 특정할 수 없습니다")
+                start = starts[0]
+                end = next((i for i in range(start + 1, len(original))
+                            if _TOML_TABLE_RE.match(original[i])), len(original))
+                new_text = "".join(original[:start]) + "\n".join(lines) + "\n" + "".join(original[end:])
             parsed, perr = mcp_adapters._read_toml_text(new_text)
             expected = json.loads(json.dumps(before, default=str))
             expected.setdefault("mcp_servers", {})[name] = defn
             if perr or json.loads(json.dumps(parsed, default=str)) != expected:
                 raise WriteRefused("새 설정을 안전하게 검증하지 못했습니다")
-            if stamp != _stamp(path):
+            if stamp != _stamp(path) or revision != mcp_adapters.file_revision(path):
                 raise WriteRefused("설정 파일이 바뀌었습니다")
             _atomic_write(path, new_text)
             after, aerr = mcp_adapters._read_toml(path)
@@ -876,12 +946,7 @@ def _opencode_set(name: str, enabled: bool, *, scope: str,
     JSON이라 codex와 달리 텍스트 수술이 필요 없다(codex는 TOML이라 파서를
     거치면 주석·서식이 날아가서 원문을 직접 고쳤다).
     """
-    if scope == "local":
-        if not worktree_path:
-            raise WriteRefused("로컬 스코프는 워크트리를 지정해야 한다")
-        path = Path(worktree_path) / "opencode.json"
-    else:
-        path = mcp_adapters.opencode_paths()["global"]
+    path, _, _ = _deploy_target_path("opencode", scope, worktree_path=worktree_path, shared=False)
 
     with _locked(path):
         before = _load_json_for_write(path)
@@ -892,6 +957,9 @@ def _opencode_set(name: str, enabled: bool, *, scope: str,
             raise WriteRefused(f"opencode({scope})에 `{name}` 서버 정의가 없다")
         if not isinstance(block[name], dict):
             raise WriteRefused("서버 정의가 객체가 아니다 — 쓰기를 중단했다")
+        _, schema_error = mcp_adapters.opencode_to_common(block[name])
+        if schema_error:
+            raise WriteRefused(schema_error)
 
         block[name]["enabled"] = enabled
         if before == after:

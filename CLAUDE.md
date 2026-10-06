@@ -50,6 +50,7 @@ contract 9 exists because of it.
 | Cross-tool rules + **hard contracts** | [`AGENTS.md`](./AGENTS.md) |
 | Release history | [`CHANGELOG.md`](./CHANGELOG.md) |
 | Other projects we read, and what we took from them | [`docs/ref/references.md`](./docs/ref/references.md) |
+| MCP management research and renewal proposal | [`reports/FarShell MCP 관리 재설계.md`](./reports/FarShell%20MCP%20관리%20재설계.md) · [`docs/ref/mcp-reference-logic.md`](./docs/ref/mcp-reference-logic.md) · [`docs/ref/mcp-openrouter-opencode.md`](./docs/ref/mcp-openrouter-opencode.md) |
 | Local working docs — index, latest handoff, backlog | `docs/README.md` · `docs/HANDOFF.md` · `docs/TODOS.md` (gitignored) |
 
 ---

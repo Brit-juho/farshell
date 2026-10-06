@@ -450,3 +450,13 @@ reality before). For frontend-restructure-specific history (the September
 2026 ES-module migration referenced throughout §2), see
 `docs/archive/v2.0/plan-2.0/10-frontend-restructure.md` locally (gitignored,
 not on GitHub).
+
+
+## MCP source and review pipeline
+
+`mcp_adapters` discovers native definitions; `mcp_sources` assigns source precedence
+and resolves exact discovered IDs. `mcp_library` stores portable snapshots and
+provenance. `mcp_plans` holds expiring single-use review plans on the server.
+`mcp_sync` compares opt-in source changes with recorded FarShell deployments;
+`mcp_write` performs guarded minimal writes. Independent probes (`mcp_verify`)
+provide evidence separate from configuration and the unknown live CLI state.

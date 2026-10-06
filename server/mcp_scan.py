@@ -23,6 +23,7 @@ from typing import Optional
 
 import fsguard
 import mcp_adapters
+import mcp_sources
 import tmux_runner
 import worktree
 
@@ -183,6 +184,7 @@ def scan(worktree_id: Optional[str] = None, tools: Optional[tuple] = None) -> di
         servers.extend(result["servers"])
         errors.extend(result["errors"])
 
+    mcp_sources.resolve(servers, wt_path)
     return {
         "worktree": _public(wt),
         "servers": servers,

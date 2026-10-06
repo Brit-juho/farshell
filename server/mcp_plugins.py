@@ -108,6 +108,19 @@ def claude_installed(worktree_path: Optional[str]) -> tuple[dict, Optional[str]]
     return out, None
 
 
+def _bundle_mcp(root: Path | None, tool: str) -> list[dict]:
+    if root is None:
+        return []
+    data, error = mcp_adapters._read_json(root / ".mcp.json")
+    definitions = mcp_adapters._as_mapping((data or {}).get("mcpServers")) if not error else {}
+    if not definitions:
+        manifest, error = mcp_adapters._read_json(root / (".claude-plugin" if tool == "claude" else ".codex-plugin") / "plugin.json")
+        definitions = mcp_adapters._as_mapping((manifest or {}).get("mcpServers")) if not error else {}
+    return [{"name": str(name), "owner": "plugin", "writable": False,
+             "runtime_state": "unknown", "source_kind": "plugin_bundle"}
+            for name in list(definitions)[:200]]
+
+
 def _claude_bundle(install_path: Optional[str]) -> tuple[list[str], bool]:
     """설치 디렉터리의 skills/*/SKILL.md 이름과 MCP 번들 여부."""
     if not isinstance(install_path, str) or not install_path:
@@ -178,6 +191,7 @@ def scan_claude_plugins(worktree_path: Optional[str] = None,
                 "skills": skills,
                 "skill_count": len(skills),
                 "bundles_mcp": has_mcp,
+                "mcp_servers": _bundle_mcp(Path(latest["installPath"]) if latest.get("installPath") else None, "claude"),
                 "effective": effective,
             })
             out.append(entry)
@@ -273,6 +287,7 @@ def scan_codex_plugins(worktree_path: Optional[str] = None,
             "skills": skills,
             "skill_count": len(skills),
             "bundles_mcp": _codex_manifest_has_mcp(root) if root else False,
+            "mcp_servers": _bundle_mcp(root, "codex"),
             "auth_policy": row.get("authPolicy"),
         })
         out.append(entry)
