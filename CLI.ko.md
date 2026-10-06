@@ -32,7 +32,7 @@ fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬�
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크 (N19/N23)
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|allow-agent <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링 (N7/N39)
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
-fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages
+fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session)
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리 (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (N30 — 구현만 됐고 미사용, ADR-27)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경

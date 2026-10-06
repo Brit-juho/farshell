@@ -10,6 +10,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **에이전트 세션 공유** (`server/agent_share.py`, `share_identity.py`, `routes/agent_share.py`,
+  `server/mcp_farshell.py`). 에이전트는 세션을 만들 수 없다 — 사용자가 평범한 tmux 세션에 닉네임과 모드
+  (`read`/`readwrite`)를 붙여 공유하면(tmux 옵션 `@fsh_share_nick`·`@fsh_share_mode`, 세션 목록의 `share`
+  필드, 기존 `list-sessions` 호출에 합쳐져 tmux 호출 추가 없음) 에이전트가 MCP 도구
+  `list_shared_sessions`·`read_session`·`send_to_session`으로 읽고 입력한다.
+  권한은 에이전트 세션 A와 공유 세션 S의 `#{session_id}`+`#{session_created}`에 묶여(이름 변경에 안전, 같은
+  이름으로 다시 만든 세션은 상속 못 함, `/new`·`/clear`·CLI 재시작에도 유지) 읽기와 쓰기를 따로 승인하며
+  유효 권한은 min(허용, 현재 공유 모드)다. **승인·공유·철회는 브라우저 로그인 세션 쿠키만** 받는다
+  (`auth.request_kind`·`require_human_session`, 기계 토큰·peer 서명은 403). 호출자는 `TMUX_PANE`·`TMUX`·pid를
+  서버가 소켓·pane·부모 프로세스 체인(직접 연결이면 `lsof`로 소켓 소유 pid까지)으로 검증한다. 입력은 `send-keys -l`
+  한 줄·4000자·제어 문자 거부, 승인 대기·작업 중인 에이전트 세션과 읽기 전용 공유에는 보내지 않고, 읽기는
+  200줄(최대 2000)·64KB, 호출 속도 제한과 감사 기록(`~/.vt/agent_access.log`, 원문 없이 글자 수·sha 8자리)이 있다.
+  새 엔드포인트와 `/ws-workspace`의 `agent_share_request` 이벤트는 `API.md`, 설계·한계는
+  `docs/ref/terminal.md`. 프런트 UI는 별도 단계다.
 - **Codex 앱의 「Claude 설정 가져오기」가 만든 중복 훅 감지와 `fsh hooks dedupe`** (`server/codex_hooks.py`,
   `bin/fsh`). 가져오기가 `~/.codex/hooks.json`에 FarShell 훅을 `claude` 태그로 복제하면 Codex 세션 이벤트가
   두 번 들어오고 에이전트 라벨이 어긋난다. `fsh hooks status`·`install`·`fsh doctor`가 경고하고

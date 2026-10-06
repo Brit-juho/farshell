@@ -251,7 +251,8 @@ def test_mcp_initialize_and_tools_list():
     assert r["result"]["protocolVersion"] == "2025-06-18"
     assert "tools" in r["result"]["capabilities"]
     names = [t["name"] for t in m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
-    assert names == ["list_agents", "send_message", "read_messages"]
+    assert names == ["list_agents", "send_message", "read_messages",
+                     "list_shared_sessions", "read_session", "send_to_session"]
     assert m.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
     assert m.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})["error"]["code"] == -32601
 

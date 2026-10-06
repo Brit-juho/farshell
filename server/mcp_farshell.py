@@ -1,10 +1,18 @@
 """`fsh mcp` — 에이전트가 FarShell 에이전트 메시지를 쓰는 MCP 서버(stdio).
 
-Claude Code·Codex·agy처럼 MCP를 지원하는 에이전트에 등록하면 도구 3개가 생긴다:
+Claude Code·Codex·agy처럼 MCP를 지원하는 에이전트에 등록하면 도구 6개가 생긴다:
 
     list_agents     이 맥과 페어링된 맥의 tmux 세션(무엇이 돌고 있나·상태)
     send_message    다른 세션의 에이전트에게 메시지(받는 쪽이 작업을 마친 뒤 전달)
     read_messages   주고받은 메시지 기록(대화 id로 거를 수 있다)
+
+    list_shared_sessions  사용자가 에이전트에게 공유한 tmux 세션(닉네임·모드·내 권한)
+    read_session          공유 세션의 화면을 읽는다(처음엔 사용자 승인이 필요)
+    send_to_session       공유 세션에 한 줄 입력한다(읽기·쓰기 공유 + 별도 승인)
+
+뒤의 셋은 「에이전트 세션 공유」다(server/agent_share.py). 에이전트는 세션을 만들지도 닫지도 못하고,
+사용자가 공유한 세션만 쓸 수 있다. 승인은 사용자가 브라우저에서 한다 — 이 도구들에는 승인 수단이 없다.
+호출자가 **어느 tmux 칸인지**는 `TMUX_PANE`·`TMUX`·자기 pid 를 헤더로 실어 서버가 검증한다(주장이 아니다).
 
 ## 왜 SDK 없이 직접 쓰나
 MCP stdio는 줄 단위 JSON-RPC 2.0이고 여기서 쓰는 메서드는 initialize·tools/list·
@@ -63,6 +71,36 @@ TOOLS = [
             "limit": {"type": "integer", "minimum": 1, "maximum": 100}},
             "additionalProperties": False},
     },
+    {
+        "name": "list_shared_sessions",
+        "description": (
+            "사용자가 에이전트에게 공유한 tmux 세션 목록(닉네임·모드·상태·내 권한). "
+            "공유된 세션만 쓸 수 있고, 처음 쓰면 사용자 승인이 필요하며(승인되면 같은 호출을 다시 하세요), 세션을 만들거나 닫을 수 없다."),
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "read_session",
+        "description": (
+            "공유된 세션의 화면(마지막 lines 줄, 기본 200·최대 2000, 출력은 64KB 까지)을 읽는다 — 읽기 전용. "
+            "공유된 세션만 쓸 수 있고, 처음 쓰면 사용자 승인이 필요하며(승인되면 같은 호출을 다시 하세요), 세션을 만들거나 닫을 수 없다. 사용자가 거부하면 5분 동안 같은 요청을 다시 못 한다."),
+        "inputSchema": {"type": "object", "properties": {
+            "nickname": {"type": "string", "description": "list_shared_sessions 에서 본 닉네임"},
+            "lines": {"type": "integer", "minimum": 1, "maximum": 2000}},
+            "required": ["nickname"], "additionalProperties": False},
+    },
+    {
+        "name": "send_to_session",
+        "description": (
+            "공유된 세션에 한 줄을 입력한다(읽기·쓰기로 공유된 세션만 — 읽기 전용 공유는 즉시 거부된다). "
+            "공유된 세션만 쓸 수 있고, 처음 쓰면 사용자 승인이 필요하며(승인되면 같은 호출을 다시 하세요), 세션을 만들거나 닫을 수 없다. 읽기 승인과 쓰기 승인은 따로다. text 는 4000자 이하 한 줄이고 제어 문자·"
+            "줄바꿈은 거부된다 — 실행하려면 enter 를 true 로 한다(여러 명령은 여러 번 호출). 상대 에이전트가 "
+            "승인 대기·작업 중이면 거부된다."),
+        "inputSchema": {"type": "object", "properties": {
+            "nickname": {"type": "string"},
+            "text": {"type": "string", "description": "입력할 한 줄(최대 4000자)"},
+            "enter": {"type": "boolean", "description": "true 면 입력 뒤 Enter 를 눌러 실행한다(기본 false)"}},
+            "required": ["nickname", "text"], "additionalProperties": False},
+    },
 ]
 
 
@@ -84,7 +122,18 @@ def _config() -> tuple[str, str]:
     return server.rstrip("/"), token
 
 
-def _api(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+def _identity_headers() -> dict:
+    """호출자 식별 값 — 서버가 pane·소켓·부모 프로세스 체인으로 검증한다(share_identity.py).
+    값이 비ASCII 일 수 있어(TMPDIR 경로) 퍼센트 인코딩한다."""
+    out = {"X-Fsh-Pid": str(os.getpid())}
+    for header, var in (("X-Fsh-Pane", "TMUX_PANE"), ("X-Fsh-Tmux", "TMUX")):
+        val = os.environ.get(var)
+        if val:
+            out[header] = urllib.parse.quote(val, safe="/,%:._-")
+    return out
+
+
+def _api(method: str, path: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict]:
     server, token = _config()
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(server + path, data=data, method=method)
@@ -92,6 +141,8 @@ def _api(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
         req.add_header("Content-Type", "application/json")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return r.status, json.loads(r.read().decode("utf-8") or "{}")
@@ -163,7 +214,60 @@ def tool_read_messages(args: dict) -> tuple[str, bool]:
     return "\n".join(rows) or "기록이 없습니다", False
 
 
+def _share_result(status: int, data: dict, ok_fmt) -> tuple[str, bool]:
+    """공유 세션 도구 공통 — 200 은 ok_fmt, 202 는 승인 대기(오류가 아니다), 나머지는 서버가 준 이유."""
+    if status == 200 and data.get("state") == "ok":
+        return ok_fmt(data), False
+    if status == 202:
+        return (f"{data.get('reason') or '사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요'} "
+                f"(요청 {data.get('requestId')}) 사용자가 FarShell 화면에서 승인합니다."), False
+    return f"실패: {_fail(status, data)}", True
+
+
+def tool_list_shared_sessions(args: dict) -> tuple[str, bool]:
+    status, data = _api("GET", "/api/agent/shared", headers=_identity_headers())
+    if status != 200:
+        return f"실패: {_fail(status, data)}", True
+    rows = []
+    names = {"granted": "허용됨", "pending": "승인 대기", "denied": "거부됨", "none": "아직 없음",
+             "unavailable": "불가(읽기 전용 공유)"}
+    for s in data.get("sessions", []):
+        p = s.get("permission") or {}
+        cmd = f" · {s['command']}" if s.get("command") else ""
+        st = f" · {s['status']}" if s.get("status") else ""
+        rows.append(f"- {s['nick']} ({'읽기·쓰기' if s['mode'] == 'readwrite' else '읽기 전용'}){cmd}{st} — "
+                    f"내 권한: 읽기 {names.get(p.get('read'), p.get('read'))}, 쓰기 {names.get(p.get('write'), p.get('write'))}")
+    return "\n".join(rows) or "사용자가 공유한 세션이 없습니다(사용자가 FarShell 에서 세션을 공유해야 합니다)", False
+
+
+def tool_read_session(args: dict) -> tuple[str, bool]:
+    body = {"nickname": args.get("nickname", "")}
+    if args.get("lines") is not None:
+        body["lines"] = args["lines"]
+    status, data = _api("POST", "/api/agent/shared/read", body, headers=_identity_headers())
+
+    def fmt(d: dict) -> str:
+        note = " (출력이 커서 앞부분이 잘렸습니다)" if d.get("truncated") else ""
+        return f"[{d['nick']} · 마지막 {d['lines']}줄{note}]\n{d['text']}"
+
+    return _share_result(status, data, fmt)
+
+
+def tool_send_to_session(args: dict) -> tuple[str, bool]:
+    body = {"nickname": args.get("nickname", ""), "text": args.get("text", ""), "enter": bool(args.get("enter", False))}
+    status, data = _api("POST", "/api/agent/shared/send", body, headers=_identity_headers())
+
+    def fmt(d: dict) -> str:
+        return (f"{d['nick']} 에 {d['chars']}자를 입력했습니다" + (" 하고 Enter 를 눌렀습니다." if d.get("enter") else
+                " (Enter 는 누르지 않았습니다). 결과는 read_session 으로 확인하세요."))
+
+    return _share_result(status, data, fmt)
+
+
 HANDLERS = {
+    "list_shared_sessions": tool_list_shared_sessions,
+    "read_session": tool_read_session,
+    "send_to_session": tool_send_to_session,
     "list_agents": tool_list_agents,
     "send_message": tool_send_message,
     "read_messages": tool_read_messages,

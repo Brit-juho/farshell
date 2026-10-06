@@ -36,7 +36,7 @@ fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # promp
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links (N19/N23)
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|allow-agent <id>|log|revoke-all]  # pair another Mac's FarShell (N7/N39)
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
-fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages
+fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session)
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees (N8/N44)
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (N30 — built but unused, ADR-27)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
@@ -133,6 +133,12 @@ fsh host allow-agent <id>               # on the receiving Mac — needs allow-c
 ```
 
 Limits: 10 exchanges per conversation, 20 messages/min per sending Mac, 4000 chars.
+
+**Shared sessions (MCP only).** `fsh mcp` also offers `list_shared_sessions`, `read_session` and
+`send_to_session`. The user shares an ordinary session with a nickname in the web UI; the agent can then
+read it (read-only share) or also type one line into it (read-write share). The first use needs the
+user's approval in the browser (a human login — the machine token cannot approve); agents cannot create
+or close sessions. Details: `docs/ref/terminal.md`, `fsh help agent-state`.
 The receiving agent sees a one-line header saying the text came from another agent.
 
 ## Prompt Queue (`fsh queue`)
