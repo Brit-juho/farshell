@@ -18,6 +18,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **`ESC [ > 4 ; 2 m` 같은 사설 파라미터 CSI가 화면 텍스트에 글자로 남던 것** (`server/agent_prompt_detect.py`).
   agy가 보내는 수정 키 모드 시퀀스가 `>4;2m`으로 남아 줄 머리 문구를 가렸다. CSI 파라미터를 ECMA-48
   범위(`0x30-0x3F`)로 넓혔다.
+- **Codex 0.160.0 실화면 측정(2026-10-06)으로 어긋난 감지 4건을 고쳤다** (`server/detect/codex.toml`,
+  `server/agent_prompt_detect.py`, `server/agent_status.py`). 승인 거절·작업 중 ESC·질문 overlay ESC는 훅 없이
+  `■ Conversation interrupted`만 남아 엔트리가 `working`으로 굳던 것을 `interrupt`로 풀되, 그 줄이 다음 턴
+  재그림에 실려 와 실행 중 턴을 `done`으로 끊던 오탐은 `interrupt_stale_after`(문구 뒤에 새 입력/응답 줄이
+  있으면 무시)로 막았다. 파일 편집 승인의 2번 `(a)`가 버려지던 `options` 정규식을 한 글자 키로 넓히고, 계획 확인
+  overlay의 `1.`~`3.` 선택지를 읽는다(커서 오른쪽 이동 `ESC[nC`는 공백으로 취급). Plan 모드는 Stop 훅이 계획
+  확인 화면보다 먼저 와 `done`이 화면 `plan`을 거절하던 것을, 10초 안에 끝난 `done`에 한해 받도록 했다.
+  실측 프레임 발췌로 회귀 테스트를 추가했다(`server/tests/codex_0160_frames.py`).
 
 - 레일·Fleet 행의 변경량에서 0인 쪽을 찍지 않는다(`+5 −0` → `+5`). 둘 다 0이면 `파일 N`으로 폴백한다.
 - 서버를 재시작하면 열려 있던 페이지의 저장된 레이아웃이 전부 빈 칸이 되던 것을 고쳤다. 원인: 서버가 재시작되면 웹 세션(PTY) id가 사라져 열린 페이지의 WS가 4004를 받는데, 이를 항상 「세션 종료됨」으로 읽어 칸을 비웠고, 그 상태가 곧바로 tmux 이름 없이 자동 저장돼 새로고침·새 탭도 빈 칸만 복원했다(재현: 격리 서버 + 뷰 3개). 이제 4004를 받으면 tmux 세션이 살아 있는지 확인하고, 살아 있으면 같은 이름으로 다시 attach해 칸의 id만 바꾼다. tmux 세션이 없으면(종료됨) 이전처럼 그 칸만 빈 칸이 된다. 확인을 못 하면 재연결 백오프로 간다.

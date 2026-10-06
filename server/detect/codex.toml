@@ -29,11 +29,34 @@ exit = [
   "esc to interrupt",
 ]
 
+# interrupt: 승인 거절(3번 `No, and tell Codex...` / ESC)·작업 중 ESC 뒤 화면에 남는 문구.
+# Codex는 이때 Stop 훅을 내지 않아 훅 엔트리가 working으로 남는다. 2026-10-06 실측
+# (codex 0.160.0, 격리 tmux): 둘 다 `■ Conversation interrupted - use /feedback if
+# something went wrong` 한 줄을 그린다(거절은 그 위에 `✗ You canceled the request to run ...`).
+interrupt = [
+  "Conversation interrupted",
+]
+# 이 줄은 중단 뒤 스크롤백에 남아 다음 턴에도 tmux 부분 재그림에 실려 온다(`Working …`
+# 줄 없이). 문구 뒤에 새 사용자 입력(`› <입력>`)이나 응답/도구 줄(`• `)이 있으면 지나간
+# 화면이다. 빈 입력줄 `› Ask Codex to do anything`과 상태 보조줄(`1 background terminal ...`)은
+# 중단 직후 화면에도 있어 제외한다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙).
+interrupt_stale_after = '^\s*(?:•|›(?!\s*Ask Codex to do anything))'
+
 # Codex 0.155.0 실측: 승인 overlay가 `› 1. Yes, proceed (y)`와 같은 번호
 # 선택지를 그린다. 키 입력은 숫자가 아니라 괄호 안 단축키이므로 모바일
-# 인라인 응답에는 y/p/esc를 보내야 한다. named group을 사용해 라벨과 실제
+# 인라인 응답에는 y/p/esc를 보내야 한다. 2026-10-06 0.160.0 실측: 파일 편집
+# 승인(`Would you like to make the following edits?`)의 2번은 `(a)`
+# (`Yes, and don't ask again for these files (a)`)라 y/p/esc로 좁히면 2번이 빠진다 —
+# 한 글자 단축키와 `esc`를 모두 받는다. named group을 사용해 라벨과 실제
 # 전송 키의 순서를 명시한다.
-options = '^\s*[›❯>]?\s*\d+\.\s+(?P<label>.+?)\s+\((?P<key>y|p|esc)\)\s*$'
+options = [
+  '^\s*[›❯>]?\s*\d+\.\s+(?P<label>.+?)\s+\((?P<key>[a-z]|esc)\)\s*$',
+  # 계획 확인(`Implement this plan?`)·질문 overlay는 단축키 괄호 없이 `1. 라벨   설명`을
+  # 그린다. 숫자 키가 곧바로 선택한다(0.160.0 실측: plan overlay에서 `3` 하나로
+  # `No, stay in Plan mode`가 닫혔다). 라벨과 설명은 공백 2칸 이상으로 갈린다. 위 형태가
+  # 하나라도 있으면 이 줄은 쓰지 않는다(승인 overlay의 번호 줄이 두 번 잡히지 않게).
+  '^\s*[›❯>]?\s*(?P<key>\d+)\.\s+(?P<label>\S.*?)(?:\s{2,}\S.*)?\s*$',
+]
 
 # 질문 화면에는 상태줄 `esc to interrupt`가 같이 떠 있다 — choice가 히트한 동안은
 # exit를 무시한다(enter 우선).

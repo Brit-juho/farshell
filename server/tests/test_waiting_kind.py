@@ -832,3 +832,114 @@ def test_plan_hook_first_then_screen_still_fills_options():
     A.on_waiting("s", True, question="Would you like to proceed?", options=opts, kind="plan")
     st = A.get_state("s")
     assert st["options"] == opts and st["kind"] == "plan"
+
+
+# ── Codex 0.160.0 실화면(2026-10-06 격리 tmux 실측) — codex_0160_frames.py ──────
+def _codex_det():
+    events = []
+    ints = []
+    d = D.PromptDetector(lambda sid, w: events.append((sid, w)),
+                         agent_for=lambda sid: "codex",
+                         on_interrupt=lambda sid: ints.append(sid))
+    return d, events, ints
+
+
+def test_real_codex_patch_approval_keeps_a_key_option():
+    # 파일 편집 승인의 2번은 `(a)` 다 — 옛 `(y|p|esc)` 정규식은 2번을 버렸다.
+    import codex_0160_frames as F
+    d, _, _ = _codex_det()
+    d.feed("s1", F.PATCH_APPROVAL)
+    assert d.is_waiting("s1") and d.get_kind("s1") == "approval"
+    q, opts = d.get_prompt("s1")
+    assert q == "Would you like to make the following edits?"
+    assert [o["key"] for o in opts] == ["y", "a", "esc"]
+    assert opts[1]["label"] == "Yes, and don't ask again for these files"
+
+
+def test_real_codex_esc_on_approval_fires_interrupt_and_clears_waiting():
+    import codex_0160_frames as F
+    d, _, ints = _codex_det()
+    d.feed("s1", F.PATCH_APPROVAL)
+    assert d.is_waiting("s1") and ints == []
+    d.feed("s1", F.PATCH_REJECTED_ESC)       # `■ Conversation interrupted - use /feedback ...`
+    assert ints == ["s1"] and not d.is_waiting("s1")
+
+
+def test_real_codex_esc_while_working_fires_interrupt():
+    import codex_0160_frames as F
+    d, _, ints = _codex_det()
+    d.feed("s1", F.WORK_ESC_INTERRUPTED)
+    assert ints == ["s1"]
+
+
+def test_real_codex_esc_on_question_overlay_fires_interrupt():
+    import codex_0160_frames as F
+    d, _, ints = _codex_det()
+    d.feed("s1", F.CHOICE_OVERLAY)
+    assert d.is_waiting("s1") and d.get_kind("s1") == "choice"
+    d.feed("s1", F.CHOICE_ESC_INTERRUPTED)
+    assert ints == ["s1"] and not d.is_waiting("s1")
+
+
+def test_real_codex_stale_interrupt_line_redrawn_in_next_turn_does_not_fire():
+    # 중단 줄은 스크롤백에 남아, 다음 턴이 도는 동안에도 tmux 부분 재그림에 `Working ...` 줄
+    # 없이 실려 온다. 그 뒤에 새 사용자 입력(`› List the files ...`)·응답(`• I'll use ls`)이
+    # 있으면 지난 화면이다 — 이걸로 working 엔트리를 done 으로 끝내면 안 된다.
+    import codex_0160_frames as F
+    d, _, ints = _codex_det()
+    d.feed("s1", F.STALE_INTERRUPT_REDRAW)
+    assert ints == []
+
+
+def test_real_codex_question_overlay_options_from_screen():
+    import codex_0160_frames as F
+    d, _, _ = _codex_det()
+    d.feed("s1", F.CHOICE_OVERLAY)
+    _, opts = d.get_prompt("s1")
+    assert [o["key"] for o in opts] == ["1", "2", "3"]
+    assert opts[0]["label"] == "Short"       # 설명 열(`Use a short README title.`)은 라벨이 아니다
+
+
+def test_real_codex_plan_overlay_is_plan_with_numbered_options():
+    # 3번의 `No, stay in Plan mode` 와 설명 사이는 `\x1b[13X\x1b[13C`(지우고 오른쪽 이동) 뿐이다 —
+    # 이동을 그냥 지우면 `Plan modeContinue planning ...` 으로 붙었다.
+    import codex_0160_frames as F
+    d, _, _ = _codex_det()
+    d.feed("s1", F.PLAN_OVERLAY_1)
+    d.feed("s1", F.PLAN_OVERLAY_2)
+    assert d.is_waiting("s1") and d.get_kind("s1") == "plan"
+    _, opts = d.get_prompt("s1")
+    assert opts == [
+        {"key": "1", "label": "Yes, implement this plan"},
+        {"key": "2", "label": "Yes, clear context and implement"},
+        {"key": "3", "label": "No, stay in Plan mode"},
+    ]
+
+
+def test_cursor_forward_becomes_blanks_when_stripping():
+    assert D._strip_ansi("a\x1b[3Cb") == "a   b"
+    assert D._strip_ansi("a\x1b[Cb") == "a b"
+
+
+def test_codex_stop_then_plan_screen_within_seconds_becomes_waiting_plan():
+    # Plan 모드는 계획을 쓴 턴의 Stop 훅이 먼저 오고 `Implement this plan?` 화면이 38ms 뒤에
+    # 그려졌다(0.160.0 실측). done 만 받던 옛 규칙은 그 계획 확인을 영영 못 올렸다.
+    A.on_event("pre", {"session_id": "c"}, agent="codex")
+    A.on_event("stop", {"session_id": "c"}, agent="codex")
+    A.on_waiting("c", True, question="Implement this plan?", kind="plan")
+    ent = A.get_state("c")
+    assert ent["status"] == A.WAITING and ent["kind"] == "plan"
+
+
+def test_stop_then_plan_screen_too_late_stays_done(monkeypatch):
+    A.on_event("stop", {"session_id": "c"}, agent="codex")
+    A.get_state("c")["updated_at"] -= A.PLAN_AFTER_DONE_SEC + 1
+    A.on_waiting("c", True, question="Implement this plan?", kind="plan")
+    assert A.get_state("c")["status"] == A.DONE
+
+
+@pytest.mark.parametrize("kind", ["approval", "choice", "question", None])
+def test_stop_then_non_plan_screen_stays_done(kind):
+    A.on_event("stop", {"session_id": "c"}, agent="codex")
+    A.on_waiting("c", True, question="x", kind=kind)
+    assert A.get_state("c")["status"] == A.DONE

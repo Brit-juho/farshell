@@ -84,6 +84,12 @@ _ANSI_RE = re.compile(
 _LINE_START_RE = re.compile(r"\x1b\[(?:\d+)?(?:;1)?H")
 
 
+# 오른쪽으로 n칸 이동(`\x1b[13C`). 칸을 비워 둔 채 건너뛴 자리라 화면에서는 공백이다 —
+# 그냥 지우면 두 열이 붙는다(Codex 0.160.0 계획 확인 overlay 3번: `... Plan mode` 와
+# `Continue planning ...` 사이가 `\x1b[13X\x1b[13C`로 이어져 `Plan modeContinue`가 됐다).
+_CURSOR_FORWARD_RE = re.compile(r"\x1b\[(\d*)C")
+
+
 def _strip_ansi(text: str) -> str:
     """ANSI 제거 후 줄바꿈을 `\\n` 하나로 통일한다.
 
@@ -94,6 +100,7 @@ def _strip_ansi(text: str) -> str:
     추출(`\\n`만 경계로 봄)이 서로 다른 줄 개수를 세게 된다.
     """
     text = _LINE_START_RE.sub("\n", text)
+    text = _CURSOR_FORWARD_RE.sub(lambda m: " " * min(int(m.group(1) or 1), 200), text)
     return _ANSI_RE.sub("", text).replace("\r\n", "\n").replace("\r", "\n")
 
 
@@ -161,6 +168,18 @@ def load_patterns(force: bool = False) -> dict:
             # 내지 않고 이 문구만 화면에 남긴다. 훅이 만든 waiting/working 엔트리를 풀 유일한
             # 신호라 별도 키로 둔다(waiting 진입 신호가 아니다).
             interrupt = [str(p).encode() for p in (data.get("interrupt") or []) if str(p)]
+            # `interrupt_stale_after` — 그 문구 **뒤**에 이 정규식이 맞으면 새 중단이 아니라 이미
+            # 지나간 화면의 재그림이다. Codex는 중단 줄이 스크롤백에 남은 채 다음 턴이 시작되고,
+            # tmux 부분 재그림이 그 줄을 `Working … esc to interrupt` 없이 다시 보내므로(2026-10-06
+            # 0.160.0 실측) 문구만으로는 작업 중 엔트리를 done으로 잘못 끝낸다. 중단 직후 화면은
+            # 문구 뒤에 빈 입력줄밖에 없고, 지나간 화면은 그 뒤에 새 사용자 입력/응답 줄이 있다.
+            stale_raw = data.get("interrupt_stale_after")
+            interrupt_stale = None
+            if isinstance(stale_raw, str) and stale_raw:
+                try:
+                    interrupt_stale = re.compile(stale_raw, re.MULTILINE)
+                except re.error as e:
+                    logger.warning(f"detect interrupt_stale_after 정규식 무효 — 건너뜀: {path.name}: {e}")
             # 트리거 순서 = 우선순위(앞이 우선, 같으면 최신 위치). 구체적인 것 먼저:
             # plan -> approval -> enter(=approval) -> choice -> question. choice의
             # 하단 안내줄(`Enter to select`)은 다른 화면에도 있을 수 있어 뒤에 둔다.
@@ -172,7 +191,7 @@ def load_patterns(force: bool = False) -> dict:
                 triggers += [(lit, k) for lit in kinds.get(k, [])]
             if triggers or exit_ or badges or interrupt:
                 out[name] = {
-                    "interrupt": interrupt,
+                    "interrupt": interrupt, "interrupt_stale": interrupt_stale,
                     "enter": [t[0] for t in triggers],
                     "enter_kinds": [t[1] for t in triggers],
                     "exit": exit_, "options": options,
@@ -413,6 +432,10 @@ class PromptDetector:
                     continue
                 after = clean[at:]
                 if any(x and x in after for x in list(spec.get("exit", [])) + list(spec.get("enter", []))):
+                    continue
+                stale = spec.get("interrupt_stale")
+                if stale is not None and stale.search(
+                        after[len(lit):].decode("utf-8", errors="ignore")):
                     continue
                 try:
                     self._on_interrupt(session_id)

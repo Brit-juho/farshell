@@ -149,6 +149,8 @@ KIND_CHOICE = "choice"
 KIND_PLAN = "plan"
 KIND_QUESTION = "question"
 KINDS = (KIND_APPROVAL, KIND_CHOICE, KIND_PLAN, KIND_QUESTION)
+# Stop 훅 직후 그려지는 계획 확인 화면(Codex Plan 모드)을 done 엔트리가 받는 시간(초).
+PLAN_AFTER_DONE_SEC = 10.0
 
 # 훅 tool_name -> kind. 목록에 없는 도구는 approval(PermissionRequest인데 도구를 모르면
 # 승인 요청이다).
@@ -493,7 +495,14 @@ def on_waiting(
         # 거절/ESC로 막 끝난 엔트리(`_reopen`)는 done이어도 다음 화면 프롬프트를 받는다 —
         # 훅이 없는 CLI(agy 등)는 새 턴 시작을 알릴 pre 훅이 없어 done에서 영영 못 빠져나온다.
         # 옛 프롬프트가 윈도우에 남아 되살리는 일은 감지기가 윈도우를 비워 막는다.
-        if ent["status"] in (WORKING, WAITING) or (ent["status"] == DONE and ent.get("_reopen")):
+        # Codex Plan 모드는 계획을 다 쓴 턴의 Stop 훅이 먼저 오고 `Implement this plan?` 화면이 그
+        # 직후(2026-10-06 0.160.0 실측: 38ms 뒤)에 그려진다 — done만 받으면 계획 확인이
+        # waiting으로 영영 올라오지 못한다. 방금(PLAN_AFTER_DONE_SEC 안에) 끝난 done에 한해
+        # plan kind만 받는다. 다른 kind는 옛 규칙(뒤늦은 감지가 완료를 되돌리면 안 됨) 그대로다.
+        fresh_plan = (kind == KIND_PLAN and ent["status"] == DONE
+                      and time.time() - ent.get("updated_at", 0) <= PLAN_AFTER_DONE_SEC)
+        if (ent["status"] in (WORKING, WAITING) or fresh_plan
+                or (ent["status"] == DONE and ent.get("_reopen"))):
             hook_kind = ent["status"] == WAITING and ent.get("_kind_src") == "hook"
             # 훅의 구조화된 질문과 선택지는 화면의 안내 문구/이전 프롬프트보다 정확하다.
             # 단, 승인·계획 훅(ExitPlanMode)은 선택지를 주지 않으므로 화면에서 추출한 버튼을 보강한다.
