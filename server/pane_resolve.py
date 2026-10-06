@@ -6,6 +6,11 @@ ADR-4: **자기보고가 1차, cwd는 폴백.**
     2. cwd 일치 — 자기보고가 없거나 못 믿을 때. 후보가 **정확히 하나일 때만**
     3. 포기 — None. 아무것도 강조하지 않는다
 
+Codex 훅은 예외다. 공유 app-server 데몬이 처음 연결된 TUI의 `$TMUX_PANE`을
+다른 세션의 훅에도 전달할 수 있으므로, Codex 훅은 pane을 버리고 유일한 cwd로
+처음 연결한다. 같은 Codex session_id의 후속 이벤트는 agent_status의 연결을
+유지한다. `fsh pane report`처럼 호출자 셸이 직접 보낸 값은 기존 pane 우선이다.
+
 3번이 이 파일에서 가장 중요한 규칙이다. 같은 cwd에 세션이 둘 이상이면(둘 다
 `$HOME`에서 띄우는 건 흔하다) 확신 있게 엉뚱한 세션을 켜는 것보다 아무것도 안
 켜는 게 안전하다 — 기존 `tmux_target.session_for_cwd`와 `grid.js`가 이미 같은
@@ -71,7 +76,8 @@ def session_for_cwd(cwd: Optional[str]) -> Optional[str]:
     return next(iter(matches)) if len(matches) == 1 else None
 
 
-def resolve(pane: Optional[str], tmux_env: Optional[str], cwd: Optional[str]) -> tuple[Optional[str], str]:
+def resolve(pane: Optional[str], tmux_env: Optional[str], cwd: Optional[str],
+            *, agent: Optional[str] = None) -> tuple[Optional[str], str]:
     """3단 해석. (세션 이름 또는 None, 근거) 를 반환한다.
 
     근거 문자열은 진단용이다 — `fsh pane report`와 로그가 "왜 이 세션으로
@@ -82,6 +88,12 @@ def resolve(pane: Optional[str], tmux_env: Optional[str], cwd: Optional[str]) ->
       ambiguous     — cwd 후보가 둘 이상 → 포기(아무것도 강조하지 않는다)
       none          — 단서 자체가 없음
     """
+    # Codex 0.160의 훅은 공유 app-server 데몬에서 실행될 수 있다. 데몬이 처음
+    # 시작된 pane의 TMUX_PANE을 다른 Codex 세션 훅에도 물려주므로 이 값은
+    # Codex 훅의 출처 증명이 아니다. cwd가 유일할 때만 처음 연결하고, 뒤따르는
+    # cwd 없는 이벤트는 agent_status가 session_id의 기존 연결을 유지한다.
+    if agent == "codex":
+        pane = None
     trusted_pane = is_our_socket(tmux_env)
     if pane and trusted_pane:
         session = session_for_pane(pane)

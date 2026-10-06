@@ -61,6 +61,25 @@ def test_pane_id_wins_even_when_cwd_is_ambiguous(panes):
     assert (session, how) == ("a", "pane")
 
 
+def test_codex_hook_ignores_daemon_inherited_pane(panes):
+    """Codex 공용 데몬의 훅은 다른 TUI가 만든 TMUX_PANE을 상속할 수 있다."""
+    panes += [
+        PaneInfo(session="second", command="codex", pid=1, path="/repo/second", pane_id="%1"),
+        PaneInfo(session="third", command="codex", pid=2, path="/repo/third", pane_id="%2"),
+    ]
+    assert pane_resolve.resolve("%1", "/tmp/tmux-501/fsh,1,0", "/repo/third",
+                                agent="codex") == ("third", "cwd")
+
+
+def test_codex_hook_with_ambiguous_cwd_does_not_use_daemon_pane(panes):
+    panes += [
+        PaneInfo(session="second", command="codex", pid=1, path="/repo", pane_id="%1"),
+        PaneInfo(session="third", command="codex", pid=2, path="/repo", pane_id="%2"),
+    ]
+    assert pane_resolve.resolve("%1", "/tmp/tmux-501/fsh,1,0", "/repo",
+                                agent="codex") == (None, "ambiguous")
+
+
 def test_same_cwd_two_sessions_without_pane_gives_up(panes):
     """A2 이전의 동작 — pane 단서가 없으면 여전히 포기한다(엉뚱한 카드 금지)."""
     panes += [

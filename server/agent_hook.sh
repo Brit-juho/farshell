@@ -88,9 +88,9 @@ try:
     # A2 pane 자기보고: Claude Code 훅 JSON에는 "어느 tmux pane에서 돌고 있나"가
     # 없다. 지금까지 서버는 cwd 문자열 일치로 추측해왔는데, 같은 디렉토리
     # ($HOME 등)에 세션이 둘이면 확신할 수 없어 아무것도 표시하지 못했다.
-    # 훅은 pane 셸의 자식이라 TMUX/TMUX_PANE을 그대로 상속받는다 — 그 두 줄을
-    # 실어 보내면 추측이 정확 매칭으로 바뀐다. tmux 밖이면 둘 다 None이고
-    # 서버가 cwd 폴백으로 내려간다.
+    # Claude Code 훅은 pane 셸의 자식이라 TMUX/TMUX_PANE을 상속받는다.
+    # Codex는 공유 app-server 데몬에서 훅을 실행할 수 있어 이 값이 다른 pane의
+    # 것일 수 있다. 호환성을 위해 필드는 그대로 보내고 서버가 CLI별로 판정한다.
     body = json.dumps({
         "event": event,
         "payload": payload,

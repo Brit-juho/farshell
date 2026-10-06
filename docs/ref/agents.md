@@ -65,6 +65,19 @@ Codex posts prompt, permission, tool, stop, and session lifecycle events while a
 `agent: "codex"`. Both drive status badges and prompt-queue auto-feed. Only Claude's
 `stop` delegates stdin to `tts_hook.sh` for the TTS summary.
 
+**Codex session attribution (2026-10-06):** its shared app-server can run hooks with
+the `TMUX_PANE` it inherited from an earlier TUI. The live server showed a Codex
+entry with the third session's cwd attached to the second tmux session. Codex hook
+events therefore ignore `pane` and use cwd only when it identifies exactly one tmux
+session. Later events with the same Codex `session_id` keep that binding even when
+they omit cwd. If several sessions share cwd, the event stays unattributed rather
+than appearing on the wrong session; an unattributed stop also cannot trigger
+automatic queue delivery. Claude hooks and direct `fsh pane report` still
+use the verified pane first. The actual hook environment was not captured in the
+live daemon, so daemon inheritance is the likely cause inferred from the state and
+process architecture; the stale-pane input was reproduced against the real tmux
+pane list.
+
 Register both with `fsh hooks install` (idempotent, preserves other hooks, and backs
 up the changed config files). `fsh hooks status` and `fsh doctor` report Claude's
 five events and Codex's six events separately.

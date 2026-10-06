@@ -98,6 +98,42 @@ def test_codex_permission_and_session_end_hooks_reach_api(client):
     assert agent_status.status_for_session("b") == "done"
 
 
+def test_codex_hook_targets_cwd_instead_of_stale_daemon_pane(client, monkeypatch):
+    monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [
+        PaneInfo(session="second", command="codex", pid=1, path="/repo/second", pane_id="%1"),
+        PaneInfo(session="third", command="codex", pid=2, path="/repo/third", pane_id="%2"),
+    ])
+    first = client.post("/api/agent/event", json={
+        "event": "pre", "agent": "codex",
+        "payload": {"session_id": "codex-third", "tool_name": "Bash", "cwd": "/repo/third"},
+        "pane": "%1", "tmux": "/tmp/tmux-501/fsh,1,0",
+    }).json()
+    assert first["state"]["tmux_session"] == "third"
+    assert agent_status.status_for_session("second") == "idle"
+    assert agent_status.status_for_session("third") == "working"
+    # Stop에는 cwd가 없어도 같은 Codex session_id에 저장된 연결을 유지한다.
+    ended = client.post("/api/agent/event", json={
+        "event": "stop", "agent": "codex", "payload": {"session_id": "codex-third"},
+        "pane": "%1", "tmux": "/tmp/tmux-501/fsh,1,0",
+    }).json()["state"]
+    assert ended["tmux_session"] == "third" and ended["status"] == "done"
+
+
+def test_unattributed_codex_stop_does_not_drain_queue(client, monkeypatch):
+    import queue_runner
+
+    called = []
+    monkeypatch.setattr(queue_runner, "schedule_drain", lambda **kw: called.append(kw) or True)
+    r = client.post("/api/agent/event", json={
+        "event": "stop", "agent": "codex", "payload": {"session_id": "unknown"},
+        "pane": "%2", "tmux": "/tmp/tmux-501/fsh,1,0", "cwd": "/Users/x",
+    })
+    assert r.status_code == 200
+    assert r.json()["state"].get("tmux_session") is None
+    assert r.json()["queue_scheduled"] is False
+    assert called == []
+
+
 def test_tmux_sessions_response_exposes_pane_id(client, monkeypatch):
     """프런트(A5)가 cwd 추측 대신 pane_id로 카드를 특정할 수 있어야 한다."""
     def fake_run_text(args, timeout=None):

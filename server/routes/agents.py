@@ -321,12 +321,15 @@ async def agent_event(request: Request):
     event = body.get("event", "stop")
     payload = body.get("payload", {})
 
-    # A2: 훅이 자기보고한 pane id를 1차 근거로, cwd를 폴백으로 세션을 특정한다.
+    # A2: 일반 훅은 pane id를 1차 근거로, cwd를 폴백으로 세션을 특정한다.
+    # Codex 훅은 공유 데몬의 오래된 pane 환경을 물려받을 수 있어 cwd만 쓴다.
     # 둘 다 실패하면 session=None — "모호하면 아무것도 강조하지 않는다"는
     # 기존 규칙 그대로다(엉뚱한 카드를 켜는 것보다 안전하다).
-    session, how = pane_resolve.resolve(
-        body.get("pane"), body.get("tmux"), payload.get("cwd")
-    )
+    clues = (body.get("pane"), body.get("tmux"), payload.get("cwd"))
+    if body.get("agent") == "codex":
+        session, how = pane_resolve.resolve(*clues, agent="codex")
+    else:
+        session, how = pane_resolve.resolve(*clues)
     if how == "foreign-tmux":
         logger.debug("훅이 우리 소켓이 아닌 tmux에서 왔다 — pane id 폐기")
 
@@ -360,7 +363,10 @@ async def agent_event(request: Request):
             if not target:
                 cwd = (state or {}).get("cwd")
                 target = tmux_target.session_for_cwd(cwd) if cwd else None
-            queued = queue_runner.schedule_drain(session=target, session_scoped=True)
+            # Codex처럼 pane을 신뢰할 수 없고 cwd도 모호한 경우, 미지정 큐
+            # 항목을 현재 포커스 pane으로 보내면 다른 에이전트가 받는다.
+            if target:
+                queued = queue_runner.schedule_drain(session=target, session_scoped=True)
         except Exception as e:                       # 큐 문제로 훅 응답이 깨지면 안 된다
             logger.warning(f"큐 드레인 예약 실패: {e}")
     elif event == "session_start" and (state or {}).get("status") == agent_status.IDLE:
