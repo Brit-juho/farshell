@@ -204,9 +204,17 @@ def verify_caller(pane: Optional[str], tmux_env: Optional[str], claimed_pid, *,
         raise IdentityError("FarShell 의 tmux 에 그런 pane 이 없습니다")
 
     weak = False
-    owner = socket_owner_pid(client, headers or {}, server_port)
+    # fail-closed(2026-10-06 적대 시험): 프록시 헤더(`X-Real-IP` 등)를 붙이면 소켓 소유자 확인을 건너뛰고
+    # 신고 pid 로 내려가던 길이 있어, 다른 에이전트의 pane·pid 를 알면 그 권한을 쓸 수 있었다.
+    # 이제 헤더는 보지 않는다 — 직접 루프백 연결이어야 하고, 그 연결을 쥔 프로세스를 `lsof` 로 확인하지
+    # 못하면 거부한다(터널·원격·lsof 없음 포함). `testclient` 는 실제 소켓이 만들 수 없는 호스트 이름이라
+    # 테스트 클라이언트 전용으로만 신고 pid 를 받는다.
+    is_test_client = bool(client) and client[0] == "testclient"
+    owner = socket_owner_pid(client, {}, server_port)
     if owner is not None:
         pid = owner
+    elif not is_test_client:
+        raise IdentityError("호출 연결의 프로세스를 확인하지 못했습니다 — 같은 맥에서 터널 없이 직접 호출해야 합니다")
     else:
         weak = True
         try:

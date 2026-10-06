@@ -129,7 +129,7 @@ def _identity_headers() -> dict:
     for header, var in (("X-Fsh-Pane", "TMUX_PANE"), ("X-Fsh-Tmux", "TMUX")):
         val = os.environ.get(var)
         if val:
-            out[header] = urllib.parse.quote(val, safe="/,%:._-")
+            out[header] = urllib.parse.quote(val, safe="/,:._-")
     return out
 
 

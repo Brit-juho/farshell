@@ -40,7 +40,7 @@ def test_mcp_sends_caller_identity_and_formats_pending(monkeypatch):
                   "params": {"name": "read_session", "arguments": {"nickname": "dev", "lines": 50}}})["result"]
     assert r["isError"] is False and "승인되면 같은 호출을 다시 하세요" in r["content"][0]["text"]
     assert seen["path"] == "/api/agent/shared/read" and seen["body"] == {"nickname": "dev", "lines": 50}
-    assert seen["headers"]["X-Fsh-Pane"] == "%7" and seen["headers"]["X-Fsh-Pid"] == str(os.getpid())
+    assert seen["headers"]["X-Fsh-Pane"] == "%257" and seen["headers"]["X-Fsh-Pid"] == str(os.getpid())
     assert seen["headers"]["X-Fsh-Tmux"] == "/tmp/tmux-501/fsh,12,0"
     monkeypatch.setattr(m, "_api", lambda *a, **k: (403, {"error": "read_only_share", "reason": "이 공유는 읽기 전용입니다"}))
     r = m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call",

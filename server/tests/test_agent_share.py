@@ -791,3 +791,15 @@ def test_push_body_never_carries_session_names(web, monkeypatch):
     assert len(sent) == 1
     assert "claude-a" not in sent[0][0] + sent[0][1] and "shell" not in sent[0][0] + sent[0][1]
 
+
+
+def test_proxy_headers_cannot_skip_the_socket_owner_check(monkeypatch):
+    """프록시 헤더를 붙여 소켓 소유자 확인을 건너뛰고 신고 pid 로 내려가던 길(2026-10-06 적대 시험)이 닫혔다 —
+    실제 소켓(IP 호스트)에서 온 호출은 소유 프로세스를 확인하지 못하면 신고 pid 가 맞아도 거부한다."""
+    row = share_identity.PaneRow(pane_id="%1", pane_pid=os.getpid(), sid="$1", created="1", name="a",
+                             active=True, command="zsh", nick="", mode="")
+    monkeypatch.setattr(share_identity, "socket_owner_pid", lambda *a, **k: None)   # lsof 없음/조회 실패
+    monkeypatch.setattr(share_identity.pane_resolve, "is_our_socket", lambda _t: True)
+    with pytest.raises(share_identity.IdentityError):
+        share_identity.verify_caller("%1", "/tmp/x,1,0", os.getpid(), client=("127.0.0.1", 50000),
+                                     headers={"x-real-ip": "127.0.0.1"}, server_port=7777, rows=[row])
