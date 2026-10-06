@@ -62,6 +62,7 @@ from routes.peer_proxy import router as peer_proxy_router
 from routes.peer_relay import router as peer_relay_router
 from routes.host_relay import router as host_relay_router
 from routes.agent_msg import router as agent_msg_router
+from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -152,6 +153,9 @@ class TokenAuthMiddleware:
             response = JSONResponse({"error": "unauthorized"}, status_code=401)
             await response(scope, receive, send)
             return
+        # 호출자 종류를 라우트가 볼 수 있게 남긴다(`request.state.auth_kind`). 사람 전용 라우트는
+        # 이 값을 믿지 않고 auth.require_human_session 이 다시 판정한다 — 이 값은 로깅·진단용.
+        scope.setdefault("state", {})["auth_kind"] = auth.request_kind(request)
         await self.app(scope, receive, send)
 
 
@@ -508,6 +512,8 @@ app.include_router(peer_proxy_router)
 app.include_router(peer_relay_router)
 app.include_router(host_relay_router)
 app.include_router(agent_msg_router)
+app.include_router(agent_share_router)
+app.include_router(agent_share_human_router)
 app.include_router(mcp_router)
 app.include_router(mcp_elevated_router)
 
