@@ -309,6 +309,16 @@ _start_tunnel_watchdog() {
   if _is_running tunnel-watchdog; then
     return 0
   fi
+  # pid 파일을 잃었어도(다른 환경에서 stop/start 했거나 파일이 지워졌을 때) 이 트리의
+  # 워치독이 이미 떠 있으면 새로 띄우지 않고 그 PID를 다시 기록한다 — 2026-10-06, restart마다
+  # 워치독이 하나씩 늘었다(같은 터널을 둘이 감시하면 좀비 재연결이 두 번 일어난다).
+  # `$VT_DIR/server/…` 절대경로로만 매칭해서 다른 인스턴스의 워치독은 건드리지 않는다.
+  local _existing
+  _existing="$(pgrep -f "$VT_DIR/server/tunnel_watchdog.py" 2>/dev/null | head -1)"
+  if [ -n "$_existing" ] && kill -0 "$_existing" 2>/dev/null; then
+    echo "$_existing" > "$PID_DIR/tunnel-watchdog.pid"
+    return 0
+  fi
   nohup "$VT_PYTHON" "$VT_DIR/server/tunnel_watchdog.py" > "$WATCHDOG_LOG" 2>&1 &
   echo $! > "$PID_DIR/tunnel-watchdog.pid"
   sleep 0.5

@@ -10,6 +10,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **`fsh restart`를 할 때마다 터널 워치독이 하나씩 늘던 것** (`bin/fsh` `_start_tunnel_watchdog`). pid 파일을
+  잃은 상태(다른 환경에서 stop/start 했거나 파일이 지워졌을 때)에서 새로 띄워 같은 터널을 둘이
+  감시했다. 이 트리의 워치독이 이미 떠 있으면 그 PID를 다시 기록하고 새로 띄우지 않는다
+  (`$VT_DIR/server/…` 절대경로로만 매칭해 다른 인스턴스는 건드리지 않는다).
+
 - 닫은 묶음 기억 정책을 고쳤다. 기억은 최대 10개(오래된 것부터 제거), `tmux_sessions` push마다 이미 종료된 구성원을 정리하고(2명 미만이면 항목 삭제, 빈 목록은 믿지 않음, 원격 칸은 건드리지 않음), 재열기는 attach가 하나라도 성공한 뒤에야 기억을 지운다(전부 실패하면 기억 유지 + 안내, 일부 실패면 그 칸은 빈 칸 + 한 줄 안내).
 - agy의 「계획 있음」 배지가 화면에 안 뜨던 것을 고쳤다. 상태 키워드가 배지를 `done`에서만 읽어 `working` 엔트리에 달린 배지를 버렸다. 이제 working 행에도 「계획 있음」/「질문 있음」을 보조 표시로 낸다(상태는 그대로, RailRow·Fleet 공용).
 - **계획 화면(`ExitPlanMode`)의 선택지 버튼이 버려지던 것** (`server/agent_status.py`). 훅이 먼저 오고
