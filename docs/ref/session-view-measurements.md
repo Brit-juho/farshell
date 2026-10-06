@@ -108,7 +108,7 @@ Cause: `session_store` is in memory, so after a restart the page's WS reconnects
 
 ## 4. Bundle size (initial payload `app.js` + `core.js`, ceiling 307,200 B)
 
-310,711 -> 295,839 -> 297,689 -> 297,901 (view-tab status bar) -> 299,215 -> 299,310 -> 300,947 -> 303,467 (server-restart recovery) -> 305,403 B (closed-view memory policy). Headroom is now about 1.8 KB; the ceiling is asserted by `frontend/tests/build-output.test.js`.
+310,711 -> 295,839 -> 297,689 -> 297,901 (view-tab status bar) -> 299,215 -> 299,310 -> 300,947 -> 303,467 (server-restart recovery) -> 305,403 B (closed-view memory policy) -> 300,800 B (session sheet list rendering moved to the lazy `screens` chunk; `core.js` 303,321 -> 298,718, `app.js` 2,082 unchanged; headroom about 6.4 KB). Headroom was about 1.8 KB; the ceiling is asserted by `frontend/tests/build-output.test.js`.
 
 ## 5. View-tab mockups
 

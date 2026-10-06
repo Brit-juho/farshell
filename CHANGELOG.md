@@ -24,6 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- 모바일 세션 시트의 평소 목록을 뷰별 묶음으로 보이게 했다. 뷰 순서대로, 묶음 뷰는 뷰 이름 헤더 + 구성원 행 한 덩어리, 단독 뷰는 행 하나이고, 열려 있지 않은 세션은 아래 별도 구역에 이름순이다. 목록 렌더링 전체를 지연 청크(`screens`, `layout/session-sheet.js`)로 옮겨 상시 로드(`app.js`+`core.js`)가 305,403B에서 300,800B로 줄었다(상한 여유 약 6.4KB). 청크가 오는 동안엔 한 줄 로딩 행, 이후 다시 그릴 때는 이전 목록이 남아 시트가 깜빡이지 않는다.
+
 - `GET /api/hosts`의 로컬 항목 세션에도 `origin`이 붙는다(원격 항목·`/api/tmux/sessions`와 같은 값, `get_all_panes` 결과에서 읽어 tmux 호출은 늘지 않는다).
 
 ### Documentation

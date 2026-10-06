@@ -11,7 +11,7 @@ import { icon } from '../ui/icons.js';
 import { closeView } from '../term/session-actions.js';
 
 let _focus = null;   // 이동·닫기 직후 다시 그릴 때 포커스를 돌려줄 버튼 {tabId, dir} | {close:true, index}
-let _note = '';      // 스크린리더용 결과 안내 한 줄
+let _note = null;    // 스크린리더용 결과 안내 한 줄 {text, until} — 한 동작이 시트를 여러 번 다시 그리므로 1.5초간 유지
 
 /** 열린 세션이 있는 뷰만, 화면 순서대로. 빈 뷰는 순서 편집 대상이 아니다. */
 export function orderedViews() {
@@ -44,8 +44,7 @@ export function renderOrderEditor(list) {
   const note = document.createElement('p');
   note.className = 'vt-order-note';
   note.setAttribute('role', 'status');
-  note.textContent = _note || '위·아래 버튼으로 뷰 순서를 바꾸고, 닫기 버튼으로 뷰를 닫습니다. 묶음 뷰는 함께 움직이고 닫아도 세션은 살아 있습니다.';
-  _note = '';
+  note.textContent = (_note && Date.now() < _note.until && _note.text) || '위·아래 버튼으로 뷰 순서를 바꾸고, 닫기 버튼으로 뷰를 닫습니다. 묶음 뷰는 함께 움직이고 닫아도 세션은 살아 있습니다.';
   list.appendChild(note);
   views.forEach((v, i) => {
     const block = document.createElement('div');
@@ -79,8 +78,8 @@ export function renderOrderEditor(list) {
       b.onclick = () => {
         if (off) return;
         _focus = { tabId: v.id, dir };
-        _note = `${label}: ${i + 1 + dir}번째 / 전체 ${views.length}개`;
-        if (!moveView(v.id, dir)) { _focus = null; _note = ''; }
+        _note = { text: `${label}: ${i + 1 + dir}번째 / 전체 ${views.length}개`, until: Date.now() + 1500 };
+        if (!moveView(v.id, dir)) { _focus = null; _note = null; }
       };
       block.appendChild(b);
     }
@@ -95,7 +94,7 @@ export function renderOrderEditor(list) {
     x.setAttribute('aria-label', `${viewName} 닫기`);
     x.onclick = async () => {
       _focus = { close: true, index: i, until: Date.now() + 1500 };
-      _note = `${viewName}를 닫았습니다. 세션은 그대로 남아 있습니다.`;
+      _note = { text: `${viewName}를 닫았습니다. 세션은 그대로 남아 있습니다.`, until: Date.now() + 1500 };
       await closeView(v.id);
       // closeView 뒤에도 세션 정리·저장이 시트를 다시 그린다 — 닫기 포커스는 1.5초간 유지해 그 그림마다 되돌린다.
       if (list.isConnected) renderOrderEditor(list);

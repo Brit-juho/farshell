@@ -34,6 +34,7 @@ const coreJs = fs.readFileSync(path.join(DIST, 'core.js'), 'utf8');
 const panelsJs = fs.readFileSync(path.join(DIST, 'panels.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(DIST, 'settings.js'), 'utf8');
 const shellJs = fs.readFileSync(path.join(DIST, 'shell.js'), 'utf8');
+const screensJs = fs.readFileSync(path.join(DIST, 'screens.js'), 'utf8');
 
 // 2.1.6 — 상한의 대상이 app.js 하나에서 **초기 페이로드 합계**로 바뀌었다.
 // 청크 규칙을 뒤집으면서(vite.config.js) app.js는 부팅 배선만 남은 2KB가 되고
@@ -104,4 +105,12 @@ test('voice.js도 함께 남는다 — app 빌드가 dist를 비우고 끝나면
   // 불러온다. 이 파일이 app 빌드만 돌리던 시절엔 `npm test` 직후의 트리에서
   // 그 요청이 404였다(실브라우저 스모크가 잡아냈다).
   assert.ok(fs.existsSync(path.join(DIST, 'voice.js')), 'frontend/dist/voice.js가 없다');
+});
+
+test('세션 시트의 목록 렌더링(layout/session-sheet.js)은 screens 청크에 있고 core에는 없다', () => {
+  // vite.config.js manualChunks에 이름이 없으면 포괄 규칙이 core로 보내 상시 로드가 ~5KB 늘어난다
+  // (빌드·테스트는 통과하고 상한만 조용히 줄어든다 — 이 파일을 옮길 때 실제로 겪었다).
+  assert.match(screensJs, /function renderSessionSheet/);
+  assert.doesNotMatch(coreJs, /function renderSessionSheet/);
+  assert.doesNotMatch(coreJs, /vt-session-group-label/);
 });

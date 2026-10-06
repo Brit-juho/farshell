@@ -138,6 +138,16 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 .vt-session-row.sleeping { opacity:.6; }
 /* 2.1.6 — 모양은 components.css의 `.vt-name-btn`. 여기 남은 건 없다 */
 .vt-session-empty { }
+/* 청크가 오기 전 한 줄(picker.js) — 시트 높이가 목록 첫 줄만큼 잡혀 열릴 때 덜 뛴다. */
+.vt-session-loading { margin:0; min-height:52px; display:flex; align-items:center; padding-inline:calc(var(--spacing) * 2.5); font-size:var(--fs-xs); color:var(--sub); }
+/* 평소 목록의 묶음 뷰(layout/session-sheet.js) — 뷰 라벨 헤더 + 구성원 행이 테두리 하나를 나눠 쓴다. */
+.vt-session-group { border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; }
+.vt-session-group-label { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 0.5); font-size:var(--fs-xs); color:var(--sub); }
+.vt-session-row.in-group { border:0; border-top:1px solid var(--line); border-radius:0; }
+.vt-session-group-label + .vt-session-row.in-group { border-top:0; }
+.vt-session-row.in-group.active { box-shadow:inset 3px 0 0 var(--acc); }
+/* 구역 제목(「열려 있지 않은 세션」) */
+.vt-session-section { margin:calc(var(--spacing) * 1.5) calc(var(--spacing) * 0.5) 0; font-size:var(--fs-xs); color:var(--sub); }
 /* L1: ⋯ 메뉴 「세션」 3항목의 임시 자리(rail 이관 전까지). 목록과 시각적으로
    구분되게 위쪽 구분선만 두고, 버튼 자체는 세션 행보다 한 단계 낮은 밀도로. */
 .vt-session-footer {

@@ -1,24 +1,20 @@
 // 세션 피커(모바일 세션 관리 시트) + 맥에서 열기 + 파일 업로드 — F5에서
 // classic script에서 ES 모듈로 전환.
 //
-// term/session.js와 순환 import 관계다 — 여기는 revealSession/removeSession/
-// renameSession을 부르고, term/session.js는 탭 전환/제거 시 updateSessionPicker를
-// 부른다. panels/viewer의 shell.js↔tree.js와 같은 이유로 그대로 유지한다(모든
-// 참조가 함수 본문 안에서만 일어나 ES 모듈이 정상 지원).
+// term/session.js는 탭 전환/제거 시 updateSessionPicker를 부른다(이 파일 → session.js 방향의
+// 정적 import는 목록 렌더링과 함께 layout/session-sheet.js로 옮겨 순환이 없어졌다).
+// 시트의 목록 렌더링 전부는 지연 청크(`screens`)다 — 상시 코드(core.js)는 열기/닫기·배선만 갖는다.
 import { activeSession, activeSessionId, sessionDisplayName, getSession } from './core/store.js';
-import { openSessionIds, openSessionOrder } from './layout/compact.js';
+import { openSessionIds } from './layout/compact.js';
 import { onLayoutChange, pruneBlankViews } from './layout/store.js';
 import { isCompactMode } from './layout/compact.js';
 import { saveLayoutNow } from './layout/persist.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction, getAction } from './core/dom.js';
-import { revealSession, renameSession } from './term/session.js';
-import { closeSession, openSessionFromRail, confirmAndKillSession } from './term/session-actions.js';
 import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
-import { promptDialog } from './core/dialog.js';
 
 export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
@@ -56,10 +52,6 @@ function sessionName(id) {
   return sessionDisplayName(id);
 }
 
-// 뷰 편집 모드(모바일, 뷰 단위 순서 변경 + 닫기 — layout/session-order.js 지연 청크). 시트를 닫으면 해제.
-let _ordering = false;
-const viewCount = () => new Set(openSessionOrder().map((e) => e.tabId)).size;
-
 function openSessionManager() {
   let backdrop = document.getElementById('session-manager');
   if (backdrop) { closeSessionManager(); return; }
@@ -67,7 +59,8 @@ function openSessionManager() {
   backdrop.id = 'session-manager';
   backdrop.className = 'vt-session-backdrop';
   backdrop.setAttribute('role', 'presentation');
-  backdrop.innerHTML = '<section class="vt-session-sheet" role="dialog" aria-modal="true" aria-labelledby="session-manager-title"></section>';
+  // 청크가 올 때까지의 틀 — 내용은 layout/session-sheet.js가 채운다.
+  backdrop.innerHTML = '<section class="vt-session-sheet" role="dialog" aria-modal="true" aria-labelledby="session-manager-title" aria-busy="true"><div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2></div><p class="vt-session-loading">불러오는 중</p></section>';
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSessionManager(); });
   // 모바일: 시트를 열 때 비어 있는 단독 뷰(「빈 화면」)를 정리한다 — 폰에는 뷰 탭 바가 없어
   // 칸 ×가 남긴 빈 뷰를 치울 길이 없다. 데스크톱은 「칸 ×는 빈 칸으로 남김」 규칙 그대로.
@@ -75,8 +68,6 @@ function openSessionManager() {
   document.body.appendChild(backdrop);
   document.getElementById('voice-session-picker')?.setAttribute('aria-expanded', 'true');
   renderSessionManager(backdrop);
-  const close = backdrop.querySelector('.vt-session-close');
-  if (close) close.focus();
   // D7: 포커스 트랩 — openPanel()의 모달들과 같은 규칙(panels/panel.js 참고).
   backdrop._onKeydown = (e) => {
     if (e.key === 'Escape') { closeSessionManager(); return; }
@@ -94,112 +85,29 @@ function openSessionManager() {
 function closeSessionManager() {
   const backdrop = document.getElementById('session-manager');
   if (!backdrop) return;
-  _ordering = false;
   if (backdrop._onKeydown) document.removeEventListener('keydown', backdrop._onKeydown);
   backdrop.remove();
   const picker = document.getElementById('voice-session-picker');
   if (picker) { picker.setAttribute('aria-expanded', 'false'); picker.focus(); }
 }
 
-// ADR-29 E — tmux 목록 팝업(옛 term/tmux-panel.js의 showTmuxSessions)을
-// 없애면서, 그게 하던 일(열리지 않은 tmux 세션 보기 + 열기 + 종료)을 이
-// 시트가 직접 흡수한다. `/api/tmux/sessions`는 이 브라우저 탭에 열리지 않은
-// 것까지 포함해 내려주므로, 이미 열린 세션의 tmux 이름과 겹치는 것만 걸러내면
-// "열리지 않은 것"만 남는다 — 레일의 판정과 같은 생각이다.
-async function fetchTmuxSessions() {
-  try {
-    const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
-    const list = await res.json();
-    return Array.isArray(list) ? list : [];
-  } catch (_) { return []; }
-}
-
-async function renderSessionManager(backdrop) {
-  const sheet = backdrop.querySelector?.('.vt-session-sheet');
-  if (!sheet) return;
-  // "맥에서도 열기"는 (특정 세션이 아니라) 앞으로 만들 모든 세션에 적용되는
-  // 전역 설정이라 ⋯의 「설정」 그룹 쪽에 남긴다(index.html 참고).
-  // 편집 중에는 뷰가 하나 남아도 모드를 유지한다(마저 닫을 수 있게). 마지막 뷰를 닫아 0개가 되면
-  // 시트를 닫는다 — 뒤에는 온보딩이 떠 있다.
-  if (_ordering && viewCount() < 1) { closeSessionManager(); return; }
-  const toggle = (viewCount() >= 2 || _ordering)
-    ? `<button class="vt-icon-btn xl vt-session-order-toggle${_ordering ? ' active' : ''}" type="button" aria-pressed="${_ordering}" aria-label="뷰 편집">${icon('square-pen', 16)}</button>` : '';
-  sheet.innerHTML = `<div class="vt-session-head"><h2 id="session-manager-title">${_ordering ? '뷰 편집' : '세션 관리'}</h2><div class="vt-session-head-actions">${toggle}<button class="vt-icon-btn xl vt-session-close" type="button" aria-label="세션 관리 닫기">${icon('x', 16)}</button></div></div><div class="vt-session-list"></div>${_ordering ? '' : `<div class="vt-session-footer"><button type="button" class="vt-menu-item vt-session-footer-item" id="session-open-mac-btn">${icon('terminal', 16)}<span class="vt-menu-item-label">지금 이 세션 맥에서 열기</span></button></div>`}`;
-  sheet.querySelector('.vt-session-close').onclick = closeSessionManager;
-  const tg = sheet.querySelector('.vt-session-order-toggle');
-  if (tg) tg.onclick = () => { _ordering = !_ordering; renderSessionManager(backdrop); };
-  const list = sheet.querySelector('.vt-session-list');
-  if (_ordering) {
-    // 편집 모드에서는 세션 행(클릭 이동)을 아예 그리지 않는다 — 오조작 방지.
-    try {
-      const m = await import('./layout/session-order.js');
-      if (backdrop.isConnected && _ordering && list.isConnected) m.renderOrderEditor(list);
-    } catch (e) { console.error('[FarShell order]', e); }
-    return;
-  }
-  const entries = openSessionIds().map((id) => [id, getSession(id)]);
-  const activeIdNow = activeSessionId();
-  const awakeTmuxNames = new Set();
-  for (const [id, s] of entries) {
-    const tmuxName = s && (s.tmuxName || s.tmux_name);
-    if (tmuxName) awakeTmuxNames.add(tmuxName);
-    const row = document.createElement('div');
-    row.className = 'vt-session-row' + (id === activeIdNow ? ' active' : '');
-    const select = document.createElement('button');
-    select.type = 'button'; select.className = 'vt-name-btn vt-session-select'; select.textContent = sessionName(id);
-    select.setAttribute('aria-current', id === activeIdNow ? 'true' : 'false');
-    // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유로 revealSession.
-    // entries는 열린 세션뿐이다 — "가서 보여줘"가
-    // 맞는 동작이지 "배정"이 아니다.
-    select.onclick = () => { revealSession(id); closeSessionManager(); };
-    const rename = document.createElement('button');
-    rename.type = 'button'; rename.className = 'vt-icon-btn xl vt-session-action'; rename.innerHTML = icon('pencil', 16); rename.setAttribute('aria-label', `${sessionName(id)} 이름 변경`);
-    rename.onclick = async () => {
-      const next = await promptDialog('새 세션 이름', { title: '이름 변경', defaultValue: sessionName(id) });
-      if (next === null) return;
-      if (await renameSession(id, next)) renderSessionManager(backdrop);
-    };
-    const close = document.createElement('button');
-    close.type = 'button'; close.className = 'vt-icon-btn xl danger vt-session-action'; close.innerHTML = icon('x', 16); close.setAttribute('aria-label', `${sessionName(id)} 닫기`);
-    // 닫기 — 레일·칸 ×와 같은 함수(term/session-actions.js closeSession).
-    close.onclick = async () => { await closeSession(id); if (document.body.contains(backdrop)) renderSessionManager(backdrop); };
-    row.append(select, rename, close);
-    // tmux 세션은 완전 종료도 여기서 — 지금까지 모바일에서 이 동작에 닿는
-    // 유일한 길이 tmux 목록 팝업이었다(ADR-29 E, 그 팝업을 없앴다).
-    if (tmuxName) {
-      const kill = document.createElement('button');
-      kill.type = 'button'; kill.className = 'vt-icon-btn xl danger vt-session-action'; kill.innerHTML = icon('trash-2', 16);
-      kill.setAttribute('aria-label', `${tmuxName} 완전 종료`);
-      kill.onclick = async () => {
-        if (await confirmAndKillSession(tmuxName, id)) { if (document.body.contains(backdrop)) renderSessionManager(backdrop); }
-      };
-      row.appendChild(kill);
-    }
-    list.appendChild(row);
-  }
-
-  const sleeping = (await fetchTmuxSessions()).filter((s) => s && s.name && !awakeTmuxNames.has(s.name));
-  for (const s of sleeping) {
-    const row = document.createElement('div');
-    row.className = 'vt-session-row sleeping';
-    const wake = document.createElement('button');
-    wake.type = 'button'; wake.className = 'vt-name-btn vt-session-select'; wake.textContent = s.name;
-    wake.title = '열기';
-    // 레일 클릭과 같은 규칙 — 기억된 묶음 뷰가 있으면 통째로, 없으면 새 단독 뷰.
-    wake.onclick = async () => { closeSessionManager(); await openSessionFromRail({ tmuxName: s.name }); };
-    const kill = document.createElement('button');
-    kill.type = 'button'; kill.className = 'vt-icon-btn xl danger vt-session-action'; kill.innerHTML = icon('trash-2', 16);
-    kill.setAttribute('aria-label', `${s.name} 완전 종료`);
-    kill.onclick = async () => {
-      if (await confirmAndKillSession(s.name, s.web_session_id || null)) { if (document.body.contains(backdrop)) renderSessionManager(backdrop); }
-    };
-    row.append(wake, kill);
-    list.appendChild(row);
-  }
-
-  if (!entries.length && !sleeping.length) { list.innerHTML = '<p class="vt-session-empty">열려 있는 세션이 없습니다.</p>'; }
-
-  sheet.querySelector('#session-open-mac-btn').onclick = () => { getAction('session.open-on-mac')?.(); };
+// 목록 렌더링은 layout/session-sheet.js(지연 청크). 열린 시트를 다시 그리라는 요청은 모두 여기로 온다.
+// 한 번 받은 뒤에는 모듈을 쥐고 **동기로** 부른다 — 편집 모드의 다시 그리기가 마이크로태스크 늦으면
+// 방금 닫은 뷰의 안내 문구 같은 일회성 상태가 낡은 목록에 먼저 소비된다.
+let _sheet = null;
+function renderSessionManager(backdrop) {
+  const run = (m) => m.renderSessionSheet(backdrop, {
+    close: closeSessionManager,
+    refresh: () => { if (backdrop.isConnected) renderSessionManager(backdrop); },
+  });
+  if (_sheet) return run(_sheet);
+  return import('./layout/session-sheet.js')
+    .then((m) => { _sheet = m; return run(m); })
+    .catch((e) => {
+      console.error('[FarShell sheet]', e);
+      const l = backdrop.querySelector('.vt-session-loading');
+      if (l) l.textContent = '목록을 불러오지 못했습니다';
+    });
 }
 
 // --- 이 세션 맥에서 열기 (tmux 세션을 iTerm에 나중에 attach) ---

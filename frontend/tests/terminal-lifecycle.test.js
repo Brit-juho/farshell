@@ -299,12 +299,15 @@ test('removeSession: 비활성 세션을 닫아도 활성 세션은 그대로 �
   assert.strictEqual(Object.keys(window.sessions).join(','), 'b');
 });
 
+const sheetReady = () => new Promise((r) => setTimeout(r, 30));
+
 test('모바일 세션 관리: 좁은 화면에서도 세션 전환과 닫기가 가능하다', async () => {
   const { window, addSession, getAction } = await buildTerminalWindow();
   addSession('a', '첫 세션');
   addSession('b', '둘째 세션');
 
   getAction('session.manager')();
+  await sheetReady();   // 목록은 지연 청크(layout/session-sheet.js)가 그린다
   const manager = window.document.getElementById('session-manager');
   assert.ok(manager, '세션 관리 시트가 열려야 한다');
   assert.strictEqual(manager.querySelectorAll('.vt-session-row').length, 2);
@@ -315,6 +318,7 @@ test('모바일 세션 관리: 좁은 화면에서도 세션 전환과 닫기가
   assert.strictEqual(window.document.getElementById('session-manager'), null, '전환 후 시트는 닫혀야 한다');
 
   getAction('session.manager')();
+  await sheetReady();
   const close = window.document.querySelectorAll('.vt-session-row')[1].querySelectorAll('.vt-session-action')[1];
   close.click();
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -325,6 +329,7 @@ test('모바일 세션 관리: 이름 변경은 레코드와 진입점에 함께
   const { window, addSession, getAction } = await buildTerminalWindow();
   addSession('a', '이전 이름');
   getAction('session.manager')();
+  await sheetReady();
   window.document.querySelector('.vt-session-action').click();
   // rename.onclick이 promptDialog(core/dialog.js)를 부른다 — window.prompt가
   // 아니라 실제 카드가 뜨므로 입력값을 채우고 확인을 누른다.
