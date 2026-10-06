@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Codex 앱의 「Claude 설정 가져오기」가 만든 중복 훅 감지와 `fsh hooks dedupe`** (`server/codex_hooks.py`,
+  `bin/fsh`). 가져오기가 `~/.codex/hooks.json`에 FarShell 훅을 `claude` 태그로 복제하면 Codex 세션 이벤트가
+  두 번 들어오고 에이전트 라벨이 어긋난다. `fsh hooks status`·`install`·`fsh doctor`가 경고하고
+  `GET /api/hooks/status`에 `tools.codex.duplicates`가 추가된다. `fsh hooks dedupe [--dry-run]`은
+  `agent_hook.sh` 항목만 지우고(다른 훅·들여쓰기 보존, `.vtbak` 백업, 원자적 쓰기, 멱등) FarShell은
+  여전히 `hooks.json`에 쓰지 않는다.
+- **개인 값·비밀이 GitHub에 올라가지 않게 막는 가드** (`scripts/guard_personal.py`, `scripts/githooks/`).
+  `.gitignore`에 도구가 만든 개인 디렉터리(`.codex/`, `.agents/` 등)·`auth.json`·`.env*`·키·로컬 DB를 더하고,
+  pre-commit·pre-push 훅이 `git add -f` 우회와 새 형태를 막는다(경로, 토큰 모양, 이 머신의 실제 홈 경로를
+  실행 시점에 비교해 저장소에는 개인 값이 남지 않는다). 켜기: `git config core.hooksPath scripts/githooks`.
+
 ### Fixed
 
 - **`fsh restart`를 할 때마다 터널 워치독이 하나씩 늘던 것** (`bin/fsh` `_start_tunnel_watchdog`). pid 파일을
