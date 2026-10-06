@@ -341,3 +341,15 @@ def test_claude_hooks_register_session_start_without_compact():
     assert groups[0]["matcher"] == "startup|resume|clear"
     assert groups[0]["hooks"][0]["command"].endswith("agent_hook.sh session_start claude")
     assert "matcher" not in settings["hooks"]["Stop"][0]
+
+
+def test_mcp_token_prefers_config_file_over_stale_env(monkeypatch):
+    # 재발급 뒤에도 이미 떠 있던 에이전트의 환경변수(낡은 토큰)가 이기면 401 이다 — 설정 파일이 먼저.
+    import mcp_farshell
+    import vt_env
+    monkeypatch.setattr(vt_env, "load", lambda *a, **k: {"VT_AUTH_TOKEN": "from-file-token", "VT_PORT": "7777"})
+    monkeypatch.setenv("VT_AUTH_TOKEN", "stale-env-token")
+    assert mcp_farshell._config()[1] == "from-file-token"
+    # 설정 파일에 없으면 환경변수로 내려간다
+    monkeypatch.setattr(vt_env, "load", lambda *a, **k: {})
+    assert mcp_farshell._config()[1] == "stale-env-token"

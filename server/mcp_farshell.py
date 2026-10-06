@@ -76,8 +76,11 @@ def _config() -> tuple[str, str]:
         file_env = {}
     port = env.get("VT_PORT") or file_env.get("VT_PORT") or "7777"
     server = env.get("VT_SERVER") or f"http://localhost:{port}"
-    token = (env.get("VT_AUTH_TOKEN") or env.get("VT_TOKEN")
-             or file_env.get("VT_AUTH_TOKEN") or file_env.get("VT_TOKEN") or "")
+    # 보안 경계 값은 설정 파일이 환경변수보다 먼저다(AGENTS.md 계약 6). 에이전트 프로세스는 tmux 전역
+    # 환경에서 낡은 토큰을 물려받는 일이 흔하다 — 토큰을 재발급해도 이미 떠 있던 세션의 환경변수가 이겨
+    # 서버가 401 을 내던 것이 이유다. 설정 파일이 없는 환경(원격·CI)만 환경변수로 내려간다.
+    token = (file_env.get("VT_AUTH_TOKEN") or file_env.get("VT_TOKEN")
+             or env.get("VT_AUTH_TOKEN") or env.get("VT_TOKEN") or "")
     return server.rstrip("/"), token
 
 
