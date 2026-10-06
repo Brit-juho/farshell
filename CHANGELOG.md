@@ -23,7 +23,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   한 줄·4000자·제어 문자 거부, 승인 대기·작업 중인 에이전트 세션과 읽기 전용 공유에는 보내지 않고, 읽기는
   200줄(최대 2000)·64KB, 호출 속도 제한과 감사 기록(`~/.vt/agent_access.log`, 원문 없이 글자 수·sha 8자리)이 있다.
   새 엔드포인트와 `/ws-workspace`의 `agent_share_request` 이벤트는 `API.md`, 설계·한계는
-  `docs/ref/terminal.md`. 프런트 UI는 별도 단계다.
+  `docs/ref/terminal.md`. 프런트 UI는 바로 아래 항목.
+- **에이전트 세션 공유 프런트** (`frontend/js/share/`, `share-lazy.js`, `shell/rail-data.ts`). 행 메뉴(레일·폰 Fleet 시트)에
+  「에이전트와 공유…」「공유 설정…」「공유 해제」「에이전트 권한…」 — 이 맥의 tmux 행에만 들어가고 다른 맥을 보는 화면과
+  이름이 `kill` 인 세션에는 없다. 공유 대화상자(닉네임 즉시 검증·409 안내·모드·경고 문구), 공유된 행의 눈/펜 아이콘 +
+  닉네임과 요약줄 「공유 · 닉네임 · 모드」(보안 상태라 끄는 설정은 없다), 승인 요청 모달 큐(`agent_share_request`·
+  재연결 때 대기 목록 맞춤, 읽기 요청 [거부][허용] / 쓰기 요청 [거부][읽기만 허용][쓰기까지 허용], 기본 포커스는 「거부」,
+  뜬 직후 400ms 입력 무시, Esc 는 결정이 아니라 「나중에」), 권한 패널(마지막 사용·쓰기만/전체 철회·최근 기록). 호출은
+  쿠키만 보낸다(`?token=`·`Authorization` 이 실리면 서버가 사람 요청으로 인정하지 않는다). 새 `share` 청크 18.6KB,
+  초기 페이로드는 300,547 → 302,148B(상한 307,200).
 - **Codex 앱의 「Claude 설정 가져오기」가 만든 중복 훅 감지와 `fsh hooks dedupe`** (`server/codex_hooks.py`,
   `bin/fsh`). 가져오기가 `~/.codex/hooks.json`에 FarShell 훅을 `claude` 태그로 복제하면 Codex 세션 이벤트가
   두 번 들어오고 에이전트 라벨이 어긋난다. `fsh hooks status`·`install`·`fsh doctor`가 경고하고

@@ -1135,6 +1135,11 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
 - **Inputs**: `--color-bg-0` background, `--color-line` border,
   `--color-line-strong` on focus. No glow.
 - **Dividers**: 1px line, `line-strong` on hover, accent while dragging.
+- **Agent-share surfaces** (`.vt-srow-share`, `.vt-share-*` in `components.css`): a security state is never colour alone — the
+  shared mark pairs shape (eye = read, pen = write), a word (「쓰기」) and colour (`--color-st-waiting` for write only; read is
+  neutral). The warning copy is plain type hierarchy (first line semibold), no box, no icon. The approval modal is a decision
+  prompt: its first-focus button is the **safe** one (거부), no button is filled/accent (neither answer should look like the
+  obvious one), buttons ignore input for 400 ms after drawing, and Esc is 「나중에」, never an answer. 44px under a coarse pointer.
 
 ## 11. Accessibility
 

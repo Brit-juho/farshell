@@ -144,12 +144,18 @@ moves the active **view tab** at every width (it moved a session in the removed 
   session appears in both 「개입 필요」 and 「세션」.
 - Row: line 1 state · agent · name; line 2 main/worktree icon · branch (main is shown too) · diff; line 3 state
   keyword · elapsed · origin icon; when applicable "open" mark and the grouped view's name. The plug (tmux) icon goes.
-- Row menu: the ⋯ button and right-click open the same menu (open/close, rename, open on Mac, connected screens, kill).
+- Row menu: the ⋯ button and right-click open the same menu (open/close, rename, open on Mac, connected screens,
+  the agent-sharing items below, kill).
   The menu opens with a **summary line** — a disabled header row (`.vt-menu-summary`, `role="note"` with an `aria-label`,
   never selectable, wraps instead of ellipsizing): state · (when waiting) the kind keyword · 「웹 외 N」 · where it was
   created (이 화면에서 만듦 / 다른 맥에서 만듦 / 직접 만듦) · branch (`rowSummary` in `shell/rail-data.ts`,
   drawn by `Menu`'s `summary` prop in the rail and by the phone Fleet sheet). Why: `ui/tooltip.js` is off for touch pointers
   (no hover), so on a phone a row's hidden facts — the waiting kind, non-web attaches, origin, branch — had no way to be read.
+- **Shared mark.** A session shared with agents shows `ShareMark` on line 3 (`shell/RailRow.tsx`, shared with Fleet): an
+  icon and the nickname — eye = read-only, pen = read/write (`share-read`/`share-write` in `ui/icons.js`); read/write also
+  gets the word 「쓰기」 and the waiting colour, so the risky mode differs by shape, text and colour. It is a security state,
+  so there is **no rail-settings switch** for it. The 48px rail shows it in the tooltip, the menu summary line in
+  「공유 · 닉네임 · 읽기 전용/읽기·쓰기」 (`shareSentence`), which is what a touch screen reads.
 - The header gear (formerly 「저장소 관리」) is **rail settings** (`RailSettings.tsx` on top of `RepoVisibility.tsx`, one
   sheet): 개입 필요 on/off (`rail.attention.show`; collapse state `rail.attention.collapsed`), per-origin visibility
   (`rail.origin.{peer,external}.show`; local cannot be hidden), and the 저장소 표시 list. All device-scoped.
@@ -240,6 +246,35 @@ and a mode; the MCP tools (`list_shared_sessions`, `read_session`, `send_to_sess
   that is waiting at an interactive prompt (`sudo`, `read`) is not detected — the state comes from agent hooks only. (4) A
   shared session is shared at its **active pane** only. (5) A grant is not time-limited (it ends with either session or by
   revocation); there is no per-share expiry.
+
+**Frontend (implemented 2026-10-06).** Code: `frontend/js/share/` (the `share` chunk — `vite.config.js` must name it or the
+catch-all sends it to `core`), `frontend/js/share-lazy.js` (the only always-loaded part: bridges + event listeners),
+row menu in `shell/rail-data.ts`.
+
+| Row (this Mac, tmux) | Items added to the row menu / phone sheet |
+|---|---|
+| not shared | 「에이전트와 공유…」, 「에이전트 권한…」 |
+| shared | 「공유 설정…」 (nick, mode), 「공유 해제」 (instant: every grant and pending request goes), 「에이전트 권한…」 |
+| viewing another host (relayed), tmux name `kill`, non-tmux row | none (the server refuses `kill`; sharing is not relayed) |
+| tmux name outside `[A-Za-z0-9_.-]{1,64}` (e.g. Hangul) | only 「에이전트 권한…」 — the server route cannot name it |
+
+- **Calls go out with the cookie only** (`share/share-api.js`). `vtFetch` appends `?token=` and `apiFetch` adds `Authorization`
+  for a legacy token link — either makes the server treat the request as not human (403 `human_session_required`). A page
+  opened through a `?token=` link therefore cannot share or approve; the dialog says so.
+- **Share dialog** (`share/share-dialog.js`, on `core/dialog.js`'s `openDialog`): the warning text, nickname (checked as you
+  type, default suggested from the session name, 409 → 「이미 쓰는 닉네임입니다」), mode radios, and the unshare note.
+  Lowering read/write to read-only warns that granted writes stop on the next call. 44px targets under a coarse pointer.
+- **Approval modal** (`share/approvals.js`): `agent_share_request` events plus `GET /api/agent/share/requests` on every
+  `/ws-workspace` open (`ws_open`, emitted by `core/workspace-ws.js`) feed one queue, oldest first; `agent_share_request_resolved`
+  removes an entry decided elsewhere. Read request → [거부][허용]; write request → [거부][읽기만 허용][쓰기까지 허용]
+  (`level` `read`/`readwrite`; the server accepts less than requested). Mis-tap protection: default focus is 「거부」 (Enter on
+  it denies — nothing is allowed by one Enter), every decision button is ignored for 400 ms after the modal (re)draws, the
+  focus trap keeps keys off the terminal, and Esc/backdrop/× mean 「나중에」, not a decision (the request stays on the server
+  for 24 h; a new request re-opens the modal, 「에이전트 권한…」 shows 「승인 대기 N건」). A screen that views another Mac
+  does not listen (approval is this-Mac only).
+- **Permissions panel** (`share/perms.js`): grants (agent session, target nick, level, last use), 「쓰기만 철회」/「전체 철회」, the
+  last 8 audit lines. The grant carries no last-use time, so it is derived from the audit log (newest 200 entries): the last
+  successful `read`/`send` for that (agent id, nick).
 
 Only `local`/`peer` are ever written (`tmux_runner.set_origin` rejects everything else without calling tmux);
 unknown values read back as `external`. The server has no auto-attach path: sessions attach only through explicit
