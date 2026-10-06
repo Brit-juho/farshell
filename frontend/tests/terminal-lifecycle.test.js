@@ -413,6 +413,98 @@ test('bootApp — 떠나는 문서(pagehide)의 부팅 실패는 아무것도 �
   assert.strictEqual(window.document.getElementById('onboarding'), null);
 });
 
+test('bootApp — 새 화면에서 저장된 tmux 뷰를 새 PTY id로 다시 연결한다', async () => {
+  const snap = {
+    v: 5, savedAt: 1, activeTab: 'view-a', closed: [],
+    tabs: [
+      { id: 'view-a', active: 'pane-a', tree: { t: 'split', id: 'split-a', dir: 'row', ratio: 0.5,
+        a: { t: 'leaf', id: 'pane-a', session: { id: 'old-a', tmux: 'ta' } },
+        b: { t: 'leaf', id: 'pane-b', session: { id: 'old-b', tmux: 'tb' } },
+      } },
+      { id: 'view-b', active: 'pane-c', tree: { t: 'leaf', id: 'pane-c', session: { id: 'old-c', tmux: 'tc' } } },
+    ],
+  };
+  const attached = [];
+  const fetchImpl = (url, opts) => {
+    const u = String(url).split('?')[0];
+    const ok = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    if (u.endsWith('/api/workspace')) return ok({ ui: { layout: snap } });
+    if (u.endsWith('/api/tmux/attach')) {
+      const name = JSON.parse(opts.body).name;
+      attached.push(name);
+      return ok({ id: `new-${name}`, name, tmux_session: name });
+    }
+    return fakeFetch(url, opts);
+  };
+  const { window, cache, context, layoutStore } = await buildTerminalWindow({ fetchImpl });
+  const { bootApp } = await importFresh(BOOT_JS, context, cache);
+  await bootApp();
+  assert.deepStrictEqual(attached, ['ta', 'tb', 'tc']);
+  const tabs = layoutStore.getTabsWithTrees();
+  assert.strictEqual(tabs[0].tree.a.session, 'new-ta');
+  assert.strictEqual(tabs[0].tree.b.session, 'new-tb');
+  assert.strictEqual(tabs[1].tree.session, 'new-tc');
+  assert.strictEqual(window.activeId, 'new-ta');
+});
+
+test('bootApp — tmux 연결이 일시 실패해도 저장된 뷰를 지우지 않고 재시도한다', async () => {
+  const snap = {
+    v: 5, savedAt: 1, activeTab: 'view-a', closed: [],
+    tabs: [{ id: 'view-a', active: 'pane-a', tree: {
+      t: 'leaf', id: 'pane-a', session: { id: 'old-a', tmux: 'ta' },
+    } }],
+  };
+  let attempts = 0;
+  let prematureSaves = 0;
+  const fetchImpl = (url, opts) => {
+    const u = String(url).split('?')[0];
+    const ok = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    if (u.endsWith('/api/workspace') && opts?.method === 'PUT' && attempts < 3) prematureSaves++;
+    if (u.endsWith('/api/workspace')) return ok({ ui: { layout: snap } });
+    if (u.endsWith('/api/tmux/attach')) {
+      attempts++;
+      return attempts <= 2
+        ? Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) })
+        : ok({ id: 'new-ta', name: 'ta', tmux_session: 'ta' });
+    }
+    return fakeFetch(url, opts);
+  };
+  const { window, cache, context, layoutStore } = await buildTerminalWindow({ fetchImpl });
+  const { bootApp } = await importFresh(BOOT_JS, context, cache);
+  await bootApp();
+  assert.strictEqual(attempts, 3);
+  assert.strictEqual(prematureSaves, 0, '일시 실패 중 빈 칸을 저장하면 원래 tmux 연결을 잃는다');
+  assert.strictEqual(layoutStore.getActiveTabId(), 'view-a');
+  assert.strictEqual(layoutStore.getTree().session, 'new-ta');
+  assert.strictEqual(window.activeId, 'new-ta');
+});
+
+test('bootApp — 새 환경에서 저장본 조회가 일시 실패하면 빈 뷰로 확정하지 않는다', async () => {
+  const snap = { v: 5, savedAt: 1, activeTab: 'view-a', closed: [], tabs: [
+    { id: 'view-a', active: 'pane-a', tree: { t: 'leaf', id: 'pane-a', session: { id: 'old-a', tmux: 'ta' } } },
+  ] };
+  let reads = 0;
+  const fetchImpl = (url, opts) => {
+    const u = String(url).split('?')[0];
+    const ok = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    if (u.endsWith('/api/workspace') && opts?.method !== 'PUT') {
+      reads++;
+      return reads <= 2
+        ? Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) })
+        : ok({ ui: { layout: snap } });
+    }
+    if (u.endsWith('/api/tmux/attach')) return ok({ id: 'new-ta', name: 'ta', tmux_session: 'ta' });
+    return fakeFetch(url, opts);
+  };
+  const { window, cache, context, layoutStore } = await buildTerminalWindow({ fetchImpl });
+  const { bootApp } = await importFresh(BOOT_JS, context, cache);
+  await bootApp();
+  assert.strictEqual(reads, 4, '설정 조회와 레이아웃 조회를 재시도한 뒤 복원해야 한다');
+  assert.strictEqual(layoutStore.getActiveTabId(), 'view-a');
+  assert.strictEqual(layoutStore.getTree().session, 'new-ta');
+  assert.strictEqual(window.document.getElementById('onboarding'), null);
+});
+
 // ── 서버 재시작 복구(2026-10-06 폰 실측) ───────────────────────────────────
 // 서버가 재시작되면 PTY(웹 세션 id)가 사라져 열려 있던 페이지의 WS가 4004를 받는다.
 // 이걸 곧바로 "종료됨"으로 읽어 칸을 비우면 레이아웃이 tmux 이름 없이 저장돼 새로고침·새

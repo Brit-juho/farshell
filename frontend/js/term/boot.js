@@ -122,6 +122,7 @@ async function renderOnboardingSessions() {
 // 명시적으로 호출한다.
 // 떠나는 문서의 부팅은 fetch가 중단되며 예외로 끝난다. 그건 실패가 아니다.
 let _leaving = false;
+let _bootRetryCount = 0;
 window.addEventListener('pagehide', () => { _leaving = true; });
 
 export async function bootApp() {
@@ -153,7 +154,19 @@ export async function bootApp() {
     // 뷰가 하나도 없으면 온보딩. **지금 이 시점에** 없을 때만 — fetch를 기다리는
     // 사이 사용자가 이미 「새 세션」을 눌렀을 수 있다(z-index:500이라 세션을 가린다).
     if (isLayoutEmpty() && Object.keys(allSessions()).length === 0) showOnboarding();
+    if (_bootRetryCount >= 3) showToast('저장된 화면을 다시 연결했습니다', 'success', { key: 'boot-restore' });
+    _bootRetryCount = 0;
   } catch (e) {
+    if (e.retryable && !_leaving) {
+      // 실패한 attach 뒤 restoreLayout을 실행하면 저장된 tmux 연결이 빈 칸으로
+      // 덮인다. 서버가 돌아올 때까지 원본 스냅샷을 유지하고 부팅을 다시 시도한다.
+      const delay = Math.min(5000, 250 * 2 ** Math.min(_bootRetryCount++, 5));
+      if (_bootRetryCount === 3) showToast('저장된 화면에 다시 연결하는 중입니다', 'warn',
+                                           { key: 'boot-restore', duration: 0 });
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (!_leaving) return bootApp();
+      return;
+    }
     // ADR-45 — 여기서 세션을 만들면 안 된다. 예전엔 createSession()이었고, 부팅 중
     // 새로고침·터널 끊김만으로 서버에 요청하지 않은 셸이 하나씩 생겼다(e2e 온보딩
     // 간헐 실패의 원인). 세션은 온보딩 버튼으로 사용자가 만든다.

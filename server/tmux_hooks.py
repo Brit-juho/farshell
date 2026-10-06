@@ -56,10 +56,13 @@ def _port() -> str:
 
 def hook_command(port: str | None = None) -> str:
     """훅 한 칸에 넣을 tmux 명령. `-b`로 tmux를 막지 않고, curl은 2초면 포기한다
-    (서버가 내려가 있어도 훅이 쌓이지 않는다)."""
+    (서버가 내려가 있어도 훅이 쌓이지 않는다). 연결 실패는 tmux 메시지로 표시하지 않는다."""
     url = f"http://127.0.0.1:{port or _port()}{KICK_PATH}"
     # _SECRET는 [-_A-Za-z0-9]뿐이라 따옴표 안에서 이스케이프가 필요 없다.
-    curl = f"curl -s -m 2 -o /dev/null -X POST -H '{HEADER}: {_SECRET}' {url}"
+    # run-shell은 명령이 실패하면 전체 명령(비밀 헤더 포함)과 종료 코드를 화면에
+    # 띄운다. 서버 재시작/절전 중 연결 실패는 정상적으로 가능한 일이므로 성공으로
+    # 끝내고, 다음 훅이나 감시 루프가 목록을 갱신하도록 둔다.
+    curl = f"curl -s -m 2 -o /dev/null -X POST -H '{HEADER}: {_SECRET}' {url} || :"
     return f'run-shell -b "{curl}"'
 
 

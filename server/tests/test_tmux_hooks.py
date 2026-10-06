@@ -3,6 +3,8 @@
 실제 tmux는 부르지 않는다 — tmux_runner.run을 가짜로 바꿔 무엇을 부르는지만 본다.
 """
 
+import subprocess
+
 import pytest
 from starlette.testclient import TestClient
 
@@ -32,6 +34,16 @@ def test_hook_command_carries_secret_and_port():
     assert "http://127.0.0.1:7791/api/tmux/kick" in cmd
     assert f"{tmux_hooks.HEADER}: {tmux_hooks._SECRET}" in cmd
     assert "-m 2" in cmd, "서버가 내려가 있어도 훅이 쌓이지 않게 짧게 포기한다"
+
+
+def test_hook_command_does_not_report_connection_failure():
+    # 닫힌 포트에서도 tmux run-shell이 성공으로 끝나야 명령/비밀 헤더를
+    # 클라이언트 화면에 표시하지 않는다.
+    cmd = tmux_hooks.hook_command("1")
+    shell_command = cmd.removeprefix('run-shell -b "').removesuffix('"')
+    result = subprocess.run(["sh", "-c", shell_command], capture_output=True, timeout=4)
+    assert result.returncode == 0
+    assert result.stdout == b"" and result.stderr == b""
 
 
 @pytest.mark.real_tmux_hooks

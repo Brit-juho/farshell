@@ -289,6 +289,10 @@ unknown values read back as `external`. The server has no auto-attach path: sess
 The web UI uses tmux sessions as its default:
 - On startup only the sessions in this browser tab's saved layout are attached; nothing is attached just because it
   exists (there is no "attach the first tmux session" fallback any more).
+- A saved tmux leaf keeps the tmux name alongside its short-lived web PTY id. Boot attaches that name again and
+  places the new id in the same view/pane. A new browser tab saves its copied layout under its own screen id after
+  restoration. During a server restart, a failed workspace read or transient attach error retries boot before
+  restoring or saving the layout, so a temporary failure cannot replace those saved names with empty panes.
 - "+ New" creates a tmux session (`POST /api/tmux/create`) and opens it in a new single view.
 - Four verbs, one implementation (`frontend/js/term/session-actions.js`), called by the rail row menu, the mobile
   session sheet, Fleet and the pane/view buttons:

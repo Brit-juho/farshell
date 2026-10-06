@@ -222,7 +222,8 @@ function _isSnapshot(s) {
 const _newer = (a, b) => (!a ? b : !b ? a : ((b.savedAt || 0) > (a.savedAt || 0) ? b : a));
 
 /** 부팅 때 쓸 스냅샷을 고른다: 이 브라우저 탭의 저장본(로컬·서버 중 최신),
- * 없으면 가장 최근 저장본의 사본(새 탭). 없으면 null. 서버 실패는 무시한다. */
+ * 없으면 가장 최근 저장본의 사본(새 탭). 로컬 사본 없이 서버가 일시 실패하면
+ * 재시도 대상으로 올린다 — 빈 화면을 정본처럼 저장하지 않기 위해서다. */
 export async function loadLayoutSnapshot() {
   let own = _readLocal(_screenKey());
   let latest = _readLocal(LS_KEY);
@@ -231,7 +232,14 @@ export async function loadLayoutSnapshot() {
     const mine = ws?.ui?.layouts?.[screenId()];
     if (_isSnapshot(mine)) own = _newer(own, mine);
     if (_isSnapshot(ws?.ui?.layout)) latest = _newer(latest, ws.ui.layout);
-  } catch (_) { /* 서버 미응답/미인증 — 로컬만으로 */ }
+  } catch (e) {
+    // 새 기기엔 로컬 사본이 없다. 서버 재시작 중 조회 실패를 "저장본 없음"으로
+    // 확정하면 빈 뷰로 부팅하므로, 연결이 돌아올 때 같은 저장본을 다시 읽는다.
+    if (!own && !latest && (!e.status || e.status >= 500 || e.status === 429)) {
+      e.retryable = true;
+      throw e;
+    }
+  }
   return own || latest || null;
 }
 

@@ -33,10 +33,23 @@ export async function attachLayoutSessions(infos) {
         if (info.tmux) id = await attachRemoteSession(host, info.tmux, { place: 'none' });
         if (!id) continue;
       } else if (info.tmux) {
-        const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: info.tmux, screen: screenId() }),
-        });
+        let res;
+        try {
+          res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: info.tmux, screen: screenId() }),
+          });
+        } catch (e) {
+          // 재시작 중 네트워크 단절을 "tmux가 종료됨"으로 간주하면 restoreLayout이
+          // 칸을 비우고 다음 저장에서 tmux 이름까지 잃는다. 부팅 전체를 재시도한다.
+          e.retryable = true;
+          throw e;
+        }
+        if (!res.ok && (res.status >= 500 || res.status === 429)) {
+          const e = new Error(`tmux attach temporarily unavailable (${res.status})`);
+          e.retryable = true;
+          throw e;
+        }
         const data = res.ok ? await res.json() : null;
         id = data && data.id;
         if (id && !getSession(id)) addSession(id, data.name || info.tmux, { place: 'none', tmuxName: info.tmux });
@@ -51,9 +64,11 @@ export async function attachLayoutSessions(infos) {
         if (x) { id = x.id; if (!getSession(id)) addSession(id, x.name || id, { place: 'none', ...(x.tmux_name ? { tmuxName: x.tmux_name } : {}) }); }
       }
       if (id) opened++; else failed++;
-    } catch (_) { failed++; }
+    } catch (e) {
+      if (e.retryable) throw e;
+      failed++;
+    }
   }
   if (failed > 0) showToast(`세션 ${failed}개를 열지 못했습니다 (이미 종료됨)`);
   return opened;
 }
-
