@@ -191,15 +191,55 @@ right after `new-session` (same mechanism as `@fsh_wt`, so it survives a server 
 
 The `agent` origin (robot icon, 「에이전트가 만듦」, `rail.origin.agent.show`) was **removed 2026-10-06**: agents never create sessions, so nothing could write it. A stale `rail.origin.agent.show` in saved settings is ignored (`core/settings.js` drops keys outside the schema).
 
-**Agent-shared sessions (design, not implemented).** An agent may only work in a tmux session the user made and
-named. The planned shape: the user creates an ordinary session (an empty terminal), then marks it shared with a
-nickname (tmux user option, e.g. `@fsh_shared`); the MCP server exposes only sessions carrying that mark
-(`list_shared_sessions`, `read_session` = capture the visible pane, `send_to_session` = type into it through the same
-guarded input path as the prompt queue — never into a pane that is `waiting`). Agents cannot create, rename, kill or
-share sessions, and cannot reach an unmarked one by guessing a name. Unsharing is one action for the user. It is the
-opposite trade-off of "agents create sessions": no resource-exhaustion or free-cwd surface, because the user already
-decided which terminal is exposed. Open points: read-only vs read-write share, per-share expiry, and whether sending
-needs a one-time user confirmation.
+**Agent-shared sessions (implemented 2026-10-06).** An agent works only in a tmux session the user made and shared.
+Agents cannot create, rename, kill or share sessions and cannot reach an unshared one by guessing a name (unshared and
+nonexistent nicks both answer 404). The user creates an ordinary session (an empty terminal) and shares it with a nickname
+and a mode; the MCP tools (`list_shared_sessions`, `read_session`, `send_to_session`) are the only door. Code:
+`server/agent_share.py` (rules, store, audit), `server/share_identity.py` (caller identity), `server/routes/agent_share.py`
+(HTTP), `server/mcp_farshell.py` (tools). Endpoint contract: `API.md` «Agent session sharing».
+
+- **Mark.** tmux user options `@fsh_share_nick` (`[A-Za-z0-9_-]{1,32}`, unique case-insensitively, checked under a lock) and
+  `@fsh_share_mode` (`read`|`readwrite`). Read in the same `list-sessions` call as `@fsh_origin`, so no extra tmux call;
+  `GET /api/tmux/sessions` and the `tmux_sessions` push carry `share: {nick, mode} | null`. The mark lives as long as tmux does
+  (server restarts keep it). A value someone typed in by hand is re-validated on every read: a bad nick means not shared, an
+  unknown mode reads as `read`. A session literally named `kill` cannot be shared (its unshare URL collides with the kill route).
+- **Grants.** `~/.vt/agent_grants.json` (0600, flock). A grant is (agent session A, shared session S) → read and/or write.
+  Both ends are keyed by `#{session_id}` + `#{session_created}` — not the name — so a rename follows, and a session killed and
+  recreated under the same name starts with nothing. It is deliberately **not** bound to the Claude/Codex session id: `/new`,
+  `/clear` and a CLI restart are the same tmux session and keep the grant. When A or S ends, the grant and its requests are
+  swept on the next read of the store. **Effective permission = min(granted, the share's current mode)**: lowering the mode to
+  `read` stops writing on the very next call, raising it again revives an existing write grant.
+- **Approval is human-only.** No grant → the call creates a **pending request** (one per agent/session/kind) and returns `202`;
+  the agent is told to repeat the same call once approved. Read and write are approved separately (allowing a write request may
+  give `read` only; a read request can never give write). A write request on a read-only share is refused at once, without a
+  request. A denied request is not re-created for 5 minutes; pending ones expire after 24 h; at most 20 pending per agent.
+  The user is told by the `agent_share_request` event on `/ws-workspace` (and a Web Push with no session names when no browser is
+  open). All approval/share/revoke endpoints sit behind `auth.require_human_session` — browser cookie only; the machine token,
+  which the agent itself holds, gets 403 (`docs/ref/auth.md`). Peers cannot use any of it (no peer route, not in `relay_policy`).
+- **Caller identity** (the part that stops "B pretends to be A's pane"). The MCP sends `TMUX_PANE`, `TMUX`, its pid as
+  `X-Fsh-*` headers. The server requires: `TMUX` is FarShell's socket (`pane_resolve.is_our_socket`); `TMUX_PANE` exists in
+  FarShell's tmux, which gives the pane's `pane_pid` and session from tmux itself; and the **parent chain of the calling pid
+  (64 levels at most) reaches that `pane_pid`**. Anything else is 403 `identity_unverified` with a reason; outside tmux there is no
+  `TMUX_PANE`, so it is refused. On a direct loopback connection (no proxy headers) the server looks up the TCP peer's owning pid
+  with `lsof` and uses that instead of the claimed pid, so a lied-about pid does not help.
+- **Read.** `capture-pane -p -J` of the session's active pane: last 200 lines by default, 2000 at most, trailing blank rows
+  dropped, 64 KB at most (the newest part is kept; `truncated` says so). 30/min per (agent session, shared session).
+- **Write.** `send-keys -l -- <text>` literally; Enter only with `enter:true`. It does not use the prompt queue (the main use is a
+  shell). Text: 1–4000 chars, one line, **no control characters, ESC, tab, newline, Unicode line separators or bidi
+  overrides** — a newline would run a command without `enter`, so multi-line input is refused and N commands are N calls. If an
+  agent CLI is known (hooks) to be `waiting` the send is refused (it would be consumed as the approval answer), `working` is refused
+  too, an unknown state (plain shell) is allowed. 10/min per pair.
+- **Audit.** `~/.vt/agent_access.log` (jsonl, 0600, rotated once at 1 MB to `.log.1`): time, agent (name + `$id`), nick, action
+  (`read`/`send`/`list`/`request`/`decide`/`revoke`/`share`/`unshare`), result, lines read, chars sent and the **first 8 hex of
+  the text's sha256 — never the text**. Read by the browser only (`GET /api/agent/share/audit`).
+- **Known limits.** (1) The claimed pid is only checked by the parent chain when the socket owner cannot be resolved (through a
+  tunnel/proxy, or no `lsof`): another process on the same Mac that knows an agent's pane id and a pid inside that pane could
+  impersonate it there. The machine token it also needs is readable by any same-user process anyway, so this raises the bar
+  rather than closing a user boundary. (2) Pane text can contain anything — what an agent reads is as trustworthy as the
+  program that printed it (prompt injection through a shared terminal is possible). (3) `send_to_session` into a plain shell
+  that is waiting at an interactive prompt (`sudo`, `read`) is not detected — the state comes from agent hooks only. (4) A
+  shared session is shared at its **active pane** only. (5) A grant is not time-limited (it ends with either session or by
+  revocation); there is no per-share expiry.
 
 Only `local`/`peer` are ever written (`tmux_runner.set_origin` rejects everything else without calling tmux);
 unknown values read back as `external`. The server has no auto-attach path: sessions attach only through explicit

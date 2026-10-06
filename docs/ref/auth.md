@@ -91,6 +91,23 @@ needs the same condition, because it's a replacement for #3, not a shortcut arou
 | Cross-site blocking | `OriginGuardMiddleware` (`server/main.py`) — returns 403 for both HTTP and WS if the Origin isn't itself. The only path that auth/OTP alone can't block (if the browser already has a cookie, auth passes). Also removes the default `*` CORS — opt in via `VT_ALLOWED_ORIGINS` if needed |
 | API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (daemons, hooks, the TUI). Via URL `?token=xxx` or `Authorization: Bearer xxx`. **It is not a second password — the login form rejects it (2026-09-17).** It used to be accepted there, which meant a human-usable credential that `fsh password` could never change or expire; the observed symptom was "I changed the password and the old one still logs me in". A legacy `?token=` link therefore no longer trades itself for a session cookie (it keeps working via the query parameter); register phones with `fsh mobile`'s one-time ticket instead. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are still recognized as fallbacks) |
 
+## Who is calling: browser session, machine token or peer (2026-10-06)
+
+Authenticated does not mean human. The machine token (`VT_AUTH_TOKEN`) is readable by every agent process on the Mac
+(`~/.vt.env`, environment), so anything that must be decided **by a person** cannot accept it. `auth.request_kind(request)` tells
+the three apart — `session` (a valid signed `vt_session` cookie and **no** `Authorization` header or `?token=` alongside it),
+`machine` (Bearer, `?token=`, or the token carried as a cookie value), `none` — and the middleware leaves the result on
+`request.state.auth_kind` (diagnostic only). The gate itself is the FastAPI dependency `auth.require_human_session`, attached to
+the **whole router** (`human_router` in `routes/agent_share.py`) rather than per handler: machine token, peer signature, a bad
+cookie and an unauthenticated call all get **403 `human_session_required`**. A server with no password set cannot prove anyone is
+human, so it is 403 there as well.
+
+What this protects: sharing a session with agents, approving/denying an agent's access request, revoking a grant and reading the
+access log (`API.md` «Agent session sharing»). The agent-facing endpoints of the same feature take the machine token plus a
+pane/pid identity check but can approve nothing. Peers never reach any of it: `/api/peer/*` has no route for it and
+`relay_policy.py` does not allow the paths. Tests: `server/tests/test_agent_share.py` (machine token on every human endpoint,
+cookie + token together, no-password server, peer-signed requests, relay allowlist).
+
 ## A device's sessions die with the device
 
 `session_device` used to check only that the bound device **still existed**. A device

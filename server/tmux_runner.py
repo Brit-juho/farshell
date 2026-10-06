@@ -13,6 +13,7 @@ import asyncio
 import functools
 import logging
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -118,6 +119,26 @@ def normalize_origin(raw: str | None) -> str:
     return v if v in RECORDABLE_ORIGINS else ORIGIN_EXTERNAL
 
 
+# 에이전트 세션 공유 표시(2026-10-06). 사용자가 평범한 세션을 닉네임과 함께 "공유"하면 두 옵션이
+# 세션에 적힌다 — tmux 가 살아 있는 동안 서버 재시작을 견딘다. 읽기는 기존 list-sessions
+# 호출의 포맷에 합쳐져 추가 tmux 호출이 없다. 값은 사람이 tmux 로 직접 바꿀 수도 있으니 읽을 때마다
+# 다시 검증한다(`parse_share`). 쓰기·권한 판단은 agent_share.py 가 한다.
+SHARE_NICK_OPTION = "@fsh_share_nick"
+SHARE_MODE_OPTION = "@fsh_share_mode"
+SHARE_MODES = ("read", "readwrite")
+SHARE_NICK_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
+
+
+def parse_share(nick: str | None, mode: str | None) -> dict | None:
+    """tmux 옵션 두 값 → `{nick, mode}` 또는 None. 닉네임이 규칙에 안 맞으면 공유 아님,
+    모드가 모르는 값이면 가장 낮은 `read`로 읽는다(권한이 실수로 올라가지 않게)."""
+    n = (nick or "").strip()
+    if not SHARE_NICK_RE.fullmatch(n):
+        return None
+    m = (mode or "").strip()
+    return {"nick": n, "mode": m if m in SHARE_MODES else "read"}
+
+
 def get_all_panes() -> list[PaneInfo]:
     """모든 세션의 모든 pane 정보를 단일 호출로 수집 (G3 핵심).
 
@@ -154,7 +175,7 @@ def get_all_panes() -> list[PaneInfo]:
 
 def list_sessions() -> list[dict]:
     """세션 메타 정보를 단일 호출로 수집."""
-    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{@fsh_wt}\t#{@fsh_origin}"
+    fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{@fsh_wt}\t#{@fsh_origin}\t#{@fsh_share_nick}\t#{@fsh_share_mode}"
     text = run_text(["list-sessions", "-F", fmt])
     if not text:
         return []
@@ -173,6 +194,7 @@ def list_sessions() -> list[dict]:
                 "created": int(parts[3]) if parts[3].isdigit() else 0,
                 "wt_id": parts[4] if len(parts) > 4 else "",
                 "origin": normalize_origin(parts[5] if len(parts) > 5 else ""),
+                "share": parse_share(parts[6] if len(parts) > 6 else "", parts[7] if len(parts) > 7 else ""),
             }
         )
     return sessions

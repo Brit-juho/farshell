@@ -369,6 +369,51 @@ def check_credential(cred: str) -> bool:
     return credential_kind(cred) is not None
 
 
+# 호출자 종류 (2026-10-06, 에이전트 세션 공유) -----------------------------------
+# 같은 서버가 세 종류의 호출자를 받는다: 브라우저 로그인 세션(사람), 기계 토큰(데몬·훅·에이전트의
+# MCP), peer 서명(다른 맥). "에이전트가 자기 접근을 스스로 승인"하는 길을 막으려면 **사람만 할 수
+# 있는 일**을 가려낼 수단이 필요하다 — 기계 토큰은 에이전트가 환경·`~/.vt.env`에서 읽을 수 있기
+# 때문에 "인증됐다"는 사람이라는 뜻이 아니다. 여기서 가른다(peer 서명 경로 `/api/peer/`는 다른
+# 미들웨어 예외로 처리되고 이 함수는 거기서 쓰이지 않는다 — 사람 전용 라우트는 그 경로에 없다).
+AUTH_SESSION = "session"   # 서명 세션 쿠키(사람이 비밀번호로 로그인했다)
+AUTH_MACHINE = "machine"   # 기계 토큰(Bearer / ?token= / 쿠키로 실린 토큰)
+AUTH_NONE = "none"         # 인증 수단 없음(또는 무효)
+
+
+def request_kind(request) -> str:
+    """요청의 인증 종류 — `session` | `machine` | `none`.
+
+    `session`은 **서명 세션 쿠키만**이고, `Authorization`·`?token=`이 하나라도 같이 실려 오면
+    사람의 브라우저 요청이 아니라고 보아 `session`으로 치지 않는다(브라우저는 둘 다 안 보낸다).
+    서명키가 없는 레거시 환경에서는 쿠키 값이 기계 토큰 그대로라 세션이 존재할 수 없다 → `session` 불가.
+    """
+    cookie = request.cookies.get("vt_session", "")
+    has_header_cred = bool(request.headers.get("authorization")) or bool(request.query_params.get("token"))
+    if cookie and not has_header_cred and session_device(cookie) is not None:
+        return AUTH_SESSION
+    if VT_AUTH_TOKEN:
+        authz = request.headers.get("authorization", "")
+        for cand in (authz[7:] if authz.startswith("Bearer ") else "",
+                     request.query_params.get("token", ""), cookie):
+            if cand and hmac.compare_digest(cand, VT_AUTH_TOKEN):
+                return AUTH_MACHINE
+    return AUTH_NONE
+
+
+def require_human_session(request: Request) -> None:
+    """사람(브라우저 로그인 세션)만 통과하는 FastAPI 의존성 — 에이전트 접근 승인·공유·철회용.
+
+    기계 토큰·peer 서명·무인증은 전부 403 `human_session_required`. 비밀번호가 설정되지 않은
+    서버(로그인 자체가 없다)도 403이다 — 그 환경에서는 "사람"을 증명할 방법이 없다.
+    """
+    from starlette.exceptions import HTTPException
+
+    if request_kind(request) != AUTH_SESSION:
+        raise HTTPException(status_code=403, detail={
+            "error": "human_session_required",
+            "reason": "이 작업은 브라우저에서 로그인한 사람만 할 수 있습니다 (기계 토큰으로는 불가)"})
+
+
 def check_request(token: str) -> bool:
     """미들웨어/WS: 요청에 실린 값(세션 쿠키 또는 기계 토큰)으로 인증."""
     if not token:
