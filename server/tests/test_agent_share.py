@@ -162,12 +162,22 @@ def test_nick_validation_and_uniqueness(web):
     assert share(human, "s2", "other").status_code == 200
 
 
-def test_reserved_name_kill_cannot_be_shared(web):
-    """`DELETE /api/tmux/kill/share` 는 세션 종료 라우트와 같은 경로다 — 'kill' 세션은 공유하지 않는다."""
+def test_kill_named_session_can_be_shared_and_unshared(web):
     human, _, env = web
     env.mk("kill", "cat")
-    r = share(human, "kill", "k")
-    assert r.status_code == 400 and r.json()["error"] == "reserved_name"
+    assert share(human, "kill", "k").status_code == 200
+    assert human.delete("/api/agent/share/sessions/kill").status_code == 200
+    assert env.sess("kill").share is None
+
+
+def test_renamed_kill_session_unshares_without_ending_it(web):
+    human, _, env = web
+    env.mk("target", "cat")
+    assert share(human, "target", "shell").status_code == 200
+    env.rename("target", "kill")
+    r = human.delete("/api/agent/share/sessions/kill")
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert env.sess("kill").share is None
 
 
 def test_share_marks_session_list_and_unshare_clears(web):
@@ -181,7 +191,7 @@ def test_share_marks_session_list_and_unshare_clears(web):
     # tmux 옵션이 실제로 심겼다(서버 재시작을 견디는 근거)
     out = tmux_runner.run_text(["show-options", "-v", "-t", "t1", "@fsh_share_nick"])
     assert out.strip() == "dev"
-    r = human.delete("/api/tmux/t1/share")
+    r = human.delete("/api/agent/share/sessions/t1")
     assert r.status_code == 200 and r.json()["ok"] is True
     assert next(s for s in human.get("/api/tmux/sessions").json() if s["name"] == "t1")["share"] is None
 
@@ -281,6 +291,23 @@ def test_lowering_mode_takes_effect_immediately(web):
     assert asend(agent, env, "claude-a", "shell", "echo three").status_code == 200
 
 
+@pytest.mark.parametrize("bad", ['{"grants": {"x": 1}, "requests": []}',
+                                       '{"grants": [], "requests": "wrong"}', '{broken json'])
+def test_corrupt_grants_preserved_before_next_save(web, bad):
+    human, agent, env = setup_pair(web)
+    path = agent_share._path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(bad)
+    assert human.get("/api/agent/share/grants").status_code == 200
+    assert human.get("/api/agent/share/grants").json()["grants"] == []
+    assert path.read_text() == bad  # 읽기만으로는 원본을 덮지 않는다
+    assert aread(agent, env, "claude-a", "shell").status_code == 202
+    backups = list(path.parent.glob("agent_grants.json.corrupt-*"))
+    assert len(backups) == 1 and backups[0].read_text() == bad
+    assert backups[0].stat().st_mode & 0o777 == 0o600
+    assert len(json.loads(path.read_text())["requests"]) == 1
+
+
 def test_grant_survives_cli_restart_in_same_tmux_session(web):
     """/new·/clear·CLI 재시작 = 같은 tmux 세션의 다른 프로세스. 권한은 Claude session_id 가 아니라 tmux 세션에 묶인다."""
     human, agent, env = web
@@ -353,7 +380,7 @@ def test_revoke_write_only_then_all_and_unshare_clears_everything(web):
     assert human.delete(f"/api/agent/share/grants/{gid}").status_code == 200
     assert human.delete(f"/api/agent/share/grants/{gid}").status_code == 404
     assert aread(agent, env, "claude-a", "shell").status_code == 202          # 철회 → 다시 보류
-    r = human.delete("/api/tmux/target/share")
+    r = human.delete("/api/agent/share/sessions/target")
     assert r.json()["clearedRequests"] >= 1
     assert aread(agent, env, "claude-a", "shell").status_code == 404          # 공유 해제 → 닉네임 자체가 없다
     assert human.get("/api/agent/share/requests").json()["requests"] == []
@@ -461,7 +488,7 @@ def test_socket_owner_overrides_a_lying_pid(web, monkeypatch):
 
 HUMAN_ONLY = [
     ("post", "/api/tmux/target/share", {"nick": "shell", "mode": "read"}),
-    ("delete", "/api/tmux/target/share", None),
+    ("delete", "/api/agent/share/sessions/target", None),
     ("get", "/api/agent/share/requests", None),
     ("post", "/api/agent/share/requests/abcdef123456/decision", {"decision": "allow"}),
     ("get", "/api/agent/share/grants", None),
@@ -558,7 +585,7 @@ def test_auth_kind_helper(app_auth):
 
 
 @pytest.mark.parametrize("text", ["a\nb", "a\rb", "a\tb", "\x1b[31mred", "esc\x1b", "nul\x00", "del\x7f", "bell\x07",
-                                  "c1\x9b", "ls ", "rtl‮", "iso⁦x", ""])
+                                  "c1\x9b", "ls ", "rtl‮", "iso⁦x", "zero\u200bwidth", "join\u200d", ""])
 def test_send_rejects_control_chars_newlines_and_empty(web, text):
     human, agent, env = setup_pair(web, mode="readwrite")
     r = asend(agent, env, "claude-a", "shell", text)
@@ -667,6 +694,7 @@ def test_audit_log_shape_has_no_plaintext(web, tmp_path):
     for want in (("share", "ok"), ("request", "pending"), ("decide", "allowed"), ("send", "ok"), ("read", "ok"),
                  ("list", "identity_unverified")):
         assert want in acts, (want, acts)
+    assert next(r for r in recs if r["result"] == "identity_unverified")["by"] == "agent"
     send = next(r for r in recs if r["action"] == "send" and r["result"] == "ok")
     import hashlib
     assert send["sha8"] == hashlib.sha256(secret.encode()).hexdigest()[:8] and send["chars"] == len(secret)

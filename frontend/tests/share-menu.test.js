@@ -28,13 +28,18 @@ test('공유된 행: 「공유 설정…」「공유 해제」「에이전트 �
   assert.strictEqual(items.find((i) => i.id === 'unshare').label, '공유 해제');
 });
 
-test('다른 맥을 보는 화면(share 옵션 없음)·kill 이름·tmux 아닌 행에는 항목이 없다', async () => {
+test('다른 맥을 보는 화면(share 옵션 없음)·tmux 아닌 행에는 항목이 없다', async () => {
   const { rowMenuItems } = await load();
   const any = (items) => items.some((i) => ['share', 'shareSettings', 'unshare', 'agentPerms'].includes(i.id));
   assert.ok(!any(rowMenuItems({ open: true, tmuxName: 'dev', share: null })), '옵션 없음 = 원격 화면');
   assert.ok(!any(rowMenuItems({ open: true, tmuxName: 'dev', share: null }, { share: false })));
-  assert.ok(!any(rowMenuItems({ open: true, tmuxName: 'kill', share: null }, { share: true })), 'kill 은 서버가 거부');
   assert.ok(!any(rowMenuItems({ open: true, tmuxName: null, share: null }, { share: true })));
+});
+
+test('kill 이름의 공유 세션에도 공유 해제 항목이 있다', async () => {
+  const { rowMenuItems } = await load();
+  const items = rowMenuItems({ open: true, tmuxName: 'kill', share: { nick: 'shell', mode: 'read' } }, { share: true });
+  assert.ok(ids(items).includes('unshare'));
 });
 
 test('서버가 받지 않는 이름(한글 등)은 공유 항목만 빠지고 권한 패널 진입은 남는다', async () => {

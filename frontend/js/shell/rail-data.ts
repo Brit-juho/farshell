@@ -288,8 +288,8 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
   } else {
     items.push({ id: 'open', label: '열기' }, ...split);
   }
-  // 이름이 `kill` 인 세션은 서버가 공유를 거부한다(해제 URL 이 종료 라우트와 겹친다). 이름 규칙 밖(한글 등)은 공유 항목만 뺀다.
-  if (opts.share && row.tmuxName && row.tmuxName !== 'kill') {
+  // 이름 규칙 밖(한글 등)은 공유 항목만 뺀다.
+  if (opts.share && row.tmuxName) {
     if (SHARE_NAME_RE.test(row.tmuxName)) {
       if (row.share) {
         items.push(

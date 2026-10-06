@@ -12,11 +12,9 @@
   3. 호출 프로세스의 부모 체인(최대 `MAX_DEPTH` 단계)이 그 `pane_pid` 에 닿는다 — 즉 그 칸에서
      실제로 돌고 있는 프로세스다. 다른 칸의 프로세스가 `TMUX_PANE=%3` 을 위조해도 체인이 다르다.
 
-**pid 는 자기 신고다.** 같은 맥의 직접 연결(루프백 + 프록시 헤더 없음)에서는 서버가 TCP 소켓의
-소유 프로세스를 `lsof` 로 직접 찾아 신고 값 대신 쓴다(`socket_owner_pid`) — 신고를 속여도 소용없다.
-이 조회가 불가능한 경로(터널·프록시를 거침, `lsof` 없음)는 신고된 pid 로 내려가고, 그때는 같은
-맥의 다른 프로세스가 "pid 위조 + 같은 칸의 pane id"를 알아내야 하는 한계가 남는다(docs/ref/terminal.md
-「Agent-shared sessions」 알려진 한계).
+**신고된 pid 는 인증 근거로 쓰지 않는다.** 직접 루프백 연결에서 서버가 TCP 소켓의 소유 프로세스를
+`lsof` 로 직접 찾는다(`socket_owner_pid`). 소유자를 확인할 수 없는 경로(터널·프록시·`lsof` 없음)는 거부한다.
+`testclient`의 가상 연결만 별도 시험 경로에서 신고 pid 를 쓴다.
 """
 
 from __future__ import annotations
@@ -144,7 +142,7 @@ def _lsof_path() -> Optional[str]:
 
 def socket_owner_pid(client: Optional[tuple], headers: dict, server_port: Optional[int]) -> Optional[int]:
     """같은 맥에서 루프백으로 직접 들어온 연결이면 그 TCP 연결의 **클라이언트 쪽 프로세스 pid**.
-    프록시 헤더가 있거나(터널) 루프백이 아니거나 조회가 안 되면 None — 호출부가 신고 값을 쓴다."""
+    루프백이 아니거나 조회가 안 되면 None. 실제 호출부는 요청 헤더 대신 빈 dict 를 넘긴다."""
     lsof = _lsof_path()
     if not client or len(client) < 2 or not lsof:
         return None

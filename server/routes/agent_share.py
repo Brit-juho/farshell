@@ -178,7 +178,7 @@ async def _identify(request: Request, action: str, nick: Optional[str] = None):
             headers={k.lower(): v for k, v in h.items()},
             server_port=server[1] if server else None)
     except share_identity.IdentityError as e:
-        await asyncio.to_thread(agent_share.audit, action, "identity_unverified", nick=nick, reason=e.reason)
+        await asyncio.to_thread(agent_share.audit, action, "identity_unverified", nick=nick, by="agent", reason=e.reason)
         raise ShareError("identity_unverified", e.reason, 403) from None
 
 
@@ -322,7 +322,7 @@ async def share_session(name: str, request: Request):
     return {"ok": True, "name": name, "share": share}
 
 
-@human_router.delete("/api/tmux/{name}/share", response_model=UnshareResponse)
+@human_router.delete("/api/agent/share/sessions/{name}", response_model=UnshareResponse)
 async def unshare_session(name: str):
     """공유 해제 — 그 세션의 모든 권한과 대기·거부 요청도 지운다."""
     if not _NAME_RE.fullmatch(name):

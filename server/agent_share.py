@@ -128,7 +128,7 @@ def check_mode(mode) -> str:
     return mode
 
 
-_BAD_CATEGORIES = {"Cc", "Cs", "Zl", "Zp"}
+_BAD_CATEGORIES = {"Cc", "Cf", "Cs", "Zl", "Zp"}
 
 
 def check_send_text(text) -> str:
@@ -143,7 +143,7 @@ def check_send_text(text) -> str:
         if cat in _BAD_CATEGORIES or "‪" <= ch <= "‮" or "⁦" <= ch <= "⁩":
             raise ShareError(
                 "bad_text",
-                "제어 문자·ESC·줄바꿈·탭은 보낼 수 없습니다 — 한 줄만 보내고 실행하려면 enter 를 true 로 하세요", 400)
+                "제어 문자·보이지 않는 문자·ESC·줄바꿈·탭은 보낼 수 없습니다 — 한 줄만 보내고 실행하려면 enter 를 true 로 하세요", 400)
     return text
 
 
@@ -178,18 +178,38 @@ def _locked(name: str = "agent_grants.lock"):
         yield
 
 
-def _load() -> dict:
+def _load() -> tuple[dict, bool]:
     p = _path()
     data: dict = {}
+    corrupt = False
     if p.is_file():
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
-            logger.warning(f"에이전트 권한 파일 읽기 실패({e}) — 빈 상태로 시작(권한 없음 = 안전한 쪽)")
+            logger.warning(f"에이전트 권한 파일 읽기 실패({e}) — 빈 상태로 시작, 다음 저장 전 원본 보존")
+            corrupt = True
     if not isinstance(data, dict):
         data = {}
-    return {"grants": [g for g in data.get("grants", []) if isinstance(g, dict)],
-            "requests": [r for r in data.get("requests", []) if isinstance(r, dict)]}
+        corrupt = True
+    grants, requests = data.get("grants", []), data.get("requests", [])
+    if not isinstance(grants, list) or not isinstance(requests, list):
+        grants, requests = [], []
+        corrupt = True
+    return {"grants": [g for g in grants if isinstance(g, dict)],
+            "requests": [r for r in requests if isinstance(r, dict)]}, corrupt
+
+
+def _backup_corrupt() -> None:
+    """깨진 저장소를 덮기 전에 원본 바이트를 0600 파일로 보존한다(호출자는 저장소 락을 쥔다)."""
+    p = _path()
+    try:
+        raw = p.read_bytes()
+        backup = p.with_name(f"{p.name}.corrupt-{uuid.uuid4().hex}")
+        fd = os.open(str(backup), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(raw)
+    except OSError as e:
+        raise ShareError("store_backup_failed", "손상된 권한 파일의 백업을 만들지 못해 저장을 중단했습니다", 503) from e
 
 
 def _save(data: dict) -> None:
@@ -228,11 +248,13 @@ def _txn(snap: Optional[dict[str, Sess]]):
     """락 안에서 읽고 정리한 뒤 변경이 있으면 저장하는 트랜잭션. `with _txn(snap) as data:` 로 data 를
     고치면 빠져나올 때 저장된다."""
     with _locked():
-        data = _load()
+        data, corrupt = _load()
         before = json.dumps(data, sort_keys=True)
         _purge(data, snap, time.time())   # 정리 결과도 변경으로 저장된다
         yield data
         if json.dumps(data, sort_keys=True) != before or not _path().exists():
+            if corrupt and _path().exists():
+                _backup_corrupt()
             _save(data)
 
 
@@ -369,10 +391,6 @@ def set_share(name: str, nick, mode) -> dict:
         if snap is None:
             raise ShareError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
         target = _by_name(snap, name)
-        if name == "kill":
-            # `DELETE /api/tmux/kill/{name}`(세션 종료)과 `DELETE /api/tmux/{name}/share` 가 이 이름에서 같은
-            # 경로가 된다 — 해제 요청이 엉뚱한 세션을 죽이지 않도록 이 이름은 공유하지 않는다.
-            raise ShareError("reserved_name", "'kill' 이라는 이름의 세션은 공유할 수 없습니다 — 이름을 바꾼 뒤 공유하세요", 400)
         for s in snap.values():
             if s.key != target.key and s.share and s.share["nick"].lower() == nick.lower():
                 raise ShareError("nick_taken", f"'{nick}' 닉네임은 이미 다른 세션이 쓰고 있습니다", 409)
@@ -471,10 +489,11 @@ def _audit_path() -> Path:
     return vt_paths.state_dir() / "agent_access.log"
 
 
-def audit(action: str, result: str, *, agent=None, nick: Optional[str] = None, **extra) -> None:
+def audit(action: str, result: str, *, agent=None, nick: Optional[str] = None,
+          by: Optional[str] = None, **extra) -> None:
     """한 줄 jsonl. **원문은 남기지 않는다** — 글자 수와 sha 앞 8자리만. 실패해도 호출을 막지 않는다."""
     rec: dict = {"ts": round(time.time(), 3), "action": action, "result": result,
-                 "by": "agent" if agent is not None else "user"}
+                 "by": by or ("agent" if agent is not None else "user")}
     if agent is not None:
         rec["agent"] = {"name": agent.name, "id": agent.sid}
         if getattr(agent, "weak", False):

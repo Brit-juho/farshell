@@ -208,13 +208,16 @@ and a mode; the MCP tools (`list_shared_sessions`, `read_session`, `send_to_sess
   `@fsh_share_mode` (`read`|`readwrite`). Read in the same `list-sessions` call as `@fsh_origin`, so no extra tmux call;
   `GET /api/tmux/sessions` and the `tmux_sessions` push carry `share: {nick, mode} | null`. The mark lives as long as tmux does
   (server restarts keep it). A value someone typed in by hand is re-validated on every read: a bad nick means not shared, an
-  unknown mode reads as `read`. A session literally named `kill` cannot be shared (its unshare URL collides with the kill route).
+  unknown mode reads as `read`. Unshare uses `/api/agent/share/sessions/{name}`, separate from the tmux kill route, including for a session named `kill`.
 - **Grants.** `~/.vt/agent_grants.json` (0600, flock). A grant is (agent session A, shared session S) → read and/or write.
   Both ends are keyed by `#{session_id}` + `#{session_created}` — not the name — so a rename follows, and a session killed and
   recreated under the same name starts with nothing. It is deliberately **not** bound to the Claude/Codex session id: `/new`,
   `/clear` and a CLI restart are the same tmux session and keep the grant. When A or S ends, the grant and its requests are
-  swept on the next read of the store. **Effective permission = min(granted, the share's current mode)**: lowering the mode to
-  `read` stops writing on the very next call, raising it again revives an existing write grant.
+  swept on the next read of the store. Malformed grants or requests are treated as empty; before a later write replaces the
+  damaged file, its exact bytes are saved to a private `agent_grants.json.corrupt-*` backup. If backup fails, the write is
+  refused. **Effective permission = min(granted, the share's current mode)**: lowering the mode to `read` stops writing on the
+  very next call. Raising it again revives an existing write grant **without another approval**; revoke the write grant or
+  unshare if the reduction should be permanent.
 - **Approval is human-only.** No grant → the call creates a **pending request** (one per agent/session/kind) and returns `202`;
   the agent is told to repeat the same call once approved. Read and write are approved separately (allowing a write request may
   give `read` only; a read request can never give write). A write request on a read-only share is refused at once, without a
@@ -226,22 +229,23 @@ and a mode; the MCP tools (`list_shared_sessions`, `read_session`, `send_to_sess
   `X-Fsh-*` headers. The server requires: `TMUX` is FarShell's socket (`pane_resolve.is_our_socket`); `TMUX_PANE` exists in
   FarShell's tmux, which gives the pane's `pane_pid` and session from tmux itself; and the **parent chain of the calling pid
   (64 levels at most) reaches that `pane_pid`**. Anything else is 403 `identity_unverified` with a reason; outside tmux there is no
-  `TMUX_PANE`, so it is refused. On a direct loopback connection (no proxy headers) the server looks up the TCP peer's owning pid
-  with `lsof` and uses that instead of the claimed pid, so a lied-about pid does not help.
+  `TMUX_PANE`, so it is refused. The server requires a direct loopback connection and looks up the TCP peer's owning pid with
+  `lsof`; if it cannot establish that owner, it refuses the call. Proxy headers cannot switch the check to a claimed pid.
 - **Read.** `capture-pane -p -J` of the session's active pane: last 200 lines by default, 2000 at most, trailing blank rows
   dropped, 64 KB at most (the newest part is kept; `truncated` says so). 30/min per (agent session, shared session).
 - **Write.** `send-keys -l -- <text>` literally; Enter only with `enter:true`. It does not use the prompt queue (the main use is a
   shell). Text: 1–4000 chars, one line, **no control characters, ESC, tab, newline, Unicode line separators or bidi
-  overrides** — a newline would run a command without `enter`, so multi-line input is refused and N commands are N calls. If an
+  overrides or Unicode format characters such as U+200B** — a newline would run a command without `enter`, so multi-line input is refused and N commands are N calls. If an
   agent CLI is known (hooks) to be `waiting` the send is refused (it would be consumed as the approval answer), `working` is refused
   too, an unknown state (plain shell) is allowed. 10/min per pair.
 - **Audit.** `~/.vt/agent_access.log` (jsonl, 0600, rotated once at 1 MB to `.log.1`): time, agent (name + `$id`), nick, action
   (`read`/`send`/`list`/`request`/`decide`/`revoke`/`share`/`unshare`), result, lines read, chars sent and the **first 8 hex of
   the text's sha256 — never the text**. Read by the browser only (`GET /api/agent/share/audit`).
-- **Known limits.** (1) The claimed pid is only checked by the parent chain when the socket owner cannot be resolved (through a
-  tunnel/proxy, or no `lsof`): another process on the same Mac that knows an agent's pane id and a pid inside that pane could
-  impersonate it there. The machine token it also needs is readable by any same-user process anyway, so this raises the bar
-  rather than closing a user boundary. (2) Pane text can contain anything — what an agent reads is as trustworthy as the
+- **Known limits.** (1) This is a guard against a deceived agent or an accidental call, **not a security boundary against a
+  malicious process running as the same OS user with unrestricted file access**. Such a process can read the session-signing
+  key in `~/.vt.env`, forge a browser session cookie and pass a human-only approval endpoint; this was reproduced in an
+  adversarial test. Run less-trusted agents with a sandbox or separate OS account that cannot read `~/.vt.env`. File mode 0600
+  alone does not separate processes running as the same user. (2) Pane text can contain anything — what an agent reads is as trustworthy as the
   program that printed it (prompt injection through a shared terminal is possible). (3) `send_to_session` into a plain shell
   that is waiting at an interactive prompt (`sudo`, `read`) is not detected — the state comes from agent hooks only. (4) A
   shared session is shared at its **active pane** only. (5) A grant is not time-limited (it ends with either session or by
@@ -255,7 +259,7 @@ row menu in `shell/rail-data.ts`.
 |---|---|
 | not shared | 「에이전트와 공유…」, 「에이전트 권한…」 |
 | shared | 「공유 설정…」 (nick, mode), 「공유 해제」 (instant: every grant and pending request goes), 「에이전트 권한…」 |
-| viewing another host (relayed), tmux name `kill`, non-tmux row | none (the server refuses `kill`; sharing is not relayed) |
+| viewing another host (relayed), non-tmux row | none (sharing is not relayed) |
 | tmux name outside `[A-Za-z0-9_.-]{1,64}` (e.g. Hangul) | only 「에이전트 권한…」 — the server route cannot name it |
 
 - **Calls go out with the cookie only** (`share/share-api.js`). `vtFetch` appends `?token=` and `apiFetch` adds `Authorization`

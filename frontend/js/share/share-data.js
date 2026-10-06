@@ -53,7 +53,6 @@ export function errorText(e) {
   if (code === 'nick_taken') return '이미 쓰는 닉네임입니다';
   if (code === 'human_session_required') return '비밀번호로 로그인한 브라우저에서만 할 수 있습니다 (토큰 링크 접속에서는 불가)';
   if (code === 'read_only_share') return '이 공유는 읽기 전용입니다 — 공유 설정에서 읽기·쓰기로 올린 뒤 허용하세요';
-  if (code === 'reserved_name') return "'kill' 이라는 이름의 세션은 공유할 수 없습니다";
   const reason = e && e.data && e.data.reason;
   return reason || (e && e.message) || '요청에 실패했습니다';
 }

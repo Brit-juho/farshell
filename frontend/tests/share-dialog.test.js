@@ -116,7 +116,7 @@ test('공유 설정: 기존 닉네임·모드로 시작하고, 읽기 전용으�
 });
 
 test('공유 해제: DELETE 를 보내고 지운 권한 수를 알린다', async () => {
-  const t = await loadShare({ 'DELETE /api/tmux/dev/share': () => ({ json: { ok: true, revokedGrants: 2, clearedRequests: 0 } }) });
+  const t = await loadShare({ 'DELETE /api/agent/share/sessions/dev': () => ({ json: { ok: true, revokedGrants: 2, clearedRequests: 0 } }) });
   _wins.push(t.window);
   assert.strictEqual(await t.mod.unshareSession('dev'), true);
   assert.strictEqual(t.calls[0].method, 'DELETE');

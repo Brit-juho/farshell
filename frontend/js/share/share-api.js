@@ -19,7 +19,7 @@ const J = (method, body) => ({ method, headers: { 'Content-Type': 'application/j
 
 export const shareApi = {
   share: (name, nick, mode) => shareFetch(`/api/tmux/${encodeURIComponent(name)}/share`, J('POST', { nick, mode })),
-  unshare: (name) => shareFetch(`/api/tmux/${encodeURIComponent(name)}/share`, { method: 'DELETE' }),
+  unshare: (name) => shareFetch(`/api/agent/share/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   requests: () => shareFetch('/api/agent/share/requests').then((d) => (d && d.requests) || []),
   decide: (id, decision, level) => shareFetch(
     `/api/agent/share/requests/${encodeURIComponent(id)}/decision`,
