@@ -35,6 +35,7 @@ const panelsJs = fs.readFileSync(path.join(DIST, 'panels.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(DIST, 'settings.js'), 'utf8');
 const shellJs = fs.readFileSync(path.join(DIST, 'shell.js'), 'utf8');
 const screensJs = fs.readFileSync(path.join(DIST, 'screens.js'), 'utf8');
+const shareJs = fs.readFileSync(path.join(DIST, 'share.js'), 'utf8');
 
 // 2.1.6 — 상한의 대상이 app.js 하나에서 **초기 페이로드 합계**로 바뀌었다.
 // 청크 규칙을 뒤집으면서(vite.config.js) app.js는 부팅 배선만 남은 2KB가 되고
@@ -113,4 +114,22 @@ test('세션 시트의 목록 렌더링(layout/session-sheet.js)은 screens 청�
   assert.match(screensJs, /function renderSessionSheet/);
   assert.doesNotMatch(coreJs, /function renderSessionSheet/);
   assert.doesNotMatch(coreJs, /vt-session-group-label/);
+});
+
+test('에이전트 공유의 대화상자·승인 모달·권한 패널은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·import() 만)', () => {
+  // vite.config.js manualChunks 의 `/frontend/js/share/` 규칙이 빠지면 포괄 규칙이 core 로 보내
+  // 상시 로드가 ~18KB 늘어난다(빌드·테스트는 통과하고 상한만 조용히 줄어든다).
+  assert.match(shareJs, /function openShareDialog/);
+  assert.match(shareJs, /function openPermsPanel/);
+  assert.match(shareJs, /vt-share-approval/);
+  assert.doesNotMatch(coreJs, /function openShareDialog/);
+  assert.doesNotMatch(coreJs, /function openPermsPanel/);
+  assert.doesNotMatch(coreJs, /vt-share-approval/);
+  assert.doesNotMatch(coreJs, /에이전트 접근 요청/);
+  // core 쪽 진입점은 있고, 청크는 동적 import 로만 받는다
+  assert.match(coreJs, /agent_share_request/);
+  assert.match(coreJs, /import\("\.\/share\.js"\)/);
+  // share 청크도 core 싱글톤을 복제하지 않는다
+  assert.doesNotMatch(shareJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
+  assert.doesNotMatch(shareJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
 });

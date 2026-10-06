@@ -1299,11 +1299,28 @@
   .vt-share-acts { flex-wrap: wrap; }
   .vt-share-later { display: flex; justify-content: flex-start; margin-top: calc(var(--spacing) * 3); }
 
+  /* 권한 패널 */
+  .vt-share-h { margin: 0 0 calc(var(--spacing) * 2); color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); letter-spacing: var(--tracking-wide); }
+  .vt-share-pending { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--spacing) * 3); margin: 0 0 calc(var(--spacing) * 4); color: var(--color-st-waiting); font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui); }
+  .vt-share-grants { list-style: none; margin: 0 0 calc(var(--spacing) * 5); padding: 0; }
+  .vt-share-grant { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: calc(var(--spacing) * 2) calc(var(--spacing) * 3); padding: calc(var(--spacing) * 2.5) 0; border-top: 1px solid var(--color-line); }
+  .vt-share-grant:first-child { border-top: 0; }
+  .vt-share-grant-main { min-width: 0; flex: 1 1 200px; }
+  .vt-share-grant-who { display: flex; flex-wrap: wrap; gap: calc(var(--spacing) * 1.5); align-items: baseline; color: var(--color-txt); font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui); overflow-wrap: anywhere; }
+  .vt-share-to { color: var(--color-sub); font-weight: var(--weight-normal); font-size: var(--fs-xs); }
+  .vt-share-grant-meta { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-share-grant-acts { display: flex; gap: calc(var(--spacing) * 2); flex-wrap: wrap; }
+  .vt-share-empty { margin: 0 0 calc(var(--spacing) * 5); color: var(--color-sub); font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui); }
+  .vt-share-audit { margin: 0 0 calc(var(--spacing) * 3); padding: 0; list-style: none; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-mono); font-variant-numeric: tabular-nums; }
+  .vt-share-audit li { overflow-wrap: anywhere; }
 
   @media (pointer: coarse) {
     .vt-share-approval .vt-btn,
+    .vt-share-grant .vt-btn,
+    .vt-share-pending .vt-btn,
     .vt-dialog .vt-share-ok,
     .vt-dialog .vt-share-cancel { --btn-h: 44px; }
+    .vt-share-later .vt-btn { --btn-h: 44px; }
     .vt-share-mode { min-height: 48px; }
   }
 }

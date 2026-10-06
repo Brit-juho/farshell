@@ -22,6 +22,7 @@ function sync() {
 
 window.vtShareOpen = (name, share) => load().then((m) => m.openShareDialog(name, share)).catch(warn);
 window.vtShareUnshare = (name) => load().then((m) => m.unshareSession(name)).catch(warn);
+window.vtAgentPerms = () => load().then((m) => m.openPermsPanel()).catch(warn);
 
 if (!isRelayed()) {
   onWorkspaceEvent('agent_share_request', (msg) => { if (msg && msg.request) load().then((m) => m.addRequest(msg.request)).catch(warn); });
