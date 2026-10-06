@@ -58,6 +58,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - agy 1.2.16으로 선택 화면 ESC 스킵 뒤 `waiting` 잔류를 원시 스트림까지 재실측했다. 줄 머리 앵커가 없고 맨 `(skipped)`는 도구 출력과 겹쳐 `interrupt`를 추가하지 않았다(`docs/ref/session-view-measurements.md` §1).
 
+### Removed
+
+- **Unused `agent` session origin and its display setting** — agents never create sessions (decision 2026-10-06), so nothing could write `agent`. Removed the robot icon, 「에이전트가 만듦」, the rail-settings toggle and the `rail.origin.agent.show` schema key; `tmux_runner.set_origin` now accepts only `local`/`peer` and an old `@fsh_origin=agent` reads back as `external`. A stale saved `rail.origin.agent.show` is ignored. Remaining origins: `local`/`peer`/`external`. `app.js`+`core.js` 300800 -> 300547 B.
+
+
 ## [2.3.0] — 2026-10-06
 
 > 세션·뷰 모델을 정리한 릴리스다(재우기/깨우기 폐지, 새로고침은 닫은 세션을 되살리지 않음, 레이아웃은 브라우저 탭별 저장).

@@ -80,7 +80,7 @@ Measured against Claude Code 2.1.289 in an isolated server/tmux socket. **Reject
 
 **Found and implemented this round.** Touch pane splitting through the row menu (width >=720px and coarse pointer only; relaxes "grouping by drag only" for touch); landscape-phone keyboard focus mode (`visualViewport.height < 300px` hides tab bar, headers, rail, dock, HUD, bottom nav); a one-line summary at the top of the row menu (touch has no hover tooltip); close view and blank-view pruning in the phone sheet.
 
-**Known limits / substitute tests.** Peer and agent origin were exercised by setting the tmux option `@fsh_origin` directly rather than by a real peer host or agent spawn. The 719px/720px boundary was checked by emulation (resized viewport), not by a device that reports that width. A real desktop touch screen (>=720px coarse) was not available; the touch split menu was verified by emulating `pointer: coarse`.
+**Known limits / substitute tests.** Peer and agent origin (agent since removed) were exercised by setting the tmux option `@fsh_origin` directly rather than by a real peer host or agent spawn. The 719px/720px boundary was checked by emulation (resized viewport), not by a device that reports that width. A real desktop touch screen (>=720px coarse) was not available; the touch split menu was verified by emulating `pointer: coarse`.
 
 ### 3.1 Round 2 (2026-10-06, after the touch/keyboard/waiting fixes)
 
@@ -97,7 +97,7 @@ Same device and method (isolated server on port 17920, `env -i`, real soft keybo
 | Touch pane split (>=720px landscape) / absent in portrait | pass. **Fail, fixed:** in landscape the visible height is 331px, so the menu of a bottom rail row ran past the viewport and its items could not be reached. `Menu` now measures itself after mount, pulls itself inside the visible viewport and scrolls if still too tall |
 | Landscape + real soft keyboard focus mode | pass: tab bar, pane headers and rail hide, the pane uses the remaining 111px; everything returns when the keyboard closes. Not distinguished: with/without a connected key bar (it is `display:none` in landscape both before and after) |
 | Hit areas of the tab x and pane-header x (44x44, corner taps do only the intended action) | pass; the 4px gap against the neighbouring 18px split buttons was not stress-tested |
-| Regression: edge swipe order, reload restore, closed-group restore, three origin icons | pass. The 「Connected screens」 sheet could not be reopened in landscape (no open view = no row menu entry) |
+| Regression: edge swipe order, reload restore, closed-group restore, three origin icons (as measured; the `agent` robot icon was removed afterwards, 2026-10-06, so there are two now) | pass. The 「Connected screens」 sheet could not be reopened in landscape (no open view = no row menu entry) |
 
 Side observations: after a server restart every pane came back empty although the tmux names had been in the layout. **Cause confirmed and fixed (2026-10-06, section 3.2).** The default `waiting` TTL is 2 minutes, so synthetic states turned `working` by themselves until `VT_AGENT_TTL_*` was raised.
 

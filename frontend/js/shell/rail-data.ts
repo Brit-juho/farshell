@@ -4,13 +4,13 @@
 // - 구역은 둘이다. 「개입 필요」(waiting) · 「세션」(전체, 이름순만).
 //   상태 우선순위 정렬은 없다 — 행이 오락가락하지 않게(2026-09-18 사용자 지적).
 // - 행 3줄: 상태·에이전트·이름 / 메인·워크트리 아이콘·브랜치·변경량 / 상태 키워드·경과·만든 곳.
-// - 만든 곳(origin) 3종(peer·agent·external)은 레일 설정에서 표시를 끈다.
+// - 만든 곳(origin) 2종(peer·external)은 레일 설정에서 표시를 끈다.
 import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
-export type Origin = 'local' | 'peer' | 'agent' | 'external';
+export type Origin = 'local' | 'peer' | 'external';
 export type WaitKind = 'approval' | 'choice' | 'plan' | 'question';
 export type DoneBadge = 'question' | 'plan';
 
@@ -54,18 +54,17 @@ export interface SessionRow {
 
 // ── 만든 곳 ────────────────────────────────────────────────────────────────
 
-export const HIDEABLE_ORIGINS: Origin[] = ['peer', 'agent', 'external'];
+export const HIDEABLE_ORIGINS: Origin[] = ['peer', 'external'];
 
 export const ORIGIN_LABEL: Record<Origin, string> = {
   local: '이 화면에서 만듦',
   peer: '다른 맥에서 만듦',
-  agent: '에이전트가 만듦',
   external: '직접 만듦 (CLI·tmux)',
 };
 
 /** 서버 값이 없거나(구버전 서버) 모르는 값이면 local — 모든 행에 외부 아이콘이 붙는 것보다 안전하다. */
 export function normalizeOrigin(v: unknown): Origin {
-  return v === 'peer' || v === 'agent' || v === 'external' ? v : 'local';
+  return v === 'peer' || v === 'external' ? v : 'local';
 }
 
 /** 서버가 준 kind. 모르는 값은 질문. */
@@ -147,7 +146,6 @@ export const RAIL_PREF_DEFAULTS: Record<string, boolean> = {
   [ATTENTION_SHOW_KEY]: true,
   [ATTENTION_COLLAPSED_KEY]: false,
   [originShowKey('peer')]: true,
-  [originShowKey('agent')]: true,
   [originShowKey('external')]: true,
 };
 
@@ -294,7 +292,6 @@ export function worktreeIconName(row: Pick<SessionRow, 'isMainWorktree'>): 'git-
 
 export const ORIGIN_ICON: Record<Exclude<Origin, 'local'>, string> = {
   peer: 'laptop',
-  agent: 'bot',
   external: 'square-terminal',
 };
 

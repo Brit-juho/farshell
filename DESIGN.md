@@ -409,7 +409,7 @@ rows never jump). There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A r
 2. **Main/worktree icon** (`git-commit` = main worktree, `git-branch` = linked worktree) ·
    branch — **main is shown too** — · change size (`+add −del`, or `파일 N`).
 3. **State keyword** · elapsed time · **origin icon** (local has none; `laptop` = created on
-   another Mac, `bot` = created by an agent, `square-terminal` = CLI / plain tmux).
+   another Mac, `square-terminal` = CLI / plain tmux).
 
 Only when applicable, a fourth line: the grouped view's name and a 「다른 화면 N」 badge
 (tmux clients attached beyond this browser tab's own). The state keyword is short and fixed so
@@ -421,7 +421,7 @@ A session that is not open keeps full opacity but its name steps down to `--colo
 
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
 맥에서 열기 · 연결된 화면 · 종료). The header gear is **레일 설정** (개입 필요 on/off, show
-or hide sessions by origin — peer / agent / external, and the 저장소 표시 list). Hiding an
+or hide sessions by origin — peer / external, and the 저장소 표시 list). Hiding an
 origin never hides a session that is open or waiting. The rail's width resizer spans
 240~480px. Collapsed (48px), only the state icon and agent mark remain; name, branch and
 keyword move to the row tooltip.

@@ -287,7 +287,7 @@ def test_sessions_carry_origin_like_the_local_list(env, monkeypatch):
     r = client.get("/api/peer/sessions",
                    headers=_sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions"))
     got = {s["name"]: s["origin"] for s in r.json()["sessions"]}
-    assert got == {"a": "local", "b": "peer", "c": "agent",
+    assert got == {"a": "local", "b": "peer", "c": "external",
                    "d": "external", "e": "external", "f": "external"}
     assert len(calls) == 1 and "#{@fsh_origin}" in calls[0][-1]
 

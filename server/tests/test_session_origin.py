@@ -21,9 +21,10 @@ class _FakeRequest:
 
 
 def test_normalize_origin():
-    for v in ("local", "peer", "agent"):
+    for v in ("local", "peer"):
         assert tmux_runner.normalize_origin(v) == v
-    for v in ("", None, "external", "LOCAL", "evil", "local; kill-server"):
+    # 옛 `agent`(폐기)도 모르는 값 — external
+    for v in ("agent", "", None, "external", "LOCAL", "evil", "local; kill-server"):
         assert tmux_runner.normalize_origin(v) == "external"
 
 
@@ -31,12 +32,11 @@ def test_set_origin_whitelist(monkeypatch):
     calls = []
     monkeypatch.setattr(tmux_runner, "run", lambda args, timeout=None: calls.append(list(args)) or (0, b"", b""))
     assert tmux_runner.set_origin("s", "local") is True
-    assert tmux_runner.set_origin("s", "agent") is True
     assert tmux_runner.set_origin("s", "peer") is True
     assert calls[0] == ["set-option", "-t", "s", "@fsh_origin", "local"]
-    for bad in ("external", "", "x", "Local"):
+    for bad in ("agent", "external", "", "x", "Local"):
         assert tmux_runner.set_origin("s", bad) is False
-    assert len(calls) == 3, "화이트리스트 밖의 값은 tmux를 부르지 않는다"
+    assert len(calls) == 2, "화이트리스트 밖의 값은 tmux를 부르지 않는다"
 
 
 def test_list_sessions_and_panes_read_origin_in_the_same_call(monkeypatch):
@@ -45,12 +45,12 @@ def test_list_sessions_and_panes_read_origin_in_the_same_call(monkeypatch):
     def fake_run_text(args, timeout=None):
         seen.append(list(args))
         if args[0] == "list-sessions":
-            return "a\t1\t0\t100\t\tlocal\nb\t1\t0\t101\t\t\nc\t1\t0\t102\t\tbogus\n"
+            return "a\t1\t0\t100\t\tlocal\nb\t1\t0\t101\t\t\nc\t1\t0\t102\t\tbogus\nd\t1\t0\t103\t\tagent\n"
         return "a\tzsh\t1\t/x\t%1\t\tpeer\nb\tzsh\t2\t/y\t%2\t\t\n"
 
     monkeypatch.setattr(tmux_runner, "run_text", fake_run_text)
     sessions = tmux_runner.list_sessions()
-    assert [s["origin"] for s in sessions] == ["local", "external", "external"]
+    assert [s["origin"] for s in sessions] == ["local", "external", "external", "external"]  # 옛 agent 값도 external
     panes = tmux_runner.get_all_panes()
     assert [p.origin for p in panes] == ["peer", "external"]
     assert len(seen) == 2

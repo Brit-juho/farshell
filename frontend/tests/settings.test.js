@@ -296,3 +296,15 @@ test('나중에 로드된 사본은 window 브리지를 덮지 않는다', async
   await window.vtSettingsSet('viewer.sheet.height', 60);
   assert.strictEqual(first.get('viewer.sheet.height'), 60, '브리지 쓰기는 먼저 뜬 저장소로 간다');
 });
+
+// 2026-10-06 agent 출처 폐기 — 옛 기기에 남은 `rail.origin.agent.show` 는 깨지지 않고 무시되며,
+// 다음 저장에서 서버 사본에서도 사라진다.
+test('폐기된 rail.origin.agent.show 가 저장돼 있어도 무시되고 다시 올라가지 않는다', async () => {
+  const { S, calls } = await load({ remote: { 'rail.origin.agent.show': false, 'rail.origin.peer.show': false } });
+  await S.load();
+  assert.strictEqual(S.get('rail.origin.peer.show'), false, '살아 있는 키는 그대로');
+  assert.strictEqual(S.get('rail.origin.agent.show'), undefined, '스키마에 없는 키');
+  await S.set('rail.attention.show', false);
+  const put = calls.filter((c) => c.opts && c.opts.method === 'PUT').pop();
+  assert.ok(!('rail.origin.agent.show' in JSON.parse(put.opts.body).settings));
+});

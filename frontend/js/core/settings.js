@@ -126,7 +126,6 @@ export const SCHEMA = {
   'rail.attention.collapsed': { type: 'bool', def: false, scope: 'device' },
   // 만든 곳별 표시(local은 끌 수 없다). 끄더라도 열려 있는 세션·입력 대기 세션은 남는다.
   'rail.origin.peer.show':     { type: 'bool', def: true, scope: 'device' },
-  'rail.origin.agent.show':    { type: 'bool', def: true, scope: 'device' },
   'rail.origin.external.show': { type: 'bool', def: true, scope: 'device' },
 };
 

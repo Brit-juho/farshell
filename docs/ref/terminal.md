@@ -147,12 +147,12 @@ moves the active **view tab** at every width (it moved a session in the removed 
 - Row menu: the ⋯ button and right-click open the same menu (open/close, rename, open on Mac, connected screens, kill).
   The menu opens with a **summary line** — a disabled header row (`.vt-menu-summary`, `role="note"` with an `aria-label`,
   never selectable, wraps instead of ellipsizing): state · (when waiting) the kind keyword · 「웹 외 N」 · where it was
-  created (이 화면에서 만듦 / 다른 맥에서 만듦 / 에이전트가 만듦 / 직접 만듦) · branch (`rowSummary` in `shell/rail-data.ts`,
+  created (이 화면에서 만듦 / 다른 맥에서 만듦 / 직접 만듦) · branch (`rowSummary` in `shell/rail-data.ts`,
   drawn by `Menu`'s `summary` prop in the rail and by the phone Fleet sheet). Why: `ui/tooltip.js` is off for touch pointers
   (no hover), so on a phone a row's hidden facts — the waiting kind, non-web attaches, origin, branch — had no way to be read.
 - The header gear (formerly 「저장소 관리」) is **rail settings** (`RailSettings.tsx` on top of `RepoVisibility.tsx`, one
   sheet): 개입 필요 on/off (`rail.attention.show`; collapse state `rail.attention.collapsed`), per-origin visibility
-  (`rail.origin.{peer,agent,external}.show`; local cannot be hidden), and the 저장소 표시 list. All device-scoped.
+  (`rail.origin.{peer,external}.show`; local cannot be hidden), and the 저장소 표시 list. All device-scoped.
   Hiding an origin never hides a session that is open or waiting; turning 개입 필요 off leaves waiting sessions in
   「세션」, identified by their keyword.
 - Code: `shell/rail-data.ts` (pure: lists, keyword, menu items, prefs), `shell/rail-fetch.ts` `collectSessionRows`
@@ -169,12 +169,12 @@ moves the active **view tab** at every width (it moved a session in the removed 
 
 ### Origin
 
-Recorded when a session is created and shown as a rail icon: this browser / another Mac (peer create) / an agent /
+Recorded when a session is created and shown as a rail icon: this browser / another Mac (peer create) /
 external (no record — `fsh` CLI or plain tmux). Only sessions created in this browser tab open automatically.
 
 **Rail icon.** The rail and Fleet show a small icon per origin
-(`laptop` = peer, `bot` = agent, `square-terminal` = external; local has none) with a Korean tooltip, and rail settings can
-hide each of the three. Front-end auto-open audit: nothing opens a session by itself except boot restoring the *saved
+(`laptop` = peer, `square-terminal` = external; local has none) with a Korean tooltip, and rail settings can
+hide each of the two. Front-end auto-open audit: nothing opens a session by itself except boot restoring the *saved
 layout* (sessions this browser tab had placed itself, whatever their origin) and the explicit `#tmux=<name>` handoff link;
 no path attaches a session because of its origin.
 
@@ -187,8 +187,9 @@ right after `new-session` (same mechanism as `@fsh_wt`, so it survives a server 
 |---|---|---|
 | `local` | `POST /api/tmux/create`, worktree open (`worktree._open_agent`, `open_worktree`) | created from this UI |
 | `peer` | `POST /api/peer/sessions/create` | another Mac created it; the server decides this itself, the request body is never read for it |
-| `agent` | nothing, **by decision (2026-10-06)** | agents never create sessions: the user creates the (empty) tmux session and *shares* it with agents by name — see "Agent-shared sessions" below. The value and `tmux_runner.set_origin(name, "agent")` are kept only so old data reads back; no new path will write it |
-| `external` | nothing (absence of the option) | `fsh` CLI, plain `tmux new`, or any unknown option value |
+| `external` | nothing (absence of the option) | `fsh` CLI, plain `tmux new`, or any unknown option value (an old `agent` value included) |
+
+The `agent` origin (robot icon, 「에이전트가 만듦」, `rail.origin.agent.show`) was **removed 2026-10-06**: agents never create sessions, so nothing could write it. A stale `rail.origin.agent.show` in saved settings is ignored (`core/settings.js` drops keys outside the schema).
 
 **Agent-shared sessions (design, not implemented).** An agent may only work in a tmux session the user made and
 named. The planned shape: the user creates an ordinary session (an empty terminal), then marks it shared with a
@@ -200,7 +201,7 @@ opposite trade-off of "agents create sessions": no resource-exhaustion or free-c
 decided which terminal is exposed. Open points: read-only vs read-write share, per-share expiry, and whether sending
 needs a one-time user confirmation.
 
-Only `local`/`peer`/`agent` are ever written (`tmux_runner.set_origin` rejects everything else without calling tmux);
+Only `local`/`peer` are ever written (`tmux_runner.set_origin` rejects everything else without calling tmux);
 unknown values read back as `external`. The server has no auto-attach path: sessions attach only through explicit
 `POST /api/tmux/attach|create`, so "only this tab's own sessions open automatically" is a frontend rule.
 

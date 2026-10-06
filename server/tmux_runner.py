@@ -105,10 +105,10 @@ class PaneInfo:
 
 
 # 세션을 만든 곳. 기록 값은 이 화이트리스트뿐이고 "external"은 값이 아니라 "기록 없음"이다
-# (fsh CLI·직접 띄운 tmux는 옵션을 안 심는다). 에이전트 경로는 값만 준비돼 있다 — 지금
-# MCP 도구에는 세션 생성 기능이 없다.
+# (fsh CLI·직접 띄운 tmux는 옵션을 안 심는다). 옛 `agent` 값(2026-10-06 폐기: 에이전트는
+# 세션을 만들지 않는다)은 모르는 값이라 external로 읽힌다.
 ORIGIN_OPTION = "@fsh_origin"
-RECORDABLE_ORIGINS = frozenset({"local", "peer", "agent"})
+RECORDABLE_ORIGINS = frozenset({"local", "peer"})
 ORIGIN_EXTERNAL = "external"
 
 
@@ -191,7 +191,7 @@ def set_option(session: str, key: str, value: str) -> bool:
 
 
 def set_origin(session: str, origin: str) -> bool:
-    """세션을 만든 곳을 `@fsh_origin`에 적는다. 화이트리스트(local/peer/agent) 밖의 값은
+    """세션을 만든 곳을 `@fsh_origin`에 적는다. 화이트리스트(local/peer) 밖의 값은
     tmux를 부르지 않고 False — 호출부가 외부 입력을 그대로 넘겨도 임의 값이 들어가지 않는다."""
     if origin not in RECORDABLE_ORIGINS:
         return False

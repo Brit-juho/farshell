@@ -75,10 +75,9 @@ test('buildRailLists — 만든 곳을 끄면 숨지만 열려 있는 세션·wa
     row({ name: 'ext-open', origin: 'external', open: true }),
     row({ name: 'ext-wait', origin: 'external', status: 'waiting' }),
     row({ name: 'peer-closed', origin: 'peer' }),
-    row({ name: 'agent', origin: 'agent' }),
     row({ name: 'mine', origin: 'local' }),
   ], prefs);
-  assert.deepStrictEqual(names(sessions), ['agent', 'ext-open', 'ext-wait', 'mine']);
+  assert.deepStrictEqual(names(sessions), ['ext-open', 'ext-wait', 'mine']);
 });
 
 test('묶음/묶지 않음/잠자는 중 구역의 옛 API는 없다', async () => {
@@ -147,9 +146,9 @@ test('normalizeOrigin — 없거나 모르는 값은 local(구버전 서버에�
   assert.strictEqual(normalizeOrigin(undefined), 'local');
   assert.strictEqual(normalizeOrigin('whatever'), 'local');
   assert.strictEqual(normalizeOrigin('peer'), 'peer');
-  assert.strictEqual(normalizeOrigin('agent'), 'agent');
+  assert.strictEqual(normalizeOrigin('agent'), 'local', '폐기된 값 — 모르는 값과 같다');
   assert.strictEqual(normalizeOrigin('external'), 'external');
-  assert.deepStrictEqual(Array.from(HIDEABLE_ORIGINS), ['peer', 'agent', 'external'], 'local은 끌 수 없다');
+  assert.deepStrictEqual(Array.from(HIDEABLE_ORIGINS), ['peer', 'external'], 'local은 끌 수 없다');
 });
 
 test('worktreeIconName / diffLabel', async () => {
@@ -215,11 +214,11 @@ test('readRailPrefs — 값이 없으면 기본값, 있으면 그 값(undefined�
   assert.strictEqual(d.attentionShow, true);
   assert.strictEqual(d.attentionCollapsed, false);
   assert.deepStrictEqual(Array.from(d.hiddenOrigins), []);
-  const store = { 'rail.attention.show': false, 'rail.attention.collapsed': true, 'rail.origin.agent.show': false };
+  const store = { 'rail.attention.show': false, 'rail.attention.collapsed': true, 'rail.origin.agent.show': false, 'rail.origin.peer.show': false };
   const p = readRailPrefs((k) => store[k]);
   assert.strictEqual(p.attentionShow, false);
   assert.strictEqual(p.attentionCollapsed, true);
-  assert.deepStrictEqual(Array.from(p.hiddenOrigins), ['agent']);
+  assert.deepStrictEqual(Array.from(p.hiddenOrigins), ['peer'], '폐기된 rail.origin.agent.show 는 무시된다');
 });
 
 // ── 레일 접힘 기본값 ───────────────────────────────────────────────────────
@@ -244,7 +243,7 @@ test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음
   window.agentNames = () => ({ api: 'claude' });
   const rows = collectSessionRows({
     tmux: [
-      { name: 'api', cwd: '/r', wt_id: 'wt-main', attached: 3, origin: 'agent' },
+      { name: 'api', cwd: '/r', wt_id: 'wt-main', attached: 3, origin: 'external' },
       { name: 'web', cwd: '/r', wt_id: 'wt-b', attached: 1, origin: 'peer' },
       { name: 'cli', cwd: null, wt_id: null, attached: 0 },
     ],
@@ -262,7 +261,7 @@ test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음
   assert.strictEqual(by.web.branch, 'feat/x');
   assert.strictEqual(by.api.kind, 'choice');
   assert.strictEqual(by.api.unseen, true);
-  assert.strictEqual(by.api.origin, 'agent');
+  assert.strictEqual(by.api.origin, 'external');
   assert.strictEqual(by.web.origin, 'peer');
   assert.strictEqual(by.cli.origin, 'local', 'origin 필드가 없으면 local');
   assert.strictEqual(by.api.open, true);
@@ -330,7 +329,7 @@ test('rowSummary — 상태 · (대기면) 유형 · 웹 외 N · 만든 곳 · 
     rowSummary(r({ status: 'waiting', kind: 'approval', otherClients: 2, origin: 'peer', branch: 'feat/x' })),
     '입력 대기 · 승인 요청 · 웹 외 2 · 다른 맥에서 만듦 · feat/x');
   assert.strictEqual(rowSummary(r({ status: 'waiting', kind: null })), '입력 대기 · 질문 · 이 화면에서 만듦');
-  assert.strictEqual(rowSummary(r({ status: 'working', origin: 'agent', branch: 'main' })), '작업 중 · 에이전트가 만듦 · main');
+  assert.strictEqual(rowSummary(r({ status: 'working', origin: 'peer', branch: 'main' })), '작업 중 · 다른 맥에서 만듦 · main');
   assert.strictEqual(rowSummary(r({ status: 'done', origin: 'external' })), '완료 · 직접 만듦 (CLI·tmux)');
   // 입력 대기가 아니면 유형은 안 붙는다, 모르는 상태는 유휴
   assert.ok(!rowSummary(r({ status: 'working', kind: 'plan' })).includes('계획 확인'));

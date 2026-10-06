@@ -49,14 +49,14 @@ def test_local_entry_sessions_carry_origin_without_extra_tmux_calls(tmp_path, mo
 
     calls = []
     monkeypatch.setattr(tmux_runner, "run_text", lambda args, timeout=2.0: (
-        calls.append(args) or "a\t1\t0\nb\t1\t1\nc\t2\t0"))
+        calls.append(args) or "a\t1\t0\nb\t1\t1\nc\t2\t0\nd\t1\t0"))
     monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [
         tmux_runner.PaneInfo(session="a", command="zsh", pid=1, path="/x", origin="peer"),
         tmux_runner.PaneInfo(session="b", command="zsh", pid=2, path="/y", origin="local"),
     ])
     entry = hosts_mod._local_entry()
     got = {s["name"]: s["origin"] for s in entry["sessions"]}
-    assert got == {"a": "peer", "b": "local", "c": "external"}  # 팬 정보가 없으면 기록 없음
+    assert got == {"a": "peer", "b": "local", "c": "external", "d": "external"}  # 팬 정보가 없으면 기록 없음
     assert len(calls) == 1, "list-sessions 한 번 외에 tmux를 더 부르지 않는다"
 
 
