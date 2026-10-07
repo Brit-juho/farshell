@@ -190,6 +190,9 @@
   //   키보드는 영문 입력도 isComposing/keyCode 229로 보고해서 그것만으로는 틀린다.
   //   ASCII 글자 키가 조합 없이 들어오면 끈다. 값은 compositionend가 영문 키로
   //   되돌리므로(아래) 이 표시는 "바꿔 입력된다"는 사실을 알려 주는 역할이다.
+  // 화면 폭이 아니라 기기 종류로 구분한다(iPad 데스크톱 모드 포함).
+  var mobileInput=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')
+    || (/Macintosh/i.test(navigator.userAgent||'') && navigator.maxTouchPoints>1);
   var capsOn=false, koOn=false;
   function renderPassState(){
     var parts=[];
@@ -204,16 +207,18 @@
     else if(!e.isComposing && e.key && e.key.length===1 && /[A-Za-z]/.test(e.key)){ koOn=false; }
     renderPassState();
   }
-  pass.addEventListener('keydown',trackKey);
-  pass.addEventListener('keyup',trackKey);
-  pass.addEventListener('compositionupdate',function(e){
-    if(hasHangul(e.data||'')){ koOn=true; renderPassState(); }
-  });
-  pass.addEventListener('input',function(){
-    if(hasHangul(pass.value)){ koOn=true; renderPassState(); }
-  });
-  // 칸을 떠나면 지운다 — 다른 창에서 Caps Lock을 바꿨을 수 있어 돌아올 때 다시 읽는다.
-  pass.addEventListener('blur',function(){ capsOn=false; koOn=false; renderPassState(); });
+  if(!mobileInput){
+    pass.addEventListener('keydown',trackKey);
+    pass.addEventListener('keyup',trackKey);
+    pass.addEventListener('compositionupdate',function(e){
+      if(hasHangul(e.data||'')){ koOn=true; renderPassState(); }
+    });
+    pass.addEventListener('input',function(){
+      if(hasHangul(pass.value)){ koOn=true; renderPassState(); }
+    });
+    // 칸을 떠나면 지운다 — 다른 창에서 Caps Lock을 바꿨을 수 있어 돌아올 때 다시 읽는다.
+    pass.addEventListener('blur',function(){ capsOn=false; koOn=false; renderPassState(); });
+  }
 
   // IME 조합이 끝날 때마다(음절 하나가 완성될 때마다) 한글이 섞여 있으면 즉시 되돌린다.
   pass.addEventListener('compositionend',function(){

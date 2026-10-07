@@ -18,9 +18,11 @@ after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 const json = (status, body) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) });
 
-async function boot({ status, authReplies = [] }) {
+async function boot({ status, authReplies = [], userAgent, maxTouchPoints = 0 }) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
+  if (userAgent) Object.defineProperty(env.window.navigator, 'userAgent', { value: userAgent });
+  Object.defineProperty(env.window.navigator, 'maxTouchPoints', { value: maxTouchPoints });
   const posts = [];
   env.window.fetch = (url, opts) => {
     if (url.startsWith('/api/capabilities')) return json(401, {});
@@ -139,3 +141,22 @@ test('입력 상태 — Caps Lock과 한글이 같이면 둘 다 말한다, 칸�
   pass.dispatchEvent(new document.defaultView.FocusEvent('blur'));
   assert.strictEqual(st.hidden, true);
 });
+
+for (const [device, userAgent, maxTouchPoints] of [
+  ['iPhone', 'Mozilla/5.0 (iPhone)', 5],
+  ['Android', 'Mozilla/5.0 (Linux; Android 15)', 5],
+  ['iPad 데스크톱 모드', 'Mozilla/5.0 (Macintosh; Intel Mac OS X)', 5],
+]) {
+  test(`입력 상태 — ${device}에서는 Caps Lock과 한글 입력을 표시하지 않는다`, async () => {
+    const { document } = await boot({ status: { protected: true }, userAgent, maxTouchPoints });
+    const pass = document.getElementById('login-pass');
+    const st = document.getElementById('login-pass-state');
+    key(document, 'keydown', { key: 'HangulMode', modifierCapsLock: true });
+    key(document, 'keyup', { key: 'A', modifierCapsLock: true });
+    pass.value = '가';
+    pass.dispatchEvent(new document.defaultView.CompositionEvent('compositionupdate', { data: '가' }));
+    pass.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.strictEqual(st.hidden, true);
+    assert.strictEqual(st.textContent, '');
+  });
+}
