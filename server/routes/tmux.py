@@ -178,7 +178,7 @@ async def collect_tmux_sessions() -> list[dict]:
     fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}\t#{@fsh_origin}\t#{@fsh_share_nick}\t#{@fsh_share_mode}"
     # A2: pane_id를 함께 받아 응답에 싣는다 — 프런트가 "이 카드가 그 pane인가"를
     # cwd 추측이 아니라 id로 판정할 수 있게(같은 cwd 세션 둘 문제의 해소).
-    fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}"
+    fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}\t#{window_active}\t#{pane_active}"
 
     sessions_text = await tmux_runner.run_text_async(["list-sessions", "-F", fmt_sessions], timeout=2.0)
     if not sessions_text:
@@ -186,17 +186,23 @@ async def collect_tmux_sessions() -> list[dict]:
 
     panes_text = await tmux_runner.run_text_async(["list-panes", "-a", "-F", fmt_panes], timeout=2.0) or ""
     pane_by_session: dict[str, tuple[str, str, str]] = {}
+    pane_ranks: dict[str, int] = {}
     for line in panes_text.strip().split("\n"):
         if not line:
             continue
         parts = line.split("\t")
-        if len(parts) >= 2 and parts[0] not in pane_by_session:
+        # 첫 pane이 아니라 활성 window의 활성 pane을 대표로 선택한다.
+        rank = (2 if len(parts) > 4 and parts[4] == "1" else 0) + (1 if len(parts) > 5 and parts[5] == "1" else 0)
+        if len(parts) >= 2 and (parts[0] not in pane_by_session or rank > pane_ranks[parts[0]]):
+            pane_ranks[parts[0]] = rank
             pane_by_session[parts[0]] = (
                 parts[1],
                 parts[2] if len(parts) > 2 else "",
                 parts[3] if len(parts) > 3 else "",
             )
 
+    from session_context import contexts_for
+    contexts = await contexts_for(["", *(p[1] for p in pane_by_session.values())])
     live_ptys = pty_mgr.sessions  # 복사본이라 한 번만 받는다
     sessions = []
     for line in sessions_text.strip().split("\n"):
@@ -219,6 +225,7 @@ async def collect_tmux_sessions() -> list[dict]:
             "otherClients": max(0, attached - len(web_sessions)),
             "command": cmd,
             "cwd": cwd,
+            "context": contexts[cwd],
             "pane_id": pane_id,
             "web_session_id": web_session.session_id if web_session else None,
             "wt_id": parts[3] if len(parts) > 3 else "",

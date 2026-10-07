@@ -18,6 +18,7 @@ import { screenId } from '../core/screen-id.js';
 import { allSessions, getSession } from '../core/store.js';
 import { switchTo, addSession } from '../term/session.js';
 import { _applyCardAgent } from './badges.js';
+import { contextLabel } from '../ui/session-context.js';
 
 // 카드 하나의 정적 뼈대를 만든다(제목·메타 자리·클릭 핸들러). 값 채우기는
 // updateSessionCard()가 별도로 한다 — pane-picker.js의 "매번 새로 만든다"와
@@ -50,12 +51,13 @@ export function updateSessionCard(card, sess, agentInfo) {
   card.dataset.cwd = sess.cwd || '';
   // textContent로 넣는다 — cwd는 사용자의 실제 파일 경로라 임의 문자를
   // 포함할 수 있다(card-title과 같은 이유, innerHTML 금지).
-  card.querySelector('.card-meta').textContent = sess.cwd || '';
+  card.querySelector('.card-meta').textContent = contextLabel(sess);
+  card.querySelector('.card-meta').setAttribute('data-tip', sess.cwd || '');
   // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.
   const isOpenTab = Object.values(allSessions()).some((s) => (s.tmuxName || s.tmux_name) === sess.name);
   card.classList.toggle('open-tab', isOpenTab);
   card.setAttribute('data-tip', isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속');
-  _applyCardAgent(card, agentInfo);
+  if (agentInfo !== undefined) _applyCardAgent(card, agentInfo);
 }
 
 export async function attachTmuxSession(name) {

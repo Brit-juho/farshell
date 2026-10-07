@@ -1,7 +1,7 @@
 // N38(70-mobile.md §2) — 모바일 플릿 홈. compact(<720px) 하단 내비의 첫 탭
 // (ui.mobile.home 기본값). Rail.tsx와 **같은 데이터·같은 구역 규칙**을 쓴다 —
 // 행 조립(rail-fetch.ts의 collectSessionRows)과 구역(rail-data.ts의 buildRailLists:
-// 개입 필요 · 세션, 이름순)이 하나라서 "데스크톱 레일에서 보이는 게 폰에서도 보인다".
+// 개입 필요 · 세션, 묶음과 이름순 단독)이 하나라서 "데스크톱 레일에서 보이는 게 폰에서도 보인다".
 // 상태 키워드·상태 아이콘·읽지 않음 링·만든 곳 아이콘도 레일과 같은 컴포넌트(RailRow.tsx)다.
 // 폰에만 있는 것은 인라인 승인 버튼(개입 필요 구역의 행)과 꾹 눌러 여는 메뉴 시트다.
 //
@@ -17,13 +17,14 @@ import { agentMark } from './agent-mark.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 // git 배지 캐시·변경 알림 구독·행 조립은 레일과 **같은 것**을 쓴다(같은 shell 청크).
 import {
-  safeFetch, collectSessionRows, syncAgentsFromServer, createDiffWatcher, type RailDeps,
+  safeFetch, collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, rowMenuItems, rowSummary, runRowMenu, diffLabel, worktreeIconName, type SessionRow,
+  buildRailLists, groupSessionRows, rowMenuItems, rowSummary, runRowMenu, diffLabel, type SessionRow,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { KeywordLine, OriginMark, ScreensMark, ShareMark } from './RailRow.js';
+import { ViewGroup } from './ViewGroup.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
@@ -165,32 +166,22 @@ function Row(props: {
             {(a) => <span class="vt-srow-agent vt-fleet-agent" innerHTML={agentMark(a())} />}
           </Show>
           <span class="vt-srow-name vt-fleet-name">{props.row.name}</span>
-          <Show when={props.row.open}>
-            <span class="vt-srow-open" role="img" aria-label="열려 있음" innerHTML={icon('app-window', 13, 2)} />
-          </Show>
         </div>
-        <Show when={props.row.branch || diff()}>
+        <Show when={props.row.directory || props.row.branch || diff()}>
           <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line2">
-            <Show when={props.row.branch}>
-              <span
-                class="vt-srow-wt"
-                role="img"
-                aria-label={props.row.isMainWorktree ? '메인 워크트리' : '워크트리'}
-                innerHTML={icon(worktreeIconName(props.row), 12, 2)}
-              />
-              <span class="vt-srow-branch">{props.row.branch}</span>
-            </Show>
+            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd}>{props.row.directory}</span></Show>
+            <Show when={props.row.branch}><span class="vt-srow-branch">{props.row.branch}</span></Show>
             <Show when={diff()}><span class="vt-srow-meta vt-fleet-diff">{diff()}</span></Show>
           </div>
         </Show>
+        <Show when={props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">정보 갱신 대기</div></Show>
         <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line3">
           <KeywordLine row={props.row} now={now} />
           <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>
-        <Show when={props.row.viewLabel || props.row.otherScreens > 0 || props.row.otherClients > 0}>
+        <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>
           <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line4">
-            <Show when={props.row.viewLabel}><span class="vt-srow-view">{props.row.viewLabel}</span></Show>
             <ScreensMark row={props.row} />
           </div>
         </Show>
@@ -223,6 +214,7 @@ function Row(props: {
 function Fleet(props: { deps: FleetDeps }) {
   const sessionsVersion = useSessionsVersion();
   const agentVersion = useAgentVersion();
+  const layoutVersion = useLayoutVersion();
 
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [repos, setRepos] = createSignal<any[]>([]);
@@ -232,7 +224,7 @@ function Fleet(props: { deps: FleetDeps }) {
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
   // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
   const diffWatcher = createDiffWatcher(() => setDiffTick((n) => n + 1));
-  createEffect(() => diffWatcher.sync(tmuxSessions().map((t: any) => t && t.cwd)));
+  createEffect(() => diffWatcher.sync(tmuxSessions().filter((t: any) => !t.context).map((t: any) => t.cwd)));
   onCleanup(() => diffWatcher.dispose());
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenuOpen, setHostMenuOpen] = createSignal(false);
@@ -240,9 +232,11 @@ function Fleet(props: { deps: FleetDeps }) {
   // (core/host-route.js, Rail.tsx와 같은 규칙). 세션 목록은 그 맥의 API에서 온다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
 
+  let tmuxRevision = 0;
   const refreshSessions = async () => {
+    const request = ++tmuxRevision;
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
-    if (list) setTmuxSessions(list);
+    if (request === tmuxRevision && Array.isArray(list)) setTmuxSessions(list);
   };
   const refreshAgent = () => syncAgentsFromServer(props.deps as RailDeps);
   // 브랜치·변경량(레일과 같은 행)의 출처.
@@ -272,7 +266,7 @@ function Fleet(props: { deps: FleetDeps }) {
   };
   document.addEventListener('vt:mobile-tab', onMobileTab);
   const offSessions = onWorkspaceEvent('tmux_sessions', (msg: any) => {
-    if (Array.isArray(msg?.sessions)) setTmuxSessions(msg.sessions);
+    if (Array.isArray(msg?.sessions)) { tmuxRevision += 1; setTmuxSessions(msg.sessions); }
   });
   onCleanup(() => {
     clearInterval(t1); clearInterval(t2); clearInterval(t3);
@@ -291,16 +285,18 @@ function Fleet(props: { deps: FleetDeps }) {
   // 레일과 같은 행 조립·같은 구역(rail-fetch.ts · rail-data.ts). 개입 필요 구역의 행에만
   // 인라인 승인 버튼이 붙는다 — 같은 세션이 아래 「세션」에도 있지만 거기엔 버튼이 없다.
   const rows = createMemo<SessionRow[]>(() => {
-    sessionsVersion(); agentVersion(); diffTick(); // 구독 트리거용
+    sessionsVersion(); agentVersion(); layoutVersion(); diffTick(); // 구독 트리거용
     return collectSessionRows({
       tmux: tmuxSessions(),
       repos: repos(),
-      groups: (window as any).getTabGroups?.() || [],
+      groups: (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || [],
       deps: props.deps,
       onDiff: () => setDiffTick((n) => n + 1),
     });
   });
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
+  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(lists().sessions,
+    (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
 
   const openRow = async (row: SessionRow) => {
     const w = window as any;
@@ -442,17 +438,14 @@ function Fleet(props: { deps: FleetDeps }) {
       <Show when={lists().sessions.length > 0}>
         <div class="vt-fleet-group">
           <div class="vt-fleet-group-head">세션 · {lists().sessions.length}</div>
-          <For each={lists().sessions}>
-            {(row) => (
-              <Row
-                row={row}
-                onOpen={() => { void openRow(row); }}
-                onLongPress={() => openMenu(row)}
-                onAnswer={() => Promise.resolve()}
-                onSeen={() => seenRow(row)}
-              />
-            )}
-          </For>
+          <For each={viewGroups()}>{(group) => {
+            const members = () => <For each={group.rows}>{(row) => <Row row={row}
+              onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
+              onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}</For>;
+            return <Show when={group.id} fallback={members()}>
+              <ViewGroup group={group} onOpen={() => { void openRow(group.rows[0]); }}>{members()}</ViewGroup>
+            </Show>;
+          }}</For>
         </div>
       </Show>
       {/* Rail.tsx 하단의 "+ 새 세션"과 같은 액션(session.add-menu) — 목록이

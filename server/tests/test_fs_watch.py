@@ -167,7 +167,9 @@ def test_real_file_change_is_reported_once_per_subscription(root, polling_watch)
             {"kind": "dir", "path": str(root / "d")},
         ])
         assert rejected == []
-        await asyncio.sleep(0.5)   # 감시 스레드가 뜰 시간
+        # polling backend는 같은 초의 같은 크기 파일 교체를 놓칠 수 있다.
+        # 초기 파일의 mtime과 저장 시점을 분리하고 감시 시작도 기다린다.
+        await asyncio.sleep(1.1)
         # 편집기식 저장: 임시 파일을 쓰고 rename으로 바꿔치기한다.
         tmp = root / "d" / ".a.md.tmp"
         tmp.write_text("v2")

@@ -661,3 +661,32 @@ test('pruneClosedByLive — 목록에 없는 세션을 닫은 묶음 기억에�
   assert.strictEqual(S.getClosedViews().length, 0);
   assert.ok(calls.some((c) => c.opts && c.opts.method === 'PUT'), '정리한 상태를 바로 저장한다');
 });
+
+for (const status of [401, 403]) test(`저장본 조회 ${status} — 로컬 캐시가 있어도 복원을 확정하지 않는다`, async () => {
+  const { window, P, calls } = await load();
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({ v: 5, savedAt: 1, tabs: [] }));
+  window.fetch = async () => ({ ok: false, status, json: async () => ({ error: 'auth required' }) });
+  await assert.rejects(P.loadLayoutSnapshot(), (e) => e.status === status);
+  P.saveLayoutNow();
+  assert.strictEqual(calls.filter((c) => c.opts?.method === 'PUT').length, 0);
+});
+
+test('재로그인 — 인증 실패로 비워진 최신 로컬 캐시보다 서버의 묶음 정본을 복원한다', async () => {
+  const { window, P, core, S } = await load();
+  const remote = { v: 5, savedAt: 1, activeTab: 'group', closed: [], tabs: [
+    { id: 'group', label: '보존한 묶음', tree: { t: 'split', id: 'split', dir: 'row', ratio: 0.4,
+      a: { t: 'leaf', id: 'a', session: { id: 'old-a', tmux: 'ta' } },
+      b: { t: 'leaf', id: 'b', session: { id: 'old-b', tmux: 'tb' } },
+    } },
+  ] };
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({ ...remote, savedAt: 999, tabs: [] }));
+  window.sessionStorage.setItem('vt.restore-after-login', '1');
+  window.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ui: { layout: remote } }) });
+  const snap = await P.loadLayoutSnapshot();
+  assert.strictEqual(snap.tabs[0].label, '보존한 묶음');
+  addLive(core, 'new-a', 'ta'); addLive(core, 'new-b', 'tb');
+  await P.restoreLayout(snap);
+  assert.strictEqual(S.getTree().a.session, 'new-a');
+  assert.strictEqual(S.getTree().b.session, 'new-b');
+  assert.strictEqual(window.sessionStorage.getItem('vt.restore-after-login'), null);
+});

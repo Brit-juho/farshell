@@ -14,6 +14,7 @@
 import { createSignal, createEffect, onCleanup, onMount, For, Show, createMemo } from 'solid-js';
 import { render } from 'solid-js/web';
 import { icon } from '../ui/icons.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import {
   parseQuery, fuzzyMatch, PLACEHOLDER, DEFAULT_COMMANDS, SETTINGS_COMMANDS,
   type PaletteMode, type CommandDescriptor,
@@ -154,20 +155,31 @@ function PaletteBody(props: PaletteBodyProps) {
     refreshTmux();
   });
 
+  let tmuxRevision = 0;
+  function applyTmux(sessRes: any[]) {
+    const byWebId: Record<string, any> = {};
+    const byName = new Map(sessRes.map((s: any) => [s.name, s]));
+    const local = (window as any).allSessions?.() || {};
+    for (const [id, session] of Object.entries<any>(local)) {
+      const tmuxName = session.tmuxName || session.tmux_name;
+      if (byName.has(tmuxName)) byWebId[id] = byName.get(tmuxName);
+    }
+    setTmuxByWebId(byWebId);
+  }
+  const offTmux = onWorkspaceEvent('tmux_sessions', (msg: any) => {
+    tmuxRevision += 1;
+    if (props.visible() && Array.isArray(msg.sessions)) applyTmux(msg.sessions);
+  });
+  onCleanup(offTmux);
   function refreshTmux() {
+    const request = ++tmuxRevision;
     Promise.all([
-      deps.vtFetch('/api/tmux/sessions').catch(() => []),
-      deps.vtFetch('/api/agents').catch(() => ({})),
+      deps.vtFetch('/api/tmux/sessions').catch(() => null),
+      deps.vtFetch('/api/agents').catch(() => null),
     ]).then(([sessRes, agentsRes]) => {
-      const byWebId: Record<string, any> = {};
-      const byName = new Map((sessRes || []).map((s: any) => [s.name, s]));
-      const local = (window as any).allSessions?.() || {};
-      for (const [id, session] of Object.entries<any>(local)) {
-        const tmuxName = session.tmuxName || session.tmux_name;
-        if (byName.has(tmuxName)) byWebId[id] = byName.get(tmuxName);
-      }
-      setTmuxByWebId(byWebId);
-      setAgents(agentsRes || {});
+      if (request !== tmuxRevision) return;
+      if (Array.isArray(sessRes)) applyTmux(sessRes);
+      if (agentsRes) setAgents(agentsRes);
     }).catch(() => {});
   }
 

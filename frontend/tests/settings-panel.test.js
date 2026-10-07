@@ -112,7 +112,7 @@ test('접근성 — 행 라벨과 도움말이 주 컨트롤에 연결된다', a
 test('설정 범위 — device/global이 행에서 글자로 구분된다', async () => {
   const { document, P } = await build();
   P.showSettings();
-  assert.strictEqual(rowByLabel(document, '글자 크기').querySelector('.vt-set-scope').textContent, '이 기기');
+  assert.strictEqual(rowByLabel(document, '글자 크기').querySelector('.vt-set-scope').textContent, 'Windows');
   assert.strictEqual(rowByLabel(document, '커서 모양').querySelector('.vt-set-scope').textContent, '모든 기기');
 });
 

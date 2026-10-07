@@ -1139,6 +1139,12 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
 
 ## 11. Accessibility
 
+Session lists use one editable grouped-view header above pane-order members, including remembered closed views.
+The group title is separate from session names and Git metadata; `이름 변경` is a text action with a 44px
+touch target. Rows show current directory and branch as text rather than a main/worktree SVG. State/unseen,
+agent identity, sharing permissions and connected-screen marks retain their distinct meanings.
+See [session UI design](docs/ref/session-ui.md).
+
 - **Touch targets:** under a coarse pointer, the bottom nav and keybar
   buttons keep a 44px tap area. A fine pointer keeps a tighter density.
   The small **view-tab ×** (`.vt-wtab-close`) and **pane-header ×** (`.vt-pane-close`)

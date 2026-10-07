@@ -10,6 +10,7 @@
 //
 // 수정: (1) 4001/4004 같은 '재시도해도 동일'한 코드는 재연결하지 않고 중단.
 //       (2) 연결이 STABLE_MS 이상 안정적으로 유지된 뒤에만 백오프 카운터를 리셋.
+import { requireAuthentication } from '../core/auth-state.js';
 import { getSession } from '../core/store.js';
 import { WS_BASE } from '../core/env.js';
 import { relayWsPath } from '../core/host-route.js';
@@ -191,6 +192,11 @@ export function startSessionSocket(id, term) {
         // (복구 대상이 아니면) 4004 = 다른 곳에서 종료됨 → 닫기와 같은 경로로 칸을 비운다(2026-10-03).
         if (code === 4004 && typeof window.vtCloseSession === 'function') {
           window.vtCloseSession(id);
+          return;
+        }
+        if (code === 4001) {
+          requireAuthentication();
+          _setConnOverlayDetail(id, '로그인 후 기존 화면을 복원합니다.');
           return;
         }
         const why = code === 4001 ? '인증 실패'

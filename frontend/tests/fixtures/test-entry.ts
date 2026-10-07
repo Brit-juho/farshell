@@ -9,7 +9,7 @@ export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, compactRailRows, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
   HIDEABLE_ORIGINS, normalizeOrigin, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
-  worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence,
+  worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, groupSessionRows,
 } from '../../js/shell/rail-data.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
 export { mountRow, mountMenu } from './row-mount.js';

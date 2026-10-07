@@ -15,6 +15,7 @@ import { registerAction, getAction } from './core/dom.js';
 import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
+import { onWorkspaceEvent } from './core/workspace-ws.js';
 
 export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
@@ -66,6 +67,11 @@ function openSessionManager() {
   // 칸 ×가 남긴 빈 뷰를 치울 길이 없다. 데스크톱은 「칸 ×는 빈 칸으로 남김」 규칙 그대로.
   if (isCompactMode() && pruneBlankViews() > 0) saveLayoutNow();
   document.body.appendChild(backdrop);
+  backdrop._offSessions = onWorkspaceEvent('tmux_sessions', (msg) => {
+    if (!Array.isArray(msg.sessions)) return;
+    backdrop._snapshot = msg.sessions;
+    if (backdrop.isConnected) renderSessionManager(backdrop);
+  });
   document.getElementById('voice-session-picker')?.setAttribute('aria-expanded', 'true');
   renderSessionManager(backdrop);
   // D7: 포커스 트랩 — openPanel()의 모달들과 같은 규칙(panels/panel.js 참고).
@@ -86,6 +92,7 @@ function closeSessionManager() {
   const backdrop = document.getElementById('session-manager');
   if (!backdrop) return;
   if (backdrop._onKeydown) document.removeEventListener('keydown', backdrop._onKeydown);
+  backdrop._offSessions?.();
   backdrop.remove();
   const picker = document.getElementById('voice-session-picker');
   if (picker) { picker.setAttribute('aria-expanded', 'false'); picker.focus(); }

@@ -187,3 +187,23 @@ test('setVtSkin: --bar를 읽을 수 없으면 메타를 건드리지 않는다'
   setVtSkin('notepad');
   assert.strictEqual(meta.getAttribute('content'), '#123456');
 });
+
+test('서버 스킨 복원 — 캐시 없는 브라우저의 화면·터미널에 적용하고 PUT하지 않는다', async () => {
+  const calls = [];
+  const env = createDomEnv('<!doctype html><html data-skin="farshell"><body></body></html>');
+  _doms.push(env.dom);
+  env.window.API_BASE = '';
+  env.window.fetch = (url, opts) => {
+    calls.push({ url, opts });
+    return Promise.resolve({ ok: true, json: async () => ({ settings: { 'theme.skin': 'vscode' } }) });
+  };
+  const cache = new Map();
+  const theme = await importFresh(THEME_JS, env.context, cache);
+  const settings = await importFresh(path.join(__dirname, '../js/core/settings.js'), env.context, cache);
+  env.window.sessions.a = fakeSession5x();
+  await settings.load();
+  assert.strictEqual(theme.getVtSkin(), 'vscode');
+  assert.deepStrictEqual(env.window.sessions.a.term.options.theme, theme.getVtXtermTheme('vscode'));
+  assert.strictEqual(env.window.localStorage.getItem('vt-skin'), 'vscode');
+  assert.strictEqual(calls.filter((c) => c.opts?.method === 'PUT').length, 0);
+});

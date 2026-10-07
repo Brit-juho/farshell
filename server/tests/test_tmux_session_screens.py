@@ -69,3 +69,17 @@ def test_other_clients_never_negative(fake_tmux, monkeypatch):
     _web(monkeypatch, "ts-b2", "b", "scr2")
     out = {s["name"]: s for s in asyncio.run(tmux_route.collect_tmux_sessions())}
     assert out["b"]["webScreens"] == 2 and out["b"]["otherClients"] == 0
+
+
+def test_metadata_uses_active_pane_in_active_window(monkeypatch):
+    async def fake_run(args, timeout=None):
+        if args[0] == "list-sessions":
+            return "a\t2\t0\told-tag\tlocal\n"
+        return ("a\tzsh\t/old\t%1\t0\t1\n"
+                "a\tclaude\t/other\t%2\t1\t0\n"
+                "a\tcodex\t/current\t%3\t1\t1\n")
+    monkeypatch.setattr(tmux_runner, "run_text_async", fake_run)
+    out = asyncio.run(tmux_route.collect_tmux_sessions())[0]
+    assert (out["cwd"], out["command"], out["pane_id"]) == ("/current", "codex", "%3")
+    assert out["context"]["cwd"] == "/current"
+    assert out["wt_id"] == "old-tag", "생성 소속은 보존하지만 현재 위치로 사용하지 않는다"

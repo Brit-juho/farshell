@@ -440,7 +440,6 @@
   .vt-srow.is-waiting .vt-srow-meta,
   .vt-srow.is-waiting .vt-srow-sub,
   .vt-srow.is-waiting .vt-srow-wt,
-  .vt-srow.is-waiting .vt-srow-open,
   .vt-srow.is-waiting .vt-srow-origin,
   .vt-srow.is-waiting .vt-srow-agent { color: var(--color-sub); }
   .vt-srow.is-waiting .vt-srow-kw[data-state="waiting"] { color: var(--color-txt); }
@@ -500,16 +499,36 @@
     min-width: 0;
   }
   .vt-srow-wt,
-  .vt-srow-open,
   .vt-srow-origin { display: inline-flex; flex: none; color: var(--color-muted); }
-  .vt-srow.active .vt-srow-wt,
-  .vt-srow.active .vt-srow-open { color: var(--color-acc); }
+  .vt-srow.active .vt-srow-wt { color: var(--color-acc); }
   .vt-srow-branch {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .vt-srow-directory { min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-srow-directory + .vt-srow-branch::before { content: "· "; }
+  .vt-view-group { margin: var(--spacing) 0 calc(var(--spacing) * 2); border-bottom: 1px solid var(--color-line); }
+  .vt-view-group-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; min-height: 28px; padding: 0 calc(var(--spacing) * 2.5); }
+  .vt-view-group-title { flex: 1; min-width: 0; padding: 0; text-align: left; background: transparent; border: 0; color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .vt-view-group-title:hover { color: var(--color-txt); }
+  .vt-view-group-count { flex: none; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); }
+  .vt-view-group-rename { flex: none; padding: 0 var(--spacing); min-height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-sub); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui); cursor: pointer; }
+  .vt-view-group-rename:hover { background: var(--menu-hover); color: var(--color-txt); }
+  .vt-view-group-title:focus-visible, .vt-view-group-rename:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 2px; }
+  @media (hover: hover) and (pointer: fine) {
+    .vt-view-group-rename { opacity: 0; }
+    .vt-view-group-head:hover .vt-view-group-rename, .vt-view-group-head:focus-within .vt-view-group-rename { opacity: 1; }
+  }
+  .vt-session-body { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+  .vt-session-body .vt-session-select { width: 100%; text-align: left; }
+  .vt-session-meta { display: block; font-size: var(--fs-xs); color: var(--color-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-session-error { font-size: var(--fs-xs); color: var(--color-sub); }
+  @media (pointer: coarse), (max-width: 719px) {
+    .vt-view-group-title, .vt-view-group-rename { min-height: 44px; }
+    .vt-view-group-rename { min-width: 44px; opacity: 1; }
   }
   /* 상태 키워드 — 짧게 고정이라 잘리지 않는다. 색은 상태 아이콘과 같은 토큰. */
   .vt-srow-kw { flex: none; color: var(--color-muted); font-weight: var(--weight-medium); }

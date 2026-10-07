@@ -52,7 +52,7 @@ test('3줄 — 1줄 상태 아이콘·이름, 2줄 브랜치(main도)·변경량
   assert.strictEqual(top.querySelector('.vt-srow-name').textContent, 'api');
   const l2 = root.querySelector('.vt-srow-line2');
   assert.strictEqual(l2.querySelector('.vt-srow-branch').textContent, 'main');
-  assert.ok(l2.querySelector('.vt-srow-wt'), '메인/워크트리 아이콘');
+  assert.strictEqual(l2.querySelector('.vt-srow-wt'), null, '워크트리 아이콘 대신 작업 위치 텍스트');
   assert.ok(text(l2).includes('+10 −1'));
   const l3 = root.querySelector('.vt-srow-line3');
   assert.strictEqual(l3.querySelector('.vt-srow-kw').textContent, '승인 요청');
@@ -77,10 +77,10 @@ test('질문 원문은 행에 안 나오고 키워드만 — kind 없으면 질�
   assert.ok(!text(root).includes('아주 긴 질문'));
 });
 
-test('열림 표시·묶음 뷰 이름·다른 화면 N은 해당할 때만', async () => {
+test('창 아이콘·반복 묶음 제목은 없고 다른 화면 N은 해당할 때만', async () => {
   const on = await mount({ open: true, viewLabel: 'api+web', otherScreens: 2 });
-  assert.ok(on.root.querySelector('.vt-srow-open'));
-  assert.strictEqual(on.root.querySelector('.vt-srow-view').textContent, 'api+web');
+  assert.strictEqual(on.root.querySelector('.vt-srow-open'), null);
+  assert.strictEqual(on.root.querySelector('.vt-srow-view'), null, '묶음 제목은 헤더에서 한 번만 표시');
   assert.strictEqual(on.root.querySelector('.vt-srow-screens').textContent.trim(), '다른 화면 2');
   const off = await mount({ open: false, sessionId: '' });
   assert.strictEqual(off.root.querySelector('.vt-srow-open'), null);

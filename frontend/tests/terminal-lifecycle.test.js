@@ -646,3 +646,83 @@ test('reopenClosedView — 모두 성공하면 기억이 나가고 두 칸이 �
   assert.ok(window.sessions['id-ta'] && window.sessions['id-tb']);
   assert.strictEqual(toasts.length, 0);
 });
+
+test('로그인 폼이 떠 있으면 복원 요청과 빈 레이아웃 저장을 하지 않는다', async () => {
+  const built = await buildTerminalWindow();
+  built.window.__vtAuthed = false;
+  const { bootApp } = await importFresh(BOOT_JS, built.context, built.cache);
+  const boot = bootApp();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(built.window.__fetches.length, 0);
+  assert.strictEqual(built.window.document.getElementById('onboarding'), null);
+  built.window.__vtAuthed = true;
+  built.window.document.dispatchEvent(new built.window.Event('vt:authed'));
+  await boot;
+  assert.ok(built.window.__fetches.some(([url]) => String(url).includes('/api/workspace')));
+});
+
+test('묶음 복원 도중 401 — 원본 배치를 지키고 재인증 후 전체 묶음을 복원한다', async () => {
+  const snap = { v: 5, savedAt: 1, activeTab: 'group', closed: [], tabs: [
+    { id: 'group', label: '원래 묶음', active: 'a', tree: { t: 'split', id: 'split', dir: 'col', ratio: 0.35,
+      a: { t: 'leaf', id: 'a', session: { id: 'old-a', tmux: 'ta' } },
+      b: { t: 'leaf', id: 'b', session: { id: 'old-b', tmux: 'tb' } },
+    } },
+  ] };
+  let expired = true;
+  const fetchImpl = (url, opts) => {
+    const u = String(url).split('?')[0];
+    const ok = (body) => Promise.resolve({ ok: true, status: 200, json: async () => body });
+    if (u.endsWith('/api/workspace')) return ok({ ui: { layout: snap } });
+    if (u.endsWith('/api/tmux/attach')) {
+      const name = JSON.parse(opts.body).name;
+      if (expired && name === 'tb') return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+      return ok({ id: 'new-' + name, name, tmux_session: name });
+    }
+    return fakeFetch(url, opts);
+  };
+  const built = await buildTerminalWindow({ fetchImpl });
+  const { bootApp } = await importFresh(BOOT_JS, built.context, built.cache);
+  const boot = bootApp();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(built.window.__vtAuthed, false);
+  assert.ok(!built.window.__fetches.some(([url, opts]) => String(url).includes('/api/workspace') && opts?.method === 'PUT'));
+  assert.strictEqual(built.window.document.getElementById('onboarding'), null);
+  expired = false;
+  built.window.__vtAuthed = true;
+  built.window.document.dispatchEvent(new built.window.Event('vt:authed'));
+  await boot;
+  const tab = built.layoutStore.getTabsWithTrees()[0];
+  assert.strictEqual(tab.label, '원래 묶음');
+  assert.strictEqual(tab.tree.ratio, 0.35);
+  assert.strictEqual(tab.tree.a.session, 'new-ta');
+  assert.strictEqual(tab.tree.b.session, 'new-tb');
+});
+
+test('열린 터미널 WS 인증 만료 — 로그인 요청을 표시하고 세션과 뷰를 유지한다', async () => {
+  const { window, addSession, layoutStore } = await buildTerminalWindow();
+  window.__vtAuthed = true;
+  let prompts = 0;
+  window.document.addEventListener('vt:auth-required', () => prompts++);
+  addSession('a', 'ta', { tmuxName: 'ta' });
+  const tab = layoutStore.getActiveTabId();
+  window.sessions.a.ws.onclose({ code: 4001 });
+  assert.strictEqual(window.__vtAuthed, false);
+  assert.strictEqual(prompts, 1);
+  assert.ok(window.sessions.a);
+  assert.strictEqual(layoutStore.getActiveTabId(), tab);
+  assert.strictEqual(layoutStore.getTree().session, 'a');
+});
+
+for (const status of [403, 404, 200]) test(`확인되지 않은 attach 응답 ${status} — 원래 세션 배치를 빈 칸으로 확정하지 않는다`, async () => {
+  const built = await buildTerminalWindow({ fetchImpl: (url, opts) => String(url).includes('/api/tmux/attach')
+    ? Promise.resolve({ ok: status === 200, status, json: async () => ({}) }) : fakeFetch(url, opts) });
+  const { attachLayoutSessions } = await importFresh(path.join(__dirname, '../js/term/workspace.js'), built.context, built.cache);
+  await assert.rejects(attachLayoutSessions([{ id: 'old', tmux: 'ta' }]));
+});
+
+test('확인된 tmux 종료만 복원에서 빠진다', async () => {
+  const built = await buildTerminalWindow({ fetchImpl: (url, opts) => String(url).includes('/api/tmux/attach')
+    ? Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'tmux session not found' }) }) : fakeFetch(url, opts) });
+  const { attachLayoutSessions } = await importFresh(path.join(__dirname, '../js/term/workspace.js'), built.context, built.cache);
+  assert.strictEqual(await attachLayoutSessions([{ id: 'old', tmux: 'ta' }]), 0);
+});

@@ -106,6 +106,8 @@ def _diff_stat(top: Path) -> dict:
     """워킹트리+인덱스 전체의 +/− 합. HEAD가 없는 저장소(커밋 0개)면 0."""
     rc, out = _git(top, "diff", "--numstat", "HEAD")
     if rc != 0:
+        if rc in (124, 127):
+            return {"insertions": 0, "deletions": 0, "error": "git_diff_unavailable"}
         return {"insertions": 0, "deletions": 0}
     ins = dele = 0
     for line in out.splitlines():
@@ -120,8 +122,8 @@ def _diff_stat(top: Path) -> dict:
     return {"insertions": ins, "deletions": dele}
 
 
-def _collect_status(repo: Path) -> dict:
-    top = _git_toplevel(repo)
+def _collect_status(repo: Path, *, top: Path | None = None) -> dict:
+    top = top or _git_toplevel(repo)
     if top is None:
         return {"repo": False, "root": str(repo), "files": []}
     # --branch: dock 소스컨트롤 머리말(브랜치 · ↑ahead ↓behind)을 위해. 별도
@@ -129,6 +131,7 @@ def _collect_status(repo: Path) -> dict:
     rc, out = _git(top, "status", "--porcelain=v1", "-z", "--branch")
     if rc != 0:
         return {"repo": True, "root": str(top), "files": [],
+                "error": "git_status_unavailable",
                 **_parse_branch_header(""), "insertions": 0, "deletions": 0}
     files = []
     # -z 는 NUL 구분이라 공백/한글 파일명이 안전하다.
@@ -538,5 +541,3 @@ async def git_commit(request: Request):
     status = await asyncio.to_thread(_collect_status, top)
     status["committed"] = True
     return status
-
-

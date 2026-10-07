@@ -1,5 +1,5 @@
 // 레일 252px. 행 = tmux 세션(docs/ref/terminal.md 「Rail」). 구역은 둘 —
-// 「개입 필요」(waiting, 접고 끌 수 있다)와 「세션」(전체, 이름순만). 묶음·묶지 않음·
+// 「개입 필요」(waiting, 접고 끌 수 있다)와 「세션」(묶음 헤더 + 칸 순서 구성원, 나머지 단독은 이름순). 묶지 않음·
 // 잠자는 중 구역(폐지)과 상태 우선순위 정렬은 없다. 워크트리는 행의 브랜치 줄로만 남는다.
 // 원격 호스트는 화면 전체를 그 맥으로 전환하는 방식(core/host-route.js)이라 같은
 // 행 구성을 쓴다 — 목록은 그 맥의 API(중계)에서 온다.
@@ -12,7 +12,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import {
-  buildRailLists, compactRailRows, rowMenuItems, rowSummary, runRowMenu, defaultRailCollapsed,
+  buildRailLists, groupSessionRows, compactRailRows, rowMenuItems, rowSummary, runRowMenu, defaultRailCollapsed,
   ATTENTION_COLLAPSED_KEY,
   type SessionRow,
 } from './rail-data.js';
@@ -35,6 +35,7 @@ export type { RailDeps } from './rail-fetch.js';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { RepoVisibility } from './RepoVisibility.js';
 import { RailSettingsLead } from './RailSettings.js';
+import { ViewGroup } from './ViewGroup.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 // tmux 목록(attached·cwd)의 정본은 `/ws-workspace`의 `tmux_sessions` push다
@@ -88,7 +89,7 @@ function Rail(props: { deps: RailDeps }) {
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
   // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
   const diffWatcher = createDiffWatcher(() => setDiffTick((n) => n + 1));
-  createEffect(() => diffWatcher.sync(tmuxSessions().map((t: any) => t && t.cwd)));
+  createEffect(() => diffWatcher.sync(tmuxSessions().filter((t: any) => !t.context).map((t: any) => t.cwd)));
   onCleanup(() => diffWatcher.dispose());
   // 접힘 기본값은 티어를 따른다(§3 표) — wide(≥1280) 미만에서는 접힘으로 시작.
   // 저장된 값이 있으면 그게 이긴다(사용자가 직접 정한 것이므로). Dock.tsx가
@@ -117,10 +118,12 @@ function Rail(props: { deps: RailDeps }) {
     : null;
   const railPollingActive = () => desktopMq ? desktopMq.matches : window.innerWidth >= 720;
 
+  let tmuxRevision = 0;
   const refreshSessions = async () => {
     if (!railPollingActive()) return;
+    const request = ++tmuxRevision;
     const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
-    if (list) setTmuxSessions(list);
+    if (request === tmuxRevision && Array.isArray(list)) setTmuxSessions(list);
   };
   const refreshAgent = async () => {
     if (!railPollingActive()) return;
@@ -132,7 +135,8 @@ function Rail(props: { deps: RailDeps }) {
     const data = await safeFetch<{ repos?: any[]; truncated?: boolean; hiddenCount?: number }>(
       props.deps, '/api/repos',
     );
-    setRepos(data?.repos || []);
+    if (!data) return;
+    setRepos(data.repos || []);
     setTruncated(!!data?.truncated);
     setHiddenCount(Number(data?.hiddenCount) || 0);
   };
@@ -164,7 +168,7 @@ function Rail(props: { deps: RailDeps }) {
   // 반영되고, 평시에는 요청이 아예 나가지 않는다.
   const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshRepos(); });
   const offSessions = onWorkspaceEvent('tmux_sessions', (msg: any) => {
-    if (Array.isArray(msg?.sessions)) setTmuxSessions(msg.sessions);
+    if (Array.isArray(msg?.sessions)) { tmuxRevision += 1; setTmuxSessions(msg.sessions); }
   });
   // 2026-09-28 — 원격 세션 생성·종료·이름 변경 직후(term/remote.js). 15초 주기를
   // 기다리면 방금 만든 세션이 목록에 없어 "안 됐나?" 하고 또 누른다.
@@ -207,7 +211,7 @@ function Rail(props: { deps: RailDeps }) {
     const out = collectSessionRows({
       tmux: tmuxSessions(),
       repos: repos(),
-      groups: (window as any).getTabGroups?.() || [],
+      groups: (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || [],
       deps: props.deps,
       onDiff: () => setDiffTick((n) => n + 1),
     });
@@ -216,6 +220,8 @@ function Rail(props: { deps: RailDeps }) {
   });
 
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
+  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(lists().sessions,
+    (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
   const compact = createMemo(() => compactRailRows(lists()));
   const totalRows = createMemo(() => lists().sessions.length);
 
@@ -493,7 +499,13 @@ function Rail(props: { deps: RailDeps }) {
                 </span>
               </div>
             </Show>
-            <For each={lists().sessions}>{(row) => renderRow(row)}</For>
+            <For each={viewGroups()}>{(group) => (
+              <Show when={group.id} fallback={renderRow(group.rows[0])}>
+                <ViewGroup group={group} onOpen={() => { void openRow({} as MouseEvent, group.rows[0]); }}>
+                  <For each={group.rows}>{(row) => renderRow(row)}</For>
+                </ViewGroup>
+              </Show>
+            )}</For>
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
             <div class="vt-wgrail-note">레일 설정에서 {rows().length - lists().sessions.length}개를 숨겼습니다.</div>

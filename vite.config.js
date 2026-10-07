@@ -153,6 +153,8 @@ export default defineConfig(({ mode }) => {
           // 단일 산출물이라 청크가 필요 없다.
           manualChunks: isVoice || isTest ? undefined : (id) => {
             const p = id.split('?')[0].replace(/\\/g, '/');
+            // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.
+            if (p.endsWith('/frontend/js/term/tab-worktree.js')) return 'shell';
             if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
             // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
             // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.

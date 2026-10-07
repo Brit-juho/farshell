@@ -3,6 +3,7 @@
 // 끼어 있다"고 지적했는데, 실제로 뽑아보니 tmux-panel.js/session.js/workspace.js
 // 사이 의존이 얽혀 있어 결국 이 파일이 그 세 모듈을 조립하는 최상위가 됐다.
 // 계획서가 예상한 panels/onboarding.js로의 흡수(L4)는 이번 F4 범위가 아니다.
+import { waitForAuthentication, requireAuthentication } from '../core/auth-state.js';
 import { attachTmux } from './session.js';
 import { attachLayoutSessions } from './workspace.js';
 import { restoreLayout, loadLayoutSnapshot, snapshotSessionInfos, pruneClosedByLive } from '../layout/persist.js';
@@ -23,15 +24,15 @@ export function showOnboarding() {
   el.id = 'onboarding';
   el.className = 'vt-onboarding';
   el.innerHTML = `
-    <div class="vt-ob-icon">${icon('mic', 22)}</div>
-    <h2>FarShell</h2>
-    <p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
-    <div id="ob-sessions" class="vt-ob-sessions" hidden></div>
-    <div class="vt-ob-actions">
-      <button class="vt-btn solid lg" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
-      <button class="vt-btn lg" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
-    </div>
-    <p class="vt-ob-hint">맥북에서 ${displayComboHtml('Ctrl+Shift+M')}로 음성 입력 (voice daemon 실행 시)</p>
+<div class="vt-ob-icon">${icon('mic', 22)}</div>
+<h2>FarShell</h2>
+<p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
+<div id="ob-sessions" class="vt-ob-sessions" hidden></div>
+<div class="vt-ob-actions">
+<button class="vt-btn solid lg" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
+<button class="vt-btn lg" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
+</div>
+<p class="vt-ob-hint">맥북에서 ${displayComboHtml('Ctrl+Shift+M')}로 음성 입력 (voice daemon 실행 시)</p>
   `;
   document.body.appendChild(el);
   renderOnboardingSessions();
@@ -126,6 +127,7 @@ let _bootRetryCount = 0;
 window.addEventListener('pagehide', () => { _leaving = true; });
 
 export async function bootApp() {
+  if (_leaving || !await waitForAuthentication()) return;
   // S2: 설정은 캐시로 이미 동기 적용돼 있고(core/settings.js 모듈 평가 시점),
   // 여기서는 서버 값으로 맞추기만 한다 — 다른 기기에서 바꾼 설정이 이 시점에
   // 반영된다. 실패해도 부팅을 막지 않는다(캐시 값으로 그대로 동작).
@@ -157,6 +159,11 @@ export async function bootApp() {
     if (_bootRetryCount >= 3) showToast('저장된 화면을 다시 연결했습니다', 'success', { key: 'boot-restore' });
     _bootRetryCount = 0;
   } catch (e) {
+    if (e.status === 401 && !_leaving) {
+      requireAuthentication();
+      if (await waitForAuthentication() && !_leaving) return bootApp();
+      return;
+    }
     if (e.retryable && !_leaving) {
       // 실패한 attach 뒤 restoreLayout을 실행하면 저장된 tmux 연결이 빈 칸으로
       // 덮인다. 서버가 돌아올 때까지 원본 스냅샷을 유지하고 부팅을 다시 시도한다.

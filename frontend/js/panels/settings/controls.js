@@ -5,7 +5,7 @@
 //
 // **컨트롤은 스키마에서 그린다** — 항목을 하드코딩하면 core/settings.js 스키마와
 // 두 벌이 되어 어긋난다. 값·범위·기본값은 전부 스토어에서 읽는다.
-import { get as setting, set as setSetting, scopeOf, SCHEMA } from '../../core/settings.js';
+import { get as setting, set as setSetting, scopeOf, SCHEMA, DEVICE_PROFILE } from '../../core/settings.js';
 import { icon } from '../../ui/icons.js';
 
 let _rowId = 0;
@@ -23,7 +23,9 @@ export function row(label, controlEl, help, options = {}) {
   if (options.scope) {
     const badge = document.createElement('span');
     badge.className = 'vt-tag vt-set-scope';
-    badge.textContent = options.scope === 'device' ? '이 기기' : '모든 기기';
+    badge.textContent = options.scope === 'device'
+      ? ({ mobile: '모바일', mac: 'Mac', windows: 'Windows', linux: 'Linux' })[DEVICE_PROFILE]
+      : '모든 기기';
     left.appendChild(badge);
   }
   let helpId = null;

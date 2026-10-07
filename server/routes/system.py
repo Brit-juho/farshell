@@ -361,6 +361,12 @@ async def hooks_status():
 @router.get("/api/device-settings")
 async def device_settings_get(request: Request):
     did = device_settings.device_id_for(request.cookies.get("vt_device", ""))
+    profile = request.query_params.get("profile")
+    if profile is not None:
+        if profile not in device_settings.PROFILES:
+            return JSONResponse({"error": "unknown device profile"}, status_code=400)
+        settings = device_settings.load_profile(profile, did)
+        return {"device_id": device_settings.profile_id(profile), "profile": profile, "settings": settings}
     return {"device_id": did, "settings": device_settings.load(did)}
 
 
@@ -371,6 +377,12 @@ async def device_settings_put(request: Request):
     values = body.get("settings") if isinstance(body, dict) else None
     if not isinstance(values, dict):
         return JSONResponse({"error": "settings must be an object"}, status_code=400)
+    profile = request.query_params.get("profile")
+    if profile is not None:
+        if profile not in device_settings.PROFILES:
+            return JSONResponse({"error": "unknown device profile"}, status_code=400)
+        device_settings.load_profile(profile, did)
+        did = device_settings.profile_id(profile)
     merged = device_settings.save(did, values)
     return {"ok": True, "device_id": did, "settings": merged}
 
@@ -419,11 +431,11 @@ async def workspace_put(request: Request):
 #  서버 메모리 변화 — 워크트리 표시·웹 세션 등록 — 뒤에만 남았다),
 # 터미널에서 직접 `tmux new` 한 것처럼 서버를 안 거친 변경은 주기가 잡는다.
 # 2026-09-30 — 이제 tmux 훅(tmux_hooks.py)이 생성·종료·이름 변경·붙기·떨어지기를
-# 모든 경로에서 바로 알린다(서버를 안 거친 `tmux new`까지). 주기는 훅이 없는
-# 변화(실행 중 명령·현재 폴더)만 맡으므로 5초 → 30초로 늘렸다 — tmux 조회
-# (명령 2개, 실측 약 16ms)가 화면이 떠 있는 동안 1/6로 준다. 에이전트가 시작·
-# 끝날 때(명령 이름이 실제로 바뀌는 주된 순간)는 routes/agents.py가 따로 알린다.
-_SESSIONS_PUSH_INTERVAL = float(os.environ.get("VT_SESSIONS_PUSH_INTERVAL", "30.0"))
+# 모든 경로에서 바로 알린다(서버를 안 거친 `tmux new`까지).
+# 현재 cwd·브랜치·변경량도 같은 snapshot으로 밀어 준다(2026-10-07).
+# 외부 cd/checkout은 tmux 훅이 없으므로 기본 5초 안전망으로 본다. Git은 cwd별
+# 10초 캐시·동시 조회 합치기를 쓰고, 숨은 화면은 기존처럼 쉰다.
+_SESSIONS_PUSH_INTERVAL = float(os.environ.get("VT_SESSIONS_PUSH_INTERVAL", "5.0"))
 _hooks_installed = False
 _sessions_task: asyncio.Task | None = None
 _sessions_kick: asyncio.Event | None = None

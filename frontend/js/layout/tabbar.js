@@ -9,11 +9,11 @@
 // 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
 // 닫기·이름 변경은 레일 세션 행으로, 상태·읽지 않음은 이 파일의 탭 아래
 // 가장자리 상태 바로(2026-10-04 리뉴얼 — 탭에는 라벨과 ×만 남는다).
-import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, setTabLabel, moveLayoutTab, tabDisplayLabel, onLayoutChange, isLayoutEmpty } from './store.js';
+import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, moveLayoutTab, tabDisplayLabel, onLayoutChange, isLayoutEmpty } from './store.js';
 import { collectSessions } from './tree.js';
 import { allSessions, activeSessionId, getSession, sessionDisplayName } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
-import { closeView } from '../term/session-actions.js';
+import { closeView, renameView } from '../term/session-actions.js';
 import { icon } from '../ui/icons.js';
 import { getStatus, isUnseen, onStatusChange } from '../agent/state.js';
 import { viewSegments, segmentsTooltip, segmentsAria } from '../design/state-classes.js';
@@ -236,9 +236,7 @@ export function openGroupTab({ sessionId, worktreeId = null, hostId = 'local', l
  * 왕복이 없다: 탭 라벨은 워크스페이스 스냅샷을 통해 이미 영속화되므로
  * (layout/persist.js) 여기서 store만 바꾸고 바로 저장하면 끝이다. */
 export function renameTab(tabId, label) {
-  const ok = setTabLabel(tabId, label);
-  if (ok) saveLayoutNow();
-  return ok;
+  return renameView(tabId, label);
 }
 
 onLayoutChange(render);

@@ -9,6 +9,19 @@ import { screenId } from '../core/screen-id.js';
 import { addSession } from './session.js';
 import { attachRemoteSession } from './remote.js';
 
+// 복원 요청은 인증/연결 실패와 확인된 세션 부재(404)를 구분한다.
+async function restoreRequest(url, options, missing = false) {
+  const res = await apiFetch(url, options).catch((e) => { e.retryable = true; throw e; });
+  if (!res.ok && !(missing && res.status === 404 && (await res.json())?.error === 'tmux session not found')) {
+    const e = new Error(`restore ${res.status}`);
+    e.status = res.status;
+    e.retryable = res.status >= 500 || res.status === 429;
+    throw e;
+  }
+  return res;
+}
+
+
 // 2026-10-03(세션·뷰 규칙 2단계) — 부팅은 **저장된 레이아웃의 열린 칸에 있던
 // 세션만** attach한다(layout/persist.js snapshotSessionInfos). 예전의
 // restoreWorkspace(이 파일의 세션 목록 스냅샷 전부)와 reconcileMissingTmuxSessions
@@ -33,39 +46,27 @@ export async function attachLayoutSessions(infos) {
         if (info.tmux) id = await attachRemoteSession(host, info.tmux, { place: 'none' });
         if (!id) continue;
       } else if (info.tmux) {
-        let res;
-        try {
-          res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: info.tmux, screen: screenId() }),
-          });
-        } catch (e) {
-          // 재시작 중 네트워크 단절을 "tmux가 종료됨"으로 간주하면 restoreLayout이
-          // 칸을 비우고 다음 저장에서 tmux 이름까지 잃는다. 부팅 전체를 재시도한다.
-          e.retryable = true;
-          throw e;
-        }
-        if (!res.ok && (res.status >= 500 || res.status === 429)) {
-          const e = new Error(`tmux attach temporarily unavailable (${res.status})`);
-          e.retryable = true;
-          throw e;
-        }
+        const res = await restoreRequest(`${API_BASE}/api/tmux/attach`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: info.tmux, screen: screenId() }),
+        }, true);
         const data = res.ok ? await res.json() : null;
         id = data && data.id;
+        if (res.ok && !id) throw new Error('invalid attach response');
         if (id && !getSession(id)) addSession(id, data.name || info.tmux, { place: 'none', tmuxName: info.tmux });
       } else if (info.id) {
         // 비-tmux(순수 PTY) 칸 — 서버가 이 브라우저 탭의 그 PTY를 아직 들고 있을 때만.
         if (!live) {
           live = new Map();
-          const r = await apiFetch(`${API_BASE}/api/sessions?screen=${screenId()}`).catch(() => null);
-          if (r && r.ok) for (const x of await r.json()) live.set(x.id, x);
+          const r = await restoreRequest(`${API_BASE}/api/sessions?screen=${screenId()}`);
+          for (const x of await r.json()) live.set(x.id, x);
         }
         const x = live.get(info.id);
         if (x) { id = x.id; if (!getSession(id)) addSession(id, x.name || id, { place: 'none', ...(x.tmux_name ? { tmuxName: x.tmux_name } : {}) }); }
       }
       if (id) opened++; else failed++;
     } catch (e) {
-      if (e.retryable) throw e;
+      if (host === 'local' || e.retryable) throw e;
       failed++;
     }
   }

@@ -133,12 +133,19 @@
   // 자격증명 파라미터를 URL에서 지우고 재로드 — 히스토리/공유 링크에 남지 않게 한다.
   // next가 있으면 정리 후 재로드하는 대신 곧장 그리로 옮긴다.
   function reloadClean(){
+    try { sessionStorage.setItem('vt.restore-after-login', '1'); } catch (_) {}
     var n=safeNext();
     if(n){ location.replace(n); return; }
     params.delete('ticket'); params.delete('token');
     var q=params.toString();
     location.replace(location.pathname+(q?'?'+q:'')+location.hash);
   }
+
+  // 열린 페이지의 인증 만료도 같은 로그인 폼으로 처리한다. 기존 뷰는 뒤에서 유지된다.
+  document.addEventListener('vt:auth-required', function(){
+    window.__vtAuthed=false; gate.hidden=false;
+    showForm();
+  });
 
   // 1회용 기기 등록 티켓(QR로 들어온 경우) — 스캔 자체가 등록 승인이다.
   var ticket=params.get('ticket');

@@ -2,9 +2,9 @@
 //
 // 행은 3줄이다(docs/ref/terminal.md 「Rail」):
 //   1줄  상태 아이콘(읽지 않음이면 둘레 링) · 에이전트 · 이름(제자리 편집)
-//   2줄  메인/워크트리 아이콘 · 브랜치(main도 항상) · 변경량
+//   2줄  현재 디렉터리 · 브랜치(main도 항상) · 변경량
 //   3줄  상태 키워드 · 경과 시간 · 만든 곳 아이콘
-// 해당할 때만 1줄 끝에 「열림」 표시, 4번째 줄에 묶음 뷰 이름·「다른 화면 N」.
+// 해당할 때만 4번째 줄에 「다른 화면 N」(묶음 제목은 ViewGroup 헤더 한 번).
 // 상태 왼쪽 막대(옛 vt-wgrail-bar)와 tmux 플러그 아이콘은 없다 — 상태는 아이콘의
 // 색+모양이 말하고, tmux라는 사실은 행마다 같아서 정보가 아니었다.
 //
@@ -15,7 +15,7 @@ import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { agentLabel, icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
 import {
-  stateKeyword, formatRelativeTime, statusSentence, diffLabel, worktreeIconName,
+  stateKeyword, formatRelativeTime, statusSentence, diffLabel,
   ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo,
 } from './rail-data.js';
 
@@ -208,43 +208,22 @@ export function Row(props: {
               onBlur={() => props.onEditCommit?.()}
             />
           </Show>
-          <Show when={props.row.open}>
-            <span
-              class="vt-srow-open"
-              data-tip="이 화면에 열려 있음"
-              data-tip-side="right"
-              role="img"
-              aria-label="열려 있음"
-              innerHTML={icon('app-window', 12, 2)}
-            />
-          </Show>
         </div>
-        <Show when={branch() || diff()}>
+        <Show when={props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable'}>
           <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
-            <Show when={branch()}>
-              <span
-                class="vt-srow-wt"
-                data-tip={props.row.isMainWorktree ? '메인 워크트리' : '워크트리'}
-                data-tip-side="right"
-                role="img"
-                aria-label={props.row.isMainWorktree ? '메인 워크트리' : '워크트리'}
-                innerHTML={icon(worktreeIconName(props.row), 12, 2)}
-              />
-              <span class="vt-srow-branch">{branch()}</span>
-            </Show>
+            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
+            <Show when={branch()}><span class="vt-srow-branch" data-tip={`브랜치 · ${branch()}`} data-tip-side="right">{branch()}</span></Show>
             <Show when={diff()}><span class="vt-srow-meta vt-wgrail-diff">{diff()}</span></Show>
           </div>
+          <Show when={props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">정보 갱신 대기</div></Show>
         </Show>
         <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
           <KeywordLine row={props.row} now={now} />
           <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>
-        <Show when={props.row.viewLabel || props.row.otherScreens > 0 || props.row.otherClients > 0}>
+        <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>
           <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4">
-            <Show when={props.row.viewLabel}>
-              <span class="vt-srow-view" data-tip="묶음 뷰" data-tip-side="right">{props.row.viewLabel}</span>
-            </Show>
             <ScreensMark row={props.row} />
           </div>
         </Show>

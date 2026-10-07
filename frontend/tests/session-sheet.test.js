@@ -93,6 +93,35 @@ test('뷰에 이름이 있으면 묶음 헤더에 그 이름', async () => {
   assert.strictEqual(m.querySelector('.vt-session-group').getAttribute('aria-label'), '배포 작업');
 });
 
+test('묶음 제목 편집은 세션 이름을 바꾸지 않고 닫힌 묶음에도 저장된다', async () => {
+  const { answerPrompt } = require('./helpers/dialog-stub');
+  const ctx = await setup();
+  const m = await openSheet(ctx);
+  m.querySelector('.vt-view-group-rename').click();
+  await answerPrompt(ctx.doc, { value: '검토 작업' });
+  await flush();
+  assert.strictEqual(ctx.S.getTabsWithTrees().find((t) => t.id === ctx.t2).label, '검토 작업');
+  assert.deepStrictEqual(names(m.querySelector('.vt-session-group')), ['tb', 'tc']);
+  // 같은 저장소의 실제 닫힌 스냅샷도 제목 편집 대상이다.
+  ctx.S.rememberClosedView({ id: 'closed', label: '검토 작업', tree: { t: 'split', dir: 'row', ratio: .5,
+    a: { t: 'leaf', session: { tmux: 'e' } }, b: { t: 'leaf', session: { tmux: 'f' } } } });
+  assert.strictEqual(ctx.S.setTabLabel('closed', '다음 작업'), true);
+  assert.strictEqual(ctx.S.getClosedViews().find((v) => v.id === 'closed').label, '다음 작업');
+});
+
+test('모바일 목록에도 현재 디렉터리/브랜치가 보이고 조회 실패는 기존 목록과 재시도를 보존한다', async () => {
+  const ctx = await setup({ tmux: [{ name: 'tb', cwd: '/repo/src', context: { cwd: '/repo/src', status: 'ready', branch: 'feature' } },
+    { name: 'outside', cwd: '/elsewhere', context: { cwd: '/elsewhere', status: 'nonrepo' } }] });
+  let m = await openSheet(ctx);
+  assert.match(m.querySelector('.vt-session-meta').textContent, /src · feature/);
+  ctx.window.fetch = () => Promise.reject(new Error('temporary'));
+  ctx.S.setTabLabel(ctx.t2, '갱신');
+  await flush();
+  assert.ok(names(m).includes('outside'));
+  assert.match(m.querySelector('.vt-session-error').textContent, /다시 시도/);
+  assert.strictEqual(m.querySelector('.vt-session-empty'), null);
+});
+
 test('뷰 탭을 재정렬하면 목록이 따라오고 n/m과 같은 순서다', async () => {
   const ctx = await setup();
   ctx.S.moveLayoutTab(ctx.t3, 0);

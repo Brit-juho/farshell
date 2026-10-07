@@ -5,15 +5,16 @@
 // 한 덩어리, 단독 뷰는 행 하나. 열려 있지 않은 tmux 세션은 그 아래 이름순 구역. 순서의 출처는
 // layout/compact.js openSessionOrder() 하나라 스와이프·키·`n/m`과 항상 같다.
 import { activeSessionId, sessionDisplayName, getSession } from '../core/store.js';
-import { getActiveTabId } from './store.js';
+import { getActiveTabId, getClosedViews, closedViewMembers } from './store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { getAction } from '../core/dom.js';
 import { revealSession, renameSession } from '../term/session.js';
-import { closeSession, openSessionFromRail, confirmAndKillSession } from '../term/session-actions.js';
+import { closeSession, openSessionFromRail, confirmAndKillSession, renameView } from '../term/session-actions.js';
 import { promptDialog } from '../core/dialog.js';
 import { icon } from '../ui/icons.js';
 import { orderedViews, renderOrderEditor } from './session-order.js';
+import { contextLabel } from '../ui/session-context.js';
 
 // ADR-29 E — tmux 목록 팝업을 없애면서 그게 하던 일(열리지 않은 tmux 세션 보기 + 열기 + 종료)을 이 시트가
 // 흡수했다. `/api/tmux/sessions`는 이 브라우저 탭에 열리지 않은 것까지 내려주므로, 열린 세션의 tmux 이름과
@@ -21,9 +22,10 @@ import { orderedViews, renderOrderEditor } from './session-order.js';
 async function fetchTmuxSessions() {
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
+    if (!res.ok) return null;
     const list = await res.json();
-    return Array.isArray(list) ? list : [];
-  } catch (_) { return []; }
+    return Array.isArray(list) ? list : null;
+  } catch (_) { return null; }
 }
 
 const btn = (cls, html, label) => {
@@ -34,7 +36,7 @@ const btn = (cls, html, label) => {
 };
 
 /** 열린 세션 한 줄. `inGroup`이면 묶음 안 구성원 행(테두리는 묶음이 갖는다). */
-function openRow(id, ctx, inGroup) {
+function openRow(id, ctx, inGroup, metadata) {
   const s = getSession(id);
   const name = sessionDisplayName(id);
   const tmuxName = s && (s.tmuxName || s.tmux_name);
@@ -55,7 +57,7 @@ function openRow(id, ctx, inGroup) {
   // 닫기 — 레일·칸 ×와 같은 함수(term/session-actions.js closeSession).
   const close = btn('vt-icon-btn xl danger vt-session-action', icon('x', 16), `${name} 닫기`);
   close.onclick = async () => { await closeSession(id); ctx.refresh(); };
-  row.append(select, rename, close);
+  row.append(sessionBody(select, metadata), rename, close);
   // tmux 세션은 완전 종료도 여기서 — 모바일에서 이 동작에 닿는 유일한 길이다(ADR-29 E).
   if (tmuxName) {
     const kill = btn('vt-icon-btn xl danger vt-session-action', icon('trash-2', 16), `${tmuxName} 완전 종료`);
@@ -75,12 +77,48 @@ function sleepingRow(s, ctx) {
   wake.onclick = async () => { ctx.close(); await openSessionFromRail({ tmuxName: s.name }); };
   const kill = btn('vt-icon-btn xl danger vt-session-action', icon('trash-2', 16), `${s.name} 완전 종료`);
   kill.onclick = async () => { if (await confirmAndKillSession(s.name, s.web_session_id || null)) ctx.refresh(); };
-  row.append(wake, kill);
+  row.append(sessionBody(wake, s), kill);
   return row;
 }
 
 /** 열린 세션 구역 — 뷰 순서대로. 묶음은 한 덩어리, 단독은 행 하나. 돌려주는 값: [노드들, 열린 세션들의 tmux 이름]. */
-function openSection(ctx) {
+function sessionBody(select, session) {
+  const body = document.createElement('div');
+  body.className = 'vt-session-body';
+  body.appendChild(select);
+  const label = session && contextLabel(session);
+  if (label) {
+    const meta = document.createElement('span');
+    meta.className = 'vt-session-meta'; meta.textContent = label;
+    meta.setAttribute('data-tip', session.cwd || '');
+    body.appendChild(meta);
+  }
+  return body;
+}
+
+function groupHead(id, label, count, ctx, open) {
+  const head = document.createElement('div');
+  head.className = 'vt-view-group-head';
+  const title = document.createElement('button');
+  title.type = 'button'; title.className = 'vt-session-group-label vt-view-group-title';
+  title.textContent = label; title.onclick = open;
+  const edit = document.createElement('button');
+  edit.type = 'button'; edit.className = 'vt-view-group-rename'; edit.textContent = '편집';
+  edit.setAttribute('aria-label', `${label} 묶음 이름 변경`);
+  edit.onclick = async () => {
+    const next = await promptDialog('묶음 뷰 제목', { title: '묶음 이름 변경', defaultValue: label });
+    if (next === null || !next.trim()) return;
+    if (renameView(id, next.trim())) ctx.refresh();
+    else showToast('묶음 이름을 저장하지 못했습니다. 제목은 128자까지 입력할 수 있습니다.');
+  };
+  const total = document.createElement('span');
+  total.className = 'vt-view-group-count'; total.textContent = String(count);
+  total.setAttribute('aria-label', `${count}개 세션`);
+  head.append(title, total, edit);
+  return head;
+}
+
+function openSection(ctx, metadata) {
   const activeTab = getActiveTabId();
   const nodes = [];
   const awake = new Set();
@@ -90,17 +128,16 @@ function openSection(ctx) {
       const t = s && (s.tmuxName || s.tmux_name);
       if (t) awake.add(t);
     }
-    if (v.members.length < 2) { nodes.push(openRow(v.members[0], ctx, false)); continue; }
+    const rowFor = (id, inGroup) => { const s = getSession(id); return openRow(id, ctx, inGroup, metadata.get(s && (s.tmuxName || s.tmux_name))); };
+    if (v.members.length < 2) { nodes.push(rowFor(v.members[0], false)); continue; }
     const group = document.createElement('div');
     group.className = 'vt-session-group' + (v.id === activeTab ? ' active' : '');
     group.setAttribute('role', 'group');
     const label = v.label || '묶음 뷰';
     group.setAttribute('aria-label', label);
-    const head = document.createElement('div');
-    head.className = 'vt-session-group-label';
-    head.textContent = label;
+    const head = groupHead(v.id, label, v.members.length, ctx, () => { revealSession(v.members[0]); ctx.close(); });
     group.appendChild(head);
-    for (const id of v.members) group.appendChild(openRow(id, ctx, true));
+    for (const id of v.members) group.appendChild(rowFor(id, true));
     nodes.push(group);
   }
   return { nodes, awake };
@@ -158,9 +195,15 @@ export async function renderSessionSheet(backdrop, ctx) {
     return;
   }
 
-  const { nodes, awake } = openSection(ctx);
+  const pending = backdrop._snapshot;
+  backdrop._snapshot = null;
+  const fetched = pending || await fetchTmuxSessions();
+  if (seq !== backdrop._seq) return;
+  if (fetched) backdrop._tmux = fetched;
+  const tmux = backdrop._tmux || [];
+  const { nodes, awake } = openSection(ctx, new Map(tmux.map((s) => [s.name, s])));
   list.append(...nodes);
-  const sleeping = (await fetchTmuxSessions())
+  const sleeping = tmux
     .filter((s) => s && s.name && !awake.has(s.name))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   if (seq !== backdrop._seq) return;
@@ -169,9 +212,27 @@ export async function renderSessionSheet(backdrop, ctx) {
     h.className = 'vt-session-section';
     h.textContent = '열려 있지 않은 세션';
     list.appendChild(h);
-    for (const s of sleeping) list.appendChild(sleepingRow(s, ctx));
+    const remaining = new Map(sleeping.map((s) => [s.name, s]));
+    for (const v of getClosedViews()) {
+      const members = closedViewMembers(v).map((n) => remaining.get(n)).filter(Boolean);
+      if (members.length < 2) continue;
+      const group = document.createElement('div');
+      group.className = 'vt-session-group closed';
+      const label = v.label || members.map((s) => s.name).join(' · ');
+      group.setAttribute('role', 'group'); group.setAttribute('aria-label', label);
+      group.appendChild(groupHead(v.id, label, members.length, ctx, async () => { ctx.close(); await openSessionFromRail({ tmuxName: members[0].name }); }));
+      for (const s of members) { remaining.delete(s.name); group.appendChild(sleepingRow(s, ctx)); }
+      list.appendChild(group);
+    }
+    for (const s of remaining.values()) list.appendChild(sleepingRow(s, ctx));
   }
-  if (!nodes.length && !sleeping.length) list.innerHTML = '<p class="vt-session-empty">열려 있는 세션이 없습니다.</p>';
+  if (!nodes.length && !sleeping.length && fetched) list.innerHTML = '<p class="vt-session-empty">열려 있는 세션이 없습니다.</p>';
+  if (!fetched) {
+    const error = document.createElement('p'); error.className = 'vt-session-error';
+    error.setAttribute('role', 'status'); error.textContent = '세션 정보를 갱신하지 못했습니다. ';
+    const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'vt-btn sm';
+    retry.textContent = '다시 시도'; retry.onclick = ctx.refresh; error.appendChild(retry); list.appendChild(error);
+  }
 
   // "맥에서도 열기"는 특정 세션이 아니라 앞으로 만들 모든 세션에 적용되는 전역 설정이라 ⋯의 「설정」 그룹 쪽에 남긴다.
   const footer = document.createElement('div');

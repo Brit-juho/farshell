@@ -31,40 +31,16 @@ async function load() {
   return _m;
 }
 
-test('worktreeLabelMap — main은 저장소명, 나머지는 repo/branch (레일과 같은 규칙)', async () => {
-  const { worktreeLabelMap } = await load();
-  const map = worktreeLabelMap([
-    { repoName: 'farshell', branch: 'master', isMain: true, sessions: ['dev'] },
-    { repoName: 'farshell', branch: 'feat/2.1', isMain: false, sessions: ['wt-21', 'wt-21-b'] },
+test('pane 헤더 브랜치는 생성 태그가 아니라 현재 cwd 스냅샷을 쓴다', async () => {
+  const { branchChipMap } = await load();
+  const map = branchChipMap([
+    { name: 'a', cwd: '/new', wt_id: 'old', context: { cwd: '/new', status: 'ready', branch: 'feature' } },
+    { name: 'b', cwd: '/nonrepo', context: { cwd: '/nonrepo', status: 'nonrepo', branch: null } },
+    { name: 'c', cwd: '/repo', context: { cwd: '/repo', status: 'ready', branch: null } },
+    { name: 'd', cwd: '/moved', context: { cwd: '/old', status: 'ready', branch: 'wrong' } },
   ]);
-  assert.strictEqual(map.get('dev'), 'farshell');
-  assert.strictEqual(map.get('wt-21'), 'farshell/feat/2.1');
-  assert.strictEqual(map.get('wt-21-b'), 'farshell/feat/2.1');
+  assert.strictEqual(map.get('a'), 'feature');
+  assert.strictEqual(map.has('b'), false);
+  assert.strictEqual(map.get('c'), '분리된 HEAD');
+  assert.strictEqual(map.has('d'), false);
 });
-
-test('worktreeLabelMap — 세션이 중복으로 실려 와도 먼저 온 라벨을 유지한다', async () => {
-  const { worktreeLabelMap } = await load();
-  const map = worktreeLabelMap([
-    { repoName: 'a', branch: 'x', isMain: false, sessions: ['dup'] },
-    { repoName: 'b', branch: 'y', isMain: false, sessions: ['dup'] },
-  ]);
-  assert.strictEqual(map.get('dup'), 'a/x');
-});
-
-test('worktreeLabelMap — 빈 입력·세션 없는 워크트리도 안전하다', async () => {
-  const { worktreeLabelMap } = await load();
-  assert.strictEqual(worktreeLabelMap(undefined).size, 0);
-  assert.strictEqual(worktreeLabelMap([{ repoName: 'a', branch: 'b', isMain: false }]).size, 0);
-});
-
-test('canRelabel — 사용자가 직접 지은 이름은 자동 라벨이 덮지 않는다', async () => {
-  const { canRelabel } = await load();
-  assert.strictEqual(canRelabel({ tmuxName: 'dev' }), true);
-  assert.strictEqual(canRelabel({ tmuxName: 'dev', renamed: true }), false);
-  assert.strictEqual(canRelabel(null), false);
-});
-
-// 2026-09-18 후속(그룹 재정의) — 탭 소속 판정은 이제 pane 트리에서 나온다
-// (layout/tabbar.js의 tabSessionNames, layout/store.js의 tabGroups). 이
-// 파일의 effectiveGroupMap(@fsh_grp를 옮기던 함수)은 그 태그와 함께
-// 없앴다 — 아래 테스트도 같이 지웠다.

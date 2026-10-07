@@ -89,3 +89,33 @@ def test_device_id_for_rejects_unsafe_ids_and_falls_back(bad, monkeypatch):
     # 고정), 혹시라도 그런 값이 오면 파일명 인젝션으로 이어지지 않아야 한다.
     monkeypatch.setattr(auth, "verify_device", lambda secret: {"id": bad})
     assert device_settings.device_id_for("whatever") == "local"
+
+
+def test_profile_survives_device_reregistration_and_separates_platforms(client, tmp_path):
+    secret, did = auth.register_device("old browser")
+    device_settings.save(did, {"terminal.fontSize": 20})
+    client.cookies.set("vt_device", secret)
+    r = client.get("/api/device-settings?profile=mac")
+    assert r.json()["settings"] == {"terminal.fontSize": 20}
+    client.put("/api/device-settings?profile=mac", json={"settings": {"terminal.fontSize": 22}})
+    new_secret, _ = auth.register_device("new browser")
+    client.cookies.set("vt_device", new_secret)
+    assert client.get("/api/device-settings?profile=mac").json()["settings"]["terminal.fontSize"] == 22
+    assert client.get("/api/device-settings?profile=mobile").json()["settings"] == {}
+    client.cookies.clear()
+    assert client.get("/api/device-settings?profile=mac").json()["settings"]["terminal.fontSize"] == 22
+    assert stat.S_IMODE((tmp_path / ".vt/device-settings/profilemac.json").stat().st_mode) == 0o600
+
+
+def test_profile_migration_never_overwrites_saved_preferences(client):
+    device_settings.save("profilemac", {"terminal.fontSize": 24})
+    device_settings.save("local", {"terminal.fontSize": 10, "ui.rail.width": 300})
+    settings = client.get("/api/device-settings?profile=mac").json()["settings"]
+    assert settings == {"terminal.fontSize": 24, "ui.rail.width": 300}
+
+
+@pytest.mark.parametrize("profile", ["../escape", "", "unknown"])
+def test_invalid_profile_is_rejected(client, profile):
+    url = "/api/device-settings"
+    assert client.get(url, params={"profile": profile}).status_code == 400
+    assert client.put(url, params={"profile": profile}, json={"settings": {}}).status_code == 400

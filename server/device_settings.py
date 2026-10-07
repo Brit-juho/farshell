@@ -7,11 +7,10 @@ ADR-5)에 같이 두면 폰에서 조절한 값이 맥 터미널까지 커진다
 `core/settings.js`가 유일한 소스이고, 서버는 여기서도 값의 의미를 모르고
 기기별로 보관만 한다(workspace.py의 같은 원칙).
 
-기기 식별: `vt_device` 쿠키(auth 패키지가 이미 관리하는 그 쿠키 — 기기 등록은
-매 비밀번호 로그인마다 조용히 일어나므로, OTP를 켜지 않은 사용자도 쿠키를
-이미 갖고 있다). 쿠키가 없는 접속(비밀번호 미설정 로컬 전용 등)은 파일
-하나(`local.json`)를 공유한다 — 그 경우 "기기가 여럿"이라는 개념 자체가
-없다.
+기기 종류별 프로필(mobile/mac/windows/linux)은 로그인 쿠키와 독립적으로 보관한다.
+기존 클라이언트는 쿠키별 저장소를 계속 사용한다. 프로필을 처음 읽을 때 현재
+쿠키의 옛 설정에서 빠진 키만 이관하므로 재등록·쿠키 만료가 취향을 지우지 않는다.
+프로필 파일은 저장소 밖 STATE_DIR 아래에 0600으로 저장한다.
 """
 
 from __future__ import annotations
@@ -19,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import auth
+import store_lock
 
 DIR = auth.STATE_DIR / "device-settings"
 
@@ -46,10 +46,32 @@ def load(device_id: str) -> dict:
     return auth._read_json(_path(device_id), {})
 
 
+PROFILES = frozenset({"mobile", "mac", "windows", "linux"})
+
+
+def profile_id(profile: str) -> str:
+    if profile not in PROFILES:
+        raise ValueError("unknown device profile")
+    return "profile" + profile
+
+
+def load_profile(profile: str, legacy_id: str) -> dict:
+    did = profile_id(profile)
+    path = _path(did)
+    with store_lock.exclusive(path.with_suffix(".lock")):
+        cur = load(did)
+        legacy = load(legacy_id)
+        merged = {**legacy, **cur}
+        if merged != cur:
+            auth._write_json_secure(path, merged)
+        return merged
+
+
 def save(device_id: str, values: dict) -> dict:
-    """얕은 병합(workspace.py의 settings 병합과 같은 이유 — 다른 탭/새로고침이
-    동시에 다른 키를 바꿔도 한쪽이 통째로 안 지워진다)."""
-    cur = load(device_id)
-    merged = {**cur, **(values or {})}
-    auth._write_json_secure(_path(device_id), merged)
-    return merged
+    """부분 업데이트의 읽기·병합·원자적 저장을 같은 락으로 보호한다."""
+    path = _path(device_id)
+    with store_lock.exclusive(path.with_suffix(".lock")):
+        cur = load(device_id)
+        merged = {**cur, **(values or {})}
+        auth._write_json_secure(path, merged)
+        return merged

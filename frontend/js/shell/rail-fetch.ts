@@ -12,6 +12,7 @@ import { createSignal, onCleanup } from 'solid-js';
 import { normalizeOrigin, normalizeShare, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
 import { confirmDialog } from '../core/dialog.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
+import { sessionContext, directoryLabel } from '../ui/session-context.js';
 
 // §5 원문: "60초 캐시" — 워크트리에 안 속한(changed 요약을 서버가 안 주는)
 // 세션에만 쓴다.
@@ -270,10 +271,10 @@ export function actionSessionId(row: Pick<SessionRow, 'sessionId'>): string | nu
 export interface CollectInput {
   /** GET /api/tmux/sessions 또는 `/ws-workspace`의 tmux_sessions. */
   tmux: any[];
-  /** GET /api/repos의 repos — 브랜치·변경량의 출처(없으면 브랜치 줄이 비는다). */
+  /** GET /api/repos의 repos — 구버전 context 없는 서버의 폴백/워크트리 식별. */
   repos?: any[];
-  /** layout/store.js의 getTabGroups() — 묶음 뷰 이름의 출처. */
-  groups?: { id: string; label: string; sessionIds: string[] }[];
+  /** layout/store.js의 getSessionViewGroups() — 열린/닫힌 묶음의 제목과 구성원. */
+  groups?: { id: string; label: string; sessionIds: string[]; tmuxNames?: string[] }[];
   deps: Pick<RailDeps, 'vtFetch'>;
   /** git 조회가 끝나 다시 그려야 할 때. */
   onDiff: () => void;
@@ -281,7 +282,7 @@ export interface CollectInput {
 
 /**
  * 레일과 폰 Fleet이 같이 쓰는 행 조립. 출처: tmux 목록(이름·만든 곳·붙은 화면 수) +
- * 이 브라우저의 세션 맵(열림) + 공용 에이전트 저장소(상태·유형) + /api/repos(브랜치).
+ * 이 브라우저의 세션 맵(열림) + 공용 에이전트 저장소(상태·유형) + tmux context(현재 위치·브랜치·변경량).
  * 일반(비 tmux) 웹 세션도 행으로 낸다 — 서버에 지속되는 대상이 없어 늘 열려 있다.
  *
  * 부수 효과: 낡은 cwd의 변경량 조회를 시작한다(끝나면 onDiff).
@@ -306,8 +307,12 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
   const details = readAgentDetails();
   const names = readAgentNames();
 
-  const sidToView = new Map<string, string>();
-  for (const g of inp.groups || []) for (const sid of g.sessionIds) sidToView.set(sid, g.label);
+  const sidToView = new Map<string, { id: string; label: string }>();
+  const tmuxToView = new Map<string, { id: string; label: string }>();
+  for (const g of inp.groups || []) {
+    for (const sid of g.sessionIds) sidToView.set(sid, g);
+    for (const name of g.tmuxNames || []) tmuxToView.set(name, g);
+  }
 
   const tmuxToWebSid: Record<string, string> = {};
   for (const [sid, s] of Object.entries<any>(all)) {
@@ -316,9 +321,11 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
   }
 
   const wtInfo = new Map<string, { branch: string; isMain: boolean; changed: any }>();
+  const rootToWt = new Map<string, { id: string; isMain: boolean }>();
   for (const repo of inp.repos || []) {
     for (const wt of repo.worktrees || []) {
       wtInfo.set(wt.id, { branch: wt.branch, isMain: !!wt.isMain, changed: wt.changed || null });
+      if (wt.path) rootToWt.set(wt.path, { id: wt.id, isMain: !!wt.isMain });
     }
   }
 
@@ -339,6 +346,9 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
     const info = wtInfo.get(t.wt_id || '') ?? wtInfo.get(nameToWt.get(t.name) || '');
     const detail = details[t.name];
     const cwd = t.cwd || null;
+    const ctx = sessionContext(t);
+    const modern = ctx.status !== 'legacy';
+    const view = sid ? sidToView.get(sid) : tmuxToView.get(t.name);
     const attached = Number(t.attached) || 0;
     out.push({
       sessionId: sid,
@@ -351,21 +361,22 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       tool: detail?.tool ?? null,
       kind: detail?.kind ? normalizeKind(detail.kind) : null,
       badge: normalizeBadge(detail?.badge),
-      diffFiles: cwd ? (cachedDiffCount(cwd) ?? null) : null,
-      changed: info?.changed ?? null,
+      cwd: ctx.cwd, directory: directoryLabel(ctx.cwd), contextStatus: ctx.status,
+      diffFiles: modern ? (ctx.changed?.files ?? null) : cwd ? (cachedDiffCount(cwd) ?? null) : null,
+      changed: modern ? ctx.changed : info?.changed ?? null,
       question: detail?.question ?? null,
       options: detail?.options ?? null,
       promptId: detail?.promptId ?? null,
       agent: names[t.name] ?? null,
-      branch: info?.branch ?? null,
-      isMainWorktree: info?.isMain ?? false,
-      worktreeId: t.wt_id || null,
+      branch: modern ? ctx.branch || (ctx.status === 'ready' || ctx.root ? '분리된 HEAD' : null) : info?.branch ?? null,
+      isMainWorktree: modern ? rootToWt.get(ctx.root)?.isMain ?? false : info?.isMain ?? false,
+      worktreeId: modern ? rootToWt.get(ctx.root)?.id ?? null : t.wt_id || null,
       origin: normalizeOrigin(t.origin),
       share: normalizeShare(t.share),
-      viewLabel: (sid && sidToView.get(sid)) || null,
+      viewLabel: view?.label || null, viewId: view?.id || null,
       ...screenCounts(t, attached, !!sid),
     });
-    if (cwd && diffCountStale(cwd)) fetchDiffCount(inp.deps, cwd).then(inp.onDiff);
+    if (!modern && cwd && diffCountStale(cwd)) fetchDiffCount(inp.deps, cwd).then(inp.onDiff);
   }
 
   for (const [sid, s] of Object.entries<any>(all)) {
@@ -382,7 +393,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       diffFiles: null,
       agent: null, branch: null, isMainWorktree: false,
       origin: 'local',
-      viewLabel: sidToView.get(sid) || null,
+      viewLabel: sidToView.get(sid)?.label || null, viewId: sidToView.get(sid)?.id || null,
       otherScreens: 0,
       otherClients: 0,
     });

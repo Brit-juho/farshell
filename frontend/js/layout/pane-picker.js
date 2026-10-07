@@ -22,6 +22,7 @@ import { setActivePane, openPanelPane } from './store.js';
 // panels/registry.js 하나에서 온다(dock 탭과 짝이 맞아야 한다).
 import { PANELS } from '../panels/registry.js';
 import { icon } from '../ui/icons.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 const PANEL_ID = 'vt-pane-pick';
 
@@ -31,10 +32,12 @@ function _sessionLabel(id) {
 }
 
 export function openPanePicker(paneId) {
+  let offSessions = () => {};
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: '이 화면에 표시할 세션 선택',
     extraClass: 'vt-pane-pick',
+    onClose: () => offSessions(),
     headHTML: `<div class="vt-vw-title">이 화면에 표시할 세션</div>`,
     bodyId: 'vt-pp-body',
     bodyHTML: `
@@ -53,6 +56,14 @@ export function openPanePicker(paneId) {
   });
 
   _renderCandidates(paneId, panel.body.querySelector('#vt-pp-cards'));
+  offSessions = onWorkspaceEvent('tmux_sessions', (msg) => {
+    if (!Array.isArray(msg.sessions)) return;
+    const byName = new Map(msg.sessions.map((s) => [s.name, s]));
+    for (const card of panel.body.querySelectorAll('.vt-card[data-name]')) {
+      const s = byName.get(card.dataset.name);
+      if (s) updateSessionCard(card, s);
+    }
+  });
   _renderPanelChoices(paneId, panel.body.querySelector('#vt-pp-panels'));
 }
 

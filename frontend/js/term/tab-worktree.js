@@ -1,84 +1,33 @@
-// 10-shell-layout.md §4 — "탭 = 열려 있는 워크트리"의 **1단계: 렌더만**.
-//
-// 원래 계획은 탭 하나가 워크트리 하나를 대표하고 그 안에 세션 여러 개가 들어가는
-// 것이었는데, 조사해 보니 pane 트리가 화면 전체에 하나뿐인 구조라 진짜 다중
-// 세션(2단계)은 `/api/workspace` 스키마까지 건드리는 큰 작업이다. 그래서 이
-// 파일은 저위험 부분만 한다: **탭에 적히는 이름을 워크트리 단위로 바꾼다.**
-// 탭 개수·수명·드래그·닫기 동작은 그대로다(세션 단위).
-//
-// 규칙 둘:
-//  - 사용자가 직접 지은 이름(`renamed`)은 절대 덮지 않는다.
-//  - 워크트리에 안 속한 세션은 그대로 둔다(레일의 「묶지 않음」과 같은 규칙).
-//
-// 2026-09-18 후속(그룹 재정의) — 탭 소속 판정은 이제 pane 트리 자체에서
-// 나온다(layout/tabbar.js의 tabSessionNames, layout/store.js의 tabGroups) —
-// `@fsh_grp` 태그도, 그 태그를 읽어 지도를 만들던 effectiveGroupMap/
-// setGroupSessionMap도 여기서 함께 없앴다.
-import { allSessions, setSessionDisplayName } from '../core/store.js';
+// pane 헤더도 레일/카드와 같은 현재 작업 위치의 context를 사용한다.
+// 생성 시 워크트리 소속으로 세션 이름을 자동 변경하던 옛 경로는 제거했다.
 import { vtFetch } from '../core/api.js';
 import { setBranchChipMap } from '../layout/panes.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
+import { sessionContext } from '../ui/session-context.js';
 
-// 정본은 `/ws-workspace`의 `worktrees_changed` push(맨 아래). 이 폴링은 WS가
-// 끊긴 동안과, 터미널에서 직접 워크트리를 만들어 서버가 변경을 모르는 경우를
-// 위한 안전망이다 — Rail.tsx의 WORKTREES_POLL_MS와 같은 이유·같은 값.
-const POLL_MS = 60000;
-
-/** 워크트리 목록 → `tmux 세션 이름 → 표시 라벨` 지도. 라벨 규칙은 레일과 같다
- * (30-worktree.md §4: isMain이면 repoName, 아니면 `repo/branch`). 순수 함수. */
-export function worktreeLabelMap(worktrees) {
+export function branchChipMap(sessions) {
   const map = new Map();
-  for (const wt of worktrees || []) {
-    const label = wt.isMain ? wt.repoName : `${wt.repoName}/${wt.branch}`;
-    for (const name of wt.sessions || []) {
-      // 한 세션이 두 워크트리에 속할 수는 없다 — 먼저 온 것을 남긴다(서버가
-      // 중복을 내려주는 비정상 상황에서도 라벨이 깜빡이지 않게).
-      if (!map.has(name)) map.set(name, label);
-    }
+  for (const s of sessions || []) {
+    const ctx = sessionContext(s);
+    const branch = ctx.branch || (ctx.status === 'ready' || ctx.root ? '분리된 HEAD' : null);
+    if (branch) map.set(s.name, branch);
   }
   return map;
 }
 
-/** 이 탭의 이름을 자동 라벨로 바꿔도 되는가. 사용자가 지은 이름은 보존한다. */
-export function canRelabel(session) {
-  return !!session && !session.renamed;
-}
-
-function applyLabels(map) {
-  for (const [id, s] of Object.entries(allSessions())) {
-    const tmux = s && (s.tmuxName || s.tmux_name);
-    if (!tmux || !canRelabel(s)) continue;
-    const label = map.get(tmux);
-    if (!label || s.displayName === label) continue;
-    // 이름의 출처는 레코드다(core/store.js) — 탭 DOM은 setSessionDisplayName이
-    // 같이 맞춘다. 3단계에서 그 DOM이 사라져도 이 경로는 그대로 동작한다.
-    setSessionDisplayName(id, label);
-  }
-}
-
-/** 세션 이름 → 브랜치. **저장소에 워크트리가 둘 이상일 때만** 항목이
- * 생긴다(D4: "워크트리가 1개뿐인 저장소는 축이 안 보인다") — 구분할 대상이
- * 하나뿐이면 칩은 정보가 아니라 잡음이다. */
-export function branchChipMap(worktrees) {
-  const perRepo = new Map();
-  for (const wt of worktrees || []) perRepo.set(wt.repo, (perRepo.get(wt.repo) || 0) + 1);
-  const map = new Map();
-  for (const wt of worktrees || []) {
-    if ((perRepo.get(wt.repo) || 0) < 2) continue;
-    for (const name of wt.sessions || []) if (!map.has(name)) map.set(name, wt.branch);
-  }
-  return map;
-}
-
+let revision = 0;
 export async function refreshTabWorktreeLabels() {
+  const request = ++revision;
   try {
-    const repoData = await vtFetch('/api/repos');
-    const worktrees = (repoData?.repos || []).flatMap((r) => r.worktrees || []);
-    applyLabels(worktreeLabelMap(worktrees));
-    setBranchChipMap(branchChipMap(worktrees));
-  } catch (_) { /* 워크트리 API가 없거나 실패 — 탭은 기존 이름 그대로 쓴다 */ }
+    const sessions = await vtFetch('/api/tmux/sessions');
+    if (request === revision && Array.isArray(sessions)) setBranchChipMap(branchChipMap(sessions));
+  } catch (_) { /* 마지막 성공 값을 유지한다 */ }
 }
 
 refreshTabWorktreeLabels();
-setInterval(() => { if (!document.hidden) refreshTabWorktreeLabels(); }, POLL_MS);
-onWorkspaceEvent('worktrees_changed', () => { refreshTabWorktreeLabels(); });
+setInterval(() => { if (!document.hidden) refreshTabWorktreeLabels(); }, 60000);
+onWorkspaceEvent('tmux_sessions', (msg) => {
+  if (!Array.isArray(msg.sessions)) return;
+  revision += 1;
+  setBranchChipMap(branchChipMap(msg.sessions));
+});

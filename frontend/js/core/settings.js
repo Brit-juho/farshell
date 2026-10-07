@@ -17,13 +17,21 @@
 // 규칙:
 //   - 변경은 **즉시 반영**된다(재시작 없음). 구독자에게 알린 뒤 서버에 PUT.
 //   - **쓰기 실패는 조용히 큐잉하지 않는다.** 토스트로 알리고 캐시만 갱신하며,
-//     다음 로드 때 서버 값이 이긴다. 조용한 유실보다 눈에 보이는 실패가 낫다.
+//     같은 화면에서 다시 로드하거나 값을 재선택하면 저장을 다시 시도한다.
 //   - `migrate`가 지정된 키는 **기존 localStorage 값에서 1회 이관**한다.
 //     이관 후 원본 키는 지우지 않는다(롤백 여지 — 2.0이 끝나면 정리한다).
 //   - **스코프는 스키마가 정한다 — 사용자가 바꾸지 않는다**(문서 §1의 화면
 //     2b 규칙: 배지는 읽기 전용).
 import { vtFetch } from './api.js';
 import { hostKey, isRelayed } from './host-route.js';
+
+// 브라우저 등록 쿠키가 바뀌어도 같은 종류의 화면 설정을 복원한다.
+const ua = navigator.userAgent || '';
+export const DEVICE_PROFILE = /Android|iPhone|iPad|iPod/i.test(ua)
+  || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) ? 'mobile'
+  : /Mac/i.test(navigator.platform || ua) ? 'mac'
+  : /Win/i.test(navigator.platform || ua) ? 'windows' : 'linux';
+const DEVICE_ENDPOINT = `/api/device-settings?profile=${DEVICE_PROFILE}`;
 
 // parse: 옛 localStorage 문자열 → 새 값. 없으면 그대로 쓴다.
 const onOff = (v) => v !== 'off';
@@ -142,7 +150,10 @@ const _stores = {
   device: { values: {}, cacheKey: 'vt-settings-device-v1' },
 };
 
-let _loaded = false;
+const _pending = { global: {}, device: {} };
+const _writes = { global: Promise.resolve(), device: Promise.resolve() };
+let _revision = 0;
+const _keyRevision = {};
 const _listeners = new Set();
 const _persistenceListeners = new Set();
 
@@ -183,7 +194,7 @@ export function has(key) {
   return key in _stores[_scopeOf(key)].values;
 }
 
-// 화면 2b의 읽기 전용 배지("[기기]"/"[전체]")가 쓴다.
+// 설정 화면의 읽기 전용 저장 범위 배지가 쓴다.
 export function scopeOf(key) {
   return _scopeOf(key);
 }
@@ -230,13 +241,15 @@ export function set(key, value) {
   if (!spec) { console.warn(`[settings] 알 수 없는 키: ${key}`); return Promise.resolve(false); }
   const v = _coerce(key, value);
   if (v === undefined) { console.warn(`[settings] ${key}에 맞지 않는 값: ${value}`); return Promise.resolve(false); }
-  if (get(key) === v) return Promise.resolve(true);
+  if (has(key) && get(key) === v && !(key in _pending[_scopeOf(key)])) return Promise.resolve(true);
   const scope = _scopeOf(key);
   _stores[scope].values[key] = v;
+  _pending[scope][key] = v;
+  _keyRevision[key] = ++_revision;
   _writeCache(scope);
   _notify({ [key]: v });
   _notifyPersistence({ status: 'saving', key, scope });
-  const push = scope === 'device' ? _pushDevice() : _pushGlobal();
+  const push = _push(scope, { [key]: v });
   return push.then((ok) => {
     _notifyPersistence({ status: ok ? 'saved' : 'failed', key, scope });
     return ok;
@@ -249,30 +262,22 @@ function _pushFailToast() {
   }
 }
 
-function _pushGlobal() {
-  return vtFetch('/api/workspace', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: _stores.global.values }),
-  }).then(() => true).catch(() => {
-    // 조용히 재시도 큐에 넣지 않는다 — 사용자는 "저장됐다"고 믿고 다른 기기에서
-    // 열었다가 값이 없는 것을 보게 된다. 그 자리에서 알린다.
-    _pushFailToast();
-    return false;
-  });
-}
-
-// device 스토어는 **이 기기만** 쓰므로 /ws-workspace 같은 push 브로드캐스트가
-// 없다(파일 상단 주석) — 그냥 이 기기의 저장 요청 하나로 끝난다.
-function _pushDevice() {
-  return vtFetch('/api/device-settings', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: _stores.device.values }),
-  }).then(() => true).catch(() => {
-    _pushFailToast();
-    return false;
-  });
+// 항목 단위 patch를 순서대로 저장한다. 다른 탭의 최신 값을 캐시로 덮지 않는다.
+function _push(scope, patch) {
+  const run = async () => {
+    try {
+      await vtFetch(scope === 'device' ? DEVICE_ENDPOINT : '/api/workspace', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: patch }),
+      });
+      for (const [key, value] of Object.entries(patch)) {
+        if (_pending[scope][key] === value) delete _pending[scope][key];
+      }
+      return true;
+    } catch (_) { _pushFailToast(); return false; }
+  };
+  _writes[scope] = _writes[scope].then(run, run);
+  return _writes[scope];
 }
 
 // 기존 localStorage 키에서 1회 이관. 이미 값이 있는 키는 건드리지 않는다.
@@ -313,13 +318,16 @@ _initSync();
 
 // 서버 응답 하나를 스코프에 반영. 반환값은 "뭔가 바뀌었나"(호출자가 이관분을
 // 올릴지 판단하는 데 쓴다).
-function _applyRemote(scope, remote) {
+function _applyRemote(scope, remote, revision) {
   if (!remote || typeof remote !== 'object') return false;
   const next = {};
   for (const [k, v] of Object.entries(remote)) {
     if (_scopeOf(k) !== scope) continue;   // 스키마가 다른 스코프로 옮긴 키 방어
     const c = _coerce(k, v);
     if (c !== undefined) next[k] = c;
+  }
+  for (const [key, value] of Object.entries(_stores[scope].values)) {
+    if (key in _pending[scope] || (_keyRevision[key] || 0) > revision) next[key] = value;
   }
   _stores[scope].values = next;
   _writeCache(scope);
@@ -329,24 +337,25 @@ function _applyRemote(scope, remote) {
 // 서버 동기화. 캐시로 이미 그려진 뒤에 돌고, **서버 값이 이긴다**(ADR-5).
 // 두 스코프를 병렬로 가져온다 — 서로 다른 엔드포인트라 순서는 상관없다.
 export async function load() {
-  const migrated = _migratedAtBoot;
-  _loaded = true;
-  const [globalResult, deviceResult] = await Promise.allSettled([
-    vtFetch('/api/workspace'),
-    vtFetch('/api/device-settings'),
-  ]);
-
-  if (globalResult.status === 'fulfilled') {
-    const remote = globalResult.value && globalResult.value.settings;
-    const hadRemote = remote && Object.keys(remote).length > 0;
-    if (hadRemote || !migrated.global) _applyRemote('global', remote || {});
-    else if (migrated.global) _pushGlobal();   // 서버엔 없고 방금 이관만 됐다 → 올린다
+  const revision = _revision;
+  const candidates = {};
+  for (const scope of ['global', 'device']) {
+    candidates[scope] = Object.fromEntries(Object.entries(_stores[scope].values)
+      .filter(([key]) => SCHEMA[key]?.migrate && _scopeOf(key) === scope
+        && !(scope === 'global' && isRelayed())));
   }
-  if (deviceResult.status === 'fulfilled') {
-    const remote = deviceResult.value && deviceResult.value.settings;
-    const hadRemote = remote && Object.keys(remote).length > 0;
-    if (hadRemote || !migrated.device) _applyRemote('device', remote || {});
-    else if (migrated.device) _pushDevice();
+  const results = await Promise.allSettled([
+    vtFetch('/api/workspace'), vtFetch(DEVICE_ENDPOINT),
+  ]);
+  for (const [index, scope] of ['global', 'device'].entries()) {
+    if (results[index].status !== 'fulfilled') continue;
+    const remote = results[index].value?.settings || {};
+    // 항목별 이관: 서버에 다른 설정 하나가 있어도 누락된 옛 스킨을 버리지 않는다.
+    const missing = Object.fromEntries(Object.entries(candidates[scope])
+      .filter(([key]) => !(key in remote) && !(_keyRevision[key] > revision)));
+    _applyRemote(scope, { ...missing, ...remote }, revision);
+    const patch = { ...missing, ..._pending[scope] };
+    if (Object.keys(patch).length) await _push(scope, patch);
   }
   // 둘 다 실패해도(오프라인 등) 캐시 값으로 계속 동작한다 — 설정 화면도 그대로 열린다.
   _notify(getAll());

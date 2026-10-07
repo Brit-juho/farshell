@@ -117,7 +117,7 @@ function _paintChip(paneEl) {
   const branch = tmux ? _branchChips.get(tmux) : null;
   chip.textContent = branch || '';
   chip.hidden = !branch;
-  if (branch) chip.setAttribute('data-tip', '이 세션이 속한 워크트리 브랜치'); else chip.removeAttribute('data-tip');
+  if (branch) chip.setAttribute('data-tip', '현재 작업 디렉터리의 브랜치'); else chip.removeAttribute('data-tip');
 }
 
 // 트리가 안 바뀌어도(브랜치 지도만 새로 왔을 때) 이미 그려진 pane들의 칩만

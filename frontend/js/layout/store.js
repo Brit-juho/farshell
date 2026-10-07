@@ -517,9 +517,10 @@ export function moveLayoutTab(tabId, toIndex) {
 }
 
 export function setTabLabel(tabId, label) {
-  const t = _tabs.find((x) => x.id === tabId);
-  if (!t || !label) return false;
-  t.label = String(label);
+  const t = _tabs.find((x) => x.id === tabId) || _closed.find((x) => x.id === tabId);
+  const value = String(label || '').trim();
+  if (!t || !value || value.length > 128) return false;
+  t.label = value;
   _notify();
   return true;
 }
@@ -683,6 +684,14 @@ export function tabGroups() {
     .filter((g) => g.sessionIds.length >= 2);
 }
 
+/** 열린 묶음과 기억된 닫힌 묶음을 같은 목록 구조로 읽는다. 라벨은 세션 이름과 별개다. */
+export function sessionViewGroups() {
+  const open = tabGroups();
+  return [...open, ..._closed.map((v) => ({ id: v.id,
+    label: v.label || _serialMembers(v.tree).join(' · '), sessionIds: [],
+    tmuxNames: _serialMembers(v.tree), closed: true }))];
+}
+
 // N36(워크트리 레일) — shell/Rail.tsx는 지연 청크라 이 모듈을 직접 import하면
 // 트리 상태가 복제된다(ADR-26/N35 커밋의 core/store.js와 같은 이유).
 // splitActivePane(팔레트·스니펫)와 tabGroups만 window로 노출한다.
@@ -691,6 +700,7 @@ window.splitActivePane = splitActivePane;
 // 없다(ADR-26). `openFileInPane`이 같은 이유로 같은 브리지를 쓴다.
 window.openPanelPane = openPanelPane;
 window.getTabGroups = tabGroups;
+window.getSessionViewGroups = sessionViewGroups;
 // Rail.tsx가 화면(pane 트리)이 바뀔 때마다 그룹을 다시 계산하려면 이
 // 이벤트가 필요하다 — 세션 스토어 구독(storeSubscribe)만으로는 "이미 있는
 // 세션을 다른 pane으로 옮겼다" 같은 순수 레이아웃 변경을 못 잡는다.

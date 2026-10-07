@@ -5,7 +5,7 @@
 // import를 못 해 맨 아래 window 브리지를 쓴다.
 import { closeLayoutTab, getTabsWithTrees, getTree, getActiveTabId, countLeaves, closePane,
   isLayoutEmpty, rememberClosedView, findClosedViewByTmux, peekClosedView, takeClosedView, forgetClosedMembers,
-  openTabWithTree, getActivePaneId } from '../layout/store.js';
+  openTabWithTree, getActivePaneId, setTabLabel } from '../layout/store.js';
 import { collectSessions, findNode, findPaneBySession } from '../layout/tree.js';
 import { applyPaneDrop, canSplit } from '../layout/dnd.js';
 import { COMPACT_MAX } from '../layout/breakpoints.js';
@@ -27,6 +27,13 @@ export async function closeSession(sessionId) {
 
 export const detachSession = closeSession;   // 옛 이름
 export const collectTreeSessions = collectSessions;   // 옛 이름
+
+/** 열린/닫힌 묶음 제목 편집. 세션 이름·cwd·브랜치를 바꾸지 않고 스냅샷에 저장한다. */
+export function renameView(viewId, label) {
+  const ok = setTabLabel(viewId, label);
+  if (ok) saveLayoutNow();
+  return ok;
+}
 
 function _lookupLive(sessionId) {
   const s = getSession(sessionId);
@@ -199,6 +206,7 @@ export async function confirmAndKillSession(name, webSessionId) {
 window.vtCloseSession = closeSession;
 window.vtDetachSession = closeSession;   // 옛 이름(외부 스크립트 호환)
 window.vtCloseView = closeView;
+window.vtRenameTab = renameView;
 window.vtClosePane = closePaneAction;
 window.vtOpenSessionFromRail = openSessionFromRail;
 window.vtKillSession = killSession;

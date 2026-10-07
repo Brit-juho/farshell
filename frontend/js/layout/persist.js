@@ -227,12 +227,26 @@ const _newer = (a, b) => (!a ? b : !b ? a : ((b.savedAt || 0) > (a.savedAt || 0)
 export async function loadLayoutSnapshot() {
   let own = _readLocal(_screenKey());
   let latest = _readLocal(LS_KEY);
+  let afterLogin = false;
+  try { afterLogin = sessionStorage.getItem('vt.restore-after-login') === '1'; } catch (_) {}
   try {
     const ws = await vtFetch('/api/workspace');
     const mine = ws?.ui?.layouts?.[screenId()];
-    if (_isSnapshot(mine)) own = _newer(own, mine);
-    if (_isSnapshot(ws?.ui?.layout)) latest = _newer(latest, ws.ui.layout);
+    if (afterLogin) {
+      // 만료 중 옛 클라이언트가 빈 로컬 캐시를 썼을 수 있다. 재로그인은 서버 정본부터 복원.
+      own = _isSnapshot(mine) ? mine : null;
+      latest = _isSnapshot(ws?.ui?.layout) ? ws.ui.layout : null;
+    } else {
+      if (_isSnapshot(mine)) own = _newer(own, mine);
+      if (_isSnapshot(ws?.ui?.layout)) latest = _newer(latest, ws.ui.layout);
+    }
   } catch (e) {
+    // 인증 실패는 저장본 없음이 아니다. 캐시 유무와 무관하게 저장 가드를 닫아 둔다.
+    if (e.status === 401 || e.status === 403) throw e;
+    if (afterLogin) {
+      e.retryable = !e.status || e.status >= 500 || e.status === 429;
+      throw e;
+    }
     // 새 기기엔 로컬 사본이 없다. 서버 재시작 중 조회 실패를 "저장본 없음"으로
     // 확정하면 빈 뷰로 부팅하므로, 연결이 돌아올 때 같은 저장본을 다시 읽는다.
     if (!own && !latest && (!e.status || e.status >= 500 || e.status === 429)) {
@@ -301,6 +315,7 @@ function _applySnapshot(snap) {
 export async function restoreLayout(snap = undefined) {
   if (snap === undefined) snap = await loadLayoutSnapshot();
   const applied = snap ? _applySnapshot(snap) : false;
+  try { sessionStorage.removeItem('vt.restore-after-login'); } catch (_) {}
   _enabled = true; // 이 시점 이후의 변경부터 저장한다
   return applied && countLeaves() > 0;
 }

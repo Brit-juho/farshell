@@ -308,3 +308,73 @@ test('폐기된 rail.origin.agent.show 가 저장돼 있어도 무시되고 다�
   const put = calls.filter((c) => c.opts && c.opts.method === 'PUT').pop();
   assert.ok(!('rail.origin.agent.show' in JSON.parse(put.opts.body).settings));
 });
+
+test('다른 화면의 최신 값을 덮지 않도록 변경한 키만 PUT한다', async () => {
+  const { S, calls } = await load({ remote: { 'theme.skin': 'vscode', 'terminal.cursorBlink': false } });
+  await S.load();
+  await S.set('terminal.cursorStyle', 'bar');
+  const put = calls.filter((c) => c.opts?.method === 'PUT').pop();
+  assert.deepStrictEqual(JSON.parse(put.opts.body).settings, { 'terminal.cursorStyle': 'bar' });
+});
+
+test('서버에 다른 항목이 있어도 옛 스킨을 항목별로 이관한다', async () => {
+  const { S, calls } = await load({ pre: (w) => w.localStorage.setItem('vt-skin', 'linear'), remote: { 'terminal.cursorBlink': false } });
+  await S.load();
+  assert.strictEqual(S.get('theme.skin'), 'linear');
+  const put = calls.find((c) => c.opts?.method === 'PUT');
+  assert.deepStrictEqual(JSON.parse(put.opts.body).settings, { 'theme.skin': 'linear' });
+});
+
+test('명시적으로 기본값을 골라도 서버에 저장한다', async () => {
+  const { S, calls } = await load();
+  await S.set('theme.skin', 'farshell');
+  assert.strictEqual(S.has('theme.skin'), true);
+  assert.ok(calls.some((c) => c.opts?.method === 'PUT'));
+});
+
+test('설정 읽기 중 바꾼 값은 늦게 도착한 옛 서버 응답에 초기화되지 않는다', async () => {
+  const { S, window } = await load();
+  const releases = [];
+  window.fetch = (url, opts) => opts?.method === 'PUT'
+    ? Promise.resolve({ ok: true, json: async () => ({ ok: true }) })
+    : new Promise((resolve) => releases.push(() => resolve({ ok: true, json: async () => ({ settings: { 'theme.skin': 'macos' } }) })));
+  const loading = S.load();
+  await S.set('theme.skin', 'linear');
+  for (const release of releases) release();
+  await loading;
+  assert.strictEqual(S.get('theme.skin'), 'linear');
+});
+
+test('같은 항목을 빠르게 바꿔도 PUT은 변경 순서대로 완료된다', async () => {
+  const { S, window } = await load();
+  const values = [];
+  const releases = [];
+  window.fetch = (_, opts) => new Promise((resolve) => {
+    values.push(JSON.parse(opts.body).settings['theme.skin']);
+    releases.push(() => resolve({ ok: true, json: async () => ({ ok: true }) }));
+  });
+  const first = S.set('theme.skin', 'macos');
+  const second = S.set('theme.skin', 'linear');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepStrictEqual(values, ['macos']);
+  releases.shift()();
+  await first;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepStrictEqual(values, ['macos', 'linear']);
+  releases.shift()();
+  await second;
+  assert.strictEqual(S.get('theme.skin'), 'linear');
+});
+
+for (const [platform, ua, touch, expected] of [
+  ['MacIntel', 'Macintosh', 0, 'mac'], ['Win32', 'Windows NT', 0, 'windows'],
+  ['Linux', 'Android', 5, 'mobile'], ['MacIntel', 'Macintosh', 5, 'mobile'],
+]) test(`기기 종류 프로필 — ${ua}/${touch} → ${expected}`, async () => {
+  const { S, calls } = await load({ pre: (w) => {
+    Object.defineProperty(w.navigator, 'platform', { value: platform });
+    Object.defineProperty(w.navigator, 'userAgent', { value: ua });
+    Object.defineProperty(w.navigator, 'maxTouchPoints', { value: touch });
+  } });
+  await S.set('terminal.fontSize', 20);
+  assert.match(calls[0].url, new RegExp(`profile=${expected}`));
+});

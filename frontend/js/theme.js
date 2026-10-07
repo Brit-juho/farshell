@@ -1,6 +1,6 @@
 // VT 테마 엔진 — UI 스킨 + xterm.js 터미널 테마(ANSI 16색)를 함께 전환. F5에서
 // classic script에서 ES 모듈로 전환.
-import { set as setSetting } from './core/settings.js';
+import { set as setSetting, get as setting, has as hasSetting, subscribe as onSettings } from './core/settings.js';
 import { allSessions } from './core/store.js';
 import { registerAction } from './core/dom.js';
 
@@ -194,17 +194,27 @@ function _syncThemeChips(skin) {
   if (meta && bar) meta.setAttribute('content', bar);
 }
 
-export function setVtSkin(skin) {
+function applyVtSkin(skin) {
   if (vtSkins().indexOf(skin) < 0) skin = 'farshell';
   document.documentElement.setAttribute('data-skin', skin);
   // S2: 스킨도 설정 스토어로 — 기기마다 다른 스킨이 뜨던 것을 없앤다.
   // 옛 `vt-skin` 키도 계속 쓴다(theme.js는 classic script 시절부터 부팅 아주
   // 초반에 이 키를 읽어 FOUC를 막아왔다. 그 경로를 깨지 않는다).
   try { localStorage.setItem('vt-skin', skin); } catch (_) {}
-  setSetting('theme.skin', skin);
   _syncThemeChips(skin);
   _applyXtermToOpen(skin);
 }
+
+// 복원은 저장 요청을 만들지 않는다. 서버 값 도착과 사용자 변경 모두 같은 적용 경로.
+export function setVtSkin(skin) {
+  if (!vtSkins().includes(skin)) skin = 'farshell';
+  if (setting('theme.skin') === skin) applyVtSkin(skin);
+  return setSetting('theme.skin', skin);
+}
+onSettings((changed) => {
+  if ('theme.skin' in changed) applyVtSkin(setting('theme.skin'));
+});
+if (hasSetting('theme.skin')) applyVtSkin(setting('theme.skin'));
 
 // 초기 칩/메타 동기화 (부팅 인라인 스크립트가 이미 data-skin은 설정함)
 (function initSkinUI() {

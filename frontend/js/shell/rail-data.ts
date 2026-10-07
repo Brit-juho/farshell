@@ -43,6 +43,9 @@ export interface SessionRow {
   promptId?: string | null;
   agent?: string | null;
   branch?: string | null;
+  cwd?: string;
+  directory?: string;
+  contextStatus?: string;
   isMainWorktree?: boolean;
   worktreeId?: string | null;
   origin: Origin;
@@ -50,6 +53,7 @@ export interface SessionRow {
   share?: ShareInfo | null;
   /** 이 세션이 속한 묶음 뷰의 이름(묶음이 아니면 null). */
   viewLabel: string | null;
+  viewId?: string | null;
   /** 이 브라우저 탭 말고 이 세션에 붙은 **웹** 화면 수(다른 브라우저 탭·폰). */
   otherScreens: number;
   /** 웹이 아닌 attach 수(맥 터미널 등). 구버전 서버가 값을 안 주면 0. */
@@ -201,6 +205,28 @@ export interface RailLists<T> {
   sessions: T[];
 }
 
+export interface SessionGroup<T = SessionRow> {
+  id: string; label: string; rows: T[];
+}
+
+/** 같은 제목의 다른 뷰를 섞지 않는다. 묶음은 view id, 구성원은 pane 순서로 묶는다. */
+export function groupSessionRows<T extends Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'>>(
+  rows: T[], groups: { id: string; label: string; sessionIds: string[]; tmuxNames?: string[] }[],
+): SessionGroup<T>[] {
+  const used = new Set<T>();
+  const out: SessionGroup<T>[] = [];
+  for (const g of groups) {
+    const members = [...g.sessionIds.map((id) => rows.find((r) => r.sessionId === id)),
+      ...(g.tmuxNames || []).map((name) => rows.find((r) => r.tmuxName === name && !r.sessionId))]
+      .filter((r): r is T => !!r && !used.has(r));
+    if (members.length < 2) continue;
+    members.forEach((r) => used.add(r));
+    out.push({ id: g.id, label: g.label, rows: members });
+  }
+  for (const r of rows) if (!used.has(r)) out.push({ id: '', label: '', rows: [r] });
+  return out;
+}
+
 /**
  * 「개입 필요」= waiting 세션, 「세션」= 전체. 둘 다 이름순뿐이다.
  *
@@ -250,7 +276,7 @@ export interface RowMenuItem {
  * 만든 곳 · 브랜치. 값이 없는 조각은 건너뛴다. 선택 불가 헤더 행(`.vt-menu-summary`)에 그린다.
  */
 export function rowSummary(
-  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'branch'> & { share?: ShareInfo | null },
+  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'branch'> & { share?: ShareInfo | null; cwd?: string },
 ): string {
   const s = normalizeState(row.status);
   const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
@@ -258,6 +284,7 @@ export function rowSummary(
   if (row.share) parts.push(shareSentence(row.share));
   if (row.otherClients > 0) parts.push(`웹 외 ${row.otherClients}`);
   parts.push(ORIGIN_LABEL[normalizeOrigin(row.origin)]);
+  if (row.cwd) parts.push(row.cwd);
   if (row.branch) parts.push(row.branch);
   return parts.join(' · ');
 }

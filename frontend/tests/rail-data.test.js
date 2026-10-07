@@ -234,6 +234,50 @@ test('defaultRailCollapsed — wide 미만은 접고, wide 이상은 편다', as
 
 // ── 행 조립(collectSessionRows) ────────────────────────────────────────────
 
+test('CLI마다 같은 현재 위치 context를 사용하고 오래된 워크트리 정보는 섞지 않는다', async () => {
+  const { collectSessionRows, window } = await mod();
+  window.allSessions = () => ({});
+  window.agentNames = () => ({ a: 'claude', b: 'codex', c: 'agy' });
+  const tmux = ['a', 'b', 'c'].map((name) => ({ name, cwd: '/new/src', wt_id: 'old',
+    context: { cwd: '/new/src', root: '/new', status: 'ready', branch: 'current', changed: { files: 2, add: 3, del: 1 } } }));
+  let requests = 0;
+  const rows = collectSessionRows({ tmux, repos: [{ worktrees: [{ id: 'old', branch: 'wrong', changed: { files: 99, add: 99, del: 99 } }] }],
+    deps: { vtFetch: async () => { requests++; return {}; } }, onDiff: () => {} });
+  for (const row of rows) {
+    assert.strictEqual(row.branch, 'current');
+    assert.strictEqual(row.directory, 'src');
+    assert.strictEqual(row.changed.files, 2);
+  }
+  assert.strictEqual(requests, 0, '서버 context를 받은 뒤 별도 Git 값을 섞지 않는다');
+});
+
+test('cwd가 바뀐 context와 nonrepo는 이전 브랜치/변경량을 폴백하지 않는다', async () => {
+  const { collectSessionRows, window } = await mod();
+  window.allSessions = () => ({});
+  const rows = collectSessionRows({ tmux: [
+    { name: 'moved', cwd: '/new', wt_id: 'old', context: { cwd: '/old', status: 'ready', branch: 'wrong' } },
+    { name: 'shell', cwd: '/new', wt_id: 'old', context: { cwd: '/new', status: 'nonrepo', branch: null } },
+  ], repos: [{ worktrees: [{ id: 'old', branch: 'old-branch' }] }], deps: { vtFetch: async () => ({}) }, onDiff: () => {} });
+  for (const row of rows) assert.strictEqual(row.branch, null);
+  assert.strictEqual(rows[0].contextStatus, 'unavailable');
+  assert.strictEqual(rows[1].contextStatus, 'nonrepo');
+});
+
+test('묶음 제목이 같아도 view id로 구분하고 구성원은 pane 순서, 닫힌 묶음도 함께 표시한다', async () => {
+  const { groupSessionRows } = await mod();
+  const rows = [
+    { name: 'a', tmuxName: 'a', sessionId: 's1' }, { name: 'b', tmuxName: 'b', sessionId: 's2' },
+    { name: 'c', tmuxName: 'c', sessionId: '' }, { name: 'd', tmuxName: 'd', sessionId: '' },
+  ];
+  const groups = groupSessionRows(rows, [
+    { id: 'open', label: '작업', sessionIds: ['s2', 's1'] },
+    { id: 'closed', label: '작업', sessionIds: [], tmuxNames: ['d', 'c'] },
+  ]);
+  assert.deepStrictEqual(Array.from(groups, (g) => g.id), ['open', 'closed']);
+  assert.deepStrictEqual(Array.from(groups[0].rows, (r) => r.name), ['b', 'a']);
+  assert.deepStrictEqual(Array.from(groups[1].rows, (r) => r.name), ['d', 'c']);
+});
+
 test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음 이름·다른 화면을 채운다', async () => {
   const { collectSessionRows, window } = await mod();
   window.allSessions = () => ({ w1: { tmuxName: 'api' }, w2: { tmuxName: 'web' } });
