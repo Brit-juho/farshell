@@ -15,7 +15,6 @@ from .config import (
 )
 from .media_keys import start_media_key_listener
 from .recorder import toggle_recording
-from .stt import init_whisper
 from .tmux_target import read_voice_target_lock
 
 # 로깅 — voice_daemon.py 진입 시 한 번만 설정
@@ -76,7 +75,7 @@ def main():
     else:
         logger.info("음성 타깃 AUTO (most-recent)")
 
-    init_whisper()
+    logger.info("STT: 서버 공유 (독립 모드는 VT_VOICE_STANDALONE=on)")
 
     media_keys_off = vt_getenv("VT_VOICE_MEDIA_KEYS", "on").lower() == "off"
     if media_keys_off:

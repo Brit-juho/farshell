@@ -13,15 +13,16 @@ import { register as registerKey } from '../core/keymap.js';
 // 불려 두 번째가 토글로 닫아버린다(ports-lazy.js의 _opening과 같은 이유).
 let _opening = false;
 
-function open() {
+function open(section) {
   if (_opening) return;
   _opening = true;
   import('./settings.js')
-    .then((m) => m.showSettings())
+    .then((m) => m.showSettings(section))
     .catch((e) => console.error('[FarShell settings]', e))
     .finally(() => { _opening = false; });
 }
 
-registerAction('settings.show', open);
+registerAction('settings.show', () => open());
+registerAction('voice.settings', () => open('voice'));
 // S3에서 잡아둔 `Mod+,` 바인딩의 주인.
 registerKey('settings', () => open());

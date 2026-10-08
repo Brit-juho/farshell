@@ -3,7 +3,6 @@
 // 처리한다. `copyToClipboard`/`showToast`는 아직 classic script(term/clipboard.js·
 // ui/toast.js)가 소유해 bare identifier로 읽는다.
 import { get as setting } from '../core/settings.js';
-import { playAudioBlob } from './tts.js';
 
 const _vToken = new URLSearchParams(location.search).get('token') || '';
 const _vTokenQ = _vToken ? `?token=${_vToken}` : '';
@@ -53,7 +52,7 @@ function connectNotify() {
       } else if (e.data instanceof Blob) {
         console.log('[NOTIFY] audio blob:', e.data.size, 'bytes');
         if (e.data.size > 0) {
-          playAudioBlob(e.data);
+          // 구 알림 방송 오디오는 재생하지 않는다. 지정 소유자는 ws-voice로 수신한다.
         }
         pendingMeta = null;
       }

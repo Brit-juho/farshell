@@ -1,3 +1,4 @@
+import { renderSessionVoice, renderVoiceDefaults } from './voice-session.js';
 import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession } from '../../../core/store.js';
 import { mountClients } from '../../../layout/clients.js';
@@ -9,11 +10,13 @@ import { getAction } from '../../../core/dom.js';
 // ── 「음성」 (N42 · 알림·음성 진단) ──────────────────────────────────────
 // (다른 탭 클릭 · 패널 닫기) 반드시 cleanup을 불러야 폴링 타이머가 안 샌다.
 let _voiceClientsCleanup = null;
+let _voiceSessionCleanup = null;
 
 /** 이 섹션을 떠날 때(다른 탭·패널 닫기) 반드시 불러야 폴링 타이머가 안 샌다.
  *  settings.js의 rerender/onClose가 부른다. */
 export function cleanupVoiceClients() {
   if (_voiceClientsCleanup) { _voiceClientsCleanup(); _voiceClientsCleanup = null; }
+  _voiceSessionCleanup?.(); _voiceSessionCleanup = null;
   cleanupVoiceModels();  // 모델 받기 진행 폴링
 }
 
@@ -59,66 +62,13 @@ export function renderVoiceSection() {
     } catch (e) { toast(e.message || '발송 실패', 'error'); }
   });
 
-  // 2. 작업 완료 알림 (Stop 훅 TTS 요약)
-  const notifyBtn = document.createElement('button');
-  notifyBtn.type = 'button'; notifyBtn.className = 'vt-btn sm quiet vt-set-reset'; notifyBtn.textContent = '소리 듣기';
-  const notifyRow = row('작업 완료 알림', notifyBtn);
-  const notifyStatus = statusLine('확인 중…');
-  notifyRow.querySelector('.vt-set-label').appendChild(notifyStatus);
-  notif.appendChild(notifyRow);
-  // 작업 완료 때 무엇을 할지. 기본은 끔 — 소리·낭독은 켠 사람에게만 난다.
-  notif.appendChild(renderItems({ items: [
-    { kind: 'select', key: 'voice.notifyMode', label: '알림 방식',
-      labels: { off: '끔', sound: '완료음만', speak: '응답 요약 낭독' },
-      help: 'Claude 작업이 끝났을 때. 음성 데몬을 켜지 않아도 동작합니다.' },
-    { kind: 'range', key: 'voice.notifyMinSec', label: '최소 작업 시간', step: 5, unit: '초',
-      help: '이 시간보다 짧게 끝난 작업은 알리지 않습니다. 0이면 항상 알립니다.' },
-    { kind: 'bool', key: 'voice.notifySuccessOnly', label: 'API 오류로 끝난 응답 제외',
-      help: '한도 초과·연결 오류 같은 오류 응답은 알리지 않습니다.' },
-    { kind: 'bool', key: 'voice.notifyOnlyUnfocused', label: '웹에 접속 중이면 알리지 않기',
-      help: '폰이나 브라우저로 화면을 보고 있는 동안에는 소리를 내지 않습니다.' },
-  ] }));
-  vtFetch('/api/hooks/status').then((r) => {
-    // TTS 요약은 Claude Stop 훅만 사용한다. Codex 훅 수를 합치면 실제 음성
-    // 기능과 무관한 이벤트 때문에 분모가 바뀐다.
-    const events = r && r.tools && r.tools.claude
-      ? Object.entries(r.tools.claude.events || {})
-      : (r && r.events ? Object.entries(r.events) : []);
-    if (!events.length) { notifyStatus.textContent = '훅 상태를 확인할 수 없습니다.'; return; }
-    const ok = events.filter(([, s]) => s === 'ok').length;
-    notifyStatus.textContent = `TTS 요약 · 훅 ${ok}/${events.length} 설치됨`;
-  }).catch(() => { notifyStatus.textContent = '훅 상태를 확인할 수 없습니다.'; });
-  notifyBtn.addEventListener('click', async () => {
-    try {
-      const r = await vtFetch('/api/notify/test', { method: 'POST' });
-      toast(r.ok ? '알림을 보냈습니다' : (r.configured ? '발송 실패' : 'ntfy/텔레그램이 설정되지 않았습니다'));
-    } catch (e) { toast(e.message || '발송 실패', 'error'); }
-  });
+  _voiceSessionCleanup?.();
+  const sessionVoice = renderSessionVoice();
+  const defaults = renderVoiceDefaults();
+  _voiceSessionCleanup = () => { sessionVoice.cleanup(); defaults.cleanup(); };
 
   // 3. 음성 입력 + 받아 둔 항목 관리 — voice-models.js
   const vm = renderVoiceInput();
-
-  // 4. 맥에서 음성만 쓰기 (로컬 마이크 — 서버에 상태 조회 API가 없어
-  //    버튼 라벨은 클라이언트가 마지막 응답을 기억해 토글한다)
-  const localBtn = document.createElement('button');
-  localBtn.type = 'button'; localBtn.className = 'vt-btn sm quiet vt-set-reset'; localBtn.textContent = '시작';
-  let localRunning = false;
-  localBtn.addEventListener('click', async () => {
-    try {
-      if (!localRunning) {
-        const r = await vtFetch('/voice/local/start', { method: 'POST' });
-        if (r && r.error) { toast(r.reason || '시작할 수 없습니다', 'error'); return; }
-        localRunning = true; localBtn.textContent = '중지';
-        toast('맥 로컬 음성 입력을 시작했습니다');
-      } else {
-        const r = await vtFetch('/voice/local/stop', { method: 'POST' });
-        localRunning = false; localBtn.textContent = '시작';
-        toast(r && r.text ? `인식됨: ${r.text}` : '중지했습니다');
-      }
-    } catch (e) { toast(e.message || '실패', 'error'); }
-  });
-  desk.appendChild(row('맥에서 음성만 쓰기', localBtn,
-    '터미널 화면 없이 맥 마이크만 켭니다 — 이어폰으로 조작할 때 씁니다.'));
 
   // 5. 음성 전용 모드 — 실제 토글 로직·시각 상태(.active)는
   // voice/media-session.js의 toggleVoiceOnly()가 갖고 있다(그 파일은 별도
@@ -149,6 +99,6 @@ export function renderVoiceSection() {
   const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
   if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote, activeSessionId());
 
-  frag.append(group('알림', notif), vm.input, vm.manage, group('데스크톱 음성', desk));
+  frag.append(sessionVoice.element, defaults.element, group('알림', notif), vm.input, vm.manage, group('데스크톱 음성', desk));
   return frag;
 }

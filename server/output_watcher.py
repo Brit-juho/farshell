@@ -4,7 +4,7 @@ PTY 출력이 일정 시간(idle_timeout) 동안 없으면 "작업 완료"로 �
 마지막 출력을 요약해서 TTS로 알림한다.
 
 알림 대상:
-- 데스크톱: macOS say로 직접 재생
+- 완료 감시는 외부 알림만 전달하며 세션 TTS는 완료 훅에서 처리한다
 - 모바일: WebSocket으로 오디오 데이터 push
 """
 
@@ -166,17 +166,7 @@ class OutputWatcher:
         """TTS 생성 + 콜백 호출."""
         logger.info(f"[watcher] Session {session_id} idle — notifying: {summary[:80]}...")
 
-        try:
-            audio = await voice_handler.synthesize(summary)
-        except Exception as e:
-            logger.warning(f"TTS failed for notification: {e}")
-            # TTS fallback (직접 재생)
-            try:
-                import platform_utils
-                platform_utils.tts_speak(summary)
-            except Exception:
-                pass
-            audio = b""
+        audio = b""  # 음성은 세션 정책이 적용된 완료 훅에서만 생성한다.
 
         for cb in self._notify_callbacks:
             try:

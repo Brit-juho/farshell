@@ -10,6 +10,7 @@ import wave
 import numpy as np
 
 from .config import MAX_RECORDING_SECONDS, SAMPLE_RATE, logger
+import voice_handler
 import stt_service  # server/ 는 config.py가 sys.path에 넣어 둔다
 
 # transcribe에 넘길 오디오 상한. 녹음 상한(MAX_RECORDING_SECONDS)과 같게 두되, 방어적으로
@@ -31,5 +32,8 @@ def transcribe(audio_np: np.ndarray) -> str:
         wf.setsampwidth(2)
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(audio_np.tobytes())
-    text, _timing = stt_service.transcribe_wav(buf.getvalue(), None)
+    wav = buf.getvalue()
+    if voice_handler._is_silent_wav(wav):
+        return ""
+    text, _timing = stt_service.transcribe_wav(wav, None)
     return text

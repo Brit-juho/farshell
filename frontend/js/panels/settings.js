@@ -115,7 +115,7 @@ const SEARCH_ITEMS = [
   ['terminal', '드래그 시 자동 복사'], ['terminal', '터치 탭을 앱에 전달'],
   ['terminal', '스크린 리더 모드'], ['terminal', '스크롤백 줄 수'],
   ['voice', '웹 푸시 알림'], ['voice', '완료 알림'], ['voice', '알림 방식'], ['voice', '음성 인식 모델'], ['voice', '받아 둔 항목 관리'],
-  ['voice', '맥에서 음성만 쓰기'], ['voice', '음성 전용 모드'],
+  ['voice', '현재 세션 음성'], ['voice', '음성 전용 모드'],
   ['agents', '에이전트 감지 상태'],
   ['keymap', '단축키와 터미널 전달'],
   ['appearance', '스킨'], ['appearance', '파일 뷰어 표시 방식'],
@@ -260,8 +260,9 @@ function rerender(focusTarget = null) {
   });
 }
 
-export function showSettings() {
-  _mobileHome = true;
+export function showSettings(section) {
+  _mobileHome = !section;
+  if (section) _activeSection = section;
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: '설정',

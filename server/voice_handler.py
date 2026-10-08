@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import time
 import wave
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -108,9 +109,17 @@ def _convert_to_wav_pyav(audio_bytes: bytes, input_format: str) -> Optional[byte
         pcm = bytearray()
         # 프레임 버퍼는 정렬 패딩이 붙어 있을 수 있다 — 실제 샘플 수(f.samples × 2바이트 mono s16)만 쓴다.
         # 안 자르면 AAC·mp3처럼 프레임이 딱 안 떨어지는 입력(iPhone Safari의 mp4)에서 길이가 늘어난다(2초 → 2.57초).
+        deadline = time.monotonic() + 10
         for frame in container.decode(stream):
+            if time.monotonic() > deadline:
+                raise ValueError("오디오 디코딩 시간이 초과됐습니다")
             for f in resampler.resample(frame):
                 pcm.extend(bytes(f.planes[0])[: f.samples * 2])
+                if len(pcm) >= int((MAX_STT_SECONDS or 60) * 32000):
+                    break
+            if len(pcm) >= int((MAX_STT_SECONDS or 60) * 32000):
+                break
+        pcm = pcm[:int((MAX_STT_SECONDS or 60) * 32000)]
         # resampler flush
         for f in resampler.resample(None):
             pcm.extend(bytes(f.planes[0])[: f.samples * 2])
@@ -136,7 +145,7 @@ def _convert_to_wav_ffmpeg(audio_bytes: bytes, input_format: str) -> bytes:
     dst_path = src_path.rsplit(".", 1)[0] + ".wav"
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-i", src_path,
+            ["ffmpeg", "-y", "-i", src_path, "-t", str(MAX_STT_SECONDS or 60),
              "-ar", "16000", "-ac", "1", "-f", "wav", dst_path],
             capture_output=True, timeout=10,
         )
@@ -305,27 +314,49 @@ def _init_tts() -> str:
     return _tts_engine
 
 
-async def synthesize(text: str, voice: str = "ko-KR-SunHiNeural") -> bytes:
-    """텍스트 → 음성 바이트 (MP3 또는 WAV)."""
-    engine = _init_tts()
+@dataclass(frozen=True)
+class SynthesizedAudio:
+    data: bytes
+    media_type: str
+    engine: str
 
-    if engine == "edge-tts":
-        import edge_tts
+
+def completion_sound() -> SynthesizedAudio:
+    import math
+    import struct
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+        w.writeframes(b"".join(struct.pack("<h", int(5000 * math.sin(2 * math.pi * 660 * i / 16000)
+                             * (1 - i / 3200))) for i in range(3200)))
+    return SynthesizedAudio(buf.getvalue(), "audio/wav", "tone")
+
+
+async def synthesize_result(text: str, voice: str = "ko-KR-SunHiNeural", engine: str = "auto") -> SynthesizedAudio:
+    """결과의 실제 MIME을 반환한다. local 선택은 외부 서비스로 보내지 않는다."""
+    if engine not in ("auto", "edge", "local"):
+        raise ValueError("지원하지 않는 TTS 엔진입니다")
+    selected = _init_tts() if engine == "auto" else ("edge-tts" if engine == "edge" else "macos-say")
+    if selected == "edge-tts":
         try:
-            communicate = edge_tts.Communicate(text, voice)
+            import edge_tts
             buf = io.BytesIO()
-            async for chunk in communicate.stream():
+            async for chunk in edge_tts.Communicate(text, voice).stream():
                 if chunk["type"] == "audio":
                     buf.write(chunk["data"])
-            return buf.getvalue()
-        except Exception as e:
-            logger.warning(f"edge-tts failed: {e}, falling back to macOS say")
-            return await _macos_say(text)
+            return SynthesizedAudio(buf.getvalue(), "audio/mpeg", "edge-tts")
+        except Exception:
+            if engine == "edge":
+                raise
+            logger.warning("edge-tts 실패 — 로컬 음성 합성으로 대체")
+    import shutil
+    if shutil.which("say"):
+        return SynthesizedAudio(await _macos_say(text), "audio/wav", "macos-say")
+    raise RuntimeError("로컬 TTS 엔진을 사용할 수 없습니다")
 
-    elif engine == "macos-say":
-        return await _macos_say(text)
 
-    raise RuntimeError("TTS engine not available")
+async def synthesize(text: str, voice: str = "ko-KR-SunHiNeural") -> bytes:
+    return (await synthesize_result(text, voice)).data
 
 
 async def _macos_say(text: str) -> bytes:
@@ -333,12 +364,13 @@ async def _macos_say(text: str) -> bytes:
     loop = asyncio.get_running_loop()
 
     def _say():
-        with tempfile.NamedTemporaryFile(suffix=".aiff", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
         try:
             subprocess.run(
-                ["say", "-v", "Yuna", "-o", tmp_path, text],
+                ["say", "-v", "Yuna", "--file-format=WAVE", "--data-format=LEI16@22050", "-o", tmp_path, text],
                 capture_output=True,
+                check=True,
                 timeout=30,
             )
             return Path(tmp_path).read_bytes()

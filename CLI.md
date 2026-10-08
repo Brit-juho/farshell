@@ -26,6 +26,7 @@ fsh mobile [--e2e] [--session <name>] [--temp]
 fsh manage             # TUI management tool (sessions/target/hotkeys/status)
 fsh attach [name]      # attach any tmux session in a new window
 fsh voice              # voice mode (background, usable while using other apps)
+fsh voice-bind <claude|codex> <conversation-id>  # bind from the actual target pane
 fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
 fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
 fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue
@@ -36,7 +37,7 @@ fsh mcp                         # MCP server (stdio) for agents: list_agents / s
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
-fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude Stop also drives TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
+fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude/Codex Stop drive session-specific TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
 fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
 fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)

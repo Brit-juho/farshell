@@ -5,13 +5,14 @@
 | Feature | Description |
 |------|------|
 | Voice Daemon | macOS hotkey (Ctrl+Shift+M) → STT → direct input into tmux |
-| Hands-free mode | Mobile 🔄 button → continuous record/STT loop |
+| Session TTS | 세션별 끔·완료음·응답 읽기, 선택한 화면 또는 서버에서 순차 재생 |
 | Voice-only mode | 🎧 button → hides the terminal and shows only a large mic (for earbud operation) |
 | Web Push (P5) | ⋯ menu → "Push Notifications". Existing notifications (`/ws-notify` → Notification API) only work **while a PWA tab is alive**, so turning off the phone screen meant missing "waiting for approval." This fills that gap. No push is sent while at least one WS client is connected (to avoid the same notification arriving twice). **Requirements**: ① https — Service Workers don't even register over plain http ② iOS requires adding to the home screen as a PWA (16.4+; a subscription can't be created from a Safari tab — no workaround). **A subscription is bound to its origin** — if the trycloudflare URL changes, existing subscriptions all die, so each subscription stores its origin, mismatches are excluded from sending, and 404/410 responses are cleaned up on the spot. Notification bodies never contain commands, paths, or code (they'd show on the lock screen). The VAPID key is auto-generated at `~/.vt/vapid.json` (0600) — **deleting it invalidates every existing subscription**. SW registration is handled by `js/swreg.js` (it used to live inside `voice.js`, so the SW never registered at all when voice wasn't installed) |
 
 ### Voice Daemon (standalone macOS voice input)
 
-A daemon that types voice input directly into tmux via a hotkey, without needing the server.
+전역 단축키로 녹음하고 녹음 시작에 고정한 tmux pane으로 입력한다. 기본은 서버 STT 공유다.
+서버 없이 독립 사용하려면 VT_VOICE_STANDALONE=on을 명시한다. 실패 시 자동 독립 입력하지 않는다.
 
 ```bash
 # Run
@@ -20,6 +21,31 @@ A daemon that types voice input directly into tmux via a hotkey, without needing
 # Usage: Ctrl+Shift+M (toggle) → speak → STT → typed into the active tmux pane
 # Requires allowing the terminal app under macOS System Settings → Privacy → Accessibility
 ```
+
+### 세션 음성 정책
+
+마이크 옆 「응답 읽기 설정」 또는 설정 「음성 및 알림」에서 현재 세션의 끔·완료음·응답 읽기를 고른다.
+모바일 dock이 숨겨진 화면에서도 이 설정의 「녹음 시작」으로 같은 입력 액션을 사용한다.
+기본 off이며 「새 세션 기본값」은 처음 음성 정책을 확인하는 세션에만 복사한다. 기존 세션은 바뀌지 않는다. 출력은 이 기기 또는 서버 컴퓨터를 선택한다. 브라우저 소유권은 한 화면만 갖고
+다른 화면에서는 「이 기기로 옮기기」로 옮긴다. 연결 종료 시 서버에서 대신 읽지 않는다.
+음성 큐는 기기별 순차 재생(최대 10건, 2분)이며 자동 재생 차단은 「터치하여 재생」으로 표시한다.
+새 녹음은 해당 출력의 재생을 중단하고 큐를 잠시 멈춘다. 다른 앱의 say/afplay는 종료하지 않는다.
+
+Claude·Codex Stop은 서버 voice_sessions의 공통 정책을 거친다. voice_completion의 도구별 어댑터는
+Claude 기록과 Codex response_item/event_msg 또는 last_assistant_message를 읽는다.
+응답 끝부분 최대 200자를 읽으며 별도 LLM 요약은 하지 않는다. 식별이 모호하면 낭독하지 않는다.
+해당 pane에서 `fsh voice-bind <claude|codex> <대화 ID>`로 명시적으로 연결할 수 있다.
+최종 응답 어댑터가 없는 도구는 TTS 미지원이다. 출력 idle 감시는 음성을 생성하지 않는다.
+
+STT는 녹음 시작에 대상 토큰을 발급받고 종료·재전송에 같은 pane을 사용한다. 대상이 사라지면
+다른 pane으로 보내지 않고 인식 텍스트 복사를 제공한다. 첫 클릭은 모델 준비, 다음 클릭은 녹음이다.
+브라우저 녹음은 최대 60초, 업로드는 4MiB다. 구 로컬 마이크 기능은 제거했으며 구 요청은 410이다.
+자동 VAD·연속 녹음은 지원하지 않는다. 이어폰 미디어키는 매 접속마다 기본 off다.
+
+TTS auto는 edge-tts → macOS say이며 브라우저가 재생할 수 있는 WAV로 로컬 음성을 만들고 실제 오디오 MIME을 전달한다. edge는 텍스트를 외부로 보낸다.
+local을 선택하면 외부 요청 없이 say만 사용한다. edge 선택은 실패 시 다른 엔진으로 바꾸지 않는다.
+완료 훅의 서버 장애 시 직접 OS 낭독 폴백은 없다. 기존 전역 낭독 설정은 새 세션을 자동으로 켜지 않는다.
+프로토콜은 [API.md](../../API.md), 구현 목표와 검증 시나리오는 [voice-session-plan.md](voice-session-plan.md)를 본다.
 
 ### Clipboard Daemon (macOS clipboard sync)
 

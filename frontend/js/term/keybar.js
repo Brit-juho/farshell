@@ -122,6 +122,8 @@ export function placeMicButton() {
   // 먹는다). 이제 포인터 종류와 무관하게 dock(없으면 rail 설정 슬롯)에 둔다.
   const target = document.getElementById('vt-dock-mic-home') || document.getElementById('vt-rail-mic-slot');
   if (target && mic.parentElement !== target) target.appendChild(mic);
+  const voiceSettings = document.getElementById('voice-session-settings');
+  if (target && voiceSettings && voiceSettings.parentElement !== target) target.appendChild(voiceSettings);
 }
 placeMicButton();
 

@@ -9,6 +9,14 @@ import platform_utils
 
 from .config import MAX_RECORDING_SECONDS, SAMPLE_RATE, TTS_CONFIRM, VOICE_TARGET_NOTIFY, logger
 from .stt import transcribe
+from . import server_client
+import secrets
+import json
+import io
+import wave
+import asyncio
+import voice_handler
+import voice_targets
 from .tmux_target import pane_label, resolve_voice_target_pane, send_to_tmux
 
 _recording = False
@@ -17,6 +25,8 @@ _stream: sd.InputStream | None = None
 _lock = threading.Lock()
 # 토글 디바운스 — 미디어 키 중복 발생/경쟁 등 어떤 이중 이벤트에도 rapid on/off를 막는다.
 _last_toggle = 0.0
+_target = None
+_processing = False
 TOGGLE_DEBOUNCE_SEC = 0.25
 
 
@@ -25,30 +35,33 @@ def is_recording() -> bool:
 
 
 def _notify_target():
-    """V3-G: 녹음 시작 시 이번 발화가 어느 tmux pane으로 갈지 데스크톱 알림으로 미리 보여준다.
-
-    타깃이 없으면(tmux 세션 자체가 없음) 조용히 건너뛴다 — 그 경우는 STT 완료 후
-    stop_recording_and_process가 이미 로그/TTS로 알린다(중복 알림 방지).
-    이 시점의 pane과 실제 전송 시점(stop_recording_and_process)의 pane 판정은 각각
-    독립적으로 다시 계산된다 — 녹음하는 몇 초 사이 활성 pane이 바뀌면 안내와 실제
-    전송 타깃이 어긋날 수 있지만(레이스), 실사용에서 무시할 만한 리스크로 판단했다.
-    """
+    """녹음 시작에 고정한 대상을 안내한다."""
     try:
-        pane, mode = resolve_voice_target_pane()
+        pane = (_target or {}).get("pane")
         if not pane:
             return
         label = pane_label(pane) or pane
-        prefix = "🔒 " if mode.startswith("lock:") else ""
+        prefix = "🔒 " if (_target or {}).get("mode", "").startswith("lock:") else ""
         platform_utils.notify("🎙 음성 입력", f"{prefix}→ {label}")
     except Exception as e:
         logger.debug(f"타깃 알림 실패: {e}")
 
 
 def start_recording():
-    global _recording, _audio_frames, _stream
+    global _recording, _audio_frames, _stream, _target
     with _lock:
-        if _recording:
+        if _recording or _processing:
             return
+        pane, mode = resolve_voice_target_pane()
+        if not pane:
+            platform_utils.notify("음성 입력", "입력 대상 tmux pane이 없습니다")
+            return
+        try:
+            _target = voice_targets.snapshot("", pane) if server_client.independent() else server_client.target(pane)
+        except Exception as e:
+            platform_utils.notify("음성 준비 실패", str(e)[:200])
+            return
+        _target["mode"] = mode
         _audio_frames = []
         _recording = True
 
@@ -78,10 +91,28 @@ def start_recording():
             pass
         _stream = None
 
-    _stream = sd.InputStream(
-        samplerate=SAMPLE_RATE, channels=1, dtype="int16", callback=callback
-    )
-    _stream.start()
+    try:
+        _stream = sd.InputStream(
+            samplerate=SAMPLE_RATE, channels=1, dtype="int16", callback=callback
+        )
+        _stream.start()
+    except Exception as e:
+        with _lock:
+            _recording = False
+            _audio_frames = []
+        if _stream:
+            try:
+                _stream.close()
+            except Exception:
+                pass
+            _stream = None
+        if not server_client.independent():
+            try:
+                server_client.request('/voice/cancel', json.dumps({'server': True, 'pause': False}).encode())
+            except Exception:
+                pass
+        platform_utils.notify('녹음 시작 실패', str(e)[:200])
+        return
     logger.info("🎙 녹음 시작")
     platform_utils.play_sound("start")
     if VOICE_TARGET_NOTIFY:
@@ -89,21 +120,35 @@ def start_recording():
 
 
 def stop_recording_and_process():
-    global _recording, _stream, _audio_frames
+    global _recording, _stream, _audio_frames, _processing
     with _lock:
         if not _recording:
             return
         _recording = False
+        _processing = True
 
-    if _stream:
-        _stream.stop()
-        _stream.close()
-        _stream = None
+    stream, _stream = _stream, None
+    if stream:
+        try:
+            stream.stop()
+        except Exception as e:
+            logger.warning('녹음 스트림 종료 실패: %s', e)
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
 
     platform_utils.play_sound("stop")
 
     if not _audio_frames:
         logger.info("녹음 데이터 없음")
+        _processing = False
+        if not server_client.independent():
+            try:
+                server_client.request("/voice/cancel", json.dumps({"server": True, "pause": False}).encode())
+            except Exception:
+                pass
         return
 
     # 프레임 리스트를 로컬로 넘기고 전역 버퍼는 즉시 비운다 — 다음 녹음 전까지 GB 단위
@@ -114,29 +159,38 @@ def stop_recording_and_process():
     logger.info(f"녹음 종료: {len(audio)/SAMPLE_RATE:.1f}초")
 
     try:
-        text = transcribe(audio)
+        if server_client.independent():
+            text = transcribe(audio)
+            if text and voice_targets.valid(_target):
+                send_to_tmux(_target['pane'], text)
+        else:
+            buf = io.BytesIO()
+            with wave.open(buf, 'wb') as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(SAMPLE_RATE); w.writeframes(audio.tobytes())
+            result = server_client.request('/voice/input', buf.getvalue(), 'audio/wav',
+                {'X-Voice-Id': secrets.token_hex(16), 'X-Voice-Target': _target['token']}, timeout=130)
+            text = result.get('text', '')
+            if result.get('error') or (text and not result.get('injected')):
+                raise RuntimeError(result.get('error') or '입력되지 않았습니다')
+        if text:
+            logger.info('STT → %s: %s', _target['pane'], text)
+            if TTS_CONFIRM and server_client.independent():
+                # 이 프로세스의 플레이어만 사용한다. 기본은 꺼짐.
+                from voice_sessions import VoiceCoordinator
+                async def confirm():
+                    item = await voice_handler.synthesize_result(text, engine='local')
+                    await VoiceCoordinator()._play_server({}, item)
+                asyncio.run(confirm())
     except Exception as e:
-        # 모델을 아직 안 받았거나 로드에 실패한 경우 — 데몬이 조용히 죽지 않고 이유를 알린다.
-        logger.error(f"STT 실패: {e}")
-        platform_utils.notify("🎙 음성 입력 실패", str(e)[:200])
-        return
-    if not text:
-        logger.info("인식된 텍스트 없음")
-        return
-
-    logger.info(f"STT: {text}")
-
-    pane, mode = resolve_voice_target_pane()
-    if not pane:
-        logger.warning("활성 tmux pane 없음")
-        if TTS_CONFIRM:
-            platform_utils.tts_speak("tmux 세션이 없습니다")
-        return
-
-    if send_to_tmux(pane, text):
-        logger.info(f"→ tmux {pane} ({mode}): {text}")
-        if TTS_CONFIRM:
-            platform_utils.tts_speak(text)
+        logger.error('STT 실패: %s', e)
+        platform_utils.notify('음성 입력 실패', str(e)[:200])
+    finally:
+        _processing = False
+        if not server_client.independent():
+            try:
+                server_client.request('/voice/cancel', json.dumps({'server': True, 'pause': False}).encode())
+            except Exception:
+                pass
 
 
 def toggle_recording():

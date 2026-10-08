@@ -57,7 +57,7 @@ def test_push_sent_when_no_ws_client(monkeypatch):
     asyncio.run(pty_routes.on_task_complete("s1", "빌드 완료", b""))
 
     assert len(pushed) == 1, "앱이 닫혀 있으면 푸시로 알려야 한다"
-    assert spoke == ["빌드 완료"], "맥 앞에 있을 수 있으니 로컬 TTS도 유지"
+    assert spoke == [], "출력 감시는 서버로 음성을 자동 전환하지 않는다"
 
 
 def test_push_body_carries_no_command_details(monkeypatch):
@@ -103,4 +103,4 @@ def test_push_failure_does_not_break_notification(monkeypatch):
     monkeypatch.setattr(pty_routes._platform_utils, "tts_speak", lambda s: spoke.append(s))
 
     asyncio.run(pty_routes.on_task_complete("s1", "완료", b""))
-    assert spoke == ["완료"]
+    assert spoke == []

@@ -118,21 +118,9 @@ except Exception as e:
     _note_failure(f"{type(e).__name__}: {e}")
 PYEOF
 
-# ── Stop → 완료 알림 위임 ───────────────────────────────────────────────
-#
-# 소리를 낼지는 tts_hook.sh가 설정(voice.notifyMode — 기본 off)으로 정한다.
-# 예전에는 **음성 데몬이 떠 있을 때만** 위임했는데(2026-09-17), 데몬 없이 웹으로만
-# 쓰는 사람은 낭독·완료음을 아예 받을 수 없었다. 이제 데몬 여부는 보지 않는다 —
-# 소리는 켠 사람(설정)에게만 난다.
-#
-# ⚠ **위쪽의 `POST /api/agent/event`는 이 위임과 무관하다.** 그건 상태 배지
-# (idle/working/waiting/done)·프롬프트 큐 자동 투입·감지 커버리지의 전제다.
-
-if [ "$EVENT" = "stop" ]; then
-    HOOK_DIR="$(dirname "$0")"
-    if [ -x "$HOOK_DIR/tts_hook.sh" ]; then
-        cat "$TMPINPUT" | "$HOOK_DIR/tts_hook.sh" || true
-    fi
+# 완료 음성은 상태 이벤트를 받은 서버가 세션 정책에 따라 처리한다.
+# 서버가 없으면 자동 OS 낭독으로 우회하지 않는다.
+if [ "$EVENT" = "stop" ] && [ -x "$(dirname "$0")/tts_hook.sh" ]; then
+    cat "$TMPINPUT" | "$(dirname "$0")/tts_hook.sh" "$AGENT" || true
 fi
-
 exit 0

@@ -338,6 +338,12 @@ async def agent_event(request: Request):
     # 받아 세션(agent_detector)보다 우선 적용한다.
     state = agent_status.on_event(event, payload, session=session, agent=body.get("agent"))
     report_seen.mark(body.get("agent"))
+    # 음성 실패는 상태 훅·큐 투입을 막지 않는다.
+    try:
+        from voice_sessions import coordinator
+        coordinator.completion(body, session or (state or {}).get("tmux_session"))
+    except Exception as e:
+        logger.warning("음성 완료 예약 실패: %s", type(e).__name__)
     # 2026-09-30 — 에이전트가 시작·끝나는 순간이 곧 pane의 실행 중 명령이 바뀌는
     # 순간이다. tmux엔 그 훅이 없어 세션 감시 주기(30초)를 기다리지 않게 알린다.
     import routes.system as _system_routes

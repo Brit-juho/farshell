@@ -1,95 +1,134 @@
-// TTS 재생 — F4에서 voice.js에서 분리. barge-in(재생 중 새 녹음 시작 시 즉시
-// 정지)이 recording.js와 이 파일 양쪽에서 일어나므로 `_stopCurrentTTS`를 export한다.
-// speakText(text)가 여기 있었다 — 클라이언트가 직접 `POST /voice/output`을 불러
-// 그 응답을 재생하는 경로다. **최초 커밋(ced9104)부터 호출처가 0이었다.** F4에서
-// voice.js를 모듈로 쪼갤 때 그대로 옮겨왔을 뿐이라, 리팩터가 만든 회귀가 아니라
-// 처음부터 배선되지 않은 코드였다. 2026-09-08 삭제.
-//
-// 브라우저 TTS는 죽지 않는다 — 실제 경로는 서버가 밀어주는 쪽이다:
-// notify.js가 /ws-notify로 받은 바이너리 프레임을 playAudioBlob에 바로 넘긴다
-// (voice/notify.js:56). `/voice/output` 엔드포인트 자체도 살아있다 —
-// server/tts_hook.sh:113이 Claude Code Stop 훅에서 호출한다.
+// 지정한 화면만 수신한다. 큐 순서는 서버 ACK로 관리한다.
+import { vtFetch } from '../core/api.js';
+import { screenId } from '../core/screen-id.js';
+let socket = null;
+let generation = '';
+let current = null;
+let reconnect = null;
+let retries = 0;
+const keys = new Map();
+const policies = new Map();
+const lookingUp = new Set();
 
-// [A1] autoplay 정책 대응 — play() 실패 시 UI로 수동 재생 유도
-let _pendingAudioUrl = null;
-// 현재 재생 중인 TTS의 object URL. audio 엘리먼트 자체(window._currentTTSAudio)와
-// 항상 쌍으로 관리 — pause()만으로 중단하면 ended/error가 안 불려 URL.revokeObjectURL이
-// 영영 안 불리고, Audio 엘리먼트의 디코더/오디오 파이프라인도 안 풀린다. task_complete
-// 알림이 응답마다 오는 활성 세션에서는 이게 매번 하나씩 새서 GB 단위로 쌓인다.
-let _currentTTSUrl = null;
+function send(msg) {
+  if (socket?.readyState === 1) socket.send(JSON.stringify(msg));
+}
+function ack(id, status) { send({ type: 'voice_ack', id, status }); }
 
-// [D8 barge-in] 재생 중이던 TTS를 완전히 정지 — pause + revoke + src 해제(디코더 파이프라인
-// 즉시 반환). barge-in이 일어나는 모든 지점(recording.js의 startRecording, playAudioBlob)이
-// 이걸 공유한다.
 export function _stopCurrentTTS() {
-  const audio = window._currentTTSAudio;
-  if (audio) {
-    try { audio.pause(); } catch {}
-    try { audio.removeAttribute('src'); audio.load(); } catch {}
-    window._currentTTSAudio = null;
-  }
-  if (_currentTTSUrl) {
-    URL.revokeObjectURL(_currentTTSUrl);
-    _currentTTSUrl = null;
-  }
+  if (!current) return;
+  const old = current;
+  current = null;
+  old.audio.pause();
+  old.audio.removeAttribute('src');
+  old.audio.load();
+  URL.revokeObjectURL(old.url);
+  document.getElementById('play-pending-btn')?.remove();
+  window._currentTTSAudio = null;
+  if (old.id) ack(old.id, 'cancelled');
 }
 
-export function playAudioBlob(blob) {
-  console.log('[TTS] playAudioBlob called,', blob.size, 'bytes');
-  // [D8 barge-in] 기존 재생 중이던 오디오가 있으면 먼저 완전히 정리
+function play(blob, id = '') {
   _stopCurrentTTS();
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  const item = current = { audio, url, id };
   window._currentTTSAudio = audio;
-  _currentTTSUrl = url;
-  audio.onended = () => {
-    console.log('[TTS] 재생 완료');
-    if (_currentTTSUrl === url) { URL.revokeObjectURL(url); _currentTTSUrl = null; }
-    if (window._currentTTSAudio === audio) window._currentTTSAudio = null;
+  const finish = (status) => {
+    if (current !== item) return;
+    current = null;
+    URL.revokeObjectURL(url);
+    audio.removeAttribute('src'); audio.load();
+    document.getElementById('play-pending-btn')?.remove();
+    window._currentTTSAudio = null;
+    if (id) ack(id, status);
   };
-  audio.onerror = (e) => {
-    console.error('[TTS] 재생 에러:', e);
-    if (_currentTTSUrl === url) { URL.revokeObjectURL(url); _currentTTSUrl = null; }
-    if (window._currentTTSAudio === audio) window._currentTTSAudio = null;
-  };
-
-  const playPromise = audio.play();
-  if (playPromise) {
-    playPromise.then(() => {
-      console.log('[TTS] 재생 시작 성공');
-    }).catch((err) => {
-      console.warn('[TTS] autoplay 차단:', err.message);
-      _pendingAudioUrl = url;
-      showPlayButton();
-    });
-  }
-}
-
-function showPlayButton() {
-  let btn = document.getElementById('play-pending-btn');
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.id = 'play-pending-btn';
-    btn.textContent = '터치하여 재생';
-    btn.className = 'vt-btn solid';
-    btn.style.cssText = 'display:block;margin:6px auto 0;font-size:13px;';
-    btn.onclick = () => {
-      if (_pendingAudioUrl) {
-        const url = _pendingAudioUrl;
-        const a = new Audio(url);
-        window._currentTTSAudio = a;
-        _currentTTSUrl = url;
-        a.play();
-        const cleanup = () => {
-          if (_currentTTSUrl === url) { URL.revokeObjectURL(url); _currentTTSUrl = null; }
-          if (window._currentTTSAudio === a) window._currentTTSAudio = null;
-        };
-        a.onended = cleanup;
-        a.onerror = cleanup;
-        _pendingAudioUrl = null;
+  audio.onended = () => finish('played');
+  audio.onerror = () => finish('failed');
+  const start = async () => {
+    if (current !== item) return;
+    try {
+      await audio.play();
+      document.getElementById('play-pending-btn')?.remove();
+    } catch (e) {
+      if (current !== item) return;
+      if (id) ack(id, 'blocked');
+      let btn = document.getElementById('play-pending-btn');
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'play-pending-btn'; btn.className = 'vt-btn solid';
+        btn.textContent = '터치하여 재생';
+        btn.onclick = () => start();
+        document.getElementById('mic-status')?.appendChild(btn);
       }
-      btn.remove();
-    };
-    document.getElementById('mic-status').appendChild(btn);
-  }
+    }
+  };
+  start();
 }
+
+// 구 모듈 호출 호환. 알림 방송의 바이너리 음성은 notify.js에서 더 이상 재생하지 않는다.
+export function playAudioBlob(blob) { play(blob); }
+
+export function pauseVoice(pause) {
+  if (pause) _stopCurrentTTS();
+  send({ type: 'voice_barge', pause });
+}
+
+function visibility() {
+  const sess = window.getSession?.(window.activeId);
+  const name = sess?.tmuxName || sess?.tmux_name;
+  const key = keys.get(name);
+  // 설정 화면을 열지 않아도 현재 화면의 가시성과 저장된 정책을 확인한다.
+  if (generation && name && !key && !sess.remote && !lookingUp.has(name)) {
+    lookingUp.add(name);
+    vtFetch(`/voice/session?session_id=${encodeURIComponent(window.activeId)}&screen=${screenId()}`)
+      .then((data) => {
+        if (data?.target && data?.policy) window.voiceRememberSession(data.target.name, data.target.key, data.policy, data.owns);
+      }).catch(() => {}).finally(() => lookingUp.delete(name));
+  }
+  const btn = document.getElementById('voice-session-settings');
+  const cfg = policies.get(key);
+  if (btn) btn.textContent = cfg?.policy.mode === 'off' || !cfg ? '응답 읽기 설정' : cfg.owns ? '응답 읽기 켜짐' : '세션 음성 설정';
+  send({ type: 'voice_visible', keys: !document.hidden && key ? [key] : [] });
+}
+
+function connect() {
+  if (window.vtRelayHost?.() !== undefined && window.vtRelayHost() !== 'local') return;
+  if (typeof WebSocket !== 'function') return;
+  const query = new URLSearchParams(location.search).get('token') || window.VT_TOKEN || '';
+  const params = new URLSearchParams({ screen: screenId() });
+  if (query) params.set('token', query);
+  socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-voice?${params}`);
+  socket.onmessage = async (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'voice_connected') {
+        generation = msg.generation; retries = 0; keys.clear(); policies.clear();
+        window.dispatchEvent(new CustomEvent('voice-connected'));
+        visibility();
+      } else if (msg.type === 'voice_policy') {
+        policies.set(msg.key, msg); visibility();
+        window.dispatchEvent(new CustomEvent('voice-policy', { detail: msg }));
+      } else if (msg.type === 'voice_cancel') {
+        if (current?.id === msg.id) _stopCurrentTTS();
+      } else if (msg.type === 'voice_audio' && msg.generation === generation) {
+        const raw = atob(msg.audio);
+        const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+        const status = document.getElementById('mic-status');
+        if (status) status.textContent = `${msg.name} 응답 읽기`;
+        play(new Blob([bytes], { type: msg.media_type }), msg.id);
+      }
+    } catch (e) { console.warn('[voice]', e); }
+  };
+  socket.onclose = (ev) => {
+    generation = ''; _stopCurrentTTS();
+    if (ev.code === 4001 || ev.code === 4000) return;
+    clearTimeout(reconnect);
+    reconnect = setTimeout(connect, Math.min(30000, 1000 * 2 ** Math.min(++retries, 5)));
+  };
+  socket.onerror = () => socket.close();
+}
+window.voiceRememberSession = (name, key, policy, owns) => { keys.set(name, key); if (policy) policies.set(key, { policy, owns }); visibility(); };
+document.addEventListener('visibilitychange', visibility);
+window.storeSubscribe?.(visibility);
+connect();

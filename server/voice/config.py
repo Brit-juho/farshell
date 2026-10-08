@@ -16,7 +16,6 @@ from pynput import keyboard  # noqa: E402
 logger = logging.getLogger("voice-daemon")
 
 SAMPLE_RATE = 16000
-TTS_CONFIRM = True  # STT 결과를 TTS로 읽어줄지
 
 
 _VT_ENV = vt_env.load()
@@ -25,6 +24,9 @@ _VT_ENV = vt_env.load()
 def vt_getenv(key: str, default: str = "") -> str:
     """환경변수 → ~/.vt.env → default 우선순위."""
     return vt_env.getenv(key, default, file_env=_VT_ENV)
+
+
+TTS_CONFIRM = vt_getenv("VT_VOICE_INPUT_CONFIRM", "off").lower() == "on"
 
 
 # V3-G: 녹음 시작 시(발화 전) 이번 명령이 어느 tmux pane으로 갈지 데스크톱 알림으로

@@ -70,7 +70,7 @@ The release-path table, the terminal-reply root cause (DA1/DA2/XTVERSION/OSC 10/
 `server/agent_hook.sh` is the shared entry point. Claude Code posts `{pre,post,stop}`;
 Codex posts prompt, permission, tool, stop, and session lifecycle events while adding
 `agent: "codex"`. Both drive status badges and prompt-queue auto-feed. Only Claude's
-`stop` delegates stdin to `tts_hook.sh` for the TTS summary.
+`stop` reports completion to the server; session voice policy controls TTS. The legacy `tts_hook.sh` only preserves explicitly configured ntfy delivery.
 
 **Codex session attribution (2026-10-06):** its shared app-server can run hooks with
 the `TMUX_PANE` it inherited from an earlier TUI. The live server showed a Codex
@@ -104,13 +104,11 @@ its indentation preserved; idempotent. A broken `hooks.json` is left untouched.
 **Register `agent_hook.sh stop`, never `tts_hook.sh` directly** — registering
 both plays the TTS summary twice.
 
-- Script: `server/tts_hook.sh` (the TTS half, invoked by `agent_hook.sh stop`
-  regardless of whether the voice daemon is running. `tts_hook.sh` checks the
-  notification settings; completion speech is off by default.)
-- Config: Claude `hooks.PreToolUse` / `hooks.PostToolUse` / `hooks.Stop` / `hooks.SessionStart` in
-  `~/.claude/settings.json`; Codex's six managed events in `~/.codex/config.toml`
-- Behavior: extracts the last assistant response (up to 200 chars) from the transcript → server TTS → plays via `afplay`
-- Fallback: uses macOS `say -v Yuna` if the server isn't running
+- Speech: `server/voice_sessions.py` applies session policy, output ownership and serial playback; `voice_completion.py` extracts Claude/Codex final responses.
+- Hooks stay installed for status/queue regardless of whether session TTS is enabled.
+- No automatic server-side speech when a browser disconnects or the server is unavailable.
+- Configure current-session voice in Settings; see [voice.md](voice.md).
+
 
 ```bash
 # Test the hook (with the server running)

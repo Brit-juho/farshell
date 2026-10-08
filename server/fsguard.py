@@ -279,3 +279,21 @@ def looks_binary(head: bytes) -> bool:
     오탐 방향이 '안전한 쪽'(내용을 안 보냄)이라 허용 가능하다.
     """
     return b"\x00" in head
+
+
+def voice_transcript_path(tool: str, value: str):
+    """음성 훅 기록은 등록 도구의 로컬 기록 디렉터리 안에서만 읽는다."""
+    from pathlib import Path
+    if tool == 'claude':
+        roots = [Path(os.environ.get('CLAUDE_CONFIG_DIR') or Path.home() / '.claude') / 'projects']
+    elif tool == 'codex':
+        roots = [Path(os.environ.get('VT_CODEX_HOME') or os.environ.get('CODEX_HOME') or Path.home() / '.codex') / 'sessions']
+    else:
+        return None
+    try:
+        path = Path(value).expanduser().resolve()
+        if path.suffix == '.jsonl' and path.is_file() and any(path.is_relative_to(r.resolve()) for r in roots):
+            return path
+    except (OSError, ValueError, TypeError):
+        pass
+    return None

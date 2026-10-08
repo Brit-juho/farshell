@@ -45,11 +45,19 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 
 | Method | Path | Description |
 |--------|------|------|
-| POST | `/voice/input?session_id=X` | Voice → STT → session input. Body is the recording (`Content-Type`: `audio/webm` · `audio/mp4` · `audio/ogg` · `audio/wav`). Optional `X-Voice-Id` header: a re-sent recording with the same id is answered from memory (`duplicate: true`) and typed into the terminal only once. Returns `{text, injected, session_id, timing: {decode_ms, wait_ms, load_ms, stt_ms, total_ms}}`; `error` when the model is not ready (nothing is ever downloaded here); 429 when too many requests are queued |
+| POST | `/voice/target` | Freeze authenticated caller's input target. Body `{session_id}` (web) or `{pane}` (machine daemon); returns `{token,key,name,pane,generation,boot,ttl_sec,max_record_sec}`. Token expires after 180s; a deleted/replaced pane is never replaced with the active pane |
+| GET | `/voice/defaults` | Defaults copied when a session first requests voice policy; initial mode off. Browser ownership must be claimed separately |
+| PUT | `/voice/defaults` | Body `{policy}` using session policy fields; existing session overrides are unchanged |
+| GET | `/voice/session?session_id=X` | Session voice policy and ownership: `?session_id=X&screen=Y`; returns `{target,policy,owns,claimed,status,adapters}` |
+| PUT | `/voice/session` | Set session-specific voice policy. Body `{session_id,screen,policy,transfer?}`. Policy `{mode:off|sound|speak,destination:browser|server,min_sec,success_only,only_unfocused,engine:auto|edge|local}`; another screen's browser ownership requires explicit `transfer:true`. Settings persist outside checkout, mode 0600 |
+| POST | `/voice/bind` | Machine-only explicit tool conversation binding from its actual FarShell tmux pane: `{tool:claude|codex,run,pane,tmux}`. CLI `fsh voice-bind` supplies the shell's pane/socket |
+| POST | `/voice/test` | Test actual TTS through the session output queue: `{session_id,screen}`. Browser tests require that screen's playback ownership |
+| WS | `/ws-voice` | Authenticated destination-specific audio. `?screen=Y`; `voice_connected` supplies a connection generation. `voice_audio` carries playback/completion IDs, session key/name, generation, actual MIME and base64 audio in one message. Client sends `voice_ack` (`blocked|played|failed|cancelled`), `voice_barge {pause}` and `voice_visible {keys}`. A single owner gets audio; reconnect does not replay past audio |
+| POST | `/voice/input?session_id=X` | Voice → STT → session input. Body is the recording (`Content-Type`: `audio/webm` · `audio/mp4` · `audio/ogg` · `audio/wav`). New clients use `X-Voice-Target` from the recording-start target and `X-Voice-Id` (caller + target/content dedup, collision 409, max upload 4MiB). Legacy session-id requests remain compatible. Optional `X-Voice-Id` header: a re-sent recording with the same id is answered from memory (`duplicate: true`) and typed into the terminal only once. Returns `{text, injected, session_id, timing: {decode_ms, wait_ms, load_ms, stt_ms, total_ms}}`; `error` when the model is not ready (nothing is ever downloaded here); 429 when too many requests are queued |
 | POST | `/voice/output` | Text → TTS → returns audio |
-| POST | `/voice/cancel` | Immediately stop playing TTS (barge-in) |
-| POST | `/voice/local/start` | Start MacBook microphone recording |
-| POST | `/voice/local/stop?session_id=X` | Stop recording → STT → session input |
+| POST | `/voice/cancel` | Pause/resume that authenticated screen's queue: `{screen,pause}`. Machine daemon may use `{server:true,pause}`. Stops only FarShell-owned playback, never global say/afplay processes |
+| POST | `/voice/local/start` | Deprecated: 410 `local_mic_removed`; use browser microphone or Voice Daemon |
+| POST | `/voice/local/stop?session_id=X` | Deprecated: 410 `local_mic_removed`; never records or injects |
 | GET | `/voice/stt/status` | STT state — selected model, loaded model/engine, memory, current setup job, last error. Does not load a model |
 | GET | `/voice/stt/catalog` | Models this server can run (recommended one first, readiness, requirements, measured numbers) and the ones it cannot (with the reason), plus usable engines and the current selection. `?custom=<custom:engine:owner/repo>` adds that custom model |
 | POST | `/voice/stt/setup` | Start ONE preparation step in the background — body `{"model": "<id>", "step": "model" \| "req:<requirement id>"}`. The settings UI calls this only after the user confirms the download. 400 for unknown models/steps or items the app does not install itself (pip packages), 409 while another step runs. Progress is `setup` in `GET /voice/stt/status` |

@@ -401,11 +401,11 @@ test('정보 — 훅 상태 조회가 실패해도 패널이 죽지 않는다', 
 });
 
 // N42(60-settings-palette.md §7) — 설정 → 음성 탭: 알림·음성 진단 5항목.
-test('음성 — 5항목이 모두 그려진다', async () => {
+test('음성 — 유지한 기능이 그려진다', async () => {
   const { document, P } = await build();
   P.showSettings();
   sectionButton(document, '음성 및 알림').click();
-  for (const label of ['웹 푸시', '작업 완료 알림', '음성 인식 상태', '맥에서 음성만 쓰기']) {
+  for (const label of ['웹 푸시', '음성 인식 상태']) {
     assert.ok(rowByLabel(document, label), `${label} 행이 있어야 한다`);
   }
 });
@@ -455,18 +455,11 @@ test('음성 — 구독 켜기/끄기 버튼(#push-btn)이 이식됐고 pushui.j
   assert.ok(subBtn.querySelector('#push-label'), '#push-label id가 유지돼야 한다');
 });
 
-test('음성 — 작업 완료 알림 소리 듣기 버튼이 /api/notify/test를 호출한다', async () => {
-  const { document, P, posts } = await build({
-    fetchExtra: (u) => (u.includes('/api/notify/test')
-      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, configured: true }) })
-      : null),
-  });
-  P.showSettings();
-  sectionButton(document, '음성 및 알림').click();
-  const btn = rowByLabel(document, '작업 완료 알림').querySelector('button');
-  btn.click();
-  await flush();
-  assert.ok(posts.some((u) => u.includes('/api/notify/test')));
+test('음성 — 세션 미선택이면 안내하고 외부 알림을 TTS 테스트로 호출하지 않는다', async () => {
+  const { document, P, posts } = await build();
+  P.showSettings(); sectionButton(document, '음성 및 알림').click(); await flush();
+  assert.match(document.getElementById('vt-set-body').textContent, /tmux 세션을 선택/);
+  assert.ok(!posts.some((u) => u.includes('/api/notify/test')));
 });
 
 test('음성 — 음성 인식 상태에 따라 적재/내리기 버튼이 토글된다', async () => {
@@ -485,26 +478,11 @@ test('음성 — 음성 인식 상태에 따라 적재/내리기 버튼이 토�
   assert.strictEqual(unload.disabled, false);
 });
 
-test('음성 — 맥에서 음성만 쓰기 버튼이 시작→중지로 토글된다', async () => {
-  const { document, P, posts } = await build({
-    fetchExtra: (u) => {
-      if (u.includes('/voice/local/start')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'recording' }) });
-      if (u.includes('/voice/local/stop')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'not_recording', text: '' }) });
-      return null;
-    },
-  });
-  P.showSettings();
-  sectionButton(document, '음성 및 알림').click();
-  const btn = rowByLabel(document, '맥에서 음성만 쓰기').querySelector('button');
-  assert.strictEqual(btn.textContent, '시작');
-  btn.click();
-  await flush();
-  assert.strictEqual(btn.textContent, '중지');
-  assert.ok(posts.some((u) => u.includes('/voice/local/start')));
-  btn.click();
-  await flush();
-  assert.strictEqual(btn.textContent, '시작');
-  assert.ok(posts.some((u) => u.includes('/voice/local/stop')));
+test('음성 — 서버 로컬 마이크 기능은 표시하지 않는다', async () => {
+  const { document, P, posts } = await build();
+  P.showSettings(); sectionButton(document, '음성 및 알림').click(); await flush();
+  assert.strictEqual(rowByLabel(document, '맥에서 음성만 쓰기'), undefined);
+  assert.ok(!posts.some((u) => u.includes('/voice/local/')));
 });
 
 test('음성 — 다른 탭으로 이동해도 죽지 않는다(clients.js 폴링 정리 경로)', async () => {

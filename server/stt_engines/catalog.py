@@ -73,7 +73,7 @@ CATALOG: tuple = (
     ),
     ModelSpec(
         id="apple-speech-ko", engine="apple_speech", label="Apple 음성 인식 (SpeechAnalyzer)",
-        tagline="맥에 내장된 기능. 모델 다운로드가 필요 없고 메모리를 거의 안 쓴다",
+        tagline="맥에 내장된 기능. 한국어 시스템 자산을 준비해 쓰는 경량 엔진",
         size_mb=0, static_tags=("경량",), bench=_bench(6.4, 0.06, 36), license="OS 기능",
         notes=("숫자는 숫자로 적는다(팔천 → 8000)", "일부 단어를 오인식할 수 있다(깃 → 비커밍)",
                "메모리 수치에는 시스템 서비스가 쓰는 몫이 빠져 있다"),

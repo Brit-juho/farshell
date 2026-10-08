@@ -17,7 +17,7 @@
 // 공유 인스턴스인 `window.activeId`/`window.registerAction`을 bare로 읽는다
 // (F4 이전 voice.js가 classic script로 하던 방식 그대로).
 import { apiFetch } from '../core/api.js';
-import { _stopCurrentTTS } from './tts.js';
+import { pauseVoice } from './tts.js';
 // 순수 함수 모듈(상태·DOM 없음) — 번들에 인라인돼도 안전하다.
 import {
   pickRecorderMime, contentTypeOf, buildAudioConstraints, buildRecorderOptions,
@@ -31,6 +31,9 @@ export const micStatus = document.getElementById('mic-status');
 
 let mediaRecorder = null;
 let audioChunks = [];
+let target = null;
+let busy = false;
+let recordTimer = null;
 let _failedUpload = null;  // 전송 실패한 마지막 녹음 { blob, contentType } — 최대 1건, 새 녹음 시작 시 버린다
 const RETRY_DELAYS = [1000, 3000];
 const retryBtn = document.getElementById('mic-retry-btn');
@@ -39,7 +42,7 @@ export let isRecording = false;
 
 // --- 마이크 녹음 ---
 
-// STT 모델은 서버에서 첫 사용 시 ~400MB를 잡고 로딩에 몇 초 걸린다. 모델은 자동으로 받지 않는다 —
+// STT 모델은 서버에서 처음 사용할 때 로딩에 몇 초 걸린다. 모델은 자동으로 받지 않는다 —
 // 설정 「음성 및 알림」에서 명시적으로 받아야 한다(안 받았으면 준비가 실패하고 그 이유를 보여준다).
 // 터미널만 쓰는 사람은 음성을 안 켜면 이 비용이 0이다. 그래서 첫 녹음 전에 명시적으로
 // "준비"시키고 그 사실을 사용자에게 알린다. 준비되면 다음 탭부터 바로 녹음.
@@ -51,7 +54,7 @@ async function ensureSttReady() {
   if (_sttPreparing) return false;
   _sttPreparing = true;
   micBtn.querySelector('.label').textContent = '준비 중...';
-  micStatus.textContent = '음성 모델 준비 중… (메모리 ~400MB)';
+  micStatus.textContent = '선택한 음성 모델 준비 중…';
   try {
     const r = await apiFetch(`${API}/voice/stt/preload`, { method: 'POST' });
     const d = await r.json();
@@ -80,15 +83,26 @@ export async function toggleRecording() {
 }
 
 export async function startRecording() {
-  // 준비 안 됐으면 이번 탭은 모델 준비만 하고 리턴 (녹음은 준비 완료 후 다음 탭)
+  if (busy) return;
+  if (window.vtRelayHost?.() && window.vtRelayHost() !== 'local') {
+    micStatus.textContent = '원격 호스트에 직접 접속해 음성을 사용하세요'; return;
+  }
   if (!_sttReady) { await ensureSttReady(); return; }
+  busy = true;
   try {
-    // [D8 barge-in] 재생 중인 TTS 중단 — 사용자가 말하기 시작하면 즉시 정지
-    try {
-      apiFetch(`${API}/voice/cancel`, { method: 'POST' }).catch(() => {});
-      _stopCurrentTTS();
-    } catch {}
-
+    const ready = await apiFetch(`${API}/voice/stt/status`).then((r) => r.json());
+    if (!ready.loaded || ready.loaded_model !== ready.model) {
+      _sttReady = false; busy = false; await ensureSttReady(); return;
+    }
+    const sid = window.activeId || '';
+    const tr = await apiFetch(`${API}/voice/target`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sid }),
+    });
+    const captured = await tr.json();
+    if (!tr.ok) throw new Error(captured.error || '입력 대상 준비 실패');
+    target = { ...captured, sessionId: sid };
+    pauseVoice(true);
     _failedUpload = null;
     hideRetry();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: buildAudioConstraints() });
@@ -111,21 +125,27 @@ export async function startRecording() {
       const contentType = contentTypeOf(mediaRecorder.mimeType || mime);
       const blob = new Blob(audioChunks, { type: contentType });
       _stopAt = performance.now();
-      await sendAudio(blob, contentType);
+      try { await sendAudio(blob, contentType, target); }
+      finally { busy = false; pauseVoice(false); }
     };
 
     mediaRecorder.start();
+    busy = false;
+    recordTimer = setTimeout(() => stopRecording(), 60000);
     isRecording = true;
     micBtn.classList.add('recording');
     micBtn.querySelector('.label').textContent = '녹음 중...';
-    micStatus.textContent = '녹음 중 — 탭하여 중지';
+    micStatus.textContent = `${target.name}에 녹음 중 — 탭하여 중지 (최대 60초)`;
   } catch (err) {
     console.error('마이크 접근 실패:', err);
-    micStatus.textContent = micErrorMessage(err);
+    micStatus.textContent = err.name === 'Error' ? err.message : micErrorMessage(err);
+    busy = false; pauseVoice(false);
   }
 }
 
 export function stopRecording() {
+  if (!isRecording) return;
+  clearTimeout(recordTimer); busy = true;
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
   }
@@ -148,15 +168,15 @@ function showRetry(msg) {
 }
 
 // 한 번의 POST. 네트워크 실패·5xx는 재시도 대상으로 던지고, 4xx·성공 응답은 결과로 돌려준다.
-async function postOnce(blob, contentType, voiceId) {
+async function postOnce(blob, contentType, voiceId, captured) {
   // [H2] 현재 활성 세션 ID를 쿼리 파라미터로 전달. window.activeId는 core/store.js
   // (app.js 번들)가 실 세션 전환마다 갱신해주는 진짜 공유 값이다 — 이 파일에서
   // core/store.js를 직접 import하면 안 되는 이유는 파일 상단 주석 참고.
-  const sid = window.activeId || '';
+  const sid = captured.sessionId;
   const res = await apiFetch(`${API}/voice/input?session_id=${encodeURIComponent(sid)}`, {
     method: 'POST',
     // 같은 녹음의 재전송이 터미널에 두 번 입력되지 않게 서버가 이 id로 중복을 건너뛴다.
-    headers: { 'Content-Type': contentType, 'X-Voice-Id': voiceId },
+    headers: { 'Content-Type': contentType, 'X-Voice-Id': voiceId, 'X-Voice-Target': captured.token },
     body: blob,
   });
   // C5: 4xx/5xx면 body가 JSON이 아닐 수 있어 파싱 실패를 허용한다.
@@ -170,35 +190,43 @@ async function postOnce(blob, contentType, voiceId) {
   return { res, data };
 }
 
-async function sendAudio(blob, contentType) {
-  _failedUpload = { blob, contentType, voiceId: newVoiceId() };
+async function sendAudio(blob, contentType, captured) {
+  _failedUpload = { blob, contentType, voiceId: newVoiceId(), captured, created: Date.now() };
   await uploadWithRetry();
 }
 
 async function resendFailed() {
-  if (!_failedUpload) return;
+  if (!_failedUpload || busy) return;
+  if (Date.now() - _failedUpload.created > 120000) {
+    _failedUpload = null; hideRetry(); micStatus.textContent = '재전송 시간이 만료됐습니다. 새로 녹음해 주세요'; return;
+  }
+  busy = true;
   hideRetry();
   micStatus.textContent = '다시 보내는 중...';
   _stopAt = performance.now();
-  await uploadWithRetry();
+  try { await uploadWithRetry(); } finally { busy = false; }
 }
 
 async function uploadWithRetry() {
-  const { blob, contentType, voiceId } = _failedUpload;
+  const { blob, contentType, voiceId, captured } = _failedUpload;
   try {
-    const { res, data } = await retryWithBackoff(() => postOnce(blob, contentType, voiceId), RETRY_DELAYS);
+    const { res, data } = await retryWithBackoff(() => postOnce(blob, contentType, voiceId, captured), RETRY_DELAYS);
     _failedUpload = null;
     console.debug('[voice] 왕복 %dms, 서버 timing:', Math.round(performance.now() - _stopAt), data && data.timing);
     if (!res.ok) {
       // 4xx(인증·형식 거부)는 재시도하지 않는다 — 서버가 준 메시지를 그대로 보여준다.
       micStatus.textContent = (data && data.error) || `전송 실패 (${res.status})`;
     } else if (data && data.text) {
-      micStatus.textContent = `"${data.text}"`;
+      micStatus.textContent = data.injected ? `${captured.name}: "${data.text}"` : `입력되지 않음 — ${data.text}`;
+      if (!data.injected && navigator.clipboard) {
+        const copy = document.createElement('button'); copy.className = 'vt-btn sm'; copy.textContent = '인식 텍스트 복사';
+        copy.onclick = () => navigator.clipboard.writeText(data.text); micStatus.appendChild(copy);
+      }
     } else {
       micStatus.textContent = (data && data.error) || '인식 실패';
     }
     // W1-5: 핸즈프리 자동 재시작 분기 제거. 매 녹음은 명시적 클릭으로만.
-    setTimeout(() => { micStatus.textContent = ''; }, 3000);
+    if (data?.injected) setTimeout(() => { if (!isRecording && !busy) micStatus.textContent = ''; }, 3000);
   } catch (err) {
     console.error('음성 전송 실패:', err);
     // 보관(_failedUpload)은 유지 — 버튼으로 같은 blob을 재전송한다.

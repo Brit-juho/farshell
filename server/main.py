@@ -390,6 +390,8 @@ async def lifespan(_app: FastAPI):
         with suppress(asyncio.CancelledError):
             await port_expiry_task
         await port_proxy.shutdown_all()
+        from voice_sessions import coordinator
+        await coordinator.close()
         stt_idle_task.cancel()
         files_cleanup_task.cancel()
         with suppress(asyncio.CancelledError):

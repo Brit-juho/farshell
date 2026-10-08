@@ -2533,6 +2533,14 @@ _issue_ticket() {
 }
 
 # Wave 2 W2-4: 음성 daemon 타깃 세션 lock/해제 (V3-R)
+cmd_voice_bind() {
+  if [ "$#" -ne 2 ] || [ -z "${TMUX_PANE:-}" ]; then
+    echo "사용법: 해당 tmux pane에서 fsh voice-bind <claude|codex> <대화 ID>"
+    return 1
+  fi
+  "$VT_PYTHON" "$VT_DIR/server/voice_bind.py" "$1" "$2"
+}
+
 cmd_voice_target() {
   local target_file="$HOME/.vt/voice_target"
   mkdir -p "$HOME/.vt"
@@ -4702,6 +4710,7 @@ case "${1:-help}" in
   otp)      shift; cmd_otp "$@" ;;
   device|devices) shift; cmd_device "$@" ;;
   git-account) shift; cmd_git_account "$@" ;;
+  voice-bind) shift; cmd_voice_bind "$@" ;;
   voice-target) shift; cmd_voice_target "$@" ;;
   manage)   shift; cmd_manage "$@" ;;
   tui)      shift; cmd_manage "$@" ;;
