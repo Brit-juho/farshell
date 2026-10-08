@@ -259,7 +259,7 @@ def test_design_expected_reads_real_code():
     for key in ("skins", "breakpoints", "pane-cap", "rail-items", "agent-states"):
         assert key in exp, f"{key}를 코드에서 못 뽑았다 — 추출기가 고장 났다"
     assert exp["breakpoints"] == "720/1280"
-    assert exp["pane-cap"] == "2/4/6"
+    assert exp["pane-cap"] == "1/4/6"
 
 
 def test_norm_strips_doc_only_decorations():

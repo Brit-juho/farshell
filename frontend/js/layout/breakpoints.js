@@ -6,3 +6,9 @@
 export const COMPACT_MAX = 720;
 export const REGULAR_MAX = 1280;
 export const WIDE_MAX = 1600;
+
+// 모바일 기기는 가로 모드에서도 한 칸만 표시한다. 좁은 PC 창도 같은 모바일 UI다.
+import { isMobileDevice } from '../core/device.js';
+export function isMobileLayout() {
+  return isMobileDevice() || window.innerWidth < COMPACT_MAX;
+}

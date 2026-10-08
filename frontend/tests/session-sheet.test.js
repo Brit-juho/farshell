@@ -32,7 +32,7 @@ async function setup({ tmux = [] } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
-  window.innerWidth = 500;
+  window.innerWidth = 1024; // 저장된 PC 묶음을 만든 뒤 모바일에서 복원한다.
   window.WebSocket = FakeWebSocket;
   window.Terminal = FakeTerminal;
   window.FitAddon = { FitAddon: class { fit() {} } };
@@ -63,6 +63,7 @@ async function setup({ tmux = [] } = {}) {
   sess.addSession('c', 'C', { place: 'pane', tmuxName: 'tc' });
   sess.addSession('d', 'D');
   const t3 = S.getActiveTabId();
+  window.innerWidth = 500;
   return { env, window, doc: window.document, sess, core, dom, S, picker, state, t1, t2, t3 };
 }
 

@@ -197,12 +197,12 @@ test('canSplit — pane 상한에 걸리면 가장자리 드롭도 분할하지 
 // N16 — 10-shell-layout.md §3: compact/regular/wide/xwide 4구간. xwide(N4)는
 // 상한이 없다(Infinity) — countLeaves()가 아무리 커져도 canSplit()이 계속
 // true여야 하므로 숫자 비교 대신 isFinite로 확인한다.
-test('tierCap — 폭 구간별 상한 2/4/6/무제한 (breakpoints.js와 같은 경계값)', async () => {
+test('tierCap — 폭 구간별 상한 1/4/6/무제한 (breakpoints.js와 같은 경계값)', async () => {
   const { D } = await loadDnd();
   const env = _doms[_doms.length - 1].window;
   const setW = (w) => Object.defineProperty(env, 'innerWidth', { value: w, configurable: true });
-  setW(390);  assert.strictEqual(D.tierCap(), 2);
-  setW(719);  assert.strictEqual(D.tierCap(), 2);
+  setW(390);  assert.strictEqual(D.tierCap(), 1);
+  setW(719);  assert.strictEqual(D.tierCap(), 1);
   setW(720);  assert.strictEqual(D.tierCap(), 4);
   setW(1279); assert.strictEqual(D.tierCap(), 4);
   setW(1280); assert.strictEqual(D.tierCap(), 6);
@@ -302,3 +302,32 @@ test('applyPanelDrop — pane 상한에 걸리면 가장자리 드롭도 분할�
   assert.strictEqual(D.applyPanelDrop(id, 'right', 'usage'), false);
   assert.strictEqual(S.getTree(), before);
 });
+
+test('모바일에서는 직접 분할과 가장자리 드롭을 막고 기존 묶음을 보존한다', async () => {
+  const { S, D } = await loadDnd();
+  const win = _doms[_doms.length - 1].window;
+  const first = S.getActivePaneId();
+  S.setPaneSession('a', first);
+  S.splitActivePane('row', 'b');
+  const before = S.getTree();
+  Object.defineProperty(win, 'innerWidth', { value: 390, configurable: true });
+  assert.strictEqual(D.canSplit(), false);
+  assert.strictEqual(S.splitActivePane('row'), null);
+  assert.strictEqual(S.splitPane(first, 'col'), null);
+  D.applyPaneDrop(first, 'right', 'c');
+  assert.strictEqual(S.getTree(), before);
+  assert.strictEqual(S.countLeaves(), 2);
+});
+
+for (const [ua, touches] of [['Mozilla/5.0 (Android)', 5], ['Mozilla/5.0 (Macintosh)', 5]]) {
+  test(`모바일 가로 화면에서도 분할하지 않는다: ${ua}`, async () => {
+    const { S, D } = await loadDnd();
+    const win = _doms[_doms.length - 1].window;
+    Object.defineProperty(win, 'innerWidth', { value: 1024, configurable: true });
+    Object.defineProperty(win.navigator, 'userAgent', { value: ua });
+    Object.defineProperty(win.navigator, 'maxTouchPoints', { value: touches });
+    assert.strictEqual(D.canSplit(), false);
+    assert.strictEqual(S.splitActivePane('row'), null);
+    assert.strictEqual(S.countLeaves(), 1);
+  });
+}

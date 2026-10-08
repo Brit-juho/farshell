@@ -1,3 +1,4 @@
+import { isMobileLayout } from './breakpoints.js';
 // L3 0단계 — 분할 pane 트리의 상태를 들고 있는 유일한 곳. layout/tree.js는
 // 순수 함수만 있고 "지금 트리가 뭔지"는 모른다 — 그 상태를 여기서 보관하고,
 // 바뀔 때마다 구독자에게 알린다(렌더러는 1단계에서 이 스토어를 구독한다).
@@ -176,6 +177,7 @@ export function setPaneSession(sessionId, paneId = _activePaneId) {
 // newFirst: L5 DnD 전용 — 왼쪽/위 가장자리 드롭이면 true로 넘겨 새 leaf가 그
 // 자리(a)에 먼저 오게 한다(tree.js splitPane 참고). 헤더 버튼은 항상 기본값(false).
 export function splitPane(paneId, dir, sessionId = null, newFirst = false) {
+  if (isMobileLayout()) return null;
   const newLeaf = makeLeaf(_genId('pane'), sessionId);
   const next = _splitPane(_tree, paneId, dir, newLeaf, _genId('split'), newFirst);
   if (next === _tree) return null;

@@ -8,7 +8,9 @@
 
 export const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
 export const API_BASE = `${location.protocol}//${location.host}`;
-export const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+import { isMobileDevice } from './device.js';
+export const isMobile = isMobileDevice();
+document.documentElement.classList.toggle('vt-mobile-device', isMobile);
 // OS별 안내 문구 표시용. 실제 키 처리는 이미 ctrlKey||metaKey로 두 OS 모두
 // 받아들이므로 동작에는 영향 없다.
 export const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);

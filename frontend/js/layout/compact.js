@@ -10,13 +10,13 @@
 // 이 코드베이스가 쓰는 기법(ports.js의 `_wireSwipe`, U5 스와이프)과 동일하게
 // 맞췄다 — 다른 값을 쓰면 기기마다 스와이프 손맛이 갈린다.
 import { _isCoarsePointer } from '../core/env.js';
-import { COMPACT_MAX } from './breakpoints.js';
+import { isMobileLayout } from './breakpoints.js';
 import { getActivePaneId, getTabsWithTrees } from './store.js';
 import { getSession } from '../core/store.js';
 import { revealSession } from '../term/session.js';
 
 export function isCompactMode() {
-  return window.innerWidth < COMPACT_MAX;
+  return isMobileLayout();
 }
 
 // depth-first(a→b) leaf 나열. dir 값(row/col)은 여기서 안 본다 — 설계 원칙 1:

@@ -31,7 +31,7 @@ async function setup({ width = 500 } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
-  window.innerWidth = width;
+  window.innerWidth = 1024; // 기존 PC 묶음 구성
   window.WebSocket = FakeWebSocket;
   window.Terminal = FakeTerminal;
   window.FitAddon = { FitAddon: class { fit() {} } };
@@ -57,6 +57,7 @@ async function setup({ width = 500 } = {}) {
   sess.addSession('c', 'C', { place: 'pane', tmuxName: 'tc' });
   sess.addSession('d', 'D');
   const t3 = S.getActiveTabId();
+  window.innerWidth = width;
   return { env, window, doc, sess, core, dom, S, actions, cache, t1, t2, t3 };
 }
 

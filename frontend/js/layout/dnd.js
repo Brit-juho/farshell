@@ -14,7 +14,7 @@
 // 순수 로직이라 단위 테스트 대상이다(layout-dnd.test.js).
 import { splitPane, setPaneSession, setPanePanel, countLeaves, getTree, findTabBySessionId, closeViewIfEmptied } from './store.js';
 import { findNode } from './tree.js';
-import { COMPACT_MAX, REGULAR_MAX, WIDE_MAX } from './breakpoints.js';
+import { REGULAR_MAX, WIDE_MAX, isMobileLayout } from './breakpoints.js';
 // N4 3단계 — 패널 드래그의 mime과 이름 집합. 상수만 쓰고, registry.js는 정적
 // import가 없어 이 방향(core → registry)은 청크를 오염시키지 않는다.
 import { PANEL_MIME, PANEL_KINDS } from '../panels/registry.js';
@@ -42,7 +42,7 @@ function _dragMime(dataTransfer) {
 // — Infinity를 그대로 반환해 countLeaves() < Infinity가 항상 참이 되게 한다.
 export function tierCap() {
   const w = window.innerWidth;
-  if (w < COMPACT_MAX) return 2;
+  if (isMobileLayout()) return 1;
   if (w < REGULAR_MAX) return 4;
   if (w < WIDE_MAX) return 6;
   return Infinity;

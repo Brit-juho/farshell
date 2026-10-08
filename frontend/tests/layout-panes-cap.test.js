@@ -78,25 +78,23 @@ test('상한 미만이면 분할 버튼이 활성이고 툴팁은 이름만', as
 });
 
 test('상한에 도달하면 모든 분할 버튼이 disabled + 이유가 툴팁/aria-label에 붙는다', async () => {
-  const { window, addSession, store } = await buildWindow(390); // compact 폭 상한 2
+  const { window, addSession, store } = await buildWindow(390); // 모바일은 분할 불가
   addSession('a');
   store.splitActivePane('row'); // leaf 2개 = 상한 도달
 
   const btns = splitButtons(window.document);
   assert.ok(btns.length >= 2);
   assert.ok(btns.every((b) => b.disabled === true), '전부 비활성이어야 한다');
-  assert.match(btns[0].getAttribute('data-tip-sub'), /최대 2개/);
+  assert.match(btns[0].getAttribute('data-tip-sub'), /최대 1개/);
   assert.match(btns[0].getAttribute('aria-label'), /분할 한도/);
 });
 
-test('닫아서 상한 아래로 내려오면 다시 활성으로 돌아온다', async () => {
+test('모바일에서는 한 칸만 있어도 분할이 활성화되지 않는다', async () => {
   const { window, addSession, store } = await buildWindow(390);
   addSession('a');
-  const second = store.splitActivePane('row');
+  assert.strictEqual(store.splitActivePane('row'), null);
+  assert.strictEqual(store.countLeaves(), 1);
   assert.ok(splitButtons(window.document).every((b) => b.disabled));
-
-  store.closePane(second);
-  assert.ok(splitButtons(window.document).every((b) => b.disabled === false), '상한이 풀리면 되살아나야 한다');
 });
 
 // N16 — 10-shell-layout.md §3: 4구간(compact/regular/wide/xwide)으로 재편.
