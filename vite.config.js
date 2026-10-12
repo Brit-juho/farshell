@@ -153,6 +153,8 @@ export default defineConfig(({ mode }) => {
           // 단일 산출물이라 청크가 필요 없다.
           manualChunks: isVoice || isTest ? undefined : (id) => {
             const p = id.split('?')[0].replace(/\\/g, '/');
+            // 음성 상태 UI는 인증 후 조회할 때 로딩한다. 초기 core 크기를 늘리지 않는다.
+            if (p.endsWith('/frontend/js/voice/status-panel.js')) return 'voice-status';
             // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
             if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';
             // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.

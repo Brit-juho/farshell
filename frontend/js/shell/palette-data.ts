@@ -90,6 +90,7 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
   { label: '사용량', action: 'usage.open', gate: 'usage', isPanel: true },
   { label: '터미널 내 검색', action: 'search.toggle' },
   { label: '음성 전용 모드', action: 'voice.only-toggle', gate: 'voice' },
+  { label: '음성 입력 상태', action: 'voice.status' },
   { label: '새 세션', action: 'session.add-menu' },
   // 2026-09-23(2.1 D6) — 「모든 기능」에서 찾을 수 없던 셋. rail에는 이
   // 셋과 짝지을 data-action 버튼이 없다(설정·세션은 rail이 임베디드

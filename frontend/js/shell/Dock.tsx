@@ -353,6 +353,7 @@ function Dock(props: { deps: DockDeps }) {
           <button type="button" class="vt-dock-tab vt-dock-action vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" data-tip="dock 접기" data-tip-side="bottom" innerHTML={icon('chevron-down', 14, 2)} />
         </Show>
       </div>
+      <div id="vt-dock-voice-status" />
       {/* 탭 내용은 전부 패널 렌더러가 여기 붙인다(panels/panel.js의 dock 호스트). */}
       <div class="vt-dock-body" ref={bodyRef} />
       <div ref={wireResizer} class="vt-dock-resizer" />

@@ -86,9 +86,6 @@ function visibility() {
         if (data?.target && data?.policy) window.voiceRememberSession(data.target.name, data.target.key, data.policy, data.owns);
       }).catch(() => {}).finally(() => lookingUp.delete(name));
   }
-  const btn = document.getElementById('voice-session-settings');
-  const cfg = policies.get(key);
-  if (btn) btn.textContent = cfg?.policy.mode === 'off' || !cfg ? '응답 읽기 설정' : cfg.owns ? '응답 읽기 켜짐' : '세션 음성 설정';
   send({ type: 'voice_visible', keys: !document.hidden && key ? [key] : [] });
 }
 

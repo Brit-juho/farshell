@@ -589,15 +589,37 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #vt-rail-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
 #vt-rail-mic-slot #mic-btn-wrap .label { font-weight:600; }
 
-/* 음성 상태 pill — 상단 바 아래 우측에 떠 있음 */
-#mic-status {
-  position:fixed; top:calc(var(--topbar-popup-y) + env(safe-area-inset-top,0px)); right:12px; z-index:90;
-  max-width:min(320px,82vw); font-size:var(--fs-sm); color:var(--txt);
-  background:var(--menu); border:1px solid var(--line); border-radius:var(--radius-sm);
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3.5); box-shadow:var(--shadow-e2);
-  line-height:1.4; word-break:break-word;
+/* 마이크에 붙는 음성 상태 패널. 기존 상태 노드는 고정 팝업 대신 패널 내용이다. */
+#voice-status-panel {
+  position:fixed; z-index:90; box-sizing:border-box; max-height:calc(100dvh - 24px);
+  overflow:auto; padding:12px; font-size:var(--fs-sm); color:var(--color-txt);
+  background:var(--menu); border:1px solid var(--color-line-strong);
+  border-radius:var(--radius-sm); box-shadow:var(--shadow-e2); line-height:1.5;
 }
+#voice-status-panel[hidden] { display:none; }
+#voice-status-panel.vt-voice-mobile {
+  bottom:calc(64px + env(safe-area-inset-bottom,0px)); max-height:calc(100dvh - 100px);
+}
+.vt-voice-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.vt-voice-server { display:flex; flex-direction:column; gap:2px; }
+#voice-stt-detail { color:var(--color-sub); overflow-wrap:anywhere; }
+#mic-status { margin-top:12px; padding-top:12px; border-top:1px solid var(--color-line); overflow-wrap:anywhere; }
 #mic-status:empty { display:none; }
+.vt-voice-meta { margin:8px 0; color:var(--color-sub); overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.vt-voice-meta:empty { display:none; }
+.vt-voice-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.vt-voice-help { margin:10px 0 0; color:var(--color-sub); font-size:var(--fs-xs); }
+#mic-status .vt-btn { margin:8px 8px 0 0; }
+.vt-voice-summary { display:flex; width:100%; align-items:center; min-height:28px; padding:4px 10px; border:0; border-bottom:1px solid var(--color-line); background:transparent; color:var(--color-sub); font:inherit; font-size:var(--fs-xs); text-align:left; cursor:pointer; }
+.vt-voice-summary:hover { background:var(--menu-hover); color:var(--color-txt); }
+.vt-voice-short { display:none; }
+#vt-dock.collapsed .vt-voice-summary { justify-content:center; padding:4px 0; }
+#vt-dock.collapsed .vt-voice-summary > span:not(.vt-voice-short) { display:none; }
+#vt-dock.collapsed .vt-voice-short { display:inline; }
+@media (pointer:coarse) {
+  #voice-status-panel .vt-btn { min-height:44px; }
+  .vt-voice-summary { min-height:44px; }
+}
 
 /* ---- 연결 상태 pill ---------------------------------------------------- */
 #conn-status {
@@ -656,10 +678,6 @@ body.voice-only-mode #mic-btn-wrap.mic {
 }
 body.voice-only-mode #mic-btn-wrap.mic svg { width:50px; height:50px; }
 body.voice-only-mode #mic-btn-wrap.mic .label { display:block; font-size:var(--fs-base); }
-body.voice-only-mode #mic-status {
-  position:fixed; top:auto; bottom:14%; left:50%; right:auto; transform:translateX(-50%);
-  text-align:center; max-width:80vw; font-size:var(--fs-md); background:transparent; border:none; box-shadow:none;
-}
 
 /* 모바일에서는 상단 바·칸 헤더 없이 활성 터미널 한 칸만 사용한다. */
 @media (max-width:719px) {

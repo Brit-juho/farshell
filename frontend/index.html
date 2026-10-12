@@ -518,7 +518,6 @@
         <span class="label">음성 입력</span>
       </button>
     </div>
-    <button class="vt-btn sm needs-voice" id="voice-session-settings" data-action="voice.settings" aria-label="현재 세션 음성 설정">응답 읽기 설정</button>
     <button class="vt-menu-item mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
       <svg data-icon="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>이어폰 미디어키
     </button>
@@ -536,8 +535,15 @@
        같은 기능의 규칙이 진입점마다 달라진다. term/upload.js가 순차로 올린다. -->
   <input type="file" id="file-input" hidden multiple onchange="uploadFile(this)" />
 
-  <!-- 음성 상태 텍스트 — 상단 바 아래 떠 있는 pill (녹음 중/처리 중/권한 필요/인식 결과) -->
-  <div id="mic-status" role="status" aria-live="polite"></div>
+  <!-- 음성 상태 패널: voice/status-panel.js가 기존 상태 노드를 이 안에 유지한다. -->
+  <section id="voice-status-panel" hidden role="dialog" aria-label="음성 입력 상태">
+    <header class="vt-voice-head"><strong>음성 입력</strong><button type="button" class="vt-btn sm quiet" id="voice-status-close" aria-label="음성 상태 닫기">닫기</button></header>
+    <div class="vt-voice-server"><strong id="voice-stt-state">서버 상태 확인 중</strong><span id="voice-stt-detail"></span></div>
+    <div id="mic-status" role="status" aria-live="polite"></div>
+    <p id="voice-record-meta" class="vt-voice-meta"></p>
+    <div class="vt-voice-actions"><button type="button" class="vt-btn sm" id="voice-panel-record" data-action="voice.record">녹음 시작</button><button type="button" class="vt-btn sm quiet" data-action="voice.settings">모델 · 음성 설정</button></div>
+    <p class="vt-voice-help">녹음은 이 기기에서, 음성 인식은 서버에서 처리합니다. 인식한 문장은 입력 대상에 Enter와 함께 전송됩니다.</p>
+  </section>
   <!-- 전송 실패 시 recording.js가 #mic-status 안으로 옮겨 붙인다(기본 숨김) -->
   <button id="mic-retry-btn" class="vt-btn solid" type="button" hidden style="font-size:13px;margin-left:6px">다시 보내기</button>
 

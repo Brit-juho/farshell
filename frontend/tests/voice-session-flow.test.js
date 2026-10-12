@@ -20,7 +20,8 @@ async function build() {
   const requests = [];
   w.fetch = async (url, opts = {}) => {
     requests.push({ url: String(url), opts });
-    const data = String(url).includes('/stt/status') ? { loaded: true, model: 'm', loaded_model: 'm' }
+    const data = String(url).includes('/stt/status') ? { available: true, selected_valid: true, loaded: true, model: 'm', loaded_model: 'm' }
+      : String(url).includes('/stt/catalog') ? { models: [{ id: 'm', label: '음성 모델', model_present: true, requirements: [] }] }
       : String(url).includes('/stt/preload') ? { loaded: true }
       : String(url).includes('/voice/target') ? { token: 'captured-A', name: 'A' }
       : { text: '명령', injected: true };
@@ -34,6 +35,8 @@ async function build() {
     stop() { this.state = 'inactive'; this.ondataavailable({ data: new w.Blob(['audio']) }); this.onstop(); }
   };
   const cache = new Map();
+  const statusPanel = await importFresh(path.join(__dirname, '../js/voice/status-panel.js'), env.context, cache);
+  statusPanel.mountVoiceStatus();
   const recording = await importFresh(path.join(__dirname, '../js/voice/recording.js'), env.context, cache);
   return { w, recording, requests };
 }
@@ -43,11 +46,16 @@ test('녹음 후 탭이 바뀌어도 시작 때 대상과 토큰으로 보낸다
   await recording.startRecording(); // 준비
   await recording.startRecording(); // 녹음
   assert.strictEqual(recording.isRecording, true);
+  assert.strictEqual(w.document.getElementById('voice-status-panel').hidden, false);
+  assert.match(w.document.getElementById('voice-record-meta').textContent, /입력 대상: A/);
+  assert.strictEqual(w.document.getElementById('voice-panel-record').textContent, '녹음 종료');
   w.activeId = 'B'; recording.stopRecording(); await flush(); await flush();
   const sent = requests.find((r) => r.url.includes('/voice/input'));
   assert.ok(sent.url.includes('session_id=A'));
   assert.strictEqual(sent.opts.headers['X-Voice-Target'], 'captured-A');
   assert.strictEqual(requests.filter((r) => r.url.includes('/voice/input')).length, 1);
+  assert.match(w.document.getElementById('mic-status').textContent, /입력 완료 — A/);
+  assert.match(w.document.getElementById('voice-record-meta').textContent, /입력 대상: A/);
 });
 
 test('자동 재생 차단 후 취소하면 수동 재생 버튼과 오디오를 해제한다', async () => {

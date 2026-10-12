@@ -27,6 +27,8 @@ whenAuthed(() => (async () => {
   try {
     const res = await apiFetch(`${API_BASE}/api/capabilities`);
     const caps = await res.json();
+    import('../voice/status-panel.js').then(({ mountVoiceStatus }) => mountVoiceStatus())
+      .catch((e) => console.warn('[voice] 상태 패널 로드 실패', e));
     // P2: 열람 가능한 루트가 없으면 코드 뷰어 진입점을 숨긴다.
     // (voice와 달리 return보다 먼저 처리해야 음성 미설치 환경에서도 게이팅이 걸린다)
     if (!caps.fs) {

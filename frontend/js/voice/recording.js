@@ -49,10 +49,15 @@ export let isRecording = false;
 let _sttReady = false;
 let _sttPreparing = false;
 
+function stage(phase, targetName) {
+  window.dispatchEvent(new CustomEvent('vt:voice-stage', { detail: { phase, ...(targetName !== undefined ? { target: targetName } : {}) } }));
+}
+
 async function ensureSttReady() {
   if (_sttReady) return true;
   if (_sttPreparing) return false;
   _sttPreparing = true;
+  stage('preparing', '');
   micBtn.querySelector('.label').textContent = '준비 중...';
   micStatus.textContent = '선택한 음성 모델 준비 중…';
   try {
@@ -62,12 +67,15 @@ async function ensureSttReady() {
       _sttReady = true;
       micBtn.querySelector('.label').textContent = '음성 입력';
       micStatus.textContent = '준비 완료 — 마이크를 눌러 녹음';
+      stage('ready');
       return false;  // 이번 탭은 '준비'로 소비. 사용자가 다시 눌러 녹음.
     }
     micBtn.querySelector('.label').textContent = '음성 입력';
     micStatus.textContent = d.error || '음성 준비 실패 — STT가 설치돼 있는지 확인하세요';
+    stage('error');
   } catch (e) {
     micStatus.textContent = '음성 준비 실패 (서버 응답 없음)';
+    stage('error');
   } finally {
     _sttPreparing = false;
   }
@@ -89,6 +97,8 @@ export async function startRecording() {
   }
   if (!_sttReady) { await ensureSttReady(); return; }
   busy = true;
+  micStatus.textContent = '입력 대상과 마이크 확인 중…';
+  stage('starting', '');
   try {
     const ready = await apiFetch(`${API}/voice/stt/status`).then((r) => r.json());
     if (!ready.loaded || ready.loaded_model !== ready.model) {
@@ -102,6 +112,7 @@ export async function startRecording() {
     const captured = await tr.json();
     if (!tr.ok) throw new Error(captured.error || '입력 대상 준비 실패');
     target = { ...captured, sessionId: sid };
+    stage('starting', target.name);
     pauseVoice(true);
     _failedUpload = null;
     hideRetry();
@@ -136,10 +147,12 @@ export async function startRecording() {
     micBtn.classList.add('recording');
     micBtn.querySelector('.label').textContent = '녹음 중...';
     micStatus.textContent = `${target.name}에 녹음 중 — 탭하여 중지 (최대 60초)`;
+    stage('recording', target.name);
   } catch (err) {
     console.error('마이크 접근 실패:', err);
     micStatus.textContent = err.name === 'Error' ? err.message : micErrorMessage(err);
     busy = false; pauseVoice(false);
+    stage('error');
   }
 }
 
@@ -153,6 +166,7 @@ export function stopRecording() {
   micBtn.classList.remove('recording');
   micBtn.querySelector('.label').textContent = '음성 입력';
   micStatus.textContent = '처리 중...';
+  stage('processing');
 }
 
 let _stopAt = 0;
@@ -203,6 +217,7 @@ async function resendFailed() {
   busy = true;
   hideRetry();
   micStatus.textContent = '다시 보내는 중...';
+  stage('processing');
   _stopAt = performance.now();
   try { await uploadWithRetry(); } finally { busy = false; }
 }
@@ -217,7 +232,7 @@ async function uploadWithRetry() {
       // 4xx(인증·형식 거부)는 재시도하지 않는다 — 서버가 준 메시지를 그대로 보여준다.
       micStatus.textContent = (data && data.error) || `전송 실패 (${res.status})`;
     } else if (data && data.text) {
-      micStatus.textContent = data.injected ? `${captured.name}: "${data.text}"` : `입력되지 않음 — ${data.text}`;
+      micStatus.textContent = data.injected ? `입력 완료 — ${captured.name}: "${data.text}"` : `입력되지 않음 — ${data.text}`;
       if (!data.injected && navigator.clipboard) {
         const copy = document.createElement('button'); copy.className = 'vt-btn sm'; copy.textContent = '인식 텍스트 복사';
         copy.onclick = () => navigator.clipboard.writeText(data.text); micStatus.appendChild(copy);
@@ -226,11 +241,12 @@ async function uploadWithRetry() {
       micStatus.textContent = (data && data.error) || '인식 실패';
     }
     // W1-5: 핸즈프리 자동 재시작 분기 제거. 매 녹음은 명시적 클릭으로만.
-    if (data?.injected) setTimeout(() => { if (!isRecording && !busy) micStatus.textContent = ''; }, 3000);
+    stage(res.ok && data?.injected ? 'done' : 'error');
   } catch (err) {
     console.error('음성 전송 실패:', err);
     // 보관(_failedUpload)은 유지 — 버튼으로 같은 blob을 재전송한다.
     showRetry('전송 실패 — ');
+    stage('error');
   }
 }
 

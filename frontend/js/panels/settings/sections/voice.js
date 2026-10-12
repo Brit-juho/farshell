@@ -69,6 +69,11 @@ export function renderVoiceSection() {
 
   // 3. 음성 입력 + 받아 둔 항목 관리 — voice-models.js
   const vm = renderVoiceInput();
+  const statusBtn = document.createElement('button');
+  statusBtn.type = 'button'; statusBtn.className = 'vt-btn sm quiet';
+  statusBtn.textContent = '음성 상태 열기';
+  statusBtn.addEventListener('click', () => getAction('voice.status')?.());
+  vm.input.prepend(row('입력 현황', statusBtn));
 
   // 5. 음성 전용 모드 — 실제 토글 로직·시각 상태(.active)는
   // voice/media-session.js의 toggleVoiceOnly()가 갖고 있다(그 파일은 별도
