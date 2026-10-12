@@ -508,7 +508,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .vt-srow-directory { min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-srow-workspace-kind { flex: none; color: var(--color-sub); }
+  .vt-srow-directory { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-srow-line2 .vt-srow-branch { min-width: 0; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-workspace-details { display: grid; gap: var(--spacing); margin: 0; }
+  .vt-workspace-details dt { color: var(--color-sub); font-size: var(--fs-xs); }
+  .vt-workspace-details dd { margin: 0 0 calc(var(--spacing) * 2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); }
   .vt-srow-directory + .vt-srow-branch::before { content: "· "; }
   .vt-view-group { margin: var(--spacing) 0 calc(var(--spacing) * 2); border-bottom: 1px solid var(--color-line); }
   .vt-view-group-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; min-height: 28px; padding: 0 calc(var(--spacing) * 2.5); }
@@ -524,11 +529,19 @@
   }
   .vt-session-body { display: flex; flex: 1; min-width: 0; flex-direction: column; }
   .vt-session-body .vt-session-select { width: 100%; text-align: left; }
-  .vt-session-meta { display: block; font-size: var(--fs-xs); color: var(--color-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-session-meta { display: block; width: 100%; text-align: left; padding: 0; background: transparent; border: 0; font: inherit; font-size: var(--fs-xs); color: var(--color-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .vt-session-meta:focus-visible { outline: 2px solid var(--color-acc); }
+  .vt-card button.card-meta { width: 100%; text-align: left; padding: 0; border: 0; background: transparent; cursor: pointer; }
   .vt-session-error { font-size: var(--fs-xs); color: var(--color-sub); }
   @media (pointer: coarse), (max-width: 719px) {
+    .vt-session-meta, .vt-card button.card-meta { min-height: 44px; }
+    .vt-srow-line2 { flex-wrap: wrap; }
+    .vt-srow-line2 .vt-srow-directory { flex-basis: 45%; }
     .vt-view-group-title, .vt-view-group-rename { min-height: 44px; }
     .vt-view-group-rename { min-width: 44px; opacity: 1; }
+  }
+  @media (max-width: 420px) {
+    .vt-srow-line2 .vt-srow-meta { display: none; }
   }
   /* 상태 키워드 — 짧게 고정이라 잘리지 않는다. 색은 상태 아이콘과 같은 토큰. */
   .vt-srow-kw { flex: none; color: var(--color-muted); font-weight: var(--weight-medium); }

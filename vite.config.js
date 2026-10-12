@@ -153,7 +153,10 @@ export default defineConfig(({ mode }) => {
           // 단일 산출물이라 청크가 필요 없다.
           manualChunks: isVoice || isTest ? undefined : (id) => {
             const p = id.split('?')[0].replace(/\\/g, '/');
+            // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
+            if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';
             // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.
+            if (p.endsWith('/frontend/js/ui/session-context.js')) return 'shell';
             if (p.endsWith('/frontend/js/term/tab-worktree.js')) return 'shell';
             if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
             // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
@@ -197,6 +200,7 @@ export default defineConfig(({ mode }) => {
             // 빈 칸 클릭 시 열리는 세션 선택 시트(layout/panes.js가 지연 import).
             if (p.endsWith('/frontend/js/layout/pane-picker.js')) return 'screens';
             // 모바일 세션 시트의 목록 렌더링 전부(picker.js가 시트를 열 때 지연 import)와 그 안의 뷰 순서 편집.
+            if (p.endsWith('/frontend/js/ui/workspace-details.js')) return 'screens';
             if (p.endsWith('/frontend/js/layout/session-sheet.js')) return 'screens';
             if (p.endsWith('/frontend/js/layout/session-order.js')) return 'screens';
             // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야

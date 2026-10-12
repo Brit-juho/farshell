@@ -55,7 +55,7 @@
   // xterm 수식 파라미터: 1 + Shift(1) + Alt(2) + Ctrl(4).
   function modParam(mods) {
     if (!mods) return 1;
-    return 1 + (mods.shift ? 1 : 0) + (mods.alt ? 2 : 0) + (mods.ctrl ? 4 : 0);
+    return 1 + (mods.shift ? 1 : 0) + (mods.alt ? 2 : 0) + (mods.ctrl ? 4 : 0) + (mods.meta ? 8 : 0);
   }
 
   // 키바 버튼 → 최종 전송 시퀀스. opts: { key, seq, mods: { ctrl, alt, shift } }

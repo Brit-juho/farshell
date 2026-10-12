@@ -143,6 +143,7 @@ test('Ctrl+Shift+V — paste 이벤트가 없는 브라우저에서는 Clipboard
   K.register('paste', () => Clip.queueNativePasteFallback('a'));
   const wrapper = window.document.getElementById('w');
   Sel.wireClipboard('a', fakeTerm(), wrapper);
+  wrapper.id = 'term-a'; wrapper.querySelector('textarea').focus();
   wrapper.querySelector('textarea').dispatchEvent(new window.KeyboardEvent('keydown', {
     key: 'V', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
   }));
@@ -170,12 +171,12 @@ test('터미널에도 전달 — 코드 뷰어와 재지정한 붙여넣기 액�
       bubbles: true, cancelable: true,
     });
     textarea.dispatchEvent(event);
-    assert.strictEqual(term.keyHandler(event), true);
+    assert.strictEqual(term.keyHandler(event), false, '원본 키는 막고 전달용 키만 인코딩한다');
     assert.strictEqual(runs, 1, `${id} 액션이 문서와 xterm에서 중복 실행되면 안 된다`);
   }
 });
 
-test('붙일 것이 없으면 가로채지 않는다 — xterm 기본 동작을 막지 않는다', async () => {
+test('빈 붙여넣기도 처리 완료로 소비한다 — xterm 중복 경로를 막는다', async () => {
   const { window, S, Sel } = await load();
   const sock = new FakeOpenSocket();
   S.registerSession('a', { ws: sock });
@@ -188,7 +189,7 @@ test('붙일 것이 없으면 가로채지 않는다 — xterm 기본 동작을 
   window.document.querySelector('textarea').dispatchEvent(pasteEvent(window, ''));
 
   assert.strictEqual(sock.sent.length, 0);
-  assert.strictEqual(xtermPastes, 1);
+  assert.strictEqual(xtermPastes, 0);
 });
 
 // 2026-09-23 — 예전엔 "선택 모드일 때만" contextmenu(Android 롱프레스)를

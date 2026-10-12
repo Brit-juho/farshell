@@ -4,25 +4,17 @@
 //
 // 특히 `Mod+F`는 셸에서 `forward-char`인데 웹이 가로채고 사용자가 되돌릴 방법이
 // 없었다 — 그래서 이 파일의 핵심 기능은 재바인딩이 아니라 **`passthrough`**다:
-// "이 키는 내가 안 먹고 터미널에 그대로 넘긴다"를 사용자가 선택할 수 있어야 한다.
+// 기존 passthrough는 앱과 터미널 양쪽 실행이다. terminal 전달 모드는 앱을 실행하지 않는다.
 //
 // 표기법: `Mod+Shift+F` 형태. `Mod`는 macOS에서 Cmd, 그 외에서 Ctrl로 해석된다
-// (두 플랫폼에 각각 기본값을 적지 않아도 되고, 사용자가 바꾼 값도 그대로 이식된다).
+// 명시적 Meta/Ctrl은 구분하고, 사용자 설정은 기기 종류별 V2로 저장한다.
 import { icon } from '../ui/icons.js';
 import { get as setting, set as setSetting, subscribe as onSettings } from './settings.js';
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
-
-// PWA standalone(홈 화면에서 실행)인지. 일반 브라우저 탭에서는 `Mod+W`처럼
-// 브라우저가 먼저 먹는 키를 **가로챌 수 없다** — 조용히 안 되는 게 최악이므로
-// 그런 바인딩은 아예 비활성으로 표시하고 설정 화면에서 그 사실을 알린다.
-export function isStandalone() {
-  try {
-    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  } catch (_) {
-    return false;
-  }
-}
+import { isMacKeyboard as IS_MAC, isStandalone } from './platform.js';
+import { physicalKey, isComposingKey } from './keyboard-event.js';
+import { decideKey, wireKeyboardRouter, forwardTerminalKey } from './keyboard-router.js';
+export { isStandalone };
 
 // 브라우저가 먼저 소비해 일반 탭에서는 가로챌 수 없는 조합.
 // (`Mod+W` 탭 닫기, `Mod+N` 새 창, `Mod+T` 새 탭, `Mod+Q` 종료,
@@ -91,16 +83,22 @@ const BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
 // 스키마를 항목마다 만들면 스키마가 키맵의 사본이 되어 반드시 어긋난다.
 const STORE_KEY = 'keymap.overrides';
 
+const DEVICE_KEY = 'keymap.bindingsV2';
 function _overrides() {
-  const raw = setting(STORE_KEY);
-  if (!raw) return {};
   try {
-    return typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch (_) {
-    return {};
-  }
+    const v2 = JSON.parse(setting(DEVICE_KEY) || 'null');
+    if (v2?.version === 2 && v2.bindings && typeof v2.bindings === 'object' && !Array.isArray(v2.bindings)) return v2.bindings;
+  } catch (_) { /* 손상된 V2로 기존 바인딩까지 잃지 않는다. */ }
+  try {
+    const raw = setting(STORE_KEY);
+    const old = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw;
+    return old && typeof old === 'object' && !Array.isArray(old) ? old : {};
+  } catch (_) { return {}; }
 }
-
+function saveOverrides(bindings) {
+  // 최초 편집 때 기존 global을 복사한다. 원본은 롤백/다른 기기용으로 남긴다.
+  return setSetting(DEVICE_KEY, JSON.stringify({ version: 2, bindings }));
+}
 // 이 플랫폼의 기본 조합. 사용자가 바꾼 값(재정의)이 없을 때만 쓰인다 —
 // 재정의는 플랫폼과 무관하게 저장한 그대로 이식된다(파일 머리 주석의 약속).
 function _defaultCombo(spec) {
@@ -117,10 +115,12 @@ export function getBinding(id) {
     id,
     label: spec.label,
     combo: ov.binding || def,
-    passthrough: ov.passthrough ?? false,
-    isDefault: !ov.binding && ov.passthrough === undefined,
+    passthrough: ov.delivery === 'app-and-terminal' || (ov.delivery == null && (ov.passthrough ?? false)),
+    delivery: ov.delivery || (ov.passthrough ? 'app-and-terminal' : 'app'),
+    keyKind: ov.keyKind || (/^[a-z0-9]$/i.test(normalize(ov.binding || def).split('+').at(-1)) ? 'code' : 'key'),
+    isDefault: !ov.binding && ov.passthrough === undefined && !ov.delivery,
     // 일반 브라우저 탭에서 이 조합이 가로채지지 않는다면 그 사실을 함께 알린다.
-    unavailable: isBrowserReserved(ov.binding || def) && !isStandalone(),
+    unavailable: isBrowserReserved(ov.binding || def),
   };
 }
 
@@ -142,25 +142,25 @@ export function conflicts() {
   return out;
 }
 
-export function setBinding(id, combo) {
+export function setBinding(id, combo, keyKind) {
   if (!BY_ID.has(id)) return Promise.resolve(false);
   const ov = { ..._overrides() };
-  ov[id] = { ...(ov[id] || {}), binding: combo || undefined };
+  ov[id] = { ...(ov[id] || {}), binding: combo || undefined, keyKind: keyKind || (/^[a-z0-9]$/i.test(normalize(combo).split('+').at(-1)) ? 'code' : 'key') };
   if (!combo) delete ov[id].binding;
-  return setSetting(STORE_KEY, JSON.stringify(ov));
+  return saveOverrides(ov);
 }
 
 export function setPassthrough(id, on) {
   if (!BY_ID.has(id)) return Promise.resolve(false);
   const ov = { ..._overrides() };
-  ov[id] = { ...(ov[id] || {}), passthrough: !!on };
-  return setSetting(STORE_KEY, JSON.stringify(ov));
+  ov[id] = { ...(ov[id] || {}), delivery: on ? 'app-and-terminal' : 'app' };
+  return saveOverrides(ov);
 }
 
 export function reset(id) {
   const ov = { ..._overrides() };
   delete ov[id];
-  return setSetting(STORE_KEY, JSON.stringify(ov));
+  return saveOverrides(ov);
 }
 
 // ── 매칭 ──────────────────────────────────────────────────────────────────
@@ -182,39 +182,39 @@ export function normalize(combo) {
   for (const p of parts) {
     const low = p.toLowerCase();
     if (low === 'mod' || low === 'ctrl' || low === 'control' || low === 'cmd' || low === 'meta' || low === 'shift' || low === 'alt' || low === 'option') {
-      let m = low === 'control' ? 'ctrl' : low === 'cmd' || low === 'meta' ? 'mod' : low === 'option' ? 'alt' : low;
+      let m = low === 'control' ? 'ctrl' : low === 'cmd' || low === 'meta' ? (IS_MAC ? 'mod' : 'meta') : low === 'option' ? 'alt' : low;
       if (m === 'ctrl' && !IS_MAC) m = 'mod';
       mods.add(m);
     } else {
       key = p.length === 1 ? low : p;   // 한 글자는 소문자, ArrowLeft 등은 원형
     }
   }
-  const order = ['mod', 'ctrl', 'alt', 'shift'];
+  const order = ['mod', 'meta', 'ctrl', 'alt', 'shift'];
   return [...order.filter((m) => mods.has(m)), key].join('+');
 }
 
 // KeyboardEvent → 표준형 조합 문자열.
-export function comboFromEvent(e) {
+export function comboFromEvent(e, keyKind = 'code') {
   const mods = [];
   const modPressed = IS_MAC ? e.metaKey : e.ctrlKey;
   if (modPressed) mods.push('mod');
-  if (!IS_MAC && e.metaKey) mods.push('mod');           // 리눅스/윈도의 Meta도 Mod로
+  if (!IS_MAC && e.metaKey) mods.push('meta');           // 리눅스/윈도의 Meta도 Mod로
   if (e.ctrlKey && IS_MAC) mods.push('ctrl');           // macOS에서 Ctrl은 Mod와 별개
   if (e.altKey) mods.push('alt');
   if (e.shiftKey) mods.push('shift');
-  let key = e.key;
+  let key = keyKind === 'code' ? physicalKey(e) : e.key;
   if (key === ' ') key = 'Space';
   if (key && key.length === 1) key = key.toLowerCase();
-  const order = ['mod', 'ctrl', 'alt', 'shift'];
+  const order = ['mod', 'meta', 'ctrl', 'alt', 'shift'];
   return [...order.filter((m) => mods.includes(m)), key].join('+');
 }
 
 // 눌린 키가 어떤 액션인지. 없으면 null.
 export function match(e) {
-  const combo = comboFromEvent(e);
+  if (isComposingKey(e) || e.getModifierState?.('AltGraph') || e.altGraph) return null;
   for (const b of list()) {
     if (b.unavailable) continue;      // 일반 탭에서 못 잡는 조합은 매칭도 안 한다
-    if (normalize(b.combo) === combo) return b;
+    if (normalize(b.combo) === comboFromEvent(e, b.keyKind)) return b;
   }
   return null;
 }
@@ -235,7 +235,6 @@ export function isNativePasteShortcut(e, binding) {
     && normalize(binding.combo) === comboFromEvent(e);
 }
 
-const TAB_ACTIONS = new Set(['tabPrev', 'tabNext', 'tabMovePrev', 'tabMoveNext']);
 function isTextField(target) {
   return target instanceof Element && !target.closest('.xterm')
     && Boolean(target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
@@ -244,9 +243,10 @@ function isTextField(target) {
 // ── 실행 ──────────────────────────────────────────────────────────────────
 const _handlers = new Map();
 
-// 액션 하나에 실행 함수를 등록한다. 같은 id에 두 번 등록하면 나중 것이 이긴다
+// 액션 하나에 실행 함수를 등록한다. 같은 id의 중복 등록은 경고하고 마지막 함수를 사용한다
 // (모듈 재평가 대비 — 테스트에서 특히).
 export function register(id, fn) {
+  if (_handlers.has(id) && _handlers.get(id) !== fn) console.warn(`[keymap] ${id} 실행 함수가 중복 등록되었습니다`);
   _handlers.set(id, fn);
   return () => { if (_handlers.get(id) === fn) _handlers.delete(id); };
 }
@@ -262,52 +262,37 @@ export function invoke(id) {
 
 // document capture 단계에서 한 번만 듣는다. 여기저기서 각자 keydown을 듣던 것을
 // 이 한 곳으로 모으는 것이 S3의 목적이다.
-export function handleKeydown(e) {
-  const b = match(e);
-  if (!b) return false;
-  // 일반 입력창의 붙여넣기는 그 입력창 몫이다. xterm의 숨은 textarea는
-  // isTextField에서 제외돼 터미널 붙여넣기 경로를 계속 탄다.
-  if (b.id === 'paste' && isTextField(e.target)) return false;
-  // 탭 이동 핸들러는 편집 중 실행을 건너뛴다. 키 기본동작도 함께 살려야
-  // Shift+화살표 텍스트 선택을 막지 않는다.
-  if (TAB_ACTIONS.has(b.id) && isTextField(e.target)) return false;
+function dispatchKey(e, decision, allowed) {
+  const b = match(decision.stroke);
+  if (!b || (allowed && !allowed.includes(b.id))) return;
+  if (isTextField(e.target) && !allowed?.includes(b.id) && !['palette', 'settings'].includes(b.id)) { decision.owner = 'editor'; return; }
+  if (e.repeat) { decision.owner = 'app'; decision.terminal = 'block'; decision.consumed = true; return; }
   const fn = _handlers.get(b.id);
-  if (!fn) return false;
+  if (!fn && b.delivery !== 'terminal') return;
   const nativePaste = isNativePasteShortcut(e, b);
-  // 브라우저 기본 단축키는 어느 경우든 막는다. passthrough는 전파만 남겨
-  // xterm이 같은 키를 PTY로 보내게 한다(예: Ctrl+F → forward-char).
-  // 네이티브 붙여넣기만 예외: paste 이벤트가 올 기회를 주고, 오지 않는
-  // 브라우저는 핸들러의 지연 Clipboard API 폴백으로 처리한다.
-  if (!nativePaste) {
-    e.preventDefault();
-    if (!b.passthrough) e.stopPropagation();
+  const target = e.target;
+  Object.assign(decision, { owner: nativePaste ? 'native' : 'app', actionId: b.id,
+    terminal: nativePaste ? 'default' : 'block', consumed: !nativePaste });
+  if (b.delivery !== 'terminal') {
+    try { fn?.(e); } catch (err) { console.warn(`[keymap] ${b.id} 실행 실패:`, err); }
   }
-  try {
-    fn(e);
-  } catch (err) {
-    console.warn(`[keymap] ${b.id} 실행 실패:`, err);
-  }
-  return !nativePaste && !b.passthrough;
+  if (!nativePaste && b.delivery !== 'app') forwardTerminalKey(target, e, decision.stroke, decision.targetContext);
 }
-
-let _wired = false;
-export function wire() {
-  if (_wired || typeof document === 'undefined') return;
-  _wired = true;
-  document.addEventListener('keydown', handleKeydown, true);
+export function setDelivery(id, delivery) {
+  if (!BY_ID.has(id) || !['app', 'app-and-terminal', 'terminal'].includes(delivery)) return Promise.resolve(false);
+  const ov = { ..._overrides() };
+  ov[id] = { ...(ov[id] || {}), delivery };
+  return saveOverrides(ov);
 }
-
-// 모듈 평가 시점에 바로 건다. 등록(register) 순서와 무관하다 — handleKeydown이
-// 키를 받은 **그 순간** 핸들러 맵을 조회하기 때문이다. 이렇게 해두면 이 모듈을
-// import한 것만으로 단축키가 살아나서, 일부 모듈만 로드하는 단위 테스트에서도
-// 실제와 같은 경로가 성립한다(quickopen.test.js가 그 케이스).
+export function handleKeydown(e) { return decideKey(e).consumed; }
+export function wire() { wireKeyboardRouter(dispatchKey); }
 wire();
 
 // 설정이 바뀌면(다른 기기에서 재바인딩 등) 다음 키 입력부터 자동으로 새 값이
 // 적용된다 — list()/match()가 매번 스토어를 읽기 때문에 별도 갱신이 필요 없다.
 // 구독은 충돌 경고를 콘솔에 한 번 남기기 위한 것뿐이다.
 onSettings((changed) => {
-  if (!changed || !(STORE_KEY in changed)) return;
+  if (!changed || !(STORE_KEY in changed) && !(DEVICE_KEY in changed)) return;
   const c = conflicts();
   if (Object.keys(c).length) console.warn('[keymap] 충돌:', c);
 });
@@ -319,32 +304,26 @@ onSettings((changed) => {
 const _KEY_ICON = { ArrowLeft: 'arrow-left', ArrowRight: 'arrow-right', ArrowUp: 'arrow-up', ArrowDown: 'arrow-down', Enter: 'key-enter' };
 const _MOD_ICON = { mod: 'key-command', shift: 'key-shift', alt: 'key-option', ctrl: 'key-ctrl' };
 const _esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-export function displayComboHtml(combo) {
-  const parts = String(combo || '').split('+').filter(Boolean).map((p) => {
-    const low = p.toLowerCase();
-    const name = _KEY_ICON[p] || (IS_MAC ? _MOD_ICON[low] : null);
-    if (name) return `<span class="vt-key vt-key-icon">${icon(name, 13, 2)}</span>`;
-    const text = low === 'mod' || low === 'ctrl' ? 'Ctrl' : low === 'shift' ? 'Shift' : low === 'alt' ? 'Alt'
-      : (p.length === 1 ? p.toUpperCase() : p);
-    return `<span class="vt-key">${_esc(text)}</span>`;
+function comboTokens(combo) {
+  return String(combo || '').split('+').filter(Boolean).map((p) => {
+    let low = p.toLowerCase();
+    if (low === 'cmd') low = 'meta';
+    if (low === 'control') low = 'ctrl';
+    if (low === 'option') low = 'alt';
+    const modifier = low === 'mod' ? (IS_MAC ? 'meta' : 'ctrl') : low;
+    const glyphs = { meta: '⌘', ctrl: '⌃', alt: '⌥', shift: '⇧' };
+    const names = { meta: 'Meta', ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift' };
+    const arrows = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓' };
+    return { text: names[modifier] || (p.length === 1 ? p.toUpperCase() : p),
+      glyph: (IS_MAC && glyphs[modifier]) || arrows[p],
+      icon: _KEY_ICON[p] || (IS_MAC ? (modifier === 'meta' ? 'key-command' : _MOD_ICON[modifier]) : null) };
   });
-  return parts.join(IS_MAC ? '' : '<span class="vt-key-sep">+</span>');
 }
-
+export function displayComboHtml(combo) {
+  return comboTokens(combo).map((p) => p.icon
+    ? `<span class="vt-key vt-key-icon">${icon(p.icon, 13, 2)}</span>`
+    : `<span class="vt-key">${_esc(p.text)}</span>`).join(IS_MAC ? '' : '<span class="vt-key-sep">+</span>');
+}
 export function displayCombo(combo) {
-  return String(combo || '')
-    .split('+')
-    .map((p) => {
-      const low = p.toLowerCase();
-      if (low === 'mod') return IS_MAC ? '⌘' : 'Ctrl';
-      if (low === 'shift') return IS_MAC ? '⇧' : 'Shift';
-      if (low === 'alt') return IS_MAC ? '⌥' : 'Alt';
-      if (low === 'ctrl') return IS_MAC ? '⌃' : 'Ctrl';
-      if (p === 'ArrowLeft') return '←';
-      if (p === 'ArrowRight') return '→';
-      if (p === 'ArrowUp') return '↑';
-      if (p === 'ArrowDown') return '↓';
-      return p.length === 1 ? p.toUpperCase() : p;
-    })
-    .join(IS_MAC ? '' : '+');
+  return comboTokens(combo).map((p) => p.glyph || p.text).join(IS_MAC ? '' : '+');
 }

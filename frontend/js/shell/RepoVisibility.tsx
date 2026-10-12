@@ -1,3 +1,4 @@
+import { pushScope } from '../core/keyboard-scopes.js';
 // 98-rail-repos-2.1.6.md §3 → ADR-29 C — 「저장소 표시」였던 시트가 **저장소→
 // 워크트리→세션** 3단 관리 시트로 넓어졌다. ADR-29 B가 레일 행을 세션으로
 // 되돌리면서 레일에서 워크트리 만들기·삭제·열기가 설 자리를 잃었다 — 그 셋을
@@ -197,14 +198,17 @@ export function RepoVisibility(props: Props) {
   };
 
   const onDocKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !wtDialogRepo()) props.onClose(); };
-  document.addEventListener('keydown', onDocKey);
-  onCleanup(() => document.removeEventListener('keydown', onDocKey));
+  let scopeElement!: HTMLDivElement;
+  const disposeKeys = pushScope({ element: () => scopeElement, id: 'RepoVisibility', modal: true, onKey: (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { onDocKey(e); return true; }
+  } });
+  onCleanup(disposeKeys);
 
   const onBackdropClick = (e: MouseEvent) => { if (e.target === e.currentTarget) props.onClose(); };
 
   return (
     <>
-      <div class="vt-viewer-backdrop vt-wtd-backdrop" onClick={onBackdropClick}>
+      <div ref={scopeElement} class="vt-viewer-backdrop vt-wtd-backdrop" onClick={onBackdropClick}>
         <div class="vt-viewer-card vt-wtd-card vt-repovis-card" role="dialog" aria-modal="true" aria-label={props.title || '저장소 관리'}>
           <div class="vt-wtd-head">
             <span class="vt-wtd-title">{props.title || '저장소 관리'}</span>

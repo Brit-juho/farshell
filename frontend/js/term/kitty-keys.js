@@ -1,3 +1,4 @@
+import '../lib/keyseq.js';
 // N12 — kitty 키보드 프로토콜(진행형 향상, "CSI u").
 //
 // 왜 필요한가: 레거시 터미널 입력 인코딩에는 자리가 없어서 아예 전달되지
@@ -21,9 +22,7 @@
 //   1 disambiguate escape codes   2 report event types
 //   4 report alternate keys       8 report all keys as escape codes
 //   16 report associated text
-// 우리는 **1만 소비한다** — 나머지는 받아서 그대로 보관하고 질의에 되돌려
-// 준다(앱이 자기가 켠 값을 다시 읽을 수 있어야 한다). 소비하지 않는 플래그를
-// 켰다고 해서 우리가 그 동작을 하는 척하면 그게 더 나쁘다.
+// 구현·광고하는 플래그는 **1만**이다. 미구현 플래그는 저장/질의에서도 제거한다.
 
 // ── 1층: 인코딩 ────────────────────────────────────────────────────────────
 
@@ -36,11 +35,7 @@ const SPECIAL = {
 
 /** kitty의 수정자 비트 — 값은 "1 + 비트합"이다(수정자가 없으면 1). */
 export function modifierValue(e) {
-  return 1
-    + (e.shiftKey ? 1 : 0)
-    + (e.altKey ? 2 : 0)
-    + (e.ctrlKey ? 4 : 0)
-    + (e.metaKey ? 8 : 0);
+  return globalThis.VTKeySeq.modParam({ shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, meta: e.metaKey });
 }
 
 /**
@@ -90,8 +85,10 @@ export function keyCodePoint(key) {
  * 앱에 쓰레기가 들어가지 않는다"를 보장하는 지점이다.
  */
 export function encodeKey(e, flags) {
-  if (!(flags & 1)) return null;
+  if (!(flags & 1) || e.isComposing || e.keyCode === 229 || e.getModifierState?.('AltGraph')) return null;
   if (e.type !== 'keydown') return null;
+  // Option 생성 문자에서 레이아웃의 기본키를 추측하지 않는다. xterm에 위임한다.
+  if (e.altKey && /[^\x00-\x7f]/.test(e.key || '')) return null;
   const key = e.key;
   if (!key || key === 'Dead' || key === 'Unidentified') return null;
   // 수정자 키 자체는 보내지 않는다(report all keys=8을 소비하지 않으므로).
@@ -160,7 +157,7 @@ export class KittyKeyState {
 function _sane(v) {
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0) return 0;
-  return n & 31;    // 정의된 플래그 5비트만
+  return n & 1;    // 구현한 disambiguation만 광고한다
 }
 
 /**

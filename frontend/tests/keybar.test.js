@@ -63,8 +63,10 @@ async function buildWindow({ coarse = false, search = '', visualViewport = null 
   const domNs = await importFresh(DOM_JS, env.context, cache);
   const store = await importFresh(CORE_STORE_JS, env.context, cache);
   const keybarNs = await importFresh(KEYBAR_JS, env.context, cache);
+  await keybarNs.initKeybar();
+  const keyboard = await importFresh(path.join(__dirname, '../js/term/keyboard-input.js'), env.context, cache);
 
-  return { window, dom: domNs, store, vv, ...keybarNs };
+  return { window, dom: domNs, store, vv, keyboard, ...keybarNs };
 }
 
 test('데스크톱(포인터 정밀) — keybar는 hidden 그대로, 마이크는 rail 설정 슬롯에 남는다', async () => {
@@ -130,9 +132,10 @@ async function buildWired() {
   const sent = [];
   const decoder = new TextDecoder();
   env.store.registerSession('s1', {
-    term: { focus() {}, blur() {}, getSelection() { return ''; }, clearSelection() {} },
+    term: { focus() {}, blur() {}, getSelection() { return ''; }, clearSelection() {}, input(data) { sent.push(data); }, attachCustomKeyEventHandler() {} },
     wsHandle: { readyState: 1, send(data) { sent.push(typeof data === 'string' ? data : decoder.decode(data)); } },
   });
+  env.keyboard.wireKeyboardInput('s1', env.store.getSession('s1').term, env.window.document.getElementById('keybar'));
   env.store.setActive('s1');
   const doc = env.window.document;
   const btn = (sel) => doc.querySelector(sel);

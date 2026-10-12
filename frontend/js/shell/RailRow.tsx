@@ -211,6 +211,7 @@ export function Row(props: {
         </div>
         <Show when={props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable'}>
           <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
+            <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? '별도 워크트리' : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
             <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
             <Show when={branch()}><span class="vt-srow-branch" data-tip={`브랜치 · ${branch()}`} data-tip-side="right">{branch()}</span></Show>
             <Show when={diff()}><span class="vt-srow-meta vt-wgrail-diff">{diff()}</span></Show>
@@ -262,9 +263,13 @@ export interface MenuItem {
 /** `summary`: 맨 위의 선택 불가 요약 한 줄(행 메뉴 — rail-data.ts rowSummary). aria 로도 읽힌다. */
 export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[]; summary?: string }) {
   let ref: HTMLDivElement | undefined;
+  const previousFocus = document.activeElement as HTMLElement | null;
   const onDocClick = (e: MouseEvent) => { if (ref && !ref.contains(e.target as Node)) props.onClose(); };
   document.addEventListener('mousedown', onDocClick, true);
-  onCleanup(() => document.removeEventListener('mousedown', onDocClick, true));
+  onCleanup(() => {
+    document.removeEventListener('mousedown', onDocClick, true);
+    if (ref?.contains(document.activeElement) && previousFocus?.isConnected) previousFocus.focus();
+  });
   // 가로 폰(보이는 높이 331px)에서 아래쪽 행의 메뉴가 뷰포트 밖으로 넘쳐 항목에 닿을 수
   // 없었다(2026-10-06 폰 실측). 그려진 뒤 크기를 재서 안으로 당기고, 그래도 넘치면 스크롤.
   onMount(() => {
@@ -279,10 +284,19 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
     const h = Math.min(r.height, vh - pad * 2);
     ref.style.top = `${Math.max(pad, Math.min(props.y, vh - h - pad))}px`;
     ref.style.left = `${Math.max(pad, Math.min(props.x, vw - r.width - pad))}px`;
+    ref.querySelector<HTMLElement>('.vt-menu-item')?.focus();
   });
 
   return (
-    <div ref={ref} class="vt-menu" style={{ left: `${props.x}px`, top: `${props.y}px`, right: 'auto' }}>
+    <div ref={ref} class="vt-menu" style={{ left: `${props.x}px`, top: `${props.y}px`, right: 'auto' }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') { e.stopPropagation(); props.onClose(); return; }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault(); e.stopPropagation();
+        const items = Array.from(ref?.querySelectorAll<HTMLElement>('.vt-menu-item') || []);
+        const index = items.indexOf(document.activeElement as HTMLElement);
+        items[(index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+      }}>
       <Show when={props.summary}>
         <div class="vt-menu-summary" role="note" aria-label={`요약: ${props.summary}`}>{props.summary}</div>
       </Show>
@@ -290,6 +304,11 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
         {(it) => (
           <div
             class="vt-menu-item"
+            role="button" tabindex="0"
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault(); e.stopPropagation(); props.onClose(); it.run();
+            }}
             classList={{ dim: !!it.dim, checked: !!it.checked, danger: !!it.danger }}
             onClick={() => { props.onClose(); it.run(); }}
           >

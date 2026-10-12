@@ -22,7 +22,7 @@
 import { get as setting, subscribe as onSettings } from '../core/settings.js';
 import { allSessions } from '../core/store.js';
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
+import { isMacKeyboard as IS_MAC } from '../core/platform.js';
 
 // 세션별 정리 함수 — 설정을 다시 켜면 되돌린다.
 const _wired = new WeakMap();

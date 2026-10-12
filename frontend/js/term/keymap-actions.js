@@ -33,7 +33,7 @@ registerKey('paneEven', () => evenRatios());
 registerKey('paste', (e) => {
   const id = focusedTerminalSessionId() || activeSessionId();
   if (!id) return;
-  if (e && isNativePasteShortcut(e, getBinding('paste'))) queueNativePasteFallback(id);
+  if (e && isNativePasteShortcut(e, getBinding('paste'))) queueNativePasteFallback(id, e);
   else pasteFromClipboard(id);
 });
 

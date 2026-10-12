@@ -1,3 +1,4 @@
+import { pushScope } from '../core/keyboard-scopes.js';
 // N5/N40/N46(60-settings-palette.md §3) — 커맨드 팔레트 전면 통합. 구
 // quickopen.js(vanilla) + search.js(인페인 검색바 자체는 term/search-bar.js로
 // 남고, 팔레트로 여는 진입점만 여기로 옮겨왔다)를 하나로.
@@ -646,6 +647,8 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
   const [currentMode, setCurrentMode] = createSignal<PaletteMode>('default');
 
   let bodyApi: any = null;
+  let disposeKeys: (() => void) | null = null;
+  onCleanup(() => disposeKeys?.());
 
   function onResize() { setWide(window.innerWidth >= 900); }
   window.addEventListener('resize', onResize);
@@ -653,10 +656,11 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
 
   function close() {
     setVisible(false);
-    document.removeEventListener('keydown', onKeydown, true);
+    disposeKeys?.(); disposeKeys = null;
   }
 
   function onKeydown(ev: KeyboardEvent) {
+    if ((ev.target as Element)?.closest?.('.vt-dialog, button.card-meta')) return;
     if (ev.key === 'Escape') { ev.preventDefault(); close(); return; }
     if (ev.key === 'ArrowDown') { ev.preventDefault(); bodyApi?.selectAndFire(1); return; }
     if (ev.key === 'ArrowUp') { ev.preventDefault(); bodyApi?.selectAndFire(-1); return; }
@@ -678,7 +682,8 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
       setQuery('');
     }
     setVisible(true);
-    document.addEventListener('keydown', onKeydown, true);
+    disposeKeys?.();
+    disposeKeys = pushScope({ id: 'palette', modal: true, onKey: onKeydown, allowActions: ['palette', 'search'] });
   }
 
   const api: PaletteApi = { open, close, isOpen: visible };

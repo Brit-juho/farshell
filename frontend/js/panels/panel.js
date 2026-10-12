@@ -1,3 +1,4 @@
+import { pushScope } from '../core/keyboard-scopes.js';
 import { icon } from '../ui/icons.js';
 // N38 — dock이 CSS로 숨는 문턱과 정확히 같은 조건이어야 한다(styles/layers/
 // legacy.css의 `#vt-dock`는 `@media (min-width:720px)`에서만 display:flex —
@@ -212,7 +213,7 @@ export function openPanel(opts) {
           if (opts.onKey && opts.onKey(ev) === true) return;
           ev.stopPropagation();
           closePanel(opts.id);
-          return;
+          return true;
         }
         // D7: 포커스 트랩 — Tab이 배경(터미널 등)으로 새지 않게 첫/끝 사이를 순환시킨다.
         if (!modal || ev.key !== 'Tab') return;
@@ -229,7 +230,8 @@ export function openPanel(opts) {
         }
       };
       el._vtKeyHandler = keyHandler;
-      document.addEventListener('keydown', keyHandler);
+      el._vtDisposeKeys = pushScope({ id: opts.id, element: el, modal, onKey: keyHandler,
+        enabled: () => modal || el.contains(document.activeElement) });
       (opts.mount || document.body).appendChild(el);
 
       if (mobileRoute) {
@@ -268,7 +270,7 @@ export function closePanel(idOrEl, options = {}) {
       // 폴링과 짝인 visibilitychange 리스너 — 같이 떼지 않으면 닫힌 패널의
       // 핸들러가 document에 남는다(탭을 오갈 때마다 쌓인다).
       if (el._vtOnVisible) document.removeEventListener('visibilitychange', el._vtOnVisible);
-      document.removeEventListener('keydown', el._vtKeyHandler);
+      el._vtDisposeKeys?.();
       el.remove();
       if (el._vtOnClose) el._vtOnClose();
       document.dispatchEvent(new CustomEvent('vt:panel-close', { detail: { id, mobileRoute: Boolean(el._vtMobileHistory) } }));

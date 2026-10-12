@@ -1,3 +1,4 @@
+import { hasBlockingScope } from '../core/keyboard-scopes.js';
 // 클립보드: 복사(선택 자동복사/우클릭/단축키) · 붙여넣기 · 이미지 붙여넣기 업로드.
 // F4에서 terminal.js(구 :172-263)에서 분리.
 import { getSession } from '../core/store.js';
@@ -92,58 +93,65 @@ export async function pasteFromClipboard(id, shouldSend = () => true) {
     }
   } catch (_) { /* 권한/비보안 컨텍스트 — 텍스트 폴백 */ }
   const text = await readClipboardText();
-  if (!shouldSend()) return;
   if (text == null) {
     showToast('클립보드 읽기 불가 — HTTPS/localhost에서만 가능. Cmd/Ctrl+V를 쓰세요.');
     return;
   }
+  if (!shouldSend()) return;
   sendPaste(id, text);
 }
 
 // 일부 브라우저/xterm 조합은 Ctrl+Shift+V keydown 뒤에 paste 이벤트를 내지
 // 않는다. 짧게 기다렸다가 이벤트가 없을 때만 Clipboard API로 읽는다.
 // paste 이벤트가 늦게 와도 아직 진행 중인 비동기 읽기는 취소할 수 있다.
-const nativePastePending = new Map();
-function removeNativePastePending(id, pending) {
-  const queue = nativePastePending.get(id);
-  if (!queue) return;
-  const idx = queue.indexOf(pending);
-  if (idx >= 0) queue.splice(idx, 1);
-  if (queue.length === 0) nativePastePending.delete(id);
-}
-
-// 포커스가 있는 터미널의 세션 id(없으면 null). 터미널 래퍼는 `term-<id>`다.
+// native 이벤트에는 keydown id가 없다. 한 번의 전달권을 coordinator가 관리한다.
+let nativeTransaction = null;
+let pasteSequence = 0;
+const eventTransactions = new WeakMap();
 export function focusedTerminalSessionId() {
-  const el = document.activeElement;
-  const wrap = el && el.closest ? el.closest('[id^="term-"]') : null;
+  const wrap = document.activeElement?.closest?.('[id^="term-"]');
   return wrap ? wrap.id.slice('term-'.length) : null;
 }
-
-export function queueNativePasteFallback(id) {
-  const pending = { cancelled: false, timer: null };
-  const queue = nativePastePending.get(id) || [];
-  queue.push(pending);
-  nativePastePending.set(id, queue);
-  pending.timer = setTimeout(async () => {
-    if (pending.cancelled) return;
-    try { await pasteFromClipboard(id, () => !pending.cancelled); }
-    catch (_) { /* 클립보드 접근 실패는 pasteFromClipboard의 안내 경로에 맡긴다 */ }
-    finally { removeNativePastePending(id, pending); }
+export function cancelPasteTransactions(id) {
+  const tx = nativeTransaction;
+  if (!tx || (id && tx.sessionId !== id)) return;
+  tx.state = 'cancelled'; clearTimeout(tx.timer); nativeTransaction = null;
+}
+export function queueNativePasteFallback(id, event) {
+  if (event && eventTransactions.has(event)) return;
+  cancelPasteTransactions();
+  const tx = { id: ++pasteSequence, sessionId: id, handle: getSession(id)?.wsHandle,
+    state: 'waiting-native', deliveredAt: 0, timer: null };
+  nativeTransaction = tx;
+  if (event) eventTransactions.set(event, tx);
+  tx.timer = setTimeout(async () => {
+    if (nativeTransaction !== tx || tx.state !== 'waiting-native') return;
+    tx.state = 'reading-fallback';
+    const claim = () => {
+      if (nativeTransaction !== tx || tx.state !== 'reading-fallback') return false;
+      if (hasBlockingScope() || !getSession(id) || getSession(id)?.wsHandle !== tx.handle || focusedTerminalSessionId() !== id) {
+        cancelPasteTransactions(id); return false;
+      }
+      tx.state = 'delivered'; tx.deliveredAt = Date.now(); return true;
+    };
+    try { await pasteFromClipboard(id, claim); }
+    catch (_) { tx.state = 'failed'; }
   }, 250);
 }
-
-// 2026-09-30 — 네이티브 paste 이벤트가 오면 **어느 세션에 걸린 것이든** 예약된
-// 폴백을 모두 취소한다. 예전엔 이벤트를 받은 세션(id)의 것만 지워서, 단축키가
-// 다른 세션에 예약해 둔 폴백이 살아남아 그 세션에도 붙여넣었다.
-export function cancelNativePasteFallback(id) {
-  for (const [sid, queue] of [...nativePastePending.entries()]) {
-    for (const pending of [...queue]) {
-      pending.cancelled = true;
-      clearTimeout(pending.timer);
-      removeNativePastePending(sid, pending);
-    }
+// false면 이미 fallback이 전달한 직후의 모호한 native 이벤트. 중복 전송하지 않는다.
+// 다음 keydown은 새 tx를 만들므로 빠른 연속 키 붙여넣기를 내용 비교로 제거하지 않는다.
+export function claimNativePaste(id) {
+  const tx = nativeTransaction;
+  if (tx?.state === 'delivered' && Date.now() - tx.deliveredAt < 1000) {
+    cancelPasteTransactions();
+    window.showToast?.('붙여넣기가 이미 전달되었습니다. 추가로 붙이려면 다시 실행하세요.');
+    return false;
   }
+  cancelPasteTransactions();
+  return true;
 }
+// 기존 외부 호출 호환. native 내용 처리에는 claimNativePaste를 사용한다.
+export function cancelNativePasteFallback(id) { cancelPasteTransactions(); }
 
 // 이미지 붙여넣기 → 서버 업로드 → 저장 경로를 터미널에 삽입 (Claude에 그대로 넘길 수 있게)
 //

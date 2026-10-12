@@ -711,3 +711,10 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 /* 모델 관리 행은 control 칸이 좁아지지 않게 세로로 쌓는다 */
 .vt-set-row:has(> .vt-vm-manage) { flex-direction:column; }
 .vt-set-row:has(> .vt-vm-manage) .vt-vm-manage { width:100%; }
+
+/* 가로로 놓은 터치 기기도 키맵 컨트롤의 손가락 표적을 유지한다. */
+@media (pointer:coarse) {
+  .vt-settings .vt-select,
+  .vt-settings .vt-set-combo,
+  .vt-settings .vt-set-reset { min-height:44px; }
+}

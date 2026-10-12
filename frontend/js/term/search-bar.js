@@ -1,3 +1,4 @@
+import { pushScope } from '../core/keyboard-scopes.js';
 // 터미널 내 검색(xterm searchAddon) — 구 js/search.js(F5 classic→ESM 전환)에서
 // 이름만 바꿔 옮겼다. N40/N46(60-settings-palette.md §3)에서 `Mod+F`가
 // 팔레트 `~`(스크롤백 검색) 모드로 재배선되면서, 이 파일이 담당하던 자리
@@ -12,14 +13,20 @@ import { registerAction } from '../core/dom.js';
 const searchBar = document.getElementById('search-bar');
 const searchInput = document.getElementById('search-input');
 
+let disposeKeys = null;
 function toggleSearch() {
   searchBar.classList.toggle('visible');
   if (searchBar.classList.contains('visible')) {
     searchInput.focus();
     searchInput.select();
-  }
+    disposeKeys?.();
+    disposeKeys = pushScope({ id: 'terminal-search', element: searchBar, restoreFocus: false,
+      enabled: () => searchBar.classList.contains('visible') && searchBar.contains(document.activeElement),
+      onKey: (e) => { if (e.key === 'Escape') { closeSearch(); return true; } } });
+  } else { disposeKeys?.(); disposeKeys = null; }
 }
 function closeSearch() {
+  disposeKeys?.(); disposeKeys = null;
   searchBar.classList.remove('visible');
   const s = activeSession();
   if (s) s.term.focus();
@@ -35,16 +42,8 @@ function searchPrev() {
   s.searchAddon.findPrevious(searchInput.value);
 }
 
-// Escape는 키맵 레지스트리에 넣지 않는다 — 여러 표면(검색·팔레트·패널·모달)이
-// 각자 "열려 있으면 닫는다"로 쓰는 문맥 키라, 하나의 전역 액션으로 묶으면 어느
-// 것이 닫힐지 예측할 수 없어진다. 재바인딩 대상도 아니다.
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && searchBar.classList.contains('visible')) {
-    closeSearch();
-  }
-});
 searchInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
+  if (e.key === 'Enter' && !e.isComposing) {
     e.shiftKey ? searchPrev() : searchNext();
   }
 });

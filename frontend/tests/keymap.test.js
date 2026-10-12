@@ -41,8 +41,8 @@ test('normalize — 순서·대소문자가 달라도 같은 조합으로 본다
 
 test('normalize — Cmd/Meta/Ctrl 표기를 Mod로 흡수한다', async () => {
   const { K } = await load();
-  assert.strictEqual(K.normalize('Cmd+K'), 'mod+k');
-  assert.strictEqual(K.normalize('Meta+K'), 'mod+k');
+  assert.strictEqual(K.normalize('Cmd+K'), 'meta+k');
+  assert.strictEqual(K.normalize('Meta+K'), 'meta+k');
 });
 
 test('normalize — 특수키 이름은 원형을 지킨다', async () => {
@@ -56,7 +56,7 @@ test('비-mac에서는 Ctrl이 Mod다', async () => {
   // `settings`(Mod+,)는 비-mac에서도 그대로 Ctrl 조합이다 — 터미널이 안 쓰는 키라
   // defNonMac이 필요 없었다.
   assert.strictEqual(K.match(kd(window, { key: ',', ctrlKey: true })).id, 'settings');
-  assert.strictEqual(K.match(kd(window, { key: ',', metaKey: true })).id, 'settings');
+  assert.strictEqual(K.match(kd(window, { key: ',', metaKey: true })), null, '비Mac Meta는 Ctrl과 다른 키다');
 });
 
 test('mac에서는 Cmd가 Mod이고 Ctrl은 별개다', async () => {
@@ -215,7 +215,7 @@ test('passthrough — 동작은 하되 키를 터미널로 흘린다(검색 키�
   const e = kd(window, { key: 'f', ctrlKey: true, shiftKey: true });
   const consumed = K.handleKeydown(e);
   assert.strictEqual(ran, 1, '동작 자체는 그대로 실행된다');
-  assert.strictEqual(consumed, false);
+  assert.strictEqual(consumed, true, '원본 이벤트를 소비하고 단말 전달은 명시적으로 한다');
   assert.strictEqual(e.defaultPrevented, true, '브라우저 기본 동작은 막고 xterm으로 전파한다');
 });
 
@@ -226,10 +226,9 @@ test('passthrough — 브라우저 기본 동작은 막고 xterm 대상까지 �
   K.register('search', () => { actionRuns += 1; });
   await K.setPassthrough('search', true);
   const textarea = window.document.createElement('textarea');
-  window.document.body.appendChild(textarea);
-  textarea.addEventListener('keydown', (e) => {
-    if (e.defaultPrevented) xtermEvents += 1;
-  });
+  const wrapper = window.document.createElement('div'); wrapper.className = 'xterm';
+  wrapper.appendChild(textarea); window.document.body.appendChild(wrapper);
+  textarea.addEventListener('keydown', () => { xtermEvents += 1; });
   const e = kd(window, { key: 'f', ctrlKey: true, shiftKey: true });
   textarea.dispatchEvent(e);
   assert.strictEqual(actionRuns, 1);
@@ -319,12 +318,12 @@ test('일반 탭에서 Mod+W로 재바인딩하면 unavailable로 표시되고 �
   assert.strictEqual(K.match(kd(window, { key: 'w', ctrlKey: true })), null);
 });
 
-test('PWA standalone에서는 Mod+W도 가로챌 수 있다', async () => {
+test('PWA도 OS/브라우저 예약 키를 사용 가능하다고 단정하지 않는다', async () => {
   const { K, window } = await load({ standalone: true, platform: 'Linux' });
   await K.setBinding('paneClose', 'Mod+W');
   const b = K.list().find((x) => x.id === 'paneClose');
-  assert.strictEqual(b.unavailable, false);
-  assert.strictEqual(K.match(kd(window, { key: 'w', ctrlKey: true })).id, 'paneClose');
+  assert.strictEqual(b.unavailable, true);
+  assert.strictEqual(K.match(kd(window, { key: 'w', ctrlKey: true })), null);
 });
 
 // ── 표시 ──────────────────────────────────────────────────────────────────

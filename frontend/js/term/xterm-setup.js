@@ -6,8 +6,6 @@ import { get as setting, has as hasSetting } from '../core/settings.js';
 import { isMobile, _isCoarsePointer } from '../core/env.js';
 import { wireClipboard } from './selection.js';
 import { wireLinks } from './links.js';
-import { wireTouchScroll } from './touch.js';
-import { wireTouchSelect } from './touch-select.js';
 import { getVtXtermFont, getVtXtermTheme } from '../theme.js';
 import { adoptWrapper } from '../layout/surface.js';
 
@@ -58,6 +56,7 @@ function _ensureCanvasAddon(term) {
 export function createXtermInstance(id) {
   const term = new Terminal({
     cursorBlink: true,
+    macOptionIsMeta: setting('terminal.optionMode') === 'meta',
     // xterm 기본값(1000)은 서버 재접속 복원 예산(최대 256KB, server/pty_manager.py
     // SCROLLBACK_MAX_BYTES)에 비해 작아, 일반 텍스트 위주 세션에서는 서버가 보낸
     // scrollback 상당수가 도착 즉시 버려진다. Wave Terminal 기본값(2000)에 맞춤 —
@@ -250,12 +249,17 @@ export function createXtermInstance(id) {
   wireLinks(id, term);
 
   // 모바일 터치 스크롤 (tmux mouse on 이면 xterm이 터치를 앱으로 넘겨 스크롤이 죽는다)
-  wireTouchScroll(id, term, wrapper);
+  if (_isCoarsePointer() || navigator.maxTouchPoints > 0) {
+    Promise.all([import('./touch.js'), import('./touch-select.js')]).then(([scroll, select]) => {
+      if (!wrapper.isConnected) return;
+      scroll.wireTouchScroll(id, term, wrapper);
+      select.wireTouchSelect(id, term, wrapper);
+    }).catch(() => window.showToast?.('터치 입력을 불러오지 못했습니다. 화면을 새로고침하세요.', 'warn'));
+  }
 
   // 모바일 텍스트 선택 — 꾹 눌러 단어를 고르고 핸들로 넓힌다(term/touch-select.js
   // 머리말 — xterm 자신의 선택 모델만 쓰는 이유). wireTouchScroll처럼 터치가
   // 없는 기기에서는 pointerType 검사로 조용히 아무 일도 안 한다.
-  wireTouchSelect(id, term, wrapper);
 
   return { term, fitAddon, searchAddon, wrapper };
 }

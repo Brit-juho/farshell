@@ -16,6 +16,8 @@ def git(repo, *args):
 def repo(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_BROWSE_ROOTS", str(tmp_path))
     context._cache.clear()
+    context._workspace_cache.clear()
+    context._repo_cache.clear()
     p = tmp_path / "project"
     p.mkdir()
     git(p, "init", "-q", "-b", "main")
@@ -26,6 +28,8 @@ def repo(tmp_path, monkeypatch):
     git(p, "commit", "-qm", "initial")
     yield p
     context._cache.clear()
+    context._workspace_cache.clear()
+    context._repo_cache.clear()
 
 
 def test_subdirectory_branch_changes_and_detached_head(repo, monkeypatch):
@@ -99,3 +103,110 @@ def test_same_cwd_reads_once_across_sessions(repo, monkeypatch):
     assert calls == [str(repo)] and result[str(repo)]["branch"] == "main"
     asyncio.run(context.contexts_for([str(repo)]))
     assert calls == [str(repo)]
+
+
+def test_main_linked_subdirectory_detached_and_nonrepo(repo, monkeypatch):
+    tree = repo.parent / "task a 한글"
+    git(repo, "worktree", "add", "-qb", "feature", str(tree))
+    sub = tree / "packages" / "src"
+    sub.mkdir(parents=True)
+    main = context._context(str(repo))
+    linked = context._context(str(sub))
+    assert main["worktree"]["kind"] == "main"
+    assert linked["worktree"] == {"kind": "linked", "status": "ready",
+        "repositoryRoot": str(repo.resolve()), "name": tree.name, "relative": "packages/src"}
+    assert linked["branch"] == "feature"
+    monkeypatch.setattr(context, "TTL", 0)
+    context._cache.clear()
+    git(tree, "checkout", "--detach", "-q")
+    assert context._context(str(tree))["worktree"]["kind"] == "linked"
+    assert context._context(str(tree))["branch"] is None
+    assert context._context(str(repo.parent))["worktree"] is None
+
+
+def test_identity_failure_does_not_discard_git_status(repo, monkeypatch):
+    original = context._git
+    def failing(p, *args):
+        if "--git-common-dir" in args:
+            return 124, ""
+        return original(p, *args)
+    monkeypatch.setattr(context, "_git", failing)
+    data = context._context(str(repo))
+    assert data["status"] == "ready" and data["branch"] == "main"
+    assert data["worktree"]["kind"] == "unknown"
+    assert data["worktree"]["status"] == "unavailable"
+
+
+def test_identity_boundary_rechecked_on_cached_success(repo, monkeypatch):
+    tree = repo.parent / "task"
+    git(repo, "worktree", "add", "-qb", "feature", str(tree))
+    assert context._context(str(tree))["worktree"]["kind"] == "linked"
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(tree))
+    data = context._context(str(tree))
+    assert data["branch"] == "feature" and data["root"] == str(tree.resolve())
+    assert data["worktree"]["kind"] == "unknown"
+    assert data["worktree"]["repositoryRoot"] is None
+
+
+def test_separate_git_directory_is_main_not_linked(repo):
+    other = repo.parent / "separate"
+    git(repo, "init", "-q", "--separate-git-dir", str(repo.parent / "git-data"), str(other))
+    git(other, "config", "user.email", "test@example.com")
+    git(other, "config", "user.name", "test")
+    (other / "file").write_text("test")
+    git(other, "add", ".")
+    git(other, "commit", "-qm", "initial")
+    assert (other / ".git").is_file()
+    assert context._context(str(other))["worktree"]["kind"] == "main"
+
+
+def test_repository_lookup_shared_and_collision_names(repo, monkeypatch):
+    a = repo.parent / "one" / "task"
+    b = repo.parent / "two" / "task"
+    git(repo, "worktree", "add", "-qb", "one", str(a))
+    git(repo, "worktree", "add", "-qb", "two", str(b))
+    calls = []
+    original = context._git
+    def counted(p, *args):
+        if args[:2] == ("worktree", "list"):
+            calls.append(args)
+        return original(p, *args)
+    monkeypatch.setattr(context, "_git", counted)
+    result = asyncio.run(context.contexts_for([str(a), str(b), str(a)]))
+    assert len(calls) == 1
+    assert result[str(a)]["worktree"]["name"] == "one/task"
+    assert result[str(b)]["worktree"]["name"] == "two/task"
+
+
+def test_worktree_path_with_newline_is_preserved(repo):
+    tree = repo.parent / "task\nline"
+    git(repo, "worktree", "add", "-qb", "newline", str(tree))
+    data = context._context(str(tree))
+    assert data["root"] == str(tree.resolve())
+    assert data["worktree"]["kind"] == "linked"
+    assert data["worktree"]["repositoryRoot"] == str(repo.resolve())
+
+
+def test_root_changed_during_lookup_discards_old_snapshot(repo, monkeypatch):
+    assert context._context(str(repo))["branch"] == "main"
+    monkeypatch.setattr(context, "TTL", 0)
+    context._cache[str(repo)] = (0, context._cache[str(repo)][1])
+    original = context._git_path
+    monkeypatch.setattr(context, "_git_path", lambda p, option:
+        repo.parent if option == "--show-toplevel" else original(p, option))
+    changed = context._context(str(repo))
+    assert changed["status"] == "unavailable"
+    assert changed["root"] is None and changed["branch"] is None
+    assert changed["worktree"] is None
+
+
+def test_submodule_git_file_is_main_workspace(repo):
+    parent = repo.parent / "parent"
+    parent.mkdir()
+    git(parent, "init", "-q", "-b", "main")
+    git(parent, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(repo), "module")
+    module = parent / "module"
+    assert (module / ".git").is_file()
+    data = context._context(str(module))
+    assert data["worktree"]["kind"] == "main"
+    assert data["root"] == str(module.resolve())

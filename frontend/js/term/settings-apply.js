@@ -20,6 +20,7 @@ const OPTION_KEYS = {
   'terminal.cursorStyle': 'cursorStyle',
   'terminal.cursorBlink': 'cursorBlink',
   'terminal.scrollback': 'scrollback',
+  'terminal.optionMode': 'macOptionIsMeta',
 };
 
 function applySettingsToTerminals(changed) {
@@ -27,7 +28,7 @@ function applySettingsToTerminals(changed) {
   const opts = {};
   for (const key of keys) {
     const optName = OPTION_KEYS[key];
-    if (optName) opts[optName] = setting(key);
+    if (optName) opts[optName] = key === 'terminal.optionMode' ? setting(key) === 'meta' : setting(key);
   }
   if (Object.keys(opts).length === 0) return;
 

@@ -225,7 +225,7 @@ test('키맵 — 현재 바인딩과 passthrough 체크가 그려진다', async 
   sectionButton(document, '키맵').click();
   const row = rowByLabel(document, '스크롤백 검색');
   assert.ok(row.querySelector('.vt-set-combo').textContent.length > 0);
-  assert.strictEqual(row.querySelector('.vt-set-pt input').checked, false);
+  assert.strictEqual(row.querySelector('.vt-set-pt').value, 'app');
 });
 
 test('키맵 — 기본 붙여넣기는 브라우저 이벤트를 쓰므로 터미널 전달 토글을 숨긴다', async () => {
@@ -244,8 +244,8 @@ test('키맵 — passthrough 체크가 레지스트리에 반영된다', async (
   // N40/N46 — `search`는 이제 「스크롤백 검색」. 인페인 검색바는 `searchInPane`
   // (라벨 「터미널 내 검색」)로 내려갔다. 이 테스트 환경은 navigator.platform이
   // 비어 있어 비-mac 기본값(search=Ctrl+Shift+F)이 적용된다.
-  const box = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-pt input');
-  box.checked = true;
+  const box = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-pt');
+  box.value = 'app-and-terminal';
   box.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
   await flush();
   assert.strictEqual(K.list().find((b) => b.id === 'search').passthrough, true);

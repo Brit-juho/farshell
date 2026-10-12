@@ -1,11 +1,11 @@
 // 마우스/선택 배선 — 드래그 자동복사·우클릭·이미지 붙여넣기·단축키·OSC52.
 // F4에서 terminal.js(구 :482-565)에서 분리. addSession에서 term.open 직후 호출.
-import { match as matchKey } from '../core/keymap.js';
+import { wireKeyboardInput } from './keyboard-input.js';
 import { get as setting } from '../core/settings.js';
-import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste, cancelNativePasteFallback } from './clipboard.js';
+import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste, claimNativePaste } from './clipboard.js';
 import { getSession } from '../core/store.js';
 import { _isCoarsePointer } from '../core/env.js';
-import { wireKittyKeyboard, encodeKey } from './kitty-keys.js';
+
 
 export function wireClipboard(id, term, wrapper) {
   // 1) copy-on-select — 드래그(브라우저 선택) 끝나면 자동 복사.
@@ -61,20 +61,19 @@ export function wireClipboard(id, term, wrapper) {
     const items = (e.clipboardData && e.clipboardData.items) || [];
     for (const it of items) {
       if (it.type && it.type.indexOf('image/') === 0) {
-        cancelNativePasteFallback(id);
         e.preventDefault();
         e.stopPropagation();
+        if (!claimNativePaste(id)) return;
         const file = it.getAsFile();
         if (file) pasteImageUpload(id, file);
         return;
       }
     }
     const text = e.clipboardData && e.clipboardData.getData('text/plain');
-    if (text) {
-      cancelNativePasteFallback(id);
+    if (text != null) {
       e.preventDefault();
       e.stopPropagation();
-      sendPaste(id, text);
+      if (claimNativePaste(id)) sendPaste(id, text);
     }
   }, true);
 
@@ -88,26 +87,10 @@ export function wireClipboard(id, term, wrapper) {
   //    되므로 중복이라 오히려 혼란만 준다.
   //    Ctrl+Shift+V는 브라우저의 "서식 없이 붙여넣기"가 만든 paste 이벤트를
   //    우선한다. 이벤트가 없을 때만 지연 Clipboard API 폴백이 실행된다.
-  // 키맵 액션은 document capture 리스너 한 곳에서 실행한다. 여기서 다시
-  // 실행하면 passthrough가 켜진 키는 두 번 처리된다. xterm에서는 키맵에
-  // 잡힌 키를 kitty 프로토콜로 재인코딩하지 않고 그대로 통과시킨다.
+  // 키 액션과 전달 대상은 공통 router가 한 번 결정한다. xterm callback은
+  // 저장된 결정만 사용하며 앱+터미널 조합도 협상된 encoder로 한 번 보낸다.
   // N12 — kitty 키보드 프로토콜. 앱이 모드를 켰을 때만 동작한다(협상 2층).
-  const kitty = wireKittyKeyboard(term);
-
-  term.attachCustomKeyEventHandler((e) => {
-    if (e.type !== 'keydown') return true;
-    const hit = matchKey(e);
-    if (hit) return true;
-    // 우리 단축키가 아닌 키만 프로토콜 인코딩 대상이다 — 순서가 반대면
-    // 앱이 모드를 켠 동안 Mod+K 같은 UI 단축키가 PTY로 새어 나간다.
-    const seq = encodeKey(e, kitty.flags);
-    if (seq) {
-      e.preventDefault();
-      term.input(seq, true);
-      return false;
-    }
-    return true;
-  });
+  wireKeyboardInput(id, term, wrapper);
 
   // 5) OSC 52 — 서버 쪽 프로그램(vim, tmux copy-mode 등)이 클립보드에 쓰려는
   //    요청은 PTY 출력 스트림에 이스케이프 시퀀스로 실려 이미 여기까지 온다.

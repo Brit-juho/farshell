@@ -11,9 +11,9 @@ export const API_BASE = `${location.protocol}//${location.host}`;
 import { isMobileDevice } from './device.js';
 export const isMobile = isMobileDevice();
 document.documentElement.classList.toggle('vt-mobile-device', isMobile);
-// OS별 안내 문구 표시용. 실제 키 처리는 이미 ctrlKey||metaKey로 두 OS 모두
-// 받아들이므로 동작에는 영향 없다.
-export const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+// 키보드 플랫폼과 안내 표시는 같은 platform helper를 사용한다.
+import { isMacKeyboard } from './platform.js';
+export const isMac = isMacKeyboard;
 
 // 물리 키보드가 없는 터치 기기 판정 — keybar 노출, M5 롱프레스 선택 기본값 등
 // 여러 곳에서 같은 기준을 쓴다.

@@ -1,3 +1,5 @@
+import { disposeKeyboardInput } from './keyboard-input.js';
+import { cancelPasteTransactions } from './clipboard.js';
 // 세션 생성 진입점 + 세션 전환/이름변경/좌우이동 단축키 + 세션 제거.
 // N37 3단계 6/n에서 세션 탭 줄(#tabs)이 사라졌다 — 이 파일은 더 이상 탭 DOM을
 // 만들지도, 읽지도 않는다. 화면에 세션을 보여주는 곳은 워크트리 탭(layout/
@@ -380,6 +382,8 @@ export async function removeSession(id) {
   // (id는 이미 delete되지만) 죽은 타이머가 지연 후 깨어난다.
   if (s.reconnTimer) { clearTimeout(s.reconnTimer); s.reconnTimer = null; }
   if (s.ws) { try { s.ws.close(); } catch (_) {} }
+  disposeKeyboardInput(id);
+  cancelPasteTransactions(id);
   s.term.dispose();
   s.wrapper.remove();
   window.removeEventListener('resize', s.onResize);

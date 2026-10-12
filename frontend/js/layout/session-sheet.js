@@ -14,6 +14,7 @@ import { closeSession, openSessionFromRail, confirmAndKillSession, renameView } 
 import { promptDialog } from '../core/dialog.js';
 import { icon } from '../ui/icons.js';
 import { orderedViews, renderOrderEditor } from './session-order.js';
+import { showWorkspaceDetails } from '../ui/workspace-details.js';
 import { contextLabel } from '../ui/session-context.js';
 
 // ADR-29 E — tmux 목록 팝업을 없애면서 그게 하던 일(열리지 않은 tmux 세션 보기 + 열기 + 종료)을 이 시트가
@@ -88,7 +89,9 @@ function sessionBody(select, session) {
   body.appendChild(select);
   const label = session && contextLabel(session);
   if (label) {
-    const meta = document.createElement('span');
+    const meta = document.createElement('button');
+    meta.type = 'button'; meta.setAttribute('aria-label', `${session.name || '세션'} 작업 위치 보기`);
+    meta.onclick = () => showWorkspaceDetails(session);
     meta.className = 'vt-session-meta'; meta.textContent = label;
     meta.setAttribute('data-tip', session.cwd || '');
     body.appendChild(meta);

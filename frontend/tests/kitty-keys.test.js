@@ -93,7 +93,7 @@ test('push/pop — 앱이 빠져나가면 이전 값으로 되돌아간다', asy
   st.push(1);
   assert.strictEqual(st.flags, 1);
   st.push(5);
-  assert.strictEqual(st.flags, 5);
+  assert.strictEqual(st.flags, 1);
   st.pop();
   assert.strictEqual(st.flags, 1);
   st.pop();
@@ -123,9 +123,9 @@ test('set — mode 1=설정, 2=OR, 3=해제', async () => {
   st.set(1, 1);
   assert.strictEqual(st.flags, 1);
   st.set(4, 2);
-  assert.strictEqual(st.flags, 5);
+  assert.strictEqual(st.flags, 1);
   st.set(1, 3);
-  assert.strictEqual(st.flags, 4);
+  assert.strictEqual(st.flags, 0);
   st.set(0, 1);
   assert.strictEqual(st.flags, 0);
 });
@@ -134,19 +134,19 @@ test('정의되지 않은 플래그 비트와 쓰레기 값은 걸러낸다', as
   const K = await loadKitty();
   const st = new K.KittyKeyState();
   st.push(9999);
-  assert.strictEqual(st.flags, 9999 & 31);
+  assert.strictEqual(st.flags, 9999 & 1);
   st.push(-1);
   assert.strictEqual(st.flags, 0);
   st.push('nope');
   assert.strictEqual(st.flags, 0);
 });
 
-test('질의 응답은 앱이 켠 값을 그대로 되돌려준다', async () => {
+test('질의 응답은 실제 구현한 플래그만 되돌려준다', async () => {
   const K = await loadKitty();
   const st = new K.KittyKeyState();
   assert.strictEqual(st.queryReply(), '\x1b[?0u');
   st.push(5);
-  assert.strictEqual(st.queryReply(), '\x1b[?5u');
+  assert.strictEqual(st.queryReply(), '\x1b[?1u');
 });
 
 test('wireKittyKeyboard — CSI 핸들러가 파서에 등록되고 모드를 바꾼다', async () => {
@@ -164,10 +164,10 @@ test('wireKittyKeyboard — CSI 핸들러가 파서에 등록되고 모드를 �
   assert.strictEqual(find('>')([1]), true, '처리했다고 알려야 시퀀스가 화면에 새지 않는다');
   assert.strictEqual(st.flags, 1);
   find('=')([4, 2]);
-  assert.strictEqual(st.flags, 5);
+  assert.strictEqual(st.flags, 1);
   find('?')([]);
   assert.deepStrictEqual(written.length, 1);
-  assert.strictEqual(written[0], '\x1b[?5u');
+  assert.strictEqual(written[0], '\x1b[?1u');
   find('<')([1]);
   assert.strictEqual(st.flags, 0);
 });

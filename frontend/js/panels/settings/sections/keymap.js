@@ -1,5 +1,7 @@
+import { pushScope } from '../../../core/keyboard-scopes.js';
 import * as keymap from '../../../core/keymap.js';
-import { row } from '../controls.js';
+import { row, selectControl } from '../controls.js';
+import { icon } from '../../../ui/icons.js';
 
 // ── 「키맵」 ──────────────────────────────────────────────────────────────
 // `rerender`는 settings.js(패널 껍데기)가 넘긴다 — 섹션이 패널을 다시 import하면
@@ -12,10 +14,16 @@ export function renderKeymapSection(rerender) {
     const note = document.createElement('p');
     note.className = 'vt-set-note';
     const combos = ['Mod+W', 'Mod+T', 'Mod+N'].map((c) => keymap.displayComboHtml(c)).join('·');
-    note.innerHTML = `일부 조합(${combos} 등)은 브라우저가 먼저 사용해 일반 탭에서는 지정할 수 없습니다. 홈 화면에 추가해 앱으로 실행하면 사용할 수 있습니다.`;
+    note.innerHTML = `일부 조합(${combos} 등)은 브라우저가 먼저 사용해 일반 탭에서는 지정할 수 없습니다. 앱으로 실행해도 OS나 브라우저가 먼저 사용하는 조합은 보장되지 않습니다.`;
     frag.appendChild(note);
   }
 
+  const note = document.createElement('p');
+  note.className = 'vt-set-note';
+  note.textContent = '단축키는 이 기기 종류에 저장됩니다. Mac·Windows·Linux·모바일 설정은 서로 독립적입니다.';
+  frag.appendChild(note);
+  const option = selectControl('terminal.optionMode', { unicode: '문자 입력 (기존 동작)', meta: '터미널 Meta 키' });
+  frag.appendChild(row('Mac Option 키', option, 'Meta 모드는 Option 조합을 터미널 명령에 사용합니다. 일반 특수문자 입력은 문자 입력 모드를 선택하세요.'));
   for (const b of keymap.list()) {
     const control = document.createElement('div');
     control.className = 'vt-set-keyrow';
@@ -32,13 +40,19 @@ export function renderKeymapSection(rerender) {
 
     // passthrough — 이 화면에서 가장 중요한 컨트롤. `Mod+F` 같은 셸 키를
     // 사용자가 되찾을 수 있는 유일한 경로다.
-    const pt = document.createElement('label');
-    pt.className = 'vt-set-pt';
-    const ptBox = document.createElement('input');
-    ptBox.type = 'checkbox';
-    ptBox.checked = b.passthrough;
-    ptBox.addEventListener('change', () => keymap.setPassthrough(b.id, ptBox.checked).then(rerender));
-    pt.append(ptBox, document.createTextNode(' 터미널에도 전달'));
+    const pt = document.createElement('select');
+    pt.className = 'vt-select vt-set-pt';
+    pt.setAttribute('aria-label', `${b.label} 전달 대상`);
+    for (const [value, label] of [['app', '앱 동작'], ['app-and-terminal', '앱 + 터미널'], ['terminal', '터미널만']]) {
+      const o = document.createElement('option'); o.value = value; o.textContent = label; pt.appendChild(o);
+    }
+    pt.value = b.delivery;
+    pt.addEventListener('change', () => keymap.setDelivery(b.id, pt.value).then(rerender));
+
+    const deliveryWrap = document.createElement('div');
+    deliveryWrap.className = 'vt-select-wrap';
+    deliveryWrap.appendChild(pt);
+    deliveryWrap.insertAdjacentHTML('beforeend', icon('chevron-down', 12, 2));
 
     const reset = document.createElement('button');
     reset.type = 'button';
@@ -47,7 +61,7 @@ export function renderKeymapSection(rerender) {
     reset.addEventListener('click', () => keymap.reset(b.id).then(rerender));
 
     if (browserPaste) control.append(combo, reset);
-    else control.append(combo, pt, reset);
+    else control.append(combo, deliveryWrap, reset);
 
     const conflictIds = conflicts[keymap.normalize(b.combo)];
     const help = [];
@@ -69,18 +83,28 @@ export function renderKeymapSection(rerender) {
 }
 
 // 재바인딩 — 버튼을 누르면 다음 키 조합 하나를 그대로 받는다.
+let cancelRecording = null;
 function startRebind(id, btn, rerender) {
+  cancelRecording?.();
   btn.classList.add('recording');
   btn.textContent = '키를 누르세요…';
+  let dispose = () => {};
+  const finish = () => { dispose(); btn.classList.remove('recording'); cancelRecording = null; };
+  cancelRecording = finish;
   const onKey = (e) => {
     // 수식키만 눌린 상태는 무시한다(⌘를 누르는 도중에 확정되면 못 쓴다).
     if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
-    document.removeEventListener('keydown', onKey, true);
-    btn.classList.remove('recording');
+    finish();
     if (e.key === 'Escape') { rerender(); return; }   // 취소
-    keymap.setBinding(id, keymap.comboFromEvent(e)).then(rerender);
+    const combo = keymap.comboFromEvent(e);
+    const conflict = keymap.list().find((b) => b.id !== id && keymap.normalize(b.combo) === keymap.normalize(combo));
+    if (conflict) {
+      window.showToast?.(`${conflict.label}와 같은 조합입니다. 다른 키를 선택하세요.`, 'warn'); rerender(); return;
+    }
+    keymap.setBinding(id, combo).then(rerender);
   };
-  document.addEventListener('keydown', onKey, true);
+  dispose = pushScope({ id: 'keymap-recording', kind: 'recorder', element: btn, onKey,
+    restoreFocus: false, onDispose: () => { btn.classList.remove('recording'); cancelRecording = null; } });
 }

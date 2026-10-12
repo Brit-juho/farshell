@@ -12,7 +12,7 @@ import { createSignal, onCleanup } from 'solid-js';
 import { normalizeOrigin, normalizeShare, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
 import { confirmDialog } from '../core/dialog.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
-import { sessionContext, directoryLabel } from '../ui/session-context.js';
+import { sessionContext, workspaceDirectory, workspaceKind } from '../ui/session-context.js';
 
 // §5 원문: "60초 캐시" — 워크트리에 안 속한(changed 요약을 서버가 안 주는)
 // 세션에만 쓴다.
@@ -361,7 +361,8 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       tool: detail?.tool ?? null,
       kind: detail?.kind ? normalizeKind(detail.kind) : null,
       badge: normalizeBadge(detail?.badge),
-      cwd: ctx.cwd, directory: directoryLabel(ctx.cwd), contextStatus: ctx.status,
+      cwd: ctx.cwd, directory: workspaceDirectory(ctx), workspaceKind: workspaceKind(ctx), context: ctx,
+      contextStatus: ctx.status === 'unavailable' || ctx.worktree?.status === 'unavailable' ? 'unavailable' : ctx.status,
       diffFiles: modern ? (ctx.changed?.files ?? null) : cwd ? (cachedDiffCount(cwd) ?? null) : null,
       changed: modern ? ctx.changed : info?.changed ?? null,
       question: detail?.question ?? null,
@@ -369,7 +370,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       promptId: detail?.promptId ?? null,
       agent: names[t.name] ?? null,
       branch: modern ? ctx.branch || (ctx.status === 'ready' || ctx.root ? '분리된 HEAD' : null) : info?.branch ?? null,
-      isMainWorktree: modern ? rootToWt.get(ctx.root)?.isMain ?? false : info?.isMain ?? false,
+      isMainWorktree: modern ? ctx.worktree?.kind === 'main' : info?.isMain ?? false,
       worktreeId: modern ? rootToWt.get(ctx.root)?.id ?? null : t.wt_id || null,
       origin: normalizeOrigin(t.origin),
       share: normalizeShare(t.share),

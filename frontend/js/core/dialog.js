@@ -74,7 +74,7 @@ export function promptDialog(message, opts = {}) {
     const submit = () => { result = input.value; closePanel(id); };
     body.querySelector('.vt-dialog-ok').addEventListener('click', submit);
     body.querySelector('.vt-dialog-cancel').addEventListener('click', () => closePanel(id));
-    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); submit(); } });
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.isComposing && ev.keyCode !== 229) { ev.preventDefault(); submit(); } });
     // openPanel의 기본 초기 포커스는 첫 포커스 가능 요소(닫기 X) — 입력창으로 되돌린다.
     input.focus();
     input.select();

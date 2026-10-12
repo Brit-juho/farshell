@@ -18,7 +18,6 @@ import { screenId } from '../core/screen-id.js';
 import { E2E_ENABLED, wrapE2E, _wsQuery } from './e2e.js';
 import { fitAndResize } from './resize.js';
 import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
-import { applyStickyMod } from './keybar.js';
 
 const TERMINAL_CLOSE_CODES = new Set([4001, 4004, 4005]);
 const STABLE_MS = 3000;
@@ -217,8 +216,8 @@ export function startSessionSocket(id, term) {
   term.onData((data) => {
     const handle = getSession(id)?.wsHandle;
     if (handle && handle.readyState === WebSocket.OPEN) {
-      // keybar의 sticky Ctrl이 armed면 소프트 키보드로 친 문자에 Ctrl 조합 적용.
-      handle.send(new TextEncoder().encode(applyStickyMod(data)));
+      // 이미 인코딩된 키/문자/프로토콜 응답은 수정하지 않고 전달한다.
+      handle.send(new TextEncoder().encode(data));
     }
   });
 

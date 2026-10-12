@@ -3,7 +3,7 @@
 // 규칙의 출처는 docs/ref/terminal.md 「Session and view rules」(Rail):
 // - 구역은 둘이다. 「개입 필요」(waiting) · 「세션」(전체, 이름순만).
 //   상태 우선순위 정렬은 없다 — 행이 오락가락하지 않게(2026-09-18 사용자 지적).
-// - 행 3줄: 상태·에이전트·이름 / 메인·워크트리 아이콘·브랜치·변경량 / 상태 키워드·경과·만든 곳.
+// - 행 3줄: 상태·에이전트·이름 / 작업 공간 종류·경로·브랜치·변경량 / 상태 키워드·경과·만든 곳.
 // - 만든 곳(origin) 2종(peer·external)은 레일 설정에서 표시를 끈다.
 import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
@@ -45,6 +45,8 @@ export interface SessionRow {
   branch?: string | null;
   cwd?: string;
   directory?: string;
+  workspaceKind?: string;
+  context?: any;
   contextStatus?: string;
   isMainWorktree?: boolean;
   worktreeId?: string | null;
@@ -261,7 +263,7 @@ export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: num
 
 export type RowMenuId =
   | 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown'
-  | 'share' | 'shareSettings' | 'unshare' | 'agentPerms';
+  | 'workspace' | 'share' | 'shareSettings' | 'unshare' | 'agentPerms';
 
 export interface RowMenuItem {
   id: RowMenuId;
@@ -299,7 +301,7 @@ export interface RowMenuOpts {
 
 /** 열린 세션이면 닫기, 아니면 열기. 이름 변경·맥에서 열기·연결된 화면은 웹 세션이 있어야 하고,
  * 종료는 tmux 세션이면 늘 있다(확인창은 vtConfirmAndKillSession). */
-export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { share?: ShareInfo | null }, opts: RowMenuOpts = {}): RowMenuItem[] {
+export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { share?: ShareInfo | null; cwd?: string }, opts: RowMenuOpts = {}): RowMenuItem[] {
   const items: RowMenuItem[] = [];
   const split: RowMenuItem[] = opts.split
     ? [{ id: 'splitRight', label: '오른쪽에 나란히 열기' }, { id: 'splitDown', label: '아래에 열기' }]
@@ -315,6 +317,7 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
   } else {
     items.push({ id: 'open', label: '열기' }, ...split);
   }
+  if (row.cwd) items.push({ id: 'workspace', label: '작업 위치 보기' });
   // 이름 규칙 밖(한글 등)은 공유 항목만 뺀다.
   if (opts.share && row.tmuxName) {
     if (SHARE_NAME_RE.test(row.tmuxName)) {
@@ -336,12 +339,13 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
 /** 메뉴 항목을 실행한다. 지연 청크는 세션 모듈을 정적 import 못 해 window 브리지를 받는다. */
 export function runRowMenu(
   id: RowMenuId,
-  row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'> & { share?: ShareInfo | null },
+  row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'> & { share?: ShareInfo | null; cwd?: string; context?: any },
   w: any,
   startRename: () => void,
 ): void {
   const sid = row.sessionId || null;
   switch (id) {
+    case 'workspace': void import('../ui/workspace-details.js').then(m => m.showWorkspaceDetails(row)); break;
     case 'open': w.vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName }); break;
     case 'close': if (sid) w.vtCloseSession?.(sid); break;
     case 'rename': if (sid) startRename(); break;

@@ -1,3 +1,4 @@
+import { pushScope } from '../core/keyboard-scopes.js';
 // N44 — 워크트리 만들기 다이얼로그(30-worktree.md §3). Rail.tsx 안에서만
 // 마운트되는 자식 컴포넌트라 별도 window 브리지 제약(Rail.tsx 상단 주석)이
 // 없다 — Rail.tsx가 이미 갖고 있는 deps(vtFetch)를 그대로 받는다.
@@ -112,13 +113,16 @@ export function WorktreeDialog(props: Props) {
   };
 
   const onDocKey = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
-  document.addEventListener('keydown', onDocKey);
-  onCleanup(() => document.removeEventListener('keydown', onDocKey));
+  let scopeElement!: HTMLDivElement;
+  const disposeKeys = pushScope({ element: () => scopeElement, id: 'WorktreeDialog', modal: true, onKey: (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { onDocKey(e); return true; }
+  } });
+  onCleanup(disposeKeys);
 
   const onBackdropClick = (e: MouseEvent) => { if (e.target === e.currentTarget) props.onClose(); };
 
   return (
-    <div class="vt-viewer-backdrop vt-wtd-backdrop" onClick={onBackdropClick}>
+    <div ref={scopeElement} class="vt-viewer-backdrop vt-wtd-backdrop" onClick={onBackdropClick}>
       <div class="vt-viewer-card vt-wtd-card" role="dialog" aria-modal="true" aria-label="워크트리 만들기">
         <div class="vt-wtd-head">
           <span class="vt-wtd-title">워크트리 만들기</span>

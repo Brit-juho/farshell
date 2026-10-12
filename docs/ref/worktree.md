@@ -32,3 +32,7 @@ Delete refuses the main worktree outright and returns 409 `dirty:true` on any un
 Because a symlinked node_modules reflects the main repo's *current* tree rather than `base`, `GET /api/worktrees/precheck` hashes package.json + lockfile on both sides and raises a `lockfile_mismatch` warning before the create dialog.
 
 `~/.worktrees` is auto-added to the fsguard roots when it exists — without that, every worktree created here would sit outside the browse boundary and be silently dropped from its own list
+
+## Session workspace display
+
+Session cards describe the active pane’s current location, independently of creation ownership (`@fsh_wt`). They distinguish the primary workspace (`메인`) and linked worktrees (`WT`) through Git directory/common-directory resolution, including trees made by Codex, Claude or plain Git outside FarShell. See [session UI](./session-ui.md) and the [display design](./session-worktree-display-plan.md).

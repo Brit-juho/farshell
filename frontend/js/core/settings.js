@@ -26,11 +26,8 @@ import { vtFetch } from './api.js';
 import { hostKey, isRelayed } from './host-route.js';
 
 // 브라우저 등록 쿠키가 바뀌어도 같은 종류의 화면 설정을 복원한다.
-const ua = navigator.userAgent || '';
-export const DEVICE_PROFILE = /Android|iPhone|iPad|iPod/i.test(ua)
-  || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) ? 'mobile'
-  : /Mac/i.test(navigator.platform || ua) ? 'mac'
-  : /Win/i.test(navigator.platform || ua) ? 'windows' : 'linux';
+import { settingsProfile } from './platform.js';
+export const DEVICE_PROFILE = settingsProfile;
 const DEVICE_ENDPOINT = `/api/device-settings?profile=${DEVICE_PROFILE}`;
 
 // parse: 옛 localStorage 문자열 → 새 값. 없으면 그대로 쓴다.
@@ -74,7 +71,9 @@ export const SCHEMA = {
   // S3: 키맵 재정의({id: {binding, passthrough}})를 JSON 문자열로 한 덩어리
   // 저장한다. 항목마다 스키마 키를 만들면 스키마가 키맵의 사본이 되어 반드시
   // 어긋난다 — 키맵의 진짜 스키마는 core/keymap.js의 ACTIONS 하나뿐이다.
-  'keymap.overrides':       { type: 'str', def: '{}' },
+  'keymap.overrides':       { type: 'str', def: '{}' }, // V1 읽기 호환
+  'keymap.bindingsV2':      { type: 'str', def: '', scope: 'device' },
+  'terminal.optionMode':    { type: 'enum', def: 'unicode', values: ['unicode', 'meta'], scope: 'device' },
   // 2026-09-23(2.1 D6) — 빠른 열기(팔레트) 기본 화면의 "최근 사용 기능" 2개.
   // action id(레이블 아님 — 레이블은 바뀔 수 있다) 배열을 최신순 JSON
   // 문자열로 저장한다. 기기마다 쓰는 기능이 달라 device 스코프다.

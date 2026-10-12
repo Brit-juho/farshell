@@ -1,3 +1,4 @@
+import { pushScope } from '../core/keyboard-scopes.js';
 // ADR-29 E — 「연결된 화면」의 마지막 남은 진입점.
 //
 // 이 파일은 `layout/rail.js`(48px 아이콘 레일 + 사이드 플라이아웃)를 대체하는
@@ -22,7 +23,7 @@ function closePanel() {
   const el = document.getElementById('vt-connected-screens');
   if (el) el.remove();
   if (_cleanup) { _cleanup(); _cleanup = null; }
-  if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
+  if (_onKey) { _onKey(); _onKey = null; }
   _shownSessionId = null;
 }
 
@@ -79,8 +80,9 @@ export function openPanel(explicitSessionId) {
 
   _shownSessionId = targetId;
   _cleanup = mountClients(body, tmuxName, activeSess.remote, targetId);
-  _onKey = (e) => { if (e.key === 'Escape') closePanel(); };
-  document.addEventListener('keydown', _onKey);
+  _onKey = pushScope({ id: 'connected-screens', element: backdrop, modal: true, onKey: (e) => {
+    if (e.key === 'Escape') { closePanel(); return true; }
+  } });
 }
 
 registerAction('clients.show', openPanel);

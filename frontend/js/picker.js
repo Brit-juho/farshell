@@ -1,3 +1,4 @@
+import { pushScope } from './core/keyboard-scopes.js';
 // 세션 피커(모바일 세션 관리 시트) + 맥에서 열기 + 파일 업로드 — F5에서
 // classic script에서 ES 모듈로 전환.
 //
@@ -76,7 +77,8 @@ function openSessionManager() {
   renderSessionManager(backdrop);
   // D7: 포커스 트랩 — openPanel()의 모달들과 같은 규칙(panels/panel.js 참고).
   backdrop._onKeydown = (e) => {
-    if (e.key === 'Escape') { closeSessionManager(); return; }
+    if (document.activeElement?.closest('.vt-dialog')) return;
+    if (e.key === 'Escape') { closeSessionManager(); return true; }
     if (e.key !== 'Tab') return;
     const items = _focusables(backdrop);
     if (items.length === 0) return;
@@ -85,13 +87,13 @@ function openSessionManager() {
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     else if (!backdrop.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
   };
-  document.addEventListener('keydown', backdrop._onKeydown);
+  backdrop._disposeKeys = pushScope({ id: 'session-manager', element: backdrop, modal: true, onKey: backdrop._onKeydown });
 }
 
 function closeSessionManager() {
   const backdrop = document.getElementById('session-manager');
   if (!backdrop) return;
-  if (backdrop._onKeydown) document.removeEventListener('keydown', backdrop._onKeydown);
+  backdrop._disposeKeys?.();
   backdrop._offSessions?.();
   backdrop.remove();
   const picker = document.getElementById('voice-session-picker');
