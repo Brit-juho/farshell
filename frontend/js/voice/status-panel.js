@@ -25,12 +25,9 @@ export function mountVoiceStatus() {
   const meta = document.getElementById('voice-record-meta');
   const record = document.getElementById('voice-panel-record');
   const close = document.getElementById('voice-status-close');
-  const trigger = document.createElement('button');
-  trigger.type = 'button'; trigger.id = 'voice-status-toggle'; trigger.className = 'vt-voice-summary';
-  trigger.setAttribute('aria-controls', panel.id); trigger.setAttribute('aria-expanded', 'false');
-  const short = document.createElement('span'); short.className = 'vt-voice-short'; short.textContent = 'STT';
-  const summary = document.createElement('span'); summary.textContent = '음성 · 확인 중';
-  trigger.append(short, summary);
+  // 별도 버튼은 두지 않는다 — 마이크 버튼이 녹음 토글이면서 상태 점(data-voice-state)을 겸하고,
+  // 길게 누르기·우클릭·팔레트(voice.status)로 이 패널을 연다.
+  if (mic) mic.setAttribute('aria-controls', panel.id);
   let openedFrom = null;
   let pending = false;
   let refreshAgain = false;
@@ -38,11 +35,17 @@ export function mountVoiceStatus() {
   let targetName = '';
   let startedAt = 0;
   let usable = false;
+  let failed = false;
   let refreshedAt = 0;
   const remote = () => window.vtRelayHost?.() && window.vtRelayHost() !== 'local';
-  function placeTrigger() {
-    const home = document.getElementById('vt-dock-voice-status');
-    if (home && trigger.parentElement !== home) home.appendChild(trigger);
+  // 마이크 버튼의 상태 점: '' 정상 · busy 진행 중 · setup 준비 필요 · error 실패.
+  function paintMic() {
+    if (!mic) return;
+    let v = '';
+    if (phase === 'error' || failed) v = 'error';
+    else if (['preparing', 'starting', 'processing'].includes(phase)) v = 'busy';
+    else if (phase !== 'recording' && !usable && !remote()) v = 'setup';
+    if (v) mic.dataset.voiceState = v; else delete mic.dataset.voiceState;
   }
   function position() {
     if (panel.hidden) return;
@@ -63,6 +66,7 @@ export function mountVoiceStatus() {
   async function refresh() {
     if (pending) { refreshAgain = true; return; }
     pending = true;
+    failed = false;
     try {
       if (remote()) {
         state.textContent = '직접 접속 필요'; detail.textContent = '원격 호스트의 음성을 쓰려면 해당 호스트에 직접 접속하세요.';
@@ -76,31 +80,47 @@ export function mountVoiceStatus() {
         usable = view.usable;
       }
     } catch (e) {
+      failed = true;
       state.textContent = '상태 확인 실패'; detail.textContent = e.status === 401 || e.status === 403 ? '로그인이 필요합니다.' : '서버 연결을 확인하세요.';
       usable = false;
     } finally {
       pending = false; refreshedAt = Date.now();
-      summary.textContent = `음성 · ${state.textContent}`;
-      trigger.setAttribute('aria-label', `음성 입력 상태: ${state.textContent}`);
-      trigger.dataset.state = state.textContent;
       mic?.setAttribute('data-tip-sub', state.textContent);
-      paintRecord(); position();
+      mic?.setAttribute('aria-label', `음성 입력 (탭하여 녹음) · ${state.textContent}`);
+      paintMic(); paintRecord(); position();
       if (refreshAgain) { refreshAgain = false; refresh(); }
     }
   }
   function open(from, focus = false) {
     const wasHidden = panel.hidden;
     if (wasHidden) openedFrom = from || document.activeElement;
-    panel.hidden = false; trigger.setAttribute('aria-expanded', 'true');
+    panel.hidden = false; mic?.setAttribute('aria-expanded', 'true');
     position();
     if (wasHidden || Date.now() - refreshedAt >= 15000) refresh();
     if (focus) close.focus();
   }
   function hide(restoreFocus = false) {
-    panel.hidden = true; trigger.setAttribute('aria-expanded', 'false');
+    panel.hidden = true; mic?.setAttribute('aria-expanded', 'false');
     if (restoreFocus && openedFrom?.isConnected) openedFrom.focus();
   }
-  trigger.onclick = () => panel.hidden ? open(trigger, true) : hide(true);
+  // 길게 누르기(500ms)·우클릭(터치 길게 누름도 contextmenu로 온다)은 패널을 연다.
+  // 길게 누른 뒤 손을 떼면 click이 따라오므로 한 번 삼켜 녹음이 시작되지 않게 한다.
+  let pressTimer = null;
+  let swallowClick = false;
+  const cancelPress = () => { clearTimeout(pressTimer); pressTimer = null; };
+  if (mic) {
+    mic.addEventListener('pointerdown', (e) => {
+      if (e.button > 0) return;
+      cancelPress();
+      pressTimer = setTimeout(() => { pressTimer = null; swallowClick = true; open(mic, true); }, 500);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => mic.addEventListener(t, cancelPress));
+    mic.addEventListener('contextmenu', (e) => { e.preventDefault(); cancelPress(); swallowClick = false; open(mic, true); });
+    mic.addEventListener('click', (e) => {
+      if (!swallowClick) return;
+      swallowClick = false; e.stopPropagation(); e.preventDefault();
+    }, true);
+  }
   close.onclick = () => hide(true);
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="voice.settings"]')) hide();
@@ -109,28 +129,27 @@ export function mountVoiceStatus() {
     if (e.key === 'Escape' && !panel.hidden) { hide(true); e.preventDefault(); e.stopPropagation(); }
   }, true);
   document.addEventListener('pointerdown', (e) => {
-    if (!panel.hidden && !panel.contains(e.target) && !trigger.contains(e.target) && !mic?.contains(e.target)) hide();
+    if (!panel.hidden && !panel.contains(e.target) && !mic?.contains(e.target)) hide();
   });
   window.addEventListener('resize', position);
-  window.addEventListener('vt:mic-placed', placeTrigger);
   window.addEventListener('vt:voice-stage', (e) => {
     phase = e.detail.phase;
     if (e.detail.target !== undefined) targetName = e.detail.target;
     if (phase === 'recording') startedAt = Date.now();
-    paintRecord(); open(mic);
+    paintMic(); paintRecord(); open(mic);
     if (['idle', 'ready', 'error', 'done'].includes(phase)) refresh();
   });
   new MutationObserver(() => {
     if (message.textContent.trim()) open(mic);
   }).observe(message, { childList: true, subtree: true, characterData: true });
-  window.registerAction('voice.status', () => open(trigger.isConnected ? trigger : null, true));
-  placeTrigger(); refresh();
+  window.registerAction('voice.status', () => open(mic, true));
+  refresh();
   if (message.textContent.trim()) open(mic);
   // 서버 상태는 화면이 보일 때만 갱신. 모델 적재나 다운로드는 하지 않는다.
   window.setInterval(() => {
     if (document.hidden) return;
     if (phase === 'recording') paintRecord();
-    const dockVisible = trigger.getBoundingClientRect().width > 0;
+    const dockVisible = (mic?.getBoundingClientRect().width || 0) > 0;
     if ((!panel.hidden || dockVisible) && Date.now() - refreshedAt >= 15000) refresh();
   }, 1000);
 }
