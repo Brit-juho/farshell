@@ -17,11 +17,41 @@
 // 완전히 분리된 두 번의 Rollup 실행**으로 나눴다 — 서로의 그래프를 아예 못
 // 보므로 청크 공유가 구조적으로 불가능해진다(대가: core/*.js 코드가 두
 // 산출물에 각각 인라인돼 중복되지만, 몇 KB 수준이라 I2의 300KB 상한에 문제없다).
-import { defineConfig } from 'vite';
+import { defineConfig, transformWithEsbuild } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import solid from 'vite-plugin-solid';
 
 const isVoice = !!process.env.VOICE_BUILD;
+
+// 2026-10-13 — lib 모드(ES 형식)에서 Vite는 공백·주석을 줄이지 않는다(트리 셰이킹용 주석 보존이 이유).
+// `minify: true`인데도 core.js에 주석 183줄과 들여쓰기가 그대로 실려, 초기 페이로드(app+core)가
+// 300KiB 상한에 0.03KiB 남은 상태였다(문서 주석 한 줄이 상한을 깼다). 산출 청크마다 esbuild를 한 번 더
+// 돌려 **공백·주석만** 걷는다.
+// - 식별자는 그대로 둔다: build-output.test.js가 모듈 스코프 이름(`sessions`·`activeId`)으로 청크 간
+//   싱글톤 복제를 잡는다(위 esbuild.minifyIdentifiers:false와 같은 이유).
+// - 문법 축약(minifySyntax)도 하지 않는다: 연속 선언을 한 줄로 합쳐 그 검사 정규식을 깰 수 있고,
+//   남는 이득에 비해 원본과의 거리가 커진다.
+// - 소스맵은 이어 붙인다(Rollup이 renderChunk가 돌려준 map을 앞 단계 map과 합친다).
+// - test 빌드는 산출물 문자열을 직접 검사하는 테스트가 있어 건드리지 않는다.
+function stripChunkWhitespace() {
+  return {
+    name: 'fsh-strip-chunk-whitespace',
+    apply: 'build',
+    // order:'post' — Vite 자신의 esbuild 단계(vite:esbuild-transpile)가 renderChunk에서 코드를 다시 예쁘게
+    // 찍어 내므로, 그보다 뒤에 돌아야 걷은 공백이 남는다(앞에 두면 효과가 0이었다, 2026-10-13 실측).
+    renderChunk: {
+      order: 'post',
+      async handler(code, chunk) {
+        const r = await transformWithEsbuild(code, chunk.fileName, {
+          loader: 'js', format: 'esm', target: 'esnext',
+          minifyWhitespace: true, minifySyntax: false, minifyIdentifiers: false,
+          legalComments: 'none', sourcemap: true,
+        });
+        return { code: r.code, map: r.map };
+      },
+    },
+  };
+}
 
 // F4에서 Codex가 지적한 잔여 버그 수정: vite dev 서버가 /api·/ws만 프록시해서
 // index.html이 참조하는 /static/*(서버가 frontend/ 를 마운트하는 경로 — vendor
@@ -63,7 +93,7 @@ export default defineConfig(({ mode }) => {
     // N17: solid()는 .tsx/.jsx만 변환한다(기존 9천 줄의 classic .js는 그대로 —
     // vite-plugin-solid의 기본 include가 확장자로만 걸린다). lib 모드·2회 분리
     // 빌드·해시 없는 파일명은 그대로 유지된다(ADR-26).
-    plugins: [tailwindcss(), solid()],
+    plugins: [tailwindcss(), solid(), ...(isTest ? [] : [stripChunkWhitespace()])],
     // 식별자는 줄이지 않는다 — 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이
     // 남아야 build-output.test.js가 청크 간 싱글톤 복제를 잡는다.
     esbuild: { minifyIdentifiers: false, minifyWhitespace: !isTest, minifySyntax: !isTest },

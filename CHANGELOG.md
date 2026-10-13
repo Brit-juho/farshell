@@ -16,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **초기 번들이 300KiB 상한에 닿아 있던 것**. Vite lib(ES) 모드는 공백·주석을 줄이지 않아 `core.js`에 주석과 들여쓰기가 그대로 실렸다. 산출 청크마다 esbuild로 공백·주석만 걷는 단계를 더해 초기 페이로드가 307KB에서 253KB로 줄었다(`shell.js` 220→168KB, `voice.js` 42→32KB). 식별자는 그대로 두고 소스맵은 이어 붙인다.
+
 - **큐·에이전트 메시지의 여러 줄 지시가 첫 줄에서 제출되던 것**. 자동 입력(큐, 대상 지정 음성, 원격 입력)이 `send-keys -l` 대신 tmux 버퍼 붙여넣기(`paste-buffer -p -r`)로 들어가고, 200ms 뒤 Enter를 따로 보낸다. 같은 pane에 쓰는 자동 입력은 pane별 락으로 직렬화한다.
 
 - **큐 투입이 사람의 입력에 끼어들던 것**. stop 뒤 무조건 3초를 기다리던 대신, 그 세션에 최근 사람이 입력했으면 자동 투입을 미루고 재시도한다. `send_to_session`도 이때 409 `target_human_typing`을 낸다.
