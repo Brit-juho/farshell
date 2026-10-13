@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import store_lock
+from i18n import tr
 import vt_paths
 
 logger = logging.getLogger(__name__)
@@ -234,16 +235,16 @@ def add(text: str, target: str | dict | None = None, source: dict | None = None,
     id, agent_msg.py). 큐 자신은 뜻을 보지 않고 그대로 싣는다."""
     text = (text or "").strip()
     if not text:
-        return {"ok": False, "error": "empty", "reason": "빈 내용은 넣을 수 없습니다"}
+        return {"ok": False, "error": "empty", "reason": tr("빈 내용은 넣을 수 없습니다")}
     if len(text) > MAX_TEXT_LEN:
         return {"ok": False, "error": "too_long",
-                "reason": f"내용이 너무 깁니다 (최대 {MAX_TEXT_LEN}자)"}
+                "reason": tr("내용이 너무 깁니다 (최대 {max}자)", max=MAX_TEXT_LEN)}
     with _locked():
         items = _read_unlocked()
         if len(items) >= MAX_ITEMS:
             # 조용히 버리지 않는다 — 넣은 줄 알았는데 없는 것이 최악이다.
             return {"ok": False, "error": "full",
-                    "reason": f"큐가 가득 찼습니다 (최대 {MAX_ITEMS}개)"}
+                    "reason": tr("큐가 가득 찼습니다 (최대 {max}개)", max=MAX_ITEMS)}
         item = {
             "id": uuid.uuid4().hex[:12],
             "text": text,
@@ -268,10 +269,10 @@ def remove(item_id: str) -> dict:
         items = _read_unlocked()
         target = next((x for x in items if x.get("id") == item_id), None)
         if target is None:
-            return {"ok": False, "error": "not_found", "reason": "항목이 없습니다"}
+            return {"ok": False, "error": "not_found", "reason": tr("항목이 없습니다")}
         if target.get("status") == STATUS_SENDING:
             return {"ok": False, "error": "item_sending",
-                    "reason": "지금 전송 중인 항목이라 삭제할 수 없습니다"}
+                    "reason": tr("지금 전송 중인 항목이라 삭제할 수 없습니다")}
         rest = [x for x in items if x.get("id") != item_id]
         _write_unlocked(rest)
         _log_transition(target, target.get("status"), "removed", actor="remove")
@@ -393,7 +394,7 @@ def unblock(item_id: str) -> dict:
             return {"ok": False, "error": "not_found"}
         if found.get("status") == STATUS_SENDING:
             return {"ok": False, "error": "item_sending",
-                    "reason": "지금 전송 중인 항목입니다"}
+                    "reason": tr("지금 전송 중인 항목입니다")}
         frm = found.get("status")
         found["status"] = STATUS_PENDING
         for k in ("blocked_reason", "attempts", "retry_at", "exhausted"):
@@ -516,7 +517,7 @@ def _run_via_server() -> dict | None:
     if status == 0:
         return None
     if status == 401:
-        return {"ok": False, "reason": "서버 인증 실패 — 'fsh doctor'로 토큰을 확인하세요"}
+        return {"ok": False, "reason": tr("서버 인증 실패 — 'fsh doctor'로 토큰을 확인하세요")}
     return data
 
 
@@ -530,12 +531,12 @@ def _cli(argv: list[str]) -> int:
         items = list_items()
         print()
         if not items:
-            print("  큐가 비어 있습니다")
+            print("  " + tr("큐가 비어 있습니다"))
             print()
-            print("  추가: vt queue add \"테스트 고쳐줘\"")
+            print("  " + tr("추가: vt queue add \"테스트 고쳐줘\""))
         else:
             pend = sum(1 for x in items if x.get("status") == STATUS_PENDING)
-            print(f"  📋 프롬프트 큐 — {len(items)}건 (대기 {pend})")
+            print("  📋 " + tr("프롬프트 큐 — {total}건 (대기 {pending})", n=len(items), total=len(items), pending=pend))
             print()
             for i, x in enumerate(items, 1):
                 st = x.get("status")
@@ -549,25 +550,25 @@ def _cli(argv: list[str]) -> int:
                 if x.get("blocked_reason"):
                     if x.get("retry_at"):
                         left = max(0, int(float(x["retry_at"]) - time.time()))
-                        tail = f"{left}초 뒤 재시도 ({x.get('attempts', 0)}/{MAX_ATTEMPTS})"
+                        tail = tr("{sec}초 뒤 재시도 ({tries}/{max})", sec=left, tries=x.get('attempts', 0), max=MAX_ATTEMPTS)
                     else:
-                        tail = f"해제: vt queue unblock {x['id'][:8]}"
-                    print(f"         └ 차단됨: {x['blocked_reason']} — {tail}")
+                        tail = tr("해제: vt queue unblock {id}", id=x['id'][:8])
+                    print("         └ " + tr("차단됨: {reason} — {tail}", reason=x['blocked_reason'], tail=tail))
             print()
-            print("  실행: vt queue run   삭제: vt queue rm <id>   비우기: vt queue clear   기록: vt queue log [id]")
+            print("  " + tr("실행: vt queue run   삭제: vt queue rm <id>   비우기: vt queue clear   기록: vt queue log [id]"))
         print()
         return 0
 
     if cmd == "add":
         if not rest:
-            print("  ✗ 내용이 없습니다. 사용법: vt queue add \"내용\" [세션]", file=sys.stderr)
+            print("  ✗ " + tr("내용이 없습니다. 사용법: vt queue add \"내용\" [세션]"), file=sys.stderr)
             return 2
         # 마지막 인자가 tmux 세션 이름이면 타깃으로 쓴다(vt queue add "..." dev)
         r = add(rest[0], rest[1] if len(rest) > 1 else None)
         if not r.get("ok"):
             print(f"  ✗ {r['reason']}", file=sys.stderr)
             return 1
-        print(f"  ✓ 큐에 추가 ({r['count']}건) — {r['item']['id'][:8]}")
+        print("  ✓ " + tr("큐에 추가 ({count}건) — {id}", n=r['count'], count=r['count'], id=r['item']['id'][:8]))
         return 0
 
     if cmd in ("rm", "remove", "delete"):
@@ -577,22 +578,22 @@ def _cli(argv: list[str]) -> int:
         prefix = rest[0]
         match = [x for x in list_items() if x["id"].startswith(prefix)]
         if not match:
-            print(f"  ✗ '{prefix}' 로 시작하는 항목이 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{prefix}' 로 시작하는 항목이 없습니다", prefix=prefix), file=sys.stderr)
             return 1
         if len(match) > 1:
-            print(f"  ✗ '{prefix}' 가 {len(match)}건과 일치합니다 — 더 길게 지정하세요", file=sys.stderr)
+            print("  ✗ " + tr("'{prefix}' 가 {count}건과 일치합니다 — 더 길게 지정하세요", n=len(match), prefix=prefix, count=len(match)), file=sys.stderr)
             return 1
         r = remove(match[0]["id"])
         if not r.get("ok"):
             print(f"  ✗ {r.get('reason', r.get('error'))}", file=sys.stderr)
             return 1
-        print(f"  ✓ 삭제됨: {match[0]['text'][:40]}")
+        print("  ✓ " + tr("삭제됨: {text}", text=match[0]['text'][:40]))
         return 0
 
     if cmd == "clear":
         r = clear()
-        kept = f" (전송 중 {r['kept_sending']}건은 남김)" if r.get("kept_sending") else ""
-        print(f"  ✓ {r['removed']}건 삭제{kept}")
+        kept = tr(" (전송 중 {count}건은 남김)", n=r['kept_sending'], count=r['kept_sending']) if r.get("kept_sending") else ""
+        print("  ✓ " + tr("{count}건 삭제", n=r['removed'], count=r['removed']) + kept)
         return 0
 
     if cmd == "unblock":
@@ -601,19 +602,19 @@ def _cli(argv: list[str]) -> int:
             return 2
         match = [x for x in list_items() if x["id"].startswith(rest[0])]
         if len(match) != 1:
-            print(f"  ✗ '{rest[0]}' 로 특정되는 항목이 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{prefix}' 로 특정되는 항목이 없습니다", prefix=rest[0]), file=sys.stderr)
             return 1
         r = unblock(match[0]["id"])
         if not r.get("ok"):
             print(f"  ✗ {r.get('reason', r.get('error'))}", file=sys.stderr)
             return 1
-        print(f"  ✓ 재개됨: {match[0]['text'][:40]}")
+        print("  ✓ " + tr("재개됨: {text}", text=match[0]['text'][:40]))
         return 0
 
     if cmd == "log":
         rows = transitions(rest[0] if rest else None, limit=50)
         if not rows:
-            print("  기록이 없습니다")
+            print("  " + tr("기록이 없습니다"))
             return 0
         for e in rows:
             ts = time.strftime("%m-%d %H:%M:%S", time.localtime(e.get("ts", 0)))
@@ -633,9 +634,9 @@ def _cli(argv: list[str]) -> int:
             print(f"  ✗ {r.get('reason', r.get('error'))}", file=sys.stderr)
             return 1
         if r["drained"] == 0:
-            print("  ⓘ 큐가 비었습니다")
+            print("  ⓘ " + tr("큐가 비었습니다"))
             return 0
-        print(f"  ✓ 투입 → {r['pane']} ({r['mode']}), 남은 {r['remaining']}건")
+        print("  ✓ " + tr("투입 → {pane} ({mode}), 남은 {count}건", n=r['remaining'], pane=r['pane'], mode=r['mode'], count=r['remaining']))
         return 0
 
     print(f"unknown command: {cmd}", file=sys.stderr)

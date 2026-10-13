@@ -28,6 +28,7 @@ from typing import Optional
 import store_lock
 import tmux_runner
 import vt_paths
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -495,7 +496,7 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     import tmux_target
     tmux_target.send_to_tmux(ident["pane"], LAUNCH[agent])
     _audit("spawn", "ok", reason=f"{caller.name}->{child_name}", chars=len(task))
-    _push("하위 세션을 만들었습니다", f"{caller.name} → {child_name}: {_one_line(task, 60)}")
+    _push(tr("하위 세션을 만들었습니다"), f"{caller.name} → {child_name}: {_one_line(task, 60)}")
     return {"delegation": did, "child": child_name, "agent": agent, "cwd": start_dir}
 
 
@@ -577,7 +578,7 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
     _flush(did)
     _audit("report", "ok", reason=outcome, chars=len(summary))
     if not still_running:
-        _push("위임한 작업이 모두 끝났습니다", f"{item['parent']['name']}의 하위 세션 보고가 도착했습니다")
+        _push(tr("위임한 작업이 모두 끝났습니다"), tr("{name}의 하위 세션 보고가 도착했습니다", name=item['parent']['name']))
     return {"ok": True, "delegation": did}
 
 
@@ -619,9 +620,9 @@ def on_agent_event(session: Optional[str], status: Optional[str], payload: dict)
         child_name, parent_name = item["child"]["name"], item["parent"]["name"]
     _flush(did)
     if status == "waiting":
-        _push("하위 세션이 승인을 기다립니다", f"{parent_name} → {child_name}")
+        _push(tr("하위 세션이 승인을 기다립니다"), f"{parent_name} → {child_name}")
     else:
-        _push("하위 세션이 보고 없이 멈췄습니다", f"{parent_name} → {child_name}")
+        _push(tr("하위 세션이 보고 없이 멈췄습니다"), f"{parent_name} → {child_name}")
 
 
 def on_child_working(session: Optional[str]) -> None:
@@ -759,7 +760,7 @@ def _cli(argv: list[str]) -> int:
     if cmd in ("ls", "list"):
         items = list_all()
         if not items:
-            print("  위임이 없습니다")
+            print("  " + tr("위임이 없습니다"))
             return 0
         for x in sorted(items, key=lambda x: x.get("created_at", 0)):
             ts = time.strftime("%m-%d %H:%M", time.localtime(x.get("created_at", 0)))
@@ -769,16 +770,16 @@ def _cli(argv: list[str]) -> int:
         return 0
     if cmd == "close":
         if len(argv) < 2:
-            print("  ✗ id가 필요합니다", file=sys.stderr)
+            print("  ✗ " + tr("id가 필요합니다"), file=sys.stderr)
             return 2
         match = [x for x in list_all() if x["id"].startswith(argv[1])]
         if len(match) != 1:
-            print(f"  ✗ '{argv[1]}'로 특정되는 위임이 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{id}'로 특정되는 위임이 없습니다", id=argv[1]), file=sys.stderr)
             return 1
         r = close(match[0]["id"], reason="closed_by_user")
-        print("  ✓ 닫았습니다(세션은 남겨 둡니다)" + (f", 대기 지시 {r.get('removed_queued')}건 삭제" if r.get("removed_queued") else ""))
+        print("  ✓ " + tr("닫았습니다(세션은 남겨 둡니다)") + (tr(", 대기 지시 {count}건 삭제", n=r.get('removed_queued'), count=r.get('removed_queued')) if r.get("removed_queued") else ""))
         return 0
-    print("사용법: fsh delegate [ls|close <id>]", file=sys.stderr)
+    print(tr("사용법: fsh delegate [ls|close <id>]"), file=sys.stderr)
     return 2
 
 

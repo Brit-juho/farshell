@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import re
+from i18n import tr
 
 # 위험 제어문자 화이트리스트 — iTerm2 kPasteFlagsRemovingUnsafeControlCodes.
 _ALLOWED_CONTROL = frozenset({0x09, 0x0A, 0x0C, 0x0D, 0x16})  # tab LF FF CR ^V
@@ -66,8 +67,8 @@ class LineTooLong(Exception):
         self.line_index = line_index
         self.line_length = line_length
         super().__init__(
-            f"{line_index + 1}번째 줄이 {line_length}바이트 — "
-            f"이 프로그램은 한 줄 {max_line}바이트까지만 받습니다"
+            tr("{line}번째 줄이 {length}바이트 — 이 프로그램은 한 줄 {max}바이트까지만 받습니다",
+               line=line_index + 1, length=line_length, max=max_line)
         )
 
 

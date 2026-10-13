@@ -37,6 +37,7 @@ import os
 
 import queue_store
 import tmux_target
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -170,14 +171,14 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
     item = queue_store.claim_next(session, session_scoped=session_scoped,
                                   targeted_only=targeted_only)
     if item is None:
-        return {"ok": True, "drained": 0, "reason": "큐가 비었습니다"}
+        return {"ok": True, "drained": 0, "reason": tr("큐가 비었습니다")}
 
     ok, reason = _check_safe(item["text"])
     if not ok:
         item = _block(item, reason, retriable=False)
         logger.warning(f"큐 항목이 safe_mode 에 막힘: {reason}")
         return {"ok": False, "drained": 0, "error": "blocked",
-                "reason": f"위험 명령으로 차단됨: {reason}", "item": item}
+                "reason": tr("위험 명령으로 차단됨: {reason}", reason=reason), "item": item}
 
     # 5관문(A4): 승인 대기 중인 pane 에는 절대 넣지 않는다. 항목은 버리지 않고
     # blocked 로 남겨 승인이 끝난 뒤 다시 흘려보낼 수 있게 한다.
@@ -186,7 +187,7 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
     if _is_waiting(target_session, target_host):
         item = _block(item, "타깃이 승인 대기 중", retriable=True)
         return {"ok": False, "drained": 0, "error": "waiting",
-                "reason": "타깃이 승인 대기 중입니다 (큐에 유지됨)", "item": item}
+                "reason": tr("타깃이 승인 대기 중입니다 (큐에 유지됨)"), "item": item}
 
     # A3 — 원격 호스트 항목은 로컬 tmux를 아예 보지 않는다. pane 해석(send-keys)은
     # 로컬 소켓 전용이라 원격 세션 이름으로 로컬 pane을 찾으면 **같은 이름의
@@ -195,14 +196,14 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
         if not target_session:
             item = _block(item, "원격 항목에 세션이 없음", retriable=False)
             return {"ok": False, "drained": 0, "error": "no_target",
-                    "reason": "원격 항목은 대상 세션을 지정해야 합니다 (큐에 유지됨)",
+                    "reason": tr("원격 항목은 대상 세션을 지정해야 합니다 (큐에 유지됨)"),
                     "item": item}
         remote_text = (f"{item['preface']}\n{item['text']}" if item.get("preface") else item["text"])
         ok, reason = _send_remote(target_host, target_session, remote_text)
         if not ok:
             item = _block(item, reason or "원격 전송 실패", retriable=True)
             return {"ok": False, "drained": 0, "error": "send_failed",
-                    "reason": f"{target_host}에 전송 실패: {reason} (큐에 유지됨)",
+                    "reason": tr("{host}에 전송 실패: {reason} (큐에 유지됨)", host=target_host, reason=reason),
                     "item": item}
         queue_store.complete(item)
         logger.info(f"큐 투입 → {target_host}:{target_session}: {item['text'][:60]}")
@@ -215,7 +216,7 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
         # 항목을 버리지 않는다 — 세션이 돌아오면 그대로 실행돼야 한다.
         item = _block(item, "타깃 tmux 세션 없음", retriable=True)
         return {"ok": False, "drained": 0, "error": "no_target",
-                "reason": "보낼 tmux 세션이 없습니다 (큐에 유지됨)", "item": item}
+                "reason": tr("보낼 tmux 세션이 없습니다 (큐에 유지됨)"), "item": item}
 
     if automatic:
         import pane_input
@@ -223,7 +224,7 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
         if pane_input.human_typing(typing_session):
             item = _block(item, "사용자가 입력하는 중", retriable=True)
             return {"ok": False, "drained": 0, "error": "human_typing",
-                    "reason": "사용자가 입력하는 중이라 미뤘습니다 (큐에 유지됨)", "item": item}
+                    "reason": tr("사용자가 입력하는 중이라 미뤘습니다 (큐에 유지됨)"), "item": item}
 
     preface = item.get("preface")
     sent = (tmux_target.send_to_tmux(pane, item["text"], preface=preface) if preface
@@ -231,7 +232,7 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
     if not sent:
         item = _block(item, "tmux 전송 실패", retriable=True)
         return {"ok": False, "drained": 0, "error": "send_failed",
-                "reason": "tmux 전송에 실패했습니다 (큐에 유지됨)", "item": item}
+                "reason": tr("tmux 전송에 실패했습니다 (큐에 유지됨)"), "item": item}
 
     queue_store.complete(item)
 
@@ -311,9 +312,9 @@ def _notify(title: str, body: str) -> None:
 
 
 def _notify_exhausted(item: dict) -> None:
-    _notify("큐 항목이 계속 막힘",
-            f"{queue_store.MAX_ATTEMPTS}번 시도했지만 투입하지 못했습니다: "
-            f"{item.get('blocked_reason', '')} — {item.get('text', '')[:60]}")
+    _notify(tr("큐 항목이 계속 막힘"),
+            tr("{n}번 시도했지만 투입하지 못했습니다: {reason} — {text}", n=queue_store.MAX_ATTEMPTS,
+               reason=item.get('blocked_reason', ''), text=item.get('text', '')[:60]))
 
 
 def _session_ready(name: str) -> bool:
@@ -334,7 +335,7 @@ def sweep_once() -> dict:
     """한 번 점검한다. blocking — to_thread로 부른다."""
     r = queue_store.sweep()
     for x in r["stale"]:
-        _notify("큐 투입이 멈춤", f"전송이 끝나지 않았습니다 — 확인 후 해제하세요: {x.get('text', '')[:60]}")
+        _notify(tr("큐 투입이 멈춤"), tr("전송이 끝나지 않았습니다 — 확인 후 해제하세요: {text}", text=x.get('text', '')[:60]))
     return r
 
 

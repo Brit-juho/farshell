@@ -7,6 +7,7 @@ circular import 없이 전역 상태를 한 곳에서 관리.
 from __future__ import annotations
 
 from fastapi import WebSocket
+from i18n import tr
 from pty_manager import PTYManager
 from session_store import SessionStore
 from output_watcher import OutputWatcher
@@ -77,7 +78,7 @@ def _push_waiting_notice() -> None:
         if not push.available():
             return
         loop = asyncio.get_running_loop()
-        loop.create_task(asyncio.to_thread(push.send, "승인 대기", "세션에서 확인이 필요합니다", "/"))
+        loop.create_task(asyncio.to_thread(push.send, tr("승인 대기"), tr("세션에서 확인이 필요합니다"), "/"))
     except RuntimeError:
         pass  # 이벤트 루프 밖(테스트 등) — 푸시는 부가 기능이라 조용히 건너뛴다
     except Exception:

@@ -184,12 +184,15 @@ def main(argv: list[str]) -> int:
     unused = sorted(k for k in d if k not in used)
     bad_vars = []
     for k, v in d.items():
-        vals = [v] if isinstance(v, str) else [x for x in (v.get("one"), v.get("other")) if x]
         want = set(VAR.findall(k))
-        for x in vals:
+        forms = [("other", v)] if isinstance(v, str) else [("one", v.get("one")), ("other", v.get("other"))]
+        for form, x in forms:
+            if not x:
+                continue
             got = set(VAR.findall(x))
-            # {n}은 복수형 one 문구에서 숫자를 풀어 쓸 수 있어 빠져도 된다.
-            if got - want or (want - got - {"n"}):
+            # 복수형의 one 은 숫자를 "1"로 풀어 쓸 수 있어 자리표시자를 빼도 된다 — 새로 만들면 안 된다.
+            # 그 밖의 번역은 원문과 자리표시자가 같아야 한다.
+            if (got - want) or (form != "one" and (want - got)):
                 bad_vars.append(f"{k!r} -> {x!r}")
     for k in missing:
         print(f"missing: {k!r}  ({used[k]})")
