@@ -1,9 +1,22 @@
 #!/bin/sh
 # 개인 값·비밀이 커밋에 섞이지 않게 막는다 — scripts/guard_personal.py 참고.
 # 켜기: git config core.hooksPath scripts/githooks   (bin/fsh doctor 가 켜져 있는지 알려준다)
+# 메시지 언어: VT_LANG 환경변수, 없으면 OS 로캘(ko* 이면 한국어, 그 밖은 영어). sh 라 lib/i18n.sh 는 못 쓴다.
+case "${VT_LANG:-}" in
+  ko|en) _l="$VT_LANG" ;;
+  *) _l=en
+     for _k in "${LC_ALL:-}" "${LC_MESSAGES:-}" "${LANG:-}"; do
+       case "$_k" in ''|C|POSIX) continue ;; ko*|KO*) _l=ko ;; esac
+       break
+     done ;;
+esac
 root="$(git rev-parse --show-toplevel)" || exit 0
 py="${VT_PYTHON:-}"
 [ -x "$py" ] || py="$root/.venv/bin/python"
 [ -x "$py" ] || py="$(command -v python3)"
-[ -n "$py" ] || { echo "guard_personal: python 을 찾지 못해 검사를 건너뜁니다" >&2; exit 0; }
+if [ -z "$py" ]; then
+  if [ "$_l" = "ko" ]; then echo "guard_personal: python 을 찾지 못해 검사를 건너뜁니다" >&2
+  else echo "guard_personal: python not found, skipping the check" >&2; fi
+  exit 0
+fi
 exec "$py" "$root/scripts/guard_personal.py" staged

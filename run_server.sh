@@ -17,6 +17,10 @@ unset _vt_v
 . "$SCRIPT_DIR/lib/vt_env.sh"
 vt_env_load "$SCRIPT_DIR/config/vt.defaults.env"
 vt_env_load "${VT_CONFIG:-$HOME/.vt.env}"
+# 메시지 번역(_t). lib/i18n.sh 가 없으면 vt_env.sh 의 대체 _t 가 원문을 그대로 내보낸다.
+if [ -f "$SCRIPT_DIR/lib/i18n.sh" ]; then
+  . "$SCRIPT_DIR/lib/i18n.sh"
+fi
 
 # Python 결정: VT_PYTHON > .venv > 시스템 python3
 if [ -n "${VT_PYTHON:-}" ] && [ -x "$VT_PYTHON" ]; then
@@ -28,10 +32,10 @@ else
 fi
 
 if ! "$PYTHON" -c "import fastapi, uvicorn" >/dev/null 2>&1; then
-  echo "✗ Python 환경에 의존성이 없습니다: $PYTHON"
-  echo "  설치: ./install.sh         (터미널만)"
-  echo "  설치: ./install.sh voice   (음성 모드 포함)"
-  echo "  또는 ~/.vt.env에 VT_PYTHON=/path/to/python 지정"
+  echo "✗ $(_t 'Python 환경에 의존성이 없습니다: {python}' python="$PYTHON")"
+  echo "  $(_t '설치: ./install.sh         (터미널만)')"
+  echo "  $(_t '설치: ./install.sh voice   (음성 모드 포함)')"
+  echo "  $(_t '또는 ~/.vt.env에 VT_PYTHON=/path/to/python 지정')"
   exit 1
 fi
 

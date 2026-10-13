@@ -3,8 +3,10 @@
 # 사용법:
 #   ./install.sh             # 터미널만 (경량, ~50MB)
 #   ./install.sh voice       # 터미널 + 음성 모드 (수백MB; 음성 인식 모델은 설정에서 따로 받음)
+#   ./install.sh --lang en   # 화면 언어 지정 (ko|en) — ~/.vt.env 의 VT_LANG 로 저장됨
 #   curl -fsSL <URL>/install.sh | bash       # 원격 설치 (터미널만)
 #   curl -fsSL <URL>/install.sh | bash -s voice
+#   curl -fsSL <URL>/install.sh | bash -s -- --lang en
 #
 # 환경변수:
 #   VT_DIR   — 설치 경로 (기본: 스크립트 위치 또는 ~/farshell)
@@ -12,25 +14,143 @@
 
 set -euo pipefail
 
+# i18n — 레포의 lib/ 가 있으면 그걸 쓰고, 없으면(파이프 설치 직후 클론 전) 아래 대체 구현을 쓴다.
+# 대체 구현은 번역 사전이 없으므로 원문(한국어)을 그대로 내보내고, vt_is_en 은 OS 로캘만 본다.
+_t() {
+  local out="${1-}" kv
+  shift 2>/dev/null || true
+  for kv in "$@"; do out="${out//\{${kv%%=*}\}/${kv#*=}}"; done
+  printf '%s' "$out"
+}
+vt_is_en() {
+  local k v
+  for k in LC_ALL LC_MESSAGES LANG; do
+    eval "v=\${$k-}"
+    case "$v" in ''|C|POSIX) continue ;; esac
+    case "$v" in ko*|KO*) return 1 ;; *) return 0 ;; esac
+  done
+  return 0
+}
+
+# lib/vt_env.sh + lib/i18n.sh 를 불러온다(있을 때만). 불러오면 위 대체 구현을 덮어쓴다.
+_inst_load_libs() {
+  local d="$1"
+  if [ -f "$d/lib/vt_env.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$d/lib/vt_env.sh"
+  fi
+  if [ -f "$d/lib/i18n.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$d/lib/i18n.sh"
+  fi
+}
+
+_inst_usage() {
+  if vt_is_en; then cat <<'EOF_EN'
+FarShell installer
+
+Usage:
+  ./install.sh [terminal|voice] [--lang ko|en]
+
+  terminal        terminal only (default, ~50MB)
+  voice           terminal + voice mode (hundreds of MB; speech models are downloaded later in Settings)
+  --lang ko|en    display language; saved as VT_LANG in ~/.vt.env
+                  (default: keep the saved value, else ask, else follow the OS locale)
+  -h, --help      show this help
+
+Environment:
+  VT_DIR          install path (default: this script's folder, or ~/farshell)
+  VT_PORT         port (default: 7777)
+EOF_EN
+  else cat <<'EOF'
+FarShell 설치 스크립트
+
+사용법:
+  ./install.sh [terminal|voice] [--lang ko|en]
+
+  terminal        터미널만 (기본, ~50MB)
+  voice           터미널 + 음성 모드 (수백MB; 음성 인식 모델은 설정에서 따로 받음)
+  --lang ko|en    화면 언어. ~/.vt.env 의 VT_LANG 로 저장됨
+                  (기본: 저장된 값 유지, 없으면 질문, 비대화형이면 OS 로캘 기준)
+  -h, --help      이 도움말
+
+환경변수:
+  VT_DIR          설치 경로 (기본: 스크립트 위치 또는 ~/farshell)
+  VT_PORT         포트 (기본: 7777)
+EOF
+  fi
+}
+
+# 로컬 레포가 이미 있으면(=SCRIPT_DIR 에 lib/ 가 있으면) 인자 처리·가드 메시지부터 번역을 쓴다.
+_SCRIPT_DIR_EARLY="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
+if [ -n "$_SCRIPT_DIR_EARLY" ] && [ -f "$_SCRIPT_DIR_EARLY/bin/fsh" ]; then
+  _inst_load_libs "$_SCRIPT_DIR_EARLY"
+fi
+
+# 인자 처리: [terminal|voice] [--lang ko|en] [-h|--help]
+PROFILE=""
+LANG_OPT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) _inst_usage; exit 0 ;;
+    --lang)
+      if [ $# -lt 2 ]; then
+        echo "✗ --lang requires a value: ko or en" >&2
+        exit 2
+      fi
+      LANG_OPT="$2"; shift 2 ;;
+    --lang=*) LANG_OPT="${1#--lang=}"; shift ;;
+    -*)
+      echo "✗ Unknown option: $1 (see ./install.sh --help)" >&2
+      exit 2 ;;
+    *)
+      [ -n "$PROFILE" ] || PROFILE="$1"
+      shift ;;
+  esac
+done
+PROFILE="${PROFILE:-terminal}"  # terminal | voice
+if [ -n "$LANG_OPT" ]; then
+  LANG_OPT="$(printf '%s' "$LANG_OPT" | tr 'A-Z' 'a-z')"
+  case "$LANG_OPT" in
+    ko|en) ;;
+    *)
+      echo "✗ Invalid --lang value: '$LANG_OPT' (use ko or en)" >&2
+      exit 2 ;;
+  esac
+fi
+
 # Windows 네이티브 가드 — Git Bash/MSYS/Cygwin에서 실행 시 거부
 case "$(uname -s 2>/dev/null)" in
   MINGW*|MSYS*|CYGWIN*)
-    echo ""
-    echo "✗ Windows 네이티브 환경은 지원하지 않습니다."
-    echo ""
-    echo "  FarShell은 tmux를 사용하므로 Linux/macOS 환경이 필요합니다."
-    echo "  Windows 사용자는 WSL2를 통해 설치하세요:"
-    echo ""
-    echo "  1. PowerShell(관리자)에서: wsl --install"
-    echo "  2. WSL2 진입 후: git clone <repo> && cd farshell && ./install.sh"
-    echo ""
-    echo "  자세히: README.md 'Windows (WSL2)' 섹션"
+    if vt_is_en; then
+      echo ""
+      echo "✗ Native Windows is not supported."
+      echo ""
+      echo "  FarShell uses tmux, so it needs Linux or macOS."
+      echo "  On Windows, install it through WSL2:"
+      echo ""
+      echo "  1. In PowerShell (admin): wsl --install"
+      echo "  2. Inside WSL2: git clone <repo> && cd farshell && ./install.sh"
+      echo ""
+      echo "  Details: the 'Windows (WSL2)' section of README.md"
+    else
+      echo ""
+      echo "✗ Windows 네이티브 환경은 지원하지 않습니다."
+      echo ""
+      echo "  FarShell은 tmux를 사용하므로 Linux/macOS 환경이 필요합니다."
+      echo "  Windows 사용자는 WSL2를 통해 설치하세요:"
+      echo ""
+      echo "  1. PowerShell(관리자)에서: wsl --install"
+      echo "  2. WSL2 진입 후: git clone <repo> && cd farshell && ./install.sh"
+      echo ""
+      echo "  자세히: README.md 'Windows (WSL2)' 섹션"
+    fi
     exit 1
     ;;
 esac
 
-PROFILE="${1:-terminal}"  # terminal | voice
 PIPE_INSTALL=0
+PIPE_REUSED=0
 
 # 로컬 레포가 있으면 그걸 우선 사용. 진짜 파이프 설치(curl | bash)에서만 클론.
 # 이전 버전은 `[ -t 0 ]`로 stdin TTY 여부를 체크했지만, 자동화/CI 환경도 false로
@@ -42,22 +162,89 @@ else
   PIPE_INSTALL=1
   VT_DIR="${VT_DIR:-$HOME/farshell}"
   if [ ! -d "$VT_DIR" ]; then
-    echo "▸ 레포 클론 중 → $VT_DIR"
+    # 클론 전에는 사전이 없다 — 로캘만 보고 고른다
+    if vt_is_en; then
+      echo "▸ Cloning repo → $VT_DIR"
+    else
+      echo "▸ 레포 클론 중 → $VT_DIR"
+    fi
     git clone --depth 1 https://github.com/Brit-juho/farshell.git "$VT_DIR"
   else
-    echo "✓ 기존 레포 사용: $VT_DIR"
+    PIPE_REUSED=1   # 언어가 정해진 뒤에 알린다
   fi
   cd "$VT_DIR"
+  _inst_load_libs "$VT_DIR"
+fi
+
+# 화면 언어(VT_LANG) — --lang > ~/.vt.env 에 이미 있는 값 > 질문(터미널) > OS 로캘.
+# ~/.vt.env 쓰기는 반드시 vt_env_set 으로 한다(AGENTS.md 계약 5번 — echo/sed 금지).
+# 이 설치기는 $HOME/.vt.env 만 쓰므로 VT_CONFIG 환경변수는 호출 동안만 그 경로로 맞춘다.
+_inst_os_lang() {
+  local k v
+  for k in LC_ALL LC_MESSAGES LANG; do
+    eval "v=\${$k-}"
+    case "$v" in ''|C|POSIX) continue ;; esac
+    v="$(printf '%s' "$v" | tr 'A-Z' 'a-z')"
+    case "$v" in ko*) echo ko ;; *) echo en ;; esac
+    return 0
+  done
+  echo en
+}
+
+LANG_PENDING=""   # ~/.vt.env 가 아직 없을 때 5단계 뒤에 기록할 값
+_inst_pick_lang() {
+  local envf="$HOME/.vt.env" cur="" chosen="" def ans
+  # 오래된 트리라 lib 가 없으면 언어 설정은 건너뛴다
+  if ! type vt_env_set >/dev/null 2>&1 || ! type vt_lang_resolve >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -f "$envf" ]; then
+    cur="$(VT_CONFIG="$envf" vt_env_get VT_LANG 2>/dev/null || true)"
+    case "$cur" in ko|en) ;; *) cur="" ;; esac
+  fi
+  if [ -z "$LANG_OPT" ] && [ -n "$cur" ]; then
+    VT_CONFIG="$envf" vt_lang_resolve
+    return 0
+  fi
+  chosen="$LANG_OPT"
+  if [ -z "$chosen" ]; then
+    def="$(_inst_os_lang)"
+    if [ -t 0 ]; then
+      # 두 언어를 함께 적는 고정 문구 — _t 로 감싸지 않는다
+      printf 'Language / 언어 [ko/en] (기본 %s): ' "$def"
+      IFS= read -r ans || ans=""
+      ans="$(printf '%s' "$ans" | tr 'A-Z' 'a-z')"
+      case "$ans" in ko|en) chosen="$ans" ;; *) chosen="$def" ;; esac
+    else
+      chosen="$def"
+    fi
+  fi
+  if [ -f "$envf" ]; then
+    if VT_CONFIG="$envf" vt_env_set VT_LANG "$chosen"; then
+      VT_CONFIG="$envf" vt_lang_resolve
+    else
+      _VT_LANG="$chosen"
+      echo "  ⚠ $(_t '언어 설정을 ~/.vt.env 에 저장하지 못했습니다 — 나중에 설정 화면에서 바꿀 수 있습니다')"
+    fi
+  else
+    LANG_PENDING="$chosen"
+    _VT_LANG="$chosen"
+  fi
+}
+_inst_pick_lang
+
+if [ "$PIPE_REUSED" = "1" ]; then
+  echo "✓ $(_t '기존 레포 사용: {dir}' dir="$VT_DIR")"
 fi
 
 echo ""
-echo "  🎤 FarShell 설치 — 프로필: $PROFILE"
-echo "  설치 경로: $VT_DIR"
+echo "  🎤 $(_t 'FarShell 설치 — 프로필: {profile}' profile="$PROFILE")"
+echo "  $(_t '설치 경로: {dir}' dir="$VT_DIR")"
 echo ""
 
 # 1. Python 확인
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "✗ python3 미설치. macOS: 'brew install python@3.11', Linux: 'apt install python3'"
+  echo "✗ $(_t "python3 미설치. macOS: 'brew install python@3.11', Linux: 'apt install python3'")"
   exit 1
 fi
 PY_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
@@ -71,17 +258,17 @@ PY_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.vers
 PY_MAJOR="${PY_VERSION%%.*}"
 PY_MINOR="${PY_VERSION##*.}"
 if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
-  echo "✗ Python $PY_VERSION — FarShell은 **3.11 이상**이 필요합니다."
-  echo "    (서버 코드가 3.10+ 문법을 쓰고, CI가 검증하는 하한은 3.11입니다)"
+  echo "✗ $(_t 'Python {version} — FarShell은 **3.11 이상**이 필요합니다.' version="$PY_VERSION")"
+  echo "    $(_t '(서버 코드가 3.10+ 문법을 쓰고, CI가 검증하는 하한은 3.11입니다)')"
   if [ "$(uname)" = "Darwin" ]; then
-    echo "    macOS 기본 python3는 3.9라 그대로는 동작하지 않습니다:"
+    echo "    $(_t 'macOS 기본 python3는 3.9라 그대로는 동작하지 않습니다:')"
     echo "      brew install python@3.11"
-    echo "      그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V"
+    echo "      $(_t '그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V')"
   else
-    echo "    설치: apt install python3.11 / dnf install python3.11 등"
+    echo "    $(_t '설치: {cmd} 등' cmd='apt install python3.11 / dnf install python3.11')"
   fi
-  echo "    이미 3.11+ 를 갖고 있다면 그 python으로 직접 venv를 만들고"
-  echo "    ~/.vt.env 의 VT_PYTHON 을 그 경로로 지정해도 됩니다."
+  echo "    $(_t '이미 3.11+ 를 갖고 있다면 그 python으로 직접 venv를 만들고')"
+  echo "    $(_t '~/.vt.env 의 VT_PYTHON 을 그 경로로 지정해도 됩니다.')"
   exit 1
 fi
 echo "✓ Python $PY_VERSION"
@@ -89,7 +276,7 @@ echo "✓ Python $PY_VERSION"
 # 2. venv 생성 (이미 있으면 재사용)
 VENV="$VT_DIR/.venv"
 if [ ! -d "$VENV" ]; then
-  echo "▸ 가상환경 생성 → $VENV"
+  echo "▸ $(_t '가상환경 생성') → $VENV"
   python3 -m venv "$VENV"
 fi
 # shellcheck disable=SC1091
@@ -97,16 +284,16 @@ source "$VENV/bin/activate"
 pip install --quiet --upgrade pip
 
 # 3. 프로필별 패키지 설치
-echo "▸ 패키지 설치 중..."
+echo "▸ $(_t '패키지 설치 중...')"
 pip install --quiet -r "$VT_DIR/requirements-core.txt"
 if [ "$PROFILE" = "voice" ]; then
   pip install --quiet -r "$VT_DIR/requirements-voice.txt"
   if [ "$(uname)" = "Darwin" ]; then
     pip install --quiet pyobjc-framework-Cocoa
   fi
-  echo "✓ 터미널 + 음성 모드 의존성 설치 완료"
+  echo "✓ $(_t '터미널 + 음성 모드 의존성 설치 완료')"
 else
-  echo "✓ 터미널 의존성 설치 완료 (음성 모드는 './install.sh voice'로 추가)"
+  echo "✓ $(_t "터미널 의존성 설치 완료 (음성 모드는 './install.sh voice'로 추가)")"
 fi
 
 # 3-1. 프런트엔드 자산 준비 — **두 경로**(I4, 2026-09-08)
@@ -123,27 +310,27 @@ fi
 # — .git이 없고 dist가 있으면 tarball이다. mtime 비교는 tar 전개 순서에 따라
 # 뒤집힐 수 있어 신뢰할 수 없다.
 if [ ! -d "$VT_DIR/.git" ] && [ -f "$VT_DIR/frontend/dist/app.js" ]; then
-  echo "✓ 릴리스 패키지 — 빌드된 프런트엔드가 포함돼 있습니다 (node 불필요)"
+  echo "✓ $(_t '릴리스 패키지 — 빌드된 프런트엔드가 포함돼 있습니다 (node 불필요)')"
 elif [ -f "$VT_DIR/frontend/dist/app.js" ] && [ ! -f "$VT_DIR/package.json" ]; then
   # package.json이 없는데 dist만 있는 이상한 트리 — 그래도 돌 수는 있다.
-  echo "✓ 빌드된 프런트엔드 발견 (빌드 생략)"
+  echo "✓ $(_t '빌드된 프런트엔드 발견 (빌드 생략)')"
 else
   if ! command -v npm >/dev/null 2>&1; then
     echo ""
-    echo "✗ Node.js(npm)가 필요합니다 — 소스에서 설치할 때 프런트엔드를 빌드합니다."
-    echo "    (릴리스 tarball로 설치하면 node 없이 됩니다:"
+    echo "✗ $(_t 'Node.js(npm)가 필요합니다 — 소스에서 설치할 때 프런트엔드를 빌드합니다.')"
+    echo "    $(_t '(릴리스 tarball로 설치하면 node 없이 됩니다:')"
     echo "     https://github.com/Brit-juho/farshell/releases 에서 farshell-*.tar.gz)"
     if [ "$(uname)" = "Darwin" ]; then
-      echo "    설치: brew install node"
+      echo "    $(_t '설치: {cmd}' cmd='brew install node')"
     else
-      echo "    설치: https://nodejs.org (또는 배포판 패키지 매니저: apt/dnf/pacman install nodejs npm)"
+      echo "    $(_t '설치: {url} (또는 배포판 패키지 매니저: {cmds})' url='https://nodejs.org' cmds='apt/dnf/pacman install nodejs npm')"
     fi
-    echo "    설치 후 './install.sh $PROFILE'을 다시 실행하세요."
+    echo "    $(_t "설치 후 './install.sh {profile}'을 다시 실행하세요." profile="$PROFILE")"
     exit 1
   fi
-  echo "▸ 프런트엔드 빌드 중... (Vite + Tailwind, node $(node --version))"
+  echo "▸ $(_t '프런트엔드 빌드 중... (Vite + Tailwind, node {version})' version="$(node --version)")"
   ( cd "$VT_DIR" && npm ci --silent && npm run build --silent )
-  echo "✓ 프런트엔드 빌드 완료 → frontend/dist/"
+  echo "✓ $(_t '프런트엔드 빌드 완료 → frontend/dist/')"
 fi
 
 # 4. fsh CLI 등록. 구 명령어 `vt`는 2.1에서 제거됐다 — 예전 설치본이 남긴
@@ -154,13 +341,13 @@ ln -sf "$VT_DIR/bin/fsh" "$HOME/.local/bin/fsh"
 # `set -e` 아래이므로 `[ -L … ] && rm` 형태는 안 된다 — 심링크가 없는 신규
 # 설치에서 test가 1을 반환해 설치 전체가 조용히 중단된다.
 if [ -L "$HOME/.local/bin/vt" ]; then rm -f "$HOME/.local/bin/vt"; fi
-echo "✓ fsh CLI 등록 → ~/.local/bin/fsh"
+echo "✓ $(_t 'fsh CLI 등록 → ~/.local/bin/fsh')"
 
 # 4-1. tmux 격리 config 복사 (Phase 8 G3)
 mkdir -p "$HOME/.config/vt"
 if [ -f "$VT_DIR/config/vt-tmux.conf" ] && [ ! -f "$HOME/.config/vt/tmux.conf" ]; then
   cp "$VT_DIR/config/vt-tmux.conf" "$HOME/.config/vt/tmux.conf"
-  echo "✓ tmux 격리 config → ~/.config/vt/tmux.conf"
+  echo "✓ $(_t 'tmux 격리 config → ~/.config/vt/tmux.conf')"
 fi
 
 # 5. 설정 파일 생성 (없을 때만)
@@ -181,11 +368,20 @@ VT_PYTHON=\${VT_DIR}/.venv/bin/python
 # VT_NOTIFY_URL=https://ntfy.sh/your-topic  # 푸시 알림 (선택)
 EOF
   chmod 600 "$HOME/.vt.env"
-  echo "✓ 설정 파일 생성 → ~/.vt.env (권한 600)"
+  echo "✓ $(_t '설정 파일 생성 → ~/.vt.env (권한 600)')"
 else
   # 예전 install.sh가 644로 만들어 둔 파일을 여기서 바로잡는다
   chmod 600 "$HOME/.vt.env" 2>/dev/null || true
-  echo "✓ 기존 설정 유지 → ~/.vt.env"
+  echo "✓ $(_t '기존 설정 유지 → ~/.vt.env')"
+fi
+
+# 5-1. 화면 언어 — ~/.vt.env 가 방금 새로 만들어졌다면 여기서 기록한다.
+if [ -n "$LANG_PENDING" ]; then
+  if VT_CONFIG="$HOME/.vt.env" vt_env_set VT_LANG "$LANG_PENDING"; then
+    VT_CONFIG="$HOME/.vt.env" vt_lang_resolve
+  else
+    echo "  ⚠ $(_t '언어 설정을 ~/.vt.env 에 저장하지 못했습니다 — 나중에 설정 화면에서 바꿀 수 있습니다')"
+  fi
 fi
 
 # 6. PATH 확인
@@ -197,18 +393,18 @@ esac
 if [ -n "$SHELL_RC" ] && ! echo ":$PATH:" | grep -q ":$HOME/.local/bin:"; then
   if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$SHELL_RC" 2>/dev/null; then
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
-    echo "✓ PATH 등록 → $SHELL_RC (새 터미널에서 적용)"
+    echo "✓ $(_t 'PATH 등록 → {rc} (새 터미널에서 적용)' rc="$SHELL_RC")"
   fi
 fi
 
 # 7. cloudflared 안내 (선택)
 if ! command -v cloudflared >/dev/null 2>&1; then
   echo ""
-  echo "  ⓘ 원격 접속(fsh start)용 cloudflared 미설치."
+  echo "  ⓘ $(_t '원격 접속(fsh start)용 cloudflared 미설치.')"
   if [ "$(uname)" = "Darwin" ]; then
-    echo "    설치: brew install cloudflared"
+    echo "    $(_t '설치: {cmd}' cmd='brew install cloudflared')"
   else
-    echo "    설치: curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/.local/bin/cloudflared && chmod +x ~/.local/bin/cloudflared"
+    echo "    $(_t '설치: {cmd}' cmd='curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/.local/bin/cloudflared && chmod +x ~/.local/bin/cloudflared')"
   fi
 fi
 
@@ -216,7 +412,7 @@ fi
 if [ "$PROFILE" = "voice" ] && [ "$(uname)" = "Linux" ]; then
   if ! command -v espeak-ng >/dev/null 2>&1 && ! command -v espeak >/dev/null 2>&1; then
     echo ""
-    echo "  ⓘ Linux 음성 출력(TTS)을 위해 espeak-ng 권장:"
+    echo "  ⓘ $(_t 'Linux 음성 출력(TTS)을 위해 espeak-ng 권장:')"
     echo "    Debian/Ubuntu: sudo apt-get install espeak-ng libnotify-bin"
     echo "    Fedora:        sudo dnf install espeak-ng libnotify"
     echo "    Arch:          sudo pacman -S espeak-ng libnotify"
@@ -231,11 +427,11 @@ fi
 if [ -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" ]; then
   echo ""
   if "$VENV/bin/python" "$VT_DIR/server/claude_hooks.py" status >/dev/null 2>&1; then
-    echo "  ✓ Claude Code 훅 이미 등록됨"
+    echo "  ✓ $(_t 'Claude Code 훅 이미 등록됨')"
   else
-    echo "  Claude Code 훅 등록 (에이전트 상태·큐 자동 투입·TTS 요약의 전제)"
+    echo "  $(_t 'Claude Code 훅 등록 (에이전트 상태·큐 자동 투입·TTS 요약의 전제)')"
     "$VENV/bin/python" "$VT_DIR/server/claude_hooks.py" install \
-      || echo "  ⚠ 훅 등록 실패 — 'fsh hooks install'로 다시 시도할 수 있습니다"
+      || echo "  ⚠ $(_t "훅 등록 실패 — 'fsh hooks install'로 다시 시도할 수 있습니다")"
   fi
 fi
 
@@ -243,15 +439,36 @@ fi
 # 비대화형(curl|bash)에서는 스킵. TTY가 있으면 사용자에게 확인 후 fsh install-profiles 실행
 if [ -t 0 ] && [ -t 1 ]; then
   echo ""
-  printf "  새 터미널 창이 자동으로 FarShell tmux로 진입하도록 설정할까요? [y/N] "
+  printf "  %s " "$(_t '새 터미널 창이 자동으로 FarShell tmux로 진입하도록 설정할까요? [y/N]')"
   IFS= read -r REPLY_PROFILE || REPLY_PROFILE=""
   if [ "${REPLY_PROFILE:-}" = "y" ] || [ "${REPLY_PROFILE:-}" = "Y" ]; then
-    "$VT_DIR/bin/fsh" install-profiles 2>&1 || echo "  ⚠ install-profiles 실패 — 'fsh install-profiles' 수동 실행 가능"
+    "$VT_DIR/bin/fsh" install-profiles 2>&1 || echo "  ⚠ $(_t "install-profiles 실패 — 'fsh install-profiles' 수동 실행 가능")"
   else
-    echo "  ⓘ 나중에 'fsh install-profiles' 또는 'fsh shell-init zsh >> ~/.zshrc'로 활성화 가능"
+    echo "  ⓘ $(_t "나중에 'fsh install-profiles' 또는 'fsh shell-init zsh >> ~/.zshrc'로 활성화 가능")"
   fi
 fi
 
+if vt_is_en; then
+echo ""
+echo "  ┌─────────────────────────────────────────┐"
+echo "  │  ✓ Installation complete                │"
+echo "  │                                         │"
+echo "  │  Get started:                           │"
+echo "  │    fsh status   - check status          │"
+echo "  │    fsh start    - server + entrance     │"
+echo "  │    fsh mobile   - phone URL + QR        │"
+if [ "$PROFILE" = "voice" ]; then
+echo "  │    fsh voice    - voice mode            │"
+fi
+echo "  │                                         │"
+echo "  │  Open a new terminal or run             │"
+echo "  │  'source ~/.zshrc'                      │"
+echo "  └─────────────────────────────────────────┘"
+echo ""
+echo "  Note: to open the public tunnel (remote access) with 'fsh start', set up"
+echo "  authentication first - run 'fsh password' (not needed for localhost/lan/tailscale modes)."
+echo ""
+else
 echo ""
 echo "  ┌─────────────────────────────────────────┐"
 echo "  │  ✓ 설치 완료                              │"
@@ -270,3 +487,4 @@ echo ""
 echo "  참고: 'fsh start'로 공개 터널(원격 접속)을 열려면 먼저 인증을 설정해야"
 echo "  합니다 — 'fsh password' 실행 (localhost/lan/tailscale 모드는 필요 없음)."
 echo ""
+fi

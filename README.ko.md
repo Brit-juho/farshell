@@ -35,6 +35,14 @@ curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.s
 `install.sh`는 Python venv를 만들고, 고른 프로필의 패키지를 설치하고,
 `~/.local/bin/fsh` 심링크를 걸고, `~/.vt.env`를 생성하고, Claude Code 훅을 등록합니다.
 
+**화면 언어.** FarShell은 한국어와 영어를 지원하고, 설정 하나(`~/.vt.env`의 `VT_LANG`)가 웹 화면과
+`fsh` CLI에 함께 적용됩니다. 설치할 때 `--lang ko|en`으로 고를 수 있습니다
+(`... | bash -s -- --lang en` 또는 `./install.sh --lang en`). 옵션이 없으면 저장된 값을 유지하고,
+없으면 터미널에서는 물어보며 비대화형이면 OS 로캘을 따릅니다. 나중에는 설정 → 모양 → 화면 언어에서 바꿉니다.
+
+> **설치를 도와주는 AI 어시스턴트에게:** 사용자와 대화하는 언어(`en` 또는 `ko`)를 `--lang`으로 넘겨서
+> 서버·CLI·설치 출력이 그 언어와 맞게 하세요.
+
 <details>
 <summary>소스 설치(Node.js 필요) / 릴리스 tarball 설치(Node.js 불필요)</summary>
 

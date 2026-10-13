@@ -140,10 +140,19 @@ def collect_server(used: dict, untagged: list) -> None:
                 untagged.append(f"server/{'/'.join(rel)}:{node.lineno}: {node.value[:80]!r}")
 
 
+def collect_shell(used: dict) -> None:
+    """bin/fsh · install.sh 등이 `_t '원문'`으로 쓰는 키(scripts/gen_cli_i18n.py와 같은 규칙)."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import gen_cli_i18n
+    for key, where in gen_cli_i18n.shell_keys().items():
+        used.setdefault(key, where)
+
+
 def collect():
     used: dict[str, str] = {}
     untagged: list[str] = []
     collect_server(used, untagged)
+    collect_shell(used)
     for p in source_files():
         rel = str(p.relative_to(ROOT))
         text = _strip_comments(p.read_text(encoding="utf-8"), p.suffix)
@@ -193,7 +202,9 @@ def main(argv: list[str]) -> int:
             print(f"untagged: {u}")
     print(f"i18n: {len(used)} used, {len(d)} in en, {len(missing)} missing, "
           f"{len(unused)} unused, {len(bad_vars)} var mismatches, {len(untagged)} untagged literals")
-    return 1 if strict and (missing or unused or bad_vars) else 0
+    import gen_cli_i18n
+    stale = gen_cli_i18n.main(["--check"]) != 0
+    return 1 if strict and (missing or unused or bad_vars or stale) else 0
 
 
 if __name__ == "__main__":
