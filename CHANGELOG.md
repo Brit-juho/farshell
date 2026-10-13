@@ -16,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **큐 투입이 사람의 입력에 끼어들던 것**. stop 뒤 무조건 3초를 기다리던 대신, 그 세션에 최근 사람이 입력했으면 자동 투입을 미루고 재시도한다. `send_to_session`도 이때 409 `target_human_typing`을 낸다.
 
+- **닫힌 세션의 마지막 훅이 다른 세션 상태로 기록되던 것**. 훅이 보고한 pane이 이미 없으면 cwd로 대신 찾지 않는다(`pane_resolve` `pane-gone`). 하위 세션을 닫자 같은 폴더의 부모가 `done`이 돼 큐가 부모 셸에 입력되던 문제였다. 예전 계약(`test_unknown_pane_id_falls_back_to_cwd`)을 뒤집었다.
+
 - **큐 자동 투입 예약이 버려지던 것**. 예약을 서버 전체에 하나만 두던 것을 세션별로 나눴고, 워커 스레드에서 부른 예약도 서버 루프로 넘긴다(`schedule_drain_threadsafe`). 점검 루프는 세션을 지목한 `pending` 항목이 있는데 그 세션이 확실히 쉬고 있으면 다시 흘린다.
 
 - **큐 항목 안정성**. 전송 중 항목을 `sending`으로 자리에 남겨 삭제를 거부한다(409 `item_sending`). 일시적인 이유로 막힌 항목은 백오프(5초부터 2배, 최대 5회)로 자동 재시도하고, 다 쓰면 Web Push로 알린다. 오래 멈춘 전송과 재시작으로 끊긴 전송은 중복 투입을 막으려고 재시도 없이 막아 둔다. 상태 전이를 `~/.vt/queue_transitions.jsonl`에 남기고 `fsh queue log`·`GET /api/queue/transitions`로 본다. `fsh queue run`은 서버가 떠 있으면 서버에 맡긴다.
