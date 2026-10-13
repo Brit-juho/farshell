@@ -16,6 +16,7 @@ from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import fsguard
+import i18n
 import network_access
 import notify
 import platform_utils
@@ -385,6 +386,25 @@ async def device_settings_put(request: Request):
         did = device_settings.profile_id(profile)
     merged = device_settings.save(did, values)
     return {"ok": True, "device_id": did, "settings": merged}
+
+
+# 화면 언어 — 서버 전역 하나(server/i18n.py). 읽기는 로그인 전에도 필요해서
+# /api/auth/status와 index.html이 대신 싣는다. 여기는 바꾸기만(인증 필요).
+@router.put("/api/lang")
+async def lang_put(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    lang = body.get("lang") if isinstance(body, dict) else None
+    if lang not in i18n.LANGS:
+        return JSONResponse({"error": "lang must be one of: " + ", ".join(i18n.LANGS)}, status_code=400)
+    try:
+        await asyncio.to_thread(i18n.set_lang, lang)
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.warning("[i18n] VT_LANG write failed: %s", e)
+        return JSONResponse({"error": "failed to save language"}, status_code=500)
+    return {"ok": True, "lang": i18n.current()}
 
 
 async def broadcast_workspace_event(msg: dict) -> None:

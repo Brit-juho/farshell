@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -31,6 +31,7 @@ _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 
 import auth
 import file_store
+import i18n
 import network_access
 import port_proxy
 import tunnel
@@ -539,7 +540,15 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
 
 @app.get("/")
 async def index():
-    return FileResponse(str(Path(FRONTEND_DIR) / "index.html"))
+    # 언어는 서버가 정해 HTML에 박는다(server/i18n.py) — 그래서 FileResponse가 아니다.
+    p = Path(FRONTEND_DIR) / "index.html"
+    lang = i18n.current()
+    dict_file = Path(FRONTEND_DIR) / "js" / "locales" / f"{lang}.js"
+    version, dictionary = "", None
+    if lang != "ko" and dict_file.exists():
+        version = str(int(dict_file.stat().st_mtime))
+        dictionary = i18n.load_dict(dict_file)
+    return HTMLResponse(i18n.render_index(p.read_text(encoding="utf-8"), lang, version, dictionary))
 
 
 @app.get("/sw.js")
@@ -724,6 +733,7 @@ async def auth_status(request: Request):
     미인증 상태에서도 접근 가능해야 하므로 비밀 정보는 담지 않는다.
     """
     return {
+        "lang": i18n.current(),
         "protected": auth.is_protected(),
         # 비밀번호와 기계 토큰은 별개다 — 토큰만 설정된 환경은 protected=True인데도
         # 사람이 쓸 비밀번호는 없다. 설정 「보안」 탭이 그 둘을 구분해 보여준다.

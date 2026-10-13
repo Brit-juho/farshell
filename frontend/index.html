@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="macOS/Linux 터미널을 어디서든 — tmux 세션 그대로, 음성 입력, 모바일 PWA, Claude Code 연동까지. 무료·오픈소스, 내 서버에 직접 설치.">
+  <meta name="description" content="macOS/Linux 터미널을 어디서든 — tmux 세션 그대로, 음성 입력, 모바일 PWA, Claude Code 연동까지. 무료·오픈소스, 내 서버에 직접 설치." data-i18n-attr="content">
   <!-- 개인 원격 접속 도구 — 터널 URL이 새어나가도 검색엔진에 잡히지 않도록 noindex.
        인증 뒤 실제 콘텐츠(터미널)라 색인될 이유도 없다. -->
   <meta name="robots" content="noindex, nofollow">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="FarShell">
-  <meta property="og:title" content="FarShell — 어디서든 macOS/Linux 터미널">
-  <meta property="og:description" content="tmux 세션 그대로, 음성 입력, 모바일 PWA, Claude Code 연동까지. 무료·오픈소스, 내 서버에 직접 설치.">
+  <meta property="og:title" content="FarShell — 어디서든 macOS/Linux 터미널" data-i18n-attr="content">
+  <meta property="og:description" content="tmux 세션 그대로, 음성 입력, 모바일 PWA, Claude Code 연동까지. 무료·오픈소스, 내 서버에 직접 설치." data-i18n-attr="content">
   <meta property="og:image" content="/static/icon-512.png">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="FarShell — 어디서든 macOS/Linux 터미널">
-  <meta name="twitter:description" content="tmux 세션 그대로, 음성 입력, 모바일 PWA, Claude Code 연동까지. 무료·오픈소스, 내 서버에 직접 설치.">
+  <meta name="twitter:title" content="FarShell — 어디서든 macOS/Linux 터미널" data-i18n-attr="content">
+  <meta name="twitter:description" content="tmux 세션 그대로, 음성 입력, 모바일 PWA, Claude Code 연동까지. 무료·오픈소스, 내 서버에 직접 설치." data-i18n-attr="content">
   <meta name="twitter:image" content="/static/icon-512.png">
   <title>FarShell</title>
   <link rel="icon" type="image/png" href="/static/icon-192.png">
@@ -255,7 +255,7 @@
          (라벨 문구는 gate.js가 상황에 따라 바꾼다 — 프로브 / QR 기기 등록). -->
     <div id="login-spinner" role="status" aria-live="polite">
       <span class="login-spin-ring" aria-hidden="true"></span>
-      <p id="login-spin-label">연결을 확인하는 중</p>
+      <p id="login-spin-label" data-i18n>연결을 확인하는 중</p>
     </div>
     <form id="login-form" hidden autocomplete="off">
       <!-- D5: ui/icons.js와 같은 path(Lucide 'square-terminal') — 번들 로드 전에도
@@ -263,14 +263,14 @@
            그게 아이콘 라이브러리를 섞는 것보다 낫다. -->
       <svg class="login-mark" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M12 15h5"/></svg>
       <h1>FarShell</h1>
-      <p class="login-sub">이 터미널에 접속하려면 비밀번호가 필요합니다.</p>
+      <p class="login-sub" data-i18n>이 터미널에 접속하려면 비밀번호가 필요합니다.</p>
       <!-- 지금 어느 서버로 들어가는지. 터널 URL은 자주 바뀌고 맥이 둘일 수도 있다. -->
       <p id="login-host" hidden></p>
       <!-- 공유 링크(N21)나 노출 포트 session 모드(2.2)로 들어와 로그인이 가로챈 경우에만 뜬다 -->
-      <p id="login-next-note" hidden>로그인하면 열려던 페이지로 이어집니다.</p>
+      <p id="login-next-note" hidden data-i18n>로그인하면 열려던 페이지로 이어집니다.</p>
 
       <div class="login-fields">
-        <label class="login-label" for="login-pass">비밀번호</label>
+        <label class="login-label" for="login-pass" data-i18n>비밀번호</label>
         <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
              화면 상 노출은 -webkit-text-security로 그대로 가린다.
              readonly+onfocus 해제: Chrome은 autocomplete=off를 로그인성 필드에서 종종 무시하고
@@ -279,7 +279,7 @@
         <input id="login-pass" type="text" name="vt-key" autocomplete="off"
           autocorrect="off" autocapitalize="off" spellcheck="false"
           readonly onfocus="this.removeAttribute('readonly')"
-          aria-label="비밀번호" aria-describedby="login-pass-state" />
+          aria-label="비밀번호" aria-describedby="login-pass-state"  data-i18n-attr="aria-label"/>
         <!-- 입력 상태 — Caps Lock·한글 입력 중일 때만 뜬다(gate.js). 키를 누르기 전에는
              브라우저가 알려 주지 않아서 "영문"이라고 미리 말하지 않는다. -->
         <p id="login-pass-state" role="status" aria-live="polite" hidden></p>
@@ -288,24 +288,24 @@
              value는 server/auth/__init__.py의 REMEMBER_TTLS 키와 같아야 한다 —
              server/tests/test_login_remember_markup.py가 대조한다. -->
         <fieldset id="login-remember" hidden>
-          <legend class="login-label">이 기기 기억</legend>
+          <legend class="login-label" data-i18n>이 기기 기억</legend>
           <div class="login-remember-opts">
-            <label><input type="radio" name="vt-remember" value="90d" checked /><span>90일</span></label>
-            <label><input type="radio" name="vt-remember" value="24h" /><span>24시간</span></label>
-            <label><input type="radio" name="vt-remember" value="1h" /><span>1시간</span></label>
+            <label><input type="radio" name="vt-remember" value="90d" checked /><span data-i18n>90일</span></label>
+            <label><input type="radio" name="vt-remember" value="24h" /><span data-i18n>24시간</span></label>
+            <label><input type="radio" name="vt-remember" value="1h" /><span data-i18n>1시간</span></label>
           </div>
-          <p class="login-remember-hint">잠깐 쓰는 기기라면 짧게 고르세요. 기간이 끝나면 다시 로그인해야 합니다.</p>
+          <p class="login-remember-hint" data-i18n>잠깐 쓰는 기기라면 짧게 고르세요. 기간이 끝나면 다시 로그인해야 합니다.</p>
         </fieldset>
         <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'fsh otp setup'으로 연동한 뒤에만 나타난다 -->
         <div id="login-otp-wrap" hidden>
-          <p class="login-otp-hint">처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
-          <label class="login-label" for="login-otp">인증 코드</label>
+          <p class="login-otp-hint" data-i18n>처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
+          <label class="login-label" for="login-otp" data-i18n>인증 코드</label>
           <input id="login-otp" type="text" name="vt-otp" autocomplete="one-time-code"
             inputmode="numeric" pattern="[0-9]*" maxlength="6"
             autocorrect="off" autocapitalize="off" spellcheck="false"
-            placeholder="000000" aria-label="인증 코드" />
+            placeholder="000000" aria-label="인증 코드"  data-i18n-attr="aria-label"/>
         </div>
-        <button type="submit" id="login-submit"><span id="login-submit-label">접속</span></button>
+        <button type="submit" id="login-submit"><span id="login-submit-label" data-i18n>접속</span></button>
       </div>
 
       <!-- 오류는 두 줄이다: 무슨 일인지(제목) / 서버가 덧붙인 사실(보조). -->
@@ -319,18 +319,20 @@
       </div>
     </form>
   </div>
+  <!--vt:i18n-->
+  <script src="/static/js/i18n-boot.js"></script>
   <script src="/static/js/gate.js"></script>
   <!-- D7: screenReaderMode가 터치 기기 기본 ON(M5)인데 정작 연결 끊김이 안 읽히던 문제 -->
   <div id="conn-status" role="status" aria-live="polite"></div>
 
   <!-- 터미널 검색 바 -->
   <div id="search-bar">
-    <input id="search-input" class="vt-input" type="text" placeholder="검색..." aria-label="터미널 검색" />
+    <input id="search-input" class="vt-input" type="text" placeholder="검색..." aria-label="터미널 검색"  data-i18n-attr="placeholder,aria-label"/>
     <!-- 도형은 ui/icons.js 'chevron-down'(hydrateIcons). 이전 결과는 CSS로 뒤집는다. -->
-    <button data-action="search.prev" aria-label="이전 결과" class="flipped"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
-    <button data-action="search.next" aria-label="다음 결과"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
+    <button data-action="search.prev" aria-label="이전 결과" class="flipped" data-i18n-attr="aria-label"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
+    <button data-action="search.next" aria-label="다음 결과" data-i18n-attr="aria-label"><svg data-icon="chevron-down" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
     <!-- 도형은 ui/icons.js 'x'(hydrateIcons) -->
-    <button data-action="search.close" aria-label="검색 닫기"><svg data-icon="x" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
+    <button data-action="search.close" aria-label="검색 닫기" data-i18n-attr="aria-label"><svg data-icon="x" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
   </div>
 
   <!-- 상단 통합 바 -->
@@ -353,8 +355,8 @@
          레일도 같이 접히는 문제는 모바일 레이아웃을 다시 만들 때 같이 본다
          (지금 모바일 레이아웃은 어차피 갈아엎을 예정이라 여기서 대비하지
          않는다). -->
-    <div id="vt-wtabs" role="tablist" aria-label="워크트리 탭"></div>
-    <div class="wt-chevron" data-action="session.manager" data-tip="세션 프로파일" data-tip-side="bottom" role="button" tabindex="0" aria-label="세션 프로파일">
+    <div id="vt-wtabs" role="tablist" aria-label="워크트리 탭" data-i18n-attr="aria-label"></div>
+    <div class="wt-chevron" data-action="session.manager" data-tip="세션 프로파일" data-tip-side="bottom" role="button" tabindex="0" aria-label="세션 프로파일" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"></svg>
     </div>
 
@@ -362,7 +364,7 @@
          2026-09-29(H1) — 모바일 헤더의 주인공. 윗줄 세션 이름 ▾, 아랫줄 "기기 · 3/5"
          (picker.js가 그린다). 따로 있던 기기 칩(#vt-env-chip)은 이 아랫줄로 합쳤다. -->
     <button id="voice-session-picker" type="button" aria-label="세션 관리" aria-haspopup="dialog"
-      aria-expanded="false" data-action="session.manager">세션</button>
+      aria-expanded="false" data-action="session.manager" data-i18n data-i18n-attr="aria-label">세션</button>
 
     <div class="spacer"></div>
 
@@ -379,10 +381,10 @@
          항목에서 제거했다(상단바 ↔ ⋯ 중복 제거). -->
     <!-- 2026-09-29 — 모바일 키바 여닫기. 키바가 있는 기기(터치)의 터미널 탭에서만
          보인다(CSS, html.vt-has-keybar). 상태는 기기별 설정 keybar.open. -->
-    <button id="keybar-open-btn" type="button" class="vt-icon-btn" aria-label="특수키 바" aria-pressed="false" data-tip="특수키 바 열기/닫기" data-tip-side="bottom">
+    <button id="keybar-open-btn" type="button" class="vt-icon-btn" aria-label="특수키 바" aria-pressed="false" data-tip="특수키 바 열기/닫기" data-tip-side="bottom" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
     </button>
-    <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" data-tip="빠른 열기" data-tip-keys="Mod+K" data-tip-side="bottom">
+    <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" data-tip="빠른 열기" data-tip-keys="Mod+K" data-tip-side="bottom" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <!-- N37 §4 — 「연결된 화면」. shell/HeaderExtras.tsx가 채우고, 데이터가 없으면
@@ -403,32 +405,32 @@
        유일한 자리)은 DOM에서 지우지 않았다: CSS로만 숨기고, 새 레일의
        "⋯ 더보기" 메뉴가 그 버튼들을 그대로 다시 누른다(shell/Rail.tsx). -->
   <div id="vt-wgrail-slot"></div>
-  <nav id="vt-rail" aria-label="사이드바">
-    <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" data-tip="세션" data-tip-side="right">
+  <nav id="vt-rail" aria-label="사이드바" data-i18n-attr="aria-label">
+    <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" data-tip="세션" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="layout-panels" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-session" hidden></span>
     </button>
     <!-- N35 §6이 지운 폴더 트리를 dock 탭으로 되살렸다(2026-09-22, 사용자 확인
          — N35 "코드뷰어는 dock에 안 들어간다" 결정 번복). git diff/커밋은 여기
          없다 — 그건 소스컨트롤(vt-rail-*scm 없음, dock 첫 탭)의 몫. -->
-    <button type="button" class="vt-rail-btn" id="vt-rail-dir" data-rail="dir" data-action="dir.show" aria-label="파일" data-tip="파일" data-tip-sub="디렉토리 탐색" data-tip-side="right">
+    <button type="button" class="vt-rail-btn" id="vt-rail-dir" data-rail="dir" data-action="dir.show" aria-label="파일" data-tip="파일" data-tip-sub="디렉토리 탐색" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
-    <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" data-tip="프롬프트 큐" data-tip-side="right">
+    <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" data-tip="프롬프트 큐" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-queue" hidden></span>
     </button>
-    <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" data-tip="프롬프트 스니펫" data-tip-side="right">
+    <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" data-tip="프롬프트 스니펫" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <!-- 50-files-share.md §4 — 업로드 파일 저장소 탭. 위의 「파일」(디렉토리
          트리)과는 다른 것이다: 그건 저장소 소스를 읽는 화면이고, 이건 업로드된
          파일을 관리·공유하는 화면이다(dock 첨부 탭과 같은 렌더러). 이름이
          겹치면 구분이 안 돼 「첨부」로 부른다. -->
-    <button type="button" class="vt-rail-btn" id="vt-rail-files" data-rail="files" data-action="files.show" aria-label="첨부" data-tip="첨부" data-tip-sub="저장소 · 공유 링크" data-tip-side="right">
+    <button type="button" class="vt-rail-btn" id="vt-rail-files" data-rail="files" data-action="files.show" aria-label="첨부" data-tip="첨부" data-tip-sub="저장소 · 공유 링크" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
-    <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" data-tip="포트 대시보드" data-tip-side="right">
+    <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" data-tip="포트 대시보드" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="briefcase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       <span class="vt-rail-badge" id="vt-rail-badge-ports" hidden></span>
     </button>
@@ -437,18 +439,18 @@
          실패 시 기본 표시 폴백까지 동일)으로 숨긴다. 정적 hidden을 안 거는
          이유는 그 폴백과 일관성을 맞추기 위해서다 — U가 실제로 caps.usage를
          추가하는 순간 이 파일을 다시 안 건드려도 자동으로 나타난다. -->
-    <button type="button" class="vt-rail-btn needs-usage" id="vt-rail-usage" data-rail="usage" data-action="usage.open" aria-label="사용량" data-tip="사용량" data-tip-side="right">
+    <button type="button" class="vt-rail-btn needs-usage" id="vt-rail-usage" data-rail="usage" data-action="usage.open" aria-label="사용량" data-tip="사용량" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
     <div class="vt-rail-spacer"></div>
-    <button type="button" class="vt-rail-btn" id="vt-rail-settings" data-rail="settings" aria-label="설정" aria-pressed="false" data-tip="설정" data-tip-side="right">
+    <button type="button" class="vt-rail-btn" id="vt-rail-settings" data-rail="settings" aria-label="설정" aria-pressed="false" data-tip="설정" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>
   </nav>
-  <div id="vt-rail-panel" role="region" aria-label="사이드 패널" hidden>
+  <div id="vt-rail-panel" role="region" aria-label="사이드 패널" hidden data-i18n-attr="aria-label">
     <div class="vt-rail-panel-head">
       <div class="vt-rail-panel-title" id="vt-rail-panel-title"></div>
-      <button type="button" class="vt-icon-btn sm vt-rail-panel-close" aria-label="패널 닫기">
+      <button type="button" class="vt-icon-btn sm vt-rail-panel-close" aria-label="패널 닫기" data-i18n-attr="aria-label">
         <svg data-icon="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       </button>
     </div>
@@ -475,17 +477,17 @@
   <!-- N34 §7 — 상태바 HUD 24px. 내용은 shell/Hud.tsx(Solid)가 채운다.
        compact(<720px)에서는 CSS로 통째로 숨는다(하단 내비가 그 자리를 쓴다).
        "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다. -->
-  <footer id="vt-hud" aria-label="상태"></footer>
+  <footer id="vt-hud" aria-label="상태" data-i18n-attr="aria-label"></footer>
 
   <!-- L8/U2: 우측 레일 — wide(≥1024px)에서만 상시 노출된다. 사용량의 요점이
        "상시 노출로 신뢰감을 만든다"(60-usage-provider.md §왜 하는가)인데 패널을
        열어야만 보이면 그 요점이 사라진다. 섹션이 하나도 없으면(=사용량 소스가
        없으면) .needs-usage 게이팅으로 레일 자체가 사라지고 pane이 폭을 회수한다
        (30-layout-shell.md §4 "빈 패널을 보여주지 않는다"). -->
-  <aside id="vt-right-rail" class="needs-usage" aria-label="사용량">
+  <aside id="vt-right-rail" class="needs-usage" aria-label="사용량" data-i18n-attr="aria-label">
     <div class="vt-rr-head">
-      <span class="vt-rr-title">사용량</span>
-      <button type="button" class="vt-icon-btn sm vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" data-tip="우측 레일 접기" data-tip-side="left">›</button>
+      <span class="vt-rr-title" data-i18n>사용량</span>
+      <button type="button" class="vt-icon-btn sm vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" data-tip="우측 레일 접기" data-tip-side="left" data-i18n-attr="aria-label,data-tip">›</button>
     </div>
     <div class="vt-rr-body" id="vt-right-rail-body"></div>
   </aside>
@@ -513,15 +515,15 @@
          voice.js 계약(#mic-btn-wrap + .label + .recording)은 그대로 —
          dock이 있으면 keybar.js가 이 버튼 자체를 그리로 옮긴다(재생성 아님). -->
     <div id="vt-rail-mic-slot">
-      <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" data-tip="음성 입력" data-tip-side="right">
+      <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" data-tip="음성 입력" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
         <svg data-icon="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-        <span class="label">음성 입력</span>
+        <span class="label" data-i18n>음성 입력</span>
       </button>
     </div>
-    <button class="vt-menu-item mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle">
+    <button class="vt-menu-item mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle" data-i18n>
       <svg data-icon="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>이어폰 미디어키
     </button>
-    <button class="vt-menu-item mi" role="menuitem" data-action="guide.show">
+    <button class="vt-menu-item mi" role="menuitem" data-action="guide.show" data-i18n>
       <svg data-icon="help-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       가이드 보기
     </button>
@@ -536,16 +538,16 @@
   <input type="file" id="file-input" hidden multiple onchange="uploadFile(this)" />
 
   <!-- 음성 상태 패널: voice/status-panel.js가 기존 상태 노드를 이 안에 유지한다. -->
-  <section id="voice-status-panel" hidden role="dialog" aria-label="음성 입력 상태">
-    <header class="vt-voice-head"><strong>음성 입력</strong><button type="button" class="vt-btn sm quiet" id="voice-status-close" aria-label="음성 상태 닫기">닫기</button></header>
-    <div class="vt-voice-server"><strong id="voice-stt-state">서버 상태 확인 중</strong><span id="voice-stt-detail"></span></div>
+  <section id="voice-status-panel" hidden role="dialog" aria-label="음성 입력 상태" data-i18n-attr="aria-label">
+    <header class="vt-voice-head"><strong data-i18n>음성 입력</strong><button type="button" class="vt-btn sm quiet" id="voice-status-close" aria-label="음성 상태 닫기" data-i18n data-i18n-attr="aria-label">닫기</button></header>
+    <div class="vt-voice-server"><strong id="voice-stt-state" data-i18n>서버 상태 확인 중</strong><span id="voice-stt-detail"></span></div>
     <div id="mic-status" role="status" aria-live="polite"></div>
     <p id="voice-record-meta" class="vt-voice-meta"></p>
-    <div class="vt-voice-actions"><button type="button" class="vt-btn sm" id="voice-panel-record" data-action="voice.record">녹음 시작</button><button type="button" class="vt-btn sm quiet" data-action="voice.settings">모델 · 음성 설정</button></div>
-    <p class="vt-voice-help">녹음은 이 기기에서, 음성 인식은 서버에서 처리합니다. 인식한 문장은 입력 대상에 Enter와 함께 전송됩니다.</p>
+    <div class="vt-voice-actions"><button type="button" class="vt-btn sm" id="voice-panel-record" data-action="voice.record" data-i18n>녹음 시작</button><button type="button" class="vt-btn sm quiet" data-action="voice.settings" data-i18n>모델 · 음성 설정</button></div>
+    <p class="vt-voice-help" data-i18n>녹음은 이 기기에서, 음성 인식은 서버에서 처리합니다. 인식한 문장은 입력 대상에 Enter와 함께 전송됩니다.</p>
   </section>
   <!-- 전송 실패 시 recording.js가 #mic-status 안으로 옮겨 붙인다(기본 숨김) -->
-  <button id="mic-retry-btn" class="vt-btn solid" type="button" hidden style="font-size:13px;margin-left:6px">다시 보내기</button>
+  <button id="mic-retry-btn" class="vt-btn solid" type="button" hidden style="font-size:13px;margin-left:6px" data-i18n>다시 보내기</button>
 
   <!-- 모바일 특수키 바 (keybar) — 소프트 키보드에 없는 키만 PTY로 전송한다.
        기본 hidden; term/keybar.js가 터치 기기(pointer:coarse)에서만 노출하고 배선/위치 조정.
@@ -554,7 +556,7 @@
        없앴다(마이크는 안 쓰는데 자리만 먹었고, 문자는 소프트 키보드에 있다).
        스크롤 줄의 키는 손을 뗄 때 전송한다(밀어서 스크롤하려다 눌리지 않게) —
        수식키와 방향키는 스크롤하지 않으므로 누르는 즉시 반응한다. -->
-  <div id="keybar" role="toolbar" aria-label="특수키" hidden>
+  <div id="keybar" role="toolbar" aria-label="특수키" hidden data-i18n-attr="aria-label">
     <div id="keybar-main">
       <!-- Ctrl/Alt/Shift: 탭 = 다음 한 키, 한 번 더 탭 = 고정, 누르고 있는 동안 = 적용.
            스크롤로 밀려나지 않게 따로 고정한다 — 동시 입력은 늘 같은 자리여야 한다. -->
@@ -567,7 +569,7 @@
         <button type="button" class="kb" data-key="esc">Esc</button>
         <button type="button" class="kb" data-key="tab">Tab</button>
         <button type="button" class="kb" data-key="backtab" aria-label="Shift+Tab">⇧Tab</button>
-        <button type="button" class="kb" data-key="ctrlc" aria-label="Ctrl+C 중단">^C</button>
+        <button type="button" class="kb" data-key="ctrlc" aria-label="Ctrl+C 중단" data-i18n-attr="aria-label">^C</button>
         <button type="button" class="kb" data-key="home">Home</button>
         <button type="button" class="kb" data-key="end">End</button>
         <button type="button" class="kb" data-key="pgup" aria-label="Page Up">PgUp</button>
@@ -588,17 +590,17 @@
         <button type="button" class="kb" data-key="f12">F12</button>
       </div>
       <div id="keybar-arrows">
-        <button type="button" class="kb kb-arrow" data-key="up" aria-label="위쪽 화살표">↑</button>
-        <button type="button" class="kb kb-arrow" data-key="left" aria-label="왼쪽 화살표">←</button>
-        <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표">↓</button>
-        <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표">→</button>
+        <button type="button" class="kb kb-arrow" data-key="up" aria-label="위쪽 화살표" data-i18n-attr="aria-label">↑</button>
+        <button type="button" class="kb kb-arrow" data-key="left" aria-label="왼쪽 화살표" data-i18n-attr="aria-label">←</button>
+        <button type="button" class="kb kb-arrow" data-key="down" aria-label="아래쪽 화살표" data-i18n-attr="aria-label">↓</button>
+        <button type="button" class="kb kb-arrow" data-key="right" aria-label="오른쪽 화살표" data-i18n-attr="aria-label">→</button>
       </div>
     </div>
     <div id="keybar-selection-actions" hidden>
-      <span id="keybar-selection-hint">텍스트를 길게 눌러 선택</span>
-      <button type="button" class="vt-btn sm" id="keybar-selection-all">모두 선택</button>
-      <button type="button" class="vt-btn sm solid" id="keybar-selection-copy">복사</button>
-      <button type="button" class="vt-btn sm quiet" id="keybar-selection-done">완료</button>
+      <span id="keybar-selection-hint" data-i18n>텍스트를 길게 눌러 선택</span>
+      <button type="button" class="vt-btn sm" id="keybar-selection-all" data-i18n>모두 선택</button>
+      <button type="button" class="vt-btn sm solid" id="keybar-selection-copy" data-i18n>복사</button>
+      <button type="button" class="vt-btn sm quiet" id="keybar-selection-done" data-i18n>완료</button>
     </div>
   </div>
 
@@ -619,29 +621,29 @@
        아이콘은 `<svg data-icon="이름">` 빈 자리로만 두고 도형은 ui/icons.js의
        hydrateIcons()가 채운다(예전엔 path를 복사해 둬서 「설정」 톱니가 dock과
        어긋났다). -->
-  <nav id="vt-mnav-bottom" aria-label="하단 내비">
-    <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="세션" aria-pressed="false">
+  <nav id="vt-mnav-bottom" aria-label="하단 내비" data-i18n-attr="aria-label">
+    <button type="button" class="vt-mnav-btn" data-mnav="fleet" aria-label="세션" aria-pressed="false" data-i18n-attr="aria-label">
       <svg data-icon="list" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-      <span class="vt-mnav-label">세션</span>
+      <span class="vt-mnav-label" data-i18n>세션</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-waiting" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="terminal" aria-label="터미널" aria-pressed="false">
+    <button type="button" class="vt-mnav-btn" data-mnav="terminal" aria-label="터미널" aria-pressed="false" data-i18n-attr="aria-label">
       <svg data-icon="terminal" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-      <span class="vt-mnav-label">터미널</span>
+      <span class="vt-mnav-label" data-i18n>터미널</span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="changes" data-action="scm.show" aria-label="변경" aria-pressed="false">
+    <button type="button" class="vt-mnav-btn" data-mnav="changes" data-action="scm.show" aria-label="변경" aria-pressed="false" data-i18n-attr="aria-label">
       <svg data-icon="git-branch" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-      <span class="vt-mnav-label">변경</span>
+      <span class="vt-mnav-label" data-i18n>변경</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="files.show" aria-label="첨부" aria-pressed="false">
+    <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="files.show" aria-label="첨부" aria-pressed="false" data-i18n-attr="aria-label">
       <svg data-icon="paperclip" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-      <span class="vt-mnav-label">첨부</span>
+      <span class="vt-mnav-label" data-i18n>첨부</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-files" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="설정" aria-pressed="false">
+    <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="설정" aria-pressed="false" data-i18n-attr="aria-label">
       <svg data-icon="settings" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-      <span class="vt-mnav-label">설정</span>
+      <span class="vt-mnav-label" data-i18n>설정</span>
     </button>
   </nav>
 

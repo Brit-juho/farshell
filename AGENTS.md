@@ -13,6 +13,7 @@ npm test
 .venv/bin/python -m pytest
 python3 scripts/check_docs.py --strict
 python3 scripts/check_css_vars.py --strict
+python3 scripts/check_i18n.py --strict
 ```
 
 `npm test` includes TypeScript checking; Vite builds do not. Put server tests in
@@ -45,7 +46,10 @@ Verify affected behavior with actual responses, operations and logs.
 9. Define colors in `styles/theme/tokens.css` or `skins.css`; do not add hex literals
    in `frontend/js` or `styles/layers`.
 10. Keep endpoint tables only in `API.md`. Other documents should link to it.
-11. Only `docs/help/`, `docs/ref/` and `docs/guide/` are tracked under `docs/`.
+11. Wrap user-visible strings in `t('한국어 원문')` (`frontend/js/core/i18n.js`) and add the
+    English entry to `frontend/js/locales/en.js`. The Korean source text is the key; see
+    [`docs/ref/i18n.md`](./docs/ref/i18n.md).
+12. Only `docs/help/`, `docs/ref/` and `docs/guide/` are tracked under `docs/`.
     New `fsh help` topics need both a `bin/fsh` entry and a `docs/help/` file.
 
 ## Working rules

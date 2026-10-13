@@ -12,7 +12,10 @@
 // 401 {error:"otp_required"}가 돌아오고, 그때 6자리 입력칸이 추가로 열린다.
 // OTP 미연동이면 이 분기가 아예 발생하지 않아 기존 동작과 동일하다.
 (function(){
+  // 번역 — i18n-boot.js가 먼저 로드된다. 없으면 원문 그대로.
+  var T=window.vtT||function(s){ return s; };
   var gate=document.getElementById('login-gate');
+  if(window.vtApplyI18n) window.vtApplyI18n(gate);
   var spin=document.getElementById('login-spinner');
   var spinLabel=document.getElementById('login-spin-label');
   var form=document.getElementById('login-form');
@@ -118,8 +121,8 @@
   // aria-busy를 같이 바꿔 CSS가 링을 붙이고 스크린리더도 진행 중임을 안다.
   function setBusy(on){
     btn.disabled=on;
-    if(on){ btn.setAttribute('aria-busy','true'); btnLabel.textContent='확인하는 중'; }
-    else { btn.removeAttribute('aria-busy'); btnLabel.textContent='접속'; }
+    if(on){ btn.setAttribute('aria-busy','true'); btnLabel.textContent=T('확인하는 중'); }
+    else { btn.removeAttribute('aria-busy'); btnLabel.textContent=T('접속'); }
   }
   // 제목은 사람이 읽을 한 문장, 보조 줄은 서버가 덧붙인 사실(남은 시도·대기 시간).
   // 둘을 한 줄에 이어 붙이면 같은 무게로 읽혀서 정작 무슨 일인지가 묻힌다.
@@ -152,7 +155,7 @@
   if(ticket){
     // 같은 링이지만 기다리는 일이 다르다 — 프로브는 수백 ms, 기기 등록은 서버가
     // 기기 목록에 쓰고 세션까지 발급하는 동안이라 체감이 길다.
-    spinLabel.textContent='기기를 등록하는 중';
+    spinLabel.textContent=T('기기를 등록하는 중');
     fetch('/api/auth',{method:'POST',credentials:'include',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:ticket})})
     .then(function(r){
@@ -169,9 +172,9 @@
       // 무관하게 옳은 동작이다 — 재시도·뒤로가기·프리렌더 어느 쪽이든 같다.
       fetch('/api/capabilities',{credentials:'include'}).then(function(p){
         if(p.status!==401){ reloadClean(); return; }
-        showForm(); showErr('등록 링크가 만료되었습니다','비밀번호로 접속하거나, 맥에서 fsh mobile로 QR을 다시 받으세요.');
+        showForm(); showErr(T('등록 링크가 만료되었습니다'),T('비밀번호로 접속하거나, 맥에서 fsh mobile로 QR을 다시 받으세요.'));
       }).catch(function(){
-        showForm(); showErr('등록 링크가 만료되었습니다','비밀번호로 접속하거나, 맥에서 fsh mobile로 QR을 다시 받으세요.');
+        showForm(); showErr(T('등록 링크가 만료되었습니다'),T('비밀번호로 접속하거나, 맥에서 fsh mobile로 QR을 다시 받으세요.'));
       });
     }).catch(function(){ showForm(); });
     return;
@@ -196,8 +199,8 @@
   var capsOn=false, koOn=false;
   function renderPassState(){
     var parts=[];
-    if(capsOn) parts.push('Caps Lock이 켜져 있습니다');
-    if(koOn) parts.push('한글 입력 중 · 영문 키로 바꿔 입력됩니다');
+    if(capsOn) parts.push(T('Caps Lock이 켜져 있습니다'));
+    if(koOn) parts.push(T('한글 입력 중 · 영문 키로 바꿔 입력됩니다'));
     passState.textContent=parts.join(' · ');
     passState.hidden=!parts.length;
   }
@@ -235,7 +238,7 @@
     var rem=rememberValue(); if(rem) payload.remember=rem;
     if(!otpWrap.hidden){
       var code=(otp.value||'').replace(/\D/g,'');
-      if(code.length!==6){ showErr('인증 코드를 6자리로 입력하세요'); return; }
+      if(code.length!==6){ showErr(T('인증 코드를 6자리로 입력하세요')); return; }
       payload.otp=code;
     }
     setBusy(true); err.hidden=true;
@@ -251,29 +254,29 @@
         }
         if(d.error==='otp_invalid'){
           otpWrap.hidden=false;
-          showErr('인증 코드가 올바르지 않습니다', d.remaining!=null?('남은 시도 '+d.remaining+'회'):'');
+          showErr(T('인증 코드가 올바르지 않습니다'), d.remaining!=null?(T('남은 시도 {n}회',{n:d.remaining})):'');
           try{ otp.value=''; otp.focus(); }catch(e){}
           return;
         }
         if(d.error==='otp_locked'){
-          showErr('시도 횟수를 초과했습니다', Math.ceil((d.retry_after||600)/60)+'분 뒤에 다시 시도할 수 있습니다.');
+          showErr(T('시도 횟수를 초과했습니다'), T('{n}분 뒤에 다시 시도할 수 있습니다.',{n:Math.ceil((d.retry_after||600)/60)}));
           return;
         }
-        if(d.error==='ticket_invalid'){ showErr('등록 링크가 만료되었습니다','비밀번호로 접속하세요.'); return; }
+        if(d.error==='ticket_invalid'){ showErr(T('등록 링크가 만료되었습니다'),T('비밀번호로 접속하세요.')); return; }
         // 화면의 선택지와 서버 허용값이 어긋난 경우(구버전 캐시 화면 등). 비밀번호 문제가 아니다.
-        if(d.error==='invalid_remember'){ showErr('기기 기억 기간을 처리하지 못했습니다','페이지를 새로고침한 뒤 다시 시도하세요.'); return; }
+        if(d.error==='invalid_remember'){ showErr(T('기기 기억 기간을 처리하지 못했습니다'),T('페이지를 새로고침한 뒤 다시 시도하세요.')); return; }
         // 비밀번호 5회 실패 → IP 단위 10분 잠금(429 password_locked). 이걸 따로
         // 다루지 않으면 잠긴 동안 **정답을 쳐도** "비밀번호가 올바르지 않습니다"가
         // 뜬다 — 실제로 맞는 비밀번호를 놔두고 비밀번호를 새로 바꾸게 만든 문구다.
         if(d.error==='password_locked'){
-          showErr('시도 횟수를 초과했습니다', Math.ceil((d.retry_after||600)/60)+'분 뒤에 다시 시도할 수 있습니다. 비밀번호를 바꿀 필요는 없습니다.');
+          showErr(T('시도 횟수를 초과했습니다'), T('{n}분 뒤에 다시 시도할 수 있습니다. 비밀번호를 바꿀 필요는 없습니다.',{n:Math.ceil((d.retry_after||600)/60)}));
           return;
         }
-        showErr('비밀번호가 올바르지 않습니다');
+        showErr(T('비밀번호가 올바르지 않습니다'));
         try{ pass.select(); }catch(e){}
       });
     // 네트워크 실패는 비밀번호가 틀린 것과 전혀 다른 일이다 — 같은 자리에 뜨더라도
     // 무엇을 해야 하는지가 달라서 문장을 나눠 둔다.
-    }).catch(function(){ showErr('서버에 연결하지 못했습니다','네트워크 상태를 확인한 뒤 다시 시도하세요.'); });
+    }).catch(function(){ showErr(T('서버에 연결하지 못했습니다'),T('네트워크 상태를 확인한 뒤 다시 시도하세요.')); });
   });
 })();

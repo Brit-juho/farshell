@@ -72,7 +72,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | Method | Path | Description |
 |--------|------|------|
 | POST | `/api/auth` | Login — password (+ `otp` for a new device) or a one-time `ticket` → issues `vt_session`/`vt_device` HttpOnly cookies. Optional `remember` (`90d` default / `24h` / `1h`) sets a **new** device's lifetime; a registered device ignores it, a ticket follows its own bound lifetime. The session never outlives its device (`min(24h, device remaining)`). 400 `invalid_remember`, 401 `otp_required`/`otp_invalid`, 429 `otp_locked` |
-| GET | `/api/auth/status` | Whether auth is active / OTP is linked / this device is registered and not expired (accessible unauthenticated, no secrets included). The login screen shows the lifetime choice only when `device_known` is false |
+| GET | `/api/auth/status` | Whether auth is active / OTP is linked / this device is registered and not expired (accessible unauthenticated, no secrets included). The login screen shows the lifetime choice only when `device_known` is false. Also carries the server display language `lang` (`ko`/`en`) |
 | POST | `/api/auth/logout` | Clears the session only (device registration is kept) |
 | POST | `/api/auth/elevate` | Re-verify password (+ OTP if linked) → reissues `vt_session` with a 15-minute `elev` claim. Session-scoped, not device-scoped. 401 `invalid`/`otp_required`/`otp_invalid`, 429 `*_locked` |
 | GET | `/api/auth/elevation` | Current session's elevation state (`elevated`, `elevated_until`) + `unused: true` / `unused_reason: "ADR-27"` — no path requires elevation today. Read-only (Settings → Security) |
@@ -328,6 +328,7 @@ a peer signature opens.
 | GET | `/api/device-settings` | Fetch persistent settings for `?profile=mobile|mac|windows|linux`; omitted: legacy `vt_device` cookie scope (`local` without it) |
 | PUT | `/api/device-settings` | Merge changed settings into the selected profile (same query as GET) |
 | GET | `/api/agents` | Full list of active agents (claude, etc.) per tmux session |
+| PUT | `/api/lang` | Set the server-wide display language `{"lang": "ko"\|"en"}`; written to `VT_LANG` in `~/.vt.env`. Takes effect on the next page load |
 | GET | `/api/agents/{tmux_name}` | Active agent info for a specific tmux session |
 | GET | `/api/agents/coverage` | per-CLI approval-wait detection coverage: `[{cli, path:"hook"\|"report"\|"pty"\|"none", patternLines, states, trust:"high"\|"mid"\|"low", kinds, kindSources, badges}]`, read live from `detect/*.toml`. `kinds` = the waiting kinds this CLI can tell apart (`approval`/`choice`/`plan`/`question`, empty when it cannot express waiting); `kindSources` maps each kind to `hook`/`screen`/`fallback`; `badges` = auxiliary done-badges it can raise |
 | GET | `/api/agent/status` | Agent state machine (A1) — `idle/working/waiting/done` per session, with TTL sweeping. A `waiting` entry carries `kind` (`approval`/`choice`/`plan`/`question`; removed when waiting ends — priority: hook `tool_name` > screen pattern of the detected CLI > `question`). A done entry may carry `badge` (`question` when the last assistant message ends with `?`, `plan` for agy's `/artifact to review`) — a helper mark, never a waiting state. The same fields ride on `/ws-agent` entries |
