@@ -462,7 +462,16 @@ function Fleet(props: { deps: FleetDeps }) {
       </Show>
       <Show when={lists().sessions.length > 0}>
         <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head">{t('세션')} · {lists().sessions.length}</div>
+          <div class="vt-fleet-group-head vt-fleet-group-head-sort">
+            <span>{t('세션')} · {lists().sessions.length}</span>
+            {/* 폰에도 정렬 전환이 있어야 수동 순서를 이 화면에서 시작할 수 있다(레일 머리와 같은 값) — 순서는 행 시트의 위로·아래로 이동. */}
+            <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
+              <For each={[['name', t('이름순')], ['manual', t('수동')]] as ['name' | 'manual', string][]}>{([id, label]) => (
+                <button type="button" role="radio" class="vt-rail-sort-opt" aria-checked={prefs().sort === id}
+                  onClick={() => { if (prefs().sort !== id) setPref(ORDER_KEY, encodeOrder(id, id === 'manual' ? fleetOrder() : prefs().order)); }}>{label}</button>
+              )}</For>
+            </div>
+          </div>
           <For each={viewGroups().filter((g) => g.id)}>{(group) => (
             <ViewGroup group={group} onOpen={() => { void openRow(group.rows[0]); }}>
               <For each={group.rows}>{(row) => <Row row={row}

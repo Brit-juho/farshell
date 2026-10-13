@@ -417,3 +417,7 @@
 }
 /* 폰 Fleet 행(.vt-srow.lg)은 패딩 6px · 아이콘 16px이라 레인이 15px을 지난다. */
 .vt-lin-fleet { --lane-x:2px; --branch-y:20px; --stub:5px; }
+/* 폰 Fleet의 「세션」 머리 — 정렬 전환은 손가락 표적(40px)으로. */
+.vt-fleet-group-head-sort { display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2); }
+.vt-fleet-group-head-sort .vt-rail-sort { margin-left:0; }
+.vt-fleet-group-head-sort .vt-rail-sort-opt { min-height:40px; padding:0 calc(var(--spacing) * 3.5); font-size:var(--fs-xs); }
