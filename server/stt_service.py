@@ -299,10 +299,25 @@ def catalog_payload(custom: Optional[str] = None) -> dict:
             "models": models, "unsupported": unsupported, "setup": _setup.status()}
 
 
+def _selected_ready(sel: Selection) -> bool:
+    """고른 모델을 지금 바로 올릴 수 있는가(받아 둠 + 필요 항목 충족) — 모델을 올리지 않고 확인만 한다."""
+    if not sel.valid or sel.spec is None:
+        return False
+    try:
+        env = detect()
+        eng = stt_engines.get_engine(sel.spec.engine)
+        if not eng.supported(env)[0] or not eng.model_present(sel.spec):
+            return False
+        return all(r.satisfied for r in eng.requirements(env))
+    except Exception:
+        return False
+
+
 def status_payload() -> dict:
     sel = selection()
     return {"available": available(), "loaded": loaded(), "engine": loaded_engine_id(),
-            "model": sel.model_id, "selected_valid": sel.valid, "loaded_model": loaded_model_id(),
+            "model": sel.model_id, "selected_valid": sel.valid, "selected_ready": _selected_ready(sel),
+            "loaded_model": loaded_model_id(),
             "rss_mb": rss_mb(), "setup": _setup.status(), "last_error": _last_error or None,
             "timing": {"last": _last_timing} if _last_timing else None}
 

@@ -58,7 +58,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | POST | `/voice/cancel` | Pause/resume that authenticated screen's queue: `{screen,pause}`. Machine daemon may use `{server:true,pause}`. Stops only FarShell-owned playback, never global say/afplay processes |
 | POST | `/voice/local/start` | Deprecated: 410 `local_mic_removed`; use browser microphone or Voice Daemon |
 | POST | `/voice/local/stop?session_id=X` | Deprecated: 410 `local_mic_removed`; never records or injects |
-| GET | `/voice/stt/status` | STT state — selected model, loaded model/engine, memory, current setup job, last error. Does not load a model |
+| GET | `/voice/stt/status` | STT state — selected model, `selected_ready` (downloaded and requirements met, so it can be loaded), loaded model/engine, memory, current setup job, last error. Does not load a model |
 | GET | `/voice/stt/catalog` | Models this server can run (recommended one first, readiness, requirements, measured numbers) and the ones it cannot (with the reason), plus usable engines and the current selection. `?custom=<custom:engine:owner/repo>` adds that custom model |
 | POST | `/voice/stt/setup` | Start ONE preparation step in the background — body `{"model": "<id>", "step": "model" \| "req:<requirement id>"}`. The settings UI calls this only after the user confirms the download. 400 for unknown models/steps or items the app does not install itself (pip packages), 409 while another step runs. Progress is `setup` in `GET /voice/stt/status` |
 | GET | `/voice/notify/clients` | Number of web clients attached to `/ws-notify` — the Stop hook uses it for "don't notify while the web UI is open" |

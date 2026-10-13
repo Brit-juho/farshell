@@ -344,6 +344,13 @@ def test_status_payload_shape(fx):
     assert st["timing"]["last"]["stt_ms"] >= 0 and st["setup"] is None and st["last_error"] is None
 
 
+def test_status_selected_ready_reflects_presence_without_loading(fx):
+    assert stt_service.status_payload()["selected_ready"] is False
+    ready(fx)
+    st = stt_service.status_payload()
+    assert st["selected_ready"] is True and st["loaded"] is False
+
+
 # ── start_setup ────────────────────────────────────────────────────
 
 def test_setup_rejects_bad_input(fx):

@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- **음성 버튼 시작 흐름과 「다시 보내기」가 영구히 남던 것**. 시작은 STT 상태 확인(GET), 마이크, 입력 대상 순으로 바꿨다(마이크가 없으면 서버 상태를 만들지 않고, 이전 재전송 보관분은 녹음이 실제로 시작될 때만 버린다). 모델이 준비되지 않은 환경은 올리기 요청 없이 안내만 보이고, `GET /voice/stt/status`에 `selected_ready`를 더했다. 재시도는 429·502·503·504와 네트워크 오류만 하고, 다시 보내기는 1회·15초 안에만 남는다.
+
 ### Added
 
 - **키보드 입력 경로 통합**. 물리 키와 문자를 분리하고 녹화·최상위 모달의 우선순위를 통일했다. 기기별 바인딩과 Option 문자/Meta 모드를 추가하고 Android sticky 입력·붙여넣기 중복을 수정했다. ADB 실기기 및 자동 검증을 완료했으며 macOS OS 입력 경로 검증은 남아 있다.
