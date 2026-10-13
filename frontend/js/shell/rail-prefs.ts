@@ -18,7 +18,7 @@ export function createRailPrefs() {
     setPrefs(read());
   });
   onCleanup(() => unsub?.());
-  const set = (key: string, value: boolean) => {
+  const set = (key: string, value: boolean | string) => {
     (window as any).vtSettingsSet?.(key, value);
     setPrefs(read());
   };

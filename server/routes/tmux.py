@@ -176,7 +176,8 @@ async def collect_tmux_sessions() -> list[dict]:
     내도록 한 곳에서 만든다."""
     # 2.1 D2: `@fsh_wt`도 같이 받는다 — 세션이 어느 워크트리 소속인지, cwd
     # 추측이 아니라 tmux에 적힌 사실로 답한다(subprocess 호출 수는 그대로다).
-    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}\t#{@fsh_origin}\t#{@fsh_share_nick}\t#{@fsh_share_mode}"
+    # 마지막 두 칸(session_id·session_created)은 위임 장부의 세션 키다(delegation.py) — 계보 표시용.
+    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}\t#{@fsh_origin}\t#{@fsh_share_nick}\t#{@fsh_share_mode}\t#{session_id}\t#{session_created}"
     # A2: pane_id를 함께 받아 응답에 싣는다 — 프런트가 "이 카드가 그 pane인가"를
     # cwd 추측이 아니라 id로 판정할 수 있게(같은 cwd 세션 둘 문제의 해소).
     fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}\t#{window_active}\t#{pane_active}"
@@ -205,6 +206,12 @@ async def collect_tmux_sessions() -> list[dict]:
     from session_context import contexts_for
     contexts = await contexts_for(["", *(p[1] for p in pane_by_session.values())])
     live_ptys = pty_mgr.sessions  # 복사본이라 한 번만 받는다
+    keys: dict[str, str] = {}
+    for line in sessions_text.strip().split("\n"):
+        p = line.split("\t")
+        if len(p) > 8 and p[8].isdigit():
+            keys[f"{p[7]}:{int(p[8])}"] = p[0]
+    lineage = await asyncio.to_thread(_lineage_by_name, keys)
     sessions = []
     for line in sessions_text.strip().split("\n"):
         if not line:
@@ -234,8 +241,35 @@ async def collect_tmux_sessions() -> list[dict]:
             "origin": tmux_runner.normalize_origin(parts[4] if len(parts) > 4 else ""),
             # 에이전트 세션 공유 표시(`@fsh_share_*`) — 같은 list-sessions 호출에서 읽는다. 공유가 아니면 null.
             "share": tmux_runner.parse_share(parts[5] if len(parts) > 5 else "", parts[6] if len(parts) > 6 else ""),
+            # 위임으로 만든 하위 세션이면 그 계보(장부 기준 — tmux 옵션은 에이전트가 바꿀 수 있어 안 쓴다).
+            "lineage": lineage.get(name),
         })
     return sessions
+
+
+def _lineage_by_name(keys: dict[str, str]) -> dict[str, dict]:
+    """{세션 키: 이름} → {자식 세션 이름: 계보}. 장부를 못 읽으면 빈 값(레일은 평평하게 그린다)."""
+    try:
+        import delegation
+        items = delegation.list_all()
+    except Exception:  # noqa: BLE001
+        return {}
+    out: dict[str, dict] = {}
+    for x in sorted(items, key=lambda x: x.get("created_at", 0)):
+        child = keys.get(x["child"]["key"])
+        if not child or x.get("state") == "starting":
+            continue
+        summary = x.get("summary") or ""
+        out[child] = {
+            "delegation": x["id"],
+            "parent": keys.get(x["parent"]["key"]),     # 부모 세션이 사라졌으면 None
+            "state": x.get("state"),
+            "outcome": x.get("outcome"),
+            "createdAt": x.get("created_at"),
+            "task": x.get("task_preview", "")[:200],
+            "summary": summary[:600] + ("…" if len(summary) > 600 else ""),
+        }
+    return out
 
 
 @router.post("/api/tmux/create")

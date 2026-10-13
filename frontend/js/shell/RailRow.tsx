@@ -16,7 +16,7 @@ import { agentLabel, icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
 import {
-  stateKeyword, formatRelativeTime, statusSentence, diffLabel,
+  stateKeyword, formatRelativeTime, statusSentence, diffLabel, lineageLabel,
   ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo,
 } from './rail-data.js';
 
@@ -113,8 +113,55 @@ export function KeywordLine(props: { row: SessionRow; now: () => number }) {
   );
 }
 
+/** 하위 세션의 위임 상태 표시(진행 중·보고·닫힘). 레일 행과 Fleet 행이 같이 쓴다. */
+export function LineageMark(props: { row: SessionRow }) {
+  return (
+    <Show when={props.row.lineage}>
+      {(l) => (
+        <span
+          class="vt-srow-lineage"
+          data-lstate={l().state}
+          data-outcome={l().outcome || undefined}
+          data-tip={l().task ? t('맡은 일 · {task}', { task: l().task }) : undefined}
+          data-tip-side="right"
+        >{lineageLabel(l())}</span>
+      )}
+    </Show>
+  );
+}
+
+/** 부모 행의 「하위 보고 1/2」 칩 + 하위 접기 토글. 레일 행과 Fleet 행이 같이 쓴다. */
+export function KidsToggle(props: {
+  progress: { reported: number; open: number } | null; count: number; collapsed: boolean; name: string;
+  onToggle?: () => void;
+}) {
+  return (
+    <Show when={props.count > 0 && props.onToggle}>
+      <button
+        type="button"
+        class="vt-srow-kids"
+        classList={{ collapsed: props.collapsed }}
+        aria-expanded={!props.collapsed}
+        aria-label={props.collapsed ? t('{name}의 하위 세션 펼치기', { name: props.name }) : t('{name}의 하위 세션 접기', { name: props.name })}
+        data-tip={t('하위 세션 {n}개', { n: props.count })}
+        data-tip-side="right"
+        onClick={(e) => { e.stopPropagation(); props.onToggle?.(); }}
+      >
+        <Show when={props.progress} fallback={<span>{t('하위 {n}', { n: props.count })}</span>}>
+          {(p) => <span>{t('하위 보고 {r}/{n}', { r: p().reported, n: p().open })}</span>}
+        </Show>
+        <span class="vt-srow-kids-caret" innerHTML={icon('chevron-down', 11, 2)} />
+      </button>
+    </Show>
+  );
+}
+
 export function Row(props: {
   row: SessionRow; active: boolean; compact?: boolean;
+  /** 위임 하위 세션 행 — 둘째 줄(작업 공간·브랜치)을 빼고 위임 상태를 붙인다. 부모 밑 레인 안에 그려진다. */
+  kid?: boolean;
+  /** 부모 행이면 하위 진행 칩과 접기 토글. */
+  progress?: { reported: number; open: number } | null; kidsCount?: number; kidsCollapsed?: boolean; onToggleKids?: () => void;
   /** 열린 행만 끌 수 있다(Rail.tsx의 onRowDragStart가 조건을 본다) — 터미널 칸에 놓으면 분할(묶음)이 생긴다. */
   draggable?: boolean; onDragStart?: (e: DragEvent) => void;
   /** 이름 제자리 편집 — window.prompt 안 씀. */
@@ -148,7 +195,7 @@ export function Row(props: {
   return (
     <div
       class="vt-srow vt-wgrail-row"
-      classList={{ active: props.active, closed: !props.row.open }}
+      classList={{ active: props.active, closed: !props.row.open, kid: !!props.kid }}
       onClick={props.onOpen}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => { e.preventDefault(); props.onContext(e); }}
@@ -209,8 +256,10 @@ export function Row(props: {
               onBlur={() => props.onEditCommit?.()}
             />
           </Show>
+          <KidsToggle progress={props.progress ?? null} count={props.kidsCount || 0} collapsed={!!props.kidsCollapsed}
+            name={rowName()} onToggle={props.onToggleKids} />
         </div>
-        <Show when={props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable'}>
+        <Show when={!props.kid && (props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable')}>
           <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
             <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
             <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
@@ -220,7 +269,11 @@ export function Row(props: {
           <Show when={props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">{t('정보 갱신 대기')}</div></Show>
         </Show>
         <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
-          <KeywordLine row={props.row} now={now} />
+          {/* 하위 행: 진행 중이면 에이전트 상태(작업 중·입력 대기)가 정보고, 끝났으면 위임 결과가 정보다 — 둘을 같이 쓰면
+              「보고 · 성공 완료」처럼 같은 말이 겹친다(2026-10-13 실화면). */}
+          <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} />}>
+            <LineageMark row={props.row} />
+          </Show>
           <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>

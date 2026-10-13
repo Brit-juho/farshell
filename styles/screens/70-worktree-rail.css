@@ -335,3 +335,85 @@
 .vt-railset-hint { grid-column:2; font:400 var(--fs-3xs) var(--font-ui); color:var(--color-sub); }
 .vt-railset-note { font:400 var(--fs-3xs) var(--font-ui); color:var(--color-sub); }
 .vt-railset .vt-wtd-section-title:not(:first-child) { margin-top:calc(var(--spacing) * 2); }
+
+/* ── 위임 계보(2026-10-13, docs/plan-2.4/50-agent-delegation.md · 방향 A 「계보선」) ──────────
+   위임은 브랜치, 보고는 머지. 부모 행의 상태 아이콘 아래로 레인(부모 상태색)이 내려가고, 하위 세션은
+   그 레인에서 굽은 가지로 갈라진다. 보고한 하위는 가지가 완료색으로 바뀌어 레인에 합쳐지고, 실패 보고는
+   오류색, 닫힌 하위는 흐린 선이다. 레인은 행 왼쪽 여백(10px) 안의 x=4px을 지난다 — 아이콘 축(18px)으로
+   내리면 부모 행의 둘째·셋째 줄 글자 위를 긋는다(2026-10-13 실화면). 부모 아이콘(y≈17px)에서 짧게 꺾여 내려온다.
+   행 패딩(.vt-srow, components.css)을 바꾸면 여기도 같이 고친다. */
+.vt-lin { position:relative; --lane:var(--color-st-idle); --lane-x:4px; --branch-y:17px; --stub:6px; }
+.vt-lin[data-lane="working"] { --lane:var(--color-st-working); }
+.vt-lin[data-lane="waiting"] { --lane:var(--color-st-waiting); }
+.vt-lin[data-lane="done"]    { --lane:var(--color-st-done); }
+.vt-lin.has-kids > .vt-srow { position:relative; }
+.vt-lin.has-kids > .vt-srow::after {
+  content:""; position:absolute; left:var(--lane-x); top:var(--branch-y); bottom:0; width:var(--stub);
+  border-left:2px solid var(--lane); border-top:2px solid var(--lane); border-top-left-radius:6px;
+  pointer-events:none;
+}
+.vt-lin-kid { position:relative; --branch:var(--lane); }
+.vt-lin-kid.merged { --branch:var(--color-st-done); }
+.vt-lin-kid.failed { --branch:var(--color-st-error); }
+.vt-lin-kid.closed, .vt-lin-fold { --branch:var(--color-line-strong); }
+/* 하위 행은 아이콘이 가지 끝에 오도록 오른쪽으로 민다. */
+.vt-lin-kid > .vt-srow { padding-left:calc(var(--spacing) * 5); }
+.vt-lin-kid::before {
+  content:""; position:absolute; left:var(--lane-x); top:0; width:16px; height:var(--branch-y);
+  border-left:2px solid var(--lane); border-bottom:2px solid var(--branch); border-bottom-left-radius:8px;
+  pointer-events:none;
+}
+.vt-lin-kid:not(.last)::after {
+  content:""; position:absolute; left:var(--lane-x); top:var(--branch-y); bottom:0; width:2px;
+  background:var(--lane); pointer-events:none;
+}
+.vt-lin-kid.closed > .vt-srow { opacity:.55; }
+.vt-lin-fold { min-height:28px; display:flex; align-items:center; padding-left:calc(var(--spacing) * 5); }
+.vt-lin-fold::before { height:14px; }
+.vt-lin-fold-btn {
+  display:inline-flex; align-items:center; gap:var(--spacing); min-height:28px; padding:0 calc(var(--spacing) * 1.5);
+  border:0; border-radius:var(--radius-sm); background:transparent; cursor:pointer;
+  color:var(--color-muted); font:var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui);
+}
+.vt-lin-fold-btn:hover { color:var(--color-sub); background:var(--menu-hover); }
+.vt-lin-fold-caret { display:inline-flex; transform:rotate(-90deg); transition:transform var(--dur-fast) var(--ease-out-quint); }
+.vt-lin-fold-btn[aria-expanded="true"] .vt-lin-fold-caret { transform:none; }
+/* 부모 행: 「하위 보고 1/2」 칩 겸 접기 토글. */
+.vt-srow-kids {
+  flex:none; display:inline-flex; align-items:center; gap:2px; min-height:20px; padding:0 calc(var(--spacing) * 1.25);
+  border:1px solid color-mix(in srgb, var(--color-st-working) 40%, transparent); border-radius:var(--radius-sm);
+  background:transparent; color:var(--color-sub); cursor:pointer;
+  font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono); font-variant-numeric:tabular-nums;
+}
+.vt-srow-kids:hover { color:var(--color-txt); }
+.vt-srow-kids-caret { display:inline-flex; transition:transform var(--dur-fast) var(--ease-out-quint); }
+.vt-srow-kids.collapsed .vt-srow-kids-caret { transform:rotate(-90deg); }
+.vt-srow-kids:focus-visible, .vt-lin-fold-btn:focus-visible { outline:2px solid var(--color-acc); outline-offset:1px; }
+/* 하위 행의 위임 상태 키워드. */
+.vt-srow-lineage { flex:none; font-weight:var(--weight-medium); color:var(--color-st-working); }
+.vt-srow-lineage[data-lstate="reported"] { color:var(--color-st-done); }
+.vt-srow-lineage[data-outcome="failed"] { color:var(--color-st-error); }
+.vt-srow-lineage[data-lstate="closed"], .vt-srow-lineage[data-lstate="orphaned"] { color:var(--color-muted); }
+/* 정렬 전환(이름순 · 수동). */
+.vt-rail-sort {
+  margin-left:auto; flex:none; display:inline-flex; border:1px solid var(--color-line-strong); border-radius:var(--radius-sm); overflow:hidden;
+  text-transform:none; letter-spacing:0;
+}
+.vt-rail-sort-opt {
+  min-height:22px; padding:0 calc(var(--spacing) * 2); border:0; background:transparent; cursor:pointer;
+  color:var(--color-muted); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui);
+}
+.vt-rail-sort-opt[aria-checked="true"] { background:var(--color-bg-3); color:var(--color-txt); }
+.vt-rail-sort-opt:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+/* 수동 정렬 드롭 위치. */
+.vt-lin.drop-before::before, .vt-lin.drop-after::after {
+  content:""; position:absolute; left:calc(var(--spacing) * 2); right:calc(var(--spacing) * 2); height:2px; z-index:1;
+  background:var(--color-acc); border-radius:1px; pointer-events:none;
+}
+.vt-lin.drop-before::before { top:-1px; }
+.vt-lin.drop-after::after { bottom:-1px; }
+@media (prefers-reduced-motion:reduce) {
+  .vt-lin-fold-caret, .vt-srow-kids-caret { transition:none; }
+}
+/* 폰 Fleet 행(.vt-srow.lg)은 패딩 6px · 아이콘 16px이라 레인이 15px을 지난다. */
+.vt-lin-fleet { --lane-x:2px; --branch-y:20px; --stub:5px; }

@@ -14,8 +14,9 @@ import { render, Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
   buildRailLists, groupSessionRows, compactRailRows, rowMenuItems, rowSummary, runRowMenu, defaultRailCollapsed,
-  ATTENTION_COLLAPSED_KEY,
-  type SessionRow,
+  ATTENTION_COLLAPSED_KEY, ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
+  buildSessionTree, kidsProgress, moveInOrder, stepInOrder,
+  type SessionRow, type RailSort, type TreeEntry,
 } from './rail-data.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -224,6 +225,49 @@ function Rail(props: { deps: RailDeps }) {
   const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(lists().sessions,
     (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
   const compact = createMemo(() => compactRailRows(lists()));
+
+  // ── 계보 트리 · 정렬 ─────────────────────────────────────────────────────
+  // 분할 화면 묶음(viewGroups의 id 있는 것)은 지금처럼 따로 그리고, 나머지 단독 행을 부모 → 자식
+  // 트리로 묶는다(rail-data.ts buildSessionTree). 자식은 정렬과 상관없이 부모 밑에 붙는다.
+  const groupedViews = createMemo(() => viewGroups().filter((g) => g.id));
+  const tree = createMemo<TreeEntry<SessionRow>[]>(() =>
+    buildSessionTree(viewGroups().filter((g) => !g.id).map((g) => g.rows[0]), prefs().sort, prefs().order));
+  const rowKey = (r: SessionRow) => r.tmuxName || r.name;
+  const topOrder = () => tree().map((e) => rowKey(e.row));
+  const saveOrder = (names: string[]) => setPref(ORDER_KEY, encodeOrder('manual', names));
+  const setSort = (s: RailSort) => {
+    if (s === prefs().sort) return;
+    // 수동으로 바꿀 때는 지금 보이는 순서를 출발점으로 삼는다(바꾸자마자 섞이지 않게). 이름순으로 돌아가도
+    // 수동 순서는 지우지 않는다 — 다시 수동을 고르면 그대로 돌아온다.
+    setPref(ORDER_KEY, encodeOrder(s, s === 'manual' ? topOrder() : prefs().order));
+  };
+  const moveRow = (row: SessionRow, dir: -1 | 1) => saveOrder(stepInOrder(topOrder(), rowKey(row), dir));
+  const flip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
+  const toggleKids = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(flip(prefs().kidsCollapsed, name), prefs().closedOpen));
+  const toggleClosed = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(prefs().kidsCollapsed, flip(prefs().closedOpen, name)));
+  const kidsCollapsed = (r: SessionRow) => prefs().kidsCollapsed.includes(rowKey(r));
+  const closedOpen = (r: SessionRow) => prefs().closedOpen.includes(rowKey(r));
+
+  // 수동 정렬 드래그. 최상위 항목(부모는 자식과 한 덩어리)만 옮긴다. 터미널 칸 분할 드래그(text/vt-tab-id)와
+  // 같은 드래그에 두 형식을 함께 싣는다 — 레일 안에 놓으면 순서, 칸에 놓으면 분할이다.
+  const ORDER_MIME = 'text/vt-rail-order';
+  const [dropAt, setDropAt] = createSignal<{ name: string; place: 'before' | 'after' } | null>(null);
+  const isTop = (r: SessionRow) => tree().some((e) => e.row === r);
+  const onEntryDragOver = (e: DragEvent, entry: TreeEntry<SessionRow>) => {
+    if (prefs().sort !== 'manual' || !e.dataTransfer?.types.includes(ORDER_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setDropAt({ name: rowKey(entry.row), place: e.clientY < r.top + Math.min(r.height, 60) / 2 ? 'before' : 'after' });
+  };
+  const onEntryDrop = (e: DragEvent) => {
+    const name = e.dataTransfer?.getData(ORDER_MIME);
+    const at = dropAt();
+    setDropAt(null);
+    if (!name || !at) return;
+    e.preventDefault();
+    saveOrder(moveInOrder(topOrder(), name, at.name, at.place));
+  };
   const totalRows = createMemo(() => lists().sessions.length);
 
   const activeId = createMemo(() => { sessionsVersion(); return (window as any).activeSessionId?.() ?? null; });
@@ -256,8 +300,11 @@ function Rail(props: { deps: RailDeps }) {
   // 문자열이어야 한다(이 파일은 레이아웃 모듈을 정적 import 못 한다). 열려 있지 않은
   // 세션은 웹 세션 id가 없어 끌 수 없다.
   const onRowDragStart = (e: DragEvent, row: SessionRow) => {
-    if (!row.open || !row.sessionId) { e.preventDefault(); return; }
-    e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
+    const reorder = prefs().sort === 'manual' && isTop(row);
+    const split = row.open && !!row.sessionId;
+    if (!reorder && !split) { e.preventDefault(); return; }
+    if (split) e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
+    if (reorder) e.dataTransfer?.setData(ORDER_MIME, rowKey(row));
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -283,9 +330,12 @@ function Rail(props: { deps: RailDeps }) {
     const m = ctxMenu();
     if (!m) return [];
     const row = m.row;
-    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST }).map((it) => ({
+    const order = topOrder();
+    const at = isTop(row) && prefs().sort === 'manual' ? order.indexOf(rowKey(row)) : -1;
+    const move = at < 0 ? undefined : { up: at > 0, down: at < order.length - 1 };
+    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, move }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger,
-      run: () => runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name)),
+      run: () => runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name), (d) => moveRow(row, d)),
     }));
   };
 
@@ -369,12 +419,17 @@ function Rail(props: { deps: RailDeps }) {
 
 
   // 같은 행이 두 구역(개입 필요·세션)에 나올 수 있다 — 같은 세션이라 편집·활성 상태도 같이 따라간다.
-  const renderRow = (row: SessionRow) => (
+  const renderRow = (row: SessionRow, lin?: { kid?: boolean; entry?: TreeEntry<SessionRow> }) => (
     <Row
       row={row}
       compact={collapsed()}
+      kid={!!lin?.kid}
+      progress={lin?.entry ? kidsProgress(lin.entry.kids) : null}
+      kidsCount={lin?.entry ? lin.entry.kids.length + lin.entry.closedKids.length : 0}
+      kidsCollapsed={lin?.entry ? kidsCollapsed(row) : false}
+      onToggleKids={lin?.entry ? () => toggleKids(rowKey(row)) : undefined}
       active={!!row.sessionId && row.sessionId === activeId()}
-      draggable={row.open && !!row.sessionId}
+      draggable={(row.open && !!row.sessionId) || (prefs().sort === 'manual' && !lin?.kid && !!lin?.entry)}
       onDragStart={(e) => onRowDragStart(e, row)}
       editing={!!row.sessionId && editingSessionKey() === row.sessionId}
       editingValue={editingSessionValue()}
@@ -498,14 +553,76 @@ function Rail(props: { deps: RailDeps }) {
                   {t('세션')}
                   <span class="vt-wgrail-group-count">{lists().sessions.length}</span>
                 </span>
+                <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
+                  <For each={[['name', t('이름순')], ['manual', t('수동')]] as [RailSort, string][]}>{([id, label]) => (
+                    <button
+                      type="button"
+                      role="radio"
+                      class="vt-rail-sort-opt"
+                      aria-checked={prefs().sort === id}
+                      data-tip={id === 'manual' ? t('끌어서 순서를 바꿉니다. 행 메뉴의 위로·아래로 이동도 됩니다.') : undefined}
+                      data-tip-side="bottom"
+                      onClick={() => setSort(id)}
+                    >{label}</button>
+                  )}</For>
+                </div>
               </div>
             </Show>
-            <For each={viewGroups()}>{(group) => (
-              <Show when={group.id} fallback={renderRow(group.rows[0])}>
-                <ViewGroup group={group} onOpen={() => { void openRow({} as MouseEvent, group.rows[0]); }}>
-                  <For each={group.rows}>{(row) => renderRow(row)}</For>
-                </ViewGroup>
-              </Show>
+            <For each={groupedViews()}>{(group) => (
+              <ViewGroup group={group} onOpen={() => { void openRow({} as MouseEvent, group.rows[0]); }}>
+                <For each={group.rows}>{(row) => renderRow(row)}</For>
+              </ViewGroup>
+            )}</For>
+            <For each={tree()}>{(entry) => (
+              <div
+                class="vt-lin"
+                classList={{
+                  'has-kids': entry.kids.length + entry.closedKids.length > 0 && !kidsCollapsed(entry.row),
+                  'drop-before': dropAt()?.name === rowKey(entry.row) && dropAt()?.place === 'before',
+                  'drop-after': dropAt()?.name === rowKey(entry.row) && dropAt()?.place === 'after',
+                }}
+                data-lane={entry.row.status}
+                onDragOver={(e) => onEntryDragOver(e, entry)}
+                onDragLeave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropAt(null); }}
+                onDrop={onEntryDrop}
+                onDragEnd={() => setDropAt(null)}
+              >
+                {renderRow(entry.row, { entry })}
+                <Show when={(entry.kids.length + entry.closedKids.length) > 0 && !kidsCollapsed(entry.row)}>
+                  <div class="vt-lin-kids" role="group" aria-label={t('{name}의 하위 세션', { name: entry.row.name })}>
+                    <For each={entry.kids}>{(kid, i) => (
+                      <div
+                        class="vt-lin-kid"
+                        classList={{
+                          last: i() === entry.kids.length - 1 && entry.closedKids.length === 0,
+                          merged: kid.lineage?.state === 'reported',
+                          failed: kid.lineage?.outcome === 'failed',
+                        }}
+                      >{renderRow(kid, { kid: true })}</div>
+                    )}</For>
+                    <Show when={entry.closedKids.length > 0}>
+                      <div class="vt-lin-kid vt-lin-fold" classList={{ last: !closedOpen(entry.row) }}>
+                        <button
+                          type="button"
+                          class="vt-lin-fold-btn"
+                          aria-expanded={closedOpen(entry.row)}
+                          onClick={() => toggleClosed(rowKey(entry.row))}
+                        >
+                          <span class="vt-lin-fold-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                          {t('닫힌 하위 {n}', { n: entry.closedKids.length })}
+                        </button>
+                      </div>
+                      <Show when={closedOpen(entry.row)}>
+                        <For each={entry.closedKids}>{(kid, i) => (
+                          <div class="vt-lin-kid closed" classList={{ last: i() === entry.closedKids.length - 1 }}>
+                            {renderRow(kid, { kid: true })}
+                          </div>
+                        )}</For>
+                      </Show>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
             )}</For>
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
