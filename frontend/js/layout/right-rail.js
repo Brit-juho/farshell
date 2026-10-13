@@ -5,6 +5,7 @@
 // 게이팅(agent/status.js)이 그 일을 한다. 섹션이 하나도 없으면 레일이 통째로
 // 사라지고 pane이 폭을 회수한다(30-layout-shell.md §4).
 import { get as setting, set as setSetting, subscribe as onSettings } from '../core/settings.js';
+import { t } from '../core/i18n.js';
 
 const RAIL = document.getElementById('vt-right-rail');
 const BTN = document.getElementById('vt-rr-collapse');
@@ -16,8 +17,8 @@ function apply() {
   RAIL.classList.toggle('collapsed', collapsed);
   if (BTN) {
     BTN.textContent = collapsed ? '‹' : '›';
-    BTN.setAttribute('data-tip', collapsed ? '우측 레일 펼치기' : '우측 레일 접기');
-    BTN.setAttribute('aria-label', collapsed ? '우측 레일 펼치기' : '우측 레일 접기');
+    BTN.setAttribute('data-tip', collapsed ? t('우측 레일 펼치기') : t('우측 레일 접기'));
+    BTN.setAttribute('aria-label', collapsed ? t('우측 레일 펼치기') : t('우측 레일 접기'));
     BTN.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }
 }

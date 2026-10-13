@@ -8,6 +8,7 @@ import { API_BASE } from '../core/env.js';
 import { screenId } from '../core/screen-id.js';
 import { addSession } from './session.js';
 import { attachRemoteSession } from './remote.js';
+import { t } from '../core/i18n.js';
 
 // 복원 요청은 인증/연결 실패와 확인된 세션 부재(404)를 구분한다.
 async function restoreRequest(url, options, missing = false) {
@@ -70,6 +71,6 @@ export async function attachLayoutSessions(infos) {
       failed++;
     }
   }
-  if (failed > 0) showToast(`세션 ${failed}개를 열지 못했습니다 (이미 종료됨)`);
+  if (failed > 0) showToast(t('세션 {n}개를 열지 못했습니다 (이미 종료됨)', { n: failed }));
   return opened;
 }

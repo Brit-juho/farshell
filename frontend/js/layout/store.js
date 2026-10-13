@@ -10,6 +10,7 @@ import { isMobileLayout } from './breakpoints.js';
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
 import { activeSessionId, setActive, sessionDisplayName } from '../core/store.js';
 import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setLeafPanel as _setLeafPanel, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, findPaneBySession, collectSessions } from './tree.js';
+import { t } from '../core/i18n.js';
 
 function _genId(prefix) {
   const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -669,7 +670,7 @@ export function getTabsWithTrees() {
 export function tabDisplayLabel(tab) {
   if (tab.label) return tab.label;
   const ids = collectSessions(tab.tree);
-  if (ids.length === 0) return '빈 화면';
+  if (ids.length === 0) return t('빈 화면');
   if (ids.length === 1) return sessionDisplayName(ids[0]);
   return ids.map((id) => sessionDisplayName(id)).join(' + ');
 }

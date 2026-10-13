@@ -23,6 +23,7 @@ import { activeSession, activeSessionId, getSession } from './core/store.js';
 import { screenId } from './core/screen-id.js';
 import { sendToPty, sendPaste } from './term/clipboard.js';
 import { addSession } from './term/session.js';
+import { t } from './core/i18n.js';
 
 // '전체' 탭 기본 — 기존 동작(스코프 구분 없이 전부 표시)과 최대한 같게 시작한다.
 let _scopeTab = 'global';
@@ -32,31 +33,31 @@ function closeSnippets() { closePanel('vt-snippets'); }
 export function showSnippets() {
       const panel = openPanel({
         id: 'vt-snippets',
-        ariaLabel: '프롬프트 스니펫',
-        headHTML: `<div class="vt-vw-title">프롬프트 스니펫</div>`,
+        ariaLabel: t('프롬프트 스니펫'),
+        headHTML: `<div class="vt-vw-title">${t('프롬프트 스니펫')}</div>`,
         extraHTML: `
-          <div class="vt-sn-scope-tabs" role="tablist" aria-label="스니펫 스코프">
-            <button type="button" class="vt-segment vt-sn-scope-tab" data-scope="project" id="vt-sn-tab-project" role="tab">프로젝트</button>
-            <button type="button" class="vt-segment vt-sn-scope-tab" data-scope="global" id="vt-sn-tab-global" role="tab">전체</button>
+          <div class="vt-sn-scope-tabs" role="tablist" aria-label="${t('스니펫 스코프')}">
+            <button type="button" class="vt-segment vt-sn-scope-tab" data-scope="project" id="vt-sn-tab-project" role="tab">${t('프로젝트')}</button>
+            <button type="button" class="vt-segment vt-sn-scope-tab" data-scope="global" id="vt-sn-tab-global" role="tab">${t('전체')}</button>
           </div>
           <div class="vt-q-compose">
-            <input id="vt-sn-label" class="vt-input lg" type="text" placeholder="이름 (선택)" maxlength="60" />
-            <textarea id="vt-sn-input" rows="3" placeholder="저장할 지시문/명령…"></textarea>
-            <div class="vt-sn-mode-choice" role="radiogroup" aria-label="실행 방식">
+            <input id="vt-sn-label" class="vt-input lg" type="text" placeholder="${t('이름 (선택)')}" maxlength="60" />
+            <textarea id="vt-sn-input" rows="3" placeholder="${t('저장할 지시문/명령…')}"></textarea>
+            <div class="vt-sn-mode-choice" role="radiogroup" aria-label="${t('실행 방식')}">
               <label class="vt-sn-mode-opt">
                 <input type="radio" name="vt-sn-mode" value="paste" checked />
-                붙여넣기만 <span class="vt-q-sub">Enter는 안 누름 — 값 채우고 확인 후 직접 실행</span>
+                ${t('붙여넣기만')} <span class="vt-q-sub">${t('Enter는 안 누름 — 값 채우고 확인 후 직접 실행')}</span>
               </label>
               <label class="vt-sn-mode-opt">
                 <input type="radio" name="vt-sn-mode" value="new_section" />
-                새 섹션 자동 실행 <span class="vt-q-sub">오른쪽에 새 세션을 열고 바로 Enter까지</span>
+                ${t('새 섹션 자동 실행')} <span class="vt-q-sub">${t('오른쪽에 새 세션을 열고 바로 Enter까지')}</span>
               </label>
             </div>
             <div class="vt-q-compose-row">
-              <label class="vt-sn-save-scope" id="vt-sn-save-scope-label" title="현재 활성 세션의 저장소에만 저장">
-                <input type="checkbox" id="vt-sn-save-project" /> 이 프로젝트에만
+              <label class="vt-sn-save-scope" id="vt-sn-save-scope-label" title="${t('현재 활성 세션의 저장소에만 저장')}">
+                <input type="checkbox" id="vt-sn-save-project" /> ${t('이 프로젝트에만')}
               </label>
-              <button class="vt-btn" id="vt-sn-add">저장</button>
+              <button class="vt-btn" id="vt-sn-add">${t('저장')}</button>
             </div>
           </div>
         `,
@@ -121,7 +122,7 @@ export function showSnippets() {
       if (_scopeTab === 'project') {
         const projectKey = await _currentProjectKey();
         if (!projectKey) {
-          body.innerHTML = '<div class="vt-vw-empty">현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 볼 수 있습니다.</div>';
+          body.innerHTML = `<div class="vt-vw-empty">${t('현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 볼 수 있습니다.')}</div>`;
           return;
         }
         items = items.filter((it) => it.scope === 'project' && it.project === projectKey);
@@ -129,8 +130,8 @@ export function showSnippets() {
 
       if (!items.length) {
         body.innerHTML = _scopeTab === 'project'
-          ? '<div class="vt-vw-empty">이 프로젝트에 저장된 스니펫이 없습니다.</div>'
-          : '<div class="vt-vw-empty">저장된 스니펫이 없습니다.<br>자주 쓰는 지시문을 위에 저장해두세요.</div>';
+          ? `<div class="vt-vw-empty">${t('이 프로젝트에 저장된 스니펫이 없습니다.')}</div>`
+          : `<div class="vt-vw-empty">${t('저장된 스니펫이 없습니다.')}<br>${t('자주 쓰는 지시문을 위에 저장해두세요.')}</div>`;
         return;
       }
 
@@ -155,7 +156,7 @@ export function showSnippets() {
         if (it.scope === 'project') {
           const chip = document.createElement('span');
           chip.className = 'vt-tag vt-q-chip';
-          chip.textContent = '프로젝트';
+          chip.textContent = t('프로젝트');
           chip.title = it.project || '';
           meta.appendChild(chip);
         }
@@ -167,12 +168,12 @@ export function showSnippets() {
         const run = document.createElement('button');
         run.className = 'vt-btn';
         if (isPaste) {
-          run.textContent = '붙여넣기';
-          run.title = '지금 보고 있는 세션에 텍스트만 입력 — Enter는 직접';
+          run.textContent = t('붙여넣기');
+          run.title = t('지금 보고 있는 세션에 텍스트만 입력 — Enter는 직접');
           run.onclick = () => pasteSnippet(it);
         } else {
-          run.textContent = '새 섹션 실행';
-          run.title = '오른쪽으로 분할해 같은 위치의 새 세션에서 바로 실행';
+          run.textContent = t('새 섹션 실행');
+          run.title = t('오른쪽으로 분할해 같은 위치의 새 세션에서 바로 실행');
           run.onclick = () => runSnippetNewSection(it);
         }
 
@@ -180,13 +181,13 @@ export function showSnippets() {
         // 다시 만들게 하지 않는다.
         const toggle = document.createElement('button');
         toggle.className = 'vt-btn vt-sn-mode-toggle';
-        toggle.title = isPaste ? '새 섹션 자동 실행으로 바꾸기' : '붙여넣기만으로 바꾸기';
-        toggle.textContent = isPaste ? '⇥ 자동으로' : '⇤ 붙여넣기로';
+        toggle.title = isPaste ? t('새 섹션 자동 실행으로 바꾸기') : t('붙여넣기만으로 바꾸기');
+        toggle.textContent = isPaste ? t('⇥ 자동으로') : t('⇤ 붙여넣기로');
         toggle.onclick = () => toggleSnippetMode(it, isPaste ? 'new_section' : 'paste');
 
         const rm = document.createElement('button');
         rm.className = 'vt-btn danger';
-        rm.textContent = '삭제';
+        rm.textContent = t('삭제');
         rm.onclick = () => removeSnippet(it.id);
         act.appendChild(run); act.appendChild(toggle); act.appendChild(rm);
 
@@ -220,14 +221,14 @@ export function showSnippets() {
         labelEl.value = '';
         inputEl.value = '';
       } catch (e) {
-        showToast(`저장 실패: ${e.message}`);
+        showToast(t('저장 실패: {error}', { error: e.message }));
       }
       refreshSnippets();
     }
 
     async function removeSnippet(id) {
       try { await vtFetch(`/api/snippets/${id}`, { method: 'DELETE' }); }
-      catch (e) { showToast(`삭제 실패: ${e.message}`); }
+      catch (e) { showToast(t('삭제 실패: {error}', { error: e.message })); }
       refreshSnippets();
     }
 
@@ -239,7 +240,7 @@ export function showSnippets() {
           body: JSON.stringify({ mode: newMode }),
         });
       } catch (e) {
-        showToast(`변경 실패: ${e.message}`);
+        showToast(t('변경 실패: {error}', { error: e.message }));
         return;
       }
       refreshSnippets();
@@ -252,7 +253,7 @@ export function showSnippets() {
     // 달리 줄마다 실행되면 안 되므로(그게 사고), bracketed paste로 감싸지는
     // 경로가 정확히 맞는다.
     function pasteSnippet(it) {
-      if (!activeSession()) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
+      if (!activeSession()) { showToast(t('열려 있는 세션이 없습니다'), 'error'); return; }
       sendPaste(activeSessionId(), it.text);
       closeSnippets();
     }
@@ -278,15 +279,15 @@ export function showSnippets() {
     // 청크 경계에 따라 트리 상태가 복제될 수 있다는 그 모듈 자신의 경고 — N36
     // 주석 참고) — 그 규칙을 그대로 따른다.
     async function runSnippetNewSection(it) {
-      if (!activeSession()) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
+      if (!activeSession()) { showToast(t('열려 있는 세션이 없습니다'), 'error'); return; }
       if (typeof window.splitActivePane !== 'function') {
-        showToast('분할을 사용할 수 없습니다', 'error');
+        showToast(t('분할을 사용할 수 없습니다'), 'error');
         return;
       }
       const cwd = await _activeCwd();
       const newPaneId = window.splitActivePane('right');
       if (!newPaneId) {
-        showToast('분할 실패 — 페인 개수 상한에 도달했을 수 있습니다', 'error');
+        showToast(t('분할 실패 — 페인 개수 상한에 도달했을 수 있습니다'), 'error');
         return;
       }
       let data;
@@ -297,7 +298,7 @@ export function showSnippets() {
           body: JSON.stringify({ ...(cwd ? { cwd } : {}), screen: screenId() }),
         });
       } catch (e) {
-        showToast(`새 섹션 생성 실패: ${e.message}`, 'error');
+        showToast(t('새 섹션 생성 실패: {error}', { error: e.message }), 'error');
         return;
       }
       // addSession()이 탭·xterm·WS를 만들고 switchTo()로 활성 pane(방금 분할한
@@ -309,7 +310,7 @@ export function showSnippets() {
 
       const ready = await _waitForPtyOpen(data.id);
       if (!ready) {
-        showToast('새 세션 연결이 늦어 스니펫을 아직 보내지 못했습니다 — 연결되면 직접 붙여넣으세요', 'error');
+        showToast(t('새 세션 연결이 늦어 스니펫을 아직 보내지 못했습니다 — 연결되면 직접 붙여넣으세요'), 'error');
         return;
       }
       // N24: 이 경로는 sendPaste로 옮기지 않는다 — 멀티라인 스니펫은 줄마다

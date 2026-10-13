@@ -9,6 +9,7 @@ import { saveLayoutNow } from './persist.js';
 import { sessionDisplayName } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { closeView } from '../term/session-actions.js';
+import { t } from '../core/i18n.js';
 
 let _focus = null;   // 이동·닫기 직후 다시 그릴 때 포커스를 돌려줄 버튼 {tabId, dir} | {close:true, index}
 let _note = null;    // 스크린리더용 결과 안내 한 줄 {text, until} — 한 동작이 시트를 여러 번 다시 그리므로 1.5초간 유지
@@ -34,7 +35,7 @@ export function moveView(tabId, delta) {
 }
 
 function viewTitle(v) {
-  return v.label || (v.members.length > 1 ? '묶음 뷰' : sessionDisplayName(v.members[0]));
+  return v.label || (v.members.length > 1 ? t('묶음 뷰') : sessionDisplayName(v.members[0]));
 }
 
 export function renderOrderEditor(list) {
@@ -44,7 +45,7 @@ export function renderOrderEditor(list) {
   const note = document.createElement('p');
   note.className = 'vt-order-note';
   note.setAttribute('role', 'status');
-  note.textContent = (_note && Date.now() < _note.until && _note.text) || '위·아래 버튼으로 뷰 순서를 바꾸고, 닫기 버튼으로 뷰를 닫습니다. 묶음 뷰는 함께 움직이고 닫아도 세션은 살아 있습니다.';
+  note.textContent = (_note && Date.now() < _note.until && _note.text) || t('위·아래 버튼으로 뷰 순서를 바꾸고, 닫기 버튼으로 뷰를 닫습니다. 묶음 뷰는 함께 움직이고 닫아도 세션은 살아 있습니다.');
   list.appendChild(note);
   views.forEach((v, i) => {
     const block = document.createElement('div');
@@ -73,12 +74,12 @@ export function renderOrderEditor(list) {
       b.dataset.tab = v.id; b.dataset.dir = String(dir);
       b.innerHTML = icon('chevron-down', 18);
       const label = grouped ? viewTitle(v) : sessionDisplayName(v.members[0]);
-      b.setAttribute('aria-label', `${label} ${dir < 0 ? '위로' : '아래로'} 옮기기`);
+      b.setAttribute('aria-label', dir < 0 ? t('{label} 위로 옮기기', { label }) : t('{label} 아래로 옮기기', { label }));
       if (off) b.setAttribute('aria-disabled', 'true');
       b.onclick = () => {
         if (off) return;
         _focus = { tabId: v.id, dir };
-        _note = { text: `${label}: ${i + 1 + dir}번째 / 전체 ${views.length}개`, until: Date.now() + 1500 };
+        _note = { text: t('{label}: {pos}번째 / 전체 {n}개', { label, pos: i + 1 + dir, n: views.length }), until: Date.now() + 1500 };
         if (!moveView(v.id, dir)) { _focus = null; _note = null; }
       };
       block.appendChild(b);
@@ -90,11 +91,11 @@ export function renderOrderEditor(list) {
     x.dataset.tab = v.id;
     x.innerHTML = icon('x', 18);
     // 라벨이 이미 '…뷰'로 끝나면(예: 「묶음 뷰」) '뷰'를 또 붙이지 않는다.
-    const viewName = /뷰$/.test(label) ? label : `${label} 뷰`;
-    x.setAttribute('aria-label', `${viewName} 닫기`);
+    const viewName = /뷰$/.test(label) ? label : t('{label} 뷰', { label });
+    x.setAttribute('aria-label', t('{name} 닫기', { name: viewName }));
     x.onclick = async () => {
       _focus = { close: true, index: i, until: Date.now() + 1500 };
-      _note = { text: `${viewName}를 닫았습니다. 세션은 그대로 남아 있습니다.`, until: Date.now() + 1500 };
+      _note = { text: t('{name}를 닫았습니다. 세션은 그대로 남아 있습니다.', { name: viewName }), until: Date.now() + 1500 };
       await closeView(v.id);
       // closeView 뒤에도 세션 정리·저장이 시트를 다시 그린다 — 닫기 포커스는 1.5초간 유지해 그 그림마다 되돌린다.
       if (list.isConnected) renderOrderEditor(list);

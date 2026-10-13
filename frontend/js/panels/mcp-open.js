@@ -11,12 +11,13 @@
 import { openPanel, closePanel } from './panel.js';
 import { getTabs, getActiveTabId, getTree, getActivePaneId, onLayoutChange } from '../layout/store.js';
 import { findNode } from '../layout/tree.js';
+import { t } from '../core/i18n.js';
 
 /** MCP 화면의 기준 — 포커스된 칸의 tmux 세션(`session:<이름>`). 경로는 서버가
  *  tmux에 직접 묻는다(server/mcp_scan.py SESSION_PREFIX). 원격 호스트 칸은 이
  *  서버의 tmux에 없으므로 기준으로 쓰지 않는다. 세션이 없으면 탭의 워크트리. */
 export function mcpContext() {
-  const tab = getTabs().find((t) => t.id === getActiveTabId());
+  const tab = getTabs().find((tb) => tb.id === getActiveTabId());
   const leaf = findNode(getTree(), getActivePaneId());
   const local = (!tab || (tab.hostId || 'local') === 'local')
     && (!leaf || (leaf.host || 'local') === 'local');
@@ -33,8 +34,8 @@ export function showMcp() {
   let unsub = null;
   const panel = openPanel({
     id: 'vt-mcp',
-    ariaLabel: 'MCP와 스킬 관리',
-    headHTML: '<div class="vt-vw-title">MCP · 스킬</div>',
+    ariaLabel: t('MCP와 스킬 관리'),
+    headHTML: `<div class="vt-vw-title">${t('MCP · 스킬')}</div>`,
     bodyId: 'vt-mcp-body',
     onClose: () => { if (unsub) unsub(); unsub = null; },
   });
@@ -51,5 +52,5 @@ export function showMcp() {
         m.mount(panel.body, ctx);
       });
     })
-    .catch((e) => { panel.body.textContent = '불러오지 못했습니다'; console.error('[FarShell mcp]', e); });
+    .catch((e) => { panel.body.textContent = t('불러오지 못했습니다'); console.error('[FarShell mcp]', e); });
 }

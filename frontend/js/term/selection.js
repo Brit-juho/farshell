@@ -5,6 +5,7 @@ import { get as setting } from '../core/settings.js';
 import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste, claimNativePaste } from './clipboard.js';
 import { getSession } from '../core/store.js';
 import { _isCoarsePointer } from '../core/env.js';
+import { t } from '../core/i18n.js';
 
 
 export function wireClipboard(id, term, wrapper) {
@@ -26,7 +27,7 @@ export function wireClipboard(id, term, wrapper) {
     // moreMenu.js + voice/notify.js). 이제 설정 스토어 하나만 본다.
     if (!setting('mouse.autocopyOnSelect')) return;
     const sel = term.getSelection && term.getSelection();
-    if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
+    if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast(t('복사됨')); });
   });
 
   // 2) 우클릭 — 선택 있으면 복사, 없으면 붙여넣기 (PuTTY 스타일)
@@ -42,7 +43,7 @@ export function wireClipboard(id, term, wrapper) {
     if (_isCoarsePointer()) { e.preventDefault(); return; }
     e.preventDefault();
     const sel = term.getSelection && term.getSelection();
-    if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast('복사됨'); });
+    if (sel && sel.trim()) copyToClipboard(sel).then((ok) => { if (ok) showToast(t('복사됨')); });
     else pasteFromClipboard(id);
   });
 
@@ -115,7 +116,7 @@ export function wireClipboard(id, term, wrapper) {
         const bin = atob(payload);
         const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
         const text = new TextDecoder('utf-8').decode(bytes);
-        copyToClipboard(text).then((ok) => { if (ok) showToast('클립보드 동기화됨 (OSC52)'); });
+        copyToClipboard(text).then((ok) => { if (ok) showToast(t('클립보드 동기화됨 (OSC52)')); });
       } catch (_) { /* 잘못된 base64 무시 */ }
       return true;
     });

@@ -37,6 +37,7 @@ import { vtFetch } from '../core/api.js';
 import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
 import { beginResizeOverlay, endResizeOverlay } from './resize-overlay.js';
+import { t } from '../core/i18n.js';
 
 export { canSplit };
 
@@ -46,8 +47,8 @@ export { canSplit };
 // 조용히 무시한다 — 드래그 중에는 하이라이트가 안 뜨는 것 자체가 피드백이다.
 function _applySplitCap(paneEl) {
   const ok = canSplit();
-  const reason = `분할 한도에 도달했습니다 (현재 화면 폭에서는 최대 ${tierCap()}개)`;
-  for (const [sel, label] of [['.vt-pane-split-row', '오른쪽 분할'], ['.vt-pane-split-col', '아래쪽 분할']]) {
+  const reason = t('분할 한도에 도달했습니다 (현재 화면 폭에서는 최대 {n}개)', { n: tierCap() });
+  for (const [sel, label] of [['.vt-pane-split-row', t('오른쪽 분할')], ['.vt-pane-split-col', t('아래쪽 분할')]]) {
     const btn = paneEl.querySelector(sel);
     if (!btn) continue;
     btn.disabled = !ok;
@@ -117,7 +118,7 @@ function _paintChip(paneEl) {
   const branch = tmux ? _branchChips.get(tmux) : null;
   chip.textContent = branch || '';
   chip.hidden = !branch;
-  if (branch) chip.setAttribute('data-tip', '현재 작업 디렉터리의 브랜치'); else chip.removeAttribute('data-tip');
+  if (branch) chip.setAttribute('data-tip', t('현재 작업 디렉터리의 브랜치')); else chip.removeAttribute('data-tip');
 }
 
 // 트리가 안 바뀌어도(브랜치 지도만 새로 왔을 때) 이미 그려진 pane들의 칩만
@@ -136,9 +137,9 @@ function _buildPaneEl(paneId) {
     <div class="vt-pane-head">
       <span class="vt-pane-name"></span>
       <span class="vt-pane-branch" hidden></span>
-      <button type="button" class="vt-icon-btn xs vt-pane-split-row" data-tip="오른쪽 분할" data-tip-side="bottom" aria-label="오른쪽 분할">${icon('columns-2', 13)}</button>
-      <button type="button" class="vt-icon-btn xs vt-pane-split-col" data-tip="아래쪽 분할" data-tip-side="bottom" aria-label="아래쪽 분할">${icon('rows-2', 13)}</button>
-      <button type="button" class="vt-icon-btn xs danger vt-pane-close" data-tip="닫기" data-tip-side="bottom" aria-label="닫기">${icon('x', 13)}</button>
+      <button type="button" class="vt-icon-btn xs vt-pane-split-row" data-tip="${t('오른쪽 분할')}" data-tip-side="bottom" aria-label="${t('오른쪽 분할')}">${icon('columns-2', 13)}</button>
+      <button type="button" class="vt-icon-btn xs vt-pane-split-col" data-tip="${t('아래쪽 분할')}" data-tip-side="bottom" aria-label="${t('아래쪽 분할')}">${icon('rows-2', 13)}</button>
+      <button type="button" class="vt-icon-btn xs danger vt-pane-close" data-tip="${t('닫기')}" data-tip-side="bottom" aria-label="${t('닫기')}">${icon('x', 13)}</button>
     </div>
     <div class="vt-pane-body"></div>
   `;
@@ -214,8 +215,8 @@ function _renderEmptyBody(bodyEl, paneId) {
   const ph = document.createElement('button');
   ph.type = 'button';
   ph.className = 'vt-pane-empty';
-  ph.setAttribute('aria-label', '이 화면에 표시할 세션 선택');
-  ph.innerHTML = `${icon('plus', 20)}<span>세션 선택</span>`;
+  ph.setAttribute('aria-label', t('이 화면에 표시할 세션 선택'));
+  ph.innerHTML = `${icon('plus', 20)}<span>${t('세션 선택')}</span>`;
   ph.addEventListener('click', () => openPanePicker(paneId));
   bodyEl.appendChild(ph);
 }
@@ -236,14 +237,14 @@ function _renderRemoteEmptyBody(bodyEl, hostId) {
   box.className = 'vt-pane-unreachable vt-pane-remote-empty';
   const title = document.createElement('div');
   title.className = 'vt-pane-unreachable-title';
-  title.textContent = `${label} · 열린 화면 없음`;
+  title.textContent = t('{label} · 열린 화면 없음', { label });
   const sub = document.createElement('div');
   sub.className = 'vt-pane-unreachable-sub';
-  sub.textContent = '왼쪽 목록에서 세션을 고르거나 새로 만드세요.';
+  sub.textContent = t('왼쪽 목록에서 세션을 고르거나 새로 만드세요.');
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'vt-btn sm';
-  btn.textContent = `+ ${label}에 새 세션`;
+  btn.textContent = t('+ {label}에 새 세션', { label });
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     try { await window.vtCreateRemoteSession?.(hostId); } finally { btn.disabled = false; }
@@ -272,19 +273,19 @@ function _renderUnreachableBody(bodyEl, node) {
   box.className = 'vt-pane-unreachable';
   const title = document.createElement('div');
   title.className = 'vt-pane-unreachable-title';
-  title.textContent = `${node.unreachable.host} · 연결 안 됨`;
+  title.textContent = t('{host} · 연결 안 됨', { host: node.unreachable.host });
   const sub = document.createElement('div');
   sub.className = 'vt-pane-unreachable-sub';
-  sub.textContent = `${node.unreachable.tmux} — 호스트가 돌아오면 이 자리에 복구됩니다.`;
+  sub.textContent = t('{name} — 호스트가 돌아오면 이 자리에 복구됩니다.', { name: node.unreachable.tmux });
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'vt-btn sm vt-pane-unreachable-retry';
-  btn.textContent = '다시 시도';
+  btn.textContent = t('다시 시도');
   btn.addEventListener('click', () => _retryUnreachable(node, sub, btn));
   const pick = document.createElement('button');
   pick.type = 'button';
   pick.className = 'vt-btn sm';
-  pick.textContent = '다른 세션 고르기';
+  pick.textContent = t('다른 세션 고르기');
   // 기다리지 않기로 결정할 수 있어야 한다 — 호스트를 영영 안 켤 수도 있다.
   pick.addEventListener('click', () => openPanePicker(node.id));
 
@@ -301,14 +302,14 @@ function _renderUnreachableBody(bodyEl, node) {
 async function _retryUnreachable(node, subEl, btn) {
   btn.disabled = true;
   const prev = subEl.textContent;
-  subEl.textContent = '확인 중…';
+  subEl.textContent = t('확인 중…');
   try {
     const data = await vtFetch('/api/hosts?fresh=1');
     const host = (data?.hosts || []).find((h) => h.id === node.unreachable.host);
     if (!host) {
-      subEl.textContent = '이 호스트는 더 이상 등록돼 있지 않습니다 — 다른 세션을 고르세요.';
+      subEl.textContent = t('이 호스트는 더 이상 등록돼 있지 않습니다 — 다른 세션을 고르세요.');
     } else if (!host.online) {
-      subEl.textContent = `${host.label} — 아직 연결되지 않습니다.`;
+      subEl.textContent = t('{host} — 아직 연결되지 않습니다.', { host: host.label });
     } else if (typeof window.attachRemoteSession === 'function') {
       // 멀티호스트 3단계가 붙여 주는 경로. 없으면(지금) 아래 안내로 떨어진다.
       // 이 칸을 다시 채운다 — 활성 칸으로 맞춘 뒤 그 자리에 놓는다.
@@ -316,7 +317,7 @@ async function _retryUnreachable(node, subEl, btn) {
       await window.attachRemoteSession(host.id, node.unreachable.tmux, { place: 'pane' });
       return;
     } else {
-      subEl.textContent = `${host.label}는 다시 켜졌습니다 — 원격 세션 열기는 준비 중입니다.`;
+      subEl.textContent = t('{host}는 다시 켜졌습니다 — 원격 세션 열기는 준비 중입니다.', { host: host.label });
     }
   } catch (_) {
     subEl.textContent = prev;
@@ -404,14 +405,14 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
   // 칸 ×가 무엇을 하는지는 칸에 세션이 있느냐로 갈린다(closePaneAction).
   const closeBtn = paneEl.querySelector('.vt-pane-close');
   const holdsSession = (node.kind || 'terminal') === 'terminal' && node.session && getSession(node.session);
-  const closeTip = holdsSession ? '세션 닫기 — 칸은 빈 칸으로 남습니다' : '칸 없애기';
+  const closeTip = holdsSession ? t('세션 닫기 — 칸은 빈 칸으로 남습니다') : t('칸 없애기');
   closeBtn.setAttribute('data-tip', closeTip);
   closeBtn.setAttribute('aria-label', closeTip);
 
   // N35 §6 — 뷰어 칸: 세션이 아니라 파일 하나를 그린다. 표면 레이어에는 아무
   // 것도 안 넘긴다(placement에 안 들어가므로 xterm이 이 자리를 덮지 않는다).
   if (node.kind === 'viewer') {
-    nameEl.textContent = (node.file ? node.file.split('/').pop() : '파일 없음') + labelSuffix;
+    nameEl.textContent = (node.file ? node.file.split('/').pop() : t('파일 없음')) + labelSuffix;
     if (node.file) nameEl.setAttribute('data-tip', node.file); else nameEl.removeAttribute('data-tip');
     _renderViewerBody(bodyEl, node.file);
     return paneEl;
@@ -443,10 +444,10 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
     // C3 — 원격 호스트가 잠깐 꺼진 칸. 빈 pane으로 강등하지 않고 배치를 지킨다
     // (강등하면 호스트를 다시 켜도 배치가 영영 사라진다, layout/persist.js 참고).
     nameEl.textContent = `${node.unreachable.tmux} · ${node.unreachable.host}` + labelSuffix;
-    nameEl.setAttribute('data-tip', `${node.unreachable.host}에 연결할 수 없습니다`);
+    nameEl.setAttribute('data-tip', t('{host}에 연결할 수 없습니다', { host: node.unreachable.host }));
     _renderUnreachableBody(bodyEl, node);
   } else {
-    nameEl.textContent = '빈 pane' + labelSuffix;
+    nameEl.textContent = t('빈 pane') + labelSuffix;
     _renderEmptyBody(bodyEl, node.id);
   }
   return paneEl;
@@ -463,7 +464,7 @@ function _renderViewerBody(bodyEl, file) {
     bodyEl.dataset.viewerFile = '';
     const empty = document.createElement('div');
     empty.className = 'vt-vw-empty';
-    empty.textContent = '파일이 지정되지 않았습니다.';
+    empty.textContent = t('파일이 지정되지 않았습니다.');
     bodyEl.appendChild(empty);
     return;
   }
@@ -478,8 +479,8 @@ function _renderViewerBody(bodyEl, file) {
   const refreshBtn = document.createElement('button');
   refreshBtn.type = 'button';
   refreshBtn.className = 'vt-icon-btn xs vt-pane-refresh';
-  refreshBtn.setAttribute('aria-label', '새로고침');
-  refreshBtn.dataset.tip = '새로고침';
+  refreshBtn.setAttribute('aria-label', t('새로고침'));
+  refreshBtn.dataset.tip = t('새로고침');
   refreshBtn.innerHTML = icon('refresh-cw', 13);
   refreshBtn.addEventListener('click', () => { _refreshViewerBody(bodyEl); });
   tools.appendChild(refreshBtn);

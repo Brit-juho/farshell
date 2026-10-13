@@ -7,6 +7,7 @@
 // - 만든 곳(origin) 2종(peer·external)은 레일 설정에서 표시를 끈다.
 import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
+import { t } from '../core/i18n.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
@@ -67,9 +68,9 @@ export interface SessionRow {
 export const HIDEABLE_ORIGINS: Origin[] = ['peer', 'external'];
 
 export const ORIGIN_LABEL: Record<Origin, string> = {
-  local: '이 화면에서 만듦',
-  peer: '다른 맥에서 만듦',
-  external: '직접 만듦 (CLI·tmux)',
+  local: t('이 화면에서 만듦'),
+  peer: t('다른 맥에서 만듦'),
+  external: t('직접 만듦 (CLI·tmux)'),
 };
 
 /** 서버 값이 없거나(구버전 서버) 모르는 값이면 local — 모든 행에 외부 아이콘이 붙는 것보다 안전하다. */
@@ -89,7 +90,7 @@ export function normalizeBadge(v: unknown): DoneBadge | null {
 // ── 에이전트 공유 ──────────────────────────────────────────────────────────
 // ⚠ share/share-data.js(지연 청크)와 같은 규칙이다 — shell 청크는 그 청크를 정적 import 할 수 없어 한 벌 더 적는다.
 
-export const SHARE_MODE_LABEL: Record<ShareInfo['mode'], string> = { read: '읽기 전용', readwrite: '읽기·쓰기' };
+export const SHARE_MODE_LABEL: Record<ShareInfo['mode'], string> = { read: t('읽기 전용'), readwrite: t('읽기·쓰기') };
 const SHARE_NICK_RE = /^[A-Za-z0-9_-]{1,32}$/;
 /** 서버가 받는 세션 이름(`routes/agent_share.py`). 한글 이름 세션은 공유할 수 없다. */
 const SHARE_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -103,21 +104,21 @@ export function normalizeShare(v: unknown): ShareInfo | null {
 
 /** 「공유 · 닉네임 · 읽기 전용」 — 요약줄·접힌 레일 툴팁이 쓴다. */
 export function shareSentence(share: ShareInfo | null | undefined): string {
-  return share ? `공유 · ${share.nick} · ${SHARE_MODE_LABEL[share.mode]}` : '';
+  return share ? t('공유 · {nick} · {mode}', { nick: share.nick, mode: SHARE_MODE_LABEL[share.mode] }) : '';
 }
 
 // ── 상태 키워드 ────────────────────────────────────────────────────────────
 
 export const KIND_LABEL: Record<WaitKind, string> = {
-  approval: '승인 요청',
-  choice: '선택 요청',
-  plan: '계획 확인',
-  question: '질문',
+  approval: t('승인 요청'),
+  choice: t('선택 요청'),
+  plan: t('계획 확인'),
+  question: t('질문'),
 };
 
 export const BADGE_LABEL: Record<DoneBadge, string> = {
-  question: '질문 있음',
-  plan: '계획 있음',
+  question: t('질문 있음'),
+  plan: t('계획 있음'),
 };
 
 export interface StateKeyword {
@@ -147,12 +148,12 @@ export function stateKeyword(
 export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.now()): string {
   if (sinceEpochSec == null) return '';
   const sec = Math.max(0, Math.round(nowMs / 1000 - sinceEpochSec));
-  if (sec < 60) return `${sec}초`;
+  if (sec < 60) return t('{n}초', { n: sec });
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min}분`;
+  if (min < 60) return t('{n}분', { n: min });
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}시간`;
-  return `${Math.round(hr / 24)}일`;
+  if (hr < 24) return t('{n}시간', { n: hr });
+  return t('{n}일', { n: Math.round(hr / 24) });
 }
 
 /** 접힌 레일·툴팁·스크린리더가 쓰는 한 줄: "승인 요청 · 2분". */
@@ -284,7 +285,7 @@ export function rowSummary(
   const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
   if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
   if (row.share) parts.push(shareSentence(row.share));
-  if (row.otherClients > 0) parts.push(`웹 외 ${row.otherClients}`);
+  if (row.otherClients > 0) parts.push(t('웹 외 {n}', { n: row.otherClients }));
   parts.push(ORIGIN_LABEL[normalizeOrigin(row.origin)]);
   if (row.cwd) parts.push(row.cwd);
   if (row.branch) parts.push(row.branch);
@@ -304,35 +305,35 @@ export interface RowMenuOpts {
 export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { share?: ShareInfo | null; cwd?: string }, opts: RowMenuOpts = {}): RowMenuItem[] {
   const items: RowMenuItem[] = [];
   const split: RowMenuItem[] = opts.split
-    ? [{ id: 'splitRight', label: '오른쪽에 나란히 열기' }, { id: 'splitDown', label: '아래에 열기' }]
+    ? [{ id: 'splitRight', label: t('오른쪽에 나란히 열기') }, { id: 'splitDown', label: t('아래에 열기') }]
     : [];
   if (row.open) {
     items.push(
-      { id: 'close', label: '닫기' },
+      { id: 'close', label: t('닫기') },
       ...split,
-      { id: 'rename', label: '이름 변경' },
-      { id: 'openOnMac', label: '맥에서 열기' },
-      { id: 'screens', label: '연결된 화면' },
+      { id: 'rename', label: t('이름 변경') },
+      { id: 'openOnMac', label: t('맥에서 열기') },
+      { id: 'screens', label: t('연결된 화면') },
     );
   } else {
-    items.push({ id: 'open', label: '열기' }, ...split);
+    items.push({ id: 'open', label: t('열기') }, ...split);
   }
-  if (row.cwd) items.push({ id: 'workspace', label: '작업 위치 보기' });
+  if (row.cwd) items.push({ id: 'workspace', label: t('작업 위치 보기') });
   // 이름 규칙 밖(한글 등)은 공유 항목만 뺀다.
   if (opts.share && row.tmuxName) {
     if (SHARE_NAME_RE.test(row.tmuxName)) {
       if (row.share) {
         items.push(
-          { id: 'shareSettings', label: '공유 설정…' },
-          { id: 'unshare', label: '공유 해제', detail: '권한 모두 삭제' },
+          { id: 'shareSettings', label: t('공유 설정…') },
+          { id: 'unshare', label: t('공유 해제'), detail: t('권한 모두 삭제') },
         );
       } else {
-        items.push({ id: 'share', label: '에이전트와 공유…' });
+        items.push({ id: 'share', label: t('에이전트와 공유…') });
       }
     }
-    items.push({ id: 'agentPerms', label: '에이전트 권한…' });
+    items.push({ id: 'agentPerms', label: t('에이전트 권한…') });
   }
-  if (row.tmuxName) items.push({ id: 'kill', label: '종료', detail: '되돌릴 수 없음', danger: true });
+  if (row.tmuxName) items.push({ id: 'kill', label: t('종료'), detail: t('되돌릴 수 없음'), danger: true });
   return items;
 }
 
@@ -380,7 +381,7 @@ export function diffLabel(row: Pick<SessionRow, 'changed' | 'diffFiles'>): strin
   const del = c && c.del > 0 ? `−${c.del}` : '';
   if (add || del) return [add, del].filter(Boolean).join(' ');
   const files = row.diffFiles != null && row.diffFiles > 0 ? row.diffFiles : (c && c.files > 0 ? c.files : 0);
-  return files > 0 ? `파일 ${files}` : null;
+  return files > 0 ? t('파일 {n}', { n: files }) : null;
 }
 
 /**

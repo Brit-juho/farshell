@@ -11,6 +11,7 @@
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
+import { t } from '../core/i18n.js';
 import {
   buildRailLists, groupSessionRows, compactRailRows, rowMenuItems, rowSummary, runRowMenu, defaultRailCollapsed,
   ATTENTION_COLLAPSED_KEY,
@@ -84,7 +85,7 @@ function Rail(props: { deps: RailDeps }) {
   const { prefs, set: setPref } = createRailPrefs();
   const toggleAttentionCollapsed = () => setPref(ATTENTION_COLLAPSED_KEY, !prefs().attentionCollapsed);
 
-  const railTitle = () => '세션';
+  const railTitle = () => t('세션');
   const [diffTick, setDiffTick] = createSignal(0); // git 조회가 끝나면 다시 그리라는 신호
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
   // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
@@ -386,7 +387,7 @@ function Rail(props: { deps: RailDeps }) {
   );
 
   return (
-    <aside id="vt-wgrail" class="vt-sidepanel left" ref={railRef} classList={{ collapsed: collapsed() }} aria-label="세션">
+    <aside id="vt-wgrail" class="vt-sidepanel left" ref={railRef} classList={{ collapsed: collapsed() }} aria-label={t('세션')}>
       <div class="vt-wgrail-head">
         <Show when={!collapsed()}>
           {/* C1 — 호스트가 로컬 하나뿐이면 칩을 아예 안 그린다. 멀티호스트를
@@ -400,7 +401,7 @@ function Rail(props: { deps: RailDeps }) {
               class="vt-host-btn vt-wgrail-host"
               classList={{ offline: activeHost() ? !activeHost()!.online : false, remote: viewHostId !== LOCAL_HOST }}
               onClick={openHostMenu}
-              data-tip={activeHost()?.label || '호스트 선택'}
+              data-tip={activeHost()?.label || t('호스트 선택')}
               data-tip-sub={activeHost() ? hostDetail(activeHost()!) : undefined}
               data-tip-side="bottom"
             >
@@ -416,9 +417,9 @@ function Rail(props: { deps: RailDeps }) {
             <button
               type="button"
               class="vt-icon-btn sm vt-wgrail-settings"
-              aria-label="레일 설정"
-              data-tip="레일 설정"
-              data-tip-sub={hiddenCount() ? `저장소 ${hiddenCount()}개 숨김` : '개입 필요 · 만든 곳 · 저장소'}
+              aria-label={t('레일 설정')}
+              data-tip={t('레일 설정')}
+              data-tip-sub={hiddenCount() ? t('저장소 {n}개 숨김', { n: hiddenCount() }) : t('개입 필요 · 만든 곳 · 저장소')}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
               innerHTML={icon('settings', 13, 2)}
@@ -432,8 +433,8 @@ function Rail(props: { deps: RailDeps }) {
             class="vt-icon-btn sm vt-wgrail-collapse"
             classList={{ collapsed: collapsed() }}
             onClick={toggleCollapse}
-            aria-label={collapsed() ? '펼치기' : '접기'}
-            data-tip={collapsed() ? '레일 펼치기' : '레일 접기'}
+            aria-label={collapsed() ? t('펼치기') : t('접기')}
+            data-tip={collapsed() ? t('레일 펼치기') : t('레일 접기')}
             data-tip-side="bottom"
             innerHTML={icon('chevron-down', 14, 2)}
           />
@@ -442,12 +443,12 @@ function Rail(props: { deps: RailDeps }) {
       <div class="vt-wgrail-body">
         <Show when={rows().length === 0 && !collapsed() && !viewHostOffline()}>
           <div class="vt-wgrail-empty">
-            아직 세션이 없습니다.
+            {t('아직 세션이 없습니다.')}
             <button
               type="button"
               class="vt-btn sm vt-wgrail-empty-new"
               onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
-            >+ 새 세션</button>
+            >+ {t('새 세션')}</button>
           </div>
         </Show>
         {/* 전환해 둔 맥이 꺼져 있으면 "빈 목록"과 "연결 안 됨"을 구분해서 보여준다. */}
@@ -481,7 +482,7 @@ function Rail(props: { deps: RailDeps }) {
                   onClick={toggleAttentionCollapsed}
                 >
                   <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                  <span class="vt-wgrail-group-label">개입 필요</span>
+                  <span class="vt-wgrail-group-label">{t('개입 필요')}</span>
                   <span class="vt-wgrail-group-count">{lists().attention.length}</span>
                 </button>
               </div>
@@ -494,7 +495,7 @@ function Rail(props: { deps: RailDeps }) {
             <Show when={!collapsed()}>
               <div class="vt-wgrail-group-head">
                 <span class="vt-wgrail-group-label">
-                  세션
+                  {t('세션')}
                   <span class="vt-wgrail-group-count">{lists().sessions.length}</span>
                 </span>
               </div>
@@ -508,13 +509,13 @@ function Rail(props: { deps: RailDeps }) {
             )}</For>
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
-            <div class="vt-wgrail-note">레일 설정에서 {rows().length - lists().sessions.length}개를 숨겼습니다.</div>
+            <div class="vt-wgrail-note">{t('레일 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>
           </Show>
         </Show>
         {/* §1 — 목록이 200개 상한에서 잘렸다. 여기 한 줄이 없으면 "몇 개가
             빠졌다"가 이번에 고친 깊이 버그와 똑같은 증상으로 보인다. */}
         <Show when={truncated() && !collapsed()}>
-          <div class="vt-wgrail-note">저장소가 200개를 넘어 일부만 표시합니다.</div>
+          <div class="vt-wgrail-note">{t('저장소가 200개를 넘어 일부만 표시합니다.')}</div>
         </Show>
       </div>
       {/* 2026-09-18(2차) — 설정 ⚙과 마이크는 여기 살다가 사용자 요청으로 반대편
@@ -537,14 +538,14 @@ function Rail(props: { deps: RailDeps }) {
           type="button"
           class="vt-wgrail-new"
           disabled={viewHostOffline()}
-          data-tip={collapsed() ? '새 세션' : undefined}
-          data-tip-sub={viewHostOffline() ? '호스트에 연결할 수 없습니다' : undefined}
+          data-tip={collapsed() ? t('새 세션') : undefined}
+          data-tip-sub={viewHostOffline() ? t('호스트에 연결할 수 없습니다') : undefined}
           data-tip-side="right"
           onClick={(e) => {
             (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e);
           }}
         >
-          <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ 새 세션</Show>
+          <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ {t('새 세션')}</Show>
         </button>
       </div>
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
@@ -582,7 +583,7 @@ function Rail(props: { deps: RailDeps }) {
         <Portal>
           <RepoVisibility
             deps={props.deps}
-            title="레일 설정"
+            title={t('레일 설정')}
             lead={<RailSettingsLead />}
             onClose={() => setRepoSheet(false)}
             onChanged={() => refreshRepos()}

@@ -11,6 +11,7 @@ import { createSignal, onCleanup } from 'solid-js';
 
 import { normalizeOrigin, normalizeShare, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
 import { confirmDialog } from '../core/dialog.js';
+import { t } from '../core/i18n.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
 import { sessionContext, workspaceDirectory, workspaceKind } from '../ui/session-context.js';
 
@@ -239,15 +240,15 @@ export async function deleteWorktreeRow(
   deps: RailDeps, wtId: string, label: string, hasSessions: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const firstWarn = hasSessions
-    ? `'${label}' 워크트리를 삭제합니다. 열려 있는 세션의 tmux는 그대로 남지만 다음에 자동으로 재연결되지는 않습니다. 되돌릴 수 없습니다.`
-    : `'${label}' 워크트리를 삭제합니다. 되돌릴 수 없습니다.`;
-  if (!await confirmDialog(firstWarn, { title: '워크트리 삭제', okLabel: '삭제', danger: true })) return { ok: false };
+    ? t("'{label}' 워크트리를 삭제합니다. 열려 있는 세션의 tmux는 그대로 남지만 다음에 자동으로 재연결되지는 않습니다. 되돌릴 수 없습니다.", { label })
+    : t("'{label}' 워크트리를 삭제합니다. 되돌릴 수 없습니다.", { label });
+  if (!await confirmDialog(firstWarn, { title: t('워크트리 삭제'), okLabel: t('삭제'), danger: true })) return { ok: false };
   try {
     await deps.vtFetch(`/api/worktrees/${encodeURIComponent(wtId)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
     return { ok: true };
   } catch (e: any) {
     if (e?.status === 409 && e?.data?.dirty) {
-      if (!await confirmDialog(`'${label}'에 커밋하지 않은 변경사항이 있습니다. 그래도 삭제할까요? 그 변경은 사라집니다.`, { title: '변경사항 있음', okLabel: '그래도 삭제', danger: true })) {
+      if (!await confirmDialog(t("'{label}'에 커밋하지 않은 변경사항이 있습니다. 그래도 삭제할까요? 그 변경은 사라집니다.", { label }), { title: t('변경사항 있음'), okLabel: t('그래도 삭제'), danger: true })) {
         return { ok: false };
       }
       try {
@@ -256,10 +257,10 @@ export async function deleteWorktreeRow(
         });
         return { ok: true };
       } catch (e2: any) {
-        return { ok: false, error: e2?.data?.error || e2?.message || '삭제 실패' };
+        return { ok: false, error: e2?.data?.error || e2?.message || t('삭제 실패') };
       }
     }
-    return { ok: false, error: e?.data?.error || e?.message || '삭제 실패' };
+    return { ok: false, error: e?.data?.error || e?.message || t('삭제 실패') };
   }
 }
 
@@ -340,23 +341,23 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
 
   const out: SessionRow[] = [];
   const seenTmux = new Set<string>();
-  for (const t of inp.tmux) {
-    seenTmux.add(t.name);
-    const sid = tmuxToWebSid[t.name] || '';
-    const info = wtInfo.get(t.wt_id || '') ?? wtInfo.get(nameToWt.get(t.name) || '');
-    const detail = details[t.name];
-    const cwd = t.cwd || null;
-    const ctx = sessionContext(t);
+  for (const tm of inp.tmux) {
+    seenTmux.add(tm.name);
+    const sid = tmuxToWebSid[tm.name] || '';
+    const info = wtInfo.get(tm.wt_id || '') ?? wtInfo.get(nameToWt.get(tm.name) || '');
+    const detail = details[tm.name];
+    const cwd = tm.cwd || null;
+    const ctx = sessionContext(tm);
     const modern = ctx.status !== 'legacy';
-    const view = sid ? sidToView.get(sid) : tmuxToView.get(t.name);
-    const attached = Number(t.attached) || 0;
+    const view = sid ? sidToView.get(sid) : tmuxToView.get(tm.name);
+    const attached = Number(tm.attached) || 0;
     out.push({
       sessionId: sid,
-      tmuxName: t.name,
-      name: t.name,
+      tmuxName: tm.name,
+      name: tm.name,
       open: !!sid,
-      status: w.getStatus ? w.getStatus(t.name) : 'idle',
-      unseen: !!(w.isUnseen && w.isUnseen(t.name)),
+      status: w.getStatus ? w.getStatus(tm.name) : 'idle',
+      unseen: !!(w.isUnseen && w.isUnseen(tm.name)),
       since: detail?.since ?? null,
       tool: detail?.tool ?? null,
       kind: detail?.kind ? normalizeKind(detail.kind) : null,
@@ -368,14 +369,14 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       question: detail?.question ?? null,
       options: detail?.options ?? null,
       promptId: detail?.promptId ?? null,
-      agent: names[t.name] ?? null,
-      branch: modern ? ctx.branch || (ctx.status === 'ready' || ctx.root ? '분리된 HEAD' : null) : info?.branch ?? null,
+      agent: names[tm.name] ?? null,
+      branch: modern ? ctx.branch || (ctx.status === 'ready' || ctx.root ? t('분리된 HEAD') : null) : info?.branch ?? null,
       isMainWorktree: modern ? ctx.worktree?.kind === 'main' : info?.isMain ?? false,
-      worktreeId: modern ? rootToWt.get(ctx.root)?.id ?? null : t.wt_id || null,
-      origin: normalizeOrigin(t.origin),
-      share: normalizeShare(t.share),
+      worktreeId: modern ? rootToWt.get(ctx.root)?.id ?? null : tm.wt_id || null,
+      origin: normalizeOrigin(tm.origin),
+      share: normalizeShare(tm.share),
       viewLabel: view?.label || null, viewId: view?.id || null,
-      ...screenCounts(t, attached, !!sid),
+      ...screenCounts(tm, attached, !!sid),
     });
     if (!modern && cwd && diffCountStale(cwd)) fetchDiffCount(inp.deps, cwd).then(inp.onDiff);
   }

@@ -11,6 +11,7 @@
 import { vtFetch } from '../core/api.js';
 import { activeSessionId } from '../core/store.js';
 import { icon } from '../ui/icons.js';
+import { t } from '../core/i18n.js';
 
 // 훅(`VT_NOTIFY_CLIENT_EVENTS=1`)이 꺼져 있으면 attach/detach를 알 방법이
 // 없으므로 폴링으로 폴백한다. **그 사실을 UI에 표시하지 않는다**(계획서 §3):
@@ -18,12 +19,12 @@ import { icon } from '../ui/icons.js';
 const POLL_MS = 5000;
 
 function timeAgo(activity) {
-  const t = Number(activity);
-  if (!t) return '';
-  const sec = Math.max(0, Math.floor(Date.now() / 1000 - t));
-  if (sec < 60) return '방금';
-  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
-  return `${Math.floor(sec / 3600)}시간 전`;
+  const ts = Number(activity);
+  if (!ts) return '';
+  const sec = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (sec < 60) return t('방금');
+  if (sec < 3600) return t('{n}분 전', { n: Math.floor(sec / 60) });
+  return t('{n}시간 전', { n: Math.floor(sec / 3600) });
 }
 
 function row(client, onDetach, readOnly = false) {
@@ -45,14 +46,14 @@ function row(client, onDetach, readOnly = false) {
   if (client.is_me) {
     const badge = document.createElement('span');
     badge.className = 'vt-tag vt-clients-badge';
-    badge.textContent = '나';
+    badge.textContent = t('나');
     el.appendChild(badge);
   } else if (!readOnly) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'vt-icon-btn sm danger vt-clients-detach';
-    btn.title = `${client.label || client.tty} 끊기`;
-    btn.setAttribute('aria-label', `${client.label || client.tty} 끊기`);
+    btn.title = t('{name} 끊기', { name: client.label || client.tty });
+    btn.setAttribute('aria-label', t('{name} 끊기', { name: client.label || client.tty }));
     btn.innerHTML = icon('x', 12);
     btn.addEventListener('click', (e) => { e.stopPropagation(); onDetach(client); });
     el.appendChild(btn);
@@ -81,12 +82,12 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
   const head = document.createElement('div');
   head.className = 'vt-clients-head';
   head.appendChild(Object.assign(document.createElement('span'), {
-    className: 'vt-clients-title', textContent: '연결된 화면',
+    className: 'vt-clients-title', textContent: t('연결된 화면'),
   }));
   const solo = document.createElement('button');
   solo.type = 'button';
   solo.className = 'vt-btn sm quiet';
-  solo.textContent = '이 화면만 남기기';
+  solo.textContent = t('이 화면만 남기기');
   head.appendChild(solo);
   wrap.appendChild(head);
   const list = document.createElement('div');
@@ -95,7 +96,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
   const status = document.createElement('div');
   status.className = 'vt-clients-status';
   status.setAttribute('role', 'status');
-  status.textContent = '연결된 화면을 확인하는 중…';
+  status.textContent = t('연결된 화면을 확인하는 중…');
   wrap.appendChild(status);
   // 원격에서 control 등급이 없으면 끊기 자체가 불가능하다 — 그 사실을 여기 적는다.
   const note = document.createElement('div');
@@ -132,22 +133,22 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       // 눌러서 실패하게 두지 말고 미리 비활성화한다.
       solo.disabled = !data.me_tty || readOnly || clients.length < 2;
       solo.hidden = readOnly;
-      solo.title = !data.me_tty ? '이 화면의 tty를 확인할 수 없어 사용할 수 없습니다'
-        : clients.length < 2 ? '다른 화면이 없습니다' : '';
+      solo.title = !data.me_tty ? t('이 화면의 tty를 확인할 수 없어 사용할 수 없습니다')
+        : clients.length < 2 ? t('다른 화면이 없습니다') : '';
       note.hidden = !readOnly;
       for (const c of clients) list.appendChild(row(c, detach, readOnly));
-      if (!clients.length) status.textContent = '연결된 화면이 없습니다';
+      if (!clients.length) status.textContent = t('연결된 화면이 없습니다');
     } catch (e) {
       if (stopped || current !== requestId) return;
       list.replaceChildren();
       solo.disabled = true;
       status.replaceChildren();
       const message = document.createElement('span');
-      message.textContent = `목록을 불러오지 못했습니다: ${e.message || '연결을 확인하세요'}`;
+      message.textContent = t('목록을 불러오지 못했습니다: {reason}', { reason: e.message || t('연결을 확인하세요') });
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'vt-btn sm quiet';
-      retry.textContent = '다시 시도';
+      retry.textContent = t('다시 시도');
       retry.addEventListener('click', refresh);
       status.append(message, retry);
     }
@@ -159,8 +160,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
   function _handleDenied(e) {
     if (remote && e && e.status === 403) {
       readOnly = true;
-      note.textContent = '읽기 전용(view)으로 연결돼 있어 화면을 끊을 수 없습니다 — 그 호스트에서 '
-        + "'fsh host allow-control'로 켜세요.";
+      note.textContent = t("읽기 전용(view)으로 연결돼 있어 화면을 끊을 수 없습니다 — 그 호스트에서 'fsh host allow-control'로 켜세요.");
       return true;
     }
     return false;
@@ -177,7 +177,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       });
     } catch (e) {
       if (!_handleDenied(e) && typeof window.showToast === 'function') {
-        window.showToast(e.message || '끊기 실패', 'error');
+        window.showToast(e.message || t('끊기 실패'), 'error');
       }
     }
     refresh();
@@ -194,11 +194,11 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       });
       if (typeof window.showToast === 'function') {
         const n = (r.detached || []).length;
-        window.showToast(n ? `화면 ${n}개를 끊었습니다` : '끊을 화면이 없습니다');
+        window.showToast(n ? t('화면 {n}개를 끊었습니다', { n }) : t('끊을 화면이 없습니다'));
       }
     } catch (e) {
       if (!_handleDenied(e) && typeof window.showToast === 'function') {
-        window.showToast(e.message || '실패', 'error');
+        window.showToast(e.message || t('실패'), 'error');
       }
     }
     refresh();

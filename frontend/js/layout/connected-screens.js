@@ -14,6 +14,7 @@ import { pushScope } from '../core/keyboard-scopes.js';
 import { activeSessionId, getSession } from '../core/store.js';
 import { registerAction } from '../core/dom.js';
 import { mountClients } from './clients.js';
+import { t } from '../core/i18n.js';
 
 let _cleanup = null;
 let _onKey = null;
@@ -43,7 +44,7 @@ export function openPanel(explicitSessionId) {
   const activeSess = getSession(targetId);
   const tmuxName = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
   if (!tmuxName) {
-    if (typeof window.showToast === 'function') window.showToast('tmux 세션이 아닙니다');
+    if (typeof window.showToast === 'function') window.showToast(t('tmux 세션이 아닙니다'));
     return;
   }
 
@@ -56,18 +57,18 @@ export function openPanel(explicitSessionId) {
   card.className = 'vt-viewer-card vt-wtd-card';
   card.setAttribute('role', 'dialog');
   card.setAttribute('aria-modal', 'true');
-  card.setAttribute('aria-label', '연결된 화면');
+  card.setAttribute('aria-label', t('연결된 화면'));
 
   const head = document.createElement('div');
   head.className = 'vt-wtd-head';
   const title = document.createElement('span');
   title.className = 'vt-wtd-title';
-  title.textContent = '연결된 화면';
+  title.textContent = t('연결된 화면');
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'vt-btn sm quiet vt-wtd-x';
   x.textContent = '×';
-  x.setAttribute('aria-label', '닫기');
+  x.setAttribute('aria-label', t('닫기'));
   x.addEventListener('click', closePanel);
   head.append(title, x);
 

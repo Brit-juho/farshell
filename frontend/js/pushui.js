@@ -3,6 +3,7 @@
 // window 전용으로 남아 있어(UMD류) 계속 bare로 읽는다. F5에서 이 파일 자체는
 // classic script에서 ES 모듈로 전환.
 import { registerAction } from './core/dom.js';
+import { t } from './core/i18n.js';
 
 // 설정 「음성」 섹션이 자기 행을 그린 뒤 부른다 — 그 시점 기준 구독 상태로
 // 라벨·tip을 맞춘다(섹션은 탭을 열 때마다 다시 그려지므로 매번 다시 불러야 함).
@@ -21,23 +22,23 @@ async function _refreshPushLabel() {
       // "왜 안 되는지 모르겠는 알림"이 제일 나쁘다.
       const reason = VTPush.blockReason();
       if (reason) {
-        label.textContent = '푸시 알림 — 사용 불가';
+        label.textContent = t('푸시 알림 — 사용 불가');
         if (btn) {
-          btn.setAttribute('data-tip', '푸시 알림 — 사용 불가');
+          btn.setAttribute('data-tip', t('푸시 알림 — 사용 불가'));
           btn.setAttribute('data-tip-sub', reason);
           btn.classList.add('disabled');
         }
         return;
       }
       const on = await VTPush.isSubscribed();
-      label.textContent = on ? '푸시 알림 (켜짐)' : '푸시 알림';
+      label.textContent = on ? t('푸시 알림 (켜짐)') : t('푸시 알림');
       if (btn) {
         // 2026-09-18 — 한 줄 title을 두 단으로 나눈다(ui/tooltip.js): 무엇인지와
         // 지금 어떤 상태인지가 같은 크기로 붙어 있으면 둘 다 안 읽힌다.
-        btn.setAttribute('data-tip', on ? '푸시 알림 끄기' : '푸시 알림 켜기');
+        btn.setAttribute('data-tip', on ? t('푸시 알림 끄기') : t('푸시 알림 켜기'));
         btn.setAttribute('data-tip-sub', on
-          ? '켜짐 — 앱을 닫아도 작업 완료 알림이 온다'
-          : '앱을 닫아도 작업 완료 알림을 받는다');
+          ? t('켜짐 — 앱을 닫아도 작업 완료 알림이 온다')
+          : t('앱을 닫아도 작업 완료 알림을 받는다'));
         btn.classList.remove('disabled');
       }
     }
@@ -51,13 +52,13 @@ async function _refreshPushLabel() {
       try {
         if (on) {
           await VTPush.unsubscribe();
-          showToast('푸시 알림 껐습니다');
+          showToast(t('푸시 알림 껐습니다'));
         } else {
           const r = await VTPush.subscribe();
-          showToast(r.ok ? '푸시 알림 켰습니다' : (r.reason || '구독 실패'));
+          showToast(r.ok ? t('푸시 알림 켰습니다') : (r.reason || t('구독 실패')));
         }
       } catch (e) {
-        showToast(`푸시 설정 실패: ${e.message}`);
+        showToast(t('푸시 설정 실패: {error}', { error: e.message }));
       }
       _refreshPushLabel();
     }

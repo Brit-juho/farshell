@@ -1,21 +1,22 @@
 import { vtFetch } from '../../../core/api.js';
 import { statusLine } from '../controls.js';
+import { t } from '../../../core/i18n.js';
 
 // ── 「에이전트」 (N9/N45 · 감지 커버리지 표) ────────────────────────────────
 // N9 — `report`는 `fsh pane report`로 에이전트가 직접 알려주는 경로다.
 // 훅과 같은 1차 신호라 신뢰도도 같은 「높음」이다.
-const AGENT_PATH_LABEL = { hook: '훅', report: '자기보고', pty: 'PTY 패턴', none: '없음' };
-const AGENT_TRUST_LABEL = { high: '높음', mid: '보통', low: '낮음' };
+const AGENT_PATH_LABEL = { hook: t('훅'), report: t('자기보고'), pty: t('PTY 패턴'), none: t('없음') };
+const AGENT_TRUST_LABEL = { high: t('높음'), mid: t('보통'), low: t('낮음') };
 
 export function renderAgentsSection() {
   const frag = document.createDocumentFragment();
 
   const title = document.createElement('div');
   title.className = 'vt-set-label';
-  title.textContent = '감지 커버리지';
+  title.textContent = t('감지 커버리지');
   frag.appendChild(title);
 
-  const status = statusLine('확인 중…');
+  const status = statusLine(t('확인 중…'));
   frag.appendChild(status);
 
   const tableHost = document.createElement('div');
@@ -24,18 +25,17 @@ export function renderAgentsSection() {
 
   const note = document.createElement('div');
   note.className = 'vt-set-help';
-  note.textContent = '"보통" 이하는 레일에서 입력 대기를 놓칠 수 있다는 뜻입니다. '
-    + '훅이 없는 CLI는 래퍼에서 fsh pane report로 상태를 알리면 "높음"이 됩니다.';
+  note.textContent = t('"보통" 이하는 레일에서 입력 대기를 놓칠 수 있다는 뜻입니다. 훅이 없는 CLI는 래퍼에서 fsh pane report로 상태를 알리면 "높음"이 됩니다.');
   frag.appendChild(note);
 
   vtFetch('/api/agents/coverage').then((rows) => {
     if (!Array.isArray(rows) || !rows.length) {
-      status.textContent = '커버리지 정보를 확인할 수 없습니다.';
+      status.textContent = t('커버리지 정보를 확인할 수 없습니다.');
       return;
     }
     status.remove();
     tableHost.appendChild(renderCoverageTable(rows));
-  }).catch(() => { status.textContent = '커버리지 정보를 확인할 수 없습니다.'; });
+  }).catch(() => { status.textContent = t('커버리지 정보를 확인할 수 없습니다.'); });
 
   return frag;
 }
@@ -46,7 +46,7 @@ function renderCoverageTable(rows) {
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  for (const label of ['CLI', '경로', '패턴 줄 수', '상태', '신뢰도']) {
+  for (const label of ['CLI', t('경로'), t('패턴 줄 수'), t('상태'), t('신뢰도')]) {
     const th = document.createElement('th');
     th.textContent = label;
     headRow.appendChild(th);
@@ -67,7 +67,7 @@ function renderCoverageTable(rows) {
     path.textContent = AGENT_PATH_LABEL[r.path] || r.path;
     // 자기보고는 "마지막으로 보고받은 때"가 곧 그 경로가 살아 있다는 증거다.
     if (r.path === 'report' && r.lastReport) {
-      path.title = `마지막 보고: ${new Date(r.lastReport * 1000).toLocaleString()}`;
+      path.title = t('마지막 보고: {time}', { time: new Date(r.lastReport * 1000).toLocaleString() });
     }
 
     const lines = document.createElement('td');

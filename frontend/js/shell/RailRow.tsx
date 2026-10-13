@@ -14,6 +14,7 @@ import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 
 import { agentLabel, icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
+import { t } from '../core/i18n.js';
 import {
   stateKeyword, formatRelativeTime, statusSentence, diffLabel,
   ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo,
@@ -22,8 +23,8 @@ import {
 /** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
 function createNow() {
   const [now, setNow] = createSignal(Date.now());
-  const t = setInterval(() => setNow(Date.now()), 30000);
-  onCleanup(() => clearInterval(t));
+  const timer = setInterval(() => setNow(Date.now()), 30000);
+  onCleanup(() => clearInterval(timer));
   return now;
 }
 
@@ -73,17 +74,17 @@ export function ScreensMark(props: { row: Pick<SessionRow, 'otherScreens' | 'oth
   return (
     <>
       <Show when={props.row.otherScreens > 0}>
-        <span class="vt-srow-screens" data-tip="이 탭 말고 다른 브라우저 탭·폰에서도 열려 있음" data-tip-side="right">
-          다른 화면 {props.row.otherScreens}
+        <span class="vt-srow-screens" data-tip={t('이 탭 말고 다른 브라우저 탭·폰에서도 열려 있음')} data-tip-side="right">
+          {t('다른 화면 {n}', { n: props.row.otherScreens })}
         </span>
       </Show>
       <Show when={props.row.otherClients > 0}>
         <span
           class="vt-srow-clients"
-          data-tip={`웹이 아닌 터미널 ${props.row.otherClients}개가 붙어 있음 (맥 터미널 등)`}
+          data-tip={t('웹이 아닌 터미널 {n}개가 붙어 있음 (맥 터미널 등)', { n: props.row.otherClients })}
           data-tip-side="right"
           role="img"
-          aria-label={`웹이 아닌 터미널 ${props.row.otherClients}개가 붙어 있음`}
+          aria-label={t('웹이 아닌 터미널 {n}개가 붙어 있음', { n: props.row.otherClients })}
         >
           <span innerHTML={icon('terminal', 12, 2)} />
           {props.row.otherClients}
@@ -211,12 +212,12 @@ export function Row(props: {
         </div>
         <Show when={props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable'}>
           <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
-            <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? '별도 워크트리' : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
+            <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
             <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
-            <Show when={branch()}><span class="vt-srow-branch" data-tip={`브랜치 · ${branch()}`} data-tip-side="right">{branch()}</span></Show>
+            <Show when={branch()}><span class="vt-srow-branch" data-tip={t('브랜치 · {branch}', { branch: branch() })} data-tip-side="right">{branch()}</span></Show>
             <Show when={diff()}><span class="vt-srow-meta vt-wgrail-diff">{diff()}</span></Show>
           </div>
-          <Show when={props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">정보 갱신 대기</div></Show>
+          <Show when={props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">{t('정보 갱신 대기')}</div></Show>
         </Show>
         <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
           <KeywordLine row={props.row} now={now} />
@@ -236,8 +237,8 @@ export function Row(props: {
         <button
           type="button"
           class="vt-icon-btn xs vt-srow-menu"
-          aria-label={`${rowName()} 메뉴`}
-          data-tip="메뉴"
+          aria-label={t('{name} 메뉴', { name: rowName() })}
+          data-tip={t('메뉴')}
           data-tip-side="left"
           onClick={(e) => { e.stopPropagation(); props.onContext(e); }}
           innerHTML={icon('more-horizontal', 14, 2)}
@@ -298,7 +299,7 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
         items[(index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
       }}>
       <Show when={props.summary}>
-        <div class="vt-menu-summary" role="note" aria-label={`요약: ${props.summary}`}>{props.summary}</div>
+        <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: props.summary })}>{props.summary}</div>
       </Show>
       <For each={props.items}>
         {(it) => (

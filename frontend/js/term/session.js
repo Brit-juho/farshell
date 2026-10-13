@@ -31,6 +31,7 @@ import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayou
 import { saveLayoutNow } from '../layout/persist.js';
 import { COMPACT_MAX } from '../layout/breakpoints.js';
 import { stepSession } from '../layout/compact.js';
+import { t } from '../core/i18n.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
 export async function createSession({ place = 'view' } = {}) {
@@ -60,7 +61,7 @@ export async function createSession({ place = 'view' } = {}) {
     body: '{}',
   });
   // C5: 401(토큰)/500 시 JSON에 id가 없어 addSession(undefined) 방지.
-  if (!res.ok) { showToast(`세션 생성 실패 (${res.status})`); return; }
+  if (!res.ok) { showToast(t('세션 생성 실패 ({status})', { status: res.status })); return; }
   const { id } = await res.json();
   if (id) addSession(id, undefined, { place });
 }
@@ -100,8 +101,8 @@ export function showAddMenu(el, e) {
     it.onclick = () => { menu.remove(); onClick(); };
     return it;
   };
-  menu.appendChild(mkItem('일반 터미널', '단발 셸 (tmux 아님)', createPlainSession));
-  menu.appendChild(mkItem('tmux 세션', 'detach 유지 · 맥/모바일 공유', createTmuxSession));
+  menu.appendChild(mkItem(t('일반 터미널'), t('단발 셸 (tmux 아님)'), createPlainSession));
+  menu.appendChild(mkItem(t('tmux 세션'), t('detach 유지 · 맥/모바일 공유'), createTmuxSession));
   document.body.appendChild(menu);
 
   // 레일 하단 버튼처럼 뷰포트 맨 아래에 붙은 경우, 아래로 펼치면 body의
@@ -126,7 +127,7 @@ async function createPlainSession() {
     headers: { 'Content-Type': 'application/json' },
     body: '{}',
   });
-  if (!res.ok) { showToast(`세션 생성 실패 (${res.status})`); return; }
+  if (!res.ok) { showToast(t('세션 생성 실패 ({status})', { status: res.status })); return; }
   const { id } = await res.json();
   if (id) addSession(id);
 }
@@ -145,9 +146,9 @@ export async function attachTmux(tmuxName, { place = 'view' } = {}) {
   });
   // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
   // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
-  if (!res.ok) { showToast(`세션 열기 실패: ${tmuxName} (${res.status})`); return null; }
+  if (!res.ok) { showToast(t('세션 열기 실패: {name} ({status})', { name: tmuxName, status: res.status })); return null; }
   const data = await res.json();
-  if (!data.id) { showToast(`세션 열기 실패: ${tmuxName}`); return null; }
+  if (!data.id) { showToast(t('세션 열기 실패: {name}', { name: tmuxName })); return null; }
   // 이미 웹에 열려 있으면 해당 탭으로 전환. 2026-09-21(사용자 지적) —
   // switchTo는 "배정"이라 그 세션이 다른 세션과 화면을 공유 중이면(그룹)
   // 짝을 밀어냈다 — revealSession이 트리를 안 건드리고 그 자리로만 이동한다.
@@ -173,9 +174,9 @@ export async function createTmuxSession() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId() }),
   });
-  if (!res.ok) { showToast(`tmux 세션 생성 실패 (${res.status})`); return; }
+  if (!res.ok) { showToast(t('tmux 세션 생성 실패 ({status})', { status: res.status })); return; }
   const data = await res.json();
-  if (!data.id) { showToast('tmux 세션 생성 실패'); return; }
+  if (!data.id) { showToast(t('tmux 세션 생성 실패')); return; }
   addSession(data.id, data.name || data.id, { tmuxName: data.tmux_session });
   // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
   const s = getSession(data.id);
@@ -199,7 +200,7 @@ export function addSession(id, displayName, opts = null) {
   const { place = 'view', ...recordOpts } = opts || {};
   // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
   // 생기므로 무시한다.
-  if (!id) { showToast('세션 생성 실패 (id 없음)'); return; }
+  if (!id) { showToast(t('세션 생성 실패 (id 없음)')); return; }
   // 빈 상태 온보딩이 떠 있으면 제거 — 안 그러면 새 터미널이 온보딩 뒤에 가려져
   // 탭은 생겼는데 이동/조작이 안 되는 것처럼 보인다.
   document.getElementById('onboarding')?.remove();
@@ -293,10 +294,10 @@ export async function renameSession(id, rawName, previousNameOverride) {
       // "웹 라벨만 조용히 바꾸는" 폴백이 없어졌다: 서버가 거절한 이유를
       // 그대로 보여준다.
       const msg = data?.error === 'tmux session name must be alphanumeric/dash/underscore only'
-        ? '세션 이름은 영숫자·dash·underscore만 가능합니다(tmux 제약)'
+        ? t('세션 이름은 영숫자·dash·underscore만 가능합니다(tmux 제약)')
         : data?.error === 'tmux session name already exists'
-        ? '이미 있는 이름입니다'
-        : '세션 이름 변경 실패';
+        ? t('이미 있는 이름입니다')
+        : t('세션 이름 변경 실패');
       if (typeof showToast === 'function') showToast(msg, 'error');
       return false;
     }
@@ -315,7 +316,7 @@ export async function renameSession(id, rawName, previousNameOverride) {
     // 편집 중 DOM에 남은 값을 되돌린다 — 실패했는데 새 이름이 남아 있으면
     // 사용자는 바뀐 줄 안다.
     setSessionDisplayName(id, previousName);
-    if (typeof showToast === 'function') showToast('세션 이름 변경 실패', 'error');
+    if (typeof showToast === 'function') showToast(t('세션 이름 변경 실패'), 'error');
     return false;
   }
 }

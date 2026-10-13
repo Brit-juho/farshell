@@ -10,6 +10,7 @@
 // 계약: 제목은 사람 말, 원문은 detail, 할 수 있는 일이 있으면 action.
 // 스타일은 styles/layers/components.css의 .vt-empty.
 import { icon } from './icons.js';
+import { t } from '../core/i18n.js';
 
 /**
  * @param {object} o
@@ -64,6 +65,6 @@ export function errorState(title, err, retry) {
     icon: 'alert-triangle',
     title,
     detail: err == null ? '' : String(err && err.message ? err.message : err),
-    action: retry ? { label: '다시 시도', onClick: retry } : undefined,
+    action: retry ? { label: t('다시 시도'), onClick: retry } : undefined,
   });
 }

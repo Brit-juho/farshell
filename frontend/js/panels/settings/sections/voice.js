@@ -6,6 +6,7 @@ import { row, statusLine, toast, renderItems, group } from '../controls.js';
 import { renderVoiceInput, cleanupVoiceModels } from './voice-models.js';
 import { togglePush, refreshPushLabel } from '../../../pushui.js';
 import { getAction } from '../../../core/dom.js';
+import { t } from '../../../core/i18n.js';
 
 // ── 「음성」 (N42 · 알림·음성 진단) ──────────────────────────────────────
 // (다른 탭 클릭 · 패널 닫기) 반드시 cleanup을 불러야 폴링 타이머가 안 샌다.
@@ -34,32 +35,32 @@ export function renderVoiceSection() {
   subBtn.type = 'button'; subBtn.id = 'push-btn'; subBtn.className = 'vt-btn sm quiet vt-set-reset';
   const subLabel = document.createElement('span');
   subLabel.id = 'push-label';
-  subLabel.textContent = '구독';
+  subLabel.textContent = t('구독');
   subBtn.appendChild(subLabel);
   // togglePush()가 끝에서 스스로 refreshPushLabel을 다시 부른다(pushui.js).
   subBtn.addEventListener('click', () => togglePush());
 
   const pushBtn = document.createElement('button');
-  pushBtn.type = 'button'; pushBtn.className = 'vt-btn sm quiet vt-set-reset'; pushBtn.textContent = '테스트 발송';
+  pushBtn.type = 'button'; pushBtn.className = 'vt-btn sm quiet vt-set-reset'; pushBtn.textContent = t('테스트 발송');
   const pushBtns = document.createElement('div');
   pushBtns.className = 'vt-set-btns';
   pushBtns.append(subBtn, pushBtn);
-  const pushRow = row('웹 푸시', pushBtns);
-  const pushStatus = statusLine('확인 중…');
+  const pushRow = row(t('웹 푸시'), pushBtns);
+  const pushStatus = statusLine(t('확인 중…'));
   pushRow.querySelector('.vt-set-label').appendChild(pushStatus);
   notif.appendChild(pushRow);
   refreshPushLabel();
   vtFetch('/api/push/status').then((r) => {
     if (!r) return;
     pushStatus.textContent = r.available
-      ? `구독 ${r.subscriptions}대 · VAPID ${r.configured ? '확인됨' : '미설정'}`
-      : '사용 불가 (pywebpush 미설치)';
-  }).catch(() => { pushStatus.textContent = '상태를 확인할 수 없습니다.'; });
+      ? t('구독 {n}대 · VAPID {vapid}', { n: r.subscriptions, vapid: r.configured ? t('확인됨') : t('미설정') })
+      : t('사용 불가 (pywebpush 미설치)');
+  }).catch(() => { pushStatus.textContent = t('상태를 확인할 수 없습니다.'); });
   pushBtn.addEventListener('click', async () => {
     try {
       const r = await vtFetch('/api/push/test', { method: 'POST' });
-      toast(r.ok ? `발송됨 · 구독 ${r.sent}건` : '발송 실패');
-    } catch (e) { toast(e.message || '발송 실패', 'error'); }
+      toast(r.ok ? t('발송됨 · 구독 {n}건', { n: r.sent }) : t('발송 실패'));
+    } catch (e) { toast(e.message || t('발송 실패'), 'error'); }
   });
 
   _voiceSessionCleanup?.();
@@ -71,9 +72,9 @@ export function renderVoiceSection() {
   const vm = renderVoiceInput();
   const statusBtn = document.createElement('button');
   statusBtn.type = 'button'; statusBtn.className = 'vt-btn sm quiet';
-  statusBtn.textContent = '음성 상태 열기';
+  statusBtn.textContent = t('음성 상태 열기');
   statusBtn.addEventListener('click', () => getAction('voice.status')?.());
-  vm.input.prepend(row('입력 현황', statusBtn));
+  vm.input.prepend(row(t('입력 현황'), statusBtn));
 
   // 5. 음성 전용 모드 — 실제 토글 로직·시각 상태(.active)는
   // voice/media-session.js의 toggleVoiceOnly()가 갖고 있다(그 파일은 별도
@@ -88,13 +89,13 @@ export function renderVoiceSection() {
   voiceOnlyBtn.className = 'vt-btn sm quiet vt-set-reset needs-voice';
   const paintVoiceOnly = () => {
     const isOn = document.body.classList.contains('voice-only-mode');
-    voiceOnlyBtn.textContent = isOn ? '끄기' : '켜기';
+    voiceOnlyBtn.textContent = isOn ? t('끄기') : t('켜기');
     voiceOnlyBtn.classList.toggle('active', isOn);
   };
   paintVoiceOnly();
   voiceOnlyBtn.addEventListener('click', () => { getAction('voice.only-toggle')?.(); paintVoiceOnly(); });
-  desk.appendChild(row('음성 전용 모드', voiceOnlyBtn,
-    '화면을 마이크 하나로 채웁니다 — 이어폰만으로 조작할 때 씁니다.'));
+  desk.appendChild(row(t('음성 전용 모드'), voiceOnlyBtn,
+    t('화면을 마이크 하나로 채웁니다 — 이어폰만으로 조작할 때 씁니다.')));
 
   // 6. 연결된 화면 — clients.js의 기존 렌더러를 그대로 이식(중복 구현 금지).
   const clientsHost = document.createElement('div');
@@ -104,6 +105,6 @@ export function renderVoiceSection() {
   const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
   if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote, activeSessionId());
 
-  frag.append(sessionVoice.element, defaults.element, group('알림', notif), vm.input, vm.manage, group('데스크톱 음성', desk));
+  frag.append(sessionVoice.element, defaults.element, group(t('알림'), notif), vm.input, vm.manage, group(t('데스크톱 음성'), desk));
   return frag;
 }

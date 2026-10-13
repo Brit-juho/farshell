@@ -12,40 +12,42 @@
 // import 하면 그 청크가 core로 승격돼 초기 페이로드가 커진다 — `load()`는
 // 반드시 동적 import여야 한다.
 
+import { t } from '../core/i18n.js';
+
 /** 패널 이름 → 메타. 이름은 스냅샷에 그대로 저장되므로 바꾸면 옛 배치가 깨진다. */
 export const PANELS = {
   scm: {
-    label: '소스컨트롤',
+    label: t('소스컨트롤'),
     icon: 'git-branch',
     panelId: 'vt-dock-scm',
     load: () => import('./viewer/scm.js').then((m) => m.showScm),
   },
   queue: {
-    label: '큐',
+    label: t('큐'),
     icon: 'list',
     panelId: 'vt-queue',
     load: () => import('../queue.js').then((m) => m.showQueue),
   },
   dir: {
-    label: '파일',
+    label: t('파일'),
     icon: 'folder',
     panelId: 'vt-dir',
     load: () => import('./viewer/tree.js').then((m) => m.showTree),
   },
   files: {
-    label: '첨부',
+    label: t('첨부'),
     icon: 'paperclip',
     panelId: 'vt-files',
     load: () => import('./files/files.js').then((m) => m.showFiles),
   },
   ports: {
-    label: '포트',
+    label: t('포트'),
     icon: 'plug',
     panelId: 'vt-ports',
     load: () => import('./ports/ports.js').then((m) => m.showPorts),
   },
   usage: {
-    label: '사용량',
+    label: t('사용량'),
     icon: 'gauge',
     panelId: 'vt-usage',
     load: () => import('./usage.js').then((m) => m.showUsage),
@@ -83,7 +85,7 @@ export async function mountPanelInPane(name, bodyEl, paneId) {
     bodyEl.replaceChildren();
     const err = document.createElement('div');
     err.className = 'vt-vw-empty warn';
-    err.textContent = `${panelLabel(name)} 화면을 불러오지 못했습니다.`;
+    err.textContent = t('{name} 화면을 불러오지 못했습니다.', { name: panelLabel(name) });
     bodyEl.appendChild(err);
     return null;
   }

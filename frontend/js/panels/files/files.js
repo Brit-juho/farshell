@@ -23,6 +23,7 @@ import { showToast } from '../../ui/toast.js';
 import { icon } from '../../ui/icons.js';
 import { okFlash } from '../../ui/okflash.js';
 import { confirmDialog, promptDialog } from '../../core/dialog.js';
+import { t } from '../../core/i18n.js';
 
 // ⚠ ADR-26 — 이 파일은 지연 청크(panels.js)에 들어가므로 core/store.js를
 // **정적 import 하지 않는다**. 하면 Vite가 세션 싱글톤을 청크 안에 복제해
@@ -31,17 +32,17 @@ import { confirmDialog, promptDialog } from '../../core/dialog.js';
 const activeSession = () => (typeof window.activeSession === 'function' ? window.activeSession() : null);
 
 const FILTERS = [
-  { id: 'all', label: '전체' },
-  { id: 'shared', label: '공유 중' },
-  { id: 'expiring', label: '만료 임박' },
+  { id: 'all', label: t('전체') },
+  { id: 'shared', label: t('공유 중') },
+  { id: 'expiring', label: t('만료 임박') },
 ];
 
 // §3 「만료 · 필수」 — 서버의 VALID_TTLS와 같은 값이어야 한다(다르면 400).
 const TTLS = [
-  { v: 3600, label: '1시간' },
-  { v: 86400, label: '24시간' },
-  { v: 604800, label: '7일' },
-  { v: 2592000, label: '30일' },
+  { v: 3600, label: t('1시간') },
+  { v: 86400, label: t('24시간') },
+  { v: 604800, label: t('7일') },
+  { v: 2592000, label: t('30일') },
 ];
 
 // N4 — 필터·마지막 목록은 **인스턴스별** 상태다. 모듈 레벨 변수 한 벌로
@@ -83,15 +84,15 @@ export function fmtUploadDate(item, now = new Date()) {
 // "남은 기간" 열. 공유 중이거나 pin된 파일은 TTL 정리에서 제외되므로(§1)
 // 서버가 expires_at을 null로 내려준다 — 그 경우 기간이 아니라 이유를 쓴다.
 export function fmtRemaining(item, nowSec = Date.now() / 1000) {
-  if (item.pin) return '고정됨';
-  if (!item.expires_at) return item.shares && item.shares.length ? '공유 중' : '—';
+  if (item.pin) return t('고정됨');
+  if (!item.expires_at) return item.shares && item.shares.length ? t('공유 중') : '—';
   const sec = item.expires_at - nowSec;
-  if (sec <= 0) return '만료됨';
+  if (sec <= 0) return t('만료됨');
   const days = Math.floor(sec / 86400);
-  if (days >= 1) return `${days}일`;
+  if (days >= 1) return t('{n}일', { n: days });
   const hours = Math.floor(sec / 3600);
-  if (hours >= 1) return `${hours}시간`;
-  return `${Math.max(1, Math.floor(sec / 60))}분`;
+  if (hours >= 1) return t('{n}시간', { n: hours });
+  return t('{n}분', { n: Math.max(1, Math.floor(sec / 60)) });
 }
 
 // 공유 열. 모드가 섞여 있으면(device + pin) 둘 다 보여준다 — "공유 중"
@@ -99,7 +100,7 @@ export function fmtRemaining(item, nowSec = Date.now() / 1000) {
 export function shareLabel(item) {
   const shares = item.shares || [];
   if (!shares.length) return '';
-  const modes = [...new Set(shares.map((s) => (typeof s === 'string' ? '공유 중' : s.mode === 'pin' ? 'PIN' : '내 기기')))];
+  const modes = [...new Set(shares.map((s) => (typeof s === 'string' ? t('공유 중') : s.mode === 'pin' ? 'PIN' : t('내 기기'))))];
   return modes.join(' · ');
 }
 
@@ -146,11 +147,11 @@ function showFiles(opts = {}) {
     paneHost: opts.paneHost || null,
     paneId: opts.paneId || null,
     id: 'vt-files',
-    ariaLabel: '파일',
+    ariaLabel: t('파일'),
     headHTML: `
-      <div class="vt-vw-title" id="vt-fl-title">파일</div>
-      <button class="vt-btn sm quiet" id="vt-fl-select-toggle" title="여러 개 골라 한 번에 정리" aria-pressed="false">선택</button>
-      <button class="vt-btn sm vt-vw-diff" id="vt-fl-upload" title="파일 올리기">올리기</button>
+      <div class="vt-vw-title" id="vt-fl-title">${t('파일')}</div>
+      <button class="vt-btn sm quiet" id="vt-fl-select-toggle" title="${t('여러 개 골라 한 번에 정리')}" aria-pressed="false">${t('선택')}</button>
+      <button class="vt-btn sm vt-vw-diff" id="vt-fl-upload" title="${t('파일 올리기')}">${t('올리기')}</button>
     `,
     extraHTML: `
       <div class="vt-fl-chips" id="vt-fl-chips" role="tablist"></div>
@@ -252,7 +253,7 @@ async function refreshFiles(inst) {
     // 이 화면의 이름처럼 읽힌다. 제목은 사람 말로, 원문은 detail로, 그리고
     // 다시 해볼 수 있는 일이므로 [다시 시도]를 단다.
     body.innerHTML = '';
-    body.appendChild(errorState('파일 목록을 불러오지 못했습니다', e, () => refreshFiles(inst)));
+    body.appendChild(errorState(t('파일 목록을 불러오지 못했습니다'), e, () => refreshFiles(inst)));
     return;
   }
   const items = data?.items || [];
@@ -264,7 +265,7 @@ async function refreshFiles(inst) {
   const quota = data?.quota || {};
   const title = inst.ctx.byId('vt-fl-title');
   if (title) {
-    title.textContent = `파일 · ${items.length}개${quota.used != null ? ` · ${fmtBytes(quota.used)}` : ''}`;
+    title.textContent = t('파일 · {n}개', { n: items.length }) + (quota.used != null ? ` · ${fmtBytes(quota.used)}` : '');
   }
 
   inst._items = items;
@@ -295,8 +296,8 @@ function _paintBody(inst) {
     const empty = document.createElement('div');
     empty.className = 'vt-vw-loading';
     empty.textContent = inst.filter === 'all'
-      ? '저장된 파일이 없습니다. 「올리기」 또는 터미널에 이미지 붙여넣기로 추가됩니다.'
-      : '해당하는 파일이 없습니다.';
+      ? t('저장된 파일이 없습니다. 「올리기」 또는 터미널에 이미지 붙여넣기로 추가됩니다.')
+      : t('해당하는 파일이 없습니다.');
     body.appendChild(empty);
   } else {
     for (const item of items) body.appendChild(renderRow(item, inst));
@@ -322,9 +323,9 @@ function renderUploadingRow(job) {
   name.textContent = job.name;
   name.title = job.name;
   const pct = job.size ? Math.min(100, Math.round((job.loaded / job.size) * 100)) : 0;
-  const label = job.phase === 'queued' ? '대기 중'
-    : job.phase === 'saving' ? '서버 저장 중'
-      : `업로드 중 · ${fmtBytes(job.loaded)} / ${fmtBytes(job.size)}`;
+  const label = job.phase === 'queued' ? t('대기 중')
+    : job.phase === 'saving' ? t('서버 저장 중')
+      : t('업로드 중 · {loaded} / {size}', { loaded: fmtBytes(job.loaded), size: fmtBytes(job.size) });
   const sub = document.createElement('div');
   sub.className = 'vt-fl-sub';
   sub.textContent = label;
@@ -342,10 +343,10 @@ function renderUploadingRow(job) {
 
   const acts = document.createElement('div');
   acts.className = 'vt-fl-acts';
-  const cancelBtn = iconBtn('x', '취소', 'rm', () => window.vtCancelUpload?.(job.clientId));
+  const cancelBtn = iconBtn('x', t('취소'), 'rm', () => window.vtCancelUpload?.(job.clientId));
   if (job.phase === 'saving') {
     cancelBtn.disabled = true;
-    cancelBtn.title = '서버가 저장하는 중이라 취소할 수 없습니다';
+    cancelBtn.title = t('서버가 저장하는 중이라 취소할 수 없습니다');
   }
   acts.appendChild(cancelBtn);
   row.appendChild(acts);
@@ -382,13 +383,13 @@ function _renderSelectBar(inst) {
 
   const count = document.createElement('span');
   count.className = 'vt-fl-selectbar-count';
-  count.textContent = `${inst.selected.size}개 선택`;
+  count.textContent = t('{n}개 선택', { n: inst.selected.size });
   bar.appendChild(count);
 
   const selectAllBtn = document.createElement('button');
   selectAllBtn.type = 'button';
   selectAllBtn.className = 'vt-btn sm quiet';
-  selectAllBtn.textContent = allSelected ? '선택 해제' : '보이는 항목 전체 선택';
+  selectAllBtn.textContent = allSelected ? t('선택 해제') : t('보이는 항목 전체 선택');
   selectAllBtn.disabled = visible.length === 0;
   selectAllBtn.addEventListener('click', () => {
     if (allSelected) for (const id of visible) inst.selected.delete(id);
@@ -400,7 +401,7 @@ function _renderSelectBar(inst) {
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'vt-btn sm danger';
-  deleteBtn.textContent = '삭제';
+  deleteBtn.textContent = t('삭제');
   deleteBtn.disabled = inst.selected.size === 0;
   deleteBtn.addEventListener('click', () => bulkDeleteSelected(inst));
   bar.appendChild(deleteBtn);
@@ -408,7 +409,7 @@ function _renderSelectBar(inst) {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className = 'vt-btn sm quiet';
-  cancelBtn.textContent = '취소';
+  cancelBtn.textContent = t('취소');
   cancelBtn.addEventListener('click', () => _toggleSelectMode(inst));
   bar.appendChild(cancelBtn);
 }
@@ -424,10 +425,10 @@ async function bulkDeleteSelected(inst) {
   const items = (inst._items || []).filter((x) => ids.includes(x.id));
   const totalSize = items.reduce((n, x) => n + (x.size || 0), 0);
   const sharedCount = items.filter((x) => (x.shares || []).length).length;
-  const lines = [`${ids.length}개(${fmtBytes(totalSize)})를 삭제합니다.`];
-  if (sharedCount) lines.push(`공유 링크가 걸린 파일 ${sharedCount}개도 함께 무효가 됩니다.`);
-  lines.push('계속할까요?');
-  if (!await confirmDialog(lines.join('\n\n'), { title: '파일 일괄 삭제', okLabel: '삭제', danger: true })) return;
+  const lines = [t('{n}개({size})를 삭제합니다.', { n: ids.length, size: fmtBytes(totalSize) })];
+  if (sharedCount) lines.push(t('공유 링크가 걸린 파일 {n}개도 함께 무효가 됩니다.', { n: sharedCount }));
+  lines.push(t('계속할까요?'));
+  if (!await confirmDialog(lines.join('\n\n'), { title: t('파일 일괄 삭제'), okLabel: t('삭제'), danger: true })) return;
   try {
     const r = await vtFetch('/api/files/delete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
@@ -435,10 +436,10 @@ async function bulkDeleteSelected(inst) {
     if (r.missing && r.missing.length) {
       // 화면에 있던 항목이 서버엔 없었다 — 다른 기기가 먼저 지웠거나 TTL
       // 정리와 겹쳤다. 나머지는 성공했으니 조용히 넘기지 않고 한 줄만 남긴다.
-      showToast(`${r.missing.length}개는 이미 지워져 있었습니다`, 'info');
+      showToast(t('{n}개는 이미 지워져 있었습니다', { n: r.missing.length }), 'info');
     }
   } catch (e) {
-    showToast('일괄 삭제 실패: ' + e.message, 'error');
+    showToast(t('일괄 삭제 실패: {msg}', { msg: e.message }), 'error');
   }
   inst.selectMode = false;
   inst.selected.clear();
@@ -475,7 +476,7 @@ function renderRow(item, inst) {
     cb.type = 'checkbox';
     cb.className = 'vt-fl-select-cb';
     cb.checked = inst.selected.has(item.id);
-    cb.setAttribute('aria-label', `${item.name} 선택`);
+    cb.setAttribute('aria-label', t('{name} 선택', { name: item.name }));
     cb.addEventListener('change', () => _toggleRowSelected(inst, item.id));
     row.appendChild(cb);
     row.classList.add('vt-fl-row-selectable');
@@ -512,11 +513,11 @@ function renderRow(item, inst) {
   if (!inst || !inst.selectMode) {
     const acts = document.createElement('div');
     acts.className = 'vt-fl-acts';
-    acts.appendChild(iconBtn('download', '다운로드', 'dl', () => downloadFile(item)));
-    acts.appendChild(iconBtn('clipboard-copy', '경로 복사', 'copy', (e) => copyPath(item, e.currentTarget)));
-    acts.appendChild(iconBtn('keyboard', '터미널에 삽입', 'ins', () => insertFile(item)));
-    acts.appendChild(iconBtn('link', '링크 발급', 'share', () => openShareDialog(item)));
-    acts.appendChild(iconBtn('trash-2', '삭제', 'rm', () => deleteFile(item)));
+    acts.appendChild(iconBtn('download', t('다운로드'), 'dl', () => downloadFile(item)));
+    acts.appendChild(iconBtn('clipboard-copy', t('경로 복사'), 'copy', (e) => copyPath(item, e.currentTarget)));
+    acts.appendChild(iconBtn('keyboard', t('터미널에 삽입'), 'ins', () => insertFile(item)));
+    acts.appendChild(iconBtn('link', t('링크 발급'), 'share', () => openShareDialog(item)));
+    acts.appendChild(iconBtn('trash-2', t('삭제'), 'rm', () => deleteFile(item)));
     row.appendChild(acts);
   }
   return row;
@@ -536,7 +537,7 @@ function renderFooter(quota) {
   const text = document.createElement('div');
   text.className = 'vt-fl-footer-text';
   text.textContent = max
-    ? `${fmtBytes(used)} / ${fmtBytes(max)}${quota.ttl_days ? ` · ${quota.ttl_days}일 후 자동 삭제` : ''}`
+    ? `${fmtBytes(used)} / ${fmtBytes(max)}${quota.ttl_days ? ` · ${t('{n}일 후 자동 삭제', { n: quota.ttl_days })}` : ''}`
     : `${fmtBytes(used)}`;
   foot.appendChild(bar);
   foot.appendChild(text);
@@ -563,7 +564,7 @@ async function copyPath(item, btn) {
     // 남지 않지만, 알려야 할 범위도 이 버튼 하나다.
     okFlash(btn);
   } catch (e) {
-    showToast('복사 실패: ' + e.message, 'error');
+    showToast(t('복사 실패: {msg}', { msg: e.message }), 'error');
   }
 }
 
@@ -575,7 +576,7 @@ async function insertFile(item) {
     // 없고, 같은 경로에 **다른** 파일이 있으면 더 나쁘다. 그래서 바이트를 먼저
     // 옮기고(상대가 저장한 뒤 자기 경로를 타이핑한다) 그 결과만 알린다.
     const host = s.remote.host;
-    showToast(`${host}(으)로 전송 중…`);
+    showToast(t('{host}(으)로 전송 중…', { host }));
     try {
       const r = await vtFetch(`/api/files/${encodeURIComponent(item.id)}/send`, {
         method: 'POST',
@@ -583,15 +584,15 @@ async function insertFile(item) {
         body: JSON.stringify({ host, session: s.remote.tmux }),
       });
       showToast(r.typed
-        ? `${host}에 전송 후 경로 삽입됨${r.reused ? ' (이미 있던 파일 재사용)' : ''}`
-        : `${host}에 전송됨 — pane을 못 찾아 경로는 못 넣었습니다`, r.typed ? 'success' : 'error');
+        ? (r.reused ? t('{host}에 전송 후 경로 삽입됨 (이미 있던 파일 재사용)', { host }) : t('{host}에 전송 후 경로 삽입됨', { host }))
+        : t('{host}에 전송됨 — pane을 못 찾아 경로는 못 넣었습니다', { host }), r.typed ? 'success' : 'error');
     } catch (e) {
-      showToast(`전송 실패: ${e.message}`, 'error');
+      showToast(t('전송 실패: {msg}', { msg: e.message }), 'error');
     }
     return;
   }
   if (!tmuxName) {
-    showToast('tmux 세션에 연결된 터미널을 먼저 선택하세요', 'error');
+    showToast(t('tmux 세션에 연결된 터미널을 먼저 선택하세요'), 'error');
     return;
   }
   try {
@@ -602,21 +603,21 @@ async function insertFile(item) {
     });
     // 성공을 말하지 않는다 — 터미널에 경로가 실제로 타이핑된 것이 증거다.
   } catch (e) {
-    showToast('삽입 실패: ' + e.message, 'error');
+    showToast(t('삽입 실패: {msg}', { msg: e.message }), 'error');
   }
 }
 
 async function deleteFile(item) {
   const shared = (item.shares || []).length;
   const msg = shared
-    ? `${item.name} 을(를) 삭제합니다.\n\n공유 링크 ${shared}개도 함께 무효가 됩니다. 계속할까요?`
-    : `${item.name} 을(를) 삭제할까요?`;
-  if (!await confirmDialog(msg, { title: '파일 삭제', okLabel: '삭제', danger: true })) return;
+    ? t('{name} 을(를) 삭제합니다.\n\n공유 링크 {n}개도 함께 무효가 됩니다. 계속할까요?', { name: item.name, n: shared })
+    : t('{name} 을(를) 삭제할까요?', { name: item.name });
+  if (!await confirmDialog(msg, { title: t('파일 삭제'), okLabel: t('삭제'), danger: true })) return;
   try {
     await vtFetch(`/api/files/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
     // 성공을 말하지 않는다 — 아래 refreshAllFiles()로 행이 사라지는 것이 증거다.
   } catch (e) {
-    showToast('삭제 실패: ' + e.message, 'error');
+    showToast(t('삭제 실패: {msg}', { msg: e.message }), 'error');
   }
   refreshAllFiles();
 }
@@ -631,31 +632,31 @@ function openShareDialog(item) {
   wrap.id = 'vt-fl-share';
   wrap.className = 'vt-viewer-backdrop vt-fl-share-backdrop';
   wrap.innerHTML = `
-    <div class="vt-viewer-card vt-fl-share-card" role="dialog" aria-modal="true" aria-label="공유 링크 발급">
+    <div class="vt-viewer-card vt-fl-share-card" role="dialog" aria-modal="true" aria-label="${t('공유 링크 발급')}">
       <div class="vt-viewer-head">
-        <div class="vt-vw-title">링크 발급 — ${vtEsc(item.name)}</div>
-        <button class="vt-icon-btn vt-vw-x" aria-label="닫기">${icon('x', 16)}</button>
+        <div class="vt-vw-title">${vtEsc(t('링크 발급 — {name}', { name: item.name }))}</div>
+        <button class="vt-icon-btn vt-vw-x" aria-label="${t('닫기')}">${icon('x', 16)}</button>
       </div>
       <div class="vt-vw-body">
         <div class="vt-fl-field">
-          <div class="vt-fl-field-label">누가 열 수 있나</div>
-          <label class="vt-fl-radio"><input type="radio" name="vt-fl-mode" value="device" checked> 내 기기만 <span class="vt-fl-hint">등록된 기기에서 로그인 상태로만 열립니다</span></label>
-          <label class="vt-fl-radio"><input type="radio" name="vt-fl-mode" value="pin"> PIN 보호 <span class="vt-fl-hint">코드를 아는 사람이면 누구나 (5회 틀리면 링크 소멸)</span></label>
-          <label class="vt-fl-radio disabled"><input type="radio" name="vt-fl-mode" value="public" disabled> 누구나 열기 <span class="vt-fl-hint">제공하지 않습니다</span></label>
+          <div class="vt-fl-field-label">${t('누가 열 수 있나')}</div>
+          <label class="vt-fl-radio"><input type="radio" name="vt-fl-mode" value="device" checked> ${t('내 기기만')} <span class="vt-fl-hint">${t('등록된 기기에서 로그인 상태로만 열립니다')}</span></label>
+          <label class="vt-fl-radio"><input type="radio" name="vt-fl-mode" value="pin"> ${t('PIN 보호')} <span class="vt-fl-hint">${t('코드를 아는 사람이면 누구나 (5회 틀리면 링크 소멸)')}</span></label>
+          <label class="vt-fl-radio disabled"><input type="radio" name="vt-fl-mode" value="public" disabled> ${t('누구나 열기')} <span class="vt-fl-hint">${t('제공하지 않습니다')}</span></label>
         </div>
         <div class="vt-fl-field" id="vt-fl-pin-field" hidden>
-          <div class="vt-fl-field-label">PIN · 4~20자</div>
-          <input type="text" id="vt-fl-pin" class="vt-input lg vt-fl-input" autocomplete="off" inputmode="numeric" placeholder="예: 4821" />
+          <div class="vt-fl-field-label">${t('PIN · 4~20자')}</div>
+          <input type="text" id="vt-fl-pin" class="vt-input lg vt-fl-input" autocomplete="off" inputmode="numeric" placeholder="${t('예: 4821')}" />
         </div>
         <div class="vt-fl-field">
-          <div class="vt-fl-field-label">만료 · 필수</div>
+          <div class="vt-fl-field-label">${t('만료 · 필수')}</div>
           <select id="vt-fl-ttl" class="vt-input lg vt-fl-input">
-            ${TTLS.map((t) => `<option value="${t.v}"${t.v === 86400 ? ' selected' : ''}>${t.label}</option>`).join('')}
+            ${TTLS.map((o) => `<option value="${o.v}"${o.v === 86400 ? ' selected' : ''}>${o.label}</option>`).join('')}
           </select>
         </div>
-        <label class="vt-fl-check"><input type="checkbox" id="vt-fl-once"> 다운로드 1회 후 자동 취소</label>
+        <label class="vt-fl-check"><input type="checkbox" id="vt-fl-once"> ${t('다운로드 1회 후 자동 취소')}</label>
         <div class="vt-fl-share-actions">
-          <button class="vt-btn" id="vt-fl-issue">발급</button>
+          <button class="vt-btn" id="vt-fl-issue">${t('발급')}</button>
         </div>
         <div class="vt-fl-share-list" id="vt-fl-share-list"></div>
       </div>
@@ -687,7 +688,7 @@ async function issueShare(item, wrap) {
   const once = wrap.querySelector('#vt-fl-once').checked;
   const pin = wrap.querySelector('#vt-fl-pin').value.trim();
   if (mode === 'pin' && (pin.length < 4 || pin.length > 20)) {
-    showToast('PIN은 4~20자여야 합니다', 'error');
+    showToast(t('PIN은 4~20자여야 합니다'), 'error');
     return;
   }
   const body = { mode, ttl, once };
@@ -705,11 +706,11 @@ async function issueShare(item, wrap) {
   } catch (e) {
     // 파일 상단 2번: 승격이 필요한 첫 UI 경로. 비밀번호를 한 번 더 받고 재시도.
     if (!/elevation_required|401/.test(e.message || '')) {
-      showToast('발급 실패: ' + e.message, 'error');
+      showToast(t('발급 실패: {msg}', { msg: e.message }), 'error');
       return;
     }
     if (!(await elevate())) return;
-    try { res = await post(); } catch (e2) { showToast('발급 실패: ' + e2.message, 'error'); return; }
+    try { res = await post(); } catch (e2) { showToast(t('발급 실패: {msg}', { msg: e2.message }), 'error'); return; }
   }
 
   if (res?.share?.shareId && res?.token) _issuedTokens.set(res.share.shareId, res.token);
@@ -717,7 +718,7 @@ async function issueShare(item, wrap) {
   // 결과도 한 줄이어야 한다. 복사까지 됐는지가 유일하게 다른 정보다.
   let copied = false;
   try { await navigator.clipboard.writeText(absoluteShareUrl(res.url)); copied = true; } catch (_) {}
-  showToast(copied ? '링크 발급됨 — 클립보드에 복사했습니다' : '링크 발급됨', 'success');
+  showToast(copied ? t('링크 발급됨 — 클립보드에 복사했습니다') : t('링크 발급됨'), 'success');
   await renderShareList(item, wrap);
   refreshAllFiles();
 }
@@ -729,7 +730,7 @@ export function absoluteShareUrl(url) {
 }
 
 async function elevate() {
-  const pw = await promptDialog('공유 링크 발급에는 비밀번호 확인이 필요합니다.', { title: '비밀번호 확인', password: true });
+  const pw = await promptDialog(t('공유 링크 발급에는 비밀번호 확인이 필요합니다.'), { title: t('비밀번호 확인'), password: true });
   if (pw === null) return false;
   try {
     await vtFetch('/api/auth/elevate', {
@@ -739,7 +740,7 @@ async function elevate() {
     });
     return true;
   } catch (e) {
-    showToast('비밀번호 확인 실패', 'error');
+    showToast(t('비밀번호 확인 실패'), 'error');
     return false;
   }
 }
@@ -757,7 +758,7 @@ async function renderShareList(item, wrap) {
   if (!shares.length) {
     const none = document.createElement('div');
     none.className = 'vt-fl-hint';
-    none.textContent = '발급된 링크가 없습니다.';
+    none.textContent = t('발급된 링크가 없습니다.');
     host.appendChild(none);
     return;
   }
@@ -767,7 +768,7 @@ async function renderShareList(item, wrap) {
     const label = document.createElement('div');
     label.className = 'vt-fl-share-label';
     const left = Math.max(0, Math.round((s.exp - Date.now() / 1000) / 3600));
-    label.textContent = `${s.mode === 'pin' ? 'PIN' : '내 기기'} · ${left}시간 남음${s.once ? ' · 1회용' : ''}`;
+    label.textContent = `${s.mode === 'pin' ? 'PIN' : t('내 기기')} · ${t('{n}시간 남음', { n: left })}${s.once ? ` · ${t('1회용')}` : ''}`;
     const acts = document.createElement('div');
     acts.className = 'vt-fl-acts';
     const token = _issuedTokens.get(s.shareId);
@@ -775,22 +776,22 @@ async function renderShareList(item, wrap) {
     // 사람이 읽는 낱말('복사'·'지금 취소')을 넘기고 있었다. icons.js에 그런
     // 이름이 없으니 icon()이 빈 문자열을 돌려줘서, 공유 목록의 두 버튼은
     // 아이콘 없이 빈 상자로 그려지고 있었다(console.warn만 남았다).
-    const copyBtn = iconBtn('clipboard-copy', token ? '링크 복사' : '이 링크의 주소는 발급한 그 순간에만 알 수 있습니다(서버가 보관하지 않음) — 필요하면 취소 후 새로 발급하세요', 'copy', async (e) => {
+    const copyBtn = iconBtn('clipboard-copy', token ? t('링크 복사') : t('이 링크의 주소는 발급한 그 순간에만 알 수 있습니다(서버가 보관하지 않음) — 필요하면 취소 후 새로 발급하세요'), 'copy', async (e) => {
       if (!token) return;
       try { await navigator.clipboard.writeText(absoluteShareUrl(`/s/${token}`)); okFlash(e.currentTarget); }
-      catch (err) { showToast('복사 실패: ' + err.message, 'error'); }
+      catch (err) { showToast(t('복사 실패: {msg}', { msg: err.message }), 'error'); }
     });
     copyBtn.disabled = !token;
     acts.appendChild(copyBtn);
-    acts.appendChild(iconBtn('trash-2', '공유 취소', 'rm', async () => {
+    acts.appendChild(iconBtn('trash-2', t('공유 취소'), 'rm', async () => {
       try {
         await vtFetch(`/api/files/${encodeURIComponent(item.id)}/share/${encodeURIComponent(s.shareId)}`, { method: 'DELETE' });
-        showToast('취소됨 — 링크가 즉시 404가 됩니다', 'success');
+        showToast(t('취소됨 — 링크가 즉시 404가 됩니다'), 'success');
       } catch (e) {
         if (/elevation_required|401/.test(e.message || '') && await elevate()) {
           try { await vtFetch(`/api/files/${encodeURIComponent(item.id)}/share/${encodeURIComponent(s.shareId)}`, { method: 'DELETE' }); }
-          catch (e2) { showToast('취소 실패: ' + e2.message, 'error'); }
-        } else { showToast('취소 실패: ' + e.message, 'error'); }
+          catch (e2) { showToast(t('취소 실패: {msg}', { msg: e2.message }), 'error'); }
+        } else { showToast(t('취소 실패: {msg}', { msg: e.message }), 'error'); }
       }
       await renderShareList(item, wrap);
       refreshAllFiles();

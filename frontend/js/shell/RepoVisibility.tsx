@@ -23,6 +23,7 @@ import { createSignal, onCleanup, onMount, For, Show, type JSX } from 'solid-js'
 
 import { openWorktree, deleteWorktreeRow, type RailDeps } from './rail-fetch.js';
 import { WorktreeDialog } from './WorktreeDialog.js';
+import { t } from '../core/i18n.js';
 
 export interface RepoVisibilityDeps extends RailDeps {}
 
@@ -95,7 +96,7 @@ export function RepoVisibility(props: Props) {
       setGroups(repos);
       setRoots(data?.roots || []);
     } catch (e: any) {
-      setErrorMsg(e?.data?.error || e?.message || '저장소 목록을 불러오지 못했습니다');
+      setErrorMsg(e?.data?.error || e?.message || t('저장소 목록을 불러오지 못했습니다'));
     } finally {
       setLoading(false);
     }
@@ -119,7 +120,7 @@ export function RepoVisibility(props: Props) {
       props.onChanged();
     } catch (e: any) {
       setGroups((list) => list.map((x) => (x.path === group.path ? { ...x, hidden: !nextHidden } : x)));
-      setErrorMsg(e?.data?.reason || e?.data?.error || e?.message || '저장에 실패했습니다');
+      setErrorMsg(e?.data?.reason || e?.data?.error || e?.message || t('저장에 실패했습니다'));
     } finally {
       setBusyRepo((b) => { const n = { ...b }; delete n[group.path]; return n; });
     }
@@ -158,7 +159,7 @@ export function RepoVisibility(props: Props) {
     setBusyWt((b) => ({ ...b, [wt.id]: true }));
     try {
       const tmuxName = await openWorktree(props.deps, wt.id);
-      if (!tmuxName) { setErrorMsg('세션을 여는 데 실패했습니다'); return; }
+      if (!tmuxName) { setErrorMsg(t('세션을 여는 데 실패했습니다')); return; }
       setErrorMsg(null);
       // 방금 만든 세션이라 아직 화면(탭)이 없다 — 지금 활성 탭에 그냥
       // 얹힌다(switchTo/attachTmux의 기본 동작, Rail.tsx의 열려 있지 않은 세션
@@ -176,7 +177,7 @@ export function RepoVisibility(props: Props) {
     try {
       const label = wt.isMain ? wt.repoName : `${wt.repoName}/${wt.branch}`;
       const result = await deleteWorktreeRow(props.deps, wt.id, label, wt.sessions.length > 0);
-      if (result.error) { setErrorMsg(`워크트리 삭제 실패: ${result.error}`); return; }
+      if (result.error) { setErrorMsg(t('워크트리 삭제 실패: {error}', { error: result.error })); return; }
       if (result.ok) { setErrorMsg(null); await load(); props.onChanged(); }
     } finally {
       setBusyWt((b) => { const n = { ...b }; delete n[wt.id]; return n; });
@@ -209,17 +210,17 @@ export function RepoVisibility(props: Props) {
   return (
     <>
       <div ref={scopeElement} class="vt-viewer-backdrop vt-wtd-backdrop" onClick={onBackdropClick}>
-        <div class="vt-viewer-card vt-wtd-card vt-repovis-card" role="dialog" aria-modal="true" aria-label={props.title || '저장소 관리'}>
+        <div class="vt-viewer-card vt-wtd-card vt-repovis-card" role="dialog" aria-modal="true" aria-label={props.title || t('저장소 관리')}>
           <div class="vt-wtd-head">
-            <span class="vt-wtd-title">{props.title || '저장소 관리'}</span>
-            <button type="button" class="vt-btn sm quiet vt-wtd-x" onClick={props.onClose} aria-label="닫기">×</button>
+            <span class="vt-wtd-title">{props.title || t('저장소 관리')}</span>
+            <button type="button" class="vt-btn sm quiet vt-wtd-x" onClick={props.onClose} aria-label={t('닫기')}>×</button>
           </div>
           <div class="vt-wtd-body vt-repovis-body">
             {props.lead}
-            <Show when={props.lead}><div class="vt-wtd-section-title">저장소</div></Show>
-            <Show when={loading()}><div class="vt-repovis-empty">불러오는 중…</div></Show>
+            <Show when={props.lead}><div class="vt-wtd-section-title">{t('저장소')}</div></Show>
+            <Show when={loading()}><div class="vt-repovis-empty">{t('불러오는 중…')}</div></Show>
             <Show when={!loading() && groups().length === 0}>
-              <div class="vt-repovis-empty">탐색 경계 안에 git 저장소가 없습니다.</div>
+              <div class="vt-repovis-empty">{t('탐색 경계 안에 git 저장소가 없습니다.')}</div>
             </Show>
             {/* ⚠ 숨김 표시 클래스를 `hidden`으로 두면 안 된다. 사용자 브라우저에서
                 그 행이 통째로 사라지는 것을 실제로 봤다 — 확장 프로그램이 주입한
@@ -243,7 +244,7 @@ export function RepoVisibility(props: Props) {
                               type="checkbox"
                               checked={!group.hidden}
                               disabled={!!busyRepo()[group.path]}
-                              aria-label={`${group.name} 표시`}
+                              aria-label={t('{name} 표시', { name: group.name })}
                               onChange={() => toggleHidden(group)}
                             />
                           </Show>
@@ -261,7 +262,7 @@ export function RepoVisibility(props: Props) {
                             class="vt-btn sm quiet"
                             disabled={!!busyWt()[wt.id]}
                             onClick={() => newSessionIn(wt)}
-                          >+ 새 세션</button>
+                          >+ {t('새 세션')}</button>
                           {/* 30-worktree.md §3: 메인 워크트리는 삭제할 수 없다
                               (서버도 400으로 거절한다) — 메뉴에 애초에 안 띄운다.
                               대신 "+ 워크트리"(그 저장소에 새로 만들기)는 본체
@@ -273,19 +274,19 @@ export function RepoVisibility(props: Props) {
                               class="vt-btn sm quiet danger"
                               disabled={!!busyWt()[wt.id]}
                               onClick={() => removeWorktree(wt)}
-                            >삭제</button>
+                            >{t('삭제')}</button>
                           </Show>
                           <Show when={wt.isMain}>
                             <button
                               type="button"
                               class="vt-btn sm quiet vt-repovis-add-wt"
                               onClick={() => setWtDialogRepo({ path: group.path })}
-                            >+ 워크트리</button>
+                            >+ {t('워크트리')}</button>
                           </Show>
                         </div>
                         <Show
                           when={wt.sessions.length > 0}
-                          fallback={<div class="vt-repovis-wt-empty">세션 없음</div>}
+                          fallback={<div class="vt-repovis-wt-empty">{t('세션 없음')}</div>}
                         >
                           <div class="vt-repovis-sessions">
                             <For each={wt.sessions}>
@@ -309,7 +310,7 @@ export function RepoVisibility(props: Props) {
               경계 자체는 **읽기 전용**이다: `~/.vt.env`는 `lib/vt_env.sh`가 단일
               소유자이고, 설정 파일을 다른 경로로 고쳐 쓰지 않는다는 규칙이 있다. */}
           <div class="vt-repovis-foot">
-            <span class="vt-repovis-foot-label">탐색 경계</span>
+            <span class="vt-repovis-foot-label">{t('탐색 경계')}</span>
             <span class="vt-repovis-foot-value" data-tip="VT_BROWSE_ROOTS" data-tip-sub="~/.vt.env">
               {roots().join(' · ') || '—'}
             </span>

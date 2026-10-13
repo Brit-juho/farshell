@@ -16,6 +16,7 @@ import { icon } from '../ui/icons.js';
 import { orderedViews, renderOrderEditor } from './session-order.js';
 import { showWorkspaceDetails } from '../ui/workspace-details.js';
 import { contextLabel } from '../ui/session-context.js';
+import { t } from '../core/i18n.js';
 
 // ADR-29 E — tmux 목록 팝업을 없애면서 그게 하던 일(열리지 않은 tmux 세션 보기 + 열기 + 종료)을 이 시트가
 // 흡수했다. `/api/tmux/sessions`는 이 브라우저 탭에 열리지 않은 것까지 내려주므로, 열린 세션의 tmux 이름과
@@ -49,19 +50,19 @@ function openRow(id, ctx, inGroup, metadata) {
   select.setAttribute('aria-current', activeNow ? 'true' : 'false');
   // 레일(Rail.tsx openRow)과 같은 이유로 revealSession — "가서 보여줘"지 "배정"이 아니다.
   select.onclick = () => { revealSession(id); ctx.close(); };
-  const rename = btn('vt-icon-btn xl vt-session-action', icon('pencil', 16), `${name} 이름 변경`);
+  const rename = btn('vt-icon-btn xl vt-session-action', icon('pencil', 16), t('{name} 이름 변경', { name }));
   rename.onclick = async () => {
-    const next = await promptDialog('새 세션 이름', { title: '이름 변경', defaultValue: name });
+    const next = await promptDialog(t('새 세션 이름'), { title: t('이름 변경'), defaultValue: name });
     if (next === null) return;
     if (await renameSession(id, next)) ctx.refresh();
   };
   // 닫기 — 레일·칸 ×와 같은 함수(term/session-actions.js closeSession).
-  const close = btn('vt-icon-btn xl danger vt-session-action', icon('x', 16), `${name} 닫기`);
+  const close = btn('vt-icon-btn xl danger vt-session-action', icon('x', 16), t('{name} 닫기', { name }));
   close.onclick = async () => { await closeSession(id); ctx.refresh(); };
   row.append(sessionBody(select, metadata), rename, close);
   // tmux 세션은 완전 종료도 여기서 — 모바일에서 이 동작에 닿는 유일한 길이다(ADR-29 E).
   if (tmuxName) {
-    const kill = btn('vt-icon-btn xl danger vt-session-action', icon('trash-2', 16), `${tmuxName} 완전 종료`);
+    const kill = btn('vt-icon-btn xl danger vt-session-action', icon('trash-2', 16), t('{name} 완전 종료', { name: tmuxName }));
     kill.onclick = async () => { if (await confirmAndKillSession(tmuxName, id)) ctx.refresh(); };
     row.appendChild(kill);
   }
@@ -73,10 +74,10 @@ function sleepingRow(s, ctx) {
   row.className = 'vt-session-row sleeping';
   const wake = document.createElement('button');
   wake.type = 'button'; wake.className = 'vt-name-btn vt-session-select'; wake.textContent = s.name;
-  wake.title = '열기';
+  wake.title = t('열기');
   // 레일 클릭과 같은 규칙 — 기억된 묶음 뷰가 있으면 통째로, 없으면 새 단독 뷰.
   wake.onclick = async () => { ctx.close(); await openSessionFromRail({ tmuxName: s.name }); };
-  const kill = btn('vt-icon-btn xl danger vt-session-action', icon('trash-2', 16), `${s.name} 완전 종료`);
+  const kill = btn('vt-icon-btn xl danger vt-session-action', icon('trash-2', 16), t('{name} 완전 종료', { name: s.name }));
   kill.onclick = async () => { if (await confirmAndKillSession(s.name, s.web_session_id || null)) ctx.refresh(); };
   row.append(sessionBody(wake, s), kill);
   return row;
@@ -90,7 +91,7 @@ function sessionBody(select, session) {
   const label = session && contextLabel(session);
   if (label) {
     const meta = document.createElement('button');
-    meta.type = 'button'; meta.setAttribute('aria-label', `${session.name || '세션'} 작업 위치 보기`);
+    meta.type = 'button'; meta.setAttribute('aria-label', t('{name} 작업 위치 보기', { name: session.name || t('세션') }));
     meta.onclick = () => showWorkspaceDetails(session);
     meta.className = 'vt-session-meta'; meta.textContent = label;
     meta.setAttribute('data-tip', session.cwd || '');
@@ -106,17 +107,17 @@ function groupHead(id, label, count, ctx, open) {
   title.type = 'button'; title.className = 'vt-session-group-label vt-view-group-title';
   title.textContent = label; title.onclick = open;
   const edit = document.createElement('button');
-  edit.type = 'button'; edit.className = 'vt-view-group-rename'; edit.textContent = '편집';
-  edit.setAttribute('aria-label', `${label} 묶음 이름 변경`);
+  edit.type = 'button'; edit.className = 'vt-view-group-rename'; edit.textContent = t('편집');
+  edit.setAttribute('aria-label', t('{label} 묶음 이름 변경', { label }));
   edit.onclick = async () => {
-    const next = await promptDialog('묶음 뷰 제목', { title: '묶음 이름 변경', defaultValue: label });
+    const next = await promptDialog(t('묶음 뷰 제목'), { title: t('묶음 이름 변경'), defaultValue: label });
     if (next === null || !next.trim()) return;
     if (renameView(id, next.trim())) ctx.refresh();
-    else showToast('묶음 이름을 저장하지 못했습니다. 제목은 128자까지 입력할 수 있습니다.');
+    else showToast(t('묶음 이름을 저장하지 못했습니다. 제목은 128자까지 입력할 수 있습니다.'));
   };
   const total = document.createElement('span');
   total.className = 'vt-view-group-count'; total.textContent = String(count);
-  total.setAttribute('aria-label', `${count}개 세션`);
+  total.setAttribute('aria-label', t('{n}개 세션', { n: count }));
   head.append(title, total, edit);
   return head;
 }
@@ -136,7 +137,7 @@ function openSection(ctx, metadata) {
     const group = document.createElement('div');
     group.className = 'vt-session-group' + (v.id === activeTab ? ' active' : '');
     group.setAttribute('role', 'group');
-    const label = v.label || '묶음 뷰';
+    const label = v.label || t('묶음 뷰');
     group.setAttribute('aria-label', label);
     const head = groupHead(v.id, label, v.members.length, ctx, () => { revealSession(v.members[0]); ctx.close(); });
     group.appendChild(head);
@@ -163,15 +164,15 @@ export async function renderSessionSheet(backdrop, ctx) {
   const ordering = !!backdrop._ordering;
 
   const toggle = (viewCount >= 2 || ordering)
-    ? btn(`vt-icon-btn xl vt-session-order-toggle${ordering ? ' active' : ''}`, icon('square-pen', 16), '뷰 편집') : null;
+    ? btn(`vt-icon-btn xl vt-session-order-toggle${ordering ? ' active' : ''}`, icon('square-pen', 16), t('뷰 편집')) : null;
   if (toggle) toggle.setAttribute('aria-pressed', String(ordering));
-  const closeBtn = btn('vt-icon-btn xl vt-session-close', icon('x', 16), '세션 관리 닫기');
+  const closeBtn = btn('vt-icon-btn xl vt-session-close', icon('x', 16), t('세션 관리 닫기'));
   closeBtn.onclick = ctx.close;
   const head = document.createElement('div');
   head.className = 'vt-session-head';
   const h2 = document.createElement('h2');
   h2.id = 'session-manager-title';
-  h2.textContent = ordering ? '뷰 편집' : '세션 관리';
+  h2.textContent = ordering ? t('뷰 편집') : t('세션 관리');
   const actions = document.createElement('div');
   actions.className = 'vt-session-head-actions';
   actions.append(...(toggle ? [toggle] : []), closeBtn);
@@ -213,7 +214,7 @@ export async function renderSessionSheet(backdrop, ctx) {
   if (sleeping.length) {
     const h = document.createElement('p');
     h.className = 'vt-session-section';
-    h.textContent = '열려 있지 않은 세션';
+    h.textContent = t('열려 있지 않은 세션');
     list.appendChild(h);
     const remaining = new Map(sleeping.map((s) => [s.name, s]));
     for (const v of getClosedViews()) {
@@ -229,12 +230,12 @@ export async function renderSessionSheet(backdrop, ctx) {
     }
     for (const s of remaining.values()) list.appendChild(sleepingRow(s, ctx));
   }
-  if (!nodes.length && !sleeping.length && fetched) list.innerHTML = '<p class="vt-session-empty">열려 있는 세션이 없습니다.</p>';
+  if (!nodes.length && !sleeping.length && fetched) list.innerHTML = `<p class="vt-session-empty">${t('열려 있는 세션이 없습니다.')}</p>`;
   if (!fetched) {
     const error = document.createElement('p'); error.className = 'vt-session-error';
-    error.setAttribute('role', 'status'); error.textContent = '세션 정보를 갱신하지 못했습니다. ';
+    error.setAttribute('role', 'status'); error.textContent = t('세션 정보를 갱신하지 못했습니다. ');
     const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'vt-btn sm';
-    retry.textContent = '다시 시도'; retry.onclick = ctx.refresh; error.appendChild(retry); list.appendChild(error);
+    retry.textContent = t('다시 시도'); retry.onclick = ctx.refresh; error.appendChild(retry); list.appendChild(error);
   }
 
   // "맥에서도 열기"는 특정 세션이 아니라 앞으로 만들 모든 세션에 적용되는 전역 설정이라 ⋯의 「설정」 그룹 쪽에 남긴다.
@@ -242,7 +243,7 @@ export async function renderSessionSheet(backdrop, ctx) {
   footer.className = 'vt-session-footer';
   const mac = document.createElement('button');
   mac.type = 'button'; mac.className = 'vt-menu-item vt-session-footer-item'; mac.id = 'session-open-mac-btn';
-  mac.innerHTML = `${icon('terminal', 16)}<span class="vt-menu-item-label">지금 이 세션 맥에서 열기</span>`;
+  mac.innerHTML = `${icon('terminal', 16)}<span class="vt-menu-item-label">${t('지금 이 세션 맥에서 열기')}</span>`;
   mac.onclick = () => { getAction('session.open-on-mac')?.(); };
   footer.appendChild(mac);
   finish(footer);

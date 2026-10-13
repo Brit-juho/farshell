@@ -12,6 +12,7 @@ import { openPanel, closePanel } from '../panels/panel.js';
 import { vtEsc } from '../core/api.js';
 import { shareApi } from './share-api.js';
 import { requestSentence, kindHelp, APPROVAL_NOTE, errorText, MODE_LABEL } from './share-data.js';
+import { t } from '../core/i18n.js';
 
 export const ARM_MS = 400;
 const PANEL_ID = 'vt-share-approval';
@@ -25,7 +26,7 @@ let lastError = '';
 let internalClose = false;
 
 const byCreated = (a, b) => (a.created || 0) - (b.created || 0);
-const toast = (m, t) => { if (typeof window.showToast === 'function') window.showToast(m, t); };
+const toast = (m, type) => { if (typeof window.showToast === 'function') window.showToast(m, type); };
 
 export function pendingRequests() { return queue.slice(); }
 
@@ -59,7 +60,7 @@ export function showPending() { snoozed = false; render(); }
 function snooze() {
   if (!queue.length) return;
   snoozed = true;
-  toast(`승인 대기 ${queue.length}건 — 행 메뉴의 「에이전트 권한…」에서 다시 볼 수 있습니다`, 'info');
+  toast(t('승인 대기 {n}건 — 행 메뉴의 「에이전트 권한…」에서 다시 볼 수 있습니다', { n: queue.length }), 'info');
 }
 
 function close() {
@@ -73,8 +74,8 @@ function levelButtons(req) {
   const btn = (act, label, extra = '') =>
     `<button type="button" class="vt-btn lg vt-share-act${extra}" data-act="${act}">${label}</button>`;
   return req.kind === 'write'
-    ? btn('deny', '거부') + btn('read', '읽기만 허용') + btn('readwrite', '쓰기까지 허용')
-    : btn('deny', '거부') + btn('read', '허용');
+    ? btn('deny', t('거부')) + btn('read', t('읽기만 허용')) + btn('readwrite', t('쓰기까지 허용'))
+    : btn('deny', t('거부')) + btn('read', t('허용'));
 }
 
 function draw() {
@@ -87,13 +88,13 @@ function draw() {
     <p class="vt-share-ask">${vtEsc(requestSentence(req))}</p>
     <p class="vt-share-help">${vtEsc(kindHelp(req.kind))}</p>
     <dl class="vt-share-facts">
-      <dt>요청한 세션</dt><dd>${vtEsc((req.agent && req.agent.name) || '?')}</dd>
-      <dt>대상</dt><dd>${vtEsc(nick)}${req.target && req.target.name && req.target.name !== nick ? ` (${vtEsc(req.target.name)})` : ''}${mode ? ` · ${vtEsc(MODE_LABEL[mode] || mode)}` : ''}</dd>
+      <dt>${t('요청한 세션')}</dt><dd>${vtEsc((req.agent && req.agent.name) || '?')}</dd>
+      <dt>${t('대상')}</dt><dd>${vtEsc(nick)}${req.target && req.target.name && req.target.name !== nick ? ` (${vtEsc(req.target.name)})` : ''}${mode ? ` · ${vtEsc(MODE_LABEL[mode] || mode)}` : ''}</dd>
     </dl>
     <p class="vt-share-note">${vtEsc(APPROVAL_NOTE)}</p>
     <div class="vt-share-err" role="alert">${vtEsc(lastError)}</div>
     <div class="vt-dialog-actions vt-share-acts">${levelButtons(req)}</div>
-    <div class="vt-share-later"><button type="button" class="vt-btn quiet vt-share-snooze">나중에</button></div>`;
+    <div class="vt-share-later"><button type="button" class="vt-btn quiet vt-share-snooze">${t('나중에')}</button></div>`;
   body.querySelectorAll('.vt-share-act').forEach((b) => b.addEventListener('click', () => onAct(b.dataset.act)));
   body.querySelector('.vt-share-snooze').addEventListener('click', () => { snooze(); close(); });
   armedAt = Date.now() + ARM_MS;
@@ -131,9 +132,9 @@ function render() {
   if (!el) {
     const r = openPanel({
       id: PANEL_ID,
-      ariaLabel: '에이전트 접근 요청',
+      ariaLabel: t('에이전트 접근 요청'),
       extraClass: 'vt-dialog vt-share-approval',
-      headHTML: '<div class="vt-vw-title">에이전트 접근 요청</div><span class="vt-share-count" aria-live="polite"></span>',
+      headHTML: '<div class="vt-vw-title">' + t('에이전트 접근 요청') + '</div><span class="vt-share-count" aria-live="polite"></span>',
       bodyId: `${PANEL_ID}-body`,
       bodyHTML: '<div class="vt-share-approval-body"></div>',
       onClose: () => {

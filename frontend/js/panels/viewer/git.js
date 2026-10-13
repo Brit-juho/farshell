@@ -6,11 +6,12 @@ import { vtFetch } from '../../core/api.js';
 import { emptyState, errorState } from '../../ui/empty.js';
 import { _setMsg } from './state.js';
 import { _renderDiffDOM } from './diff.js';
+import { t } from '../../core/i18n.js';
 
 function _gitFileLabel(entry) {
-  if (entry.index_status === '?' || entry.worktree_status === '?') return '추가되지 않음';
+  if (entry.index_status === '?' || entry.worktree_status === '?') return t('추가되지 않음');
   const code = entry.index_status || entry.worktree_status;
-  return { M: '수정됨', A: '추가됨', D: '삭제됨', R: '이름변경', C: '복사됨', U: '충돌' }[code] || code;
+  return { M: t('수정됨'), A: t('추가됨'), D: t('삭제됨'), R: t('이름변경'), C: t('복사됨'), U: t('충돌') }[code] || code;
 }
 
 async function _gitAction(repo, path, files) {
@@ -36,7 +37,7 @@ async function _gitAction(repo, path, files) {
 //                            타입 viewer)으로 그 파일을 연다. 인라인 diff와 별개
 //                            동작이라 버튼을 따로 둔다(행 클릭은 diff를 덮지 않는다).
 
-const _RO_HINT = '읽기 전용입니다';
+const _RO_HINT = t('읽기 전용입니다');
 
 function _gitRowEl(repo, entry, staged, opts) {
   const row = document.createElement('div');
@@ -53,7 +54,7 @@ function _gitRowEl(repo, entry, staged, opts) {
   // 폭은 이제 CSS가 24px로 잡는다 — 글자는 주위(↑↓ · +142 −38 머릿말)와 같은
   // 반각 부호로 맞춘다. 이모지가 아니고 icons.js에도 minus가 없어 글자로 남긴다.
   btn.textContent = staged ? '−' : '+';
-  btn.title = opts.readOnly ? _RO_HINT : (staged ? '스테이지 해제' : '스테이지');
+  btn.title = opts.readOnly ? _RO_HINT : (staged ? t('스테이지 해제') : t('스테이지'));
   btn.setAttribute('aria-label', btn.title);
   if (opts.readOnly) {
     btn.disabled = true;
@@ -65,7 +66,7 @@ function _gitRowEl(repo, entry, staged, opts) {
         await _gitAction(repo, staged ? '/api/git/unstage' : '/api/git/stage', [entry.file]);
         await opts.reload();
       } catch (e) {
-        showToast(`${btn.title} 실패: ${e.message}`);
+        showToast(staged ? t('스테이지 해제 실패: {msg}', { msg: e.message }) : t('스테이지 실패: {msg}', { msg: e.message }));
         btn.disabled = false;
       }
     });
@@ -88,8 +89,8 @@ function _gitRowEl(repo, entry, staged, opts) {
     const openBtn = document.createElement('button');
     openBtn.className = 'vt-btn sm quiet vt-vw-gopen';
     openBtn.type = 'button';
-    openBtn.textContent = '뷰어';
-    openBtn.title = '뷰어 페인에서 파일 열기';
+    openBtn.textContent = t('뷰어');
+    openBtn.title = t('뷰어 페인에서 파일 열기');
     openBtn.setAttribute('aria-label', openBtn.title);
     openBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -125,10 +126,10 @@ async function _doCommit(repo, wrap, reload) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo, message }),
     });
-    showToast('커밋했습니다.');
+    showToast(t('커밋했습니다.'));
     await reload();
   } catch (e) {
-    showToast(`커밋 실패: ${e.message}`);
+    showToast(t('커밋 실패: {msg}', { msg: e.message }));
     btn.disabled = false;
   }
 }
@@ -158,7 +159,7 @@ export async function renderGitStatus(container, repo, opts = {}) {
       };
     }
   } else {
-    container.innerHTML = '<div class="vt-vw-loading">git status 확인 중…</div>';
+    container.innerHTML = `<div class="vt-vw-loading">${t('git status 확인 중…')}</div>`;
   }
 
   let d;
@@ -169,7 +170,7 @@ export async function renderGitStatus(container, repo, opts = {}) {
     // 2.1.6 — 서버 예외 문자열을 제목 자리에 그대로 두면 그게 이 화면의 이름처럼
     // 읽힌다. 제목은 사람 말, 원문은 detail, 그리고 다시 해볼 수 있는 일이다.
     container.innerHTML = '';
-    container.appendChild(errorState('변경 사항을 불러오지 못했습니다', e, () => renderGitStatus(container, repo, opts)));
+    container.appendChild(errorState(t('변경 사항을 불러오지 못했습니다'), e, () => renderGitStatus(container, repo, opts)));
     return null;
   }
   // 기다리는 사이 사용자가 diff·커밋 상세로 들어갔으면 그 화면을 덮지 않는다.
@@ -181,8 +182,8 @@ export async function renderGitStatus(container, repo, opts = {}) {
     container.innerHTML = '';
     container.appendChild(emptyState({
       icon: 'git-branch',
-      title: 'git 저장소가 아닙니다',
-      desc: '이 워크트리에는 .git이 없습니다. 저장소 안의 세션을 열면 그 변경 사항이 여기 나옵니다.',
+      title: t('git 저장소가 아닙니다'),
+      desc: t('이 워크트리에는 .git이 없습니다. 저장소 안의 세션을 열면 그 변경 사항이 여기 나옵니다.'),
     }));
     return d;
   }
@@ -200,11 +201,11 @@ export async function renderGitStatus(container, repo, opts = {}) {
   if (!d.files.length) {
     const empty = document.createElement('div');
     empty.className = 'vt-vw-empty';
-    empty.textContent = '변경된 내용이 없습니다.';
+    empty.textContent = t('변경된 내용이 없습니다.');
     wrap.appendChild(empty);
   } else {
-    if (staged.length) wrap.appendChild(_gitSectionEl('스테이지됨', staged, repo, true, o));
-    if (unstaged.length) wrap.appendChild(_gitSectionEl('변경사항', unstaged, repo, false, o));
+    if (staged.length) wrap.appendChild(_gitSectionEl(t('스테이지됨'), staged, repo, true, o));
+    if (unstaged.length) wrap.appendChild(_gitSectionEl(t('변경사항'), unstaged, repo, false, o));
   }
 
   // 읽기 전용(dock, 2.1.0)에서는 커밋 상자를 아예 안 그린다 — 비활성 입력창은
@@ -216,11 +217,11 @@ export async function renderGitStatus(container, repo, opts = {}) {
   const ta = document.createElement('textarea');
   ta.className = 'vt-vw-gmsg';
   ta.rows = 2;
-  ta.placeholder = '커밋 메시지';
+  ta.placeholder = t('커밋 메시지');
   ta.disabled = !canCommit;
   const cbtn = document.createElement('button');
   cbtn.className = 'vt-btn solid vt-vw-gcommit-btn';
-  cbtn.textContent = '커밋';
+  cbtn.textContent = t('커밋');
   cbtn.disabled = !canCommit;
   commitBox.appendChild(ta);
   commitBox.appendChild(cbtn);
@@ -274,7 +275,7 @@ async function _renderCommitLog(repo, container, skip, opts) {
     container.innerHTML = '';
     const head = document.createElement('div');
     head.className = 'vt-vw-ghead';
-    head.textContent = '커밋 기록';
+    head.textContent = t('커밋 기록');
     container.appendChild(head);
   }
   const more = container.querySelector('.vt-vw-glog-more');
@@ -294,7 +295,7 @@ async function _renderCommitLog(repo, container, skip, opts) {
     if (skip === 0) {
       const empty = document.createElement('div');
       empty.className = 'vt-vw-empty';
-      empty.textContent = '커밋이 없습니다.';
+      empty.textContent = t('커밋이 없습니다.');
       container.appendChild(empty);
     }
     return;
@@ -303,7 +304,7 @@ async function _renderCommitLog(repo, container, skip, opts) {
   if (d.has_more) {
     const btn = document.createElement('button');
     btn.className = 'vt-btn vt-vw-glog-more';
-    btn.textContent = '더 보기';
+    btn.textContent = t('더 보기');
     btn.addEventListener('click', () => _renderCommitLog(repo, container, skip + d.commits.length, opts));
     container.appendChild(btn);
   }
@@ -312,7 +313,7 @@ async function _renderCommitLog(repo, container, skip, opts) {
 /** 커밋 하나(메타 + 변경 파일 목록)를 container에 그린다. */
 export async function renderCommit(container, repo, sha, opts = {}) {
   const o = { onBack: null, onFile: () => {}, ...opts };
-  container.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
+  container.innerHTML = `<div class="vt-vw-loading">${t('불러오는 중…')}</div>`;
 
   let d;
   try {
@@ -323,7 +324,7 @@ export async function renderCommit(container, repo, sha, opts = {}) {
   }
 
   container.innerHTML = '';
-  if (o.onBack) container.appendChild(_backBtn('‹ 상태로', o.onBack));
+  if (o.onBack) container.appendChild(_backBtn(t('‹ 상태로'), o.onBack));
 
   const wrap = document.createElement('div');
   wrap.className = 'vt-vw-git';
@@ -350,7 +351,7 @@ export async function renderCommit(container, repo, sha, opts = {}) {
   sec.className = 'vt-vw-gsec';
   const head = document.createElement('div');
   head.className = 'vt-vw-ghead';
-  head.textContent = `변경된 파일 (${d.files.length})`;
+  head.textContent = t('변경된 파일 ({n})', { n: d.files.length });
   sec.appendChild(head);
   d.files.forEach(f => {
     const row = document.createElement('div');
@@ -373,7 +374,7 @@ export async function renderCommit(container, repo, sha, opts = {}) {
 /** 커밋 안의 파일 하나의 diff를 container에 그린다. */
 export async function renderCommitFileDiff(container, repo, sha, file, opts = {}) {
   const o = { onBack: null, ...opts };
-  container.innerHTML = '<div class="vt-vw-loading">git show 실행 중…</div>';
+  container.innerHTML = `<div class="vt-vw-loading">${t('git show 실행 중…')}</div>`;
 
   let d;
   try {
@@ -385,12 +386,12 @@ export async function renderCommitFileDiff(container, repo, sha, file, opts = {}
   }
 
   container.innerHTML = '';
-  if (o.onBack) container.appendChild(_backBtn('‹ 커밋으로', o.onBack));
+  if (o.onBack) container.appendChild(_backBtn(t('‹ 커밋으로'), o.onBack));
 
   if (!d.diff || !d.diff.trim()) {
     const empty = document.createElement('div');
     empty.className = 'vt-vw-empty';
-    empty.textContent = '변경된 내용이 없습니다.';
+    empty.textContent = t('변경된 내용이 없습니다.');
     container.appendChild(empty);
     return;
   }
@@ -398,7 +399,7 @@ export async function renderCommitFileDiff(container, repo, sha, file, opts = {}
   if (d.truncated) {
     const note = document.createElement('div');
     note.className = 'vt-vw-note warn';
-    note.textContent = 'diff가 커서 일부만 표시했습니다.';
+    note.textContent = t('diff가 커서 일부만 표시했습니다.');
     container.appendChild(note);
   }
 }

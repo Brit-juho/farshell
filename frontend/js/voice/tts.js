@@ -1,6 +1,7 @@
 // 지정한 화면만 수신한다. 큐 순서는 서버 ACK로 관리한다.
 import { vtFetch } from '../core/api.js';
 import { screenId } from '../core/screen-id.js';
+import { t } from '../core/i18n.js';
 let socket = null;
 let generation = '';
 let current = null;
@@ -57,7 +58,7 @@ function play(blob, id = '') {
       if (!btn) {
         btn = document.createElement('button');
         btn.id = 'play-pending-btn'; btn.className = 'vt-btn solid';
-        btn.textContent = '터치하여 재생';
+        btn.textContent = t('터치하여 재생');
         btn.onclick = () => start();
         document.getElementById('mic-status')?.appendChild(btn);
       }
@@ -112,7 +113,7 @@ function connect() {
         const raw = atob(msg.audio);
         const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
         const status = document.getElementById('mic-status');
-        if (status) status.textContent = `${msg.name} 응답 읽기`;
+        if (status) status.textContent = t('{name} 응답 읽기', { name: msg.name });
         play(new Blob([bytes], { type: msg.media_type }), msg.id);
       }
     } catch (e) { console.warn('[voice]', e); }

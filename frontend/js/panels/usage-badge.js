@@ -11,6 +11,7 @@
 // compact/regular 폭에서는 그 코드를 아예 안 받는다.
 import { vtFetch } from '../core/api.js';
 import { registerAction } from '../core/dom.js';
+import { t } from '../core/i18n.js';
 
 const BADGE_POLL_MS = 60000;   // 피드가 90초 주기라 60초면 충분하다
 
@@ -28,9 +29,9 @@ export function paintRailBadge(data) {
   const active = data?.active_profile;
   // 2026-09-18 — 한 줄짜리 title을 두 단 툴팁으로 나눈다(ui/tooltip.js): 이름은
   // 「사용량」 하나뿐이고, 활성 프로필·실행 중 목록은 값이므로 보조 단(mono)이다.
-  btn.setAttribute('data-tip', '사용량');
+  btn.setAttribute('data-tip', t('사용량'));
   const detail = data?.available
-    ? [active ? `활성: ${active}` : '', live.length ? `실행 중: ${live.join(', ')}` : ''].filter(Boolean).join(' · ')
+    ? [active ? t('활성: {active}', { active }) : '', live.length ? t('실행 중: {names}', { names: live.join(', ') }) : ''].filter(Boolean).join(' · ')
     : '';
   if (detail) btn.setAttribute('data-tip-sub', detail); else btn.removeAttribute('data-tip-sub');
   badge.hidden = !live.length;

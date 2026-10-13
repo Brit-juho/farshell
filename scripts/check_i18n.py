@@ -28,10 +28,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FRONT = ROOT / "frontend"
 DICT = FRONT / "js" / "locales" / "en.js"
-SKIP_DIRS = {"locales", "vendor", "dist", "tests", "node_modules"}
+SKIP_DIRS = {"locales", "vendor", "dist", "dist-test", "tests", "node_modules"}
 
 _STR = r"""'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\$]|\\.|\$(?!\{))*)`"""
 CALL = re.compile(r"(?<![\w.$])(?:t|T|vtT|window\.vtT)\(\s*(?:" + _STR + r")")
+CALL_FULL = re.compile(r"(?<![\w.$])(?:t|T|vtT|window\.vtT)\(\s*(?:" + _STR + r")")
 HANGUL_LIT = re.compile(r"""'[^'\n]*[가-힣][^'\n]*'|"[^"\n]*[가-힣][^"\n]*"|`[^`]*[가-힣][^`]*`""")
 VAR = re.compile(r"\{(\w+)\}")
 
@@ -114,6 +115,8 @@ def collect():
                 used.setdefault(k, rel)
             continue
         for ln_no, ln in enumerate(text.splitlines(), 1):
+            # 이미 감싼 호출은 지우고 본다 — 템플릿 안의 ${t('…')}를 미처리로 세지 않게.
+            ln = CALL_FULL.sub("", ln)
             for m in HANGUL_LIT.finditer(ln):
                 before = ln[: m.start()]
                 if re.search(r"(?:\b[tT]|vtT)\(\s*$", before):

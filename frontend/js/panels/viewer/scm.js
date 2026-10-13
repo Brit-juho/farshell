@@ -17,6 +17,7 @@ import { vtFetch } from '../../core/api.js';
 import { renderGitStatus, renderCommit, renderCommitFileDiff } from './git.js';
 import { renderFileDiff } from './diff.js';
 import { _viewerState } from './state.js';
+import { t } from '../../core/i18n.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 
 const PANEL_ID = 'vt-dock-scm';
@@ -57,7 +58,7 @@ function _renderHead(headEl, repo, d) {
   headEl.innerHTML = '';
   const left = _el('div', 'vt-scm-head-left');
   if (!repo) {
-    left.appendChild(_el('span', 'vt-scm-repo', '열린 세션 없음'));
+    left.appendChild(_el('span', 'vt-scm-repo', t('열린 세션 없음')));
     headEl.appendChild(left);
     return;
   }
@@ -69,7 +70,7 @@ function _renderHead(headEl, repo, d) {
     if (d.behind) left.appendChild(_el('span', 'vt-scm-track', `↓${d.behind}`));
     if (d.insertions) left.appendChild(_el('span', 'vt-scm-add', `+${d.insertions}`));
     if (d.deletions) left.appendChild(_el('span', 'vt-scm-del', `−${d.deletions}`));
-    if (d.files && d.files.length) left.appendChild(_el('span', 'vt-scm-count', `파일 ${d.files.length}`));
+    if (d.files && d.files.length) left.appendChild(_el('span', 'vt-scm-count', t('파일 {n}', { n: d.files.length })));
   }
   headEl.appendChild(left);
   // 계정 칩 없음(ADR-27) — 40 §1의 계정 저장소는 구현만 되고 dock에 연결하지 않는다.
@@ -83,9 +84,9 @@ export async function showScm(opts = {}) {
     paneHost: opts.paneHost || null,
     paneId: opts.paneId || null,
     id: PANEL_ID,
-    ariaLabel: '소스컨트롤',
+    ariaLabel: t('소스컨트롤'),
     headHTML: '<div class="vt-scm-head" id="vt-scm-head"></div>'
-      + '<button class="vt-btn sm vt-vw-diff" id="vt-scm-refresh" title="새로고침">새로고침</button>',
+      + `<button class="vt-btn sm vt-vw-diff" id="vt-scm-refresh" title="${t('새로고침')}">${t('새로고침')}</button>`,
     bodyId: 'vt-scm-body',
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
@@ -131,8 +132,8 @@ export async function showScm(opts = {}) {
       body.innerHTML = '';
       body.appendChild(emptyState({
         icon: 'folder',
-        title: '볼 저장소가 없습니다',
-        desc: '세션을 열면 그 작업 디렉터리의 변경 사항을 여기서 봅니다.',
+        title: t('볼 저장소가 없습니다'),
+        desc: t('세션을 열면 그 작업 디렉터리의 변경 사항을 여기서 봅니다.'),
       }));
       return;
     }

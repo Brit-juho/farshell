@@ -9,6 +9,7 @@
 //   - iOS 사파리 탭 (홈 화면에 PWA로 설치해야 Web Push가 열린다, iOS 16.4+)
 //   - 사용자가 알림 권한을 거부
 
+import { t } from '../core/i18n.js';
 (function () {
   'use strict';
 
@@ -39,19 +40,19 @@
   // 왜 구독이 불가능한지 사람이 읽을 수 있는 이유. UI가 그대로 보여준다.
   function blockReason() {
     if (!window.isSecureContext) {
-      return 'https 접속이 아닙니다 (평문 http에서는 브라우저가 알림을 막습니다)';
+      return t('https 접속이 아닙니다 (평문 http에서는 브라우저가 알림을 막습니다)');
     }
     if (!('PushManager' in window)) {
       const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       const standalone = window.matchMedia('(display-mode: standalone)').matches
         || window.navigator.standalone === true;
       if (iOS && !standalone) {
-        return 'iOS에서는 홈 화면에 앱으로 추가해야 알림을 받을 수 있습니다 (공유 → 홈 화면에 추가)';
+        return t('iOS에서는 홈 화면에 앱으로 추가해야 알림을 받을 수 있습니다 (공유 → 홈 화면에 추가)');
       }
-      return '이 브라우저는 Web Push를 지원하지 않습니다';
+      return t('이 브라우저는 Web Push를 지원하지 않습니다');
     }
     if (Notification.permission === 'denied') {
-      return '알림 권한이 거부돼 있습니다 (브라우저 설정에서 허용해 주세요)';
+      return t('알림 권한이 거부돼 있습니다 (브라우저 설정에서 허용해 주세요)');
     }
     return '';
   }
@@ -62,11 +63,11 @@
 
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') {
-      return { ok: false, reason: '알림 권한이 허용되지 않았습니다' };
+      return { ok: false, reason: t('알림 권한이 허용되지 않았습니다') };
     }
 
     const res = await api('/api/push/key');
-    if (!res.ok) return { ok: false, reason: '서버에 VAPID 키가 없습니다' };
+    if (!res.ok) return { ok: false, reason: t('서버에 VAPID 키가 없습니다') };
     const { key } = await res.json();
 
     const reg = await navigator.serviceWorker.ready;
@@ -94,7 +95,7 @@
         label: navigator.platform || '',
       }),
     });
-    if (!r.ok) return { ok: false, reason: '서버 등록 실패' };
+    if (!r.ok) return { ok: false, reason: t('서버 등록 실패') };
     return { ok: true };
   }
 

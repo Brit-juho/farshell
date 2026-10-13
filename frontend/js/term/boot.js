@@ -18,6 +18,7 @@ import { icon } from '../ui/icons.js';
 import { displayComboHtml } from '../core/keymap.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 import { showToast } from '../ui/toast.js';
+import { t } from '../core/i18n.js';
 
 export function showOnboarding() {
   const el = document.createElement('div');
@@ -26,13 +27,13 @@ export function showOnboarding() {
   el.innerHTML = `
 <div class="vt-ob-icon">${icon('mic', 22)}</div>
 <h2>FarShell</h2>
-<p>음성으로 터미널을 조작하세요.<br>tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.</p>
+<p>${t('음성으로 터미널을 조작하세요.')}<br>${t('tmux 세션을 만들거나, 새 터미널을 시작할 수 있습니다.')}</p>
 <div id="ob-sessions" class="vt-ob-sessions" hidden></div>
 <div class="vt-ob-actions">
-<button class="vt-btn solid lg" onclick="document.getElementById('onboarding').remove();createTmuxSession()">tmux 세션 시작</button>
-<button class="vt-btn lg" onclick="document.getElementById('onboarding').remove();createSession()">일반 터미널</button>
+<button class="vt-btn solid lg" onclick="document.getElementById('onboarding').remove();createTmuxSession()">${t('tmux 세션 시작')}</button>
+<button class="vt-btn lg" onclick="document.getElementById('onboarding').remove();createSession()">${t('일반 터미널')}</button>
 </div>
-<p class="vt-ob-hint">맥북에서 ${displayComboHtml('Ctrl+Shift+M')}로 음성 입력 (voice daemon 실행 시)</p>
+<p class="vt-ob-hint">${t('맥북에서 {combo}로 음성 입력 (voice daemon 실행 시)', { combo: displayComboHtml('Ctrl+Shift+M') })}</p>
   `;
   document.body.appendChild(el);
   renderOnboardingSessions();
@@ -59,7 +60,7 @@ function _drawOnboardingSessions(list, tmuxList, interactive) {
   list.innerHTML = '';
   const title = document.createElement('div');
   title.className = 'vt-ob-sessions-title';
-  title.textContent = `살아있는 tmux 세션 ${tmuxList.length}개`;
+  title.textContent = t('살아있는 tmux 세션 {n}개', { n: tmuxList.length });
   list.appendChild(title);
   for (const s of tmuxList) {
     const row = document.createElement('div');
@@ -71,13 +72,13 @@ function _drawOnboardingSessions(list, tmuxList, interactive) {
     const cmd = s.command ? ` · ${s.command}` : '';
     label.append(tmuxStatusDot(s), document.createTextNode(`${s.name}  (${s.windows}win · ${statusText}${cmd})`));
     if (interactive) {
-      label.title = '이 세션 열기';
+      label.title = t('이 세션 열기');
       label.onclick = async () => {
         document.getElementById('onboarding')?.remove();
         await attachTmux(s.name);
       };
     } else {
-      label.title = '연결 확인 중...';
+      label.title = t('연결 확인 중...');
     }
     row.appendChild(label);
     list.appendChild(row);
@@ -156,7 +157,7 @@ export async function bootApp() {
     // 뷰가 하나도 없으면 온보딩. **지금 이 시점에** 없을 때만 — fetch를 기다리는
     // 사이 사용자가 이미 「새 세션」을 눌렀을 수 있다(z-index:500이라 세션을 가린다).
     if (isLayoutEmpty() && Object.keys(allSessions()).length === 0) showOnboarding();
-    if (_bootRetryCount >= 3) showToast('저장된 화면을 다시 연결했습니다', 'success', { key: 'boot-restore' });
+    if (_bootRetryCount >= 3) showToast(t('저장된 화면을 다시 연결했습니다'), 'success', { key: 'boot-restore' });
     _bootRetryCount = 0;
   } catch (e) {
     if (e.status === 401 && !_leaving) {
@@ -168,7 +169,7 @@ export async function bootApp() {
       // 실패한 attach 뒤 restoreLayout을 실행하면 저장된 tmux 연결이 빈 칸으로
       // 덮인다. 서버가 돌아올 때까지 원본 스냅샷을 유지하고 부팅을 다시 시도한다.
       const delay = Math.min(5000, 250 * 2 ** Math.min(_bootRetryCount++, 5));
-      if (_bootRetryCount === 3) showToast('저장된 화면에 다시 연결하는 중입니다', 'warn',
+      if (_bootRetryCount === 3) showToast(t('저장된 화면에 다시 연결하는 중입니다'), 'warn',
                                            { key: 'boot-restore', duration: 0 });
       await new Promise((resolve) => setTimeout(resolve, delay));
       if (!_leaving) return bootApp();
@@ -180,6 +181,6 @@ export async function bootApp() {
     if (_leaving) return;
     console.error('[FarShell boot]', e);
     if (Object.keys(allSessions()).length === 0) showOnboarding();
-    showToast('서버에서 세션 목록을 받지 못했습니다 — 새로고침해 보세요', 'warn');
+    showToast(t('서버에서 세션 목록을 받지 못했습니다 — 새로고침해 보세요'), 'warn');
   }
 }

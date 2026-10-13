@@ -23,6 +23,7 @@ import {
   pickRecorderMime, contentTypeOf, buildAudioConstraints, buildRecorderOptions,
   micErrorMessage, retryWithBackoff, newVoiceId,
 } from './capture.js';
+import { t } from '../core/i18n.js';
 
 const API = `${location.protocol}//${location.host}`;
 
@@ -58,7 +59,7 @@ function stage(phase, targetName) {
   window.dispatchEvent(new CustomEvent('vt:voice-stage', { detail: { phase, ...(targetName !== undefined ? { target: targetName } : {}) } }));
 }
 
-const NOT_READY_MSG = '음성 모델이 준비되지 않았습니다 — 설정 「음성 및 알림」에서 준비하세요';
+const NOT_READY_MSG = t('음성 모델이 준비되지 않았습니다 — 설정 「음성 및 알림」에서 준비하세요');
 
 // 'ready' 녹음해도 됨 · 'consumed' 이번 탭은 모델 올리기로 썼음 · 'blocked' 안내만 보이고 끝.
 // 서버 상태를 매번 GET으로 확인한다(캐시하지 않음 — 서버 재시작으로 모델이 내려가도 바로 반영).
@@ -67,7 +68,7 @@ async function prepareStt() {
   try {
     st = await apiFetch(`${API}/voice/stt/status`).then((r) => r.json());
   } catch (e) {
-    micStatus.textContent = '음성 상태를 확인하지 못했습니다 (서버 응답 없음)';
+    micStatus.textContent = t('음성 상태를 확인하지 못했습니다 (서버 응답 없음)');
     stage('error');
     return 'blocked';
   }
@@ -80,24 +81,24 @@ async function prepareStt() {
   if (_sttPreparing) return 'blocked';
   _sttPreparing = true;
   stage('preparing', '');
-  micBtn.querySelector('.label').textContent = '준비 중...';
-  micStatus.textContent = '선택한 음성 모델 준비 중…';
+  micBtn.querySelector('.label').textContent = t('준비 중...');
+  micStatus.textContent = t('선택한 음성 모델 준비 중…');
   try {
     const r = await apiFetch(`${API}/voice/stt/preload`, { method: 'POST' });
     const d = await r.json();
     if (r.ok && d.loaded) {
-      micStatus.textContent = '준비 완료 — 마이크를 눌러 녹음';
+      micStatus.textContent = t('준비 완료 — 마이크를 눌러 녹음');
       stage('ready');
       return 'consumed';
     }
-    micStatus.textContent = d.error || '음성 준비 실패 — STT가 설치돼 있는지 확인하세요';
+    micStatus.textContent = d.error || t('음성 준비 실패 — STT가 설치돼 있는지 확인하세요');
     stage('error');
   } catch (e) {
-    micStatus.textContent = '음성 준비 실패 (서버 응답 없음)';
+    micStatus.textContent = t('음성 준비 실패 (서버 응답 없음)');
     stage('error');
   } finally {
     _sttPreparing = false;
-    micBtn.querySelector('.label').textContent = '음성 입력';
+    micBtn.querySelector('.label').textContent = t('음성 입력');
   }
   return 'blocked';
 }
@@ -113,10 +114,10 @@ export async function toggleRecording() {
 export async function startRecording() {
   if (busy) return;
   if (window.vtRelayHost?.() && window.vtRelayHost() !== 'local') {
-    micStatus.textContent = '원격 호스트에 직접 접속해 음성을 사용하세요'; return;
+    micStatus.textContent = t('원격 호스트에 직접 접속해 음성을 사용하세요'); return;
   }
   busy = true;
-  micStatus.textContent = '입력 대상과 마이크 확인 중…';
+  micStatus.textContent = t('입력 대상과 마이크 확인 중…');
   stage('starting', '');
   let stream = null;
   let paused = false;
@@ -131,7 +132,7 @@ export async function startRecording() {
       body: JSON.stringify({ session_id: sid }),
     });
     const captured = await tr.json();
-    if (!tr.ok) throw new Error(captured.error || '입력 대상 준비 실패');
+    if (!tr.ok) throw new Error(captured.error || t('입력 대상 준비 실패'));
     const mime = pickRecorderMime((t) => MediaRecorder.isTypeSupported(t));
     const recorder = new MediaRecorder(stream, buildRecorderOptions(mime));
     // 여기까지 오면 녹음이 시작된다 — 이전 실패분·버튼·TTS 일시정지는 이때서야 정리한다.
@@ -163,8 +164,8 @@ export async function startRecording() {
     recordTimer = setTimeout(() => stopRecording(), 60000);
     isRecording = true;
     micBtn.classList.add('recording');
-    micBtn.querySelector('.label').textContent = '녹음 중...';
-    micStatus.textContent = `${target.name}에 녹음 중 — 탭하여 중지 (최대 60초)`;
+    micBtn.querySelector('.label').textContent = t('녹음 중...');
+    micStatus.textContent = t('{name}에 녹음 중 — 탭하여 중지 (최대 60초)', { name: target.name });
     stage('recording', target.name);
   } catch (err) {
     console.error('마이크 접근 실패:', err);
@@ -184,8 +185,8 @@ export function stopRecording() {
   }
   isRecording = false;
   micBtn.classList.remove('recording');
-  micBtn.querySelector('.label').textContent = '음성 입력';
-  micStatus.textContent = '처리 중...';
+  micBtn.querySelector('.label').textContent = t('음성 입력');
+  micStatus.textContent = t('처리 중...');
   stage('processing');
 }
 
@@ -212,7 +213,7 @@ function showRetry(msg) {
   _retryTimer = setTimeout(() => {
     if (busy) return;
     dropFailedUpload();
-    micStatus.textContent = '전송하지 못했습니다. 새로 녹음해 주세요';
+    micStatus.textContent = t('전송하지 못했습니다. 새로 녹음해 주세요');
   }, RETRY_TTL_MS);
 }
 
@@ -247,11 +248,11 @@ async function sendAudio(blob, contentType, captured) {
 async function resendFailed() {
   if (!_failedUpload || busy) return;
   if (Date.now() - _failedUpload.failedAt > RETRY_TTL_MS) {
-    dropFailedUpload(); micStatus.textContent = '재전송 시간이 만료됐습니다. 새로 녹음해 주세요'; return;
+    dropFailedUpload(); micStatus.textContent = t('재전송 시간이 만료됐습니다. 새로 녹음해 주세요'); return;
   }
   busy = true;
   hideRetry();
-  micStatus.textContent = '다시 보내는 중...';
+  micStatus.textContent = t('다시 보내는 중...');
   stage('processing');
   _stopAt = performance.now();
   try { await uploadWithRetry(); } finally { busy = false; }
@@ -265,15 +266,15 @@ async function uploadWithRetry() {
     console.debug('[voice] 왕복 %dms, 서버 timing:', Math.round(performance.now() - _stopAt), data && data.timing);
     if (!res.ok) {
       // 4xx(인증·형식 거부)는 재시도하지 않는다 — 서버가 준 메시지를 그대로 보여준다.
-      micStatus.textContent = (data && data.error) || `전송 실패 (${res.status})`;
+      micStatus.textContent = (data && data.error) || t('전송 실패 ({status})', { status: res.status });
     } else if (data && data.text) {
-      micStatus.textContent = data.injected ? `입력 완료 — ${captured.name}: "${data.text}"` : `입력되지 않음 — ${data.text}`;
+      micStatus.textContent = data.injected ? t('입력 완료 — {name}: "{text}"', { name: captured.name, text: data.text }) : t('입력되지 않음 — {text}', { text: data.text });
       if (!data.injected && navigator.clipboard) {
-        const copy = document.createElement('button'); copy.className = 'vt-btn sm'; copy.textContent = '인식 텍스트 복사';
+        const copy = document.createElement('button'); copy.className = 'vt-btn sm'; copy.textContent = t('인식 텍스트 복사');
         copy.onclick = () => navigator.clipboard.writeText(data.text); micStatus.appendChild(copy);
       }
     } else {
-      micStatus.textContent = (data && data.error) || '인식 실패';
+      micStatus.textContent = (data && data.error) || t('인식 실패');
     }
     // W1-5: 핸즈프리 자동 재시작 분기 제거. 매 녹음은 명시적 클릭으로만.
     stage(res.ok && data?.injected ? 'done' : 'error');
@@ -283,10 +284,10 @@ async function uploadWithRetry() {
     if (f && ++f.attempts < MAX_FAILED_ATTEMPTS) {
       // 보관(_failedUpload)은 유지 — 버튼으로 같은 blob을 재전송한다.
       f.failedAt = Date.now();
-      showRetry('전송 실패 — ');
+      showRetry(t('전송 실패 — '));
     } else {
       dropFailedUpload();
-      micStatus.textContent = '전송하지 못했습니다. 새로 녹음해 주세요';
+      micStatus.textContent = t('전송하지 못했습니다. 새로 녹음해 주세요');
     }
     stage('error');
   }

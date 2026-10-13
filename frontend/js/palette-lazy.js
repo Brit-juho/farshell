@@ -21,6 +21,7 @@ import { loadViewer, openFile, openFileInPane } from './panels/viewer-lazy.js';
 import { setVtSkin, vtSkins, vtSkinLabel } from './theme.js';
 import { buildSessionCard, updateSessionCard } from './agent/preview.js';
 import { showToast } from './ui/toast.js';
+import { t } from './core/i18n.js';
 
 // 이름의 출처는 세션 레코드다(core/store.js의 sessionDisplayName) — 예전엔
 // 탭 DOM의 텍스트를 읽었는데, 그 DOM은 10 §4 3단계에서 사라진다.
@@ -109,7 +110,7 @@ function maybeShowRewireToast() {
     // localStorage 불가 환경(시크릿 모드 등) — 매번 뜨더라도 안내가 아예
     // 없는 것보다 낫다, 조용히 넘어가지 않는다.
   }
-  showToast('검색 단축키가 바뀌었습니다 — 예전처럼 쓰려면 설정에서 되돌릴 수 있습니다', 'info', { duration: 6000 });
+  showToast(t('검색 단축키가 바뀌었습니다 — 예전처럼 쓰려면 설정에서 되돌릴 수 있습니다'), 'info', { duration: 6000 });
 }
 
 // N40/N46 — `Mod+F`는 이제 팔레트를 `~`(스크롤백 검색) 모드로 연다.

@@ -18,6 +18,7 @@ import { screenId } from '../core/screen-id.js';
 import { E2E_ENABLED, wrapE2E, _wsQuery } from './e2e.js';
 import { fitAndResize } from './resize.js';
 import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
+import { t } from '../core/i18n.js';
 
 const TERMINAL_CLOSE_CODES = new Set([4001, 4004, 4005]);
 const STABLE_MS = 3000;
@@ -55,7 +56,7 @@ export function startSessionSocket(id, term) {
     // 여전히 지수적으로 늘어나 30초 상한까지 백오프하므로 폭풍 재발 위험은 없음.
     // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 7로 clamp.
     const delay = Math.min(250 * Math.pow(2, Math.min(_retries, 7)), 30000);
-    _setConnOverlayDetail(id, `재연결 시도 중... (${_retries}회)`);
+    _setConnOverlayDetail(id, t('재연결 시도 중... ({n}회)', { n: _retries }));
     // O1: "끊기"를 누른 상태면 사용자가 멈춘 것 — 다음 타이머를 새로 걸지 않는다.
     // "다시 연결"을 누르면 _reconnectNow()가 이 delay를 기다리지 않고 즉시 재시도한다.
     if (!s._reconnectStopped) {
@@ -114,13 +115,13 @@ export function startSessionSocket(id, term) {
           // N25(2.1.5 3/n) — tmux paste-buffer가 실패했다(죽은 pane 등).
           // 조용히 삼키지 않는다: PTY write와 달리 tmux 위임은 서버가 별도
           // 프로세스를 실행하는 것이라 실패가 예외적으로 일어날 수 있다.
-          if (typeof showToast === 'function') showToast('붙여넣기 실패 — 세션을 확인해 주세요', 'error');
+          if (typeof showToast === 'function') showToast(t('붙여넣기 실패 — 세션을 확인해 주세요'), 'error');
         } else if (msg && msg.type === 'paste_line_too_long') {
           // N26(2.1.5 4/n) — 정규(줄 단위) 모드는 한 줄 한계를 넘기면 잘리는
           // 게 아니라 그 줄이 통째로 사라진다(서버 실측) — 그래서 서버가
           // 아예 안 보냈다. 조용한 실패보다 이렇게 알리는 편이 낫다.
           if (typeof showToast === 'function') {
-            showToast(`이 프로그램은 한 줄 ${msg.max_line}자까지만 받습니다 — 파일 업로드로 경로를 넘겨보세요`, 'error');
+            showToast(t('이 프로그램은 한 줄 {n}자까지만 받습니다 — 파일 업로드로 경로를 넘겨보세요', { n: msg.max_line }), 'error');
           }
         }
       } catch (_) { /* binary or non-JSON */ }
@@ -195,13 +196,13 @@ export function startSessionSocket(id, term) {
         }
         if (code === 4001) {
           requireAuthentication();
-          _setConnOverlayDetail(id, '로그인 후 기존 화면을 복원합니다.');
+          _setConnOverlayDetail(id, t('로그인 후 기존 화면을 복원합니다.'));
           return;
         }
-        const why = code === 4001 ? '인증 실패'
-          : code === 4005 ? '다른 화면에서 이 화면을 끊음'
-            : '세션이 서버에 없음(종료됨)';
-        _setConnOverlayDetail(id, `재연결 중단 — ${why}. 탭을 닫고 새로 여세요.`);
+        const why = code === 4001 ? t('인증 실패')
+          : code === 4005 ? t('다른 화면에서 이 화면을 끊음')
+            : t('세션이 서버에 없음(종료됨)');
+        _setConnOverlayDetail(id, t('재연결 중단 — {reason}. 탭을 닫고 새로 여세요.', { reason: why }));
         return;
       }
       _scheduleRetry(s);

@@ -18,6 +18,7 @@ import { screenId } from '../core/screen-id.js';
 import { allSessions, getSession } from '../core/store.js';
 import { switchTo, addSession } from '../term/session.js';
 import { _applyCardAgent } from './badges.js';
+import { t } from '../core/i18n.js';
 
 // 카드 하나의 정적 뼈대를 만든다(제목·메타 자리·클릭 핸들러). 값 채우기는
 // updateSessionCard()가 별도로 한다 — pane-picker.js의 "매번 새로 만든다"와
@@ -57,13 +58,13 @@ export function updateSessionCard(card, sess, agentInfo) {
   import('../ui/session-context.js').then(({ contextLabel }) => {
     if (card._contextSession === sess) meta.textContent = contextLabel(sess);
   }).catch(() => { if (card._contextSession === sess) meta.textContent = sess.cwd || ''; });
-  meta.setAttribute('aria-label', `${sess.name} 작업 위치 보기`);
+  meta.setAttribute('aria-label', t('{name} 작업 위치 보기', { name: sess.name }));
   meta.onclick = (e) => { e.stopPropagation(); import('../ui/workspace-details.js').then(m => m.showWorkspaceDetails(sess)); };
   card.querySelector('.card-meta').setAttribute('data-tip', sess.cwd || '');
   // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.
   const isOpenTab = Object.values(allSessions()).some((s) => (s.tmuxName || s.tmux_name) === sess.name);
   card.classList.toggle('open-tab', isOpenTab);
-  card.setAttribute('data-tip', isOpenTab ? '이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환' : '클릭하면 이 세션에 접속');
+  card.setAttribute('data-tip', isOpenTab ? t('이미 탭으로 열려 있음 — 클릭하면 그 탭으로 전환') : t('클릭하면 이 세션에 접속'));
   if (agentInfo !== undefined) _applyCardAgent(card, agentInfo);
 }
 

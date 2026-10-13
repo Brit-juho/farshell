@@ -5,6 +5,7 @@ import { getSession } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { uploadFiles } from './upload.js';
+import { t } from '../core/i18n.js';
 
 // 시스템 클립보드에 쓰기. HTTPS/localhost가 아니면 clipboard API가 막히므로
 // execCommand('copy') 폴백을 둔다.
@@ -94,7 +95,7 @@ export async function pasteFromClipboard(id, shouldSend = () => true) {
   } catch (_) { /* 권한/비보안 컨텍스트 — 텍스트 폴백 */ }
   const text = await readClipboardText();
   if (text == null) {
-    showToast('클립보드 읽기 불가 — HTTPS/localhost에서만 가능. Cmd/Ctrl+V를 쓰세요.');
+    showToast(t('클립보드 읽기 불가 — HTTPS/localhost에서만 가능. Cmd/Ctrl+V를 쓰세요.'));
     return;
   }
   if (!shouldSend()) return;
@@ -144,7 +145,7 @@ export function claimNativePaste(id) {
   const tx = nativeTransaction;
   if (tx?.state === 'delivered' && Date.now() - tx.deliveredAt < 1000) {
     cancelPasteTransactions();
-    window.showToast?.('붙여넣기가 이미 전달되었습니다. 추가로 붙이려면 다시 실행하세요.');
+    window.showToast?.(t('붙여넣기가 이미 전달되었습니다. 추가로 붙이려면 다시 실행하세요.'));
     return false;
   }
   cancelPasteTransactions();

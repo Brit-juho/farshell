@@ -1,17 +1,18 @@
 // app.js 쪽 상태 UI. voice.js와는 DOM/이벤트로만 연결한다(공유 store 복제 금지).
 import { vtFetch } from '../core/api.js';
+import { t } from '../core/i18n.js';
 
 export function describeStt(status, catalog) {
   const model = catalog?.models?.find((m) => m.id === status.model);
-  if (!status.available) return { state: '사용 불가', detail: '이 서버에서 지원하는 음성 인식 엔진이 없습니다.', usable: false };
-  if (!status.selected_valid || !model) return { state: '모델 선택 필요', detail: '설정에서 이 서버에 맞는 모델을 선택하세요.', usable: false };
+  if (!status.available) return { state: t('사용 불가'), detail: t('이 서버에서 지원하는 음성 인식 엔진이 없습니다.'), usable: false };
+  if (!status.selected_valid || !model) return { state: t('모델 선택 필요'), detail: t('설정에서 이 서버에 맞는 모델을 선택하세요.'), usable: false };
   const missing = (model.requirements || []).filter((r) => !r.satisfied).map((r) => r.label);
-  if (!model.model_present) missing.push('음성 모델');
-  if (missing.length) return { state: '설치 필요', detail: `${model.label} · ${missing.join(', ')} 미설치`, usable: false };
+  if (!model.model_present) missing.push(t('음성 모델'));
+  if (missing.length) return { state: t('설치 필요'), detail: t('{model} · {missing} 미설치', { model: model.label, missing: missing.join(', ') }), usable: false };
   if (status.loaded && status.loaded_model === status.model) {
-    return { state: '사용 준비됨', detail: `${model.label} · 서버 메모리에 올라가 있음`, usable: true };
+    return { state: t('사용 준비됨'), detail: t('{model} · 서버 메모리에 올라가 있음', { model: model.label }), usable: true };
   }
-  return { state: '모델 준비 필요', detail: `${model.label} · 설치됨, 메모리에 올리면 녹음 가능`, usable: true };
+  return { state: t('모델 준비 필요'), detail: t('{model} · 설치됨, 메모리에 올리면 녹음 가능', { model: model.label }), usable: true };
 }
 
 export function mountVoiceStatus() {
@@ -60,8 +61,12 @@ export function mountVoiceStatus() {
   }
   function paintRecord() {
     record.disabled = phase !== 'recording' && (!usable || ['preparing', 'starting', 'processing'].includes(phase));
-    record.textContent = phase === 'recording' ? '녹음 종료' : phase === 'processing' ? '인식 중' : phase === 'preparing' ? '모델 준비 중' : phase === 'starting' ? '마이크 확인 중' : state.textContent === '모델 준비 필요' ? '모델 준비' : '녹음 시작';
-    meta.textContent = targetName ? `입력 대상: ${targetName}${phase === 'recording' ? ` · ${Math.min(60, Math.floor((Date.now() - startedAt) / 1000))}초 / 60초` : ''}` : '';
+    record.textContent = phase === 'recording' ? t('녹음 종료') : phase === 'processing' ? t('인식 중') : phase === 'preparing' ? t('모델 준비 중') : phase === 'starting' ? t('마이크 확인 중') : state.textContent === t('모델 준비 필요') ? t('모델 준비') : t('녹음 시작');
+    meta.textContent = targetName
+      ? (phase === 'recording'
+        ? t('입력 대상: {name} · {sec}초 / 60초', { name: targetName, sec: Math.min(60, Math.floor((Date.now() - startedAt) / 1000)) })
+        : t('입력 대상: {name}', { name: targetName }))
+      : '';
   }
   async function refresh() {
     if (pending) { refreshAgain = true; return; }
@@ -69,24 +74,24 @@ export function mountVoiceStatus() {
     failed = false;
     try {
       if (remote()) {
-        state.textContent = '직접 접속 필요'; detail.textContent = '원격 호스트의 음성을 쓰려면 해당 호스트에 직접 접속하세요.';
+        state.textContent = t('직접 접속 필요'); detail.textContent = t('원격 호스트의 음성을 쓰려면 해당 호스트에 직접 접속하세요.');
         usable = false;
       } else {
         const [status, catalog] = await Promise.all([vtFetch('/voice/stt/status'), vtFetch('/voice/stt/catalog')]);
         const view = describeStt(status, catalog);
         state.textContent = view.state;
         detail.textContent = view.detail;
-        if (status.last_error) detail.textContent += ` · 마지막 오류: ${status.last_error}`;
+        if (status.last_error) detail.textContent += ' · ' + t('마지막 오류: {error}', { error: status.last_error });
         usable = view.usable;
       }
     } catch (e) {
       failed = true;
-      state.textContent = '상태 확인 실패'; detail.textContent = e.status === 401 || e.status === 403 ? '로그인이 필요합니다.' : '서버 연결을 확인하세요.';
+      state.textContent = t('상태 확인 실패'); detail.textContent = e.status === 401 || e.status === 403 ? t('로그인이 필요합니다.') : t('서버 연결을 확인하세요.');
       usable = false;
     } finally {
       pending = false; refreshedAt = Date.now();
       mic?.setAttribute('data-tip-sub', state.textContent);
-      mic?.setAttribute('aria-label', `음성 입력 (탭하여 녹음) · ${state.textContent}`);
+      mic?.setAttribute('aria-label', t('음성 입력 (탭하여 녹음) · {state}', { state: state.textContent }));
       paintMic(); paintRecord(); position();
       if (refreshAgain) { refreshAgain = false; refresh(); }
     }

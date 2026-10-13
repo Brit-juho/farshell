@@ -9,6 +9,7 @@
 import { activeSessionId, activeSession, getSession } from '../core/store.js';
 import { copyToClipboard } from './clipboard.js';
 import { _isCoarsePointer } from '../core/env.js';
+import { t } from '../core/i18n.js';
 
 // 보이는 높이가 이보다 작으면 포커스 모드. 가로 폰(≈400px)에 키보드가 뜨면 200px 안팎, 세로 폰은 훨씬 크다.
 // 300px = 상단 바 + 키바(≈96px) + 터미널 몇 줄이 겨우 들어가는 하한이라 그 아래에서는 크롬이 터미널을 먹는다.
@@ -69,14 +70,14 @@ export async function _copyTerminalSelection() {
   const term = activeSession()?.term;
   const text = _activeSelectionText(term);
   if (!text.trim()) {
-    showToast('복사할 텍스트 범위를 먼저 선택하세요.');
+    showToast(t('복사할 텍스트 범위를 먼저 선택하세요.'));
     return false;
   }
   const ok = await copyToClipboard(text);
   // 성공은 말하지 않는다 — 바로 아래에서 선택 모드가 닫히는 것(선택 바가
   // 사라지고 키들 줄이 돌아온다)이 증거고, 폰에서 그 토스트는 방금 복사한
   // 그 선택 영역 위에 떴다.
-  if (!ok) showToast('클립보드에 복사하지 못했습니다.', 'error');
+  if (!ok) showToast(t('클립보드에 복사하지 못했습니다.'), 'error');
   if (ok) setTerminalSelectionMode(false);
   return ok;
 }
@@ -167,8 +168,8 @@ export function applyStickyMod(data) {
 }
 
 export function _focusActiveTerm() {
-  const t = activeSession()?.term;
-  if (t) { try { t.focus(); } catch (_) {} }
+  const term = activeSession()?.term;
+  if (term) { try { term.focus(); } catch (_) {} }
 }
 
 let initialization = null;
@@ -177,7 +178,7 @@ export function initKeybar() {
   try { force = new URLSearchParams(location.search).get('keybar') === '1' || localStorage.getItem('vt_keybar') === 'on'; } catch (_) {}
   if (!_isCoarsePointer() && !force) return Promise.resolve();
   if (!initialization) initialization = import('./keybar-ui.js').then((m) => m.initKeybarUI()).catch(() => {
-    initialization = null; window.showToast?.('키바를 불러오지 못했습니다. 화면을 새로고침하세요.', 'warn');
+    initialization = null; window.showToast?.(t('키바를 불러오지 못했습니다. 화면을 새로고침하세요.'), 'warn');
   });
   return initialization;
 }

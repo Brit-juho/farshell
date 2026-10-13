@@ -12,6 +12,7 @@ import { getSession } from '../core/store.js';
 import { applyAgentBadges } from './badges.js';
 import { applySnapshot, applyEvent, applyAgentNames } from './state.js';
 import { showToast } from '../ui/toast.js';
+import { t } from '../core/i18n.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
 // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
@@ -87,7 +88,7 @@ whenAuthed(() => (async () => {
   // 방치돼 "눌러도 반응 없음"으로만 보였다. .needs-voice를 그대로 두면
   // 사용자가 계속 죽은 버튼을 누르게 되므로 여기서 끈다.
   s.onerror = () => {
-    showToast('음성 모듈을 불러오지 못했습니다 — 서버를 다시 빌드/재시작해 보세요.', 'error');
+    showToast(t('음성 모듈을 불러오지 못했습니다 — 서버를 다시 빌드/재시작해 보세요.'), 'error');
     document.querySelectorAll('.needs-voice').forEach((el) => { el.disabled = true; });
   };
   document.body.appendChild(s);
@@ -103,7 +104,7 @@ whenAuthed(() => {
       // 드러나므로 점이 따로 필요 없다. aria-live로 스크린리더에도 알린다.
       banner.setAttribute('role', 'status');
       banner.setAttribute('aria-live', 'polite');
-      banner.textContent = '안전 모드 — 위험 명령 차단됨';
+      banner.textContent = t('안전 모드 — 위험 명령 차단됨');
       document.body.appendChild(banner);
     }
   }).catch(() => {});

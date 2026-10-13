@@ -17,6 +17,7 @@ import { closeView, renameView } from '../term/session-actions.js';
 import { icon } from '../ui/icons.js';
 import { getStatus, isUnseen, onStatusChange } from '../agent/state.js';
 import { viewSegments, segmentsTooltip, segmentsAria } from '../design/state-classes.js';
+import { t } from '../core/i18n.js';
 
 const HOST = 'vt-wtabs';
 
@@ -166,17 +167,17 @@ function render() {
   host.replaceChildren();
   _wireScroll(host);
 
-  for (const t of tabs) {
+  for (const tab of tabs) {
     const el = document.createElement('div');
-    el.className = 'vt-wtab' + (t.id === activeId ? ' active' : '');
-    el.dataset.tabId = t.id;
+    el.className = 'vt-wtab' + (tab.id === activeId ? ' active' : '');
+    el.dataset.tabId = tab.id;
     el.setAttribute('role', 'tab');
-    el.setAttribute('aria-selected', String(t.id === activeId));
-    el.tabIndex = t.id === activeId ? 0 : -1;
+    el.setAttribute('aria-selected', String(tab.id === activeId));
+    el.tabIndex = tab.id === activeId ? 0 : -1;
 
     const name = document.createElement('span');
     name.className = 'vt-wtab-name';
-    name.textContent = tabDisplayLabel(t);
+    name.textContent = tabDisplayLabel(tab);
     el.appendChild(name);
 
     const bar = document.createElement('span');
@@ -190,31 +191,31 @@ function render() {
       x.type = 'button';
       x.className = 'vt-icon-btn xs vt-wtab-close';
       x.innerHTML = icon('x', 11);
-      x.setAttribute('aria-label', `${tabDisplayLabel(t)} 닫기`);
-      x.setAttribute('data-tip', '뷰 닫기');
-      x.setAttribute('data-tip-sub', collectSessions(t.tree).length >= 2
-        ? '세션은 계속 돕니다 · 묶음 구성은 기억해 두고 레일에서 다시 열 수 있습니다'
-        : '세션은 계속 돕니다 · 레일에서 다시 열 수 있습니다');
+      x.setAttribute('aria-label', t('{name} 닫기', { name: tabDisplayLabel(tab) }));
+      x.setAttribute('data-tip', t('뷰 닫기'));
+      x.setAttribute('data-tip-sub', collectSessions(tab.tree).length >= 2
+        ? t('세션은 계속 돕니다 · 묶음 구성은 기억해 두고 레일에서 다시 열 수 있습니다')
+        : t('세션은 계속 돕니다 · 레일에서 다시 열 수 있습니다'));
       x.setAttribute('data-tip-side', 'bottom');
       x.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeView(t.id);
+        closeView(tab.id);
       });
       el.appendChild(x);
     }
 
     // 전환 + 왼쪽 위 칸의 터미널에 포커스(store.js switchLayoutTab).
     el.addEventListener('click', () => {
-      if (!switchLayoutTab(t.id)) return;
+      if (!switchLayoutTab(tab.id)) return;
       saveLayoutNow();
       const s = getSession(activeSessionId());
       if (s && s.term) s.term.focus();
     });
-    _wireDrag(el, t, host);
+    _wireDrag(el, tab, host);
     host.appendChild(el);
     // 지금 활성 탭이면 넘친 목록 밖에 숨어 있을 수 있으니 보이는 자리로
     // 끌어온다(예: 키보드로 마지막 탭까지 이동한 경우).
-    if (t.id === activeId) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (tab.id === activeId) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   _updateFade(host);
   paintTabs();

@@ -8,6 +8,7 @@ import { vtFetch, vtEsc } from '../../core/api.js';
 import { _isCoarsePointer } from '../../core/env.js';
 import { confirmDialog, alertDialog, promptDialog, openDialog, nextId } from '../../core/dialog.js';
 import { relayPath } from '../../core/host-route.js';
+import { t } from '../../core/i18n.js';
 
 // 2026-10 — session("내 기기만") 노출의 공개 주소를 쿠키 없이 열면 안내 화면만 뜬다
 // (메인 FarShell 주소를 드러내지 않으려고 — server/routes/port_proxy_app.py
@@ -28,19 +29,19 @@ async function _openUrlFor(tunnelUrl, share) {
     const d = await vtFetch('/api/tunnel/list');
     if (d && d.main && d.main.url) return shareOpenUrl(tunnelUrl, share, d.main.url);
   } catch { /* 아래로 */ }
-  showToast('그 맥의 FarShell 주소를 찾지 못했습니다 — 공개 주소로 엽니다(안내 화면이 뜰 수 있습니다)');
+  showToast(t('그 맥의 FarShell 주소를 찾지 못했습니다 — 공개 주소로 엽니다(안내 화면이 뜰 수 있습니다)'));
   return tunnelUrl;
 }
 
 // 2.2 — 노출 모드 3가지(plan-2.2/00-port-access.md §1). files.js의 공유 링크
 // 다이얼로그와 같은 화면 언어(`.vt-fl-*`)를 재사용한다 — "파일을 공유"와
 // "포트를 공개"는 사용자에게 같은 종류의 결정이라 같은 모양이어야 한다.
-const MODE_LABEL = { public: '공개', session: '내 기기만', pin: '코드' };
+const MODE_LABEL = { public: t('공개'), session: t('내 기기만'), pin: t('코드') };
 const TTLS = [
-  { v: 3600, label: '1시간' },
-  { v: 86400, label: '24시간' },
-  { v: 604800, label: '7일' },
-  { v: 2592000, label: '30일' },
+  { v: 3600, label: t('1시간') },
+  { v: 86400, label: t('24시간') },
+  { v: 604800, label: t('7일') },
+  { v: 2592000, label: t('30일') },
 ];
 
 
@@ -52,10 +53,10 @@ function showPorts(opts = {}) {
         paneHost: opts.paneHost || null,
         paneId: opts.paneId || null,
         id: 'vt-ports',
-        ariaLabel: '포트 대시보드',
+        ariaLabel: t('포트 대시보드'),
         headHTML: `
-          <div class="vt-vw-title">포트 — 실행 중인 개발 서버</div>
-          <button class="vt-btn sm vt-vw-diff" id="vt-pt-refresh" title="새로고침">새로고침</button>
+          <div class="vt-vw-title">${t('포트 — 실행 중인 개발 서버')}</div>
+          <button class="vt-btn sm vt-vw-diff" id="vt-pt-refresh" title="${t('새로고침')}">${t('새로고침')}</button>
         `,
         bodyId: 'vt-pt-body',
       });
@@ -80,10 +81,10 @@ function showPorts(opts = {}) {
     function _fmtUptime(s) {
       if (!s) return '';
       const dm = /^(\d+)-/.exec(s);
-      if (dm) return parseInt(dm[1], 10) + '일';       // "05-01:26" → "5일"
+      if (dm) return t('{n}일', { n: parseInt(dm[1], 10) });       // "05-01:26" → "5일"
       const parts = s.split(':');
-      if (parts.length === 3) return parseInt(parts[0], 10) + '시간';
-      if (parts.length === 2) return parseInt(parts[0], 10) + '분';
+      if (parts.length === 3) return t('{n}시간', { n: parseInt(parts[0], 10) });
+      if (parts.length === 2) return t('{n}분', { n: parseInt(parts[0], 10) });
       return s;
     }
 
@@ -213,7 +214,7 @@ function showPorts(opts = {}) {
       if (p.protected) {
         const lock = document.createElement('span');
         lock.className = 'vt-pt-lock';
-        lock.textContent = '보호됨';
+        lock.textContent = t('보호됨');
         lock.title = p.protected_reason;
         actions.appendChild(lock);
       } else {
@@ -225,19 +226,19 @@ function showPorts(opts = {}) {
         // quiet = 테두리 상자를 뗀다 — 목록 행 안의 동작이지 주 액션이 아니다.
         ex.className = 'vt-btn sm quiet';
         if (p.tunnel_url) {
-          ex.textContent = '미리보기';
+          ex.textContent = t('미리보기');
           ex.title = p.tunnel_url;
           ex.onclick = async () => showPortPreview(p.port, await _openUrlFor(p.tunnel_url, p.share));
         } else {
-          ex.textContent = '공개';
-          ex.title = '이 포트를 Cloudflare 터널로 인터넷에 공개합니다';
+          ex.textContent = t('공개');
+          ex.title = t('이 포트를 Cloudflare 터널로 인터넷에 공개합니다');
           ex.onclick = () => exposePort(ctx, p.port);
         }
         actions.appendChild(ex);
         if (!swipeKillOnTouch) {
           const kb = document.createElement('button');
           kb.className = 'vt-btn sm quiet danger';
-          kb.textContent = '종료';
+          kb.textContent = t('종료');
           kb.onclick = () => killPort(ctx, p.port, p.pid, p.cmd);
           actions.appendChild(kb);
         }
@@ -259,7 +260,7 @@ function showPorts(opts = {}) {
 
       const kill = document.createElement('button');
       kill.className = 'vt-pt-swipe-kill';
-      kill.textContent = '종료';
+      kill.textContent = t('종료');
       kill.onclick = () => { _closeSwipe(row); killPort(ctx, p.port, p.pid, p.cmd); };
 
       row.appendChild(kill);
@@ -284,52 +285,52 @@ async function _renderTunnelSection(ctx, body) {
   section.className = 'vt-pt-tunnel-section';
   const head = document.createElement('div');
   head.className = 'vt-pt-section';
-  head.textContent = `노출 중 · ${d.count}`;
+  head.textContent = t('노출 중 · {n}', { n: d.count });
   section.appendChild(head);
 
   const rows = d.main ? [d.main, ...d.extra] : d.extra;
-  rows.forEach((t) => {
+  rows.forEach((tn) => {
     const row = document.createElement('div');
     row.className = 'vt-pt-tunnel-row';
     // 2.2 — 모드 라벨(누가 열 수 있나) + 리스너가 못 뜬 경우의 경고(§8, ADR-31
     // 바인드 실패 시 broken). 메인 터널(d.main)은 노출 정책이 없어 mode가 없다.
-    const modeLabel = t.mode ? (MODE_LABEL[t.mode] || t.mode) : '';
+    const modeLabel = tn.mode ? (MODE_LABEL[tn.mode] || tn.mode) : '';
     row.innerHTML = `
-      <span class="vt-pt-port">:${vtEsc(String(t.port))}</span>
-      <span class="vt-pt-tunnel-label">${vtEsc(t.label)}</span>
+      <span class="vt-pt-port">:${vtEsc(String(tn.port))}</span>
+      <span class="vt-pt-tunnel-label">${vtEsc(tn.label)}</span>
       ${modeLabel ? `<span class="vt-pt-tunnel-mode">${vtEsc(modeLabel)}</span>` : ''}
-      ${t.broken ? '<span class="vt-pt-tunnel-broken" title="내부 프록시가 뜨지 못했습니다 — 지금은 접속이 안 됩니다">⚠ 고장</span>' : ''}
-      <a class="vt-pt-tunnel-url" href="${vtEsc(t.url)}" target="_blank" rel="noopener noreferrer">${vtEsc(t.url.replace(/^https:\/\//, ''))}</a>
+      ${tn.broken ? `<span class="vt-pt-tunnel-broken" title="${vtEsc(t('내부 프록시가 뜨지 못했습니다 — 지금은 접속이 안 됩니다'))}">⚠ ${vtEsc(t('고장'))}</span>` : ''}
+      <a class="vt-pt-tunnel-url" href="${vtEsc(tn.url)}" target="_blank" rel="noopener noreferrer">${vtEsc(tn.url.replace(/^https:\/\//, ''))}</a>
     `;
     // session 노출은 링크를 누를 때 /p/authorize부터 시작한다(shareOpenUrl). 표시·복사는
     // 공개 주소 그대로 — 남에게 보내면 안내 화면만 보이고 FarShell 주소는 안 드러난다.
-    if (t.mode === 'session' && t.share) {
+    if (tn.mode === 'session' && tn.share) {
       const a = row.querySelector('.vt-pt-tunnel-url');
       a.addEventListener('click', async (ev) => {
         ev.preventDefault();
-        window.open(await _openUrlFor(t.url, t.share), '_blank', 'noopener,noreferrer');
+        window.open(await _openUrlFor(tn.url, tn.share), '_blank', 'noopener,noreferrer');
       });
     }
     const actions = document.createElement('span');
     actions.className = 'vt-pt-actions';
     const copyBtn = document.createElement('button');
     copyBtn.className = 'vt-btn sm quiet';
-    copyBtn.textContent = '복사';
-    copyBtn.addEventListener('click', () => _copyText(t.url));
+    copyBtn.textContent = t('복사');
+    copyBtn.addEventListener('click', () => _copyText(tn.url));
     actions.appendChild(copyBtn);
-    if (t.mode === 'pin') {
+    if (tn.mode === 'pin') {
       const pinBtn = document.createElement('button');
       pinBtn.className = 'vt-btn sm quiet';
-      pinBtn.textContent = '코드 재발급';
-      pinBtn.title = '터널·URL은 그대로 두고 접속 코드만 새로 만듭니다';
-      pinBtn.addEventListener('click', () => reissuePin(ctx, t.port));
+      pinBtn.textContent = t('코드 재발급');
+      pinBtn.title = t('터널·URL은 그대로 두고 접속 코드만 새로 만듭니다');
+      pinBtn.addEventListener('click', () => reissuePin(ctx, tn.port));
       actions.appendChild(pinBtn);
     }
-    if (t !== d.main) {
+    if (tn !== d.main) {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'vt-btn sm quiet danger';
-      closeBtn.textContent = '해제';
-      closeBtn.addEventListener('click', () => _unexposeTunnel(ctx, t.port));
+      closeBtn.textContent = t('해제');
+      closeBtn.addEventListener('click', () => _unexposeTunnel(ctx, tn.port));
       actions.appendChild(closeBtn);
     }
     row.appendChild(actions);
@@ -341,19 +342,19 @@ async function _renderTunnelSection(ctx, body) {
 async function _copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    showToast('복사됨');
+    showToast(t('복사됨'));
   } catch {
-    showToast('복사 실패 — 직접 선택해 복사하세요');
+    showToast(t('복사 실패 — 직접 선택해 복사하세요'));
   }
 }
 
 async function _unexposeTunnel(ctx, port) {
-  if (!await confirmDialog(`포트 ${port} 터널을 해제할까요?`, { title: '터널 해제', okLabel: '해제', danger: true })) return;
+  if (!await confirmDialog(t('포트 {port} 터널을 해제할까요?', { port }), { title: t('터널 해제'), okLabel: t('해제'), danger: true })) return;
   try {
     await vtFetch(`/api/ports/${port}/expose`, { method: 'DELETE' });
-    showToast(`포트 ${port} 터널 해제됨`);
+    showToast(t('포트 {port} 터널 해제됨', { port }));
   } catch (e) {
-    showToast(`해제 실패: ${e.message}`);
+    showToast(t('해제 실패: {msg}', { msg: e.message }));
   }
   refreshPorts(ctx, true);
 }
@@ -369,7 +370,7 @@ async function _unexposeTunnel(ctx, port) {
         return;
       }
       if (!d.ports.length) {
-        body.innerHTML = '<div class="vt-vw-empty">리스닝 중인 포트가 없습니다.</div>';
+        body.innerHTML = `<div class="vt-vw-empty">${vtEsc(t('리스닝 중인 포트가 없습니다.'))}</div>`;
         await _renderTunnelSection(ctx, body);
         return;
       }
@@ -389,14 +390,14 @@ async function _unexposeTunnel(ctx, port) {
           sawMine = true;
           const head = document.createElement('div');
           head.className = 'vt-pt-section';
-          head.textContent = '내 서버';
+          head.textContent = t('내 서버');
           list.appendChild(head);
         }
         if (hasBothGroups && rep.protected && !sawProtected) {
           sawProtected = true;
           const head = document.createElement('div');
           head.className = 'vt-pt-section';
-          head.textContent = '보호됨 / 시스템';
+          head.textContent = t('보호됨 / 시스템');
           list.appendChild(head);
         }
         list.appendChild(_buildRow(ctx, rep, false));
@@ -407,20 +408,20 @@ async function _unexposeTunnel(ctx, port) {
       if (d.truncated) {
         const n = document.createElement('div');
         n.className = 'vt-vw-note warn';
-        n.textContent = '포트가 많아 일부만 표시했습니다.';
+        n.textContent = t('포트가 많아 일부만 표시했습니다.');
         body.appendChild(n);
       }
       await _renderTunnelSection(ctx, body);
     }
 
     async function killPort(ctx, port, pid, cmd) {
-      if (!await confirmDialog(`포트 ${port} (${cmd}, pid ${pid}) 를 종료할까요?`, { title: '프로세스 종료', okLabel: '종료', danger: true })) return;
+      if (!await confirmDialog(t('포트 {port} ({cmd}, pid {pid}) 를 종료할까요?', { port, cmd, pid }), { title: t('프로세스 종료'), okLabel: t('종료'), danger: true })) return;
       try {
         // pid를 함께 보낸다 — 조회 후 프로세스가 바뀌었으면 서버가 409로 거부한다.
         const r = await vtFetch(`/api/ports/${port}?pid=${pid}`, { method: 'DELETE' });
-        showToast(`포트 ${port} 종료됨 (${r.signal})`);
+        showToast(t('포트 {port} 종료됨 ({signal})', { port, signal: r.signal }));
       } catch (e) {
-        showToast(`종료 실패: ${e.message}`);
+        showToast(t('종료 실패: {msg}', { msg: e.message }));
       }
       refreshPorts(ctx, true);
     }
@@ -434,23 +435,23 @@ async function _unexposeTunnel(ctx, port) {
         let settled = false;
         const finish = () => { if (!settled) { settled = true; resolve(result); } };
         const { body } = openDialog({
-          id, title: `포트 ${port} 공개`, onClose: finish,
+          id, title: t('포트 {port} 공개', { port }), onClose: finish,
           bodyHTML: `
             <div class="vt-fl-field">
-              <div class="vt-fl-field-label">누가 열 수 있나</div>
-              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="session" checked> 내 기기만 <span class="vt-fl-hint">이 FarShell에 로그인한 기기에서만 열립니다</span></label>
-              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="pin"> 접속 코드 <span class="vt-fl-hint">서버가 코드를 만들어 보여줍니다 — 코드를 아는 사람이면 누구나</span></label>
-              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="public"> 누구나 <span class="vt-fl-hint">URL을 아는 사람 모두 — 인증 없음</span></label>
+              <div class="vt-fl-field-label">${t('누가 열 수 있나')}</div>
+              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="session" checked> ${t('내 기기만')} <span class="vt-fl-hint">${t('이 FarShell에 로그인한 기기에서만 열립니다')}</span></label>
+              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="pin"> ${t('접속 코드')} <span class="vt-fl-hint">${t('서버가 코드를 만들어 보여줍니다 — 코드를 아는 사람이면 누구나')}</span></label>
+              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="public"> ${t('누구나')} <span class="vt-fl-hint">${t('URL을 아는 사람 모두 — 인증 없음')}</span></label>
             </div>
             <div class="vt-fl-field">
-              <div class="vt-fl-field-label">만료 · 필수</div>
+              <div class="vt-fl-field-label">${t('만료 · 필수')}</div>
               <select id="vt-pt-ttl" class="vt-input lg">
-                ${TTLS.map((t) => `<option value="${t.v}"${t.v === 3600 ? ' selected' : ''}>${vtEsc(t.label)}</option>`).join('')}
+                ${TTLS.map((o) => `<option value="${o.v}"${o.v === 3600 ? ' selected' : ''}>${vtEsc(o.label)}</option>`).join('')}
               </select>
             </div>
             <div class="vt-dialog-actions">
-              <button type="button" class="vt-btn vt-dialog-cancel">취소</button>
-              <button type="button" class="vt-btn solid vt-dialog-ok">공개</button>
+              <button type="button" class="vt-btn vt-dialog-cancel">${t('취소')}</button>
+              <button type="button" class="vt-btn solid vt-dialog-ok">${t('공개')}</button>
             </div>`,
         });
         if (!body) { resolve(null); return; }
@@ -466,7 +467,7 @@ async function _unexposeTunnel(ctx, port) {
     // 승격(require_elevated) — 포트를 여는 것도 공유 링크 발급과 같은 등급의
     // 쓰기 액션이다. files.js의 elevate()와 같은 패턴(비밀번호 확인 후 재시도).
     async function elevate() {
-      const pw = await promptDialog('이 동작에는 비밀번호 확인이 필요합니다.', { title: '비밀번호 확인', password: true });
+      const pw = await promptDialog(t('이 동작에는 비밀번호 확인이 필요합니다.'), { title: t('비밀번호 확인'), password: true });
       if (pw === null) return false;
       try {
         await vtFetch('/api/auth/elevate', {
@@ -476,7 +477,7 @@ async function _unexposeTunnel(ctx, port) {
         });
         return true;
       } catch (e) {
-        showToast('비밀번호 확인 실패');
+        showToast(t('비밀번호 확인 실패'));
         return false;
       }
     }
@@ -493,13 +494,13 @@ async function _unexposeTunnel(ctx, port) {
 
     async function _showPinOnce(pin) {
       // 저장은 해시뿐이라 이 응답이 원문을 보는 유일한 기회다.
-      await alertDialog(`접속 코드: ${pin}\n\n다시 표시되지 않습니다 — 잊으면 재발급하세요.`, { title: '접속 코드' });
+      await alertDialog(t('접속 코드: {pin}\n\n다시 표시되지 않습니다 — 잊으면 재발급하세요.', { pin }), { title: t('접속 코드') });
     }
 
     async function exposePort(ctx, port) {
       const choice = await openExposeDialog(port);
       if (!choice) return;
-      showToast(`포트 ${port} 터널 여는 중…`);
+      showToast(t('포트 {port} 터널 여는 중…', { port }));
       const send = (extra) => _elevatedFetch(`/api/ports/${port}/expose`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -509,17 +510,17 @@ async function _unexposeTunnel(ctx, port) {
         // 위험 포트(Chrome 원격 디버깅 등) — 서버가 이유를 알려 준다. 한 번 더 확인받는다.
         if (e.status === 409 && e.data && e.data.error === 'dangerous_port') {
           const ok = await confirmDialog(
-            `${e.data.reason}\n\n이 포트를 공개 인터넷에 열면 접근 제어가 있어도 위험합니다. 그래도 열까요?`,
-            { title: `포트 ${port}는 위험한 포트입니다`, okLabel: '그래도 공개', danger: true });
-          if (!ok) { showToast('공개를 취소했습니다'); return null; }
-          return send({ force_danger: true }).catch((e2) => { showToast(`공개 실패: ${e2.message}`); return null; });
+            t('{reason}\n\n이 포트를 공개 인터넷에 열면 접근 제어가 있어도 위험합니다. 그래도 열까요?', { reason: e.data.reason }),
+            { title: t('포트 {port}는 위험한 포트입니다', { port }), okLabel: t('그래도 공개'), danger: true });
+          if (!ok) { showToast(t('공개를 취소했습니다')); return null; }
+          return send({ force_danger: true }).catch((e2) => { showToast(t('공개 실패: {msg}', { msg: e2.message })); return null; });
         }
-        showToast(`공개 실패: ${e.message}`);
+        showToast(t('공개 실패: {msg}', { msg: e.message }));
         return null;
       });
       if (r) {
         if (r.pin) await _showPinOnce(r.pin);
-        else showToast(r.url ? `공개됨: ${r.url}` : '공개됨');
+        else showToast(r.url ? t('공개됨: {url}', { url: r.url }) : t('공개됨'));
       }
       // L5: 성공하면 그 행의 버튼이 "공개"→"미리보기"로 바뀌어야 하니 목록을 새로 받는다.
       refreshPorts(ctx, true);
@@ -527,7 +528,7 @@ async function _unexposeTunnel(ctx, port) {
 
     async function reissuePin(ctx, port) {
       const r = await _elevatedFetch(`/api/ports/${port}/share/pin`, { method: 'POST' })
-        .catch((e) => { showToast(`재발급 실패: ${e.message}`); return null; });
+        .catch((e) => { showToast(t('재발급 실패: {msg}', { msg: e.message })); return null; });
       if (r?.pin) await _showPinOnce(r.pin);
       refreshPorts(ctx, true);
     }
@@ -540,14 +541,14 @@ async function _unexposeTunnel(ctx, port) {
     function showPortPreview(port, url) {
       const panel = openPanel({
         id: 'vt-pt-preview',
-        ariaLabel: `포트 ${port} 미리보기`,
+        ariaLabel: t('포트 {port} 미리보기', { port }),
         extraClass: 'mode-preview',
         headHTML: `
-          <div class="vt-vw-title">포트 ${port} 미리보기</div>
-          <a class="vt-btn sm vt-vw-diff" href="${vtEsc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기</a>
+          <div class="vt-vw-title">${vtEsc(t('포트 {port} 미리보기', { port }))}</div>
+          <a class="vt-btn sm vt-vw-diff" href="${vtEsc(url)}" target="_blank" rel="noopener noreferrer">${vtEsc(t('새 탭에서 열기'))}</a>
         `,
         bodyId: 'vt-pt-preview-body',
-        bodyHTML: `<iframe src="${vtEsc(url)}" title="포트 ${port} 미리보기" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>`,
+        bodyHTML: `<iframe src="${vtEsc(url)}" title="${vtEsc(t('포트 {port} 미리보기', { port }))}" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>`,
       });
       if (!panel) return;
     }

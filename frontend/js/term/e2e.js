@@ -6,6 +6,7 @@
 import { VT_TOKEN } from '../core/env.js';
 import { relayHost } from '../core/host-route.js';
 import { confirmDialog, alertDialog } from '../core/dialog.js';
+import { t } from '../core/i18n.js';
 
 const _urlParams = new URLSearchParams(location.search);
 const _hashParams = new URLSearchParams(location.hash.slice(1));
@@ -54,10 +55,8 @@ function _e2eSetPinned(identityPub) {
 // 무게는 문장 자체가 지게 한다 — 보안 경고에 장식은 필요 없다.
 function _e2eConfirmRetrust(newIdentityPub) {
   return confirmDialog(
-    '이 서버의 E2E 암호화 identity 키가 이전과 다릅니다.\n' +
-    '서버를 재설치했거나 키를 재발급했다면 정상이지만, 중간자 공격(MITM)일 수도 있습니다.\n\n' +
-    '새 키를 신뢰하고 계속하시겠습니까? (신뢰하지 않으면 연결을 종료합니다)',
-    { title: 'E2E identity 키 변경', okLabel: '신뢰하고 계속', cancelLabel: '연결 종료', danger: true }
+    t('이 서버의 E2E 암호화 identity 키가 이전과 다릅니다.\n서버를 재설치했거나 키를 재발급했다면 정상이지만, 중간자 공격(MITM)일 수도 있습니다.\n\n새 키를 신뢰하고 계속하시겠습니까? (신뢰하지 않으면 연결을 종료합니다)'),
+    { title: t('E2E identity 키 변경'), okLabel: t('신뢰하고 계속'), cancelLabel: t('연결 종료'), danger: true }
   );
 }
 
@@ -80,7 +79,7 @@ export function wrapE2E(ws, onReady, onData, onE2EError) {
     console.error('[E2E]', msg);
     try { ws.close(); } catch {}
     if (typeof onE2EError === 'function') onE2EError(msg);
-    else alertDialog('E2E 암호화 핸드셰이크 실패: ' + msg, { title: 'E2E 오류' });
+    else alertDialog(t('E2E 암호화 핸드셰이크 실패: {reason}', { reason: msg }), { title: t('E2E 오류') });
   };
   let sharedKey = null;
   // 재신뢰 확인이 비동기(커스텀 다이얼로그)로 바뀌면서, 응답을 기다리는 동안
@@ -100,7 +99,7 @@ export function wrapE2E(ws, onReady, onData, onE2EError) {
       // identity_pub/sig가 없는 서버(구버전) — 서명 검증 없이 진행하면 능동 MITM을
       // 막을 수 없으므로 명시적으로 거부한다. 조용한 평문 폴백은 하지 않는다.
       if (!msg.identity_pub || !msg.sig) {
-        fail('서버가 identity 서명을 보내지 않았습니다 (구버전 서버 또는 변조된 응답)');
+        fail(t('서버가 identity 서명을 보내지 않았습니다 (구버전 서버 또는 변조된 응답)'));
         return;
       }
       let ephemeralPub, identityPub, sig;
@@ -109,12 +108,12 @@ export function wrapE2E(ws, onReady, onData, onE2EError) {
         identityPub = _b64uDec(msg.identity_pub);
         sig = _b64uDec(msg.sig);
       } catch {
-        fail('e2e-hello 페이로드 디코딩 실패');
+        fail(t('e2e-hello 페이로드 디코딩 실패'));
         return;
       }
       // Ed25519 서명 검증: identity_pub이 실제로 이 ephemeral 공개키에 서명했는가.
       if (!nacl.sign.detached.verify(ephemeralPub, sig, identityPub)) {
-        fail('서명 검증 실패 — ephemeral 공개키가 identity 키로 서명되지 않았습니다 (MITM 의심)');
+        fail(t('서명 검증 실패 — ephemeral 공개키가 identity 키로 서명되지 않았습니다 (MITM 의심)'));
         return;
       }
       // TOFU 핀닝: 첫 접속이면 신뢰하고 저장, 이후 접속은 대조.
@@ -125,7 +124,7 @@ export function wrapE2E(ws, onReady, onData, onE2EError) {
         if (await _e2eConfirmRetrust(msg.identity_pub)) {
           _e2eSetPinned(msg.identity_pub);
         } else {
-          fail('identity 키 변경을 사용자가 거부했습니다 — 연결을 중단합니다');
+          fail(t('identity 키 변경을 사용자가 거부했습니다 — 연결을 중단합니다'));
           return;
         }
       }

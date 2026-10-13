@@ -6,6 +6,8 @@
 // provider가 없으면 사용량 칩이 아예 없고, 터널이 안 돌면 터널 칩이 없다.
 // "없음"이나 "—"를 그리지 않는다 — 2.0의 usage 게이팅과 같은 원칙이다.
 
+import { t } from '../core/i18n.js';
+
 export type HudTone = 'ok' | 'warn' | 'err' | 'plain';
 
 export interface HudChip {
@@ -95,7 +97,7 @@ export function formatResetsIn(sec: number | null | undefined): string {
   const m = Math.floor((sec % 3600) / 60);
   if (h > 0) return `${h}h${m}m`;
   if (m > 0) return `${m}m`;
-  return '곧';
+  return t('곧');
 }
 
 // 사용량 프로필 하나 → 칩 하나. 창(window)이 여럿이면 **가장 많이 쓴 것**을
@@ -116,7 +118,7 @@ function usageChip(p: UsageProfile): HudChip | null {
     id: `usage:${name}`,
     label: name,
     value: `${pct}%`,
-    hint: resets ? `· ${resets} 후 초기화` : undefined,
+    hint: resets ? t('· {resets} 후 초기화', { resets }) : undefined,
     tone,
     action: 'usage.open',
     side: 'right',
@@ -134,7 +136,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
   if (input.caps) {
     chips.push({
       id: 'server',
-      label: '서버',
+      label: t('서버'),
       value: input.port ? `:${input.port}` : '',
       tone: 'ok',
       dot: true,
@@ -148,7 +150,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
   }
 
   if (input.safeMode?.enabled) {
-    chips.push({ id: 'safe-mode', label: '세이프모드', value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
+    chips.push({ id: 'safe-mode', label: t('세이프모드'), value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
   }
 
   // 연결된 화면 — 2.0에서는 clients.length < 2면 패널 자체를 숨겨서 "내 화면
@@ -157,7 +159,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
   if (typeof input.screens === 'number' && input.screens > 0) {
     chips.push({
       id: 'screens',
-      label: '연결된 화면',
+      label: t('연결된 화면'),
       value: String(input.screens),
       // 나 말고 다른 화면이 붙어 있으면 주의 색 — tmux가 가장 작은 클라이언트에
       // 맞춰 리레이아웃하므로 "화면이 오락가락"의 원인이 바로 이 상태다.

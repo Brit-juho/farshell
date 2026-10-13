@@ -13,6 +13,7 @@ import { _viewerState, _setMsg, _ICON_CHEVRON, _ICON_INSERT } from './state.js';
 import { _loadRecent, _pushRecent, _clearRecent } from './recent.js';
 import { _fmtSize } from './file.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
+import { t } from '../../core/i18n.js';
 
 const PANEL_ID = 'vt-dir';
 
@@ -27,12 +28,12 @@ export async function showTree(opts = {}) {
     paneHost: opts.paneHost || null,
     paneId: opts.paneId || null,
     id: PANEL_ID,
-    ariaLabel: '파일',
-    headHTML: '<div class="vt-vw-title">파일</div>'
-      + `<button type="button" class="vt-icon-btn" id="vt-dir-here" title="현재 터미널 위치로 열기">${icon('terminal', 14)}</button>`
-      + '<button type="button" class="vt-btn sm vt-vw-diff" id="vt-dir-refresh" title="새로고침">새로고침</button>',
+    ariaLabel: t('파일'),
+    headHTML: `<div class="vt-vw-title">${t('파일')}</div>`
+      + `<button type="button" class="vt-icon-btn" id="vt-dir-here" title="${t('현재 터미널 위치로 열기')}">${icon('terminal', 14)}</button>`
+      + `<button type="button" class="vt-btn sm vt-vw-diff" id="vt-dir-refresh" title="${t('새로고침')}">${t('새로고침')}</button>`,
     extraHTML: '<input class="vt-vw-path" id="vt-dir-path" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" '
-      + 'title="경로를 입력하고 Enter — 이 위치를 최상단으로 엽니다">',
+      + `title="${t('경로를 입력하고 Enter — 이 위치를 최상단으로 엽니다')}">`,
     bodyId: 'vt-dir-body',
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
@@ -51,7 +52,7 @@ export async function showTree(opts = {}) {
 
   const insertToTerminal = (path) => {
     if (typeof window.activeSession !== 'function' || !window.activeSession()) {
-      showToast('열려 있는 터미널 세션이 없습니다');
+      showToast(t('열려 있는 터미널 세션이 없습니다'));
       return;
     }
     window.sendToPty(window.activeSessionId(), path + ' ');
@@ -60,14 +61,14 @@ export async function showTree(opts = {}) {
 
   const openAtTerminalCwd = async () => {
     const s = typeof window.activeSession === 'function' ? window.activeSession() : null;
-    if (!s) { showToast('열려 있는 터미널 세션이 없습니다'); return; }
+    if (!s) { showToast(t('열려 있는 터미널 세션이 없습니다')); return; }
     const tmuxName = s.tmuxName || s.tmux_name;
-    if (!tmuxName) { showToast('현재 세션은 tmux 세션이 아니라 위치를 알 수 없습니다'); return; }
+    if (!tmuxName) { showToast(t('현재 세션은 tmux 세션이 아니라 위치를 알 수 없습니다')); return; }
     let list;
     try { list = await vtFetch('/api/tmux/sessions'); }
-    catch (e) { showToast(`위치 확인 실패: ${e.message}`); return; }
+    catch (e) { showToast(t('위치 확인 실패: {msg}', { msg: e.message })); return; }
     const info = (list || []).find((t) => t.name === tmuxName);
-    if (!info || !info.cwd) { showToast('현재 터미널 위치를 확인할 수 없습니다'); return; }
+    if (!info || !info.cwd) { showToast(t('현재 터미널 위치를 확인할 수 없습니다')); return; }
     await navigateRoot(info.cwd);
   };
 
@@ -85,11 +86,11 @@ export async function showTree(opts = {}) {
     const head = document.createElement('div');
     head.className = 'vt-vw-recent-head';
     const label = document.createElement('span');
-    label.textContent = '최근';
+    label.textContent = t('최근');
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'vt-vw-recent-clear';
-    clear.textContent = '지우기';
+    clear.textContent = t('지우기');
     clear.addEventListener('click', (e) => { e.stopPropagation(); _clearRecent(); sec.remove(); });
     head.appendChild(label);
     head.appendChild(clear);
@@ -138,7 +139,7 @@ export async function showTree(opts = {}) {
       const insert = document.createElement('button');
       insert.type = 'button';
       insert.className = 'vt-icon-btn xs vt-vw-row-insert';
-      insert.title = '터미널에 경로 삽입';
+      insert.title = t('터미널에 경로 삽입');
       insert.innerHTML = _ICON_INSERT;
       insert.addEventListener('click', (e) => { e.stopPropagation(); insertToTerminal(path); });
       row.appendChild(insert);
@@ -186,7 +187,7 @@ export async function showTree(opts = {}) {
       treeEl.appendChild(frag);
       const empty = document.createElement('div');
       empty.className = 'vt-vw-empty';
-      empty.textContent = '빈 디렉토리';
+      empty.textContent = t('빈 디렉토리');
       treeEl.appendChild(empty);
       return;
     }
@@ -198,7 +199,7 @@ export async function showTree(opts = {}) {
       const note = document.createElement('div');
       note.className = 'vt-vw-note warn';
       note.style.setProperty('--d', 0);
-      note.textContent = `항목이 많아 일부만 표시했습니다 (최대 ${data.entries.length}개)`;
+      note.textContent = t('항목이 많아 일부만 표시했습니다 (최대 {n}개)', { n: data.entries.length });
       frag.appendChild(note);
     }
     treeEl.appendChild(frag);
@@ -220,7 +221,7 @@ export async function showTree(opts = {}) {
       chev.innerHTML = prevIcon;
       row.classList.remove('open');
       _viewerState.expanded.delete(path);
-      showToast(`목록을 불러오지 못했습니다: ${e.message}`);
+      showToast(t('목록을 불러오지 못했습니다: {msg}', { msg: e.message }));
       return;
     }
     chev.innerHTML = prevIcon;   // 펼쳐진 화살표 방향은 .open의 CSS 회전이 담당한다
@@ -239,14 +240,14 @@ export async function showTree(opts = {}) {
       const note = document.createElement('div');
       note.className = 'vt-vw-note warn';
       note.style.setProperty('--d', depth + 1);
-      note.textContent = `일부만 표시했습니다 (최대 ${data.entries.length}개)`;
+      note.textContent = t('일부만 표시했습니다 (최대 {n}개)', { n: data.entries.length });
       frag.appendChild(note);
     }
     if (!entries.length && !data.truncated) {
       const empty = document.createElement('div');
       empty.className = 'vt-vw-empty';
       empty.style.setProperty('--d', depth + 1);
-      empty.textContent = '빈 디렉토리';
+      empty.textContent = t('빈 디렉토리');
       frag.appendChild(empty);
     }
     return frag;
@@ -335,7 +336,7 @@ export async function showTree(opts = {}) {
     try {
       data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(path)}`);
     } catch (e) {
-      showToast(`이동할 수 없습니다: ${e.message}`);
+      showToast(t('이동할 수 없습니다: {msg}', { msg: e.message }));
       return false;
     }
     _viewerState.root = path;
@@ -367,7 +368,7 @@ export async function showTree(opts = {}) {
 
   panel.el._vtOnClose = _unwatchAll;
 
-  body.innerHTML = '<div class="vt-vw-loading">불러오는 중…</div>';
+  body.innerHTML = `<div class="vt-vw-loading">${t('불러오는 중…')}</div>`;
   let startRoot = _viewerState.root;
   if (!startRoot) {
     try {
@@ -376,7 +377,7 @@ export async function showTree(opts = {}) {
     } catch (_) { startRoot = null; }
   }
   if (!startRoot) {
-    _setMsg(body, 'vt-vw-empty', ['열람 가능한 위치를 찾을 수 없습니다']);
+    _setMsg(body, 'vt-vw-empty', [t('열람 가능한 위치를 찾을 수 없습니다')]);
     return;
   }
 
