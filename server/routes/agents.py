@@ -387,6 +387,19 @@ async def agent_event(request: Request):
             except Exception as e:
                 logger.warning(f"큐 드레인 예약 실패: {e}")
 
+    # 위임 — 자식 세션의 턴 종료·승인 대기를 부모에게 알린다(delegation.py). 실패가 훅 응답을 막으면 안 된다.
+    _deleg_session = session or (state or {}).get("tmux_session")
+    _deleg_status = (state or {}).get("status")
+    if _deleg_session and _deleg_status in (agent_status.DONE, agent_status.WAITING, agent_status.WORKING):
+        try:
+            import delegation
+            if _deleg_status == agent_status.WORKING:
+                await asyncio.to_thread(delegation.on_child_working, _deleg_session)
+            else:
+                await asyncio.to_thread(delegation.on_agent_event, _deleg_session, _deleg_status, payload)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"위임 이벤트 처리 실패: {e}")
+
     public_state = agent_status.public_entry(state) if state else state
     msg = {"type": "agent_event", "event": event, "state": public_state, "resolved_by": how}
     dead = set()

@@ -250,9 +250,16 @@ def test_mcp_initialize_and_tools_list():
                   "params": {"protocolVersion": "2025-06-18"}})
     assert r["result"]["protocolVersion"] == "2025-06-18"
     assert "tools" in r["result"]["capabilities"]
-    names = [t["name"] for t in m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
+    # 서버에 닿지 않으면(역할을 모르면) 전부 보여 준다 — 판단은 서버가 다시 한다.
+    m_api = m._api
+    m._api = lambda *a, **k: (0, {})
+    try:
+        names = [t["name"] for t in m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
+    finally:
+        m._api = m_api
     assert names == ["list_agents", "send_message", "read_messages",
-                     "list_shared_sessions", "read_session", "send_to_session"]
+                     "list_shared_sessions", "read_session", "send_to_session",
+                     "spawn_session", "send_to_child", "close_delegation", "report_back", "list_delegations"]
     assert m.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
     assert m.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})["error"]["code"] == -32601
 

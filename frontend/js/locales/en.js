@@ -1536,6 +1536,7 @@ window.__VT_I18N = {
   "사용법: codex_hooks.py [status|install|uninstall|duplicates|dedupe]": "Usage: codex_hooks.py [status|install|uninstall|duplicates|dedupe]",
   "사용법: codex_hooks.py dedupe [--dry-run]": "Usage: codex_hooks.py dedupe [--dry-run]",
   "사용법: fsh clauth [status|which]": "Usage: fsh clauth [status|which]",
+  "사용법: fsh delegate [ls|close <id>]": "Usage: fsh delegate [ls|close <id>]",
   "사용법: fsh device [list|rename <id> <별명>|revoke <id>|prune]": "Usage: fsh device [list|rename <id> <name>|revoke <id>|prune]",
   "사용법: fsh device rename <id앞자리> <별명>": "Usage: fsh device rename <id-prefix> <name>",
   "사용법: fsh device revoke <id앞자리>": "Usage: fsh device revoke <id-prefix>",

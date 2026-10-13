@@ -64,6 +64,7 @@ from routes.peer_relay import router as peer_relay_router
 from routes.host_relay import router as host_relay_router
 from routes.agent_msg import router as agent_msg_router
 from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
+from routes.delegation import router as delegation_router, human_router as delegation_human_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -375,6 +376,9 @@ async def lifespan(_app: FastAPI):
     # 큐 재시도·멈춤 점검. 기동 시 지난 프로세스가 남긴 sending 항목부터 정리한다.
     import queue_runner
     queue_sweep_task = asyncio.create_task(queue_runner.sweep_loop())
+    # 위임 점검 — 세션이 사라진 위임 정리, 재시작 전에 못 보낸 결과 재전송.
+    import delegation
+    delegation_sweep_task = asyncio.create_task(delegation.sweep_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -396,6 +400,9 @@ async def lifespan(_app: FastAPI):
         queue_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await queue_sweep_task
+        delegation_sweep_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await delegation_sweep_task
         await port_proxy.shutdown_all()
         from voice_sessions import coordinator
         await coordinator.close()
@@ -523,6 +530,8 @@ app.include_router(host_relay_router)
 app.include_router(agent_msg_router)
 app.include_router(agent_share_router)
 app.include_router(agent_share_human_router)
+app.include_router(delegation_router)
+app.include_router(delegation_human_router)
 app.include_router(mcp_router)
 app.include_router(mcp_elevated_router)
 

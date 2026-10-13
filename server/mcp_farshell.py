@@ -104,6 +104,56 @@ TOOLS = [
 ]
 
 
+DELEGATION_TOOLS = [
+    {
+        "name": "spawn_session",
+        "description": (
+            "하위 세션을 하나 만들어 작업을 맡긴다. 새 tmux 세션에 에이전트(claude 또는 codex)를 기본 권한으로 "
+            "띄우고 task를 첫 지시로 넣는다. 사용자는 폰·브라우저에서 그 세션을 보고 끼어들 수 있다. "
+            "결과는 나중에 이 세션의 입력으로 '[위임 결과 …]' 형태로 도착한다 — 폴링하지 말고 다른 일을 계속하라. "
+            "하위 세션은 다시 하위 세션을 만들 수 없고, 열린 하위 세션은 3개까지다. 거부되면 다시 요청하지 말고 직접 처리하라."),
+        "inputSchema": {"type": "object", "properties": {
+            "task": {"type": "string", "description": "맡길 일. 여러 줄 가능. 혼자서 끝낼 수 있게 구체적으로"},
+            "title": {"type": "string", "description": "세션 이름(영숫자·-·_ 40자 이하). 비우면 자동"},
+            "agent": {"type": "string", "enum": ["claude", "codex"], "description": "비우면 이 세션과 같은 것"},
+            "cwd": {"type": "string", "description": "작업 폴더 절대 경로. 비우면 이 세션의 현재 폴더"},
+            "worktree": {"type": "object", "properties": {"branch": {"type": "string"}}, "required": ["branch"],
+                         "description": "주면 이 세션의 HEAD에서 새 git worktree를 만들어 거기서 일한다"}},
+            "required": ["task"], "additionalProperties": False},
+    },
+    {
+        "name": "send_to_child",
+        "description": "내가 만든 하위 세션에 추가 지시를 보낸다. 하위 에이전트가 작업 중이면 끝난 뒤에 들어간다.",
+        "inputSchema": {"type": "object", "properties": {
+            "delegation": {"type": "string"}, "text": {"type": "string"}},
+            "required": ["delegation", "text"], "additionalProperties": False},
+    },
+    {
+        "name": "close_delegation",
+        "description": "내가 맡긴 위임을 닫는다. 세션은 지우지 않고 남겨 둔다(사용자가 결과를 확인한 뒤 닫는다). 열린 하위 세션 수에서 빠진다.",
+        "inputSchema": {"type": "object", "properties": {"delegation": {"type": "string"}},
+                        "required": ["delegation"], "additionalProperties": False},
+    },
+    {
+        "name": "report_back",
+        "description": ("이 세션이 다른 세션에게서 위임받은 작업의 결과를 보고한다. 위임 하나에 한 번만 된다. "
+                        "실패했어도 outcome=failed로 보고하라."),
+        "inputSchema": {"type": "object", "properties": {
+            "outcome": {"type": "string", "enum": ["succeeded", "failed"]},
+            "summary": {"type": "string", "description": "결과 요약(무엇을 했고, 어디에 있고, 남은 일). 4KB 넘으면 잘려서 전달된다"}},
+            "required": ["outcome", "summary"], "additionalProperties": False},
+    },
+    {
+        "name": "list_delegations",
+        "description": "내가 맡긴 위임과 나에게 맡겨진 위임의 상태. 보고 전문(summary)도 여기서 읽는다.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+]
+TOOLS = TOOLS + DELEGATION_TOOLS
+_PARENT_ONLY = {"spawn_session", "send_to_child", "close_delegation"}
+_CHILD_ONLY = {"report_back"}
+
+
 def _config() -> tuple[str, str]:
     env = dict(os.environ)
     try:
@@ -264,7 +314,75 @@ def tool_send_to_session(args: dict) -> tuple[str, bool]:
     return _share_result(status, data, fmt)
 
 
+def _deleg_result(status: int, data: dict, ok_text) -> tuple[str, bool]:
+    if 200 <= status < 300:
+        return ok_text(data), False
+    return f"실패: {_fail(status, data)}", True
+
+
+def tool_spawn_session(args: dict) -> tuple[str, bool]:
+    body = {k: args[k] for k in ("task", "title", "agent", "cwd", "worktree") if args.get(k)}
+    status, data = _api("POST", "/api/delegations", body, headers=_identity_headers())
+    return _deleg_result(status, data, lambda d: (
+        f"하위 세션 '{d['child']}'을 만들었습니다(위임 {d['delegation']}, {d['agent']}, {d['cwd']}). "
+        f"결과는 이 세션의 입력으로 도착합니다. 기다리며 폴링하지 말고 다른 일을 계속하세요."))
+
+
+def tool_send_to_child(args: dict) -> tuple[str, bool]:
+    did = str(args.get("delegation") or "")
+    status, data = _api("POST", f"/api/delegations/{urllib.parse.quote(did, safe='')}/send",
+                        {"text": args.get("text", "")}, headers=_identity_headers())
+    return _deleg_result(status, data, lambda d: "보냈습니다. 하위 에이전트가 작업 중이면 끝난 뒤에 들어갑니다.")
+
+
+def tool_close_delegation(args: dict) -> tuple[str, bool]:
+    did = str(args.get("delegation") or "")
+    status, data = _api("POST", f"/api/delegations/{urllib.parse.quote(did, safe='')}/close", {},
+                        headers=_identity_headers())
+    return _deleg_result(status, data, lambda d: "닫았습니다. 세션은 남아 있습니다.")
+
+
+def tool_report_back(args: dict) -> tuple[str, bool]:
+    body = {"outcome": args.get("outcome", ""), "summary": args.get("summary", "")}
+    status, data = _api("POST", "/api/delegations/report", body, headers=_identity_headers())
+    return _deleg_result(status, data, lambda d: "보고했습니다. 부모 세션에 전달됩니다.")
+
+
+def tool_list_delegations(args: dict) -> tuple[str, bool]:
+    status, data = _api("GET", "/api/delegations", headers=_identity_headers())
+    if status != 200:
+        return f"실패: {_fail(status, data)}", True
+    rows = []
+    for x in data.get("items", []):
+        who = f"→ {x['child']}" if x.get("role") == "parent" else f"← {x['parent']}(나에게 맡김)"
+        oc = f"/{x['outcome']}" if x.get("outcome") else ""
+        rows.append(f"- {x['id']} {who} [{x['state']}{oc}] {x.get('task_preview', '')}")
+        if x.get("summary"):
+            rows.append(f"  보고: {x['summary']}")
+    return "\n".join(rows) or "위임이 없습니다", False
+
+
+def tools_for_caller() -> list[dict]:
+    """깊이 한도에 닿은 하위 세션에는 만들기 도구를 아예 보여주지 않는다(서버도 막는다)."""
+    status, data = _api("GET", "/api/delegations/role", headers=_identity_headers())
+    if status != 200:
+        return TOOLS
+    hide = set()
+    if data.get("is_child"):
+        hide |= _PARENT_ONLY
+    else:
+        hide |= _CHILD_ONLY
+        if not data.get("can_spawn"):
+            hide.add("spawn_session")
+    return [t for t in TOOLS if t["name"] not in hide]
+
+
 HANDLERS = {
+    "spawn_session": tool_spawn_session,
+    "send_to_child": tool_send_to_child,
+    "close_delegation": tool_close_delegation,
+    "report_back": tool_report_back,
+    "list_delegations": tool_list_delegations,
     "list_shared_sessions": tool_list_shared_sessions,
     "read_session": tool_read_session,
     "send_to_session": tool_send_to_session,
@@ -290,7 +408,7 @@ def handle(req: dict) -> dict | None:
     if method == "ping":
         return {"jsonrpc": "2.0", "id": rid, "result": {}}
     if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": rid, "result": {"tools": TOOLS}}
+        return {"jsonrpc": "2.0", "id": rid, "result": {"tools": tools_for_caller()}}
     if method == "tools/call":
         params = req.get("params") or {}
         fn = HANDLERS.get(params.get("name"))

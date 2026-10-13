@@ -327,6 +327,7 @@ _t_en_lookup() {
     '사용: prefix + {key}  (default prefix: Ctrl+b)') _T_OUT='Use: prefix + {key}  (default prefix: Ctrl+b)' ;;
     '사용법:') _T_OUT='Usage:' ;;
     '사용법: fsh clauth [status|which]') _T_OUT='Usage: fsh clauth [status|which]' ;;
+    '사용법: fsh delegate [ls|close <id>]') _T_OUT='Usage: fsh delegate [ls|close <id>]' ;;
     '사용법: fsh device [list|rename <id> <별명>|revoke <id>|prune]') _T_OUT='Usage: fsh device [list|rename <id> <name>|revoke <id>|prune]' ;;
     '사용법: fsh device rename <id앞자리> <별명>') _T_OUT='Usage: fsh device rename <id-prefix> <name>' ;;
     '사용법: fsh device revoke <id앞자리>') _T_OUT='Usage: fsh device revoke <id-prefix>' ;;

@@ -272,6 +272,20 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | POST | `/api/peer/sessions/kill` | Signed, **`control` level** — end a tmux session on this host (JSON: `name`). Matched **exactly** (`-t =name`): plain `-t name` falls back to a prefix match, so `dev` would kill `dev-2`. Missing → 404 (`error: session_not_found`). Also cleans up this host's own web tab on that session (reuses the local kill) |
 | POST | `/api/peer/sessions/rename` | Signed, **`control` level** — rename a tmux session on this host (JSON: `name`, `new`). Exact match on the target, 409 if `new` exists, and this host's own web-session record follows the new name |
 
+## Agent delegation (2026-10-13)
+
+Agent endpoints only: machine token **plus the same caller identity as session sharing** (`X-Fsh-Pane`/`X-Fsh-Tmux`/`X-Fsh-Pid`, see below); failure → 403 `identity_unverified`. Not in the relay allowlist. Errors are `{error, reason}`. Design: `docs/ref/agents.md` «Agent delegation».
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/delegations/role` | `{enabled, is_child, can_spawn, delegation}` for the caller — the MCP uses it to hide tools |
+| GET | `/api/delegations` | Delegations where the caller is parent or child: `{items:[{id, state, role, parent, child, agent, task_preview, outcome?, summary?, created_at, reported_at?, closed_at?, close_reason?, cwd}]}` |
+| POST | `/api/delegations` | Spawn. JSON `{task, title?, agent?: claude\|codex, cwd?, worktree?: {branch}}` → `{ok, delegation, child, agent, cwd}`. 403 `depth_limit` / `spawn_disabled`, 429 `child_limit` / `rate_limited`, 413 `task_too_long`, 400 `bad_agent`/`bad_title`/`bad_cwd`/`bad_branch`/`empty_task`/`worktree_failed`, 409 `name_taken`, 503 `tmux_unavailable`, 500 `store_corrupt` |
+| POST | `/api/delegations/report` | Child only. JSON `{outcome: succeeded\|failed, summary}`. 403 `not_delegated`, 409 `already_reported` (once per delegation) |
+| POST | `/api/delegations/{did}/send` | Parent only. JSON `{text}` → queued for the child. 404 `not_found` (also for someone else's delegation), 409 `delegation_closed`, 413 `text_too_long` |
+| POST | `/api/delegations/{did}/close` | Parent only. Closes the record, drops undelivered instructions, keeps the session → `{ok, removed_queued}` |
+| POST | `/api/delegations/{did}/close-by-user` | **Human only** (browser login session; machine token → 403). Same as close, for the rail row menu 「위임 닫기」 |
+
 ## Agent session sharing (2026-10-06 — agents work only in sessions the user shared)
 
 Two audiences, two kinds of caller. **Agent endpoints** take the machine token (`Authorization: Bearer`) **plus caller identity** (below). **User endpoints** take the **browser login session cookie only** — the machine token, `?token=`, a peer signature or an unauthenticated call all get **403 `human_session_required`** (`auth.require_human_session`, the same dependency on the whole router). An agent holds the machine token, so it must never be the thing that approves its own access. None of these paths is in the host-switch relay allowlist, and the peer namespace has no route for them: other Macs cannot use the feature.

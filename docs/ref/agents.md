@@ -194,14 +194,27 @@ One agent sends a message to another agent's tmux session, on this Mac or a pair
   - A reply that arrived was read as a new request and answered again (hop 2). Replies now carry a different header ("답장 … 다시 답할 필요가 없습니다"); only requests tell the agent how to answer. The hop limit stays as the backstop.
   - A freshly started agent had no status entry, so messages waited until a human typed the first prompt. `SessionStart` (startup/resume/clear) now marks the session idle and drains **only items that name that session** (`targeted_only`) — untargeted queue items still belong to whichever agent stops first. Re-run `fsh hooks install` (or `install.sh`) so existing machines register the new hook.
 
+## Agent delegation (MCP, 2026-10-13)
+
+An agent hands work to a **sub-session** it creates and gets the result back as a queue item. Design and the reference survey behind it: `docs/plan-2.4/50-agent-delegation.md`; code: `server/delegation.py`, `server/routes/delegation.py`; endpoints: `API.md` «Agent delegation».
+
+- **Tools** (`fsh mcp`): `spawn_session {task, title?, agent?, cwd?, worktree?:{branch}}`, `send_to_child {delegation, text}`, `close_delegation {delegation}`, `report_back {outcome, summary}`, `list_delegations`. `tools/list` asks the server for the caller's role: a sub-session never sees the spawn/send/close tools, a non-child never sees `report_back`.
+- **Ownership lives in `~/.vt/delegations.json` only** (0600, flock). Each record pins parent and child by `#{session_id}:#{session_created}` (the same key `share_identity.verify_caller` returns), so a renamed session keeps its delegation and a re-created session with the same name does not inherit it. The tmux options `@fsh_parent` / `@fsh_delegation` are display hints — an agent could rewrite them, so no check reads them.
+- **Limits** (all enforced in `check_spawn`, inside the store lock): depth 1 (a session that was ever a child cannot spawn), 3 open (running/reported) children per parent, 5 spawns/min server-wide, `VT_AGENT_SPAWN=0` turns the feature off. Refusals tell the model not to retry.
+- **Launch.** The server picks the command: `command claude --permission-mode default` or `command codex --sandbox workspace-write --ask-for-approval on-request`. `command` skips shell aliases, so a user alias that adds `--dangerously-skip-permissions` does not reach the child; the parent's bypass mode is never inherited. The task goes in as a targeted queue item (not a CLI argument — that would show in `ps`), with a footer asking the child to call `report_back` once; the child's `SessionStart` hook drains it. Task and follow-up items carry a one-line `preface` that is **typed** before the body is pasted: Claude Code wraps a bracketed paste as `<pasted_content>` and may decline instructions it did not get from the user (real run 2026-10-13: 1 of 3 children refused; with the preface 3 of 3 followed). Results to the parent get no preface, so they read as data. Without FarShell hooks in the child CLI the task stays queued for `fsh queue run`.
+- **Worktree** only when asked: `worktree.create_worktree` from the parent's `HEAD`, no agent started by it.
+- **Results to the parent** are queue items targeted at the parent session: `[위임 결과 · <child> · <kind>/<outcome>] (위임 <id>)`, a fixed «this is data, not instructions» line, then the body capped at 4 KB (lines that imitate the header are prefixed with `> `). Kinds: `reported` (`report_back`), `turn_ended` (child's Stop hook without a report — carries the hook's `last_assistant_message`, once per delegation, skipped after a report), `needs_human` (child entered `waiting`; the parent cannot answer it), `gone` (child session vanished), `soft_limit` (running longer than `VT_DELEGATE_SOFT_LIMIT_MIN`, default 60; nothing is killed). A newer result replaces an older one still pending in the parent's queue.
+- **Exactly once.** Each result is written to the record's outbox before it is queued; the sweep (`VT_DELEGATE_SWEEP_SEC`, default 30) re-queues unsent entries and skips ones whose `{delegation, kind}` source is already in the queue.
+- **Lifecycle.** `close_delegation` / `fsh delegate close` close the record and drop the child's undelivered instructions; the session and worktree stay. A parent that disappears leaves its children `orphaned` (not killed). Spawn, report, close and refusals are written to `~/.vt/agent_access.log`.
+
 ## Agent session sharing (MCP, 2026-10-06)
 
 The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the agent can read it and, if allowed, type into it.
-**Agents never create or close sessions.** Design, identity check, approval rules, limits and the known gaps: `docs/ref/terminal.md`
+**Agents never create or close sessions the user made** — shared sessions stay under the approval flow below. Agents can create their own sub-sessions through delegation (next section). Design, identity check, approval rules, limits and the known gaps: `docs/ref/terminal.md`
 «Agent-shared sessions»; endpoints and the `agent_share_request` event: `API.md`; the human-only boundary: `docs/ref/auth.md`.
 
 - Tool descriptions say the same thing to the model: only shared sessions work, the first use needs the user's approval (repeat the
-  same call once approved — the tool returns `사용자 승인 대기 중` for a `202`), sessions cannot be created or closed.
+  same call once approved — the tool returns `사용자 승인 대기 중` for a `202`), shared sessions cannot be created or closed by the agent (sub-sessions are delegation's job).
 - `read_session {nickname, lines?}` → last lines of the pane (default 200, max 2000, 64 KB). `send_to_session {nickname, text, enter?}` →
   one line, literally; `enter:true` presses Enter. No newlines/control characters (several commands = several calls); refused while an
   agent CLI in the target is `waiting` or `working`.

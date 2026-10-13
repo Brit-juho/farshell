@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **에이전트 위임(하위 세션)**. 에이전트가 MCP `spawn_session`으로 하위 세션을 만들어 일을 맡기고, 결과를 `[위임 결과 …]` 큐 입력으로 돌려받는다(`report_back`, 보고 없이 턴이 끝나면 Stop 훅의 마지막 응답, 승인 대기, 세션 소멸). 소유는 서버 장부(`~/.vt/delegations.json`)의 세션 식별자로만 판정하고, 깊이 1·열린 자식 3개·분당 5회로 제한한다. 자식은 서버가 고른 명령으로 기본 권한 모드로 뜬다(부모의 권한 우회를 물려주지 않는다). `send_to_child`, `close_delegation`, `list_delegations`, `fsh delegate`. 끄려면 `VT_AGENT_SPAWN=0`. 레퍼런스 11곳 조사: `docs/ref/references.md`.
+
 ### Fixed
 
 - **큐·에이전트 메시지의 여러 줄 지시가 첫 줄에서 제출되던 것**. 자동 입력(큐, 대상 지정 음성, 원격 입력)이 `send-keys -l` 대신 tmux 버퍼 붙여넣기(`paste-buffer -p -r`)로 들어가고, 200ms 뒤 Enter를 따로 보낸다. 같은 pane에 쓰는 자동 입력은 pane별 락으로 직렬화한다.

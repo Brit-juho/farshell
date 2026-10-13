@@ -1801,6 +1801,7 @@ cmd_help() {
                             With --agent <name>, the agent detection coverage
                             raises that CLI to "self-reported · high"
     fsh queue               Prompt queue — stack instructions while the agent is busy and feed them in order
+    fsh delegate            List/close agent delegations (ls|close <id>)
     fsh msg                 Messages between agents (log / agents / send)
     fsh mcp                 MCP server (stdio) for agents — register it with Claude
     fsh worktree            Create/open/delete git worktrees (alias: wt)
@@ -1861,6 +1862,7 @@ HELP_EN
                             --agent <이름>을 함께 주면 설정 → 에이전트의 감지
                             커버리지가 그 CLI를 「자기보고 · 높음」으로 올린다
     fsh queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
+    fsh delegate            에이전트 위임 목록·닫기 (ls|close <id>)
     fsh msg                 에이전트 간 메시지 (log / agents / send)
     fsh mcp                 에이전트용 MCP 서버(stdio) — Claude에 등록해 쓴다
     fsh worktree            git 워크트리 만들기/열기/삭제 (별칭: wt)
@@ -1899,7 +1901,7 @@ HELP
   case "$topic" in
     start|restart|stop|status|mobile|password|otp|device|devices) topic="access" ;;
     attach|handoff|terminal) topic="terminal" ;;
-    hooks|pane|queue|msg|mcp) topic="agent-state" ;;
+    hooks|pane|queue|msg|mcp|delegate) topic="agent-state" ;;
     voice-target) topic="target" ;;
     hotkey) topic="hotkeys" ;;
   esac
@@ -2221,6 +2223,23 @@ cmd_mcp() {
   cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" exec "$VT_PYTHON" mcp_farshell.py
 }
 
+# 에이전트 위임(docs/plan-2.4/50-agent-delegation.md) — queue와 같은 방식으로 서버 없이 장부를 읽는다.
+cmd_delegate() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
+    return 1
+  fi
+  local sub="${1:-ls}"
+  case "$sub" in
+    ls|list|close)
+      shift 2>/dev/null || true
+      (cd "$VT_DIR/server" && "$VT_PYTHON" delegation.py "$sub" "$@")
+      ;;
+    *)
+      echo "$(_t '사용법: fsh delegate [ls|close <id>]')"
+      return 1 ;;
+  esac
+}
 
 cmd_msg() {
   if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
@@ -4877,6 +4896,7 @@ case "${1:-help}" in
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;
   queue)    shift; cmd_queue "$@" ;;
+  delegate) shift; cmd_delegate "$@" ;;
   files)    shift; cmd_files "$@" ;;
   host|hosts) shift; cmd_host "$@" ;;
   mcp)      shift; cmd_mcp "$@" ;;

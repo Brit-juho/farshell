@@ -196,7 +196,7 @@ right after `new-session` (same mechanism as `@fsh_wt`, so it survives a server 
 | `peer` | `POST /api/peer/sessions/create` | another Mac created it; the server decides this itself, the request body is never read for it |
 | `external` | nothing (absence of the option) | `fsh` CLI, plain `tmux new`, or any unknown option value (an old `agent` value included) |
 
-The `agent` origin (robot icon, 「에이전트가 만듦」, `rail.origin.agent.show`) was **removed 2026-10-06**: agents never create sessions, so nothing could write it. A stale `rail.origin.agent.show` in saved settings is ignored (`core/settings.js` drops keys outside the schema).
+The `agent` origin (robot icon, 「에이전트가 만듦」, `rail.origin.agent.show`) was **removed 2026-10-06**, when agents could not create sessions. Since 2026-10-13 delegation creates sub-sessions (`docs/ref/agents.md` «Agent delegation»); they are recorded as `local` origin and marked with `@fsh_parent`/`@fsh_delegation` instead. A stale `rail.origin.agent.show` in saved settings is ignored (`core/settings.js` drops keys outside the schema).
 
 **Agent-shared sessions (implemented 2026-10-06).** An agent works only in a tmux session the user made and shared.
 Agents cannot create, rename, kill or share sessions and cannot reach an unshared one by guessing a name (unshared and
