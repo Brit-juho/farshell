@@ -32,13 +32,13 @@ def test_add_and_list_preserves_order():
     assert [x["text"] for x in queue_store.list_items()] == ["첫째", "둘째", "셋째"]
 
 
-def test_pop_next_is_fifo():
+def test_claim_next_is_fifo():
     for t in ["a", "b", "c"]:
         queue_store.add(t)
-    assert queue_store.pop_next()["text"] == "a"
-    assert queue_store.pop_next()["text"] == "b"
-    assert queue_store.pop_next()["text"] == "c"
-    assert queue_store.pop_next() is None
+    assert queue_store.claim_next()["text"] == "a"
+    assert queue_store.claim_next()["text"] == "b"
+    assert queue_store.claim_next()["text"] == "c"
+    assert queue_store.claim_next() is None
 
 
 def test_empty_text_rejected():
@@ -90,30 +90,30 @@ def test_survives_corrupt_file():
 
 def test_blocked_item_stays_in_queue():
     item = queue_store.add("sudo rm -rf /")["item"]
-    queue_store.pop_next()
+    queue_store.claim_next()
     queue_store.mark_blocked(item, "sudo")
     items = queue_store.list_items()
     assert len(items) == 1
     assert items[0]["status"] == queue_store.STATUS_BLOCKED
     assert items[0]["blocked_reason"] == "sudo"
     # blocked 는 pop 대상이 아니다 — 다시 투입되지 않는다
-    assert queue_store.pop_next() is None
+    assert queue_store.claim_next() is None
     assert queue_store.pending_count() == 0
 
 
 def test_unblock_makes_it_pending_again():
     item = queue_store.add("x")["item"]
-    queue_store.pop_next()
+    queue_store.claim_next()
     queue_store.mark_blocked(item, "테스트")
     assert queue_store.unblock(item["id"])["ok"]
-    assert queue_store.pop_next()["text"] == "x"
+    assert queue_store.claim_next()["text"] == "x"
 
 
 def test_blocked_item_is_reinserted_at_front():
     """막힌 항목이 큐 뒤로 밀리면 순서가 뒤집힌다."""
     a = queue_store.add("a")["item"]
     queue_store.add("b")
-    queue_store.pop_next()
+    queue_store.claim_next()
     queue_store.mark_blocked(a, "테스트")
     assert [x["text"] for x in queue_store.list_items()] == ["a", "b"]
 
@@ -122,9 +122,9 @@ def test_two_blocked_items_keep_submission_order():
     """A가 B보다 먼저 막히면, 최종 순서는 [A, B]여야 한다(뒤집히면 안 된다)."""
     a = queue_store.add("a")["item"]
     b = queue_store.add("b")["item"]
-    queue_store.pop_next()  # a
+    queue_store.claim_next()  # a
     queue_store.mark_blocked(a, "테스트")
-    queue_store.pop_next()  # b
+    queue_store.claim_next()  # b
     queue_store.mark_blocked(b, "테스트")
     assert [x["text"] for x in queue_store.list_items()] == ["a", "b"]
 
@@ -225,26 +225,27 @@ def test_explicit_target_uses_named_session(monkeypatch):
     assert r["ok"] and r["pane"] == "%7" and r["mode"] == "session:dev"
 
 
-def test_session_scoped_pop_skips_other_sessions_target(monkeypatch):
+def test_session_scoped_claim_skips_other_sessions_target(monkeypatch):
     """세션 스코프 드레인에서는 다른 세션 몫 항목을 건너뛰고 큐에 남겨야 한다."""
     queue_store.add("for-dev", target="dev")
     queue_store.add("untargeted")
-    item = queue_store.pop_next("staging", session_scoped=True)
+    item = queue_store.claim_next("staging", session_scoped=True)
     assert item["text"] == "untargeted"  # 미지정 항목은 여전히 대상
-    remaining = queue_store.list_items()
+    # 집어 든 항목은 sending으로 자리에 남는다 — 대기 중인 건 for-dev 하나
+    remaining = [x for x in queue_store.list_items() if x["status"] == queue_store.STATUS_PENDING]
     assert len(remaining) == 1 and remaining[0]["text"] == "for-dev"
 
 
-def test_session_scoped_pop_matches_own_session(monkeypatch):
+def test_session_scoped_claim_matches_own_session(monkeypatch):
     queue_store.add("for-dev", target="dev")
-    item = queue_store.pop_next("dev", session_scoped=True)
+    item = queue_store.claim_next("dev", session_scoped=True)
     assert item["text"] == "for-dev"
 
 
 def test_unscoped_pop_ignores_target_mismatch(monkeypatch):
     """수동 실행(session_scoped=False)은 세션 매칭 없이 맨 앞 항목을 그대로 꺼낸다."""
     queue_store.add("for-dev", target="dev")
-    item = queue_store.pop_next("staging")
+    item = queue_store.claim_next("staging")
     assert item["text"] == "for-dev"
 
 

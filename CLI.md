@@ -29,10 +29,11 @@ fsh voice              # voice mode (background, usable while using other apps)
 fsh voice-bind <claude|codex> <conversation-id>  # bind from the actual target pane
 fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
 fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
-fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear]  # prompt queue
+fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear|log [id]]  # prompt queue
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|allow-agent <id>|log|revoke-all]  # pair another Mac's FarShell
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
+fsh delegate [ls|close <id>]  # agent delegations (sub-sessions); close keeps the session
 fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session)
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
@@ -148,7 +149,8 @@ fsh queue list                  # list queue
 fsh queue add "next instruction" [session]  # add to queue (max 50)
 fsh queue run                   # manual drain — feed one item
 fsh queue rm <id>                # delete an item (id=all clears everything)
-fsh queue unblock <id>          # resume an item blocked by safe_mode
+fsh queue unblock <id>          # resume a blocked item (resets retries)
+fsh queue log [id]              # state-transition log (pending → sending → sent / blocked)
 fsh queue clear                 # clear everything
 ```
 

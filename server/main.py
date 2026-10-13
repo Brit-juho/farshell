@@ -372,6 +372,9 @@ async def lifespan(_app: FastAPI):
     # 만료된 노출은 터널까지 내린다(routes/ports.py). 기동 직후 한 번 돌고 이후 1분마다.
     import routes.ports as _ports_routes
     port_expiry_task = asyncio.create_task(_ports_routes.expiry_sweep_loop())
+    # 큐 재시도·멈춤 점검. 기동 시 지난 프로세스가 남긴 sending 항목부터 정리한다.
+    import queue_runner
+    queue_sweep_task = asyncio.create_task(queue_runner.sweep_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -390,6 +393,9 @@ async def lifespan(_app: FastAPI):
         port_expiry_task.cancel()
         with suppress(asyncio.CancelledError):
             await port_expiry_task
+        queue_sweep_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await queue_sweep_task
         await port_proxy.shutdown_all()
         from voice_sessions import coordinator
         await coordinator.close()

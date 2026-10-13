@@ -163,8 +163,9 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 |--------|------|------|
 | GET | `/api/queue` | List the queue |
 | POST | `/api/queue` | Add to the queue (JSON: text, target). Cap of 50, returns 409 if exceeded |
-| DELETE | `/api/queue/{item_id}` | Delete an item. `id=all` clears everything |
-| POST | `/api/queue/{item_id}/unblock` | Resume an item blocked by safe_mode |
+| DELETE | `/api/queue/{item_id}` | Delete an item. `id=all` clears everything except items being sent. 409 `item_sending` for an item being sent |
+| POST | `/api/queue/{item_id}/unblock` | Resume a blocked item (resets its retry count). 409 `item_sending` for an item being sent |
+| GET | `/api/queue/transitions` | State-transition log, oldest first. Query: `id` (prefix), `limit` (1–500, default 50) |
 | POST | `/api/queue/run` | Manual drain — dispatch one item |
 
 ## Worktrees

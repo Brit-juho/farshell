@@ -343,7 +343,7 @@ _t_en_lookup() {
     '사용법: fsh msg send <[호스트/]세션> "내용" [--reply <id>]') _T_OUT='Usage: fsh msg send <[host/]session> "text" [--reply <id>]' ;;
     '사용법: fsh pane report [--state idle|working|waiting|done] [--agent <이름>]') _T_OUT='Usage: fsh pane report [--state idle|working|waiting|done] [--agent <name>]' ;;
     '사용법: fsh pane report [--state idle|working|waiting|done] [--agent claude|codex|...]') _T_OUT='Usage: fsh pane report [--state idle|working|waiting|done] [--agent claude|codex|...]' ;;
-    '사용법: fsh queue [list|add "내용" [세션]|rm <id>|unblock <id>|clear|run]') _T_OUT='Usage: fsh queue [list|add "text" [session]|rm <id>|unblock <id>|clear|run]' ;;
+    '사용법: fsh queue [list|add "내용" [세션]|rm <id>|unblock <id>|clear|run|log [id]]') _T_OUT='Usage: fsh queue [list|add "text" [session]|rm <id>|unblock <id>|clear|run|log [id]]' ;;
     '사용법: fsh run "명령어"') _T_OUT='Usage: fsh run "command"' ;;
     '사용법: fsh shell-init [zsh|bash|fish|pwsh]') _T_OUT='Usage: fsh shell-init [zsh|bash|fish|pwsh]' ;;
     '사용법: fsh terminal [show|set <{choices}>|unset]') _T_OUT='Usage: fsh terminal [show|set <{choices}>|unset]' ;;

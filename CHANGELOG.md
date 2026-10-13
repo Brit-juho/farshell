@@ -8,7 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
 ### Fixed
+
+- **큐·에이전트 메시지의 여러 줄 지시가 첫 줄에서 제출되던 것**. 자동 입력(큐, 대상 지정 음성, 원격 입력)이 `send-keys -l` 대신 tmux 버퍼 붙여넣기(`paste-buffer -p -r`)로 들어가고, 200ms 뒤 Enter를 따로 보낸다. 같은 pane에 쓰는 자동 입력은 pane별 락으로 직렬화한다.
+
+- **큐 투입이 사람의 입력에 끼어들던 것**. stop 뒤 무조건 3초를 기다리던 대신, 그 세션에 최근 사람이 입력했으면 자동 투입을 미루고 재시도한다. `send_to_session`도 이때 409 `target_human_typing`을 낸다.
+
+- **큐 자동 투입 예약이 버려지던 것**. 예약을 서버 전체에 하나만 두던 것을 세션별로 나눴고, 워커 스레드에서 부른 예약도 서버 루프로 넘긴다(`schedule_drain_threadsafe`). 점검 루프는 세션을 지목한 `pending` 항목이 있는데 그 세션이 확실히 쉬고 있으면 다시 흘린다.
+
+- **큐 항목 안정성**. 전송 중 항목을 `sending`으로 자리에 남겨 삭제를 거부한다(409 `item_sending`). 일시적인 이유로 막힌 항목은 백오프(5초부터 2배, 최대 5회)로 자동 재시도하고, 다 쓰면 Web Push로 알린다. 오래 멈춘 전송과 재시작으로 끊긴 전송은 중복 투입을 막으려고 재시도 없이 막아 둔다. 상태 전이를 `~/.vt/queue_transitions.jsonl`에 남기고 `fsh queue log`·`GET /api/queue/transitions`로 본다. `fsh queue run`은 서버가 떠 있으면 서버에 맡긴다.
 
 - **dock의 마이크·STT 버튼 중복**. 별도 「STT」 버튼을 없애고 마이크 버튼이 상태를 겸한다: 준비 필요·진행 중·실패일 때만 모서리에 점이 붙고(`data-voice-state`), 툴팁·`aria-label`에 상태가 들어간다. 음성 상태 패널은 마이크 버튼을 길게 누르거나 우클릭, 또는 팔레트 「음성 입력 상태」로 연다(녹음을 시도하면 지금처럼 자동으로 열린다).
 

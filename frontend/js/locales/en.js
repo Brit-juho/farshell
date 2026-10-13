@@ -1554,7 +1554,7 @@ window.__VT_I18N = {
   "사용법: fsh msg send <[호스트/]세션> \"내용\" [--reply <id>]": "Usage: fsh msg send <[host/]session> \"text\" [--reply <id>]",
   "사용법: fsh pane report [--state idle|working|waiting|done] [--agent <이름>]": "Usage: fsh pane report [--state idle|working|waiting|done] [--agent <name>]",
   "사용법: fsh pane report [--state idle|working|waiting|done] [--agent claude|codex|...]": "Usage: fsh pane report [--state idle|working|waiting|done] [--agent claude|codex|...]",
-  "사용법: fsh queue [list|add \"내용\" [세션]|rm <id>|unblock <id>|clear|run]": "Usage: fsh queue [list|add \"text\" [session]|rm <id>|unblock <id>|clear|run]",
+  "사용법: fsh queue [list|add \"내용\" [세션]|rm <id>|unblock <id>|clear|run|log [id]]": "Usage: fsh queue [list|add \"text\" [session]|rm <id>|unblock <id>|clear|run|log [id]]",
   "사용법: fsh run \"명령어\"": "Usage: fsh run \"command\"",
   "사용법: fsh shell-init [zsh|bash|fish|pwsh]": "Usage: fsh shell-init [zsh|bash|fish|pwsh]",
   "사용법: fsh terminal [show|set <{choices}>|unset]": "Usage: fsh terminal [show|set <{choices}>|unset]",

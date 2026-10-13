@@ -13,6 +13,7 @@ from output_watcher import OutputWatcher
 import agent_prompt_detect
 import agent_status
 import auto_responder
+import pane_input
 import terminal_reports
 
 pty_mgr = PTYManager()
@@ -131,6 +132,8 @@ def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> N
         return
     info = session_store.get(pty_session_id)
     tmux_name = info.tmux_name if info else None
+    # 자동 투입(큐·에이전트 메시지)이 사람이 쓰는 중인 입력에 끼어들지 않게(pane_input).
+    pane_input.note_human_input(tmux_name)
     was_waiting = agent_status.status_for_session(tmux_name) == agent_status.WAITING
     is_cancel = data == b"\x1b" or data == "\x1b"
 

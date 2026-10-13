@@ -2152,12 +2152,12 @@ cmd_queue() {
   fi
   local sub="${1:-list}"
   case "$sub" in
-    list|ls|add|rm|remove|delete|clear|unblock|run)
+    list|ls|add|rm|remove|delete|clear|unblock|run|log)
       shift 2>/dev/null || true
       (cd "$VT_DIR/server" && "$VT_PYTHON" queue_store.py "$sub" "$@")
       ;;
     *)
-      echo "$(_t '사용법: fsh queue [list|add "내용" [세션]|rm <id>|unblock <id>|clear|run]')"
+      echo "$(_t '사용법: fsh queue [list|add "내용" [세션]|rm <id>|unblock <id>|clear|run|log [id]]')"
       return 1 ;;
   esac
 }

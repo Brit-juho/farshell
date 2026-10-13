@@ -177,7 +177,15 @@ export function showQueue(opts = {}) {
         if (it.blocked_reason) {
           const sub = document.createElement('div');
           sub.className = 'vt-q-sub';
-          sub.textContent = `차단됨: ${it.blocked_reason}`;
+          // retry_at이 있으면 서버 점검(queue_store.sweep)이 알아서 다시 시도한다.
+          sub.textContent = it.retry_at
+            ? `차단됨: ${it.blocked_reason} — 자동 재시도 (${it.attempts || 0}회째)`
+            : `차단됨: ${it.blocked_reason}`;
+          meta.appendChild(sub);
+        } else if (it.status === 'sending') {
+          const sub = document.createElement('div');
+          sub.className = 'vt-q-sub';
+          sub.textContent = '전송 중';
           meta.appendChild(sub);
         }
 
@@ -205,11 +213,14 @@ export function showQueue(opts = {}) {
           ub.onclick = () => unblockQueueItem(ctx, it.id);
           act.appendChild(ub);
         }
-        const rm = document.createElement('button');
-        rm.className = 'vt-btn danger';
-        rm.textContent = '삭제';
-        rm.onclick = () => removeQueueItem(ctx, it.id);
-        act.appendChild(rm);
+        // 전송 중인 항목은 서버가 삭제를 거부한다(409 item_sending) — 버튼도 안 그린다.
+        if (it.status !== 'sending') {
+          const rm = document.createElement('button');
+          rm.className = 'vt-btn danger';
+          rm.textContent = '삭제';
+          rm.onclick = () => removeQueueItem(ctx, it.id);
+          act.appendChild(rm);
+        }
 
         row.appendChild(idx); row.appendChild(meta); row.appendChild(act);
         list.appendChild(row);

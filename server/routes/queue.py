@@ -52,7 +52,7 @@ async def delete_item(item_id: str):
         return queue_store.clear()
     r = queue_store.remove(item_id)
     if not r.get("ok"):
-        return JSONResponse(r, status_code=404)
+        return JSONResponse(r, status_code=409 if r.get("error") == "item_sending" else 404)
     return r
 
 
@@ -60,8 +60,14 @@ async def delete_item(item_id: str):
 async def unblock_item(item_id: str):
     r = queue_store.unblock(item_id)
     if not r.get("ok"):
-        return JSONResponse(r, status_code=404)
+        return JSONResponse(r, status_code=409 if r.get("error") == "item_sending" else 404)
     return r
+
+
+@router.get("/api/queue/transitions")
+async def get_transitions(id: str = "", limit: int = 50):
+    """상태 전이 기록(최근순 아님 — 시간순). id는 접두어."""
+    return {"items": queue_store.transitions(id or None, max(1, min(limit, 500)))}
 
 
 @router.post("/api/queue/run")

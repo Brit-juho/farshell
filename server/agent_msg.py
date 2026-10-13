@@ -291,7 +291,7 @@ def record_outgoing(*, to_host: str, to_label: str, to_session: str, from_sessio
 def maybe_drain(session: str) -> bool:
     """받는 세션이 **확실히** 쉬고 있을 때만 바로 흘려보낸다(모듈 머리말).
 
-    이벤트 루프 스레드에서 불러야 한다 — `schedule_drain`이 태스크를 만든다
+    어느 스레드에서 불러도 된다 — 워커 스레드면 서버 루프로 넘긴다(queue_runner.schedule_drain_threadsafe).
     (`receive`는 파일 락 때문에 to_thread로 돌므로 거기서 부르지 않는다)."""
     try:
         import agent_status
@@ -301,7 +301,7 @@ def maybe_drain(session: str) -> bool:
     known = agent_status.known_status_for_session(session)
     if known not in (agent_status.IDLE, agent_status.DONE):
         return False
-    return queue_runner.schedule_drain(session=session, session_scoped=True, targeted_only=True)
+    return queue_runner.schedule_drain_threadsafe(session=session, session_scoped=True, targeted_only=True)
 
 
 def on_queue_result(item: dict, delivered: bool, reason: str = "") -> None:

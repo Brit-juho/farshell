@@ -18,6 +18,7 @@ import logging
 import os
 import subprocess
 import time
+import uuid
 
 import tmux_runner
 import vt_env
@@ -148,35 +149,104 @@ def pane_exists(pane_id: str) -> bool:
         return False
 
 
-# 텍스트와 Enter 사이 간격. 0이어도 별도 호출이면 제출되는 것을 실측했지만(아래),
-# 두 호출이 한 입력 묶음으로 합쳐지지 않게 아주 짧게 띄운다.
-_ENTER_GAP_SEC = 0.05
+def _enter_gap_sec() -> float:
+    """붙여넣기와 Enter 사이 간격.
+
+    붙여넣기 묶음과 Enter가 한 입력으로 합쳐지면 Claude Code는 Enter를 줄바꿈으로
+    받는다(아래 send_to_tmux 주석). OpenRig이 같은 순서(paste-buffer → 대기 →
+    Enter)에 200ms를 쓰는 것을 기본값으로 따랐다. 환경변수로 조정한다.
+    """
+    try:
+        ms = float(os.environ.get("VT_PASTE_ENTER_GAP_MS", "200"))
+    except ValueError:
+        ms = 200.0
+    return max(0.0, ms) / 1000.0
 
 
-def send_to_tmux(pane_id: str, text: str) -> bool:
-    """tmux pane에 텍스트를 넣고 Enter를 누른다.
+def _paste_to_pane(pane_id: str, text: str) -> bool:
+    """pane에 텍스트를 붙여넣는다(Enter 없음). 줄바꿈을 보존한다.
+
+    `send-keys -l`은 텍스트 속 `\n`을 키 입력으로 넘겨, 여러 줄 지시가 첫 줄에서
+    제출돼버렸다. tmux 버퍼를 거쳐 `paste-buffer -p -r`로 넣으면:
+      - `-p`: pane이 bracketed paste를 켰으면 마커로 감싼다(Claude Code·Codex·
+        bash 5.1+). 마커 안의 줄바꿈은 제출이 아니라 입력창 줄바꿈이다.
+      - `-r`: LF를 CR로 바꾸지 않는다(기본 동작은 바꿔서 줄마다 Enter가 된다).
+      - `-d`: 붙인 뒤 버퍼를 지운다. 버퍼 이름은 매번 새로 — 동시 투입끼리,
+        그리고 사용자의 tmux 버퍼 스택(prefix+])과 섞이지 않는다.
+    대상은 세션 이름이 아니라 pane id(`%N`)다 — 그 사이 활성 pane이 바뀌어도
+    엉뚱한 칸에 들어가지 않는다. 정리·버전 규칙은 tmux_paste와 같다.
+    """
+    import paste_prepare
+    import tmux_paste
+
+    body = paste_prepare.strip_unsafe_control_chars(text)
+    body = paste_prepare.normalize_newlines(body)
+    if not body:
+        return True
+    buf_name = f"fsh-send-{uuid.uuid4().hex[:12]}"
+    rc, _, err = tmux_runner.run(["load-buffer", "-b", buf_name, "-"],
+                                 input=body.encode("utf-8", "surrogatepass"))
+    if rc != 0:
+        logger.error(f"tmux load-buffer 실패: {err!r}")
+        return False
+    args = ["paste-buffer", "-p", "-r", "-d", "-b", buf_name, "-t", pane_id]
+    if tmux_paste.supports_paste_sanitize_off(tmux_paste.tmux_version()):
+        args.insert(1, "-S")
+    rc, _, err = tmux_runner.run(args)
+    if rc != 0:
+        logger.error(f"tmux paste-buffer 실패({pane_id}): {err!r}")
+        tmux_runner.run(["delete-buffer", "-b", buf_name])
+        return False
+    return True
+
+
+def send_to_tmux(pane_id: str, text: str, preface: str | None = None) -> bool:
+    """tmux pane에 텍스트를 넣고 Enter를 누른다. 여러 줄도 한 번에 제출된다.
 
     2026-09-28(실측) — 예전엔 `send-keys -- text Enter` **한 번의 호출**이었다.
     Claude Code는 한꺼번에 몰려 들어온 입력을 붙여넣기로 받고 그 안의 Enter를
     줄바꿈으로 처리해서, 큐·에이전트 메시지가 입력창에 들어가기만 하고 제출되지
-    않았다(M1↔M5 실제 Claude 테스트, 같은 조건 5회 중 0회 제출). 텍스트를 `-l`로
-    넣고 Enter를 **따로 호출**하면 5회 중 5회 제출됐다. `-l`은 텍스트가 키 이름
-    (`Enter`·`Up`)과 같을 때 그 키로 해석되는 것도 막는다.
+    않았다(M1↔M5 실제 Claude 테스트, 같은 조건 5회 중 0회 제출). 그래서 텍스트와
+    Enter를 **따로 호출**한다 — 이 원칙은 그대로다.
+
+    2026-10-13 — 텍스트 쪽을 `send-keys -l`에서 붙여넣기(_paste_to_pane)로 바꿨다.
+    `-l`은 텍스트 속 줄바꿈을 키 입력으로 보내 여러 줄 지시가 첫 줄에서 잘렸다.
+    pane 락(pane_input) 안에서 "붙여넣기 → 대기 → Enter"를 한 덩어리로 보낸다 —
+    다른 자동 입력이 사이에 끼면 그쪽 Enter가 이 텍스트를 반쯤 제출한다.
+
+    `preface`(한 줄)가 있으면 붙여넣기 전에 **타이핑**으로 넣는다. Claude Code는 bracketed paste를
+    `<pasted_content>`로 감싸 "사용자가 직접 쓴 말이 아님"으로 다루고, 그 안의 지시를 따르지 않을 수
+    있다(2026-10-13 위임 E2E: 3회 중 1회 거부). 위임 지시처럼 받는 쪽이 **따라야 하는** 텍스트는
+    사용자 턴의 머리말이 "아래 붙여넣은 작업을 하라"고 말하게 한다. 결과 보고처럼 데이터로 읽혀야
+    하는 텍스트는 머리말 없이 붙여넣기만 한다.
     """
-    try:
-        subprocess.run(
-            TMUX_BASE + ["send-keys", "-t", pane_id, "-l", "--", text],
-            timeout=2, check=True,
-        )
-        time.sleep(_ENTER_GAP_SEC)
-        subprocess.run(
-            TMUX_BASE + ["send-keys", "-t", pane_id, "Enter"],
-            timeout=2, check=True,
-        )
+    import pane_input
+
+    with pane_input.lock(pane_id):
+        if preface:
+            line = " ".join(preface.split())
+            rc, _, err = tmux_runner.run(["send-keys", "-t", pane_id, "-l", "--", line + " "])
+            if rc != 0:
+                logger.error(f"tmux send-keys(머리말) 실패({pane_id}): {err!r}")
+                return False
+            time.sleep(_enter_gap_sec())
+        if not _paste_to_pane(pane_id, text):
+            return False
+        time.sleep(_enter_gap_sec())
+        rc, _, err = tmux_runner.run(["send-keys", "-t", pane_id, "Enter"])
+        if rc != 0:
+            logger.error(f"tmux send-keys Enter 실패({pane_id}): {err!r}")
+            return False
         return True
-    except Exception as e:
-        logger.error(f"tmux send-keys 실패: {e}")
-        return False
+
+
+def session_of_pane(pane_id: str) -> str | None:
+    """pane id → tmux 세션 이름. 사람 입력 확인(pane_input)이 세션 단위라 필요하다."""
+    rc, out, _ = tmux_runner.run(["display-message", "-p", "-t", pane_id, "#{session_name}"])
+    if rc != 0:
+        return None
+    name = out.decode("utf-8", "replace").strip()
+    return name or None
 
 
 def type_to_tmux(pane_id: str, text: str) -> bool:
@@ -184,14 +254,19 @@ def type_to_tmux(pane_id: str, text: str) -> bool:
 
     파일 경로 삽입(N19)처럼 사용자가 명령 일부로 조합해 넣을 값에 쓴다. Enter를
     자동으로 누르면 아직 완성 안 된 명령을 그대로 실행시켜버릴 수 있어 위험하다.
+    pane 락을 잡는다 — 큐 투입의 "붙여넣기 → Enter" 사이에 끼어들면 그 Enter가
+    이 텍스트까지 실행시킨다.
     """
+    import pane_input
+
     try:
-        subprocess.run(
-            # `-l` — 텍스트 전체가 키 이름(`Enter` 등)과 같으면 tmux가 그 키를 눌러
-            # "Enter 없이 타이핑"이라는 약속이 깨진다(send_to_tmux 주석).
-            TMUX_BASE + ["send-keys", "-t", pane_id, "-l", "--", text],
-            timeout=2, check=True,
-        )
+        with pane_input.lock(pane_id):
+            subprocess.run(
+                # `-l` — 텍스트 전체가 키 이름(`Enter` 등)과 같으면 tmux가 그 키를 눌러
+                # "Enter 없이 타이핑"이라는 약속이 깨진다(send_to_tmux 주석).
+                TMUX_BASE + ["send-keys", "-t", pane_id, "-l", "--", text],
+                timeout=2, check=True,
+            )
         return True
     except Exception as e:
         logger.error(f"tmux send-keys(타이핑) 실패: {e}")
