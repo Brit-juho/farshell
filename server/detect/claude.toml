@@ -30,6 +30,10 @@ exit = [
 interrupt = [
   "Interrupted · What should Claude do instead?",
 ]
+# 문구 뒤에 응답·도구 줄(`⏺`)이 있으면 지나간 화면이다(다음 턴이 이미 시작됐다). 중단 직후
+# 화면은 문구 뒤에 입력 상자밖에 없다. 화면을 다시 열 때 스크롤백에 남은 옛 문구가 지금 작업
+# 중인 엔트리를 done으로 끝내지 않게 한다(Codex의 같은 키와 같은 규칙).
+interrupt_stale_after = '^\s*⏺'
 
 # N38(70-mobile.md §2) — 모바일 플릿 홈의 인라인 승인 버튼용. Claude Code의
 # 번호 선택지 줄("❯ 1. Yes" / "  2. Yes, and don't ask again ..." 등)에서

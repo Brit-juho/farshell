@@ -59,7 +59,9 @@ def test_install_preserves_foreign_hooks(cfg):
 
     assert data["model"] == "opus", "훅과 무관한 키는 그대로여야 한다"
     assert "/home/x/other_stop.sh" in _cmds(data, "Stop")
-    assert _cmds(data, "UserPromptSubmit") == ["/home/x/coach.sh"]
+    # 남의 UserPromptSubmit 훅은 그대로 두고 우리 것을 옆에 더한다(2026-10-13부터 우리도 등록).
+    assert _cmds(data, "UserPromptSubmit")[0] == "/home/x/coach.sh"
+    assert any("agent_hook.sh prompt claude" in c for c in _cmds(data, "UserPromptSubmit"))
     assert any("agent_hook.sh stop claude" in c for c in _cmds(data, "Stop"))
     # 남의 훅에 붙어 있던 timeout 같은 필드도 그대로 보존돼야 한다
     assert any(

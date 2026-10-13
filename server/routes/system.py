@@ -548,6 +548,11 @@ async def tmux_kick(request: Request):
     if not tmux_hooks.verify(request.headers.get(tmux_hooks.HEADER)):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     kick_sessions()
+    # 세션 이름 변경·종료, 웹 클라이언트의 세션 이동을 에이전트 상태와 화면 감지에 반영한다
+    # (deps.on_tmux_change). 훅 응답은 기다리게 하지 않는다.
+    import deps
+    task = asyncio.create_task(deps.on_tmux_change())
+    task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
     return Response(status_code=204)
 
 

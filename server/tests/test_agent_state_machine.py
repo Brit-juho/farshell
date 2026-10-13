@@ -65,8 +65,10 @@ def test_codex_prompt_permission_and_session_end_lifecycle():
     })
     assert ent["status"] == A.WAITING
     assert ent["question"] == "Bash 실행 승인이 필요합니다"
+    # SessionEnd는 완료가 아니라 반납이다 — 엔트리를 지우고 idle 모양을 돌려준다.
     ent = A.on_event("session_end", {"session_id": "s"})
-    assert ent["status"] == A.DONE and ent["question"] is None
+    assert ent["status"] == A.IDLE and ent["released"] is True
+    assert A.get_state("s") == {} and A.status_for_session("dev") == A.IDLE
 
 
 def test_post_clears_resolved_permission_wait():
@@ -126,7 +128,8 @@ def test_escape_cancel_finishes_only_waiting_entries_in_target_session():
     assert A.get_state("s1")["tool"] is None
     assert A.get_state("s1")["question"] is None
     assert A.get_status("s2") == A.WAITING
-    assert A.get_status("s3") == A.WORKING
+    # s3은 dev의 소유자(s1)가 아니라서 상태에 반영되지 않았다(세션 소유자 규칙).
+    assert A.get_state("s3") == {}
 
 
 # ── N38(70-mobile.md §2) — 인라인 승인용 question/options ───────────────────

@@ -360,3 +360,48 @@ test('window 브리지 — 지연 청크(레일·플릿)가 읽고 쓰는 길', 
   assert.strictEqual(window.agentDetails().dev.since, 5);
   assert.strictEqual(S.getStatus('dev'), 'done');
 });
+
+// 2026-10-13(docs/plan-2.4/60) — 이벤트가 엔트리 하나로 세션 상태를 덮어써 스냅샷과
+// 깜빡이던 문제, 반납(released) 엔트리 제거.
+test('applyEvent — 스냅샷과 같은 규칙으로 다시 계산한다(엔트리 하나로 덮어쓰지 않는다)', async () => {
+  const { S } = await load();
+  S.applySnapshot({
+    a: { status: 'waiting', tmux_session: 'dev', session_id: 'a', host: 'local' },
+    b: { status: 'working', tmux_session: 'dev', session_id: 'b', host: 'local' },
+  });
+  S.applyEvent({ status: 'working', tmux_session: 'dev', session_id: 'b', host: 'local' });
+  assert.strictEqual(S.getStatus('dev'), 'waiting', '다른 엔트리의 대기가 남아 있으면 그대로');
+});
+
+test('applyEvent — released는 그 엔트리를 지우고 세션 상태를 다시 계산한다', async () => {
+  const { S } = await load();
+  S.applySnapshot({
+    old: { status: 'done', tmux_session: 'dev', session_id: 'old', host: 'local' },
+    cur: { status: 'working', tmux_session: 'dev', session_id: 'cur', host: 'local' },
+  });
+  assert.strictEqual(S.getStatus('dev'), 'done');
+  S.applyEvent({ session_id: 'old', host: 'local', tmux_session: 'dev', status: 'idle', released: true });
+  assert.strictEqual(S.getStatus('dev'), 'working');
+  S.applyEvent({ session_id: 'cur', host: 'local', tmux_session: 'dev', status: 'idle', released: true });
+  assert.strictEqual(S.getStatus('dev'), 'idle');
+  assert.strictEqual(S.allStatuses().size, 0);
+});
+
+test('applyEvent — 모르는 엔트리의 released는 아무것도 하지 않는다', async () => {
+  const { S } = await load();
+  S.applySnapshot({ a: { status: 'working', tmux_session: 'dev', session_id: 'a', host: 'local' } });
+  let calls = 0;
+  S.onStatusChange(() => calls++);
+  calls = 0;
+  S.applyEvent({ session_id: 'zz', host: 'local', tmux_session: 'dev', status: 'idle', released: true });
+  assert.strictEqual(calls, 0);
+  assert.strictEqual(S.getStatus('dev'), 'working');
+});
+
+test('applyEvent — 엔트리가 다른 세션으로 옮겨 가면 옛 세션도 다시 계산된다', async () => {
+  const { S } = await load();
+  S.applySnapshot({ a: { status: 'working', tmux_session: 'one', session_id: 'a', host: 'local' } });
+  S.applyEvent({ status: 'working', tmux_session: 'two', session_id: 'a', host: 'local' });
+  assert.strictEqual(S.getStatus('one'), 'idle');
+  assert.strictEqual(S.getStatus('two'), 'working');
+});

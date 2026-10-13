@@ -57,6 +57,12 @@ EVENTS = {
     # 끝나므로 허용·거부를 결정하지 않고 기존 대화상자가 그대로 뜬다(실측 2026-10-03).
     # 승인·거절 시점을 알리는 이벤트는 없어 해제는 다음 pre/post/stop·화면 패턴이 맡는다.
     "PermissionRequest": "permission",
+    # 2026-10-13 — 설치기가 관리하지 않는 태그 없는 항목으로 등록돼 있던 둘을 정식으로 맡는다.
+    # 프롬프트 제출은 턴 시작(working)을 도구 호출 전에 알리고, 세션 종료는 **반납**이다
+    # (agent_status 「세션 소유자」: 완료가 아니라 엔트리를 지운다 — `/clear`마다 「완료」와
+    # 큐 투입이 생기던 경로).
+    "UserPromptSubmit": "prompt",
+    "SessionEnd": "session_end",
 }
 
 # 이벤트별 matcher. Pre/PostToolUse는 도구 이름으로 거른다 — 우리는 모든 도구를 본다.

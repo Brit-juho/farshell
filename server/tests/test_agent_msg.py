@@ -338,7 +338,7 @@ def test_session_start_event_drains_only_targeted_items(env, monkeypatch):
     import pane_resolve
     import queue_runner
     agent_status._state.clear()
-    monkeypatch.setattr(pane_resolve, "resolve", lambda pane, tmux, cwd: ("api", "pane"))
+    monkeypatch.setattr(pane_resolve, "resolve", lambda pane, tmux, cwd, **kw: ("api", "pane"))
     seen = {}
     monkeypatch.setattr(queue_runner, "schedule_drain",
                         lambda **kw: seen.update(kw) or True)

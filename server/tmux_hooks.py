@@ -37,6 +37,9 @@ EVENTS = (
     "session-renamed",
     "client-attached",
     "client-detached",
+    # 2026-10-13 — 붙어 있던 클라이언트가 다른 세션으로 옮겨 갔다(`detach-on-destroy off`의
+    # 자동 전환, switch-client). 웹 PTY의 화면 감지가 옮겨 간 세션에 귀속돼야 한다(deps).
+    "client-session-changed",
 )
 HOOK_INDEX = 77
 

@@ -76,6 +76,20 @@ def _reset_codex_plugin_cache():
 
 
 @pytest.fixture(autouse=True)
+def _reset_agent_owners():
+    """agent_status의 세션 소유자·은퇴 목록은 모듈 전역이다. 테스트들은 `_state`만 비우는데,
+    앞 테스트가 은퇴시킨 session_id("s" 등)를 다음 테스트가 다시 쓰면 이벤트가 무시된다."""
+    import agent_status
+    agent_status._owners.clear()
+    agent_status._retired.clear()
+    agent_status._last_uid_of.clear()
+    yield
+    agent_status._owners.clear()
+    agent_status._retired.clear()
+    agent_status._last_uid_of.clear()
+
+
+@pytest.fixture(autouse=True)
 def _no_real_tmux_hooks(request, monkeypatch):
     """tmux 훅(tmux_hooks.py)을 실제 tmux 서버에 걸거나 지우지 않는다.
 

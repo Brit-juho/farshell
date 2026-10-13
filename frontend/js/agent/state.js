@@ -104,45 +104,52 @@ export function applySnapshot(all) {
   for (const [k, entry] of Object.entries(all || {})) {
     if (entry) _entries.set(_entryKey(k, entry), entry);
   }
+  _recompute(false);
+  _hydrated = true;
+}
+
+// 단일 이벤트(agent_event) 반영. 서버가 세션을 특정하지 못했으면(같은 cwd에
+// 세션이 여럿 등) 아무것도 하지 않는다 — "모호하면 안 켠다" 규칙 그대로다.
+//
+// 2026-10-13 — 이벤트로 온 엔트리 **하나의** 상태로 세션 상태를 덮어쓰던 것을, 스냅샷과
+// 같은 규칙(그 세션 엔트리들 중 가장 급한 것)으로 다시 계산하게 바꿨다. 예전엔 훅마다
+// working, 15초 하트비트 스냅샷마다 옛 엔트리의 done으로 깜빡였다. `released`(반납·은퇴·
+// TTL 삭제)는 그 엔트리를 지운다 — 서버가 지운 엔트리를 다음 스냅샷까지 들고 있지 않게.
+export function applyEvent(state) {
+  if (!state) return;
+  // session_id가 없는 옛 형태의 이벤트는 세션당 엔트리 하나로 취급한다.
+  const key = _entryKey(null, state) ?? (state.tmux_session ? `?\n${state.tmux_session}` : null);
+  if (state.released) {
+    if (key == null || !_entries.delete(key)) return;
+  } else {
+    if (!state.tmux_session) return;
+    _entries.set(key, state);
+  }
+  _recompute(true);
+}
+
+// _entries → 세션별 상태·세부. live=true면 실제 전이(단일 이벤트)라 로드 직후 규칙을
+// 건너뛰고 「읽지 않음」을 매긴다.
+function _recompute(live) {
   const next = new Map();
-  for (const entry of Object.values(all || {})) {
+  for (const entry of _entries.values()) {
     const name = entry && entry.tmux_session;
     if (!name) continue;
     const status = normalizeState(entry.status);
-    // 같은 tmux 세션에 엔트리가 여럿이면(훅 + pane 자기보고) 더 급한 쪽을 쓴다.
+    // 같은 tmux 세션에 엔트리가 여럿이면(소유자 없는 세션의 자기보고 + 화면 감지) 더 급한 쪽을 쓴다.
     const cur = next.get(name);
     if (!cur || entryUrgency(status) < entryUrgency(cur)) next.set(name, status);
   }
   const changed = next.size !== _byTmux.size
     || [...next].some(([k, v]) => _byTmux.get(k) !== v);
-  // N37 — 전이를 보고 unseen을 갱신한다. 스냅샷에서 사라진 세션(=서버가 TTL로
-  // 정리했거나 세션이 닫힘)은 알릴 완료도 같이 사라진다.
-  for (const [name, status] of next) _trackUnseen(name, _byTmux.get(name), status);
+  // N37 — 전이를 보고 unseen을 갱신한다. 사라진 세션(=서버가 TTL로 정리했거나 세션이
+  // 닫힘·반납)은 알릴 완료도 같이 사라진다.
+  for (const [name, status] of next) _trackUnseen(name, _byTmux.get(name), status, live);
   for (const name of _byTmux.keys()) if (!next.has(name)) _unseen.delete(name);
-  _hydrated = true;
   _byTmux.clear();
   for (const [k, v] of next) _byTmux.set(k, v);
   const detailsChanged = _rebuildDetails();
   if (changed || detailsChanged) _notify();
-}
-
-// 단일 이벤트(agent_event) 반영. 서버가 세션을 특정하지 못했으면(같은 cwd에
-// 세션이 여럿 등) 아무것도 하지 않는다 — "모호하면 안 켠다" 규칙 그대로다.
-export function applyEvent(state) {
-  const name = state && state.tmux_session;
-  if (!name) return;
-  const key = _entryKey(null, state);
-  if (key != null) _entries.set(key, state);
-  const detailsChanged = _rebuildDetails();
-  const status = normalizeState(state.status);
-  if (_byTmux.get(name) === status) {
-    // 상태는 그대로여도 도구가 바뀌거나 질문이 붙었으면 상태 문장은 다시 그려야 한다.
-    if (detailsChanged) _notify();
-    return;
-  }
-  _trackUnseen(name, _byTmux.get(name), status, true);  // 단일 이벤트는 실제 전이다
-  _byTmux.set(name, status);
-  _notify();
 }
 
 // 스냅샷의 키는 서버의 불투명 키, 이벤트에는 키가 없다 — 둘을 같은 엔트리로

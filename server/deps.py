@@ -6,6 +6,8 @@ circular import 없이 전역 상태를 한 곳에서 관리.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import WebSocket
 from i18n import tr
 from pty_manager import PTYManager
@@ -16,6 +18,8 @@ import agent_status
 import auto_responder
 import pane_input
 import terminal_reports
+
+logger = logging.getLogger(__name__)
 
 pty_mgr = PTYManager()
 session_store = SessionStore()
@@ -29,13 +33,74 @@ _auto_responder = auto_responder.get_global_responder(
 # 알림용 WebSocket 클라이언트 집합
 notify_clients: set[WebSocket] = set()
 
+# 웹 PTY(웹 세션 id) → 그 tmux 클라이언트가 **지금** 붙어 있는 세션 이름. session_store의
+# tmux_name은 attach 때 한 번 적은 값이라, 클라이언트가 다른 세션으로 옮겨 가면(세션 종료 뒤
+# `detach-on-destroy off`의 자동 전환, 터미널 안의 `fsh` switch-client, `prefix s`) 그 화면의
+# 질문·중단 문구가 원래 세션에 적용됐다. 화면 감지 경로는 이 값을 먼저 본다. 화면(프런트)이
+# 보는 session_store 값은 바꾸지 않는다 — 탭과 PTY의 짝은 프런트의 계약이다.
+_pty_tmux_now: dict[str, str] = {}
+
+
+def tmux_for_pty(pty_session_id: str) -> str | None:
+    """화면 감지·승인 토큰이 쓸 tmux 세션 이름. 클라이언트가 옮겨 갔으면 옮겨 간 곳."""
+    now = _pty_tmux_now.get(pty_session_id)
+    if now:
+        return now
+    info = session_store.get(pty_session_id)
+    return info.tmux_name if info else None
+
+
+def _read_tmux_state() -> tuple[list[tuple[str, str]], dict[str, str]] | None:
+    """(세션 목록 [(#{session_id}, 이름)], {클라이언트 tty: 세션 이름}). tmux가 없으면 None."""
+    import tmux_runner
+    sess = tmux_runner.run_text(["list-sessions", "-F", "#{session_id}\t#{session_name}"], timeout=2.0)
+    if sess is None:
+        return None
+    live = [tuple(line.split("\t", 1)) for line in sess.splitlines() if "\t" in line]
+    clients = tmux_runner.run_text(["list-clients", "-F", "#{client_tty}\t#{session_name}"], timeout=2.0) or ""
+    by_tty = dict(tuple(line.split("\t", 1)) for line in clients.splitlines() if "\t" in line)
+    return live, by_tty
+
+
+def apply_tmux_state(live: list[tuple[str, str]], by_tty: dict[str, str]) -> None:
+    """tmux에서 읽은 값을 반영한다(이벤트 루프에서 — agent_status는 루프 안에서만 바꾼다)."""
+    agent_status.reconcile_sessions(live)
+    for sid in list(_pty_tmux_now):
+        if sid not in pty_mgr.sessions:
+            del _pty_tmux_now[sid]
+    for sid, s in list(pty_mgr.sessions.items()):
+        info = session_store.get(sid)
+        tty = getattr(s, "tty", "")
+        if not info or not info.tmux_name or not tty or tty not in by_tty:
+            continue
+        cur = by_tty[tty]
+        if cur == tmux_for_pty(sid):
+            continue
+        if cur == info.tmux_name:
+            _pty_tmux_now.pop(sid, None)
+        else:
+            _pty_tmux_now[sid] = cur
+        # 감지 윈도우에는 이전 세션의 글자가 남아 있다 — 그걸로 다음 세션을 판정하지 않는다.
+        _prompt_detector.remove(sid)
+
+
+async def on_tmux_change() -> None:
+    """tmux 훅(`/api/tmux/kick`)마다 — 세션 이름 변경·종료와 클라이언트 이동을 반영한다."""
+    import asyncio
+    try:
+        got = await asyncio.to_thread(_read_tmux_state)
+    except Exception as e:  # noqa: BLE001 — 다음 훅에 다시 본다
+        logger.debug(f"tmux 상태 읽기 실패: {e}")
+        return
+    if got is not None:
+        apply_tmux_state(*got)
+
 # A3: 승인 대기(waiting) 감지 — auto_responder 옆에서 같은 출력 스트림을 먹되
 # 아무것도 쓰지 않고 상태만 알린다. PTY 세션 id(웹 키스페이스)를 tmux 세션
 # 이름(상태 키스페이스)으로 옮기는 다리가 아래 콜백이다 — 그 매핑을 아는 곳은
 # session_store 하나뿐이라 여기서 묶는다.
 def _on_waiting_change(pty_session_id: str, waiting: bool) -> None:
-    info = session_store.get(pty_session_id)
-    tmux_name = info.tmux_name if info else None
+    tmux_name = tmux_for_pty(pty_session_id)
     if not tmux_name:
         # tmux가 아닌 순수 PTY 세션 — 상태를 붙일 대상(카드/탭)이 없다.
         return
@@ -51,11 +116,12 @@ def _on_waiting_change(pty_session_id: str, waiting: bool) -> None:
     # `agent_status._entries_for`와 같은 규칙을 쓴다(consume_prompt도 이걸
     # 쓴다) — 두 곳이 각자 조건을 들면 하나만 고쳐질 위험이 있다.
     kind = _prompt_detector.get_kind(pty_session_id) if waiting else None
+    # 소유자가 있으면 소유자 하나만 받는다(agent_status 「세션 소유자」) — 옛 세션·자식
+    # 프로세스의 엔트리에 화면 판정이 번지지 않는다.
     targets = [e.get("session_id") for e in agent_status._entries_for(tmux_name)]
     for sid in targets or [f"pane:{tmux_name}"]:
-        agent_status.on_waiting(sid, waiting, question=question, options=options, kind=kind)
-        if not targets:
-            agent_status.get_state(sid)["tmux_session"] = tmux_name
+        agent_status.on_waiting(sid, waiting, question=question, options=options, kind=kind,
+                                session=tmux_name)
 
     # A5: 승인 대기는 **사용자가 답해야만 풀리는** 상태라, 화면을 안 보고 있으면
     # 세션이 그대로 멈춰 있는다. 기존 "작업 완료" 푸시와 같은 규칙을 그대로 따른다:
@@ -88,8 +154,7 @@ def _push_waiting_notice() -> None:
 def _agent_for_pty(pty_session_id: str):
     """이 PTY 세션의 tmux pane에서 도는 CLI 이름 — kind 패턴을 그 CLI의 spec으로만
     매칭하기 위한 판별. 1차 신호(엔트리의 `agent`: 훅/자기보고) 다음 프로세스 스캔."""
-    info = session_store.get(pty_session_id)
-    tmux_name = info.tmux_name if info else None
+    tmux_name = tmux_for_pty(pty_session_id)
     if not tmux_name:
         return None
     for ent in agent_status._entries_for(tmux_name):
@@ -103,16 +168,16 @@ def _agent_for_pty(pty_session_id: str):
 
 
 def _on_badge_change(pty_session_id: str, badge) -> None:
-    info = session_store.get(pty_session_id)
-    if info and info.tmux_name:
-        agent_status.set_badge_for_session(info.tmux_name, badge)
+    tmux_name = tmux_for_pty(pty_session_id)
+    if tmux_name:
+        agent_status.set_badge_for_session(tmux_name, badge)
 
 
 def _on_interrupt(pty_session_id: str) -> None:
     """화면에 거절/중단 문구가 그려졌다 — CLI는 이때 Stop 훅을 내지 않는다."""
-    info = session_store.get(pty_session_id)
-    if info and info.tmux_name:
-        agent_status.finish_interrupted_for_session(info.tmux_name)
+    tmux_name = tmux_for_pty(pty_session_id)
+    if tmux_name:
+        agent_status.finish_interrupted_for_session(tmux_name)
 
 
 _prompt_detector = agent_prompt_detect.get_global_detector(
@@ -131,8 +196,7 @@ def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> N
     # 친 키가 아니다 — 새로고침·두 번째 화면 attach가 waiting을 풀던 근본 원인(terminal_reports).
     if terminal_reports.is_terminal_report(data):
         return
-    info = session_store.get(pty_session_id)
-    tmux_name = info.tmux_name if info else None
+    tmux_name = tmux_for_pty(pty_session_id)
     # 자동 투입(큐·에이전트 메시지)이 사람이 쓰는 중인 입력에 끼어들지 않게(pane_input).
     pane_input.note_human_input(tmux_name)
     was_waiting = agent_status.status_for_session(tmux_name) == agent_status.WAITING

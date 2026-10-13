@@ -609,6 +609,20 @@ def test_interrupt_ignored_when_working_status_line_redrawn_after_it():
     assert ints == []
 
 
+def test_claude_interrupt_followed_by_a_later_answer_is_stale():
+    """2026-10-13 — 화면을 다시 열면 스크롤백의 옛 중단 줄 뒤로 다음 턴의 응답(`⏺`)이 함께
+    그려진다. 그 재그림이 지금 작업 중인 엔트리를 done으로 끝내면 안 된다."""
+    d, ints = _int_det()
+    d.feed("s1", CLAUDE_INTERRUPTED_REAL + "\r\n❯ \x1b[7mnext task\x1b[27m\r\n\r\n\x1b[38;5;231m⏺\x1b[39m Sure\r\n".encode())
+    assert ints == []
+
+
+def test_claude_interrupt_with_only_the_input_box_after_it_still_fires():
+    d, ints = _int_det()
+    d.feed("s1", CLAUDE_INTERRUPTED_REAL + "\r\n\x1b[2m────\x1b[22m\r\n❯ \r\n\x1b[2m────\x1b[22m\r\n".encode())
+    assert ints == ["s1"]
+
+
 def test_interrupt_not_scoped_to_other_cli_or_agy_without_literal():
     for agent in ("codex", "agy"):
         d, ints = _int_det(agent)

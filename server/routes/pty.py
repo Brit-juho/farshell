@@ -219,8 +219,8 @@ async def send_keys(session_id: str, request: Request):
     # 기존 동작 그대로 통과한다.
     prompt_id = body.get("prompt_id")
     if prompt_id is not None:
-        info = session_store.get(session_id)
-        tmux_name = info.tmux_name if info else None
+        # 토큰은 이 PTY가 지금 보여 주는 세션의 것이다(클라이언트가 옮겨 갔을 수 있다, deps).
+        tmux_name = _deps.tmux_for_pty(session_id)
         if not tmux_name or not agent_status.consume_prompt(tmux_name, str(prompt_id)):
             return JSONResponse({"error": "stale_prompt"}, status_code=409)
     try:

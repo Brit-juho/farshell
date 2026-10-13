@@ -15,6 +15,12 @@ EVENT="${1:-stop}"
 AGENT="${2:-claude}"
 SERVER="${VT_SERVER:-http://localhost:${VT_PORT:-7777}}"
 
+# 백그라운드로 돌린 Claude 세션은 그 작업을 띄운 pane의 환경(TMUX_PANE)을 물려받았을 뿐 그
+# pane에서 돌지 않는다 — 보내면 엉뚱한 세션 상태가 된다(Orca hook-script.ts와 같은 판단).
+if [ -n "${CLAUDE_JOB_DIR:-}" ]; then
+    exit 0
+fi
+
 # stdin 백업 — Stop 이벤트는 tts_hook.sh로도 전달해야 함
 TMPINPUT=$(mktemp)
 trap 'rm -f "$TMPINPUT"' EXIT
@@ -22,7 +28,10 @@ cat > "$TMPINPUT"
 
 # 서버에 이벤트 전송 (timeout 짧게 — 훅이 Claude를 막으면 안 됨)
 python3 - "$EVENT" "$TMPINPUT" "$SERVER" "$(dirname "$0")" "$AGENT" << 'PYEOF' || true
-import json, os, sys, urllib.error, urllib.request
+import json, os, sys, time, urllib.error, urllib.request
+
+# 이벤트를 받은 시각 — 서버가 늦게 도착한 이벤트를 버리는 기준(agent_status.on_event `ts`).
+received_ns = time.time_ns()
 
 event, input_file, server, hook_dir, agent = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 try:
@@ -97,6 +106,11 @@ try:
         "pane": os.environ.get("TMUX_PANE"),
         "tmux": os.environ.get("TMUX"),
         "agent": agent,
+        # 이 훅을 돌리는 셸의 pid. 서버가 요청을 처리하는 동안(이 스크립트는 응답을 기다린다)
+        # 프로세스 표에서 그 위의 에이전트가 정말 그 pane의 포그라운드인지 대조한다
+        # (server/hook_identity.py — 같은 pane을 물려받은 claude -p·데몬을 가려낸다).
+        "hook_pid": os.getppid(),
+        "ts": received_ns,
     }).encode()
     headers = {"Content-Type": "application/json"}
     if token:

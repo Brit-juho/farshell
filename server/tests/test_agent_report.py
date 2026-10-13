@@ -94,8 +94,9 @@ def test_codex_permission_and_session_end_hooks_reach_api(client):
     ended = client.post("/api/agent/event", json={
         "event": "session_end", "payload": {"session_id": "codex-1"},
     }).json()["state"]
-    assert ended["status"] == "done"
-    assert agent_status.status_for_session("b") == "done"
+    # 반납 — 종료한 세션이 30분짜리 「완료」로 남지 않는다.
+    assert ended["status"] == "idle" and ended["released"] is True
+    assert agent_status.status_for_session("b") == "idle"
 
 
 def test_codex_hook_targets_cwd_instead_of_stale_daemon_pane(client, monkeypatch):
@@ -146,3 +147,44 @@ def test_tmux_sessions_response_exposes_pane_id(client, monkeypatch):
     monkeypatch.setattr(tmux_runner, "run_text", fake_run_text)
     data = client.get("/api/tmux/sessions").json()
     assert {s["name"]: s["pane_id"] for s in data} == {"a": "%1", "b": "%2"}
+
+
+# ── 세션 소유자 (docs/plan-2.4/60) ──────────────────────────────────────────
+_PANE_A = {"pane": "%1", "tmux": "/tmp/tmux-501/fsh,1,0"}
+
+
+def test_session_end_does_not_drain_the_queue(client, monkeypatch):
+    """`/clear`의 SessionEnd가 완료로 처리돼 큐가 흘러들던 경로."""
+    import queue_runner
+    called = []
+    monkeypatch.setattr(queue_runner, "schedule_drain", lambda **kw: called.append(kw) or True)
+    client.post("/api/agent/event", json={
+        "event": "pre", "payload": {"session_id": "s1", "tool_name": "Bash"}, **_PANE_A})
+    body = client.post("/api/agent/event", json={
+        "event": "session_end", "payload": {"session_id": "s1", "reason": "clear"}, **_PANE_A}).json()
+    assert body["state"]["released"] is True and body["queue_scheduled"] is False
+    assert called == []
+    assert agent_status.status_for_session("a") == "idle"
+
+
+def test_non_owner_stop_is_ignored_and_does_not_drain(client, monkeypatch):
+    """같은 pane의 TMUX_PANE을 물려받은 자식 프로세스의 Stop."""
+    import queue_runner
+    called = []
+    monkeypatch.setattr(queue_runner, "schedule_drain", lambda **kw: called.append(kw) or True)
+    client.post("/api/agent/event", json={
+        "event": "pre", "payload": {"session_id": "main", "tool_name": "Bash"}, **_PANE_A})
+    body = client.post("/api/agent/event", json={
+        "event": "stop", "payload": {"session_id": "child"}, **_PANE_A}).json()
+    assert body["state"] is None and body["resolved_by"] == "ignored"
+    assert called == []
+    assert agent_status.status_for_session("a") == "working"
+
+
+def test_status_api_hides_retired_entries(client):
+    for ev, sid, extra in (("pre", "old", {"tool_name": "Bash"}), ("stop", "old", {}),
+                           ("session_start", "new", {"source": "clear"})):
+        client.post("/api/agent/event", json={
+            "event": ev, "payload": {"session_id": sid, **extra}, **_PANE_A})
+    all_ = client.get("/api/agent/status").json()["all"]
+    assert set(all_) == {"new"} and all_["new"]["status"] == "idle"

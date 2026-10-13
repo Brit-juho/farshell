@@ -16,6 +16,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **세션 상태가 엉뚱한 세션에 붙거나 옛 상태가 이기던 것**. tmux 세션마다 그 pane을 지금 가진 에이전트 세션 하나(소유자)만 상태를 낸다. `/clear`·`--resume`·재실행으로 새 세션이 열리면 옛 세션은 은퇴하고, 그 늦은 훅은 무시한다. 예전엔 한 세션에 엔트리가 셋까지 쌓여 옛 `done`이 지금의 `working`을 이겼다(실서버). 소유자가 아닌 session_id의 훅(같은 pane을 물려받은 `claude -p` 같은 자식)은 상태·큐·음성을 건드리지 않는다. `SessionEnd`는 완료가 아니라 반납이라 `/clear`가 「완료」 배지와 큐 투입을 만들지 않는다. 설치기가 `SessionEnd`·`UserPromptSubmit`도 관리한다(`fsh hooks install` 다시 실행).
+
+- **질문이 떴는데 대기 상태가 안 뜨거나 바로 풀리던 것**. Claude `AskUserQuestion`·`ExitPlanMode`의 PreToolUse에서 바로 대기로 올리고, 대기는 그 도구의 post(같은 `tool_use_id`)·다음 프롬프트·Stop·사람 입력으로만 풀린다. 서브에이전트(`agent_id`)나 병렬 도구의 이벤트는 대기를 풀지 않고, 서브에이전트 도구는 끝난 세션을 다시 작업 중으로 만들지 않는다. 화면 감지·중단 문구·입력 해제·TTL 전이도 15초 하트비트를 기다리지 않고 바로 화면에 간다.
+
+- **같은 pane을 물려받은 프로세스의 훅이 세션 상태를 바꾸던 것**. 훅이 자기 pid를 보내고, 서버가 프로세스 표로 그 위의 에이전트가 정말 그 pane의 포그라운드 대화형 프로세스인지 대조한다. Bash 도구나 MCP가 띄운 `claude -p`는 소유권을 가져가지 못하고, 데몬처럼 pane 밖에서 돈 훅은 pane 주장을 버린다. 확인된 에이전트는 비정상 종료로 남은 옛 상태를 바로 넘겨받는다. `TMUX_PANE`이 없는 Claude 훅(데스크톱 앱·IDE)은 같은 폴더의 세션에 붙이지 않는다. 백그라운드 Claude 세션(`CLAUDE_JOB_DIR`)의 훅은 보내지 않고, 늦게 도착한 이벤트는 버린다.
+
+- **이름을 바꾸거나 닫은 세션, 다른 세션으로 옮겨 간 화면의 상태**. tmux 훅이 올 때마다 엔트리가 tmux 세션 id로 이름 변경을 따라가고, 닫힌 세션의 엔트리는 지운다(같은 이름의 새 세션이 옛 상태를 물려받지 않는다). 웹 터미널의 tmux 클라이언트가 다른 세션으로 옮겨 가면(`detach-on-destroy`, `switch-client`, `prefix s`) 그 화면의 질문·중단 감지가 옮겨 간 세션에 붙는다. 지난 턴의 Claude `Interrupted ·` 줄이 다시 그려져도 지금 작업을 끝내지 않는다.
+
+- **Codex 승인·질문 대기를 pane으로 찾지 못하던 것**. 프로세스로 확인된 Codex 훅(`codex --no-daemon` 등)은 pane으로 세션을 찾고, 확인되지 않으면 같은 폴더에서 Codex가 떠 있는 pane만 후보로 본다. pane 제목의 `Action Required`로 대기를 보강하고, 거절·ESC로 훅 없이 끝난 대기도 제목으로 내린다.
+
 - **초기 번들이 300KiB 상한에 닿아 있던 것**. Vite lib(ES) 모드는 공백·주석을 줄이지 않아 `core.js`에 주석과 들여쓰기가 그대로 실렸다. 산출 청크마다 esbuild로 공백·주석만 걷는 단계를 더해 초기 페이로드가 307KB에서 253KB로 줄었다(`shell.js` 220→168KB, `voice.js` 42→32KB). 식별자는 그대로 두고 소스맵은 이어 붙인다.
 
 - **큐·에이전트 메시지의 여러 줄 지시가 첫 줄에서 제출되던 것**. 자동 입력(큐, 대상 지정 음성, 원격 입력)이 `send-keys -l` 대신 tmux 버퍼 붙여넣기(`paste-buffer -p -r`)로 들어가고, 200ms 뒤 Enter를 따로 보낸다. 같은 pane에 쓰는 자동 입력은 pane별 락으로 직렬화한다.

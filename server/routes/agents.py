@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 import agent_detector
 import agent_status
 import auth
+import hook_identity
 import pane_resolve
 import report_seen
 
@@ -43,6 +44,49 @@ def _public_active(active: list) -> list:
     return [agent_status.public_entry(e) for e in active]
 
 
+async def _broadcast_agent(msg: dict) -> None:
+    dead = set()
+    for ws in list(_agent_event_clients):
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            dead.add(ws)
+    _agent_event_clients.difference_update(dead)
+
+
+# 2026-10-13(docs/plan-2.4/60) — 훅 요청 밖에서 일어난 전이(화면 감지·중단 문구·입력
+# 해제·TTL·은퇴)를 바로 보낸다. 예전엔 15초 하트비트 스냅샷에야 실려서, 화면으로만 잡히는
+# 질문이 늦게 뜨거나 은퇴한 옛 엔트리가 그동안 세션 상태를 차지했다. agent_status는
+# 스레드(to_thread)에서도 상태를 바꾸므로 이벤트 루프로 넘겨서 보낸다.
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _remember_loop() -> None:
+    global _main_loop
+    try:
+        _main_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+
+def _on_status_change(entry: dict, reason: str) -> None:
+    loop = _main_loop
+    if loop is None or loop.is_closed() or not _agent_event_clients:
+        return
+    msg = {"type": "agent_event", "event": reason, "state": entry, "resolved_by": "server"}
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is loop:
+        loop.create_task(_broadcast_agent(msg))
+    else:
+        loop.call_soon_threadsafe(lambda: loop.create_task(_broadcast_agent(msg)))
+
+
+agent_status.subscribe(_on_status_change)
+
+
 def _apply_entry_agent_overrides(result: dict) -> dict:
     """P2-1(ADR-34) — 1차 신호(엔트리의 `agent`, 자기보고/훅)가 2차 추측
     (`agent_detector`, tmux pane 프로세스 스캔)을 이긴다. 세션 전환 순간
@@ -64,6 +108,19 @@ def _apply_entry_agent_overrides(result: dict) -> dict:
         # 미지의 이름(E10 — 오타 등)도 그대로 내보낸다. 아이콘만 안 뜬다.
         result[name] = {"agent": agent, **(info or {})}
     return result
+
+
+def _pane_titles() -> dict[str, str]:
+    """{tmux 세션 이름: 활성 pane 제목}. Codex의 「Action Required」 제목을 읽는 데 쓴다."""
+    import tmux_runner
+    text = tmux_runner.run_text(
+        ["list-panes", "-a", "-F", "#{session_name}\t#{pane_active}\t#{pane_title}"], timeout=2.0) or ""
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) == 3 and (parts[1] == "1" or parts[0] not in out):
+            out[parts[0]] = parts[2]
+    return out
 
 
 def _agents_now() -> dict:
@@ -116,6 +173,11 @@ async def _agents_loop(kick: asyncio.Event) -> None:
             break
         if all(ws in _agent_hidden for ws in _agent_event_clients):
             continue
+        try:
+            # Codex 대기의 보조 신호(pane 제목). 상태 변경 알림은 agent_status가 보낸다.
+            agent_status.apply_titles(await asyncio.to_thread(_pane_titles))
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"pane 제목 읽기 실패: {e}")
         try:
             cur = await asyncio.to_thread(_agents_now)
         except Exception as e:  # noqa: BLE001 — 한 번 실패해도 다음 주기에 다시 본다
@@ -314,6 +376,7 @@ async def agent_event(request: Request):
     # `request` 에 타입 annotation이 없으면 FastAPI가 이걸 '필수 쿼리 파라미터'로 읽어
     # 모든 요청이 422로 떨어진다. 함수 안의 `from fastapi import Request` 는 시그니처에
     # 아무 영향이 없어서, agent_hook.sh 가 보내는 이벤트가 줄곧 조용히 실패하고 있었다.
+    _remember_loop()
     try:
         body = await request.json()
     except Exception:
@@ -326,24 +389,51 @@ async def agent_event(request: Request):
     # 둘 다 실패하면 session=None — "모호하면 아무것도 강조하지 않는다"는
     # 기존 규칙 그대로다(엉뚱한 카드를 켜는 것보다 안전하다).
     clues = (body.get("pane"), body.get("tmux"), payload.get("cwd"))
-    if body.get("agent") == "codex":
-        session, how = pane_resolve.resolve(*clues, agent="codex")
-    else:
-        session, how = pane_resolve.resolve(*clues)
+    agent_name = body.get("agent")
+    # P2(2026-10-13) — 훅 프로세스가 정말 그 pane의 대화형 에이전트인지 프로세스 표로 대조한다
+    # (hook_identity). 같은 pane을 물려받은 자식(claude -p·MCP 자식·Codex 데몬)을 가려낸다.
+    # 옛 훅은 hook_pid를 안 보내 `unknown` — 예전 규칙 그대로 간다(AGENTS.md 계약 8).
+    verdict = hook_identity.UNKNOWN
+    if body.get("pane") and pane_resolve.is_our_socket(body.get("tmux")):
+        try:
+            verdict, _agent_pid = await asyncio.to_thread(
+                hook_identity.classify, body.get("hook_pid"), body.get("pane"), payload.get("session_id"))
+        except Exception as e:  # noqa: BLE001 — 판정 실패는 예전 규칙으로
+            logger.debug(f"훅 프로세스 대조 실패: {e}")
+    if verdict == hook_identity.FOREIGN:
+        clues = (None, None, payload.get("cwd"))   # pane 주장이 거짓 — pane 단서를 버린다
+    session, how = pane_resolve.resolve(
+        *clues, agent=agent_name,
+        pane_verified=verdict == hook_identity.OK,
+        # Claude 훅은 pane 셸의 자식이다. pane이 없으면 tmux 밖의 Claude라 cwd로 붙이지 않는다.
+        cwd_fallback=agent_name == "codex")
     if how == "foreign-tmux":
         logger.debug("훅이 우리 소켓이 아닌 tmux에서 왔다 — pane id 폐기")
+    verified = {hook_identity.OK: True, hook_identity.CHILD: False}.get(verdict)
+    (logger.info if verdict in (hook_identity.CHILD, hook_identity.FOREIGN) else logger.debug)(
+        "훅 %s sid=%s pane=%s → %s(%s), 프로세스 판정 %s", event,
+        str(payload.get("session_id"))[:8], body.get("pane"), session, how, verdict)
+    ts = body.get("ts") if isinstance(body.get("ts"), int) else None
 
     # P2-1(ADR-34) — 훅이 자기 이름을 이미 실어 보내는데(`report_seen.mark` 아래
     # 줄이 그 값을 쓰고 있었다) 정작 엔트리에는 안 갔다. `on_event`가 1차 신호로
     # 받아 세션(agent_detector)보다 우선 적용한다.
-    state = agent_status.on_event(event, payload, session=session, agent=body.get("agent"))
+    state = agent_status.on_event(event, payload, session=session, agent=agent_name,
+                                  verified=verified, ts=ts)
     report_seen.mark(body.get("agent"))
+    # None = 그 세션의 소유자가 아니거나 은퇴한 세션의 이벤트(agent_status 「세션 소유자」).
+    # 같은 pane을 물려받은 자식 프로세스의 Stop이 큐를 흘리거나 완료를 낭독하면 안 된다.
+    ignored = state is None and event in agent_status._HOOK_EVENTS
+    if ignored:
+        how = "ignored"
+    released = bool((state or {}).get("released"))
     # 음성 실패는 상태 훅·큐 투입을 막지 않는다.
-    try:
-        from voice_sessions import coordinator
-        coordinator.completion(body, session or (state or {}).get("tmux_session"))
-    except Exception as e:
-        logger.warning("음성 완료 예약 실패: %s", type(e).__name__)
+    if state is not None and not released:
+        try:
+            from voice_sessions import coordinator
+            coordinator.completion(body, session or state.get("tmux_session"))
+        except Exception as e:
+            logger.warning("음성 완료 예약 실패: %s", type(e).__name__)
     # 2026-09-30 — 에이전트가 시작·끝나는 순간이 곧 pane의 실행 중 명령이 바뀌는
     # 순간이다. tmux엔 그 훅이 없어 세션 감시 주기(30초)를 기다리지 않게 알린다.
     import routes.system as _system_routes
@@ -401,17 +491,15 @@ async def agent_event(request: Request):
             logger.warning(f"위임 이벤트 처리 실패: {e}")
 
     public_state = agent_status.public_entry(state) if state else state
-    msg = {"type": "agent_event", "event": event, "state": public_state, "resolved_by": how}
-    dead = set()
-    for ws in list(_agent_event_clients):
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            dead.add(ws)
-    _agent_event_clients.difference_update(dead)
+    # 반납은 agent_status가 이미 `release`로 알렸다(_on_status_change). 무시한 이벤트는
+    # 화면에 보낼 상태가 없다.
+    if state is not None and not released:
+        await _broadcast_agent({"type": "agent_event", "event": event, "state": public_state,
+                                "resolved_by": how})
     _kick_agents()
 
-    return {"ok": True, "state": public_state, "queue_scheduled": queued}
+    return {"ok": True, "state": public_state, "queue_scheduled": queued, "resolved_by": how,
+            "identity": verdict}
 
 
 @router.post("/api/agent/report")
@@ -462,7 +550,7 @@ async def agent_report(request: Request):
 async def agent_status_get():
     # 기존 필드(active/all)는 그대로 둔다 — 하위호환. A1에서 각 엔트리에
     # status가 추가됐고, 소비자는 그걸 그대로 쓰면 된다(파생 금지).
-    return {"active": _public_active(agent_status.all_active()), "all": _public_state(agent_status.get_state())}
+    return {"active": _public_active(agent_status.all_active()), "all": _public_state(agent_status.visible_state())}
 
 
 @router.websocket("/ws-agent")
@@ -475,6 +563,7 @@ async def ws_agent(websocket: WebSocket):
         await websocket.close(code=4001)
         return
     await websocket.accept()
+    _remember_loop()
     _agent_event_clients.add(websocket)
     _ensure_agents_loop()
     loop = asyncio.get_running_loop()
@@ -503,7 +592,7 @@ async def ws_agent(websocket: WebSocket):
                 # 여기 넣지 않는다(비싸다 — 그건 agents_change 때만).
                 await websocket.send_json({
                     "type": "agent_status_sync",
-                    "all": _public_state(agent_status.get_state()),
+                    "all": _public_state(agent_status.visible_state()),
                 })
             except Exception:
                 return
@@ -521,7 +610,7 @@ async def ws_agent(websocket: WebSocket):
             "active": _public_active(agent_status.all_active()),
             # A1: 재접속·새로고침 시 done/waiting까지 복원되려면 active(=도구
             # 실행 중)만으론 부족하다 — 상태를 가진 엔트리 전체를 함께 보낸다.
-            "all": _public_state(agent_status.get_state()),
+            "all": _public_state(agent_status.visible_state()),
             "agents": agents_now,
         })
         while True:
