@@ -157,7 +157,7 @@ export function renderVoiceInput() {
 
     const head = el('div', 'vt-vm-head');
     head.appendChild(el('span', 'vt-vm-name', m.label));
-    for (const tag of m.tags || []) head.appendChild(el('span', tag === '권장' ? 'vt-tag vt-vm-tag-rec' : 'vt-tag', tag));
+    for (const tag of m.tags || []) head.appendChild(el('span', tag === t('권장') ? 'vt-tag vt-vm-tag-rec' : 'vt-tag', tag));
     if (m.selected) head.appendChild(el('span', 'vt-tag vt-vm-tag-cur', t('사용 중')));
     const st = el('span', 'vt-tag vt-vm-state', modelState(m));
     st.dataset.state = m.ready ? 'ready' : (modelState(m) === t('설치 필요') ? 'need' : 'get');

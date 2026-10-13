@@ -46,6 +46,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import store_lock
+from i18n import tr
 import vt_paths
 
 logger = logging.getLogger(__name__)
@@ -462,15 +463,15 @@ from host_store.audit import (  # noqa: E402,F401
 
 def _fmt_when(ts: int) -> str:
     if not ts:
-        return "기록 없음"
+        return tr("기록 없음")
     delta = int(time.time()) - int(ts)
     if delta < 60:
-        return "방금"
+        return tr("방금")
     if delta < 3600:
-        return f"{delta // 60}분 전"
+        return tr("{n}분 전", n=delta // 60)
     if delta < 86400:
-        return f"{delta // 3600}시간 전"
-    return f"{delta // 86400}일 전"
+        return tr("{n}시간 전", n=delta // 3600)
+    return tr("{n}일 전", n=delta // 86400)
 
 
 def _cli(argv: list[str]) -> int:
@@ -483,26 +484,25 @@ def _cli(argv: list[str]) -> int:
         me = get_self()
         peers, grants = list_peers(), list_grants()
         print()
-        print(f"  🖥  이 호스트: {me['label']}  ({me['id']})")
+        print("  🖥  " + tr("이 호스트: {label}  ({id})", label=me['label'], id=me['id']))
         print()
-        print("  ▸ 내가 붙는 호스트 (peers)")
+        print("  ▸ " + tr("내가 붙는 호스트 (peers)"))
         if not peers:
-            print("      없음 — 상대 맥에서 'fsh host pair' 후 'fsh host add' 하세요")
+            print("      " + tr("없음 — 상대 맥에서 'fsh host pair' 후 'fsh host add' 하세요"))
         for p in peers:
             lat = f"{p['latencyMs']}ms" if p.get("latencyMs") is not None else "-"
             print(f"      {p['id']:<16} {p['label']:<16} {p['url']}")
-            print(f"      {'':<16} 마지막 확인 {_fmt_when(p.get('lastSeen', 0))} · {lat}"
-                  f" · v{p.get('version') or '?'}")
+            print(f"      {'':<16} " + tr("마지막 확인 {when} · {lat} · v{version}", when=_fmt_when(p.get('lastSeen', 0)), lat=lat, version=p.get('version') or '?'))
         print()
-        print("  ▸ 나를 보도록 허용한 호스트 (grants)")
+        print("  ▸ " + tr("나를 보도록 허용한 호스트 (grants)"))
         if not grants:
-            print("      없음")
+            print("      " + tr("없음"))
         for g in grants:
-            agent = " · 에이전트 메시지 수신" if g.get("agentMessages") else ""
-            print(f"      {g['id']:<16} {g['label']:<16} 등급 {g['level']}{agent}"
-                  f" · 마지막 접속 {_fmt_when(g.get('lastSeen', 0))}")
+            agent = (" · " + tr("에이전트 메시지 수신")) if g.get("agentMessages") else ""
+            print(f"      {g['id']:<16} {g['label']:<16} " + tr("등급 {level}", level=g['level']) + agent
+                  + " · " + tr("마지막 접속 {when}", when=_fmt_when(g.get('lastSeen', 0))))
         print()
-        print("  추가: fsh host pair (상대 맥) → fsh host add <url> --ticket <티켓> (내 맥)")
+        print("  " + tr("추가: fsh host pair (상대 맥) → fsh host add <url> --ticket <티켓> (내 맥)"))
         print()
         return 0
 
@@ -512,22 +512,22 @@ def _cli(argv: list[str]) -> int:
         ticket = issue_pair_ticket(label)
         me = get_self()
         print()
-        print(f"  🔑 페어링 티켓 (5분간 유효, 1회용)")
+        print("  🔑 " + tr("페어링 티켓 (5분간 유효, 1회용)"))
         print()
         print(f"      {ticket}")
         print()
-        print(f"  이 호스트: {me['label']} ({me['id']})")
-        print("  상대 맥에서:  fsh host add <이 맥의 접속 URL> --ticket <위 티켓>")
+        print("  " + tr("이 호스트: {label} ({id})", label=me['label'], id=me['id']))
+        print("  " + tr("상대 맥에서:  fsh host add <이 맥의 접속 URL> --ticket <위 티켓>"))
         print()
-        print("  ⚠ 상대는 기본 'view'(읽기 전용)로 등록됩니다.")
-        print("    입력까지 허용하려면 등록 후: fsh host allow-control <id>")
+        print("  ⚠ " + tr("상대는 기본 'view'(읽기 전용)로 등록됩니다."))
+        print("    " + tr("입력까지 허용하려면 등록 후: fsh host allow-control <id>"))
         print()
         return 0
 
     if cmd == "add":
         # A 쪽에서 실행 — 티켓을 들고 상대에게 등록을 요청한다.
         if not rest:
-            print("  ✗ 사용법: fsh host add <url> --ticket <티켓> [--label 별명]", file=sys.stderr)
+            print("  ✗ " + tr("사용법: fsh host add <url> --ticket <티켓> [--label 별명]"), file=sys.stderr)
             return 2
         url = rest[0]
         ticket = label = ""
@@ -540,118 +540,118 @@ def _cli(argv: list[str]) -> int:
             else:
                 i += 1
         if not ticket:
-            print("  ✗ --ticket 이 필요합니다 (상대 맥에서 'fsh host pair'로 발급)", file=sys.stderr)
+            print("  ✗ " + tr("--ticket 이 필요합니다 (상대 맥에서 'fsh host pair'로 발급)"), file=sys.stderr)
             return 2
         if not url.startswith(("http://", "https://")):
-            print(f"  ✗ URL은 http(s):// 로 시작해야 합니다: {url}", file=sys.stderr)
+            print("  ✗ " + tr("URL은 http(s):// 로 시작해야 합니다: {url}", url=url), file=sys.stderr)
             return 2
         import peer_client
         try:
             r = peer_client.pair_sync(url, ticket, label)
         except peer_client.PeerError as e:
-            print(f"  ✗ 페어링 실패: {e.reason}", file=sys.stderr)
+            print("  ✗ " + tr("페어링 실패: {reason}", reason=e.reason), file=sys.stderr)
             return 1
         p = r["peer"]
         print()
-        print(f"  ✓ 페어링 완료 — {p['label']} ({p['id']})")
+        print("  ✓ " + tr("페어링 완료 — {label} ({id})", label=p['label'], id=p['id']))
         print(f"      URL      {p['url']}")
-        print(f"      지연      {r['latencyMs']}ms")
-        print(f"      상대 버전  v{r['remoteVersion'] or '?'}")
+        print("      " + tr("지연") + f"      {r['latencyMs']}ms")
+        print("      " + tr("상대 버전") + f"  v{r['remoteVersion'] or '?'}")
         if abs(r["clockSkew"]) > 5:
-            print(f"      ⚠ 시계 차이 {r['clockSkew']:+.1f}초 — 보정해서 저장했습니다")
+            print("      ⚠ " + tr("시계 차이 {skew}초 — 보정해서 저장했습니다", skew=f"{r['clockSkew']:+.1f}"))
         print()
-        print("  이 호스트는 읽기 전용(view)입니다. 상대 맥에서 등급을 올리려면:")
+        print("  " + tr("이 호스트는 읽기 전용(view)입니다. 상대 맥에서 등급을 올리려면:"))
         print(f"      fsh host allow-control {host_store_self_id_hint()}")
         print()
         return 0
 
     if cmd == "ping":
         if not rest:
-            print("  ✗ id가 필요합니다: fsh host ping <id>", file=sys.stderr)
+            print("  ✗ " + tr("id가 필요합니다: fsh host ping <id>"), file=sys.stderr)
             return 2
         peer = find_peer(rest[0])
         if peer is None:
-            print(f"  ✗ '{rest[0]}' 호스트가 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{id}' 호스트가 없습니다", id=rest[0]), file=sys.stderr)
             return 1
         import peer_client
         try:
             r = peer_client.ping_sync(peer)
         except peer_client.PeerError as e:
-            print(f"  ✗ {peer['label']} ({peer['id']}) 연결 안 됨 — {e.reason}", file=sys.stderr)
+            print("  ✗ " + tr("{label} ({id}) 연결 안 됨 — {reason}", label=peer['label'], id=peer['id'], reason=e.reason), file=sys.stderr)
             return 1
         print(f"  ✓ {r['label']} ({r['id']}) · {r['latencyMs']}ms · v{r.get('version') or '?'}"
-              f" · 내 등급 {r.get('level', '?')}")
+              " · " + tr("내 등급 {level}", level=r.get('level', '?')))
         if abs(r["clockSkew"]) > 5:
-            print(f"    ⚠ 시계 차이 {r['clockSkew']:+.1f}초")
+            print("    ⚠ " + tr("시계 차이 {skew}초", skew=f"{r['clockSkew']:+.1f}"))
         return 0
 
     if cmd in ("rm", "remove"):
         if not rest:
-            print("  ✗ id가 필요합니다", file=sys.stderr)
+            print("  ✗ " + tr("id가 필요합니다"), file=sys.stderr)
             return 2
         pid = rest[0]
         did_peer = remove_peer(pid)
         did_grant = remove_grant(pid)
         if not (did_peer or did_grant):
-            print(f"  ✗ '{pid}' 호스트가 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{id}' 호스트가 없습니다", id=pid), file=sys.stderr)
             return 1
         parts = []
         if did_peer:
-            parts.append("내가 붙던 연결")
+            parts.append(tr("내가 붙던 연결"))
         if did_grant:
-            parts.append("상대에게 준 접근 권한")
-        print(f"  ✓ {pid} 삭제됨 ({', '.join(parts)})")
+            parts.append(tr("상대에게 준 접근 권한"))
+        print("  ✓ " + tr("{id} 삭제됨 ({parts})", id=pid, parts=', '.join(parts)))
         return 0
 
     if cmd == "rename":
         if len(rest) < 2:
-            print("  ✗ 사용법: fsh host rename <id> <새 별명>   (self = 이 호스트)", file=sys.stderr)
+            print("  ✗ " + tr("사용법: fsh host rename <id> <새 별명>   (self = 이 호스트)"), file=sys.stderr)
             return 2
         if rest[0] == "self":
             me = set_self_label(" ".join(rest[1:]))
-            print(f"  ✓ 이 호스트의 이름: {me['label']} ({me['id']})")
+            print("  ✓ " + tr("이 호스트의 이름: {label} ({id})", label=me['label'], id=me['id']))
             return 0
         p = rename_peer(rest[0], " ".join(rest[1:]))
         if p is None:
-            print(f"  ✗ '{rest[0]}' 호스트가 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{id}' 호스트가 없습니다", id=rest[0]), file=sys.stderr)
             return 1
-        print(f"  ✓ {p['id']} → {p['label']}  (내 쪽에서만 쓰는 이름입니다)")
+        print("  ✓ " + tr("{id} → {label}  (내 쪽에서만 쓰는 이름입니다)", id=p['id'], label=p['label']))
         return 0
 
     if cmd in ("allow-control", "deny-control"):
         if not rest:
-            print("  ✗ id가 필요합니다", file=sys.stderr)
+            print("  ✗ " + tr("id가 필요합니다"), file=sys.stderr)
             return 2
         level = LEVEL_CONTROL if cmd == "allow-control" else LEVEL_VIEW
         g = set_grant_level(rest[0], level)
         if g is None:
-            print(f"  ✗ '{rest[0]}' 를 허용 목록에서 찾을 수 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{id}' 를 허용 목록에서 찾을 수 없습니다", id=rest[0]), file=sys.stderr)
             return 1
         if level == LEVEL_CONTROL:
-            print(f"  ✓ {g['id']} 등급 → control")
-            print("    ⚠ 이제 그 호스트가 세션에 입력을 보낼 수 있습니다 — SSH로 들어온 것과")
-            print("      같은 수준의 노출입니다. 되돌리려면: fsh host deny-control " + g["id"])
+            print("  ✓ " + tr("{id} 등급 → control", id=g['id']))
+            print("    ⚠ " + tr("이제 그 호스트가 세션에 입력을 보낼 수 있습니다 — SSH로 들어온 것과"))
+            print("      " + tr("같은 수준의 노출입니다. 되돌리려면: fsh host deny-control {id}", id=g["id"]))
         else:
-            print(f"  ✓ {g['id']} 등급 → view (읽기 전용)")
+            print("  ✓ " + tr("{id} 등급 → view (읽기 전용)", id=g['id']))
         return 0
 
     if cmd in ("allow-agent", "deny-agent"):
         if not rest:
-            print("  ✗ id가 필요합니다", file=sys.stderr)
+            print("  ✗ " + tr("id가 필요합니다"), file=sys.stderr)
             return 2
         on = cmd == "allow-agent"
         g = set_grant_agent(rest[0], on)
         if g is None:
-            print(f"  ✗ '{rest[0]}' 를 허용 목록에서 찾을 수 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{id}' 를 허용 목록에서 찾을 수 없습니다", id=rest[0]), file=sys.stderr)
             return 1
         if on:
-            print(f"  ✓ {g['id']} 에이전트 메시지 수신 → 켬")
-            print("    ⚠ 그 맥의 에이전트가 이 맥 에이전트에게 일을 시킬 수 있습니다(작업이 끝난 뒤")
-            print("      큐로 전달). control 등급도 함께 있어야 동작합니다. 끄려면: fsh host deny-agent " + g["id"])
+            print("  ✓ " + tr("{id} 에이전트 메시지 수신 → 켬", id=g['id']))
+            print("    ⚠ " + tr("그 맥의 에이전트가 이 맥 에이전트에게 일을 시킬 수 있습니다(작업이 끝난 뒤"))
+            print("      " + tr("큐로 전달). control 등급도 함께 있어야 동작합니다. 끄려면: fsh host deny-agent {id}", id=g["id"]))
             if g.get("level") != LEVEL_CONTROL:
-                print("    ⓘ 지금은 등급이 view라 아직 받지 않습니다 — fsh host allow-control " + g["id"])
+                print("    ⓘ " + tr("지금은 등급이 view라 아직 받지 않습니다 — fsh host allow-control {id}", id=g["id"]))
         else:
-            print(f"  ✓ {g['id']} 에이전트 메시지 수신 → 끔")
+            print("  ✓ " + tr("{id} 에이전트 메시지 수신 → 끔", id=g['id']))
         return 0
 
     if cmd == "log":
@@ -659,7 +659,7 @@ def _cli(argv: list[str]) -> int:
         rows = read_audit(pid, limit=50)
         print()
         if not rows:
-            print("  기록이 없습니다")
+            print("  " + tr("기록이 없습니다"))
         for r in rows:
             mark = "✓" if r.get("ok") else "✗"
             when = time.strftime("%m-%d %H:%M:%S", time.localtime(r.get("ts", 0)))
@@ -670,8 +670,8 @@ def _cli(argv: list[str]) -> int:
 
     if cmd == "revoke-all":
         r = revoke_all()
-        print(f"  ✓ 전부 무효화 — peers {r['peers']}건, grants {r['grants']}건")
-        print("    상대 맥에도 남아 있는 항목은 그쪽에서 'fsh host rm' 하세요.")
+        print("  ✓ " + tr("전부 무효화 — peers {peers}건, grants {grants}건", peers=r['peers'], grants=r['grants']))
+        print("    " + tr("상대 맥에도 남아 있는 항목은 그쪽에서 'fsh host rm' 하세요."))
         return 0
 
     print(f"unknown command: {cmd}", file=sys.stderr)

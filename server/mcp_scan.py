@@ -26,6 +26,7 @@ import mcp_adapters
 import mcp_sources
 import tmux_runner
 import worktree
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -40,37 +41,40 @@ _GIT_TIMEOUT = 2.0
 
 # 도구별로 "지금 이 순간"이 어떻게 다른지. 화면이 안내 문구를 만드는 근거이고,
 # 전부 공식 문서나 소스 확인으로 뒷받침된 것만 적는다(97번 §0-4).
-TOOL_FACTS = {
-    "claude": {
-        "hot_reload": False,
-        "apply": "다음 세션부터 — 실행 중인 창은 재시작해야 반영된다",
-        "off_is_immediate": None,  # 공식 문서에 없음. 모르는 건 모른다고 한다.
-    },
-    "codex": {
-        "hot_reload": False,
-        "apply": "다음 세션부터 — 실행 중인 창은 재시작해야 반영된다",
-        "off_is_immediate": None,
-    },
-    # agy(Antigravity CLI)는 설정이 전역 파일 하나뿐이라 워크트리 개념이 없다.
-    # 핫리로드 여부는 **확인하지 못했다** — 구글의 이전 CLI 조사 결과는 다른
-    # 제품의 것이라 그대로 가져다 쓰지 않는다(2026-09-16 정정).
-    "agy": {
-        "hot_reload": None,
-        "apply": "반영 시점이 확인되지 않았다 — 실행 중인 창은 재시작을 권한다",
-        "off_is_immediate": None,
-        "scopes": ["global"],
-    },
-    # opencode — 전역 + 프로젝트 파일이 **병합**된다. `enabled: true/false`로
-    # codex와 같은 방향이다. ⚠ 꺼둔 서버가 조용히 다시 켜지는 upstream 버그가
-    # 보고돼 있어(§6 4단계) "껐다"를 확정으로 말하지 않는다 — 이 화면의
-    # 값어치는 정직함이므로 그 사실을 그대로 표시한다.
-    "opencode": {
-        "hot_reload": False,
-        "apply": "다음 세션부터 — 실행 중인 창은 재시작해야 반영된다",
-        "off_is_immediate": None,
-        "off_warning": "opencode는 꺼둔 서버가 다시 켜지는 문제가 보고돼 있습니다 — 끈 뒤 실제로 꺼졌는지 확인하세요",
-    },
-}
+def tool_facts() -> dict:
+    """tr()는 호출 시점의 언어로 나가야 하므로 요청마다 만든다."""
+    return {
+        "claude": {
+            "hot_reload": False,
+            "apply": tr("다음 세션부터 — 실행 중인 창은 재시작해야 반영된다"),
+            "off_is_immediate": None,  # 공식 문서에 없음. 모르는 건 모른다고 한다.
+        },
+        "codex": {
+            "hot_reload": False,
+            "apply": tr("다음 세션부터 — 실행 중인 창은 재시작해야 반영된다"),
+            "off_is_immediate": None,
+        },
+        # agy(Antigravity CLI)는 설정이 전역 파일 하나뿐이라 워크트리 개념이 없다.
+        # 핫리로드 여부는 **확인하지 못했다** — 구글의 이전 CLI 조사 결과는 다른
+        # 제품의 것이라 그대로 가져다 쓰지 않는다(2026-09-16 정정).
+        "agy": {
+            "hot_reload": None,
+            "apply": tr("반영 시점이 확인되지 않았다 — 실행 중인 창은 재시작을 권한다"),
+            "off_is_immediate": None,
+            "scopes": ["global"],
+        },
+        # opencode — 전역 + 프로젝트 파일이 **병합**된다. `enabled: true/false`로
+        # codex와 같은 방향이다. ⚠ 꺼둔 서버가 조용히 다시 켜지는 upstream 버그가
+        # 보고돼 있어(§6 4단계) "껐다"를 확정으로 말하지 않는다 — 이 화면의
+        # 값어치는 정직함이므로 그 사실을 그대로 표시한다.
+        "opencode": {
+            "hot_reload": False,
+            "apply": tr("다음 세션부터 — 실행 중인 창은 재시작해야 반영된다"),
+            "off_is_immediate": None,
+            "off_warning": tr("opencode는 꺼둔 서버가 다시 켜지는 문제가 보고돼 있습니다 — 끈 뒤 실제로 꺼졌는지 확인하세요"),
+        },
+    }
+
 
 TOOLS = ("claude", "codex", "agy", "opencode")
 
@@ -185,11 +189,12 @@ def scan(worktree_id: Optional[str] = None, tools: Optional[tuple] = None) -> di
         errors.extend(result["errors"])
 
     mcp_sources.resolve(servers, wt_path)
+    facts = tool_facts()
     return {
         "worktree": _public(wt),
         "servers": servers,
         "errors": errors,
-        "facts": {t: TOOL_FACTS[t] for t in (tools or TOOLS) if t in TOOL_FACTS},
+        "facts": {t: facts[t] for t in (tools or TOOLS) if t in facts},
     }
 
 

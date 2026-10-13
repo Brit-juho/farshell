@@ -66,6 +66,43 @@ def set_lang(lang: str) -> None:
     os.environ["VT_LANG"] = lang
 
 
+# ── 서버가 직접 번역하는 문구 ────────────────────────────────────────────
+# 키는 프런트엔드와 같은 한국어 원문, 사전도 같은 locales/en.js 하나다. 언어는 서버
+# 전역 하나라 요청마다 달라지지 않는다. 한국어이거나 사전에 없으면 원문이 나간다.
+_DICT_PATH = _ROOT / "frontend" / "js" / "locales" / "en.js"
+_dict_cache: tuple[float, dict] = (-1.0, {})
+_VAR = re.compile(r"\{(\w+)\}")
+
+
+def _en_dict() -> dict:
+    global _dict_cache
+    try:
+        mtime = _DICT_PATH.stat().st_mtime
+    except OSError:
+        return {}
+    if _dict_cache[0] != mtime:
+        _dict_cache = (mtime, load_dict(_DICT_PATH))
+    return _dict_cache[1]
+
+
+def tr(src: str, **vars) -> str:
+    """한국어 원문 `src`를 현재 언어로. `{name}` 자리는 vars로 채운다.
+
+    값이 {one, other}이면 vars["n"]이 1일 때 one을 쓴다(프런트엔드 vtT와 같은 규칙).
+    """
+    out = src
+    if current() != "ko":
+        v = _en_dict().get(src)
+        if isinstance(v, str):
+            out = v
+        elif isinstance(v, dict):
+            one = v.get("one")
+            out = one if (one and vars.get("n") == 1) else (v.get("other") or one or src)
+    if vars:
+        out = _VAR.sub(lambda m: str(vars[m.group(1)]) if m.group(1) in vars else m.group(0), out)
+    return out
+
+
 _MARKER = "<!--vt:i18n-->"
 _META = re.compile(r'(<meta [^>]*content=")([^"]*)("[^>]*data-i18n-attr="content"[^>]*>)')
 

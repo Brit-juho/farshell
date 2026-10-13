@@ -26,6 +26,7 @@ import file_store
 import fs_watch
 import fsguard
 import tmux_target
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ def _list_dir(p: Path) -> dict:
                     size = 0
                 entries.append({"name": name, "dir": is_dir, "size": size})
     except PermissionError:
-        raise fsguard.FsDenied("읽기 권한이 없습니다")
+        raise fsguard.FsDenied(tr("읽기 권한이 없습니다"))
 
     # 디렉토리 우선, 그다음 이름순 — 파일 탐색기의 보편적 정렬.
     entries.sort(key=lambda e: (not e["dir"], e["name"].lower()))
@@ -243,7 +244,7 @@ async def fs_file(path: str = Query(...)):
     try:
         return await asyncio.to_thread(_read_file, p)
     except PermissionError:
-        return _denied("읽기 권한이 없습니다")
+        return _denied(tr("읽기 권한이 없습니다"))
     except OSError as e:
         logger.warning(f"fs_file 실패: {e}")
         return JSONResponse({"error": "read failed"}, status_code=500)
@@ -273,16 +274,16 @@ async def fs_raw(path: str = Query(...)):
             head = f.read(fsguard.SNIFF_BYTES)
             mime = fsguard.image_type(p, head)
             if not mime:
-                return _denied("이미지 파일이 아닙니다")
+                return _denied(tr("이미지 파일이 아닙니다"))
             if size > fsguard.MAX_IMAGE_BYTES:
                 return JSONResponse(
                     {"error": "too_large",
-                     "reason": f"이미지가 너무 큽니다 (최대 {fsguard.MAX_IMAGE_BYTES // (1024*1024)}MB)"},
+                     "reason": tr("이미지가 너무 큽니다 (최대 {max}MB)", max=fsguard.MAX_IMAGE_BYTES // (1024*1024))},
                     status_code=413,
                 )
             data = head + f.read()
     except PermissionError:
-        return _denied("읽기 권한이 없습니다")
+        return _denied(tr("읽기 권한이 없습니다"))
     except OSError as e:
         logger.warning(f"fs_raw 실패: {e}")
         return JSONResponse({"error": "read failed"}, status_code=500)
@@ -484,7 +485,7 @@ async def send_file_to_host(file_id: str, request: Request):
     host = str(body.get("host", "")).strip()
     session = str(body.get("session", "")).strip()
     if not host or host == "local":
-        return JSONResponse({"error": "bad_host", "reason": "원격 호스트 id가 필요합니다"},
+        return JSONResponse({"error": "bad_host", "reason": tr("원격 호스트 id가 필요합니다")},
                             status_code=400)
     fp = await asyncio.to_thread(file_store.real_path_for, file_id)
     if fp is None:
@@ -496,7 +497,7 @@ async def send_file_to_host(file_id: str, request: Request):
     peer = await asyncio.to_thread(host_store.find_peer, host)
     if peer is None:
         return JSONResponse({"error": "host_not_found",
-                             "reason": f"등록되지 않은 호스트입니다: {host}"}, status_code=404)
+                             "reason": tr("등록되지 않은 호스트입니다: {host}", host=host)}, status_code=404)
     item = await asyncio.to_thread(file_store.get_item, file_id)
     data = await asyncio.to_thread(fp.read_bytes)
     headers = {

@@ -22,6 +22,10 @@ os.environ.pop("VT_TRUST_PROXY", None)
 # 테스트는 monkeypatch로 직접 넣는다.
 os.environ.pop("VT_DIR", None)
 os.environ.setdefault("VT_NETWORK_MODE", "all")
+# 화면 언어는 서버 전역 한 값이다(server/i18n.py). 한국어 문구를 단언하는 테스트가
+# 개발자 셸의 LANG(en_US 등)에 따라 달라지지 않게 고정한다. 영어를 보는 테스트는
+# monkeypatch로 VT_LANG을 바꾼다.
+os.environ["VT_LANG"] = "ko"
 
 # ⚠ 이 스위트는 **개발자의 실제 ~/.vt.env를 절대 읽지 않는다.**
 #

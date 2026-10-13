@@ -49,6 +49,7 @@ import os
 import re
 import time
 from typing import Optional
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -158,11 +159,12 @@ _TOOL_KINDS = {"AskUserQuestion": KIND_CHOICE, "ExitPlanMode": KIND_PLAN}
 # Codex는 질문을 PermissionRequest가 아니라 PreToolUse로 알린다.
 _CODEX_CHOICE_TOOLS = ("request_user_input",)
 
-_KIND_QUESTIONS = {
-    KIND_CHOICE: "선택이 필요합니다",
-    KIND_PLAN: "계획 확인이 필요합니다",
-    KIND_QUESTION: "입력이 필요합니다",
-}
+def _kind_question(kind: str) -> str:
+    return {
+        KIND_CHOICE: tr("선택이 필요합니다"),
+        KIND_PLAN: tr("계획 확인이 필요합니다"),
+        KIND_QUESTION: tr("입력이 필요합니다"),
+    }[kind]
 
 
 def _tool_options(tool_input) -> Optional[list]:
@@ -287,10 +289,10 @@ def _set_hook_prompt(ent: dict, kind: str, tool, tool_input) -> None:
     ent["kind"] = kind
     ent["_kind_src"] = "hook"
     if kind == KIND_APPROVAL:
-        ent["question"] = f"{tool} 실행 승인이 필요합니다" if tool else "실행 승인이 필요합니다"
+        ent["question"] = tr("{tool} 실행 승인이 필요합니다", tool=tool) if tool else tr("실행 승인이 필요합니다")
         ent["options"] = screen_options
     else:
-        ent["question"] = _tool_question(tool_input) or _KIND_QUESTIONS[kind]
+        ent["question"] = _tool_question(tool_input) or _kind_question(kind)
         ent["options"] = _tool_options(tool_input) if kind == KIND_CHOICE else None
 
 
@@ -585,7 +587,7 @@ def report(sid: str, status: str, session: Optional[str] = None,
     알 수 없는 status 문자열은 거부한다(오타가 조용히 새 상태를 만들면 안 된다).
     """
     if status not in STATUSES:
-        raise ValueError(f"알 수 없는 상태: {status} (가능: {', '.join(STATUSES)})")
+        raise ValueError(tr("알 수 없는 상태: {status} (가능: {allowed})", status=status, allowed=", ".join(STATUSES)))
     sweep()
     ent = _entry(sid, cwd, host)
     if session:

@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -49,6 +50,8 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Re
 from starlette.routing import Route, WebSocketRoute
 
 import auth
+import i18n
+from i18n import tr
 import port_share_store as store
 from auth.lockout import _KeyedLockout
 from ttl_cache import TTLCache
@@ -241,13 +244,13 @@ def _page(html: str, status: int) -> HTMLResponse:
 # PIN 칸 입력 상태 — 로그인 화면(frontend/js/gate.js)과 같은 판정이다. 한글 조합이
 # 시작됐는지와 Caps Lock만 본다(PIN은 대소문자를 안 가리지만, 한글은 그대로
 # 들어가 틀린 코드가 된다). 둘 다 키를 한 번 누른 뒤에야 알 수 있다.
-_PIN_STATE_JS = """<script>
+_PIN_STATE_JS_TEMPLATE = """<script>
 (function(){
   var i=document.querySelector('input[name=pin]'), st=document.getElementById('st');
   if(!i||!st) return;
   var ko=false, HAN=/[\u3131-\u318e\uac00-\ud7a3]/;
   function show(){
-    st.textContent = ko ? '한글 입력 중입니다. 영문으로 바꿔 입력하세요.' : '';
+    st.textContent = ko ? __KO_MSG__ : '';
     st.hidden = !ko;
   }
   i.addEventListener('keydown',function(e){
@@ -261,13 +264,24 @@ _PIN_STATE_JS = """<script>
 </script>"""
 
 
+def _pin_state_js() -> str:
+    # 문구는 호출 시점의 언어로 — 모듈 상수에 굳히지 않는다.
+    msg = tr("한글 입력 중입니다. 영문으로 바꿔 입력하세요.")
+    return _PIN_STATE_JS_TEMPLATE.replace("__KO_MSG__", json.dumps(msg).replace("</", "<\\/"))
+
+
 def _pin_page(label: str, error: str = "", status: int = 200, next_path: str = "/") -> HTMLResponse:
     err = f'<p class="err">{_esc(error)}</p>' if error else ""
+    lang = i18n.current()
+    title = _esc(tr("FarShell — 접근 코드"))
+    heading = _esc(tr("접근 코드를 입력하세요"))
+    submit = _esc(tr("열기"))
+    state_js = _pin_state_js()
     safe_label = _esc(label)
     safe_nxt = _esc(safe_next(next_path))
-    html = f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
+    html = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FarShell — 접근 코드</title>
+<title>{title}</title>
 <style>
 body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#eee;
   display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
@@ -284,16 +298,16 @@ button{{width:100%;margin-top:12px;padding:12px;border-radius:8px;border:none;
 .st[hidden]{{display:none}}
 </style></head><body>
 <form method="post" action="/__fsh/pin">
-<h1>접근 코드를 입력하세요</h1>
+<h1>{heading}</h1>
 <p class="sub">{safe_label}</p>
 {err}
 <input type="hidden" name="next" value="{safe_nxt}">
 <input name="pin" autocomplete="off" autocapitalize="characters" autofocus maxlength="20"
        placeholder="XXXX-XXXX" lang="en" aria-describedby="st">
 <p class="st" id="st" role="status" aria-live="polite" hidden></p>
-<button type="submit">열기</button>
+<button type="submit">{submit}</button>
 </form>
-{_PIN_STATE_JS}
+{state_js}
 </body></html>"""
     return _page(html, status)
 
@@ -306,9 +320,13 @@ def _session_only_page(label: str) -> HTMLResponse:
     처음 여는 경로는 FarShell 쪽(포트 패널·`fsh tunnel expose` 출력)에서 시작한다 —
     한 번 통과한 기기는 쿠키가 있어 이 화면을 보지 않는다.
     """
-    html = f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
+    lang = i18n.current()
+    title = _esc(tr("FarShell — 로그인한 기기 전용"))
+    heading = _esc(tr("로그인한 기기에서만 열 수 있습니다"))
+    body = _esc(tr("이 앱은 FarShell에 로그인한 기기 전용입니다. FarShell의 포트 패널에서 열어 주세요."))
+    html = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FarShell — 로그인한 기기 전용</title>
+<title>{title}</title>
 <style>
 body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#eee;
   display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
@@ -316,9 +334,9 @@ div{{background:#1c1c1c;padding:24px;border-radius:12px;width:min(360px,90vw)}}
 h1{{font-size:15px;margin:0 0 8px}}
 p{{font-size:13px;color:#aaa;margin:0;line-height:1.6}}
 </style></head><body><div>
-<h1>로그인한 기기에서만 열 수 있습니다</h1>
+<h1>{heading}</h1>
 <p>{_esc(label)}</p>
-<p style="margin-top:10px">이 앱은 FarShell에 로그인한 기기 전용입니다. FarShell의 포트 패널에서 열어 주세요.</p>
+<p style="margin-top:10px">{body}</p>
 </div></body></html>"""
     return _page(html, 403)
 
@@ -400,7 +418,7 @@ def _pin_handler(port: int):
         remaining = _pin_lockout.lock_remaining(key)
         if remaining > 0:
             # scrypt를 돌리기 **전에** 단락시킨다 — 잠금의 목적이 CPU 보호다.
-            return _pin_page(label, f"시도가 많습니다. {remaining}초 후 다시 시도하세요.", status=429)
+            return _pin_page(label, tr("시도가 많습니다. {n}초 후 다시 시도하세요.", n=remaining), status=429)
 
         form = await _read_small_form(request)
         if form is None:
@@ -410,7 +428,7 @@ def _pin_handler(port: int):
 
         # 슬롯이 다 찼으면 기다리지 않고 돌려보낸다 — 대기열이 쌓이는 것 자체가 부하다.
         if _pin_slots.locked():
-            return _pin_page(label, "잠시 후 다시 시도하세요.", status=429, next_path=nxt or "/")
+            return _pin_page(label, tr("잠시 후 다시 시도하세요."), status=429, next_path=nxt or "/")
         async with _pin_slots:
             ok = await asyncio.to_thread(store.verify_pin, share, pin)
         if not ok:
@@ -421,7 +439,7 @@ def _pin_handler(port: int):
                 f"[port-proxy] PIN 실패 port={port} ip={key} 누적={total}"
                 + (f" — 이 IP {PIN_LOCK_SEC}초 차단" if locked else "")
             )
-            return _pin_page(label, "코드가 올바르지 않습니다.", status=401, next_path=nxt or "/")
+            return _pin_page(label, tr("코드가 올바르지 않습니다."), status=401, next_path=nxt or "/")
 
         _pin_lockout.reset_failures(key)
         resp = RedirectResponse(safe_next(nxt), status_code=303)
@@ -535,7 +553,7 @@ def _proxy_handler(port: int, client_holder: dict):
         except httpx.ConnectError:
             return JSONResponse(
                 {"error": "upstream_down",
-                 "reason": f"localhost:{port} 에 응답하는 서비스가 없습니다."},
+                 "reason": tr("localhost:{port} 에 응답하는 서비스가 없습니다.", port=port)},
                 status_code=502,
             )
         except httpx.HTTPError as e:

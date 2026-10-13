@@ -18,6 +18,7 @@ import urllib.parse
 import urllib.request
 
 import host_store
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ def _request(url: str, method: str, headers: dict, body: dict | None,
                 # 상대가 JSON이 아닌 걸 돌려줬다 — 대개 로그인 게이트 HTML이다.
                 # 이 경우를 "알 수 없는 오류"로 뭉개면 원인 파악이 불가능하다.
                 raise PeerError(
-                    f"JSON이 아닌 응답({resp.status}) — URL이 farshell 서버가 맞는지 확인하세요",
+                    tr("JSON이 아닌 응답({status}) — URL이 farshell 서버가 맞는지 확인하세요", status=resp.status),
                     resp.status,
                 )
     except urllib.error.HTTPError as e:
@@ -61,9 +62,9 @@ def _request(url: str, method: str, headers: dict, body: dict | None,
             payload = {}
         return e.code, payload
     except urllib.error.URLError as e:
-        raise PeerError(f"연결 실패: {e.reason}")
+        raise PeerError(tr("연결 실패: {reason}", reason=e.reason))
     except OSError as e:
-        raise PeerError(f"연결 실패: {e}")
+        raise PeerError(tr("연결 실패: {reason}", reason=e))
 
 
 def _signed_headers(peer: dict, method: str, path: str, body_hash: str = "") -> dict:
@@ -97,11 +98,11 @@ def _call_sync(peer: dict, method: str, path: str, body: dict | None = None,
     if status == 404 and not payload:
         # peer 네임스페이스 자체가 없다 = 상대가 구버전이다. 이 진단이 없으면
         # 사용자는 그냥 "404"만 보고 원인을 못 찾는다.
-        raise PeerError("상대 서버에 /api/peer 가 없습니다 — 구버전일 수 있습니다(양쪽 업데이트 필요)", 404)
+        raise PeerError(tr("상대 서버에 /api/peer 가 없습니다 — 구버전일 수 있습니다(양쪽 업데이트 필요)"), 404)
     if status == 401:
-        raise PeerError(payload.get("reason") or "인증 거부 — 페어링이 취소됐거나 만료됐습니다", 401)
+        raise PeerError(payload.get("reason") or tr("인증 거부 — 페어링이 취소됐거나 만료됐습니다"), 401)
     if status == 403:
-        raise PeerError(payload.get("reason") or "권한 부족", 403)
+        raise PeerError(payload.get("reason") or tr("권한 부족"), 403)
     if not (200 <= status < 300):
         raise PeerError(payload.get("reason") or payload.get("error") or f"HTTP {status}", status)
     return payload
@@ -129,7 +130,7 @@ def send_bytes_sync(peer: dict, path: str, data: bytes, headers: dict,
             try:
                 return json.loads(raw)
             except ValueError:
-                raise PeerError(f"JSON이 아닌 응답({resp.status})", resp.status)
+                raise PeerError(tr("JSON이 아닌 응답({status})", status=resp.status), resp.status)
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace")
         try:
@@ -138,9 +139,9 @@ def send_bytes_sync(peer: dict, path: str, data: bytes, headers: dict,
             payload = {}
         raise PeerError(payload.get("reason") or payload.get("error") or f"HTTP {e.code}", e.code)
     except urllib.error.URLError as e:
-        raise PeerError(f"연결 실패: {e.reason}")
+        raise PeerError(tr("연결 실패: {reason}", reason=e.reason))
     except OSError as e:
-        raise PeerError(f"연결 실패: {e}")
+        raise PeerError(tr("연결 실패: {reason}", reason=e))
 
 
 async def call(peer: dict, method: str, path: str, body: dict | None = None) -> dict:
@@ -188,11 +189,11 @@ def pair_sync(url: str, ticket: str, label: str = "") -> dict:
     )
     rtt = (time.monotonic() - t0) * 1000
     if status == 404 and not payload:
-        raise PeerError("상대 서버에 /api/peer 가 없습니다 — 구버전일 수 있습니다(양쪽 업데이트 필요)", 404)
+        raise PeerError(tr("상대 서버에 /api/peer 가 없습니다 — 구버전일 수 있습니다(양쪽 업데이트 필요)"), 404)
     if status == 401:
         raise PeerError(
             payload.get("reason")
-            or "티켓이 유효하지 않거나 만료됐습니다 — 상대 맥에서 'fsh host pair'를 다시 실행하세요",
+            or tr("티켓이 유효하지 않거나 만료됐습니다 — 상대 맥에서 'fsh host pair'를 다시 실행하세요"),
             401,
         )
     if not (200 <= status < 300):
@@ -201,7 +202,7 @@ def pair_sync(url: str, ticket: str, label: str = "") -> dict:
     secret = payload.get("secret")
     remote_id = host_store.normalize_id(str(payload.get("id", "")))
     if not secret or not remote_id:
-        raise PeerError("상대 응답에 id/secret이 없습니다")
+        raise PeerError(tr("상대 응답에 id/secret이 없습니다"))
     skew = _measure_skew(payload, rtt)
     peer = host_store.add_peer(
         remote_id, url, secret,
@@ -210,7 +211,7 @@ def pair_sync(url: str, ticket: str, label: str = "") -> dict:
         clock_skew=skew,
     )
     if peer is None:
-        raise PeerError(f"상대가 보낸 호스트 id를 쓸 수 없습니다: {payload.get('id')!r}")
+        raise PeerError(tr("상대가 보낸 호스트 id를 쓸 수 없습니다: {id}", id=repr(payload.get('id'))))
     return {
         "peer": {k: v for k, v in peer.items() if k != "secret"},
         "clockSkew": round(skew, 3),

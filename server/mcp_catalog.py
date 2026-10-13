@@ -60,6 +60,7 @@ from pathlib import Path
 
 import store_lock
 import vt_paths
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +227,7 @@ def set_tags(name: str, tags: list) -> dict:
         kept = {t.casefold() for t in clean}
         if len(existing | kept) > MAX_TAGS_TOTAL:
             return {"ok": False, "error": "too_many_tags",
-                    "reason": f"태그는 최대 {MAX_TAGS_TOTAL}종류까지입니다"}
+                    "reason": tr("태그는 최대 {n}종류까지입니다", n=MAX_TAGS_TOTAL)}
 
         if clean:
             current[name] = clean
@@ -390,7 +391,7 @@ def set_cred(server: str, key: str, secret: str, *,
     name = normalize_env_name(env) if (env or "").strip() else auto_env_name(server, key)
     if name is None:
         return {"ok": False, "error": "invalid_env_name",
-                "reason": "환경변수 이름은 영문자·숫자·밑줄만 쓸 수 있습니다"}
+                "reason": tr("환경변수 이름은 영문자·숫자·밑줄만 쓸 수 있습니다")}
 
     cid = _cred_id(server, key)
     with _locked():

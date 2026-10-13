@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 import fsguard
 import repo_store
 import worktree
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +76,10 @@ async def set_worktree_hidden(request: Request):
     except Exception:
         body = {}
     if not isinstance(body, dict):
-        return JSONResponse({"error": "잘못된 요청 본문"}, status_code=400)
+        return JSONResponse({"error": tr("잘못된 요청 본문")}, status_code=400)
     raw_path = body.get("path")
     if not isinstance(raw_path, str) or not raw_path.strip():
-        return JSONResponse({"error": "path가 필요합니다"}, status_code=400)
+        return JSONResponse({"error": tr("path가 필요합니다")}, status_code=400)
     try:
         path = fsguard.resolve_under_roots(raw_path)
     except fsguard.FsDenied as e:
@@ -106,7 +107,7 @@ async def create_worktree(request: Request):
     except Exception:
         body = {}
     if not isinstance(body, dict):
-        return JSONResponse({"error": "잘못된 요청 본문"}, status_code=400)
+        return JSONResponse({"error": tr("잘못된 요청 본문")}, status_code=400)
     # ADR-29 A0 — `git worktree add` + node_modules 복사(`shutil.copytree`,
     # 수십 초까지 가능)까지 포함한 동기 작업이다. to_thread 없이 직접 부르면
     # 그동안 서버 전체(HTTP·WS·PTY 출력)가 멎는다 — /api/worktrees(GET)이

@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 import auth
+from i18n import tr
 import file_store
 
 logger = logging.getLogger(__name__)
@@ -119,10 +120,13 @@ def _resolve(token: str):
 
 def _pin_page(token: str, error: str = "") -> str:
     err_html = f'<p class="err">{error}</p>' if error else ""
+    title = tr("FarShell — 공유 파일")
+    heading = tr("PIN을 입력하세요")
+    submit = tr("확인")
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" type="image/png" href="/static/icon-192.png">
-<title>FarShell — 공유 파일</title>
+<title>{title}</title>
 <style>
 body{{font-family:-apple-system,sans-serif;background:#111;color:#eee;display:flex;
   align-items:center;justify-content:center;min-height:100vh;margin:0}}
@@ -135,10 +139,10 @@ button{{width:100%;margin-top:12px;padding:10px;border-radius:8px;border:none;
 .err{{color:#f66;font-size:13px;margin:0 0 8px}}
 </style></head><body>
 <form method="post" action="/s/{token}/pin">
-<h1>PIN을 입력하세요</h1>
+<h1>{heading}</h1>
 {err_html}
 <input name="pin" inputmode="numeric" autocomplete="off" autofocus maxlength="20">
-<button type="submit">확인</button>
+<button type="submit">{submit}</button>
 </form></body></html>"""
 
 
@@ -203,7 +207,7 @@ async def share_pin_submit(token: str, request: Request):
             logger.warning(f"[share] PIN 5회 실패로 공유 취소: file={item['id']} share={share['shareId']}")
             return JSONResponse({"error": "not_found"}, status_code=404)
         file_store.update_share(item["id"], share["shareId"], attempts=attempts)
-        return HTMLResponse(_pin_page(token, "PIN이 올바르지 않습니다"), status_code=401)
+        return HTMLResponse(_pin_page(token, tr("PIN이 올바르지 않습니다")), status_code=401)
 
     secret = secrets.token_urlsafe(24)
     file_store.update_share(

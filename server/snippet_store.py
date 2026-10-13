@@ -24,6 +24,7 @@ from pathlib import Path
 import fsguard
 import store_lock
 import vt_paths
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +157,10 @@ def add(text: str, label: str | None = None, scope: str = SCOPE_GLOBAL,
         cwd: str | None = None, mode: str | None = None) -> dict:
     text = (text or "").strip("\n")
     if not text.strip():
-        return {"ok": False, "error": "empty", "reason": "빈 내용은 저장할 수 없습니다"}
+        return {"ok": False, "error": "empty", "reason": tr("빈 내용은 저장할 수 없습니다")}
     if len(text) > MAX_TEXT_LEN:
         return {"ok": False, "error": "too_long",
-                "reason": f"내용이 너무 깁니다 (최대 {MAX_TEXT_LEN}자)"}
+                "reason": tr("내용이 너무 깁니다 (최대 {max}자)", max=MAX_TEXT_LEN)}
     label = (label or "").strip()[:MAX_LABEL_LEN]
     scope = scope if scope in VALID_SCOPES else SCOPE_GLOBAL
     mode = mode if mode in VALID_MODES else DEFAULT_MODE
@@ -168,12 +169,12 @@ def add(text: str, label: str | None = None, scope: str = SCOPE_GLOBAL,
         project = resolve_project_key(cwd)
         if not project:
             return {"ok": False, "error": "no_project",
-                    "reason": "현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 저장할 수 있습니다"}
+                    "reason": tr("현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 저장할 수 있습니다")}
     with _locked():
         items = _read_unlocked()
         if len(items) >= MAX_ITEMS:
             return {"ok": False, "error": "full",
-                    "reason": f"스니펫이 가득 찼습니다 (최대 {MAX_ITEMS}개)"}
+                    "reason": tr("스니펫이 가득 찼습니다 (최대 {max}개)", max=MAX_ITEMS)}
         item = {
             "id": uuid.uuid4().hex[:12],
             "label": label,
@@ -193,7 +194,7 @@ def remove(item_id: str) -> dict:
         items = _read_unlocked()
         rest = [x for x in items if x.get("id") != item_id]
         if len(rest) == len(items):
-            return {"ok": False, "error": "not_found", "reason": "항목이 없습니다"}
+            return {"ok": False, "error": "not_found", "reason": tr("항목이 없습니다")}
         _write_unlocked(rest)
     return {"ok": True, "count": len(rest)}
 
@@ -202,7 +203,7 @@ def set_mode(item_id: str, mode: str) -> dict:
     """저장된 스니펫의 실행 방식(새 섹션 자동 실행 / 붙여넣기만)을 나중에 바꾼다
     — 처음 저장할 때 고른 모드를 되돌릴 수 없으면 "관리"가 아니라 "한 번 선택"이다."""
     if mode not in VALID_MODES:
-        return {"ok": False, "error": "bad_mode", "reason": f"mode는 {sorted(VALID_MODES)} 중 하나"}
+        return {"ok": False, "error": "bad_mode", "reason": tr("mode는 {modes} 중 하나", modes=sorted(VALID_MODES))}
     with _locked():
         items = _read_unlocked()
         for x in items:
@@ -210,4 +211,4 @@ def set_mode(item_id: str, mode: str) -> dict:
                 x["mode"] = mode
                 _write_unlocked(items)
                 return {"ok": True, "item": x}
-    return {"ok": False, "error": "not_found", "reason": "항목이 없습니다"}
+    return {"ok": False, "error": "not_found", "reason": tr("항목이 없습니다")}

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Callable, ClassVar, Optional
 
 from .env import HostEnv
+from i18n import tr
 
 Progress = Callable[[int, Optional[int]], None]
 
@@ -54,7 +55,7 @@ class Engine(abc.ABC):
     def requirements(self, env: HostEnv) -> list[Requirement]: ...
 
     def install_requirement(self, req_id: str, progress: Progress) -> None:
-        raise NotReady("이 항목은 앱이 대신 설치하지 않습니다 — 안내된 명령으로 직접 설치해 주세요")
+        raise NotReady(tr("이 항목은 앱이 대신 설치하지 않습니다 — 안내된 명령으로 직접 설치해 주세요"))
 
     # ── 모델 ───────────────────────────────────────────────────────
     @abc.abstractmethod

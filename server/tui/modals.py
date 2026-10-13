@@ -6,12 +6,13 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label
+from i18n import tr
 
 
 class RenameDialog(ModalScreen[str | None]):
     """세션 이름 변경 모달."""
 
-    BINDINGS = [Binding("escape", "cancel", "취소")]
+    BINDINGS = [Binding("escape", "cancel", tr("취소"))]
 
     def __init__(self, current_name: str):
         super().__init__()
@@ -19,9 +20,9 @@ class RenameDialog(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(f"'{self.current_name}' 새 이름:"),
+            Label(tr("'{name}' 새 이름:", name=self.current_name)),
             Input(value=self.current_name, id="rename-input"),
-            Label("[Enter] 확정  [Esc] 취소", classes="dim"),
+            Label(tr("[Enter] 확정  [Esc] 취소"), classes="dim"),
             id="rename-dialog",
         )
 
@@ -37,9 +38,9 @@ class ConfirmDialog(ModalScreen[bool]):
     """확인 모달."""
 
     BINDINGS = [
-        Binding("y", "yes", "예"),
-        Binding("n", "cancel", "아니오"),
-        Binding("escape", "cancel", "취소"),
+        Binding("y", "yes", tr("예")),
+        Binding("n", "cancel", tr("아니오")),
+        Binding("escape", "cancel", tr("취소")),
     ]
 
     def __init__(self, message: str):
@@ -49,7 +50,7 @@ class ConfirmDialog(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         yield Vertical(
             Label(self.message),
-            Label("[y] 예  [n/Esc] 아니오", classes="dim"),
+            Label(tr("[y] 예  [n/Esc] 아니오"), classes="dim"),
             id="confirm-dialog",
         )
 

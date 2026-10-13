@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
 import host_store
+from i18n import tr
 import peer_client
 import relay_policy
 from routes.peer_proxy import CONNECT_TIMEOUT, _ws_url
@@ -60,7 +61,7 @@ def _http() -> httpx.AsyncClient:
 def _outdated(peer: dict) -> JSONResponse:
     return JSONResponse(
         {"error": "peer_outdated",
-         "reason": f"{peer['label']}의 FarShell이 호스트 전환을 모릅니다 — 그 맥을 업데이트하세요"},
+         "reason": tr("{label}의 FarShell이 호스트 전환을 모릅니다 — 그 맥을 업데이트하세요", label=peer['label'])},
         status_code=501,
     )
 
@@ -70,13 +71,13 @@ def _outdated(peer: dict) -> JSONResponse:
 async def host_relay(host_id: str, rest: str, request: Request):
     peer = await asyncio.to_thread(host_store.find_peer, host_id)
     if peer is None:
-        return JSONResponse({"error": "not_found", "reason": "등록되지 않은 호스트입니다"},
+        return JSONResponse({"error": "not_found", "reason": tr("등록되지 않은 호스트입니다")},
                             status_code=404)
     target = "/" + rest
     method = request.method.upper()
     if not relay_policy.http_allowed(method, target):
         return JSONResponse(
-            {"error": "relay_forbidden", "reason": f"다른 맥에서 쓸 수 없는 기능입니다: {target}"},
+            {"error": "relay_forbidden", "reason": tr("다른 맥에서 쓸 수 없는 기능입니다: {target}", target=target)},
             status_code=403,
         )
 
@@ -98,7 +99,7 @@ async def host_relay(host_id: str, rest: str, request: Request):
     except httpx.HTTPError as e:
         logger.info(f"[relay] {host_id} {method} {target} 실패: {e}")
         return JSONResponse(
-            {"error": "peer_unreachable", "reason": f"{peer['label']}에 연결할 수 없습니다"},
+            {"error": "peer_unreachable", "reason": tr("{label}에 연결할 수 없습니다", label=peer['label'])},
             status_code=502,
         )
 
@@ -107,7 +108,7 @@ async def host_relay(host_id: str, rest: str, request: Request):
         if resp.status_code in (404, 405):
             return _outdated(peer)
         return JSONResponse(
-            {"error": "peer_error", "reason": f"{peer['label']} 응답 HTTP {resp.status_code}"},
+            {"error": "peer_error", "reason": tr("{label} 응답 HTTP {status}", label=peer['label'], status=resp.status_code)},
             status_code=502,
         )
 
@@ -152,7 +153,7 @@ async def host_relay_ws(ws: WebSocket, host_id: str, rest: str):
         )
     except Exception as e:  # noqa: BLE001 — 연결 실패는 상태이지 서버 오류가 아니다
         logger.info(f"[relay ws] {host_id} {target} 연결 실패: {e}")
-        await ws.close(code=4502, reason="원격 호스트에 연결할 수 없습니다")
+        await ws.close(code=4502, reason=tr("원격 호스트에 연결할 수 없습니다"))
         return
 
     async def _down():

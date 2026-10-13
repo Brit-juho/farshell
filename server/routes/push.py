@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 import push
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ async def push_status():
 async def push_key():
     if not push.available():
         return JSONResponse(
-            {"error": "unavailable", "reason": "pywebpush 미설치"}, status_code=501)
+            {"error": "unavailable", "reason": tr("pywebpush 미설치")}, status_code=501)
     key = await asyncio.to_thread(push.public_key)
     if not key:
         return JSONResponse({"error": "no_keys"}, status_code=500)
@@ -64,7 +65,7 @@ async def push_unsubscribe(request: Request):
 
 @router.post("/api/push/test")
 async def push_test():
-    r = await asyncio.to_thread(push.send, "VT 테스트 알림", "푸시가 정상 동작합니다", "/")
+    r = await asyncio.to_thread(push.send, tr("VT 테스트 알림"), tr("푸시가 정상 동작합니다"), "/")
     if not r.get("ok"):
         return JSONResponse(r, status_code=501)
     return r

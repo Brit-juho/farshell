@@ -11,6 +11,7 @@ import uuid
 from typing import Callable, Optional
 
 from .base import NotReady, Progress
+from i18n import tr
 
 _MAX_ERROR = 300
 
@@ -33,7 +34,7 @@ class SetupManager:
         """작업을 시작한다. 이미 진행 중이면 SetupBusy. `blocking`은 테스트용(스레드를 안 쓰고 끝까지 실행)."""
         with self._lock:
             if self._job is not None and self._job["state"] == "running":
-                raise SetupBusy(f"이미 '{self._job['model']}' 준비 중입니다 — 끝난 뒤 다시 시도해 주세요")
+                raise SetupBusy(tr("이미 '{model}' 준비 중입니다 — 끝난 뒤 다시 시도해 주세요", model=self._job["model"]))
             job = {"id": uuid.uuid4().hex[:8], "model": model_id, "state": "running", "error": None,
                    "steps": [{"id": step_id, "label": label, "state": "running", "done": 0, "total": None}]}
             self._job = job

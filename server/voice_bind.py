@@ -4,6 +4,7 @@ import os
 import sys
 import urllib.request
 import vt_env
+from i18n import tr
 
 cfg = vt_env.load()
 token = cfg.get('VT_AUTH_TOKEN') or cfg.get('VT_TOKEN') or os.environ.get('VT_AUTH_TOKEN') or ''
@@ -14,7 +15,7 @@ req = urllib.request.Request(base + '/voice/bind', data=json.dumps(body).encode(
 try:
     with urllib.request.urlopen(req, timeout=5) as r:
         result = json.load(r)
-    print('음성 연결: ' + result['target']['name'] + ' ' + result['target']['pane'])
+    print(tr('음성 연결: {name} {pane}', name=result['target']['name'], pane=result['target']['pane']))
 except Exception as e:
-    print('음성 연결 실패: ' + str(e), file=sys.stderr)
+    print(tr('음성 연결 실패: {e}', e=e), file=sys.stderr)
     sys.exit(1)

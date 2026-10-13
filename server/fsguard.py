@@ -24,6 +24,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Optional
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -156,11 +157,11 @@ def get_start_roots() -> list[Path]:
 def _is_denied_name(name: str) -> Optional[str]:
     lowered = name.lower()
     if lowered in DENY_NAMES:
-        return f"거부된 파일명: {name}"
+        return tr("거부된 파일명: {name}", name=name)
     if lowered.startswith(DENY_PREFIXES):
-        return f"거부된 파일명: {name}"
+        return tr("거부된 파일명: {name}", name=name)
     if lowered.endswith(DENY_SUFFIXES):
-        return f"거부된 확장자: {name}"
+        return tr("거부된 확장자: {name}", name=name)
     return None
 
 
@@ -172,10 +173,10 @@ def _check_denylist(p: Path) -> Optional[str]:
     parts = p.parts
     for i, part in enumerate(parts):
         if part in DENY_DIR_PARTS:
-            return f"거부된 디렉토리: {part}"
+            return tr("거부된 디렉토리: {name}", name=part)
         # ".config/gcloud" 같은 2단 항목 처리
         if i + 1 < len(parts) and f"{part}/{parts[i + 1]}" in DENY_DIR_PARTS:
-            return f"거부된 디렉토리: {part}/{parts[i + 1]}"
+            return tr("거부된 디렉토리: {name}", name=f"{part}/{parts[i + 1]}")
     return _is_denied_name(p.name)
 
 
@@ -185,21 +186,21 @@ def resolve_under_roots(raw_path: str) -> Path:
     실패하면 FsDenied 를 던진다. 호출부는 이 예외를 403으로 매핑하면 된다.
     """
     if not raw_path or not raw_path.strip():
-        raise FsDenied("경로가 비었습니다")
+        raise FsDenied(tr("경로가 비었습니다"))
 
     roots = get_roots()
     if not roots:
-        raise FsDenied("열람 가능한 루트가 설정되지 않았습니다 (VT_BROWSE_ROOTS)")
+        raise FsDenied(tr("열람 가능한 루트가 설정되지 않았습니다 (VT_BROWSE_ROOTS)"))
 
     try:
         # strict=False — 존재하지 않아도 정규화는 하고, 존재 확인은 호출부가 한다.
         # 심링크는 여기서 전부 펼쳐지므로 루트 밖을 가리키면 아래 검사에서 걸린다.
         p = Path(raw_path).expanduser().resolve()
     except (OSError, RuntimeError) as e:
-        raise FsDenied(f"경로 해석 실패: {e}") from e
+        raise FsDenied(tr("경로 해석 실패: {error}", error=e)) from e
 
     if not any(_is_within(p, root) for root in roots):
-        raise FsDenied("허용된 루트 밖의 경로입니다")
+        raise FsDenied(tr("허용된 루트 밖의 경로입니다"))
 
     denied = _check_denylist(p)
     if denied:

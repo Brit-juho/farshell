@@ -23,6 +23,7 @@ import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import host_store
+from i18n import tr
 import peer_client
 from routes.pty import _ws_auth_token
 
@@ -45,16 +46,18 @@ def _screen_token(raw: str | None) -> str:
 # 알아듣는 코드(term/ws.js의 TERMINAL_CLOSE_CODES). 예전엔 B의 종료 코드를 버리고
 # 기본값(1000)으로 닫아서, 원격 세션이 사라진 탭(B에서 종료·이름 변경)이 없는
 # 세션에 영원히 재연결을 시도했다.
-_TERMINAL_UPSTREAM_CODES = {
-    4404: (4004, "원격 세션이 없습니다"),
-    4401: (4001, "원격 호스트가 인증을 거부했습니다"),
-}
+def _terminal_upstream_codes() -> dict:
+    # tr() 는 호출 시점에 평가해야 해서 상수가 아니라 함수로 둔다.
+    return {
+        4404: (4004, tr("원격 세션이 없습니다")),
+        4401: (4001, tr("원격 호스트가 인증을 거부했습니다")),
+    }
 
 
 def browser_close_for(upstream_code: int | None) -> tuple[int, str]:
     """B의 종료 코드로 브라우저 쪽 종료 코드·이유를 정한다. 재시도해서 달라지지
     않는 경우만 옮기고, 나머지는 평소처럼(1000) 닫아 브라우저가 재연결하게 둔다."""
-    return _TERMINAL_UPSTREAM_CODES.get(upstream_code or 0, (1000, ""))
+    return _terminal_upstream_codes().get(upstream_code or 0, (1000, ""))
 
 
 def _ws_url(base_url: str, path: str) -> str:
@@ -82,7 +85,7 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
     try:
         import websockets
     except ImportError:  # pragma: no cover — requirements-core에 있다
-        await ws.close(code=4500, reason="websockets 미설치")
+        await ws.close(code=4500, reason=tr("websockets 미설치"))
         return
 
     path = f"/api/peer/ws/{tmux_name}"
@@ -103,7 +106,7 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
         )
     except Exception as e:  # noqa: BLE001 — 연결 실패는 상태이지 서버 오류가 아니다
         logger.info(f"[peer proxy] {host_id} 연결 실패: {e}")
-        await ws.close(code=4502, reason="원격 호스트에 연결할 수 없습니다")
+        await ws.close(code=4502, reason=tr("원격 호스트에 연결할 수 없습니다"))
         return
 
     async def _down():

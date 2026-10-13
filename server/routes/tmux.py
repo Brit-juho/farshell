@@ -15,6 +15,7 @@ import platform_utils
 import tmux_runner
 from deps import pty_mgr, session_store, output_watcher
 from session_store import new_session_id
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +259,7 @@ async def create_tmux_session(request: Request):
     requested_cwd = str(body.get("cwd") or "").strip()
     if requested_cwd:
         if not os.path.isabs(requested_cwd) or not os.path.isdir(requested_cwd):
-            return JSONResponse({"error": "cwd가 존재하는 절대경로가 아닙니다"}, status_code=400)
+            return JSONResponse({"error": tr("cwd가 존재하는 절대경로가 아닙니다")}, status_code=400)
         start_dir = requested_cwd
     else:
         # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
@@ -320,17 +321,17 @@ async def open_tmux_on_mac(request: Request):
     body = await request.json()
     tmux_name = (body.get("name") or "").strip()
     if not tmux_name or not re.fullmatch(r"[A-Za-z0-9_\-]+", tmux_name):
-        return JSONResponse({"ok": False, "error": "유효하지 않은 세션 이름"}, status_code=400)
+        return JSONResponse({"ok": False, "error": tr("유효하지 않은 세션 이름")}, status_code=400)
     if not platform_utils.IS_MACOS:
-        return JSONResponse({"ok": False, "error": "서버가 macOS가 아님"}, status_code=400)
+        return JSONResponse({"ok": False, "error": tr("서버가 macOS가 아님")}, status_code=400)
 
     if tmux_name in _mac_open_locks:
-        return JSONResponse({"ok": False, "error": "이미 여는 중"}, status_code=409)
+        return JSONResponse({"ok": False, "error": tr("이미 여는 중")}, status_code=409)
     _mac_open_locks.add(tmux_name)
     try:
         rc, _, _ = await tmux_runner.run_async(["has-session", "-t", tmux_name], timeout=5.0)
         if rc != 0:
-            return JSONResponse({"ok": False, "error": "tmux 세션을 찾을 수 없음"}, status_code=404)
+            return JSONResponse({"ok": False, "error": tr("tmux 세션을 찾을 수 없음")}, status_code=404)
 
         # display-message -t는 대상 세션이 없어도 attach된 클라이언트가 하나도 없으면
         # rc=0/빈 출력을 내는 tmux 특이 동작이 있어(has-session과 결과가 어긋남),
@@ -350,12 +351,12 @@ async def open_tmux_on_mac(request: Request):
         desktop_attached = total_attached - web_attached
 
         if desktop_attached > 0:
-            return {"ok": True, "skipped": True, "error": None, "reason": "이미 맥에서 열려 있음"}
+            return {"ok": True, "skipped": True, "error": None, "reason": tr("이미 맥에서 열려 있음")}
 
         attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
         try:
             ok = platform_utils.spawn_mac_terminal(attach_cmd)
-            return {"ok": bool(ok), "skipped": False, "error": None if ok else "지원하는 터미널 앱이 없음"}
+            return {"ok": bool(ok), "skipped": False, "error": None if ok else tr("지원하는 터미널 앱이 없음")}
         except Exception as e:
             logger.warning(f"open-on-mac 실패: {e}")
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
@@ -484,7 +485,7 @@ def _label(row: dict, my_tty: str | None, device_labels: dict[str, str] | None =
     """사람이 알아볼 라벨. tmux는 클라이언트 종류를 알려주지 않으므로 추정이다 —
     추정임이 드러나게 '웹(추정)' 같은 표기는 쓰지 않고, 확실한 것(나·등록 기기)만 단정한다."""
     if my_tty and row["tty"] == my_tty:
-        return "이 화면"
+        return tr("이 화면")
     if device_labels:
         label = device_labels.get(row["tty"])
         if label:
@@ -516,7 +517,7 @@ async def tmux_detach_client(request: Request):
         return JSONResponse({"error": "tty required"}, status_code=400)
     # 지금 보고 있는 화면을 스스로 끊으면 복구 경로가 없다 — 400으로 막는다.
     if tty == _tty_of_web_session(me):
-        return JSONResponse({"error": "cannot detach self", "reason": "지금 보고 있는 화면은 끊을 수 없습니다"}, status_code=400)
+        return JSONResponse({"error": "cannot detach self", "reason": tr("지금 보고 있는 화면은 끊을 수 없습니다")}, status_code=400)
     await tmux_runner.run_async(["detach-client", "-t", tty], timeout=2.0)
     return {"ok": True, "detached": tty}
 
@@ -535,7 +536,7 @@ async def tmux_clients_solo(request: Request):
     if not keep:
         # 남길 화면을 특정하지 못하면 **아무것도 끊지 않는다**. 전부 끊고 나면
         # 되돌릴 방법이 없다.
-        return JSONResponse({"error": "unknown client", "reason": "이 화면의 tty를 확인할 수 없습니다"}, status_code=400)
+        return JSONResponse({"error": "unknown client", "reason": tr("이 화면의 tty를 확인할 수 없습니다")}, status_code=400)
 
     # tmux 호출이 여러 번이라 한 덩어리로 스레드에 넘긴다(routes/peer.py의 _solo와 같은 관용구).
     def _solo() -> list[str]:

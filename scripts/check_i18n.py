@@ -19,6 +19,7 @@
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -99,9 +100,50 @@ def _strip_comments(text: str, suffix: str) -> str:
     return "\n".join("" if ln.lstrip().startswith("//") else ln for ln in text.splitlines())
 
 
+SERVER = ROOT / "server"
+_LOG_NAMES = {"print", "debug", "info", "warning", "warn", "error", "exception", "critical", "log"}
+
+
+def _call_name(node: ast.Call) -> str:
+    f = node.func
+    return f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else "")
+
+
+def collect_server(used: dict, untagged: list) -> None:
+    """server/*.py의 tr('원문') 호출을 키로 모으고, 감싸지 않은 한글 문자열 상수를 센다."""
+    for p in sorted(SERVER.rglob("*.py")):
+        rel = p.relative_to(SERVER).parts
+        if "tests" in rel or "__pycache__" in rel or ".venv" in rel:
+            continue
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        skip: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                body = node.body
+                if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant):
+                    skip.add(id(body[0].value))
+            if isinstance(node, ast.Call):
+                name = _call_name(node)
+                if name == "tr" and node.args and isinstance(node.args[0], ast.Constant) \
+                        and isinstance(node.args[0].value, str):
+                    used.setdefault(node.args[0].value, f"server/{'/'.join(rel)}")
+                    skip.add(id(node.args[0]))
+                elif name in _LOG_NAMES:  # 로그는 번역하지 않는다
+                    for a in ast.walk(node):
+                        skip.add(id(a))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skip \
+                    and re.search(r"[가-힣]", node.value):
+                untagged.append(f"server/{'/'.join(rel)}:{node.lineno}: {node.value[:80]!r}")
+
+
 def collect():
     used: dict[str, str] = {}
     untagged: list[str] = []
+    collect_server(used, untagged)
     for p in source_files():
         rel = str(p.relative_to(ROOT))
         text = _strip_comments(p.read_text(encoding="utf-8"), p.suffix)

@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 import auth
+from i18n import tr
 import port_proxy
 import port_share_store as pshare
 import portscan
@@ -91,11 +92,11 @@ def _vt_bin() -> Path | None:
 def _run_vt(*args: str) -> tuple[int, str]:
     vt = _vt_bin()
     if vt is None:
-        return 127, "fsh CLI를 찾을 수 없습니다 (VT_DIR 미설정)"
+        return 127, tr("fsh CLI를 찾을 수 없습니다 (VT_DIR 미설정)")
     try:
         p = subprocess.run(["bash", str(vt), *args], capture_output=True, timeout=VT_TIMEOUT)
     except subprocess.TimeoutExpired:
-        return 124, "시간 초과"
+        return 124, tr("시간 초과")
     except (OSError, ValueError) as e:
         return 127, str(e)
     return p.returncode, p.stdout.decode("utf-8", errors="replace")
@@ -128,7 +129,7 @@ async def expose_port(port: int, request: Request):
     if not body.get("confirm"):
         return JSONResponse(
             {"ok": False, "error": "confirm_required",
-             "reason": "이 포트를 외부에서 접근 가능하게 만듭니다. confirm=true 로 다시 요청하세요."},
+             "reason": tr("이 포트를 외부에서 접근 가능하게 만듭니다. confirm=true 로 다시 요청하세요.")},
             status_code=428,
         )
 
@@ -140,7 +141,7 @@ async def expose_port(port: int, request: Request):
     if danger and body.get("force_danger") is not True:
         return JSONResponse(
             {"ok": False, "error": "dangerous_port", "reason": danger,
-             "hint": "정말 노출하려면 force_danger=true 로 다시 요청하세요."},
+             "hint": tr("정말 노출하려면 force_danger=true 로 다시 요청하세요.")},
             status_code=409,
         )
     if danger:
@@ -152,8 +153,7 @@ async def expose_port(port: int, request: Request):
         # 거기서 다시 뚫지 않는다"는 원래 의도를 지키는 쪽(plan §10-3).
         return JSONResponse(
             {"ok": False, "error": "network_mode",
-             "reason": f"접근 범위가 '{net_mode}'로 제한된 상태입니다. "
-                       f"공개 터널을 여는 대신 같은 망에서 직접 접속하세요."},
+             "reason": tr("접근 범위가 '{mode}'로 제한된 상태입니다. 공개 터널을 여는 대신 같은 망에서 직접 접속하세요.", mode=net_mode)},
             status_code=409,
         )
 
@@ -179,7 +179,7 @@ async def expose_port(port: int, request: Request):
         await asyncio.to_thread(pshare.remove_share, port)
         return JSONResponse(
             {"ok": False, "error": "proxy_bind_failed",
-             "reason": f"내부 프록시 포트 {share['proxyPort']} 를 열 수 없습니다."},
+             "reason": tr("내부 프록시 포트 {port} 를 열 수 없습니다.", port=share['proxyPort'])},
             status_code=500,
         )
 
@@ -222,7 +222,7 @@ async def reissue_pin(port: int):
     if share.get("mode") != "pin":
         return JSONResponse(
             {"ok": False, "error": "not_pin_mode",
-             "reason": "PIN 모드가 아닌 노출에는 코드가 없습니다."},
+             "reason": tr("PIN 모드가 아닌 노출에는 코드가 없습니다.")},
             status_code=409,
         )
     result = await asyncio.to_thread(pshare.regenerate_pin, port)
@@ -353,7 +353,7 @@ async def list_tunnels():
     if main_status["running"] and main_status["url"]:
         main = {
             "port": int(os.environ.get("VT_PORT", "7777")),
-            "label": "터미널 (VT)",
+            "label": tr("터미널 (VT)"),
             "url": main_status["url"],
             "named": main_status["mode"] == "named",
         }

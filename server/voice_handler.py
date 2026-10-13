@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 import stt_service
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ def _convert_to_wav_pyav(audio_bytes: bytes, input_format: str) -> Optional[byte
         deadline = time.monotonic() + 10
         for frame in container.decode(stream):
             if time.monotonic() > deadline:
-                raise ValueError("오디오 디코딩 시간이 초과됐습니다")
+                raise ValueError(tr("오디오 디코딩 시간이 초과됐습니다"))
             for f in resampler.resample(frame):
                 pcm.extend(bytes(f.planes[0])[: f.samples * 2])
                 if len(pcm) >= int((MAX_STT_SECONDS or 60) * 32000):
@@ -266,7 +267,7 @@ async def transcribe_timed(audio_bytes: bytes, input_format: str = "webm",
             loop.run_in_executor(None, stt_service.transcribe_wav, wav_bytes, lang),
             timeout=STT_TOTAL_TIMEOUT)
     except asyncio.TimeoutError as e:
-        raise RuntimeError("음성 인식 시간이 초과됐습니다") from e
+        raise RuntimeError(tr("음성 인식 시간이 초과됐습니다")) from e
     timing = {"decode_ms": round((t1 - t0) * 1000), **t, "total_ms": round((time.perf_counter() - t0) * 1000)}
     logger.info("voice.stt timing %s", timing)
     return text, timing
@@ -335,7 +336,7 @@ def completion_sound() -> SynthesizedAudio:
 async def synthesize_result(text: str, voice: str = "ko-KR-SunHiNeural", engine: str = "auto") -> SynthesizedAudio:
     """결과의 실제 MIME을 반환한다. local 선택은 외부 서비스로 보내지 않는다."""
     if engine not in ("auto", "edge", "local"):
-        raise ValueError("지원하지 않는 TTS 엔진입니다")
+        raise ValueError(tr("지원하지 않는 TTS 엔진입니다"))
     selected = _init_tts() if engine == "auto" else ("edge-tts" if engine == "edge" else "macos-say")
     if selected == "edge-tts":
         try:
@@ -352,7 +353,7 @@ async def synthesize_result(text: str, voice: str = "ko-KR-SunHiNeural", engine:
     import shutil
     if shutil.which("say"):
         return SynthesizedAudio(await _macos_say(text), "audio/wav", "macos-say")
-    raise RuntimeError("로컬 TTS 엔진을 사용할 수 없습니다")
+    raise RuntimeError(tr("로컬 TTS 엔진을 사용할 수 없습니다"))
 
 
 async def synthesize(text: str, voice: str = "ko-KR-SunHiNeural") -> bytes:

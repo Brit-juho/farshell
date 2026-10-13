@@ -41,6 +41,7 @@ import mcp_write
 import mcp_sources
 import mcp_sync
 from auth import require_elevated
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +231,7 @@ async def apply_group(request: Request):
         return JSONResponse({"error": "invalid_tag"}, status_code=400)
     if not isinstance(enabled, bool):
         return JSONResponse(
-            {"error": "invalid_enabled", "reason": "enabled는 true/false 여야 한다"},
+            {"error": "invalid_enabled", "reason": tr("enabled는 true/false 여야 한다")},
             status_code=400,
         )
 
@@ -324,7 +325,7 @@ async def toggle_mcp(request: Request):
 
     if tool not in mcp_write.TOOLS:
         return JSONResponse(
-            {"error": "invalid_tool", "reason": f"tool은 {sorted(mcp_write.TOOLS)} 중 하나"},
+            {"error": "invalid_tool", "reason": tr("tool은 {tools} 중 하나", tools=sorted(mcp_write.TOOLS))},
             status_code=400,
         )
     if not name:
@@ -332,7 +333,7 @@ async def toggle_mcp(request: Request):
     if not isinstance(enabled, bool):
         # 문자열 "false"를 참으로 읽어 서버를 켜버리는 사고를 막는다.
         return JSONResponse(
-            {"error": "invalid_enabled", "reason": "enabled는 true/false 여야 한다"},
+            {"error": "invalid_enabled", "reason": tr("enabled는 true/false 여야 한다")},
             status_code=400,
         )
     if scope not in ("global", "local"):
@@ -379,7 +380,7 @@ async def toggle_mcp_batch(request: Request):
 
     if tool not in mcp_write.TOOLS:
         return JSONResponse(
-            {"error": "invalid_tool", "reason": f"tool은 {sorted(mcp_write.TOOLS)} 중 하나"},
+            {"error": "invalid_tool", "reason": tr("tool은 {tools} 중 하나", tools=sorted(mcp_write.TOOLS))},
             status_code=400,
         )
     if scope not in ("global", "local"):
@@ -388,7 +389,7 @@ async def toggle_mcp_batch(request: Request):
         return JSONResponse({"error": "missing_changes"}, status_code=400)
     if len(changes) > MAX_BATCH:
         return JSONResponse(
-            {"error": "batch_too_large", "reason": f"한 번에 최대 {MAX_BATCH}개"},
+            {"error": "batch_too_large", "reason": tr("한 번에 최대 {n}개", n=MAX_BATCH)},
             status_code=400,
         )
 
@@ -402,7 +403,7 @@ async def toggle_mcp_batch(request: Request):
             return JSONResponse({"error": "missing_name"}, status_code=400)
         if not isinstance(enabled, bool):
             return JSONResponse(
-                {"error": "invalid_enabled", "reason": "enabled는 true/false 여야 한다"},
+                {"error": "invalid_enabled", "reason": tr("enabled는 true/false 여야 한다")},
                 status_code=400,
             )
         cleaned.append({"name": name, "enabled": enabled, "shared": bool(c.get("shared", False))})
@@ -544,7 +545,7 @@ async def toggle_plugin(request: Request):
         return JSONResponse({"error": "missing_name"}, status_code=400)
     if not isinstance(enabled, bool):
         return JSONResponse(
-            {"error": "invalid_enabled", "reason": "enabled는 true/false 여야 한다"},
+            {"error": "invalid_enabled", "reason": tr("enabled는 true/false 여야 한다")},
             status_code=400,
         )
 
@@ -575,7 +576,7 @@ async def verify_mcp_server(scope: str, name: str, request: Request):
     tool = str(body.get("tool", "") or "")
     if tool not in mcp_adapters.ADAPTERS:
         return JSONResponse(
-            {"error": "invalid_tool", "reason": f"tool은 {sorted(mcp_adapters.ADAPTERS)} 중 하나"},
+            {"error": "invalid_tool", "reason": tr("tool은 {tools} 중 하나", tools=sorted(mcp_adapters.ADAPTERS))},
             status_code=400,
         )
     worktree_id = body.get("worktree") or None
@@ -598,7 +599,7 @@ async def verify_mcp_server(scope: str, name: str, request: Request):
     if launch is None:
         existing, _ = mcp_adapters.find_raw_defn(tool, scope, name, worktree_path=worktree_path, worktree_id=worktree_id)
         if raw is not None or existing is not None:
-            return {"state": "unverified", "tool_count": None, "error": "독립 검사에서 실행 의미를 보존할 수 없는 정의입니다",
+            return {"state": "unverified", "tool_count": None, "error": tr("독립 검사에서 실행 의미를 보존할 수 없는 정의입니다"),
                     "evidence": "independent_probe", "runtime_state": "unknown", "checked_at": time.time()}
         return JSONResponse({"error": "not_found"}, status_code=404)
 
@@ -612,9 +613,9 @@ async def verify_mcp_server(scope: str, name: str, request: Request):
     else:
         # E21 — 네트워크 행위는 사용자 확인 없이 부르지 않는다.
         if launch.get("requires_cli_auth"):
-            return {"state": "unverified", "tool_count": None, "error": "대상 도구의 인증을 사용하는 원격 MCP입니다 — 대상 도구에서 확인하세요",
+            return {"state": "unverified", "tool_count": None, "error": tr("대상 도구의 인증을 사용하는 원격 MCP입니다 — 대상 도구에서 확인하세요"),
                     "evidence": "independent_probe", "runtime_state": "unknown", "checked_at": time.time()}
         if launch["transport"] == "sse":
-            return {"state": "unverified", "error": "SSE 독립 검사는 지원하지 않습니다", "runtime_state": "unknown"}
+            return {"state": "unverified", "error": tr("SSE 독립 검사는 지원하지 않습니다"), "runtime_state": "unknown"}
         result = await mcp_verify.verify_http(launch["url"], confirmed=confirmed)
     return {**result, "evidence": "independent_probe", "runtime_state": "unknown"}

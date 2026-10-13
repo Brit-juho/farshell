@@ -64,7 +64,6 @@ function levelBadge(x) {
 // 첫 줄, `wt` 없을 때). 뜻이 같은 문장을 카드 수만큼 복붙해 보여줄 이유가
 // 없어 프론트에서만 걸러낸다 — 백엔드는 그대로 둔다(다른 소비처가 이
 // notes를 쓸 수도 있어 API 응답 자체를 바꾸지 않는 편이 안전하다).
-const REDUNDANT_WT_NOTE = '켜짐/꺼짐은 프로젝트마다 따로 기록된다 — 워크트리를 골라야 알 수 있다';
 
 // 워크트리 id는 settings.js가 넘겨준다.
 let _worktreeId = null;
@@ -711,7 +710,7 @@ function renderServer(group, facts, tags, data) {
     body.appendChild(row);
     const hasWorktree = !!(data && data.worktree);
     for (const note of entry.notes || []) {
-      if (!hasWorktree && note === REDUNDANT_WT_NOTE) continue;
+      if (!hasWorktree && note === t('켜짐/꺼짐은 프로젝트마다 따로 기록된다 — 워크트리를 골라야 알 수 있다')) continue;
       body.appendChild(help(note));
     }
   }

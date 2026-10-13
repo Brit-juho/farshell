@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .env import HostEnv
+from i18n import tr
 
 TAG = "b11347"
 _URL = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{name}"
@@ -86,8 +87,7 @@ def download_and_install(env: HostEnv, progress: Callable[[int, Optional[int]], 
                          _opener=urllib.request.urlopen) -> Path:
     asset = asset_for(env)
     if asset is None:
-        raise ReleaseError(f"이 환경({env.label})용 llama.cpp 공식 배포본이 없습니다 — "
-                           "직접 설치한 뒤 VT_LLAMA_SERVER에 경로를 지정해 주세요")
+        raise ReleaseError(tr("이 환경({env})용 llama.cpp 공식 배포본이 없습니다 — 직접 설치한 뒤 VT_LLAMA_SERVER에 경로를 지정해 주세요", env=env.label))
     name, want_sha, size = asset
     dest = install_dir()
     root = install_root()
@@ -105,22 +105,22 @@ def download_and_install(env: HostEnv, progress: Callable[[int, Optional[int]], 
                     break
                 done += len(chunk)
                 if done > size * 1.05:       # 예상보다 훨씬 크면 중단 — 엉뚱한 파일을 받는 중이다
-                    raise ReleaseError("받은 파일이 예상 크기를 넘어 중단했습니다")
+                    raise ReleaseError(tr("받은 파일이 예상 크기를 넘어 중단했습니다"))
                 h.update(chunk)
                 out.write(chunk)
                 progress(done, size)
         if h.hexdigest() != want_sha:
-            raise ReleaseError("받은 파일의 sha256이 일치하지 않아 폐기했습니다(손상되었거나 변조되었을 수 있습니다)")
+            raise ReleaseError(tr("받은 파일의 sha256이 일치하지 않아 폐기했습니다(손상되었거나 변조되었을 수 있습니다)"))
         staging = tmp_dir / "x"
         staging.mkdir()
         try:
             with tarfile.open(archive) as tar:
                 tar.extractall(staging, filter="data")
         except tarfile.TarError as e:      # 경로 이탈·링크 탈출·손상 모두 — 안전하지 않으면 설치하지 않는다
-            raise ReleaseError(f"압축 파일이 안전하지 않거나 손상돼 설치를 중단했습니다 ({type(e).__name__})") from e
+            raise ReleaseError(tr("압축 파일이 안전하지 않거나 손상돼 설치를 중단했습니다 ({err})", err=type(e).__name__)) from e
         found = next((p for p in staging.rglob(BINARY_NAME) if p.is_file()), None)
         if found is None:
-            raise ReleaseError("압축 안에서 llama-server를 찾지 못했습니다")
+            raise ReleaseError(tr("압축 안에서 llama-server를 찾지 못했습니다"))
         if dest.exists():
             shutil.rmtree(dest)
         shutil.move(str(staging), str(dest))
@@ -130,7 +130,7 @@ def download_and_install(env: HostEnv, progress: Callable[[int, Optional[int]], 
                 p.chmod(p.stat().st_mode | 0o755)
             binary = managed_binary()
         if binary is None:
-            raise ReleaseError("설치 후 실행 파일을 찾지 못했습니다")
+            raise ReleaseError(tr("설치 후 실행 파일을 찾지 못했습니다"))
         return binary
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

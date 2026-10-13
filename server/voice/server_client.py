@@ -3,6 +3,7 @@ import json
 import os
 import urllib.request
 from .config import vt_getenv, _VT_ENV
+from i18n import tr
 
 
 def independent():
@@ -26,6 +27,6 @@ def target(pane):
     result = request('/voice/target', json.dumps({'pane': pane}).encode())
     ready = request('/voice/stt/preload', timeout=130)
     if not ready.get('loaded'):
-        raise RuntimeError(ready.get('error') or '음성 인식 모델을 먼저 준비해 주세요')
+        raise RuntimeError(ready.get('error') or tr('음성 인식 모델을 먼저 준비해 주세요'))
     request('/voice/cancel', json.dumps({'server': True, 'pause': True}).encode())
     return result

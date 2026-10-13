@@ -21,6 +21,7 @@ import fsguard
 import git_account_store as store
 import snippet_store
 from auth import require_elevated
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ async def add_account(request: Request):
 
     if provider not in store.PROVIDERS:
         return JSONResponse(
-            {"error": "invalid_provider", "reason": f"provider는 {sorted(store.PROVIDERS)} 중 하나"},
+            {"error": "invalid_provider", "reason": tr("provider는 {providers} 중 하나", providers=sorted(store.PROVIDERS))},
             status_code=400,
         )
     if not token:

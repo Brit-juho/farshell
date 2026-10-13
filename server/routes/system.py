@@ -31,6 +31,7 @@ import stt_service
 import voice_handler
 import workspace
 from deps import pty_mgr
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -290,13 +291,13 @@ async def notify_client_event(request: Request):
     remote_host = str(body.get("remote_host", "") or "").strip()[:128]
 
     if event == "detached":
-        title = "tmux 세션 연결 해제"
-        message = f"세션 '{session}'에서 클라이언트 연결이 끊어졌습니다"
+        title = tr("tmux 세션 연결 해제")
+        message = tr("세션 '{session}'에서 클라이언트 연결이 끊어졌습니다", session=session)
         tags = "lock"
     else:
-        title = "🔐 tmux 세션 접속"
-        source = f"SSH ({remote_host})" if remote_host else "로컬 클라이언트"
-        message = f"세션 '{session}'에 새 클라이언트 연결 — {source}"
+        title = tr("🔐 tmux 세션 접속")
+        source = f"SSH ({remote_host})" if remote_host else tr("로컬 클라이언트")
+        message = tr("세션 '{session}'에 새 클라이언트 연결 — {source}", session=session, source=source)
         tags = "unlock,warning"
 
     sent = await notify.send(title, message, priority="default", tags=tags)
@@ -630,7 +631,7 @@ async def port_share_authorize(request: Request):
     if not entry or not entry.get("url"):
         return JSONResponse(
             {"error": "tunnel_not_found",
-             "reason": "이 포트의 공개 주소를 찾을 수 없습니다. 노출이 내려갔을 수 있습니다."},
+             "reason": tr("이 포트의 공개 주소를 찾을 수 없습니다. 노출이 내려갔을 수 있습니다.")},
             status_code=404,
         )
 

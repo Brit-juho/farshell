@@ -12,6 +12,7 @@ import mcp_plans as plans
 import mcp_scan
 import mcp_sources as sources
 import mcp_write
+from i18n import tr
 
 
 def _read() -> dict:
@@ -23,7 +24,7 @@ def _state(rule: dict, item: dict | None) -> tuple[str, str | None]:
     if not rule.get("enabled"):
         return "paused", None
     if not item or not isinstance(item.get("source"), dict):
-        return "missing_source", "추적할 원본이 없습니다"
+        return "missing_source", tr("추적할 원본이 없습니다")
     source = item["source"]
     entry, raw, error = sources.find(source["source_id"], source.get("worktree_id"))
     if error or raw is None:
@@ -35,7 +36,7 @@ def _state(rule: dict, item: dict | None) -> tuple[str, str | None]:
     if error or target is None:
         return "missing_target", error
     if adapters.definition_hash(target) != rule["target_hash"]:
-        return "diverged", "대상에서 직접 수정했습니다 — 기존 정의를 보존합니다"
+        return "diverged", tr("대상에서 직접 수정했습니다 — 기존 정의를 보존합니다")
     return ("pending" if adapters.definition_hash(raw) != rule["source_hash"] else "current"), None
 
 
@@ -54,14 +55,14 @@ def list_rules() -> dict:
 
 def set_enabled(deployment: str, enabled: bool) -> dict:
     if not isinstance(enabled, bool):
-        return {"status": "failed", "reason": "동기화 상태가 올바르지 않습니다"}
+        return {"status": "failed", "reason": tr("동기화 상태가 올바르지 않습니다")}
     data = _read()
     tracked = data.get("library_deployments", {}).get(deployment)
     if not tracked:
-        return {"status": "failed", "reason": "FarShell이 배포한 대상만 동기화할 수 있습니다"}
+        return {"status": "failed", "reason": tr("FarShell이 배포한 대상만 동기화할 수 있습니다")}
     item = data.get("library", {}).get(tracked["item_id"])
     if not item or not isinstance(item.get("source"), dict):
-        return {"status": "failed", "reason": "추적할 원본이 없습니다"}
+        return {"status": "failed", "reason": tr("추적할 원본이 없습니다")}
     rule = {**tracked, "id": deployment, "enabled": enabled}
     if enabled:
         state, reason = _state(rule, item)
@@ -70,7 +71,7 @@ def set_enabled(deployment: str, enabled: bool) -> dict:
     with catalog._locked():
         current = catalog._read_unlocked()
         if current.get("library_deployments", {}).get(deployment) != tracked:
-            return {"status": "failed", "reason": "동기화 대상 기록이 바뀌었습니다"}
+            return {"status": "failed", "reason": tr("동기화 대상 기록이 바뀌었습니다")}
         current.setdefault("sync_rules", {})[deployment] = rule
         catalog._write_unlocked(current)
     return {"status": "ok", "enabled": enabled}
@@ -80,15 +81,15 @@ def _snapshot(rule_id: str) -> dict:
     data = _read()
     rule = data.get("sync_rules", {}).get(rule_id)
     if not rule:
-        return {"status": "failed", "reason": "동기화 규칙이 없습니다"}
+        return {"status": "failed", "reason": tr("동기화 규칙이 없습니다")}
     item = data.get("library", {}).get(rule["item_id"])
     state, reason = _state(rule, item)
     if state != "pending":
-        return {"status": "failed", "state": state, "reason": reason or "적용할 원본 변경이 없습니다"}
+        return {"status": "failed", "state": state, "reason": reason or tr("적용할 원본 변경이 없습니다")}
     source = item["source"]
     entry, raw, error = sources.find(source["source_id"], source.get("worktree_id"))
     if error or entry is None or raw is None:
-        return {"status": "failed", "reason": error or "원본이 없습니다"}
+        return {"status": "failed", "reason": error or tr("원본이 없습니다")}
     definition, error = library._eligible(entry, raw)
     if error:
         return {"status": "failed", "reason": error}
@@ -99,10 +100,10 @@ def _snapshot(rule_id: str) -> dict:
     wt = mcp_scan.find_worktree(rule.get("worktree"))
     target_path = library._target(rule["tool"], rule["scope"], wt)
     if target_path is None:
-        return {"status": "failed", "reason": "대상 파일이 쓰기 범위를 벗어났습니다"}
+        return {"status": "failed", "reason": tr("대상 파일이 쓰기 범위를 벗어났습니다")}
     target, error = library.target_raw(rule["tool"], rule["scope"], item["name"], rule.get("worktree"))
     if error or target is None:
-        return {"status": "failed", "reason": error or "대상이 없습니다"}
+        return {"status": "failed", "reason": error or tr("대상이 없습니다")}
     diff = library.masked_definition(rendered, rule["tool"])
     if rule["tool"] in ("codex", "opencode"):
         diff["enabled"] = target.get("enabled", True)
@@ -110,7 +111,7 @@ def _snapshot(rule_id: str) -> dict:
         diff["disabled"] = target.get("disabled", False)
     else:
         diff.pop("disabledMcpServers", None)
-        diff["activation"] = "기존 프로젝트별 상태 유지"
+        diff["activation"] = tr("기존 프로젝트별 상태 유지")
     return {"status": "ok", "rule_revision": library._digest(rule), "item_revision": library._digest(item),
             "source_hash": adapters.definition_hash(raw), "source_id": source["source_id"],
             "target_hash": rule["target_hash"], "target_revision": adapters.file_revision(target_path),
@@ -123,24 +124,24 @@ def preview(rule_id: str) -> dict:
     if snapshot["status"] != "ok":
         return snapshot
     public = {k: v for k, v in snapshot.items() if k != "definition"}
-    return {**public, "apply": "대상의 켬/끔 상태를 유지합니다 — 다음 시작에 반영됩니다",
+    return {**public, "apply": tr("대상의 켬/끔 상태를 유지합니다 — 다음 시작에 반영됩니다"),
             **plans.issue("sync", {"id": rule_id, "snapshot": snapshot})}
 
 
 def apply(rule_id: str, token: str) -> dict:
     plan = plans.take(token, "sync")
     if not plan or plan["id"] != rule_id:
-        return {"status": "failed", "reason": "동기화 미리보기가 없거나 만료됐습니다"}
+        return {"status": "failed", "reason": tr("동기화 미리보기가 없거나 만료됐습니다")}
     snapshot = _snapshot(rule_id)
     if snapshot != plan["snapshot"]:
-        return {"status": "failed", "reason": "미리보기 뒤 원본이나 대상이 바뀌었습니다"}
+        return {"status": "failed", "reason": tr("미리보기 뒤 원본이나 대상이 바뀌었습니다")}
     data = _read()
     rule = data.get("sync_rules", {}).get(rule_id)
     item = data.get("library", {}).get((rule or {}).get("item_id"))
     if rule is None or item is None:
-        return {"status": "failed", "reason": "적용 직전 동기화 항목이 없어졌습니다"}
+        return {"status": "failed", "reason": tr("적용 직전 동기화 항목이 없어졌습니다")}
     if library._digest(rule) != snapshot["rule_revision"] or library._digest(item) != snapshot["item_revision"]:
-        return {"status": "failed", "reason": "적용 직전 보관함이나 동기화 규칙이 바뀌었습니다"}
+        return {"status": "failed", "reason": tr("적용 직전 보관함이나 동기화 규칙이 바뀌었습니다")}
     rendered, error = library._definition({**item, "definition": snapshot["definition"]}, rule["tool"])
     target, error = library.target_raw(rule["tool"], rule["scope"], item["name"], rule.get("worktree"))
     if error:
@@ -172,7 +173,7 @@ def apply(rule_id: str, token: str) -> dict:
         data = catalog._read_unlocked()
         live_rule = data.get("sync_rules", {}).get(rule_id)
         if not live_rule or library._digest(live_rule) != snapshot["rule_revision"]:
-            return {"status": "unknown", "reason": "설정을 쓴 뒤 동기화 규칙이 바뀌었습니다"}
+            return {"status": "unknown", "reason": tr("설정을 쓴 뒤 동기화 규칙이 바뀌었습니다")}
         live_rule.update({"source_hash": snapshot["source_hash"], "target_hash": adapters.definition_hash(written)})
         data["library_deployments"][rule_id].update({"source_hash": snapshot["source_hash"],
                                                    "target_hash": adapters.definition_hash(written)})
@@ -182,7 +183,7 @@ def apply(rule_id: str, token: str) -> dict:
             live_item["source"]["raw_hash"] = snapshot["source_hash"]
             live_item["fingerprint"] = library._digest({"name": item["name"], "definition": snapshot["definition"]})
         catalog._write_unlocked(data)
-    return {**result, "runtime_state": "unknown", "apply": "다음 시작에 반영됩니다"}
+    return {**result, "runtime_state": "unknown", "apply": tr("다음 시작에 반영됩니다")}
 
 
 def record_activation(tool: str, scope: str, name: str, worktree_id: str | None, before: dict | None) -> None:

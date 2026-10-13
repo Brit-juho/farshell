@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import auth
+from i18n import tr
 import store_lock
 import vt_paths
 
@@ -58,14 +59,16 @@ COOKIE_MAX_TTL = 12 * 3600
 # Chrome 원격 디버깅을 공개하면 로그인된 브라우저 전체가 원격 조작된다.
 # 막지는 않고(정말 필요한 경우가 있다) 확인을 한 번 더 받는다: CLI는 --force,
 # 웹은 `force_danger: true`. VT 서버 포트 자체는 bin/fsh가 무조건 거부한다.
-_DANGEROUS_PORTS: dict[int, str] = {
-    9222: "Chrome 원격 디버깅 — 로그인된 브라우저 전체를 원격으로 조작할 수 있습니다",
-    9229: "Node.js 인스펙터 — 원격에서 임의 코드를 실행할 수 있습니다",
-    2375: "Docker API(평문) — 원격에서 컨테이너와 호스트를 제어할 수 있습니다",
-    2376: "Docker API — 원격에서 컨테이너와 호스트를 제어할 수 있습니다",
-    **{p: "ngrok 에이전트 API — 터널을 원격으로 만들고 끌 수 있습니다" for p in range(4040, 4044)},
-    **{p: "cloudflared 메트릭 — 터널 내부 상태가 드러납니다" for p in range(20241, 20246)},
-}
+def _dangerous_ports() -> dict[int, str]:
+    # tr() 는 호출 시점에 평가해야 해서 상수가 아니라 함수로 둔다.
+    return {
+        9222: tr("Chrome 원격 디버깅 — 로그인된 브라우저 전체를 원격으로 조작할 수 있습니다"),
+        9229: tr("Node.js 인스펙터 — 원격에서 임의 코드를 실행할 수 있습니다"),
+        2375: tr("Docker API(평문) — 원격에서 컨테이너와 호스트를 제어할 수 있습니다"),
+        2376: tr("Docker API — 원격에서 컨테이너와 호스트를 제어할 수 있습니다"),
+        **{p: tr("ngrok 에이전트 API — 터널을 원격으로 만들고 끌 수 있습니다") for p in range(4040, 4044)},
+        **{p: tr("cloudflared 메트릭 — 터널 내부 상태가 드러납니다") for p in range(20241, 20246)},
+    }
 
 
 def _state_dir() -> Path:
@@ -180,8 +183,8 @@ def verify_pin(share: dict, raw: str) -> bool:
 def danger_reason(port: int) -> str | None:
     """공개하면 위험한 포트면 그 이유, 아니면 None. 웹과 CLI가 같은 판정을 쓴다."""
     if PROXY_PORT_BASE <= port < PROXY_PORT_BASE + PROXY_PORT_SPAN:
-        return "FarShell 내부 프록시 포트 — 다른 노출의 접근 제어를 겹쳐 열게 됩니다"
-    return _DANGEROUS_PORTS.get(port)
+        return tr("FarShell 내부 프록시 포트 — 다른 노출의 접근 제어를 겹쳐 열게 됩니다")
+    return _dangerous_ports().get(port)
 
 
 def is_expired(share: dict) -> bool:
@@ -233,7 +236,7 @@ def _alloc_proxy_port_unlocked(items: list[dict]) -> int:
         if n not in used:
             return n
     raise RuntimeError(
-        f"프록시 포트 범위({PROXY_PORT_BASE}~{PROXY_PORT_BASE + PROXY_PORT_SPAN - 1})가 가득 찼습니다"
+        tr("프록시 포트 범위({first}~{last})가 가득 찼습니다", first=PROXY_PORT_BASE, last=PROXY_PORT_BASE + PROXY_PORT_SPAN - 1)
     )
 
 

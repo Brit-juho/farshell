@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .env import HostEnv
+from i18n import tr
 
 BASIS = "합성 음성 20문장 · Apple Silicon · 2026-10-02"
 
@@ -29,10 +30,51 @@ class ModelSpec:
     custom: bool = False
 
     def to_dict(self) -> dict:
-        return {"id": self.id, "engine": self.engine, "label": self.label, "tagline": self.tagline,
-                "repo": self.repo, "size_mb": self.size_mb, "static_tags": list(self.static_tags),
-                "bench": self.bench, "license": self.license, "notes": list(self.notes),
+        x = _display()
+        bench = dict(self.bench, basis=x.get(self.bench["basis"], self.bench["basis"])) if self.bench else None
+        return {"id": self.id, "engine": self.engine, "label": x.get(self.label, self.label),
+                "tagline": x.get(self.tagline, self.tagline),
+                "repo": self.repo, "size_mb": self.size_mb,
+                "static_tags": [x.get(s, s) for s in self.static_tags],
+                "bench": bench, "license": x.get(self.license, self.license),
+                "notes": [x.get(n, n) for n in self.notes],
                 "custom": self.custom}
+
+
+def _display() -> dict:
+    """카탈로그의 한국어 원문 → 현재 언어. 호출 시점에 평가한다(언어가 바뀔 수 있다)."""
+    return {
+        BASIS: tr("합성 음성 20문장 · Apple Silicon · 2026-10-02"),
+        "Apple 음성 인식 (SpeechAnalyzer)": tr("Apple 음성 인식 (SpeechAnalyzer)"),
+        "영어·한글이 섞인 코딩 지시에 안정적. 애플 칩 GPU로 가장 빠르게 도는 균형형":
+            tr("영어·한글이 섞인 코딩 지시에 안정적. 애플 칩 GPU로 가장 빠르게 도는 균형형"),
+        "정확도가 가장 높다. 메모리 약 2.5GB를 쓴다": tr("정확도가 가장 높다. 메모리 약 2.5GB를 쓴다"),
+        "맥·Linux·WSL2 어디서나 돈다. GPU 없이 CPU만으로도 동작":
+            tr("맥·Linux·WSL2 어디서나 돈다. GPU 없이 CPU만으로도 동작"),
+        "큰 모델의 높은 정확도를 모든 플랫폼에서. 메모리·용량이 크다":
+            tr("큰 모델의 높은 정확도를 모든 플랫폼에서. 메모리·용량이 크다"),
+        "맥에 내장된 기능. 한국어 시스템 자산을 준비해 쓰는 경량 엔진":
+            tr("맥에 내장된 기능. 한국어 시스템 자산을 준비해 쓰는 경량 엔진"),
+        "OS 기능": tr("OS 기능"),
+        "양자화는 8bit — 4bit는 한국어에서 오류가 크게 늘어난다는 보고가 있다":
+            tr("양자화는 8bit — 4bit는 한국어에서 오류가 크게 늘어난다는 보고가 있다"),
+        "고정확": tr("고정확"),
+        "실험적": tr("실험적"),
+        "경량": tr("경량"),
+        "llama.cpp의 오디오 입력은 아직 실험 단계라 품질이 달라질 수 있다":
+            tr("llama.cpp의 오디오 입력은 아직 실험 단계라 품질이 달라질 수 있다"),
+        "측정은 Apple Silicon CPU 기준 — x86 PC의 속도는 확인하지 못했다":
+            tr("측정은 Apple Silicon CPU 기준 — x86 PC의 속도는 확인하지 못했다"),
+        "메모리는 약 2GB(별도 프로세스라 내리면 OS로 돌려준다)":
+            tr("메모리는 약 2GB(별도 프로세스라 내리면 OS로 돌려준다)"),
+        "아직 이 환경에서 측정하지 않았다": tr("아직 이 환경에서 측정하지 않았다"),
+        "llama.cpp의 오디오 입력은 아직 실험 단계": tr("llama.cpp의 오디오 입력은 아직 실험 단계"),
+        "숫자는 숫자로 적는다(팔천 → 8000)": tr("숫자는 숫자로 적는다(팔천 → 8000)"),
+        "일부 단어를 오인식할 수 있다(깃 → 비커밍)": tr("일부 단어를 오인식할 수 있다(깃 → 비커밍)"),
+        "메모리 수치에는 시스템 서비스가 쓰는 몫이 빠져 있다": tr("메모리 수치에는 시스템 서비스가 쓰는 몫이 빠져 있다"),
+        "직접 입력한 모델": tr("직접 입력한 모델"),
+        "직접 입력한 모델 — 이 앱이 검증하지 않았습니다": tr("직접 입력한 모델 — 이 앱이 검증하지 않았습니다"),
+    }
 
 
 def _bench(cer, sec, rss_mb):
