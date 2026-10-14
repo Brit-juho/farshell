@@ -1,0 +1,11 @@
+/* Symbols Nerd Font Mono — Nerd Fonts v3 "Symbols Only"(MIT, LICENSE.txt 동봉)에서
+ * 글리프 영역(PUA E000-F8FF, F0000-FFFFD, 일부 기호)만 남겨 woff2로 변환했다.
+ * 터미널 폰트 스택(theme.js VT_XTERM_FONTS)의 맨 뒤에 붙는 **글리프 전용 폴백**이다:
+ * 프롬프트(starship/p10k)의 브랜치·폴더 아이콘, Powerline 구분자가 접속한 기기에
+ * 설치된 폰트와 무관하게 그려지도록. 일반 글자는 앞쪽 폰트가 그리므로 unicode-range가
+ * 이 영역일 때만 파일을 받는다(약 1.1MB, 아이콘이 처음 나올 때 1회). */
+@font-face {
+  font-family: "Symbols Nerd Font Mono"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("./symbols-nerd-font-mono.woff2") format("woff2");
+  unicode-range: U+E000-F8FF,U+F0000-FFFFD,U+23FB-23FE,U+2665,U+26A1,U+2B58;
+}

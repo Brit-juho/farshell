@@ -158,9 +158,11 @@ export function getVtXtermTheme(skin) {
 // 없으면 번들된 IBM Plex Mono로 자연히 넘어감). 예전 4순위 'Cascadia Code'는
 // IBM Plex Mono/ui-monospace/SF Mono가 항상 먼저 걸려 로드될 일이 없던
 // 죽은 값이라 제거.
+// 'Symbols Nerd Font Mono'는 번들 글리프 전용 폴백(프롬프트 아이콘/Powerline) —
+// 기기에 Nerd Font가 없어도 깨진 네모가 안 뜨게 한다. 일반 글자엔 쓰이지 않는다.
 const VT_XTERM_FONTS = {
-  windows: "'Cascadia Code', 'Cascadia Mono', 'IBM Plex Mono', ui-monospace, Consolas, monospace",
-  _default: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+  windows: "'Cascadia Code', 'Cascadia Mono', 'IBM Plex Mono', ui-monospace, Consolas, 'Symbols Nerd Font Mono', monospace",
+  _default: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, 'Symbols Nerd Font Mono', monospace",
 };
 export function getVtXtermFont(skin) {
   skin = skin || getVtSkin();
@@ -223,14 +225,23 @@ if (hasSetting('theme.skin')) applyVtSkin(setting('theme.skin'));
   else apply();
 })();
 
-// 번들 폰트(IBM Plex Mono) 로드 완료 후 열린 터미널 refit — swap로 인한 셀 폭 오차 보정
-if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(() => {
-    const map = allSessions();
-    for (const id of Object.keys(map)) {
-      try { map[id].fitAddon && map[id].fitAddon.fit(); } catch (_) {}
-    }
-  });
+// 번들 폰트 로드 완료 후 열린 터미널 refit — swap로 인한 셀 폭 오차 보정.
+// 아이콘 폴백(Symbols Nerd Font Mono)은 글리프가 처음 나올 때 늦게 받아지므로
+// ready 이후에도 loadingdone마다 텍스처 아틀라스를 비우고 다시 그린다.
+function _refitAfterFonts() {
+  const map = allSessions();
+  for (const id of Object.keys(map)) {
+    const s = map[id];
+    try {
+      if (s.term && s.term.clearTextureAtlas) s.term.clearTextureAtlas();
+      if (s.term && s.term.refresh) s.term.refresh(0, s.term.rows - 1);
+      s.fitAddon && s.fitAddon.fit();
+    } catch (_) {}
+  }
+}
+if (document.fonts) {
+  if (document.fonts.ready) document.fonts.ready.then(_refitAfterFonts);
+  if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', _refitAfterFonts);
 }
 
 // F3(c): data-action 위임용 등록. 테마 칩은 data-skin 속성을 그대로 읽는다
