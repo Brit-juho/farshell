@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import mcp_adapters as adapters
+from i18n import tr
 
 
 def read_entry(entry: dict, worktree_path: str | None) -> tuple[dict | None, str | None]:
@@ -12,7 +13,7 @@ def read_entry(entry: dict, worktree_path: str | None) -> tuple[dict | None, str
         adapters._read_jsonc if path.suffix == ".jsonc" else adapters._read_json)
     data, error = reader(path)
     if error or data is None:
-        return None, error or "원본 파일이 없습니다"
+        return None, error or tr("원본 파일이 없습니다")
     if entry["tool"] == "claude":
         if entry["scope"] == "local" and not entry.get("shared"):
             data = adapters._claude_project_entry(data, worktree_path)
@@ -20,7 +21,7 @@ def read_entry(entry: dict, worktree_path: str | None) -> tuple[dict | None, str
     else:
         key = {"codex": "mcp_servers", "agy": "mcpServers", "opencode": "mcp"}[entry["tool"]]
     raw = adapters._as_mapping(data.get(key)).get(entry["name"])
-    return (raw, None) if isinstance(raw, dict) else (None, "원본 정의가 없습니다")
+    return (raw, None) if isinstance(raw, dict) else (None, tr("원본 정의가 없습니다"))
 
 
 def resolve(servers: list[dict], worktree_path: str | None) -> None:
@@ -51,7 +52,7 @@ def resolve(servers: list[dict], worktree_path: str | None) -> None:
             for entry in eligible:
                 entry["effective_status"] = "merged"
                 entry["effective_sources"] = [e["source_id"] for e in sorted(eligible, key=priority)]
-                entry["notes"].append("같은 이름의 정의가 필드별로 병합됩니다 — 원본별 항목을 표시합니다")
+                entry["notes"].append(tr("같은 이름의 정의가 필드별로 병합됩니다 — 원본별 항목을 표시합니다"))
 
 
 def find(source_id: str, worktree_id: str | None) -> tuple[dict | None, dict | None, str | None]:
@@ -59,6 +60,6 @@ def find(source_id: str, worktree_id: str | None) -> tuple[dict | None, dict | N
     scanned = mcp_scan.scan(worktree_id)
     entry = next((e for e in scanned["servers"] if e["source_id"] == source_id), None)
     if entry is None:
-        return None, None, "출처를 찾지 못했습니다"
+        return None, None, tr("출처를 찾지 못했습니다")
     raw, error = read_entry(entry, (scanned.get("worktree") or {}).get("path"))
     return entry, raw, error

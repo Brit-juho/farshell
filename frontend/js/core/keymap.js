@@ -14,6 +14,7 @@ import { get as setting, set as setSetting, subscribe as onSettings } from './se
 import { isMacKeyboard as IS_MAC, isStandalone } from './platform.js';
 import { physicalKey, isComposingKey } from './keyboard-event.js';
 import { decideKey, wireKeyboardRouter, forwardTerminalKey } from './keyboard-router.js';
+import { t } from './i18n.js';
 export { isStandalone };
 
 // 브라우저가 먼저 소비해 일반 탭에서는 가로챌 수 없는 조합.
@@ -47,33 +48,33 @@ const ACTIONS = [
   // 검색) 모드로 연다. 예전에 이 자리가 열던 인페인 검색바(xterm
   // searchAddon)는 `searchInPane`(Mod+Shift+F)으로 내려갔다 — R7: 근육기억이
   // 걸린 재배선이라 palette-lazy.js가 최초 1회 토스트를 띄운다.
-  { id: 'search',       def: 'Mod+F',        defNonMac: 'Ctrl+Shift+F', label: '스크롤백 검색' },
-  { id: 'searchInPane', def: 'Mod+Shift+F',  defNonMac: 'Alt+Shift+F',  label: '터미널 내 검색' },
-  { id: 'palette',    def: 'Mod+K',        defNonMac: 'Ctrl+Shift+K', label: '커맨드 팔레트' },
-  { id: 'viewer',     def: 'Ctrl+Shift+E', label: '코드 뷰어' },
-  { id: 'paste',      def: 'Ctrl+Shift+V', label: '붙여넣기' },
-  { id: 'tabPrev',    def: 'Mod+Shift+ArrowLeft',  label: '이전 탭' },
-  { id: 'tabNext',    def: 'Mod+Shift+ArrowRight', label: '다음 탭' },
+  { id: 'search',       def: 'Mod+F',        defNonMac: 'Ctrl+Shift+F', label: t('스크롤백 검색') },
+  { id: 'searchInPane', def: 'Mod+Shift+F',  defNonMac: 'Alt+Shift+F',  label: t('터미널 내 검색') },
+  { id: 'palette',    def: 'Mod+K',        defNonMac: 'Ctrl+Shift+K', label: t('커맨드 팔레트') },
+  { id: 'viewer',     def: 'Ctrl+Shift+E', label: t('코드 뷰어') },
+  { id: 'paste',      def: 'Ctrl+Shift+V', label: t('붙여넣기') },
+  { id: 'tabPrev',    def: 'Mod+Shift+ArrowLeft',  label: t('이전 탭') },
+  { id: 'tabNext',    def: 'Mod+Shift+ArrowRight', label: t('다음 탭') },
   // 뷰 탭을 앞/뒤로 옮긴다(드래그 재정렬은 layout/tabbar.js). 이동 순서의 출처가
   // 뷰 탭 순서이므로 모바일에서도 이 키가 곧 스와이프 순서를 바꾼다.
-  { id: 'tabMovePrev', def: 'Mod+Alt+Shift+ArrowLeft',  label: '탭을 앞으로' },
-  { id: 'tabMoveNext', def: 'Mod+Alt+Shift+ArrowRight', label: '탭을 뒤로' },
-  { id: 'settings',   def: 'Mod+,',        label: '설정' },
-  { id: 'splitRight', def: 'Mod+D',        defNonMac: 'Ctrl+Shift+D', label: '오른쪽 분할' },
-  { id: 'splitDown',  def: 'Mod+Shift+D',  defNonMac: 'Alt+Shift+D',  label: '아래 분할' },
+  { id: 'tabMovePrev', def: 'Mod+Alt+Shift+ArrowLeft',  label: t('탭을 앞으로') },
+  { id: 'tabMoveNext', def: 'Mod+Alt+Shift+ArrowRight', label: t('탭을 뒤로') },
+  { id: 'settings',   def: 'Mod+,',        label: t('설정') },
+  { id: 'splitRight', def: 'Mod+D',        defNonMac: 'Ctrl+Shift+D', label: t('오른쪽 분할') },
+  { id: 'splitDown',  def: 'Mod+Shift+D',  defNonMac: 'Alt+Shift+D',  label: t('아래 분할') },
   // 계획서 경고 그대로: `Mod+W`는 브라우저 탭 닫기와 충돌한다 — 그런데 대안으로
   // 뒀던 `Mod+Shift+W`도 **창** 닫기라 일반 탭에서는 똑같이 우리에게 오지 않았다
   // (2026-09-18 점검). mac은 브라우저가 안 쓰는 `Ctrl+Shift+…`로, 비-mac은 그
   // 자리(Ctrl=Mod)가 바로 그 창 닫기라 `Alt+Shift+…`로 간다.
-  { id: 'paneClose',  def: 'Ctrl+Shift+W', defNonMac: 'Alt+Shift+W',  label: 'pane 닫기' },
+  { id: 'paneClose',  def: 'Ctrl+Shift+W', defNonMac: 'Alt+Shift+W',  label: t('pane 닫기') },
   // 2026-09-18 — 분할 비율은 드래그로만 바뀌고 되돌릴 방법이 없었다.
   // 분할선 더블클릭은 그 분할 하나만, 이 키는 트리 전체를 반반으로 돌린다.
-  { id: 'paneEven',   def: 'Mod+Alt+D',    defNonMac: 'Ctrl+Alt+D',   label: '분할 균등 정렬' },
-  { id: 'railToggle', def: 'Mod+B',        defNonMac: 'Alt+Shift+B',  label: '사이드바 토글' },
+  { id: 'paneEven',   def: 'Mod+Alt+D',    defNonMac: 'Ctrl+Alt+D',   label: t('분할 균등 정렬') },
+  { id: 'railToggle', def: 'Mod+B',        defNonMac: 'Alt+Shift+B',  label: t('사이드바 토글') },
   // N44(30-worktree.md §3) — 워크트리 만들기. 시크릿 창이 양쪽 플랫폼에서 이
   // 자리를 먼저 먹는다(mac `Cmd+Shift+N`, 비-mac `Ctrl+Shift+N`) — paneClose와
   // 같은 이유로 갈라 둔다.
-  { id: 'worktreeNew', def: 'Ctrl+Shift+N', defNonMac: 'Alt+Shift+N',  label: '워크트리 만들기' },
+  { id: 'worktreeNew', def: 'Ctrl+Shift+N', defNonMac: 'Alt+Shift+N',  label: t('워크트리 만들기') },
 ];
 
 const BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));

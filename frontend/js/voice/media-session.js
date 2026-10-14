@@ -8,6 +8,7 @@
 // app.js 쪽 진짜 인스턴스를 덮어쓴다(recording.js 상단 주석에 상세 — 실측으로
 // 확인한 사고). `window.registerAction`을 bare로 그대로 쓴다.
 import { isRecording, startRecording, stopRecording, toggleRecording, micStatus } from './recording.js';
+import { t } from '../core/i18n.js';
 
 // W1-5: handsFreeModeOn 제거됨 (VAD 미구현 상태에서의 가짜 핸즈프리 모드 폐기)
 // ⚠ setupMediaSession()의 무음 오디오 loop=true 재생은 주석("AudioContext.suspend()로
@@ -26,7 +27,7 @@ function toggleMediaKeyTrigger() {
   if (mediaKeyTriggerOn) {
     // ON: Media Session 핸들러 등록 + 무음 오디오 재생
     setupMediaSession();
-    micStatus.textContent = '이어폰 Play/Pause = 녹음 토글';
+    micStatus.textContent = t('이어폰 Play/Pause = 녹음 토글');
   } else {
     // OFF: 핸들러 해제 + 무음 완전 정지 → OS가 기본 미디어 컨트롤 가짐
     if ('mediaSession' in navigator) {
@@ -47,7 +48,7 @@ function toggleMediaKeyTrigger() {
       } catch (e) {}
       silentAudio = null;  // 다음 ON 토글 시 재생성
     }
-    micStatus.textContent = '이어폰 미디어 키 → OS 기본 동작';
+    micStatus.textContent = t('이어폰 미디어 키 → OS 기본 동작');
   }
   setTimeout(() => { micStatus.textContent = ''; }, 2500);
 }
@@ -80,7 +81,7 @@ export function toggleVoiceOnly() {
       _micHomeBeforeVoiceOnly = null;
     }
   }
-  micStatus.textContent = isOn ? '음성 전용 모드 — 터미널 숨김' : '';
+  micStatus.textContent = isOn ? t('음성 전용 모드 — 터미널 숨김') : '';
 }
 
 // --- 무선 이어폰 터치 컨트롤 (Media Session API) ---
@@ -112,7 +113,7 @@ function setupMediaSession() {
 
   navigator.mediaSession.metadata = new MediaMetadata({
     title: 'FarShell',
-    artist: '음성 입력 대기 중',
+    artist: t('음성 입력 대기 중'),
     album: 'Voice Control',
   });
 
@@ -120,7 +121,7 @@ function setupMediaSession() {
   navigator.mediaSession.setActionHandler('play', () => {
     if (!isRecording) {
       startRecording();
-      navigator.mediaSession.metadata.artist = '녹음 중...';
+      navigator.mediaSession.metadata.artist = t('녹음 중...');
       navigator.mediaSession.playbackState = 'playing';
     }
   });
@@ -128,7 +129,7 @@ function setupMediaSession() {
   navigator.mediaSession.setActionHandler('pause', () => {
     if (isRecording) {
       stopRecording();
-      navigator.mediaSession.metadata.artist = '음성 입력 대기 중';
+      navigator.mediaSession.metadata.artist = t('음성 입력 대기 중');
       navigator.mediaSession.playbackState = 'paused';
     }
   });

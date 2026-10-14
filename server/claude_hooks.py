@@ -38,6 +38,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from i18n import tr
 
 # 훅 이벤트 → agent_hook.sh 인자. Claude Code의 이벤트 이름이 키다.
 EVENTS = {
@@ -100,9 +101,9 @@ def load_settings(path: Path) -> dict:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"{path} 를 JSON으로 읽을 수 없습니다: {e}") from e
+        raise ValueError(tr("{path} 를 JSON으로 읽을 수 없습니다: {error}", path=path, error=e)) from e
     if not isinstance(data, dict):
-        raise ValueError(f"{path} 의 최상위가 객체가 아닙니다")
+        raise ValueError(tr("{path} 의 최상위가 객체가 아닙니다", path=path))
     return data
 
 
@@ -187,7 +188,7 @@ def apply_install(settings: dict, repo_root: Path | None = None) -> tuple[dict, 
                 continue
             if replaced:
                 # 우리 항목이 두 개 이상 — 첫 번째만 남기고 나머지는 버린다(중복 제거).
-                changes.append(f"{event}: 중복 항목 제거 ({ours[0]})")
+                changes.append(tr("{event}: 중복 항목 제거 ({command})", event=event, command=ours[0]))
                 continue
             if ours[0] != want:
                 changes.append(f"{event}: {ours[0]} → {want}")
@@ -202,7 +203,7 @@ def apply_install(settings: dict, repo_root: Path | None = None) -> tuple[dict, 
             if event in MATCHERS:
                 entry["matcher"] = MATCHERS[event]
             kept.append(entry)
-            changes.append(f"{event}: 등록 ({want})")
+            changes.append(tr("{event}: 등록 ({command})", event=event, command=want))
 
         hooks[event] = kept
 
@@ -235,7 +236,7 @@ def apply_uninstall(settings: dict) -> tuple[dict, list[str]]:
                 ]
                 kept.append(g)
             for c in ours:
-                changes.append(f"{event}: 제거 ({c})")
+                changes.append(tr("{event}: 제거 ({command})", event=event, command=c))
         if kept:
             hooks[event] = kept
         else:
@@ -285,17 +286,17 @@ def _cmd_install() -> int:
         settings = load_settings(path)
     except ValueError as e:
         print(f"  ✗ {e}")
-        print("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다.")
+        print(tr("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다."))
         return 2
     merged, changes = apply_install(settings)
     if not changes:
-        print(f"  ✓ 이미 등록돼 있습니다 ({path})")
+        print(tr("  ✓ 이미 등록돼 있습니다 ({path})", path=path))
         return 0
     backup = write_settings(path, merged)
     for c in changes:
         print(f"  · {c}")
-    print(f"  ✓ {path} 갱신" + (f" (백업: {backup})" if backup else ""))
-    print("  ⓘ 이미 실행 중인 claude 세션에는 적용되지 않습니다 — 새로 시작하세요.")
+    print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))
+    print(tr("  ⓘ 이미 실행 중인 claude 세션에는 적용되지 않습니다 — 새로 시작하세요."))
     return 0
 
 
@@ -308,12 +309,12 @@ def _cmd_uninstall() -> int:
         return 2
     merged, changes = apply_uninstall(settings)
     if not changes:
-        print("  ✓ 등록된 FarShell 훅이 없습니다")
+        print(tr("  ✓ 등록된 FarShell 훅이 없습니다"))
         return 0
     backup = write_settings(path, merged)
     for c in changes:
         print(f"  · {c}")
-    print(f"  ✓ {path} 갱신" + (f" (백업: {backup})" if backup else ""))
+    print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))
     return 0
 
 
@@ -325,7 +326,7 @@ def main(argv: list[str]) -> int:
         return _cmd_install()
     if cmd == "uninstall":
         return _cmd_uninstall()
-    print("사용법: claude_hooks.py [status|install|uninstall]", file=sys.stderr)
+    print(tr("사용법: claude_hooks.py [status|install|uninstall]"), file=sys.stderr)
     return 64
 
 

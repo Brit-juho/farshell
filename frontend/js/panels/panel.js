@@ -11,6 +11,7 @@ import { icon } from '../ui/icons.js';
 // 복제되기 때문이다(build-output.test.js, ADR-26) — breakpoints.js는
 // 상수뿐이라 안전하다(Rail.tsx의 같은 예외 주석 참고).
 import { COMPACT_MAX } from '../layout/breakpoints.js';
+import { t } from '../core/i18n.js';
 
 // 모달형 패널(코드 뷰어/포트/큐)의 공용 뼈대. 구 js/panel.js (F2에서 이관).
 // 세 패널이 토글 진입 · backdrop 클릭 닫기 · Esc 닫기 · 닫을 때 fitAndResize ·
@@ -180,9 +181,9 @@ export function openPanel(opts) {
         + (opts.extraClass ? ' ' + opts.extraClass : '');
       el.innerHTML = `
         <div class="vt-viewer-card" role="dialog" aria-modal="${modal}" aria-label="${opts.ariaLabel}">
-          <div class="vt-viewer-head">${opts.headHTML}<button class="vt-icon-btn vt-vw-x" aria-label="닫기">${icon('x', 14)}</button></div>
+          <div class="vt-viewer-head">${opts.headHTML}<button class="vt-icon-btn vt-vw-x" aria-label="${t('닫기')}">${icon('x', 14)}</button></div>
           ${opts.extraHTML || ''}
-          <div class="vt-vw-body" id="${opts.bodyId}">${opts.bodyHTML || '<div class="vt-vw-loading">불러오는 중…</div>'}</div>
+          <div class="vt-vw-body" id="${opts.bodyId}">${opts.bodyHTML || `<div class="vt-vw-loading">${t('불러오는 중…')}</div>`}</div>
         </div>
       `;
       // 안쪽 id도 인스턴스별로 옮긴다. 순서가 중요하다 — innerHTML을 채운

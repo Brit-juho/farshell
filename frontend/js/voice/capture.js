@@ -4,6 +4,7 @@
 // 상태가 없는 모듈이라 안전하다(core/store.js류와 달리 사본이 생겨도 덮어쓸 게 없다).
 
 // 선호 순서. ''는 "형식 지정 없이 브라우저 기본"(iOS Safari는 보통 audio/mp4).
+import { t } from '../core/i18n.js';
 export const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', ''];
 
 // 서버(/voice/input)가 받는 Content-Type 목록.
@@ -50,10 +51,10 @@ export function buildRecorderOptions(mimeType) {
 }
 
 export const MIC_ERROR_MESSAGES = {
-  '권한': '마이크 권한이 필요합니다 — 브라우저 설정에서 허용해 주세요',
-  '마이크 없음': '마이크를 찾을 수 없습니다 — 연결을 확인하세요',
-  '이 브라우저는 녹음 형식을 지원하지 않음': '이 브라우저는 녹음 형식을 지원하지 않습니다',
-  '마이크를 열 수 없음': '마이크를 열 수 없습니다 — 다른 앱이 쓰는 중인지 확인하세요',
+  '권한': t('마이크 권한이 필요합니다 — 브라우저 설정에서 허용해 주세요'),
+  '마이크 없음': t('마이크를 찾을 수 없습니다 — 연결을 확인하세요'),
+  '이 브라우저는 녹음 형식을 지원하지 않음': t('이 브라우저는 녹음 형식을 지원하지 않습니다'),
+  '마이크를 열 수 없음': t('마이크를 열 수 없습니다 — 다른 앱이 쓰는 중인지 확인하세요'),
 };
 
 export function classifyMicError(err) {

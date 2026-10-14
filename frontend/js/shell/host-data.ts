@@ -6,6 +6,8 @@
 // 2026-09-28부터 스위처는 필터가 아니라 **화면 전체의 전환**이다(core/host-route.js,
 // docs/ref/multihost.md 「Host switch」). 이 파일은 여전히 메뉴 모양만 만든다.
 
+import { t } from '../core/i18n.js';
+
 /** 로컬 호스트의 예약 id — 서버(`agent_status.LOCAL_HOST`)와 같은 값. */
 export const LOCAL_HOST = 'local';
 
@@ -41,15 +43,15 @@ export interface HostMenuItem {
 }
 
 const REASON_LABEL: Record<string, string> = {
-  timeout: '응답 없음',
-  refused: '연결 거부됨',
-  unauthorized: '인증 거부됨(페어링 해제?)',
-  network: '네트워크 오류',
+  timeout: t('응답 없음'),
+  refused: t('연결 거부됨'),
+  unauthorized: t('인증 거부됨(페어링 해제?)'),
+  network: t('네트워크 오류'),
 };
 
 export function reasonLabel(reason: string | undefined | null): string {
-  if (!reason) return '연결 안 됨';
-  return REASON_LABEL[reason] || `연결 안 됨 · ${reason}`;
+  if (!reason) return t('연결 안 됨');
+  return REASON_LABEL[reason] || t('연결 안 됨 · {reason}', { reason });
 }
 
 /** 상대시간은 rail-data의 것과 포맷이 같아야 해서 그대로 재사용한다. */
@@ -57,7 +59,7 @@ export function hostDetail(host: HostEntry): string {
   if (!host.online) return reasonLabel(host.reason);
   const n = (host.sessions || []).length;
   const rtt = host.id === LOCAL_HOST ? '' : ` · ${host.latencyMs ?? 0}ms`;
-  return `세션 ${n}${rtt}`;
+  return t('세션 {n}', { n }) + rtt;
 }
 
 /**

@@ -48,6 +48,7 @@ from worktree_parse import (  # noqa: F401
     parse_worktree_porcelain,
     substitute_env_ports,
 )
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -542,7 +543,7 @@ def _session_name_for(repo_name: str, branch: str) -> str:
 def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dict:
     spec = agents.get(agent_name)
     if not spec:
-        return {"ok": False, "error": "지원하지 않는 agent"}
+        return {"ok": False, "error": tr("지원하지 않는 agent")}
     tmux_name = _session_name_for(repo_name, branch)
     if not tmux_runner.has_session(tmux_name):
         rc, _, err = tmux_runner.run(
@@ -596,17 +597,17 @@ def _validate_create_body(body: dict) -> tuple[str, str, str, str, dict, str, st
     agent_name = body.get("agent")
 
     if not repo_raw or not base or not name:
-        raise WorktreeError(400, {"error": "repo/base/name이 필요합니다"})
+        raise WorktreeError(400, {"error": tr("repo/base/name이 필요합니다")})
     if not _SLUG_RE.fullmatch(name):
-        raise WorktreeError(400, {"error": "name은 영숫자/-/_ 만 가능합니다"})
+        raise WorktreeError(400, {"error": tr("name은 영숫자/-/_ 만 가능합니다")})
     if branch.startswith("-") or not _BRANCH_RE.fullmatch(branch):
-        raise WorktreeError(400, {"error": "유효하지 않은 브랜치 이름입니다"})
+        raise WorktreeError(400, {"error": tr("유효하지 않은 브랜치 이름입니다")})
     if node_modules_mode not in ("symlink", "copy", "none"):
-        raise WorktreeError(400, {"error": "nodeModules 값이 유효하지 않습니다"})
+        raise WorktreeError(400, {"error": tr("nodeModules 값이 유효하지 않습니다")})
     if env_mode not in ("inherit", "empty", "none"):
-        raise WorktreeError(400, {"error": "env 값이 유효하지 않습니다"})
+        raise WorktreeError(400, {"error": tr("env 값이 유효하지 않습니다")})
     if agent_name is not None and not agents.is_supported(agent_name):
-        raise WorktreeError(400, {"error": f"지원하지 않는 agent: {agent_name}"})
+        raise WorktreeError(400, {"error": tr("지원하지 않는 agent: {agent}", agent=agent_name)})
 
     return repo_raw, base, name, branch, ports_cfg, node_modules_mode, env_mode, agent_name
 
@@ -620,7 +621,7 @@ def create_worktree(body: dict) -> dict:
     except fsguard.FsDenied as e:
         raise WorktreeError(403, {"error": e.reason}) from e
     if not (repo_path / ".git").exists():
-        raise WorktreeError(400, {"error": "git 저장소가 아닙니다"})
+        raise WorktreeError(400, {"error": tr("git 저장소가 아닙니다")})
 
     repo_name = repo_path.name
     dest = Path.home() / ".worktrees" / repo_name / name
@@ -629,7 +630,7 @@ def create_worktree(body: dict) -> dict:
     except fsguard.FsDenied as e:
         raise WorktreeError(403, {"error": e.reason}) from e
     if dest_resolved.exists():
-        raise WorktreeError(409, {"error": "이미 존재하는 경로입니다", "path": str(dest_resolved)})
+        raise WorktreeError(409, {"error": tr("이미 존재하는 경로입니다"), "path": str(dest_resolved)})
 
     warnings: list[str] = []
     if _lockfile_mismatch(repo_path, base):
@@ -639,7 +640,7 @@ def create_worktree(body: dict) -> dict:
     dest_resolved.parent.mkdir(parents=True, exist_ok=True)
     rc, _, err = _git(["worktree", "add", "-b", branch, str(dest_resolved), base], cwd=repo_path)
     if rc != 0:
-        raise WorktreeError(400, {"error": "git worktree add 실패", "detail": err.decode("utf-8", errors="replace")})
+        raise WorktreeError(400, {"error": tr("git worktree add 실패"), "detail": err.decode("utf-8", errors="replace")})
 
     created_node_modules: Path | None = None
     opened: dict | None = None
@@ -690,7 +691,7 @@ def create_worktree(body: dict) -> dict:
             pass
         _git(["worktree", "remove", "--force", str(dest_resolved)], cwd=repo_path)
         _git(["branch", "-D", branch], cwd=repo_path)
-        raise WorktreeError(500, {"error": "워크트리 생성 실패", "detail": str(e)}) from e
+        raise WorktreeError(500, {"error": tr("워크트리 생성 실패"), "detail": str(e)}) from e
 
     invalidate_cache()
     entry = find_by_id(hashlib.sha1(f"{repo_path}{dest_resolved}".encode()).hexdigest()[:12], force=True)
@@ -706,7 +707,7 @@ def create_worktree(body: dict) -> dict:
 def open_worktree(wt_id: str) -> dict:
     wt = find_by_id(wt_id, force=True)
     if not wt:
-        raise WorktreeError(404, {"error": "워크트리를 찾을 수 없습니다"})
+        raise WorktreeError(404, {"error": tr("워크트리를 찾을 수 없습니다")})
     if wt["sessions"]:
         return {"ok": True, "tmux_session": wt["sessions"][0], "created": False}
     tmux_name = _session_name_for(wt["repoName"], wt["branch"])
@@ -715,7 +716,7 @@ def open_worktree(wt_id: str) -> dict:
             ["new-session", "-d", "-s", tmux_name, "-c", wt["path"]], timeout=GIT_TIMEOUT,
         )
         if rc != 0:
-            raise WorktreeError(500, {"error": "tmux 세션 생성 실패", "detail": err.decode("utf-8", errors="replace")})
+            raise WorktreeError(500, {"error": tr("tmux 세션 생성 실패"), "detail": err.decode("utf-8", errors="replace")})
         tmux_runner.set_origin(tmux_name, "local")
         # 2.1 D2 — 방금 만든 세션이 이 워크트리 소속임을 tmux에 적어 둔다.
         tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id)
@@ -726,9 +727,9 @@ def open_worktree(wt_id: str) -> dict:
 def delete_worktree(wt_id: str, *, force: bool = False, kill_sessions: bool = False) -> dict:
     wt = find_by_id(wt_id, force=True)
     if not wt:
-        raise WorktreeError(404, {"error": "워크트리를 찾을 수 없습니다"})
+        raise WorktreeError(404, {"error": tr("워크트리를 찾을 수 없습니다")})
     if wt["isMain"]:
-        raise WorktreeError(400, {"error": "메인 워크트리는 삭제할 수 없습니다"})
+        raise WorktreeError(400, {"error": tr("메인 워크트리는 삭제할 수 없습니다")})
 
     path = Path(wt["path"])
     repo = Path(wt["repo"])
@@ -736,7 +737,7 @@ def delete_worktree(wt_id: str, *, force: bool = False, kill_sessions: bool = Fa
     if not force:
         rc, out, _ = _git(["status", "--porcelain"], cwd=path)
         if rc == 0 and out.strip():
-            raise WorktreeError(409, {"error": "워크트리에 변경사항이 있습니다", "dirty": True})
+            raise WorktreeError(409, {"error": tr("워크트리에 변경사항이 있습니다"), "dirty": True})
 
     args = ["worktree", "remove"]
     if force:
@@ -744,7 +745,7 @@ def delete_worktree(wt_id: str, *, force: bool = False, kill_sessions: bool = Fa
     args.append(str(path))
     rc, _, err = _git(args, cwd=repo)
     if rc != 0:
-        raise WorktreeError(500, {"error": "git worktree remove 실패", "detail": err.decode("utf-8", errors="replace")})
+        raise WorktreeError(500, {"error": tr("git worktree remove 실패"), "detail": err.decode("utf-8", errors="replace")})
 
     if kill_sessions:
         for s in wt["sessions"]:
@@ -774,7 +775,7 @@ def _cli(argv: list[str]) -> int:
         items = list_worktrees(force=True)
         print()
         if not items:
-            print("  워크트리가 없습니다")
+            print(tr("  워크트리가 없습니다"))
         else:
             for w in items:
                 mark = "★" if w["isMain"] else " "
@@ -785,7 +786,7 @@ def _cli(argv: list[str]) -> int:
 
     if cmd == "add":
         if not rest:
-            print("사용법: fsh worktree add <name> [--base b] [--ports] [--copy-modules] [--agent claude]", file=sys.stderr)
+            print(tr("사용법: fsh worktree add <name> [--base b] [--ports] [--copy-modules] [--agent claude]"), file=sys.stderr)
             return 2
         name = rest[0]
         opts = rest[1:]
@@ -820,44 +821,44 @@ def _cli(argv: list[str]) -> int:
         except WorktreeError as e:
             print(f"  ✗ {e.payload.get('error')}", file=sys.stderr)
             return 1
-        print(f"  ✓ 생성됨: {r['worktree']['path']}")
+        print(tr("  ✓ 생성됨: {path}", path=r["worktree"]["path"]))
         if r.get("warnings"):
             print(f"  ⚠ {', '.join(r['warnings'])}")
         return 0
 
     if cmd == "rm":
         if not rest:
-            print("사용법: fsh worktree rm <name> [--force]", file=sys.stderr)
+            print(tr("사용법: fsh worktree rm <name> [--force]"), file=sys.stderr)
             return 2
         name = rest[0]
         force = "--force" in rest[1:]
         wt = _cli_find(name)
         if not wt:
-            print(f"  ✗ '{name}' 을 찾을 수 없습니다(또는 여러 개와 일치)", file=sys.stderr)
+            print(tr("  ✗ '{name}' 을 찾을 수 없습니다(또는 여러 개와 일치)", name=name), file=sys.stderr)
             return 1
         try:
             r = delete_worktree(wt["id"], force=force)
         except WorktreeError as e:
             print(f"  ✗ {e.payload.get('error')}", file=sys.stderr)
             return 1
-        print(f"  ✓ 삭제됨: {r['removed']}")
+        print(tr("  ✓ 삭제됨: {path}", path=r["removed"]))
         return 0
 
     if cmd == "open":
         if not rest:
-            print("사용법: fsh worktree open <name>", file=sys.stderr)
+            print(tr("사용법: fsh worktree open <name>"), file=sys.stderr)
             return 2
         name = rest[0]
         wt = _cli_find(name)
         if not wt:
-            print(f"  ✗ '{name}' 을 찾을 수 없습니다(또는 여러 개와 일치)", file=sys.stderr)
+            print(tr("  ✗ '{name}' 을 찾을 수 없습니다(또는 여러 개와 일치)", name=name), file=sys.stderr)
             return 1
         try:
             r = open_worktree(wt["id"])
         except WorktreeError as e:
             print(f"  ✗ {e.payload.get('error')}", file=sys.stderr)
             return 1
-        suffix = " (신규)" if r["created"] else ""
+        suffix = tr(" (신규)") if r["created"] else ""
         print(f"  ✓ {r['tmux_session']}{suffix}")
         return 0
 

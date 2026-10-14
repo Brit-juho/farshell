@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 
 import agent_status
 import host_store
+from i18n import tr
 import peer_client
 from ttl_cache import TTLCache
 
@@ -235,7 +236,7 @@ async def _peer_session_call(host_id: str, action: str, body: dict):
             # 라우트 자체가 없는 404 — 상대가 2.2.1 이전 버전이다.
             return JSONResponse(
                 {"error": "peer_outdated",
-                 "reason": f"{peer['label']}의 FarShell이 이 기능을 모릅니다 — 그 맥을 업데이트하세요"},
+                 "reason": tr("{label}의 FarShell이 이 기능을 모릅니다 — 그 맥을 업데이트하세요", label=peer['label'])},
                 status_code=501,
             )
         return _peer_error(e)

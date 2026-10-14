@@ -19,6 +19,7 @@ from .clauth import ClauthProvider, feed_path
 from .codex import CodexProvider
 from .counter_jsonl import CounterJsonlProvider
 from .null import NullProvider
+from i18n import tr
 
 _provider = None
 _provider_mode: Optional[str] = None
@@ -150,7 +151,7 @@ def counter_snapshot(since: float = 0) -> Optional[dict]:
 
 def counter_add(model, tokens, seconds) -> dict:
     if _mode() == "none":
-        return {"ok": False, "error": "disabled", "reason": "사용량 표시가 꺼져 있습니다 (VT_USAGE_PROVIDER=none)"}
+        return {"ok": False, "error": "disabled", "reason": tr("사용량 표시가 꺼져 있습니다 (VT_USAGE_PROVIDER=none)")}
     return _get_counter_provider().add(model, tokens, seconds)
 
 

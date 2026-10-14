@@ -18,6 +18,7 @@ import asyncio
 import voice_handler
 import voice_targets
 from .tmux_target import pane_label, resolve_voice_target_pane, send_to_tmux
+from i18n import tr
 
 _recording = False
 _audio_frames: list[np.ndarray] = []
@@ -42,7 +43,7 @@ def _notify_target():
             return
         label = pane_label(pane) or pane
         prefix = "🔒 " if (_target or {}).get("mode", "").startswith("lock:") else ""
-        platform_utils.notify("🎙 음성 입력", f"{prefix}→ {label}")
+        platform_utils.notify(tr("🎙 음성 입력"), f"{prefix}→ {label}")
     except Exception as e:
         logger.debug(f"타깃 알림 실패: {e}")
 
@@ -54,12 +55,12 @@ def start_recording():
             return
         pane, mode = resolve_voice_target_pane()
         if not pane:
-            platform_utils.notify("음성 입력", "입력 대상 tmux pane이 없습니다")
+            platform_utils.notify(tr("음성 입력"), tr("입력 대상 tmux pane이 없습니다"))
             return
         try:
             _target = voice_targets.snapshot("", pane) if server_client.independent() else server_client.target(pane)
         except Exception as e:
-            platform_utils.notify("음성 준비 실패", str(e)[:200])
+            platform_utils.notify(tr("음성 준비 실패"), str(e)[:200])
             return
         _target["mode"] = mode
         _audio_frames = []
@@ -111,7 +112,7 @@ def start_recording():
                 server_client.request('/voice/cancel', json.dumps({'server': True, 'pause': False}).encode())
             except Exception:
                 pass
-        platform_utils.notify('녹음 시작 실패', str(e)[:200])
+        platform_utils.notify(tr('녹음 시작 실패'), str(e)[:200])
         return
     logger.info("🎙 녹음 시작")
     platform_utils.play_sound("start")
@@ -171,7 +172,7 @@ def stop_recording_and_process():
                 {'X-Voice-Id': secrets.token_hex(16), 'X-Voice-Target': _target['token']}, timeout=130)
             text = result.get('text', '')
             if result.get('error') or (text and not result.get('injected')):
-                raise RuntimeError(result.get('error') or '입력되지 않았습니다')
+                raise RuntimeError(result.get('error') or tr('입력되지 않았습니다'))
         if text:
             logger.info('STT → %s: %s', _target['pane'], text)
             if TTS_CONFIRM and server_client.independent():
@@ -183,7 +184,7 @@ def stop_recording_and_process():
                 asyncio.run(confirm())
     except Exception as e:
         logger.error('STT 실패: %s', e)
-        platform_utils.notify('음성 입력 실패', str(e)[:200])
+        platform_utils.notify(tr('음성 입력 실패'), str(e)[:200])
     finally:
         _processing = False
         if not server_client.independent():

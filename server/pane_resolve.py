@@ -86,6 +86,7 @@ def resolve(pane: Optional[str], tmux_env: Optional[str], cwd: Optional[str],
       cwd           — cwd가 유일해서 매칭
       foreign-tmux  — 우리 소켓이 아니라 pane id를 버렸고 cwd로도 못 찾음
       ambiguous     — cwd 후보가 둘 이상 → 포기(아무것도 강조하지 않는다)
+      pane-gone     — 우리 소켓의 pane id인데 그 pane이 이미 없음 → cwd로 추측하지 않는다
       none          — 단서 자체가 없음
     """
     # Codex 0.160의 훅은 공유 app-server 데몬에서 실행될 수 있다. 데몬이 처음
@@ -99,6 +100,11 @@ def resolve(pane: Optional[str], tmux_env: Optional[str], cwd: Optional[str],
         session = session_for_pane(pane)
         if session:
             return session, "pane"
+        # 우리 소켓의 pane이 이미 없다 — 그 세션이 닫히면서 에이전트가 마지막 훅(Stop·SessionEnd)을
+        # 보낸 것이다. cwd로 추측하면 **같은 폴더에 남은 다른 세션**이 그 상태를 받는다(2026-10-13
+        # 실측: 하위 세션을 닫자 부모가 done이 돼 큐가 부모의 셸에 입력됐다). 출처가 확실한 단서가
+        # 사라졌다는 사실을 존중한다.
+        return None, "pane-gone"
     session = session_for_cwd(cwd)
     if session:
         return session, "cwd"

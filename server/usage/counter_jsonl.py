@@ -33,6 +33,7 @@ from typing import Optional
 
 import store_lock
 import vt_paths
+from i18n import tr
 
 MAX_MODEL_LEN = 80
 MAX_TOKENS = 100_000_000       # 한 이벤트당 상한 — 오기입 방어(예: 초당 토큰을 누적으로 착각)
@@ -76,21 +77,21 @@ def _day(ts: float) -> str:
 def _validate(model, tokens, seconds) -> tuple[Optional[dict], Optional[str]]:
     model = str(model or "").strip()
     if not model:
-        return None, "model이 비어 있습니다"
+        return None, tr("model이 비어 있습니다")
     if len(model) > MAX_MODEL_LEN:
-        return None, f"model이 너무 깁니다 (최대 {MAX_MODEL_LEN}자)"
+        return None, tr("model이 너무 깁니다 (최대 {max}자)", max=MAX_MODEL_LEN)
     try:
         tokens = int(tokens)
     except (TypeError, ValueError):
-        return None, "tokens는 정수여야 합니다"
+        return None, tr("tokens는 정수여야 합니다")
     try:
         seconds = float(seconds)
     except (TypeError, ValueError):
-        return None, "seconds는 숫자여야 합니다"
+        return None, tr("seconds는 숫자여야 합니다")
     if tokens < 0 or tokens > MAX_TOKENS:
-        return None, f"tokens 범위를 벗어났습니다 (0~{MAX_TOKENS})"
+        return None, tr("tokens 범위를 벗어났습니다 (0~{max})", max=MAX_TOKENS)
     if seconds < 0 or seconds > MAX_SECONDS:
-        return None, f"seconds 범위를 벗어났습니다 (0~{MAX_SECONDS})"
+        return None, tr("seconds 범위를 벗어났습니다 (0~{max})", max=MAX_SECONDS)
     return {"model": model, "tokens": tokens, "seconds": seconds}, None
 
 
@@ -248,14 +249,14 @@ def _cli(argv: list[str]) -> int:
             else:
                 i += 1
         if "model" not in opts or "tokens" not in opts or "seconds" not in opts:
-            print("  ✗ 사용법: fsh usage add --model <이름> --tokens <N> --seconds <N>", file=sys.stderr)
+            print(tr("  ✗ 사용법: fsh usage add --model <이름> --tokens <N> --seconds <N>"), file=sys.stderr)
             return 2
         r = CounterJsonlProvider().add(opts["model"], opts["tokens"], opts["seconds"])
         if not r.get("ok"):
             print(f"  ✗ {r['reason']}", file=sys.stderr)
             return 1
         ev = r["event"]
-        print(f"  ✓ 기록됨 — {ev['model']} · {ev['tokens']} tok · {ev['seconds']}s")
+        print(tr("  ✓ 기록됨 — {model} · {tokens} tok · {seconds}s", model=ev["model"], tokens=ev["tokens"], seconds=ev["seconds"]))
         return 0
 
     if cmd == "list":
@@ -263,14 +264,14 @@ def _cli(argv: list[str]) -> int:
         counters = (snap or {}).get("counters", [])
         print()
         if not counters:
-            print("  누적 사용량 기록이 없습니다")
+            print(tr("  누적 사용량 기록이 없습니다"))
             print()
-            print("  기록: fsh usage add --model qwen2.5-coder --tokens 1840 --seconds 41")
+            print(tr("  기록: fsh usage add --model qwen2.5-coder --tokens 1840 --seconds 41"))
         else:
-            print(f"  📈 누적형 사용량 — {len(counters)}개 모델")
+            print(tr("  📈 누적형 사용량 — {n}개 모델", n=len(counters)))
             print()
             for c in counters:
-                tps = f"{c['tok_per_sec']} tok/s" if c["tok_per_sec"] is not None else "tok/s 없음"
+                tps = f"{c['tok_per_sec']} tok/s" if c["tok_per_sec"] is not None else tr("tok/s 없음")
                 print(f"    {c['label']:<20} {c['tokens']:>10} tok  {c['seconds']:>8.1f}s  {tps}")
         print()
         return 0

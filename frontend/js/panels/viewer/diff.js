@@ -3,6 +3,7 @@
 import { vtFetch } from '../../core/api.js';
 import { isMac } from '../../core/env.js';
 import { _setMsg } from './state.js';
+import { t } from '../../core/i18n.js';
 import { _hl } from './file.js';
 // UMD 전역 VTDiffLex — 뷰어 전용이라 panels 청크에서 평가한다(마지막 import일 것: file.js 참고).
 import '../../lib/difflex.js';
@@ -35,7 +36,7 @@ export function _renderDiffDOM(container, diffText) {
     if (f.binary) {
       const note = document.createElement('div');
       note.className = 'vt-vw-note';
-      note.textContent = '바이너리 파일';
+      note.textContent = t('바이너리 파일');
       fileEl.appendChild(note);
     } else {
       f.hunks.forEach(h => {
@@ -101,17 +102,17 @@ function _toggleDiffAnnotate(row, filePath, lineNo) {
   const ta = document.createElement('textarea');
   ta.className = 'vt-vw-annotate-input';
   ta.rows = 2;
-  ta.placeholder = `이 줄에 지시… (${isMac ? 'Cmd' : 'Ctrl'}+Enter로 추가)`;
+  ta.placeholder = t('이 줄에 지시… ({mod}+Enter로 추가)', { mod: isMac ? 'Cmd' : 'Ctrl' });
   const actions = document.createElement('div');
   actions.className = 'vt-vw-annotate-row';
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'vt-btn';
   cancelBtn.type = 'button';
-  cancelBtn.textContent = '취소';
+  cancelBtn.textContent = t('취소');
   const addBtn = document.createElement('button');
   addBtn.className = 'vt-btn';
   addBtn.type = 'button';
-  addBtn.textContent = '큐에 추가';
+  addBtn.textContent = t('큐에 추가');
   actions.appendChild(cancelBtn);
   actions.appendChild(addBtn);
   box.appendChild(ta);
@@ -142,18 +143,18 @@ async function _submitDiffAnnotate(box, ta, filePath, lineNo) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    if (typeof showToast === 'function') showToast('큐에 추가됨');
+    if (typeof showToast === 'function') showToast(t('큐에 추가됨'));
     box.remove();
   } catch (e) {
     if (addBtn) addBtn.disabled = false;
-    if (typeof showToast === 'function') showToast(`추가 실패: ${e.message}`);
+    if (typeof showToast === 'function') showToast(t('추가 실패: {msg}', { msg: e.message }));
   }
 }
 
 // 파일 하나의 diff. status 목록에서 특정 파일을 눌렀을 때 쓴다.
 // N35 §6 — "어디에 그릴지"를 인자로 받는다(dock 소스컨트롤 탭이 유일한 소비처).
 export async function renderFileDiff(container, repo, file, staged, opts = {}) {
-  container.innerHTML = '<div class="vt-vw-loading">git diff 실행 중…</div>';
+  container.innerHTML = `<div class="vt-vw-loading">${t('git diff 실행 중…')}</div>`;
 
   let d;
   try {
@@ -168,14 +169,14 @@ export async function renderFileDiff(container, repo, file, staged, opts = {}) {
   if (opts.onBack) {
     const back = document.createElement('button');
     back.className = 'vt-btn vt-vw-cback';
-    back.textContent = '‹ 상태로';
+    back.textContent = t('‹ 상태로');
     back.addEventListener('click', opts.onBack);
     container.appendChild(back);
   }
   if (!d.diff || !d.diff.trim()) {
     const empty = document.createElement('div');
     empty.className = 'vt-vw-empty';
-    empty.textContent = '변경된 내용이 없습니다.';
+    empty.textContent = t('변경된 내용이 없습니다.');
     container.appendChild(empty);
     return;
   }
@@ -183,7 +184,7 @@ export async function renderFileDiff(container, repo, file, staged, opts = {}) {
   if (d.truncated) {
     const note = document.createElement('div');
     note.className = 'vt-vw-note warn';
-    note.textContent = 'diff가 커서 일부만 표시했습니다.';
+    note.textContent = t('diff가 커서 일부만 표시했습니다.');
     container.appendChild(note);
   }
 }

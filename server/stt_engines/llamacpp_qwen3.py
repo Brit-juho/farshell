@@ -27,6 +27,7 @@ from typing import Optional
 from . import hfcache, llama_release
 from .base import Engine, NotReady, Progress, Requirement
 from .env import HostEnv
+from i18n import tr
 
 _START_TIMEOUT = 180       # 큰 모델 첫 로드 여유
 _REQUEST_TIMEOUT = 90
@@ -54,8 +55,7 @@ class LlamaCppQwen3Engine(Engine):
     def supported(self, env: HostEnv) -> tuple:
         if llama_release.asset_for(env) is not None or llama_release.find_binary() is not None:
             return True, ""
-        return False, (f"이 환경({env.label})용 llama.cpp 공식 배포본이 없습니다 — "
-                       "직접 설치한 뒤 환경변수 VT_LLAMA_SERVER에 경로를 지정하면 쓸 수 있습니다")
+        return False, tr("이 환경({env})용 llama.cpp 공식 배포본이 없습니다 — 직접 설치한 뒤 환경변수 VT_LLAMA_SERVER에 경로를 지정하면 쓸 수 있습니다", env=env.label)
 
     def requirements(self, env: HostEnv) -> list:
         found = llama_release.find_binary()
@@ -64,24 +64,26 @@ class LlamaCppQwen3Engine(Engine):
         if env.os == "linux":
             missing = _linux_missing_libs(found)
             reqs.append(Requirement(
-                id="linux-libs", label="시스템 라이브러리 (OpenMP: libgomp)", kind="system",
+                id="linux-libs", label=tr("시스템 라이브러리 (OpenMP: libgomp)"), kind="system",
                 satisfied=not missing,
                 hint="" if not missing else
-                     "sudo apt install libgomp1  (Debian/Ubuntu) · sudo dnf install libgomp  (Fedora) 로 설치해 주세요"
-                     + (f" — 없는 라이브러리: {', '.join(missing)}" if missing != ["libgomp"] else "")))
+                     (tr("sudo apt install libgomp1  (Debian/Ubuntu) · sudo dnf install libgomp  (Fedora) 로 설치해 주세요")
+                      if missing == ["libgomp"] else
+                      tr("sudo apt install libgomp1  (Debian/Ubuntu) · sudo dnf install libgomp  (Fedora) 로 설치해 주세요 — 없는 라이브러리: {libs}",
+                         libs=", ".join(missing)))))
         return reqs
 
     def _base_requirements(self, env: HostEnv, found, asset) -> list:
         return [Requirement(
-            id="llama-server", label="llama.cpp (llama-server 실행 파일)", kind="binary",
+            id="llama-server", label=tr("llama.cpp (llama-server 실행 파일)"), kind="binary",
             satisfied=found is not None,
-            hint="" if found else ("설정에서 받거나, 직접 설치한 뒤 VT_LLAMA_SERVER에 경로를 지정하세요"),
+            hint="" if found else tr("설정에서 받거나, 직접 설치한 뒤 VT_LLAMA_SERVER에 경로를 지정하세요"),
             can_install=asset is not None,
             size_mb=round(asset[2] / 1024 / 1024) if asset else None)]
 
     def install_requirement(self, req_id: str, progress: Progress) -> None:
         if req_id != "llama-server":
-            raise NotReady(f"알 수 없는 항목: {req_id}")
+            raise NotReady(tr("알 수 없는 항목: {req_id}", req_id=req_id))
         from .env import detect
         try:
             llama_release.download_and_install(detect(), progress)
@@ -130,11 +132,10 @@ class LlamaCppQwen3Engine(Engine):
             self._stop_locked()
             binary = llama_release.find_binary()
             if binary is None:
-                raise NotReady("llama.cpp(llama-server)가 없습니다 — 설정 「음성 및 알림」에서 먼저 받아 주세요")
+                raise NotReady(tr("llama.cpp(llama-server)가 없습니다 — 설정 「음성 및 알림」에서 먼저 받아 주세요"))
             files = self._files(spec)
             if files is None:
-                raise NotReady(f"음성 인식 모델 '{spec.label}'을(를) 아직 받지 않았습니다 — "
-                               "설정 「음성 및 알림」에서 먼저 받아 주세요")
+                raise NotReady(tr("음성 인식 모델 '{model}'을(를) 아직 받지 않았습니다 — 설정 「음성 및 알림」에서 먼저 받아 주세요", model=spec.label))
             port = _free_port()
             key = secrets.token_urlsafe(24)
             log = _log_path()
@@ -161,7 +162,7 @@ class LlamaCppQwen3Engine(Engine):
         deadline = time.monotonic() + _START_TIMEOUT
         while time.monotonic() < deadline:
             if proc.poll() is not None:
-                raise NotReady("llama.cpp 엔진이 시작 중 종료됐습니다: " + _log_tail(log))
+                raise NotReady(tr("llama.cpp 엔진이 시작 중 종료됐습니다: {log}", log=_log_tail(log)))
             try:
                 req = urllib.request.Request(self._base + "/health")
                 with urllib.request.urlopen(req, timeout=2) as r:
@@ -170,7 +171,7 @@ class LlamaCppQwen3Engine(Engine):
             except Exception:
                 pass
             time.sleep(0.4)
-        raise NotReady("llama.cpp 엔진 준비 시간이 초과됐습니다: " + _log_tail(log))
+        raise NotReady(tr("llama.cpp 엔진 준비 시간이 초과됐습니다: {log}", log=_log_tail(log)))
 
     def _stop_locked(self) -> None:
         proc, self._proc, self._model_id = self._proc, None, None
@@ -199,7 +200,7 @@ class LlamaCppQwen3Engine(Engine):
 
     def transcribe(self, wav: bytes, language: Optional[str]) -> str:
         if self.loaded() is None:
-            raise NotReady("음성 인식 엔진이 올라와 있지 않습니다")
+            raise NotReady(tr("음성 인식 엔진이 올라와 있지 않습니다"))
         body = {"messages": [{"role": "user", "content": [
             {"type": "input_audio", "input_audio": {"data": base64.b64encode(wav).decode(), "format": "wav"}}]}],
             "temperature": 0, "max_tokens": _MAX_TOKENS}
@@ -210,12 +211,12 @@ class LlamaCppQwen3Engine(Engine):
             with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as r:
                 content = json.load(r)["choices"][0]["message"]["content"]
         except urllib.error.HTTPError as e:
-            raise RuntimeError(f"llama.cpp 엔진 오류 {e.code}: {e.read()[:200]!r}") from e
+            raise RuntimeError(tr("llama.cpp 엔진 오류 {code}: {body}", code=e.code, body=repr(e.read()[:200]))) from e
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             if self._proc is not None and self._proc.poll() is not None:
                 self.unload()
-                raise NotReady("llama.cpp 엔진이 종료돼 있습니다 — 다시 시도하면 새로 시작합니다") from e
-            raise RuntimeError(f"llama.cpp 엔진 응답 실패: {e}") from e
+                raise NotReady(tr("llama.cpp 엔진이 종료돼 있습니다 — 다시 시도하면 새로 시작합니다")) from e
+            raise RuntimeError(tr("llama.cpp 엔진 응답 실패: {e}", e=e)) from e
         return parse_asr_text(content)
 
     def rss_mb(self) -> int:
@@ -293,7 +294,7 @@ def _log_tail(log: Path, n: int = 3) -> str:
         lines = [l for l in log.read_text(errors="replace").splitlines() if l.strip()]
         return " | ".join(lines[-n:])[:400]
     except OSError:
-        return "(로그 없음)"
+        return tr("(로그 없음)")
 
 
 def _repo_gguf_patterns(repo: str) -> list:
@@ -307,7 +308,7 @@ def _pick_gguf(names: list) -> list:
     models = [n for n in ggufs if not n.startswith("mmproj")]
     projs = [n for n in ggufs if n.startswith("mmproj")]
     if not models or not projs:
-        raise NotReady("이 리포에는 llama.cpp용 모델(.gguf)과 mmproj 파일이 함께 없습니다")
+        raise NotReady(tr("이 리포에는 llama.cpp용 모델(.gguf)과 mmproj 파일이 함께 없습니다"))
     model = next((n for n in models if "Q8_0" in n), models[0])
     proj = next((n for n in projs if "Q8_0" in n), projs[0])
     return [model, proj]

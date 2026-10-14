@@ -48,6 +48,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import host_store
+from i18n import tr
 from routes.peer_protocol import (
     PeerDenied,
     _authenticate_raw,
@@ -83,14 +84,14 @@ async def peer_pair(request: Request):
         # 로컬 호스트를 가로챈다.
         host_store.audit(raw_id or "?", "pair", False, "잘못되거나 예약된 호스트 id")
         return JSONResponse(
-            {"error": "bad_id", "reason": f"쓸 수 없는 호스트 id입니다: {raw_id!r}"},
+            {"error": "bad_id", "reason": tr("쓸 수 없는 호스트 id입니다: {id}", id=repr(raw_id))},
             status_code=400,
         )
     if host_store.consume_pair_ticket(ticket) is None:
         host_store.audit(peer_id, "pair", False, "티켓 무효/만료")
         return JSONResponse(
             {"error": "ticket_invalid",
-             "reason": "티켓이 유효하지 않거나 만료됐습니다 — 'fsh host pair'를 다시 실행하세요"},
+             "reason": tr("티켓이 유효하지 않거나 만료됐습니다 — 'fsh host pair'를 다시 실행하세요")},
             status_code=401,
         )
 
@@ -243,7 +244,7 @@ async def peer_clients_detach(request: Request, grant: dict):
         # 로컬 경로와 같은 규칙 — 지금 보고 있는 화면을 스스로 끊으면 복구 경로가
         # 없다(그리고 원격에서는 "왜 끊겼는지"가 더 안 보인다).
         return JSONResponse(
-            {"error": "cannot detach self", "reason": "지금 보고 있는 화면은 끊을 수 없습니다"},
+            {"error": "cannot detach self", "reason": tr("지금 보고 있는 화면은 끊을 수 없습니다")},
             status_code=400,
         ), "자기 화면"
     await asyncio.to_thread(tmux_runner.run, ["detach-client", "-t", tty], 2.0)
@@ -272,7 +273,7 @@ async def peer_clients_solo(request: Request, grant: dict):
     keep = _my_tty(grant, _screen_token(body.get("screen")))
     if not keep:
         return JSONResponse(
-            {"error": "unknown client", "reason": "이 화면의 tty를 확인할 수 없습니다"},
+            {"error": "unknown client", "reason": tr("이 화면의 tty를 확인할 수 없습니다")},
             status_code=400,
         ), "자기 화면 미확인"
 
@@ -367,7 +368,7 @@ async def peer_input(request: Request, grant: dict):
     data = body.get("data")
     enter = bool(body.get("enter", False))
     if not session or not isinstance(data, str) or not data:
-        return JSONResponse({"error": "bad_request", "reason": "session/data가 필요합니다"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "reason": tr("session/data가 필요합니다")}, status_code=400)
 
     import tmux_target
 
@@ -418,7 +419,7 @@ async def _has_exact(name: str) -> bool:
 
 def _bad_name(raw) -> tuple[JSONResponse, str]:
     return JSONResponse(
-        {"error": "bad_name", "reason": "세션 이름은 영숫자·dash·underscore 1~32자만 가능합니다(첫 글자 dash 불가)"},
+        {"error": "bad_name", "reason": tr("세션 이름은 영숫자·dash·underscore 1~32자만 가능합니다(첫 글자 dash 불가)")},
         status_code=400,
     ), f"잘못된 이름: {str(raw)[:40]!r}"
 
@@ -446,7 +447,7 @@ async def peer_sessions_create(request: Request, grant: dict):
             return _bad_name(raw)
         if await _has_exact(name):
             return JSONResponse(
-                {"error": "exists", "reason": f"이미 있는 이름입니다: {name}"}, status_code=409,
+                {"error": "exists", "reason": tr("이미 있는 이름입니다: {name}", name=name)}, status_code=409,
             ), f"중복: {name}"
     rc, _, err = await tmux_runner.run_async(
         ["new-session", "-d", "-s", name, "-c", platform_utils.default_start_dir()],
@@ -510,7 +511,7 @@ async def peer_sessions_rename(request: Request, grant: dict):
         return JSONResponse({"error": "session_not_found"}, status_code=404), f"세션 없음: {old}"
     if await _has_exact(new):
         return JSONResponse(
-            {"error": "exists", "reason": f"이미 있는 이름입니다: {new}"}, status_code=409,
+            {"error": "exists", "reason": tr("이미 있는 이름입니다: {name}", name=new)}, status_code=409,
         ), f"중복: {new}"
     rc, _, err = await tmux_runner.run_async(["rename-session", "-t", f"={old}", new], timeout=2.0)
     if rc != 0:
@@ -732,7 +733,7 @@ async def peer_file(request: Request, grant: dict, data: bytes):
     if len(data) > file_store.MAX_UPLOAD_BYTES:
         return JSONResponse(
             {"error": "too_large",
-             "reason": f"파일이 이 호스트의 상한을 넘습니다 (최대 {file_store.MAX_UPLOAD_BYTES // (1024*1024)}MB)"},
+             "reason": tr("파일이 이 호스트의 상한을 넘습니다 (최대 {mb}MB)", mb=file_store.MAX_UPLOAD_BYTES // (1024*1024))},
             status_code=413,
         ), f"{name} 크기 초과"
 

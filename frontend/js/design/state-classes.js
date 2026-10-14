@@ -11,13 +11,15 @@
 // 뺐다. 서버가 언젠가 보내더라도 normalizeState가 idle로 접는다 — 색 토큰
 // (--color-st-error)은 위험·실패 표시에 쓰이므로 남아 있다.
 
+import { t } from '../core/i18n.js';
+
 export const STATES = ['idle', 'working', 'waiting', 'done'];
 
 export const STATE_LABEL = {
-  idle:    '유휴',
-  working: '작업 중',
-  waiting: '입력 대기',
-  done:    '완료',
+  idle:    t('유휴'),
+  working: t('작업 중'),
+  waiting: t('입력 대기'),
+  done:    t('완료'),
 };
 
 /** 알 수 없는 값(error·undefined·미래의 새 상태)은 전부 idle. */
@@ -98,10 +100,10 @@ export function viewSegments(entries) {
 
 /** 호버 툴팁 — 세션마다 한 줄: "이름 · 상태[ · 확인 안 함]". */
 export function segmentsTooltip(segs) {
-  return segs.map((s) => `${s.name} · ${s.label}${s.unseen ? ' · 확인 안 함' : ''}`).join('\n');
+  return segs.map((s) => (s.unseen ? t('{name} · {label} · 확인 안 함', { name: s.name, label: s.label }) : `${s.name} · ${s.label}`)).join('\n');
 }
 
 /** 스크린 리더용 한 줄 — "api, 작업 중 · web, 입력 대기(확인 안 함)". */
 export function segmentsAria(segs) {
-  return segs.map((s) => `${s.name}, ${s.label}${s.unseen ? '(확인 안 함)' : ''}`).join(' · ');
+  return segs.map((s) => (s.unseen ? t('{name}, {label}(확인 안 함)', { name: s.name, label: s.label }) : `${s.name}, ${s.label}`)).join(' · ');
 }

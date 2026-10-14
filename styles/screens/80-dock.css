@@ -207,6 +207,16 @@
 }
 .vt-dock-mic-home #mic-btn-wrap.mic:hover { background:var(--menu-hover); color:var(--color-txt); }
 .vt-dock-mic-home #mic-btn-wrap.mic:active { transform:none; background:var(--color-surface-active); }
+/* 상태 점 — 평소(준비됨)엔 없다. 문제가 있을 때만 아이콘 모서리에 색이 붙는다
+   (status-panel.js가 data-voice-state를 정한다). */
+.vt-dock-mic-home #mic-btn-wrap { position:relative; }
+.vt-dock-mic-home #mic-btn-wrap[data-voice-state]::after {
+  content:''; position:absolute; top:6px; right:6px; width:6px; height:6px; border-radius:50%;
+  background:var(--color-sub);
+}
+.vt-dock-mic-home #mic-btn-wrap[data-voice-state="busy"]::after { background:var(--color-st-working); }
+.vt-dock-mic-home #mic-btn-wrap[data-voice-state="setup"]::after { background:var(--color-st-waiting); }
+.vt-dock-mic-home #mic-btn-wrap[data-voice-state="error"]::after { background:var(--color-st-error); }
 .vt-dock-mic-home #mic-btn-wrap.mic.recording {
   background:var(--color-st-error); color:var(--color-on-solid);
 }

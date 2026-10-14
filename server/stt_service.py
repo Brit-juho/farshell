@@ -24,6 +24,7 @@ from stt_engines import catalog, hfcache, llama_release, setup_jobs
 from stt_engines.base import NotReady
 from stt_engines.catalog import ModelSpec
 from stt_engines.env import HostEnv, detect
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,8 @@ def selection(env: Optional[HostEnv] = None) -> Selection:
 
 
 def _invalid_message(sel: Selection) -> str:
-    return (f"이전에 고른 모델('{sel.legacy}')은 이 서버에서 더 이상 쓸 수 없습니다 — "
-            "설정 「음성 및 알림」에서 모델을 다시 골라 주세요")
+    return tr("이전에 고른 모델('{model}')은 이 서버에서 더 이상 쓸 수 없습니다 — 설정 「음성 및 알림」에서 모델을 다시 골라 주세요",
+              model=sel.legacy)
 
 
 # ── 엔진 구동 ───────────────────────────────────────────────────────
@@ -206,7 +207,7 @@ def transcribe_wav(wav: bytes, language: Optional[str]) -> tuple:
     global _waiting, _last_error, _last_timing
     with _state_lock:
         if _waiting >= MAX_WAITING:
-            raise Busy("음성 인식이 밀려 있습니다 — 잠시 뒤에 다시 말해 주세요")
+            raise Busy(tr("음성 인식이 밀려 있습니다 — 잠시 뒤에 다시 말해 주세요"))
         _waiting += 1
     t0 = time.perf_counter()
     try:
@@ -253,10 +254,10 @@ def _model_view(spec: ModelSpec, env: HostEnv, sel: Selection, rec_id: str) -> d
     ok, reason = eng.supported(env)
     reqs = [r.to_dict() for r in eng.requirements(env)] if ok else []
     present = bool(ok and eng.model_present(spec))
-    tags = list(spec.static_tags)
-    if spec.id == rec_id:
-        tags.insert(0, "권장")
     d = spec.to_dict()
+    tags = list(d["static_tags"])  # to_dict()가 현재 언어로 옮긴 값
+    if spec.id == rec_id:
+        tags.insert(0, tr("권장"))
     d.update({
         "engine_label": eng.label, "tags": tags, "supported": ok, "unsupported_reason": "" if ok else reason,
         "requirements": reqs, "model_present": present,
@@ -299,10 +300,25 @@ def catalog_payload(custom: Optional[str] = None) -> dict:
             "models": models, "unsupported": unsupported, "setup": _setup.status()}
 
 
+def _selected_ready(sel: Selection) -> bool:
+    """고른 모델을 지금 바로 올릴 수 있는가(받아 둠 + 필요 항목 충족) — 모델을 올리지 않고 확인만 한다."""
+    if not sel.valid or sel.spec is None:
+        return False
+    try:
+        env = detect()
+        eng = stt_engines.get_engine(sel.spec.engine)
+        if not eng.supported(env)[0] or not eng.model_present(sel.spec):
+            return False
+        return all(r.satisfied for r in eng.requirements(env))
+    except Exception:
+        return False
+
+
 def status_payload() -> dict:
     sel = selection()
     return {"available": available(), "loaded": loaded(), "engine": loaded_engine_id(),
-            "model": sel.model_id, "selected_valid": sel.valid, "loaded_model": loaded_model_id(),
+            "model": sel.model_id, "selected_valid": sel.valid, "selected_ready": _selected_ready(sel),
+            "loaded_model": loaded_model_id(),
             "rss_mb": rss_mb(), "setup": _setup.status(), "last_error": _last_error or None,
             "timing": {"last": _last_timing} if _last_timing else None}
 
@@ -316,14 +332,14 @@ class SetupError(ValueError):
 def start_setup(model_id: str, step: str, blocking: bool = False) -> dict:
     spec = spec_for(model_id)
     if spec is None:
-        raise SetupError("알 수 없는 모델입니다 — 목록의 모델이거나 custom:<엔진>:<owner/repo> 형식이어야 합니다")
+        raise SetupError(tr("알 수 없는 모델입니다 — 목록의 모델이거나 custom:<엔진>:<owner/repo> 형식이어야 합니다"))
     env = detect()
     eng = stt_engines.get_engine(spec.engine)
     ok, reason = eng.supported(env)
     if not ok:
         raise SetupError(reason)
     if step == "model":
-        label = f"{spec.label} 모델 받기"
+        label = tr("{model} 모델 받기", model=spec.to_dict()["label"])
 
         def fn(progress):
             eng.download_model(spec, progress)
@@ -335,17 +351,19 @@ def start_setup(model_id: str, step: str, blocking: bool = False) -> dict:
         req_id = step[4:]
         req = next((r for r in eng.requirements(env) if r.id == req_id), None)
         if req is None:
-            raise SetupError(f"이 엔진에 없는 항목입니다: {req_id}")
+            raise SetupError(tr("이 엔진에 없는 항목입니다: {req_id}", req_id=req_id))
         if req.satisfied:
             return _done_job(model_id, step, req.label)
         if not req.can_install:
-            raise SetupError(f"앱이 대신 설치하지 않는 항목입니다 — {req.hint or '안내된 방법으로 직접 설치해 주세요'}")
-        label = f"{req.label} 설치"
+            raise SetupError(
+                tr("앱이 대신 설치하지 않는 항목입니다 — {hint}", hint=req.hint) if req.hint
+                else tr("앱이 대신 설치하지 않는 항목입니다 — 안내된 방법으로 직접 설치해 주세요"))
+        label = tr("{item} 설치", item=req.label)
 
         def fn(progress):
             eng.install_requirement(req_id, progress)
     else:
-        raise SetupError("step은 'model' 또는 'req:<항목 id>'여야 합니다")
+        raise SetupError(tr("step은 'model' 또는 'req:<항목 id>'여야 합니다"))
     try:
         return _setup.start(model_id, step, label, fn, blocking=blocking)
     except setup_jobs.SetupBusy:
@@ -412,34 +430,34 @@ def downloads_payload() -> dict:
         size = _model_bytes(spec, eng)
         if size <= 0:                    # 시스템이 관리하는 것(Apple)은 지울 게 없다
             continue
-        out_models.append({"model_id": spec.id, "label": spec.label, "engine": spec.engine,
+        out_models.append({"model_id": spec.id, "label": spec.to_dict()["label"], "engine": spec.engine,
                            "size_bytes": size, "selected": sel.model_id == spec.id})
     binaries = []
     root = llama_release.install_root()
     if root.is_dir():
         size = hfcache.dir_size(root)
         if size > 0:
-            binaries.append({"id": "llama-server", "label": "llama.cpp (앱이 받은 실행 파일)",
+            binaries.append({"id": "llama-server", "label": tr("llama.cpp (앱이 받은 실행 파일)"),
                              "path": str(root), "size_bytes": size})
     return {"models": out_models, "binaries": binaries}
 
 
 def delete_download(model_id: Optional[str] = None, binary: Optional[str] = None) -> int:
     if (model_id is None) == (binary is None):
-        raise SetupError("model_id 또는 binary 중 하나만 지정해야 합니다")
+        raise SetupError(tr("model_id 또는 binary 중 하나만 지정해야 합니다"))
     if binary is not None:
         if binary != "llama-server":
-            raise SetupError(f"알 수 없는 항목: {binary}")
+            raise SetupError(tr("알 수 없는 항목: {req_id}", req_id=binary))
         inst = stt_engines._instances.get("llamacpp_qwen3")
         if inst is not None:
             inst.unload()
         return llama_release.remove_installed()
     spec = spec_for(model_id)
     if spec is None:
-        raise SetupError("알 수 없는 모델입니다")
+        raise SetupError(tr("알 수 없는 모델입니다"))
     # 직접 입력 모델은 **이 앱이 받은 것(매니페스트)이거나 지금 선택 중인 것**만 지운다 — 아니면 사용자가 아무 리포
     # id나 적어 무관한 HuggingFace 캐시(다른 도구가 받은 모델)를 지울 수 있다.
     if spec.custom and model_id not in _read_custom() and selection().model_id != model_id:
-        raise SetupError("이 앱이 받은 직접 입력 모델이 아니라서 지우지 않습니다")
+        raise SetupError(tr("이 앱이 받은 직접 입력 모델이 아니라서 지우지 않습니다"))
     eng = stt_engines.get_engine(spec.engine)
     return eng.delete_model(spec)

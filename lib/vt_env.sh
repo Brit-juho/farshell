@@ -23,6 +23,14 @@
 #   VT_AUTH_TOKEN / VT_AUTH_PASSWORD_HASH / VT_AUTH_SESSION_KEY 같은 시크릿이 들어가므로
 #   쓰기 함수는 항상 0600을 보장한다. 임시 파일도 umask 077로 만든다.
 
+# 메시지 번역 — lib/i18n.sh 가 먼저 source 돼 있으면 그 _t 를 쓰고, 아니면 원문을 그대로 내보낸다.
+type _t >/dev/null 2>&1 || _t() {
+  local out="${1-}" kv
+  shift 2>/dev/null || true
+  for kv in "$@"; do out="${out//\{${kv%%=*}\}/${kv#*=}}"; done
+  printf '%s' "$out"
+}
+
 # 대상 파일 — VT_CONFIG가 있으면 그것을 쓴다(프로필 분리 / 테스트 격리).
 vt_env_file() {
   printf '%s' "${VT_CONFIG:-$HOME/.vt.env}"
@@ -260,7 +268,7 @@ _vt_env_mktemp() {
   umask 077
   if ! : > "$tmp" 2>/dev/null; then
     umask "$old_umask"
-    echo "vt_env: 임시 파일 생성 실패: $tmp" >&2
+    echo "vt_env: $(_t '임시 파일 생성 실패: {path}' path="$tmp")" >&2
     return 1
   fi
   umask "$old_umask"
@@ -271,7 +279,7 @@ _vt_env_mktemp() {
 vt_env_set() {
   local key="${1-}" value="${2-}" file tmp rc=0
   if ! _vt_env_valid_key "$key"; then
-    echo "vt_env_set: 잘못된 키 이름: '$key'" >&2
+    echo "vt_env_set: $(_t "잘못된 키 이름: '{key}'" key="$key")" >&2
     return 2
   fi
   file="$(vt_env_file)"
@@ -283,18 +291,18 @@ vt_env_set() {
     grep -vE "$(_vt_env_line_re "$key")" "$file" >> "$tmp" || rc=$?
     if [ "$rc" -gt 1 ]; then
       rm -f "$tmp"
-      echo "vt_env_set: $file 읽기 실패 (원본 유지)" >&2
+      echo "vt_env_set: $(_t '{file} 읽기 실패 (원본 유지)' file="$file")" >&2
       return 1
     fi
   fi
 
   if ! printf '%s=%s\n' "$key" "$(vt_env_quote "$value")" >> "$tmp"; then
-    rm -f "$tmp"; echo "vt_env_set: 쓰기 실패 (원본 유지)" >&2; return 1
+    rm -f "$tmp"; echo "vt_env_set: $(_t '쓰기 실패 (원본 유지)')" >&2; return 1
   fi
 
   chmod 600 "$tmp" 2>/dev/null
   if ! mv -f "$tmp" "$file"; then
-    rm -f "$tmp"; echo "vt_env_set: 교체 실패 (원본 유지)" >&2; return 1
+    rm -f "$tmp"; echo "vt_env_set: $(_t '교체 실패 (원본 유지)')" >&2; return 1
   fi
 }
 
@@ -305,7 +313,7 @@ vt_env_unset() {
   [ -f "$file" ] || return 0
   for key in "$@"; do
     if ! _vt_env_valid_key "$key"; then
-      echo "vt_env_unset: 잘못된 키 이름: '$key'" >&2
+      echo "vt_env_unset: $(_t "잘못된 키 이름: '{key}'" key="$key")" >&2
       return 2
     fi
     pattern="${pattern:+$pattern|}$key"
@@ -315,11 +323,11 @@ vt_env_unset() {
   tmp="$(_vt_env_mktemp "$file")" || return 1
   grep -vE "$(_vt_env_line_re "$pattern")" "$file" >> "$tmp" || rc=$?
   if [ "$rc" -gt 1 ]; then
-    rm -f "$tmp"; echo "vt_env_unset: $file 읽기 실패 (원본 유지)" >&2; return 1
+    rm -f "$tmp"; echo "vt_env_unset: $(_t '{file} 읽기 실패 (원본 유지)' file="$file")" >&2; return 1
   fi
   chmod 600 "$tmp" 2>/dev/null
   if ! mv -f "$tmp" "$file"; then
-    rm -f "$tmp"; echo "vt_env_unset: 교체 실패 (원본 유지)" >&2; return 1
+    rm -f "$tmp"; echo "vt_env_unset: $(_t '교체 실패 (원본 유지)')" >&2; return 1
   fi
 }
 
@@ -341,18 +349,18 @@ vt_env_lint() {
       n=$((n + 1))
       case "${line#"${line%%[![:space:]]*}"}" in ''|'#'*) continue ;; esac
       if ! _vt_env_split_line "$line"; then
-        printf '%s: 형식을 알 수 없는 줄 — %s\n' "$n" "$line"; bad=1; continue
+        printf '%s: %s — %s\n' "$n" "$(_t '형식을 알 수 없는 줄')" "$line"; bad=1; continue
       fi
       case "$_vt_raw" in
         *'$('*|*'`'*|*'$['*)
-          printf '%s: 실행 구문은 지원하지 않습니다(리터럴로 남음) — %s\n' "$n" "$line"
+          printf '%s: %s — %s\n' "$n" "$(_t '실행 구문은 지원하지 않습니다(리터럴로 남음)')" "$line"
           bad=1 ;;
       esac
       _vt_undef=""
       _vt_env_parse_value "$_vt_raw"
       if [ -n "$_vt_undef" ]; then
-        printf '%s: 정의되지 않은 변수 %s— 그 부분이 사라집니다. 홑따옴표로 감싸세요 — %s\n' \
-          "$n" "$_vt_undef" "$line"
+        printf '%s: %s — %s\n' \
+          "$n" "$(_t '정의되지 않은 변수 {names}— 그 부분이 사라집니다. 홑따옴표로 감싸세요' names="$_vt_undef")" "$line"
         bad=1
       fi
       export "$_vt_key=$_vt_val"

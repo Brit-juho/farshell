@@ -26,6 +26,7 @@ import subprocess
 import time
 
 import portdetect
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +50,25 @@ _SYSTEM_PATH_PREFIXES = (
 )
 
 # 목록에서 감추지는 않되 kill을 막는 이유들.
-PROTECT_SELF = "VT 서버 — 죽이면 이 화면이 끊깁니다"
-PROTECT_PROXY = "노출 포트 공유의 내부 프록시 — 죽이면 그 공유가 끊깁니다"
-PROTECT_CRITICAL = "원격 접속 인프라 — 죽이면 외부에서 못 들어옵니다"
-PROTECT_FOREIGN = "다른 사용자의 프로세스입니다"
-PROTECT_SYSTEM = "macOS 기본 시스템 프로세스입니다"
+# 문구는 호출 시점의 언어로 만들어야 해서 상수가 아니라 모듈 `__getattr__` 로 낸다
+# (`portscan.PROTECT_SELF` 같은 기존 접근 방식은 그대로 동작한다).
+def _protect_text(name: str) -> str:
+    return {
+        "PROTECT_SELF": tr("VT 서버 — 죽이면 이 화면이 끊깁니다"),
+        "PROTECT_PROXY": tr("노출 포트 공유의 내부 프록시 — 죽이면 그 공유가 끊깁니다"),
+        "PROTECT_CRITICAL": tr("원격 접속 인프라 — 죽이면 외부에서 못 들어옵니다"),
+        "PROTECT_FOREIGN": tr("다른 사용자의 프로세스입니다"),
+        "PROTECT_SYSTEM": tr("macOS 기본 시스템 프로세스입니다"),
+    }[name]
+
+
+def __getattr__(name: str):
+    if name.startswith("PROTECT_"):
+        try:
+            return _protect_text(name)
+        except KeyError:
+            pass
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 MAX_ROWS = 200
 
@@ -172,17 +187,17 @@ def _proxy_ports() -> set:
 
 def _classify(row: dict, me: str, vt_port: int, proxy_ports: set | None = None) -> tuple[bool, str]:
     if row["port"] == vt_port:
-        return True, PROTECT_SELF
+        return True, _protect_text("PROTECT_SELF")
     if row["port"] in (proxy_ports or ()):
-        return True, PROTECT_PROXY
+        return True, _protect_text("PROTECT_PROXY")
     full_path = (row.get("command") or row["cmd"]).split()[0]
     base = full_path.rsplit("/", 1)[-1]
     if base in _CRITICAL_NAMES or row["cmd"] in _CRITICAL_NAMES:
-        return True, PROTECT_CRITICAL
+        return True, _protect_text("PROTECT_CRITICAL")
     if row["user"] != me:
-        return True, PROTECT_FOREIGN
+        return True, _protect_text("PROTECT_FOREIGN")
     if full_path.startswith(_SYSTEM_PATH_PREFIXES):
-        return True, PROTECT_SYSTEM
+        return True, _protect_text("PROTECT_SYSTEM")
     return False, ""
 
 
@@ -243,19 +258,19 @@ def kill_port(port: int, expected_pid: int | None = None) -> dict:
     """
     vt_port = _vt_port()
     if port == vt_port:
-        return {"ok": False, "error": "protected", "reason": PROTECT_SELF}
+        return {"ok": False, "error": "protected", "reason": _protect_text("PROTECT_SELF")}
     # 목록에서 감추는 것만으로는 부족하다 — 이 엔드포인트는 포트 번호를 직접
     # 받으므로 목록을 거치지 않고도 호출된다. 실제 방어는 여기다.
     proxy_ports = _proxy_ports()
     if port in proxy_ports:
-        return {"ok": False, "error": "protected", "reason": PROTECT_PROXY}
+        return {"ok": False, "error": "protected", "reason": _protect_text("PROTECT_PROXY")}
 
     pid = pid_for_port(port)
     if pid is None:
-        return {"ok": False, "error": "not_found", "reason": f"포트 {port}에 리스닝 프로세스가 없습니다"}
+        return {"ok": False, "error": "not_found", "reason": tr("포트 {port}에 리스닝 프로세스가 없습니다", port=port)}
     if expected_pid is not None and pid != expected_pid:
         return {"ok": False, "error": "pid_changed",
-                "reason": f"프로세스가 바뀌었습니다 (기대 {expected_pid}, 현재 {pid})"}
+                "reason": tr("프로세스가 바뀌었습니다 (기대 {expected}, 현재 {current})", expected=expected_pid, current=pid)}
 
     # 재분류 — 조회와 kill 사이에 상태가 바뀌었을 수 있다.
     rows = _parse_lsof(_run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "+c", "0"], LSOF_TIMEOUT))
@@ -269,9 +284,9 @@ def kill_port(port: int, expected_pid: int | None = None) -> dict:
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
-        return {"ok": True, "pid": pid, "signal": "none", "note": "이미 종료됨"}
+        return {"ok": True, "pid": pid, "signal": "none", "note": tr("이미 종료됨")}
     except PermissionError:
-        return {"ok": False, "error": "permission", "reason": "종료 권한이 없습니다"}
+        return {"ok": False, "error": "permission", "reason": tr("종료 권한이 없습니다")}
 
     for _ in range(30):                       # 3초
         time.sleep(0.1)
@@ -289,7 +304,7 @@ def kill_port(port: int, expected_pid: int | None = None) -> dict:
         _invalidate()
         return {"ok": True, "pid": pid, "signal": "TERM"}
     except PermissionError:
-        return {"ok": False, "error": "permission", "reason": "강제 종료 권한이 없습니다"}
+        return {"ok": False, "error": "permission", "reason": tr("강제 종료 권한이 없습니다")}
     _invalidate()
     return {"ok": True, "pid": pid, "signal": "KILL"}
 

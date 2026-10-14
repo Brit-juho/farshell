@@ -5,6 +5,7 @@
 // Promise 기반 API만 얹는다.
 import { openPanel, closePanel } from '../panels/panel.js';
 import { vtEsc } from './api.js';
+import { t } from './i18n.js';
 
 let seq = 0;
 export const nextId = () => `vt-dialog-${++seq}`;
@@ -30,7 +31,7 @@ export function openDialog({ id, title, bodyHTML, onClose }) {
 /** 파괴적/비파괴적 확인. danger=true면 확인 버튼을 강조하지 않는다(components.css
  * "위험한 동작은 채움으로 만들지 않는다" 규칙, .vt-btn.danger는 outline). */
 export function confirmDialog(message, opts = {}) {
-  const { title = '확인', okLabel = '확인', cancelLabel = '취소', danger = false } = opts;
+  const { title = t('확인'), okLabel = t('확인'), cancelLabel = t('취소'), danger = false } = opts;
   const id = nextId();
   return new Promise((resolve) => {
     let result = false;
@@ -53,7 +54,7 @@ export function confirmDialog(message, opts = {}) {
 
 /** 텍스트 입력. 취소/배경클릭/Esc는 null, 확인은 입력값(빈 문자열 가능)을 돌려준다. */
 export function promptDialog(message, opts = {}) {
-  const { title = '입력', okLabel = '확인', cancelLabel = '취소', defaultValue = '', password = false } = opts;
+  const { title = t('입력'), okLabel = t('확인'), cancelLabel = t('취소'), defaultValue = '', password = false } = opts;
   const id = nextId();
   return new Promise((resolve) => {
     let result = null;
@@ -83,7 +84,7 @@ export function promptDialog(message, opts = {}) {
 
 /** 정보 알림. 버튼 하나, 닫히면(어느 경로로든) resolve. */
 export function alertDialog(message, opts = {}) {
-  const { title = '알림', okLabel = '확인' } = opts;
+  const { title = t('알림'), okLabel = t('확인') } = opts;
   const id = nextId();
   return new Promise((resolve) => {
     let settled = false;

@@ -1,5 +1,53 @@
 import { vtSkins, vtSkinLabel, getVtSkin } from '../../../theme.js';
-import { renderItems, group } from '../controls.js';
+import { renderItems, group, row, toast } from '../controls.js';
+import { icon } from '../../../ui/icons.js';
+import { t, lang } from '../../../core/i18n.js';
+
+// 화면 언어 — 서버 전역 값(VT_LANG, server/i18n.py)이라 설정 스토어 스키마가 아니다.
+// 서버가 index.html을 내줄 때 언어를 박으므로 바꾼 뒤에는 새로고침해야 적용된다.
+// 선택지 이름은 번역하지 않는다 — 읽지 못하는 언어로 화면이 바뀌었을 때도 돌아갈 길을
+// 찾을 수 있어야 한다.
+const LANG_LABELS = { ko: '한국어', en: 'English' };
+
+function renderLangControl() {
+  const wrap = document.createElement('div');
+  wrap.className = 'vt-select-wrap';
+  const sel = document.createElement('select');
+  sel.className = 'vt-select';
+  for (const [v, label] of Object.entries(LANG_LABELS)) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+  sel.value = lang();
+  sel.addEventListener('change', async () => {
+    const next = sel.value;
+    sel.disabled = true;
+    try {
+      // vtFetch를 쓰지 않는다: 호스트 전환 중이면 다른 맥으로 중계되는데, 화면을 내주는
+      // 것은 이 서버라 이 서버의 언어를 바꿔야 한다.
+      const tq = (window._tokenQuery || '').replace(/^[?&]/, '');
+      const r = await fetch(`${window.API_BASE}/api/lang${tq ? `?${tq}` : ''}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(window.VT_TOKEN ? { Authorization: `Bearer ${window.VT_TOKEN}` } : {}),
+        },
+        body: JSON.stringify({ lang: next }),
+      });
+      if (!r.ok) throw new Error(String(r.status));
+      location.reload();
+    } catch (_) {
+      sel.value = lang();
+      sel.disabled = false;
+      toast(t('언어를 저장하지 못했습니다'), 'error');
+    }
+  });
+  wrap.appendChild(sel);
+  wrap.insertAdjacentHTML('beforeend', icon('chevron-down', 12, 2));
+  return wrap;
+}
 
 // 2026-09-18 — 스킨 칩(#theme-row)의 유일한 자리였다. 48px 아이콘 레일
 // (#vt-rail)이 새 레일(shell/Rail.tsx)로 대체되며 display:none이 됐는데, 그 ⚙
@@ -43,17 +91,20 @@ export function renderAppearanceSection() {
 
   const skinTitle = document.createElement('div');
   skinTitle.className = 'vt-set-label';
-  skinTitle.textContent = '스킨';
+  skinTitle.textContent = t('스킨');
   frag.appendChild(skinTitle);
   frag.appendChild(renderSkinRow());
   // registerAction('theme.set', ...)이 data-action 위임으로 클릭을 처리한다
   // (core/dom.js) — 여기서 직접 리스너를 달 필요가 없다.
 
   // ADR-44 — 시트 높이·창 위치는 여기 안 낸다. 드래그가 그 값의 입력 수단이다.
-  frag.appendChild(group('파일 뷰어', renderItems({ items: [
-    { key: 'viewer.surface', label: '파일 뷰어 표시 방식', kind: 'select',
-      labels: { sheet: '상단 시트', float: '떠 있는 창', pane: '페인 (터미널 옆을 쪼갬)' },
-      help: '파일을 열었을 때 어디에 띄울지 고릅니다. 시트와 창은 터미널 크기를 바꾸지 않습니다.' },
+  frag.appendChild(group(t('언어'), row(t('화면 언어'), renderLangControl(),
+    t('웹 화면과 fsh 명령이 함께 따릅니다. 바꾸면 페이지를 다시 불러옵니다.'), { scope: 'global' })));
+
+  frag.appendChild(group(t('파일 뷰어'), renderItems({ items: [
+    { key: 'viewer.surface', label: t('파일 뷰어 표시 방식'), kind: 'select',
+      labels: { sheet: t('상단 시트'), float: t('떠 있는 창'), pane: t('페인 (터미널 옆을 쪼갬)') },
+      help: t('파일을 열었을 때 어디에 띄울지 고릅니다. 시트와 창은 터미널 크기를 바꾸지 않습니다.') },
   ] })));
 
   return frag;

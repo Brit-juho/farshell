@@ -17,6 +17,7 @@ import { uploadFiles } from './term/upload.js';
 import { _focusables } from './panels/panel.js';
 import { icon } from './ui/icons.js';
 import { onWorkspaceEvent } from './core/workspace-ws.js';
+import { t } from './core/i18n.js';
 
 export function updateSessionPicker() {
   const picker = document.getElementById('voice-session-picker');
@@ -31,7 +32,7 @@ export function updateSessionPicker() {
   // 'vt:machine' 이벤트로 다시 그린다). 이름은 사용자 입력이라 textContent로만 넣는다.
   const name = document.createElement('span');
   name.className = 'vt-sp-name';
-  name.textContent = s ? sessionDisplayName(activeId) : '세션';
+  name.textContent = s ? sessionDisplayName(activeId) : t('세션');
   const row = document.createElement('span');
   row.className = 'vt-sp-row';
   row.append(name);
@@ -62,7 +63,7 @@ function openSessionManager() {
   backdrop.className = 'vt-session-backdrop';
   backdrop.setAttribute('role', 'presentation');
   // 청크가 올 때까지의 틀 — 내용은 layout/session-sheet.js가 채운다.
-  backdrop.innerHTML = '<section class="vt-session-sheet" role="dialog" aria-modal="true" aria-labelledby="session-manager-title" aria-busy="true"><div class="vt-session-head"><h2 id="session-manager-title">세션 관리</h2></div><p class="vt-session-loading">불러오는 중</p></section>';
+  backdrop.innerHTML = '<section class="vt-session-sheet" role="dialog" aria-modal="true" aria-labelledby="session-manager-title" aria-busy="true"><div class="vt-session-head"><h2 id="session-manager-title">' + t('세션 관리') + '</h2></div><p class="vt-session-loading">' + t('불러오는 중') + '</p></section>';
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSessionManager(); });
   // 모바일: 시트를 열 때 비어 있는 단독 뷰(「빈 화면」)를 정리한다 — 폰에는 뷰 탭 바가 없어
   // 칸 ×가 남긴 빈 뷰를 치울 길이 없다. 데스크톱은 「칸 ×는 빈 칸으로 남김」 규칙 그대로.
@@ -115,7 +116,7 @@ function renderSessionManager(backdrop) {
     .catch((e) => {
       console.error('[FarShell sheet]', e);
       const l = backdrop.querySelector('.vt-session-loading');
-      if (l) l.textContent = '목록을 불러오지 못했습니다';
+      if (l) l.textContent = t('목록을 불러오지 못했습니다');
     });
 }
 
@@ -125,20 +126,20 @@ function renderSessionManager(backdrop) {
 // 딴 데로 튀므로, 여기서 대상만 직접 지정해 activeSession을 건드리지 않는다.
 async function openSessionOnMac(explicitSessionId) {
   const s = explicitSessionId ? getSession(explicitSessionId) : activeSession();
-  if (!s) { showToast('열려 있는 세션이 없습니다', 'error'); return; }
+  if (!s) { showToast(t('열려 있는 세션이 없습니다'), 'error'); return; }
   const tmuxName = s.tmuxName || s.tmux_name;
-  if (!tmuxName) { showToast('이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다', 'error'); return; }
+  if (!tmuxName) { showToast(t('이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다'), 'error'); return; }
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/open-on-mac`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: tmuxName }),
     });
     const data = await res.json();
-    if (data.skipped) showToast(`'${tmuxName}'은 이미 맥에서 열려 있습니다`, 'success');
-    else if (data.ok) showToast(`맥 터미널에 '${tmuxName}' 열림`, 'success');
-    else showToast('맥에서 열기 실패: ' + (data.error || ''), 'error');
+    if (data.skipped) showToast(t("'{name}'은 이미 맥에서 열려 있습니다", { name: tmuxName }), 'success');
+    else if (data.ok) showToast(t("맥 터미널에 '{name}' 열림", { name: tmuxName }), 'success');
+    else showToast(t('맥에서 열기 실패: {error}', { error: data.error || '' }), 'error');
   } catch (e) {
-    showToast('맥에서 열기 실패: ' + e.message, 'error');
+    showToast(t('맥에서 열기 실패: {error}', { error: e.message }), 'error');
   }
 }
 

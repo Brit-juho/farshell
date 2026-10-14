@@ -16,6 +16,7 @@ from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import fsguard
+import i18n
 import network_access
 import notify
 import platform_utils
@@ -30,6 +31,7 @@ import stt_service
 import voice_handler
 import workspace
 from deps import pty_mgr
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -289,13 +291,13 @@ async def notify_client_event(request: Request):
     remote_host = str(body.get("remote_host", "") or "").strip()[:128]
 
     if event == "detached":
-        title = "tmux 세션 연결 해제"
-        message = f"세션 '{session}'에서 클라이언트 연결이 끊어졌습니다"
+        title = tr("tmux 세션 연결 해제")
+        message = tr("세션 '{session}'에서 클라이언트 연결이 끊어졌습니다", session=session)
         tags = "lock"
     else:
-        title = "🔐 tmux 세션 접속"
-        source = f"SSH ({remote_host})" if remote_host else "로컬 클라이언트"
-        message = f"세션 '{session}'에 새 클라이언트 연결 — {source}"
+        title = tr("🔐 tmux 세션 접속")
+        source = f"SSH ({remote_host})" if remote_host else tr("로컬 클라이언트")
+        message = tr("세션 '{session}'에 새 클라이언트 연결 — {source}", session=session, source=source)
         tags = "unlock,warning"
 
     sent = await notify.send(title, message, priority="default", tags=tags)
@@ -385,6 +387,25 @@ async def device_settings_put(request: Request):
         did = device_settings.profile_id(profile)
     merged = device_settings.save(did, values)
     return {"ok": True, "device_id": did, "settings": merged}
+
+
+# 화면 언어 — 서버 전역 하나(server/i18n.py). 읽기는 로그인 전에도 필요해서
+# /api/auth/status와 index.html이 대신 싣는다. 여기는 바꾸기만(인증 필요).
+@router.put("/api/lang")
+async def lang_put(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    lang = body.get("lang") if isinstance(body, dict) else None
+    if lang not in i18n.LANGS:
+        return JSONResponse({"error": "lang must be one of: " + ", ".join(i18n.LANGS)}, status_code=400)
+    try:
+        await asyncio.to_thread(i18n.set_lang, lang)
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.warning("[i18n] VT_LANG write failed: %s", e)
+        return JSONResponse({"error": "failed to save language"}, status_code=500)
+    return {"ok": True, "lang": i18n.current()}
 
 
 async def broadcast_workspace_event(msg: dict) -> None:
@@ -610,7 +631,7 @@ async def port_share_authorize(request: Request):
     if not entry or not entry.get("url"):
         return JSONResponse(
             {"error": "tunnel_not_found",
-             "reason": "이 포트의 공개 주소를 찾을 수 없습니다. 노출이 내려갔을 수 있습니다."},
+             "reason": tr("이 포트의 공개 주소를 찾을 수 없습니다. 노출이 내려갔을 수 있습니다.")},
             status_code=404,
         )
 

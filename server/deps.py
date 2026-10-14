@@ -7,12 +7,14 @@ circular import 없이 전역 상태를 한 곳에서 관리.
 from __future__ import annotations
 
 from fastapi import WebSocket
+from i18n import tr
 from pty_manager import PTYManager
 from session_store import SessionStore
 from output_watcher import OutputWatcher
 import agent_prompt_detect
 import agent_status
 import auto_responder
+import pane_input
 import terminal_reports
 
 pty_mgr = PTYManager()
@@ -76,7 +78,7 @@ def _push_waiting_notice() -> None:
         if not push.available():
             return
         loop = asyncio.get_running_loop()
-        loop.create_task(asyncio.to_thread(push.send, "승인 대기", "세션에서 확인이 필요합니다", "/"))
+        loop.create_task(asyncio.to_thread(push.send, tr("승인 대기"), tr("세션에서 확인이 필요합니다"), "/"))
     except RuntimeError:
         pass  # 이벤트 루프 밖(테스트 등) — 푸시는 부가 기능이라 조용히 건너뛴다
     except Exception:
@@ -131,6 +133,8 @@ def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> N
         return
     info = session_store.get(pty_session_id)
     tmux_name = info.tmux_name if info else None
+    # 자동 투입(큐·에이전트 메시지)이 사람이 쓰는 중인 입력에 끼어들지 않게(pane_input).
+    pane_input.note_human_input(tmux_name)
     was_waiting = agent_status.status_for_session(tmux_name) == agent_status.WAITING
     is_cancel = data == b"\x1b" or data == "\x1b"
 

@@ -20,6 +20,7 @@
 // (server/relay_policy.py) — 여기 목록은 "보내면 안 되는 것"이 아니라 "이 기기
 // 것"의 목록이다.
 
+import { t } from './i18n.js';
 export const LOCAL_HOST = 'local';
 const STORE_KEY = 'vt.relayHost';
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
@@ -95,7 +96,7 @@ export function switchHost(id) {
     else localStorage.setItem(STORE_KEY, next);
   } catch (_) {
     if (typeof window.showToast === 'function') {
-      window.showToast('이 브라우저에 선택을 저장할 수 없어 전환하지 못했습니다', 'error');
+      window.showToast(t('이 브라우저에 선택을 저장할 수 없어 전환하지 못했습니다'), 'error');
     }
     return;
   }
@@ -123,7 +124,7 @@ export async function verifyRelayHost() {
   if (res.ok || res.status === 502 || res.status === 401) return;
   let reason = '';
   try { reason = (await res.json()).reason || ''; } catch (_) { /* 본문 없음 */ }
-  try { sessionStorage.setItem(NOTICE_KEY, `${_host}로 전환할 수 없어 이 맥으로 돌아왔습니다${reason ? ` — ${reason}` : ''}`); } catch (_) {}
+  try { sessionStorage.setItem(NOTICE_KEY, reason ? t('{host}로 전환할 수 없어 이 맥으로 돌아왔습니다 — {reason}', { host: _host, reason }) : t('{host}로 전환할 수 없어 이 맥으로 돌아왔습니다', { host: _host })); } catch (_) {}
   switchHost(LOCAL_HOST);
 }
 

@@ -25,6 +25,7 @@ from deps import (
     on_terminal_input,
 )
 from session_store import new_session_id
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -707,7 +708,7 @@ async def on_task_complete(session_id: str, summary: str, audio: bytes):
         try:
             import push
             if push.available():
-                await asyncio.to_thread(push.send, "작업 완료", "터미널에서 확인하세요", "/")
+                await asyncio.to_thread(push.send, tr("작업 완료"), tr("터미널에서 확인하세요"), "/")
         except Exception as e:
             logger.warning("web push 발송 실패: %s", e)
 

@@ -7,6 +7,7 @@
 // 두 벌이 되어 어긋난다. 값·범위·기본값은 전부 스토어에서 읽는다.
 import { get as setting, set as setSetting, scopeOf, SCHEMA, DEVICE_PROFILE } from '../../core/settings.js';
 import { icon } from '../../ui/icons.js';
+import { t } from '../../core/i18n.js';
 
 let _rowId = 0;
 
@@ -24,8 +25,8 @@ export function row(label, controlEl, help, options = {}) {
     const badge = document.createElement('span');
     badge.className = 'vt-tag vt-set-scope';
     badge.textContent = options.scope === 'device'
-      ? ({ mobile: '모바일', mac: 'Mac', windows: 'Windows', linux: 'Linux' })[DEVICE_PROFILE]
-      : '모든 기기';
+      ? ({ mobile: t('모바일'), mac: 'Mac', windows: 'Windows', linux: 'Linux' })[DEVICE_PROFILE]
+      : t('모든 기기');
     left.appendChild(badge);
   }
   let helpId = null;
@@ -41,7 +42,7 @@ export function row(label, controlEl, help, options = {}) {
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'vt-set-default';
-    reset.textContent = '기본값으로';
+    reset.textContent = t('기본값으로');
     const updateReset = () => { reset.hidden = setting(options.key) === SCHEMA[options.key]?.def; };
     reset.addEventListener('click', () => {
       setSetting(options.key, SCHEMA[options.key].def);
@@ -64,7 +65,7 @@ export function row(label, controlEl, help, options = {}) {
   }
   const directNumber = controlEl.querySelector?.('.vt-range-number');
   if (directNumber) {
-    directNumber.setAttribute('aria-label', `${label} 직접 입력`);
+    directNumber.setAttribute('aria-label', t('{label} 직접 입력', { label }));
     if (helpId) directNumber.setAttribute('aria-describedby', helpId);
   }
   meta.prepend(left);
@@ -118,10 +119,10 @@ export function rangeControl(key, step, unit = '', presets = []) {
   number.min = input.min; number.max = input.max; number.step = input.step; number.value = input.value;
   const suffix = document.createElement('span');
   suffix.className = 'vt-range-unit';
-  suffix.textContent = unit;
+  suffix.textContent = unit === '줄' ? t('줄') : unit;
   const paint = (v) => {
     input.value = v; number.value = v;
-    input.setAttribute('aria-valuetext', unit === '줄' ? `${Number(v).toLocaleString()}줄` : `${v}${unit}`);
+    input.setAttribute('aria-valuetext', unit === '줄' ? t('{n}줄', { n: Number(v).toLocaleString() }) : `${v}${unit}`);
   };
   paint(input.value);
   input.addEventListener('input', () => { number.value = input.value; paint(input.value); });
@@ -142,7 +143,7 @@ export function rangeControl(key, step, unit = '', presets = []) {
     for (const preset of presets) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'vt-btn sm quiet';
-      b.textContent = unit === '줄' ? `${Number(preset).toLocaleString()}줄` : `${preset}${unit}`;
+      b.textContent = unit === '줄' ? t('{n}줄', { n: Number(preset).toLocaleString() }) : `${preset}${unit}`;
       b.addEventListener('click', () => {
         setSetting(key, preset); paint(setting(key));
         wrap.dispatchEvent(new Event('vt-setting-value'));
@@ -241,9 +242,9 @@ export function secRow(label, value, state, help) {
 }
 
 export function fmtWhen(ts) {
-  if (!ts) return '기록 없음';
+  if (!ts) return t('기록 없음');
   const d = new Date(ts * 1000);
-  if (Number.isNaN(d.getTime())) return '기록 없음';
+  if (Number.isNaN(d.getTime())) return t('기록 없음');
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }

@@ -33,6 +33,7 @@ import tempfile
 from typing import Callable, NamedTuple
 
 import platform_utils as pu
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ def _write_launcher(command: str) -> str:
     if not _SAFE_PATH.match(path):
         os.close(fd)
         os.unlink(path)
-        raise ValueError(f"임시 스크립트 경로가 안전하지 않음: {path!r}")
+        raise ValueError(tr("임시 스크립트 경로가 안전하지 않음: {path}", path=repr(path)))
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(f"rm -f -- {path}\nexec {command}\n")
     os.chmod(path, 0o700)
@@ -192,7 +193,7 @@ _SPAWNERS: dict[str, Callable[[str], tuple[bool, str, str]]] = {
 def _spawn_warp(command: str) -> OpenResult:
     # Warp는 명령 주입 경로가 없다 — 앱만 열고 명령은 클립보드에 둔다(붙여넣기 필요).
     if not is_installed("warp"):
-        return OpenResult(False, "warp", "Warp가 설치돼 있지 않음")
+        return OpenResult(False, "warp", tr("Warp가 설치돼 있지 않음"))
     ok, err = _popen(["open", "-na", "Warp"])
     if not ok:
         return OpenResult(False, "warp", err)
@@ -200,18 +201,18 @@ def _spawn_warp(command: str) -> OpenResult:
         subprocess.run(["pbcopy"], input=command, text=True, timeout=3)
     except Exception:
         pass
-    return OpenResult(True, "warp", "", "Warp는 명령을 자동 실행하지 못해 클립보드에 복사했습니다 — 붙여넣기 하세요")
+    return OpenResult(True, "warp", "", tr("Warp는 명령을 자동 실행하지 못해 클립보드에 복사했습니다 — 붙여넣기 하세요"))
 
 
 def open_terminal(command: str, preferred: str | None = None) -> OpenResult:
     """새 터미널 창에서 command를 실행한다. command는 셸 명령 문자열."""
     if not command or not command.strip():
-        return OpenResult(False, "", "명령이 비어 있음")
+        return OpenResult(False, "", tr("명령이 비어 있음"))
     if pu.IS_LINUX and not pu.IS_WSL2:
         ok = pu.spawn_linux_terminal(command)
-        return OpenResult(ok, "linux" if ok else "", "" if ok else "지원하는 터미널 에뮬레이터가 없음")
+        return OpenResult(ok, "linux" if ok else "", "" if ok else tr("지원하는 터미널 에뮬레이터가 없음"))
     if not pu.IS_MACOS:
-        return OpenResult(False, "", "지원하지 않는 OS")
+        return OpenResult(False, "", tr("지원하지 않는 OS"))
 
     pref = (preferred or preference()).lower()
     if pref not in CHOICES:
@@ -227,7 +228,7 @@ def open_terminal(command: str, preferred: str | None = None) -> OpenResult:
     for app in order:
         if not is_installed(app):
             if app == pref:
-                note = f"VT_TERMINAL={pref}가 설치돼 있지 않아 자동 선택으로 열었습니다"
+                note = tr("VT_TERMINAL={pref}가 설치돼 있지 않아 자동 선택으로 열었습니다", pref=pref)
             continue
         if app == "warp":
             res = _spawn_warp(command)
@@ -247,7 +248,7 @@ def open_terminal(command: str, preferred: str | None = None) -> OpenResult:
         if ok:
             # launcher는 실행되면서 스스로 지운다
             if app != pref and pref != "auto" and not note:
-                note = f"VT_TERMINAL={pref}로 열지 못해 {app}로 열었습니다"
+                note = tr("VT_TERMINAL={pref}로 열지 못해 {app}로 열었습니다", pref=pref, app=app)
             return OpenResult(True, app, "", extra or note)
         try:
             os.unlink(launcher)
@@ -255,8 +256,8 @@ def open_terminal(command: str, preferred: str | None = None) -> OpenResult:
             pass
         errors.append(f"{app}: {err}")
         if app == pref and not note:
-            note = f"VT_TERMINAL={pref}로 열지 못해 자동 선택으로 넘어갔습니다"
-    return OpenResult(False, "", "; ".join(e for e in errors if e) or "열 수 있는 터미널 앱이 없음", note)
+            note = tr("VT_TERMINAL={pref}로 열지 못해 자동 선택으로 넘어갔습니다", pref=pref)
+    return OpenResult(False, "", "; ".join(e for e in errors if e) or tr("열 수 있는 터미널 앱이 없음"), note)
 
 
 def main(argv: list[str]) -> int:

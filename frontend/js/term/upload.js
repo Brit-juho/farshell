@@ -19,6 +19,7 @@ import { relayUrl } from '../core/host-route.js';
 import { noteNetworkError, noteResponse } from '../core/reachability.js';
 import { sendPaste } from './clipboard.js';
 import { showToast } from '../ui/toast.js';
+import { t } from '../core/i18n.js';
 
 /** DataTransfer에 OS 파일이 실려 있는가. 앱 내부 드래그(세션·dock 탭)와
  *  구분하는 유일한 기준이다 — 그쪽은 자기 mime을 싣고 'Files'는 안 싣는다. */
@@ -47,7 +48,7 @@ export function filesFromDataTransfer(dataTransfer) {
       const f = item.getAsFile();
       if (f) out.push(f);
     }
-    if (sawDir) showToast('폴더는 올릴 수 없습니다 — 파일만 골라 놓으세요', 'error');
+    if (sawDir) showToast(t('폴더는 올릴 수 없습니다 — 파일만 골라 놓으세요'), 'error');
     return out;
   }
   return Array.from(dataTransfer.files || []);
@@ -141,11 +142,11 @@ function _uploadOne(job, sessionId) {
       job.phase = 'error';
       _jobs.delete(job.clientId);
       _emitProgress();
-      if (!silent) showToast(`${job.name} 업로드 실패 — ${why}`, 'error');
+      if (!silent) showToast(t('{name} 업로드 실패 — {reason}', { name: job.name, reason: why }), 'error');
       resolve(null);
     };
 
-    xhr.addEventListener('error', () => { noteNetworkError(); fail('네트워크 오류'); });
+    xhr.addEventListener('error', () => { noteNetworkError(); fail(t('네트워크 오류')); });
     xhr.addEventListener('abort', () => {
       // 사용자가 직접 취소한 것과 진짜 실패를 갈라야 한다 — 취소는 오류가
       // 아니고, 취소 요약은 배치가 끝날 때 한 번에 말한다(uploadFiles).
@@ -161,8 +162,8 @@ function _uploadOne(job, sessionId) {
       // 413(용량 초과)은 서버가 max_mb를 실어 준다 — 왜 실패했는지 말해 준다.
       if (xhr.status < 200 || xhr.status >= 300 || !data || !data.ok) {
         fail(data && data.error === 'file too large'
-          ? `${data.max_mb}MB를 넘습니다`
-          : (data && data.error) || '알 수 없는 오류');
+          ? t('{max}MB를 넘습니다', { max: data.max_mb })
+          : (data && data.error) || t('알 수 없는 오류'));
         return;
       }
       job.phase = 'done';
@@ -246,11 +247,11 @@ export async function uploadFiles(list, opts = {}) {
 
   const n = done.length;
   const failed = files.length - n - cancelled;
-  const what = n === 1 ? done[0].path.split('/').pop() : `${n}개`;
-  const tail = insertPath && sessionId ? ' — 경로 삽입됨' : '';
-  const notes = [failed ? `${failed}개 실패` : null, cancelled ? `${cancelled}개 취소` : null].filter(Boolean);
+  const what = n === 1 ? done[0].path.split('/').pop() : t('{n}개', { n });
+  const tail = insertPath && sessionId ? t(' — 경로 삽입됨') : '';
+  const notes = [failed ? t('{n}개 실패', { n: failed }) : null, cancelled ? t('{n}개 취소', { n: cancelled }) : null].filter(Boolean);
   const suffix = notes.length ? ` (${notes.join(' · ')})` : '';
-  showToast(`${what} 업로드 완료${suffix}${tail}`, 'success');
+  showToast(t('{what} 업로드 완료{suffix}{tail}', { what, suffix, tail }), 'success');
   return done;
 }
 
@@ -273,6 +274,6 @@ if (typeof window !== 'undefined') {
   window.addEventListener('drop', (e) => {
     if (!hasFiles(e.dataTransfer)) return;
     e.preventDefault();
-    showToast('터미널 칸이나 파일 패널에 놓으면 올라갑니다', 'info');
+    showToast(t('터미널 칸이나 파일 패널에 놓으면 올라갑니다'), 'info');
   });
 }

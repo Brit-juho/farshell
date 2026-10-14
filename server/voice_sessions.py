@@ -14,6 +14,7 @@ from pathlib import Path
 import auth
 import voice_targets as targets
 import voice_handler
+from i18n import tr
 
 log = logging.getLogger(__name__)
 DEFAULT = {'mode': 'off', 'destination': 'browser', 'min_sec': 0, 'success_only': True,
@@ -49,9 +50,9 @@ class VoiceCoordinator:
     def validated(cfg, changes):
         cfg = {**cfg, **{k: changes[k] for k in DEFAULT if k in changes}}
         if cfg['mode'] not in ('off', 'sound', 'speak') or cfg['destination'] not in ('browser', 'server'):
-            raise ValueError('음성 설정 값이 잘못됐습니다')
+            raise ValueError(tr('음성 설정 값이 잘못됐습니다'))
         if cfg['engine'] not in ('auto', 'edge', 'local'):
-            raise ValueError('음성 엔진 값이 잘못됐습니다')
+            raise ValueError(tr('음성 엔진 값이 잘못됐습니다'))
         cfg['min_sec'] = max(0, min(600, int(cfg['min_sec'])))
         cfg['success_only'] = cfg['success_only'] is not False
         cfg['only_unfocused'] = cfg['only_unfocused'] is True
@@ -71,9 +72,9 @@ class VoiceCoordinator:
         old = self.leases.get(key)
         if cfg['mode'] != 'off' and cfg['destination'] == 'browser':
             if client not in self.clients:
-                raise ValueError('이 화면의 음성 연결을 기다려 주세요')
+                raise ValueError(tr('이 화면의 음성 연결을 기다려 주세요'))
             if old and old[:2] != client and not transfer:
-                raise ValueError('다른 화면에서 듣고 있습니다. 이 기기로 옮기기를 누르세요')
+                raise ValueError(tr('다른 화면에서 듣고 있습니다. 이 기기로 옮기기를 누르세요'))
         await self.cancel_session(key)
         data = auth._read_json(auth.STATE_DIR / 'voice-sessions.json', {})
         data[key] = cfg
@@ -234,7 +235,7 @@ class VoiceCoordinator:
     async def _play_server(self, job, audio):
         player = shutil.which('afplay') or shutil.which('ffplay')
         if not player:
-            raise RuntimeError('서버 오디오 재생 프로그램이 없습니다')
+            raise RuntimeError(tr('서버 오디오 재생 프로그램이 없습니다'))
         fd, path = tempfile.mkstemp(suffix='.aiff' if audio.media_type == 'audio/aiff' else '.wav' if audio.media_type == 'audio/wav' else '.mp3')
         try:
             with os.fdopen(fd, 'wb') as f:

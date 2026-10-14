@@ -11,6 +11,7 @@
 // 객체가 된다). 상수 모듈(breakpoints·resizer)만 예외다.
 import { batch, createSignal, createMemo, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
 import { icon } from '../ui/icons.js';
+import { t } from '../core/i18n.js';
 import { render } from 'solid-js/web';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WIDE_MAX } from '../layout/breakpoints.js';
@@ -68,12 +69,12 @@ interface DockTab {
 // 사용자 확인 — N35 번복). 업로드 파일을 관리하던 옛 「파일」 탭은 그 이름을
 // 내주고 「첨부」로 물러났다 — 둘 다 "파일"이면 구분이 안 된다.
 const TABS: DockTab[] = [
-  { id: 'scm',   label: '소스컨트롤', icon: 'git-branch', panelId: 'vt-dock-scm', action: 'scm.show' },   // 40 §3 (2.1.0은 읽기 전용)
-  { id: 'dir',   label: '파일', icon: 'folder',    panelId: 'vt-dir', action: 'dir.show' },
-  { id: 'queue', label: '큐', icon: 'list',        panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
-  { id: 'files', label: '첨부', icon: 'paperclip',   panelId: 'vt-files', action: 'files.show' },  // 50 §4
-  { id: 'ports', label: '포트', icon: 'plug',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
-  { id: 'usage', label: '사용량', icon: 'gauge',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
+  { id: 'scm',   label: t('소스컨트롤'), icon: 'git-branch', panelId: 'vt-dock-scm', action: 'scm.show' },   // 40 §3 (2.1.0은 읽기 전용)
+  { id: 'dir',   label: t('파일'), icon: 'folder',    panelId: 'vt-dir', action: 'dir.show' },
+  { id: 'queue', label: t('큐'), icon: 'list',        panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
+  { id: 'files', label: t('첨부'), icon: 'paperclip',   panelId: 'vt-files', action: 'files.show' },  // 50 §4
+  { id: 'ports', label: t('포트'), icon: 'plug',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
+  { id: 'usage', label: t('사용량'), icon: 'gauge',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
 ];
 
 function Dock(props: { deps: DockDeps }) {
@@ -241,10 +242,10 @@ function Dock(props: { deps: DockDeps }) {
   // 수치는 탭에서 내려가고 툴팁으로 올라간다(아래 vt-dock-tab-dot 주석).
   // 단위를 붙이는 이유: 툴팁에는 자리가 있고, "14"보다 "14개 열림"이 한 번에
   // 읽힌다. 배지 칸에서는 못 하던 일이다.
-  const tipSub = (t: DockTab) => {
-    const n = badgeOf(t);
+  const tipSub = (tab: DockTab) => {
+    const n = badgeOf(tab);
     if (!n) return undefined;
-    return t.badge === 'queue' ? `${n}개 대기` : `${n}개 열림`;
+    return tab.badge === 'queue' ? t('{n}개 대기', { n }) : t('{n}개 열림', { n });
   };
 
   return (
@@ -324,8 +325,8 @@ function Dock(props: { deps: DockDeps }) {
         <button
           type="button"
           class="vt-dock-tab vt-dock-action vt-dock-mcp-btn"
-          aria-label="MCP · 스킬 관리"
-          data-tip="MCP · 스킬 관리"
+          aria-label={t('MCP · 스킬 관리')}
+          data-tip={t('MCP · 스킬 관리')}
           data-tip-side="left"
           onClick={showMcp}
           innerHTML={icon('link', 16, 2)}
@@ -333,8 +334,8 @@ function Dock(props: { deps: DockDeps }) {
         <button
           type="button"
           class="vt-dock-tab vt-dock-action vt-dock-settings-btn"
-          aria-label="설정"
-          data-tip="설정"
+          aria-label={t('설정')}
+          data-tip={t('설정')}
           data-tip-keys="Mod+,"
           data-tip-side="left"
           onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
@@ -350,10 +351,9 @@ function Dock(props: { deps: DockDeps }) {
               회전만 시켜 방향을 맞춘다. 그 왼쪽 레일은 펼침 상태에서 왼쪽
               (접히는 쪽)을 가리키는 90deg를 썼다. dock은 오른쪽으로 접히므로
               거울상인 -90deg(오른쪽을 가리킴). */}
-          <button type="button" class="vt-dock-tab vt-dock-action vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label="dock 접기" data-tip="dock 접기" data-tip-side="bottom" innerHTML={icon('chevron-down', 14, 2)} />
+          <button type="button" class="vt-dock-tab vt-dock-action vt-dock-collapse" onClick={() => setCollapsedPersist(true)} aria-label={t('dock 접기')} data-tip={t('dock 접기')} data-tip-side="bottom" innerHTML={icon('chevron-down', 14, 2)} />
         </Show>
       </div>
-      <div id="vt-dock-voice-status" />
       {/* 탭 내용은 전부 패널 렌더러가 여기 붙인다(panels/panel.js의 dock 호스트). */}
       <div class="vt-dock-body" ref={bodyRef} />
       <div ref={wireResizer} class="vt-dock-resizer" />

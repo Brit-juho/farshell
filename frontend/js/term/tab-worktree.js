@@ -4,12 +4,13 @@ import { vtFetch } from '../core/api.js';
 import { setBranchChipMap } from '../layout/panes.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import { sessionContext } from '../ui/session-context.js';
+import { t } from '../core/i18n.js';
 
 export function branchChipMap(sessions) {
   const map = new Map();
   for (const s of sessions || []) {
     const ctx = sessionContext(s);
-    const branch = ctx.branch || (ctx.status === 'ready' || ctx.root ? '분리된 HEAD' : null);
+    const branch = ctx.branch || (ctx.status === 'ready' || ctx.root ? t('분리된 HEAD') : null);
     if (branch) map.set(s.name, branch);
   }
   return map;

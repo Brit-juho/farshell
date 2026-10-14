@@ -53,7 +53,11 @@ test('app.js가 지연 청크를 정적으로 import하지 않는다 — "지연
   // entry가 그 청크를 정적 import하게 되는데, **빌드는 성공하고 크기 게이트도
   // 통과한다**(app.js가 오히려 작아지니까). 실측한 사고: snippets.js 하나를
   // 지연시키자 app.js가 0.04KB 스텁이 되고 panels.js가 215KB로 부풀었다.
-  const statics = [...appJs.matchAll(/^import\s[^;]*?from\s*["']\.\/([\w.-]+)["']/gm)].map((m) => m[1]);
+  // 산출물은 공백이 걷혀 있다(vite.config.js stripChunkWhitespace) — `import{a as b}from"./core.js";`가
+  // 한 줄에 이어진다. 그래서 줄 머리(^) 대신 문장 경계로 찾고, 하나도 못 찾으면 실패시킨다
+  // (정규식이 산출 형식을 못 따라가 0건이 되면 이 검사가 아무것도 막지 못한 채 통과한다).
+  const statics = [...appJs.matchAll(/(?:^|[;}\n])\s*import\s*[^;()]*?from\s*["']\.\/([\w.-]+)["']/g)].map((m) => m[1]);
+  assert.ok(statics.includes('core.js'), 'app.js의 정적 import를 하나도 못 찾았다 — 검사 정규식이 산출 형식과 어긋났다');
   for (const dep of statics) {
     assert.strictEqual(dep, 'core.js',
       `app.js가 ./${dep}를 정적 import한다 — 지연 청크가 상시 로드로 승격됐다`);

@@ -15,6 +15,7 @@ import { openPanel, setPanelPoll } from './panels/panel.js';
 import { icon } from './ui/icons.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { isMac } from './core/env.js';
+import { t } from './core/i18n.js';
 
 
 /** U8 — 「지금 실행」은 **큐에 투입할 게 있을 때만** 누를 수 있다.
@@ -30,7 +31,7 @@ export function syncRunButton(root, count) {
   const btn = root?.byId ? root.byId('vt-q-run') : root?.querySelector?.('#vt-q-run');
   if (!btn) return null;
   btn.disabled = count === 0;
-  btn.title = count === 0 ? '큐가 비어 있습니다' : '한 건 지금 투입';
+  btn.title = count === 0 ? t('큐가 비어 있습니다') : t('한 건 지금 투입');
   return btn;
 }
 
@@ -43,19 +44,19 @@ export function showQueue(opts = {}) {
         paneHost: opts.paneHost || null,
         paneId: opts.paneId || null,
         id: 'vt-queue',
-        ariaLabel: '프롬프트 큐',
+        ariaLabel: t('프롬프트 큐'),
         headHTML: `
-          <div class="vt-vw-title">프롬프트 큐</div>
-          <button class="vt-btn sm vt-vw-diff" id="vt-q-run" title="한 건 지금 투입">지금 실행</button>
+          <div class="vt-vw-title">${t('프롬프트 큐')}</div>
+          <button class="vt-btn sm vt-vw-diff" id="vt-q-run" title="${t('한 건 지금 투입')}">${t('지금 실행')}</button>
         `,
         extraHTML: `
           <div class="vt-q-compose">
-            <textarea id="vt-q-input" class="vt-input lg" rows="2" placeholder="작업이 끝나면 실행할 지시… (${isMac ? 'Cmd' : 'Ctrl'}+Enter로 추가)"></textarea>
+            <textarea id="vt-q-input" class="vt-input lg" rows="2" placeholder="${t('작업이 끝나면 실행할 지시… ({key}+Enter로 추가)', { key: isMac ? 'Cmd' : 'Ctrl' })}"></textarea>
             <div class="vt-q-compose-row">
-              <select id="vt-q-target" class="vt-input vt-q-target" title="대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다">
-                <option value="">자동 (음성 타깃 규칙)</option>
+              <select id="vt-q-target" class="vt-input vt-q-target" title="${t('대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다')}">
+                <option value="">${t('자동 (음성 타깃 규칙)')}</option>
               </select>
-              <button class="vt-btn" id="vt-q-add">추가</button>
+              <button class="vt-btn" id="vt-q-add">${t('추가')}</button>
             </div>
           </div>
         `,
@@ -126,10 +127,10 @@ export function showQueue(opts = {}) {
     function _updateAutoTargetLabel(ctx, label, mode) {
       const opt = document.querySelector('#vt-q-target option[value=""]');
       if (!opt) return;
-      if (!label) { opt.textContent = '자동 (대상 없음)'; return; }
+      if (!label) { opt.textContent = t('자동 (대상 없음)'); return; }
       opt.textContent = mode && mode.startsWith('lock:')
-        ? `자동 (→ ${label}, 고정됨)`
-        : `자동 (→ ${label})`;
+        ? t('자동 (→ {label}, 고정됨)', { label })
+        : t('자동 (→ {label})', { label });
     }
 
     async function refreshQueue(ctx) {
@@ -150,8 +151,8 @@ export function showQueue(opts = {}) {
       if (!d.items.length) {
         // 「지금 실행」이 방금 비활성이 됐으므로 그쪽을 가리키지 않는다 —
         // 못 누르는 버튼을 쓰라고 안내하면 그게 더 헷갈린다.
-        body.innerHTML = `<div class="vt-vw-empty">큐가 비어 있습니다.<br>`
-          + `${d.autodrain ? '작업이 끝나면 자동으로 투입됩니다.' : '자동 투입이 꺼져 있습니다 — 항목을 추가한 뒤 「지금 실행」으로 투입하세요.'}</div>`;
+        body.innerHTML = `<div class="vt-vw-empty">${t('큐가 비어 있습니다.')}<br>`
+          + `${d.autodrain ? t('작업이 끝나면 자동으로 투입됩니다.') : t('자동 투입이 꺼져 있습니다 — 항목을 추가한 뒤 「지금 실행」으로 투입하세요.')}</div>`;
         return;
       }
 
@@ -177,7 +178,15 @@ export function showQueue(opts = {}) {
         if (it.blocked_reason) {
           const sub = document.createElement('div');
           sub.className = 'vt-q-sub';
-          sub.textContent = `차단됨: ${it.blocked_reason}`;
+          // retry_at이 있으면 서버 점검(queue_store.sweep)이 알아서 다시 시도한다.
+          sub.textContent = it.retry_at
+            ? t('차단됨: {reason} — 자동 재시도 ({n}회째)', { reason: it.blocked_reason, n: it.attempts || 0 })
+            : t('차단됨: {reason}', { reason: it.blocked_reason });
+          meta.appendChild(sub);
+        } else if (it.status === 'sending') {
+          const sub = document.createElement('div');
+          sub.className = 'vt-q-sub';
+          sub.textContent = t('전송 중');
           meta.appendChild(sub);
         }
 
@@ -191,8 +200,8 @@ export function showQueue(opts = {}) {
           chip.className = 'vt-tag vt-q-chip';
           chip.textContent = targetHost ? `${targetSession} · ${targetHost}` : targetSession;
           chip.title = targetHost
-            ? `대상: ${targetHost} 호스트의 ${targetSession} 세션`
-            : `대상 세션: ${targetSession}`;
+            ? t('대상: {host} 호스트의 {session} 세션', { host: targetHost, session: targetSession })
+            : t('대상 세션: {session}', { session: targetSession });
           meta.appendChild(chip);
         }
 
@@ -201,15 +210,18 @@ export function showQueue(opts = {}) {
         if (it.status === 'blocked') {
           const ub = document.createElement('button');
           ub.className = 'vt-btn';
-          ub.textContent = '재개';
+          ub.textContent = t('재개');
           ub.onclick = () => unblockQueueItem(ctx, it.id);
           act.appendChild(ub);
         }
-        const rm = document.createElement('button');
-        rm.className = 'vt-btn danger';
-        rm.textContent = '삭제';
-        rm.onclick = () => removeQueueItem(ctx, it.id);
-        act.appendChild(rm);
+        // 전송 중인 항목은 서버가 삭제를 거부한다(409 item_sending) — 버튼도 안 그린다.
+        if (it.status !== 'sending') {
+          const rm = document.createElement('button');
+          rm.className = 'vt-btn danger';
+          rm.textContent = t('삭제');
+          rm.onclick = () => removeQueueItem(ctx, it.id);
+          act.appendChild(rm);
+        }
 
         row.appendChild(idx); row.appendChild(meta); row.appendChild(act);
         list.appendChild(row);
@@ -220,8 +232,8 @@ export function showQueue(opts = {}) {
       const foot = document.createElement('div');
       foot.className = 'vt-vw-note';
       foot.textContent = d.autodrain
-        ? `${d.pending}건 대기 — 에이전트 작업이 끝나면 순서대로 투입됩니다`
-        : `${d.pending}건 대기 — 자동 투입 꺼짐(VT_QUEUE_AUTODRAIN=0)`;
+        ? t('{n}건 대기 — 에이전트 작업이 끝나면 순서대로 투입됩니다', { n: d.pending })
+        : t('{n}건 대기 — 자동 투입 꺼짐(VT_QUEUE_AUTODRAIN=0)', { n: d.pending });
       body.appendChild(foot);
     }
 
@@ -247,27 +259,27 @@ export function showQueue(opts = {}) {
         });
         inp.value = '';
       } catch (e) {
-        showToast(`추가 실패: ${e.message}`);
+        showToast(t('추가 실패: {msg}', { msg: e.message }));
       }
       refreshQueue(ctx);
     }
 
     async function removeQueueItem(ctx, id) {
       try { await vtFetch(`/api/queue/${id}`, { method: 'DELETE' }); }
-      catch (e) { showToast(`삭제 실패: ${e.message}`); }
+      catch (e) { showToast(t('삭제 실패: {msg}', { msg: e.message })); }
       refreshQueue(ctx);
     }
 
     async function unblockQueueItem(ctx, id) {
       try { await vtFetch(`/api/queue/${id}/unblock`, { method: 'POST' }); }
-      catch (e) { showToast(`재개 실패: ${e.message}`); }
+      catch (e) { showToast(t('재개 실패: {msg}', { msg: e.message })); }
       refreshQueue(ctx);
     }
 
     async function runQueueOnce(ctx) {
       try {
         const r = await vtFetch('/api/queue/run', { method: 'POST' });
-        showToast(r.drained ? `투입됨 (남은 ${r.remaining}건)` : '큐가 비었습니다');
+        showToast(r.drained ? t('투입됨 (남은 {n}건)', { n: r.remaining }) : t('큐가 비었습니다'));
       } catch (e) {
         showToast(e.message);
       }

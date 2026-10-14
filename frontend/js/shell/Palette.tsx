@@ -15,6 +15,7 @@ import { pushScope } from '../core/keyboard-scopes.js';
 import { createSignal, createEffect, onCleanup, onMount, For, Show, createMemo } from 'solid-js';
 import { render } from 'solid-js/web';
 import { icon } from '../ui/icons.js';
+import { t } from '../core/i18n.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import {
   parseQuery, fuzzyMatch, PLACEHOLDER, DEFAULT_COMMANDS, SETTINGS_COMMANDS,
@@ -69,14 +70,14 @@ interface Row {
 // 않으므로 선택 인덱스(selected)와 키보드 이동은 그대로다. 헤더에 .vt-qo-row를
 // 붙이지 않는 것도 같은 이유다(행 수를 세는 곳이 헤더를 행으로 세면 안 된다).
 const KIND_META: Record<string, { label: string; icon: string }> = {
-  recent:     { label: '최근 사용', icon: 'list' },
-  session:    { label: '세션',     icon: 'agent-shell' },
-  file:       { label: '파일',     icon: 'file' },
-  command:    { label: '명령',     icon: 'list' },
-  keymap:     { label: '키맵',     icon: 'keyboard' },
-  queue:      { label: '큐',       icon: 'list' },
-  port:       { label: '포트',     icon: 'plug' },
-  scrollback: { label: '스크롤백', icon: 'search' },
+  recent:     { label: t('최근 사용'), icon: 'list' },
+  session:    { label: t('세션'),     icon: 'agent-shell' },
+  file:       { label: t('파일'),     icon: 'file' },
+  command:    { label: t('명령'),     icon: 'list' },
+  keymap:     { label: t('키맵'),     icon: 'keyboard' },
+  queue:      { label: t('큐'),       icon: 'list' },
+  port:       { label: t('포트'),     icon: 'plug' },
+  scrollback: { label: t('스크롤백'), icon: 'search' },
   empty:      { label: '',         icon: 'list' },
 };
 
@@ -206,7 +207,7 @@ function PaletteBody(props: PaletteBodyProps) {
       .catch((e) => {
         if (parseQuery(props.query()).raw !== rawSnapshot) return;
         setFileResults([]);
-        setSearchError(e?.message ? `검색에 실패했습니다 — ${e.message}` : '검색에 실패했습니다.');
+        setSearchError(e?.message ? t('검색에 실패했습니다 — {message}', { message: e.message }) : t('검색에 실패했습니다.'));
       })
       .finally(() => setFileLoading(false));
   }, DEBOUNCE_MS, () => parsed().mode === 'file' ? parsed().raw : '');
@@ -248,7 +249,7 @@ function PaletteBody(props: PaletteBodyProps) {
       .catch((e) => {
         if (parseQuery(props.query()).raw !== rawSnapshot) return;
         setScrollbackResults([]);
-        setSearchError(e?.message ? `검색에 실패했습니다 — ${e.message}` : '검색에 실패했습니다.');
+        setSearchError(e?.message ? t('검색에 실패했습니다 — {message}', { message: e.message }) : t('검색에 실패했습니다.'));
       })
       .finally(() => setScrollbackLoading(false));
   }, DEBOUNCE_MS, () => parsed().mode === 'scrollback' ? parsed().raw : '');
@@ -258,7 +259,7 @@ function PaletteBody(props: PaletteBodyProps) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
-    }).then(() => deps.showToast('큐에 추가됨')).catch((e: any) => deps.showToast(`추가 실패: ${e.message}`));
+    }).then(() => deps.showToast(t('큐에 추가됨'))).catch((e: any) => deps.showToast(t('추가 실패: {message}', { message: e.message })));
   }
 
   function openSessionRow(sess: SessionTab): Row {
@@ -341,7 +342,7 @@ function PaletteBody(props: PaletteBodyProps) {
     return deps.vtSkins().map((skin) => ({
       key: `theme:${skin}`,
       kind: 'command',
-      label: `테마 · ${deps.vtSkinLabel(skin)}`,
+      label: t('테마 · {skin}', { skin: deps.vtSkinLabel(skin) }),
       onOpen: () => { props.onRequestClose(); deps.setVtSkin(skin); },
     }));
   }
@@ -443,19 +444,19 @@ function PaletteBody(props: PaletteBodyProps) {
         const uploadRow: Row = {
           key: 'cmd:upload',
           kind: 'command',
-          label: '파일 업로드',
+          label: t('파일 업로드'),
           onOpen: () => { props.onRequestClose(); document.getElementById('file-input')?.click(); },
         };
         // 모바일에는 dock MCP 버튼이 없으므로 빠른 열기에서도 독립 팝업으로 연다.
         const mcpRow: Row = {
           key: 'cmd:mcp',
           kind: 'command',
-          label: 'MCP · 스킬 관리',
+          label: t('MCP · 스킬 관리'),
           onOpen: () => {
             props.onRequestClose();
             import('../panels/mcp-open.js')
               .then((m) => m.showMcp())
-              .catch(() => deps.showToast('MCP 화면을 열지 못했습니다', 'error'));
+              .catch(() => deps.showToast(t('MCP 화면을 열지 못했습니다'), 'error'));
           },
         };
         // 키맵 명령도 「모든 기능」에 합류한다 — 예전엔 `:` 접두사로만
@@ -499,7 +500,7 @@ function PaletteBody(props: PaletteBodyProps) {
     if (r.preview.kind === 'file') {
       const path = r.preview.path;
       deps.vtFetch(`/api/fs/file?path=${encodeURIComponent(path)}`).then(async (d) => {
-        if (d.binary) { setPreviewText([`바이너리 파일`]); return; }
+        if (d.binary) { setPreviewText([t('바이너리 파일')]); return; }
         const lines = String(d.content || '').split('\n').slice(0, 40);
         setPreviewText(lines);
       }).catch((e: any) => setPreviewText([e.message]));
@@ -507,7 +508,7 @@ function PaletteBody(props: PaletteBodyProps) {
       // 라이브 프리뷰 카드가 이미 마지막 출력을 보여주므로, 별도 fetch 없이
       // 상태 문구만 보여준다 — 카드 자체가 결과 목록에도 이미 나온다.
       const sess = r.preview.sess;
-      setPreviewText([`세션 · ${sess.name}`, sess.command || '']);
+      setPreviewText([t('세션 · {name}', { name: sess.name }), sess.command || '']);
     } else if (r.preview.kind === 'scrollback') {
       setPreviewText(null); // 스크롤백은 행 자체가 컨텍스트를 담아 별도 렌더(아래)
     }
@@ -560,12 +561,12 @@ function PaletteBody(props: PaletteBodyProps) {
         <Show when={rows().length === 0}>
           <div class="vt-vw-empty">
             {parsed().mode === 'port' && !deps.gateOk('ports')
-              ? '포트 대시보드를 사용할 수 없는 환경입니다.'
+              ? t('포트 대시보드를 사용할 수 없는 환경입니다.')
               : (parsed().mode === 'file' && fileLoading()) || (parsed().mode === 'scrollback' && scrollbackLoading()) || (parsed().mode === 'port' && portsLoading())
-                ? '불러오는 중…'
+                ? t('불러오는 중…')
                 : searchError()
                   ? searchError()
-                  : '일치하는 항목이 없습니다.'}
+                  : t('일치하는 항목이 없습니다.')}
           </div>
         </Show>
         <For each={rows()}>
@@ -612,7 +613,7 @@ function PaletteBody(props: PaletteBodyProps) {
         <div class="vt-qo-preview-pane">
           <Show when={parsed().mode === 'scrollback' && rows()[selected()]?.preview?.kind === 'scrollback'}
                 fallback={
-                  <Show when={previewText()} fallback={<div class="vt-vw-empty">미리보기 없음</div>}>
+                  <Show when={previewText()} fallback={<div class="vt-vw-empty">{t('미리보기 없음')}</div>}>
                     <For each={previewText() || []}>{(line) => <div class="vt-qo-preview-line">{line}</div>}</For>
                   </Show>
                 }>
@@ -700,11 +701,11 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
               공유하는데, 그쪽 치수(1100px)를 그대로 물려받아 팔레트가 화면
               절반을 덮고 있었다. 폭·행 높이·머리글은 이 클래스 안에서만
               다시 정한다(components.css). */}
-          <div class="vt-viewer-card vt-qo-card" role="dialog" aria-modal="true" aria-label="빠른 열기">
+          <div class="vt-viewer-card vt-qo-card" role="dialog" aria-modal="true" aria-label={t('빠른 열기')}>
             <div class="vt-viewer-head vt-qo-head">
               <span class="vt-qo-head-mark" aria-hidden="true" innerHTML={icon('search', 14, 2)} />
-              <div class="vt-vw-title">빠른 열기</div>
-              <span class="vt-qo-head-esc" aria-hidden="true">esc 닫기</span>
+              <div class="vt-vw-title">{t('빠른 열기')}</div>
+              <span class="vt-qo-head-esc" aria-hidden="true">{t('esc 닫기')}</span>
             </div>
             <input
               ref={inputEl}
@@ -723,10 +724,10 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
                 방법이 placeholder 한 줄뿐이었다. 목업 4a처럼 아래에 상시
                 고정한다 — 키 힌트와 모드 힌트를 한 줄에 같이 둔다. */}
             <div class="vt-qo-foot" aria-hidden="true">
-              <span><kbd class="vt-qo-key" innerHTML={icon('arrow-up', 13, 2) + icon('arrow-down', 13, 2)} /> 이동</span>
-              <span><kbd class="vt-qo-key" innerHTML={icon('key-enter', 13, 2)} /> 열기</span>
-              <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Mod+Enter') : '⌘↵'} /> 새 pane</span>
-              <span class="vt-qo-foot-modes">/ 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백</span>
+              <span><kbd class="vt-qo-key" innerHTML={icon('arrow-up', 13, 2) + icon('arrow-down', 13, 2)} /> {t('이동')}</span>
+              <span><kbd class="vt-qo-key" innerHTML={icon('key-enter', 13, 2)} /> {t('열기')}</span>
+              <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Mod+Enter') : '⌘↵'} /> {t('새 pane')}</span>
+              <span class="vt-qo-foot-modes">{t('/ 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백')}</span>
             </div>
           </div>
         </div>

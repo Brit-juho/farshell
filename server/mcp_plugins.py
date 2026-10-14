@@ -30,6 +30,7 @@ from typing import Optional
 
 import codex_cli
 import mcp_adapters
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +248,7 @@ def scan_codex_plugins(worktree_path: Optional[str] = None,
         return {"plugins": [], "errors": [{"source": source, "reason": err}]}
     if not isinstance(data, dict) or not isinstance(data.get("installed"), list):
         return {"plugins": [], "errors": [{
-            "source": source, "reason": "응답 형식이 예상과 다릅니다",
+            "source": source, "reason": tr("응답 형식이 예상과 다릅니다"),
         }]}
 
     config_path = mcp_adapters.codex_paths()["global"]

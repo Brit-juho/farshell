@@ -33,6 +33,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 import host_store
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -71,34 +72,34 @@ def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> d
     nonce = headers.get("x-peer-nonce", "")
     sig = headers.get("x-peer-sig", "")
     if not (peer_id and ts_raw and nonce and sig):
-        raise PeerDenied("서명 헤더가 없습니다")
+        raise PeerDenied(tr("서명 헤더가 없습니다"))
     try:
         ts = int(ts_raw)
     except ValueError:
-        raise PeerDenied("잘못된 타임스탬프")
+        raise PeerDenied(tr("잘못된 타임스탬프"))
 
     grant = host_store.find_grant(peer_id)
     if grant is None:
         # 취소된 상대가 옛 secret으로 계속 두드리는 경우가 여기다 — 기록해둔다.
         host_store.audit(peer_id, "auth", False, "등록되지 않은 호스트")
-        raise PeerDenied("등록되지 않은 호스트입니다")
+        raise PeerDenied(tr("등록되지 않은 호스트입니다"))
 
     # A2 — 본문 해시를 서명한 요청. 헤더가 **있으면 반드시 맞아야 한다**(없는 척
     # 지우고 보내면 서명 자체가 안 맞으므로 downgrade가 성립하지 않는다).
     claimed = headers.get("x-peer-body", "")
     if claimed and body_hash and not hmac.compare_digest(claimed, body_hash):
         host_store.audit(peer_id, "auth", False, "본문 해시 불일치")
-        raise PeerDenied("본문이 서명과 일치하지 않습니다")
+        raise PeerDenied(tr("본문이 서명과 일치하지 않습니다"))
     if not host_store.verify_signature(grant["secret"], method, path, ts, nonce, sig,
                                        body_hash=claimed):
         host_store.audit(peer_id, "auth", False, "서명 불일치 또는 시간창 밖")
-        raise PeerDenied("서명이 유효하지 않습니다 — 시계 차이가 크면 'fsh host ping'으로 확인하세요")
+        raise PeerDenied(tr("서명이 유효하지 않습니다 — 시계 차이가 크면 'fsh host ping'으로 확인하세요"))
 
     # 재생 차단은 서명 검증을 통과한 뒤에 본다 — 그 전에 하면 아무나 nonce를
     # 채워 넣어 정상 요청을 막을 수 있다(캐시 오염).
     if not _nonces.check_and_add(f"{peer_id}:{nonce}"):
         host_store.audit(peer_id, "auth", False, "nonce 재사용(재생 시도)")
-        raise PeerDenied("이미 사용된 요청입니다")
+        raise PeerDenied(tr("이미 사용된 요청입니다"))
 
     host_store.touch_grant(peer_id)
     return grant
@@ -118,8 +119,7 @@ def _require(request: Request, level: str = host_store.LEVEL_VIEW) -> tuple[dict
         host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
         return None, JSONResponse(
             {"error": "level_required", "reason":
-             "이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 "
-             "'fsh host allow-control <id>'로 켜야 합니다"},
+             tr("이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 'fsh host allow-control <id>'로 켜야 합니다")},
             status_code=403,
         )
     return grant, None
@@ -139,8 +139,7 @@ async def _require_body(request: Request, level: str = host_store.LEVEL_VIEW):
         host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
         return None, JSONResponse(
             {"error": "level_required", "reason":
-             "이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 "
-             "'fsh host allow-control <id>'로 켜야 합니다"},
+             tr("이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 'fsh host allow-control <id>'로 켜야 합니다")},
             status_code=403,
         )
     return grant, (grant, data)

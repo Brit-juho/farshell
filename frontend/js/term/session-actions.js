@@ -18,6 +18,7 @@ import { API_BASE } from '../core/env.js';
 import { getSession, allSessions } from '../core/store.js';
 import { getStatus } from '../agent/state.js';
 import { confirmDialog } from '../core/dialog.js';
+import { t } from '../core/i18n.js';
 
 /** 닫기 — 웹 attach만 놓는다(tmux는 산다). 칸은 빈 칸으로 남는다. */
 export async function closeSession(sessionId) {
@@ -112,13 +113,13 @@ export async function reopenClosedView(viewId, focusTmux = null) {
       if (id) attached.set(tmux, id); else failed.push(tmux);
     }
     if (byTmux.size > 0 && attached.size === 0) {
-      showToast(`묶음을 열지 못했습니다 — ${failed.join(', ')} (기억은 그대로 둡니다)`);
+      showToast(t('묶음을 열지 못했습니다 — {names} (기억은 그대로 둡니다)', { names: failed.join(', ') }));
       return false;
     }
     const tree = deserializeTree(view.tree, (info) => (info && info.tmux && attached.get(info.tmux)) || null);
     if (!tree) return false;
     takeClosedView(viewId);
-    if (failed.length) showToast(`묶음의 ${failed.length}개 세션을 열지 못해 빈 칸으로 뒀습니다 — ${failed.join(', ')}`);
+    if (failed.length) showToast(t('묶음의 {n}개 세션을 열지 못해 빈 칸으로 뒀습니다 — {names}', { n: failed.length, names: failed.join(', ') }));
     const focusId = focusTmux ? attached.get(focusTmux) : null;
     openTabWithTree({ id: view.id, label: view.label, worktreeId: view.worktreeId, hostId: view.hostId,
       tree, focusPaneId: focusId ? findPaneBySession(tree, focusId) : null });
@@ -171,10 +172,9 @@ export async function splitOpenSession(dir, { sessionId = null, tmuxName = null 
 
 /** 종료 확인 문구 — waiting/working이면 반드시 적는다. */
 export function killWarning(name, status) {
-  const busyNote = status === 'waiting' ? ' 입력을 기다리고 있습니다.'
-    : status === 'working' ? ' 지금 작업 중입니다.'
-    : '';
-  return `'${name}'을(를) 완전히 종료합니다.${busyNote} 되돌릴 수 없습니다.`;
+  if (status === 'waiting') return t("'{name}'을(를) 완전히 종료합니다. 입력을 기다리고 있습니다. 되돌릴 수 없습니다.", { name });
+  if (status === 'working') return t("'{name}'을(를) 완전히 종료합니다. 지금 작업 중입니다. 되돌릴 수 없습니다.", { name });
+  return t("'{name}'을(를) 완전히 종료합니다. 되돌릴 수 없습니다.", { name });
 }
 
 /** 종료 — 열려 있으면 먼저 닫는다(재연결 루프 방지). 다른 브라우저 탭은 WS
@@ -185,13 +185,13 @@ export async function killSession(name, webSessionId) {
   }
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/kill/${encodeURIComponent(name)}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(`완전 종료 실패: ${name} (${res.status})`); return false; }
+    if (!res.ok) { showToast(t('완전 종료 실패: {name} ({status})', { name, status: res.status })); return false; }
     forgetClosedMembers([name]);
     saveLayoutNow();
-    showToast(`완전 종료됨: ${name}`);
+    showToast(t('완전 종료됨: {name}', { name }));
     return true;
   } catch (_) {
-    showToast(`완전 종료 오류: ${name}`);
+    showToast(t('완전 종료 오류: {name}', { name }));
     return false;
   }
 }
@@ -199,7 +199,7 @@ export async function killSession(name, webSessionId) {
 /** 확인받고 종료(Rail.tsx 메뉴 등). */
 export async function confirmAndKillSession(name, webSessionId) {
   const status = getStatus(name);
-  if (!await confirmDialog(killWarning(name, status), { title: '완전 종료', okLabel: '완전 종료', danger: true })) return false;
+  if (!await confirmDialog(killWarning(name, status), { title: t('완전 종료'), okLabel: t('완전 종료'), danger: true })) return false;
   return killSession(name, webSessionId);
 }
 

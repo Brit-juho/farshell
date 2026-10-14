@@ -3,6 +3,7 @@
 // 처리한다. `copyToClipboard`/`showToast`는 아직 classic script(term/clipboard.js·
 // ui/toast.js)가 소유해 bare identifier로 읽는다.
 import { get as setting } from '../core/settings.js';
+import { t } from '../core/i18n.js';
 
 const _vToken = new URLSearchParams(location.search).get('token') || '';
 const _vTokenQ = _vToken ? `?token=${_vToken}` : '';
@@ -45,7 +46,7 @@ function connectNotify() {
           const autoSyncOff = !setting('mouse.autocopyOnSelect');
           if (!autoSyncOff && typeof copyToClipboard === 'function') {
             copyToClipboard(data.text).then((ok) => {
-              if (ok && typeof showToast === 'function') showToast('클립보드 동기화됨');
+              if (ok && typeof showToast === 'function') showToast(t('클립보드 동기화됨'));
             });
           }
         }
@@ -87,7 +88,7 @@ function showNotification(summary, sessionId) {
   showToast(`[${sessionId}] ${short}`, 'success', { duration: 5000 });
 
   // 백그라운드 브라우저 알림 (화면 밖에서도 보이게)
-  showBrowserNotification('FarShell — 작업 완료', short);
+  showBrowserNotification(t('FarShell — 작업 완료'), short);
 }
 
 // ⚠ Android Chrome 등 모바일 브라우저는 `new Notification()` 생성자를 금지하고

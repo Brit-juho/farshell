@@ -16,6 +16,7 @@ import { openPanel, setPanelPoll } from './panel.js';
 import { emptyState } from '../ui/empty.js';
 import { vtFetch } from '../core/api.js';
 import { paintRailBadge } from './usage-badge.js';
+import { t } from '../core/i18n.js';
 
 const PANEL_ID = 'vt-usage';
 const POLL_MS = 30000;   // 피드 자체가 90초 주기라 그보다 자주 볼 이유가 없다
@@ -32,12 +33,12 @@ function barColor(pct) {
 // 틀어져 있어도 맞도록 계산 자체는 서버가 한다).
 function humanIn(sec) {
   if (sec == null) return '';
-  if (sec < 60) return '곧 리셋';
+  if (sec < 60) return t('곧 리셋');
   const m = Math.round(sec / 60);
-  if (m < 60) return `${m}분 후 리셋`;
+  if (m < 60) return t('{n}분 후 리셋', { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return m % 60 ? `${h}시간 ${m % 60}분 후 리셋` : `${h}시간 후 리셋`;
-  return `${Math.round(h / 24)}일 후 리셋`;
+  if (h < 24) return m % 60 ? t('{h}시간 {m}분 후 리셋', { h, m: m % 60 }) : t('{n}시간 후 리셋', { n: h });
+  return t('{n}일 후 리셋', { n: Math.round(h / 24) });
 }
 
 function el(tag, cls, text) {
@@ -61,7 +62,7 @@ function renderWindow(w) {
   track.setAttribute('aria-valuenow', String(Math.round(pct)));
   track.setAttribute('aria-valuemin', '0');
   track.setAttribute('aria-valuemax', '100');
-  track.setAttribute('aria-label', `${w.label} 사용량 ${Math.round(pct)}%`);
+  track.setAttribute('aria-label', t('{label} 사용량 {pct}%', { label: w.label, pct: Math.round(pct) }));
   row.appendChild(track);
 
   row.appendChild(el('span', 'vt-usage-pct', `${Math.round(pct)}%`));
@@ -89,7 +90,7 @@ function renderProfile(p, activeName) {
     liveDot.dataset.state = 'working';
     live.appendChild(liveDot);
     live.appendChild(document.createTextNode('live'));
-    live.title = '이 프로필로 실행 중인 세션이 있습니다';
+    live.title = t('이 프로필로 실행 중인 세션이 있습니다');
     head.appendChild(live);
   }
   card.appendChild(head);
@@ -97,25 +98,26 @@ function renderProfile(p, activeName) {
   // 경고는 게이지보다 **위**에 온다 — 재인증이 필요한데 숫자를 먼저 보여주면
   // 그 숫자가 신뢰할 수 있는 값이라고 착각하게 된다.
   if (!p.auth_ok) {
-    const warn = el('div', 'vt-usage-warn', `재인증 필요 (${p.auth_status})`);
+    const warn = el('div', 'vt-usage-warn', t('재인증 필요 ({status})', { status: p.auth_status }));
     card.appendChild(warn);
   } else if (p.fetch_status === 'AuthExpired') {
     // terminal 상태다 — 자동 재시도로 감추지 않는다(계획서 §4).
-    card.appendChild(el('div', 'vt-usage-warn', '조치 필요 — 인증이 만료됐습니다'));
+    card.appendChild(el('div', 'vt-usage-warn', t('조치 필요 — 인증이 만료됐습니다')));
   }
 
   if (!p.windows || p.windows.length === 0) {
     // provider:"generic" 등은 바를 그릴 데이터가 없다. 빈 바를 0%로 그리면
     // "안 쓰고 있다"는 거짓 정보가 된다.
-    card.appendChild(el('div', 'vt-usage-empty', '사용량 정보 없음'));
+    card.appendChild(el('div', 'vt-usage-empty', t('사용량 정보 없음')));
   } else {
     for (const w of p.windows) card.appendChild(renderWindow(w));
   }
 
   if (p.fallback && p.fallback.position != null) {
     const fb = el('div', 'vt-usage-fallback');
-    fb.textContent = `폴백 #${p.fallback.position} · ${p.fallback.threshold ?? '?'}%`
-      + (p.fallback.armed ? ' · 대기' : ' · 해제');
+    fb.textContent = p.fallback.armed
+      ? t('폴백 #{pos} · {threshold}% · 대기', { pos: p.fallback.position, threshold: p.fallback.threshold ?? '?' })
+      : t('폴백 #{pos} · {threshold}% · 해제', { pos: p.fallback.position, threshold: p.fallback.threshold ?? '?' });
     fb.classList.toggle('armed', !!p.fallback.armed);
     card.appendChild(fb);
   }
@@ -130,10 +132,10 @@ function renderLimitSection(data) {
 
   if (!data || !data.available) {
     const reason = data && data.reason;
-    const msg = reason === 'disabled' ? '사용량 표시가 꺼져 있습니다 (VT_USAGE_PROVIDER=none).'
-      : reason === 'schema' ? '사용량 피드 형식을 알 수 없습니다 (clauth 버전 확인 필요).'
-      : reason === 'permission' ? '사용량 피드를 읽을 권한이 없습니다.'
-      : reason === 'broken' ? '사용량 피드를 읽는 중입니다…'
+    const msg = reason === 'disabled' ? t('사용량 표시가 꺼져 있습니다 (VT_USAGE_PROVIDER=none).')
+      : reason === 'schema' ? t('사용량 피드 형식을 알 수 없습니다 (clauth 버전 확인 필요).')
+      : reason === 'permission' ? t('사용량 피드를 읽을 권한이 없습니다.')
+      : reason === 'broken' ? t('사용량 피드를 읽는 중입니다…')
       : null;
     if (msg) wrap.appendChild(el('p', 'vt-usage-none', msg));
     return wrap;
@@ -142,11 +144,11 @@ function renderLimitSection(data) {
   if (data.stale) {
     // 미터를 흐리게 + 이유를 적는다. 흐리기만 하면 사용자는 "왜 흐리지"를 모른다.
     wrap.classList.add('stale');
-    wrap.appendChild(el('div', 'vt-usage-warn', '갱신 멈춤 — 아래 값은 마지막으로 받은 것입니다'));
+    wrap.appendChild(el('div', 'vt-usage-warn', t('갱신 멈춤 — 아래 값은 마지막으로 받은 것입니다')));
   }
 
   for (const p of data.profiles || []) wrap.appendChild(renderProfile(p, data.active_profile));
-  if (!(data.profiles || []).length) wrap.appendChild(el('p', 'vt-usage-none', '프로필이 없습니다.'));
+  if (!(data.profiles || []).length) wrap.appendChild(el('p', 'vt-usage-none', t('프로필이 없습니다.')));
   return wrap;
 }
 
@@ -220,8 +222,8 @@ function renderCounter(c) {
     const liveDot = el('span', 'status-dot');
     liveDot.dataset.state = 'working';
     live.appendChild(liveDot);
-    live.appendChild(document.createTextNode('실행 중'));
-    live.title = 'ollama에서 지금 로드되어 있는 모델입니다';
+    live.appendChild(document.createTextNode(t('실행 중')));
+    live.title = t('ollama에서 지금 로드되어 있는 모델입니다');
     head.appendChild(live);
   }
   card.appendChild(head);
@@ -230,7 +232,7 @@ function renderCounter(c) {
   stats.appendChild(el('span', 'vt-counter-stat', humanTokens(c.tokens)));
   stats.appendChild(el('span', 'vt-counter-stat', humanDuration(c.seconds)));
   stats.appendChild(el('span', 'vt-counter-stat',
-    c.tok_per_sec != null ? `${c.tok_per_sec} tok/s 평균` : '—'));
+    c.tok_per_sec != null ? t('{rate} tok/s 평균', { rate: c.tok_per_sec }) : '—'));
   card.appendChild(stats);
 
   card.appendChild(renderSparkline(c.samples));
@@ -243,10 +245,10 @@ function renderCounterSection(data) {
   const wrap = el('div', 'vt-usage-counter-section');
   if (!data || !data.available) return wrap;
 
-  wrap.appendChild(el('div', 'vt-usage-section-title', '누적형 · 한도 없음'));
+  wrap.appendChild(el('div', 'vt-usage-section-title', t('누적형 · 한도 없음')));
   const counters = data.counters || [];
   if (!counters.length) {
-    wrap.appendChild(el('p', 'vt-usage-none', '기록이 없습니다 — fsh usage add로 기록하세요.'));
+    wrap.appendChild(el('p', 'vt-usage-none', t('기록이 없습니다 — fsh usage add로 기록하세요.')));
     return wrap;
   }
   for (const c of counters) wrap.appendChild(renderCounter(c));
@@ -273,8 +275,8 @@ export function renderBody(limitData, counterData, target) {
     body.innerHTML = '';
     body.appendChild(emptyState({
       icon: 'gauge',
-      title: '연결된 사용량 소스가 없습니다',
-      desc: 'clauth나 Codex CLI에 로그인하면 남은 한도가 여기 표시됩니다. 로컬 모델처럼 한도가 없는 사용량은 fsh usage add로 기록할 수 있습니다.',
+      title: t('연결된 사용량 소스가 없습니다'),
+      desc: t('clauth나 Codex CLI에 로그인하면 남은 한도가 여기 표시됩니다. 로컬 모델처럼 한도가 없는 사용량은 fsh usage add로 기록할 수 있습니다.'),
     }));
   }
 }
@@ -318,8 +320,8 @@ export function showUsage(opts = {}) {
     paneHost: opts.paneHost || null,
     paneId: opts.paneId || null,
     id: PANEL_ID,
-    ariaLabel: '사용량',
-    headHTML: '<div class="vt-vw-title">사용량</div>',
+    ariaLabel: t('사용량'),
+    headHTML: `<div class="vt-vw-title">${t('사용량')}</div>`,
     bodyId: 'vt-usage-body',
     extraClass: 'vt-usage',
   });

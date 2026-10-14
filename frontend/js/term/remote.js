@@ -23,6 +23,7 @@ import { confirmDialog } from '../core/dialog.js';
 import { getTree, getActivePaneId, getActiveTabHostId } from '../layout/store.js';
 import { findNode } from '../layout/tree.js';
 import { LOCAL_HOST, viewHost, findRemoteSession } from './host-view.js';
+import { t } from '../core/i18n.js';
 
 export function remoteSessionId(hostId, tmuxName) {
   return `remote:${hostId}:${tmuxName}`;
@@ -87,8 +88,8 @@ async function attachRemoteSessionAs(id, hostId, tmuxName, place = 'view') {
   try {
     const hosts = await _fetchHosts();
     const host = hosts.find((h) => h.id === hostId);
-    if (!host) { showToast(`등록되지 않은 호스트: ${hostId}`, 'error'); return null; }
-    if (!host.online) { showToast(`${host.label} — 연결할 수 없습니다`, 'error'); return null; }
+    if (!host) { showToast(t('등록되지 않은 호스트: {host}', { host: hostId }), 'error'); return null; }
+    if (!host.online) { showToast(t('{host} — 연결할 수 없습니다', { host: host.label }), 'error'); return null; }
   } catch (_) { /* 목록 조회 실패는 막지 않는다 — 소켓이 곧 진실을 말해준다 */ }
 
   // remote는 **소켓이 열리기 전에** 레코드에 있어야 한다(ws.js가 이걸 보고
@@ -138,7 +139,7 @@ export async function createRemoteSession(hostId, name = '') {
   try {
     data = await vtFetch(`/api/hosts/${encodeURIComponent(hostId)}/sessions`, _json('POST', { name }));
   } catch (e) {
-    showToast(`새 세션 실패 — ${e.message}`, 'error');
+    showToast(t('새 세션 실패 — {reason}', { reason: e.message }), 'error');
     return null;
   }
   _hostsChanged(hostId);
@@ -154,8 +155,8 @@ export async function killRemoteSession(hostId, tmuxName) {
   if (!hostId || !tmuxName) return false;
   const label = await hostLabel(hostId);
   const ok = await confirmDialog(
-    `${label}의 '${tmuxName}'을(를) 완전히 종료합니다. 되돌릴 수 없습니다.`,
-    { title: '완전 종료', okLabel: '완전 종료', danger: true },
+    t("{host}의 '{name}'을(를) 완전히 종료합니다. 되돌릴 수 없습니다.", { host: label, name: tmuxName }),
+    { title: t('완전 종료'), okLabel: t('완전 종료'), danger: true },
   );
   if (!ok) return false;
   const open = findRemoteSession(_entries(), hostId, tmuxName);
@@ -166,11 +167,11 @@ export async function killRemoteSession(hostId, tmuxName) {
       _json('DELETE'),
     );
   } catch (e) {
-    showToast(`완전 종료 실패 — ${e.message}`, 'error');
+    showToast(t('완전 종료 실패 — {reason}', { reason: e.message }), 'error');
     _hostsChanged(hostId);
     return false;
   }
-  showToast(`완전 종료됨: ${tmuxName} · ${label}`);
+  showToast(t('완전 종료됨: {name} · {host}', { name: tmuxName, host: label }));
   _hostsChanged(hostId);
   return true;
 }
@@ -187,7 +188,7 @@ export async function renameRemoteSession(hostId, oldName, newName) {
       _json('PATCH', { name: next }),
     );
   } catch (e) {
-    showToast(`이름 변경 실패 — ${e.message}`, 'error');
+    showToast(t('이름 변경 실패 — {reason}', { reason: e.message }), 'error');
     return false;
   }
   const open = findRemoteSession(_entries(), hostId, oldName);

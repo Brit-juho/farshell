@@ -1,5 +1,6 @@
 import { vtFetch } from '../../../core/api.js';
 import { statusLine, secRow, fmtWhen } from '../controls.js';
+import { t } from '../../../core/i18n.js';
 
 // ── 「보안」 ──────────────────────────────────────────────────────────────
 // 60-settings-palette.md §2 — 비밀번호 · OTP · 기기 · 승격 상태.
@@ -20,22 +21,22 @@ export function renderSecuritySection() {
 
   const authHost = document.createElement('div');
   authHost.className = 'vt-set-sechost';
-  authHost.appendChild(statusLine('인증 상태 확인 중…'));
+  authHost.appendChild(statusLine(t('인증 상태 확인 중…')));
   frag.appendChild(authHost);
 
   const devTitle = document.createElement('div');
   devTitle.className = 'vt-set-label';
-  devTitle.textContent = '등록 기기';
+  devTitle.textContent = t('등록 기기');
   frag.appendChild(devTitle);
 
   const devHost = document.createElement('div');
   devHost.className = 'vt-set-sechost';
-  devHost.appendChild(statusLine('기기 목록 확인 중…'));
+  devHost.appendChild(statusLine(t('기기 목록 확인 중…')));
   frag.appendChild(devHost);
 
   const elevHost = document.createElement('div');
   elevHost.className = 'vt-set-sechost';
-  elevHost.appendChild(statusLine('승격 상태 확인 중…'));
+  elevHost.appendChild(statusLine(t('승격 상태 확인 중…')));
   frag.appendChild(elevHost);
 
   // 로그아웃은 비밀번호가 실제로 걸려 있을 때만 의미가 있다 — 인증이 없는
@@ -50,26 +51,26 @@ export function renderSecuritySection() {
     const pw = !!(r && r.password_set);
     if (pw) outHost.appendChild(_logoutRow());
     authHost.appendChild(secRow(
-      '웹 로그인 비밀번호',
-      pw ? '설정됨' : '설정 안 됨',
+      t('웹 로그인 비밀번호'),
+      pw ? t('설정됨') : t('설정 안 됨'),
       pw ? 'on' : 'off',
-      pw ? null : "터미널에서 'fsh password'로 설정합니다.",
+      pw ? null : t("터미널에서 'fsh password'로 설정합니다."),
     ));
     const otp = !!(r && r.otp_enabled);
     authHost.appendChild(secRow(
-      'OTP (새 기기 등록 관문)',
-      otp ? '활성' : '비활성',
+      t('OTP (새 기기 등록 관문)'),
+      otp ? t('활성') : t('비활성'),
       otp ? 'on' : 'off',
-      otp ? '처음 보는 기기를 등록할 때만 OTP를 요구합니다.'
-          : "터미널에서 'fsh otp setup'으로 활성화합니다.",
+      otp ? t('처음 보는 기기를 등록할 때만 OTP를 요구합니다.')
+          : t("터미널에서 'fsh otp setup'으로 활성화합니다."),
     ));
-  }).catch(() => { authHost.innerHTML = ''; authHost.appendChild(statusLine('인증 상태를 확인할 수 없습니다.')); });
+  }).catch(() => { authHost.innerHTML = ''; authHost.appendChild(statusLine(t('인증 상태를 확인할 수 없습니다.'))); });
 
   vtFetch('/api/devices').then((r) => {
     const rows = (r && Array.isArray(r.devices)) ? r.devices : [];
     devHost.innerHTML = '';
     if (!rows.length) {
-      devHost.appendChild(statusLine('등록된 기기가 없습니다. 휴대폰에서 QR로 처음 접속하면 등록됩니다.'));
+      devHost.appendChild(statusLine(t('등록된 기기가 없습니다. 휴대폰에서 QR로 처음 접속하면 등록됩니다.')));
       return;
     }
     // 2026-09-24(2.1 D6) — 폭이 좁은 화면(폰)에서 열(기기/id/등록/마지막
@@ -79,25 +80,25 @@ export function renderSecuritySection() {
     tableHost.className = 'vt-set-covtable-host';
     tableHost.appendChild(renderDeviceTable(rows));
     devHost.appendChild(tableHost);
-    devHost.appendChild(statusLine("기기 폐기는 터미널에서 'fsh device revoke <id>'로 합니다 — 그 기기의 세션도 함께 끊깁니다."));
+    devHost.appendChild(statusLine(t("기기 폐기는 터미널에서 'fsh device revoke <id>'로 합니다 — 그 기기의 세션도 함께 끊깁니다.")));
     if (rows.some((d) => d.expired)) {
-      devHost.appendChild(statusLine("만료된 기기는 접속할 수 없고 7일 뒤 목록에서 지워집니다. 지금 정리하려면 'fsh device prune'."));
+      devHost.appendChild(statusLine(t("만료된 기기는 접속할 수 없고 7일 뒤 목록에서 지워집니다. 지금 정리하려면 'fsh device prune'.")));
     }
-  }).catch(() => { devHost.innerHTML = ''; devHost.appendChild(statusLine('기기 목록을 확인할 수 없습니다.')); });
+  }).catch(() => { devHost.innerHTML = ''; devHost.appendChild(statusLine(t('기기 목록을 확인할 수 없습니다.'))); });
 
   vtFetch('/api/auth/elevation').then((r) => {
     const until = (r && Number(r.elevated_until)) || 0;
     const left = until ? Math.max(0, Math.round((until * 1000 - Date.now()) / 60000)) : 0;
     elevHost.innerHTML = '';
     elevHost.appendChild(secRow(
-      '승격 세션',
-      until && left ? `승격됨 · ${left}분 남음` : '승격 안 됨',
+      t('승격 세션'),
+      until && left ? t('승격됨 · {n}분 남음', { n: left }) : t('승격 안 됨'),
       until && left ? 'on' : 'off',
       // ADR-27 — push/PR을 만들지 않기로 해서 승격을 요구하는 경로가 지금은 없다.
       // 이 문장이 없으면 "왜 항상 비활성이지?"로 읽힌다.
-      '현재 이 기능을 쓰는 경로가 없습니다(ADR-27) — 승격을 요구하는 조작이 아직 없습니다.',
+      t('현재 이 기능을 쓰는 경로가 없습니다(ADR-27) — 승격을 요구하는 조작이 아직 없습니다.'),
     ));
-  }).catch(() => { elevHost.innerHTML = ''; elevHost.appendChild(statusLine('승격 상태를 확인할 수 없습니다.')); });
+  }).catch(() => { elevHost.innerHTML = ''; elevHost.appendChild(statusLine(t('승격 상태를 확인할 수 없습니다.'))); });
 
   return frag;
 }
@@ -110,14 +111,12 @@ function _logoutRow() {
 
   const label = document.createElement('div');
   label.className = 'vt-set-label';
-  label.textContent = '이 브라우저에서 로그아웃';
+  label.textContent = t('이 브라우저에서 로그아웃');
   wrap.appendChild(label);
 
   const help = document.createElement('div');
   help.className = 'vt-set-help';
-  help.textContent = '이 브라우저의 세션만 끝냅니다. 기기 등록은 남아 있어 '
-    + '다시 들어올 때 비밀번호만 입력하면 됩니다. 기기 자체를 끊으려면 '
-    + "터미널에서 'fsh device revoke <id>'를 씁니다.";
+  help.textContent = t("이 브라우저의 세션만 끝냅니다. 기기 등록은 남아 있어 다시 들어올 때 비밀번호만 입력하면 됩니다. 기기 자체를 끊으려면 터미널에서 'fsh device revoke <id>'를 씁니다.");
   wrap.appendChild(help);
 
   // 2026-09-22(사용자 지적) — danger(빨강)는 이 저장소에서 되돌릴 수 없는
@@ -126,10 +125,10 @@ function _logoutRow() {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'vt-btn sm';
-  btn.textContent = '로그아웃';
+  btn.textContent = t('로그아웃');
   btn.addEventListener('click', async () => {
     btn.disabled = true;
-    btn.textContent = '로그아웃 중…';
+    btn.textContent = t('로그아웃 중…');
     try {
       await vtFetch('/api/auth/logout', { method: 'POST' });
     } catch (_) {
@@ -149,7 +148,7 @@ function renderDeviceTable(rows) {
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  for (const label of ['기기', 'id', '등록', '마지막 사용', '기간']) {
+  for (const label of [t('기기'), 'id', t('등록'), t('마지막 사용'), t('기간')]) {
     const th = document.createElement('th');
     th.textContent = label;
     headRow.appendChild(th);
@@ -164,11 +163,11 @@ function renderDeviceTable(rows) {
     if (d.expired) tr.dataset.expired = '1';
 
     const label = document.createElement('td');
-    label.textContent = d.label || '기기';
+    label.textContent = d.label || t('기기');
     if (d.current) {
       const badge = document.createElement('span');
       badge.className = 'vt-tag vt-set-devme';
-      badge.textContent = '이 기기';
+      badge.textContent = t('이 기기');
       label.appendChild(badge);
     }
     const meta = deviceMeta(d);
@@ -202,7 +201,7 @@ function renderDeviceTable(rows) {
   return table;
 }
 
-const VIA_LABEL = { tunnel: '터널', tailscale: 'Tailscale', lan: 'LAN', local: '이 맥', direct: '직접' };
+const VIA_LABEL = { tunnel: t('터널'), tailscale: 'Tailscale', lan: 'LAN', local: t('이 맥'), direct: t('직접') };
 
 // "Android 15 · Chrome 140 · 203.0.113.5 (터널)". 예전에 등록된 기기는 이 정보가 없어 빈 문자열.
 export function deviceMeta(d) {
@@ -216,17 +215,17 @@ export function deviceMeta(d) {
 
 function span(sec) {
   const s = Math.max(0, Math.floor(sec));
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}분`;
-  if (s < 86400) return `${Math.floor(s / 3600)}시간`;
-  return `${Math.floor(s / 86400)}일`;
+  if (s < 3600) return t('{n}분', { n: Math.max(1, Math.floor(s / 60)) });
+  if (s < 86400) return t('{n}시간', { n: Math.floor(s / 3600) });
+  return t('{n}일', { n: Math.floor(s / 86400) });
 }
 
 // [표시 문구, data-state]. state: expired / temp / persistent.
 export function deviceLife(d, nowSec) {
   const exp = Number(d.expires_at) || 0;
-  if (d.expired || (exp && exp <= nowSec)) return ['만료됨', 'expired'];
+  if (d.expired || (exp && exp <= nowSec)) return [t('만료됨'), 'expired'];
   if (!exp) return ['—', 'persistent'];
-  const left = `${span(exp - nowSec)} 남음`;
-  return d.kind === 'temporary' ? [`임시 · ${left}`, 'temp'] : [left, 'persistent'];
+  const left = t('{time} 남음', { time: span(exp - nowSec) });
+  return d.kind === 'temporary' ? [t('임시 · {time}', { time: left }), 'temp'] : [left, 'persistent'];
 }
 

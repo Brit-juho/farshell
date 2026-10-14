@@ -8,6 +8,7 @@ import { wireClipboard } from './selection.js';
 import { wireLinks } from './links.js';
 import { getVtXtermFont, getVtXtermTheme } from '../theme.js';
 import { adoptWrapper } from '../layout/surface.js';
+import { t } from '../core/i18n.js';
 
 // M6: 핀치로 조절한 폰트 크기가 있으면 그걸 기본값으로 — 없으면 기존 규칙.
 // touch.js의 _setGlobalFontSize도 같은 상한/하한을 쓰므로 여기서 export해 공유한다
@@ -254,7 +255,7 @@ export function createXtermInstance(id) {
       if (!wrapper.isConnected) return;
       scroll.wireTouchScroll(id, term, wrapper);
       select.wireTouchSelect(id, term, wrapper);
-    }).catch(() => window.showToast?.('터치 입력을 불러오지 못했습니다. 화면을 새로고침하세요.', 'warn'));
+    }).catch(() => window.showToast?.(t('터치 입력을 불러오지 못했습니다. 화면을 새로고침하세요.'), 'warn'));
   }
 
   // 모바일 텍스트 선택 — 꾹 눌러 단어를 고르고 핸들로 넓힌다(term/touch-select.js

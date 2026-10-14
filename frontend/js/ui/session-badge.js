@@ -4,12 +4,13 @@
 // 대체한다(텍스트는 원래도 있었다 — 이모지가 중복 정보였다).
 // tmux-panel.js(⋯ 메뉴 목록)와 boot.js(온보딩 목록)가 완전히 같은 판정 로직을
 // 복붙해 갖고 있었다 — 여기 하나로 합친다.
+import { t } from '../core/i18n.js';
 export function tmuxStatus(s) {
   const openInWeb = !!s.web_session_id;
   const attached = s.attached > 0;
   return {
     color: openInWeb ? 'var(--ok)' : attached ? 'var(--info)' : 'var(--sub)',
-    text: openInWeb ? '웹에 열림' : attached ? '데스크톱 attach' : '열려 있지 않음',
+    text: openInWeb ? t('웹에 열림') : attached ? t('데스크톱 attach') : t('열려 있지 않음'),
   };
 }
 

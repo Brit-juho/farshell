@@ -24,6 +24,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 import fsguard
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,7 @@ def _redact_diff(diff_text: str, is_denied=_diff_path_denied) -> str:
                 if hl.startswith("+++ "):
                     break
             out.extend(kept)
-            out.append(REDACTION_PLACEHOLDER)
+            out.append(tr("[내용 가려짐 — 보호된 경로]"))
         else:
             out.extend(section)
     return "\n".join(out)
@@ -251,7 +252,7 @@ def _collect_diff(repo: Path, file: str, staged: bool) -> dict:
     rc, out = _git(top, *args)
     if rc == 124:
         return {"repo": True, "diff": "", "truncated": False,
-                "error": "git diff 시간 초과"}
+                "error": tr("git diff 시간 초과")}
     out = _redact_diff(out)
     truncated = len(out.encode()) > MAX_DIFF_BYTES
     if truncated:
@@ -282,7 +283,7 @@ async def git_diff(
         return JSONResponse({"error": "not a directory"}, status_code=404)
     # file 은 저장소 기준 상대경로다. 절대경로/상위 탈출을 여기서 잘라낸다.
     if file and _bad_repo_relpath(file):
-        return _denied("잘못된 파일 경로입니다")
+        return _denied(tr("잘못된 파일 경로입니다"))
     return await asyncio.to_thread(_collect_diff, p, file, staged)
 
 
@@ -313,7 +314,7 @@ def _collect_log(repo: Path, file: str, skip: int, limit: int) -> dict:
         args += ["--", file]
     rc, out = _git(top, *args)
     if rc == 124:
-        return {"repo": True, "commits": [], "has_more": False, "error": "git log 시간 초과"}
+        return {"repo": True, "commits": [], "has_more": False, "error": tr("git log 시간 초과")}
     if rc != 0:
         # 커밋이 아예 없는 새 저장소 등 — 빈 로그로 취급한다.
         return {"repo": True, "root": str(top), "commits": [], "has_more": False}
@@ -345,7 +346,7 @@ async def git_log(
     if not p.is_dir():
         return JSONResponse({"error": "not a directory"}, status_code=404)
     if file and _bad_repo_relpath(file):
-        return _denied("잘못된 파일 경로입니다")
+        return _denied(tr("잘못된 파일 경로입니다"))
     return await asyncio.to_thread(_collect_log, p, file, skip, limit)
 
 
@@ -390,7 +391,7 @@ def _collect_commit_file_diff(repo: Path, sha: str, file: str) -> dict:
         args += ["--", file]
     rc, out = _git(repo, *args)
     if rc == 124:
-        return {"diff": "", "truncated": False, "error": "git show 시간 초과"}
+        return {"diff": "", "truncated": False, "error": tr("git show 시간 초과")}
     out = _redact_diff(out)
     truncated = len(out.encode()) > MAX_DIFF_BYTES
     if truncated:
@@ -411,12 +412,12 @@ async def git_show(
     if not p.is_dir():
         return JSONResponse({"error": "not a directory"}, status_code=404)
     if not _SHA_RE.match(sha):
-        return _denied("잘못된 커밋 해시입니다")
+        return _denied(tr("잘못된 커밋 해시입니다"))
     if file and _bad_repo_relpath(file):
-        return _denied("잘못된 파일 경로입니다")
+        return _denied(tr("잘못된 파일 경로입니다"))
     top = await asyncio.to_thread(_git_toplevel, p)
     if top is None:
-        return JSONResponse({"error": "git 저장소가 아닙니다"}, status_code=404)
+        return JSONResponse({"error": tr("git 저장소가 아닙니다")}, status_code=404)
 
     if file:
         diff = await asyncio.to_thread(_collect_commit_file_diff, top, sha, file)
@@ -424,7 +425,7 @@ async def git_show(
 
     meta = await asyncio.to_thread(_collect_commit_meta, top, sha)
     if meta is None:
-        return JSONResponse({"error": "커밋을 찾을 수 없습니다"}, status_code=404)
+        return JSONResponse({"error": tr("커밋을 찾을 수 없습니다")}, status_code=404)
     files = await asyncio.to_thread(_collect_commit_files, top, sha)
     return {"repo": True, "root": str(top), "commit": meta, "files": files}
 
@@ -459,7 +460,7 @@ def _resolve_repo_top(repo_raw: str) -> tuple[Path, JSONResponse | None]:
         return None, JSONResponse({"error": "not a directory"}, status_code=404)
     top = _git_toplevel(p)
     if top is None:
-        return None, JSONResponse({"error": "git 저장소가 아닙니다"}, status_code=404)
+        return None, JSONResponse({"error": tr("git 저장소가 아닙니다")}, status_code=404)
     return top, None
 
 
@@ -485,10 +486,10 @@ async def git_stage(request: Request):
         return err
     files = _validate_files(body.get("files"))
     if files is None:
-        return _denied("잘못된 파일 목록입니다")
+        return _denied(tr("잘못된 파일 목록입니다"))
     rc, _ = await asyncio.to_thread(_git, top, "add", "--", *files)
     if rc != 0:
-        return JSONResponse({"error": "git add 실패"}, status_code=500)
+        return JSONResponse({"error": tr("git add 실패")}, status_code=500)
     return await asyncio.to_thread(_collect_status, top)
 
 
@@ -502,11 +503,11 @@ async def git_unstage(request: Request):
         return err
     files = _validate_files(body.get("files"))
     if files is None:
-        return _denied("잘못된 파일 목록입니다")
+        return _denied(tr("잘못된 파일 목록입니다"))
     # reset(HEAD 없이) -- <paths> 는 워킹트리를 건드리지 않고 인덱스만 되돌린다.
     rc, _ = await asyncio.to_thread(_git, top, "reset", "-q", "--", *files)
     if rc != 0:
-        return JSONResponse({"error": "git reset 실패"}, status_code=500)
+        return JSONResponse({"error": tr("git reset 실패")}, status_code=500)
     return await asyncio.to_thread(_collect_status, top)
 
 
@@ -529,15 +530,15 @@ async def git_commit(request: Request):
         return err
     message = body.get("message", "")
     if not isinstance(message, str) or not message.strip():
-        return JSONResponse({"error": "커밋 메시지가 비었습니다"}, status_code=400)
+        return JSONResponse({"error": tr("커밋 메시지가 비었습니다")}, status_code=400)
     if len(message.encode("utf-8")) > MAX_COMMIT_MSG_BYTES:
-        return JSONResponse({"error": "커밋 메시지가 너무 깁니다"}, status_code=400)
+        return JSONResponse({"error": tr("커밋 메시지가 너무 깁니다")}, status_code=400)
     if not await asyncio.to_thread(_has_staged_changes, top):
-        return JSONResponse({"error": "커밋할 스테이지 변경사항이 없습니다"}, status_code=400)
+        return JSONResponse({"error": tr("커밋할 스테이지 변경사항이 없습니다")}, status_code=400)
     rc, out = await asyncio.to_thread(_commit, top, message)
     if rc != 0:
         logger.warning(f"git commit 실패: {out[:500]}")
-        return JSONResponse({"error": "git commit 실패"}, status_code=500)
+        return JSONResponse({"error": tr("git commit 실패")}, status_code=500)
     status = await asyncio.to_thread(_collect_status, top)
     status["committed"] = True
     return status

@@ -24,6 +24,7 @@ import vt_paths
 
 from .base import Engine, NotReady, Progress, Requirement
 from .env import HostEnv
+from i18n import tr
 
 SRC = Path(__file__).with_suffix(".swift")
 MODEL_ID = "apple-speech-ko"
@@ -31,7 +32,6 @@ HELPER_REQ = "apple-helper"
 _REPLY_TIMEOUT = 30.0     # 헬퍼 응답 대기 상한(초)
 _CHECK_TIMEOUT = 30.0
 _BUILD_TIMEOUT = 600.0
-_SETUP_MSG = "설정에서 먼저 준비해 주세요"
 
 
 def _src_hash() -> str:
@@ -51,13 +51,16 @@ def _helper_ready() -> bool:
 def check_path_line(path: str) -> str:
     """헬퍼는 한 줄에 경로 하나를 받는다 — 개행이 섞이면 프로토콜이 깨지므로 거부한다."""
     if "\n" in path or "\r" in path:
-        raise ValueError("경로에 개행 문자를 쓸 수 없습니다")
+        raise ValueError(tr("경로에 개행 문자를 쓸 수 없습니다"))
     return path
 
 
 class AppleSpeechEngine(Engine):
     id = "apple_speech"
-    label = "Apple 음성 인식 (SpeechAnalyzer)"
+
+    @property
+    def label(self) -> str:  # type: ignore[override]
+        return tr("Apple 음성 인식 (SpeechAnalyzer)")
 
     def __init__(self) -> None:
         self._proc: Optional[subprocess.Popen] = None
@@ -69,16 +72,16 @@ class AppleSpeechEngine(Engine):
     def supported(self, env: HostEnv) -> tuple[bool, str]:
         if env.os == "macos" and env.arch == "arm64" and env.macos_version and tuple(env.macos_version) >= (26, 0):
             return True, ""
-        return False, "macOS 26 이상의 애플 칩 맥에서만 쓸 수 있습니다"
+        return False, tr("macOS 26 이상의 애플 칩 맥에서만 쓸 수 있습니다")
 
     def requirements(self, env: HostEnv) -> list[Requirement]:
         has_swiftc = shutil.which("swiftc") is not None
         return [
-            Requirement(id="swiftc", label="Swift 컴파일러 (swiftc)", kind="system", satisfied=has_swiftc,
+            Requirement(id="swiftc", label=tr("Swift 컴파일러 (swiftc)"), kind="system", satisfied=has_swiftc,
                         hint="" if has_swiftc else "xcode-select --install"),
-            Requirement(id=HELPER_REQ, label="음성 인식 헬퍼 (앱이 직접 빌드)", kind="binary",
+            Requirement(id=HELPER_REQ, label=tr("음성 인식 헬퍼 (앱이 직접 빌드)"), kind="binary",
                         satisfied=_helper_ready(),
-                        hint="" if _helper_ready() else "설정에서 「받기」를 누르면 빌드합니다",
+                        hint="" if _helper_ready() else tr("설정에서 「받기」를 누르면 빌드합니다"),
                         can_install=has_swiftc),
         ]
 
@@ -86,7 +89,7 @@ class AppleSpeechEngine(Engine):
         if req_id != HELPER_REQ:
             return super().install_requirement(req_id, progress)
         if not shutil.which("swiftc"):
-            raise NotReady("swiftc가 없습니다 — 터미널에서 `xcode-select --install`을 실행해 주세요")
+            raise NotReady(tr("swiftc가 없습니다 — 터미널에서 `xcode-select --install`을 실행해 주세요"))
         if _helper_ready():
             return
         dest = helper_path()
@@ -97,12 +100,12 @@ class AppleSpeechEngine(Engine):
             r = subprocess.run(["swiftc", "-parse-as-library", "-O", str(SRC), "-o", str(tmp)],
                                capture_output=True, text=True, timeout=_BUILD_TIMEOUT)
             if r.returncode != 0:
-                tail = (r.stderr.strip().splitlines() or ["알 수 없는 오류"])[-1]
-                raise NotReady(f"헬퍼 빌드에 실패했습니다: {tail}")
+                tail = (r.stderr.strip().splitlines() or [tr("알 수 없는 오류")])[-1]
+                raise NotReady(tr("헬퍼 빌드에 실패했습니다: {tail}", tail=tail))
             os.chmod(tmp, 0o755)
             os.replace(tmp, dest)
         except subprocess.TimeoutExpired:
-            raise NotReady("헬퍼 빌드가 시간 안에 끝나지 않았습니다")
+            raise NotReady(tr("헬퍼 빌드가 시간 안에 끝나지 않았습니다"))
         finally:
             tmp.unlink(missing_ok=True)
         for old in dest.parent.glob("stt_apple-*"):      # 옛 소스 해시 빌드 정리
@@ -123,7 +126,7 @@ class AppleSpeechEngine(Engine):
 
     def download_model(self, spec, progress: Progress) -> None:
         if not _helper_ready():
-            raise NotReady(f"음성 인식 헬퍼가 아직 없습니다. {_SETUP_MSG}")
+            raise NotReady(tr("음성 인식 헬퍼가 아직 없습니다. 설정에서 먼저 준비해 주세요"))
         progress(0, None)
         p = subprocess.Popen([str(helper_path()), "--install"], stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, text=True)
@@ -145,14 +148,14 @@ class AppleSpeechEngine(Engine):
             p.wait(timeout=_BUILD_TIMEOUT)
         except subprocess.TimeoutExpired:
             p.kill()
-            raise NotReady("한국어 음성 자산 설치가 시간 안에 끝나지 않았습니다")
+            raise NotReady(tr("한국어 음성 자산 설치가 시간 안에 끝나지 않았습니다"))
         finally:
             if p.poll() is None:
                 p.kill()
             t.join(timeout=2)
         if p.returncode != 0 or not done:
-            tail = ((err_box[0] if err_box else "").strip().splitlines() or ["알 수 없는 오류"])[-1]
-            raise NotReady(f"한국어 음성 자산 설치에 실패했습니다: {tail}")
+            tail = ((err_box[0] if err_box else "").strip().splitlines() or [tr("알 수 없는 오류")])[-1]
+            raise NotReady(tr("한국어 음성 자산 설치에 실패했습니다: {tail}", tail=tail))
         progress(1, 1)
 
     def delete_model(self, spec) -> int:
@@ -165,7 +168,7 @@ class AppleSpeechEngine(Engine):
             if self._alive():
                 return
             if not _helper_ready():
-                raise NotReady(f"음성 인식 헬퍼가 아직 없습니다. {_SETUP_MSG}")
+                raise NotReady(tr("음성 인식 헬퍼가 아직 없습니다. 설정에서 먼저 준비해 주세요"))
             p = subprocess.Popen([str(helper_path()), "--serve"], stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
             q: queue.Queue = queue.Queue()
@@ -182,13 +185,13 @@ class AppleSpeechEngine(Engine):
                 first = q.get(timeout=_REPLY_TIMEOUT)
             except queue.Empty:
                 self._kill()
-                raise NotReady("음성 인식 헬퍼가 시간 안에 준비되지 않았습니다")
+                raise NotReady(tr("음성 인식 헬퍼가 시간 안에 준비되지 않았습니다"))
             if not first or json.loads(first).get("ready") != "1":
                 code = p.wait(timeout=5) if p.poll() is None else p.returncode
                 self._kill()
                 if code == 3:
-                    raise NotReady(f"한국어 음성 자산이 설치되지 않았습니다. {_SETUP_MSG}")
-                raise NotReady(f"음성 인식 헬퍼를 시작하지 못했습니다 (종료 코드 {code})")
+                    raise NotReady(tr("한국어 음성 자산이 설치되지 않았습니다. 설정에서 먼저 준비해 주세요"))
+                raise NotReady(tr("음성 인식 헬퍼를 시작하지 못했습니다 (종료 코드 {code})", code=code))
 
     def unload(self) -> None:
         with self._lock:
@@ -201,7 +204,7 @@ class AppleSpeechEngine(Engine):
         # language는 쓰지 않는다 — 헬퍼는 ko-KR 고정이다.
         with self._lock:
             if not self._alive():
-                raise NotReady(f"음성 인식 헬퍼가 실행 중이 아닙니다. {_SETUP_MSG}")
+                raise NotReady(tr("음성 인식 헬퍼가 실행 중이 아닙니다. 설정에서 먼저 준비해 주세요"))
             fd, path = tempfile.mkstemp(suffix=".wav", prefix="apple-stt-")
             try:
                 with os.fdopen(fd, "wb") as f:
@@ -213,10 +216,10 @@ class AppleSpeechEngine(Engine):
                     line = self._lines.get(timeout=_REPLY_TIMEOUT)
                 except queue.Empty:
                     self._kill()
-                    raise RuntimeError("음성 인식 헬퍼가 시간 안에 응답하지 않아 종료했습니다")
+                    raise RuntimeError(tr("음성 인식 헬퍼가 시간 안에 응답하지 않아 종료했습니다"))
                 if not line:
                     self._kill()
-                    raise RuntimeError("음성 인식 헬퍼가 예기치 않게 종료되었습니다")
+                    raise RuntimeError(tr("음성 인식 헬퍼가 예기치 않게 종료되었습니다"))
                 o = json.loads(line)
                 if "error" in o:
                     raise RuntimeError(o["error"])
@@ -225,7 +228,7 @@ class AppleSpeechEngine(Engine):
                 if isinstance(e, FileNotFoundError):
                     raise
                 self._kill()
-                raise RuntimeError(f"음성 인식 헬퍼와 통신하지 못했습니다: {e}")
+                raise RuntimeError(tr("음성 인식 헬퍼와 통신하지 못했습니다: {e}", e=e))
             finally:
                 try:
                     os.unlink(path)

@@ -27,6 +27,7 @@ import { hostKey, isRelayed } from './host-route.js';
 
 // 브라우저 등록 쿠키가 바뀌어도 같은 종류의 화면 설정을 복원한다.
 import { settingsProfile } from './platform.js';
+import { t } from './i18n.js';
 export const DEVICE_PROFILE = settingsProfile;
 const DEVICE_ENDPOINT = `/api/device-settings?profile=${DEVICE_PROFILE}`;
 
@@ -134,6 +135,8 @@ export const SCHEMA = {
   // 만든 곳별 표시(local은 끌 수 없다). 끄더라도 열려 있는 세션·입력 대기 세션은 남는다.
   'rail.origin.peer.show':     { type: 'bool', def: true, scope: 'device' },
   'rail.origin.external.show': { type: 'bool', def: true, scope: 'device' },
+  'rail.order':   { type: 'str', def: '' },
+  'rail.lineage': { type: 'str', def: '', scope: 'device' },
 };
 
 function _scopeOf(key) {
@@ -257,7 +260,7 @@ export function set(key, value) {
 
 function _pushFailToast() {
   if (typeof window.showToast === 'function') {
-    window.showToast('설정을 서버에 저장하지 못했습니다 (이 기기에서만 적용됨)', 'warn');
+    window.showToast(t('설정을 서버에 저장하지 못했습니다 (이 기기에서만 적용됨)'), 'warn');
   }
 }
 

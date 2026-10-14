@@ -10,6 +10,8 @@ export {
   buildRailLists, compactRailRows, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
   HIDEABLE_ORIGINS, normalizeOrigin, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, groupSessionRows,
+  normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, moveInOrder, stepInOrder, parseNameList,
+  ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
 } from '../../js/shell/rail-data.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
 export { mountRow, mountMenu } from './row-mount.js';

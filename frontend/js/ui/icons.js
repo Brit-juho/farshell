@@ -6,6 +6,7 @@
 // path는 Lucide(ISC 라이선스, 기존에 이미 폰트로 번들하던 것과 같은 세트)의
 // 24x24 stroke 좌표를 그대로 옮겼다.
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
+import { t } from '../core/i18n.js';
 
 const PATHS = {
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -179,7 +180,7 @@ export function icon(name, size, strokeWidth) {
 // 알 수 없는 상태(error 등)는 idle로 접는다.
 export function stateIcon(status, size = 14, unseen = false) {
   const s = normalizeState(status);
-  const label = STATE_LABEL[s] + (unseen ? ' · 아직 확인 안 함' : '');
+  const label = STATE_LABEL[s] + (unseen ? ' · ' + t('아직 확인 안 함') : '');
   return `<span class="vt-state-icon${unseen ? ' unseen' : ''}" data-state="${s}" role="img" aria-label="${label}">`
     + `${icon('state-' + s, size, 1.75)}</span>`;
 }
@@ -249,7 +250,7 @@ const AGENT_LABEL = {
   ollama: 'Ollama',
   lms: 'LM Studio',
   llamacpp: 'llama.cpp',
-  shell: '셸',
+  shell: t('셸'),
 };
 export function agentLabel(agentName) {
   if (!agentName) return '';

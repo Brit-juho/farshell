@@ -26,6 +26,7 @@ from pathlib import Path
 
 import store_lock
 import vt_paths
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -479,25 +480,25 @@ def _cli(argv: list[str]) -> int:
         items = sorted(list_items(), key=lambda x: x.get("created", 0), reverse=True)
         print()
         if not items:
-            print("  파일이 없습니다")
+            print(tr("  파일이 없습니다"))
         else:
             total = sum(x.get("size", 0) for x in items)
-            print(f"  📁 파일 {len(items)}개 · {_cli_fmt_size(total)}")
+            print(tr("  📁 파일 {n}개 · {size}", n=len(items), size=_cli_fmt_size(total)))
             print()
             for x in items:
-                shared = " [공유중]" if x.get("shares") else ""
+                shared = tr(" [공유중]") if x.get("shares") else ""
                 print(f"    {x['id']}  {x['name']}  {_cli_fmt_size(x.get('size', 0))}{shared}")
         print()
         return 0
 
     if cmd == "add":
         if not rest or rest[0].startswith("--"):
-            print("  ✗ 경로가 필요합니다. 사용법: fsh files add <path> [--share 1h|24h|7d|30d] [--pin]",
+            print(tr("  ✗ 경로가 필요합니다. 사용법: fsh files add <path> [--share 1h|24h|7d|30d] [--pin]"),
                   file=sys.stderr)
             return 2
         src = Path(rest[0]).expanduser()
         if not src.is_file():
-            print(f"  ✗ 파일이 없습니다: {src}", file=sys.stderr)
+            print(tr("  ✗ 파일이 없습니다: {path}", path=src), file=sys.stderr)
             return 1
         share_ttl_arg = None
         want_pin = False
@@ -519,11 +520,11 @@ def _cli(argv: list[str]) -> int:
         files_dir().mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, tmp)
         item = add_from_upload(tmp, src.name, src.stat().st_size)
-        print(f"  ✓ 추가됨 {item['name']} {_cli_fmt_size(item['size'])} id {item['id']}")
+        print(tr("  ✓ 추가됨 {name} {size} id {id}", name=item["name"], size=_cli_fmt_size(item["size"]), id=item["id"]))
         if share_ttl_arg:
             ttl = _CLI_TTL_ALIASES.get(share_ttl_arg)
             if ttl is None:
-                print(f"  ⚠ 알 수 없는 --share 값: {share_ttl_arg} (1h|24h|7d|30d 중 하나)", file=sys.stderr)
+                print(tr("  ⚠ 알 수 없는 --share 값: {value} (1h|24h|7d|30d 중 하나)", value=share_ttl_arg), file=sys.stderr)
                 return 0
             pin = None
             if want_pin:
@@ -531,29 +532,29 @@ def _cli(argv: list[str]) -> int:
                 print(f"  ℹ PIN: {pin}")
             share = add_share(item["id"], "pin" if want_pin else "device", ttl, False, pin=pin)
             token = build_share_token(item["id"], share)
-            print(f"  ✓ 공유 경로: /s/{token}")
+            print(tr("  ✓ 공유 경로: /s/{token}", token=token))
         return 0
 
     if cmd == "rm":
         if not rest:
-            print("  ✗ id가 필요합니다", file=sys.stderr)
+            print(tr("  ✗ id가 필요합니다"), file=sys.stderr)
             return 2
         item = _cli_find_by_prefix(rest[0])
         if item is None:
-            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            print(tr("  ✗ '{id}' 로 특정되는 파일이 없습니다", id=rest[0]), file=sys.stderr)
             return 1
         delete(item["id"])
-        print(f"  ✓ 삭제됨: {item['name']}")
+        print(tr("  ✓ 삭제됨: {name}", name=item["name"]))
         return 0
 
     if cmd == "share":
         if not rest:
-            print("  ✗ id가 필요합니다. 사용법: fsh files share <id> [--ttl 1h|24h|7d|30d] [--pin] [--once]",
+            print(tr("  ✗ id가 필요합니다. 사용법: fsh files share <id> [--ttl 1h|24h|7d|30d] [--pin] [--once]"),
                   file=sys.stderr)
             return 2
         item = _cli_find_by_prefix(rest[0])
         if item is None:
-            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            print(tr("  ✗ '{id}' 로 특정되는 파일이 없습니다", id=rest[0]), file=sys.stderr)
             return 1
         ttl_arg, want_pin, want_once = "24h", False, False
         i = 1
@@ -571,7 +572,7 @@ def _cli(argv: list[str]) -> int:
                 i += 1
         ttl = _CLI_TTL_ALIASES.get(ttl_arg)
         if ttl is None:
-            print(f"  ✗ 알 수 없는 --ttl 값: {ttl_arg} (1h|24h|7d|30d 중 하나)", file=sys.stderr)
+            print(tr("  ✗ 알 수 없는 --ttl 값: {value} (1h|24h|7d|30d 중 하나)", value=ttl_arg), file=sys.stderr)
             return 2
         pin = None
         if want_pin:
@@ -579,47 +580,47 @@ def _cli(argv: list[str]) -> int:
             print(f"  ℹ PIN: {pin}")
         share = add_share(item["id"], "pin" if want_pin else "device", ttl, want_once, pin=pin)
         token = build_share_token(item["id"], share)
-        print(f"  ✓ 공유 경로: /s/{token}")
+        print(tr("  ✓ 공유 경로: /s/{token}", token=token))
         return 0
 
     if cmd == "unshare":
         if not rest:
-            print("  ✗ id가 필요합니다", file=sys.stderr)
+            print(tr("  ✗ id가 필요합니다"), file=sys.stderr)
             return 2
         item = _cli_find_by_prefix(rest[0])
         if item is None:
-            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            print(tr("  ✗ '{id}' 로 특정되는 파일이 없습니다", id=rest[0]), file=sys.stderr)
             return 1
         shares = item.get("shares", [])
         if not shares:
-            print("  ⓘ 공유 중이 아닙니다")
+            print(tr("  ⓘ 공유 중이 아닙니다"))
             return 0
         for s in list(shares):
             remove_share(item["id"], s["shareId"])
-        print(f"  ✓ 공유 {len(shares)}건 취소됨")
+        print(tr("  ✓ 공유 {n}건 취소됨", n=len(shares)))
         return 0
 
     if cmd == "insert":
         if not rest:
-            print("  ✗ id가 필요합니다", file=sys.stderr)
+            print(tr("  ✗ id가 필요합니다"), file=sys.stderr)
             return 2
         item = _cli_find_by_prefix(rest[0])
         if item is None:
-            print(f"  ✗ '{rest[0]}' 로 특정되는 파일이 없습니다", file=sys.stderr)
+            print(tr("  ✗ '{id}' 로 특정되는 파일이 없습니다", id=rest[0]), file=sys.stderr)
             return 1
         fp = real_path_for(item["id"])
         if fp is None:
-            print("  ✗ 디스크에서 파일을 찾을 수 없습니다(고아 메타)", file=sys.stderr)
+            print(tr("  ✗ 디스크에서 파일을 찾을 수 없습니다(고아 메타)"), file=sys.stderr)
             return 1
         import tmux_target
         pane, mode = tmux_target.resolve_voice_target_pane()
         if not pane:
-            print("  ✗ 대상 tmux pane을 찾지 못했습니다", file=sys.stderr)
+            print(tr("  ✗ 대상 tmux pane을 찾지 못했습니다"), file=sys.stderr)
             return 1
         if not tmux_target.type_to_tmux(pane, str(fp)):
-            print("  ✗ 삽입 실패", file=sys.stderr)
+            print(tr("  ✗ 삽입 실패"), file=sys.stderr)
             return 1
-        print(f"  ✓ 삽입됨 → {pane} ({mode})")
+        print(tr("  ✓ 삽입됨 → {pane} ({mode})", pane=pane, mode=mode))
         return 0
 
     print(f"unknown command: {cmd}", file=sys.stderr)

@@ -23,7 +23,6 @@ async function build({ missing = false, remote = false, failure = false } = {}) 
     if (failure) throw new Error('offline');
     return { ok: true, status: 200, json: async () => String(url).includes('/catalog') ? { models: [model] } : status };
   };
-  const home = w.document.createElement('div'); home.id = 'vt-dock-voice-status'; w.document.body.append(home);
   const module = await importFresh(path.join(__dirname, '../js/voice/status-panel.js'), env.context, new Map());
   w.vtRelayHost = () => remote ? 'peer' : 'local';
   module.mountVoiceStatus(); await flush();
@@ -76,5 +75,44 @@ test('녹음 대상·종료·처리 상태를 보여 주고 패널을 닫아도 
   assert.match(w.document.getElementById('voice-record-meta').textContent, /원래 pane/);
   w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal(panel.hidden, true);
-  assert.equal(w.document.activeElement.id, 'voice-status-toggle');
+  assert.equal(w.document.activeElement.id, 'mic-btn-wrap');
+});
+
+test('별도 STT 버튼 없이 마이크 버튼의 상태 점이 서버 상태를 따른다', async () => {
+  assert.equal(html.includes('vt-dock-voice-status'), false);
+  const ready = await build({ missing: true });
+  const mic = ready.w.document.getElementById('mic-btn-wrap');
+  assert.equal(ready.w.document.getElementById('voice-status-toggle'), null);
+  assert.equal(mic.dataset.voiceState, 'setup');
+  assert.match(mic.getAttribute('aria-label'), /설치 필요/);
+  const ok = await build();
+  assert.equal(ok.w.document.getElementById('mic-btn-wrap').dataset.voiceState, undefined);
+  const bad = await build({ failure: true });
+  assert.equal(bad.w.document.getElementById('mic-btn-wrap').dataset.voiceState, 'error');
+  const stage = (phase) => ok.w.dispatchEvent(new ok.w.CustomEvent('vt:voice-stage', { detail: { phase } }));
+  stage('processing');
+  assert.equal(ok.w.document.getElementById('mic-btn-wrap').dataset.voiceState, 'busy');
+  stage('recording');
+  assert.equal(ok.w.document.getElementById('mic-btn-wrap').dataset.voiceState, undefined);
+});
+
+test('우클릭과 길게 누르기는 패널을 열고, 길게 누른 뒤의 click은 녹음을 시작하지 않는다', async () => {
+  const { w } = await build();
+  const mic = w.document.getElementById('mic-btn-wrap');
+  const panel = w.document.getElementById('voice-status-panel');
+  mic.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  assert.equal(panel.hidden, false);
+  w.document.getElementById('voice-status-close').click();
+  assert.equal(panel.hidden, true);
+  let clicks = 0;
+  w.document.addEventListener('click', () => { clicks++; });
+  mic.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+  assert.equal(clicks, 1, '평소 click은 그대로 전달된다');
+  mic.dispatchEvent(new w.Event('pointerdown', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 560));
+  assert.equal(panel.hidden, false);
+  mic.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+  assert.equal(clicks, 1, '길게 누른 직후 click은 삼킨다');
+  mic.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+  assert.equal(clicks, 2);
 });

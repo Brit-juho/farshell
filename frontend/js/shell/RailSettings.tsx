@@ -7,6 +7,7 @@
 import { For } from 'solid-js';
 
 import { createRailPrefs } from './rail-prefs.js';
+import { t } from '../core/i18n.js';
 import {
   ATTENTION_SHOW_KEY, HIDEABLE_ORIGINS, ORIGIN_LABEL, originShowKey, type Origin,
 } from './rail-data.js';
@@ -30,14 +31,14 @@ export function RailSettingsLead() {
   const originOn = (o: Origin) => !prefs().hiddenOrigins.includes(o);
   return (
     <div class="vt-railset">
-      <div class="vt-wtd-section-title">구역</div>
+      <div class="vt-wtd-section-title">{t('구역')}</div>
       <Toggle
-        label="개입 필요 구역 표시"
-        hint="입력을 기다리는 세션을 맨 위에 모아 보여줍니다"
+        label={t('개입 필요 구역 표시')}
+        hint={t('입력을 기다리는 세션을 맨 위에 모아 보여줍니다')}
         checked={prefs().attentionShow}
         onChange={(v) => set(ATTENTION_SHOW_KEY, v)}
       />
-      <div class="vt-wtd-section-title">만든 곳별 표시</div>
+      <div class="vt-wtd-section-title">{t('만든 곳별 표시')}</div>
       <For each={HIDEABLE_ORIGINS}>
         {(o) => (
           <Toggle
@@ -47,7 +48,7 @@ export function RailSettingsLead() {
           />
         )}
       </For>
-      <div class="vt-railset-note">끄더라도 열려 있는 세션과 입력을 기다리는 세션은 계속 보입니다.</div>
+      <div class="vt-railset-note">{t('끄더라도 열려 있는 세션과 입력을 기다리는 세션은 계속 보입니다.')}</div>
     </div>
   );
 }

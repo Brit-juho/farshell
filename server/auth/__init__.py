@@ -56,6 +56,7 @@ from typing import Optional
 from starlette.requests import Request
 
 import vt_paths
+from i18n import tr
 
 def _env(*names, default=""):
     """새 이름 우선, 없으면 레거시 이름으로 fallback."""
@@ -411,7 +412,7 @@ def require_human_session(request: Request) -> None:
     if request_kind(request) != AUTH_SESSION:
         raise HTTPException(status_code=403, detail={
             "error": "human_session_required",
-            "reason": "이 작업은 브라우저에서 로그인한 사람만 할 수 있습니다 (기계 토큰으로는 불가)"})
+            "reason": tr("이 작업은 브라우저에서 로그인한 사람만 할 수 있습니다 (기계 토큰으로는 불가)")})
 
 
 def check_request(token: str) -> bool:
@@ -471,21 +472,26 @@ def spawn_session_watchdog(ws, token: str, interval: float = 60.0):
 # CLI — bin/fsh가 서버 없이 직접 호출한다 (python -m auth <cmd>). 진입점은 __main__.py
 # ---------------------------------------------------------------------------
 
-_VIA_LABEL = {"tunnel": "터널", "tailscale": "Tailscale", "lan": "LAN", "local": "이 맥", "direct": "직접"}
-_METHOD_LABEL = {"password": "비밀번호", "password+otp": "비밀번호+OTP", "ticket": "QR"}
+def _via_label(key: str) -> str:
+    return {"tunnel": tr("터널"), "tailscale": "Tailscale", "lan": "LAN", "local": tr("이 맥"),
+            "direct": tr("직접")}.get(key, "")
+
+
+def _method_label(key: str) -> str:
+    return {"password": tr("비밀번호"), "password+otp": tr("비밀번호+OTP"), "ticket": "QR"}.get(key, "")
 
 
 def _span(sec: int) -> str:
     sec = max(0, int(sec))
     if sec < 3600:
-        return f"{max(1, sec // 60)}분"
+        return tr("{n}분", n=max(1, sec // 60))
     if sec < 86400:
-        return f"{sec // 3600}시간"
-    return f"{sec // 86400}일"
+        return tr("{n}시간", n=sec // 3600)
+    return tr("{n}일", n=sec // 86400)
 
 
 def _ago(sec: int) -> str:
-    return "방금" if sec < 60 else f"{_span(sec)} 전"
+    return tr("방금") if sec < 60 else tr("{span} 전", span=_span(sec))
 
 
 def _device_line(d: dict, now: int) -> str:
@@ -494,13 +500,14 @@ def _device_line(d: dict, now: int) -> str:
     seen = int(d.get("last_seen", now) or now)
     exp = int(d.get("expires_at", now) or now)
     label = d.get("label", "?")
-    tag = "[임시] " if d.get("kind") == "temporary" else ""
+    tag = tr("[임시] ") if d.get("kind") == "temporary" else ""
     if d.get("expired"):
-        life = f"만료됨 ({_ago(now - exp)})"
+        life = tr("만료됨 ({ago})", ago=_ago(now - exp))
     else:
-        life = f"남은 기간 {_span(exp - now)}"
-    return (f"    {d['id'][:8]}  {tag}{label:<10} 등록 {_ago(now - added)} / "
-            f"최근 사용 {_ago(now - seen)} / {life}")
+        life = tr("남은 기간 {span}", span=_span(exp - now))
+    return tr("    {id}  {tag}{label} 등록 {added} / 최근 사용 {seen} / {life}",
+              id=d["id"][:8], tag=tag, label=f"{label:<10}", added=_ago(now - added),
+              seen=_ago(now - seen), life=life)
 
 
 def _device_detail(d: dict) -> str:
@@ -509,9 +516,9 @@ def _device_detail(d: dict) -> str:
     parts = [p for p in (client.get("os", ""), client.get("browser", "")) if p]
     ip = d.get("ip_last") or ""
     if ip:
-        via = _VIA_LABEL.get(d.get("via", ""), "")
+        via = _via_label(d.get("via", ""))
         parts.append(f"{ip} ({via})" if via else ip)
-    method = _METHOD_LABEL.get(d.get("method", ""), "")
+    method = _method_label(d.get("method", ""))
     if method:
         parts.append(method)
     return " · ".join(parts)
@@ -543,11 +550,12 @@ def _cli(argv: list) -> int:
         now = int(time.time())
         print()
         if not devs:
-            print("  등록된 기기가 없습니다 (아직 로그인한 기기가 없거나 인증이 꺼져 있음)")
+            print(tr("  등록된 기기가 없습니다 (아직 로그인한 기기가 없거나 인증이 꺼져 있음)"))
         else:
             active = [d for d in devs if not d.get("expired")]
             expired = [d for d in devs if d.get("expired")]
-            print(f"  📱 등록된 기기 — 유효 {len(active)}개" + (f" · 만료 {len(expired)}개" if expired else ""))
+            print(tr("  📱 등록된 기기 — 유효 {n}개", n=len(active))
+                  + (tr(" · 만료 {n}개", n=len(expired)) if expired else ""))
             print()
             for d in active + expired:
                 print(_device_line(d, now))
@@ -557,10 +565,10 @@ def _cli(argv: list) -> int:
             print()
             if expired:
                 grace = DEVICE_EXPIRED_GRACE // 86400
-                print(f"  만료된 기기는 접속할 수 없고, 만료 {grace}일 뒤 목록에서 자동으로 지워집니다.")
-                print("  지금 정리:  fsh device prune")
-            print("  이름 변경: fsh device rename <id앞자리> <별명>")
-            print("  폐기:      fsh device revoke <id앞자리>")
+                print(tr("  만료된 기기는 접속할 수 없고, 만료 {grace}일 뒤 목록에서 자동으로 지워집니다.", grace=grace))
+                print(tr("  지금 정리:  fsh device prune"))
+            print(tr("  이름 변경: fsh device rename <id앞자리> <별명>"))
+            print(tr("  폐기:      fsh device revoke <id앞자리>"))
         print()
         return 0
     if cmd == "device-prune":

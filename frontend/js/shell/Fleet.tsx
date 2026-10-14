@@ -12,6 +12,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { icon, stateIcon } from '../ui/icons.js';
+import { t } from '../core/i18n.js';
 import { agentMark } from './agent-mark.js';
 // core 청크의 공유 인스턴스로 연결된다(shell.js가 core.js에서 import — 복제되지 않는다).
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
@@ -21,9 +22,10 @@ import {
 } from './rail-fetch.js';
 import {
   buildRailLists, groupSessionRows, rowMenuItems, rowSummary, runRowMenu, diffLabel, type SessionRow,
+  buildSessionTree, kidsProgress, stepInOrder, ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs, type TreeEntry,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
-import { KeywordLine, OriginMark, ScreensMark, ShareMark } from './RailRow.js';
+import { KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle } from './RailRow.js';
 import { ViewGroup } from './ViewGroup.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -102,6 +104,9 @@ function Row(props: {
   row: SessionRow;
   /** 인라인 승인 버튼(개입 필요 구역의 행에만). */
   answers?: boolean;
+  /** 위임 하위 세션(레일과 같은 규칙 — 둘째 줄 대신 위임 상태). */
+  kid?: boolean;
+  entry?: TreeEntry<SessionRow>; kidsCollapsed?: boolean; onToggleKids?: () => void;
   onOpen: () => void; onLongPress: () => void;
   onAnswer: (key: string) => Promise<void>; onSeen: () => void;
 }) {
@@ -166,18 +171,26 @@ function Row(props: {
             {(a) => <span class="vt-srow-agent vt-fleet-agent" innerHTML={agentMark(a())} />}
           </Show>
           <span class="vt-srow-name vt-fleet-name">{props.row.name}</span>
+          <Show when={props.entry}>{(e) => (
+            <KidsToggle progress={kidsProgress(e().kids)} count={e().kids.length + e().closedKids.length}
+              collapsed={!!props.kidsCollapsed} name={props.row.name} onToggle={props.onToggleKids} />
+          )}</Show>
         </div>
-        <Show when={props.row.directory || props.row.branch || diff()}>
+        <Show when={!props.kid && (props.row.directory || props.row.branch || diff())}>
           <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line2">
-            <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? '별도 워크트리' : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
+            <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
             <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd}>{props.row.directory}</span></Show>
             <Show when={props.row.branch}><span class="vt-srow-branch">{props.row.branch}</span></Show>
             <Show when={diff()}><span class="vt-srow-meta vt-fleet-diff">{diff()}</span></Show>
           </div>
         </Show>
-        <Show when={props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">정보 갱신 대기</div></Show>
+        <Show when={!props.kid && props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">{t('정보 갱신 대기')}</div></Show>
         <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line3">
-          <KeywordLine row={props.row} now={now} />
+          {/* 하위 행: 진행 중이면 에이전트 상태(작업 중·입력 대기)가 정보고, 끝났으면 위임 결과가 정보다 — 둘을 같이 쓰면
+              「보고 · 성공 완료」처럼 같은 말이 겹친다(2026-10-13 실화면). */}
+          <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} />}>
+            <LineageMark row={props.row} />
+          </Show>
           <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>
@@ -193,7 +206,7 @@ function Row(props: {
               when={hasOptions()}
               fallback={
                 <button type="button" class="vt-btn sm solid" onClick={props.onOpen}>
-                  터미널로
+                  {t('터미널로')}
                 </button>
               }
             >
@@ -220,7 +233,7 @@ function Fleet(props: { deps: FleetDeps }) {
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [repos, setRepos] = createSignal<any[]>([]);
   // 행 메모가 agentVersion()을 구독하므로 에이전트 저장소가 바뀌면 다시 계산된다.
-  const { prefs } = createRailPrefs();
+  const { prefs, set: setPref } = createRailPrefs();
   const [diffTick, setDiffTick] = createSignal(0);
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
   // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
@@ -298,6 +311,17 @@ function Fleet(props: { deps: FleetDeps }) {
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
   const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(lists().sessions,
     (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
+  // 레일과 같은 계보 트리·정렬(rail-data.ts). 폰에는 드래그가 없어 수동 순서는 행 시트의 위로·아래로 이동으로 바꾼다.
+  const fleetTree = createMemo<TreeEntry<SessionRow>[]>(() =>
+    buildSessionTree(viewGroups().filter((g) => !g.id).map((g) => g.rows[0]), prefs().sort, prefs().order));
+  const fleetKey = (r: SessionRow) => r.tmuxName || r.name;
+  const fleetOrder = () => fleetTree().map((e) => fleetKey(e.row));
+  const fleetMove = (row: SessionRow, dir: -1 | 1) => setPref(ORDER_KEY, encodeOrder('manual', stepInOrder(fleetOrder(), fleetKey(row), dir)));
+  const fleetMoveOpts = (row: SessionRow) => {
+    const at = prefs().sort === 'manual' ? fleetOrder().indexOf(fleetKey(row)) : -1;
+    return at < 0 ? undefined : { up: at > 0, down: at < fleetOrder().length - 1 };
+  };
+  const fleetFlip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
 
   const openRow = async (row: SessionRow) => {
     const w = window as any;
@@ -362,7 +386,7 @@ function Fleet(props: { deps: FleetDeps }) {
   };
 
   return (
-    <div id="vt-fleet" aria-label="플릿">
+    <div id="vt-fleet" aria-label={t('플릿')}>
       {/* C1 — 폰의 호스트 스위처. compact에서는 레일이 통째로 숨으므로 여기가
           유일한 진입점이다. 레일과 같은 규칙으로 호스트가 하나뿐이면 아예 안
           그린다. 좌표 팝업 대신 목록 위로 펼치는 시트 — 손가락으로 여는
@@ -411,17 +435,17 @@ function Fleet(props: { deps: FleetDeps }) {
       </Show>
       <Show when={rows().length === 0 && !viewHostOffline()}>
         <div class="vt-fleet-empty">
-          <div>세션이 없습니다</div>
+          <div>{t('세션이 없습니다')}</div>
           <div class="vt-fleet-empty-actions">
-            <button type="button" class="vt-btn solid" onClick={() => { (window as any).createTmuxSession?.(); props.deps.onOpenTerminal(); }}>tmux 세션 시작</button>
-            <button type="button" class="vt-btn" onClick={() => { (window as any).createSession?.(); props.deps.onOpenTerminal(); }}>일반 터미널</button>
+            <button type="button" class="vt-btn solid" onClick={() => { (window as any).createTmuxSession?.(); props.deps.onOpenTerminal(); }}>{t('tmux 세션 시작')}</button>
+            <button type="button" class="vt-btn" onClick={() => { (window as any).createSession?.(); props.deps.onOpenTerminal(); }}>{t('일반 터미널')}</button>
           </div>
         </div>
       </Show>
       {/* 개입 필요 — waiting 세션. 인라인 승인 버튼은 여기 행에만 붙는다. */}
       <Show when={lists().attention.length > 0}>
         <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head">개입 필요 · {lists().attention.length}</div>
+          <div class="vt-fleet-group-head">{t('개입 필요')} · {lists().attention.length}</div>
           <For each={lists().attention}>
             {(row) => (
               <Row
@@ -438,14 +462,62 @@ function Fleet(props: { deps: FleetDeps }) {
       </Show>
       <Show when={lists().sessions.length > 0}>
         <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head">세션 · {lists().sessions.length}</div>
-          <For each={viewGroups()}>{(group) => {
-            const members = () => <For each={group.rows}>{(row) => <Row row={row}
+          <div class="vt-fleet-group-head vt-fleet-group-head-sort">
+            <span>{t('세션')} · {lists().sessions.length}</span>
+            {/* 폰에도 정렬 전환이 있어야 수동 순서를 이 화면에서 시작할 수 있다(레일 머리와 같은 값) — 순서는 행 시트의 위로·아래로 이동. */}
+            <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
+              <For each={[['name', t('이름순')], ['manual', t('수동')]] as ['name' | 'manual', string][]}>{([id, label]) => (
+                <button type="button" role="radio" class="vt-rail-sort-opt" aria-checked={prefs().sort === id}
+                  onClick={() => { if (prefs().sort !== id) setPref(ORDER_KEY, encodeOrder(id, id === 'manual' ? fleetOrder() : prefs().order)); }}>{label}</button>
+              )}</For>
+            </div>
+          </div>
+          <For each={viewGroups().filter((g) => g.id)}>{(group) => (
+            <ViewGroup group={group} onOpen={() => { void openRow(group.rows[0]); }}>
+              <For each={group.rows}>{(row) => <Row row={row}
+                onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
+                onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}</For>
+            </ViewGroup>
+          )}</For>
+          <For each={fleetTree()}>{(entry) => {
+            const collapsed = () => prefs().kidsCollapsed.includes(fleetKey(entry.row));
+            const closedOpen = () => prefs().closedOpen.includes(fleetKey(entry.row));
+            const kid = (row: SessionRow) => <Row row={row} kid
               onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
-              onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}</For>;
-            return <Show when={group.id} fallback={members()}>
-              <ViewGroup group={group} onOpen={() => { void openRow(group.rows[0]); }}>{members()}</ViewGroup>
-            </Show>;
+              onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />;
+            return (
+              <div class="vt-lin vt-lin-fleet" classList={{ 'has-kids': entry.kids.length + entry.closedKids.length > 0 && !collapsed() }}
+                data-lane={entry.row.status}>
+                <Row row={entry.row} entry={entry} kidsCollapsed={collapsed()}
+                  onToggleKids={() => setPref(LINEAGE_KEY, encodeLineagePrefs(fleetFlip(prefs().kidsCollapsed, fleetKey(entry.row)), prefs().closedOpen))}
+                  onOpen={() => { void openRow(entry.row); }} onLongPress={() => openMenu(entry.row)}
+                  onAnswer={() => Promise.resolve()} onSeen={() => seenRow(entry.row)} />
+                <Show when={entry.kids.length + entry.closedKids.length > 0 && !collapsed()}>
+                  <div class="vt-lin-kids" role="group" aria-label={t('{name}의 하위 세션', { name: entry.row.name })}>
+                    <For each={entry.kids}>{(k, i) => (
+                      <div class="vt-lin-kid" classList={{
+                        last: i() === entry.kids.length - 1 && entry.closedKids.length === 0,
+                        merged: k.lineage?.state === 'reported', failed: k.lineage?.outcome === 'failed',
+                      }}>{kid(k)}</div>
+                    )}</For>
+                    <Show when={entry.closedKids.length > 0}>
+                      <div class="vt-lin-kid vt-lin-fold" classList={{ last: !closedOpen() }}>
+                        <button type="button" class="vt-lin-fold-btn" aria-expanded={closedOpen()}
+                          onClick={() => setPref(LINEAGE_KEY, encodeLineagePrefs(prefs().kidsCollapsed, fleetFlip(prefs().closedOpen, fleetKey(entry.row))))}>
+                          <span class="vt-lin-fold-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                          {t('닫힌 하위 {n}', { n: entry.closedKids.length })}
+                        </button>
+                      </div>
+                      <Show when={closedOpen()}>
+                        <For each={entry.closedKids}>{(k, i) => (
+                          <div class="vt-lin-kid closed" classList={{ last: i() === entry.closedKids.length - 1 }}>{kid(k)}</div>
+                        )}</For>
+                      </Show>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
+            );
           }}</For>
         </div>
       </Show>
@@ -458,7 +530,7 @@ function Fleet(props: { deps: FleetDeps }) {
           class="vt-fleet-add-btn"
           onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, ev?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
         >
-          + 새 세션
+          + {t('새 세션')}
         </button>
       </Show>
       {/* 꾹 눌러 메뉴 — 시트. 위 상단 주석 참고.
@@ -479,7 +551,7 @@ function Fleet(props: { deps: FleetDeps }) {
               <div class="vt-session-sheet vt-fleet-menu-sheet" onClick={(e) => e.stopPropagation()}>
                 <Show when={!renaming()} fallback={
                   <>
-                    <div class="vt-session-head"><h2>이름 변경</h2></div>
+                    <div class="vt-session-head"><h2>{t('이름 변경')}</h2></div>
                     <input
                       type="text"
                       class="vt-input"
@@ -492,18 +564,18 @@ function Fleet(props: { deps: FleetDeps }) {
                       }}
                     />
                     <div class="vt-dialog-actions">
-                      <button type="button" class="vt-btn" onClick={closeMenu}>취소</button>
-                      <button type="button" class="vt-btn solid" onClick={() => void commitRename()}>저장</button>
+                      <button type="button" class="vt-btn" onClick={closeMenu}>{t('취소')}</button>
+                      <button type="button" class="vt-btn solid" onClick={() => void commitRename()}>{t('저장')}</button>
                     </div>
                   </>
                 }>
                   <div class="vt-session-head"><h2>{row.name}</h2></div>
-                  <div class="vt-menu-summary" role="note" aria-label={`요약: ${rowSummary(row)}`}>{rowSummary(row)}</div>
+                  <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: rowSummary(row) })}>{rowSummary(row)}</div>
                   {/* 항목은 레일 메뉴와 같은 목록(rowMenuItems)이다. 이름 변경만 시트 안에서 입력창으로
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
-                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST })}>
+                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST, move: fleetMoveOpts(row) })}>
                       {(it) => (
                         <button
                           type="button"
@@ -511,7 +583,7 @@ function Fleet(props: { deps: FleetDeps }) {
                           classList={{ danger: !!it.danger }}
                           onClick={() => {
                             if (it.id === 'rename') { startRename(); return; }
-                            runMenuAction(() => runRowMenu(it.id, row, window, () => {}));
+                            runMenuAction(() => runRowMenu(it.id, row, window, () => {}, (d) => fleetMove(row, d)));
                           }}
                         >
                           {it.label}{it.detail ? ` · ${it.detail}` : ''}
@@ -520,7 +592,7 @@ function Fleet(props: { deps: FleetDeps }) {
                     </For>
                   </div>
                   <div class="vt-session-footer">
-                    <button type="button" class="vt-menu-item vt-session-footer-item" onClick={closeMenu}>취소</button>
+                    <button type="button" class="vt-menu-item vt-session-footer-item" onClick={closeMenu}>{t('취소')}</button>
                   </div>
                 </Show>
               </div>

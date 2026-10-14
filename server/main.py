@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -31,6 +31,7 @@ _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 
 import auth
 import file_store
+import i18n
 import network_access
 import port_proxy
 import tunnel
@@ -63,6 +64,7 @@ from routes.peer_relay import router as peer_relay_router
 from routes.host_relay import router as host_relay_router
 from routes.agent_msg import router as agent_msg_router
 from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
+from routes.delegation import router as delegation_router, human_router as delegation_human_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -371,6 +373,12 @@ async def lifespan(_app: FastAPI):
     # 만료된 노출은 터널까지 내린다(routes/ports.py). 기동 직후 한 번 돌고 이후 1분마다.
     import routes.ports as _ports_routes
     port_expiry_task = asyncio.create_task(_ports_routes.expiry_sweep_loop())
+    # 큐 재시도·멈춤 점검. 기동 시 지난 프로세스가 남긴 sending 항목부터 정리한다.
+    import queue_runner
+    queue_sweep_task = asyncio.create_task(queue_runner.sweep_loop())
+    # 위임 점검 — 세션이 사라진 위임 정리, 재시작 전에 못 보낸 결과 재전송.
+    import delegation
+    delegation_sweep_task = asyncio.create_task(delegation.sweep_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -389,6 +397,12 @@ async def lifespan(_app: FastAPI):
         port_expiry_task.cancel()
         with suppress(asyncio.CancelledError):
             await port_expiry_task
+        queue_sweep_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await queue_sweep_task
+        delegation_sweep_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await delegation_sweep_task
         await port_proxy.shutdown_all()
         from voice_sessions import coordinator
         await coordinator.close()
@@ -516,6 +530,8 @@ app.include_router(host_relay_router)
 app.include_router(agent_msg_router)
 app.include_router(agent_share_router)
 app.include_router(agent_share_human_router)
+app.include_router(delegation_router)
+app.include_router(delegation_human_router)
 app.include_router(mcp_router)
 app.include_router(mcp_elevated_router)
 
@@ -539,7 +555,15 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
 
 @app.get("/")
 async def index():
-    return FileResponse(str(Path(FRONTEND_DIR) / "index.html"))
+    # 언어는 서버가 정해 HTML에 박는다(server/i18n.py) — 그래서 FileResponse가 아니다.
+    p = Path(FRONTEND_DIR) / "index.html"
+    lang = i18n.current()
+    dict_file = Path(FRONTEND_DIR) / "js" / "locales" / f"{lang}.js"
+    version, dictionary = "", None
+    if lang != "ko" and dict_file.exists():
+        version = str(int(dict_file.stat().st_mtime))
+        dictionary = i18n.load_dict(dict_file)
+    return HTMLResponse(i18n.render_index(p.read_text(encoding="utf-8"), lang, version, dictionary))
 
 
 @app.get("/sw.js")
@@ -724,6 +748,7 @@ async def auth_status(request: Request):
     미인증 상태에서도 접근 가능해야 하므로 비밀 정보는 담지 않는다.
     """
     return {
+        "lang": i18n.current(),
         "protected": auth.is_protected(),
         # 비밀번호와 기계 토큰은 별개다 — 토큰만 설정된 환경은 protected=True인데도
         # 사람이 쓸 비밀번호는 없다. 설정 「보안」 탭이 그 둘을 구분해 보여준다.

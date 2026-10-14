@@ -1,6 +1,7 @@
 // 재연결 오버레이 UI. F4에서 terminal.js(구 :1358-1464)에서 분리.
 import { getSession, activeSessionId } from '../core/store.js';
 import { icon } from '../ui/icons.js';
+import { t } from '../core/i18n.js';
 
 // M9: wifi↔LTE 전환 같은 순간적 망 전환은 보통 1~2초면 스스로 재연결된다.
 // 예전엔 첫 onclose에서 곧바로 전체 화면 오버레이를 띄워, 그런 찰나의 끊김도
@@ -15,7 +16,7 @@ let _connOverlayTickTimer = null;
 function _fmtElapsed(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60), s = total % 60;
-  return m > 0 ? `${m}분 ${s}초 경과` : `${s}초 경과`;
+  return m > 0 ? t('{m}분 {s}초 경과', { m, s }) : t('{s}초 경과', { s });
 }
 
 // O1: 오버레이가 떠 있는 동안 1초마다 경과 시간을 갱신 — Wave의
@@ -42,13 +43,13 @@ function _toggleReconnectStop(id) {
     s._reconnectStopped = true;
     if (s.reconnTimer) { clearTimeout(s.reconnTimer); s.reconnTimer = null; }
     overlay.classList.add('stopped');
-    if (sub) sub.textContent = '자동 재연결이 중단되었습니다.';
-    if (btn) btn.textContent = '다시 연결';
+    if (sub) sub.textContent = t('자동 재연결이 중단되었습니다.');
+    if (btn) btn.textContent = t('다시 연결');
   } else {
     s._reconnectStopped = false;
     overlay.classList.remove('stopped');
-    if (sub) sub.textContent = '자동 재연결 시도 중...';
-    if (btn) btn.textContent = '끊기';
+    if (sub) sub.textContent = t('자동 재연결 시도 중...');
+    if (btn) btn.textContent = t('끊기');
     if (typeof s._reconnectNow === 'function') s._reconnectNow();
   }
 }
@@ -63,7 +64,7 @@ export function updateConnStatus(id, connected) {
   const el = document.getElementById('conn-status');
   let overlay = document.getElementById('conn-overlay');
   if (!connected && id === activeSessionId()) {
-    el.textContent = '서버 연결 끊김';
+    el.textContent = t('서버 연결 끊김');
     el.className = 'disconnected';
     const s0 = getSession(id);
     if (s0 && !s0._disconnectedAt) s0._disconnectedAt = Date.now();
@@ -81,10 +82,10 @@ export function updateConnStatus(id, connected) {
         ov.setAttribute('aria-live', 'polite');
         ov.innerHTML = `
           <div class="vt-ov-icon">${icon('wifi-off', 36)}</div>
-          <div class="vt-ov-title">서버 연결 끊김</div>
-          <div class="vt-ov-sub">자동 재연결 시도 중...</div>
+          <div class="vt-ov-title">${t('서버 연결 끊김')}</div>
+          <div class="vt-ov-sub">${t('자동 재연결 시도 중...')}</div>
           <div class="vt-ov-elapsed"></div>
-          <button type="button" class="vt-btn vt-ov-stop-btn">끊기</button>
+          <button type="button" class="vt-btn vt-ov-stop-btn">${t('끊기')}</button>
         `;
         document.body.appendChild(ov);
         if (s._connDetail) ov.querySelector('.vt-ov-sub').textContent = s._connDetail;

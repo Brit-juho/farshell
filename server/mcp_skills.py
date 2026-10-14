@@ -17,6 +17,7 @@ from pathlib import Path
 import mcp_adapters
 import mcp_scan
 import mcp_write
+from i18n import tr
 
 
 def _id(tool: str, path: Path) -> str:
@@ -27,19 +28,19 @@ def _roots(tool: str, wt: dict | None) -> list[tuple[Path, str, str]]:
     home = mcp_adapters._home()
     out: list[tuple[Path, str, str]] = []
     if tool == "claude":
-        out.append((mcp_adapters.claude_settings_dir() / "skills", "user", "직접 설치"))
+        out.append((mcp_adapters.claude_settings_dir() / "skills", "user", tr("직접 설치")))
         if wt:
-            out.append((Path(wt["path"]) / ".claude" / "skills", "project", "직접 설치"))
+            out.append((Path(wt["path"]) / ".claude" / "skills", "project", tr("직접 설치")))
     elif tool == "codex":
-        out += [(home / ".agents" / "skills", "user", "직접 설치"),
-                (mcp_adapters.codex_paths()["global"].parent / "skills", "user", "직접 설치")]
+        out += [(home / ".agents" / "skills", "user", tr("직접 설치")),
+                (mcp_adapters.codex_paths()["global"].parent / "skills", "user", tr("직접 설치"))]
         if wt:
             root = Path(wt["path"])
             cwd = Path(wt.get("cwd") or wt["path"])
             for directory in (cwd, *cwd.parents):
                 if directory == root.parent:
                     break
-                out.append((directory / ".agents" / "skills", "project", "직접 설치"))
+                out.append((directory / ".agents" / "skills", "project", tr("직접 설치")))
                 if directory == root:
                     break
     return out
@@ -87,16 +88,16 @@ def _find(skill_id: str, worktree_id: str | None) -> dict | None:
 
 def _import_target(source: dict, tool: str, scope: str, worktree_id: str | None) -> tuple[Path | None, str | None]:
     if tool not in ("claude", "codex") or scope not in ("global", "local"):
-        return None, "이 도구와 범위에는 스킬을 가져올 수 없습니다"
+        return None, tr("이 도구와 범위에는 스킬을 가져올 수 없습니다")
     wt = mcp_scan.find_worktree(worktree_id)
     if scope == "local" and not wt:
-        return None, "프로젝트 기준이 없습니다"
+        return None, tr("프로젝트 기준이 없습니다")
     roots = _roots(tool, wt)
     destination_root = (next((root for root, level, _ in roots if level == "user"), None)
                         if scope == "global" else
                         next((root for root, level, _ in roots if level == "project"), None))
     if destination_root is None:
-        return None, "대상 위치를 찾지 못했습니다"
+        return None, tr("대상 위치를 찾지 못했습니다")
     return destination_root / source["name"], None
 
 
@@ -106,16 +107,16 @@ def _source_digest(src: Path) -> tuple[str | None, int, str | None]:
     try:
         paths = sorted(src.rglob("*"), key=lambda p: str(p.relative_to(src)))
         if len(paths) > 500:
-            return None, 0, "스킬 파일이 너무 많습니다"
+            return None, 0, tr("스킬 파일이 너무 많습니다")
         for path in paths:
             if path.is_symlink() or not (path.is_dir() or path.is_file()):
-                return None, 0, "심볼릭 링크나 특수 파일이 있는 스킬은 가져올 수 없습니다"
+                return None, 0, tr("심볼릭 링크나 특수 파일이 있는 스킬은 가져올 수 없습니다")
             relative = str(path.relative_to(src)).encode()
             digest.update(len(relative).to_bytes(4, "big") + relative)
             if path.is_file():
                 count += 1
                 if path.stat().st_size > 20 * 1024 * 1024:
-                    return None, 0, "스킬 파일이 너무 큽니다"
+                    return None, 0, tr("스킬 파일이 너무 큽니다")
                 digest.update(path.read_bytes())
         return digest.hexdigest(), count, None
     except OSError as exc:
@@ -125,19 +126,19 @@ def _source_digest(src: Path) -> tuple[str | None, int, str | None]:
 def preview_import(skill_id: str, tool: str, scope: str, worktree_id: str | None) -> dict:
     source = _find(skill_id, worktree_id)
     if not source:
-        return {"status": "failed", "reason": "원본 스킬을 찾지 못했습니다"}
+        return {"status": "failed", "reason": tr("원본 스킬을 찾지 못했습니다")}
     destination, err = _import_target(source, tool, scope, worktree_id)
     if err:
         return {"status": "failed", "reason": err}
     if destination.exists() or destination.is_symlink():
-        return {"status": "failed", "reason": "같은 이름이 대상에 이미 있습니다", "conflict": True}
+        return {"status": "failed", "reason": tr("같은 이름이 대상에 이미 있습니다"), "conflict": True}
     digest, count, err = _source_digest(Path(source["source"]).parent)
     if err:
         return {"status": "failed", "reason": err}
     token = hashlib.sha256(json.dumps([skill_id, tool, scope, worktree_id, str(destination), digest]).encode()).hexdigest()
     return {"status": "ok", "name": source["name"], "tool": tool, "scope": scope,
             "target": str(destination), "file_count": count, "token": token,
-            "apply": "다음 세션부터 반영됩니다"}
+            "apply": tr("다음 세션부터 반영됩니다")}
 
 
 def _set_codex_config(text: str, path: str, enabled: bool) -> str:
@@ -170,9 +171,9 @@ def _set_codex_config(text: str, path: str, enabled: bool) -> str:
 def set_enabled(skill_id: str, enabled: bool, worktree_id: str | None) -> dict:
     skill = _find(skill_id, worktree_id)
     if not skill:
-        return {"status": "failed", "reason": "스킬을 찾지 못했습니다"}
+        return {"status": "failed", "reason": tr("스킬을 찾지 못했습니다")}
     if skill["tool"] != "codex":
-        return {"status": "failed", "reason": "이 도구의 스킬 활성화 방식은 확인되지 않았습니다"}
+        return {"status": "failed", "reason": tr("이 도구의 스킬 활성화 방식은 확인되지 않았습니다")}
     config = mcp_adapters.codex_paths()["global"]
     try:
         with mcp_write._locked(config):
@@ -186,13 +187,13 @@ def set_enabled(skill_id: str, enabled: bool, worktree_id: str | None) -> dict:
                 return {"status": "ok", "changed": False}
             parsed, perr = mcp_adapters._read_toml_text(updated)
             if perr or parsed is None:
-                raise mcp_write.WriteRefused(perr or "TOML 파싱 실패")
+                raise mcp_write.WriteRefused(perr or tr("TOML 파싱 실패"))
             if stamp != mcp_write._stamp(config):
-                raise mcp_write.WriteRefused("설정 파일이 바뀌었습니다. 다시 시도하세요")
+                raise mcp_write.WriteRefused(tr("설정 파일이 바뀌었습니다. 다시 시도하세요"))
             mcp_write._atomic_write(config, updated)
         state = _find(skill_id, worktree_id)
         if not state or state["enabled"] != enabled:
-            raise mcp_write.WriteUnverified("쓴 뒤 상태를 확인하지 못했습니다")
+            raise mcp_write.WriteUnverified(tr("쓴 뒤 상태를 확인하지 못했습니다"))
         return {"status": "ok", "changed": True}
     except mcp_write.WriteRefused as exc:
         return {"status": "failed", "reason": str(exc)}
@@ -208,40 +209,40 @@ def import_skill(skill_id: str, tool: str, scope: str, worktree_id: str | None,
     if fresh["status"] != "ok":
         return fresh
     if not token or token != fresh["token"]:
-        return {"status": "failed", "reason": "미리보기 뒤 스킬이 바뀌었습니다. 다시 확인하세요"}
+        return {"status": "failed", "reason": tr("미리보기 뒤 스킬이 바뀌었습니다. 다시 확인하세요")}
     source = _find(skill_id, worktree_id)
     if not source:
-        return {"status": "failed", "reason": "원본 스킬을 찾지 못했습니다"}
+        return {"status": "failed", "reason": tr("원본 스킬을 찾지 못했습니다")}
     destination = Path(fresh["target"])
     destination_root = destination.parent
     if destination.exists() or destination.is_symlink():
-        return {"status": "failed", "reason": "같은 이름이 대상에 이미 있습니다", "conflict": True}
+        return {"status": "failed", "reason": tr("같은 이름이 대상에 이미 있습니다"), "conflict": True}
     src = Path(source["source"]).parent
     try:
         if any(p.is_symlink() for p in src.rglob("*")):
-            return {"status": "failed", "reason": "심볼릭 링크가 있는 스킬은 가져올 수 없습니다"}
+            return {"status": "failed", "reason": tr("심볼릭 링크가 있는 스킬은 가져올 수 없습니다")}
         destination_root.mkdir(parents=True, exist_ok=True)
         temp = Path(tempfile.mkdtemp(prefix=".fsh-skill-", dir=destination_root))
         try:
             for child in src.iterdir():
                 if child.is_symlink():
-                    raise mcp_write.WriteRefused("심볼릭 링크가 있는 스킬은 가져올 수 없습니다")
+                    raise mcp_write.WriteRefused(tr("심볼릭 링크가 있는 스킬은 가져올 수 없습니다"))
                 target = temp / child.name
                 if child.is_dir():
                     shutil.copytree(child, target, symlinks=True)
                 else:
                     shutil.copy2(child, target, follow_symlinks=False)
             if any(p.is_symlink() for p in temp.rglob("*")):
-                raise mcp_write.WriteRefused("심볼릭 링크가 있는 스킬은 가져올 수 없습니다")
+                raise mcp_write.WriteRefused(tr("심볼릭 링크가 있는 스킬은 가져올 수 없습니다"))
             if not (temp / "SKILL.md").is_file():
-                raise mcp_write.WriteRefused("복사한 스킬을 확인하지 못했습니다")
+                raise mcp_write.WriteRefused(tr("복사한 스킬을 확인하지 못했습니다"))
             copied_digest, _, digest_err = _source_digest(temp)
             source_digest, _, source_err = _source_digest(src)
             if digest_err or source_err or copied_digest != source_digest:
-                raise mcp_write.WriteRefused("복사 중 원본 스킬이 바뀌었습니다. 다시 확인하세요")
+                raise mcp_write.WriteRefused(tr("복사 중 원본 스킬이 바뀌었습니다. 다시 확인하세요"))
             with mcp_write._locked(destination):
                 if destination.exists() or destination.is_symlink():
-                    raise mcp_write.WriteRefused("같은 이름이 대상에 이미 있습니다")
+                    raise mcp_write.WriteRefused(tr("같은 이름이 대상에 이미 있습니다"))
                 # 완성된 디렉터리만 노출한다. 기존 대상을 덮어쓰지 않도록
                 # lock 아래에서 확인한 뒤 같은 파일시스템 안에서 이동한다.
                 os.rename(temp, destination)

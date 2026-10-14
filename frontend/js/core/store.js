@@ -10,6 +10,7 @@
 // 라는 구조적 변경(생성/삭제/활성 전환)만 이 모듈의 책임으로 좁혔다 — 상태 변경
 // 추적이 불가능해지는 지점은 정확히 그 구조적 변경이었다.
 
+import { t } from './i18n.js';
 const sessions = {};
 let activeId = null;
 const subscribers = new Set();
@@ -60,7 +61,7 @@ export function sessionDisplayName(id) {
   if (s.displayName) return s.displayName;
   // 일반(비 tmux) 세션의 폴백 이름이 id를 8자로 잘라 붙인 의미 없는
   // 문자열이었다 — 열린 순서대로 "터미널 1", "터미널 2"…
-  return `터미널 ${plainSessionOrdinal(id)}`;
+  return t('터미널 {num}', { num: plainSessionOrdinal(id) });
 }
 
 /** id가 몇 번째로 열린 일반(비 tmux) 세션인지 — 등록 순서(객체 삽입 순서)로

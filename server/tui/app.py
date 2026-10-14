@@ -10,9 +10,9 @@ try:
     from textual.binding import Binding
     from textual.widgets import DataTable, Footer, Header, Static
 except ImportError:
+    from i18n import tr
     sys.stderr.write(
-        "ERROR: textual 미설치. 설치: pip install textual\n"
-        "또는: pip install -r requirements-core.txt\n"
+        tr("ERROR: textual 미설치. 설치: pip install textual\n또는: pip install -r requirements-core.txt\n")
     )
     sys.exit(1)
 
@@ -27,6 +27,7 @@ from .helpers import (
     tmux,
 )
 from .modals import ConfirmDialog, RenameDialog
+from i18n import tr
 
 
 class VTManagerApp(App):
@@ -62,14 +63,14 @@ class VTManagerApp(App):
     """
 
     BINDINGS = [
-        Binding("q", "quit", "종료"),
-        Binding("r", "rename", "이름 변경"),
+        Binding("q", "quit", tr("종료")),
+        Binding("r", "rename", tr("이름 변경")),
         Binding("k", "kill", "kill"),
         Binding("a", "attach", "attach"),
-        Binding("l", "lock", "lock 토글"),
-        Binding("u", "unlock", "lock 해제"),
-        Binding("R", "refresh", "새로고침"),
-        Binding("?", "help", "도움말"),
+        Binding("l", "lock", tr("lock 토글")),
+        Binding("u", "unlock", tr("lock 해제")),
+        Binding("R", "refresh", tr("새로고침")),
+        Binding("?", "help", tr("도움말")),
     ]
 
     def __init__(self):
@@ -79,7 +80,7 @@ class VTManagerApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield Static("로딩 중...", id="status-bar")
+        yield Static(tr("로딩 중..."), id="status-bar")
         yield DataTable(id="sessions-table", cursor_type="row", zebra_stripes=True)
         yield Static("", id="footer-info")
         yield Footer()
@@ -88,7 +89,7 @@ class VTManagerApp(App):
         self.title = "fsh manage"
         self.sub_title = "FarShell Manager"
         table = self.query_one(DataTable)
-        table.add_column("세션", width=24)
+        table.add_column(tr("세션"), width=24)
         table.add_column("Window", width=8)
         table.add_column("Attached", width=10)
         table.add_column("🎤 Voice Target", width=20)
@@ -102,7 +103,7 @@ class VTManagerApp(App):
         srv = get_server_status()
 
         status = self.query_one("#status-bar", Static)
-        srv_str = f"● 서버 :{VT_PORT}" if srv.get("running") else "○ 서버 정지"
+        srv_str = tr("● 서버 :{port}", port=VT_PORT) if srv.get("running") else tr("○ 서버 정지")
         voice_str = "● Voice" if srv.get("voice") else "○ Voice"
         target_str = f"🔒 LOCK: {self.target}" if self.target else "🔓 AUTO"
         hotkey_str = f"⌨ {spec}" + (" (DISABLED)" if disabled else "")
@@ -127,10 +128,9 @@ class VTManagerApp(App):
 
         footer = self.query_one("#footer-info", Static)
         footer.update(
-            "[r] rename  [k] kill  [a] attach (새 창)  [l] voice lock  "
-            "[u] unlock  [R] refresh  [q] quit\n"
-            f"Hotkey 변경: 'fsh hotkey set voice <key>'  |  "
-            f"Help: 'fsh help concepts'"
+            tr("[r] rename  [k] kill  [a] attach (새 창)  [l] voice lock  [u] unlock  [R] refresh  [q] quit")
+            + "\n"
+            + tr("Hotkey 변경: 'fsh hotkey set voice <key>'  |  Help: 'fsh help concepts'")
         )
 
     def _selected_name(self) -> str | None:
@@ -141,7 +141,7 @@ class VTManagerApp(App):
 
     def action_refresh(self) -> None:
         self.refresh_data()
-        self.notify("새로고침 완료", timeout=1.5)
+        self.notify(tr("새로고침 완료"), timeout=1.5)
 
     def action_rename(self) -> None:
         name = self._selected_name()
@@ -166,15 +166,15 @@ class VTManagerApp(App):
                     body={"name": new_name},
                 )
                 if ok and resp and resp.get("tmux_renamed"):
-                    self.notify(f"이름 변경: {name} → {new_name}")
+                    self.notify(tr("이름 변경: {old} → {new}", old=name, new=new_name))
                     self.refresh_data()
                     return
             rc, _, err = tmux("rename-session", "-t", name, new_name)
             if rc == 0:
-                self.notify(f"이름 변경: {name} → {new_name}")
+                self.notify(tr("이름 변경: {old} → {new}", old=name, new=new_name))
                 self.refresh_data()
             else:
-                self.notify(f"실패: {err.strip()}", severity="error")
+                self.notify(tr("실패: {err}", err=err.strip()), severity="error")
 
         self.push_screen(RenameDialog(name), on_done)
 
@@ -194,15 +194,15 @@ class VTManagerApp(App):
             if not killed:
                 rc, _, err = tmux("kill-session", "-t", name)
                 if rc != 0:
-                    self.notify(f"실패: {err.strip()}", severity="error")
+                    self.notify(tr("실패: {err}", err=err.strip()), severity="error")
                     return
-            self.notify(f"세션 '{name}' 종료")
+            self.notify(tr("세션 '{name}' 종료", name=name))
             if self.target == name:
                 set_voice_target(None)
             self.refresh_data()
 
         self.push_screen(
-            ConfirmDialog(f"세션 '{name}'을 정말 종료하시겠습니까?"),
+            ConfirmDialog(tr("세션 '{name}'을 정말 종료하시겠습니까?", name=name)),
             on_confirm,
         )
 
@@ -214,7 +214,7 @@ class VTManagerApp(App):
         try:
             vt_bin = os.environ.get("VT_BIN") or self._find_vt_bin()
             if not vt_bin:
-                self.notify("fsh CLI 못 찾음", severity="error")
+                self.notify(tr("fsh CLI 못 찾음"), severity="error")
                 return
             subprocess.Popen(
                 [vt_bin, "attach", name],
@@ -223,9 +223,9 @@ class VTManagerApp(App):
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-            self.notify(f"새 터미널 창에 '{name}' attach 시도")
+            self.notify(tr("새 터미널 창에 '{name}' attach 시도", name=name))
         except Exception as e:
-            self.notify(f"실패: {e}", severity="error")
+            self.notify(tr("실패: {err}", err=e), severity="error")
 
     def _find_vt_bin(self) -> str | None:
         # fsh가 정식 명령어, vt는 하위 호환 심링크(둘 다 같은 bin/fsh를 가리킨다) —
@@ -242,20 +242,17 @@ class VTManagerApp(App):
         if not name:
             return
         set_voice_target(name)
-        self.notify(f"🔒 음성 타깃 LOCK: {name}")
+        self.notify(tr("🔒 음성 타깃 LOCK: {name}", name=name))
         self.refresh_data()
 
     def action_unlock(self) -> None:
         set_voice_target(None)
-        self.notify("🔓 음성 타깃 → AUTO")
+        self.notify(tr("🔓 음성 타깃 → AUTO"))
         self.refresh_data()
 
     def action_help(self) -> None:
         self.notify(
-            "단축키:\n"
-            "  ↑↓ 선택  Enter (선택)\n"
-            "  r=rename  k=kill  a=attach (새 창)\n"
-            "  l=음성 lock  u=lock 해제  R=새로고침  q=종료",
+            tr("단축키:\n  ↑↓ 선택  Enter (선택)\n  r=rename  k=kill  a=attach (새 창)\n  l=음성 lock  u=lock 해제  R=새로고침  q=종료"),
             timeout=6,
         )
 

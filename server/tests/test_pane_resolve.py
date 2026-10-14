@@ -61,6 +61,12 @@ def test_pane_id_wins_even_when_cwd_is_ambiguous(panes):
     assert (session, how) == ("a", "pane")
 
 
+def test_dead_pane_does_not_fall_back_to_cwd(panes):
+    """닫힌 세션의 마지막 훅이 같은 cwd의 다른 세션에 붙으면 안 된다(2026-10-13 위임 E2E)."""
+    panes += [PaneInfo(session="parent", command="zsh", pid=1, path="/repo", pane_id="%0")]
+    assert pane_resolve.resolve("%2", "/tmp/tmux-501/fsh,1,0", "/repo") == (None, "pane-gone")
+
+
 def test_codex_hook_ignores_daemon_inherited_pane(panes):
     """Codex 공용 데몬의 훅은 다른 TUI가 만든 TMUX_PANE을 상속할 수 있다."""
     panes += [
@@ -109,10 +115,11 @@ def test_foreign_tmux_without_cwd_match_reports_reason(panes):
     assert pane_resolve.resolve("%1", "/tmp/tmux-501/default,1,0", "/nowhere") == (None, "foreign-tmux")
 
 
-def test_unknown_pane_id_falls_back_to_cwd(panes):
-    """훅이 보고한 pane이 이미 죽었을 때(세션 종료 등)."""
+def test_unknown_pane_id_does_not_fall_back_to_cwd(panes):
+    """훅이 보고한 pane이 이미 죽었을 때(세션 종료 등). 예전엔 cwd로 대신 찾았는데, 그러면 같은
+    폴더의 **다른** 세션이 죽은 세션의 done을 받아 큐가 엉뚱한 pane에 입력됐다(2026-10-13)."""
     panes += [PaneInfo(session="solo", command="claude", pid=1, path="/repo", pane_id="%9")]
-    assert pane_resolve.resolve("%404", "/tmp/tmux-501/fsh,1,0", "/repo") == ("solo", "cwd")
+    assert pane_resolve.resolve("%404", "/tmp/tmux-501/fsh,1,0", "/repo") == (None, "pane-gone")
 
 
 def test_no_clues_at_all(panes):

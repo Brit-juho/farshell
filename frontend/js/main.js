@@ -9,6 +9,10 @@
 // 속성 핸들러, (3) clearWorkspace처럼 콘솔 디버깅용으로 의도적으로 남긴 것뿐이다.
 import '../../styles/main.css';
 
+// 정적 HTML 문구 번역 — 다른 모듈이 DOM 문구를 읽거나 바꾸기 전에 한 번.
+import { applyI18n } from './core/i18n.js';
+applyI18n(document.body);
+
 import './core/env.js';
 import './core/api.js';
 // 호스트 전환 — 전환해 둔 맥에 닿을 수 없는 이유(삭제·권한 회수·구버전)면 이 맥으로 되돌린다.

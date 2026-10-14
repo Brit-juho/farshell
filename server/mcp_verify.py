@@ -32,6 +32,7 @@ import re
 import signal
 import time
 from typing import Optional
+from i18n import tr
 
 DEFAULT_TIMEOUT_SEC = 5.0
 SIGTERM_GRACE_SEC = 2.0
@@ -109,7 +110,7 @@ async def _speak(proc: "asyncio.subprocess.Process") -> int:
     await proc.stdin.drain()
     line = await proc.stdout.readline()
     if not line:
-        raise ConnectionError("initialize 응답 없음(EOF)")
+        raise ConnectionError(tr("initialize 응답 없음(EOF)"))
 
     proc.stdin.write(_rpc(None, "notifications/initialized"))
     await proc.stdin.drain()
@@ -118,13 +119,13 @@ async def _speak(proc: "asyncio.subprocess.Process") -> int:
     await proc.stdin.drain()
     line = await proc.stdout.readline()
     if not line:
-        raise ConnectionError("tools/list 응답 없음(EOF)")
+        raise ConnectionError(tr("tools/list 응답 없음(EOF)"))
     data = json.loads(line)
     if "error" in data:
         raise ConnectionError(str(data["error"]))
     tools = (data.get("result") or {}).get("tools")
     if not isinstance(tools, list):
-        raise ConnectionError("tools/list 응답 형식이 예상과 다름")
+        raise ConnectionError(tr("tools/list 응답 형식이 예상과 다름"))
     return len(tools)
 
 
@@ -165,7 +166,7 @@ async def verify_stdio(
     except FileNotFoundError:
         # E20 — 메시지에 명령 이름만. 경로가 넘어왔어도 basename만 보인다.
         return {"state": ERROR, "tool_count": None,
-                "error": f"명령을 찾을 수 없음: {os.path.basename(command)}",
+                "error": tr("명령을 찾을 수 없음: {name}", name=os.path.basename(command)),
                 "checked_at": checked_at}
     except OSError as e:
         return {"state": ERROR, "tool_count": None,
@@ -179,7 +180,7 @@ async def verify_stdio(
         # E16/E17 — 그룹 kill은 finally가 한다. 여기서는 죽이는 중인
         # 프로세스의 출력을 더 안 읽는다(위 docstring의 규율).
         return {"state": ERROR, "tool_count": None,
-                "error": "응답 시간 초과", "checked_at": checked_at}
+                "error": tr("응답 시간 초과"), "checked_at": checked_at}
     except (ConnectionError, json.JSONDecodeError) as e:
         # EOF/파싱 실패 — 프로세스가 스스로 끝났을 가능성이 높다. **그게
         # 확인될 때만**(wait()가 종료를 알려줄 때만) stderr를 건진다. 아직
@@ -202,15 +203,15 @@ def _net_error(e: BaseException) -> str:
     """사람이 읽는 말로. `str(URLError)`는 `<urlopen error [Errno 61] …>`라 화면에 못 낸다."""
     import urllib.error
     if isinstance(e, urllib.error.HTTPError):
-        return f"서버가 HTTP {e.code}로 응답했습니다"
+        return tr("서버가 HTTP {code}로 응답했습니다", code=e.code)
     reason = getattr(e, "reason", e)
     if isinstance(e, TimeoutError) or isinstance(reason, TimeoutError):
-        return "응답 시간 초과"
+        return tr("응답 시간 초과")
     if isinstance(reason, ConnectionRefusedError):
-        return "연결이 거부됐습니다 — 서버가 떠 있지 않거나 주소가 다릅니다"
+        return tr("연결이 거부됐습니다 — 서버가 떠 있지 않거나 주소가 다릅니다")
     if isinstance(reason, OSError) and reason.strerror:
-        return f"연결하지 못했습니다 — {reason.strerror}"
-    return f"연결하지 못했습니다 — {reason}"
+        return tr("연결하지 못했습니다 — {reason}", reason=reason.strerror)
+    return tr("연결하지 못했습니다 — {reason}", reason=reason)
 
 
 async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIMEOUT_SEC) -> dict:
@@ -218,7 +219,7 @@ async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIM
     checked_at = time.time()
     if not confirmed:
         return {"state": ERROR, "tool_count": None,
-                "error": "네트워크 확인이 필요합니다", "checked_at": checked_at}
+                "error": tr("네트워크 확인이 필요합니다"), "checked_at": checked_at}
 
     import urllib.error
     import urllib.request
@@ -244,7 +245,7 @@ async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIM
         with opener.open(req, timeout=timeout) as r:
             payload = r.read(1024 * 1024 + 1)
             if len(payload) > 1024 * 1024:
-                raise ValueError("응답 크기 제한")
+                raise ValueError(tr("응답 크기 제한"))
             raw = payload.decode("utf-8", errors="replace")
         return json.loads(raw)
 
@@ -258,13 +259,13 @@ async def verify_http(url: str, *, confirmed: bool, timeout: float = DEFAULT_TIM
                 "checked_at": checked_at}
     except ValueError:
         return {"state": ERROR, "tool_count": None,
-                "error": "initialize 응답을 JSON으로 읽을 수 없음", "checked_at": checked_at}
+                "error": tr("initialize 응답을 JSON으로 읽을 수 없음"), "checked_at": checked_at}
 
     if (not isinstance(data, dict) or "error" in data or data.get("id") != 1
             or not isinstance(data.get("result"), dict)
             or not data["result"].get("protocolVersion") or not isinstance(data["result"].get("serverInfo"), dict)):
         return {"state": ERROR, "tool_count": None,
-                "error": "initialize 응답 형식이 올바르지 않습니다",
+                "error": tr("initialize 응답 형식이 올바르지 않습니다"),
                 "checked_at": checked_at}
     # http/sse는 initialize 성공만 확인한다 — tools/list까지 요구하면 이 검증이
     # 세션 상태(초기화 완료 통지)를 더 들고 있어야 해서 범위를 넘는다.

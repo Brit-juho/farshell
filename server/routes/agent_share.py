@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict
 import agent_share
 import auth
 import share_identity
+from i18n import tr
 from agent_share import ShareError
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,7 @@ async def _announce(req: dict, snap: dict) -> None:
         import routes.system as system_routes
         if not getattr(system_routes, "_workspace_clients", None) and push.available():
             # 잠금화면에 뜨는 글 — 세션 이름·닉네임·내용은 싣지 않는다.
-            await asyncio.to_thread(push.send, "에이전트 접근 요청", "공유 세션 사용 승인이 필요합니다", "/")
+            await asyncio.to_thread(push.send, tr("에이전트 접근 요청"), tr("공유 세션 사용 승인이 필요합니다"), "/")
     except Exception as e:  # noqa: BLE001
         logger.debug(f"공유 요청 푸시 실패: {e}")
 
@@ -312,7 +313,7 @@ async def share_session(name: str, request: Request):
     """세션을 에이전트에게 공유(또는 닉네임·모드 변경). 모드를 낮추면 즉시 효력이 있다."""
     body = await _body(request)
     if not _NAME_RE.fullmatch(name):
-        return _err(ShareError("not_found", f"'{name}' 세션이 없습니다", 404))
+        return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404))
     try:
         share = await asyncio.to_thread(agent_share.set_share, name, body.get("nick"), body.get("mode"))
     except ShareError as e:
@@ -326,7 +327,7 @@ async def share_session(name: str, request: Request):
 async def unshare_session(name: str):
     """공유 해제 — 그 세션의 모든 권한과 대기·거부 요청도 지운다."""
     if not _NAME_RE.fullmatch(name):
-        return _err(ShareError("not_found", f"'{name}' 세션이 없습니다", 404))
+        return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404))
     try:
         res = await asyncio.to_thread(agent_share.unset_share, name)
     except ShareError as e:
@@ -353,7 +354,7 @@ async def decide_request(request_id: str, request: Request):
     snap = await asyncio.to_thread(agent_share.snapshot)
     level = body.get("level")
     if level is not None and not isinstance(level, str):
-        return _err(ShareError("bad_level", "level 은 read 또는 readwrite 입니다", 400))
+        return _err(ShareError("bad_level", tr("level 은 read 또는 readwrite 입니다"), 400))
     try:
         res = await asyncio.to_thread(agent_share.decide, request_id, body.get("decision"), level, snap)
     except ShareError as e:

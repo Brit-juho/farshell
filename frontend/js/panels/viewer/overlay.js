@@ -10,6 +10,7 @@ import { openViewerPane } from '../../layout/store.js';
 import { isCompactMode } from '../../layout/compact.js';
 import { COMPACT_MAX } from '../../layout/breakpoints.js';
 import { wireRatioResizer } from '../../layout/resizer.js';
+import { t } from '../../core/i18n.js';
 
 export const PANEL_ID = 'vt-file';
 const FLOAT_MIN_W = 320;
@@ -60,8 +61,8 @@ function _surface() {
 
 function _headHTML() {
   return '<div class="vt-file-title"><span class="vt-file-name"></span><span class="vt-file-dir"></span></div>'
-    + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="새로고침" data-tip="새로고침">${icon('refresh-cw', 14)}</button>`
-    + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="페인으로 열기" data-tip="페인으로 열기">${icon('columns-2', 14)}</button>`;
+    + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`
+    + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="${t('페인으로 열기')}" data-tip="${t('페인으로 열기')}">${icon('columns-2', 14)}</button>`;
 }
 
 function _refresh(el) {
@@ -197,7 +198,7 @@ export function openFileOverlay(path) {
   let ro = null;
   const panel = openPanel({
     id: PANEL_ID,
-    ariaLabel: '파일 보기',
+    ariaLabel: t('파일 보기'),
     headHTML: _headHTML(),
     bodyId: 'vt-file-body',
     extraClass: compact ? 'vt-file-compact' : '',

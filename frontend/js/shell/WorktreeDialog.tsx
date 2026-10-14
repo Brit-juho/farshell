@@ -8,6 +8,7 @@ import { pushScope } from '../core/keyboard-scopes.js';
 // §4-3). git dock(소스컨트롤 탭, 40-dock-git.md)이 브랜치 API를 갖게 되면
 // 그걸로 바꿀 수 있게 텍스트 입력으로 둔다 — 자유 입력이라 기능은 동일하다.
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
+import { t } from '../core/i18n.js';
 
 export interface WorktreeDialogDeps {
   vtFetch: (path: string, opts?: RequestInit) => Promise<unknown>;
@@ -28,7 +29,7 @@ interface Props {
 // 2026-09-23 — 구글의 이전 CLI 종료로 Antigravity(agy)로 대체했다
 // (server/agents.py와 같은 결정). qwen-code 추가.
 const AGENT_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: '없음' },
+  { value: '', label: t('없음') },
   { value: 'claude', label: 'Claude' },
   { value: 'codex', label: 'Codex' },
   { value: 'aider', label: 'Aider' },
@@ -106,7 +107,7 @@ export function WorktreeDialog(props: Props) {
       });
       props.onCreated(res);
     } catch (e: any) {
-      setErrorMsg(e?.data?.error || e?.message || '워크트리 생성 실패');
+      setErrorMsg(e?.data?.error || e?.message || t('워크트리 생성 실패'));
     } finally {
       setSubmitting(false);
     }
@@ -123,29 +124,29 @@ export function WorktreeDialog(props: Props) {
 
   return (
     <div ref={scopeElement} class="vt-viewer-backdrop vt-wtd-backdrop" onClick={onBackdropClick}>
-      <div class="vt-viewer-card vt-wtd-card" role="dialog" aria-modal="true" aria-label="워크트리 만들기">
+      <div class="vt-viewer-card vt-wtd-card" role="dialog" aria-modal="true" aria-label={t('워크트리 만들기')}>
         <div class="vt-wtd-head">
-          <span class="vt-wtd-title">워크트리 만들기</span>
-          <button type="button" class="vt-btn sm quiet vt-wtd-x" onClick={props.onClose} aria-label="닫기">×</button>
+          <span class="vt-wtd-title">{t('워크트리 만들기')}</span>
+          <button type="button" class="vt-btn sm quiet vt-wtd-x" onClick={props.onClose} aria-label={t('닫기')}>×</button>
         </div>
         <div class="vt-wtd-body">
           <label class="vt-wtd-row">
-            <span class="vt-wtd-label">저장소</span>
+            <span class="vt-wtd-label">{t('저장소')}</span>
             <input class="vt-input mono vt-wtd-input" value={repo()} onInput={(e) => setRepo(e.currentTarget.value)} placeholder="/Users/.../repo" />
           </label>
           <label class="vt-wtd-row">
-            <span class="vt-wtd-label">기준</span>
+            <span class="vt-wtd-label">{t('기준')}</span>
             <input class="vt-input mono vt-wtd-input" value={base()} onInput={(e) => setBase(e.currentTarget.value)} placeholder="master" />
           </label>
           <label class="vt-wtd-row">
-            <span class="vt-wtd-label">이름</span>
+            <span class="vt-wtd-label">{t('이름')}</span>
             <input class="vt-input mono vt-wtd-input" value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="queue-scope" />
           </label>
           <Show when={name() && !nameValid()}>
-            <div class="vt-wtd-error">이름은 영숫자·-·_ 만 가능합니다</div>
+            <div class="vt-wtd-error">{t('이름은 영숫자·-·_ 만 가능합니다')}</div>
           </Show>
           <label class="vt-wtd-row">
-            <span class="vt-wtd-label">브랜치</span>
+            <span class="vt-wtd-label">{t('브랜치')}</span>
             <input
               class="vt-input mono vt-wtd-input"
               value={branch()}
@@ -154,17 +155,17 @@ export function WorktreeDialog(props: Props) {
             />
           </label>
 
-          <div class="vt-wtd-section-title">무엇을 격리할까</div>
+          <div class="vt-wtd-section-title">{t('무엇을 격리할까')}</div>
 
           <div class="vt-wtd-row">
-            <span class="vt-wtd-label">포트 범위</span>
+            <span class="vt-wtd-label">{t('포트 범위')}</span>
             <input type="checkbox" checked={portsEnabled()} onChange={(e) => setPortsEnabled(e.currentTarget.checked)} />
             <Show when={portsEnabled()}>
               <input
                 class="vt-input mono vt-wtd-input vt-wtd-input-narrow"
                 value={portBase()}
                 onInput={(e) => setPortBase(e.currentTarget.value)}
-                placeholder="자동(5200~)"
+                placeholder={t('자동(5200~)')}
                 inputmode="numeric"
               />
             </Show>
@@ -173,9 +174,9 @@ export function WorktreeDialog(props: Props) {
           <div class="vt-wtd-row">
             <span class="vt-wtd-label">node_modules</span>
             <select class="vt-input mono vt-wtd-select" value={nodeModules()} onChange={(e) => setNodeModules(e.currentTarget.value as any)}>
-              <option value="symlink">심링크</option>
-              <option value="copy">복사</option>
-              <option value="none">안 함</option>
+              <option value="symlink">{t('심링크')}</option>
+              <option value="copy">{t('복사')}</option>
+              <option value="none">{t('안 함')}</option>
             </select>
           </div>
 
@@ -185,22 +186,22 @@ export function WorktreeDialog(props: Props) {
                   (HeaderExtras.tsx와 같은 형태). currentColor를 따르므로
                   .vt-wtd-warn의 경고색이 아이콘에도 그대로 간다. */}
               <svg class="vt-wtd-warn-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-              <span>{base()}와 package.json이 다릅니다 — 심링크로 두면 깨질 수 있습니다.</span>
-              <button type="button" class="vt-btn sm vt-wtd-warn-fix" onClick={() => setNodeModules('copy')}>복사로</button>
+              <span>{t('{base}와 package.json이 다릅니다 — 심링크로 두면 깨질 수 있습니다.', { base: base() })}</span>
+              <button type="button" class="vt-btn sm vt-wtd-warn-fix" onClick={() => setNodeModules('copy')}>{t('복사로')}</button>
             </div>
           </Show>
 
           <div class="vt-wtd-row">
             <span class="vt-wtd-label">.env</span>
             <select class="vt-input mono vt-wtd-select" value={envMode()} onChange={(e) => setEnvMode(e.currentTarget.value as any)}>
-              <option value="inherit">상속</option>
-              <option value="empty">빈 값</option>
-              <option value="none">안 함</option>
+              <option value="inherit">{t('상속')}</option>
+              <option value="empty">{t('빈 값')}</option>
+              <option value="none">{t('안 함')}</option>
             </select>
           </div>
 
           <div class="vt-wtd-row">
-            <span class="vt-wtd-label">에이전트</span>
+            <span class="vt-wtd-label">{t('에이전트')}</span>
             <select class="vt-input mono vt-wtd-select" value={agent()} onChange={(e) => setAgent(e.currentTarget.value)}>
               <For each={AGENT_OPTIONS}>
                 {(o) => <option value={o.value}>{o.label}</option>}
@@ -213,9 +214,9 @@ export function WorktreeDialog(props: Props) {
           </Show>
         </div>
         <div class="vt-wtd-foot">
-          <button type="button" class="vt-wtd-cancel" onClick={props.onClose}>취소</button>
+          <button type="button" class="vt-wtd-cancel" onClick={props.onClose}>{t('취소')}</button>
           <button type="button" class="vt-wtd-submit" disabled={!canSubmit()} onClick={submit}>
-            {submitting() ? '만드는 중…' : '만들고 전환'}
+            {submitting() ? t('만드는 중…') : t('만들고 전환')}
           </button>
         </div>
       </div>

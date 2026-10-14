@@ -16,6 +16,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
+from i18n import tr
 
 MAX_JSON_BYTES = 5 * 1024 * 1024
 
@@ -40,7 +41,7 @@ def executable() -> Optional[str]:
 def run_json(args: list[str], *, timeout: float = 10.0) -> tuple[object | None, str | None]:
     binary = executable()
     if not binary:
-        return None, "Codex CLI를 찾지 못했습니다"
+        return None, tr("Codex CLI를 찾지 못했습니다")
 
     env = os.environ.copy()
     env["CODEX_HOME"] = str(codex_home())
@@ -56,18 +57,18 @@ def run_json(args: list[str], *, timeout: float = 10.0) -> tuple[object | None, 
             env=env,
         )
     except subprocess.TimeoutExpired:
-        return None, "Codex CLI 응답 시간이 초과됐습니다"
+        return None, tr("Codex CLI 응답 시간이 초과됐습니다")
     except OSError as exc:
-        return None, f"Codex CLI 실행 실패: {exc.__class__.__name__}"
+        return None, tr("Codex CLI 실행 실패: {error}", error=exc.__class__.__name__)
 
     if proc.returncode != 0:
-        return None, f"Codex CLI가 종료 코드 {proc.returncode}을 반환했습니다"
+        return None, tr("Codex CLI가 종료 코드 {code}을 반환했습니다", code=proc.returncode)
     if len(proc.stdout) > MAX_JSON_BYTES:
-        return None, "Codex CLI JSON 응답이 너무 큽니다"
+        return None, tr("Codex CLI JSON 응답이 너무 큽니다")
     try:
         return json.loads(proc.stdout.decode("utf-8")), None
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
-        return None, "Codex CLI JSON을 해석하지 못했습니다"
+        return None, tr("Codex CLI JSON을 해석하지 못했습니다")
 
 
 # `codex plugin list --json`은 원격 마켓플레이스까지 조회해 단독으로 19초가 걸린다
@@ -108,7 +109,7 @@ def installed_plugin_ids() -> tuple[set[str], Optional[str]]:
     if err:
         return set(), err
     if not isinstance(data, dict) or not isinstance(data.get("installed"), list):
-        return set(), "Codex 플러그인 응답 형식이 예상과 다릅니다"
+        return set(), tr("Codex 플러그인 응답 형식이 예상과 다릅니다")
     return {
         str(row.get("pluginId"))
         for row in data["installed"]
@@ -121,7 +122,7 @@ def mcp_auth_statuses() -> tuple[dict[str, str], Optional[str]]:
     if err:
         return {}, err
     if not isinstance(data, list):
-        return {}, "Codex MCP 응답 형식이 예상과 다릅니다"
+        return {}, tr("Codex MCP 응답 형식이 예상과 다릅니다")
     out: dict[str, str] = {}
     for row in data:
         if not isinstance(row, dict) or not row.get("name"):

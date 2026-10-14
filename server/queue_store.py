@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import store_lock
+from i18n import tr
 import vt_paths
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,24 @@ MAX_TEXT_LEN = 8000
 
 STATUS_PENDING = "pending"
 STATUS_BLOCKED = "blocked"      # safe_mode 에 막힘 — 큐에 남는다
+# 투입 중 — 드레인이 집어 들었지만 아직 결과가 안 난 항목. 예전엔 꺼내서(pop) 파일에서
+# 지운 뒤 보냈으므로, 그 사이 삭제 요청은 404가 나고 실패하면 새 dict로 다시 꽂혔다.
+# 이제 자리에 남겨 두고 표시만 바꾼다 — 이 상태의 항목은 삭제·비우기를 거부한다
+# (Proliferate의 Protected 큐 항목에서 가져온 규칙: 나가는 중인 지시를 사용자가
+# 지웠다고 믿게 만들면 안 된다).
+STATUS_SENDING = "sending"
+
+# 재시도 — 일시적인 이유(승인 대기·사람 입력 중·세션 일시 부재·tmux 실패)로 막힌
+# 항목은 sweep()이 백오프 간격으로 pending에 되돌린다. MAX_ATTEMPTS번 막히면 더는
+# 자동으로 풀지 않고 사람에게 알린다(조용히 무한 재시도하지 않는다).
+RETRY_BASE_SEC = 5
+RETRY_MAX_SEC = 300
+MAX_ATTEMPTS = 5
+# sending이 이보다 오래 남아 있으면 드레인이 도중에 죽은 것이다. 이미 나갔을 수도
+# 있으므로 자동 재전송하지 않고 blocked(재시도 없음)로 돌려 사람이 판단하게 한다.
+SENDING_STALE_SEC = 30
+
+TRANSITIONS_MAX_BYTES = 1_000_000
 
 
 def _state_dir() -> Path:
@@ -53,6 +72,53 @@ def _path() -> Path:
 
 def _lock_path() -> Path:
     return _state_dir() / "queue.lock"
+
+
+def _transitions_path() -> Path:
+    return _state_dir() / "queue_transitions.jsonl"
+
+
+def _log_transition(item: dict, frm: str | None, to: str, reason: str = "",
+                    actor: str = "") -> None:
+    """상태 전이를 한 줄씩 덧붙인다(OpenRig queue_transitions에서 가져옴).
+
+    큐 락 안에서 불린다 — 같은 락이 순서를 보장한다. 기록 실패가 큐 동작을 막으면
+    안 되므로 예외는 경고로만 남긴다. 상한을 넘으면 `.1` 하나만 남기고 돌린다.
+    """
+    entry = {"ts": time.time(), "id": item.get("id"), "from": frm, "to": to}
+    if reason:
+        entry["reason"] = reason[:200]
+    if actor:
+        entry["actor"] = actor
+    p = _transitions_path()
+    try:
+        if p.is_file() and p.stat().st_size > TRANSITIONS_MAX_BYTES:
+            os.replace(str(p), str(p.with_name(p.name + ".1")))
+        fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        logger.warning(f"큐 전이 기록 실패: {e}")
+
+
+def transitions(item_id: str | None = None, limit: int = 50) -> list[dict]:
+    """최근 전이 기록. item_id는 접두어로 맞춘다(CLI가 8자 id를 쓴다)."""
+    out: list[dict] = []
+    p = _transitions_path()
+    for path in (p.with_name(p.name + ".1"), p):
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        e = json.loads(line)
+                    except ValueError:
+                        continue
+                    if item_id and not str(e.get("id", "")).startswith(item_id):
+                        continue
+                    out.append(e)
+        except OSError:
+            continue
+    return out[-limit:] if limit > 0 else out
 
 
 @contextmanager
@@ -163,21 +229,22 @@ def list_items() -> list[dict]:
         return _read_unlocked()
 
 
-def add(text: str, target: str | dict | None = None, source: dict | None = None) -> dict:
+def add(text: str, target: str | dict | None = None, source: dict | None = None,
+        preface: str | None = None) -> dict:
     """`source`는 항목을 만든 쪽이 결과를 되돌려 받을 표식이다(예: 에이전트 메시지
     id, agent_msg.py). 큐 자신은 뜻을 보지 않고 그대로 싣는다."""
     text = (text or "").strip()
     if not text:
-        return {"ok": False, "error": "empty", "reason": "빈 내용은 넣을 수 없습니다"}
+        return {"ok": False, "error": "empty", "reason": tr("빈 내용은 넣을 수 없습니다")}
     if len(text) > MAX_TEXT_LEN:
         return {"ok": False, "error": "too_long",
-                "reason": f"내용이 너무 깁니다 (최대 {MAX_TEXT_LEN}자)"}
+                "reason": tr("내용이 너무 깁니다 (최대 {max}자)", max=MAX_TEXT_LEN)}
     with _locked():
         items = _read_unlocked()
         if len(items) >= MAX_ITEMS:
             # 조용히 버리지 않는다 — 넣은 줄 알았는데 없는 것이 최악이다.
             return {"ok": False, "error": "full",
-                    "reason": f"큐가 가득 찼습니다 (최대 {MAX_ITEMS}개)"}
+                    "reason": tr("큐가 가득 찼습니다 (최대 {max}개)", max=MAX_ITEMS)}
         item = {
             "id": uuid.uuid4().hex[:12],
             "text": text,
@@ -187,31 +254,50 @@ def add(text: str, target: str | dict | None = None, source: dict | None = None)
         }
         if source:
             item["source"] = source
+        if preface:
+            # 투입 때 붙여넣기 앞에 타이핑하는 한 줄(tmux_target.send_to_tmux). 받는 에이전트가
+            # 따라야 하는 지시(위임)에만 쓴다.
+            item["preface"] = " ".join(str(preface).split())[:300]
         items.append(item)
         _write_unlocked(items)
+        _log_transition(item, None, STATUS_PENDING, actor="add")
     return {"ok": True, "item": item, "count": len(items)}
 
 
 def remove(item_id: str) -> dict:
     with _locked():
         items = _read_unlocked()
+        target = next((x for x in items if x.get("id") == item_id), None)
+        if target is None:
+            return {"ok": False, "error": "not_found", "reason": tr("항목이 없습니다")}
+        if target.get("status") == STATUS_SENDING:
+            return {"ok": False, "error": "item_sending",
+                    "reason": tr("지금 전송 중인 항목이라 삭제할 수 없습니다")}
         rest = [x for x in items if x.get("id") != item_id]
-        if len(rest) == len(items):
-            return {"ok": False, "error": "not_found", "reason": "항목이 없습니다"}
         _write_unlocked(rest)
+        _log_transition(target, target.get("status"), "removed", actor="remove")
     return {"ok": True, "count": len(rest)}
 
 
 def clear() -> dict:
+    """전송 중 항목은 남긴다 — 나머지만 비운다(remove와 같은 보호 규칙)."""
     with _locked():
-        n = len(_read_unlocked())
-        _write_unlocked([])
-    return {"ok": True, "removed": n}
+        items = _read_unlocked()
+        keep = [x for x in items if x.get("status") == STATUS_SENDING]
+        for x in items:
+            if x.get("status") != STATUS_SENDING:
+                _log_transition(x, x.get("status"), "removed", actor="clear")
+        _write_unlocked(keep)
+    return {"ok": True, "removed": len(items) - len(keep), "kept_sending": len(keep)}
 
 
-def pop_next(session: str | None = None, *, session_scoped: bool = False,
-             targeted_only: bool = False) -> dict | None:
-    """맨 앞의 pending 항목을 꺼낸다(FIFO). blocked 는 건너뛴다.
+def claim_next(session: str | None = None, *, session_scoped: bool = False,
+               targeted_only: bool = False) -> dict | None:
+    """맨 앞의 pending 항목을 sending으로 표시하고 돌려준다(FIFO). blocked는 건너뛴다.
+
+    항목은 파일에 그대로 남는다 — 결과는 complete()/mark_blocked()가 정한다.
+    같은 flock 안에서 표시하므로 서버와 CLI가 동시에 드레인해도 한 항목을 두 번
+    집지 않는다.
 
     session_scoped=True(자동 드레인, stop 훅)면 다른 세션을 타깃한 항목은
     건너뛰고 큐에 그대로 남긴다 — "멈춘 세션"과 다른 세션 몫이 잘못 흘러가지
@@ -222,7 +308,7 @@ def pop_next(session: str | None = None, *, session_scoped: bool = False,
     """
     with _locked():
         items = _read_unlocked()
-        for i, x in enumerate(items):
+        for x in items:
             if x.get("status") != STATUS_PENDING:
                 continue
             if session_scoped:
@@ -235,46 +321,183 @@ def pop_next(session: str | None = None, *, session_scoped: bool = False,
                 # 받았다는 이유로 그걸 가져가면 안 된다.
                 if targeted_only and not target:
                     continue
-            items.pop(i)
+            x["status"] = STATUS_SENDING
+            x["sending_at"] = time.time()
             _write_unlocked(items)
-            return x
+            _log_transition(x, STATUS_PENDING, STATUS_SENDING, actor="drain")
+            return dict(x)
     return None
 
 
-def mark_blocked(item: dict, reason: str) -> None:
-    """safe_mode 에 막힌 항목을 큐에 되돌려 놓는다.
+def complete(item: dict) -> None:
+    """투입 성공 — 큐에서 지운다."""
+    with _locked():
+        items = _read_unlocked()
+        rest = [x for x in items if x.get("id") != item.get("id")]
+        if len(rest) != len(items):
+            _write_unlocked(rest)
+        _log_transition(item, STATUS_SENDING, "sent", actor="drain")
 
-    맨 앞(index 0)에 항상 꽂으면, A 가 B보다 먼저 막혔을 때 최종 순서가
-    [B, A] 로 뒤집힌다 — "제출 순서대로 처리한다"는 큐의 설계 원칙 위반이다.
-    이미 blocked 상태인 마지막 항목 바로 뒤에 꽂아 blocked 항목끼리의
-    상대 순서를 제출 순서로 유지한다. blocked 항목이 아직 없으면 기존과
-    동일하게 맨 앞에 넣는다(뒤에 남은 pending 항목보다는 앞이어야 한다).
+
+def _retry_delay(attempts: int) -> float:
+    return min(RETRY_MAX_SEC, RETRY_BASE_SEC * (2 ** max(0, attempts - 1)))
+
+
+def mark_blocked(item: dict, reason: str, *, retriable: bool = False) -> dict:
+    """투입하지 못한 항목을 제자리에서 blocked로 바꾼다.
+
+    claim_next가 항목을 자리에 남겨 두므로 순서는 그대로다(예전엔 꺼냈다가 다시
+    꽂느라 blocked끼리의 순서를 따로 맞춰야 했다). 그 사이 사라졌으면(옛 형식
+    호출 등) 다른 blocked 항목 바로 뒤에 다시 넣는다 — 지시를 조용히 잃지 않는다.
+
+    retriable=True면 sweep()이 백오프 뒤 pending으로 되돌린다. 시도 횟수가
+    MAX_ATTEMPTS에 닿으면 재시도를 멈추고 `exhausted`를 단다. 반환값은 갱신된 항목.
     """
     with _locked():
         items = _read_unlocked()
-        item = {**item, "status": STATUS_BLOCKED, "blocked_reason": reason}
-        insert_at = 0
-        for i, x in enumerate(items):
-            if x.get("status") == STATUS_BLOCKED:
-                insert_at = i + 1
-        items.insert(insert_at, item)
+        cur = next((x for x in items if x.get("id") == item.get("id")), None)
+        if cur is None:
+            cur = {**item}
+            insert_at = 0
+            for i, x in enumerate(items):
+                if x.get("status") == STATUS_BLOCKED:
+                    insert_at = i + 1
+            items.insert(insert_at, cur)
+        frm = cur.get("status") or STATUS_SENDING
+        cur["status"] = STATUS_BLOCKED
+        cur["blocked_reason"] = reason
+        cur.pop("sending_at", None)
+        cur.pop("retry_at", None)
+        cur.pop("exhausted", None)
+        if retriable:
+            attempts = int(cur.get("attempts") or 0) + 1
+            cur["attempts"] = attempts
+            if attempts >= MAX_ATTEMPTS:
+                cur["exhausted"] = True
+            else:
+                cur["retry_at"] = time.time() + _retry_delay(attempts)
         _write_unlocked(items)
+        _log_transition(cur, frm, STATUS_BLOCKED, reason, actor="drain")
+        return dict(cur)
 
 
 def unblock(item_id: str) -> dict:
+    """사람이 직접 푼다 — 재시도 횟수도 처음부터."""
     with _locked():
         items = _read_unlocked()
-        found = False
+        found = None
         for x in items:
             if x.get("id") == item_id:
-                x["status"] = STATUS_PENDING
-                x.pop("blocked_reason", None)
-                found = True
+                found = x
                 break
-        if not found:
+        if found is None:
             return {"ok": False, "error": "not_found"}
+        if found.get("status") == STATUS_SENDING:
+            return {"ok": False, "error": "item_sending",
+                    "reason": tr("지금 전송 중인 항목입니다")}
+        frm = found.get("status")
+        found["status"] = STATUS_PENDING
+        for k in ("blocked_reason", "attempts", "retry_at", "exhausted"):
+            found.pop(k, None)
         _write_unlocked(items)
+        _log_transition(found, frm, STATUS_PENDING, actor="unblock")
     return {"ok": True}
+
+
+def recover_interrupted() -> int:
+    """서버 기동 시 1회 — 지난 프로세스가 투입 도중 죽어 sending으로 남은 항목.
+
+    이미 나갔을 수도 있으므로 다시 보내지 않는다(같은 지시가 두 번 실행되는 것이
+    한 번 빠지는 것보다 나쁘다). 재시도 없는 blocked로 돌려 사람이 판단한다.
+    """
+    n = 0
+    with _locked():
+        items = _read_unlocked()
+        for x in items:
+            if x.get("status") == STATUS_SENDING:
+                x["status"] = STATUS_BLOCKED
+                x["blocked_reason"] = "서버 재시작으로 전송이 중단됨 — 이미 들어갔는지 확인 후 해제하세요"
+                x.pop("sending_at", None)
+                _log_transition(x, STATUS_SENDING, STATUS_BLOCKED, x["blocked_reason"], actor="recover")
+                n += 1
+        if n:
+            _write_unlocked(items)
+    return n
+
+
+def sweep(now: float | None = None) -> dict:
+    """주기 점검(OpenRig stuck sweep에서 가져옴).
+
+    1. 너무 오래 sending인 항목 → 재시도 없는 blocked(recover_interrupted와 같은 이유).
+    2. 재시도 시각이 지난 retriable blocked → pending.
+    반환: {"stale": [...], "retried": [...]} — 호출부가 알림·드레인 예약에 쓴다.
+    """
+    now = time.time() if now is None else now
+    stale: list[dict] = []
+    retried: list[dict] = []
+    with _locked():
+        items = _read_unlocked()
+        for x in items:
+            st = x.get("status")
+            if st == STATUS_SENDING and now - float(x.get("sending_at") or 0) > SENDING_STALE_SEC:
+                x["status"] = STATUS_BLOCKED
+                x["blocked_reason"] = "전송이 끝나지 않았습니다 — 들어갔는지 확인 후 해제하세요"
+                x.pop("sending_at", None)
+                _log_transition(x, STATUS_SENDING, STATUS_BLOCKED, x["blocked_reason"], actor="sweep")
+                stale.append(dict(x))
+            elif (st == STATUS_BLOCKED and x.get("retry_at")
+                  and now >= float(x["retry_at"])):
+                x["status"] = STATUS_PENDING
+                x.pop("retry_at", None)
+                _log_transition(x, STATUS_BLOCKED, STATUS_PENDING,
+                                x.get("blocked_reason", ""), actor="sweep")
+                x.pop("blocked_reason", None)
+                retried.append(dict(x))
+        if stale or retried:
+            _write_unlocked(items)
+    return {"stale": stale, "retried": retried}
+
+
+def sources() -> list[dict]:
+    """대기·전송 중·막힌 항목의 source 목록 — 위임 재전송이 중복을 피할 때 쓴다."""
+    return [x["source"] for x in list_items() if isinstance(x.get("source"), dict)]
+
+
+def replace_pending_by_source(match, text: str, source: dict) -> bool:
+    """source가 match에 맞는 pending 항목이 있으면 내용을 바꾼다(위임 결과 합치기). 바꿨으면 True.
+
+    전송 중·막힌 항목은 건드리지 않는다 — 이미 나가는 중이거나 사람이 볼 대상이다."""
+    text = (text or "").strip()
+    if not text or len(text) > MAX_TEXT_LEN:
+        return False
+    with _locked():
+        items = _read_unlocked()
+        for x in items:
+            src = x.get("source")
+            if x.get("status") == STATUS_PENDING and isinstance(src, dict) and match(src):
+                x["text"] = text
+                x["source"] = source
+                _write_unlocked(items)
+                _log_transition(x, STATUS_PENDING, STATUS_PENDING, "합침", actor="replace")
+                return True
+    return False
+
+
+def remove_pending_by_source(match) -> int:
+    """source가 match에 맞는 pending·blocked 항목을 지운다(위임 닫기). 전송 중은 남긴다."""
+    with _locked():
+        items = _read_unlocked()
+        keep, n = [], 0
+        for x in items:
+            src = x.get("source")
+            if (x.get("status") in (STATUS_PENDING, STATUS_BLOCKED) and isinstance(src, dict) and match(src)):
+                _log_transition(x, x.get("status"), "removed", actor="delegation_close")
+                n += 1
+                continue
+            keep.append(x)
+        if n:
+            _write_unlocked(keep)
+    return n
 
 
 def pending_count() -> int:
@@ -282,6 +505,20 @@ def pending_count() -> int:
 
 
 # --- CLI (bin/fsh 가 서버 없이 직접 호출한다 — `python -m auth` 와 같은 방식) ----
+
+
+def _run_via_server() -> dict | None:
+    """서버의 `/api/queue/run`을 부른다. 서버에 닿지 못하면 None."""
+    try:
+        import mcp_farshell
+    except ImportError:
+        return None
+    status, data = mcp_farshell._api("POST", "/api/queue/run")
+    if status == 0:
+        return None
+    if status == 401:
+        return {"ok": False, "reason": tr("서버 인증 실패 — 'fsh doctor'로 토큰을 확인하세요")}
+    return data
 
 
 def _cli(argv: list[str]) -> int:
@@ -294,15 +531,16 @@ def _cli(argv: list[str]) -> int:
         items = list_items()
         print()
         if not items:
-            print("  큐가 비어 있습니다")
+            print("  " + tr("큐가 비어 있습니다"))
             print()
-            print("  추가: vt queue add \"테스트 고쳐줘\"")
+            print("  " + tr("추가: vt queue add \"테스트 고쳐줘\""))
         else:
             pend = sum(1 for x in items if x.get("status") == STATUS_PENDING)
-            print(f"  📋 프롬프트 큐 — {len(items)}건 (대기 {pend})")
+            print("  📋 " + tr("프롬프트 큐 — {total}건 (대기 {pending})", n=len(items), total=len(items), pending=pend))
             print()
             for i, x in enumerate(items, 1):
-                mark = "⏸" if x.get("status") == STATUS_BLOCKED else f"{i}."
+                st = x.get("status")
+                mark = "⏸" if st == STATUS_BLOCKED else ("→" if st == STATUS_SENDING else f"{i}.")
                 ts = target_session(x)
                 target = f" [{ts}]" if ts else ""
                 text = x["text"].replace("\n", " ⏎ ")
@@ -310,22 +548,27 @@ def _cli(argv: list[str]) -> int:
                     text = text[:57] + "..."
                 print(f"    {mark:<3} {x['id'][:8]}{target}  {text}")
                 if x.get("blocked_reason"):
-                    print(f"         └ 차단됨: {x['blocked_reason']} — 해제: vt queue unblock {x['id'][:8]}")
+                    if x.get("retry_at"):
+                        left = max(0, int(float(x["retry_at"]) - time.time()))
+                        tail = tr("{sec}초 뒤 재시도 ({tries}/{max})", sec=left, tries=x.get('attempts', 0), max=MAX_ATTEMPTS)
+                    else:
+                        tail = tr("해제: vt queue unblock {id}", id=x['id'][:8])
+                    print("         └ " + tr("차단됨: {reason} — {tail}", reason=x['blocked_reason'], tail=tail))
             print()
-            print("  실행: vt queue run   삭제: vt queue rm <id>   비우기: vt queue clear")
+            print("  " + tr("실행: vt queue run   삭제: vt queue rm <id>   비우기: vt queue clear   기록: vt queue log [id]"))
         print()
         return 0
 
     if cmd == "add":
         if not rest:
-            print("  ✗ 내용이 없습니다. 사용법: vt queue add \"내용\" [세션]", file=sys.stderr)
+            print("  ✗ " + tr("내용이 없습니다. 사용법: vt queue add \"내용\" [세션]"), file=sys.stderr)
             return 2
         # 마지막 인자가 tmux 세션 이름이면 타깃으로 쓴다(vt queue add "..." dev)
         r = add(rest[0], rest[1] if len(rest) > 1 else None)
         if not r.get("ok"):
             print(f"  ✗ {r['reason']}", file=sys.stderr)
             return 1
-        print(f"  ✓ 큐에 추가 ({r['count']}건) — {r['item']['id'][:8]}")
+        print("  ✓ " + tr("큐에 추가 ({count}건) — {id}", n=r['count'], count=r['count'], id=r['item']['id'][:8]))
         return 0
 
     if cmd in ("rm", "remove", "delete"):
@@ -335,18 +578,22 @@ def _cli(argv: list[str]) -> int:
         prefix = rest[0]
         match = [x for x in list_items() if x["id"].startswith(prefix)]
         if not match:
-            print(f"  ✗ '{prefix}' 로 시작하는 항목이 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{prefix}' 로 시작하는 항목이 없습니다", prefix=prefix), file=sys.stderr)
             return 1
         if len(match) > 1:
-            print(f"  ✗ '{prefix}' 가 {len(match)}건과 일치합니다 — 더 길게 지정하세요", file=sys.stderr)
+            print("  ✗ " + tr("'{prefix}' 가 {count}건과 일치합니다 — 더 길게 지정하세요", n=len(match), prefix=prefix, count=len(match)), file=sys.stderr)
             return 1
-        remove(match[0]["id"])
-        print(f"  ✓ 삭제됨: {match[0]['text'][:40]}")
+        r = remove(match[0]["id"])
+        if not r.get("ok"):
+            print(f"  ✗ {r.get('reason', r.get('error'))}", file=sys.stderr)
+            return 1
+        print("  ✓ " + tr("삭제됨: {text}", text=match[0]['text'][:40]))
         return 0
 
     if cmd == "clear":
         r = clear()
-        print(f"  ✓ {r['removed']}건 삭제")
+        kept = tr(" (전송 중 {count}건은 남김)", n=r['kept_sending'], count=r['kept_sending']) if r.get("kept_sending") else ""
+        print("  ✓ " + tr("{count}건 삭제", n=r['removed'], count=r['removed']) + kept)
         return 0
 
     if cmd == "unblock":
@@ -355,22 +602,41 @@ def _cli(argv: list[str]) -> int:
             return 2
         match = [x for x in list_items() if x["id"].startswith(rest[0])]
         if len(match) != 1:
-            print(f"  ✗ '{rest[0]}' 로 특정되는 항목이 없습니다", file=sys.stderr)
+            print("  ✗ " + tr("'{prefix}' 로 특정되는 항목이 없습니다", prefix=rest[0]), file=sys.stderr)
             return 1
-        unblock(match[0]["id"])
-        print(f"  ✓ 재개됨: {match[0]['text'][:40]}")
+        r = unblock(match[0]["id"])
+        if not r.get("ok"):
+            print(f"  ✗ {r.get('reason', r.get('error'))}", file=sys.stderr)
+            return 1
+        print("  ✓ " + tr("재개됨: {text}", text=match[0]['text'][:40]))
+        return 0
+
+    if cmd == "log":
+        rows = transitions(rest[0] if rest else None, limit=50)
+        if not rows:
+            print("  " + tr("기록이 없습니다"))
+            return 0
+        for e in rows:
+            ts = time.strftime("%m-%d %H:%M:%S", time.localtime(e.get("ts", 0)))
+            why = f"  {e['reason']}" if e.get("reason") else ""
+            print(f"  {ts}  {str(e.get('id'))[:8]}  {e.get('from') or '-'} → {e.get('to')}"
+                  f"  [{e.get('actor', '')}]{why}")
         return 0
 
     if cmd == "run":
-        import queue_runner
-        r = queue_runner.drain_once()
+        # 서버가 떠 있으면 서버에 맡긴다 — pane 입력 락과 사람 입력 확인은 서버
+        # 프로세스 안에만 있다. 서버가 없을 때만 여기서 직접 투입한다.
+        r = _run_via_server()
+        if r is None:
+            import queue_runner
+            r = queue_runner.drain_once()
         if not r.get("ok"):
             print(f"  ✗ {r.get('reason', r.get('error'))}", file=sys.stderr)
             return 1
         if r["drained"] == 0:
-            print("  ⓘ 큐가 비었습니다")
+            print("  ⓘ " + tr("큐가 비었습니다"))
             return 0
-        print(f"  ✓ 투입 → {r['pane']} ({r['mode']}), 남은 {r['remaining']}건")
+        print("  ✓ " + tr("투입 → {pane} ({mode}), 남은 {count}건", n=r['remaining'], pane=r['pane'], mode=r['mode'], count=r['remaining']))
         return 0
 
     print(f"unknown command: {cmd}", file=sys.stderr)

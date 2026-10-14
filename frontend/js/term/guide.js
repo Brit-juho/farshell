@@ -4,45 +4,47 @@
 import { registerAction } from '../core/dom.js';
 import { openPanel } from '../panels/panel.js';
 import { icon } from '../ui/icons.js';
+import { t } from '../core/i18n.js';
 
 function showGuide() {
   // 섹션 정의 — {icon, title, rows:[{key, desc}]}. key는 왼쪽 라벨, desc는 설명(HTML).
   // icon은 이제 Lucide 웹폰트 클래스명이 아니라 ui/icons.js 맵의 키(D5).
+  const kbdCtrlShiftV = '<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>';
   const sections = [
-    { icon: 'rocket', title: '시작하기', rows: [
-      { key: '<kbd>+</kbd> 버튼', desc: '새 세션 생성 (tmux 세션 또는 일반 터미널)' },
-      { key: '탭', desc: `더블클릭 → 이름 변경 · ${icon('x', 12)} → 닫기(tmux는 detach만 됨, 완전 종료는 ⋯ 메뉴)` },
-      { key: 'pane 분할', desc: 'pane 헤더의 분할 버튼 → 화면을 나눠 여러 세션을 동시에 표시' },
+    { icon: 'rocket', title: t('시작하기'), rows: [
+      { key: t('{key} 버튼', { key: '<kbd>+</kbd>' }), desc: t('새 세션 생성 (tmux 세션 또는 일반 터미널)') },
+      { key: t('탭'), desc: t('더블클릭 → 이름 변경 · {x} → 닫기(tmux는 detach만 됨, 완전 종료는 ⋯ 메뉴)', { x: icon('x', 12) }) },
+      { key: t('pane 분할'), desc: t('pane 헤더의 분할 버튼 → 화면을 나눠 여러 세션을 동시에 표시') },
     ]},
-    { icon: 'mic', title: '음성 입력', rows: [
-      { key: '마이크 버튼', desc: `상단 ${icon('mic', 14)} 탭 → 말하면 STT로 텍스트 입력` },
-      { key: '맥 핫키', desc: '<code>fsh voice</code> 실행 후 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> 토글' },
-      { key: '핸즈프리', desc: '모바일 반복 버튼 → 녹음·인식 연속 자동 반복' },
-      { key: '음성 전용', desc: '⋯ 메뉴 → 터미널 숨기고 큰 마이크만 표시(이어폰용)' },
+    { icon: 'mic', title: t('음성 입력'), rows: [
+      { key: t('마이크 버튼'), desc: t('상단 {mic} 탭 → 말하면 STT로 텍스트 입력', { mic: icon('mic', 14) }) },
+      { key: t('맥 핫키'), desc: t('{cmd} 실행 후 {combo} 토글', { cmd: '<code>fsh voice</code>', combo: kbdCtrlShiftV }) },
+      { key: t('핸즈프리'), desc: t('모바일 반복 버튼 → 녹음·인식 연속 자동 반복') },
+      { key: t('음성 전용'), desc: t('⋯ 메뉴 → 터미널 숨기고 큰 마이크만 표시(이어폰용)') },
     ]},
-    { icon: 'clipboard-copy', title: '복사 · 붙여넣기', rows: [
-      { key: '복사', desc: '텍스트 드래그 → <b>자동 복사</b> · 또는 선택 후 우클릭' },
-      { key: '드래그해도 선택이 안 될 때', desc: 'tmux 마우스 모드(<code>mouse on</code>)가 켜져 있으면 드래그를 tmux가 먼저 가로챔 → <kbd>Shift</kbd>+드래그(맥은 <kbd>Option</kbd>+드래그도 가능)로 강제 선택' },
-      { key: '붙여넣기', desc: '<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd> · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> · 선택 없이 우클릭' },
-      { key: '이미지', desc: '이미지를 복사해 붙여넣으면 서버에 <b>자동 업로드</b> + 경로가 명령줄에 삽입' },
-      { key: '자동 복사 켬/끔', desc: '⋯ 메뉴 → 설정에서 토글. <b>켬</b>: 드래그·vim/tmux 복사가 클립보드에 즉시 반영. <b>끔</b>: 선택만 되고 클립보드는 그대로 — 우클릭으로 원할 때만 복사' },
-      { key: '맥↔웹 동기화', desc: 'vim/tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 <code>fsh clip</code> 실행' },
+    { icon: 'clipboard-copy', title: t('복사 · 붙여넣기'), rows: [
+      { key: t('복사'), desc: t('텍스트 드래그 → {auto} · 또는 선택 후 우클릭', { auto: `<b>${t('자동 복사')}</b>` }) },
+      { key: t('드래그해도 선택이 안 될 때'), desc: t('tmux 마우스 모드({cmd})가 켜져 있으면 드래그를 tmux가 먼저 가로챔 → {shift}+드래그(맥은 {option}+드래그도 가능)로 강제 선택', { cmd: '<code>mouse on</code>', shift: '<kbd>Shift</kbd>', option: '<kbd>Option</kbd>' }) },
+      { key: t('붙여넣기'), desc: t('{paste} · {combo} · 선택 없이 우클릭', { paste: '<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd>', combo: kbdCtrlShiftV }) },
+      { key: t('이미지'), desc: t('이미지를 복사해 붙여넣으면 서버에 {auto} + 경로가 명령줄에 삽입', { auto: `<b>${t('자동 업로드')}</b>` }) },
+      { key: t('자동 복사 켬/끔'), desc: t('⋯ 메뉴 → 설정에서 토글. {on}: 드래그·vim/tmux 복사가 클립보드에 즉시 반영. {off}: 선택만 되고 클립보드는 그대로 — 우클릭으로 원할 때만 복사', { on: `<b>${t('켬')}</b>`, off: `<b>${t('끔')}</b>` }) },
+      { key: t('맥↔웹 동기화'), desc: t('vim/tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 {cmd} 실행', { cmd: '<code>fsh clip</code>' }) },
     ]},
-    { icon: 'square-terminal', title: 'tmux 세션', rows: [
-      { key: 'tmux 세션', desc: '⋯ 메뉴 → 기존 세션 목록 확인·attach' },
-      { key: '새 세션을 맥에서도 열기', desc: '앞으로 만들 세션마다 맥 터미널 창도 함께 열림(토글). 지금 보고 있는 세션을 여는 것은 「지금 이 세션 맥에서 열기」' },
-      { key: '이 세션 열기', desc: '지금 보는 세션을 맥 터미널 새 창으로 열기' },
+    { icon: 'square-terminal', title: t('tmux 세션'), rows: [
+      { key: t('tmux 세션'), desc: t('⋯ 메뉴 → 기존 세션 목록 확인·attach') },
+      { key: t('새 세션을 맥에서도 열기'), desc: t('앞으로 만들 세션마다 맥 터미널 창도 함께 열림(토글). 지금 보고 있는 세션을 여는 것은 「지금 이 세션 맥에서 열기」') },
+      { key: t('이 세션 열기'), desc: t('지금 보는 세션을 맥 터미널 새 창으로 열기') },
     ]},
-    { icon: 'file-up', title: '파일 · 검색', rows: [
-      { key: '파일 업로드', desc: '⋯ 메뉴 → 업로드(경로 자동 삽입). 이미지는 붙여넣기로도 업로드' },
-      { key: '검색', desc: '<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd> 로 터미널 출력 검색' },
+    { icon: 'file-up', title: t('파일 · 검색'), rows: [
+      { key: t('파일 업로드'), desc: t('⋯ 메뉴 → 업로드(경로 자동 삽입). 이미지는 붙여넣기로도 업로드') },
+      { key: t('검색'), desc: t('{combo} 로 터미널 출력 검색', { combo: '<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd>' }) },
     ]},
-    { icon: 'monitor-smartphone', title: '모바일 · 원격', rows: [
-      { key: '모바일 접속', desc: '<code>fsh mobile</code> → QR/URL로 폰 접속(같은 세션 이어쓰기)' },
-      { key: '핸드오프', desc: '<code>fsh handoff mobile</code> / <code>desktop</code> 으로 폰↔맥 전환' },
+    { icon: 'monitor-smartphone', title: t('모바일 · 원격'), rows: [
+      { key: t('모바일 접속'), desc: t('{cmd} → QR/URL로 폰 접속(같은 세션 이어쓰기)', { cmd: '<code>fsh mobile</code>' }) },
+      { key: t('핸드오프'), desc: t('{mobile} / {desktop} 으로 폰↔맥 전환', { mobile: '<code>fsh handoff mobile</code>', desktop: '<code>desktop</code>' }) },
     ]},
-    { icon: 'palette', title: '테마', rows: [
-      { key: '스킨 변경', desc: '⋯ 메뉴 → macOS · Catppuccin · Windows · VS Code · Notepad' },
+    { icon: 'palette', title: t('테마'), rows: [
+      { key: t('스킨 변경'), desc: t('⋯ 메뉴 → macOS · Catppuccin · Windows · VS Code · Notepad') },
     ]},
   ];
 
@@ -60,12 +62,12 @@ function showGuide() {
   // 맡긴다 — D6: 예전엔 이 모달만 .vt-guide-* 전용 CSS로 직접 구현하고 있었다.
   openPanel({
     id: 'vt-guide',
-    ariaLabel: '사용 가이드',
+    ariaLabel: t('사용 가이드'),
     headHTML: `
       <div class="vt-gh-icon">${icon('terminal', 20)}</div>
       <div class="vt-guide-title-wrap">
         <h2>FarShell</h2>
-        <p class="vt-guide-sub">브라우저로 tmux 터미널을 — 웹·폰 어디서든 이어서</p>
+        <p class="vt-guide-sub">${t('브라우저로 tmux 터미널을 — 웹·폰 어디서든 이어서')}</p>
       </div>
     `,
     bodyId: 'vt-guide-body',

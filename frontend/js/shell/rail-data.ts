@@ -7,6 +7,8 @@
 // - 만든 곳(origin) 2종(peer·external)은 레일 설정에서 표시를 끈다.
 import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
+import { t } from '../core/i18n.js';
+import { alertDialog } from '../core/dialog.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
@@ -60,6 +62,140 @@ export interface SessionRow {
   otherScreens: number;
   /** 웹이 아닌 attach 수(맥 터미널 등). 구버전 서버가 값을 안 주면 0. */
   otherClients: number;
+  /** 에이전트 위임으로 만든 하위 세션이면 그 계보(서버 위임 장부 기준). 아니면 없다/null. */
+  lineage?: Lineage | null;
+}
+
+// ── 계보(에이전트 위임) ───────────────────────────────────────────────────────
+// 출처는 서버 위임 장부(server/delegation.py)다. tmux 옵션(@fsh_parent)은 에이전트가 고칠 수
+// 있어 쓰지 않는다 — 레일 트리를 위조할 수 없게. 깊이는 1이라 트리는 부모 → 자식 한 단계뿐이다.
+
+export type LineageState = 'running' | 'reported' | 'closed' | 'orphaned';
+export interface Lineage {
+  delegation: string;
+  /** 부모 세션의 지금 이름. 부모가 사라졌으면 null. */
+  parent: string | null;
+  state: LineageState;
+  outcome: 'succeeded' | 'failed' | null;
+  createdAt: number;
+  task: string;
+  summary: string;
+}
+
+const LINEAGE_STATES: LineageState[] = ['running', 'reported', 'closed', 'orphaned'];
+
+export function normalizeLineage(v: unknown): Lineage | null {
+  const o = v as Record<string, unknown> | null;
+  if (!o || typeof o !== 'object' || typeof o.delegation !== 'string' || !o.delegation) return null;
+  const state = LINEAGE_STATES.includes(o.state as LineageState) ? (o.state as LineageState) : 'running';
+  return {
+    delegation: o.delegation,
+    parent: typeof o.parent === 'string' && o.parent ? o.parent : null,
+    state,
+    outcome: o.outcome === 'succeeded' || o.outcome === 'failed' ? o.outcome : null,
+    createdAt: Number(o.createdAt) || 0,
+    task: typeof o.task === 'string' ? o.task : '',
+    summary: typeof o.summary === 'string' ? o.summary : '',
+  };
+}
+
+/** 하위 세션 한 줄 표시: 「진행 중」「보고 · 성공」「보고 · 실패」「닫힘」「부모 없음」. */
+export function lineageLabel(l: Pick<Lineage, 'state' | 'outcome'>): string {
+  if (l.state === 'reported') return l.outcome === 'failed' ? t('보고 · 실패') : t('보고 · 성공');
+  if (l.state === 'closed') return t('닫힘');
+  if (l.state === 'orphaned') return t('부모 없음');
+  return t('진행 중');
+}
+
+export type RailSort = 'name' | 'manual';
+
+export interface TreeEntry<T> {
+  row: T;
+  /** 열린 위임의 하위 세션(진행 중·보고됨) — 만든 순서. */
+  kids: T[];
+  /** 닫힌 위임의 하위 세션 — 「닫힌 하위 N」으로 접혀 있다. */
+  closedKids: T[];
+}
+
+/**
+ * 묶음에 속하지 않은 행들을 부모 → 자식 트리로 묶는다.
+ * - 자식은 이름순·수동 정렬과 상관없이 부모 바로 밑에, 만든 순서로 선다.
+ * - 부모가 목록에 없거나(사라짐·숨김) 고아면 자식은 최상위로 올라온다.
+ * - 최상위 순서: `name`은 이름순, `manual`은 저장된 순서(모르는 이름은 뒤에, 이름순).
+ */
+export function buildSessionTree<T extends Pick<SessionRow, 'name' | 'tmuxName'> & { lineage?: Lineage | null }>(
+  rows: T[], sort: RailSort = 'name', order: string[] = [],
+): TreeEntry<T>[] {
+  const byTmux = new Map<string, T>();
+  for (const r of rows) if (r.tmuxName) byTmux.set(r.tmuxName, r);
+  const kidsOf = new Map<T, T[]>();
+  const top: T[] = [];
+  for (const r of rows) {
+    const l = r.lineage;
+    const parent = l && l.state !== 'orphaned' && l.parent ? byTmux.get(l.parent) : undefined;
+    // 자기 자신을 부모로 가리키는 값이나 부모가 다시 자식인 값은 서버가 만들지 않지만, 받아도 평평하게 그린다.
+    if (parent && parent !== r && !parent.lineage?.parent) {
+      const list = kidsOf.get(parent) || [];
+      list.push(r);
+      kidsOf.set(parent, list);
+    } else {
+      top.push(r);
+    }
+  }
+  const rank = new Map(order.map((n, i) => [n, i]));
+  const key = (r: T) => r.tmuxName || r.name;
+  top.sort((a, b) => {
+    if (sort === 'manual') {
+      const ra = rank.get(key(a)) ?? Infinity, rb = rank.get(key(b)) ?? Infinity;
+      if (ra !== rb) return ra - rb;
+    }
+    return a.name.localeCompare(b.name);
+  });
+  const byCreated = (a: T, b: T) => (a.lineage?.createdAt || 0) - (b.lineage?.createdAt || 0);
+  return top.map((row) => {
+    const all = (kidsOf.get(row) || []).sort(byCreated);
+    return {
+      row,
+      kids: all.filter((k) => k.lineage!.state === 'running' || k.lineage!.state === 'reported'),
+      closedKids: all.filter((k) => k.lineage!.state === 'closed'),
+    };
+  });
+}
+
+/** 부모 행의 칩: 「하위 보고 1/2」 — 열린 하위 중 보고한 수 / 열린 하위 수. 열린 하위가 없으면 null. */
+export function kidsProgress<T extends { lineage?: Lineage | null }>(kids: T[]): { reported: number; open: number } | null {
+  if (kids.length === 0) return null;
+  return { reported: kids.filter((k) => k.lineage?.state === 'reported').length, open: kids.length };
+}
+
+/** 수동 정렬에서 한 항목을 옮긴 새 순서. `current`는 지금 화면의 최상위 순서(이름). */
+export function moveInOrder(current: string[], name: string, target: string, place: 'before' | 'after'): string[] {
+  if (name === target) return current.slice();
+  const rest = current.filter((n) => n !== name);
+  const i = rest.indexOf(target);
+  if (i < 0) return current.slice();
+  rest.splice(place === 'before' ? i : i + 1, 0, name);
+  return rest;
+}
+
+/** 위/아래로 한 칸. 끝이면 그대로. */
+export function stepInOrder(current: string[], name: string, dir: -1 | 1): string[] {
+  const i = current.indexOf(name);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= current.length) return current.slice();
+  const out = current.slice();
+  [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}
+
+/** 설정 값(JSON 문자열) → 이름 배열. 깨졌으면 빈 배열. */
+export function parseNameList(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string');
+  if (typeof v !== 'string' || !v) return [];
+  try {
+    const a = JSON.parse(v);
+    return Array.isArray(a) ? a.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
+  } catch { return []; }
 }
 
 // ── 만든 곳 ────────────────────────────────────────────────────────────────
@@ -67,9 +203,9 @@ export interface SessionRow {
 export const HIDEABLE_ORIGINS: Origin[] = ['peer', 'external'];
 
 export const ORIGIN_LABEL: Record<Origin, string> = {
-  local: '이 화면에서 만듦',
-  peer: '다른 맥에서 만듦',
-  external: '직접 만듦 (CLI·tmux)',
+  local: t('이 화면에서 만듦'),
+  peer: t('다른 맥에서 만듦'),
+  external: t('직접 만듦 (CLI·tmux)'),
 };
 
 /** 서버 값이 없거나(구버전 서버) 모르는 값이면 local — 모든 행에 외부 아이콘이 붙는 것보다 안전하다. */
@@ -89,7 +225,7 @@ export function normalizeBadge(v: unknown): DoneBadge | null {
 // ── 에이전트 공유 ──────────────────────────────────────────────────────────
 // ⚠ share/share-data.js(지연 청크)와 같은 규칙이다 — shell 청크는 그 청크를 정적 import 할 수 없어 한 벌 더 적는다.
 
-export const SHARE_MODE_LABEL: Record<ShareInfo['mode'], string> = { read: '읽기 전용', readwrite: '읽기·쓰기' };
+export const SHARE_MODE_LABEL: Record<ShareInfo['mode'], string> = { read: t('읽기 전용'), readwrite: t('읽기·쓰기') };
 const SHARE_NICK_RE = /^[A-Za-z0-9_-]{1,32}$/;
 /** 서버가 받는 세션 이름(`routes/agent_share.py`). 한글 이름 세션은 공유할 수 없다. */
 const SHARE_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -103,21 +239,21 @@ export function normalizeShare(v: unknown): ShareInfo | null {
 
 /** 「공유 · 닉네임 · 읽기 전용」 — 요약줄·접힌 레일 툴팁이 쓴다. */
 export function shareSentence(share: ShareInfo | null | undefined): string {
-  return share ? `공유 · ${share.nick} · ${SHARE_MODE_LABEL[share.mode]}` : '';
+  return share ? t('공유 · {nick} · {mode}', { nick: share.nick, mode: SHARE_MODE_LABEL[share.mode] }) : '';
 }
 
 // ── 상태 키워드 ────────────────────────────────────────────────────────────
 
 export const KIND_LABEL: Record<WaitKind, string> = {
-  approval: '승인 요청',
-  choice: '선택 요청',
-  plan: '계획 확인',
-  question: '질문',
+  approval: t('승인 요청'),
+  choice: t('선택 요청'),
+  plan: t('계획 확인'),
+  question: t('질문'),
 };
 
 export const BADGE_LABEL: Record<DoneBadge, string> = {
-  question: '질문 있음',
-  plan: '계획 있음',
+  question: t('질문 있음'),
+  plan: t('계획 있음'),
 };
 
 export interface StateKeyword {
@@ -147,12 +283,12 @@ export function stateKeyword(
 export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.now()): string {
   if (sinceEpochSec == null) return '';
   const sec = Math.max(0, Math.round(nowMs / 1000 - sinceEpochSec));
-  if (sec < 60) return `${sec}초`;
+  if (sec < 60) return t('{n}초', { n: sec });
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min}분`;
+  if (min < 60) return t('{n}분', { n: min });
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}시간`;
-  return `${Math.round(hr / 24)}일`;
+  if (hr < 24) return t('{n}시간', { n: hr });
+  return t('{n}일', { n: Math.round(hr / 24) });
 }
 
 /** 접힌 레일·툴팁·스크린리더가 쓰는 한 줄: "승인 요청 · 2분". */
@@ -179,10 +315,35 @@ export const RAIL_PREF_DEFAULTS: Record<string, boolean> = {
   [originShowKey('external')]: true,
 };
 
+// 정렬(전역 — 기기마다 다르면 헷갈린다)과 계보 접기(기기별)를 각각 설정 키 하나에 JSON으로 묶는다.
+// core/settings.js의 스키마 줄을 아끼려는 것이다 — 초기 번들(app.js + core.js)이 300KiB 상한에 닿아 있고
+// 그 파일은 주석까지 번들에 남는다. 그래서 설명은 여기에 둔다.
+/** 전역 설정 하나에 `{"sort":"name"|"manual","order":[이름…]}`. */
+export const ORDER_KEY = 'rail.order';
+/** 기기별 설정 하나에 `{"collapsed":[하위를 접은 부모…],"closedOpen":[닫힌 하위를 펼친 부모…]}`. 기본은 펼침·접힘. */
+export const LINEAGE_KEY = 'rail.lineage';
+
+function parseObj(v: unknown): Record<string, unknown> {
+  if (typeof v !== 'string' || !v) return {};
+  try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; }
+}
+
+/** 정렬 설정 값 만들기 — Rail·Fleet가 저장할 때 쓴다. */
+export function encodeOrder(sort: RailSort, order: string[]): string {
+  return JSON.stringify({ sort, order: order.slice(0, 500) });
+}
+export function encodeLineagePrefs(collapsed: string[], closedOpen: string[]): string {
+  return JSON.stringify({ collapsed: collapsed.slice(0, 200), closedOpen: closedOpen.slice(0, 200) });
+}
+
 export interface RailPrefs {
   attentionShow: boolean;
   attentionCollapsed: boolean;
   hiddenOrigins: Origin[];
+  sort: RailSort;
+  order: string[];
+  kidsCollapsed: string[];
+  closedOpen: string[];
 }
 
 /** get: 값이 없으면 undefined/null을 돌려주는 설정 읽기(window.vtSettingsGet). */
@@ -195,6 +356,10 @@ export function readRailPrefs(get: (key: string) => unknown): RailPrefs {
     attentionShow: flag(ATTENTION_SHOW_KEY),
     attentionCollapsed: flag(ATTENTION_COLLAPSED_KEY),
     hiddenOrigins: HIDEABLE_ORIGINS.filter((o) => !flag(originShowKey(o))),
+    sort: parseObj(get(ORDER_KEY)).sort === 'manual' ? 'manual' : 'name',
+    order: parseNameList(parseObj(get(ORDER_KEY)).order),
+    kidsCollapsed: parseNameList(parseObj(get(LINEAGE_KEY)).collapsed),
+    closedOpen: parseNameList(parseObj(get(LINEAGE_KEY)).closedOpen),
   };
 }
 
@@ -263,7 +428,8 @@ export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: num
 
 export type RowMenuId =
   | 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown'
-  | 'workspace' | 'share' | 'shareSettings' | 'unshare' | 'agentPerms';
+  | 'workspace' | 'share' | 'shareSettings' | 'unshare' | 'agentPerms'
+  | 'moveUp' | 'moveDown' | 'report' | 'closeDelegation' | 'openParent';
 
 export interface RowMenuItem {
   id: RowMenuId;
@@ -284,7 +450,7 @@ export function rowSummary(
   const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
   if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
   if (row.share) parts.push(shareSentence(row.share));
-  if (row.otherClients > 0) parts.push(`웹 외 ${row.otherClients}`);
+  if (row.otherClients > 0) parts.push(t('웹 외 {n}', { n: row.otherClients }));
   parts.push(ORIGIN_LABEL[normalizeOrigin(row.origin)]);
   if (row.cwd) parts.push(row.cwd);
   if (row.branch) parts.push(row.branch);
@@ -297,51 +463,68 @@ export interface RowMenuOpts {
   split?: boolean;
   /** 에이전트 공유 항목을 넣는다. **이 맥을 보고 있을 때만** true — 승인·공유는 이 맥 전용이다(다른 맥으로 중계되지 않는다). */
   share?: boolean;
+  /** 수동 정렬의 키보드 대안(드래그를 못 쓰는 사람·터치). 최상위 행에서만, 끝이면 그 방향은 뺀다. */
+  move?: { up: boolean; down: boolean };
 }
 
 /** 열린 세션이면 닫기, 아니면 열기. 이름 변경·맥에서 열기·연결된 화면은 웹 세션이 있어야 하고,
  * 종료는 tmux 세션이면 늘 있다(확인창은 vtConfirmAndKillSession). */
-export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { share?: ShareInfo | null; cwd?: string }, opts: RowMenuOpts = {}): RowMenuItem[] {
+export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { share?: ShareInfo | null; cwd?: string; lineage?: Lineage | null }, opts: RowMenuOpts = {}): RowMenuItem[] {
   const items: RowMenuItem[] = [];
+  // 위임 하위 세션: 보고 보기 · 부모로 이동 · 위임 닫기(세션은 남는다). 위임 관련은 이 맥에서만(장부가 이 맥에 있다).
+  const lin = row.lineage;
+  const delegationItems: RowMenuItem[] = [];
+  if (lin && opts.share) {
+    if (lin.summary) delegationItems.push({ id: 'report', label: t('보고 보기') });
+    if (lin.parent) delegationItems.push({ id: 'openParent', label: t('부모 세션으로 이동'), detail: lin.parent });
+    if (lin.state === 'running' || lin.state === 'reported') {
+      delegationItems.push({ id: 'closeDelegation', label: t('위임 닫기'), detail: t('세션은 남김') });
+    }
+  }
+  const move: RowMenuItem[] = [];
+  if (opts.move?.up) move.push({ id: 'moveUp', label: t('위로 이동') });
+  if (opts.move?.down) move.push({ id: 'moveDown', label: t('아래로 이동') });
   const split: RowMenuItem[] = opts.split
-    ? [{ id: 'splitRight', label: '오른쪽에 나란히 열기' }, { id: 'splitDown', label: '아래에 열기' }]
+    ? [{ id: 'splitRight', label: t('오른쪽에 나란히 열기') }, { id: 'splitDown', label: t('아래에 열기') }]
     : [];
   if (row.open) {
     items.push(
-      { id: 'close', label: '닫기' },
+      { id: 'close', label: t('닫기') },
       ...split,
-      { id: 'rename', label: '이름 변경' },
-      { id: 'openOnMac', label: '맥에서 열기' },
-      { id: 'screens', label: '연결된 화면' },
+      { id: 'rename', label: t('이름 변경') },
+      { id: 'openOnMac', label: t('맥에서 열기') },
+      { id: 'screens', label: t('연결된 화면') },
     );
   } else {
-    items.push({ id: 'open', label: '열기' }, ...split);
+    items.push({ id: 'open', label: t('열기') }, ...split);
   }
-  if (row.cwd) items.push({ id: 'workspace', label: '작업 위치 보기' });
+  items.push(...delegationItems, ...move);
+  if (row.cwd) items.push({ id: 'workspace', label: t('작업 위치 보기') });
   // 이름 규칙 밖(한글 등)은 공유 항목만 뺀다.
   if (opts.share && row.tmuxName) {
     if (SHARE_NAME_RE.test(row.tmuxName)) {
       if (row.share) {
         items.push(
-          { id: 'shareSettings', label: '공유 설정…' },
-          { id: 'unshare', label: '공유 해제', detail: '권한 모두 삭제' },
+          { id: 'shareSettings', label: t('공유 설정…') },
+          { id: 'unshare', label: t('공유 해제'), detail: t('권한 모두 삭제') },
         );
       } else {
-        items.push({ id: 'share', label: '에이전트와 공유…' });
+        items.push({ id: 'share', label: t('에이전트와 공유…') });
       }
     }
-    items.push({ id: 'agentPerms', label: '에이전트 권한…' });
+    items.push({ id: 'agentPerms', label: t('에이전트 권한…') });
   }
-  if (row.tmuxName) items.push({ id: 'kill', label: '종료', detail: '되돌릴 수 없음', danger: true });
+  if (row.tmuxName) items.push({ id: 'kill', label: t('종료'), detail: t('되돌릴 수 없음'), danger: true });
   return items;
 }
 
 /** 메뉴 항목을 실행한다. 지연 청크는 세션 모듈을 정적 import 못 해 window 브리지를 받는다. */
 export function runRowMenu(
   id: RowMenuId,
-  row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'> & { share?: ShareInfo | null; cwd?: string; context?: any },
+  row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'> & { share?: ShareInfo | null; cwd?: string; context?: any; lineage?: Lineage | null },
   w: any,
   startRename: () => void,
+  move?: (dir: -1 | 1) => void,
 ): void {
   const sid = row.sessionId || null;
   switch (id) {
@@ -357,6 +540,21 @@ export function runRowMenu(
     case 'kill': w.vtConfirmAndKillSession?.(row.tmuxName, sid); break;
     case 'splitRight': w.vtSplitOpenSession?.('right', { sessionId: sid, tmuxName: row.tmuxName }); break;
     case 'splitDown': w.vtSplitOpenSession?.('bottom', { sessionId: sid, tmuxName: row.tmuxName }); break;
+    case 'moveUp': move?.(-1); break;
+    case 'moveDown': move?.(1); break;
+    case 'openParent': if (row.lineage?.parent) w.vtOpenSessionFromRail?.({ sessionId: null, tmuxName: row.lineage.parent }); break;
+    case 'report': if (row.lineage) void alertDialog(row.lineage.summary, { title: t('{name}의 보고', { name: row.name }) }); break;
+    case 'closeDelegation': if (row.lineage) void closeDelegation(row.lineage.delegation, w); break;
+  }
+}
+
+async function closeDelegation(id: string, w: any): Promise<void> {
+  try {
+    const res = await fetch(`/api/delegations/${encodeURIComponent(id)}/close-by-user`, { method: 'POST', credentials: 'same-origin' });
+    if (!res.ok) throw new Error(String(res.status));
+    w.showToast?.(t('위임을 닫았습니다. 세션은 남아 있습니다.'));
+  } catch {
+    w.showToast?.(t('위임을 닫지 못했습니다. 다시 시도하세요.'));
   }
 }
 
@@ -380,7 +578,7 @@ export function diffLabel(row: Pick<SessionRow, 'changed' | 'diffFiles'>): strin
   const del = c && c.del > 0 ? `−${c.del}` : '';
   if (add || del) return [add, del].filter(Boolean).join(' ');
   const files = row.diffFiles != null && row.diffFiles > 0 ? row.diffFiles : (c && c.files > 0 ? c.files : 0);
-  return files > 0 ? `파일 ${files}` : null;
+  return files > 0 ? t('파일 {n}', { n: files }) : null;
 }
 
 /**

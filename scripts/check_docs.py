@@ -330,6 +330,12 @@ def check_help_topics(problems: list[str]) -> None:
 
     for topic in sorted((listed | inline) - files):
         problems.append(f"fsh help: 안내하는 토픽에 문서가 없음 — docs/help/{topic}.md")
+    # 영어판 — `fsh help`는 VT_LANG=en 일 때 docs/help/en/<토픽>.md 를 먼저 본다(없으면 한국어로 떨어진다).
+    en_files = {p.stem for p in (ROOT / "docs" / "help" / "en").glob("*.md")}
+    for topic in sorted(files - en_files):
+        problems.append(f"docs/help/{topic}.md: 영어판이 없음 — docs/help/en/{topic}.md")
+    for topic in sorted(en_files - files):
+        problems.append(f"docs/help/en/{topic}.md: 한국어 원본이 없음 — docs/help/{topic}.md")
     # `fsh help`가 토픽 목록을 docs/help/*.md에서 직접 만들면(2026-10-02~) 문서가 있는데 안내되지
     # 않는 상황이 구조상 생기지 않는다 — 그때는 이 방향의 검사가 필요 없다.
     m = re.search(r"^cmd_help\(\) \{.*?^\}", fsh, re.S | re.M)
@@ -547,7 +553,7 @@ PERSONAL_PATTERNS = (
      "개인 툴체인 절대경로로 보인다 — VT_PYTHON이나 fsh/run_server.sh에 맡길 것"),
 )
 # 문서에는 모든 패턴을 적용한다 — 예시로 적힌 IP·도메인도 실제 값이면 곤란하다.
-PERSONAL_SCAN_GLOBS = ("*.md", "config/*.env", ".claude/skills/**/*.md", "docs/ref/*.md", "docs/help/*.md", "docs/guide/*.md")
+PERSONAL_SCAN_GLOBS = ("*.md", "config/*.env", ".claude/skills/**/*.md", "docs/ref/*.md", "docs/help/*.md", "docs/help/en/*.md", "docs/guide/*.md")
 
 # 2026-09-21: 문서만 보다가 **소스에 박힌 개인 경로를 6주 동안 놓쳤다** —
 # server/tests/test_notify_fallback.py가 실제 홈 경로(사용자명 + 사내 프로젝트명)를

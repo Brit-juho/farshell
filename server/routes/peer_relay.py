@@ -35,6 +35,7 @@ from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import JSONResponse, StreamingResponse
 
 import host_store
+from i18n import tr
 import relay_policy
 from routes.peer_protocol import PeerDenied, _authenticate_raw
 
@@ -97,7 +98,7 @@ async def peer_relay(request: Request, rest: str):
     digest = hashlib.sha256(data).hexdigest()
     claimed = request.headers.get("x-peer-body", "")
     if not claimed or not hmac.compare_digest(claimed, digest):
-        return _denied("본문 해시가 없거나 맞지 않습니다", 401)
+        return _denied(tr("본문 해시가 없거나 맞지 않습니다"), 401)
     query = request.url.query
     try:
         grant = _authenticate_raw(request.method, _signed_path(request.url.path, query),
@@ -110,11 +111,10 @@ async def peer_relay(request: Request, rest: str):
     if grant.get("level") != host_store.LEVEL_CONTROL:
         host_store.audit(grant["id"], "relay", False, f"control 등급 필요: {method} {target}")
         return _denied(
-            "이 맥은 상대에게 읽기 전용(view)만 허용했습니다 — 이 맥에서 "
-            "'fsh host allow-control <id>'를 실행해야 전환할 수 있습니다", 403, "level_required")
+            tr("이 맥은 상대에게 읽기 전용(view)만 허용했습니다 — 이 맥에서 'fsh host allow-control <id>'를 실행해야 전환할 수 있습니다"), 403, "level_required")
     if not relay_policy.http_allowed(method, target):
         host_store.audit(grant["id"], "relay", False, f"허용 목록 밖: {method} {target}")
-        return _denied(f"다른 맥에서 부를 수 없는 기능입니다: {target}", 403, "relay_forbidden")
+        return _denied(tr("다른 맥에서 부를 수 없는 기능입니다: {target}", target=target), 403, "relay_forbidden")
     if method != "GET":
         host_store.audit(grant["id"], "relay", True, f"{method} {target}")
 
@@ -158,7 +158,7 @@ async def _dispatch(request: Request, target: str, query: str, peer_id: str,
     start = await q.get()
     if start is None or start.get("type") != "http.response.start":
         task.cancel()
-        return _denied("응답이 없습니다", 502, "relay_empty")
+        return _denied(tr("응답이 없습니다"), 502, "relay_empty")
 
     headers = {RELAY_HEADER: "1"}
     for k, v in start.get("headers", []):

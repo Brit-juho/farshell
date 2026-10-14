@@ -14,6 +14,7 @@ import sys
 import tempfile
 import tomllib
 from pathlib import Path
+from i18n import tr
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BEGIN = "# >>> farshell:hooks (managed by `fsh hooks install` — do not edit by hand) >>>"
@@ -48,7 +49,7 @@ def load_text(path: Path) -> str:
     try:
         tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
-        raise ValueError(f"{path} 를 TOML로 읽을 수 없습니다: {exc}") from exc
+        raise ValueError(tr("{path} 를 TOML로 읽을 수 없습니다: {error}", path=path, error=exc)) from exc
     return text
 
 
@@ -73,7 +74,7 @@ def _split_owned(text: str) -> tuple[str, str | None, str]:
         return text, None, ""
     end = text.find(END, start)
     if end < 0:
-        raise ValueError("FarShell Codex 훅 시작 마커는 있지만 끝 마커가 없습니다")
+        raise ValueError(tr("FarShell Codex 훅 시작 마커는 있지만 끝 마커가 없습니다"))
     end += len(END)
     while end < len(text) and text[end] == "\n":
         end += 1
@@ -84,7 +85,7 @@ def plan_text(text: str, repo_root: Path | None = None) -> dict[str, tuple[str, 
     try:
         data = tomllib.loads(text) if text.strip() else {}
     except tomllib.TOMLDecodeError as exc:
-        raise ValueError(f"Codex 설정을 TOML로 읽을 수 없습니다: {exc}") from exc
+        raise ValueError(tr("Codex 설정을 TOML로 읽을 수 없습니다: {error}", error=exc)) from exc
     hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
     result = {}
     for event in EVENTS:
@@ -127,7 +128,7 @@ def apply_install(text: str, repo_root: Path | None = None) -> tuple[str, list[s
         return text, []
     current = plan_text(text, repo_root)
     changes = [f"{event}: {state}" for event, (state, _) in current.items() if state != "ok"]
-    return merged, changes or ["Codex 훅 블록 갱신"]
+    return merged, changes or [tr("Codex 훅 블록 갱신")]
 
 
 def apply_uninstall(text: str) -> tuple[str, list[str]]:
@@ -137,7 +138,7 @@ def apply_uninstall(text: str) -> tuple[str, list[str]]:
     merged = (before.rstrip("\n") + "\n\n" + after.lstrip("\n")).lstrip("\n")
     if merged.strip():
         tomllib.loads(merged)
-    return merged, ["Codex 훅 블록 제거"]
+    return merged, [tr("Codex 훅 블록 제거")]
 
 
 def write_text(path: Path, text: str) -> Path | None:
@@ -177,16 +178,16 @@ def _cmd_install() -> int:
         merged, changes = apply_install(load_text(path))
     except (ValueError, tomllib.TOMLDecodeError) as exc:
         print(f"  ✗ {exc}")
-        print("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다.")
+        print(tr("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다."))
         return 2
     if not changes:
-        print(f"  ✓ 이미 등록돼 있습니다 ({path})")
+        print(tr("  ✓ 이미 등록돼 있습니다 ({path})", path=path))
         return 0
     backup = write_text(path, merged)
     for change in changes:
         print(f"  · {change}")
-    print(f"  ✓ {path} 갱신" + (f" (백업: {backup})" if backup else ""))
-    print("  ⓘ 이미 실행 중인 codex 세션에는 적용되지 않습니다 — 새로 시작하세요.")
+    print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))
+    print(tr("  ⓘ 이미 실행 중인 codex 세션에는 적용되지 않습니다 — 새로 시작하세요."))
     return 0
 
 
@@ -198,10 +199,10 @@ def _cmd_uninstall() -> int:
         print(f"  ✗ {exc}")
         return 2
     if not changes:
-        print("  ✓ 등록된 FarShell Codex 훅이 없습니다")
+        print(tr("  ✓ 등록된 FarShell Codex 훅이 없습니다"))
         return 0
     backup = write_text(path, merged)
-    print(f"  ✓ {path} 갱신" + (f" (백업: {backup})" if backup else ""))
+    print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))
     return 0
 
 
@@ -232,13 +233,13 @@ def _load_hooks_json(path: Path) -> tuple[dict | None, str]:
     except FileNotFoundError:
         return None, ""
     except (OSError, UnicodeDecodeError) as exc:
-        raise ValueError(f"{path} 를 읽을 수 없습니다: {exc}") from exc
+        raise ValueError(tr("{path} 를 읽을 수 없습니다: {error}", path=path, error=exc)) from exc
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"{path} 를 JSON으로 읽을 수 없습니다: {exc}") from exc
+        raise ValueError(tr("{path} 를 JSON으로 읽을 수 없습니다: {error}", path=path, error=exc)) from exc
     if not isinstance(data, dict):
-        raise ValueError(f"{path} 의 최상위가 객체가 아닙니다")
+        raise ValueError(tr("{path} 의 최상위가 객체가 아닙니다", path=path))
     return data, raw
 
 
@@ -359,28 +360,28 @@ def _cmd_dedupe(dry_run: bool) -> int:
         data, raw = _load_hooks_json(path)
     except ValueError as exc:
         print(f"  ✗ {exc}")
-        print("  파일을 고친 뒤 다시 실행하세요 — 건드리지 않았습니다.")
+        print(tr("  파일을 고친 뒤 다시 실행하세요 — 건드리지 않았습니다."))
         return 2
     if data is None:
-        print(f"  ✓ {display_path(path)} 가 없습니다 — 중복 없음")
+        print(tr("  ✓ {path} 가 없습니다 — 중복 없음", path=display_path(path)))
         return 0
     new_data, removed = apply_dedupe(data)
     if not removed:
-        print(f"  ✓ {display_path(path)} 에 FarShell 훅이 없습니다 — 중복 없음")
+        print(tr("  ✓ {path} 에 FarShell 훅이 없습니다 — 중복 없음", path=display_path(path)))
         return 0
-    verb = "제거 예정" if dry_run else "제거"
+    verb = tr("제거 예정") if dry_run else tr("제거")
     for event, args, tag in removed:
-        print(f"  · {verb}: {event} — {SCRIPT_NAME} {args}" + (f" [{tag}]" if tag else " [태그 없음]"))
+        print(f"  · {verb}: {event} — {SCRIPT_NAME} {args}" + (f" [{tag}]" if tag else tr(" [태그 없음]")))
     if dry_run:
-        print(f"  ⓘ --dry-run: {display_path(path)} 는 바꾸지 않았습니다 ({len(removed)}개)")
+        print(tr("  ⓘ --dry-run: {path} 는 바꾸지 않았습니다 ({n}개)", path=display_path(path), n=len(removed)))
         return 0
     try:
         backup = write_hooks_json(path, new_data, raw)
     except OSError as exc:
-        print(f"  ✗ 쓰기 실패: {exc}")
+        print(tr("  ✗ 쓰기 실패: {error}", error=exc))
         return 2
-    print(f"  ✓ {display_path(path)} 에서 {len(removed)}개 제거 (백업: {display_path(backup)})")
-    print("  ⓘ 이미 실행 중인 codex 세션에는 적용되지 않습니다 — 새로 시작하세요.")
+    print(tr("  ✓ {path} 에서 {n}개 제거 (백업: {backup})", path=display_path(path), n=len(removed), backup=display_path(backup)))
+    print(tr("  ⓘ 이미 실행 중인 codex 세션에는 적용되지 않습니다 — 새로 시작하세요."))
     return 0
 
 
@@ -397,10 +398,10 @@ def main(argv: list[str]) -> int:
     if command == "dedupe":
         extra = argv[2:]
         if any(a != "--dry-run" for a in extra):
-            print("사용법: codex_hooks.py dedupe [--dry-run]", file=sys.stderr)
+            print(tr("사용법: codex_hooks.py dedupe [--dry-run]"), file=sys.stderr)
             return 64
         return _cmd_dedupe("--dry-run" in extra)
-    print("사용법: codex_hooks.py [status|install|uninstall|duplicates|dedupe]", file=sys.stderr)
+    print(tr("사용법: codex_hooks.py [status|install|uninstall|duplicates|dedupe]"), file=sys.stderr)
     return 64
 
 

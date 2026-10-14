@@ -8,6 +8,7 @@ import {
   validateNick, suggestNick, normalizeMode, MODE_LABEL, MODE_HELP, WARNING_LINES, UNSHARE_NOTE,
   errorText,
 } from './share-data.js';
+import { t } from '../core/i18n.js';
 
 function modeRadio(group, value, checked) {
   return `
@@ -37,27 +38,27 @@ export function openShareDialog(name, share) {
     const finish = () => { if (!settled) { settled = true; resolve(result); } };
     const { body } = openDialog({
       id,
-      title: editing ? `공유 설정 · ${name}` : `에이전트와 공유 · ${name}`,
+      title: editing ? t('공유 설정 · {name}', { name }) : t('에이전트와 공유 · {name}', { name }),
       onClose: finish,
       bodyHTML: `
         <div class="vt-share-warn" role="note">${WARNING_LINES.map((l) => `<p>${vtEsc(l)}</p>`).join('')}</div>
         <div class="vt-share-field">
-          <label class="vt-share-label" for="${id}-nick">닉네임</label>
+          <label class="vt-share-label" for="${id}-nick">${t('닉네임')}</label>
           <input id="${id}-nick" class="vt-input lg vt-share-nick" type="text" value="${vtEsc(initialNick)}"
             maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false"
             aria-describedby="${id}-nick-msg">
-          <div id="${id}-nick-msg" class="vt-share-msg" aria-live="polite">영문·숫자·_·- 1~32자. 에이전트는 이 이름으로 세션을 부릅니다.</div>
+          <div id="${id}-nick-msg" class="vt-share-msg" aria-live="polite">${t('영문·숫자·_·- 1~32자. 에이전트는 이 이름으로 세션을 부릅니다.')}</div>
         </div>
-        <div class="vt-share-field" role="radiogroup" aria-label="공유 모드">
-          <div class="vt-share-label">모드</div>
+        <div class="vt-share-field" role="radiogroup" aria-label="${t('공유 모드')}">
+          <div class="vt-share-label">${t('모드')}</div>
           ${modeRadio(group, 'read', initialMode === 'read')}
           ${modeRadio(group, 'readwrite', initialMode === 'readwrite')}
-          <div class="vt-share-msg vt-share-lower" hidden>읽기 전용으로 낮추면 이미 허용한 쓰기 권한이 다음 호출부터 멈춥니다.</div>
+          <div class="vt-share-msg vt-share-lower" hidden>${t('읽기 전용으로 낮추면 이미 허용한 쓰기 권한이 다음 호출부터 멈춥니다.')}</div>
         </div>
         ${editing ? `<p class="vt-share-note">${vtEsc(UNSHARE_NOTE)}</p>` : ''}
         <div class="vt-dialog-actions">
-          <button type="button" class="vt-btn lg vt-share-cancel">취소</button>
-          <button type="button" class="vt-btn lg solid vt-share-ok">${editing ? '저장' : '공유'}</button>
+          <button type="button" class="vt-btn lg vt-share-cancel">${t('취소')}</button>
+          <button type="button" class="vt-btn lg solid vt-share-ok">${editing ? t('저장') : t('공유')}</button>
         </div>`,
     });
     if (!body) { resolve(null); return; }
@@ -93,7 +94,7 @@ export function openShareDialog(name, share) {
         const res = await shareApi.share(name, nick, mode());
         result = res.share || { nick, mode: mode() };
         if (typeof window.showToast === 'function') {
-          window.showToast(`공유함 · ${result.nick} · ${MODE_LABEL[result.mode]}`, 'success');
+          window.showToast(t('공유함 · {nick} · {mode}', { nick: result.nick, mode: MODE_LABEL[result.mode] }), 'success');
         }
         closePanel(id);
       } catch (e) {
@@ -119,7 +120,7 @@ export async function unshareSession(name) {
   try {
     const res = await shareApi.unshare(name);
     if (typeof window.showToast === 'function') {
-      window.showToast(`공유 해제함 · 권한 ${res.revokedGrants || 0}개 삭제`, 'success');
+      window.showToast(t('공유 해제함 · 권한 {n}개 삭제', { n: res.revokedGrants || 0 }), 'success');
     }
     return true;
   } catch (e) {

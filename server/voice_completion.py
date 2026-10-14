@@ -6,13 +6,14 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 import fsguard
+from i18n import tr
 
 SUPPORTED = ('claude', 'codex')
 
 
 def clean(text: str) -> str:
     text = text[-4000:]
-    text = re.sub(r'```[\s\S]*?```', ' 코드 블록 생략. ', text)
+    text = re.sub(r'```[\s\S]*?```', tr(' 코드 블록 생략. '), text)
     text = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', text)
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'[*_`#]+', '', text).strip()

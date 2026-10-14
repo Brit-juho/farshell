@@ -23,6 +23,7 @@ import { setActivePane, openPanelPane } from './store.js';
 import { PANELS } from '../panels/registry.js';
 import { icon } from '../ui/icons.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
+import { t } from '../core/i18n.js';
 
 const PANEL_ID = 'vt-pane-pick';
 
@@ -35,15 +36,15 @@ export function openPanePicker(paneId) {
   let offSessions = () => {};
   const panel = openPanel({
     id: PANEL_ID,
-    ariaLabel: '이 화면에 표시할 세션 선택',
+    ariaLabel: t('이 화면에 표시할 세션 선택'),
     extraClass: 'vt-pane-pick',
     onClose: () => offSessions(),
-    headHTML: `<div class="vt-vw-title">이 화면에 표시할 세션</div>`,
+    headHTML: `<div class="vt-vw-title">${t('이 화면에 표시할 세션')}</div>`,
     bodyId: 'vt-pp-body',
     bodyHTML: `
-      <button type="button" class="vt-btn vt-pp-new">${icon('plus', 15)}새 세션</button>
-      <div class="vt-card-grid" id="vt-pp-cards"><div class="vt-vw-loading">불러오는 중…</div></div>
-      <div class="vt-pp-sep">또는 패널을 이 칸에</div>
+      <button type="button" class="vt-btn vt-pp-new">${icon('plus', 15)}${t('새 세션')}</button>
+      <div class="vt-card-grid" id="vt-pp-cards"><div class="vt-vw-loading">${t('불러오는 중…')}</div></div>
+      <div class="vt-pp-sep">${t('또는 패널을 이 칸에')}</div>
       <div class="vt-pp-panels" id="vt-pp-panels"></div>
     `,
   });
@@ -134,9 +135,9 @@ async function _renderCandidates(paneId, cardsEl) {
     const card = document.createElement('div');
     card.className = 'vt-card open-tab';
     card.innerHTML = `<div class="card-head"><span class="card-title"></span></div>
-      <div class="vt-pp-plain-hint">일반 터미널 · 미리보기 없음</div>`;
+      <div class="vt-pp-plain-hint">${t('일반 터미널 · 미리보기 없음')}</div>`;
     card.querySelector('.card-title').textContent = _sessionLabel(id);
-    card.title = '클릭하면 이 화면에 표시';
+    card.title = t('클릭하면 이 화면에 표시');
     card.onclick = () => {
       setActivePane(paneId);
       switchTo(id);
@@ -146,6 +147,6 @@ async function _renderCandidates(paneId, cardsEl) {
   }
 
   if (!cardsEl.children.length) {
-    cardsEl.innerHTML = '<div class="vt-vw-empty">배정할 수 있는 세션이 없습니다. 위에서 새로 만드세요.</div>';
+    cardsEl.innerHTML = `<div class="vt-vw-empty">${t('배정할 수 있는 세션이 없습니다. 위에서 새로 만드세요.')}</div>`;
   }
 }

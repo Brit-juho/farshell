@@ -610,15 +610,8 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 .vt-voice-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .vt-voice-help { margin:10px 0 0; color:var(--color-sub); font-size:var(--fs-xs); }
 #mic-status .vt-btn { margin:8px 8px 0 0; }
-.vt-voice-summary { display:flex; width:100%; align-items:center; min-height:28px; padding:4px 10px; border:0; border-bottom:1px solid var(--color-line); background:transparent; color:var(--color-sub); font:inherit; font-size:var(--fs-xs); text-align:left; cursor:pointer; }
-.vt-voice-summary:hover { background:var(--menu-hover); color:var(--color-txt); }
-.vt-voice-short { display:none; }
-#vt-dock.collapsed .vt-voice-summary { justify-content:center; padding:4px 0; }
-#vt-dock.collapsed .vt-voice-summary > span:not(.vt-voice-short) { display:none; }
-#vt-dock.collapsed .vt-voice-short { display:inline; }
 @media (pointer:coarse) {
   #voice-status-panel .vt-btn { min-height:44px; }
-  .vt-voice-summary { min-height:44px; }
 }
 
 /* ---- 연결 상태 pill ---------------------------------------------------- */

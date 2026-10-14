@@ -20,6 +20,7 @@ import hashlib
 import voice_targets
 from voice_sessions import coordinator
 from deps import pty_mgr, output_watcher, notify_clients
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +104,10 @@ async def voice_bind(request: Request):
     import pane_resolve
     body = await request.json()
     if auth.request_kind(request) != "machine" or not pane_resolve.is_our_socket(body.get("tmux")):
-        return JSONResponse({"error": "pane에서 등록 명령을 실행하세요"}, status_code=403)
+        return JSONResponse({"error": tr("pane에서 등록 명령을 실행하세요")}, status_code=403)
     tool, run = str(body.get("tool", "")), str(body.get("run", ""))
     if tool not in ("claude", "codex") or not run or len(run) > 200:
-        return JSONResponse({"error": "지원 도구와 대화 ID가 필요합니다"}, status_code=400)
+        return JSONResponse({"error": tr("지원 도구와 대화 ID가 필요합니다")}, status_code=400)
     try:
         target = await asyncio.to_thread(voice_targets.snapshot, "", str(body.get("pane", "")))
         coordinator.runs[(tool, run)] = {"target": target, "turn": __import__("secrets").token_hex(12)}
@@ -124,9 +125,9 @@ async def voice_test(request: Request):
         cfg = coordinator.policy(target["key"])
         client = (voice_targets.principal(request), str(body.get("screen", "")))
         if cfg["destination"] == "browser" and (not lease or lease[:2] != client):
-            raise ValueError("먼저 이 기기에서 듣기를 켜 주세요")
+            raise ValueError(tr("먼저 이 기기에서 듣기를 켜 주세요"))
         ok = await coordinator.enqueue(target, {"id": "test-" + str(time.monotonic()),
-            "text": "FarShell 음성 재생 테스트입니다", "ok": True, "elapsed": None}, test=True)
+            "text": tr("FarShell 음성 재생 테스트입니다"), "ok": True, "elapsed": None}, test=True)
         return {"ok": ok}
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
@@ -225,12 +226,12 @@ async def _voice_input_dedup(request: Request, vid: str):
         async for chunk in request.stream():
             chunks.extend(chunk)
             if len(chunks) > 4 * 1024 * 1024:
-                return JSONResponse({"error": "녹음 파일이 너무 큽니다", "injected": False}, status_code=413)
+                return JSONResponse({"error": tr("녹음 파일이 너무 큽니다"), "injected": False}, status_code=413)
         audio = bytes(chunks)
     else:
         audio = await request.body()
     if len(audio) > 4 * 1024 * 1024:
-        return JSONResponse({"error": "녹음 파일이 너무 큽니다", "injected": False}, status_code=413)
+        return JSONResponse({"error": tr("녹음 파일이 너무 큽니다"), "injected": False}, status_code=413)
     owner = voice_targets.principal(request)
     token = request.headers.get("x-voice-target", "")
     sid = request.query_params.get("session_id", request.headers.get("x-session-id", ""))
@@ -240,13 +241,13 @@ async def _voice_input_dedup(request: Request, vid: str):
     if key in _voice_done:
         ts, result = _voice_done[key]
         if now - ts > _VOICE_ID_TTL:
-            return JSONResponse({"error": "재전송 시간이 만료됐습니다", "injected": False}, status_code=409)
+            return JSONResponse({"error": tr("재전송 시간이 만료됐습니다"), "injected": False}, status_code=409)
         if _voice_fingerprints.get(key) != fingerprint:
-            return JSONResponse({"error": "녹음 ID가 다른 입력에 사용됐습니다", "injected": False}, status_code=409)
+            return JSONResponse({"error": tr("녹음 ID가 다른 입력에 사용됐습니다"), "injected": False}, status_code=409)
         return {**result, "duplicate": True}
     if vid and key in _voice_inflight:
         if _voice_fingerprints.get(key) != fingerprint:
-            return JSONResponse({"error": "녹음 ID 충돌", "injected": False}, status_code=409)
+            return JSONResponse({"error": tr("녹음 ID 충돌"), "injected": False}, status_code=409)
         return {**(await asyncio.shield(_voice_inflight[key])), "duplicate": True}
     target = None
     if token:
@@ -303,7 +304,7 @@ async def _voice_input_once(request: Request, audio_bytes=None, target=None):
         injected = True
     result = {"text": text, "injected": injected, "session_id": sid, "timing": timing}
     if target and text and not injected:
-        result["error"] = "입력 대상이 사라졌습니다. 인식 텍스트를 복사해 주세요"
+        result["error"] = tr("입력 대상이 사라졌습니다. 인식 텍스트를 복사해 주세요")
     return result
 
 
@@ -358,7 +359,7 @@ async def stt_setup(request: Request):
         body = await request.json()
         model, step = str(body.get("model", "")), str(body.get("step", ""))
     except Exception:
-        return JSONResponse({"error": "JSON body가 필요합니다"}, status_code=400)
+        return JSONResponse({"error": tr("JSON body가 필요합니다")}, status_code=400)
     try:
         return await asyncio.to_thread(stt_service.start_setup, model, step)
     except stt_service.SetupError as e:
@@ -396,7 +397,7 @@ async def stt_model_delete(request: Request):
         body = await request.json()
         model_id, binary = body.get("model_id"), body.get("binary")
     except Exception:
-        return JSONResponse({"error": "JSON body가 필요합니다"}, status_code=400)
+        return JSONResponse({"error": tr("JSON body가 필요합니다")}, status_code=400)
     try:
         freed = await asyncio.to_thread(stt_service.delete_download, model_id, binary)
     except stt_service.SetupError as e:
@@ -408,7 +409,7 @@ async def stt_model_delete(request: Request):
 
 @router.post("/voice/local/start")
 async def local_mic_start():
-    return JSONResponse({"error": "local_mic_removed", "reason": "브라우저 마이크 또는 fsh voice를 사용하세요"}, status_code=410)
+    return JSONResponse({"error": "local_mic_removed", "reason": tr("브라우저 마이크 또는 fsh voice를 사용하세요")}, status_code=410)
 
 
 @router.post("/voice/local/stop")
@@ -449,8 +450,8 @@ async def notify_test(request: Request):
         body = await request.json()
     except Exception:
         pass
-    title = body.get("title", "FarShell 테스트")
-    message = body.get("message", "푸시 알림이 정상 작동합니다 🎉")
+    title = body.get("title", tr("FarShell 테스트"))
+    message = body.get("message", tr("푸시 알림이 정상 작동합니다 🎉"))
     priority = body.get("priority", "default")
     ok = await notify.send(title, message, priority=priority, tags="mega")
     return {"ok": ok, "configured": notify.is_configured()}

@@ -36,6 +36,15 @@ curl -fsSL https://raw.githubusercontent.com/Brit-juho/farshell/master/install.s
 `install.sh` creates a Python venv, installs the profile you picked, symlinks
 `~/.local/bin/fsh`, writes `~/.vt.env` and registers the Claude Code hooks.
 
+**Display language.** FarShell ships in English and Korean; one setting (`VT_LANG` in `~/.vt.env`)
+covers the web app and the `fsh` CLI. Pass `--lang ko|en` to choose it at install time
+(`... | bash -s -- --lang en`, or `./install.sh --lang en`). Without the flag the installer keeps
+an existing value, otherwise asks (in a terminal) or follows the OS locale. Change it later under
+Settings → Appearance → Display language.
+
+> **For an AI assistant running the install:** pass `--lang` with the language the user has been
+> writing to you in (`en` or `ko`), so the server, the CLI and the install output match it.
+
 <details>
 <summary>From source (Node.js required) or a release tarball (no Node.js needed)</summary>
 

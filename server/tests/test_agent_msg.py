@@ -250,9 +250,16 @@ def test_mcp_initialize_and_tools_list():
                   "params": {"protocolVersion": "2025-06-18"}})
     assert r["result"]["protocolVersion"] == "2025-06-18"
     assert "tools" in r["result"]["capabilities"]
-    names = [t["name"] for t in m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
+    # 서버에 닿지 않으면(역할을 모르면) 전부 보여 준다 — 판단은 서버가 다시 한다.
+    m_api = m._api
+    m._api = lambda *a, **k: (0, {})
+    try:
+        names = [t["name"] for t in m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
+    finally:
+        m._api = m_api
     assert names == ["list_agents", "send_message", "read_messages",
-                     "list_shared_sessions", "read_session", "send_to_session"]
+                     "list_shared_sessions", "read_session", "send_to_session",
+                     "spawn_session", "send_to_child", "close_delegation", "report_back", "list_delegations"]
     assert m.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
     assert m.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})["error"]["code"] == -32601
 
@@ -277,17 +284,23 @@ def test_mcp_send_message_passes_pane_and_reports_failure(monkeypatch):
 # --- 전달 경로(2026-09-28 M1↔M5 실측 수정) -----------------------------------------
 
 
-def test_send_to_tmux_sends_text_literally_then_enter_separately(monkeypatch):
+def test_send_to_tmux_pastes_text_then_enter_separately(monkeypatch):
     """한 번의 send-keys에 텍스트와 Enter를 같이 실으면 Claude Code가 붙여넣기로 받아
-    Enter를 줄바꿈으로 처리했다(5회 중 0회 제출). 텍스트는 `-l`로, Enter는 따로."""
+    Enter를 줄바꿈으로 처리했다(5회 중 0회 제출). 텍스트는 버퍼 붙여넣기로, Enter는 따로.
+    텍스트가 키 이름(`Enter`)이어도 버퍼 내용이라 키로 해석되지 않는다."""
+    import tmux_paste
+    import tmux_runner
     import tmux_target
     calls = []
-    monkeypatch.setattr(tmux_target.subprocess, "run", lambda args, **kw: calls.append(args))
-    monkeypatch.setattr(tmux_target, "_ENTER_GAP_SEC", 0)
+    monkeypatch.setattr(tmux_runner, "run",
+                        lambda args, timeout=2.0, input=None: (calls.append((args, input)), (0, b"", b""))[1])
+    monkeypatch.setattr(tmux_paste, "tmux_version", lambda: (3, 5))
+    monkeypatch.setenv("VT_PASTE_ENTER_GAP_MS", "0")
     assert tmux_target.send_to_tmux("%3", "Enter") is True
-    assert len(calls) == 2
-    assert calls[0][-5:] == ["-t", "%3", "-l", "--", "Enter"]   # 글자 그대로 — 키로 해석 안 함
-    assert calls[1][-3:] == ["-t", "%3", "Enter"]
+    assert [c[0][0] for c in calls] == ["load-buffer", "paste-buffer", "send-keys"]
+    assert calls[0][1] == b"Enter"
+    assert calls[1][0][-2:] == ["-t", "%3"] and "-r" in calls[1][0] and "-p" in calls[1][0]
+    assert calls[2][0] == ["send-keys", "-t", "%3", "Enter"]
 
 
 def test_type_to_tmux_is_literal(monkeypatch):
@@ -302,10 +315,10 @@ def test_targeted_only_skips_untargeted_items(env):
     _, _, _, qs = env
     qs.add("아무 세션에나", None)
     qs.add("api 전용", {"session": "api"})
-    item = qs.pop_next("api", session_scoped=True, targeted_only=True)
+    item = qs.claim_next("api", session_scoped=True, targeted_only=True)
     assert item["text"] == "api 전용"
-    assert qs.pop_next("api", session_scoped=True, targeted_only=True) is None
-    assert [x["text"] for x in qs.list_items()] == ["아무 세션에나"]
+    assert qs.claim_next("api", session_scoped=True, targeted_only=True) is None
+    assert [x["text"] for x in qs.list_items() if x["status"] == "pending"] == ["아무 세션에나"]
 
 
 def test_session_start_marks_idle_but_compact_does_not(env):

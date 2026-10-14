@@ -472,12 +472,19 @@ def check_send_allowed(target: Sess) -> None:
         raise ShareError("target_waiting", "대상 세션이 승인 대기 중입니다 — 입력이 승인 답으로 소비될 수 있어 보내지 않습니다", 409)
     if st == "working":
         raise ShareError("target_busy", "대상 세션의 에이전트가 작업 중입니다 — 끝난 뒤에 보내세요", 409)
+    import pane_input
+    if pane_input.human_typing(target.name):
+        raise ShareError("target_human_typing", "사람이 대상 세션에 입력하는 중입니다 — 잠시 뒤에 보내세요", 409)
 
 
 def send_keys(target: Sess, text: str, enter: bool) -> None:
-    rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "-l", "--", text], timeout=3.0)
-    if rc == 0 and enter:
-        rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "Enter"], timeout=3.0)
+    # 한 줄 계약(check_send_text)이라 붙여넣기 경로가 필요 없다. 다른 자동 입력과
+    # 섞이지 않게 pane 락만 같이 쓴다(pane_input).
+    import pane_input
+    with pane_input.lock(target.pane_id):
+        rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "-l", "--", text], timeout=3.0)
+        if rc == 0 and enter:
+            rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "Enter"], timeout=3.0)
     if rc != 0:
         raise ShareError("tmux_failed", "입력을 보내지 못했습니다", 502)
 

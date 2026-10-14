@@ -119,6 +119,8 @@ Cause: `session_store` is in memory, so after a restart the page's WS reconnects
 
 310,711 -> 295,839 -> 297,689 -> 297,901 (view-tab status bar) -> 299,215 -> 299,310 -> 300,947 -> 303,467 (server-restart recovery) -> 305,403 B (closed-view memory policy) -> 300,800 B (session sheet list rendering moved to the lazy `screens` chunk; `core.js` 303,321 -> 298,718, `app.js` 2,082 unchanged; headroom about 6.4 KB). Headroom was about 1.8 KB; the ceiling is asserted by `frontend/tests/build-output.test.js`.
 
+2026-10-13: 307,168 B at HEAD (32 B of headroom) -> 307,551 B with the rail lineage settings (over) -> **252,513 B** after stripping whitespace and comments from every output chunk (`vite.config.js` `stripChunkWhitespace`, a post-order `renderChunk` esbuild pass; Vite's lib ES mode never minified whitespace, so `core.js` still carried its comments and indentation). `core.js` 305,107 -> 250,596, `app.js` 2,164 -> 1,917; headroom about 54 KB. Lazy chunks shrank too: `shell.js` 219,512 -> 168,373, `panels.js` 105,292 -> 95,132, `voice.js` 42,305 -> 32,333. Identifiers and syntax are left alone (the build-output test finds module-scope names); source maps are chained and still resolve to the original lines.
+
 ## 5. View-tab mockups
 
 Three variants of the segment status bar on the tab: **A** flush to the bottom edge (2/5px), **B** inner pill (3/6px), **C** top edge. **B chosen**: the 2x thickness difference (unseen vs seen) is still distinguishable at four segments and it reads in both light and dark skins; the active-tab underline moved to the background tone because the bar owns that edge.

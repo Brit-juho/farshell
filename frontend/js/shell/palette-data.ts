@@ -4,6 +4,8 @@
 // 정적 import하지 않는 순수 함수라야 node:test에서 값만 검증할 수 있다
 // (jsdom 마운트나 fetch 스텁 없이).
 
+import { t } from '../core/i18n.js';
+
 export type PaletteMode =
   | 'default'
   | 'file'
@@ -48,7 +50,7 @@ export const MODE_PREFIX: Record<Exclude<PaletteMode, 'default'>, string> = {
 };
 
 export const PLACEHOLDER =
-  '세션 · 최근 파일 · 명령 검색… ( / 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백 )';
+  t('세션 · 최근 파일 · 명령 검색… ( / 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백 )');
 
 export function parseQuery(rawInput: string): ParsedQuery {
   const raw = (rawInput || '').trim();
@@ -82,34 +84,34 @@ export interface CommandDescriptor {
 // 전부 커버해야 한다 — rail-palette-parity.test.js가 이 배열과 rail의
 // data-action 버튼을 교차 검사한다.
 export const DEFAULT_COMMANDS: CommandDescriptor[] = [
-  { label: '프롬프트 큐', action: 'queue.show', isPanel: true },
-  { label: '프롬프트 스니펫', action: 'snippets.show', isPanel: true },
-  { label: '파일 탐색기', action: 'dir.show', isPanel: true },
-  { label: '첨부 · 공유 링크', action: 'files.show', isPanel: true },
-  { label: '포트 대시보드', action: 'ports.show', gate: 'ports', isPanel: true },
-  { label: '사용량', action: 'usage.open', gate: 'usage', isPanel: true },
-  { label: '터미널 내 검색', action: 'search.toggle' },
-  { label: '음성 전용 모드', action: 'voice.only-toggle', gate: 'voice' },
-  { label: '음성 입력 상태', action: 'voice.status' },
-  { label: '새 세션', action: 'session.add-menu' },
+  { label: t('프롬프트 큐'), action: 'queue.show', isPanel: true },
+  { label: t('프롬프트 스니펫'), action: 'snippets.show', isPanel: true },
+  { label: t('파일 탐색기'), action: 'dir.show', isPanel: true },
+  { label: t('첨부 · 공유 링크'), action: 'files.show', isPanel: true },
+  { label: t('포트 대시보드'), action: 'ports.show', gate: 'ports', isPanel: true },
+  { label: t('사용량'), action: 'usage.open', gate: 'usage', isPanel: true },
+  { label: t('터미널 내 검색'), action: 'search.toggle' },
+  { label: t('음성 전용 모드'), action: 'voice.only-toggle', gate: 'voice' },
+  { label: t('음성 입력 상태'), action: 'voice.status' },
+  { label: t('새 세션'), action: 'session.add-menu' },
   // 2026-09-23(2.1 D6) — 「모든 기능」에서 찾을 수 없던 셋. rail에는 이
   // 셋과 짝지을 data-action 버튼이 없다(설정·세션은 rail이 임베디드
   // 패널로 직접 그리고, 변경·연결된 화면은 dock/모바일 하단내비 몫이다)
   // — isPanel을 안 붙여 rail-palette-parity(ADR-8) 대상에서 뺀다.
-  { label: '설정', action: 'settings.show' },
-  { label: '변경', action: 'scm.show' },
-  { label: '연결된 화면', action: 'clients.show' },
+  { label: t('설정'), action: 'settings.show' },
+  { label: t('변경'), action: 'scm.show' },
+  { label: t('연결된 화면'), action: 'clients.show' },
 ];
 
 // `>` 접두사(설정 — 2.0에서 이어받은 부가 기능, 위 PREFIX_MODE 주석 참고).
 // 테마 항목은 index.html의 .theme-chip을 그대로 읽으므로(라벨 중복 방지)
 // 여기 데이터에는 없다 — Palette.tsx가 DOM에서 직접 구성한다.
 export const SETTINGS_COMMANDS: CommandDescriptor[] = [
-  { label: '푸시 알림', action: 'push.toggle', gate: 'push' },
-  { label: '드래그 시 자동 복사', action: '__toggle:mouse.autocopyOnSelect' },
-  { label: '새 세션을 맥에서도 열기', action: '__toggle:session.openOnMac' },
-  { label: '이어폰 미디어키', action: 'voice.mediakey-toggle', gate: 'voice' },
-  { label: '가이드 보기', action: 'guide.show' },
+  { label: t('푸시 알림'), action: 'push.toggle', gate: 'push' },
+  { label: t('드래그 시 자동 복사'), action: '__toggle:mouse.autocopyOnSelect' },
+  { label: t('새 세션을 맥에서도 열기'), action: '__toggle:session.openOnMac' },
+  { label: t('이어폰 미디어키'), action: 'voice.mediakey-toggle', gate: 'voice' },
+  { label: t('가이드 보기'), action: 'guide.show' },
 ];
 
 export function panelCommands(cmds: CommandDescriptor[]): CommandDescriptor[] {
