@@ -129,6 +129,7 @@ NGROK_LOG="$VT_RUN_DIR/ngrok.log"
 DAEMON_LOG="$VT_RUN_DIR/vt-voice-daemon.log"
 CLIP_DAEMON_LOG="$VT_RUN_DIR/vt-clipboard-daemon.log"
 WATCHDOG_LOG="$VT_RUN_DIR/vt-tunnel-watchdog.log"
+HOOK_RETRY_LOG="$VT_RUN_DIR/vt-tunnel-hook-retry.log"
 PID_DIR="$VT_RUN_DIR/vt-pids"
 mkdir -p "$PID_DIR"
 # 추가 포트 터널 레지스트리 (TSV: port<TAB>url<TAB>label)
@@ -917,6 +918,42 @@ _tunnel_entries() {
   fi
 }
 
+# 주소가 아직 안 열린 start 훅을 백그라운드에서 다시 시도한다. 한 번에 하나만 —
+# 앞선 재시도는 이전 주소를 기다리는 것이라 새로 띄우기 전에 끝낸다. `fsh stop`이
+# pid 파일(tunnel-hook-retry)로 함께 내린다.
+_spawn_tunnel_hook_retry() {
+  local url="$1" tries="${VT_TUNNEL_RETRY_TRIES:-40}" interval="${VT_TUNNEL_RETRY_INTERVAL:-15}"
+  local pidfile="$PID_DIR/tunnel-hook-retry.pid"
+  _is_running tunnel-hook-retry && kill "$(cat "$pidfile")" 2>/dev/null
+  nohup "$VT_DIR/bin/fsh" tunnel __hook-retry "$url" > "$HOOK_RETRY_LOG" 2>&1 < /dev/null &
+  echo $! > "$pidfile"
+  echo "  ⚠ $(_t '터널 주소가 아직 응답하지 않습니다 — 백그라운드에서 최대 {min}분 더 기다렸다가 게시합니다: {url} (로그: {log})' \
+    min="$(( (tries * interval + 59) / 60 ))" url="$url" log="$HOOK_RETRY_LOG")"
+}
+
+# `fsh tunnel __hook-retry <url>` 본체. 주소가 응답하면 start 훅을 한 번 실행한다.
+# 그 사이 주소가 바뀌면(터널 재시작) 그만둔다 — 새 주소는 새 start가 맡는다.
+_tunnel_hook_retry() {
+  local url="$1" i tries="${VT_TUNNEL_RETRY_TRIES:-40}" interval="${VT_TUNNEL_RETRY_INTERVAL:-15}"
+  local pidfile="$PID_DIR/tunnel-hook-retry.pid"
+  [ -n "$url" ] || return 1
+  for i in $(seq 1 "$tries"); do
+    if [ "$(_main_tunnel_url)" != "$url" ]; then
+      echo "$(date '+%F %T') url changed; stop waiting for $url"
+      break
+    fi
+    if VT_TUNNEL_ALIVE_TRIES=1 _tunnel_url_alive "$url"; then
+      echo "$(date '+%F %T') alive after try $i: $url"
+      _FSH_HOOK_RETRYING=1 _run_tunnel_hook start
+      break
+    fi
+    [ "$i" -lt "$tries" ] && sleep "$interval"
+    [ "$i" -eq "$tries" ] && echo "$(date '+%F %T') gave up after $tries tries: $url"
+  done
+  [ "$(cat "$pidfile" 2>/dev/null)" = "$$" ] && rm -f "$pidfile"
+  return 0
+}
+
 _run_tunnel_hook() {
   local event="${1:-manual}"
   # 미설정이면 조용히 통과 — 터널 동작을 절대 방해하지 않는다
@@ -935,7 +972,14 @@ _run_tunnel_hook() {
   if [ "$event" != "stop" ] && [ "$(_tunnel_provider)" != "ngrok" ] && [ -z "${VT_TUNNEL_HOSTNAME:-}" ]; then
     url_now="$(_main_tunnel_url)"
     if [ -n "$url_now" ] && ! _tunnel_url_alive "$url_now"; then
-      echo "  ⚠ $(_t '터널 주소가 응답하지 않아 훅 게시를 건너뜁니다: {url}' url="$url_now")"
+      # 2026-10-14 — 새 quick tunnel이 60초 넘게 안 열려 여기서 건너뛰었고, 다시
+      # 시도하는 곳이 없어 새 주소가 영영 게시되지 않았다(실사고). start는
+      # 백그라운드에서 더 기다렸다가 게시한다. 재시도 자신은 다시 띄우지 않는다.
+      if [ "$event" = "start" ] && [ -z "${_FSH_HOOK_RETRYING:-}" ]; then
+        _spawn_tunnel_hook_retry "$url_now"
+      else
+        echo "  ⚠ $(_t '터널 주소가 응답하지 않아 훅 게시를 건너뜁니다: {url}' url="$url_now")"
+      fi
       return 0
     fi
   fi
@@ -2842,7 +2886,7 @@ cmd_stop() {
   local had_tunnel
   had_tunnel="$(_main_tunnel_pids)"
 
-  local _svcs="voice clip tunnel-watchdog tunnel server"
+  local _svcs="voice clip tunnel-hook-retry tunnel-watchdog tunnel server"
   [ "$keep_tunnel" -eq 1 ] && _svcs="voice clip server"
   for svc in $_svcs; do
     local pidfile="$PID_DIR/$svc.pid"
@@ -4034,6 +4078,10 @@ cmd_tunnel() {
       ;;
     list)
       _tunnel_list
+      ;;
+    __hook-retry)
+      # 내부용 — _spawn_tunnel_hook_retry가 nohup으로 띄운다.
+      _tunnel_hook_retry "${2:-}"
       ;;
     hook)
       echo ""

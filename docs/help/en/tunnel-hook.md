@@ -80,6 +80,20 @@ fsh tunnel hook      # shows what will be passed and actually runs it once
 
 ---
 
+### When the new URL opens late
+
+A freshly created anonymous tunnel may not answer right away. To avoid publishing a dead URL, the
+hook checks on `start` that the URL responds, for about 60 seconds. If it still doesn't, it no longer
+gives up: it **keeps waiting in the background and publishes once** (every 15 seconds by default, up
+to about 10 minutes). If the URL changes while it waits (the tunnel restarted), the old URL is dropped,
+and `fsh stop` takes the waiter down with everything else. Only one runs at a time. The log is
+`$VT_RUN_DIR/vt-tunnel-hook-retry.log`.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VT_TUNNEL_RETRY_TRIES` | 40 | How many background re-checks |
+| `VT_TUNNEL_RETRY_INTERVAL` | 15 | Seconds between re-checks |
+
 ## Examples by method
 
 These are **suggestions.** Adapt them to the tools you use rather than copying them as is.

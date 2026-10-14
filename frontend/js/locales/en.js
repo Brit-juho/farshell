@@ -2780,6 +2780,7 @@ window.__VT_I18N = {
   "터널 재시작 중...": "Restarting tunnel...",
   "터널 제공자": "Tunnel provider",
   "터널 제공자: ": "Provider:     ",
+  "터널 주소가 아직 응답하지 않습니다 — 백그라운드에서 최대 {min}분 더 기다렸다가 게시합니다: {url} (로그: {log})": "Tunnel URL isn't responding yet; waiting up to {min} more min in the background, then posting: {url} (log: {log})",
   "터널 주소가 응답하지 않아 훅 게시를 건너뜁니다: {url}": "Tunnel URL isn't responding; skipping the hook: {url}",
   "터널 해제": "Close tunnel",
   "터널: {url}": "Tunnel: {url}",

@@ -20,6 +20,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **새 터널 주소가 늦게 열리면 URL 훅이 영영 게시를 못 하던 것**. 훅은 죽은 주소를 올리지 않으려고 `start`에서 약 60초 동안 주소가 응답하는지 확인하는데, 그 안에 열리지 않으면 게시를 건너뛰고 다시 시도하는 곳이 없었다. 실제로 새 quick tunnel이 62초 뒤에야 열려 새 주소가 게시되지 않았다. 이제 `start`에서 건너뛰면 백그라운드 재시도(`fsh tunnel __hook-retry`)가 15초마다 최대 40번(약 10분) 확인하다가 열리면 한 번 게시한다. 그 사이 주소가 바뀌면 옛 주소는 버리고, 재시도는 한 번에 하나만 돌며 `fsh stop`이 함께 내린다. `VT_TUNNEL_RETRY_TRIES`·`VT_TUNNEL_RETRY_INTERVAL`로 조절한다. 도움말(한국어·영어)과 `docs/ref/tunnel.md`에 설명을 더했다.
+
 - **훅 설치가 설정 파일의 심볼릭 링크와 권한을 망가뜨리던 것**. `fsh hooks install`/`uninstall`과 MCP 쓰기가 설정 파일(`settings.json`, `config.toml`, `hooks.json`)을 임시 파일로 바꿔치기해, dotfiles나 계정 폴더가 공유 파일을 심볼릭 링크로 걸어 둔 경우 링크가 일반 파일로 바뀌고 원본은 낡은 채 남았다. 훅 쪽은 원래 0644였던 파일도 0600으로 바꿨다. 쓰기를 `server/config_io.py` 한곳으로 모아 링크 끝의 실제 파일을 쓰고, 권한을 물려받고, `fsync` 뒤에 교체하고, 락 이름을 실제 파일 기준으로 정하고, 읽은 뒤 파일이 바뀌었으면 쓰지 않고, 오래된 임시 파일을 치운다. 하드링크는 안전하게 쓸 수 없어 거부하고 이유를 알린다. CRLF·BOM 보존은 하지 않는다. (설계: `docs/plan-2.4/60-magpie-candidates.md`)
 
 - **세션 상태가 엉뚱한 세션에 붙거나 옛 상태가 이기던 것**. tmux 세션마다 그 pane을 지금 가진 에이전트 세션 하나(소유자)만 상태를 낸다. `/clear`·`--resume`·재실행으로 새 세션이 열리면 옛 세션은 은퇴하고, 그 늦은 훅은 무시한다. 예전엔 한 세션에 엔트리가 셋까지 쌓여 옛 `done`이 지금의 `working`을 이겼다(실서버). 소유자가 아닌 session_id의 훅(같은 pane을 물려받은 `claude -p` 같은 자식)은 상태·큐·음성을 건드리지 않는다. `SessionEnd`는 완료가 아니라 반납이라 `/clear`가 「완료」 배지와 큐 투입을 만들지 않는다. 설치기가 `SessionEnd`·`UserPromptSubmit`도 관리한다(`fsh hooks install` 다시 실행).
