@@ -31,21 +31,18 @@ Claude Code 자신도 쓰고, flock은 협조적 락이라 상대가 지키지 �
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
+import os  # noqa: F401 — 테스트가 mcp_write.os.replace를 가로챈다 (같은 os 모듈이라 config_io의 교체도 잡힌다)
 import re
-import tempfile
 import tomllib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
 import codex_cli
+import config_io
 import mcp_adapters
 import mcp_scan
-import store_lock
-import vt_paths
 from i18n import tr
 
 TOOLS = ("claude", "codex", "agy", "opencode")
@@ -92,62 +89,30 @@ def plan_changes(current: dict[str, bool], wanted: list[dict]) -> list[dict]:
 # ------------------------------------------------------------------ 잠금
 
 def _lock_dir() -> Path:
-    # P2-4(ADR-41) — 예전 관용구(`os.environ.get("VT_STATE_DIR") or (Path.home()
-    # / ".vt")`)는 `VT_STATE_DIR=""`에서 빈 문자열이 falsy라 우연히 폴백이
-    # 걸렸지만, `"~/vt-test"`에서는 `~`를 안 펴서 다른 16곳과 갈라졌다.
-    d = vt_paths.state_dir() / "locks"
-    d.mkdir(parents=True, exist_ok=True, mode=0o700)
-    return d
+    return config_io._lock_dir()
 
 
 @contextmanager
 def _locked(target: Path):
-    """대상 파일 하나에 대한 잠금. 잠금 파일은 사용자의 설정 디렉토리를
-    더럽히지 않도록 `~/.vt/locks/` 아래에 둔다.
-
-    기한이 다른 저장소보다 길다(10초) — 상대(Claude Code 자신)가 협조하지
-    않을 수 있는 파일이라 정직한 경쟁에 더 여유를 준다
-    (`docs/plan-2.3/20-store-durability.md` §3.3).
-    """
-    key = hashlib.sha1(str(target).encode()).hexdigest()[:16]
-    lock_path = _lock_dir() / f"{key}.lock"
-    with store_lock.exclusive(lock_path, deadline=10.0):
+    """대상 파일 하나에 대한 잠금. 구현은 `config_io.locked` — 락 이름이 심볼릭 링크를
+    해석한 실제 파일 기준이라 링크 경로와 실제 경로가 같은 락을 잡는다."""
+    with config_io.locked(target):
         yield
 
 
 # -------------------------------------------------------- 원자적 교체·검증
 
 def _stamp(path: Path) -> Optional[tuple]:
-    try:
-        st = path.stat()
-        return (st.st_mtime_ns, st.st_size)
-    except FileNotFoundError:
-        return None
+    return config_io.stamp(path)
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    """같은 디렉토리에 임시 파일로 쓰고 rename. 기존 파일이 있으면 권한을
-    그대로 물려받는다(0644인 `.mcp.json`을 0600으로 바꿔버리면 그것도 남의
-    설정을 건드리는 것이다)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """남의 설정 파일 교체. 구현은 `config_io.atomic_write` — 링크를 따라가고, 권한을
+    물려받고, 하드링크는 거부한다. 거부는 이 모듈의 `WriteRefused`로 옮긴다."""
     try:
-        mode = path.stat().st_mode & 0o777
-    except FileNotFoundError:
-        mode = 0o600
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".vt-mcp-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        os.chmod(tmp, mode)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+        config_io.atomic_write(path, text)
+    except config_io.ConfigWriteRefused as e:
+        raise WriteRefused(str(e)) from e
 
 
 def _guard_minimal_change(before: dict, after: dict, touched: str,

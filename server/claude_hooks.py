@@ -36,8 +36,10 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 from pathlib import Path
+
+import config_io
+import store_lock
 from i18n import tr
 
 # 훅 이벤트 → agent_hook.sh 인자. Claude Code의 이벤트 이름이 키다.
@@ -250,25 +252,24 @@ def apply_uninstall(settings: dict) -> tuple[dict, list[str]]:
     return settings, changes
 
 
-def write_settings(path: Path, data: dict) -> Path | None:
-    """백업 후 원자적으로 쓴다. 백업 경로를 반환(원본이 없었으면 None)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+_UNCHECKED = object()
+
+
+def write_settings(path: Path, data: dict, expected_stamp=_UNCHECKED) -> Path | None:
+    """백업 후 원자적으로 쓴다. 백업 경로를 반환(원본이 없었으면 None).
+
+    `expected_stamp`를 주면(읽기 직전의 `config_io.stamp`) 쓰기 직전에 파일이 그대로인지
+    다시 확인하고, 바뀌었으면 `ConfigWriteRefused`다. 링크는 따라가고 권한은 물려받는다
+    (`config_io`).
+    """
+    target = config_io.resolve_target(path)
+    if expected_stamp is not _UNCHECKED:
+        config_io.ensure_unchanged(path, expected_stamp)
     backup = None
-    if path.exists():
-        backup = path.with_suffix(path.suffix + ".vtbak")
-        shutil.copy2(path, backup)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".settings-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    if target.exists():
+        backup = target.with_suffix(target.suffix + ".vtbak")
+        shutil.copy2(target, backup)
+    config_io.atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return backup
 
 
@@ -289,16 +290,22 @@ def _cmd_status() -> int:
 def _cmd_install() -> int:
     path = settings_path()
     try:
-        settings = load_settings(path)
-    except ValueError as e:
+        with config_io.locked(path):
+            stamp = config_io.stamp(path)
+            try:
+                settings = load_settings(path)
+            except ValueError as e:
+                print(f"  ✗ {e}")
+                print(tr("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다."))
+                return 2
+            merged, changes = apply_install(settings)
+            if not changes:
+                print(tr("  ✓ 이미 등록돼 있습니다 ({path})", path=path))
+                return 0
+            backup = write_settings(path, merged, stamp)
+    except (config_io.ConfigWriteRefused, store_lock.LockTimeout) as e:
         print(f"  ✗ {e}")
-        print(tr("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다."))
         return 2
-    merged, changes = apply_install(settings)
-    if not changes:
-        print(tr("  ✓ 이미 등록돼 있습니다 ({path})", path=path))
-        return 0
-    backup = write_settings(path, merged)
     for c in changes:
         print(f"  · {c}")
     print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))
@@ -309,15 +316,21 @@ def _cmd_install() -> int:
 def _cmd_uninstall() -> int:
     path = settings_path()
     try:
-        settings = load_settings(path)
-    except ValueError as e:
+        with config_io.locked(path):
+            stamp = config_io.stamp(path)
+            try:
+                settings = load_settings(path)
+            except ValueError as e:
+                print(f"  ✗ {e}")
+                return 2
+            merged, changes = apply_uninstall(settings)
+            if not changes:
+                print(tr("  ✓ 등록된 FarShell 훅이 없습니다"))
+                return 0
+            backup = write_settings(path, merged, stamp)
+    except (config_io.ConfigWriteRefused, store_lock.LockTimeout) as e:
         print(f"  ✗ {e}")
         return 2
-    merged, changes = apply_uninstall(settings)
-    if not changes:
-        print(tr("  ✓ 등록된 FarShell 훅이 없습니다"))
-        return 0
-    backup = write_settings(path, merged)
     for c in changes:
         print(f"  · {c}")
     print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))

@@ -114,6 +114,18 @@ Register both with `fsh hooks install` (idempotent, preserves other hooks, and b
 up the changed config files). `fsh hooks status` and `fsh doctor` report Claude's
 eight events and Codex's six events separately.
 
+**Writing other tools' config files (`server/config_io.py`, 2026-10-14).** Hook install/uninstall
+and the MCP writers share one write path. It writes through symbolic links (the file at the end
+of the link, so a dotfiles repo or a per-account config folder that links a shared file keeps
+its link), keeps the file's mode, `fsync`s before the rename, names its lock after the real file
+(a link path and the real path take the same lock), and re-checks the file's mtime/size just
+before writing: if Claude Code or Codex changed it after we read it, nothing is written and
+the command says to retry. The lock is advisory — Claude Code does not honor it — so the
+re-check narrows the window, it does not close it. A file with other hard links is refused,
+because a rename would split the names and an in-place write is not atomic. CRLF and BOM are
+not preserved (native Windows is unsupported; a BOM file fails to parse and is refused, not
+damaged). Design and reasoning: `docs/plan-2.4/60-magpie-candidates.md` (local).
+
 **`~/.codex/hooks.json` duplicates (2026-10-06):** the Codex desktop app's "import Claude
 settings" copies Claude's FarShell hooks into `hooks.json` (`agent_hook.sh pre|post|
 permission|stop|session_start claude`, plus untagged `session_end`/`prompt`). Codex reads

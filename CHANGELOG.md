@@ -16,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **훅 설치가 설정 파일의 심볼릭 링크와 권한을 망가뜨리던 것**. `fsh hooks install`/`uninstall`과 MCP 쓰기가 설정 파일(`settings.json`, `config.toml`, `hooks.json`)을 임시 파일로 바꿔치기해, dotfiles나 계정 폴더가 공유 파일을 심볼릭 링크로 걸어 둔 경우 링크가 일반 파일로 바뀌고 원본은 낡은 채 남았다. 훅 쪽은 원래 0644였던 파일도 0600으로 바꿨다. 쓰기를 `server/config_io.py` 한곳으로 모아 링크 끝의 실제 파일을 쓰고, 권한을 물려받고, `fsync` 뒤에 교체하고, 락 이름을 실제 파일 기준으로 정하고, 읽은 뒤 파일이 바뀌었으면 쓰지 않고, 오래된 임시 파일을 치운다. 하드링크는 안전하게 쓸 수 없어 거부하고 이유를 알린다. CRLF·BOM 보존은 하지 않는다. (설계: `docs/plan-2.4/60-magpie-candidates.md`)
+
 - **세션 상태가 엉뚱한 세션에 붙거나 옛 상태가 이기던 것**. tmux 세션마다 그 pane을 지금 가진 에이전트 세션 하나(소유자)만 상태를 낸다. `/clear`·`--resume`·재실행으로 새 세션이 열리면 옛 세션은 은퇴하고, 그 늦은 훅은 무시한다. 예전엔 한 세션에 엔트리가 셋까지 쌓여 옛 `done`이 지금의 `working`을 이겼다(실서버). 소유자가 아닌 session_id의 훅(같은 pane을 물려받은 `claude -p` 같은 자식)은 상태·큐·음성을 건드리지 않는다. `SessionEnd`는 완료가 아니라 반납이라 `/clear`가 「완료」 배지와 큐 투입을 만들지 않는다. 설치기가 `SessionEnd`·`UserPromptSubmit`도 관리한다(`fsh hooks install` 다시 실행).
 
 - **질문이 떴는데 대기 상태가 안 뜨거나 바로 풀리던 것**. Claude `AskUserQuestion`·`ExitPlanMode`의 PreToolUse에서 바로 대기로 올리고, 대기는 그 도구의 post(같은 `tool_use_id`)·다음 프롬프트·Stop·사람 입력으로만 풀린다. 서브에이전트(`agent_id`)나 병렬 도구의 이벤트는 대기를 풀지 않고, 서브에이전트 도구는 끝난 세션을 다시 작업 중으로 만들지 않는다. 화면 감지·중단 문구·입력 해제·TTL 전이도 15초 하트비트를 기다리지 않고 바로 화면에 간다.

@@ -11,9 +11,11 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 import tomllib
 from pathlib import Path
+
+import config_io
+import store_lock
 from i18n import tr
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -141,23 +143,20 @@ def apply_uninstall(text: str) -> tuple[str, list[str]]:
     return merged, [tr("Codex 훅 블록 제거")]
 
 
-def write_text(path: Path, text: str) -> Path | None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+_UNCHECKED = object()
+
+
+def write_text(path: Path, text: str, expected_stamp=_UNCHECKED) -> Path | None:
+    """백업 후 원자적으로 쓴다. `expected_stamp`를 주면 쓰기 직전에 파일이 그대로인지 다시
+    확인한다(`config_io.ensure_unchanged`). 링크는 따라가고 권한은 물려받는다."""
+    target = config_io.resolve_target(path)
+    if expected_stamp is not _UNCHECKED:
+        config_io.ensure_unchanged(path, expected_stamp)
     backup = None
-    if path.exists():
-        backup = path.with_suffix(path.suffix + ".vtbak")
-        shutil.copy2(path, backup)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".config-", suffix=".toml")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as file:
-            file.write(text)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    if target.exists():
+        backup = target.with_suffix(target.suffix + ".vtbak")
+        shutil.copy2(target, backup)
+    config_io.atomic_write(path, text)
     return backup
 
 
@@ -175,15 +174,21 @@ def _cmd_status() -> int:
 def _cmd_install() -> int:
     path = settings_path()
     try:
-        merged, changes = apply_install(load_text(path))
-    except (ValueError, tomllib.TOMLDecodeError) as exc:
+        with config_io.locked(path):
+            stamp = config_io.stamp(path)
+            try:
+                merged, changes = apply_install(load_text(path))
+            except (ValueError, tomllib.TOMLDecodeError) as exc:
+                print(f"  ✗ {exc}")
+                print(tr("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다."))
+                return 2
+            if not changes:
+                print(tr("  ✓ 이미 등록돼 있습니다 ({path})", path=path))
+                return 0
+            backup = write_text(path, merged, stamp)
+    except (config_io.ConfigWriteRefused, store_lock.LockTimeout) as exc:
         print(f"  ✗ {exc}")
-        print(tr("  설정 파일을 고친 뒤 다시 실행하세요 — 덮어쓰지 않았습니다."))
         return 2
-    if not changes:
-        print(tr("  ✓ 이미 등록돼 있습니다 ({path})", path=path))
-        return 0
-    backup = write_text(path, merged)
     for change in changes:
         print(f"  · {change}")
     print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))
@@ -194,14 +199,20 @@ def _cmd_install() -> int:
 def _cmd_uninstall() -> int:
     path = settings_path()
     try:
-        merged, changes = apply_uninstall(load_text(path))
-    except ValueError as exc:
+        with config_io.locked(path):
+            stamp = config_io.stamp(path)
+            try:
+                merged, changes = apply_uninstall(load_text(path))
+            except ValueError as exc:
+                print(f"  ✗ {exc}")
+                return 2
+            if not changes:
+                print(tr("  ✓ 등록된 FarShell Codex 훅이 없습니다"))
+                return 0
+            backup = write_text(path, merged, stamp)
+    except (config_io.ConfigWriteRefused, store_lock.LockTimeout) as exc:
         print(f"  ✗ {exc}")
         return 2
-    if not changes:
-        print(tr("  ✓ 등록된 FarShell Codex 훅이 없습니다"))
-        return 0
-    backup = write_text(path, merged)
     print(tr("  ✓ {path} 갱신", path=path) + (tr(" (백업: {backup})", backup=backup) if backup else ""))
     return 0
 
@@ -326,24 +337,16 @@ def apply_dedupe(data: dict) -> tuple[dict, list[tuple[str, str, str | None]]]:
     return {**data, "hooks": new_hooks}, removed
 
 
-def write_hooks_json(path: Path, data: dict, raw: str) -> Path:
-    backup = path.with_suffix(path.suffix + ".vtbak")
-    shutil.copy2(path, backup)
+def write_hooks_json(path: Path, data: dict, raw: str, expected_stamp=_UNCHECKED) -> Path:
+    target = config_io.resolve_target(path)
+    if expected_stamp is not _UNCHECKED:
+        config_io.ensure_unchanged(path, expected_stamp)
+    backup = target.with_suffix(target.suffix + ".vtbak")
+    shutil.copy2(target, backup)
     text = json.dumps(data, indent=_detect_indent(raw), ensure_ascii=False)
     if raw.endswith("\n"):
         text += "\n"
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".hooks-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as file:
-            file.write(text)
-        shutil.copymode(path, tmp)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    config_io.atomic_write(path, text)
     return backup
 
 
@@ -356,6 +359,16 @@ def _cmd_duplicates() -> int:
 
 def _cmd_dedupe(dry_run: bool) -> int:
     path = hooks_json_path()
+    try:
+        with config_io.locked(path):
+            return _dedupe(path, dry_run)
+    except (config_io.ConfigWriteRefused, store_lock.LockTimeout) as exc:
+        print(f"  ✗ {exc}")
+        return 2
+
+
+def _dedupe(path: Path, dry_run: bool) -> int:
+    stamp = config_io.stamp(path)
     try:
         data, raw = _load_hooks_json(path)
     except ValueError as exc:
@@ -376,7 +389,7 @@ def _cmd_dedupe(dry_run: bool) -> int:
         print(tr("  ⓘ --dry-run: {path} 는 바꾸지 않았습니다 ({n}개)", path=display_path(path), n=len(removed)))
         return 0
     try:
-        backup = write_hooks_json(path, new_data, raw)
+        backup = write_hooks_json(path, new_data, raw, stamp)
     except OSError as exc:
         print(tr("  ✗ 쓰기 실패: {error}", error=exc))
         return 2
