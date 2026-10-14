@@ -164,3 +164,74 @@ def test_skip_env_is_loud_not_silent(repo, monkeypatch, capsys):
     monkeypatch.setenv("FSH_GUARD_SKIP", "1")
     assert guard.run("staged") == 0
     assert "FSH_GUARD_SKIP" in capsys.readouterr().err
+
+
+# ── 기록 문서 경로 (2026-10-14) ──────────────────────────────────────────────
+
+@pytest.mark.parametrize("path", [
+    "research_notes/x/y.md", "reports/audit.md", "docs/plan-2.5/10-a.md", "docs/archive/v2.2/x.md", "docs/TODOS.md",
+    "docs/ref/keyboard-input-plan.md", "docs/ref/references.md", "docs/ref/mcp-reference-logic.md",
+    "MCP_MANAGEMENT_DESIGN.md", "SESSION_VIEW_DESIGN.md",
+])
+def test_record_documents_are_blocked(path):
+    probs = guard.scan([path], [], markers=[], words=[])
+    assert probs and "올릴 수 없는 경로" in probs[0]
+
+
+@pytest.mark.parametrize("path", [
+    "DESIGN.md", "docs/ref/terminal.md", "docs/ref/session-ui.md", "docs/help/ssh.md", "docs/help/en/ssh.md",
+    "docs/guide/platforms.md", "README.md", "scripts/stt_bench_engines/README.md", "frontend/js/reports/x.js",
+])
+def test_reference_and_product_documents_pass(path):
+    assert guard.scan([path], [], markers=[], words=[]) == []
+
+
+# ── 내 단어 ──────────────────────────────────────────────────────────────────
+
+def test_personal_words_block_whole_words_only_and_are_not_echoed():
+    words = ["acmecorp", "profile-x"]
+    lines = [
+        ("a.py", 1, "owner = 'acmecorp'"),
+        ("a.py", 2, "name: profile-x"),
+        ("a.py", 3, "acmecorporation"),          # 단어 경계 — 걸리지 않는다
+        ("a.py", 4, "x_acmecorp_y"),             # 밑줄은 단어 문자다
+    ]
+    probs = guard.scan([], lines, markers=[], words=words)
+    assert len(probs) == 2 and probs[0].startswith("a.py:1:") and probs[1].startswith("a.py:2:")
+    assert all("acmecorp" not in p and "profile-x" not in p for p in probs)
+
+
+def test_personal_words_are_case_sensitive():
+    # 대문자로 시작하는 저장소 슬러그가 소문자 프로필 이름과 섞이지 않게 한다.
+    probs = guard.scan([], [("README.md", 1, "github.com/Acmecorp-Labs/farshell")], markers=[], words=["acmecorp"])
+    assert probs == []
+    assert guard.scan([], [("a.py", 1, "profile acmecorp")], markers=[], words=["acmecorp"])
+
+
+def test_personal_words_also_check_new_file_names():
+    probs = guard.scan(["docs/help/acmecorp-notes.md"], [], markers=[], words=["acmecorp"])
+    assert probs and "acmecorp" not in probs[0]
+
+
+def test_words_file_parsing(tmp_path, monkeypatch):
+    f = tmp_path / "words"
+    f.write_text("# 내 단어\n\nacmecorp\n  profile-x  \nab\nacmecorp\n", encoding="utf-8")
+    assert guard.personal_words(str(f)) == ["acmecorp", "profile-x"]      # 주석·빈 줄·짧은 단어·중복 제외
+    assert guard.personal_words(str(tmp_path / "missing")) == []          # 파일이 없어도 가드는 돈다
+    monkeypatch.setenv("VT_GUARD_WORDS", str(f))
+    assert guard.words_path() == str(f)
+    assert guard.scan([], [("a.py", 1, "owner acmecorp")], markers=[])    # words=None → 환경변수 파일을 읽는다
+
+
+def test_staged_mode_uses_the_words_file(tmp_path, monkeypatch):
+    words = tmp_path / "words"
+    words.write_text("zzcorp\n", encoding="utf-8")
+    repo = tmp_path / "r"
+    repo.mkdir()
+    env = {**os.environ, "VT_GUARD_WORDS": str(words), "HOME": str(tmp_path)}
+    run = lambda *a: subprocess.run(a, cwd=repo, env=env, capture_output=True, text=True)
+    run("git", "init", "-q")
+    (repo / "a.txt").write_text("owner zzcorp\n", encoding="utf-8")
+    run("git", "add", "a.txt")
+    r = run(sys.executable, str(ROOT / "scripts" / "guard_personal.py"), "staged")
+    assert r.returncode == 1 and "개인 단어" in r.stderr and "zzcorp" not in r.stderr

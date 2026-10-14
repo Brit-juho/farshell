@@ -142,6 +142,7 @@ _t_en_lookup() {
     'ngrok 이미 실행 중: {url}') _T_OUT='ngrok already running: {url}' ;;
     'oh-my-tmux 감지 → {path}') _T_OUT='Detected oh-my-tmux → {path}' ;;
     'package.json은 >=20 요구. 프런트 빌드가 실패할 수 있음') _T_OUT='package.json requires >=20. The frontend build may fail' ;;
+    'pre-commit·pre-push 훅 켜짐') _T_OUT='pre-commit and pre-push hooks are on' ;;
     'push 알림') _T_OUT='Push alerts' ;;
     'python3 미설치. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''') _T_OUT='python3 isn'\''t installed. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''' ;;
     'settings.json profile에 추가:') _T_OUT='Add to a profile in settings.json:' ;;
@@ -216,6 +217,8 @@ _t_en_lookup() {
     '같은 tailnet에서만') _T_OUT='same tailnet only' ;;
     '같은 네트워크에서만') _T_OUT='same network only' ;;
     '개념 설명:') _T_OUT='Concepts:' ;;
+    '개인 값 가드') _T_OUT='Personal-value guard' ;;
+    '개인 값 가드 훅을 켰습니다 (scripts/githooks)') _T_OUT='Personal-value guard hooks turned on (scripts/githooks)' ;;
     '결과:') _T_OUT='Result:' ;;
     '경계값') _T_OUT='Boundary values' ;;
     '경고: 인증 없이 --force로 공개 터널을 엽니다.') _T_OUT='Warning: opening a public tunnel without auth because of --force.' ;;
@@ -241,6 +244,7 @@ _t_en_lookup() {
     '기존 CLAUDE.md → CLAUDE.md.bak으로 백업') _T_OUT='Backed up existing CLAUDE.md → CLAUDE.md.bak' ;;
     '기존 레포 사용: {dir}') _T_OUT='Using existing repo: {dir}' ;;
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
+    '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks') _T_OUT='Off — turn on with: git config core.hooksPath scripts/githooks' ;;
     '꺼짐 — 비밀번호만으로 새 기기 등록 가능 (fsh otp setup)') _T_OUT='off — a password alone can register a new device (fsh otp setup)' ;;
     '나중에 '\''fsh install-profiles'\'' 또는 '\''fsh shell-init zsh >> ~/.zshrc'\''로 활성화 가능') _T_OUT='Enable it later with '\''fsh install-profiles'\'' or '\''fsh shell-init zsh >> ~/.zshrc'\''' ;;
     '낡은 환경변수를 설정 파일 값으로 바로잡음: {vars}') _T_OUT='Replaced stale environment variables with the config-file values: {vars}' ;;

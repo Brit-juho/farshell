@@ -136,11 +136,24 @@ keys, generated agent settings and local databases are excluded by `.gitignore`
 and checked by `scripts/guard_personal.py` even when added with `git add -f`.
 The guard reads the current user's identity at runtime and does not print secrets.
 
-Enable the hooks once per clone:
+`install.sh` enables the hooks in a git clone (when `core.hooksPath` is unset), and
+`fsh doctor` warns when they are off. To enable them by hand:
 
 ```bash
 git config core.hooksPath scripts/githooks
 ```
+
+Without the hooks nothing stops a personal value or a local-only document from being
+committed; the guard existed for months in this repository before anyone noticed it was off.
+
+The guard checks four things in what is being added (new file names and added lines):
+forbidden paths, secret-shaped strings, this machine's user and home path, and **your own
+words**. Local-only record documents are forbidden by name: `research_notes/`, `reports/`,
+`docs/` outside `help/ref/guide`, `docs/ref/*-plan.md`, `docs/ref/references.md`, and root
+`*_DESIGN.md`. Words that must never appear in the repository (an organization, a profile,
+a device model) go in `~/.vt-guard-words`, one per line, `#` for comments. The file stays
+outside the repository, matching is case-sensitive and whole-word, and the guard never
+prints the word it matched. `VT_GUARD_WORDS` changes the file's location.
 
 For audits, use `scripts/guard_personal.py range A..B` or
 `scripts/guard_personal.py history`. Do not bypass the guard.

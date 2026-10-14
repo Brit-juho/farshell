@@ -3481,6 +3481,16 @@ PYEOF
     _check "$(_t '스크롤백 잔여 로그')" ok "$(_t '없음')"
   fi
 
+  # 21. 개인 값 가드 훅(scripts/guard_personal.py) — 클론마다 켜야 동작한다. 꺼져 있으면 개인 값·기록
+  # 문서가 커밋에 섞여도 아무도 막지 않는다(2026-10 실제로 그랬다). git 클론일 때만 본다.
+  if [ -e "$VT_DIR/.git" ] && command -v git >/dev/null 2>&1; then
+    if [ "$(git -C "$VT_DIR" config --get core.hooksPath 2>/dev/null)" = "scripts/githooks" ]; then
+      _check "$(_t '개인 값 가드')" ok "$(_t 'pre-commit·pre-push 훅 켜짐')"
+    else
+      _check "$(_t '개인 값 가드')" warn "$(_t '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks')"
+    fi
+  fi
+
   echo ""
   echo "  $(_t '결과:') ✓ $ok  ⚠ $warn  ✗ $fail"
   echo ""

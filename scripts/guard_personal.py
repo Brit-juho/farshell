@@ -6,13 +6,18 @@
 설정 파일)를 2차로 막는다.
 
 검사 대상은 **이번에 올라가는 변경**뿐이다(추가된 줄과 새로 들어온 파일 이름) — 이미 추적 중인
-파일의 옛 내용은 `scripts/check_docs.py` 의 개인값 검사가 맡는다. 세 가지를 본다.
+파일의 옛 내용은 `scripts/check_docs.py` 의 개인값 검사가 맡는다. 네 가지를 본다.
 
-1. 경로 — 도구 상태 디렉터리(`.codex/`, `.agents/` …), 인증·키·DB·`.env*` 파일.
+1. 경로 — 도구 상태 디렉터리(`.codex/`, `.agents/` …), 인증·키·DB·`.env*` 파일, 그리고
+   로컬 전용이어야 할 기록 문서(조사 노트·보고서·계획서, 허용 폴더 밖의 `docs/` 파일).
 2. 비밀 — 토큰·키 모양(`ntn_…`, `ghp_…`, `sk-…`, scrypt 해시, 개인키 헤더)과
    `VT_AUTH_TOKEN=<실제 값>` 같은 대입.
 3. 내 홈 — 지금 이 머신의 **실제** 사용자 이름·홈 경로. 저장소에는 값을 적지 않고 실행 시점에
    `getpass.getuser()` / `$HOME` 에서 구한다(그래서 이 파일 자체에 개인 값이 없다).
+4. 내 단어 — 조직·프로필·기기 이름처럼 저장소에 적을 수 없는 값. 저장소 밖의 로컬 파일
+   (`~/.vt-guard-words`, 환경변수 `VT_GUARD_WORDS` 로 경로 변경)에서 줄마다 하나씩 읽는다.
+   `#` 로 시작하는 줄은 주석이다. 대소문자를 구분하고 단어 경계로만 맞춘다(`acme` 는 `acmeco` 에
+   걸리지 않는다). 출력에는 단어를 다시 싣지 않는다.
 
 사용법:
     guard_personal.py staged            # pre-commit: 인덱스(staged)를 본다
@@ -48,6 +53,13 @@ FORBIDDEN_PATHS: tuple[tuple[str, str], ...] = (
     (r"\.(pem|key|p12|pfx|keystore)$|(^|/)id_(rsa|ed25519|ecdsa)(\.pub)?$", "개인키·인증서"),
     (r"\.(sqlite3?|db)(-shm|-wal)?$", "로컬 데이터베이스(대화·상태가 들어간다)"),
     (r"(^|/)\.vt(-[^/]*)?(/|$)", "FarShell 런타임 상태"),
+    # 기록 문서는 로컬 전용이다(2026-10-14). docs/ref/ 는 폴더 단위로 허용돼 있어 .gitignore 만으로는
+    # 거기 둔 파일이 종류와 무관하게 추적된다 — 그래서 이름으로 한 번 더 막는다.
+    (r"^(research_notes|reports)/", "조사 노트·보고서는 로컬 전용이다 (docs/study/ 등 무시되는 곳에 둔다)"),
+    (r"^docs/(?!(help|ref|guide)/)", "docs/ 에서 추적하는 것은 help/ref/guide 뿐이다"),
+    (r"^docs/ref/[^/]*-plan\.md$", "계획서는 로컬 전용이다 (docs/ref/ 에는 현재 동작만 둔다)"),
+    (r"^docs/ref/(references|[^/]*reference-logic)\.md$", "다른 제품을 읽은 조사 기록은 로컬 전용이다"),
+    (r"^[A-Z0-9]+(_[A-Z0-9]+)*_DESIGN\.md$", "설계 초안은 로컬 전용이다"),
 )
 
 # ── 2. 비밀 ──────────────────────────────────────────────────────────────────
@@ -121,6 +133,33 @@ def personal_markers(user: str | None = None, home: str | None = None) -> list[s
     return [m for m in out if not (m in seen or seen.add(m))]
 
 
+def words_path() -> str:
+    return os.environ.get("VT_GUARD_WORDS") or os.path.expanduser("~/.vt-guard-words")
+
+
+def personal_words(path: str | None = None) -> list[str]:
+    """저장소에 적을 수 없는 이 사람의 단어(조직·프로필·기기 이름 …). 파일이 없으면 빈 목록이다."""
+    p = path if path is not None else words_path()
+    try:
+        with open(p, encoding="utf-8") as f:
+            raw = f.read().splitlines()
+    except OSError:
+        return []
+    out: list[str] = []
+    for ln in raw:
+        w = ln.strip()
+        if w and not w.startswith("#") and len(w) >= 3:
+            out.append(w)
+    return list(dict.fromkeys(out))
+
+
+def _word_regex(words: list[str]) -> "re.Pattern | None":
+    if not words:
+        return None
+    alt = "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True))
+    return re.compile(r"(?<![A-Za-z0-9_])(?:" + alt + r")(?![A-Za-z0-9_])")
+
+
 def _safe_user() -> str:
     try:
         return getpass.getuser()
@@ -161,15 +200,20 @@ def _added_paths_and_lines(diff_args: list[str]) -> tuple[list[str], list[tuple[
 # ── 검사 ─────────────────────────────────────────────────────────────────────
 
 def scan(names: Iterable[str], lines: Iterable[tuple[str, int, str]],
-         markers: list[str] | None = None) -> list[str]:
-    """문제 목록(사람이 읽는 문장). 비밀 값은 싣지 않는다."""
+         markers: list[str] | None = None, words: list[str] | None = None) -> list[str]:
+    """문제 목록(사람이 읽는 문장). 비밀 값과 개인 단어는 싣지 않는다."""
     markers = personal_markers() if markers is None else markers
+    word_rx = _word_regex(personal_words() if words is None else words)
     problems: list[str] = []
     for n in names:
         for rx, why in FORBIDDEN_PATHS:
             if re.search(rx, n):
                 problems.append(f"{n}: 올릴 수 없는 경로 — {why}")
                 break
+        else:
+            if word_rx and word_rx.search(n):
+                shown = word_rx.sub(lambda m: m.group(0)[0] + "…", n)   # 이름이 곧 단어라 그대로 찍으면 다시 새 나간다
+                problems.append(f"{shown}: 파일 이름에 개인 단어가 들어 있다 (~/.vt-guard-words)")
     for path, lineno, text in lines:
         for why in secret_hits(text):
             problems.append(f"{path}:{lineno}: 비밀로 보이는 값 — {why}")
@@ -177,6 +221,8 @@ def scan(names: Iterable[str], lines: Iterable[tuple[str, int, str]],
             if mk in text:
                 problems.append(f"{path}:{lineno}: 이 머신의 개인 경로({_mask(mk)})가 들어 있다")
                 break
+        if word_rx and word_rx.search(text):
+            problems.append(f"{path}:{lineno}: 개인 단어가 들어 있다 (~/.vt-guard-words) — 중립 값(alice·acme)으로 바꾼다")
     return problems
 
 

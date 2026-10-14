@@ -419,6 +419,15 @@ if [ "$PROFILE" = "voice" ] && [ "$(uname)" = "Linux" ]; then
   fi
 fi
 
+# 8-a. 개인 값 가드 훅 — git 클론일 때만 켠다(scripts/guard_personal.py). 켜지 않으면 개인 값이나
+# 기록 문서가 커밋에 섞여도 막는 곳이 없다. 다른 값이 이미 있으면 사용자 설정이므로 건드리지 않는다.
+if [ -e "$VT_DIR/.git" ] && command -v git >/dev/null 2>&1; then
+  if [ -z "$(git -C "$VT_DIR" config --get core.hooksPath 2>/dev/null)" ]; then
+    git -C "$VT_DIR" config core.hooksPath scripts/githooks \
+      && echo "  ✓ $(_t '개인 값 가드 훅을 켰습니다 (scripts/githooks)')"
+  fi
+fi
+
 # 8-b. (A0) Claude Code 훅 등록 — 에이전트 상태 배지·큐 자동 투입·TTS 요약이
 # 전부 이 훅에 달려 있다. 지금까지는 README의 JSON 예시로만 안내해서 실제로
 # 등록한 사용자가 사실상 없었고(그래서 서버가 이벤트를 한 건도 못 받았다),

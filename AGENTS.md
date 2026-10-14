@@ -51,6 +51,13 @@ Verify affected behavior with actual responses, operations and logs.
     [`docs/ref/i18n.md`](./docs/ref/i18n.md).
 12. Only `docs/help/`, `docs/ref/` and `docs/guide/` are tracked under `docs/`.
     New `fsh help` topics need both a `bin/fsh` entry and a `docs/help/` file.
+13. `docs/ref/` describes **current behavior** only. Research notes, notes on other products,
+    plans, reports and design drafts stay local (`docs/study/`, `docs/plan-*`, or anywhere
+    `.gitignore` already excludes) — never under `docs/ref/` or the repository root. The folder
+    is allowed as a whole, so `.gitignore` alone does not stop a file placed there;
+    `scripts/guard_personal.py` blocks such new files by name. Do not add examples, fixtures or
+    comments with real account, organization, device or path names; use neutral values
+    (`alice`, `acme`, `sample-repo`).
 
 ## Working rules
 

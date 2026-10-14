@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **에이전트 위임(하위 세션)**. 에이전트가 MCP `spawn_session`으로 하위 세션을 만들어 일을 맡기고, 결과를 `[위임 결과 …]` 큐 입력으로 돌려받는다(`report_back`, 보고 없이 턴이 끝나면 Stop 훅의 마지막 응답, 승인 대기, 세션 소멸). 소유는 서버 장부(`~/.vt/delegations.json`)의 세션 식별자로만 판정하고, 깊이 1·열린 자식 3개·분당 5회로 제한한다. 자식은 서버가 고른 명령으로 기본 권한 모드로 뜬다(부모의 권한 우회를 물려주지 않는다). `send_to_child`, `close_delegation`, `list_delegations`, `fsh delegate`. 끄려면 `VT_AGENT_SPAWN=0`. 레퍼런스 11곳을 조사했다(기록은 로컬 전용).
 
+### Changed
+
+- **개인 값 가드가 기록 문서와 개인 단어까지 막고, 켜져 있는지 알려 준다**. 지금까지 가드(`scripts/guard_personal.py`)는 클론마다 `core.hooksPath`를 손으로 켜야 했고 아무도 켜지 않아서, 조사 노트·계획서·개인 식별 값이 커밋에 섞여 GitHub까지 올라갔다. `install.sh`가 git 클론이면 훅을 켜고, `fsh doctor`가 꺼져 있으면 경고한다. 가드는 새로 들어오는 `research_notes/`·`reports/`·`docs/` 허용 폴더 밖 파일·`docs/ref/*-plan.md`·`docs/ref/references.md`·루트 `*_DESIGN.md`를 이름으로 막고, 저장소 밖 `~/.vt-guard-words`(줄마다 하나, 대소문자 구분·단어 경계)에 적은 조직·프로필·기기 이름이 추가된 줄이나 파일 이름에 있으면 막는다. 출력에는 그 단어를 다시 싣지 않는다. `AGENTS.md` 계약 13이 `docs/ref/`에는 현재 동작만 두라고 정한다.
+
 ### Fixed
 
 - **훅 설치가 설정 파일의 심볼릭 링크와 권한을 망가뜨리던 것**. `fsh hooks install`/`uninstall`과 MCP 쓰기가 설정 파일(`settings.json`, `config.toml`, `hooks.json`)을 임시 파일로 바꿔치기해, dotfiles나 계정 폴더가 공유 파일을 심볼릭 링크로 걸어 둔 경우 링크가 일반 파일로 바뀌고 원본은 낡은 채 남았다. 훅 쪽은 원래 0644였던 파일도 0600으로 바꿨다. 쓰기를 `server/config_io.py` 한곳으로 모아 링크 끝의 실제 파일을 쓰고, 권한을 물려받고, `fsync` 뒤에 교체하고, 락 이름을 실제 파일 기준으로 정하고, 읽은 뒤 파일이 바뀌었으면 쓰지 않고, 오래된 임시 파일을 치운다. 하드링크는 안전하게 쓸 수 없어 거부하고 이유를 알린다. CRLF·BOM 보존은 하지 않는다. (설계: `docs/plan-2.4/60-magpie-candidates.md`)
