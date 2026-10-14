@@ -49,7 +49,7 @@ STT는 녹음 시작에 대상 토큰을 발급받고 종료·재전송에 같�
 TTS auto는 edge-tts → macOS say이며 브라우저가 재생할 수 있는 WAV로 로컬 음성을 만들고 실제 오디오 MIME을 전달한다. edge는 텍스트를 외부로 보낸다.
 local을 선택하면 외부 요청 없이 say만 사용한다. edge 선택은 실패 시 다른 엔진으로 바꾸지 않는다.
 완료 훅의 서버 장애 시 직접 OS 낭독 폴백은 없다. 기존 전역 낭독 설정은 새 세션을 자동으로 켜지 않는다.
-프로토콜은 [API.md](../../API.md), 구현 목표와 검증 시나리오는 [voice-session-plan.md](voice-session-plan.md)를 본다.
+프로토콜은 [API.md](../../API.md)를 본다.
 
 ### Clipboard Daemon (macOS clipboard sync)
 

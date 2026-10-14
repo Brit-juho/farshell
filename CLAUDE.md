@@ -43,7 +43,6 @@ Use the documents below for detailed guidance.
 | UI rules, tokens, skins | [`DESIGN.md`](./DESIGN.md) |
 | Cross-tool rules + **hard contracts** | [`AGENTS.md`](./AGENTS.md) |
 | Release history | [`CHANGELOG.md`](./CHANGELOG.md) |
-| Other projects we read, and what we took from them | [`docs/ref/references.md`](./docs/ref/references.md) |
 
 ---
 

@@ -3,7 +3,7 @@
 `$TMUX_PANE`은 상속값이다. 같은 pane에서 시작된 프로세스는 전부 그 값을 물려받는다 —
 Bash 도구로 띄운 `claude -p`, MCP 서버가 띄운 하위 claude, 데몬이 된 Codex app-server.
 그 훅이 pane을 주장하면 엉뚱한 상태가 그 세션에 붙었다. herdr가 같은 사고를 겪고 포그라운드
-프로세스 대조(`tcgetpgrp`)로 막았다(docs/ref/references.md).
+프로세스 대조(`tcgetpgrp`)로 막았다.
 
 훅은 자기 pid(`hook_pid`, agent_hook.sh를 돌리는 셸)를 실어 보내고, 서버는 그 요청을 처리하는
 동안(훅은 응답을 기다린다) 프로세스 표를 한 번 읽어 판정한다:

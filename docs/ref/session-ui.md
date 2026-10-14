@@ -52,4 +52,4 @@
 
 ## 워크트리 표시 보완
 
-[워크트리 표시 설계](./session-worktree-display-plan.md)에 따라 현재 cwd의 Git directory/common directory로 종류를 판별한다. FarShell 등록·생성 태그·CLI 종류와 무관하다. 종류 판별 실패와 Git 상태 전체 실패는 구분한다. 작업 위치 보기는 레일/Fleet 메뉴와 모바일·선택 카드의 metadata 버튼에서 제공한다.
+워크트리 표시 설계에 따라 현재 cwd의 Git directory/common directory로 종류를 판별한다. FarShell 등록·생성 태그·CLI 종류와 무관하다. 종류 판별 실패와 Git 상태 전체 실패는 구분한다. 작업 위치 보기는 레일/Fleet 메뉴와 모바일·선택 카드의 metadata 버튼에서 제공한다.

@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **세션 레일 계보선과 수동 정렬**. 위임 하위 세션이 부모 밑에 붙고, 부모 상태색 레인에서 갈라진 가지로 그려진다(보고하면 완료색으로 합쳐짐, 실패는 오류색, 닫힌 하위는 「닫힌 하위 N」으로 접힘). 「세션」 머리에서 이름순·수동을 고르고, 수동이면 끌어서 또는 행 메뉴 위로·아래로 이동으로 순서를 바꾼다(부모와 자식이 한 덩어리). 하위 행 메뉴에 보고 보기·부모 세션으로 이동·위임 닫기. 계보는 서버 위임 장부 기준이라 에이전트가 tmux 옵션을 바꿔도 트리가 바뀌지 않는다. 폰 Fleet도 같다.
 
-- **에이전트 위임(하위 세션)**. 에이전트가 MCP `spawn_session`으로 하위 세션을 만들어 일을 맡기고, 결과를 `[위임 결과 …]` 큐 입력으로 돌려받는다(`report_back`, 보고 없이 턴이 끝나면 Stop 훅의 마지막 응답, 승인 대기, 세션 소멸). 소유는 서버 장부(`~/.vt/delegations.json`)의 세션 식별자로만 판정하고, 깊이 1·열린 자식 3개·분당 5회로 제한한다. 자식은 서버가 고른 명령으로 기본 권한 모드로 뜬다(부모의 권한 우회를 물려주지 않는다). `send_to_child`, `close_delegation`, `list_delegations`, `fsh delegate`. 끄려면 `VT_AGENT_SPAWN=0`. 레퍼런스 11곳 조사: `docs/ref/references.md`.
+- **에이전트 위임(하위 세션)**. 에이전트가 MCP `spawn_session`으로 하위 세션을 만들어 일을 맡기고, 결과를 `[위임 결과 …]` 큐 입력으로 돌려받는다(`report_back`, 보고 없이 턴이 끝나면 Stop 훅의 마지막 응답, 승인 대기, 세션 소멸). 소유는 서버 장부(`~/.vt/delegations.json`)의 세션 식별자로만 판정하고, 깊이 1·열린 자식 3개·분당 5회로 제한한다. 자식은 서버가 고른 명령으로 기본 권한 모드로 뜬다(부모의 권한 우회를 물려주지 않는다). `send_to_child`, `close_delegation`, `list_delegations`, `fsh delegate`. 끄려면 `VT_AGENT_SPAWN=0`. 레퍼런스 11곳을 조사했다(기록은 로컬 전용).
 
 ### Fixed
 

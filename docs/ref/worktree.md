@@ -35,4 +35,4 @@ Because a symlinked node_modules reflects the main repo's *current* tree rather 
 
 ## Session workspace display
 
-Session cards describe the active pane’s current location, independently of creation ownership (`@fsh_wt`). They distinguish the primary workspace (`메인`) and linked worktrees (`WT`) through Git directory/common-directory resolution, including trees made by Codex, Claude or plain Git outside FarShell. See [session UI](./session-ui.md) and the [display design](./session-worktree-display-plan.md).
+Session cards describe the active pane’s current location, independently of creation ownership (`@fsh_wt`). They distinguish the primary workspace (`메인`) and linked worktrees (`WT`) through Git directory/common-directory resolution, including trees made by Codex, Claude or plain Git outside FarShell. See [session UI](./session-ui.md).
