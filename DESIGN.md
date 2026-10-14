@@ -275,7 +275,9 @@ been done. **New code reaches for `--color-*` directly.**
 `--font-ui`: IBM Plex Sans 400/500/600 (bundled, UI chrome only). `--font-mono`:
 prefers a locally installed JetBrains Mono (terminal, kept from 2.0's ADR-9),
 falling back to the bundled IBM Plex Mono 400/600 — neither path makes a
-network request.
+network request. The terminal stack ends with the bundled glyph-only fallback
+`Symbols Nerd Font Mono` (MIT, ~1.1MB, fetched lazily when a PUA glyph first
+appears) so prompt icons / Powerline separators render on any device.
 
 OS-mimicking skins use each OS's system font. There, `system-ui` isn't "gave
 up on typography" — it's the **authentic choice for impersonating iTerm2 /
