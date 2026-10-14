@@ -15,12 +15,12 @@ import portscan
 # lsof -nP -iTCP -sTCP:LISTEN +c 0 의 실제 출력 형태 (macOS).
 # ControlCenter/redis-server 는 +c 0 없이는 9자로 잘린다.
 LSOF_SAMPLE = """COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
-ControlCenter 856 alice 11u IPv4 0xb293 0t0 TCP *:5000 (LISTEN)
-ControlCenter 856 alice 12u IPv6 0xb47b 0t0 TCP *:5000 (LISTEN)
-redis-server 1828 alice 6u IPv4 0xe5e1 0t0 TCP 127.0.0.1:6379 (LISTEN)
-redis-server 1828 alice 7u IPv6 0x962e 0t0 TCP [::1]:6379 (LISTEN)
-python3.13 59851 alice 11u IPv4 0xd7ed 0t0 TCP *:7777 (LISTEN)
-cloudflared 74342 alice 8u IPv4 0xaaaa 0t0 TCP 127.0.0.1:20241 (LISTEN)
+ControlCenter 856 dev 11u IPv4 0xb293 0t0 TCP *:5000 (LISTEN)
+ControlCenter 856 dev 12u IPv6 0xb47b 0t0 TCP *:5000 (LISTEN)
+redis-server 1828 dev 6u IPv4 0xe5e1 0t0 TCP 127.0.0.1:6379 (LISTEN)
+redis-server 1828 dev 7u IPv6 0x962e 0t0 TCP [::1]:6379 (LISTEN)
+python3.13 59851 dev 11u IPv4 0xd7ed 0t0 TCP *:7777 (LISTEN)
+cloudflared 74342 dev 8u IPv4 0xaaaa 0t0 TCP 127.0.0.1:20241 (LISTEN)
 node 13486 other 16u IPv6 0xd58b 0t0 TCP *:3434 (LISTEN)
 """
 
@@ -52,7 +52,7 @@ def test_lsof_hex_escapes_in_command_are_decoded():
     # "Google Chrome"이 "Google\x20Chrome"으로 나온다. 안 풀면 화면에 그대로 샌다.
     sample = (
         "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n"
-        "Google\\x20Chrome 13461 alice 214u IPv4 0x1 0t0 TCP 127.0.0.1:9222 (LISTEN)\n"
+        "Google\\x20Chrome 13461 dev 214u IPv4 0x1 0t0 TCP 127.0.0.1:9222 (LISTEN)\n"
     )
     rows = portscan._parse_lsof(sample)
     assert rows[(9222, 13461)]["cmd"] == "Google Chrome"
@@ -67,28 +67,28 @@ def test_vt_server_port_is_protected(monkeypatch):
     monkeypatch.setenv("VT_PORT", "7777")
     rows = portscan._parse_lsof(LSOF_SAMPLE)
     row = rows[(7777, 59851)]
-    protected, reason = portscan._classify(row, "alice", 7777)
+    protected, reason = portscan._classify(row, "dev", 7777)
     assert protected and "VT 서버" in reason
 
 
 def test_cloudflared_is_protected():
     rows = portscan._parse_lsof(LSOF_SAMPLE)
     row = rows[(20241, 74342)]
-    protected, reason = portscan._classify(row, "alice", 7777)
+    protected, reason = portscan._classify(row, "dev", 7777)
     assert protected and "원격 접속" in reason
 
 
 def test_other_user_process_is_protected():
     rows = portscan._parse_lsof(LSOF_SAMPLE)
     row = rows[(3434, 13486)]                      # user=other
-    protected, reason = portscan._classify(row, "alice", 7777)
+    protected, reason = portscan._classify(row, "dev", 7777)
     assert protected and "다른 사용자" in reason
 
 
 def test_normal_process_is_killable():
     rows = portscan._parse_lsof(LSOF_SAMPLE)
     row = rows[(6379, 1828)]
-    protected, _ = portscan._classify(row, "alice", 7777)
+    protected, _ = portscan._classify(row, "dev", 7777)
     assert not protected
 
 
@@ -122,7 +122,7 @@ def test_public_vs_loopback_flag(monkeypatch):
     """전 인터페이스(*)와 루프백은 위험도가 다르다 — UI가 구분할 수 있어야 한다."""
     monkeypatch.setattr(portscan, "_run", lambda *a, **k: LSOF_SAMPLE)
     monkeypatch.setattr(portscan, "_ps_info", lambda pids: {})
-    monkeypatch.setenv("USER", "alice")
+    monkeypatch.setenv("USER", "dev")
     monkeypatch.setenv("VT_PORT", "7777")
     by_port = {p["port"]: p for p in portscan.scan(use_cache=False)["ports"]}
     assert by_port[5000]["public"] is True         # *:5000
@@ -133,7 +133,7 @@ def test_scan_rows_carry_service_identification(monkeypatch):
     """P3-5 — redis-server 행은 cmd 매칭으로 "Redis"가 붙어야 한다."""
     monkeypatch.setattr(portscan, "_run", lambda *a, **k: LSOF_SAMPLE)
     monkeypatch.setattr(portscan, "_ps_info", lambda pids: {})
-    monkeypatch.setenv("USER", "alice")
+    monkeypatch.setenv("USER", "dev")
     monkeypatch.setenv("VT_PORT", "7777")
     by_port = {p["port"]: p for p in portscan.scan(use_cache=False)["ports"]}
     assert by_port[6379]["service"] == {"service": "Redis", "confidence": "cmd"}

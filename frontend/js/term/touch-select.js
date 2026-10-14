@@ -8,7 +8,7 @@
 // 그 순간 그 노드에 걸쳐 있던 브라우저의 네이티브 Range 선택은 양 끝이
 // (그 div, 0)으로 붕괴한다 — 한 줄 안의 드래그 선택이었다면 그대로 캐럿이
 // 되고, xterm은 `isCollapsed`를 보고 선택을 아예 지워버린다. 실기기 기록
-// (Android device, docs/archive/v2.0/TODOS-2026-09-01-backlog.md)의 "Caret까지만
+// (Android 실기기, docs/archive/v2.0/TODOS-2026-09-01-backlog.md)의 "Caret까지만
 // 되고 Range로 안 넓혀진다"가 바로 이 증상이다 — 사용자가 아무것도 안 해도
 // 터미널에 출력이 있기만 하면 선택이 무너지므로, 이 접근으로는 근본적으로
 // 못 고친다.

@@ -2394,7 +2394,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   응답은 `{"sent": 0}` 이고 예외는 warning 으로만 남아 **조용히 실패**했다.
   이제 `Vapid01.from_pem()` 으로 만든 인스턴스를 넘긴다(파싱 결과는 캐시).
   - **단위 테스트가 못 잡은 이유**: 기존 테스트가 `pywebpush.webpush` 를 모킹해서
-    실제 서명 경로를 아예 타지 않았다. 실기기(Android device + Chrome)에서 처음 드러났다.
+    실제 서명 경로를 아예 타지 않았다. Android 실기기(Chrome)에서 처음 드러났다.
     모킹 없이 진짜 키로 서명까지 확인하는 테스트 2개를 추가했다.
 
 - **모바일에서 터미널 화면을 위아래로 스크롤할 수 없던 문제.**

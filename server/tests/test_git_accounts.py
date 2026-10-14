@@ -198,11 +198,11 @@ def test_verify_token_github_success(monkeypatch):
     def fake_urlopen(req, timeout=10.0):
         assert "api.github.com" in req.full_url
         assert req.headers.get("Authorization") == "Bearer ghp_ok"
-        return _FakeResp(json.dumps({"login": "alice-work", "name": "Neo"}).encode())
+        return _FakeResp(json.dumps({"login": "alice-work", "name": "Alice"}).encode())
 
     monkeypatch.setattr(store, "urlopen", fake_urlopen)
     r = store.verify_token("github", "github.com", "ghp_ok")
-    assert r == {"ok": True, "login": "alice-work", "name": "Neo", "email": None}
+    assert r == {"ok": True, "login": "alice-work", "name": "Alice", "email": None}
 
 
 def test_verify_token_gitlab_success(monkeypatch):

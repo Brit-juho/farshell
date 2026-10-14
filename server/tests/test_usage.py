@@ -40,7 +40,7 @@ def _feed(**over):
                 "third_party": {"token": "SECRET-TOKEN"},
                 "session_token": "SECRET",
             },
-            {"name": "acme", "active": False, "provider": "generic", "windows": []},
+            {"name": "beta", "active": False, "provider": "generic", "windows": []},
         ],
     }
     data.update(over)
@@ -72,7 +72,7 @@ def test_snapshot_normalizes_feed(feed):
     snap = ClauthProvider(feed).snapshot()
     assert snap["provider"] == "clauth"
     assert snap["active_profile"] == "alpha"
-    assert [p["name"] for p in snap["profiles"]] == ["alpha", "acme"]
+    assert [p["name"] for p in snap["profiles"]] == ["alpha", "beta"]
     alpha = snap["profiles"][0]
     assert alpha["windows"][0] == {"label": "5h", "pct": 62.0, "resets_at": None, "resets_in_sec": None}
     assert alpha["fallback"] == {"position": 1, "threshold": 95.0, "armed": True}
@@ -136,7 +136,7 @@ def _feed_v2(**over):
     data = {
         "schema": 2,
         "generated_at": now,
-        "active_profile": "acme",
+        "active_profile": "beta",
         "pending_switch": None,
         "wrap_off": False,
         "refresh_interval_ms": 90000,
@@ -156,7 +156,7 @@ def _feed_v2(**over):
                 "third_party": None,
             },
             {
-                "name": "acme", "active": True, "rolling_token": False,
+                "name": "beta", "active": True, "rolling_token": False,
                 "provider": "generic", "base_url": "http://100.1.2.3:4747",
                 "tier": None, "has_live_session": False, "auth_status": "ok",
                 "fetch_status": None, "stale": False, "fetched_at": None,
@@ -176,8 +176,8 @@ def test_schema_2_is_accepted(feed):
     cap = provider.capability()
     assert cap["available"] is True and cap["profiles"] == 2
     snap = provider.snapshot()
-    assert snap["active_profile"] == "acme"
-    assert [p["name"] for p in snap["profiles"]] == ["alpha", "acme"]
+    assert snap["active_profile"] == "beta"
+    assert [p["name"] for p in snap["profiles"]] == ["alpha", "beta"]
     alpha = snap["profiles"][0]
     assert alpha["tier"] == "Pro" and alpha["auth_ok"] is True
     assert alpha["windows"][1]["pct"] == 52.0

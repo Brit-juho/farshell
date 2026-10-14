@@ -52,7 +52,7 @@ fallback 완료 후 1초 이내에 native 이벤트가 늦게 오면 재전송�
 
 ### Android ADB 실측 (2026-10-12)
 
-Android device 계열(SM-XXXX), Android 14, Chrome, Samsung 키보드에서 확인했다. 앱 설정 화면은 실제 실행 인스턴스로 확인했고, 문자/수식키 검증은 별도 로컬 페이지와 격리된 raw PTY로 수행해 작업 중인 tmux 세션에 테스트 키를 보내지 않았다.
+Android 14 실기기, Chrome, Samsung 키보드에서 확인했다. 앱 설정 화면은 실제 실행 인스턴스로 확인했고, 문자/수식키 검증은 별도 로컬 페이지와 격리된 raw PTY로 수행해 작업 중인 tmux 세션에 테스트 키를 보내지 않았다.
 
 - 키맵 16개와 전달 대상 선택 15개가 렌더링됐고, 가로 넘침이 없었다. native paste 항목은 전달 대상 선택을 숨기는 기존 계약을 유지한다.
 - 기존 키맵의 새 select가 공통 테마를 사용하지 않는 문제를 발견해 공통 `vt-select`/`vt-select-wrap`으로 수정했다. 가로 화면(832×331 CSS px)에서 24px로 줄어드는 터치 표적도 coarse pointer에서는 최소 44px로 보완했다.
