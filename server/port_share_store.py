@@ -128,6 +128,7 @@ def _read_unlocked() -> list[dict]:
         x.setdefault("views", 0)
         x.setdefault("lastAccess", None)
         x.setdefault("broken", False)
+        x.setdefault("autoRenew", False)
         out.append(x)
     return out
 
@@ -240,7 +241,8 @@ def _alloc_proxy_port_unlocked(items: list[dict]) -> int:
     )
 
 
-def create_share(port: int, label: str, mode: str, ttl: int) -> tuple[dict, str | None]:
+def create_share(port: int, label: str, mode: str, ttl: int,
+                 auto_renew: bool = False) -> tuple[dict, str | None]:
     """새 노출 정책 발급 → (share, PIN 원문 또는 None).
 
     **PIN 원문을 돌려주는 건 이 호출 하나뿐이다.** 저장은 해시만 하므로 이후
@@ -249,6 +251,10 @@ def create_share(port: int, label: str, mode: str, ttl: int) -> tuple[dict, str 
     같은 포트에 이미 정책이 있으면 교체하되 `proxyPort`는 물려받는다 — 리스너가
     이미 그 번호에 바인드돼 있고, 번호가 바뀌면 살아남은 cloudflared가 길을 잃는다.
     shareId와 PIN은 새로 만든다(재노출 = 새 자격, plan §1).
+
+    `auto_renew`가 켜진 정책은 만료돼도 지우지 않고 `ttl`만큼 연장하며, 터널이
+    사라지면(재부팅, `fsh stop`) 서버가 다시 연다(routes/ports.py의 정리 루프).
+    그래서 갱신 주기로 쓸 `ttl`을 정책에 함께 남긴다.
     """
     if mode not in VALID_MODES:
         raise ValueError(f"bad mode: {mode}")
@@ -269,6 +275,8 @@ def create_share(port: int, label: str, mode: str, ttl: int) -> tuple[dict, str 
             "proxyPort": proxy_port,
             "created": time.time(),
             "exp": time.time() + ttl,
+            "ttl": ttl,
+            "autoRenew": bool(auto_renew),
             "attempts": 0,
             "views": 0,
             "lastAccess": None,
@@ -333,6 +341,36 @@ def set_mode(port: int, mode: str) -> dict | None:
             hit["shareId"] = _new_share_id()
             _write_unlocked(items)
     return hit
+
+
+def set_auto_renew(port: int, enabled: bool) -> dict | None:
+    """자동 재노출만 켜고 끈다. 터널·URL·shareId·PIN 그대로 — 자격은 바뀌지 않는다."""
+    return update_share(port, autoRenew=bool(enabled))
+
+
+def renew_share(port: int, share_id: str) -> dict | None:
+    """자동 재노출 정책의 만료를 지금부터 `ttl`만큼 연장한다.
+
+    shareId와 PIN은 **유지한다** — 로그인 기기와 접속 코드가 계속 통해야 "자동"이다.
+    그사이 같은 포트가 다른 shareId로 재노출됐거나 자동 재노출이 꺼졌으면 None.
+    """
+    with _locked():
+        items = _read_unlocked()
+        hit = next((s for s in items if s["port"] == port), None)
+        if hit is None or hit.get("shareId") != share_id or not hit.get("autoRenew"):
+            return None
+        ttl = hit.get("ttl")
+        if ttl not in VALID_TTLS:
+            ttl = 3600  # ttl을 남기기 전에 만든 정책 — 기본값(1h)으로 갱신한다
+        hit["ttl"] = ttl
+        hit["exp"] = time.time() + ttl
+        _write_unlocked(items)
+    return hit
+
+
+def auto_renew_shares() -> list[dict]:
+    """만료되지 않은 자동 재노출 정책들. 정리 루프가 터널 복구에 쓴다."""
+    return [s for s in list_shares() if s.get("autoRenew")]
 
 
 def regenerate_pin(port: int) -> tuple[dict, str] | None:
@@ -428,8 +466,9 @@ def _cli(argv: list) -> int:
 
     if cmd == "cli-create":
         port, label, mode, ttl = int(argv[1]), argv[2], argv[3], int(argv[4])
+        auto_renew = len(argv) > 5 and argv[5] == "1"
         try:
-            share, pin = create_share(port, label, mode, ttl)
+            share, pin = create_share(port, label, mode, ttl, auto_renew)
         except ValueError as e:
             print(json.dumps({"error": str(e)}), file=sys.stderr)
             return 1
@@ -469,9 +508,22 @@ def _cli(argv: list) -> int:
         print(json.dumps(_reveal(updated, pin), ensure_ascii=False))
         return 0
 
+    if cmd == "cli-set-auto":
+        port, value = int(argv[1]), argv[2]
+        if value not in ("on", "off"):
+            print(json.dumps({"error": "bad_value"}), file=sys.stderr)
+            return 1
+        if get_share(port) is None:
+            print(json.dumps({"error": "not_found"}), file=sys.stderr)
+            return 1
+        updated = set_auto_renew(port, value == "on")
+        print(json.dumps(public_view(updated), ensure_ascii=False))
+        return 0
+
     if cmd == "cli-list":
         for s in list_shares():
-            print(f"{s['port']}\t{s['mode']}\t{1 if s.get('broken') else 0}\t{int(s.get('attempts', 0) or 0)}")
+            print(f"{s['port']}\t{s['mode']}\t{1 if s.get('broken') else 0}\t{int(s.get('attempts', 0) or 0)}"
+                  f"\t{1 if s.get('autoRenew') else 0}")
         return 0
 
     if cmd == "cli-danger":

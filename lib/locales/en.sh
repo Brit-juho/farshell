@@ -236,6 +236,7 @@ _t_en_lookup() {
     '구 iTerm2 프로필 제거 (Guid 변경으로 인한 중복 방지) → {path}') _T_OUT='Removed the old iTerm2 profile (avoids duplicates after the Guid change) → {path}' ;;
     '구 프로필 제거 → {path} (Guid가 바뀌어 중복 방지)') _T_OUT='remove old profile → {path} (Guid changed; avoids duplicates)' ;;
     '그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V') _T_OUT='Then check that PATH points to the new python3: python3 -V' ;;
+    '기간이 끝나거나 재부팅해도 이 포트를 자동으로 다시 열까요? (y/N)') _T_OUT='Re-open this port automatically when it expires or after a reboot? (y/N)' ;;
     '기계 토큰') _T_OUT='machine token' ;;
     '기계용 토큰 설정') _T_OUT='Set a machine token' ;;
     '기기 이름 변경:') _T_OUT='Device renamed:' ;;
@@ -350,7 +351,8 @@ _t_en_lookup() {
     '사용법: fsh run "명령어"') _T_OUT='Usage: fsh run "command"' ;;
     '사용법: fsh shell-init [zsh|bash|fish|pwsh]') _T_OUT='Usage: fsh shell-init [zsh|bash|fish|pwsh]' ;;
     '사용법: fsh terminal [show|set <{choices}>|unset]') _T_OUT='Usage: fsh terminal [show|set <{choices}>|unset]' ;;
-    '사용법: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [라벨] [--mode public|session|pin] [--ttl 1h|24h|7d|30d]|unexpose <port>|pin <port>|mode <port> <mode>|setup|teardown|switch <anon|named>]') _T_OUT='Usage: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [label] [--mode public|session|pin] [--ttl 1h|24h|7d|30d]|unexpose <port>|pin <port>|mode <port> <mode>|setup|teardown|switch <anon|named>]' ;;
+    '사용법: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [라벨] [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--auto-renew|--no-auto-renew]|unexpose <port>|pin <port>|mode <port> <mode>|auto <port> <on|off>|setup|teardown|switch <anon|named>]') _T_OUT='Usage: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [label] [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--auto-renew|--no-auto-renew]|unexpose <port>|pin <port>|mode <port> <mode>|auto <port> <on|off>|setup|teardown|switch <anon|named>]' ;;
+    '사용법: fsh tunnel auto <port> <on|off>') _T_OUT='Usage: fsh tunnel auto <port> <on|off>' ;;
     '사용법: fsh tunnel mode <port> <public|session|pin>') _T_OUT='Usage: fsh tunnel mode <port> <public|session|pin>' ;;
     '사용법: fsh tunnel pin <port>') _T_OUT='Usage: fsh tunnel pin <port>' ;;
     '사용법: fsh tunnel switch <anon|named>') _T_OUT='Usage: fsh tunnel switch <anon|named>' ;;
@@ -495,6 +497,11 @@ _t_en_lookup() {
     '인증:       ') _T_OUT='Auth:        ' ;;
     '인터넷 어디서나 도달 가능 (인증으로 보호)') _T_OUT='reachable from anywhere on the internet (protected by authentication)' ;;
     '임시 파일 생성 실패: {path}') _T_OUT='Couldn'\''t create temp file: {path}' ;;
+    '자동') _T_OUT='auto' ;;
+    '자동 재노출 꺼짐: 포트 {port}. 만료 시각이 되면 노출이 끝납니다.') _T_OUT='Auto re-expose off for port {port}. Exposure ends at its expiry time.' ;;
+    '자동 재노출 켜짐: 포트 {port}. 만료되면 연장하고, 터널이 사라지면 서버가 1분 안에 다시 엽니다.') _T_OUT='Auto re-expose on for port {port}. It extends at expiry, and the server re-opens the tunnel within a minute if it goes away.' ;;
+    '자동 재노출: 꺼짐 — 켜기: fsh tunnel auto {port} on') _T_OUT='Auto re-expose: off — turn on: fsh tunnel auto {port} on' ;;
+    '자동 재노출: 켜짐 — 만료되면 {ttl}씩 연장하고, 터널이 사라지면 서버가 다시 엽니다(주소는 바뀔 수 있음). 끄기: fsh tunnel auto {port} off') _T_OUT='Auto re-expose: on — extends by {ttl} at expiry, and the server re-opens the tunnel if it goes away (the address may change). Turn off: fsh tunnel auto {port} off' ;;
     '잘못된 키 이름: '\''{key}'\''') _T_OUT='Invalid key name: '\''{key}'\''' ;;
     '잘못된 핫키 형식: '\''{s}'\'' (예: ctrl+shift+m)') _T_OUT='Invalid hotkey format: '\''{s}'\'' (e.g. ctrl+shift+m)' ;;
     '재시작 실패') _T_OUT='Restart failed' ;;
@@ -570,6 +577,7 @@ _t_en_lookup() {
     '토픽 목록: {names}') _T_OUT='Topics: {names}' ;;
     '패키지 설치 중...') _T_OUT='Installing packages...' ;;
     '포트 {port} 로 열린 터널이 없습니다') _T_OUT='No tunnel is open for port {port}' ;;
+    '포트 {port} 에 노출 정책이 없습니다 — 먼저 fsh tunnel expose {port}') _T_OUT='Port {port} isn'\''t exposed — run fsh tunnel expose {port} first' ;;
     '포트 {port} 터널 종료 (PID {pid})') _T_OUT='Tunnel for port {port} stopped (PID {pid})' ;;
     '포트 {port}: {reason}') _T_OUT='Port {port}: {reason}' ;;
     '포트 범위(1-65535)를 벗어났습니다: {port}') _T_OUT='Port out of range (1-65535): {port}' ;;

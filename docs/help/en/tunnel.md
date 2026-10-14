@@ -31,10 +31,11 @@ always use `fsh restart` instead of `fsh stop && fsh start`.
 Publish **another local server** (for example port 3000), not FarShell, through a separate tunnel. This works only when the access scope is `all`.
 
 ```bash
-fsh tunnel expose 3000 "App name" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]
+fsh tunnel expose 3000 "App name" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force] [--auto-renew|--no-auto-renew]
 fsh tunnel unexpose 3000             # close that port's tunnel and sharing policy
 fsh tunnel pin 3000                  # reissue the access code (tunnel and URL stay)
 fsh tunnel mode 3000 <public|session|pin>   # change the share mode (tunnel and URL stay)
+fsh tunnel auto 3000 <on|off>        # turn auto re-expose on or off (credentials stay)
 ```
 
 | Mode | Meaning |
@@ -45,6 +46,12 @@ fsh tunnel mode 3000 <public|session|pin>   # change the share mode (tunnel and 
 
 `expose` asks for confirmation because it opens something to the public internet. Remote-control ports such as Chrome remote debugging (9222) open only with `--force`.
 For a `session` share, opening the public address directly shows only an instruction screen. Start from the "first open" link in the `expose` output (or the FarShell port panel). An exposure whose time has run out is taken down, tunnel included, within a minute.
+
+### Auto re-expose
+
+Without an option, `expose` asks "Re-open this port automatically when it expires or after a reboot?" (default no). Off a terminal (scripts, autostart) it doesn't ask and leaves it off. The web port panel's expose dialog has the same choice, and an open tunnel's row has an "Auto on/off" button to change it later.
+
+When it's on, the exposure is extended by its `--ttl` at expiry instead of being taken down (the access code and signed-in devices keep working). If the tunnel goes away (reboot, `fsh stop`, cloudflared exiting), the server re-opens it within a minute. A quick tunnel **comes back with a new address**, so pick it up with the URL-change hook. Nothing is re-opened when the access scope isn't `all`. To end it, run `fsh tunnel unexpose`.
 
 ## Get notified when the address changes
 

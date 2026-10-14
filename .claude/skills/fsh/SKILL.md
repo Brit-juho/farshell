@@ -137,10 +137,14 @@ Cloudflare quick tunnel은 호스트당 포트 1개만 연결되므로, 포트�
 터널 프로세스 + URL이 생긴다(경로로 포트를 구분하는 방식이 아님).
 
 ```bash
-fsh tunnel expose <port> "<앱 이름>"   # 예: fsh tunnel expose 3000 "내 앱"
+fsh tunnel expose <port> "<앱 이름>"   # 예: fsh tunnel expose 3000 "내 앱" (자동 재노출 여부를 묻는다)
 fsh tunnel list                       # 열려 있는 터널 전부 (메인 + 추가 포트)
 fsh tunnel unexpose <port>            # 해당 포트 터널만 종료
+fsh tunnel auto <port> on|off         # 자동 재노출 켜기/끄기 (만료 시 연장, 재부팅 후 다시 엶)
 ```
+
+상시로 열어 둘 포트는 자동 재노출을 켠다(`--auto-renew`, 비대화형 실행이면 반드시 옵션으로 지정).
+다시 열 때 익명 터널은 주소가 바뀐다.
 
 웹 UI 포트 대시보드(⋯ 메뉴 → "포트")에서도 같은 기능이 있지만, 로컬 서버를
 공개 인터넷에 여는 행위라 `confirm:true` 없이는 428로 막히고

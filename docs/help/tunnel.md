@@ -31,10 +31,11 @@ fsh tunnel teardown                  # 명명 터널 제거
 FarShell이 아니라 **다른 로컬 서버**(예: 3000번 포트)를 별도 터널로 공개한다. 접근 범위가 `all`일 때만 된다.
 
 ```bash
-fsh tunnel expose 3000 "앱 이름" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]
+fsh tunnel expose 3000 "앱 이름" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force] [--auto-renew|--no-auto-renew]
 fsh tunnel unexpose 3000             # 해당 포트 터널·공유 정책 종료
 fsh tunnel pin 3000                  # 접속 코드 재발급 (터널·URL 유지)
 fsh tunnel mode 3000 <public|session|pin>   # 공유 모드 변경 (터널·URL 유지)
+fsh tunnel auto 3000 <on|off>        # 자동 재노출 켜기/끄기 (자격 유지)
 ```
 
 | 모드 | 의미 |
@@ -45,6 +46,12 @@ fsh tunnel mode 3000 <public|session|pin>   # 공유 모드 변경 (터널·URL 
 
 공개 인터넷에 여는 동작이라 `expose`는 확인을 요구한다. Chrome 원격 디버깅(9222) 같은 원격 제어 포트는 `--force`가 있어야 열린다.
 `session` 공유는 공개 주소를 그냥 열면 안내 화면만 뜬다 — `expose` 출력의 「처음 열기」 링크(또는 FarShell 포트 패널)로 시작한다. 기간이 끝난 노출은 1분 안에 터널까지 내려간다.
+
+### 자동 재노출
+
+`expose`는 옵션을 주지 않으면 「기간이 끝나거나 재부팅해도 자동으로 다시 열까요?」라고 묻는다(기본 아니오). 터미널이 아닌 곳(스크립트, 자동 시작)에서는 묻지 않고 끈다. 웹 포트 패널의 공개 대화상자에도 같은 선택이 있고, 열린 터널 행의 「자동 켜기/끄기」로 나중에 바꾼다.
+
+켜 두면 만료 시각에 내리지 않고 `--ttl`만큼 연장한다(접속 코드·로그인 기기 그대로). 재부팅·`fsh stop`·cloudflared 종료로 터널이 사라지면 서버가 1분 안에 다시 연다. 익명 터널은 다시 열 때 **주소가 바뀌므로** 새 주소는 URL 변경 훅으로 받는다. 접근 범위가 `all`이 아니면 다시 열지 않는다. 끝내려면 `fsh tunnel unexpose`.
 
 ## 주소가 바뀔 때 알림
 

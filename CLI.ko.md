@@ -48,9 +48,11 @@ fsh handoff mobile     # 현재 tmux 세션을 폰으로 넘김 (QR + #tmux=)
 fsh handoff desktop    # 폰 세션을 맥 터미널로 가져옴
 fsh tunnel expose 3000 "앱 이름" [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--force]
                                    # 로컬 포트 공유. 기본 session: 로그인한 기기만 접근
+                                   # --auto-renew/--no-auto-renew가 없으면 자동 재노출 여부를 묻는다(터미널이 아니면 끔)
 fsh tunnel unexpose 3000          # 해당 포트 터널과 공유 정책 종료
 fsh tunnel pin 3000               # PIN 재발급 (URL 유지)
 fsh tunnel mode 3000 session      # 접근 모드 변경 (URL 유지, 재인증 필요)
+fsh tunnel auto 3000 on|off       # 자동 재노출 켜기/끄기 (만료 시 연장, 터널이 사라지면 다시 엶. 자격 유지)
 fsh tunnel list                   # 전체 터널, 접근 모드와 PIN 실패 횟수
 fsh tunnel hook                   # URL 변경 훅 확인 + 즉시 실행 (fsh help tunnel-hook)
 fsh tunnel restart                # 좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동 + 훅 재실행

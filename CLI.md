@@ -61,9 +61,14 @@ fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|3
                                    # A session share prints a "처음 열기" link that starts at the main origin's
                                    # /p/authorize — the public URL alone shows a notice to cookie-less visitors.
                                    # Expired exposures are torn down (tunnel + listener) within a minute.
+                                   # Asks whether to auto re-expose unless --auto-renew/--no-auto-renew is given
+                                   # (no prompt off a terminal: off). Auto re-expose extends the share by its --ttl at
+                                   # expiry (same share id/PIN) and the server re-opens the tunnel within a minute if it
+                                   # goes away (reboot, fsh stop) — a quick tunnel comes back with a new URL.
 fsh tunnel unexpose 3000          # stop the tunnel and its share policy for that port
 fsh tunnel pin 3000                # reissue the access PIN without touching the tunnel/URL (old-PIN visitors must re-enter)
 fsh tunnel mode 3000 session       # change who can access without touching the tunnel/URL (everyone re-authenticates)
+fsh tunnel auto 3000 on|off        # turn auto re-expose on/off for an exposed port (credentials unchanged)
 fsh tunnel list                   # list all open tunnels (main + extra ports), with mode and PIN-failure count
 fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
 fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook

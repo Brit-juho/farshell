@@ -104,8 +104,8 @@ def test_cli_list_outputs_tsv(store, capsys):
     capsys.readouterr()
     store._cli(["cli-list"])
     lines = capsys.readouterr().out.strip().splitlines()
-    # 열: 포트 · 모드 · broken · PIN 실패 누적
-    assert sorted(lines) == ["3000\tpublic\t0\t0", "4000\tpin\t0\t0"]
+    # 열: 포트 · 모드 · broken · PIN 실패 누적 · 자동 재노출
+    assert sorted(lines) == ["3000\tpublic\t0\t0\t0", "4000\tpin\t0\t0\t0"]
 
 
 def test_cli_unknown_command(store, capsys):

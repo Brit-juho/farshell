@@ -171,9 +171,16 @@ async def expose_port(port: int, request: Request):
     if ttl not in pshare.VALID_TTLS:
         return JSONResponse({"ok": False, "error": "bad_ttl"}, status_code=400)
 
+    # 자동 재노출은 사용자가 고르는 값이라 bool만 받는다. "true" 같은 문자열을
+    # 참으로 넘기면 의도하지 않은 무기한 노출이 조용히 켜질 수 있다.
+    raw_auto = body.get("auto_renew")
+    if raw_auto is not None and not isinstance(raw_auto, bool):
+        return JSONResponse({"ok": False, "error": "bad_auto_renew"}, status_code=400)
+    auto_renew = bool(raw_auto)
+
     label = str(body.get("label") or f"localhost:{port}")[:64]
 
-    share, pin = await asyncio.to_thread(pshare.create_share, port, label, share_mode, ttl)
+    share, pin = await asyncio.to_thread(pshare.create_share, port, label, share_mode, ttl, auto_renew)
     invalidate_share(port)
     if not await port_proxy.start(share):
         await asyncio.to_thread(pshare.remove_share, port)
@@ -236,18 +243,33 @@ async def reissue_pin(port: int):
 
 @elevated_router.patch("/api/ports/{port}/share")
 async def change_share_mode(port: int, request: Request):
-    """모드 변경 — 터널을 재시작하지 않으므로 주소가 죽지 않는다(ADR-30의 이득)."""
+    """모드·자동 재노출 변경 — 터널을 재시작하지 않으므로 주소가 죽지 않는다(ADR-30의 이득).
+
+    `mode`와 `auto_renew` 중 하나 이상을 받는다. `auto_renew`만 바꾸면 자격(shareId·PIN)은
+    그대로다 — 들어와 있던 사람을 끊을 이유가 없다.
+    """
     try:
         body = await request.json()
     except Exception:
         body = {}
+    if not isinstance(body, dict):
+        body = {}
+    has_mode = body.get("mode") is not None
+    raw_auto = body.get("auto_renew")
+    if raw_auto is not None and not isinstance(raw_auto, bool):
+        return JSONResponse({"ok": False, "error": "bad_auto_renew"}, status_code=400)
     mode = str(body.get("mode") or "")
-    if mode not in pshare.VALID_MODES:
+    if (has_mode or raw_auto is None) and mode not in pshare.VALID_MODES:
         return JSONResponse({"ok": False, "error": "bad_mode"}, status_code=400)
 
     share = await asyncio.to_thread(pshare.get_share, port)
     if share is None:
         return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+
+    if not has_mode:
+        updated = await asyncio.to_thread(pshare.set_auto_renew, port, raw_auto)
+        return {"ok": True, "port": port, "mode": updated.get("mode"), "pin": None,
+                "share": pshare.public_view(updated)}
 
     pin = None
     if mode == "pin" and not share.get("pinHash"):
@@ -257,6 +279,8 @@ async def change_share_mode(port: int, request: Request):
             _updated, pin = result
 
     updated = await asyncio.to_thread(pshare.set_mode, port, mode)
+    if raw_auto is not None:
+        updated = await asyncio.to_thread(pshare.set_auto_renew, port, raw_auto)
     invalidate_share(port)
     return {"ok": True, "port": port, "mode": mode,
             "pin": pshare.format_pin(pin) if pin else None,
@@ -311,7 +335,10 @@ SWEEP_INTERVAL_SEC = 60.0
 
 
 async def sweep_expired_shares() -> list[int]:
-    """만료된 노출을 터널·리스너·정책까지 내린다. 내린 포트 목록을 돌려준다."""
+    """만료된 노출을 터널·리스너·정책까지 내린다. 내린 포트 목록을 돌려준다.
+
+    자동 재노출이 켜진 정책은 내리지 않고 만료만 `ttl`만큼 연장한다(자격 유지).
+    """
     done: list[int] = []
     for stale in await asyncio.to_thread(pshare.expired_shares):
         port = stale["port"]
@@ -321,6 +348,11 @@ async def sweep_expired_shares() -> list[int]:
         if current is None or current.get("shareId") != stale.get("shareId") \
                 or not pshare.is_expired(current):
             continue
+        if current.get("autoRenew"):
+            if await asyncio.to_thread(pshare.renew_share, port, current["shareId"]):
+                invalidate_share(port)
+                logger.info(f"[ports] 자동 재노출: 포트 {port} 만료 연장")
+                continue
         await port_proxy.stop(port)
         invalidate_share(port)
         rc, out = await asyncio.to_thread(_run_vt, "tunnel", "unexpose", str(port))
@@ -333,15 +365,53 @@ async def sweep_expired_shares() -> list[int]:
     return done
 
 
+async def restore_auto_renew_tunnels() -> list[int]:
+    """자동 재노출 정책인데 터널이 없는 포트를 다시 연다. 다시 연 포트 목록을 돌려준다.
+
+    재부팅·`fsh stop`·cloudflared 종료로 터널만 사라지고 정책은 남는다. 리스너는
+    `port_proxy.sync()`가 정책을 보고 되살리므로, 여기서는 웹 노출과 같은 경로
+    (`fsh tunnel expose --proxy-port`)로 터널만 다시 띄운다. 익명 터널이라 주소는
+    새로 받고, 새 주소는 URL 변경 훅(`expose` 이벤트)으로 알린다.
+    """
+    if os.environ.get("VT_NETWORK_MODE", "all") != "all":
+        return []  # 접근 범위를 좁힌 상태에서 공개 터널을 다시 뚫지 않는다(expose와 같은 규칙)
+    shares = await asyncio.to_thread(pshare.auto_renew_shares)
+    if not shares:
+        return []
+    alive = await asyncio.to_thread(tunnel_registry.exposed_ports)
+    restored: list[int] = []
+    for share in shares:
+        port = share["port"]
+        if port in alive:
+            continue
+        if not await port_proxy.start(share):
+            logger.warning(f"[ports] 자동 재노출 {port}: 프록시 리스너를 열 수 없음")
+            continue
+        rc, out = await asyncio.to_thread(
+            _run_vt, "tunnel", "expose", str(port), share.get("label") or f"localhost:{port}",
+            "--proxy-port", str(share["proxyPort"]))
+        if rc != 0:
+            logger.warning(f"[ports] 자동 재노출 {port}: 터널 재시작 실패: {out.strip()[:200]}")
+            continue
+        logger.info(f"[ports] 자동 재노출: 포트 {port} 터널 복구 {_first_url(out)}")
+        restored.append(port)
+    return restored
+
+
 async def expiry_sweep_loop() -> None:
-    """main.py lifespan이 띄운다. 예외로 루프가 죽지 않게 매 회 감싼다."""
+    """main.py lifespan이 띄운다. 예외로 루프가 죽지 않게 매 회 감싼다.
+
+    만료 정리 다음에 자동 재노출 복구를 돈다 — 기동 직후 한 번, 이후 1분마다.
+    """
     while True:
-        try:
-            await sweep_expired_shares()
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"[ports] 만료 노출 정리 중 오류: {e}")
+        for step, name in ((sweep_expired_shares, "만료 노출 정리"),
+                           (restore_auto_renew_tunnels, "자동 재노출 복구")):
+            try:
+                await step()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[ports] {name} 중 오류: {e}")
         await asyncio.sleep(SWEEP_INTERVAL_SEC)
 
 

@@ -299,6 +299,7 @@ async function _renderTunnelSection(ctx, body) {
       <span class="vt-pt-port">:${vtEsc(String(tn.port))}</span>
       <span class="vt-pt-tunnel-label">${vtEsc(tn.label)}</span>
       ${modeLabel ? `<span class="vt-pt-tunnel-mode">${vtEsc(modeLabel)}</span>` : ''}
+      ${tn.share && tn.share.autoRenew ? `<span class="vt-pt-tunnel-mode" title="${vtEsc(t('만료되거나 터널이 사라지면 자동으로 다시 엽니다'))}">${vtEsc(t('자동'))}</span>` : ''}
       ${tn.broken ? `<span class="vt-pt-tunnel-broken" title="${vtEsc(t('내부 프록시가 뜨지 못했습니다 — 지금은 접속이 안 됩니다'))}">⚠ ${vtEsc(t('고장'))}</span>` : ''}
       <a class="vt-pt-tunnel-url" href="${vtEsc(tn.url)}" target="_blank" rel="noopener noreferrer">${vtEsc(tn.url.replace(/^https:\/\//, ''))}</a>
     `;
@@ -325,6 +326,15 @@ async function _renderTunnelSection(ctx, body) {
       pinBtn.title = t('터널·URL은 그대로 두고 접속 코드만 새로 만듭니다');
       pinBtn.addEventListener('click', () => reissuePin(ctx, tn.port));
       actions.appendChild(pinBtn);
+    }
+    if (tn !== d.main && tn.share) {
+      const autoOn = !!tn.share.autoRenew;
+      const autoBtn = document.createElement('button');
+      autoBtn.className = 'vt-btn sm quiet';
+      autoBtn.textContent = autoOn ? t('자동 끄기') : t('자동 켜기');
+      autoBtn.title = t('기간이 끝나거나 재부팅해도 자동으로 다시 열기');
+      autoBtn.addEventListener('click', () => setAutoRenew(ctx, tn.port, !autoOn));
+      actions.appendChild(autoBtn);
     }
     if (tn !== d.main) {
       const closeBtn = document.createElement('button');
@@ -449,6 +459,11 @@ async function _unexposeTunnel(ctx, port) {
                 ${TTLS.map((o) => `<option value="${o.v}"${o.v === 3600 ? ' selected' : ''}>${vtEsc(o.label)}</option>`).join('')}
               </select>
             </div>
+            <div class="vt-fl-field">
+              <div class="vt-fl-field-label">${t('자동 재노출')}</div>
+              <label class="vt-fl-check"><input type="checkbox" id="vt-pt-auto"> ${t('기간이 끝나거나 재부팅해도 자동으로 다시 열기')}</label>
+              <span class="vt-fl-hint">${t('만료되면 같은 기간만큼 연장하고, 터널이 사라지면 서버가 다시 엽니다. 다시 열면 주소가 바뀔 수 있습니다.')}</span>
+            </div>
             <div class="vt-dialog-actions">
               <button type="button" class="vt-btn vt-dialog-cancel">${t('취소')}</button>
               <button type="button" class="vt-btn solid vt-dialog-ok">${t('공개')}</button>
@@ -457,7 +472,11 @@ async function _unexposeTunnel(ctx, port) {
         if (!body) { resolve(null); return; }
         body.querySelector('.vt-dialog-ok').addEventListener('click', () => {
           const checked = body.querySelector('input[name="vt-pt-mode"]:checked');
-          result = { mode: checked ? checked.value : 'session', ttl: Number(body.querySelector('#vt-pt-ttl').value) };
+          result = {
+            mode: checked ? checked.value : 'session',
+            ttl: Number(body.querySelector('#vt-pt-ttl').value),
+            autoRenew: body.querySelector('#vt-pt-auto').checked,
+          };
           closePanel(id);
         });
         body.querySelector('.vt-dialog-cancel').addEventListener('click', () => closePanel(id));
@@ -504,7 +523,7 @@ async function _unexposeTunnel(ctx, port) {
       const send = (extra) => _elevatedFetch(`/api/ports/${port}/expose`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true, mode: choice.mode, ttl: choice.ttl, ...extra }),
+        body: JSON.stringify({ confirm: true, mode: choice.mode, ttl: choice.ttl, auto_renew: choice.autoRenew, ...extra }),
       });
       const r = await send({}).catch(async (e) => {
         // 위험 포트(Chrome 원격 디버깅 등) — 서버가 이유를 알려 준다. 한 번 더 확인받는다.
@@ -523,6 +542,16 @@ async function _unexposeTunnel(ctx, port) {
         else showToast(r.url ? t('공개됨: {url}', { url: r.url }) : t('공개됨'));
       }
       // L5: 성공하면 그 행의 버튼이 "공개"→"미리보기"로 바뀌어야 하니 목록을 새로 받는다.
+      refreshPorts(ctx, true);
+    }
+
+    async function setAutoRenew(ctx, port, on) {
+      const r = await _elevatedFetch(`/api/ports/${port}/share`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_renew: on }),
+      }).catch((e) => { showToast(t('변경 실패: {error}', { error: e.message })); return null; });
+      if (r) showToast(on ? t('포트 {port} 자동 재노출 켜짐', { port }) : t('포트 {port} 자동 재노출 꺼짐', { port }));
       refreshPorts(ctx, true);
     }
 
