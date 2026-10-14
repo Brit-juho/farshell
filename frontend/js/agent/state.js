@@ -133,7 +133,7 @@ export function applyEvent(state) {
 function _recompute(live) {
   const next = new Map();
   for (const entry of _entries.values()) {
-    const name = entry && entry.tmux_session;
+    const name = _localName(entry);
     if (!name) continue;
     const status = normalizeState(entry.status);
     // 같은 tmux 세션에 엔트리가 여럿이면(소유자 없는 세션의 자기보고 + 화면 감지) 더 급한 쪽을 쓴다.
@@ -150,6 +150,16 @@ function _recompute(live) {
   for (const [k, v] of next) _byTmux.set(k, v);
   const detailsChanged = _rebuildDetails();
   if (changed || detailsChanged) _notify();
+}
+
+// 2026-10-15 — 이 서버 자신의 엔트리만 tmux 이름 지도에 들어간다. 피어 엔트리(`host`가 다른
+// 호스트)는 이름만 같은 **다른 기계의 세션**이다 — M1의 `server-2`(done)가 로컬 `server-2`
+// (working)를 덮어 「완료」로 굳었고, Claude를 끝내 로컬 엔트리가 반납돼도 그 done이 남아
+// 「터미널」로 돌아가지 않았다. 서버의 이름 판정(_apply_entry_agent_overrides)은 이미 같은
+// 규칙으로 거른다. 원격 호스트 화면은 relay로 그 서버의 엔트리를 받으니 거기선 그게 `local`이다.
+function _localName(ent) {
+  if (!ent || (ent.host && ent.host !== 'local')) return null;
+  return ent.tmux_session || null;
 }
 
 // 스냅샷의 키는 서버의 불투명 키, 이벤트에는 키가 없다 — 둘을 같은 엔트리로
@@ -170,7 +180,7 @@ function _rebuildDetails() {
   const next = {};
   const rank = {};
   for (const ent of _entries.values()) {
-    const name = ent && ent.tmux_session;
+    const name = _localName(ent);
     if (!name) continue;
     const u = entryUrgency(ent.status);
     if (name in next && u >= rank[name]) continue;

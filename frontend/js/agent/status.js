@@ -227,8 +227,14 @@ function connectAgentWs() {
       }
     }
   };
-  wsAgent.onclose = () => { clearTimeout(_wsAgentStableTimer); scheduleAgentReconnect(); };
-  wsAgent.onerror = () => { try { wsAgent.close(); } catch (_) {} };
+  // 이미 다른 소켓으로 갈아탔으면 옛 소켓의 close가 재연결을 하나 더 만들지 않게 한다.
+  const sock = wsAgent;
+  sock.onclose = () => {
+    if (sock !== wsAgent) return;
+    clearTimeout(_wsAgentStableTimer);
+    scheduleAgentReconnect();
+  };
+  sock.onerror = () => { try { sock.close(); } catch (_) {} };
 }
 // 2026-09-30 — 서버의 에이전트 이름 감시는 보이는 화면이 없으면 쉰다(routes/
 // agents.py _agent_hidden). core/workspace-ws.js와 같은 이유로 화면이 알린다.
@@ -238,12 +244,28 @@ function _sendAgentVisibility() {
 }
 document.addEventListener('visibilitychange', _sendAgentVisibility);
 
+// 2026-10-15 — 예전엔 15번 실패하면 **영원히** 멈췄다(30초 상한이라 약 6분). 폰이 잠들거나
+// 서버가 그만큼 내려가 있으면 이후 상태가 새로고침 전까지 얼어붙었다. 이제 상한 간격으로
+// 계속 시도하고, 화면이 다시 보이거나 네트워크가 돌아오면 기다리지 않고 바로 붙는다.
+let _wsAgentTimer = null;
 function scheduleAgentReconnect() {
-  if (_wsAgentRetries >= 15) return;
-  _wsAgentRetries++;
+  if (_wsAgentTimer) return;
+  _wsAgentRetries = Math.min(_wsAgentRetries + 1, 15);
   const delay = Math.min(1000 * Math.pow(2, _wsAgentRetries), 30000);
-  setTimeout(connectAgentWs, delay);
+  _wsAgentTimer = setTimeout(() => { _wsAgentTimer = null; connectAgentWs(); }, delay);
 }
+function _reconnectAgentNow() {
+  if (document.hidden || !_authed) return;
+  if (wsAgent && (wsAgent.readyState === 0 || wsAgent.readyState === 1)) return;
+  clearTimeout(_wsAgentTimer);
+  _wsAgentTimer = null;
+  _wsAgentRetries = 0;
+  connectAgentWs();
+}
+let _authed = false;
+whenAuthed(() => { _authed = true; });
+document.addEventListener('visibilitychange', _reconnectAgentNow);
+window.addEventListener('online', _reconnectAgentNow);
 
 whenAuthed(connectAgentWs);
 // T6: 탭 뱃지가 그리드를 열지 않아도 최신 cwd를 알도록 한다. 2026-09-30부터

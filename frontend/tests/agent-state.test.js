@@ -405,3 +405,19 @@ test('applyEvent — 엔트리가 다른 세션으로 옮겨 가면 옛 세션�
   assert.strictEqual(S.getStatus('one'), 'idle');
   assert.strictEqual(S.getStatus('two'), 'working');
 });
+
+test('피어 호스트의 같은 이름 엔트리는 로컬 세션 상태에 섞이지 않는다', async () => {
+  const { S } = await load();
+  S.applySnapshot({
+    a: { status: 'working', tmux_session: 'server-2', session_id: 'a', host: 'local', tool: 'Bash' },
+    'm1@peer:server-2': { status: 'done', tmux_session: 'server-2', session_id: 'peer:server-2', host: 'm1' },
+    'm1@peer:only': { status: 'waiting', tmux_session: 'only', session_id: 'peer:only', host: 'm1' },
+  });
+  assert.strictEqual(S.getStatus('server-2'), 'working');
+  assert.strictEqual(S.agentDetails()['server-2'].tool, 'Bash');
+  assert.strictEqual(S.getStatus('only'), 'idle');
+  // 로컬 엔트리가 반납되면 피어의 done이 남지 않고 idle(터미널)로 돌아간다.
+  S.applyEvent({ session_id: 'a', host: 'local', tmux_session: 'server-2', status: 'idle', released: true });
+  assert.strictEqual(S.getStatus('server-2'), 'idle');
+  assert.strictEqual(S.agentDetails()['server-2'], undefined);
+});
