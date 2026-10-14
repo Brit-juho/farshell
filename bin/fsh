@@ -3326,7 +3326,10 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     if [ "$_hooks_rc" = "2" ]; then
       _check "$(_t 'Claude 훅')" fail "$(_t 'settings.json을 읽을 수 없음 — {err}' err="$_hooks_out")"
     elif [ "$_hooks_rc" = "0" ]; then
-      _check "$(_t 'Claude 훅')" ok "$(_t 'pre/post/stop 3종 등록됨')"
+      # 개수는 status 출력에서 센다 — 설치기의 이벤트 목록이 바뀌어도 문구가 낡지 않게(예전엔
+      # 「pre/post/stop 3종」으로 굳어 있어 8종을 검사하면서도 3종이라고 말했다).
+      _check "$(_t 'Claude 훅')" ok "$(_t '이벤트 {n}종 등록됨' n="$(printf '%s
+' "$_hooks_out" | grep -c .)")"
     else
       _hooks_missing="$(echo "$_hooks_out" | awk -F'\t' '$2!="ok"{printf "%s ", $1}')"
       _check "$(_t 'Claude 훅')" warn "$(_t "미등록/불일치: {missing}— 'fsh hooks install' (없으면 상태 배지·큐 자동 투입·TTS가 동작 안 함)" missing="$_hooks_missing")"
@@ -3339,7 +3342,8 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     if [ "$_codex_hooks_rc" = "2" ]; then
       _check "$(_t 'Codex 훅')" fail "$(_t 'config.toml을 읽을 수 없음 — {err}' err="$_codex_hooks_out")"
     elif [ "$_codex_hooks_rc" = "0" ]; then
-      _check "$(_t 'Codex 훅')" ok "$(_t 'prompt/permission/tool/stop/session 6종 등록됨')"
+      _check "$(_t 'Codex 훅')" ok "$(_t '이벤트 {n}종 등록됨' n="$(printf '%s
+' "$_codex_hooks_out" | grep -c .)")"
     else
       _codex_hooks_missing="$(echo "$_codex_hooks_out" | awk -F'\t' '$2!="ok"{printf "%s ", $1}')"
       _check "$(_t 'Codex 훅')" warn "$(_t "미등록/불일치: {missing}— 'fsh hooks install'" missing="$_codex_hooks_missing")"

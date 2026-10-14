@@ -142,8 +142,6 @@ _t_en_lookup() {
     'ngrok 이미 실행 중: {url}') _T_OUT='ngrok already running: {url}' ;;
     'oh-my-tmux 감지 → {path}') _T_OUT='Detected oh-my-tmux → {path}' ;;
     'package.json은 >=20 요구. 프런트 빌드가 실패할 수 있음') _T_OUT='package.json requires >=20. The frontend build may fail' ;;
-    'pre/post/stop 3종 등록됨') _T_OUT='pre/post/stop registered (3)' ;;
-    'prompt/permission/tool/stop/session 6종 등록됨') _T_OUT='prompt/permission/tool/stop/session registered (6)' ;;
     'push 알림') _T_OUT='Push alerts' ;;
     'python3 미설치. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''') _T_OUT='python3 isn'\''t installed. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''' ;;
     'settings.json profile에 추가:') _T_OUT='Add to a profile in settings.json:' ;;
@@ -478,6 +476,7 @@ _t_en_lookup() {
     '이미 실행 중 (PID {pid}). 같은 프롬프트는 동시 실행 차단.') _T_OUT='Already running (PID {pid}). The same prompt can'\''t run twice at once.' ;;
     '이미 존재하는 이름이면 무시 가능') _T_OUT='Safe to ignore if the name already exists' ;;
     '이미 종료됨 (PID {pid})') _T_OUT='Already stopped (PID {pid})' ;;
+    '이벤트 {n}종 등록됨') _T_OUT='{n} events registered' ;;
     '이전 코드로 들어와 있던 사람도 새 코드를 입력해야 합니다.') _T_OUT='Anyone who got in with the old code must enter the new one.' ;;
     '이전:') _T_OUT='Previous:' ;;
     '이제 접속 주소로 https://{host} 를 씁니다 ('\''fsh mobile'\''이 이 주소로 QR을 만듭니다)') _T_OUT='Your access URL is now https://{host} ('\''fsh mobile'\'' builds its QR code from it)' ;;
