@@ -34,7 +34,8 @@ def _git_path(top: Path, option: str) -> Path:
     rc, out = _git(top, "rev-parse", "--path-format=absolute", option)
     if rc or not out:
         raise OSError("worktree identity unavailable")
-    return fsguard.resolve_under_roots(out.removesuffix("\n"))
+    # git-dir/common-dir 은 `.git` 안을 가리키므로 점 디렉토리 규칙을 끈다(경계·거부 목록은 유지).
+    return fsguard.resolve_under_roots(out.removesuffix("\n"), check_hidden=False)
 
 
 def _repository_root(top: Path, common: Path) -> str | None:
@@ -76,7 +77,7 @@ def _workspace(top: Path) -> dict:
         if hit and time.monotonic() < hit[0]:
             try:
                 for path in hit[2]:
-                    fsguard.resolve_under_roots(path)
+                    fsguard.resolve_under_roots(path, check_hidden=False)
                 return dict(hit[1])
             except fsguard.FsDenied:
                 return unknown

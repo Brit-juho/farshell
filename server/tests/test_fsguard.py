@@ -238,7 +238,7 @@ def test_looks_binary():
     ".claude.json",           # Claude Code 계정·MCP 설정
     ".claude/settings.json",  # 같은 디렉토리 전체
     ".clauth/status.json",
-    ".gstack/.auth.json",
+    ".sometool-state/.auth.json",  # 이름을 모르는 도구의 상태 디렉토리
     ".vt/hosts.json",         # 피어 시크릿(설계상 SSH 개인키 등가)
     ".vt/devices.json",
     ".zsh_history",           # 명령줄에 스친 토큰
@@ -270,3 +270,91 @@ def test_ordinary_files_still_allowed_after_denylist_growth(tmp_path, monkeypatc
         f = proj / name
         f.write_text("x\n")
         assert fsguard.resolve_under_roots(str(f)) == f.resolve()
+
+
+# ---------------------------------------------------------------------------
+# 루트 아래 점(.) 디렉토리 일반 거부 + 허용 목록
+# ---------------------------------------------------------------------------
+
+def _mk(root, rel, text="x\n"):
+    f = root / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text)
+    return f
+
+
+@pytest.mark.parametrize("rel", [
+    ".github/workflows/ci.yml",
+    ".vscode/settings.json",
+    ".devcontainer/devcontainer.json",
+    ".worktrees/a/b.py",
+    ".gitignore",          # 점 파일은 디렉토리가 아니므로 열람 대상
+    ".eslintrc",
+    "src/app.py",
+])
+def test_allowed_dot_dirs_and_dotfiles(sandbox, rel):
+    f = _mk(sandbox["root"] / "proj", rel)
+    assert fsguard.resolve_under_roots(str(f)) == f.resolve()
+
+
+@pytest.mark.parametrize("rel", [
+    ".sometool/x",
+    ".cache/x/y",
+    "pkg/.cache/x/y",
+    ".git/config",
+])
+def test_unknown_dot_dirs_are_denied(sandbox, rel):
+    f = _mk(sandbox["root"] / "proj", rel)
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(f))
+
+
+def test_dot_dir_itself_is_denied_but_dotfile_is_not(sandbox):
+    d = sandbox["root"] / "proj" / ".sometool"
+    d.mkdir()
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(d))
+
+
+def test_dot_dir_above_root_is_exempt(tmp_path, monkeypatch):
+    root = tmp_path / ".hidden" / "proj"
+    f = _mk(root, "src/app.py")
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    assert fsguard.resolve_under_roots(str(f)) == f.resolve()
+    assert fsguard.resolve_under_roots(str(root)) == root.resolve()
+
+
+def test_root_itself_a_dot_dir_is_exempt(tmp_path, monkeypatch):
+    root = tmp_path / ".stuff"
+    f = _mk(root, "a.py")
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    assert fsguard.resolve_under_roots(str(f)) == f.resolve()
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(_mk(root, ".cache/z")))
+
+
+def test_symlink_into_denied_dot_dir_is_denied(sandbox):
+    proj = sandbox["root"] / "proj"
+    target = _mk(proj, ".sometool/.auth.json")
+    link = proj / "innocent"
+    link.symlink_to(target.parent)
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(link / ".auth.json"))
+
+
+def test_worktrees_root_with_dot_dir_inside_still_denied(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ok = _mk(home / ".worktrees", "repo/a.py")
+    bad = _mk(home / ".worktrees", "repo/.sometool/t")
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(tmp_path / "other"))
+    (tmp_path / "other").mkdir()
+    assert fsguard.resolve_under_roots(str(ok)) == ok.resolve()
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_under_roots(str(bad))
+
+
+def test_check_denylist_stays_a_pure_name_check():
+    """routes/git.py 가 쓰는 이름 판정은 점 디렉토리 규칙과 무관하다."""
+    assert fsguard._check_denylist(Path(".cache/x/y")) is None
+    assert fsguard._check_denylist(Path(".git/config")) is None
