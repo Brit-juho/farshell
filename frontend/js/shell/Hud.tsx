@@ -15,6 +15,8 @@ import { buildHudChips, type HudChip, type HudInput } from './hud-data.js';
 
 const POLL_MS = 30000;
 const SCREEN_POLL_MS = 5000;
+// CPU·네트워크는 초 단위로 변하는 값이라 다른 HUD 데이터(30초)와 따로 3초마다 갱신한다.
+const STATS_POLL_MS = 3000;
 
 export interface HudDeps {
   vtFetch: (path: string) => Promise<unknown>;
@@ -40,13 +42,14 @@ async function collect(deps: HudDeps): Promise<HudInput> {
   const clientsPath = deps.activeClientsPath?.() ||
     (tmuxName ? `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}` : '');
 
-  const [caps, safeMode, usage, clients] = await Promise.all([
+  const [caps, safeMode, usage, clients, stats] = await Promise.all([
     safeFetch<HudInput['caps']>(deps, '/api/capabilities'),
     safeFetch<HudInput['safeMode']>(deps, '/api/safe-mode'),
     safeFetch<HudInput['usage']>(deps, '/api/usage'),
     clientsPath
       ? safeFetch<{ clients?: unknown[] }>(deps, clientsPath)
       : Promise.resolve(null),
+    safeFetch<HudInput['stats']>(deps, '/api/system/stats'),
   ]);
 
   return {
@@ -56,6 +59,7 @@ async function collect(deps: HudDeps): Promise<HudInput> {
     safeMode,
     usage,
     screens: clients?.clients?.length ?? null,
+    stats,
   };
 }
 
@@ -158,10 +162,18 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
     setChips(buildHudChips(snapshot));
   };
 
+  const refreshStats = async () => {
+    if (!snapshot) return;
+    const stats = await safeFetch<HudInput['stats']>(props.deps, '/api/system/stats');
+    snapshot = { ...snapshot, stats };
+    setChips(buildHudChips(snapshot));
+  };
+
   refresh();
+  const statsTimer = setInterval(() => { if (!document.hidden) refreshStats(); }, STATS_POLL_MS);
   const timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
   const screenTimer = setInterval(() => { if (!document.hidden) refreshScreens(); }, SCREEN_POLL_MS);
-  onCleanup(() => { clearInterval(timer); clearInterval(screenTimer); });
+  onCleanup(() => { clearInterval(timer); clearInterval(screenTimer); clearInterval(statsTimer); });
 
   const side = (s: 'left' | 'right') => chips().filter((c) => c.side === s);
 

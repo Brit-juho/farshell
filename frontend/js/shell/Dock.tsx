@@ -75,6 +75,7 @@ const TABS: DockTab[] = [
   { id: 'files', label: t('첨부'), icon: 'paperclip',   panelId: 'vt-files', action: 'files.show' },  // 50 §4
   { id: 'ports', label: t('포트'), icon: 'plug',      panelId: 'vt-ports', action: 'ports.show', cap: 'ports', badge: 'ports' },
   { id: 'usage', label: t('사용량'), icon: 'gauge',    panelId: 'vt-usage', action: 'usage.open', cap: 'usage' },
+  { id: 'system', label: t('시스템'), icon: 'bar-chart', panelId: 'vt-system', action: 'system.open' },   // CPU·RAM·네트워크
 ];
 
 function Dock(props: { deps: DockDeps }) {

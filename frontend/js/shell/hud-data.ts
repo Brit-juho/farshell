@@ -49,6 +49,9 @@ const PRIORITY = {
   screensAlert: 3,
   /** 평상시 사용량 — dock 사용량 탭에 같은 값이 더 자세히 있다. */
   usage: 5,
+  /** 이 기계의 CPU·RAM·네트워크 — 임계를 넘으면 경고 순위(screensAlert와 같은 자리)로 올라온다. */
+  stats: 6,
+  statsAlert: 3,
   /** 화면 1개(=나뿐). 알아두면 좋지만 없어도 곤란하지 않다. */
   screens: 6,
   /** 개발 중에만 켜는 토글들. 켠 사람은 켠 걸 안다. */
@@ -70,6 +73,14 @@ export interface HudInput {
   screens?: number | null;
   /** /api/usage 응답. */
   usage?: UsageSnapshot | null;
+  /** /api/system/stats 응답. 읽지 못한 항목은 null이고, 그 칩은 그리지 않는다. */
+  stats?: SystemStats | null;
+}
+
+export interface SystemStats {
+  cpu?: { pct: number; cores: number } | null;
+  ram?: { used: number; total: number; pct: number } | null;
+  net?: { rx_bps: number; tx_bps: number; interfaces?: string[] } | null;
 }
 
 interface UsageWindow {
@@ -127,6 +138,37 @@ function usageChip(p: UsageProfile): HudChip | null {
   };
 }
 
+// 초당 바이트 → "0" / "340K" / "1.2M" / "12M". 칩 폭을 지키려고 단위는 한 글자다(초당은 라벨이 말한다).
+export function formatRate(bps: number | null | undefined): string {
+  if (bps == null || !Number.isFinite(bps) || bps < 1) return '0';
+  const units = ['B', 'K', 'M', 'G'];
+  let v = bps;
+  let i = 0;
+  while (v >= 1000 && i < units.length - 1) { v /= 1024; i += 1; }
+  const n = v >= 100 || i === 0 ? Math.round(v) : Math.round(v * 10) / 10;
+  return `${n}${units[i]}`;
+}
+
+// CPU·RAM·네트워크 칩. 읽지 못한 항목(null)은 그 칩을 아예 그리지 않는다 — 「—」를 그리지 않는 HUD의 규칙.
+function statsChips(stats: SystemStats): HudChip[] {
+  const out: HudChip[] = [];
+  const level = (pct: number, warn: number, err: number): HudTone => (pct >= err ? 'err' : pct >= warn ? 'warn' : 'plain');
+  const push = (id: string, label: string, value: string, tone: HudTone, hint?: string) => out.push({
+    id, label, value, hint, tone, action: 'system.open', side: 'right',
+    priority: tone === 'plain' ? PRIORITY.stats : PRIORITY.statsAlert,
+  });
+  if (stats.cpu && Number.isFinite(stats.cpu.pct)) {
+    push('stats:cpu', 'CPU', `${Math.round(stats.cpu.pct)}%`, level(stats.cpu.pct, 75, 90));
+  }
+  if (stats.ram && Number.isFinite(stats.ram.pct)) {
+    push('stats:ram', 'RAM', `${Math.round(stats.ram.pct)}%`, level(stats.ram.pct, 80, 90));
+  }
+  if (stats.net) {
+    push('stats:net', 'NET', `\u2193${formatRate(stats.net.rx_bps)} \u2191${formatRate(stats.net.tx_bps)}`, 'plain');
+  }
+  return out;
+}
+
 export function buildHudChips(input: HudInput): HudChip[] {
   const chips: HudChip[] = [];
 
@@ -171,6 +213,8 @@ export function buildHudChips(input: HudInput): HudChip[] {
   }
 
   // ── 우측: 사용량 + 버전 ────────────────────────────────────────────────
+  if (input.stats) chips.push(...statsChips(input.stats));
+
   if (input.usage?.available) {
     for (const p of input.usage.profiles || []) {
       const chip = usageChip(p);

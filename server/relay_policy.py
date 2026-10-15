@@ -59,7 +59,7 @@ _HTTP_RULES: tuple[tuple[re.Pattern, frozenset], ...] = tuple(
         (r"/api/worktrees(/precheck|/hidden|/[^/]+(/open)?)?", _ANY),
         (r"/api/repos", _GET),
         # 읽기 전용 상태
-        (r"/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)", _GET),
+        (r"/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)", _GET),
         (r"/api/mcp(/plugins)?", _GET),
         (r"/api/watch/[^/]+", _ANY),
     )

@@ -186,3 +186,42 @@ test('연결된 화면 — 나 혼자일 때보다 여럿일 때 더 오래 남�
   const p = (n) => buildHudChips({ caps: {}, screens: n }).find((c) => c.id === 'screens').priority;
   assert.ok(p(3) < p(1));
 });
+
+// ── 시스템 사용률 칩(CPU·RAM·네트워크) ───────────────────────────────────────
+test('formatRate — 초당 바이트를 한 글자 단위로 줄인다', async () => {
+  const { formatRate } = await mod();
+  assert.strictEqual(formatRate(0), '0');
+  assert.strictEqual(formatRate(null), '0');
+  assert.strictEqual(formatRate(512), '512B');
+  assert.strictEqual(formatRate(1536), '1.5K');
+  assert.strictEqual(formatRate(340 * 1024), '340K');
+  assert.strictEqual(formatRate(1.2 * 1024 * 1024), '1.2M');
+  assert.strictEqual(formatRate(250 * 1024 * 1024), '250M');
+});
+
+test('시스템 칩 — 값이 있는 항목만 그린다(읽지 못한 항목은 칩이 없다)', async () => {
+  const { buildHudChips } = await mod();
+  const all = buildHudChips({ stats: { cpu: { pct: 12.4, cores: 8 }, ram: { used: 1, total: 2, pct: 55.2 }, net: { rx_bps: 2048, tx_bps: 100 } } });
+  assert.deepStrictEqual(ids(all), ['stats:cpu', 'stats:ram', 'stats:net']);
+  const byId = Object.fromEntries(Array.from(all, (c) => [c.id, c]));
+  assert.strictEqual(byId['stats:cpu'].value, '12%');
+  assert.strictEqual(byId['stats:ram'].value, '55%');
+  assert.strictEqual(byId['stats:net'].value, '↓2K ↑100B');
+  assert.strictEqual(byId['stats:cpu'].action, 'system.open');
+
+  assert.deepStrictEqual(ids(buildHudChips({ stats: { cpu: null, ram: { used: 1, total: 2, pct: 10 }, net: null } })), ['stats:ram']);
+  assert.deepStrictEqual(ids(buildHudChips({ stats: { cpu: null, ram: null, net: null } })), []);
+});
+
+test('시스템 칩 — 임계를 넘으면 색이 바뀌고 자리가 모자랄 때 더 오래 버틴다', async () => {
+  const { buildHudChips } = await mod();
+  const chip = (stats, id) => Array.from(buildHudChips({ stats }), (c) => c).find((c) => c.id === id);
+  assert.strictEqual(chip({ cpu: { pct: 50, cores: 4 } }, 'stats:cpu').tone, 'plain');
+  assert.strictEqual(chip({ cpu: { pct: 80, cores: 4 } }, 'stats:cpu').tone, 'warn');
+  assert.strictEqual(chip({ cpu: { pct: 95, cores: 4 } }, 'stats:cpu').tone, 'err');
+  assert.strictEqual(chip({ ram: { used: 1, total: 2, pct: 82 } }, 'stats:ram').tone, 'warn');
+  assert.strictEqual(chip({ ram: { used: 1, total: 2, pct: 91 } }, 'stats:ram').tone, 'err');
+  const calm = chip({ cpu: { pct: 10, cores: 4 } }, 'stats:cpu').priority;
+  const hot = chip({ cpu: { pct: 95, cores: 4 } }, 'stats:cpu').priority;
+  assert.ok(hot < calm, '위험하면 우선순위 숫자가 작아진다(끝까지 남는다)');
+});

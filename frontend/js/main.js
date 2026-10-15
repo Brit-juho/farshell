@@ -94,6 +94,7 @@ import './panels/viewer-lazy.js';
 import './term/search-bar.js';
 import './picker.js';
 import './panels/ports-lazy.js';
+import './panels/system-lazy.js';   // 시스템(CPU·RAM·네트워크) — HUD 칩과 dock 탭이 연다
 import './panels/files-lazy.js';
 import './queue-lazy.js';
 import './snippets-lazy.js';

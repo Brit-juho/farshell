@@ -11,9 +11,11 @@ import shutil
 import socket
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 import fsguard
 import i18n
@@ -22,6 +24,7 @@ import notify
 import platform_utils
 import push
 import safe_mode
+import sysstats
 import tailscale
 import tmux_hooks
 import tunnel
@@ -307,6 +310,42 @@ async def notify_client_event(request: Request):
 @router.get("/api/safe-mode")
 async def safe_mode_status(request: Request):
     return _etag_response({"enabled": safe_mode.is_enabled()}, request)
+
+
+class _CpuStats(BaseModel):
+    pct: float
+    cores: int
+
+
+class _RamStats(BaseModel):
+    used: int
+    total: int
+    pct: float
+
+
+class _NetStats(BaseModel):
+    rx_bps: int
+    tx_bps: int
+    interfaces: list[str]
+
+
+class SystemStats(BaseModel):
+    """읽지 못한 항목은 null — 화면은 값이 없으면 그 칸을 숨긴다."""
+    ok: bool
+    platform: str
+    cpu: Optional[_CpuStats] = None
+    ram: Optional[_RamStats] = None
+    net: Optional[_NetStats] = None
+    ts: float
+
+
+@router.get("/api/system/stats", response_model=SystemStats)
+async def system_stats():
+    """이 서버가 도는 기계의 CPU·RAM·네트워크 사용률. 읽기 전용이라 승격이 필요 없다.
+
+    OS 기본 도구를 읽는 동기 코드라 스레드로 넘기고, 1초 안의 호출은 같은 결과를 돌려준다
+    (`sysstats.MIN_INTERVAL`) — 화면이 몇 개든 계산은 하나다."""
+    return await asyncio.to_thread(sysstats.snapshot)
 
 
 @router.get("/api/hooks/status")

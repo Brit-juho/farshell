@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **시스템 사용률(CPU·RAM·네트워크)**. 상태 줄에 CPU / RAM / NET 칩(3초마다 갱신, 80% 넘으면 주의·90% 넘으면 위험 색)이 생기고, 누르면 dock의 「시스템」 탭이 열려 막대와 최근 2분의 흐름을 보여준다. 서버는 `GET /api/system/stats`로 이 서버가 도는 기계의 값을 낸다 — 새 의존성 없이 macOS는 `host_statistics`·`vm_stat`·`netstat -ib`, Linux·WSL2는 `/proc`을 읽는다(읽지 못한 항목은 칩을 숨긴다). 호스트 전환 화면에서는 relay로 그 맥의 값을 가져온다. 파서는 실제 명령 출력 샘플로 테스트하며, Linux·WSL2 경로는 샘플 기반이다.
+
 - **파일 창의 「떠 있는 창」 전환 버튼**. 파일 창 머리줄의 버튼 하나로 위쪽에 붙은 시트와 끌어서 옮기고 크기를 바꾸는 떠 있는 창을 오간다(설정 → 모양의 `viewer.surface`와 같은 값이라 설정에서도 바뀐다). 떠 있는 창의 위치·크기는 기억한다.
 
 - **우측 패널 개선**. 소스 컨트롤에 깃 그래프(부모·브랜치 이름표)와 브랜치 선택(읽기 전용, 기본은 현재 브랜치), 파일 탭의 하위 2단계 미리 불러오기(`/api/fs/tree?depth=`), 첨부의 직접 그린 체크박스와 전체 선택, 포트의 열 맞춘 표와 노출 관리(접근 방식 변경·일시 닫기·새 주소 받기, `POST /api/ports/{port}/share/pause|resume|refresh-url`, `fsh tunnel unexpose --keep-policy`), 사용량 카드의 재인증 버튼(새 터미널에서 `clauth login <프로필>`/`codex login`). 상단 탭은 전부 SVG 아이콘이다.
