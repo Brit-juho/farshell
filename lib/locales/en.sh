@@ -643,6 +643,7 @@ _t_en_lookup() {
     '활성 — 새 기기 등록 시 코드 필요 (등록 기기 {n}개)') _T_OUT='enabled — new devices need a code ({n} device(s) registered)' ;;
     '활성화: {path} 열어 '\''command ='\'' 라인의 # 제거') _T_OUT='To enable: open {path} and remove the # from the '\''command ='\'' line' ;;
     '회사망이 방화벽으로 막아도 Tailscale은 대개 UDP 홀펀칭 또는 443 DERP 폴백으로 통과함') _T_OUT='Even behind a corporate firewall, Tailscale usually gets through via UDP hole punching or the 443 DERP fallback' ;;
+    '회수 정리') _T_OUT='revocation cleanup' ;;
     '훅 등록 실패 — '\''fsh hooks install'\''로 다시 시도할 수 있습니다') _T_OUT='Hook registration failed - retry with '\''fsh hooks install'\''' ;;
     '훅 실패(rc={rc}){out}') _T_OUT='Hook failed (rc={rc}){out}' ;;
     '훅 실행{out}') _T_OUT='Hook ran{out}' ;;

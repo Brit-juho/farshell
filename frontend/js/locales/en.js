@@ -3289,5 +3289,7 @@ window.__VT_I18N = {
   "절대 경로(또는 ~/…)여야 합니다": "Must be an absolute path (or ~/…)",
   "폴더 lease": "folder lease",
   "한 번에 {n}개까지 확인할 수 있습니다": "At most {n} paths can be checked at once",
-  "호출자를 확인하지 못했습니다 — 터미널의 fsh 또는 에이전트 세션에서 부르세요": "The caller could not be verified — call from the terminal's fsh or an agent session"
+  "호출자를 확인하지 못했습니다 — 터미널의 fsh 또는 에이전트 세션에서 부르세요": "The caller could not be verified — call from the terminal's fsh or an agent session",
+  "회수 정리": "revocation cleanup",
+  "회수 정리가 끝나지 않았습니다": "Revocation cleanup is not finished"
 };

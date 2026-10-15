@@ -8,7 +8,7 @@
   - 부모 → `deleg.control`(role=parent), 자식 → `deleg.control`(role=child) (`deleg:local/<id>`, `approved_by: system:spawn`)
   - 위임이 닫히거나(closed) 부모가 사라지면(orphaned) `state: "ended"`. 원장에서 항목이 사라지면 grant 도 사라진다.
   - 파일 기록(상속 규칙, `migrate.translate_delegation`): 새 worktree 경로의 자식 전용 grant, 또는 부모 fs grant 의 공유 참조.
-    **강제는 5단계(lease)** — 여기서는 기록·동반 회수(부모 grant 가 끝나면 상속분도 `revoked`)까지만 한다.
+    이 grant 들은 기록·동반 회수(부모 grant 가 끝나면 상속분도 `revoked`)까지만 한다. **쓰기를 막는 것은 `VT_AUTHZ_ENFORCE=lease` 가 발급하는 lease** 다(`delegation._issue_leases`, `docs/ref/auth.md` 「Folder leases」).
 번역은 `migrate.translate_delegation` 하나다(`fsh migrate-auth --apply/--verify` 와 같은 함수) — 그래서 dual-write 상태를
 `--verify` 가 "차이 없음"으로 본다. 명시적 회수(`state: revoked`)는 다시 파생해도 되살아나지 않는다(`migrate._sync`).
 
@@ -360,7 +360,7 @@ def recheck_queued(src: dict, item_id: str = "") -> Optional[str]:
 
 def check_fs(caller_key: str, raw: str, purpose: str) -> str:
     """`fs.read` on `fs:local/<경로>` — fsguard 의 루트(VT_BROWSE_ROOTS)·거부 목록 안일 때만. 통과하면 realpath.
-    밖이면 403 `cwd_outside_roots`. 5단계에서 lease 가 이 자리를 대신한다."""
+    밖이면 403 `cwd_outside_roots`. (`lease` 강제가 켜지면 남의 lease 폴더도 막는다 — `delegation._lease_guard`.)"""
     import fsguard
     from . import hooks
     try:

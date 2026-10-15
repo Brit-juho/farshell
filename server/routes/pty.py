@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 import agent_status
 import auth
 import crypto_channel
+from authz import leases as authz_leases
 from authz import legacy_gate as authz_legacy_gate
 from authz import legacy_use as authz_legacy_use
 import deps as _deps  # 전역 카운터 직접 수정용
@@ -337,9 +338,14 @@ async def rename_session(session_id: str, request: Request):
 # --------------------------------------------------------------------------
 
 @router.post("/api/upload")
-async def upload_file(file: UploadFile = File(...), session_id: str = Query("")):
+async def upload_file(request: Request, file: UploadFile = File(...), session_id: str = Query("")):
     # 저장소는 file_store가 관리(0700 디렉토리 + id 기반 실경로). 여기서는 스트리밍
     # 수신 + 크기 상한만 담당하고, 다 받은 뒤 file_store.add_from_upload로 편입한다.
+    if authz_leases.enforced() and session_id:        # 그 세션 작업 폴더로 넘어가는 파일 — 남의 lease 폴더면 막는다
+        cwd = await asyncio.to_thread(authz_leases.session_cwd, session_id)
+        blocked = await authz_leases.enforce_write(request, [cwd] if cwd else [], op="upload")
+        if blocked is not None:
+            return blocked
     file_store.files_dir().mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(file_store.files_dir(), 0o700)

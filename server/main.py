@@ -468,9 +468,10 @@ async def lifespan(_app: FastAPI):
     # 위임 점검 — 세션이 사라진 위임 정리, 재시작 전에 못 보낸 결과 재전송.
     import delegation
     delegation_sweep_task = asyncio.create_task(delegation.sweep_loop())
-    # 폴더 lease 정리(수명이 끝난 것).
-    from authz import leases as authz_leases
+    # 폴더 lease 정리(수명이 끝난 것)와, 서버가 도중에 죽어 멈춘 회수 saga 이어하기.
+    from authz import leases as authz_leases, saga as authz_saga
     lease_sweep_task = asyncio.create_task(authz_leases.sweep_loop())
+    saga_sweep_task = asyncio.create_task(authz_saga.sweep_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -506,7 +507,7 @@ async def lifespan(_app: FastAPI):
         delegation_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await delegation_sweep_task
-        for _t in (lease_sweep_task,):
+        for _t in (lease_sweep_task, saga_sweep_task):
             _t.cancel()
             with suppress(asyncio.CancelledError):
                 await _t
