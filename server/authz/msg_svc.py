@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 PREFIX_REQ = "authz:msg:req:"
 PREFIX_GRANT = "authz:msg:grant:"
 SCOPE = "msg.send"
+SOURCE = "msg"                               # 해결 기록의 종류(`authz:resolved:msg:<id>`)
 REQ_PREFIX_ID = "ms-"
 GRANT_ID_PREFIX = "gm-"
 REQUEST_TTL = limits.PENDING_TTL
@@ -164,7 +165,8 @@ def purge(docs: dict, alive: Optional[Iterable[str]], now: float) -> bool:
                 continue
         keep.append(a)
     docs["approvals"]["items"] = keep
-    return len(g0) != len(docs["grants"]["items"]) or len(a0) != len(keep)
+    pruned = approvals.prune_resolved(docs, now)
+    return len(g0) != len(docs["grants"]["items"]) or len(a0) != len(docs["approvals"]["items"]) or pruned
 
 
 def _request_rec(rid: str, ak: str, tk: str, a_name: str, t_name: str, now: float) -> dict:
@@ -412,10 +414,16 @@ def decide(request_id: str, decision: str, level: Optional[str], actor: Optional
         purge(docs, alive, now)
         req = next((r for r in msg_requests(docs) if _raw(r) == rid and r.get("state") == "pending"), None)
         if req is None:
+            if actor is None and approvals.find_resolved(docs, SOURCE, rid) is not None:
+                raise ShareError("human_session_required", tr("사람(브라우저 로그인 세션)만 승인할 수 있습니다"), 403)
+            again = approvals.replay(docs, SOURCE, rid, decision, None, actor, now)   # 이미 결정된 요청: 처음 결과 또는 409
+            if again is not None:
+                return again
             raise ShareError("not_found", "대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)", 404)
         if actor is None:                        # 주체를 만들지 못했다 = 사람이 확인되지 않았다
             raise ShareError("human_session_required", tr("사람(브라우저 로그인 세션)만 승인할 수 있습니다"), 403)
-        approvals.check_authority(actor, (SCOPE,), req["resource"])
+        approvals.check_authority(actor, (SCOPE,) if decision == "allow" else (), req["resource"], None,
+                                  approvals._snap(docs, now))
         who = actor.id
         base_audit = {"principal": who, "resource": req["resource"], "scopes": [SCOPE], "approval_id": req["id"],
                       "reason": f"agent={req.get('subject_name', '')}"}
@@ -424,7 +432,9 @@ def decide(request_id: str, decision: str, level: Optional[str], actor: Optional
             _audit_strict({**base_audit, "action": "msg.decide", "decision": "deny", "result": "denied",
                            "detail": {"request": _rid(req)}})
             _replace(docs["approvals"]["items"], req, denied)
-            return {"request": request_view(denied, names), "grant": None, "grantId": None}
+            out = {"request": request_view(denied, names), "grant": None, "grantId": None}
+            docs["approvals"]["items"].append(approvals.resolved_record(SOURCE, rid, req, "deny", None, now, out, ()))
+            return out
         old = next((g for g in msg_grants(docs) if g.get("subject_session") == req["subject_session"]
                     and g.get("resource_session") == req["resource_session"]), None)
         new = old or _grant_rec(uuid.uuid4().hex[:12], req, who, now)
@@ -433,7 +443,9 @@ def decide(request_id: str, decision: str, level: Optional[str], actor: Optional
         if old is None:
             docs["grants"]["items"].append(new)
         docs["approvals"]["items"] = [a for a in docs["approvals"]["items"] if a is not req]
-        return {"request": request_view(req, names), "grant": grant_view(new, names), "grantId": new["id"]}
+        out = {"request": request_view(req, names), "grant": grant_view(new, names), "grantId": new["id"]}
+        docs["approvals"]["items"].append(approvals.resolved_record(SOURCE, rid, req, "allow", None, now, out, (SCOPE,)))
+        return out
 
 
 def revoke(grant_id: str, actor: Optional[P.Principal], names: Optional[dict] = None) -> dict:

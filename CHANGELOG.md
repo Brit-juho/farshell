@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- **승인 결정은 먼저 온 쪽이 이긴다.** 엔진 켜짐(`VT_AUTHZ_ENFORCE=share`·`msg`)에서 이미 결정된 요청에 같은 결정을 다시 보내면 처음 결과를 그대로(`replayed: true`) 200으로 돌려주고 grant·감사를 다시 만들지 않으며, 다른 결정(또는 허용 수준이 다른 재요청)은 409 `already_decided`다. 화면 둘이 동시에 눌러도 이긴 쪽은 하나다. 결정된 요청은 10분 동안 해결 기록으로만 남고 그 뒤 정리된다. 거절 쿨다운(5분)은 그대로다.
+- **승인자는 요청한 권한을 이미 가진 사람이어야 한다.** 승인 시 요청의 (권한, 조건)마다 승인하는 사람 자신의 판정을 엔진에 묻는다. 재인증하지 않은 사람은 elevated 사유(raw 입력, 쓰기 relay 그룹, 브라우저 JS 등) 요청을 승인할 수 없고(`elevation_required`), 금지 규칙이 승인자를 막으면 403 `approver_lacks_scope`다. 에이전트·훅·로컬 CLI·서비스·peer·기계 토큰은 전과 같이 `human_session_required`다. 켜짐 이전의 판정은 바뀌지 않는다.
+
 ### Fixed
 
 - **읽을 수 없는 권한 저장소를 빈 파일로 덮어 모든 권한이 사라지던 문제.** `~/.vt/authz/*.json`과 옛 `agent_grants.json`이 깨지거나 읽히지 않으면, 그 파일을 바꾸는 변경은 이제 503 `store_unreadable`로 거부된다(같은 트랜잭션의 다른 문서도 저장하지 않는다). 손상 파일은 지우지도 고치지도 않고, 내용이 같은 복사본(`<이름>.corrupt-<id>`)을 한 번만 남긴다. 읽기는 전과 같이 fail closed다. `fsh migrate-auth --status`가 「저장소 읽기 불가」 줄로, `fsh doctor`가 실패 항목으로 알려 준다. 파일을 고치거나 `fsh migrate-auth --restore <ts>`로 되돌리면 다음 변경부터 다시 쓸 수 있다.

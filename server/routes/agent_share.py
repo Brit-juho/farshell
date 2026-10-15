@@ -411,15 +411,18 @@ async def decide_request(request_id: str, request: Request):
     req, grant = res["request"], res["grant"]
     view = request_view(req, snap)
     allowed = grant is not None
-    await asyncio.to_thread(
-        agent_share.audit, "decide", "allowed" if allowed else "denied", nick=view["target"]["nick"],
-        kind=req["kind"], level=("readwrite" if grant and grant.get("write") else "read") if allowed else None,
-        request=req["id"], grant=grant["id"] if grant else None,
-        reason=f"agent={view['agent']['name']}")
-    await _broadcast({"type": "agent_share_request_resolved", "id": req["id"], "state": "allowed" if allowed else "denied"})
+    if not res.get("replayed"):                  # 먼저 온 결정의 재전송이면 감사·알림을 다시 만들지 않는다
+        await asyncio.to_thread(
+            agent_share.audit, "decide", "allowed" if allowed else "denied", nick=view["target"]["nick"],
+            kind=req["kind"], level=("readwrite" if grant and grant.get("write") else "read") if allowed else None,
+            request=req["id"], grant=grant["id"] if grant else None,
+            reason=f"agent={view['agent']['name']}")
+        await _broadcast({"type": "agent_share_request_resolved", "id": req["id"], "state": "allowed" if allowed else "denied"})
     out = {"ok": True, "request": view, "grant": grant_view(grant, snap) if grant else None}
     if res.get("grantId"):
         out["grantId"] = res["grantId"]
+    if res.get("replayed"):
+        out["replayed"] = True
     return out
 
 
@@ -436,6 +439,8 @@ async def _decide_msg(request_id: str, decision, level, request: Request):
     except ShareError as e:
         return _err(e)
     allowed = res["grant"] is not None
+    if res.get("replayed"):
+        return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"], "replayed": True}
     await _broadcast({"type": "agent_share_request_resolved", "id": res["request"]["id"],
                       "state": "allowed" if allowed else "denied"})
     return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"]}

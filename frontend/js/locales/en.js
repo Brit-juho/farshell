@@ -3116,6 +3116,8 @@ window.__VT_I18N = {
   "권한 저장소를 읽을 수 없어 변경을 거부했습니다 — 파일은 그대로 두었습니다: {detail}. 복구: 파일을 고치거나 'fsh migrate-auth --status' 로 확인하세요": "The permission store cannot be read, so the change was refused — the file was left untouched: {detail}. To recover, fix the file or check 'fsh migrate-auth --status'",
   "권한 파일(agent_grants.json)을 읽을 수 없어 변경을 거부했습니다 — 파일은 그대로 두었습니다. 파일을 고치거나 'fsh migrate-auth --status' 로 확인하세요": "The permission file (agent_grants.json) cannot be read, so the change was refused — the file was left untouched. Fix the file or check 'fsh migrate-auth --status'",
   "권한 저장소": "Permission store",
+  "이미 처리된 요청입니다 — 먼저 온 결정이 적용됐습니다": "This request was already decided — the first decision applies",
+  "승인하는 사람이 요청된 권한을 가지고 있지 않아 승인할 수 없습니다": "The approving person does not hold the requested permission, so it cannot be approved",
   "{name} 읽을 수 없음 — 변경 거부 중(파일은 그대로, 복사본 {n}개): {why} — {path}": "{name} is unreadable — changes are refused (file untouched, {n} copies kept): {why} — {path}",
   "승인 요청을 만들 수 없는 호출자입니다": "This caller cannot create approval requests",
   "권한 엔진을 쓸 수 없어 요청을 거부했습니다": "The authorization engine is unavailable, so the request was refused",

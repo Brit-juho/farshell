@@ -111,7 +111,8 @@ def test_full_lifecycle_is_engine_driven_and_dual_written(web):
     g = docs()["grants"]["items"]
     assert [x["id"] for x in g] == [f"ag-{gid}"] and g[0]["scopes"] == ["session.view", "session.read"]
     assert g[0]["approved_by"].startswith("human:")                  # 승인자는 결정한 사람 주체
-    assert docs()["approvals"]["items"] == []
+    left = docs()["approvals"]["items"]
+    assert [a["origin"] for a in left] == [f"authz:resolved:share:{rid}"]     # 결정된 요청은 해결 기록으로만 남는다(N-1)
     assert_parity("approved")
 
     r = aread(agent, env, "claude-a", "shell")
@@ -343,7 +344,7 @@ def test_deny_decision_creates_no_grant_and_cannot_be_forced(web):
     rid = aread(agent, env, "claude-a", "shell").json()["requestId"]
     human.post(f"/api/agent/share/requests/{rid}/decision", json={"decision": "deny"})
     assert docs()["grants"]["items"] == []
-    assert human.post(f"/api/agent/share/requests/{rid}/decision", json={"decision": "allow"}).status_code == 404   # 이미 처리됨
+    assert human.post(f"/api/agent/share/requests/{rid}/decision", json={"decision": "allow"}).status_code == 409   # 이미 거절됨 — 다른 결정은 409(N-1)
     assert aread(agent, env, "claude-a", "shell").status_code == 403
 
 
@@ -450,7 +451,7 @@ def test_corrupt_engine_grants_fail_closed_and_refuse_writes(web):
     bad = approve(human, r.json()["requestId"])                           # grant 문서를 다시 써야 하는 변경 = 거부
     assert bad.status_code == 503 and bad.json()["error"] == "store_unreadable"
     assert p.read_text() == "{ not json"                                  # 손상 파일은 지우지도 고치지도 않는다
-    assert len(docs()["approvals"]["items"]) == 1                          # 요청은 그대로 남아 있다(승인 안 됨)
+    assert [a["state"] for a in docs()["approvals"]["items"] if a["origin"].startswith("legacy:")] == ["pending"]   # 승인 안 됨
     for _ in range(2):
         assert approve(human, r.json()["requestId"]).status_code == 503
     backups = list(p.parent.glob("grants.json.corrupt-*"))

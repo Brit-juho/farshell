@@ -323,6 +323,8 @@ def decide(request_id: str, decision: str, level: Optional[str], snap, actor: Op
             if tgt is not None:
                 mode = (tgt.share or {}).get("mode") or ""
         res = approvals.decide(docs, request_id, decision, level, actor=actor, share_mode=mode, now=now)
+        if res.get("replayed"):                  # 먼저 온 결정의 재전송 — 아무것도 바뀌지 않았으니 감사·알림을 다시 만들지 않는다
+            return res
         allowed = res["grant"] is not None
         view_agent = (snap or {}).get(req["subject_session"]) if req else None
         who = view_agent.name if view_agent else (req or {}).get("subject_name", "")
