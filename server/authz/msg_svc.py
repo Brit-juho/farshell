@@ -40,6 +40,7 @@ from i18n import tr
 
 from . import approvals, audit, engine, flags, limits, migrate, store
 from . import principals as P
+from . import scopes as S
 from .errors import ShareError
 
 logger = logging.getLogger(__name__)
@@ -181,7 +182,7 @@ def _grant_rec(gid: str, req: dict, approved_by: str, now: float) -> dict:
             "subject": req["subject"], "resource": req["resource"], "scopes": [SCOPE],
             "subject_session": req["subject_session"], "resource_session": req["resource_session"],
             "subject_name": req.get("subject_name", ""), "resource_name": req.get("resource_name", ""),
-            "state": "active", "approved_by": approved_by, "expires": None, "conds": {}, "created": now, "updated": now}
+            "state": "active", "approved_by": approved_by, "approved_via": S.VIA_MANUAL, "expires": None, "conds": {}, "created": now, "updated": now}
 
 
 def _replace(items: list, old: Optional[dict], new: Optional[dict]) -> None:
@@ -336,7 +337,7 @@ def grant_view(rec: dict, names: Optional[dict] = None) -> dict:
     names = names or {}
     ak, tk = rec["subject_session"], rec["resource_session"]
     return {"id": rec["id"], "kind": "msg", "granted": rec.get("created"), "updated": rec.get("updated"),
-            "approvedBy": rec.get("approved_by"),
+            "approvedBy": rec.get("approved_by"), "approvedVia": S.via_of(rec),
             "agent": {"name": names.get(ak) or rec.get("subject_name", ""), "id": ak.rpartition(":")[0]},
             "target": {"name": names.get(tk) or rec.get("resource_name", ""), "id": tk.rpartition(":")[0]}}
 

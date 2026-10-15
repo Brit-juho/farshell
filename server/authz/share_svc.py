@@ -72,7 +72,7 @@ def _sig(raw: Optional[bytes]) -> str:
 def _adopt(docs: dict, data: dict, now: float) -> None:
     """옛 파일 내용을 엔진에 동기화(원본 id 기준). 엔진 쪽 legacy agent 레코드만 건드린다."""
     from . import migrate
-    g_new = [r for r in (approvals.engine_grant(g, approved_by="migrated:live") for g in data["grants"]) if r]
+    g_new = [r for r in (approvals.engine_grant(g, approved_by="migrated:live", approved_via=S.VIA_MIGRATED) for g in data["grants"]) if r]
     a_new = [r for r in (approvals.engine_request(x, now) for x in data["requests"]) if r]
     items = docs["grants"]["items"]
     mine = [g for g in items if approvals.is_grant(g)]
@@ -292,9 +292,9 @@ def get_grant(snap, agent, target) -> Optional[dict]:
         return approvals.grant_to_legacy(g) if g else None
 
 
-def list_state(snap) -> dict:
+def list_state(snap, provenance: bool = False) -> dict:
     with _txn(snap) as docs:
-        return approvals.legacy_state(docs)
+        return approvals.legacy_state(docs, provenance=provenance)
 
 
 def request_access(snap, agent, target, kind: str) -> tuple[dict, bool]:

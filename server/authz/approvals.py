@@ -105,16 +105,23 @@ def request_to_legacy(rec: dict) -> dict:
     return out
 
 
-def legacy_state(docs: dict) -> dict:
-    """엔진 상태 → 옛 파일 모양 `{"grants": [...], "requests": [...]}`."""
-    return {"grants": [grant_to_legacy(g) for g in docs["grants"]["items"] if is_grant(g)],
+def grant_listing(rec: dict) -> dict:
+    """목록용 옛 모양 grant + 누가·어떻게 승인했나(`approvedBy`·`approvedVia`). 옛 파일 투영(`legacy_state`)에는 넣지 않는다."""
+    return {**grant_to_legacy(rec), "approvedBy": rec.get("approved_by"), "approvedVia": S.via_of(rec)}
+
+
+def legacy_state(docs: dict, *, provenance: bool = False) -> dict:
+    """엔진 상태 → 옛 파일 모양 `{"grants": [...], "requests": [...]}`. `provenance=True` 는 목록 응답용(승인 출처 포함)."""
+    to = grant_listing if provenance else grant_to_legacy
+    return {"grants": [to(g) for g in docs["grants"]["items"] if is_grant(g)],
             "requests": [request_to_legacy(a) for a in docs["approvals"]["items"] if is_request(a)]}
 
 
-def engine_grant(legacy: dict, *, approved_by: str, stamp: str = "live") -> Optional[dict]:
+def engine_grant(legacy: dict, *, approved_by: str, approved_via: str = S.VIA_MANUAL, stamp: str = "live") -> Optional[dict]:
     rec = migrate.translate_agent_grant(legacy, stamp=stamp)
     if rec is not None:
         rec["approved_by"] = approved_by
+        rec["approved_via"] = approved_via if approved_via in S.APPROVED_VIA else S.VIA_MIGRATED
     return rec
 
 
@@ -374,7 +381,7 @@ def revoke(docs: dict, grant_id: str, scope: str, now: float) -> tuple[dict, dic
     if scope == "write":
         legacy = grant_to_legacy(g)
         legacy["write"], legacy["updated"] = False, now
-        new = engine_grant(legacy, approved_by=g.get("approved_by") or "system")
+        new = engine_grant(legacy, approved_by=g.get("approved_by") or "system", approved_via=S.via_of(g))
         _replace(docs["grants"]["items"], g, new)
         return grant_to_legacy(new), {"id": g["id"], "resource": f"session:local/{g['resource_session']}"}
     _replace(docs["grants"]["items"], g, None)

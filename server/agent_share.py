@@ -450,9 +450,10 @@ def drop_target(target: Sess, snap: Optional[dict[str, Sess]]) -> tuple[int, lis
     return _legacy_drop_target(target, snap)
 
 
-def list_state(snap: Optional[dict[str, Sess]]) -> dict:
+def list_state(snap: Optional[dict[str, Sess]], provenance: bool = False) -> dict:
+    """provenance: 엔진 켜짐에서 grant 에 `approvedBy`·`approvedVia` 를 더한다(목록 응답용). 꺼짐에서는 무시한다."""
     if enforced():
-        return _svc().list_state(snap)
+        return _svc().list_state(snap, provenance)
     return _legacy_list_state(snap)
 
 

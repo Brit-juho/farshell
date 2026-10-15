@@ -453,6 +453,17 @@ ELEVATED_RELAY_GROUPS = frozenset({"files.write", "git.write", "queue", "ws.term
 # peer grant 에서 이 집합을 넘으면 elevated 승인.
 PEER_PLAIN = frozenset({"session.view", "session.read"})
 # 비elevated 로 얻는 human 기본에서 빠지는 것.
+# grant 가 어떻게 승인됐는가(`approved_by` 옆의 `approved_via`) — 출처일 뿐 위임 권한이 아니다.
+VIA_MANUAL, VIA_WINDOW, VIA_SYSTEM, VIA_MIGRATED = "manual", "window", "system", "migrated"
+APPROVED_VIA = (VIA_MANUAL, VIA_WINDOW, VIA_SYSTEM, VIA_MIGRATED)
+
+
+def via_of(rec) -> str:
+    """레코드의 승인 경로. 필드가 없거나 모르는 값이면(옛 레코드) `migrated`."""
+    v = rec.get("approved_via") if isinstance(rec, dict) else None
+    return v if v in APPROVED_VIA else VIA_MIGRATED
+
+
 HUMAN_EXCLUDED = frozenset({"browser.js", "browser.sensitive"})
 # 자동 승인 window 가 절대 덮지 못하는 것.
 NEVER_WINDOW = frozenset({"authz.request", "authz.admin", "pair.manage"})

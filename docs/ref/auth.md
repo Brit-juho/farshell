@@ -239,6 +239,17 @@ peer parity over all levels, rate/hop parity, rollback, shadow, `fsh migrate-aut
 `authz_char/test_char_agent_msg_enforced.py` (the matrix with the listed changes); `test_agent_msg.py`, the shadow replay and the authz_char matrix also run
 with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
 
+## How a grant was approved: `approved_via`
+
+Every grant record the engine writes carries `approved_via` next to `approved_by`: `manual` (a person decided it: session-share and
+message approvals), `window` (an auto-approval window decided it — windows are not built yet), `system` (the engine's own rules and
+records derived from the delegation ledger) or `migrated` (copied from an older store by `fsh migrate-auth` or by adopting the
+old `agent_grants.json`). A record without the field reads as `migrated`; re-running the migration never rewrites such a record just
+to add it, and never replaces a `manual` value with `migrated`. Grant listings show it (`approvedVia`, see `API.md`).
+It is provenance only, never authority: **a grant approved via `window` can never be used to open or extend a window**
+(`engine.validate_window(..., basis=[the grants the caller relies on])` reports `window_derived_grant`), so the window phase
+inherits the rule from the engine's guard function.
+
 ## Unreadable stores refuse writes
 
 A store file that cannot be read or parsed (`~/.vt/authz/*.json`, and the old `~/.vt/agent_grants.json` that is still

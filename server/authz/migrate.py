@@ -98,7 +98,7 @@ def translate_agent_grant(g: dict, *, stamp: str = "live") -> Optional[dict]:
         "id": f"ag-{g['id']}", "origin": f"legacy:agent_grants:{g['id']}",
         "subject": f"agent:local/{ak}", "resource": f"session:local/{tk}", "scopes": scopes,
         "subject_session": ak, "resource_session": tk, "state": "active",
-        "approved_by": f"migrated:{stamp}", "expires": None, "conds": {},
+        "approved_by": f"migrated:{stamp}", "approved_via": "migrated", "expires": None, "conds": {},
         "created": g.get("granted"), "updated": g.get("updated"),
         "subject_name": (g.get("agent") or {}).get("name") or ""})
 
@@ -142,11 +142,13 @@ def translate_peer_grant(g: dict, *, stamp: str = "live") -> list[dict]:
     scopes, sconds = defaults.peer_preset("control" if control else "view")
     out = [_scoped({"id": f"pg-{pid}", "origin": f"legacy:hosts:{pid}", "subject": f"peer:{pid}", "resource": "*",
                     "preset": "control" if control else "view", "state": "active",
-                    "approved_by": f"migrated:{stamp}", "expires": None, "conds": {}}, scopes, sconds)]
+                    "approved_by": f"migrated:{stamp}", "approved_via": "migrated", "expires": None,
+                    "conds": {}}, scopes, sconds)]
     if g.get("agentMessages"):
         out.append(_scoped({"id": f"pm-{pid}", "origin": f"legacy:hosts:{pid}:agentMessages",
                             "subject": f"peer:{pid}/obo:agent:*", "resource": "msg:local/*",
-                            "state": "active", "approved_by": f"migrated:{stamp}", "expires": None, "conds": {}},
+                            "state": "active", "approved_by": f"migrated:{stamp}", "approved_via": "migrated", "expires": None,
+                            "conds": {}},
                            ["msg.send"], None))
     return out
 
@@ -189,7 +191,7 @@ def translate_delegation(item: dict) -> list[dict]:
     ended = item.get("state") in _ENDED
     st: dict = {"state": "ended", "ended_at": item.get("closed_at"), "end_reason": item.get("close_reason")} if ended \
         else {"state": "active"}
-    base = {**st, "approved_by": "system:spawn", "expires": None, "conds": {}, "deleg": did}
+    base = {**st, "approved_by": "system:spawn", "approved_via": "system", "expires": None, "conds": {}, "deleg": did}
     out = []
     if did and pk and _SAFE.fullmatch(pk):
         out.append(_scoped({"id": f"dc-{did}", "origin": f"{DELEG_ORIGIN}{did}:control",
@@ -364,7 +366,7 @@ def _is_legacy(rec: dict) -> bool:
     return str(rec.get("origin", "")).startswith("legacy:")
 
 
-def _sync(items: list, new: list, keep_fields: tuple = ("approved_by",)) -> tuple[list, dict]:
+def _sync(items: list, new: list, keep_fields: tuple = ("approved_by", "approved_via")) -> tuple[list, dict]:
     """legacy origin 레코드를 new 와 동기화. (결과 목록, {added, updated, removed, same})."""
     by_origin = {x.get("origin"): x for x in items if _is_legacy(x)}
     native = [x for x in items if not _is_legacy(x)]
@@ -379,12 +381,16 @@ def _sync(items: list, new: list, keep_fields: tuple = ("approved_by",)) -> tupl
             stats["added"] += 1
             out.append(n)
             continue
+        orig = cur
+        if "approved_via" in keep_fields:
+            cur = {**cur, "approved_via": S.via_of(cur)}      # 필드가 없는 옛 레코드는 `migrated` 로 읽는다(그것만으로 차이가 되지 않게)
         merged = {**n, **{k: cur[k] for k in keep_fields if k in cur}}
         if cur.get("state") == "revoked":
             # 명시적 회수(사람·동반 회수)는 다시 파생해도 되살아나지 않는다 — 원본이 사라질 때까지 유지.
             merged.update({k: cur[k] for k in ("state", "revoked_at", "revoked_reason") if k in cur})
         if merged == cur:
             stats["same"] += 1
+            merged = orig                                   # 바뀐 것이 없으면 저장된 모양 그대로(옛 레코드를 괜히 고쳐 쓰지 않는다)
         else:
             stats["updated"] += 1
         out.append(merged)

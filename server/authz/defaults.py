@@ -82,7 +82,7 @@ def _full_conds(scopes) -> dict:
 
 def _rule(rid: str, subject: str, resource: str, scopes, sconds=None, **extra) -> dict:
     rec = {"id": f"default:{rid}", "subject": subject, "resource": resource, "scopes": list(scopes),
-           "state": "active", "approved_by": "system", "conds": extra.pop("conds", {}), "schema": S.SCHEMA, **extra}
+           "state": "active", "approved_by": "system", "approved_via": "system", "conds": extra.pop("conds", {}), "schema": S.SCHEMA, **extra}
     if sconds:
         rec["sconds"] = sconds
     return rec

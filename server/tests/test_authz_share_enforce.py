@@ -111,6 +111,7 @@ def test_full_lifecycle_is_engine_driven_and_dual_written(web):
     g = docs()["grants"]["items"]
     assert [x["id"] for x in g] == [f"ag-{gid}"] and g[0]["scopes"] == ["session.view", "session.read"]
     assert g[0]["approved_by"].startswith("human:")                  # 승인자는 결정한 사람 주체
+    assert g[0]["approved_via"] == "manual"                          # 사람이 직접 승인(N-7)
     left = docs()["approvals"]["items"]
     assert [a["origin"] for a in left] == [f"authz:resolved:share:{rid}"]     # 결정된 요청은 해결 기록으로만 남는다(N-1)
     assert_parity("approved")
@@ -174,10 +175,13 @@ def test_rollback_flag_off_keeps_working_and_reenable_adopts_old_changes(web, mo
     gid = human.get("/api/agent/share/grants").json()["grants"][0]["id"]
     assert asend(agent, env, "claude-a", "shell", "echo on-1").status_code == 200
     before = human.get("/api/agent/share/grants").json()
+    g0 = before["grants"][0]
+    assert g0["approvedVia"] == "manual" and g0["approvedBy"].startswith("human:")      # 켜짐에서만 승인 출처가 목록에 보인다
+    before = {"grants": [{k: v for k, v in g.items() if k not in ("approvedBy", "approvedVia")} for g in before["grants"]]}
 
     monkeypatch.delenv("VT_AUTHZ_ENFORCE")                           # 롤백: 옛 코드가 같은 상태를 이어받는다
     after_off = human.get("/api/agent/share/grants").json()
-    assert after_off == before                                       # 같은 grant 목록(동등 parity)
+    assert after_off == before                                       # 같은 grant 목록(동등 parity, 승인 출처 두 필드 제외)
     assert aread(agent, env, "claude-a", "shell").status_code == 200
     assert asend(agent, env, "claude-a", "shell", "echo off-1").status_code == 200
     assert human.delete(f"/api/agent/share/grants/{gid}?scope=write").status_code == 200   # 옛 경로에서 철회
