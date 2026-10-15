@@ -46,8 +46,9 @@ def agent_share(kind: str, allowed: bool, grant, me, target, snap) -> None:
 
 @_never_raise
 def deleg_spawn(allowed: bool, parent_key: str, data: dict, now: float, *, enabled: bool,
-                max_open: int, per_min: int) -> None:
-    """delegation.check_spawn — 열린 자식·깊이·분당 횟수·killswitch."""
+                max_open: int, per_min: int, safe_mode: bool = False) -> None:
+    """delegation.check_spawn — 열린 자식·깊이·분당 횟수·killswitch. `safe_mode` 는 3b 플래그가 켜졌을 때만 넘는다
+    (꺼짐에서는 옛 판정이 safe_mode 를 보지 않으므로 ctx 에 넣으면 거짓 차이가 난다)."""
     from . import limits
     if (max_open, per_min) != (limits.DELEG_MAX_OPEN, limits.DELEG_SPAWN_PER_MIN):
         raise RuntimeError("limits.py 의 위임 상수가 delegation.py 와 다르다")
@@ -58,25 +59,39 @@ def deleg_spawn(allowed: bool, parent_key: str, data: dict, now: float, *, enabl
         "is_child": any((x.get("child") or {}).get("key") == parent_key for x in items),
         "open_children": sum(1 for x in items
                              if (x.get("parent") or {}).get("key") == parent_key and x.get("state") in open_states),
-        "recent_spawns": sum(1 for t in data.get("spawns") or [] if now - t < 60)}}
+        "recent_spawns": sum(1 for t in data.get("spawns") or [] if now - t < 60)}, "safe_mode": bool(safe_mode)}
     p = P.agent(parent_key)
     shadow.shadow_check(allowed, "delegation.spawn", p, "deleg.spawn", f"deleg-quota:{p.id}", ctx)
 
 
 @_never_raise
-def deleg_owned(allowed: bool, did: str, caller_key: str, role: str, item) -> None:
-    """delegation._owned — 부모만 send·close(`deleg.control`)."""
+def deleg_owned(allowed: bool, did: str, caller_key: str, role: str, item, *, enforced: bool = False) -> None:
+    """delegation._owned — 부모만 send·close(`deleg.control`).
+
+    꺼짐: 옛 판정은 소유(장부 key)만 보고 닫힌 위임도 소유자로 통과시킨 뒤 상태 오류(409)를 낸다 — 엔진 쪽 번역도 그 의미로
+    맞추려고 항목을 열린 것으로 본다. 켜짐(`enforced`): 실제 항목 상태 그대로(닫힌 위임의 grant 는 `ended` 라 엔진이 거부한다)."""
     scope = "deleg.control" if role == "parent" else "deleg.report"
     shadow.shadow_check(allowed, f"delegation.{role}", P.agent(caller_key), scope, f"deleg:local/{did}",
-                        None, {"delegations": [item] if item else []})
+                        None, {"delegations": [_as_open(item, enforced)] if item else []})
 
 
 @_never_raise
-def deleg_report(allowed: bool, caller_key: str, mine: list) -> None:
-    """delegation.report — 위임받은 자식만 보고."""
+def deleg_report(allowed: bool, caller_key: str, mine: list, *, enforced: bool = False) -> None:
+    """delegation.report — 위임받은 자식만 보고. (`enforced` 의미는 `deleg_owned` 와 같다)"""
     did = mine[0].get("id") if mine else "-"
     shadow.shadow_check(allowed, "delegation.report", P.agent(caller_key), "deleg.report", f"deleg:local/{did}",
-                        None, {"delegations": list(mine)})
+                        None, {"delegations": [_as_open(x, enforced) for x in mine]})
+
+
+def _as_open(item, enforced: bool):
+    return item if enforced or not isinstance(item, dict) else {**item, "state": "running"}
+
+
+@_never_raise
+def deleg_cwd(allowed: bool, caller_key: str, path: str, purpose: str, in_roots: bool) -> None:
+    """delegation.spawn 의 cwd·worktree 기준(H9) — 3b 켜짐에서만 부른다(꺼짐에는 옛 판정이 없다)."""
+    shadow.shadow_check(allowed, "delegation.cwd", P.agent(caller_key), "fs.read", "fs:local" + path,
+                        {"fs": {"purpose": purpose, "in_roots": in_roots}})
 
 
 @_never_raise

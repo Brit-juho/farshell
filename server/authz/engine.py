@@ -15,6 +15,9 @@ ctx 키(전부 선택):
   prefer_live  공유 표시가 저장소와 다를 때 실시간 값을 쓴다(shadow 기본) / False 면 낮은 쪽
   alive        살아 있는 세션 키 집합. None 이면 tmux 를 못 읽은 것 → liveness 통과(F3·위험 4)
   deleg        `{enabled, is_child, open_children, recent_spawns}` — deleg.spawn 조건
+  safe_mode    VT_SAFE_MODE 가 켜져 있는가 — deleg.spawn killswitch(3b: 판정 지점이 켠 때만 넣는다)
+  op           판정 지점이 하려는 동작 이름(`close` …) — grant 의 `conds.ops` 와 비교
+  fs           `{purpose, in_roots}` — `conds.fs_roots`(fsguard 루트 안인가; 3b 위임 cwd, 5단계에서 lease 로 대체)
   counts       `{scope: 이미 센 횟수}` — rate 비교(limits.exceeded)
   limits       `{scope: 한도}` — counts 와 비교할 한도를 표(limits.LIMITS) 대신 지정(선택)
 """
@@ -84,6 +87,14 @@ def _conds_ok(g: dict, ctx: dict) -> tuple[bool, str]:
             return False, "child_limit"
         if limits.exceeded("deleg.spawn", int(d.get("recent_spawns", 0)), limits.DELEG_SPAWN_PER_MIN):
             return False, "rate_limited"
+    if "ops" in conds and ctx.get("op") not in conds["ops"]:
+        return False, "cond_op"
+    if conds.get("fs_roots"):
+        f = ctx.get("fs")
+        if not isinstance(f, dict) or f.get("purpose") not in conds["fs_roots"]:
+            return False, "fs_ctx_missing"
+        if not f.get("in_roots"):
+            return False, "outside_roots"
     if "host" in conds and conds["host"] != ctx.get("host", P.LOCAL_HOST):
         return False, "cond_host"
     if "max_lines" in conds and int(ctx.get("lines", 0)) > int(conds["max_lines"]):
@@ -104,6 +115,8 @@ def _killswitch(scope: str, ctx: dict) -> Optional[str]:
         d = ctx.get("deleg") or {}
         if d.get("enabled") is False:
             return "spawn_disabled"
+        if ctx.get("safe_mode"):
+            return "safe_mode"
     if ctx.get("agents_off") and scope.split(".")[0] in ("session", "msg", "deleg"):
         return "agents_off"
     return None

@@ -285,6 +285,9 @@ Agent endpoints only: machine token **plus the same caller identity as session s
 | POST | `/api/delegations/{did}/send` | Parent only. JSON `{text}` → queued for the child. 404 `not_found` (also for someone else's delegation), 409 `delegation_closed`, 413 `text_too_long` |
 | POST | `/api/delegations/{did}/close` | Parent only. Closes the record, drops undelivered instructions, keeps the session → `{ok, removed_queued}` |
 | POST | `/api/delegations/{did}/close-by-user` | **Human only** (browser login session; machine token → 403). Same as close, for the rail row menu 「위임 닫기」 |
+| POST | `/api/delegations/{did}/close-by-cli` | **Unix socket only** (TCP / machine token → 403 `socket_required`). `fsh delegate close` with the flag on: the socket peer decides who closes — outside a pane (`cli`) may **close only**, a process inside a pane (`agent`) only as the parent (same ownership check as `/close`, 404 otherwise), anything else 403 `forbidden`. Same body as close |
+
+**Engine enforcement (plan-2.6 phase 3b, `VT_AUTHZ_ENFORCE=deleg`, off by default).** Same endpoints, status codes and body keys. With the flag on the authz engine decides spawn (`deleg.spawn` on the caller's quota), send/close (`deleg.control`), report (`deleg.report`) and audits them in the hash-chained authz audit instead of `agent_access.log`; `~/.vt/delegations.json` stays the ownership ledger and is still written (turning the flag off rolls back at once; `docs/ref/auth.md` «Agent delegation under the engine»). What changes: an explicit `cwd` (and the repository a `worktree` is cut from) must be inside the browse roots (`VT_BROWSE_ROOTS`, same rule as the code viewer) — otherwise **403 `cwd_outside_roots`**, checked after the quota; `spawn` is also refused under `VT_SAFE_MODE` (**403 `safe_mode`**; `GET /api/delegations/role` then reports `can_spawn: false`); an engine failure or a grant store that is corrupt is **503 `authz_unavailable`** (fails closed), a grant/audit write that fails is **503 `audit_unavailable`** and nothing is saved. The returned `cwd` is the real path when the flag is on.
 
 ## Agent session sharing (2026-10-06 — agents work only in sessions the user shared)
 
@@ -328,6 +331,7 @@ header, cookie or `?token=` (400 `ambiguous_principal` otherwise). Only these me
 | POST | `/api/agent/shared/read`, `/api/agent/shared/send` | MCP |
 | GET | `/api/delegations`, `/api/delegations/role` | MCP |
 | POST | `/api/delegations`, `/api/delegations/report`, `/api/delegations/{id}/send`, `/api/delegations/{id}/close` | MCP |
+| POST | `/api/delegations/{did}/close-by-cli` | `fsh delegate close` (flag `deleg` on) |
 | POST | `/api/queue/run` | MCP |
 | POST | `/api/ports/_proxy/sync` | `fsh tunnel expose/pin/mode` |
 | GET | `/api/authz/whoami` | **Socket only** (the gate answers it; over TCP it is 403 `socket_only`). `{principal:{kind:"agent"\|"hook"\|"svc"\|"cli", id, uid, pid, via:"socket", svc?, pane?, key?}}`. Optional `X-Fsh-Svc: <name>` (hook, clipboard, voice, tui, tmux-notify, tunnel-hook, mcp-probe) is attribution only |

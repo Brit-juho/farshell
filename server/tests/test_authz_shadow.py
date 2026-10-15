@@ -152,6 +152,7 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
     cases = _one_per_site()
     assert len(cases) > 40
     enforced = authz_flags.enforced("share")
+    deleg = authz_flags.enforced("deleg")
     for case in cases:
         w = World(monkeypatch, world.tmp / case.id.replace("/", "_"))
         if enforced and break_at in ("engine", "write") and case.group == "agent_share" \
@@ -162,6 +163,21 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
             if break_at == "engine":
                 res = w.run(case)
                 assert res["status"] >= 400, (case.id, res)
+            continue
+        if deleg and case.group == "delegation" and case.method == "POST" and case.caller in ("agent_verified", "agent_child") \
+                and case.route in ("/api/delegations", "/api/delegations/report", "/api/delegations/{did}/send",
+                                   "/api/delegations/{did}/close"):
+            # EXPECTED_CHANGE(3b): VT_AUTHZ_ENFORCE=deleg 이면 엔진이 spawn·send·close·report 의 **권한자**다. 엔진이 터지면 닫혀야
+            # 하고(2xx 금지), 뒤집힌 답(write)은 그대로 따른다. 나머지 모드는 응답이 matrix 와 같다 — 단 하나, H9 로 바뀐 사례
+            # (agent_verified 의 cwd="/" spawn: 200 → 403 cwd_outside_roots).
+            if break_at == "engine":
+                assert w.run(case)["status"] >= 400, case.id
+            elif break_at != "write":
+                res = w.run(case)
+                if case.id.startswith("delegation.api_delegations.post.agent_verified."):
+                    assert res == {"status": 403, "error": "cwd_outside_roots"}, (case.id, res)
+                else:
+                    assert res == matrix[case.id]["expected"], case.id
             continue
         assert w.run(case) == matrix[case.id]["expected"], case.id
     st = shadow.STATS.as_dict()

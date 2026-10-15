@@ -147,19 +147,55 @@ def translate_peer_principal(g: dict) -> Optional[dict]:
             "version": 1, "lastSeen": g.get("lastSeen"), "added": g.get("added")}
 
 
+_SAFE = __import__("re").compile(r"[A-Za-z0-9_:$%.@-]{1,80}")      # id·세션 key — glob 문자(`* ? [`)와 `/` 는 선택자를 넓힌다
+DELEG_ORIGIN = "legacy:delegations:"
+_ENDED = ("closed", "orphaned")
+
+
+def _fs_path_ok(path) -> bool:
+    return isinstance(path, str) and path.startswith("/") and not any(c in path for c in "*?[\n\r\x00")
+
+
 def translate_delegation(item: dict) -> list[dict]:
+    """위임 장부 항목 → 파생 grant(B1). 장부가 소유 원장이고 grant 는 거기서 **파생**된다.
+
+    - 부모→`deleg.control`, 자식→`deleg.report`, `approved_by: system:spawn`. 위임이 닫히거나(`closed`) 부모가 사라지면
+      (`orphaned`) `state: "ended"` — 엔진은 active 만 쓴다. 장부에서 사라지면 grant 도 사라진다(KEEP_CLOSED).
+    - D13(3b): `item["fs"]` 가 있으면 fs 레코드를 더한다. `inherit` = 부모의 fs grant 를 자식이 **공유 참조**
+      (`inherit_from` = 부모 grant id, 부모 grant 가 끝나면 sync 가 동반 회수), `worktree` = 새 worktree 경로 한 곳에 자식만
+      쓰는 grant(부모의 원래 폴더 grant 는 상속하지 않는다). **강제는 5단계(lease)** — 지금은 기록·동반 회수뿐.
+    id 나 key 에 glob 문자가 있으면(손상·위조 장부) 선택자가 넓어지므로 그 레코드는 만들지 않는다.
+    """
     did = str(item.get("id") or "")
     pk = ((item.get("parent") or {}).get("key")) or ""
     ck = ((item.get("child") or {}).get("key")) or ""
+    if did and not _SAFE.fullmatch(did):
+        return []
+    ended = item.get("state") in _ENDED
+    st: dict = {"state": "ended", "ended_at": item.get("closed_at"), "end_reason": item.get("close_reason")} if ended \
+        else {"state": "active"}
+    base = {**st, "approved_by": "system:spawn", "expires": None, "conds": {}, "deleg": did}
     out = []
-    if did and pk:
-        out.append({"id": f"dc-{did}", "origin": f"legacy:delegations:{did}:control",
-                    "subject": f"agent:local/{pk}", "resource": f"deleg:local/{did}", "scopes": ["deleg.control"],
-                    "state": "active", "approved_by": "system:spawn", "expires": None, "conds": {}})
-    if did and ck:
-        out.append({"id": f"dr-{did}", "origin": f"legacy:delegations:{did}:report",
-                    "subject": f"agent:local/{ck}", "resource": f"deleg:local/{did}", "scopes": ["deleg.report"],
-                    "state": "active", "approved_by": "system:spawn", "expires": None, "conds": {}})
+    if did and pk and _SAFE.fullmatch(pk):
+        out.append({"id": f"dc-{did}", "origin": f"{DELEG_ORIGIN}{did}:control",
+                    "subject": f"agent:local/{pk}", "resource": f"deleg:local/{did}", "scopes": ["deleg.control"], **base})
+    if did and ck and _SAFE.fullmatch(ck):
+        out.append({"id": f"dr-{did}", "origin": f"{DELEG_ORIGIN}{did}:report",
+                    "subject": f"agent:local/{ck}", "resource": f"deleg:local/{did}", "scopes": ["deleg.report"], **base})
+        fs = item.get("fs")
+        if isinstance(fs, dict) and fs.get("mode") == "worktree" and _fs_path_ok(fs.get("path")):
+            out.append({"id": f"dw-{did}", "origin": f"{DELEG_ORIGIN}{did}:fs:worktree",
+                        "subject": f"agent:local/{ck}", "resource": "fs:local" + fs["path"].rstrip("/") + "/*",
+                        "scopes": ["fs.write"], "inherit": False, **{**base, "expires": None}})
+        elif isinstance(fs, dict) and fs.get("mode") == "inherit":
+            for ref in fs.get("from") or ():
+                gid = str((ref or {}).get("grant") or "")
+                scopes = [x for x in (ref or {}).get("scopes") or () if x in ("fs.read", "fs.write", "fs.commit")]
+                res = str((ref or {}).get("resource") or "")
+                if gid and _SAFE.fullmatch(gid) and scopes and res.startswith("fs:local/"):
+                    out.append({"id": f"di-{did}-{gid}", "origin": f"{DELEG_ORIGIN}{did}:fs:{gid}",
+                                "subject": f"agent:local/{ck}", "resource": res, "scopes": scopes,
+                                "inherit": True, "inherit_from": gid, **{**base, "expires": ref.get("expires")}})
     return out
 
 
@@ -318,6 +354,9 @@ def _sync(items: list, new: list, keep_fields: tuple = ("approved_by",)) -> tupl
             out.append(n)
             continue
         merged = {**n, **{k: cur[k] for k in keep_fields if k in cur}}
+        if cur.get("state") == "revoked":
+            # 명시적 회수(사람·동반 회수)는 다시 파생해도 되살아나지 않는다 — 원본이 사라질 때까지 유지.
+            merged.update({k: cur[k] for k in ("state", "revoked_at", "revoked_reason") if k in cur})
         if merged == cur:
             stats["same"] += 1
         else:
@@ -464,7 +503,7 @@ def _legacy_locks(stack: ExitStack) -> None:
     import host_store
     stack.enter_context(agent_share._locked())
     stack.enter_context(host_store._locked())
-    stack.enter_context(delegation._locked())
+    stack.enter_context(delegation._ledger_lock())   # `_locked()` 는 3b 에서 authz 락부터 잡는다 — 여기선 이미 쥐고 있다
 
 
 def restore(ts: str, *, now: Optional[float] = None) -> dict:

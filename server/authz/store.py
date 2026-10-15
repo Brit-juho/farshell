@@ -15,6 +15,7 @@ shadow 판정이 다른 저장소 락(위임·hosts) 안에서 불려도 락 순
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -126,10 +127,13 @@ def locked():
 
 
 @contextmanager
-def txn():
+def txn(held: bool = False):
     """`with txn() as docs:` — docs[name]["items"] 를 고치면 빠져나올 때 바뀐 문서만 저장된다.
-    예외로 빠져나오면 아무것도 저장하지 않는다."""
-    with locked():
+    예외로 빠져나오면 아무것도 저장하지 않는다.
+
+    `held=True` 는 호출자가 이미 `locked()` 를 쥐고 있다는 뜻이다(flock 은 같은 프로세스의 새 fd 와도 충돌해
+    다시 잡으면 스스로 데드락한다). 3b 위임 장부가 쓴다 — authz 락 → 장부 락 순서로 둘을 쥔 채 장부를 쓴다."""
+    with (contextlib.nullcontext() if held else locked()):
         docs: dict[str, dict] = {}
         before: dict[str, str] = {}
         corrupt: set[str] = set()

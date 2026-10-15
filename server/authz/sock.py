@@ -81,6 +81,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", r"/api/agent/shared/(read|send)", "mcp_farshell"),
     ("GET", r"/api/delegations(/role)?", "mcp_farshell"),
     ("POST", r"/api/delegations(/report|/[^/]+/(send|close))?", "mcp_farshell"),
+    ("POST", r"/api/delegations/[^/]+/close-by-cli", "fsh delegate close (cli / pane agent)"),
     ("POST", r"/api/queue/run", "mcp_farshell"),
     ("POST", r"/api/ports/_proxy/sync", "bin/fsh (tunnel expose/pin/mode)"),
 )

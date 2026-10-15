@@ -5431,6 +5431,318 @@
    "error": "identity_unverified"
   }
  },
+ "delegation.api_delegations_X_close_by_cli.post.agent_child.none": {
+  "group": "delegation",
+  "caller": "agent_child",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_child.password": {
+  "group": "delegation",
+  "caller": "agent_child",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_child.token": {
+  "group": "delegation",
+  "caller": "agent_child",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_foreign.none": {
+  "group": "delegation",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_foreign.password": {
+  "group": "delegation",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_foreign.token": {
+  "group": "delegation",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_verified.none": {
+  "group": "delegation",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_verified.password": {
+  "group": "delegation",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.agent_verified.token": {
+  "group": "delegation",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.machine.none": {
+  "group": "delegation",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.machine.password": {
+  "group": "delegation",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.machine.token": {
+  "group": "delegation",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.none.none": {
+  "group": "delegation",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.none.password": {
+  "group": "delegation",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.none.token": {
+  "group": "delegation",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.peer_control.none": {
+  "group": "delegation",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.peer_control.password": {
+  "group": "delegation",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.peer_control.token": {
+  "group": "delegation",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.session.none": {
+  "group": "delegation",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.session.password": {
+  "group": "delegation",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.session.token": {
+  "group": "delegation",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.session_elev.none": {
+  "group": "delegation",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.session_elev.password": {
+  "group": "delegation",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
+ "delegation.api_delegations_X_close_by_cli.post.session_elev.token": {
+  "group": "delegation",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/delegations/{did}/close-by-cli",
+  "path": "/api/delegations/{did}/close-by-cli",
+  "expected": {
+   "status": 403,
+   "error": "socket_required"
+  }
+ },
  "delegation.api_delegations_X_close_by_user.post.agent_child.none": {
   "group": "delegation",
   "caller": "agent_child",

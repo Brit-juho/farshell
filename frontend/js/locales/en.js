@@ -3075,5 +3075,7 @@ window.__VT_I18N = {
   "이 권한은 재인증(elevated)한 사람만 승인할 수 있습니다": "Only a person who has re-authenticated (elevated) can approve this permission",
   "감사 기록을 쓰지 못해 변경을 중단했습니다": "The audit record could not be written, so the change was stopped",
   "승인 요청을 만들 수 없는 호출자입니다": "This caller cannot create approval requests",
-  "권한 엔진을 쓸 수 없어 요청을 거부했습니다": "The authorization engine is unavailable, so the request was refused"
+  "권한 엔진을 쓸 수 없어 요청을 거부했습니다": "The authorization engine is unavailable, so the request was refused",
+  "서버 소켓을 쓸 수 없어 장부에 직접 씁니다": "The server socket is unavailable, writing to the ledger directly",
+  "위임을 닫지 못했습니다: {reason}": "Could not close the delegation: {reason}"
 };

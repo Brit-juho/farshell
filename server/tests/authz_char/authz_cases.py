@@ -71,6 +71,8 @@ def delegation_cases() -> list[Case]:
         ("POST", "/api/delegations/{did}/send", "/api/delegations/{did}/send", {"text": "more"}),
         ("POST", "/api/delegations/{did}/close", "/api/delegations/{did}/close", None),
         ("POST", "/api/delegations/{did}/close-by-user", "/api/delegations/{did}/close-by-user", None),
+        # 3b — `fsh delegate close` 의 서버 경로. unix socket 로만 닿는다: HTTP(TCP·쿠키·토큰)로는 누구에게나 403 이다.
+        ("POST", "/api/delegations/{did}/close-by-cli", "/api/delegations/{did}/close-by-cli", None),
     ]
     out = []
     for method, route, path, body in routes:

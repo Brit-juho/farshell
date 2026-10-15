@@ -5,7 +5,7 @@
 (dual-write) 플래그를 끄면 곧바로 이전 동작으로 돌아간다.
 
 환경변수는 호출할 때마다 읽는다(모듈 상태 없음 — 테스트가 monkeypatch 로 바꾸는 관례, 위험 16).
-이 단계에서 의미가 있는 토큰은 `share` 뿐이다. 모르는 토큰은 무시하고 `unknown()`으로만 보인다(오타가 조용히
+이 빌드에서 의미가 있는 토큰은 `share`(3a)·`deleg`(3b) 이다. 모르는 토큰은 무시하고 `unknown()`으로만 보인다(오타가 조용히
 "꺼짐"이 되는 것을 doctor 가 짚을 수 있게).
 """
 
@@ -16,7 +16,7 @@ from typing import Mapping, Optional
 
 ENV = "VT_AUTHZ_ENFORCE"
 KNOWN = ("share", "deleg", "msg", "peer", "legacy")
-IMPLEMENTED = ("share",)          # 이 빌드에서 실제로 동작하는 토큰
+IMPLEMENTED = ("share", "deleg")  # 이 빌드에서 실제로 동작하는 토큰
 
 
 def tokens(env: Optional[Mapping[str, str]] = None) -> frozenset[str]:

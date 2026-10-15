@@ -44,6 +44,9 @@ CHILD_INHERITS: tuple[str, ...] = ()
 # pane token 주체는 만들지 않는다.
 PANE_TOKENS_ENABLED = False
 
+# 3b — fs.read 를 fsguard 루트로 판정하는 위임 지점 이름(engine `conds.fs_roots`).
+SPAWN_FS_PURPOSES: tuple[str, ...] = ("spawn_cwd", "spawn_worktree_base")
+
 # --- 결정된 shim -------------------------------------------------------------------------
 
 # B1: `machine` → `legacy_token`(기존 전체 권한, 8단계 제거). 사람 전용(require_human_session)
@@ -88,10 +91,17 @@ def rules_for(p: P.Principal) -> list[dict]:
             _rule("agent_spawn_quota", p.id, f"deleg-quota:{p.id}", ["deleg.spawn"],
                   conds={"deleg_quota": True}),
         ]
+        # H9(3b) — 위임 cwd·worktree 기준은 fsguard 루트 안일 때만. 판정 지점이 ctx.fs 를 넣을 때만 닿는 조건부 규칙이다
+        # (그 밖의 fs.read 는 agent 기본에 없다). 5단계에서 lease 로 대체한다.
+        rules.append(_rule("agent_spawn_fs_roots", p.id, "fs:local/*", ["fs.read"],
+                           conds={"fs_roots": list(SPAWN_FS_PURPOSES)}))
         if LOCAL_MSG_SEND_OPEN:
             rules.append(_rule("agent_local_msg", p.id, "msg:local/*", ["msg.send"]))
         return rules
     if p.kind == P.PEER:
         return [_rule("peer_ping", "peer:*", "host:local", ["ping"])]
-    # cli·svc·hook·pair 주체는 2·5단계에 생긴다. 지금은 기본 권한 없음(거부 쪽).
+    if p.kind == P.CLI:
+        # H3(3b, 잠정 정책) — cli 는 위임을 **닫을 수** 있다(세션은 남고 위험이 낮으며 감사된다). 보내기·승인·발급은 못 한다(D1=b).
+        return [_rule("cli_deleg_close", p.id, "deleg:local/*", ["deleg.control"], conds={"ops": ["close"]})]
+    # svc·hook·pair 주체는 5단계에 생긴다. 지금은 기본 권한 없음(거부 쪽).
     return []
