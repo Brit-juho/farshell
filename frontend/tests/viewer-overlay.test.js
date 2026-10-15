@@ -1,5 +1,5 @@
 'use strict';
-// ADR-44(docs/plan-2.3/95-viewer-surface.md §10.1) — 파일 뷰어 오버레이.
+// ADR-44 — 파일 뷰어 오버레이.
 // 핵심 불변식은 "pane 트리를 건드리지 않는다"와 "터미널 입력을 가로채지 않는다"다.
 // 터미널 cols×rows가 실제로 안 바뀌는지는 레이아웃이 없는 jsdom으로는 못 재므로
 // 실브라우저 스모크(tests/e2e/test_smoke.py)가 맡는다.

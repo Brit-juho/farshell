@@ -33,7 +33,7 @@
   .status-dot[data-state="waiting"] { background: var(--color-st-waiting); }
   .status-dot[data-state="done"]    { background: var(--color-st-done); }
 
-  /* waiting만 breathing 애니메이션 — 레퍼런스 만장일치 결론: "가장 높은
+  /* waiting만 breathing 애니메이션 — "가장 높은
    * 가치의 상태는 실행중도 완료도 아닌 당신의 입력을 기다리는 중"이므로 그
    * 상태만 눈에 띄어야 한다. working까지 같이 펄스하면(구현 전 .working
    * 펄스처럼) 세션 여러 개가 늘어선 화면에서 전부 움직여 아무것도 눈에 안

@@ -1,12 +1,11 @@
 """VT_* 경로 환경변수의 단일 해석기.
 
 20곳이 `VT_STATE_DIR` 하나를 세 가지 관용구로 읽고 있었고, 빈 문자열·`~`·공백
-패딩 셋 중 어디서든 갈라졌다(docs/plan-2.3/80-vt-paths.md §1). 해석을 여기로
+패딩 셋 중 어디서든 갈라졌다. 해석을 여기로
 모은다.
 
 **이 모듈이 하지 않는 것**: mkdir · chmod · 마이그레이션 · flock. 그건 그
-파일을 소유한 모듈의 일이다(Codewhale `crates/paths`의 범위 규율 — "owns
-only the environment and platform-home decision"). 여기는 순수 판정이라
+파일을 소유한 모듈의 일이다(이 모듈은 환경변수와 플랫폼 홈 판정만 맡는다). 여기는 순수 판정이라
 I/O가 없고 테스트가 싸다(`fsguard`가 같은 이유로 같은 선택을 했다).
 
 **왜 함수인가(상수가 아니라).** 전역에 굳히지 않고 호출 시점에 `os.environ`을
@@ -44,7 +43,7 @@ class PathOverrideError(ValueError):
 def _raw(name: str) -> str | None:
     """환경변수 원문. 빈 문자열·공백만이면 None(미설정으로 강등).
 
-    Codewhale `normalize_path_value`의 번역. 실측 표(§1)의 `""` → CWD,
+    실측 표(§1)의 `""` → CWD,
     `"   "` → 공백 이름 디렉터리 문제가 여기서 닫힌다.
     """
     v = os.environ.get(name)
@@ -59,7 +58,7 @@ def user_home() -> Path:
 
     `Path.home()`은 환경에 따라 다르게 답할 수 있다 — `HOME`을 먼저 보고
     그다음 플랫폼 해석기로 떨어지는 순서를 고정해, CI와 tmux 안에서 같은
-    답이 나오게 한다(Codewhale `user_home()`의 결정적 순서, §2.5).
+    답이 나오게 한다(결정적 순서, §2.5).
 
     `HOME`도 `Path.home()`도 실패하면 `PathOverrideError` — 어느 변수가
     `~`를 못 폈는지 이름을 싣는다(E7).
@@ -76,7 +75,7 @@ def user_home() -> Path:
 def _expand(name: str, raw: str) -> Path:
     """`~` 확장 + 절대경로 강제. 그 외 상대경로는 거절한다.
 
-    Codewhale `validate_absolute_path`의 번역. 프로세스가 저장소 안에서 돌 때
+    프로세스가 저장소 안에서 돌 때
     전역 설정 override가 저장소-로컬 파일로 조용히 둔갑하는 사고를 막는다.
     """
     if raw == "~":

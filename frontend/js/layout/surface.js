@@ -5,7 +5,7 @@
 // 상자만 그린 뒤 그 상자의 getBoundingClientRect()를 읽어 wrapper에
 // transform/width/height를 찍어 "좌표로만" 둘을 붙였다.
 //
-// 왜 그랬나(`docs/plan-2.1/10-shell-layout.md §1`): 실측 문제 4건 중 셋은
+// 왜 그랬나: 실측 문제 4건 중 셋은
 // **과도한 refit**(레이아웃 변경마다 크롬 DOM 전체 교체·보이는 전 세션 fit·
 // 활성 전환만으로 전체 재fit)이었고, 나머지 하나가 "appendChild로 xterm
 // wrapper를 DOM 이동"이었다. 앞의 셋은 지금 코드에 이미 없다 — panes.js가

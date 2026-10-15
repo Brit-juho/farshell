@@ -5,9 +5,7 @@
 
 **왜 로그 파일이 아니라 API인가**(계획서 §0 — 최초 설계였던 로그 파싱을
 폐기한 이유): `~/.codex/sessions/*.jsonl`에는 누적 토큰만 있고 한도(%)가
-없다. Paseo(`getpaseo/paseo`, 17.2k stars)의
-`quota-fetcher/providers/codex.ts`가 이미 같은 문제를 풀어놨다 — Codex CLI
-**자신이 쓰는 것과 같은** OAuth 사용량 API를 직접 부른다. 2026-09-14 이
+없다. 그래서 Codex CLI **자신이 쓰는 것과 같은** OAuth 사용량 API를 직접 부른다. 2026-09-14 이
 맥에서 실제로 호출해 확인했다(계획서 §2, 실측 응답 그대로 여기 파서가
 읽는 필드로 남아 있다).
 
@@ -42,8 +40,8 @@ from urllib.request import Request as _UrlRequest
 from urllib.request import urlopen
 
 USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
-# Paseo 코드가 이 User-Agent를 쓴다 — Codex 서버 쪽 정책을 우리가 통제 못 하므로
-# 실측대로 유지한다(빼면 다른 응답이 올 수 있다는 게 그쪽이 넣어둔 이유로 보인다).
+# Codex 서버 쪽 정책을 우리가 통제 못 하므로 이 User-Agent를 실측대로 유지한다
+# (빼면 다른 응답이 올 수 있다).
 _USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 
 TTL_SEC = 60.0

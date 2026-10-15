@@ -300,7 +300,7 @@ def schedule_drain_threadsafe(session: str | None = None, session_scoped: bool =
     return True
 
 
-# --- 재시도·점검 (OpenRig stuck sweep / backoff에서 가져옴) ----------------------
+# --- 재시도·점검 (멈춤 점검 / 백오프) ----------------------
 
 
 def _notify(title: str, body: str) -> None:

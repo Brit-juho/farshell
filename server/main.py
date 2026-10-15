@@ -337,8 +337,7 @@ async def lifespan(_app: FastAPI):
     #
     # P2-4(ADR-41) §2.4 — 격리를 선언한 프로세스(VT_STATE_DIR·VT_RUN_DIR 중
     # 하나라도 명시)는 레거시 편입을 건너뛴다. `LEGACY_UPLOAD_DIR`이 이미
-    # `VT_RUN_DIR`을 따라가므로 지금 당장 사고가 나는 건 아니지만
-    # (docs/plan-2.3/80-vt-paths.md §2.4), 그건 우연이지 규칙이 아니었다 —
+    # `VT_RUN_DIR`을 따라가므로 지금 당장 사고가 나는 건 아니지만, 그건 우연이지 규칙이 아니었다 —
     # 다음에 레거시 마이그레이션이 하나 더 생기면 같은 판단을 처음부터 다시
     # 해야 한다. 여기서 명문화한다.
     if vt_paths.is_isolated():
@@ -352,7 +351,7 @@ async def lifespan(_app: FastAPI):
     # 번도 켜진 적이 없어 위험만 있고 값어치는 없었다). 기능과 함께 7일 보관
     # 정리 루프도 사라지므로, 남은 로그를 여기서 1회 청소하지 않으면
     # **영원히 남는다** — 비밀값 노출을 줄이려다 오히려 회수 불가로 만드는
-    # 셈이다(docs/plan-2.3/87-remove-scrollback-persist.md §5).
+    # 셈이다.
     await asyncio.to_thread(_purge_legacy_scrollback)
 
     # 2.2 — 노출 포트 프록시 리스너 복구(ADR-31). `fsh stop --keep-tunnel`은 추가
@@ -456,7 +455,7 @@ def _purge_legacy_scrollback() -> None:
 # 목록에 이 경로들이 없어 인증이 켜진 배포에서는 로그인 뒤였지만(단독
 # 취약점은 아니었다), 인증을 끈 구성에서는 그대로 열려 있었다. 스펙 자체는
 # `app.openapi()`를 프로세스 안에서 호출해 CI에서만 꺼낸다 — 엔드포인트가
-# 필요 없다(docs/plan-2.3/50-contract.md §2.4).
+# 필요 없다.
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(NetworkAccessMiddleware)
 app.add_middleware(TokenAuthMiddleware)

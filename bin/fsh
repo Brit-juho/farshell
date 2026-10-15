@@ -2304,7 +2304,7 @@ cmd_mcp() {
   cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" exec "$VT_PYTHON" mcp_farshell.py
 }
 
-# 에이전트 위임(docs/plan-2.4/50-agent-delegation.md) — queue와 같은 방식으로 서버 없이 장부를 읽는다.
+# 에이전트 위임 — queue와 같은 방식으로 서버 없이 장부를 읽는다.
 cmd_delegate() {
   if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
     echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"

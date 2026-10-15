@@ -28,7 +28,7 @@ const PANEL_ID = 'vt-settings';
 function renderScrollbackGroup() {
   // ADR-43(2.3.0) — 서버 디스크 영속화 토글(`renderScrollbackSection`)을
   // 없앴다. 옵트인 기능이 한 번도 켜진 적이 없어(실측 0건) 위험만 있고
-  // 값어치가 없었다(docs/plan-2.3/87-remove-scrollback-persist.md). 줄 수
+  // 값어치가 없었다. 줄 수
   // 설정(브라우저 쪽 xterm.js 버퍼)은 별개 기능이라 그대로 남는다.
   return renderItems({ items: [
     { key: 'terminal.scrollback', label: t('스크롤백 줄 수'), kind: 'range', step: 500, unit: '줄', presets: [2000, 5000, 10000] },

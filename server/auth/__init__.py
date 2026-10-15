@@ -90,7 +90,7 @@ _N, _R, _P, _DKLEN = 16384, 8, 1, 32
 # / ".vt"))`였다. `VT_STATE_DIR=""`이면 폴백이 안 걸려 빈 문자열이 그대로
 # `Path("")`(서버 CWD)가 됐고, `VT_STATE_DIR="~/vt-test"`는 `~`를 안 펴서
 # 리터럴 `~` 디렉터리가 됐다 — 인증 저장소(기기·OTP·티켓)만 다른 15곳과
-# 갈라지는 사고였다(docs/plan-2.3/80-vt-paths.md §1). 값은 여기서 **한 번**
+# 갈라지는 사고였다. 값은 여기서 **한 번**
 # 계산하고 그 뒤로는 그대로 쓴다 — 아래 세 파생 경로처럼 이 모듈 attribute를
 # 통해서만 읽히고(`devices.py` 등은 `auth.STATE_DIR`로 매번 다시 읽는다),
 # 테스트는 env가 아니라 이 attribute 자체를 monkeypatch한다

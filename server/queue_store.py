@@ -42,8 +42,7 @@ STATUS_BLOCKED = "blocked"      # safe_mode 에 막힘 — 큐에 남는다
 # 투입 중 — 드레인이 집어 들었지만 아직 결과가 안 난 항목. 예전엔 꺼내서(pop) 파일에서
 # 지운 뒤 보냈으므로, 그 사이 삭제 요청은 404가 나고 실패하면 새 dict로 다시 꽂혔다.
 # 이제 자리에 남겨 두고 표시만 바꾼다 — 이 상태의 항목은 삭제·비우기를 거부한다
-# (Proliferate의 Protected 큐 항목에서 가져온 규칙: 나가는 중인 지시를 사용자가
-# 지웠다고 믿게 만들면 안 된다).
+# (규칙: 나가는 중인 지시를 사용자가 지웠다고 믿게 만들면 안 된다).
 STATUS_SENDING = "sending"
 
 # 재시도 — 일시적인 이유(승인 대기·사람 입력 중·세션 일시 부재·tmux 실패)로 막힌
@@ -61,8 +60,7 @@ TRANSITIONS_MAX_BYTES = 1_000_000
 
 def _state_dir() -> Path:
     # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
-    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
-    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다. 단일 해석기로 교체한다.
     return vt_paths.state_dir()
 
 
@@ -80,7 +78,7 @@ def _transitions_path() -> Path:
 
 def _log_transition(item: dict, frm: str | None, to: str, reason: str = "",
                     actor: str = "") -> None:
-    """상태 전이를 한 줄씩 덧붙인다(OpenRig queue_transitions에서 가져옴).
+    """상태 전이를 한 줄씩 덧붙인다.
 
     큐 락 안에서 불린다 — 같은 락이 순서를 보장한다. 기록 실패가 큐 동작을 막으면
     안 되므로 예외는 경고로만 남긴다. 상한을 넘으면 `.1` 하나만 남기고 돌린다.
@@ -426,7 +424,7 @@ def recover_interrupted() -> int:
 
 
 def sweep(now: float | None = None) -> dict:
-    """주기 점검(OpenRig stuck sweep에서 가져옴).
+    """주기 점검(멈춤 점검).
 
     1. 너무 오래 sending인 항목 → 재시도 없는 blocked(recover_interrupted와 같은 이유).
     2. 재시도 시각이 지난 retriable blocked → pending.

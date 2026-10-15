@@ -1,4 +1,4 @@
-// 레일 계보 트리·정렬(shell/rail-data.ts) — docs/plan-2.4/50-agent-delegation.md 3단계, 방향 A 「계보선」.
+// 레일 계보 트리·정렬(shell/rail-data.ts) — 에이전트 위임 3단계, 방향 A 「계보선」.
 'use strict';
 const { test, after } = require('node:test');
 const assert = require('node:assert');

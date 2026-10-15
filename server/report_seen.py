@@ -36,8 +36,7 @@ FILENAME = "agent-report-seen.json"
 
 def _state_dir() -> Path:
     # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
-    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
-    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다. 단일 해석기로 교체한다.
     return vt_paths.state_dir()
 
 

@@ -153,8 +153,8 @@ def _enter_gap_sec() -> float:
     """붙여넣기와 Enter 사이 간격.
 
     붙여넣기 묶음과 Enter가 한 입력으로 합쳐지면 Claude Code는 Enter를 줄바꿈으로
-    받는다(아래 send_to_tmux 주석). OpenRig이 같은 순서(paste-buffer → 대기 →
-    Enter)에 200ms를 쓰는 것을 기본값으로 따랐다. 환경변수로 조정한다.
+    받는다(아래 send_to_tmux 주석). paste-buffer → 대기 → Enter 순서에서
+    기본 대기는 200ms다. 환경변수로 조정한다.
     """
     try:
         ms = float(os.environ.get("VT_PASTE_ENTER_GAP_MS", "200"))

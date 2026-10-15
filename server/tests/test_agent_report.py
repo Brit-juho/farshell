@@ -149,7 +149,7 @@ def test_tmux_sessions_response_exposes_pane_id(client, monkeypatch):
     assert {s["name"]: s["pane_id"] for s in data} == {"a": "%1", "b": "%2"}
 
 
-# ── 세션 소유자 (docs/plan-2.4/60) ──────────────────────────────────────────
+# ── 세션 소유자 ──────────────────────────────────────────
 _PANE_A = {"pane": "%1", "tmux": "/tmp/tmux-501/fsh,1,0"}
 
 

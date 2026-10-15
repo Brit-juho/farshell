@@ -1,4 +1,4 @@
-"""세션 소유자 · SessionEnd 반납 · waiting 유지 · 변경 알림 (docs/plan-2.4/60, 2026-10-13).
+"""세션 소유자 · SessionEnd 반납 · waiting 유지 · 변경 알림.
 
 실서버에서 한 tmux 세션에 엔트리 셋(지금 세션 working + `/clear` 전 세션 done 둘)이
 붙어 세션이 `done`으로 보였고, 질문 대기 중 서브에이전트의 post 하나로 waiting이 풀렸다.

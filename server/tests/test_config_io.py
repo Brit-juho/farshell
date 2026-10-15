@@ -1,6 +1,6 @@
 """남의 설정 파일 쓰기(config_io) — 지켜야 할 계약은 «안 망가뜨리는 것»이다.
 
-`docs/plan-2.4/60-magpie-candidates.md` §1. 모킹 없이 실제 파일·링크·권한으로 재현한다.
+모킹 없이 실제 파일·링크·권한으로 재현한다.
 """
 
 from __future__ import annotations

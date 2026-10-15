@@ -60,9 +60,7 @@ export function createXtermInstance(id) {
     macOptionIsMeta: setting('terminal.optionMode') === 'meta',
     // xterm 기본값(1000)은 서버 재접속 복원 예산(최대 256KB, server/pty_manager.py
     // SCROLLBACK_MAX_BYTES)에 비해 작아, 일반 텍스트 위주 세션에서는 서버가 보낸
-    // scrollback 상당수가 도착 즉시 버려진다. Wave Terminal 기본값(2000)에 맞춤 —
-    // 참고한 다른 프로젝트(wetty/ttyd/orca/blink/swell.sh)는 xterm 기본값을 그대로
-    // 쓰거나 재접속 복원 자체를 지원하지 않아 참고할 표준값이 없었음(2026-09-02 조사).
+    // scrollback 상당수가 도착 즉시 버려진다. 그래서 2000으로 올렸다.
     scrollback: 2000,
     // [P8] 스크롤 애니메이션을 끈다(0 = 즉시). 터미널에서 스크롤은 "읽던 자리를
     // 찾는" 조작이라, 부드럽게 미끄러지는 동안 글자가 흐르면 오히려 눈이 따라가지
@@ -229,8 +227,7 @@ export function createXtermInstance(id) {
     if (window.WebglAddon) {
       const webgl = new WebglAddon.WebglAddon();
       // P2: dispose만 하고 끝내면 xterm이 기본 DOM 렌더러로 추락한다(성능 저하).
-      // ttyd 등도 컨텍스트 손실 시 재활성화는 안 하지만, 그건 업계 표준이 아니라
-      // 우리 판단으로 한 단계 아래인 Canvas로라도 내려가게 한다.
+      // 한 단계 아래인 Canvas로라도 내려가게 한다.
       webgl.onContextLoss(() => {
         try { webgl.dispose(); } catch (_) {}
         _ensureCanvasAddon(term);

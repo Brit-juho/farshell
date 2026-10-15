@@ -122,8 +122,8 @@ class PTYSession:
     # P3-3(60-observability.md §1) — 예외로 떨어뜨린 구독자 누적 수 + 마지막
     # 시각. 예전엔 `dead.add(cb)` 후 조용히 집합에서 뺄 뿐 아무 데도 안 셌다.
     # 「E2E 스모크 17번째 붕괴」가 바로 이 broadcast 경로의 포화(이벤트 루프
-    # 정지)였다 — 증상이 보이는 데까지 시간이 걸린 전례가 있어, crush의
-    # dropCount 노출(Publish/PublishMustDeliver)과 같은 이유로 센다.
+    # 정지)였다 — 증상이 보이는 데까지 시간이 걸린 전례가 있어
+    # 드롭 수를 노출하려고 센다.
     dropped_subscribers: int = 0
     last_drop_at: float = 0.0
     # S2: loop.add_reader로 등록된 상태인지 — pause/resume/destroy가 중복
@@ -150,7 +150,7 @@ class PTYSession:
     # 주워 담는다 — None은 "아직 한 번도 못 봤다"(꺼짐과 다르다).
     _bracketed: Optional[bool] = field(default=None, repr=False)
     # R3: 출력 배치 버퍼 — read마다 즉시 broadcast하지 않고 짧은 창(BATCH_WINDOW_SEC)
-    # 동안 모았다가 한 번에 내보낸다. wetty의 tinybuffer(2ms, 512KB) 패턴.
+    # 동안 모았다가 한 번에 내보낸다(2ms, 512KB).
     _out_buf: bytearray = field(default_factory=bytearray, repr=False)
     _flush_handle: Optional[asyncio.TimerHandle] = field(default=None, repr=False)
     # 입력(stdin) 쓰기 백프레셔 — fd가 non-blocking이라 큰 붙여넣기 등으로 커널
@@ -563,7 +563,7 @@ class PTYManager:
 
         # R3: 매 read마다 즉시 scrollback+broadcast 하지 않고, 짧은 창(BATCH_WINDOW_SEC)
         # 동안 모아서 한 번에 내보낸다 — 빠른 출력(build 로그 등)에서 WS 프레임 수·
-        # xterm.js write() 호출 수를 줄인다(wetty의 tinybuffer 패턴). BATCH_MAX_BYTES를
+        # xterm.js write() 호출 수를 줄인다. BATCH_MAX_BYTES를
         # 넘으면 창을 기다리지 않고 즉시 flush — 지연시간에 상한을 둔다.
         session._out_buf.extend(data)
         if len(session._out_buf) >= self.BATCH_MAX_BYTES:
@@ -574,7 +574,7 @@ class PTYManager:
                 self.BATCH_WINDOW_SEC, self._flush_session, session_id
             )
 
-    # wetty tinybuffer 참고 — 2ms/512KB. 사람이 타이핑한 에코는 2ms 정도로는 체감
+    # 2ms/512KB. 사람이 타이핑한 에코는 2ms 정도로는 체감
     # 지연이 없고(사람 반응속도 훨씬 느림), 빌드 로그 같은 폭주 출력에서만 실제로
     # 여러 read를 하나의 WS 프레임으로 묶는 효과가 난다.
     BATCH_WINDOW_SEC = 0.002

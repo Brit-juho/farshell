@@ -32,7 +32,7 @@ TTS_CONFIRM = vt_getenv("VT_VOICE_INPUT_CONFIRM", "off").lower() == "on"
 # V3-G: 녹음 시작 시(발화 전) 이번 명령이 어느 tmux pane으로 갈지 데스크톱 알림으로
 # 미리 보여준다. OS 포커스가 다른 앱(브라우저 등)에 있어도 daemon은 계속 동작하는데,
 # 어느 pane이 타깃인지 사용자가 모르는 채 말하면 엉뚱한 pane에서 실행될 수 있다는
-# 문제(TODOS.md V3)를 "말하기 전에 확인"으로 해결한다. TTS_CONFIRM(사후 읽어주기)과
+# 문제를 "말하기 전에 확인"으로 해결한다. TTS_CONFIRM(사후 읽어주기)과
 # 달리 이건 "확인이 사전"이라 실수 자체를 막을 수 있다.
 VOICE_TARGET_NOTIFY = vt_getenv("VT_VOICE_TARGET_NOTIFY", "on").lower() != "off"
 

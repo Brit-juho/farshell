@@ -1,7 +1,6 @@
 """큐 안정성 — 전송 중 보호, 재시도 백오프, 멈춤 점검, 전이 기록, 사람 입력 관문, pane 락.
 
-OpenRig(stuck sweep·backoff·transition log·seat delivery guard)과 Proliferate(Protected
-큐 항목)에서 가져온 규칙들이 실제로 지켜지는지 본다.
+멈춤 점검·백오프·전이 기록·입력 관문·보호 항목 규칙이 실제로 지켜지는지 본다.
 """
 
 import threading

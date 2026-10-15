@@ -1,4 +1,4 @@
-"""2.2 — POST /api/ports/_proxy/sync (plan-2.2/00-port-access.md §6).
+"""2.2 — POST /api/ports/_proxy/sync.
 
 CLI가 port_share_store를 직접 쓴 뒤 실행 중인 서버를 깨우는 경로다.
 **승격을 요구하지 않는다** — 접근 결정은 이미 디스크에 적혀 있고, 여기서는

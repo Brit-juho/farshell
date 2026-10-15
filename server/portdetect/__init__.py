@@ -1,8 +1,7 @@
 """포트 서비스 식별 (P3-5, 60-observability.md §3).
 
 포트 3000과 11434가 화면에서 구분되지 않는다 — 사용자는 명령줄을 읽고
-추측해야 했다. crush `internal/discover/`의 `RegisterEnricher(name, impl)`
-레지스트리를 가져온다 — 서비스 하나 추가가 매처 함수 하나다.
+추측해야 했다. 매처 레지스트리 방식이라 서비스 하나 추가가 매처 함수 하나다.
 
 ## 두 단계
 
@@ -36,9 +35,8 @@ def _cmd_text(row: dict) -> str:
     return f"{row.get('cmd', '')} {row.get('command', '')}".lower()
 
 
-# (검사 함수, 서비스 이름) — 위에서부터 첫 매치를 쓴다. crush의 대상 목록
-# (ollama · lmstudio · llamacpp · litellm) 중 로컬 개발에서 실제로 자주 보는
-# 것들 + 우리 코드베이스에서 이미 다루는 도구들을 우선 등록했다.
+# (검사 함수, 서비스 이름) — 위에서부터 첫 매치를 쓴다. 로컬 개발에서 실제로 자주 보는
+# 로컬 모델 서버(ollama · lmstudio · llamacpp · litellm) + 우리 코드베이스에서 이미 다루는 도구들을 우선 등록했다.
 _KNOWN_CMDS: list[tuple[Callable[[str], bool], str]] = [
     (lambda t: "ollama" in t, "Ollama"),
     (lambda t: "lm studio" in t or "lmstudio" in t, "LM Studio"),
