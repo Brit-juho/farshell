@@ -24,5 +24,6 @@ function open(section) {
 
 registerAction('settings.show', () => open());
 registerAction('voice.settings', () => open('voice'));
+registerAction('permissions.show', () => open('permissions'));
 // S3에서 잡아둔 `Mod+,` 바인딩의 주인.
 registerKey('settings', () => open());

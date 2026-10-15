@@ -2,6 +2,7 @@
 // (re-export 구문 대신 import + export 로 쓴다: 테스트 하네스(vm-esm)가 import 줄만 훑어 그래프를 만든다.)
 import { setPending, refresh, onEvent, onChange, pending } from './store.js';
 import { wire, showPending, resolveRequest } from './inbox.js';
+import { mountPermissions } from './permissions.js';
 
 let badgeWired = false;
 /** 대기 건수를 상시 코드(share-lazy.js)가 칠하는 배지에 알린다. */
@@ -15,4 +16,4 @@ function wireBadge() {
 wire();
 wireBadge();
 
-export { setPending, refresh, onEvent, showPending, resolveRequest };
+export { setPending, refresh, onEvent, showPending, resolveRequest, mountPermissions };
