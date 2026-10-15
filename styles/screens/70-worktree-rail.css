@@ -417,7 +417,12 @@
 }
 /* 폰 Fleet 행(.vt-srow.lg)은 패딩 6px · 아이콘 16px이라 레인이 15px을 지난다. */
 .vt-lin-fleet { --lane-x:2px; --branch-y:20px; --stub:5px; }
-/* 폰 Fleet의 「세션」 머리 — 정렬 전환은 손가락 표적(40px)으로. */
+/* 폰 Fleet의 「세션」 머리 — 정렬 전환·뷰 편집은 작게 보이되 터치 영역은 넓게. */
 .vt-fleet-group-head-sort { display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2); }
-.vt-fleet-group-head-sort .vt-rail-sort { margin-left:0; }
-.vt-fleet-group-head-sort .vt-rail-sort-opt { min-height:40px; padding:0 calc(var(--spacing) * 3.5); font-size:var(--fs-xs); }
+.vt-fleet-group-head-sort .vt-rail-sort { margin-left:auto; }
+.vt-fleet-edit-btn { flex:none; width:30px; height:30px; position:relative; }
+/* 시각 크기는 작게, 터치 영역은 44px로 넓힌다. */
+.vt-fleet-edit-btn::before { content:''; position:absolute; inset:50% auto auto 50%; width:44px; height:44px; transform:translate(-50%,-50%); }
+.vt-fleet-edit-btn.active { color:var(--acc); background:var(--menu-hover); }
+.vt-fleet-order { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
+.vt-fleet-group-head-sort .vt-rail-sort-opt { min-height:28px; padding:0 calc(var(--spacing) * 2.5); font-size:var(--fs-2xs); }

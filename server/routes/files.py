@@ -45,7 +45,7 @@ async def fs_roots():
     """프론트가 첫 화면에 띄울 시작 지점. 열람 허용 경계(fsguard.get_roots())보다
     좁을 수 있다 — 기본값이 그 경우로, 시작은 ~/GitHub 이지만 위로 이동하면 경계(홈)까지
     resolve_under_roots 가 계속 허용한다."""
-    return {"roots": [str(r) for r in fsguard.get_start_roots()]}
+    return {"roots": [str(r) for r in fsguard.get_start_roots()], "home": str(Path.home())}
 
 
 # --- 트리 --------------------------------------------------------------------

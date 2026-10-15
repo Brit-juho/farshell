@@ -129,10 +129,17 @@
     padding-bottom:env(safe-area-inset-bottom,0px);
     background:var(--bar); border-top:1px solid var(--line);
   }
+  /* 하단 내비의 탭(변경·첨부·설정 등)은 팝업이 아니라 **탭 화면**이다 — 「세션」 탭(#vt-fleet-slot)과
+     같은 자리(상단 바와 하단 내비 사이)를 불투명하게 채우고, 열릴 때 슬라이드·반투명 배경 없이
+     바로 그려진다(터미널 위에 반투명 합성을 얹지 않아 폰에서 덜 버벅인다). */
   .vt-viewer-backdrop.vt-mobile-route {
+    top:calc(var(--topbar-h, 38px) + env(safe-area-inset-top,0px));
     bottom:calc(52px + env(safe-area-inset-bottom,0px));
+    background:var(--win);
   }
-  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-card { height:100%; }
+  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-card { height:100%; animation:none; box-shadow:none; }
+  /* 탭 전환이 곧 닫기다 — 하단 내비의 탭 화면에는 × 가 필요 없다. */
+  .vt-viewer-backdrop.vt-mobile-route.vt-tab-panel .vt-vw-x { display:none; }
   .vt-mnav-btn {
     flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:2px; position:relative; background:none; border:0; color:var(--sub);

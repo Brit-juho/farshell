@@ -37,13 +37,6 @@ html[data-skin="windows"] #topbar {
   background-color:color-mix(in srgb, var(--bar) 78%, transparent);
   -webkit-backdrop-filter:blur(30px) saturate(1.5); backdrop-filter:blur(30px) saturate(1.5);
 }
-.wt-chevron { display:none; }
-html[data-skin="windows"] .wt-chevron {
-  display:flex; align-items:center; justify-content:center; width:22px; height:26px;
-  color:var(--sub); cursor:pointer; border-radius:var(--radius-sm); flex-shrink:0;
-}
-html[data-skin="windows"] .wt-chevron:hover { background:var(--menu-hover); color:var(--txt); }
-html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
 /* D5: tmux 세션 상태 점(구 🟢/🖥️/💤 이모지) — ui/session-badge.js가 색만 채운다. */
 .vt-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:calc(var(--spacing) * 1.5); flex-shrink:0; }
 
@@ -102,7 +95,7 @@ html[data-skin="windows"] .wt-chevron svg { width:14px; height:14px; }
      2개 이상이면 실브라우저에서 그대로 새어 보였다(2026-09-23 발견: 세션이
      하나뿐이던 첫 검증에서는 우연히 안 보였다). #keybar가 `@media(pointer:
      fine)`에서 같은 파일을 상대로 쓰는 것과 같은 관용구(20-overlay.css:394). */
-  #vt-wtabs, .wt-chevron, #vt-workspace-chip-slot { display:none !important; }
+  #vt-wtabs, #vt-workspace-chip-slot { display:none !important; }
 }
 
 /* 모바일 세션 관리 시트. 좁은 화면에서 세션의 모든 기본 조작을 제공한다. */
@@ -237,6 +230,8 @@ html.vt-has-keybar[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar-op
     text-align:left; -webkit-tap-highlight-color:transparent;
   }
   #voice-session-picker:active .vt-sp-name { opacity:.7; }
+  /* 세션 탭이 떠 있는 동안 — 이름이 눌린 탭처럼 강조색. */
+  #voice-session-picker[aria-pressed="true"] .vt-sp-name { color:var(--acc); }
   .vt-sp-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1); max-width:100%; min-width:0; }
   .vt-sp-name {
     min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
@@ -672,9 +667,8 @@ body.voice-only-mode #mic-btn-wrap.mic {
 body.voice-only-mode #mic-btn-wrap.mic svg { width:50px; height:50px; }
 body.voice-only-mode #mic-btn-wrap.mic .label { display:block; font-size:var(--fs-base); }
 
-/* 모바일에서는 상단 바·칸 헤더 없이 활성 터미널 한 칸만 사용한다. */
+/* 모바일에서는 칸 헤더 없이 활성 터미널 한 칸만 쓴다(상단 바는 유지). */
 @media (max-width:719px) {
-  body:not(.voice-only-mode) #topbar, .vt-pane-head { display:none; }
+  .vt-pane-head { display:none; }
 }
-html.vt-mobile-device body:not(.voice-only-mode) #topbar,
 html.vt-mobile-device .vt-pane-head { display:none; }

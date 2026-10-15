@@ -112,12 +112,12 @@ test('voice.js도 함께 남는다 — app 빌드가 dist를 비우고 끝나면
   assert.ok(fs.existsSync(path.join(DIST, 'voice.js')), 'frontend/dist/voice.js가 없다');
 });
 
-test('세션 시트의 목록 렌더링(layout/session-sheet.js)은 screens 청크에 있고 core에는 없다', () => {
+test('세션 탭의 뷰 편집기(layout/session-order.js)는 screens 청크에 있고 core에는 없다', () => {
   // vite.config.js manualChunks에 이름이 없으면 포괄 규칙이 core로 보내 상시 로드가 ~5KB 늘어난다
   // (빌드·테스트는 통과하고 상한만 조용히 줄어든다 — 이 파일을 옮길 때 실제로 겪었다).
-  assert.match(screensJs, /function renderSessionSheet/);
-  assert.doesNotMatch(coreJs, /function renderSessionSheet/);
-  assert.doesNotMatch(coreJs, /vt-session-group-label/);
+  assert.match(screensJs, /function renderOrderEditor/);
+  assert.doesNotMatch(coreJs, /function renderOrderEditor/);
+  assert.doesNotMatch(coreJs, /vt-order-close/);
 });
 
 test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·감사)은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·배지·import() 만)', () => {

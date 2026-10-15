@@ -1,22 +1,15 @@
-import { pushScope } from './core/keyboard-scopes.js';
-// 세션 피커(모바일 세션 관리 시트) + 맥에서 열기 + 파일 업로드 — F5에서
+// 세션 피커(모바일 상단 세션 이름 → 「세션」 탭 전환) + 맥에서 열기 + 파일 업로드 — F5에서
 // classic script에서 ES 모듈로 전환.
 //
-// term/session.js는 탭 전환/제거 시 updateSessionPicker를 부른다(이 파일 → session.js 방향의
-// 정적 import는 목록 렌더링과 함께 layout/session-sheet.js로 옮겨 순환이 없어졌다).
-// 시트의 목록 렌더링 전부는 지연 청크(`screens`)다 — 상시 코드(core.js)는 열기/닫기·배선만 갖는다.
+// term/session.js는 탭 전환/제거 시 updateSessionPicker를 부른다. 세션 목록·관리는 「세션」 탭
+// (shell/Fleet.tsx)이 맡는다 — 예전 상단 시트(layout/session-sheet.js)는 거기로 합쳤다.
 import { activeSession, activeSessionId, sessionDisplayName, getSession } from './core/store.js';
 import { openSessionIds } from './layout/compact.js';
-import { onLayoutChange, pruneBlankViews } from './layout/store.js';
-import { isCompactMode } from './layout/compact.js';
-import { saveLayoutNow } from './layout/persist.js';
+import { onLayoutChange } from './layout/store.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
-import { registerAction, getAction } from './core/dom.js';
+import { registerAction } from './core/dom.js';
 import { uploadFiles } from './term/upload.js';
-import { _focusables } from './panels/panel.js';
-import { icon } from './ui/icons.js';
-import { onWorkspaceEvent } from './core/workspace-ws.js';
 import { t } from './core/i18n.js';
 
 export function updateSessionPicker() {
@@ -27,7 +20,7 @@ export function updateSessionPicker() {
   const entries = openSessionIds();
   const activeId = activeSessionId();
   const position = entries.indexOf(activeId) + 1;
-  // 2026-09-29(H1) — 두 줄: 윗줄 세션 이름(주인공) + ▾, 아랫줄 "기기 · 3/5".
+  // 2026-09-29(H1) — 두 줄: 윗줄 세션 이름(주인공), 아랫줄 "기기 · 3/5".
   // 기기 이름은 layout/env-chip.js가 html[data-vt-machine]에 둔다(늦게 오면
   // 'vt:machine' 이벤트로 다시 그린다). 이름은 사용자 입력이라 textContent로만 넣는다.
   const name = document.createElement('span');
@@ -36,89 +29,17 @@ export function updateSessionPicker() {
   const row = document.createElement('span');
   row.className = 'vt-sp-row';
   row.append(name);
-  row.insertAdjacentHTML('beforeend', icon('chevron-down', 14));
   const meta = document.createElement('span');
   meta.className = 'vt-sp-meta';
   const machine = document.documentElement.dataset.vtMachine || '';
   const pos = s && position > 0 ? `${position}/${entries.length}` : '';
   meta.textContent = [machine, pos].filter(Boolean).join(' · ');
   picker.replaceChildren(row, ...(meta.textContent ? [meta] : []));
-  const sheet = document.getElementById('session-manager');
-  if (sheet) renderSessionManager(sheet);
 }
 
 // 순서·n/m의 출처가 레이아웃이므로 레이아웃이 바뀌면(부팅 복원, 칸 드롭, 뷰 재정렬)
 // 라벨도 같이 다시 그린다 — 전환 경로만 갱신하면 복원 직후 n/m이 비어 있었다.
 onLayoutChange((_tree, _pane, kind) => { if (kind !== 'ratio') updateSessionPicker(); });
-
-function sessionName(id) {
-  return sessionDisplayName(id);
-}
-
-function openSessionManager() {
-  let backdrop = document.getElementById('session-manager');
-  if (backdrop) { closeSessionManager(); return; }
-  backdrop = document.createElement('div');
-  backdrop.id = 'session-manager';
-  backdrop.className = 'vt-session-backdrop';
-  backdrop.setAttribute('role', 'presentation');
-  // 청크가 올 때까지의 틀 — 내용은 layout/session-sheet.js가 채운다.
-  backdrop.innerHTML = '<section class="vt-session-sheet" role="dialog" aria-modal="true" aria-labelledby="session-manager-title" aria-busy="true"><div class="vt-session-head"><h2 id="session-manager-title">' + t('세션 관리') + '</h2></div><p class="vt-session-loading">' + t('불러오는 중') + '</p></section>';
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSessionManager(); });
-  // 모바일: 시트를 열 때 비어 있는 단독 뷰(「빈 화면」)를 정리한다 — 폰에는 뷰 탭 바가 없어
-  // 칸 ×가 남긴 빈 뷰를 치울 길이 없다. 데스크톱은 「칸 ×는 빈 칸으로 남김」 규칙 그대로.
-  if (isCompactMode() && pruneBlankViews() > 0) saveLayoutNow();
-  document.body.appendChild(backdrop);
-  backdrop._offSessions = onWorkspaceEvent('tmux_sessions', (msg) => {
-    if (!Array.isArray(msg.sessions)) return;
-    backdrop._snapshot = msg.sessions;
-    if (backdrop.isConnected) renderSessionManager(backdrop);
-  });
-  document.getElementById('voice-session-picker')?.setAttribute('aria-expanded', 'true');
-  renderSessionManager(backdrop);
-  // D7: 포커스 트랩 — openPanel()의 모달들과 같은 규칙(panels/panel.js 참고).
-  backdrop._onKeydown = (e) => {
-    if (document.activeElement?.closest('.vt-dialog')) return;
-    if (e.key === 'Escape') { closeSessionManager(); return true; }
-    if (e.key !== 'Tab') return;
-    const items = _focusables(backdrop);
-    if (items.length === 0) return;
-    const first = items[0], last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    else if (!backdrop.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
-  };
-  backdrop._disposeKeys = pushScope({ id: 'session-manager', element: backdrop, modal: true, onKey: backdrop._onKeydown });
-}
-
-function closeSessionManager() {
-  const backdrop = document.getElementById('session-manager');
-  if (!backdrop) return;
-  backdrop._disposeKeys?.();
-  backdrop._offSessions?.();
-  backdrop.remove();
-  const picker = document.getElementById('voice-session-picker');
-  if (picker) { picker.setAttribute('aria-expanded', 'false'); picker.focus(); }
-}
-
-// 목록 렌더링은 layout/session-sheet.js(지연 청크). 열린 시트를 다시 그리라는 요청은 모두 여기로 온다.
-// 한 번 받은 뒤에는 모듈을 쥐고 **동기로** 부른다 — 편집 모드의 다시 그리기가 마이크로태스크 늦으면
-// 방금 닫은 뷰의 안내 문구 같은 일회성 상태가 낡은 목록에 먼저 소비된다.
-let _sheet = null;
-function renderSessionManager(backdrop) {
-  const run = (m) => m.renderSessionSheet(backdrop, {
-    close: closeSessionManager,
-    refresh: () => { if (backdrop.isConnected) renderSessionManager(backdrop); },
-  });
-  if (_sheet) return run(_sheet);
-  return import('./layout/session-sheet.js')
-    .then((m) => { _sheet = m; return run(m); })
-    .catch((e) => {
-      console.error('[FarShell sheet]', e);
-      const l = backdrop.querySelector('.vt-session-loading');
-      if (l) l.textContent = t('목록을 불러오지 못했습니다');
-    });
-}
 
 // --- 이 세션 맥에서 열기 (tmux 세션을 iTerm에 나중에 attach) ---
 // explicitSessionId: 레일 컨텍스트 메뉴처럼 "지금 보고 있지 않은 세션"을 대상으로
@@ -159,7 +80,8 @@ async function uploadFile(input) {
 window.uploadFile = uploadFile;
 
 // F3(c): data-action 위임용 등록. (인자 없이 호출 — 대상은 항상 activeSession.)
-registerAction('session.manager', () => openSessionManager());
+// 상단 세션 이름 — 팝업이 아니라 하단 「세션」 탭 전환이다(layout/mobile-nav.js가 받는다).
+registerAction('session.manager', () => document.dispatchEvent(new CustomEvent('vt:sessions-toggle')));
 registerAction('session.open-on-mac', () => openSessionOnMac());
 // Rail.tsx가 특정 세션을 지정해 부르는 자리 — 정적 import 불가(레일 지연 청크
 // 제약, session-actions.js 머리말과 같은 이유)라 window로 브리지한다.

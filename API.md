@@ -92,7 +92,7 @@ is never limited. Denied and failed attempts are written to `~/.vt/audit/denials
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/fs/roots` | List of browsable roots (default `~/GitHub`) |
+| GET | `/api/fs/roots` | List of browsable roots (default `~/GitHub`) plus `home` (the user's home directory, used to resolve `~/` terminal links) |
 | GET | `/api/fs/tree?path=X[&depth=0-2]` | Directory listing. Excludes `.git`/`node_modules` etc. `depth` prefetches subdirectory listings into each entry's `children` (capped by dir count and entries) |
 | GET | `/api/fs/search?q=X` | Fuzzy filename search (command palette `/` mode). `path=` scopes to a subtree, max 50 results |
 | GET | `/api/fs/file?path=X` | File content. Binaries return only `binary:true`; anything over 512KB is truncated. Images also carry `image:true`, `mime`, and `too_large` — the bytes come from `/api/fs/raw` below |

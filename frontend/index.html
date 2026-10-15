@@ -357,15 +357,12 @@
          (지금 모바일 레이아웃은 어차피 갈아엎을 예정이라 여기서 대비하지
          않는다). -->
     <div id="vt-wtabs" role="tablist" aria-label="워크트리 탭" data-i18n-attr="aria-label"></div>
-    <div class="wt-chevron" data-action="session.manager" data-tip="세션 프로파일" data-tip-side="bottom" role="button" tabindex="0" aria-label="세션 프로파일" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"></svg>
-    </div>
 
-    <!-- 좁은 화면의 세션 관리 진입점. 탭 영역이 눌려도 전환·이름 변경·닫기가 남는다.
+    <!-- 좁은 화면의 세션 진입점 — 누르면 하단 「세션」 탭과 터미널을 오간다(팝업 없음).
          2026-09-29(H1) — 모바일 헤더의 주인공. 윗줄 세션 이름 ▾, 아랫줄 "기기 · 3/5"
          (picker.js가 그린다). 따로 있던 기기 칩(#vt-env-chip)은 이 아랫줄로 합쳤다. -->
-    <button id="voice-session-picker" type="button" aria-label="세션 관리" aria-haspopup="dialog"
-      aria-expanded="false" data-action="session.manager" data-i18n data-i18n-attr="aria-label">세션</button>
+    <button id="voice-session-picker" type="button" aria-label="세션" aria-pressed="false"
+      data-action="session.manager" data-i18n data-i18n-attr="aria-label">세션</button>
 
     <div class="spacer"></div>
 

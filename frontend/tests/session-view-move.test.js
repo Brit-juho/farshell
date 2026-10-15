@@ -1,4 +1,4 @@
-// 모바일 세션 시트의 뷰 옮기기(layout/session-order.js + picker.js 토글, 10-session-order.md C안). 뷰 닫기는 session-view-edit.test.js.
+// 모바일 「세션」 탭의 뷰 옮기기(layout/session-order.js, 10-session-order.md C안; Fleet.tsx가 마운트). 뷰 닫기는 session-view-edit.test.js.
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
@@ -76,28 +76,23 @@ test('뷰 이동 — 사이에 빈 뷰가 끼어 있어도 이웃 뷰를 넘는�
   assert.strictEqual(ids(C), 'b,c,a,d');
 });
 
-async function openSheet(ctx) {
-  const picker = await importFresh(J('picker.js'), ctx.env.context, ctx.cache);
-  const dom = await importFresh(J('core/dom.js'), ctx.env.context, ctx.cache);
+// Fleet.tsx가 하는 일의 흉내 — 컨테이너에 편집기를 그리고 레이아웃이 바뀔 때마다 다시 그린다.
+async function openEditor(ctx) {
   const doc = ctx.env.window.document;
-  picker.updateSessionPicker();
-  dom.getAction('session.manager')();
-  await flush();
-  return { picker, doc };
+  const host = doc.createElement('div');
+  host.id = 'vt-fleet';
+  host.innerHTML = '<button class="vt-fleet-edit-btn"></button><div class="vt-fleet-order"></div>';
+  doc.body.appendChild(host);
+  const list = host.querySelector('.vt-fleet-order');
+  ctx.O.renderOrderEditor(list);
+  ctx.S.onLayoutChange(() => ctx.O.renderOrderEditor(list));
+  return { doc, list };
 }
 const rows = (doc) => [...doc.querySelectorAll('.vt-order-view')].map((r) => [...r.querySelectorAll('.vt-order-body > span')].map((x) => x.textContent).join(' '));
 
-test('시트 — 평소엔 세션 행과 토글, 토글을 켜면 뷰 블록만(행 클릭 이동 없음)', async () => {
+test('편집기 — 뷰 블록만 그린다(행 클릭 이동 없음), 끝의 이동 버튼은 비활성', async () => {
   const ctx = await setup();
-  const { doc } = await openSheet(ctx);
-  assert.strictEqual(doc.querySelectorAll('.vt-session-select').length, 4);
-  const tg = doc.querySelector('.vt-session-order-toggle');
-  assert.ok(tg, '뷰가 2개 이상이면 토글이 보인다');
-  assert.strictEqual(tg.getAttribute('aria-pressed'), 'false');
-  assert.strictEqual(doc.querySelectorAll('.vt-order-btn').length, 0);
-  tg.click(); await flush();
-  assert.strictEqual(doc.querySelector('.vt-session-order-toggle').getAttribute('aria-pressed'), 'true');
-  assert.strictEqual(doc.querySelectorAll('.vt-session-select').length, 0, '편집 중엔 행 클릭 이동이 없다');
+  const { doc } = await openEditor(ctx);
   assert.strictEqual(doc.querySelectorAll('.vt-order-view').length, 3);
   assert.deepStrictEqual(rows(doc), ['a', '묶음 뷰 b c', 'd']);
   const btn = (tab, dir) => doc.querySelector(`.vt-order-btn[data-tab="${tab}"][data-dir="${dir}"]`);
@@ -106,44 +101,17 @@ test('시트 — 평소엔 세션 행과 토글, 토글을 켜면 뷰 블록만(
   assert.strictEqual(btn(ctx.t2, -1).getAttribute('aria-disabled'), null);
 });
 
-test('시트 — 위 버튼: 순서·n/m 즉시 갱신, 활성 뷰 불변, 포커스 유지', async () => {
+test('편집기 — 위 버튼: 순서 즉시 갱신, 활성 뷰 불변, 포커스 유지', async () => {
   const ctx = await setup();
-  const { doc } = await openSheet(ctx);
-  doc.querySelector('.vt-session-order-toggle').click(); await flush();
+  const { doc } = await openEditor(ctx);
   const activeBefore = ctx.S.getActiveTabId();                       // d 뷰
   doc.querySelector(`.vt-order-btn[data-tab="${ctx.t2}"][data-dir="-1"]`).click(); await flush();
   assert.deepStrictEqual(rows(doc), ['묶음 뷰 b c', 'a', 'd']);
   assert.strictEqual(ctx.S.getActiveTabId(), activeBefore);
   assert.strictEqual(ids(ctx.C), 'b,c,a,d');
-  assert.match(doc.querySelector('.vt-sp-meta').textContent, /4\/4$/, 'd는 여전히 4번째');
   const f = doc.activeElement;
   assert.strictEqual(f.dataset.tab, ctx.t2, '포커스가 옮긴 뷰의 버튼에 남는다');
   assert.match(doc.querySelector('.vt-order-note').textContent, /1번째/);
   // 맨 위에 닿았으니 포커스는 아래 버튼으로 넘어간다
   assert.strictEqual(f.dataset.dir, '1');
-});
-
-test('시트 — 활성 뷰를 옮기면 n/m이 따라 바뀐다', async () => {
-  const ctx = await setup();
-  const { doc } = await openSheet(ctx);
-  doc.querySelector('.vt-session-order-toggle').click(); await flush();
-  assert.match(doc.querySelector('.vt-sp-meta').textContent, /4\/4$/);
-  doc.querySelector(`.vt-order-btn[data-tab="${ctx.t3}"][data-dir="-1"]`).click(); await flush();
-  assert.strictEqual(ids(ctx.C), 'a,d,b,c');
-  assert.match(doc.querySelector('.vt-sp-meta').textContent, /2\/4$/);
-});
-
-test('시트 — 닫으면 편집 모드가 풀린다, 뷰가 1개면 토글이 없다', async () => {
-  const ctx = await setup();
-  const { doc } = await openSheet(ctx);
-  doc.querySelector('.vt-session-order-toggle').click(); await flush();
-  doc.querySelector('.vt-session-close').click();
-  const dom = await importFresh(J('core/dom.js'), ctx.env.context, ctx.cache);
-  dom.getAction('session.manager')(); await flush();
-  assert.strictEqual(doc.querySelector('.vt-session-order-toggle').getAttribute('aria-pressed'), 'false');
-  assert.strictEqual(doc.querySelectorAll('.vt-order-view').length, 0);
-  doc.querySelector('.vt-session-close').click();
-  ctx.S.closeLayoutTab(ctx.t1); ctx.S.closeLayoutTab(ctx.t2);
-  dom.getAction('session.manager')(); await flush();
-  assert.strictEqual(doc.querySelector('.vt-session-order-toggle'), null);
 });
