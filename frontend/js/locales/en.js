@@ -3128,5 +3128,6 @@ window.__VT_I18N = {
   "메시지: 받는 세션의 에이전트에게 다른 에이전트가 보낸 글로 표시되어 전달됩니다. 승인해도 그 에이전트의 권한은 늘지 않습니다.": "Message: the receiving agent sees it labelled as written by another agent. Approving does not widen that agent's permissions.",
   "메시지 요청에는 level 이 필요 없습니다": "A message request takes no level",
   "세션 key 가 올바르지 않습니다": "The session key is not valid",
-  "에이전트 메시지 승인이 필요합니다": "An agent message needs your approval"
+  "에이전트 메시지 승인이 필요합니다": "An agent message needs your approval",
+  "이 호스트에는 이 기능을 쓸 권한이 없습니다": "This host has no permission to use this feature"
 };
