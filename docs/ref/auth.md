@@ -239,6 +239,22 @@ peer parity over all levels, rate/hop parity, rollback, shadow, `fsh migrate-aut
 `authz_char/test_char_agent_msg_enforced.py` (the matrix with the listed changes); `test_agent_msg.py`, the shadow replay and the authz_char matrix also run
 with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
 
+## Re-check right before typing
+
+A decision made when a request arrives can be stale by the time the keys are sent: a grant can be revoked, a delegation closed or a
+share lowered in between. With the matching flag on, the engine is asked **again inside the per-pane lock, before the first key**
+(`tmux_target.send_to_tmux(..., guard=)`). Flag off: no re-check, and `send_to_tmux` is called exactly as before.
+
+| Path | Flag | Re-check | Outcome when it no longer holds |
+|---|---|---|---|
+| Queue item from a delegation (task, follow-up: parent `deleg.control` role=parent op=send; result: child role=child op=report; turn-ended / needs-human / soft-limit notices: the delegation must exist and be open; the `gone` notice: it must exist) | `deleg` | `deleg_svc.recheck_queued` in `queue_runner` | nothing typed; the item becomes `blocked` with reason `grant_revoked`, `delegation_closed` or `relationship_gone`; audit `deleg.queue` (denied, no content) |
+| Queue item from an agent message (local sender: `msg.send` with the relation or grant; peer sender: the `hosts.json` grant incl. `agentMessages`) | `msg` | `msg_svc.recheck_queued`; the sender identity travels in the queue item's `source.authz` (identity only, never text) | nothing typed; `blocked` with `grant_revoked`; the message record turns `blocked`; audit `msg.queue` |
+| Direct input to a shared session (`/api/agent/shared/send`) | `share` | `agent_share.recheck_send`: fresh tmux snapshot + fresh store read, same decision as `authorize` but **without** counting the per-minute limit | 403 `grant_revoked`, nothing typed (also when the session is gone or the share was lowered to read-only) |
+
+The engine failing or the store being unreadable at that moment closes (queue: `blocked` with the retriable reason `authz_unavailable`;
+share: 503 `authz_unavailable`). `grant_revoked`/`delegation_closed`/`relationship_gone` are not retried automatically; unblocking the
+item re-runs the check. Items queued while the flag was off carry no `source.authz` and are not re-checked.
+
 ## How a grant was approved: `approved_via`
 
 Every grant record the engine writes carries `approved_via` next to `approved_by`: `manual` (a person decided it: session-share and

@@ -219,7 +219,8 @@ def test_peer_message_is_queued_with_sender_identity_from_the_grant(env):
     # 보낸 호스트는 본문 주장이 아니라 서명한 grant에서 온다
     assert m["from"]["host"] == "m1" and m["from"]["hostLabel"] == "M1"
     assert m["from"]["session"] == "dev" and m["dir"] == "in"
-    assert qs.list_items()[0]["source"] == {"agentMsg": "c" * 12}
+    src = qs.list_items()[0]["source"]
+    assert src["agentMsg"] == "c" * 12 and set(src) - {"authz"} == {"agentMsg"}     # `authz`: 엔진이 켜졌을 때만 붙는 재평가 단서
 
 
 def test_peer_message_unknown_session_is_404(env):

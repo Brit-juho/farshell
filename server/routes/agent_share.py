@@ -324,7 +324,12 @@ async def agent_send(request: Request):
                 await _announce(req, snap)
             return _pending_response(req, "write")
         await asyncio.to_thread(agent_share.check_send_allowed, target)
-        await asyncio.to_thread(agent_share.send_keys, target, text, enter)
+        if agent_share.enforced():
+            # 켜짐: 판정~입력 사이의 회수 경합을 막는다 — pane 락 안에서 첫 키 직전에 같은 판정을 다시 한다.
+            await asyncio.to_thread(agent_share.send_keys, target, text, enter,
+                                    lambda: agent_share.recheck_send(me, target))
+        else:
+            await asyncio.to_thread(agent_share.send_keys, target, text, enter)
     except ShareError as e:
         await asyncio.to_thread(agent_share.audit, "send", e.code, agent=me, nick=nick, **meta)
         return _err(e)

@@ -263,6 +263,39 @@ def authorize_peer(grant: dict) -> Verdict:
     return Verdict(d.allow, d.reason, d.grant_id, None, Ticket(p, resource, {}, grant) if d.allow else None)
 
 
+def queue_authz(ticket: Optional[Ticket]) -> Optional[dict]:
+    """통과한 판정 → 큐 항목 `source.authz` 에 실을 재평가 단서(`recheck_queued` 가 읽는다). 단서는 보낸 쪽의 신원뿐이다 —
+    내용·권한 판정 결과는 싣지 않는다(입력 직전에 새로 판정한다)."""
+    if ticket is None:
+        return None
+    if ticket.principal.kind == P.PEER:
+        return {"peer": ticket.principal.attrs.get("peer_id", "")}
+    return {"from": ticket.principal.attrs.get("key", ""), "to": ticket.resource.removeprefix("msg:local/")}
+
+
+def recheck_queued(src: dict, item_id: str = "") -> Optional[str]:
+    """큐에 쌓인 에이전트 메시지를 **입력 직전에** 다시 판정한다. 통과면 None, 막히면 `grant_revoked`(관계·grant·허용 스위치가 사라짐).
+    단서(`source.authz`)가 없는 항목(플래그가 꺼진 동안 쌓인 것)은 건드리지 않는다. 거부는 감사한다(내용 없음)."""
+    a = src.get("authz")
+    if not isinstance(a, dict):
+        return None
+    mid = str(src.get("agentMsg") or "")
+    if a.get("peer") is not None:
+        import host_store
+        grant = host_store.find_grant(str(a["peer"]))
+        v = authorize_peer(grant) if grant else None
+        ok, principal, resource = bool(v and v.allow), f"peer:{a['peer']}", "msg:local/-"
+    else:
+        sender, recv = str(a.get("from") or ""), str(a.get("to") or "")
+        v = authorize_local(sender, "", recv, None)
+        ok, principal, resource = v.allow, f"agent:local/{sender}", f"msg:local/{recv}"
+    if ok:
+        return None
+    audit_op("queue", "denied", principal=principal, resource=resource, reason="grant_revoked", decision="deny",
+             detail={"id": mid, "item": item_id})
+    return "grant_revoked"
+
+
 def check_rate(ticket: Ticket, from_host: str, now: Optional[float] = None) -> None:
     """보내는 호스트당 분당 한도(`agent_msg.RATE_PER_MIN`) — 같은 판정을 카운터와 함께 엔진에 다시 묻는다. 허용이면 한 건을 센다.
     카운터 저장소·메시지는 옛 `agent_msg.check_rate` 와 같다(`_rate`, 429 `rate_limited`)."""

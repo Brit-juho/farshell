@@ -23,6 +23,10 @@ codex/aider/agy 는 훅이 없어서 자동 드레인이 걸리지 않는다 —
      (`tmux_target.send_to_tmux` 는 무조건 Enter 를 붙인다). 텍스트가 유실되는
      정도가 아니라 사용자가 승인한 적 없는 동작이 승인돼버리는 안전 문제다.
 
+  6. **입력 직전 권한 재평가** — 위임 지시·결과, 에이전트 메시지처럼 에이전트 행동에서 비롯된 항목은(`VT_AUTHZ_ENFORCE` 의
+     `deleg`/`msg` 가 켜졌을 때만) pane 락 안에서 첫 키 전에 엔진에 다시 물어본다. 그 사이 grant 가 회수되거나 위임이 닫혔으면
+     입력하지 않고 `blocked` 로 남긴다(`tmux_target.send_to_tmux(guard=)`).
+
 **`waiting` 은 완료 판정이 아니라 투입 금지 신호다.** 위의 "출력 유휴로 추측한
 완료 판정은 빼기로 했다"는 결정과 충돌하지 않는다 — waiting 이 아니라고 해서
 투입하는 게 아니고(그건 여전히 stop 훅만 한다), waiting 이면 **투입하지 않을**
@@ -141,6 +145,40 @@ def _is_waiting(target: str | None, host: str = "local") -> bool:
     return agent_status.status_for_session(name, host) == agent_status.WAITING
 
 
+def _recheck_for(item: dict):
+    """에이전트 행동에서 비롯된 항목(`source` 가 위임·에이전트 메시지)이면 입력 직전 재평가 함수를, 아니면 None.
+
+    해당 기능의 `VT_AUTHZ_ENFORCE` 토큰(`deleg` / `msg`)이 꺼져 있으면 None — 꺼짐은 예전과 바이트 단위로 같다.
+    반환 함수는 통과면 None, 막히면 (안정 사유 코드)를 돌려준다. 엔진을 못 쓰거나 예외면 `authz_unavailable`(닫힘)."""
+    src = item.get("source")
+    if not isinstance(src, dict):
+        return None
+    from authz import flags
+    if "delegation" in src and flags.enforced("deleg"):
+        from authz import deleg_svc as svc
+    elif "agentMsg" in src and isinstance(src.get("authz"), dict) and flags.enforced("msg"):   # 단서 없는 옛 항목은 건드리지 않는다
+        from authz import msg_svc as svc
+    else:
+        return None
+
+    def check() -> str | None:
+        try:
+            return svc.recheck_queued(src, str(item.get("id") or ""))
+        except Exception as e:  # noqa: BLE001 — 판정하지 못하면 입력하지 않는다
+            logger.warning(f"큐 항목 재평가 실패 — 입력하지 않음: {type(e).__name__}: {e}")
+            return RECHECK_UNAVAILABLE
+    return check
+
+
+RECHECK_UNAVAILABLE = "authz_unavailable"
+
+
+def _blocked_by_recheck(item: dict, reason: str) -> dict:
+    item = _block(item, reason, retriable=(reason == RECHECK_UNAVAILABLE))
+    logger.warning(f"큐 항목이 입력 직전 재평가에 막힘: {reason}")
+    return {"ok": False, "drained": 0, "error": "blocked", "reason": reason, "item": item}
+
+
 def drain_once(session: str | None = None, session_scoped: bool = False,
                targeted_only: bool = False, automatic: bool = False) -> dict:
     """pending 한 건을 투입한다. blocking — 호출부가 to_thread 로 감싼다.
@@ -199,6 +237,11 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
                     "reason": tr("원격 항목은 대상 세션을 지정해야 합니다 (큐에 유지됨)"),
                     "item": item}
         remote_text = (f"{item['preface']}\n{item['text']}" if item.get("preface") else item["text"])
+        recheck = _recheck_for(item)
+        if recheck is not None:                 # 원격은 로컬 pane 락이 없다 — 보내기 직전에 한 번
+            veto = recheck()
+            if veto:
+                return _blocked_by_recheck(item, veto)
         ok, reason = _send_remote(target_host, target_session, remote_text)
         if not ok:
             item = _block(item, reason or "원격 전송 실패", retriable=True)
@@ -227,8 +270,15 @@ def _drain_once(session: str | None, session_scoped: bool, targeted_only: bool =
                     "reason": tr("사용자가 입력하는 중이라 미뤘습니다 (큐에 유지됨)"), "item": item}
 
     preface = item.get("preface")
-    sent = (tmux_target.send_to_tmux(pane, item["text"], preface=preface) if preface
-            else tmux_target.send_to_tmux(pane, item["text"]))
+    kw = {}
+    recheck = _recheck_for(item)
+    if recheck is not None:
+        kw["guard"] = recheck        # pane 락 안, 첫 키 직전에 grant·관계를 다시 판정한다
+    try:
+        sent = (tmux_target.send_to_tmux(pane, item["text"], preface=preface, **kw) if preface
+                else tmux_target.send_to_tmux(pane, item["text"], **kw))
+    except tmux_target.SendVetoed as v:
+        return _blocked_by_recheck(item, v.reason)
     if not sent:
         item = _block(item, "tmux 전송 실패", retriable=True)
         return {"ok": False, "drained": 0, "error": "send_failed",

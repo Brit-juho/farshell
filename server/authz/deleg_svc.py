@@ -304,6 +304,41 @@ def deny_unknown(caller_key: str, did: str, op: str, reason: str = "no_such_dele
     audit_op(op, "denied", principal=P.agent(caller_key).id, did=did, scopes=["deleg.control"], reason=reason)
 
 
+# --- 입력 직전 재평가 -----------------------------------------------------------------
+
+
+def recheck_queued(src: dict, item_id: str = "") -> Optional[str]:
+    """큐에 쌓인 위임 항목(`source = {delegation, kind}`)을 **입력 직전에** 다시 판정한다. 통과면 None, 막히면 안정 사유 코드:
+    `relationship_gone`(장부에 그 위임이 없다) · `delegation_closed`(닫히거나 고아가 됐다) · `grant_revoked`(보내는 쪽의 grant 가 없다).
+
+    보내는 쪽은 종류가 정한다: 작업·후속 지시 = 부모(`deleg.control`, role=parent, op=send), 결과 보고 = 자식(role=child, op=report).
+    턴 종료·승인 대기·실행 시간·소멸 알림은 서버가 장부에서 만든 것이라 관계(위임이 있고 열려 있다. 소멸 알림은 닫힌 뒤에 오는 게 정상이다)만 본다.
+    거부는 감사한다(내용 없음). 읽지 못하거나 엔진이 못 쓰면 예외를 올린다 — 호출자가 닫는다."""
+    import delegation
+    did = str(src.get("delegation") or "")
+    kind = str(src.get("kind") or "")
+    item = next((x for x in delegation.list_all() if x.get("id") == did), None)
+    reason: Optional[str] = None
+    principal: Optional[str] = None
+    if item is None:
+        reason = "relationship_gone"
+    elif kind != delegation.KIND_GONE and item.get("state") not in delegation.OPEN_STATES:
+        reason = "delegation_closed"
+    else:
+        role = {delegation.KIND_TASK: ("parent", "send"), delegation.KIND_FOLLOWUP: ("parent", "send"),
+                delegation.KIND_REPORTED: ("child", "report")}.get(kind)
+        if role is not None:
+            key = str((item.get(role[0]) or {}).get("key") or "")
+            p = P.agent(key)
+            principal = p.id
+            if not key or not decide(p, "deleg.control", f"deleg:local/{did}", {"role": role[0], "op": role[1]}).allow:
+                reason = "grant_revoked"
+    if reason:
+        audit_op("queue", "denied", principal=principal or "system:queue", did=did or None, scopes=["deleg.control"],
+                 reason=reason, detail={"item": item_id, "kind": kind})
+    return reason
+
+
 # --- 위임 cwd · worktree 기준 = fs.read + fsguard 루트 ---------------------------------------------
 
 

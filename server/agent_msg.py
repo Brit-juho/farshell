@@ -265,7 +265,14 @@ def receive(*, from_host: str, from_label: str, from_session: str, to_session: s
         "status": STATUS_QUEUED,
         "created": time.time(),
     }
-    r = queue_store.add(envelope(msg), {"session": to_session}, source={"agentMsg": mid})
+    source = {"agentMsg": mid}
+    if authz is not None:
+        # 엔진이 허용한 메시지는 입력 직전에 큐가 다시 판정한다(queue_runner) — 보낸 쪽의 신원 단서를 싣는다.
+        from authz import msg_svc
+        clue = msg_svc.queue_authz(authz)
+        if clue:
+            source["authz"] = clue
+    r = queue_store.add(envelope(msg), {"session": to_session}, source=source)
     if not r.get("ok"):
         raise MessageError(r.get("error", "queue_failed"),
                            f"받는 쪽 큐에 넣지 못했습니다: {r.get('reason', '')}", 503)
