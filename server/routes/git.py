@@ -294,7 +294,7 @@ async def git_diff(
 
 # 커밋 필드 구분자. 저자명/제목에 나올 일이 없는 제어문자(Unit Separator)를 쓴다.
 _LOG_FIELD_SEP = "\x1f"
-_LOG_FMT = _LOG_FIELD_SEP.join(("%H", "%h", "%an", "%ad", "%s"))
+_LOG_FMT = _LOG_FIELD_SEP.join(("%H", "%h", "%an", "%ad", "%P", "%D", "%s"))
 
 # 형식이 명백한 hex sha만 git 인자로 넘긴다 — 그 외 문자열(옵션처럼 보이는 값 등)은 거부.
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{4,40}$")
@@ -303,13 +303,27 @@ MAX_LOG_LIMIT = 200
 DEFAULT_LOG_LIMIT = 30
 
 
-def _collect_log(repo: Path, file: str, skip: int, limit: int) -> dict:
+def _list_branches(top: Path) -> list[str]:
+    rc, out = _git(top, "for-each-ref", "--format=%(refname:short)",
+                   "--sort=-committerdate", "refs/heads", "refs/remotes")
+    if rc != 0:
+        return []
+    return [ln for ln in out.split("\n") if ln and not ln.endswith("/HEAD")]
+
+
+def _collect_log(repo: Path, file: str, skip: int, limit: int, ref: str = "") -> dict:
     top = _git_toplevel(repo)
     if top is None:
         return {"repo": False, "commits": [], "has_more": False}
+    # ref 는 실제 존재하는 브랜치 이름과 대조한 값만 git 인자로 넘긴다(옵션 주입 차단).
+    if ref and ref not in _list_branches(top):
+        return {"repo": True, "root": str(top), "commits": [], "has_more": False,
+                "error": tr("알 수 없는 브랜치입니다")}
     # has_more 판정을 위해 하나 더 요청한다.
     args = ["log", f"--pretty=format:{_LOG_FMT}", "--date=iso-strict",
             f"--skip={skip}", f"-n{limit + 1}"]
+    if ref:
+        args.append(ref)
     if file:
         args += ["--", file]
     rc, out = _git(top, *args)
@@ -324,11 +338,13 @@ def _collect_log(repo: Path, file: str, skip: int, limit: int) -> dict:
     commits = []
     for ln in lines:
         parts = ln.split(_LOG_FIELD_SEP)
-        if len(parts) != 5:
+        if len(parts) != 7:
             continue
-        h, short, author, date, subject = parts
+        h, short, author, date, parents, refs, subject = parts
         commits.append({"hash": h, "short": short, "author": author,
-                         "date": date, "subject": subject})
+                         "date": date, "subject": subject,
+                         "parents": parents.split(),
+                         "refs": [r.strip() for r in refs.split(",") if r.strip()]})
     return {"repo": True, "root": str(top), "commits": commits, "has_more": has_more}
 
 
@@ -336,6 +352,7 @@ def _collect_log(repo: Path, file: str, skip: int, limit: int) -> dict:
 async def git_log(
     repo: str = Query(...),
     file: str = Query(""),
+    ref: str = Query(""),
     skip: int = Query(0, ge=0),
     limit: int = Query(DEFAULT_LOG_LIMIT, ge=1, le=MAX_LOG_LIMIT),
 ):
@@ -347,7 +364,25 @@ async def git_log(
         return JSONResponse({"error": "not a directory"}, status_code=404)
     if file and _bad_repo_relpath(file):
         return _denied(tr("잘못된 파일 경로입니다"))
-    return await asyncio.to_thread(_collect_log, p, file, skip, limit)
+    return await asyncio.to_thread(_collect_log, p, file, skip, limit, ref)
+
+
+def _collect_branches(repo: Path) -> dict:
+    top = _git_toplevel(repo)
+    if top is None:
+        return {"repo": False, "branches": []}
+    return {"repo": True, "root": str(top), "branches": _list_branches(top)}
+
+
+@router.get("/api/git/branches")
+async def git_branches(repo: str = Query(...)):
+    try:
+        p = fsguard.resolve_under_roots(repo)
+    except fsguard.FsDenied as e:
+        return _denied(e.reason)
+    if not p.is_dir():
+        return JSONResponse({"error": "not a directory"}, status_code=404)
+    return await asyncio.to_thread(_collect_branches, p)
 
 
 def _collect_commit_files(repo: Path, sha: str) -> list[dict]:

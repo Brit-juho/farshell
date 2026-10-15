@@ -247,15 +247,79 @@ export async function renderGitStatus(container, repo, opts = {}) {
     container.scrollTop = scrollTop;
   }
 
-  _renderCommitLog(repo, logSec, 0, o);
+  _renderCommitLog(repo, logSec, 0, { ...o, branch: d.branch });
   return d;
 }
 
 // --- git log / show (커밋 기록 · 커밋 간 diff, 읽기 전용) -----------------------
 
-function _commitRowEl(repo, c, opts) {
+const _LANE_W = 12;
+const _ROW_H = 24;
+const _LANE_COLORS = ['var(--acc)', 'var(--ok)', 'var(--warn)', '#a371f7', '#f778ba', '#39c5cf'];
+
+// 레인 배정: lanes[i] = i번 줄이 다음에 기다리는 커밋 해시. 페이지를 이어 불러와도 상태를 넘긴다.
+function _layoutGraph(state, c) {
+  const lanes = state.lanes;
+  const before = lanes.slice();
+  let col = lanes.indexOf(c.hash);
+  if (col < 0) { col = lanes.indexOf(null); if (col < 0) col = lanes.length; }
+  const merging = [];
+  lanes.forEach((h, i) => { if (h === c.hash && i !== col) merging.push(i); });
+  lanes[col] = null;
+  merging.forEach(i => { lanes[i] = null; });
+  c.parents.forEach((ph, k) => {
+    if (lanes.indexOf(ph) >= 0) return;
+    let at = k === 0 ? col : lanes.indexOf(null);
+    if (at < 0 || (k > 0 && at === col)) at = lanes.length;
+    lanes[at] = ph;
+  });
+  while (lanes.length && lanes[lanes.length - 1] === null) lanes.pop();
+  return { before, after: lanes.slice(), col, merging, width: Math.max(before.length, lanes.length, col + 1) };
+}
+
+function _graphSvg(g) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', g.width * _LANE_W + 4);
+  svg.setAttribute('height', _ROW_H);
+  svg.setAttribute('class', 'vt-vw-graph');
+  const x = i => i * _LANE_W + _LANE_W / 2 + 2;
+  const mid = _ROW_H / 2;
+  const color = i => _LANE_COLORS[i % _LANE_COLORS.length];
+  const line = (x1, y1, x2, y2, i) => {
+    const l = document.createElementNS(ns, 'path');
+    const m = (y1 + y2) / 2;
+    l.setAttribute('d', x1 === x2 ? `M${x1} ${y1}V${y2}` : `M${x1} ${y1}C${x1} ${m} ${x2} ${m} ${x2} ${y2}`);
+    l.setAttribute('stroke', color(i));
+    l.setAttribute('stroke-width', '1.5');
+    l.setAttribute('fill', 'none');
+    svg.appendChild(l);
+  };
+  g.before.forEach((h, i) => {
+    if (h === null || i === g.col) return;
+    if (g.merging.includes(i)) line(x(i), 0, x(g.col), mid, i);
+    else line(x(i), 0, x(i), _ROW_H, i);
+  });
+  if (g.before[g.col] != null) line(x(g.col), 0, x(g.col), mid, g.col);
+  g.after.forEach((h, i) => {
+    if (h === null || i === g.col) return;
+    if (g.before[i] === h) return; // 위에서 이어진 줄은 이미 그렸다
+    line(x(g.col), mid, x(i), _ROW_H, i);
+  });
+  if (g.after[g.col] != null) line(x(g.col), mid, x(g.col), _ROW_H, g.col);
+  const dot = document.createElementNS(ns, 'circle');
+  dot.setAttribute('cx', x(g.col));
+  dot.setAttribute('cy', mid);
+  dot.setAttribute('r', '3.5');
+  dot.setAttribute('fill', color(g.col));
+  svg.appendChild(dot);
+  return svg;
+}
+
+function _commitRowEl(repo, c, opts, graph) {
   const row = document.createElement('div');
   row.className = 'vt-vw-grow vt-vw-crow';
+  if (graph) row.appendChild(_graphSvg(graph));
   const sha = document.createElement('span');
   sha.className = 'vt-vw-gstat';
   sha.textContent = c.short;
@@ -264,26 +328,62 @@ function _commitRowEl(repo, c, opts) {
   name.textContent = c.subject;
   name.title = `${c.author} · ${c.date}`;
   row.appendChild(sha);
+  (c.refs || []).forEach(r => {
+    const tag = document.createElement('span');
+    tag.className = 'vt-vw-gref';
+    tag.textContent = r.replace('HEAD -> ', '');
+    row.appendChild(tag);
+  });
   row.appendChild(name);
   row.addEventListener('click', () => opts.onCommit(c.hash));
   return row;
+}
+
+async function _buildBranchPicker(repo, container, current, opts) {
+  let list = [];
+  try {
+    list = (await vtFetch(`/api/git/branches?repo=${encodeURIComponent(repo)}`)).branches || [];
+  } catch (_) { return null; }
+  if (!list.length) return null;
+  const sel = document.createElement('select');
+  sel.className = 'vt-vw-gbranch';
+  sel.title = t('브랜치');
+  list.forEach(b => {
+    const o = document.createElement('option');
+    o.value = b;
+    o.textContent = b;
+    sel.appendChild(o);
+  });
+  if (current && list.includes(current)) sel.value = current;
+  sel.addEventListener('change', () => {
+    container._ref = sel.value;
+    _renderCommitLog(repo, container, 0, opts);
+  });
+  return sel;
 }
 
 // skip=0이면 헤더부터 새로 그린다. "더 보기"는 같은 container에 이어 붙인다.
 async function _renderCommitLog(repo, container, skip, opts) {
   if (skip === 0) {
     container.innerHTML = '';
+    container._graph = { lanes: [] };
     const head = document.createElement('div');
     head.className = 'vt-vw-ghead';
     head.textContent = t('커밋 기록');
     container.appendChild(head);
+    const picker = await _buildBranchPicker(repo, container, container._ref || opts.branch, opts);
+    if (picker) {
+      head.appendChild(picker);
+      container._ref = picker.value;
+    }
   }
   const more = container.querySelector('.vt-vw-glog-more');
   if (more) more.remove();
 
   let d;
   try {
-    d = await vtFetch(`/api/git/log?repo=${encodeURIComponent(repo)}&skip=${skip}&limit=20`);
+    const ref = container._ref ? `&ref=${encodeURIComponent(container._ref)}` : '';
+    d = await vtFetch(`/api/git/log?repo=${encodeURIComponent(repo)}&skip=${skip}&limit=20${ref}`);
   } catch (e) {
     const err = document.createElement('div');
     err.className = 'vt-vw-empty';
@@ -295,12 +395,15 @@ async function _renderCommitLog(repo, container, skip, opts) {
     if (skip === 0) {
       const empty = document.createElement('div');
       empty.className = 'vt-vw-empty';
-      empty.textContent = t('커밋이 없습니다.');
+      empty.textContent = d.error || t('커밋이 없습니다.');
       container.appendChild(empty);
     }
     return;
   }
-  d.commits.forEach(c => container.appendChild(_commitRowEl(repo, c, opts)));
+  d.commits.forEach(c => {
+    const g = _layoutGraph(container._graph, c);
+    container.appendChild(_commitRowEl(repo, c, opts, g));
+  });
   if (d.has_more) {
     const btn = document.createElement('button');
     btn.className = 'vt-btn vt-vw-glog-more';
@@ -405,9 +508,13 @@ export async function renderCommitFileDiff(container, repo, sha, file, opts = {}
 }
 
 function _backBtn(label, onClick) {
+  // 상단 고정 줄: 파일 경로 헤더(sticky)가 이 줄 바로 아래에 붙도록 CSS가 top 을 맞춘다.
+  const bar = document.createElement('div');
+  bar.className = 'vt-vw-cbar';
   const back = document.createElement('button');
   back.className = 'vt-btn vt-vw-cback';
   back.textContent = label;
   back.addEventListener('click', onClick);
-  return back;
+  bar.appendChild(back);
+  return bar;
 }

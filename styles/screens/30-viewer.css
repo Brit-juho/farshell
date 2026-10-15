@@ -132,14 +132,14 @@
 .vt-vw-tx{ flex:1 1 auto; padding-right:calc(var(--spacing) * 3); }
 
 /* diff */
-.vt-vw-dfile{ border-bottom:1px solid var(--line); }
+.vt-vw-dfile{ border-bottom:1px solid var(--line); width:max-content; min-width:100%; }
 .vt-vw-dhead{
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  display:flex; min-width:0; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
   background:var(--bar); position:sticky; top:0; z-index:1;
   border-bottom:1px solid var(--line);
 }
 .vt-vw-dpath{
-  flex:1;
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font:600 var(--fs-xs) var(--mono);
 }
 .vt-vw-dstat{ font:600 var(--fs-2xs) var(--mono); flex:0 0 auto; }
@@ -253,7 +253,24 @@
 .vt-vw-glog{ border-top:1px solid var(--line); }
 .vt-vw-crow .vt-vw-gstat{ width:auto; color:var(--sub); }
 .vt-vw-glog .vt-btn{ margin:calc(var(--spacing) * 2) calc(var(--spacing) * 3); align-self:flex-start; }
-.vt-vw-cback{ margin:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3) 0; }
+.vt-vw-cbar{
+  position:sticky; top:0; z-index:2; height:36px; box-sizing:border-box;
+  display:flex; align-items:center; padding:0 calc(var(--spacing) * 3);
+  background:var(--bar); border-bottom:1px solid var(--line);
+}
+.vt-vw-cbar ~ .vt-vw-dfile .vt-vw-dhead{ top:36px; }
+.vt-vw-gbranch{
+  margin-left:calc(var(--spacing) * 2); max-width:60%; font:600 var(--fs-2xs) var(--mono);
+  background:var(--bar); color:var(--fg); border:1px solid var(--line); border-radius:6px;
+  padding:2px calc(var(--spacing) * 1.5);
+}
+.vt-vw-graph{ flex:0 0 auto; display:block; }
+.vt-vw-crow{ gap:calc(var(--spacing) * 1.5); padding-top:0; padding-bottom:0; min-height:24px; }
+.vt-vw-gref{
+  flex:0 0 auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:600 var(--fs-2xs) var(--mono); padding:0 5px; border-radius:4px;
+  color:var(--acc); border:1px solid color-mix(in srgb, var(--acc) 45%, transparent);
+}
 .vt-vw-cmeta{ padding:calc(var(--spacing) * 3); border-bottom:1px solid var(--line); }
 .vt-vw-cmeta-subject{ font:600 var(--fs-sm) var(--ui); margin-bottom:calc(var(--spacing) * 1); }
 .vt-vw-cmeta-body{

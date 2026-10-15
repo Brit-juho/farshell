@@ -101,7 +101,8 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/git/stage` | Stage files (JSON: repo, files). Response is the updated status |
 | POST | `/api/git/unstage` | Unstage — only reverts the index, leaves the working tree untouched (JSON: repo, files) |
 | POST | `/api/git/commit` | Commit staged changes (JSON: repo, message). Returns 400 if nothing is staged |
-| GET | `/api/git/log?repo=X[&file=Y]` | Recent commit list |
+| GET | `/api/git/log?repo=X[&file=Y][&ref=B]` | Commit list with `parents`/`refs` for the graph; `ref` must be an existing branch |
+| GET | `/api/git/branches?repo=X` | Local and remote branch names (read-only) |
 | GET | `/api/git/show?repo=X&sha=Y` | Diff of one commit |
 
 ## Git accounts & binding (elevated session required except GET)
