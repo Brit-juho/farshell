@@ -29,7 +29,8 @@ fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬�
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # 다른 맥의 FarShell 페어링
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
-fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session)
+fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # 승인함·권한·감사 조회 (읽기 전용, 아래 참고)
+fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (저장한 자격증명은 push에 사용되지 않음)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
@@ -134,6 +135,24 @@ fsh host allow-agent <id>               # 받는 맥에서 — allow-control도 
 공유 세션용 MCP 도구는 `list_shared_sessions`, `read_session`, `send_to_session`입니다.
 사용자가 웹에서 공유한 세션만 접근할 수 있으며, 첫 접근은 브라우저의 사용자 승인이
 필요합니다. 읽기·쓰기 권한은 따로 승인합니다. 자세히: `fsh help agent-state`.
+
+## 승인함·권한·감사 (`fsh authz`)
+
+`fsh authz` 는 실행 중인 서버에 unix socket 으로 묻습니다(서버가 커널이 알려 주는 정보로 호출자를 알아서 토큰이 필요 없습니다). tmux 밖에서는
+`cli` 호출자로서 **읽기만** 할 수 있고, 에이전트 pane 안에서는 그 에이전트로 취급되어 조회가 거절됩니다. **터미널에서는 승인도 회수도 하지 않습니다.**
+
+```bash
+fsh authz whoami                  # 서버가 보는 나, 유효 scope, 맞는 프리셋 (--json)
+fsh authz requests                # 승인 대기 요청(id·종류·누가·무엇을·경과). 승인은 웹/폰 승인함에서
+fsh authz grants [--kind share|msg|peer|deleg|generic] [--subject S] [--resource R]   # 모든 권한: 프리셋·만료·남은 횟수
+fsh authz audit [--since 10m|2h|1d|<epoch>] [--principal P] [--resource R] [--limit N] [--follow] [--json]
+fsh authz revoke <grant id>       # 로그인한 사람이 웹/폰 권한 화면에서 회수한다고 안내만 합니다 (종료 코드 3)
+fsh authz panic                   # 재인증한 사람이 웹/폰에서 한다고 안내만 합니다 (종료 코드 3)
+```
+
+`audit` 는 해시 체인 상태(`정상`/`깨짐`)를 보여 주고 거부 기록(`denials`)을 체인과 합쳐 보입니다. 에이전트는 MCP 도구 `whoami`,
+`request_access {resource, scopes, reason?, ttl?}`, `list_my_grants` 로 세션 안에서 같은 일을 합니다. `request_access` 는 항상
+«사용자 승인 대기»로 돌아옵니다. API와 규칙: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
 ## 프롬프트 큐 (`fsh queue`)
 

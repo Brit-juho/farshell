@@ -342,6 +342,7 @@ _t_en_lookup() {
     '사용 중 (서버 이미 실행 중일 수 있음)') _T_OUT='in use (the server may already be running)' ;;
     '사용: prefix + {key}  (default prefix: Ctrl+b)') _T_OUT='Use: prefix + {key}  (default prefix: Ctrl+b)' ;;
     '사용법:') _T_OUT='Usage:' ;;
+    '사용법: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>') _T_OUT='Usage: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>' ;;
     '사용법: fsh clauth [status|which]') _T_OUT='Usage: fsh clauth [status|which]' ;;
     '사용법: fsh delegate [ls|close <id>]') _T_OUT='Usage: fsh delegate [ls|close <id>]' ;;
     '사용법: fsh device [list|rename <id> <별명>|revoke <id>|prune]') _T_OUT='Usage: fsh device [list|rename <id> <name>|revoke <id>|prune]' ;;

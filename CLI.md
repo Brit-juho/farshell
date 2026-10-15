@@ -34,7 +34,8 @@ fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # pair another Mac's FarShell
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
 fsh delegate [ls|close <id>]  # agent delegations (sub-sessions); close keeps the session
-fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session)
+fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # approval inbox, grants and audit (read-only; see below)
+fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
@@ -150,6 +151,24 @@ read it (read-only share) or also type one line into it (read-write share). The 
 user's approval in the browser (a human login — the machine token cannot approve); agents cannot create
 or close sessions. Details: `docs/ref/terminal.md`, `fsh help agent-state`.
 The receiving agent sees a one-line header saying the text came from another agent.
+
+## Approvals, grants and audit (`fsh authz`)
+
+`fsh authz` asks the running server over the unix socket (the server knows the caller from the kernel, no token). Outside tmux you are a
+`cli` caller and may **read**; inside an agent's pane you are that agent and the reads are refused. **The terminal never approves or revokes.**
+
+```bash
+fsh authz whoami                  # who the server thinks you are, effective scopes, matching presets (--json)
+fsh authz requests                # pending approval requests (id, kind, who, what, age); approve in the web/phone inbox
+fsh authz grants [--kind share|msg|peer|deleg|generic] [--subject S] [--resource R]   # every grant with preset, expiry, uses left
+fsh authz audit [--since 10m|2h|1d|<epoch>] [--principal P] [--resource R] [--limit N] [--follow] [--json]
+fsh authz revoke <grant id>       # prints that a signed-in person revokes it in the web/phone permissions screen (exit 3)
+fsh authz panic                   # prints that an elevated person does this in the web/phone screen (exit 3)
+```
+
+`audit` shows the hash chain state (`정상`/`깨짐`) and merges the denial log (`denials`) with the chain. For agents, the MCP tools
+`whoami`, `request_access {resource, scopes, reason?, ttl?}` and `list_my_grants` do the same from inside the session; `request_access` always
+returns «waiting for the user's approval». API and rules: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
 ## Prompt Queue (`fsh queue`)
 
