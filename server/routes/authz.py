@@ -80,6 +80,17 @@ class RevokeResponse(_Loose):
     kind: str
 
 
+class LeasesAdminResponse(_Loose):
+    leases: list[dict]
+    enforced: bool
+
+
+class LeaseRevokeResponse(_Loose):
+    ok: bool
+    id: str
+    released: int
+
+
 class AuditResponse(_Loose):
     entries: list[dict]
     chain: str
@@ -141,6 +152,26 @@ async def shadow_log(limit: int = Query(100, ge=1, le=1000)):
     records = await asyncio.to_thread(shadow.tail, limit)
     return {"enabled": shadow.enabled(), "source": shadow.source(), "stats": shadow.STATS.as_dict(),
             "summary": shadow.summary(records), "records": records}
+
+
+# --- 사람 전용: 폴더 lease 목록 · 회수 --------------------------------------------------------------
+
+
+@human_router.get("/api/authz/leases", response_model=LeasesAdminResponse)
+async def list_leases_admin():
+    """모든 보유자의 lease(보유자는 닉네임뿐). 사람은 lease 에 막히지 않지만, 남의 lease 경로에서 쓰면 감사와 알림이 남는다."""
+    from authz import leases
+    return {"leases": await asyncio.to_thread(leases.list_for, P.human("-"), everyone=True), "enforced": leases.enforced()}
+
+
+@human_router.delete("/api/authz/leases/{lease_id}", response_model=LeaseRevokeResponse)
+async def revoke_lease_admin(lease_id: str, request: Request):
+    """관리자 회수 — 파생(상속) lease 도 함께 사라진다."""
+    from authz import leases
+    try:
+        return await asyncio.to_thread(leases.revoke_admin, _actor(request) or P.human("-"), lease_id)
+    except ShareError as e:
+        return _err(e)
 
 
 # --- 읽기: 승인함 · 권한 · 감사 (사람 또는 CLI) ---------------------------------------------------------

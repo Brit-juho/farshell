@@ -5755,6 +5755,552 @@
    "error": null
   }
  },
+ "authz_api.api_authz_leases.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_leases.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_leases.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_leases.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/leases",
+  "path": "/api/authz/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "authz_api.api_authz_leases_X.delete.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/leases/{lease_id}",
+  "path": "/api/authz/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
  "authz_api.api_authz_my_grants.get.agent_foreign.none": {
   "group": "authz_api",
   "caller": "agent_foreign",
@@ -15284,6 +15830,1371 @@
   "method": "GET",
   "route": "/api/hosts/self",
   "path": "/api/hosts/self",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.get.agent_foreign.none": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.agent_foreign.password": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.agent_foreign.token": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.agent_verified.none": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.get.agent_verified.password": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.get.agent_verified.token": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.get.machine.none": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.machine.password": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.machine.token": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.none.none": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.none.password": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.get.none.token": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.get.peer_control.none": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.peer_control.password": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.get.peer_control.token": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.get.session.none": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.session.password": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.get.session.token": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.get.session_elev.none": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.get.session_elev.password": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.get.session_elev.token": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases.post.agent_foreign.none": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.agent_foreign.password": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.agent_foreign.token": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.agent_verified.none": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "outside_roots"
+  }
+ },
+ "leases.api_leases.post.agent_verified.password": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "outside_roots"
+  }
+ },
+ "leases.api_leases.post.agent_verified.token": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "outside_roots"
+  }
+ },
+ "leases.api_leases.post.machine.none": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.machine.password": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.machine.token": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.none.none": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.none.password": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.post.none.token": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.post.peer_control.none": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.peer_control.password": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.post.peer_control.token": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases.post.session.none": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.session.password": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "outside_roots"
+  }
+ },
+ "leases.api_leases.post.session.token": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "outside_roots"
+  }
+ },
+ "leases.api_leases.post.session_elev.none": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases.post.session_elev.password": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "outside_roots"
+  }
+ },
+ "leases.api_leases.post.session_elev.token": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases",
+  "path": "/api/leases",
+  "expected": {
+   "status": 403,
+   "error": "outside_roots"
+  }
+ },
+ "leases.api_leases_X.delete.agent_foreign.none": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.agent_foreign.password": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.agent_foreign.token": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.agent_verified.none": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X.delete.agent_verified.password": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X.delete.agent_verified.token": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X.delete.machine.none": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.machine.password": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.machine.token": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.none.none": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.none.password": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X.delete.none.token": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X.delete.peer_control.none": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.peer_control.password": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X.delete.peer_control.token": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X.delete.session.none": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.session.password": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X.delete.session.token": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X.delete.session_elev.none": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X.delete.session_elev.password": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X.delete.session_elev.token": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/leases/{lease_id}",
+  "path": "/api/leases/ls-none",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X_renew.post.agent_foreign.none": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.agent_foreign.password": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.agent_foreign.token": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.agent_verified.none": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X_renew.post.agent_verified.password": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X_renew.post.agent_verified.token": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X_renew.post.machine.none": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.machine.password": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.machine.token": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.none.none": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.none.password": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X_renew.post.none.token": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X_renew.post.peer_control.none": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.peer_control.password": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X_renew.post.peer_control.token": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_X_renew.post.session.none": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.session.password": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X_renew.post.session.token": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X_renew.post.session_elev.none": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_X_renew.post.session_elev.password": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_X_renew.post.session_elev.token": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/{lease_id}/renew",
+  "path": "/api/leases/ls-none/renew",
+  "expected": {
+   "status": 404,
+   "error": "not_found"
+  }
+ },
+ "leases.api_leases_check.post.agent_foreign.none": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.agent_foreign.password": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.agent_foreign.token": {
+  "group": "leases",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.agent_verified.none": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases_check.post.agent_verified.password": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases_check.post.agent_verified.token": {
+  "group": "leases",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases_check.post.machine.none": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.machine.password": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.machine.token": {
+  "group": "leases",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.none.none": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.none.password": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_check.post.none.token": {
+  "group": "leases",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_check.post.peer_control.none": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.peer_control.password": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_check.post.peer_control.token": {
+  "group": "leases",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "leases.api_leases_check.post.session.none": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.session.password": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases_check.post.session.token": {
+  "group": "leases",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases_check.post.session_elev.none": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "leases.api_leases_check.post.session_elev.password": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "leases.api_leases_check.post.session_elev.token": {
+  "group": "leases",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/leases/check",
+  "path": "/api/leases/check",
   "expected": {
    "status": 200,
    "error": null

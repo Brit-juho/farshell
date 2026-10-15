@@ -131,6 +131,7 @@ _t_en_lookup() {
     'iTerm2 재시작 후 Profiles 메뉴에서 '\''fsh (FarShell)'\'' 선택') _T_OUT='Restart iTerm2, then pick '\''fsh (FarShell)'\'' in the Profiles menu' ;;
     'install-profiles 실패 — '\''fsh install-profiles'\'' 수동 실행 가능') _T_OUT='install-profiles failed - you can run '\''fsh install-profiles'\'' manually' ;;
     'lan 범위: 같은 네트워크에서만 접속 가능 (터널 없음)') _T_OUT='lan scope: reachable from the same network only (no tunnel)' ;;
+    'lease guard') _T_OUT='lease guard' ;;
     'localhost 범위: 이 맥에서만 접속 가능 (터널 없음)') _T_OUT='localhost scope: reachable from this Mac only (no tunnel)' ;;
     'localhost:{port} 에 응답하는 서비스가 없습니다 — 터널은 띄우지만 앱을 먼저 켜세요') _T_OUT='Nothing is responding on localhost:{port}. The tunnel will start anyway, but start your app first' ;;
     'localhost:{port} 터널 시작 중...') _T_OUT='Starting tunnel for localhost:{port}...' ;;
@@ -608,6 +609,7 @@ _t_en_lookup() {
     '포트 범위(1-65535)를 벗어났습니다: {port}') _T_OUT='Port out of range (1-65535): {port}' ;;
     '포트는 숫자여야 합니다: '\''{port}'\''') _T_OUT='Port must be a number: '\''{port}'\''' ;;
     '폰 접속') _T_OUT='Phone access' ;;
+    '폴더 lease') _T_OUT='folder lease' ;;
     '프런트엔드 빌드 완료 → frontend/dist/') _T_OUT='Frontend built → frontend/dist/' ;;
     '프런트엔드 빌드 중... (Vite + Tailwind, node {version})') _T_OUT='Building the frontend... (Vite + Tailwind, node {version})' ;;
     '프로필 {np}개, {age}초 전 갱신') _T_OUT='{np} profile(s), updated {age}s ago' ;;

@@ -55,12 +55,16 @@ def _expected_change(case, world, matrix):
         if "reached" in old:
             want["reached"] = False
         return H1, want
-    if case.caller in SESSION_CALLERS and case.mode == "token" and case.method != "WS" and (
-            old.get("status") == 200 or old.get("error") == "password_required"):   # 승격 필요 라우트(panic)는 사람 확인 뒤에 password_required
+    if case.caller in SESSION_CALLERS and case.mode == "token" and case.method != "WS":
         # 사람 전용 라우트인지는 기록이 말해 준다: 같은 라우트에서 기계 토큰이 human_session_required 로 거절됐다.
         twin_row = matrix.get(case.id.replace(f".{case.caller}.", ".machine."))
-        if twin_row and twin_row["expected"].get("error") == "human_session_required":
+        twin_err = (twin_row or {}).get("expected", {}).get("error")
+        if (old.get("status") == 200 or old.get("error") in ("password_required", "not_found")) \
+                and twin_err == "human_session_required":       # 승격 필요 라우트(panic)는 사람 확인 뒤에 password_required, 없는 대상은 not_found(사람 확인은 통과한 것)
             return H14, {"status": 403, "error": "human_session_required"}
+        if case.group == "leases" and twin_err == "identity_unverified" and old.get("error") != "identity_unverified":
+            # lease 라우트는 사람 전용이 아니다 — 사람이 아니게 된 쿠키는 호출자를 확인할 수 없는 기계 토큰과 같은 취급(identity_unverified).
+            return H14, {"status": 403, "error": "identity_unverified"}
     return None
 
 
