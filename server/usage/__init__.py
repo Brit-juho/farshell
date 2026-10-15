@@ -16,7 +16,7 @@ import os
 from typing import Optional
 
 from .clauth import ClauthProvider, feed_path
-from .codex import CodexProvider
+from .codex import CodexProvider, expired_profile as codex_expired_profile
 from .counter_jsonl import CounterJsonlProvider
 from .null import NullProvider
 from i18n import tr
@@ -100,6 +100,9 @@ def codex_snapshot() -> Optional[dict]:
 def merged_capability() -> dict:
     caps = [capability(), codex_capability()]
     available = [c for c in caps if c.get("available")]
+    # 코덱스 토큰이 만료됐어도 "있는데 재인증이 필요하다"는 카드를 보여야 한다.
+    if caps[1].get("reason") == "expired":
+        available.append({"profiles": 1})
     if not available:
         return capability()  # 대표 사유는 기존 동작과 같게 clauth 것을 그대로
     return {"available": True, "profiles": sum(c.get("profiles", 0) for c in available)}
@@ -112,6 +115,8 @@ def merged_snapshot() -> Optional[dict]:
     codex_profile = (codex_snap or {}).get("profile")
     if codex_profile:
         profiles.append(codex_profile)
+    elif codex_capability().get("reason") == "expired":
+        profiles.append(codex_expired_profile())
     if not profiles:
         return None
     return {

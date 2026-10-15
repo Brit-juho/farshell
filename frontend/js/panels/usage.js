@@ -17,6 +17,7 @@ import { emptyState } from '../ui/empty.js';
 import { vtFetch } from '../core/api.js';
 import { paintRailBadge } from './usage-badge.js';
 import { t } from '../core/i18n.js';
+import { confirmDialog } from '../core/dialog.js';
 
 const PANEL_ID = 'vt-usage';
 const POLL_MS = 30000;   // 피드 자체가 90초 주기라 그보다 자주 볼 이유가 없다
@@ -70,6 +71,46 @@ function renderWindow(w) {
   return row;
 }
 
+// 재인증은 인터랙티브 로그인이라 서버가 대신 못 한다 — 새 터미널 세션을 열어 거기서 로그인
+// 명령을 실행한다. 서버에 새 엔드포인트를 만들지 않고 기존 세션 생성 + 키 입력만 쓴다.
+// 프로필 이름은 셸에 들어가므로 허용 문자만 통과시킨다.
+const _PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+export function reauthCommand(p) {
+  if (p.provider === 'codex') return 'codex login';
+  if (!_PROFILE_RE.test(p.name || '')) return null;
+  return `clauth login ${p.name}`;
+}
+
+function _waitForPtyOpen(id, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    (function poll() {
+      const h = window.getSession?.(id)?.wsHandle;
+      if (h && h.readyState === WebSocket.OPEN) { resolve(true); return; }
+      if (Date.now() - start > timeoutMs) { resolve(false); return; }
+      setTimeout(poll, 100);
+    })();
+  });
+}
+
+async function startReauth(p) {
+  const cmd = reauthCommand(p);
+  if (!cmd) { showToast(t('이 계정은 재인증 명령을 만들 수 없습니다')); return; }
+  if (typeof window.createTmuxSession !== 'function' || typeof window.sendToPty !== 'function') {
+    showToast(t('터미널을 열 수 없습니다')); return;
+  }
+  if (!await confirmDialog(t('새 터미널 세션을 열어 `{cmd}` 를 실행합니다. 열리는 안내를 따라 로그인하세요.', { cmd }),
+    { title: t('재인증'), okLabel: t('열기') })) return;
+  const id = await window.createTmuxSession();
+  if (!id) return;
+  if (!await _waitForPtyOpen(id)) {
+    showToast(t('새 세션 연결이 늦어 명령을 보내지 못했습니다 — 직접 입력하세요: {cmd}', { cmd }));
+    return;
+  }
+  window.sendToPty(id, `${cmd}\n`);
+}
+
 function renderProfile(p, activeName) {
   const card = el('div', 'vt-usage-card');
   if (p.name === activeName || p.active) card.classList.add('active');
@@ -97,27 +138,41 @@ function renderProfile(p, activeName) {
 
   // 경고는 게이지보다 **위**에 온다 — 재인증이 필요한데 숫자를 먼저 보여주면
   // 그 숫자가 신뢰할 수 있는 값이라고 착각하게 된다.
-  if (!p.auth_ok) {
-    const warn = el('div', 'vt-usage-warn', t('재인증 필요 ({status})', { status: p.auth_status }));
-    card.appendChild(warn);
-  } else if (p.fetch_status === 'AuthExpired') {
+  const needsAuth = !p.auth_ok || p.fetch_status === 'AuthExpired';
+  if (needsAuth) {
     // terminal 상태다 — 자동 재시도로 감추지 않는다(계획서 §4).
-    card.appendChild(el('div', 'vt-usage-warn', t('조치 필요 — 인증이 만료됐습니다')));
+    const warn = el('div', 'vt-usage-warn');
+    warn.appendChild(el('span', 'vt-usage-warn-text', !p.auth_ok
+      ? t('재인증 필요 ({status})', { status: p.auth_status })
+      : t('조치 필요 — 인증이 만료됐습니다')));
+    if (reauthCommand(p)) {
+      const btn = el('button', 'vt-btn sm', t('재인증'));
+      btn.type = 'button';
+      btn.title = t('새 터미널에서 로그인 명령을 실행합니다');
+      btn.addEventListener('click', () => startReauth(p));
+      warn.appendChild(btn);
+    }
+    card.appendChild(warn);
   }
 
   if (!p.windows || p.windows.length === 0) {
     // provider:"generic" 등은 바를 그릴 데이터가 없다. 빈 바를 0%로 그리면
-    // "안 쓰고 있다"는 거짓 정보가 된다.
-    card.appendChild(el('div', 'vt-usage-empty', t('사용량 정보 없음')));
+    // "안 쓰고 있다"는 거짓 정보가 된다. 카드는 머리 줄 하나로 줄인다 — 빈 카드가
+    // 데이터 있는 카드만큼 자리를 차지하면 목록이 쓸데없이 길어진다.
+    card.classList.add('compact');
+    head.appendChild(el('span', 'vt-usage-empty', needsAuth ? '' : t('사용량 정보 없음')));
   } else {
     for (const w of p.windows) card.appendChild(renderWindow(w));
   }
 
   if (p.fallback && p.fallback.position != null) {
     const fb = el('div', 'vt-usage-fallback');
+    // clauth 자동 전환 설정을 그대로 옮긴 것이다 — 순서·기준 %·켜짐 여부.
+    const args = { pos: p.fallback.position, threshold: p.fallback.threshold ?? '?' };
     fb.textContent = p.fallback.armed
-      ? t('폴백 #{pos} · {threshold}% · 대기', { pos: p.fallback.position, threshold: p.fallback.threshold ?? '?' })
-      : t('폴백 #{pos} · {threshold}% · 해제', { pos: p.fallback.position, threshold: p.fallback.threshold ?? '?' });
+      ? t('자동 전환 {pos}순위 · 기준 {threshold}%', args)
+      : t('자동 전환 꺼짐 ({pos}순위 · 기준 {threshold}%)', args);
+    fb.title = t('clauth 자동 전환 설정입니다. 켜져 있을 때만 동작합니다.');
     fb.classList.toggle('armed', !!p.fallback.armed);
     card.appendChild(fb);
   }

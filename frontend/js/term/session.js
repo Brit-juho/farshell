@@ -164,7 +164,7 @@ export async function attachTmux(tmuxName, { place = 'view' } = {}) {
   return data.id;
 }
 
-// export — showAddMenu의 "tmux 세션" 메뉴 항목이 부른다.
+// export — showAddMenu의 "tmux 세션" 메뉴 항목이 부른다. 만든 세션 id를 돌려준다(사용량 재인증 등).
 export async function createTmuxSession() {
   // "맥에서도 열기"가 켜져 있으면 서버가 메인 터미널(VT_TERMINAL) 창도 함께 연다.
   // E2: DOM이 아니라 설정 스토어가 이 값의 주인이다.
@@ -181,6 +181,7 @@ export async function createTmuxSession() {
   // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
   const s = getSession(data.id);
   if (s) s.tmuxName = data.tmux_session;
+  return data.id;
 }
 
 // showOnboarding()(boot.js)이 만드는 온보딩 화면의 버튼은 innerHTML 문자열

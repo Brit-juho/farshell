@@ -102,6 +102,37 @@ def _window(raw: Optional[dict], label: str, wid: str, now: float) -> Optional[d
     }
 
 
+def expired_profile() -> dict:
+    """토큰이 만료됐을 때 화면에 띄울 빈 카드. 카드를 감추면 "코덱스가 없다"로 읽혀서,
+    재인증이 필요하다는 사실을 보여 준다(화면이 재인증 버튼을 그린다)."""
+    return {
+        "name": "codex", "active": True, "tier": "", "provider": "codex",
+        "auth_ok": False, "auth_status": "expired", "fetch_status": "AuthExpired",
+        "has_live_session": False, "rolling_token": False, "stale": False,
+        "windows": [], "fallback": None,
+    }
+
+
+def _span_label(raw: Optional[dict], fallback: str) -> tuple[str, str]:
+    """창 길이(`limit_window_seconds`)로 이름을 붙인다 → (label, id).
+
+    primary/secondary라는 **자리**는 요금제마다 다른 창이 들어온다 — 실측(2026-10-15, pro):
+    primary_window가 604800초(7일)이고 secondary_window는 없다. 자리 이름으로 "5h"라고
+    박아 두면 주간 한도가 5시간 한도로 표시된다. 길이를 모르면 자리 기본 이름을 쓴다.
+    """
+    sec = _num(raw.get("limit_window_seconds")) if isinstance(raw, dict) else None
+    if not sec or sec <= 0:
+        return fallback, ("session" if fallback == "5h" else "weekly")
+    sec = int(sec)
+    if sec == 7 * 86400:
+        return "weekly", "weekly"
+    if sec % 86400 == 0:
+        return f"{sec // 86400}d", f"window:{sec}"
+    if sec % 3600 == 0:
+        return f"{sec // 3600}h", "session" if sec == 5 * 3600 else f"window:{sec}"
+    return f"{sec // 60}m", f"window:{sec}"
+
+
 class CodexProvider:
     name = "codex"
 
@@ -187,12 +218,12 @@ class CodexProvider:
         windows = []
         rl = data.get("rate_limit")
         if isinstance(rl, dict):
-            w = _window(rl.get("primary_window"), "5h", "session", now)
-            if w:
-                windows.append(w)
-            w = _window(rl.get("secondary_window"), "weekly", "weekly", now)
-            if w:
-                windows.append(w)
+            for key, fallback in (("primary_window", "5h"), ("secondary_window", "weekly")):
+                raw_w = rl.get(key)
+                label, wid = _span_label(raw_w, fallback)
+                w = _window(raw_w, label, wid, now)
+                if w:
+                    windows.append(w)
         crl = data.get("code_review_rate_limit")
         if isinstance(crl, dict):
             w = _window(crl.get("primary_window"), "code review", "code_review", now)

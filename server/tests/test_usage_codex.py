@@ -112,9 +112,10 @@ def test_successful_response_normalizes_windows(tmp_path, monkeypatch):
     profile = snap["profile"]
     assert profile["tier"] == "pro"
     labels = {w["label"]: w["pct"] for w in profile["windows"]}
-    assert labels["5h"] == 55.0
+    # primary_window의 길이가 604800초(7일)다 — 자리 이름("5h")이 아니라 창 길이로 이름 붙인다.
+    assert labels["weekly"] == 55.0
+    assert "5h" not in labels, "7일짜리 창을 5h로 부르지 않는다"
     assert labels["GPT-5.3-Codex-Spark"] == 0.0
-    assert "weekly" not in labels, "secondary_window가 None이면 만들지 않는다"
 
 
 def test_sensitive_fields_never_leak_into_the_snapshot(tmp_path, monkeypatch):
@@ -307,3 +308,32 @@ def test_concurrent_callers_share_one_fetch(tmp_path, monkeypatch):
     for t in threads:
         t.join()
     assert calls["n"] == 1
+
+
+def test_window_labels_follow_the_window_length():
+    from usage.codex import _span_label
+    assert _span_label({"limit_window_seconds": 18000}, "weekly") == ("5h", "session")
+    assert _span_label({"limit_window_seconds": 604800}, "5h") == ("weekly", "weekly")
+    assert _span_label({"limit_window_seconds": 86400}, "5h") == ("1d", "window:86400")
+    # 길이를 모르면 자리 기본 이름
+    assert _span_label({}, "5h") == ("5h", "session")
+    assert _span_label(None, "weekly") == ("weekly", "weekly")
+
+
+def test_merged_snapshot_shows_an_expired_codex_card(tmp_path, monkeypatch):
+    """토큰이 만료되면 카드를 감추지 않고 재인증이 필요하다는 카드를 보여 준다."""
+    import usage
+    _auth_file(tmp_path, monkeypatch)
+
+    def raise_401(req, timeout):
+        raise HTTPError(req.full_url, 401, "unauthorized", {}, io.BytesIO(b""))
+    monkeypatch.setattr("usage.codex.urlopen", raise_401)
+    usage._reset_for_tests()
+    monkeypatch.setenv("VT_USAGE_PROVIDER", "auto")
+    monkeypatch.setattr(usage, "snapshot", lambda: None)
+    monkeypatch.setattr(usage, "capability", lambda: {"available": False, "provider": "clauth", "profiles": 0, "reason": "no-feed"})
+
+    snap = usage.merged_snapshot()
+    card = [p for p in snap["profiles"] if p["name"] == "codex"][0]
+    assert card["auth_ok"] is False and card["auth_status"] == "expired" and card["windows"] == []
+    assert usage.merged_capability()["available"] is True

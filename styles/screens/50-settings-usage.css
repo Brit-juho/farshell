@@ -535,23 +535,29 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-usage-tier, .vt-usage-chip { }
 .vt-usage-live { margin-left:auto; font:500 var(--fs-xs) var(--ui); color:var(--color-st-working); }
 .vt-usage-win { display:flex; align-items:center; gap:calc(var(--spacing) * 1); margin-top:6px; }
-.vt-usage-label { width:3ch; font:500 var(--fs-xs) var(--mono); color:var(--sub); }
+.vt-usage-label { flex:0 0 auto; min-width:7ch; font:500 var(--fs-xs) var(--mono); color:var(--sub); white-space:nowrap; }
 .vt-usage-track { flex:1; height:4px; background:var(--menu-hover); border-radius:var(--radius-full); overflow:hidden; }
 .vt-usage-fill { height:100%; border-radius:var(--radius-full); transition:width .3s var(--ease-out-quint, ease); }
 .vt-usage-pct { width:4ch; text-align:right; font:500 var(--fs-xs) var(--mono); color:var(--txt); }
 .vt-usage-reset { min-width:9ch; text-align:right; font:400 var(--fs-xs) var(--ui); color:var(--sub); }
 .vt-usage-warn {
+  display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2);
   margin-bottom:calc(var(--spacing) * 1); padding:4px 8px; border-radius:var(--radius-sm);
   background:color-mix(in oklab, var(--color-st-error) 15%, transparent);
   color:var(--color-st-error); font:500 var(--fs-xs) var(--ui);
 }
 .vt-usage-empty, .vt-usage-none { }
+/* 데이터가 없는 카드(generic 계정 등)는 머리 줄 하나로 — 안내 문구는 오른쪽 끝에 조용히. */
+.vt-usage-card.compact .vt-usage-head { margin-bottom:0; }
+.vt-usage-card.compact .vt-usage-empty { margin-left:auto; padding:0; text-align:right; color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
+.vt-usage-card.compact .vt-usage-live { margin-left:0; }
+.vt-usage-warn .vt-btn { flex:0 0 auto; }
 .vt-usage-fallback { margin-top:calc(var(--spacing) * 1); font:400 var(--fs-xs) var(--ui); color:var(--sub); }
 .vt-usage-fallback.armed { color:var(--color-st-waiting); }
 @media (max-width: 720px) {
   /* compact에서는 리셋 시각을 다음 줄로 — 한 줄에 넣으면 바가 짓눌린다 */
   .vt-usage-win { flex-wrap:wrap; }
-  .vt-usage-reset { width:100%; text-align:left; padding-left:calc(3ch + var(--spacing)); }
+  .vt-usage-reset { width:100%; text-align:left; padding-left:calc(7ch + var(--spacing)); }
 }
 
 /* ── N41 누적형 사용량(로컬 LLM 등, 한도 없음) ────────────────────────────
