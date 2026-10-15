@@ -112,7 +112,9 @@
 .vt-vw-size{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); flex:0 0 auto; }
 
 /* 코드 본문 — 가로 스크롤은 이 안에서만. 페이지 전체가 밀리면 안 된다. */
-.vt-vw-code{ font:400 var(--fs-xs)/1.55 var(--mono); padding:calc(var(--spacing) * 1.5) 0; }
+/* width:max-content — 줄이 화면 폭에 묶이면 가로로 스크롤했을 때 줄 hover 강조가 첫 화면
+   폭에서 끊긴다(diff의 .vt-vw-dfile과 같은 문제). 가장 긴 줄에 맞추고 짧을 땐 100%. */
+.vt-vw-code{ font:400 var(--fs-xs)/1.55 var(--mono); padding:calc(var(--spacing) * 1.5) 0; width:max-content; min-width:100%; box-sizing:border-box; }
 .vt-vw-cl,.vt-vw-dl{ display:flex; align-items:flex-start; white-space:pre; }
 .vt-vw-cl:hover{ background:var(--menu-hover); }
 .vt-vw-no{
@@ -904,6 +906,9 @@ body.vt-resizing #terminal-container{ transition:none; }
   margin-bottom:calc(var(--spacing) * 1);
 }
 .vt-qo-preview-pane .vt-qo-preview-line{ white-space:pre; }
+/* 미리보기의 모든 줄이 같은 폭(가장 긴 줄, 짧을 땐 칸 폭)이 되게 한 열로 깐다 — 안 그러면
+   일치한 줄(.match)의 강조색이 가로 스크롤하면 첫 화면 폭에서 끊긴다. */
+.vt-qo-preview-pane{ display:grid; grid-template-columns:minmax(max-content, 1fr); align-content:start; }
 .vt-qo-preview-pane .vt-qo-preview-line.match{ color:var(--txt); background:color-mix(in srgb, var(--acc) 16%, transparent); }
 @media (max-width:899px){
   .vt-qo-preview-pane{ display:none; }
