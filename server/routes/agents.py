@@ -188,6 +188,12 @@ async def _agents_loop(kick: asyncio.Event) -> None:
         except Exception as e:  # noqa: BLE001 — 한 번 실패해도 다음 주기에 다시 본다
             logger.debug(f"에이전트 감지 실패: {e}")
             continue
+        try:
+            # 서버가 모르는 세션이 질문을 띄우고 있으면 대기로 되살린다(재시작·훅 유실 복구).
+            agent_status.recover_from_screens(
+                {n: (v or {}).get("agent") if isinstance(v, dict) else None for n, v in cur.items()})
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"화면 복구 실패: {e}")
         if cur == _agents_last:
             continue
         _agents_last = cur

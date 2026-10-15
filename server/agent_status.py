@@ -66,7 +66,7 @@ import logging
 import os
 import re
 import time
-from typing import Optional
+from typing import Callable, Optional
 from i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -203,6 +203,77 @@ def _sid(payload: dict) -> str:
     return payload.get("session_id") or payload.get("transcript_path", "default")
 
 
+# ── 만료 직전 화면 확인 ──────────────────────────────────────────────────────
+# 훅은 누락될 수 있어서 TTL로 "유실됐겠지"를 가정한다. 그런데 TTL만으로 내리면 **사람이 답을 안 하고
+# 있을 뿐인 질문**이 2분 뒤 working, 15분 뒤 idle로 바뀐다(2026-10-15 실서버 Final 세션: 선택지 질문을
+# 띄워 둔 채 17분이 지나자 서버 항목이 만료·삭제돼 화면은 질문인데 상태는 유휴였다). 그래서 만료되기
+# 직전에 그 세션의 실제 tmux 화면을 한 번 읽어 확인한다 — 맞으면 만료를 미루고 틀렸을 때만 내린다.
+# 화면 읽기는 tmux 서브프로세스라 agent_status가 직접 부르지 않고 deps가 주입한다(순환 import 방지).
+_screen_probe: Optional[Callable[[str, Optional[str]], Optional[dict]]] = None
+# 화면이 계속 질문을 보이더라도 대기를 붙들어 둘 한계(그 뒤엔 working으로 내리고, 화면이 여전하면 다시 올라온다).
+WAITING_HARD_CAP = 24 * 3600.0
+
+
+def set_screen_probe(fn: Optional[Callable[[str, Optional[str]], Optional[dict]]]) -> None:
+    """`fn(tmux 세션 이름, 에이전트) -> {"prompt","kind","busy"} | None`. None이면 화면을 못 읽은 것."""
+    global _screen_probe
+    _screen_probe = fn
+
+
+def _probe(ent: dict) -> Optional[dict]:
+    name, agent = ent.get("tmux_session"), ent.get("agent")
+    if _screen_probe is None or not name or ent.get("host", LOCAL_HOST) != LOCAL_HOST:
+        return None
+    try:
+        return _screen_probe(name, agent)
+    except Exception as e:  # noqa: BLE001 — 확인이 실패해도 예전처럼 만료시킬 뿐이다
+        logger.debug(f"화면 확인 실패({name}): {e}")
+        return None
+
+
+def _waiting_still_true(ent: dict, now: float) -> bool:
+    """TTL이 지난 waiting을 계속 대기로 둘까. 화면이 프롬프트를 보이면 예, 아니면 아니오.
+
+    화면을 읽지 못했을 땐(tmux 오류·세션 이름을 모름) 확인할 수 없으니 예전처럼 만료시킨다 —
+    일시적인 읽기 실패가 영구 대기로 굳지 않게. 그 뒤 working 만료 때 화면을 다시 읽어 질문이
+    떠 있으면 대기로 올라온다(sweep의 working 분기)."""
+    if now - ent.get("since", now) > WAITING_HARD_CAP:
+        return False
+    shot = _probe(ent)
+    return bool(shot and shot.get("prompt"))
+
+
+# 서버가 모르는 세션(재시작으로 메모리가 비었거나 훅을 놓친 경우)의 화면을 다시 확인하는 최소 간격.
+RECOVER_INTERVAL = 30.0
+_recover_at: dict[str, float] = {}
+
+
+def recover_from_screens(agents: dict[str, Optional[str]], now: Optional[float] = None) -> int:
+    """{tmux 세션: 에이전트 이름} 중, 이 서버에 항목이 없는데 화면이 질문을 띄운 세션을 대기로 되살린다.
+
+    서버 상태는 메모리뿐이라 재시작하면 비고, 대기를 알리는 훅(PreToolUse)은 그 순간 한 번뿐이다 —
+    질문이 떠 있는 채로 서버가 바뀌면 사람이 답할 때까지 상태를 알 방법이 없었다. 훅을 쓰는 CLI(claude·
+    codex)만 보고, 세션마다 RECOVER_INTERVAL 간격으로만 화면을 읽는다. 되살린 항목은 화면 감지 자리표시
+    (`pane:<이름>`)라 다음 훅이 오면 그 훅의 세션이 자리를 넘겨받는다. 되살린 수를 반환한다.
+    """
+    now = time.time() if now is None else now
+    known = {e.get("tmux_session") for e in _state.values() if e.get("host", LOCAL_HOST) == LOCAL_HOST}
+    revived = 0
+    for name, agent in agents.items():
+        if agent not in ("claude", "codex") or name in known:
+            continue
+        if now - _recover_at.get(name, 0.0) < RECOVER_INTERVAL:
+            continue
+        _recover_at[name] = now
+        shot = _probe({"tmux_session": name, "agent": agent})
+        if shot and shot.get("prompt"):
+            ent = on_waiting(f"pane:{name}", True, session=name, kind=shot.get("kind"), source="screen")
+            if ent is not None:
+                _apply_agent(ent, agent)
+                revived += 1
+    return revived
+
+
 def sweep(now: Optional[float] = None) -> int:
     """만료된 상태를 전이시킨다. 전이한 엔트리 수를 반환.
 
@@ -220,7 +291,20 @@ def sweep(now: Optional[float] = None) -> int:
     for sid, ent in list(_state.items()):
         status = ent.get("status", IDLE)
         age = now - ent.get("updated_at", now)
-        if status == WORKING and age > ttls[WORKING]:
+        if status == WORKING and age > ttls[WORKING] and (shot := _probe(ent)) is not None \
+                and (shot.get("prompt") or shot.get("busy")):
+            # 훅은 끊겼지만 화면이 아직 작업 중이거나 질문을 띄우고 있다 — 유휴로 내리지 않는다.
+            # 질문이 떠 있으면 대기로 올린다(재시작·유실로 대기 훅을 놓친 경우의 자가 복구).
+            if shot.get("prompt"):
+                ent["kind"] = shot.get("kind") or KIND_QUESTION
+                ent["_kind_src"] = "screen"
+                ent["since"] = now
+                _set_status(ent, WAITING, now)
+                changed += 1
+                _emit(ent, "screen")
+            else:
+                ent["updated_at"] = now
+        elif status == WORKING and age > ttls[WORKING]:
             logger.warning(
                 f"agent {sid}: working이 {age:.0f}초째 — 훅 유실로 보고 idle로 만료"
             )
@@ -228,6 +312,8 @@ def sweep(now: Optional[float] = None) -> int:
             ent["tool"] = None
             changed += 1
             _emit(ent, "ttl")
+        elif status == WAITING and age > ttls[WAITING] and _waiting_still_true(ent, now):
+            ent["updated_at"] = now   # 화면이 아직 질문을 보인다 — 다음 확인 때까지 대기를 유지한다
         elif status == WAITING and age > ttls[WAITING]:
             _set_status(ent, WORKING, now)
             ent["question"] = None

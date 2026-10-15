@@ -58,4 +58,6 @@ plan = [
 ]
 choice = [
   "Enter to select · ↑/↓ to navigate",
+  # 2026-10-15 실측(Claude Code 2.1.299, Final 세션): AskUserQuestion 안내줄이 이 문구로 바뀌었다.
+  "Enter to select · Tab/Arrow keys to navigate",
 ]

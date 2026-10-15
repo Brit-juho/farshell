@@ -18,6 +18,7 @@ import agent_status
 import auto_responder
 import pane_input
 import terminal_reports
+import tmux_runner
 
 logger = logging.getLogger(__name__)
 
@@ -217,3 +218,17 @@ def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> N
 # Phase 8 G2: WS 연결 한도 카운터 (single-worker 전용 — TODOS.md D1)
 ws_count_per_session: dict[str, int] = {}
 ws_total_count = 0
+
+
+def _screen_probe(tmux_name: str, agent: str | None) -> dict | None:
+    """만료 직전·복구 때 그 세션의 tmux 화면 한 장으로 상태를 확인한다(agent_status._probe).
+
+    보이는 영역만 읽는다(스크롤백 X). 읽지 못하면 None — 호출부는 "모른다"로 처리한다.
+    `=이름:` 형태로 세션 이름을 정확히 가리킨다(접두어 일치 방지)."""
+    out = tmux_runner.run_text(["capture-pane", "-p", "-t", f"={tmux_name}:"], timeout=1.0)
+    if out is None:
+        return None
+    return agent_prompt_detect.screen_state(agent, out)
+
+
+agent_status.set_screen_probe(_screen_probe)

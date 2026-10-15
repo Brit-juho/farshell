@@ -319,6 +319,37 @@ def _spec_for_agent(pats: dict, agent: Optional[str]) -> dict:
     return {agent: pats[agent]} if agent in pats else {}
 
 
+# 화면 확인에서 읽는 마지막 줄 수. Claude의 선택지 UI(질문 + 선택지 4개 + 안내줄)는 이 안에 들어온다.
+SCREEN_TAIL_LINES = 14
+
+
+def screen_state(agent: Optional[str], text: str) -> dict:
+    """지금 **화면 한 장**(`tmux capture-pane`의 보이는 영역)이 무엇을 보여 주는가.
+
+    훅이 알린 상태가 아직 맞는지 다시 확인하는 데 쓴다(agent_status.sweep의 만료 직전).
+    PTY 스트림 감지(`PromptDetector`)는 브라우저가 그 세션을 열고 있을 때만 돌지만, 이건
+    tmux 화면을 직접 읽으므로 아무도 보고 있지 않아도 된다. 같은 `detect/*.toml`을 쓴다.
+
+    반환: {"prompt": 사람의 답을 기다리는 화면이 떠 있나, "kind": 그 종류 또는 None,
+          "busy": 작업 중 표시(exit 패턴, 예: `esc to interrupt`)가 보이나}.
+    프롬프트 문구 뒤에 작업 중 표시가 나오면 그 프롬프트는 이미 지나간 것이라 prompt=False다.
+    """
+    # 질문·승인 UI는 화면 **맨 아래**에 붙는다. 위쪽 대화 내용이 그 안내 문구를 인용하고 있을 수 있어
+    # (이 코드를 고치는 대화처럼) 마지막 몇 줄만 본다 — 아니면 지나간 인용을 질문으로 오인한다.
+    lines = _strip_ansi(text or "").rstrip().split("\n")
+    joined = "\n".join(lines[-SCREEN_TAIL_LINES:]).encode("utf-8", errors="replace")
+    spec = _spec_for_agent(load_patterns(), agent)
+    if not spec:
+        return {"prompt": False, "kind": None, "busy": False}
+    _, _, pos, kind = _locate_prompt_kind(spec, joined)
+    exit_pos = -1
+    for sp in spec.values():
+        for pattern in sp.get("exit") or []:
+            exit_pos = max(exit_pos, joined.rfind(pattern))
+    prompt = pos >= 0 and exit_pos <= pos
+    return {"prompt": prompt, "kind": kind if prompt else None, "busy": exit_pos >= 0}
+
+
 class PromptDetector:
     """세션별 출력 윈도우 + enter/exit 패턴 매처.
 
