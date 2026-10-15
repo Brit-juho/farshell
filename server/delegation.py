@@ -86,7 +86,7 @@ def enabled() -> bool:
 
 
 def enforced() -> bool:
-    """`VT_AUTHZ_ENFORCE` 에 `deleg` 가 있는가 — 켜면 엔진이 위임 판정·감사를 쥔다(plan-2.6 3b). 장부는 계속 쓴다."""
+    """`VT_AUTHZ_ENFORCE` 에 `deleg` 가 있는가 — 켜면 엔진이 위임 판정·감사를 쥔다. 장부는 계속 쓴다."""
     return authz_flags.enforced("deleg")
 
 
@@ -136,7 +136,7 @@ def _ledger_lock():
 
 @contextmanager
 def _locked():
-    """꺼짐: 장부 락. 켜짐(3b): authz 락 → 장부 락(3a·`migrate.restore` 와 같은 순서) + 들어올 때 장부 채택."""
+    """꺼짐: 장부 락. 켜짐: authz 락 → 장부 락(`migrate.restore` 와 같은 순서) + 들어올 때 장부 채택."""
     lp = _lock_path()
     if enforced():
         if _svc().held():                             # 같은 스레드에서 다시 들어옴 — flock 은 재진입하지 않는다
@@ -172,7 +172,7 @@ def _write(data: dict) -> None:
     p = _path()
     blob = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
     if _svc().held():
-        # 3b dual-write — grant 를 먼저 맞추고 장부를 쓴다. authz 저장·감사가 실패하면 장부는 그대로다(503).
+        # dual-write — grant 를 먼저 맞추고 장부를 쓴다. authz 저장·감사가 실패하면 장부는 그대로다(503).
         _svc().sync(data["items"], sig=_svc().sig_of(blob))
     tmp = p.with_name(p.name + ".tmp")
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -275,7 +275,7 @@ def _task_footer(did: str) -> str:
 
 def _audit(action: str, result: str, *, principal: Optional[str] = None, did: Optional[str] = None,
            sha8: Optional[str] = None, **extra) -> None:
-    """꺼짐: 옛 `agent_access.log`. 켜짐(3b): authz 감사(hash chain) — 내용은 길이·sha8 만."""
+    """꺼짐: 옛 `agent_access.log`. 켜짐: authz 감사(hash chain) — 내용은 길이·sha8 만."""
     try:
         if enforced():
             _svc().audit_op(action, result, principal=principal, did=did, sha8=sha8,
@@ -398,7 +398,7 @@ def role_of(caller_key: str) -> dict:
 def check_spawn(data: dict, parent_key: str, now: float) -> None:
     """모든 생성 경로가 지나는 단 하나의 관문. 락 안에서 부른다.
 
-    꺼짐: 옛 판정 + shadow 한 줄. 켜짐(3b): 엔진이 `deleg.spawn`(deleg-quota)을 판정한다 — 같은 조건에 safe_mode 가 더해진다."""
+    꺼짐: 옛 판정 + shadow 한 줄. 켜짐: 엔진이 `deleg.spawn`(deleg-quota)을 판정한다 — 같은 조건에 safe_mode 가 더해진다."""
     from authz import hooks as authz_hooks
     if enforced():
         sm = _safe_mode()
@@ -449,15 +449,14 @@ def _spawn_denial(data: dict, parent_key: str, now: float) -> Optional[Delegatio
 
 def _owned(data: dict, did: str, caller_key: str, role: str, op: str = "send") -> dict:
     item = next((x for x in data["items"] if x["id"] == did), None)
-    from authz import hooks as authz_hooks   # shadow(plan-2.6 1단계)
+    from authz import hooks as authz_hooks   # shadow
     if enforced():
-        # 3b — 항목은 원장에서 찾고, 허용 여부는 엔진(`deleg.control`)이 정한다. 소유 원장의 key 가 맞아도 grant 가 없으면 거부.
-        scope = "deleg.control" if role == "parent" else "deleg.report"
+        # 항목은 원장에서 찾고, 허용 여부는 엔진(`deleg.control`, role=parent|child)이 정한다. 소유 원장의 key 가 맞아도 grant 가 없으면 거부.
         if item is None:
-            _svc().deny_unknown(caller_key, did[:64], scope, op)
+            _svc().deny_unknown(caller_key, did[:64], op)
             authz_hooks.deleg_owned(False, did, caller_key, role, None, enforced=True)
             raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
-        v = _svc().authorize(caller_key, did, scope, op=op)
+        v = _svc().authorize(caller_key, did, role, op=op)
         authz_hooks.deleg_owned(v.allow, did, caller_key, role, item, enforced=True)
         if v.allow:
             return item
@@ -499,7 +498,7 @@ def _prepare_worktree(parent_cwd: str, branch: str, name: str, check=None) -> st
     if not top or not head:
         raise DelegationError("worktree_failed", "부모 세션의 위치가 git 저장소가 아닙니다", 400)
     if check is not None:
-        top = check(top)          # H9(3b) — worktree 의 기준 저장소도 fsguard 루트 안이어야 한다(밖이면 403 cwd_outside_roots)
+        top = check(top)          # worktree 의 기준 저장소도 fsguard 루트 안이어야 한다(밖이면 403 cwd_outside_roots)
     try:
         # 기준은 부모의 HEAD(결정 5). 에이전트는 여기서 띄우지 않는다 — 실행 명령은 LAUNCH만 쓴다.
         r = worktree.create_worktree({"repo": top, "base": head, "name": name, "branch": branch,
@@ -550,7 +549,7 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
         data = _read()
         check_spawn(data, parent_key, now)
         if cwd and enforced():
-            # H9(3b) — 명시한 cwd 는 `fs.read` + fsguard 루트(VT_BROWSE_ROOTS) 안일 때만(쿼터 검사 뒤 — 오류 우선순위를 유지).
+            # 명시한 cwd 는 `fs.read` + fsguard 루트(VT_BROWSE_ROOTS) 안일 때만(쿼터 검사 뒤 — 오류 우선순위를 유지).
             # realpath 로 고정해 심볼릭 링크 바꿔치기를 막는다.
             start_dir = _svc().check_fs(parent_key, cwd, "spawn_cwd")
         child_name = _child_name(caller.name, title, set(names.values()))
@@ -593,7 +592,7 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             cur["cwd"] = start_dir
             cur["child"] = {"key": ident["key"], "name": child_name, "pane": ident["pane"]}
             if enforced():
-                # D13 — 자식의 fs grant 기록(worktree 면 새 경로 전용, 아니면 부모 fs grant 의 공유 참조). 강제는 5단계.
+                # 자식의 fs grant 기록(worktree 면 새 경로 전용, 아니면 부모 fs grant 의 공유 참조). 강제는 5단계.
                 fs = _svc().fs_record(parent_key, start_dir, worktree=bool(worktree_branch))
                 if fs:
                     cur["fs"] = fs
@@ -651,7 +650,7 @@ def send_to_child(caller_key: str, did: str, text: str) -> dict:
 
 def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_by_parent", actor=None) -> dict:
     """위임을 닫는다. 세션은 남긴다(결정 3). 자식에게 아직 안 들어간 지시만 큐에서 지운다.
-    caller_key가 None이면 사람(CLI)이다. 켜짐(3b)에서는 그 사람의 주체(`actor`: human 또는 cli)를 엔진에 묻는다 —
+    caller_key가 None이면 사람(CLI)이다. 켜짐에서는 그 사람의 주체(`actor`: human 또는 cli)를 엔진에 묻는다 —
     cli 는 닫기만 된다(`ops:[close]`)."""
     who = _agent_id(caller_key) if caller_key is not None else None
     with _locked():
@@ -695,15 +694,15 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
     with _locked():
         data = _read()
         mine = [x for x in data["items"] if x["child"]["key"] == caller_key]
-        from authz import hooks as authz_hooks   # shadow(plan-2.6 1단계)
+        from authz import hooks as authz_hooks   # shadow
         if enforced():
-            # 3b — 자식 확정은 원장(key)으로, 허용은 엔진(`deleg.report`)이. 끝난 위임(ended grant)은 아래 상태 검사가 409 를 낸다.
+            # 자식 확정은 원장(key)으로, 허용은 엔진(`deleg.control`, role=child)이. 끝난 위임(ended grant)은 아래 상태 검사가 409 를 낸다.
             mine = sorted(mine, key=lambda x: x["state"] != RUNNING)       # 보고할 수 있는 항목이 먼저
             did0 = mine[0]["id"] if mine else "-"
-            v = _svc().authorize(caller_key, did0, "deleg.report", op="report") if mine else \
+            v = _svc().authorize(caller_key, did0, "child", op="report") if mine else \
                 _svc().Verdict(False, "no_grant")
             if not mine:
-                _svc().deny_unknown(caller_key, did0, "deleg.report", "report", "not_a_child")
+                _svc().deny_unknown(caller_key, did0, "report", "not_a_child")
             authz_hooks.deleg_report(v.allow, caller_key, mine, enforced=True)
             if not mine or not (v.allow or v.ended):
                 raise DelegationError("not_delegated", "이 세션은 위임받은 하위 세션이 아닙니다", 403)
@@ -955,7 +954,7 @@ def _cli(argv: list[str]) -> int:
             return 1
         r = None
         if enforced():
-            # H3(3b) — 켜짐에서는 서버(unix socket)에 닫아 달라고 요청한다: 주체 cli 로 판정·감사되고 장부는 서버가 쓴다.
+            # 켜짐에서는 서버(unix socket)에 닫아 달라고 요청한다: 주체 cli 로 판정·감사되고 장부는 서버가 쓴다.
             # 서버가 안 떠 있거나 소켓을 못 쓸 때만 아래 직접 경로(= 옛 동작, 장부 + grant·감사 동기화는 같은 함수가 한다).
             r = _cli_close_via_server(match[0]["id"])
             if isinstance(r, int):

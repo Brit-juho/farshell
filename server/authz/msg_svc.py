@@ -1,4 +1,4 @@
-"""에이전트 간 메시지의 권한 판정·승인·감사 (3c) — `VT_AUTHZ_ENFORCE=msg` 일 때 엔진이 판정권자다.
+"""에이전트 간 메시지의 권한 판정·승인·감사 — `VT_AUTHZ_ENFORCE=msg` 일 때 엔진이 판정권자다.
 
 `agent_msg.py` 가 동작부(큐·기록·hop·머리글)를, `routes/agent_msg.py`·`routes/peer.py` 가 HTTP 면을 쥐고, 이 파일은 판정·
 승인 요청/grant 저장·감사를 한다. 꺼짐에서는 이 모듈을 거치지 않는다(옛 동작 그대로).
@@ -13,18 +13,18 @@
   - 관계가 있으면 승인 없이 허용: 위임 부모↔자식, 같은 부모의 형제 — 위임 장부(`delegations.json`)에서 **열린** 위임
     (running·reported)만. 닫힘·고아(orphaned)는 관계가 아니다. pair 구성원 관계는 5단계 자리(`pair_related`, 지금은 항상 False).
   - 그 밖은 (보내는 세션 → 받는 세션) grant 가 있어야 한다. 없으면 보류 요청(`approvals.json`, 원천 `authz:msg:req:`)을 만들고
-    HTTP 202 `{state: pending, requestId}` — 사람만 승인함에서 결정한다(에이전트는 승인할 수 없다). 거절은 5분 쿨다운(R4.6),
-    대기는 24시간·주체당 20·전체 200(R4.7). 승인되면 grant(원천 `authz:msg:grant:`)가 생기고 세션이 사라지면 함께 정리된다.
+    HTTP 202 `{state: pending, requestId}` — 사람만 승인함에서 결정한다(에이전트는 승인할 수 없다). 거절은 5분 쿨다운,
+    대기는 24시간·주체당 20·전체 200. 승인되면 grant(원천 `authz:msg:grant:`)가 생기고 세션이 사라지면 함께 정리된다.
   - 속도 제한(보내는 호스트당 분당 20)은 엔진이 센다 — 카운터는 `agent_msg._rate` 그대로(`check_rate`).
 
 ## 받는 쪽 (다른 맥 → 이 맥)
 peer 주체 `peer:<id>/obo:agent:<id>/-` 가 `msg.send` on `msg:local/-`. 판정에 쓰는 grant 는 `hosts.json` 의 등급·`agentMessages` 에서
-**그 자리에서 번역**한 것이다(`migrate.translate_peer_grant`) — `hosts.json` 이 3d 까지 소유 저장소라 저장소 사본이 낡아 결과가
+**그 자리에서 번역**한 것이다(`migrate.translate_peer_grant`) — `hosts.json` 이 아직 소유 저장소라 저장소 사본이 낡아 결과가
 갈라질 수 없다. 등급(control)은 `@capability` 가 그대로 본다. 본문 해시 서명은 건드리지 않는다. 승인은 리소스를 가진 호스트의
 사람만 한다(여기서는 거부만, 원격 요청을 만들지 않는다).
 
 ## 감사
-`audit/authz.jsonl`. 메시지 **내용**은 남기지 않는다 — 글자 수(`sizes.chars`)와 sha8 만(R11.2). 승인 결정·철회는 커밋 전에 쓰고
+`audit/authz.jsonl`. 메시지 **내용**은 남기지 않는다 — 글자 수(`sizes.chars`)와 sha8 만. 승인 결정·철회는 커밋 전에 쓰고
 못 쓰면 중단한다(503 `audit_unavailable`). 판정·요청 줄은 데이터 경로라 쓰기 실패가 전달을 막지 않는다.
 """
 
@@ -144,7 +144,7 @@ def _safe_key(k: str) -> bool:
 
 
 def purge(docs: dict, alive: Optional[Iterable[str]], now: float) -> bool:
-    """사라진 세션·만료된 대기·쿨다운이 끝난 거절을 걷어낸다. alive=None(tmux 를 못 읽음)이면 세션 정리는 건너뛴다(F3)."""
+    """사라진 세션·만료된 대기·쿨다운이 끝난 거절을 걷어낸다. alive=None(tmux 를 못 읽음)이면 세션 정리는 건너뛴다."""
     live = None if alive is None else set(alive)
 
     def gone(r: dict) -> bool:
@@ -237,7 +237,7 @@ def _decide(p: P.Principal, resource: str, ctx: dict, peer_grant: Optional[dict]
     except Exception as e:  # noqa: BLE001
         raise _unavailable(e) from e
     if d.reason == "store_corrupt":
-        raise _unavailable(RuntimeError("authz 저장소가 손상됨(F1)"))
+        raise _unavailable(RuntimeError("authz 저장소가 손상됨"))
     return d
 
 
@@ -289,7 +289,7 @@ def audit_op(action: str, result: str, *, principal: Optional[str] = None, resou
              reason: Optional[str] = None, chars: Optional[int] = None, sha8: Optional[str] = None,
              grant_id: Optional[str] = None, approval_id: Optional[str] = None, detail: Optional[dict] = None,
              decision: Optional[str] = None) -> None:
-    """`msg.<action>` 한 줄. 내용은 받지 않는다 — 글자 수와 sha8 뿐(R11.2)."""
+    """`msg.<action>` 한 줄. 내용은 받지 않는다 — 글자 수와 sha8 뿐."""
     try:
         rec = {"principal": principal or "agent:unverified", "action": f"msg.{action}",
                "resource": resource or "msg:*", "scopes": [SCOPE],
@@ -355,7 +355,7 @@ def request_access(sender_key: str, sender_name: str, recv_key: str, recv_name: 
                               corrupt=frozenset(n for n in ("grants", "approvals", "windows", "shares", "meta")
                                                 if store._read(n)[1]), now=now, source="store")
         d = engine.decide(P.agent(sender_key, name=sender_name), "authz.request", "authz:*", {}, snap)
-        if not d.allow:                          # R4.1 — authz.request 가 없으면 보류 요청도 없다
+        if not d.allow:                          # authz.request 가 없으면 보류 요청도 없다
             raise ShareError("request_not_allowed", tr("승인 요청을 만들 수 없는 호출자입니다"), 403)
         purge(docs, alive, now)
         for r in msg_requests(docs):

@@ -1,4 +1,4 @@
-"""authz 특성 테스트(plan-2.6 0단계) 픽스처 — 호출자 행렬 × 서버 모드 × tmux 상태.
+"""authz 특성 테스트 픽스처 — 호출자 행렬 × 서버 모드 × tmux 상태.
 
 상위 `server/tests/conftest.py`의 HOME·VT_CONFIG·tmux 소켓 격리를 그대로 물려받고, 여기서 더 좁힌다:
 사례마다 tmp 상태 폴더·가짜 tmux·가짜 네트워크를 새로 깐다(`authz_harness.World`).
@@ -39,6 +39,28 @@ def load_matrix() -> dict:
 @pytest.fixture
 def world(tmp_path, monkeypatch):
     return World(monkeypatch, tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def _required_conds_spy(monkeypatch):
+    """메타 검사: 이 디렉터리의 모든 시나리오가 부르는 `engine.decide` 호출 지점이 scope 의 필요 조건 값(`scopes.REQUIRED_CONDS`)을
+    ctx 에 넣었는지 본다. 값을 일부러 빼는 곳은 허용 목록 밖 relay 대상 하나뿐이고, 그 호출은 `cond_missing` 으로 거부돼야 한다."""
+    from authz import engine, scopes as S
+
+    real = engine.decide
+    seen: list = []
+
+    def spy(p, scope, resource, ctx=None, snap=None):
+        d = real(p, scope, resource, ctx, snap)
+        miss = S.missing_conds(scope, ctx or {})
+        if miss and p.authenticated:
+            seen.append((scope, tuple(miss), d.allow, d.reason))
+        return d
+
+    monkeypatch.setattr(engine, "decide", spy)
+    yield seen
+    for rec in seen:
+        assert rec == ("relay", ("group",), False, "cond_missing"), f"필요 조건 값이 빠진 호출 지점: {rec}"
 
 
 class Golden:

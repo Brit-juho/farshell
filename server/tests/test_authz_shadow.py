@@ -131,7 +131,7 @@ def _one_per_site() -> list:
 
 @pytest.mark.parametrize("break_at", ["engine", "principal", "store", "write"])
 def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world, monkeypatch):
-    """엔진·주체 만들기·저장소 읽기·기록 어디서 터져도 응답은 matrix.json 그대로다(F8)."""
+    """엔진·주체 만들기·저장소 읽기·기록 어디서 터져도 응답은 matrix.json 그대로다."""
     from authz import engine, principals, shadow, store
 
     def boom(*a, **k):
@@ -187,7 +187,7 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
                 assert w.run(case)["status"] == 503, case.id
             continue
         if msgf and case.group == "agent_msg" and case.method == "POST" and case.route == "/api/agent/message":
-            # EXPECTED_CHANGE(3c): VT_AUTHZ_ENFORCE=msg 이면 보낸 쪽 확인(H17)과 관계 판정(D6)이 응답을 정한다
+            # EXPECTED_CHANGE(3c): VT_AUTHZ_ENFORCE=msg 이면 보낸 쪽 확인과 관계 판정이 응답을 정한다
             # (`authz_char/test_char_agent_msg_enforced.py`). 확인된 에이전트가 관계 없는 세션에 보내는 사례만 엔진에 닿고,
             # 엔진이 터지면 닫혀야 한다(2xx·202 금지 → 503). 나머지는 엔진과 무관한 바뀐 응답 그대로다.
             want = matrix[case.id]["expected"]
@@ -230,18 +230,18 @@ def test_peer_ws_input_hook_matches_level(monkeypatch):
 
 
 def test_shadow_detects_a_policy_change(world, capture, monkeypatch):
-    """shadow 가 실제 차이를 잡는지 — D7 을 (b)(쓰기 그룹은 새로 승인)로 바꾸면 H5 의 control→queue relay
-    사례가 차이로 드러나야 한다. 미결정 상수 하나만 바꿔 shadow 가 무엇을 보게 될지 보여 주는 예."""
+    """shadow 가 실제 차이를 잡는지 — control 의 relay 그룹을 쓰기 그룹 없이 줄이면 control→queue relay
+    사례가 차이로 드러나야 한다. 미정 상수 하나만 바꿔 shadow 가 무엇을 보게 될지 보여 주는 예."""
     from authz import defaults
-    monkeypatch.setattr(defaults, "PEER_CONTROL_SCOPES",
-                        tuple(s for s in defaults.PEER_CONTROL_SCOPES if s != "relay.*")
-                        + ("relay.connect", "relay.sessions", "relay.status"))
+    narrower = {**defaults.PEER_CONTROL_SCONDS, "relay": {"groups": ["sessions", "status"]}}
+    monkeypatch.setattr(defaults, "PEER_CONTROL_SCONDS", narrower)
     h5 = [c for c in CASES if c.hole == "H5" and c.group == "relay" and "/api/queue" in c.path
           and c.caller == "peer_control"]
     assert h5
     world.run(h5[0])
     diffs = [r for r in capture if r.get("kind") == "mismatch"]
-    assert diffs and diffs[0]["scope"] == "relay.queue" and diffs[0]["old"] is True and diffs[0]["new"] is False
+    assert diffs and diffs[0]["scope"] == "relay" and diffs[0]["resource"] == "relay:local/queue" \
+        and diffs[0]["old"] is True and diffs[0]["new"] is False
 
 
 @pytest.mark.parametrize("caller,status", [("session", 200), ("machine", 403), ("agent_verified", 403),

@@ -1,4 +1,4 @@
-"""plan-2.6 2단계 — 「최근 24h legacy 토큰 사용 N」과 소켓 상태 보고(`python -m authz sock-status`)."""
+"""— 「최근 24h legacy 토큰 사용 N」과 소켓 상태 보고(`python -m authz sock-status`)."""
 
 from __future__ import annotations
 

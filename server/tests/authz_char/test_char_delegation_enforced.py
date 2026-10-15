@@ -63,7 +63,7 @@ def test_engine_decides_when_enforced(world, monkeypatch):
         world.run(Case(id="adhoc", group="adhoc", caller=caller, method=method, path=path, body=body, route=route))
     kinds = {(k, s) for k, s, _ in seen}
     assert ("agent", "deleg.spawn") in kinds and ("agent", "fs.read") in kinds
-    assert ("agent", "deleg.control") in kinds and ("agent", "deleg.report") in kinds
+    assert ("agent", "deleg.control") in kinds           # 부모(role=parent)·자식(role=child) 모두 deleg.control
 
 
 def test_cli_close_case_still_closes_without_a_server(world, capsys):

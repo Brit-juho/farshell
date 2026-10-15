@@ -1,4 +1,4 @@
-"""plan-2.6 2단계 — unix socket 서버(authz/sock.py): peer 자격, 게이트, 주체 해석, 시작·정리, 자가 시험.
+"""— unix socket 서버(authz/sock.py): peer 자격, 게이트, 주체 해석, 시작·정리, 자가 시험.
 
 실제 uvicorn UDS 서버를 프로세스 안에 띄워 확인한다(`sock_testkit.LiveSock`). tmux·프로세스 표는 가짜로 대체하고
 실제 `~/.vt/tmux`·사용자의 tmux 서버에는 닿지 않는다(HOME 은 conftest 가 격리). 소켓 경로는 AF_UNIX 한도 때문에
@@ -437,7 +437,7 @@ def test_gate_exposes_principal_and_marker_to_app():
     g = armed_gate(resolver=fake_resolver([], {os.getpid(): (1, 0, 0, "py")}))
     st, _ = run_gate(g, "POST", "/api/agent/report", peer={"uid": ME, "pid": os.getpid()})
     sc = g.seen["scope"]
-    assert st == 200 and sc["state"]["fsh_principal"].kind == "cli" and sc["state"]["auth_kind"] == "socket"
+    assert st == 200 and P.is_cli(sc["state"]["fsh_principal"]) and sc["state"]["fsh_principal"].kind == P.LOCAL and sc["state"]["auth_kind"] == "socket"
 
 
 # --- 주체 해석 ------------------------------------------------------------------------------------
@@ -461,7 +461,7 @@ def test_pane_chain_resolves_to_agent_with_session_key():
 
 def test_non_pane_process_is_cli_not_human():
     p = resolve(OUT_OF_PANE, [row()])
-    assert p.kind == P.CLI and p.id == f"cli:uid{ME}:pid{PID}"
+    assert p.kind == P.LOCAL and P.is_cli(p) and p.id == f"local:cli:uid{ME}:pid{PID}" and p.attrs["name"] == "cli"
     assert p.kind != P.HUMAN and not p.elevated
 
 
@@ -469,7 +469,7 @@ def test_foreign_tmux_process_is_not_agent():
     """사용자 개인 tmux(다른 소켓)의 pane 안 프로세스 — 우리 pane_pid 와 체인이 겹치지 않으므로 cli."""
     foreign = {PID: (9100, 0, 0, "py"), 9100: (9000, 0, 0, "zsh"), 9000: (1, 0, 0, "tmux")}
     p = resolve(foreign, [row(pane_pid=5000)])
-    assert p.kind == P.CLI
+    assert P.is_cli(p)
 
 
 def test_agent_declaring_svc_stays_agent():
@@ -479,24 +479,27 @@ def test_agent_declaring_svc_stays_agent():
     assert p.kind == P.AGENT
 
 
-def test_hook_in_pane_is_p5_hook():
+def test_hook_in_pane_is_the_same_agent_with_via_hook():
     p = resolve(IN_PANE, [row()], svc="hook")
-    assert p.kind == P.HOOK and p.id == "hook:local/$1:111"
+    assert p.kind == P.AGENT and p.id == "agent:local/$1:111" and p.attrs["via"] == "hook" and P.is_hook(p)
+    assert not P.is_hook(resolve(IN_PANE, [row()]))                          # 같은 pane 의 일반 호출은 via=hook 이 아니다
 
 
-def test_hook_claim_outside_pane_is_only_svc_not_hook_or_agent():
+def test_hook_claim_outside_pane_is_only_local_svc_not_agent():
     p = resolve(OUT_OF_PANE, [row()], svc="hook")
-    assert p.kind == P.SVC and p.id == "svc:hook"
+    assert p.kind == P.LOCAL and P.is_svc(p) and p.id == "local:svc:hook" and p.attrs["name"] == "svc:hook"
+    assert not P.is_hook(p)
 
 
 def test_unknown_svc_name_is_ignored():
     p = resolve(OUT_OF_PANE, [row()], svc="root-admin")
-    assert p.kind == P.CLI
+    assert P.is_cli(p)
 
 
 @pytest.mark.parametrize("name", ["clipboard", "voice", "tui", "tmux-notify", "tunnel-hook", "mcp-probe"])
 def test_declared_service_names_outside_pane(name):
-    assert resolve(OUT_OF_PANE, [row()], svc=name).id == f"svc:{name}"
+    p = resolve(OUT_OF_PANE, [row()], svc=name)
+    assert p.id == f"local:svc:{name}" and p.attrs["name"] == f"svc:{name}" and p.kind == P.LOCAL
 
 
 def test_dead_peer_is_rejected():
@@ -519,7 +522,7 @@ def test_empty_chain_fails_closed():
 
 def test_cycle_and_depth_limits_do_not_hang():
     cyc = {PID: (6000, 0, 0, "py"), 6000: (PID, 0, 0, "zsh")}
-    assert resolve(cyc, [row()]).kind == P.CLI
+    assert P.is_cli(resolve(cyc, [row()]))
 
 
 def test_principal_cache_expires(monkeypatch):
@@ -530,7 +533,7 @@ def test_principal_cache_expires(monkeypatch):
     r._rows_fn = lambda: []                                      # pane 이 사라졌다
     assert r.resolve_sync({"uid": ME, "pid": PID}, "").kind == P.AGENT      # TTL 안
     t[0] += sock.Resolver.TTL + 0.1
-    assert r.resolve_sync({"uid": ME, "pid": PID}, "").kind == P.CLI
+    assert P.is_cli(r.resolve_sync({"uid": ME, "pid": PID}, ""))
 
 
 # --- share_identity: 소켓 peer pid ----------------------------------------------------------------
@@ -620,7 +623,7 @@ def test_live_whoami_reports_cli_outside_tmux(live, env):
     ls, st = live(resolver=fake_resolver([row()], {PID: (1, 0, 0, "py")}))
     s, body = sreq(env, "GET", "/api/authz/whoami", svc="")
     p = json.loads(body)["principal"]
-    assert p["kind"] == "cli" and p["uid"] == ME and p["pid"] == PID
+    assert p["kind"] == "local" and p["name"] == "cli" and p["uid"] == ME and p["pid"] == PID
 
 
 # --- 실제 앱 통과: 토큰 없는 소켓 요청이 미들웨어를 지난다 -----------------------------------------

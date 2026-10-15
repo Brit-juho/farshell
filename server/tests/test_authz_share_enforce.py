@@ -1,4 +1,4 @@
-"""plan-2.6 3a — `VT_AUTHZ_ENFORCE=share`: 에이전트 세션 공유의 판정·저장·감사를 엔진이 쥔다.
+"""`VT_AUTHZ_ENFORCE=share`: 에이전트 세션 공유의 판정·저장·감사를 엔진이 쥔다.
 
 기존 `test_agent_share.py` 는 무수정으로 플래그 꺼짐/켜짐 둘 다 통과한다(`VT_AUTHZ_ENFORCE=share pytest …`).
 여기는 켜졌을 때만 성립하는 성질을 못 박는다:
@@ -6,8 +6,8 @@
   - 엔진이 권한자다: grant 없는 에이전트는 어떤 거짓 힌트로도 읽기·쓰기를 못 한다(적대 시험).
   - 옛 저장소와 엔진 저장소는 매 연산 뒤 같다(dual-write) — `migrate.verify_store()` 가 "차이 없음".
   - 플래그를 끄면 같은 상태로 이어진다(롤백), 다시 켜면 그 사이 옛 코드의 변경을 채택한다.
-  - 거절 쿨다운(R4.6)·대기 한도(R4.7)·분당 한도·공유 상한(ceiling)·철회 즉시 반영.
-  - 감사는 hash chain 에 있고 내용이 없다(R11.2), 변경은 감사 실패 시 fail closed(R11.5).
+  - 거절 쿨다운·대기 한도·분당 한도·공유 상한(ceiling)·철회 즉시 반영.
+  - 감사는 hash chain 에 있고 내용이 없다, 변경은 감사 실패 시 fail closed.
   - H1(기계 토큰 우회)은 여기서 안 막힌다 — 3e. 그 사실을 `authz_char/test_char_agent_share_enforced.py` 가 못 박는다.
 
 실제 tmux(전용 소켓)를 쓴다 — `test_agent_share.py` 와 같은 이유.
@@ -109,7 +109,7 @@ def test_full_lifecycle_is_engine_driven_and_dual_written(web):
     gid = res.json()["grant"]["id"]
     assert res.json()["grantId"] == f"ag-{gid}"                       # 응답이 grantId 를 얻는다
     g = docs()["grants"]["items"]
-    assert [x["id"] for x in g] == [f"ag-{gid}"] and g[0]["scopes"] == ["session.list", "session.read"]
+    assert [x["id"] for x in g] == [f"ag-{gid}"] and g[0]["scopes"] == ["session.view", "session.read"]
     assert g[0]["approved_by"].startswith("human:")                  # 승인자는 결정한 사람 주체
     assert docs()["approvals"]["items"] == []
     assert_parity("approved")
@@ -119,7 +119,7 @@ def test_full_lifecycle_is_engine_driven_and_dual_written(web):
 
     wid = asend(agent, env, "claude-a", "shell", "echo hi").json()["requestId"]
     assert approve(human, wid, "readwrite").status_code == 200
-    assert "session.input.line" in docs()["grants"]["items"][0]["scopes"]
+    assert "session.input" in docs()["grants"]["items"][0]["scopes"]
     assert_parity("write approved")
     s = asend(agent, env, "claude-a", "shell", "echo typed-1")
     assert s.status_code == 200 and s.json()["grantId"] == f"ag-{gid}"
@@ -127,7 +127,7 @@ def test_full_lifecycle_is_engine_driven_and_dual_written(web):
 
     rv = human.delete(f"/api/agent/share/grants/{gid}?scope=write")
     assert rv.status_code == 200 and rv.json()["grantId"] == f"ag-{gid}"
-    assert "session.input.line" not in docs()["grants"]["items"][0]["scopes"]
+    assert "session.input" not in docs()["grants"]["items"][0]["scopes"]
     assert_parity("write revoked")
     assert asend(agent, env, "claude-a", "shell", "x").status_code == 202
 
@@ -185,7 +185,7 @@ def test_rollback_flag_off_keeps_working_and_reenable_adopts_old_changes(web, mo
     monkeypatch.setenv("VT_AUTHZ_ENFORCE", "share")                  # 다시 켜면 옛 코드의 변경을 채택
     assert asend(agent, env, "claude-a", "shell", "echo on-2").status_code == 202    # 쓰기 철회가 살아 있다
     assert aread(agent, env, "claude-a", "shell").status_code == 200
-    assert "session.input.line" not in docs()["grants"]["items"][0]["scopes"]
+    assert "session.input" not in docs()["grants"]["items"][0]["scopes"]
     assert_parity("re-enabled")
 
 
@@ -281,14 +281,14 @@ def test_lowering_share_mode_is_enforced_by_the_engine_ceiling(web):
     # 엔진 판정 자체도 같다: grant 에는 쓰기가 남아 있지만 상한이 막는다
     from authz import engine
     me = P.agent(env.sess("claude-a").key)
-    dec = engine.decide(me, "session.input.line", f"session:local/{env.sess('target').key}",
-                        {"share": env.sess("target").share, "share_known": True, "prefer_live": False},
+    dec = engine.decide(me, "session.input", f"session:local/{env.sess('target').key}",
+                        {"share": env.sess("target").share, "share_known": True, "prefer_live": False, "mode": "line"},
                         store.Snapshot(grants=docs()["grants"]["items"], shares=docs()["shares"]["items"], now=time.time()))
     assert not dec.allow and dec.reason == "ceiling"
 
 
 def test_share_policy_drift_resolves_to_the_lower_level(web):
-    """tmux 미러를 손으로 고쳐도 진실(shares.json)을 넘지 못한다 — 낮은 쪽 (B1, 위험 13)."""
+    """tmux 미러를 손으로 고쳐도 진실(shares.json)을 넘지 못한다 — 낮은 쪽."""
     human, agent, env = setup_pair(web, mode="read")
     key = env.sess("target").key
     approve(human, aread(agent, env, "claude-a", "shell").json()["requestId"])
@@ -349,7 +349,7 @@ def test_deny_decision_creates_no_grant_and_cannot_be_forced(web):
 
 def test_limits_per_minute_and_pending_caps(web, monkeypatch):
     assert (agent_share.READ_PER_MIN, agent_share.SEND_PER_MIN) == (limits.LIMITS["session.read"][0],
-                                                                    limits.LIMITS["session.input.line"][0]) == (30, 10)
+                                                                    limits.LIMITS["session.input"][0]) == (30, 10)
     assert (agent_share.MAX_PENDING_PER_AGENT, agent_share.MAX_REQUESTS) == (limits.PENDING_PER_PRINCIPAL, limits.PENDING_TOTAL)
     assert agent_share.REQUEST_TTL == limits.PENDING_TTL and agent_share.DENY_COOLDOWN == limits.DENY_COOLDOWN
     human, agent, env = setup_pair(web, mode="readwrite")
@@ -393,15 +393,16 @@ def test_pending_requests_expire_after_24h_in_the_engine_store(web):
 
 def test_decision_authority_is_human_only_and_r43_needs_elevation():
     res = "session:local/$1:1"
-    approvals.check_authority(P.human("d1"), ["session.list", "session.read", "session.input.line"], res)   # 일반 승인
-    for bad in (P.legacy_token(), P.agent("$9:9"), P.anon(protected=True), P.cli(501, 1)):
+    approvals.check_authority(P.human("d1"), ["session.view", "session.read", "session.input"], res)   # 일반 승인
+    for bad in (P.legacy_token(), P.agent("$9:9"), P.unauthenticated(), P.cli(501, 1)):
         with pytest.raises(ShareError) as e:
             approvals.check_authority(bad, ["session.read"], res)
         assert e.value.code == "human_session_required" and e.value.status == 403
-    with pytest.raises(ShareError) as e:                                     # R4.3: input.raw 는 elevated 만
-        approvals.check_authority(P.human("d1"), ["session.input.raw"], res)
-    assert e.value.code == "elevation_required" and "session.input.raw" in e.value.extra["scopes"]
-    approvals.check_authority(P.human("d1", elevated=True), ["session.input.raw"], res)
+    raw = {"session.input": {"modes": ["raw"]}}
+    with pytest.raises(ShareError) as e:                                     # raw 입력은 elevated 만
+        approvals.check_authority(P.human("d1"), ["session.input"], res, raw)
+    assert e.value.code == "elevation_required" and "session.input[raw]" in e.value.extra["scopes"]
+    approvals.check_authority(P.human("d1", elevated=True), ["session.input"], res, raw)
 
 
 def test_r44_escalation_is_detected_and_audited(web):
@@ -410,11 +411,14 @@ def test_r44_escalation_is_detected_and_audited(web):
     approve(human, asend(agent, env, "claude-a", "shell", "x").json()["requestId"], "readwrite")
     dec = [r for r in audit_rows("share.decide")]
     esc = [r["detail"].get("escalation") for r in reversed(dec)]
-    assert esc == [["new_grant"], ["scopes:session.input.line"]]            # 처음 = 새 grant, 쓰기 추가 = scope 확대
+    assert esc == [["new_grant"], ["scopes:session.input"]]            # 처음 = 새 grant, 쓰기 추가 = scope 확대
     # 좁히는 변경(쓰기 철회)은 확대가 아니다
     g = approvals.agent_grants(docs())[0]
-    narrower = {**g, "scopes": ["session.list", "session.read"]}
-    assert S.escalation(g, narrower) == [] and S.escalation(narrower, g) == ["scopes:session.input.line"]
+    narrower = {**g, "scopes": ["session.view", "session.read"]}
+    assert S.escalation(g, narrower) == [] and S.escalation(narrower, g) == ["scopes:session.input"]
+    # 같은 scope 에서 조건 값을 늘리는 것(line -> line+raw)도 확대다
+    wider = {**g, "sconds": {"session.input": {"modes": ["line", "raw"]}}}
+    assert S.escalation(g, wider) == ["cond_widened:session.input.modes"] and S.escalation(wider, g) == []
 
 
 def test_auto_approval_windows_are_absent_in_3a(web):

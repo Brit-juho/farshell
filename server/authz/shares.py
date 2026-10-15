@@ -1,10 +1,10 @@
-"""세션 공유 정책 — 진실은 `~/.vt/authz/shares.json`, tmux `@fsh_share_nick`/`@fsh_share_mode` 는 표시용 미러 (B1).
+"""세션 공유 정책 — 진실은 `~/.vt/authz/shares.json`, tmux `@fsh_share_nick`/`@fsh_share_mode` 는 표시용 미러.
 
 `shares.json` 의 항목: `{<세션 key>: {nick, level, origin: "legacy:tmux:<key>"}}`. 엔진이 둘을 같이 쓴다(`share_svc.put_share`).
 `origin` 은 1단계 이전 도구(`fsh migrate-auth`)가 같은 항목을 같은 모양으로 만들기 때문에 그대로 쓴다 — 그래야
 `--verify` 가 dual-write 상태를 "차이 없음"으로 본다(8단계 `--finalize` 에서 정리).
 
-## 불일치 해소 (B1, 위험 13): 낮은 쪽
+## 불일치 해소: 낮은 쪽
 사람이 tmux 옵션을 손으로 고쳤거나 한쪽 쓰기가 실패해 둘이 다르면 **낮은 등급**을 쓴다.
   - 저장소·tmux 둘 다 있음 → 등급은 둘 중 낮은 쪽, 닉네임은 저장소 값(정책의 진실).
   - 저장소만 있음(tmux 옵션이 지워짐) → 공유 아님.

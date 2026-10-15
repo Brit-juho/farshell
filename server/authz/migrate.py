@@ -1,4 +1,4 @@
-"""옛 저장소 → authz 저장소 이전 (20-mapping.md B1) + 백업·복원.
+"""옛 저장소 → authz 저장소 이전 + 백업·복원.
 
 ## 번역(순수 함수)
 `translate_*`는 옛 레코드를 새 grant·approval 로 바꾸는 **순수 함수**다. 두 곳이 같이 쓴다:
@@ -9,17 +9,20 @@
 
 | 옛 | 새 |
 |---|---|
-| agent_grants grant `{agent, target, read, write}` | Grant `agent:local/<k>` → `session:local/<k>`, read→[list, read], write→+[input.line] |
+| agent_grants grant `{agent, target, read, write}` | Grant `agent:local/<k>` → `session:local/<k>`, read→[view, read], write→+[input(modes=[line])] |
 | agent_grants 대기 요청 | Approval `pending`(원래 expires) |
 | agent_grants 거절 | Approval `denied` + `cooldown_until = decided + 300` |
 | tmux `@fsh_share_*` | shares.json `{nick, level}` — 저장소에 이미 다른 값이 있으면 **낮은 쪽**(경고) |
-| hosts.json grants | `principals/peers.json`(secret 은 **sha256 만**, 아래) + Grant view/control(D3·D7) + agentMessages→obo msg.send |
-| delegations.json 항목 | Grant 부모→`deleg.control`, 자식→`deleg.report`(`approved_by: system:spawn`) |
+| hosts.json grants | `principals/peers.json`(secret 은 **sha256 만**, 아래) + Grant view/control 프리셋(`defaults.peer_preset`) + agentMessages→obo msg.send |
+| delegations.json 항목 | Grant 부모→`deleg.control`(role=parent), 자식→`deleg.control`(role=child)(`approved_by: system:spawn`) |
 | agent_access.log*, peer_audit.log* | `~/.vt/authz/legacy/<ts>/`로 복사(체인 없음) + 감사에 가져오기 기록 |
 
-**계획과 다른 점(1단계)**: B1 은 peer secret 을 peers.json 으로 "이동"한다. 1단계에서는 HMAC 인증이 여전히
-hosts.json 을 읽으므로 secret 을 복사하면 같은 비밀이 두 파일에 생기고, 재페어링하면 사본이 낡는다.
-그래서 지금은 `secret_sha256`만 적고 실제 이동은 인증을 옮기는 3d 단계에서 한다.
+**peer secret**: HMAC 인증이 아직 hosts.json 을 읽으므로 secret 을 peers.json 으로 복사하면 같은 비밀이 두 파일에 생기고,
+재페어링하면 사본이 낡는다. 그래서 지금은 `secret_sha256`만 적고 실제 이동은 peer 인증을 옮길 때 한다.
+
+## 스키마
+번역 결과는 모두 새 형태(`schema: 2`, 17개 scope + `sconds`)다. 번역은 옛 이름 목록을 만든 뒤 `scopes.upgrade_record` 를 지나므로
+저장소에 있는 옛 형태 레코드를 읽을 때의 변환과 **같은 결과**다 — 그래서 옛 이름으로 저장된 저장소도 `--verify` 가 차이 없음으로 본다.
 
 ## 멱등
 모든 이전 레코드는 `origin = "legacy:<저장소>:<원본 id>"`를 갖는다. `--apply`는 legacy origin
@@ -48,6 +51,7 @@ from typing import Iterable, Optional
 import vt_paths
 
 from . import audit, defaults, store
+from . import scopes as S
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +94,13 @@ def translate_agent_grant(g: dict, *, stamp: str = "live") -> Optional[dict]:
         scopes += ["session.input.line"]      # 옛 effective 처럼 읽기와 쓰기는 따로 본다
     if not scopes:
         return None
-    return {"id": f"ag-{g['id']}", "origin": f"legacy:agent_grants:{g['id']}",
-            "subject": f"agent:local/{ak}", "resource": f"session:local/{tk}", "scopes": scopes,
-            "subject_session": ak, "resource_session": tk, "state": "active",
-            "approved_by": f"migrated:{stamp}", "expires": None, "conds": {},
-            "created": g.get("granted"), "updated": g.get("updated"),
-            "subject_name": (g.get("agent") or {}).get("name") or ""}
+    return S.upgrade_record({
+        "id": f"ag-{g['id']}", "origin": f"legacy:agent_grants:{g['id']}",
+        "subject": f"agent:local/{ak}", "resource": f"session:local/{tk}", "scopes": scopes,
+        "subject_session": ak, "resource_session": tk, "state": "active",
+        "approved_by": f"migrated:{stamp}", "expires": None, "conds": {},
+        "created": g.get("granted"), "updated": g.get("updated"),
+        "subject_name": (g.get("agent") or {}).get("name") or ""})
 
 
 def translate_agent_request(r: dict, now: float) -> Optional[dict]:
@@ -112,13 +117,21 @@ def translate_agent_request(r: dict, now: float) -> Optional[dict]:
         until = float(r.get("decided", 0)) + DENY_COOLDOWN
         if now >= until:
             return None
-        return {**base, "state": "denied", "decided": r.get("decided"), "cooldown_until": until,
-                "expires": r.get("expires")}
+        return S.upgrade_record({**base, "state": "denied", "decided": r.get("decided"), "cooldown_until": until,
+                                 "expires": r.get("expires")})
     if r.get("state") == "pending":
         if now >= float(r.get("expires", 0)):
             return None
-        return {**base, "state": "pending", "expires": r.get("expires")}
+        return S.upgrade_record({**base, "state": "pending", "expires": r.get("expires")})
     return None
+
+
+def _scoped(rec: dict, scopes, sconds) -> dict:
+    """새 어휘의 (scopes, sconds) 로 레코드를 만든다 — 이미 새 형태라 `schema: 2` 를 단다."""
+    rec = {**rec, "scopes": list(scopes), "schema": S.SCHEMA}
+    if sconds:
+        rec["sconds"] = sconds
+    return rec
 
 
 def translate_peer_grant(g: dict, *, stamp: str = "live") -> list[dict]:
@@ -126,14 +139,15 @@ def translate_peer_grant(g: dict, *, stamp: str = "live") -> list[dict]:
     if not pid:
         return []
     control = g.get("level") == "control"
-    out = [{"id": f"pg-{pid}", "origin": f"legacy:hosts:{pid}", "subject": f"peer:{pid}", "resource": "*",
-            "scopes": list(defaults.PEER_CONTROL_SCOPES if control else defaults.PEER_VIEW_SCOPES),
-            "preset": "control" if control else "view", "state": "active",
-            "approved_by": f"migrated:{stamp}", "expires": None, "conds": {}}]
+    scopes, sconds = defaults.peer_preset("control" if control else "view")
+    out = [_scoped({"id": f"pg-{pid}", "origin": f"legacy:hosts:{pid}", "subject": f"peer:{pid}", "resource": "*",
+                    "preset": "control" if control else "view", "state": "active",
+                    "approved_by": f"migrated:{stamp}", "expires": None, "conds": {}}, scopes, sconds)]
     if g.get("agentMessages"):
-        out.append({"id": f"pm-{pid}", "origin": f"legacy:hosts:{pid}:agentMessages",
-                    "subject": f"peer:{pid}/obo:agent:*", "resource": "msg:local/*", "scopes": ["msg.send"],
-                    "state": "active", "approved_by": f"migrated:{stamp}", "expires": None, "conds": {}})
+        out.append(_scoped({"id": f"pm-{pid}", "origin": f"legacy:hosts:{pid}:agentMessages",
+                            "subject": f"peer:{pid}/obo:agent:*", "resource": "msg:local/*",
+                            "state": "active", "approved_by": f"migrated:{stamp}", "expires": None, "conds": {}},
+                           ["msg.send"], None))
     return out
 
 
@@ -157,13 +171,14 @@ def _fs_path_ok(path) -> bool:
 
 
 def translate_delegation(item: dict) -> list[dict]:
-    """위임 장부 항목 → 파생 grant(B1). 장부가 소유 원장이고 grant 는 거기서 **파생**된다.
+    """위임 장부 항목 → 파생 grant. 장부가 소유 원장이고 grant 는 거기서 **파생**된다.
 
-    - 부모→`deleg.control`, 자식→`deleg.report`, `approved_by: system:spawn`. 위임이 닫히거나(`closed`) 부모가 사라지면
-      (`orphaned`) `state: "ended"` — 엔진은 active 만 쓴다. 장부에서 사라지면 grant 도 사라진다(KEEP_CLOSED).
-    - D13(3b): `item["fs"]` 가 있으면 fs 레코드를 더한다. `inherit` = 부모의 fs grant 를 자식이 **공유 참조**
+    - 부모→`deleg.control`(role=parent), 자식→`deleg.control`(role=child), `approved_by: system:spawn`. 위임이 닫히거나(`closed`)
+      부모가 사라지면(`orphaned`) `state: "ended"` — 엔진은 active 만 쓴다. 장부에서 사라지면 grant 도 사라진다.
+    - `item["fs"]` 가 있으면 fs 레코드를 더한다. `inherit` = 부모의 fs grant 를 자식이 **공유 참조**
       (`inherit_from` = 부모 grant id, 부모 grant 가 끝나면 sync 가 동반 회수), `worktree` = 새 worktree 경로 한 곳에 자식만
-      쓰는 grant(부모의 원래 폴더 grant 는 상속하지 않는다). **강제는 5단계(lease)** — 지금은 기록·동반 회수뿐.
+      쓰는 grant(부모의 원래 폴더 grant 는 상속하지 않는다). **강제는 파일 lease 단계** — 지금은 기록·동반 회수뿐.
+      `fs.from[].scopes` 는 옛 이름 목록(`fs.read`·`fs.write`·`fs.commit`) 또는 `schema: 2` 가 붙은 새 이름 + `sconds` 다.
     id 나 key 에 glob 문자가 있으면(손상·위조 장부) 선택자가 넓어지므로 그 레코드는 만들지 않는다.
     """
     did = str(item.get("id") or "")
@@ -177,25 +192,36 @@ def translate_delegation(item: dict) -> list[dict]:
     base = {**st, "approved_by": "system:spawn", "expires": None, "conds": {}, "deleg": did}
     out = []
     if did and pk and _SAFE.fullmatch(pk):
-        out.append({"id": f"dc-{did}", "origin": f"{DELEG_ORIGIN}{did}:control",
-                    "subject": f"agent:local/{pk}", "resource": f"deleg:local/{did}", "scopes": ["deleg.control"], **base})
+        out.append(_scoped({"id": f"dc-{did}", "origin": f"{DELEG_ORIGIN}{did}:control",
+                            "subject": f"agent:local/{pk}", "resource": f"deleg:local/{did}", **base},
+                           ["deleg.control"], {"deleg.control": {"role": ["parent"]}}))
     if did and ck and _SAFE.fullmatch(ck):
-        out.append({"id": f"dr-{did}", "origin": f"{DELEG_ORIGIN}{did}:report",
-                    "subject": f"agent:local/{ck}", "resource": f"deleg:local/{did}", "scopes": ["deleg.report"], **base})
+        out.append(_scoped({"id": f"dr-{did}", "origin": f"{DELEG_ORIGIN}{did}:report",
+                            "subject": f"agent:local/{ck}", "resource": f"deleg:local/{did}", **base},
+                           ["deleg.control"], {"deleg.control": {"role": ["child"]}}))
         fs = item.get("fs")
         if isinstance(fs, dict) and fs.get("mode") == "worktree" and _fs_path_ok(fs.get("path")):
-            out.append({"id": f"dw-{did}", "origin": f"{DELEG_ORIGIN}{did}:fs:worktree",
-                        "subject": f"agent:local/{ck}", "resource": "fs:local" + fs["path"].rstrip("/") + "/*",
-                        "scopes": ["fs.write"], "inherit": False, **{**base, "expires": None}})
+            out.append(_scoped({"id": f"dw-{did}", "origin": f"{DELEG_ORIGIN}{did}:fs:worktree",
+                                "subject": f"agent:local/{ck}", "resource": "fs:local" + fs["path"].rstrip("/") + "/*",
+                                "inherit": False, **{**base, "expires": None}},
+                               ["fs.write"], {"fs.write": {"ops": ["write"]}}))
         elif isinstance(fs, dict) and fs.get("mode") == "inherit":
             for ref in fs.get("from") or ():
                 gid = str((ref or {}).get("grant") or "")
-                scopes = [x for x in (ref or {}).get("scopes") or () if x in ("fs.read", "fs.write", "fs.commit")]
+                raw = [x for x in (ref or {}).get("scopes") or ()]
                 res = str((ref or {}).get("resource") or "")
+                if (ref or {}).get("schema") == S.SCHEMA:
+                    scopes = [x for x in raw if x in ("fs.read", "fs.write")]
+                    sconds = {"fs.write": (ref.get("sconds") or {}).get("fs.write") or {}} if "fs.write" in scopes else None
+                else:
+                    scopes = [x for x in raw if x in ("fs.read", "fs.write", "fs.commit")]
+                    sconds = None
                 if gid and _SAFE.fullmatch(gid) and scopes and res.startswith("fs:local/"):
-                    out.append({"id": f"di-{did}-{gid}", "origin": f"{DELEG_ORIGIN}{did}:fs:{gid}",
-                                "subject": f"agent:local/{ck}", "resource": res, "scopes": scopes,
-                                "inherit": True, "inherit_from": gid, **{**base, "expires": ref.get("expires")}})
+                    rec = {"id": f"di-{did}-{gid}", "origin": f"{DELEG_ORIGIN}{did}:fs:{gid}",
+                           "subject": f"agent:local/{ck}", "resource": res, "inherit": True, "inherit_from": gid,
+                           **{**base, "expires": ref.get("expires")}}
+                    out.append(_scoped(rec, scopes, sconds) if (ref or {}).get("schema") == S.SCHEMA
+                               else S.upgrade_record({**rec, "scopes": scopes}))
     return out
 
 
@@ -236,7 +262,7 @@ def _read_json(p: Path) -> tuple[Optional[dict], Optional[str]]:
 
 
 def tmux_snapshot() -> Optional[dict]:
-    """`{key: {name, nick, mode}}` — tmux 를 못 읽으면 None(F3: 죽은 키 정리를 하지 않는다)."""
+    """`{key: {name, nick, mode}}` — tmux 를 못 읽으면 None(죽은 키 정리를 하지 않는다)."""
     import share_identity
     rows = share_identity.list_pane_rows()
     if rows is None:
@@ -325,7 +351,7 @@ def plan(*, now: Optional[float] = None, tmux: Optional[dict] = "probe", stamp: 
             s = {**s, "level": low}
         shares[k] = {**s, "origin": f"legacy:tmux:{k}"}
     if tmux is None:
-        warnings.append("tmux 를 읽지 못함 — 공유 정책 snapshot 없음, 죽은 세션 정리 안 함(F3)")
+        warnings.append("tmux 를 읽지 못함 — 공유 정책 snapshot 없음, 죽은 세션 정리 안 함")
 
     logs = sorted(p.name for p in sd.glob("*") if p.is_file() and p.name.startswith(LEGACY_LOG_PREFIXES)
                   and not p.name.endswith(".lock"))
@@ -503,7 +529,7 @@ def _legacy_locks(stack: ExitStack) -> None:
     import host_store
     stack.enter_context(agent_share._locked())
     stack.enter_context(host_store._locked())
-    stack.enter_context(delegation._ledger_lock())   # `_locked()` 는 3b 에서 authz 락부터 잡는다 — 여기선 이미 쥐고 있다
+    stack.enter_context(delegation._ledger_lock())   # 위임 `_locked()` 는 (켜짐에서) authz 락부터 잡는다 — 여기선 이미 쥐고 있다
 
 
 def restore(ts: str, *, now: Optional[float] = None) -> dict:
@@ -533,7 +559,7 @@ def restore(ts: str, *, now: Optional[float] = None) -> dict:
                 removed.append(key)
     # 로그는 덮지 않는다(그 뒤에 쌓인 기록을 지우지 않게) — 백업 안에 남아 있다.
     try:
-        audit.append({"principal": "cli:migrate-auth", "action": "authz.migrate.restore", "resource": "authz:*",
+        audit.append({"principal": "local:cli:migrate-auth", "action": "authz.migrate.restore", "resource": "authz:*",
                       "decision": "allow", "result": "ok", "reason": f"restore {ts}",
                       "detail": {"restored": len(restored), "removed": len(removed), "pre_restore": pre["ts"]}})
     except OSError as e:
@@ -581,13 +607,16 @@ def apply(*, now: Optional[float] = None, tmux: Optional[dict] = "probe") -> dic
         docs["approvals"]["items"], a = _sync(docs["approvals"]["items"], p["approvals"])
         docs["shares"]["items"], s = _dict_sync(docs["shares"]["items"], p["shares"])
         docs["principals/peers"]["items"], pe = _sync(docs["principals/peers"]["items"], p["peers"], keep_fields=())
+        for n in store._UPGRADED_DOCS:         # 옛 이름 레코드는 읽을 때 변환된 채로 있다 — 문서를 새 형태(schema 2)로 다시 쓴다
+            docs[n]["version"] = store.SCHEMA_VERSION
+        store._prebackup_done.add(str(store.root()))        # 방금 백업했다 — 쓰기 직전 자동 백업은 필요 없다
         meta = docs["meta"]["items"]
         logs = _import_logs(p, bk["ts"], meta)
         changed = any(x["added"] or x["updated"] or x["removed"] for x in (g, a, s, pe))
         if changed or "applied_at" not in meta:
             meta["applied_at"] = now
         meta["last_backup"] = bk["ts"]
-        if tmux:                      # tmux 를 읽었고 세션이 있다 → 공유 정책 snapshot 완료(3a 가 이 표시를 본다)
+        if tmux:                      # tmux 를 읽었고 세션이 있다 → 공유 정책 snapshot 완료(공유 강제가 이 표시를 본다)
             meta["share_adopted"] = True
         meta["schema"] = store.SCHEMA_VERSION
         meta["counts"] = {"grants": len(docs["grants"]["items"]), "approvals": len(docs["approvals"]["items"]),
@@ -595,16 +624,16 @@ def apply(*, now: Optional[float] = None, tmux: Optional[dict] = "probe") -> dic
     result = {"backup": bk["ts"], "grants": g, "approvals": a, "shares": s, "peers": pe, "logs": logs,
               "warnings": p["warnings"], "dropped": p["dropped"]}
     try:
-        audit.append({"principal": "cli:migrate-auth", "action": "authz.migrate.apply", "resource": "authz:*",
+        audit.append({"principal": "local:cli:migrate-auth", "action": "authz.migrate.apply", "resource": "authz:*",
                       "decision": "allow", "result": "ok", "reason": f"backup {bk['ts']}",
                       "detail": {"grants": g, "approvals": a, "shares": s, "peers": pe}})
         for name, n in logs["lines"].items():
             src = "legacy:agent_access" if name.startswith("agent_access") else "legacy:peer_audit"
-            audit.append({"principal": "cli:migrate-auth", "action": "authz.migrate.import_log", "resource": "authz:*",
+            audit.append({"principal": "local:cli:migrate-auth", "action": "authz.migrate.import_log", "resource": "authz:*",
                           "decision": "allow", "result": "ok", "source": src,
                           "detail": {"file": f"legacy/{bk['ts']}/{name}", "lines": n}})
     except OSError as e:
-        # R11.5 — authz 변경은 감사 실패 시 fail closed 지만, 이전은 이미 백업이 있고 shadow 단계라 경고로 둔다.
+        # authz 변경은 감사 실패 시 fail closed 지만, 이전은 이미 백업이 있고 shadow 단계라 경고로 둔다.
         result["warnings"].append(f"감사 기록 실패: {e}")
     return result
 
@@ -614,7 +643,7 @@ def verify_store(*, now: Optional[float] = None, tmux: Optional[dict] = "probe")
     p = plan(now=now, tmux=tmux)
     d = diff(p)
     clean = all(not (x["added"] or x["updated"] or x["removed"]) for x in d.values())
-    return {"clean": clean, "diff": d, "warnings": p["warnings"]}
+    return {"clean": clean, "diff": d, "warnings": p["warnings"], "schema": store.schema_report()}
 
 
 def status() -> dict:
@@ -628,5 +657,6 @@ def status() -> dict:
         pass
     ok, broken, lines = audit.verify()
     return {"migrated": "applied_at" in meta["items"], "meta": meta["items"], "meta_corrupt": bad,
-            "backups": list_backups(), "shadow_mismatches": n,
+            "backups": list_backups(), "shadow_mismatches": n, "schema": store.schema_report(),
+            "schema_version": store.SCHEMA_VERSION,
             "audit": {"ok": ok, "broken_seq": broken, "lines": lines}}

@@ -1,4 +1,4 @@
-"""authz 특성 테스트(plan-2.6 0단계)의 실행 틀 — 가짜 세계 + 호출자 행렬 + 사례 실행기.
+"""authz 특성 테스트의 실행 틀 — 가짜 세계 + 호출자 행렬 + 사례 실행기.
 
 이 파일은 **판정을 바꾸지 않는다.** 지금 서버가 내리는 판정을 그대로 재생해 기록할 뿐이다.
 그래서 서버 코드는 하나도 건드리지 않고, 판정 **바깥**의 부수효과만 가짜로 바꾼다:
@@ -48,7 +48,7 @@ def password_hash() -> str:
 
 
 MODES = ("password", "token", "none")
-# 호출자 행렬 — 30-phases.md 0단계 목록 + 위임 자식(agent_child)·서명 위조(peer_forged).
+# 호출자 행렬 — 위임 자식(agent_child)·서명 위조(peer_forged).
 CALLERS = (
     "session", "session_elev", "machine", "none",
     "peer_view", "peer_control", "peer_control_agent", "peer_forged",
@@ -211,7 +211,7 @@ class Case:
     body: Any = None               # dict → JSON, bytes → 그대로
     headers: tuple = ()            # 추가 헤더 (k, v) 쌍
     tmux: str = "up"
-    hole: Optional[str] = None     # "H1" 등 — 40-decisions-risks.md 의 구멍 번호
+    hole: Optional[str] = None     # "H1" 등 — 알려진 구멍을 가리키는 짧은 라벨(설명은 사례 id·docstring 에 있다)
     rule: Optional[str] = None     # relay_policy 규칙 패턴(커버리지 키)
     real_dispatch: bool = False    # relay: 안쪽 라우트까지 실제로 돈다(기본은 판정만 보고 멈춘다)
     note: str = ""
@@ -421,7 +421,7 @@ class World:
     # -- 서버 모드 --
     def set_mode(self, mode: str) -> None:
         """password: 비밀번호+기계 토큰+서명키(보통 설치) / token: 기계 토큰+서명키, 비밀번호 없음 /
-        none: 아무것도 없음(H6)."""
+        none: 아무것도 없음."""
         import auth
         pw, tok, key = {"password": (password_hash(), MACHINE, SESSION_KEY),
                         "token": ("", MACHINE, SESSION_KEY),

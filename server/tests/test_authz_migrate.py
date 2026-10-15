@@ -1,4 +1,4 @@
-"""authz 이전(plan-2.6 1단계, 20-mapping.md B1) — 각 행, 손상 입력, 멱등, 백업·복원, CLI.
+"""authz 이전 — 각 행, 손상 입력, 멱등, 백업·복원, CLI.
 
 tmux 는 부르지 않는다 — 계획·적용에 tmux snapshot 을 직접 넘긴다(`tmux=`).
 """
@@ -14,7 +14,7 @@ import time
 import pytest
 
 from authz import __main__ as cli
-from authz import engine, migrate, principals as P, store
+from authz import engine, migrate, principals as P, scopes as S, store
 
 NOW = time.time()
 A, T, O, X = "$1:1001", "$2:1002", "$3:1003", "$9:9009"          # X 는 죽은 세션
@@ -73,14 +73,16 @@ def test_agent_grants_rows(sd):
     g = by_origin(p["grants"])
     r = g["legacy:agent_grants:g-read"]
     assert (r["subject"], r["resource"], r["scopes"]) == (f"agent:local/{A}", f"session:local/{T}",
-                                                          ["session.list", "session.read"])
+                                                          ["session.view", "session.read"])
     assert r["approved_by"].startswith("migrated:") and r["expires"] is None
-    assert g["legacy:agent_grants:g-rw"]["scopes"] == ["session.list", "session.read", "session.input.line"]
+    assert g["legacy:agent_grants:g-rw"]["scopes"] == ["session.view", "session.read", "session.input"]
+    assert g["legacy:agent_grants:g-rw"]["sconds"] == {"session.input": {"modes": ["line"]}}
+    assert g["legacy:agent_grants:g-rw"]["schema"] == 2 and "sconds" not in r
     assert "legacy:agent_grants:g-dead" not in g and "legacy:agent_grants:g-none" not in g
     assert p["dropped"] == {"dead_session": 1, "expired": 2, "empty": 1}
     a = by_origin(p["approvals"])
     assert a["legacy:agent_grants:req:r-pend"]["state"] == "pending"
-    assert a["legacy:agent_grants:req:r-pend"]["scopes"][-1] == "session.input.line"
+    assert a["legacy:agent_grants:req:r-pend"]["scopes"][-1] == "session.input"
     d = a["legacy:agent_grants:req:r-deny"]
     assert d["state"] == "denied" and d["cooldown_until"] == pytest.approx(NOW - 10 + 300)
     assert "legacy:agent_grants:req:r-old" not in a and "legacy:agent_grants:req:r-exp" not in a
@@ -89,8 +91,9 @@ def test_agent_grants_rows(sd):
 def test_hosts_and_delegation_rows_without_copying_secrets(sd):
     p = migrate.plan(now=NOW, tmux=TMUX)
     g = by_origin(p["grants"])
-    assert g["legacy:hosts:pv"]["preset"] == "view" and "relay.*" not in g["legacy:hosts:pv"]["scopes"]
-    assert g["legacy:hosts:pca"]["preset"] == "control" and "relay.*" in g["legacy:hosts:pca"]["scopes"]
+    assert g["legacy:hosts:pv"]["preset"] == "view" and "relay" not in g["legacy:hosts:pv"]["scopes"]
+    assert g["legacy:hosts:pca"]["preset"] == "control" and "relay" in g["legacy:hosts:pca"]["scopes"]
+    assert g["legacy:hosts:pca"]["sconds"]["relay"]["groups"] == list(S.ALL_RELAY_GROUPS)
     m = g["legacy:hosts:pca:agentMessages"]
     assert (m["subject"], m["resource"], m["scopes"]) == ("peer:pca/obo:agent:*", "msg:local/*", ["msg.send"])
     assert "legacy:hosts:pv:agentMessages" not in g
@@ -115,7 +118,7 @@ def test_tmux_share_snapshot_and_lower_level_on_mismatch(sd):
 def test_unreadable_tmux_keeps_everything(sd):
     p = migrate.plan(now=NOW, tmux=None)
     assert "legacy:agent_grants:g-dead" in by_origin(p["grants"])
-    assert p["shares"] == {} and any("F3" in w for w in p["warnings"])
+    assert p["shares"] == {} and any("tmux 를 읽지 못함" in w for w in p["warnings"])
 
 
 def test_engine_on_migrated_store_matches_old_effective(sd):
@@ -124,11 +127,14 @@ def test_engine_on_migrated_store_matches_old_effective(sd):
     me = P.agent(A)
     ctx = lambda mode: {"share": {"nick": "x", "mode": mode}, "prefer_live": False, "alive": set(TMUX)}  # noqa: E731
     assert engine.decide(me, "session.read", f"session:local/{T}", ctx("readwrite"), snap).allow
-    assert not engine.decide(me, "session.input.line", f"session:local/{T}", ctx("readwrite"), snap).allow
-    assert engine.decide(me, "session.input.line", f"session:local/{O}", ctx("readwrite"), snap).allow
-    assert not engine.decide(me, "session.input.line", f"session:local/{O}", ctx("read"), snap).allow
-    assert engine.decide(me, "deleg.control", "deleg:local/d1", {}, snap).allow
-    assert not engine.decide(P.agent(O), "deleg.control", "deleg:local/d1", {}, snap).allow
+    line = lambda mode: {**ctx(mode), "mode": "line"}  # noqa: E731
+    assert not engine.decide(me, "session.input", f"session:local/{T}", line("readwrite"), snap).allow
+    assert engine.decide(me, "session.input", f"session:local/{O}", line("readwrite"), snap).allow
+    assert not engine.decide(me, "session.input", f"session:local/{O}", line("read"), snap).allow
+    assert engine.decide(me, "deleg.control", "deleg:local/d1", {"role": "parent"}, snap).allow
+    assert not engine.decide(me, "deleg.control", "deleg:local/d1", {"role": "child"}, snap).allow
+    assert not engine.decide(P.agent(O), "deleg.control", "deleg:local/d1", {"role": "parent"}, snap).allow
+    assert engine.decide(P.agent(O), "deleg.control", "deleg:local/d1", {"role": "child"}, snap).allow
 
 
 # --- 손상 입력 ---------------------------------------------------------------------------

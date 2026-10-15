@@ -204,7 +204,7 @@ def verify_caller(pane: Optional[str], tmux_env: Optional[str], claimed_pid, *,
     """호출자 세션을 확정하거나 IdentityError. 모듈 머리말의 1~3.
 
     `peer_pid`: unix socket 연결의 peer pid(authz/sock.py 가 커널에서 읽어 scope 에 넣은 값). 있으면 lsof·신고 pid 를
-    전혀 쓰지 않고 이것만 믿는다(H7 — 터널·프록시·lsof 없음에 의존하지 않는다). TCP 경로는 그대로다."""
+    전혀 쓰지 않고 이것만 믿는다(터널·프록시·lsof 없음에 의존하지 않는다). TCP 경로는 그대로다."""
     if not pane:
         raise IdentityError("TMUX_PANE 이 없습니다 — tmux 밖에서는 호출한 칸을 식별할 수 없습니다")
     if not _PANE_RE.fullmatch(pane):

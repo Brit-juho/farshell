@@ -1,4 +1,4 @@
-"""unix socket 시험 도구(plan-2.6 2단계) — 실제 AF_UNIX 서버를 프로세스 안에 띄운다.
+"""unix socket 시험 도구 — 실제 AF_UNIX 서버를 프로세스 안에 띄운다.
 
 - `short_dir()`: AF_UNIX 경로 한도(macOS 104바이트) 때문에 `/tmp/fsXXXXXXXX` 같은 짧은 임시 디렉터리.
 - `LiveSock`: 별도 스레드의 event loop 에서 `authz.sock.SockService` 를 돌린다(실제 uvicorn).

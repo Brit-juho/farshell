@@ -1,4 +1,4 @@
-"""FarShell 서버 호출 — unix socket 우선, 기계 토큰 fallback (plan-2.6 2단계, 의존성 없음).
+"""FarShell 서버 호출 — unix socket 우선, 기계 토큰 fallback.
 
 `~/.vt/run/fsh.sock`(0600)에 붙으면 서버가 연결의 peer uid/pid 로 호출자를 안다(authz/sock.py).
 토큰을 환경·파일에서 읽어 실어 보낼 필요가 없다. 소켓이 없거나(옛 서버·소켓 비활성·stale) 서버가

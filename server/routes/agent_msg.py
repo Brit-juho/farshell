@@ -9,7 +9,7 @@
 에이전트가 아무 세션인 척 쓸 수 없어야 한다. tmux 밖에서 보내면 보낸 세션은 비어
 있고, 받는 쪽은 답장할 곳이 없다는 것을 머리글로 안다.
 
-`VT_AUTHZ_ENFORCE=msg`(3c)이면 보낸 쪽은 **인증된 호출자**다(unix socket 의 peer pid 체인 또는
+`VT_AUTHZ_ENFORCE=msg`(이면 보낸 쪽은 **인증된 호출자**다(unix socket 의 peer pid 체인 또는
 `X-Fsh-*` 헤더 + 소켓 소유 프로세스 확인). 본문의 pane/tmux/cwd 는 무시하고, 확인되지 않으면
 403 `identity_unverified`, 관계 없는 세션 앞으로는 사람이 승인하기 전까지 202 보류다
 (`authz/msg_svc.py` 머리말). 꺼짐이면 위의 옛 동작 그대로다.
@@ -32,6 +32,7 @@ import agent_msg
 import host_store
 from authz import hooks as authz_hooks
 from authz import msg_svc
+from authz import principals as P
 import pane_resolve
 import peer_client
 import share_identity
@@ -86,11 +87,11 @@ def _rows_by_key(rows) -> dict:
 
 
 def _verify_sender_sync(request: Request, rows) -> _Sender:
-    """3c — 보낸 쪽을 **인증된 호출자**로 확정한다. 소켓이면 서버가 커널에서 읽은 peer pid 가 닿는 pane 의 세션,
+    """보낸 쪽을 **인증된 호출자**로 확정한다. 소켓이면 서버가 커널에서 읽은 peer pid 가 닿는 pane 의 세션,
     아니면 `X-Fsh-*` 헤더를 `share_identity.verify_caller` 로(소켓 소유 프로세스 확인). 본문의 pane/tmux/cwd 는 보지 않는다."""
     if request.scope.get("fsh_sock") is True:
         p = getattr(request.state, "fsh_principal", None)
-        key = (p.attrs.get("key") if p is not None and p.kind == "agent" else "") or ""
+        key = (p.attrs.get("key") if p is not None and p.kind == "agent" and not P.is_hook(p) else "") or ""
         if not key:
             raise _Unverified("소켓 호출 프로세스가 FarShell 의 tmux pane 안에 있지 않습니다")
         row = _rows_by_key(rows).get(key)
@@ -152,7 +153,7 @@ async def send_message(request: Request):
     is_local = host in ("local", me["id"]) or host.lower() == (me.get("label") or "").lower()
     peer = None
     if is_local:
-        authz_hooks.agent_msg_local(request, to_session)   # shadow(plan-2.6 1단계) — 응답은 바꾸지 않는다(켜짐에서도 차이를 센다)
+        authz_hooks.agent_msg_local(request, to_session)   # shadow — 응답은 바꾸지 않는다(켜짐에서도 차이를 센다)
     if enforced:
         # 존재하지 않는 대상은 보낸 쪽을 따지기 전에 404 — 호출자 확인은 그다음이다.
         if is_local:
@@ -162,7 +163,7 @@ async def send_message(request: Request):
             peer = await asyncio.to_thread(_find_peer, host)
             if peer is None:
                 return _err("host_not_found", f"등록되지 않은 호스트입니다: {host}", 404)
-        # 3c — 보낸 쪽은 인증된 호출자. 본문의 pane/tmux/cwd 는 보지 않는다(H2). 확인 못 하면 403(H17).
+        # 보낸 쪽은 인증된 호출자. 본문의 pane/tmux/cwd 는 보지 않는다. 확인 못 하면 403.
         rows = await asyncio.to_thread(share_identity.list_pane_rows)
         try:
             sender = await asyncio.to_thread(_verify_sender_sync, request, rows)
@@ -246,7 +247,7 @@ async def send_message(request: Request):
         reply_to=reply_to, hop=int(result.get("hop", hop)),
         conv=str(result.get("conv") or conv), msg_id=msg_id)
     if enforced:
-        # 보내는 호스트의 허용은 받는 호스트의 사람이 정한다(D12) — 여기서는 나간 사실만 남긴다.
+        # 보내는 호스트의 허용은 받는 호스트의 사람이 정한다 — 여기서는 나간 사실만 남긴다.
         await asyncio.to_thread(
             msg_svc.audit_op, "send", "forwarded", principal=f"agent:local/{sender.key}",
             resource=f"msg:{peer['id']}/{to_session}", decision="allow", **msg_svc.text_meta(text))

@@ -1,12 +1,12 @@
-"""unix socket 경로 — 같은 event loop 의 두 번째 uvicorn 서버 (plan-2.6 2단계, 10-policy A1 P2~P5).
+"""unix socket 경로 — 같은 event loop 의 두 번째 uvicorn 서버.
 
 `<state>/run/fsh.sock`(디렉터리 0700, 소켓 0600)에 붙은 프로세스의 **커널이 알려 주는** uid/pid 로 호출자를
-정한다. 토큰도, 헤더의 자기 주장도 신원이 아니다(R1.2). TCP 서버와 앱·미들웨어를 공유하지만 이 경로로 들어온
+정한다. 토큰도, 헤더의 자기 주장도 신원이 아니다. TCP 서버와 앱·미들웨어를 공유하지만 이 경로로 들어온
 요청은 아래 `Gate` 를 먼저 지난다.
 
 ## 흐름 (요청 하나)
   PeerH11.connection_made   커널에서 peer uid/pid 를 읽어 연결에 묶는다. uid 가 서버 uid 가 아니면 즉시 닫는다.
-  Gate                      HTTP 만(WS 거부) → 자가 시험 통과 전엔 시험 경로 외 전부 503 → R1.1 모호성(400)
+  Gate                      HTTP 만(WS 거부) → 자가 시험 통과 전엔 시험 경로 외 전부 503 → 모호성(400)
                             → 경로 허용표(403) → 주체 해석 → `scope["fsh_sock"]=True`, `state["fsh_principal"]`
   main.TokenAuthMiddleware  `scope["fsh_sock"]` 면 토큰 검사를 건너뛴다(그 키는 이 게이트만 세울 수 있다 —
                             uvicorn 이 만드는 scope 에 클라이언트가 키를 넣을 방법이 없다).
@@ -21,14 +21,14 @@ peer 가 이미 죽었거나(pid 재사용 위험) tmux 를 읽지 못하면 **�
 403 `socket_route_not_allowed`. 사람 전용 라우트(`require_human_session`)는 토큰이 그렇듯 소켓으로도 못 연다.
 허용표는 저장소 안 클라이언트가 실제로 부르는 것만이고, 새 클라이언트를 만들면 여기에 한 줄 더한다.
 
-## 플랫폼 (위험 2)
+## 플랫폼
 macOS: `getsockopt(SOL_LOCAL=0, LOCAL_PEERCRED=1, 76)` → xucred(uid), `LOCAL_PEERPID=2` → int. python `socket`
 에 상수가 없다. Linux: `SO_PEERCRED` → struct ucred(pid, uid, gid). pid 는 **connect() 를 부른 프로세스**다
 (fork 한 자식이 fd 를 상속해도 바뀌지 않는다). 시작할 때 자기 자신에게 붙어 `peer pid == getpid()` 를 확인하고,
 틀리면 소켓을 열어 두지 않는다(fail closed) — uvicorn 업그레이드로 신원이 조용히 약해지는 것을 막는 장치다.
 
 ## 건너뛰는 경우 (경고만 남기고 서버는 계속)
-`VT_AUTHZ_SOCKET=0`, WSL 의 `/mnt/` 아래(권한이 안 맞는다, 위험 15), 경로가 AF_UNIX 한도(100바이트)를 넘음,
+`VT_AUTHZ_SOCKET=0`, WSL 의 `/mnt/` 아래(권한이 안 맞는다), 경로가 AF_UNIX 한도(100바이트)를 넘음,
 이미 살아 있는 다른 리스너가 있음(그 소켓을 지우지 않는다), 소켓이 아닌 파일이 그 자리에 있음.
 """
 
@@ -67,7 +67,7 @@ WHOAMI_PATH = "/api/authz/whoami"
 # --- 허용표 ----------------------------------------------------------------------------------
 # (메서드, 경로 정규식 fullmatch, 부르는 곳). 저장소 안 클라이언트가 소켓으로 부르는 것만이다.
 ROUTES: tuple[tuple[str, str, str], ...] = (
-    ("POST", r"/api/agent/event", "agent_hook.sh (svc:hook / P5)"),
+    ("POST", r"/api/agent/event", "agent_hook.sh (svc:hook / 에이전트 pane 안이면 agent via=hook)"),
     ("POST", r"/api/agent/report", "fsh pane report"),
     ("POST", r"/api/clipboard/push", "clipboard_daemon (svc:clipboard)"),
     ("POST", r"/voice/(cancel|input|target|bind|stt/preload)", "voice daemon · voice_bind (svc:voice)"),
@@ -179,7 +179,7 @@ def _headers(scope) -> dict:
 
 
 def ambiguous_credential(scope, headers: dict) -> Optional[str]:
-    """R1.1 — 소켓 요청은 자격을 싣지 않는다. 하나라도 있으면 주체가 둘이라는 뜻이다(어느 쪽도 고르지 않는다)."""
+    """소켓 요청은 자격을 싣지 않는다. 하나라도 있으면 주체가 둘이라는 뜻이다(어느 쪽도 고르지 않는다)."""
     if headers.get("authorization"):
         return "authorization"
     if "vt_session" in headers.get("cookie", ""):
@@ -256,8 +256,9 @@ def _alive(pid: int) -> bool:
 
 def principal_view(p: P.Principal) -> dict:
     a = p.attrs
-    out = {"kind": p.kind, "id": p.id, "uid": a.get("uid"), "pid": a.get("pid"), "via": "socket"}
-    for k in ("svc", "pane", "key"):
+    out = {"kind": p.kind, "id": p.id, "uid": a.get("uid"), "pid": a.get("pid"),
+           "via": "hook" if a.get("via") == "hook" else "socket"}
+    for k in ("name", "svc", "pane", "key"):
         if a.get(k):
             out[k] = a[k]
     return out

@@ -1,4 +1,4 @@
-"""rate limit 표(10-policy.md A12)와 판정 보조.
+"""rate limit 표와 판정 보조.
 
 값은 메모리 보관, 재시작 시 초기화(기존과 같다). 1단계의 엔진은 **카운터를 직접 올리지 않는다** —
 shadow 판정이 실제 호출 횟수를 두 번 세면 안 되기 때문이다. 판정 지점이 이미 센 값을
@@ -16,26 +16,26 @@ from typing import Optional
 # (한도, 창 초) — 키는 판정 scope 또는 묶음 이름.
 LIMITS: dict[str, tuple[int, float]] = {
     "session.read": (30, 60.0),          # (주체, 세션)당
-    "session.input.line": (10, 60.0),
+    "session.input": (10, 60.0),          # 한 줄 입력
     "msg.send": (20, 60.0),              # 보내는 호스트당
     "deleg.spawn": (5, 60.0),            # 전역
     "authz.request": (6, 60.0),          # 주체당
     "pairing.code": (10, 3600.0),
     "pane_token": (10, 60.0),
-    "browser.tab": (60, 60.0),
+    "browser": (60, 60.0),               # 탭당
     "browser.js": (10, 60.0),
-    "browser.tab.navigate": (30, 60.0),
+    "browser.navigate": (30, 60.0),
     "lease": (30, 60.0),
     "peer": (600, 60.0),
 }
 MSG_MAX_HOP = 10
-DELEG_MAX_OPEN = 3          # delegation.MAX_OPEN_CHILDREN 과 같아야 한다(B1 "상수 유지")
+DELEG_MAX_OPEN = 3          # delegation.MAX_OPEN_CHILDREN 과 같아야 한다
 DELEG_SPAWN_PER_MIN = 5     # delegation.SPAWN_PER_MIN
 PAIR_CODE_ATTEMPTS = 5
-PENDING_PER_PRINCIPAL = 20  # R4.7
+PENDING_PER_PRINCIPAL = 20  # 대기 요청 주체당
 PENDING_TOTAL = 200
 PENDING_TTL = 24 * 3600
-DENY_COOLDOWN = 300         # R4.6
+DENY_COOLDOWN = 300         # 거절 쿨다운(초)
 
 
 def exceeded(name: str, count: int, limit: Optional[int] = None) -> bool:
