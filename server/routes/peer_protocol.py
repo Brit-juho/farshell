@@ -33,6 +33,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 import host_store
+from authz import hooks as authz_hooks
 from i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,7 @@ def _require(request: Request, level: str = host_store.LEVEL_VIEW) -> tuple[dict
         grant = _authenticate(request)
     except PeerDenied as e:
         return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
+    authz_hooks.peer_level(grant, level, not (level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL))
     if level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL:
         host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
         return None, JSONResponse(
@@ -135,6 +137,7 @@ async def _require_body(request: Request, level: str = host_store.LEVEL_VIEW):
         grant = _authenticate_raw(request.method, request.url.path, request.headers, digest)
     except PeerDenied as e:
         return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
+    authz_hooks.peer_level(grant, level, not (level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL))
     if level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL:
         host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
         return None, JSONResponse(

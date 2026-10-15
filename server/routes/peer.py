@@ -47,7 +47,10 @@ from pathlib import Path
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+import agent_msg
 import host_store
+from authz import hooks as authz_hooks
+from authz import msg_svc
 from i18n import tr
 from routes.peer_protocol import (
     PeerDenied,
@@ -559,6 +562,7 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
 
     await ws.accept()
     can_control = grant.get("level") == host_store.LEVEL_CONTROL
+    authz_hooks.peer_ws_control(grant, tmux_name, can_control)   # shadow(plan-2.6 1단계)
     # 「연결된 화면」이 원격에서도 동작하려면 상대가 **자기 화면이 어느 것인지**
     # 지목할 수 있어야 한다(안 그러면 「이 화면만 남기기」가 자기 자신을 끊는다).
     # 그래서 화면 토큰을 상대가 정해 보내고, PTY 세션 id에 그대로 박는다:
@@ -651,9 +655,17 @@ async def peer_agent_message(request: Request, grant: dict, data: bytes):
     일을 시키는 길이라 셸 입력 허용만으로 저절로 열리면 안 된다. 본문 해시까지
     서명한다(메시지 내용이 곧 받는 에이전트가 실행할 지시다).
     """
-    import agent_msg
-
-    if not grant.get("agentMessages"):
+    ticket = None
+    allowed = bool(grant.get("agentMessages"))
+    authz_hooks.peer_agent_messages(grant, allowed)   # shadow(plan-2.6 1단계) — 켜짐에서도 옛 검사와의 차이를 센다
+    if msg_svc.enforced():
+        # 3c — 엔진이 판정한다(hosts.json 의 agentMessages 를 그 자리에서 번역한 grant). 결과는 옛 검사와 같다.
+        try:
+            v = await asyncio.to_thread(msg_svc.authorize_peer, grant)
+        except agent_msg.MessageError as e:
+            return JSONResponse({"error": e.code, "reason": e.reason}, status_code=e.status), f"거절: {e.code}"
+        allowed, ticket = v.allow, v.ticket
+    if not allowed:
         return JSONResponse(
             {"error": "agent_messages_off", "reason":
              "상대 맥이 에이전트 메시지를 받지 않습니다 — 그 맥에서 "
@@ -679,7 +691,7 @@ async def peer_agent_message(request: Request, grant: dict, data: bytes):
             from_session=str(body.get("from") or ""), to_session=to_session,
             text=str(body.get("text") or ""), reply_to=body.get("replyTo") or None,
             claimed_hop=int(body.get("hop") or 0), msg_id=str(body.get("id") or ""),
-            conv=str(body.get("conv") or ""),
+            conv=str(body.get("conv") or ""), authz=ticket,
         )
     except agent_msg.MessageError as e:
         return JSONResponse({"error": e.code, "reason": e.reason},

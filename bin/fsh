@@ -39,6 +39,8 @@ fi
 # 화면 언어(ko/en)와 메시지 번역 `_t` — server/i18n.py와 같은 순서로 언어를 정한다.
 # shellcheck source=../lib/i18n.sh
 [ -f "$VT_DIR/lib/i18n.sh" ] && . "$VT_DIR/lib/i18n.sh"
+# shellcheck source=../lib/fsh_client.sh
+[ -f "$VT_DIR/lib/fsh_client.sh" ] && . "$VT_DIR/lib/fsh_client.sh"
 
 # 설정 파일 로드 — defaults 먼저, 그 다음 사용자 override.
 #
@@ -511,12 +513,47 @@ _port_share_cli() {
 }
 
 _authed_curl() {
+  # plan-2.6 2단계: unix socket 먼저(자격 없음 — 서버가 peer pid 로 안다), 소켓이 없거나 연결 실패(7)/소켓 계층 거부
+  # (-f 로 22)면 예전처럼 토큰. 토큰은 curl 설정 파일(-K, 프로세스 치환)로 넘겨 argv(`ps`)에 오르지 않는다.
+  # URL 의 호스트는 소켓 연결에서 쓰이지 않는다. 마지막 인자(URL)만 보고 경로를 정한다.
+  local rc
+  if declare -F fsh_sock_usable >/dev/null && fsh_sock_usable; then
+    curl --unix-socket "$(fsh_sock_path)" -H 'X-Fsh-Svc: cli' "$@"; rc=$?
+    case "$rc" in 7|22) ;; *) return "$rc" ;; esac
+  fi
   local token="${VT_AUTH_TOKEN:-${VT_TOKEN:-}}"
-  if [ -n "$token" ]; then
-    curl -H "Authorization: Bearer $token" "$@"
+  if [ -n "$token" ] && declare -F _fsh_curl_token_cfg >/dev/null; then
+    curl -K <(_fsh_curl_token_cfg) "$@"
   else
     curl "$@"
   fi
+}
+
+# plan-2.6 2단계 — unix socket 상태 한 줄. `python -m authz sock-status` 출력(state|path|selftest|perms|dir|reachable|legacy24h|reason)을
+# 읽어 "<level>\t<메시지>"로 돌려준다. level = ok|warn|fail. doctor 와 status 가 같이 쓴다.
+_sock_status_line() {
+  [ -x "${VT_PYTHON:-}" ] || return 1
+  local raw st path selftest perms dirp reach legacy reason lvl msg
+  raw="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz sock-status --port "$VT_PORT" 2>/dev/null)" || return 1
+  [ -n "$raw" ] || return 1
+  IFS='|' read -r st path selftest perms dirp reach legacy reason <<<"$raw"
+  perms="${perms#perms=}"; dirp="${dirp#dir=}"; legacy="${legacy#legacy24h=}"; reach="${reach#reachable=}"
+  case "$st:$reach" in
+    listening:True)
+      lvl=ok; msg="$(_t 'socket OK — {path} (권한 {perms}, 디렉터리 {dir}, 자가 시험 통과)' path="${path/#$HOME/~}" perms="$perms" dir="$dirp")" ;;
+    listening:*|stale:*)
+      lvl=warn; msg="$(_t '상태 파일은 켜짐인데 연결되지 않습니다 — fsh restart')" ;;
+    failed:*)
+      lvl=fail; msg="$(_t '자가 시험 실패 — 소켓을 서비스하지 않습니다(토큰으로만 동작): {reason}' reason="$reason")" ;;
+    skipped:*)
+      lvl=warn; msg="$(_t '건너뜀 — 토큰으로만 동작: {reason}' reason="$reason")" ;;
+    disabled:*)
+      lvl=warn; msg="$(_t 'VT_AUTHZ_SOCKET=0 — 소켓을 쓰지 않습니다(토큰으로만 동작)')" ;;
+    *)
+      lvl=warn; msg="$(_t '소켓 없음 — 서버가 꺼져 있거나 옛 코드입니다(fsh restart)')" ;;
+  esac
+  msg="$msg · $(_t '최근 24h 토큰 사용 {n}건' n="${legacy:-0}")"
+  printf '%s\t%s\n' "$lvl" "$msg"
 }
 
 _request_proxy_sync() {
@@ -1889,6 +1926,7 @@ cmd_help() {
                             raises that CLI to "self-reported · high"
     fsh queue               Prompt queue — stack instructions while the agent is busy and feed them in order
     fsh delegate            List/close agent delegations (ls|close <id>)
+    fsh migrate-auth        Migrate permissions to the authz store (--dry-run|--apply|--verify|--status)
     fsh msg                 Messages between agents (log / agents / send)
     fsh mcp                 MCP server (stdio) for agents — register it with Claude
     fsh worktree            Create/open/delete git worktrees (alias: wt)
@@ -1950,6 +1988,7 @@ HELP_EN
                             커버리지가 그 CLI를 「자기보고 · 높음」으로 올린다
     fsh queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
     fsh delegate            에이전트 위임 목록·닫기 (ls|close <id>)
+    fsh migrate-auth        권한 저장소 이전 (--dry-run|--apply|--verify|--status)
     fsh msg                 에이전트 간 메시지 (log / agents / send)
     fsh mcp                 에이전트용 MCP 서버(stdio) — Claude에 등록해 쓴다
     fsh worktree            git 워크트리 만들기/열기/삭제 (별칭: wt)
@@ -2328,6 +2367,23 @@ cmd_delegate() {
   esac
 }
 
+# 권한 저장소 이전(docs/plan-2.6 1단계) — 옛 grant·peer 등급·위임을 ~/.vt/authz/ 로 옮긴다.
+# 서버 없이 동작한다(저장소 파일·tmux 만 읽는다). 기본은 --dry-run(아무것도 쓰지 않음).
+cmd_migrate_auth() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
+    return 1
+  fi
+  case "${1:---dry-run}" in
+    --dry-run|--apply|--verify|--backup|--restore|--status|--json|--finalize)
+      (cd "$VT_DIR/server" && "$VT_PYTHON" -m authz migrate-auth "$@")
+      ;;
+    *)
+      echo "$(_t '사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]')"
+      return 1 ;;
+  esac
+}
+
 cmd_msg() {
   if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
     echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
@@ -2433,26 +2489,27 @@ cmd_pane() {
         echo "  ⚠ $(_t 'tmux pane 밖입니다 — pane id 없이 cwd로만 판정됩니다')"
       fi
       local resp
-      resp="$("${VT_PYTHON:-python3}" - "$state" "$agent" <<'PYEOF'
-import json, os, sys, urllib.request
+      resp="$("${VT_PYTHON:-python3}" - "$state" "$agent" "$VT_DIR/server" <<'PYEOF'
+import json, os, sys
 
 state, agent = sys.argv[1], sys.argv[2]
-server = os.environ.get("VT_SERVER") or f"http://localhost:{os.environ.get('VT_PORT', '7777')}"
-body = json.dumps({
+sys.path.insert(0, sys.argv[3])
+port = os.environ.get("VT_PORT", "7777")
+server = os.environ.get("VT_SERVER") or f"http://localhost:{port}"
+body = {
     "state": state,
     "agent": agent or None,
     "pane": os.environ.get("TMUX_PANE"),
     "tmux": os.environ.get("TMUX"),
     "cwd": os.getcwd(),
-}).encode()
-req = urllib.request.Request(f"{server}/api/agent/report", data=body,
-                             headers={"Content-Type": "application/json"})
-token = os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN")
-if token:
-    req.add_header("Authorization", f"Bearer {token}")
+}
+token = os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN") or ""
 try:
-    with urllib.request.urlopen(req, timeout=3) as r:
-        data = json.load(r)
+    # 소켓 우선(plan-2.6 2단계 — pane 안이면 서버가 peer pid 로 agent 를 안다), 없으면 TCP + 토큰.
+    import fsh_client
+    _, raw = fsh_client.call("POST", "/api/agent/report", body=body, timeout=3, svc="cli", server=server,
+                             token=token, port=port, raise_for_status=True)
+    data = json.loads(raw.decode("utf-8"))
     print(data.get("resolved_by", "?") if data.get("ok") else f"ERR {data.get('reason', data)}")
 except Exception as e:
     print(f"ERR {e}")
@@ -3363,6 +3420,14 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     _check "$(_t '인증')" ok "$(_t 'VT_AUTH_TOKEN 설정됨 (원격 인증 활성)')"
   else
     _check "$(_t '인증')" warn "$(_t "미설정 (공개 터널에선 누구나 접속 가능) — 'fsh password' 권장")"
+  fi
+
+  # 11-a. unix socket(plan-2.6 2단계) — 서버가 peer uid/pid 로 호출자를 아는 경로
+  local _sk _sk_lvl _sk_msg
+  _sk="$(_sock_status_line 2>/dev/null)"
+  if [ -n "$_sk" ]; then
+    _sk_lvl="${_sk%%$'\t'*}"; _sk_msg="${_sk#*$'\t'}"
+    _check "$(_t 'unix socket')" "$_sk_lvl" "$_sk_msg"
   fi
 
   # 11-b. OTP(새 기기 등록 관문) + 등록 기기 수
@@ -4881,6 +4946,8 @@ _status_security_block() {
     echo "    $(_t '인증:       ')✗ $(_t '없음')"
   fi
   echo "    $(_t 'OTP:        ')$otp_state"
+  local _sk; _sk="$(_sock_status_line 2>/dev/null)"
+  [ -n "$_sk" ] && echo "    $(_t '소켓:       ')${_sk#*$'\t'}"
   echo "    $(_t '등록 기기:  ')$(_t '{n}개 (fsh device list)' n="${ndev:-?}")"
   if [ "$mode" = "all" ] && [ "$protected" != "true" ]; then
     echo "    ⚠ $(_t "공개 접속인데 인증이 없습니다 — URL을 아는 누구나 이 맥에서 명령을 실행할 수 있습니다. 'fsh password'로 설정하세요.")"
@@ -5015,6 +5082,7 @@ case "${1:-help}" in
   run)      shift; cmd_run "$@" ;;
   queue)    shift; cmd_queue "$@" ;;
   delegate) shift; cmd_delegate "$@" ;;
+  migrate-auth) shift; cmd_migrate_auth "$@" ;;
   files)    shift; cmd_files "$@" ;;
   host|hosts) shift; cmd_host "$@" ;;
   mcp)      shift; cmd_mcp "$@" ;;

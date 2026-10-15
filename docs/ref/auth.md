@@ -44,6 +44,7 @@ question — it is not a universal bypass. Two things follow directly:
 | `/s/{token}` | 3 | 1, 4 | `routes/share.py` verifies the share token's signature, expiry and mode (device/pin) directly |
 | `/p/authorize` | 3 | 1, 4 | `routes/system.py` checks session + device directly. On failure it redirects to `/?next=` rather than a JSON 401 — this is a top-level navigation, not an API call |
 | `/api/peer/*` | 3 | 1, 4 | `routes/peer.py` verifies HMAC signature, time window and nonce replay directly. **A peer can only ever reach routes in that one file** |
+| Requests that arrived on the unix socket (`scope["fsh_sock"]`, only the socket Gate can set it) | 3, 4 | 1 | `authz/sock.py` `Gate`: kernel peer uid == server uid, route allowlist, principal resolved from the peer pid. See «Unix socket». Human-only routes still refuse (`request_kind` is `none`) |
 | `/api/tmux/kick` | 3 | 1, 4 | `routes/system.py` compares the `X-VT-Kick` header with a random secret made at server start (`tmux_hooks.py`) — only the server's own tmux hooks know it. The route only nudges the session-list watcher; it returns nothing (2026-09-30) |
 
 The single most useful line in that table: **nothing turns off layer 4 (the IP
@@ -99,6 +100,117 @@ access log (`API.md` «Agent session sharing»). The agent-facing endpoints of t
 pane/pid identity check but can approve nothing. Peers never reach any of it: `/api/peer/*` has no route for it and
 `relay_policy.py` does not allow the paths. Tests: `server/tests/test_agent_share.py` (machine token on every human endpoint,
 cookie + token together, no-password server, peer-signed requests, relay allowlist).
+
+## Agent session sharing under the engine (plan-2.6 phase 3a, `VT_AUTHZ_ENFORCE=share`)
+
+Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share`, `deleg` and `msg` have an effect; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
+`agent_share.py` keeps only the mechanics (`read_pane`, `send_keys`, `check_send_*`, tmux options); its public functions
+(`get_grant`, `request_access`, `decide`, `revoke`, `drop_target`, `list_state`, `snapshot`, `authorize`, `audit`) branch on the flag.
+
+| Piece | Where | Rule |
+|---|---|---|
+| Decision | `engine.decide(agent:local/<sid>:<created>, session.read / session.input.line, session:local/<key>)` | The principal is the pane identity `share_identity` verified; `X-Fsh-*` headers, body fields and any other claim are hints only (R1.2). Ceiling = the session's share policy (`read` -> list+read, `readwrite` -> +input.line; `full` is defined and unused). Rate: 30 reads / 10 sends per minute per (agent, session) — `agent_share.READ_PER_MIN`/`SEND_PER_MIN` feed `ctx["limits"]` |
+| Requests | `approvals.request` | R4.1: only if the engine allows `authz.request`; one pending per (agent, session, kind); R4.6 denial = 300 s cooldown per (agent, session, kind); R4.7 24 h expiry, 20 per agent, 200 total |
+| Decisions | `approvals.decide` / `revoke` | Human principal only (`require_human_session` still guards the router); R4.8 never wider than the request or the share mode; R4.3 scopes (`session.input.raw`, …) need an elevated human (`elevation_required`; unreachable today because grants top out at `input.line`); R4.4 escalation (`scopes.escalation`) is written to the audit row. Auto-approval windows (R4.5) are phase 4: the code never reads `windows.json` (`approvals.auto_approve()` is `None`) |
+| Store | `~/.vt/authz/{grants,approvals,shares,meta}.json` | Records are exactly `migrate.translate_agent_*` output (ids `ag-<id>`, `ap-<id>`, origin `legacy:agent_grants:<id>`), so `fsh migrate-auth --verify` reads dual-write as "no difference" and an engine record converts back to the old shape losslessly |
+| Dual-write | `share_svc._txn` | Inside one authz transaction the old `agent_grants.json` is rewritten from engine state (lock order authz -> agent_grants, same as `migrate.restore`). If the old file changed since the engine last wrote it (flag was off, or hand edit) its records are **adopted** first (`migrate._sync`, by original id); a corrupt old file is never adopted and never overwritten without a `.corrupt-*` backup. Turning the flag off therefore leaves the old code exactly the state the engine had. Same-uid processes can edit either store (D5) |
+| Share policy | `~/.vt/authz/shares.json` is the source of truth; tmux `@fsh_share_nick`/`@fsh_share_mode` are the display mirror, written together (`put_share` writes the store first) | Drift resolves to the **lower** level (nick from the store). Store has it, tmux does not -> not shared. tmux only -> not shared once the first snapshot is done (`meta.share_adopted`); the first time the flag is on the existing tmux shares are adopted. If you ran with the flag off and shared sessions, run `fsh migrate-auth --apply` before turning it on again, otherwise those shares count as unshared (safe side) |
+| Audit | `~/.vt/audit/authz.jsonl` (0600, hash chain) | Changes (share, unshare, decide, revoke) are appended **before** the commit; failure -> 503 `audit_unavailable` and nothing is saved (R11.5). Reads/sends/lists/requests are best effort. Successful `read`/`list`: first per (principal, resource) per 10 minutes plus `suppressedSince` (R11.3). Never input, screen or message text (R11.2). `GET /api/agent/share/audit` is served from it; the old `agent_access.log` is still written in full |
+| Failure | engine exception on read/send | 503 `authz_unavailable`, access denied (not "fall back to the old decision" — the engine is the authority once the flag is on). Corrupt `grants.json`/`approvals.json`/`shares.json`/`meta.json` -> agent access fails closed (`store_corrupt`, F1) until the next write backs the bytes up |
+
+Not covered (H1, phase 3e): the machine token still reaches `/api/sessions/{id}/keys`, `/api/queue`, `/api/tmux/kill/*` directly, so a
+process that holds the token can bypass the share grant on those routes. `server/tests/authz_char/test_char_agent_share_enforced.py`
+pins that. Tests: `server/tests/test_authz_share_enforce.py` (lifecycle + dual-write parity, rollback, lying hints, revocation,
+cooldown, limits, drift, audit), the whole `test_agent_share.py` and authz_char matrix also run with `VT_AUTHZ_ENFORCE=share`.
+
+## Agent delegation under the engine (plan-2.6 phase 3b, `VT_AUTHZ_ENFORCE=deleg`)
+
+Off by default (shipping changes nothing); combine with `share` as `share,deleg`. With `deleg` on, `authz/deleg_svc.py` is the
+authority for `delegation.py`'s decisions; the mechanics (tmux, queue, outbox, state transitions) stay in `delegation.py`. Public
+status codes and bodies are unchanged except the three listed under «New refusals».
+
+| Piece | Where | Rule |
+|---|---|---|
+| Spawn | `engine.decide(agent, deleg.spawn, deleg-quota:<agent>)` | Default rule `agent_spawn_quota` with conditions: open children < 3, depth 1 (a session that was ever a child cannot spawn), 5 per minute globally (the ledger's `spawns` list is the counter), `VT_AGENT_SPAWN`, and — new, only under the flag — **safe_mode** (`VT_SAFE_MODE`) |
+| Parent control | `deleg.control` on `deleg:local/<id>` | `send_to_child`/`close`. Granted to the parent only (derived grant); a child, a sibling or another parent gets 404 `not_found` as before |
+| Child report | `deleg.report` on `deleg:local/<id>` | Granted to the child only. A session that is not a child: 403 `not_delegated` |
+| Ownership ledger | `~/.vt/delegations.json` | Still written and still the source of truth for *who is parent/child*. Engine grants are **derived** from it by `migrate.translate_delegation` (same function as `fsh migrate-auth`): parent -> `deleg.control`, child -> `deleg.report`, `approved_by: system:spawn`, ids `dc-<id>`/`dr-<id>`, origin `legacy:delegations:<id>:…`. Closed or orphaned delegation -> `state: ended`; deleted from the ledger -> deleted. An explicit `state: revoked` is sticky (re-deriving or `--apply` never revives it) |
+| Dual-write | `delegation._locked()` / `_write()` | Under the flag the lock order is **authz lock -> ledger lock** (same as 3a and `migrate.restore`). Every ledger write first syncs the grants in the same critical section, then writes the ledger; if the grant store or its audit line cannot be written the ledger is not changed (503). On lock entry a ledger whose sha256 differs from `meta.deleg_ledger_sig` (flag was off, or a hand edit) is **adopted** (re-derived, one `deleg.adopt` audit line). Flag off: the authz store is not touched (instant rollback) |
+| Closed delegations | `Verdict.ended` | An ended grant is denied by the engine, but if the ledger says the caller owned it the old state errors are returned (409 `delegation_closed`, `already`, 409 `already_reported`) — all of them are no-ops |
+| H9 cwd | `deleg_svc.check_fs` | An explicit `cwd`, and the git toplevel a `worktree` is cut from, need `fs.read` on `fs:local/<realpath>`; the default rule `agent_spawn_fs_roots` only holds when `fsguard.resolve_under_roots` (VT_BROWSE_ROOTS + deny list, symlinks resolved) accepts the path. Outside -> 403 `cwd_outside_roots`. The default cwd (the parent pane's own directory) is not checked. Phase 5 replaces this with leases |
+| D13 inheritance | ledger `item["fs"]`, derived `di-…` / `dw-…` grants | Spawned **without** a worktree: if the parent holds an active fs grant covering the folder, the child gets a *shared reference* (`inherit: true`, `inherit_from` = parent grant id, scopes/resource copied); no parent grant -> nothing is recorded. Spawned **with** a worktree: one grant `fs.write` on the new worktree path for the child only (`approved_by: system:spawn`); the parent's original-folder grant is **not** inherited. Nothing else is inherited (session read/input, messages, browser, …). The inherited record is revoked (`revoked_reason: parent_grant_ended`, audit `deleg.cascade`) at the next sync after the parent grant disappears, expires or is revoked; closing/orphaning the delegation ends all of them. **Records and cascade only — fs grants are enforced in phase 5.** |
+| `fsh delegate close` (H3) | `delegation._cli`, `POST /api/delegations/{id}/close-by-cli` | With the flag on the CLI asks the server over the unix socket. The socket peer is the principal: outside a pane = `cli`, which the engine lets **close only** (`deleg.control` with `ops:[close]`; it cannot send, spawn, approve or grant — D1=b; provisional policy call); inside a pane = `agent`, parent only. A server error or denial is final (no direct write afterwards). Only if the socket is unusable (server not running, `VT_AUTHZ_SOCKET=0`, an older server) does the CLI write the ledger itself, still as principal `cli` through the engine and the audit. Same-uid processes can always edit the file directly (D5) |
+| Audit | `~/.vt/audit/authz.jsonl` | `deleg.spawn/send/close/report/cwd/identify` (decision, principal, `sizes.chars`, `sha8`; task, follow-up and report text are content and are never stored), `deleg.grant/end/cascade/adopt` for grant lifecycle (written before the commit; failure -> 503 `audit_unavailable`). Every refusal is recorded. The old `agent_access.log` is not written for delegations while the flag is on |
+| Failure | engine exception, corrupt `grants.json`/`meta.json` | 503 `authz_unavailable` for spawn/send/close/report (fail closed, F1); the corrupt file is not overwritten; reads (`list`, `role`) still work |
+
+New refusals (only with the flag on): 403 `cwd_outside_roots`, 403 `safe_mode`, 403 `spawn_denied` (no grant, should not happen), 503
+`authz_unavailable`/`audit_unavailable`. Consequence of D1=b: a person who runs `fsh delegate close` in a FarShell tmux pane that is not
+the parent is treated as an agent and refused — use the web UI row menu or a terminal outside tmux. Tests:
+`server/tests/test_authz_deleg_enforce.py` (derivation, red-team, H9, D13, audit, rollback, close-through-server) and
+`authz_char/test_char_delegation_enforced.py` (matrix with `EXPECTED_CHANGE` = the H9 spawn cases); `test_delegation.py`, the shadow
+replay and the authz_char matrix also run with `VT_AUTHZ_ENFORCE=deleg` and `share,deleg`.
+
+## Agent messages under the engine (`VT_AUTHZ_ENFORCE=msg`)
+
+Off by default (shipping changes nothing); combine as `share,deleg,msg`. With `msg` on, `authz/msg_svc.py` decides, stores and audits
+agent-to-agent messages; `agent_msg.py` keeps the mechanics (queue, history, hop counting, envelope). Turning the flag off restores the old
+behaviour at once; the message permissions stay in `~/.vt/authz/` and apply again when the flag is turned back on.
+
+| Piece | Where | Rule |
+|---|---|---|
+| Sender | `routes/agent_msg._verify_sender_sync` | The sender is the authenticated caller: over the unix socket the session whose pane the peer pid belongs to, otherwise `share_identity.verify_caller` (`X-Fsh-*` + the process that owns the loopback connection). The body's `pane`/`tmux`/`cwd` never choose the sender; a mismatch is only recorded (`msg.claim`, reason `claim_mismatch`, no content). A caller that cannot be verified gets 403 `identity_unverified` (so does a person using a browser session or the bare machine token — send from a pane). Unknown host/session is 404 first |
+| Related sessions | `msg_svc.relation` | `msg.send` on `msg:local/<receiver key>` is allowed **without approval** between a delegation parent and its child and between two children of the same parent. Only open delegations (running, reported) count; closed or orphaned ones do not. Read from `delegations.json`, whether or not the delegation flag is on. A hook for sessions that were paired (`pair_related`) exists and returns False until pairing is built |
+| Other pairs | `msg_svc.request_access` / `decide` | No permission -> a pending request (kind `msg`, origin `authz:msg:req:`) and HTTP 202. Only a person (browser login session) decides, from the same inbox as sharing requests; an agent, the machine token, a cli process or a peer cannot. Approval creates a grant for exactly (sending session -> receiving session) (`gm-<id>`, origin `authz:msg:grant:`, no expiry); revoking it makes the next send pending again. Denial starts a 5-minute cooldown (403 `request_denied`); pending requests expire after 24 h, 20 per agent and 200 in total. Both records are removed when either session no longer exists. Sessions are identified by tmux session id + creation time, so a new session with a reused name does not inherit anything |
+| Receiving from another Mac | `routes/peer.py` | The peer principal `peer:<id>/obo:agent:<id>/-` needs `msg.send` on `msg:local/-`. The grant used is translated on the spot from `hosts.json` (`control` level + `agentMessages`), so it cannot drift from what `fsh host allow-agent` set; the level itself is still checked by the capability wrapper. The outcome equals the old `control` + `agentMessages` check for every combination. The body hash signature is untouched. Whether to accept a message is decided on the Mac that owns the receiving session; no request is created for a remote sender |
+| Limits | `msg_svc.check_rate`, `agent_msg` constants | 20 messages per minute per sending host (the engine counts, `agent_msg._rate` is the counter, 429 `rate_limited`) and 10 hops per conversation (429 `hop_limit`) — same numbers and error order as before |
+| Audit | `~/.vt/audit/authz.jsonl` | `msg.send` (ok / denied / unverified / rate_limited / forwarded), `msg.request`, `msg.claim`, and `msg.decide`/`msg.revoke` (written before the commit; failure -> 503 `audit_unavailable`, nothing saved). Only length (`sizes.chars`) and `sha8` of the text. Principal `agent:local/<session key>`; `agent:unverified` when the caller could not be verified |
+| Failure | engine exception, corrupt `grants.json`/`approvals.json` | 503 `authz_unavailable` for sends that need a grant and for remote messages (fail closed); a related pair still works because it needs no stored grant |
+
+What does not change with the flag: the machine token still reaches routes outside this feature directly (see the sharing section). Tests:
+`server/tests/authz_char/test_msg_enforce.py` (relations, forged sender, unverified callers, grant lifecycle, cooldown, limits,
+peer parity over all levels, rate/hop parity, rollback, shadow, `fsh migrate-auth --verify`, audit without text) and
+`authz_char/test_char_agent_msg_enforced.py` (the matrix with the listed changes); `test_agent_msg.py`, the shadow replay and the authz_char matrix also run
+with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
+
+## Unix socket: who is calling without a token (plan-2.6 phase 2, 2026-10-15)
+
+A second uvicorn server on the same event loop listens on `<state dir>/run/fsh.sock` (default `~/.vt/run/fsh.sock`, directory
+0700, socket 0600 set **before** `listen`). The caller is whatever the kernel says: peer uid (macOS `LOCAL_PEERCRED`, Linux
+`SO_PEERCRED`) and peer pid (macOS `LOCAL_PEERPID`, Linux `SO_PEERCRED`), read in `connection_made` and put in
+`scope["fsh_peer"]`. Nothing in the request is an identity (`X-Fsh-Pane`, body `pane`, `from` are hints — R1.2).
+
+| Step | Rule |
+|---|---|
+| Connection | Peer uid != server uid -> closed without parsing. Unreadable credentials -> 403 `peer_unidentified` |
+| Self-test | At startup the server connects to itself and requires the pid/uid it read to equal its own. **Failure = fail closed**: the socket is torn down and removed, status `failed`. Until it passes, everything but the self-test path is 503 `socket_not_armed` |
+| Ambiguity (R1.1, socket stack only) | `Authorization`, a `vt_session` cookie, `?token=` or `X-Peer-*` on a socket request -> 400 `ambiguous_principal`. The TCP stack is unchanged |
+| Route allowlist | Only the method+path pairs in-repo clients use (table in `API.md` «Unix socket»); anything else 403 `socket_route_not_allowed` |
+| Principal | Peer pid's parent chain reaches a `pane_pid` of **our** tmux -> `agent:local/<sid>:<created>`; with `X-Fsh-Svc: hook` -> `hook:...`. Otherwise a declared service name -> `svc:<name>` (attribution only), else `cli:uid<uid>:pid<pid>`. A process inside a pane that declares a service stays an agent. **None of them is `human`** (no elevation, `request_kind` is `none`, so `require_human_session` refuses) |
+| Fail closed | Peer already exited (pid reuse risk) -> 403 `peer_gone`; tmux unreadable -> 503 `identity_unavailable` |
+
+Authorization in this phase is "equivalent to the machine token, only for the allowlisted routes": the middleware skips layers 3 and
+4 for requests the Gate passed, and the routes decide as before. `share_identity.verify_caller` takes the socket peer pid
+(`peer_pid=`) and never runs `lsof` for it (H7); the TCP path still uses `lsof` and fails closed when it cannot find the owner.
+
+Clients (`server/fsh_client.py`, `lib/fsh_client.sh`) prefer the socket and fall back to `VT_AUTH_TOKEN`: no socket file, stale
+file, `VT_AUTHZ_SOCKET=0`, a non-loopback `VT_SERVER`, a socket that is not ours / not 0600, or a socket-layer rejection
+(`socket_route_not_allowed`, `socket_not_armed`, `peer_unidentified`, `peer_gone`, `identity_unavailable`). A timeout after the
+connection is **not** retried over TCP. Socket file name follows the port (`fsh.sock` for 7777, else `fsh-<port>.sock`) so
+two servers sharing a state dir cannot be confused. `VT_AUTHZ_SOCKET_PATH` overrides the path (AF_UNIX path limit: 100 bytes).
+
+Not opened (a warning is logged and clients use the token): `VT_AUTHZ_SOCKET=0`; WSL path under `/mnt/` (permissions do not
+work there — keep the state dir on the Linux filesystem); path too long; another live listener on the path (never unlinked);
+a non-socket file in the way (never deleted). Native Windows is unsupported (D2): use the WSL wrapper.
+
+Limits worth knowing: a process an agent daemonized (re-parented to pid 1) no longer reaches its pane and looks like `cli`; the
+same-uid threat model still holds (an agent can read `~/.vt`, see risk 1 in the plan). `fsh doctor` and `fsh status` show the
+socket state (listening, self-test, permissions) and **machine-token requests in the last 24h**, counted in
+`~/.vt/authz/legacy_token_use.jsonl` (minute buckets of path + user agent + count; no query string, no content; 1 MB x 2 files).
+`python -m authz sock-status [--json]` prints the same.
+
+H4: `server/hooks/tmux_client_notify.sh` no longer puts the token in the URL. It uses the socket; without one it passes
+`Authorization: Bearer` through a curl config on a `/dev/fd` pipe (`curl -K`), so the token is never in argv/`ps`.
+`server/tests/test_no_token_in_argv.py` fails on any script that runs curl with `token=` or a token variable in its arguments.
 
 ## A device's sessions die with the device
 

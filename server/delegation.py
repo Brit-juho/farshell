@@ -28,6 +28,7 @@ from typing import Optional
 import store_lock
 import tmux_runner
 import vt_paths
+from authz import flags as authz_flags
 from i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,24 @@ def enabled() -> bool:
     return os.environ.get("VT_AGENT_SPAWN", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
+def enforced() -> bool:
+    """`VT_AUTHZ_ENFORCE` 에 `deleg` 가 있는가 — 켜면 엔진이 위임 판정·감사를 쥔다(plan-2.6 3b). 장부는 계속 쓴다."""
+    return authz_flags.enforced("deleg")
+
+
+def _svc():
+    from authz import deleg_svc
+    return deleg_svc
+
+
+def _safe_mode() -> bool:
+    try:
+        import safe_mode
+        return safe_mode.is_enabled()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def soft_limit_sec() -> float:
     try:
         return max(60.0, float(os.environ.get("VT_DELEGATE_SOFT_LIMIT_MIN", "60")) * 60)
@@ -98,15 +117,34 @@ def _path() -> Path:
     return vt_paths.state_dir() / "delegations.json"
 
 
-@contextmanager
-def _locked():
+def _lock_path() -> Path:
     d = vt_paths.state_dir()
     d.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(d, 0o700)
     except OSError:
         pass
-    with store_lock.exclusive(d / "delegations.lock"):
+    return d / "delegations.lock"
+
+
+@contextmanager
+def _ledger_lock():
+    """장부 락만. authz 락을 이미 쥔 호출자(`migrate.restore`)와 `_locked()` 안쪽이 쓴다."""
+    with store_lock.exclusive(_lock_path()):
+        yield
+
+
+@contextmanager
+def _locked():
+    """꺼짐: 장부 락. 켜짐(3b): authz 락 → 장부 락(3a·`migrate.restore` 와 같은 순서) + 들어올 때 장부 채택."""
+    lp = _lock_path()
+    if enforced():
+        if _svc().held():                             # 같은 스레드에서 다시 들어옴 — flock 은 재진입하지 않는다
+            raise RuntimeError("delegation._locked() 를 겹쳐 잡았다")
+        with _svc().locked(lp):
+            yield
+        return
+    with store_lock.exclusive(lp):
         yield
 
 
@@ -132,10 +170,14 @@ def _write(data: dict) -> None:
         drop = {x["id"] for x in sorted(closed, key=lambda x: x.get("closed_at") or 0)[:-KEEP_CLOSED]}
         data["items"] = [x for x in data["items"] if x["id"] not in drop]
     p = _path()
+    blob = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+    if _svc().held():
+        # 3b dual-write — grant 를 먼저 맞추고 장부를 쓴다. authz 저장·감사가 실패하면 장부는 그대로다(503).
+        _svc().sync(data["items"], sig=_svc().sig_of(blob))
     tmp = p.with_name(p.name + ".tmp")
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with os.fdopen(fd, "wb") as f:
+        f.write(blob)
     os.replace(str(tmp), str(p))
 
 
@@ -231,12 +273,27 @@ def _task_footer(did: str) -> str:
             f"summary: 결과 요약). 실패해도 보고하세요.")
 
 
-def _audit(action: str, result: str, **extra) -> None:
+def _audit(action: str, result: str, *, principal: Optional[str] = None, did: Optional[str] = None,
+           sha8: Optional[str] = None, **extra) -> None:
+    """꺼짐: 옛 `agent_access.log`. 켜짐(3b): authz 감사(hash chain) — 내용은 길이·sha8 만."""
     try:
+        if enforced():
+            _svc().audit_op(action, result, principal=principal, did=did, sha8=sha8,
+                            reason=extra.get("reason"), chars=extra.get("chars"))
+            return
         import agent_share
         agent_share.audit(f"delegate_{action}", result, by="agent", **extra)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _sha8(text: str) -> str:
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:8]
+
+
+def _agent_id(key: str) -> str:
+    return f"agent:local/{key}"
 
 
 def _push(title: str, body: str) -> None:
@@ -334,28 +391,80 @@ def role_of(caller_key: str) -> dict:
     items = list_all()
     as_child = [x for x in items if x["child"]["key"] == caller_key]
     return {"enabled": enabled(), "is_child": bool(as_child),
-            "can_spawn": enabled() and not as_child,
+            "can_spawn": enabled() and not as_child and not (enforced() and _safe_mode()),
             "delegation": next((x["id"] for x in as_child if x["state"] in OPEN_STATES), None)}
 
 
 def check_spawn(data: dict, parent_key: str, now: float) -> None:
-    """모든 생성 경로가 지나는 단 하나의 관문. 락 안에서 부른다."""
+    """모든 생성 경로가 지나는 단 하나의 관문. 락 안에서 부른다.
+
+    꺼짐: 옛 판정 + shadow 한 줄. 켜짐(3b): 엔진이 `deleg.spawn`(deleg-quota)을 판정한다 — 같은 조건에 safe_mode 가 더해진다."""
+    from authz import hooks as authz_hooks
+    if enforced():
+        sm = _safe_mode()
+        v = _svc().spawn_verdict(data, parent_key, now, enabled=enabled(), safe_mode=sm)
+        authz_hooks.deleg_spawn(v.allow, parent_key, data, now, enabled=enabled(),
+                                max_open=MAX_OPEN_CHILDREN, per_min=SPAWN_PER_MIN, safe_mode=sm)
+        if not v.allow:
+            raise _spawn_error(v.reason)
+        return
+    err = _spawn_denial(data, parent_key, now)
+    authz_hooks.deleg_spawn(err is None, parent_key, data, now, enabled=enabled(),
+                            max_open=MAX_OPEN_CHILDREN, per_min=SPAWN_PER_MIN)
+    if err is not None:
+        raise err
+
+
+def _spawn_error(reason: str) -> DelegationError:
+    """엔진 거부 이유 → 공개 오류(코드·상태는 옛 `_spawn_denial` 과 같다)."""
+    if reason == "spawn_disabled":
+        return DelegationError("spawn_disabled", "이 맥에서는 하위 세션 만들기가 꺼져 있습니다(VT_AGENT_SPAWN=0)", 403)
+    if reason == "safe_mode":
+        return DelegationError("safe_mode", "안전 모드(VT_SAFE_MODE)에서는 하위 세션을 만들 수 없습니다", 403)
+    if reason == "depth_limit":
+        return DelegationError("depth_limit", "하위 세션은 다시 하위 세션을 만들 수 없습니다. 직접 처리하세요. 다시 요청하지 마세요.", 403)
+    if reason == "child_limit":
+        return DelegationError("child_limit",
+                               f"열린 하위 세션이 이미 {MAX_OPEN_CHILDREN}개입니다. 끝난 위임을 close_delegation으로 닫거나 "
+                               f"직접 처리하세요. 다시 요청하지 마세요.", 429)
+    if reason == "rate_limited":
+        return DelegationError("rate_limited", "하위 세션을 너무 자주 만들고 있습니다. 1분 뒤에 다시 하세요.", 429)
+    return DelegationError("spawn_denied", f"하위 세션을 만들 권한이 없습니다({reason})", 403)
+
+
+def _spawn_denial(data: dict, parent_key: str, now: float) -> Optional[DelegationError]:
+    """check_spawn 의 옛 판정 본체 — 거부면 그 오류, 통과면 None(검사 순서가 곧 오류 우선순위다)."""
     if not enabled():
-        raise DelegationError("spawn_disabled", "이 맥에서는 하위 세션 만들기가 꺼져 있습니다(VT_AGENT_SPAWN=0)", 403)
+        return _spawn_error("spawn_disabled")
     if any(x["child"]["key"] == parent_key for x in data["items"]):
-        raise DelegationError("depth_limit", "하위 세션은 다시 하위 세션을 만들 수 없습니다. 직접 처리하세요. 다시 요청하지 마세요.", 403)
+        return _spawn_error("depth_limit")
     open_children = sum(1 for x in data["items"] if x["parent"]["key"] == parent_key and x["state"] in OPEN_STATES)
     if open_children >= MAX_OPEN_CHILDREN:
-        raise DelegationError("child_limit",
-                              f"열린 하위 세션이 이미 {MAX_OPEN_CHILDREN}개입니다. 끝난 위임을 close_delegation으로 닫거나 "
-                              f"직접 처리하세요. 다시 요청하지 마세요.", 429)
+        return _spawn_error("child_limit")
     recent = [t for t in data["spawns"] if now - t < 60]
     if len(recent) >= SPAWN_PER_MIN:
-        raise DelegationError("rate_limited", "하위 세션을 너무 자주 만들고 있습니다. 1분 뒤에 다시 하세요.", 429)
+        return _spawn_error("rate_limited")
+    return None
 
 
-def _owned(data: dict, did: str, caller_key: str, role: str) -> dict:
+def _owned(data: dict, did: str, caller_key: str, role: str, op: str = "send") -> dict:
     item = next((x for x in data["items"] if x["id"] == did), None)
+    from authz import hooks as authz_hooks   # shadow(plan-2.6 1단계)
+    if enforced():
+        # 3b — 항목은 원장에서 찾고, 허용 여부는 엔진(`deleg.control`)이 정한다. 소유 원장의 key 가 맞아도 grant 가 없으면 거부.
+        scope = "deleg.control" if role == "parent" else "deleg.report"
+        if item is None:
+            _svc().deny_unknown(caller_key, did[:64], scope, op)
+            authz_hooks.deleg_owned(False, did, caller_key, role, None, enforced=True)
+            raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
+        v = _svc().authorize(caller_key, did, scope, op=op)
+        authz_hooks.deleg_owned(v.allow, did, caller_key, role, item, enforced=True)
+        if v.allow:
+            return item
+        if v.ended and item[role]["key"] == caller_key:
+            return item      # 이미 끝난 위임의 소유자 — 아래 호출부의 상태 검사가 공개 계약대로 409/already 를 낸다(아무 일도 안 한다)
+        raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
+    authz_hooks.deleg_owned(not (item is None or item[role]["key"] != caller_key), did, caller_key, role, item)
     if item is None or item[role]["key"] != caller_key:
         # 남의 위임인지 없는 위임인지 구별해 알려주지 않는다.
         raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
@@ -376,7 +485,7 @@ def _child_name(parent_name: str, title: str, existing: set[str]) -> str:
     raise DelegationError("name_exhausted", "하위 세션 이름을 정하지 못했습니다", 409)
 
 
-def _prepare_worktree(parent_cwd: str, branch: str, name: str) -> str:
+def _prepare_worktree(parent_cwd: str, branch: str, name: str, check=None) -> str:
     import subprocess
 
     import worktree
@@ -389,6 +498,8 @@ def _prepare_worktree(parent_cwd: str, branch: str, name: str) -> str:
         raise DelegationError("worktree_failed", f"git을 실행하지 못했습니다: {e}", 400) from e
     if not top or not head:
         raise DelegationError("worktree_failed", "부모 세션의 위치가 git 저장소가 아닙니다", 400)
+    if check is not None:
+        top = check(top)          # H9(3b) — worktree 의 기준 저장소도 fsguard 루트 안이어야 한다(밖이면 403 cwd_outside_roots)
     try:
         # 기준은 부모의 HEAD(결정 5). 에이전트는 여기서 띄우지 않는다 — 실행 명령은 LAUNCH만 쓴다.
         r = worktree.create_worktree({"repo": top, "base": head, "name": name, "branch": branch,
@@ -438,6 +549,10 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     with _locked():
         data = _read()
         check_spawn(data, parent_key, now)
+        if cwd and enforced():
+            # H9(3b) — 명시한 cwd 는 `fs.read` + fsguard 루트(VT_BROWSE_ROOTS) 안일 때만(쿼터 검사 뒤 — 오류 우선순위를 유지).
+            # realpath 로 고정해 심볼릭 링크 바꿔치기를 막는다.
+            start_dir = _svc().check_fs(parent_key, cwd, "spawn_cwd")
         child_name = _child_name(caller.name, title, set(names.values()))
         data["spawns"] = [t for t in data["spawns"] if now - t < 60] + [now]
         item = {
@@ -454,7 +569,9 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     try:
         # 2) 워크트리(요청할 때만)
         if worktree_branch:
-            start_dir = _prepare_worktree(parent_cwd or start_dir, worktree_branch, child_name)
+            start_dir = _prepare_worktree(parent_cwd or start_dir, worktree_branch, child_name,
+                                          check=(lambda top: _svc().check_fs(parent_key, top, "spawn_worktree_base"))
+                                          if enforced() else None)
         # 3) 세션 — 이름이 겹치면 실패한다(기존 세션을 덮지 않는다).
         if tmux_runner.has_session(child_name):
             raise DelegationError("name_taken", f"'{child_name}' 세션이 이미 있습니다", 409)
@@ -475,17 +592,25 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             cur["state"] = RUNNING
             cur["cwd"] = start_dir
             cur["child"] = {"key": ident["key"], "name": child_name, "pane": ident["pane"]}
+            if enforced():
+                # D13 — 자식의 fs grant 기록(worktree 면 새 경로 전용, 아니면 부모 fs grant 의 공유 참조). 강제는 5단계.
+                fs = _svc().fs_record(parent_key, start_dir, worktree=bool(worktree_branch))
+                if fs:
+                    cur["fs"] = fs
             _enqueue(data["items"], cur, KIND_TASK, full_task, "child")
             _write(data)
             item = dict(cur)
     except Exception as e:
-        with _locked():
-            data = _read()
-            data["items"] = [x for x in data["items"] if x["id"] != did]
-            _write(data)
         if created_session:
             tmux_runner.run(["kill-session", "-t", f"={child_name}"])
-        _audit("spawn", "failed", reason=getattr(e, "code", type(e).__name__))
+        try:
+            with _locked():
+                data = _read()
+                data["items"] = [x for x in data["items"] if x["id"] != did]
+                _write(data)
+        except Exception as ce:  # noqa: BLE001 — 정리 실패가 원래 오류를 가리면 안 된다(sweep 이 spawn_interrupted 로 닫는다)
+            logger.warning(f"위임 {did} 예약 정리 실패: {ce}")
+        _audit("spawn", "failed", principal=_agent_id(parent_key), did=did, reason=getattr(e, "code", type(e).__name__))
         if isinstance(e, DelegationError):
             raise
         raise DelegationError("spawn_failed", f"하위 세션을 만들지 못했습니다: {e}", 500) from e
@@ -495,7 +620,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     _flush(did)
     import tmux_target
     tmux_target.send_to_tmux(ident["pane"], LAUNCH[agent])
-    _audit("spawn", "ok", reason=f"{caller.name}->{child_name}", chars=len(task))
+    _audit("spawn", "ok", principal=_agent_id(parent_key), did=did, reason=f"{caller.name}->{child_name}",
+           chars=len(task), sha8=_sha8(task))
     _push(tr("하위 세션을 만들었습니다"), f"{caller.name} → {child_name}: {_one_line(task, 60)}")
     return {"delegation": did, "child": child_name, "agent": agent, "cwd": start_dir}
 
@@ -509,7 +635,7 @@ def send_to_child(caller_key: str, did: str, text: str) -> dict:
         raise DelegationError("empty_text", "text가 비어 있습니다")
     with _locked():
         data = _read()
-        item = _owned(data, did, caller_key, "parent")
+        item = _owned(data, did, caller_key, "parent", op="send")
         if item["state"] not in OPEN_STATES:
             raise DelegationError("delegation_closed", "닫힌 위임입니다", 409)
         head = f"[부모 세션 {item['parent']['name']}의 추가 지시 · 위임 {did}]"
@@ -519,21 +645,30 @@ def send_to_child(caller_key: str, did: str, text: str) -> dict:
         _enqueue(data["items"], item, KIND_FOLLOWUP, msg, "child")
         _write(data)
     _flush(did)
-    _audit("send", "ok", chars=len(text))
+    _audit("send", "ok", principal=_agent_id(caller_key), did=did, chars=len(text), sha8=_sha8(text))
     return {"ok": True, "queued": True}
 
 
-def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_by_parent") -> dict:
+def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_by_parent", actor=None) -> dict:
     """위임을 닫는다. 세션은 남긴다(결정 3). 자식에게 아직 안 들어간 지시만 큐에서 지운다.
-    caller_key가 None이면 사람(CLI)이다."""
+    caller_key가 None이면 사람(CLI)이다. 켜짐(3b)에서는 그 사람의 주체(`actor`: human 또는 cli)를 엔진에 묻는다 —
+    cli 는 닫기만 된다(`ops:[close]`)."""
+    who = _agent_id(caller_key) if caller_key is not None else None
     with _locked():
         data = _read()
         if caller_key is None:
             item = next((x for x in data["items"] if x["id"] == did), None)
             if item is None:
                 raise DelegationError("not_found", "그런 위임이 없습니다", 404)
+            if enforced():
+                if actor is None:
+                    from authz import principals as P
+                    actor = P.cli(os.getuid(), os.getpid())
+                who = actor.id
+                if not _svc().authorize_actor(actor, did, op="close").allow:
+                    raise DelegationError("forbidden", "이 주체는 위임을 닫을 수 없습니다", 403)
         else:
-            item = _owned(data, did, caller_key, "parent")
+            item = _owned(data, did, caller_key, "parent", op="close")
         if item["state"] in (CLOSED,):
             return {"ok": True, "already": True}
         item["state"] = CLOSED
@@ -544,7 +679,7 @@ def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_b
     import queue_store
     removed = queue_store.remove_pending_by_source(
         lambda s: s.get("delegation") == did and s.get("kind") in (KIND_TASK, KIND_FOLLOWUP))
-    _audit("close", "ok", reason=reason)
+    _audit("close", "ok", principal=who, did=did, reason=reason)
     return {"ok": True, "removed_queued": removed}
 
 
@@ -560,8 +695,22 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
     with _locked():
         data = _read()
         mine = [x for x in data["items"] if x["child"]["key"] == caller_key]
-        if not mine:
-            raise DelegationError("not_delegated", "이 세션은 위임받은 하위 세션이 아닙니다", 403)
+        from authz import hooks as authz_hooks   # shadow(plan-2.6 1단계)
+        if enforced():
+            # 3b — 자식 확정은 원장(key)으로, 허용은 엔진(`deleg.report`)이. 끝난 위임(ended grant)은 아래 상태 검사가 409 를 낸다.
+            mine = sorted(mine, key=lambda x: x["state"] != RUNNING)       # 보고할 수 있는 항목이 먼저
+            did0 = mine[0]["id"] if mine else "-"
+            v = _svc().authorize(caller_key, did0, "deleg.report", op="report") if mine else \
+                _svc().Verdict(False, "no_grant")
+            if not mine:
+                _svc().deny_unknown(caller_key, did0, "deleg.report", "report", "not_a_child")
+            authz_hooks.deleg_report(v.allow, caller_key, mine, enforced=True)
+            if not mine or not (v.allow or v.ended):
+                raise DelegationError("not_delegated", "이 세션은 위임받은 하위 세션이 아닙니다", 403)
+        else:
+            authz_hooks.deleg_report(bool(mine), caller_key, mine)
+            if not mine:
+                raise DelegationError("not_delegated", "이 세션은 위임받은 하위 세션이 아닙니다", 403)
         item = next((x for x in mine if x["state"] == RUNNING), None)
         if item is None:
             # 한 위임에 한 번만. 닫혔거나 이미 보고했다.
@@ -576,7 +725,8 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
         parent_key = item["parent"]["key"]
         still_running = any(x["parent"]["key"] == parent_key and x["state"] == RUNNING for x in data["items"])
     _flush(did)
-    _audit("report", "ok", reason=outcome, chars=len(summary))
+    _audit("report", "ok", principal=_agent_id(caller_key), did=did, reason=outcome, chars=len(summary),
+           sha8=_sha8(summary))
     if not still_running:
         _push(tr("위임한 작업이 모두 끝났습니다"), tr("{name}의 하위 세션 보고가 도착했습니다", name=item['parent']['name']))
     return {"ok": True, "delegation": did}
@@ -701,7 +851,7 @@ def sweep(now: Optional[float] = None) -> dict:
         _mark_already_queued(did, queued_sources)
         _flush(did)
     for did in orphaned:
-        _audit("orphaned", "ok", reason="parent_gone")
+        _audit("orphaned", "ok", principal="system:sweep", did=did, reason="parent_gone")
     return {"gone": gone, "orphaned": orphaned, "flushed": flush_ids}
 
 
@@ -754,6 +904,33 @@ async def sweep_loop() -> None:
 # --- CLI (bin/fsh delegate) ----------------------------------------------------------------
 
 
+def _cli_close_via_server(did: str):
+    """`fsh delegate close` 의 서버 경로. 닫힌 결과 dict, 실패하면 종료 코드(int), 소켓을 못 쓰면 None(직접 경로로)."""
+    import sys
+
+    import fsh_client
+    try:
+        status, raw = fsh_client.socket_request("POST", f"/api/delegations/{did}/close-by-cli", body=b"{}", timeout=10.0)
+    except fsh_client.SocketUnavailable:
+        print("  · " + tr("서버 소켓을 쓸 수 없어 장부에 직접 씁니다"), file=sys.stderr)
+        return None
+    except OSError as e:           # 붙은 뒤의 끊김·시간 초과 — 처리됐을 수 있어 직접 경로로 되풀이하지 않는다
+        print("  ✗ " + tr("위임을 닫지 못했습니다: {reason}", reason=str(e)), file=sys.stderr)
+        return 1
+    try:
+        body = json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        body = {}
+    if status in (403, 503) and body.get("error") in fsh_client.SOCK_REJECTS:
+        print("  · " + tr("서버 소켓을 쓸 수 없어 장부에 직접 씁니다"), file=sys.stderr)
+        return None
+    if status != 200:
+        print("  ✗ " + tr("위임을 닫지 못했습니다: {reason}", reason=body.get("reason") or body.get("error") or status),
+              file=sys.stderr)
+        return 1
+    return body
+
+
 def _cli(argv: list[str]) -> int:
     import sys
     cmd = argv[0] if argv else "ls"
@@ -776,7 +953,15 @@ def _cli(argv: list[str]) -> int:
         if len(match) != 1:
             print("  ✗ " + tr("'{id}'로 특정되는 위임이 없습니다", id=argv[1]), file=sys.stderr)
             return 1
-        r = close(match[0]["id"], reason="closed_by_user")
+        r = None
+        if enforced():
+            # H3(3b) — 켜짐에서는 서버(unix socket)에 닫아 달라고 요청한다: 주체 cli 로 판정·감사되고 장부는 서버가 쓴다.
+            # 서버가 안 떠 있거나 소켓을 못 쓸 때만 아래 직접 경로(= 옛 동작, 장부 + grant·감사 동기화는 같은 함수가 한다).
+            r = _cli_close_via_server(match[0]["id"])
+            if isinstance(r, int):
+                return r
+        if r is None:
+            r = close(match[0]["id"], reason="closed_by_user")
         print("  ✓ " + tr("닫았습니다(세션은 남겨 둡니다)") + (tr(", 대기 지시 {count}건 삭제", n=r.get('removed_queued'), count=r.get('removed_queued')) if r.get("removed_queued") else ""))
         return 0
     print(tr("사용법: fsh delegate [ls|close <id>]"), file=sys.stderr)

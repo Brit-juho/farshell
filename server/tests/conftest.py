@@ -26,6 +26,10 @@ os.environ.setdefault("VT_NETWORK_MODE", "all")
 # 개발자 셸의 LANG(en_US 등)에 따라 달라지지 않게 고정한다. 영어를 보는 테스트는
 # monkeypatch로 VT_LANG을 바꾼다.
 os.environ["VT_LANG"] = "ko"
+# unix socket 서버(authz/sock.py)는 시험에서 기본으로 끈다 — lifespan 을 도는 TestClient 가 임시 HOME 아래에
+# 소켓을 열면 경로 길이(AF_UNIX 100바이트)와 병렬 실행에 의존하게 된다. 소켓을 시험하는 파일이 직접 켠다.
+os.environ["VT_AUTHZ_SOCKET"] = "0"
+os.environ.pop("VT_AUTHZ_SOCKET_PATH", None)
 
 # ⚠ 이 스위트는 **개발자의 실제 ~/.vt.env를 절대 읽지 않는다.**
 #
@@ -123,3 +127,27 @@ def process_table():
         pytest.skip("실행 환경이 실제 프로세스 표(ps) 조회를 허용하지 않습니다")
     if result.returncode != 0 or str(os.getpid()) not in result.stdout:
         pytest.skip("실행 환경이 실제 프로세스 표(ps) 조회를 허용하지 않습니다")
+
+
+# `VT_AUTHZ_ENFORCE=msg`(3c)에서는 보낸 세션을 본문의 pane/tmux 주장이 아니라 인증된 호출자로 정한다(H2). 아래 시험은
+# "본문 주장으로 보낸 세션을 정한다"는 옛 계약 자체를 단언하므로 그 플래그를 끈 채 돈다(켠 쪽 성질은
+# test_authz_msg_enforce.py 가 같은 내용을 인증된 호출자로 확인한다).
+_LEGACY_BODY_CLAIM_SENDER = (
+    "test_agent_msg.py::test_local_send_resolves_sender_from_pane_and_queues",
+    "test_agent_msg.py::test_local_send_refuses_missing_session_and_self",
+    "test_char_machine_token.py::test_h2_sender_session_comes_from_the_request_body",
+)
+
+
+def _legacy_body_claim(nodeid: str) -> bool:
+    """H2 의 「현재 동작 고정」 사례(`spoof_other` 포함)도 같은 이유로 꺼진 채 돈다 — 켠 쪽은 EXPECTED_CHANGE 로 따로 본다."""
+    return nodeid.endswith(_LEGACY_BODY_CLAIM_SENDER) or (
+        "test_char_machine_token.py::test_matrix[" in nodeid and "api_agent_message" in nodeid and "spoof_other" in nodeid)
+
+
+@pytest.fixture(autouse=True)
+def _legacy_body_claim_without_msg_flag(request, monkeypatch):
+    if _legacy_body_claim(request.node.nodeid):
+        toks = [t for t in os.environ.get("VT_AUTHZ_ENFORCE", "").split(",") if t.strip() and t.strip() != "msg"]
+        monkeypatch.setenv("VT_AUTHZ_ENFORCE", ",".join(toks))
+    yield

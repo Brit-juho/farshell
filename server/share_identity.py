@@ -132,6 +132,20 @@ def chain_reaches(pid: int, target_pid: int, *, parent=parent_of, max_depth: int
     return False
 
 
+def ancestors(pid: int, *, parent=parent_of, max_depth: int = MAX_DEPTH) -> list[int]:
+    """pid 자신부터 부모를 따라 올라간 pid 목록(pid 1 이하·순환·깊이 제한에서 멈춘다)."""
+    out: list[int] = []
+    seen: set[int] = set()
+    cur: Optional[int] = pid
+    for _ in range(max_depth):
+        if cur is None or cur <= 1 or cur in seen:
+            break
+        out.append(cur)
+        seen.add(cur)
+        cur = parent(cur)
+    return out
+
+
 def _lsof_path() -> Optional[str]:
     """launchd/systemd 로 뜬 서버의 PATH 에는 /usr/sbin 이 없는 일이 흔하다(macOS 의 lsof 는 거기 있다)."""
     for cand in ("/usr/sbin/lsof", "/usr/bin/lsof"):
@@ -185,8 +199,12 @@ def parse_lsof_owner(text: str, client_port: int, server_port: Optional[int]) ->
 
 def verify_caller(pane: Optional[str], tmux_env: Optional[str], claimed_pid, *,
                   client: Optional[tuple] = None, headers: Optional[dict] = None,
-                  server_port: Optional[int] = None, rows: Optional[list[PaneRow]] = None) -> Caller:
-    """호출자 세션을 확정하거나 IdentityError. 모듈 머리말의 1~3."""
+                  server_port: Optional[int] = None, rows: Optional[list[PaneRow]] = None,
+                  peer_pid: Optional[int] = None) -> Caller:
+    """호출자 세션을 확정하거나 IdentityError. 모듈 머리말의 1~3.
+
+    `peer_pid`: unix socket 연결의 peer pid(authz/sock.py 가 커널에서 읽어 scope 에 넣은 값). 있으면 lsof·신고 pid 를
+    전혀 쓰지 않고 이것만 믿는다(H7 — 터널·프록시·lsof 없음에 의존하지 않는다). TCP 경로는 그대로다."""
     if not pane:
         raise IdentityError("TMUX_PANE 이 없습니다 — tmux 밖에서는 호출한 칸을 식별할 수 없습니다")
     if not _PANE_RE.fullmatch(pane):
@@ -202,6 +220,12 @@ def verify_caller(pane: Optional[str], tmux_env: Optional[str], claimed_pid, *,
         raise IdentityError("FarShell 의 tmux 에 그런 pane 이 없습니다")
 
     weak = False
+    if peer_pid is not None:
+        if not isinstance(peer_pid, int) or peer_pid <= 1:
+            raise IdentityError("소켓 peer pid 가 올바르지 않습니다")
+        if not chain_reaches(peer_pid, row.pane_pid, parent=parent_of):
+            raise IdentityError("호출 프로세스가 그 tmux pane 안에서 실행된 것이 아닙니다(부모 체인이 pane 에 닿지 않음)")
+        return Caller(sid=row.sid, created=row.created, name=row.name, pane_id=row.pane_id, weak=False)
     # fail-closed(2026-10-06 적대 시험): 프록시 헤더(`X-Real-IP` 등)를 붙이면 소켓 소유자 확인을 건너뛰고
     # 신고 pid 로 내려가던 길이 있어, 다른 에이전트의 pane·pid 를 알면 그 권한을 쓸 수 있었다.
     # 이제 헤더는 보지 않는다 — 직접 루프백 연결이어야 하고, 그 연결을 쥔 프로세스를 `lsof` 로 확인하지

@@ -10,6 +10,7 @@ from pathlib import Path
 # server/를 sys.path에 넣는 건 진입점(tui_manager.py)의 책임이다 — 이 패키지는
 # 항상 그걸 거쳐 임포트되므로(fsh manage · pytest conftest.py 둘 다) 여기서
 # 다시 하지 않는다.
+import fsh_client
 import vt_paths
 
 VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "fsh")
@@ -25,16 +26,12 @@ VT_TOKEN = os.environ.get("VT_AUTH_TOKEN") or os.environ.get("VT_TOKEN", "")
 def server_request(method: str, path: str, body: dict | None = None, timeout: float = 2.0) -> tuple[bool, dict | None]:
     """server에 인증된 HTTP 요청. 서버 미실행 시 (False, None)."""
     import json as _json
-    url = f"http://127.0.0.1:{VT_PORT}{path}"
-    data = None if body is None else _json.dumps(body).encode()
-    headers = {"Content-Type": "application/json"} if body is not None else {}
-    if VT_TOKEN:
-        headers["Authorization"] = f"Bearer {VT_TOKEN}"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            content = r.read()
-            return True, (_json.loads(content) if content else {})
+        status, content = fsh_client.call(method, path, body=body, timeout=timeout, svc="tui",
+                                          server=f"http://127.0.0.1:{VT_PORT}", token=VT_TOKEN, port=VT_PORT)
+        if status >= 400:
+            return False, None
+        return True, (_json.loads(content) if content else {})
     except (urllib.error.URLError, ConnectionError, OSError, _json.JSONDecodeError):
         return False, None
 

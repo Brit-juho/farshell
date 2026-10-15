@@ -23,6 +23,7 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+import fsh_client
 import platform_utils
 import vt_env
 
@@ -47,15 +48,11 @@ PUSH_URL = f"http://127.0.0.1:{_PORT}/api/clipboard/push"
 
 
 def _push(text: str) -> None:
-    body = json.dumps({"text": text}).encode("utf-8")
-    headers = {"Content-Type": "application/json"}
-    if _TOKEN:
-        headers["Authorization"] = f"Bearer {_TOKEN}"
-    req = urllib.request.Request(PUSH_URL, data=body, headers=headers, method="POST")
+    # 소켓 우선(svc:clipboard), 소켓이 없으면 TCP + 토큰(fsh_client.call).
     try:
-        with urllib.request.urlopen(req, timeout=3):
-            pass
-    except urllib.error.URLError as e:
+        fsh_client.call("POST", "/api/clipboard/push", body={"text": text}, timeout=3, svc="clipboard",
+                        server=f"http://127.0.0.1:{_PORT}", token=_TOKEN, port=_PORT, raise_for_status=True)
+    except (urllib.error.URLError, OSError) as e:    # HTTPError 도 URLError 의 하위
         logger.warning(f"push 실패 (서버 미실행?): {e}")
 
 

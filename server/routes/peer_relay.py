@@ -35,6 +35,7 @@ from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import JSONResponse, StreamingResponse
 
 import host_store
+from authz import hooks as authz_hooks
 from i18n import tr
 import relay_policy
 from routes.peer_protocol import PeerDenied, _authenticate_raw
@@ -108,10 +109,12 @@ async def peer_relay(request: Request, rest: str):
 
     target = "/" + rest
     method = request.method.upper()
+    authz_hooks.relay_level(grant, grant.get("level") == host_store.LEVEL_CONTROL)
     if grant.get("level") != host_store.LEVEL_CONTROL:
         host_store.audit(grant["id"], "relay", False, f"control 등급 필요: {method} {target}")
         return _denied(
             tr("이 맥은 상대에게 읽기 전용(view)만 허용했습니다 — 이 맥에서 'fsh host allow-control <id>'를 실행해야 전환할 수 있습니다"), 403, "level_required")
+    authz_hooks.relay_rule(grant, method, target, relay_policy.http_allowed(method, target))
     if not relay_policy.http_allowed(method, target):
         host_store.audit(grant["id"], "relay", False, f"허용 목록 밖: {method} {target}")
         return _denied(tr("다른 맥에서 부를 수 없는 기능입니다: {target}", target=target), 403, "relay_forbidden")
@@ -196,11 +199,13 @@ async def peer_relay_ws(ws: WebSocket, rest: str):
         await ws.close(code=4401, reason=e.reason[:120])
         return
     target = "/" + rest
+    authz_hooks.relay_level(grant, grant.get("level") == host_store.LEVEL_CONTROL, ws=True)
     if grant.get("level") != host_store.LEVEL_CONTROL:
         host_store.audit(grant["id"], "relay-ws", False, f"control 등급 필요: {target}")
         await ws.accept()
         await ws.close(code=4403, reason="control level required")
         return
+    authz_hooks.relay_rule(grant, "GET", target, relay_policy.ws_allowed(target), ws=True)
     if not relay_policy.ws_allowed(target):
         host_store.audit(grant["id"], "relay-ws", False, f"허용 목록 밖: {target}")
         await ws.accept()

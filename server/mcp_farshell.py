@@ -34,6 +34,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import fsh_client
+
 PROTOCOL_VERSION = "2025-06-18"
 TIMEOUT = 20.0
 
@@ -183,26 +185,38 @@ def _identity_headers() -> dict:
     return out
 
 
+_IDENTITY_PATHS = frozenset({"/api/agent/message"})
+
+
 def _api(method: str, path: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict]:
+    """소켓 우선(fsh_client — peer pid 가 곧 신원), 소켓이 없으면 예전처럼 TCP + 토큰.
+    `X-Fsh-*` 헤더는 소켓에서는 힌트일 뿐이고 TCP 에서는 share_identity 가 검증한다 — 둘 다 그대로 싣는다."""
     server, token = _config()
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    req = urllib.request.Request(server + path, data=data, method=method)
-    if data is not None:
-        req.add_header("Content-Type", "application/json")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
-    for k, v in (headers or {}).items():
-        req.add_header(k, v)
+    if path in _IDENTITY_PATHS:        # 보낸 세션은 본문 주장이 아니라 서버가 이 값과 연결로 확인한다(VT_AUTHZ_ENFORCE=msg)
+        headers = {**_identity_headers(), **(headers or {})}
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return r.status, json.loads(r.read().decode("utf-8") or "{}")
-    except urllib.error.HTTPError as e:
-        try:
-            return e.code, json.loads(e.read().decode("utf-8") or "{}")
-        except ValueError:
-            return e.code, {}
+        port = urllib.parse.urlsplit(server).port
+    except ValueError:
+        port = None
+    try:
+        status, raw = fsh_client.call(method, path, body=body, headers=headers, timeout=TIMEOUT, server=server,
+                                      token=token, port=port or _config_port())
     except (urllib.error.URLError, OSError) as e:
         return 0, {"reason": f"FarShell 서버에 연결할 수 없습니다({server}) — 'fsh status'로 확인: {e}"}
+    try:
+        return status, json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        return status, {}
+
+
+def _config_port() -> str:
+    try:
+        import vt_env
+
+        file_env = vt_env.load()
+    except Exception:  # noqa: BLE001
+        file_env = {}
+    return os.environ.get("VT_PORT") or file_env.get("VT_PORT") or "7777"
 
 
 def _fail(status: int, data: dict) -> str:
@@ -237,6 +251,9 @@ def tool_send_message(args: dict) -> tuple[str, bool]:
         "cwd": os.getcwd(),
     }
     status, data = _api("POST", "/api/agent/message", body)
+    if status == 202:     # VT_AUTHZ_ENFORCE=msg — 관계 없는 세션 앞으로는 사람이 승인해야 한다(오류가 아니다)
+        return (f"{data.get('reason') or '사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요'} "
+                f"(요청 {data.get('requestId')}) 사용자가 FarShell 화면에서 승인합니다."), False
     if status != 200 or not data.get("ok"):
         return f"보내지 못했습니다: {_fail(status, data)}", True
     when = ("받는 에이전트가 쉬고 있어 곧 입력됩니다" if data.get("immediate")
