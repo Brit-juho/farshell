@@ -106,6 +106,28 @@ re-check. The 24-hour session hole described just below came directly out of thi
 duplication — whoever next adds a condition to #3 has to remember #3′ exists and
 needs the same condition, because it's a replacement for #3, not a shortcut around it.
 
+## Every route declares its authorization class
+
+Who may call a route is written down once, in one table: `server/authz/route_table.py`. Every HTTP and WebSocket route of the app, including
+the static mount, has exactly one entry saying which class it belongs to, so a route cannot ship without somebody having decided who may call it.
+
+| Class | Meaning |
+|---|---|
+| `public` | Open before login (the paths in «Exceptions» above). The entry says what checks the caller instead of the token middleware |
+| `human` | A logged-in person only; `elevated` when the route also needs the re-confirmed password. Never on the unix-socket or machine-token allowlist |
+| `socket` | In the unix-socket allowlist (`authz/sock.py` `ROUTES`); the entry records which allowlist line opens it. The machine-token scope of `VT_AUTHZ_ENFORCE=legacy` is the same list |
+| `legacy_token` | On the machine-token allowlist but not the socket one (none today: the two lists are one) |
+| `peer` | Another Mac signing with its pairing secret (`/api/peer/*`); the entry names its row in `peer_svc.NEEDS`, which holds the required scope and conditions |
+| `relay` | Host-switch relay, both the receiving side (`/api/peer/relay*`) and the browser-facing side (`/api/hosts/{id}/relay`, `/ws/hosts/{id}/relay`) |
+| `authenticated` | Any authenticated caller (cookie, machine token or socket); anything finer is logic inside the route. If the route asks the engine, the entry names the scope and conditions |
+
+**Adding a route means adding its entry.** `server/tests/test_authz_route_table.py` walks the app's real route tree (included routers, WebSocket
+routes, mounts) and fails when a route has no entry, when an entry has no route, or when the declared class disagrees with the real gate: a
+`human` route that the socket or machine-token allowlist opens, a `socket` route missing from the allowlist, an allowlist line for a route the
+app does not have, a peer route without a `peer_svc.NEEDS` row, a path on the token-middleware exempt list that is not `public`. The failure
+message prints the line to add. The table changes no behaviour: the real gates (router dependencies, the middleware exempt list in `main.py`,
+`sock.ROUTES`, `peer_svc.NEEDS`) stay authoritative and the test only checks that the table says the same thing.
+
 ## Features
 
 | Feature | Description |

@@ -123,6 +123,19 @@ for _name in ("uvicorn.access", "uvicorn.error"):
 # 미들웨어
 # ---------------------------------------------------------------------------
 
+# 토큰 인증(층 3)을 건너뛰는 경로 — 이 목록이 문서의 「Exceptions」 표와 `authz/route_table.py` 의 `public`/`peer` 분류의 근거다.
+AUTH_EXEMPT_PATHS = (
+    "/", "/sw.js", "/manifest.json", "/favicon.ico",
+    "/api/auth", "/api/auth/status", "/api/auth/logout",
+    "/api/tmux/kick", "/p/authorize",
+)
+AUTH_EXEMPT_PREFIXES = ("/static", "/s/", "/api/peer/")
+
+
+def auth_exempt(path: str) -> bool:
+    return path in AUTH_EXEMPT_PATHS or path.startswith(AUTH_EXEMPT_PREFIXES)
+
+
 class TokenAuthMiddleware:
     """인증: 서명 세션 쿠키(사람) 또는 기계 토큰(데몬/QR)을 받는다.
 
@@ -152,12 +165,7 @@ class TokenAuthMiddleware:
         if scope.get("fsh_sock") is True:
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
-        if path in (
-            "/", "/sw.js", "/manifest.json", "/favicon.ico",
-            "/api/auth", "/api/auth/status", "/api/auth/logout",
-            "/api/tmux/kick",
-        ) or path.startswith("/static") or path.startswith("/s/") or path.startswith("/api/peer/") \
-                or path == "/p/authorize":
+        if auth_exempt(path):
             # 이 예외들이 각각 어느 층을 끄고 무엇이 그 자리를 대신하는지는
             # docs/ref/auth.md 「Authorization order」 §Exceptions 표. 여기 목록을
             # 고치면 그 표도 고친다(scripts/check_docs.py는 층 순서만 검사하고
