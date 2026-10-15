@@ -3070,5 +3070,10 @@ window.__VT_I18N = {
   "🎙 음성 입력": "🎙 Voice input",
   "🔐 tmux 세션 접속": "🔐 tmux session connected",
   "🔒 음성 타깃 LOCK: {name}": "🔒 Voice target LOCK: {name}",
-  "🔓 음성 타깃 → AUTO": "🔓 Voice target -> AUTO"
+  "🔓 음성 타깃 → AUTO": "🔓 Voice target -> AUTO",
+  "사람(브라우저 로그인 세션)만 승인할 수 있습니다": "Only a person (browser login session) can approve",
+  "이 권한은 재인증(elevated)한 사람만 승인할 수 있습니다": "Only a person who has re-authenticated (elevated) can approve this permission",
+  "감사 기록을 쓰지 못해 변경을 중단했습니다": "The audit record could not be written, so the change was stopped",
+  "승인 요청을 만들 수 없는 호출자입니다": "This caller cannot create approval requests",
+  "권한 엔진을 쓸 수 없어 요청을 거부했습니다": "The authorization engine is unavailable, so the request was refused"
 };

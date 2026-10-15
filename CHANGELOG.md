@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **공유 세션 권한을 엔진으로 옮길 수 있다(`VT_AUTHZ_ENFORCE=share`, 기본 꺼짐)**. 켜면 에이전트가 공유 세션을 읽고 쓰는 판정(grant × 공유 상한 × 분당 한도), 보류 요청·거절 쿨다운(5분)·승인·철회와 감사를 `server/authz/` 엔진이 쥔다. 상태는 `~/.vt/authz/{grants,approvals,shares,meta}.json`, 감사는 `~/.vt/audit/authz.jsonl`(hash chain, 입력·화면 내용은 기록하지 않고 성공한 읽기는 주체·세션당 10분에 한 줄)이다. 옛 `agent_grants.json`·`agent_access.log`는 같이 써서 플래그를 끄면 곧바로 이전 동작으로 돌아가고, 끈 사이 옛 코드가 바꾼 권한은 다시 켤 때 이어받는다. 공유 정책의 진실은 `shares.json`이 되고 tmux `@fsh_share_*`는 표시용 미러라서, 손으로 고쳐 어긋나면 낮은 등급을 쓴다. 엔드포인트와 상태 코드는 그대로이고 읽기·쓰기·승인·철회 응답에 `grantId`가 붙는다. 결정·철회·공유 지정은 감사 기록을 못 쓰면 503 `audit_unavailable`로 멈춘다. 꺼 두면 아무것도 바뀌지 않는다. 공용 기계 토큰으로 직접 닿는 라우트(H1)는 이 단계에서 막지 않는다.
+
 - **unix socket 인증 경로(병행)**. 서버가 `~/.vt/run/fsh.sock`(디렉터리 0700, 소켓 0600)에서도 듣고, 연결의 peer uid/pid를 커널에서 읽어 호출자를 정한다(macOS `LOCAL_PEERCRED`·`LOCAL_PEERPID`, Linux `SO_PEERCRED`). pane 안이면 agent, 훅이면 hook, 그 밖은 svc/cli이며 사람(human)이 되는 길은 없다. 시작할 때 자기 자신에게 붙어 peer pid를 검증하고 틀리면 소켓을 열지 않는다. MCP·훅·클립보드·음성·`fsh manage`·`fsh`는 소켓을 먼저 쓰고 없으면 `VT_AUTH_TOKEN`으로 내려간다(`VT_AUTHZ_SOCKET=0`이면 소켓을 건너뜀). 소켓으로 열린 경로는 `API.md` «Unix socket» 표의 것뿐이다. `fsh doctor`·`fsh status`가 소켓 상태와 최근 24시간 토큰 사용 수를 보여 준다.
 
 - **노출 포트 자동 재노출**. `fsh tunnel expose`가 「기간이 끝나거나 재부팅해도 자동으로 다시 열까요?」를 묻고(`--auto-renew`/`--no-auto-renew`로 생략, 터미널이 아니면 끔), 웹 포트 패널의 공개 대화상자에도 같은 선택이 생겼다. 켜면 만료 시각에 내리지 않고 고른 기간만큼 연장하며(접속 코드·로그인 기기 유지), 재부팅이나 `fsh stop`으로 터널이 사라지면 서버가 1분 안에 다시 연다(익명 터널은 새 주소, URL 변경 훅으로 알림). 지금까지는 30일이 최대였고 재부팅하면 정책만 남고 터널은 돌아오지 않았다. 나중에 바꾸려면 `fsh tunnel auto <port> on|off` 또는 터널 행의 「자동 켜기/끄기」. 모든 모드에서 고를 수 있고 기본은 끔이다.

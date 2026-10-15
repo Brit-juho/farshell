@@ -101,6 +101,29 @@ pane/pid identity check but can approve nothing. Peers never reach any of it: `/
 `relay_policy.py` does not allow the paths. Tests: `server/tests/test_agent_share.py` (machine token on every human endpoint,
 cookie + token together, no-password server, peer-signed requests, relay allowlist).
 
+## Agent session sharing under the engine (plan-2.6 phase 3a, `VT_AUTHZ_ENFORCE=share`)
+
+Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share` is the only token with an effect in this
+phase; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
+`agent_share.py` keeps only the mechanics (`read_pane`, `send_keys`, `check_send_*`, tmux options); its public functions
+(`get_grant`, `request_access`, `decide`, `revoke`, `drop_target`, `list_state`, `snapshot`, `authorize`, `audit`) branch on the flag.
+
+| Piece | Where | Rule |
+|---|---|---|
+| Decision | `engine.decide(agent:local/<sid>:<created>, session.read / session.input.line, session:local/<key>)` | The principal is the pane identity `share_identity` verified; `X-Fsh-*` headers, body fields and any other claim are hints only (R1.2). Ceiling = the session's share policy (`read` -> list+read, `readwrite` -> +input.line; `full` is defined and unused). Rate: 30 reads / 10 sends per minute per (agent, session) — `agent_share.READ_PER_MIN`/`SEND_PER_MIN` feed `ctx["limits"]` |
+| Requests | `approvals.request` | R4.1: only if the engine allows `authz.request`; one pending per (agent, session, kind); R4.6 denial = 300 s cooldown per (agent, session, kind); R4.7 24 h expiry, 20 per agent, 200 total |
+| Decisions | `approvals.decide` / `revoke` | Human principal only (`require_human_session` still guards the router); R4.8 never wider than the request or the share mode; R4.3 scopes (`session.input.raw`, …) need an elevated human (`elevation_required`; unreachable today because grants top out at `input.line`); R4.4 escalation (`scopes.escalation`) is written to the audit row. Auto-approval windows (R4.5) are phase 4: the code never reads `windows.json` (`approvals.auto_approve()` is `None`) |
+| Store | `~/.vt/authz/{grants,approvals,shares,meta}.json` | Records are exactly `migrate.translate_agent_*` output (ids `ag-<id>`, `ap-<id>`, origin `legacy:agent_grants:<id>`), so `fsh migrate-auth --verify` reads dual-write as "no difference" and an engine record converts back to the old shape losslessly |
+| Dual-write | `share_svc._txn` | Inside one authz transaction the old `agent_grants.json` is rewritten from engine state (lock order authz -> agent_grants, same as `migrate.restore`). If the old file changed since the engine last wrote it (flag was off, or hand edit) its records are **adopted** first (`migrate._sync`, by original id); a corrupt old file is never adopted and never overwritten without a `.corrupt-*` backup. Turning the flag off therefore leaves the old code exactly the state the engine had. Same-uid processes can edit either store (D5) |
+| Share policy | `~/.vt/authz/shares.json` is the source of truth; tmux `@fsh_share_nick`/`@fsh_share_mode` are the display mirror, written together (`put_share` writes the store first) | Drift resolves to the **lower** level (nick from the store). Store has it, tmux does not -> not shared. tmux only -> not shared once the first snapshot is done (`meta.share_adopted`); the first time the flag is on the existing tmux shares are adopted. If you ran with the flag off and shared sessions, run `fsh migrate-auth --apply` before turning it on again, otherwise those shares count as unshared (safe side) |
+| Audit | `~/.vt/audit/authz.jsonl` (0600, hash chain) | Changes (share, unshare, decide, revoke) are appended **before** the commit; failure -> 503 `audit_unavailable` and nothing is saved (R11.5). Reads/sends/lists/requests are best effort. Successful `read`/`list`: first per (principal, resource) per 10 minutes plus `suppressedSince` (R11.3). Never input, screen or message text (R11.2). `GET /api/agent/share/audit` is served from it; the old `agent_access.log` is still written in full |
+| Failure | engine exception on read/send | 503 `authz_unavailable`, access denied (not "fall back to the old decision" — the engine is the authority once the flag is on). Corrupt `grants.json`/`approvals.json`/`shares.json`/`meta.json` -> agent access fails closed (`store_corrupt`, F1) until the next write backs the bytes up |
+
+Not covered (H1, phase 3e): the machine token still reaches `/api/sessions/{id}/keys`, `/api/queue`, `/api/tmux/kill/*` directly, so a
+process that holds the token can bypass the share grant on those routes. `server/tests/authz_char/test_char_agent_share_enforced.py`
+pins that. Tests: `server/tests/test_authz_share_enforce.py` (lifecycle + dual-write parity, rollback, lying hints, revocation,
+cooldown, limits, drift, audit), the whole `test_agent_share.py` and authz_char matrix also run with `VT_AUTHZ_ENFORCE=share`.
+
 ## Unix socket: who is calling without a token (plan-2.6 phase 2, 2026-10-15)
 
 A second uvicorn server on the same event loop listens on `<state dir>/run/fsh.sock` (default `~/.vt/run/fsh.sock`, directory

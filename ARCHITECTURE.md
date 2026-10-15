@@ -93,7 +93,7 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 | File | Responsibility |
 |---|---|
 | `auth/` | Web login (scrypt password hash + HMAC session cookie), device whitelist + TOTP gate, one-time registration ticket |
-| `authz/` | Unified authorization engine (plan-2.6). Phase 1: shadow mode only (`shadow.py`, no response changes). Phase 2: `sock.py` — second uvicorn server on `~/.vt/run/fsh.sock` (peer uid/pid from the kernel, self-test that fails closed, route allowlist, principals agent/hook/svc/cli), `legacy_use.py` — counter of machine-token requests for `fsh doctor` |
+| `authz/` | Unified authorization engine (plan-2.6). Phase 1: shadow mode only (`shadow.py`, no response changes). Phase 2: `sock.py` — second uvicorn server on `~/.vt/run/fsh.sock` (peer uid/pid from the kernel, self-test that fails closed, route allowlist, principals agent/hook/svc/cli), `legacy_use.py` — counter of machine-token requests for `fsh doctor`. Phase 3a (`VT_AUTHZ_ENFORCE=share`, off by default): `flags.py`, `share_svc.py` + `approvals.py` + `shares.py` take over agent session sharing (decisions, grants/requests, share policy, audit chain) with the old `agent_grants.json` written in parallel |
 | `fsh_client.py` | stdlib-only client used by MCP, hooks, daemons and the CLI: unix socket first, `VT_AUTH_TOKEN` over TCP as fallback (`lib/fsh_client.sh` is the curl equivalent) |
 | `crypto_channel.py` | E2E WebSocket encryption (X25519 ephemeral keys + Ed25519 identity signing + NaCl SecretBox) — server side of the handshake whose client side is `frontend/js/term/e2e.js` |
 | `fsguard.py` | Single source of truth for the code-viewer's file-browse root confinement, path resolution, and denylist |

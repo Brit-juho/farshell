@@ -29,7 +29,6 @@ from pydantic import BaseModel, ConfigDict
 
 import agent_share
 import auth
-from authz import hooks as authz_hooks
 import share_identity
 from i18n import tr
 from agent_share import ShareError
@@ -106,6 +105,17 @@ class RevokeResponse(_Loose):
 
 class AuditResponse(_Loose):
     entries: list[dict]
+
+
+def _actor(request: Request):
+    """결정한 사람의 주체(감사·승인권 확인용). 꺼져 있으면 None — 옛 경로는 주체를 쓰지 않는다."""
+    if not agent_share.enforced():
+        return None
+    try:
+        from authz import principals as P
+        return P.from_request(request)
+    except Exception:  # noqa: BLE001 — 주체를 못 만들면 권한 없는 사람으로(승인 못 함)
+        return None
 
 
 def _err(e: ShareError) -> JSONResponse:
@@ -254,23 +264,24 @@ async def agent_read(request: Request):
     except ShareError as e:
         return _err(e)
     try:
-        grant = await asyncio.to_thread(agent_share.get_grant, snap, me, target)
-        authz_hooks.agent_share("read", agent_share.effective(grant, target.share)["read"], grant, me, target, snap)
-        if not agent_share.effective(grant, target.share)["read"]:
+        acc = await asyncio.to_thread(agent_share.authorize, "read", snap, me, target)
+        if not acc.allowed:
             req, created = await asyncio.to_thread(agent_share.request_access, snap, me, target, agent_share.KIND_READ)
             await asyncio.to_thread(agent_share.audit, "request", "pending" if created else "pending_dup",
                                     agent=me, nick=target.share["nick"], kind="read", request=req["id"])
             if created:
                 await _announce(req, snap)
             return _pending_response(req, "read")
-        await asyncio.to_thread(agent_share.check_rate, "read", me.key, target.key)
         res = await asyncio.to_thread(agent_share.read_pane, target, lines)
     except ShareError as e:
         await asyncio.to_thread(agent_share.audit, "read", e.code, agent=me, nick=target.share["nick"])
         return _err(e)
     await asyncio.to_thread(agent_share.audit, "read", "ok", agent=me, nick=target.share["nick"],
-                            lines=res["lines"], truncated=res["truncated"] or None)
-    return {"state": "ok", "nick": target.share["nick"], **res}
+                            lines=res["lines"], truncated=res["truncated"] or None, grant=acc.grant_id)
+    out = {"state": "ok", "nick": target.share["nick"], **res}
+    if acc.grant_id:
+        out["grantId"] = acc.grant_id
+    return out
 
 
 @router.post("/api/agent/shared/send", response_model=SendResponse)
@@ -290,23 +301,24 @@ async def agent_send(request: Request):
         if target.share["mode"] != agent_share.LEVEL_READWRITE:
             # 읽기 전용 공유 — 승인 요청을 만들지 않고 즉시 거부한다(허용해 줄 수 없는 것을 묻지 않는다).
             raise ShareError("read_only_share", "이 공유는 읽기 전용입니다", 403)
-        grant = await asyncio.to_thread(agent_share.get_grant, snap, me, target)
-        authz_hooks.agent_share("write", agent_share.effective(grant, target.share)["write"], grant, me, target, snap)
-        if not agent_share.effective(grant, target.share)["write"]:
+        acc = await asyncio.to_thread(agent_share.authorize, "write", snap, me, target)
+        if not acc.allowed:
             req, created = await asyncio.to_thread(agent_share.request_access, snap, me, target, agent_share.KIND_WRITE)
             await asyncio.to_thread(agent_share.audit, "request", "pending" if created else "pending_dup",
                                     agent=me, nick=nick, kind="write", request=req["id"])
             if created:
                 await _announce(req, snap)
             return _pending_response(req, "write")
-        await asyncio.to_thread(agent_share.check_rate, "send", me.key, target.key)
         await asyncio.to_thread(agent_share.check_send_allowed, target)
         await asyncio.to_thread(agent_share.send_keys, target, text, enter)
     except ShareError as e:
         await asyncio.to_thread(agent_share.audit, "send", e.code, agent=me, nick=nick, **meta)
         return _err(e)
-    await asyncio.to_thread(agent_share.audit, "send", "ok", agent=me, nick=nick, **meta)
-    return {"state": "ok", "nick": nick, "chars": len(text), "enter": enter}
+    await asyncio.to_thread(agent_share.audit, "send", "ok", agent=me, nick=nick, grant=acc.grant_id, **meta)
+    out = {"state": "ok", "nick": nick, "chars": len(text), "enter": enter}
+    if acc.grant_id:
+        out["grantId"] = acc.grant_id
+    return out
 
 
 # --- 사람용 (브라우저 로그인 세션만) ------------------------------------------------------------
@@ -319,7 +331,7 @@ async def share_session(name: str, request: Request):
     if not _NAME_RE.fullmatch(name):
         return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404))
     try:
-        share = await asyncio.to_thread(agent_share.set_share, name, body.get("nick"), body.get("mode"))
+        share = await asyncio.to_thread(agent_share.set_share, name, body.get("nick"), body.get("mode"), _actor(request))
     except ShareError as e:
         return _err(e)
     await asyncio.to_thread(agent_share.audit, "share", "ok", nick=share["nick"], mode=share["mode"])
@@ -328,12 +340,12 @@ async def share_session(name: str, request: Request):
 
 
 @human_router.delete("/api/agent/share/sessions/{name}", response_model=UnshareResponse)
-async def unshare_session(name: str):
+async def unshare_session(name: str, request: Request):
     """공유 해제 — 그 세션의 모든 권한과 대기·거부 요청도 지운다."""
     if not _NAME_RE.fullmatch(name):
         return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404))
     try:
-        res = await asyncio.to_thread(agent_share.unset_share, name)
+        res = await asyncio.to_thread(agent_share.unset_share, name, _actor(request))
     except ShareError as e:
         return _err(e)
     was = res["was"] or {}
@@ -360,7 +372,7 @@ async def decide_request(request_id: str, request: Request):
     if level is not None and not isinstance(level, str):
         return _err(ShareError("bad_level", tr("level 은 read 또는 readwrite 입니다"), 400))
     try:
-        res = await asyncio.to_thread(agent_share.decide, request_id, body.get("decision"), level, snap)
+        res = await asyncio.to_thread(agent_share.decide, request_id, body.get("decision"), level, snap, _actor(request))
     except ShareError as e:
         return _err(e)
     req, grant = res["request"], res["grant"]
@@ -372,7 +384,10 @@ async def decide_request(request_id: str, request: Request):
         request=req["id"], grant=grant["id"] if grant else None,
         reason=f"agent={view['agent']['name']}")
     await _broadcast({"type": "agent_share_request_resolved", "id": req["id"], "state": "allowed" if allowed else "denied"})
-    return {"ok": True, "request": view, "grant": grant_view(grant, snap) if grant else None}
+    out = {"ok": True, "request": view, "grant": grant_view(grant, snap) if grant else None}
+    if res.get("grantId"):
+        out["grantId"] = res["grantId"]
+    return out
 
 
 def grant_view(g: dict, snap: Optional[dict]) -> dict:
@@ -396,17 +411,20 @@ async def list_grants():
 
 
 @human_router.delete("/api/agent/share/grants/{grant_id}", response_model=RevokeResponse)
-async def revoke_grant(grant_id: str, scope: str = Query("all")):
+async def revoke_grant(grant_id: str, request: Request, scope: str = Query("all")):
     """권한 철회. `scope=write` 는 쓰기만 거두고 읽기는 남긴다."""
     snap = await asyncio.to_thread(agent_share.snapshot)
     try:
-        g = await asyncio.to_thread(agent_share.revoke, grant_id, scope, snap)
+        g = await asyncio.to_thread(agent_share.revoke, grant_id, scope, snap, _actor(request))
     except ShareError as e:
         return _err(e)
     view = grant_view(g, snap)
     await asyncio.to_thread(agent_share.audit, "revoke", "ok", nick=view["target"]["nick"], grant=g["id"],
                             level="write" if scope == "write" else "all", reason=f"agent={view['agent']['name']}")
-    return {"ok": True, "grant": view}
+    out = {"ok": True, "grant": view}
+    if agent_share.enforced():
+        out["grantId"] = f"ag-{g['id']}"
+    return out
 
 
 @human_router.get("/api/agent/share/audit", response_model=AuditResponse)

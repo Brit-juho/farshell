@@ -167,3 +167,29 @@ def verify(p: Optional[Path] = None) -> tuple[bool, Optional[int], int]:
                     return False, rec.get("seq"), n
                 prev = raw
     return True, None, n
+
+
+def read_recent(limit: int, action_prefix: str = "") -> list[dict]:
+    """최근 줄(새 것 먼저). `action_prefix` 로 거른다. 파일 끝 512KB 만 보고 회전 세대는 한 단계 앞까지 본다."""
+    limit = max(1, min(int(limit), 1000))
+    out: list[dict] = []
+    p = path()
+    for fp in (p, _rotated(p, 1)):
+        try:
+            with open(fp, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                f.seek(max(0, size - 512 * 1024))
+                lines = f.read().splitlines()
+        except OSError:
+            continue
+        for raw in reversed(lines):
+            try:
+                rec = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and str(rec.get("action", "")).startswith(action_prefix):
+                out.append(rec)
+                if len(out) >= limit:
+                    return out
+    return out

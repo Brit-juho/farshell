@@ -221,6 +221,7 @@ and a mode; the MCP tools (`list_shared_sessions`, `read_session`, `send_to_sess
   refused. **Effective permission = min(granted, the share's current mode)**: lowering the mode to `read` stops writing on the
   very next call. Raising it again revives an existing write grant **without another approval**; revoke the write grant or
   unshare if the reduction should be permanent.
+- **Engine mode.** With `VT_AUTHZ_ENFORCE=share` the grants/requests/share policy live in `~/.vt/authz/` and the audit goes to `~/.vt/audit/authz.jsonl`; `agent_grants.json` and `agent_access.log` are still written in parallel (rollback = unset the flag). See `docs/ref/auth.md` «Agent session sharing under the engine».
 - **Approval is human-only.** No grant → the call creates a **pending request** (one per agent/session/kind) and returns `202`;
   the agent is told to repeat the same call once approved. Read and write are approved separately (allowing a write request may
   give `read` only; a read request can never give write). A write request on a read-only share is refused at once, without a

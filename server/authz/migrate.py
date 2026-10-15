@@ -94,7 +94,8 @@ def translate_agent_grant(g: dict, *, stamp: str = "live") -> Optional[dict]:
             "subject": f"agent:local/{ak}", "resource": f"session:local/{tk}", "scopes": scopes,
             "subject_session": ak, "resource_session": tk, "state": "active",
             "approved_by": f"migrated:{stamp}", "expires": None, "conds": {},
-            "created": g.get("granted")}
+            "created": g.get("granted"), "updated": g.get("updated"),
+            "subject_name": (g.get("agent") or {}).get("name") or ""}
 
 
 def translate_agent_request(r: dict, now: float) -> Optional[dict]:
@@ -105,12 +106,14 @@ def translate_agent_request(r: dict, now: float) -> Optional[dict]:
     scopes = ["session.list", "session.read"] + (["session.input.line"] if kind == "write" else [])
     base = {"id": f"ap-{r['id']}", "origin": f"legacy:agent_grants:req:{r['id']}",
             "subject": f"agent:local/{ak}", "resource": f"session:local/{tk}", "scopes": scopes,
-            "subject_session": ak, "resource_session": tk, "created": r.get("created")}
+            "subject_session": ak, "resource_session": tk, "created": r.get("created"),
+            "subject_name": (r.get("agent") or {}).get("name") or ""}
     if r.get("state") == "denied":
         until = float(r.get("decided", 0)) + DENY_COOLDOWN
         if now >= until:
             return None
-        return {**base, "state": "denied", "decided": r.get("decided"), "cooldown_until": until}
+        return {**base, "state": "denied", "decided": r.get("decided"), "cooldown_until": until,
+                "expires": r.get("expires")}
     if r.get("state") == "pending":
         if now >= float(r.get("expires", 0)):
             return None
@@ -545,6 +548,8 @@ def apply(*, now: Optional[float] = None, tmux: Optional[dict] = "probe") -> dic
         if changed or "applied_at" not in meta:
             meta["applied_at"] = now
         meta["last_backup"] = bk["ts"]
+        if tmux:                      # tmux 를 읽었고 세션이 있다 → 공유 정책 snapshot 완료(3a 가 이 표시를 본다)
+            meta["share_adopted"] = True
         meta["schema"] = store.SCHEMA_VERSION
         meta["counts"] = {"grants": len(docs["grants"]["items"]), "approvals": len(docs["approvals"]["items"]),
                           "shares": len(docs["shares"]["items"]), "peers": len(docs["principals/peers"]["items"])}

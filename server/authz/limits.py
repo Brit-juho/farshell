@@ -62,3 +62,14 @@ class Window:
                 return False
             q.append(now)
             return True
+
+
+def recent(store: dict, key: str, now: float, period: float = 60.0) -> list[float]:
+    """`store[key]` 의 타임스탬프 중 창(period초) 안의 것. 호출자가 락을 쥔다."""
+    return [t for t in store.get(key, []) if now - t < period]
+
+
+def record(store: dict, key: str, hits: list[float], now: float) -> None:
+    """창 안의 기록(hits)에 지금을 더해 저장. 거부된 호출은 더하지 않는다(= 기존 동작)."""
+    hits.append(now)
+    store[key] = hits

@@ -23,6 +23,7 @@ _CHAR = Path(__file__).resolve().parent / "authz_char"
 if str(_CHAR) not in sys.path:
     sys.path.insert(0, str(_CHAR))
 
+from authz import flags as authz_flags  # noqa: E402
 from authz_cases import all_cases  # noqa: E402
 from authz_harness import World  # noqa: E402
 
@@ -150,8 +151,18 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
     matrix = json.loads((_CHAR / "matrix.json").read_text(encoding="utf-8"))
     cases = _one_per_site()
     assert len(cases) > 40
+    enforced = authz_flags.enforced("share")
     for case in cases:
         w = World(monkeypatch, world.tmp / case.id.replace("/", "_"))
+        if enforced and break_at in ("engine", "write") and case.group == "agent_share" \
+                and case.caller in ("agent_verified", "agent_child") and case.route.startswith("/api/agent/shared/"):
+            # EXPECTED_CHANGE(3a): VT_AUTHZ_ENFORCE=share 이면 엔진이 이 판정의 **권한자**다 — shadow 라면 삼켰을 엔진
+            # 예외·뒤집힌 답이 응답을 바꾸는 게 맞다(뒤집힌 답을 따르는 것도 권한자라서다). 터진 경우는 기존 판정으로
+            # 되돌아가지 않고 **닫혀야** 한다: 2xx 가 되면 안 된다. 나머지 지점은 아직 shadow 라 아래 단언 그대로다.
+            if break_at == "engine":
+                res = w.run(case)
+                assert res["status"] >= 400, (case.id, res)
+            continue
         assert w.run(case) == matrix[case.id]["expected"], case.id
     st = shadow.STATS.as_dict()
     assert st["errors"] > 0

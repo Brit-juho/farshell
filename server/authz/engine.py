@@ -16,6 +16,7 @@ ctx 키(전부 선택):
   alive        살아 있는 세션 키 집합. None 이면 tmux 를 못 읽은 것 → liveness 통과(F3·위험 4)
   deleg        `{enabled, is_child, open_children, recent_spawns}` — deleg.spawn 조건
   counts       `{scope: 이미 센 횟수}` — rate 비교(limits.exceeded)
+  limits       `{scope: 한도}` — counts 와 비교할 한도를 표(limits.LIMITS) 대신 지정(선택)
 """
 
 from __future__ import annotations
@@ -175,8 +176,11 @@ def decide(p: P.Principal, scope: str, resource: str, ctx: Optional[dict] = None
             return Decision(False, "denied", d.get("id"), "deny")
 
     counts = ctx.get("counts") or {}
-    if scope in counts and scope in limits.LIMITS and limits.exceeded(scope, int(counts[scope])):
-        return Decision(False, "rate_limited", hit.get("id"), "rate")
+    if scope in counts:
+        # `limits` 는 판정 지점이 덮어쓰는 한도(옛 모듈의 조정 가능한 상수를 따라가려는 것). 없으면 표의 값.
+        lim = (ctx.get("limits") or {}).get(scope)
+        if (lim is not None or scope in limits.LIMITS) and limits.exceeded(scope, int(counts[scope]), lim):
+            return Decision(False, "rate_limited", hit.get("id"), "rate")
     return Decision(True, "ok", hit.get("id"), "default" if str(hit.get("id", "")).startswith("default:") else "grant")
 
 
