@@ -191,6 +191,9 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | DELETE | `/api/ports/{port}/expose` | **Elevated.** Tear down that port's tunnel and share policy — a re-expose issues a new share id and PIN |
 | POST | `/api/ports/{port}/share/pin` | **Elevated.** Reissue the PIN without touching the tunnel (URL survives). Also rotates the share id, so everyone who got in with the old PIN must enter the new one |
 | PATCH | `/api/ports/{port}/share` | **Elevated.** Body `{"mode":...}` and/or `{"auto_renew":true\|false}` (at least one) — change who can access, or toggle auto re-expose, without touching the tunnel. An actual mode change rotates the share id, so anyone admitted under the old mode must authenticate again; toggling `auto_renew` alone keeps the share id and PIN |
+| POST | `/api/ports/{port}/share/pause` | **Elevated.** Temporarily close: stops only the tunnel and keeps the policy (share id, PIN, expiry). Auto re-expose does not reopen it while paused |
+| POST | `/api/ports/{port}/share/resume` | **Elevated.** Reopen a paused share with the same policy. Anonymous tunnels get a new URL |
+| POST | `/api/ports/{port}/share/refresh-url` | **Elevated.** Restart only the tunnel to get a new public URL; share id, PIN and expiry stay. If the reopen fails the share is left paused |
 | POST | `/api/ports/_proxy/sync` | Not elevated — tells the running server to (re)start listeners for whatever `port_share_store` currently says. `fsh tunnel expose/pin/mode` call this after writing the policy directly (CLI trust level, not the web session's elevation gate) |
 | GET | `/api/tunnel/list` | summary of every currently open tunnel (main + `fsh tunnel expose`d ports), each with `mode`/`broken` (2.2). Unexposing reuses `DELETE /api/ports/{port}/expose` above |
 

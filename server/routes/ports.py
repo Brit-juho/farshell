@@ -220,6 +220,89 @@ async def unexpose_port(port: int):
     return {"ok": True, "port": port, "output": out.strip()}
 
 
+async def _reopen_tunnel(share: dict) -> tuple[bool, str, str]:
+    """정책은 그대로 두고 리스너 + cloudflared만 다시 띄운다. (성공, 주소, 오류 출력)."""
+    if not await port_proxy.start(share):
+        return False, "", tr("내부 프록시 포트 {port} 를 열 수 없습니다.", port=share["proxyPort"])
+    rc, out = await asyncio.to_thread(
+        _run_vt, "tunnel", "expose", str(share["port"]),
+        share.get("label") or f"localhost:{share['port']}",
+        "--proxy-port", str(share["proxyPort"]))
+    if rc != 0:
+        return False, "", out.strip()
+    return True, _first_url(out), out.strip()
+
+
+@elevated_router.post("/api/ports/{port}/share/pause")
+async def pause_share(port: int):
+    """일시 닫기 — 터널만 내리고 정책(주소 자격·PIN·만료)은 남긴다.
+
+    자동 재노출이 켜져 있어도 `paused` 동안은 다시 열지 않는다(restore가 건너뛴다).
+    """
+    share = await asyncio.to_thread(pshare.get_share, port)
+    if share is None:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    await asyncio.to_thread(pshare.update_share, port, paused=True)
+    invalidate_share(port)
+    rc, out = await asyncio.to_thread(_run_vt, "tunnel", "unexpose", str(port), "--keep-policy")
+    if rc != 0:
+        await asyncio.to_thread(pshare.update_share, port, paused=False)
+        invalidate_share(port)
+        return JSONResponse({"ok": False, "error": "pause_failed", "reason": out.strip()},
+                            status_code=500)
+    return {"ok": True, "port": port, "paused": True}
+
+
+@elevated_router.post("/api/ports/{port}/share/resume")
+async def resume_share(port: int):
+    """일시 닫은 노출을 같은 정책으로 다시 연다. 익명 터널이라 주소는 새로 받는다."""
+    share = await asyncio.to_thread(pshare.get_share, port)
+    if share is None:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    if not share.get("paused"):
+        return JSONResponse({"ok": False, "error": "not_paused"}, status_code=409)
+    if os.environ.get("VT_NETWORK_MODE", "all") != "all":
+        return JSONResponse({"ok": False, "error": "network_mode",
+                             "reason": tr("접근 범위가 제한된 상태라 다시 열 수 없습니다.")},
+                            status_code=409)
+    ok, url, out = await _reopen_tunnel(share)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "resume_failed", "reason": out}, status_code=500)
+    updated = await asyncio.to_thread(pshare.update_share, port, paused=False)
+    invalidate_share(port)
+    return {"ok": True, "port": port, "url": url, "share": pshare.public_view(updated or share)}
+
+
+@elevated_router.post("/api/ports/{port}/share/refresh-url")
+async def refresh_share_url(port: int):
+    """터널만 다시 띄워 새 공개 주소를 받는다. shareId·PIN·만료는 그대로다.
+
+    다시 여는 데 실패하면 터널은 이미 내려간 뒤라 `paused`로 남긴다 — 그래야 화면이
+    "열려 있다"고 거짓말하지 않고, 사용자가 다시 열기를 누를 수 있다.
+    """
+    share = await asyncio.to_thread(pshare.get_share, port)
+    if share is None:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    if share.get("paused"):
+        return JSONResponse({"ok": False, "error": "paused",
+                             "reason": tr("일시 닫힌 노출입니다. 먼저 다시 여세요.")}, status_code=409)
+    if os.environ.get("VT_NETWORK_MODE", "all") != "all":
+        return JSONResponse({"ok": False, "error": "network_mode",
+                             "reason": tr("접근 범위가 제한된 상태라 다시 열 수 없습니다.")},
+                            status_code=409)
+    rc, out = await asyncio.to_thread(_run_vt, "tunnel", "unexpose", str(port), "--keep-policy")
+    if rc != 0:
+        return JSONResponse({"ok": False, "error": "refresh_failed", "reason": out.strip()},
+                            status_code=500)
+    ok, url, out = await _reopen_tunnel(share)
+    if not ok:
+        await asyncio.to_thread(pshare.update_share, port, paused=True)
+        invalidate_share(port)
+        return JSONResponse({"ok": False, "error": "refresh_failed", "reason": out}, status_code=500)
+    invalidate_share(port)
+    return {"ok": True, "port": port, "url": url, "share": pshare.public_view(share)}
+
+
 @elevated_router.post("/api/ports/{port}/share/pin")
 async def reissue_pin(port: int):
     """PIN만 새로 발급 — 터널도 proxyPort도 건드리지 않으므로 **공개 URL이 산다.**"""
@@ -382,8 +465,8 @@ async def restore_auto_renew_tunnels() -> list[int]:
     restored: list[int] = []
     for share in shares:
         port = share["port"]
-        if port in alive:
-            continue
+        if port in alive or share.get("paused"):
+            continue   # 사용자가 일시 닫은 노출은 자동 재노출이 되살리지 않는다
         if not await port_proxy.start(share):
             logger.warning(f"[ports] 자동 재노출 {port}: 프록시 리스너를 열 수 없음")
             continue
@@ -439,4 +522,11 @@ async def list_tunnels():
             row["mode"] = s.get("mode")
             row["broken"] = bool(s.get("broken"))
         extra_rows.append(row)
+    # 일시 닫힌 노출은 터널이 없어 레지스트리엔 안 나오지만, 다시 열 수 있게 목록엔 둔다.
+    for port, s in sorted(shares.items()):
+        if s.get("paused") and port not in extra:
+            extra_rows.append({"port": port, "label": s.get("label") or f"localhost:{port}",
+                               "url": "", "named": False, "paused": True,
+                               "share": pshare.public_view(s), "mode": s.get("mode"),
+                               "broken": False})
     return {"main": main, "extra": extra_rows, "count": (1 if main else 0) + len(extra_rows)}

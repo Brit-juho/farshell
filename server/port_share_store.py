@@ -129,6 +129,7 @@ def _read_unlocked() -> list[dict]:
         x.setdefault("lastAccess", None)
         x.setdefault("broken", False)
         x.setdefault("autoRenew", False)
+        x.setdefault("paused", False)
         out.append(x)
     return out
 
@@ -281,6 +282,7 @@ def create_share(port: int, label: str, mode: str, ttl: int,
             "views": 0,
             "lastAccess": None,
             "broken": False,
+            "paused": False,
         }
         if pin is not None:
             share["pinHash"] = auth.hash_password(pin)

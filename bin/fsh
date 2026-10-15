@@ -629,6 +629,10 @@ _start_extra_tunnel() {
 
 _stop_extra_tunnel() {
   local port="${1:-}"
+  # --keep-policy: 터널(cloudflared)만 내리고 노출 정책(shareId·PIN·만료)은 남긴다.
+  # 웹의 「일시 닫기」·「주소 갱신」이 쓴다 — 다시 열어도 같은 자격으로 돌아오게.
+  local keep_policy=0
+  [ "${2:-}" = "--keep-policy" ] && keep_policy=1
   local pidfile="$PID_DIR/tunnel-$port.pid"
   if [ ! -f "$pidfile" ]; then
     echo "  ⓘ $(_t '포트 {port} 로 열린 터널이 없습니다' port="$port")"
@@ -641,7 +645,9 @@ _stop_extra_tunnel() {
   _registry_del "$port"
   # 2.2 — 정책도 함께 지운다. 재노출하면 새 shareId·PIN이 발급된다(plan §1).
   # 정책이 아예 없던 레거시/내부 호출일 수 있으니 실패는 무시한다.
-  _port_share_cli cli-remove "$port" >/dev/null 2>&1
+  if [ "$keep_policy" -eq 0 ]; then
+    _port_share_cli cli-remove "$port" >/dev/null 2>&1
+  fi
   _request_proxy_sync
   _run_tunnel_hook unexpose
 }
@@ -4100,7 +4106,7 @@ cmd_tunnel() {
       ;;
     unexpose)
       echo ""
-      _stop_extra_tunnel "${2:-}"
+      _stop_extra_tunnel "${2:-}" "${3:-}"
       echo ""
       ;;
     pin)

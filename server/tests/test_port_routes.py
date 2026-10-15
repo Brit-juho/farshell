@@ -77,6 +77,9 @@ def test_write_routes_are_on_the_elevated_router(routes):
     assert paths == {
         "/api/ports/{port}/expose",
         "/api/ports/{port}/share/pin",
+        "/api/ports/{port}/share/pause",
+        "/api/ports/{port}/share/resume",
+        "/api/ports/{port}/share/refresh-url",
         "/api/ports/{port}/share",
     }
 
