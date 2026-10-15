@@ -23,6 +23,7 @@ import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import host_store
+from authz import host_gate
 from i18n import tr
 import peer_client
 from routes.pty import _ws_auth_token
@@ -76,6 +77,12 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()
+    if host_gate.enforced():
+        # H13 — 원격 터미널 스트림(control 이면 입력)이라 relay 의 터미널 그룹과 같은 권한을 요구한다.
+        d = await asyncio.to_thread(host_gate.decide, ws, host_id, "relay", {"group": "ws.term"})
+        if not d.allow:
+            await ws.close(code=4003, reason="host access denied")
+            return
 
     peer = await asyncio.to_thread(host_store.find_peer, host_id)
     if peer is None:

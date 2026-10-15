@@ -102,6 +102,24 @@ def approver_rules(p: P.Principal) -> list[dict]:
     return [_rule("human_approver", p.id, "*", sc, _full_conds(sc))]
 
 
+# 리소스 종류 — `scopes._RES_RE` 와 같다. 기계 토큰의 기본 규칙을 「다른 맥(`host:<id>`)을 뺀 전부」로 나눌 때 쓴다.
+_NON_HOST_KINDS = ("session", "fs", "browser", "msg", "deleg", "deleg-quota", "relay", "authz")
+
+
+def _legacy_token_rules(p: P.Principal, sc: list[str]) -> list[dict]:
+    """기계 토큰의 기본 권한. `peer` 강제가 켜진 서버의 **명시한 기계 토큰**은 다른 맥(`host:<id>`, 이 호스트 `host:local` 제외)을 못 건드린다 —
+    상대 맥 세션 생성·종료·relay 는 로그인한 사람의 일이다. 인증 수단이 하나도 없는 서버의 무인증 호출(`open_server`)은 서버가 원래 전부 열어 둔
+    것이라 그대로 전부 허용한다."""
+    if not flags.enforced("peer"):
+        return [_rule("legacy_token", p.id, "*", sc, _full_conds(sc))]
+    if p.attrs.get("open_server"):
+        return [_rule("legacy_token", p.id, "*", sc, _full_conds(sc)),
+                _rule("legacy_open_host_relay", p.id, "host:*", ["relay"], _full_conds(["relay"]))]
+    res = ["host:local"] + [x for k in _NON_HOST_KINDS for x in (k, f"{k}:*")]
+    return [_rule("legacy_token" if i == 0 else f"legacy_token:{i}", p.id, r, sc, _full_conds(sc))
+            for i, r in enumerate(res)]
+
+
 def rules_for(p: P.Principal) -> list[dict]:
     """주체 종류별 기본 권한. 리소스는 이 호스트(`local`)만."""
     if p.kind == P.HUMAN:
@@ -109,12 +127,16 @@ def rules_for(p: P.Principal) -> list[dict]:
         if not p.elevated:
             excl |= {"authz.admin"}      # 결정은 elevated 에서만
         sc = _all_local_except(excl)
-        return [_rule("human", p.id, "*", sc, _full_conds(sc))]
+        rules = [_rule("human", p.id, "*", sc, _full_conds(sc))]
+        if flags.enforced("peer"):
+            # 로그인한 사람은 다른 맥(`host:<id>`)의 relay(전 그룹)를 쓴다 — 세션 생성·종료 같은 관리는 위 규칙의 session.manage.
+            rules.append(_rule("human_host_relay", p.id, "host:*", ["relay"], _full_conds(["relay"])))
+        return rules
     if p.kind == P.LEGACY:
         sc = _all_local_except(LEGACY_TOKEN_EXCLUDED)
         if p.attrs.get("open_server") and not UNPROTECTED_ANON_FULL:
             return []
-        return [_rule("legacy_token", p.id, "*", sc, _full_conds(sc))]
+        return _legacy_token_rules(p, sc)
     if p.kind == P.AGENT:
         key = p.attrs.get("key", "")
         own = f"session:local/{key}"
@@ -140,9 +162,11 @@ def rules_for(p: P.Principal) -> list[dict]:
         return rules
     if p.kind == P.PEER:
         return [_rule("peer_ping", "peer:*", "host:local", ["ping"])]
+    local_host = [_rule("local_host_read", p.id, "host:*", ["session.view", "ping"])] \
+        if p.kind == P.LOCAL and flags.enforced("peer") else []        # 호스트 목록·ping 만(읽기 전용)
     if P.is_cli(p):
         # cli 는 위임을 **닫을 수** 있다(세션은 남고 위험이 낮으며 감사된다). 보내기·승인·발급은 못 한다.
         return [_rule("cli_deleg_close", p.id, "deleg:local/*", ["deleg.control"], {"deleg.control": {"role": ["parent"]}},
-                      conds={"ops": ["close"]})]
+                      conds={"ops": ["close"]})] + local_host
     # 서비스 데몬(`svc:*`)은 기본 권한이 없다(거부 쪽).
-    return []
+    return local_host

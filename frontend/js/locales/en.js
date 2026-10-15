@@ -3129,5 +3129,6 @@ window.__VT_I18N = {
   "메시지 요청에는 level 이 필요 없습니다": "A message request takes no level",
   "세션 key 가 올바르지 않습니다": "The session key is not valid",
   "에이전트 메시지 승인이 필요합니다": "An agent message needs your approval",
-  "이 호스트에는 이 기능을 쓸 권한이 없습니다": "This host has no permission to use this feature"
+  "이 호스트에는 이 기능을 쓸 권한이 없습니다": "This host has no permission to use this feature",
+  "이 호출자는 다른 맥을 조작할 수 없습니다 — 브라우저에서 로그인한 사람만 할 수 있습니다": "This caller cannot operate another Mac — only a person logged in through the browser can"
 };

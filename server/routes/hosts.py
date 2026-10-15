@@ -20,11 +20,12 @@ import asyncio
 import logging
 import time
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 import agent_status
 import host_store
+from authz import host_gate
 from i18n import tr
 import peer_client
 from ttl_cache import TTLCache
@@ -112,7 +113,7 @@ def _local_entry() -> dict:
     }
 
 
-@router.get("/api/hosts")
+@router.get("/api/hosts", dependencies=[Depends(host_gate.dependency("session.view"))])
 async def list_hosts(fresh: bool = Query(False)):
     """로컬 + 등록된 원격 호스트를 세션 목록과 함께.
 
@@ -158,7 +159,7 @@ def _peer_error(e: "peer_client.PeerError") -> JSONResponse:
     return JSONResponse({"error": "peer_error", "reason": e.reason}, status_code=status)
 
 
-@router.get("/api/hosts/{host_id}/clients")
+@router.get("/api/hosts/{host_id}/clients", dependencies=[Depends(host_gate.dependency("session.view"))])
 async def host_clients(host_id: str, session: str, screen: str = Query("")):
     peer, err = await _peer_or_404(host_id)
     if err:
@@ -172,7 +173,7 @@ async def host_clients(host_id: str, session: str, screen: str = Query("")):
         return _peer_error(e)
 
 
-@router.post("/api/hosts/{host_id}/clients/detach")
+@router.post("/api/hosts/{host_id}/clients/detach", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "detach"}))])
 async def host_clients_detach(host_id: str, request: Request):
     peer, err = await _peer_or_404(host_id)
     if err:
@@ -184,7 +185,7 @@ async def host_clients_detach(host_id: str, request: Request):
         return _peer_error(e)
 
 
-@router.post("/api/hosts/{host_id}/clients/solo")
+@router.post("/api/hosts/{host_id}/clients/solo", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "detach"}))])
 async def host_clients_solo(host_id: str, request: Request):
     peer, err = await _peer_or_404(host_id)
     if err:
@@ -196,7 +197,7 @@ async def host_clients_solo(host_id: str, request: Request):
         return _peer_error(e)
 
 
-@router.get("/api/hosts/{host_id}/search")
+@router.get("/api/hosts/{host_id}/search", dependencies=[Depends(host_gate.dependency("session.read"))])
 async def host_search(host_id: str, q: str):
     """원격 스크롤백 검색. 결과의 `host`/`host_label`을 여기서 붙인다 — 팔레트가
     "이건 다른 맥의 출력"임을 표시할 수 있어야 하고, 그 판단을 원격이 자기
@@ -244,7 +245,7 @@ async def _peer_session_call(host_id: str, action: str, body: dict):
     return result
 
 
-@router.post("/api/hosts/{host_id}/sessions")
+@router.post("/api/hosts/{host_id}/sessions", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "create"}))])
 async def host_session_create(host_id: str, request: Request):
     try:
         body = await request.json()
@@ -253,12 +254,12 @@ async def host_session_create(host_id: str, request: Request):
     return await _peer_session_call(host_id, "create", {"name": str(body.get("name") or "")})
 
 
-@router.delete("/api/hosts/{host_id}/sessions/{name}")
+@router.delete("/api/hosts/{host_id}/sessions/{name}", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "kill"}))])
 async def host_session_kill(host_id: str, name: str):
     return await _peer_session_call(host_id, "kill", {"name": name})
 
 
-@router.patch("/api/hosts/{host_id}/sessions/{name}")
+@router.patch("/api/hosts/{host_id}/sessions/{name}", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "rename"}))])
 async def host_session_rename(host_id: str, name: str, request: Request):
     try:
         body = await request.json()
@@ -267,7 +268,7 @@ async def host_session_rename(host_id: str, name: str, request: Request):
     return await _peer_session_call(host_id, "rename", {"name": name, "new": str(body.get("name") or "")})
 
 
-@router.post("/api/hosts/{host_id}/ping")
+@router.post("/api/hosts/{host_id}/ping", dependencies=[Depends(host_gate.dependency("ping"))])
 async def ping_host(host_id: str):
     peer = await asyncio.to_thread(host_store.find_peer, host_id)
     if peer is None:
