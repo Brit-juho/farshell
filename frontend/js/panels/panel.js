@@ -62,6 +62,9 @@ const MOBILE_ROUTE_IDS = new Set([
   'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-mcp', 'vt-files', 'vt-dir', 'vt-ports', 'vt-usage', 'vt-file',
 ]);
 
+// 하단 내비의 탭 화면 — 팝업이 아니라 탭이라 × 를 숨기고 상단 바 아래를 채운다(60-mobile-hud.css).
+const TAB_PANEL_IDS = new Set(['vt-dock-scm', 'vt-files', 'vt-settings']);
+
 function _withoutPanelState(state) {
   if (!state || typeof state !== 'object') return state;
   const next = { ...state };
@@ -178,6 +181,7 @@ export function openPanel(opts) {
       el.className = (opts.paneHost ? 'vt-dock-panel vt-pane-panel-root'
           : host ? 'vt-dock-panel' : modal ? 'vt-viewer-backdrop' : 'vt-file-overlay')
         + (mobileRoute ? ' vt-mobile-route' : '')
+        + (mobileRoute && TAB_PANEL_IDS.has(opts.id) ? ' vt-tab-panel' : '')
         + (opts.extraClass ? ' ' + opts.extraClass : '');
       el.innerHTML = `
         <div class="vt-viewer-card" role="dialog" aria-modal="${modal}" aria-label="${opts.ariaLabel}">
@@ -235,7 +239,9 @@ export function openPanel(opts) {
         enabled: () => modal || el.contains(document.activeElement) });
       (opts.mount || document.body).appendChild(el);
 
-      if (mobileRoute) {
+      // 탭 화면은 history 항목을 쌓지 않는다 — 탭을 오갈 때마다 쌓이면 뒤로가기가 지난 탭들을 순례한다.
+      // (탭 안에서 열리는 하위 화면·파일 보기는 그대로 쌓는다.)
+      if (mobileRoute && !TAB_PANEL_IDS.has(opts.id)) {
         el._vtMobileHistory = true;
         try {
           history.pushState({ ...(history.state || {}), vtPanel: opts.id }, '', location.href);
