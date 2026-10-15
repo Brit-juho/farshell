@@ -403,8 +403,27 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 /* 2026-09-23 — 일괄 정리(설계 4번). 「선택」을 누르면 각 행 앞에 체크박스가
    붙고 칩 줄 아래에 이 바가 뜬다. 업로드 진행 행은 선택 대상이 아니라서
    체크박스가 안 붙는다(renderUploadingRow는 애초에 이 클래스를 안 쓴다). */
-.vt-fl-select-cb{ flex:0 0 auto; width:16px; height:16px; accent-color:var(--acc); }
-.vt-fl-row-selectable.selected{ background:var(--color-acc-surface); }
+.vt-fl-select-cb{
+  flex:0 0 auto; width:18px; height:18px; margin:0; cursor:pointer;
+  appearance:none; -webkit-appearance:none; box-sizing:border-box;
+  border:1.5px solid color-mix(in srgb, var(--sub) 70%, transparent); border-radius:5px;
+  background:transparent center / 12px 12px no-repeat;
+  transition:background-color .12s, border-color .12s;
+}
+.vt-fl-select-cb:hover{ border-color:var(--acc); }
+.vt-fl-select-cb:checked, .vt-fl-select-cb:indeterminate{
+  background-color:var(--acc); border-color:var(--acc);
+}
+.vt-fl-select-cb:checked{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+.vt-fl-select-cb:indeterminate{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+}
+.vt-fl-select-cb:disabled{ opacity:.4; cursor:default; }
+.vt-fl-select-cb:focus-visible{ outline:2px solid var(--acc); outline-offset:2px; }
+.vt-fl-selectall{ margin-right:calc(var(--spacing) * 3); display:inline-flex; align-items:center; gap:calc(var(--spacing) * 2); cursor:pointer; font:500 var(--fs-2xs) var(--mono); color:var(--txt); }
+.vt-fl-row-selectable.selected{ background:color-mix(in srgb, var(--acc) 12%, transparent); }
 .vt-fl-selectbar{
   display:flex; align-items:center; gap:calc(var(--spacing) * 2);
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);

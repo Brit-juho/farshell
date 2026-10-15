@@ -386,17 +386,25 @@ function _renderSelectBar(inst) {
   count.textContent = t('{n}개 선택', { n: inst.selected.size });
   bar.appendChild(count);
 
-  const selectAllBtn = document.createElement('button');
-  selectAllBtn.type = 'button';
-  selectAllBtn.className = 'vt-btn sm quiet';
-  selectAllBtn.textContent = allSelected ? t('선택 해제') : t('보이는 항목 전체 선택');
-  selectAllBtn.disabled = visible.length === 0;
-  selectAllBtn.addEventListener('click', () => {
+  // 전체 선택은 체크박스로 — 일부만 골랐을 때는 가운데 줄(indeterminate)로 보인다.
+  const selectAll = document.createElement('label');
+  selectAll.className = 'vt-fl-selectall';
+  const allCb = document.createElement('input');
+  allCb.type = 'checkbox';
+  allCb.className = 'vt-fl-select-cb';
+  const someSelected = visible.some((id) => inst.selected.has(id));
+  allCb.checked = allSelected;
+  allCb.indeterminate = someSelected && !allSelected;
+  allCb.disabled = visible.length === 0;
+  allCb.addEventListener('change', () => {
     if (allSelected) for (const id of visible) inst.selected.delete(id);
     else for (const id of visible) inst.selected.add(id);
     _paintBody(inst);
   });
-  bar.appendChild(selectAllBtn);
+  const allLabel = document.createElement('span');
+  allLabel.textContent = t('전체 선택');
+  selectAll.append(allCb, allLabel);
+  bar.insertBefore(selectAll, count);
 
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';

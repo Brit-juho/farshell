@@ -417,6 +417,7 @@ window.__VT_I18N = {
   "git diff 실행 중…": "Running git diff…",
   "git log 시간 초과": "git log timed out",
   "알 수 없는 브랜치입니다": "Unknown branch",
+  "전체 선택": "Select all",
   "브랜치": "Branch",
   "git reset 실패": "git reset failed",
   "git show 시간 초과": "git show timed out",
@@ -1483,7 +1484,6 @@ window.__VT_I18N = {
   "보기": "View",
   "보내기": "Send",
   "보낼 tmux 세션이 없습니다 (큐에 유지됨)": "No tmux session to send to (kept in the queue)",
-  "보이는 항목 전체 선택": "Select all visible",
   "보통": "Medium",
   "보호됨": "Protected",
   "보호됨 / 시스템": "Protected / system",
@@ -1746,7 +1746,6 @@ window.__VT_I18N = {
   "선택": "Select",
   "선택 요청": "Choice requested",
   "선택 중": "Selected",
-  "선택 해제": "Deselect all",
   "선택된 모델 없음": "no model selected",
   "선택이 필요합니다": "A choice is needed",
   "선택한 {n}개 보관함에 저장": {
