@@ -214,6 +214,6 @@ def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> N
     if was_waiting and not is_cancel and agent_status.status_for_session(tmux_name) == agent_status.WAITING:
         _on_waiting_change(pty_session_id, False)
 
-# Phase 8 G2: WS 연결 한도 카운터 (single-worker 전용 — TODOS.md D1)
+# Phase 8 G2: WS 연결 한도 카운터 (single-worker 전용)
 ws_count_per_session: dict[str, int] = {}
 ws_total_count = 0

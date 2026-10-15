@@ -126,7 +126,7 @@ body.voice-only-mode .vt-onboarding { display:none; }
 }
 .vt-ob-row-label:hover { background:var(--menu-hover); }
 /* L1: 캐시로 즉시 그린 목록 — 아직 실제 연결을 확인 전이라 눌리지 않게 막고
-   흐리게 표시(Orca 패턴: "확인 전엔 비활성"). */
+   흐리게 표시("확인 전엔 비활성"). */
 .vt-ob-sessions-pending { opacity:.55; }
 .vt-ob-sessions-pending .vt-ob-row-label { cursor:default; pointer-events:none; }
 /* 2.1.6 — .vt-btn-primary/.vt-btn-secondary는 components.css의 `.vt-btn.solid lg`/

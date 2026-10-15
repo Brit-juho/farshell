@@ -1,4 +1,4 @@
-"""hook_identity — 훅 프로세스가 그 pane의 대화형 에이전트인가 (docs/plan-2.4/60 P2).
+"""hook_identity — 훅 프로세스가 그 pane의 대화형 에이전트인가.
 
 프로세스 표 모양은 2026-10-13 실측을 따른다: pane 셸(zsh) 아래 claude가 포그라운드 그룹
 리더(PGID == PID == TPGID)이고, MCP 서버는 claude의 그룹을 물려받으며, Bash 도구·훅은 tty

@@ -114,7 +114,7 @@ def check_api_docs(problems: list[str]) -> None:
 # 위 check_api_docs는 "경로 집합"만 본다 — 메서드가 바뀌거나(POST→PUT), 경로
 # 파라미터 이름이 바뀌거나(norm()이 지운다), 필수 쿼리 파라미터가 새로 생겨도
 # 못 잡는다. FastAPI는 이 정보를 이미 `app.openapi()`로 들고 있다 — 안 쓰고
-# 있었을 뿐이다(docs/plan-2.3/50-contract.md §1).
+# 있었을 뿐이다.
 
 _METHODS = ("get", "post", "put", "patch", "delete")
 

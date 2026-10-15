@@ -62,7 +62,7 @@ def _read_json(path: Path) -> tuple[Optional[dict], Optional[str]]:
 
     파싱 실패는 (None, 사유)로 구분해 돌려준다. 이걸 뭉뚱그려 빈 dict로
     바꾸면 다음 단계(쓰기)가 "설정이 비어 있다"고 오해해 통째로 날릴 수
-    있다 — agent-deck이 실제로 겪은 사고(#1956)의 시작점이 그것이었다.
+    있다 — 설정 전체가 증발하는 사고의 시작점이 그것이다.
     """
     try:
         raw = path.read_text(encoding="utf-8")
@@ -353,7 +353,7 @@ def _transport(defn: dict) -> str:
     #    화면이 사실을 그대로 보여준다. 인식 못 하는 값(예: "websocket")도
     #    원문 그대로 싣는다 — "unknown"으로 뭉개면 정보가 있는데 없다고
     #    말하는 셈이다. `type`/`transport` 외 도구별 동의어는 아직 없다 —
-    #    확인 전엔 추측으로 키를 늘리지 않는다(docs/plan-2.3/40-mcp.md §1).
+    #    확인 전엔 추측으로 키를 늘리지 않는다.
     declared = str(defn.get("type") or defn.get("transport") or "").strip().lower()
     if declared:
         return declared
@@ -908,8 +908,7 @@ def apply_refs(tool: str, defn: dict, mapping: dict) -> dict:
     "이 칸의 값을 이 환경변수 이름으로 대체하라"는 뜻이다.
 
     **값을 지우는 것이 이 함수의 전부다.** 여기서 하나라도 빠뜨리면 그 값이
-    그대로 CLI 설정 파일에 남고, `.mcp.json`이라면 git에 커밋된다(§2-2 —
-    레퍼런스 agent-deck이 실제로 밟고 있는 경로).
+    그대로 CLI 설정 파일에 남고, `.mcp.json`이라면 git에 커밋된다(§2-2).
     """
     if ref_syntax(tool) == "none" and any(mapping.get(s) for s in ("env", "headers")):
         # 참조를 쓸 수 없는 도구에 참조를 적으면 값 대신 `${…}` 글자가 전달된다.

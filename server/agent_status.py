@@ -43,7 +43,7 @@ cwd도 같은 문제를 갖는다 — 두 맥의 홈 경로(`/Users/<같은이�
 `transcript_path`는 사용자 이름이 같으면 문자열까지 동일할 수 있어서, sid만으로는
 서로 덮어쓴다.
 
-## 세션 소유자 (2026-10-13, docs/plan-2.4/60)
+## 세션 소유자 (2026-10-13)
 
 tmux 세션 하나에는 **그 pane을 지금 가진 에이전트 세션 하나**(소유자)만 상태를 낸다.
 그전에는 그 이름을 단 엔트리를 전부 모아 "가장 급한 상태"를 골랐는데, `/clear`·
@@ -53,8 +53,8 @@ tmux 세션 하나에는 **그 pane을 지금 가진 에이전트 세션 하나*
 훅도 같은 세션에 상태를 보탰다.
 
   - 소유자는 SessionStart(startup/resume/clear)가 정하거나, 소유자가 없을 때 첫 이벤트가
-    차지한다. 바뀌면 옛 소유자는 **은퇴**한다(엔트리 삭제, 이후 이벤트 무시 — herdr의
-    stale 목록). resume은 은퇴한 대화를 되살린다.
+    차지한다. 바뀌면 옛 소유자는 **은퇴**한다(엔트리 삭제, 이후 이벤트 무시).
+    resume은 은퇴한 대화를 되살린다.
   - 소유자가 아닌 session_id의 이벤트는 상태에 반영하지 않는다.
   - SessionEnd는 완료가 아니라 **반납**이다 — `/clear` 한 번이 「완료」 30분 + 큐 투입이
     되던 경로를 끊는다.
@@ -303,7 +303,7 @@ def _prompt_fingerprint(ent: dict) -> str:
     질문 원문을 그대로 비교하면 안 된다 — PTY 감지는 화면이 다시 그려질 때마다
     같은 프롬프트를 재추출하는데, ANSI 잔여·말줄임·후행 공백 때문에 문자열이
     미세하게 달라질 수 있다. 그때마다 토큰을 새로 내면 사용자가 보고 있는
-    토큰이 탭하기 전에 만료된다(docs/plan-2.3/10-approval-race.md §4 E5).
+    토큰이 탭하기 전에 만료된다.
 
     그래서 공백을 접어 정규화하고, 선택지는 **키만** 본다(라벨은 잘릴 수 있다).
     """
@@ -327,8 +327,7 @@ def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
     if status != DONE:
         ent.pop("_reopen", None)
     if status != WAITING:
-        # 해소된 프롬프트가 "아직 활성"으로 남지 않게 한다(crush 「소비 뒤
-        # 활성 표식을 지운다」 규율의 우리 번역).
+        # 해소된 프롬프트가 "아직 활성"으로 남지 않게 한다(소비 뒤 활성 표식을 지운다).
         ent["prompt_id"] = None
         ent["_prompt_fp"] = None
         return
@@ -375,8 +374,8 @@ def _apply_agent(ent: dict, agent: Optional[str]) -> None:
       **기존 값을 지우지 않는다.** 훅이 agent를 안 실어 보내는 구버전
       설치가 있고, 그 요청이 이미 박힌 이름을 날리면 안 된다(E1/E6/E11).
     - 이미 같은 값이면 건드리지 않는다 — `since` 같은 인접 필드를 덩달아
-      갱신하지 않는다(crush `reportLocked`, E2).
-    - 아직 없으면 무조건 채운다(crush `registerInitial`, E3).
+      갱신하지 않는다(E2).
+    - 아직 없으면 무조건 채운다(E3).
     - **1차 신호가 2차 추측(`agent_detector`)을 이긴다**는 게 이 항목
       전체의 요점이다(§2.4) — 탐지기와 값이 달라도 여기서 지우지 않는다.
       TTL이 옛 값을 자연 만료시킨다(§3.4).
@@ -411,8 +410,8 @@ def _ends_with_question(text) -> bool:
     return isinstance(text, str) and text.rstrip().endswith(("?", "？"))
 
 
-# Claude가 사람의 답을 기다리는 도구. PreToolUse에서 바로 waiting으로 올린다(Orca와 같은
-# 판정, Codex `request_user_input` 분기와 같은 모양). bypass 모드에서도 PreToolUse →
+# Claude가 사람의 답을 기다리는 도구. PreToolUse에서 바로 waiting으로 올린다(Codex
+# `request_user_input` 분기와 같은 모양). bypass 모드에서도 PreToolUse →
 # PermissionRequest 순으로 온다(2026-10-13 실측, 2.1.296) — pre에서 먼저 올려 두면
 # PermissionRequest가 늦거나 유실돼도 질문이 보이고, 답한 뒤 같은 tool_use_id의 post가 푼다.
 _CLAUDE_WAIT_TOOLS = {"AskUserQuestion": KIND_CHOICE, "ExitPlanMode": KIND_PLAN}
@@ -519,7 +518,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         verified: hook_identity의 판정(True=ok, False=child, None=모름). `_gate` 참고.
         ts: 훅이 이벤트를 받은 시각(ns). 같은 엔트리에 이보다 늦게 받은 이벤트가 이미
             반영됐으면 이 이벤트를 버린다 — 2초 타임아웃으로 늦게 도착한 pre가 stop 뒤에
-            working을 되살리지 않게(herdr·crush의 seq 최고수위).
+            working을 되살리지 않게(seq 최고수위).
 
     Returns:
         해당 세션의 갱신된 상태(엔트리 전체). 반납(session_end)이면 `released: True`인
@@ -594,8 +593,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         ent["input"] = payload.get("tool_input", {})
         # P1-1 — question/options를 _set_status보다 먼저 채운다. _set_status가
         # 그 자리에서 지문(_prompt_fingerprint)을 계산하므로, 순서가 바뀌면
-        # 항상 빈 질문으로 계산돼 토큰이 매번 같아진다(docs/plan-2.3/
-        # 10-approval-race.md §3.1의 경고).
+        # 항상 빈 질문으로 계산돼 토큰이 매번 같아진다.
         # kind는 훅이 아는 tool_name으로 정한다(훅 > 화면 > 폴백). 도구를 모르면 approval.
         kind = _TOOL_KINDS.get(tool, KIND_APPROVAL)
         _set_hook_prompt(ent, kind, tool, ent["input"])
@@ -773,7 +771,7 @@ def on_waiting(
 CODEX_ACTION_TITLE = "Action Required"
 
 
-_SPINNER = re.compile("[\u2800-\u28ff\u25d0-\u25d3]")   # 작업 중 제목 앞의 스피너(herdr와 같은 판정)
+_SPINNER = re.compile("[\u2800-\u28ff\u25d0-\u25d3]")   # 작업 중 제목 앞의 스피너
 
 
 def apply_titles(titles: dict[str, str], host: str = LOCAL_HOST) -> int:
@@ -934,9 +932,8 @@ def consume_prompt(tmux_name: str, prompt_id: str, host: str = LOCAL_HOST) -> bo
 
     ⚠ 이 함수는 동기이고, 검사와 대입 사이에 **절대 `await`를 넣지 않는다.**
     asyncio 단일 이벤트 루프에서 await 없는 구간은 원자적으로 실행되므로,
-    crush가 뮤텍스로 얻는 것(csync.Map.Take)을 우리는 이 규칙으로 얻는다.
-    await가 하나라도 들어가면 두 요청이 같은 토큰을 통과한다
-    (docs/plan-2.3/10-approval-race.md §4 E13).
+    뮤텍스 없이도 이 규칙으로 "한 번만 소비"가 보장된다.
+    await가 하나라도 들어가면 두 요청이 같은 토큰을 통과한다.
     """
     sweep()
     for ent in _entries_for(tmux_name, host):

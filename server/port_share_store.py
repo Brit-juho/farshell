@@ -1,4 +1,4 @@
-"""노출 포트 공유 정책 저장소 (2.2, plan-2.2/00-port-access.md §4).
+"""노출 포트 공유 정책 저장소 (2.2).
 
 `fsh tunnel expose`가 연 포트마다 "누가 열 수 있나"를 기록한다. 세 모드 —
 `public`(URL 아는 누구나) · `session`(로그인 기기만) · `pin`(그 노출 전용 코드).
@@ -73,8 +73,7 @@ def _dangerous_ports() -> dict[int, str]:
 
 def _state_dir() -> Path:
     # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
-    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
-    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다. 단일 해석기로 교체한다.
     return vt_paths.state_dir()
 
 

@@ -105,7 +105,7 @@ export const SCHEMA = {
   'keybar.open':            { type: 'bool', def: false, scope: 'device' },
   'ui.mobile.home':         { type: 'enum', def: 'fleet', values: ['fleet', 'terminal'], scope: 'device' },
 
-  // ADR-44(docs/plan-2.3/95-viewer-surface.md §3) — 파일 뷰어 표면. `pane`은 2.2.0까지의
+  // ADR-44 — 파일 뷰어 표면. `pane`은 2.2.0까지의
   // 동작(터미널 옆을 쪼갠다)이라 값으로 남긴다. 표면·높이·창 위치가 폰과 맥 사이에 새면
   // 안 되므로 셋 다 device. 높이를 %로 두는 건 외부 모니터에서 맞춘 px 값이 노트북에서
   // 화면을 다 덮지 않게 하려는 것이고, 창 위치를 JSON 한 덩어리로 두는 건 부분 저장된

@@ -16,7 +16,7 @@ AGENT="${2:-claude}"
 SERVER="${VT_SERVER:-http://localhost:${VT_PORT:-7777}}"
 
 # 백그라운드로 돌린 Claude 세션은 그 작업을 띄운 pane의 환경(TMUX_PANE)을 물려받았을 뿐 그
-# pane에서 돌지 않는다 — 보내면 엉뚱한 세션 상태가 된다(Orca hook-script.ts와 같은 판단).
+# pane에서 돌지 않는다 — 보내면 엉뚱한 세션 상태가 된다.
 if [ -n "${CLAUDE_JOB_DIR:-}" ]; then
     exit 0
 fi

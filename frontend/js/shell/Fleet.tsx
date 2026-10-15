@@ -338,8 +338,7 @@ function Fleet(props: { deps: FleetDeps }) {
     // e·s·c가 찍히고 waiting이 풀리지 않는다.
     const text = key === 'esc' ? '\x1b' : `${key}\r`;
     // P1-1(ADR-33) — 토큰이 있으면 함께 보낸다. 서버가 먼저 도착한 요청만
-    // 통과시키고 나머지는 409로 떨어뜨린다(docs/plan-2.3/10-approval-race.md
-    // §3.3). promptId가 없으면(구버전 서버 등) 필드 자체를 안 보내 기존
+    // 통과시키고 나머지는 409로 떨어뜨린다. promptId가 없으면(구버전 서버 등) 필드 자체를 안 보내 기존
     // 동작 그대로 통과한다.
     const body: Record<string, string> = row.promptId ? { text, prompt_id: row.promptId } : { text };
     return props.deps.vtFetch(`/api/sessions/${encodeURIComponent(row.sessionId)}/keys`, {
