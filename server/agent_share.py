@@ -211,17 +211,55 @@ def _load() -> tuple[dict, bool]:
             "requests": [r for r in requests if isinstance(r, dict)]}, corrupt
 
 
-def _backup_corrupt() -> None:
-    """깨진 저장소를 덮기 전에 원본 바이트를 0600 파일로 보존한다(호출자는 저장소 락을 쥔다)."""
+def _backup_corrupt() -> Optional[Path]:
+    """깨진 저장소의 원본 바이트를 0600 복사본으로 보존한다(같은 내용의 복사본이 있으면 새로 만들지 않는다).
+    원본은 지우지도 고치지도 않는다. 복사에 실패하면 None."""
     p = _path()
     try:
         raw = p.read_bytes()
+    except OSError:
+        return None
+    for old in p.parent.glob(f"{p.name}.corrupt-*"):
+        try:
+            if old.read_bytes() == raw:
+                return old
+        except OSError:
+            continue
+    try:
         backup = p.with_name(f"{p.name}.corrupt-{uuid.uuid4().hex}")
         fd = os.open(str(backup), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "wb") as f:
             f.write(raw)
+        return backup
     except OSError as e:
-        raise ShareError("store_backup_failed", "손상된 권한 파일의 백업을 만들지 못해 저장을 중단했습니다", 503) from e
+        logger.warning(f"손상된 권한 파일의 복사본을 만들지 못했다: {e}")
+        return None
+
+
+def refuse_corrupt_write() -> None:
+    """읽지 못한 옛 저장소를 빈 상태로 덮으면 모든 권한이 사라진다 — 복사본만 남기고 쓰기를 거부한다(503). 파일은 그대로 둔다.
+    호출자는 저장소 락을 쥐고 있다."""
+    _backup_corrupt()
+    raise ShareError("store_unreadable",
+                     tr("권한 파일(agent_grants.json)을 읽을 수 없어 변경을 거부했습니다 — 파일은 그대로 두었습니다. "
+                        "파일을 고치거나 'fsh migrate-auth --status' 로 확인하세요"), 503)
+
+
+def store_problem() -> Optional[str]:
+    """옛 저장소를 읽을 수 없으면 이유 한 줄, 아니면 None(진단용 — 읽기만 한다)."""
+    p = _path()
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except OSError as e:
+        return f"읽기 실패: {e.strerror or e}"
+    except ValueError as e:
+        return f"JSON 파싱 실패: {e}"
+    if not isinstance(data, dict) or not isinstance(data.get("grants", []), list) \
+            or not isinstance(data.get("requests", []), list):
+        return "모양이 올바르지 않음"
+    return None
 
 
 def _save(data: dict) -> None:
@@ -266,7 +304,7 @@ def _txn(snap: Optional[dict[str, Sess]]):
         yield data
         if json.dumps(data, sort_keys=True) != before or not _path().exists():
             if corrupt and _path().exists():
-                _backup_corrupt()
+                refuse_corrupt_write()
             _save(data)
 
 
@@ -412,9 +450,10 @@ def drop_target(target: Sess, snap: Optional[dict[str, Sess]]) -> tuple[int, lis
     return _legacy_drop_target(target, snap)
 
 
-def list_state(snap: Optional[dict[str, Sess]]) -> dict:
+def list_state(snap: Optional[dict[str, Sess]], provenance: bool = False) -> dict:
+    """provenance: 엔진 켜짐에서 grant 에 `approvedBy`·`approvedVia` 를 더한다(목록 응답용). 꺼짐에서는 무시한다."""
     if enforced():
-        return _svc().list_state(snap)
+        return _svc().list_state(snap, provenance)
     return _legacy_list_state(snap)
 
 

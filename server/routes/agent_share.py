@@ -411,15 +411,18 @@ async def decide_request(request_id: str, request: Request):
     req, grant = res["request"], res["grant"]
     view = request_view(req, snap)
     allowed = grant is not None
-    await asyncio.to_thread(
-        agent_share.audit, "decide", "allowed" if allowed else "denied", nick=view["target"]["nick"],
-        kind=req["kind"], level=("readwrite" if grant and grant.get("write") else "read") if allowed else None,
-        request=req["id"], grant=grant["id"] if grant else None,
-        reason=f"agent={view['agent']['name']}")
-    await _broadcast({"type": "agent_share_request_resolved", "id": req["id"], "state": "allowed" if allowed else "denied"})
+    if not res.get("replayed"):                  # 먼저 온 결정의 재전송이면 감사·알림을 다시 만들지 않는다
+        await asyncio.to_thread(
+            agent_share.audit, "decide", "allowed" if allowed else "denied", nick=view["target"]["nick"],
+            kind=req["kind"], level=("readwrite" if grant and grant.get("write") else "read") if allowed else None,
+            request=req["id"], grant=grant["id"] if grant else None,
+            reason=f"agent={view['agent']['name']}")
+        await _broadcast({"type": "agent_share_request_resolved", "id": req["id"], "state": "allowed" if allowed else "denied"})
     out = {"ok": True, "request": view, "grant": grant_view(grant, snap) if grant else None}
     if res.get("grantId"):
         out["grantId"] = res["grantId"]
+    if res.get("replayed"):
+        out["replayed"] = True
     return out
 
 
@@ -436,6 +439,8 @@ async def _decide_msg(request_id: str, decision, level, request: Request):
     except ShareError as e:
         return _err(e)
     allowed = res["grant"] is not None
+    if res.get("replayed"):
+        return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"], "replayed": True}
     await _broadcast({"type": "agent_share_request_resolved", "id": res["request"]["id"],
                       "state": "allowed" if allowed else "denied"})
     return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"]}
@@ -447,11 +452,14 @@ def grant_view(g: dict, snap: Optional[dict]) -> dict:
     t = snap.get(f"{g['target']['sid']}:{g['target']['created']}")
     share = (t.share if t else None) or {}
     eff = agent_share.effective(g, share or None)
-    return {"id": g["id"], "read": bool(g.get("read")), "write": bool(g.get("write")),
-            "effective": eff, "granted": g.get("granted"), "updated": g.get("updated"),
-            "agent": {"name": a.name if a else g["agent"].get("name", ""), "id": g["agent"]["sid"]},
-            "target": {"nick": share.get("nick"), "mode": share.get("mode"), "name": t.name if t else None,
-                       "id": g["target"]["sid"]}}
+    out = {"id": g["id"], "read": bool(g.get("read")), "write": bool(g.get("write")),
+           "effective": eff, "granted": g.get("granted"), "updated": g.get("updated"),
+           "agent": {"name": a.name if a else g["agent"].get("name", ""), "id": g["agent"]["sid"]},
+           "target": {"nick": share.get("nick"), "mode": share.get("mode"), "name": t.name if t else None,
+                      "id": g["target"]["sid"]}}
+    if "approvedVia" in g:                       # 엔진 켜짐에서만 — 누가·어떤 경로로 승인했나
+        out["approvedBy"], out["approvedVia"] = g.get("approvedBy"), g["approvedVia"]
+    return out
 
 
 @human_router.get("/api/agent/share/grants", response_model=GrantsResponse)
@@ -461,7 +469,7 @@ async def list_grants(kind: str = Query("")):
         alive, names = await asyncio.to_thread(_msg_alive_names)
         return {"grants": await asyncio.to_thread(msg_svc.list_grants, alive, names)}
     snap = await asyncio.to_thread(agent_share.snapshot)
-    state = await asyncio.to_thread(agent_share.list_state, snap)
+    state = await asyncio.to_thread(agent_share.list_state, snap, True)
     return {"grants": [grant_view(g, snap) for g in state["grants"]]}
 
 

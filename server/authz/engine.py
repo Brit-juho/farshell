@@ -26,6 +26,8 @@ ctx 키(필요 조건 키 외에는 선택):
   safe_mode    VT_SAFE_MODE 가 켜져 있는가 — deleg.spawn killswitch(판정 지점이 켠 때만 넣는다)
   fs           `{purpose, in_roots}` — `conds.fs_roots`(fsguard 루트 안인가; 위임 cwd. 파일 lease 가 생기면 대체)
   msg          `{related, relation}` — `conds.msg_related`(위임 부모↔자식·형제·pair 인가). 없으면 관계 없음으로 본다
+  approving    승인자 확인 모드(`approvals.check_authority`) — True 이면 비elevated human 은 (scope, 조건)이 elevated 사유인 요청을
+               가졌다고 보지 않는다(`elevation_required`). 이 키가 없는 판정은 그대로다
   counts       `{scope: 이미 센 횟수}` — rate 비교(limits.exceeded)
   limits       `{scope: 한도}` — counts 와 비교할 한도를 표(limits.LIMITS) 대신 지정(선택)
 """
@@ -133,6 +135,12 @@ def _killswitch(scope: str, ctx: dict) -> Optional[str]:
     return None
 
 
+def _approval_elevated(scope: str, resource: str, ctx: dict) -> bool:
+    """승인 대상 (scope, 조건)이 elevated 사유인가 — 요청받는 쪽(비human 주체) 기준 `scopes.requires_elevated`."""
+    sconds = {scope: {c.key: [str(ctx[c.ctx])] for c in S.COND_SPEC.get(scope, ()) if ctx.get(c.ctx)}}
+    return bool(S.requires_elevated("agent", [scope], resource, sconds))
+
+
 def _time_ok(g: dict, now: float) -> bool:
     nb, ex = g.get("not_before"), g.get("expires")
     if nb is not None and now < float(nb):
@@ -158,8 +166,12 @@ def decide(p: P.Principal, scope: str, resource: str, ctx: Optional[dict] = None
     if ks:
         return _deny(ks, "killswitch")
 
+    if ctx.get("approving") and p.kind == P.HUMAN and not p.elevated and _approval_elevated(scope, resource, ctx):
+        return _deny("elevation_required", "approver")      # 승인자는 요청한 (scope, 조건)을 이미 가져야 한다 — elevated 사유는 elevated human 만
+
     store_bad = bool(snap.corrupt) and P.fails_closed(p)
-    candidates = defaults.rules_for(p) + ([] if store_bad else list(snap.grants))
+    candidates = defaults.rules_for(p) + (defaults.approver_rules(p) if ctx.get("approving") else []) \
+        + ([] if store_bad else list(snap.grants))
     hit: Optional[dict] = None
     cond_fail = ""
     for g in candidates:
@@ -263,9 +275,15 @@ def window_covers(w: dict, p: P.Principal, resource: str, scopes, ttl: float, no
     return True, "window"
 
 
-def validate_window(w: dict, *, elevated: bool, now: float, env: Optional[dict] = None) -> list[str]:
-    """window 생성 요청 검증 — 오류 목록."""
-    errs = []
+def window_basis_errors(basis) -> list[str]:
+    """window 를 열거나 늘릴 때 근거로 삼는 grant 들(`basis`)의 검사. **window 로 승인된 grant 는 새 window 를 열 수도, 기존 window
+    를 늘릴 수도 없다**(`approved_via` 는 출처일 뿐 위임 권한이 아니다). 필드가 없는 옛 grant 는 `migrated` 로 읽어 막지 않는다."""
+    return ["window_derived_grant"] if any(S.via_of(g) == S.VIA_WINDOW for g in (basis or ())) else []
+
+
+def validate_window(w: dict, *, elevated: bool, now: float, env: Optional[dict] = None, basis=()) -> list[str]:
+    """window 생성·연장 요청 검증 — 오류 목록. `basis`: 요청자가 근거로 내세우는 grant 들(없으면 검사 안 함)."""
+    errs = window_basis_errors(basis)
     if not elevated:
         errs.append("elevated_required")
     exp = float(w.get("expires", 0))

@@ -82,7 +82,7 @@ def _full_conds(scopes) -> dict:
 
 def _rule(rid: str, subject: str, resource: str, scopes, sconds=None, **extra) -> dict:
     rec = {"id": f"default:{rid}", "subject": subject, "resource": resource, "scopes": list(scopes),
-           "state": "active", "approved_by": "system", "conds": extra.pop("conds", {}), "schema": S.SCHEMA, **extra}
+           "state": "active", "approved_by": "system", "approved_via": "system", "conds": extra.pop("conds", {}), "schema": S.SCHEMA, **extra}
     if sconds:
         rec["sconds"] = sconds
     return rec
@@ -91,6 +91,15 @@ def _rule(rid: str, subject: str, resource: str, scopes, sconds=None, **extra) -
 def _all_local_except(excluded) -> list[str]:
     """이 호스트의 어휘 전부(relay 는 따로 준다 — 기본에 없다) + 내부 메타 판정."""
     return [s for s in S.CATALOG_ORDER if s not in excluded and s != "relay"] + list(S.INTERNAL)
+
+
+def approver_rules(p: P.Principal) -> list[dict]:
+    """승인자 확인 모드(`ctx.approving`)에서만 쓰는 추가 규칙 — 사람은 기본 권한에 없는 relay(그룹 전체)를 승인할 수 있고,
+    elevated 사람은 거기에 browser.js·browser.sensitive 도 승인할 수 있다(R4.3: 승인은 elevated 가 한다). 일반 판정에는 닿지 않는다."""
+    if p.kind != P.HUMAN:
+        return []
+    sc = ["relay"] + (["browser.js", "browser.sensitive"] if p.elevated else [])
+    return [_rule("human_approver", p.id, "*", sc, _full_conds(sc))]
 
 
 def rules_for(p: P.Principal) -> list[dict]:

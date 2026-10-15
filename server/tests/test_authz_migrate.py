@@ -151,12 +151,15 @@ def test_corrupt_legacy_file_is_skipped_with_a_warning(sd):
     assert r["grants"]["added"] == 3
 
 
-def test_corrupt_authz_doc_is_backed_up_before_apply_overwrites(sd):
+def test_apply_refuses_to_overwrite_a_corrupt_authz_doc(sd):
     store.root().mkdir(parents=True)
     store.doc_path("grants").write_text("not json")
-    migrate.apply(now=NOW, tmux=TMUX)
+    with pytest.raises(store.StoreError) as ei:
+        migrate.apply(now=NOW, tmux=TMUX)
+    assert ei.value.code == "store_unreadable"
+    assert store.doc_path("grants").read_text() == "not json"          # 손상 파일은 그대로
     assert [b.read_text() for b in store.root().glob("grants.json.corrupt-*")] == ["not json"]
-    assert store.snapshot().corrupt == frozenset()
+    assert store.snapshot().corrupt == {"grants"}
 
 
 # --- 멱등 ---------------------------------------------------------------------------------
