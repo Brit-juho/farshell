@@ -339,7 +339,7 @@ def test_principal_unprotected_server(monkeypatch):
 # --- 저장소 ---------------------------------------------------------------------------
 
 
-def test_store_txn_writes_private_files_and_backs_up_corruption(_state):
+def test_store_txn_writes_private_files_and_refuses_corrupt_writes(_state):
     with store.txn() as docs:
         docs["grants"]["items"].append({"id": "x"})
     p = store.doc_path("grants")
@@ -349,10 +349,14 @@ def test_store_txn_writes_private_files_and_backs_up_corruption(_state):
     p.write_text("{not json", encoding="utf-8")
     s = store.snapshot()
     assert s.corrupt == {"grants"} and s.grants == []
-    with store.txn() as docs:
-        docs["grants"]["items"].append({"id": "y"})
+    for _ in range(2):
+        with pytest.raises(store.StoreError) as ei:
+            with store.txn() as docs:
+                docs["grants"]["items"].append({"id": "y"})
+        assert ei.value.code == "store_unreadable" and ei.value.status == 503
+    assert p.read_text(encoding="utf-8") == "{not json"                # 손상 파일은 그대로
     backups = list(store.root().glob("grants.json.corrupt-*"))
-    assert len(backups) == 1 and backups[0].read_text() == "{not json"
+    assert len(backups) == 1 and backups[0].read_text() == "{not json"  # 같은 내용의 복사본은 한 번만
     assert stat.S_IMODE(backups[0].stat().st_mode) == 0o600
 
 

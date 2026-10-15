@@ -11,7 +11,8 @@
     플래그를 끄면 옛 코드가 그 파일을 그대로 이어받는다(롤백).
   - 옛 파일이 엔진이 마지막으로 쓴 것과 달라졌으면(플래그를 끈 사이 옛 코드가 썼거나 손으로 고침) 트랜잭션 처음에
     **채택**한다: 옛 레코드를 번역해 엔진에 동기화(원본 id 기준, `migrate._sync`). 옛 파일이 손상이면 채택하지 않는다
-    (엔진 상태를 지우지 않고, 읽기만으로는 원본을 건드리지 않는다 — 다음 쓰기 때 백업 후 덮는다).
+    (엔진 상태를 지우지 않고 원본도 건드리지 않는다). 옛 파일을 투영해야 하는 변경은 **거부**한다(503 `store_unreadable`,
+    복사본만 남긴다) — 엔진만 앞서 쓰면 둘이 갈라지고, 빈 상태로 덮으면 옛 권한이 사라진다.
     `meta.share_legacy_sig` 가 마지막으로 맞춘 옛 파일의 sha256 이다.
   - 엔진 저장이 옛 파일 쓰기보다 늦게 실패하면 옛 파일이 앞선다 → 다음 트랜잭션이 그 상태를 채택해 스스로 맞춘다.
 
@@ -29,6 +30,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import time
 from contextlib import contextmanager
@@ -88,13 +90,12 @@ def _write_legacy(docs: dict) -> None:
     with ag._locked():
         _, corrupt = ag._load()
         if corrupt and ag._path().exists():
-            ag._backup_corrupt()                 # 손상 원본 보존 — 실패하면 ShareError(503), 저장 중단
+            ag.refuse_corrupt_write()            # 읽지 못한 옛 파일은 덮지 않는다 — ShareError(503), 엔진 저장도 중단
         ag._save(state)
     docs["meta"]["items"][SIG_KEY] = _sig(_legacy_bytes())
 
 
 def _fp(docs: dict) -> str:
-    import json
     return json.dumps([approvals.agent_grants(docs), approvals.agent_requests(docs)], sort_keys=True, default=str)
 
 
@@ -107,6 +108,7 @@ def _txn(snap):
     with store.txn() as docs:
         docs["_corrupt"] = frozenset(n for n in ("grants", "approvals", "windows", "shares", "meta")
                                      if store._read(n)[1])
+        before = {n: json.dumps(docs[n], sort_keys=True) for n in docs["_corrupt"]}
         meta = docs["meta"]["items"]
         sig = _sig(_legacy_bytes())
         if meta.get(SIG_KEY) != sig:
@@ -117,6 +119,12 @@ def _txn(snap):
         base = _fp(docs)
         approvals.purge(docs, None if snap is None else set(snap), now, ag.DENY_COOLDOWN)
         yield docs
+        # 읽지 못한 엔진 문서를 바꾸는 변경은 옛 파일에 투영하기 **전에** 거부한다(옛 파일만 앞서가면 안 된다)
+        bad = [n for n in docs["_corrupt"] if json.dumps(docs[n], sort_keys=True) != before[n]]
+        if bad:
+            for n in bad:
+                store.preserve_copy(n)
+            raise store.unreadable_error(bad)
         if _fp(docs) != base:
             _write_legacy(docs)
 

@@ -293,7 +293,7 @@ def test_lowering_mode_takes_effect_immediately(web):
 
 @pytest.mark.parametrize("bad", ['{"grants": {"x": 1}, "requests": []}',
                                        '{"grants": [], "requests": "wrong"}', '{broken json'])
-def test_corrupt_grants_preserved_before_next_save(web, bad):
+def test_corrupt_grants_refuse_writes_and_keep_the_file(web, bad):
     human, agent, env = setup_pair(web)
     path = agent_share._path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -301,11 +301,13 @@ def test_corrupt_grants_preserved_before_next_save(web, bad):
     assert human.get("/api/agent/share/grants").status_code == 200
     assert human.get("/api/agent/share/grants").json()["grants"] == []
     assert path.read_text() == bad  # 읽기만으로는 원본을 덮지 않는다
-    assert aread(agent, env, "claude-a", "shell").status_code == 202
+    for _ in range(2):                          # 새 요청을 만들려면 저장해야 한다 — 읽을 수 없는 파일은 덮지 않고 거부한다
+        r = aread(agent, env, "claude-a", "shell")
+        assert r.status_code == 503 and r.json()["error"] == "store_unreadable"
+    assert path.read_text() == bad              # 손상 파일은 그대로
     backups = list(path.parent.glob("agent_grants.json.corrupt-*"))
-    assert len(backups) == 1 and backups[0].read_text() == bad
+    assert len(backups) == 1 and backups[0].read_text() == bad      # 같은 내용의 복사본은 한 번만
     assert backups[0].stat().st_mode & 0o777 == 0o600
-    assert len(json.loads(path.read_text())["requests"]) == 1
 
 
 def test_grant_survives_cli_restart_in_same_tmux_session(process_table, web):

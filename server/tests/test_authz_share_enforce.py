@@ -436,19 +436,27 @@ def test_auto_approval_windows_are_absent_in_3a(web):
 # --- 저장소 손상·장애 ---------------------------------------------------------------------------
 
 
-def test_corrupt_engine_grants_fail_closed_and_are_backed_up_on_next_write(web):
+def test_corrupt_engine_grants_fail_closed_and_refuse_writes(web):
     human, agent, env = setup_pair(web)
     approve(human, aread(agent, env, "claude-a", "shell").json()["requestId"])
     assert aread(agent, env, "claude-a", "shell").status_code == 200
     p = store.doc_path("grants")
+    good = p.read_text()
     p.write_text("{ not json")
     r = aread(agent, env, "claude-a", "shell")
     assert r.status_code == 202                                           # F1: agent scope fail closed
     assert p.read_text() == "{ not json"                                  # 읽기·요청만으로는 원본을 안 덮는다
     assert aread(agent, env, "claude-a", "shell").status_code == 202
-    approve(human, r.json()["requestId"])                                 # grant 문서를 다시 쓰는 첫 변경
+    bad = approve(human, r.json()["requestId"])                           # grant 문서를 다시 써야 하는 변경 = 거부
+    assert bad.status_code == 503 and bad.json()["error"] == "store_unreadable"
+    assert p.read_text() == "{ not json"                                  # 손상 파일은 지우지도 고치지도 않는다
+    assert len(docs()["approvals"]["items"]) == 1                          # 요청은 그대로 남아 있다(승인 안 됨)
+    for _ in range(2):
+        assert approve(human, r.json()["requestId"]).status_code == 503
     backups = list(p.parent.glob("grants.json.corrupt-*"))
     assert len(backups) == 1 and backups[0].read_text() == "{ not json" and backups[0].stat().st_mode & 0o777 == 0o600
+    p.write_text(good)                                                    # 사람이 파일을 되살리면 다시 쓸 수 있다
+    assert approve(human, r.json()["requestId"]).status_code == 200
     assert aread(agent, env, "claude-a", "shell").status_code == 200
 
 
@@ -489,16 +497,23 @@ def test_engine_failure_after_enable_fails_closed(web, monkeypatch):
     assert r.status_code == 503 and r.json()["error"] == "authz_unavailable" and "text" not in r.json()
 
 
-def test_legacy_file_corrupt_does_not_wipe_engine_state(web):
+def test_legacy_file_corrupt_does_not_wipe_engine_state_and_refuses_projection(web):
     human, agent, env = setup_pair(web)
     approve(human, aread(agent, env, "claude-a", "shell").json()["requestId"])
+    good = agent_share._path().read_text()
     agent_share._path().write_text("{ not json")
     assert aread(agent, env, "claude-a", "shell").status_code == 200       # 엔진 상태가 권한자
     assert agent_share._path().read_text() == "{ not json"                  # 읽기만으로는 원본을 안 덮는다
     env.mk("t2", "cat")
     share(human, "t2", "second")
-    assert aread(agent, env, "claude-a", "second").status_code == 202       # 쓰기 때 백업 후 투영
+    before = docs()["approvals"]["items"]
+    r = aread(agent, env, "claude-a", "second")
+    assert r.status_code == 503 and r.json()["error"] == "store_unreadable"  # 옛 파일에 투영할 수 없으니 변경 거부
+    assert agent_share._path().read_text() == "{ not json"                  # 손상 파일은 그대로
+    assert docs()["approvals"]["items"] == before                           # 엔진만 앞서가지도 않는다
     assert len(list(agent_share._path().parent.glob("agent_grants.json.corrupt-*"))) == 1
+    agent_share._path().write_text(good)                                    # 사람이 되살리면 이어진다
+    assert aread(agent, env, "claude-a", "second").status_code == 202
     assert_parity("recovered")
 
 

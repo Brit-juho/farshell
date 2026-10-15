@@ -3430,6 +3430,18 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     _check "$(_t 'unix socket')" "$_sk_lvl" "$_sk_msg"
   fi
 
+  # 11-a2. 권한 저장소 — 읽을 수 없는 파일이 있으면 변경이 거부된다(덮어써서 권한이 사라지는 것을 막는다)
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _st _st_name _st_why _st_path _st_n
+    _st="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz store-status 2>/dev/null)"
+    if [ -n "$_st" ]; then
+      while IFS='|' read -r _st_name _st_why _st_path _st_n; do
+        [ -n "$_st_name" ] || continue
+        _check "$(_t '권한 저장소')" fail "$(_t '{name} 읽을 수 없음 — 변경 거부 중(파일은 그대로, 복사본 {n}개): {why} — {path}' name="$_st_name" why="$_st_why" n="${_st_n:-0}" path="${_st_path/#$HOME/~}")"
+      done <<<"$_st"
+    fi
+  fi
+
   # 11-b. OTP(새 기기 등록 관문) + 등록 기기 수
   if [ -x "${VT_PYTHON:-}" ]; then
     local _otp_json _ndev

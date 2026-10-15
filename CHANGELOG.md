@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- **읽을 수 없는 권한 저장소를 빈 파일로 덮어 모든 권한이 사라지던 문제.** `~/.vt/authz/*.json`과 옛 `agent_grants.json`이 깨지거나 읽히지 않으면, 그 파일을 바꾸는 변경은 이제 503 `store_unreadable`로 거부된다(같은 트랜잭션의 다른 문서도 저장하지 않는다). 손상 파일은 지우지도 고치지도 않고, 내용이 같은 복사본(`<이름>.corrupt-<id>`)을 한 번만 남긴다. 읽기는 전과 같이 fail closed다. `fsh migrate-auth --status`가 「저장소 읽기 불가」 줄로, `fsh doctor`가 실패 항목으로 알려 준다. 파일을 고치거나 `fsh migrate-auth --restore <ts>`로 되돌리면 다음 변경부터 다시 쓸 수 있다.
+
 ## [2.4.0] — 2026-10-15
 
 > 우측 패널(소스 컨트롤·파일·첨부·포트·사용량·상단 메뉴)을 다듬고, 에이전트 상태 판정의 구멍(완료 확인·질문 만료)을 메운 릴리스다. 상태 줄과 dock에서 이 기계의 CPU·RAM·네트워크를 볼 수 있고, 포트 노출을 일시 닫거나 새 주소를 받을 수 있다.

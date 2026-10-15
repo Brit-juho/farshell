@@ -164,6 +164,8 @@ def _status(as_json: bool) -> int:
     for n, r in st["schema"].items():
         _p(f"스키마 {n}: version={r.get('version')} 항목 {r.get('items')}개, 옛 이름 형태 {r.get('legacy_items')}개 "
            f"(코드 스키마 {st['schema_version']})")
+    for u in st["unreadable"]:
+        _p(f"저장소 읽기 불가: {u['name']} — {u['reason']} (변경 거부 중 · 파일은 그대로, 복사본 {len(u['copies'])}개) {u['path']}")
     a = st["audit"]
     _p(f"감사 체인: {'온전' if a['ok'] else '깨짐 seq=' + str(a['broken_seq'])} ({a['lines']}줄)")
     _p("백업:")
@@ -213,6 +215,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
+def store_status(argv: list[str]) -> int:
+    """`python -m authz store-status [--json]` — fsh doctor 가 쓴다. 읽을 수 없는 저장소가 있으면 한 줄씩 `name|reason|path|copies`,
+    없으면 출력 없음. 항상 0(진단이지 판정이 아니다)."""
+    ap = argparse.ArgumentParser(prog="authz store-status")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args(argv)
+    from . import migrate
+    bad = migrate.unreadable()
+    if args.json:
+        _p(json.dumps(bad, ensure_ascii=False))
+    else:
+        for u in bad:
+            _p(f"{u['name']}|{u['reason'].replace('|', '/')}|{u['path']}|{len(u['copies'])}")
+    return 0
+
+
 def sock_status(argv: list[str]) -> int:
     """`python -m authz sock-status [--port N] [--json]` — fsh doctor/status 가 쓴다. 항상 0(진단이지 판정이 아니다)."""
     ap = argparse.ArgumentParser(prog="authz sock-status")
@@ -232,6 +250,8 @@ def sock_status(argv: list[str]) -> int:
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "migrate-auth":
         sys.exit(main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "store-status":
+        sys.exit(store_status(sys.argv[2:]))
     if len(sys.argv) > 1 and sys.argv[1] == "sock-status":
         sys.exit(sock_status(sys.argv[2:]))
     print("사용법: python -m authz migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]")

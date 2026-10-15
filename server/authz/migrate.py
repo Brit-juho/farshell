@@ -646,6 +646,21 @@ def verify_store(*, now: Optional[float] = None, tmux: Optional[dict] = "probe")
     return {"clean": clean, "diff": d, "warnings": p["warnings"], "schema": store.schema_report()}
 
 
+def unreadable() -> list[dict]:
+    """읽을 수 없어 쓰기가 거부되는 저장소 `[{name, path, reason, copies}]` — authz 문서와 옛 `agent_grants.json`. 읽기만 한다."""
+    out = store.unreadable_report()
+    try:
+        import agent_share as ag
+        why = ag.store_problem()
+        if why:
+            p = ag._path()
+            out.append({"name": "agent_grants", "path": str(p), "reason": why,
+                        "copies": [str(c) for c in sorted(p.parent.glob(f"{p.name}.corrupt-*"))]})
+    except Exception as e:  # noqa: BLE001 — 진단이 상태 조회를 막으면 안 된다
+        logger.warning(f"옛 저장소 점검 실패: {e}")
+    return out
+
+
 def status() -> dict:
     meta, bad = store._read("meta")
     sh = store.root() / "shadow.jsonl"
@@ -658,5 +673,5 @@ def status() -> dict:
     ok, broken, lines = audit.verify()
     return {"migrated": "applied_at" in meta["items"], "meta": meta["items"], "meta_corrupt": bad,
             "backups": list_backups(), "shadow_mismatches": n, "schema": store.schema_report(),
-            "schema_version": store.SCHEMA_VERSION,
+            "schema_version": store.SCHEMA_VERSION, "unreadable": unreadable(),
             "audit": {"ok": ok, "broken_seq": broken, "lines": lines}}

@@ -186,6 +186,7 @@ _t_en_lookup() {
     '{file} 읽기 실패 (원본 유지)') _T_OUT='Couldn'\''t read {file} (original kept)' ;;
     '{label} — 설정에서 받아 주세요') _T_OUT='{label} — download it in Settings' ;;
     '{label} 준비됨') _T_OUT='{label} ready' ;;
+    '{name} 읽을 수 없음 — 변경 거부 중(파일은 그대로, 복사본 {n}개): {why} — {path}') _T_OUT='{name} is unreadable — changes are refused (file untouched, {n} copies kept): {why} — {path}' ;;
     '{n} (credentials JSON 파일)') _T_OUT='{n} (credentials JSON files)' ;;
     '{n}개 (fsh device list)') _T_OUT='{n} (fsh device list)' ;;
     '{n}개 snippet 안내') _T_OUT='{n} snippet hint(s)' ;;
@@ -239,6 +240,7 @@ _t_en_lookup() {
     '교체 실패 (원본 유지)') _T_OUT='Replace failed (original kept)' ;;
     '구 iTerm2 프로필 제거 (Guid 변경으로 인한 중복 방지) → {path}') _T_OUT='Removed the old iTerm2 profile (avoids duplicates after the Guid change) → {path}' ;;
     '구 프로필 제거 → {path} (Guid가 바뀌어 중복 방지)') _T_OUT='remove old profile → {path} (Guid changed; avoids duplicates)' ;;
+    '권한 저장소') _T_OUT='Permission store' ;;
     '그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V') _T_OUT='Then check that PATH points to the new python3: python3 -V' ;;
     '기간이 끝나거나 재부팅해도 이 포트를 자동으로 다시 열까요? (y/N)') _T_OUT='Re-open this port automatically when it expires or after a reboot? (y/N)' ;;
     '기계 토큰') _T_OUT='machine token' ;;

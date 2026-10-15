@@ -180,10 +180,10 @@ Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list 
 | Requests | `approvals.request` | Only if the engine allows `authz.request`; one pending per (agent, session, kind); a denial = 300 s cooldown per (agent, session, kind); 24 h expiry, 20 per agent, 200 total |
 | Decisions | `approvals.decide` / `revoke` | Human principal only (`require_human_session` still guards the router); never wider than the request or the share mode; elevated reasons (for example `session.input[raw]`) need an elevated human (`elevation_required`; unreachable today because grants top out at `line` input); escalation (`scopes.escalation`) is written to the audit row. Auto-approval windows come later: the code never reads `windows.json` (`approvals.auto_approve()` is `None`) |
 | Store | `~/.vt/authz/{grants,approvals,shares,meta}.json` | Records are exactly `migrate.translate_agent_*` output (ids `ag-<id>`, `ap-<id>`, origin `legacy:agent_grants:<id>`, new-form scopes), so `fsh migrate-auth --verify` reads dual-write as "no difference" and an engine record converts back to the old shape losslessly |
-| Dual-write | `share_svc._txn` | Inside one authz transaction the old `agent_grants.json` is rewritten from engine state (lock order authz -> agent_grants, same as `migrate.restore`). If the old file changed since the engine last wrote it (flag was off, or hand edit) its records are **adopted** first (`migrate._sync`, by original id); a corrupt old file is never adopted and never overwritten without a `.corrupt-*` backup. Turning the flag off therefore leaves the old code exactly the state the engine had. Same-uid processes can edit either store (FarShell does not claim to stop a shell of the same user) |
+| Dual-write | `share_svc._txn` | Inside one authz transaction the old `agent_grants.json` is rewritten from engine state (lock order authz -> agent_grants, same as `migrate.restore`). If the old file changed since the engine last wrote it (flag was off, or hand edit) its records are **adopted** first (`migrate._sync`, by original id); an unreadable old file is never adopted and never overwritten: a change that would have to be projected onto it is refused (503 `store_unreadable`). Turning the flag off therefore leaves the old code exactly the state the engine had. Same-uid processes can edit either store (FarShell does not claim to stop a shell of the same user) |
 | Share policy | `~/.vt/authz/shares.json` is the source of truth; tmux `@fsh_share_nick`/`@fsh_share_mode` are the display mirror, written together (`put_share` writes the store first) | Drift resolves to the **lower** level (nick from the store). Store has it, tmux does not -> not shared. tmux only -> not shared once the first snapshot is done (`meta.share_adopted`); the first time the flag is on the existing tmux shares are adopted. If you ran with the flag off and shared sessions, run `fsh migrate-auth --apply` before turning it on again, otherwise those shares count as unshared (safe side) |
 | Audit | `~/.vt/audit/authz.jsonl` (0600, hash chain) | Changes (share, unshare, decide, revoke) are appended **before** the commit; failure -> 503 `audit_unavailable` and nothing is saved. Reads/sends/lists/requests are best effort. Successful `read`/`list`: first per (principal, resource) per 10 minutes plus `suppressedSince`. Never input, screen or message text. `GET /api/agent/share/audit` is served from it; the old `agent_access.log` is still written in full |
-| Failure | engine exception on read/send | 503 `authz_unavailable`, access denied (not "fall back to the old decision" — the engine is the authority once the flag is on). Corrupt `grants.json`/`approvals.json`/`shares.json`/`meta.json` -> agent access fails closed (`store_corrupt`) until the next write backs the bytes up |
+| Failure | engine exception on read/send | 503 `authz_unavailable`, access denied (not "fall back to the old decision" — the engine is the authority once the flag is on). Corrupt `grants.json`/`approvals.json`/`shares.json`/`meta.json` -> agent access fails closed (`store_corrupt`) and writes to that file are refused (see «Unreadable stores») |
 
 Not covered yet (the machine-token bypass): the machine token still reaches `/api/sessions/{id}/keys`, `/api/queue`, `/api/tmux/kill/*` directly, so a
 process that holds the token can bypass the share grant on those routes. `server/tests/authz_char/test_char_agent_share_enforced.py`
@@ -238,6 +238,17 @@ What does not change with the flag: the machine token still reaches routes outsi
 peer parity over all levels, rate/hop parity, rollback, shadow, `fsh migrate-auth --verify`, audit without text) and
 `authz_char/test_char_agent_msg_enforced.py` (the matrix with the listed changes); `test_agent_msg.py`, the shadow replay and the authz_char matrix also run
 with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
+
+## Unreadable stores refuse writes
+
+A store file that cannot be read or parsed (`~/.vt/authz/*.json`, and the old `~/.vt/agent_grants.json` that is still
+mirrored) is **never overwritten**. Reads stay fail closed (agents, peers and the CLI are denied while `grants.json`
+or `meta.json` is unreadable; a human session keeps working). A change that would write the unreadable file is refused with
+503 `store_unreadable` and nothing else in the same transaction is saved. Writes to other, healthy files are not blocked.
+The broken file is left exactly as it was (never deleted, never repaired); a copy of its bytes is kept next to it as
+`<name>.corrupt-<id>` (0600, one copy per distinct content). Fix or restore the file by hand (`fsh migrate-auth --restore <ts>`
+restores a backup), and the next change goes through. `fsh migrate-auth --status` prints a «저장소 읽기 불가» line per unreadable
+file (reason, path, number of copies) and `fsh doctor` reports the same as a failed check.
 
 ## Unix socket: who is calling without a token (2026-10-15)
 
