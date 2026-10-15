@@ -1,4 +1,4 @@
-// 모바일 세션 시트의 「뷰 편집」 — 뷰 단위로 위/아래 버튼으로 순서를 옮기고, 닫기 버튼으로 뷰를 닫는다
+// 모바일 「세션」 탭의 「뷰 편집」(shell/Fleet.tsx가 마운트) — 뷰 단위로 위/아래 버튼으로 순서를 옮기고, 닫기 버튼으로 뷰를 닫는다
 // (10-session-order.md C안 + 2026-10-06 뷰 닫기). 닫기는 탭 ×와 같은 closeView(묶음 구성 기억 포함).
 // 순서의 출처는 저장되는 레이아웃 하나라서(layout/compact.js openSessionOrder) 여기서 하는 일은
 // `moveLayoutTab`(데스크톱 탭 드래그와 같은 함수) + `saveLayoutNow` 뿐이다. 활성 탭은 id로 다시
@@ -106,9 +106,9 @@ export function renderOrderEditor(list) {
   if (_focus && _focus.close && Date.now() > _focus.until) _focus = null;
   if (_focus && _focus.close) {
     const xs = [...list.querySelectorAll('.vt-order-close')];
-    // 닫힌 자리로 올라온 이웃 뷰의 닫기 버튼, 없으면 마지막 것. 뷰가 없으면 시트 토글/닫기로.
+    // 닫힌 자리로 올라온 이웃 뷰의 닫기 버튼, 없으면 마지막 것. 뷰가 없으면 편집 토글로.
     const want = xs[Math.min(_focus.index, xs.length - 1)]
-      || list.closest('.vt-session-sheet')?.querySelector('.vt-session-close');
+      || list.closest('#vt-fleet')?.querySelector('.vt-fleet-edit-btn');
     if (want) want.focus();
   } else if (_focus) {
     const f = _focus; _focus = null;

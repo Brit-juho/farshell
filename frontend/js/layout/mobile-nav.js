@@ -22,6 +22,8 @@ import { vtFetch } from '../core/api.js';
 import { getAction } from '../core/dom.js';
 import { getSession, activeSessionId } from '../core/store.js';
 import { allStatuses, onStatusChange } from '../agent/state.js';
+import { pruneBlankViews } from './store.js';
+import { saveLayoutNow } from './persist.js';
 
 const BADGE_POLL_MS = 15000;
 
@@ -93,6 +95,8 @@ export function setTab(tab) {
   _baseTab = tab;
   _paintNav(tab);
   if (tab === 'fleet') {
+    // 폰에는 뷰 탭 바가 없어 칸 ×가 남긴 빈 뷰를 치울 길이 없다 — 세션 탭을 열 때 정리한다.
+    if (_mq.matches && pruneBlankViews() > 0) saveLayoutNow();
     _fleetSlot.hidden = false;
     _ensureFleetMounted();
   } else {
@@ -161,8 +165,16 @@ function _refreshBadges() {
   _refreshChangesBadge();
 }
 
+// 상단 세션 이름 — 세션 탭과 터미널을 오간다(탭 전환). 다른 탭(변경·첨부·설정)이 떠 있으면 세션 탭으로.
+function _toggleSessionsTab() {
+  if (!_mq.matches) return;
+  _closeMobilePanels();
+  setTab(_tab === 'fleet' ? 'terminal' : 'fleet');
+}
+
 function _init() {
   if (!_wired) return;
+  document.addEventListener('vt:sessions-toggle', _toggleSessionsTab);
 
   for (const btn of _bottomEl.querySelectorAll('[data-mnav]')) {
     btn.addEventListener('click', () => {
@@ -175,6 +187,11 @@ function _init() {
       }
     });
   }
+
+  // 세션 탭이 떠 있는 동안 헤더 이름이 눌린 상태로 보이게 한다.
+  document.addEventListener('vt:mobile-tab', (e) => {
+    document.getElementById('voice-session-picker')?.setAttribute('aria-pressed', String(e.detail?.tab === 'fleet'));
+  });
 
   document.addEventListener('vt:panel-open', (e) => {
     const tab = PANEL_TAB[e.detail?.id];

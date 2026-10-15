@@ -365,6 +365,19 @@ function Fleet(props: { deps: FleetDeps }) {
   // (호스트 스위처 시트와 같은 이유). 이름 변경은 그 자리에서 시트 내용을
   // 입력창으로 바꾼다(Rail.tsx가 이미 지킨 규칙 — window.prompt 안 씀).
   const [menu, setMenu] = createSignal<{ row: SessionRow } | null>(null);
+
+  // 「뷰 편집」 — 뷰 단위 순서·닫기. 예전 상단 세션 시트가 하던 일이다(시트는 이 탭으로 합쳤다).
+  // 편집기 DOM은 layout/session-order.js(screens 청크)가 그린다 — 지연 청크는 레이아웃 모듈을
+  // 정적 import 못 해서 열 때 동적으로 받고, 레이아웃이 바뀔 때마다 다시 그린다.
+  const [editViews, setEditViews] = createSignal(false);
+  let editorEl: HTMLDivElement | undefined;
+  createEffect(() => {
+    layoutVersion();
+    if (!editViews()) return;
+    void import('../layout/session-order.js').then((m) => {
+      if (editorEl && editorEl.isConnected && editViews()) m.renderOrderEditor(editorEl);
+    });
+  });
   const [renaming, setRenaming] = createSignal(false);
   const [renameValue, setRenameValue] = createSignal('');
 
@@ -471,7 +484,12 @@ function Fleet(props: { deps: FleetDeps }) {
                   onClick={() => { if (prefs().sort !== id) setPref(ORDER_KEY, encodeOrder(id, id === 'manual' ? fleetOrder() : prefs().order)); }}>{label}</button>
               )}</For>
             </div>
+            <button type="button" class="vt-icon-btn xl vt-fleet-edit-btn" classList={{ active: editViews() }}
+              aria-pressed={editViews()} aria-label={t('뷰 편집')} data-tip={t('뷰 편집')}
+              onClick={() => setEditViews((v) => !v)} innerHTML={icon('square-pen', 16)} />
           </div>
+          <Show when={editViews()}><div class="vt-fleet-order" ref={(el) => { editorEl = el; }} /></Show>
+          <Show when={!editViews()}>
           <For each={viewGroups().filter((g) => g.id)}>{(group) => (
             <ViewGroup group={group} onOpen={() => { void openRow(group.rows[0]); }}>
               <For each={group.rows}>{(row) => <Row row={row}
@@ -519,6 +537,7 @@ function Fleet(props: { deps: FleetDeps }) {
               </div>
             );
           }}</For>
+          </Show>
         </div>
       </Show>
       {/* Rail.tsx 하단의 "+ 새 세션"과 같은 액션(session.add-menu) — 목록이

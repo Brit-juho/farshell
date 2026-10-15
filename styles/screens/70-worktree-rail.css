@@ -420,4 +420,7 @@
 /* 폰 Fleet의 「세션」 머리 — 정렬 전환은 손가락 표적(40px)으로. */
 .vt-fleet-group-head-sort { display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2); }
 .vt-fleet-group-head-sort .vt-rail-sort { margin-left:0; }
+.vt-fleet-edit-btn { flex:none; }
+.vt-fleet-edit-btn.active { color:var(--acc); background:var(--menu-hover); }
+.vt-fleet-order { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-fleet-group-head-sort .vt-rail-sort-opt { min-height:40px; padding:0 calc(var(--spacing) * 3.5); font-size:var(--fs-xs); }

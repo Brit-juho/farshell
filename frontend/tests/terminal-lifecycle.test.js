@@ -299,43 +299,20 @@ test('removeSession: 비활성 세션을 닫아도 활성 세션은 그대로 �
   assert.strictEqual(Object.keys(window.sessions).join(','), 'b');
 });
 
-const sheetReady = () => new Promise((r) => setTimeout(r, 30));
-
-test('모바일 세션 관리: 좁은 화면에서도 세션 전환과 닫기가 가능하다', async () => {
+test('상단 세션 이름은 팝업이 아니라 「세션」 탭 전환 이벤트를 보낸다', async () => {
   const { window, addSession, getAction } = await buildTerminalWindow();
   addSession('a', '첫 세션');
-  addSession('b', '둘째 세션');
-
+  let n = 0;
+  window.document.addEventListener('vt:sessions-toggle', () => { n += 1; });
   getAction('session.manager')();
-  await sheetReady();   // 목록은 지연 청크(layout/session-sheet.js)가 그린다
-  const manager = window.document.getElementById('session-manager');
-  assert.ok(manager, '세션 관리 시트가 열려야 한다');
-  assert.strictEqual(manager.querySelectorAll('.vt-session-row').length, 2);
-  assert.strictEqual(window.document.getElementById('voice-session-picker').getAttribute('aria-expanded'), 'true');
-
-  manager.querySelector('.vt-session-row .vt-session-select').click();
-  assert.strictEqual(window.activeId, 'a', '목록의 세션을 누르면 해당 세션으로 전환돼야 한다');
-  assert.strictEqual(window.document.getElementById('session-manager'), null, '전환 후 시트는 닫혀야 한다');
-
-  getAction('session.manager')();
-  await sheetReady();
-  const close = window.document.querySelectorAll('.vt-session-row')[1].querySelectorAll('.vt-session-action')[1];
-  close.click();
-  await new Promise(resolve => setTimeout(resolve, 0));
-  assert.strictEqual(window.sessions.b, undefined, '시트에서도 개별 세션을 닫을 수 있어야 한다');
+  assert.strictEqual(n, 1);
+  assert.strictEqual(window.document.getElementById('session-manager'), null, '시트는 더 이상 없다');
 });
 
-test('모바일 세션 관리: 이름 변경은 레코드와 진입점에 함께 반영된다', async () => {
-  const { window, addSession, getAction } = await buildTerminalWindow();
+test('세션 이름 변경은 레코드와 상단 진입점에 함께 반영된다', async () => {
+  const { window, addSession } = await buildTerminalWindow();
   addSession('a', '이전 이름');
-  getAction('session.manager')();
-  await sheetReady();
-  window.document.querySelector('.vt-session-action').click();
-  // rename.onclick이 promptDialog(core/dialog.js)를 부른다 — window.prompt가
-  // 아니라 실제 카드가 뜨므로 입력값을 채우고 확인을 누른다.
-  await answerPrompt(window.document, { value: '새 이름' });
-  await new Promise(resolve => setTimeout(resolve, 0));
-
+  await window.renameSession('a', '새 이름');
   assert.strictEqual(window.sessionDisplayName('a'), '새 이름');
   assert.strictEqual(window.document.querySelector('#voice-session-picker .vt-sp-name').textContent, '새 이름');
 });
