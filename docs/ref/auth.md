@@ -263,6 +263,16 @@ item re-runs the check. Items queued while the flag was off carry no `source.aut
   at most). A child has no way to approve anything — approving needs a signed-in person's session, which no scope grants. A child keeps
   `authz.request` (its only way to ask the person); each request it creates records the open delegation it belongs to as a `delegation`
   field on the stored request, for display in the approvals inbox. The field does not appear in API responses and is not used in decisions.
+- **The parent/child edge is immutable.** A write to `delegations.json` that changes a delegation's `parent.key`, its `child.key` (once
+  filled at spawn) or its `id` is refused (`edge_immutable`) and audited. Adding delegations, filling the reserved empty child key once,
+  state changes and removing old entries are unaffected.
+- **Control is the strict parent only.** `send_to_child`/`close` work for the parent session of that delegation — not for the child
+  itself, a sibling, another parent's child, a grandparent or any other session — whether or not `deleg` is on (with it on, the engine
+  grant and the ledger's parent key must both agree). Depth is 1; if the depth limit is ever raised, control still stops at the direct
+  parent. An entry whose parent equals its child is treated as not existing.
+- **Ownership keys include the session creation time** (`#{session_id}:#{session_created}`). A session recreated under the same name, or a
+  new session continuing a resumed/forked conversation, has a different key and neither takes over a parent's or child's role nor receives its
+  hook notices. Tests: `test_authz_recheck.py`, `test_authz_child_limits.py`, `test_authz_ownership.py`.
 
 ## How a grant was approved: `approved_via`
 
