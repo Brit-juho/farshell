@@ -3077,5 +3077,10 @@ window.__VT_I18N = {
   "승인 요청을 만들 수 없는 호출자입니다": "This caller cannot create approval requests",
   "권한 엔진을 쓸 수 없어 요청을 거부했습니다": "The authorization engine is unavailable, so the request was refused",
   "서버 소켓을 쓸 수 없어 장부에 직접 씁니다": "The server socket is unavailable, writing to the ledger directly",
-  "위임을 닫지 못했습니다: {reason}": "Could not close the delegation: {reason}"
+  "위임을 닫지 못했습니다: {reason}": "Could not close the delegation: {reason}",
+  "「{agent}」이(가) 「{nick}」 세션의 에이전트에게 메시지를 보내려 합니다": "「{agent}」 wants to send a message to the agent in 「{nick}」",
+  "메시지: 받는 세션의 에이전트에게 다른 에이전트가 보낸 글로 표시되어 전달됩니다. 승인해도 그 에이전트의 권한은 늘지 않습니다.": "Message: the receiving agent sees it labelled as written by another agent. Approving does not widen that agent's permissions.",
+  "메시지 요청에는 level 이 필요 없습니다": "A message request takes no level",
+  "세션 key 가 올바르지 않습니다": "The session key is not valid",
+  "에이전트 메시지 승인이 필요합니다": "An agent message needs your approval"
 };

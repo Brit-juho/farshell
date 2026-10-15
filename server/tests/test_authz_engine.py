@@ -206,7 +206,9 @@ def test_peer_defaults_and_migrated_presets():
     assert not engine.decide(P.peer("pv", obo="agent:pv/-"), "msg.send", "msg:local/-", {}, s).allow
 
 
-def test_local_msg_send_open_d6():
+def test_local_msg_send_open_d6(monkeypatch):
+    """꺼짐(`msg` 플래그 없음)의 동작 고정 — 켠 판은 test_msg_enforce.py."""
+    monkeypatch.setenv("VT_AUTHZ_ENFORCE", "")
     assert engine.decide(P.agent(A), "msg.send", f"msg:local/{B}").allow is defaults.LOCAL_MSG_SEND_OPEN
 
 

@@ -103,8 +103,7 @@ cookie + token together, no-password server, peer-signed requests, relay allowli
 
 ## Agent session sharing under the engine (plan-2.6 phase 3a, `VT_AUTHZ_ENFORCE=share`)
 
-Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share` is the only token with an effect in this
-phase; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
+Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share`, `deleg` and `msg` have an effect; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
 `agent_share.py` keeps only the mechanics (`read_pane`, `send_keys`, `check_send_*`, tmux options); its public functions
 (`get_grant`, `request_access`, `decide`, `revoke`, `drop_target`, `list_state`, `snapshot`, `authorize`, `audit`) branch on the flag.
 
@@ -150,6 +149,28 @@ the parent is treated as an agent and refused — use the web UI row menu or a t
 `server/tests/test_authz_deleg_enforce.py` (derivation, red-team, H9, D13, audit, rollback, close-through-server) and
 `authz_char/test_char_delegation_enforced.py` (matrix with `EXPECTED_CHANGE` = the H9 spawn cases); `test_delegation.py`, the shadow
 replay and the authz_char matrix also run with `VT_AUTHZ_ENFORCE=deleg` and `share,deleg`.
+
+## Agent messages under the engine (`VT_AUTHZ_ENFORCE=msg`)
+
+Off by default (shipping changes nothing); combine as `share,deleg,msg`. With `msg` on, `authz/msg_svc.py` decides, stores and audits
+agent-to-agent messages; `agent_msg.py` keeps the mechanics (queue, history, hop counting, envelope). Turning the flag off restores the old
+behaviour at once; the message permissions stay in `~/.vt/authz/` and apply again when the flag is turned back on.
+
+| Piece | Where | Rule |
+|---|---|---|
+| Sender | `routes/agent_msg._verify_sender_sync` | The sender is the authenticated caller: over the unix socket the session whose pane the peer pid belongs to, otherwise `share_identity.verify_caller` (`X-Fsh-*` + the process that owns the loopback connection). The body's `pane`/`tmux`/`cwd` never choose the sender; a mismatch is only recorded (`msg.claim`, reason `claim_mismatch`, no content). A caller that cannot be verified gets 403 `identity_unverified` (so does a person using a browser session or the bare machine token — send from a pane). Unknown host/session is 404 first |
+| Related sessions | `msg_svc.relation` | `msg.send` on `msg:local/<receiver key>` is allowed **without approval** between a delegation parent and its child and between two children of the same parent. Only open delegations (running, reported) count; closed or orphaned ones do not. Read from `delegations.json`, whether or not the delegation flag is on. A hook for sessions that were paired (`pair_related`) exists and returns False until pairing is built |
+| Other pairs | `msg_svc.request_access` / `decide` | No permission -> a pending request (kind `msg`, origin `authz:msg:req:`) and HTTP 202. Only a person (browser login session) decides, from the same inbox as sharing requests; an agent, the machine token, a cli process or a peer cannot. Approval creates a grant for exactly (sending session -> receiving session) (`gm-<id>`, origin `authz:msg:grant:`, no expiry); revoking it makes the next send pending again. Denial starts a 5-minute cooldown (403 `request_denied`); pending requests expire after 24 h, 20 per agent and 200 in total. Both records are removed when either session no longer exists. Sessions are identified by tmux session id + creation time, so a new session with a reused name does not inherit anything |
+| Receiving from another Mac | `routes/peer.py` | The peer principal `peer:<id>/obo:agent:<id>/-` needs `msg.send` on `msg:local/-`. The grant used is translated on the spot from `hosts.json` (`control` level + `agentMessages`), so it cannot drift from what `fsh host allow-agent` set; the level itself is still checked by the capability wrapper. The outcome equals the old `control` + `agentMessages` check for every combination. The body hash signature is untouched. Whether to accept a message is decided on the Mac that owns the receiving session; no request is created for a remote sender |
+| Limits | `msg_svc.check_rate`, `agent_msg` constants | 20 messages per minute per sending host (the engine counts, `agent_msg._rate` is the counter, 429 `rate_limited`) and 10 hops per conversation (429 `hop_limit`) — same numbers and error order as before |
+| Audit | `~/.vt/audit/authz.jsonl` | `msg.send` (ok / denied / unverified / rate_limited / forwarded), `msg.request`, `msg.claim`, and `msg.decide`/`msg.revoke` (written before the commit; failure -> 503 `audit_unavailable`, nothing saved). Only length (`sizes.chars`) and `sha8` of the text. Principal `agent:local/<session key>`; `agent:unverified` when the caller could not be verified |
+| Failure | engine exception, corrupt `grants.json`/`approvals.json` | 503 `authz_unavailable` for sends that need a grant and for remote messages (fail closed); a related pair still works because it needs no stored grant |
+
+What does not change with the flag: the machine token still reaches routes outside this feature directly (see the sharing section). Tests:
+`server/tests/authz_char/test_msg_enforce.py` (relations, forged sender, unverified callers, grant lifecycle, cooldown, limits,
+peer parity over all levels, rate/hop parity, rollback, shadow, `fsh migrate-auth --verify`, audit without text) and
+`authz_char/test_char_agent_msg_enforced.py` (the matrix with the listed changes); `test_agent_msg.py`, the shadow replay and the authz_char matrix also run
+with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
 
 ## Unix socket: who is calling without a token (plan-2.6 phase 2, 2026-10-15)
 

@@ -11,6 +11,13 @@ import pytest
 from authz_cases import cases_for
 
 
+@pytest.fixture(autouse=True)
+def _msg_flag_off(monkeypatch):
+    """이 파일은 3c 이전의 옛 동작을 고정한다 — 환경에 `msg` 가 켜져 있어도 끄고 돈다(켠 판은 `*_enforced.py`)."""
+    from authz import flags
+    monkeypatch.setenv("VT_AUTHZ_ENFORCE", ",".join(sorted(flags.tokens() - {"msg"})))
+
+
 @pytest.mark.parametrize("case", cases_for("agent_msg"), ids=lambda c: c.id)
 def test_matrix(case, world, golden):
     golden.check(case, world.run(case))

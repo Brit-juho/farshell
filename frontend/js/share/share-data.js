@@ -61,12 +61,14 @@ export function errorText(e) {
 export function requestSentence(req) {
   const nick = (req.target && req.target.nick) || '?';
   const agent = (req.agent && req.agent.name) || '?';
+  if (req.kind === 'msg') return t('「{agent}」이(가) 「{nick}」 세션의 에이전트에게 메시지를 보내려 합니다', { agent, nick });
   return req.kind === 'write'
     ? t('「{agent}」이(가) 「{nick}」 세션의 쓰기 권한을 요청합니다', { agent, nick })
     : t('「{agent}」이(가) 「{nick}」 세션의 읽기 권한을 요청합니다', { agent, nick });
 }
 
 export function kindHelp(kind) {
+  if (kind === 'msg') return t('메시지: 받는 세션의 에이전트에게 다른 에이전트가 보낸 글로 표시되어 전달됩니다. 승인해도 그 에이전트의 권한은 늘지 않습니다.');
   return kind === 'write'
     ? t('쓰기: 에이전트가 이 터미널에서 명령을 실행할 수 있습니다.')
     : t('읽기: 에이전트가 이 세션의 화면에 보이는 내용을 읽습니다.');

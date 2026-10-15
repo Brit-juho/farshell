@@ -18,6 +18,7 @@ ctx 키(전부 선택):
   safe_mode    VT_SAFE_MODE 가 켜져 있는가 — deleg.spawn killswitch(3b: 판정 지점이 켠 때만 넣는다)
   op           판정 지점이 하려는 동작 이름(`close` …) — grant 의 `conds.ops` 와 비교
   fs           `{purpose, in_roots}` — `conds.fs_roots`(fsguard 루트 안인가; 3b 위임 cwd, 5단계에서 lease 로 대체)
+  msg          `{related, relation}` — `conds.msg_related`(3c: 위임 부모↔자식·형제·pair 인가). 없으면 관계 없음으로 본다
   counts       `{scope: 이미 센 횟수}` — rate 비교(limits.exceeded)
   limits       `{scope: 한도}` — counts 와 비교할 한도를 표(limits.LIMITS) 대신 지정(선택)
 """
@@ -87,6 +88,10 @@ def _conds_ok(g: dict, ctx: dict) -> tuple[bool, str]:
             return False, "child_limit"
         if limits.exceeded("deleg.spawn", int(d.get("recent_spawns", 0)), limits.DELEG_SPAWN_PER_MIN):
             return False, "rate_limited"
+    if conds.get("msg_related"):
+        m = ctx.get("msg")
+        if not isinstance(m, dict) or not m.get("related"):
+            return False, "not_related"
     if "ops" in conds and ctx.get("op") not in conds["ops"]:
         return False, "cond_op"
     if conds.get("fs_roots"):

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from . import flags
 from . import principals as P
 
 # --- 미결정(D#) — 지금 동작 ---------------------------------------------------------------
@@ -26,7 +27,9 @@ PEER_CONTROL_SCOPES: tuple[str, ...] = PEER_VIEW_SCOPES + (
 # (지금 peer 는 공유 여부와 무관하게 모든 세션을 본다).
 PEER_SESSION_CEILING_EXEMPT = True
 
-# PROVISIONAL D6: current behavior — 로컬 agent→agent `msg.send` 는 기본 허용(대상 inbox grant 불필요).
+# PROVISIONAL D6: current behavior — 이 상수는 `VT_AUTHZ_ENFORCE` 에 `msg` 가 없을 때(꺼짐)의 동작이다: 로컬 agent→agent
+# `msg.send` 는 누구에게나 기본 허용. 결정(D6=c)은 켜짐(3c)에서 이미 적용되며 이 표시는 꺼짐 동작을 가리킨다.
+# 켜짐(3c)에서는 위임 부모↔자식·형제(열린 위임만)와 pair 구성원끼리만 승인 없이, 그 밖은 (보내는 세션 → 받는 세션) grant 가 필요하다.
 LOCAL_MSG_SEND_OPEN = True
 
 # PROVISIONAL D8: current behavior — 비밀번호 없이 서명키만 있는 서버(token 모드)에서도 서명 세션
@@ -95,7 +98,11 @@ def rules_for(p: P.Principal) -> list[dict]:
         # (그 밖의 fs.read 는 agent 기본에 없다). 5단계에서 lease 로 대체한다.
         rules.append(_rule("agent_spawn_fs_roots", p.id, "fs:local/*", ["fs.read"],
                            conds={"fs_roots": list(SPAWN_FS_PURPOSES)}))
-        if LOCAL_MSG_SEND_OPEN:
+        if flags.enforced("msg"):
+            # 관계는 판정 지점이 ctx.msg.related 로 알려 준다(위임 장부·pair — authz/msg_svc.relation). 관계가 없으면 이 규칙은
+            # 닿지 않고, 보내는→받는 세션 grant(`msg:local/<받는 세션 key>`)가 있어야 한다.
+            rules.append(_rule("agent_local_msg_related", p.id, "msg:local/*", ["msg.send"], conds={"msg_related": True}))
+        elif LOCAL_MSG_SEND_OPEN:
             rules.append(_rule("agent_local_msg", p.id, "msg:local/*", ["msg.send"]))
         return rules
     if p.kind == P.PEER:

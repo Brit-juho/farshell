@@ -153,6 +153,7 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
     assert len(cases) > 40
     enforced = authz_flags.enforced("share")
     deleg = authz_flags.enforced("deleg")
+    msgf = authz_flags.enforced("msg")
     for case in cases:
         w = World(monkeypatch, world.tmp / case.id.replace("/", "_"))
         if enforced and break_at in ("engine", "write") and case.group == "agent_share" \
@@ -178,6 +179,32 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
                     assert res == {"status": 403, "error": "cwd_outside_roots"}, (case.id, res)
                 else:
                     assert res == matrix[case.id]["expected"], case.id
+            continue
+        if msgf and case.method == "POST" and case.route == "/api/peer/agent/message" \
+                and case.caller in ("peer_control", "peer_control_agent") and break_at in ("engine", "write"):
+            # EXPECTED_CHANGE(3c): 받는 쪽도 엔진이 `msg.send` 의 권한자다 — 엔진이 터지면 닫히고(503), 뒤집힌 답은 따른다.
+            if break_at == "engine":
+                assert w.run(case)["status"] == 503, case.id
+            continue
+        if msgf and case.group == "agent_msg" and case.method == "POST" and case.route == "/api/agent/message":
+            # EXPECTED_CHANGE(3c): VT_AUTHZ_ENFORCE=msg 이면 보낸 쪽 확인(H17)과 관계 판정(D6)이 응답을 정한다
+            # (`authz_char/test_char_agent_msg_enforced.py`). 확인된 에이전트가 관계 없는 세션에 보내는 사례만 엔진에 닿고,
+            # 엔진이 터지면 닫혀야 한다(2xx·202 금지 → 503). 나머지는 엔진과 무관한 바뀐 응답 그대로다.
+            want = matrix[case.id]["expected"]
+            reaches_engine = False
+            if want.get("status") == 200:
+                if case.caller == "agent_verified":
+                    reaches_engine = case.id.rsplit(".", 1)[-1].startswith("local_")
+                else:
+                    want = {"status": 403, "error": "identity_unverified"}
+            if reaches_engine:
+                res = w.run(case)
+                if break_at == "engine":
+                    assert res["status"] == 503, (case.id, res)
+                elif break_at != "write":
+                    assert res == {"status": 202, "error": None}, (case.id, res)
+            else:
+                assert w.run(case) == want, case.id
             continue
         assert w.run(case) == matrix[case.id]["expected"], case.id
     st = shadow.STATS.as_dict()
