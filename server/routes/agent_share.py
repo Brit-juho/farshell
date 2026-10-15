@@ -31,6 +31,7 @@ import agent_share
 import auth
 import share_identity
 from authz import msg_svc
+from authz import host_grant_svc
 from i18n import tr
 from agent_share import ShareError
 
@@ -383,6 +384,9 @@ async def list_requests():
     out = [request_view(r, snap) for r in state["requests"] if r.get("state") == "pending"]
     if msg_svc.enforced():                    # 에이전트 간 메시지 승인 요청도 같은 승인함에 보인다(kind: msg)
         out += await asyncio.to_thread(_msg_requests)
+    if host_grant_svc.enforced():                   # 호스트 권한 변경 요청(`fsh host allow-*`)도 같은 승인함에 보인다(kind: peer)
+        out += await asyncio.to_thread(host_grant_svc.list_requests)
+    if msg_svc.enforced() or host_grant_svc.enforced():
         out.sort(key=lambda r: r.get("created") or 0)
     return {"requests": out}
 
@@ -409,6 +413,8 @@ async def decide_request(request_id: str, request: Request):
         return _err(ShareError("bad_level", tr("level 은 read 또는 readwrite 입니다"), 400))
     if msg_svc.enforced() and msg_svc.owns_request(request_id):
         return await _decide_msg(request_id, body.get("decision"), level, request)
+    if host_grant_svc.enforced() and host_grant_svc.owns_request(request_id):
+        return await _decide_peer(request_id, body.get("decision"), level, request)
     try:
         res = await asyncio.to_thread(agent_share.decide, request_id, body.get("decision"), level, snap, _actor(request))
     except ShareError as e:
@@ -448,6 +454,24 @@ async def _decide_msg(request_id: str, decision, level, request: Request):
         return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"], "replayed": True}
     await _broadcast({"type": "agent_share_request_resolved", "id": res["request"]["id"],
                       "state": "allowed" if allowed else "denied"})
+    return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"]}
+
+
+async def _decide_peer(request_id: str, decision, level, request: Request):
+    """호스트 권한 변경 요청(`fsh host allow-*`)의 결정. 승인권은 사람(브라우저 로그인 세션)뿐이다 — pane 없는 CLI 도 승인할 수 없다."""
+    from authz import principals as P
+    try:
+        actor = P.from_request(request)
+    except Exception:  # noqa: BLE001 — 주체를 못 만들면 권한 없는 사람으로(승인 못 함)
+        actor = None
+    try:
+        res = await asyncio.to_thread(host_grant_svc.decide_request, request_id, decision, level, actor)
+    except ShareError as e:
+        return _err(e)
+    if res.get("replayed"):
+        return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"], "replayed": True}
+    await _broadcast({"type": "agent_share_request_resolved", "id": res["request"]["id"],
+                      "state": "allowed" if res["grant"] is not None else "denied"})
     return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"]}
 
 

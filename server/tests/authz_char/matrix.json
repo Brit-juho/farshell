@@ -9439,6 +9439,240 @@
    "close": 4502
   }
  },
+ "hosts.api_host_grants_X_change.post.agent_verified.none": {
+  "group": "hosts",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.agent_verified.password": {
+  "group": "hosts",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.agent_verified.token": {
+  "group": "hosts",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.machine.none": {
+  "group": "hosts",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.machine.password": {
+  "group": "hosts",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.machine.token": {
+  "group": "hosts",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.none.none": {
+  "group": "hosts",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.none.password": {
+  "group": "hosts",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.none.token": {
+  "group": "hosts",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.peer_control.none": {
+  "group": "hosts",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.peer_control.password": {
+  "group": "hosts",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.peer_control.token": {
+  "group": "hosts",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.session.none": {
+  "group": "hosts",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.session.password": {
+  "group": "hosts",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.session.token": {
+  "group": "hosts",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.session_elev.none": {
+  "group": "hosts",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.session_elev.password": {
+  "group": "hosts",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
+ "hosts.api_host_grants_X_change.post.session_elev.token": {
+  "group": "hosts",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/host-grants/{peer_id}/change",
+  "path": "/api/host-grants/pv/change",
+  "expected": {
+   "status": 409,
+   "error": "peer_enforce_off"
+  }
+ },
  "hosts.api_hosts.get.agent_verified.none": {
   "group": "hosts",
   "caller": "agent_verified",

@@ -2328,13 +2328,27 @@ cmd_host() {
       shift 2>/dev/null || true
       (cd "$VT_DIR/server" && "$VT_PYTHON" -m host_store "$sub" "$@")
       ;;
+    help|-h|--help)
+      _host_usage
+      echo
+      echo "$(_t '권한 변경 (allow-control / deny-control / allow-agent / deny-agent):')"
+      echo "  $(_t '서버가 VT_AUTHZ_ENFORCE=peer 로 떠 있으면 이 명령은 서버에 변경을 요청합니다 (unix socket).')"
+      echo "  $(_t '- deny-*: 접근을 줄이는 변경이라 바로 적용되고 감사 기록에 남습니다.')"
+      echo "  $(_t '- allow-*: 접근을 늘리는 변경이라 승인 요청만 만들어집니다. 웹 화면의 승인함에서 사람이 승인해야 적용되고, 이 명령으로는 승인할 수 없습니다.')"
+      echo "  $(_t '서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.')"
+      echo "  $(_t '주의: control(제어) 등급은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다.')"
+      return 0 ;;
     *)
-      echo "$(_t '사용법: fsh host [list|pair [별명]|add <url> --ticket <티켓> [--label 별명]')"
-      echo "                 $(_t '|ping <id>|rm <id>|rename <id|self> <별명>')"
-      echo "                 |allow-control <id>|deny-control <id>"
-      echo "                 |allow-agent <id>|deny-agent <id>|log [id]|revoke-all]"
+      _host_usage
       return 1 ;;
   esac
+}
+
+_host_usage() {
+  echo "$(_t '사용법: fsh host [list|pair [별명]|add <url> --ticket <티켓> [--label 별명]')"
+  echo "                 $(_t '|ping <id>|rm <id>|rename <id|self> <별명>')"
+  echo "                 |allow-control <id>|deny-control <id>"
+  echo "                 |allow-agent <id>|deny-agent <id>|log [id]|revoke-all|help]"
 }
 
 # 에이전트 간 메시지 (2026-09-28) — `fsh mcp`는 에이전트가 쓰는 MCP 서버(stdio)를

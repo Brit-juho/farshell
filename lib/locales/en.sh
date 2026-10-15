@@ -32,6 +32,8 @@ _t_en_lookup() {
     '(체크: "Run command in shell")') _T_OUT='(check "Run command in shell")' ;;
     '(템플릿 없음. '\''fsh template save <이름>'\'' 으로 저장)') _T_OUT='(no templates. Save one with '\''fsh template save <name>'\'')' ;;
     '(폰 접속 URL과 QR은 서버가 떠 있을 때 '\''fsh mobile'\''로 봅니다)') _T_OUT='(The phone URL and QR code are available from '\''fsh mobile'\'' while the server is running)' ;;
+    '- allow-*: 접근을 늘리는 변경이라 승인 요청만 만들어집니다. 웹 화면의 승인함에서 사람이 승인해야 적용되고, 이 명령으로는 승인할 수 없습니다.') _T_OUT='- allow-*: raises access, so it only creates an approval request. A person must approve it in the web inbox; this command cannot approve.' ;;
+    '- deny-*: 접근을 줄이는 변경이라 바로 적용되고 감사 기록에 남습니다.') _T_OUT='- deny-*: lowers access, so it applies at once and is written to the audit log.' ;;
     '--force — 경고를 확인하고 노출합니다') _T_OUT='--force: exposing despite the warning' ;;
     '--network 값이 없습니다') _T_OUT='--network needs a value' ;;
     '.venv 없음 → '\''./install.sh'\'' 실행 또는 ~/.vt.env에 VT_PYTHON 지정') _T_OUT='no .venv → run '\''./install.sh'\'' or set VT_PYTHON in ~/.vt.env' ;;
@@ -240,6 +242,7 @@ _t_en_lookup() {
     '교체 실패 (원본 유지)') _T_OUT='Replace failed (original kept)' ;;
     '구 iTerm2 프로필 제거 (Guid 변경으로 인한 중복 방지) → {path}') _T_OUT='Removed the old iTerm2 profile (avoids duplicates after the Guid change) → {path}' ;;
     '구 프로필 제거 → {path} (Guid가 바뀌어 중복 방지)') _T_OUT='remove old profile → {path} (Guid changed; avoids duplicates)' ;;
+    '권한 변경 (allow-control / deny-control / allow-agent / deny-agent):') _T_OUT='Permission changes (allow-control / deny-control / allow-agent / deny-agent):' ;;
     '권한 저장소') _T_OUT='Permission store' ;;
     '그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V') _T_OUT='Then check that PATH points to the new python3: python3 -V' ;;
     '기간이 끝나거나 재부팅해도 이 포트를 자동으로 다시 열까요? (y/N)') _T_OUT='Re-open this port automatically when it expires or after a reboot? (y/N)' ;;
@@ -385,6 +388,8 @@ _t_en_lookup() {
     '서버/음성 데몬 종료 (터널은 그대로 — URL 유지)') _T_OUT='Server and voice daemons stopped (tunnel kept — URL unchanged)' ;;
     '서버/터널/음성 데몬 종료') _T_OUT='Server, tunnel and voice daemons stopped' ;;
     '서버:        ') _T_OUT='Server:       ' ;;
+    '서버가 VT_AUTHZ_ENFORCE=peer 로 떠 있으면 이 명령은 서버에 변경을 요청합니다 (unix socket).') _T_OUT='When the server runs with VT_AUTHZ_ENFORCE=peer, these commands ask the server to make the change (unix socket).' ;;
+    '서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.') _T_OUT='If the server is down, the socket is unusable or that setting is off, it writes ~/.vt/hosts.json directly as before.' ;;
     '서버가 떠 있지 않을 수 있습니다: fsh status') _T_OUT='The server may not be running: fsh status' ;;
     '서버가 실행 중이 아닙니다. 먼저 '\''fsh start'\''로 시작하세요.') _T_OUT='The server isn'\''t running. Start it first with '\''fsh start'\''.' ;;
     '서버가 옛 설정으로 돌고 있습니다: {keys} — '\''fsh restart'\'' 필요') _T_OUT='server is running with old settings: {keys} — run '\''fsh restart'\''' ;;
@@ -539,6 +544,7 @@ _t_en_lookup() {
     '제거: fsh hooks dedupe') _T_OUT='Remove: fsh hooks dedupe' ;;
     '종료: fsh stop') _T_OUT='Stop: fsh stop' ;;
     '종료할 tmux 세션 없음') _T_OUT='No tmux sessions to stop' ;;
+    '주의: control(제어) 등급은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다.') _T_OUT='Note: the control level means that Mac can type commands into this Mac'\''s terminals — the same as a remote shell.' ;;
     '중단됨') _T_OUT='Aborted' ;;
     '중복 해제: rm {lock}') _T_OUT='To override: rm {lock}' ;;
     '중지') _T_OUT='stopped' ;;

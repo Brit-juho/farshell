@@ -84,6 +84,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", r"/api/delegations/[^/]+/close-by-cli", "fsh delegate close (cli / pane agent)"),
     ("POST", r"/api/queue/run", "mcp_farshell"),
     ("POST", r"/api/ports/_proxy/sync", "bin/fsh (tunnel expose/pin/mode)"),
+    ("POST", r"/api/host-grants/[^/]+/change", "fsh host allow-control|deny-control|allow-agent|deny-agent (cli / pane agent)"),
 )
 _ROUTES_RE = tuple((m, re.compile(p), who) for m, p, who in ROUTES)
 
