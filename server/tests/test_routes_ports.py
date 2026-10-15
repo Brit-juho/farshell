@@ -22,7 +22,7 @@ def client():
 
 @pytest.fixture
 def elevated(tmp_path, monkeypatch):
-    """2.2부터 expose/unexpose는 **승격**을 요구한다(plan-2.2 §5) — 포트를 외부에
+    """2.2부터 expose/unexpose는 **승격**을 요구한다 — 포트를 외부에
     여는 것은 공유 링크 발급과 같은 등급의 쓰기 액션이다. 로그인 → 승격까지
     거친 클라이언트를 돌려준다(test_auth_elevate.py와 같은 패턴)."""
     import auth as _auth

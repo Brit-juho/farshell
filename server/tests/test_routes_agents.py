@@ -1,6 +1,6 @@
 """P2-1(ADR-34) — `GET /api/agents` · `GET /api/agents/{tmux_name}` ·
 `POST /api/agent/event`가 엔트리의 `agent`(1차 신호)를 `agent_detector`
-(2차 추측)보다 우선하는지. docs/plan-2.3/30-agent-attribution.md §5.
+(2차 추측)보다 우선하는지.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""ADR-43(2.3.0) — 스크롤백 영속화 제거. `docs/plan-2.3/87-remove-scrollback-persist.md`.
+"""ADR-43(2.3.0) — 스크롤백 영속화 제거.
 
 기능 자체(`server/scrollback_persist.py`)는 삭제됐다. 여기서 확인하는 것은
 남은 자취 둘이다 — 1회성 정리 함수(`main._purge_legacy_scrollback`)의 안전성과,

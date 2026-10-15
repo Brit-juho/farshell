@@ -666,8 +666,7 @@ function Rail(props: { deps: RailDeps }) {
         </button>
       </div>
       <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
-      {/* 2026-09-21 — RepoVisibility와 같은 이유로 Portal로 body에 붙인다
-          (docs/TODOS.md "레일 컨텍스트 메뉴 z-index 문제", 미해결이던 항목).
+      {/* 2026-09-21 — RepoVisibility와 같은 이유로 Portal로 body에 붙인다.
           `.vt-sidepanel`이 z-index:70짜리 쌓임 맥락을 만들어서, `.vt-menu`의
           z-index:520이 레일 밖의 더 높은 오버레이(예: 온보딩 z:500 이상의
           다른 화면)에 가려질 수 있었다 — 지금까지는 우연히 충돌 경로가 없어

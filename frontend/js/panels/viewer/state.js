@@ -12,7 +12,7 @@ export let _viewerState = {
   expanded: new Set(),   // 펼쳐진 디렉토리 절대경로 — 접었다 다시 펼 때 재요청 판단에 씀
 };
 
-// L2: Termius SFTP→프롬프트 패턴 — 파일 트리 행의 "터미널에 경로 삽입" 버튼.
+// L2: 파일 트리 행의 "터미널에 경로 삽입" 버튼.
 // icons.js의 'terminal' 토큰과 path가 같지만(우연이 아니라 같은 화살표 의미),
 // 그쪽은 24px 레일/dock 아이콘 전제라 12px 인라인 버튼에는 이 상수를 쓴다.
 export const _ICON_INSERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>';

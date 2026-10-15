@@ -1,6 +1,6 @@
 # Session and view measurements (2026-10)
 
-Evidence behind the session/view rules, the `waiting` kind and release logic, and the phone (touch) work of 2026-10-05/06. Rules live in [`terminal.md`](./terminal.md) (「Session and view rules」) and [`agents.md`](./agents.md); this file keeps the numbers and the procedures. Screenshots are not tracked: they sit in a local, untracked directory (`docs/plan-2.5/measurements/2026-10/`, see its `INDEX.md`).
+Evidence behind the session/view rules, the `waiting` kind and release logic, and the phone (touch) work of 2026-10-05/06. Rules live in [`terminal.md`](./terminal.md) (「Session and view rules」) and [`agents.md`](./agents.md); this file keeps the numbers and the procedures. Screenshots are not tracked.
 
 CLI versions: Claude Code 2.1.287 (first pass) and 2.1.289 (re-measured after fixes); Codex 0.158.0 measured, 0.160.0 installed afterwards; agy (Antigravity CLI) 1.1.23 first, 1.2.14 after, 1.2.16 re-checked on 2026-10-06. tmux 3.7c.
 
@@ -84,7 +84,7 @@ Measured against Claude Code 2.1.289 in an isolated server/tmux socket. **Reject
 
 ### 3.1 Round 2 (2026-10-06, after the touch/keyboard/waiting fixes)
 
-Same device and method (isolated server on port 17920, `env -i`, real soft keyboard, real `adb input swipe`). Screenshots: local, untracked (`docs/plan-2.5/measurements/`).
+Same device and method (isolated server on port 17920, `env -i`, real soft keyboard, real `adb input swipe`). Screenshots are not tracked.
 
 | Item | Result |
 |---|---|

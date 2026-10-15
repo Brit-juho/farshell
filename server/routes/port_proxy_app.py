@@ -1,4 +1,4 @@
-"""노출 포트 프록시 앱 (2.2, plan-2.2/00-port-access.md ADR-31 · §2 · §3).
+"""노출 포트 프록시 앱 (2.2, ADR-31).
 
 노출한 포트 하나당 **전용 loopback 리스너**에 올라가는 최소 ASGI 앱이다.
 cloudflared는 `--url http://127.0.0.1:<proxyPort>`로 여기를 본다.

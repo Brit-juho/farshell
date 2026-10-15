@@ -1,4 +1,4 @@
-// ADR-44(docs/plan-2.3/95-viewer-surface.md) — 파일 뷰어 오버레이. pane 트리 밖에 있어서
+// ADR-44 — 파일 뷰어 오버레이. pane 트리 밖에 있어서
 // 열고 닫아도 터미널 cols×rows가 바뀌지 않는다(fit도 SIGWINCH도 안 일어난다).
 import { openPanel, closePanel } from '../panel.js';
 import { renderFile, refreshFile } from './file.js';

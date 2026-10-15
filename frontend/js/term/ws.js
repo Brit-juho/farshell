@@ -84,7 +84,7 @@ export function startSessionSocket(id, term) {
       // 재연결이었다면(첫 연결이 아니면) 서버가 scrollback(최대 256KB)을 통째로 재전송한다.
       // reset 없이 write하면 이전 출력이 중복 누적되므로 비운 뒤 깨끗하게 repaint한다.
       // R1: "[재연결됨]" 상태 문구는 예전엔 term.write()로 찍어 스크롤백에 영구히
-      // 남았다(ttyd·wetty처럼 오버레이로 분리) — updateConnStatus가 이미 오버레이를
+      // 남았다 — updateConnStatus가 이미 오버레이를
       // 지워 "연결됨"을 보여주므로 별도 텍스트 없이 reset만 한다.
       if (_retries > 0) { term.reset(); }
       // 새(재)연결된 PTY는 크기를 모르므로 캐시를 비워 첫 fitAndResize가 반드시 보내게 한다.
@@ -136,7 +136,7 @@ export function startSessionSocket(id, term) {
 
     // R2: 서버 pause_read는 WS 송신 큐(_on_data) 크기만 본다 — 네트워크로는
     // 다 나갔는데 xterm.js 렌더링(특히 저사양 모바일)이 못 따라가는 상황은
-    // 못 잡는다. ttyd의 writeData() 패턴처럼 xterm write() 완료 콜백으로 실제
+    // 못 잡는다. xterm write() 완료 콜백으로 실제
     // 렌더링 진행 상황을 재고, 밀리면 별도 render_pause/resume 신호를 보낸다
     // (서버는 이걸 큐 기반 pause와 독립된 requester로 취급 — 둘 다 풀려야 재개).
     let _pendingWrites = 0;

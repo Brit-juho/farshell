@@ -1,4 +1,4 @@
-"""에이전트 위임 API (docs/plan-2.4/50-agent-delegation.md).
+"""에이전트 위임 API.
 
 호출자는 `share_identity.verify_caller`로 확정한다(`X-Fsh-Pane`/`X-Fsh-Tmux`/`X-Fsh-Pid` + 루프백 소켓
 소유 프로세스의 부모 체인) — 기계 토큰은 모든 에이전트가 같은 값이라 "어느 세션인가"를 가리지 못한다.

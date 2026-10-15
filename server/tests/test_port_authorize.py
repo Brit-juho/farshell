@@ -1,4 +1,4 @@
-"""2.2 — `/p/authorize` 교차 origin 핸드셰이크 (plan-2.2/00-port-access.md §3 · §9).
+"""2.2 — `/p/authorize` 교차 origin 핸드셰이크.
 
 오픈 리다이렉트 차단 · 티켓의 share/기기 바인딩 · 미로그인 시 로그인 게이트로
 되돌리기를 확인한다. 티켓 소비 쪽(`/__fsh/cb`)은 test_port_proxy_auth.py가 본다.

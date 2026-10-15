@@ -1,7 +1,6 @@
 """실패 백오프 (P3-4, 60-observability.md §2) — 반복 프로빙 실패를 잠시 쉰다.
 
-crush `internal/lsp/manager.go`의 `unavailableRetryDelay`(30초) + `unavailable
-*csync.Map` 패턴의 우리 번역이다. 실패는 비싸고, 곧 다시 실패할 가능성이
+실패한 키를 일정 시간(기본 30초) 재시도 대상에서 뺀다. 실패는 비싸고, 곧 다시 실패할 가능성이
 높다 — 파일을 열 때마다 `exec.LookPath`와 spawn을 반복하지 않기 위한 장치다.
 
 ## 이 모듈을 쓰기 전에 감사부터 했다
@@ -18,14 +17,14 @@ crush `internal/lsp/manager.go`의 `unavailableRetryDelay`(30초) + `unavailable
   120초)가 `_restart_tunnel()`(비싼 행동 — `fsh tunnel restart` 서브프로세스)
   을 재시도 사이 최소 간격으로 이미 제한한다. 이름만 다를 뿐 같은 규율이다.
 - `portscan.scan()` — `_CACHE_TTL`(3초) TTL 캐시가 이미 lsof/ps 호출 빈도를
-  누르고 있다. crush의 LSP 사례(exec.LookPath + 프로세스 spawn, 훨씬 비싸고
-  "곧 다시 실패할" 성질이 뚜렷한 실패)와 달리, lsof/ps 실패는 대개 바이너리
+  누르고 있다. 프로세스 spawn처럼 비싸고 "곧 다시 실패할" 성질이 뚜렷한 실패와
+  달리, lsof/ps 실패는 대개 바이너리
   부재(영구 상태)라 "잠시 쉬었다 재시도"가 딱히 도움이 안 된다.
 
 **그래서 이 클래스는 아직 어디에도 연결돼 있지 않다.** "백오프가 없는 곳만
 추가한다"는 설계 지시를 따른 결과다 — 없어도 되는 곳에 넣으면 다음 사람이
 "방금 고친 게 왜 반영이 안 되지"를 겪는다. 다음에 진짜로 반복 프로빙하는
-자리(예: crush처럼 실제 LSP 붙이기)가 생기면 여기를 쓴다.
+자리(예: 외부 서버를 실제로 붙이는 경로)가 생기면 여기를 쓴다.
 """
 
 from __future__ import annotations
@@ -37,8 +36,7 @@ import time
 class FailureBackoff:
     """실패한 키를 일정 시간 재시도 대상에서 뺀다. 성공하면 즉시 해제한다.
 
-    **해제 경로(`clear`)가 없으면 백오프가 "죽은 것으로 낙인"이 된다** —
-    crush의 `clearUnavailable`과 같은 이유다. 오프라인이던 대상이 돌아와도
+    **해제 경로(`clear`)가 없으면 백오프가 "죽은 것으로 낙인"이 된다.** 오프라인이던 대상이 돌아와도
     성공한 그 순간 바로 풀어줘야 한다. 사용자가 "다시 시도"를 눌렀을 때도
     `clear`를 불러 강제로 재시도를 허용할 수 있다.
     """

@@ -214,7 +214,7 @@ async def send_keys(session_id: str, request: Request):
 
     # P1-1(ADR-33) — 승인 응답 경쟁. `prompt_id`가 실려 오면 이 요청이 그
     # 토큰을 소비했을 때만 아래로 내려간다 — 부수효과(PTY 쓰기)는 경쟁을
-    # 이긴 뒤에만 일어난다(docs/plan-2.3/10-approval-race.md §2.3/§3.3).
+    # 이긴 뒤에만 일어난다.
     # `prompt_id`가 없으면(터미널 직접 타이핑, WS 입력, 구버전 클라이언트)
     # 기존 동작 그대로 통과한다.
     prompt_id = body.get("prompt_id")

@@ -1,4 +1,4 @@
-"""에이전트 위임 — 하위 세션을 만들고 결과를 돌려받는다(docs/plan-2.4/50-agent-delegation.md).
+"""에이전트 위임 — 하위 세션을 만들고 결과를 돌려받는다.
 
 **소유의 근거는 이 장부 하나다.** `~/.vt/delegations.json`(0600, flock)에 위임마다 부모와 자식의
 tmux 세션 식별자(`#{session_id}` + `#{session_created}`, share_identity.Caller.key)를 한 번 쓰고
@@ -339,7 +339,7 @@ def role_of(caller_key: str) -> dict:
 
 
 def check_spawn(data: dict, parent_key: str, now: float) -> None:
-    """모든 생성 경로가 지나는 단 하나의 관문(orca dispatch-depth와 같은 원칙). 락 안에서 부른다."""
+    """모든 생성 경로가 지나는 단 하나의 관문. 락 안에서 부른다."""
     if not enabled():
         raise DelegationError("spawn_disabled", "이 맥에서는 하위 세션 만들기가 꺼져 있습니다(VT_AGENT_SPAWN=0)", 403)
     if any(x["child"]["key"] == parent_key for x in data["items"]):
@@ -564,7 +564,7 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
             raise DelegationError("not_delegated", "이 세션은 위임받은 하위 세션이 아닙니다", 403)
         item = next((x for x in mine if x["state"] == RUNNING), None)
         if item is None:
-            # 한 위임에 한 번만(orca worker_done). 닫혔거나 이미 보고했다.
+            # 한 위임에 한 번만. 닫혔거나 이미 보고했다.
             raise DelegationError("already_reported", "이 위임은 이미 보고했거나 닫혔습니다", 409)
         item["state"] = REPORTED
         item["outcome"] = outcome
@@ -600,7 +600,7 @@ def on_agent_event(session: Optional[str], status: Optional[str], payload: dict)
             return
         did = item["id"]
         if status == "done":
-            # 보고가 이미 있으면 생략(Proliferate suppress). 턴 종료 알림은 위임당 한 번.
+            # 보고가 이미 있으면 생략. 턴 종료 알림은 위임당 한 번.
             if item["state"] != RUNNING or item.get("turn_ended_sent"):
                 return
             item["turn_ended_sent"] = True

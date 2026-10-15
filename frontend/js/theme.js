@@ -7,8 +7,8 @@ import { registerAction } from './core/dom.js';
 // D1(ADR-3): farshell이 새 기본 스킨 — 목록 순서가 곧 설정 화면 칩 순서이자
 // "미지의 스킨" 폴백 우선순위 의도를 나타내므로 맨 앞에 둔다.
 // 2026-09-24(2.1 D6) — warp/linear/vercel 3개 추가. 사용자가 직접 고른
-// 레퍼런스(Warp 터미널의 그라디언트 액센트 · Linear의 무광 인디고 ·
-// Vercel/Geist의 흑백+단색)를 그대로 새 스킨으로 얹었다 — 기존 6개처럼
+// 색 구성(그라디언트 액센트 · 무광 인디고 · 흑백+단색)을
+// 그대로 새 스킨으로 얹었다 — 기존 6개처럼
 // "이미 있던 색의 재매핑"이 아니라 값 자체가 새로 고른 것들이다.
 const VT_SKINS = ['farshell', 'macos', 'catppuccin', 'windows', 'vscode', 'notepad', 'warp', 'linear', 'vercel'];
 

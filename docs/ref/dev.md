@@ -148,10 +148,10 @@ committed; the guard existed for months in this repository before anyone noticed
 
 The guard checks four things in what is being added (new file names and added lines):
 forbidden paths, secret-shaped strings, this machine's user and home path, and **your own
-words**. Local-only record documents are forbidden by name: `research_notes/`, `reports/`,
-`docs/` outside `help/ref/guide`, `docs/ref/*-plan.md`, `docs/ref/references.md`, and root
-`*_DESIGN.md`. Words that must never appear in the repository (an organization, a profile,
-a device model) go in `~/.vt-guard-words`, one per line, `#` for comments. The file stays
+words**. Local-only record documents are forbidden by name: everything under `docs/` except
+`help/`, `ref/` and `guide/` (the local-only folder is `docs/local/`), `research_notes/`,
+`reports/`, `docs/ref/*-plan.md`, `docs/ref/references.md`, and root `*_DESIGN.md`. Words
+that must never appear in the repository (an organization, a profile, a device model) go in `~/.vt-guard-words`, one per line, `#` for comments. The file stays
 outside the repository, matching is case-sensitive and whole-word, and the guard never
 prints the word it matched. `VT_GUARD_WORDS` changes the file's location.
 

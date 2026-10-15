@@ -19,9 +19,8 @@ function _fmtElapsed(ms) {
   return m > 0 ? t('{m}분 {s}초 경과', { m, s }) : t('{s}초 경과', { s });
 }
 
-// O1: 오버레이가 떠 있는 동안 1초마다 경과 시간을 갱신 — Wave의
-// connstatusoverlay.tsx가 "얼마나 기다렸는지" 실시간으로 보여주는 것과 같은 이유.
-// 그래야 "재연결 시도 중..."만 보고 언제까지 기다려야 할지 감이 안 오는 문제가 풀린다.
+// O1: 오버레이가 떠 있는 동안 1초마다 경과 시간을 갱신 — "얼마나 기다렸는지"를
+// 실시간으로 보여준다. 그래야 "재연결 시도 중..."만 보고 언제까지 기다려야 할지 감이 안 오는 문제가 풀린다.
 function _tickConnOverlay(id) {
   const overlay = document.getElementById('conn-overlay');
   if (!overlay) { clearInterval(_connOverlayTickTimer); _connOverlayTickTimer = null; return; }
@@ -106,7 +105,7 @@ export function updateConnStatus(id, connected) {
 
 // R1: 재연결 시도 횟수/중단 사유 같은 상태 디테일은 예전엔 term.write()로 터미널
 // 스크롤백에 직접 찍어 영구히 남았다. updateConnStatus()가 이미 띄워둔 오버레이의
-// 서브텍스트만 갱신 — 실제 세션 출력과 분리된다(ttyd·wetty와 같은 패턴).
+// 서브텍스트만 갱신 — 실제 세션 출력과 분리된다.
 export function _setConnOverlayDetail(id, text) {
   if (id !== activeSessionId()) return;
   const s = getSession(id);

@@ -38,7 +38,7 @@ def issue_ticket(label: str = "", ttl: int | None = None, **extra) -> str:
     QR을 띄우는 시점에 맥에 대한 물리적 접근이 이미 증명된 것이므로, 스캔을
     기기 등록 승인으로 인정한다(상시 토큰을 URL에 박는 기존 방식의 대체).
 
-    `ttl`·`extra`는 2.2의 노출 포트 `session` 모드가 쓴다(plan-2.2 §3): 티켓을
+    `ttl`·`extra`는 2.2의 노출 포트 `session` 모드가 쓴다: 티켓을
     특정 share와 기기에 **묶어서** 발급하고, 수명을 기본 5분이 아니라 60초로
     줄인다. 티켓이 URL에 실리는 것은 감수하는 대신 창을 좁히는 쪽이다.
     묶인 값은 `consume_ticket`이 그대로 돌려주므로 호출부가 대조할 수 있다.

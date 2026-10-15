@@ -361,7 +361,7 @@ test('window 브리지 — 지연 청크(레일·플릿)가 읽고 쓰는 길', 
   assert.strictEqual(S.getStatus('dev'), 'done');
 });
 
-// 2026-10-13(docs/plan-2.4/60) — 이벤트가 엔트리 하나로 세션 상태를 덮어써 스냅샷과
+// 2026-10-13 — 이벤트가 엔트리 하나로 세션 상태를 덮어써 스냅샷과
 // 깜빡이던 문제, 반납(released) 엔트리 제거.
 test('applyEvent — 스냅샷과 같은 규칙으로 다시 계산한다(엔트리 하나로 덮어쓰지 않는다)', async () => {
   const { S } = await load();

@@ -1,9 +1,8 @@
 """MCP 헬스체크 (P3-2, 40-mcp.md §3, ADR-36) — 사용자가 누르는 1회성 검증.
 
-crush `init.go:1115-1120`이 서술한 사고를 피하는 게 이 모듈의 유일한 존재
-이유다: stdio MCP 서버는 자기 자식을 또 스폰하는 경우가 흔한데(signal-mcp가
-signal-cli를 띄우는 식), 기본 취소는 직접 자식만 죽이고 손자는 PPID 1로
-고아가 된다 — *"production accumulated 15+ such zombies over two days."*
+고아 프로세스를 남기지 않는 것이 이 모듈의 유일한 존재 이유다: stdio MCP 서버는
+자기 자식을 또 스폰하는 경우가 흔한데(signal-mcp가 signal-cli를 띄우는 식), 기본
+취소는 직접 자식만 죽이고 손자는 PPID 1로 고아가 된다 — 며칠이면 좀비가 쌓인다.
 
 그래서 반드시:
   1. `start_new_session=True`로 스폰한다 — 이 프로세스가 새 세션/그룹의
@@ -13,8 +12,7 @@ signal-cli를 띄우는 식), 기본 취소는 직접 자식만 죽이고 손자
   3. SIGTERM으로 먼저 묻고, `SIGTERM_GRACE_SEC` 안에 안 죽으면 SIGKILL.
 
 **타임아웃으로 강제 종료한 뒤에는 그 프로세스의 stdout/stderr를 더 읽지
-않는다** — `docs/ref/agents.md`의 "Hook aggregation" 절(P3-6 조사)이 crush
-`runner.go:172`에서 그대로 가져온 규율이다. 강제로 끝낸 파이프를 계속
+않는다** — 강제로 끝낸 파이프를 계속
 읽으면 데이터 경쟁이다. 그래서 stderr는 프로세스가 **스스로** 끝났을
 때만(EOF가 자연스럽게 왔고 `wait()`가 종료를 확인했을 때만) 건진다.
 

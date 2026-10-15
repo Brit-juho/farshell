@@ -1,4 +1,4 @@
-"""2.2 — port_share_store.py 단위 테스트 (plan-2.2/00-port-access.md §9 수용 기준).
+"""2.2 — port_share_store.py 단위 테스트.
 
 권한·PIN 원문 미저장·재노출 시 새 자격·proxyPort 영속·fail-closed를 확인한다.
 HTTP 레이어(프록시 앱·라우트)는 별도 파일로 분리한다.

@@ -2,8 +2,7 @@
 
 FarShell은 Claude Code·Codex의 설정 파일(`settings.json`, `.claude.json`,
 `config.toml`, `hooks.json`, MCP 설정)을 고친다. 이 파일들은 우리 것이 아니라서
-쓰기 한 번에 지켜야 할 계약이 많은데, 예전엔 네 군데가 제각각 구현해 서로 달랐다
-(`docs/plan-2.4/60-magpie-candidates.md` §1.1). 한곳으로 모은다.
+쓰기 한 번에 지켜야 할 계약이 많은데, 예전엔 네 군데가 제각각 구현해 서로 달랐다. 한곳으로 모은다.
 
 계약:
 
@@ -93,7 +92,7 @@ def locked(path, deadline: float = 10.0):
     """대상 파일 하나에 대한 잠금(실제 파일 기준).
 
     기한이 다른 저장소보다 길다(10초) — 상대(Claude Code 자신)가 협조하지 않을 수
-    있는 파일이라 정직한 경쟁에 더 여유를 준다(`docs/plan-2.3/20-store-durability.md` §3.3).
+    있는 파일이라 정직한 경쟁에 더 여유를 준다.
     """
     key = hashlib.sha1(str(resolve_target(path)).encode()).hexdigest()[:16]
     with store_lock.exclusive(_lock_dir() / f"{key}.lock", deadline=deadline):

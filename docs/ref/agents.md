@@ -67,7 +67,7 @@ A `waiting` entry carries `kind` = `approval | choice | plan | question` (`GET /
 
 ### Session owner and waiting release (2026-10-13)
 
-Design and evidence: local plan `docs/plan-2.4/60-agent-status-attribution.md`. Code: `server/agent_status.py` (module note «세션 소유자»).
+Code: `server/agent_status.py` (module note «세션 소유자»).
 
 - **One owner per tmux session.** A tmux session's state is the state of the one agent session (hook `session_id`) that owns it — not the most urgent of every entry carrying that name. Before this, `/clear`/`--resume`/restart left the previous session's entry behind for 30-60 minutes, and because `done` outranks `working` the live server showed a working session as done (three entries on one session). The owner is set by SessionStart (`startup`/`resume`/`clear`), or by the first event when there is no owner. The previous owner is **retired**: its entry is deleted and its late hooks are ignored for an hour (`resume` brings a retired conversation back).
 - **Non-owner events are ignored** (`/api/agent/event` returns `state: null`, `resolved_by: "ignored"`; no queue drain, delegation event or completion voice). This covers child processes that inherit the pane's `TMUX_PANE` (`claude -p` from a Bash tool or an MCP server). A `startup` from another session while the owner is `working`/`waiting` does not take over — an interactive replacement comes as `clear`/`resume`, or as `startup` after SessionEnd released the pane.
@@ -126,7 +126,7 @@ the command says to retry. The lock is advisory — Claude Code does not honor i
 re-check narrows the window, it does not close it. A file with other hard links is refused,
 because a rename would split the names and an in-place write is not atomic. CRLF and BOM are
 not preserved (native Windows is unsupported; a BOM file fails to parse and is refused, not
-damaged). Design and reasoning: `docs/plan-2.4/60-magpie-candidates.md` (local).
+damaged).
 
 **`~/.codex/hooks.json` duplicates (2026-10-06):** the Codex desktop app's "import Claude
 settings" copies Claude's FarShell hooks into `hooks.json` (`agent_hook.sh pre|post|
@@ -154,64 +154,16 @@ both plays the TTS summary twice.
 echo '{"transcript_path":"/tmp/test_transcript.jsonl"}' | ./server/tts_hook.sh
 ```
 
-### Hook aggregation (P3-6, current behavior — no engine, by design)
+### Hook aggregation (current behavior, no merge step)
 
-crush's `internal/hooks/` runs a `deny > allow > none` aggregation with sticky halt
-because **one crush process runs every matched hook itself** and must fold their exit
-codes into a single decision before continuing the agent loop. We are not that
-process — Claude Code and Codex are, and hook-decision aggregation across matched
-groups happens **inside their own runtimes**, which we don't own and can't observe.
-So the question this section actually answers is narrower: does *our own* installed
-hook (`agent_hook.sh`) ever end up invoked more than once for what a human would call
-"one event," and if so, what does our server do about it?
-
-**Yes, more than one hook group for the same event is a normal, expected outcome —
-not an edge case:**
-- Both installers (`claude_hooks.apply_install`, `codex_hooks.apply_install`)
-  explicitly preserve any pre-existing hook the user already had for that event
-  (`kept.append(g)` for a foreign Claude group; text outside the `farshell:hooks`
-  markers for Codex). If the user had their own `Stop` hook before running
-  `fsh hooks install`, both it and ours are registered afterward, and Claude
-  Code/Codex run both when a session stops.
-- `SessionStart` (2026-09-28) uses matcher `"startup|resume|clear"` — **not** `compact`, which
-  fires mid-task; the server ignores `source: "compact"` too, for hooks registered without it.
-- Our `PreToolUse`/`PostToolUse` matcher is always `"*"` (`apply_install`, both
-  files) — every tool call matches it. A user with a tool-specific hook (matcher
-  `"Bash"`, say) will see **both** groups fire on every Bash call. This isn't
-  hypothetical; it's true for anyone who had hooks configured before installing
-  FarShell.
-- Two copies of *our own* hook for one event is the one case the installers
-  actively prevent, not something that can currently happen: `claude_hooks.
-  apply_install` has an explicit "우리 항목이 두 개 이상 — 첫 번째만 남기고 나머지는
-  버린다" dedup branch (the branch existing at all says it was seen or anticipated
-  before the current idempotent installer shipped), and `codex_hooks.apply_install`
-  replaces the whole managed block as one unit, so a second copy can't accumulate
-  from repeated `fsh hooks install` runs. `plan()`/`plan_text()` are what `fsh hooks
-  status`/`fsh doctor` read to report this without touching the file.
-
-**What our server does when that happens: nothing needs to merge, because nothing
-converges on one process.** Each matched hook group is a separate OS subprocess
-started directly by Claude Code/Codex — a foreign hook script never talks to our
-server, and Claude Code's own decision-aggregation across groups (if the hooks
-return allow/deny) happens before or after `agent_hook.sh` runs, entirely inside the
-CLI. `POST /api/agent/event` (`server/routes/agents.py:212`) only ever hears from
-invocations of `agent_hook.sh` itself, and there is exactly one such registration
-per event by construction (see dedup above). `agent_status.on_event()` mutates the
-in-memory entry directly with no merge step — if it were ever called twice for the
-same logical moment, the second call's fields simply overwrite the first's
-(last-write-wins), which is a non-issue in practice because that double-call
-scenario is the one thing the installers rule out.
-
-**Conclusion: no aggregation engine to build.** The situation crush's `hooks.go
-aggregate()` exists for — one process reconciling conflicting decisions from
-multiple hooks it itself ran — doesn't arise on our side. If we ever become the
-process that runs multiple hooks ourselves (not just receives one call from one),
-revisit this and bring over crush's `deny > allow > none` + sticky-halt rule rather
-than inventing a new one — it's already proven. The one crush detail worth carrying
-over regardless of that: `runner.go:172`'s rule to **never read a timed-out/killed
-child's stdout or stderr after abandoning it** (data race on the buffer). It doesn't
-apply to hook running today, but it applies directly to the health-check timeout
-handling in `40-mcp.md` §3 (P3-2) — note it there when that item is picked up.
+Each matched hook group is a separate subprocess started by Claude Code/Codex; a hook the user
+registered for the same event runs alongside ours and its decision handling stays inside the CLI.
+`POST /api/agent/event` only hears from `agent_hook.sh`. The installers (`claude_hooks.apply_install`,
+`codex_hooks.apply_install`) keep user hooks and leave exactly one FarShell registration per event,
+so repeated `fsh hooks install` never stacks copies. There is no merge step: `agent_status.on_event()`
+writes the in-memory entry directly and a repeated call overwrites the previous fields (last-write-wins).
+`SessionStart` matches `"startup|resume|clear"` (not `compact`, which the server also ignores);
+`PreToolUse`/`PostToolUse` use matcher `"*"`, so a user's tool-specific hook fires alongside ours.
 
 ## Agent-to-agent messages (2026-09-28, stage 1)
 
@@ -231,7 +183,7 @@ One agent sends a message to another agent's tmux session, on this Mac or a pair
 
 ## Agent delegation (MCP, 2026-10-13)
 
-An agent hands work to a **sub-session** it creates and gets the result back as a queue item. Design and the reference survey behind it: `docs/plan-2.4/50-agent-delegation.md`; code: `server/delegation.py`, `server/routes/delegation.py`; endpoints: `API.md` «Agent delegation».
+An agent hands work to a **sub-session** it creates and gets the result back as a queue item. Code: `server/delegation.py`, `server/routes/delegation.py`; endpoints: `API.md` «Agent delegation».
 
 - **Tools** (`fsh mcp`): `spawn_session {task, title?, agent?, cwd?, worktree?:{branch}}`, `send_to_child {delegation, text}`, `close_delegation {delegation}`, `report_back {outcome, summary}`, `list_delegations`. `tools/list` asks the server for the caller's role: a sub-session never sees the spawn/send/close tools, a non-child never sees `report_back`.
 - **Ownership lives in `~/.vt/delegations.json` only** (0600, flock). Each record pins parent and child by `#{session_id}:#{session_created}` (the same key `share_identity.verify_caller` returns), so a renamed session keeps its delegation and a re-created session with the same name does not inherit it. The tmux options `@fsh_parent` / `@fsh_delegation` are display hints — an agent could rewrite them, so no check reads them.
