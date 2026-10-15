@@ -1,4 +1,4 @@
-"""에이전트 세션 공유의 grant·승인 요청 — 엔진 저장소(`grants.json`·`approvals.json`) 위의 순수 변경 함수들 (3a).
+"""에이전트 세션 공유의 grant·승인 요청 — 엔진 저장소(`grants.json`·`approvals.json`) 위의 순수 변경 함수들.
 
 모든 함수는 `store.txn()` 이 준 `docs` 를 **제자리에서** 고치고 값을 돌려줄 뿐, 파일·tmux·시계를 직접 읽지 않는다
 (`now` 를 받는다). 락·dual-write·감사는 호출자(`share_svc`)가 한다.
@@ -11,12 +11,12 @@
   - 옛 저장소 파일은 엔진 상태의 투영으로 언제든 다시 만들 수 있다.
 옛 모양 dict 는 라우트·MCP 응답이 쓰는 모양(`{id, agent, target, read, write, …}`)이다 — 공개 계약이 안 바뀐다.
 
-## 정책 (10-policy.md)
+## 정책
   - R4.1 권한이 없을 때만 보류 요청. 같은 (주체, 세션, 종류) 는 하나로 합친다.
   - R4.6 거절은 300초 쿨다운. R4.7 대기 24시간 만료, 주체당 20·전체 200.
   - R4.8 승인자는 요청보다 좁게(읽기 요청에 읽기만) 줄 수 있고 넓게는 못 준다. 공유 상한(ceiling)보다 높게도 못 준다.
   - R4.3 elevated 가 필요한 scope 가 들어 있으면 elevated human 만 승인. R4.4 확대는 `scopes.escalation` 으로 찾아 감사에 남긴다.
-  - 자동 승인 window(R4.5)는 4단계 — 여기서는 만들지도 읽지도 않는다. `auto_approve()` 는 항상 None 이다.
+  - 자동 승인 window는 4단계 — 여기서는 만들지도 읽지도 않는다. `auto_approve()` 는 항상 None 이다.
 """
 
 from __future__ import annotations
@@ -33,8 +33,9 @@ from .errors import ShareError
 
 PREFIX = "legacy:agent_grants:"
 PREFIX_REQ = "legacy:agent_grants:req:"
-READ_SCOPES = ("session.list", "session.read")
-WRITE_SCOPE = "session.input.line"
+READ_SCOPES = ("session.view", "session.read")
+WRITE_SCOPE = "session.input"              # 조건 modes=[line] (기본값)
+WRITE_SCONDS = {"session.input": {"modes": ["line"]}}
 KIND_READ, KIND_WRITE = "read", "write"
 LEVEL_READ, LEVEL_READWRITE = "read", "readwrite"
 
@@ -68,7 +69,13 @@ def is_request(rec: dict) -> bool:
 
 
 def kind_of(rec: dict) -> str:
-    return KIND_WRITE if WRITE_SCOPE in (rec.get("scopes") or ()) else KIND_READ
+    return KIND_WRITE if _can_write(rec) else KIND_READ
+
+
+def _can_write(rec: dict) -> bool:
+    """한 줄 입력(직접)을 줄 수 있는 레코드인가."""
+    e = S.caps_of(rec).get(WRITE_SCOPE)
+    return bool(e) and "line" in e.get("modes", ()) and "direct" in e.get("via", ())
 
 
 def grant_to_legacy(rec: dict) -> dict:
@@ -76,7 +83,7 @@ def grant_to_legacy(rec: dict) -> dict:
     agent = _ref(rec["subject_session"], rec.get("subject_name") or "")
     agent.setdefault("name", "")
     out = {"id": raw_id(rec), "agent": agent, "target": _ref(rec["resource_session"]),
-           "read": "session.read" in scopes, "write": WRITE_SCOPE in scopes, "granted": rec.get("created")}
+           "read": "session.read" in scopes, "write": _can_write(rec), "granted": rec.get("created")}
     if rec.get("updated") is not None:
         out["updated"] = rec["updated"]
     return out
@@ -139,7 +146,7 @@ def _replace(items: list, old: Optional[dict], new: Optional[dict]) -> None:
 
 
 def purge(docs: dict, alive: Optional[Iterable[str]], now: float, cooldown: float) -> bool:
-    """사라진 세션·만료된 요청·쿨다운이 끝난 거절을 걷어낸다. alive=None(tmux 를 못 읽음)이면 세션 정리는 건너뛴다(F3)."""
+    """사라진 세션·만료된 요청·쿨다운이 끝난 거절을 걷어낸다. alive=None(tmux 를 못 읽음)이면 세션 정리는 건너뛴다."""
     live = None if alive is None else set(alive)
 
     def gone(r: dict) -> bool:
@@ -166,7 +173,7 @@ def purge(docs: dict, alive: Optional[Iterable[str]], now: float, cooldown: floa
 
 
 def auto_approve(*_a, **_kw) -> None:
-    """R4.5 자동 승인 window — 4단계. 3a 는 window 를 만들지도 읽지도 않으므로 항상 None(= 사람이 결정)."""
+    """자동 승인 window — 아직 없다. window 를 만들지도 읽지도 않으므로 항상 None(= 사람이 결정)."""
     return None
 
 
@@ -199,12 +206,13 @@ def request(docs: dict, agent_ref: dict, target_ref: dict, kind: str, now: float
 # --- 결정 -----------------------------------------------------------------------------------
 
 
-def check_authority(actor: Optional[P.Principal], scopes: Iterable[str], resource: str) -> None:
-    """승인권자 확인 — human 만, 그리고 R4.3 scope 가 있으면 elevated human 만(R1.3)."""
+def check_authority(actor: Optional[P.Principal], scopes: Iterable[str], resource: str,
+                    sconds: Optional[dict] = None) -> None:
+    """승인권자 확인 — human 만, 그리고 elevated 사유((scope, 조건) 기준)가 있으면 elevated human 만."""
     actor = actor or P.human("-")
     if actor.kind != P.HUMAN or not actor.authenticated:
         raise ShareError("human_session_required", tr("사람(브라우저 로그인 세션)만 승인할 수 있습니다"), 403)
-    need = S.requires_elevated("agent", scopes, resource)
+    need = S.requires_elevated("agent", scopes, resource, sconds)
     if need and not actor.elevated:
         raise ShareError("elevation_required", tr("이 권한은 재인증(elevated)한 사람만 승인할 수 있습니다"), 403,
                          scopes=sorted(need))
@@ -236,7 +244,7 @@ def decide(docs: dict, request_id: str, decision: str, level: Optional[str], *, 
     if level == LEVEL_READWRITE and share_mode is not None and share_mode != LEVEL_READWRITE:
         raise ShareError("read_only_share", "이 공유는 읽기 전용입니다 — 공유 모드를 읽기·쓰기로 올린 뒤 허용하세요", 409)
     granted_scopes = list(READ_SCOPES) + ([WRITE_SCOPE] if level == LEVEL_READWRITE else [])
-    check_authority(actor, granted_scopes, resource)
+    check_authority(actor, granted_scopes, resource, WRITE_SCONDS if level == LEVEL_READWRITE else None)
     ak, tk = req["subject_session"], req["resource_session"]
     old = find_grant(docs, ak, tk)
     legacy = grant_to_legacy(old) if old else {

@@ -177,7 +177,7 @@ async def _announce(req: dict, snap: dict) -> None:
 
 
 async def announce_view(view: dict, push_body: str) -> None:
-    """이미 만든 요청 화면값(`request_view` 모양)을 알린다 — 공유 요청과 메시지 요청(3c)이 같이 쓴다."""
+    """이미 만든 요청 화면값(`request_view` 모양)을 알린다 — 공유 요청과 메시지 요청이 같이 쓴다."""
     await _broadcast({"type": "agent_share_request", "request": view})
     try:
         import push
@@ -376,7 +376,7 @@ async def list_requests():
     snap = await asyncio.to_thread(agent_share.snapshot)
     state = await asyncio.to_thread(agent_share.list_state, snap)
     out = [request_view(r, snap) for r in state["requests"] if r.get("state") == "pending"]
-    if msg_svc.enforced():                    # 3c — 에이전트 간 메시지 승인 요청도 같은 승인함에 보인다(kind: msg)
+    if msg_svc.enforced():                    # 에이전트 간 메시지 승인 요청도 같은 승인함에 보인다(kind: msg)
         out += await asyncio.to_thread(_msg_requests)
         out.sort(key=lambda r: r.get("created") or 0)
     return {"requests": out}
@@ -424,7 +424,7 @@ async def decide_request(request_id: str, request: Request):
 
 
 async def _decide_msg(request_id: str, decision, level, request: Request):
-    """3c — 에이전트 간 메시지 보내기 요청의 결정. 승인권은 사람(브라우저 로그인 세션)뿐이다."""
+    """에이전트 간 메시지 보내기 요청의 결정. 승인권은 사람(브라우저 로그인 세션)뿐이다."""
     from authz import principals as P
     try:
         actor = P.from_request(request)
@@ -456,7 +456,7 @@ def grant_view(g: dict, snap: Optional[dict]) -> dict:
 
 @human_router.get("/api/agent/share/grants", response_model=GrantsResponse)
 async def list_grants(kind: str = Query("")):
-    """권한 목록. 기본은 세션 공유 권한만(응답 모양 그대로). `?kind=msg`(3c, 플래그 켜짐)는 에이전트 간 메시지 권한."""
+    """권한 목록. 기본은 세션 공유 권한만(응답 모양 그대로). `?kind=msg`(플래그 켜짐)는 에이전트 간 메시지 권한."""
     if kind == "msg" and msg_svc.enforced():
         alive, names = await asyncio.to_thread(_msg_alive_names)
         return {"grants": await asyncio.to_thread(msg_svc.list_grants, alive, names)}
@@ -467,7 +467,7 @@ async def list_grants(kind: str = Query("")):
 
 @human_router.delete("/api/agent/share/grants/{grant_id}", response_model=RevokeResponse)
 async def revoke_grant(grant_id: str, request: Request, scope: str = Query("all")):
-    """권한 철회. `scope=write` 는 쓰기만 거두고 읽기는 남긴다. 메시지 권한(`gm-…`, 3c)은 통째로 거둔다."""
+    """권한 철회. `scope=write` 는 쓰기만 거두고 읽기는 남긴다. 메시지 권한(`gm-…`)은 통째로 거둔다."""
     if msg_svc.enforced() and msg_svc.owns_grant(grant_id):
         _alive, names = await asyncio.to_thread(_msg_alive_names)
         try:

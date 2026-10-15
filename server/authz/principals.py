@@ -1,11 +1,15 @@
-"""주체(principal) — 10-policy.md A1 의 P1~P8 + 1단계 shim `legacy_token`.
+"""주체(principal) — 종류 5개: `human`, `local`, `agent`, `peer`, `legacy_token`(임시).
 
-1단계에서 주체는 **기존 인증 판정을 그대로 감싸서** 만든다(`auth.request_kind`,
-`share_identity.verify_caller`, peer HMAC). 인증 로직을 여기서 다시 구현하면 두 구현이 갈라지는
-날이 오고, 그 차이가 shadow 잡음이 된다. 새 인증(unix socket P2~P5)은 2단계 `sock.py`.
+주체는 **기존 인증 판정을 그대로 감싸서** 만든다(`auth.request_kind`, `share_identity.verify_caller`, peer HMAC).
+인증 로직을 여기서 다시 구현하면 두 구현이 갈라지는 날이 오고, 그 차이가 shadow 잡음이 된다.
 
-- 기계 토큰 → `legacy_token`(20-mapping.md B1: 8단계까지 기존 전체 권한 shim).
-- 비밀번호·토큰이 모두 없는 서버(H6)의 무인증 → `anon` + `protected=False`.
+- `human`: 로그인한 브라우저 세션(기기). elevated 는 human 만 가진다.
+- `local`: unix socket 에서 오는 비human·비agent 호출자(CLI·서비스 데몬). 이름은 속성 `name`(`cli` | `svc:<이름>`)이고
+  귀속용일 뿐 경계가 아니다.
+- `agent`: 우리 tmux pane 안의 에이전트. pane 안의 훅 스크립트도 같은 agent 이고 속성 `via=hook` 만 다르다.
+- `peer`: 서명(HMAC)을 통과한 다른 맥. 인증만 — 인가는 grant 로.
+- `legacy_token`: 기계 토큰(이행 기간 전용 shim). 비밀번호·토큰이 모두 없는 서버의 무인증 호출도 같은 전체 권한 shim 이다.
+- 인증되지 않은 호출자·pair 는 주체가 아니다. pair 는 구성원이 grant 묶음을 만드는 장치일 뿐 단독 인증 수단이 아니다.
 """
 
 from __future__ import annotations
@@ -13,9 +17,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-HUMAN, CLI, SVC, AGENT, HOOK, PEER, PAIR, ANON, LEGACY = (
-    "human", "cli", "svc", "agent", "hook", "peer", "pair", "anon", "legacy_token")
-KINDS = (HUMAN, CLI, SVC, AGENT, HOOK, PEER, PAIR, ANON, LEGACY)
+HUMAN, LOCAL, AGENT, PEER, LEGACY = "human", "local", "agent", "peer", "legacy_token"
+KINDS = (HUMAN, LOCAL, AGENT, PEER, LEGACY)
+NO_KIND = ""                    # 인증되지 않은 호출자 — 주체 종류가 아니다(엔진이 거부한다)
 LOCAL_HOST = "local"
 
 
@@ -24,9 +28,8 @@ class Principal:
     kind: str
     id: str
     authenticated: bool = True
-    elevated: bool = False          # R1.3 — human 만
-    protected: bool = True          # 서버에 인증 수단이 있는가(False = H6 모드)
-    obo: Optional[str] = None       # peer 대리 주체(A8 R8.3)
+    elevated: bool = False          # human 만 가진다
+    obo: Optional[str] = None       # peer 대리 주체
     attrs: dict = field(default_factory=dict, compare=False, hash=False)
 
     def subject_ids(self) -> tuple[str, ...]:
@@ -48,8 +51,15 @@ def legacy_token() -> Principal:
     return Principal(LEGACY, "legacy_token")
 
 
-def anon(*, protected: bool) -> Principal:
-    return Principal(ANON, "anon", authenticated=not protected, protected=protected)
+def open_server() -> Principal:
+    """비밀번호·토큰이 모두 없는 서버의 무인증 호출자 — 서버에 인증 수단이 없어 기계 토큰과 같은 전체 권한(임시 shim,
+    `legacy_token` 의 한 형태)."""
+    return Principal(LEGACY, "legacy:open", attrs={"open_server": True})
+
+
+def unauthenticated(*, ambiguous: bool = False) -> Principal:
+    """인증되지 않은(또는 모호한) 호출자 — 주체가 아니다. 엔진은 어떤 scope 도 허용하지 않는다."""
+    return Principal(NO_KIND, "unauthenticated", authenticated=False, attrs={"ambiguous": True} if ambiguous else {})
 
 
 def agent(key: str, host: str = LOCAL_HOST, *, name: str = "") -> Principal:
@@ -64,27 +74,49 @@ def peer(peer_id: str, *, obo: Optional[str] = None) -> Principal:
 SVC_NAMES = ("hook", "clipboard", "voice", "tui", "tmux-notify", "tunnel-hook", "mcp-probe")
 
 
+def local(name: str, uid: int, pid: int, *, ident: str = "") -> Principal:
+    """`local:<name>` — unix socket 에서 오는 비human·비agent 호출자. `name` 은 `cli` 또는 `svc:<이름>`이고
+    귀속용 속성일 뿐 보안 경계가 아니다(같은 uid)."""
+    attrs = {"name": name, "uid": uid, "pid": pid}
+    if name.startswith("svc:"):
+        attrs["svc"] = name[4:]
+    return Principal(LOCAL, f"local:{ident or name}", attrs=attrs)
+
+
 def cli(uid: int, pid: int) -> Principal:
-    """`cli:uid<uid>:pid<pid>` — unix socket 의 peer 가 우리 tmux pane 밖이다. **human 이 아니다**(A1 P2)."""
-    return Principal(CLI, f"cli:uid{uid}:pid{pid}", attrs={"uid": uid, "pid": pid})
+    """`local:cli:uid<uid>:pid<pid>` — unix socket 의 peer 가 우리 tmux pane 밖이다. **human 이 아니다**."""
+    return local("cli", uid, pid, ident=f"cli:uid{uid}:pid{pid}")
 
 
 def svc(name: str, uid: int, pid: int) -> Principal:
-    """`svc:<name>` — 선언된 이름은 귀속용일 뿐 경계가 아니다(같은 uid, 정책 A3)."""
-    return Principal(SVC, f"svc:{name}", attrs={"uid": uid, "pid": pid, "svc": name})
+    """`local:svc:<이름>` — 선언된 이름은 귀속용일 뿐 경계가 아니다(같은 uid)."""
+    return local(f"svc:{name}", uid, pid)
 
 
-def hook(agent_key: str, host: str = LOCAL_HOST, *, uid: int = 0, pid: int = 0) -> Principal:
-    """`hook:<agent key>` — 에이전트 pane 안의 훅 스크립트(P5). 훅 신원 판정(hook_identity)은 라우트가 그대로 한다."""
-    return Principal(HOOK, f"hook:{host}/{agent_key}", attrs={"key": agent_key, "uid": uid, "pid": pid})
+def is_cli(p: Principal) -> bool:
+    return p.kind == LOCAL and p.attrs.get("name") == "cli"
+
+
+def is_svc(p: Principal) -> bool:
+    return p.kind == LOCAL and str(p.attrs.get("name", "")).startswith("svc:")
+
+
+def is_hook(p: Principal) -> bool:
+    """에이전트 pane 안의 훅 스크립트 — 같은 agent 주체에 속성 `via=hook`."""
+    return p.kind == AGENT and p.attrs.get("via") == "hook"
+
+
+def fails_closed(p: Principal) -> bool:
+    """grant 저장소가 손상되면 이 주체는 거부로 닫힌다(human·svc 기본은 동작)."""
+    return p.kind in (AGENT, PEER) or is_cli(p)
 
 
 def from_socket(peer: dict, *, row=None, svc_claim: str = "") -> Principal:
     """unix socket 연결의 peer(`{uid, pid}`) → 주체. 판정 순서가 곧 규칙이다.
 
-    1. peer 의 부모 체인이 우리 tmux pane 에 닿는다(`row`) → **agent**. `X-Fsh-Svc: hook` 이면 hook(P5).
-       그 밖의 이름을 선언해도 agent 로 남는다 — pane 안의 프로세스가 `svc:`를 자처해 agent 를 벗어날 수 없다.
-    2. pane 밖이고 알려진 svc 이름을 선언했다 → svc.  3. 그 밖 → cli. 어느 쪽도 human 이 아니다.
+    1. peer 의 부모 체인이 우리 tmux pane 에 닿는다(`row`) → **agent**. `X-Fsh-Svc: hook` 이면 같은 agent 에
+       속성 `via=hook`. 그 밖의 이름을 선언해도 agent 로 남는다 — pane 안의 프로세스가 `svc:`를 자처해 agent 를 벗어날 수 없다.
+    2. pane 밖이고 알려진 svc 이름을 선언했다 → local(`svc:<이름>`).  3. 그 밖 → local(`cli`). 어느 쪽도 human 이 아니다.
     """
     uid, pid = int(peer["uid"]), int(peer["pid"])
     claim = svc_claim if svc_claim in SVC_NAMES else ""
@@ -92,16 +124,11 @@ def from_socket(peer: dict, *, row=None, svc_claim: str = "") -> Principal:
         p = agent(f"{row.sid}:{row.created}", name=getattr(row, "name", ""))
         attrs = dict(p.attrs, uid=uid, pid=pid, pane=row.pane_id, via="socket")
         if claim == "hook":
-            h = hook(attrs["key"], uid=uid, pid=pid)
-            h.attrs.update(pane=row.pane_id, via="socket")
-            return h
-        if claim:
+            attrs["via"] = "hook"
+        elif claim:
             attrs["svc"] = claim
         return Principal(AGENT, p.id, attrs=attrs)
-    if claim:
-        p = svc(claim, uid, pid)
-    else:
-        p = cli(uid, pid)
+    p = svc(claim, uid, pid) if claim else cli(uid, pid)
     p.attrs["via"] = "socket"
     return p
 
@@ -123,8 +150,8 @@ def from_request(request) -> Principal:
 
     `authenticated`는 미들웨어와 같은 규칙(쿠키 → 쿼리 → Bearer 순으로 **처음 것 하나**를 검사)
     으로 정하고, `kind`는 request_kind 로 정한다. 둘이 어긋나는 요청(예: 유효 쿠키 + 엉뚱한
-    Bearer)은 R1.1 의 "모호한 주체"다 — 기존 미들웨어는 통과시키지만 이 주체는 anon 이 되어
-    shadow 차이로 드러난다(의도: 3단계 전에 실제로 그런 요청이 있는지 본다).
+    Bearer)은 「모호한 주체」다 — 기존 미들웨어는 통과시키지만 이 쪽은 인증되지 않은 호출자가 되어
+    shadow 차이로 드러난다(의도: 강제 전에 실제로 그런 요청이 있는지 본다).
     """
     import auth
     from . import defaults
@@ -138,19 +165,18 @@ def from_request(request) -> Principal:
             import time as _t
             elev = bool(auth.VT_AUTH_PASSWORD_HASH) and auth.session_elevated_until(cookie) > int(_t.time())
             return human(dev, elevated=elev)
-        return anon(protected=protected)
+        return unauthenticated() if protected else open_server()
     if kind == auth.AUTH_MACHINE:
         return legacy_token()
-    p = anon(protected=protected)
     if not protected:
-        return p
-    # 미들웨어가 통과시키는(=check_request 참) 요청인데 종류를 못 정했다 → 모호.
+        return open_server()
+    # 미들웨어가 통과시키는(=check_request 참) 요청인데 종류를 못 정했다 -> 모호.
     token = cookie or q or bearer
     if token and auth.check_request(token):
-        return Principal(ANON, "anon", authenticated=False, protected=True, attrs={"ambiguous": True})
-    return p
+        return unauthenticated(ambiguous=True)
+    return unauthenticated()
 
 
 def from_peer_grant(grant: dict, *, obo: Optional[str] = None) -> Principal:
-    """HMAC 을 통과한 peer(`host_store` grant) → peer 주체. 인증만 — 인가는 grant 로(R8.1)."""
+    """HMAC 을 통과한 peer(`host_store` grant) → peer 주체. 인증만 — 인가는 grant 로."""
     return peer(str(grant.get("id") or ""), obo=obo)

@@ -1,4 +1,4 @@
-"""H4(plan-2.6) — 기계 토큰이 curl 인자(= `ps` 에 보이는 argv)나 URL 쿼리에 실리지 않는다. 허용 목록은 없다.
+"""H4 — 기계 토큰이 curl 인자(= `ps` 에 보이는 argv)나 URL 쿼리에 실리지 않는다. 허용 목록은 없다.
 
 저장소 안 셸 스크립트·`bin/*`·`.claude`·`scripts`·`lib`·`server/hooks` 를 훑는다(시험 파일·문서·node_modules 제외).
 - 이어붙인 논리 줄에 `curl` 이 있고 `token=`(`?token=`·`&token=` 포함)이 있으면 실패.

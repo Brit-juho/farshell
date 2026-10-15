@@ -1,4 +1,4 @@
-"""plan-2.6 3b — `VT_AUTHZ_ENFORCE=deleg`: 에이전트 위임의 판정·파생 grant·감사를 엔진이 쥔다.
+"""`VT_AUTHZ_ENFORCE=deleg`: 에이전트 위임의 판정·파생 grant·감사를 엔진이 쥔다.
 
 기존 `test_delegation.py` 는 무수정으로 꺼짐/켜짐 둘 다 통과한다(`VT_AUTHZ_ENFORCE=deleg pytest …`). 여기는 켜졌을 때만 성립하는 성질:
 
@@ -102,7 +102,7 @@ def test_engine_decides_and_ledger_stays_the_ownership_ledger(tm, monkeypatch):
     delegation.send_to_child(parent.key, did, "more")
     delegation.report(_caller(tm, "kid").key, "succeeded", "done")
     delegation.close(did, caller_key=parent.key)
-    assert {("agent", "deleg.spawn"), ("agent", "deleg.control"), ("agent", "deleg.report")} <= set(seen)
+    assert {("agent", "deleg.spawn"), ("agent", "deleg.control")} <= set(seen)
     item = delegation.get(did)                         # 장부는 계속 쓴다
     assert item["state"] == "closed" and item["parent"]["key"] == parent.key
 
@@ -113,7 +113,8 @@ def test_derived_grants_follow_b1_and_verify_is_clean(tm):
     g = gmap()
     c, r = g[f"dc-{did}"], g[f"dr-{did}"]
     assert (c["subject"], c["resource"], c["scopes"]) == (f"agent:local/{parent.key}", f"deleg:local/{did}", ["deleg.control"])
-    assert (r["subject"], r["resource"], r["scopes"]) == (f"agent:local/{kid.key}", f"deleg:local/{did}", ["deleg.report"])
+    assert (r["subject"], r["resource"], r["scopes"]) == (f"agent:local/{kid.key}", f"deleg:local/{did}", ["deleg.control"])
+    assert c["sconds"] == {"deleg.control": {"role": ["parent"]}} and r["sconds"] == {"deleg.control": {"role": ["child"]}}
     assert c["approved_by"] == r["approved_by"] == "system:spawn" and c["state"] == r["state"] == "active"
     assert migrate.verify_store(tmux=None)["clean"]
     delegation.close(did, caller_key=parent.key)
@@ -365,10 +366,12 @@ def test_nothing_else_is_inherited(tm, monkeypatch, tmp_path):
     mine = {g["id"].split("-")[0] for g in grants() if g["subject"] == f"agent:local/{kid.key}"}
     assert mine == {"dr", "di"}
     snap = store.snapshot()
-    for scope, res in (("session.read", f"session:local/{parent.key}"), ("session.input.line", f"session:local/{parent.key}"),
-                       ("browser.tab.open", "browser:adapter:cdp"), ("deleg.control", "deleg:local/other"),
-                       ("fs.write", "fs:local/etc/passwd")):
-        d = engine.decide(P.agent(kid.key), scope, res, {}, snap)
+    for scope, res, ctx in (("session.read", f"session:local/{parent.key}", {}),
+                            ("session.input", f"session:local/{parent.key}", {"mode": "line"}),
+                            ("browser", "browser:adapter:cdp", {"op": "open"}),
+                            ("deleg.control", "deleg:local/other", {"role": "parent"}),
+                            ("fs.write", "fs:local/etc/passwd", {"op": "write"})):
+        d = engine.decide(P.agent(kid.key), scope, res, ctx, snap)
         assert not d.allow, (scope, d.reason)
 
 
@@ -413,7 +416,7 @@ def test_legacy_agent_access_log_is_replaced_only_when_enforced(tm, monkeypatch)
 
 
 def test_audit_failure_stops_the_grant_change(tm, monkeypatch):
-    """grant 발급 감사를 못 쓰면(R11.5) 위임은 만들어지지 않는다 — 장부·세션 모두 되돌린다."""
+    """grant 발급 감사를 못 쓰면 위임은 만들어지지 않는다 — 장부·세션 모두 되돌린다."""
     real = audit.append
 
     def flaky(rec, **k):
@@ -540,8 +543,9 @@ def test_close_by_cli_route_cli_principal_may_only_close(tm, monkeypatch):
     assert closes and closes[-1]["principal"] == cli.id
     # 승인·발급은 못 한다: cli 에게는 deleg.control(close 외), deleg.spawn, authz.admin 이 없다
     snap = store.snapshot()
-    for scope, res, ctx in (("deleg.control", f"deleg:local/{did}", {"op": "send"}), ("deleg.spawn", "deleg-quota:x", {}),
-                            ("authz.admin", "authz:*", {}), ("deleg.report", f"deleg:local/{did}", {})):
+    for scope, res, ctx in (("deleg.control", f"deleg:local/{did}", {"role": "parent", "op": "send"}),
+                            ("deleg.spawn", "deleg-quota:x", {}), ("authz.admin", "authz:*", {}),
+                            ("deleg.control", f"deleg:local/{did}", {"role": "child"})):
         assert not engine.decide(cli, scope, res, ctx, snap).allow, scope
 
 
@@ -552,6 +556,11 @@ def test_close_by_cli_route_requires_the_socket_and_a_cli_or_parent(tm, monkeypa
         assert r.status_code == 403 and r.json()["error"] == "socket_required"
     parent, other = _caller(tm, "main"), _caller(tm, "other")
     with _client(monkeypatch, P.svc("hook", os.getuid(), 1)) as c:
+        assert c.post(f"/api/delegations/{did}/close-by-cli").status_code == 403
+    hook = P.from_socket({"uid": os.getuid(), "pid": 1}, row=type("R", (), {
+        "sid": parent.sid, "created": parent.created, "name": "main", "pane_id": "%1"})(), svc_claim="hook")
+    assert P.is_hook(hook) and hook.kind == "agent"
+    with _client(monkeypatch, hook) as c:                               # 훅은 같은 agent 라도 위임을 닫을 수 없다
         assert c.post(f"/api/delegations/{did}/close-by-cli").status_code == 403
     with _client(monkeypatch, P.agent(other.key)) as c:                 # pane 안 프로세스는 소유 검사를 받는다
         assert c.post(f"/api/delegations/{did}/close-by-cli").status_code == 404
@@ -600,7 +609,7 @@ def test_cli_close_falls_back_only_when_the_socket_is_unusable(tm, monkeypatch, 
     x = delegation.get(did)
     assert x["state"] == "closed" and x["close_reason"] == "closed_by_user"
     closes = [r for r in lines() if r["action"] == "deleg.close"]
-    assert closes[-1]["principal"].startswith("cli:uid")                 # 직접 경로도 cli 주체로 판정·감사된다
+    assert closes[-1]["principal"].startswith("local:cli:uid")                 # 직접 경로도 cli 주체로 판정·감사된다
     did2 = spawn(tm, title="k2")
     monkeypatch.setattr(fsh_client, "socket_request", lambda *a, **k: (403, b'{"error":"socket_route_not_allowed"}'))
     assert delegation._cli(["close", did2]) == 0 and delegation.get(did2)["state"] == "closed"     # 옛 서버

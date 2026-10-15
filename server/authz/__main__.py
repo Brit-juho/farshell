@@ -6,10 +6,15 @@
                                       (2) 개발 체크아웃이면 authz_char/matrix.json 을 이전된 저장소로 재생
     migrate-auth --backup             백업만
     migrate-auth --restore <ts>       백업 검증 후 복원(복원 전 현재 상태를 다시 백업)
-    migrate-auth --status             이전 여부·백업 목록·shadow 불일치 수·감사 체인
+    migrate-auth --status             이전 여부·저장소 스키마·백업 목록·shadow 불일치 수·감사 체인
     공통: --json (기계용 출력)
 
-`--finalize`(옛 저장소 정리)는 8단계 기능이라 이 단계에는 없다.
+`--finalize`(옛 저장소 정리)는 옛 인증 경로를 걷어내는 단계의 기능이라 아직 없다.
+
+## 스키마
+grant·승인 레코드는 17개 scope + 조건(스키마 2)으로 저장한다. 옛 이름(67개)으로 저장된 레코드는 읽을 때 변환하고, 문서가 바뀔 때
+새 형태로 쓴다(그 직전에 `pre-schema2` 백업을 자동으로 한 번 만든다). `--status` 가 문서별 스키마를, `--verify` 가 저장소 번역 일치를 본다.
+되돌리려면 이 변경의 커밋을 되돌린 뒤 `--restore <ts>` 로 백업을 복원한다(`--backup` 으로 미리 만들어 둘 수 있다).
 
 ## --verify 의 matrix 재생을 어떻게 하는가
 matrix.json 은 HTTP 결과(상태 코드)의 golden 이고, 엔진 입력(주체·scope·리소스)이 아니다. 그래서
@@ -52,7 +57,7 @@ def _dry_run(as_json: bool) -> int:
         _p(json.dumps(out, ensure_ascii=False, indent=1, default=str))
         return 0
     _p(f"fsh migrate-auth --dry-run  (저장소 {store.root()}, 쓰지 않음)")
-    _p(f"  tmux 읽기: {'됨 — 세션 ' + str(p['tmux_sessions']) + '개' if p['tmux_readable'] else '안 됨(F3 — 죽은 세션 정리 안 함)'}")
+    _p(f"  tmux 읽기: {'됨 — 세션 ' + str(p['tmux_sessions']) + '개' if p['tmux_readable'] else '안 됨 - 죽은 세션 정리 안 함'}")
     _p("이전 대상:")
     kinds: dict[str, int] = {}
     for g in p["grants"]:
@@ -135,6 +140,8 @@ def _verify(as_json: bool) -> int:
         _p(f"(1) 저장소 ↔ 옛 저장소 번역: {'일치' if s['clean'] else '차이 있음'}")
         for k, st in s["diff"].items():
             _p(_fmt_stats(k, st))
+        for n, r in (s.get("schema") or {}).items():
+            _p(f"    스키마 {n}: version={r.get('version')} 항목 {r.get('items')}개 (옛 이름 {r.get('legacy_items')}개 - 읽을 때 변환)")
         _p(f"(2) matrix.json 재생(이전된 저장소, store 소스): {status}")
         for cid, rows in (found or {}).items():
             for r in rows:
@@ -154,6 +161,9 @@ def _status(as_json: bool) -> int:
     when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(m["applied_at"])) if st["migrated"] else "-"
     _p(f"이전: {'됨 ' + when if st['migrated'] else '안 됨'}  {m.get('counts') or ''}")
     _p(f"shadow 불일치 기록: {st['shadow_mismatches']}줄")
+    for n, r in st["schema"].items():
+        _p(f"스키마 {n}: version={r.get('version')} 항목 {r.get('items')}개, 옛 이름 형태 {r.get('legacy_items')}개 "
+           f"(코드 스키마 {st['schema_version']})")
     a = st["audit"]
     _p(f"감사 체인: {'온전' if a['ok'] else '깨짐 seq=' + str(a['broken_seq'])} ({a['lines']}줄)")
     _p("백업:")
@@ -163,7 +173,7 @@ def _status(as_json: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="fsh migrate-auth", description="옛 권한 저장소 → authz 이전(plan-2.6 1단계)")
+    ap = argparse.ArgumentParser(prog="fsh migrate-auth", description="옛 권한 저장소 → authz 이전")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--dry-run", action="store_true")
     g.add_argument("--apply", action="store_true")

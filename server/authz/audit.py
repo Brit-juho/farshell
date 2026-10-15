@@ -1,15 +1,15 @@
-"""감사 로그 — `~/.vt/audit/authz.jsonl` (0600, hash chain) (10-policy.md A11).
+"""감사 로그 — `~/.vt/audit/authz.jsonl` (0600, hash chain).
 
 각 줄: `seq, ts, prev_sha, principal, obo, action, resource, scopes, decision, grant_id/approval_id/
 window_id, result, reason, sizes, sha8`. `prev_sha`는 **앞 줄 원문 바이트의 sha256**이라 중간 줄을
 고치거나 지우면 `verify()`가 그 자리를 짚는다. 회전(5MB, 10세대) 뒤에도 체인은 이어진다 — 새 파일의
 첫 줄이 회전된 파일 마지막 줄을 가리킨다.
 
-**내용은 절대 기록하지 않는다(R11.2).** 입력 텍스트·화면·메시지 본문·URL query·쿠키 값·파일 내용·
+**내용은 절대 기록하지 않는다.** 입력 텍스트·화면·메시지 본문·URL query·쿠키 값·파일 내용·
 비밀이 들어올 만한 키는 `_scrub`이 버린다. 길이·sha8 같은 크기 정보만 남긴다. URL 은 origin +
 path 의 sha8 로 바꾼다.
 
-단일 writer(위험 5): 서버와 `fsh migrate-auth` 가 같은 `audit.lock` 아래에서만 쓴다.
+단일 writer: 서버와 `fsh migrate-auth` 가 같은 `audit.lock` 아래에서만 쓴다.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ GENERATIONS = 10
 MAX_AGE_DAYS = 90
 GENESIS = "0" * 64
 
-# R11.2 — 값이 내용일 수 있는 키. 어떤 깊이에 있어도 버린다.
+# 값이 내용일 수 있는 키. 어떤 깊이에 있어도 버린다.
 FORBIDDEN_KEYS = frozenset({
     "text", "content", "body", "screen", "output", "message", "msg", "summary", "task", "query",
     "fragment", "cookie", "cookies", "value", "values", "storage", "secret", "token", "password",
@@ -116,7 +116,7 @@ def _rotate(p: Path, now: float) -> None:
 
 
 def append(rec: dict, *, now: Optional[float] = None) -> dict:
-    """한 줄 추가. 실패는 OSError 로 올린다 — authz 변경은 호출자가 fail closed 한다(R11.5)."""
+    """한 줄 추가. 실패는 OSError 로 올린다 — authz 변경은 호출자가 fail closed 한다."""
     p = path()
     p.parent.mkdir(parents=True, exist_ok=True)
     try:

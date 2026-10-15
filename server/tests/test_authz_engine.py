@@ -1,4 +1,4 @@
-"""authz 엔진(plan-2.6 1단계) — 판정식·함의·상한·조건·확대·window, 주체, 저장소, 감사 체인."""
+"""authz 엔진 — 판정식·함의·상한·조건·확대·window, 주체, 저장소, 감사 체인."""
 
 from __future__ import annotations
 
@@ -34,23 +34,27 @@ def share_grant(scopes, **kw):
 
 
 def test_closure_has_only_the_declared_implications():
-    assert S.closure(["session.input.raw"]) == {"session.input.raw", "session.input.line"}
-    assert S.closure(["session.stream"]) == {"session.stream", "session.read"}
+    # raw 입력은 한 줄 입력을 포함하고, 파일 쓰기(write)는 읽기를 포함한다 — 조건 값까지 본다.
+    assert S.effective(["session.input"], {"session.input": {"modes": ["raw"]}})["session.input"]["modes"] == {"line", "raw"}
+    assert S.effective(["session.input"])["session.input"]["modes"] == {"line"}
     assert S.closure(["fs.write"]) == {"fs.write", "fs.read"}
-    assert "session.input.raw" not in S.closure(["session.input.line"])
-    assert "session.stream" not in S.closure(["session.read"])
+    assert S.closure(["fs.write"]) == S.closure(["fs.write", "fs.read"])
+    assert S.effective(["fs.write"], {"fs.write": {"ops": ["drop"]}}).keys() == {"fs.write"}      # drop 은 읽기를 함의하지 않는다
     assert S.closure(["nope.scope"]) == frozenset()
-    assert S.closure(["relay.*"]) == {s for s in S.CATALOG if s.startswith("relay.")}
+    assert S.closure(["session.*"]) == {"session.view", "session.read", "session.input", "session.manage"}
+    assert S.closure(["*"]) == S.CATALOG
+    assert len(S.CATALOG) == 17 and not (set(S.INTERNAL) & S.CATALOG)
 
 
 def test_relay_groups_cover_every_relay_policy_rule():
     import relay_policy
     assert {rx.pattern for rx, _ in relay_policy._HTTP_RULES} == set(S.RELAY_HTTP_GROUPS)
     assert {rx.pattern for rx in relay_policy._WS_RULES} == set(S.RELAY_WS_GROUPS)
-    assert S.relay_group("POST", "/api/queue") == "relay.queue"
+    assert S.relay_group("POST", "/api/queue") == "queue"
     assert S.relay_group("GET", "/api/files/x/share") is None          # 거부 목록
     assert S.relay_group("POST", "/api/git/status") is None             # 메서드 밖
-    assert S.relay_ws_group("/ws/abc") == "relay.ws.term"
+    assert S.relay_ws_group("/ws/abc") == "ws.term"
+    assert set(S.ALL_RELAY_GROUPS) == {*S.RELAY_HTTP_GROUPS.values(), *S.RELAY_WS_GROUPS.values()} and len(S.ALL_RELAY_GROUPS) == 26
 
 
 def test_unknown_scope_and_resource_are_denied():
@@ -59,12 +63,14 @@ def test_unknown_scope_and_resource_are_denied():
     assert engine.decide(p, "session.read", "galaxy:far").reason == "unknown_resource"
 
 
-def test_requires_elevated_r43():
-    assert S.requires_elevated("human", ["session.input.raw"]) == set()
-    assert "session.input.raw" in S.requires_elevated("agent", ["session.input.raw"])
-    assert S.requires_elevated("agent", ["session.read"]) == set()
-    assert "session.input.line" in S.requires_elevated("peer", ["session.input.line"])
-    assert S.requires_elevated("peer", ["session.read", "session.stream"]) == set()
+def test_requires_elevated_by_scope_and_conds():
+    raw = {"session.input": {"modes": ["raw"]}}
+    assert S.requires_elevated("human", ["session.input"], "", raw) == set()
+    assert "session.input[raw]" in S.requires_elevated("agent", ["session.input"], "", raw)
+    assert S.requires_elevated("agent", ["session.input"]) == set()                        # 기본 modes=[line]
+    assert S.requires_elevated("agent", ["session.view", "session.read"]) == set()
+    assert "session.input" in S.requires_elevated("peer", ["session.input"])               # peer 는 보기·읽기를 넘으면 elevated
+    assert S.requires_elevated("peer", ["session.view", "session.read"]) == set()
     assert "deleg.spawn(remote)" in S.requires_elevated("peer", ["deleg.spawn"], "deleg-quota:peer:m5")
 
 
@@ -73,7 +79,10 @@ def test_requires_elevated_r43():
 
 def test_agent_owns_its_session_but_not_others():
     p = P.agent(A)
-    assert engine.decide(p, "session.input.raw", f"session:local/{A}").allow
+    assert engine.decide(p, "session.input", f"session:local/{A}", {"mode": "line"}).allow
+    # 자기 세션이라도 raw 입력·관리(생성·종료 …)는 명시 grant 가 있어야 한다
+    assert not engine.decide(p, "session.input", f"session:local/{A}", {"mode": "raw"}).allow
+    assert not engine.decide(p, "session.manage", f"session:local/{A}", {"op": "kill"}).allow
     d = engine.decide(p, "session.read", f"session:local/{B}", {"share": {"nick": "s", "mode": "read"}})
     assert (d.allow, d.reason) == (False, "no_grant")
 
@@ -81,10 +90,10 @@ def test_agent_owns_its_session_but_not_others():
 @pytest.mark.parametrize("mode,read,line", [("read", True, False), ("readwrite", True, True), (None, False, False)])
 def test_grant_is_capped_by_the_share_ceiling(mode, read, line):
     p = P.agent(A)
-    g = share_grant(["session.list", "session.read", "session.input.line"])
+    g = share_grant(["session.view", "session.read", "session.input"])
     ctx = {"share": {"nick": "s", "mode": mode} if mode else None, "alive": {A, B}}
     assert engine.decide(p, "session.read", f"session:local/{B}", ctx, snap([g])).allow is read
-    d = engine.decide(p, "session.input.line", f"session:local/{B}", ctx, snap([g]))
+    d = engine.decide(p, "session.input", f"session:local/{B}", {**ctx, "mode": "line"}, snap([g]))
     assert d.allow is line
     if not line:
         assert d.reason == "ceiling" and d.grant_id == "g1"
@@ -93,19 +102,19 @@ def test_grant_is_capped_by_the_share_ceiling(mode, read, line):
 def test_full_share_level_allows_raw_only_with_a_raw_grant():
     p = P.agent(A)
     ctx = {"share": {"nick": "s", "mode": "full"}}
-    assert not engine.decide(p, "session.input.raw", f"session:local/{B}", ctx,
-                             snap([share_grant(["session.input.line"])])).allow
-    assert engine.decide(p, "session.input.raw", f"session:local/{B}", ctx,
-                         snap([share_grant(["session.input.raw"])])).allow
+    raw = {**ctx, "mode": "raw"}
+    assert not engine.decide(p, "session.input", f"session:local/{B}", raw, snap([share_grant(["session.input"])])).allow
+    assert engine.decide(p, "session.input", f"session:local/{B}", raw,
+                         snap([share_grant(["session.input"], sconds={"session.input": {"modes": ["raw"]}})])).allow
 
 
 def test_share_mismatch_resolves_to_the_lower_level_in_store_mode():
     p = P.agent(A)
-    g = share_grant(["session.read", "session.input.line"])
-    ctx = {"share": {"nick": "s", "mode": "readwrite"}}
+    g = share_grant(["session.read", "session.input"])
+    ctx = {"share": {"nick": "s", "mode": "readwrite"}, "mode": "line"}
     stored = {B: {"nick": "s", "level": "read"}}
-    assert engine.decide(p, "session.input.line", f"session:local/{B}", ctx, snap([g], stored)).allow
-    assert not engine.decide(p, "session.input.line", f"session:local/{B}", {**ctx, "prefer_live": False},
+    assert engine.decide(p, "session.input", f"session:local/{B}", ctx, snap([g], stored)).allow
+    assert not engine.decide(p, "session.input", f"session:local/{B}", {**ctx, "prefer_live": False},
                              snap([g], stored)).allow
     # 판정 지점이 tmux 를 안 넘기면 저장소 값
     assert engine.decide(p, "session.read", f"session:local/{B}", {}, snap([g], stored)).allow
@@ -136,7 +145,7 @@ def test_store_corruption_fails_closed_for_agents_but_not_humans():
     ctx = {"share": {"nick": "s", "mode": "read"}}
     d = engine.decide(P.agent(A), "session.read", f"session:local/{B}", ctx, snap([g], corrupt={"grants"}))
     assert (d.allow, d.reason) == (False, "store_corrupt")
-    assert engine.decide(P.human("dev1"), "session.input.raw", f"session:local/{B}", {}, snap(corrupt={"grants"})).allow
+    assert engine.decide(P.human("dev1"), "session.input", f"session:local/{B}", {"mode": "raw"}, snap(corrupt={"grants"})).allow
 
 
 @pytest.mark.parametrize("deleg,reason", [
@@ -166,23 +175,27 @@ def test_rate_counts_from_ctx():
     assert engine.decide(p, "session.read", r, {"counts": {"session.read": 30}}).reason == "rate_limited"
 
 
-# --- 주체별 기본(A3)과 PROVISIONAL ---------------------------------------------------------
+# --- 주체별 기본과 PROVISIONAL ---------------------------------------------------------
 
 
 def test_legacy_token_is_the_full_rights_shim_minus_admin():
     p = P.legacy_token()
-    assert engine.decide(p, "session.input.raw", f"session:local/{B}").allow
+    assert engine.decide(p, "session.input", f"session:local/{B}", {"mode": "raw"}).allow
+    assert engine.decide(p, "browser.sensitive", "browser:tab:1", {"op": "network"}).allow       # 기계 토큰 shim 은 그대로 전부
     assert engine.decide(p, "deleg.spawn", "deleg-quota:x").allow
     assert not engine.decide(p, "authz.admin", "authz:*").allow
 
 
-def test_anon_depends_on_protection_d8():
-    assert not engine.decide(P.anon(protected=True), "api.access", "host:local").allow
-    assert engine.decide(P.anon(protected=False), "msg.send", "msg:local/x").allow is defaults.UNPROTECTED_ANON_FULL
+def test_unauthenticated_is_denied_and_open_server_is_the_full_shim():
+    assert not engine.decide(P.unauthenticated(), "api.access", "host:local").allow
+    assert engine.decide(P.open_server(), "msg.send", "msg:local/x").allow is defaults.UNPROTECTED_ANON_FULL
+    assert P.open_server().kind == P.LEGACY
 
 
-def test_human_excludes_browser_js_and_admin_needs_elevation():
+def test_human_excludes_browser_js_sensitive_and_admin_needs_elevation():
     assert not engine.decide(P.human("d"), "browser.js", "browser:tab:1").allow
+    assert not engine.decide(P.human("d"), "browser.sensitive", "browser:tab:1", {"op": "network"}).allow
+    assert engine.decide(P.human("d"), "browser", "browser:tab:1", {"op": "navigate"}).allow
     assert not engine.decide(P.human("d"), "authz.admin", "authz:*").allow
     assert engine.decide(P.human("d", elevated=True), "authz.admin", "authz:*").allow
 
@@ -195,12 +208,13 @@ def test_peer_defaults_and_migrated_presets():
     gs = migrate.translate_peer_grant({"id": "pv", "level": "view"}) + \
         migrate.translate_peer_grant({"id": "pc", "level": "control", "agentMessages": True})
     s = snap(gs)
-    assert engine.decide(pv, "session.stream", "session:local/x", {}, s).allow      # D3 (a)
-    assert engine.decide(pv, "session.meta", "session:local/x", {}, s).allow
-    assert not engine.decide(pv, "session.input.raw", "host:local", {}, s).allow
-    assert not engine.decide(pv, "relay.connect", "relay:local", {}, s).allow
-    assert engine.decide(pc, "relay.queue", "relay:local/queue", {}, s).allow        # D7 (a)
-    assert engine.decide(pc, "fs.drop", "host:local", {}, s).allow
+    assert engine.decide(pv, "session.read", "session:local/x", {}, s).allow        # 보기: 모든 세션 읽기·실시간 출력
+    assert engine.decide(pv, "session.view", "session:local/x", {}, s).allow
+    assert not engine.decide(pv, "session.input", "host:local", {"mode": "raw"}, s).allow
+    assert not engine.decide(pv, "relay", "relay:local", {"group": S.ANY_GROUP}, s).allow
+    assert engine.decide(pc, "relay", "relay:local/queue", {"group": "queue"}, s).allow    # 제어: relay 전 그룹
+    assert engine.decide(pc, "fs.write", "host:local", {"op": "drop"}, s).allow
+    assert not engine.decide(pc, "fs.write", "host:local", {"op": "write"}, s).allow         # 옛 control 에 없던 것은 안 준다
     assert not engine.decide(pc, "msg.send", "msg:local/-", {}, s).allow             # obo 없이
     assert engine.decide(P.peer("pc", obo="agent:pc/-"), "msg.send", "msg:local/-", {}, s).allow
     assert not engine.decide(P.peer("pv", obo="agent:pv/-"), "msg.send", "msg:local/-", {}, s).allow
@@ -215,11 +229,12 @@ def test_local_msg_send_open_d6(monkeypatch):
 def test_provisional_constants_are_marked():
     src = (S.__file__.replace("scopes.py", "defaults.py"))
     text = open(src, encoding="utf-8").read()
-    for d in ("D3", "D6", "D7", "D8", "D10", "D13"):
-        assert f"# PROVISIONAL {d}: current behavior" in text, d
+    for d in ("peer-view-scope", "peer-control-scope", "peer-session-ceiling", "local-msg-open", "cookie-without-password",
+              "unprotected-open", "child-inherits", "pane-tokens"):
+        assert f"# PROVISIONAL({d}): current behavior" in text, d
 
 
-# --- 확대(R4.4) ---------------------------------------------------------------------------
+# --- 확대 ---------------------------------------------------------------------------
 
 
 def test_escalation_detects_every_widening_and_ignores_narrowing():
@@ -227,7 +242,7 @@ def test_escalation_detects_every_widening_and_ignores_narrowing():
             "expires": 100, "conds": {"max_lines": 200, "path_glob": ["/r/a/*", "/r/b/*"]}, "role": "navigator"}
     assert S.escalation(None, base) == ["new_grant"]
     assert S.escalation(base, dict(base)) == []
-    assert S.escalation(base, {**base, "scopes": ["session.stream"]}) == ["scopes:session.stream"]
+    assert S.escalation(base, {**base, "scopes": ["session.read", "session.input"]}) == ["scopes:session.input"]
     assert S.escalation(base, {**base, "scopes": []}) == []
     assert "resource" in S.escalation(base, {**base, "resource": "session:local/*"})
     assert S.escalation({**base, "resource": "session:local/*"}, base) == []
@@ -241,11 +256,11 @@ def test_escalation_detects_every_widening_and_ignores_narrowing():
     assert "role:driver" in S.escalation(base, {**base, "role": "driver"})
 
 
-# --- 자동 승인 window(R4.5) ---------------------------------------------------------------
+# --- 자동 승인 window ---------------------------------------------------------------
 
 
 def _w(**kw):
-    return {"subject": "agent:local/*", "resources": ["session:local/*"], "covers": ["session.read", "session.list"],
+    return {"subject": "agent:local/*", "resources": ["session:local/*"], "covers": ["session.read", "session.view"],
             "max_ttl_per_grant": 600, "expires": NOW + 1800, **kw}
 
 
@@ -253,15 +268,18 @@ def test_window_covers_only_what_it_names():
     p = P.agent(A)
     r = f"session:local/{B}"
     assert engine.window_covers(_w(), p, r, ["session.read"], 300, NOW) == (True, "window")
-    assert engine.window_covers(_w(), p, r, ["session.input.line"], 300, NOW)[1] == "window_scope"
+    assert engine.window_covers(_w(), p, r, ["session.input"], 300, NOW)[1] == "window_scope"
     assert engine.window_covers(_w(), p, r, ["session.read"], 900, NOW)[1] == "window_ttl"
     assert engine.window_covers(_w(), p, r, ["session.read"], 300, NOW + 1800)[1] == "window_expired"
     assert engine.window_covers(_w(), p, "fs:local/x", ["session.read"], 300, NOW)[1] == "window_resource"
     assert engine.window_covers(_w(), P.peer("x"), r, ["session.read"], 300, NOW)[1] == "window_subject"
     # R4.3 scope 는 와일드카드로 덮이지 않는다 — 이름으로 적어야 한다
-    assert engine.window_covers(_w(covers=["session.*"]), p, r, ["session.input.raw"], 300, NOW)[1] == \
+    raw = {"session.input": {"modes": ["raw"]}}
+    assert engine.window_covers(_w(covers=["session.*"], cconds=raw), p, r, ["session.input"], 300, NOW, raw)[1] == \
         "window_elevated_scope"
-    assert engine.window_covers(_w(covers=["session.input.raw"]), p, r, ["session.input.raw"], 300, NOW)[0]
+    assert engine.window_covers(_w(covers=["session.input"], cconds=raw), p, r, ["session.input"], 300, NOW, raw)[0]
+    # 조건 값을 이름으로 적지 않으면(기본 modes=[line]) raw 를 덮지 못한다
+    assert engine.window_covers(_w(covers=["session.input"]), p, r, ["session.input"], 300, NOW, raw)[1] == "window_scope"
     assert engine.window_covers(_w(covers=["authz.request"]), p, "authz:*", ["authz.request"], 1, NOW)[1] == \
         "window_forbidden_scope"
 
@@ -303,7 +321,8 @@ def test_principal_from_request_mirrors_auth(protected):
     assert P.from_request(_req(cookie=cookie)).kind == P.HUMAN
     assert P.from_request(_req(bearer="tok-abc")).kind == P.LEGACY
     a = P.from_request(_req())
-    assert (a.kind, a.authenticated) == (P.ANON, False)
+    assert (a.kind, a.authenticated) == (P.NO_KIND, False)
+    assert P.NO_KIND not in P.KINDS
     amb = P.from_request(_req(cookie=cookie, bearer="garbage"))     # R1.1 — 기존 미들웨어는 통과
     assert amb.attrs.get("ambiguous") and not amb.authenticated
     assert engine.decide(amb, "api.access", "host:local").reason == "ambiguous_principal"
@@ -314,7 +333,7 @@ def test_principal_unprotected_server(monkeypatch):
     monkeypatch.setattr(auth, "VT_AUTH_PASSWORD_HASH", "")
     monkeypatch.setattr(auth, "VT_AUTH_TOKEN", "")
     a = P.from_request(_req())
-    assert (a.kind, a.protected, a.authenticated) == (P.ANON, False, True)
+    assert (a.kind, a.authenticated, a.attrs.get("open_server")) == (P.LEGACY, True, True)
 
 
 # --- 저장소 ---------------------------------------------------------------------------
@@ -326,7 +345,7 @@ def test_store_txn_writes_private_files_and_backs_up_corruption(_state):
     p = store.doc_path("grants")
     assert stat.S_IMODE(p.stat().st_mode) == 0o600
     assert stat.S_IMODE(store.root().stat().st_mode) == 0o700
-    assert store.snapshot().grants == [{"id": "x"}]
+    assert store.snapshot().grants == [{"id": "x", "schema": 2}]      # 읽을 때 새 형태 표시가 붙는다
     p.write_text("{not json", encoding="utf-8")
     s = store.snapshot()
     assert s.corrupt == {"grants"} and s.grants == []

@@ -1,4 +1,4 @@
-"""에이전트 위임 API (docs/plan-2.4/50-agent-delegation.md).
+"""에이전트 위임 API.
 
 호출자는 `share_identity.verify_caller`로 확정한다(`X-Fsh-Pane`/`X-Fsh-Tmux`/`X-Fsh-Pid` + 루프백 소켓
 소유 프로세스의 부모 체인) — 기계 토큰은 모든 에이전트가 같은 값이라 "어느 세션인가"를 가리지 못한다.
@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 import auth
+from authz import principals as P
 
 import delegation
 import share_identity
@@ -166,18 +167,18 @@ async def close_by_user(did: str, request: Request):
 
 @router.post("/api/delegations/{did}/close-by-cli")
 async def close_by_cli(did: str, request: Request):
-    """`fsh delegate close` 의 서버 경로(H3) — **unix socket 로만** 닿는다(TCP·기계 토큰은 403).
+    """`fsh delegate close` 의 서버 경로 — **unix socket 로만** 닿는다(TCP·기계 토큰은 403).
 
-    주체는 소켓 peer 가 정한다: pane 밖 프로세스 = `cli` — 위임을 **닫기만** 할 수 있다(보내기·승인·권한 변경 불가, D1=b).
+    주체는 소켓 peer 가 정한다: pane 밖 프로세스 = `local`(cli) — 위임을 **닫기만** 할 수 있다(보내기·승인·권한 변경 불가).
     pane 안 프로세스 = `agent` — 그 위임의 부모일 때만(`/close` 와 같은 소유 검사). 그 밖(svc·hook)은 403."""
     sock = request.scope.get("fsh_sock") is True
     p = getattr(request.state, "fsh_principal", None) if sock else None
     if p is None:
         return JSONResponse({"error": "socket_required", "reason": "이 경로는 unix socket 으로만 열려 있습니다"}, status_code=403)
     try:
-        if p.kind == "cli":
+        if P.is_cli(p):
             r = await asyncio.to_thread(delegation.close, did, reason="closed_by_user", actor=p)
-        elif p.kind == "agent" and p.attrs.get("key"):
+        elif p.kind == "agent" and p.attrs.get("key") and not P.is_hook(p):
             r = await asyncio.to_thread(delegation.close, did, caller_key=p.attrs["key"])
         else:
             return JSONResponse({"error": "forbidden", "reason": "이 주체는 위임을 닫을 수 없습니다"}, status_code=403)

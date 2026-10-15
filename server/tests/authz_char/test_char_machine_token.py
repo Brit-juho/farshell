@@ -1,4 +1,4 @@
-"""기계 토큰·control peer 구멍(H1·H2·H5·H6)을 CURRENT_BEHAVIOR 로 고정한다.
+"""기계 토큰·control peer 구멍을 CURRENT_BEHAVIOR 로 고정한다.
 
 **이 파일의 단언은 "안전하다"가 아니라 "지금 이렇다"이다.** 이후 단계가 구멍을 막으면 여기가
 깨지는 게 정상이고, 그때 matrix.json 을 다시 만들면서 어느 사례가 바뀌었는지가 곧 변경 목록이다.

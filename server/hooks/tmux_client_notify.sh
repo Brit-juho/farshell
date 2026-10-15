@@ -83,7 +83,7 @@ fi
 # run-shell -b(background)로 호출되므로 여기서 추가로 &를 걸 필요는 없지만,
 # 스크립트 단독 실행(디버깅) 시에도 안전하도록 timeout을 짧게 유지한다.
 #
-# 인증(H4, plan-2.6 2단계): 예전에는 URL 쿼리 문자열에 기계 토큰을 붙였다 — curl 인자라 `ps`에 그대로 보이고
+# 인증: 예전에는 URL 쿼리 문자열에 기계 토큰을 붙였다 — curl 인자라 `ps`에 그대로 보이고
 # 서버 접근 로그에도 남는다. 이제 unix socket(~/.vt/run/fsh.sock)을 먼저 쓰고(자격이 없다), 소켓이 없을 때만
 # `Authorization: Bearer` 를 curl 설정 파일(-K, 프로세스 치환)로 넘긴다 — 토큰은 어떤 경우에도 argv 에 오르지 않는다
 # (lib/fsh_client.sh). 이 스크립트와 저장소 안 다른 스크립트가 토큰을 curl 인자에 싣는 것은 server/tests/test_no_token_in_argv.py 가 막는다.

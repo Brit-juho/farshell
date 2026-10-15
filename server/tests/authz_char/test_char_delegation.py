@@ -1,7 +1,7 @@
 """에이전트 위임(`routes/delegation.py`) — 지금 판정 고정.
 
 에이전트용 6개는 pane 확인 + 장부(부모·자식 key)로, 사람용 close-by-user 는 `require_human_session`으로
-가른다. spawn 은 grant·승인이 없고 `cwd`는 아무 절대 경로나 받는다(H9).
+가른다. spawn 은 grant·승인이 없고 `cwd`는 아무 절대 경로나 받는다.
 """
 
 from __future__ import annotations

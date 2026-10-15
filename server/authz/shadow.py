@@ -2,11 +2,11 @@
 
     shadow_check(old_allow, site, principal, scope, resource, ctx=None, legacy=None)
 
-- **절대 예외를 던지지 않는다**(F8). 엔진·저장소·기록 어디서 실패해도 경고 로그 한 줄(속도 제한)과
+- **절대 예외를 던지지 않는다**. 엔진·저장소·기록 어디서 실패해도 경고 로그 한 줄(속도 제한)과
   shadow.jsonl 의 `error` 줄만 남기고 None 을 돌려준다. 호출부는 반환값을 쓰지 않는다 —
   응답은 언제나 기존 판정이 정한다.
 - 기록: `~/.vt/authz/shadow.jsonl`(0600). 불일치·오류만. 내용(입력·화면·본문)은 싣지 않는다 —
-  주체 id·scope·리소스·두 판정·이유뿐이다(R11.2 와 같은 규율).
+  주체 id·scope·리소스·두 판정·이유뿐이다(감사와 같은 규율).
 - 크기·속도 제한: 같은 (지점, 주체, scope, 리소스, 판정 쌍)은 60초에 한 번만 쓰고 나머지는 세기만 한다.
   전체로는 분당 120줄, 파일은 5MB 에서 `.1` 한 세대로 돈다.
 
@@ -163,7 +163,7 @@ def shadow_check(old_allow, site: str, principal: Union[object, Callable[[], obj
                         "new": dec.allow, "reason": dec.reason, "rule": dec.rule, "grantId": dec.grant_id,
                         "source": snap.source})
         return dec
-    except Exception as e:  # noqa: BLE001 — F8: shadow 는 어떤 경우에도 요청을 깨지 않는다
+    except Exception as e:  # noqa: BLE001 — shadow 는 어떤 경우에도 요청을 깨지 않는다
         _error(site, e)
         return None
 

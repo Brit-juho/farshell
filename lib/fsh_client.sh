@@ -1,5 +1,5 @@
 #!/bin/bash
-# FarShell 서버 호출(셸) — unix socket 우선, 기계 토큰 fallback (plan-2.6 2단계).
+# FarShell 서버 호출(셸) — unix socket 우선, 기계 토큰 fallback.
 # server/fsh_client.py 와 같은 규칙이다: 소켓 파일 이름은 포트를 따라간다(기본 7777 → fsh.sock,
 # 그 외 fsh-<port>.sock). `source` 해서 쓴다. 이 파일은 설정을 읽지 않는다 — VT_PORT 등은 호출부가 먼저 로드한다.
 #

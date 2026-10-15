@@ -1,4 +1,4 @@
-"""plan-2.6 2단계 — 클라이언트 쪽: fsh_client / lib/fsh_client.sh 와 이를 쓰는 저장소 안 모든 클라이언트.
+"""— 클라이언트 쪽: fsh_client / lib/fsh_client.sh 와 이를 쓰는 저장소 안 모든 클라이언트.
 
 규칙: 소켓이 있으면 소켓(Authorization 없음), 없거나 `VT_AUTHZ_SOCKET=0` 이면 예전 TCP + Bearer. 가짜 서버는
 stdlib 로 만든 기록용 UDS/TCP 서버(`sock_testkit`)이고, 서버 쪽 게이트와의 왕복은 test_authz_sock.py 가 본다.
@@ -225,7 +225,7 @@ def test_round_trip_against_real_uvicorn_gate(w):
     try:
         assert ls.start()["state"] == "listening"
         st, data = fsh_client.call_json("POST", "/api/agent/report", body={"x": 1}, server=w.tcp.url, token=TOKEN)
-        assert (st, data) == (200, {"got": {"x": 1}, "auth": None, "kind": "cli"})
+        assert (st, data) == (200, {"got": {"x": 1}, "auth": None, "kind": "local"})
         assert w.tcp.records == []
     finally:
         ls.stop()

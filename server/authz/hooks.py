@@ -2,7 +2,7 @@
 
 판정 지점마다 "어느 주체가 어느 리소스에 어느 scope 를" 묻는지 여기 한곳에 적는다. 호출부에
 흩어 두면 지점 9곳이 각자 다른 규칙으로 엔진을 부르게 된다. 모든 함수는 `_never_raise`로 감싸
-어떤 예외도 호출부로 새지 않는다(F8). 반환값은 없다 — 응답은 언제나 기존 판정이 정한다.
+어떤 예외도 호출부로 새지 않는다. 반환값은 없다 — 응답은 언제나 기존 판정이 정한다.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from . import principals as P
 from . import scopes as S
 from . import shadow
 
-# peer capability 등급 → 대표 scope(R8.2 의 등급 묶음에서 그 등급을 가르는 scope).
-PEER_LEVEL_SCOPE = {"view": "session.list", "control": "session.input.raw"}
+# peer capability 등급 → 그 등급을 가르는 대표 판정 `(scope, ctx)`. view = 보기, control = raw 입력.
+PEER_LEVEL_CALL = {"view": ("session.view", {}), "control": ("session.input", {"mode": "raw"})}
 
 
 def _never_raise(fn):
@@ -37,17 +37,18 @@ def middleware(request, allowed: bool) -> None:
 @_never_raise
 def agent_share(kind: str, allowed: bool, grant, me, target, snap) -> None:
     """routes/agent_share.py — 공유 세션 읽기(`read`)·쓰기(`write`)의 grant×공유모드 판정."""
-    scope = "session.read" if kind == "read" else "session.input.line"
-    shadow.shadow_check(
-        allowed, f"agent_share.{kind}", lambda: P.from_caller(me), scope, f"session:local/{target.key}",
-        {"share": target.share, "share_known": True, "alive": set(snap) if snap is not None else None},
-        {"agent_grants": [grant] if grant else []})
+    scope = "session.read" if kind == "read" else "session.input"
+    ctx = {"share": target.share, "share_known": True, "alive": set(snap) if snap is not None else None}
+    if kind != "read":
+        ctx["mode"] = "line"
+    shadow.shadow_check(allowed, f"agent_share.{kind}", lambda: P.from_caller(me), scope,
+                        f"session:local/{target.key}", ctx, {"agent_grants": [grant] if grant else []})
 
 
 @_never_raise
 def deleg_spawn(allowed: bool, parent_key: str, data: dict, now: float, *, enabled: bool,
                 max_open: int, per_min: int, safe_mode: bool = False) -> None:
-    """delegation.check_spawn — 열린 자식·깊이·분당 횟수·killswitch. `safe_mode` 는 3b 플래그가 켜졌을 때만 넘는다
+    """delegation.check_spawn — 열린 자식·깊이·분당 횟수·killswitch. `safe_mode` 는 위임 강제 플래그(`deleg`)가 켜졌을 때만 넘는다
     (꺼짐에서는 옛 판정이 safe_mode 를 보지 않으므로 ctx 에 넣으면 거짓 차이가 난다)."""
     from . import limits
     if (max_open, per_min) != (limits.DELEG_MAX_OPEN, limits.DELEG_SPAWN_PER_MIN):
@@ -70,17 +71,16 @@ def deleg_owned(allowed: bool, did: str, caller_key: str, role: str, item, *, en
 
     꺼짐: 옛 판정은 소유(장부 key)만 보고 닫힌 위임도 소유자로 통과시킨 뒤 상태 오류(409)를 낸다 — 엔진 쪽 번역도 그 의미로
     맞추려고 항목을 열린 것으로 본다. 켜짐(`enforced`): 실제 항목 상태 그대로(닫힌 위임의 grant 는 `ended` 라 엔진이 거부한다)."""
-    scope = "deleg.control" if role == "parent" else "deleg.report"
-    shadow.shadow_check(allowed, f"delegation.{role}", P.agent(caller_key), scope, f"deleg:local/{did}",
-                        None, {"delegations": [_as_open(item, enforced)] if item else []})
+    shadow.shadow_check(allowed, f"delegation.{role}", P.agent(caller_key), "deleg.control", f"deleg:local/{did}",
+                        {"role": role}, {"delegations": [_as_open(item, enforced)] if item else []})
 
 
 @_never_raise
 def deleg_report(allowed: bool, caller_key: str, mine: list, *, enforced: bool = False) -> None:
     """delegation.report — 위임받은 자식만 보고. (`enforced` 의미는 `deleg_owned` 와 같다)"""
     did = mine[0].get("id") if mine else "-"
-    shadow.shadow_check(allowed, "delegation.report", P.agent(caller_key), "deleg.report", f"deleg:local/{did}",
-                        None, {"delegations": [_as_open(x, enforced) for x in mine]})
+    shadow.shadow_check(allowed, "delegation.report", P.agent(caller_key), "deleg.control", f"deleg:local/{did}",
+                        {"role": "child"}, {"delegations": [_as_open(x, enforced) for x in mine]})
 
 
 def _as_open(item, enforced: bool):
@@ -89,14 +89,14 @@ def _as_open(item, enforced: bool):
 
 @_never_raise
 def deleg_cwd(allowed: bool, caller_key: str, path: str, purpose: str, in_roots: bool) -> None:
-    """delegation.spawn 의 cwd·worktree 기준(H9) — 3b 켜짐에서만 부른다(꺼짐에는 옛 판정이 없다)."""
+    """delegation.spawn 의 cwd·worktree 기준 — 위임 강제를 켰을 때만 부른다(꺼짐에는 옛 판정이 없다)."""
     shadow.shadow_check(allowed, "delegation.cwd", P.agent(caller_key), "fs.read", "fs:local" + path,
                         {"fs": {"purpose": purpose, "in_roots": in_roots}})
 
 
 @_never_raise
 def agent_msg_local(request, to_session: str) -> None:
-    """routes/agent_msg.py — 로컬 메시지에는 지금 인가가 없다(D6 기본 허용). 송신 주체는 요청 인증."""
+    """routes/agent_msg.py — 로컬 메시지에는 지금 인가가 없다(로컬 메시지는 지금 기본 허용). 송신 주체는 요청 인증."""
     shadow.shadow_check(True, "agent_msg.local", lambda: P.from_request(request), "msg.send",
                         f"msg:local/{to_session}")
 
@@ -104,8 +104,8 @@ def agent_msg_local(request, to_session: str) -> None:
 @_never_raise
 def peer_level(grant: dict, level: str, allowed: bool) -> None:
     """routes/peer_protocol.py `_require`/`_require_body` — capability 등급."""
-    shadow.shadow_check(allowed, f"peer.level.{level}", P.from_peer_grant(grant),
-                        PEER_LEVEL_SCOPE.get(level, f"level.{level}"), "host:local", None,
+    scope, ctx = PEER_LEVEL_CALL.get(level, (f"level.{level}", {}))      # 모르는 등급은 모르는 scope 라 거부
+    shadow.shadow_check(allowed, f"peer.level.{level}", P.from_peer_grant(grant), scope, "host:local", ctx,
                         {"peer_grants": [grant]})
 
 
@@ -120,22 +120,22 @@ def peer_agent_messages(grant: dict, allowed: bool) -> None:
 @_never_raise
 def peer_ws_control(grant: dict, tmux_name: str, allowed: bool) -> None:
     """routes/peer.py `peer_ws` — control 이면 입력 허용."""
-    shadow.shadow_check(allowed, "peer.ws_input", P.from_peer_grant(grant), "session.input.raw",
-                        f"session:local/name:{tmux_name}", None, {"peer_grants": [grant]})
+    shadow.shadow_check(allowed, "peer.ws_input", P.from_peer_grant(grant), "session.input",
+                        f"session:local/name:{tmux_name}", {"mode": "raw"}, {"peer_grants": [grant]})
 
 
 @_never_raise
 def relay_level(grant: dict, allowed: bool, ws: bool = False) -> None:
     """routes/peer_relay.py — relay 를 쓸 수 있는 등급인가."""
     shadow.shadow_check(allowed, "relay_ws.level" if ws else "relay.level", P.from_peer_grant(grant),
-                        "relay.connect", "relay:local", None, {"peer_grants": [grant]})
+                        "relay", "relay:local", {"group": S.ANY_GROUP}, {"peer_grants": [grant]})
 
 
 @_never_raise
 def relay_rule(grant: dict, method: str, target: str, allowed: bool, ws: bool = False) -> None:
     """routes/peer_relay.py — 허용 목록(라우팅 정책) + 그룹 scope."""
     group = S.relay_ws_group(target) if ws else S.relay_group(method, target)
-    scope = group or "relay.unrouted"           # 카탈로그에 없다 → 엔진은 unknown_scope 로 거부
-    shadow.shadow_check(allowed, "relay_ws.rule" if ws else "relay.rule", P.from_peer_grant(grant), scope,
-                        f"relay:local/{(group or 'unrouted')[len('relay.'):] if group else 'unrouted'}",
-                        None, {"peer_grants": [grant]})
+    # 허용 목록 밖이면 그룹이 없다 -> ctx 에 `group` 이 없어 엔진이 거부한다(필요 조건 값 누락).
+    shadow.shadow_check(allowed, "relay_ws.rule" if ws else "relay.rule", P.from_peer_grant(grant), "relay",
+                        f"relay:local/{group or 'unrouted'}", {"group": group} if group else {},
+                        {"peer_grants": [grant]})

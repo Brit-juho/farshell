@@ -112,7 +112,7 @@ try:
         "hook_pid": os.getppid(),
         "ts": received_ns,
     }).encode()
-    # 소켓 우선(plan-2.6 2단계): ~/.vt/run/fsh.sock 이 있으면 peer pid 로 서버가 이 훅의 pane·에이전트를 안다 —
+    # 소켓 우선: ~/.vt/run/fsh.sock 이 있으면 peer pid 로 서버가 이 훅의 pane·에이전트를 안다 —
     # 토큰이 필요 없다. 소켓이 없거나(옛 서버·VT_AUTHZ_SOCKET=0) 소켓 쪽이 거부하면 예전처럼 TCP + Bearer.
     # fsh_client 를 못 불러와도(설치가 깨진 경우) 훅은 죽지 않는다 — 아래 예전 경로로 내려간다.
     try:

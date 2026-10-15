@@ -161,7 +161,7 @@ class TokenAuthMiddleware:
             if authz.startswith("Bearer "):
                 token = authz[7:]
         authenticated = auth.check_request(token)
-        authz_hooks.middleware(request, authenticated)   # shadow(plan-2.6 1단계) — 응답 불변
+        authz_hooks.middleware(request, authenticated)   # shadow — 응답 불변
         if not authenticated:
             response = JSONResponse({"error": "unauthorized"}, status_code=401)
             await response(scope, receive, send)
@@ -170,7 +170,7 @@ class TokenAuthMiddleware:
         # 이 값을 믿지 않고 auth.require_human_session 이 다시 판정한다 — 이 값은 로깅·진단용.
         kind = auth.request_kind(request)
         scope.setdefault("state", {})["auth_kind"] = kind
-        if kind == auth.AUTH_MACHINE:       # 기계 토큰 사용 기록(경로·UA·횟수만, plan-2.6 2단계)
+        if kind == auth.AUTH_MACHINE:       # 기계 토큰 사용 기록(경로·UA·횟수만)
             authz_legacy_use.record(path, request.headers.get("user-agent", ""))
         await self.app(scope, receive, send)
 
@@ -405,7 +405,7 @@ async def lifespan(_app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.debug(f"tmux 훅 설치 실패: {e}")
 
-    # plan-2.6 2단계 — unix socket 두 번째 서버. 실패해도(건너뜀·자가 시험 실패) 서버 기동은 막지 않는다:
+    # unix socket 두 번째 서버. 실패해도(건너뜀·자가 시험 실패) 서버 기동은 막지 않는다:
     # 소켓이 없으면 클라이언트는 토큰으로 내려간다.
     sock_service = authz_sock.SockService(_app)
     try:

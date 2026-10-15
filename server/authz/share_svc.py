@@ -1,4 +1,4 @@
-"""에이전트 세션 공유의 권한 판정·저장·감사 (3a) — `VT_AUTHZ_ENFORCE=share` 일 때 엔진이 진실이다.
+"""에이전트 세션 공유의 권한 판정·저장·감사 — `VT_AUTHZ_ENFORCE=share` 일 때 엔진이 진실이다.
 
 `agent_share.py` 가 동작부(`read_pane`·`send_keys`·`check_send_*`·tmux 옵션)를 쥐고, 저장·판정·감사는 여기로 넘어온다.
 `agent_share` 의 공개 함수(`get_grant`·`request_access`·`decide`·`revoke`·`drop_target`·`list_state`·`snapshot`·`audit` …)는
@@ -16,14 +16,14 @@
   - 엔진 저장이 옛 파일 쓰기보다 늦게 실패하면 옛 파일이 앞선다 → 다음 트랜잭션이 그 상태를 채택해 스스로 맞춘다.
 
 ## 판정
-`authorize()` 가 `engine.decide` 를 부른다: 주체 `agent:local/<sid>:<created>`, scope `session.read`/`session.input.line`,
+`authorize()` 가 `engine.decide` 를 부른다: 주체 `agent:local/<sid>:<created>`, scope `session.read`/`session.input`(mode=line),
 리소스 `session:local/<key>`, ctx 에 공유 정책(ceiling)·살아 있는 세션·분당 횟수(limits). 호출자가 대는 헤더·본문은 판정에
-들어가지 않는다 — 주체는 `share_identity` 가 확인한 pane 소속뿐이다(R1.2).
+들어가지 않는다 — 주체는 `share_identity` 가 확인한 pane 소속뿐이다.
 
 ## 감사
-변경(결정·철회·공유 지정/해제)은 **커밋 전에** `audit/authz.jsonl` 에 쓰고, 못 쓰면 503 `audit_unavailable` 로 중단한다(R11.5).
-데이터 경로(읽기·쓰기·목록)는 기록이 실패해도 계속한다. 성공한 읽기는 (주체, 리소스)당 10분에 한 줄 + 건너뛴 횟수(R11.3).
-내용은 남기지 않는다(R11.2 — `audit._scrub`).
+변경(결정·철회·공유 지정/해제)은 **커밋 전에** `audit/authz.jsonl` 에 쓰고, 못 쓰면 503 `audit_unavailable` 로 중단한다.
+데이터 경로(읽기·쓰기·목록)는 기록이 실패해도 계속한다. 성공한 읽기는 (주체, 리소스)당 10분에 한 줄 + 건너뛴 횟수.
+내용은 남기지 않는다(`audit._scrub`).
 """
 
 from __future__ import annotations
@@ -135,7 +135,7 @@ def agent_key(a) -> str:
 
 
 def resolve_shares(tmux_shares: dict) -> dict:
-    """`{세션 key: tmux 에서 읽은 {nick, mode} 또는 None}` → 유효 공유(낮은 쪽, B1). 처음이면 tmux 값을 채택(snapshot).
+    """`{세션 key: tmux 에서 읽은 {nick, mode} 또는 None}` → 유효 공유(낮은 쪽). 처음이면 tmux 값을 채택(snapshot).
     저장소를 못 읽으면 어느 세션도 공유로 보지 않는다(fail closed)."""
     try:
         items, adopted, bad = shares.load()
@@ -164,7 +164,7 @@ def put_share(target, nick: str, mode: str, snap, actor: Optional[P.Principal]) 
             for k in [k for k in d if k not in snap]:
                 del d[k]
         d[target.key] = shares.entry(target.key, nick, mode)
-        _audit_change("share", "ok", actor, f"session:local/{target.key}", "allow", scopes=["session.list"],
+        _audit_change("share", "ok", actor, f"session:local/{target.key}", "allow", scopes=["session.view"],
                       legacy={"action": "share", "result": "ok", "by": "user", "nick": nick, "mode": mode})
 
 
@@ -178,7 +178,7 @@ def drop_share_entry(docs: dict, key: str) -> None:
 def _audit_change(action: str, result: str, actor: Optional[P.Principal], resource: str, decision: str, *,
                   scopes=(), grant_id=None, approval_id=None, reason: Optional[str] = None,
                   legacy: Optional[dict] = None) -> None:
-    """authz 변경 감사 — 커밋 전에 쓰고 실패하면 fail closed(R11.5)."""
+    """authz 변경 감사 — 커밋 전에 쓰고 실패하면 fail closed."""
     try:
         audit.append({"principal": (actor or P.human("-")).id, "action": f"share.{action}", "resource": resource,
                       "scopes": list(scopes), "decision": decision, "grant_id": grant_id, "approval_id": approval_id,
@@ -200,7 +200,7 @@ def mirror_audit(action: str, result: str, rec: dict, agent, nick: Optional[str]
         resource = f"session:local/nick:{nick}" if nick else "authz:*"
         sizes = {k: rec[k] for k in ("lines", "chars", "truncated") if k in rec} or None
         suppressed = None
-        if action in ("read", "list") and result == "ok":      # R11.3 — 읽기는 10분에 한 줄 + 건너뛴 횟수
+        if action in ("read", "list") and result == "ok":      # 읽기는 10분에 한 줄 + 건너뛴 횟수
             k = (principal, resource, action)
             now = time.time()
             with ag._rate_lock:
@@ -215,7 +215,7 @@ def mirror_audit(action: str, result: str, rec: dict, agent, nick: Optional[str]
         if suppressed:
             detail["suppressedSince"] = suppressed
         audit.append({"principal": principal, "action": f"share.{action}", "resource": resource,
-                      "scopes": ["session.input.line" if action == "send" else "session.read"]
+                      "scopes": ["session.input" if action == "send" else "session.read"]
                       if action in ("read", "send") else [], "decision": decision, "grant_id": rec.get("grant"),
                       "approval_id": rec.get("request"), "result": result, "reason": rec.get("reason"),
                       "sizes": sizes, "sha8": rec.get("sha8"), "detail": detail})
@@ -252,7 +252,7 @@ def authorize(kind: str, snap, agent, target, now: Optional[float] = None) -> Ac
     """`kind`=`read`|`write` 의 접근 판정. 엔진이 정한다. 허용이면 분당 횟수에 한 번 더한다."""
     ag = _ag()
     now = time.time() if now is None else now
-    scope = "session.read" if kind == "read" else "session.input.line"
+    scope = "session.read" if kind == "read" else "session.input"
     rkind = "read" if kind == "read" else "send"
     limit = ag.READ_PER_MIN if kind == "read" else ag.SEND_PER_MIN
     p = P.from_caller(agent)
@@ -264,6 +264,9 @@ def authorize(kind: str, snap, agent, target, now: Optional[float] = None) -> Ac
             ctx = {"share": target.share, "share_known": True, "prefer_live": False,
                    "alive": set(snap) if snap is not None else None,
                    "counts": {scope: len(hits)}, "limits": {scope: limit}}
+            if kind != "read":
+                ctx["mode"] = "line"             # 공유 세션에 보내는 것은 정제된 한 줄 입력뿐
+
             d = engine.decide(p, scope, f"session:local/{target.key}", ctx, _snapshot(docs, now))
             if d.allow:
                 limits.record(ag._rate, key, hits, now)
@@ -291,7 +294,7 @@ def request_access(snap, agent, target, kind: str) -> tuple[dict, bool]:
     now = time.time()
     with _txn(snap) as docs:
         d = engine.decide(P.from_caller(agent), "authz.request", "authz:*", {}, _snapshot(docs, now))
-        if not d.allow:                          # R4.1 — authz.request 가 없으면 보류 요청도 없다(403)
+        if not d.allow:                          # authz.request 가 없으면 보류 요청도 없다(403)
             raise ShareError("request_not_allowed", tr("승인 요청을 만들 수 없는 호출자입니다"), 403)
         return approvals.request(
             docs, {"sid": agent.sid, "created": agent.created, "name": agent.name},

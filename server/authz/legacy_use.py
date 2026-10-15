@@ -1,4 +1,4 @@
-"""기계 토큰으로 인증된 요청의 가벼운 사용 기록 — `fsh doctor` 의 「최근 24h legacy 사용 N」 (plan-2.6 2단계).
+"""기계 토큰으로 인증된 요청의 가벼운 사용 기록 — `fsh doctor` 의 「최근 24h legacy 사용 N」.
 
 `~/.vt/authz/legacy_token_use.jsonl`(0600). 줄 하나 = (분, 경로, UA) 묶음 하나의 횟수:
 `{"ts": <분 시작 epoch>, "path": "/api/x", "ua": "curl/8.7", "n": 3}`.

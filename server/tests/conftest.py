@@ -129,7 +129,7 @@ def process_table():
         pytest.skip("실행 환경이 실제 프로세스 표(ps) 조회를 허용하지 않습니다")
 
 
-# `VT_AUTHZ_ENFORCE=msg`(3c)에서는 보낸 세션을 본문의 pane/tmux 주장이 아니라 인증된 호출자로 정한다(H2). 아래 시험은
+# `VT_AUTHZ_ENFORCE=msg`(3c)에서는 보낸 세션을 본문의 pane/tmux 주장이 아니라 인증된 호출자로 정한다. 아래 시험은
 # "본문 주장으로 보낸 세션을 정한다"는 옛 계약 자체를 단언하므로 그 플래그를 끈 채 돈다(켠 쪽 성질은
 # test_authz_msg_enforce.py 가 같은 내용을 인증된 호출자로 확인한다).
 _LEGACY_BODY_CLAIM_SENDER = (

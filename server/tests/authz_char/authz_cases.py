@@ -88,7 +88,7 @@ def delegation_cases() -> list[Case]:
 def agent_msg_cases() -> list[Case]:
     g = "agent_msg"
     callers = HUMAN + ("agent_verified", "agent_foreign", "peer_control")
-    # 보낸 세션은 **본문의 pane/tmux** 로 정해진다(H2) — 여기선 일부러 남의 칸(other, %3)을 주장한다.
+    # 보낸 세션은 **본문의 pane/tmux** 로 정해진다 — 여기선 일부러 남의 칸(other, %3)을 주장한다.
     spoof = {"to": "local/target", "text": "hi", "pane": "%3", "tmux": TMUX_ENV}
     variants = [
         ("POST", "/api/agent/message", "/api/agent/message", spoof, "local_spoofed_sender", "H2"),
@@ -295,7 +295,7 @@ def hosts_cases() -> list[Case]:
     return out
 
 
-# --- machine token 구멍(H1·H2·H5·H6) ----------------------------------------------------------
+# --- machine token 구멍 ----------------------------------------------------------
 
 def machine_token_cases() -> list[Case]:
     g = "machine_token"
@@ -346,7 +346,7 @@ def machine_token_cases() -> list[Case]:
     return out
 
 
-# --- CLI 직접 쓰기(H3) ------------------------------------------------------------------------
+# --- CLI 직접 쓰기 ------------------------------------------------------------------------
 
 CLI_FUNCS = (
     ("host_store._cli", ("allow-control", "pv")),

@@ -16,7 +16,7 @@
     가진 값이라 승인 주체가 될 수 없다. 에이전트는 권한이 없으면 **보류 요청**을 만들 뿐이다.
   - 호출자 식별은 `share_identity.py`. 감사 기록은 이 파일의 `audit()`.
 
-## 권한 이관 (plan-2.6 3a)
+## 권한 이관
 `VT_AUTHZ_ENFORCE=share` 이면 판정·저장·감사는 `authz/share_svc.py`(엔진)가 맡고, 이 파일은 동작부(`read_pane`·
 `send_keys`·`check_send_*`·tmux 옵션)와 공개 함수의 **분기**만 한다. 꺼져 있으면(기본) 아래 옛 구현이 그대로 돈다.
 켜도 옛 저장소(`agent_grants.json`·`agent_access.log`)는 같이 쓴다 — 플래그를 끄면 곧바로 롤백된다.
@@ -110,7 +110,7 @@ def snapshot(rows: Optional[list] = None) -> Optional[dict[str, Sess]]:
             best[key] = r
     tmux_shares = {k: tmux_runner.parse_share(r.nick, r.mode) for k, r in best.items()}
     if enforced():
-        # tmux 옵션은 표시용 미러 — 진실은 shares.json 이고 둘이 다르면 낮은 쪽(B1).
+        # tmux 옵션은 표시용 미러 — 진실은 shares.json 이고 둘이 다르면 낮은 쪽.
         tmux_shares = _svc().resolve_shares(tmux_shares)
     return {k: Sess(r.sid, r.created, r.name, r.pane_id, r.command, tmux_shares[k]) for k, r in best.items()}
 
@@ -444,7 +444,7 @@ def authorize(kind: str, snap, agent, target: Sess) -> Access:
             acc = _svc().authorize(kind, snap, agent, target)
         except ShareError:
             raise
-        except Exception as e:  # noqa: BLE001 — 켜진 뒤 엔진이 판정권자다: 못 쓰면 열지 않고 닫는다(F8 은 shadow 얘기)
+        except Exception as e:  # noqa: BLE001 — 켜진 뒤 엔진이 판정권자다: 못 쓰면 열지 않고 닫는다(shadow 단계의 「예외를 삼킨다」와는 다르다)
             logger.warning(f"권한 엔진 판정 실패 — 거부: {type(e).__name__}: {e}")
             raise ShareError("authz_unavailable", tr("권한 엔진을 쓸 수 없어 요청을 거부했습니다"), 503) from e
         authz_hooks.agent_share(kind, acc.allowed, acc.grant, agent, target, snap)
@@ -483,7 +483,7 @@ def set_share(name: str, nick, mode, actor=None) -> dict:
             if s.key != target.key and s.share and s.share["nick"].lower() == nick.lower():
                 raise ShareError("nick_taken", f"'{nick}' 닉네임은 이미 다른 세션이 쓰고 있습니다", 409)
         if enforced():
-            # 정책 저장소(진실)를 먼저 — tmux 미러 쓰기가 실패해도 낮은 쪽으로 해소돼 안전하다(B1).
+            # 정책 저장소(진실)를 먼저 — tmux 미러 쓰기가 실패해도 낮은 쪽으로 해소돼 안전하다.
             _svc().put_share(target, nick, mode, snap, actor)
         # 닉네임을 먼저 심으면 모드가 비어 있는 순간 read 로 읽힌다(낮은 쪽이라 안전).
         if not (tmux_runner.set_option(target.sid, tmux_runner.SHARE_NICK_OPTION, nick)
@@ -513,7 +513,7 @@ def unset_share(name: str, actor=None) -> dict:
 
 _rate_lock = threading.Lock()
 _rate: dict[str, list[float]] = {}
-_read_seen: dict[tuple, tuple[float, int]] = {}   # authz 감사의 읽기 표본 추출(R11.3) — (주체, 리소스, 동작) → (마지막 기록, 건너뜀)
+_read_seen: dict[tuple, tuple[float, int]] = {}   # authz 감사의 읽기 표본 추출 — (주체, 리소스, 동작) → (마지막 기록, 건너뜀)
 
 
 def check_rate(kind: str, agent_key: str, target_key: str, now: Optional[float] = None) -> None:
