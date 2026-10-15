@@ -31,6 +31,7 @@ _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 
 import auth
 from authz import hooks as authz_hooks
+from authz import legacy_gate as authz_legacy_gate
 from authz import legacy_use as authz_legacy_use
 from authz import sock as authz_sock
 import file_store
@@ -152,6 +153,7 @@ class TokenAuthMiddleware:
             # 이 표는 검사하지 않는다 — 사람이 맞춰야 한다).
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
+        legacy_on = authz_legacy_gate.active()      # VT_AUTHZ_ENFORCE=legacy — 꺼짐이면 아래 분기는 전부 건너뛴다
         token = (
             request.cookies.get("vt_session", "")
             or request.query_params.get("token", "")
@@ -171,6 +173,12 @@ class TokenAuthMiddleware:
         kind = auth.request_kind(request)
         scope.setdefault("state", {})["auth_kind"] = kind
         if kind == auth.AUTH_MACHINE:       # 기계 토큰 사용 기록(경로·UA·횟수만)
+            if legacy_on and not authz_legacy_gate.scope_allowed(scope.get("method", "GET"), path):
+                # H1 — 기계 토큰은 소켓 허용표의 (메서드, 경로)만. 거절도 세어 어느 외부 스크립트를 옮길지 보이게 한다.
+                authz_legacy_use.record(path, request.headers.get("user-agent", ""), denied=True)
+                response = JSONResponse(authz_legacy_gate.scope_denied_body(), status_code=403)
+                await response(scope, receive, send)
+                return
             authz_legacy_use.record(path, request.headers.get("user-agent", ""))
         await self.app(scope, receive, send)
 
