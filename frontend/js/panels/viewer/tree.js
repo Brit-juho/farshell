@@ -205,6 +205,22 @@ export async function showTree(opts = {}) {
     treeEl.appendChild(frag);
   }
 
+  // 서버가 하위 2단계까지 미리 담아 주면 path → 목록으로 캐시해, 폴더를 펼칠 때 기다리지 않는다.
+  const _treeCache = new Map();
+  function _stashChildren(path, listing) {
+    const base = path.replace(/\/$/, '');
+    for (const e of listing.entries) {
+      if (!e.dir || !e.children) continue;
+      _treeCache.set(base + '/' + e.name, e.children);
+      _stashChildren(base + '/' + e.name, e.children);
+    }
+  }
+  async function _fetchTree(path) {
+    const data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(path)}&depth=2`);
+    _stashChildren(path, data);
+    return data;
+  }
+
   async function _toggleDir(row, path, depth) {
     if (_viewerState.expanded.has(path)) { _collapseDir(row, path); return; }
 
@@ -216,7 +232,7 @@ export async function showTree(opts = {}) {
 
     let data;
     try {
-      data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(path)}`);
+      data = _treeCache.get(path) || await _fetchTree(path);
     } catch (e) {
       chev.innerHTML = prevIcon;
       row.classList.remove('open');
@@ -293,7 +309,8 @@ export async function showTree(opts = {}) {
     const root = _viewerState.root;
     if (!root) return;
     const snap = Array.from(_viewerState.expanded);
-    const fetchTree = (p) => vtFetch(`/api/fs/tree?path=${encodeURIComponent(p)}`);
+    const fetchTree = _fetchTree;
+    _treeCache.clear();
     let top;
     try { top = await fetchTree(root); } catch (_) { return; }
     const listings = new Map();
@@ -334,7 +351,8 @@ export async function showTree(opts = {}) {
   async function navigateRoot(path) {
     let data;
     try {
-      data = await vtFetch(`/api/fs/tree?path=${encodeURIComponent(path)}`);
+      _treeCache.clear();
+      data = await _fetchTree(path);
     } catch (e) {
       showToast(t('이동할 수 없습니다: {msg}', { msg: e.message }));
       return false;

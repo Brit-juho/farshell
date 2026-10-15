@@ -83,7 +83,7 @@ issued after login; daemons/scripts authenticate with a `?token=xxx` query param
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/api/fs/roots` | List of browsable roots (default `~/GitHub`) |
-| GET | `/api/fs/tree?path=X` | Directory listing. Excludes `.git`/`node_modules` etc. |
+| GET | `/api/fs/tree?path=X[&depth=0-2]` | Directory listing. Excludes `.git`/`node_modules` etc. `depth` prefetches subdirectory listings into each entry's `children` (capped by dir count and entries) |
 | GET | `/api/fs/search?q=X` | Fuzzy filename search (command palette `/` mode). `path=` scopes to a subtree, max 50 results |
 | GET | `/api/fs/file?path=X` | File content. Binaries return only `binary:true`; anything over 512KB is truncated. Images also carry `image:true`, `mime`, and `too_large` — the bytes come from `/api/fs/raw` below |
 | GET | `/api/fs/raw?path=X` | [T3] Raw **image** bytes for inline preview. Same browse boundary as `/api/fs/file`, plus a type allowlist: png/jpeg/gif/webp/bmp/ico only, and only when extension **and** magic bytes agree. SVG, HTML and PDF are excluded — served same-origin they are scriptable documents, i.e. XSS. Over 8MB → 413; not an image → 403. Sent with `nosniff` and `Content-Disposition: inline` |

@@ -191,8 +191,43 @@ async def fs_search(q: str = Query(...), path: str = Query("")):
     return {"results": final, "truncated": truncated or len(all_results) > MAX_SEARCH_RESULTS}
 
 
+# 미리 펼쳐 두는 하위 목록의 상한 — 큰 저장소에서 첫 응답이 커지지 않게 자른다.
+MAX_PREFETCH_DEPTH = 2
+MAX_PREFETCH_DIRS = 150
+MAX_PREFETCH_CHILD_ENTRIES = 200
+
+
+def _list_dir_deep(p: Path, depth: int) -> dict:
+    """_list_dir + 하위 디렉토리 목록을 depth 단계까지 `children` 에 미리 담는다.
+
+    권한 없는 하위 디렉토리는 조용히 건너뛰고(펼칠 때 일반 조회가 오류를 보여준다),
+    총 디렉토리 수와 항목 수 상한을 넘으면 그 아래는 미리 담지 않는다."""
+    root = _list_dir(p)
+    budget = [MAX_PREFETCH_DIRS]
+
+    def fill(listing: dict, base: Path, left: int) -> None:
+        if left <= 0:
+            return
+        for e in listing["entries"]:
+            if not e["dir"] or budget[0] <= 0:
+                continue
+            budget[0] -= 1
+            child = base / e["name"]
+            try:
+                sub = _list_dir(child)
+            except (fsguard.FsDenied, OSError):
+                continue
+            if len(sub["entries"]) > MAX_PREFETCH_CHILD_ENTRIES:
+                continue
+            e["children"] = sub
+            fill(sub, child, left - 1)
+
+    fill(root, p, depth)
+    return root
+
+
 @router.get("/api/fs/tree")
-async def fs_tree(path: str = Query(...)):
+async def fs_tree(path: str = Query(...), depth: int = Query(0, ge=0, le=MAX_PREFETCH_DEPTH)):
     try:
         p = fsguard.resolve_under_roots(path)
     except fsguard.FsDenied as e:
@@ -200,6 +235,8 @@ async def fs_tree(path: str = Query(...)):
     if not p.is_dir():
         return JSONResponse({"error": "not a directory"}, status_code=404)
     try:
+        if depth:
+            return await asyncio.to_thread(_list_dir_deep, p, depth)
         return await asyncio.to_thread(_list_dir, p)
     except fsguard.FsDenied as e:
         return _denied(e.reason)

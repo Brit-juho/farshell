@@ -366,7 +366,7 @@ body.vt-resizing #terminal-container{ transition:none; }
    만들지 않는다 — 그게 이 작업이 없애려는 리플로우 자체다.
    z-index 20: 컨테이너 안 기존 최고값(드롭 오버레이 9) 위, body의 fixed 레이어 아래.
    ------------------------------------------------------------------------- */
-.vt-file-overlay{ position:absolute; inset:0; z-index:20; pointer-events:none; }
+.vt-file-overlay{ position:absolute; inset:0 var(--vt-file-inset-r, 0px) 0 0; z-index:20; pointer-events:none; }
 .vt-file-overlay > .vt-viewer-card{
   position:absolute; pointer-events:auto;
   max-height:none; box-shadow:var(--shadow-e2);
@@ -779,6 +779,12 @@ body.vt-resizing #terminal-container{ transition:none; }
   justify-content:space-between;
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
 }
+.vt-vw-recent-clear{
+  appearance:none; background:transparent; border:0; cursor:pointer;
+  padding:2px calc(var(--spacing) * 1.5); border-radius:6px;
+  font:500 var(--fs-2xs) var(--mono); color:var(--sub);
+}
+.vt-vw-recent-clear:hover{ background:var(--menu-hover); color:var(--fg); }
 .vt-vw-recent-row{ flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 0.25); }
 .vt-vw-recent-row .vt-vw-name{ flex:0 0 auto; width:100%; }
 .vt-vw-recent-dir{

@@ -114,8 +114,24 @@ function _setRect(el, r) {
   for (const k of ['x', 'y', 'w', 'h']) el.style.setProperty(`--vt-file-${k}`, `${Math.round(r[k])}px`);
 }
 
+// 좁은 화면에서는 dock이 터미널을 밀지 않고 위에 덮인다. 그때 오버레이가 dock 밑으로
+// 파고들어 코드가 가려지므로, 겹친 폭만큼 오른쪽을 비운다(밀리는 폭에서는 0).
+function _dockInset(mount) {
+  const dock = document.getElementById('vt-dock');
+  if (!dock || !mount) return 0;
+  const d = dock.getBoundingClientRect();
+  const m = mount.getBoundingClientRect();
+  if (d.width === 0) return 0;
+  return Math.max(0, Math.round(m.right - d.left));
+}
+
+function _syncDockInset(el) {
+  el.style.setProperty('--vt-file-inset-r', `${_dockInset(_container())}px`);
+}
+
 function _applyGeometry(el) {
   const surface = _surface();
+  _syncDockInset(el);
   el.classList.toggle('surface-sheet', surface === 'sheet');
   el.classList.toggle('surface-float', surface === 'float');
   if (surface === 'sheet') {
@@ -124,7 +140,7 @@ function _applyGeometry(el) {
   }
   const c = _container();
   if (!c) return;
-  const cw = c.clientWidth;
+  const cw = c.clientWidth - _dockInset(c);
   const ch = c.clientHeight;
   _setRect(el, clampRect(parseRect(get('viewer.float.rect')) || defaultRect(cw, ch), cw, ch));
 }
@@ -232,10 +248,13 @@ export function openFileOverlay(path) {
     // dock·레일을 접고 펴도 컨테이너 폭이 바뀐다 — 창 크기 이벤트만으로는 못 잡는다.
     if (typeof window.ResizeObserver === 'function') {
       ro = new window.ResizeObserver(() => {
+        _syncDockInset(el);
         if (!el.classList.contains('surface-float') || !el._vtRect) return;
-        _setRect(el, clampRect(el._vtRect, mount.clientWidth, mount.clientHeight));
+        _setRect(el, clampRect(el._vtRect, mount.clientWidth - _dockInset(mount), mount.clientHeight));
       });
       ro.observe(mount);
+      const dockEl = document.getElementById('vt-dock');
+      if (dockEl) ro.observe(dockEl);
     }
     // 키보드로 바로 스크롤하고 Esc로 닫을 수 있게. 닫으면 panel.js가 열기 전 포커스(터미널)로 돌려준다.
     body.tabIndex = -1;
