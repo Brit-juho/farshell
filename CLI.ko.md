@@ -27,7 +27,7 @@ fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
 fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|allow-agent <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # 다른 맥의 FarShell 페어링
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
 fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session)
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
@@ -124,6 +124,12 @@ fsh host allow-agent <id>               # 받는 맥에서 — allow-control도 
 
 제한: 대화당 10번 왕복, 보내는 맥당 분당 20건, 4000자. 받는 에이전트에게는 "다른
 에이전트가 보낸 요청"이라는 한 줄 머리글이 붙습니다.
+
+**다른 맥이 할 수 있는 일 바꾸기 (`fsh host allow-*` / `deny-*`).** 서버가 `VT_AUTHZ_ENFORCE=peer` 로 떠 있으면 이 명령들은 `~/.vt/hosts.json` 을 직접
+쓰지 않고 unix socket 으로 서버에 요청합니다. `deny-control` / `deny-agent` 는 접근을 줄이므로 바로 적용되고 감사 기록에 남습니다.
+`allow-control` / `allow-agent` 는 접근을 늘리므로 승인 요청만 만들어지고, 웹 승인함에서 사람이 승인해야 하며 이 명령으로는 승인할 수 없습니다.
+요청을 만들면 종료 코드 0 이지만 아직 아무것도 바뀌지 않았다고 알려 줍니다. 그 설정이 꺼져 있거나 소켓이 없거나 옛 서버면 예전처럼
+`hosts.json` 에 바로 씁니다. `control` 은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다. `fsh host help` 로 볼 수 있습니다.
 
 공유 세션용 MCP 도구는 `list_shared_sessions`, `read_session`, `send_to_session`입니다.
 사용자가 웹에서 공유한 세션만 접근할 수 있으며, 첫 접근은 브라우저의 사용자 승인이

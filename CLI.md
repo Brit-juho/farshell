@@ -31,7 +31,7 @@ fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
 fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
 fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear|log [id]]  # prompt queue
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|allow-agent <id>|log|revoke-all]  # pair another Mac's FarShell
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # pair another Mac's FarShell
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
 fsh delegate [ls|close <id>]  # agent delegations (sub-sessions); close keeps the session
 fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session)
@@ -136,6 +136,13 @@ fsh host allow-agent <id>               # on the receiving Mac — needs allow-c
 ```
 
 Limits: 10 exchanges per conversation, 20 messages/min per sending Mac, 4000 chars.
+
+**Changing what another Mac may do (`fsh host allow-*` / `deny-*`).** With the server running `VT_AUTHZ_ENFORCE=peer` these commands ask the
+server over the unix socket instead of writing `~/.vt/hosts.json`: `deny-control` / `deny-agent` lower access and apply at once (audited);
+`allow-control` / `allow-agent` raise it, so they only create an approval request — a person approves it in the web inbox, and this command
+cannot. The command exits 0 after creating the request and says that nothing has changed yet. Without the flag, without a socket or against
+an older server they write `hosts.json` directly, as before. `control` means that Mac can type into this Mac's terminals — a remote shell.
+`fsh host help` prints this.
 
 **Shared sessions (MCP only).** `fsh mcp` also offers `list_shared_sessions`, `read_session` and
 `send_to_session`. The user shares an ordinary session with a nickname in the web UI; the agent can then
