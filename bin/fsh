@@ -1931,6 +1931,7 @@ cmd_help() {
     fsh delegate            List/close agent delegations (ls|close <id>)
     fsh migrate-auth        Migrate permissions to the authz store (--dry-run|--apply|--verify|--status)
     fsh authz               Inbox and permissions, read-only (whoami|grants|requests|audit|revoke|panic)
+    fsh lease               Folder leases — mark a path as "mine" (ls|acquire|renew|release|check|guard)
     fsh msg                 Messages between agents (log / agents / send)
     fsh mcp                 MCP server (stdio) for agents — register it with Claude
     fsh worktree            Create/open/delete git worktrees (alias: wt)
@@ -1994,6 +1995,7 @@ HELP_EN
     fsh delegate            에이전트 위임 목록·닫기 (ls|close <id>)
     fsh migrate-auth        권한 저장소 이전 (--dry-run|--apply|--verify|--status)
     fsh authz               승인함·권한 조회 (whoami|grants|requests|audit|revoke|panic) — 승인·회수는 웹/폰에서
+    fsh lease               폴더 lease — 이 경로는 내가 쓰는 중 (ls|acquire|renew|release|check|guard)
     fsh msg                 에이전트 간 메시지 (log / agents / send)
     fsh mcp                 에이전트용 MCP 서버(stdio) — Claude에 등록해 쓴다
     fsh worktree            git 워크트리 만들기/열기/삭제 (별칭: wt)
@@ -2032,7 +2034,8 @@ HELP
   case "$topic" in
     start|restart|stop|status|mobile|password|otp|device|devices) topic="access" ;;
     attach|handoff|terminal) topic="terminal" ;;
-    hooks|pane|queue|msg|mcp|delegate|authz) topic="agent-state" ;;
+    hooks|pane|queue|msg|mcp|delegate) topic="agent-state" ;;
+    authz|lease) topic="permissions" ;;
     voice-target) topic="target" ;;
     hotkey) topic="hotkeys" ;;
   esac
@@ -2416,6 +2419,24 @@ cmd_authz() {
       ;;
     *)
       echo "$(_t '사용법: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>')"
+      return 1 ;;
+  esac
+}
+
+# 폴더 lease — unix socket 로 서버에 말한다(연결의 peer 가 곧 신원). pre-commit guard 도 이 명령을 부른다:
+# 서버가 안 닿으면 경고만 하고 커밋은 통과(lease 는 권고). 현재 폴더(저장소)는 파이썬에 --cwd 로 넘긴다(server/ 로 옮겨 가서 부르므로).
+cmd_lease() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
+    return 1
+  fi
+  case "${1:-ls}" in
+    ls|list|acquire|renew|release|rm|check|guard)
+      local _cwd="$PWD"
+      (cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" "$VT_PYTHON" -m authz lease --cwd "$_cwd" --fsh "$VT_DIR/bin/fsh" "$@")
+      ;;
+    *)
+      echo "$(_t '사용법: fsh lease <ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status>')"
       return 1 ;;
   esac
 }
@@ -3497,6 +3518,24 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
         [ -n "$_st_name" ] || continue
         _check "$(_t '권한 저장소')" fail "$(_t '{name} 읽을 수 없음 — 변경 거부 중(파일은 그대로, 복사본 {n}개): {why} — {path}' name="$_st_name" why="$_st_why" n="${_st_n:-0}" path="${_st_path/#$HOME/~}")"
       done <<<"$_st"
+    fi
+  fi
+
+  # 11-a3. 폴더 lease — 활성 lease 수, 강제 여부, 이 저장소의 pre-commit guard, 최근 24h 에 건너뛴 횟수, 끝나지 않은 회수 정리
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _ls _ls_n _ls_guard _ls_skip _ls_enf _ls_saga _ls_cwd="$PWD"
+    _ls="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz lease --cwd "$_ls_cwd" doctor 2>/dev/null)"
+    if [ -n "$_ls" ]; then
+      IFS='|' read -r _ls_n _ls_guard _ls_skip _ls_enf _ls_saga <<<"$_ls"
+      _check "$(_t '폴더 lease')" ok "$(_t '활성 {n}개 · 쓰기 차단 {enf} (권고 모드면 서버는 막지 않음)' n="$_ls_n" enf="$([ "$_ls_enf" = 1 ] && echo on || echo off)")"
+      case "$_ls_guard" in
+        installed|chained) _check "$(_t 'lease guard')" ok "$(_t '이 저장소에 설치됨 (서버가 안 닿으면 경고만, 최근 24h 건너뜀 {n}회)' n="${_ls_skip:-0}")" ;;
+        absent)  _check "$(_t 'lease guard')" ok "$(_t "이 저장소에는 설치 안 됨 (선택) — 'fsh lease guard install'")" ;;
+        foreign) _check "$(_t 'lease guard')" ok "$(_t "다른 pre-commit 훅이 있음 — 'fsh lease guard install' 은 그 훅을 이어서 실행합니다")" ;;
+      esac
+      if [ "${_ls_saga:-0}" -gt 0 ] 2>/dev/null; then
+        _check "$(_t '회수 정리')" warn "$(_t '끝나지 않은 정리 {n}건 — 서버가 이어서 처리합니다 (fsh restart 로 재개)' n="$_ls_saga")"
+      fi
     fi
   fi
 
@@ -5154,6 +5193,7 @@ case "${1:-help}" in
   delegate) shift; cmd_delegate "$@" ;;
   migrate-auth) shift; cmd_migrate_auth "$@" ;;
   authz)    shift; cmd_authz "$@" ;;
+  lease)    shift; cmd_lease "$@" ;;
   files)    shift; cmd_files "$@" ;;
   host|hosts) shift; cmd_host "$@" ;;
   mcp)      shift; cmd_mcp "$@" ;;
