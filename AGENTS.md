@@ -68,6 +68,23 @@ Verify affected behavior with actual responses, operations and logs.
     comments with real account, organization, device or path names; use neutral values
     (`alice`, `acme`, `sample-repo`).
 
+## Branches and releases
+
+- `master` holds **released code only**. Its tip is always the latest release commit, which the
+  `vX.Y.Z` tag points at. Do not commit feature work to it.
+- `dev` is where development accumulates until the next version is decided. Start work from `dev`
+  (a short-lived `feat/...` branch is fine) and merge back into `dev`; `CHANGELOG.md` keeps the
+  `[Unreleased]` section, `VERSION` stays at the last released version.
+- `release/X.Y` preserves the X.Y line at its release tag (`release/2.3` is exactly `v2.3.0`).
+  It exists for urgent fixes to that version: commit the fix there, tag `vX.Y.(Z+1)`, then
+  merge it into `dev` so it is not lost.
+- To release: on `dev`, run the release commit (`VERSION`, the two README badges, move
+  `[Unreleased]` to `[X.Y.Z] — date`, `chore(release): vX.Y.Z`), then fast-forward `master` to it,
+  tag `vX.Y.Z` on `master` and push the tag (the `Release` workflow publishes it; it fails if
+  `VERSION` and the tag differ), and point `release/X.Y` at the tag. Pushing a tag publishes a
+  public release — confirm with the user first.
+- Never force-push `master`, `dev` or a `release/*` branch. Fast-forward only.
+
 ## Working rules
 
 - Preserve unrelated changes. Do not use `git stash`; stage only the intended changes.
