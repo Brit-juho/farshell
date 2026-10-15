@@ -8,8 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **통합 승인함·권한·감사 API (`/api/authz/*`, 플래그 없음).** 세션 공유·에이전트 메시지·호스트 권한 변경(`fsh host allow-*`)·에이전트가 직접 낸 요청이 한 목록(`GET /api/authz/approvals`)에 종류(`kind`)·요청자(위임 계보 포함)·리소스·요청한 권한과 조건·프리셋(보기·협업·운전·제어)·경과/남은 시간으로 보인다. 결정은 한 경로(`POST /api/authz/approvals/{id}/decision`, `allow|deny|later` × `once|session|deny`)이고 옛 결정 함수를 그대로 불러 선착순·재전송 멱등·승인권자 확인이 같다. 승인자는 요청보다 좁게(scope·기간)만 줄 수 있다. `GET /api/authz/grants`(승인한 사람·경로·프리셋·만료·남은 횟수), `DELETE /api/authz/grants/{id}?scopes=`(종류별 기존 회수 경로), `GET /api/authz/audit`(주 체인과 거부 기록을 합치고 서버가 해시 체인을 검증한 `chain: ok|broken`), `POST /api/authz/panic`(재인증한 사람만; 사람이 아닌 주체의 권한과 보류 요청을 전부 거둠)을 더했다. 옛 `/api/agent/share/*` 는 본문 그대로 같은 함수를 쓰는 얇은 껍데기로 남는다. 모든 집행 플래그를 꺼도 안전하다(읽기·관리 라우트일 뿐이다).
+- **에이전트가 권한을 직접 요청한다 (`POST /api/authz/requests`, `GET /api/authz/whoami`).** `{resource, scopes, reason, ttl}` 로 요청하면 항상 202 보류이고 사람이 승인함에서 «한 번만(사용 1회) / 이 세션 동안 / 거부»를 고른다. 호출자당 분당 6건·대기 20건·전체 200건, 거절 뒤 5분 쿨다운, `authz.*`·`pair.manage` 는 요청할 수 없다. 사유 문구는 승인 화면에만 보이고 감사에는 길이와 sha8 만 남는다. `whoami`(unix socket) 는 호출자와 유효 scope·조건, 맞는 프리셋을 알려 준다.
+- **`fsh authz whoami|grants|requests|audit [--follow] [--since]|revoke|panic` 와 MCP 도구 `whoami`·`request_access`·`list_my_grants`.** MCP 도구 목록은 whoami 의 scope 로 거른다. `fsh authz` 는 unix socket 으로 서버에 묻는 조회 명령이다. 터미널은 승인도 회수도 하지 않는다 — `revoke`·`panic` 은 서버를 부르지 않고 웹/폰에서 사람이 한다고 안내한다. 에이전트 pane 안에서는 조회도 거절된다. 도움말은 ko/en.
+- **`/ws-workspace` 의 `authz_request`·`authz_resolved`·`authz_revoked` 이벤트.** id 와 종류만 싣는 내용 없는 알림이다. 옛 `agent_share_request*` 도 한 릴리스 동안 같이 나간다.
+- **사전 인증 실패 한도.** 틀린 쿠키·토큰·로그인·일회용 티켓·페어링 코드와 peer 서명 실패를 출처별로 센다. 60초에 10번이면 그 출처는 5분 동안 429(`Retry-After`)이고, 로그인·페어링 엔드포인트는 전체 분당 300회 상한이 따로 있다. 메모리에만 있어 재시작하면 풀리고, unix socket 은 대상이 아니며, Origin 검사는 루프백도 면제하지 않는다. 서명은 맞는데 만료된 쿠키나 자격 없는 요청은 세지 않는다. 터널이 클라이언트 주소 헤더를 주지 않으면 원격 사용자 전체가 한 출처로 묶이는 한계가 있다(`docs/ref/auth.md`).
+- **큐 항목의 막힘 사유에 사람이 읽는 문구가 붙는다.** `grant_revoked`·`delegation_closed`·`relationship_gone`·`authz_unavailable` 코드는 그대로 두고, `GET /api/queue` 항목에 `blocked_text`(ko/en)를, `fsh queue` 출력에 같은 문구를 싣는다.
+
 ### Changed
 
+- **거부 기록을 주 감사 체인에서 분리했다.** 정책 거절·속도 제한·잠금·인증 실패는 `~/.vt/audit/denials.jsonl`(0600, 1MB × 3세대, 분당 60줄 + 누락 개수 줄)에 남고, 쓰기 실패는 요청을 막지 않는다. 해시 체인(`authz.jsonl`)에는 허용 판정과 모든 authz·pair·lease·grant 변경(사람의 거절 결정 포함)이 남아 거부 폭주가 정당한 이력을 밀어내지 못한다. 이미 체인에 있는 거부는 옮기지 않는다. `GET /api/authz/audit`·`GET /api/agent/share/audit` 은 둘을 합쳐 읽는다.
 - **공용 기계 토큰을 정리한다 (`VT_AUTHZ_ENFORCE=legacy`, 기본 꺼짐).** 켜면 `VT_AUTH_TOKEN` 은 더 이상 API 전체를 여는 열쇠가 아니다. 토큰(Bearer)은 unix socket 이 저장소 안 클라이언트에게 열어 주는 (메서드, 경로) 허용표 안에서만 쓸 수 있고, 그 밖(`/api/sessions/{id}/keys`, `/api/queue` 쓰기, `/api/hosts/*`, 파일·git 쓰기, WebSocket 등)은 403 `legacy_token_scope` 로 소켓이나 로그인을 쓰라고 안내한다. `?token=` 쿼리는 400 `token_query_unsupported`, 토큰 값을 세션 쿠키로 쓰는 방식은 401 `token_cookie_unsupported` 로 받지 않고, 접근 로그는 `token`·`secret`·`password` 류 쿼리 값을 가린다. 웹 앱도 주소창의 `?token=` 을 읽지 않고 지운 뒤 평소 로그인 화면을 보여 준다(이 부분은 플래그와 무관). 로그인한 브라우저·소켓·peer 서명은 그대로다. 꺼 두면 서버는 아무것도 바뀌지 않는다.
 - **비밀번호 없이 토큰만 있는 서버는 승인이 필요한 기능을 멈춰 두지 않고 이유를 알린다 (`legacy` 켜짐).** 세션 공유·관계 없는 세션으로의 에이전트 메시지·`fsh host allow-*` 처럼 사람의 승인이 필요한 호출은 403 `approval_unavailable_no_password` 로 답하고(`fsh password` 로 비밀번호를 설정하라는 안내), `fsh doctor` 와 서버 시작 로그가 한 번 알린다. 이미 부여된 권한은 그대로 동작한다. 이런 서버의 서명 쿠키는 더 이상 「사람」이 아니다(사람 전용 라우트 403). 비밀번호도 토큰도 없는 서버는 지금과 같다.
 - **`fsh doctor`·`fsh status` 가 범위 밖으로 거절된 토큰 요청을 보여 준다 (`legacy` 켜짐).** 최근 24시간의 거절 수를 경로·user agent 별로 보여 줘서, 다음 릴리스에서 기본값이 바뀌기 전에 어느 외부 스크립트를 소켓이나 로그인으로 옮겨야 하는지 알 수 있다. 이번 릴리스에서 토큰은 여전히 기본으로 받는다(사용만 집계).

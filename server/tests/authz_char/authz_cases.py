@@ -26,6 +26,38 @@ def _cid(group: str, route: str, method: str, caller: str, mode: str, var: str =
     return ".".join(p for p in (group, _slug(route), method.lower(), caller, mode, var) if p)
 
 
+# --- authz (승인함·권한·감사 API, 4단계) ------------------------------------------------------
+
+def authz_api_cases() -> list[Case]:
+    """`routes/authz.py` 전부. 사람 전용(결정·회수·비상 정지·shadow)과 사람/CLI 읽기, 에이전트 쪽(요청·내 권한)을 호출자 × 모드로 돈다.
+    세션 key 는 가짜 tmux 의 `target` 세션(`$2:1002`)이다."""
+    g = "authz_api"
+    callers = HUMAN + ("agent_verified", "agent_foreign", "peer_control")
+    req = {"resource": "session:local/$2:1002", "scopes": ["session.read"], "reason": "char", "ttl": 600}
+    routes = [
+        ("GET", "/api/authz/shadow", "/api/authz/shadow", None, ""),
+        ("GET", "/api/authz/whoami", "/api/authz/whoami", None, ""),
+        ("GET", "/api/authz/approvals", "/api/authz/approvals", None, ""),
+        ("GET", "/api/authz/grants", "/api/authz/grants", None, ""),
+        ("GET", "/api/authz/audit", "/api/authz/audit", None, ""),
+        ("POST", "/api/authz/approvals/{approval_id}/decision", "/api/authz/approvals/{rid}/decision",
+         {"decision": "allow", "choice": "session"}, ""),
+        ("DELETE", "/api/authz/grants/{grant_id}", "/api/authz/grants/{gid}", None, ""),
+        ("POST", "/api/authz/panic", "/api/authz/panic", None, ""),
+        ("POST", "/api/authz/requests", "/api/authz/requests", req, ""),
+        ("POST", "/api/authz/requests", "/api/authz/requests", {"resource": "session:local/$2:1002", "scopes": ["authz.admin"]},
+         "unrequestable_scope"),
+        ("GET", "/api/authz/requests", "/api/authz/requests", None, ""),
+        ("GET", "/api/authz/my-grants", "/api/authz/my-grants", None, ""),
+    ]
+    out = []
+    for method, route, path, body, var in routes:
+        for mode in MODES:
+            for c in callers:
+                out.append(Case(_cid(g, route, method, c, mode, var), g, c, mode, method, route, path, body))
+    return out
+
+
 # --- agent_share ----------------------------------------------------------------------------
 
 def agent_share_cases() -> list[Case]:
@@ -369,7 +401,7 @@ def cli_cases() -> list[Case]:
 BUILDERS = {
     "agent_share": agent_share_cases, "delegation": delegation_cases, "agent_msg": agent_msg_cases,
     "peer": peer_cases, "relay": relay_cases, "host_relay": host_relay_cases, "hosts": hosts_cases,
-    "machine_token": machine_token_cases, "cli_writes": cli_cases,
+    "machine_token": machine_token_cases, "cli_writes": cli_cases, "authz_api": authz_api_cases,
 }
 
 

@@ -53,7 +53,7 @@ def gmap() -> dict:
 
 
 def lines(prefix: str = "deleg.") -> list[dict]:
-    return list(reversed(audit.read_recent(1000, prefix)))
+    return list(reversed(audit.read_merged(1000, prefix)))
 
 
 def raw_audit() -> str:

@@ -40,7 +40,7 @@ from authz import peer_svc
 from authz import scopes as authz_scopes
 from i18n import tr
 import relay_policy
-from routes.peer_protocol import PeerDenied, _authenticate_raw
+from routes.peer_protocol import PeerDenied, _guarded
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +104,8 @@ async def peer_relay(request: Request, rest: str):
         return _denied(tr("본문 해시가 없거나 맞지 않습니다"), 401)
     query = request.url.query
     try:
-        grant = _authenticate_raw(request.method, _signed_path(request.url.path, query),
-                                  request.headers, digest)
+        grant = _guarded(request, request.method, _signed_path(request.url.path, query),
+                         request.headers, digest)
     except PeerDenied as e:
         return _denied(e.reason, e.status)
 
@@ -211,7 +211,7 @@ async def _dispatch(request: Request, target: str, query: str, peer_id: str,
 async def peer_relay_ws(ws: WebSocket, rest: str):
     query = ws.url.query
     try:
-        grant = _authenticate_raw("GET", _signed_path(ws.url.path, query), ws.headers)
+        grant = _guarded(ws, "GET", _signed_path(ws.url.path, query), ws.headers)
     except PeerDenied as e:
         await ws.accept()
         await ws.close(code=4401, reason=e.reason[:120])

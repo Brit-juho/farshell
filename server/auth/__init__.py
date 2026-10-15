@@ -253,6 +253,26 @@ def session_device(value: str) -> Optional[str]:
     return did
 
 
+def session_signed(value: str) -> bool:
+    """세션 쿠키가 **서명은 맞는가**(만료·기기 회수와 무관). 서명이 맞는 만료/회수 쿠키는 위조가 아니라 낡은 것이다 —
+    사전 인증 실패 한도(`authz/preauth.py`)가 추측으로 세지 않으려고 쓴다."""
+    if not VT_AUTH_SESSION_KEY or not value:
+        return False
+    parts = value.split(".")
+    try:
+        if len(parts) == 5 and parts[0] == "v3":
+            payload, sig = ".".join(parts[:4]), parts[4]
+        elif len(parts) == 4 and parts[0] == "v2":
+            payload, sig = ".".join(parts[:3]), parts[3]
+        elif len(parts) == 3 and parts[0] == "v1":
+            payload, sig = ".".join(parts[:2]), parts[2]
+        else:
+            return False
+        return hmac.compare_digest(_sign(payload), sig)
+    except (ValueError, TypeError):
+        return False
+
+
 def verify_session(value: str) -> bool:
     """세션 쿠키 값이 유효한(서명·만료·기기 OK) 세션표인지 검증."""
     return session_device(value) is not None

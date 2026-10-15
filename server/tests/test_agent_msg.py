@@ -260,7 +260,8 @@ def test_mcp_initialize_and_tools_list():
         m._api = m_api
     assert names == ["list_agents", "send_message", "read_messages",
                      "list_shared_sessions", "read_session", "send_to_session",
-                     "spawn_session", "send_to_child", "close_delegation", "report_back", "list_delegations"]
+                     "spawn_session", "send_to_child", "close_delegation", "report_back", "list_delegations",
+                     "whoami", "request_access", "list_my_grants"]
     assert m.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
     assert m.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})["error"]["code"] == -32601
 

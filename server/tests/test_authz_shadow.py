@@ -122,6 +122,8 @@ def _one_per_site() -> list:
     """판정 지점마다 대표 사례 몇 개(빠르게) — 모든 그룹·호출자 종류가 섞이게."""
     seen, out = set(), []
     for c in CASES:
+        if c.group == "authz_api":      # 승인함 API 는 shadow 지점이 아니다(엔진/저장소를 직접 읽고 쓰는 관리 라우트) — 자기 시험이 따로 있다
+            continue
         k = (c.group, c.caller, c.method)
         if k not in seen:
             seen.add(k)

@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict
 import agent_share
 import auth
 import share_identity
+from authz import events as authz_events
 from authz import msg_svc
 from authz import host_grant_svc
 from i18n import tr
@@ -152,6 +153,19 @@ async def _broadcast(msg: dict) -> None:
         logger.debug(f"공유 이벤트 알림 실패: {e}")
 
 
+def _kind_of_view(view: dict) -> str:
+    """요청 화면값의 kind(`read`/`write`=공유 세션 접근, `msg`, `peer`) → 승인함 종류."""
+    k = view.get("kind")
+    return k if k in ("msg", "peer") else "share"
+
+
+async def _resolved(rid: str, kind: str, state: str) -> None:
+    """결정·정리 알림. 옛 `agent_share_request_resolved` 와 새 `authz_resolved` 를 함께 낸다(옛 것은 한 릴리스 동안 유지)."""
+    if kind != "generic":                       # generic 요청은 옛 화면이 모르는 종류라 옛 이벤트가 없다
+        await _broadcast({"type": "agent_share_request_resolved", "id": rid, "state": state})
+    await authz_events.emit(authz_events.resolved_event(rid, kind, state))
+
+
 def _kick() -> None:
     try:
         import routes.system as system_routes
@@ -177,9 +191,12 @@ async def _announce(req: dict, snap: dict) -> None:
     await announce_view(request_view(req, snap), tr("공유 세션 사용 승인이 필요합니다"))
 
 
-async def announce_view(view: dict, push_body: str) -> None:
-    """이미 만든 요청 화면값(`request_view` 모양)을 알린다 — 공유 요청과 메시지 요청이 같이 쓴다."""
-    await _broadcast({"type": "agent_share_request", "request": view})
+async def announce_view(view: dict, push_body: str, *, kind: Optional[str] = None, legacy: bool = True) -> None:
+    """이미 만든 요청 화면값(`request_view` 모양)을 알린다 — 공유 요청과 메시지 요청이 같이 쓴다.
+    `legacy=False` 는 옛 모양(agent/target)이 아닌 요청(generic)이라 옛 이벤트를 내지 않는다."""
+    if legacy:
+        await _broadcast({"type": "agent_share_request", "request": view})
+    await authz_events.emit(authz_events.request_event(view.get("id", ""), kind or _kind_of_view(view)))
     try:
         import push
         import routes.system as system_routes
@@ -371,7 +388,7 @@ async def unshare_session(name: str, request: Request):
     was = res["was"] or {}
     await asyncio.to_thread(agent_share.audit, "unshare", "ok", nick=was.get("nick"))
     for rid in res["clearedRequests"]:
-        await _broadcast({"type": "agent_share_request_resolved", "id": rid, "state": "cleared"})
+        await _resolved(rid, "share", "cleared")
     _kick()
     return {"ok": True, "name": name, "revokedGrants": res["revokedGrants"], "clearedRequests": len(res["clearedRequests"])}
 
@@ -407,16 +424,22 @@ def _msg_requests() -> list:
 @human_router.post("/api/agent/share/requests/{request_id}/decision", response_model=DecisionResponse)
 async def decide_request(request_id: str, request: Request):
     body = await _body(request)
-    snap = await asyncio.to_thread(agent_share.snapshot)
     level = body.get("level")
     if level is not None and not isinstance(level, str):
         return _err(ShareError("bad_level", tr("level 은 read 또는 readwrite 입니다"), 400))
+    return await decide_core(request_id, body.get("decision"), level, request)
+
+
+async def decide_core(request_id: str, decision, level, request: Request):
+    """결정 한 건 — 옛 `/api/agent/share/requests/{id}/decision` 과 새 `/api/authz/approvals/{id}/decision` 이 같이 쓴다.
+    응답은 성공이면 dict(`ok`, `request`, `grant`, …), 실패면 JSONResponse 다."""
+    snap = await asyncio.to_thread(agent_share.snapshot)
     if msg_svc.enforced() and msg_svc.owns_request(request_id):
-        return await _decide_msg(request_id, body.get("decision"), level, request)
+        return await _decide_msg(request_id, decision, level, request)
     if host_grant_svc.enforced() and host_grant_svc.owns_request(request_id):
-        return await _decide_peer(request_id, body.get("decision"), level, request)
+        return await _decide_peer(request_id, decision, level, request)
     try:
-        res = await asyncio.to_thread(agent_share.decide, request_id, body.get("decision"), level, snap, _actor(request))
+        res = await asyncio.to_thread(agent_share.decide, request_id, decision, level, snap, _actor(request))
     except ShareError as e:
         return _err(e)
     req, grant = res["request"], res["grant"]
@@ -428,7 +451,7 @@ async def decide_request(request_id: str, request: Request):
             kind=req["kind"], level=("readwrite" if grant and grant.get("write") else "read") if allowed else None,
             request=req["id"], grant=grant["id"] if grant else None,
             reason=f"agent={view['agent']['name']}")
-        await _broadcast({"type": "agent_share_request_resolved", "id": req["id"], "state": "allowed" if allowed else "denied"})
+        await _resolved(req["id"], "share", "allowed" if allowed else "denied")
     out = {"ok": True, "request": view, "grant": grant_view(grant, snap) if grant else None}
     if res.get("grantId"):
         out["grantId"] = res["grantId"]
@@ -452,8 +475,7 @@ async def _decide_msg(request_id: str, decision, level, request: Request):
     allowed = res["grant"] is not None
     if res.get("replayed"):
         return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"], "replayed": True}
-    await _broadcast({"type": "agent_share_request_resolved", "id": res["request"]["id"],
-                      "state": "allowed" if allowed else "denied"})
+    await _resolved(res["request"]["id"], "msg", "allowed" if allowed else "denied")
     return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"]}
 
 
@@ -470,8 +492,7 @@ async def _decide_peer(request_id: str, decision, level, request: Request):
         return _err(e)
     if res.get("replayed"):
         return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"], "replayed": True}
-    await _broadcast({"type": "agent_share_request_resolved", "id": res["request"]["id"],
-                      "state": "allowed" if res["grant"] is not None else "denied"})
+    await _resolved(res["request"]["id"], "peer", "allowed" if res["grant"] is not None else "denied")
     return {"ok": True, "request": res["request"], "grant": res["grant"], "grantId": res["grantId"]}
 
 
@@ -511,6 +532,7 @@ async def revoke_grant(grant_id: str, request: Request, scope: str = Query("all"
             g = await asyncio.to_thread(msg_svc.revoke, grant_id, _actor_any(request), names)
         except ShareError as e:
             return _err(e)
+        await authz_events.emit(authz_events.revoked_event(g["id"], "msg"))
         return {"ok": True, "grant": g, "grantId": g["id"]}
     snap = await asyncio.to_thread(agent_share.snapshot)
     try:
@@ -520,6 +542,7 @@ async def revoke_grant(grant_id: str, request: Request, scope: str = Query("all"
     view = grant_view(g, snap)
     await asyncio.to_thread(agent_share.audit, "revoke", "ok", nick=view["target"]["nick"], grant=g["id"],
                             level="write" if scope == "write" else "all", reason=f"agent={view['agent']['name']}")
+    await authz_events.emit(authz_events.revoked_event(f"ag-{g['id']}", "share"))
     out = {"ok": True, "grant": view}
     if agent_share.enforced():
         out["grantId"] = f"ag-{g['id']}"

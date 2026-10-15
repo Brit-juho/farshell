@@ -1930,6 +1930,7 @@ cmd_help() {
     fsh queue               Prompt queue — stack instructions while the agent is busy and feed them in order
     fsh delegate            List/close agent delegations (ls|close <id>)
     fsh migrate-auth        Migrate permissions to the authz store (--dry-run|--apply|--verify|--status)
+    fsh authz               Inbox and permissions, read-only (whoami|grants|requests|audit|revoke|panic)
     fsh msg                 Messages between agents (log / agents / send)
     fsh mcp                 MCP server (stdio) for agents — register it with Claude
     fsh worktree            Create/open/delete git worktrees (alias: wt)
@@ -1992,6 +1993,7 @@ HELP_EN
     fsh queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
     fsh delegate            에이전트 위임 목록·닫기 (ls|close <id>)
     fsh migrate-auth        권한 저장소 이전 (--dry-run|--apply|--verify|--status)
+    fsh authz               승인함·권한 조회 (whoami|grants|requests|audit|revoke|panic) — 승인·회수는 웹/폰에서
     fsh msg                 에이전트 간 메시지 (log / agents / send)
     fsh mcp                 에이전트용 MCP 서버(stdio) — Claude에 등록해 쓴다
     fsh worktree            git 워크트리 만들기/열기/삭제 (별칭: wt)
@@ -2030,7 +2032,7 @@ HELP
   case "$topic" in
     start|restart|stop|status|mobile|password|otp|device|devices) topic="access" ;;
     attach|handoff|terminal) topic="terminal" ;;
-    hooks|pane|queue|msg|mcp|delegate) topic="agent-state" ;;
+    hooks|pane|queue|msg|mcp|delegate|authz) topic="agent-state" ;;
     voice-target) topic="target" ;;
     hotkey) topic="hotkeys" ;;
   esac
@@ -2397,6 +2399,23 @@ cmd_migrate_auth() {
       ;;
     *)
       echo "$(_t '사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]')"
+      return 1 ;;
+  esac
+}
+
+# 승인함·권한·감사 조회 — unix socket 로 서버에 묻는다(서버가 연결의 peer 로 호출자를 안다).
+# 터미널(pane 밖)은 보기만 한다: 승인·회수·비상 정지는 로그인한 사람(웹/폰)의 일이라 revoke·panic 은 서버를 부르지 않고 안내만 한다.
+cmd_authz() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
+    return 1
+  fi
+  case "${1:-}" in
+    whoami|grants|requests|revoke|audit|panic)
+      (cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" "$VT_PYTHON" -m authz cli "$@")
+      ;;
+    *)
+      echo "$(_t '사용법: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>')"
       return 1 ;;
   esac
 }
@@ -5134,6 +5153,7 @@ case "${1:-help}" in
   queue)    shift; cmd_queue "$@" ;;
   delegate) shift; cmd_delegate "$@" ;;
   migrate-auth) shift; cmd_migrate_auth "$@" ;;
+  authz)    shift; cmd_authz "$@" ;;
   files)    shift; cmd_files "$@" ;;
   host|hosts) shift; cmd_host "$@" ;;
   mcp)      shift; cmd_mcp "$@" ;;

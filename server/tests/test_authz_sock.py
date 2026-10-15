@@ -402,6 +402,8 @@ def test_unrelated_cookie_is_not_a_credential():
     ("GET", "/api/authz/shadow"), ("GET", "/api/peer/whoami"), ("POST", "/api/agent/report/x"),
     ("GET", "/api/agent/report"), ("POST", "/api/tmux/kill/a"), ("GET", "/"), ("POST", "/api/auth"),
     ("POST", "/api/tmux/a/share"), ("POST", "/api/hosts/pair"),
+    ("POST", "/api/authz/panic"), ("DELETE", "/api/authz/grants/gg-1"), ("POST", "/api/authz/approvals/x/decision"),
+    ("POST", "/api/authz/whoami"), ("DELETE", "/api/authz/requests"),
 ])
 def test_route_outside_allowlist_is_403(method, path):
     g = armed_gate()
@@ -419,7 +421,9 @@ def test_route_outside_allowlist_is_403(method, path):
     ("GET", "/api/agent/shared"), ("POST", "/api/agent/shared/read"), ("POST", "/api/agent/shared/send"),
     ("GET", "/api/delegations"), ("GET", "/api/delegations/role"), ("POST", "/api/delegations"),
     ("POST", "/api/delegations/report"), ("POST", "/api/delegations/d1/send"), ("POST", "/api/delegations/d1/close"),
-    ("POST", "/api/queue/run"), ("POST", "/api/ports/_proxy/sync")]])
+    ("POST", "/api/queue/run"), ("POST", "/api/ports/_proxy/sync"),
+    ("GET", "/api/authz/requests"), ("POST", "/api/authz/requests"), ("GET", "/api/authz/my-grants"),
+    ("GET", "/api/authz/approvals"), ("GET", "/api/authz/grants"), ("GET", "/api/authz/audit")]])
 def test_every_in_repo_client_route_is_allowed(method, path):
     assert sock.route_allowed(method, path)
     g = armed_gate()

@@ -39,7 +39,7 @@ from typing import Optional
 
 from i18n import tr
 
-from . import approvals, audit, engine, limits, shares, store
+from . import approvals, audit, engine, inbox, limits, shares, store
 from . import principals as P
 from . import scopes as S
 from .errors import ShareError
@@ -235,7 +235,7 @@ def read_audit(limit: int) -> list[dict]:
     """`GET /api/agent/share/audit` — authz 감사에서 공유 줄만, 옛 모양으로(최근 순)."""
     limit = max(1, min(int(limit), 500))
     out = []
-    for r in audit.read_recent(limit, "share."):
+    for r in audit.read_merged(limit, "share."):          # 거부(denials.jsonl)도 옛 화면에는 계속 보인다
         d = r.get("detail")
         if isinstance(d, dict):
             out.append({"ts": r.get("ts"), **d})
@@ -278,11 +278,13 @@ def authorize(kind: str, snap, agent, target, now: Optional[float] = None) -> Ac
             d = engine.decide(p, scope, f"session:local/{target.key}", ctx, _snapshot(docs, now))
             if d.allow:
                 limits.record(ag._rate, key, hits, now)
+                inbox.consume_use(docs, d.grant_id)       # 「한 번만」으로 허용한 grant(max_uses=1)면 한 번 썼다고 센다
             else:
                 ag._rate[key] = hits
         limited = (not d.allow) and d.reason == "rate_limited"
+        gid = g["id"] if g else (d.grant_id if d.allow and str(d.grant_id or "").startswith(inbox.GRANT_ID_PREFIX) else None)
         return Access(allowed=d.allow or limited, rate_limited=limited, limit=limit,
-                      grant=approvals.grant_to_legacy(g) if g else None, grant_id=g["id"] if g else None,
+                      grant=approvals.grant_to_legacy(g) if g else None, grant_id=gid,
                       reason=d.reason, decision=d.as_dict())
 
 

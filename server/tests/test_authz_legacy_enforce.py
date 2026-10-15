@@ -75,6 +75,9 @@ SAMPLES = [
     ("POST", "/api/delegations/report"), ("POST", "/api/delegations/d1/send"), ("POST", "/api/delegations/d1/close"),
     ("POST", "/api/delegations/d1/close-by-cli"), ("POST", "/api/queue/run"), ("POST", "/api/ports/_proxy/sync"),
     ("POST", "/api/host-grants/pc/change"),
+    ("GET", "/api/authz/whoami"), ("GET", "/api/authz/requests"), ("POST", "/api/authz/requests"),
+    ("GET", "/api/authz/my-grants"), ("GET", "/api/authz/approvals"), ("GET", "/api/authz/grants"),
+    ("GET", "/api/authz/audit"),
 ]
 
 DENIED = [

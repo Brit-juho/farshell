@@ -50,12 +50,13 @@ from fastapi.responses import JSONResponse
 import agent_msg
 import host_store
 from authz import hooks as authz_hooks
+from authz import preauth as authz_preauth
 from authz import msg_svc
 from authz import peer_svc
 from i18n import tr
 from routes.peer_protocol import (
     PeerDenied,
-    _authenticate_raw,
+    _guarded,
     _require,
     _require_body,
     _version,
@@ -93,6 +94,7 @@ async def peer_pair(request: Request):
         )
     if host_store.consume_pair_ticket(ticket) is None:
         host_store.audit(peer_id, "pair", False, "티켓 무효/만료")
+        authz_preauth.fail(authz_preauth.source_of(request), "pair")
         return JSONResponse(
             {"error": "ticket_invalid",
              "reason": tr("티켓이 유효하지 않거나 만료됐습니다 — 'fsh host pair'를 다시 실행하세요")},
@@ -542,7 +544,7 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
     것을 이미 지원하므로 PTY를 따로 두는 게 맞다.
     """
     try:
-        grant = _authenticate_raw("GET", ws.url.path, ws.headers)
+        grant = _guarded(ws, "GET", ws.url.path, ws.headers)
     except PeerDenied as e:
         # accept 전에 닫으면 상대는 HTTP 403을 받는다 — 이유를 실을 수 없어
         # 일단 받아들인 뒤 코드와 함께 닫는다.

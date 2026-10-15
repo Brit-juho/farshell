@@ -85,6 +85,11 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", r"/api/queue/run", "mcp_farshell"),
     ("POST", r"/api/ports/_proxy/sync", "bin/fsh (tunnel expose/pin/mode)"),
     ("POST", r"/api/host-grants/[^/]+/change", "fsh host allow-control|deny-control|allow-agent|deny-agent (cli / pane agent)"),
+    # 승인함·권한 — 에이전트는 자기 요청/권한만, CLI 는 읽기만(승인·회수는 사람 세션). whoami 는 위 게이트가 앱 앞에서 직접 답한다.
+    ("GET", r"/api/authz/whoami", "fsh authz whoami · mcp whoami (answered by the gate itself)"),
+    ("GET", r"/api/authz/(requests|my-grants)", "mcp request_access / list_my_grants (agent: own records only)"),
+    ("POST", r"/api/authz/requests", "mcp request_access (agent, creates a pending request)"),
+    ("GET", r"/api/authz/(approvals|grants|audit)", "fsh authz requests|grants|audit (cli: read only)"),
 )
 _ROUTES_RE = tuple((m, re.compile(p), who) for m, p, who in ROUTES)
 
@@ -301,7 +306,13 @@ class Gate:
             raise Reject(400, "ambiguous_principal", f"소켓 요청에 {amb} 자격이 함께 실렸습니다")
         if path == WHOAMI_PATH and method == "GET":
             p = await asyncio.to_thread(self.resolver.resolve_sync, peer, headers.get("x-fsh-svc", "").strip().lower())
-            await _respond(send, 200, {"principal": principal_view(p)})
+            try:
+                from . import inbox
+                body = await asyncio.to_thread(inbox.whoami, p)      # 주체 + 유효 scope·조건 요약 + 맞는 프리셋
+            except Exception as e:  # noqa: BLE001 — 요약을 못 만들어도 호출자 확인은 돌려준다
+                logger.warning("[authz-sock] whoami 요약 실패: %s", e)
+                body = {"principal": principal_view(p), "scopes": None, "authz": "unavailable"}
+            await _respond(send, 200, body)
             return
         if not route_allowed(method, path):
             raise Reject(403, "socket_route_not_allowed", f"{method} {path} 는 소켓으로 열려 있지 않습니다")
