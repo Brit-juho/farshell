@@ -192,7 +192,7 @@ def auto_approve(*_a, **_kw) -> None:
 
 
 def request(docs: dict, agent_ref: dict, target_ref: dict, kind: str, now: float, *, ttl: float, per_agent: int,
-            total: int, cooldown: float, new_id: Optional[str] = None) -> tuple[dict, bool]:
+            total: int, cooldown: float, new_id: Optional[str] = None, delegation: Optional[str] = None) -> tuple[dict, bool]:
     """보류 요청 하나. (옛 모양 요청, 새로 만들었는가). 쿨다운 중이면 403, 한도를 넘으면 429."""
     ak = f"{agent_ref['sid']}:{agent_ref['created']}"
     tk = f"{target_ref['sid']}:{target_ref['created']}"
@@ -213,6 +213,8 @@ def request(docs: dict, agent_ref: dict, target_ref: dict, kind: str, now: float
     rec = engine_request(legacy, now)
     if rec is None:                              # ttl<=0 같은 시험 값 — 요청은 만들어지지 않는다
         return legacy, True
+    if delegation:                               # 자식의 요청이면 부모 위임 id 를 남긴다(계보 표시용 필드 — 판정에 쓰지 않는다)
+        rec["delegation"] = delegation
     docs["approvals"]["items"].append(rec)
     return request_to_legacy(rec), True
 

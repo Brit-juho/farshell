@@ -170,11 +170,14 @@ def purge(docs: dict, alive: Optional[Iterable[str]], now: float) -> bool:
     return len(g0) != len(docs["grants"]["items"]) or len(a0) != len(docs["approvals"]["items"]) or pruned
 
 
-def _request_rec(rid: str, ak: str, tk: str, a_name: str, t_name: str, now: float) -> dict:
-    return {"id": f"ap-{rid}", "origin": f"{PREFIX_REQ}{rid}", "kind": "msg", "subject": f"agent:local/{ak}",
-            "resource": f"msg:local/{tk}", "scopes": [SCOPE], "subject_session": ak, "resource_session": tk,
-            "subject_name": a_name, "resource_name": t_name, "state": "pending", "created": now,
-            "expires": now + REQUEST_TTL}
+def _request_rec(rid: str, ak: str, tk: str, a_name: str, t_name: str, now: float, delegation: Optional[str] = None) -> dict:
+    rec = {"id": f"ap-{rid}", "origin": f"{PREFIX_REQ}{rid}", "kind": "msg", "subject": f"agent:local/{ak}",
+           "resource": f"msg:local/{tk}", "scopes": [SCOPE], "subject_session": ak, "resource_session": tk,
+           "subject_name": a_name, "resource_name": t_name, "state": "pending", "created": now,
+           "expires": now + REQUEST_TTL}
+    if delegation:                               # 자식의 요청이면 부모 위임 id (계보 표시용 필드 — 판정에 쓰지 않는다)
+        rec["delegation"] = delegation
+    return rec
 
 
 def _grant_rec(gid: str, req: dict, approved_by: str, now: float) -> dict:
@@ -385,6 +388,8 @@ def request_access(sender_key: str, sender_name: str, recv_key: str, recv_name: 
     now = time.time()
     if not (_safe_key(sender_key) and _safe_key(recv_key)):
         raise ShareError("bad_target", tr("세션 key 가 올바르지 않습니다"), 400)
+    from . import deleg_svc
+    lineage = deleg_svc.lineage_of(sender_key)            # 락 밖에서 — 장부를 읽는다
     with store.txn() as docs:
         snap = store.Snapshot(grants=docs["grants"]["items"], approvals=docs["approvals"]["items"],
                               windows=docs["windows"]["items"], shares=docs["shares"]["items"],
@@ -406,7 +411,7 @@ def request_access(sender_key: str, sender_name: str, recv_key: str, recv_name: 
         mine = sum(1 for r in reqs if r.get("state") == "pending" and r.get("subject_session") == sender_key)
         if mine >= MAX_PENDING_PER_AGENT or len(reqs) >= MAX_REQUESTS:
             raise ShareError("too_many_requests", "대기 중인 승인 요청이 너무 많습니다 — 사용자가 처리한 뒤 다시 하세요", 429)
-        rec = _request_rec(f"{REQ_PREFIX_ID}{uuid.uuid4().hex[:12]}", sender_key, recv_key, sender_name, recv_name, now)
+        rec = _request_rec(f"{REQ_PREFIX_ID}{uuid.uuid4().hex[:12]}", sender_key, recv_key, sender_name, recv_name, now, lineage)
         docs["approvals"]["items"].append(rec)
         return dict(rec), True
 

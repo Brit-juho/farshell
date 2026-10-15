@@ -314,6 +314,8 @@ def list_state(snap, provenance: bool = False) -> dict:
 
 def request_access(snap, agent, target, kind: str) -> tuple[dict, bool]:
     ag = _ag()
+    from . import deleg_svc
+    lineage = deleg_svc.lineage_of(agent_key(agent))      # 락 밖에서 — 장부를 읽는다
     now = time.time()
     with _txn(snap) as docs:
         d = engine.decide(P.from_caller(agent), "authz.request", "authz:*", {}, _snapshot(docs, now))
@@ -322,7 +324,7 @@ def request_access(snap, agent, target, kind: str) -> tuple[dict, bool]:
         return approvals.request(
             docs, {"sid": agent.sid, "created": agent.created, "name": agent.name},
             {"sid": target.sid, "created": target.created}, kind, now, ttl=ag.REQUEST_TTL,
-            per_agent=ag.MAX_PENDING_PER_AGENT, total=ag.MAX_REQUESTS, cooldown=ag.DENY_COOLDOWN)
+            per_agent=ag.MAX_PENDING_PER_AGENT, total=ag.MAX_REQUESTS, cooldown=ag.DENY_COOLDOWN, delegation=lineage)
 
 
 def decide(request_id: str, decision: str, level: Optional[str], snap, actor: Optional[P.Principal] = None) -> dict:

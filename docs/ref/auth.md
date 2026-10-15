@@ -255,6 +255,15 @@ The engine failing or the store being unreadable at that moment closes (queue: `
 share: 503 `authz_unavailable`). `grant_revoked`/`delegation_closed`/`relationship_gone` are not retried automatically; unblocking the
 item re-runs the check. Items queued while the flag was off carry no `source.authz` and are not re-checked.
 
+## Child limits and ownership integrity
+
+- **A child's grants are the intersection of the parent's grants and what is requested** (`scopes.child_grants(parent_grants, requested)`;
+  delegation derives the child's folder share through it). These never pass to a child even if the parent holds them: `browser.js`,
+  `browser.sensitive`, `session.manage`, `relay`, `authz.admin`, `pair.manage`, and `session.input` with `raw` (a child gets `line`
+  at most). A child has no way to approve anything — approving needs a signed-in person's session, which no scope grants. A child keeps
+  `authz.request` (its only way to ask the person); each request it creates records the open delegation it belongs to as a `delegation`
+  field on the stored request, for display in the approvals inbox. The field does not appear in API responses and is not used in decisions.
+
 ## How a grant was approved: `approved_via`
 
 Every grant record the engine writes carries `approved_via` next to `approved_by`: `manual` (a person decided it: session-share and

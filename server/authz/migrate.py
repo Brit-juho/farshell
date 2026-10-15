@@ -366,7 +366,7 @@ def _is_legacy(rec: dict) -> bool:
     return str(rec.get("origin", "")).startswith("legacy:")
 
 
-def _sync(items: list, new: list, keep_fields: tuple = ("approved_by", "approved_via")) -> tuple[list, dict]:
+def _sync(items: list, new: list, keep_fields: tuple = ("approved_by", "approved_via", "delegation")) -> tuple[list, dict]:
     """legacy origin 레코드를 new 와 동기화. (결과 목록, {added, updated, removed, same})."""
     by_origin = {x.get("origin"): x for x in items if _is_legacy(x)}
     native = [x for x in items if not _is_legacy(x)]
