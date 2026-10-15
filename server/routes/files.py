@@ -64,7 +64,8 @@ def _list_dir(p: Path) -> dict:
                     is_dir = de.is_dir(follow_symlinks=False)
                 except OSError:
                     continue
-                if is_dir and name in fsguard.EXCLUDE_DIRS:
+                if is_dir and (name in fsguard.EXCLUDE_DIRS
+                               or fsguard.is_hidden_state_dir_name(name)):
                     continue
                 # 거부 대상은 목록에서도 감춘다. 이름만으로도 정보가 되기 때문.
                 if not is_dir and fsguard._is_denied_name(name):
@@ -135,7 +136,8 @@ def _search_files(root: Path, query: str) -> tuple[list[dict], bool]:
                     except OSError:
                         continue
                     if is_dir:
-                        if name in fsguard.EXCLUDE_DIRS:
+                        if (name in fsguard.EXCLUDE_DIRS
+                                or fsguard.is_hidden_state_dir_name(name)):
                             continue
                         subdirs.append(de.path)
                         continue

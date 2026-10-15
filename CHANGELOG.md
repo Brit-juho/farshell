@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **파일 뷰어가 이름을 모르는 도구의 상태 디렉토리도 막는다**. 지금까지는 `.ssh`·`.claude` 같은 이름을 하나씩 거부 목록에 올려야 했고, 목록에 없는 도구의 `.도구이름/.auth.json`은 열렸다. 이제 열람 루트 아래의 `.`로 시작하는 디렉토리는 허용 목록(`.github`·`.gitlab`·`.vscode`·`.devcontainer`·`.husky`·`.storybook`·`.circleci`·`.changeset`·`.worktrees`)에 없으면 거부하고, 파일 트리와 검색에서도 감춘다. 루트 경로 자체와 그 위쪽(예: 점 디렉토리 안의 `VT_BROWSE_ROOTS`, 자동 추가되는 `~/.worktrees` 루트)은 검사하지 않는다. `.git/` 안의 파일도 이제 열리지 않는다. `.gitignore` 같은 점 파일은 그대로 열린다.
+
 - **개인 값 가드가 기록 문서와 개인 단어까지 막고, 켜져 있는지 알려 준다**. 지금까지 가드(`scripts/guard_personal.py`)는 클론마다 `core.hooksPath`를 손으로 켜야 했고 아무도 켜지 않아서, 조사 노트·계획서·개인 식별 값이 커밋에 섞여 GitHub까지 올라갔다. `install.sh`가 git 클론이면 훅을 켜고, `fsh doctor`가 꺼져 있으면 경고한다. 가드는 새로 들어오는 `research_notes/`·`reports/`·`docs/` 허용 폴더 밖 파일·`docs/ref/*-plan.md`·`docs/ref/references.md`·루트 `*_DESIGN.md`를 이름으로 막고, 저장소 밖 `~/.vt-guard-words`(줄마다 하나, 대소문자 구분·단어 경계)에 적은 조직·프로필·기기 이름이 추가된 줄이나 파일 이름에 있으면 막는다. 출력에는 그 단어를 다시 싣지 않는다. `AGENTS.md` 계약 13이 `docs/ref/`에는 현재 동작만 두라고 정한다.
 
 ### Fixed
