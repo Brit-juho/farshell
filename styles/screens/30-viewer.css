@@ -264,7 +264,7 @@
   background:var(--bar); color:var(--txt); border:1px solid var(--line); border-radius:6px;
   padding:2px calc(var(--spacing) * 1.5);
 }
-.vt-vw-graph{ flex:0 0 auto; display:block; }
+.vt-vw-graph{ flex:0 0 auto; display:block; width:var(--vt-graph-w, auto); }
 .vt-vw-crow{ gap:calc(var(--spacing) * 1.5); padding-top:0; padding-bottom:0; min-height:24px; }
 .vt-vw-gref{
   flex:0 0 auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;

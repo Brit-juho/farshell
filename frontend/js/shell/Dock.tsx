@@ -285,7 +285,6 @@ function Dock(props: { deps: DockDeps }) {
                   전체 이름은 data-tip이 들고 있다(ui/tooltip.js). dock은 화면
                   오른쪽 끝이라 툴팁은 왼쪽으로 나온다. */}
               <span class="vt-dock-tab-ico" innerHTML={icon(t.icon, 16)} />
-              <span class="vt-dock-tab-label">{t.label}</span>
               {/* 2026-09-18 — 배지가 수치(.vt-badge)에서 점으로 내려왔던 이유:
                   접힘 36px에서 탭의 clientWidth 35에 scrollWidth가 38이 되어
                   (아이콘 16 + gap 4 + 배지 min-width 18) .vt-dock-tabs의

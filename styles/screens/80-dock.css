@@ -85,6 +85,11 @@
   transition:background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint);
 }
 .vt-dock-tab:hover { background:var(--menu-hover); color:var(--color-txt); }
+/* 탭 행이 overflow로 잘려서 바깥으로 그리는 기본 포커스 링이 위아래가 반쯤 잘려 보였다 —
+   링을 칸 안쪽으로 그린다. */
+.vt-dock-tab:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; border-radius:0; }
+/* 탭은 전부 아이콘 칸이다 — 이름은 aria-label과 툴팁(data-tip)이 말한다. */
+.vt-dock-tab { width:32px; padding:0; justify-content:center; }
 /* 한 부모의 형제이니 "마지막"은 항상 실제 마지막 버튼(펼침이면 접기, 접힘이면
    접기가 안 보이므로 설정)이다 — 옛 :empty 보정(마이크 미설치 시 다음
    요소가 border-left를 대신 받던 것)이 필요 없어졌다: 자기 border-right를
@@ -193,7 +198,7 @@
   border:0; border-radius:0;
   background:transparent; color:var(--color-sub); cursor:pointer;
 }
-.vt-dock-mic-home .vt-rail-mic-btn:hover { background:var(--menu-hover); color:var(--color-txt); }
+.vt-dock-mic-home .vt-rail-mic-btn:hover { background:transparent; color:var(--color-txt); }
 /* 탭 아이콘(icon(t.icon,16))과 같은 16px로 맞춘다 — 이전엔 15px라 접힘 칸에서
    탭과 나란히 서면 한 단 작아 보였다. */
 .vt-dock-mic-home .vt-rail-mic-btn > svg { width:16px; height:16px; flex:none; }
@@ -205,8 +210,9 @@
 .vt-dock-mic-home #mic-btn-wrap.mic:hover {
   background:transparent; color:var(--color-sub); filter:none;
 }
-.vt-dock-mic-home #mic-btn-wrap.mic:hover { background:var(--menu-hover); color:var(--color-txt); }
-.vt-dock-mic-home #mic-btn-wrap.mic:active { transform:none; background:var(--color-surface-active); }
+.vt-dock-mic-home #mic-btn-wrap.mic:hover { background:transparent; color:var(--color-txt); }
+.vt-dock-mic-home #mic-btn-wrap.mic:active { transform:none; background:transparent; }
+.vt-dock-mic-home:active { background:var(--color-surface-active); }
 /* 상태 점 — 평소(준비됨)엔 없다. 문제가 있을 때만 아이콘 모서리에 색이 붙는다
    (status-panel.js가 data-voice-state를 정한다). */
 .vt-dock-mic-home #mic-btn-wrap { position:relative; }
@@ -243,11 +249,12 @@
   padding:calc(var(--spacing) * 2.5) 0;
   border-right:0; border-bottom:1px solid var(--line); justify-content:center;
 }
-#vt-dock.collapsed .vt-dock-tab-label { display:none; }
-#vt-dock.collapsed .vt-dock-tab-ico { display:inline-flex; }
+#vt-dock.collapsed .vt-dock-tab { width:auto; }
 /* 펼친 dock은 지금까지대로 글자만 — 아이콘을 같이 넣으면 5개 탭이 가로로
    늘어선 줄이 빽빽해진다. 아이콘은 접힘 전용 장치다. */
-.vt-dock-tab-ico { display:none; }
+.vt-dock-tab-ico { display:inline-flex; }
+/* 펼침의 수치 배지는 아이콘 모서리에 올린다 — 칸 폭(32px)을 밀지 않는다. */
+.vt-dock-tab-badge { position:absolute; top:1px; right:0; min-width:14px; height:14px; padding:0 3px; font-size:9px; line-height:12px; box-sizing:border-box; }
 /* 접힘 36px에서는 밑줄이 놓일 아랫변이 없다 — 같은 2px을 세로 변(오른쪽)으로
    돌린다. 색·두께는 펼친 상태와 같으니 활성 문법은 하나로 유지된다. */
 #vt-dock.collapsed .vt-dock-tab.active { box-shadow:inset -2px 0 0 var(--color-acc); }

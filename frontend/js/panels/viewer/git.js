@@ -402,8 +402,11 @@ async function _renderCommitLog(repo, container, skip, opts) {
   }
   d.commits.forEach(c => {
     const g = _layoutGraph(container._graph, c);
+    container._graph.maxW = Math.max(container._graph.maxW || 1, g.width);
     container.appendChild(_commitRowEl(repo, c, opts, g));
   });
+  // 모든 행의 그래프 칸을 가장 넓은 줄 수에 맞춰, 해시·제목 열이 행마다 흔들리지 않게 한다.
+  container.style.setProperty('--vt-graph-w', `${container._graph.maxW * _LANE_W + 4}px`);
   if (d.has_more) {
     const btn = document.createElement('button');
     btn.className = 'vt-btn vt-vw-glog-more';
