@@ -451,6 +451,25 @@ socket state (listening, self-test, permissions) and **machine-token requests in
 `Authorization: Bearer` through a curl config on a `/dev/fd` pipe (`curl -K`), so the token is never in argv/`ps`.
 `server/tests/test_no_token_in_argv.py` fails on any script that runs curl with `token=` or a token variable in its arguments.
 
+## Inbox and grants: one list, one decision route
+
+`/api/authz/approvals` lists every pending request (shared-session access, agent messages, host changes from `fsh host allow-*`, and
+`generic` requests an agent makes with `POST /api/authz/requests`); `/api/authz/grants` lists every grant. The decision and revoke
+routes do not re-implement anything: they pick the module that owns the kind (`agent_share`, `msg_svc`, `host_grant_svc`, the delegation
+ledger) and call its existing decide/revoke function, so first-decision-wins, idempotent replay, the approver-authority check
+(a person can approve only what they themselves could do; elevated reasons need an elevated session) and the audit rows are the same
+as through the old `/api/agent/share/*` routes, which stay as shims. API detail: `API.md` «Approval inbox, grants and audit».
+
+| Topic | Rule |
+|---|---|
+| Who may call | Decide/revoke/panic: browser login session only (panic: elevated). Reads: login session, or the `fsh` CLI on the unix socket (a `cli` caller outside tmux) — the CLI never approves or revokes (`fsh authz revoke`/`panic` only point to the web/phone screen). An agent sees only its own requests and grants |
+| What a person chooses | `once` (a grant with `conds.max_uses = 1`, counted where an enforcement point consumes it), `session` (while the requester's and the resource's sessions live), or deny (5-minute cooldown). The approver can only narrow scopes and time, never widen |
+| Presets | The UI shows four bundles — 보기 (view), 협업 (collab), 운전 (drive), 제어 (control; elevated) — and the smallest bundle that covers a request or grant; scopes and conditions are on the detail view and in the audit |
+| `generic` grants | Written to `grants.json` with origin `authz:grant:<id>` (never projected to the old files), honoured by the engine wherever an enforcement point asks. With every flag off they change no response |
+| Requests by agents | `authz.request` is an agent default; 6 a minute per caller, 20 pending per caller, 200 in all, 24 h expiry, 5-minute cooldown after a refusal. `authz.*` and `pair.manage` cannot be requested. The agent's free-text `reason` is shown to the approver and never audited (length and sha8 only). A delegated child's request carries the parent delegation id |
+| Events | `authz_request`, `authz_resolved`, `authz_revoked` on `/ws-workspace` with ids and kinds only; the old `agent_share_request*` events are still sent for one release |
+| Panic | Revokes non-human grants through each kind's own revoke path, clears pending requests, lowers peer grants to view (the pairing stays) and closes open delegations; human defaults, share policy and logins are untouched. Audited per item plus one `authz.panic` row |
+
 ## A device's sessions die with the device
 
 `session_device` used to check only that the bound device **still existed**. A device

@@ -803,9 +803,11 @@ def test_pending_request_is_pushed_to_workspace_websocket(web):
         req = msg["request"]
         assert req["id"] == rid and req["kind"] == "read" and req["agent"]["name"] == "claude-a"
         assert req["target"]["nick"] == "shell"
+        assert ws.receive_json() == {"type": "authz_request", "id": rid, "kind": "share"}      # 새 이벤트(내용 없음) — 옛 것과 함께
         approve(human, rid)
         done = ws.receive_json()
         assert done == {"type": "agent_share_request_resolved", "id": rid, "state": "allowed"}
+        assert ws.receive_json() == {"type": "authz_resolved", "id": rid, "kind": "share", "state": "allowed"}
 
 
 def test_push_body_never_carries_session_names(web, monkeypatch):

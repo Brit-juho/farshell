@@ -55,7 +55,8 @@ def _expected_change(case, world, matrix):
         if "reached" in old:
             want["reached"] = False
         return H1, want
-    if case.caller in SESSION_CALLERS and case.mode == "token" and case.method != "WS" and old.get("status") == 200:
+    if case.caller in SESSION_CALLERS and case.mode == "token" and case.method != "WS" and (
+            old.get("status") == 200 or old.get("error") == "password_required"):   # 승격 필요 라우트(panic)는 사람 확인 뒤에 password_required
         # 사람 전용 라우트인지는 기록이 말해 준다: 같은 라우트에서 기계 토큰이 human_session_required 로 거절됐다.
         twin_row = matrix.get(case.id.replace(f".{case.caller}.", ".machine."))
         if twin_row and twin_row["expected"].get("error") == "human_session_required":

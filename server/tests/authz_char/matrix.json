@@ -4390,6 +4390,3282 @@
    "error": null
   }
  },
+ "authz_api.api_authz_approvals.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_approvals.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_approvals.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_approvals.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/approvals",
+  "path": "/api/authz/approvals",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_approvals_X_decision.post.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/approvals/{approval_id}/decision",
+  "path": "/api/authz/approvals/{rid}/decision",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_audit.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_audit.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_audit.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_audit.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_audit.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_audit.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_audit.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_audit.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_audit.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/audit",
+  "path": "/api/authz/audit",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/grants",
+  "path": "/api/authz/grants",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_grants_X.delete.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/authz/grants/{grant_id}",
+  "path": "/api/authz/grants/{gid}",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_my_grants.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_my_grants.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_my_grants.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_my_grants.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_my_grants.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/my-grants",
+  "path": "/api/authz/my-grants",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_panic.post.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_panic.post.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_panic.post.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_panic.post.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_panic.post.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 401,
+   "error": "elevation_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "password_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_panic.post.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_panic.post.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/panic",
+  "path": "/api/authz/panic",
+  "expected": {
+   "status": 403,
+   "error": "password_required"
+  }
+ },
+ "authz_api.api_authz_requests.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_requests.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_requests.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_requests.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_foreign.none.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_foreign.password.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_foreign.token.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 202,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_verified.none.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 400,
+   "error": "scope_not_requestable"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 202,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_verified.password.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 400,
+   "error": "scope_not_requestable"
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 202,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_requests.post.agent_verified.token.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 400,
+   "error": "scope_not_requestable"
+  }
+ },
+ "authz_api.api_authz_requests.post.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.machine.none.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.machine.password.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.machine.token.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.none.none.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.none.password.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.none.token.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.peer_control.none.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.peer_control.password.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.peer_control.token.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_requests.post.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session.none.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session.password.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session.token.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session_elev.none.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session_elev.password.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_requests.post.session_elev.token.unrequestable_scope": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/authz/requests",
+  "path": "/api/authz/requests",
+  "expected": {
+   "status": 403,
+   "error": "identity_unverified"
+  }
+ },
+ "authz_api.api_authz_shadow.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_shadow.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_shadow.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_shadow.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_shadow.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_shadow.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_shadow.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 403,
+   "error": "human_session_required"
+  }
+ },
+ "authz_api.api_authz_shadow.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_shadow.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/shadow",
+  "path": "/api/authz/shadow",
+  "expected": {
+   "status": 200,
+   "error": null
+  }
+ },
+ "authz_api.api_authz_whoami.get.agent_foreign.none": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.agent_foreign.password": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.agent_foreign.token": {
+  "group": "authz_api",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.agent_verified.none": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.agent_verified.password": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.agent_verified.token": {
+  "group": "authz_api",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.machine.none": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.machine.password": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.machine.token": {
+  "group": "authz_api",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.none.none": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.none.password": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_whoami.get.none.token": {
+  "group": "authz_api",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_whoami.get.peer_control.none": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.peer_control.password": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_whoami.get.peer_control.token": {
+  "group": "authz_api",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "authz_api.api_authz_whoami.get.session.none": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.session.password": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.session.token": {
+  "group": "authz_api",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.session_elev.none": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.session_elev.password": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
+ "authz_api.api_authz_whoami.get.session_elev.token": {
+  "group": "authz_api",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/authz/whoami",
+  "path": "/api/authz/whoami",
+  "expected": {
+   "status": 403,
+   "error": "socket_only"
+  }
+ },
  "cli_writes.delegation.close_dseed": {
   "group": "cli_writes",
   "caller": "local_cli",

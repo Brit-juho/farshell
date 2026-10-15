@@ -39,7 +39,7 @@ from typing import Optional
 
 from i18n import tr
 
-from . import approvals, audit, engine, limits, shares, store
+from . import approvals, audit, engine, inbox, limits, shares, store
 from . import principals as P
 from . import scopes as S
 from .errors import ShareError
@@ -278,11 +278,13 @@ def authorize(kind: str, snap, agent, target, now: Optional[float] = None) -> Ac
             d = engine.decide(p, scope, f"session:local/{target.key}", ctx, _snapshot(docs, now))
             if d.allow:
                 limits.record(ag._rate, key, hits, now)
+                inbox.consume_use(docs, d.grant_id)       # 「한 번만」으로 허용한 grant(max_uses=1)면 한 번 썼다고 센다
             else:
                 ag._rate[key] = hits
         limited = (not d.allow) and d.reason == "rate_limited"
+        gid = g["id"] if g else (d.grant_id if d.allow and str(d.grant_id or "").startswith(inbox.GRANT_ID_PREFIX) else None)
         return Access(allowed=d.allow or limited, rate_limited=limited, limit=limit,
-                      grant=approvals.grant_to_legacy(g) if g else None, grant_id=g["id"] if g else None,
+                      grant=approvals.grant_to_legacy(g) if g else None, grant_id=gid,
                       reason=d.reason, decision=d.as_dict())
 
 

@@ -70,7 +70,7 @@ from routes.peer_relay import router as peer_relay_router
 from routes.host_relay import router as host_relay_router
 from routes.agent_msg import router as agent_msg_router
 from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
-from routes.authz import human_router as authz_human_router, router as authz_router
+from routes.authz import human_router as authz_human_router, read_router as authz_read_router, router as authz_router
 from routes.delegation import router as delegation_router, human_router as delegation_human_router
 
 logging.basicConfig(level=logging.INFO)
@@ -614,6 +614,7 @@ app.include_router(worktree_router)
 app.include_router(repos_router)
 app.include_router(security_router)
 app.include_router(authz_human_router)
+app.include_router(authz_read_router)
 app.include_router(authz_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)

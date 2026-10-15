@@ -83,12 +83,14 @@ def _reset_codex_plugin_cache():
 def _reset_preauth_state():
     """사전 인증 실패 한도(authz/preauth.py)와 거부 기록의 분당 카운터는 모듈 전역(메모리)이다. 앞 테스트의 실패·잠금이
     다음 테스트로 새면 안 된다."""
-    from authz import denylog, preauth
+    from authz import denylog, inbox, preauth
     preauth.reset()
     denylog.reset()
+    inbox.reset_rate()
     yield
     preauth.reset()
     denylog.reset()
+    inbox.reset_rate()
 
 
 @pytest.fixture(autouse=True)
