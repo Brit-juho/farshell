@@ -672,9 +672,8 @@ body.voice-only-mode #mic-btn-wrap.mic {
 body.voice-only-mode #mic-btn-wrap.mic svg { width:50px; height:50px; }
 body.voice-only-mode #mic-btn-wrap.mic .label { display:block; font-size:var(--fs-base); }
 
-/* 모바일에서는 상단 바·칸 헤더 없이 활성 터미널 한 칸만 사용한다. */
+/* 모바일에서는 칸 헤더 없이 활성 터미널 한 칸만 쓴다(상단 바는 유지). */
 @media (max-width:719px) {
-  body:not(.voice-only-mode) #topbar, .vt-pane-head { display:none; }
+  .vt-pane-head { display:none; }
 }
-html.vt-mobile-device body:not(.voice-only-mode) #topbar,
 html.vt-mobile-device .vt-pane-head { display:none; }
