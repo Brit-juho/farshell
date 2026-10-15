@@ -91,3 +91,21 @@ test('shareOpenUrl — session 노출만 /p/authorize로 시작한다', async ()
   assert.strictEqual(shareOpenUrl(url, null), url);
   assert.strictEqual(shareOpenUrl(url, { mode: 'session' }), url, 'shareId가 없으면 만들 수 있는 링크가 없다');
 });
+
+test('_portsSignature — 숫자(cpu·메모리)가 바뀌어도 같고, 구조(포트·모드·일시 닫힘)가 바뀌면 달라진다', async () => {
+  const { _portsSignature } = await load();
+  const base = { ports: [{ port: 3000, pid: 10, cmd: 'node', protected: false, cpu: 1.2, rss_kb: 100, uptime: '01:00' }] };
+  const tl = { count: 1, main: null, extra: [{ port: 3000, url: 'https://a', label: 'x', mode: 'session', share: { autoRenew: false, mode: 'session' } }] };
+  const sig = _portsSignature(base, tl);
+
+  const moved = { ports: [{ ...base.ports[0], cpu: 9.9, rss_kb: 5000, uptime: '02:00' }] };
+  assert.strictEqual(_portsSignature(moved, tl), sig, '수치만 바뀌면 DOM을 새로 그리지 않는다');
+
+  const paused = { ...tl, extra: [{ ...tl.extra[0], paused: true }] };
+  assert.notStrictEqual(_portsSignature(base, paused), sig, '일시 닫힘은 구조 변경');
+
+  const mode = { ...tl, extra: [{ ...tl.extra[0], mode: 'pin', share: { autoRenew: false, mode: 'pin' } }] };
+  assert.notStrictEqual(_portsSignature(base, mode), sig, '접근 방식 변경은 구조 변경');
+
+  assert.notStrictEqual(_portsSignature({ ports: [] }, tl), sig, '포트 목록이 바뀌면 달라진다');
+});

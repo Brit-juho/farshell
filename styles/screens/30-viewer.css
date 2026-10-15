@@ -547,9 +547,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-pt-row:active{ background:color-mix(in srgb, var(--acc) 12%, var(--menu-hover)); }
 
 /* U4/D4: 같은 pid의 대표 포트가 아닌 나머지 — 들여쓰고 톤을 낮춘다. */
-.vt-pt-row-sub{ padding-left:calc(var(--spacing) * 6); }
 .vt-pt-row-sub .vt-pt-cmd{ color:var(--sub); }
-.vt-pt-sub-arrow{ color:var(--sub); margin-right:calc(var(--spacing) * 1); }
 
 /* U5/L6: 스와이프-종료(터치 전용). row는 뷰포트, inner가 실제 카드로 그 위를 덮어
    kill 버튼을 가린다 — 왼쪽으로 밀면 inner가 물러나며 버튼이 드러난다. */
@@ -559,7 +557,6 @@ body.vt-resizing #terminal-container{ transition:none; }
   height:24px; padding:0 calc(var(--spacing) * 3); background:var(--win);
   transition:transform .18s ease; will-change:transform;
 }
-.vt-pt-row-sub .vt-pt-row-inner{ padding-left:calc(var(--spacing) * 6); }
 .vt-pt-swipe-kill{
   position:absolute; top:0; right:0; bottom:0; width:76px;
   background:var(--err); color:var(--color-on-solid); border:0;
@@ -568,40 +565,6 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-pt-port{
   flex:0 0 auto; min-width:56px;
   font:600 var(--fs-sm) var(--mono); color:var(--txt);
-  font-variant-numeric:tabular-nums;
-}
-.vt-pt-meta{ display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); flex:1 1 auto; min-width:0; overflow:hidden; }
-/* 줄어드는 순서: **수치가 먼저**(가중치 100), 이름은 마지막(1). 둘 다 넘치면
-   자르고 줄임표를 붙인다.
-
-   2026-09-17 — 이전엔 반대였다(이름이 먼저 양보). 그 결과 392px dock에서 실측하면
-   이름 칸이 47px까지 눌려 「MACSOOPPackage」가 「MACS…」로만 남고, 그 옆에
-   「pid 98234 · 1일 · 13M」은 134px을 온전히 차지하고 있었다. 행에서 답해야 하는
-   질문은 "이 포트에서 **무엇이** 도는가"이고 pid·업타임·메모리는 그다음이다.
-   수치는 잘려도 hover의 제목이나 종료 확인 대화상자에서 다시 읽을 수 있지만,
-   이름이 잘리면 그 행이 무엇인지 알 방법이 화면에 남지 않는다. */
-.vt-pt-cmd{
-  flex:0 1 auto;
-  min-width:0;
-  /* 2026-09-17 — 행에서 읽는 것은 **포트 번호**다(.vt-pt-port 13.5/600 mono).
-     명령 이름이 같은 13.5px이라 둘이 같은 층에 있었다. 한 단 내려 포트가
-     앞서게 한다 — 아래 수치(.vt-pt-sub 11 mono)까지 세 층이 된다. */
-  font-size:var(--fs-xs);
-}
-/* pid·uptime·CPU%·메모리처럼 새로고침마다 값이 바뀌는 숫자 — tabular-nums로
-   자릿수가 바뀌어도 폭이 흔들리지 않게 고정한다.
-
-   2.1.6 — 예전엔 `flex:0 0 auto`로 **아예 안 줄어들게** 해서 "cmd보다 먼저 줄어들지
-   않는다"를 지켰다. 그런데 dock은 사용자가 폭을 줄일 수 있고, 320px쯤에서 이
-   135px짜리 줄이 84px 칸을 뚫고 나가 오른쪽의 태그·[공개]·[종료] 버튼 **밑에
-   겹쳐 그려졌다**(실브라우저에서 확인 — 글자와 버튼이 포개져 둘 다 안 읽혔다).
-   부모(.vt-pt-meta)의 min-width:0은 부모만 줄일 뿐 안 줄어드는 자식을 막지 못한다.
-   의도(수치가 끝까지 남는다)는 shrink 가중치로 지키고, 넘침은 자른다. */
-.vt-pt-sub{
-  flex:0 100 auto;
-  min-width:0;
-  color:var(--sub);
-  font:400 var(--fs-2xs) var(--mono);
   font-variant-numeric:tabular-nums;
 }
 .vt-pt-actions{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
@@ -634,7 +597,7 @@ body.vt-resizing #terminal-container{ transition:none; }
   .vt-pt-row:hover .vt-pt-actions,
   .vt-pt-row:focus-within .vt-pt-actions{ opacity:1; pointer-events:auto; }
 }
-.vt-pt-lock{ color:var(--sub); font:400 var(--fs-xs) var(--ui); cursor:help; }
+.vt-pt-lock{ display:inline-flex; vertical-align:-1px; margin-right:calc(var(--spacing) * 1.5); color:var(--sub); cursor:help; }
 /* 2.1.6 — .vt-pt-btn(큐·스니펫·포트·diff·git 로그·파일 공유, 6개 파일 19곳)은
    components.css의 `.vt-btn` / `.vt-btn.danger`로 대체했다. 이름이 "pt"(패널
    텍스트)였지만 하는 일은 그냥 버튼이었고, 컴포넌트와 별개로 한 벌 더 있었다.
@@ -658,15 +621,92 @@ body.vt-resizing #terminal-container{ transition:none; }
   border-bottom:1px solid var(--line); font:400 var(--fs-sm) var(--ui);
 }
 .vt-pt-tunnel-label{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-3xs) var(--mono); }
-/* 2.2 — 「누가 열 수 있나」 모드 라벨과 리스너 바인드 실패 경고(ADR-31). */
-.vt-pt-tunnel-mode{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-3xs) var(--ui); }
-.vt-pt-tunnel-broken{ flex:0 0 auto; color:var(--warn); font:600 var(--fs-3xs) var(--ui); }
-.vt-pt-tunnel-url{
-  flex:1 1 auto;
-  min-width:0;
-  font:400 var(--fs-xs) var(--mono);
-  color:var(--acc);
+
+/* 포트 표 — 열을 맞춘다. 숫자(PID·기간·메모리·CPU)는 칸 하나씩이라 값이 바뀌어도 위아래가 정렬된다.
+   좁은 dock에서는 덜 중요한 열(기간 → CPU)부터 접는다 — 이름이 먼저 잘리지 않게. */
+.vt-pt-table{ container-type:inline-size; --pt-pad:calc(var(--spacing) * 4); }
+.vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{
+  display:grid; align-items:center; column-gap:calc(var(--spacing) * 2);
+  grid-template-columns:56px minmax(0, 1fr) 46px 54px 40px 38px;
+  padding:0 var(--pt-pad);
 }
+.vt-pt-table .vt-pt-row.swipeable{ padding:0; }
+.vt-pt-table .vt-pt-cmd{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pt-num{
+  text-align:right; white-space:nowrap; color:var(--sub);
+  font:400 var(--fs-2xs) var(--mono); font-variant-numeric:tabular-nums;
+}
+.vt-pt-thead{
+  height:22px; background:var(--bar); color:var(--sub);
+  font:600 var(--fs-3xs) var(--ui); letter-spacing:.03em;
+}
+.vt-pt-thead:hover{ background:var(--bar); }
+.vt-pt-thead .vt-pt-port, .vt-pt-thead .vt-pt-cmd, .vt-pt-thead .vt-pt-num{ font:600 var(--fs-3xs) var(--ui); color:var(--sub); }
+@container (max-width:360px){
+  .vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{ grid-template-columns:56px minmax(0, 1fr) 46px 54px 40px; }
+  .vt-pt-num-cpu{ display:none; }
+}
+@container (max-width:300px){
+  .vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{ grid-template-columns:56px minmax(0, 1fr) 46px 40px; }
+  .vt-pt-num-uptime{ display:none; }
+}
+/* 터치 기기는 동작 버튼이 행 안에 항상 보인다 — 칸을 하나 더 둔다. */
+@media (hover:none), (pointer:coarse){
+  .vt-pt-table .vt-pt-row:not(.swipeable):not(.vt-pt-thead), .vt-pt-table .vt-pt-row-inner{
+    grid-template-columns:56px minmax(0, 1fr) 46px 54px 40px 38px auto;
+  }
+}
+/* 같은 pid의 나머지 포트 — 대표 행에서 이어지는 연결선으로 묶임을 보여 준다. */
+.vt-pt-row-sub, .vt-pt-row-sub .vt-pt-row-inner{ position:relative; }
+.vt-pt-row-sub .vt-pt-port{ padding-left:calc(var(--spacing) * 3.5); }
+.vt-pt-row-sub::before{
+  content:''; position:absolute; left:calc(var(--pt-pad) + 4px); top:0; bottom:0;
+  border-left:1px solid color-mix(in srgb, var(--sub) 45%, transparent); pointer-events:none;
+}
+.vt-pt-row-sub::after{
+  content:''; position:absolute; left:calc(var(--pt-pad) + 4px); top:50%; width:7px;
+  border-top:1px solid color-mix(in srgb, var(--sub) 45%, transparent); pointer-events:none;
+}
+.vt-pt-row-sub:not(:has(+ .vt-pt-row-sub))::before{ bottom:50%; }
+
+/* 노출 중 — 주소는 [주소] 버튼 하나, 부가 동작은 행에 올렸을 때만. */
+.vt-pt-tunnel-row{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+  min-height:32px; padding:calc(var(--spacing) * 1) var(--pt-pad, calc(var(--spacing) * 4));
+  border-bottom:1px solid var(--line); font:400 var(--fs-sm) var(--ui);
+}
+.vt-pt-tunnel-row:hover{ background:var(--menu-hover); }
+.vt-pt-tunnel-row.paused .vt-pt-port, .vt-pt-tunnel-row.paused .vt-pt-tunnel-label{ opacity:.6; }
+.vt-pt-tunnel-row .vt-pt-port{ min-width:48px; }
+.vt-pt-tunnel-label{
+  flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--sub); font:400 var(--fs-3xs) var(--mono);
+}
+.vt-pt-chips{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
+.vt-pt-chip{
+  padding:0 calc(var(--spacing) * 1.5); border:1px solid var(--line); border-radius:var(--radius-full, 999px);
+  color:var(--sub); font:500 var(--fs-3xs)/16px var(--ui); white-space:nowrap;
+}
+.vt-pt-chip.warn{ color:var(--warn); border-color:color-mix(in srgb, var(--warn) 45%, transparent); }
+.vt-pt-open{ flex:0 0 auto; display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); }
+.vt-pt-tunnel-row .vt-pt-actions{ gap:calc(var(--spacing) * 0.5); }
+@media (hover:hover) and (pointer:fine){
+  .vt-pt-tunnel-row .vt-pt-actions{ opacity:0; transition:opacity var(--dur-fast) var(--ease-out-quint); }
+  .vt-pt-tunnel-row:hover .vt-pt-actions,
+  .vt-pt-tunnel-row:focus-within .vt-pt-actions{ opacity:1; }
+}
+
+/* 관리 시트 */
+.vt-pt-menu{ display:flex; flex-direction:column; gap:2px; min-width:240px; }
+.vt-pt-menu-label{ padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1) calc(var(--spacing) * 0.5); color:var(--sub); font:600 var(--fs-3xs) var(--ui); letter-spacing:.03em; }
+.vt-pt-menu-item{
+  display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 3);
+  width:100%; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); border:0; border-radius:8px;
+  background:transparent; color:var(--txt); font:500 var(--fs-sm) var(--ui); text-align:left; cursor:pointer;
+}
+.vt-pt-menu-item:hover{ background:var(--menu-hover); }
+.vt-pt-menu-item.current{ background:color-mix(in srgb, var(--acc) 12%, transparent); }
+.vt-pt-menu-item em{ color:var(--sub); font:400 var(--fs-3xs) var(--ui); font-style:normal; }
 
 /* U4/D4: 행이 한 줄(24px)로 고정된 뒤로는 좁은 화면에서도 줄바꿈이 필요 없다 —
    cmd가 ellipsis로 줄어들 뿐. 예전엔 두 줄 stacking이라 wrap이 필요했다. */
