@@ -1,7 +1,7 @@
 // 코드 뷰어 git status/stage/commit + log/show — F4에서 viewer.js에서 분리.
 //
 // 코드 뷰어의 유일한 쓰기 경로. push·브랜치 조작은 절대 추가하지 않는다.
-// 스코프를 stage/unstage/commit 으로만 좁게 유지한다 — TODOS.md D16 참고.
+// 스코프를 stage/unstage/commit 으로만 좁게 유지한다.
 import { vtFetch } from '../../core/api.js';
 import { emptyState, errorState } from '../../ui/empty.js';
 import { _setMsg } from './state.js';

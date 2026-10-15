@@ -1,6 +1,6 @@
 """`fsh mcp` — 에이전트가 FarShell 에이전트 메시지를 쓰는 MCP 서버(stdio).
 
-Claude Code·Codex·agy처럼 MCP를 지원하는 에이전트에 등록하면 도구 6개가 생긴다:
+Claude Code·Codex·agy처럼 MCP를 지원하는 에이전트에 등록하면 도구가 생긴다(아래는 처음 6개):
 
     list_agents     이 맥과 페어링된 맥의 tmux 세션(무엇이 돌고 있나·상태)
     send_message    다른 세션의 에이전트에게 메시지(받는 쪽이 작업을 마친 뒤 전달)
@@ -33,6 +33,8 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+import fsh_client
 
 PROTOCOL_VERSION = "2025-06-18"
 TIMEOUT = 20.0
@@ -150,6 +152,41 @@ DELEGATION_TOOLS = [
     },
 ]
 TOOLS = TOOLS + DELEGATION_TOOLS
+AUTHZ_TOOLS = [
+    {
+        "name": "whoami",
+        "description": (
+            "FarShell 이 이 세션을 누구로 보는지와 지금 가진 권한(scope·조건)을 보여준다. 권한이 모자라 막혔을 때 먼저 확인하고, "
+            "필요한 것만 request_access 로 요청하라."),
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "request_access",
+        "description": (
+            "리소스 하나에 대한 권한을 사람에게 요청한다(예: resource='session:local/<세션 key>', scopes=['session.read']). "
+            "항상 '승인 대기'로 돌아오고, 사용자가 FarShell 화면에서 한 번만·이 세션 동안·거부 중에서 고른다. 승인되면 막혔던 호출을 다시 하세요. "
+            "거부되면 5분 동안 같은 요청을 다시 못 한다. authz.admin·pair.manage 같은 관리 권한은 요청할 수 없다."),
+        "inputSchema": {"type": "object", "properties": {
+            "resource": {"type": "string", "description": "예: session:local/$2:1700000000, fs:local/<경로>/*, msg:local/<세션 key>"},
+            "scopes": {"type": "array", "items": {"type": "string"}, "description": "예: ['session.read']"},
+            "reason": {"type": "string", "description": "왜 필요한지 한두 문장(승인 화면에 그대로 보인다)"},
+            "ttl": {"type": "integer", "minimum": 60, "description": "필요한 기간(초). 비우면 이 세션이 끝날 때까지"}},
+            "required": ["resource", "scopes"], "additionalProperties": False},
+    },
+    {
+        "name": "list_my_grants",
+        "description": "내 세션에 사람이 승인해 준 권한 목록(리소스·scope·남은 횟수·만료)과 내가 낸 요청의 상태. 다른 세션의 것은 보이지 않는다.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+]
+TOOLS = TOOLS + AUTHZ_TOOLS
+# 도구 → 이 중 하나라도 가진 호출자에게만 보인다(whoami 의 유효 scope 기준). 목록에 없는 도구는 늘 보인다 —
+# 막히면 서버가 이유를 돌려주고, 그 도구들은 권한이 없을 때 승인 요청(202)으로 이어지기 때문이다.
+TOOL_SCOPES = {
+    "spawn_session": ("deleg.spawn",),
+    "send_message": ("msg.send",),
+    "request_access": ("authz.request",),
+}
 _PARENT_ONLY = {"spawn_session", "send_to_child", "close_delegation"}
 _CHILD_ONLY = {"report_back"}
 
@@ -183,26 +220,38 @@ def _identity_headers() -> dict:
     return out
 
 
+_IDENTITY_PATHS = frozenset({"/api/agent/message"})
+
+
 def _api(method: str, path: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict]:
+    """소켓 우선(fsh_client — peer pid 가 곧 신원), 소켓이 없으면 예전처럼 TCP + 토큰.
+    `X-Fsh-*` 헤더는 소켓에서는 힌트일 뿐이고 TCP 에서는 share_identity 가 검증한다 — 둘 다 그대로 싣는다."""
     server, token = _config()
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    req = urllib.request.Request(server + path, data=data, method=method)
-    if data is not None:
-        req.add_header("Content-Type", "application/json")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
-    for k, v in (headers or {}).items():
-        req.add_header(k, v)
+    if path in _IDENTITY_PATHS:        # 보낸 세션은 본문 주장이 아니라 서버가 이 값과 연결로 확인한다(VT_AUTHZ_ENFORCE=msg)
+        headers = {**_identity_headers(), **(headers or {})}
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return r.status, json.loads(r.read().decode("utf-8") or "{}")
-    except urllib.error.HTTPError as e:
-        try:
-            return e.code, json.loads(e.read().decode("utf-8") or "{}")
-        except ValueError:
-            return e.code, {}
+        port = urllib.parse.urlsplit(server).port
+    except ValueError:
+        port = None
+    try:
+        status, raw = fsh_client.call(method, path, body=body, headers=headers, timeout=TIMEOUT, server=server,
+                                      token=token, port=port or _config_port())
     except (urllib.error.URLError, OSError) as e:
         return 0, {"reason": f"FarShell 서버에 연결할 수 없습니다({server}) — 'fsh status'로 확인: {e}"}
+    try:
+        return status, json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        return status, {}
+
+
+def _config_port() -> str:
+    try:
+        import vt_env
+
+        file_env = vt_env.load()
+    except Exception:  # noqa: BLE001
+        file_env = {}
+    return os.environ.get("VT_PORT") or file_env.get("VT_PORT") or "7777"
 
 
 def _fail(status: int, data: dict) -> str:
@@ -237,6 +286,9 @@ def tool_send_message(args: dict) -> tuple[str, bool]:
         "cwd": os.getcwd(),
     }
     status, data = _api("POST", "/api/agent/message", body)
+    if status == 202:     # VT_AUTHZ_ENFORCE=msg — 관계 없는 세션 앞으로는 사람이 승인해야 한다(오류가 아니다)
+        return (f"{data.get('reason') or '사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요'} "
+                f"(요청 {data.get('requestId')}) 사용자가 FarShell 화면에서 승인합니다."), False
     if status != 200 or not data.get("ok"):
         return f"보내지 못했습니다: {_fail(status, data)}", True
     when = ("받는 에이전트가 쉬고 있어 곧 입력됩니다" if data.get("immediate")
@@ -362,11 +414,67 @@ def tool_list_delegations(args: dict) -> tuple[str, bool]:
     return "\n".join(rows) or "위임이 없습니다", False
 
 
+def tool_whoami(args: dict) -> tuple[str, bool]:
+    status, data = _api("GET", "/api/authz/whoami")
+    if status != 200:
+        return f"실패: {_fail(status, data)}", True
+    p = data.get("principal") or {}
+    lines = [f"나: {p.get('kind')} {p.get('id')} (경로 {p.get('via')})"]
+    if data.get("scopes") is None:
+        lines.append("유효 권한을 계산하지 못했습니다(권한 저장소 문제) — 서버 관리자에게 알리세요")
+        return "\n".join(lines), False
+    lines.append("유효 scope: " + (", ".join(data["scopes"]) or "없음"))
+    for sc, conds in (data.get("caps") or {}).items():
+        if conds:
+            lines.append(f"  {sc}: " + "; ".join(f"{k}={'|'.join(v)}" for k, v in conds.items()))
+    lines.append("맞는 프리셋: " + (", ".join(x["label"] for x in data.get("presets", [])) or "없음"))
+    return "\n".join(lines), False
+
+
+def tool_request_access(args: dict) -> tuple[str, bool]:
+    body = {"resource": args.get("resource", ""), "scopes": args.get("scopes") or []}
+    for k in ("reason", "ttl"):
+        if args.get(k) not in (None, ""):
+            body[k] = args[k]
+    status, data = _api("POST", "/api/authz/requests", body, headers=_identity_headers())
+    if status == 202:     # 오류가 아니다 — 사람이 승인한다 (다른 도구의 202 와 같은 문구)
+        return (f"{data.get('reason') or '사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요'} "
+                f"(요청 {data.get('requestId')}) 사용자가 FarShell 화면에서 승인합니다."), False
+    return f"요청하지 못했습니다: {_fail(status, data)}", True
+
+
+def tool_list_my_grants(args: dict) -> tuple[str, bool]:
+    status, data = _api("GET", "/api/authz/my-grants", headers=_identity_headers())
+    if status != 200:
+        return f"실패: {_fail(status, data)}", True
+    rows = []
+    for g in data.get("grants", []):
+        left = f" · {g['maxUses'] - (g.get('uses') or 0)}회 남음" if g.get("maxUses") is not None else ""
+        rows.append(f"- {g['id']} {g.get('resource')} : {', '.join(g.get('scopes', []))}{left}")
+    s2, d2 = _api("GET", "/api/authz/requests", headers=_identity_headers())
+    reqs = [f"- {r['requestId']} [{r['state']}] {r['resource']} : {', '.join(r['scopes'])}" for r in d2.get("requests", [])] if s2 == 200 else []
+    out = ["승인받은 권한:"] + (rows or ["  (없음)"])
+    if reqs:
+        out += ["내 요청:"] + reqs
+    return "\n".join(out), False
+
+
+def _caller_scopes() -> set | None:
+    """`whoami` 의 유효 scope. 소켓이 아니거나 서버가 계산하지 못했으면 None(= 거르지 않는다)."""
+    status, data = _api("GET", "/api/authz/whoami", headers=_identity_headers())
+    if status != 200 or not isinstance(data.get("scopes"), list):
+        return None
+    return set(data["scopes"])
+
+
 def tools_for_caller() -> list[dict]:
-    """깊이 한도에 닿은 하위 세션에는 만들기 도구를 아예 보여주지 않는다(서버도 막는다)."""
+    """깊이 한도에 닿은 하위 세션에는 만들기 도구를 아예 보여주지 않는다(서버도 막는다). 그리고 `TOOL_SCOPES` 에 적힌 도구는
+    그 scope 를 하나도 못 가진 호출자에게 숨긴다(whoami 의 유효 scope 기준 — 보여 줘도 서버가 거부할 도구를 에이전트에게 권하지 않는다)."""
+    scopes = _caller_scopes()
+    keep = TOOLS if scopes is None else [t for t in TOOLS if t["name"] not in TOOL_SCOPES or scopes & set(TOOL_SCOPES[t["name"]])]
     status, data = _api("GET", "/api/delegations/role", headers=_identity_headers())
     if status != 200:
-        return TOOLS
+        return keep
     hide = set()
     if data.get("is_child"):
         hide |= _PARENT_ONLY
@@ -374,7 +482,7 @@ def tools_for_caller() -> list[dict]:
         hide |= _CHILD_ONLY
         if not data.get("can_spawn"):
             hide.add("spawn_session")
-    return [t for t in TOOLS if t["name"] not in hide]
+    return [t for t in keep if t["name"] not in hide]
 
 
 HANDLERS = {
@@ -389,6 +497,9 @@ HANDLERS = {
     "list_agents": tool_list_agents,
     "send_message": tool_send_message,
     "read_messages": tool_read_messages,
+    "whoami": tool_whoami,
+    "request_access": tool_request_access,
+    "list_my_grants": tool_list_my_grants,
 }
 
 

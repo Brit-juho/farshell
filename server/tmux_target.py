@@ -153,8 +153,8 @@ def _enter_gap_sec() -> float:
     """붙여넣기와 Enter 사이 간격.
 
     붙여넣기 묶음과 Enter가 한 입력으로 합쳐지면 Claude Code는 Enter를 줄바꿈으로
-    받는다(아래 send_to_tmux 주석). OpenRig이 같은 순서(paste-buffer → 대기 →
-    Enter)에 200ms를 쓰는 것을 기본값으로 따랐다. 환경변수로 조정한다.
+    받는다(아래 send_to_tmux 주석). paste-buffer → 대기 → Enter 순서에서
+    기본 대기는 200ms다. 환경변수로 조정한다.
     """
     try:
         ms = float(os.environ.get("VT_PASTE_ENTER_GAP_MS", "200"))
@@ -200,7 +200,15 @@ def _paste_to_pane(pane_id: str, text: str) -> bool:
     return True
 
 
-def send_to_tmux(pane_id: str, text: str, preface: str | None = None) -> bool:
+class SendVetoed(Exception):
+    """`send_to_tmux(guard=...)` 의 가드가 입력 직전에 막았다 — 아무것도 입력하지 않았다. `reason` 은 안정적인 사유 코드."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def send_to_tmux(pane_id: str, text: str, preface: str | None = None, guard=None) -> bool:
     """tmux pane에 텍스트를 넣고 Enter를 누른다. 여러 줄도 한 번에 제출된다.
 
     2026-09-28(실측) — 예전엔 `send-keys -- text Enter` **한 번의 호출**이었다.
@@ -219,10 +227,18 @@ def send_to_tmux(pane_id: str, text: str, preface: str | None = None) -> bool:
     있다(2026-10-13 위임 E2E: 3회 중 1회 거부). 위임 지시처럼 받는 쪽이 **따라야 하는** 텍스트는
     사용자 턴의 머리말이 "아래 붙여넣은 작업을 하라"고 말하게 한다. 결과 보고처럼 데이터로 읽혀야
     하는 텍스트는 머리말 없이 붙여넣기만 한다.
+
+    `guard`(인자 없는 함수)가 있으면 pane 락을 잡은 **직후, 첫 키를 보내기 전에** 한 번 부른다. 사유 문자열을 돌려주면
+    아무것도 입력하지 않고 `SendVetoed(사유)` 를 올린다 — 권한을 입력 직전에 다시 확인하는 자리다(승인~입력 사이의 회수 경합).
+    가드가 예외를 내면 입력하지 않는다(닫힘).
     """
     import pane_input
 
     with pane_input.lock(pane_id):
+        if guard is not None:
+            veto = guard()
+            if veto:
+                raise SendVetoed(str(veto))
         if preface:
             line = " ".join(preface.split())
             rc, _, err = tmux_runner.run(["send-keys", "-t", pane_id, "-l", "--", line + " "])

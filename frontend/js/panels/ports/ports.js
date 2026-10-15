@@ -34,7 +34,7 @@ async function _openUrlFor(tunnelUrl, share) {
   return tunnelUrl;
 }
 
-// 2.2 — 노출 모드 3가지(plan-2.2/00-port-access.md §1). files.js의 공유 링크
+// 2.2 — 노출 모드 3가지. files.js의 공유 링크
 // 다이얼로그와 같은 화면 언어(`.vt-fl-*`)를 재사용한다 — "파일을 공유"와
 // "포트를 공개"는 사용자에게 같은 종류의 결정이라 같은 모양이어야 한다.
 const MODE_LABEL = { public: t('공개'), session: t('내 기기만'), pin: t('코드') };
@@ -223,7 +223,7 @@ function showPorts(opts = {}) {
       } else {
         // L5: 이미 공개 터널이 열려 있으면(server가 GET /api/ports에 tunnel_url을
         // 얹어 알려준다) "공개" 대신 "미리보기"로 바꿔 앱 안에서 바로 확인하게 한다 —
-        // 매번 "공개→URL 복사→새 탭"을 거칠 필요가 없다(Termius 포트포워딩+브라우저 워크플로).
+        // 매번 "공개→URL 복사→새 탭"을 거칠 필요가 없다.
         const ex = document.createElement('button');
         // sm = 행 높이(24px)와 같은 단. 기본 .vt-btn은 28px이라 24px 행보다 컸다.
         // quiet = 테두리 상자를 뗀다 — 목록 행 안의 동작이지 주 액션이 아니다.

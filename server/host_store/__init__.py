@@ -68,8 +68,7 @@ LABEL_MAX_LEN = 60
 
 def _state_dir() -> Path:
     # P2-4(ADR-41) — 예전엔 `Path(os.environ.get("VT_STATE_DIR", "~/.vt")).expanduser()`.
-    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다
-    # (docs/plan-2.3/80-vt-paths.md §1). 단일 해석기로 교체한다.
+    # `VT_STATE_DIR=""`은 폴백이 안 걸려 서버 CWD가 됐고 공백 패딩은 안 잘렸다. 단일 해석기로 교체한다.
     return vt_paths.state_dir()
 
 
@@ -474,6 +473,50 @@ def _fmt_when(ts: int) -> str:
     return tr("{n}일 전", n=delta // 86400)
 
 
+def _change_via_server(cmd: str, pid: str):
+    """`allow-*/deny-*` 의 서버 경로(H3). 서버가 unix socket 으로 받으면 그 결과를 출력하고 종료 코드(int)를, 소켓을 못 쓰거나 서버가
+    이 변경을 요청으로 받지 않으면(`VT_AUTHZ_ENFORCE=peer` 꺼짐·옛 서버) None 을 돌려 호출부가 옛 직접 쓰기로 가게 한다.
+
+    줄이는 변경(deny-*)은 서버가 바로 적용하고 감사한다. 늘리는 변경(allow-*)은 승인 요청이 되어 웹 승인함에서 사람이 승인해야
+    적용된다 — 이 명령은 요청을 만들었을 뿐이라 종료 코드 0 이어도 아직 적용되지 않았다."""
+    import json
+    import sys
+    from urllib.parse import quote
+
+    import fsh_client
+    try:
+        status, raw = fsh_client.socket_request("POST", f"/api/host-grants/{quote(pid, safe='')}/change",
+                                                body=json.dumps({"action": cmd}).encode(), timeout=10.0)
+    except fsh_client.SocketUnavailable:
+        return None
+    except OSError as e:           # 붙은 뒤의 끊김·시간 초과 — 처리됐을 수 있어 직접 쓰기로 되풀이하지 않는다
+        print("  ✗ " + tr("서버에 요청하지 못했습니다: {reason}", reason=str(e)), file=sys.stderr)
+        return 1
+    try:
+        body = json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        body = {}
+    if (status in (403, 503) and body.get("error") in fsh_client.SOCK_REJECTS) or \
+            (status == 409 and body.get("error") == "peer_enforce_off"):
+        return None
+    if status not in (200, 202):
+        print("  ✗ " + tr("요청이 거절됐습니다: {reason}", reason=body.get("reason") or body.get("error") or status),
+              file=sys.stderr)
+        return 1
+    peer = (body.get("peer") or {}).get("id") or pid
+    state = body.get("state")
+    if state == "pending":
+        print("  ⏳ " + tr("{id} 승인 요청을 만들었습니다 — 웹 화면의 승인함에서 사람이 승인해야 적용됩니다", id=peer))
+        print("    " + tr("이 명령으로는 승인할 수 없습니다. 아직 아무것도 바뀌지 않았습니다."))
+    elif state == "noop":
+        print("  ✓ " + tr("{id} 은(는) 이미 그 상태입니다", id=peer))
+    elif cmd == "deny-control":
+        print("  ✓ " + tr("{id} 등급 → view (읽기 전용)", id=peer))
+    else:
+        print("  ✓ " + tr("{id} 에이전트 메시지 수신 → 끔", id=peer))
+    return 0
+
+
 def _cli(argv: list[str]) -> int:
     import sys
 
@@ -623,6 +666,9 @@ def _cli(argv: list[str]) -> int:
             print("  ✗ " + tr("id가 필요합니다"), file=sys.stderr)
             return 2
         level = LEVEL_CONTROL if cmd == "allow-control" else LEVEL_VIEW
+        via = _change_via_server(cmd, rest[0])
+        if via is not None:
+            return via
         g = set_grant_level(rest[0], level)
         if g is None:
             print("  ✗ " + tr("'{id}' 를 허용 목록에서 찾을 수 없습니다", id=rest[0]), file=sys.stderr)
@@ -640,6 +686,9 @@ def _cli(argv: list[str]) -> int:
             print("  ✗ " + tr("id가 필요합니다"), file=sys.stderr)
             return 2
         on = cmd == "allow-agent"
+        via = _change_via_server(cmd, rest[0])
+        if via is not None:
+            return via
         g = set_grant_agent(rest[0], on)
         if g is None:
             print("  ✗ " + tr("'{id}' 를 허용 목록에서 찾을 수 없습니다", id=rest[0]), file=sys.stderr)

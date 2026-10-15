@@ -47,11 +47,16 @@ from pathlib import Path
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+import agent_msg
 import host_store
+from authz import hooks as authz_hooks
+from authz import preauth as authz_preauth
+from authz import msg_svc
+from authz import peer_svc
 from i18n import tr
 from routes.peer_protocol import (
     PeerDenied,
-    _authenticate_raw,
+    _guarded,
     _require,
     _require_body,
     _version,
@@ -89,6 +94,7 @@ async def peer_pair(request: Request):
         )
     if host_store.consume_pair_ticket(ticket) is None:
         host_store.audit(peer_id, "pair", False, "티켓 무효/만료")
+        authz_preauth.fail(authz_preauth.source_of(request), "pair")
         return JSONResponse(
             {"error": "ticket_invalid",
              "reason": tr("티켓이 유효하지 않거나 만료됐습니다 — 'fsh host pair'를 다시 실행하세요")},
@@ -538,7 +544,7 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
     것을 이미 지원하므로 PTY를 따로 두는 게 맞다.
     """
     try:
-        grant = _authenticate_raw("GET", ws.url.path, ws.headers)
+        grant = _guarded(ws, "GET", ws.url.path, ws.headers)
     except PeerDenied as e:
         # accept 전에 닫으면 상대는 HTTP 403을 받는다 — 이유를 실을 수 없어
         # 일단 받아들인 뒤 코드와 함께 닫는다.
@@ -559,6 +565,17 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
 
     await ws.accept()
     can_control = grant.get("level") == host_store.LEVEL_CONTROL
+    authz_hooks.peer_ws_control(grant, tmux_name, can_control)   # shadow
+    watch = None
+    if peer_svc.enforced():
+        # 엔진이 연결(보기)과 입력(raw)을 판정한다. 입력 프레임마다 다시 묻고, 2초마다 grant 를 읽어 회수되면 소켓을 닫는다.
+        watch = peer_svc.GrantWatch(grant["id"], tmux_name)
+        await asyncio.to_thread(watch.refresh, True)
+        if not (watch.alive and watch.view_ok):
+            host_store.audit(grant["id"], "ws", False, f"권한 없음: {watch.reason or 'no_grant'}")
+            await ws.close(code=4403, reason="forbidden")
+            return
+        can_control = can_control and watch.input_ok
     # 「연결된 화면」이 원격에서도 동작하려면 상대가 **자기 화면이 어느 것인지**
     # 지목할 수 있어야 한다(안 그러면 「이 화면만 남기기」가 자기 자신을 끊는다).
     # 그래서 화면 토큰을 상대가 정해 보내고, PTY 세션 id에 그대로 박는다:
@@ -607,13 +624,14 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
                     return
 
     out_task = asyncio.create_task(_pump_out())
+    watch_task = (asyncio.create_task(_watch_revocation(ws, watch, can_control)) if watch is not None else None)
     try:
         while True:
             msg = await ws.receive()
             if msg["type"] == "websocket.disconnect":
                 break
             if msg.get("bytes") is not None:
-                if can_control:
+                if can_control and (watch is None or watch.input_allowed()):
                     pty_mgr.write(session_id, msg["bytes"])
                 continue
             text = msg.get("text")
@@ -627,7 +645,7 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
                 # 크기는 등급과 무관하게 받는다 — 보기만 하는 화면도 자기 크기에
                 # 맞게 그려져야 한다(입력이 아니다).
                 pty_mgr.resize(session_id, int(payload.get("cols", 80)), int(payload.get("rows", 24)))
-            elif payload.get("type") == "input" and can_control:
+            elif payload.get("type") == "input" and can_control and (watch is None or watch.input_allowed()):
                 pty_mgr.write(session_id, str(payload.get("data", "")).encode())
     except WebSocketDisconnect:
         pass
@@ -635,9 +653,31 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
         logger.debug(f"[peer ws] {e}")
     finally:
         out_task.cancel()
+        if watch_task is not None:
+            watch_task.cancel()
         pty_mgr.unsubscribe(session_id, _on_data)
         pty_mgr.destroy_session(session_id)
         host_store.audit(grant["id"], "ws", True, f"{tmux_name} 종료")
+
+
+async def _watch_revocation(ws: WebSocket, watch: "peer_svc.GrantWatch", had_input: bool,
+                            interval: float | None = None) -> None:
+    """`peer` 강제: 연결 중 grant 가 회수되면(상대 삭제·보기 상실·입력 권한 상실) 소켓을 닫는다 — 회수 후 `interval`(기본 2초) 안에."""
+    step = peer_svc.WATCH_INTERVAL if interval is None else interval
+    while True:
+        await asyncio.sleep(step)
+        try:
+            await asyncio.to_thread(watch.refresh)
+        except Exception as e:  # noqa: BLE001 — 읽지 못하면 권한을 확인할 수 없다: 닫는다
+            logger.warning(f"[peer ws] grant 재확인 실패 — 끊음: {e}")
+            watch.alive = False
+        if not watch.alive or not watch.view_ok or (had_input and not watch.input_ok):
+            host_store.audit(watch.peer_id, "ws", False, "연결 중 권한 회수 — 끊음")
+            try:
+                await ws.close(code=4401, reason="peer revoked")
+            except Exception:  # noqa: BLE001 — 이미 닫혔으면 할 일이 없다
+                pass
+            return
 
 
 @router.post("/api/peer/agent/message")
@@ -651,9 +691,24 @@ async def peer_agent_message(request: Request, grant: dict, data: bytes):
     일을 시키는 길이라 셸 입력 허용만으로 저절로 열리면 안 된다. 본문 해시까지
     서명한다(메시지 내용이 곧 받는 에이전트가 실행할 지시다).
     """
-    import agent_msg
-
-    if not grant.get("agentMessages"):
+    ticket = None
+    allowed = bool(grant.get("agentMessages"))
+    authz_hooks.peer_agent_messages(grant, allowed)   # shadow — 켜짐에서도 옛 검사와의 차이를 센다
+    if peer_svc.enforced() and not msg_svc.enforced():
+        # `agentMessages` 스위치도 엔진이 판정한다(msg.send, 대리 주체 `peer:X/obo:agent:X/-`). 결과는 옛 스위치와 같다.
+        d = await asyncio.to_thread(peer_svc.decide, grant, "agent/message:msg")
+        if peer_svc.unavailable(d):
+            return JSONResponse({"error": "authz_unavailable", "reason": tr("권한 엔진을 쓸 수 없어 요청을 거부했습니다")},
+                                status_code=503), "권한 엔진 사용 불가"
+        allowed = d.allow
+    if msg_svc.enforced():
+        # 엔진이 판정한다(hosts.json 의 agentMessages 를 그 자리에서 번역한 grant). 결과는 옛 검사와 같다.
+        try:
+            v = await asyncio.to_thread(msg_svc.authorize_peer, grant)
+        except agent_msg.MessageError as e:
+            return JSONResponse({"error": e.code, "reason": e.reason}, status_code=e.status), f"거절: {e.code}"
+        allowed, ticket = v.allow, v.ticket
+    if not allowed:
         return JSONResponse(
             {"error": "agent_messages_off", "reason":
              "상대 맥이 에이전트 메시지를 받지 않습니다 — 그 맥에서 "
@@ -679,7 +734,7 @@ async def peer_agent_message(request: Request, grant: dict, data: bytes):
             from_session=str(body.get("from") or ""), to_session=to_session,
             text=str(body.get("text") or ""), reply_to=body.get("replyTo") or None,
             claimed_hop=int(body.get("hop") or 0), msg_id=str(body.get("id") or ""),
-            conv=str(body.get("conv") or ""),
+            conv=str(body.get("conv") or ""), authz=ticket,
         )
     except agent_msg.MessageError as e:
         return JSONResponse({"error": e.code, "reason": e.reason},

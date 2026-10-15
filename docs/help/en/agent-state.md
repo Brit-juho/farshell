@@ -82,6 +82,8 @@ A child session can't create further child sessions, and each parent can have at
 sessions. To turn it off, set `VT_AGENT_SPAWN=0`.
 List and close: `fsh delegate ls`, `fsh delegate close <id>` (the session is kept).
 
+An agent can ask for a permission (`request_access`) and check what it has (`whoami`, `list_my_grants`); the person picks «once / for this session / deny» in the approval inbox. `fsh authz` in a terminal is read-only (approving and revoking happen in the web/phone UI).
+
 ## Sharing a session with an agent (MCP)
 
 An agent can't create or close sessions you made. (It makes its own child sessions through

@@ -61,7 +61,7 @@ Verify affected behavior with actual responses, operations and logs.
 12. Only `docs/help/`, `docs/ref/` and `docs/guide/` are tracked under `docs/`.
     New `fsh help` topics need both a `bin/fsh` entry and a `docs/help/` file.
 13. `docs/ref/` describes **current behavior** only. Research notes, notes on other products,
-    plans, reports and design drafts stay local (`docs/study/`, `docs/plan-*`, or anywhere
+    plans, reports and design drafts stay local (`docs/local/`, or anywhere
     `.gitignore` already excludes) — never under `docs/ref/` or the repository root. The folder
     is allowed as a whole, so `.gitignore` alone does not stop a file placed there;
     `scripts/guard_personal.py` blocks such new files by name. Do not add examples, fixtures or

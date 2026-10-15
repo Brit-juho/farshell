@@ -120,15 +120,17 @@ test('세션 탭의 뷰 편집기(layout/session-order.js)는 screens 청크에 
   assert.doesNotMatch(coreJs, /vt-order-close/);
 });
 
-test('에이전트 공유의 대화상자·승인 모달·권한 패널은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·import() 만)', () => {
+test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·감사)은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·배지·import() 만)', () => {
   // vite.config.js manualChunks 의 `/frontend/js/share/` 규칙이 빠지면 포괄 규칙이 core 로 보내
   // 상시 로드가 ~18KB 늘어난다(빌드·테스트는 통과하고 상한만 조용히 줄어든다).
   assert.match(shareJs, /function openShareDialog/);
-  assert.match(shareJs, /function openPermsPanel/);
-  assert.match(shareJs, /vt-share-approval/);
+  assert.match(shareJs, /function mountPermissions/);
+  assert.match(shareJs, /function mountAudit/);
+  assert.match(shareJs, /vt-authz-approval/);
   assert.doesNotMatch(coreJs, /function openShareDialog/);
-  assert.doesNotMatch(coreJs, /function openPermsPanel/);
-  assert.doesNotMatch(coreJs, /vt-share-approval/);
+  assert.doesNotMatch(coreJs, /function mountPermissions/);
+  assert.doesNotMatch(coreJs, /function mountAudit/);
+  assert.doesNotMatch(coreJs, /vt-authz-approval/);
   assert.doesNotMatch(coreJs, /에이전트 접근 요청/);
   // core 쪽 진입점은 있고, 청크는 동적 import 로만 받는다
   assert.match(coreJs, /agent_share_request/);

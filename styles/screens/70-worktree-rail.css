@@ -336,7 +336,7 @@
 .vt-railset-note { font:400 var(--fs-3xs) var(--font-ui); color:var(--color-sub); }
 .vt-railset .vt-wtd-section-title:not(:first-child) { margin-top:calc(var(--spacing) * 2); }
 
-/* ── 위임 계보(2026-10-13, docs/plan-2.4/50-agent-delegation.md · 방향 A 「계보선」) ──────────
+/* ── 위임 계보(2026-10-13, 방향 A 「계보선」) ──────────
    위임은 브랜치, 보고는 머지. 부모 행의 상태 아이콘 아래로 레인(부모 상태색)이 내려가고, 하위 세션은
    그 레인에서 굽은 가지로 갈라진다. 보고한 하위는 가지가 완료색으로 바뀌어 레인에 합쳐지고, 실패 보고는
    오류색, 닫힌 하위는 흐린 선이다. 레인은 행 왼쪽 여백(10px) 안의 x=4px을 지난다 — 아이콘 축(18px)으로

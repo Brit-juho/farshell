@@ -18,7 +18,7 @@ router = APIRouter()
 
 @router.get("/api/queue")
 async def get_queue():
-    items = queue_store.list_items()
+    items = [queue_store.with_blocked_text(x) for x in queue_store.list_items()]
     # U9: "자동" 타깃 드롭다운/문구가 실제로 어느 세션을 가리키는지 눈에 보이게.
     # 큐/음성이 공유하는 같은 판정(tmux_target.resolve_voice_target_pane)을 그대로 재사용.
     pane, mode = tmux_target.resolve_voice_target_pane()

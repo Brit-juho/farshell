@@ -32,6 +32,8 @@ _t_en_lookup() {
     '(체크: "Run command in shell")') _T_OUT='(check "Run command in shell")' ;;
     '(템플릿 없음. '\''fsh template save <이름>'\'' 으로 저장)') _T_OUT='(no templates. Save one with '\''fsh template save <name>'\'')' ;;
     '(폰 접속 URL과 QR은 서버가 떠 있을 때 '\''fsh mobile'\''로 봅니다)') _T_OUT='(The phone URL and QR code are available from '\''fsh mobile'\'' while the server is running)' ;;
+    '- allow-*: 접근을 늘리는 변경이라 승인 요청만 만들어집니다. 웹 화면의 승인함에서 사람이 승인해야 적용되고, 이 명령으로는 승인할 수 없습니다.') _T_OUT='- allow-*: raises access, so it only creates an approval request. A person must approve it in the web inbox; this command cannot approve.' ;;
+    '- deny-*: 접근을 줄이는 변경이라 바로 적용되고 감사 기록에 남습니다.') _T_OUT='- deny-*: lowers access, so it applies at once and is written to the audit log.' ;;
     '--force — 경고를 확인하고 노출합니다') _T_OUT='--force: exposing despite the warning' ;;
     '--network 값이 없습니다') _T_OUT='--network needs a value' ;;
     '.venv 없음 → '\''./install.sh'\'' 실행 또는 ~/.vt.env에 VT_PYTHON 지정') _T_OUT='no .venv → run '\''./install.sh'\'' or set VT_PYTHON in ~/.vt.env' ;;
@@ -81,6 +83,7 @@ _t_en_lookup() {
     'TTS 미설치 — sudo apt-get install espeak-ng') _T_OUT='TTS not installed — sudo apt-get install espeak-ng' ;;
     'URL 변경 훅: ') _T_OUT='URL hook:     ' ;;
     'URL을 아는 누구나 이 맥에서 명령을 실행할 수 있습니다.') _T_OUT='Anyone who knows the URL can run commands on this Mac.' ;;
+    'VT_AUTHZ_SOCKET=0 — 소켓을 쓰지 않습니다(토큰으로만 동작)') _T_OUT='VT_AUTHZ_SOCKET=0 — the socket is not used (token only)' ;;
     'VT_AUTH_TOKEN 설정됨 (원격 인증 활성)') _T_OUT='VT_AUTH_TOKEN set (remote auth on)' ;;
     'VT_NGROK_DOMAIN 미설정 — 매번 임시 주소가 발급됩니다') _T_OUT='VT_NGROK_DOMAIN not set — you get a temporary address each time' ;;
     'VT_PYTHON 미설정/실행불가. '\''fsh doctor'\''로 확인하세요.') _T_OUT='VT_PYTHON isn'\''t set or isn'\''t executable. Check with '\''fsh doctor'\''.' ;;
@@ -147,6 +150,7 @@ _t_en_lookup() {
     'python3 미설치. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''') _T_OUT='python3 isn'\''t installed. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''' ;;
     'settings.json profile에 추가:') _T_OUT='Add to a profile in settings.json:' ;;
     'settings.json을 읽을 수 없음 — {err}') _T_OUT='can'\''t read settings.json — {err}' ;;
+    'socket OK — {path} (권한 {perms}, 디렉터리 {dir}, 자가 시험 통과)') _T_OUT='socket OK — {path} (mode {perms}, directory {dir}, self-test passed)' ;;
     'stdin을 직접 읽습니다(다른 세션은 진단 못 합니다).') _T_OUT='pane'\''s stdin directly (it can'\''t diagnose other sessions).' ;;
     'tailscale IP/호스트명을 가져오지 못했습니다. '\''tailscale status'\''로 확인하세요') _T_OUT='Couldn'\''t get the tailscale IP/hostname. Check '\''tailscale status'\''' ;;
     'tailscale 미설치. brew install tailscale (macOS) 또는 https://tailscale.com/download') _T_OUT='tailscale is not installed. brew install tailscale (macOS) or https://tailscale.com/download' ;;
@@ -175,6 +179,7 @@ _t_en_lookup() {
     'tmux 세션: {session}') _T_OUT='tmux session: {session}' ;;
     'tmux 세션은 살아있습니다 (영속성):') _T_OUT='tmux sessions are still running (persistent):' ;;
     'tmux 안에서만 popup으로 띄울 수 있습니다.') _T_OUT='Popups only work inside tmux.' ;;
+    'unix socket') _T_OUT='unix socket' ;;
     '{action} 핫키 → {value}') _T_OUT='{action} hotkey → {value}' ;;
     '{action} 핫키 디폴트로 복구') _T_OUT='{action} hotkey restored to default' ;;
     '{action} 핫키 비활성화') _T_OUT='{action} hotkey disabled' ;;
@@ -183,6 +188,7 @@ _t_en_lookup() {
     '{file} 읽기 실패 (원본 유지)') _T_OUT='Couldn'\''t read {file} (original kept)' ;;
     '{label} — 설정에서 받아 주세요') _T_OUT='{label} — download it in Settings' ;;
     '{label} 준비됨') _T_OUT='{label} ready' ;;
+    '{name} 읽을 수 없음 — 변경 거부 중(파일은 그대로, 복사본 {n}개): {why} — {path}') _T_OUT='{name} is unreadable — changes are refused (file untouched, {n} copies kept): {why} — {path}' ;;
     '{n} (credentials JSON 파일)') _T_OUT='{n} (credentials JSON files)' ;;
     '{n}개 (fsh device list)') _T_OUT='{n} (fsh device list)' ;;
     '{n}개 snippet 안내') _T_OUT='{n} snippet hint(s)' ;;
@@ -219,6 +225,7 @@ _t_en_lookup() {
     '개념 설명:') _T_OUT='Concepts:' ;;
     '개인 값 가드') _T_OUT='Personal-value guard' ;;
     '개인 값 가드 훅을 켰습니다 (scripts/githooks)') _T_OUT='Personal-value guard hooks turned on (scripts/githooks)' ;;
+    '건너뜀 — 토큰으로만 동작: {reason}') _T_OUT='Skipped — token only: {reason}' ;;
     '결과:') _T_OUT='Result:' ;;
     '경계값') _T_OUT='Boundary values' ;;
     '경고: 인증 없이 --force로 공개 터널을 엽니다.') _T_OUT='Warning: opening a public tunnel without auth because of --force.' ;;
@@ -232,9 +239,12 @@ _t_en_lookup() {
     '공개키 형식이 아님 (ssh-ed25519/ssh-rsa/ecdsa-sha2-*로 시작해야 함)') _T_OUT='Not a valid public key (must start with ssh-ed25519, ssh-rsa or ecdsa-sha2-*)' ;;
     '공개키를 ~/.ssh/authorized_keys에 추가했습니다') _T_OUT='Added the public key to ~/.ssh/authorized_keys' ;;
     '공개하지 않으려면: fsh start --network tailscale   (또는 lan / localhost)') _T_OUT='To keep it private: fsh start --network tailscale   (or lan / localhost)' ;;
+    '공용 토큰') _T_OUT='Shared token' ;;
     '교체 실패 (원본 유지)') _T_OUT='Replace failed (original kept)' ;;
     '구 iTerm2 프로필 제거 (Guid 변경으로 인한 중복 방지) → {path}') _T_OUT='Removed the old iTerm2 profile (avoids duplicates after the Guid change) → {path}' ;;
     '구 프로필 제거 → {path} (Guid가 바뀌어 중복 방지)') _T_OUT='remove old profile → {path} (Guid changed; avoids duplicates)' ;;
+    '권한 변경 (allow-control / deny-control / allow-agent / deny-agent):') _T_OUT='Permission changes (allow-control / deny-control / allow-agent / deny-agent):' ;;
+    '권한 저장소') _T_OUT='Permission store' ;;
     '그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V') _T_OUT='Then check that PATH points to the new python3: python3 -V' ;;
     '기간이 끝나거나 재부팅해도 이 포트를 자동으로 다시 열까요? (y/N)') _T_OUT='Re-open this port automatically when it expires or after a reboot? (y/N)' ;;
     '기계 토큰') _T_OUT='machine token' ;;
@@ -305,6 +315,9 @@ _t_en_lookup() {
     '미설치 — 프런트엔드 빌드에 필요. macOS: '\''brew install node'\'', Linux: nodejs.org') _T_OUT='not installed — needed to build the frontend. macOS: '\''brew install node'\'', Linux: nodejs.org' ;;
     '미설치 — 회사망 등에서 SSH로 원격 접속 시 필요. https://tailscale.com/download') _T_OUT='not installed — needed for SSH access from restricted networks. https://tailscale.com/download' ;;
     '미연동 — 비밀번호만으로 새 기기도 접속 가능 (등록 기기 {n}개). '\''fsh otp setup'\''') _T_OUT='not enabled — new devices can sign in with the password alone ({n} device(s) registered). '\''fsh otp setup'\''' ;;
+    '범위 밖 거절 {n}건 (legacy_token_scope)') _T_OUT='{n} refused as out of scope (legacy_token_scope)' ;;
+    '범위 밖 거절 {n}건 (최근 24h): {path} — {ua}. unix socket(fsh 명령) 또는 로그인으로 옮기세요') _T_OUT='{n} refused as out of scope (last 24h): {path} — {ua}. Move it to the unix socket (fsh command) or a login' ;;
+    '범위 밖 거절 없음 (최근 24h)') _T_OUT='No out-of-scope refusals (last 24h)' ;;
     '변경 후 '\''fsh stop && fsh voice'\''로 daemon 재시작 필요') _T_OUT='After changing it, restart the daemon with '\''fsh stop && fsh voice'\''' ;;
     '변경: fsh hotkey set voice <ctrl+shift+x>') _T_OUT='Change: fsh hotkey set voice <ctrl+shift+x>' ;;
     '변경: fsh terminal set <{choices}>   (되돌리기: fsh terminal unset)') _T_OUT='Change: fsh terminal set <{choices}>   (revert: fsh terminal unset)' ;;
@@ -329,6 +342,7 @@ _t_en_lookup() {
     '사용 중 (서버 이미 실행 중일 수 있음)') _T_OUT='in use (the server may already be running)' ;;
     '사용: prefix + {key}  (default prefix: Ctrl+b)') _T_OUT='Use: prefix + {key}  (default prefix: Ctrl+b)' ;;
     '사용법:') _T_OUT='Usage:' ;;
+    '사용법: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>') _T_OUT='Usage: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>' ;;
     '사용법: fsh clauth [status|which]') _T_OUT='Usage: fsh clauth [status|which]' ;;
     '사용법: fsh delegate [ls|close <id>]') _T_OUT='Usage: fsh delegate [ls|close <id>]' ;;
     '사용법: fsh device [list|rename <id> <별명>|revoke <id>|prune]') _T_OUT='Usage: fsh device [list|rename <id> <name>|revoke <id>|prune]' ;;
@@ -343,6 +357,7 @@ _t_en_lookup() {
     '사용법: fsh hotkey disable <action>') _T_OUT='Usage: fsh hotkey disable <action>' ;;
     '사용법: fsh hotkey reset <action>') _T_OUT='Usage: fsh hotkey reset <action>' ;;
     '사용법: fsh hotkey set <action> <hotkey>') _T_OUT='Usage: fsh hotkey set <action> <hotkey>' ;;
+    '사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]') _T_OUT='Usage: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]' ;;
     '사용법: fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]') _T_OUT='Usage: fsh msg [log [conv-id]|agents|send <[host/]session> "text" [--reply <id>]]' ;;
     '사용법: fsh msg send <[호스트/]세션> "내용" [--reply <id>]') _T_OUT='Usage: fsh msg send <[host/]session> "text" [--reply <id>]' ;;
     '사용법: fsh pane report [--state idle|working|waiting|done] [--agent <이름>]') _T_OUT='Usage: fsh pane report [--state idle|working|waiting|done] [--agent <name>]' ;;
@@ -359,6 +374,7 @@ _t_en_lookup() {
     '사용법: fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]') _T_OUT='Usage: fsh usage [list|add --model <name> --tokens <N> --seconds <N>]' ;;
     '사용법: fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]') _T_OUT='Usage: fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]' ;;
     '사용법: 해당 tmux pane에서 fsh voice-bind <claude|codex> <대화 ID>') _T_OUT='Usage: run in the target tmux pane: fsh voice-bind <claude|codex> <conversation ID>' ;;
+    '상태 파일은 켜짐인데 연결되지 않습니다 — fsh restart') _T_OUT='Status file says listening but it does not connect — fsh restart' ;;
     '새 웹 로그인 비밀번호:') _T_OUT='New web login password:' ;;
     '새 접속 코드: {pin} — 다시 표시되지 않습니다') _T_OUT='New access code: {pin} (shown only once)' ;;
     '새 접속 코드: {pin} — 다시 표시되지 않습니다. 터널·URL은 그대로입니다.') _T_OUT='New access code: {pin} (shown only once). The tunnel and URL are unchanged.' ;;
@@ -377,6 +393,8 @@ _t_en_lookup() {
     '서버/음성 데몬 종료 (터널은 그대로 — URL 유지)') _T_OUT='Server and voice daemons stopped (tunnel kept — URL unchanged)' ;;
     '서버/터널/음성 데몬 종료') _T_OUT='Server, tunnel and voice daemons stopped' ;;
     '서버:        ') _T_OUT='Server:       ' ;;
+    '서버가 VT_AUTHZ_ENFORCE=peer 로 떠 있으면 이 명령은 서버에 변경을 요청합니다 (unix socket).') _T_OUT='When the server runs with VT_AUTHZ_ENFORCE=peer, these commands ask the server to make the change (unix socket).' ;;
+    '서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.') _T_OUT='If the server is down, the socket is unusable or that setting is off, it writes ~/.vt/hosts.json directly as before.' ;;
     '서버가 떠 있지 않을 수 있습니다: fsh status') _T_OUT='The server may not be running: fsh status' ;;
     '서버가 실행 중이 아닙니다. 먼저 '\''fsh start'\''로 시작하세요.') _T_OUT='The server isn'\''t running. Start it first with '\''fsh start'\''.' ;;
     '서버가 옛 설정으로 돌고 있습니다: {keys} — '\''fsh restart'\'' 필요') _T_OUT='server is running with old settings: {keys} — run '\''fsh restart'\''' ;;
@@ -403,8 +421,11 @@ _t_en_lookup() {
     '세션 서명키(VT_AUTH_SESSION_KEY) 자동 생성') _T_OUT='Session signing key (VT_AUTH_SESSION_KEY) generated automatically' ;;
     '세션 이름을 입력하세요:') _T_OUT='Enter a session name:' ;;
     '소스가 산출물보다 최신 — '\''npm run build'\''로 다시 빌드하세요 ({src} 등)') _T_OUT='sources are newer than the build — rebuild with '\''npm run build'\'' (e.g. {src})' ;;
+    '소켓 없음 — 서버가 꺼져 있거나 옛 코드입니다(fsh restart)') _T_OUT='No socket — the server is stopped or running old code (fsh restart)' ;;
+    '소켓:       ') _T_OUT='Socket:     ' ;;
     '수동 입력용 키:') _T_OUT='Key for manual entry:' ;;
     '스크롤백 잔여 로그') _T_OUT='Leftover scrollback logs' ;;
+    '승인 기능') _T_OUT='Approvals' ;;
     '시스템 설정 → 개인정보 보호 및 보안 → 자동화 에서') _T_OUT='In System Settings -> Privacy & Security -> Automation,' ;;
     '시크릿 생성 실패') _T_OUT='Couldn'\''t generate the secret' ;;
     '실시간 확인: tail -f {path}') _T_OUT='Follow live: tail -f {path}' ;;
@@ -460,6 +481,7 @@ _t_en_lookup() {
     '웹 로그인 비밀번호 설정 완료 — 해시만 저장(원문 미저장)') _T_OUT='Web login password set — only the hash is stored (never the plain text)' ;;
     '웹 로그인 비밀번호 설정됨 (fsh password)') _T_OUT='web login password set (fsh password)' ;;
     '웹 로그인 비밀번호 해제 (VT_AUTH_PASSWORD_HASH 제거)') _T_OUT='Web login password cleared (VT_AUTH_PASSWORD_HASH removed)' ;;
+    '웹 로그인 비밀번호가 없어 승인이 필요한 에이전트·peer 기능이 꺼져 있습니다 — '\''fsh password'\'' 로 설정하세요') _T_OUT='Agent and peer features that need an approval are off because no web login password is set — set one with '\''fsh password'\''' ;;
     '위험을 감수하고 그대로 진행하려면: fsh start --force') _T_OUT='To proceed at your own risk: fsh start --force' ;;
     '위험한 포트가 공개 중:{ports} — 원격 제어 수단이 될 수 있습니다. '\''fsh tunnel unexpose <port>'\''') _T_OUT='risky ports are public:{ports} — they can give remote control. Run '\''fsh tunnel unexpose <port>'\''' ;;
     '위험한 포트라 노출하지 않았습니다. 정말 열려면 --force를 붙이세요.') _T_OUT='Not exposed: this port is risky. Add --force if you really want to open it.' ;;
@@ -497,6 +519,7 @@ _t_en_lookup() {
     '인증:       ') _T_OUT='Auth:        ' ;;
     '인터넷 어디서나 도달 가능 (인증으로 보호)') _T_OUT='reachable from anywhere on the internet (protected by authentication)' ;;
     '임시 파일 생성 실패: {path}') _T_OUT='Couldn'\''t create temp file: {path}' ;;
+    '자가 시험 실패 — 소켓을 서비스하지 않습니다(토큰으로만 동작): {reason}') _T_OUT='Self-test failed — the socket is not served (token only): {reason}' ;;
     '자동') _T_OUT='auto' ;;
     '자동 재노출 꺼짐: 포트 {port}. 만료 시각이 되면 노출이 끝납니다.') _T_OUT='Auto re-expose off for port {port}. Exposure ends at its expiry time.' ;;
     '자동 재노출 켜짐: 포트 {port}. 만료되면 연장하고, 터널이 사라지면 서버가 1분 안에 다시 엽니다.') _T_OUT='Auto re-expose on for port {port}. It extends at expiry, and the server re-opens the tunnel within a minute if it goes away.' ;;
@@ -528,6 +551,7 @@ _t_en_lookup() {
     '제거: fsh hooks dedupe') _T_OUT='Remove: fsh hooks dedupe' ;;
     '종료: fsh stop') _T_OUT='Stop: fsh stop' ;;
     '종료할 tmux 세션 없음') _T_OUT='No tmux sessions to stop' ;;
+    '주의: control(제어) 등급은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다.') _T_OUT='Note: the control level means that Mac can type commands into this Mac'\''s terminals — the same as a remote shell.' ;;
     '중단됨') _T_OUT='Aborted' ;;
     '중복 해제: rm {lock}') _T_OUT='To override: rm {lock}' ;;
     '중지') _T_OUT='stopped' ;;
@@ -540,6 +564,7 @@ _t_en_lookup() {
     '차단 도구: {tools}...') _T_OUT='Blocked tools: {tools}...' ;;
     '처음 열기: {url}') _T_OUT='First visit: {url}' ;;
     '첫 실행 안내') _T_OUT='First run' ;;
+    '최근 24h 토큰 사용 {n}건') _T_OUT='{n} machine-token requests in the last 24h' ;;
     '추가 포트:') _T_OUT='Extra ports:' ;;
     '추가 포트는 임시 주소입니다(고정 도메인은 메인 터널이 씁니다)') _T_OUT='Extra ports get temporary URLs (the fixed domain belongs to the main tunnel)' ;;
     '치명적 문제 있음. ✗ 항목부터 해결하세요.') _T_OUT='Critical problems found. Fix the ✗ items first.' ;;

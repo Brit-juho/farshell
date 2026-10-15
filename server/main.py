@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import hmac
 import logging
 import os
 import re
@@ -30,6 +31,11 @@ import vt_env as _vt_env
 _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 
 import auth
+from authz import hooks as authz_hooks
+from authz import legacy_gate as authz_legacy_gate
+from authz import legacy_use as authz_legacy_use
+from authz import preauth as authz_preauth
+from authz import sock as authz_sock
 import file_store
 import i18n
 import network_access
@@ -64,6 +70,7 @@ from routes.peer_relay import router as peer_relay_router
 from routes.host_relay import router as host_relay_router
 from routes.agent_msg import router as agent_msg_router
 from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
+from routes.authz import human_router as authz_human_router, read_router as authz_read_router, router as authz_router
 from routes.delegation import router as delegation_router, human_router as delegation_human_router
 
 logging.basicConfig(level=logging.INFO)
@@ -78,6 +85,9 @@ FRONTEND_DIR = str(BASE_DIR / "frontend")
 # ---------------------------------------------------------------------------
 
 _SECRET_QS_RE = re.compile(r"((?:token|ticket|otp)=)[^&\s\"']+", re.IGNORECASE)
+# `legacy` 강제 시: 이름에 token 이 들어간 모든 쿼리(access_token= …)와 secret/password/key 류도 가린다.
+_SECRET_QS_WIDE_RE = re.compile(
+    r"((?<=[?&])[\w.-]*(?:token|ticket|otp|secret|passw(?:or)?d|apikey|api_key|auth)[\w.-]*=)[^&\s\"']+", re.IGNORECASE)
 
 
 class _RedactSecretsFilter(logging.Filter):
@@ -89,14 +99,20 @@ class _RedactSecretsFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        wide = authz_legacy_gate.active()
         if isinstance(record.args, tuple):
             record.args = tuple(
-                _SECRET_QS_RE.sub(r"\1***", a) if isinstance(a, str) else a
+                _redact(a, wide) if isinstance(a, str) else a
                 for a in record.args
             )
         if isinstance(record.msg, str):
-            record.msg = _SECRET_QS_RE.sub(r"\1***", record.msg)
+            record.msg = _redact(record.msg, wide)
         return True
+
+
+def _redact(text: str, wide: bool) -> str:
+    text = _SECRET_QS_RE.sub(r"\1***", text)
+    return _SECRET_QS_WIDE_RE.sub(r"\1***", text) if wide else text
 
 
 for _name in ("uvicorn.access", "uvicorn.error"):
@@ -130,6 +146,11 @@ class TokenAuthMiddleware:
         # (#3′, docs/ref/auth.md). 전송 범위를 바꾸면 그 표도 고칠 것.
         if scope["type"] != "http" or not auth.is_protected():
             return await self.app(scope, receive, send)
+        # unix socket 서버(authz/sock.py Gate)가 peer uid/pid 로 호출자를 확인하고 허용표를 통과시킨 요청.
+        # `fsh_sock` 키는 그 게이트만 세운다 — TCP 쪽 uvicorn 이 만드는 scope 에는 이 키가 없고 클라이언트가
+        # 넣을 방법도 없다. 토큰이 없는 요청이므로 `request_kind` 는 none 이다(사람 전용 라우트는 그대로 거부).
+        if scope.get("fsh_sock") is True:
+            return await self.app(scope, receive, send)
         path = scope.get("path", "")
         if path in (
             "/", "/sw.js", "/manifest.json", "/favicon.ico",
@@ -143,6 +164,12 @@ class TokenAuthMiddleware:
             # 이 표는 검사하지 않는다 — 사람이 맞춰야 한다).
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
+        legacy_on = authz_legacy_gate.active()      # VT_AUTHZ_ENFORCE=legacy — 꺼짐이면 아래 분기는 전부 건너뛴다
+        if legacy_on:
+            rejected = self._legacy_transport_reject(request)
+            if rejected is not None:
+                await rejected(scope, receive, send)
+                return
         token = (
             request.cookies.get("vt_session", "")
             or request.query_params.get("token", "")
@@ -151,13 +178,62 @@ class TokenAuthMiddleware:
             authz = request.headers.get("authorization", "")
             if authz.startswith("Bearer "):
                 token = authz[7:]
-        if not auth.check_request(token):
+        authenticated = auth.check_request(token)
+        authz_hooks.middleware(request, authenticated)   # shadow — 응답 불변
+        if not authenticated:
+            # 제시했는데 틀린 자격만 센다(자격 없음·서명은 맞는데 만료된 쿠키는 추측이 아니다).
+            if token and not auth.session_signed(token):
+                authz_preauth.fail(authz_preauth.source_of(request), "credential")
             response = JSONResponse({"error": "unauthorized"}, status_code=401)
             await response(scope, receive, send)
             return
         # 호출자 종류를 라우트가 볼 수 있게 남긴다(`request.state.auth_kind`). 사람 전용 라우트는
         # 이 값을 믿지 않고 auth.require_human_session 이 다시 판정한다 — 이 값은 로깅·진단용.
-        scope.setdefault("state", {})["auth_kind"] = auth.request_kind(request)
+        kind = auth.request_kind(request)
+        scope.setdefault("state", {})["auth_kind"] = kind
+        if kind == auth.AUTH_MACHINE:       # 기계 토큰 사용 기록(경로·UA·횟수만)
+            if legacy_on and not authz_legacy_gate.scope_allowed(scope.get("method", "GET"), path):
+                # H1 — 기계 토큰은 소켓 허용표의 (메서드, 경로)만. 거절도 세어 어느 외부 스크립트를 옮길지 보이게 한다.
+                authz_legacy_use.record(path, request.headers.get("user-agent", ""), denied=True)
+                response = JSONResponse(authz_legacy_gate.scope_denied_body(), status_code=403)
+                await response(scope, receive, send)
+                return
+            authz_legacy_use.record(path, request.headers.get("user-agent", ""))
+        await self.app(scope, receive, send)
+
+    @staticmethod
+    def _legacy_transport_reject(request: Request):
+        """H4 — `legacy` 가 켜지면 `?token=` 과 「쿠키 값 = 기계 토큰」은 받지 않는다(유효 여부와 무관하게 같은 답)."""
+        if request.query_params.get("token", ""):
+            return JSONResponse(authz_legacy_gate.token_url_body(), status_code=400)
+        cookie = request.cookies.get("vt_session", "")
+        if cookie and auth.VT_AUTH_TOKEN and hmac.compare_digest(cookie, auth.VT_AUTH_TOKEN):
+            return JSONResponse(authz_legacy_gate.token_cookie_body(), status_code=401)
+        return None
+
+
+class PreauthMiddleware:
+    """사전 인증 실패 한도 — 출처가 잠겼거나 자격 교환 엔드포인트가 전역 상한을 넘었으면 429 + Retry-After.
+
+    HTTP 만 본다. unix socket 요청(`fsh_sock`)은 지나지 않는다 — 커널이 확인한 peer 라 추측할 자격이 없고, 소켓은 잠기지 않는다.
+    실패를 세는 곳은 각 인증 지점이다(TokenAuth·로그인·peer 서명·페어링). 규칙과 근거는 `authz/preauth.py`."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("fsh_sock") is True:
+            return await self.app(scope, receive, send)
+        headers = _scope_headers(scope)
+        client = scope.get("client")
+        source = authz_preauth.source_key(client[0] if client else None, headers)
+        hit = authz_preauth.blocked(source, scope.get("path", ""))
+        if hit is not None:
+            retry, why = hit
+            response = JSONResponse({"error": "rate_limited", "reason": why, "retry_after": retry},
+                                    status_code=429, headers={"Retry-After": str(retry)})
+            await response(scope, receive, send)
+            return
         await self.app(scope, receive, send)
 
 
@@ -266,6 +342,8 @@ class NetworkAccessMiddleware:
         # HTTP + WS 둘 다(P2-5 표 #4). 전송 범위를 바꾸면 docs/ref/auth.md도 고칠 것.
         if scope["type"] not in ("http", "websocket"):
             return await self.app(scope, receive, send)
+        if scope.get("fsh_sock") is True:    # 소켓 요청은 IP 가 없다 — 파일 권한 0600 + peer uid 가 접근 제어
+            return await self.app(scope, receive, send)
         spec = network_access.get_current_spec()
         if spec.allow_all:
             return await self.app(scope, receive, send)
@@ -317,6 +395,9 @@ async def lifespan(_app: FastAPI):
             "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "
             "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
         )
+    notice = authz_legacy_gate.notice_for_start()
+    if notice:
+        logger.warning(notice)
     if auth.is_protected():
         n_dev = sum(1 for d in auth.list_devices() if not d.get("expired"))
         if auth.totp_enabled():
@@ -337,8 +418,7 @@ async def lifespan(_app: FastAPI):
     #
     # P2-4(ADR-41) §2.4 — 격리를 선언한 프로세스(VT_STATE_DIR·VT_RUN_DIR 중
     # 하나라도 명시)는 레거시 편입을 건너뛴다. `LEGACY_UPLOAD_DIR`이 이미
-    # `VT_RUN_DIR`을 따라가므로 지금 당장 사고가 나는 건 아니지만
-    # (docs/plan-2.3/80-vt-paths.md §2.4), 그건 우연이지 규칙이 아니었다 —
+    # `VT_RUN_DIR`을 따라가므로 지금 당장 사고가 나는 건 아니지만, 그건 우연이지 규칙이 아니었다 —
     # 다음에 레거시 마이그레이션이 하나 더 생기면 같은 판단을 처음부터 다시
     # 해야 한다. 여기서 명문화한다.
     if vt_paths.is_isolated():
@@ -352,7 +432,7 @@ async def lifespan(_app: FastAPI):
     # 번도 켜진 적이 없어 위험만 있고 값어치는 없었다). 기능과 함께 7일 보관
     # 정리 루프도 사라지므로, 남은 로그를 여기서 1회 청소하지 않으면
     # **영원히 남는다** — 비밀값 노출을 줄이려다 오히려 회수 불가로 만드는
-    # 셈이다(docs/plan-2.3/87-remove-scrollback-persist.md §5).
+    # 셈이다.
     await asyncio.to_thread(_purge_legacy_scrollback)
 
     # 2.2 — 노출 포트 프록시 리스너 복구(ADR-31). `fsh stop --keep-tunnel`은 추가
@@ -389,9 +469,20 @@ async def lifespan(_app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.debug(f"tmux 훅 설치 실패: {e}")
 
+    # unix socket 두 번째 서버. 실패해도(건너뜀·자가 시험 실패) 서버 기동은 막지 않는다:
+    # 소켓이 없으면 클라이언트는 토큰으로 내려간다.
+    sock_service = authz_sock.SockService(_app)
+    try:
+        await sock_service.start()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[authz-sock] 시작 실패: {e}")
+
     try:
         yield
     finally:
+        with suppress(Exception):
+            await sock_service.stop()
+        authz_legacy_use.flush()
         with suppress(Exception):
             await asyncio.to_thread(tmux_hooks.uninstall)
         port_expiry_task.cancel()
@@ -456,10 +547,11 @@ def _purge_legacy_scrollback() -> None:
 # 목록에 이 경로들이 없어 인증이 켜진 배포에서는 로그인 뒤였지만(단독
 # 취약점은 아니었다), 인증을 끈 구성에서는 그대로 열려 있었다. 스펙 자체는
 # `app.openapi()`를 프로세스 안에서 호출해 CI에서만 꺼낸다 — 엔드포인트가
-# 필요 없다(docs/plan-2.3/50-contract.md §2.4).
+# 필요 없다.
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(NetworkAccessMiddleware)
 app.add_middleware(TokenAuthMiddleware)
+app.add_middleware(PreauthMiddleware)       # TokenAuth 바깥 — 잠긴 출처는 인증 판정 전에 429
 # 프론트엔드는 이 서버가 직접 서빙하므로(동일 출처) CORS가 필요 없다. 예전엔 `*`로
 # 열려 있어서 임의의 웹사이트가 응답 본문까지 읽을 수 있었다 — 인증이 꺼진 기본
 # 구성에서는 그대로 원격 코드 실행이었다. 외부 클라이언트가 필요한 경우에만 옵트인.
@@ -521,6 +613,9 @@ app.include_router(git_accounts_elevated_router)
 app.include_router(worktree_router)
 app.include_router(repos_router)
 app.include_router(security_router)
+app.include_router(authz_human_router)
+app.include_router(authz_read_router)
+app.include_router(authz_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)
@@ -645,6 +740,7 @@ async def auth_login(request: Request):
     if ticket:
         hit = auth.consume_ticket(ticket)
         if not hit:
+            authz_preauth.fail(authz_preauth.source_of(request), "ticket")
             return JSONResponse({"error": "ticket_invalid"}, status_code=401)
         device_life = _ticket_device_ttl(hit)
         device_secret, device_id = auth.register_device(
@@ -664,6 +760,7 @@ async def auth_login(request: Request):
         kind = auth.credential_kind(cred)
         if kind is None:
             auth.password_note_failure(client_key)
+            authz_preauth.fail(authz_preauth.source_of(request), "login")
             return JSONResponse({"error": "invalid"}, status_code=401)
         auth.password_reset_failures(client_key)
 
@@ -683,6 +780,7 @@ async def auth_login(request: Request):
                         return JSONResponse({"error": "otp_required"}, status_code=401)
                     if not auth.verify_totp(otp):
                         auth.otp_note_failure(client_key)
+                        authz_preauth.fail(authz_preauth.source_of(request), "otp")
                         return JSONResponse(
                             {"error": "otp_invalid",
                              "remaining": max(0, auth.OTP_MAX_FAILS - auth.otp_failure_count(client_key))},

@@ -90,7 +90,7 @@ _N, _R, _P, _DKLEN = 16384, 8, 1, 32
 # / ".vt"))`였다. `VT_STATE_DIR=""`이면 폴백이 안 걸려 빈 문자열이 그대로
 # `Path("")`(서버 CWD)가 됐고, `VT_STATE_DIR="~/vt-test"`는 `~`를 안 펴서
 # 리터럴 `~` 디렉터리가 됐다 — 인증 저장소(기기·OTP·티켓)만 다른 15곳과
-# 갈라지는 사고였다(docs/plan-2.3/80-vt-paths.md §1). 값은 여기서 **한 번**
+# 갈라지는 사고였다. 값은 여기서 **한 번**
 # 계산하고 그 뒤로는 그대로 쓴다 — 아래 세 파생 경로처럼 이 모듈 attribute를
 # 통해서만 읽히고(`devices.py` 등은 `auth.STATE_DIR`로 매번 다시 읽는다),
 # 테스트는 env가 아니라 이 attribute 자체를 monkeypatch한다
@@ -253,6 +253,26 @@ def session_device(value: str) -> Optional[str]:
     return did
 
 
+def session_signed(value: str) -> bool:
+    """세션 쿠키가 **서명은 맞는가**(만료·기기 회수와 무관). 서명이 맞는 만료/회수 쿠키는 위조가 아니라 낡은 것이다 —
+    사전 인증 실패 한도(`authz/preauth.py`)가 추측으로 세지 않으려고 쓴다."""
+    if not VT_AUTH_SESSION_KEY or not value:
+        return False
+    parts = value.split(".")
+    try:
+        if len(parts) == 5 and parts[0] == "v3":
+            payload, sig = ".".join(parts[:4]), parts[4]
+        elif len(parts) == 4 and parts[0] == "v2":
+            payload, sig = ".".join(parts[:3]), parts[3]
+        elif len(parts) == 3 and parts[0] == "v1":
+            payload, sig = ".".join(parts[:2]), parts[2]
+        else:
+            return False
+        return hmac.compare_digest(_sign(payload), sig)
+    except (ValueError, TypeError):
+        return False
+
+
 def verify_session(value: str) -> bool:
     """세션 쿠키 값이 유효한(서명·만료·기기 OK) 세션표인지 검증."""
     return session_device(value) is not None
@@ -381,6 +401,15 @@ AUTH_MACHINE = "machine"   # 기계 토큰(Bearer / ?token= / 쿠키로 실린 �
 AUTH_NONE = "none"         # 인증 수단 없음(또는 무효)
 
 
+def _cookie_may_be_human() -> bool:
+    """서명 쿠키를 사람 세션으로 칠 수 있는가. 비밀번호가 있으면 언제나. 비밀번호 없이 토큰만 있는 서버는 사람이 로그인할 방법이
+    없으므로, `VT_AUTHZ_ENFORCE=legacy` 가 켜지면 서명 쿠키도 사람이 아니다(H14). 꺼짐이면 옛 판정 그대로."""
+    if VT_AUTH_PASSWORD_HASH:
+        return True
+    from authz import legacy_gate
+    return not legacy_gate.active()
+
+
 def request_kind(request) -> str:
     """요청의 인증 종류 — `session` | `machine` | `none`.
 
@@ -390,7 +419,7 @@ def request_kind(request) -> str:
     """
     cookie = request.cookies.get("vt_session", "")
     has_header_cred = bool(request.headers.get("authorization")) or bool(request.query_params.get("token"))
-    if cookie and not has_header_cred and session_device(cookie) is not None:
+    if cookie and not has_header_cred and session_device(cookie) is not None and _cookie_may_be_human():
         return AUTH_SESSION
     if VT_AUTH_TOKEN:
         authz = request.headers.get("authorization", "")

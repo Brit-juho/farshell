@@ -19,7 +19,6 @@ export const WARNING_LINES = [
   t('처음 쓰려는 에이전트마다 승인을 묻습니다.'),
 ];
 export const UNSHARE_NOTE = t('「공유 해제」는 이 세션의 모든 권한과 대기 중인 요청을 즉시 지웁니다.');
-export const APPROVAL_NOTE = t('허용하면 이 에이전트는 /clear 후에도 계속 쓸 수 있습니다. 「에이전트 권한」에서 언제든 철회할 수 있습니다.');
 
 /** 닉네임 검사. 통과하면 null, 아니면 사람이 읽는 이유. */
 export function validateNick(nick) {
@@ -56,63 +55,4 @@ export function errorText(e) {
   if (code === 'read_only_share') return t('이 공유는 읽기 전용입니다 — 공유 설정에서 읽기·쓰기로 올린 뒤 허용하세요');
   const reason = e && e.data && e.data.reason;
   return reason || (e && e.message) || t('요청에 실패했습니다');
-}
-
-export function requestSentence(req) {
-  const nick = (req.target && req.target.nick) || '?';
-  const agent = (req.agent && req.agent.name) || '?';
-  return req.kind === 'write'
-    ? t('「{agent}」이(가) 「{nick}」 세션의 쓰기 권한을 요청합니다', { agent, nick })
-    : t('「{agent}」이(가) 「{nick}」 세션의 읽기 권한을 요청합니다', { agent, nick });
-}
-
-export function kindHelp(kind) {
-  return kind === 'write'
-    ? t('쓰기: 에이전트가 이 터미널에서 명령을 실행할 수 있습니다.')
-    : t('읽기: 에이전트가 이 세션의 화면에 보이는 내용을 읽습니다.');
-}
-
-export function relTime(tsSec, nowMs = Date.now()) {
-  if (tsSec == null) return '';
-  const sec = Math.max(0, Math.round(nowMs / 1000 - tsSec));
-  if (sec < 60) return t('방금');
-  const min = Math.round(sec / 60);
-  if (min < 60) return t('{n}분 전', { n: min });
-  const hr = Math.round(min / 60);
-  if (hr < 24) return t('{n}시간 전', { n: hr });
-  return t('{n}일 전', { n: Math.round(hr / 24) });
-}
-
-/** 권한 수준 한 줄. effective(공유 모드와의 교집합) 기준이고, 쓰기를 받았지만 지금 막혀 있으면 그렇게 말한다. */
-export function grantLevel(g) {
-  const eff = g.effective || { read: g.read, write: g.write };
-  if (eff.write) return t('읽기·쓰기');
-  if (g.write && !eff.write) return eff.read ? t('읽기 (쓰기는 공유가 읽기 전용이라 멈춤)') : t('없음');
-  return eff.read ? t('읽기') : t('없음');
-}
-
-/** 감사 기록에서 (에이전트 id, 닉네임)의 마지막 성공 사용 시각. 서버가 grant 에 lastUsed 를 주지 않아 여기서 뽑는다. */
-export function lastUsedOf(grant, entries) {
-  let last = null;
-  for (const e of entries || []) {
-    if (e.by !== 'agent' || (e.action !== 'read' && e.action !== 'send') || e.result !== 'ok') continue;
-    if (!e.agent || e.agent.id !== grant.agent.id || e.nick !== grant.target.nick) continue;
-    if (last == null || e.ts > last) last = e.ts;
-  }
-  return last;
-}
-
-const ACTION_LABEL = {
-  read: t('화면 읽음'), send: t('입력 보냄'), list: t('목록 조회'), request: t('승인 요청'),
-  decide: t('결정'), revoke: t('철회'), share: t('공유'), unshare: t('공유 해제'),
-};
-const RESULT_LABEL = {
-  ok: t('성공'), allowed: t('허용'), denied: t('거부'), pending: t('대기'), pending_dup: t('대기'),
-  read_only_share: t('읽기 전용이라 거절'), rate_limited: t('호출 제한'), request_denied: t('거부됨'),
-};
-export function auditLine(e, nowMs = Date.now()) {
-  const who = e.by === 'user' ? t('사용자') : (e.agent && e.agent.name) || t('에이전트');
-  const act = ACTION_LABEL[e.action] || e.action;
-  const res = RESULT_LABEL[e.result] || e.result;
-  return `${relTime(e.ts, nowMs)} · ${who} · ${act}${e.nick ? ` · ${e.nick}` : ''} · ${res}`;
 }

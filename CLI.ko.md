@@ -27,9 +27,10 @@ fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
 fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|allow-agent <id>|log|revoke-all]  # 다른 맥의 FarShell 페어링
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # 다른 맥의 FarShell 페어링
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
-fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session)
+fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # 승인함·권한·감사 조회 (읽기 전용, 아래 참고)
+fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (저장한 자격증명은 push에 사용되지 않음)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
@@ -125,9 +126,33 @@ fsh host allow-agent <id>               # 받는 맥에서 — allow-control도 
 제한: 대화당 10번 왕복, 보내는 맥당 분당 20건, 4000자. 받는 에이전트에게는 "다른
 에이전트가 보낸 요청"이라는 한 줄 머리글이 붙습니다.
 
+**다른 맥이 할 수 있는 일 바꾸기 (`fsh host allow-*` / `deny-*`).** 서버가 `VT_AUTHZ_ENFORCE=peer` 로 떠 있으면 이 명령들은 `~/.vt/hosts.json` 을 직접
+쓰지 않고 unix socket 으로 서버에 요청합니다. `deny-control` / `deny-agent` 는 접근을 줄이므로 바로 적용되고 감사 기록에 남습니다.
+`allow-control` / `allow-agent` 는 접근을 늘리므로 승인 요청만 만들어지고, 웹 승인함에서 사람이 승인해야 하며 이 명령으로는 승인할 수 없습니다.
+요청을 만들면 종료 코드 0 이지만 아직 아무것도 바뀌지 않았다고 알려 줍니다. 그 설정이 꺼져 있거나 소켓이 없거나 옛 서버면 예전처럼
+`hosts.json` 에 바로 씁니다. `control` 은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다. `fsh host help` 로 볼 수 있습니다.
+
 공유 세션용 MCP 도구는 `list_shared_sessions`, `read_session`, `send_to_session`입니다.
 사용자가 웹에서 공유한 세션만 접근할 수 있으며, 첫 접근은 브라우저의 사용자 승인이
 필요합니다. 읽기·쓰기 권한은 따로 승인합니다. 자세히: `fsh help agent-state`.
+
+## 승인함·권한·감사 (`fsh authz`)
+
+`fsh authz` 는 실행 중인 서버에 unix socket 으로 묻습니다(서버가 커널이 알려 주는 정보로 호출자를 알아서 토큰이 필요 없습니다). tmux 밖에서는
+`cli` 호출자로서 **읽기만** 할 수 있고, 에이전트 pane 안에서는 그 에이전트로 취급되어 조회가 거절됩니다. **터미널에서는 승인도 회수도 하지 않습니다.**
+
+```bash
+fsh authz whoami                  # 서버가 보는 나, 유효 scope, 맞는 프리셋 (--json)
+fsh authz requests                # 승인 대기 요청(id·종류·누가·무엇을·경과). 승인은 웹/폰 승인함에서
+fsh authz grants [--kind share|msg|peer|deleg|generic] [--subject S] [--resource R]   # 모든 권한: 프리셋·만료·남은 횟수
+fsh authz audit [--since 10m|2h|1d|<epoch>] [--principal P] [--resource R] [--limit N] [--follow] [--json]
+fsh authz revoke <grant id>       # 로그인한 사람이 웹/폰 권한 화면에서 회수한다고 안내만 합니다 (종료 코드 3)
+fsh authz panic                   # 재인증한 사람이 웹/폰에서 한다고 안내만 합니다 (종료 코드 3)
+```
+
+`audit` 는 해시 체인 상태(`정상`/`깨짐`)를 보여 주고 거부 기록(`denials`)을 체인과 합쳐 보입니다. 에이전트는 MCP 도구 `whoami`,
+`request_access {resource, scopes, reason?, ttl?}`, `list_my_grants` 로 세션 안에서 같은 일을 합니다. `request_access` 는 항상
+«사용자 승인 대기»로 돌아옵니다. API와 규칙: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
 ## 프롬프트 큐 (`fsh queue`)
 
@@ -185,6 +210,8 @@ fsh queue clear                 # 전체 비우기
 | 12 | 인증 | 비밀번호/토큰 설정 여부 |
 | 13 | 터미널 앱 | 감지된 앱 목록 + 현재 `TERM_PROGRAM` |
 | 14 | Tailscale | 설치/연결 상태 |
+| 15 | unix socket | `~/.vt/run/fsh.sock` 상태(켜짐 / 건너뜀 / 자가 시험 실패), 권한, 최근 24시간 기계 토큰 요청 수. `VT_AUTHZ_SOCKET=0`이면 클라이언트가 소켓을 건너뛰고 토큰만 씁니다. `fsh status`에도 한 줄로 나옵니다 |
+| 16 | 공용 토큰 | `VT_AUTHZ_ENFORCE=legacy`일 때만: 최근 24시간 동안 범위 밖이라 거절된(403 `legacy_token_scope`) 기계 토큰 요청 수를 경로·user agent별로 보여 줍니다. 어느 외부 스크립트를 소켓이나 로그인으로 옮겨야 하는지 알 수 있습니다. 토큰만 있고 웹 비밀번호가 없는 서버에서는 승인이 필요한 에이전트·peer 기능이 `fsh password` 설정 전까지 꺼져 있다는 안내도 나옵니다 |
 
 ---
 

@@ -172,6 +172,7 @@ def test_skip_env_is_loud_not_silent(repo, monkeypatch, capsys):
     "research_notes/x/y.md", "reports/audit.md", "docs/plan-2.5/10-a.md", "docs/archive/v2.2/x.md", "docs/TODOS.md",
     "docs/ref/keyboard-input-plan.md", "docs/ref/references.md", "docs/ref/mcp-reference-logic.md",
     "MCP_MANAGEMENT_DESIGN.md", "SESSION_VIEW_DESIGN.md",
+    "docs/local/plans/plan-x/10-a.md", "docs/local/research/notes.md", "docs/local/notes/memo.md",
 ])
 def test_record_documents_are_blocked(path):
     probs = guard.scan([path], [], markers=[], words=[])

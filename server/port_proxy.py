@@ -1,4 +1,4 @@
-"""노출 포트 프록시 리스너 수명 관리 (2.2, plan-2.2/00-port-access.md ADR-31).
+"""노출 포트 프록시 리스너 수명 관리 (2.2, ADR-31).
 
 share 하나당 `127.0.0.1:<proxyPort>`에 uvicorn 리스너를 하나 올린다. 그 리스너에
 올라가는 앱은 `routes/port_proxy_app.py`이고 라우트가 셋뿐이다 — **FarShell의

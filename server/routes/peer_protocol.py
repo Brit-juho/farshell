@@ -33,6 +33,9 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 import host_store
+from authz import hooks as authz_hooks
+from authz import peer_svc
+from authz import preauth as authz_preauth
 from i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -60,6 +63,21 @@ class PeerDenied(Exception):
         self.status = status
 
 
+def _guarded(conn, method: str, path: str, headers, body_hash: str = "") -> dict:
+    """`_authenticate_raw` + 출처별 사전 인증 실패 한도(`authz/preauth.py`): 잠긴 출처는 429, 서명을 내세웠다 틀린 요청은 실패로 센다.
+    요청/WS 핸들러가 이것을 부른다(`conn` = Request | WebSocket). 서명 규칙 자체는 `_authenticate_raw` 하나다."""
+    source = authz_preauth.source_key(_client_host(conn), headers)
+    left = authz_preauth.LIMITER.lock_remaining(source)
+    if left:
+        raise PeerDenied(tr("인증 실패가 많아 잠시 막혔습니다 — {sec}초 뒤에 다시 시도하세요", sec=left), 429)
+    try:
+        return _authenticate_raw(method, path, headers, body_hash) if body_hash else _authenticate_raw(method, path, headers)
+    except PeerDenied:
+        if headers.get("x-peer-id"):
+            authz_preauth.fail(source, "peer_sig")
+        raise
+
+
 def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> dict:
     """서명 검증 → grant. 실패는 PeerDenied. 실패도 전부 감사 로그에 남긴다.
 
@@ -67,6 +85,10 @@ def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> d
     엔드포인트도 **같은 서명 규칙**을 써야 하는데 WebSocket에는 Request가 없다.
     검증 로직이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.
     """
+    return _authenticate_checked(method, path, headers, body_hash)
+
+
+def _authenticate_checked(method: str, path: str, headers, body_hash: str = "") -> dict:
     peer_id = headers.get("x-peer-id", "")
     ts_raw = headers.get("x-peer-ts", "")
     nonce = headers.get("x-peer-nonce", "")
@@ -105,43 +127,69 @@ def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> d
     return grant
 
 
+def _client_host(conn) -> str | None:
+    c = getattr(conn, "client", None)
+    return (c.host if c else None) or "unknown"
+
+
 def _authenticate(request: Request) -> dict:
-    return _authenticate_raw(request.method, request.url.path, request.headers)
+    return _guarded(request, request.method, request.url.path, request.headers)
 
 
-def _require(request: Request, level: str = host_store.LEVEL_VIEW) -> tuple[dict | None, JSONResponse | None]:
+def _level_required(grant: dict, path: str) -> JSONResponse:
+    host_store.audit(grant["id"], path, False, "control 등급 필요")
+    return JSONResponse(
+        {"error": "level_required", "reason":
+         tr("이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 'fsh host allow-control <id>'로 켜야 합니다")},
+        status_code=403,
+    )
+
+
+def _gate(grant: dict, level: str, action: str | None, path: str) -> JSONResponse | None:
+    """등급 관문. 꺼짐: 옛 등급 비교. 켜짐(`peer`): 라우트가 표(`peer_svc.NEEDS`)에 적은 (scope, 조건)을 엔진에 묻는다 —
+    결과와 응답은 같다(control 이 필요한 라우트를 view 가 부르면 403 `level_required`)."""
+    legacy_ok = not (level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL)
+    authz_hooks.peer_level(grant, level, legacy_ok)      # shadow
+    if not peer_svc.enforced():
+        return None if legacy_ok else _level_required(grant, path)
+    d = peer_svc.decide(grant, action, level=level)
+    if d.allow:
+        return None
+    if peer_svc.unavailable(d):
+        return JSONResponse({"error": "authz_unavailable", "reason": tr("권한 엔진을 쓸 수 없어 요청을 거부했습니다")},
+                            status_code=503)
+    peer_svc.audit_denied(grant, action or level, d)
+    if level == host_store.LEVEL_CONTROL:
+        return _level_required(grant, path)
+    host_store.audit(grant["id"], path, False, f"권한 없음: {d.reason}")
+    return JSONResponse({"error": "peer_forbidden", "reason": tr("이 호스트에는 이 기능을 쓸 권한이 없습니다")},
+                        status_code=403)
+
+
+def _require(request: Request, level: str = host_store.LEVEL_VIEW,
+             action: str | None = None) -> tuple[dict | None, JSONResponse | None]:
     """(grant, 오류응답) — 오류응답이 None이 아니면 그대로 반환하면 된다."""
     try:
         grant = _authenticate(request)
     except PeerDenied as e:
         return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
-    if level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL:
-        host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
-        return None, JSONResponse(
-            {"error": "level_required", "reason":
-             tr("이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 'fsh host allow-control <id>'로 켜야 합니다")},
-            status_code=403,
-        )
-    return grant, None
+    err = _gate(grant, level, action, request.url.path)
+    return (None, err) if err is not None else (grant, None)
 
 
-async def _require_body(request: Request, level: str = host_store.LEVEL_VIEW):
+async def _require_body(request: Request, level: str = host_store.LEVEL_VIEW, action: str | None = None):
     """본문 해시까지 서명한 요청용 인증(A2). 성공하면 `(grant, (grant, body))`,
     실패하면 `(None, JSONResponse)` — 호출부가 본문을 다시 읽지 않아도 되게
     바이트를 함께 돌려준다(한 번만 읽을 수 있는 스트림이다)."""
     data = await request.body()
     digest = hashlib.sha256(data).hexdigest()
     try:
-        grant = _authenticate_raw(request.method, request.url.path, request.headers, digest)
+        grant = _guarded(request, request.method, request.url.path, request.headers, digest)
     except PeerDenied as e:
         return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
-    if level == host_store.LEVEL_CONTROL and grant.get("level") != host_store.LEVEL_CONTROL:
-        host_store.audit(grant["id"], request.url.path, False, "control 등급 필요")
-        return None, JSONResponse(
-            {"error": "level_required", "reason":
-             tr("이 호스트는 읽기 전용(view)으로 허용돼 있습니다 — 상대 맥에서 'fsh host allow-control <id>'로 켜야 합니다")},
-            status_code=403,
-        )
+    err = _gate(grant, level, action, request.url.path)
+    if err is not None:
+        return None, err
     return grant, (grant, data)
 
 
@@ -200,13 +248,13 @@ def capability(action: str, *, level: str = host_store.LEVEL_VIEW,
         @wraps(fn)
         async def wrapper(request: Request, *args, **kwargs):
             if body:
-                grant, got = await _require_body(request, level)
+                grant, got = await _require_body(request, level, action)
                 if grant is None:
                     return got          # JSONResponse
                 _, raw = got
                 extra = (raw,)
             else:
-                grant, err = _require(request, level)
+                grant, err = _require(request, level, action)
                 if err:
                     return err
                 extra = ()
@@ -233,6 +281,8 @@ def capability(action: str, *, level: str = host_store.LEVEL_VIEW,
         # 만드는데, 그게 `@wraps`가 심어둔 `__wrapped__`를 따라가 **원본**을
         # 본다. 그러면 우리가 주입하는 `grant: dict`를 요청 본문 파라미터로
         # 오해해 422를 낸다(실측). 래퍼가 실제로 받는 모양을 명시해 끊는다.
+        wrapper.peer_action = action      # 단일 표 `peer_svc.NEEDS` 의 키 — 선언 누락 시험이 읽는다
+        wrapper.peer_level = level
         wrapper.__signature__ = inspect.Signature([
             inspect.Parameter("request", inspect.Parameter.POSITIONAL_OR_KEYWORD,
                               annotation=Request),

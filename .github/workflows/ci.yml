@@ -2,7 +2,6 @@ name: CI
 
 # 신설 (F1, 2026-09-03) — 이 저장소엔 CI가 아예 없었다. 2.0에서 프런트엔드에
 # 빌드 단계가 처음 생기는 시점이라, 깨진 빌드를 사용자보다 먼저 잡기 위해 도입한다.
-# 설계 근거·실측: docs/archive/v2.0/plan-2.0/80-ci-release.md 참고(로컬 전용, gitignored).
 
 on:
   pull_request:

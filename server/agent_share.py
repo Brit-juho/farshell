@@ -16,6 +16,11 @@
     가진 값이라 승인 주체가 될 수 없다. 에이전트는 권한이 없으면 **보류 요청**을 만들 뿐이다.
   - 호출자 식별은 `share_identity.py`. 감사 기록은 이 파일의 `audit()`.
 
+## 권한 이관
+`VT_AUTHZ_ENFORCE=share` 이면 판정·저장·감사는 `authz/share_svc.py`(엔진)가 맡고, 이 파일은 동작부(`read_pane`·
+`send_keys`·`check_send_*`·tmux 옵션)와 공개 함수의 **분기**만 한다. 꺼져 있으면(기본) 아래 옛 구현이 그대로 돈다.
+켜도 옛 저장소(`agent_grants.json`·`agent_access.log`)는 같이 쓴다 — 플래그를 끄면 곧바로 롤백된다.
+
 ## 저장
 `~/.vt/agent_grants.json`(0600 + flock) — grants 와 보류·거부 요청을 한 파일에 둔다(한 락으로
 승인 = 요청 삭제 + 권한 기록이 원자적). `~/.vt/agent_access.log`(jsonl 0600, 1MB 에서 한 단계 순환).
@@ -40,6 +45,10 @@ import share_identity
 import store_lock
 import tmux_runner
 import vt_paths
+from authz import flags as authz_flags
+from authz import legacy_gate as authz_legacy_gate
+from authz.errors import ShareError
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +70,14 @@ MAX_REQUESTS = 200
 AUDIT_MAX_BYTES = 1024 * 1024
 
 
-class ShareError(Exception):
-    def __init__(self, code: str, reason: str, status: int = 400, **extra):
-        super().__init__(reason)
-        self.code, self.reason, self.status, self.extra = code, reason, status, extra
+def enforced() -> bool:
+    """`VT_AUTHZ_ENFORCE` 에 `share` 가 있는가 — 켜면 엔진이 공유 세션 판정·저장·감사를 쥔다."""
+    return authz_flags.enforced("share")
 
-    def body(self) -> dict:
-        return {"error": self.code, "reason": self.reason, **self.extra}
+
+def _svc():
+    from authz import share_svc
+    return share_svc
 
 
 # --- 세션 스냅샷 -------------------------------------------------------------------------
@@ -99,8 +109,11 @@ def snapshot(rows: Optional[list] = None) -> Optional[dict[str, Sess]]:
         cur = best.get(key)
         if cur is None or (r.active and not cur.active):
             best[key] = r
-    return {k: Sess(r.sid, r.created, r.name, r.pane_id, r.command, tmux_runner.parse_share(r.nick, r.mode))
-            for k, r in best.items()}
+    tmux_shares = {k: tmux_runner.parse_share(r.nick, r.mode) for k, r in best.items()}
+    if enforced():
+        # tmux 옵션은 표시용 미러 — 진실은 shares.json 이고 둘이 다르면 낮은 쪽.
+        tmux_shares = _svc().resolve_shares(tmux_shares)
+    return {k: Sess(r.sid, r.created, r.name, r.pane_id, r.command, tmux_shares[k]) for k, r in best.items()}
 
 
 def find_by_nick(snap: dict[str, Sess], nick: str) -> Sess:
@@ -199,17 +212,55 @@ def _load() -> tuple[dict, bool]:
             "requests": [r for r in requests if isinstance(r, dict)]}, corrupt
 
 
-def _backup_corrupt() -> None:
-    """깨진 저장소를 덮기 전에 원본 바이트를 0600 파일로 보존한다(호출자는 저장소 락을 쥔다)."""
+def _backup_corrupt() -> Optional[Path]:
+    """깨진 저장소의 원본 바이트를 0600 복사본으로 보존한다(같은 내용의 복사본이 있으면 새로 만들지 않는다).
+    원본은 지우지도 고치지도 않는다. 복사에 실패하면 None."""
     p = _path()
     try:
         raw = p.read_bytes()
+    except OSError:
+        return None
+    for old in p.parent.glob(f"{p.name}.corrupt-*"):
+        try:
+            if old.read_bytes() == raw:
+                return old
+        except OSError:
+            continue
+    try:
         backup = p.with_name(f"{p.name}.corrupt-{uuid.uuid4().hex}")
         fd = os.open(str(backup), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "wb") as f:
             f.write(raw)
+        return backup
     except OSError as e:
-        raise ShareError("store_backup_failed", "손상된 권한 파일의 백업을 만들지 못해 저장을 중단했습니다", 503) from e
+        logger.warning(f"손상된 권한 파일의 복사본을 만들지 못했다: {e}")
+        return None
+
+
+def refuse_corrupt_write() -> None:
+    """읽지 못한 옛 저장소를 빈 상태로 덮으면 모든 권한이 사라진다 — 복사본만 남기고 쓰기를 거부한다(503). 파일은 그대로 둔다.
+    호출자는 저장소 락을 쥐고 있다."""
+    _backup_corrupt()
+    raise ShareError("store_unreadable",
+                     tr("권한 파일(agent_grants.json)을 읽을 수 없어 변경을 거부했습니다 — 파일은 그대로 두었습니다. "
+                        "파일을 고치거나 'fsh migrate-auth --status' 로 확인하세요"), 503)
+
+
+def store_problem() -> Optional[str]:
+    """옛 저장소를 읽을 수 없으면 이유 한 줄, 아니면 None(진단용 — 읽기만 한다)."""
+    p = _path()
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except OSError as e:
+        return f"읽기 실패: {e.strerror or e}"
+    except ValueError as e:
+        return f"JSON 파싱 실패: {e}"
+    if not isinstance(data, dict) or not isinstance(data.get("grants", []), list) \
+            or not isinstance(data.get("requests", []), list):
+        return "모양이 올바르지 않음"
+    return None
 
 
 def _save(data: dict) -> None:
@@ -254,7 +305,7 @@ def _txn(snap: Optional[dict[str, Sess]]):
         yield data
         if json.dumps(data, sort_keys=True) != before or not _path().exists():
             if corrupt and _path().exists():
-                _backup_corrupt()
+                refuse_corrupt_write()
             _save(data)
 
 
@@ -280,7 +331,7 @@ def effective(grant: Optional[dict], share: Optional[dict]) -> dict:
             "write": bool(grant and grant.get("write") and mode == LEVEL_READWRITE)}
 
 
-def request_access(snap: dict[str, Sess], agent, target: Sess, kind: str) -> tuple[dict, bool]:
+def _legacy_request_access(snap: dict[str, Sess], agent, target: Sess, kind: str) -> tuple[dict, bool]:
     """권한이 없을 때 보류 요청. (요청, 새로 만들었는가). 거부 쿨다운 중이면 ShareError."""
     now = time.time()
     with _txn(snap) as data:
@@ -301,7 +352,7 @@ def request_access(snap: dict[str, Sess], agent, target: Sess, kind: str) -> tup
         return dict(req), True
 
 
-def decide(request_id: str, decision: str, level: Optional[str], snap: Optional[dict[str, Sess]]) -> dict:
+def _legacy_decide(request_id: str, decision: str, level: Optional[str], snap: Optional[dict[str, Sess]]) -> dict:
     """사람의 결정. allow(level=요청 종류와 같거나 낮게) 또는 deny. 결과 `{request, grant}`."""
     if decision not in ("allow", "deny"):
         raise ShareError("bad_decision", "decision 은 allow 또는 deny 입니다", 400)
@@ -334,7 +385,7 @@ def decide(request_id: str, decision: str, level: Optional[str], snap: Optional[
         return {"request": dict(req), "grant": dict(grant)}
 
 
-def revoke(grant_id: str, scope: str, snap: Optional[dict[str, Sess]]) -> dict:
+def _legacy_revoke(grant_id: str, scope: str, snap: Optional[dict[str, Sess]]) -> dict:
     """권한 철회. scope `all`(전부) | `write`(쓰기만 거두고 읽기는 남긴다)."""
     if scope not in ("all", "write"):
         raise ShareError("bad_scope", "scope 는 all 또는 write 입니다", 400)
@@ -350,7 +401,7 @@ def revoke(grant_id: str, scope: str, snap: Optional[dict[str, Sess]]) -> dict:
         return dict(g)
 
 
-def drop_target(target: Sess, snap: Optional[dict[str, Sess]]) -> tuple[int, list[str]]:
+def _legacy_drop_target(target: Sess, snap: Optional[dict[str, Sess]]) -> tuple[int, list[str]]:
     """공유 해제 — 그 세션에 대한 모든 권한과 대기·거부 요청을 지운다. (지운 권한 수, 지운 요청 id들)."""
     with _txn(snap) as data:
         g0 = len(data["grants"])
@@ -360,15 +411,93 @@ def drop_target(target: Sess, snap: Optional[dict[str, Sess]]) -> tuple[int, lis
         return g0 - len(data["grants"]), gone
 
 
-def list_state(snap: Optional[dict[str, Sess]]) -> dict:
+def _legacy_list_state(snap: Optional[dict[str, Sess]]) -> dict:
     with _txn(snap) as data:
         return {"grants": [dict(g) for g in data["grants"]], "requests": [dict(r) for r in data["requests"]]}
 
 
-def get_grant(snap, agent, target: Sess) -> Optional[dict]:
+def _legacy_get_grant(snap, agent, target: Sess) -> Optional[dict]:
     with _txn(snap) as data:
         g = _find_grant(data, agent, target)
         return dict(g) if g else None
+
+
+# --- 공개 분기: 플래그가 켜져 있으면 엔진(authz/share_svc.py), 아니면 위의 옛 구현 ---------------------
+
+
+def request_access(snap: dict[str, Sess], agent, target: Sess, kind: str) -> tuple[dict, bool]:
+    """권한이 없을 때 보류 요청. (요청, 새로 만들었는가). 거부 쿨다운 중이면 ShareError."""
+    authz_legacy_gate.require_approval_available()    # 승인할 사람(웹 비밀번호)이 없으면 보류로 두지 않고 ShareError(403)
+    if enforced():
+        return _svc().request_access(snap, agent, target, kind)
+    return _legacy_request_access(snap, agent, target, kind)
+
+
+def decide(request_id: str, decision: str, level: Optional[str], snap: Optional[dict[str, Sess]], actor=None) -> dict:
+    """사람의 결정. 결과 `{request, grant}`(켜져 있으면 `grantId` 등이 더 붙는다). actor: 결정한 주체(`authz.principals`)."""
+    if enforced():
+        return _svc().decide(request_id, decision, level, snap, actor)
+    return _legacy_decide(request_id, decision, level, snap)
+
+
+def revoke(grant_id: str, scope: str, snap: Optional[dict[str, Sess]], actor=None) -> dict:
+    if enforced():
+        return _svc().revoke(grant_id, scope, snap, actor)
+    return _legacy_revoke(grant_id, scope, snap)
+
+
+def drop_target(target: Sess, snap: Optional[dict[str, Sess]]) -> tuple[int, list[str]]:
+    if enforced():
+        return _svc().drop_target(target, snap)
+    return _legacy_drop_target(target, snap)
+
+
+def list_state(snap: Optional[dict[str, Sess]], provenance: bool = False) -> dict:
+    """provenance: 엔진 켜짐에서 grant 에 `approvedBy`·`approvedVia` 를 더한다(목록 응답용). 꺼짐에서는 무시한다."""
+    if enforced():
+        return _svc().list_state(snap, provenance)
+    return _legacy_list_state(snap)
+
+
+def get_grant(snap, agent, target: Sess) -> Optional[dict]:
+    if enforced():
+        return _svc().get_grant(snap, agent, target)
+    return _legacy_get_grant(snap, agent, target)
+
+
+@dataclass
+class Access:
+    """`authorize()` 결과. allowed 면 읽기·쓰기를 계속하고, 아니면 보류 요청 흐름이다."""
+    allowed: bool
+    grant: Optional[dict] = None
+    grant_id: Optional[str] = None      # 켜져 있을 때만 — 엔진 grant id(`ag-…`)
+    reason: str = ""
+
+
+def authorize(kind: str, snap, agent, target: Sess) -> Access:
+    """`kind`=`read`|`write` 접근 판정(+ 허용이면 분당 횟수 확인). 속도 제한을 넘으면 ShareError(429).
+
+    꺼짐: grant × 공유 모드(`effective`) — 옛 판정 그대로. 켜짐: `engine.decide`(grant·공유 상한·한도). 어느 쪽이든
+    shadow 지점(`authz.hooks.agent_share`)을 한 번 지난다."""
+    from authz import hooks as authz_hooks
+    if enforced():
+        try:
+            acc = _svc().authorize(kind, snap, agent, target)
+        except ShareError:
+            raise
+        except Exception as e:  # noqa: BLE001 — 켜진 뒤 엔진이 판정권자다: 못 쓰면 열지 않고 닫는다(shadow 단계의 「예외를 삼킨다」와는 다르다)
+            logger.warning(f"권한 엔진 판정 실패 — 거부: {type(e).__name__}: {e}")
+            raise ShareError("authz_unavailable", tr("권한 엔진을 쓸 수 없어 요청을 거부했습니다"), 503) from e
+        authz_hooks.agent_share(kind, acc.allowed, acc.grant, agent, target, snap)
+        if acc.rate_limited:
+            raise ShareError("rate_limited", f"너무 자주 호출했습니다 (분당 {acc.limit}회)", 429)
+        return Access(acc.allowed and not acc.rate_limited, acc.grant, acc.grant_id, acc.reason)
+    grant = get_grant(snap, agent, target)
+    ok = effective(grant, target.share)["read" if kind == KIND_READ else "write"]
+    authz_hooks.agent_share(kind, ok, grant, agent, target, snap)
+    if ok:
+        check_rate("read" if kind == KIND_READ else "send", agent.key, target.key)
+    return Access(ok, grant, None, "ok" if ok else "no_grant")
 
 
 # --- 공유 지정·해제 ----------------------------------------------------------------------
@@ -383,7 +512,7 @@ def _by_name(snap: dict[str, Sess], name: str) -> Sess:
     return hits[0]
 
 
-def set_share(name: str, nick, mode) -> dict:
+def set_share(name: str, nick, mode, actor=None) -> dict:
     """세션을 공유하거나 모드·닉네임을 바꾼다. 닉네임 유일성(대소문자 무시)은 락 안에서 확인한다."""
     nick, mode = check_nick(nick), check_mode(mode)
     with _share_lock:
@@ -394,6 +523,9 @@ def set_share(name: str, nick, mode) -> dict:
         for s in snap.values():
             if s.key != target.key and s.share and s.share["nick"].lower() == nick.lower():
                 raise ShareError("nick_taken", f"'{nick}' 닉네임은 이미 다른 세션이 쓰고 있습니다", 409)
+        if enforced():
+            # 정책 저장소(진실)를 먼저 — tmux 미러 쓰기가 실패해도 낮은 쪽으로 해소돼 안전하다.
+            _svc().put_share(target, nick, mode, snap, actor)
         # 닉네임을 먼저 심으면 모드가 비어 있는 순간 read 로 읽힌다(낮은 쪽이라 안전).
         if not (tmux_runner.set_option(target.sid, tmux_runner.SHARE_NICK_OPTION, nick)
                 and tmux_runner.set_option(target.sid, tmux_runner.SHARE_MODE_OPTION, mode)):
@@ -401,16 +533,20 @@ def set_share(name: str, nick, mode) -> dict:
     return {"nick": nick, "mode": mode}
 
 
-def unset_share(name: str) -> dict:
+def unset_share(name: str, actor=None) -> dict:
     with _share_lock:
         snap = snapshot()
         if snap is None:
             raise ShareError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
         target = _by_name(snap, name)
         was = target.share
+        if enforced():
+            # 정책·권한·요청을 한 트랜잭션에서 먼저 지운다(감사 실패면 503 — 아무것도 안 지운 채 중단).
+            grants, reqs = _svc().unshare(target, snap, actor)
         for opt in (tmux_runner.SHARE_NICK_OPTION, tmux_runner.SHARE_MODE_OPTION):
             tmux_runner.run(["set-option", "-u", "-t", target.sid, opt], timeout=2.0)
-        grants, reqs = drop_target(target, snap)
+        if not enforced():
+            grants, reqs = drop_target(target, snap)
     return {"was": was, "revokedGrants": grants, "clearedRequests": reqs}
 
 
@@ -418,6 +554,7 @@ def unset_share(name: str) -> dict:
 
 _rate_lock = threading.Lock()
 _rate: dict[str, list[float]] = {}
+_read_seen: dict[tuple, tuple[float, int]] = {}   # authz 감사의 읽기 표본 추출 — (주체, 리소스, 동작) → (마지막 기록, 건너뜀)
 
 
 def check_rate(kind: str, agent_key: str, target_key: str, now: Optional[float] = None) -> None:
@@ -477,11 +614,34 @@ def check_send_allowed(target: Sess) -> None:
         raise ShareError("target_human_typing", "사람이 대상 세션에 입력하는 중입니다 — 잠시 뒤에 보내세요", 409)
 
 
-def send_keys(target: Sess, text: str, enter: bool) -> None:
+def recheck_send(agent, target: Sess) -> None:
+    """입력 직전 재평가 — 켜짐(`VT_AUTHZ_ENFORCE=share`)에서만. 승인~입력 사이에 grant 가 회수되거나 공유가 내려가거나 세션이 바뀌었으면
+    ShareError(403 `grant_revoked`). 분당 횟수는 세지 않는다(이미 `authorize` 가 센 호출이다). 꺼짐이면 아무것도 하지 않는다."""
+    if not enforced():
+        return
+    try:
+        fresh = snapshot()
+        if fresh is None:
+            raise ShareError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
+        cur = fresh.get(target.key)
+        ok = cur is not None and cur.pane_id == target.pane_id and _svc().still_allowed("write", fresh, agent, cur)
+    except ShareError:
+        raise
+    except Exception as e:  # noqa: BLE001 — 엔진을 못 쓰면 입력하지 않는다
+        logger.warning(f"입력 직전 재평가 실패 — 거부: {type(e).__name__}: {e}")
+        raise ShareError("authz_unavailable", tr("권한 엔진을 쓸 수 없어 요청을 거부했습니다"), 503) from e
+    if not ok:
+        raise ShareError("grant_revoked", tr("입력 직전에 권한이 회수되어 보내지 않았습니다"), 403)
+
+
+def send_keys(target: Sess, text: str, enter: bool, guard=None) -> None:
     # 한 줄 계약(check_send_text)이라 붙여넣기 경로가 필요 없다. 다른 자동 입력과
     # 섞이지 않게 pane 락만 같이 쓴다(pane_input).
+    # `guard`: pane 락을 잡은 직후, 첫 키 전에 부른다. 예외(ShareError)를 올리면 아무것도 입력하지 않는다.
     import pane_input
     with pane_input.lock(target.pane_id):
+        if guard is not None:
+            guard()
         rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "-l", "--", text], timeout=3.0)
         if rc == 0 and enter:
             rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "Enter"], timeout=3.0)
@@ -494,6 +654,10 @@ def send_keys(target: Sess, text: str, enter: bool) -> None:
 
 def _audit_path() -> Path:
     return vt_paths.state_dir() / "agent_access.log"
+
+
+# 엔진이 커밋 전에 직접 감사에 쓰는 변경 동작(fail closed) — 여기서 또 옮기면 두 번 기록된다.
+_SVC_AUDITED = frozenset({"decide", "revoke", "share", "unshare"})
 
 
 def audit(action: str, result: str, *, agent=None, nick: Optional[str] = None,
@@ -526,10 +690,14 @@ def audit(action: str, result: str, *, agent=None, nick: Optional[str] = None,
                 os.close(fd)
     except Exception as e:  # noqa: BLE001 — 기록 실패가 사용자 작업을 막으면 안 된다
         logger.warning(f"에이전트 접근 기록 실패: {e}")
+    if enforced() and action not in _SVC_AUDITED and not action.startswith("delegate_"):
+        _svc().mirror_audit(action, result, rec, agent, nick)
 
 
 def read_audit(limit: int = 100) -> list[dict]:
-    """최근 순(새것이 먼저). 순환된 한 단계 앞 파일까지 본다."""
+    """최근 순(새것이 먼저). 순환된 한 단계 앞 파일까지 본다. 켜져 있으면 authz 감사(hash chain)에서 읽는다."""
+    if enforced():
+        return _svc().read_audit(limit)
     limit = max(1, min(int(limit), 500))
     rows: list[dict] = []
     with _locked("agent_access.lock"):

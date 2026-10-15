@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -16,6 +17,8 @@ from fastapi.responses import JSONResponse
 import agent_status
 import auth
 import crypto_channel
+from authz import legacy_gate as authz_legacy_gate
+from authz import legacy_use as authz_legacy_use
 import deps as _deps  # 전역 카운터 직접 수정용
 import file_store
 import paste_prepare
@@ -102,6 +105,8 @@ def _ws_auth_token(ws: WebSocket) -> Optional[str]:
     #    토큰이 없으므로 ""(인증 꺼짐과 같은 뜻)를 돌려준다.
     if ws.scope.get("vt_relay"):
         return ""
+    if authz_legacy_gate.active():
+        return _ws_auth_token_legacy(ws)
     # 1) HttpOnly 세션 쿠키 (/api/auth 후)
     cookie = ws.cookies.get("vt_session", "")
     if auth.check_request(cookie):
@@ -116,6 +121,20 @@ def _ws_auth_token(ws: WebSocket) -> Optional[str]:
         bearer = auth_hdr[7:]
         if auth.check_request(bearer):
             return bearer
+    return None
+
+
+def _ws_auth_token_legacy(ws: WebSocket) -> Optional[str]:
+    """`VT_AUTHZ_ENFORCE=legacy` — WS 는 서명 세션 쿠키(로그인한 브라우저)만. 기계 토큰은 Bearer 든 `?token=` 이든 쿠키 값이든
+    받지 않는다(WS 는 unix socket 허용표에도 없다). 거절한 시도는 `legacy_token_denied` 로 센다."""
+    cookie = ws.cookies.get("vt_session", "")
+    if cookie and not (auth.VT_AUTH_TOKEN and hmac.compare_digest(cookie, auth.VT_AUTH_TOKEN)) and auth.verify_session(cookie):
+        return cookie
+    hdr = ws.headers.get("authorization", "")
+    used_token = ws.query_params.get("token", "") or (hdr[7:] if hdr.startswith("Bearer ") else "") or (
+        cookie if auth.VT_AUTH_TOKEN and cookie and hmac.compare_digest(cookie, auth.VT_AUTH_TOKEN) else "")
+    if used_token and auth.VT_AUTH_TOKEN and hmac.compare_digest(used_token, auth.VT_AUTH_TOKEN):
+        authz_legacy_use.record(ws.scope.get("path", ""), ws.headers.get("user-agent", ""), denied=True)
     return None
 
 
@@ -214,7 +233,7 @@ async def send_keys(session_id: str, request: Request):
 
     # P1-1(ADR-33) — 승인 응답 경쟁. `prompt_id`가 실려 오면 이 요청이 그
     # 토큰을 소비했을 때만 아래로 내려간다 — 부수효과(PTY 쓰기)는 경쟁을
-    # 이긴 뒤에만 일어난다(docs/plan-2.3/10-approval-race.md §2.3/§3.3).
+    # 이긴 뒤에만 일어난다.
     # `prompt_id`가 없으면(터미널 직접 타이핑, WS 입력, 구버전 클라이언트)
     # 기존 동작 그대로 통과한다.
     prompt_id = body.get("prompt_id")

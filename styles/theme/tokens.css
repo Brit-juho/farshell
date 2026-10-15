@@ -1,4 +1,4 @@
-/* D1 (docs/plan-2.0/20-design-system.md §2) — 구조 토큰 + 기본 스킨(farshell)의
+/* D1 — 구조 토큰 + 기본 스킨(farshell)의
  * 색 토큰 17개. Tailwind v4 @theme으로 선언하면 실제 :root 커스텀 프로퍼티로
  * 컴파일되므로, 아직 레거시인 styles/layers/legacy.css에서도 var(--color-*)로
  * 그대로 참조할 수 있다(커스텀 프로퍼티 상속은 @layer 경계와 무관하다) — 그

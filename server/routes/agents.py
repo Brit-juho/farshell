@@ -59,7 +59,7 @@ async def _broadcast_agent(msg: dict) -> None:
     _agent_event_clients.difference_update(dead)
 
 
-# 2026-10-13(docs/plan-2.4/60) — 훅 요청 밖에서 일어난 전이(화면 감지·중단 문구·입력
+# 2026-10-13 — 훅 요청 밖에서 일어난 전이(화면 감지·중단 문구·입력
 # 해제·TTL·은퇴)를 바로 보낸다. 예전엔 15초 하트비트 스냅샷에야 실려서, 화면으로만 잡히는
 # 질문이 늦게 뜨거나 은퇴한 옛 엔트리가 그동안 세션 상태를 차지했다. agent_status는
 # 스레드(to_thread)에서도 상태를 바꾸므로 이벤트 루프로 넘겨서 보낸다.

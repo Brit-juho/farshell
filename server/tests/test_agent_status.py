@@ -165,7 +165,7 @@ def test_all_active_reports_host_per_entry():
 
 
 # ---------------------------------------------------------------------------
-# P2-1(ADR-34) — 에이전트 귀속을 엔트리에 박는다. docs/plan-2.3/30-agent-attribution.md §5.
+# P2-1(ADR-34) — 에이전트 귀속을 엔트리에 박는다.
 
 def test_agent_param_on_event_sets_the_entry_agent():
     result = agent_status.on_event(

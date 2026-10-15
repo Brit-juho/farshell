@@ -1,4 +1,4 @@
-"""2.2 — port_share_store CLI (plan-2.2/00-port-access.md §6).
+"""2.2 — port_share_store CLI.
 
 `fsh tunnel expose`가 서버 프로세스 없이 정책을 직접 쓰기 위해 부르는 진입점.
 CLI는 auth의 otp/device 명령과 같은 신뢰 등급(로컬 셸)이라 승격을 요구하지

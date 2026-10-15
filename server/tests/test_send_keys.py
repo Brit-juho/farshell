@@ -82,8 +82,7 @@ def test_inherits_token_auth_middleware(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# P1-1(ADR-33) — 승인 응답 경쟁. `prompt_id`가 실린 요청만 이 스위트에서 다룬다
-# (docs/plan-2.3/10-approval-race.md §5 「API」).
+# P1-1(ADR-33) — 승인 응답 경쟁. `prompt_id`가 실린 요청만 이 스위트에서 다룬다.
 
 def _issue_prompt_token(tmux_name, agent_sid="pane:dev"):
     """실제 waiting 진입 경로(report → on_waiting)로 토큰을 발급받는다 —

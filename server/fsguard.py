@@ -81,9 +81,23 @@ DENY_DIR_PARTS = {
     ".ssh", ".aws", ".gnupg", ".config/gcloud", ".kube", ".docker",
     # 자격증명·세션 상태를 통째로 담는 디렉토리. 개별 파일명을 쫓는 것보다
     # 디렉토리를 닫는 쪽이 새 파일이 추가돼도 깨지지 않는다.
-    ".vt", ".claude", ".codex", ".clauth", ".gstack", ".config/gh",
+    ".vt", ".claude", ".codex", ".clauth", ".config/gh",
     ".password-store", ".cert", ".chef", ".azure",
 }
+
+# 열람 루트 아래의 점(.) 디렉토리는 기본 거부한다 — 도구마다 자격증명·세션 상태를
+# 자기 점 디렉토리에 두므로(`.sometool/.auth.json`) 이름을 하나씩 쫓지 않고 일반 규칙으로 닫는다.
+# 소스 트리의 일부인 점 디렉토리만 허용 목록으로 연다. 루트 경로 자체와 그 위쪽 구성요소는
+# 검사하지 않는다(사용자가 고른 루트이므로. 예: ~/.worktrees 루트).
+ALLOWED_DOT_DIRS = {
+    ".github", ".gitlab", ".vscode", ".devcontainer", ".husky", ".storybook",
+    ".circleci", ".changeset", ".worktrees",
+}
+
+
+def is_hidden_state_dir_name(name: str) -> bool:
+    """디렉토리 이름만 보는 순수 판정 — 트리 목록·검색이 같이 쓴다."""
+    return name.startswith(".") and name not in ALLOWED_DOT_DIRS
 
 
 class FsDenied(Exception):
@@ -180,10 +194,12 @@ def _check_denylist(p: Path) -> Optional[str]:
     return _is_denied_name(p.name)
 
 
-def resolve_under_roots(raw_path: str) -> Path:
+def resolve_under_roots(raw_path: str, *, check_hidden: bool = True) -> Path:
     """사용자가 준 경로를 검증해 안전한 절대경로로 바꾼다.
 
     실패하면 FsDenied 를 던진다. 호출부는 이 예외를 403으로 매핑하면 된다.
+    check_hidden=False 는 점 디렉토리 규칙만 끈다(경계·거부 목록은 그대로). 내용을 내보내지
+    않고 `.git` 디렉토리의 경계 소속만 확인하는 내부 호출(session_context)용이다.
     """
     if not raw_path or not raw_path.strip():
         raise FsDenied(tr("경로가 비었습니다"))
@@ -206,7 +222,37 @@ def resolve_under_roots(raw_path: str) -> Path:
     if denied:
         raise FsDenied(denied)
 
+    if check_hidden:
+        denied = _check_hidden_state_dir(p, _matching_root(p, roots))
+        if denied:
+            raise FsDenied(denied)
+
     return p
+
+
+def _matching_root(p: Path, roots: list[Path]) -> Path:
+    """p 를 품는 루트 중 가장 깊은 것 — 사용자가 명시적으로 고른 가장 구체적인 경계."""
+    return max((r for r in roots if _is_within(p, r)), key=lambda r: len(r.parts))
+
+
+def _check_hidden_state_dir(p: Path, root: Path) -> Optional[str]:
+    """root 아래 구성요소 중 허용 목록에 없는 점 디렉토리가 있으면 거부 사유를 돌려준다.
+
+    root 자신과 그 위쪽은 검사하지 않는다. 마지막 구성요소는 디렉토리일 때만 본다
+    (`.gitignore`·`.eslintrc` 같은 점 파일은 열람 대상). _check_denylist 와 달리
+    루트 상대 판정이라 resolve_under_roots 에서만 부른다.
+    """
+    try:
+        rel = p.relative_to(root).parts
+    except ValueError:
+        return None
+    for i, part in enumerate(rel):
+        if not is_hidden_state_dir_name(part):
+            continue
+        if i == len(rel) - 1 and not p.is_dir():
+            continue
+        return tr("거부된 디렉토리: {name}", name=part)
+    return None
 
 
 def _is_within(p: Path, root: Path) -> bool:

@@ -26,7 +26,7 @@ def test_should_skip_stops_after_the_delay_elapses():
 
 
 def test_clear_releases_immediately():
-    """crush의 clearUnavailable과 같은 이유 — 성공하면 바로 풀어야
+    """성공하면 바로 풀어야
     "죽은 것으로 낙인"이 안 된다."""
     b = FailureBackoff(delay=10.0)
     b.mark_failed("k")

@@ -31,10 +31,11 @@ fsh voice-target [name|--auto]  # lock/unlock the voice daemon target
 fsh clip               # clipboard sync daemon (Mac clipboard change → web, OSC52 fallback)
 fsh queue [list|add "content" [session]|run|rm <id>|unblock <id>|clear|log [id]]  # prompt queue
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # file store + share links
-fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|allow-agent <id>|log|revoke-all]  # pair another Mac's FarShell
+fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <name>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # pair another Mac's FarShell
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
 fsh delegate [ls|close <id>]  # agent delegations (sub-sessions); close keeps the session
-fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session)
+fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # approval inbox, grants and audit (read-only; see below)
+fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
@@ -137,12 +138,37 @@ fsh host allow-agent <id>               # on the receiving Mac — needs allow-c
 
 Limits: 10 exchanges per conversation, 20 messages/min per sending Mac, 4000 chars.
 
+**Changing what another Mac may do (`fsh host allow-*` / `deny-*`).** With the server running `VT_AUTHZ_ENFORCE=peer` these commands ask the
+server over the unix socket instead of writing `~/.vt/hosts.json`: `deny-control` / `deny-agent` lower access and apply at once (audited);
+`allow-control` / `allow-agent` raise it, so they only create an approval request — a person approves it in the web inbox, and this command
+cannot. The command exits 0 after creating the request and says that nothing has changed yet. Without the flag, without a socket or against
+an older server they write `hosts.json` directly, as before. `control` means that Mac can type into this Mac's terminals — a remote shell.
+`fsh host help` prints this.
+
 **Shared sessions (MCP only).** `fsh mcp` also offers `list_shared_sessions`, `read_session` and
 `send_to_session`. The user shares an ordinary session with a nickname in the web UI; the agent can then
 read it (read-only share) or also type one line into it (read-write share). The first use needs the
 user's approval in the browser (a human login — the machine token cannot approve); agents cannot create
 or close sessions. Details: `docs/ref/terminal.md`, `fsh help agent-state`.
 The receiving agent sees a one-line header saying the text came from another agent.
+
+## Approvals, grants and audit (`fsh authz`)
+
+`fsh authz` asks the running server over the unix socket (the server knows the caller from the kernel, no token). Outside tmux you are a
+`cli` caller and may **read**; inside an agent's pane you are that agent and the reads are refused. **The terminal never approves or revokes.**
+
+```bash
+fsh authz whoami                  # who the server thinks you are, effective scopes, matching presets (--json)
+fsh authz requests                # pending approval requests (id, kind, who, what, age); approve in the web/phone inbox
+fsh authz grants [--kind share|msg|peer|deleg|generic] [--subject S] [--resource R]   # every grant with preset, expiry, uses left
+fsh authz audit [--since 10m|2h|1d|<epoch>] [--principal P] [--resource R] [--limit N] [--follow] [--json]
+fsh authz revoke <grant id>       # prints that a signed-in person revokes it in the web/phone permissions screen (exit 3)
+fsh authz panic                   # prints that an elevated person does this in the web/phone screen (exit 3)
+```
+
+`audit` shows the hash chain state (`정상`/`깨짐`) and merges the denial log (`denials`) with the chain. For agents, the MCP tools
+`whoami`, `request_access {resource, scopes, reason?, ttl?}` and `list_my_grants` do the same from inside the session; `request_access` always
+returns «waiting for the user's approval». API and rules: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
 ## Prompt Queue (`fsh queue`)
 
@@ -205,6 +231,8 @@ contract 5). The few that decide how you reach this Mac:
 | 12 | Auth | Whether password/token is configured |
 | 13 | Terminal app | Detected app list + current `TERM_PROGRAM` |
 | 14 | Tailscale | Install/connection status |
+| 15 | unix socket | `~/.vt/run/fsh.sock` state (listening / skipped / failed self-test), permissions, and machine-token requests in the last 24h. `VT_AUTHZ_SOCKET=0` makes clients skip the socket and use the token only. `fsh status` shows the same one line |
+| 16 | shared token | Only with `VT_AUTHZ_ENFORCE=legacy`: the number of machine-token requests refused as out of scope (403 `legacy_token_scope`) in the last 24h, listed per route and user agent so you can see which outside script still needs to move to the socket or a login. On a server with a token but no web password it also says that approval-needing agent/peer features are off until `fsh password` is set |
 
 ---
 

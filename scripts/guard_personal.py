@@ -55,11 +55,11 @@ FORBIDDEN_PATHS: tuple[tuple[str, str], ...] = (
     (r"(^|/)\.vt(-[^/]*)?(/|$)", "FarShell 런타임 상태"),
     # 기록 문서는 로컬 전용이다(2026-10-14). docs/ref/ 는 폴더 단위로 허용돼 있어 .gitignore 만으로는
     # 거기 둔 파일이 종류와 무관하게 추적된다 — 그래서 이름으로 한 번 더 막는다.
-    (r"^(research_notes|reports)/", "조사 노트·보고서는 로컬 전용이다 (docs/study/ 등 무시되는 곳에 둔다)"),
-    (r"^docs/(?!(help|ref|guide)/)", "docs/ 에서 추적하는 것은 help/ref/guide 뿐이다"),
-    (r"^docs/ref/[^/]*-plan\.md$", "계획서는 로컬 전용이다 (docs/ref/ 에는 현재 동작만 둔다)"),
-    (r"^docs/ref/(references|[^/]*reference-logic)\.md$", "다른 제품을 읽은 조사 기록은 로컬 전용이다"),
-    (r"^[A-Z0-9]+(_[A-Z0-9]+)*_DESIGN\.md$", "설계 초안은 로컬 전용이다"),
+    (r"^(research_notes|reports)/", "조사 노트·보고서는 로컬 전용이다 (docs/local/notes/ 에 둔다)"),
+    (r"^docs/(?!(help|ref|guide)/)", "docs/ 에서 추적하는 것은 help/ref/guide 뿐이다 (로컬 문서는 docs/local/)"),
+    (r"^docs/ref/[^/]*-plan\.md$", "계획서는 로컬 전용이다 (docs/local/plans/ 에 둔다. docs/ref/ 에는 현재 동작만 둔다)"),
+    (r"^docs/ref/(references|[^/]*reference-logic)\.md$", "다른 제품을 읽은 조사 기록은 로컬 전용이다 (docs/local/research/ 에 둔다)"),
+    (r"^[A-Z0-9]+(_[A-Z0-9]+)*_DESIGN\.md$", "설계 초안은 로컬 전용이다 (docs/local/notes/ 에 둔다)"),
 )
 
 # ── 2. 비밀 ──────────────────────────────────────────────────────────────────

@@ -236,14 +236,21 @@ def envelope(msg: dict) -> str:
 
 def receive(*, from_host: str, from_label: str, from_session: str, to_session: str,
             text: str, reply_to: str | None = None, claimed_hop: int = 0,
-            msg_id: str | None = None, conv: str | None = None) -> dict:
-    """이 맥의 세션 앞으로 온 메시지를 기록하고 큐에 넣는다. 로컬 발신도 여기로 온다."""
+            msg_id: str | None = None, conv: str | None = None, authz=None) -> dict:
+    """이 맥의 세션 앞으로 온 메시지를 기록하고 큐에 넣는다. 로컬 발신도 여기로 온다.
+
+    `authz`: 엔진(`VT_AUTHZ_ENFORCE=msg`)이 이미 허용한 판정의 `msg_svc.Ticket`. 있으면 분당 한도를 엔진이 센다
+    (카운터·오류 모양은 `check_rate` 와 같다). 없으면 옛 경로 그대로."""
     import queue_store
 
     text = check_text(text)
     if not SESSION_RE.match(to_session or ""):
         raise MessageError("bad_target", f"받는 세션 이름이 올바르지 않습니다: {to_session!r}")
-    check_rate(from_host)
+    if authz is not None:
+        from authz import msg_svc
+        msg_svc.check_rate(authz, from_host)
+    else:
+        check_rate(from_host)
     my_conv, hop = resolve_conv(reply_to, claimed_hop)
     mid = msg_id if msg_id and ID_RE.match(msg_id) and not get(msg_id) else uuid.uuid4().hex[:12]
     msg = {
@@ -258,7 +265,14 @@ def receive(*, from_host: str, from_label: str, from_session: str, to_session: s
         "status": STATUS_QUEUED,
         "created": time.time(),
     }
-    r = queue_store.add(envelope(msg), {"session": to_session}, source={"agentMsg": mid})
+    source = {"agentMsg": mid}
+    if authz is not None:
+        # 엔진이 허용한 메시지는 입력 직전에 큐가 다시 판정한다(queue_runner) — 보낸 쪽의 신원 단서를 싣는다.
+        from authz import msg_svc
+        clue = msg_svc.queue_authz(authz)
+        if clue:
+            source["authz"] = clue
+    r = queue_store.add(envelope(msg), {"session": to_session}, source=source)
     if not r.get("ok"):
         raise MessageError(r.get("error", "queue_failed"),
                            f"받는 쪽 큐에 넣지 못했습니다: {r.get('reason', '')}", 503)

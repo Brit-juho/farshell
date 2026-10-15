@@ -516,3 +516,18 @@ def test_raw_over_the_cap_is_413(client, repo, monkeypatch):
     assert r.status_code == 413
     # 목록 응답도 같은 사실을 알려야 화면이 "너무 큽니다"를 그릴 수 있다.
     assert client.get(f"/api/fs/file?path={p}").json()["too_large"] is True
+
+
+def test_fs_tree_and_search_hide_unknown_dot_dirs(client, repo):
+    (repo / ".sometool").mkdir()
+    (repo / ".sometool" / "tokenfile.txt").write_text("x")
+    (repo / ".github").mkdir()
+    (repo / ".github" / "tokenci.yml").write_text("x")
+    (repo / ".gitignore").write_text("x")
+    names = [e["name"] for e in client.get("/api/fs/tree", params={"path": str(repo)}).json()["entries"]]
+    assert ".sometool" not in names
+    assert ".github" in names and ".gitignore" in names
+    paths = [x["path"] for x in client.get("/api/fs/search", params={"q": "token"}).json()["results"]]
+    assert any(p.endswith(".github/tokenci.yml") for p in paths)
+    assert not any(".sometool" in p for p in paths)
+    assert client.get("/api/fs/tree", params={"path": str(repo / ".sometool")}).status_code == 403

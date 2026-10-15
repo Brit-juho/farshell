@@ -180,10 +180,15 @@
     return;
   }
 
-  // URL에 ?token= 이 있으면(레거시 링크) 그 토큰으로 프로브 → 통과 시 terminal.js가 쿠키 교환
-  var urlTok=params.get('token');
-  var probe='/api/capabilities'+(urlTok?('?token='+encodeURIComponent(urlTok)):'');
-  fetch(probe,{credentials:'include'}).then(function(r){
+  // URL의 ?token= 은 더 이상 인증 수단이 아니다 — 값을 쓰지 않고 주소창에서만 지운다. 로그인 쿠키가 없으면 평소처럼 로그인 화면이 뜬다.
+  if(params.has('token')){
+    try {
+      params.delete('token');
+      var cleaned=params.toString();
+      history.replaceState({},'',location.pathname+(cleaned?'?'+cleaned:'')+location.hash);
+    } catch (_) {}
+  }
+  fetch('/api/capabilities',{credentials:'include'}).then(function(r){
     if(r.status===401){ showForm(); } else { goNextOrHide(); }
   }).catch(function(){ goNextOrHide(); });
 

@@ -16,7 +16,7 @@ AGENT="${2:-claude}"
 SERVER="${VT_SERVER:-http://localhost:${VT_PORT:-7777}}"
 
 # 백그라운드로 돌린 Claude 세션은 그 작업을 띄운 pane의 환경(TMUX_PANE)을 물려받았을 뿐 그
-# pane에서 돌지 않는다 — 보내면 엉뚱한 세션 상태가 된다(Orca hook-script.ts와 같은 판단).
+# pane에서 돌지 않는다 — 보내면 엉뚱한 세션 상태가 된다.
 if [ -n "${CLAUDE_JOB_DIR:-}" ]; then
     exit 0
 fi
@@ -28,7 +28,7 @@ cat > "$TMPINPUT"
 
 # 서버에 이벤트 전송 (timeout 짧게 — 훅이 Claude를 막으면 안 됨)
 python3 - "$EVENT" "$TMPINPUT" "$SERVER" "$(dirname "$0")" "$AGENT" << 'PYEOF' || true
-import json, os, sys, time, urllib.error, urllib.request
+import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 # 이벤트를 받은 시각 — 서버가 늦게 도착한 이벤트를 버리는 기준(agent_status.on_event `ts`).
 received_ns = time.time_ns()
@@ -112,15 +112,26 @@ try:
         "hook_pid": os.getppid(),
         "ts": received_ns,
     }).encode()
-    headers = {"Content-Type": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(
-        f"{server}/api/agent/event",
-        data=body,
-        headers=headers,
-    )
-    urllib.request.urlopen(req, timeout=2)
+    # 소켓 우선: ~/.vt/run/fsh.sock 이 있으면 peer pid 로 서버가 이 훅의 pane·에이전트를 안다 —
+    # 토큰이 필요 없다. 소켓이 없거나(옛 서버·VT_AUTHZ_SOCKET=0) 소켓 쪽이 거부하면 예전처럼 TCP + Bearer.
+    # fsh_client 를 못 불러와도(설치가 깨진 경우) 훅은 죽지 않는다 — 아래 예전 경로로 내려간다.
+    try:
+        import fsh_client
+    except Exception:
+        fsh_client = None
+    if fsh_client is not None:
+        try:
+            _port = urllib.parse.urlsplit(server).port
+        except ValueError:
+            _port = None
+        fsh_client.call("POST", "/api/agent/event", body=body, timeout=2, svc="hook", server=server,
+                        token=token, port=_port or os.environ.get("VT_PORT"), raise_for_status=True)
+    else:
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(f"{server}/api/agent/event", data=body, headers=headers)
+        urllib.request.urlopen(req, timeout=2)
     _clear_failure()
 except urllib.error.HTTPError as e:
     # 401/403은 "서버가 안 떠 있다"와 다르다 — 설정이 틀렸다는 뜻이라 반드시 남긴다.

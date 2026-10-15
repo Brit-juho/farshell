@@ -35,9 +35,12 @@ from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import JSONResponse, StreamingResponse
 
 import host_store
+from authz import hooks as authz_hooks
+from authz import peer_svc
+from authz import scopes as authz_scopes
 from i18n import tr
 import relay_policy
-from routes.peer_protocol import PeerDenied, _authenticate_raw
+from routes.peer_protocol import PeerDenied, _guarded
 
 logger = logging.getLogger(__name__)
 
@@ -101,18 +104,36 @@ async def peer_relay(request: Request, rest: str):
         return _denied(tr("본문 해시가 없거나 맞지 않습니다"), 401)
     query = request.url.query
     try:
-        grant = _authenticate_raw(request.method, _signed_path(request.url.path, query),
-                                  request.headers, digest)
+        grant = _guarded(request, request.method, _signed_path(request.url.path, query),
+                         request.headers, digest)
     except PeerDenied as e:
         return _denied(e.reason, e.status)
 
     target = "/" + rest
     method = request.method.upper()
-    if grant.get("level") != host_store.LEVEL_CONTROL:
+    legacy_level_ok = grant.get("level") == host_store.LEVEL_CONTROL
+    authz_hooks.relay_level(grant, legacy_level_ok)
+    enforce = peer_svc.enforced()
+    # 순서는 옛 그대로다: 연결 관문(등급) -> 허용 목록(규칙) -> 실행. 켜짐에서는 두 관문이 같은 엔진 판정(`relay` + `group` 조건)이다.
+    if enforce:
+        gate = await asyncio.to_thread(peer_svc.decide, grant, "relay")
+        if peer_svc.unavailable(gate):
+            return _denied(tr("권한 엔진을 쓸 수 없어 요청을 거부했습니다"), 503, "authz_unavailable")
+        level_ok = gate.allow
+    else:
+        level_ok = legacy_level_ok
+    if not level_ok:
+        if enforce:
+            peer_svc.audit_denied(grant, "relay", gate, "relay:local")
         host_store.audit(grant["id"], "relay", False, f"control 등급 필요: {method} {target}")
         return _denied(
             tr("이 맥은 상대에게 읽기 전용(view)만 허용했습니다 — 이 맥에서 'fsh host allow-control <id>'를 실행해야 전환할 수 있습니다"), 403, "level_required")
-    if not relay_policy.http_allowed(method, target):
+    rule_ok = relay_policy.http_allowed(method, target)
+    authz_hooks.relay_rule(grant, method, target, rule_ok)
+    if enforce:
+        group = authz_scopes.relay_group(method, target)
+        rule_ok = (await asyncio.to_thread(peer_svc.relay_group_decide, grant, group)).allow
+    if not rule_ok:
         host_store.audit(grant["id"], "relay", False, f"허용 목록 밖: {method} {target}")
         return _denied(tr("다른 맥에서 부를 수 없는 기능입니다: {target}", target=target), 403, "relay_forbidden")
     if method != "GET":
@@ -190,18 +211,33 @@ async def _dispatch(request: Request, target: str, query: str, peer_id: str,
 async def peer_relay_ws(ws: WebSocket, rest: str):
     query = ws.url.query
     try:
-        grant = _authenticate_raw("GET", _signed_path(ws.url.path, query), ws.headers)
+        grant = _guarded(ws, "GET", _signed_path(ws.url.path, query), ws.headers)
     except PeerDenied as e:
         await ws.accept()
         await ws.close(code=4401, reason=e.reason[:120])
         return
     target = "/" + rest
-    if grant.get("level") != host_store.LEVEL_CONTROL:
+    legacy_level_ok = grant.get("level") == host_store.LEVEL_CONTROL
+    authz_hooks.relay_level(grant, legacy_level_ok, ws=True)
+    enforce = peer_svc.enforced()
+    if enforce:
+        gate = await asyncio.to_thread(peer_svc.decide, grant, "relay-ws")
+        level_ok = gate.allow
+    else:
+        level_ok = legacy_level_ok
+    if not level_ok:
+        if enforce:
+            peer_svc.audit_denied(grant, "relay-ws", gate, "relay:local")
         host_store.audit(grant["id"], "relay-ws", False, f"control 등급 필요: {target}")
         await ws.accept()
         await ws.close(code=4403, reason="control level required")
         return
-    if not relay_policy.ws_allowed(target):
+    rule_ok = relay_policy.ws_allowed(target)
+    authz_hooks.relay_rule(grant, "GET", target, rule_ok, ws=True)
+    if enforce:
+        group = authz_scopes.relay_ws_group(target)
+        rule_ok = (await asyncio.to_thread(peer_svc.relay_group_decide, grant, group)).allow
+    if not rule_ok:
         host_store.audit(grant["id"], "relay-ws", False, f"허용 목록 밖: {target}")
         await ws.accept()
         await ws.close(code=4403, reason="relay forbidden")
@@ -211,7 +247,8 @@ async def peer_relay_ws(ws: WebSocket, rest: str):
     # 아직 accept하지 않은 소켓을 안쪽 라우트에 그대로 넘긴다 — accept·송수신·
     # 종료 코드 전부 안쪽 라우트가 정한다(4004 "세션 없음" 같은 뜻이 그대로 간다).
     # 바깥 WebSocket 객체는 이후 쓰지 않으므로 그 상태 추적과 어긋나도 괜찮다.
-    watchdog = asyncio.create_task(_revocation_watchdog(ws, grant["id"]))
+    watchdog = asyncio.create_task(_revocation_watchdog(
+        ws, grant["id"], interval=peer_svc.WATCH_INTERVAL if enforce else peer_svc.LEGACY_WATCH_INTERVAL))
     try:
         await ws.app.router(scope, ws._receive, ws._send)  # noqa: SLF001
     finally:
@@ -224,8 +261,12 @@ async def _revocation_watchdog(ws: WebSocket, peer_id: str, interval: float = 30
     없으면 취소한 상대가 이미 열어둔 터미널로 계속 입력할 수 있다."""
     while True:
         await asyncio.sleep(interval)
-        g = await asyncio.to_thread(host_store.find_grant, peer_id)
-        if g is None or g.get("level") != host_store.LEVEL_CONTROL:
+        if peer_svc.enforced():
+            lost = not await asyncio.to_thread(peer_svc.relay_ws_alive, peer_id)
+        else:
+            g = await asyncio.to_thread(host_store.find_grant, peer_id)
+            lost = g is None or g.get("level") != host_store.LEVEL_CONTROL
+        if lost:
             host_store.audit(peer_id, "relay-ws", False, "연결 중 권한 회수 — 끊음")
             try:
                 await ws._send({"type": "websocket.close", "code": 4401,  # noqa: SLF001
