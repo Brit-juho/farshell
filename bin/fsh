@@ -4169,9 +4169,12 @@ _tunnel_list() {
     # 2.2 — port_shares.json에서 포트별 모드를 읽어 같이 보여준다(plan §6).
     # 정책이 없는 행(레거시/내부 호출)은 "-"로 둔다.
     local modes; modes="$(_port_share_cli cli-list 2>/dev/null)"
-    awk -F'\t' -v modes="$modes" -v failfmt="$(_t '실패{n}')" -v autofmt="$(_t '자동')" '
+    # modes는 정책마다 한 줄이라 줄바꿈이 들어 있다 — awk -v 로 넘기면 macOS 기본 awk(BWK)가
+    # "newline in string"으로 프로그램 전체를 포기해 정책이 2개 이상일 때 행이 하나도 안 나온다.
+    # 환경변수로 넘기면 줄바꿈을 그대로 읽는다(macOS·Linux 공통).
+    MODES="$modes" awk -F'\t' -v failfmt="$(_t '실패{n}')" -v autofmt="$(_t '자동')" '
       BEGIN {
-        n = split(modes, lines, "\n")
+        n = split(ENVIRON["MODES"], lines, "\n")
         for (i = 1; i <= n; i++) {
           split(lines[i], f, "\t")
           if (f[1] != "") {
