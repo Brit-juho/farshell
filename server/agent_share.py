@@ -612,11 +612,34 @@ def check_send_allowed(target: Sess) -> None:
         raise ShareError("target_human_typing", "사람이 대상 세션에 입력하는 중입니다 — 잠시 뒤에 보내세요", 409)
 
 
-def send_keys(target: Sess, text: str, enter: bool) -> None:
+def recheck_send(agent, target: Sess) -> None:
+    """입력 직전 재평가 — 켜짐(`VT_AUTHZ_ENFORCE=share`)에서만. 승인~입력 사이에 grant 가 회수되거나 공유가 내려가거나 세션이 바뀌었으면
+    ShareError(403 `grant_revoked`). 분당 횟수는 세지 않는다(이미 `authorize` 가 센 호출이다). 꺼짐이면 아무것도 하지 않는다."""
+    if not enforced():
+        return
+    try:
+        fresh = snapshot()
+        if fresh is None:
+            raise ShareError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
+        cur = fresh.get(target.key)
+        ok = cur is not None and cur.pane_id == target.pane_id and _svc().still_allowed("write", fresh, agent, cur)
+    except ShareError:
+        raise
+    except Exception as e:  # noqa: BLE001 — 엔진을 못 쓰면 입력하지 않는다
+        logger.warning(f"입력 직전 재평가 실패 — 거부: {type(e).__name__}: {e}")
+        raise ShareError("authz_unavailable", tr("권한 엔진을 쓸 수 없어 요청을 거부했습니다"), 503) from e
+    if not ok:
+        raise ShareError("grant_revoked", tr("입력 직전에 권한이 회수되어 보내지 않았습니다"), 403)
+
+
+def send_keys(target: Sess, text: str, enter: bool, guard=None) -> None:
     # 한 줄 계약(check_send_text)이라 붙여넣기 경로가 필요 없다. 다른 자동 입력과
     # 섞이지 않게 pane 락만 같이 쓴다(pane_input).
+    # `guard`: pane 락을 잡은 직후, 첫 키 전에 부른다. 예외(ShareError)를 올리면 아무것도 입력하지 않는다.
     import pane_input
     with pane_input.lock(target.pane_id):
+        if guard is not None:
+            guard()
         rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "-l", "--", text], timeout=3.0)
         if rc == 0 and enter:
             rc, _, _ = tmux_runner.run(["send-keys", "-t", target.pane_id, "Enter"], timeout=3.0)

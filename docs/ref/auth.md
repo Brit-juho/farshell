@@ -239,6 +239,41 @@ peer parity over all levels, rate/hop parity, rollback, shadow, `fsh migrate-aut
 `authz_char/test_char_agent_msg_enforced.py` (the matrix with the listed changes); `test_agent_msg.py`, the shadow replay and the authz_char matrix also run
 with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
 
+## Re-check right before typing
+
+A decision made when a request arrives can be stale by the time the keys are sent: a grant can be revoked, a delegation closed or a
+share lowered in between. With the matching flag on, the engine is asked **again inside the per-pane lock, before the first key**
+(`tmux_target.send_to_tmux(..., guard=)`). Flag off: no re-check, and `send_to_tmux` is called exactly as before.
+
+| Path | Flag | Re-check | Outcome when it no longer holds |
+|---|---|---|---|
+| Queue item from a delegation (task, follow-up: parent `deleg.control` role=parent op=send; result: child role=child op=report; turn-ended / needs-human / soft-limit notices: the delegation must exist and be open; the `gone` notice: it must exist) | `deleg` | `deleg_svc.recheck_queued` in `queue_runner` | nothing typed; the item becomes `blocked` with reason `grant_revoked`, `delegation_closed` or `relationship_gone`; audit `deleg.queue` (denied, no content) |
+| Queue item from an agent message (local sender: `msg.send` with the relation or grant; peer sender: the `hosts.json` grant incl. `agentMessages`) | `msg` | `msg_svc.recheck_queued`; the sender identity travels in the queue item's `source.authz` (identity only, never text) | nothing typed; `blocked` with `grant_revoked`; the message record turns `blocked`; audit `msg.queue` |
+| Direct input to a shared session (`/api/agent/shared/send`) | `share` | `agent_share.recheck_send`: fresh tmux snapshot + fresh store read, same decision as `authorize` but **without** counting the per-minute limit | 403 `grant_revoked`, nothing typed (also when the session is gone or the share was lowered to read-only) |
+
+The engine failing or the store being unreadable at that moment closes (queue: `blocked` with the retriable reason `authz_unavailable`;
+share: 503 `authz_unavailable`). `grant_revoked`/`delegation_closed`/`relationship_gone` are not retried automatically; unblocking the
+item re-runs the check. Items queued while the flag was off carry no `source.authz` and are not re-checked.
+
+## Child limits and ownership integrity
+
+- **A child's grants are the intersection of the parent's grants and what is requested** (`scopes.child_grants(parent_grants, requested)`;
+  delegation derives the child's folder share through it). These never pass to a child even if the parent holds them: `browser.js`,
+  `browser.sensitive`, `session.manage`, `relay`, `authz.admin`, `pair.manage`, and `session.input` with `raw` (a child gets `line`
+  at most). A child has no way to approve anything — approving needs a signed-in person's session, which no scope grants. A child keeps
+  `authz.request` (its only way to ask the person); each request it creates records the open delegation it belongs to as a `delegation`
+  field on the stored request, for display in the approvals inbox. The field does not appear in API responses and is not used in decisions.
+- **The parent/child edge is immutable.** A write to `delegations.json` that changes a delegation's `parent.key`, its `child.key` (once
+  filled at spawn) or its `id` is refused (`edge_immutable`) and audited. Adding delegations, filling the reserved empty child key once,
+  state changes and removing old entries are unaffected.
+- **Control is the strict parent only.** `send_to_child`/`close` work for the parent session of that delegation — not for the child
+  itself, a sibling, another parent's child, a grandparent or any other session — whether or not `deleg` is on (with it on, the engine
+  grant and the ledger's parent key must both agree). Depth is 1; if the depth limit is ever raised, control still stops at the direct
+  parent. An entry whose parent equals its child is treated as not existing.
+- **Ownership keys include the session creation time** (`#{session_id}:#{session_created}`). A session recreated under the same name, or a
+  new session continuing a resumed/forked conversation, has a different key and neither takes over a parent's or child's role nor receives its
+  hook notices. Tests: `test_authz_recheck.py`, `test_authz_child_limits.py`, `test_authz_ownership.py`.
+
 ## How a grant was approved: `approved_via`
 
 Every grant record the engine writes carries `approved_via` next to `approved_by`: `manual` (a person decided it: session-share and

@@ -286,6 +286,21 @@ def authorize(kind: str, snap, agent, target, now: Optional[float] = None) -> Ac
                       reason=d.reason, decision=d.as_dict())
 
 
+def still_allowed(kind: str, snap, agent, target, now: Optional[float] = None) -> bool:
+    """`authorize` 와 같은 판정을 **횟수를 세지 않고, 락 없이 방금 저장소에서 읽은 값으로** 다시 묻는다(입력 직전 재평가).
+    `target.share` 는 지금의 공유 표시여야 한다(호출자가 방금 읽은 snapshot 의 것)."""
+    now = time.time() if now is None else now
+    scope = "session.read" if kind == "read" else "session.input"
+    ctx = {"share": target.share, "share_known": True, "prefer_live": False, "alive": set(snap) if snap is not None else None}
+    if kind != "read":
+        ctx["mode"] = "line"
+    docs = {n: store._read(n) for n in ("grants", "approvals", "windows", "shares", "meta")}
+    s = store.Snapshot(grants=docs["grants"][0]["items"], approvals=docs["approvals"][0]["items"],
+                       windows=docs["windows"][0]["items"], shares=docs["shares"][0]["items"],
+                       corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store")
+    return engine.decide(P.from_caller(agent), scope, f"session:local/{target.key}", ctx, s).allow
+
+
 def get_grant(snap, agent, target) -> Optional[dict]:
     with _txn(snap) as docs:
         g = approvals.find_grant(docs, agent_key(agent), target.key)
@@ -299,6 +314,8 @@ def list_state(snap, provenance: bool = False) -> dict:
 
 def request_access(snap, agent, target, kind: str) -> tuple[dict, bool]:
     ag = _ag()
+    from . import deleg_svc
+    lineage = deleg_svc.lineage_of(agent_key(agent))      # 락 밖에서 — 장부를 읽는다
     now = time.time()
     with _txn(snap) as docs:
         d = engine.decide(P.from_caller(agent), "authz.request", "authz:*", {}, _snapshot(docs, now))
@@ -307,7 +324,7 @@ def request_access(snap, agent, target, kind: str) -> tuple[dict, bool]:
         return approvals.request(
             docs, {"sid": agent.sid, "created": agent.created, "name": agent.name},
             {"sid": target.sid, "created": target.created}, kind, now, ttl=ag.REQUEST_TTL,
-            per_agent=ag.MAX_PENDING_PER_AGENT, total=ag.MAX_REQUESTS, cooldown=ag.DENY_COOLDOWN)
+            per_agent=ag.MAX_PENDING_PER_AGENT, total=ag.MAX_REQUESTS, cooldown=ag.DENY_COOLDOWN, delegation=lineage)
 
 
 def decide(request_id: str, decision: str, level: Optional[str], snap, actor: Optional[P.Principal] = None) -> dict:

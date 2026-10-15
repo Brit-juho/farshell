@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **입력 직전에 권한을 다시 확인한다.** 엔진 켜짐(`VT_AUTHZ_ENFORCE=deleg`·`msg`·`share`)에서, 요청을 받을 때 통과한 판정이 실제 입력 사이에 낡는 경합을 막는다. 위임 지시·결과와 에이전트 메시지가 큐에서 나가기 직전, 그리고 공유 세션 직접 입력(`send_to_session`)이 나가기 직전에 pane 락 안에서 첫 키를 보내기 전에 엔진에 다시 묻는다. 그 사이 grant가 회수되거나 위임이 닫히거나 관계가 사라졌거나 공유가 읽기 전용으로 내려갔으면 아무것도 입력하지 않는다. 큐 항목은 `blocked`(사유 `grant_revoked`·`delegation_closed`·`relationship_gone`, 자동 재시도 없음)가 되고 감사에 내용 없이 남으며, 공유 입력은 403 `grant_revoked`다. 엔진을 못 쓰는 순간에는 닫힌다(큐: 재시도되는 `authz_unavailable`, 공유: 503). 플래그가 꺼져 있으면 예전과 같다.
+- **위임 자식의 권한 한계를 명시했다.** 자식 grant는 부모 grant와 요청의 교집합이며(`scopes.child_grants`), 부모가 가졌어도 `browser.js`·`browser.sensitive`·`session.manage`·`relay`·`authz.admin`·`pair.manage`와 raw 입력은 어떤 자식에게도 상속되지 않는다. 자식은 사람에게 묻는 길인 `authz.request`만은 유지하고, 그 요청에는 소속 위임 id가 저장소 필드로 남는다(받은편지함 계보 표시용, API 응답·판정에는 쓰지 않는다). 판정 결과는 바뀌지 않는다.
+- **위임 소유 무결성을 굳혔다.** 위임 장부에서 부모-자식 간선(`parent.key`, 채워진 뒤의 `child.key`)과 `id`를 바꾸는 쓰기는 감사하고 거부한다(`edge_immutable`). `send_to_child`·`close`는 그 위임의 엄격한 부모만 할 수 있고(자식 자신·형제·다른 부모의 자식·조부모 불가, 켜짐에서는 엔진 grant와 장부의 부모 키가 모두 맞아야 한다), 부모와 자식이 같은 손상 항목은 없는 위임으로 취급한다. 같은 이름으로 다시 만든 세션이나 이어받은 대화(새 세션)는 `session_created`가 달라 소유를 만들지도 가져가지도 못한다.
 - **승인 결정은 먼저 온 쪽이 이긴다.** 엔진 켜짐(`VT_AUTHZ_ENFORCE=share`·`msg`)에서 이미 결정된 요청에 같은 결정을 다시 보내면 처음 결과를 그대로(`replayed: true`) 200으로 돌려주고 grant·감사를 다시 만들지 않으며, 다른 결정(또는 허용 수준이 다른 재요청)은 409 `already_decided`다. 화면 둘이 동시에 눌러도 이긴 쪽은 하나다. 결정된 요청은 10분 동안 해결 기록으로만 남고 그 뒤 정리된다. 거절 쿨다운(5분)은 그대로다.
 - **승인자는 요청한 권한을 이미 가진 사람이어야 한다.** 승인 시 요청의 (권한, 조건)마다 승인하는 사람 자신의 판정을 엔진에 묻는다. 재인증하지 않은 사람은 elevated 사유(raw 입력, 쓰기 relay 그룹, 브라우저 JS 등) 요청을 승인할 수 없고(`elevation_required`), 금지 규칙이 승인자를 막으면 403 `approver_lacks_scope`다. 에이전트·훅·로컬 CLI·서비스·peer·기계 토큰은 전과 같이 `human_session_required`다. 켜짐 이전의 판정은 바뀌지 않는다.
 

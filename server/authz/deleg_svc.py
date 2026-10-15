@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 SIG_KEY = "deleg_ledger_sig"
 FS_SCOPES = ("fs.read", "fs.write")
+FS_REQUEST = {"scopes": list(FS_SCOPES), "sconds": {"fs.write": {"ops": list(S.FS_WRITE_OPS)}}}   # 자식 fs 몫으로 요청하는 것(전부)
 MAX_INHERIT_REFS = 8
 
 _held = threading.local()
@@ -304,6 +305,56 @@ def deny_unknown(caller_key: str, did: str, op: str, reason: str = "no_such_dele
     audit_op(op, "denied", principal=P.agent(caller_key).id, did=did, scopes=["deleg.control"], reason=reason)
 
 
+def lineage_of(child_key: str) -> Optional[str]:
+    """이 세션이 **자식으로서** 맡고 있는 열린 위임의 id(실행 중 우선). 자식이 아니거나 장부를 읽지 못하면 None.
+    자식의 승인 요청(`authz.request`)에 부모 위임 id 를 남겨 받은편지함이 계보를 보여 줄 수 있게 한다(필드만 — 판정에 쓰지 않는다).
+    authz 락을 쥔 채로 부르면 안 된다(장부를 읽는다)."""
+    import delegation
+    try:
+        mine = [x for x in delegation.list_all() if (x.get("child") or {}).get("key") == child_key
+                and x.get("state") in delegation.OPEN_STATES]
+    except Exception as e:  # noqa: BLE001 — 계보 표시 때문에 요청이 실패하면 안 된다
+        logger.warning(f"위임 계보를 읽지 못함({type(e).__name__}) — 요청에 남기지 않는다")
+        return None
+    mine.sort(key=lambda x: x.get("state") != delegation.RUNNING)
+    return str(mine[0]["id"]) if mine else None
+
+
+# --- 입력 직전 재평가 -----------------------------------------------------------------
+
+
+def recheck_queued(src: dict, item_id: str = "") -> Optional[str]:
+    """큐에 쌓인 위임 항목(`source = {delegation, kind}`)을 **입력 직전에** 다시 판정한다. 통과면 None, 막히면 안정 사유 코드:
+    `relationship_gone`(장부에 그 위임이 없다) · `delegation_closed`(닫히거나 고아가 됐다) · `grant_revoked`(보내는 쪽의 grant 가 없다).
+
+    보내는 쪽은 종류가 정한다: 작업·후속 지시 = 부모(`deleg.control`, role=parent, op=send), 결과 보고 = 자식(role=child, op=report).
+    턴 종료·승인 대기·실행 시간·소멸 알림은 서버가 장부에서 만든 것이라 관계(위임이 있고 열려 있다. 소멸 알림은 닫힌 뒤에 오는 게 정상이다)만 본다.
+    거부는 감사한다(내용 없음). 읽지 못하거나 엔진이 못 쓰면 예외를 올린다 — 호출자가 닫는다."""
+    import delegation
+    did = str(src.get("delegation") or "")
+    kind = str(src.get("kind") or "")
+    item = next((x for x in delegation.list_all() if x.get("id") == did), None)
+    reason: Optional[str] = None
+    principal: Optional[str] = None
+    if item is None:
+        reason = "relationship_gone"
+    elif kind != delegation.KIND_GONE and item.get("state") not in delegation.OPEN_STATES:
+        reason = "delegation_closed"
+    else:
+        role = {delegation.KIND_TASK: ("parent", "send"), delegation.KIND_FOLLOWUP: ("parent", "send"),
+                delegation.KIND_REPORTED: ("child", "report")}.get(kind)
+        if role is not None:
+            key = str((item.get(role[0]) or {}).get("key") or "")
+            p = P.agent(key)
+            principal = p.id
+            if not key or not decide(p, "deleg.control", f"deleg:local/{did}", {"role": role[0], "op": role[1]}).allow:
+                reason = "grant_revoked"
+    if reason:
+        audit_op("queue", "denied", principal=principal or "system:queue", did=did or None, scopes=["deleg.control"],
+                 reason=reason, detail={"item": item_id, "kind": kind})
+    return reason
+
+
 # --- 위임 cwd · worktree 기준 = fs.read + fsguard 루트 ---------------------------------------------
 
 
@@ -342,12 +393,14 @@ def fs_record(parent_key: str, start_dir: str, *, worktree: bool) -> Optional[di
             continue
         if not engine._subject_matches(str(g.get("subject", "")), p) or not engine._time_ok(g, now):
             continue
-        caps = S.caps_of(g)
-        scopes = [x for x in FS_SCOPES if x in caps]
-        if not scopes:
-            continue
         pat = str(g.get("resource", ""))
         if S.resource_matches(pat, res) or S.resource_matches(pat, res + "/x"):
+            # 자식의 몫 = 부모 grant ∩ 요청(파일 읽기·쓰기) − 상속 불가. 위임이 자식에게 grant 를 파생하는 자리는 이 함수를 거친다.
+            cg = S.child_grants([g], FS_REQUEST)
+            caps = S.effective(cg["scopes"], cg["sconds"])
+            scopes = [x for x in FS_SCOPES if x in caps]
+            if not scopes:
+                continue
             ref = {"grant": g.get("id"), "resource": pat, "scopes": scopes, "schema": S.SCHEMA, "expires": g.get("expires")}
             if "fs.write" in caps:
                 ref["sconds"] = {"fs.write": {"ops": [o for o in S.FS_WRITE_OPS if o in caps["fs.write"]["ops"]]}}

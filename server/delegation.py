@@ -164,7 +164,47 @@ def _read() -> dict:
     return data
 
 
+def _prev_items() -> list[dict]:
+    try:
+        d = json.loads(_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    items = d.get("items") if isinstance(d, dict) else None
+    return [x for x in items if isinstance(x, dict)] if isinstance(items, list) else []
+
+
+def _edge_key(item: dict, side: str) -> str:
+    return str((item.get(side) or {}).get("key") or "")
+
+
+def _check_edges(items: list[dict]) -> None:
+    """부모-자식 간선(`parent.key`·`child.key`)과 위임 `id` 는 만든 뒤 바꿀 수 없다 — 바꾸려는 쓰기는 감사하고 거부한다.
+    허용되는 변화는 둘뿐: 새 위임을 더하는 것, 예약(`starting`)의 빈 `child.key` 를 한 번 채우는 것. 항목을 지우는 것(정리·보관 한도)은 간선을 바꾸지 않는다.
+    `id` 바꿔치기는 같은 `created_at` 의 다른 `id` 로 알아본다. 쓰기 직전, 락 안에서 파일의 현재 내용과 비교한다."""
+    prev = _prev_items()
+    if not prev:
+        return
+    by_id = {x.get("id"): x for x in prev}
+    by_created = {x.get("created_at"): x for x in prev if x.get("created_at") is not None}
+    for x in items:
+        old = by_id.get(x.get("id"))
+        field = None
+        if old is None:
+            twin = by_created.get(x.get("created_at"))
+            if twin is not None and twin.get("id") != x.get("id"):
+                old, field = twin, "id"
+        elif _edge_key(old, "parent") != _edge_key(x, "parent"):
+            field = "parent_key"
+        elif _edge_key(old, "child") and _edge_key(old, "child") != _edge_key(x, "child"):
+            field = "child_key"
+        if field:
+            did = str((old or {}).get("id") or x.get("id") or "")[:64]
+            _audit("edge_immutable", "denied", principal="system:ledger", did=did or None, reason=field)
+            raise DelegationError("edge_immutable", "위임의 부모-자식 관계(와 id)는 만든 뒤 바꿀 수 없습니다", 500)
+
+
 def _write(data: dict) -> None:
+    _check_edges(data["items"])
     closed = [x for x in data["items"] if x.get("state") not in OPEN_STATES]
     if len(closed) > KEEP_CLOSED:
         drop = {x["id"] for x in sorted(closed, key=lambda x: x.get("closed_at") or 0)[:-KEEP_CLOSED]}
@@ -450,6 +490,8 @@ def _spawn_denial(data: dict, parent_key: str, now: float) -> Optional[Delegatio
 def _owned(data: dict, did: str, caller_key: str, role: str, op: str = "send") -> dict:
     item = next((x for x in data["items"] if x["id"] == did), None)
     from authz import hooks as authz_hooks   # shadow
+    if role == "parent" and item is not None and item["parent"]["key"] == item["child"]["key"]:
+        item = None      # 자기 자신은 제어자가 될 수 없다(부모 = 자식인 항목은 위조·손상) — 없는 위임과 같은 답
     if enforced():
         # 항목은 원장에서 찾고, 허용 여부는 엔진(`deleg.control`, role=parent|child)이 정한다. 소유 원장의 key 가 맞아도 grant 가 없으면 거부.
         if item is None:
@@ -458,7 +500,7 @@ def _owned(data: dict, did: str, caller_key: str, role: str, op: str = "send") -
             raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
         v = _svc().authorize(caller_key, did, role, op=op)
         authz_hooks.deleg_owned(v.allow, did, caller_key, role, item, enforced=True)
-        if v.allow:
+        if v.allow and item[role]["key"] == caller_key:     # 엔진 허용 + 장부의 엄격한 부모/자식 — 어느 한쪽만으로는 열리지 않는다
             return item
         if v.ended and item[role]["key"] == caller_key:
             return item      # 이미 끝난 위임의 소유자 — 아래 호출부의 상태 검사가 공개 계약대로 409/already 를 낸다(아무 일도 안 한다)

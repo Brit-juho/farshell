@@ -490,6 +490,62 @@ def requires_elevated(principal_kind: str, scopes: Iterable[str], resource: str 
     return out
 
 
+# --- 자식 grant (위임 상속) ------------------------------------------------------------------
+
+# 어떤 자식에게도 상속되지 않는 scope. 부모가 가졌어도 자식 grant 에 들어가지 않는다: 브라우저 JS·민감 데이터, 세션 관리(생성·종료 …),
+# 릴레이 전체, 권한 관리(`authz.admin`)·기기 페어링(`pair.manage`). 사람의 승인 채널은 사람 세션에만 있는 것이라 어느 scope 로도 상속되지 않는다.
+NEVER_INHERIT_SCOPES = frozenset({"browser.js", "browser.sensitive", "session.manage", "relay", "authz.admin", "pair.manage"})
+# 상속되지 않는 조건 값 — `session.input` 의 raw 입력은 부모가 가졌어도 자식에게는 한 줄(line) 입력까지만.
+NEVER_INHERIT_CONDS: dict = {"session.input": {"modes": frozenset({"raw"})}}
+# 자식이 부모와 무관하게 요청만으로 갖는 scope — 자식에게는 사람에게 묻는 길이 이것뿐이다(승인은 사람이 한다).
+CHILD_ALWAYS = frozenset({"authz.request"})
+
+
+def _union_caps(grants: Iterable[dict]) -> Caps:
+    out: Caps = {}
+    for g in grants or ():
+        for s, e in caps_of(g).items():
+            cur = out.setdefault(s, {})
+            for k, v in e.items():
+                cur[k] = frozenset(cur.get(k, frozenset()) | v)
+    return out
+
+
+def child_grants(parent_grants: Iterable[dict], requested: dict) -> dict:
+    """자식 grant = (부모 grant 들의 합) ∩ 요청 − 상속 불가. 입력·출력은 `{"scopes": [...], "sconds": {...}}` 모양이다.
+
+    - `parent_grants`: 부모가 지금 가진 **허용** grant 들(금지 규칙·만료·비활성은 호출자가 거른다). 부모에게 없는 것은 요청해도 못 받는다.
+    - `requested`: 자식에게 주려는 (scopes, sconds). 와일드카드는 풀어서 본다.
+    - 조건은 값마다 교집합이고, 필요한 조건 하나라도 비면(예: raw 만 요청했는데 상속 불가) 그 scope 는 통째로 뺀다.
+    - `NEVER_INHERIT_SCOPES`·`NEVER_INHERIT_CONDS` 는 부모가 가져도 뺀다. `CHILD_ALWAYS`(`authz.request`)만 부모와 무관하게 요청대로 남는다.
+    결과를 `effective()` 로 풀면 위 규칙을 만족하는 정규형이다(감사·기록용)."""
+    have = _union_caps(parent_grants)
+    want = effective((requested or {}).get("scopes") or (), (requested or {}).get("sconds"))
+    out: Caps = {}
+    for scope, entry in want.items():
+        if scope in NEVER_INHERIT_SCOPES:
+            continue
+        if scope in CHILD_ALWAYS:
+            out[scope] = {}
+            continue
+        h = have.get(scope)
+        if h is None:
+            continue
+        got = {}
+        for k, vals in entry.items():
+            keep = frozenset(vals) & h.get(k, frozenset())
+            for cond, banned in NEVER_INHERIT_CONDS.get(scope, {}).items():
+                if cond == k:
+                    keep = keep - banned
+            got[k] = keep
+        if any(not v for v in got.values()):
+            continue
+        out[scope] = got
+    scopes = sorted(out)
+    sconds = {s: {k: sorted(v) for k, v in e.items()} for s, e in sorted(out.items()) if e}
+    return {"scopes": scopes, "sconds": sconds}
+
+
 def caps_subset(want: Caps, have: Caps) -> bool:
     """want 의 모든 (scope, 조건 값)이 have 안에 있는가."""
     for s, e in want.items():

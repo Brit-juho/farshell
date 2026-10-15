@@ -170,11 +170,14 @@ def purge(docs: dict, alive: Optional[Iterable[str]], now: float) -> bool:
     return len(g0) != len(docs["grants"]["items"]) or len(a0) != len(docs["approvals"]["items"]) or pruned
 
 
-def _request_rec(rid: str, ak: str, tk: str, a_name: str, t_name: str, now: float) -> dict:
-    return {"id": f"ap-{rid}", "origin": f"{PREFIX_REQ}{rid}", "kind": "msg", "subject": f"agent:local/{ak}",
-            "resource": f"msg:local/{tk}", "scopes": [SCOPE], "subject_session": ak, "resource_session": tk,
-            "subject_name": a_name, "resource_name": t_name, "state": "pending", "created": now,
-            "expires": now + REQUEST_TTL}
+def _request_rec(rid: str, ak: str, tk: str, a_name: str, t_name: str, now: float, delegation: Optional[str] = None) -> dict:
+    rec = {"id": f"ap-{rid}", "origin": f"{PREFIX_REQ}{rid}", "kind": "msg", "subject": f"agent:local/{ak}",
+           "resource": f"msg:local/{tk}", "scopes": [SCOPE], "subject_session": ak, "resource_session": tk,
+           "subject_name": a_name, "resource_name": t_name, "state": "pending", "created": now,
+           "expires": now + REQUEST_TTL}
+    if delegation:                               # 자식의 요청이면 부모 위임 id (계보 표시용 필드 — 판정에 쓰지 않는다)
+        rec["delegation"] = delegation
+    return rec
 
 
 def _grant_rec(gid: str, req: dict, approved_by: str, now: float) -> dict:
@@ -261,6 +264,39 @@ def authorize_peer(grant: dict) -> Verdict:
     resource = "msg:local/-"
     d = _decide(p, resource, {}, grant)
     return Verdict(d.allow, d.reason, d.grant_id, None, Ticket(p, resource, {}, grant) if d.allow else None)
+
+
+def queue_authz(ticket: Optional[Ticket]) -> Optional[dict]:
+    """통과한 판정 → 큐 항목 `source.authz` 에 실을 재평가 단서(`recheck_queued` 가 읽는다). 단서는 보낸 쪽의 신원뿐이다 —
+    내용·권한 판정 결과는 싣지 않는다(입력 직전에 새로 판정한다)."""
+    if ticket is None:
+        return None
+    if ticket.principal.kind == P.PEER:
+        return {"peer": ticket.principal.attrs.get("peer_id", "")}
+    return {"from": ticket.principal.attrs.get("key", ""), "to": ticket.resource.removeprefix("msg:local/")}
+
+
+def recheck_queued(src: dict, item_id: str = "") -> Optional[str]:
+    """큐에 쌓인 에이전트 메시지를 **입력 직전에** 다시 판정한다. 통과면 None, 막히면 `grant_revoked`(관계·grant·허용 스위치가 사라짐).
+    단서(`source.authz`)가 없는 항목(플래그가 꺼진 동안 쌓인 것)은 건드리지 않는다. 거부는 감사한다(내용 없음)."""
+    a = src.get("authz")
+    if not isinstance(a, dict):
+        return None
+    mid = str(src.get("agentMsg") or "")
+    if a.get("peer") is not None:
+        import host_store
+        grant = host_store.find_grant(str(a["peer"]))
+        v = authorize_peer(grant) if grant else None
+        ok, principal, resource = bool(v and v.allow), f"peer:{a['peer']}", "msg:local/-"
+    else:
+        sender, recv = str(a.get("from") or ""), str(a.get("to") or "")
+        v = authorize_local(sender, "", recv, None)
+        ok, principal, resource = v.allow, f"agent:local/{sender}", f"msg:local/{recv}"
+    if ok:
+        return None
+    audit_op("queue", "denied", principal=principal, resource=resource, reason="grant_revoked", decision="deny",
+             detail={"id": mid, "item": item_id})
+    return "grant_revoked"
 
 
 def check_rate(ticket: Ticket, from_host: str, now: Optional[float] = None) -> None:
@@ -352,6 +388,8 @@ def request_access(sender_key: str, sender_name: str, recv_key: str, recv_name: 
     now = time.time()
     if not (_safe_key(sender_key) and _safe_key(recv_key)):
         raise ShareError("bad_target", tr("세션 key 가 올바르지 않습니다"), 400)
+    from . import deleg_svc
+    lineage = deleg_svc.lineage_of(sender_key)            # 락 밖에서 — 장부를 읽는다
     with store.txn() as docs:
         snap = store.Snapshot(grants=docs["grants"]["items"], approvals=docs["approvals"]["items"],
                               windows=docs["windows"]["items"], shares=docs["shares"]["items"],
@@ -373,7 +411,7 @@ def request_access(sender_key: str, sender_name: str, recv_key: str, recv_name: 
         mine = sum(1 for r in reqs if r.get("state") == "pending" and r.get("subject_session") == sender_key)
         if mine >= MAX_PENDING_PER_AGENT or len(reqs) >= MAX_REQUESTS:
             raise ShareError("too_many_requests", "대기 중인 승인 요청이 너무 많습니다 — 사용자가 처리한 뒤 다시 하세요", 429)
-        rec = _request_rec(f"{REQ_PREFIX_ID}{uuid.uuid4().hex[:12]}", sender_key, recv_key, sender_name, recv_name, now)
+        rec = _request_rec(f"{REQ_PREFIX_ID}{uuid.uuid4().hex[:12]}", sender_key, recv_key, sender_name, recv_name, now, lineage)
         docs["approvals"]["items"].append(rec)
         return dict(rec), True
 

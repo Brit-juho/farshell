@@ -3111,6 +3111,7 @@ window.__VT_I18N = {
   "🔒 음성 타깃 LOCK: {name}": "🔒 Voice target LOCK: {name}",
   "🔓 음성 타깃 → AUTO": "🔓 Voice target -> AUTO",
   "사람(브라우저 로그인 세션)만 승인할 수 있습니다": "Only a person (browser login session) can approve",
+  "입력 직전에 권한이 회수되어 보내지 않았습니다": "The permission was revoked just before typing, so nothing was sent",
   "이 권한은 재인증(elevated)한 사람만 승인할 수 있습니다": "Only a person who has re-authenticated (elevated) can approve this permission",
   "감사 기록을 쓰지 못해 변경을 중단했습니다": "The audit record could not be written, so the change was stopped",
   "권한 저장소를 읽을 수 없어 변경을 거부했습니다 — 파일은 그대로 두었습니다: {detail}. 복구: 파일을 고치거나 'fsh migrate-auth --status' 로 확인하세요": "The permission store cannot be read, so the change was refused — the file was left untouched: {detail}. To recover, fix the file or check 'fsh migrate-auth --status'",
