@@ -95,6 +95,28 @@ function _setHead(el, path) {
   el.querySelector('.vt-file-title').dataset.tip = path;
 }
 
+// 파일 창이 터미널 위에서 열리고·움직이고·크기가 바뀌고·닫힐 때 터미널 그림을 통째로 다시 그린다.
+// 실사용에서 창이 겹친 가로 범위의 터미널 아래쪽(Claude Code 입력 상자의 테두리선 등)이 갱신되지 않고
+// 검게 남았다(2026-10-15 스크린샷) — 터미널 내용이 아니라 GPU 렌더러의 화면이 어긋난 것이라
+// 글리프 캐시를 비우고 전체 행을 다시 그리면 풀린다. 연속 호출은 한 번으로 모은다.
+let _repaintTimer = null;
+function _repaintTerminals() {
+  if (_repaintTimer) clearTimeout(_repaintTimer);
+  _repaintTimer = setTimeout(() => {
+    _repaintTimer = null;
+    const map = typeof window.allSessions === 'function' ? window.allSessions() : null;
+    if (!map) return;
+    for (const id of Object.keys(map)) {
+      const term = map[id] && map[id].term;
+      if (!term) continue;
+      try {
+        if (term.clearTextureAtlas) term.clearTextureAtlas();
+        if (term.refresh) term.refresh(0, term.rows - 1);
+      } catch (_) { /* 그리기 보정일 뿐 — 실패해도 파일 창 동작과 무관하다 */ }
+    }
+  }, 120);
+}
+
 function _setFile(el, path) {
   // 같은 파일을 다시 그리면 스크롤이 튄다 — 뷰어 페인(panes.js)과 같은 규칙.
   if (el.dataset.viewerFile === path) return;
@@ -106,7 +128,9 @@ function _setFile(el, path) {
   host.className = 'vt-vw-code-pane';
   body.replaceChildren(host);
   body.scrollTop = 0;
-  renderFile(host, path).catch((e) => { host.textContent = String(e && e.message ? e.message : e); });
+  renderFile(host, path)
+    .catch((e) => { host.textContent = String(e && e.message ? e.message : e); })
+    .finally(_repaintTerminals);
   _watch(el, path);
 }
 
@@ -144,6 +168,7 @@ function _applyGeometry(el) {
   const surface = _surface();
   _syncSurfaceBtn(el, surface);
   _syncDockInset(el);
+  _repaintTerminals();
   el.classList.toggle('surface-sheet', surface === 'sheet');
   el.classList.toggle('surface-float', surface === 'float');
   if (surface === 'sheet') {
@@ -166,7 +191,7 @@ function _wireSheetGrip(el, grip) {
     onStart: () => { pct = 0; },
     // 드래그 중에는 CSS 변수만 바꾼다. 설정 저장은 서버 PUT이라 놓을 때 한 번만.
     onRatio: (ratio) => { pct = clampSheetPct(ratio * 100); el.style.setProperty('--vt-sheet-h', `${pct}%`); },
-    onEnd: () => { if (pct) set('viewer.sheet.height', Math.round(pct)); },
+    onEnd: () => { if (pct) set('viewer.sheet.height', Math.round(pct)); _repaintTerminals(); },
   });
 }
 
@@ -202,6 +227,7 @@ function _wireFloatDrag(el, handle, mode) {
       document.body.classList.remove('vt-resizing');
       el.classList.remove('dragging');
       set('viewer.float.rect', JSON.stringify(_round(el._vtRect)));
+      _repaintTerminals();
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
@@ -232,6 +258,7 @@ export function openFileOverlay(path) {
     extraClass: compact ? 'vt-file-compact' : '',
     ...(mount ? { mount, modal: false, onKey: _escClosesOnlyWhenFocused } : {}),
     onClose: () => {
+      _repaintTerminals();
       if (ro) ro.disconnect();
       if (panel && panel.el._vtUnwatch) { panel.el._vtUnwatch(); panel.el._vtUnwatch = null; }
     },
