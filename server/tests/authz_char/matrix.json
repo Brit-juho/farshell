@@ -16849,7 +16849,7 @@
   "method": "DELETE",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -16864,7 +16864,7 @@
   "method": "DELETE",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -16879,7 +16879,7 @@
   "method": "DELETE",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -16894,7 +16894,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 401,
    "error": "peer_denied",
@@ -16909,7 +16909,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 200,
    "error": null,
@@ -16924,7 +16924,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 200,
    "error": null,
@@ -16939,7 +16939,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 401,
    "error": "peer_denied",
@@ -16954,7 +16954,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -16969,7 +16969,7 @@
   "method": "PATCH",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -16984,7 +16984,7 @@
   "method": "PATCH",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -16999,7 +16999,7 @@
   "method": "PATCH",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -17014,7 +17014,7 @@
   "method": "POST",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -17029,7 +17029,7 @@
   "method": "POST",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -17044,7 +17044,7 @@
   "method": "POST",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -17059,7 +17059,7 @@
   "method": "PUT",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -17074,7 +17074,7 @@
   "method": "PUT",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -17089,7 +17089,7 @@
   "method": "PUT",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/capabilities",
-  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)",
+  "rule": "/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)",
   "expected": {
    "status": 403,
    "error": "level_required",

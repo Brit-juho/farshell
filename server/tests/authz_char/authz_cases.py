@@ -178,7 +178,7 @@ RELAY_SAMPLES = {
     r"/api/workspace": "/api/workspace",
     r"/api/worktrees(/precheck|/hidden|/[^/]+(/open)?)?": "/api/worktrees",
     r"/api/repos": "/api/repos",
-    r"/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)": "/api/capabilities",
+    r"/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)": "/api/capabilities",
     r"/api/mcp(/plugins)?": "/api/mcp",
     r"/api/watch/[^/]+": "/api/watch/x",
 }

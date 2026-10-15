@@ -72,7 +72,7 @@ RELAY_HTTP_GROUPS: dict[str, str] = {
     r"/api/workspace": "workspace",
     r"/api/worktrees(/precheck|/hidden|/[^/]+(/open)?)?": "worktrees",
     r"/api/repos": "repos",
-    r"/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status)": "status",
+    r"/api/(capabilities|hooks/status|safe-mode|tunnel/list|tailscale/status|system/stats)": "status",
     r"/api/mcp(/plugins)?": "mcp",
     r"/api/watch/[^/]+": "watch",
 }
