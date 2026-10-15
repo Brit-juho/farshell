@@ -417,6 +417,8 @@ window.__VT_I18N = {
   "git diff 실행 중…": "Running git diff…",
   "git log 시간 초과": "git log timed out",
   "알 수 없는 브랜치입니다": "Unknown branch",
+  "떠 있는 창으로 옮기기": "Make it a floating window",
+  "위쪽에 붙이기": "Pin to the top",
   "clauth 자동 전환 설정입니다. 켜져 있을 때만 동작합니다.": "clauth's auto-switch setting. It only applies while enabled.",
   "새 세션 연결이 늦어 명령을 보내지 못했습니다 — 직접 입력하세요: {cmd}": "The new session was slow to connect, so the command was not sent — type it yourself: {cmd}",
   "새 터미널 세션을 열어 `{cmd}` 를 실행합니다. 열리는 안내를 따라 로그인하세요.": "Opens a new terminal session and runs `{cmd}`. Follow the prompts to sign in.",

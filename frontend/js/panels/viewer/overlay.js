@@ -62,6 +62,7 @@ function _surface() {
 function _headHTML() {
   return '<div class="vt-file-title"><span class="vt-file-name"></span><span class="vt-file-dir"></span></div>'
     + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`
+    + `<button type="button" class="vt-icon-btn vt-file-float" aria-pressed="false">${icon('app-window', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="${t('페인으로 열기')}" data-tip="${t('페인으로 열기')}">${icon('columns-2', 14)}</button>`;
 }
 
@@ -129,8 +130,19 @@ function _syncDockInset(el) {
   el.style.setProperty('--vt-file-inset-r', `${_dockInset(_container())}px`);
 }
 
+// 머리줄의 「떠 있는 창 ↔ 위쪽에 붙이기」 버튼 — 지금 표면에 맞춰 이름과 눌림 상태를 맞춘다.
+function _syncSurfaceBtn(el, surface) {
+  const b = el.querySelector('.vt-file-float');
+  if (!b) return;
+  const label = surface === 'float' ? t('위쪽에 붙이기') : t('떠 있는 창으로 옮기기');
+  b.setAttribute('aria-pressed', String(surface === 'float'));
+  b.setAttribute('aria-label', label);
+  b.dataset.tip = label;
+}
+
 function _applyGeometry(el) {
   const surface = _surface();
+  _syncSurfaceBtn(el, surface);
   _syncDockInset(el);
   el.classList.toggle('surface-sheet', surface === 'sheet');
   el.classList.toggle('surface-float', surface === 'float');
@@ -228,6 +240,10 @@ export function openFileOverlay(path) {
   const { el, body } = panel;
 
   el.querySelector('.vt-file-refresh').addEventListener('click', () => { _refresh(el); });
+  const floatBtn = el.querySelector('.vt-file-float');
+  // 폰(compact)은 설정과 무관하게 전체 화면 시트라 옮길 곳이 없다.
+  if (!mount) floatBtn.hidden = true;
+  floatBtn.addEventListener('click', () => set('viewer.surface', _surface() === 'float' ? 'sheet' : 'float'));
   el.querySelector('.vt-file-topane').addEventListener('click', () => {
     const file = el.dataset.viewerFile;
     closePanel(el);
