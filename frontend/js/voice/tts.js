@@ -93,9 +93,7 @@ function visibility() {
 function connect() {
   if (window.vtRelayHost?.() !== undefined && window.vtRelayHost() !== 'local') return;
   if (typeof WebSocket !== 'function') return;
-  const query = new URLSearchParams(location.search).get('token') || window.VT_TOKEN || '';
   const params = new URLSearchParams({ screen: screenId() });
-  if (query) params.set('token', query);
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-voice?${params}`);
   socket.onmessage = async (event) => {
     try {

@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import hmac
 import logging
 import os
 import re
@@ -83,6 +84,9 @@ FRONTEND_DIR = str(BASE_DIR / "frontend")
 # ---------------------------------------------------------------------------
 
 _SECRET_QS_RE = re.compile(r"((?:token|ticket|otp)=)[^&\s\"']+", re.IGNORECASE)
+# `legacy` 강제 시: 이름에 token 이 들어간 모든 쿼리(access_token= …)와 secret/password/key 류도 가린다.
+_SECRET_QS_WIDE_RE = re.compile(
+    r"((?<=[?&])[\w.-]*(?:token|ticket|otp|secret|passw(?:or)?d|apikey|api_key|auth)[\w.-]*=)[^&\s\"']+", re.IGNORECASE)
 
 
 class _RedactSecretsFilter(logging.Filter):
@@ -94,14 +98,20 @@ class _RedactSecretsFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        wide = authz_legacy_gate.active()
         if isinstance(record.args, tuple):
             record.args = tuple(
-                _SECRET_QS_RE.sub(r"\1***", a) if isinstance(a, str) else a
+                _redact(a, wide) if isinstance(a, str) else a
                 for a in record.args
             )
         if isinstance(record.msg, str):
-            record.msg = _SECRET_QS_RE.sub(r"\1***", record.msg)
+            record.msg = _redact(record.msg, wide)
         return True
+
+
+def _redact(text: str, wide: bool) -> str:
+    text = _SECRET_QS_RE.sub(r"\1***", text)
+    return _SECRET_QS_WIDE_RE.sub(r"\1***", text) if wide else text
 
 
 for _name in ("uvicorn.access", "uvicorn.error"):
@@ -154,6 +164,11 @@ class TokenAuthMiddleware:
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
         legacy_on = authz_legacy_gate.active()      # VT_AUTHZ_ENFORCE=legacy — 꺼짐이면 아래 분기는 전부 건너뛴다
+        if legacy_on:
+            rejected = self._legacy_transport_reject(request)
+            if rejected is not None:
+                await rejected(scope, receive, send)
+                return
         token = (
             request.cookies.get("vt_session", "")
             or request.query_params.get("token", "")
@@ -181,6 +196,16 @@ class TokenAuthMiddleware:
                 return
             authz_legacy_use.record(path, request.headers.get("user-agent", ""))
         await self.app(scope, receive, send)
+
+    @staticmethod
+    def _legacy_transport_reject(request: Request):
+        """H4 — `legacy` 가 켜지면 `?token=` 과 「쿠키 값 = 기계 토큰」은 받지 않는다(유효 여부와 무관하게 같은 답)."""
+        if request.query_params.get("token", ""):
+            return JSONResponse(authz_legacy_gate.token_url_body(), status_code=400)
+        cookie = request.cookies.get("vt_session", "")
+        if cookie and auth.VT_AUTH_TOKEN and hmac.compare_digest(cookie, auth.VT_AUTH_TOKEN):
+            return JSONResponse(authz_legacy_gate.token_cookie_body(), status_code=401)
+        return None
 
 
 def _allowed_origins() -> set:
