@@ -421,3 +421,63 @@ test('피어 호스트의 같은 이름 엔트리는 로컬 세션 상태에 섞
   assert.strictEqual(S.getStatus('server-2'), 'idle');
   assert.strictEqual(S.agentDetails()['server-2'], undefined);
 });
+
+// 2026-10-15 — 화면만 idle로 내리면 서버의 done(30분 TTL)이 다음 스냅샷으로 되돌아와
+// 「완료 · 확인하지 않음」이 반복됐다(실서버, Final 세션). 확인은 서버에도 전해야 한다.
+async function loadWithFetch() {
+  const calls = [];
+  const env = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(env.dom);
+  env.window.API_BASE = '';
+  const stub = (url, opts) => {
+    calls.push({ url: String(url), body: opts && opts.body ? JSON.parse(opts.body) : null, method: opts && opts.method });
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, acked: 1 }), text: async () => '{}', headers: { get: () => 'application/json' } });
+  };
+  env.window.fetch = stub;
+  env.context.fetch = stub;
+  const S = await importFresh(STATE_JS, env.context, new Map());
+  return { S, calls };
+}
+
+test('ackLocal — done이면 서버에 ack를 보낸다(그 세션 이름으로 한 번)', async () => {
+  const { S, calls } = await loadWithFetch();
+  S.applySnapshot({ h1: { status: 'done', tmux_session: 'Final' } });
+  S.ackLocal('Final');
+  await new Promise((r) => setTimeout(r, 20));
+  const acks = calls.filter((c) => c.url.includes('/api/agent/ack'));
+  assert.strictEqual(acks.length, 1);
+  assert.strictEqual(acks[0].method, 'POST');
+  assert.deepStrictEqual(acks[0].body, { tmux_session: 'Final' });
+});
+
+test('ackLocal — 작업 중·idle 세션을 클릭해도 서버 요청은 나가지 않는다', async () => {
+  const { S, calls } = await loadWithFetch();
+  S.applySnapshot({ h1: { status: 'working', tmux_session: 'dev' } });
+  S.ackLocal('dev');
+  S.ackLocal('nope');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(calls.filter((c) => c.url.includes('/api/agent/ack')).length, 0);
+});
+
+test('ackLocal — 서버가 idle을 돌려준 스냅샷은 완료·읽지 않음을 되살리지 않는다', async () => {
+  const { S } = await loadWithFetch();
+  S.applySnapshot({ h1: { status: 'done', tmux_session: 'Final' } });
+  S.ackLocal('Final');
+  S.applySnapshot({ h1: { status: 'idle', tmux_session: 'Final' } });   // 서버가 ack를 받은 뒤의 하트비트
+  assert.strictEqual(S.getStatus('Final'), 'idle');
+  assert.strictEqual(S.isUnseen('Final'), false);
+});
+
+test('ackLocal — 서버 요청이 실패해도 로컬은 idle로 내려간다', async () => {
+  const env = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(env.dom);
+  env.window.API_BASE = '';
+  const boom = () => Promise.reject(new Error('offline'));
+  env.window.fetch = boom;
+  env.context.fetch = boom;
+  const S = await importFresh(STATE_JS, env.context, new Map());
+  S.applySnapshot({ h1: { status: 'done', tmux_session: 'Final' } });
+  S.ackLocal('Final');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(S.getStatus('Final'), 'idle');
+});

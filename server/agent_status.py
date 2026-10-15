@@ -837,6 +837,24 @@ def ack(sid: str, host: str = LOCAL_HOST) -> Optional[dict]:
     return ent
 
 
+def ack_session(tmux_name: str, host: str = LOCAL_HOST) -> int:
+    """tmux 세션 이름으로 그 세션의 완료(done)를 확인 처리한다 → 바뀐 엔트리 수.
+
+    화면은 세션 이름만 안다(훅의 session_id는 모른다). 소유자가 있으면 소유자 하나만,
+    없으면 그 이름의 엔트리들(`_entries_for`와 같은 규칙)을 본다. done이 아닌 상태는
+    건드리지 않는다 — 작업 중인 세션을 클릭했다고 working이 지워지면 안 된다. 반복 호출해도
+    두 번째부터는 0을 돌려줄 뿐이다.
+    """
+    sweep()
+    n = 0
+    for ent in _entries_for(tmux_name, host):
+        if ent.get("status") == DONE:
+            _set_status(ent, IDLE)
+            _emit(ent, "ack")
+            n += 1
+    return n
+
+
 def _entries_for(tmux_name: str, host: str = LOCAL_HOST) -> list[dict]:
     """tmux 세션 이름으로 엔트리를 찾는다.
 

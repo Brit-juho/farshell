@@ -7,7 +7,8 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
 
 import agent_detector
 import agent_status
@@ -26,6 +27,10 @@ _AGENTS_PUSH_INTERVAL = float(os.environ.get("VT_AGENTS_PUSH_INTERVAL", "5.0"))
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 사람(브라우저 로그인 세션)만 부를 수 있는 라우터 — 기계 토큰(훅·데몬·에이전트)은 거부한다.
+# 완료 확인은 "사람이 봤다"는 뜻이라 에이전트가 대신 눌러 자기 완료를 지우면 안 된다.
+human_router = APIRouter(dependencies=[Depends(auth.require_human_session)])
 
 # WebSocket 클라이언트 집합 (모듈 수준 — 라우터 전체가 공유)
 _agent_event_clients: set[WebSocket] = set()
@@ -551,6 +556,25 @@ async def agent_status_get():
     # 기존 필드(active/all)는 그대로 둔다 — 하위호환. A1에서 각 엔트리에
     # status가 추가됐고, 소비자는 그걸 그대로 쓰면 된다(파생 금지).
     return {"active": _public_active(agent_status.all_active()), "all": _public_state(agent_status.visible_state())}
+
+
+class AckRequest(BaseModel):
+    tmux_session: str = Field(min_length=1, max_length=128)
+
+
+class AckResponse(BaseModel):
+    ok: bool
+    acked: int
+
+
+@human_router.post("/api/agent/ack", response_model=AckResponse)
+async def agent_ack(body: AckRequest):
+    """사용자가 그 세션의 완료를 확인했다 → 서버의 done을 idle로 내린다.
+
+    화면만 idle로 바꾸면 서버의 done이 30분 TTL까지 남아, 다음 스냅샷(15초 하트비트)이
+    "idle→done 전이"로 읽혀 완료와 「확인하지 않음」이 되살아났다. 서버가 내리면 모든 기기가
+    같은 idle을 받는다(`ack` 이벤트가 /ws-agent로 나간다)."""
+    return {"ok": True, "acked": agent_status.ack_session(body.tmux_session)}
 
 
 @router.websocket("/ws-agent")

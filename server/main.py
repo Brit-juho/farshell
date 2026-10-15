@@ -40,7 +40,7 @@ from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
 from routes.tmux import router as tmux_router
 from routes.voice import router as voice_router
-from routes.agents import router as agents_router
+from routes.agents import router as agents_router, human_router as agents_human_router
 from routes.system import router as system_router
 from routes.clipboard import router as clipboard_router
 from routes.files import router as files_router
@@ -505,6 +505,7 @@ app.include_router(pty_router)
 app.include_router(tmux_router)
 app.include_router(voice_router)
 app.include_router(agents_router)
+app.include_router(agents_human_router)
 app.include_router(system_router)
 app.include_router(clipboard_router)
 app.include_router(files_router)

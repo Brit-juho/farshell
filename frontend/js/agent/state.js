@@ -9,6 +9,7 @@
 // **키는 tmux 세션 이름이다.** 서버 상태 엔트리의 키(훅 session_id)는 프런트가
 // 알 방법이 없고, 웹 세션 id는 재attach마다 바뀐다. A2가 각 엔트리에 붙여주는
 // `tmux_session`이 두 세계를 잇는 안정적인 유일한 키다.
+import { vtFetch } from '../core/api.js';
 import { STATE_LABEL, URGENCY, normalizeState, entryUrgency, stateRank } from '../design/state-classes.js';
 
 export { URGENCY };
@@ -222,17 +223,28 @@ export function agentNames() {
   return { ..._names };
 }
 
-// 사용자가 완료를 확인했다(탭/카드 클릭) → 로컬에서 즉시 idle로 내린다.
-// 서버 ack API는 A6 이후에 붙인다 — 지금은 화면 반응성이 목적이고, 서버 쪽은
-// done TTL(30분)이 어차피 정리한다.
+// 사용자가 완료를 확인했다(탭/카드 클릭) → 로컬에서 즉시 idle로 내리고, 서버에도 알린다.
+// 서버가 done을 그대로 들고 있으면 다음 스냅샷(15초 하트비트)이 "idle→done 전이"로 읽혀
+// 완료와 「확인하지 않음」이 되살아난다 — 서버가 내려야 모든 기기가 같은 idle을 받는다.
+// 서버 호출이 실패해도 로컬 동작은 그대로다(다음 확인 때 다시 시도한다).
 export function ackLocal(tmuxName) {
   const wasUnseen = _unseen.delete(tmuxName);
   if (_byTmux.get(tmuxName) === 'done') {
     _byTmux.set(tmuxName, IDLE);
     _notify();
+    _ackServer(tmuxName);
   } else if (wasUnseen) {
     _notify();
   }
+}
+
+// done일 때만 부른다 — 세션을 클릭할 때마다(작업 중이어도) 요청이 나가지 않게.
+function _ackServer(tmuxName) {
+  vtFetch('/api/agent/ack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tmux_session: tmuxName }),
+  }).catch(() => { /* 로컬은 이미 내렸다 — 서버가 다음 확인 때 다시 받는다 */ });
 }
 
 // 세션 목록 정렬 — rail·팔레트·세션 시트 전용(정렬을 이름순으로 바꾸는 건 5단계).
