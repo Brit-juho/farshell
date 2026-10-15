@@ -72,18 +72,22 @@ Verify affected behavior with actual responses, operations and logs.
 
 - `master` holds **released code only**. Its tip is always the latest release commit, which the
   `vX.Y.Z` tag points at. Do not commit feature work to it.
-- `dev` is where development accumulates until the next version is decided. Start work from `dev`
-  (a short-lived `feat/...` branch is fine) and merge back into `dev`; `CHANGELOG.md` keeps the
-  `[Unreleased]` section, `VERSION` stays at the last released version.
+- `dev` is where development accumulates until the next version is decided. Do the work on a
+  short-lived `feat/<topic>` (or `fix/<topic>`) branch cut from `dev`, and merge it back with
+  **`git merge --no-ff`** so every feature leaves one merge commit (`merge: feat/<topic> — summary`)
+  that groups its commits. Do not commit feature work straight to `dev`, and do not squash or
+  fast-forward a feature in. `CHANGELOG.md` keeps the `[Unreleased]` section and `VERSION` stays at
+  the last released version. Delete the feature branch after it is merged.
 - `release/X.Y` preserves the X.Y line at its release tag (`release/2.3` is exactly `v2.3.0`).
   It exists for urgent fixes to that version: commit the fix there, tag `vX.Y.(Z+1)`, then
-  merge it into `dev` so it is not lost.
+  merge it into `dev` (also with `--no-ff`) so it is not lost.
 - To release: on `dev`, run the release commit (`VERSION`, the two README badges, move
-  `[Unreleased]` to `[X.Y.Z] — date`, `chore(release): vX.Y.Z`), then fast-forward `master` to it,
-  tag `vX.Y.Z` on `master` and push the tag (the `Release` workflow publishes it; it fails if
-  `VERSION` and the tag differ), and point `release/X.Y` at the tag. Pushing a tag publishes a
-  public release — confirm with the user first.
-- Never force-push `master`, `dev` or a `release/*` branch. Fast-forward only.
+  `[Unreleased]` to `[X.Y.Z] — date`, `chore(release): vX.Y.Z`), then fast-forward `master` to it.
+  This one stays a fast-forward: `master`'s tip must be the release commit the tag points at (the
+  feature merge commits come along in the history). Tag `vX.Y.Z` on `master` and push the tag (the
+  `Release` workflow publishes it; it fails if `VERSION` and the tag differ), and point
+  `release/X.Y` at the tag. Pushing a tag publishes a public release — confirm with the user first.
+- Never force-push `master`, `dev` or a `release/*` branch; a push must only move the tip forward.
 
 ## Working rules
 
