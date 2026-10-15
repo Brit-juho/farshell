@@ -20,11 +20,14 @@ import asyncio
 import logging
 import time
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 import agent_status
 import host_store
+from authz import host_gate, host_grant_svc
+from authz import principals as P
+from authz.errors import ShareError
 from i18n import tr
 import peer_client
 from ttl_cache import TTLCache
@@ -112,7 +115,7 @@ def _local_entry() -> dict:
     }
 
 
-@router.get("/api/hosts")
+@router.get("/api/hosts", dependencies=[Depends(host_gate.dependency("session.view"))])
 async def list_hosts(fresh: bool = Query(False)):
     """로컬 + 등록된 원격 호스트를 세션 목록과 함께.
 
@@ -158,7 +161,7 @@ def _peer_error(e: "peer_client.PeerError") -> JSONResponse:
     return JSONResponse({"error": "peer_error", "reason": e.reason}, status_code=status)
 
 
-@router.get("/api/hosts/{host_id}/clients")
+@router.get("/api/hosts/{host_id}/clients", dependencies=[Depends(host_gate.dependency("session.view"))])
 async def host_clients(host_id: str, session: str, screen: str = Query("")):
     peer, err = await _peer_or_404(host_id)
     if err:
@@ -172,7 +175,7 @@ async def host_clients(host_id: str, session: str, screen: str = Query("")):
         return _peer_error(e)
 
 
-@router.post("/api/hosts/{host_id}/clients/detach")
+@router.post("/api/hosts/{host_id}/clients/detach", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "detach"}))])
 async def host_clients_detach(host_id: str, request: Request):
     peer, err = await _peer_or_404(host_id)
     if err:
@@ -184,7 +187,7 @@ async def host_clients_detach(host_id: str, request: Request):
         return _peer_error(e)
 
 
-@router.post("/api/hosts/{host_id}/clients/solo")
+@router.post("/api/hosts/{host_id}/clients/solo", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "detach"}))])
 async def host_clients_solo(host_id: str, request: Request):
     peer, err = await _peer_or_404(host_id)
     if err:
@@ -196,7 +199,7 @@ async def host_clients_solo(host_id: str, request: Request):
         return _peer_error(e)
 
 
-@router.get("/api/hosts/{host_id}/search")
+@router.get("/api/hosts/{host_id}/search", dependencies=[Depends(host_gate.dependency("session.read"))])
 async def host_search(host_id: str, q: str):
     """원격 스크롤백 검색. 결과의 `host`/`host_label`을 여기서 붙인다 — 팔레트가
     "이건 다른 맥의 출력"임을 표시할 수 있어야 하고, 그 판단을 원격이 자기
@@ -244,7 +247,7 @@ async def _peer_session_call(host_id: str, action: str, body: dict):
     return result
 
 
-@router.post("/api/hosts/{host_id}/sessions")
+@router.post("/api/hosts/{host_id}/sessions", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "create"}))])
 async def host_session_create(host_id: str, request: Request):
     try:
         body = await request.json()
@@ -253,12 +256,12 @@ async def host_session_create(host_id: str, request: Request):
     return await _peer_session_call(host_id, "create", {"name": str(body.get("name") or "")})
 
 
-@router.delete("/api/hosts/{host_id}/sessions/{name}")
+@router.delete("/api/hosts/{host_id}/sessions/{name}", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "kill"}))])
 async def host_session_kill(host_id: str, name: str):
     return await _peer_session_call(host_id, "kill", {"name": name})
 
 
-@router.patch("/api/hosts/{host_id}/sessions/{name}")
+@router.patch("/api/hosts/{host_id}/sessions/{name}", dependencies=[Depends(host_gate.dependency("session.manage", {"op": "rename"}))])
 async def host_session_rename(host_id: str, name: str, request: Request):
     try:
         body = await request.json()
@@ -267,7 +270,7 @@ async def host_session_rename(host_id: str, name: str, request: Request):
     return await _peer_session_call(host_id, "rename", {"name": name, "new": str(body.get("name") or "")})
 
 
-@router.post("/api/hosts/{host_id}/ping")
+@router.post("/api/hosts/{host_id}/ping", dependencies=[Depends(host_gate.dependency("ping"))])
 async def ping_host(host_id: str):
     peer = await asyncio.to_thread(host_store.find_peer, host_id)
     if peer is None:
@@ -280,3 +283,38 @@ async def ping_host(host_id: str):
         return {"ok": False, "online": False, "reason": e.reason}
     _sessions_cache.invalidate(f"sessions:{host_id}")
     return {"ok": True, "online": True, **r}
+
+
+# ── fsh host allow-control|deny-control|allow-agent|deny-agent (H3) ─────────────
+# CLI 가 hosts.json 을 직접 쓰는 대신 unix socket 으로 서버에 변경을 **요청**한다(`VT_AUTHZ_ENFORCE=peer`).
+# 접근을 줄이는 deny-* 는 바로 적용·감사하고, 늘리는 allow-* 는 승인 요청이 된다 — 웹 승인함에서 사람이 승인해야 적용되고,
+# pane 없는 CLI 는 승인할 수 없다. 꺼져 있으면 409 `peer_enforce_off` 로 답해 CLI 가 옛 직접 쓰기로 내려가게 한다.
+
+
+@router.post("/api/host-grants/{peer_id}/change")
+async def host_grant_change(peer_id: str, request: Request):
+    if not host_grant_svc.enforced():
+        return JSONResponse({"error": "peer_enforce_off", "reason": tr("이 서버는 호스트 권한 변경을 승인 요청으로 받지 않습니다")},
+                            status_code=409)
+    actor = host_gate.local_principal(request)
+    if actor.kind not in (P.LOCAL, P.AGENT):         # 사람은 승인함에서 결정한다 — 이 길은 CLI·에이전트의 요청용
+        return JSONResponse({"error": "local_caller_required",
+                             "reason": tr("이 요청은 fsh 명령(unix socket)으로만 보낼 수 있습니다")}, status_code=403)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    action = str((body if isinstance(body, dict) else {}).get("action") or "")
+    try:
+        res = await asyncio.to_thread(host_grant_svc.change, actor, peer_id, action)
+    except ShareError as e:
+        return JSONResponse(e.body(), status_code=e.status)
+    if res["state"] == "pending":
+        if res.get("created"):
+            try:
+                from routes.agent_share import announce_view
+                await announce_view(res["request"], tr("호스트 권한 변경 승인이 필요합니다"))
+            except Exception as e:  # noqa: BLE001 — 알림 실패가 요청 생성을 되돌리지 않는다
+                logger.debug(f"호스트 권한 요청 알림 실패: {e}")
+        return JSONResponse({"ok": True, **{k: v for k, v in res.items() if k != "created"}}, status_code=202)
+    return {"ok": True, **res}

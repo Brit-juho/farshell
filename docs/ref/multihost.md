@@ -45,3 +45,12 @@ The browser calls this side's `/api/hosts/{id}/sessions` (POST / DELETE / PATCH)
 - **Allowlist, not denylist** (`server/relay_policy.py`): a new API is unreachable from a peer until listed. Never relayed: auth/devices/OTP/elevation, host & peer management (would allow A→B→C chaining), share links, port expose, git accounts, MCP writes, push, clipboard, voice, hook events. Elevated routes also fail inside because there is no cookie — a second lock.
 - The header chip shows **only the chosen host** (the "· M1 경유" suffix is gone).
 - Known limits: voice input and push notifications stay tied to the Mac you logged in to; opening a port preview uses that Mac's tunnel URLs as reported by it.
+
+## Access is decided by grants, not by the signature (`VT_AUTHZ_ENFORCE=peer`)
+
+The signature only says which Mac is calling. With `VT_AUTHZ_ENFORCE=peer` what that Mac may do comes from its grant (`view` or `control`, plus
+the agent-message switch), checked per route and again for every typed frame on an open terminal; a Mac you remove or downgrade is
+disconnected within 5 seconds. **`control` is a remote shell**: that Mac can type into every terminal here, create and kill sessions, send
+files and use the relayed API — treat it like an SSH login. On the sending side only a person logged in through the browser can use the
+host list, remote session actions and the host switch; an agent or the machine token cannot. Raising a Mac's access with `fsh host allow-*`
+becomes an approval request that a person confirms in the web inbox. Details: [`auth.md`](./auth.md).

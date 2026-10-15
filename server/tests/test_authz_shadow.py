@@ -154,8 +154,22 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
     enforced = authz_flags.enforced("share")
     deleg = authz_flags.enforced("deleg")
     msgf = authz_flags.enforced("msg")
+    peerf = authz_flags.enforced("peer")
     for case in cases:
         w = World(monkeypatch, world.tmp / case.id.replace("/", "_"))
+        if peerf and case.route.startswith(("/api/peer/", "/api/hosts", "/ws/hosts/", "/ws/remote/")) \
+                and case.route not in ("/api/peer/pair", "/api/hosts/self") and case.method != "FUNC":
+            # EXPECTED_CHANGE(3d): VT_AUTHZ_ENFORCE=peer 이면 엔진이 다른 맥(peer)·relay·호스트 조작의 **권한자**다. 엔진·주체·저장소가 터지면
+            # 닫혀야 하고(허용이던 사례가 2xx 로 남으면 안 된다), 뒤집힌 답(write)은 그대로 따른다.
+            # (주체 만들기 실패는 요청에서 주체를 만드는 호스트 조작 경로에만 닿는다 — peer 서명 경로는 grant 에서 주체를 만든다.)
+            host_side = case.route.startswith(("/api/hosts", "/ws/hosts/", "/ws/remote/"))
+            if break_at in ("engine", "store") or (break_at == "principal" and host_side):
+                want, res = matrix[case.id]["expected"], w.run(case)
+                if "status" in res and want.get("status", 400) < 400:
+                    assert res["status"] >= 400, (case.id, res)
+                continue
+            if break_at == "write":
+                continue
         if enforced and break_at in ("engine", "write") and case.group == "agent_share" \
                 and case.caller in ("agent_verified", "agent_child") and case.route.startswith("/api/agent/shared/"):
             # EXPECTED_CHANGE(3a): VT_AUTHZ_ENFORCE=share 이면 엔진이 이 판정의 **권한자**다 — shadow 라면 삼켰을 엔진

@@ -170,7 +170,7 @@ exact old bytes. To roll back: revert the commit, then `fsh migrate-auth --resto
 
 ## Agent session sharing under the engine (`VT_AUTHZ_ENFORCE=share`)
 
-Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share`, `deleg` and `msg` have an effect; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
+Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share`, `deleg`, `msg` and `peer` have an effect; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
 `agent_share.py` keeps only the mechanics (`read_pane`, `send_keys`, `check_send_*`, tmux options); its public functions
 (`get_grant`, `request_access`, `decide`, `revoke`, `drop_target`, `list_state`, `snapshot`, `authorize`, `audit`) branch on the flag.
 
@@ -238,6 +238,69 @@ What does not change with the flag: the machine token still reaches routes outsi
 peer parity over all levels, rate/hop parity, rollback, shadow, `fsh migrate-auth --verify`, audit without text) and
 `authz_char/test_char_agent_msg_enforced.py` (the matrix with the listed changes); `test_agent_msg.py`, the shadow replay and the authz_char matrix also run
 with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
+
+## Other Macs under the engine (`VT_AUTHZ_ENFORCE=peer`)
+
+Off by default (shipping changes nothing); combine as `share,deleg,msg,peer`. With `peer` on, `authz/peer_svc.py` decides what another Mac
+(`/api/peer/*`) may do, `authz/host_gate.py` decides who may operate another Mac from this server (`/api/hosts/*`, `/ws/hosts/*`,
+`/ws/remote/*`) and `authz/host_grant_svc.py` turns `fsh host allow-*/deny-*` into approval requests. Turning the flag off
+restores the old behaviour at once. Every level and route gives the **same answer and the same error body** as before; the only changes are
+the ones listed under "Operating another Mac from this server" below.
+
+**What `control` means.** A Mac you set to `control` can type into every terminal here, create and kill sessions, receive files and use the
+whole relayed API: it is a **remote shell** on this Mac, the same exposure as an SSH login. `view` can list and read sessions and search
+scrollback (including the working directory and output) but cannot change anything. Granting `control` is a decision about a machine you
+trust as much as yourself.
+
+| Piece | Where | Rule |
+|---|---|---|
+| Authentication | `routes/peer_protocol.py` | The HMAC signature (body hash, time window, nonce, rate limits — all unchanged) only proves **which Mac** is calling: the principal `peer:<id>`. What it may do is decided by grants. |
+| Grants | `peer_svc._snapshot` | Translated on the spot from `hosts.json` (`view` -> `session.view` + `session.read`; `control` -> also `session.input` raw, `session.manage` (create, kill, rename, detach), `fs.write` (drop only) and `relay` for every group; `agentMessages` -> `msg.send` for the agent principal), so a `fsh host` change takes effect at once and the stored copy can never be stale. Rules in the engine store (deny rules included) apply on top. |
+| One declaration table | `peer_svc.NEEDS` | Each peer route lists the (scope, conditions) it needs in this single table; the capability wrapper reads it, and a test fails for any `/api/peer/*` route without an entry. An action missing from the table falls back to its old level, never to "allow". |
+| Open sockets | `peer_svc.GrantWatch` | Input frames on `/api/peer/ws/{name}` re-check `session.input` (raw) per frame (cached until `hosts.json`/`grants.json` change), and every 2 seconds the grant is read again: a removed Mac, or one that lost view or input, is disconnected (close 4401) within 5 seconds. The relay socket uses the same 2-second check instead of the old 30 seconds. |
+| Relay | `routes/peer_relay.py` | Each allowlist rule maps to a group (`scopes.RELAY_*_GROUPS`) and the engine is asked for `relay` with that `group`. The order and the error bodies are as before: the level gate comes first (a `view` Mac gets 403 `level_required` even for an allowlisted GET), then the allowlist (403 `relay_forbidden`). A deny rule for one group turns only that group into `relay_forbidden`. |
+| Failure | engine exception, corrupt `grants.json` | 503 `authz_unavailable` for a peer request (fail closed). |
+| Audit | `~/.vt/audit/authz.jsonl` | An engine denial of a peer request is recorded (`peer.<action>`, one line per Mac/action/reason per minute); no request content. `host_store` keeps its own per-peer log (`fsh host log`). |
+
+### Operating another Mac from this server
+
+`/api/hosts/{id}/...` and `/api/hosts/{id}/relay/...` (plus `/ws/hosts/{id}/relay/...` and `/ws/remote/...`) make this server act on another
+Mac with its stored secret. Before, any authenticated caller could use them, including the machine token and a verified agent. With the flag
+on the caller needs the scope on `host:<id>`:
+
+| Caller | Allowed |
+|---|---|
+| Person logged in through the browser | Everything (list, ping, search, create/kill/rename sessions, detach clients, relay every group) |
+| Server without any password or token | Everything (that server is open by design) |
+| `fsh` / service daemon over the unix socket (`local`) | The host list and ping only |
+| Agent, machine token (`Authorization: Bearer`, `?token=`) | Nothing (403 `host_access_denied`, WebSocket close 4003) |
+
+Used by the web app (host list on the rail and fleet screens, the remote tab/session actions, the whole host switch) — all of it is browser
+traffic with the login cookie, so people see no difference. No `fsh` command calls these routes (`fsh host ping/pair/add` talk to the other
+Mac directly). A browser opened through a legacy `?token=` link (machine token instead of the login cookie) loses the host switch; log in
+with the password.
+
+### Changing a Mac's access with `fsh host` — approval, not a file write
+
+`fsh host allow-control|deny-control|allow-agent|deny-agent` used to write `hosts.json` directly, so any process with the same user (an agent
+in a terminal) could raise a Mac's access. With the flag on the command asks the running server over the unix socket
+(`POST /api/host-grants/{id}/change`; the socket peer is the principal — `local` outside a pane, `agent` inside one):
+
+| Change | Result |
+|---|---|
+| `deny-control`, `deny-agent` (lower access) | Applied at once and recorded in the audit chain (`peer.grant`); already in that state -> `noop` |
+| `allow-control`, `allow-agent` (raise access) | A pending request (kind `peer`, origin `authz:peer:req:`) in the same inbox as sharing and message requests; nothing changes until a **person** (browser login session) approves. `allow-control` needs a re-authenticated (elevated) person because it grants raw input. Same request is merged; a denial cools down for 5 minutes; 20 pending per caller, 200 total |
+
+A `fsh` process without a pane (`local`), an agent, the machine token and a peer can never approve. After approval the engine store and
+`hosts.json` are both written (the old writers `set_grant_level`/`set_grant_agent` stay for one more release), so `fsh migrate-auth --verify`
+stays clean. Without the flag, without the socket or against an older server the command writes `hosts.json` directly as before. Someone who
+can edit `~/.vt` as the same user can still change the file by hand — the audit chain and `fsh doctor` are what detect that, not this route.
+The command exits 0 when it only created a request; it says so and nothing has changed yet.
+
+Tests: `server/tests/authz_char/test_peer_enforce.py` (declaration coverage, 2-second revocation, per-frame re-check, relay order and groups,
+host scopes per caller, request/approve/deny lifecycle, CLI fallbacks, rollback, `--verify`) and `authz_char/test_char_peer_enforced.py` (the
+matrix: peer, relay, machine-token groups identical; the listed host-operation changes). `test_char_hosts.py` and the host-switch half of
+`test_char_relay.py` pin the old behaviour with the flag removed.
 
 ## Re-check right before typing
 

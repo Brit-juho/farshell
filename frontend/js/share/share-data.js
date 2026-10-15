@@ -62,6 +62,11 @@ export function requestSentence(req) {
   const nick = (req.target && req.target.nick) || '?';
   const agent = (req.agent && req.agent.name) || '?';
   if (req.kind === 'msg') return t('「{agent}」이(가) 「{nick}」 세션의 에이전트에게 메시지를 보내려 합니다', { agent, nick });
+  if (req.kind === 'peer') {
+    return req.change === 'allow-agent'
+      ? t('「{agent}」이(가) 호스트 「{nick}」의 에이전트 메시지를 이 맥이 받도록 허용하려 합니다', { agent, nick })
+      : t('「{agent}」이(가) 호스트 「{nick}」에 제어 등급을 주려 합니다', { agent, nick });
+  }
   return req.kind === 'write'
     ? t('「{agent}」이(가) 「{nick}」 세션의 쓰기 권한을 요청합니다', { agent, nick })
     : t('「{agent}」이(가) 「{nick}」 세션의 읽기 권한을 요청합니다', { agent, nick });
@@ -69,6 +74,7 @@ export function requestSentence(req) {
 
 export function kindHelp(kind) {
   if (kind === 'msg') return t('메시지: 받는 세션의 에이전트에게 다른 에이전트가 보낸 글로 표시되어 전달됩니다. 승인해도 그 에이전트의 권한은 늘지 않습니다.');
+  if (kind === 'peer') return t('호스트 권한: 제어 등급은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다(원격 셸과 같습니다). 에이전트 메시지는 그 맥의 에이전트가 이 맥 에이전트에게 일을 시킬 수 있다는 뜻입니다.');
   return kind === 'write'
     ? t('쓰기: 에이전트가 이 터미널에서 명령을 실행할 수 있습니다.')
     : t('읽기: 에이전트가 이 세션의 화면에 보이는 내용을 읽습니다.');

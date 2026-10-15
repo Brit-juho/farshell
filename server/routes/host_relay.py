@@ -29,6 +29,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
 import host_store
+from authz import host_gate
+from authz import scopes as authz_scopes
 from i18n import tr
 import peer_client
 import relay_policy
@@ -69,6 +71,11 @@ def _outdated(peer: dict) -> JSONResponse:
 @router.api_route("/api/hosts/{host_id}/relay/{rest:path}",
                   methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def host_relay(host_id: str, rest: str, request: Request):
+    if host_gate.enforced():
+        # H13 — 다른 맥의 API 를 통째로 부르는 길이다. 호출자가 `host:<id>` 의 relay 를 가져야 한다(사람은 기본으로, 에이전트·기계 토큰은 아니다).
+        d = await asyncio.to_thread(host_gate.decide, request, host_id, "relay", {"group": authz_scopes.ANY_GROUP})
+        if not d.allow:
+            return JSONResponse(host_gate.denied_body(), status_code=403)
     peer = await asyncio.to_thread(host_store.find_peer, host_id)
     if peer is None:
         return JSONResponse({"error": "not_found", "reason": tr("등록되지 않은 호스트입니다")},
@@ -80,6 +87,11 @@ async def host_relay(host_id: str, rest: str, request: Request):
             {"error": "relay_forbidden", "reason": tr("다른 맥에서 쓸 수 없는 기능입니다: {target}", target=target)},
             status_code=403,
         )
+    if host_gate.enforced():                  # 규칙 -> 그룹 -> 엔진: 이 그룹을 부를 수 있는가
+        d = await asyncio.to_thread(host_gate.decide, request, host_id, "relay",
+                                    {"group": authz_scopes.relay_group(method, target)})
+        if not d.allow:
+            return JSONResponse(host_gate.denied_body(), status_code=403)
 
     data = await request.body()
     digest = hashlib.sha256(data).hexdigest()
@@ -130,6 +142,11 @@ async def host_relay_ws(ws: WebSocket, host_id: str, rest: str):
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()
+    if host_gate.enforced():
+        d = await asyncio.to_thread(host_gate.decide, ws, host_id, "relay", {"group": authz_scopes.ANY_GROUP})
+        if not d.allow:
+            await ws.close(code=4003, reason="host access denied")
+            return
     peer = await asyncio.to_thread(host_store.find_peer, host_id)
     if peer is None:
         await ws.close(code=4004, reason="host not found")
@@ -138,6 +155,11 @@ async def host_relay_ws(ws: WebSocket, host_id: str, rest: str):
     if not relay_policy.ws_allowed(target):
         await ws.close(code=4003, reason="relay forbidden")
         return
+    if host_gate.enforced():
+        d = await asyncio.to_thread(host_gate.decide, ws, host_id, "relay", {"group": authz_scopes.relay_ws_group(target)})
+        if not d.allow:
+            await ws.close(code=4003, reason="host access denied")
+            return
 
     import websockets
 

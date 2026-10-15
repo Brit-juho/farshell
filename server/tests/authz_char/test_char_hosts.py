@@ -11,6 +11,13 @@ import pytest
 from authz_cases import cases_for
 
 
+@pytest.fixture(autouse=True)
+def _peer_flag_off(monkeypatch):
+    """이 파일은 3d(H13) 이전의 옛 동작을 고정한다 — 환경에 `peer` 가 켜져 있어도 끄고 돈다(켠 판은 `test_char_peer_enforced.py`)."""
+    from authz import flags
+    monkeypatch.setenv("VT_AUTHZ_ENFORCE", ",".join(sorted(flags.tokens() - {"peer"})))
+
+
 @pytest.mark.parametrize("case", cases_for("hosts"), ids=lambda c: c.id)
 def test_matrix(case, world, golden):
     golden.check(case, world.run(case))

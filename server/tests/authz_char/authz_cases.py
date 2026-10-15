@@ -286,6 +286,8 @@ def hosts_cases() -> list[Case]:
         ("DELETE", "/api/hosts/{host_id}/sessions/{name}", "/api/hosts/m5/sessions/dev", None),
         ("PATCH", "/api/hosts/{host_id}/sessions/{name}", "/api/hosts/m5/sessions/dev", {"name": "dev2"}),
         ("POST", "/api/hosts/{host_id}/ping", "/api/hosts/m5/ping", None),
+        # 3d(H3) — `fsh host allow-*/deny-*` 의 서버 경로. 꺼짐에서는 어느 호출자에게나 409 `peer_enforce_off`(CLI 는 옛 직접 쓰기로 내려간다).
+        ("POST", "/api/host-grants/{peer_id}/change", "/api/host-grants/pv/change", {"action": "deny-control"}),
     ]
     out = []
     for method, route, path, body in routes:
