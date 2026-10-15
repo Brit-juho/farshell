@@ -44,6 +44,7 @@ question — it is not a universal bypass. Two things follow directly:
 | `/s/{token}` | 3 | 1, 4 | `routes/share.py` verifies the share token's signature, expiry and mode (device/pin) directly |
 | `/p/authorize` | 3 | 1, 4 | `routes/system.py` checks session + device directly. On failure it redirects to `/?next=` rather than a JSON 401 — this is a top-level navigation, not an API call |
 | `/api/peer/*` | 3 | 1, 4 | `routes/peer.py` verifies HMAC signature, time window and nonce replay directly. **A peer can only ever reach routes in that one file** |
+| Requests that arrived on the unix socket (`scope["fsh_sock"]`, only the socket Gate can set it) | 3, 4 | 1 | `authz/sock.py` `Gate`: kernel peer uid == server uid, route allowlist, principal resolved from the peer pid. See «Unix socket». Human-only routes still refuse (`request_kind` is `none`) |
 | `/api/tmux/kick` | 3 | 1, 4 | `routes/system.py` compares the `X-VT-Kick` header with a random secret made at server start (`tmux_hooks.py`) — only the server's own tmux hooks know it. The route only nudges the session-list watcher; it returns nothing (2026-09-30) |
 
 The single most useful line in that table: **nothing turns off layer 4 (the IP
@@ -99,6 +100,46 @@ access log (`API.md` «Agent session sharing»). The agent-facing endpoints of t
 pane/pid identity check but can approve nothing. Peers never reach any of it: `/api/peer/*` has no route for it and
 `relay_policy.py` does not allow the paths. Tests: `server/tests/test_agent_share.py` (machine token on every human endpoint,
 cookie + token together, no-password server, peer-signed requests, relay allowlist).
+
+## Unix socket: who is calling without a token (plan-2.6 phase 2, 2026-10-15)
+
+A second uvicorn server on the same event loop listens on `<state dir>/run/fsh.sock` (default `~/.vt/run/fsh.sock`, directory
+0700, socket 0600 set **before** `listen`). The caller is whatever the kernel says: peer uid (macOS `LOCAL_PEERCRED`, Linux
+`SO_PEERCRED`) and peer pid (macOS `LOCAL_PEERPID`, Linux `SO_PEERCRED`), read in `connection_made` and put in
+`scope["fsh_peer"]`. Nothing in the request is an identity (`X-Fsh-Pane`, body `pane`, `from` are hints — R1.2).
+
+| Step | Rule |
+|---|---|
+| Connection | Peer uid != server uid -> closed without parsing. Unreadable credentials -> 403 `peer_unidentified` |
+| Self-test | At startup the server connects to itself and requires the pid/uid it read to equal its own. **Failure = fail closed**: the socket is torn down and removed, status `failed`. Until it passes, everything but the self-test path is 503 `socket_not_armed` |
+| Ambiguity (R1.1, socket stack only) | `Authorization`, a `vt_session` cookie, `?token=` or `X-Peer-*` on a socket request -> 400 `ambiguous_principal`. The TCP stack is unchanged |
+| Route allowlist | Only the method+path pairs in-repo clients use (table in `API.md` «Unix socket»); anything else 403 `socket_route_not_allowed` |
+| Principal | Peer pid's parent chain reaches a `pane_pid` of **our** tmux -> `agent:local/<sid>:<created>`; with `X-Fsh-Svc: hook` -> `hook:...`. Otherwise a declared service name -> `svc:<name>` (attribution only), else `cli:uid<uid>:pid<pid>`. A process inside a pane that declares a service stays an agent. **None of them is `human`** (no elevation, `request_kind` is `none`, so `require_human_session` refuses) |
+| Fail closed | Peer already exited (pid reuse risk) -> 403 `peer_gone`; tmux unreadable -> 503 `identity_unavailable` |
+
+Authorization in this phase is "equivalent to the machine token, only for the allowlisted routes": the middleware skips layers 3 and
+4 for requests the Gate passed, and the routes decide as before. `share_identity.verify_caller` takes the socket peer pid
+(`peer_pid=`) and never runs `lsof` for it (H7); the TCP path still uses `lsof` and fails closed when it cannot find the owner.
+
+Clients (`server/fsh_client.py`, `lib/fsh_client.sh`) prefer the socket and fall back to `VT_AUTH_TOKEN`: no socket file, stale
+file, `VT_AUTHZ_SOCKET=0`, a non-loopback `VT_SERVER`, a socket that is not ours / not 0600, or a socket-layer rejection
+(`socket_route_not_allowed`, `socket_not_armed`, `peer_unidentified`, `peer_gone`, `identity_unavailable`). A timeout after the
+connection is **not** retried over TCP. Socket file name follows the port (`fsh.sock` for 7777, else `fsh-<port>.sock`) so
+two servers sharing a state dir cannot be confused. `VT_AUTHZ_SOCKET_PATH` overrides the path (AF_UNIX path limit: 100 bytes).
+
+Not opened (a warning is logged and clients use the token): `VT_AUTHZ_SOCKET=0`; WSL path under `/mnt/` (permissions do not
+work there — keep the state dir on the Linux filesystem); path too long; another live listener on the path (never unlinked);
+a non-socket file in the way (never deleted). Native Windows is unsupported (D2): use the WSL wrapper.
+
+Limits worth knowing: a process an agent daemonized (re-parented to pid 1) no longer reaches its pane and looks like `cli`; the
+same-uid threat model still holds (an agent can read `~/.vt`, see risk 1 in the plan). `fsh doctor` and `fsh status` show the
+socket state (listening, self-test, permissions) and **machine-token requests in the last 24h**, counted in
+`~/.vt/authz/legacy_token_use.jsonl` (minute buckets of path + user agent + count; no query string, no content; 1 MB x 2 files).
+`python -m authz sock-status [--json]` prints the same.
+
+H4: `server/hooks/tmux_client_notify.sh` no longer puts the token in the URL. It uses the socket; without one it passes
+`Authorization: Bearer` through a curl config on a `/dev/fd` pipe (`curl -K`), so the token is never in argv/`ps`.
+`server/tests/test_no_token_in_argv.py` fails on any script that runs curl with `token=` or a token variable in its arguments.
 
 ## A device's sessions die with the device
 

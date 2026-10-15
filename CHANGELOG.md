@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **unix socket 인증 경로(병행)**. 서버가 `~/.vt/run/fsh.sock`(디렉터리 0700, 소켓 0600)에서도 듣고, 연결의 peer uid/pid를 커널에서 읽어 호출자를 정한다(macOS `LOCAL_PEERCRED`·`LOCAL_PEERPID`, Linux `SO_PEERCRED`). pane 안이면 agent, 훅이면 hook, 그 밖은 svc/cli이며 사람(human)이 되는 길은 없다. 시작할 때 자기 자신에게 붙어 peer pid를 검증하고 틀리면 소켓을 열지 않는다. MCP·훅·클립보드·음성·`fsh manage`·`fsh`는 소켓을 먼저 쓰고 없으면 `VT_AUTH_TOKEN`으로 내려간다(`VT_AUTHZ_SOCKET=0`이면 소켓을 건너뜀). 소켓으로 열린 경로는 `API.md` «Unix socket» 표의 것뿐이다. `fsh doctor`·`fsh status`가 소켓 상태와 최근 24시간 토큰 사용 수를 보여 준다.
+
 - **노출 포트 자동 재노출**. `fsh tunnel expose`가 「기간이 끝나거나 재부팅해도 자동으로 다시 열까요?」를 묻고(`--auto-renew`/`--no-auto-renew`로 생략, 터미널이 아니면 끔), 웹 포트 패널의 공개 대화상자에도 같은 선택이 생겼다. 켜면 만료 시각에 내리지 않고 고른 기간만큼 연장하며(접속 코드·로그인 기기 유지), 재부팅이나 `fsh stop`으로 터널이 사라지면 서버가 1분 안에 다시 연다(익명 터널은 새 주소, URL 변경 훅으로 알림). 지금까지는 30일이 최대였고 재부팅하면 정책만 남고 터널은 돌아오지 않았다. 나중에 바꾸려면 `fsh tunnel auto <port> on|off` 또는 터널 행의 「자동 켜기/끄기」. 모든 모드에서 고를 수 있고 기본은 끔이다.
 
 - **세션 레일 계보선과 수동 정렬**. 위임 하위 세션이 부모 밑에 붙고, 부모 상태색 레인에서 갈라진 가지로 그려진다(보고하면 완료색으로 합쳐짐, 실패는 오류색, 닫힌 하위는 「닫힌 하위 N」으로 접힘). 「세션」 머리에서 이름순·수동을 고르고, 수동이면 끌어서 또는 행 메뉴 위로·아래로 이동으로 순서를 바꾼다(부모와 자식이 한 덩어리). 하위 행 메뉴에 보고 보기·부모 세션으로 이동·위임 닫기. 계보는 서버 위임 장부 기준이라 에이전트가 tmux 옵션을 바꿔도 트리가 바뀌지 않는다. 폰 Fleet도 같다.
@@ -17,6 +19,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **에이전트 위임(하위 세션)**. 에이전트가 MCP `spawn_session`으로 하위 세션을 만들어 일을 맡기고, 결과를 `[위임 결과 …]` 큐 입력으로 돌려받는다(`report_back`, 보고 없이 턴이 끝나면 Stop 훅의 마지막 응답, 승인 대기, 세션 소멸). 소유는 서버 장부(`~/.vt/delegations.json`)의 세션 식별자로만 판정하고, 깊이 1·열린 자식 3개·분당 5회로 제한한다. 자식은 서버가 고른 명령으로 기본 권한 모드로 뜬다(부모의 권한 우회를 물려주지 않는다). `send_to_child`, `close_delegation`, `list_delegations`, `fsh delegate`. 끄려면 `VT_AGENT_SPAWN=0`. 레퍼런스 11곳을 조사했다(기록은 로컬 전용).
 
 ### Changed
+
+- **tmux attach/detach 알림이 토큰을 URL에 싣지 않는다**. `server/hooks/tmux_client_notify.sh`가 curl 인자에 `?token=`을 붙여 `ps`와 접근 로그에 기계 토큰이 보였다. 이제 소켓을 쓰고, 소켓이 없으면 `Authorization` 헤더를 curl 설정(`-K`, 프로세스 치환)으로 넘겨 argv에 값이 없다. 저장소 안 스크립트가 curl 인자에 토큰을 싣지 않는지 시험이 지킨다.
 
 - **개인 값 가드가 기록 문서와 개인 단어까지 막고, 켜져 있는지 알려 준다**. 지금까지 가드(`scripts/guard_personal.py`)는 클론마다 `core.hooksPath`를 손으로 켜야 했고 아무도 켜지 않아서, 조사 노트·계획서·개인 식별 값이 커밋에 섞여 GitHub까지 올라갔다. `install.sh`가 git 클론이면 훅을 켜고, `fsh doctor`가 꺼져 있으면 경고한다. 가드는 새로 들어오는 `research_notes/`·`reports/`·`docs/` 허용 폴더 밖 파일·`docs/ref/*-plan.md`·`docs/ref/references.md`·루트 `*_DESIGN.md`를 이름으로 막고, 저장소 밖 `~/.vt-guard-words`(줄마다 하나, 대소문자 구분·단어 경계)에 적은 조직·프로필·기기 이름이 추가된 줄이나 파일 이름에 있으면 막는다. 출력에는 그 단어를 다시 싣지 않는다. `AGENTS.md` 계약 13이 `docs/ref/`에는 현재 동작만 두라고 정한다.
 

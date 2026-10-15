@@ -185,6 +185,7 @@ fsh queue clear                 # 전체 비우기
 | 12 | 인증 | 비밀번호/토큰 설정 여부 |
 | 13 | 터미널 앱 | 감지된 앱 목록 + 현재 `TERM_PROGRAM` |
 | 14 | Tailscale | 설치/연결 상태 |
+| 15 | unix socket | `~/.vt/run/fsh.sock` 상태(켜짐 / 건너뜀 / 자가 시험 실패), 권한, 최근 24시간 기계 토큰 요청 수. `VT_AUTHZ_SOCKET=0`이면 클라이언트가 소켓을 건너뛰고 토큰만 씁니다. `fsh status`에도 한 줄로 나옵니다 |
 
 ---
 

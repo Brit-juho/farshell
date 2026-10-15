@@ -31,6 +31,8 @@ _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 
 import auth
 from authz import hooks as authz_hooks
+from authz import legacy_use as authz_legacy_use
+from authz import sock as authz_sock
 import file_store
 import i18n
 import network_access
@@ -65,7 +67,7 @@ from routes.peer_relay import router as peer_relay_router
 from routes.host_relay import router as host_relay_router
 from routes.agent_msg import router as agent_msg_router
 from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
-from routes.authz import human_router as authz_human_router
+from routes.authz import human_router as authz_human_router, router as authz_router
 from routes.delegation import router as delegation_router, human_router as delegation_human_router
 
 logging.basicConfig(level=logging.INFO)
@@ -132,6 +134,11 @@ class TokenAuthMiddleware:
         # (#3′, docs/ref/auth.md). 전송 범위를 바꾸면 그 표도 고칠 것.
         if scope["type"] != "http" or not auth.is_protected():
             return await self.app(scope, receive, send)
+        # unix socket 서버(authz/sock.py Gate)가 peer uid/pid 로 호출자를 확인하고 허용표를 통과시킨 요청.
+        # `fsh_sock` 키는 그 게이트만 세운다 — TCP 쪽 uvicorn 이 만드는 scope 에는 이 키가 없고 클라이언트가
+        # 넣을 방법도 없다. 토큰이 없는 요청이므로 `request_kind` 는 none 이다(사람 전용 라우트는 그대로 거부).
+        if scope.get("fsh_sock") is True:
+            return await self.app(scope, receive, send)
         path = scope.get("path", "")
         if path in (
             "/", "/sw.js", "/manifest.json", "/favicon.ico",
@@ -161,7 +168,10 @@ class TokenAuthMiddleware:
             return
         # 호출자 종류를 라우트가 볼 수 있게 남긴다(`request.state.auth_kind`). 사람 전용 라우트는
         # 이 값을 믿지 않고 auth.require_human_session 이 다시 판정한다 — 이 값은 로깅·진단용.
-        scope.setdefault("state", {})["auth_kind"] = auth.request_kind(request)
+        kind = auth.request_kind(request)
+        scope.setdefault("state", {})["auth_kind"] = kind
+        if kind == auth.AUTH_MACHINE:       # 기계 토큰 사용 기록(경로·UA·횟수만, plan-2.6 2단계)
+            authz_legacy_use.record(path, request.headers.get("user-agent", ""))
         await self.app(scope, receive, send)
 
 
@@ -269,6 +279,8 @@ class NetworkAccessMiddleware:
     async def __call__(self, scope, receive, send):
         # HTTP + WS 둘 다(P2-5 표 #4). 전송 범위를 바꾸면 docs/ref/auth.md도 고칠 것.
         if scope["type"] not in ("http", "websocket"):
+            return await self.app(scope, receive, send)
+        if scope.get("fsh_sock") is True:    # 소켓 요청은 IP 가 없다 — 파일 권한 0600 + peer uid 가 접근 제어
             return await self.app(scope, receive, send)
         spec = network_access.get_current_spec()
         if spec.allow_all:
@@ -393,9 +405,20 @@ async def lifespan(_app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.debug(f"tmux 훅 설치 실패: {e}")
 
+    # plan-2.6 2단계 — unix socket 두 번째 서버. 실패해도(건너뜀·자가 시험 실패) 서버 기동은 막지 않는다:
+    # 소켓이 없으면 클라이언트는 토큰으로 내려간다.
+    sock_service = authz_sock.SockService(_app)
+    try:
+        await sock_service.start()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[authz-sock] 시작 실패: {e}")
+
     try:
         yield
     finally:
+        with suppress(Exception):
+            await sock_service.stop()
+        authz_legacy_use.flush()
         with suppress(Exception):
             await asyncio.to_thread(tmux_hooks.uninstall)
         port_expiry_task.cancel()
@@ -525,6 +548,7 @@ app.include_router(worktree_router)
 app.include_router(repos_router)
 app.include_router(security_router)
 app.include_router(authz_human_router)
+app.include_router(authz_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)

@@ -205,6 +205,7 @@ contract 5). The few that decide how you reach this Mac:
 | 12 | Auth | Whether password/token is configured |
 | 13 | Terminal app | Detected app list + current `TERM_PROGRAM` |
 | 14 | Tailscale | Install/connection status |
+| 15 | unix socket | `~/.vt/run/fsh.sock` state (listening / skipped / failed self-test), permissions, and machine-token requests in the last 24h. `VT_AUTHZ_SOCKET=0` makes clients skip the socket and use the token only. `fsh status` shows the same one line |
 
 ---
 

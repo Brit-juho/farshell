@@ -203,8 +203,26 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
+def sock_status(argv: list[str]) -> int:
+    """`python -m authz sock-status [--port N] [--json]` — fsh doctor/status 가 쓴다. 항상 0(진단이지 판정이 아니다)."""
+    ap = argparse.ArgumentParser(prog="authz sock-status")
+    ap.add_argument("--port", default=None)
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args(argv)
+    from . import sock
+    r = sock.status_report(args.port)
+    if args.json:
+        _p(json.dumps(r, ensure_ascii=False))
+    else:
+        _p(f"{r['state']}|{r['path']}|selftest={r['selftest']}|perms={r['perms']}|dir={r['dir_perms']}|"
+           f"reachable={r['reachable']}|legacy24h={r['legacy_token_24h']}|{r['reason']}")
+    return 0
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "migrate-auth":
         sys.exit(main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "sock-status":
+        sys.exit(sock_status(sys.argv[2:]))
     print("사용법: python -m authz migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]")
     sys.exit(2)

@@ -34,6 +34,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import fsh_client
+
 PROTOCOL_VERSION = "2025-06-18"
 TIMEOUT = 20.0
 
@@ -184,25 +186,32 @@ def _identity_headers() -> dict:
 
 
 def _api(method: str, path: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict]:
+    """소켓 우선(fsh_client — peer pid 가 곧 신원), 소켓이 없으면 예전처럼 TCP + 토큰.
+    `X-Fsh-*` 헤더는 소켓에서는 힌트일 뿐이고 TCP 에서는 share_identity 가 검증한다 — 둘 다 그대로 싣는다."""
     server, token = _config()
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    req = urllib.request.Request(server + path, data=data, method=method)
-    if data is not None:
-        req.add_header("Content-Type", "application/json")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
-    for k, v in (headers or {}).items():
-        req.add_header(k, v)
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return r.status, json.loads(r.read().decode("utf-8") or "{}")
-    except urllib.error.HTTPError as e:
-        try:
-            return e.code, json.loads(e.read().decode("utf-8") or "{}")
-        except ValueError:
-            return e.code, {}
+        port = urllib.parse.urlsplit(server).port
+    except ValueError:
+        port = None
+    try:
+        status, raw = fsh_client.call(method, path, body=body, headers=headers, timeout=TIMEOUT, server=server,
+                                      token=token, port=port or _config_port())
     except (urllib.error.URLError, OSError) as e:
         return 0, {"reason": f"FarShell 서버에 연결할 수 없습니다({server}) — 'fsh status'로 확인: {e}"}
+    try:
+        return status, json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        return status, {}
+
+
+def _config_port() -> str:
+    try:
+        import vt_env
+
+        file_env = vt_env.load()
+    except Exception:  # noqa: BLE001
+        file_env = {}
+    return os.environ.get("VT_PORT") or file_env.get("VT_PORT") or "7777"
 
 
 def _fail(status: int, data: dict) -> str:

@@ -178,7 +178,8 @@ async def _identify(request: Request, action: str, nick: Optional[str] = None):
             share_identity.verify_caller, pane, tmux_env, pid,
             client=tuple(request.client) if request.client else None,
             headers={k.lower(): v for k, v in h.items()},
-            server_port=server[1] if server else None)
+            server_port=server[1] if server else None,
+            peer_pid=((request.scope.get("fsh_peer") or {}).get("pid")))
     except share_identity.IdentityError as e:
         await asyncio.to_thread(agent_share.audit, action, "identity_unverified", nick=nick, by="agent", reason=e.reason)
         raise ShareError("identity_unverified", e.reason, 403) from None

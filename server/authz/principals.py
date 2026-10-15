@@ -61,6 +61,51 @@ def peer(peer_id: str, *, obo: Optional[str] = None) -> Principal:
     return Principal(PEER, f"peer:{peer_id}", obo=obo, attrs={"peer_id": peer_id})
 
 
+SVC_NAMES = ("hook", "clipboard", "voice", "tui", "tmux-notify", "tunnel-hook", "mcp-probe")
+
+
+def cli(uid: int, pid: int) -> Principal:
+    """`cli:uid<uid>:pid<pid>` — unix socket 의 peer 가 우리 tmux pane 밖이다. **human 이 아니다**(A1 P2)."""
+    return Principal(CLI, f"cli:uid{uid}:pid{pid}", attrs={"uid": uid, "pid": pid})
+
+
+def svc(name: str, uid: int, pid: int) -> Principal:
+    """`svc:<name>` — 선언된 이름은 귀속용일 뿐 경계가 아니다(같은 uid, 정책 A3)."""
+    return Principal(SVC, f"svc:{name}", attrs={"uid": uid, "pid": pid, "svc": name})
+
+
+def hook(agent_key: str, host: str = LOCAL_HOST, *, uid: int = 0, pid: int = 0) -> Principal:
+    """`hook:<agent key>` — 에이전트 pane 안의 훅 스크립트(P5). 훅 신원 판정(hook_identity)은 라우트가 그대로 한다."""
+    return Principal(HOOK, f"hook:{host}/{agent_key}", attrs={"key": agent_key, "uid": uid, "pid": pid})
+
+
+def from_socket(peer: dict, *, row=None, svc_claim: str = "") -> Principal:
+    """unix socket 연결의 peer(`{uid, pid}`) → 주체. 판정 순서가 곧 규칙이다.
+
+    1. peer 의 부모 체인이 우리 tmux pane 에 닿는다(`row`) → **agent**. `X-Fsh-Svc: hook` 이면 hook(P5).
+       그 밖의 이름을 선언해도 agent 로 남는다 — pane 안의 프로세스가 `svc:`를 자처해 agent 를 벗어날 수 없다.
+    2. pane 밖이고 알려진 svc 이름을 선언했다 → svc.  3. 그 밖 → cli. 어느 쪽도 human 이 아니다.
+    """
+    uid, pid = int(peer["uid"]), int(peer["pid"])
+    claim = svc_claim if svc_claim in SVC_NAMES else ""
+    if row is not None:
+        p = agent(f"{row.sid}:{row.created}", name=getattr(row, "name", ""))
+        attrs = dict(p.attrs, uid=uid, pid=pid, pane=row.pane_id, via="socket")
+        if claim == "hook":
+            h = hook(attrs["key"], uid=uid, pid=pid)
+            h.attrs.update(pane=row.pane_id, via="socket")
+            return h
+        if claim:
+            attrs["svc"] = claim
+        return Principal(AGENT, p.id, attrs=attrs)
+    if claim:
+        p = svc(claim, uid, pid)
+    else:
+        p = cli(uid, pid)
+    p.attrs["via"] = "socket"
+    return p
+
+
 def from_caller(caller) -> Principal:
     """`share_identity.Caller`(확인된 pane 호출자) → agent 주체."""
     return agent(f"{caller.sid}:{caller.created}", name=getattr(caller, "name", ""))

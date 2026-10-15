@@ -304,6 +304,35 @@ Two audiences, two kinds of caller. **Agent endpoints** take the machine token (
 | GET | `/api/agent/share/audit?limit=100` | **Browser session only.** Access log, newest first (max 500). Entries: `{ts, action:"read"\|"send"\|"list"\|"request"\|"decide"\|"revoke"\|"share"\|"unshare", result, by:"agent"\|"user", agent?:{name,id}, nick?, kind?, level?, lines?, chars?, sha8?, enter?, request?, grant?, reason?}` — identity failures have `by:"agent"` even when the caller cannot be identified. The text itself is never stored, only its length and the first 8 hex of its sha256 |
 | GET | `/api/authz/shadow?limit=100` | **Browser session only.** Debug view of the authz engine in shadow mode (plan-2.6 phase 1, read-only): `{enabled, source:"live"\|"store", stats:{checks, mismatches, errors, suppressed, bySite}, summary, records:[{ts, kind:"mismatch"\|"error", site, principal, principalKind, scope, resource, old, new, reason, rule, grantId, source}]}` newest first (max 1000). Records never contain content (input, screen, message bodies). Shadow decisions never change any response; disable with `VT_AUTHZ_SHADOW=0` |
 
+### Unix socket (plan-2.6 phase 2)
+
+Same server, second listener: `~/.vt/run/fsh.sock` (see `docs/ref/auth.md` «Unix socket»). Requests carry **no** `Authorization`
+header, cookie or `?token=` (400 `ambiguous_principal` otherwise). Only these method+path pairs are reachable; everything else is
+403 `socket_route_not_allowed`. Callers: the in-repo clients (`mcp_farshell`, `agent_hook.sh`, `clipboard_daemon`, voice daemon,
+`fsh manage`, `fsh`, `tmux_client_notify.sh`).
+
+| Method | Path | Caller |
+|--------|------|------|
+| POST | `/api/agent/event` | `agent_hook.sh` |
+| POST | `/api/agent/report` | `fsh pane report` |
+| POST | `/api/clipboard/push` | clipboard daemon |
+| POST | `/voice/cancel`, `/voice/input`, `/voice/target`, `/voice/bind`, `/voice/stt/preload` | voice daemon, `voice_bind.py` |
+| GET | `/api/capabilities`, `/api/tmux/sessions` | `fsh manage` |
+| DELETE | `/api/tmux/kill/{tmux_name}` | `fsh manage` |
+| PATCH | `/api/sessions/{session_id}` | `fsh manage` |
+| POST | `/api/notify/client-event` | `tmux_client_notify.sh` |
+| POST | `/api/agent/message` | MCP `send_message` |
+| GET | `/api/agent/messages`, `/api/agent/directory`, `/api/agent/shared` | MCP |
+| POST | `/api/agent/shared/read`, `/api/agent/shared/send` | MCP |
+| GET | `/api/delegations`, `/api/delegations/role` | MCP |
+| POST | `/api/delegations`, `/api/delegations/report`, `/api/delegations/{id}/send`, `/api/delegations/{id}/close` | MCP |
+| POST | `/api/queue/run` | MCP |
+| POST | `/api/ports/_proxy/sync` | `fsh tunnel expose/pin/mode` |
+| GET | `/api/authz/whoami` | **Socket only** (the gate answers it; over TCP it is 403 `socket_only`). `{principal:{kind:"agent"\|"hook"\|"svc"\|"cli", id, uid, pid, via:"socket", svc?, pane?, key?}}`. Optional `X-Fsh-Svc: <name>` (hook, clipboard, voice, tui, tmux-notify, tunnel-hook, mcp-probe) is attribution only |
+
+The routes behind these paths authorize exactly as they do for the machine token; human-only routes stay unreachable (a socket
+caller is never `human`).
+
 **Events for the frontend** on `/ws-workspace` (already pushed to every connected browser):
 
 - `{"type":"agent_share_request","request":{id, kind, state:"pending", created, expires, agent:{name,id}, target:{nick, mode, name, id}}}` — an agent made a new pending request (not repeated for duplicates).

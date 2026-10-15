@@ -40,7 +40,8 @@ async def _caller(request: Request):
             share_identity.verify_caller, pane, tmux_env, pid,
             client=tuple(request.client) if request.client else None,
             headers={k.lower(): v for k, v in h.items()},
-            server_port=server[1] if server else None)
+            server_port=server[1] if server else None,
+            peer_pid=((request.scope.get("fsh_peer") or {}).get("pid")))
     except share_identity.IdentityError as e:
         await asyncio.to_thread(delegation._audit, "identify", "identity_unverified", reason=e.reason)
         raise DelegationError("identity_unverified", e.reason, 403) from None

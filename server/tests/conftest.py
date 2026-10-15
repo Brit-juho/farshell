@@ -26,6 +26,10 @@ os.environ.setdefault("VT_NETWORK_MODE", "all")
 # 개발자 셸의 LANG(en_US 등)에 따라 달라지지 않게 고정한다. 영어를 보는 테스트는
 # monkeypatch로 VT_LANG을 바꾼다.
 os.environ["VT_LANG"] = "ko"
+# unix socket 서버(authz/sock.py)는 시험에서 기본으로 끈다 — lifespan 을 도는 TestClient 가 임시 HOME 아래에
+# 소켓을 열면 경로 길이(AF_UNIX 100바이트)와 병렬 실행에 의존하게 된다. 소켓을 시험하는 파일이 직접 켠다.
+os.environ["VT_AUTHZ_SOCKET"] = "0"
+os.environ.pop("VT_AUTHZ_SOCKET_PATH", None)
 
 # ⚠ 이 스위트는 **개발자의 실제 ~/.vt.env를 절대 읽지 않는다.**
 #

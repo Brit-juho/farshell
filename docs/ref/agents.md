@@ -87,7 +87,7 @@ The release-path table, the terminal-reply root cause (DA1/DA2/XTVERSION/OSC 10/
 
 ### Claude Code and Codex hooks
 
-`server/agent_hook.sh` is the shared entry point. Claude Code posts `{pre,post,stop}`;
+`server/agent_hook.sh` is the shared entry point (it posts over the unix socket when one exists, else with the machine token; it never fails or blocks the agent either way). Claude Code posts `{pre,post,stop}`;
 Codex posts prompt, permission, tool, stop, and session lifecycle events while adding
 `agent: "codex"`. Both drive status badges and prompt-queue auto-feed. Only Claude's
 `stop` reports completion to the server; session voice policy controls TTS. The legacy `tts_hook.sh` only preserves explicitly configured ntfy delivery.
@@ -220,7 +220,7 @@ One agent sends a message to another agent's tmux session, on this Mac or a pair
 - **Receiving from another Mac needs `control` plus `fsh host allow-agent <id>`** (`grant.agentMessages`). Making another Mac's agent do work is remote execution; `control` alone must not open it silently. The body is covered by the signature hash.
 - **Ping-pong guard**: hop limit 10 per conversation, counted from the receiver's own records as well as the sender's claim (the larger wins); 20/min per sending host.
 - **The header** tells the receiving agent the text came from another agent, with `reply_to`/`to` for the answer. The body is flattened to one line — the queue submits with Enter, and a multi-line body would be split into several prompts.
-- **`fsh mcp`** (`server/mcp_farshell.py`) is a dependency-free stdio JSON-RPC server with six tools: `list_agents`, `send_message`, `read_messages` (messages) and `list_shared_sessions`, `read_session`, `send_to_session` (session sharing, below). It only calls the local FarShell API with the machine token (env, else `~/.vt.env`) and, for the sharing tools, also sends `TMUX_PANE`/`TMUX`/its pid as `X-Fsh-*` headers so the server can verify which tmux pane it runs in. `fsh msg` exposes the message tools for shells and agents without MCP (the sharing tools are MCP-only).
+- **`fsh mcp`** (`server/mcp_farshell.py`) is a dependency-free stdio JSON-RPC server with six tools: `list_agents`, `send_message`, `read_messages` (messages) and `list_shared_sessions`, `read_session`, `send_to_session` (session sharing, below). It only calls the local FarShell API — over the unix socket first (`~/.vt/run/fsh.sock`, the server identifies the caller by peer pid; see `docs/ref/auth.md` «Unix socket»), falling back to the machine token (`~/.vt.env`, else env) when there is no socket — and, for the sharing tools, also sends `TMUX_PANE`/`TMUX`/its pid as `X-Fsh-*` headers so the server can verify which tmux pane it runs in. `fsh msg` exposes the message tools for shells and agents without MCP (the sharing tools are MCP-only).
 - Automatic delivery works for agents with lifecycle hooks (Claude Code, Codex). Others (aider, agy, …) receive the message but it is fed manually.
 - **Three fixes from the first real M1↔M5 run (2026-09-28):**
   - `tmux_target.send_to_tmux` typed text and `Enter` in **one** `send-keys` call; Claude Code read the burst as a paste and took the Enter as a newline — the message sat unsubmitted in the input box (0/5 in a repeat test). Now the text goes with `-l` and Enter is a **separate** call (5/5). This also affected the plain prompt queue, voice input and `/api/peer/input` with `enter`. `-l` additionally stops a text that equals a key name (`Enter`, `Up`) from being pressed as that key, in `type_to_tmux` too.
