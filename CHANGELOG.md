@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **큐 항목의 막힘 사유에 사람이 읽는 문구가 붙는다.** `grant_revoked`·`delegation_closed`·`relationship_gone`·`authz_unavailable` 코드는 그대로 두고, `GET /api/queue` 항목에 `blocked_text`(ko/en)를, `fsh queue` 출력에 같은 문구를 싣는다.
 - **통합 승인함 화면과 설정 > 권한.** 세션 공유·메시지·다른 맥·일반 요청이 한 결정 창으로 온다. 한 번에 요청 하나만(「모두 허용」 없음), 요청을 프리셋 이름(보기·협업·운전·제어)과 정확한 scope·조건으로 보여 주고 «거부 / 한 번만 / 이 세션 동안»을 고른다(받지 않는 종류는 이유를 보인다). 기본 포커스 거부·400ms 무장·Esc=나중에는 그대로다. 높은 권한 요청은 따로 표시되고 비밀번호를 다시 확인해야 허용된다. 대기 건수는 설정 버튼의 배지로 보인다. 설정에 「권한」 구역이 생겨 대기 목록·허용된 권한(거르기·회수·기본 규칙은 따로)·감사 기록(최근 순, 체인 배지, 거부 기록 선택)·비상 정지(두 단계 확인 + 재인증)를 한곳에서 본다. 옛 「에이전트 권한」 패널과 승인 모달은 이 화면으로 대체됐다. `fsh help permissions` 추가.
 - **큐 패널이 막힌 항목의 사람용 문구(`blocked_text`)를 보인다.**
+- **모든 라우트가 인가 분류를 한 표에 선언한다 (`server/authz/route_table.py`, 동작 변화 없음).** HTTP·WebSocket 라우트 247건을 `public`·`human`(승격 표시 포함)·`socket`(소켓 허용표 항목 기록)·`peer`(`peer_svc.NEEDS` 키)·`relay`·`authenticated`(엔진 scope·조건) 중 정확히 하나로 적었다. 새 라우트를 표에 안 적으면 `server/tests/test_authz_route_table.py` 가 앱의 실제 라우트 트리(include 된 라우터·WS·마운트)를 훑어 실패하고, 더할 줄을 메시지로 알려 준다. 표와 실제 관문이 어긋나는 경우(소켓·기계 토큰 허용표가 여는 `human` 라우트, 허용표에 없는 `socket` 라우트, 앱에 없는 라우트를 여는 허용표 줄, `NEEDS` 없는 peer 라우트)도 잡는다. 미들웨어 예외 목록은 `main.AUTH_EXEMPT_*` 상수로 꺼냈다(판정 동일). `docs/ref/auth.md` 에 「Every route declares its authorization class」 절을 더했다.
 
 ### Changed
 
