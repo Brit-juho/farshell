@@ -1,5 +1,38 @@
 # Auth, devices, boundary values
 
+## Shared machine token (`VT_AUTHZ_ENFORCE=legacy`)
+
+Off by default (shipping changes nothing); combine as `share,deleg,msg,peer,legacy`. The machine token is readable by every process of your
+user (`~/.vt.env`, the environment), so with the flag on it stops being a key to the whole API. Turning the flag off restores the old
+behaviour at once. This release only *reports* token use by default; the plan is that a later release turns this on by default and the one
+after removes the token.
+
+**What counts as a machine-token request.** One authenticated by `Authorization: Bearer <token>`, by `?token=<token>`, or by the token
+carried as the `vt_session` cookie value. Browser login sessions (signed cookie) and the unix socket are never machine-token requests.
+
+| Rule | With the flag on |
+|---|---|
+| Scope | The token may only call the method+path pairs the unix socket already allows for in-repo clients (table in `API.md` «Unix socket»: hooks, the MCP fallback, clipboard/voice/TUI daemons, tmux notify, ports sync, agent message/shared/delegation endpoints, `queue/run`, `host-grants/*/change`). Anything else is **403 `legacy_token_scope`**, including WebSockets. Allowed requests are still counted in `legacy_token_use.jsonl`; refused ones in `legacy_token_denied.jsonl` (same shape: minute bucket, path, user agent, count; no query, no content) |
+| Transport | `?token=` is refused with 400 `token_query_unsupported` and the token as a cookie value with 401 `token_cookie_unsupported`, whether or not the value is right. Only the `Authorization` header remains. Access logs also mask any query value whose name contains `token`, `ticket`, `otp`, `secret`, `password` or `auth` |
+| Web app | `core/env.js` and the login gate no longer read `?token=`: the parameter is removed from the address bar and the normal login (or `fsh mobile` link) is used |
+| No password | If only the token is set (no `fsh password`) there is nobody who can approve. Features that need an approval — sharing a session, agent messages to an unrelated session, `fsh host allow-*` — answer 403 `approval_unavailable_no_password` instead of waiting forever, and `fsh doctor` and the server start log say so once. Grants that already exist keep working. A signed cookie on such a server is not a person either (`require_human_session` refuses it). A server with neither password nor token is unchanged |
+
+The route check is made in the token middleware, before the route runs, so the answer for a person-only route changes from
+`human_session_required` to `legacy_token_scope` for a token caller (still 403). Peer-signed requests, the exempt paths in the exceptions
+table below and the unix socket are not touched. `DELETE /api/tmux/kill/{name}` stays reachable because `fsh manage` uses it over the
+socket and falls back to the token.
+
+**Migrating an outside script.** `fsh doctor` (and `python -m authz legacy-denied`) lists the refused (path, user agent) pairs of the last
+24 hours. For each: run it on the same Mac through the unix socket (`fsh` commands, or `curl --unix-socket ~/.vt/run/fsh.sock`, which
+needs no token); use a browser login (`fsh mobile`) for anything a person does; or ask whether the route belongs on the allowlist
+(`authz/sock.py` `ROUTES`, which then also opens it on the socket). A script on another machine cannot use the socket: pair the Macs
+(`fsh host`) instead of sharing the token.
+
+Tests: `server/tests/test_authz_legacy_enforce.py` (every allowlisted route works with the token, a sample of sensitive ones is refused,
+`?token=` and cookie-token refusal, log masking, no-password gating, signed cookie on a token-only server, rollback, doctor output) and
+`server/tests/authz_char/test_char_legacy_enforced.py` (the whole characterization matrix with the flag on; only the three rules above
+change an answer).
+
 ## Authorization order (P2-5, ADR-42)
 
 The table below shows the middleware order and the additional checks applied
@@ -82,7 +115,7 @@ needs the same condition, because it's a replacement for #3, not a shortcut arou
 | Device metadata | `ua` (≤300 chars), parsed `client` (OS + browser major), `ip_first`/`ip_last`, `via`, `method` (`password`/`password+otp`/`ticket`). **Display only — never an auth input.** Tunnel requests arrive from loopback, so the IP comes from `CF-Connecting-IP`, read only when the request comes from loopback; a local process could forge it, which is why it stays out of the IP filter (`VT_TRUST_PROXY` is a separate switch). `ip_last` updates at most once a day, like `last_seen` |
 | One-time device registration ticket | The QR/URL from `fsh mobile`/`fsh handoff` carries a 5-minute one-time ticket (`?ticket=`) instead of a persistent token. Physical access to the Mac is already proven at the moment the QR is shown, so scanning it equals approving registration. The old approach of embedding a persistent token in the URL left that value permanently sitting in logs, history, and QR images |
 | Cross-site blocking | `OriginGuardMiddleware` (`server/main.py`) — returns 403 for both HTTP and WS if the Origin isn't itself. The only path that auth/OTP alone can't block (if the browser already has a cookie, auth passes). Also removes the default `*` CORS — opt in via `VT_ALLOWED_ORIGINS` if needed |
-| API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (daemons, hooks, the TUI). Via URL `?token=xxx` or `Authorization: Bearer xxx`. **It is not a second password — the login form rejects it (2026-09-17).** It used to be accepted there, which meant a human-usable credential that `fsh password` could never change or expire; the observed symptom was "I changed the password and the old one still logs me in". A legacy `?token=` link therefore no longer trades itself for a session cookie (it keeps working via the query parameter); register phones with `fsh mobile`'s one-time ticket instead. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are still recognized as fallbacks) |
+| API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (daemons, hooks, the TUI). Via URL `?token=xxx` or `Authorization: Bearer xxx`. **It is not a second password — the login form rejects it (2026-09-17).** It used to be accepted there, which meant a human-usable credential that `fsh password` could never change or expire; the observed symptom was "I changed the password and the old one still logs me in". A legacy `?token=` link therefore no longer trades itself for a session cookie (it keeps working via the query parameter, unless `VT_AUTHZ_ENFORCE=legacy` is on, see «Shared machine token»); register phones with `fsh mobile`'s one-time ticket instead. The web app itself no longer reads `?token=` from the address bar: it removes it and shows the normal login. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are still recognized as fallbacks) |
 
 ## Who is calling: browser session, machine token or peer (2026-10-06)
 
@@ -170,7 +203,7 @@ exact old bytes. To roll back: revert the commit, then `fsh migrate-auth --resto
 
 ## Agent session sharing under the engine (`VT_AUTHZ_ENFORCE=share`)
 
-Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share`, `deleg`, `msg` and `peer` have an effect; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
+Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list (`share`, `deleg`, `msg`, `peer` and `legacy` have an effect; unknown tokens are ignored and shown by `flags.unknown()`). With `share` on, `authz/share_svc.py` is the authority and
 `agent_share.py` keeps only the mechanics (`read_pane`, `send_keys`, `check_send_*`, tmux options); its public functions
 (`get_grant`, `request_access`, `decide`, `revoke`, `drop_target`, `list_state`, `snapshot`, `authorize`, `audit`) branch on the flag.
 

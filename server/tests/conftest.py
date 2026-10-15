@@ -151,3 +151,28 @@ def _legacy_body_claim_without_msg_flag(request, monkeypatch):
         toks = [t for t in os.environ.get("VT_AUTHZ_ENFORCE", "").split(",") if t.strip() and t.strip() != "msg"]
         monkeypatch.setenv("VT_AUTHZ_ENFORCE", ",".join(toks))
     yield
+
+
+# `VT_AUTHZ_ENFORCE=legacy`(3e)에서는 공용 기계 토큰이 소켓 허용표 안의 (메서드, 경로)만 쓰고, `?token=`·쿠키 토큰은 받지 않으며, 비밀번호 없이
+# 토큰만 있는 서버에서는 서명 쿠키가 사람이 아니고 승인 요청이 만들어지지 않는다. 아래 시험은 **켜지 않은 상태의 계약**
+# (토큰이 API 전체를 연다 / 서명 쿠키가 사람이다 / 승인 요청이 만들어진다)을 단언하므로 그 플래그를 끈 채 돈다. 켠 쪽 성질은
+# test_authz_legacy_enforce.py 와 authz_char/test_char_legacy_enforced.py 가 따로 본다.
+_LEGACY_OPEN_CONTRACT = (
+    "test_agent_share.py::test_machine_token_cannot_share_approve_or_revoke",
+    "test_authz_legacy_use.py::test_middleware_counts_machine_token_requests_only",
+    "test_authz_shadow.py::test_shadow_exceptions_are_swallowed_and_responses_unchanged",
+)
+
+
+def _legacy_open_contract(nodeid: str) -> bool:
+    if "authz_char/" in nodeid:
+        return "test_char_legacy_enforced.py" not in nodeid        # 0단계 golden(matrix.json)은 꺼진 상태의 기록이다
+    return nodeid.split("/")[-1].startswith(_LEGACY_OPEN_CONTRACT)
+
+
+@pytest.fixture(autouse=True)
+def _legacy_off_for_open_contract(request, monkeypatch):
+    if _legacy_open_contract(request.node.nodeid):
+        toks = [t for t in os.environ.get("VT_AUTHZ_ENFORCE", "").split(",") if t.strip() and t.strip() != "legacy"]
+        monkeypatch.setenv("VT_AUTHZ_ENFORCE", ",".join(toks))
+    yield

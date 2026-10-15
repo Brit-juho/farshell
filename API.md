@@ -6,8 +6,8 @@ the architecture.
 
 **Auth:** If a password (`fsh password`) or token (`VT_AUTH_TOKEN`) is set, every
 endpoint requires authentication. Humans authenticate with the `vt_session` cookie
-issued after login; daemons/scripts authenticate with a `?token=xxx` query param or an
-`Authorization: Bearer xxx` header. See the
+issued after login; daemons/scripts authenticate with an `Authorization: Bearer xxx` header (a `?token=xxx` query param
+is still accepted unless `VT_AUTHZ_ENFORCE=legacy` is on, see «Shared machine token» below). See the
 [Security section of README.md](./README.md#security) for the full auth model.
 
 ---
@@ -311,11 +311,26 @@ Two audiences, two kinds of caller. **Agent endpoints** take the machine token (
 | GET | `/api/agent/share/audit?limit=100` | **Browser session only.** Access log, newest first (max 500). Entries: `{ts, action:"read"\|"send"\|"list"\|"request"\|"decide"\|"revoke"\|"share"\|"unshare", result, by:"agent"\|"user", agent?:{name,id}, nick?, kind?, level?, lines?, chars?, sha8?, enter?, request?, grant?, reason?}` — identity failures have `by:"agent"` even when the caller cannot be identified. The text itself is never stored, only its length and the first 8 hex of its sha256 |
 | GET | `/api/authz/shadow?limit=100` | **Browser session only.** Debug view of the authz engine in shadow mode (read-only): `{enabled, source:"live"\|"store", stats:{checks, mismatches, errors, suppressed, bySite}, summary, records:[{ts, kind:"mismatch"\|"error", site, principal, principalKind, scope, resource, old, new, reason, rule, grantId, source}]}` newest first (max 1000). Records never contain content (input, screen, message bodies). Shadow decisions never change any response; disable with `VT_AUTHZ_SHADOW=0` |
 
-**Engine enforcement (`VT_AUTHZ_ENFORCE=share`, off by default).** Same endpoints, status codes and body keys. With the flag on, the authz engine decides, stores and audits (`docs/ref/auth.md` «Agent session sharing under the engine»); the old `agent_grants.json` / `agent_access.log` are still written in parallel, so turning the flag off rolls back at once. What changes: `read`/`send` responses, `decision` and `DELETE …/grants/{id}` responses gain **`grantId`** (the engine id, `ag-<id>`; `DELETE` accepts either form); a failed audit write stops share/unshare/decision/revoke with **503 `audit_unavailable`** (nothing is saved); an engine failure on an agent read/send is **503 `authz_unavailable`** (fails closed); a change that would write an unreadable store file (engine or the mirrored `agent_grants.json`) is **503 `store_unreadable`** — the file is left untouched (also with the flag off, for `agent_grants.json`); `GET /api/agent/share/audit` reads the hash-chained authz audit, where a successful `read`/`list` is recorded once per 10 minutes per agent and nick. Machine-token routes outside this feature (`/api/sessions/{id}/keys`, `/api/queue`, …) are **not** covered yet (H1, phase 3e).
+**Engine enforcement (`VT_AUTHZ_ENFORCE=share`, off by default).** Same endpoints, status codes and body keys. With the flag on, the authz engine decides, stores and audits (`docs/ref/auth.md` «Agent session sharing under the engine»); the old `agent_grants.json` / `agent_access.log` are still written in parallel, so turning the flag off rolls back at once. What changes: `read`/`send` responses, `decision` and `DELETE …/grants/{id}` responses gain **`grantId`** (the engine id, `ag-<id>`; `DELETE` accepts either form); a failed audit write stops share/unshare/decision/revoke with **503 `audit_unavailable`** (nothing is saved); an engine failure on an agent read/send is **503 `authz_unavailable`** (fails closed); a change that would write an unreadable store file (engine or the mirrored `agent_grants.json`) is **503 `store_unreadable`** — the file is left untouched (also with the flag off, for `agent_grants.json`); `GET /api/agent/share/audit` reads the hash-chained authz audit, where a successful `read`/`list` is recorded once per 10 minutes per agent and nick. Machine-token routes outside this feature (`/api/sessions/{id}/keys`, `/api/queue`, …) are not part of this feature; `VT_AUTHZ_ENFORCE=legacy` closes them to the machine token (see «Shared machine token»).
 
 **Agent-to-agent messages under the engine (`VT_AUTHZ_ENFORCE=msg`, off by default).** The approval inbox is shared: `GET /api/agent/share/requests` also lists message requests (`kind:"msg"`, id `ms-…`, `target.name` = the receiving session), `POST …/requests/{request_id}/decision` approves (`decision:"allow"`, `level` ignored) or denies one and returns `grantId` (`gm-…`), `GET /api/agent/share/grants?kind=msg` lists message permissions (`[{id, kind:"msg", granted, updated, approvedBy, approvedVia, agent:{name,id}, target:{name,id}}]`; the default listing is unchanged), and `DELETE /api/agent/share/grants/{gm-…}` revokes one (the next send is pending again). All of these are browser-session only; an agent or the machine token gets 403. A permission belongs to one (sending session -> receiving session) pair and disappears when either session is gone. Message text is never written to the audit log (length and sha8 only). `docs/ref/auth.md` «Agent messages under the engine».
 
 **Host permission requests (`VT_AUTHZ_ENFORCE=peer`, off by default).** The same inbox also lists requests made by `fsh host allow-control|allow-agent` (`kind:"peer"`, id `pr-…`, `change` = the requested action, `target.name` = the Mac's id); `POST …/requests/{request_id}/decision` applies (`allow`) or refuses (`deny`) one. Only a person decides — `allow-control` needs a re-authenticated person (403 `elevation_required` otherwise). The response carries `grantId` (`pg-<id>` for the control level, `pm-<id>` for agent messages). See `docs/ref/auth.md` «Other Macs under the engine».
+
+### Shared machine token (`VT_AUTHZ_ENFORCE=legacy`, off by default)
+
+With the flag on, the shared machine token (`VT_AUTH_TOKEN`) is no longer an all-purpose key. A request counts as a machine-token request when it is authenticated by `Authorization: Bearer`, a cookie whose value is the token, or `?token=`; browser login sessions and the unix socket are unaffected.
+
+| Situation | Answer |
+|---|---|
+| Machine token on a (method, path) listed in the «Unix socket» table below | Works as before (and is counted in the 24h usage line of `fsh doctor`) |
+| Machine token on any other route (`/api/sessions/{id}/keys`, `/api/queue` writes, the host operation routes, file and git writes, WebSockets …) | **403 `legacy_token_scope`** `{error, reason}`; the reason points at the unix socket or the web login. Counted separately for `fsh doctor` |
+| `?token=…` on any protected route | **400 `token_query_unsupported`** (valid or not) |
+| The token value sent as the `vt_session` cookie | **401 `token_cookie_unsupported`** |
+| Token only, no web password: a call that would create an approval request (session sharing, agent messages to an unrelated session, `fsh host allow-*`) | **403 `approval_unavailable_no_password`**; set a password with `fsh password`. Grants that already exist keep working |
+| Token only, no web password: a signed cookie | Authenticated, but not a person: person-only routes answer 403 `human_session_required` |
+
+A server with neither password nor token is unchanged. Access logs mask `token`-like query values. Details and how to migrate scripts: [`docs/ref/auth.md`](./docs/ref/auth.md) «Shared machine token».
 
 ### Unix socket
 

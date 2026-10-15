@@ -3149,5 +3149,15 @@ window.__VT_I18N = {
   "- deny-*: 접근을 줄이는 변경이라 바로 적용되고 감사 기록에 남습니다.": "- deny-*: lowers access, so it applies at once and is written to the audit log.",
   "- allow-*: 접근을 늘리는 변경이라 승인 요청만 만들어집니다. 웹 화면의 승인함에서 사람이 승인해야 적용되고, 이 명령으로는 승인할 수 없습니다.": "- allow-*: raises access, so it only creates an approval request. A person must approve it in the web inbox; this command cannot approve.",
   "서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.": "If the server is down, the socket is unusable or that setting is off, it writes ~/.vt/hosts.json directly as before.",
-  "주의: control(제어) 등급은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다.": "Note: the control level means that Mac can type commands into this Mac's terminals — the same as a remote shell."
+  "주의: control(제어) 등급은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다.": "Note: the control level means that Mac can type commands into this Mac's terminals — the same as a remote shell.",
+  "URL 의 ?token= 은 더 이상 받지 않습니다 — 비밀번호로 로그인하거나 fsh mobile 로 접속하세요": "?token= in the URL is no longer accepted — log in with the password or connect with fsh mobile",
+  "공용 기계 토큰으로는 이 API 를 쓸 수 없습니다 — 같은 맥에서는 fsh 명령(unix socket)을, 브라우저에서는 비밀번호 로그인을 쓰세요": "The shared machine token cannot use this API — on the same Mac use the fsh command (unix socket), in a browser log in with the password",
+  "공용 토큰": "Shared token",
+  "기계 토큰을 세션 쿠키로 쓰는 방식은 더 이상 받지 않습니다 — 비밀번호로 로그인하거나 fsh mobile 로 접속하세요": "Using the machine token as a session cookie is no longer accepted — log in with the password or connect with fsh mobile",
+  "범위 밖 거절 {n}건 (legacy_token_scope)": "{n} refused as out of scope (legacy_token_scope)",
+  "범위 밖 거절 {n}건 (최근 24h): {path} — {ua}. unix socket(fsh 명령) 또는 로그인으로 옮기세요": "{n} refused as out of scope (last 24h): {path} — {ua}. Move it to the unix socket (fsh command) or a login",
+  "범위 밖 거절 없음 (최근 24h)": "No out-of-scope refusals (last 24h)",
+  "승인 기능": "Approvals",
+  "웹 로그인 비밀번호가 없어 승인이 필요한 에이전트·peer 기능이 꺼져 있습니다 — 'fsh password' 로 설정하세요": "Agent and peer features that need an approval are off because no web login password is set — set one with 'fsh password'",
+  "웹 로그인 비밀번호가 없어 승인할 사람이 없습니다 — fsh password 로 비밀번호를 설정하세요": "No web login password is set, so there is nobody who can approve — set one with fsh password"
 };

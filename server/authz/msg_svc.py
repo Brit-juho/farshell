@@ -38,7 +38,7 @@ from typing import Iterable, Optional
 
 from i18n import tr
 
-from . import approvals, audit, engine, flags, limits, migrate, store
+from . import approvals, audit, engine, flags, legacy_gate, limits, migrate, store
 from . import principals as P
 from . import scopes as S
 from .errors import ShareError
@@ -388,6 +388,7 @@ def request_access(sender_key: str, sender_name: str, recv_key: str, recv_name: 
     now = time.time()
     if not (_safe_key(sender_key) and _safe_key(recv_key)):
         raise ShareError("bad_target", tr("세션 key 가 올바르지 않습니다"), 400)
+    legacy_gate.require_approval_available()      # 승인할 사람(웹 비밀번호)이 없으면 보류로 두지 않고 이유를 알린다
     from . import deleg_svc
     lineage = deleg_svc.lineage_of(sender_key)            # 락 밖에서 — 장부를 읽는다
     with store.txn() as docs:

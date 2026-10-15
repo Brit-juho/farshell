@@ -192,6 +192,7 @@ fsh queue clear                 # 전체 비우기
 | 13 | 터미널 앱 | 감지된 앱 목록 + 현재 `TERM_PROGRAM` |
 | 14 | Tailscale | 설치/연결 상태 |
 | 15 | unix socket | `~/.vt/run/fsh.sock` 상태(켜짐 / 건너뜀 / 자가 시험 실패), 권한, 최근 24시간 기계 토큰 요청 수. `VT_AUTHZ_SOCKET=0`이면 클라이언트가 소켓을 건너뛰고 토큰만 씁니다. `fsh status`에도 한 줄로 나옵니다 |
+| 16 | 공용 토큰 | `VT_AUTHZ_ENFORCE=legacy`일 때만: 최근 24시간 동안 범위 밖이라 거절된(403 `legacy_token_scope`) 기계 토큰 요청 수를 경로·user agent별로 보여 줍니다. 어느 외부 스크립트를 소켓이나 로그인으로 옮겨야 하는지 알 수 있습니다. 토큰만 있고 웹 비밀번호가 없는 서버에서는 승인이 필요한 에이전트·peer 기능이 `fsh password` 설정 전까지 꺼져 있다는 안내도 나옵니다 |
 
 ---
 

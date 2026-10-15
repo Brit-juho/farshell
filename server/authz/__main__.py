@@ -243,11 +243,30 @@ def sock_status(argv: list[str]) -> int:
         _p(json.dumps(r, ensure_ascii=False))
     else:
         _p(f"{r['state']}|{r['path']}|selftest={r['selftest']}|perms={r['perms']}|dir={r['dir_perms']}|"
-           f"reachable={r['reachable']}|legacy24h={r['legacy_token_24h']}|{r['reason']}")
+           f"reachable={r['reachable']}|legacy24h={r['legacy_token_24h']}|denied24h={r['legacy_denied_24h']}|"
+           f"legacy={int(r['legacy_enforced'])}|nopw={int(r['approval_unavailable'])}|{r['reason']}")
+    return 0
+
+
+def legacy_denied(argv: list[str]) -> int:
+    """`python -m authz legacy-denied [--json]` — 최근 24h 에 `legacy_token_scope` 로 거절된 (경로, UA) 별 횟수. fsh doctor 가 쓴다."""
+    ap = argparse.ArgumentParser(prog="authz legacy-denied")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--limit", type=int, default=8)
+    args = ap.parse_args(argv)
+    from . import legacy_use
+    rows = legacy_use.denied_top_24h(args.limit)
+    if args.json:
+        _p(json.dumps(rows, ensure_ascii=False))
+    else:
+        for r in rows:
+            _p(f"{r['n']}|{r['path'].replace('|', '/')}|{r['ua'].replace('|', '/')}")
     return 0
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "legacy-denied":
+        sys.exit(legacy_denied(sys.argv[2:]))
     if len(sys.argv) > 1 and sys.argv[1] == "migrate-auth":
         sys.exit(main(sys.argv[2:]))
     if len(sys.argv) > 1 and sys.argv[1] == "store-status":

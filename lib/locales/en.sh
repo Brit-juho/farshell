@@ -239,6 +239,7 @@ _t_en_lookup() {
     '공개키 형식이 아님 (ssh-ed25519/ssh-rsa/ecdsa-sha2-*로 시작해야 함)') _T_OUT='Not a valid public key (must start with ssh-ed25519, ssh-rsa or ecdsa-sha2-*)' ;;
     '공개키를 ~/.ssh/authorized_keys에 추가했습니다') _T_OUT='Added the public key to ~/.ssh/authorized_keys' ;;
     '공개하지 않으려면: fsh start --network tailscale   (또는 lan / localhost)') _T_OUT='To keep it private: fsh start --network tailscale   (or lan / localhost)' ;;
+    '공용 토큰') _T_OUT='Shared token' ;;
     '교체 실패 (원본 유지)') _T_OUT='Replace failed (original kept)' ;;
     '구 iTerm2 프로필 제거 (Guid 변경으로 인한 중복 방지) → {path}') _T_OUT='Removed the old iTerm2 profile (avoids duplicates after the Guid change) → {path}' ;;
     '구 프로필 제거 → {path} (Guid가 바뀌어 중복 방지)') _T_OUT='remove old profile → {path} (Guid changed; avoids duplicates)' ;;
@@ -314,6 +315,9 @@ _t_en_lookup() {
     '미설치 — 프런트엔드 빌드에 필요. macOS: '\''brew install node'\'', Linux: nodejs.org') _T_OUT='not installed — needed to build the frontend. macOS: '\''brew install node'\'', Linux: nodejs.org' ;;
     '미설치 — 회사망 등에서 SSH로 원격 접속 시 필요. https://tailscale.com/download') _T_OUT='not installed — needed for SSH access from restricted networks. https://tailscale.com/download' ;;
     '미연동 — 비밀번호만으로 새 기기도 접속 가능 (등록 기기 {n}개). '\''fsh otp setup'\''') _T_OUT='not enabled — new devices can sign in with the password alone ({n} device(s) registered). '\''fsh otp setup'\''' ;;
+    '범위 밖 거절 {n}건 (legacy_token_scope)') _T_OUT='{n} refused as out of scope (legacy_token_scope)' ;;
+    '범위 밖 거절 {n}건 (최근 24h): {path} — {ua}. unix socket(fsh 명령) 또는 로그인으로 옮기세요') _T_OUT='{n} refused as out of scope (last 24h): {path} — {ua}. Move it to the unix socket (fsh command) or a login' ;;
+    '범위 밖 거절 없음 (최근 24h)') _T_OUT='No out-of-scope refusals (last 24h)' ;;
     '변경 후 '\''fsh stop && fsh voice'\''로 daemon 재시작 필요') _T_OUT='After changing it, restart the daemon with '\''fsh stop && fsh voice'\''' ;;
     '변경: fsh hotkey set voice <ctrl+shift+x>') _T_OUT='Change: fsh hotkey set voice <ctrl+shift+x>' ;;
     '변경: fsh terminal set <{choices}>   (되돌리기: fsh terminal unset)') _T_OUT='Change: fsh terminal set <{choices}>   (revert: fsh terminal unset)' ;;
@@ -420,6 +424,7 @@ _t_en_lookup() {
     '소켓:       ') _T_OUT='Socket:     ' ;;
     '수동 입력용 키:') _T_OUT='Key for manual entry:' ;;
     '스크롤백 잔여 로그') _T_OUT='Leftover scrollback logs' ;;
+    '승인 기능') _T_OUT='Approvals' ;;
     '시스템 설정 → 개인정보 보호 및 보안 → 자동화 에서') _T_OUT='In System Settings -> Privacy & Security -> Automation,' ;;
     '시크릿 생성 실패') _T_OUT='Couldn'\''t generate the secret' ;;
     '실시간 확인: tail -f {path}') _T_OUT='Follow live: tail -f {path}' ;;
@@ -475,6 +480,7 @@ _t_en_lookup() {
     '웹 로그인 비밀번호 설정 완료 — 해시만 저장(원문 미저장)') _T_OUT='Web login password set — only the hash is stored (never the plain text)' ;;
     '웹 로그인 비밀번호 설정됨 (fsh password)') _T_OUT='web login password set (fsh password)' ;;
     '웹 로그인 비밀번호 해제 (VT_AUTH_PASSWORD_HASH 제거)') _T_OUT='Web login password cleared (VT_AUTH_PASSWORD_HASH removed)' ;;
+    '웹 로그인 비밀번호가 없어 승인이 필요한 에이전트·peer 기능이 꺼져 있습니다 — '\''fsh password'\'' 로 설정하세요') _T_OUT='Agent and peer features that need an approval are off because no web login password is set — set one with '\''fsh password'\''' ;;
     '위험을 감수하고 그대로 진행하려면: fsh start --force') _T_OUT='To proceed at your own risk: fsh start --force' ;;
     '위험한 포트가 공개 중:{ports} — 원격 제어 수단이 될 수 있습니다. '\''fsh tunnel unexpose <port>'\''') _T_OUT='risky ports are public:{ports} — they can give remote control. Run '\''fsh tunnel unexpose <port>'\''' ;;
     '위험한 포트라 노출하지 않았습니다. 정말 열려면 --force를 붙이세요.') _T_OUT='Not exposed: this port is risky. Add --force if you really want to open it.' ;;

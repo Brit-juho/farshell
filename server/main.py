@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import hmac
 import logging
 import os
 import re
@@ -31,6 +32,7 @@ _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 
 import auth
 from authz import hooks as authz_hooks
+from authz import legacy_gate as authz_legacy_gate
 from authz import legacy_use as authz_legacy_use
 from authz import sock as authz_sock
 import file_store
@@ -82,6 +84,9 @@ FRONTEND_DIR = str(BASE_DIR / "frontend")
 # ---------------------------------------------------------------------------
 
 _SECRET_QS_RE = re.compile(r"((?:token|ticket|otp)=)[^&\s\"']+", re.IGNORECASE)
+# `legacy` 강제 시: 이름에 token 이 들어간 모든 쿼리(access_token= …)와 secret/password/key 류도 가린다.
+_SECRET_QS_WIDE_RE = re.compile(
+    r"((?<=[?&])[\w.-]*(?:token|ticket|otp|secret|passw(?:or)?d|apikey|api_key|auth)[\w.-]*=)[^&\s\"']+", re.IGNORECASE)
 
 
 class _RedactSecretsFilter(logging.Filter):
@@ -93,14 +98,20 @@ class _RedactSecretsFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        wide = authz_legacy_gate.active()
         if isinstance(record.args, tuple):
             record.args = tuple(
-                _SECRET_QS_RE.sub(r"\1***", a) if isinstance(a, str) else a
+                _redact(a, wide) if isinstance(a, str) else a
                 for a in record.args
             )
         if isinstance(record.msg, str):
-            record.msg = _SECRET_QS_RE.sub(r"\1***", record.msg)
+            record.msg = _redact(record.msg, wide)
         return True
+
+
+def _redact(text: str, wide: bool) -> str:
+    text = _SECRET_QS_RE.sub(r"\1***", text)
+    return _SECRET_QS_WIDE_RE.sub(r"\1***", text) if wide else text
 
 
 for _name in ("uvicorn.access", "uvicorn.error"):
@@ -152,6 +163,12 @@ class TokenAuthMiddleware:
             # 이 표는 검사하지 않는다 — 사람이 맞춰야 한다).
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
+        legacy_on = authz_legacy_gate.active()      # VT_AUTHZ_ENFORCE=legacy — 꺼짐이면 아래 분기는 전부 건너뛴다
+        if legacy_on:
+            rejected = self._legacy_transport_reject(request)
+            if rejected is not None:
+                await rejected(scope, receive, send)
+                return
         token = (
             request.cookies.get("vt_session", "")
             or request.query_params.get("token", "")
@@ -171,8 +188,24 @@ class TokenAuthMiddleware:
         kind = auth.request_kind(request)
         scope.setdefault("state", {})["auth_kind"] = kind
         if kind == auth.AUTH_MACHINE:       # 기계 토큰 사용 기록(경로·UA·횟수만)
+            if legacy_on and not authz_legacy_gate.scope_allowed(scope.get("method", "GET"), path):
+                # H1 — 기계 토큰은 소켓 허용표의 (메서드, 경로)만. 거절도 세어 어느 외부 스크립트를 옮길지 보이게 한다.
+                authz_legacy_use.record(path, request.headers.get("user-agent", ""), denied=True)
+                response = JSONResponse(authz_legacy_gate.scope_denied_body(), status_code=403)
+                await response(scope, receive, send)
+                return
             authz_legacy_use.record(path, request.headers.get("user-agent", ""))
         await self.app(scope, receive, send)
+
+    @staticmethod
+    def _legacy_transport_reject(request: Request):
+        """H4 — `legacy` 가 켜지면 `?token=` 과 「쿠키 값 = 기계 토큰」은 받지 않는다(유효 여부와 무관하게 같은 답)."""
+        if request.query_params.get("token", ""):
+            return JSONResponse(authz_legacy_gate.token_url_body(), status_code=400)
+        cookie = request.cookies.get("vt_session", "")
+        if cookie and auth.VT_AUTH_TOKEN and hmac.compare_digest(cookie, auth.VT_AUTH_TOKEN):
+            return JSONResponse(authz_legacy_gate.token_cookie_body(), status_code=401)
+        return None
 
 
 def _allowed_origins() -> set:
@@ -333,6 +366,9 @@ async def lifespan(_app: FastAPI):
             "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "
             "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
         )
+    notice = authz_legacy_gate.notice_for_start()
+    if notice:
+        logger.warning(notice)
     if auth.is_protected():
         n_dev = sum(1 for d in auth.list_devices() if not d.get("expired"))
         if auth.totp_enabled():

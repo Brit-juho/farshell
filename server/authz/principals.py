@@ -154,13 +154,13 @@ def from_request(request) -> Principal:
     shadow 차이로 드러난다(의도: 강제 전에 실제로 그런 요청이 있는지 본다).
     """
     import auth
-    from . import defaults
+    from . import defaults, flags
 
     protected = auth.is_protected()
     cookie, q, bearer = _tokens(request.cookies, request.query_params, request.headers)
     kind = auth.request_kind(request)
     if kind == auth.AUTH_SESSION:
-        if auth.VT_AUTH_PASSWORD_HASH or defaults.HUMAN_COOKIE_WITHOUT_PASSWORD:
+        if auth.VT_AUTH_PASSWORD_HASH or (defaults.HUMAN_COOKIE_WITHOUT_PASSWORD and not flags.enforced("legacy")):
             dev = auth.session_device(cookie) or ""
             import time as _t
             elev = bool(auth.VT_AUTH_PASSWORD_HASH) and auth.session_elevated_until(cookie) > int(_t.time())
@@ -170,6 +170,10 @@ def from_request(request) -> Principal:
         return legacy_token()
     if not protected:
         return open_server()
+    if (cookie and not q and not bearer and not auth.VT_AUTH_PASSWORD_HASH and flags.enforced("legacy")
+            and auth.session_device(cookie) is not None):
+        # H14 — 비밀번호 없이 토큰만 있는 서버의 서명 쿠키: 사람이 아니고, 옛날처럼 기계 토큰 수준으로만 쓴다.
+        return legacy_token()
     # 미들웨어가 통과시키는(=check_request 참) 요청인데 종류를 못 정했다 -> 모호.
     token = cookie or q or bearer
     if token and auth.check_request(token):

@@ -213,6 +213,7 @@ contract 5). The few that decide how you reach this Mac:
 | 13 | Terminal app | Detected app list + current `TERM_PROGRAM` |
 | 14 | Tailscale | Install/connection status |
 | 15 | unix socket | `~/.vt/run/fsh.sock` state (listening / skipped / failed self-test), permissions, and machine-token requests in the last 24h. `VT_AUTHZ_SOCKET=0` makes clients skip the socket and use the token only. `fsh status` shows the same one line |
+| 16 | shared token | Only with `VT_AUTHZ_ENFORCE=legacy`: the number of machine-token requests refused as out of scope (403 `legacy_token_scope`) in the last 24h, listed per route and user agent so you can see which outside script still needs to move to the socket or a login. On a server with a token but no web password it also says that approval-needing agent/peer features are off until `fsh password` is set |
 
 ---
 

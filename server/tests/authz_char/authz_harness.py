@@ -390,6 +390,15 @@ class World:
         import share_identity
         return share_identity.Caller(sid=s.sid, created=s.created, name=s.name, pane_id=s.pane)
 
+    def _request_access(self, snap, tgt):
+        """상태를 **미리 만들어 두는** 호출 — 승인 요청은 「그 요청이 이미 있던 상황」을 깔기 위한 것이라, 비밀번호 없는 서버에서
+        새 승인 요청을 막는 `legacy` 문(`legacy_gate`)은 건너뛴다(시험 대상은 이 뒤의 요청이다)."""
+        import agent_share
+        from authz import legacy_gate
+        with self.mp.context() as m:
+            m.setattr(legacy_gate, "approval_unavailable", lambda: False)
+            return agent_share.request_access(snap, self.caller_obj(self.agent_a), tgt, agent_share.KIND_READ)
+
     def seed(self, path: str, body) -> None:
         """경로·본문의 `{rid}`·`{gid}`·`{ticket}` 자리를 채울 상태를 그때 만든다."""
         blob = path + json.dumps(body, default=str) if not isinstance(body, bytes) else path
@@ -397,7 +406,7 @@ class World:
         if "{rid}" in blob or "{gid}" in blob:
             snap = agent_share.snapshot()
             tgt = next(s for s in snap.values() if s.name == "target")
-            req, _ = agent_share.request_access(snap, self.caller_obj(self.agent_a), tgt, agent_share.KIND_READ)
+            req, _ = self._request_access(snap, tgt)
             self.subs["rid"] = req["id"]
             if "{gid}" in blob:
                 self.subs["gid"] = agent_share.decide(req["id"], "allow", None, snap)["grant"]["id"]
@@ -410,7 +419,7 @@ class World:
         import agent_share
         snap = agent_share.snapshot()
         tgt = next(s for s in snap.values() if s.name == "target")
-        req, _ = agent_share.request_access(snap, self.caller_obj(self.agent_a), tgt, agent_share.KIND_READ)
+        req, _ = self._request_access(snap, tgt)
         agent_share.decide(req["id"], "allow", None, snap)
 
     def fill(self, s: str) -> str:
