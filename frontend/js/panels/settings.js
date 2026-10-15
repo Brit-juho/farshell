@@ -18,6 +18,7 @@ import { renderVoiceSection, cleanupVoiceClients } from './settings/sections/voi
 import { renderAppearanceSection } from './settings/sections/appearance.js';
 import { renderAgentsSection } from './settings/sections/agents.js';
 import { renderSecuritySection } from './settings/sections/security.js';
+import { renderPermissionsSection } from './settings/sections/permissions.js';
 import { renderAboutSection } from './settings/sections/about.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
@@ -104,6 +105,7 @@ const SECTIONS = [
   // 기본 6스킨 칩(2026-09-18부터 이 탭이 유일한 자리 — 위 주석 참고).
   // 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
   { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식을 고릅니다.'), custom: renderAppearanceSection },
+  { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 허용된 권한, 감사 기록을 봅니다.'), custom: renderPermissionsSection },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.'), custom: renderSecuritySection },
   // N13(80-multihost-agents.md §3) — 토글 자체는 스키마 항목이지만, 디스크
   // 사용량은 서버에 물어봐야 하는 값이라(보안 섹션과 같은 이유로) custom.
@@ -120,6 +122,7 @@ const SEARCH_ITEMS = [
   ['agents', t('에이전트 감지 상태')],
   ['keymap', t('단축키와 터미널 전달')],
   ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('파일 뷰어 표시 방식')],
+  ['permissions', t('승인 대기')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
   ['security', t('로그인과 OTP')], ['security', t('등록 기기')], ['security', t('로그아웃')],
   ['about', t('에이전트 훅')], ['about', t('사용량 공급자')], ['about', t('버전과 진단')],
 ].map(([sectionId, label]) => ({ sectionId, label }));
@@ -136,6 +139,10 @@ const SEARCH_ALIASES = {
   [t('받아 둔 항목 관리')]: t('모델 삭제 지우기 용량 저장 공간 엔진 파일'),
   [t('맥에서 음성만 쓰기')]: t('로컬 음성 입력 마이크'),
   [t('등록 기기')]: t('디바이스 장치'),
+  [t('승인 대기')]: t('승인함 인박스 에이전트 요청 허용 거부'),
+  [t('허용된 권한')]: t('grant 회수 철회 프리셋 보기 협업 운전 제어'),
+  [t('감사 기록')]: t('audit 로그 체인 거부 기록'),
+  [t('비상 정지')]: t('panic 모든 에이전트 권한 회수'),
   [t('화면 언어')]: t('언어 language 한국어 영어 english'),
   [t('에이전트 훅')]: 'hook codex claude',
 };

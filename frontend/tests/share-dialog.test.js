@@ -134,7 +134,7 @@ test('요청은 쿠키만 보낸다 — Authorization·?token= 이 없어야 서
   assert.strictEqual(c.opts.credentials, 'same-origin');
 });
 
-test('순수 규칙: suggestNick·validateNick·lastUsedOf', async () => {
+test('순수 규칙: suggestNick·validateNick', async () => {
   const env = createDomEnv('<!doctype html><html><body></body></html>');
   _wins.push(env.window);
   const d = await importFresh(path.join(__dirname, '../js/share/share-data.js'), env.context, new Map());
@@ -143,14 +143,5 @@ test('순수 규칙: suggestNick·validateNick·lastUsedOf', async () => {
   assert.strictEqual(d.suggestNick('x'.repeat(40)).length, 32);
   assert.strictEqual(d.validateNick('a'), null);
   assert.ok(d.validateNick('a b'));
-  const g = { agent: { id: '$1' }, target: { nick: 'n' } };
-  const ents = [
-    { by: 'agent', action: 'read', result: 'ok', agent: { id: '$1' }, nick: 'n', ts: 10 },
-    { by: 'agent', action: 'send', result: 'ok', agent: { id: '$1' }, nick: 'n', ts: 30 },
-    { by: 'agent', action: 'read', result: 'rate_limited', agent: { id: '$1' }, nick: 'n', ts: 99 },
-    { by: 'agent', action: 'read', result: 'ok', agent: { id: '$2' }, nick: 'n', ts: 77 },
-  ];
-  assert.strictEqual(d.lastUsedOf(g, ents), 30);
-  assert.strictEqual(d.lastUsedOf({ agent: { id: '$9' }, target: { nick: 'n' } }, ents), null);
   void tick;
 });

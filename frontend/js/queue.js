@@ -39,6 +39,15 @@ export function syncRunButton(root, count) {
 // 같은 패널이 dock에도 동시에 떠 있을 수 있으므로(사용자 결정, 2026-09-20)
 // 이 함수 안의 모든 DOM 조회는 전역 id가 아니라 `ctx`(자기 인스턴스)를 거친다.
 // 그 전환이 이 패널 이식의 전부다 — 나머지 로직은 손대지 않았다.
+/** 막힌 항목의 한 줄. 권한 재확인으로 막힌 항목은 서버가 사람이 읽는 문구(blocked_text)를 함께 주므로 코드 대신 그것을 보인다.
+ * retry_at이 있으면 서버 점검(queue_store.sweep)이 알아서 다시 시도한다. */
+export function blockedLine(it) {
+  const reason = it.blocked_text || it.blocked_reason;
+  return it.retry_at
+    ? t('차단됨: {reason} — 자동 재시도 ({n}회째)', { reason, n: it.attempts || 0 })
+    : t('차단됨: {reason}', { reason });
+}
+
 export function showQueue(opts = {}) {
       const panel = openPanel({
         paneHost: opts.paneHost || null,
@@ -178,10 +187,7 @@ export function showQueue(opts = {}) {
         if (it.blocked_reason) {
           const sub = document.createElement('div');
           sub.className = 'vt-q-sub';
-          // retry_at이 있으면 서버 점검(queue_store.sweep)이 알아서 다시 시도한다.
-          sub.textContent = it.retry_at
-            ? t('차단됨: {reason} — 자동 재시도 ({n}회째)', { reason: it.blocked_reason, n: it.attempts || 0 })
-            : t('차단됨: {reason}', { reason: it.blocked_reason });
+          sub.textContent = blockedLine(it);
           meta.appendChild(sub);
         } else if (it.status === 'sending') {
           const sub = document.createElement('div');

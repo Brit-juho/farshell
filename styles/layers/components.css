@@ -1302,57 +1302,101 @@
     font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-ui);
   }
 
-  /* 승인 모달 */
-  .vt-share-count {
+  /* 승인함 · 권한 · 감사 (authz/*) — 토큰만 쓰고, 액센트는 쓰지 않는다(상태색은 높은 권한·경고에만). */
+  .vt-authz-count {
     margin-left: auto;
     margin-right: calc(var(--spacing) * 2);
     color: var(--color-sub);
     font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui);
     font-variant-numeric: tabular-nums;
   }
-  .vt-share-ask {
-    margin: 0 0 calc(var(--spacing) * 2);
+  .vt-authz-ask {
+    margin: 0 0 calc(var(--spacing) * 3);
     color: var(--color-txt);
     font: var(--weight-semibold) var(--fs-md) / var(--leading-tight) var(--font-ui);
     overflow-wrap: anywhere;
   }
-  .vt-share-help { margin: 0 0 calc(var(--spacing) * 3); color: var(--color-txt); font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui); }
-  .vt-share-facts {
+  .vt-authz-elevated {
+    margin: 0 0 calc(var(--spacing) * 3);
+    color: var(--color-st-waiting);
+    font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui);
+  }
+  .vt-authz-elevated strong { font-weight: var(--weight-semibold); }
+  .vt-authz-elevated .vt-authz-code { display: block; margin-top: 2px; color: var(--color-txt); }
+  .vt-authz-approval-body[data-elevated="1"] .vt-authz-ask { color: var(--color-txt); }
+  .vt-authz-facts {
     display: grid;
-    grid-template-columns: max-content 1fr;
+    grid-template-columns: max-content minmax(0, 1fr);
     gap: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
     margin: 0 0 calc(var(--spacing) * 3);
     font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
   }
-  .vt-share-facts dt { color: var(--color-sub); }
-  .vt-share-facts dd { margin: 0; color: var(--color-txt); overflow-wrap: anywhere; }
-  .vt-share-err { min-height: 0; margin: 0 0 calc(var(--spacing) * 2); color: var(--color-st-error); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
-  .vt-share-err:empty { display: none; }
-  .vt-share-acts { flex-wrap: wrap; }
-  .vt-share-later { display: flex; justify-content: flex-start; margin-top: calc(var(--spacing) * 3); }
-
-  /* 권한 패널 */
-  .vt-share-h { margin: 0 0 calc(var(--spacing) * 2); color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); letter-spacing: var(--tracking-wide); }
-  .vt-share-pending { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--spacing) * 3); margin: 0 0 calc(var(--spacing) * 4); color: var(--color-st-waiting); font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui); }
-  .vt-share-grants { list-style: none; margin: 0 0 calc(var(--spacing) * 5); padding: 0; }
-  .vt-share-grant { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: calc(var(--spacing) * 2) calc(var(--spacing) * 3); padding: calc(var(--spacing) * 2.5) 0; border-top: 1px solid var(--color-line); }
-  .vt-share-grant:first-child { border-top: 0; }
-  .vt-share-grant-main { min-width: 0; flex: 1 1 200px; }
-  .vt-share-grant-who { display: flex; flex-wrap: wrap; gap: calc(var(--spacing) * 1.5); align-items: baseline; color: var(--color-txt); font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui); overflow-wrap: anywhere; }
-  .vt-share-to { color: var(--color-sub); font-weight: var(--weight-normal); font-size: var(--fs-xs); }
-  .vt-share-grant-meta { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
-  .vt-share-grant-acts { display: flex; gap: calc(var(--spacing) * 2); flex-wrap: wrap; }
-  .vt-share-empty { margin: 0 0 calc(var(--spacing) * 5); color: var(--color-sub); font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui); }
-  .vt-share-audit { margin: 0 0 calc(var(--spacing) * 3); padding: 0; list-style: none; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-mono); font-variant-numeric: tabular-nums; }
-  .vt-share-audit li { overflow-wrap: anywhere; }
+  .vt-authz-facts dt { color: var(--color-sub); }
+  .vt-authz-facts dd { margin: 0; color: var(--color-txt); overflow-wrap: anywhere; }
+  .vt-authz-reason { white-space: pre-wrap; }
+  .vt-authz-sub { display: block; color: var(--color-sub); }
+  .vt-authz-audit-who .vt-authz-sub,
+  .vt-authz-who + .vt-authz-sub { display: inline; margin: 0 calc(var(--spacing) * 1.5); font-size: var(--fs-xs); font-weight: var(--weight-normal); }
+  .vt-authz-code { display: inline-block; max-width: 100%; color: var(--color-sub); font-family: var(--font-mono); overflow-wrap: anywhere; }
+  .vt-authz-facts .vt-authz-code { color: var(--color-txt); }
+  .vt-authz-err { min-height: 0; margin: 0 0 calc(var(--spacing) * 2); color: var(--color-st-error); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-authz-err:empty { display: none; }
+  .vt-authz-acts { flex-wrap: wrap; }
+  .vt-authz-why, .vt-authz-note {
+    margin: calc(var(--spacing) * 2) 0 0;
+    color: var(--color-sub);
+    font: var(--weight-normal) var(--fs-xs) / var(--leading-body) var(--font-ui);
+  }
+  .vt-authz-warn { margin: 0 0 calc(var(--spacing) * 3); color: var(--color-st-error); font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui); }
+  .vt-authz-later { display: flex; justify-content: flex-start; margin-top: calc(var(--spacing) * 3); }
+  .vt-authz-host { min-width: 0; }
+  .vt-authz-h { margin: calc(var(--spacing) * 5) 0 calc(var(--spacing) * 1); color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); letter-spacing: var(--tracking-wide); }
+  .vt-authz-empty { margin: 0 0 calc(var(--spacing) * 3); color: var(--color-sub); font: var(--weight-normal) var(--fs-sm) / var(--leading-body) var(--font-ui); }
+  .vt-authz-rows, .vt-authz-audit, .vt-authz-builtin { list-style: none; margin: 0 0 calc(var(--spacing) * 3); padding: 0; }
+  .vt-authz-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: calc(var(--spacing) * 2) calc(var(--spacing) * 3); padding: calc(var(--spacing) * 2.5) 0; border-top: 1px solid var(--color-line); }
+  .vt-authz-row:first-child { border-top: 0; }
+  .vt-authz-row-main { min-width: 0; flex: 1 1 220px; }
+  .vt-authz-row-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: calc(var(--spacing) * 2); color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-authz-preset { color: var(--color-txt); font-weight: var(--weight-semibold); font-size: var(--fs-sm); }
+  .vt-authz-flag { color: var(--color-st-waiting); font-weight: var(--weight-semibold); }
+  .vt-authz-row-ask { margin-top: 2px; color: var(--color-txt); font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui); overflow-wrap: anywhere; }
+  .vt-authz-who { color: var(--color-txt); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+  .vt-authz-row-detail { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-mono); overflow-wrap: anywhere; }
+  .vt-authz-row-meta { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-authz-row-acts { display: flex; gap: calc(var(--spacing) * 2); flex-wrap: wrap; }
+  .vt-authz-builtin li { display: flex; flex-direction: column; gap: 2px; padding: calc(var(--spacing) * 2) 0; border-top: 1px solid var(--color-line); }
+  .vt-authz-builtin li:first-child { border-top: 0; }
+  .vt-authz-filters { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--spacing) * 2); margin: 0 0 calc(var(--spacing) * 3); }
+  .vt-authz-in { flex: 1 1 140px; min-width: 0; box-sizing: border-box; min-height: 28px; padding: 0 calc(var(--spacing) * 2); color: var(--color-txt); background: var(--color-bg-2); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui); }
+  .vt-authz-in:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 1px; }
+  .vt-authz-check { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-authz-check input { accent-color: var(--color-acc); }
+  .vt-authz-chain { margin: 0 0 calc(var(--spacing) * 3); color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-authz-chain[data-state="broken"] { color: var(--color-st-error); font-weight: var(--weight-semibold); }
+  .vt-authz-audit-row { padding: calc(var(--spacing) * 2) 0; border-top: 1px solid var(--color-line); }
+  .vt-authz-audit-row:first-child { border-top: 0; }
+  .vt-authz-audit-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: calc(var(--spacing) * 2); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-authz-audit-ts { color: var(--color-sub); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .vt-authz-audit-act { color: var(--color-txt); font-weight: var(--weight-semibold); }
+  .vt-authz-audit-out { color: var(--color-sub); }
+  .vt-authz-audit-who { color: var(--color-txt); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-mono); overflow-wrap: anywhere; }
+  .vt-authz-badge {
+    position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box;
+    border-radius: var(--radius-full); background: var(--color-bg-3); color: var(--color-st-waiting);
+    border: 1px solid var(--color-line-strong); font: var(--weight-semibold) 9px / 13px var(--font-ui); text-align: center;
+    font-variant-numeric: tabular-nums; pointer-events: none;
+  }
+  .vt-authz-badge[hidden] { display: none; }
+  #vt-rail-settings, .vt-dock-settings-btn, .vt-mnav-btn[data-mnav="more"] { position: relative; }
 
   @media (pointer: coarse) {
-    .vt-share-approval .vt-btn,
-    .vt-share-grant .vt-btn,
-    .vt-share-pending .vt-btn,
+    .vt-authz-approval .vt-btn,
+    .vt-authz-row .vt-btn,
+    .vt-authz-host .vt-btn,
     .vt-dialog .vt-share-ok,
     .vt-dialog .vt-share-cancel { --btn-h: 44px; }
-    .vt-share-later .vt-btn { --btn-h: 44px; }
+    .vt-authz-later .vt-btn { --btn-h: 44px; }
+    .vt-authz-in { min-height: 44px; }
     .vt-share-mode { min-height: 48px; }
   }
 }

@@ -470,6 +470,22 @@ as through the old `/api/agent/share/*` routes, which stay as shims. API detail:
 | Events | `authz_request`, `authz_resolved`, `authz_revoked` on `/ws-workspace` with ids and kinds only; the old `agent_share_request*` events are still sent for one release |
 | Panic | Revokes non-human grants through each kind's own revoke path, clears pending requests, lowers peer grants to view (the pairing stays) and closes open delegations; human defaults, share policy and logins are untouched. Audited per item plus one `authz.panic` row |
 
+### Inbox, grants and audit screens
+
+The web UI has one inbox for every kind. A decision window shows **one request at a time** (oldest first, no "allow all": it would approve
+requests that arrive later); the requester (with delegation lineage), target and exact scopes/conditions are shown verbatim, and the request is
+worded with the preset names. Choices are deny / once / this session; a kind that does not take once (`msg`, `peer`) shows the reason, a `share`
+request that the server refuses with `choice_unavailable` keeps the window open with the server's reason. The old approval modal's guards are kept:
+focus starts on deny, buttons are ignored for 400 ms after the window appears, Esc/backdrop/X mean "later" (nothing is sent). A request with
+`elevated` reasons is marked and allowing it re-asks for the password (the existing elevate prompt) when the server answers `elevation_required`.
+Events carry only ids and kinds, so the screen re-reads `GET /api/authz/approvals`; the old `agent_share_request*` events are used only until a
+new `authz_*` event has been seen, and a burst of both causes one re-read. The pending count is a badge on the settings buttons (rail, dock,
+phone nav).
+
+Settings > Permissions hosts the pending list, the grants list (filters go to the server; revoke asks for confirmation; built-in defaults are listed
+separately and cannot be revoked), the audit timeline (reverse chronological, filters, optional denials, a chain badge that is neutral when `ok` and a
+warning when `broken`; only whitelisted fields are drawn, never content) and the guarded emergency stop (two-step confirmation, then the elevate prompt).
+
 ## A device's sessions die with the device
 
 `session_device` used to check only that the bound device **still existed**. A device
