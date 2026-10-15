@@ -29,8 +29,11 @@ fsh_sock_usable() {
   case "$(printf '%s' "${VT_AUTHZ_SOCKET:-1}" | tr 'A-Z' 'a-z')" in 0|off|false|no) return 1 ;; esac
   local p; p="$(fsh_sock_path)"
   [ -S "$p" ] && [ -O "$p" ] || return 1
+  # GNU stat 에서 `-f` 는 "파일시스템 정보"라 인자를 파일로 읽다 실패하면서도 stdout 에 쓰레기를 남긴다 — 그래서 GNU(-c)를
+  # 먼저 시도하고, 결과가 3자리 8진수일 때만 받는다. BSD/macOS 는 -c 가 없어 실패 → -f '%Lp'.
   local mode
-  mode="$(stat -f '%Lp' "$p" 2>/dev/null || stat -c '%a' "$p" 2>/dev/null)" || return 1
+  mode="$(stat -c '%a' "$p" 2>/dev/null)"
+  case "$mode" in [0-7][0-7][0-7]) ;; *) mode="$(stat -f '%Lp' "$p" 2>/dev/null)" ;; esac
   case "$mode" in 600|400|700) return 0 ;; esac
   return 1
 }

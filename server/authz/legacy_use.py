@@ -50,7 +50,8 @@ def _flush_one(pending: dict, path_fn, before_minute: int) -> None:
     if not lines:
         return
     p = path_fn()
-    p.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    from . import store
+    store._ensure_dir(p.parent)
     try:
         if p.stat().st_size > MAX_BYTES:
             os.replace(p, p.with_name(p.name + ".1"))

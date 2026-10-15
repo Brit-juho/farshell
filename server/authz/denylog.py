@@ -80,11 +80,8 @@ def _rotate(p: Path) -> None:
 
 def _write_line(p: Path, rec: dict) -> None:
     line = (json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n").encode()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(p.parent, 0o700)
-    except OSError:
-        pass
+    from . import store
+    store._ensure_dir(p.parent)
     with store_lock.exclusive(p.with_name("denials.lock")):
         try:
             if p.exists() and p.stat().st_size + len(line) > MAX_BYTES:

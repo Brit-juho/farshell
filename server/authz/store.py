@@ -71,11 +71,39 @@ def _empty(name: str) -> dict:
 
 
 def _ensure_dir(d: Path) -> None:
-    d.mkdir(parents=True, exist_ok=True)
+    """`d` 와 새로 만든 모든 상위 디렉터리를 정확히 0700 으로 둔다(umask·부모 모드와 무관).
+
+    `mkdir(parents=True, mode=...)` 는 마지막 단계에만 mode 를 쓰고 그마저 umask 를 받는다 — 그래서 만든 디렉터리마다
+    직접 chmod 한다. 이미 있던 `authz/` 아래 디렉터리도 0700 으로 되돌린다(authz 밖의 기존 상위는 건드리지 않는다)."""
+    d = Path(d)
+    made = []
+    p = d
+    while not p.exists() and p != p.parent:
+        made.append(p)
+        p = p.parent
+    for q in reversed(made):
+        try:
+            q.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+    todo = list(made)
+    if d not in todo:
+        todo.append(d)
     try:
-        os.chmod(d, 0o700)
-    except OSError:
+        r = root()
+        if r == d or r in d.parents:
+            for q in (d, *d.parents):
+                if q not in todo:
+                    todo.append(q)
+                if q == r:
+                    break
+    except Exception:  # noqa: BLE001
         pass
+    for q in todo:
+        try:
+            os.chmod(q, 0o700)
+        except OSError:
+            pass
 
 
 def _read(name: str) -> tuple[dict, bool]:

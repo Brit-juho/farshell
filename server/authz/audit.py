@@ -127,11 +127,8 @@ def append(rec: dict, *, now: Optional[float] = None) -> dict:
         denylog.record(rec, now=now)
         return {**scrub(rec), "source": "denials"}
     p = path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(p.parent, 0o700)
-    except OSError:
-        pass
+    from . import store
+    store._ensure_dir(p.parent)
     now = time.time() if now is None else now
     with store_lock.exclusive(p.with_name("audit.lock")):
         last = _last_line(p)
