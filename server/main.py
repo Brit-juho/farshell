@@ -30,6 +30,7 @@ import vt_env as _vt_env
 _VT_BOUNDARY_APPLIED = _vt_env.apply_boundary_overrides()
 
 import auth
+from authz import hooks as authz_hooks
 import file_store
 import i18n
 import network_access
@@ -64,6 +65,7 @@ from routes.peer_relay import router as peer_relay_router
 from routes.host_relay import router as host_relay_router
 from routes.agent_msg import router as agent_msg_router
 from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
+from routes.authz import human_router as authz_human_router
 from routes.delegation import router as delegation_router, human_router as delegation_human_router
 
 logging.basicConfig(level=logging.INFO)
@@ -151,7 +153,9 @@ class TokenAuthMiddleware:
             authz = request.headers.get("authorization", "")
             if authz.startswith("Bearer "):
                 token = authz[7:]
-        if not auth.check_request(token):
+        authenticated = auth.check_request(token)
+        authz_hooks.middleware(request, authenticated)   # shadow(plan-2.6 1단계) — 응답 불변
+        if not authenticated:
             response = JSONResponse({"error": "unauthorized"}, status_code=401)
             await response(scope, receive, send)
             return
@@ -520,6 +524,7 @@ app.include_router(git_accounts_elevated_router)
 app.include_router(worktree_router)
 app.include_router(repos_router)
 app.include_router(security_router)
+app.include_router(authz_human_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)

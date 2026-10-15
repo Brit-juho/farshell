@@ -48,6 +48,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 import host_store
+from authz import hooks as authz_hooks
 from i18n import tr
 from routes.peer_protocol import (
     PeerDenied,
@@ -559,6 +560,7 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
 
     await ws.accept()
     can_control = grant.get("level") == host_store.LEVEL_CONTROL
+    authz_hooks.peer_ws_control(grant, tmux_name, can_control)   # shadow(plan-2.6 1단계)
     # 「연결된 화면」이 원격에서도 동작하려면 상대가 **자기 화면이 어느 것인지**
     # 지목할 수 있어야 한다(안 그러면 「이 화면만 남기기」가 자기 자신을 끊는다).
     # 그래서 화면 토큰을 상대가 정해 보내고, PTY 세션 id에 그대로 박는다:
@@ -653,6 +655,7 @@ async def peer_agent_message(request: Request, grant: dict, data: bytes):
     """
     import agent_msg
 
+    authz_hooks.peer_agent_messages(grant, bool(grant.get("agentMessages")))   # shadow(plan-2.6 1단계)
     if not grant.get("agentMessages"):
         return JSONResponse(
             {"error": "agent_messages_off", "reason":

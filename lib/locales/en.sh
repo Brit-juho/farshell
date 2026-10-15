@@ -343,6 +343,7 @@ _t_en_lookup() {
     '사용법: fsh hotkey disable <action>') _T_OUT='Usage: fsh hotkey disable <action>' ;;
     '사용법: fsh hotkey reset <action>') _T_OUT='Usage: fsh hotkey reset <action>' ;;
     '사용법: fsh hotkey set <action> <hotkey>') _T_OUT='Usage: fsh hotkey set <action> <hotkey>' ;;
+    '사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]') _T_OUT='Usage: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]' ;;
     '사용법: fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]') _T_OUT='Usage: fsh msg [log [conv-id]|agents|send <[host/]session> "text" [--reply <id>]]' ;;
     '사용법: fsh msg send <[호스트/]세션> "내용" [--reply <id>]') _T_OUT='Usage: fsh msg send <[host/]session> "text" [--reply <id>]' ;;
     '사용법: fsh pane report [--state idle|working|waiting|done] [--agent <이름>]') _T_OUT='Usage: fsh pane report [--state idle|working|waiting|done] [--agent <name>]' ;;

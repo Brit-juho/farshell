@@ -340,22 +340,35 @@ def role_of(caller_key: str) -> dict:
 
 def check_spawn(data: dict, parent_key: str, now: float) -> None:
     """모든 생성 경로가 지나는 단 하나의 관문(orca dispatch-depth와 같은 원칙). 락 안에서 부른다."""
+    err = _spawn_denial(data, parent_key, now)
+    from authz import hooks as authz_hooks   # shadow(plan-2.6 1단계) — 판정은 위 한 줄이 정한다
+    authz_hooks.deleg_spawn(err is None, parent_key, data, now, enabled=enabled(),
+                            max_open=MAX_OPEN_CHILDREN, per_min=SPAWN_PER_MIN)
+    if err is not None:
+        raise err
+
+
+def _spawn_denial(data: dict, parent_key: str, now: float) -> Optional[DelegationError]:
+    """check_spawn 의 판정 본체 — 거부면 그 오류, 통과면 None(검사 순서가 곧 오류 우선순위다)."""
     if not enabled():
-        raise DelegationError("spawn_disabled", "이 맥에서는 하위 세션 만들기가 꺼져 있습니다(VT_AGENT_SPAWN=0)", 403)
+        return DelegationError("spawn_disabled", "이 맥에서는 하위 세션 만들기가 꺼져 있습니다(VT_AGENT_SPAWN=0)", 403)
     if any(x["child"]["key"] == parent_key for x in data["items"]):
-        raise DelegationError("depth_limit", "하위 세션은 다시 하위 세션을 만들 수 없습니다. 직접 처리하세요. 다시 요청하지 마세요.", 403)
+        return DelegationError("depth_limit", "하위 세션은 다시 하위 세션을 만들 수 없습니다. 직접 처리하세요. 다시 요청하지 마세요.", 403)
     open_children = sum(1 for x in data["items"] if x["parent"]["key"] == parent_key and x["state"] in OPEN_STATES)
     if open_children >= MAX_OPEN_CHILDREN:
-        raise DelegationError("child_limit",
-                              f"열린 하위 세션이 이미 {MAX_OPEN_CHILDREN}개입니다. 끝난 위임을 close_delegation으로 닫거나 "
-                              f"직접 처리하세요. 다시 요청하지 마세요.", 429)
+        return DelegationError("child_limit",
+                               f"열린 하위 세션이 이미 {MAX_OPEN_CHILDREN}개입니다. 끝난 위임을 close_delegation으로 닫거나 "
+                               f"직접 처리하세요. 다시 요청하지 마세요.", 429)
     recent = [t for t in data["spawns"] if now - t < 60]
     if len(recent) >= SPAWN_PER_MIN:
-        raise DelegationError("rate_limited", "하위 세션을 너무 자주 만들고 있습니다. 1분 뒤에 다시 하세요.", 429)
+        return DelegationError("rate_limited", "하위 세션을 너무 자주 만들고 있습니다. 1분 뒤에 다시 하세요.", 429)
+    return None
 
 
 def _owned(data: dict, did: str, caller_key: str, role: str) -> dict:
     item = next((x for x in data["items"] if x["id"] == did), None)
+    from authz import hooks as authz_hooks   # shadow(plan-2.6 1단계)
+    authz_hooks.deleg_owned(not (item is None or item[role]["key"] != caller_key), did, caller_key, role, item)
     if item is None or item[role]["key"] != caller_key:
         # 남의 위임인지 없는 위임인지 구별해 알려주지 않는다.
         raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
@@ -560,6 +573,8 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
     with _locked():
         data = _read()
         mine = [x for x in data["items"] if x["child"]["key"] == caller_key]
+        from authz import hooks as authz_hooks   # shadow(plan-2.6 1단계)
+        authz_hooks.deleg_report(bool(mine), caller_key, mine)
         if not mine:
             raise DelegationError("not_delegated", "이 세션은 위임받은 하위 세션이 아닙니다", 403)
         item = next((x for x in mine if x["state"] == RUNNING), None)

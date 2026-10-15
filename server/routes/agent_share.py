@@ -29,6 +29,7 @@ from pydantic import BaseModel, ConfigDict
 
 import agent_share
 import auth
+from authz import hooks as authz_hooks
 import share_identity
 from i18n import tr
 from agent_share import ShareError
@@ -253,6 +254,7 @@ async def agent_read(request: Request):
         return _err(e)
     try:
         grant = await asyncio.to_thread(agent_share.get_grant, snap, me, target)
+        authz_hooks.agent_share("read", agent_share.effective(grant, target.share)["read"], grant, me, target, snap)
         if not agent_share.effective(grant, target.share)["read"]:
             req, created = await asyncio.to_thread(agent_share.request_access, snap, me, target, agent_share.KIND_READ)
             await asyncio.to_thread(agent_share.audit, "request", "pending" if created else "pending_dup",
@@ -288,6 +290,7 @@ async def agent_send(request: Request):
             # 읽기 전용 공유 — 승인 요청을 만들지 않고 즉시 거부한다(허용해 줄 수 없는 것을 묻지 않는다).
             raise ShareError("read_only_share", "이 공유는 읽기 전용입니다", 403)
         grant = await asyncio.to_thread(agent_share.get_grant, snap, me, target)
+        authz_hooks.agent_share("write", agent_share.effective(grant, target.share)["write"], grant, me, target, snap)
         if not agent_share.effective(grant, target.share)["write"]:
             req, created = await asyncio.to_thread(agent_share.request_access, snap, me, target, agent_share.KIND_WRITE)
             await asyncio.to_thread(agent_share.audit, "request", "pending" if created else "pending_dup",

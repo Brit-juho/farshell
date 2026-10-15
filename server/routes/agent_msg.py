@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 import agent_msg
 import host_store
+from authz import hooks as authz_hooks
 import pane_resolve
 import peer_client
 
@@ -71,6 +72,7 @@ async def send_message(request: Request):
 
     me = await asyncio.to_thread(host_store.get_self)
     if host in ("local", me["id"]) or host.lower() == (me.get("label") or "").lower():
+        authz_hooks.agent_msg_local(request, to_session)   # shadow(plan-2.6 1단계) — 지금은 인가 없음(D6)
         if not await _has_exact(to_session):
             return _err("session_not_found", f"이 맥에 '{to_session}' 세션이 없습니다", 404)
         if to_session == from_session:
