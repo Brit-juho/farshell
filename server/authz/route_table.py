@@ -242,6 +242,14 @@ _ROWS: tuple = (
     ("POST", "/api/authz/requests", sock_("authz.request")),
     ("GET", "/api/authz/requests", sock_()),
     ("GET", "/api/authz/my-grants", sock_()),
+    ("GET", "/api/authz/leases", human()),
+    ("DELETE", "/api/authz/leases/{lease_id}", human()),
+# --- routes/leases.py
+    ("POST", "/api/leases", sock_("fs.write", op="write")),
+    ("POST", "/api/leases/check", sock_()),
+    ("POST", "/api/leases/{lease_id}/renew", sock_()),
+    ("DELETE", "/api/leases/{lease_id}", sock_()),
+    ("GET", "/api/leases", sock_()),
 # --- routes/share.py
     ("POST", "/api/files/{file_id}/share", human(elevated=True)),
     ("DELETE", "/api/files/{file_id}/share/{share_id}", human(elevated=True)),

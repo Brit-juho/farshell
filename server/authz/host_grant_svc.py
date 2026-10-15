@@ -171,6 +171,11 @@ def change(actor: P.Principal, peer_id: str, action: str) -> dict:
                 raise ShareError("not_found", tr("'{id}' 를 허용 목록에서 찾을 수 없습니다", id=peer_id), 404)
             mirror(docs, pid, approved_by=actor.id, approved_via=S.VIA_MANUAL)
         host_store.audit(pid, "grant", True, f"{action} ({actor.short()})")
+        try:
+            from . import saga
+            saga.after_peer_deny(pid, actor)           # `lease` 플래그가 켜졌을 때만 일한다
+        except Exception as e:  # noqa: BLE001 — 회수는 이미 적용됐다. 남은 정리는 sweep 이 이어한다
+            logger.warning(f"peer 회수 정리 saga 시작 실패: {type(e).__name__}: {e}")
         return {"state": "applied", "change": action, "peer": {"id": pid, "label": g.get("label") or pid}}
     legacy_gate.require_approval_available()         # 승인할 사람(웹 비밀번호)이 없으면 보류로 두지 않고 이유를 알린다
     with store.txn() as docs:

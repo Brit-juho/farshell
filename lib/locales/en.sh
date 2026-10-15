@@ -131,6 +131,7 @@ _t_en_lookup() {
     'iTerm2 재시작 후 Profiles 메뉴에서 '\''fsh (FarShell)'\'' 선택') _T_OUT='Restart iTerm2, then pick '\''fsh (FarShell)'\'' in the Profiles menu' ;;
     'install-profiles 실패 — '\''fsh install-profiles'\'' 수동 실행 가능') _T_OUT='install-profiles failed - you can run '\''fsh install-profiles'\'' manually' ;;
     'lan 범위: 같은 네트워크에서만 접속 가능 (터널 없음)') _T_OUT='lan scope: reachable from the same network only (no tunnel)' ;;
+    'lease guard') _T_OUT='lease guard' ;;
     'localhost 범위: 이 맥에서만 접속 가능 (터널 없음)') _T_OUT='localhost scope: reachable from this Mac only (no tunnel)' ;;
     'localhost:{port} 에 응답하는 서비스가 없습니다 — 터널은 띄우지만 앱을 먼저 켜세요') _T_OUT='Nothing is responding on localhost:{port}. The tunnel will start anyway, but start your app first' ;;
     'localhost:{port} 터널 시작 중...') _T_OUT='Starting tunnel for localhost:{port}...' ;;
@@ -257,6 +258,7 @@ _t_en_lookup() {
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
     '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks') _T_OUT='Off — turn on with: git config core.hooksPath scripts/githooks' ;;
     '꺼짐 — 비밀번호만으로 새 기기 등록 가능 (fsh otp setup)') _T_OUT='off — a password alone can register a new device (fsh otp setup)' ;;
+    '끝나지 않은 정리 {n}건 — 서버가 이어서 처리합니다 (fsh restart 로 재개)') _T_OUT='{n} cleanup(s) unfinished — the server resumes them (fsh restart to resume)' ;;
     '나중에 '\''fsh install-profiles'\'' 또는 '\''fsh shell-init zsh >> ~/.zshrc'\''로 활성화 가능') _T_OUT='Enable it later with '\''fsh install-profiles'\'' or '\''fsh shell-init zsh >> ~/.zshrc'\''' ;;
     '낡은 환경변수를 설정 파일 값으로 바로잡음: {vars}') _T_OUT='Replaced stale environment variables with the config-file values: {vars}' ;;
     '낡은 환경변수를 파일 값으로 바로잡음: {keys} — 창을 새로 여세요') _T_OUT='stale environment variables replaced by file values: {keys} — open a new window' ;;
@@ -264,6 +266,7 @@ _t_en_lookup() {
     '노션/브라우저 작업을 계속하면서 음성으로 코딩') _T_OUT='Keep working in Notion or the browser and code by voice' ;;
     '노출 포트') _T_OUT='Exposed ports' ;;
     '누가 언제 이 세션에 붙는지 push로 알림 받기: ~/.vt.env에 VT_NOTIFY_CLIENT_EVENTS=1 추가') _T_OUT='To get a push when someone attaches to this session, add VT_NOTIFY_CLIENT_EVENTS=1 to ~/.vt.env' ;;
+    '다른 pre-commit 훅이 있음 — '\''fsh lease guard install'\'' 은 그 훅을 이어서 실행합니다') _T_OUT='Another pre-commit hook exists — '\''fsh lease guard install'\'' chains it and runs it first' ;;
     '다른 경로/스크립트: {cur}') _T_OUT='different path/script: {cur}' ;;
     '다른 사용자가 읽을 수 있음.') _T_OUT='other users can read it.' ;;
     '대신 직접 실행:') _T_OUT='Run it directly instead:' ;;
@@ -357,6 +360,7 @@ _t_en_lookup() {
     '사용법: fsh hotkey disable <action>') _T_OUT='Usage: fsh hotkey disable <action>' ;;
     '사용법: fsh hotkey reset <action>') _T_OUT='Usage: fsh hotkey reset <action>' ;;
     '사용법: fsh hotkey set <action> <hotkey>') _T_OUT='Usage: fsh hotkey set <action> <hotkey>' ;;
+    '사용법: fsh lease <ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status>') _T_OUT='Usage: fsh lease <ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status>' ;;
     '사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]') _T_OUT='Usage: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]' ;;
     '사용법: fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]') _T_OUT='Usage: fsh msg [log [conv-id]|agents|send <[host/]session> "text" [--reply <id>]]' ;;
     '사용법: fsh msg send <[호스트/]세션> "내용" [--reply <id>]') _T_OUT='Usage: fsh msg send <[host/]session> "text" [--reply <id>]' ;;
@@ -496,6 +500,8 @@ _t_en_lookup() {
     '이 맥에서만') _T_OUT='this Mac only' ;;
     '이 머신의 tailnet 주소: {addr}') _T_OUT='This machine'\''s tailnet address: {addr}' ;;
     '이 설정 없이도 '\''fsh voice'\''는 동작하지만, 새 창에서 자동 attach가 더 편리합니다.') _T_OUT=''\''fsh voice'\'' works without it, but auto-attach in new windows is more convenient.' ;;
+    '이 저장소에 설치됨 (서버가 안 닿으면 경고만, 최근 24h 건너뜀 {n}회)') _T_OUT='installed in this repository (warns only when the server is unreachable; skipped {n} time(s) in the last 24h)' ;;
+    '이 저장소에는 설치 안 됨 (선택) — '\''fsh lease guard install'\''') _T_OUT='not installed in this repository (optional) — '\''fsh lease guard install'\''' ;;
     '이름:    ') _T_OUT='Name:     ' ;;
     '이미 3.11+ 를 갖고 있다면 그 python으로 직접 venv를 만들고') _T_OUT='If you already have 3.11+, create the venv with that python yourself' ;;
     '이미 tmux 안 ({session}). 추가 동작 없음.') _T_OUT='Already inside tmux ({session}). Nothing to do.' ;;
@@ -608,6 +614,7 @@ _t_en_lookup() {
     '포트 범위(1-65535)를 벗어났습니다: {port}') _T_OUT='Port out of range (1-65535): {port}' ;;
     '포트는 숫자여야 합니다: '\''{port}'\''') _T_OUT='Port must be a number: '\''{port}'\''' ;;
     '폰 접속') _T_OUT='Phone access' ;;
+    '폴더 lease') _T_OUT='folder lease' ;;
     '프런트엔드 빌드 완료 → frontend/dist/') _T_OUT='Frontend built → frontend/dist/' ;;
     '프런트엔드 빌드 중... (Vite + Tailwind, node {version})') _T_OUT='Building the frontend... (Vite + Tailwind, node {version})' ;;
     '프로필 {np}개, {age}초 전 갱신') _T_OUT='{np} profile(s), updated {age}s ago' ;;
@@ -637,10 +644,12 @@ _t_en_lookup() {
     '확인 입력:') _T_OUT='Confirm:' ;;
     '환경변수와 설정 파일이 일치') _T_OUT='environment matches the config file' ;;
     '활성') _T_OUT='Enabled' ;;
+    '활성 {n}개 · 쓰기 차단 {enf} (권고 모드면 서버는 막지 않음)') _T_OUT='{n} active · write blocking {enf} (in advisory mode the server does not block)' ;;
     '활성 — 새 기기 등록 시 6자리 코드 필요') _T_OUT='enabled — registering a new device needs a 6-digit code' ;;
     '활성 — 새 기기 등록 시 코드 필요 (등록 기기 {n}개)') _T_OUT='enabled — new devices need a code ({n} device(s) registered)' ;;
     '활성화: {path} 열어 '\''command ='\'' 라인의 # 제거') _T_OUT='To enable: open {path} and remove the # from the '\''command ='\'' line' ;;
     '회사망이 방화벽으로 막아도 Tailscale은 대개 UDP 홀펀칭 또는 443 DERP 폴백으로 통과함') _T_OUT='Even behind a corporate firewall, Tailscale usually gets through via UDP hole punching or the 443 DERP fallback' ;;
+    '회수 정리') _T_OUT='revocation cleanup' ;;
     '훅 등록 실패 — '\''fsh hooks install'\''로 다시 시도할 수 있습니다') _T_OUT='Hook registration failed - retry with '\''fsh hooks install'\''' ;;
     '훅 실패(rc={rc}){out}') _T_OUT='Hook failed (rc={rc}){out}' ;;
     '훅 실행{out}') _T_OUT='Hook ran{out}' ;;

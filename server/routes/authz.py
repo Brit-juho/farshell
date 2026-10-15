@@ -29,7 +29,7 @@ import agent_share
 import auth
 from i18n import tr
 from authz import audit, denylog, events as authz_events, inbox, shadow
-from authz import host_grant_svc, msg_svc
+from authz import host_grant_svc, msg_svc, saga
 from authz import principals as P
 from authz import scopes as S
 from authz.errors import ShareError
@@ -80,6 +80,17 @@ class RevokeResponse(_Loose):
     kind: str
 
 
+class LeasesAdminResponse(_Loose):
+    leases: list[dict]
+    enforced: bool
+
+
+class LeaseRevokeResponse(_Loose):
+    ok: bool
+    id: str
+    released: int
+
+
 class AuditResponse(_Loose):
     entries: list[dict]
     chain: str
@@ -125,6 +136,14 @@ def _actor(request: Request) -> Optional[P.Principal]:
         return None
 
 
+async def _saga_after(fn, *args) -> None:
+    """회수 뒤 정리 saga(`VT_AUTHZ_ENFORCE=lease` 일 때만 일한다). 정리가 실패해도 회수 응답은 막지 않는다 — 남은 것은 sweep 이 이어한다."""
+    try:
+        await asyncio.to_thread(fn, *args)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"회수 정리 saga 시작 실패(sweep 이 이어한다): {type(e).__name__}: {e}")
+
+
 def _names_alive():
     import share_identity
     rows = share_identity.list_pane_rows()
@@ -141,6 +160,26 @@ async def shadow_log(limit: int = Query(100, ge=1, le=1000)):
     records = await asyncio.to_thread(shadow.tail, limit)
     return {"enabled": shadow.enabled(), "source": shadow.source(), "stats": shadow.STATS.as_dict(),
             "summary": shadow.summary(records), "records": records}
+
+
+# --- 사람 전용: 폴더 lease 목록 · 회수 --------------------------------------------------------------
+
+
+@human_router.get("/api/authz/leases", response_model=LeasesAdminResponse)
+async def list_leases_admin():
+    """모든 보유자의 lease(보유자는 닉네임뿐). 사람은 lease 에 막히지 않지만, 남의 lease 경로에서 쓰면 감사와 알림이 남는다."""
+    from authz import leases
+    return {"leases": await asyncio.to_thread(leases.list_for, P.human("-"), everyone=True), "enforced": leases.enforced()}
+
+
+@human_router.delete("/api/authz/leases/{lease_id}", response_model=LeaseRevokeResponse)
+async def revoke_lease_admin(lease_id: str, request: Request):
+    """관리자 회수 — 파생(상속) lease 도 함께 사라진다."""
+    from authz import leases
+    try:
+        return await asyncio.to_thread(leases.revoke_admin, _actor(request) or P.human("-"), lease_id)
+    except ShareError as e:
+        return _err(e)
 
 
 # --- 읽기: 승인함 · 권한 · 감사 (사람 또는 CLI) ---------------------------------------------------------
@@ -300,6 +339,7 @@ async def revoke_grant(grant_id: str, request: Request, scopes: str = Query("", 
         if code:
             return JSONResponse({"error": code, "reason": getattr(e, "reason", str(e))}, status_code=getattr(e, "status", 400))
         raise
+    await _saga_after(saga.after_grant_revoke, [grant_id, res["id"]], _actor(request))
     await authz_events.emit(authz_events.revoked_event(res["id"], res["kind"]))
     return {"ok": True, **res}
 
@@ -313,6 +353,7 @@ async def panic(request: Request):
         res = await asyncio.to_thread(inbox.panic, snap, _actor(request), _names_alive)
     except ShareError as e:
         return _err(e)
+    await _saga_after(saga.after_panic, _actor(request))
     await authz_events.emit(authz_events.revoked_event("*", "all"))
     await authz_events.emit(authz_events.resolved_event("*", "all", "cleared"))
     return res

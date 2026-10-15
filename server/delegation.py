@@ -95,6 +95,58 @@ def _svc():
     return deleg_svc
 
 
+def _lease_enforced() -> bool:
+    """`VT_AUTHZ_ENFORCE` 에 `lease` 가 있는가 — 켜면 spawn 의 작업 폴더가 남의 lease 에 막히고, 자식이 lease 를 상속·발급받는다."""
+    return authz_flags.enforced("lease")
+
+
+def _lease_guard(parent_key: str, parent_name: str, start_dir: str) -> None:
+    """spawn 의 작업 폴더가 다른 보유자의 write/exclusive lease 안이면 403 `lease_conflict`."""
+    from authz import leases
+    from authz import principals as P
+    try:
+        rows = leases.blocking(P.agent(parent_key, name=parent_name).id, [start_dir])
+    except Exception as e:  # noqa: BLE001 — 읽지 못하면 닫는다(강제를 켠 서버)
+        raise DelegationError("lease_unavailable", "lease 저장소를 읽을 수 없어 하위 세션을 만들지 못했습니다", 503) from e
+    if rows:
+        raise DelegationError("lease_conflict", f"다른 세션({rows[0]['holder']})의 lease 가 걸린 폴더라 하위 세션을 만들 수 없습니다", 403)
+
+
+def _issue_leases(parent_key: str, child_key: str, child_name: str, did: str, start_dir: str, worktree: bool) -> None:
+    """worktree 자식은 새 worktree 경로에 자기만의 exclusive write lease 를 시스템이 발급받고(부모의 원래 폴더 lease 는 상속하지 않는다),
+    같은 폴더 자식은 부모가 그 폴더를 덮는 lease 를 가졌을 때 그것을 공유 상속한다(derived_from). 위임이 닫히면 함께 놓인다."""
+    from authz import leases
+    from authz import principals as P
+    child = P.agent(child_key, name=child_name)
+    try:
+        if worktree:
+            leases.acquire(child, start_dir, mode="write", exclusive=True, ttl=leases.MAX_TTL, reason="worktree of delegation",
+                           system=True, deleg=did)
+            return
+        real = os.path.realpath(start_dir)
+        for l in leases.active_now():
+            if l["holder"] == P.agent(parent_key).id and not l.get("derived_from") and leases.covers(l["glob"], real):
+                leases.acquire(child, l["glob"], mode=l["mode"], exclusive=bool(l.get("exclusive")), ttl=l.get("ttl"),
+                               reason="inherited from parent", system=True, derived_from=l["id"], deleg=did,
+                               expires=l.get("expires"), max_expires=l.get("max_expires"))
+    except leases.LeaseError as e:
+        if e.code in ("outside_roots", "bad_glob"):      # 열람 루트 밖의 worktree 는 lease 를 걸 수 없다 — 위임은 그대로 진행
+            logger.warning(f"위임 {did}: 자식에게 lease 를 발급하지 못했다({e.code})")
+            return
+        raise DelegationError("lease_conflict" if e.code == "lease_conflict" else e.code, e.reason, e.status) from e
+
+
+def _release_leases(dids, reason: str) -> None:
+    if not dids or not _lease_enforced():
+        return
+    from authz import leases
+    for did in dids:
+        try:
+            leases.release_by_deleg(did, reason)
+        except Exception as e:  # noqa: BLE001 — 보유 세션이 사라지거나 만료되면 어차피 사라진다
+            logger.warning(f"위임 {did} lease 해제 실패: {type(e).__name__}: {e}")
+
+
 def _safe_mode() -> bool:
     try:
         import safe_mode
@@ -586,6 +638,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     names = live_sessions()
     if names is None:
         raise DelegationError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
+    if _lease_enforced() and not worktree_branch:
+        _lease_guard(parent_key, caller.name, start_dir)
     # 1) 관문 + 예약(같은 락 안에서 — 검사와 기록 사이에 다른 생성이 끼지 못한다)
     with _locked():
         data = _read()
@@ -641,9 +695,12 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             _enqueue(data["items"], cur, KIND_TASK, full_task, "child")
             _write(data)
             item = dict(cur)
+        if _lease_enforced():
+            _issue_leases(parent_key, ident["key"], child_name, did, start_dir, bool(worktree_branch))
     except Exception as e:
         if created_session:
             tmux_runner.run(["kill-session", "-t", f"={child_name}"])
+        _release_leases([did], "spawn_failed")
         try:
             with _locked():
                 data = _read()
@@ -690,10 +747,10 @@ def send_to_child(caller_key: str, did: str, text: str) -> dict:
     return {"ok": True, "queued": True}
 
 
-def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_by_parent", actor=None) -> dict:
+def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_by_parent", actor=None, system: bool = False) -> dict:
     """위임을 닫는다. 세션은 남긴다(결정 3). 자식에게 아직 안 들어간 지시만 큐에서 지운다.
     caller_key가 None이면 사람(CLI)이다. 켜짐에서는 그 사람의 주체(`actor`: human 또는 cli)를 엔진에 묻는다 —
-    cli 는 닫기만 된다(`ops:[close]`)."""
+    cli 는 닫기만 된다(`ops:[close]`). `system=True` 는 회수 saga 가 서버 이름으로 닫는 경우 — 주체 판정을 거치지 않는다(감사는 `system:saga`)."""
     who = _agent_id(caller_key) if caller_key is not None else None
     with _locked():
         data = _read()
@@ -701,7 +758,9 @@ def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_b
             item = next((x for x in data["items"] if x["id"] == did), None)
             if item is None:
                 raise DelegationError("not_found", "그런 위임이 없습니다", 404)
-            if enforced():
+            if system:
+                who = "system:saga"
+            elif enforced():
                 if actor is None:
                     from authz import principals as P
                     actor = P.cli(os.getuid(), os.getpid())
@@ -717,6 +776,7 @@ def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_b
         item["close_reason"] = reason
         item["outbox"] = [o for o in item.get("outbox", []) if o.get("queued") or o["target"] == "parent"]
         _write(data)
+    _release_leases([did], "delegation_closed")
     import queue_store
     removed = queue_store.remove_pending_by_source(
         lambda s: s.get("delegation") == did and s.get("kind") in (KIND_TASK, KIND_FOLLOWUP))
@@ -886,6 +946,8 @@ def sweep(now: Optional[float] = None) -> dict:
                 flush_ids.append(x["id"])
         if changed:
             _write(data)
+    _release_leases(gone + orphaned + [x["id"] for x in data["items"] if x.get("close_reason") == "spawn_interrupted"
+                                       and x.get("closed_at") == now], "delegation_ended")
     import queue_store
     queued_sources = {(s.get("delegation"), s.get("kind")) for s in queue_store.sources()}
     for did in set(flush_ids + gone):

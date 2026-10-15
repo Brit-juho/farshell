@@ -22,6 +22,7 @@ from pathlib import Path
 from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+from authz import leases as authz_leases
 import file_store
 import fs_watch
 import fsguard
@@ -571,6 +572,11 @@ async def insert_file(file_id: str, request: Request):
     pane = tmux_target.session_pane(session)
     if not pane:
         return JSONResponse({"error": "session_not_found"}, status_code=404)
+    if authz_leases.enforced():
+        cwd = await asyncio.to_thread(authz_leases.session_cwd, session)
+        blocked = await authz_leases.enforce_write(request, [cwd] if cwd else [], op="insert")
+        if blocked is not None:
+            return blocked
     ok = await asyncio.to_thread(tmux_target.type_to_tmux, pane, str(fp))
     if not ok:
         return JSONResponse({"error": "insert_failed"}, status_code=500)

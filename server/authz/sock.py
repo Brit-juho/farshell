@@ -90,6 +90,10 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", r"/api/authz/(requests|my-grants)", "mcp request_access / list_my_grants (agent: own records only)"),
     ("POST", r"/api/authz/requests", "mcp request_access (agent, creates a pending request)"),
     ("GET", r"/api/authz/(approvals|grants|audit)", "fsh authz requests|grants|audit (cli: read only)"),
+    # 폴더 lease — 에이전트(잡기·갱신·놓기·자기 목록)와 터미널 fsh(전체 목록·check·pre-commit guard)
+    ("GET", r"/api/leases", "fsh lease ls · mcp lease_list"),
+    ("POST", r"/api/leases(/check|/[^/]+/renew)?", "fsh lease acquire|renew|check · pre-commit guard · mcp lease_acquire|lease_renew"),
+    ("DELETE", r"/api/leases/[^/]+", "fsh lease release · mcp lease_release"),
 )
 _ROUTES_RE = tuple((m, re.compile(p), who) for m, p, who in ROUTES)
 

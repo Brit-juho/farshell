@@ -179,7 +179,7 @@ def test_mcp_whoami_and_list_my_grants_format(monkeypatch):
 
 def test_tools_for_caller_filters_by_whoami_scopes(monkeypatch):
     import mcp_farshell as m
-    state = {"scopes": ["deleg.spawn", "msg.send", "authz.request", "session.read"], "role": {"is_child": False, "can_spawn": True}}
+    state = {"scopes": ["deleg.spawn", "msg.send", "authz.request", "session.read", "fs.write"], "role": {"is_child": False, "can_spawn": True}}
 
     def fake(method, path, body=None, headers=None):
         if path == "/api/authz/whoami":
@@ -190,9 +190,10 @@ def test_tools_for_caller_filters_by_whoami_scopes(monkeypatch):
     names = lambda: {t["name"] for t in m.tools_for_caller()}      # noqa: E731
     full = names()
     assert {"spawn_session", "send_message", "request_access", "whoami", "list_my_grants", "read_session"} <= full
+    assert {"lease_acquire", "lease_renew", "lease_release", "lease_list"} <= full      # fs.write 가 있으면 lease 도구가 보인다
     state["scopes"] = ["session.read"]                              # 만들기·메시지·요청 권한이 없다
     n = names()
-    assert not ({"spawn_session", "send_message", "request_access"} & n) and {"whoami", "list_my_grants", "read_session", "list_agents"} <= n
+    assert not ({"spawn_session", "send_message", "request_access"} & n) and not {t for t in n if t.startswith("lease_")} and {"whoami", "list_my_grants", "read_session", "list_agents"} <= n
     state["scopes"] = None                                          # TCP(whoami 불가) — 예전처럼 거르지 않는다
     assert names() == full
     state["scopes"] = ["deleg.spawn", "msg.send", "authz.request"]

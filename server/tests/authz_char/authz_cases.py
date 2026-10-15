@@ -49,12 +49,37 @@ def authz_api_cases() -> list[Case]:
          "unrequestable_scope"),
         ("GET", "/api/authz/requests", "/api/authz/requests", None, ""),
         ("GET", "/api/authz/my-grants", "/api/authz/my-grants", None, ""),
+        # 폴더 lease 의 사람 전용 목록·회수.
+        ("GET", "/api/authz/leases", "/api/authz/leases", None, ""),
+        ("DELETE", "/api/authz/leases/{lease_id}", "/api/authz/leases/ls-none", None, ""),
     ]
     out = []
     for method, route, path, body, var in routes:
         for mode in MODES:
             for c in callers:
                 out.append(Case(_cid(g, route, method, c, mode, var), g, c, mode, method, route, path, body))
+    return out
+
+
+# --- leases --------------------------------------------------------------------------
+
+def leases_cases() -> list[Case]:
+    """`routes/leases.py` 전부. 호출자 × 서버 모드. 열람 루트 밖 경로(`/`)라 잡기는 어느 호출자도 성공하지 못한다(경로 검증이 먼저) —
+    여기서 보는 것은 누가 이 라우트에 닿는가(호출자 분류)다. 규칙 자체는 test_authz_leases*.py 가 본다."""
+    g = "leases"
+    callers = HUMAN + AGENTS[:1] + ("agent_foreign", "peer_control")
+    routes = [
+        ("POST", "/api/leases", "/api/leases", {"glob": "/", "mode": "write"}),
+        ("GET", "/api/leases", "/api/leases", None),
+        ("POST", "/api/leases/check", "/api/leases/check", {"paths": ["/nonexistent/x"]}),
+        ("POST", "/api/leases/{lease_id}/renew", "/api/leases/ls-none/renew", {"ttl": 60}),
+        ("DELETE", "/api/leases/{lease_id}", "/api/leases/ls-none", None),
+    ]
+    out = []
+    for method, route, path, body in routes:
+        for mode in MODES:
+            for c in callers:
+                out.append(Case(_cid(g, route, method, c, mode), g, c, mode, method, route, path, body))
     return out
 
 
@@ -402,6 +427,7 @@ BUILDERS = {
     "agent_share": agent_share_cases, "delegation": delegation_cases, "agent_msg": agent_msg_cases,
     "peer": peer_cases, "relay": relay_cases, "host_relay": host_relay_cases, "hosts": hosts_cases,
     "machine_token": machine_token_cases, "cli_writes": cli_cases, "authz_api": authz_api_cases,
+    "leases": leases_cases,
 }
 
 

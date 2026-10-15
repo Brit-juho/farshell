@@ -6,6 +6,7 @@
     authz_request   {type, id, kind}                  새 보류 요청
     authz_resolved  {type, id, kind, state}           결정됨(allowed|denied|cleared)
     authz_revoked   {type, id, kind}                  권한 회수(grant id)
+    lease_notice    {type, id, kind}                  사람의 쓰기가 남의 lease 경로 안에서 일어남(kind=override; 막지 않는다)
 
 옛 `agent_share_request*` 이벤트는 한 릴리스 동안 그대로 함께 나간다(`routes/agent_share.py`).
 """
@@ -17,6 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 REQUEST, RESOLVED, REVOKED = "authz_request", "authz_resolved", "authz_revoked"
+LEASE_NOTICE = "lease_notice"
 KINDS = ("share", "msg", "peer", "generic")
 
 
@@ -30,6 +32,10 @@ def resolved_event(rid: str, kind: str, state: str) -> dict:
 
 def revoked_event(gid: str, kind: str) -> dict:
     return {"type": REVOKED, "id": str(gid), "kind": kind}
+
+
+def lease_notice_event(lease_id: str, kind: str = "override") -> dict:
+    return {"type": LEASE_NOTICE, "id": str(lease_id), "kind": kind}
 
 
 async def emit(msg: dict) -> None:

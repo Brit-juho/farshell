@@ -30,7 +30,8 @@ fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # 다른 맥의 FarShell 페어링
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
 fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # 승인함·권한·감사 조회 (읽기 전용, 아래 참고)
-fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants
+fsh lease [ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status]  # 폴더 lease + 선택 설치 pre-commit guard (아래 참고)
+fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants / lease_acquire / lease_renew / lease_release / lease_list
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (저장한 자격증명은 push에 사용되지 않음)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
@@ -154,6 +155,32 @@ fsh authz panic                   # 재인증한 사람이 웹/폰에서 한다�
 `request_access {resource, scopes, reason?, ttl?}`, `list_my_grants` 로 세션 안에서 같은 일을 합니다. `request_access` 는 항상
 «사용자 승인 대기»로 돌아옵니다. API와 규칙: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
+## 폴더 lease (`fsh lease`)
+
+lease 는 「이 폴더(또는 glob)는 지금 내가 쓰는 중」이라는 표시입니다. 두 에이전트가 같은 파일을 동시에 고치지 않게 하려는 것이고, unix socket 으로 서버에 묻습니다(토큰 없음).
+기본 30분, 최대 8시간, 갱신할 수 있습니다.
+
+```bash
+fsh lease ls                                  # 활성 lease: id, 보유자(닉네임), mode, exclusive, 남은 시간, glob
+fsh lease acquire ~/code/app/src --write --ttl 2h --reason "리팩터링"   # --read, --exclusive, --ttl 90|30m|2h
+fsh lease renew <id> [--ttl 1h]               # 만든 때부터 최대 8시간까지
+fsh lease release <id>
+fsh lease check --staged                      # 스테이지한 파일을 커밋하면 남의 lease 와 부딪히는가? (종료 코드 1 = 부딪힘)
+fsh lease check path/a path/b [--holder <주체 id>]
+fsh lease guard install | uninstall | status  # 「지금 저장소」의 git pre-commit 훅
+```
+
+lease 를 잡으려면 그 경로에 밑바닥 권한(쓰기는 `fs.write`, 읽기는 `fs.read`)이 있어야 합니다 — 사람은 기본으로 있고 에이전트는 `request_access` 로 요청합니다.
+충돌하면 보유자 닉네임과 끝나는 시각을 보여 줍니다. **서버가 `VT_AUTHZ_ENFORCE=lease` 로 떠 있지 않으면 lease 는 권고일 뿐**이고, 켜도 FarShell 이 직접 하는 쓰기(웹 UI/API의
+git stage·commit, 세션으로의 파일 전달, 위임 작업 폴더)만 막습니다. 같은 사용자의 프로세스는 lease 를 무시할 수 있습니다. `fsh doctor` 가 활성 개수, 차단 여부,
+지금 저장소의 guard 상태를 보여 줍니다.
+
+**커밋 guard.** `guard install` 은 `fsh lease check --staged` 를 부르는 pre-commit 훅을 씁니다(스테이지된 이름은 NUL 로 나눠 읽고, 이름 바꾸기는 옛 이름·새 이름 둘 다 보며,
+명령 인자에 비밀을 싣지 않고, 기계 토큰은 쓰지 않습니다). 이미 있는 pre-commit 훅은 덮지 않고 `pre-commit.fsh-chained` 로 옮겨 **먼저 실행**하며, `guard uninstall` 이 되돌립니다.
+충돌하면 커밋이 멈추고(종료 코드 1) 보유자와 파일 목록을 보여 줍니다. 서버에 닿지 못하면 **경고 한 줄만 내고 커밋은 통과**시키며 `~/.vt/authz/guard-skipped.log` 에
+(시각·사유·파일 개수만, 경로 없음) 한 줄을 남깁니다. `git commit --no-verify` 로 건너뛸 수 있습니다. 에이전트용 MCP 도구는 `lease_acquire`·`lease_renew`·`lease_release`·`lease_list`
+이고 `whoami` 에 `fs.write` 또는 `fs.read` 가 있는 호출자에게만 보입니다. 규칙은 `docs/ref/auth.md` 「Folder leases and revocation cleanup」, API 는 `API.md` 「Folder leases」.
+
 ## 프롬프트 큐 (`fsh queue`)
 
 에이전트가 작업 중일 때 다음 지시를 큐에 저장하고, 완료 후 한 건씩 투입합니다.
@@ -212,6 +239,7 @@ fsh queue clear                 # 전체 비우기
 | 14 | Tailscale | 설치/연결 상태 |
 | 15 | unix socket | `~/.vt/run/fsh.sock` 상태(켜짐 / 건너뜀 / 자가 시험 실패), 권한, 최근 24시간 기계 토큰 요청 수. `VT_AUTHZ_SOCKET=0`이면 클라이언트가 소켓을 건너뛰고 토큰만 씁니다. `fsh status`에도 한 줄로 나옵니다 |
 | 16 | 공용 토큰 | `VT_AUTHZ_ENFORCE=legacy`일 때만: 최근 24시간 동안 범위 밖이라 거절된(403 `legacy_token_scope`) 기계 토큰 요청 수를 경로·user agent별로 보여 줍니다. 어느 외부 스크립트를 소켓이나 로그인으로 옮겨야 하는지 알 수 있습니다. 토큰만 있고 웹 비밀번호가 없는 서버에서는 승인이 필요한 에이전트·peer 기능이 `fsh password` 설정 전까지 꺼져 있다는 안내도 나옵니다 |
+| 17 | 폴더 lease | 활성 lease 개수, 쓰기 차단(`VT_AUTHZ_ENFORCE=lease`) 켜짐 여부, 지금 저장소의 pre-commit guard 상태(설치됨 / 기존 훅과 이어짐 / 없음), 최근 24시간 동안 서버가 안 닿아 guard 가 건너뛴 횟수(`~/.vt/authz/guard-skipped.log`), 끝나지 않은 회수 정리(saga)가 있으면 경고 |
 
 ---
 

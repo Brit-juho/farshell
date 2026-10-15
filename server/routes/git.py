@@ -24,6 +24,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 import fsguard
+from authz import leases as authz_leases
 from i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -522,6 +523,9 @@ async def git_stage(request: Request):
     files = _validate_files(body.get("files"))
     if files is None:
         return _denied(tr("잘못된 파일 목록입니다"))
+    blocked = await authz_leases.enforce_write(request, [str(top / f) for f in files], op="git.stage")
+    if blocked is not None:
+        return blocked
     rc, _ = await asyncio.to_thread(_git, top, "add", "--", *files)
     if rc != 0:
         return JSONResponse({"error": tr("git add 실패")}, status_code=500)
@@ -539,6 +543,9 @@ async def git_unstage(request: Request):
     files = _validate_files(body.get("files"))
     if files is None:
         return _denied(tr("잘못된 파일 목록입니다"))
+    blocked = await authz_leases.enforce_write(request, [str(top / f) for f in files], op="git.unstage")
+    if blocked is not None:
+        return blocked
     # reset(HEAD 없이) -- <paths> 는 워킹트리를 건드리지 않고 인덱스만 되돌린다.
     rc, _ = await asyncio.to_thread(_git, top, "reset", "-q", "--", *files)
     if rc != 0:
@@ -549,6 +556,16 @@ async def git_unstage(request: Request):
 def _has_staged_changes(repo: Path) -> bool:
     rc, out = _git(repo, "diff", "--cached", "--name-only")
     return rc == 0 and bool(out.strip())
+
+
+def _staged_paths(repo: Path) -> list[str]:
+    """스테이지된 경로 전부(이름 바꾸기도 옛 이름·새 이름 둘 다) — `-z` 로 NUL 구분."""
+    try:
+        proc = subprocess.run(["git", "-C", str(repo), "diff", "--cached", "--name-only", "-z", "--no-renames"],
+                              capture_output=True, timeout=GIT_TIMEOUT)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
+    return [x for x in proc.stdout.decode("utf-8", "surrogateescape").split("\0") if x]
 
 
 def _commit(repo: Path, message: str) -> tuple[int, str]:
@@ -570,6 +587,11 @@ async def git_commit(request: Request):
         return JSONResponse({"error": tr("커밋 메시지가 너무 깁니다")}, status_code=400)
     if not await asyncio.to_thread(_has_staged_changes, top):
         return JSONResponse({"error": tr("커밋할 스테이지 변경사항이 없습니다")}, status_code=400)
+    if authz_leases.enforced():            # 스테이지된 파일 전부가 대상이다(NUL 로 나눠 받는다 — 이름에 공백·개행이 있어도 안전)
+        staged = await asyncio.to_thread(_staged_paths, top)
+        blocked = await authz_leases.enforce_write(request, [str(top / f) for f in staged], op="git.commit")
+        if blocked is not None:
+            return blocked
     rc, out = await asyncio.to_thread(_commit, top, message)
     if rc != 0:
         logger.warning(f"git commit 실패: {out[:500]}")
