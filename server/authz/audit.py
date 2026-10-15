@@ -10,6 +10,9 @@ window_id, result, reason, sizes, sha8`. `prev_sha`는 **앞 줄 원문 바이�
 path 의 sha8 로 바꾼다.
 
 단일 writer: 서버와 `fsh migrate-auth` 가 같은 `audit.lock` 아래에서만 쓴다.
+
+거부 판정은 이 체인에 쓰지 않는다 — `denylog.py`(별도 파일, 분당 상한, 쓰기 실패는 요청을 막지 않음). 체인에는 허용 판정과
+authz·pair·lease·grant 변경(사람의 거절 결정 포함)이 남는다.
 """
 
 from __future__ import annotations
@@ -116,7 +119,13 @@ def _rotate(p: Path, now: float) -> None:
 
 
 def append(rec: dict, *, now: Optional[float] = None) -> dict:
-    """한 줄 추가. 실패는 OSError 로 올린다 — authz 변경은 호출자가 fail closed 한다."""
+    """한 줄 추가. 실패는 OSError 로 올린다 — authz 변경은 호출자가 fail closed 한다.
+
+    거부 판정(`denylog.is_denial`)은 체인이 아니라 `denials.jsonl` 로 간다(실패해도 예외 없음, 반환값에 `seq` 가 없다)."""
+    from . import denylog
+    if denylog.is_denial(rec):
+        denylog.record(rec, now=now)
+        return {**scrub(rec), "source": "denials"}
     p = path()
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -192,4 +201,51 @@ def read_recent(limit: int, action_prefix: str = "") -> list[dict]:
                 out.append(rec)
                 if len(out) >= limit:
                     return out
+    return out
+
+
+def read_merged(limit: int, action_prefix: str = "") -> list[dict]:
+    """`read_recent` 와 같지만 거부 기록(`denials.jsonl`)도 합친다(최근 순). 주 체인 줄은 `source: chain`, 거부 줄은 `denials`."""
+    from . import denylog
+    limit = max(1, min(int(limit), 1000))
+    rows = [{**r, "source": "chain"} for r in read_recent(limit, action_prefix)]
+    rows += [r for r in denylog.read_recent(limit) if str(r.get("action", "")).startswith(action_prefix)]
+    rows.sort(key=lambda r: (float(r.get("ts") or 0), int(r.get("seq") or 0)), reverse=True)
+    return rows[:limit]
+
+
+# 조회 응답에 싣는 필드 — 기록 때 이미 내용을 거른 값이지만 한 번 더 허용 목록으로 자른다.
+VIEW_KEYS = ("seq", "ts", "principal", "obo", "action", "resource", "scopes", "decision", "grant_id", "approval_id",
+             "window_id", "result", "reason", "sizes", "sha8", "source", "detail", "dropped")
+
+
+def query(*, principal: str = "", resource: str = "", since: float = 0.0, limit: int = 100) -> list[dict]:
+    """주 체인과 거부 기록을 합쳐 최근 순으로. 각 줄에 `source`(`chain`|`denials`). 필터는 접두어 일치(주체·리소스)와 시각.
+    내용은 기록 단계에서 이미 걸러져 있다 — 여기서도 허용 필드만 돌려준다."""
+    from . import denylog
+    limit = max(1, min(int(limit), 500))
+    rows: list[dict] = []
+    for r in read_recent(1000):
+        rows.append({**r, "source": "chain"})
+    for r in denylog.read_recent(1000):
+        rows.append({**r, "source": "denials"})
+
+    def keep(r: dict) -> bool:
+        if principal and not (str(r.get("principal") or "").startswith(principal)
+                              or str(r.get("obo") or "").startswith(principal)):
+            return False
+        if resource and not str(r.get("resource") or "").startswith(resource):
+            return False
+        return float(r.get("ts") or 0) >= since
+
+    rows = [r for r in rows if keep(r)]
+    rows.sort(key=lambda r: (float(r.get("ts") or 0), int(r.get("seq") or 0)), reverse=True)
+    return [{k: v for k, v in _scrub_view(r).items() if k in VIEW_KEYS} for r in rows[:limit]]
+
+
+def _scrub_view(r: dict) -> dict:
+    out = _scrub({k: v for k, v in r.items() if k not in ("source", "seq", "ts", "dropped")})
+    for k in ("source", "seq", "ts", "dropped"):
+        if k in r:
+            out[k] = r[k]
     return out

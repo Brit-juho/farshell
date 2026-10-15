@@ -80,6 +80,18 @@ def _reset_codex_plugin_cache():
 
 
 @pytest.fixture(autouse=True)
+def _reset_preauth_state():
+    """사전 인증 실패 한도(authz/preauth.py)와 거부 기록의 분당 카운터는 모듈 전역(메모리)이다. 앞 테스트의 실패·잠금이
+    다음 테스트로 새면 안 된다."""
+    from authz import denylog, preauth
+    preauth.reset()
+    denylog.reset()
+    yield
+    preauth.reset()
+    denylog.reset()
+
+
+@pytest.fixture(autouse=True)
 def _reset_agent_owners():
     """agent_status의 세션 소유자·은퇴 목록은 모듈 전역이다. 테스트들은 `_state`만 비우는데,
     앞 테스트가 은퇴시킨 session_id("s" 등)를 다음 테스트가 다시 쓰면 이벤트가 무시된다."""

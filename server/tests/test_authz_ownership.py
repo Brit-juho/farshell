@@ -43,7 +43,11 @@ def code(fn):
 
 def audit_text(mode: str) -> str:
     p = audit.path() if mode == "deleg" else vt_paths.state_dir() / "agent_access.log"
-    return p.read_text(encoding="utf-8") if p.exists() else ""
+    text = p.read_text(encoding="utf-8") if p.exists() else ""
+    if mode == "deleg":                      # 거부는 별도 파일(denials.jsonl)로 간다
+        from authz import denylog
+        text += denylog.path().read_text(encoding="utf-8") if denylog.path().exists() else ""
+    return text
 
 
 def edit(fn):

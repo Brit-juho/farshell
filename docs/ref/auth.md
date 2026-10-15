@@ -47,6 +47,7 @@ registration order in `main.py`.
 |---:|---|---|---|---|---|
 | 1 | Origin guard `OriginGuardMiddleware` <!-- mw --> | HTTP + WS | Is the request's origin this server itself? No `Origin` header (non-browser) passes; `""`/`"null"` (opaque origin) is rejected | `server/main.py`, `OriginGuardMiddleware` | 403 `cross_origin` |
 | 2 | CORS (opt-in) `CORSMiddleware` <!-- mw:cors --> | HTTP | Is this an explicitly allowed external origin? If `_allowed_origins()` is empty, **this layer doesn't exist at all** | `server/main.py` (conditional `add_middleware`) | Browser can't read the response body |
+| 2′ | Pre-auth failure limit `PreauthMiddleware` <!-- mw --> | HTTP | Is this source locked (10 failed credentials in 60 s → 5 minutes), or is a credential-exchange endpoint (`/api/auth`, `/api/peer/pair`) over its global 300/min? Never applied to unix-socket requests | `server/main.py`, `PreauthMiddleware` → `server/authz/preauth.py` | 429 `rate_limited` + `Retry-After` |
 | 3 | Token auth `TokenAuthMiddleware` <!-- mw --> | **HTTP only** | Is the session cookie / `?token=` / `Bearer` valid? If `auth.is_protected()` is false, everyone passes | `server/main.py`, `TokenAuthMiddleware` → `auth.check_request` | 401 `unauthorized` |
 | 3′ | WS handshake auth | **WS only** | Same question as #3, done by the route itself at handshake time + a separate expiry re-check | route-level `_ws_auth` (e.g. `routes/pty.py`) | Handshake refused |
 | 4 | Network access `NetworkAccessMiddleware` <!-- mw --> | HTTP + WS | Does the client IP fall inside `VT_NETWORK_MODE`'s CIDR ranges? | `server/main.py`, `NetworkAccessMiddleware` | 403 `ip_not_allowed` |
@@ -391,6 +392,24 @@ The broken file is left exactly as it was (never deleted, never repaired); a cop
 `<name>.corrupt-<id>` (0600, one copy per distinct content). Fix or restore the file by hand (`fsh migrate-auth --restore <ts>`
 restores a backup), and the next change goes through. `fsh migrate-auth --status` prints a «저장소 읽기 불가» line per unreadable
 file (reason, path, number of copies) and `fsh doctor` reports the same as a failed check.
+
+## Deny log and the chain
+
+Denials (policy refusals, rate limits, lockouts, authentication failures) go to `~/.vt/audit/denials.jsonl` — not hash-chained,
+0600, 1 MB × 3 files, at most 60 lines a minute plus a `denylog.dropped` count line, and a failed write never fails a request.
+The chain `~/.vt/audit/authz.jsonl` keeps allows and every authz/pair/lease/grant change (a person's refusal of a request is a change,
+so it stays). Which one a row goes to is decided in `audit.append` (`denylog.is_denial`: `decision == "deny"` and not a `.decide`/`.revoke`/
+`.grant` … action). Existing denials in the chain are not moved. `GET /api/authz/audit` merges both and reports `chain: ok|broken` from a server-side verification.
+
+## Pre-auth failure limit
+
+`server/authz/preauth.py` counts failures before a caller has proven anything — an invalid cookie/token (not a correctly signed but
+expired cookie, and not a request without credentials), a wrong login or one-time ticket, a failed peer signature or pairing ticket.
+10 failures in 60 s from one source lock that source for 5 minutes (429 `rate_limited` + `Retry-After`; the login page stays open);
+`/api/auth` and `/api/peer/pair` share a global 300/min cap. It is in memory (a restart clears it), the unix socket is exempt, and the
+Origin check is not skipped for loopback. **Known trade-off:** behind a tunnel that sends no client-address header every remote user
+shares one source key (the loopback address), so ten bad guesses can lock remote access (not the socket or the local `fsh`) for five
+minutes. The `CF-Connecting-IP` and `X-Forwarded-For` headers are used when present.
 
 ## Unix socket: who is calling without a token (2026-10-15)
 

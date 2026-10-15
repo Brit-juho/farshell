@@ -34,6 +34,7 @@ import auth
 from authz import hooks as authz_hooks
 from authz import legacy_gate as authz_legacy_gate
 from authz import legacy_use as authz_legacy_use
+from authz import preauth as authz_preauth
 from authz import sock as authz_sock
 import file_store
 import i18n
@@ -180,6 +181,9 @@ class TokenAuthMiddleware:
         authenticated = auth.check_request(token)
         authz_hooks.middleware(request, authenticated)   # shadow — 응답 불변
         if not authenticated:
+            # 제시했는데 틀린 자격만 센다(자격 없음·서명은 맞는데 만료된 쿠키는 추측이 아니다).
+            if token and not auth.session_signed(token):
+                authz_preauth.fail(authz_preauth.source_of(request), "credential")
             response = JSONResponse({"error": "unauthorized"}, status_code=401)
             await response(scope, receive, send)
             return
@@ -206,6 +210,31 @@ class TokenAuthMiddleware:
         if cookie and auth.VT_AUTH_TOKEN and hmac.compare_digest(cookie, auth.VT_AUTH_TOKEN):
             return JSONResponse(authz_legacy_gate.token_cookie_body(), status_code=401)
         return None
+
+
+class PreauthMiddleware:
+    """사전 인증 실패 한도 — 출처가 잠겼거나 자격 교환 엔드포인트가 전역 상한을 넘었으면 429 + Retry-After.
+
+    HTTP 만 본다. unix socket 요청(`fsh_sock`)은 지나지 않는다 — 커널이 확인한 peer 라 추측할 자격이 없고, 소켓은 잠기지 않는다.
+    실패를 세는 곳은 각 인증 지점이다(TokenAuth·로그인·peer 서명·페어링). 규칙과 근거는 `authz/preauth.py`."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("fsh_sock") is True:
+            return await self.app(scope, receive, send)
+        headers = _scope_headers(scope)
+        client = scope.get("client")
+        source = authz_preauth.source_key(client[0] if client else None, headers)
+        hit = authz_preauth.blocked(source, scope.get("path", ""))
+        if hit is not None:
+            retry, why = hit
+            response = JSONResponse({"error": "rate_limited", "reason": why, "retry_after": retry},
+                                    status_code=429, headers={"Retry-After": str(retry)})
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 def _allowed_origins() -> set:
@@ -522,6 +551,7 @@ def _purge_legacy_scrollback() -> None:
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(NetworkAccessMiddleware)
 app.add_middleware(TokenAuthMiddleware)
+app.add_middleware(PreauthMiddleware)       # TokenAuth 바깥 — 잠긴 출처는 인증 판정 전에 429
 # 프론트엔드는 이 서버가 직접 서빙하므로(동일 출처) CORS가 필요 없다. 예전엔 `*`로
 # 열려 있어서 임의의 웹사이트가 응답 본문까지 읽을 수 있었다 — 인증이 꺼진 기본
 # 구성에서는 그대로 원격 코드 실행이었다. 외부 클라이언트가 필요한 경우에만 옵트인.
@@ -709,6 +739,7 @@ async def auth_login(request: Request):
     if ticket:
         hit = auth.consume_ticket(ticket)
         if not hit:
+            authz_preauth.fail(authz_preauth.source_of(request), "ticket")
             return JSONResponse({"error": "ticket_invalid"}, status_code=401)
         device_life = _ticket_device_ttl(hit)
         device_secret, device_id = auth.register_device(
@@ -728,6 +759,7 @@ async def auth_login(request: Request):
         kind = auth.credential_kind(cred)
         if kind is None:
             auth.password_note_failure(client_key)
+            authz_preauth.fail(authz_preauth.source_of(request), "login")
             return JSONResponse({"error": "invalid"}, status_code=401)
         auth.password_reset_failures(client_key)
 
@@ -747,6 +779,7 @@ async def auth_login(request: Request):
                         return JSONResponse({"error": "otp_required"}, status_code=401)
                     if not auth.verify_totp(otp):
                         auth.otp_note_failure(client_key)
+                        authz_preauth.fail(authz_preauth.source_of(request), "otp")
                         return JSONResponse(
                             {"error": "otp_invalid",
                              "remaining": max(0, auth.OTP_MAX_FAILS - auth.otp_failure_count(client_key))},

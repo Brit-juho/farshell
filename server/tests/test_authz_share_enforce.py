@@ -63,7 +63,7 @@ def assert_parity(note: str = "") -> None:
 
 
 def audit_rows(prefix="share."):
-    return audit.read_recent(1000, prefix)
+    return audit.read_merged(1000, prefix)
 
 
 # --- 플래그 --------------------------------------------------------------------------------

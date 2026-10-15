@@ -43,7 +43,7 @@ def add_grant(**g) -> None:
 
 
 def audit_rows(prefix: str) -> list[dict]:
-    return list(reversed(audit.read_recent(1000, prefix)))
+    return list(reversed(audit.read_merged(1000, prefix)))
 
 
 class Typed:
@@ -252,7 +252,9 @@ def test_agent_message_is_blocked_when_the_grant_is_revoked_before_typing(tm, ty
     assert m["status"] == agent_msg.STATUS_BLOCKED and m["reason"] == "grant_revoked"      # 메시지 상태도 맞춘다
     rows = audit_rows("msg.queue")
     assert rows and rows[0]["result"] == "denied" and rows[0]["reason"] == "grant_revoked"
-    assert "안녕" not in audit.path().read_text(encoding="utf-8")
+    from authz import denylog
+    for f in (audit.path(), denylog.path()):                       # 거부는 별도 파일에 남는다
+        assert "안녕" not in (f.read_text(encoding="utf-8") if f.exists() else "")
 
 
 def test_agent_message_is_typed_while_the_grant_stands(tm, typed, monkeypatch):

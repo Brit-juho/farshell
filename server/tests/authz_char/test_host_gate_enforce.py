@@ -95,7 +95,7 @@ def test_host_denials_are_audited_without_content(world):
     world.set_mode("password")
     h = world.headers_for("machine", "POST", "/api/hosts/m5/sessions", b"")
     client().post("/api/hosts/m5/sessions", json={"name": "secret-name-xyz"}, headers=h)
-    rows = audit.read_recent(10, "host.")
+    rows = audit.read_merged(10, "host.")
     assert rows and rows[0]["decision"] == "deny" and rows[0]["resource"] == "host:m5"
     assert "secret-name-xyz" not in json.dumps(rows)
 

@@ -78,6 +78,16 @@ is still accepted unless `VT_AUTHZ_ENFORCE=legacy` is on, see «Shared machine t
 | GET | `/api/auth/elevation` | Current session's elevation state (`elevated`, `elevated_until`) + `unused: true` / `unused_reason: "ADR-27"` — no path requires elevation today. Read-only (Settings → Security) |
 | GET | `/api/devices` | Registered devices (`~/.vt/devices.json`): id (first 8 chars only), label, added_at, last_seen, `current` for the requesting device, `expires_at`/`expired`/`kind` (`persistent`/`temporary`)/`method`, and display-only `os`/`browser`/`ip_last`/`via` (`tunnel`/`tailscale`/`lan`/`local`/`direct`). Expired devices stay listed for 7 days. The raw UA is not returned. Read-only — registration/revocation is `fsh device` |
 
+**Pre-auth failure limit (all HTTP routes except the unix socket).** Failed credential attempts are counted per source: an invalid
+cookie, token or login, a wrong one-time ticket or pairing ticket, and a failed peer signature. Ten failures within 60 s lock that
+source for 5 minutes: every protected route (and the login and pairing endpoints, even with the right credential) answers
+**429 `rate_limited`** `{error, reason:"source_locked", retry_after}` with a `Retry-After` header; the login page and static files
+stay open. `/api/auth` and `/api/peer/pair` also share a global cap of 300 calls per minute across all sources
+(`reason:"exchange_cap"`). Nothing is counted for a request without credentials or for a correctly signed session cookie that has merely
+expired. The source is the client address; with `VT_TRUST_PROXY=1` the proxy-reported address, and for a loopback connection that
+carries `CF-Connecting-IP`/`X-Forwarded-For` (a tunnel) that header value. State is in memory and resets on restart. The unix socket
+is never limited. Denied and failed attempts are written to `~/.vt/audit/denials.jsonl`, not to the hash-chained audit.
+
 ## Code Viewer / Diff (read-only)
 
 | Method | Path | Description |
@@ -162,7 +172,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/api/queue` | List the queue |
+| GET | `/api/queue` | List the queue. An item blocked by an authorization re-check carries the stable code in `blocked_reason` (`grant_revoked`, `delegation_closed`, `relationship_gone`, `authz_unavailable`) **and** a human text in the server language in `blocked_text`; other blocked items have no `blocked_text` |
 | POST | `/api/queue` | Add to the queue (JSON: text, target). Cap of 50, returns 409 if exceeded |
 | DELETE | `/api/queue/{item_id}` | Delete an item. `id=all` clears everything except items being sent. 409 `item_sending` for an item being sent |
 | POST | `/api/queue/{item_id}/unblock` | Resume a blocked item (resets its retry count). 409 `item_sending` for an item being sent |

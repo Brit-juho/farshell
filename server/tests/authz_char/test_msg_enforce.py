@@ -71,7 +71,7 @@ def human_json(world, method: str, path: str, body=None):
 
 def audit_lines(prefix="msg."):
     from authz import audit
-    return list(reversed(audit.read_recent(1000, prefix)))
+    return list(reversed(audit.read_merged(1000, prefix)))
 
 
 def raw_audit() -> str:

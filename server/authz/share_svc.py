@@ -235,7 +235,7 @@ def read_audit(limit: int) -> list[dict]:
     """`GET /api/agent/share/audit` — authz 감사에서 공유 줄만, 옛 모양으로(최근 순)."""
     limit = max(1, min(int(limit), 500))
     out = []
-    for r in audit.read_recent(limit, "share."):
+    for r in audit.read_merged(limit, "share."):          # 거부(denials.jsonl)도 옛 화면에는 계속 보인다
         d = r.get("detail")
         if isinstance(d, dict):
             out.append({"ts": r.get("ts"), **d})

@@ -35,6 +35,7 @@ from fastapi.responses import JSONResponse
 import host_store
 from authz import hooks as authz_hooks
 from authz import peer_svc
+from authz import preauth as authz_preauth
 from i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,21 @@ class PeerDenied(Exception):
         self.status = status
 
 
+def _guarded(conn, method: str, path: str, headers, body_hash: str = "") -> dict:
+    """`_authenticate_raw` + 출처별 사전 인증 실패 한도(`authz/preauth.py`): 잠긴 출처는 429, 서명을 내세웠다 틀린 요청은 실패로 센다.
+    요청/WS 핸들러가 이것을 부른다(`conn` = Request | WebSocket). 서명 규칙 자체는 `_authenticate_raw` 하나다."""
+    source = authz_preauth.source_key(_client_host(conn), headers)
+    left = authz_preauth.LIMITER.lock_remaining(source)
+    if left:
+        raise PeerDenied(tr("인증 실패가 많아 잠시 막혔습니다 — {sec}초 뒤에 다시 시도하세요", sec=left), 429)
+    try:
+        return _authenticate_raw(method, path, headers, body_hash) if body_hash else _authenticate_raw(method, path, headers)
+    except PeerDenied:
+        if headers.get("x-peer-id"):
+            authz_preauth.fail(source, "peer_sig")
+        raise
+
+
 def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> dict:
     """서명 검증 → grant. 실패는 PeerDenied. 실패도 전부 감사 로그에 남긴다.
 
@@ -69,6 +85,10 @@ def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> d
     엔드포인트도 **같은 서명 규칙**을 써야 하는데 WebSocket에는 Request가 없다.
     검증 로직이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.
     """
+    return _authenticate_checked(method, path, headers, body_hash)
+
+
+def _authenticate_checked(method: str, path: str, headers, body_hash: str = "") -> dict:
     peer_id = headers.get("x-peer-id", "")
     ts_raw = headers.get("x-peer-ts", "")
     nonce = headers.get("x-peer-nonce", "")
@@ -107,8 +127,13 @@ def _authenticate_raw(method: str, path: str, headers, body_hash: str = "") -> d
     return grant
 
 
+def _client_host(conn) -> str | None:
+    c = getattr(conn, "client", None)
+    return (c.host if c else None) or "unknown"
+
+
 def _authenticate(request: Request) -> dict:
-    return _authenticate_raw(request.method, request.url.path, request.headers)
+    return _guarded(request, request.method, request.url.path, request.headers)
 
 
 def _level_required(grant: dict, path: str) -> JSONResponse:
@@ -159,7 +184,7 @@ async def _require_body(request: Request, level: str = host_store.LEVEL_VIEW, ac
     data = await request.body()
     digest = hashlib.sha256(data).hexdigest()
     try:
-        grant = _authenticate_raw(request.method, request.url.path, request.headers, digest)
+        grant = _guarded(request, request.method, request.url.path, request.headers, digest)
     except PeerDenied as e:
         return None, JSONResponse({"error": "peer_denied", "reason": e.reason}, status_code=e.status)
     err = _gate(grant, level, action, request.url.path)

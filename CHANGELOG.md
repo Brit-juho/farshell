@@ -8,8 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **사전 인증 실패 한도.** 틀린 쿠키·토큰·로그인·일회용 티켓·페어링 코드와 peer 서명 실패를 출처별로 센다. 60초에 10번이면 그 출처는 5분 동안 429(`Retry-After`)이고, 로그인·페어링 엔드포인트는 전체 분당 300회 상한이 따로 있다. 메모리에만 있어 재시작하면 풀리고, unix socket 은 대상이 아니며, Origin 검사는 루프백도 면제하지 않는다. 서명은 맞는데 만료된 쿠키나 자격 없는 요청은 세지 않는다. 터널이 클라이언트 주소 헤더를 주지 않으면 원격 사용자 전체가 한 출처로 묶이는 한계가 있다(`docs/ref/auth.md`).
+- **큐 항목의 막힘 사유에 사람이 읽는 문구가 붙는다.** `grant_revoked`·`delegation_closed`·`relationship_gone`·`authz_unavailable` 코드는 그대로 두고, `GET /api/queue` 항목에 `blocked_text`(ko/en)를, `fsh queue` 출력에 같은 문구를 싣는다.
+
 ### Changed
 
+- **거부 기록을 주 감사 체인에서 분리했다.** 정책 거절·속도 제한·잠금·인증 실패는 `~/.vt/audit/denials.jsonl`(0600, 1MB × 3세대, 분당 60줄 + 누락 개수 줄)에 남고, 쓰기 실패는 요청을 막지 않는다. 해시 체인(`authz.jsonl`)에는 허용 판정과 모든 authz·pair·lease·grant 변경(사람의 거절 결정 포함)이 남아 거부 폭주가 정당한 이력을 밀어내지 못한다. 이미 체인에 있는 거부는 옮기지 않는다. `GET /api/authz/audit`·`GET /api/agent/share/audit` 은 둘을 합쳐 읽는다.
 - **공용 기계 토큰을 정리한다 (`VT_AUTHZ_ENFORCE=legacy`, 기본 꺼짐).** 켜면 `VT_AUTH_TOKEN` 은 더 이상 API 전체를 여는 열쇠가 아니다. 토큰(Bearer)은 unix socket 이 저장소 안 클라이언트에게 열어 주는 (메서드, 경로) 허용표 안에서만 쓸 수 있고, 그 밖(`/api/sessions/{id}/keys`, `/api/queue` 쓰기, `/api/hosts/*`, 파일·git 쓰기, WebSocket 등)은 403 `legacy_token_scope` 로 소켓이나 로그인을 쓰라고 안내한다. `?token=` 쿼리는 400 `token_query_unsupported`, 토큰 값을 세션 쿠키로 쓰는 방식은 401 `token_cookie_unsupported` 로 받지 않고, 접근 로그는 `token`·`secret`·`password` 류 쿼리 값을 가린다. 웹 앱도 주소창의 `?token=` 을 읽지 않고 지운 뒤 평소 로그인 화면을 보여 준다(이 부분은 플래그와 무관). 로그인한 브라우저·소켓·peer 서명은 그대로다. 꺼 두면 서버는 아무것도 바뀌지 않는다.
 - **비밀번호 없이 토큰만 있는 서버는 승인이 필요한 기능을 멈춰 두지 않고 이유를 알린다 (`legacy` 켜짐).** 세션 공유·관계 없는 세션으로의 에이전트 메시지·`fsh host allow-*` 처럼 사람의 승인이 필요한 호출은 403 `approval_unavailable_no_password` 로 답하고(`fsh password` 로 비밀번호를 설정하라는 안내), `fsh doctor` 와 서버 시작 로그가 한 번 알린다. 이미 부여된 권한은 그대로 동작한다. 이런 서버의 서명 쿠키는 더 이상 「사람」이 아니다(사람 전용 라우트 403). 비밀번호도 토큰도 없는 서버는 지금과 같다.
 - **`fsh doctor`·`fsh status` 가 범위 밖으로 거절된 토큰 요청을 보여 준다 (`legacy` 켜짐).** 최근 24시간의 거절 수를 경로·user agent 별로 보여 줘서, 다음 릴리스에서 기본값이 바뀌기 전에 어느 외부 스크립트를 소켓이나 로그인으로 옮겨야 하는지 알 수 있다. 이번 릴리스에서 토큰은 여전히 기본으로 받는다(사용만 집계).
