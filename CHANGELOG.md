@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-10-15
+
+> 우측 패널(소스 컨트롤·파일·첨부·포트·사용량·상단 메뉴)을 다듬고, 에이전트 상태 판정의 구멍(완료 확인·질문 만료)을 메운 릴리스다. 상태 줄과 dock에서 이 기계의 CPU·RAM·네트워크를 볼 수 있고, 포트 노출을 일시 닫거나 새 주소를 받을 수 있다.
+
 ### Added
 
 - **시스템 사용률(CPU·RAM·네트워크)**. 상태 줄에 CPU / RAM / NET 칩(3초마다 갱신, 80% 넘으면 주의·90% 넘으면 위험 색)이 생기고, 누르면 dock의 「시스템」 탭이 열려 막대와 최근 2분의 흐름을 보여준다. 서버는 `GET /api/system/stats`로 이 서버가 도는 기계의 값을 낸다 — 새 의존성 없이 macOS는 `host_statistics`·`vm_stat`·`netstat -ib`, Linux·WSL2는 `/proc`을 읽는다(읽지 못한 항목은 칩을 숨긴다). 호스트 전환 화면에서는 relay로 그 맥의 값을 가져온다. 파서는 실제 명령 출력 샘플로 테스트하며, Linux·WSL2 경로는 샘플 기반이다.
