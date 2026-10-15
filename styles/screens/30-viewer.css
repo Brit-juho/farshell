@@ -127,7 +127,9 @@
 .vt-vw-code .vt-vw-no{
   position:sticky; left:0; background:var(--crust); z-index:1;
 }
-.vt-vw-cl:hover .vt-vw-no{ background:var(--menu-hover); }
+/* --menu-hover는 반투명(흰색 9%)이다. 번호 칸 배경을 그걸로 바꾸면 sticky 칸 뒤로 지나가는
+   코드 글자가 비쳐 번호와 겹쳐 보인다 — 불투명 바닥(--crust) 위에 강조색을 한 겹 얹는다. */
+.vt-vw-cl:hover .vt-vw-no{ background:linear-gradient(var(--menu-hover), var(--menu-hover)), var(--crust); }
 .vt-vw-sign{ flex:0 0 auto; width:14px; text-align:center; user-select:none; color:var(--sub); font-weight:600; }
 .vt-vw-dl.add .vt-vw-sign{ color:var(--ok); }
 .vt-vw-dl.del .vt-vw-sign{ color:var(--err); }
