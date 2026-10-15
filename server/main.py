@@ -366,6 +366,9 @@ async def lifespan(_app: FastAPI):
             "보여 IP 필터가 무력화됩니다. 원격 인증은 'vt password'/VT_AUTH_TOKEN으로 하세요 "
             "(VT_TRUST_PROXY=1 + CF-Connecting-IP 신뢰 시에만 IP 필터가 의미 있음)."
         )
+    notice = authz_legacy_gate.notice_for_start()
+    if notice:
+        logger.warning(notice)
     if auth.is_protected():
         n_dev = sum(1 for d in auth.list_devices() if not d.get("expired"))
         if auth.totp_enabled():

@@ -17,6 +17,7 @@ from i18n import tr
 
 from . import approvals, audit, defaults, flags, limits, migrate, store
 from . import principals as P
+from . import legacy_gate
 from . import scopes as S
 from .errors import ShareError
 
@@ -171,6 +172,7 @@ def change(actor: P.Principal, peer_id: str, action: str) -> dict:
             mirror(docs, pid, approved_by=actor.id, approved_via=S.VIA_MANUAL)
         host_store.audit(pid, "grant", True, f"{action} ({actor.short()})")
         return {"state": "applied", "change": action, "peer": {"id": pid, "label": g.get("label") or pid}}
+    legacy_gate.require_approval_available()         # 승인할 사람(웹 비밀번호)이 없으면 보류로 두지 않고 이유를 알린다
     with store.txn() as docs:
         purge(docs, now)
         reqs = peer_requests(docs)

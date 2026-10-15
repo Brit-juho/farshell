@@ -381,6 +381,15 @@ AUTH_MACHINE = "machine"   # 기계 토큰(Bearer / ?token= / 쿠키로 실린 �
 AUTH_NONE = "none"         # 인증 수단 없음(또는 무효)
 
 
+def _cookie_may_be_human() -> bool:
+    """서명 쿠키를 사람 세션으로 칠 수 있는가. 비밀번호가 있으면 언제나. 비밀번호 없이 토큰만 있는 서버는 사람이 로그인할 방법이
+    없으므로, `VT_AUTHZ_ENFORCE=legacy` 가 켜지면 서명 쿠키도 사람이 아니다(H14). 꺼짐이면 옛 판정 그대로."""
+    if VT_AUTH_PASSWORD_HASH:
+        return True
+    from authz import legacy_gate
+    return not legacy_gate.active()
+
+
 def request_kind(request) -> str:
     """요청의 인증 종류 — `session` | `machine` | `none`.
 
@@ -390,7 +399,7 @@ def request_kind(request) -> str:
     """
     cookie = request.cookies.get("vt_session", "")
     has_header_cred = bool(request.headers.get("authorization")) or bool(request.query_params.get("token"))
-    if cookie and not has_header_cred and session_device(cookie) is not None:
+    if cookie and not has_header_cred and session_device(cookie) is not None and _cookie_may_be_human():
         return AUTH_SESSION
     if VT_AUTH_TOKEN:
         authz = request.headers.get("authorization", "")

@@ -533,10 +533,12 @@ def _on_wsl_drvfs(path: Path) -> bool:
 
 def status_report(port=None) -> dict:
     """서버 밖에서 부르는 진단 — 상태 파일 + 파일 권한 + 실제 연결 시험 + 최근 24h legacy 토큰 사용 수."""
-    from . import legacy_use
+    from . import legacy_gate, legacy_use
     path = Path(fsh_client.socket_path(port))
     out: dict = {"path": str(path), "enabled": enabled(), "state": "absent", "reason": "", "selftest": None,
-                 "perms": None, "dir_perms": None, "reachable": False, "legacy_token_24h": legacy_use.count_24h()}
+                 "perms": None, "dir_perms": None, "reachable": False, "legacy_token_24h": legacy_use.count_24h(),
+                 "legacy_enforced": legacy_gate.active(), "legacy_denied_24h": legacy_use.denied_24h(),
+                 "approval_unavailable": legacy_gate.approval_unavailable()}
     try:
         rec = json.loads(status_path(path).read_text())
         out.update(state=rec.get("state", "absent"), reason=rec.get("reason", ""), selftest=rec.get("selftest"),

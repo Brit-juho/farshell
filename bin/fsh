@@ -529,15 +529,16 @@ _authed_curl() {
   fi
 }
 
-# unix socket 상태 한 줄. `python -m authz sock-status` 출력(state|path|selftest|perms|dir|reachable|legacy24h|reason)을
+# unix socket 상태 한 줄. `python -m authz sock-status` 출력(state|path|selftest|perms|dir|reachable|legacy24h|denied24h|legacy|nopw|reason)을
 # 읽어 "<level>\t<메시지>"로 돌려준다. level = ok|warn|fail. doctor 와 status 가 같이 쓴다.
 _sock_status_line() {
   [ -x "${VT_PYTHON:-}" ] || return 1
-  local raw st path selftest perms dirp reach legacy reason lvl msg
+  local raw st path selftest perms dirp reach legacy denied lflag nopw reason lvl msg
   raw="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz sock-status --port "$VT_PORT" 2>/dev/null)" || return 1
   [ -n "$raw" ] || return 1
-  IFS='|' read -r st path selftest perms dirp reach legacy reason <<<"$raw"
+  IFS='|' read -r st path selftest perms dirp reach legacy denied lflag nopw reason <<<"$raw"
   perms="${perms#perms=}"; dirp="${dirp#dir=}"; legacy="${legacy#legacy24h=}"; reach="${reach#reachable=}"
+  denied="${denied#denied24h=}"; lflag="${lflag#legacy=}"; nopw="${nopw#nopw=}"
   case "$st:$reach" in
     listening:True)
       lvl=ok; msg="$(_t 'socket OK — {path} (권한 {perms}, 디렉터리 {dir}, 자가 시험 통과)' path="${path/#$HOME/~}" perms="$perms" dir="$dirp")" ;;
@@ -553,6 +554,8 @@ _sock_status_line() {
       lvl=warn; msg="$(_t '소켓 없음 — 서버가 꺼져 있거나 옛 코드입니다(fsh restart)')" ;;
   esac
   msg="$msg · $(_t '최근 24h 토큰 사용 {n}건' n="${legacy:-0}")"
+  # VT_AUTHZ_ENFORCE=legacy — 허용표 밖이라 거절한 토큰 요청(다음 릴리스 전에 옮겨야 할 외부 스크립트의 단서)
+  [ "$lflag" = "1" ] && msg="$msg · $(_t '범위 밖 거절 {n}건 (legacy_token_scope)' n="${denied:-0}")"
   printf '%s\t%s\n' "$lvl" "$msg"
 }
 
@@ -3442,6 +3445,28 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
   if [ -n "$_sk" ]; then
     _sk_lvl="${_sk%%$'\t'*}"; _sk_msg="${_sk#*$'\t'}"
     _check "$(_t 'unix socket')" "$_sk_lvl" "$_sk_msg"
+  fi
+
+  # 11-a1. 공용 토큰 정리(VT_AUTHZ_ENFORCE=legacy) — 거절된 요청의 경로·UA, 비밀번호 없는 서버의 승인 기능
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _lg _lg_n _lg_path _lg_ua _lg_raw
+    _lg_raw="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz sock-status --port "$VT_PORT" 2>/dev/null)"
+    case "$_lg_raw" in
+      *'|legacy=1|'*)
+        _lg="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz legacy-denied 2>/dev/null)"
+        if [ -n "$_lg" ]; then
+          while IFS='|' read -r _lg_n _lg_path _lg_ua; do
+            [ -n "$_lg_n" ] || continue
+            _check "$(_t '공용 토큰')" warn "$(_t '범위 밖 거절 {n}건 (최근 24h): {path} — {ua}. unix socket(fsh 명령) 또는 로그인으로 옮기세요' n="$_lg_n" path="$_lg_path" ua="${_lg_ua:-?}")"
+          done <<<"$_lg"
+        else
+          _check "$(_t '공용 토큰')" ok "$(_t '범위 밖 거절 없음 (최근 24h)')"
+        fi
+        case "$_lg_raw" in
+          *'|nopw=1|'*) _check "$(_t '승인 기능')" warn "$(_t "웹 로그인 비밀번호가 없어 승인이 필요한 에이전트·peer 기능이 꺼져 있습니다 — 'fsh password' 로 설정하세요")" ;;
+        esac
+        ;;
+    esac
   fi
 
   # 11-a2. 권한 저장소 — 읽을 수 없는 파일이 있으면 변경이 거부된다(덮어써서 권한이 사라지는 것을 막는다)

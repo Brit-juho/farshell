@@ -46,6 +46,7 @@ import store_lock
 import tmux_runner
 import vt_paths
 from authz import flags as authz_flags
+from authz import legacy_gate as authz_legacy_gate
 from authz.errors import ShareError
 from i18n import tr
 
@@ -426,6 +427,7 @@ def _legacy_get_grant(snap, agent, target: Sess) -> Optional[dict]:
 
 def request_access(snap: dict[str, Sess], agent, target: Sess, kind: str) -> tuple[dict, bool]:
     """권한이 없을 때 보류 요청. (요청, 새로 만들었는가). 거부 쿨다운 중이면 ShareError."""
+    authz_legacy_gate.require_approval_available()    # 승인할 사람(웹 비밀번호)이 없으면 보류로 두지 않고 ShareError(403)
     if enforced():
         return _svc().request_access(snap, agent, target, kind)
     return _legacy_request_access(snap, agent, target, kind)
