@@ -250,6 +250,13 @@ _ROWS: tuple = (
     ("POST", "/api/leases/{lease_id}/renew", sock_()),
     ("DELETE", "/api/leases/{lease_id}", sock_()),
     ("GET", "/api/leases", sock_()),
+# --- routes/pairs.py
+    ("POST", "/api/pairs", sock_()),
+    ("POST", "/api/pairs/join", sock_()),
+    ("POST", "/api/pairs/{pair_id}/code", sock_()),
+    ("GET", "/api/pairs/{pair_id}/status", sock_()),
+    ("GET", "/api/pairs", sock_()),
+    ("DELETE", "/api/pairs/{pair_id}", sock_()),
 # --- routes/share.py
     ("POST", "/api/files/{file_id}/share", human(elevated=True)),
     ("DELETE", "/api/files/{file_id}/share/{share_id}", human(elevated=True)),

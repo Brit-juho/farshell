@@ -244,6 +244,9 @@ async def read_audit(principal: str = Query("", max_length=200), resource: str =
 
 
 def request_kind(request_id: str) -> str:
+    from authz import pairs
+    if pairs.owns_request(request_id):
+        return inbox.KIND_PAIR
     if inbox.owns_request(request_id):
         return inbox.KIND_GENERIC
     if msg_svc.enforced() and msg_svc.owns_request(request_id):
@@ -276,6 +279,8 @@ async def decide_approval(approval_id: str, request: Request):
       승인권자 확인(elevated 가 필요한 요청은 elevated 사람만)은 옛 결정 함수 그대로다."""
     import routes.agent_share as share_routes
     body = await _body(request)
+    if request_kind(approval_id) == inbox.KIND_PAIR:
+        return await _decide_pair(approval_id, body, request)
     try:
         decision, choice, scopes, ttl = inbox.check_choice(body.get("decision"), body.get("choice"), body.get("scopes"), body.get("ttl"))
     except ShareError as e:
@@ -320,6 +325,32 @@ async def decide_approval(approval_id: str, request: Request):
     if kind == inbox.KIND_GENERIC and not out.get("replayed"):
         await share_routes._resolved(approval_id, kind, "allowed" if out.get("grant") else "denied")
     return {**out, "id": approval_id, "kind": kind, "state": "allowed" if out.get("grant") else "denied"}
+
+
+async def _decide_pair(approval_id: str, body: dict, request: Request):
+    """pair 승인(kind=`pair`) — 한 화면에서 정한다. 본문 `{decision: allow|deny|later, elevated?: [항목…], phrase?}`. `elevated` 는 명시로 체크한 항목만 준다
+    (체크가 있으면 재인증한 사람만). `phrase` 를 주면 두 에이전트가 보고 있는 확인 문구와 같아야 한다. 선택지(choice·scopes·ttl)는 받지 않는다."""
+    from authz import pairs
+    decision = body.get("decision")
+    if decision not in ("allow", "deny", "later"):
+        return _err(ShareError("bad_decision", tr("decision 은 allow, deny, later 중 하나입니다"), 400))
+    if body.get("choice") is not None or body.get("scopes") or body.get("ttl") is not None:
+        return _err(ShareError("choice_unsupported", tr("이 종류의 요청은 허용/거절만 받습니다 — 한 번만·기간·범위 조정은 지원하지 않습니다"), 400))
+    try:
+        pairs.require_enabled()
+        if decision == "later":
+            pend = await asyncio.to_thread(pairs.pending_approvals)
+            if not any(a["id"] == approval_id or f"ap-{a['id']}" == approval_id for a in pend):
+                return _err(ShareError("not_found", tr("대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)"), 404))
+            return {"ok": True, "id": approval_id, "kind": inbox.KIND_PAIR, "state": "pending", "later": True}
+        res = await asyncio.to_thread(pairs.decide, approval_id, decision, _actor(request), elevated=body.get("elevated"), phrase=body.get("phrase"))
+    except ShareError as e:
+        if e.code in ("phrase_mismatch_locked", "member_gone"):
+            await authz_events.emit(authz_events.resolved_event(approval_id, inbox.KIND_PAIR, "denied"))
+        return _err(e)
+    if not res.get("replayed"):
+        await authz_events.emit(authz_events.resolved_event(approval_id, inbox.KIND_PAIR, res["state"]))
+    return {**res, "id": approval_id, "kind": inbox.KIND_PAIR}
 
 
 @human_router.delete("/api/authz/grants/{grant_id}", response_model=RevokeResponse)

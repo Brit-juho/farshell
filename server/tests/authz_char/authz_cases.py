@@ -83,6 +83,29 @@ def leases_cases() -> list[Case]:
     return out
 
 
+# --- pairs ---------------------------------------------------------------------------
+
+def pairs_cases() -> list[Case]:
+    """`routes/pairs.py` 전부. 호출자 × 서버 모드. 마스터 스위치(`pair`)가 꺼진 서버의 동작이다 — 도달한 호출자는 모두 409 `pair_disabled`,
+    닿지 못하는 호출자(인증 없음 등)는 평소의 인증 응답. 켠 뒤의 규칙은 test_authz_pairs*.py 가 본다."""
+    g = "pairs"
+    callers = HUMAN + AGENTS[:1] + ("agent_foreign", "peer_control")
+    routes = [
+        ("POST", "/api/pairs", "/api/pairs", {"sessions": ["x"], "role": "driver"}),
+        ("POST", "/api/pairs/join", "/api/pairs/join", {"code": "ABCD-EFGH"}),
+        ("POST", "/api/pairs/{pair_id}/code", "/api/pairs/pr-none/code", None),
+        ("GET", "/api/pairs/{pair_id}/status", "/api/pairs/pr-none/status", None),
+        ("GET", "/api/pairs", "/api/pairs", None),
+        ("DELETE", "/api/pairs/{pair_id}", "/api/pairs/pr-none", None),
+    ]
+    out = []
+    for method, route, path, body in routes:
+        for mode in MODES:
+            for c in callers:
+                out.append(Case(_cid(g, route, method, c, mode), g, c, mode, method, route, path, body))
+    return out
+
+
 # --- agent_share ----------------------------------------------------------------------------
 
 def agent_share_cases() -> list[Case]:
@@ -427,7 +450,7 @@ BUILDERS = {
     "agent_share": agent_share_cases, "delegation": delegation_cases, "agent_msg": agent_msg_cases,
     "peer": peer_cases, "relay": relay_cases, "host_relay": host_relay_cases, "hosts": hosts_cases,
     "machine_token": machine_token_cases, "cli_writes": cli_cases, "authz_api": authz_api_cases,
-    "leases": leases_cases,
+    "leases": leases_cases, "pairs": pairs_cases,
 }
 
 

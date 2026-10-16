@@ -73,6 +73,7 @@ from routes.agent_share import router as agent_share_router, human_router as age
 from routes.authz import human_router as authz_human_router, read_router as authz_read_router, router as authz_router
 from routes.delegation import router as delegation_router, human_router as delegation_human_router
 from routes.leases import router as leases_router
+from routes.pairs import router as pairs_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -471,6 +472,9 @@ async def lifespan(_app: FastAPI):
     # 폴더 lease 정리(수명이 끝난 것)와, 서버가 도중에 죽어 멈춘 회수 saga 이어하기.
     from authz import leases as authz_leases, saga as authz_saga
     lease_sweep_task = asyncio.create_task(authz_leases.sweep_loop())
+    # pair 점검(제안 만료·유휴·구성원 세션 소멸·최대 수명). 마스터 스위치가 꺼져 있으면 매 주기 아무것도 하지 않는다.
+    from authz import pairs as authz_pairs
+    pair_sweep_task = asyncio.create_task(authz_pairs.sweep_loop())
     saga_sweep_task = asyncio.create_task(authz_saga.sweep_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
@@ -507,7 +511,7 @@ async def lifespan(_app: FastAPI):
         delegation_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await delegation_sweep_task
-        for _t in (lease_sweep_task, saga_sweep_task):
+        for _t in (lease_sweep_task, saga_sweep_task, pair_sweep_task):
             _t.cancel()
             with suppress(asyncio.CancelledError):
                 await _t
@@ -634,6 +638,7 @@ app.include_router(authz_human_router)
 app.include_router(authz_read_router)
 app.include_router(authz_router)
 app.include_router(leases_router)
+app.include_router(pairs_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)

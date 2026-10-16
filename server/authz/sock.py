@@ -94,6 +94,10 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", r"/api/leases", "fsh lease ls · mcp lease_list"),
     ("POST", r"/api/leases(/check|/[^/]+/renew)?", "fsh lease acquire|renew|check · pre-commit guard · mcp lease_acquire|lease_renew"),
     ("DELETE", r"/api/leases/[^/]+", "fsh lease release · mcp lease_release"),
+    # pair — 에이전트(만들기·코드·합류·상태·끝내기)와 터미널 fsh(전체 목록). 마스터 스위치가 꺼져 있으면 라우트가 409 로 답한다.
+    ("GET", r"/api/pairs(/[^/]+/status)?", "fsh pair status|ls · mcp pair_status"),
+    ("POST", r"/api/pairs(/join|/[^/]+/code)?", "fsh pair start|code|join"),
+    ("DELETE", r"/api/pairs/[^/]+", "fsh pair end|revoke"),
 )
 _ROUTES_RE = tuple((m, re.compile(p), who) for m, p, who in ROUTES)
 

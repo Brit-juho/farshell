@@ -28,7 +28,7 @@ from typing import Iterable, Optional
 
 from i18n import tr
 
-from . import approvals, audit, defaults, engine, limits, store
+from . import approvals, audit, defaults, engine, flags, limits, store
 from . import principals as P
 from . import scopes as S
 from .errors import ShareError
@@ -41,6 +41,7 @@ PREFIX_GRANT = "authz:grant:"
 REQ_ID_PREFIX = "gq-"
 GRANT_ID_PREFIX = "gg-"
 KIND_SHARE, KIND_MSG, KIND_PEER, KIND_GENERIC = "share", "msg", "peer", "generic"
+KIND_PAIR = "pair"
 CHOICES = ("once", "session", "deny")
 DECISIONS = ("allow", "deny", "later")
 REQUEST_TTL = limits.PENDING_TTL
@@ -286,7 +287,8 @@ def _check_scopes(scopes, conds) -> tuple[list[str], Optional[dict]]:
     for x in scopes:
         if not isinstance(x, str) or x not in S.CATALOG:
             raise ShareError("bad_scopes", tr("알 수 없는 scope 입니다"), 400)
-        if x in UNREQUESTABLE:
+        if x in UNREQUESTABLE and not (x == "pair.manage" and flags.enforced("pair")):
+            # pair 기능이 켜진 서버에서만 에이전트가 `pair.manage` 를 요청할 수 있다(사람이 승인함에서 정한다). 자동 승인 구간은 여전히 못 덮는다.
             raise ShareError("scope_not_requestable", tr("이 scope 는 요청할 수 없습니다 — 사람이 직접 정하는 권한입니다"), 400, scope=x)
         if x not in out:
             out.append(x)
@@ -455,6 +457,8 @@ def list_approvals(snap, *, names_alive=None) -> list[dict]:
            if is_req(r) and r.get("state") == "pending" and now < float(r.get("expires") or 0)
            and not (alive is not None and any(r.get(k) and r[k] not in alive for k in ("subject_session", "resource_session")))]
     out += gen
+    from . import pairs
+    out += pairs.pending_approvals(now)           # pair 가 꺼져 있으면 비어 있다
     out.sort(key=lambda r: r.get("created") or 0)
     return out
 
@@ -478,6 +482,8 @@ def kind_of_grant(g: dict) -> str:
         return KIND_GENERIC
     if o.startswith("legacy:delegations:"):
         return "deleg"
+    if o.startswith("pair:grant:"):
+        return KIND_PAIR
     return "other"
 
 
@@ -747,6 +753,10 @@ def revoke(grant_id: str, scopes: Optional[list], snap, actor: Optional[P.Princi
         peer = grant_id[3:]
         r = host_grant_svc.change(actor or P.human("-"), peer, "deny-control" if grant_id.startswith("pg-") else "deny-agent")
         return {"kind": KIND_PEER, "id": grant_id, "grant": {"id": grant_id, "peer": peer, "state": r.get("state")}}
+    if grant_id.startswith("pp-"):
+        from . import pairs
+        r = pairs.revoke_by_grant(grant_id, actor)
+        return {"kind": KIND_PAIR, "id": grant_id, "grant": {"id": grant_id, "pair": r["pair"]}}
     if grant_id[:3] in ("dc-", "dr-", "dw-", "di-"):
         did = grant_id[3:].split("-", 1)[0] if grant_id.startswith("di-") else grant_id[3:]
         delegation.close(did, reason="closed_by_user", actor=actor)
@@ -765,6 +775,9 @@ def panic(snap, actor: Optional[P.Principal], names_alive=None) -> dict:
     import delegation
     from . import host_grant_svc, msg_svc
     done = {"share": 0, "msg": 0, "peer": 0, "deleg": 0, "generic": 0, "requests": 0}
+    from . import pairs as _pairs
+    if _pairs.enabled():
+        done["pair"] = 0
     failed: list[dict] = []
     now = time.time()
 
@@ -806,6 +819,9 @@ def panic(snap, actor: Optional[P.Principal], names_alive=None) -> dict:
             attempt("requests", lambda t=t: agent_share.drop_target(t, snap))
     cleared = _clear_requests(actor, snap)
     done["requests"] += cleared
+    from . import pairs
+    if pairs.enabled():
+        attempt("pair", lambda: pairs.end_all(actor, "panic"))
     _audit_strict({"principal": (actor or P.human("-")).id, "action": "authz.panic", "resource": "authz:*", "scopes": [],
                    "decision": "allow", "result": "ok", "detail": {"counts": done, "failed": len(failed)}})
     return {"ok": not failed, "revoked": done, "failed": failed}

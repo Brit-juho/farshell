@@ -384,7 +384,9 @@ def test_panic_needs_elevation_and_revokes_everything_non_human(world):
 # --- 6. 요청 생성 한도 -------------------------------------------------------------------------------------------
 
 
-def test_request_validation(world):
+def test_request_validation(world, monkeypatch):
+    from authz import flags
+    monkeypatch.setenv("VT_AUTHZ_ENFORCE", ",".join(sorted(flags.tokens() - {"pair"})))     # pair 가 켜진 서버에서만 pair.manage 를 요청할 수 있다(test_authz_pairs.py)
     for over, err in (({"scopes": []}, "bad_scopes"), ({"scopes": ["nope.nope"]}, "bad_scopes"),
                       ({"scopes": ["authz.admin"]}, "scope_not_requestable"), ({"scopes": ["pair.manage"]}, "scope_not_requestable"),
                       ({"scopes": ["authz.request"]}, "scope_not_requestable"), ({"resource": "weird:thing"}, "bad_resource"),
