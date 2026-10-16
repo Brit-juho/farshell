@@ -504,12 +504,14 @@ def test_sock_usable_stat_flavors(w, tmp_path, flavor, mode, usable):
     w.unix(mode=mode)
     fake = tmp_path / "fakebin"
     fake.mkdir()
-    real = subprocess.run(["bash", "-c", "command -v stat"], capture_output=True, text=True).stdout.strip()
+    # 실제 stat 에 기대지 않는다(이 맥의 BSD stat 으로만 도는 시험이 되지 않게). 소켓 파일의 권한은 시험이 아는 값이다.
+    octal = f"{mode:o}"
     if flavor == "gnu":
-        body = (f'if [ "$1" = -c ]; then printf "%o\\n" $(( 0$(\"{real}\" -f %Lp \"$3\") )); exit 0; fi\n'
+        body = (f'if [ "$1" = -c ]; then printf "%s\\n" "{octal}"; exit 0; fi\n'
                 'echo "  File: filesystem info garbage"; echo "    ID: 0 Namelen: 255"; exit 1\n')
     else:
-        body = f'if [ "$1" = -f ]; then exec "{real}" "$@"; fi\necho "stat: illegal option -- c" >&2; exit 1\n'
+        body = (f'if [ "$1" = -f ]; then printf "%s\\n" "{octal}"; exit 0; fi\n'
+                'echo "stat: illegal option -- c" >&2; exit 1\n')
     (fake / "stat").write_text("#!/bin/bash\n" + body)
     (fake / "stat").chmod(0o755)
     env = _env_for_script(w, tmp_path, VT_PORT=str(w.tcp.port))
