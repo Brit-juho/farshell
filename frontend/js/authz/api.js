@@ -24,9 +24,14 @@ export function needsElevation(e) {
 export const authzApi = {
   approvals: () => shareFetch('/api/authz/approvals').then((d) => (d && d.approvals) || []),
   /** choice: once|session|deny. 'later' 는 서버에 아무것도 바꾸지 않는다. */
-  decide: (id, decision, choice) => shareFetch(
+  decide: (id, decision, choice, extra) => shareFetch(
     `/api/authz/approvals/${encodeURIComponent(id)}/decision`,
-    J('POST', choice ? { decision, choice } : { decision }),
+    J('POST', { decision, ...(choice ? { choice } : {}), ...(extra || {}) }),
+  ),
+  /** 페어 승인 — `elevated` 는 사람이 직접 체크한 항목만(빈 목록이면 높은 권한 없이). 선택지(choice)는 받지 않는다. */
+  decidePair: (id, elevated) => shareFetch(
+    `/api/authz/approvals/${encodeURIComponent(id)}/decision`,
+    J('POST', { decision: 'allow', elevated: elevated || [] }),
   ),
   grants: (filters = {}) => shareFetch(`/api/authz/grants${qs({ subject: filters.subject, resource: filters.resource, kind: filters.kind })}`)
     .then((d) => (d && d.grants) || []),
@@ -36,5 +41,14 @@ export const authzApi = {
   ),
   /** `{entries, chain:'ok'|'broken', lines, brokenSeq, denials}` */
   audit: (q = {}) => shareFetch(`/api/authz/audit${qs({ principal: q.principal, resource: q.resource, since: q.since || undefined, limit: q.limit })}`),
+  /** 페어·lease — `pair_disabled`(409)는 기능이 꺼진 서버다(오류가 아니라 안내로 보인다). */
+  pairs: () => shareFetch('/api/pairs').then((d) => (d && d.pairs) || []),
+  pairCode: (id) => shareFetch(`/api/pairs/${encodeURIComponent(id)}/code`, J('POST', {})),
+  pairEnd: (id) => shareFetch(`/api/pairs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  pairHandoff: (id) => shareFetch(`/api/pairs/${encodeURIComponent(id)}/handoff`, J('POST', {})),
+  pairAccept: (id) => shareFetch(`/api/pairs/${encodeURIComponent(id)}/handoff/accept`, J('POST', {})),
+  /** `{leases, enforced}` */
+  leases: () => shareFetch('/api/authz/leases'),
+  leaseRevoke: (id) => shareFetch(`/api/authz/leases/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   panic: () => shareFetch('/api/authz/panic', J('POST', {})),
 };

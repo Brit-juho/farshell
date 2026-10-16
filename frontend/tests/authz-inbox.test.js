@@ -34,13 +34,13 @@ test('share 요청: 문장에 프리셋 이름, 상세 줄에 정확한 scope, �
   assert.strictEqual(t.document.activeElement, t.act('deny'));
 });
 
-test('프리셋이 일부만 덮으면 「… 일부」, 조건은 상세 줄에 그대로', async () => {
+test('프리셋이 일부만 덮으면 「… 범위 안」(영어 「Part of」 대신 뜻이 분명한 말), 조건은 상세 줄에 그대로', async () => {
   const t = await setup();
   t.entry.setPending([item('r1', 'share', {
     preset: { id: 'drive', label: '운전', exact: false },
     scopes: ['session.input', 'session.read'], conds: { 'session.input': { modes: ['line'], via: ['direct'] } },
   })]);
-  assert.match(t.text(), /「운전 일부」 권한/);
+  assert.match(t.text(), /「운전 범위 안」 권한/);
   assert.match(t.text(), /session\.input\[modes=line; via=direct\]/);
 });
 
