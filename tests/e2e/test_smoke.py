@@ -1659,20 +1659,20 @@ def test_파일을_패널에_끌어다_놓으면_올라간다(page):
         "(n) => [...document.querySelectorAll('#vt-dock .vt-fl-name')].some(e => e.textContent.includes(n))",
         arg=name, timeout=15000,
     )
+    # 업로드 중 행(.vt-fl-row-uploading)이 서버 레코드 행으로 바뀐 뒤에 읽는다 — 크기는 완료 행의 .vt-fl-meta 에 있다.
     page.wait_for_function(
         """(n) => {
           const r = [...document.querySelectorAll('#vt-dock .vt-fl-row')]
             .find(x => x.querySelector('.vt-fl-name')?.textContent.includes(n));
-          const t = r?.querySelector('.vt-fl-sub')?.textContent.trim() || '';
-          return t && !t.includes('저장 중');
+          return !!r && !r.classList.contains('vt-fl-row-uploading') && !!r.querySelector('.vt-fl-meta');
         }""",
-        arg=name, timeout=15000,
+        arg=name, timeout=20000,
     )
     got = page.evaluate(
         """(n) => {
           const rows = [...document.querySelectorAll('#vt-dock .vt-fl-row')];
           const mine = rows.find(r => r.querySelector('.vt-fl-name')?.textContent.includes(n));
-          return { rows: rows.length, sub: mine?.querySelector('.vt-fl-sub')?.textContent.trim() || '' };
+          return { rows: rows.length, sub: mine?.querySelector('.vt-fl-meta')?.textContent.trim() || '' };
         }""",
         name,
     )
