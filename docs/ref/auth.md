@@ -637,6 +637,30 @@ Settings > Permissions hosts the pending list, the grants list (filters go to th
 separately and cannot be revoked), the audit timeline (reverse chronological, filters, optional denials, a chain badge that is neutral when `ok` and a
 warning when `broken`; only whitelisted fields are drawn, never content) and the guarded emergency stop (two-step confirmation, then the elevate prompt).
 
+### Pair approval, Pairs and Folder leases screens
+
+A `pair` request uses the same decision window but one fixed layout, so everything needed to decide is on one screen: who is pairing with
+whom (nicknames; a person without a name is shown as "you"), the bundle in words (sessions, folders, whether leases are taken), the preset name
+each role gets (see/collab/drive/control, `… within` when the role is narrower than the preset) with the exact scope and conditions in a detail
+line, **both check phrases side by side** with the instruction to compare them with what each agent displayed (a warning if the two differ), and
+the elevated items as one checkbox each — **none is pre-ticked**. The decision button states what it grants (each member's role and preset plus
+the ticked elevated items). Only ticking an elevated item leads to one re-authentication (the existing elevate prompt); allowing without ticks
+sends `elevated: []` and never asks for the password. Deny keeps the default focus, buttons are ignored for 400 ms, Esc means "later", and there
+is no "allow all". A server refusal (`phrase_mismatch`, `elevation_required`, `wider_than_requested`, `already_decided`) is shown with the
+server's own reason and the window stays open; a refusal that closed the request (`phrase_mismatch_locked`, `member_gone`) is shown as a toast
+and the request leaves the list. The window sits above the phone's bottom navigation, not under it.
+
+Settings > Permissions has a **Pairs** section (state, members with roles, bundle, time left, swap count; end/revoke after confirmation; offer a
+handoff when you are the driver, accept when you are the navigator, swap at once when a person is not a member; "show code" for a pending pair
+you started, with the code, its check phrase and a live countdown) and a **Folder leases** section (holder, path glob, mode, exclusive, expiry;
+release after confirmation; an inherited lease is a read-only marker and has no release button; a note says leases are advisory outside
+FarShell's own APIs). A server with `pair` off answers `409 pair_disabled`, which is shown as one explanatory line rather than an error; an
+empty list explains that a pair is started by an agent or `fsh pair start` and that the feature must be enabled. Pair grants in the grants list
+carry a pair tag that scrolls to that pair; revoking one asks first because it ends the whole pair. Audit lines for `pair.*` and `lease.*` are
+worded in plain text from counts and states only. The server emits no event when a pair is created, a code is issued or a handoff happens, so
+the section re-reads after its own actions, on the `pair` approval and revoke events, and on its refresh button; `lease_notice` re-reads the
+leases. Event bursts are coalesced per kind.
+
 ## A device's sessions die with the device
 
 `session_device` used to check only that the bound device **still existed**. A device

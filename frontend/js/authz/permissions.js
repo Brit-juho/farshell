@@ -7,6 +7,8 @@ import { errorText } from './data.js';
 import { mountInboxList } from './inbox.js';
 import { mountGrants } from './grants.js';
 import { mountAudit } from './audit.js';
+import { mountPairs } from './pairs.js';
+import { mountLeases } from './leases.js';
 
 /** 비상 정지 — 두 단계 확인 + 재인증. 사람 기본 권한·공유 정책·로그인은 그대로고, 사람이 아닌 주체의 권한과 대기 요청만 거둔다. */
 export function mountPanic(host) {
@@ -16,7 +18,7 @@ export function mountPanic(host) {
       <button type="button" class="vt-btn lg danger vt-authz-panic-arm">${t('모든 에이전트 권한 회수…')}</button>`;
   };
   const armed = () => {
-    host.innerHTML = `<p class="vt-authz-warn" role="alert">${t('정말 모든 에이전트 권한을 회수할까요? 공유 세션·메시지·다른 맥·위임·일반 권한이 전부 거두어지고, 에이전트는 다시 승인을 받아야 합니다. 비밀번호를 다시 확인합니다.')}</p>
+    host.innerHTML = `<p class="vt-authz-warn" role="alert">${t('정말 모든 에이전트 권한을 회수할까요? 공유 세션·메시지·다른 맥·위임·페어·일반 권한이 전부 거두어지고, 에이전트는 다시 승인을 받아야 합니다. 비밀번호를 다시 확인합니다.')}</p>
       <div class="vt-dialog-actions"><button type="button" class="vt-btn lg vt-authz-panic-cancel">${t('취소')}</button>
       <button type="button" class="vt-btn lg danger vt-authz-panic-go">${t('지금 모두 회수')}</button></div>`;
     host.querySelector('.vt-authz-panic-cancel').focus();     // 파괴적 동작이라 기본 포커스는 취소
@@ -51,9 +53,11 @@ export function mountPanic(host) {
   idle();
 }
 
-/** hosts: {inbox, grants, audit, panic} — 설정 섹션이 만든 빈 요소들. */
+/** hosts: {inbox, pairs, leases, grants, audit, panic} — 설정 섹션이 만든 빈 요소들(pairs·leases 는 없어도 된다). */
 export function mountPermissions(hosts) {
   mountInboxList(hosts.inbox);
+  if (hosts.pairs) mountPairs(hosts.pairs);
+  if (hosts.leases) mountLeases(hosts.leases);
   mountGrants(hosts.grants);
   mountAudit(hosts.audit);
   mountPanic(hosts.panic);

@@ -21,6 +21,8 @@ password (web/phone). `fsh authz` in the terminal is read-only.
 | Section | What it shows |
 |---|---|
 | Waiting for approval | Every pending request in one list. "Decide" opens the decision window for that request |
+| Pairs | Pairs in progress and those that ended within the last hour: state, members with roles, bundle, time left. End/revoke (confirmed), offer a role swap or accept one; the side that started a pair gets "Show code" (the code, its check phrase and a live countdown). A server with the feature off shows one explanatory line |
+| Folder leases | Leases held now: holder, path, read/write, exclusive, expiry. A person releases one with "Release" (confirmed). An inherited lease is a read-only marker and goes away when its parent is released. A lease is an advisory marker that cannot stop writes made outside FarShell itself (shell, editor) |
 | Granted access | A list you can filter by subject, resource and kind. Each row: preset (or scope count), the exact scopes and conditions, who approved and how, expiry or uses left, delegation lineage. "Revoke" asks for confirmation |
 | Built-in rules | The defaults set in code. Read-only; they cannot be revoked |
 | Audit log | Newest first. Filter by principal, resource and time, and choose whether denials are included. A healthy hash chain shows a plain "integrity verified"; a broken one shows a warning. Content (input, screens, messages) is neither recorded nor shown |
@@ -44,7 +46,7 @@ lease; a child started in a worktree gets its own lease on the new worktree.
 - **Advisory**: what an agent does with its own tools, and any other program of the same user account. **A lease is a marker, not a lock** — a process of the same account can ignore it.
 - People are never blocked. Writing inside someone else's lease only leaves a record and a notice.
 - **Commit guard (optional)**: `fsh lease guard install` stops a commit that includes files under someone else's lease and tells you who holds it. If the server cannot be reached it only warns and the commit goes through. An existing pre-commit hook is kept and still runs first.
-- There is no screen yet for a person to revoke a lease; use the API (`DELETE /api/authz/leases/{id}`). Revoking a permission also ends the leases taken with it.
+- A person releases a lease in Settings > Permissions > Folder leases (API `DELETE /api/authz/leases/{id}`). Revoking a permission also ends the leases taken with it.
 
 ## pair — two sessions on one job
 
@@ -53,8 +55,8 @@ Two agents (or one person and one agent) split the same bundle of sessions and f
 
 1. One side runs `fsh pair start --session NAME --dir FOLDER` (or MCP `pair_create`) and gets a code (`ABCD-EFGH`) and a **two-word check phrase**. The code is single-use, valid 5 minutes, and burned after 5 wrong tries.
 2. The other side runs `fsh pair join <code>` (or `pair_join`). It learns the result **as itself** with `fsh pair status`, not through the code.
-3. The inbox shows one «pair» request: the whole bundle, both check phrases and what each role gets, **on one screen**. Check that the phrase matches what both agents show.
-   **High-risk** items (raw input, session management, relay) are given only if you tick them, and ticking needs your password again. Agents cannot approve. Widening a pair later is a new approval.
+3. The inbox shows one «Pair» request: who is pairing with whom, the whole bundle, what each role gets (the preset name and exact scopes) and **both check phrases**, **on one screen**. Compare the phrases one by one with what each agent displayed on its own screen (deny if they differ). The allow button spells out what it grants.
+   **High-risk** items (raw input, session management, relay) each have a checkbox (all off at first) and only ticked ones are given; ticking any asks for your password once more when you allow. Agents cannot approve. Widening a pair later is a new approval.
 4. There is exactly one driver. `fsh pair handoff <id>` offers, the other side's `fsh pair accept <id>` swaps (an offer lapses after 2 minutes). A person can always type.
 5. It ends on `fsh pair end <id>`, a person revoking it in the permissions screen, 2 hours idle (`VT_PAIR_IDLE_MIN`), a member session disappearing, or 8 hours. Then the permissions, leases and queued messages between the members are cleaned up (`fsh pair revoke <id> --verify` confirms).
 

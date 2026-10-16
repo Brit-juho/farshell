@@ -4,6 +4,8 @@
 // 받으면 목록을 서버에서 다시 읽는다. 옛 `agent_share_request*` 는 새 이벤트가 한 번도 오지 않은 동안에만 같은 일을 한다
 // (서버가 한 릴리스 동안 둘을 함께 보낸다 — 새 이벤트를 한 번이라도 받으면 옛 것은 무시해 같은 요청을 두 번 처리하지 않는다).
 // 다시 읽기는 짧게 묶어(coalesce) 옛·새가 잇따라 와도 요청 한 번이다.
+// 페어·폴더 lease 화면은 `{type:'pairs'}`·`{type:'leases'}` 변경 알림을 구독해 다시 읽는다 — 같은 이벤트 묶음(요청→결정→회수)이 잇따라 와도
+// 종류마다 한 번만 알린다(signal). 서버는 페어를 만들거나 코드를 받거나 역할을 바꿀 때는 이벤트를 내지 않으므로 그 화면은 자기 동작 뒤에 직접 다시 읽는다.
 import { authzApi } from './api.js';
 
 export const COALESCE_MS = 40;
@@ -15,6 +17,7 @@ let inflight = null;
 let dirty = false;
 let lastError = '';
 const subs = new Set();
+const sigTimers = {};
 
 const byCreated = (a, b) => (a.created || 0) - (b.created || 0);
 const emit = (ev) => { for (const fn of [...subs]) { try { fn(ev); } catch (e) { console.error('[FarShell authz]', e); } } };
@@ -26,6 +29,12 @@ export function sawNewEvents() { return sawNew; }
 
 /** 변경 구독. 콜백은 `{type:'pending', added:[id…]}` 또는 `{type:'grants'}`. 해제 함수를 돌려준다. */
 export function onChange(fn) { subs.add(fn); return () => subs.delete(fn); }
+
+/** `{type}` 변경 알림을 짧게 묶어 한 번만 보낸다. */
+function signal(type) {
+  if (sigTimers[type]) return;
+  sigTimers[type] = setTimeout(() => { sigTimers[type] = null; emit({ type }); }, COALESCE_MS);
+}
 
 /** 서버 목록으로 통째로 맞춘다. 처리된 것은 빠지고, 새로 생긴 id 는 `added` 로 알린다. */
 export function setPending(next) {
@@ -71,14 +80,22 @@ export function onEvent(msg) {
   if (!msg || typeof msg.type !== 'string') return;
   switch (msg.type) {
     case 'authz_request':
-      sawNew = true; schedule(); break;
+      sawNew = true; schedule();
+      if (msg.kind === 'pair') signal('pairs');       // 합류 — 페어가 「승인 대기」가 된다
+      break;
     case 'authz_resolved':
       sawNew = true;
       if (msg.id === '*') { list = []; emit({ type: 'pending', added: [] }); } else removePending(String(msg.id));
       emit({ type: 'grants' });
+      if (msg.kind === 'pair' || msg.kind === 'all') { signal('pairs'); signal('leases'); }   // 승인하면 lease 도 생긴다
       break;
     case 'authz_revoked':
-      sawNew = true; emit({ type: 'grants' }); break;
+      sawNew = true; emit({ type: 'grants' });
+      if (msg.kind === 'pair' || msg.kind === 'all') signal('pairs');
+      signal('leases');                                // 권한을 거두면 그 묶음의 lease 도 놓인다(회수 saga)
+      break;
+    case 'lease_notice':
+      signal('leases'); break;                         // 사람의 쓰기가 남의 lease 경로 안에서 일어남 — 막지 않고 알리기만 한다
     case 'agent_share_request':
       if (!sawNew) schedule(); break;
     case 'agent_share_request_resolved':
@@ -90,5 +107,6 @@ export function onEvent(msg) {
 
 /** 테스트용. */
 export function _reset() {
-  list = []; sawNew = false; if (timer) clearTimeout(timer); timer = null; inflight = null; dirty = false; lastError = ''; subs.clear();
+  list = []; sawNew = false; if (timer) clearTimeout(timer); timer = null;
+  for (const k of Object.keys(sigTimers)) { if (sigTimers[k]) clearTimeout(sigTimers[k]); sigTimers[k] = null; } inflight = null; dirty = false; lastError = ''; subs.clear();
 }

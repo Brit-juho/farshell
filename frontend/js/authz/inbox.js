@@ -11,10 +11,12 @@ import { vtEsc } from '../core/api.js';
 import { t } from '../core/i18n.js';
 import { authzApi } from './api.js';
 import { withElevation } from './elevate.js';
-import { pending, onChange, setPending, removePending } from './store.js';
+import { pending, onChange, setPending, removePending, refresh } from './store.js';
 import {
-  askSentence, kindLabel, detailLine, requester, lineageText, ageText, expiryText, choicesFor, errorText, resourceText,
+  askSentence, kindLabel, rowDetail, detailLine, requester, lineageText, ageText, expiryText, choicesFor, errorText, resourceText,
+  pairErrorText, PAIR_CLOSED_CODES,
 } from './data.js';
+import { pairBodyHTML, bindPair } from './pair-approval.js';
 
 export const ARM_MS = 400;
 const PANEL_ID = 'vt-authz-approval';
@@ -25,6 +27,8 @@ let el = null;           // 열린 모달 루트
 let armedAt = 0;
 let inflight = false;
 let lastError = '';
+let ticks = new Set();     // 페어: 사람이 직접 체크한 높은 권한 항목(요청마다 새로 — 미리 체크하지 않는다)
+let ticksFor = null;
 let internalClose = false;
 let wired = false;
 
@@ -62,7 +66,7 @@ function close() {
 
 function choiceButtons(req) {
   const cs = choicesFor(req);
-  const btn = (c) => `<button type="button" class="vt-btn lg vt-authz-act${c.choice === 'deny' ? '' : ''}" data-act="${c.choice}"${c.available ? '' : ' disabled aria-disabled="true"'}>${vtEsc(c.label)}</button>`;
+  const btn = (c) => `<button type="button" class="vt-btn lg vt-authz-act" data-act="${c.choice}"${c.available ? '' : ' disabled aria-disabled="true"'}>${vtEsc(c.label)}</button>`;
   const order = ['deny', 'once', 'session'];       // 거부가 맨 앞 — 기본 포커스도 여기
   const why = cs.filter((c) => !c.available).map((c) => `<p class="vt-authz-why">${vtEsc(c.label)}: ${vtEsc(c.why)}</p>`).join('');
   return `<div class="vt-dialog-actions vt-authz-acts">${order.map((k) => btn(cs.find((c) => c.choice === k))).join('')}</div>${why}`;
@@ -75,7 +79,7 @@ function factsHTML(req) {
   return `<dl class="vt-authz-facts">
       <dt>${t('종류')}</dt><dd>${vtEsc(kindLabel(req.kind))}</dd>
       <dt>${t('요청한 세션')}</dt><dd>${vtEsc(requester(req))}${lin ? `<span class="vt-authz-sub">${vtEsc(lin)}</span>` : ''}</dd>
-      <dt>${t('대상')}</dt><dd>${vtEsc(label)}${rid && rid !== label ? `<span class="vt-authz-code">${vtEsc(rid)}</span>` : ''}</dd>
+      <dt>${t('대상')}</dt><dd><span>${vtEsc(label)}</span>${rid && rid !== label ? `<span class="vt-authz-code">${vtEsc(rid)}</span>` : ''}</dd>
       <dt>${t('요청 범위')}</dt><dd><span class="vt-authz-code">${vtEsc(detailLine(req))}</span></dd>
       ${req.reason ? `<dt>${t('에이전트가 적은 사유')}</dt><dd class="vt-authz-reason">${vtEsc(req.reason)}</dd>` : ''}
       <dt>${t('시각')}</dt><dd>${vtEsc(ageText(req.age))} · ${vtEsc(expiryText(req.expiresIn))}</dd>
@@ -90,6 +94,11 @@ function draw() {
   el.querySelector('.vt-authz-count').textContent = q.length > 1 ? `${q.findIndex((r) => r.id === req.id) + 1} / ${q.length}` : '';
   body.dataset.kind = req.kind;
   body.dataset.elevated = elevated ? '1' : '0';
+  if (req.kind === 'pair') {
+    if (ticksFor !== req.id) { ticks = new Set(); ticksFor = req.id; }
+    body.innerHTML = pairBodyHTML(req, ticks, lastError);
+    bindPair(body, req, ticks);
+  } else {
   body.innerHTML = `
     ${elevated ? `<p class="vt-authz-elevated" role="note"><strong>${t('높은 권한이 필요한 요청')}</strong> ${vtEsc(t('비밀번호를 다시 확인한 뒤에만 허용됩니다.'))}<span class="vt-authz-code">${vtEsc(req.elevated.join(', '))}</span></p>` : ''}
     <p class="vt-authz-ask">${vtEsc(askSentence(req))}</p>
@@ -98,11 +107,13 @@ function draw() {
     ${choiceButtons(req)}
     <p class="vt-authz-note">${t('허용한 권한은 설정의 「권한」에서 언제든 회수할 수 있습니다.')}</p>
     <div class="vt-authz-later"><button type="button" class="vt-btn quiet vt-authz-snooze">${t('나중에')}</button></div>`;
+  }
   body.querySelectorAll('.vt-authz-act').forEach((b) => b.addEventListener('click', () => onAct(b.dataset.act)));
   body.querySelector('.vt-authz-snooze').addEventListener('click', () => { snooze(); close(); });
   armedAt = Date.now() + ARM_MS;
   const deny = body.querySelector('[data-act="deny"]');
-  if (deny) deny.focus();                // 기본 포커스는 안전한 쪽(거부)
+  if (deny) deny.focus({ preventScroll: true });   // 기본 포커스는 안전한 쪽(거부) — 긴 페어 화면이 중간부터 보이지 않게 스크롤은 안 한다
+  body.scrollTop = 0; if (body.parentElement) body.parentElement.scrollTop = 0;
 }
 
 async function onAct(choice) {
@@ -113,13 +124,27 @@ async function onAct(choice) {
   if (!spec || !spec.available) return;
   inflight = true;
   el.querySelectorAll('.vt-authz-act').forEach((b) => { b.disabled = true; });
-  const call = () => (choice === 'deny' ? authzApi.decide(req.id, 'deny') : authzApi.decide(req.id, 'allow', choice));
+  const isPair = req.kind === 'pair';
+  const ticked = isPair ? [...ticks] : [];
+  const call = () => {
+    if (choice === 'deny') return authzApi.decide(req.id, 'deny');
+    return isPair ? authzApi.decidePair(req.id, ticked) : authzApi.decide(req.id, 'allow', choice);
+  };
   try {
-    const res = choice === 'deny' ? await call() : await withElevation(call, t('높은 권한을 허용하려면 비밀번호를 다시 확인해야 합니다.'));
+    // 페어: 높은 권한을 체크했을 때만 재인증을 묻는다(서버가 elevation_required 로 알린 뒤 한 번). 체크가 없으면 묻지 않는다.
+    const askPw = choice !== 'deny' && (!isPair || ticked.length > 0);
+    const res = askPw ? await withElevation(call, t('높은 권한을 허용하려면 비밀번호를 다시 확인해야 합니다.')) : await call();
     if (res !== null) { lastError = ''; focusId = null; removePending(req.id); }
   } catch (e) {
     if (e && e.status === 404) {          // 이미 처리됨·만료·세션 종료 — 목록에서 뺀다
       lastError = ''; focusId = null; removePending(req.id);
+    } else if (isPair) {
+      // 서버가 거절한 이유를 그대로 보이고 창은 열어 둔다. 서버가 요청 자체를 닫은 경우(확인 문구 3번 불일치·세션 사라짐)와
+      // 이미 다른 결정이 난 경우는 목록을 다시 맞춘다.
+      lastError = pairErrorText(e);
+      const code = e && (e.code || (e.data && e.data.error));
+      if (PAIR_CLOSED_CODES.includes(code)) { toast(lastError, 'error'); focusId = null; removePending(req.id); lastError = ''; }
+      else if (code === 'already_decided') void refresh();
     } else {
       lastError = errorText(e);
     }
@@ -186,7 +211,7 @@ export function mountInboxList(host) {
         <div class="vt-authz-row-main">
           <div class="vt-authz-row-top"><span class="vt-authz-kind">${vtEsc(kindLabel(r.kind))}</span>${el_ ? `<span class="vt-authz-flag">${t('높은 권한')}</span>` : ''}</div>
           <div class="vt-authz-row-ask">${vtEsc(askSentence(r))}</div>
-          <div class="vt-authz-row-detail">${vtEsc(detailLine(r))}</div>
+          <div class="vt-authz-row-detail">${vtEsc(rowDetail(r))}</div>
           <div class="vt-authz-row-meta">${vtEsc(ageText(r.age))} · ${vtEsc(expiryText(r.expiresIn))}${lineageText(r) ? ` · ${vtEsc(lineageText(r))}` : ''}</div>
         </div>
         <button type="button" class="vt-btn lg vt-authz-open">${t('결정하기')}</button>

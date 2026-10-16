@@ -3,7 +3,7 @@
 import { vtEsc } from '../core/api.js';
 import { t } from '../core/i18n.js';
 import { authzApi } from './api.js';
-import { auditView, chainBadge, RANGES, sinceFor, stamp, errorText } from './data.js';
+import { auditView, chainBadge, RANGES, sinceFor, stamp, errorText, auditActionText } from './data.js';
 
 export const PAGE = 50;
 export const FETCH_LIMIT = 500;
@@ -11,13 +11,14 @@ export const FILTER_DEBOUNCE_MS = 250;
 
 function rowHTML(e) {
   const v = auditView(e);
-  const tail = [v.scopes.join(', '), v.reason].filter(Boolean).join(' · ');
+  const tail = [v.scopes.join(', '), v.reasonText].filter(Boolean).join(' · ');
   return `<li class="vt-authz-audit-row" data-source="${v.source}">
     <div class="vt-authz-audit-top"><span class="vt-authz-audit-ts">${vtEsc(stamp(v.ts))}</span>
-      <span class="vt-authz-audit-act">${vtEsc(v.action)}</span>
+      <span class="vt-authz-audit-act" title="${vtEsc(v.action)}">${vtEsc(auditActionText(v.action))}</span>
       ${v.outcome ? `<span class="vt-authz-audit-out">${vtEsc(v.outcome)}</span>` : ''}
       ${v.source === 'denials' ? `<span class="vt-authz-flag">${t('거부 기록')}</span>` : ''}</div>
     <div class="vt-authz-audit-who">${vtEsc(v.principal)}${v.resource ? ` <span class="vt-authz-sub">→</span> ${vtEsc(v.resource)}` : ''}</div>
+    ${v.summary ? `<div class="vt-pair-bundle-line">${vtEsc(v.summary)}</div>` : ''}
     ${tail ? `<div class="vt-authz-row-detail">${vtEsc(tail)}</div>` : ''}
   </li>`;
 }

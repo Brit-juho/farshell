@@ -138,6 +138,10 @@
     background:var(--win);
   }
   .vt-viewer-backdrop.vt-mobile-route .vt-viewer-card { height:100%; animation:none; box-shadow:none; }
+  /* 승인함 모달(authz)은 하단 내비 위까지만 — 아래 끝(「나중에」)이 내비에 가려지지 않게 한다. */
+  .vt-viewer-backdrop.vt-authz-approval { bottom:calc(52px + env(safe-area-inset-bottom,0px)); }
+  .vt-authz-approval .vt-viewer-card { max-height:100%; }
+  .vt-authz-approval .vt-vw-body { min-height:0; overflow-y:auto; }
   /* 탭 전환이 곧 닫기다 — 하단 내비의 탭 화면에는 × 가 필요 없다. */
   .vt-viewer-backdrop.vt-mobile-route.vt-tab-panel .vt-vw-x { display:none; }
   .vt-mnav-btn {
