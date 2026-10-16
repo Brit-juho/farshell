@@ -217,6 +217,46 @@ LEASE_TOOLS = [
     },
 ]
 TOOLS = TOOLS + LEASE_TOOLS
+PAIR_TOOLS = [
+    {
+        "name": "pair_create",
+        "description": (
+            "다른 에이전트와 pair 를 만든다 — 같은 작업 묶음(세션·폴더)을 한쪽은 driver(입력·쓰기), 한쪽은 navigator(읽기·메시지)로 함께 한다. "
+            "pair.manage 권한이 있어야 한다(없으면 request_access 로 사람에게 요청). 만들면 코드(8자)와 확인 문구 두 단어가 나온다 — 상대에게 전하고, "
+            "상대가 pair_join 하면 사람이 한 화면에서 묶음 전체를 보고 승인한다. raw 입력 같은 위험 항목은 elevated 로 따로 요청하며 사람이 명시로 체크해야만 주어진다. "
+            "driver 는 정확히 한 명이고 pair 는 2시간 놀면 끝난다."),
+        "inputSchema": {"type": "object", "properties": {
+            "sessions": {"type": "array", "items": {"type": "string"}, "description": "묶음에 넣을 세션 이름 또는 key"},
+            "dirs": {"type": "array", "items": {"type": "string"}, "description": "묶음에 넣을 폴더(절대 경로)"},
+            "role": {"type": "string", "enum": ["driver", "navigator"], "description": "내 역할(기본 driver). 상대는 반대 역할"},
+            "leases": {"type": "boolean", "description": "true 면 driver 가 폴더마다 write lease 를 가진다"},
+            "elevated": {"type": "array", "items": {"type": "string", "enum": ["raw_input", "session_manage", "relay", "browser_js", "browser_sensitive"]},
+                         "description": "사람에게 명시 승인을 요청할 위험 항목"},
+            "with": {"type": "string", "description": "합류할 세션을 이 하나로 제한(이름 또는 key)"}},
+            "additionalProperties": False},
+    },
+    {
+        "name": "pair_join",
+        "description": "상대가 준 pair 코드(예: ABCD-EFGH)로 합류한다. 사람의 승인을 기다리는 상태가 되고, 결과는 pair_status 로 확인한다. 코드를 5번 틀리면 그 코드는 폐기된다.",
+        "inputSchema": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"], "additionalProperties": False},
+    },
+    {
+        "name": "pair_status",
+        "description": "내 pair 의 상태·내 역할·세대·승인 여부. id 를 빼면 내가 속한 pair 목록. 합류한 뒤 승인 결과를 여기서 읽는다(응답을 놓쳐도 코드를 다시 받을 필요 없다).",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "additionalProperties": False},
+    },
+    {
+        "name": "pair_handoff",
+        "description": "driver 가 운전대를 넘기겠다고 제안한다. navigator 가 pair_accept 해야 바뀌며 2분 안에 수락하지 않으면 그대로다.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"], "additionalProperties": False},
+    },
+    {
+        "name": "pair_accept",
+        "description": "상대 driver 의 handoff 제안을 수락한다 — 내가 driver 가 되고 상대는 navigator 가 된다(세대 번호가 하나 오른다).",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"], "additionalProperties": False},
+    },
+]
+TOOLS = TOOLS + PAIR_TOOLS
 # 도구 → 이 중 하나라도 가진 호출자에게만 보인다(whoami 의 유효 scope 기준). 목록에 없는 도구는 늘 보인다 —
 # 막히면 서버가 이유를 돌려주고, 그 도구들은 권한이 없을 때 승인 요청(202)으로 이어지기 때문이다.
 TOOL_SCOPES = {
@@ -228,6 +268,7 @@ TOOL_SCOPES = {
     "lease_release": ("fs.write", "fs.read"),
     "lease_list": ("fs.write", "fs.read"),
 }
+PAIR_TOOL_NAMES = {t["name"] for t in PAIR_TOOLS}
 _PARENT_ONLY = {"spawn_session", "send_to_child", "close_delegation"}
 _CHILD_ONLY = {"report_back"}
 
@@ -549,10 +590,88 @@ def tool_lease_list(args: dict) -> tuple[str, bool]:
     return ("\n".join(rows) or "lease 가 없습니다") + note, False
 
 
+def _pair_line(v: dict) -> str:
+    mem = ", ".join(f"{m['name'] or m['kind']}={m['role']}{'(나)' if m.get('you') else ''}" for m in v.get("members", []))
+    b = v.get("bundle") or {}
+    ho = v.get("handoff")
+    extra = f" · handoff 제안 중(남은 {ho['expiresIn']}초)" if ho else ""
+    return (f"- {v['id']} [{v['state']}] 세대 {v.get('generation', 0)} · {mem} · 세션 {len(b.get('sessions', []))}개 · 폴더 {len(b.get('dirs', []))}개"
+            f" · 승인 {((v.get('approval') or {}).get('state') or '-')}{extra}")
+
+
+def _pair_fail(status: int, data: dict) -> tuple[str, bool]:
+    if data.get("error") == "pair_disabled":
+        return "이 서버는 pair 기능이 꺼져 있습니다(VT_AUTHZ_ENFORCE 에 pair 가 필요).", True
+    if status == 403 and data.get("need"):
+        n = data["need"]
+        return (f"권한이 없습니다 — {', '.join(n.get('scopes') or [])} on {n.get('resource')} 가 필요합니다. request_access 로 사람에게 요청하세요."), True
+    return f"실패: {_fail(status, data)}", True
+
+
+def tool_pair_create(args: dict) -> tuple[str, bool]:
+    body = {k: args[k] for k in ("sessions", "dirs", "role", "leases", "elevated", "with") if args.get(k) not in (None, "", [])}
+    status, data = _api("POST", "/api/pairs", body, headers=_identity_headers())
+    if status not in (200, 201):
+        return _pair_fail(status, data)
+    pid = data["pair"]["id"]
+    s2, c = _api("POST", f"/api/pairs/{urllib.parse.quote(pid, safe='')}/code", headers=_identity_headers())
+    if s2 != 200:
+        return _pair_fail(s2, c)
+    return (f"pair 를 만들었습니다: {pid}\n코드: {c['code']}  확인 문구: {c['phrase']}  (5분 안에, 한 번만)\n"
+            f"상대에게 코드를 전하세요. 상대가 pair_join 하면 사람이 승인함에서 확인 문구를 보고 승인합니다. 결과는 pair_status 로 확인하세요."), False
+
+
+def tool_pair_join(args: dict) -> tuple[str, bool]:
+    status, data = _api("POST", "/api/pairs/join", {"code": args.get("code", "")}, headers=_identity_headers())
+    if status != 200:
+        return _pair_fail(status, data)
+    v = data["pair"]
+    return (f"합류했습니다: {v['id']} — 내 역할 {v.get('role')}. 확인 문구: {v.get('phrase')} (사람이 승인할 때 이 문구가 보입니다). "
+            f"승인을 기다리는 중입니다 — pair_status 로 확인하세요."), False
+
+
+def tool_pair_status(args: dict) -> tuple[str, bool]:
+    if args.get("id"):
+        status, data = _api("GET", f"/api/pairs/{urllib.parse.quote(str(args['id']), safe='')}/status", headers=_identity_headers())
+        if status != 200:
+            return _pair_fail(status, data)
+        v = data["pair"]
+        extra = ""
+        if v.get("role"):
+            extra = f"\n내 역할: {v['role']}{' (운전 중)' if v.get('isDriver') else ''}"
+        if v.get("endReason"):
+            extra += f"\n끝난 이유: {v['endReason']}"
+        return _pair_line(v) + extra, False
+    status, data = _api("GET", "/api/pairs", headers=_identity_headers())
+    if status != 200:
+        return _pair_fail(status, data)
+    return "\n".join(_pair_line(v) for v in data.get("pairs", [])) or "pair 가 없습니다", False
+
+
+def _pair_post(path: str, args: dict, done: str) -> tuple[str, bool]:
+    status, data = _api("POST", f"/api/pairs/{urllib.parse.quote(str(args.get('id', '')), safe='')}/{path}", headers=_identity_headers())
+    if status != 200:
+        return _pair_fail(status, data)
+    return done + "\n" + _pair_line(data["pair"]), False
+
+
+def tool_pair_handoff(args: dict) -> tuple[str, bool]:
+    return _pair_post("handoff", args, "handoff 를 제안했습니다 — 상대가 pair_accept 하면 바뀝니다(2분 안에).")
+
+
+def tool_pair_accept(args: dict) -> tuple[str, bool]:
+    return _pair_post("handoff/accept", args, "수락했습니다 — 이제 내가 driver 입니다.")
+
+
+def _caller_whoami() -> dict | None:
+    status, data = _api("GET", "/api/authz/whoami", headers=_identity_headers())
+    return data if status == 200 and isinstance(data, dict) else None
+
+
 def _caller_scopes() -> set | None:
     """`whoami` 의 유효 scope. 소켓이 아니거나 서버가 계산하지 못했으면 None(= 거르지 않는다)."""
-    status, data = _api("GET", "/api/authz/whoami", headers=_identity_headers())
-    if status != 200 or not isinstance(data.get("scopes"), list):
+    data = _caller_whoami()
+    if data is None or not isinstance(data.get("scopes"), list):
         return None
     return set(data["scopes"])
 
@@ -560,8 +679,12 @@ def _caller_scopes() -> set | None:
 def tools_for_caller() -> list[dict]:
     """깊이 한도에 닿은 하위 세션에는 만들기 도구를 아예 보여주지 않는다(서버도 막는다). 그리고 `TOOL_SCOPES` 에 적힌 도구는
     그 scope 를 하나도 못 가진 호출자에게 숨긴다(whoami 의 유효 scope 기준 — 보여 줘도 서버가 거부할 도구를 에이전트에게 권하지 않는다)."""
-    scopes = _caller_scopes()
+    who = _caller_whoami()
+    scopes = set(who["scopes"]) if who is not None and isinstance(who.get("scopes"), list) else None
     keep = TOOLS if scopes is None else [t for t in TOOLS if t["name"] not in TOOL_SCOPES or scopes & set(TOOL_SCOPES[t["name"]])]
+    # pair 도구는 서버가 pair 기능을 켰다고 whoami 가 알려 줄 때만(unix socket) 보인다. 만들기는 pair.manage 도 있어야 한다.
+    pair_on = bool(((who or {}).get("features") or {}).get("pair"))
+    keep = [t for t in keep if t["name"] not in PAIR_TOOL_NAMES or (pair_on and (t["name"] != "pair_create" or "pair.manage" in (scopes or ())))]
     status, data = _api("GET", "/api/delegations/role", headers=_identity_headers())
     if status != 200:
         return keep
@@ -594,6 +717,11 @@ HANDLERS = {
     "lease_renew": tool_lease_renew,
     "lease_release": tool_lease_release,
     "lease_list": tool_lease_list,
+    "pair_create": tool_pair_create,
+    "pair_join": tool_pair_join,
+    "pair_status": tool_pair_status,
+    "pair_handoff": tool_pair_handoff,
+    "pair_accept": tool_pair_accept,
 }
 
 

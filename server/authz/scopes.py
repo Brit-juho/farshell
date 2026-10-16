@@ -579,7 +579,7 @@ def explicit_in(covers: Iterable[str], cconds: Optional[dict], reason: str) -> b
 
 # --- 리소스 -----------------------------------------------------------------------------
 
-_RES_RE = re.compile(r"^(session|host|fs|browser|msg|deleg|deleg-quota|relay|authz)(:.*)?$")
+_RES_RE = re.compile(r"^(session|host|fs|browser|msg|deleg|deleg-quota|relay|authz|pair)(:.*)?$")
 
 
 def resource_ok(resource: str) -> bool:

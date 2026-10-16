@@ -38,7 +38,7 @@ import fnmatch
 from dataclasses import dataclass
 from typing import Optional
 
-from . import ceilings, defaults, limits
+from . import ceilings, defaults, flags, limits
 from . import principals as P
 from . import scopes as S
 from .store import Snapshot
@@ -177,6 +177,8 @@ def decide(p: P.Principal, scope: str, resource: str, ctx: Optional[dict] = None
     for g in candidates:
         if g.get("effect") == "deny" or g.get("state", "active") != "active":
             continue
+        if g.get("pair_id") and not flags.enforced("pair"):
+            continue                       # pair 기능이 꺼지면 pair 가 준 grant 도 효력이 없다(마스터 스위치)
         if not _subject_matches(str(g.get("subject", "")), p):
             continue
         if not S.resource_matches(str(g.get("resource", "")), resource):
@@ -203,7 +205,8 @@ def decide(p: P.Principal, scope: str, resource: str, ctx: Optional[dict] = None
             return _deny("store_corrupt", "store")
         return _deny(cond_fail or "no_grant", "conds" if cond_fail else None)
 
-    if ceilings.applies(p, scope, resource):
+    if ceilings.applies(p, scope, resource) and not hit.get("pair_id"):
+        # pair 가 승인 때 준 grant 는 역할(운전/탐색)이 곧 상한이다 — 공유 정책 상한을 따로 겹치지 않는다(`pairs.py`).
         key = _session_key(resource)
         stored = (snap.shares or {}).get(key) if key else None
         if ctx.get("share_known", "share" in ctx):

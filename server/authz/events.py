@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 REQUEST, RESOLVED, REVOKED = "authz_request", "authz_resolved", "authz_revoked"
 LEASE_NOTICE = "lease_notice"
-KINDS = ("share", "msg", "peer", "generic")
+KINDS = ("share", "msg", "peer", "generic", "pair")
 
 
 def request_event(rid: str, kind: str) -> dict:

@@ -18,7 +18,7 @@
   - 겹침은 **보수적**이다: 정적 prefix 가 서로 조상 관계가 아니면 겹치지 않고, literal 대 glob 은 fnmatch(조상 포함)로 확정하며,
     glob 대 glob 은 머리 문자열이 겹치면 겹친다고 본다(모르면 충돌).
   - 충돌: 다른 보유자와 write 끼리 겹치면 충돌. write 와 read 는 둘 중 하나가 exclusive 일 때만. read 끼리는 없다.
-    같은 pair 의 둘 다 non-exclusive 인 write 는 예외 — pair 는 다음 단계라 `same_pair` 는 지금 항상 False 다.
+    같은 활성 pair 의 둘 다 non-exclusive 인 write 는 예외 — pair 기능이 켜져 있을 때만(`same_pair`).
     같은 위임 계보(derived_from 로 이어진 것)는 충돌하지 않는다.
   - 수명: 기본 30분, 최대 8시간(갱신해도 만든 때부터 8시간을 못 넘긴다 — 확대가 아니다). 보유 세션이 사라지면(tmux 를 못 읽으면 유지),
     만료되면, 관리자가 회수하면, 근거 grant 가 회수되면 사라진다. 파생 lease 는 부모와 함께 사라진다.
@@ -165,8 +165,9 @@ def overlaps(a: str, b: str) -> bool:
 
 
 def same_pair(holder_a: str, holder_b: str) -> bool:
-    """두 보유자가 같은 pair 의 구성원인가 — pair 는 다음 단계라 지금은 항상 False."""
-    return False
+    """두 보유자(주체 id)가 같은 활성 pair 의 구성원인가. pair 기능이 꺼져 있으면(`VT_AUTHZ_ENFORCE` 에 `pair` 없음) 항상 False."""
+    from . import pairs
+    return pairs.same_pair_holders(holder_a, holder_b)
 
 
 def clash(new: dict, old: dict) -> bool:
@@ -427,6 +428,21 @@ def acquire(p: P.Principal, glob: str, *, mode: str = "write", exclusive: bool =
         _audit_lease("acquire", p.id, rec, scopes=[scope])
         items.append(rec)
     return view(rec, now)
+
+
+def insert_in_txn(docs: dict, rec: dict, *, who: str, alive=None) -> None:
+    """이미 `store.txn()` 안에 있는 호출자(pair 승인·handoff)가 lease 레코드를 같은 트랜잭션에서 넣는다 — 수명이 끝난 것을 걷어내고,
+    다른 보유자와 충돌하면 409 `lease_conflict`(트랜잭션 전체가 취소된다), 아니면 감사 한 줄과 함께 더한다. 밑바닥 권한·속도 제한은 건너뛴다(시스템 발급)."""
+    now = time.time()
+    _reap_in_txn(docs, now, alive)
+    items = docs["leases"]["items"]
+    clashing = [l for l in items if clash(rec, l) and not _same_lineage(rec, l, items)]
+    if clashing:
+        first = min(clashing, key=lambda x: float(x.get("expires") or 0))
+        raise _err("lease_conflict", tr("다른 세션이 이 경로를 쓰는 중입니다"), 409, holder=holder_nick(first),
+                   expires=first.get("expires"), conflicts=[conflict_row(x) for x in clashing[:10]])
+    _audit_lease("acquire", who, rec)
+    items.append(rec)
 
 
 def _root_of(l: dict, byid: dict) -> str:

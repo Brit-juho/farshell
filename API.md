@@ -367,10 +367,11 @@ header, cookie or `?token=` (400 `ambiguous_principal` otherwise). Only these me
 | POST | `/api/delegations/{did}/close-by-cli` | `fsh delegate close` (flag `deleg` on) |
 | POST | `/api/queue/run` | MCP |
 | POST | `/api/ports/_proxy/sync` | `fsh tunnel expose/pin/mode` |
-| GET | `/api/authz/whoami` | **Socket only** (the gate answers it; over TCP it is 403 `socket_only`). `{principal:{kind:"agent"\|"hook"\|"svc"\|"cli", id, uid, pid, via:"socket", svc?, pane?, key?}, scopes:[…], caps:{scope:{condition:[values]}}, grants:[{id, resource, scopes, default, conditional}], presets:[{id, label}], authz:"ok"\|"unavailable"}` — `scopes`/`caps` are the union of the caller's default rules and active grants (conditional rules included: `conditional` lists the extra condition keys such as `deleg_quota`, `msg_related`, `fs_roots`), `presets` the permission bundles it fully contains. `scopes` is `null` when the grant store cannot be read. Optional `X-Fsh-Svc: <name>` (hook, clipboard, voice, tui, tmux-notify, tunnel-hook, mcp-probe) is attribution only |
+| GET | `/api/authz/whoami` | **Socket only** (the gate answers it; over TCP it is 403 `socket_only`). `{principal:{kind:"agent"\|"hook"\|"svc"\|"cli", id, uid, pid, via:"socket", svc?, pane?, key?}, scopes:[…], caps:{scope:{condition:[values]}}, grants:[{id, resource, scopes, default, conditional}], presets:[{id, label}], authz:"ok"\|"unavailable"}` — `scopes`/`caps` are the union of the caller's default rules and active grants (conditional rules included: `conditional` lists the extra condition keys such as `deleg_quota`, `msg_related`, `fs_roots`), `presets` the permission bundles it fully contains. `scopes` is `null` when the grant store cannot be read. `features:{pair:true}` is present only while the pair switch is on (MCP uses it to show the `pair_*` tools). Optional `X-Fsh-Svc: <name>` (hook, clipboard, voice, tui, tmux-notify, tunnel-hook, mcp-probe) is attribution only |
 | GET, POST | `/api/authz/requests` | MCP `request_access` (agent only): create / list the caller's own approval requests |
 | GET | `/api/authz/my-grants` | MCP `list_my_grants` (agent only): the caller's own grants |
 | GET, POST, DELETE | `/api/leases`, `/api/leases/check`, `/api/leases/{lease_id}/renew`, `/api/leases/{lease_id}` | `fsh lease …`, the pre-commit guard, MCP `lease_*` — see «Folder leases» |
+| GET, POST, DELETE | `/api/pairs`, `/api/pairs/join`, `/api/pairs/{pair_id}/code`, `/api/pairs/{pair_id}/status`, `/api/pairs/{pair_id}/handoff`, `/api/pairs/{pair_id}/handoff/accept`, `/api/pairs/{pair_id}` | `fsh pair …`, MCP `pair_*` — see «Pairs» (409 `pair_disabled` unless `VT_AUTHZ_ENFORCE` has `pair`) |
 | GET | `/api/authz/approvals`, `/api/authz/grants`, `/api/authz/audit` | `fsh authz requests\|grants\|audit` (a `cli` caller outside tmux, read only; agents get 403 `human_or_cli_required`) |
 
 The routes behind these paths authorize exactly as they do for the machine token; human-only routes stay unreachable (a socket
@@ -413,6 +414,33 @@ Responses never carry screen text, input or message bodies. Three kinds of calle
 | GET | `/api/authz/shadow?limit=100` | **Browser session only.** Debug view of the shadow engine (see «Agent session sharing») |
 
 **Deny log.** Denials (policy refusals, rate limits, lockouts, authentication failures) go to `~/.vt/audit/denials.jsonl` (0600; 1 MB × 3 files; at most 60 lines a minute, followed by a `denylog.dropped` line with the count of dropped lines; a write failure never blocks the request). The hash-chained `authz.jsonl` keeps allows and every authz/pair/lease/grant change, including a person's refusal of a request. History is not rewritten: denials already in the chain stay there. `GET /api/authz/audit` and `GET /api/agent/share/audit` read both.
+
+## Pairs (`/api/pairs`)
+
+Two participants work on one bundle of sessions and folders as **driver** and **navigator**; a person approves the whole pairing once. The
+routes exist whatever `VT_AUTHZ_ENFORCE` says, but **without the `pair` token every one of them is `409 {error:"pair_disabled"}`** and nothing
+else changes. Rules, roles, handoff, ending and the same-user caveat: `docs/ref/auth.md` «Pairs». Callers: an agent or the terminal's `fsh`
+over the unix socket, or a logged-in browser; hooks, service daemons and peers are 403 `request_not_allowed`. Not on the relay allowlist.
+Errors are `{error, reason, …}`. A pair view never contains session keys, principal ids or code values — names, roles, states only.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/pairs` | Create: `{sessions?:[name\|key\|{local}\|{host,session}], dirs?:[absolute], leases?, elevated?:["raw_input"\|"session_manage"\|"relay"\|"browser_js"\|"browser_sensitive"], role?:"driver"\|"navigator", with?}` (at least one session or folder). Callers: a person, or an agent with `pair.manage` on `pair:*` (403 `forbidden` + `need` otherwise). `201 {ok, pair, reused:false}`; the same creator and bundle while unjoined returns `200 … reused:true`. 400 `empty_bundle`/`bad_bundle`/`bad_elevated`/`bad_role`/`bad_ref`, 403 `outside_roots`, 404 `session_not_found`, **501 `pair_remote_unsupported`** (a `{host, session}` of another Mac), 429 `too_many_pairs` (5 live per creator) |
+| POST | `/api/pairs/{pair_id}/code` | Creator only (else 404). `{ok, code:"ABCD-EFGH", phrase:"two words", expires, ttl:300, reused, pair}`. A pending code is returned unchanged (`reused:true`); new codes are limited to 10 per creator per hour (429 `rate_limited`). 409 `bad_state` once joined |
+| POST | `/api/pairs/join` | `{code}` (case, spaces and hyphens ignored). A verified agent session only. `200 {ok, pair:{…, phrase, pendingApproval:true}}`. Wrong or expired or spent code: `404 invalid_code` — and the attempt counts against every pending code, the 5th burns them. 400 `self_join`, 403 `not_intended` |
+| GET | `/api/pairs/{pair_id}/status` | A participant (or a person); anyone else 404. `{ok, pair:{id, state, generation, members:[{seat, kind, name, role, joined, you, driver}], bundle:{sessions:[{name}], dirs, leases, elevated:{requested, granted}}, approval:{state:"none"\|"pending"\|"allowed"\|"denied"\|"cancelled", id}, role, isDriver, expires, endReason, handoff:{to, by, expiresIn}\|null, phrase?, code?:{state, expiresIn}, cleanup?}}`. States: `proposed`, `code_issued`, `joined`, `active`, `handoff_pending`, `ended`, `expired`, `revoked`. The joiner reads the approval result here — no token is involved |
+| GET | `/api/pairs` | `{pairs:[…]}` — an agent sees its own, a person or the terminal sees all (terminal pairs stay listed for an hour; `cleanup:{done, saga, grants, leases}` says whether the revocation cleanup finished) |
+| POST | `/api/pairs/{pair_id}/handoff` | The driver offers (`state: handoff_pending`, 2 minutes). A person who is not the driver swaps at once (human override). 403 `not_driver`, 409 `bad_state` |
+| POST | `/api/pairs/{pair_id}/handoff/accept` | The navigator accepts: roles and grants swap in one transaction, `generation` +1. 403 `not_navigator`, 409 `no_offer` (none, or expired) / `stale_offer` |
+| DELETE | `/api/pairs/{pair_id}` | A member ends it (`ended`); a person who is not a member revokes it (`revoked`). Runs the revocation saga; `{ok, pair, cleanup:{done, saga, grants, leases}}`. Idempotent (`already`) |
+
+**Approval** goes through the shared inbox: `GET /api/authz/approvals` lists an item with `kind:"pair"`, `id:"pq-…"` and a `pair` object —
+`phrases:{initiator, joiner}`, `bundle:{sessions, dirs, leases, summary}`, `roles:{initiator, joiner}:{name, kind, role}`,
+`presets:{driver, navigator}`, `elevatedItems:[{id, label, reasons}]`, `needsReauth`. `POST /api/authz/approvals/{id}/decision`
+(browser session only) takes `{decision:"allow"\|"deny"\|"later", elevated?:[ticked items], phrase?}` — `choice`/`scopes`/`ttl` are 400
+`choice_unsupported`. Ticks must be a subset of the request (400 `wider_than_requested`) and need an elevated session (403 `elevation_required`);
+a wrong `phrase` is 400 `phrase_mismatch` (3rd miss: 409 `phrase_mismatch_locked`, the request is rejected); same decision again is
+`replayed:true`, a different one 409 `already_decided`. Events on `/ws-workspace`: `authz_request`/`authz_resolved`/`authz_revoked` with `kind:"pair"`.
 
 ## Folder leases (`/api/leases`)
 

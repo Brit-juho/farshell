@@ -9,13 +9,17 @@
     cancel_messages   미전달 에이전트 메시지 취소(`failed`, 사유 `revoked`)
     close_delegations 관련 위임 닫기(`reason=revoked`)
     release_leases    folder lease 해제
+    pair_grants·pair_leases·pair_messages·pair_delegations·pair_verify   pair 가 끝났을 때만 — pair grant 회수, pair lease 해제, 구성원 간
+                      대기 메시지·큐 취소, pair 가 효력을 갖던 동안 구성원이 만든 위임 닫기, 남은 것 확인
     verify            모든 저장소를 다시 읽어 남은 것이 없음을 확인 — 남았으면 saga 는 `running` 으로 남고 sweep 이 다시 돈다
-    mark_revoked      grant 를 `revoked` 로, saga 를 `done` 으로
+    mark_revoked      grant 를 `revoked` 로
+    pair_finalize     회수된 pair grant 레코드를 지우고 pair 에 정리 완료를 적는다 → saga 는 `done`
 
 다음 단계(pair·브라우저·peer)는 `register(name, fn, before="verify")` 로 단계를 끼워 넣는다.
 
 대상(`target`)은 다음 키의 조합이다: `grant_ids`(grant 레코드 id 들), `subject`(주체 id), `key`(에이전트 세션 key),
-`names`(그 세션의 tmux 이름들 — 보낸 사람 일치용), `did`(위임 id), `peer`(peer id), `all`(사람이 아닌 모든 주체: 비상 정지).
+`names`(그 세션의 tmux 이름들 — 보낸 사람 일치용), `did`(위임 id), `peer`(peer id), `all`(사람이 아닌 모든 주체: 비상 정지),
+`pair`(pair id; 함께 `members`·`since`).
 
 `VT_AUTHZ_ENFORCE` 에 `lease` 가 있을 때만 기존 회수 경로(grant 회수·비상 정지·호스트 deny-*)가 이 saga 를 부른다.
 시험은 `FAULT = {"step": 이름, "when": "before"|"after"}` 로 단계 앞/뒤에서 프로세스가 죽은 것을 흉내 낸다(`InjectedCrash`).
@@ -205,6 +209,17 @@ def _release_leases(t: dict) -> None:
     leases.release_where(_lease_match(t), who="system:saga", reason="revoked")
 
 
+def _pair_step(name: str) -> Callable[[dict], None]:
+    """pair 회수 단계 — 대상에 `pair` 가 있을 때만 일한다(그 밖의 saga 에서는 아무것도 하지 않는다)."""
+    def run_step(t: dict) -> None:
+        if not t.get("pair"):
+            return
+        from . import pairs
+        getattr(pairs, name)(t)
+    run_step.__name__ = name
+    return run_step
+
+
 def _verify(t: dict) -> None:
     import queue_store
     from . import leases
@@ -249,8 +264,15 @@ _STEPS: list[tuple[str, Callable[[dict], None]]] = [
     ("cancel_messages", _cancel_messages),
     ("close_delegations", _close_delegations),
     ("release_leases", _release_leases),
+    # pair — 효력을 잃은 pair 의 grant·lease·구성원 간 메시지·그 사이 만든 위임을 거두고 확인한다(대상에 `pair` 가 없으면 건너뛴다)
+    ("pair_grants", _pair_step("saga_grants")),
+    ("pair_leases", _pair_step("saga_leases")),
+    ("pair_messages", _pair_step("saga_messages")),
+    ("pair_delegations", _pair_step("saga_delegations")),
+    ("pair_verify", _pair_step("saga_verify")),
     ("verify", _verify),
     ("mark_revoked", _mark_revoked),
+    ("pair_finalize", _pair_step("saga_finalize")),
 ]
 
 
