@@ -134,8 +134,21 @@ def test_exactly_one_driver_under_concurrent_handoffs(env):
     assert len(drivers(pid)) == 1
     pr = get(pid)
     assert pr["state"] in ("active", "handoff_pending")
-    # 세대는 교체가 일어난 횟수와 같다 — 각 교체는 정확히 한 번 올렸다. 마지막 driver 는 세대의 홀짝과 맞는다.
-    assert pr["generation"] >= 1
+    # 경쟁 중에 교체가 한 번이라도 일어났는지는 스케줄링에 달렸다(오래된 파이썬에서는 0일 수 있다) — 그래서 끝난 뒤 정해진 교체를 한 번 더 해
+    # 세대가 정확히 1 오르는지 본다. 마지막 driver 는 세대의 홀짝과 맞는다.
+    g0 = pr["generation"]
+    for who in (A, B):
+        try:
+            pairs.handoff_offer(who, pid)        # driver 만 성공한다(이미 제안 중이면 같은 제안)
+        except ShareError:
+            pass
+    for who in (A, B):
+        try:
+            pairs.handoff_accept(who, pid)       # 제안받은 쪽만 성공한다
+        except ShareError:
+            pass
+    pr = get(pid)
+    assert pr["generation"] == g0 + 1
     assert (drivers(pid)[0]["seat"] == "joiner") == (pr["generation"] % 2 == 1)
     gs = {g["id"]: g for g in grants_of(pid)}
     drv = drivers(pid)[0]
