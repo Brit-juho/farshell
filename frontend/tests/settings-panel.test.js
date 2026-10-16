@@ -18,10 +18,13 @@ const TOAST_JS = path.join(__dirname, '../js/ui/toast.js');
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
-async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' } }, fetchExtra, compact = false } = {}) {
+async function build({ hooks = { ok: true, events: { PreToolUse: 'ok', PostToolUse: 'ok', Stop: 'ok' } }, fetchExtra, compact = false, platform } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
+  // jsdom의 UA는 `(${process.platform})`을 담는다 — 기본 platform(빈 문자열)일 때 /Win/이 맥의 "darwin"에도
+  // 걸려 OS 판정이 호스트마다 달라진다. OS에 기대는 시험은 platform을 명시해 고정한다.
+  if (platform) Object.defineProperty(window.navigator, 'platform', { value: platform, configurable: true });
   window.API_BASE = '';
   window._tokenQuery = '';
   window.fitAndResize = () => {};
@@ -110,7 +113,7 @@ test('접근성 — 행 라벨과 도움말이 주 컨트롤에 연결된다', a
 });
 
 test('설정 범위 — device/global이 행에서 글자로 구분된다', async () => {
-  const { document, P } = await build();
+  const { document, P } = await build({ platform: 'Win32' });
   P.showSettings();
   assert.strictEqual(rowByLabel(document, '글자 크기').querySelector('.vt-set-scope').textContent, 'Windows');
   assert.strictEqual(rowByLabel(document, '커서 모양').querySelector('.vt-set-scope').textContent, '모든 기기');

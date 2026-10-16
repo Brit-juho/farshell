@@ -128,7 +128,12 @@ def _no_network(monkeypatch):
     def boom(*a, **k):
         raise AssertionError("네트워크 호출 금지")
     monkeypatch.setattr(urllib.request, "urlopen", boom)
-    import huggingface_hub
+    # huggingface_hub는 음성 선택 의존성(requirements-voice.txt)이라 CI의 core 설치에는 없다.
+    # 없으면 download_model이 ImportError로 끝나 어차피 네트워크에 못 나가므로 막을 것이 없다.
+    try:
+        import huggingface_hub
+    except ImportError:
+        return
     monkeypatch.setattr(huggingface_hub, "snapshot_download", boom, raising=False)
 
 
@@ -368,6 +373,12 @@ def test_kill_orphan_terminates_our_server(process_table, env, eng):
         if proc.poll() is None:
             proc.kill()
             proc.wait()
+
+
+def test_kill_orphan_survives_narrow_ps_width(process_table, env, eng, monkeypatch):
+    # 리눅스 procps는 COLUMNS가 걸리면 파이프 출력도 그 폭에서 자른다 — 긴 경로 뒤의 --api-key가 사라지면 고아를 못 알아본다.
+    monkeypatch.setenv("COLUMNS", "20")
+    test_kill_orphan_terminates_our_server(process_table, env, eng)
 
 
 def test_kill_orphan_leaves_unrelated_process(process_table, env, eng):

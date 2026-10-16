@@ -235,7 +235,9 @@ class LlamaCppQwen3Engine(Engine):
         except (OSError, ValueError, IndexError):
             return
         try:
-            cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
+            # -ww: 폭 제한을 푼다. 리눅스 procps는 COLUMNS가 걸린 환경에서 파이프로 읽어도 명령행을 그 폭에서 잘라, 경로가
+            # 긴 설치에서는 뒤쪽의 --api-key가 사라져 우리 프로세스를 못 알아보고 고아를 그대로 남겼다.
+            cmd = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
         except OSError:
             return
         # 우리가 띄운 것인지 확인: 실행 파일 경로(기록돼 있으면)와 우리가 거는 --api-key가 모두 명령행에 있어야 한다.
