@@ -1339,6 +1339,7 @@
   .vt-authz-who + .vt-authz-sub { display: inline; margin: 0 calc(var(--spacing) * 1.5); font-size: var(--fs-xs); font-weight: var(--weight-normal); }
   .vt-authz-code { display: inline-block; max-width: 100%; color: var(--color-sub); font-family: var(--font-mono); overflow-wrap: anywhere; }
   .vt-authz-facts .vt-authz-code { color: var(--color-txt); }
+  .vt-authz-facts dd > span + .vt-authz-code { display: block; color: var(--color-sub); }   /* 대상 이름 아래 줄에 id — 붙어서 한 단어처럼 읽히지 않게 */
   .vt-authz-err { min-height: 0; margin: 0 0 calc(var(--spacing) * 2); color: var(--color-st-error); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
   .vt-authz-err:empty { display: none; }
   .vt-authz-acts { flex-wrap: wrap; }
@@ -1363,6 +1364,7 @@
   .vt-authz-who { color: var(--color-txt); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
   .vt-authz-row-detail { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-mono); overflow-wrap: anywhere; }
   .vt-authz-row-meta { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-authz-inbox .vt-authz-row-detail { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }   /* 긴 scope 목록은 목록에서 3줄까지 — 전체는 「결정하기」 창에 */
   .vt-authz-row-acts { display: flex; gap: calc(var(--spacing) * 2); flex-wrap: wrap; }
   .vt-authz-builtin li { display: flex; flex-direction: column; gap: 2px; padding: calc(var(--spacing) * 2) 0; border-top: 1px solid var(--color-line); }
   .vt-authz-builtin li:first-child { border-top: 0; }
@@ -1380,6 +1382,43 @@
   .vt-authz-audit-act { color: var(--color-txt); font-weight: var(--weight-semibold); }
   .vt-authz-audit-out { color: var(--color-sub); }
   .vt-authz-audit-who { color: var(--color-txt); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-mono); overflow-wrap: anywhere; }
+  /* 페어 승인(한 화면) · 페어/폴더 lease 목록 — 새 색은 없다. 상태색은 높은 권한(대기색)·경고(오류색)에만. */
+  .vt-pair-parties { list-style: none; margin: 0 0 calc(var(--spacing) * 3); padding: 0; }
+  .vt-pair-party { padding: calc(var(--spacing) * 2) 0; border-top: 1px solid var(--color-line); min-width: 0; }
+  .vt-pair-party:first-child { border-top: 0; }
+  .vt-pair-party-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: calc(var(--spacing) * 2); font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui); }
+  .vt-pair-party-top .vt-authz-sub { display: inline; font-size: var(--fs-xs); }
+  .vt-pair-preset { margin-top: 2px; color: var(--color-txt); font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui); }
+  .vt-pair-chip { display: inline-block; margin: 0 calc(var(--spacing) * 1.5) 2px 0; padding: 0 calc(var(--spacing) * 1.5); color: var(--color-txt); background: var(--color-bg-3); border-radius: var(--radius-sm); font-family: var(--font-mono); }
+  .vt-pair-phrase-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(var(--spacing) * 3); margin: 0 0 calc(var(--spacing) * 1); }
+  .vt-pair-phrase-cell { min-width: 0; padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); background: var(--color-bg-3); border-radius: var(--radius-sm); }
+  .vt-pair-phrase-cell .vt-authz-sub { font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow-wrap: anywhere; }
+  .vt-pair-phrase { display: block; margin-top: 2px; color: var(--color-txt); font: var(--weight-semibold) var(--fs-md) / var(--leading-tight) var(--font-mono); overflow-wrap: anywhere; }
+  .vt-pair-phrase-inline { color: var(--color-txt); font-family: var(--font-mono); }
+  .vt-pair-elev { margin: calc(var(--spacing) * 4) 0 calc(var(--spacing) * 3); padding: 0; border: 0; min-width: 0; }
+  .vt-pair-elev legend { padding: 0; margin: 0 0 calc(var(--spacing) * 1); color: var(--color-st-waiting); font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui); }
+  .vt-pair-tick { display: flex; align-items: flex-start; gap: calc(var(--spacing) * 2.5); min-height: 44px; padding: calc(var(--spacing) * 1.5) 0; border-top: 1px solid var(--color-line); cursor: pointer; }
+  .vt-pair-tick input { flex: none; margin: 3px 0 0; accent-color: var(--color-acc); }
+  .vt-pair-tick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .vt-pair-tick-name { color: var(--color-txt); font: var(--weight-medium) var(--fs-sm) / var(--leading-row) var(--font-ui); overflow-wrap: anywhere; }
+  .vt-pair-acts { flex-direction: column; align-items: stretch; }
+  .vt-pair-acts .vt-btn { width: 100%; height: auto; min-height: var(--btn-h, 36px); padding-top: calc(var(--spacing) * 2); padding-bottom: calc(var(--spacing) * 2); white-space: normal; text-align: left; line-height: var(--leading-row); }
+  .vt-pair-acts .vt-btn[data-act="deny"] { text-align: center; }
+  .vt-authz-toolbar { display: flex; justify-content: flex-end; margin: 0; }
+  .vt-authz-tag { padding: 0 calc(var(--spacing) * 1.5); color: var(--color-sub); background: none; border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); cursor: pointer; }
+  .vt-authz-tag:hover { color: var(--color-txt); }
+  .vt-authz-tag:focus-visible, .vt-pair-row:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 1px; }
+  .vt-pair-row[data-ended="1"] .vt-authz-row-ask, .vt-pair-row[data-ended="1"] .vt-authz-row-detail { color: var(--color-sub); }
+  .vt-pair-bundle-line { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow-wrap: anywhere; }
+  .vt-pair-row .vt-authz-row-ask .vt-authz-sub { display: inline; margin-left: calc(var(--spacing) * 1.5); font-size: var(--fs-xs); }
+  .vt-pair-code { margin-top: calc(var(--spacing) * 2); padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); background: var(--color-bg-3); border-radius: var(--radius-sm); }
+  .vt-pair-code-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: calc(var(--spacing) * 3); }
+  .vt-pair-code-val { color: var(--color-txt); font: var(--weight-semibold) var(--fs-lg) / var(--leading-tight) var(--font-mono); letter-spacing: .08em; }
+  .vt-pair-countdown { color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui); font-variant-numeric: tabular-nums; }
+  .vt-pair-countdown[data-expired] { color: var(--color-st-error); }
+  .vt-lease-inherit { color: var(--color-sub); font-weight: var(--weight-medium); }
+  .vt-lease-row[data-derived="1"] .vt-authz-row-ask { color: var(--color-sub); }
+
   .vt-authz-badge {
     position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box;
     border-radius: var(--radius-full); background: var(--color-bg-3); color: var(--color-st-waiting);
@@ -1389,6 +1428,12 @@
   .vt-authz-badge[hidden] { display: none; }
   #vt-rail-settings, .vt-dock-settings-btn, .vt-mnav-btn[data-mnav="more"] { position: relative; }
 
+  /* 좁은 화면: 승인 모달은 하단 내비(고정 52px) 위까지만 — 아래 끝(「나중에」)이 내비에 가려지지 않게 한다. */
+  @media (max-width: 719px) {
+    .vt-pair-phrase-cell { padding: calc(var(--spacing) * 2); }
+    .vt-pair-phrase { font-size: var(--fs-sm); }
+  }
+
   @media (pointer: coarse) {
     .vt-authz-approval .vt-btn,
     .vt-authz-row .vt-btn,
@@ -1397,6 +1442,7 @@
     .vt-dialog .vt-share-cancel { --btn-h: 44px; }
     .vt-authz-later .vt-btn { --btn-h: 44px; }
     .vt-authz-in { min-height: 44px; }
+    .vt-authz-tag { min-height: 32px; }
     .vt-share-mode { min-height: 48px; }
   }
 }
