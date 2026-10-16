@@ -29,7 +29,7 @@ import fsguard
 import mcp_env
 import tmux_runner
 # 순수 파서는 worktree_parse.py로 옮겼다. **이름은 여기 그대로 남긴다** —
-# tests/test_worktree.py와 create_worktree가 `worktree.parse_*`로 쓰고 있고,
+# server/tests/test_worktree.py와 create_worktree가 `worktree.parse_*`로 쓰고 있고,
 # 상태를 안 읽는 순수 함수라 재수출해도 monkeypatch와 어긋날 여지가 없다.
 from worktree_ports import (  # noqa: F401
     DEFAULT_PORT_BASE,

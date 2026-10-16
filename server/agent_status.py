@@ -274,6 +274,23 @@ def recover_from_screens(agents: dict[str, Optional[str]], now: Optional[float] 
     return revived
 
 
+def drop_shell_placeholders(shell_sessions: set[str]) -> int:
+    """화면 감지 자리표시(`pane:<이름>`) 중 포그라운드가 빈 셸로 돌아온 세션의 것을 지운다. 지운 수를 반환.
+
+    훅 없이 끝난 에이전트(`^C`·`exit`)는 해제 신호를 남기지 않는다. 자리표시가 남으면 waiting이 2분 뒤
+    working으로, 15분 뒤에야 idle로 내려가 일반 터미널이 「작업 중」으로 보인다. 훅이 만든 엔트리와
+    `fsh pane report`가 맡은 엔트리는 건드리지 않는다."""
+    n = 0
+    for key, ent in list(_state.items()):
+        if (ent.get("_screen") and ent.get("host", LOCAL_HOST) == LOCAL_HOST
+                and ent.get("tmux_session") in shell_sessions):
+            del _state[key]
+            _drop_owner_refs(key)
+            _emit(_released(ent), "release")
+            n += 1
+    return n
+
+
 def sweep(now: Optional[float] = None) -> int:
     """만료된 상태를 전이시킨다. 전이한 엔트리 수를 반환.
 
@@ -803,6 +820,7 @@ def on_waiting(
         if not waiting:
             return None
         ent = _entry(sid, cwd, host)
+        ent["_screen"] = True   # 화면 감지가 만든 자리표시 — drop_shell_placeholders의 정리 대상
         if session:
             ent["tmux_session"] = session
         _set_status(ent, WORKING)
@@ -1065,6 +1083,7 @@ def report(sid: str, status: str, session: Optional[str] = None,
         raise ValueError(tr("알 수 없는 상태: {status} (가능: {allowed})", status=status, allowed=", ".join(STATUSES)))
     sweep()
     ent = _entry(sid, cwd, host)
+    ent.pop("_screen", None)   # 자기보고가 맡은 엔트리는 화면 자리표시가 아니다
     if session:
         ent["tmux_session"] = session
     # P2-1(ADR-34) — `_apply_agent`가 유일한 진입점이 되도록 자기보고도

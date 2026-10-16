@@ -73,6 +73,9 @@ def _is_shell(comm: str) -> bool:
     return os.path.basename(comm).lstrip("-") in _SHELLS
 
 
+is_shell = _is_shell   # 다른 모듈이 쓰는 공개 이름
+
+
 def _claude_sessions_dir() -> Path:
     base = os.environ.get("CLAUDE_CONFIG_DIR")
     return (Path(base) if base else Path.home() / ".claude") / "sessions"
