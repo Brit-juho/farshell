@@ -14,6 +14,7 @@ const warn = (e) => console.error('[FarShell share]', e);
 // 설정 버튼들에 붙는 대기 건수 배지(기존 rail 배지와 같은 모양). 0건이면 숨긴다.
 const BADGE_HOSTS = ['#vt-rail-settings', '.vt-dock-settings-btn', '.vt-mnav-btn[data-mnav="more"]'];
 window.vtAuthzBadge = (n) => {
+  window.vtAuthzPending = n;      // 설정 모바일 홈의 「권한」 줄이 읽는다
   for (const sel of BADGE_HOSTS) {
     const host = document.querySelector(sel);
     if (!host) continue;
@@ -56,7 +57,7 @@ if (!isRelayed()) {
   for (const type of ['authz_request', 'agent_share_request']) {
     onWorkspaceEvent(type, (msg) => { if (msg) loadAuthz().then((m) => m.onEvent({ ...msg, type })).catch(warn); });
   }
-  for (const type of ['authz_resolved', 'authz_revoked', 'agent_share_request_resolved']) {
+  for (const type of ['authz_resolved', 'authz_revoked', 'agent_share_request_resolved', 'lease_notice']) {
     onWorkspaceEvent(type, (msg) => { if (msg && authzMod) authzMod.then((m) => m.onEvent({ ...msg, type })).catch(warn); });
   }
   // 부팅·재연결 때 놓친 요청을 맞춘다(ws 가 열릴 때마다).

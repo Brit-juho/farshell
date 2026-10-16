@@ -105,7 +105,7 @@ const SECTIONS = [
   // 기본 6스킨 칩(2026-09-18부터 이 탭이 유일한 자리 — 위 주석 참고).
   // 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
   { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식을 고릅니다.'), custom: renderAppearanceSection },
-  { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 허용된 권한, 감사 기록을 봅니다.'), custom: renderPermissionsSection },
+  { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 lease, 허용된 권한, 감사 기록을 봅니다.'), custom: renderPermissionsSection },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.'), custom: renderSecuritySection },
   // N13(80-multihost-agents.md §3) — 토글 자체는 스키마 항목이지만, 디스크
   // 사용량은 서버에 물어봐야 하는 값이라(보안 섹션과 같은 이유로) custom.
@@ -122,7 +122,7 @@ const SEARCH_ITEMS = [
   ['agents', t('에이전트 감지 상태')],
   ['keymap', t('단축키와 터미널 전달')],
   ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('파일 뷰어 표시 방식')],
-  ['permissions', t('승인 대기')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
+  ['permissions', t('승인 대기')], ['permissions', t('페어')], ['permissions', t('폴더 lease')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
   ['security', t('로그인과 OTP')], ['security', t('등록 기기')], ['security', t('로그아웃')],
   ['about', t('에이전트 훅')], ['about', t('사용량 공급자')], ['about', t('버전과 진단')],
 ].map(([sectionId, label]) => ({ sectionId, label }));
@@ -140,6 +140,8 @@ const SEARCH_ALIASES = {
   [t('맥에서 음성만 쓰기')]: t('로컬 음성 입력 마이크'),
   [t('등록 기기')]: t('디바이스 장치'),
   [t('승인 대기')]: t('승인함 인박스 에이전트 요청 허용 거부'),
+  [t('페어')]: t('pair 짝 코드 합류 역할 교체 handoff driver navigator 운전자 길잡이 fsh pair'),
+  [t('폴더 lease')]: t('lease 잠금 폴더 점유 배타 경로 glob'),
   [t('허용된 권한')]: t('grant 회수 철회 프리셋 보기 협업 운전 제어'),
   [t('감사 기록')]: t('audit 로그 체인 거부 기록'),
   [t('비상 정지')]: t('panic 모든 에이전트 권한 회수'),
@@ -208,7 +210,10 @@ function renderMobileHome(body, focusSearch = false) {
     const h = document.createElement('h2'); h.className = 'vt-set-mobile-group'; h.textContent = title; home.appendChild(h);
     for (const item of items) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'vt-set-mobile-link';
-      b.innerHTML = `<span><strong>${item.label}</strong>${item.description ? `<small>${item.description}</small>` : ''}</span><span aria-hidden="true">›</span>`;
+      // 승인 대기가 있으면 「권한」 줄이 스스로 말한다(하단 내비의 배지와 같은 숫자) — 모바일에서는 이 줄이 권한 화면의 입구다.
+      const pend = item.id === 'permissions' ? Number(window.vtAuthzPending) || 0 : 0;
+      const desc = pend > 0 ? `${t('승인 대기 {n}건', { n: pend })} · ${item.description}` : item.description;
+      b.innerHTML = `<span><strong>${item.label}</strong>${desc ? `<small>${desc}</small>` : ''}</span><span aria-hidden="true">›</span>`;
       b.addEventListener('click', () => {
         if (item.action) openTool(item.action);
         else { _activeSection = item.id; _mobileHome = false; rerender(''); }

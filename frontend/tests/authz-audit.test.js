@@ -126,8 +126,9 @@ test('순수 규칙: auditView 허용 목록, chainBadge, sinceFor', async () =>
   const t = await loadShare({}, { files: ['authz/data.js'] });
   _wins.push(t.window);
   const v = t.mod.auditView({ ts: 1, principal: 'p', action: 'a', resource: 'r', scopes: ['s'], result: 'ok', text: 'LEAK', detail: 'LEAK', source: 'denials' });
-  assert.deepStrictEqual(Object.keys(v).sort(), ['action', 'outcome', 'principal', 'reason', 'resource', 'scopes', 'source', 'ts']);
+  assert.deepStrictEqual(Object.keys(v).sort(), ['action', 'outcome', 'principal', 'reason', 'reasonText', 'resource', 'scopes', 'source', 'summary', 'ts']);
   assert.strictEqual(v.source, 'denials');
+  assert.strictEqual(v.summary, '', 'detail 객체는 페어·lease 줄 밖에서는 글로도 내보내지 않는다');
   assert.strictEqual(t.mod.chainBadge({ chain: 'ok' }).state, 'ok');
   assert.strictEqual(t.mod.chainBadge(null).state, 'unknown');
   assert.strictEqual(t.mod.sinceFor('all', 1000), 0);

@@ -5,21 +5,31 @@ import { t } from '../core/i18n.js';
 import { authzApi } from './api.js';
 import { onChange } from './store.js';
 import {
-  kindLabel, KIND_LABEL, grantSummary, detailLine, approvedText, grantExpiry, lineageText, canRevokeWriteOnly, builtinDefaults, errorText,
+  kindLabel, KIND_LABEL, grantSummary, detailLine, approvedText, grantExpiry, lineageText, canRevokeWriteOnly, builtinDefaults, errorText, pairIdOfGrant,
 } from './data.js';
 
 export const FILTER_DEBOUNCE_MS = 250;
-const FILTER_KINDS = ['share', 'msg', 'peer', 'deleg', 'generic'];
+const FILTER_KINDS = ['share', 'msg', 'peer', 'deleg', 'generic', 'pair'];
 const toast = (m, type) => { if (typeof window.showToast === 'function') window.showToast(m, type); };
+
+/** 권한 행의 페어 표시에서 같은 화면의 페어 행으로 간다. 목록에 없으면(끝난 지 오래) 알린다. */
+function goToPair(id) {
+  const row = [...document.querySelectorAll('.vt-pair-row')].find((r) => r.dataset.pair === id);
+  if (!row) { toast(t('목록에 없는 페어입니다 — 이미 끝났을 수 있습니다'), 'info'); return; }
+  row.tabIndex = -1;
+  row.scrollIntoView?.({ block: 'center' });
+  row.focus();
+}
 
 function rowHTML(g) {
   const sub = (g.subject && (g.subject.name || g.subject.id)) || '?';
   const res = typeof g.resource === 'string' ? g.resource : '?';
   const lin = lineageText({ lineage: g.lineage });
   const approved = approvedText(g);
+  const pid = g.kind === 'pair' ? pairIdOfGrant(g) : '';
   return `<li class="vt-authz-row" data-grant="${vtEsc(g.id)}" data-kind="${vtEsc(g.kind)}">
     <div class="vt-authz-row-main">
-      <div class="vt-authz-row-top"><span class="vt-authz-kind">${vtEsc(kindLabel(g.kind))}</span><span class="vt-authz-preset">${vtEsc(grantSummary(g))}</span></div>
+      <div class="vt-authz-row-top"><span class="vt-authz-kind">${vtEsc(kindLabel(g.kind))}</span><span class="vt-authz-preset">${vtEsc(grantSummary(g))}</span>${pid ? `<button type="button" class="vt-authz-tag vt-pair-link" data-pair-link="${vtEsc(pid)}" aria-label="${vtEsc(t('페어 {id} 로 이동', { id: pid }))}">${t('페어')} ${vtEsc(pid.slice(3, 9))}</button>` : ''}</div>
       <div class="vt-authz-row-ask"><span class="vt-authz-who">${vtEsc(sub)}</span><span class="vt-authz-sub">${t('대상')}</span><span class="vt-authz-code">${vtEsc(res)}</span></div>
       <div class="vt-authz-row-detail">${vtEsc(detailLine(g))}</div>
       <div class="vt-authz-row-meta">${vtEsc([approved, grantExpiry(g), lin].filter(Boolean).join(' · '))}</div>
@@ -87,6 +97,8 @@ export function mountGrants(host) {
   });
   host.addEventListener('click', async (ev) => {
     if (ev.target.closest('.vt-authz-retry')) { void load(); return; }
+    const link = ev.target.closest('.vt-pair-link');
+    if (link) { goToPair(link.dataset.pairLink); return; }
     const b = ev.target.closest('.vt-authz-revoke');
     if (!b || busy) return;
     const row = b.closest('.vt-authz-row');
@@ -95,6 +107,7 @@ export function mountGrants(host) {
     const kind = row.dataset.kind;
     const msg = writeOnly
       ? t('이 에이전트의 입력 권한만 거두고 읽기는 남깁니다. 계속할까요?')
+      : kind === 'pair' ? t('이 권한을 회수하면 이 페어 전체가 끝납니다. 두 쪽이 받은 권한과 폴더 lease 가 모두 거두어집니다. 계속할까요?')
       : kind === 'deleg' ? t('이 위임을 닫습니다. 하위 세션은 남지만 더 이상 지시를 받지 않습니다. 계속할까요?')
         : t('이 권한을 회수합니다. 에이전트는 다시 요청해야 쓸 수 있습니다. 계속할까요?');
     if (!(await confirmDialog(msg, { title: t('권한 회수'), okLabel: writeOnly ? t('입력만 회수') : t('회수'), danger: true }))) return;
