@@ -15,7 +15,7 @@ from authz_cases import RELAY_DENY_SAMPLES, RELAY_SAMPLES, RELAY_WS_SAMPLES, all
 from conftest import REGEN, load_matrix
 
 MODULES = {f"routes.{m}" for m in ("agent_share", "agent_msg", "delegation", "peer", "peer_relay",
-                                   "host_relay", "hosts", "authz")}
+                                   "host_relay", "hosts", "authz", "leases")}
 
 pytestmark = pytest.mark.skipif(REGEN, reason="matrix.json 을 다시 만드는 중")
 

@@ -251,7 +251,27 @@ def _clipboard(w, monkeypatch):
     return "/api/clipboard/push"
 
 
+def _stub_pynput(monkeypatch):
+    """voice.config 가 import 시점에 `pynput` 을 요구한다 — 음성 미설치 환경(CI)에서는 빈 대역으로 대신한다.
+    여기서 보는 건 소켓 클라이언트 규칙이지 핫키 파싱이 아니다. 대역이 남지 않게 voice.* 도 시험 뒤에 되돌린다."""
+    try:
+        import pynput  # noqa: F401
+        return
+    except ImportError:
+        pass
+    import types
+    from unittest import mock
+    kb = mock.MagicMock(name="pynput.keyboard")
+    pk = types.ModuleType("pynput")
+    pk.keyboard = kb
+    monkeypatch.setitem(sys.modules, "pynput", pk)
+    monkeypatch.setitem(sys.modules, "pynput.keyboard", kb)
+    for m in [m for m in sys.modules if m == "voice" or m.startswith("voice.")]:
+        monkeypatch.delitem(sys.modules, m)
+
+
 def _voice_client(w, monkeypatch):
+    _stub_pynput(monkeypatch)
     from voice import server_client
     monkeypatch.setenv("VT_SERVER", w.tcp.url)
     monkeypatch.setenv("VT_AUTH_TOKEN", TOKEN)
@@ -474,6 +494,28 @@ def test_fsh_api_socket_then_tcp(w, tmp_path):
     r = bash(script, env)
     assert "rc=0 via=tcp code=200" in r.stdout.replace("\n", " ")
     assert auth_of(w.tcp.records[-1]) == f"Bearer {TOKEN}" and w.tcp.records[-1]["headers"]["x-fsh-svc"] == "cli"
+
+
+@pytest.mark.parametrize("flavor", ["gnu", "bsd"])
+@pytest.mark.parametrize("mode,usable", [(0o600, True), (0o400, True), (0o644, False), (0o660, False)])
+def test_sock_usable_stat_flavors(w, tmp_path, flavor, mode, usable):
+    """GNU stat 은 `-f '%Lp'` 를 "파일시스템 정보"로 읽어 stdout 에 쓰레기를 남기고 실패한다(Linux CI 에서 소켓이 항상
+    거부됐다). 어느 쪽 stat 이든 권한 판정이 같아야 한다 — PATH 앞의 가짜 stat 으로 두 방언을 흉내 낸다."""
+    w.unix(mode=mode)
+    fake = tmp_path / "fakebin"
+    fake.mkdir()
+    real = subprocess.run(["bash", "-c", "command -v stat"], capture_output=True, text=True).stdout.strip()
+    if flavor == "gnu":
+        body = (f'if [ "$1" = -c ]; then printf "%o\\n" $(( 0$(\"{real}\" -f %Lp \"$3\") )); exit 0; fi\n'
+                'echo "  File: filesystem info garbage"; echo "    ID: 0 Namelen: 255"; exit 1\n')
+    else:
+        body = f'if [ "$1" = -f ]; then exec "{real}" "$@"; fi\necho "stat: illegal option -- c" >&2; exit 1\n'
+    (fake / "stat").write_text("#!/bin/bash\n" + body)
+    (fake / "stat").chmod(0o755)
+    env = _env_for_script(w, tmp_path, VT_PORT=str(w.tcp.port))
+    env["PATH"] = f"{fake}:{env.get('PATH', os.environ['PATH'])}"
+    r = bash(f". {REPO}/lib/fsh_client.sh; fsh_sock_usable && echo USABLE || echo NO", env)
+    assert r.stdout.strip() == ("USABLE" if usable else "NO"), (r.stdout, r.stderr)
 
 
 def test_fsh_api_socket_rejection_falls_back(w, tmp_path):

@@ -184,6 +184,6 @@ def test_next_with_ampersand_does_not_split_the_query(sysmod):
 def test_authorize_path_bypasses_token_middleware():
     """JSON 401이 나면 브라우저가 로그인 화면을 못 본다 — /s/ 와 같은 이유."""
     import main
-    import inspect
-    src = inspect.getsource(main.TokenAuthMiddleware.__call__)
-    assert "/p/authorize" in src
+    # 예외 목록은 main.AUTH_EXEMPT_* 상수로 있고, 미들웨어는 auth_exempt() 로 그것을 읽는다.
+    assert main.auth_exempt("/p/authorize")
+    assert not main.auth_exempt("/p/authorized-not")

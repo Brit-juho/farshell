@@ -50,6 +50,7 @@ from fastapi.responses import JSONResponse
 import agent_msg
 import host_store
 from authz import hooks as authz_hooks
+from authz import leases as authz_leases
 from authz import preauth as authz_preauth
 from authz import msg_svc
 from authz import peer_svc
@@ -791,6 +792,13 @@ async def peer_file(request: Request, grant: dict, data: bytes):
              "reason": tr("파일이 이 호스트의 상한을 넘습니다 (최대 {mb}MB)", mb=file_store.MAX_UPLOAD_BYTES // (1024*1024))},
             status_code=413,
         ), f"{name} 크기 초과"
+
+    if session and authz_leases.enforced():
+        # fs.drop — 파일이 가서 닿는 세션의 작업 폴더가 남의 lease 안이면 받지 않는다(저장 전에 막는다).
+        cwd = await asyncio.to_thread(authz_leases.session_cwd, session)
+        blocked = await authz_leases.enforce_write(request, [cwd] if cwd else [], op="drop")
+        if blocked is not None:
+            return blocked, f"{name} lease 충돌 — {session}"
 
     origin = f"{grant['id']}:{src_id}" if src_id else ""
     item = await asyncio.to_thread(file_store.find_by_origin, origin) if origin else None

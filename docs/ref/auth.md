@@ -106,6 +106,28 @@ re-check. The 24-hour session hole described just below came directly out of thi
 duplication — whoever next adds a condition to #3 has to remember #3′ exists and
 needs the same condition, because it's a replacement for #3, not a shortcut around it.
 
+## Every route declares its authorization class
+
+Who may call a route is written down once, in one table: `server/authz/route_table.py`. Every HTTP and WebSocket route of the app, including
+the static mount, has exactly one entry saying which class it belongs to, so a route cannot ship without somebody having decided who may call it.
+
+| Class | Meaning |
+|---|---|
+| `public` | Open before login (the paths in «Exceptions» above). The entry says what checks the caller instead of the token middleware |
+| `human` | A logged-in person only; `elevated` when the route also needs the re-confirmed password. Never on the unix-socket or machine-token allowlist |
+| `socket` | In the unix-socket allowlist (`authz/sock.py` `ROUTES`); the entry records which allowlist line opens it. The machine-token scope of `VT_AUTHZ_ENFORCE=legacy` is the same list |
+| `legacy_token` | On the machine-token allowlist but not the socket one (none today: the two lists are one) |
+| `peer` | Another Mac signing with its pairing secret (`/api/peer/*`); the entry names its row in `peer_svc.NEEDS`, which holds the required scope and conditions |
+| `relay` | Host-switch relay, both the receiving side (`/api/peer/relay*`) and the browser-facing side (`/api/hosts/{id}/relay`, `/ws/hosts/{id}/relay`) |
+| `authenticated` | Any authenticated caller (cookie, machine token or socket); anything finer is logic inside the route. If the route asks the engine, the entry names the scope and conditions |
+
+**Adding a route means adding its entry.** `server/tests/test_authz_route_table.py` walks the app's real route tree (included routers, WebSocket
+routes, mounts) and fails when a route has no entry, when an entry has no route, or when the declared class disagrees with the real gate: a
+`human` route that the socket or machine-token allowlist opens, a `socket` route missing from the allowlist, an allowlist line for a route the
+app does not have, a peer route without a `peer_svc.NEEDS` row, a path on the token-middleware exempt list that is not `public`. The failure
+message prints the line to add. The table changes no behaviour: the real gates (router dependencies, the middleware exempt list in `main.py`,
+`sock.ROUTES`, `peer_svc.NEEDS`) stay authoritative and the test only checks that the table says the same thing.
+
 ## Features
 
 | Feature | Description |
@@ -238,8 +260,8 @@ status codes and bodies are unchanged except the three listed under «New refusa
 | Ownership ledger | `~/.vt/delegations.json` | Still written and still the source of truth for *who is parent/child*. Engine grants are **derived** from it by `migrate.translate_delegation` (same function as `fsh migrate-auth`): parent -> `deleg.control` (`role=parent`), child -> `deleg.control` (`role=child`), `approved_by: system:spawn`, ids `dc-<id>`/`dr-<id>`, origin `legacy:delegations:<id>:…`. Closed or orphaned delegation -> `state: ended`; deleted from the ledger -> deleted. An explicit `state: revoked` is sticky (re-deriving or `--apply` never revives it) |
 | Dual-write | `delegation._locked()` / `_write()` | Under the flag the lock order is **authz lock -> ledger lock** (same as 3a and `migrate.restore`). Every ledger write first syncs the grants in the same critical section, then writes the ledger; if the grant store or its audit line cannot be written the ledger is not changed (503). On lock entry a ledger whose sha256 differs from `meta.deleg_ledger_sig` (flag was off, or a hand edit) is **adopted** (re-derived, one `deleg.adopt` audit line). Flag off: the authz store is not touched (instant rollback) |
 | Closed delegations | `Verdict.ended` | An ended grant is denied by the engine, but if the ledger says the caller owned it the old state errors are returned (409 `delegation_closed`, `already`, 409 `already_reported`) — all of them are no-ops |
-| Spawn directory | `deleg_svc.check_fs` | An explicit `cwd`, and the git toplevel a `worktree` is cut from, need `fs.read` on `fs:local/<realpath>`; the default rule `agent_spawn_fs_roots` only holds when `fsguard.resolve_under_roots` (VT_BROWSE_ROOTS + deny list, symlinks resolved) accepts the path. Outside -> 403 `cwd_outside_roots`. The default cwd (the parent pane's own directory) is not checked. File leases will replace this later |
-| Folder-grant inheritance | ledger `item["fs"]`, derived `di-…` / `dw-…` grants | Spawned **without** a worktree: if the parent holds an active fs grant covering the folder, the child gets a *shared reference* (`inherit: true`, `inherit_from` = parent grant id, scopes/resource copied); no parent grant -> nothing is recorded. Spawned **with** a worktree: one grant `fs.write` on the new worktree path for the child only (`approved_by: system:spawn`); the parent's original-folder grant is **not** inherited. Nothing else is inherited (session read/input, messages, browser, …). The inherited record is revoked (`revoked_reason: parent_grant_ended`, audit `deleg.cascade`) at the next sync after the parent grant disappears, expires or is revoked; closing/orphaning the delegation ends all of them. **Records and cascade only — fs grants are not enforced yet (file leases come later).** |
+| Spawn directory | `deleg_svc.check_fs` | An explicit `cwd`, and the git toplevel a `worktree` is cut from, need `fs.read` on `fs:local/<realpath>`; the default rule `agent_spawn_fs_roots` only holds when `fsguard.resolve_under_roots` (VT_BROWSE_ROOTS + deny list, symlinks resolved) accepts the path. Outside -> 403 `cwd_outside_roots`. The default cwd (the parent pane's own directory) is not checked. With `lease` on, the cwd is also refused while another holder's write lease covers it (see «Folder leases») |
+| Folder-grant inheritance | ledger `item["fs"]`, derived `di-…` / `dw-…` grants | Spawned **without** a worktree: if the parent holds an active fs grant covering the folder, the child gets a *shared reference* (`inherit: true`, `inherit_from` = parent grant id, scopes/resource copied); no parent grant -> nothing is recorded. Spawned **with** a worktree: one grant `fs.write` on the new worktree path for the child only (`approved_by: system:spawn`); the parent's original-folder grant is **not** inherited. Nothing else is inherited (session read/input, messages, browser, …). The inherited record is revoked (`revoked_reason: parent_grant_ended`, audit `deleg.cascade`) at the next sync after the parent grant disappears, expires or is revoked; closing/orphaning the delegation ends all of them. The fs grants are records plus cascade; what keeps another session out of the folder is the lease issued under `lease` (see «Folder leases» — the worktree grant stays as the engine-side record, the lease is the enforced layer). |
 | `fsh delegate close` | `delegation._cli`, `POST /api/delegations/{id}/close-by-cli` | With the flag on the CLI asks the server over the unix socket. The socket peer is the principal: outside a pane = `cli`, which the engine lets **close only** (`deleg.control` with `role=parent` and `ops:[close]`; it cannot send, spawn, approve or grant - a provisional policy); inside a pane = `agent`, parent only. A server error or denial is final (no direct write afterwards). Only if the socket is unusable (server not running, `VT_AUTHZ_SOCKET=0`, an older server) does the CLI write the ledger itself, still as principal `cli` through the engine and the audit. Same-uid processes can always edit the file directly |
 | Audit | `~/.vt/audit/authz.jsonl` | `deleg.spawn/send/close/report/cwd/identify` (decision, principal, `sizes.chars`, `sha8`; task, follow-up and report text are content and are never stored), `deleg.grant/end/cascade/adopt` for grant lifecycle (written before the commit; failure -> 503 `audit_unavailable`). Every refusal is recorded. The old `agent_access.log` is not written for delegations while the flag is on |
 | Failure | engine exception, corrupt `grants.json`/`meta.json` | 503 `authz_unavailable` for spawn/send/close/report (fail closed); the corrupt file is not overwritten; reads (`list`, `role`) still work |
@@ -250,6 +272,63 @@ the parent is treated as an agent and refused — use the web UI row menu or a t
 `server/tests/test_authz_deleg_enforce.py` (derivation, red-team, spawn directory, inheritance, audit, rollback, close-through-server) and
 `authz_char/test_char_delegation_enforced.py` (matrix with `EXPECTED_CHANGE` = the spawn-directory cases); `test_delegation.py`, the shadow
 replay and the authz_char matrix also run with `VT_AUTHZ_ENFORCE=deleg` and `share,deleg`.
+
+## Folder leases and revocation cleanup (`VT_AUTHZ_ENFORCE=lease`)
+
+A **lease** says «this path is mine for now». The API (`/api/leases`, `fsh lease`, MCP `lease_*`) is always there; the flag only
+decides whether FarShell **refuses** writes that run into another holder's lease and whether revocations run the cleanup saga below.
+Flag off = nothing that existed changes (byte-identical responses; the authz characterization matrix and `fsh migrate-auth --verify`
+stay clean).
+
+### What is enforced, what is only advisory
+
+| | |
+|---|---|
+| **Enforced** (flag `lease`) | Writes FarShell performs for a non-human caller: `POST /api/git/stage`, `/unstage`, `/commit` (every staged path, renames count both names), files delivered to a session's working folder — `POST /api/upload?session_id=`, `POST /api/files/{id}/insert`, a peer's `POST /api/peer/file` with a session (the `fs.write` op `drop`) — and the working folder of `POST /api/delegations`. Refusal: **403 `lease_conflict`** `{holder, expires, op, paths, conflicts[]}` (holder = nickname only). The file-store deletes (`DELETE /api/files/{id}`, `POST /api/files/delete`) act on FarShell's own attachment store, which sits in hidden state and can never be leased, so they are not hooked |
+| **Advisory** | Anything an agent does with its own tools (shell, editor, `git` run in its pane). The unix user's processes can ignore a lease, edit the lease file or skip the guard with `git commit --no-verify`. **A lease does not stop a program running as the same user** — same limit as the rest of the permission store (`approved_via`, «Unreadable stores refuse writes»). Do not describe it as a lock |
+| **Optional guard** | `fsh lease guard install` — a pre-commit hook that asks the server and refuses a commit that touches another holder's leased files. Server unreachable: **warning only, the commit goes through**, and one line (time, reason, file count — no paths) is appended to `~/.vt/authz/guard-skipped.log`; `fsh doctor` shows the last 24h count |
+| **Humans** | Never blocked. A person writing inside someone else's leased path produces an `lease.override` audit line and a content-free `lease_notice` event on `/ws-workspace`; nothing is refused |
+
+Callers FarShell cannot match to a holder (machine token without a verifiable pane, peers, a pane-less `cli`) count as «someone else»:
+any write/exclusive lease over the path refuses them. A corrupt `leases.json` refuses non-humans with 503 `lease_unavailable`.
+
+### The lease
+
+`{id "ls-…", holder, resource "fs:local/<realpath glob>", mode read|write, exclusive, ttl, reason, created, expires, max_expires,
+derived_from, deleg, grant_id, approved_via}` in `~/.vt/authz/leases.json` (0600, same lock and atomic write as the other authz documents).
+
+| Rule | Detail |
+|---|---|
+| Canonical glob | The static prefix (path components before the first `*?[`) is `realpath`ed; `..` is refused; the prefix must be inside `VT_BROWSE_ROOTS` and outside the deny list and hidden-state folders (`fsguard`), literal `.git`/`.ssh`/… components and `.*` in the rest are refused. A path without glob characters means the whole folder. Not-yet-existing paths (a new worktree) are fine |
+| Overlap | Conservative: static prefixes must be ancestor-related; literal vs glob uses `fnmatch` (ancestors included); glob vs glob overlaps when their leading literal text is compatible. When unsure it conflicts. The UI-facing wording is «may overlap» |
+| Conflict | Another holder's **write × write** conflicts; write × read only when either is `exclusive`; read × read never. Same holder and same delegation lineage never conflict. The «same pair, both non-exclusive» exception exists as `leases.same_pair()` and is a stub returning False until pairs exist. 409 `lease_conflict` `{holder, expires, conflicts[]}` |
+| Time | Default 30 min, max 8 h (`ttl_too_long` above). Renewal re-sets the remaining time to the original ttl but never beyond `created + 8h` (not an escalation), never shrinks, and a derived lease follows its parent |
+| Ends | At expiry; when the holder's session is gone (tmux unreadable = keep, as for grants); on admin revoke (`DELETE /api/authz/leases/{id}`); when the grant that allowed it is revoked/expired (`grant_id`); when its parent lease ends |
+| Needs | `fs.write` (ops `write`) for a write lease, `fs.read` for a read lease, decided by the engine on `fs:local/<glob>` (a folder also matches `<folder>/*`). Without it: 403 `forbidden` with `need`. Humans have both by default; a pane-less `cli` has neither. System-issued delegation leases (`approved_via: system`) skip this |
+| Limits | 30 lease changes per minute per principal (429 `rate_limited`), 50 leases per holder |
+| Audit | `lease.acquire/renew/release/revoke/expire/override` in the hash chain; the `reason` text is never stored in the audit (length only); a failed audit write is 503 `audit_unavailable` and nothing changes. Denials go to the deny log |
+
+### Delegation (inheritance)
+
+Under `lease`, `POST /api/delegations`: a **same-folder child** gets a lease derived from every lease its parent holds over that folder
+(`derived_from` = the parent lease, `approved_via: system`, expiry follows the parent) so parent, child and sibling children write together
+while strangers are refused. A child spawned **with a worktree** gets its own **exclusive write lease on the new worktree path**
+(system-issued, `deleg` = the delegation id) and does **not** inherit the parent's original-folder lease. Closing the delegation, the
+child or parent session ending, or releasing the parent lease ends the child's leases (a parent release cascades to everything derived).
+If the new worktree path is already under someone else's lease the spawn fails cleanly with 403 `lease_conflict`.
+
+### Revocation saga (`server/authz/saga.py`)
+
+When `lease` is on, **grant revoke** (`DELETE /api/authz/grants/{id}`), **panic** and **host deny-control/deny-agent** run a saga after the
+existing revoke path (which is unchanged). Steps — each idempotent, each recorded in `~/.vt/authz/sagas.json` as it completes:
+`mark_revoking` → `close_streams` (revoke bus) → `drop_queued` → `cancel_messages` → `close_delegations` (reason `revoked`) →
+`release_leases` → `verify` (re-reads every store; anything left restarts the saga from the top) → `mark_revoked`. A server that dies midway
+resumes at the next start and every 30 s (`lifespan` sweep); a step that keeps failing backs off and is `stuck` after 20 attempts
+(`fsh doctor` reports unfinished sagas). Later features add their own steps with `saga.register(name, fn, before="verify")`.
+
+Tests: `test_authz_leases.py` (canonical table, overlap table, conflict matrix, TTL/renew, liveness, human, routes),
+`test_authz_lease_enforce.py` (each write route flag on/off, inheritance, saga crash injection at every step), `test_lease_guard.py`
+(real `git commit` through the hook), `test_lease_cli_mcp.py`, `authz_char/test_char_leases.py`.
 
 ## Agent messages under the engine (`VT_AUTHZ_ENFORCE=msg`)
 

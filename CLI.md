@@ -35,7 +35,8 @@ fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <n
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
 fsh delegate [ls|close <id>]  # agent delegations (sub-sessions); close keeps the session
 fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # approval inbox, grants and audit (read-only; see below)
-fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants
+fsh lease [ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status]  # folder leases + optional pre-commit guard (see below)
+fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants / lease_acquire / lease_renew / lease_release / lease_list
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
@@ -170,6 +171,35 @@ fsh authz panic                   # prints that an elevated person does this in 
 `whoami`, `request_access {resource, scopes, reason?, ttl?}` and `list_my_grants` do the same from inside the session; `request_access` always
 returns «waiting for the user's approval». API and rules: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
+## Folder leases (`fsh lease`)
+
+A lease says «this folder (or glob) is mine for now» so that two agents do not edit the same files. Talks to the server over the unix
+socket (no token). Defaults: 30 minutes, at most 8 hours, renewable.
+
+```bash
+fsh lease ls                                  # active leases: id, holder (nickname), mode, exclusive, time left, glob
+fsh lease acquire ~/code/app/src --write --ttl 2h --reason "refactor"   # --read, --exclusive, --ttl 90|30m|2h
+fsh lease renew <id> [--ttl 1h]               # up to 8 h after it was created
+fsh lease release <id>
+fsh lease check --staged                      # would committing the staged files collide with someone else's lease? (exit 1 = yes)
+fsh lease check path/a path/b [--holder <principal id>]
+fsh lease guard install | uninstall | status  # git pre-commit hook for the CURRENT repository
+```
+
+Holding a lease needs the underlying permission on that path (`fs.write` for write, `fs.read` for read) — a person has it, an agent asks
+with `request_access`. A conflicting request prints the holder's nickname and when the lease ends. **Leases are advisory unless the server
+runs with `VT_AUTHZ_ENFORCE=lease`**, and even then only writes FarShell performs itself (git stage/commit from the web UI/API, file
+delivery to a session, delegation folders) are refused; a process of the same user can ignore a lease. `fsh doctor` shows the active count,
+whether blocking is on and the guard state of the current repository.
+
+**Commit guard.** `guard install` writes a pre-commit hook that runs `fsh lease check --staged` (staged names are read NUL-separated,
+renames count both names, nothing secret goes on a command line; the machine token is never used). An existing pre-commit hook is not
+overwritten: it is renamed to `pre-commit.fsh-chained`, runs first, and `guard uninstall` puts it back. With a conflict the commit stops
+(exit 1) and lists the holder and files. If the server cannot be reached the guard prints **one warning line and lets the commit through**
+and appends a line (time, reason, file count — no paths) to `~/.vt/authz/guard-skipped.log`. `git commit --no-verify` skips the guard.
+The agent-side tools are MCP `lease_acquire`, `lease_renew`, `lease_release`, `lease_list` (shown only to callers whose `whoami` has
+`fs.write` or `fs.read`). Rules: `docs/ref/auth.md` «Folder leases and revocation cleanup», API: `API.md` «Folder leases».
+
 ## Prompt Queue (`fsh queue`)
 
 Stores instructions while an agent is working and feeds them in one at a time
@@ -233,6 +263,7 @@ contract 5). The few that decide how you reach this Mac:
 | 14 | Tailscale | Install/connection status |
 | 15 | unix socket | `~/.vt/run/fsh.sock` state (listening / skipped / failed self-test), permissions, and machine-token requests in the last 24h. `VT_AUTHZ_SOCKET=0` makes clients skip the socket and use the token only. `fsh status` shows the same one line |
 | 16 | shared token | Only with `VT_AUTHZ_ENFORCE=legacy`: the number of machine-token requests refused as out of scope (403 `legacy_token_scope`) in the last 24h, listed per route and user agent so you can see which outside script still needs to move to the socket or a login. On a server with a token but no web password it also says that approval-needing agent/peer features are off until `fsh password` is set |
+| 17 | Folder leases | Active lease count, whether write blocking (`VT_AUTHZ_ENFORCE=lease`) is on, the pre-commit guard state of the current repository (installed / chained to an existing hook / absent), how many times the guard skipped in the last 24 h because the server was unreachable (`~/.vt/authz/guard-skipped.log`), and a warning if a revocation cleanup (saga) is unfinished |
 
 ---
 

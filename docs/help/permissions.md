@@ -31,4 +31,17 @@
 
 권한이 회수되었거나 위임이 닫혀 큐 항목이 막히면 큐 패널에 사람이 읽는 이유가 나온다(코드는 그대로 API에 있다).
 
+## 폴더 lease — 「이 경로는 내가 쓰는 중」
+
+두 에이전트가 같은 폴더를 동시에 고치지 않게, 에이전트(MCP `lease_acquire`)나 터미널(`fsh lease acquire <경로> --write`)이 폴더에 **lease**를 잡습니다.
+기본 30분, 최대 8시간(`lease_renew`/`fsh lease renew`로 늘림). 다른 세션이 겹치는 경로에 쓰기 lease 를 잡으려 하면 보유자 닉네임과 끝나는 시각이 나오며 거절됩니다.
+lease 를 잡으려면 그 경로의 쓰기(또는 읽기) 권한이 있어야 합니다 — 없으면 에이전트가 `request_access` 로 승인을 요청합니다. 위임한 하위 세션은 같은 폴더면 부모의 lease 를 함께 쓰고,
+worktree 로 띄우면 새 worktree 에 자기 lease 를 받습니다.
+
+- **강제인 것**: 서버 설정 `VT_AUTHZ_ENFORCE` 에 `lease` 가 있을 때만, FarShell 이 대신 하는 쓰기(웹의 git stage·commit, 세션으로 보내는 파일, 위임 작업 폴더)가 남의 lease 경로에서 거절됩니다.
+- **권고인 것**: 에이전트가 자기 도구로 직접 쓰는 것, 그리고 같은 사용자 계정의 다른 프로그램. **lease 는 잠금이 아니라 표시입니다** — 같은 계정의 프로세스는 무시할 수 있습니다.
+- 사람은 막히지 않습니다. 남의 lease 경로에서 쓰면 기록과 알림만 남습니다.
+- **커밋 guard(선택)**: `fsh lease guard install` — 남의 lease 가 걸린 파일이 든 커밋을 알려 주며 멈춥니다. 서버에 닿지 못하면 경고만 하고 커밋은 통과합니다. 기존 pre-commit 훅은 지우지 않고 이어서 실행합니다.
+- 사람이 lease 를 회수하는 화면은 아직 없고 API(`DELETE /api/authz/leases/{id}`)로 합니다. 권한을 회수하면 그 권한으로 잡은 lease 도 함께 사라집니다.
+
 관련: `fsh help agent-state` (MCP 도구 `request_access`·`whoami`), `docs/ref/auth.md`.

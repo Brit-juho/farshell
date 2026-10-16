@@ -88,6 +88,7 @@ def dependency(scope: str, ctx: Optional[dict] = None):
 
     from fastapi import Request
     dep.__annotations__["request"] = Request
+    dep.authz_need = (scope, dict(ctx or {}))      # 라우트 표(authz/route_table.py)와 메타 시험이 읽는다 — 동작에는 쓰이지 않는다
     return dep
 
 

@@ -90,6 +90,10 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", r"/api/authz/(requests|my-grants)", "mcp request_access / list_my_grants (agent: own records only)"),
     ("POST", r"/api/authz/requests", "mcp request_access (agent, creates a pending request)"),
     ("GET", r"/api/authz/(approvals|grants|audit)", "fsh authz requests|grants|audit (cli: read only)"),
+    # 폴더 lease — 에이전트(잡기·갱신·놓기·자기 목록)와 터미널 fsh(전체 목록·check·pre-commit guard)
+    ("GET", r"/api/leases", "fsh lease ls · mcp lease_list"),
+    ("POST", r"/api/leases(/check|/[^/]+/renew)?", "fsh lease acquire|renew|check · pre-commit guard · mcp lease_acquire|lease_renew"),
+    ("DELETE", r"/api/leases/[^/]+", "fsh lease release · mcp lease_release"),
 )
 _ROUTES_RE = tuple((m, re.compile(p), who) for m, p, who in ROUTES)
 
@@ -385,6 +389,17 @@ def prepare_socket(path: Path) -> socket.socket:
     """디렉터리 0700 → stale 정리 → bind → chmod 0600 → listen. 실패는 SkipSocket(사유)."""
     d = path.parent
     try:
+        missing = []
+        q = d
+        while not q.exists() and q != q.parent:
+            missing.append(q)
+            q = q.parent
+        for q in reversed(missing):               # mkdir(parents=True) 는 중간 단계에 mode 를 쓰지 않고 umask 도 받는다
+            try:
+                q.mkdir(mode=0o700)
+            except FileExistsError:
+                pass
+            os.chmod(q, 0o700)
         d.mkdir(mode=0o700, parents=True, exist_ok=True)
         st = os.stat(d)
         if st.st_uid != os.geteuid():

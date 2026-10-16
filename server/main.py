@@ -72,6 +72,7 @@ from routes.agent_msg import router as agent_msg_router
 from routes.agent_share import router as agent_share_router, human_router as agent_share_human_router
 from routes.authz import human_router as authz_human_router, read_router as authz_read_router, router as authz_router
 from routes.delegation import router as delegation_router, human_router as delegation_human_router
+from routes.leases import router as leases_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -123,6 +124,19 @@ for _name in ("uvicorn.access", "uvicorn.error"):
 # 미들웨어
 # ---------------------------------------------------------------------------
 
+# 토큰 인증(층 3)을 건너뛰는 경로 — 이 목록이 문서의 「Exceptions」 표와 `authz/route_table.py` 의 `public`/`peer` 분류의 근거다.
+AUTH_EXEMPT_PATHS = (
+    "/", "/sw.js", "/manifest.json", "/favicon.ico",
+    "/api/auth", "/api/auth/status", "/api/auth/logout",
+    "/api/tmux/kick", "/p/authorize",
+)
+AUTH_EXEMPT_PREFIXES = ("/static", "/s/", "/api/peer/")
+
+
+def auth_exempt(path: str) -> bool:
+    return path in AUTH_EXEMPT_PATHS or path.startswith(AUTH_EXEMPT_PREFIXES)
+
+
 class TokenAuthMiddleware:
     """인증: 서명 세션 쿠키(사람) 또는 기계 토큰(데몬/QR)을 받는다.
 
@@ -152,12 +166,7 @@ class TokenAuthMiddleware:
         if scope.get("fsh_sock") is True:
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
-        if path in (
-            "/", "/sw.js", "/manifest.json", "/favicon.ico",
-            "/api/auth", "/api/auth/status", "/api/auth/logout",
-            "/api/tmux/kick",
-        ) or path.startswith("/static") or path.startswith("/s/") or path.startswith("/api/peer/") \
-                or path == "/p/authorize":
+        if auth_exempt(path):
             # 이 예외들이 각각 어느 층을 끄고 무엇이 그 자리를 대신하는지는
             # docs/ref/auth.md 「Authorization order」 §Exceptions 표. 여기 목록을
             # 고치면 그 표도 고친다(scripts/check_docs.py는 층 순서만 검사하고
@@ -459,6 +468,10 @@ async def lifespan(_app: FastAPI):
     # 위임 점검 — 세션이 사라진 위임 정리, 재시작 전에 못 보낸 결과 재전송.
     import delegation
     delegation_sweep_task = asyncio.create_task(delegation.sweep_loop())
+    # 폴더 lease 정리(수명이 끝난 것)와, 서버가 도중에 죽어 멈춘 회수 saga 이어하기.
+    from authz import leases as authz_leases, saga as authz_saga
+    lease_sweep_task = asyncio.create_task(authz_leases.sweep_loop())
+    saga_sweep_task = asyncio.create_task(authz_saga.sweep_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -494,6 +507,10 @@ async def lifespan(_app: FastAPI):
         delegation_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await delegation_sweep_task
+        for _t in (lease_sweep_task, saga_sweep_task):
+            _t.cancel()
+            with suppress(asyncio.CancelledError):
+                await _t
         await port_proxy.shutdown_all()
         from voice_sessions import coordinator
         await coordinator.close()
@@ -616,6 +633,7 @@ app.include_router(security_router)
 app.include_router(authz_human_router)
 app.include_router(authz_read_router)
 app.include_router(authz_router)
+app.include_router(leases_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)

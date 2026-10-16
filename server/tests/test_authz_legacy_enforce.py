@@ -78,6 +78,8 @@ SAMPLES = [
     ("GET", "/api/authz/whoami"), ("GET", "/api/authz/requests"), ("POST", "/api/authz/requests"),
     ("GET", "/api/authz/my-grants"), ("GET", "/api/authz/approvals"), ("GET", "/api/authz/grants"),
     ("GET", "/api/authz/audit"),
+    ("GET", "/api/leases"), ("POST", "/api/leases"), ("POST", "/api/leases/check"), ("POST", "/api/leases/ls-1/renew"),
+    ("DELETE", "/api/leases/ls-1"),
 ]
 
 DENIED = [

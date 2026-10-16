@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -180,12 +181,52 @@ AUTHZ_TOOLS = [
     },
 ]
 TOOLS = TOOLS + AUTHZ_TOOLS
+LEASE_TOOLS = [
+    {
+        "name": "lease_acquire",
+        "description": (
+            "폴더(또는 glob)에 lease 를 잡아 「이 경로는 내가 쓰는 중」이라고 표시한다. 다른 세션이 겹치는 경로에 write lease 를 잡으려 하면 "
+            "충돌(보유자 닉네임과 만료 시각)로 거절된다. 기본 30분, 최대 8시간이고 lease_renew 로 늘린다. 그 경로에 fs.write(읽기 lease 는 fs.read) "
+            "권한이 있어야 한다 — 없으면 request_access 로 요청하라. 서버가 쓰기를 막는지(강제)는 서버 설정에 달려 있고, 막지 않는 동안은 권고다. "
+            "같은 계정의 다른 프로세스는 lease 를 무시할 수 있다."),
+        "inputSchema": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "절대 경로 또는 glob. 예: /path/to/proj/src/*  (glob 문자가 없으면 그 폴더 전체)"},
+            "mode": {"type": "string", "enum": ["write", "read"], "description": "기본 write"},
+            "exclusive": {"type": "boolean", "description": "true 면 다른 세션의 겹치는 읽기 lease 도 막는다"},
+            "ttl": {"type": "integer", "minimum": 1, "maximum": 28800, "description": "초. 기본 1800, 최대 28800"},
+            "reason": {"type": "string", "description": "왜 잡는지 한 줄(사람 화면에만 보인다)"}},
+            "required": ["path"], "additionalProperties": False},
+    },
+    {
+        "name": "lease_renew",
+        "description": "내 lease 의 남은 시간을 늘린다(만든 때부터 최대 8시간까지).",
+        "inputSchema": {"type": "object", "properties": {
+            "id": {"type": "string"}, "ttl": {"type": "integer", "minimum": 1, "maximum": 28800}},
+            "required": ["id"], "additionalProperties": False},
+    },
+    {
+        "name": "lease_release",
+        "description": "내 lease 를 놓는다. 일이 끝나면 바로 놓아 다른 세션이 쓸 수 있게 하라.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}},
+                        "required": ["id"], "additionalProperties": False},
+    },
+    {
+        "name": "lease_list",
+        "description": "내가 잡은 lease(상속받은 것 포함)와 남은 시간.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+]
+TOOLS = TOOLS + LEASE_TOOLS
 # 도구 → 이 중 하나라도 가진 호출자에게만 보인다(whoami 의 유효 scope 기준). 목록에 없는 도구는 늘 보인다 —
 # 막히면 서버가 이유를 돌려주고, 그 도구들은 권한이 없을 때 승인 요청(202)으로 이어지기 때문이다.
 TOOL_SCOPES = {
     "spawn_session": ("deleg.spawn",),
     "send_message": ("msg.send",),
     "request_access": ("authz.request",),
+    "lease_acquire": ("fs.write", "fs.read"),
+    "lease_renew": ("fs.write", "fs.read"),
+    "lease_release": ("fs.write", "fs.read"),
+    "lease_list": ("fs.write", "fs.read"),
 }
 _PARENT_ONLY = {"spawn_session", "send_to_child", "close_delegation"}
 _CHILD_ONLY = {"report_back"}
@@ -459,6 +500,55 @@ def tool_list_my_grants(args: dict) -> tuple[str, bool]:
     return "\n".join(out), False
 
 
+def _lease_line(l: dict) -> str:
+    left = int(l.get("remaining") or 0)
+    ex = ", exclusive" if l.get("exclusive") else ""
+    src = " [상속]" if l.get("derivedFrom") else ""
+    return f"- {l['id']} {l['glob']} ({l['mode']}{ex}) 남은 {left // 60}분{src}"
+
+
+def tool_lease_acquire(args: dict) -> tuple[str, bool]:
+    body = {"glob": args.get("path", ""), "mode": args.get("mode") or "write", "exclusive": bool(args.get("exclusive"))}
+    for k in ("ttl", "reason"):
+        if args.get(k) not in (None, ""):
+            body[k] = args[k]
+    status, data = _api("POST", "/api/leases", body, headers=_identity_headers())
+    if status == 201:
+        return "lease 를 잡았습니다:\n" + _lease_line(data["lease"]), False
+    if status == 409:
+        return (f"충돌: {data.get('holder')} 세션이 이 경로를 쓰는 중입니다(만료 "
+                f"{time.strftime('%H:%M:%S', time.localtime(float(data['expires']))) if data.get('expires') else '?'}). 다른 경로를 쓰거나 끝나길 기다리세요."), True
+    if status == 403 and data.get("need"):
+        n = data["need"]
+        return (f"권한이 없습니다 — {', '.join(n.get('scopes') or [])} on {n.get('resource')} 가 필요합니다. "
+                f"request_access 로 사람에게 요청하세요."), True
+    return f"실패: {_fail(status, data)}", True
+
+
+def tool_lease_renew(args: dict) -> tuple[str, bool]:
+    body = {"ttl": args["ttl"]} if args.get("ttl") else {}
+    status, data = _api("POST", f"/api/leases/{urllib.parse.quote(str(args.get('id', '')), safe='')}/renew", body, headers=_identity_headers())
+    if status != 200:
+        return f"실패: {_fail(status, data)}", True
+    return "갱신했습니다:\n" + _lease_line(data["lease"]) + (" (최대 시간에 닿았습니다)" if data["lease"].get("capped") else ""), False
+
+
+def tool_lease_release(args: dict) -> tuple[str, bool]:
+    status, data = _api("DELETE", f"/api/leases/{urllib.parse.quote(str(args.get('id', '')), safe='')}", headers=_identity_headers())
+    if status != 200:
+        return f"실패: {_fail(status, data)}", True
+    return "lease 를 놓았습니다", False
+
+
+def tool_lease_list(args: dict) -> tuple[str, bool]:
+    status, data = _api("GET", "/api/leases", headers=_identity_headers())
+    if status != 200:
+        return f"실패: {_fail(status, data)}", True
+    rows = [_lease_line(l) for l in data.get("leases", [])]
+    note = "" if data.get("enforced") else "\n(권고 모드 — 서버가 쓰기를 막지 않습니다)"
+    return ("\n".join(rows) or "lease 가 없습니다") + note, False
+
+
 def _caller_scopes() -> set | None:
     """`whoami` 의 유효 scope. 소켓이 아니거나 서버가 계산하지 못했으면 None(= 거르지 않는다)."""
     status, data = _api("GET", "/api/authz/whoami", headers=_identity_headers())
@@ -500,6 +590,10 @@ HANDLERS = {
     "whoami": tool_whoami,
     "request_access": tool_request_access,
     "list_my_grants": tool_list_my_grants,
+    "lease_acquire": tool_lease_acquire,
+    "lease_renew": tool_lease_renew,
+    "lease_release": tool_lease_release,
+    "lease_list": tool_lease_list,
 }
 
 
