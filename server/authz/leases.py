@@ -18,7 +18,7 @@
   - 겹침은 **보수적**이다: 정적 prefix 가 서로 조상 관계가 아니면 겹치지 않고, literal 대 glob 은 fnmatch(조상 포함)로 확정하며,
     glob 대 glob 은 머리 문자열이 겹치면 겹친다고 본다(모르면 충돌).
   - 충돌: 다른 보유자와 write 끼리 겹치면 충돌. write 와 read 는 둘 중 하나가 exclusive 일 때만. read 끼리는 없다.
-    같은 pair 의 둘 다 non-exclusive 인 write 는 예외 — `same_pair` 가 연결되기 전에는 항상 False 다.
+    같은 활성 pair 의 둘 다 non-exclusive 인 write 는 예외 — pair 기능이 켜져 있을 때만(`same_pair`).
     같은 위임 계보(derived_from 로 이어진 것)는 충돌하지 않는다.
   - 수명: 기본 30분, 최대 8시간(갱신해도 만든 때부터 8시간을 못 넘긴다 — 확대가 아니다). 보유 세션이 사라지면(tmux 를 못 읽으면 유지),
     만료되면, 관리자가 회수하면, 근거 grant 가 회수되면 사라진다. 파생 lease 는 부모와 함께 사라진다.
@@ -165,8 +165,9 @@ def overlaps(a: str, b: str) -> bool:
 
 
 def same_pair(holder_a: str, holder_b: str) -> bool:
-    """두 보유자가 같은 pair 의 구성원인가 — 아직 연결 전이라 지금은 항상 False."""
-    return False
+    """두 보유자(주체 id)가 같은 활성 pair 의 구성원인가. pair 기능이 꺼져 있으면(`VT_AUTHZ_ENFORCE` 에 `pair` 없음) 항상 False."""
+    from . import pairs
+    return pairs.same_pair_holders(holder_a, holder_b)
 
 
 def clash(new: dict, old: dict) -> bool:

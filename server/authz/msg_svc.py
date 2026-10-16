@@ -11,7 +11,7 @@
 
 판정은 `msg.send` on `msg:local/<받는 세션 key>`:
   - 관계가 있으면 승인 없이 허용: 위임 부모↔자식, 같은 부모의 형제 — 위임 장부(`delegations.json`)에서 **열린** 위임
-    (running·reported)만. 닫힘·고아(orphaned)는 관계가 아니다. pair 구성원 관계는 5단계 자리(`pair_related`, 지금은 항상 False).
+    (running·reported)만. 닫힘·고아(orphaned)는 관계가 아니다. pair 구성원 관계는 `pair_related`(pair 기능이 켜져 있을 때만).
   - 그 밖은 (보내는 세션 → 받는 세션) grant 가 있어야 한다. 없으면 보류 요청(`approvals.json`, 원천 `authz:msg:req:`)을 만들고
     HTTP 202 `{state: pending, requestId}` — 사람만 승인함에서 결정한다(에이전트는 승인할 수 없다). 거절은 5분 쿨다운,
     대기는 24시간·주체당 20·전체 200. 승인되면 grant(원천 `authz:msg:grant:`)가 생기고 세션이 사라지면 함께 정리된다.
@@ -80,9 +80,9 @@ def _unavailable(e: BaseException):
 
 
 def pair_related(a_key: str, b_key: str) -> bool:
-    """STUB(5단계) — 같은 pair 의 구성원끼리는 승인 없이 보낼 수 있어야 한다. pair 저장소(`pairs.json`)가 아직 없어 항상 False.
-    5단계가 이 함수만 채우면 된다(판정 지점·엔진 조건은 이미 `relation()` 을 거친다)."""
-    return False
+    """같은 활성 pair 의 구성원끼리는 승인 없이 보낼 수 있다. pair 기능이 꺼져 있으면(`VT_AUTHZ_ENFORCE` 에 `pair` 없음) 항상 False."""
+    from . import pairs
+    return pairs.related_keys(a_key, b_key)
 
 
 def _ledger_items() -> list[dict]:

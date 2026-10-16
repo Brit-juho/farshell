@@ -244,10 +244,12 @@ def test_wrong_caller_kinds(env):
 def test_flag_off_every_entry_answers_pair_disabled_without_side_effects(env, monkeypatch):
     monkeypatch.setenv("VT_AUTHZ_ENFORCE", "share,deleg,msg,peer,legacy,lease")
     for fn, args in ((pairs.create, (H, bundle(env))), (pairs.issue_code, (A, "pr-x")), (pairs.join, (B, "ABCD-EFGH")),
-                     (pairs.status, (A, "pr-x")), (pairs.list_for, (A,)), (pairs.end, (A, "pr-x"))):
+                     (pairs.status, (A, "pr-x")), (pairs.list_for, (A,)), (pairs.handoff_offer, (A, "pr-x")),
+                     (pairs.handoff_accept, (A, "pr-x")), (pairs.end, (A, "pr-x"))):
         kw = {"everyone": False} if fn is pairs.list_for else {}
         assert code_of(fn, *args, **kw)[:2] == ("pair_disabled", 409)
     assert not store.doc_path("pairs").exists() and pairs.pending_approvals() == []
+    assert pairs.related_keys("$1:101", "$2:102") is False and pairs.same_pair_holders(A.id, B.id) is False
 
 
 def test_remote_refs_are_501(env):

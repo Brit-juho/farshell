@@ -96,6 +96,8 @@ def pairs_cases() -> list[Case]:
         ("POST", "/api/pairs/{pair_id}/code", "/api/pairs/pr-none/code", None),
         ("GET", "/api/pairs/{pair_id}/status", "/api/pairs/pr-none/status", None),
         ("GET", "/api/pairs", "/api/pairs", None),
+        ("POST", "/api/pairs/{pair_id}/handoff", "/api/pairs/pr-none/handoff", None),
+        ("POST", "/api/pairs/{pair_id}/handoff/accept", "/api/pairs/pr-none/handoff/accept", None),
         ("DELETE", "/api/pairs/{pair_id}", "/api/pairs/pr-none", None),
     ]
     out = []

@@ -6,6 +6,8 @@
   POST   /api/pairs/join                  `{code}` 로 합류(확인된 에이전트) → 사람의 승인 요청이 생긴다
   GET    /api/pairs/{id}/status           참여자 본인이 결과를 읽는다(합류자는 이것으로 승인 여부를 안다). 참여자 또는 사람
   GET    /api/pairs                       에이전트는 자기 것만, 사람·터미널(fsh)은 전부
+  POST   /api/pairs/{id}/handoff          driver 의 제안(사람이 driver 가 아니면 곧바로 교체)
+  POST   /api/pairs/{id}/handoff/accept   navigator 의 수락 — 원자적 교체, 세대 +1
   DELETE /api/pairs/{id}                  끝내기(구성원) 또는 회수(사람)
 
 호출자는 unix socket 의 연결(peer)로 정해진다. 토큰 경로에서는 `X-Fsh-*` 헤더로 pane 을 확인한다. 승인은 이 라우터가 아니라 통합 승인함
@@ -133,6 +135,26 @@ async def list_pairs(request: Request):
         pairs.require_enabled()
         p = await _caller(request)
         return {"pairs": await asyncio.to_thread(pairs.list_for, p, everyone=_sees_all(p))}
+    except ShareError as e:
+        return _err(e)
+
+
+@router.post("/api/pairs/{pair_id}/handoff", response_model=PairResponse)
+async def handoff(pair_id: str, request: Request):
+    try:
+        pairs.require_enabled()
+        p = await _caller(request)
+        return {"ok": True, "pair": await asyncio.to_thread(pairs.handoff_offer, p, pair_id)}
+    except ShareError as e:
+        return _err(e)
+
+
+@router.post("/api/pairs/{pair_id}/handoff/accept", response_model=PairResponse)
+async def handoff_accept(pair_id: str, request: Request):
+    try:
+        pairs.require_enabled()
+        p = await _caller(request)
+        return {"ok": True, "pair": await asyncio.to_thread(pairs.handoff_accept, p, pair_id)}
     except ShareError as e:
         return _err(e)
 

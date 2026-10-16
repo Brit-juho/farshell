@@ -18956,6 +18956,552 @@
    "error": "pair_disabled"
   }
  },
+ "pairs.api_pairs_X_handoff.post.agent_foreign.none": {
+  "group": "pairs",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.agent_foreign.password": {
+  "group": "pairs",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.agent_foreign.token": {
+  "group": "pairs",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.agent_verified.none": {
+  "group": "pairs",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.agent_verified.password": {
+  "group": "pairs",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.agent_verified.token": {
+  "group": "pairs",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.machine.none": {
+  "group": "pairs",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.machine.password": {
+  "group": "pairs",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.machine.token": {
+  "group": "pairs",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.none.none": {
+  "group": "pairs",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.none.password": {
+  "group": "pairs",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.none.token": {
+  "group": "pairs",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.peer_control.none": {
+  "group": "pairs",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.peer_control.password": {
+  "group": "pairs",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.peer_control.token": {
+  "group": "pairs",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.session.none": {
+  "group": "pairs",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.session.password": {
+  "group": "pairs",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.session.token": {
+  "group": "pairs",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.session_elev.none": {
+  "group": "pairs",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.session_elev.password": {
+  "group": "pairs",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff.post.session_elev.token": {
+  "group": "pairs",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff",
+  "path": "/api/pairs/pr-none/handoff",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.agent_foreign.none": {
+  "group": "pairs",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.agent_foreign.password": {
+  "group": "pairs",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.agent_foreign.token": {
+  "group": "pairs",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.agent_verified.none": {
+  "group": "pairs",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.agent_verified.password": {
+  "group": "pairs",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.agent_verified.token": {
+  "group": "pairs",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.machine.none": {
+  "group": "pairs",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.machine.password": {
+  "group": "pairs",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.machine.token": {
+  "group": "pairs",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.none.none": {
+  "group": "pairs",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.none.password": {
+  "group": "pairs",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.none.token": {
+  "group": "pairs",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.peer_control.none": {
+  "group": "pairs",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.peer_control.password": {
+  "group": "pairs",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.peer_control.token": {
+  "group": "pairs",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.session.none": {
+  "group": "pairs",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.session.password": {
+  "group": "pairs",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.session.token": {
+  "group": "pairs",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.session_elev.none": {
+  "group": "pairs",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.session_elev.password": {
+  "group": "pairs",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
+ "pairs.api_pairs_X_handoff_accept.post.session_elev.token": {
+  "group": "pairs",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/pairs/{pair_id}/handoff/accept",
+  "path": "/api/pairs/pr-none/handoff/accept",
+  "expected": {
+   "status": 409,
+   "error": "pair_disabled"
+  }
+ },
  "pairs.api_pairs_X_status.get.agent_foreign.none": {
   "group": "pairs",
   "caller": "agent_foreign",

@@ -915,6 +915,74 @@ def request_id_norm(request_id: str) -> str:
     return "pq-" + _raw(pair_id_of_request(request_id))
 
 
+# --- handoff ----------------------------------------------------------------------------------
+
+
+def _swap(docs: dict, pair: dict, t: float, who: str, reason: str, alive) -> None:
+    """역할을 맞바꾸고 grant·lease 를 새 역할로 옮기고 세대를 올린다. 호출자가 저장소 락(txn)을 쥐고 있다."""
+    a, b = pair["members"]
+    a["role"], b["role"] = b["role"], a["role"]
+    _driver(pair)                                    # 불변식 확인
+    pair["generation"] = int(pair.get("generation", 0)) + 1
+    pair["handoff"] = None
+    pair.update(state=ACTIVE, updated=t, touched=t)
+    _apply_grants(docs, pair, t)
+    _sync_leases(docs, pair, t, alive)
+    _audit("handoff", who, pair, reason=reason)
+
+
+def handoff_offer(p: P.Principal, pid: str) -> dict:
+    """driver 가 넘기겠다고 제안한다(navigator 가 수락해야 바뀐다). driver 가 아닌 사람(navigator 사람 구성원이나 지켜보는 사람)이 부르면
+    수락 없이 곧바로 바뀐다(override)."""
+    require_enabled()
+    t = now()
+    alive = _alive_keys() if p.kind == P.HUMAN else None
+    with store.txn() as docs:
+        pair = _find(docs, pid)
+        me = _caller_member(pair, p) if pair else None
+        if pair is None or (me is None and p.kind != P.HUMAN):
+            raise _err("not_found", tr("그런 pair 가 없습니다"), 404)
+        _tick_one(docs, pair, t)
+        drv = _driver(pair) if pair["state"] in RUNNING_STATES else None
+        if p.kind == P.HUMAN and pair["state"] in RUNNING_STATES and me is not drv:
+            _swap(docs, pair, t, p.id, "human_override", alive)       # 운전대를 쥐지 않은 사람은 언제나 가져갈 수 있다(수락 없이)
+            return view(pair, p, t)
+        if pair["state"] == HANDOFF_PENDING and pair.get("handoff") and me is _member(pair, pair["handoff"]["by"]):
+            return view(pair, p, t)                  # 같은 제안의 재요청 — 그대로
+        if pair["state"] != ACTIVE:
+            raise _err("bad_state", tr("활성 상태의 pair 만 handoff 할 수 있습니다"), 409, state=pair["state"])
+        if me is not drv:
+            raise _err("not_driver", tr("driver 만 handoff 를 제안할 수 있습니다"), 403)
+        other = _other(pair, drv)
+        pair["handoff"] = {"by": drv["seat"], "to": other["seat"], "expires": t + OFFER_TTL, "generation": int(pair.get("generation", 0))}
+        pair.update(state=HANDOFF_PENDING, updated=t, touched=t)
+        _audit("handoff_offer", p.id, pair)
+        return view(pair, p, t)
+
+
+def handoff_accept(p: P.Principal, pid: str) -> dict:
+    """navigator 가 수락한다 → 저장소 락 아래에서 원자적으로 교체, 세대 +1. 제안이 없거나 만료됐으면 409."""
+    require_enabled()
+    t = now()
+    alive = _alive_keys()
+    with store.txn() as docs:
+        pair = _find(docs, pid)
+        me = _caller_member(pair, p) if pair else None
+        if pair is None or me is None:
+            raise _err("not_found", tr("그런 pair 가 없습니다"), 404)
+        _tick_one(docs, pair, t)
+        ho = pair.get("handoff")
+        if pair["state"] != HANDOFF_PENDING or not ho:
+            raise _err("no_offer", tr("수락할 handoff 제안이 없습니다(없거나 시간이 지났습니다)"), 409)
+        if _member(pair, ho["to"]) is not me:
+            raise _err("not_navigator", tr("제안을 받은 쪽(navigator)만 수락할 수 있습니다"), 403)
+        if int(ho.get("generation", -1)) == int(pair.get("generation", 0)):
+            _swap(docs, pair, t, p.id, "accepted", alive)
+            return view(pair, p, t)
+        pair.update(state=ACTIVE, handoff=None, updated=t)             # 낡은 제안은 거두고(저장하고) 거절한다
+    raise _err("stale_offer", tr("제안이 낡았습니다 — 다시 제안하세요"), 409)
+
+
 # --- 끝내기 · 회수 ----------------------------------------------------------------------------
 
 
@@ -1091,3 +1159,38 @@ async def sweep_loop(interval: float = 30.0) -> None:
             await asyncio.to_thread(sweep)
         except Exception as e:  # noqa: BLE001 — 다음 주기에 다시
             logger.warning(f"pair 점검 실패: {type(e).__name__}: {e}")
+
+
+# --- 관계(메시지 · lease) ---------------------------------------------------------------------
+
+
+def _running_pairs() -> list:
+    if not enabled():
+        return []
+    try:
+        d, bad = store._read("pairs")
+    except Exception:  # noqa: BLE001
+        return []
+    return [] if bad else [x for x in d["items"] if x.get("state") in RUNNING_STATES]
+
+
+def related_keys(a_key: str, b_key: str) -> bool:
+    """활성 pair 의 두 구성원 세션인가 — `msg_svc.pair_related`. 꺼져 있으면 항상 False."""
+    if not a_key or not b_key or a_key == b_key:
+        return False
+    for x in _running_pairs():
+        keys = {_own_key(m) for m in x["members"] if _is_agent_member(m)}
+        if a_key in keys and b_key in keys:
+            return True
+    return False
+
+
+def same_pair_holders(holder_a: str, holder_b: str) -> bool:
+    """두 lease 보유자(주체 id)가 같은 활성 pair 의 구성원인가 — `leases.same_pair`."""
+    if not holder_a or not holder_b or holder_a == holder_b:
+        return False
+    for x in _running_pairs():
+        ps = {m.get("principal") for m in x["members"] if _is_agent_member(m)}
+        if holder_a in ps and holder_b in ps:
+            return True
+    return False
