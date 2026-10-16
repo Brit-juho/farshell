@@ -1659,6 +1659,15 @@ def test_파일을_패널에_끌어다_놓으면_올라간다(page):
         "(n) => [...document.querySelectorAll('#vt-dock .vt-fl-name')].some(e => e.textContent.includes(n))",
         arg=name, timeout=15000,
     )
+    page.wait_for_function(
+        """(n) => {
+          const r = [...document.querySelectorAll('#vt-dock .vt-fl-row')]
+            .find(x => x.querySelector('.vt-fl-name')?.textContent.includes(n));
+          const t = r?.querySelector('.vt-fl-sub')?.textContent.trim() || '';
+          return t && !t.includes('저장 중');
+        }""",
+        arg=name, timeout=15000,
+    )
     got = page.evaluate(
         """(n) => {
           const rows = [...document.querySelectorAll('#vt-dock .vt-fl-row')];

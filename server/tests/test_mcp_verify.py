@@ -126,8 +126,21 @@ sys.stdin.read()
 
     grandchild_pid = int(pidfile.read_text())
     # 핵심 단언 — 손자가 살아 있으면 안 된다.
-    with pytest.raises(ProcessLookupError):
-        os.kill(grandchild_pid, 0)
+    # 정리된 손자는 init 이 거두기 전까지 좀비로 남을 수 있다(init 이 없는 컨테이너) — 좀비는 죽은 것으로 본다.
+    deadline = time.monotonic() + 3.0
+    while _pid_running(grandchild_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not _pid_running(grandchild_pid)
+
+
+def _pid_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    import subprocess
+    out = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    return bool(out) and not out.startswith("Z")
 
 
 def test_secret_env_value_is_redacted_from_error():
