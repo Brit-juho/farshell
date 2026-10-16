@@ -71,11 +71,14 @@ def _empty(name: str) -> dict:
 
 
 def _ensure_dir(d: Path) -> None:
+    # `parents=True`가 만드는 중간 디렉터리는 umask 기본값(0755)을 받는다 — 새로 생긴 것은 전부 0700으로 맞춘다.
+    created = [a for a in (d, *d.parents) if not a.exists()]
     d.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(d, 0o700)
-    except OSError:
-        pass
+    for a in created + [d]:
+        try:
+            os.chmod(a, 0o700)
+        except OSError:
+            pass
 
 
 def _read(name: str) -> tuple[dict, bool]:
