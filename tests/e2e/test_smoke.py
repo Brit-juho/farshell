@@ -36,7 +36,7 @@ playwright나 브라우저가 없으면 **전체 skip**한다. 옛 파일이 "�
 올리면 asyncio를 쓰는 기존 테스트 15건이 RuntimeError로 깨진다(실측). 자세한 건
 같은 디렉토리의 conftest.py 주석 참고.
 
-`VT_E2E_URL`을 주면 이미 떠 있는 서버에 붙는다(그때는 `VT_E2E_TOKEN`도 같이).
+`VT_E2E_URL`을 주면 이미 떠 있는 서버에 붙는다(그때는 `VT_E2E_TOKEN`(기계 토큰)과 `VT_E2E_PASSWORD`(로그인 비밀번호)도 같이).
 안 주면 이 파일이 **격리된 서버를 직접 띄운다** — 실 사용자의 워크스페이스·tmux
 소켓·인증 토큰을 절대 건드리지 않기 위해서다(아래 `_isolated_env` 주석 참고).
 """
@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import socket
 import json
 import subprocess
@@ -75,13 +76,32 @@ COMPACT = {"width": 390, "height": 780}
 REGULAR = {"width": 900, "height": 800}
 WIDE = {"width": 1440, "height": 900}
 
-SKINS = ["farshell", "macos", "catppuccin", "windows", "vscode", "notepad"]
+SKINS = ["farshell", "macos", "catppuccin", "windows", "vscode", "notepad", "warp", "linear", "vercel"]  # frontend/js/theme.js VT_SKINS와 같다
 
 
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+# 브라우저는 사람처럼 **비밀번호로 로그인**해서 세션 쿠키를 받는다. 기계 토큰(VT_AUTH_TOKEN)은
+# 웹앱에서 더 이상 통하지 않는다(`?token=`은 주소창에서 지워지고 서버도 거절한다 — docs/ref/auth.md).
+# 토큰은 테스트 코드가 서버를 직접 부를 때(Authorization 헤더)만 쓴다. 격리 서버 전용 값이다.
+E2E_PASSWORD = "e2e-smoke-password"
+
+
+def _password_hash() -> str:
+    from auth.password import hash_password
+    return hash_password(E2E_PASSWORD)
+
+
+def _login(ctx, base: str) -> None:
+    """컨텍스트에 세션 쿠키를 심는다 — `ctx.request`는 컨텍스트의 쿠키 저장소를 같이 쓴다.
+    외부 서버(VT_E2E_URL)는 VT_E2E_PASSWORD로 로그인한다."""
+    password = os.environ.get("VT_E2E_PASSWORD", E2E_PASSWORD)
+    r = ctx.request.post(f"{base}/api/auth", data={"token": password})
+    assert r.ok, f"e2e 로그인 실패: {r.status} {r.text()[:200]}"
 
 
 def _isolated_env(port: int, token: str, tmp: Path) -> dict:
@@ -114,6 +134,13 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
     env.update(
         VT_PORT=str(port),
         VT_AUTH_TOKEN=token,
+        VT_AUTH_PASSWORD_HASH=_password_hash(),
+        # 서명키가 없으면 로그인 쿠키가 기계 토큰 그대로가 되어 「사람 세션」으로 인정되지 않는다
+        # (승인함 같은 사람 전용 조회가 403). 실제 설치처럼 서명키를 둔다.
+        VT_AUTH_SESSION_KEY=secrets.token_hex(32),   # 서버 하나의 수명 동안만 쓰는 임시 값
+        # 화면 언어는 서버가 OS 로캘로 정한다(docs/ref/i18n.md). 이 스위트의 단언은 한국어 화면을 전제하는데
+        # CI 러너는 LANG=C.UTF-8이라 영어로 떴고, 탭·라벨 선택자가 전부 빗나갔다. 로캘과 무관하게 고정한다.
+        VT_LANG="ko",
         VT_WORKSPACE_PATH=str(tmp / "workspace.json"),
         VT_TMUX_SOCKET=_tmux_socket(port),
         VT_NETWORK_MODE="localhost",
@@ -282,9 +309,9 @@ def _reset_saved_layout(base: str, token: str) -> None:
     # `ctx.request`를 쓰지 않는다 — 컨텍스트와 수명을 같이하기 때문이다.
     try:
         req = urllib.request.Request(
-            f"{base}/api/workspace?token={token}",
+            f"{base}/api/workspace",
             data=json.dumps({"ui": {"layout": None}}).encode(),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
             method="PUT",
         )
         urllib.request.urlopen(req, timeout=5).close()
@@ -296,6 +323,7 @@ def _reset_saved_layout(base: str, token: str) -> None:
 def page(browser, server, request):
     base, token = server
     ctx = browser.new_context(viewport=WIDE)
+    _login(ctx, base)
     _reset_saved_layout(base, token)
     # ⚠ **첫 문서에서만** 지운다. init 스크립트는 `page.reload()`에서도 다시
     # 도는데, 배치 복원을 검사하는 테스트는 localStorage에 스냅샷을 심고
@@ -323,7 +351,7 @@ def page(browser, server, request):
         lambda r: bad_responses.append(f"{r.request.method} {r.url} → {r.status}")
         if r.status >= 400 else None,
     )
-    _boot(pg, f"{base}/?token={token}")
+    _boot(pg, f"{base}/")
     pg.console_errors = errors  # 개별 테스트가 필요하면 본다
     pg.bad_responses = bad_responses
     yield pg
@@ -366,8 +394,9 @@ def isolated_page(_pw, server):
     # 테스트가 유령 split 위에서 시작한다.
     _reset_saved_layout(base, token)
     ctx = b.new_context(viewport=WIDE)
+    _login(ctx, base)
     pg = ctx.new_page()
-    _boot(pg, f"{base}/?token={token}")
+    _boot(pg, f"{base}/")
     yield pg
     ctx.close()
     b.close()
@@ -395,6 +424,11 @@ def _boot(pg, url: str) -> None:
     pg.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
 
 
+def _dock_tab(pg, label: str):
+    """dock 탭 하나. 탭은 **아이콘만** 그려서 텍스트가 없다(2026-10-15, 이름은 aria-label·툴팁에 있다)."""
+    return pg.locator(f'#vt-dock .vt-dock-tab[aria-label^="{label}"]').first
+
+
 def _open_dock(pg, label: str) -> None:
     """dock 탭을 연다 — **이미 그 탭이 열려 있으면 클릭하지 않는다.**
     같은 탭 재클릭은 접기라서, 앞 테스트가 남긴 상태(dock은 활성 탭·접힘을
@@ -413,10 +447,10 @@ def _open_dock(pg, label: str) -> None:
     pg.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
     is_active = (
         "(label) => [...document.querySelectorAll('#vt-dock .vt-dock-tab')]"
-        ".some((t) => t.textContent.trim().startsWith(label) && t.classList.contains('active'))"
+        ".some((t) => (t.getAttribute('aria-label') || '').startsWith(label) && t.classList.contains('active'))"
     )
     if not pg.evaluate(is_active, label):
-        pg.locator("#vt-dock .vt-dock-tab", has_text=label).first.click()
+        _dock_tab(pg, label).click()
     pg.wait_for_function(is_active, arg=label, timeout=5000)
     # 지연 청크가 도착해 패널이 dock 본문에 붙을 때까지. 무엇이 붙는지는
     # 호출한 테스트가 검사한다 — 여기서는 "뭔가 하나 떴다"까지만 본다.
@@ -427,32 +461,20 @@ def _open_dock(pg, label: str) -> None:
 
 # ── 부팅 ──────────────────────────────────────────────────────────────────
 
-# 2026-09-17부터 서버는 **기계 토큰(VT_AUTH_TOKEN)으로 세션 쿠키를 발급하지
-# 않는다.** 그런데 `core/env.js`의 부트스트랩은 `?token=`이 있으면 지금도
-# 한 번 `POST /api/auth`로 쿠키 교환을 시도하고, 실패해도 query 토큰으로 계속
-# 인증되므로 접속에는 지장이 없다(그 파일의 주석이 그렇게 적어 뒀다). 이
-# 스위트는 레거시 `?token=` 링크로 들어가므로 그 401이 매번 한 번 찍힌다 —
-# **예상된 유일한 실패 응답**이라 여기서만 면제한다. 다른 401/403이 섞이면
-# 아래 단언이 그대로 잡는다.
-EXPECTED_BAD = ("POST", "/api/auth", 401)
-
-
-def _unexpected(responses: list[str]) -> list[str]:
-    m, path, code = EXPECTED_BAD
-    return [r for r in responses
-            if not (r.startswith(m + " ") and path in r and r.endswith(f"→ {code}"))]
+# 예전에는 레거시 `?token=` 링크의 쿠키 교환(`POST /api/auth` 401)이 매번 한 번 찍혀 그것만 면제했다.
+# 이제 스위트는 비밀번호로 로그인해 들어가므로(`_login`) 면제할 응답이 없다 — 4xx/5xx는 전부 실패다.
 
 
 def test_페이지가_JS_에러_없이_뜬다(page):
     page.wait_for_timeout(1200)
     # 서버가 인증을 요구하는 401/403은 없어야 하고, 모듈 평가 에러도 없어야 한다.
-    unexpected = _unexpected(page.bad_responses)
+    unexpected = list(page.bad_responses)
     assert unexpected == [], "예상 밖 실패 응답:\n  " + "\n  ".join(unexpected)
     fatal = [
         e for e in page.console_errors
         if "favicon" not in e.lower()
-        # 위 EXPECTED_BAD가 내는 줄. URL이 없어 문구로만 걸러야 하는데, 정작
-        # 어떤 요청인지는 바로 위 bad_responses 단언이 이미 확인했다.
+        # URL이 없는 줄이라 문구로 거른다 — 어떤 요청이 실패했는지는 바로 위
+        # bad_responses 단언이 이미 확인했다.
         and "Failed to load resource" not in e
     ]
     assert fatal == [], "콘솔 에러:\n  " + "\n  ".join(fatal)
@@ -523,7 +545,7 @@ def test_세션이_없어도_패널_전용_배치를_복원하고_다음_변경�
 # shell/Rail.tsx가 행에 얹는 클래스 조합(N36). 이게 바뀌면 아래 테스트가
 # 엉뚱한 걸 검사하게 되므로 번들에서 실제로 확인한다 — 레일은 지연 청크
 # (shell.js)에 있으므로 app.js가 아니라 그 파일을 본다.
-_CARD_CLASSES = ["vt-wgrail-row", "vt-wgrail-bar", "vt-wgrail-name", "vt-wgrail-row-sub"]
+_CARD_CLASSES = ["vt-wgrail-row", "vt-wgrail-name", "vt-wgrail-row-sub"]
 
 
 def test_레일_행_클래스_조합이_아직_코드에_있다(page, server):
@@ -556,7 +578,7 @@ def test_레일_행_레이아웃이_행_안에_갇힌다(page):
           // 들고 있어서, 옛 이름만 붙이면 flex가 아닌 블록을 재게 된다.
           row.className = 'vt-srow vt-wgrail-row';
           row.innerHTML = `
-            <span class="vt-srow-mark vt-wgrail-bar tone-waiting"></span>
+            <span class="vt-srow-state"><svg width="14" height="14"></svg></span>
             <div class="vt-srow-main vt-wgrail-row-main">
               <div class="vt-srow-top vt-wgrail-row-top">
                 <span class="vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
@@ -642,7 +664,7 @@ def test_레일과_dock은_compact에서_숨고_그_위에서_보인다(page):
 
 # ── 스킨 ──────────────────────────────────────────────────────────────────
 
-def test_6스킨이_실제_계산값에_반영된다(page):
+def test_스킨이_실제_계산값에_반영된다(page):
     """data-skin만 바뀌고 색은 안 바뀌는 상태(스타일시트 누락 등)를 잡는다."""
     bars = {}
     for skin in SKINS:
@@ -654,10 +676,10 @@ def test_6스킨이_실제_계산값에_반영된다(page):
     assert len(set(bars.values())) == len(SKINS), f"스킨별 --bar가 안 갈린다: {bars}"
 
 
-def test_테마_칩_6개가_서로_다른_색을_보인다(page):
+def test_테마_칩이_서로_다른_색을_보인다(page):
     """T9 회귀 방지 — 칩 색을 인라인 style에서 토큰 상수로 옮겼다.
 
-    `--color-acc`는 현재 스킨 것만 알려주므로, 칩이 그걸 쓰면 6개가 전부 같은
+    `--color-acc`는 현재 스킨 것만 알려주므로, 칩이 그걸 쓰면 전부 같은
     색이 된다. 정적 검사(인라인 style이 없는가)만으로는 이 실패를 못 본다.
     """
     # 2026-09-19 — 칩은 레일 플라이아웃에서 **설정 패널 「모양」**으로 이식됐다
@@ -682,36 +704,9 @@ def test_테마_칩_6개가_서로_다른_색을_보인다(page):
 
 # ── 상태 표시가 색 단독이 아닌가 ──────────────────────────────────────────
 
-def test_레일_상태막대가_색_단독이_아니고_실제로_그려진다(page):
-    """T3 회귀 방지. CSS에 규칙이 있는 것과 실제로 렌더되는 건 다르다 —
-    부모의 overflow나 stacking에 막혀 안 보일 수 있다. N36에서 그 자리는
-    rail 버튼의 ::before가 아니라 행 왼쪽의 `.vt-wgrail-bar`다."""
-    page.wait_for_selector("#vt-wgrail .vt-wgrail-body", timeout=10000)
-    bars = page.evaluate(
-        """() => {
-          const list = document.querySelector('#vt-wgrail .vt-wgrail-body');
-          const out = {};
-          for (const tone of ['waiting', 'working', 'error', 'idle']) {
-            const row = document.createElement('div');
-            // 폭(3px, patterns.css)도 상태색(components.css)도 `vt-srow-mark`가
-            // 준다 — `vt-wgrail-bar`만 붙이면 span이 inline으로 남아 폭 0이고
-            // 배경도 안 붙는다. 실제 마크업(RailRow.tsx)과 같은 조합으로 잰다.
-            row.className = 'vt-srow vt-wgrail-row';
-            row.innerHTML = `<span class="vt-srow-mark vt-wgrail-bar tone-${tone}"></span><div class="vt-srow-main vt-wgrail-row-main"><div class="vt-srow-top vt-wgrail-row-top"><span class="vt-wgrail-name">x</span></div></div>`;
-            list.appendChild(row);
-            const b = row.querySelector('.vt-srow-mark').getBoundingClientRect();
-            const cs = getComputedStyle(row.querySelector('.vt-srow-mark'));
-            out[tone] = { w: Math.round(b.width), h: Math.round(b.height), bg: cs.backgroundColor };
-            row.remove();
-          }
-          return out;
-        }"""
-    )
-    for tone, v in bars.items():
-        assert v["w"] >= 3, f"{tone} 막대 폭이 {v['w']}px"
-        assert v["h"] > 0, f"{tone} 막대가 높이 0이다"
-        assert v["bg"] not in ("", "rgba(0, 0, 0, 0)"), f"{tone} 막대가 투명하다: {v}"
-    assert len({v["bg"] for v in bars.values()}) == len(bars), f"상태별 색이 겹친다: {bars}"
+# 옛 `test_레일_상태막대가_색_단독이_아니고_실제로_그려진다`는 지웠다 — 행 왼쪽 3px 상태 막대(`.vt-srow-mark`,
+# `.vt-wgrail-bar`)가 상태 아이콘(`.vt-srow-state`, 색+모양, 읽지 않음은 둘레 링)으로 대체돼 검사할 대상이
+# 없다(RailRow.tsx 머리말). 색 단독이 아닌지는 아이콘 모양 쪽이라 jsdom 시험(frontend/tests)이 본다.
 
 
 def test_레일에서_연_시트가_온보딩_위에_뜬다(page):
@@ -986,8 +981,13 @@ def test_레일_폭이_기기_설정으로_저장되고_새로고침에도_유�
     base, token = server
     page.evaluate("() => window.vtSettingsSet('ui.rail.width', 300)")
     page.wait_for_timeout(400)
-    r = page.request.get(f"{base}/api/device-settings", params={"token": token})
-    assert r.json()["settings"].get("ui.rail.width") == 300
+    # 저장 위치는 OS별 프로필(mac/windows/linux/mobile)이라 호스트마다 다르다 — 어느 프로필이든
+    # 이 값이 서버에 있으면 된다. 프로필 없는 조회는 다른 저장소(기기 id)를 본다.
+    saved = [
+        page.request.get(f"{base}/api/device-settings", params={"profile": prof}).json()["settings"].get("ui.rail.width")
+        for prof in ("mac", "windows", "linux", "mobile")
+    ]
+    assert 300 in saved, saved
 
     page.reload()
     page.wait_for_function(
@@ -1097,6 +1097,7 @@ def test_연결된_화면이_실제_tmux_클라이언트를_표시한다(isolate
 def test_두_웹_화면을_따로_세고_상대만_끊는다(isolated_page):
     first = isolated_page
     second_context = first.context.browser.new_context(viewport=WIDE)
+    _login(second_context, first.url.split("/", 3)[0] + "//" + first.url.split("/", 3)[2])
     second = second_context.new_page()
     try:
         before = set(first.evaluate("() => Object.keys(window.allSessions())"))
@@ -1135,6 +1136,7 @@ def test_두_웹_화면을_따로_세고_상대만_끊는다(isolated_page):
 def test_브라우저_탭을_닫으면_그_화면만_목록에서_빠진다(isolated_page):
     first = isolated_page
     second_context = first.context.browser.new_context(viewport=WIDE)
+    _login(second_context, first.url.split("/", 3)[0] + "//" + first.url.split("/", 3)[2])
     second = second_context.new_page()
     before = set(first.evaluate("() => Object.keys(window.allSessions())"))
     try:
@@ -1178,7 +1180,8 @@ def test_그룹의_세션을_클릭하면_짝을_밀어내지_않고_그_칸으�
     # 배정된다(addSession의 마지막 줄이 switchTo). 이제 A는 첫 칸에, B는
     # 활성 칸(둘째)에 있다 — 그룹이 만들어진 상태이자, "짝(A) 쪽이 아니라
     # B 쪽이 활성"이라는 버그 재현에 필요한 조건이다.
-    page.evaluate("() => window.createSession && window.createSession()")
+    # place:'pane' — 기본은 새 단독 뷰(탭)라서 분할한 칸이 아니라 새 탭으로 간다(term/session.js, 2026-10-03).
+    page.evaluate("() => window.createSession && window.createSession({ place: 'pane' })")
     page.wait_for_timeout(500)
     session_ids = page.evaluate("() => Object.keys(window.allSessions())")
     assert len(session_ids) == 2, f"두 세션이 만들어져야 한다: {session_ids}"
@@ -1305,7 +1308,7 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
 def test_dock_탭_행이_문서대로_그려진다(page):
     """소스컨트롤 | 큐 | 포트 | 사용량 — capability가 없는 탭은 아예 없다."""
     page.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
-    labels = page.locator("#vt-dock .vt-dock-tab").all_text_contents()
+    labels = [t.get_attribute("aria-label") for t in page.locator("#vt-dock .vt-dock-tab").all()]
     assert labels[:1] == ["소스컨트롤"], f"첫 탭이 소스컨트롤이 아니다: {labels}"
     assert "큐" in labels, labels
 
@@ -1346,7 +1349,7 @@ def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
     assert got["inside"], f"패널이 dock 폭을 넘는다: {got}"
 
     # 같은 탭 재클릭 = 접기
-    page.locator("#vt-dock .vt-dock-tab", has_text="큐").first.click()
+    _dock_tab(page, "큐").click()
     page.wait_for_function(
         "() => document.getElementById('vt-dock').classList.contains('collapsed')", timeout=5000
     )
@@ -1370,7 +1373,7 @@ def test_dock_탭을_페인으로_끌어내면_그_칸이_패널_칸이_되고_d
     page.wait_for_selector(".vt-pane-viewer", timeout=15000)
 
     _open_dock(page, "큐")
-    tab = page.locator("#vt-dock .vt-dock-tab", has_text="큐").first
+    tab = _dock_tab(page, "큐")
     pane = page.locator(".vt-pane").first
     box = pane.bounding_box()
 
@@ -1542,36 +1545,32 @@ def test_워크트리_탭은_하나뿐이면_안_보이고_열면_나타난다(p
     assert active == "repo/smoke", "새로 연 워크트리 탭이 활성이어야 한다"
 
 
-def test_워크트리_탭이_에이전트_마크와_상태_자리를_갖는다(page):
-    """10 §4 — 탭 구성은 `[에이전트 마크][이름][상태 dot][읽지 않음][닫기]`.
-    세션 탭 줄을 이 탭 안으로 흡수하려면 그 표시들이 먼저 여기로 와야 한다.
+def test_워크트리_탭은_라벨과_상태_바와_닫기만_갖고_세션이_없으면_바가_비어_있다(page):
+    """10 §4 — 탭 구성은 `[라벨][상태 바][닫기]`(2026-10-04 리뉴얼, layout/tabbar.js). 옛 `[에이전트 마크]
+    [이름][상태 dot][읽지 않음][닫기]` 자리는 사라졌고 상태·읽지 않음은 탭 아래 가장자리의 세그먼트 바가 맡는다.
 
-    CI에는 에이전트도 tmux 세션도 없으니 **idle일 때의 규칙**을 본다: 자리는
-    있되 비어 있고, 빈 자리가 폭을 먹지 않는다(:empty 접힘). 회색 점이 상시로
-    붙어 있으면 그건 정보가 아니라 노이즈라는 게 이 규칙의 이유다."""
+    CI에는 에이전트도 tmux 세션도 없으니 **idle일 때의 규칙**을 본다: 칸(세션)이 없으면 바는 세그먼트
+    없이 비어 있고, 툴팁 대신 라벨만 aria-label로 남는다. 회색 점이 상시로 붙어 있으면 정보가 아니라
+    노이즈라는 게 이 규칙의 이유다."""
     page.evaluate("() => window.openGroupTab({ worktreeId: 'wt-marks', label: 'repo/marks' })")
     page.wait_for_timeout(250)
     shape = page.evaluate(
         """() => {
           const tab = document.querySelector('#vt-wtabs .vt-wtab.active');
-          const agent = tab.querySelector('.vt-wtab-agent');
-          const marks = tab.querySelector('.vt-wtab-marks');
-          const unread = tab.querySelector('.vt-wtab-unread');
+          const bar = tab.querySelector('.vt-wtab-bar');
           return {
-            slots: [...tab.children].map((c) => c.className),
-            agentWidth: agent.getBoundingClientRect().width,
-            marksWidth: marks.getBoundingClientRect().width,
-            dot: !!marks.querySelector('.status-dot'),
-            unreadHidden: unread.hidden,
+            slots: [...tab.children].map((c) => c.className.split(' ')[0]),
+            segments: bar.children.length,
+            tip: tab.hasAttribute('data-tip'),
+            aria: tab.getAttribute('aria-label'),
+            name: tab.querySelector('.vt-wtab-name').textContent,
           };
         }"""
     )
-    assert shape["slots"][:4] == [
-        "vt-wtab-agent", "vt-wtab-name", "vt-wtab-marks", "vt-wtab-unread"], shape["slots"]
-    assert shape["dot"] is False, "idle이면 상태 dot을 그리지 않는다"
-    assert shape["unreadHidden"] is True
-    assert shape["agentWidth"] == 0 and shape["marksWidth"] == 0, \
-        f"빈 자리가 폭을 먹으면 안 된다: {shape}"
+    assert shape["slots"] == ["vt-wtab-name", "vt-wtab-bar", "vt-icon-btn"], shape["slots"]
+    assert shape["segments"] == 0, f"세션이 없는데 세그먼트가 그려졌다: {shape}"
+    assert shape["tip"] is False, "idle 탭에는 상태 툴팁이 없다"
+    assert shape["aria"] == shape["name"], f"idle 탭의 aria-label은 라벨 그대로다: {shape}"
 
 
 def test_탭마다_자기_pane_트리를_가진다(page):
@@ -1691,6 +1690,21 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
                  '"sessions":[{"name":"train","status":"working"}]}]}',
         ),
     )
+    # 원격을 고르면 페이지가 새로고침되고 부팅 직후 `verifyRelayHost`가 그 호스트로 릴레이한
+    # `/api/capabilities`를 확인한다. 가짜 호스트 `gpu`는 서버에 등록돼 있지 않아 릴레이가 거절하면
+    # 앱이 이유를 알리고 이 맥으로 되돌아가 버린다(그래서 「train」이 영영 안 나왔다). 릴레이 쪽도 같이
+    # 스텁한다 — 이 테스트가 보는 건 스위처의 동작이지 릴레이 자체가 아니다.
+    page.route(
+        "**/api/hosts/gpu/relay/api/capabilities*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body="{}"),
+    )
+    page.route(
+        "**/api/hosts/gpu/relay/api/tmux/sessions*",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body='[{"name":"train","windows":1,"attached":false,"command":"python"}]',
+        ),
+    )
     # dock은 **기기 설정**에 마지막 활성 탭과 접힘 여부를 남긴다. 진짜 폰은
     # 자기만의 기기 id를 갖고, 폰 폭에서는 접힘이 기본이라 부팅 직후 dock
     # 패널이 뜨지 않는다. 그런데 이 스위트는 컨텍스트마다 쿠키가 없어 **모든
@@ -1725,8 +1739,9 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
         ".some(e => e.textContent.trim() === 'train')",
         timeout=10000,
     )
-    # 그리고 그 선택이 기기 설정에 남는다(레일과 같은 키).
-    assert page.evaluate("() => window.vtSettingsGet('ui.activeHostId')") == "gpu"
+    # 그리고 그 선택이 남는다 — 호스트 전환은 기기 설정(`ui.activeHostId`)이 아니라 브라우저 저장소의
+    # `vt.relayHost`와 새로고침으로 한다(core/host-route.js `switchHost`).
+    assert page.evaluate("() => window.vtRelayHost()") == "gpu"
 
 
 def test_mcp_workspace_tabs_fit_desktop_and_mobile(page):
