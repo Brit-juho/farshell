@@ -39,7 +39,7 @@ def _concrete_path(case, world) -> str:
 def _expected_change(case, world, matrix):
     """(이유, 켠 뒤 기대값) 또는 None."""
     old = matrix[case.id]["expected"]
-    if case.mode not in MODES or case.group in ("peer", "cli_writes"):
+    if case.mode not in MODES or case.group in ("peer", "peer_v2", "cli_writes"):
         return None
     method = "GET" if case.method == "WS" else case.method
     if case.caller in BEARER_CALLERS:

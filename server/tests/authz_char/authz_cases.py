@@ -232,6 +232,39 @@ def peer_cases() -> list[Case]:
     return out
 
 
+# --- peer v2 (6단계: /api/peer/v2/* — 켜짐(`VT_AUTHZ_ENFORCE=peer`) 전에는 «없는 라우트»와 같은 404) -----------------------
+
+V2_ROUTES = (
+    ("POST", "/api/peer/v2/authz/request", {"nickname": "target", "access": "read"}),
+    ("GET", "/api/peer/v2/authz/status/{request_id}", None),
+    ("GET", "/api/peer/v2/authz/grants", None),
+    ("GET", "/api/peer/v2/session/shared", None),
+    ("POST", "/api/peer/v2/session/read", {"nickname": "target"}),
+    ("POST", "/api/peer/v2/session/send", {"nickname": "target", "text": "ls"}),
+    ("POST", "/api/peer/v2/deleg/spawn", {"delegation": "0123456789", "task": "t"}),
+    ("POST", "/api/peer/v2/deleg/send", {"delegation": "0123456789", "text": "t"}),
+    ("POST", "/api/peer/v2/deleg/close", {"delegation": "0123456789"}),
+    ("POST", "/api/peer/v2/deleg/report", {"delegation": "0123456789", "kind": "reported", "outcome": "succeeded", "body": "x", "seq": 1}),
+    ("POST", "/api/peer/v2/pair/join", {"code": "ABCD-EFGH"}),
+    ("GET", "/api/peer/v2/pair/status/{pair_id}", None),
+    ("POST", "/api/peer/v2/revoke", {"scope": "host"}),
+    ("POST", "/api/peer/v2/rotate", {}),
+    ("POST", "/api/peer/v2/rotate/confirm", {}),
+)
+
+
+def peer_v2_cases() -> list[Case]:
+    g = "peer_v2"
+    callers = ("none", "machine", "session") + PEERS
+    out = []
+    for mode in MODES:
+        for c in callers:
+            for method, route, body in V2_ROUTES:
+                path = route.replace("{request_id}", "gq-none").replace("{pair_id}", "pr-none")
+                out.append(Case(_cid(g, route, method, c, mode), g, c, mode, method, route, path, body))
+    return out
+
+
 # --- relay (B: /api/peer/relay — relay_policy 규칙 전부) --------------------------------------
 
 # 규칙 패턴 → 그 규칙에만 걸리는 대표 경로. 메타 테스트가 "대표 경로가 그 규칙과 맞는가"도 본다.
@@ -450,7 +483,7 @@ def cli_cases() -> list[Case]:
 
 BUILDERS = {
     "agent_share": agent_share_cases, "delegation": delegation_cases, "agent_msg": agent_msg_cases,
-    "peer": peer_cases, "relay": relay_cases, "host_relay": host_relay_cases, "hosts": hosts_cases,
+    "peer": peer_cases, "peer_v2": peer_v2_cases, "relay": relay_cases, "host_relay": host_relay_cases, "hosts": hosts_cases,
     "machine_token": machine_token_cases, "cli_writes": cli_cases, "authz_api": authz_api_cases,
     "leases": leases_cases, "pairs": pairs_cases,
 }

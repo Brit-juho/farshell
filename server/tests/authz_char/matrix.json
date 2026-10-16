@@ -23936,6 +23936,4101 @@
    "close": 4401
   }
  },
+ "peer_v2.api_peer_v2_authz_grants.get.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_grants.get.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/grants",
+  "path": "/api/peer/v2/authz/grants",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_request.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/authz/request",
+  "path": "/api/peer/v2/authz/request",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_authz_status_X.get.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/authz/status/{request_id}",
+  "path": "/api/peer/v2/authz/status/gq-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_close.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/close",
+  "path": "/api/peer/v2/deleg/close",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_report.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/report",
+  "path": "/api/peer/v2/deleg/report",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_send.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/send",
+  "path": "/api/peer/v2/deleg/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_deleg_spawn.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/deleg/spawn",
+  "path": "/api/peer/v2/deleg/spawn",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_join.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/pair/join",
+  "path": "/api/peer/v2/pair/join",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_pair_status_X.get.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/pair/status/{pair_id}",
+  "path": "/api/peer/v2/pair/status/pr-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_revoke.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/revoke",
+  "path": "/api/peer/v2/revoke",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate",
+  "path": "/api/peer/v2/rotate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_rotate_confirm.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/rotate/confirm",
+  "path": "/api/peer/v2/rotate/confirm",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_read.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/read",
+  "path": "/api/peer/v2/session/read",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_send.post.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/v2/session/send",
+  "path": "/api/peer/v2/session/send",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.machine.none": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.machine.password": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.machine.token": {
+  "group": "peer_v2",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.none.none": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.none.password": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.none.token": {
+  "group": "peer_v2",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_control.none": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_control.password": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_control.token": {
+  "group": "peer_v2",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_control_agent.none": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_control_agent.password": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_control_agent.token": {
+  "group": "peer_v2",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_forged.none": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_forged.password": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_forged.token": {
+  "group": "peer_v2",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_view.none": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_view.password": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.peer_view.token": {
+  "group": "peer_v2",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.session.none": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.session.password": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "peer_v2.api_peer_v2_session_shared.get.session.token": {
+  "group": "peer_v2",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/v2/session/shared",
+  "path": "/api/peer/v2/session/shared",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
  "relay.api_agent_status.delete.peer_control": {
   "group": "relay",
   "caller": "peer_control",

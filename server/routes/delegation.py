@@ -84,6 +84,9 @@ async def list_mine(request: Request):
         return _err(e)
     mine = [delegation.public(x, caller.key) for x in items
             if caller.key in (x["parent"]["key"], x["child"]["key"])]
+    host = (request.query_params.get("host") or "").strip().lower()
+    if host:     # `?host=<id>` — 그 호스트의 에이전트가 부모 또는 자식인 위임만(원장의 `host` 필드로 거른다)
+        mine = [x for x in mine if host in (x.get("parent_host"), x.get("child_host"))]
     return {"items": mine}
 
 
@@ -91,9 +94,23 @@ async def list_mine(request: Request):
 async def spawn(request: Request):
     body = await _body(request)
     wt = body.get("worktree")
+    host = str(body.get("host") or "").strip()
     try:
         caller = await _caller(request)
         parent_agent = await asyncio.to_thread(_parent_agent, caller.name)
+        if host:
+            # 다른 Mac 에 하위 세션 — 작업 폴더·worktree 는 보낼 수 없다(상대 호스트의 기본 시작 폴더). 승인이 필요하면 202.
+            if body.get("cwd") or wt:
+                raise DelegationError("remote_cwd_unsupported", "다른 Mac 의 하위 세션은 작업 폴더·worktree 를 고를 수 없습니다", 400)
+            r = await asyncio.to_thread(
+                delegation.spawn_on_host, caller, host,
+                task=str(body.get("task") or ""), title=str(body.get("title") or ""),
+                agent=str(body.get("agent") or ""), parent_agent=parent_agent)
+            if r.get("pending"):
+                return JSONResponse({"state": "pending", **{k: v for k, v in r.items() if k != "pending"}}, status_code=202)
+            import routes.system as _system_routes
+            _system_routes.kick_sessions()
+            return {"ok": True, **r}
         r = await asyncio.to_thread(
             delegation.spawn, caller,
             task=str(body.get("task") or ""), title=str(body.get("title") or ""),

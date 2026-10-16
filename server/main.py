@@ -64,6 +64,7 @@ from routes.repos import router as repos_router
 from routes.security import router as security_router
 from routes.share import elevated_router as share_elevated_router, public_router as share_public_router
 from routes.peer import router as peer_router
+from routes.peer_v2 import router as peer_v2_router
 from routes.hosts import router as hosts_router
 from routes.peer_proxy import router as peer_proxy_router
 from routes.peer_relay import router as peer_relay_router
@@ -476,6 +477,9 @@ async def lifespan(_app: FastAPI):
     from authz import pairs as authz_pairs
     pair_sweep_task = asyncio.create_task(authz_pairs.sweep_loop())
     saga_sweep_task = asyncio.create_task(authz_saga.sweep_loop())
+    # 다른 Mac 에 못 보낸 회수 알림 재시도(`VT_AUTHZ_ENFORCE=peer` 일 때만 일한다).
+    from authz import remote as authz_remote
+    remote_outbox_task = asyncio.create_task(authz_remote.outbox_loop())
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -511,7 +515,7 @@ async def lifespan(_app: FastAPI):
         delegation_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await delegation_sweep_task
-        for _t in (lease_sweep_task, saga_sweep_task, pair_sweep_task):
+        for _t in (lease_sweep_task, saga_sweep_task, pair_sweep_task, remote_outbox_task):
             _t.cancel()
             with suppress(asyncio.CancelledError):
                 await _t
@@ -642,6 +646,7 @@ app.include_router(pairs_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)
+app.include_router(peer_v2_router)
 app.include_router(hosts_router)
 app.include_router(peer_proxy_router)
 app.include_router(peer_relay_router)

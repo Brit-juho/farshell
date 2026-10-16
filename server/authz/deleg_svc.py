@@ -278,13 +278,26 @@ def _ended_grant(p: P.Principal, role: str, did: str) -> bool:
     if bad:
         return False
     res = f"deleg:local/{did}"
-    return any(g.get("state") == "ended" and g.get("subject") == p.id and g.get("resource") == res
+    return any(g.get("state") == "ended" and g.get("subject") == p.short() and g.get("resource") == res
                and role in S.caps_of(g).get("deleg.control", {}).get("role", ()) for g in docs["items"])
+
+
+def side_principal(item: dict, role: str) -> P.Principal:
+    """위임 항목의 `parent`/`child` 쪽 주체. 다른 호스트의 에이전트면(`host`) 그 호스트가 보증하는 대리 주체 `peer:<호스트>/obo:agent:<호스트>/<key>`."""
+    side = item.get(role) or {}
+    host, key = side.get("host"), str(side.get("key") or "")
+    if host and key.startswith(f"{host}/"):
+        return P.peer(host, obo=f"agent:{host}/{key[len(host) + 1:]}")
+    return P.agent(key)
 
 
 def authorize(caller_key: str, did: str, role: str, *, op: str) -> Verdict:
     """`deleg.control` on `deleg:local/<id>` — `role=parent`(보내기·닫기) 또는 `role=child`(보고). 거부는 감사한다."""
-    p = P.agent(caller_key)
+    return authorize_p(P.agent(caller_key), did, role, op=op)
+
+
+def authorize_p(p: P.Principal, did: str, role: str, *, op: str) -> Verdict:
+    """`authorize` 의 주체 일반형 — 다른 호스트의 에이전트(대리 주체)도 같은 판정(`deleg.control`)을 받는다."""
     d = decide(p, "deleg.control", f"deleg:local/{did}", {"role": role, "op": op})
     v = Verdict(d.allow, d.reason, grant_id=d.grant_id)
     if not d.allow:
@@ -345,8 +358,8 @@ def recheck_queued(src: dict, item_id: str = "") -> Optional[str]:
                 delegation.KIND_REPORTED: ("child", "report")}.get(kind)
         if role is not None:
             key = str((item.get(role[0]) or {}).get("key") or "")
-            p = P.agent(key)
-            principal = p.id
+            p = side_principal(item, role[0])
+            principal = p.short()
             if not key or not decide(p, "deleg.control", f"deleg:local/{did}", {"role": role[0], "op": role[1]}).allow:
                 reason = "grant_revoked"
     if reason:

@@ -216,7 +216,7 @@ def request_view(rec: dict, names: Optional[dict] = None) -> dict:
     sk = rec.get("subject_session")
     scopes = list(rec.get("scopes") or ())
     return _item(kind=KIND_GENERIC, rid=raw_id(rec), rec=rec,
-                 subject={"kind": "agent" if sk else "local", "id": rec.get("subject"),
+                 subject={"kind": "peer" if rec.get("peer_id") else ("agent" if sk else "local"), "id": rec.get("subject"),
                           "name": names.get(sk) or rec.get("subject_name") or ""},
                  resource={"id": rec.get("resource"), "label": names.get(rec.get("resource_session") or "") or rec.get("resource_name") or ""},
                  scopes=scopes, sconds=rec.get("sconds"), extra={"reason": rec.get("note") or "", "ttl": rec.get("ttl")})
@@ -226,7 +226,7 @@ def _item(*, kind: str, rid: str, rec: dict, subject: dict, resource: dict, scop
           now: Optional[float] = None) -> dict:
     now = time.time() if now is None else now
     scopes = _fmt_scopes(scopes)
-    el = sorted(S.requires_elevated("agent", scopes, str(resource.get("id") or ""), sconds))
+    el = sorted(S.requires_elevated("peer" if rec.get("peer_id") else "agent", scopes, str(resource.get("id") or ""), sconds))
     out = {"id": rid, "kind": kind, "state": rec.get("state") or "pending", "subject": subject, "resource": resource,
            "scopes": scopes, "conds": _view_conds(sconds), "preset": preset_of(scopes, sconds), "elevated": el,
            "lineage": ({"delegation": rec["delegation"]} if rec.get("delegation") else None),
@@ -277,6 +277,8 @@ def whoami(p: P.Principal, now: Optional[float] = None) -> dict:
                "presets": presets_within(caps), "authz": "ok"}
         if flags.enforced("pair"):
             out["features"] = {"pair": True}          # 켜졌을 때만 키가 생긴다(꺼짐 = 응답이 예전과 같다) — MCP 가 pair 도구 노출을 정한다
+        if flags.enforced("peer"):
+            out.setdefault("features", {})["remote"] = True      # 다른 Mac 의 공유 세션·위임을 `host` 인자로 쓸 수 있다(MCP 가 인자를 보여 준다)
         return out
     except Exception as e:  # noqa: BLE001 — 저장소 문제로 호출자 확인까지 막지 않는다
         logger.warning(f"whoami 유효 권한 계산 실패: {type(e).__name__}: {e}")
@@ -379,6 +381,74 @@ def create_request(p: P.Principal, resource, scopes, conds=None, reason=None, tt
         docs["approvals"]["items"].append(rec)
         limits.record(_rate, p.id, hits, now)
         return request_view(rec), True
+
+
+REMOTE_SCOPES = frozenset({"session.view", "session.read", "session.input", "deleg.spawn"})   # 다른 Mac 의 에이전트가 요청할 수 있는 것
+
+
+def create_remote_request(p: P.Principal, peer_label: str, resource, scopes, conds=None, reason=None, ttl=None, *,
+                          agent_name: str = "", resource_session: Optional[str] = None, alive: Optional[set] = None,
+                          now: Optional[float] = None) -> tuple[dict, bool]:
+    """다른 Mac 의 에이전트(대리 주체 `peer:X/obo:agent:X/…`)의 요청 하나 → (승인함 항목, 새로 만들었는가). 같은 (주체, 리소스, scope 집합)은 하나로 합친다.
+    로컬 에이전트의 `create_request` 와 같은 한도(주체당 분당 6·대기 20·전체 200, 거절 쿨다운 300초)이고, 요청할 수 있는 scope 는 `REMOTE_SCOPES` 뿐이다.
+    승인은 이 서버(리소스를 가진 호스트)의 사람이 한다 — 요청 쪽 사람의 위임 승인은 없다(D12)."""
+    now = time.time() if now is None else now
+    if p.kind != P.PEER or not p.obo:
+        raise ShareError("request_not_allowed", tr("승인 요청을 만들 수 없는 호출자입니다"), 403)
+    resource = _check_resource(resource)
+    sc, cd = _check_scopes(scopes, conds)
+    if not set(sc) <= REMOTE_SCOPES:
+        raise ShareError("scope_not_requestable", tr("이 scope 는 다른 Mac 에서 요청할 수 없습니다"), 400, scope=sorted(set(sc) - REMOTE_SCOPES)[0])
+    ttl_v = _check_ttl(ttl)
+    if reason is not None and not isinstance(reason, str):
+        raise ShareError("bad_reason", tr("reason 은 문자열입니다"), 400)
+    note = " ".join((reason or "").split())[:REASON_MAX]
+    name = " ".join((agent_name or "").split())[:40]
+    from . import legacy_gate
+    legacy_gate.require_approval_available()
+    sig = (resource, tuple(sorted(sc)), json_sig(cd))
+    sid = p.short()
+    with store.txn() as docs:
+        purge(docs, alive, now)
+        for r in _generic_reqs(docs):
+            if r.get("subject") == sid and (r.get("resource"), tuple(sorted(r.get("scopes") or ())), json_sig(r.get("sconds"))) == sig:
+                if r.get("state") == "denied":
+                    wait = int(DENY_COOLDOWN - (now - float(r.get("decided") or 0)))
+                    raise ShareError("request_denied",
+                                     tr("사용자가 거부했습니다 — {sec}초 뒤에 다시 요청할 수 있습니다", sec=max(wait, 1)),
+                                     403, state="denied", retryAfter=max(wait, 1))
+                return request_view(r), False
+        hits = limits.recent(_rate, sid, now)
+        if len(hits) >= RATE_PER_MIN:
+            _rate[sid] = hits
+            raise ShareError("rate_limited", tr("요청이 너무 잦습니다 — 잠시 뒤에 다시 하세요"), 429, retryAfter=60)
+        pending = [a for a in docs["approvals"]["items"] if a.get("state") == "pending"
+                   and str(a.get("origin", "")).startswith((PREFIX_REQ, "authz:msg:req:", "authz:peer:req:", "legacy:agent_grants:req:"))]
+        mine = sum(1 for a in pending if a.get("subject") == sid)
+        if mine >= PER_PRINCIPAL or len(pending) >= TOTAL:
+            raise ShareError("too_many_requests", tr("대기 중인 승인 요청이 너무 많습니다 — 사용자가 처리한 뒤 다시 하세요"), 429)
+        rid = f"{REQ_ID_PREFIX}{uuid.uuid4().hex[:12]}"
+        rec = _scoped({"id": f"ap-{rid}", "origin": f"{PREFIX_REQ}{rid}", "kind": "generic", "subject": sid, "resource": resource,
+                       "subject_session": None, "resource_session": resource_session,
+                       "subject_name": f"{peer_label}/{name}" if name else peer_label,
+                       "peer_id": p.attrs.get("peer_id"), "peer_label": peer_label,
+                       "state": "pending", "created": now, "expires": now + REQUEST_TTL, "note": note, "ttl": ttl_v}, sc, cd)
+        _audit_strict({"principal": sid, "action": "authz.request", "resource": resource, "scopes": sc, "decision": "pending",
+                       "result": "pending", "approval_id": rec["id"], "sizes": {"chars": len(note)}, "sha8": audit.sha8(note)})
+        docs["approvals"]["items"].append(rec)
+        limits.record(_rate, sid, hits, now)
+        return request_view(rec), True
+
+
+def _notify_peer_revoked(g: dict, scopes, whole: bool) -> None:
+    """다른 Mac 에 준 grant 를 회수했다 — 그 호스트에 알린다(서명된 `/api/peer/v2/revoke`, 실패하면 outbox 에서 재시도). 플래그가 꺼져 있으면 아무것도 안 한다."""
+    try:
+        from . import remote
+        if remote.enabled():
+            remote.notify_revoked(str(g.get("peer_id") or ""), obo=remote.obo_of_subject(str(g.get("subject") or "")),
+                                  scopes=list(scopes or g.get("scopes") or ()), ref=str(g.get("id") or ""), whole=whole)
+    except Exception as e:  # noqa: BLE001 — 회수는 이미 적용됐다. 알림은 best effort
+        logger.warning(f"회수 알림 실패: {type(e).__name__}: {e}")
 
 
 def json_sig(v) -> str:
@@ -610,6 +680,8 @@ def _make_grant(*, req: dict, scopes: list[str], sconds: Optional[dict], choice:
         rec["uses"] = 0
     if req.get("delegation"):
         rec["delegation"] = req["delegation"]
+    if req.get("peer_id"):
+        rec["peer_id"] = req["peer_id"]          # 다른 Mac 의 에이전트에게 준 grant — 회수하면 그 호스트에 알린다(`remote.notify_revoked`)
     return rec
 
 
@@ -639,7 +711,7 @@ def decide_generic(request_id: str, decision: str, choice: Optional[str], scopes
             docs["approvals"]["items"].append(approvals.resolved_record(SOURCE, rid, req, "deny", None, now, out, ()))
             return out
         sc, cd = _narrow(want_sc, want_cd, scopes)
-        approvals.check_authority(actor, sc, req["resource"], cd, _snap(docs, now))
+        approvals.check_authority(actor, sc, req["resource"], cd, _snap(docs, now), kind="peer" if req.get("peer_id") else "agent")
         eff_ttl = ttl if ttl is not None else req.get("ttl")
         if ttl is not None and req.get("ttl") is not None and ttl > int(req["ttl"]):
             raise ShareError("wider_than_requested", tr("요청한 기간보다 길게는 줄 수 없습니다"), 400)
@@ -730,7 +802,11 @@ def revoke_generic(grant_id: str, scopes: Optional[list], actor: Optional[P.Prin
                        "scopes": scopes or list(g.get("scopes") or ()), "decision": "allow", "result": "ok", "grant_id": g["id"],
                        "reason": "kind=generic"})
         approvals._replace(docs["grants"]["items"], g, remain)
-        return grant_view(g, KIND_GENERIC)
+        out = grant_view(g, KIND_GENERIC)
+        peer_id = g.get("peer_id")
+    if peer_id:
+        _notify_peer_revoked(g, scopes, remain is None)      # 락 밖에서 — 네트워크는 쓰지 않고 outbox 에 적는다
+    return out
 
 
 def _share_scope(scopes: Optional[list]) -> str:

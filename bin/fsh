@@ -2334,7 +2334,7 @@ cmd_host() {
   fi
   local sub="${1:-list}"
   case "$sub" in
-    list|ls|pair|add|ping|rm|remove|rename|allow-control|deny-control|allow-agent|deny-agent|log|revoke-all)
+    list|ls|pair|add|ping|rm|remove|rename|rotate|allow-control|deny-control|allow-agent|deny-agent|log|revoke-all)
       shift 2>/dev/null || true
       (cd "$VT_DIR/server" && "$VT_PYTHON" -m host_store "$sub" "$@")
       ;;
@@ -2347,6 +2347,10 @@ cmd_host() {
       echo "  $(_t '- allow-*: 접근을 늘리는 변경이라 승인 요청만 만들어집니다. 웹 화면의 승인함에서 사람이 승인해야 적용되고, 이 명령으로는 승인할 수 없습니다.')"
       echo "  $(_t '서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.')"
       echo "  $(_t '주의: control(제어) 등급은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다.')"
+      echo
+      echo "$(_t 'secret 회전 (rotate <id>):')"
+      echo "  $(_t '내가 그 호스트로 나가는 연결의 secret 을 양쪽이 함께 새로 바꿉니다(VT_AUTHZ_ENFORCE 에 peer 필요, 만료 없음). 도중에 실패하면 이전 secret 이 그대로 남고, 마지막 회전 시각은 감사 기록에 남습니다.')"
+      echo "  $(_t '상대가 나를 부르는 방향의 secret 은 상대 맥에서 같은 명령으로 바꿉니다.')"
       return 0 ;;
     *)
       _host_usage
@@ -2357,7 +2361,7 @@ cmd_host() {
 _host_usage() {
   echo "$(_t '사용법: fsh host [list|pair [별명]|add <url> --ticket <티켓> [--label 별명]')"
   echo "                 $(_t '|ping <id>|rm <id>|rename <id|self> <별명>')"
-  echo "                 |allow-control <id>|deny-control <id>"
+  echo "                 |rotate <id>|allow-control <id>|deny-control <id>"
   echo "                 |allow-agent <id>|deny-agent <id>|log [id]|revoke-all|help]"
 }
 
@@ -3569,6 +3573,22 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
         _check "$(_t 'pair')" warn "$(_t '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다' n="$_pr_n")"
       else
         _check "$(_t 'pair')" ok "$(_t '꺼짐 (VT_AUTHZ_ENFORCE 에 pair 를 더하면 켜짐)')"
+      fi
+    fi
+  fi
+
+  # 11-a5. 다른 Mac 권한(프로토콜 v2) — 마스터 스위치, 못 보낸 회수 알림, 끝나지 않은 secret 회전
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _rm _rm_en _rm_p _rm_d _rm_u
+    _rm="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz remote-status 2>/dev/null)"
+    if [ -n "$_rm" ]; then
+      IFS='|' read -r _rm_en _rm_p _rm_d _rm_u <<<"$_rm"
+      if [ "$_rm_en" != 1 ]; then
+        _check "$(_t '다른 Mac 권한')" ok "$(_t '꺼짐 (VT_AUTHZ_ENFORCE 에 peer 를 더하면 켜짐)')"
+      elif [ "${_rm_p:-0}" -gt 0 ] 2>/dev/null || [ "${_rm_u:-0}" -gt 0 ] 2>/dev/null; then
+        _check "$(_t '다른 Mac 권한')" warn "$(_t '켜짐 · 못 보낸 회수 알림 {p}건 · 확인 안 된 secret 회전 {u}건 — 서버가 다시 시도합니다(fsh host rotate 로 정리)' p="${_rm_p:-0}" u="${_rm_u:-0}")"
+      else
+        _check "$(_t '다른 Mac 권한')" ok "$(_t '켜짐 · 밀린 회수 알림 없음')"
       fi
     fi
   fi

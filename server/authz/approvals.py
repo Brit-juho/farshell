@@ -238,16 +238,17 @@ def _approver_ctxs(scopes: Iterable[str], sconds: Optional[dict]) -> list[tuple[
 
 
 def check_authority(actor: Optional[P.Principal], scopes: Iterable[str], resource: str,
-                    sconds: Optional[dict] = None, snap: Optional[store.Snapshot] = None) -> None:
+                    sconds: Optional[dict] = None, snap: Optional[store.Snapshot] = None, *, kind: str = "agent") -> None:
     """승인권자 확인 — 서명된 human 세션만(에이전트·훅·cli·svc·peer·기계 토큰은 안 된다). 그리고 승인자는 요청한 (scope, 조건)을
     **이미 가져야** 한다: 요청마다 엔진에 승인자 자신의 판정을 묻는다(`ctx.approving`). 비elevated human 은 elevated 사유(R4.3)인
     요청을 승인할 수 없다."""
     actor = actor or P.human("-")
     if actor.kind != P.HUMAN or not actor.authenticated:
         raise ShareError("human_session_required", tr("사람(브라우저 로그인 세션)만 승인할 수 있습니다"), 403)
-    need = S.requires_elevated("agent", scopes, resource, sconds)
+    need = S.requires_elevated(kind, scopes, resource, sconds)
     for sc, ctx in _approver_ctxs(scopes, sconds):
-        d = engine.decide(actor, sc, resource, {**ctx, "approving": True}, snap)
+        # `kind` 는 요청한 주체의 종류다 — 다른 Mac 의 에이전트(`peer`)는 보기·읽기를 넘는 것이 모두 elevated 사유다(R4.3).
+        d = engine.decide(actor, sc, resource, {**ctx, "approving": True, **({"approving_kind": kind} if kind != "agent" else {})}, snap)
         if d.allow:
             continue
         if d.reason == "elevation_required":

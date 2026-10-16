@@ -211,6 +211,7 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
 - `list_shared_sessions` shows each session's nick, mode, state and **my** read/write status (`granted`/`pending`/`denied`/`none`/
   `unavailable`); it never shows session names or folders.
 - The `agent_status` states are only known for sessions with hooks. A plain shell has no state, so sends to it are allowed.
+- With `VT_AUTHZ_ENFORCE=peer` the five tools `read_session`, `send_to_session`, `list_shared_sessions`, `spawn_session` (needs `deleg` too) and `list_delegations` get an optional `host` argument (a host id): the call goes to that Mac's `/api/peer/v2/*` with this agent vouched for by a signed obo, and a person on that Mac approves (202 → «call again»). `tools/list` only shows `host` when `whoami` reports `features.remote`; with the flag off the tool definitions are unchanged. See `auth.md` «Other Macs, grant based».
 
 
 ### MCP 갱신·출처 추적 (2026-10-06)

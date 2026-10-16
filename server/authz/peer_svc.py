@@ -79,6 +79,22 @@ NEEDS: dict[str, Need] = {
     "relay": Need("relay", {"group": S.ANY_GROUP}, "relay:local"),
     "relay-ws": Need("relay", {"group": S.ANY_GROUP}, "relay:local"),
     "relay:group": Need("relay", {}, "relay:local"),                      # ctx.group 은 규칙에서 온다
+    # 프로토콜 v2 (`routes/peer_v2.py`, `authz/remote.py`) — 인가는 grant: 핸들러가 리소스를 정해 엔진에 묻는다. 대리 주체 필수.
+    "v2/authz/request": Need("authz.request", {}, "authz:*"),             # 요청 자체는 아무 대리 주체나 낼 수 있다(승인은 이 서버의 사람)
+    "v2/authz/status": Need("ping"),
+    "v2/authz/grants": Need("ping"),                                       # 서명을 통과한 호스트가 자기 권한을 본다(회수 확인의 근거)
+    "v2/session/shared": Need("session.view", {}, "session:local/-"),
+    "v2/session/read": Need("session.read", {}, "session:local/-"),
+    "v2/session/send": Need("session.input", {"mode": "line"}, "session:local/-"),
+    "v2/deleg/spawn": Need("deleg.spawn", {}, "deleg-quota:peer"),
+    "v2/deleg/send": Need("deleg.control", {"role": "parent"}, "deleg:local/-"),
+    "v2/deleg/close": Need("deleg.control", {"role": "parent"}, "deleg:local/-"),
+    "v2/deleg/report": Need("deleg.control", {"role": "child"}, "deleg:local/-"),
+    "v2/pair/join": Need("ping"),                                          # 합류는 코드(1회용)와 이 서버 사람의 승인이 인가다 — 관리 scope 가 아니다
+    "v2/pair/status": Need("ping"),
+    "v2/revoke": Need("ping"),                                             # 알림은 힌트 — 인정 여부는 A 가 B 에 직접 물어 정한다
+    "v2/rotate": Need("ping"),
+    "v2/rotate/confirm": Need("ping"),
 }
 
 # 이름이 붙은 capability 가 아닌 `/api/peer/*` 라우트 -> 동작 이름 (None = 엔진 밖: 서명 대신 1회용 티켓이 인증).

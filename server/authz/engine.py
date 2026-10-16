@@ -138,7 +138,7 @@ def _killswitch(scope: str, ctx: dict) -> Optional[str]:
 def _approval_elevated(scope: str, resource: str, ctx: dict) -> bool:
     """승인 대상 (scope, 조건)이 elevated 사유인가 — 요청받는 쪽(비human 주체) 기준 `scopes.requires_elevated`."""
     sconds = {scope: {c.key: [str(ctx[c.ctx])] for c in S.COND_SPEC.get(scope, ()) if ctx.get(c.ctx)}}
-    return bool(S.requires_elevated("agent", [scope], resource, sconds))
+    return bool(S.requires_elevated(ctx.get("approving_kind") or "agent", [scope], resource, sconds))
 
 
 def _time_ok(g: dict, now: float) -> bool:
@@ -162,6 +162,8 @@ def decide(p: P.Principal, scope: str, resource: str, ctx: Optional[dict] = None
         return _deny("ambiguous_principal" if p.attrs.get("ambiguous") else "unauthenticated")
     if S.missing_conds(scope, ctx):
         return _deny("cond_missing", "required_cond")      # 필요한 조건 값이 없으면 거부(모르는 scope 거부와 같은 원칙)
+    if p.kind == P.PEER and p.obo and scope not in S.PEER_SURFACE_SCOPES:
+        return _deny("surface_forbidden", "surface")       # N-24: 다른 Mac 의 에이전트 표면은 grant 와 무관하게 좁은 허용 목록 안에서만
     ks = _killswitch(scope, ctx)
     if ks:
         return _deny(ks, "killswitch")

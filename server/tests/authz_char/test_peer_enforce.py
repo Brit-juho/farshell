@@ -54,7 +54,7 @@ def _peer_routes():
     from fastapi.routing import APIRoute, APIWebSocketRoute
     included = {id(getattr(r, "original_router", None)) for r in main.app.router.routes}
     out = []
-    for name in ("routes.peer", "routes.peer_relay"):
+    for name in ("routes.peer", "routes.peer_v2", "routes.peer_relay"):
         mod = importlib.import_module(name)
         for router in {id(v): v for v in vars(mod).values() if isinstance(v, APIRouter)}.values():
             assert id(router) in included, f"{name} 의 라우터가 main 에 포함되지 않음"

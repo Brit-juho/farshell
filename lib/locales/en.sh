@@ -150,6 +150,7 @@ _t_en_lookup() {
     'pre-commit·pre-push 훅 켜짐') _T_OUT='pre-commit and pre-push hooks are on' ;;
     'push 알림') _T_OUT='Push alerts' ;;
     'python3 미설치. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''') _T_OUT='python3 isn'\''t installed. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''' ;;
+    'secret 회전 (rotate <id>):') _T_OUT='Secret rotation (rotate <id>):' ;;
     'settings.json profile에 추가:') _T_OUT='Add to a profile in settings.json:' ;;
     'settings.json을 읽을 수 없음 — {err}') _T_OUT='can'\''t read settings.json — {err}' ;;
     'socket OK — {path} (권한 {perms}, 디렉터리 {dir}, 자가 시험 통과)') _T_OUT='socket OK — {path} (mode {perms}, directory {dir}, self-test passed)' ;;
@@ -260,15 +261,18 @@ _t_en_lookup() {
     '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다') _T_OUT='The feature is off but {n} stored pair(s) remain - their permissions have no effect' ;;
     '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks') _T_OUT='Off — turn on with: git config core.hooksPath scripts/githooks' ;;
     '꺼짐 (VT_AUTHZ_ENFORCE 에 pair 를 더하면 켜짐)') _T_OUT='Off (add pair to VT_AUTHZ_ENFORCE to turn it on)' ;;
+    '꺼짐 (VT_AUTHZ_ENFORCE 에 peer 를 더하면 켜짐)') _T_OUT='off (add peer to VT_AUTHZ_ENFORCE to turn on)' ;;
     '꺼짐 — 비밀번호만으로 새 기기 등록 가능 (fsh otp setup)') _T_OUT='off — a password alone can register a new device (fsh otp setup)' ;;
     '끝나지 않은 정리 {n}건 — 서버가 이어서 처리합니다 (fsh restart 로 재개)') _T_OUT='{n} cleanup(s) unfinished — the server resumes them (fsh restart to resume)' ;;
     '나중에 '\''fsh install-profiles'\'' 또는 '\''fsh shell-init zsh >> ~/.zshrc'\''로 활성화 가능') _T_OUT='Enable it later with '\''fsh install-profiles'\'' or '\''fsh shell-init zsh >> ~/.zshrc'\''' ;;
     '낡은 환경변수를 설정 파일 값으로 바로잡음: {vars}') _T_OUT='Replaced stale environment variables with the config-file values: {vars}' ;;
     '낡은 환경변수를 파일 값으로 바로잡음: {keys} — 창을 새로 여세요') _T_OUT='stale environment variables replaced by file values: {keys} — open a new window' ;;
+    '내가 그 호스트로 나가는 연결의 secret 을 양쪽이 함께 새로 바꿉니다(VT_AUTHZ_ENFORCE 에 peer 필요, 만료 없음). 도중에 실패하면 이전 secret 이 그대로 남고, 마지막 회전 시각은 감사 기록에 남습니다.') _T_OUT='Replaces the secret of my outgoing connection to that host on both sides at once (needs '\''peer'\'' in VT_AUTHZ_ENFORCE, no expiry). If it fails midway the previous secret stays, and the time of the last rotation is written to the audit log.' ;;
     '내부 프록시(:{port})가 아직 응답하지 않습니다 — 서버가 막 떴다면 잠시 후 다시 시도하세요') _T_OUT='The internal proxy (:{port}) isn'\''t responding yet. If the server just started, try again in a moment' ;;
     '노션/브라우저 작업을 계속하면서 음성으로 코딩') _T_OUT='Keep working in Notion or the browser and code by voice' ;;
     '노출 포트') _T_OUT='Exposed ports' ;;
     '누가 언제 이 세션에 붙는지 push로 알림 받기: ~/.vt.env에 VT_NOTIFY_CLIENT_EVENTS=1 추가') _T_OUT='To get a push when someone attaches to this session, add VT_NOTIFY_CLIENT_EVENTS=1 to ~/.vt.env' ;;
+    '다른 Mac 권한') _T_OUT='Other-Mac permissions' ;;
     '다른 pre-commit 훅이 있음 — '\''fsh lease guard install'\'' 은 그 훅을 이어서 실행합니다') _T_OUT='Another pre-commit hook exists — '\''fsh lease guard install'\'' chains it and runs it first' ;;
     '다른 경로/스크립트: {cur}') _T_OUT='different path/script: {cur}' ;;
     '다른 사용자가 읽을 수 있음.') _T_OUT='other users can read it.' ;;
@@ -382,6 +386,7 @@ _t_en_lookup() {
     '사용법: fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]') _T_OUT='Usage: fsh usage [list|add --model <name> --tokens <N> --seconds <N>]' ;;
     '사용법: fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]') _T_OUT='Usage: fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]' ;;
     '사용법: 해당 tmux pane에서 fsh voice-bind <claude|codex> <대화 ID>') _T_OUT='Usage: run in the target tmux pane: fsh voice-bind <claude|codex> <conversation ID>' ;;
+    '상대가 나를 부르는 방향의 secret 은 상대 맥에서 같은 명령으로 바꿉니다.') _T_OUT='The secret for the opposite direction (the other Mac calling this one) is rotated on that Mac with the same command.' ;;
     '상태 파일은 켜짐인데 연결되지 않습니다 — fsh restart') _T_OUT='Status file says listening but it does not connect — fsh restart' ;;
     '새 웹 로그인 비밀번호:') _T_OUT='New web login password:' ;;
     '새 접속 코드: {pin} — 다시 표시되지 않습니다') _T_OUT='New access code: {pin} (shown only once)' ;;
@@ -579,6 +584,8 @@ _t_en_lookup() {
     '추가 포트는 임시 주소입니다(고정 도메인은 메인 터널이 씁니다)') _T_OUT='Extra ports get temporary URLs (the fixed domain belongs to the main tunnel)' ;;
     '치명적 문제 있음. ✗ 항목부터 해결하세요.') _T_OUT='Critical problems found. Fix the ✗ items first.' ;;
     '켜짐 (새 기기 등록 시 OTP 요구)') _T_OUT='on (OTP required to register a new device)' ;;
+    '켜짐 · 못 보낸 회수 알림 {p}건 · 확인 안 된 secret 회전 {u}건 — 서버가 다시 시도합니다(fsh host rotate 로 정리)') _T_OUT='on / {p} revoke notice(s) not delivered / {u} unconfirmed secret rotation(s) - the server retries (settle rotations with fsh host rotate)' ;;
+    '켜짐 · 밀린 회수 알림 없음') _T_OUT='on / no pending revoke notices' ;;
     '켜짐 · 진행 중 {n}개 · 승인 대기 {w}개') _T_OUT='On / {n} in progress / {w} waiting for approval' ;;
     '코드가 맞지 않습니다. 시계 동기화를 확인하고 '\''fsh otp setup'\''을 다시 실행하세요.') _T_OUT='Wrong code. Check your clock sync and run '\''fsh otp setup'\'' again.' ;;
     '클라이언트 접속/해제 알림: 활성화됨 (VT_NOTIFY_CLIENT_EVENTS=1)') _T_OUT='Client connect/disconnect alerts: enabled (VT_NOTIFY_CLIENT_EVENTS=1)' ;;

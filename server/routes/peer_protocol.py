@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import time
 from pathlib import Path
 
 from fastapi import Request
@@ -36,6 +37,7 @@ import host_store
 from authz import hooks as authz_hooks
 from authz import peer_svc
 from authz import preauth as authz_preauth
+from authz import remote
 from i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -57,10 +59,11 @@ def _version() -> str:
 
 
 class PeerDenied(Exception):
-    def __init__(self, reason: str, status: int = 401):
+    def __init__(self, reason: str, status: int = 401, code: str = ""):
         super().__init__(reason)
         self.reason = reason
         self.status = status
+        self.code = code          # v2 응답에만 실린다(`unregistered` — 회수 확인이 «B 가 인증된 응답으로 당신은 없다»를 알아보는 근거)
 
 
 def _guarded(conn, method: str, path: str, headers, body_hash: str = "") -> dict:
@@ -104,7 +107,7 @@ def _authenticate_checked(method: str, path: str, headers, body_hash: str = "") 
     if grant is None:
         # 취소된 상대가 옛 secret으로 계속 두드리는 경우가 여기다 — 기록해둔다.
         host_store.audit(peer_id, "auth", False, "등록되지 않은 호스트")
-        raise PeerDenied(tr("등록되지 않은 호스트입니다"))
+        raise PeerDenied(tr("등록되지 않은 호스트입니다"), code="unregistered")
 
     # A2 — 본문 해시를 서명한 요청. 헤더가 **있으면 반드시 맞아야 한다**(없는 척
     # 지우고 보내면 서명 자체가 안 맞으므로 downgrade가 성립하지 않는다).
@@ -112,8 +115,22 @@ def _authenticate_checked(method: str, path: str, headers, body_hash: str = "") 
     if claimed and body_hash and not hmac.compare_digest(claimed, body_hash):
         host_store.audit(peer_id, "auth", False, "본문 해시 불일치")
         raise PeerDenied(tr("본문이 서명과 일치하지 않습니다"))
-    if not host_store.verify_signature(grant["secret"], method, path, ts, nonce, sig,
-                                       body_hash=claimed):
+    # 프로토콜 v2 — 대리 주체(obo). 켜진 서버만 읽는다(꺼짐 = 헤더를 모르는 옛 서버와 같아, obo 가 붙은 서명은 검증에 실패한다).
+    # obo 는 서명 문자열에 들어가므로 바꾸거나 떼어 내면 서명이 깨진다. 그리고 상대는 **자기 호스트의 에이전트만** 보증할 수 있다.
+    obo = ""
+    claimed_obo = headers.get("x-peer-obo", "")
+    if claimed_obo and remote.enabled():
+        if not host_store.valid_obo(claimed_obo) or claimed_obo.split("/", 1)[0] != f"agent:{grant['id']}":
+            host_store.audit(peer_id, "auth", False, "대리 주체 형식 오류 또는 남의 호스트 에이전트")
+            raise PeerDenied(tr("대리 주체가 올바르지 않습니다"))
+        obo = claimed_obo
+    ok = host_store.verify_signature(grant["secret"], method, path, ts, nonce, sig, body_hash=claimed, obo=obo)
+    promote = False
+    if not ok:
+        nxt = host_store.pending_secret(grant)       # 회전 중이면 새 secret 도 받는다(`host_store` 「secret 회전」)
+        if nxt and host_store.verify_signature(nxt, method, path, ts, nonce, sig, body_hash=claimed, obo=obo):
+            ok, promote = True, True
+    if not ok:
         host_store.audit(peer_id, "auth", False, "서명 불일치 또는 시간창 밖")
         raise PeerDenied(tr("서명이 유효하지 않습니다 — 시계 차이가 크면 'fsh host ping'으로 확인하세요"))
 
@@ -123,8 +140,14 @@ def _authenticate_checked(method: str, path: str, headers, body_hash: str = "") 
         host_store.audit(peer_id, "auth", False, "nonce 재사용(재생 시도)")
         raise PeerDenied(tr("이미 사용된 요청입니다"))
 
+    if promote:
+        # 새 secret 으로 서명된 첫 요청 — 보류를 정식으로 올리고 옛 secret 을 버린다. 감사에 마지막 회전 시각을 남긴다.
+        promoted = host_store.promote_next(peer_id)
+        if promoted is not None:
+            remote.audit_rotated(promoted)
+            grant = host_store.find_grant(peer_id) or grant
     host_store.touch_grant(peer_id)
-    return grant
+    return {**grant, "obo": obo} if obo else grant
 
 
 def _client_host(conn) -> str | None:
@@ -287,5 +310,71 @@ def capability(action: str, *, level: str = host_store.LEVEL_VIEW,
             inspect.Parameter("request", inspect.Parameter.POSITIONAL_OR_KEYWORD,
                               annotation=Request),
         ])
+        return wrapper
+    return decorate
+
+
+# --- 프로토콜 v2 관문 (`/api/peer/v2/*`) -----------------------------------------------------------------
+#
+# v1 의 `capability` 는 «등급(view/control) 비교»를 관문에서 한다. v2 는 인가가 **grant** 다 — 관문은 인증(서명 + 본문 해시 + 대리 주체)과
+# 속도 제한·감사만 하고, 「이 주체가 이 리소스에 이 scope 를 가졌는가」는 핸들러가 엔진에 묻는다(리소스가 요청 본문에서 정해지기 때문).
+# 켜짐(`VT_AUTHZ_ENFORCE=peer`) 전에는 라우트가 **없는 것과 같은 404** 로 답한다(꺼짐 = 기존과 byte-identical).
+#
+# 모든 v2 요청은 본문 해시를 서명한다(`X-Peer-Body` 필수 — 명령·작업 지시가 곧 본문이라 중간에서 바뀌면 안 된다).
+
+from authz import limits as _limits   # noqa: E402
+
+V2_PER_MIN = 600           # peer 당 분당(A12)
+V2_MAX_BODY = 1 << 20      # v2 본문은 JSON 명령이다 — 1MB 를 넘으면 서명 검증 전에 거부(파일 전송은 v1 `/api/peer/file`)
+_v2_hits: dict[str, list[float]] = {}
+_NOT_FOUND = {"detail": "Not Found"}
+
+
+def capability_v2(action: str, *, obo_required: bool = False, strip: tuple[str, ...] = ()):
+    """v2 핸들러 데코레이터. 핸들러는 `(request, grant, raw_body)` 를 받는다 — `grant["obo"]` 는 서명이 보증한 대리 주체(없으면 키 없음).
+    반환 규칙은 `capability` 와 같다(payload | (payload, detail) | JSONResponse | (JSONResponse, detail))."""
+    def decorate(fn):
+        @wraps(fn)
+        async def wrapper(request: Request, *args, **kwargs):
+            if not remote.enabled():
+                return JSONResponse(_NOT_FOUND, status_code=404)
+            data = await request.body()
+            if len(data) > V2_MAX_BODY:
+                return JSONResponse({"error": "too_large", "reason": tr("요청이 너무 큽니다")}, status_code=413)
+            if not request.headers.get("x-peer-body"):
+                return JSONResponse({"error": "peer_denied", "reason": tr("본문 해시 서명이 필요합니다")}, status_code=401)
+            digest = hashlib.sha256(data).hexdigest()
+            try:
+                grant = _guarded(request, request.method, request.url.path, request.headers, digest)
+            except PeerDenied as e:
+                return JSONResponse({"error": "peer_denied", "reason": e.reason, **({"code": e.code} if e.code else {})},
+                                    status_code=e.status)
+            now = time.time()
+            hits = _limits.recent(_v2_hits, grant["id"], now)
+            if len(hits) >= V2_PER_MIN:
+                _v2_hits[grant["id"]] = hits
+                host_store.audit(grant["id"], action, False, "분당 한도")
+                return JSONResponse({"error": "rate_limited", "reason": tr("요청이 너무 잦습니다 — 잠시 뒤에 다시 하세요")},
+                                    status_code=429, headers={"Retry-After": "10"})
+            _limits.record(_v2_hits, grant["id"], hits, now)
+            if obo_required and not grant.get("obo"):
+                host_store.audit(grant["id"], action, False, "대리 주체 없음")
+                return JSONResponse({"error": "obo_required", "reason": tr("이 요청에는 대리 주체(X-Peer-Obo)가 필요합니다")},
+                                    status_code=400)
+            result = await fn(request, grant, data, *args, **kwargs)
+            detail = ""
+            if isinstance(result, tuple) and len(result) == 2:
+                result, detail = result
+            if isinstance(result, JSONResponse):
+                host_store.audit(grant["id"], action, False, detail or f"HTTP {result.status_code}")
+                return result
+            payload = _strip_keys(result, strip) if strip else result
+            host_store.audit(grant["id"], action, True, detail)
+            return payload
+        wrapper.peer_action = action
+        wrapper.peer_level = peer_svc.level_of(peer_svc.NEEDS[action])
+        # FastAPI 가 읽는 모양 = 원본 핸들러에서 우리가 주입하는 `grant`·`data` 를 뺀 것(`request` 와 경로 매개변수만).
+        keep = [p for n, p in inspect.signature(fn).parameters.items() if n not in ("grant", "data")]
+        wrapper.__signature__ = inspect.Signature(keep)
         return wrapper
     return decorate

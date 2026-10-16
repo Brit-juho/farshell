@@ -67,21 +67,37 @@ def _request(url: str, method: str, headers: dict, body: dict | None,
         raise PeerError(tr("연결 실패: {reason}", reason=e))
 
 
-def _signed_headers(peer: dict, method: str, path: str, body_hash: str = "") -> dict:
+def _v2_on() -> bool:
+    """`VT_AUTHZ_ENFORCE=peer` — 켜져 있을 때만 프로토콜 v2 헤더(`X-Peer-Proto`)를 단다(꺼짐 = 예전과 헤더까지 같다)."""
+    try:
+        from authz import flags
+        return flags.enforced("peer")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _signed_headers(peer: dict, method: str, path: str, body_hash: str = "", obo: str = "") -> dict:
     """서명 헤더. 상대 시계와의 차이(clockSkew)를 보정해 ts를 만든다 —
-    두 맥의 시계가 몇 초 틀어져 있어도 서명 창(60초)에서 떨어지지 않게."""
+    두 맥의 시계가 몇 초 틀어져 있어도 서명 창(60초)에서 떨어지지 않게.
+
+    `obo`(프로토콜 v2): 「이 요청은 내 에이전트 X 를 대신한다」는 보증. 서명에 들어가며 헤더 `X-Peer-Obo` 로도 나간다."""
     ts = int(time.time() + peer.get("clockSkew", 0))
     nonce = secrets.token_urlsafe(12)
     me = host_store.get_self()
-    return {
+    out = {
         "X-Peer-Id": me["id"],
         "X-Peer-Ts": str(ts),
         "X-Peer-Nonce": nonce,
-        "X-Peer-Sig": host_store.sign_request(peer["secret"], method, path, ts, nonce, body_hash),
+        "X-Peer-Sig": host_store.sign_request(peer["secret"], method, path, ts, nonce, body_hash, obo),
         # 본문 해시를 쓴 요청만 이 헤더를 단다 — 상대는 헤더가 있으면 그 값으로
         # 서명을 검증하고, 실제 본문 해시와도 대조한다(A2).
         **({"X-Peer-Body": body_hash} if body_hash else {}),
     }
+    if obo:
+        out["X-Peer-Obo"] = obo
+    if obo or _v2_on():
+        out["X-Peer-Proto"] = str(host_store.PROTO_VERSION)
+    return out
 
 
 def _call_sync(peer: dict, method: str, path: str, body: dict | None = None,
@@ -155,10 +171,11 @@ def ping_sync(peer: dict) -> dict:
     payload = _call_sync(peer, "GET", "/api/peer/ping")
     rtt = (time.monotonic() - t0) * 1000
     skew = _measure_skew(payload, rtt)
-    host_store.update_peer(
-        peer["id"], lastSeen=int(time.time()), latencyMs=round(rtt),
-        clockSkew=round(skew, 3), version=str(payload.get("version", ""))[:32],
-    )
+    fields = dict(lastSeen=int(time.time()), latencyMs=round(rtt),
+                  clockSkew=round(skew, 3), version=str(payload.get("version", ""))[:32])
+    if "proto" in payload:       # v2 상대만 준다(꺼짐·옛 상대의 응답은 예전과 같아 이 키가 없다)
+        fields["proto"] = int(payload["proto"] or 1)
+    host_store.update_peer(peer["id"], **fields)
     return {**payload, "latencyMs": round(rtt), "clockSkew": round(skew, 3)}
 
 
@@ -226,3 +243,107 @@ def _self_version() -> str:
         return (Path(__file__).resolve().parent.parent / "VERSION").read_text(encoding="utf-8").strip()
     except OSError:
         return ""
+
+
+# --- 프로토콜 v2 호출 ---------------------------------------------------------------------------------
+
+
+def v2_call_sync(peer: dict, method: str, path: str, body: dict | None = None, *, obo: str = "",
+                 timeout: float = TIMEOUT) -> tuple[int, dict]:
+    """`/api/peer/v2/*` 호출 — **본문 해시를 서명**하고(명령·작업 지시가 곧 본문이다) 대리 주체(`obo`)를 서명에 싣는다.
+    (상태 코드, JSON) 을 돌려준다 — 4xx/5xx 도 예외가 아니다(호출부가 의미를 안다). 연결 실패·JSON 이 아닌 응답만 `PeerError`."""
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else b""
+    digest = hashlib.sha256(data).hexdigest()
+    headers = _signed_headers(peer, method, path, digest, obo)
+    if data:
+        headers["Content-Type"] = "application/json"
+    url = peer["url"].rstrip("/") + path
+    req = urllib.request.Request(url, data=data or None, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status, raw = resp.status, resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        status, raw = e.code, e.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as e:
+        raise PeerError(tr("연결 실패: {reason}", reason=e.reason))
+    except OSError as e:
+        raise PeerError(tr("연결 실패: {reason}", reason=e))
+    try:
+        payload = json.loads(raw) if raw else {}
+    except ValueError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return status, payload
+
+
+async def v2_call(peer: dict, method: str, path: str, body: dict | None = None, *, obo: str = "",
+                  timeout: float = TIMEOUT) -> tuple[int, dict]:
+    return await asyncio.to_thread(v2_call_sync, peer, method, path, body, obo=obo, timeout=timeout)
+
+
+ROTATE_PATH = "/api/peer/v2/rotate"
+ROTATE_CONFIRM_PATH = "/api/peer/v2/rotate/confirm"
+
+
+def settle_rotation(peer_id: str) -> str:
+    """끝나지 않은 회전(`peers[].rotation == "unconfirmed"`)을 정리한다. 반환: `none`(할 일 없음) · `confirmed`(상대가 새 secret 을 알고 있다)
+    · `rolled_back`(상대가 모른다 -> 옛 secret 으로 되돌림) · `unknown`(상대에게 닿지 못했다 — 그대로 둔다)."""
+    cur = host_store.find_peer(peer_id)
+    if not cur or cur.get("rotation") != "unconfirmed":
+        return "none"
+    try:
+        st, _ = v2_call_sync(cur, "POST", ROTATE_CONFIRM_PATH, {})
+        if st == 200:
+            host_store.settle_peer_secret(peer_id, confirmed=True)
+            return "confirmed"
+        if st != 401:
+            return "unknown"
+        # 새 secret 을 상대가 모른다 — 옛 secret 이 아직 맞는지 본다(맞으면 되돌린다).
+        old = {**cur, "secret": cur.get("prevSecret") or ""}
+        st2, _ = v2_call_sync(old, "GET", "/api/peer/ping")
+        if st2 == 200:
+            host_store.settle_peer_secret(peer_id, confirmed=False)
+            return "rolled_back"
+    except PeerError:
+        pass
+    return "unknown"
+
+
+def rotate_sync(peer: dict) -> dict:
+    """연결의 secret 을 회전한다(`fsh host rotate`). 성공하면 `{id, rotatedAt, previousRotatedAt}`, 실패하면 `PeerError` 이고 **이전 secret 이 그대로**다.
+    절차와 중단 복구는 `host_store` 의 「secret 회전」 주석."""
+    pid = peer["id"]
+    state = settle_rotation(pid)
+    if state == "unknown":
+        raise PeerError(tr("이전 회전이 끝났는지 확인하지 못했습니다 — 상대 서버가 켜져 있는지 보고 다시 시도하세요"))
+    cur = host_store.find_peer(pid)
+    if cur is None:
+        raise PeerError(tr("'{id}' 호스트가 없습니다", id=pid))
+    st, payload = v2_call_sync(cur, "POST", ROTATE_PATH, {}, timeout=PAIR_TIMEOUT)
+    if st == 404:
+        raise PeerError(tr("상대 서버가 secret 회전을 지원하지 않습니다 — 구버전이거나 상대 서버의 VT_AUTHZ_ENFORCE 에 peer 가 없습니다"), 404)
+    if st == 401:
+        raise PeerError(payload.get("reason") or tr("인증 거부 — 페어링이 취소됐거나 만료됐습니다"), 401)
+    new = payload.get("secret") if st == 200 else None
+    if not isinstance(new, str) or len(new) < 16:
+        raise PeerError(payload.get("reason") or payload.get("error") or f"HTTP {st}", st)
+    # 여기까지는 아무것도 바꾸지 않았다(상대에는 10분짜리 보류만 있다). 이제 내 쪽을 한 번에 바꾸고 새 secret 으로 확인한다.
+    if not host_store.swap_peer_secret(pid, cur["secret"], new):
+        raise PeerError(tr("회전하는 사이 이 연결이 바뀌어 중단했습니다 — 이전 secret 을 그대로 씁니다"))
+    updated = host_store.find_peer(pid)
+    st, confirm = 0, {}
+    for attempt in range(3):
+        try:
+            st, confirm = v2_call_sync(updated, "POST", ROTATE_CONFIRM_PATH, {})
+            break
+        except PeerError:
+            time.sleep(0.5 * (attempt + 1))
+    if st == 200:
+        host_store.settle_peer_secret(pid, confirmed=True)
+        return {"id": pid, "rotatedAt": confirm.get("rotatedAt") or updated.get("rotatedAt"),
+                "previousRotatedAt": updated.get("previousRotatedAt") or 0}
+    if st == 401:                       # 상대가 새 secret 을 모른다(보류가 만료됐다) — 되돌린다
+        host_store.settle_peer_secret(pid, confirmed=False)
+        raise PeerError(tr("상대가 새 secret 을 받지 못해 이전 secret 으로 되돌렸습니다 — 다시 시도하세요"), 401)
+    raise PeerError(tr("새 secret 이 적용됐는지 확인하지 못했습니다 — 'fsh host rotate {id}' 를 다시 실행하면 정리합니다", id=pid))

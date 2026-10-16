@@ -464,6 +464,12 @@ def via_of(rec) -> str:
     return v if v in APPROVED_VIA else VIA_MIGRATED
 
 
+# 전송로별 상한(N-24) — 다른 Mac 이 서명으로 보증한 에이전트(대리 주체 `peer:X/obo:agent:X/…`)가 **어떤 grant 를 받았더라도** 쓸 수 있는 scope 의 좁은 허용 목록.
+# 이 경로는 공개 터널로도 닿으므로 로컬 에이전트보다 좁다: 세션 보기·읽기·한 줄 입력, 원격 위임, 메시지, 승인 요청뿐이다. 승인함·권한 관리(`authz.admin`)·
+# pair 관리·세션 관리·relay·브라우저·파일은 grant 가 있어도 이 표면으로는 열리지 않는다(엔진이 `surface_forbidden` 으로 거부 — 관리 경로가 터널로 올라오지 않게).
+PEER_SURFACE_SCOPES = frozenset({"ping", "authz.request", "session.view", "session.read", "session.input", "msg.send",
+                                 "deleg.spawn", "deleg.control"})
+
 HUMAN_EXCLUDED = frozenset({"browser.js", "browser.sensitive"})
 # 자동 승인 window 가 절대 덮지 못하는 것.
 NEVER_WINDOW = frozenset({"authz.request", "authz.admin", "pair.manage"})

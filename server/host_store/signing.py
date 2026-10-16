@@ -20,8 +20,22 @@ import time
 # 양쪽 시계 오차를 보정한 뒤의 기준. 넓히면 재생 창이 같이 넓어진다.
 SIGNATURE_WINDOW_SEC = 60
 
+# 프로토콜 버전. 1 = method/path/ts/nonce(+본문 해시). 2 = 거기에 대리 주체(obo)를 **있을 때만** 더한다.
+# v1 상대는 obo 가 없는 요청을 글자 하나까지 예전과 같이 서명·검증하므로 섞여 있어도 끊기지 않는다.
+PROTO_VERSION = 2
+
+# 대리 주체 문법 — `agent:<호스트 id>/<세션 key>`. 서명 문자열에 그대로 들어가므로 개행·구분자가 낄 수 없게 좁게 잡는다.
+import re as _re
+
+OBO_RE = _re.compile(r"agent:[a-z0-9_-]{1,40}/[A-Za-z0-9_:$%.@-]{1,80}")
+
+
+def valid_obo(obo: str) -> bool:
+    return bool(obo) and OBO_RE.fullmatch(obo) is not None
+
+
 def sign_request(secret: str, method: str, path: str, ts: int, nonce: str,
-                 body_hash: str = "") -> str:
+                 body_hash: str = "", obo: str = "") -> str:
     """서명 대상에 method와 path를 포함한다 — 서명 하나를 다른 엔드포인트에
     돌려쓰지 못하게(예: view용 GET 서명을 control용 POST에 재사용) 막는다.
 
@@ -30,20 +44,26 @@ def sign_request(secret: str, method: str, path: str, ts: int, nonce: str,
     지나가는 큰 덩어리라 "서명은 맞는데 내용이 바뀐" 경우를 구분할 수 있어야
     한다. `body_hash`가 빈 문자열이면 **서명 문자열이 예전과 글자 하나까지
     같다** — 구버전 상대와의 호환이 깨지지 않는다(그래서 조건부로 붙인다).
+
+    프로토콜 v2 는 대리 주체(`obo`, 「이 요청은 A 의 에이전트 X 를 대신한다」는 A 의 보증)를 서명에 넣는다 — `obo` 가 있을 때만 맨 끝에
+    `\nobo:<주체>` 를 붙인다(`body_hash` 와 같은 방식이라 obo 없는 서명은 예전과 같다). 서명에 들어 있으므로 중간에서 obo 를 바꾸거나
+    떼어 내면 서명이 깨진다(바꿔치기·downgrade 모두 인증 실패).
     """
     payload = f"{method.upper()}\n{path}\n{ts}\n{nonce}"
     if body_hash:
         payload += f"\n{body_hash}"
+    if obo:
+        payload += f"\nobo:{obo}"
     return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
 def verify_signature(secret: str, method: str, path: str, ts: int, nonce: str,
-                     sig: str, now: float | None = None, body_hash: str = "") -> bool:
+                     sig: str, now: float | None = None, body_hash: str = "", obo: str = "") -> bool:
     now = time.time() if now is None else now
     if abs(now - ts) > SIGNATURE_WINDOW_SEC:
         return False
     return hmac.compare_digest(
-        sign_request(secret, method, path, ts, nonce, body_hash), sig or "")
+        sign_request(secret, method, path, ts, nonce, body_hash, obo), sig or "")
 
 
 class NonceCache:

@@ -409,7 +409,9 @@ def _share_result(status: int, data: dict, ok_fmt) -> tuple[str, bool]:
 
 
 def tool_list_shared_sessions(args: dict) -> tuple[str, bool]:
-    status, data = _api("GET", "/api/agent/shared", headers=_identity_headers())
+    host = str(args.get("host") or "").strip()
+    q = "?" + urllib.parse.urlencode({"host": host}) if host else ""
+    status, data = _api("GET", "/api/agent/shared" + q, headers=_identity_headers())
     if status != 200:
         return f"실패: {_fail(status, data)}", True
     rows = []
@@ -421,6 +423,8 @@ def tool_list_shared_sessions(args: dict) -> tuple[str, bool]:
         st = f" · {s['status']}" if s.get("status") else ""
         rows.append(f"- {s['nick']} ({'읽기·쓰기' if s['mode'] == 'readwrite' else '읽기 전용'}){cmd}{st} — "
                     f"내 권한: 읽기 {names.get(p.get('read'), p.get('read'))}, 쓰기 {names.get(p.get('write'), p.get('write'))}")
+    if host and status == 200 and not rows:
+        return f"{host} 에서 사용자가 공유한 세션이 없습니다(그 맥의 사용자가 FarShell 에서 세션을 공유해야 합니다)", False
     return "\n".join(rows) or "사용자가 공유한 세션이 없습니다(사용자가 FarShell 에서 세션을 공유해야 합니다)", False
 
 
@@ -428,6 +432,8 @@ def tool_read_session(args: dict) -> tuple[str, bool]:
     body = {"nickname": args.get("nickname", "")}
     if args.get("lines") is not None:
         body["lines"] = args["lines"]
+    if args.get("host"):
+        body["host"] = str(args["host"])
     status, data = _api("POST", "/api/agent/shared/read", body, headers=_identity_headers())
 
     def fmt(d: dict) -> str:
@@ -439,6 +445,8 @@ def tool_read_session(args: dict) -> tuple[str, bool]:
 
 def tool_send_to_session(args: dict) -> tuple[str, bool]:
     body = {"nickname": args.get("nickname", ""), "text": args.get("text", ""), "enter": bool(args.get("enter", False))}
+    if args.get("host"):
+        body["host"] = str(args["host"])
     status, data = _api("POST", "/api/agent/shared/send", body, headers=_identity_headers())
 
     def fmt(d: dict) -> str:
@@ -455,8 +463,11 @@ def _deleg_result(status: int, data: dict, ok_text) -> tuple[str, bool]:
 
 
 def tool_spawn_session(args: dict) -> tuple[str, bool]:
-    body = {k: args[k] for k in ("task", "title", "agent", "cwd", "worktree") if args.get(k)}
+    body = {k: args[k] for k in ("task", "title", "agent", "cwd", "worktree", "host") if args.get(k)}
     status, data = _api("POST", "/api/delegations", body, headers=_identity_headers())
+    if status == 202:     # 다른 Mac 의 사람이 승인해야 한다(오류가 아니다)
+        return (f"{data.get('reason') or '사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요'} "
+                f"(요청 {data.get('requestId')}) 그 맥의 사용자가 FarShell 화면에서 승인합니다."), False
     return _deleg_result(status, data, lambda d: (
         f"하위 세션 '{d['child']}'을 만들었습니다(위임 {d['delegation']}, {d['agent']}, {d['cwd']}). "
         f"결과는 이 세션의 입력으로 도착합니다. 기다리며 폴링하지 말고 다른 일을 계속하세요."))
@@ -483,12 +494,16 @@ def tool_report_back(args: dict) -> tuple[str, bool]:
 
 
 def tool_list_delegations(args: dict) -> tuple[str, bool]:
-    status, data = _api("GET", "/api/delegations", headers=_identity_headers())
+    host = str(args.get("host") or "").strip()
+    q = "?" + urllib.parse.urlencode({"host": host}) if host else ""
+    status, data = _api("GET", "/api/delegations" + q, headers=_identity_headers())
     if status != 200:
         return f"실패: {_fail(status, data)}", True
     rows = []
     for x in data.get("items", []):
-        who = f"→ {x['child']}" if x.get("role") == "parent" else f"← {x['parent']}(나에게 맡김)"
+        where = x.get("child_host") if x.get("role") == "parent" else x.get("parent_host")
+        at = f"@{where}" if where else ""
+        who = f"→ {x['child']}{at}" if x.get("role") == "parent" else f"← {x['parent']}{at}(나에게 맡김)"
         oc = f"/{x['outcome']}" if x.get("outcome") else ""
         rows.append(f"- {x['id']} {who} [{x['state']}{oc}] {x.get('task_preview', '')}")
         if x.get("summary"):
@@ -676,6 +691,18 @@ def _caller_scopes() -> set | None:
     return set(data["scopes"])
 
 
+HOST_TOOLS = frozenset({"read_session", "send_to_session", "list_shared_sessions", "spawn_session", "list_delegations"})
+HOST_PROP = {"type": "string", "description": "다른 Mac 의 호스트 id(fsh host list 의 id). 비우면 이 맥. 그 맥의 사용자가 승인해야 쓸 수 있다"}
+
+
+def _with_host(tool: dict) -> dict:
+    out = dict(tool)
+    schema = dict(out["inputSchema"])
+    schema["properties"] = {**schema.get("properties", {}), "host": HOST_PROP}
+    out["inputSchema"] = schema
+    return out
+
+
 def tools_for_caller() -> list[dict]:
     """깊이 한도에 닿은 하위 세션에는 만들기 도구를 아예 보여주지 않는다(서버도 막는다). 그리고 `TOOL_SCOPES` 에 적힌 도구는
     그 scope 를 하나도 못 가진 호출자에게 숨긴다(whoami 의 유효 scope 기준 — 보여 줘도 서버가 거부할 도구를 에이전트에게 권하지 않는다)."""
@@ -685,6 +712,9 @@ def tools_for_caller() -> list[dict]:
     # pair 도구는 서버가 pair 기능을 켰다고 whoami 가 알려 줄 때만(unix socket) 보인다. 만들기는 pair.manage 도 있어야 한다.
     pair_on = bool(((who or {}).get("features") or {}).get("pair"))
     keep = [t for t in keep if t["name"] not in PAIR_TOOL_NAMES or (pair_on and (t["name"] != "pair_create" or "pair.manage" in (scopes or ())))]
+    # 다른 Mac 권한(VT_AUTHZ_ENFORCE=peer)이 켜진 서버일 때만 `host` 인자를 보여 준다(꺼짐 = 도구 정의가 예전과 같다).
+    if bool(((who or {}).get("features") or {}).get("remote")):
+        keep = [_with_host(t) if t["name"] in HOST_TOOLS else t for t in keep]
     status, data = _api("GET", "/api/delegations/role", headers=_identity_headers())
     if status != 200:
         return keep

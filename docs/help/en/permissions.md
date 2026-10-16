@@ -62,4 +62,16 @@ Two agents (or one person and one agent) split the same bundle of sessions and f
 
 A program of the same user account can edit the permission store directly — a pair does not stop that; it makes clear who may do what and cuts accidents short.
 
+## Agents on another Mac - reading and typing into shared sessions, remote delegation
+
+An agent on one Mac can read and type one line into a session that is **shared** on another Mac, or have that Mac create a sub-session (this is not the same as giving it a `control`
+shell). Both Macs must be paired (`fsh host`) and both servers need `peer` in `VT_AUTHZ_ENFORCE` (`deleg` too for delegation). Once on, the MCP tools `list_shared_sessions`,
+`read_session`, `send_to_session`, `spawn_session` and `list_delegations` take a `host` argument (a host id).
+
+- The first use puts a request in **the other Mac's** inbox. The agent asked; the person on that Mac approves (nobody approves on the asking side). Once approved, repeat the same call.
+- **Reading** needs a normal approval; **typing and remote sub-sessions** can only be approved by a person who re-confirmed their password. A read-only share cannot be typed into.
+- The agent only sees **shared** sessions on the other Mac (no session names or folders). A remote sub-session starts in that Mac's default folder; a working folder or worktree cannot be chosen.
+- If you revoke on the other Mac or remove the Mac (`fsh host rm`), open remote terminal screens close within 5 seconds.
+- `fsh host rotate <id>` replaces the secret of the connection going out to that Mac on both sides (no expiry). If it fails midway the previous secret stays. Rotate the opposite direction from the other Mac with the same command.
+
 See also: `fsh help agent-state` (MCP tools `request_access` and `whoami`), `docs/ref/auth.md`.

@@ -47,6 +47,7 @@ KIND_NEEDS_HUMAN = "needs_human"
 KIND_GONE = "gone"
 KIND_SOFT_LIMIT = "soft_limit"
 KIND_OVERFLOW = "overflow"
+KIND_CLOSE = "close"          # 다른 호스트의 자식에게 «위임을 닫아라»(outbox 대상 `peer:<id>` 에만 쓴다)
 TRANSIENT = ("turn_ended", "needs_human", "soft_limit")
 TO_PARENT = (KIND_REPORTED, KIND_TURN_ENDED, KIND_NEEDS_HUMAN, KIND_GONE, KIND_SOFT_LIMIT, KIND_OVERFLOW)
 
@@ -417,10 +418,20 @@ def _queue_add(text: str, session: str, did: str, kind: str) -> bool:
     return bool(r.get("ok"))
 
 
-def _enqueue(items: list[dict], item: dict, kind: str, text: str, target: str) -> None:
-    """outbox에 적는다. 실제 큐 투입은 락 밖의 _flush가 한다."""
-    item.setdefault("outbox", []).append({"kind": kind, "text": text, "target": target,
-                                          "ts": time.time(), "queued": False})
+def _enqueue(items: list[dict], item: dict, kind: str, text: str, target: str, *, body: str = "", outcome: str = "") -> None:
+    """outbox에 적는다. 실제 큐 투입은 락 밖의 _flush가 한다.
+
+    상대(부모/자식)가 **다른 호스트**에 있으면 대상이 `peer:<호스트 id>` 가 된다 — 그쪽 큐에는 넣을 수 없으니 `_flush` 가 프로토콜 v2 로 보낸다.
+    그때 받는 호스트는 우리 머리글(`text`)을 믿지 않고 자기 장부로 다시 만든다: 그래서 원문(`body`)과 결과(`outcome`)를 따로 적는다."""
+    side = item.get(target) if target in ("parent", "child") else None
+    if isinstance(side, dict) and side.get("host"):
+        target = f"peer:{side['host']}"
+    rec = {"kind": kind, "text": text, "target": target, "ts": time.time(), "queued": False}
+    if target.startswith("peer:"):
+        rec["body"] = body
+        if outcome:
+            rec["outcome"] = outcome
+    item.setdefault("outbox", []).append(rec)
 
 
 def _flush(did: str) -> None:
@@ -434,6 +445,14 @@ def _flush(did: str) -> None:
     done_idx: list[float] = []
     for o in pending:
         target = o["target"]
+        if target.startswith("peer:"):
+            try:
+                from authz import remote
+                if remote.deliver_deleg(item, o):
+                    done_idx.append(o["ts"])
+            except Exception as e:  # noqa: BLE001 — 다음 sweep 에서 다시
+                logger.warning(f"위임 {did} 원격 전달 실패: {type(e).__name__}: {e}")
+            continue
         if target == "parent":
             names = live_sessions() or {}
             target = names.get(item["parent"]["key"])
@@ -487,11 +506,18 @@ def role_of(caller_key: str) -> dict:
             "delegation": next((x["id"] for x in as_child if x["state"] in OPEN_STATES), None)}
 
 
-def check_spawn(data: dict, parent_key: str, now: float) -> None:
+def check_spawn(data: dict, parent_key: str, now: float, *, remote: bool = False) -> None:
     """모든 생성 경로가 지나는 단 하나의 관문. 락 안에서 부른다.
 
-    꺼짐: 옛 판정 + shadow 한 줄. 켜짐: 엔진이 `deleg.spawn`(deleg-quota)을 판정한다 — 같은 조건에 safe_mode 가 더해진다."""
+    꺼짐: 옛 판정 + shadow 한 줄. 켜짐: 엔진이 `deleg.spawn`(deleg-quota)을 판정한다 — 같은 조건에 safe_mode 가 더해진다.
+    `remote=True`: 부모가 다른 호스트의 에이전트다 — 엔진 판정(B 의 grant)은 호출자(`authz/remote.py`)가 이미 했고, 여기서는 이 호스트의 쿼터
+    (열린 자식 3개·분당 5회·VT_AGENT_SPAWN)만 센다."""
     from authz import hooks as authz_hooks
+    if remote:
+        err = _spawn_denial(data, parent_key, now)
+        if err is not None:
+            raise err
+        return
     if enforced():
         sm = _safe_mode()
         v = _svc().spawn_verdict(data, parent_key, now, enabled=enabled(), safe_mode=sm)
@@ -606,13 +632,33 @@ def _prepare_worktree(parent_cwd: str, branch: str, name: str, check=None) -> st
     return path
 
 
+class RemoteCaller:
+    """다른 호스트의 에이전트가 부모인 위임 — `share_identity.Caller` 자리에 들어가는 최소한(`key` 는 `<호스트 id>/<그쪽 세션 key>`).
+    이 호스트에는 그 pane 이 없다(`pane_id` 빈 값). 대리 주체를 서명으로 보증한 것은 그 호스트이고, 권한 판정은 이 호스트의 grant 가 이미 했다."""
+
+    def __init__(self, host: str, key: str, name: str, principal: str):
+        self.host, self.raw_key, self.name, self.principal = host, key, name, principal
+        self.key, self.pane_id = f"{host}/{key}", ""
+
+
+_DID_RE = re.compile(r"[0-9a-f]{10}")
+
+
 def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
-          worktree_branch: str = "", parent_agent: str = "") -> dict:
-    """caller: share_identity.Caller(검증된 호출자). blocking."""
+          worktree_branch: str = "", parent_agent: str = "", remote: Optional[RemoteCaller] = None, did: str = "") -> dict:
+    """caller: share_identity.Caller(검증된 호출자). blocking.
+
+    `remote`(다른 호스트의 부모): `caller` 자리에 `RemoteCaller` 를 넣고 `did` 는 부모 호스트의 장부와 같은 id 다. 작업 폴더·worktree 는 받지 않는다
+    (이 호스트의 기본 시작 폴더에서만 시작 — 경로는 이 호스트 안에서만 뜻이 있는 값이고, 원격이 고르게 하면 임의 경로 입구가 된다)."""
     task = _clean(task).strip()
     if not task:
         raise DelegationError("empty_task", "task가 비어 있습니다")
-    did = uuid.uuid4().hex[:10]
+    if remote is not None:
+        if cwd or worktree_branch:
+            raise DelegationError("remote_cwd_unsupported", "다른 호스트가 시작한 하위 세션은 작업 폴더·worktree 를 고를 수 없습니다", 400)
+        if not _DID_RE.fullmatch(did or ""):
+            raise DelegationError("bad_id", "위임 id 가 올바르지 않습니다", 400)
+    did = did if remote is not None else uuid.uuid4().hex[:10]
     full_task = task + _task_footer(did)
     if len(full_task) > TASK_MAX_CHARS:
         raise DelegationError("task_too_long",
@@ -625,11 +671,14 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     if worktree_branch and not re.fullmatch(r"[A-Za-z0-9._/-]{1,100}", worktree_branch):
         raise DelegationError("bad_branch", "브랜치 이름이 올바르지 않습니다")
 
-    parent_cwd = _pane_cwd(caller.pane_id) or ""
+    parent_cwd = _pane_cwd(caller.pane_id) or "" if remote is None else ""
     if cwd:
         if not os.path.isabs(cwd) or not os.path.isdir(cwd):
             raise DelegationError("bad_cwd", "cwd는 존재하는 절대 경로여야 합니다")
         start_dir = cwd
+    elif remote is not None:
+        import platform_utils
+        start_dir = platform_utils.default_start_dir()
     else:
         start_dir = parent_cwd if parent_cwd and os.path.isdir(parent_cwd) else str(Path.home())
 
@@ -638,12 +687,22 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     names = live_sessions()
     if names is None:
         raise DelegationError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
-    if _lease_enforced() and not worktree_branch:
+    if _lease_enforced() and not worktree_branch and remote is None:
         _lease_guard(parent_key, caller.name, start_dir)
     # 1) 관문 + 예약(같은 락 안에서 — 검사와 기록 사이에 다른 생성이 끼지 못한다)
     with _locked():
         data = _read()
-        check_spawn(data, parent_key, now)
+        if remote is not None:
+            same = next((x for x in data["items"] if x["id"] == did), None)
+            if same is not None:
+                # 부모 호스트가 응답을 못 받고 다시 보낸 것 — 같은 부모면 만들어 둔 결과를 그대로(멱등), 다른 부모의 id 와 겹치면 거부.
+                if (same.get("parent") or {}).get("key") != parent_key:
+                    raise DelegationError("id_taken", "이미 쓰인 위임 id 입니다", 409)
+                if same["state"] != RUNNING and same["state"] != REPORTED:
+                    raise DelegationError("in_progress", "이 위임은 아직 만드는 중이거나 이미 닫혔습니다", 409)
+                return {"delegation": did, "child": same["child"]["name"], "agent": same["agent"], "childKey": same["child"]["key"],
+                        "duplicate": True}
+        check_spawn(data, parent_key, now, **({"remote": True} if remote is not None else {}))
         if cwd and enforced():
             # 명시한 cwd 는 `fs.read` + fsguard 루트(VT_BROWSE_ROOTS) 안일 때만(쿼터 검사 뒤 — 오류 우선순위를 유지).
             # realpath 로 고정해 심볼릭 링크 바꿔치기를 막는다.
@@ -657,6 +716,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             "child": {"key": "", "name": child_name, "pane": ""},
             "cwd": start_dir, "outbox": [],
         }
+        if remote is not None:
+            item["parent"]["host"] = remote.host
         data["items"].append(item)
         _write(data)
 
@@ -687,7 +748,7 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             cur["state"] = RUNNING
             cur["cwd"] = start_dir
             cur["child"] = {"key": ident["key"], "name": child_name, "pane": ident["pane"]}
-            if enforced():
+            if enforced() and remote is None:
                 # 자식의 fs grant 기록(worktree 면 새 경로 전용, 아니면 부모 fs grant 의 공유 참조). 강제는 5단계.
                 fs = _svc().fs_record(parent_key, start_dir, worktree=bool(worktree_branch))
                 if fs:
@@ -695,7 +756,7 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             _enqueue(data["items"], cur, KIND_TASK, full_task, "child")
             _write(data)
             item = dict(cur)
-        if _lease_enforced():
+        if _lease_enforced() and remote is None:
             _issue_leases(parent_key, ident["key"], child_name, did, start_dir, bool(worktree_branch))
     except Exception as e:
         if created_session:
@@ -708,7 +769,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
                 _write(data)
         except Exception as ce:  # noqa: BLE001 — 정리 실패가 원래 오류를 가리면 안 된다(sweep 이 spawn_interrupted 로 닫는다)
             logger.warning(f"위임 {did} 예약 정리 실패: {ce}")
-        _audit("spawn", "failed", principal=_agent_id(parent_key), did=did, reason=getattr(e, "code", type(e).__name__))
+        _audit("spawn", "failed", principal=remote.principal if remote is not None else _agent_id(parent_key), did=did,
+               reason=getattr(e, "code", type(e).__name__))
         if isinstance(e, DelegationError):
             raise
         raise DelegationError("spawn_failed", f"하위 세션을 만들지 못했습니다: {e}", 500) from e
@@ -718,9 +780,11 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     _flush(did)
     import tmux_target
     tmux_target.send_to_tmux(ident["pane"], LAUNCH[agent])
-    _audit("spawn", "ok", principal=_agent_id(parent_key), did=did, reason=f"{caller.name}->{child_name}",
-           chars=len(task), sha8=_sha8(task))
+    _audit("spawn", "ok", principal=remote.principal if remote is not None else _agent_id(parent_key), did=did,
+           reason=f"{caller.name}->{child_name}", chars=len(task), sha8=_sha8(task))
     _push(tr("하위 세션을 만들었습니다"), f"{caller.name} → {child_name}: {_one_line(task, 60)}")
+    if remote is not None:
+        return {"delegation": did, "child": child_name, "agent": agent, "childKey": ident["key"]}    # 이 호스트의 경로는 내보내지 않는다
     return {"delegation": did, "child": child_name, "agent": agent, "cwd": start_dir}
 
 
@@ -740,14 +804,15 @@ def send_to_child(caller_key: str, did: str, text: str) -> dict:
         msg = f"{head}\n{text}"
         if len(msg) > TASK_MAX_CHARS:
             raise DelegationError("text_too_long", f"내용이 너무 깁니다(최대 {TASK_MAX_CHARS - len(head) - 1}자)", 413)
-        _enqueue(data["items"], item, KIND_FOLLOWUP, msg, "child")
+        _enqueue(data["items"], item, KIND_FOLLOWUP, msg, "child", body=text)
         _write(data)
     _flush(did)
     _audit("send", "ok", principal=_agent_id(caller_key), did=did, chars=len(text), sha8=_sha8(text))
     return {"ok": True, "queued": True}
 
 
-def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_by_parent", actor=None, system: bool = False) -> dict:
+def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_by_parent", actor=None, system: bool = False,
+          notify_peer: bool = True) -> dict:
     """위임을 닫는다. 세션은 남긴다(결정 3). 자식에게 아직 안 들어간 지시만 큐에서 지운다.
     caller_key가 None이면 사람(CLI)이다. 켜짐에서는 그 사람의 주체(`actor`: human 또는 cli)를 엔진에 묻는다 —
     cli 는 닫기만 된다(`ops:[close]`). `system=True` 는 회수 saga 가 서버 이름으로 닫는 경우 — 주체 판정을 거치지 않는다(감사는 `system:saga`)."""
@@ -774,13 +839,22 @@ def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_b
         item["state"] = CLOSED
         item["closed_at"] = time.time()
         item["close_reason"] = reason
-        item["outbox"] = [o for o in item.get("outbox", []) if o.get("queued") or o["target"] == "parent"]
+        # 자식에게 아직 안 들어간 지시는 지운다. 부모 쪽으로 가는 알림과, 다른 호스트로 가는 «닫아라»·«이쪽에서 닫혔다»는 남긴다.
+        item["outbox"] = [o for o in item.get("outbox", []) if o.get("queued") or o["target"] == "parent"
+                          or o["kind"] == KIND_CLOSE or (str(o["target"]).startswith("peer:") and o["kind"] in TO_PARENT)]
+        if notify_peer:
+            if (item.get("child") or {}).get("host"):
+                _enqueue(data["items"], item, KIND_CLOSE, "", "child")                    # 자식은 다른 호스트에 산다 — 그쪽 위임도 닫는다
+            elif (item.get("parent") or {}).get("host") and caller_key is None:
+                _enqueue(data["items"], item, KIND_GONE, "", "parent", body="위임이 자식 호스트에서 닫혔습니다")   # 부모(다른 호스트)가 알게 한다
         _write(data)
     _release_leases([did], "delegation_closed")
     import queue_store
     removed = queue_store.remove_pending_by_source(
         lambda s: s.get("delegation") == did and s.get("kind") in (KIND_TASK, KIND_FOLLOWUP))
     _audit("close", "ok", principal=who, did=did, reason=reason)
+    if notify_peer and any(str(o.get("target", "")).startswith("peer:") and not o.get("queued") for o in (item.get("outbox") or [])):
+        _flush(did)
     return {"ok": True, "removed_queued": removed}
 
 
@@ -820,7 +894,8 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
         item["outcome"] = outcome
         item["summary"] = _cap_bytes(summary, 64 * 1024)[0]
         item["reported_at"] = time.time()
-        _enqueue(data["items"], item, KIND_REPORTED, format_to_parent(item, "reported", summary, outcome), "parent")
+        _enqueue(data["items"], item, KIND_REPORTED, format_to_parent(item, "reported", summary, outcome), "parent",
+                 body=summary, outcome=outcome)
         _write(data)
         did = item["id"]
         parent_key = item["parent"]["key"]
@@ -831,6 +906,217 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
     if not still_running:
         _push(tr("위임한 작업이 모두 끝났습니다"), tr("{name}의 하위 세션 보고가 도착했습니다", name=item['parent']['name']))
     return {"ok": True, "delegation": did}
+
+
+# --- 다른 호스트와의 위임 (프로토콜 v2, `VT_AUTHZ_ENFORCE=peer,deleg`) ---------------------------------------------------------
+#
+# 부모와 자식이 서로 다른 호스트에 산다. 양쪽 장부에 같은 위임 id 가 있고, 상대 쪽 세션은 `host` 필드와 `<호스트 id>/<key>` 형태의 key 로 적힌다
+# (이 호스트의 tmux key 에는 `/` 가 없어 섞이지 않는다). 소유의 근거는 여전히 «이 호스트의 장부»이고, 허용은 엔진이 판정한다:
+# 상대 쪽 에이전트는 장부에서 파생된 대리 주체 grant(`migrate.translate_delegation`)로 `deleg.control` 을 가진다.
+#
+#   부모 호스트(A)  spawn_on_host     예약 -> B 에 `/v2/deleg/spawn` -> 자식 key 를 장부에 채움(승인 대기면 예약을 지우고 202)
+#                    send/close        outbox 대상 `peer:B` -> `/v2/deleg/send|close`
+#   자식 호스트(B)  spawn_remote      B 의 사람이 승인한 grant 로(elevated) 자식을 만든다 — 작업 폴더·worktree 는 받지 않는다
+#                    send/close_from_remote   부모 에이전트의 지시·닫기(장부의 부모 key + 엔진 `deleg.control` role=parent)
+#                    report -> outbox 대상 `peer:A` -> A 의 `/v2/deleg/report` -> report_from_remote(아래)
+# 결과·알림의 머리글은 받는 호스트가 **자기 장부로 다시 만든다**(보낸 호스트의 문구를 지시로 믿지 않는다). 같은 outbox 항목은 `ts` 로 한 번만 처리한다.
+
+
+def _remote_key(host: str, obo: str) -> str:
+    from authz import remote
+    return f"{host}/{remote.obo_key(obo)}"
+
+
+def _convert(e: Exception) -> DelegationError:
+    return DelegationError(getattr(e, "code", "remote_error"), getattr(e, "reason", str(e)), getattr(e, "status", 502))
+
+
+def spawn_on_host(caller, host: str, *, task: str, title: str = "", agent: str = "", parent_agent: str = "") -> dict:
+    """다른 호스트에 하위 세션을 만든다(부모 = 이 호스트의 확인된 호출자). 승인이 필요하면 `{"pending": True, "requestId", "reason"}`."""
+    from authz import remote
+    from authz.errors import ShareError
+    task = _clean(task).strip()
+    if not task:
+        raise DelegationError("empty_task", "task가 비어 있습니다")
+    agent = agent or (parent_agent if parent_agent in SPAWN_AGENTS else "claude")
+    if agent not in SPAWN_AGENTS:
+        raise DelegationError("bad_agent", f"agent는 {', '.join(SPAWN_AGENTS)} 중 하나여야 합니다")
+    if title and not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", title):
+        raise DelegationError("bad_title", "title은 영숫자·-·_ 1~40자입니다")
+    try:
+        remote.require_enabled()
+        peer = remote.peer_of(host)
+    except ShareError as e:
+        raise _convert(e) from None
+    host = peer["id"]
+    if not remote.deleg_enabled():
+        raise DelegationError("deleg_disabled", "원격 위임이 꺼져 있습니다 — VT_AUTHZ_ENFORCE 에 peer 와 deleg 가 필요합니다", 409)
+    did = uuid.uuid4().hex[:10]
+    now = time.time()
+    parent_key = caller.key
+    with _locked():
+        data = _read()
+        check_spawn(data, parent_key, now)
+        data["spawns"] = [t for t in data["spawns"] if now - t < 60] + [now]
+        data["items"].append({
+            "id": did, "state": "starting", "agent": agent, "created_at": now, "task_preview": _one_line(task, 200),
+            "parent": {"key": parent_key, "name": caller.name, "pane": caller.pane_id},
+            "child": {"key": "", "name": "", "pane": "", "host": host}, "cwd": "", "outbox": []})
+        _write(data)
+
+    def drop() -> None:
+        try:
+            with _locked():
+                d = _read()
+                d["items"] = [x for x in d["items"] if x["id"] != did]
+                _write(d)
+        except Exception as ce:  # noqa: BLE001 — 정리 실패가 원래 오류를 가리면 안 된다(sweep 이 spawn_interrupted 로 닫는다)
+            logger.warning(f"위임 {did} 예약 정리 실패: {ce}")
+
+    try:
+        status, out = remote.call(host, "POST", "/api/peer/v2/deleg/spawn",
+                                  {"delegation": did, "task": task, "title": title, "agent": agent,
+                                   "parentName": caller.name}, agent_key=caller.key, timeout=30.0)
+    except ShareError as e:
+        drop()
+        _audit("spawn", "failed", principal=_agent_id(parent_key), did=did, reason=e.code)
+        raise _convert(e) from None
+    if status == 202:
+        drop()
+        return {"pending": True, "requestId": out.get("requestId"), "kind": out.get("kind", "deleg"),
+                "reason": out.get("reason") or "사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요"}
+    child_key = str(out.get("childKey") or "")
+    if status != 200 or not child_key or "/" in child_key:
+        drop()
+        _audit("spawn", "failed", principal=_agent_id(parent_key), did=did, reason=str(out.get("error") or status))
+        raise DelegationError(str(out.get("error") or "remote_spawn_failed"), str(out.get("reason") or f"상대 호스트가 거절했습니다(HTTP {status})"),
+                              status if 400 <= status < 600 else 502)
+    with _locked():
+        data = _read()
+        cur = next((x for x in data["items"] if x["id"] == did), None)
+        if cur is None:
+            raise DelegationError("spawn_interrupted", "위임 예약이 사라졌습니다", 500)
+        cur["state"] = RUNNING
+        cur["child"] = {"key": f"{host}/{child_key}", "name": str(out.get("child") or "")[:60], "pane": "", "host": host}
+        _write(data)
+    _audit("spawn", "ok", principal=_agent_id(parent_key), did=did, reason=f"{caller.name}->{host}/{out.get('child')}",
+           chars=len(task), sha8=_sha8(task))
+    return {"delegation": did, "child": f"{host}/{out.get('child')}", "agent": agent, "cwd": f"(호스트 {host})", "host": host}
+
+
+def spawn_remote(host: str, obo: str, *, did: str, parent_name: str, task: str, title: str, agent: str, principal: str) -> dict:
+    """이 호스트에 다른 호스트의 에이전트가 부모인 하위 세션을 만든다(허용은 호출자가 B 의 grant 로 이미 판정). blocking."""
+    from authz import remote
+    name = _NAME_RE.sub("-", str(parent_name or "")).strip("-")[:40] or "remote"
+    caller = RemoteCaller(host, remote.obo_key(obo), name, principal)
+    return spawn(caller, task=task, title=title, agent=agent, remote=caller, did=did)
+
+
+def _find_remote(data: dict, did: str, host: str, obo: str, role: str) -> dict:
+    """장부에서 `role`(parent|child) 이 `host` 의 그 에이전트인 위임. 없으면 404 — 남의 위임인지 없는 위임인지 알리지 않는다."""
+    key = _remote_key(host, obo)
+    item = next((x for x in data["items"] if x["id"] == did), None)
+    if item is None or (item.get(role) or {}).get("host") != host or item[role].get("key") != key:
+        raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
+    return item
+
+
+def _authorize_remote(item: dict, host: str, obo: str, role: str, op: str) -> None:
+    from authz import principals as P
+    v = _svc().authorize_p(P.peer(host, obo=obo), item["id"], role, op=op)
+    if v.allow:
+        return
+    if v.ended:
+        return                 # 이미 끝난 위임 — 호출부의 상태 검사가 공개 계약대로 409 를 낸다
+    raise DelegationError("not_found", "그런 위임이 없거나 이 세션의 것이 아닙니다", 404)
+
+
+def send_from_remote(host: str, obo: str, did: str, text: str) -> dict:
+    """부모(다른 호스트의 에이전트)가 이 호스트의 자식에게 추가 지시."""
+    text = _clean(text).strip()
+    if not text:
+        raise DelegationError("empty_text", "text가 비어 있습니다")
+    with _locked():
+        data = _read()
+        item = _find_remote(data, did, host, obo, "parent")
+        _authorize_remote(item, host, obo, "parent", "send")
+        if item["state"] not in OPEN_STATES:
+            raise DelegationError("delegation_closed", "닫힌 위임입니다", 409)
+        head = f"[부모 세션 {item['parent']['name']}의 추가 지시 · 위임 {did}]"
+        msg = f"{head}\n{text}"
+        if len(msg) > TASK_MAX_CHARS:
+            raise DelegationError("text_too_long", f"내용이 너무 깁니다(최대 {TASK_MAX_CHARS - len(head) - 1}자)", 413)
+        _enqueue(data["items"], item, KIND_FOLLOWUP, msg, "child", body=text)
+        _write(data)
+    _flush(did)
+    _audit("send", "ok", principal=f"peer:{host}/obo:{obo}", did=did, chars=len(text), sha8=_sha8(text))
+    return {"ok": True, "queued": True}
+
+
+def close_from_remote(host: str, obo: str, did: str) -> dict:
+    """부모(다른 호스트의 에이전트)가 위임을 닫는다 — 세션은 남긴다(로컬 `close` 와 같다)."""
+    with _locked():
+        data = _read()
+        item = _find_remote(data, did, host, obo, "parent")
+        _authorize_remote(item, host, obo, "parent", "close")
+    return close(did, reason="closed_by_remote_parent", system=True, notify_peer=False)
+
+
+def report_from_remote(host: str, obo: str, did: str, kind: str, outcome: str, body: str, seq) -> dict:
+    """자식(다른 호스트의 에이전트)의 보고·알림이 부모인 이 호스트에 도착했다. 머리글은 이 호스트의 장부로 다시 만들고, 본문은 데이터로 감싼다.
+    같은 `seq`(자식 호스트 outbox 항목의 ts)는 한 번만 처리한다."""
+    if kind not in TO_PARENT:
+        raise DelegationError("bad_kind", "알 수 없는 알림 종류입니다", 400)
+    body = _clean(str(body or "")).strip()
+    with _locked():
+        data = _read()
+        item = _find_remote(data, did, host, obo, "child")
+        _authorize_remote(item, host, obo, "child", "report")
+        tag = str(seq)[:32]
+        seen = item.setdefault("remote_seen", [])
+        if tag in seen:
+            return {"ok": True, "duplicate": True}
+        if item["state"] not in OPEN_STATES and kind != KIND_GONE:
+            raise DelegationError("delegation_closed", "이 위임은 이미 닫혔습니다", 409)
+        if kind == KIND_REPORTED:
+            if outcome not in ("succeeded", "failed"):
+                raise DelegationError("bad_outcome", "outcome은 succeeded 또는 failed입니다")
+            if item["state"] != RUNNING:
+                raise DelegationError("already_reported", "이 위임은 이미 보고했거나 닫혔습니다", 409)
+            item.update(state=REPORTED, outcome=outcome, summary=_cap_bytes(body, 64 * 1024)[0], reported_at=time.time())
+            text = format_to_parent(item, "reported", body, outcome)
+        elif kind == KIND_GONE:
+            if item["state"] in OPEN_STATES:
+                item.update(state=CLOSED, closed_at=time.time(), close_reason="child_gone")
+            text = format_to_parent(item, "gone")
+        else:
+            label = {KIND_TURN_ENDED: "turn_ended", KIND_NEEDS_HUMAN: "needs_human", KIND_SOFT_LIMIT: "soft_limit"}.get(kind, kind)
+            text = format_to_parent(item, label, body)
+        seen.append(tag)
+        del seen[:-50]
+        _enqueue(data["items"], item, kind, text, "parent")      # 부모는 이 호스트에 산다 -> 로컬 큐
+        _write(data)
+    _flush(did)
+    _audit("report", "ok", principal=f"peer:{host}/obo:{obo}", did=did, reason=outcome or kind, chars=len(body), sha8=_sha8(body))
+    return {"ok": True, "delegation": did}
+
+
+def close_remote(host: str, reason: str = "revoked", parent_key: Optional[str] = None) -> list[str]:
+    """`host` 와 맺은 열린 위임을 닫는다(그 호스트의 권한이 거둬졌다). 닫은 id 목록. `parent_key` 가 있으면 이 호스트의 그 에이전트가 부모인 것만
+    (상대가 «당신의 그 에이전트 권한»만 거둔 경우)."""
+    with _locked():
+        ids = [x["id"] for x in _read()["items"] if x["state"] in OPEN_STATES
+               and host in ((x["parent"].get("host")), (x["child"].get("host")))
+               and (parent_key is None or (x["parent"]["key"] == parent_key and not x["parent"].get("host")))]
+    done = []
+    for did in ids:
+        try:
+            close(did, reason=reason, system=True, notify_peer=False)
+            done.append(did)
+        except DelegationError as e:
+            if e.status != 404:
+                raise
+    return done
 
 
 # --- 훅 이벤트 -------------------------------------------------------------------------
@@ -858,15 +1144,13 @@ def on_agent_event(session: Optional[str], status: Optional[str], payload: dict)
             last = str((payload or {}).get("last_assistant_message") or "")
             body = ("하위 에이전트가 report_back 없이 턴을 마쳤습니다. 마지막 응답:\n" + last) if last else \
                 "하위 에이전트가 report_back 없이 턴을 마쳤습니다(마지막 응답을 받지 못함). 세션을 직접 확인하세요."
-            _enqueue(data["items"], item, KIND_TURN_ENDED, format_to_parent(item, "turn_ended", body), "parent")
+            _enqueue(data["items"], item, KIND_TURN_ENDED, format_to_parent(item, "turn_ended", body), "parent", body=body)
         else:
             if item.get("waiting_notified"):
                 return
             item["waiting_notified"] = True
-            _enqueue(data["items"], item, KIND_NEEDS_HUMAN,
-                     format_to_parent(item, "needs_human",
-                                      "하위 세션이 사람의 승인을 기다립니다. 에이전트는 대신 승인할 수 없습니다. 기다리거나 다른 일을 하세요."),
-                     "parent")
+            _nh = "하위 세션이 사람의 승인을 기다립니다. 에이전트는 대신 승인할 수 없습니다. 기다리거나 다른 일을 하세요."
+            _enqueue(data["items"], item, KIND_NEEDS_HUMAN, format_to_parent(item, "needs_human", _nh), "parent", body=_nh)
         _write(data)
         child_name, parent_name = item["child"]["name"], item["parent"]["name"]
     _flush(did)
@@ -916,15 +1200,18 @@ def sweep(now: Optional[float] = None) -> dict:
                 changed = True
                 continue
             if x["state"] not in OPEN_STATES:
+                if any(not o.get("queued") and str(o.get("target", "")).startswith("peer:") for o in x.get("outbox", [])):
+                    flush_ids.append(x["id"])           # 닫힌 뒤에도 다른 호스트로 못 간 «닫아라»·«닫혔다»는 계속 시도한다
                 continue
-            child_alive = x["child"]["key"] in names
-            parent_alive = x["parent"]["key"] in names
+            # 부모·자식이 다른 호스트에 있으면 이 호스트의 tmux 로는 살았는지 알 수 없다 — 그쪽이 «gone»·«닫아라»로 알려 준다.
+            child_alive = True if (x["child"].get("host")) else x["child"]["key"] in names
+            parent_alive = True if (x["parent"].get("host")) else x["parent"]["key"] in names
             if not child_alive:
                 x["state"] = CLOSED
                 x["closed_at"] = now
                 x["close_reason"] = "child_gone"
                 if parent_alive:
-                    _enqueue(data["items"], x, KIND_GONE, format_to_parent(x, "gone"), "parent")
+                    _enqueue(data["items"], x, KIND_GONE, format_to_parent(x, "gone"), "parent", body="하위 세션이 사라졌습니다")
                 gone.append(x["id"])
                 changed = True
             elif not parent_alive:
@@ -932,15 +1219,15 @@ def sweep(now: Optional[float] = None) -> dict:
                 x["closed_at"] = now
                 x["close_reason"] = "parent_gone"
                 x["outbox"] = [o for o in x.get("outbox", []) if o["target"] != "parent"]
+                if x["child"].get("host"):
+                    _enqueue(data["items"], x, KIND_CLOSE, "", "child")     # 다른 호스트의 자식에게 부모가 사라졌음을(위임을 닫도록) 알린다
                 orphaned.append(x["id"])
                 changed = True
             elif x["state"] == RUNNING and not x.get("soft_notified") and now - x["created_at"] > soft_limit_sec():
                 x["soft_notified"] = True
-                _enqueue(data["items"], x, KIND_SOFT_LIMIT,
-                         format_to_parent(x, "soft_limit",
-                                          f"하위 세션이 {int(soft_limit_sec() // 60)}분째 보고 없이 돌고 있습니다. "
-                                          f"강제로 끝내지 않습니다. 확인하거나 close_delegation으로 닫으세요."),
-                         "parent")
+                _sl = (f"하위 세션이 {int(soft_limit_sec() // 60)}분째 보고 없이 돌고 있습니다. "
+                       f"강제로 끝내지 않습니다. 확인하거나 close_delegation으로 닫으세요.")
+                _enqueue(data["items"], x, KIND_SOFT_LIMIT, format_to_parent(x, "soft_limit", _sl), "parent", body=_sl)
                 changed = True
             if any(not o.get("queued") for o in x.get("outbox", [])):
                 flush_ids.append(x["id"])
@@ -979,6 +1266,9 @@ def public(item: dict, viewer_key: Optional[str] = None) -> dict:
                                     "reported_at", "closed_at", "close_reason", "cwd")}
     out["parent"] = item["parent"]["name"]
     out["child"] = item["child"]["name"]
+    for side in ("parent", "child"):
+        if item[side].get("host"):
+            out[f"{side}_host"] = item[side]["host"]         # 다른 호스트의 세션이면 어느 호스트인지(없으면 이 호스트 — 예전 응답과 같다)
     if viewer_key is not None:
         out["role"] = "parent" if item["parent"]["key"] == viewer_key else "child"
     if item.get("summary"):

@@ -57,8 +57,8 @@ def applies(p: P.Principal, scope: str, resource: str) -> bool:
         return False
     if p.kind in (P.HUMAN, P.LEGACY):
         return False                     # 로컬 사람·legacy shim 은 소유자와 같다
-    if p.kind == P.PEER and defaults.PEER_SESSION_CEILING_EXEMPT:
-        return False
+    if p.kind == P.PEER and defaults.PEER_SESSION_CEILING_EXEMPT and not p.obo:
+        return False                     # 호스트 단위 peer grant 만 면제다 — 다른 Mac 의 **에이전트**(대리 주체)는 공유 정책을 넘지 못한다
     if p.kind == P.AGENT and resource == f"session:local/{p.attrs.get('key', '')}":
         return False                     # 자기 세션
     return True

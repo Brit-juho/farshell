@@ -321,6 +321,8 @@ def _is_agent_member(m: dict) -> bool:
 def _caller_member(pair: dict, p: P.Principal) -> Optional[dict]:
     if p.kind == P.AGENT:
         return next((m for m in pair["members"] if _is_agent_member(m) and m["principal"] == p.id), None)
+    if p.kind == P.PEER and p.obo:       # 다른 Mac 의 에이전트(대리 주체) — 그 호스트가 보증한 `peer:X/obo:agent:X/<key>` 로 구성원이 된다
+        return next((m for m in pair["members"] if _is_agent_member(m) and m["principal"] == p.short()), None)
     if p.kind == P.HUMAN:
         return next((m for m in pair["members"] if m.get("kind") == "human"), None)
     return None
@@ -741,7 +743,8 @@ def issue_code(p: P.Principal, pid: str) -> dict:
 def join(p: P.Principal, raw_code) -> dict:
     """확인된 에이전트가 코드로 합류한다 → 보기(+확인 문구). 승인 요청이 생긴다. 틀린 코드는 404 `invalid_code`."""
     require_enabled()
-    if p.kind != P.AGENT or P.is_hook(p) or not p.attrs.get("key"):
+    remote_p = p.kind == P.PEER and bool(p.obo)
+    if not remote_p and (p.kind != P.AGENT or P.is_hook(p) or not p.attrs.get("key")):
         raise _err("request_not_allowed", tr("확인된 에이전트 세션만 합류할 수 있습니다"), 403)
     code = normalize_code(raw_code)
     t = now()
@@ -770,19 +773,23 @@ def join(p: P.Principal, raw_code) -> dict:
             result = ("burned", burned)
         else:
             pair = hit
-            key = p.attrs["key"]
+            key = p.attrs.get("key") or ""
             ini = _member(pair, INITIATOR)
-            if pair.get("with") and pair["with"]["local"] != key:
-                raise _err("not_intended", tr("이 코드는 다른 세션을 위한 것입니다"), 403)
-            if ini.get("ref") and ini["ref"].get("local") == key:
+            if pair.get("with") and (remote_p or pair["with"]["local"] != key):
+                raise _err("not_intended", tr("이 코드는 다른 세션을 위한 것입니다"), 403)    # 특정 로컬 세션을 지목한 코드는 다른 Mac 이 쓸 수 없다
+            if not remote_p and ini.get("ref") and ini["ref"].get("local") == key:
                 raise _err("self_join", tr("자기가 만든 pair 에는 합류할 수 없습니다"), 400)
             j = _member(pair, JOINER)
-            j.update(ref={"local": key}, principal=p.id, name=p.attrs.get("name") or "", joined=t)
+            if remote_p:
+                j.update(ref={"remote": {"host": p.attrs.get("peer_id"), "key": p.obo.split("/", 1)[1]}}, principal=p.short(),
+                         name=p.attrs.get("name") or "", joined=t)
+            else:
+                j.update(ref={"local": key}, principal=p.id, name=p.attrs.get("name") or "", joined=t)
             pair["code"].update(state="redeemed", value=None)
             pair["approval"] = {"id": request_id_of(pair["id"]), "state": "pending", "created": t, "expires": t + APPROVAL_TTL,
                                 "phrase_misses": 0, "ticked": [], "phrase": pair["code"]["phrase"]}
             pair["state"], pair["updated"], pair["touched"] = JOINED, t, t
-            _audit("join", p.id, pair, reason="redeemed")
+            _audit("join", p.short(), pair, reason="redeemed")
             out = view(pair, p, t)
             out["phrase"] = pair["code"]["phrase"]
             out["pendingApproval"] = True

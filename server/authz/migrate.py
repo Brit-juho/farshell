@@ -188,6 +188,24 @@ def translate_delegation(item: dict) -> list[dict]:
     ck = ((item.get("child") or {}).get("key")) or ""
     if did and not _SAFE.fullmatch(did):
         return []
+    # 다른 호스트의 에이전트가 한쪽이면(`host`) 그쪽 주체는 `agent:local/<key>` 가 아니라 그 호스트가 보증하는 대리 주체다.
+    psub, csub = f"agent:local/{pk}", f"agent:local/{ck}"
+    for side, key in (("parent", pk), ("child", ck)):
+        host = ((item.get(side) or {}).get("host")) or ""
+        if not host:
+            continue
+        raw = key[len(host) + 1:] if key.startswith(f"{host}/") else ""
+        if not (_SAFE.fullmatch(host) and raw and _SAFE.fullmatch(raw)):
+            if side == "parent":
+                pk = ""
+            else:
+                ck = ""
+            continue
+        sub = f"peer:{host}/obo:agent:{host}/{raw}"
+        if side == "parent":
+            psub, pk = sub, raw
+        else:
+            csub, ck = sub, raw
     ended = item.get("state") in _ENDED
     st: dict = {"state": "ended", "ended_at": item.get("closed_at"), "end_reason": item.get("close_reason")} if ended \
         else {"state": "active"}
@@ -195,11 +213,11 @@ def translate_delegation(item: dict) -> list[dict]:
     out = []
     if did and pk and _SAFE.fullmatch(pk):
         out.append(_scoped({"id": f"dc-{did}", "origin": f"{DELEG_ORIGIN}{did}:control",
-                            "subject": f"agent:local/{pk}", "resource": f"deleg:local/{did}", **base},
+                            "subject": psub, "resource": f"deleg:local/{did}", **base},
                            ["deleg.control"], {"deleg.control": {"role": ["parent"]}}))
     if did and ck and _SAFE.fullmatch(ck):
         out.append(_scoped({"id": f"dr-{did}", "origin": f"{DELEG_ORIGIN}{did}:report",
-                            "subject": f"agent:local/{ck}", "resource": f"deleg:local/{did}", **base},
+                            "subject": csub, "resource": f"deleg:local/{did}", **base},
                            ["deleg.control"], {"deleg.control": {"role": ["child"]}}))
         fs = item.get("fs")
         if isinstance(fs, dict) and fs.get("mode") == "worktree" and _fs_path_ok(fs.get("path")):

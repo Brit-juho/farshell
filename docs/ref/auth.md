@@ -487,6 +487,38 @@ host scopes per caller, request/approve/deny lifecycle, CLI fallbacks, rollback,
 matrix: peer, relay, machine-token groups identical; the listed host-operation changes). `test_char_hosts.py` and the host-switch half of
 `test_char_relay.py` pin the old behaviour with the flag removed.
 
+## Other Macs, grant based (protocol v2, `VT_AUTHZ_ENFORCE=peer`)
+
+Off by default: without `peer` in `VT_AUTHZ_ENFORCE` the `/api/peer/v2/*` routes answer 404 like a missing route, the sender adds no `X-Peer-Obo`/`X-Peer-Proto`
+headers, `host` arguments are refused (409 `remote_disabled`), `tools/list` of the MCP server is unchanged and no new file is created (`peer_outbox.json`). Remote
+delegation also needs `deleg`; joining a pair also needs `pair`.
+
+**What changes for v1 peers: nothing.** A v1 Mac (no obo, no `X-Peer-Proto`) keeps its migrated `view`/`control` grant and every old route answers as before. The
+signature string only grows when an obo is present (`…\nobo:<principal>` after the optional body hash, `host_store/signing.py`), so a signature without an obo is
+byte-identical to the old one. Protocol v2 adds `proto: 2` to the ping answer (only when the flag is on).
+
+**On behalf of (obo).** A signature proves which Mac calls (`peer:A`). To act for one of its agents the Mac adds `X-Peer-Obo: agent:<A's id>/<session key>`, which is
+**part of the signature** and **A's voucher, not an authentication**: B builds the principal `peer:A/obo:agent:A/<key>` and decides by **its own grants** for that
+principal, approved by a person on B (D12: there is no approval on the asking side). A can only vouch for agents of its own id (`agent:<A>/…`). Swapping the obo,
+adding one to an unsigned request or stripping it all fail authentication; a body hash is required on every v2 call. Dropping the obo can only **reduce** what a call
+may do: grants for `peer:A/obo:…` do not apply to `peer:A`, while a host-level grant applies to both, and an agent route without an obo is 400. Replays are refused by
+the nonce cache as before.
+
+| Piece | Where | Rule |
+|---|---|---|
+| Gate | `routes/peer_protocol.capability_v2` | Flag off -> 404. Signature + required body hash + obo, 600 calls per minute per peer, an audit line per call (`peer_audit.log`). The handlers ask the engine; the gate never decides a permission. |
+| Shared sessions | `authz/remote.py` | `GET /v2/session/shared`, `POST /v2/session/read\|send`. A remote agent only sees **shared** sessions; the share policy is the ceiling (`ceilings.applies` covers obo principals; host-level peer grants stay exempt). Reading needs a grant from a person on B (202 pending, then retry); typing a line needs a grant approved by a **re-authenticated (elevated)** person (R4.3: for a peer everything beyond view/read is elevated). Read-only share: 403 at once. The grant is evaluated without a cache each call and again inside the pane lock before the first key. |
+| Surface ceiling (N-24) | `scopes.PEER_SURFACE_SCOPES`, `engine.decide` | An obo principal can use at most `ping`, `authz.request`, `session.view/read/input`, `msg.send`, `deleg.spawn/control` — **whatever grants exist**. Inbox/authz admin, pair management, session management, relay, browser and files are `surface_forbidden`. The relay allowlist (`relay_policy`) does not reach any v2, inbox, pair, delegation or agent-share route, and a second tunnel listener is **not** built: the ceiling is enforced in the engine. |
+| Requests | `inbox.create_remote_request` | Same limits as local agents (6/min, 20 pending per principal, 200 total, 5 minute denial cooldown); only `session.view/read/input` and `deleg.spawn` are requestable. The request shows in the normal inbox (`kind: generic`, subject `peer:A/obo:…`); the approver check treats the requester as a peer (`approving_kind`). |
+| Remote delegation | `delegation.py`, `authz/remote.py` | Parent and child ledgers on both Macs share the delegation id; the other side is recorded as `host` and a key `<host>/<key>` (a local tmux key never contains `/`). Remote spawn needs an elevated-approved `deleg.spawn` grant (`once` is consumed by the call), no cwd/worktree, this host's quota (3 open, 5/min) and `VT_AGENT_SPAWN`. Instructions and close go to `peer:<host>` through the outbox; reports travel the other way and are rebuilt by the receiver from its own ledger (`remote_seen` makes redelivery harmless). Control needs the engine's `deleg.control` for the derived obo grant **and** the ledger's key. |
+| Pair | `authz/pairs.py` | An obo agent can join a pair created on B (`POST /v2/pair/join`); member principal `peer:A/obo:…`, no local session key. A pair code that names a specific local session cannot be used from another Mac. |
+| Revocation (N-13, N-14) | `authz/remote.py` | Revoking a grant given to a Mac's agent, removing a Mac (`fsh host rm`, `revoke-all`) or an emergency stop writes a signed notice to `~/.vt/peer_outbox.json` (0600) and tries once at once; it retries with backoff (5s … 1h, 30 tries) while the server runs. The receiver **never deletes on the notice alone**: it asks the sender (`GET /v2/authz/grants`) and accepts only if the sender answers authenticated and the grant is gone («unregistered» for the host scope); unreachable or 5xx = not accepted. Accepting closes its open proxied terminals to that Mac and the delegations with it. `fsh host rm` tells the Mac before it deletes its own route back, so an unreachable Mac at that moment learns from its closed stream instead. |
+| Open terminals | `peer_svc.GrantWatch` | Unchanged: every 2 seconds the sender's grant is read again and a removed or downgraded Mac is disconnected (4401); the receiving proxy closes the browser socket with it. Total from revoke to the other side's closed stream: under 5 seconds (tested end to end). |
+| Secret rotation (D16 = b) | `host_store`, `peer_client.rotate_sync` | `fsh host rotate <id>` replaces the secret of **my outgoing connection** on both sides; no expiry. Two steps so that a failure at any point keeps the previous secret: (1) the other Mac creates a new secret and holds it pending for 10 minutes (both secrets work), (2) I swap my file in one write and confirm with a request signed by the new secret, which promotes it there. Failures: step 1 fails -> nothing changed; confirm answered 401 -> I restore the previous secret; confirm lost (network) -> `rotation: "unconfirmed"` and the next `fsh host rotate` settles it (confirmed or rolled back). The last rotation time is on both sides (`fsh host list`) and in the audit (`peer.rotate` with `rotated_at`, `previous_rotated_at`). The other direction of a mutual pairing is rotated from the other Mac. The new secret travels in the response of a signed request, the same exposure as pairing; it needs `peer` on the Mac you run it on and on the other one. |
+
+Not built (undecided or out of scope here): a physically separate tunnel listener for the peer surface, remote `cwd`/worktree for delegation, shared-session
+streaming for obo agents (agents poll `read`), and a direction-independent single-command rotation of both secrets of a mutual pairing.
+
 ## Re-check right before typing
 
 A decision made when a request arrives can be stale by the time the keys are sent: a grant can be revoked, a delegation closed or a

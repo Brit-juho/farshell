@@ -54,3 +54,13 @@ disconnected within 5 seconds. **`control` is a remote shell**: that Mac can typ
 files and use the relayed API — treat it like an SSH login. On the sending side only a person logged in through the browser can use the
 host list, remote session actions and the host switch; an agent or the machine token cannot. Raising a Mac's access with `fsh host allow-*`
 becomes an approval request that a person confirms in the web inbox. Details: [`auth.md`](./auth.md).
+
+## Another Mac's agents, protocol v2 (`VT_AUTHZ_ENFORCE=peer`)
+
+An agent on one Mac can read and type into a session **shared** on another Mac and can have that Mac create a sub-session, without becoming a `control` shell. The calling
+Mac vouches for its agent (`X-Peer-Obo`, signed); the receiving Mac's person approves in the normal web inbox, and the share policy there is the ceiling. MCP tools
+`read_session`, `send_to_session`, `list_shared_sessions`, `spawn_session` and `list_delegations` take a `host` argument (a host id from `fsh host list`) only when the server
+has the flag on; the answer to a first use is «waiting for approval, call again». Instructions to the child, results back to the parent's queue and closing follow the delegation
+ledger, which records the other Mac as `host`. Revoking on the receiving Mac cuts open terminal streams on the other side within 5 seconds, and a signed revoke notice (re-checked
+by asking the sender) cleans the rest. `fsh host rotate <id>` rotates a connection's secret on both sides atomically (the previous secret survives any failure). Protocol, limits and
+what is not built: [`auth.md`](./auth.md) «Other Macs, grant based»; endpoints: `API.md`.

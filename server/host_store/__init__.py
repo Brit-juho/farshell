@@ -246,10 +246,13 @@ def find_grant(peer_id: str) -> dict | None:
         return next((g for g in _read_unlocked()["grants"] if g["id"] == pid), None)
 
 
+_SECRET_KEYS = ("secret", "next", "prevSecret")      # 목록·응답에 절대 싣지 않는 키(회전 중의 새·옛 secret 포함)
+
+
 def list_grants() -> list[dict]:
     """secret을 뺀 목록 — 화면/CLI 표시용."""
     with _locked():
-        return [{k: v for k, v in g.items() if k != "secret"}
+        return [{k: v for k, v in g.items() if k not in _SECRET_KEYS}
                 for g in sorted(_read_unlocked()["grants"], key=lambda x: x.get("added", 0))]
 
 
@@ -282,7 +285,7 @@ def set_grant_level(peer_id: str, level: str) -> dict | None:
             return None
         g["level"] = level
         _write_unlocked(data)
-        return {k: v for k, v in g.items() if k != "secret"}
+        return {k: v for k, v in g.items() if k not in _SECRET_KEYS}
 
 
 def set_grant_agent(peer_id: str, on: bool) -> dict | None:
@@ -302,7 +305,7 @@ def set_grant_agent(peer_id: str, on: bool) -> dict | None:
         else:
             g.pop("agentMessages", None)
         _write_unlocked(data)
-        return {k: v for k, v in g.items() if k != "secret"}
+        return {k: v for k, v in g.items() if k not in _SECRET_KEYS}
 
 
 def touch_grant(peer_id: str) -> None:
@@ -360,7 +363,7 @@ def find_peer(peer_id: str) -> dict | None:
 
 def list_peers() -> list[dict]:
     with _locked():
-        return [{k: v for k, v in p.items() if k != "secret"}
+        return [{k: v for k, v in p.items() if k not in _SECRET_KEYS}
                 for p in sorted(_read_unlocked()["peers"], key=lambda x: x.get("added", 0))]
 
 
@@ -391,7 +394,7 @@ def rename_peer(peer_id: str, label: str) -> dict | None:
             return None
         p["label"] = (label or "").strip()[:LABEL_MAX_LEN] or p["id"]
         _write_unlocked(data)
-        return {k: v for k, v in p.items() if k != "secret"}
+        return {k: v for k, v in p.items() if k not in _SECRET_KEYS}
 
 
 def update_peer(peer_id: str, **fields) -> dict | None:
@@ -407,7 +410,7 @@ def update_peer(peer_id: str, **fields) -> dict | None:
             return None
         p.update(fields)
         _write_unlocked(data)
-        return {k: v for k, v in p.items() if k != "secret"}
+        return {k: v for k, v in p.items() if k not in _SECRET_KEYS}
 
 
 def revoke_all() -> dict:
@@ -421,6 +424,102 @@ def revoke_all() -> dict:
         _write_unlocked(data)
     logger.warning(f"[peer] revoke-all — peers {n_p}건, grants {n_g}건 전부 무효화")
     return {"peers": n_p, "grants": n_g}
+
+
+
+
+# --- secret 회전 (D16 = (b): `fsh host rotate`, 만료 없음) ----------------------------------------------
+#
+# 연결 하나의 secret 은 두 파일에 있다 — 부르는 쪽(A)의 `peers[]`, 받는 쪽(B)의 `grants[]`. 한쪽만 바뀌면 그 연결이 끊기므로
+# 두 단계로 바꾼다(어느 지점에서 죽어도 이전 secret 으로 돌아갈 수 있다):
+#   1. A -> B `POST /api/peer/v2/rotate`(옛 secret 으로 서명). B 가 새 secret 을 만들어 `grants[].next` 에 **보류**(10분)하고 응답에 싣는다.
+#      B 는 이 동안 옛 secret 과 새 secret 둘 다 받는다.
+#   2. A 가 새 secret 을 `peers[]` 에 한 번에(옛 값이 그대로일 때만) 쓴다 — 옛 secret 은 `prevSecret` 으로 남는다 — 그리고 새 secret 으로 서명한
+#      `POST /api/peer/v2/rotate/confirm` 을 보낸다. B 는 새 secret 으로 서명된 **첫 요청**에서 `next` 를 `secret` 으로 올리고 옛 것을 버린다.
+#   실패 처리: 1에서 실패하면 아무것도 안 바뀐다. 2의 확인이 거절(401)되면 A 가 `prevSecret` 으로 되돌린다. 확인이 네트워크 오류로 끝나면
+#   `rotation: "unconfirmed"` 로 남고 다음 `fsh host rotate`/`ping` 이 어느 쪽이 맞는지 보고 정리한다(`peer_client.settle_rotation`).
+NEXT_TTL = 600           # B 가 새 secret 을 보류해 두는 시간(초) — 이 안에 A 의 첫 요청이 와야 한다
+
+
+def begin_rotation(peer_id: str) -> str | None:
+    """B 쪽: 새 secret 을 만들어 보류한다(`next`). 없는 상대면 None. 이미 보류가 있으면 새로 만들어 덮는다."""
+    pid = normalize_id(peer_id)
+    if pid is None:
+        return None
+    secret = secrets.token_urlsafe(32)
+    with _locked():
+        data = _read_unlocked()
+        g = next((x for x in data["grants"] if x["id"] == pid), None)
+        if g is None:
+            return None
+        g["next"] = {"secret": secret, "exp": int(time.time()) + NEXT_TTL}
+        _write_unlocked(data)
+    return secret
+
+
+def pending_secret(grant: dict) -> str | None:
+    """grant 의 보류 중인(만료 전) 새 secret."""
+    n = grant.get("next")
+    if isinstance(n, dict) and n.get("secret") and int(n.get("exp", 0)) > int(time.time()):
+        return str(n["secret"])
+    return None
+
+
+def promote_next(peer_id: str) -> dict | None:
+    """B 쪽: 새 secret 으로 서명된 요청을 받았다 — 보류를 정식으로 올린다. 올린 grant(비밀 없이)를 돌려준다. 보류가 없으면 None."""
+    pid = normalize_id(peer_id)
+    if pid is None:
+        return None
+    with _locked():
+        data = _read_unlocked()
+        g = next((x for x in data["grants"] if x["id"] == pid), None)
+        if g is None or pending_secret(g) is None:
+            return None
+        g["secret"] = g["next"]["secret"]
+        g.pop("next", None)
+        g["previousRotatedAt"] = g.get("rotatedAt", 0)
+        g["rotatedAt"] = int(time.time())
+        _write_unlocked(data)
+        return {k: v for k, v in g.items() if k not in _SECRET_KEYS}
+
+
+def swap_peer_secret(peer_id: str, expect_old: str, new_secret: str) -> bool:
+    """A 쪽: `peers[]` 의 secret 을 **옛 값이 그대로일 때만** 새 값으로 바꾼다(옛 값은 `prevSecret`). 한 번의 락·한 번의 원자적 교체."""
+    pid = normalize_id(peer_id)
+    if pid is None or not new_secret:
+        return False
+    with _locked():
+        data = _read_unlocked()
+        p = next((x for x in data["peers"] if x["id"] == pid), None)
+        if p is None or not hmac.compare_digest(str(p.get("secret", "")), str(expect_old)):
+            return False
+        p["prevSecret"] = p["secret"]
+        p["secret"] = new_secret
+        p["previousRotatedAt"] = p.get("rotatedAt", 0)
+        p["rotatedAt"] = int(time.time())
+        p["rotation"] = "unconfirmed"
+        _write_unlocked(data)
+    return True
+
+
+def settle_peer_secret(peer_id: str, *, confirmed: bool) -> bool:
+    """A 쪽: 확인됐으면 옛 secret 을 버리고, 거절됐으면 옛 secret 으로 되돌린다. 보류 중인 회전이 없으면 False."""
+    pid = normalize_id(peer_id)
+    if pid is None:
+        return False
+    with _locked():
+        data = _read_unlocked()
+        p = next((x for x in data["peers"] if x["id"] == pid), None)
+        if p is None or p.get("rotation") != "unconfirmed":
+            return False
+        if confirmed:
+            p.pop("prevSecret", None)
+        else:
+            p["secret"] = p.pop("prevSecret", p["secret"])
+            p["rotatedAt"] = p.pop("previousRotatedAt", 0)
+        p.pop("rotation", None)
+        _write_unlocked(data)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -443,9 +542,11 @@ def revoke_all() -> dict:
 # 굳히지 않고 `VT_STATE_DIR`를 호출 시점에 읽기 때문이다(테스트도 환경변수로만
 # 격리한다). 그래서 재수출이 안전하다.
 from host_store.signing import (  # noqa: E402,F401
+    PROTO_VERSION,
     SIGNATURE_WINDOW_SEC,
     NonceCache,
     sign_request,
+    valid_obo,
     verify_signature,
 )
 from host_store.audit import (  # noqa: E402,F401
@@ -536,6 +637,8 @@ def _cli(argv: list[str]) -> int:
             lat = f"{p['latencyMs']}ms" if p.get("latencyMs") is not None else "-"
             print(f"      {p['id']:<16} {p['label']:<16} {p['url']}")
             print(f"      {'':<16} " + tr("마지막 확인 {when} · {lat} · v{version}", when=_fmt_when(p.get('lastSeen', 0)), lat=lat, version=p.get('version') or '?'))
+            if p.get("rotatedAt"):
+                print(f"      {'':<16} " + tr("마지막 secret 회전 {when}", when=_fmt_when(p["rotatedAt"])) + (" · " + tr("확인 안 됨") if p.get("rotation") else ""))
         print()
         print("  ▸ " + tr("나를 보도록 허용한 호스트 (grants)"))
         if not grants:
@@ -543,7 +646,8 @@ def _cli(argv: list[str]) -> int:
         for g in grants:
             agent = (" · " + tr("에이전트 메시지 수신")) if g.get("agentMessages") else ""
             print(f"      {g['id']:<16} {g['label']:<16} " + tr("등급 {level}", level=g['level']) + agent
-                  + " · " + tr("마지막 접속 {when}", when=_fmt_when(g.get('lastSeen', 0))))
+                  + " · " + tr("마지막 접속 {when}", when=_fmt_when(g.get('lastSeen', 0)))
+                  + ((" · " + tr("마지막 secret 회전 {when}", when=_fmt_when(g["rotatedAt"]))) if g.get("rotatedAt") else ""))
         print()
         print("  " + tr("추가: fsh host pair (상대 맥) → fsh host add <url> --ticket <티켓> (내 맥)"))
         print()
@@ -633,8 +737,10 @@ def _cli(argv: list[str]) -> int:
             print("  ✗ " + tr("id가 필요합니다"), file=sys.stderr)
             return 2
         pid = rest[0]
-        did_peer = remove_peer(pid)
         did_grant = remove_grant(pid)
+        if did_grant:
+            _notify_revoked(pid)          # 상대에게 가는 길(peers[])이 아직 있는 지금 알린다 — 아래에서 그 길도 지운다
+        did_peer = remove_peer(pid)
         if not (did_peer or did_grant):
             print("  ✗ " + tr("'{id}' 호스트가 없습니다", id=pid), file=sys.stderr)
             return 1
@@ -703,6 +809,33 @@ def _cli(argv: list[str]) -> int:
             print("  ✓ " + tr("{id} 에이전트 메시지 수신 → 끔", id=g['id']))
         return 0
 
+    if cmd == "rotate":
+        # 연결 secret 회전(D16) — 내가 그 호스트로 나가는 연결(peers[])의 secret 을 상대와 함께 바꾼다. 상대가 나를 부르는 방향은 상대 쪽에서 같은 명령으로.
+        if not rest:
+            print("  ✗ " + tr("id가 필요합니다: fsh host rotate <id>"), file=sys.stderr)
+            return 2
+        from authz import flags
+        if not flags.enforced("peer"):
+            print("  ✗ " + tr("secret 회전은 VT_AUTHZ_ENFORCE 에 peer 가 있을 때만 쓸 수 있습니다"), file=sys.stderr)
+            return 1
+        peer = find_peer(rest[0])
+        if peer is None:
+            print("  ✗ " + tr("'{id}' 호스트가 없습니다", id=rest[0]), file=sys.stderr)
+            return 1
+        import peer_client
+        try:
+            r = peer_client.rotate_sync(peer)
+        except peer_client.PeerError as e:
+            print("  ✗ " + tr("회전하지 못했습니다 — 이전 secret 을 그대로 씁니다: {reason}", reason=e.reason), file=sys.stderr)
+            return 1
+        audit(peer["id"], "rotate", True, f"secret 회전 (이번 {r['rotatedAt']}, 이전 {r['previousRotatedAt'] or '없음'})")
+        _audit_rotated_authz(peer["id"], r)
+        print("  ✓ " + tr("{id} secret 회전 완료 — 양쪽이 새 secret 으로 바뀌었습니다", id=peer["id"]))
+        if r["previousRotatedAt"]:
+            print("    " + tr("이전 회전: {when}", when=_fmt_when(r["previousRotatedAt"])))
+        print("    " + tr("상대가 나를 부르는 방향의 secret 은 상대 맥에서 'fsh host rotate {id}' 로 바꿉니다.", id=get_self()["id"]))
+        return 0
+
     if cmd == "log":
         pid = rest[0] if rest else ""
         rows = read_audit(pid, limit=50)
@@ -718,6 +851,9 @@ def _cli(argv: list[str]) -> int:
         return 0
 
     if cmd == "revoke-all":
+        for g in list_grants():
+            if remove_grant(g["id"]):
+                _notify_revoked(g["id"])
         r = revoke_all()
         print("  ✓ " + tr("전부 무효화 — peers {peers}건, grants {grants}건", peers=r['peers'], grants=r['grants']))
         print("    " + tr("상대 맥에도 남아 있는 항목은 그쪽에서 'fsh host rm' 하세요."))
@@ -725,6 +861,26 @@ def _cli(argv: list[str]) -> int:
 
     print(f"unknown command: {cmd}", file=sys.stderr)
     return 2
+
+
+def _notify_revoked(pid: str) -> None:
+    """상대에게 «권한을 거뒀다»고 알린다(프로토콜 v2, 켜져 있을 때만). 이 프로세스가 곧 끝나므로 한 번 동기로 시도한다."""
+    try:
+        from authz import remote
+        remote.notify_revoked(pid, sync=True)
+    except Exception as e:  # noqa: BLE001 — 알림 실패가 회수를 막으면 안 된다
+        logger.warning(f"회수 알림 실패: {type(e).__name__}: {e}")
+
+
+def _audit_rotated_authz(pid: str, r: dict) -> None:
+    """A 쪽 회전을 authz 감사 체인에도 남긴다(마지막 회전 시각 포함). 실패해도 회전은 끝났다."""
+    try:
+        from authz import audit as authz_audit
+        authz_audit.append({"principal": "local:cli", "action": "peer.rotate", "resource": f"host:{pid}", "decision": "allow",
+                            "result": "rotated", "reason": "secret_rotated",
+                            "detail": {"rotated_at": r.get("rotatedAt"), "previous_rotated_at": r.get("previousRotatedAt")}})
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"회전 감사 기록 실패: {type(e).__name__}: {e}")
 
 
 def host_store_self_id_hint() -> str:

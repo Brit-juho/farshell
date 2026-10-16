@@ -61,6 +61,23 @@ def browser_close_for(upstream_code: int | None) -> tuple[int, str]:
     return _terminal_upstream_codes().get(upstream_code or 0, (1000, ""))
 
 
+# 열려 있는 원격 터미널 스트림(호스트 id -> {(브라우저 소켓, 그 소켓의 event loop)}). 상대 호스트가 «당신의 권한을 거뒀다»고 알려 와서 확인되면
+# (`authz/remote.py` on_revoke) 상대의 종료 코드를 기다리지 않고 바로 닫는다 — 상대가 2초 안에 끊는 것(`GrantWatch`)과 함께 5초 한도를 지킨다.
+_OPEN: dict[str, set] = {}
+
+
+def close_streams(host_id: str) -> int:
+    """`host_id` 로 열린 스트림을 닫는다(어느 스레드에서든 부를 수 있다). 닫기를 시작한 수."""
+    n = 0
+    for ws, loop in list(_OPEN.get(host_store.normalize_id(host_id) or host_id, ())):
+        try:
+            asyncio.run_coroutine_threadsafe(ws.close(code=4001, reason=tr("원격 호스트가 권한을 거뒀습니다")), loop)
+            n += 1
+        except Exception:  # noqa: BLE001 — 이미 닫혔다
+            pass
+    return n
+
+
 def _ws_url(base_url: str, path: str) -> str:
     u = base_url.rstrip("/")
     if u.startswith("https://"):
@@ -138,6 +155,8 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
 
     down = asyncio.create_task(_down())
     up = asyncio.create_task(_up())
+    reg = (ws, asyncio.get_running_loop())
+    _OPEN.setdefault(peer["id"], set()).add(reg)
     try:
         done, pending = await asyncio.wait({down, up}, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
@@ -145,6 +164,7 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
     except WebSocketDisconnect:
         pass
     finally:
+        _OPEN.get(peer["id"], set()).discard(reg)
         down.cancel()
         up.cancel()
         try:

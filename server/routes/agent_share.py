@@ -241,9 +241,25 @@ def _pending_response(req: dict, kind: str) -> JSONResponse:
         "reason": f"사용자 승인 대기 중({what}) — 승인되면 같은 호출을 다시 하세요"}, status_code=202)
 
 
+async def _remote_share(request: Request, host: str, action: str, method: str, path: str, body: dict | None):
+    """`host` 인자 — 다른 Mac 의 공유 세션. 호출자는 이 맥에서 평소처럼 확인하고(`_identify`), 그 에이전트를 **대리 주체**로 보증해 상대 호스트의
+    `/api/peer/v2/session/*` 를 부른다. 허용은 상대 호스트의 grant 가 정한다(없으면 그쪽 사람에게 가는 202). `VT_AUTHZ_ENFORCE=peer` 가 필요하다."""
+    from authz import remote
+    try:
+        me = await _identify(request, action)
+        out_body = None if body is None else {**body, "agentName": me.name}
+        status, out = await asyncio.to_thread(remote.call, host, method, path, out_body, agent_key=me.key)
+    except ShareError as e:
+        return _err(e)
+    return JSONResponse(out, status_code=status)
+
+
 @router.get("/api/agent/shared", response_model=SharedListResponse)
 async def agent_list_shared(request: Request):
-    """공유된 세션 — 닉네임·모드·상태와 **내** 권한 상태. 세션 이름·cwd 는 싣지 않는다."""
+    """공유된 세션 — 닉네임·모드·상태와 **내** 권한 상태. 세션 이름·cwd 는 싣지 않는다. `?host=<id>` 는 다른 Mac 의 공유 세션."""
+    host = (request.query_params.get("host") or "").strip()
+    if host:
+        return await _remote_share(request, host, "list", "GET", "/api/peer/v2/session/shared", None)
     try:
         me = await _identify(request, "list")
         snap = await _snap()
@@ -290,6 +306,14 @@ async def _target_for(request: Request, action: str, body: dict):
 async def agent_read(request: Request):
     body = await _body(request)
     nick = str(body.get("nickname") or "")[:32]
+    host = str(body.get("host") or "").strip()
+    if host:
+        try:
+            agent_share.check_lines(body.get("lines"))
+        except ShareError as e:
+            return _err(e)
+        return await _remote_share(request, host, "read", "POST", "/api/peer/v2/session/read",
+                                   {"nickname": nick, **({"lines": body["lines"]} if body.get("lines") is not None else {})})
     try:
         lines = agent_share.check_lines(body.get("lines"))
         me, snap, target = await _target_for(request, "read", body)
@@ -319,6 +343,17 @@ async def agent_read(request: Request):
 @router.post("/api/agent/shared/send", response_model=SendResponse)
 async def agent_send(request: Request):
     body = await _body(request)
+    host = str(body.get("host") or "").strip()
+    if host:
+        try:
+            text = agent_share.check_send_text(body.get("text"))
+            enter = body.get("enter", False)
+            if not isinstance(enter, bool):
+                raise ShareError("bad_enter", "enter 는 true/false 입니다", 400)
+        except ShareError as e:
+            return _err(e)
+        return await _remote_share(request, host, "send", "POST", "/api/peer/v2/session/send",
+                                   {"nickname": str(body.get("nickname") or "")[:32], "text": text, "enter": enter})
     try:
         text = agent_share.check_send_text(body.get("text"))
         enter = body.get("enter", False)

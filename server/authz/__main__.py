@@ -248,6 +248,18 @@ def sock_status(argv: list[str]) -> int:
     return 0
 
 
+def remote_status(argv: list[str]) -> int:
+    """`python -m authz remote-status` — fsh doctor 가 쓴다: `enabled|못 보낸 회수 알림|포기한 알림|확인 안 된 회전`. 항상 0(진단이지 판정이 아니다)."""
+    from . import flags, remote
+    import host_store
+    items = remote.outbox_items()
+    pending = sum(1 for x in items if x.get("state") != "dead")
+    dead = len(items) - pending
+    unconfirmed = sum(1 for p in host_store._read_unlocked().get("peers", []) if p.get("rotation") == "unconfirmed")
+    _p(f"{int(flags.enforced('peer'))}|{pending}|{dead}|{unconfirmed}")
+    return 0
+
+
 def legacy_denied(argv: list[str]) -> int:
     """`python -m authz legacy-denied [--json]` — 최근 24h 에 `legacy_token_scope` 로 거절된 (경로, UA) 별 횟수. fsh doctor 가 쓴다."""
     ap = argparse.ArgumentParser(prog="authz legacy-denied")
@@ -282,5 +294,7 @@ if __name__ == "__main__":
         sys.exit(store_status(sys.argv[2:]))
     if len(sys.argv) > 1 and sys.argv[1] == "sock-status":
         sys.exit(sock_status(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "remote-status":
+        sys.exit(remote_status(sys.argv[2:]))
     print("사용법: python -m authz migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]")
     sys.exit(2)

@@ -54,6 +54,7 @@ from authz import leases as authz_leases
 from authz import preauth as authz_preauth
 from authz import msg_svc
 from authz import peer_svc
+from authz import remote
 from i18n import tr
 from routes.peer_protocol import (
     PeerDenied,
@@ -332,7 +333,7 @@ async def peer_ping(request: Request, grant: dict):
     서명이 60초 창 안에 들어온다.
     """
     me = host_store.get_self()
-    return {
+    out = {
         "ok": True,
         "id": me["id"],
         "label": me["label"],
@@ -340,6 +341,9 @@ async def peer_ping(request: Request, grant: dict):
         "serverTime": time.time(),
         "level": grant["level"],
     }
+    if remote.enabled():
+        out["proto"] = host_store.PROTO_VERSION      # 프로토콜 v2(대리 주체 obo) 지원 — 꺼짐·옛 서버의 응답에는 이 키가 없다
+    return out
 
 
 # --- 3단계: 입력(control) · 출력 스트림 -------------------------------------------
