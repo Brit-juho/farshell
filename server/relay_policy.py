@@ -65,6 +65,12 @@ _HTTP_RULES: tuple[tuple[re.Pattern, frozenset], ...] = tuple(
     )
 )
 
+# 명시해야만 열리는 규칙 — 기본 허용 목록(`_HTTP_RULES`)과 `http_allowed` 에 **들지 않는다**. 권한 엔진이 켜진 서버에서만 그룹 이름
+# (`scopes.OPTIN_RELAY_GROUPS`)으로 판정하며, 옛 등급(view/control)만으로는 절대 열리지 않는다. 브라우저 broker(`/api/browser/*`).
+_OPTIN_HTTP_RULES: tuple[tuple[re.Pattern, frozenset], ...] = (
+    (re.compile(r"/api/browser/(adapters|tabs)(/.*)?"), _ANY),
+)
+
 # 탭의 files 규칙이 넓어서(`/api/files/[^/]+`) 아래를 먼저 막는다 — 공유 링크
 # 생성(승격)과 다른 peer로 보내기(전이).
 _HTTP_DENY = (
@@ -102,6 +108,19 @@ def http_allowed(method: str, path: str) -> bool:
         return False
     m = method.upper()
     return any(rx.fullmatch(p) and m in methods for rx, methods in _HTTP_RULES)
+
+
+def optin_group(method: str, path: str) -> str | None:
+    """명시해야 열리는 그룹의 이름(`browser`). 경로 정리(`_clean`)를 통과하고 메서드가 맞을 때만."""
+    p = _clean(path)
+    if p is None:
+        return None
+    m = method.upper()
+    for rx, methods in _OPTIN_HTTP_RULES:
+        if rx.fullmatch(p) and m in methods:
+            from authz import scopes
+            return scopes.OPTIN_RELAY_HTTP_GROUPS.get(rx.pattern)
+    return None
 
 
 def ws_allowed(path: str) -> bool:

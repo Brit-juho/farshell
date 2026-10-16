@@ -416,10 +416,11 @@ def test_saga_crash_at_every_step_then_sweep_is_clean(world, monkeypatch, step, 
         saga.start("principal", w["target"])
     rec = saga.list_all()[-1]
     assert rec["state"] == "running"                                                    # 죽었으니 끝나지 않았다
-    assert set(rec["steps"]) == set(STEPS[:STEPS.index(step)])                         # 죽은 단계 앞까지만 기록됐다(뒤에 죽어도 그 단계는 기록 전)
+    cur = saga.step_names()                                                              # 켜진 기능(예: browser)이 끼운 단계까지 포함한 지금 목록
+    assert set(rec["steps"]) == set(cur[:cur.index(step)])                              # 죽은 단계 앞까지만 기록됐다(뒤에 죽어도 그 단계는 기록 전)
     assert saga.sweep() == [rec["id"]]                                                  # lifespan sweep 이 이어한다
     after = saga.get(rec["id"])
-    assert after["state"] == "done" and set(after["steps"]) == set(STEPS)
+    assert after["state"] == "done" and set(after["steps"]) == set(cur)
     assert residue(w) == CLEAN
     assert saga.sweep() == []
 

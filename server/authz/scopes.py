@@ -84,6 +84,10 @@ RELAY_WS_GROUPS: dict[str, str] = {
     r"/ws-fs-watch": "ws.fswatch",
 }
 ALL_RELAY_GROUPS: tuple[str, ...] = tuple(sorted({*RELAY_HTTP_GROUPS.values(), *RELAY_WS_GROUPS.values()}))
+# 명시해야만 열리는 relay 그룹 — 기본 그룹 목록(`ALL_RELAY_GROUPS`)·프리셋·`*`·사람 기본 권한에 들지 않는다. grant 가 이름으로 적어야 하고,
+# deny 규칙(금지)은 넓게 막으므로 이 그룹도 덮는다. 규칙 패턴은 `relay_policy._OPTIN_HTTP_RULES`.
+OPTIN_RELAY_GROUPS: tuple[str, ...] = ("browser",)
+OPTIN_RELAY_HTTP_GROUPS: dict[str, str] = {r"/api/browser/(adapters|tabs)(/.*)?": "browser"}
 # 「relay 를 쓸 수 있는가」(연결 관문) — 그룹 하나 이상을 가졌는지를 묻는다.
 ANY_GROUP = "*"
 
@@ -97,6 +101,7 @@ class Cond:
     domain: tuple                 # 가능한 값
     default: tuple                # grant 에 조건이 없을 때의 값(최소 권한)
     required: bool = True         # 컨텍스트에 값이 없으면 거부하는가
+    extra: tuple = ()             # 명시해야만 허용되는 값 — `*`·기본값·사람 기본에 들지 않는다(deny 는 포함)
 
 
 INPUT_MODES = ("line", "raw")
@@ -115,7 +120,7 @@ COND_SPEC: dict[str, tuple[Cond, ...]] = {
     "fs.write": (Cond("op", "ops", FS_WRITE_OPS, ("write",)),),
     "browser": (Cond("op", "ops", BROWSER_OPS, BROWSER_OPS),),
     "browser.sensitive": (Cond("op", "ops", SENSITIVE_OPS, ()),),
-    "relay": (Cond("group", "groups", ALL_RELAY_GROUPS, ()),),
+    "relay": (Cond("group", "groups", ALL_RELAY_GROUPS, (), extra=OPTIN_RELAY_GROUPS),),
 }
 # (scope -> 판정 컨텍스트에 반드시 있어야 하는 키). 메타테스트가 모든 호출 지점과 대조한다.
 REQUIRED_CONDS: dict[str, tuple[str, ...]] = {
@@ -134,15 +139,15 @@ def _expand_new(p: str) -> set[str]:
 
 def _values(c: Cond, given, *, deny: bool) -> frozenset:
     if given is None:
-        return frozenset(c.domain if deny else c.default)
+        return frozenset((*c.domain, *c.extra) if deny else c.default)
     if isinstance(given, str):
         given = [given]
     out: set = set()
     for v in given:
         v = str(v)
         if v == "*":
-            out |= set(c.domain)
-        elif v in c.domain:
+            out |= set((*c.domain, *c.extra) if deny else c.domain)
+        elif v in c.domain or v in c.extra:
             out.add(v)
     return frozenset(out)
 
@@ -656,9 +661,12 @@ def escalation(old: Optional[dict], new: dict) -> list[str]:
 
 
 def relay_group(method: str, path: str) -> Optional[str]:
-    """relay 대상의 그룹 이름(`relay` scope 의 조건 값). 허용 목록 밖이면 None."""
+    """relay 대상의 그룹 이름(`relay` scope 의 조건 값). 허용 목록 밖이면 None. 명시해야 열리는 그룹(`OPTIN_RELAY_GROUPS`)도 여기서만 찾는다."""
     import relay_policy
 
+    og = relay_policy.optin_group(method, path)
+    if og:
+        return og
     if not relay_policy.http_allowed(method, path):
         return None
     p = relay_policy._clean(path)

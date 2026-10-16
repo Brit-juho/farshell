@@ -277,6 +277,8 @@ def whoami(p: P.Principal, now: Optional[float] = None) -> dict:
                "presets": presets_within(caps), "authz": "ok"}
         if flags.enforced("pair"):
             out["features"] = {"pair": True}          # 켜졌을 때만 키가 생긴다(꺼짐 = 응답이 예전과 같다) — MCP 가 pair 도구 노출을 정한다
+        if flags.enforced("browser"):
+            out.setdefault("features", {})["browser"] = True       # 켜졌을 때만 키가 생긴다 — MCP 가 브라우저 도구 노출을 정한다
         if flags.enforced("peer"):
             out.setdefault("features", {})["remote"] = True      # 다른 Mac 의 공유 세션·위임을 `host` 인자로 쓸 수 있다(MCP 가 인자를 보여 준다)
         return out

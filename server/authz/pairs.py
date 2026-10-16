@@ -18,7 +18,7 @@ grant 묶음을 쓰고(`pair_id` 표시), pair 가 끝나면 그 grant·lease �
 
 ## 역할 · handoff
   역할은 `driver`·`navigator` 둘뿐이고 driver 는 언제나 정확히 한 명이다. navigator = 「협업」 프리셋(보기·읽기·메시지·파일 읽기), driver = 「운전」(+한 줄 입력·파일 쓰기·
-  위임 spawn). 이 빌드에는 브라우저 중개가 없어 프리셋의 `browser` 는 빼고 준다. 사람 구성원은 역할과 무관하게 언제나 입력할 수 있고(사람 기본 권한),
+  위임 spawn). 프리셋의 `browser` 는 빼고 준다(결정 필요 — 브라우저 broker 에서 pair 구성원이 쓰려면 grant 를 따로 받는다). 사람 구성원은 역할과 무관하게 언제나 입력할 수 있고(사람 기본 권한),
   에이전트 입력은 기존 사람-입력 중 양보 규칙(`pane_input`)이 그대로 비켜 선다. handoff = driver 가 제안 → navigator 가 수락, 저장소 락 아래에서
   역할과 grant 를 한 번에 바꾸고 세대 번호를 하나 올린다. 2분 안에 수락하지 않으면 원래대로. 사람이 제안하면(override) 수락 없이 곧바로 바뀐다.
 
@@ -365,7 +365,7 @@ def _deny_log(who: str, action: str, reason: str) -> None:
 
 
 def role_caps(role: str) -> tuple[list, dict]:
-    """역할 → (scopes, sconds). navigator = 「협업」, driver = 「운전」 — 브라우저 중개가 아직 없어 `browser` 는 뺀다."""
+    """역할 → (scopes, sconds). navigator = 「협업」, driver = 「운전」 — 프리셋에는 `browser` 를 넣지 않는다(브라우저 broker 는 있지만 pair 승인 화면이 보여 주는 묶음에 없던 권한이라 따로 정한다 — 결정 필요)."""
     if role not in ROLES:
         raise ValueError(role)
     sc, cd = S.preset("collab" if role == NAVIGATOR else "drive")

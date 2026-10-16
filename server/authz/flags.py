@@ -5,7 +5,8 @@
 (dual-write) 플래그를 끄면 곧바로 이전 동작으로 돌아간다.
 
 환경변수는 호출할 때마다 읽는다(모듈 상태 없음 — 테스트가 monkeypatch 로 바꾸는 관례).
-이 빌드에서 의미가 있는 토큰은 `share`·`deleg`·`msg`·`peer`·`legacy`·`lease`·`pair` 이다. `pair` 는 pair 기능 전체의 마스터 스위치다 —
+이 빌드에서 의미가 있는 토큰은 `share`·`deleg`·`msg`·`peer`·`legacy`·`lease`·`pair`·`browser` 이다. `browser` 는 브라우저 broker 의 마스터 스위치다 —
+꺼져 있으면 `/api/browser/*` 라우트는 없는 라우트와 같은 404 로 답하고 MCP 브라우저 도구도 보이지 않는다. `pair` 는 pair 기능 전체의 마스터 스위치다 —
 꺼져 있으면 모든 pair 라우트가 409 `pair_disabled` 로 답하고 그 밖의 어떤 동작도 바뀌지 않는다. `lease` 는 폴더 lease 의 강제(쓰기 거부)·
 회수 saga 를 켠다 — lease 를 잡고 놓는 API 자체는 이 토큰과 무관하게 항상 있다(권고). 모르는 토큰은 무시하고 `unknown()`으로만 보인다(오타가 조용히
 "꺼짐"이 되는 것을 doctor 가 짚을 수 있게).
@@ -17,8 +18,8 @@ import os
 from typing import Mapping, Optional
 
 ENV = "VT_AUTHZ_ENFORCE"
-KNOWN = ("share", "deleg", "msg", "peer", "legacy", "lease", "pair")
-IMPLEMENTED = ("share", "deleg", "msg", "peer", "legacy", "lease", "pair")  # 이 빌드에서 실제로 동작하는 토큰
+KNOWN = ("share", "deleg", "msg", "peer", "legacy", "lease", "pair", "browser")
+IMPLEMENTED = ("share", "deleg", "msg", "peer", "legacy", "lease", "pair", "browser")  # 이 빌드에서 실제로 동작하는 토큰
 
 
 def tokens(env: Optional[Mapping[str, str]] = None) -> frozenset[str]:

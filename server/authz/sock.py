@@ -98,6 +98,11 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", r"/api/pairs(/[^/]+/status)?", "fsh pair status|ls · mcp pair_status"),
     ("POST", r"/api/pairs(/join|/[^/]+/(code|handoff|handoff/accept))?", "fsh pair start|code|join|handoff|accept · mcp pair_create|pair_join|pair_handoff|pair_accept"),
     ("DELETE", r"/api/pairs/[^/]+", "fsh pair end|revoke"),
+    # 브라우저 broker — 에이전트(격리 탭 열기·조작·닫기)와 터미널 fsh(어댑터 켜기·탭 목록·닫기). 마스터 스위치(`browser`)가 꺼져 있으면 라우트가 404 로 답한다.
+    ("GET", r"/api/browser/(adapters|tabs)", "fsh browser adapters|tabs · mcp browser_list_adapters|browser_tabs"),
+    ("POST", r"/api/browser/(tabs|adapters/[^/]+/enable|tabs/[^/]+/(navigate|snapshot|screenshot|click|type|eval|cookies|storage|network|handoff))",
+     "fsh browser enable · mcp browser_open|browser_navigate|browser_snapshot|browser_screenshot|browser_click|browser_type|browser_eval|browser_handoff"),
+    ("DELETE", r"/api/browser/tabs/[^/]+", "fsh browser close · mcp browser_close"),
 )
 _ROUTES_RE = tuple((m, re.compile(p), who) for m, p, who in ROUTES)
 

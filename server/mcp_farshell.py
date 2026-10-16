@@ -257,6 +257,75 @@ PAIR_TOOLS = [
     },
 ]
 TOOLS = TOOLS + PAIR_TOOLS
+_ID = {"id": {"type": "string", "description": "browser_open 이 돌려준 탭 id(bt-…)"}}
+BROWSER_TOOLS = [
+    {
+        "name": "browser_list_adapters",
+        "description": "브라우저 어댑터 목록 — 어느 것이 켜져 있고 쓸 수 있는지(사용할 수 없으면 이유). 켜는 것은 사람의 일이다(설정 또는 fsh browser enable).",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "browser_open",
+        "description": (
+            "격리된 브라우저 탭을 연다(사용자의 Chrome·로그인 세션과 무관한 새 프로필). 기본으로는 about:blank 와 FarShell 이 노출한 localhost 포트만 열린다 — "
+            "그 밖의 주소는 사람이 허용한 목록(url_allowlist)에 있어야 한다. 사설망·메타데이터 주소와 file:/chrome:/data: 등은 거부된다. "
+            "탭은 여는 에이전트의 것이다. 쓰고 나면 browser_close 로 닫는다."),
+        "inputSchema": {"type": "object", "properties": {
+            "url": {"type": "string", "description": "처음 열 주소(생략하면 about:blank)"},
+            "adapter": {"type": "string", "description": "어댑터 이름(생략하면 켜진 첫 어댑터)"}},
+            "additionalProperties": False},
+    },
+    {
+        "name": "browser_navigate",
+        "description": "탭을 다른 주소로 이동한다. redirect·iframe 까지 같은 주소 정책으로 검사되고, 어긋나면 탭이 about:blank 로 돌아간다. 분당 30번.",
+        "inputSchema": {"type": "object", "properties": {**_ID, "url": {"type": "string"}}, "required": ["id", "url"], "additionalProperties": False},
+    },
+    {
+        "name": "browser_snapshot",
+        "description": "페이지 본문 글과 누를 수 있는 요소 목록(번호 e1, e2 …). browser_click·browser_type 은 이 번호로만 요소를 가리킨다. 이동하면 번호가 무효가 되니 다시 찍는다.",
+        "inputSchema": {"type": "object", "properties": {**_ID}, "required": ["id"], "additionalProperties": False},
+    },
+    {
+        "name": "browser_screenshot",
+        "description": "탭의 화면을 PNG 로 찍는다.",
+        "inputSchema": {"type": "object", "properties": {**_ID}, "required": ["id"], "additionalProperties": False},
+    },
+    {
+        "name": "browser_click",
+        "description": "snapshot 의 요소 번호(예: e3)를 누른다. 누른 뒤 열린 주소도 정책으로 다시 검사된다.",
+        "inputSchema": {"type": "object", "properties": {**_ID, "ref": {"type": "string", "description": "snapshot 이 준 번호(예: e3)"}},
+                        "required": ["id", "ref"], "additionalProperties": False},
+    },
+    {
+        "name": "browser_type",
+        "description": "snapshot 의 입력 요소(번호)에 글을 넣는다(기존 내용을 바꾼다). submit=true 면 Enter 를 누른다. 최대 10000자.",
+        "inputSchema": {"type": "object", "properties": {**_ID, "ref": {"type": "string"}, "text": {"type": "string"}, "submit": {"type": "boolean"}},
+                        "required": ["id", "ref", "text"], "additionalProperties": False},
+    },
+    {
+        "name": "browser_eval",
+        "description": "페이지에서 JavaScript 를 실행하고 결과를 돌려준다(최대 64KB). 사람이 browser.js 권한을 승인한 에이전트에게만 보인다. 분당 10번.",
+        "inputSchema": {"type": "object", "properties": {**_ID, "script": {"type": "string", "description": "표현식 또는 함수(최대 20000자)"}},
+                        "required": ["id", "script"], "additionalProperties": False},
+    },
+    {
+        "name": "browser_close",
+        "description": "탭을 닫는다.",
+        "inputSchema": {"type": "object", "properties": {**_ID}, "required": ["id"], "additionalProperties": False},
+    },
+    {
+        "name": "browser_tabs",
+        "description": "내가 연 탭 목록(상태: open · orphaned=어댑터가 내려가 조작 불가 · released=소유권이 풀림).",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "browser_handoff",
+        "description": "탭을 사람에게 넘긴다 — 내 소유가 풀리고 탭은 닫히지 않는다. 이후 에이전트는 그 탭을 조작할 수 없다.",
+        "inputSchema": {"type": "object", "properties": {**_ID}, "required": ["id"], "additionalProperties": False},
+    },
+]
+TOOLS = TOOLS + BROWSER_TOOLS
+BROWSER_TOOL_NAMES = {t["name"] for t in BROWSER_TOOLS}
 # 도구 → 이 중 하나라도 가진 호출자에게만 보인다(whoami 의 유효 scope 기준). 목록에 없는 도구는 늘 보인다 —
 # 막히면 서버가 이유를 돌려주고, 그 도구들은 권한이 없을 때 승인 요청(202)으로 이어지기 때문이다.
 TOOL_SCOPES = {
@@ -269,6 +338,7 @@ TOOL_SCOPES = {
     "lease_list": ("fs.write", "fs.read"),
 }
 PAIR_TOOL_NAMES = {t["name"] for t in PAIR_TOOLS}
+BROWSER_TIMEOUT = 60.0
 _PARENT_ONLY = {"spawn_session", "send_to_child", "close_delegation"}
 _CHILD_ONLY = {"report_back"}
 
@@ -305,7 +375,7 @@ def _identity_headers() -> dict:
 _IDENTITY_PATHS = frozenset({"/api/agent/message"})
 
 
-def _api(method: str, path: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict]:
+def _api(method: str, path: str, body: dict | None = None, headers: dict | None = None, timeout: float | None = None) -> tuple[int, dict]:
     """소켓 우선(fsh_client — peer pid 가 곧 신원), 소켓이 없으면 예전처럼 TCP + 토큰.
     `X-Fsh-*` 헤더는 소켓에서는 힌트일 뿐이고 TCP 에서는 share_identity 가 검증한다 — 둘 다 그대로 싣는다."""
     server, token = _config()
@@ -316,7 +386,7 @@ def _api(method: str, path: str, body: dict | None = None, headers: dict | None 
     except ValueError:
         port = None
     try:
-        status, raw = fsh_client.call(method, path, body=body, headers=headers, timeout=TIMEOUT, server=server,
+        status, raw = fsh_client.call(method, path, body=body, headers=headers, timeout=timeout or TIMEOUT, server=server,
                                       token=token, port=port or _config_port())
     except (urllib.error.URLError, OSError) as e:
         return 0, {"reason": f"FarShell 서버에 연결할 수 없습니다({server}) — 'fsh status'로 확인: {e}"}
@@ -678,6 +748,104 @@ def tool_pair_accept(args: dict) -> tuple[str, bool]:
     return _pair_post("handoff/accept", args, "수락했습니다 — 이제 내가 driver 입니다.")
 
 
+def _browser_fail(status: int, data: dict) -> tuple[str, bool]:
+    code = data.get("error")
+    if code == "forbidden" and data.get("need"):
+        n = data["need"]
+        ops = f" (ops: {','.join(n['ops'])})" if n.get("ops") else ""
+        return (f"권한이 없습니다 — {', '.join(n.get('scopes') or [])}{ops} on {n.get('resource')} 가 필요합니다. request_access 로 사람에게 요청하세요."), True
+    if code == "url_blocked":
+        return f"이 주소는 열 수 없습니다({data.get('urlReason')}). 사람이 허용한 주소(url_allowlist)만 열립니다.", True
+    if code == "tab_orphaned":
+        return "이 탭은 브라우저 어댑터가 내려가 조작할 수 없습니다(orphaned). browser_close 로 닫고 새로 여세요.", True
+    return f"실패: {_fail(status, data)}", True
+
+
+def _bpath(tab: str, action: str = "") -> str:
+    return f"/api/browser/tabs/{urllib.parse.quote(str(tab), safe='')}" + (f"/{action}" if action else "")
+
+
+def _bpost(tab: str, action: str, body: dict | None = None) -> tuple[int, dict]:
+    return _api("POST", _bpath(tab, action), body or {}, headers=_identity_headers(), timeout=BROWSER_TIMEOUT)
+
+
+def tool_browser_list_adapters(args: dict) -> tuple[str, bool]:
+    status, data = _api("GET", "/api/browser/adapters", headers=_identity_headers())
+    if status != 200:
+        return _browser_fail(status, data)
+    rows = [f"- {a['name']}: {'켜짐' if a.get('enabled') else ('꺼짐' if a.get('available') else '사용 불가(' + str(a.get('reason')) + ')')}"
+            for a in data.get("adapters", [])]
+    return "\n".join(rows) or "어댑터가 없습니다", False
+
+
+def tool_browser_open(args: dict) -> tuple[str, bool]:
+    body = {k: args[k] for k in ("url", "adapter") if args.get(k)}
+    status, data = _api("POST", "/api/browser/tabs", body, headers=_identity_headers(), timeout=BROWSER_TIMEOUT)
+    if status not in (200, 201):
+        return _browser_fail(status, data)
+    t = data["tab"]
+    nav = t.get("navigate") or {}
+    return f"탭을 열었습니다: {t['id']} ({t['adapter']})" + (f"\n주소: {nav.get('url')}\n제목: {nav.get('title')}" if nav else ""), False
+
+
+def tool_browser_navigate(args: dict) -> tuple[str, bool]:
+    status, data = _bpost(args.get("id", ""), "navigate", {"url": args.get("url", "")})
+    if status != 200:
+        return _browser_fail(status, data)
+    return f"주소: {data.get('url')}\n제목: {data.get('title')}", False
+
+
+def tool_browser_snapshot(args: dict) -> tuple[str, bool]:
+    status, data = _bpost(args.get("id", ""), "snapshot")
+    if status != 200:
+        return _browser_fail(status, data)
+    els = "\n".join(f"{e['ref']} [{e.get('role')}] {e.get('name') or ''}".rstrip() for e in data.get("elements", []))
+    return f"주소: {data.get('url')}\n제목: {data.get('title')}\n\n[요소]\n{els or '(없음)'}\n\n[본문]\n{data.get('text', '')}", False
+
+
+def tool_browser_screenshot(args: dict):
+    status, data = _bpost(args.get("id", ""), "screenshot")
+    if status != 200:
+        return _browser_fail(status, data)
+    return [{"type": "image", "data": data.get("png", ""), "mimeType": "image/png"},
+            {"type": "text", "text": f"스크린샷 {data.get('bytes', 0)} 바이트"}], False
+
+
+def tool_browser_click(args: dict) -> tuple[str, bool]:
+    status, data = _bpost(args.get("id", ""), "click", {"ref": args.get("ref", "")})
+    return ("눌렀습니다", False) if status == 200 else _browser_fail(status, data)
+
+
+def tool_browser_type(args: dict) -> tuple[str, bool]:
+    status, data = _bpost(args.get("id", ""), "type", {"ref": args.get("ref", ""), "text": args.get("text", ""), "submit": bool(args.get("submit"))})
+    return ("입력했습니다", False) if status == 200 else _browser_fail(status, data)
+
+
+def tool_browser_eval(args: dict) -> tuple[str, bool]:
+    status, data = _bpost(args.get("id", ""), "eval", {"script": args.get("script", "")})
+    if status != 200:
+        return _browser_fail(status, data)
+    return json.dumps(data.get("result"), ensure_ascii=False, default=str) + ("\n(결과가 64KB 를 넘어 잘렸습니다)" if data.get("truncated") else ""), False
+
+
+def tool_browser_close(args: dict) -> tuple[str, bool]:
+    status, data = _api("DELETE", _bpath(args.get("id", "")), headers=_identity_headers(), timeout=BROWSER_TIMEOUT)
+    return ("탭을 닫았습니다", False) if status == 200 else _browser_fail(status, data)
+
+
+def tool_browser_tabs(args: dict) -> tuple[str, bool]:
+    status, data = _api("GET", "/api/browser/tabs", headers=_identity_headers())
+    if status != 200:
+        return _browser_fail(status, data)
+    rows = [f"- {t['id']} [{t['state']}] {t['adapter']}" + (" · 사람이 이어받음" if t.get("humanTaken") else "") for t in data.get("tabs", [])]
+    return "\n".join(rows) or "열린 탭이 없습니다", False
+
+
+def tool_browser_handoff(args: dict) -> tuple[str, bool]:
+    status, data = _bpost(args.get("id", ""), "handoff")
+    return ("탭을 사람에게 넘겼습니다 — 더는 조작할 수 없습니다", False) if status == 200 else _browser_fail(status, data)
+
+
 def _caller_whoami() -> dict | None:
     status, data = _api("GET", "/api/authz/whoami", headers=_identity_headers())
     return data if status == 200 and isinstance(data, dict) else None
@@ -712,6 +880,10 @@ def tools_for_caller() -> list[dict]:
     # pair 도구는 서버가 pair 기능을 켰다고 whoami 가 알려 줄 때만(unix socket) 보인다. 만들기는 pair.manage 도 있어야 한다.
     pair_on = bool(((who or {}).get("features") or {}).get("pair"))
     keep = [t for t in keep if t["name"] not in PAIR_TOOL_NAMES or (pair_on and (t["name"] != "pair_create" or "pair.manage" in (scopes or ())))]
+    # 브라우저 도구는 서버가 browser 기능을 켰다고 whoami 가 알려 줄 때만(unix socket) 보이고, 에이전트가 browser 권한을 가졌을 때만. eval 은 browser.js 도 있어야 한다.
+    browser_on = bool(((who or {}).get("features") or {}).get("browser"))
+    keep = [t for t in keep if t["name"] not in BROWSER_TOOL_NAMES
+            or (browser_on and (scopes is None or "browser" in scopes) and (t["name"] != "browser_eval" or (scopes is not None and "browser.js" in scopes)))]
     # 다른 Mac 권한(VT_AUTHZ_ENFORCE=peer)이 켜진 서버일 때만 `host` 인자를 보여 준다(꺼짐 = 도구 정의가 예전과 같다).
     if bool(((who or {}).get("features") or {}).get("remote")):
         keep = [_with_host(t) if t["name"] in HOST_TOOLS else t for t in keep]
@@ -752,6 +924,17 @@ HANDLERS = {
     "pair_status": tool_pair_status,
     "pair_handoff": tool_pair_handoff,
     "pair_accept": tool_pair_accept,
+    "browser_list_adapters": tool_browser_list_adapters,
+    "browser_open": tool_browser_open,
+    "browser_navigate": tool_browser_navigate,
+    "browser_snapshot": tool_browser_snapshot,
+    "browser_screenshot": tool_browser_screenshot,
+    "browser_click": tool_browser_click,
+    "browser_type": tool_browser_type,
+    "browser_eval": tool_browser_eval,
+    "browser_close": tool_browser_close,
+    "browser_tabs": tool_browser_tabs,
+    "browser_handoff": tool_browser_handoff,
 }
 
 
@@ -782,8 +965,9 @@ def handle(req: dict) -> dict | None:
             text, is_error = fn(params.get("arguments") or {})
         except Exception as e:  # noqa: BLE001 — 도구 실패는 에이전트가 읽을 글로
             text, is_error = f"도구 실행 중 오류: {e}", True
+        content = text if isinstance(text, list) else [{"type": "text", "text": text}]      # 스크린샷만 이미지 content 를 돌려준다
         return {"jsonrpc": "2.0", "id": rid, "result": {
-            "content": [{"type": "text", "text": text}], "isError": is_error}}
+            "content": content, "isError": is_error}}
     return {"jsonrpc": "2.0", "id": rid,
             "error": {"code": -32601, "message": f"method not found: {method}"}}
 

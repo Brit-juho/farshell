@@ -1933,6 +1933,7 @@ cmd_help() {
     fsh authz               Inbox and permissions, read-only (whoami|grants|requests|audit|revoke|panic)
     fsh lease               Folder leases — mark a path as "mine" (ls|acquire|renew|release|check|guard)
     fsh pair                Two sessions working one bundle together — driver/navigator (start|code|join|status|handoff|accept|end|revoke)
+    fsh browser             Isolated browser tabs for agents — adapters, tabs (adapters|enable|tabs|close)
     fsh msg                 Messages between agents (log / agents / send)
     fsh mcp                 MCP server (stdio) for agents — register it with Claude
     fsh worktree            Create/open/delete git worktrees (alias: wt)
@@ -1998,6 +1999,7 @@ HELP_EN
     fsh authz               승인함·권한 조회 (whoami|grants|requests|audit|revoke|panic) — 승인·회수는 웹/폰에서
     fsh lease               폴더 lease — 이 경로는 내가 쓰는 중 (ls|acquire|renew|release|check|guard)
     fsh pair                두 세션이 한 작업 묶음을 함께 — driver/navigator (start|code|join|status|handoff|accept|end|revoke)
+    fsh browser             에이전트용 격리 브라우저 탭 — 어댑터·탭 관리 (adapters|enable|tabs|close)
     fsh msg                 에이전트 간 메시지 (log / agents / send)
     fsh mcp                 에이전트용 MCP 서버(stdio) — Claude에 등록해 쓴다
     fsh worktree            git 워크트리 만들기/열기/삭제 (별칭: wt)
@@ -2037,7 +2039,7 @@ HELP
     start|restart|stop|status|mobile|password|otp|device|devices) topic="access" ;;
     attach|handoff|terminal) topic="terminal" ;;
     hooks|pane|queue|msg|mcp|delegate) topic="agent-state" ;;
-    authz|lease|pair) topic="permissions" ;;
+    authz|lease|pair|browser) topic="permissions" ;;
     voice-target) topic="target" ;;
     hotkey) topic="hotkeys" ;;
   esac
@@ -2459,6 +2461,22 @@ cmd_pair() {
       ;;
     *)
       echo "$(_t '사용법: fsh pair <start [--session S] [--dir D] [--role driver|navigator] [--lease] [--elevated a,b]|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]>')"
+      return 1 ;;
+  esac
+}
+
+# browser — 에이전트용 격리 브라우저 broker(어댑터 켜기·탭 목록·닫기). unix socket 로 서버에 말한다. 서버의 browser 스위치가 꺼져 있으면 그렇다고 알려 준다.
+cmd_browser() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
+    return 1
+  fi
+  case "${1:-adapters}" in
+    adapters|enable|tabs|close)
+      (cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" "$VT_PYTHON" -m authz browser "$@")
+      ;;
+    *)
+      echo "$(_t '사용법: fsh browser <adapters|enable <이름> [--off] [--yes]|tabs|close <id>>')"
       return 1 ;;
   esac
 }
@@ -5249,6 +5267,7 @@ case "${1:-help}" in
   authz)    shift; cmd_authz "$@" ;;
   lease)    shift; cmd_lease "$@" ;;
   pair)     shift; cmd_pair "$@" ;;
+  browser)  shift; cmd_browser "$@" ;;
   files)    shift; cmd_files "$@" ;;
   host|hosts) shift; cmd_host "$@" ;;
   mcp)      shift; cmd_mcp "$@" ;;

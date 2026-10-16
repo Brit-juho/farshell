@@ -83,6 +83,9 @@ SAMPLES = [
     ("GET", "/api/pairs"), ("GET", "/api/pairs/pr-1/status"), ("POST", "/api/pairs"), ("POST", "/api/pairs/join"),
     ("POST", "/api/pairs/pr-1/code"), ("POST", "/api/pairs/pr-1/handoff"), ("POST", "/api/pairs/pr-1/handoff/accept"),
     ("DELETE", "/api/pairs/pr-1"),
+    ("GET", "/api/browser/adapters"), ("GET", "/api/browser/tabs"), ("POST", "/api/browser/tabs"), ("POST", "/api/browser/adapters/x/enable"),
+    ("POST", "/api/browser/tabs/bt-1/navigate"), ("POST", "/api/browser/tabs/bt-1/eval"), ("POST", "/api/browser/tabs/bt-1/handoff"),
+    ("DELETE", "/api/browser/tabs/bt-1"),
 ]
 
 DENIED = [

@@ -30,6 +30,7 @@ ctx 키(필요 조건 키 외에는 선택):
                가졌다고 보지 않는다(`elevation_required`). 이 키가 없는 판정은 그대로다
   counts       `{scope: 이미 센 횟수}` — rate 비교(limits.exceeded)
   limits       `{scope: 한도}` — counts 와 비교할 한도를 표(limits.LIMITS) 대신 지정(선택)
+  values       browser.sensitive(cookies·storage) — 값을 청하는 요청이면 True. 그 grant 의 `conds.values` 가 참이어야 한다(R9.5). 이 키가 없는 판정은 그대로다
 """
 
 from __future__ import annotations
@@ -102,6 +103,8 @@ def _conds_ok(g: dict, ctx: dict) -> tuple[bool, str]:
             return False, "not_related"
     if "ops" in conds and ctx.get("op") not in conds["ops"]:
         return False, "cond_op"
+    if ctx.get("values") and not conds.get("values"):
+        return False, "cond_values"        # 브라우저 쿠키·storage 값(R9.5) — 값을 청하는 요청은 `values` 조건이 있는 grant 만
     if conds.get("fs_roots"):
         f = ctx.get("fs")
         if not isinstance(f, dict) or f.get("purpose") not in conds["fs_roots"]:

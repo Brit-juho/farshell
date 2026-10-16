@@ -214,6 +214,8 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
 - With `VT_AUTHZ_ENFORCE=peer` the five tools `read_session`, `send_to_session`, `list_shared_sessions`, `spawn_session` (needs `deleg` too) and `list_delegations` get an optional `host` argument (a host id): the call goes to that Mac's `/api/peer/v2/*` with this agent vouched for by a signed obo, and a person on that Mac approves (202 → «call again»). `tools/list` only shows `host` when `whoami` reports `features.remote`; with the flag off the tool definitions are unchanged. See `auth.md` «Other Macs, grant based».
 
 
+- With `VT_AUTHZ_ENFORCE=browser` the MCP server also offers isolated-browser tools — `browser_list_adapters`, `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`, `browser_type`, `browser_close`, `browser_tabs`, `browser_handoff`, and `browser_eval` only for an agent that holds `browser.js`. They appear only when `whoami` announces `features.browser` and the agent holds `browser`; elements are addressed by the `e1`… numbers from `browser_snapshot`. Rules and limits: `docs/ref/auth.md` «Browser broker» (user-profile attach and downloads are follow-up work).
+
 ### MCP 갱신·출처 추적 (2026-10-06)
 
 - 각 설정 항목에 `source_id`, 파일 revision, 원문 hash, 소유자, 쓰기 가능 여부,

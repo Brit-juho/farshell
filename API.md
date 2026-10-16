@@ -458,6 +458,38 @@ Errors are `{error, reason, …}`. A pair view never contains session keys, prin
 a wrong `phrase` is 400 `phrase_mismatch` (3rd miss: 409 `phrase_mismatch_locked`, the request is rejected); same decision again is
 `replayed:true`, a different one 409 `already_decided`. Events on `/ws-workspace`: `authz_request`/`authz_resolved`/`authz_revoked` with `kind:"pair"`.
 
+## Browser broker
+
+Agents open **isolated browser tabs** (a fresh profile, never the user's Chrome) and drive them through the server. **Without the `browser` token in
+`VT_AUTHZ_ENFORCE` every route below answers `404 {"detail":"Not Found"}`, exactly like a missing route**, and nothing else changes. Callers: an agent or
+the terminal's `fsh` over the unix socket, a logged-in browser (people), or another Mac's relay (only if a grant names the `browser` relay group;
+`eval`, cookies, storage and network are refused over a relay). Hooks and service daemons are 403 `request_not_allowed`. Rules, URL policy, redaction,
+limits and failure behavior: `docs/ref/auth.md` «Browser broker». Errors are `{error, reason, …}`; a missing permission is 403 `forbidden` with
+`need:{resource, scopes, ops}`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/browser/adapters` | A person or the terminal, or an agent holding `browser` (ops ∋ read). `{enabled, consented, configError, consentText, adapters:[{name, profile, available, reason, enabled, ops, intercepts}]}`. Names: `playwright`, `cdp` (real), and four local CLI adapters that are placeholders (`available:false, reason:"not_implemented"`). An adapter that declares `profile:"user"` is shown unavailable (`profile_user_unsupported`) |
+| POST | `/api/browser/adapters/{name}/enable` | **A person or the terminal only** (agents, peers and relays are 403). JSON `{enabled?: bool (default true), consent?: bool}`. The first time anything is turned on, `consent:true` (a real boolean) is required — else 409 `consent_required` + `consentText`. 409 `adapter_unavailable` (+`adapterReason`), 501 `unsupported_profile`, 404 for an unknown name, 503 `audit_unavailable` (the change is not made without its audit line) |
+| POST | `/api/browser/tabs` | Open an isolated tab. JSON `{url?, adapter?, profile?, attach?}`. Needs `browser` (ops ∋ open, and navigate when `url` is given). `201 {ok, tab, navigate?}`. 403 `forbidden`/`url_blocked`, 409 `adapter_disabled`/`no_adapter_enabled`/`adapter_unavailable`, 429 `too_many_tabs` (4 per owner, 12 in all), 503 `adapter_down`. **`profile:"user"` → 501 `unsupported_profile`; `attach` (a tab the broker did not open) needs `browser.sensitive` ops ∋ attach and then is still 501** — connecting to the user's own browser is not implemented |
+| GET | `/api/browser/tabs` | An agent sees its own tabs, a person or the terminal sees all: `{tabs:[{id, adapter, state: open\|orphaned\|released, owner, ownerName, pair, humanTaken, released, orphanReason, created, lastUsed, hostGen}]}`. Adapters are asked which tabs they still have; missing ones become `orphaned` |
+| POST | `/api/browser/tabs/{tab_id}/navigate` | JSON `{url}`. `browser` ops ∋ navigate, 30 per minute per tab. Every redirect hop, subframe and later load is checked by the URL policy; 403 `url_blocked` (+`urlReason`) and the tab is put back on `about:blank` if something slipped through |
+| POST | `/api/browser/tabs/{tab_id}/snapshot` | `{url, title, text, elements:[{ref:"e1", role, name, …}]}` (`browser` ops ∋ read). `ref`s are the only way to point at an element and die on navigation |
+| POST | `/api/browser/tabs/{tab_id}/screenshot` | `{png (base64), bytes}` (read) |
+| POST | `/api/browser/tabs/{tab_id}/click` | JSON `{ref}` (`browser` ops ∋ input). 400 `unknown_ref`; 403 `url_blocked` if the click opened a forbidden address |
+| POST | `/api/browser/tabs/{tab_id}/type` | JSON `{ref, text (≤10000), submit?}` (input) |
+| POST | `/api/browser/tabs/{tab_id}/eval` | JSON `{script (≤20000)}` → `{result, truncated}` (≤64 KB). **Needs `browser.js`** (nobody has it by default, not even a logged-in person), 10 per minute per tab. Never over a relay |
+| POST | `/api/browser/tabs/{tab_id}/cookies` | `browser.sensitive` ops ∋ cookies. Names, domains, paths and flags only. `{values:true}` additionally needs the grant condition `values` (else 403 `forbidden`, `why:"cond_values"`). Never over a relay |
+| POST | `/api/browser/tabs/{tab_id}/storage` | Same for local/session storage (key names only unless `values`) |
+| POST | `/api/browser/tabs/{tab_id}/network` | `browser.sensitive` ops ∋ network. `Cookie`, `Set-Cookie`, `Authorization`, `Proxy-Authorization` header values and bodies over 64 KB are always `[redacted]` |
+| POST | `/api/browser/tabs/{tab_id}/handoff` | The owner gives the tab to the person: ownership is released (`humanTaken:true`), the tab stays open, nobody (including the old owner) can operate it |
+| DELETE | `/api/browser/tabs/{tab_id}` | Close. The owner (`browser` ops ∋ close), or a person/the terminal for any tab. Works on `orphaned` tabs |
+
+Other statuses: 403 `forbidden` with `why:"not_owner"` (the tab belongs to someone else; only a grant naming that tab, or the same pair, works), 404 `not_found`,
+409 `tab_not_open` (ownership released), 413 `too_large`, 429 `rate_limited` (+`limit`: `general`/`navigate`/`js`), **503 `tab_orphaned`** (adapter down, host
+restarted or lease lost — every operation except close is refused; ownership is kept), 503 `adapter_down`, 503 `tabs_unreadable`, 503 `authz_unavailable`,
+503 `audit_unavailable` (scripts and sensitive reads are not run without their audit line).
+
 ## Folder leases (`/api/leases`)
 
 A lease marks a path (or glob) as «in use by this session». The endpoints exist whatever `VT_AUTHZ_ENFORCE` says; only with the `lease`

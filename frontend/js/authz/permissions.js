@@ -9,6 +9,7 @@ import { mountGrants } from './grants.js';
 import { mountAudit } from './audit.js';
 import { mountPairs } from './pairs.js';
 import { mountLeases } from './leases.js';
+import { mountBrowser } from './browser.js';
 
 /** 비상 정지 — 두 단계 확인 + 재인증. 사람 기본 권한·공유 정책·로그인은 그대로고, 사람이 아닌 주체의 권한과 대기 요청만 거둔다. */
 export function mountPanic(host) {
@@ -53,11 +54,12 @@ export function mountPanic(host) {
   idle();
 }
 
-/** hosts: {inbox, pairs, leases, grants, audit, panic} — 설정 섹션이 만든 빈 요소들(pairs·leases 는 없어도 된다). */
+/** hosts: {inbox, pairs, leases, browser, grants, audit, panic} — 설정 섹션이 만든 빈 요소들(pairs·leases·browser 는 없어도 된다). */
 export function mountPermissions(hosts) {
   mountInboxList(hosts.inbox);
   if (hosts.pairs) mountPairs(hosts.pairs);
   if (hosts.leases) mountLeases(hosts.leases);
+  if (hosts.browser) mountBrowser(hosts.browser);
   mountGrants(hosts.grants);
   mountAudit(hosts.audit);
   mountPanic(hosts.panic);

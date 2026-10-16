@@ -519,6 +519,63 @@ the nonce cache as before.
 Not built (undecided or out of scope here): a physically separate tunnel listener for the peer surface, remote `cwd`/worktree for delegation, shared-session
 streaming for obo agents (agents poll `read`), and a direction-independent single-command rotation of both secrets of a mutual pairing.
 
+## Browser broker (`VT_AUTHZ_ENFORCE=browser`)
+
+Agents can open **isolated browser tabs** and drive them through the server: `server/browser/{broker,policy,tabs,config}.py`, adapters in
+`server/browser/adapters/`, routes `routes/browser.py` (API: «Browser broker» in `API.md`), CLI `fsh browser`, MCP `browser_*`, Settings > Permissions > Browser.
+
+**Master switch and consent (N-26).** Off by default. Without `browser` in `VT_AUTHZ_ENFORCE` the routes answer a plain 404, MCP tools are hidden (`whoami`
+only announces `features.browser` when it is on), no file is created and no browser process is started. When on, each adapter is still off until a person (or the
+terminal's `fsh`) turns it on in `~/.vt/authz/browser.json` (0600); the first time ever needs an explicit consent (`consent: true`, a real boolean). A broken or
+unexpected settings file is read as **off** (a string `"true"` or `1` is off too) and is never overwritten. Agents cannot turn adapters on.
+
+**Adapters** (`BrowserAdapter`: `capabilities()`, `profile`, open/list/navigate/snapshot/screenshot/click/type/eval/cookies/storage/network/close, plus `frame_urls`,
+`settle`, `pop_blocked`, `blank`). `playwright` (isolated headless Chromium, one browser context per tab, one worker thread) and `cdp` (a headless Chromium it starts
+itself with a throwaway profile under `~/.vt/browser/`, the DevTools port bound to `127.0.0.1`, never exposed by any route, and it never attaches to a running
+browser) are real. The other four adapter slots (local CLI adapters) are placeholders that implement only the interface: `capabilities()` says
+`available:false` with a reason and every operation is refused. Optional packages are imported lazily; a missing one shows as unavailable and never breaks the server.
+**`profile=user` (attaching to the user's own Chrome) is not implemented**: an adapter that declares it is unavailable, `profile:"user"` and `attach` are 501
+`unsupported_profile` (the `attach` permission check still happens first). Follow-up work, together with downloads (R9.6, refused today).
+
+**Permissions.** Three scopes, resource `browser:local/new` (open, lists) or `browser:local/tab/<id>`: `browser` (ops open, navigate, read, input, close — nothing by default for agents;
+a logged-in person has it), `browser.js` (`eval`; **nobody has it by default**, not people either; elevated approval), `browser.sensitive` (ops cookies, storage, network,
+download, attach; elevated). Every operation asks the engine first; an engine error, a damaged grant store or an unreadable tab ledger refuses (fail closed). Optional
+grant conditions: `conds.url_allowlist` (below) and `conds.values` (cookie/storage values). The relay group `browser` exists for other Macs but is **not** in the default
+relay group list, presets or `*`: a grant must name it, and over a relay `eval`, cookies, storage and network are refused outright (values never cross a peer link).
+Pairs do not give `browser` in their presets (a pair's «browser_js»/«browser_sensitive» elevated items still work on `browser:local/*`).
+
+**Tab ownership (R9.2).** The agent that opens a tab owns it. Someone else needs a grant that names that tab (`browser:local/tab/<id>` or `browser:tab:<id>`) or a grant
+from the same pair; a wildcard `browser:local/*` is not enough. People and the terminal can list and close any tab but do not operate others' tabs.
+
+**URL policy (R9.3, N-27)** — one function (`policy.check_url`) used before navigating, at every redirect hop, for subframes, and again after each click/type/eval/navigate:
+the default (`url_allowlist: []`) allows only `about:blank` and `localhost`/`127.0.0.1`/`[::1]` on ports FarShell has exposed (the tunnel registry, minus dangerous ports such as
+remote debugging). Denied outright: `file:`, `chrome:`, `chrome-extension:`, `devtools:`, `view-source:`, top-level `data:`/`blob:`, `javascript:`, other `about:`, `ws:`, `ftp:`,
+credentials in the URL. RFC1918, link-local, CGNAT and metadata addresses (also written as decimal/octal/hex numbers or inside IPv6) need the **exact IP, CIDR or host:port** in the
+allowlist — `*.example.com` never covers an IP or special name and a lone `*` is ignored. Names are normalized the way a browser does (IDNA/punycode, NFKC, `\`, percent-decoding,
+trailing dot) and compared exactly, so look-alike domains do not match. A listed *name* is resolved and must not resolve to a non-public address unless that address is
+listed too; this is one layer against DNS rebinding, **not a complete defence** (the browser resolves again). The allowlist comes from the caller's own `browser` grants.
+In the browser, adapters block hops/subframes/subresources in the network layer; the broker re-reads every frame URL after an action (waiting briefly for late navigations), and
+on a violation puts the tab back on `about:blank` and refuses (`url_blocked`). Sub-resources (images, scripts, XHR) are checked more loosely: public hosts pass, but loopback
+(unexposed port), private, link-local and metadata targets are blocked unless listed. Tabs are addressed only by `snapshot` refs (`e1`…), never by selectors.
+
+**Redaction (R9.5).** Cookies and storage return names/domains/paths/flags only; values need `values:true` **and** a grant with `conds.values` (checked by the engine, so a
+grant without it is refused with `cond_values`). `network` always redacts `Cookie`, `Set-Cookie`, `Authorization`, `Proxy-Authorization` and bodies over 64 KB. Audit lines never
+hold values, script text, typed text, or URL query/fragment (origin + path hash only). Scripts and sensitive reads are not run if their audit line cannot be written.
+
+**Limits.** Per tab: 60 operations/min in all, 30 navigations/min, 10 `eval`/min; 4 tabs per owner and 12 in all; an idle tab is closed after 60 minutes (a tab handed to a person is not).
+
+**Failure (F7) and generations (N-28).** If an adapter goes down its open tabs become `orphaned` with the owner kept and every operation except close is refused
+(`tab_orphaned`, 503). The server takes a host lease at start (`~/.vt/authz/tabs.json`, dir 0700, file 0600 with explicit chmod) and bumps a generation number; a tab from an earlier
+generation, or with the lease held by another process, is refused — a restart orphans old tabs rather than adopting them. A damaged `tabs.json` refuses operations and is not overwritten.
+
+**Revocation (N-15).** Revoking a grant, pair, subject or an emergency stop (with `lease` in `VT_AUTHZ_ENFORCE`, as for the other revocation steps) runs the saga step `browser_tabs`:
+tabs are **not closed**, only their ownership is released (`state: released`; nobody can operate them, a person can close them). A tab the owner handed over with `browser_handoff`
+is marked `humanTaken` and is never touched by revocation.
+
+**Limits to state plainly.** The adapters are code in this repository driving a real browser: a page can still do what any web page can inside the allowed origins. The
+broker keeps agents inside the policy; it does not make the allowed pages trustworthy, and a process of the same user account can read `~/.vt` directly. The real adapters
+were exercised with fakes in CI and a real browser only when the `playwright` package is installed.
+
 ## Re-check right before typing
 
 A decision made when a request arrives can be stale by the time the keys are sent: a grant can be revoked, a delegation closed or a

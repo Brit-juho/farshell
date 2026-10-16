@@ -36,6 +36,7 @@ fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent
 fsh delegate [ls|close <id>]  # agent delegations (sub-sessions); close keeps the session
 fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # approval inbox, grants and audit (read-only; see below)
 fsh pair [start|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]]  # two sessions working one bundle as driver/navigator (see below; needs VT_AUTHZ_ENFORCE=pair)
+fsh browser [adapters|enable <name> [--off] [--yes]|tabs|close <id>]  # isolated browser tabs for agents: turn adapters on, list/close tabs (see below; needs VT_AUTHZ_ENFORCE=browser)
 fsh lease [ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status]  # folder leases + optional pre-commit guard (see below)
 fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants / lease_acquire / lease_renew / lease_release / lease_list
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
@@ -171,6 +172,22 @@ fsh authz panic                   # prints that an elevated person does this in 
 `audit` shows the hash chain state (`정상`/`깨짐`) and merges the denial log (`denials`) with the chain. For agents, the MCP tools
 `whoami`, `request_access {resource, scopes, reason?, ttl?}` and `list_my_grants` do the same from inside the session; `request_access` always
 returns «waiting for the user's approval». API and rules: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
+
+## Browser broker (`fsh browser`)
+
+Agents get **isolated** browser tabs (a fresh profile; your own Chrome and its logins are never touched). The server must run with `browser` in
+`VT_AUTHZ_ENFORCE`; otherwise the commands say it is off. Turning an adapter on is for people and the terminal — agents cannot.
+
+```bash
+fsh browser adapters              # playwright, cdp, … : on / off / unavailable (with the reason)
+fsh browser enable playwright     # first time ever: shows the consent text and asks (non-interactive: add --yes)
+fsh browser enable playwright --off
+fsh browser tabs [--json]         # open tabs, owner and state (open / orphaned / released)
+fsh browser close <id>            # close any tab
+```
+
+Agents use the MCP tools `browser_list_adapters`, `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`,
+`browser_type`, `browser_close`, `browser_tabs`, `browser_handoff` and (only with a `browser.js` grant) `browser_eval`. Rules: `docs/ref/auth.md` «Browser broker».
 
 ## Pairs (`fsh pair`)
 

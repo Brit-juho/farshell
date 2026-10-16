@@ -481,11 +481,43 @@ def cli_cases() -> list[Case]:
                  " ".join(a), hole="H3") for fn, a in CLI_FUNCS]
 
 
+# --- browser -------------------------------------------------------------------------
+
+def browser_cases() -> list[Case]:
+    """`routes/browser.py` 전부. 호출자 × 서버 모드. 마스터 스위치(`browser`)가 꺼진 서버의 동작이다 — 도달한 호출자는 모두 «없는 라우트»와 같은 404,
+    닿지 못하는 호출자(인증 없음 등)는 평소의 인증 응답. 켠 뒤의 규칙은 test_browser_*.py 가 본다."""
+    g = "browser"
+    callers = HUMAN + AGENTS[:1] + ("agent_foreign", "peer_control")
+    routes = [
+        ("GET", "/api/browser/adapters", "/api/browser/adapters", None),
+        ("POST", "/api/browser/adapters/{name}/enable", "/api/browser/adapters/playwright/enable", {"enabled": True, "consent": True}),
+        ("POST", "/api/browser/tabs", "/api/browser/tabs", {"url": "about:blank"}),
+        ("GET", "/api/browser/tabs", "/api/browser/tabs", None),
+        ("POST", "/api/browser/tabs/{tab_id}/navigate", "/api/browser/tabs/bt-none/navigate", {"url": "http://localhost:1/"}),
+        ("POST", "/api/browser/tabs/{tab_id}/snapshot", "/api/browser/tabs/bt-none/snapshot", None),
+        ("POST", "/api/browser/tabs/{tab_id}/screenshot", "/api/browser/tabs/bt-none/screenshot", None),
+        ("POST", "/api/browser/tabs/{tab_id}/click", "/api/browser/tabs/bt-none/click", {"ref": "e1"}),
+        ("POST", "/api/browser/tabs/{tab_id}/type", "/api/browser/tabs/bt-none/type", {"ref": "e1", "text": "x"}),
+        ("POST", "/api/browser/tabs/{tab_id}/eval", "/api/browser/tabs/bt-none/eval", {"script": "1"}),
+        ("POST", "/api/browser/tabs/{tab_id}/cookies", "/api/browser/tabs/bt-none/cookies", {"values": True}),
+        ("POST", "/api/browser/tabs/{tab_id}/storage", "/api/browser/tabs/bt-none/storage", None),
+        ("POST", "/api/browser/tabs/{tab_id}/network", "/api/browser/tabs/bt-none/network", None),
+        ("POST", "/api/browser/tabs/{tab_id}/handoff", "/api/browser/tabs/bt-none/handoff", None),
+        ("DELETE", "/api/browser/tabs/{tab_id}", "/api/browser/tabs/bt-none", None),
+    ]
+    out = []
+    for method, route, path, body in routes:
+        for mode in MODES:
+            for c in callers:
+                out.append(Case(_cid(g, route, method, c, mode), g, c, mode, method, route, path, body))
+    return out
+
+
 BUILDERS = {
     "agent_share": agent_share_cases, "delegation": delegation_cases, "agent_msg": agent_msg_cases,
     "peer": peer_cases, "peer_v2": peer_v2_cases, "relay": relay_cases, "host_relay": host_relay_cases, "hosts": hosts_cases,
     "machine_token": machine_token_cases, "cli_writes": cli_cases, "authz_api": authz_api_cases,
-    "leases": leases_cases, "pairs": pairs_cases,
+    "leases": leases_cases, "pairs": pairs_cases, "browser": browser_cases,
 }
 
 

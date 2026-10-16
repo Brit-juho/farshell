@@ -286,6 +286,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "pair":
         from . import pair_cli
         sys.exit(pair_cli.main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "browser":
+        from . import browser_cli
+        sys.exit(browser_cli.main(sys.argv[2:]))
     if len(sys.argv) > 1 and sys.argv[1] == "legacy-denied":
         sys.exit(legacy_denied(sys.argv[2:]))
     if len(sys.argv) > 1 and sys.argv[1] == "migrate-auth":

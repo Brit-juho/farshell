@@ -51,4 +51,9 @@ export const authzApi = {
   leases: () => shareFetch('/api/authz/leases'),
   leaseRevoke: (id) => shareFetch(`/api/authz/leases/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   panic: () => shareFetch('/api/authz/panic', J('POST', {})),
+  /** 브라우저 broker — 기능이 꺼진 서버는 404(오류가 아니라 안내로 보인다). */
+  browserAdapters: () => shareFetch('/api/browser/adapters'),
+  browserEnable: (name, enabled, consent) => shareFetch(`/api/browser/adapters/${encodeURIComponent(name)}/enable`, J('POST', { enabled, ...(consent ? { consent: true } : {}) })),
+  browserTabs: () => shareFetch('/api/browser/tabs'),
+  browserClose: (id) => shareFetch(`/api/browser/tabs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

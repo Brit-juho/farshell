@@ -82,7 +82,7 @@ async def host_relay(host_id: str, rest: str, request: Request):
                             status_code=404)
     target = "/" + rest
     method = request.method.upper()
-    if not relay_policy.http_allowed(method, target):
+    if not relay_policy.http_allowed(method, target) and not (host_gate.enforced() and relay_policy.optin_group(method, target)):
         return JSONResponse(
             {"error": "relay_forbidden", "reason": tr("다른 맥에서 쓸 수 없는 기능입니다: {target}", target=target)},
             status_code=403,

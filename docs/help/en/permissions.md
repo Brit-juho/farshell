@@ -62,6 +62,18 @@ Two agents (or one person and one agent) split the same bundle of sessions and f
 
 A program of the same user account can edit the permission store directly — a pair does not stop that; it makes clear who may do what and cuts accidents short.
 
+## Browser - isolated tabs for agents
+
+Agents can open **isolated browser tabs** (a fresh profile - your own Chrome and its logins are never touched) to see and drive the localhost ports FarShell has exposed.
+It is on only if the server's `VT_AUTHZ_ENFORCE` contains `browser` (otherwise `fsh browser` says it is off).
+
+- **Turn it on**: Settings > Permissions > Browser, or `fsh browser enable NAME` - the first time you confirm a consent text. Agents cannot turn it on. An unusable adapter shows why.
+- By default only `about:blank` and **exposed localhost ports** open. Anything else must be in the allowlist (`url_allowlist`) you give when approving; private-network and metadata addresses need the exact IP written down, and `file:`, `chrome:`, `data:` never open. Every navigation, redirect, iframe and the address opened after a click is checked again, and a violation puts the tab back on a blank page.
+- **Running scripts (`browser.js`)** and **cookie, storage and network values (`browser.sensitive`)** are given to nobody by default - they need your approval with your password re-entered. Cookie/storage **values** need an extra «values» condition on top; cookie/auth headers and bodies over 64 KB in the network view are always hidden.
+- A tab belongs to the agent that opened it. Another agent needs a permission that names that tab (or the same pair). Settings and `fsh browser tabs` / `close <id>` list and close every tab.
+- If the adapter goes down the tab becomes `orphaned` (still owned, but not operable); revoking a permission **does not close** a tab, it only releases ownership. A tab an agent hands over with `browser_handoff` is shown as taken over by you.
+- Connecting to your own Chrome (profile=user) and downloads are not supported yet.
+
 ## Agents on another Mac - reading and typing into shared sessions, remote delegation
 
 An agent on one Mac can read and type one line into a session that is **shared** on another Mac, or have that Mac create a sub-session (this is not the same as giving it a `control`

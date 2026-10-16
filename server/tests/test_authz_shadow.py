@@ -162,6 +162,8 @@ def test_shadow_exceptions_are_swallowed_and_responses_unchanged(break_at, world
             # EXPECTED_CHANGE: lease 라우트는 호출자 주체를 요청에서 직접 만든다(shadow 가 아니라 라우트 자신의 판정). 만들기가 터지면
             # 호출자를 확인할 수 없으니 닫힌다(403 identity_unverified) — shadow 예외가 응답을 못 바꾼다는 이 시험의 주제 밖이다.
             continue
+        if case.group == "browser" and authz_flags.enforced("browser"):
+            continue          # EXPECTED_CHANGE: matrix 는 browser 스위치가 꺼진 서버(전부 404)를 기록한다 — 켜진 서버는 test_browser_*.py
         if case.group == "pairs" and authz_flags.enforced("pair"):
             # EXPECTED_CHANGE: matrix 는 pair 스위치가 꺼진 서버(전부 409 pair_disabled)를 기록한다. 켜진 서버에서 pair 라우트는 shadow 판정이 아니라
             # 자기 규칙을 따른다(test_authz_pairs*.py).

@@ -8212,6 +8212,4101 @@
    "error": "socket_only"
   }
  },
+ "browser.api_browser_adapters.get.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters.get.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters.get.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters.get.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters.get.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters.get.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/adapters",
+  "path": "/api/browser/adapters",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_adapters_X_enable.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/adapters/{name}/enable",
+  "path": "/api/browser/adapters/playwright/enable",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.get.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.get.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.get.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.get.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.get.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs",
+  "path": "/api/browser/tabs",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X.delete.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X.delete.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X.delete.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X.delete.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X.delete.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/browser/tabs/{tab_id}",
+  "path": "/api/browser/tabs/bt-none",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_click.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/click",
+  "path": "/api/browser/tabs/bt-none/click",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_cookies.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/cookies",
+  "path": "/api/browser/tabs/bt-none/cookies",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_eval.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/eval",
+  "path": "/api/browser/tabs/bt-none/eval",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_handoff.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/handoff",
+  "path": "/api/browser/tabs/bt-none/handoff",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_navigate.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/navigate",
+  "path": "/api/browser/tabs/bt-none/navigate",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_network.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/network",
+  "path": "/api/browser/tabs/bt-none/network",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_screenshot.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/screenshot",
+  "path": "/api/browser/tabs/bt-none/screenshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_snapshot.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/snapshot",
+  "path": "/api/browser/tabs/bt-none/snapshot",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_storage.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/storage",
+  "path": "/api/browser/tabs/bt-none/storage",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.agent_foreign.none": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.agent_foreign.password": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.agent_foreign.token": {
+  "group": "browser",
+  "caller": "agent_foreign",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.agent_verified.none": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.agent_verified.password": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.agent_verified.token": {
+  "group": "browser",
+  "caller": "agent_verified",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.machine.none": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.machine.password": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.machine.token": {
+  "group": "browser",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.none.none": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.none.password": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.none.token": {
+  "group": "browser",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.peer_control.none": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.peer_control.password": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.peer_control.token": {
+  "group": "browser",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 401,
+   "error": "unauthorized"
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.session.none": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.session.password": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.session.token": {
+  "group": "browser",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.session_elev.none": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "none",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.session_elev.password": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
+ "browser.api_browser_tabs_X_type.post.session_elev.token": {
+  "group": "browser",
+  "caller": "session_elev",
+  "mode": "token",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/browser/tabs/{tab_id}/type",
+  "path": "/api/browser/tabs/bt-none/type",
+  "expected": {
+   "status": 404,
+   "error": null
+  }
+ },
  "cli_writes.delegation.close_dseed": {
   "group": "cli_writes",
   "caller": "local_cli",

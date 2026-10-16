@@ -31,6 +31,7 @@ fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <�
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
 fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # 승인함·권한·감사 조회 (읽기 전용, 아래 참고)
 fsh pair [start|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]]  # 두 세션이 한 작업 묶음을 driver/navigator 로 함께 (아래 참고; VT_AUTHZ_ENFORCE=pair 필요)
+fsh browser [adapters|enable <이름> [--off] [--yes]|tabs|close <id>]  # 에이전트용 격리 브라우저 탭: 어댑터 켜기, 탭 목록·닫기 (아래 참고; VT_AUTHZ_ENFORCE=browser 필요)
 fsh lease [ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status]  # 폴더 lease + 선택 설치 pre-commit guard (아래 참고)
 fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants / lease_acquire / lease_renew / lease_release / lease_list
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
@@ -155,6 +156,22 @@ fsh authz panic                   # 재인증한 사람이 웹/폰에서 한다�
 `audit` 는 해시 체인 상태(`정상`/`깨짐`)를 보여 주고 거부 기록(`denials`)을 체인과 합쳐 보입니다. 에이전트는 MCP 도구 `whoami`,
 `request_access {resource, scopes, reason?, ttl?}`, `list_my_grants` 로 세션 안에서 같은 일을 합니다. `request_access` 는 항상
 «사용자 승인 대기»로 돌아옵니다. API와 규칙: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
+
+## 브라우저 broker (`fsh browser`)
+
+에이전트에게 **격리된** 브라우저 탭을 줍니다(새 프로필 — 당신의 Chrome 과 로그인에는 닿지 않습니다). 서버가 `VT_AUTHZ_ENFORCE` 에 `browser` 를 가지고 있어야 하며,
+없으면 명령이 꺼져 있다고 알려 줍니다. 어댑터를 켜는 것은 사람과 터미널의 일이고 에이전트는 못 합니다.
+
+```bash
+fsh browser adapters              # playwright, cdp, … : 켜짐 / 꺼짐 / 사용 불가(이유)
+fsh browser enable playwright     # 처음 켤 때 동의 문구를 보여 주고 묻습니다(비대화형은 --yes)
+fsh browser enable playwright --off
+fsh browser tabs [--json]         # 열린 탭, 소유자, 상태(open / orphaned / released)
+fsh browser close <id>            # 어느 탭이든 닫기
+```
+
+에이전트는 MCP 도구 `browser_list_adapters`·`browser_open`·`browser_navigate`·`browser_snapshot`·`browser_screenshot`·`browser_click`·`browser_type`·
+`browser_close`·`browser_tabs`·`browser_handoff` 와 (`browser.js` 권한이 있을 때만) `browser_eval` 을 씁니다. 규칙: `docs/ref/auth.md` «Browser broker».
 
 ## pair (`fsh pair`)
 

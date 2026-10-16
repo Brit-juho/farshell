@@ -75,6 +75,7 @@ from routes.authz import human_router as authz_human_router, read_router as auth
 from routes.delegation import router as delegation_router, human_router as delegation_human_router
 from routes.leases import router as leases_router
 from routes.pairs import router as pairs_router
+from routes.browser import router as browser_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -480,6 +481,10 @@ async def lifespan(_app: FastAPI):
     # 다른 Mac 에 못 보낸 회수 알림 재시도(`VT_AUTHZ_ENFORCE=peer` 일 때만 일한다).
     from authz import remote as authz_remote
     remote_outbox_task = asyncio.create_task(authz_remote.outbox_loop())
+    # 브라우저 broker(`VT_AUTHZ_ENFORCE` 의 `browser`) — 호스트 임대·세대를 잡고(옛 탭은 orphaned) 회수 saga 에 탭 단계를 끼운다. 꺼져 있으면 아무것도 하지 않는다.
+    from browser import broker as browser_broker
+    if browser_broker.enabled():
+        await asyncio.to_thread(browser_broker.startup)
 
     # tmux 훅(tmux_hooks.py) — 이 프로세스의 비밀값으로 우리 칸을 덮어쓴다. tmux
     # 서버가 아직 없으면 실패하고, 첫 화면이 붙을 때 routes/system.py가 다시 건다.
@@ -504,6 +509,9 @@ async def lifespan(_app: FastAPI):
         with suppress(Exception):
             await sock_service.stop()
         authz_legacy_use.flush()
+        if browser_broker.enabled():
+            with suppress(Exception):
+                await asyncio.to_thread(browser_broker.shutdown)
         with suppress(Exception):
             await asyncio.to_thread(tmux_hooks.uninstall)
         port_expiry_task.cancel()
@@ -643,6 +651,7 @@ app.include_router(authz_read_router)
 app.include_router(authz_router)
 app.include_router(leases_router)
 app.include_router(pairs_router)
+app.include_router(browser_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)
