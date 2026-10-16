@@ -1932,6 +1932,7 @@ cmd_help() {
     fsh migrate-auth        Migrate permissions to the authz store (--dry-run|--apply|--verify|--status)
     fsh authz               Inbox and permissions, read-only (whoami|grants|requests|audit|revoke|panic)
     fsh lease               Folder leases — mark a path as "mine" (ls|acquire|renew|release|check|guard)
+    fsh pair                Two sessions working one bundle together — driver/navigator (start|code|join|status|handoff|accept|end|revoke)
     fsh msg                 Messages between agents (log / agents / send)
     fsh mcp                 MCP server (stdio) for agents — register it with Claude
     fsh worktree            Create/open/delete git worktrees (alias: wt)
@@ -1996,6 +1997,7 @@ HELP_EN
     fsh migrate-auth        권한 저장소 이전 (--dry-run|--apply|--verify|--status)
     fsh authz               승인함·권한 조회 (whoami|grants|requests|audit|revoke|panic) — 승인·회수는 웹/폰에서
     fsh lease               폴더 lease — 이 경로는 내가 쓰는 중 (ls|acquire|renew|release|check|guard)
+    fsh pair                두 세션이 한 작업 묶음을 함께 — driver/navigator (start|code|join|status|handoff|accept|end|revoke)
     fsh msg                 에이전트 간 메시지 (log / agents / send)
     fsh mcp                 에이전트용 MCP 서버(stdio) — Claude에 등록해 쓴다
     fsh worktree            git 워크트리 만들기/열기/삭제 (별칭: wt)
@@ -2035,7 +2037,7 @@ HELP
     start|restart|stop|status|mobile|password|otp|device|devices) topic="access" ;;
     attach|handoff|terminal) topic="terminal" ;;
     hooks|pane|queue|msg|mcp|delegate) topic="agent-state" ;;
-    authz|lease) topic="permissions" ;;
+    authz|lease|pair) topic="permissions" ;;
     voice-target) topic="target" ;;
     hotkey) topic="hotkeys" ;;
   esac
@@ -2437,6 +2439,22 @@ cmd_lease() {
       ;;
     *)
       echo "$(_t '사용법: fsh lease <ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status>')"
+      return 1 ;;
+  esac
+}
+
+# pair — 두 세션이 한 작업 묶음을 함께(driver/navigator). unix socket 로 서버에 말한다. 승인은 웹/폰의 사람이 한다. 서버의 pair 스위치가 꺼져 있으면 그렇다고 알려 준다.
+cmd_pair() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
+    return 1
+  fi
+  case "${1:-status}" in
+    start|code|join|status|ls|list|handoff|accept|end|revoke)
+      (cd "$VT_DIR/server" && VT_PORT="${VT_PORT:-7777}" "$VT_PYTHON" -m authz pair "$@")
+      ;;
+    *)
+      echo "$(_t '사용법: fsh pair <start [--session S] [--dir D] [--role driver|navigator] [--lease] [--elevated a,b]|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]>')"
       return 1 ;;
   esac
 }
@@ -3535,6 +3553,22 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
       esac
       if [ "${_ls_saga:-0}" -gt 0 ] 2>/dev/null; then
         _check "$(_t '회수 정리')" warn "$(_t '끝나지 않은 정리 {n}건 — 서버가 이어서 처리합니다 (fsh restart 로 재개)' n="$_ls_saga")"
+      fi
+    fi
+  fi
+
+  # 11-a4. pair — 마스터 스위치, 효력 중인 pair 수, 승인을 기다리는 수
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _pr _pr_en _pr_n _pr_w
+    _pr="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz pair doctor 2>/dev/null)"
+    if [ -n "$_pr" ]; then
+      IFS='|' read -r _pr_en _pr_n _pr_w <<<"$_pr"
+      if [ "$_pr_en" = 1 ]; then
+        _check "$(_t 'pair')" ok "$(_t '켜짐 · 진행 중 {n}개 · 승인 대기 {w}개' n="$_pr_n" w="${_pr_w:-0}")"
+      elif [ "${_pr_n:-0}" -gt 0 ] 2>/dev/null; then
+        _check "$(_t 'pair')" warn "$(_t '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다' n="$_pr_n")"
+      else
+        _check "$(_t 'pair')" ok "$(_t '꺼짐 (VT_AUTHZ_ENFORCE 에 pair 를 더하면 켜짐)')"
       fi
     fi
   fi
@@ -5194,6 +5228,7 @@ case "${1:-help}" in
   migrate-auth) shift; cmd_migrate_auth "$@" ;;
   authz)    shift; cmd_authz "$@" ;;
   lease)    shift; cmd_lease "$@" ;;
+  pair)     shift; cmd_pair "$@" ;;
   files)    shift; cmd_files "$@" ;;
   host|hosts) shift; cmd_host "$@" ;;
   mcp)      shift; cmd_mcp "$@" ;;

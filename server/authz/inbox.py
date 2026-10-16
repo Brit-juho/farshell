@@ -270,11 +270,14 @@ def whoami(p: P.Principal, now: Optional[float] = None) -> dict:
                 for k, v in e.items():
                     cur[k] = cur.get(k, frozenset()) | v
         caps = {s: {k: frozenset(v) for k, v in e.items()} for s, e in union.items()}
-        return {"principal": view, "scopes": sorted(caps), "caps": S.caps_view(caps),
-                "grants": [{"id": g.get("id"), "resource": g.get("resource"), "scopes": _fmt_scopes(S.caps_of(g)),
-                            "default": str(g.get("id", "")).startswith("default:"),
-                            "conditional": sorted(k for k, v in (g.get("conds") or {}).items() if v)} for g in mine],
-                "presets": presets_within(caps), "authz": "ok"}
+        out = {"principal": view, "scopes": sorted(caps), "caps": S.caps_view(caps),
+               "grants": [{"id": g.get("id"), "resource": g.get("resource"), "scopes": _fmt_scopes(S.caps_of(g)),
+                           "default": str(g.get("id", "")).startswith("default:"),
+                           "conditional": sorted(k for k, v in (g.get("conds") or {}).items() if v)} for g in mine],
+               "presets": presets_within(caps), "authz": "ok"}
+        if flags.enforced("pair"):
+            out["features"] = {"pair": True}          # 켜졌을 때만 키가 생긴다(꺼짐 = 응답이 예전과 같다) — MCP 가 pair 도구 노출을 정한다
+        return out
     except Exception as e:  # noqa: BLE001 — 저장소 문제로 호출자 확인까지 막지 않는다
         logger.warning(f"whoami 유효 권한 계산 실패: {type(e).__name__}: {e}")
         return {"principal": view, "scopes": None, "caps": None, "grants": [], "presets": [], "authz": "unavailable"}

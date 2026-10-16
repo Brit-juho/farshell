@@ -46,4 +46,18 @@ lease; a child started in a worktree gets its own lease on the new worktree.
 - **Commit guard (optional)**: `fsh lease guard install` stops a commit that includes files under someone else's lease and tells you who holds it. If the server cannot be reached it only warns and the commit goes through. An existing pre-commit hook is kept and still runs first.
 - There is no screen yet for a person to revoke a lease; use the API (`DELETE /api/authz/leases/{id}`). Revoking a permission also ends the leases taken with it.
 
+## pair — two sessions on one job
+
+Two agents (or one person and one agent) split the same bundle of sessions and folders into **driver** (types and writes) and **navigator**
+(reads and messages). It is on only if the server's `VT_AUTHZ_ENFORCE` contains `pair` (otherwise `fsh pair` says it is off).
+
+1. One side runs `fsh pair start --session NAME --dir FOLDER` (or MCP `pair_create`) and gets a code (`ABCD-EFGH`) and a **two-word check phrase**. The code is single-use, valid 5 minutes, and burned after 5 wrong tries.
+2. The other side runs `fsh pair join <code>` (or `pair_join`). It learns the result **as itself** with `fsh pair status`, not through the code.
+3. The inbox shows one «pair» request: the whole bundle, both check phrases and what each role gets, **on one screen**. Check that the phrase matches what both agents show.
+   **High-risk** items (raw input, session management, relay) are given only if you tick them, and ticking needs your password again. Agents cannot approve. Widening a pair later is a new approval.
+4. There is exactly one driver. `fsh pair handoff <id>` offers, the other side's `fsh pair accept <id>` swaps (an offer lapses after 2 minutes). A person can always type.
+5. It ends on `fsh pair end <id>`, a person revoking it in the permissions screen, 2 hours idle (`VT_PAIR_IDLE_MIN`), a member session disappearing, or 8 hours. Then the permissions, leases and queued messages between the members are cleaned up (`fsh pair revoke <id> --verify` confirms).
+
+A program of the same user account can edit the permission store directly — a pair does not stop that; it makes clear who may do what and cuts accidents short.
+
 See also: `fsh help agent-state` (MCP tools `request_access` and `whoami`), `docs/ref/auth.md`.

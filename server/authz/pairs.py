@@ -1194,3 +1194,134 @@ def same_pair_holders(holder_a: str, holder_b: str) -> bool:
         if holder_a in ps and holder_b in ps:
             return True
     return False
+
+
+# --- 회수 saga 단계 ---------------------------------------------------------------------------
+# saga.py 의 단계 표가 이 함수들을 부른다. 모두 멱등이고 `t["pair"]` 가 없으면 아무것도 하지 않는다.
+
+
+def _pid(t: dict) -> str:
+    return str(t.get("pair") or "")
+
+
+def saga_grants(t: dict) -> None:
+    pid = _pid(t)
+    if not pid:
+        return
+    now_ = time.time()
+    with store.txn() as docs:
+        for g in docs["grants"]["items"]:
+            if g.get("pair_id") == pid and g.get("state", "active") == "active":
+                g.update(state="revoking", revoking_at=now_)
+
+
+def saga_leases(t: dict) -> None:
+    pid = _pid(t)
+    if not pid:
+        return
+    from . import leases
+    leases.release_where(lambda l: l.get("pair_id") == pid, who="system:saga", reason="pair_ended")
+
+
+def _member_names(t: dict) -> tuple[set, set]:
+    names = {m.get("name") for m in t.get("members") or () if m.get("name")}
+    keys = {m.get("key") for m in t.get("members") or () if m.get("key")}
+    return names, keys
+
+
+def _between_members(m: dict, names: set) -> bool:
+    return (m.get("dir") == "in" and (m.get("from") or {}).get("host") == "local" and (m.get("from") or {}).get("session") in names
+            and (m.get("to") or {}).get("session") in names)
+
+
+def saga_messages(t: dict) -> None:
+    """구성원끼리 오간 아직 전달되지 않은 메시지를 취소하고 그 큐 항목을 지운다."""
+    if not _pid(t):
+        return
+    import agent_msg
+    import queue_store
+    names, _keys = _member_names(t)
+    if len(names) < 2:
+        return
+    mids = {m["id"] for m in agent_msg.list_messages(limit=agent_msg.MAX_KEEP)
+            if m.get("status") == agent_msg.STATUS_QUEUED and _between_members(m, names)}
+    if mids:
+        queue_store.remove_pending_by_source(lambda s: s.get("agentMsg") in mids or s.get("pair_id") == _pid(t))
+        for mid in mids:
+            agent_msg.set_status(mid, agent_msg.STATUS_FAILED, "revoked")
+
+
+def _pair_delegations(t: dict) -> list:
+    """pair 가 효력을 갖는 동안 구성원이 부모로 만든, 아직 열린 위임."""
+    import delegation
+    keys = _member_names(t)[1]
+    since = t.get("since")
+    if not keys or not since:
+        return []
+    open_states = tuple(delegation.OPEN_STATES) + ("starting",)
+    try:
+        items = delegation.list_all()
+    except Exception as e:  # noqa: BLE001
+        from .saga import SagaIncomplete
+        raise SagaIncomplete(f"위임 장부를 읽지 못함: {type(e).__name__}") from e
+    return [x["id"] for x in items if x.get("state") in open_states and ((x.get("parent") or {}).get("key") in keys)
+            and float(x.get("created_at") or 0) >= float(since)]
+
+
+def saga_delegations(t: dict) -> None:
+    if not _pid(t):
+        return
+    import delegation
+    for did in _pair_delegations(t):
+        try:
+            delegation.close(did, reason="revoked", system=True)
+        except delegation.DelegationError as e:
+            if e.status != 404:
+                raise
+
+
+def saga_verify(t: dict) -> None:
+    """남은 것이 있으면 SagaIncomplete — pair grant 가 아직 active, pair lease, 구성원 간 대기 메시지, 열린 pair 위임."""
+    pid = _pid(t)
+    if not pid:
+        return
+    from . import leases
+    from .saga import SagaIncomplete
+    left: dict = {}
+    d, bad = store._read("grants")
+    if bad:
+        raise SagaIncomplete("grants 문서를 읽지 못함")
+    n = sum(1 for g in d["items"] if g.get("pair_id") == pid and g.get("state", "active") == "active")
+    if n:
+        left["grants_active"] = n
+    items, lbad = leases.read_items()
+    if lbad:
+        raise SagaIncomplete("leases 문서를 읽지 못함")
+    n = sum(1 for l in items if l.get("pair_id") == pid)
+    if n:
+        left["leases"] = n
+    import agent_msg
+    names, _k = _member_names(t)
+    if len(names) >= 2:
+        n = sum(1 for m in agent_msg.list_messages(limit=agent_msg.MAX_KEEP)
+                if m.get("status") == agent_msg.STATUS_QUEUED and _between_members(m, names))
+        if n:
+            left["messages"] = n
+    n = len(_pair_delegations(t))
+    if n:
+        left["delegations"] = n
+    if left:
+        raise SagaIncomplete(", ".join(f"{k}={v}" for k, v in sorted(left.items())))
+
+
+def saga_finalize(t: dict) -> None:
+    """모든 정리가 끝났다 — 회수된 pair grant 레코드를 지우고 pair 에 정리 완료를 적는다."""
+    pid = _pid(t)
+    if not pid:
+        return
+    now_ = time.time()
+    with store.txn() as docs:
+        docs["grants"]["items"] = [g for g in docs["grants"]["items"] if not (g.get("pair_id") == pid and g.get("state") == "revoked")]
+        x = _find(docs, pid)
+        if x is not None and not x.get("saga_done"):
+            x["saga_done"] = now_

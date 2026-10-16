@@ -30,6 +30,7 @@ fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # 다른 맥의 FarShell 페어링
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
 fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # 승인함·권한·감사 조회 (읽기 전용, 아래 참고)
+fsh pair [start|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]]  # 두 세션이 한 작업 묶음을 driver/navigator 로 함께 (아래 참고; VT_AUTHZ_ENFORCE=pair 필요)
 fsh lease [ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status]  # 폴더 lease + 선택 설치 pre-commit guard (아래 참고)
 fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants / lease_acquire / lease_renew / lease_release / lease_list
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
@@ -155,6 +156,28 @@ fsh authz panic                   # 재인증한 사람이 웹/폰에서 한다�
 `request_access {resource, scopes, reason?, ttl?}`, `list_my_grants` 로 세션 안에서 같은 일을 합니다. `request_access` 는 항상
 «사용자 승인 대기»로 돌아옵니다. API와 규칙: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
+## pair (`fsh pair`)
+
+pair 는 두 세션(또는 사람 하나와 세션 하나)이 같은 세션·폴더 묶음을 함께 다루는 장치입니다. 한쪽은 **driver**(입력하고 씀), 한쪽은 **navigator**(읽고 메시지). 서버가
+`VT_AUTHZ_ENFORCE=pair` 로 떠 있어야 하고, 꺼져 있으면 모든 하위 명령이 꺼져 있다고 알려 줍니다. 서버와는 unix socket 으로만 말합니다(토큰 없음). 묶음 전체는 웹/폰 승인함에서
+사람이 한 번에 승인합니다 — 터미널은 승인하지 않습니다.
+
+```bash
+fsh pair start --session reviewer --dir ~/code/app --lease --elevated raw_input   # 에이전트 pane 에서; 코드와 두 단어 확인 문구를 보여 줍니다
+fsh pair code <id>                  # 대기 중인 코드 다시 보기(만료까지 같은 코드, 5분)
+fsh pair join ABCD-EFGH             # 상대 에이전트가 합류 → 사람의 승인을 기다림
+fsh pair status [<id>]              # 내 pair 목록 또는 한 건 (합류자는 여기서 승인 결과를 읽습니다 — 토큰 필요 없음)
+fsh pair handoff <id>               # driver 가 운전대를 제안(2분)   fsh pair accept <id>   # navigator 가 수락, 세대 +1
+fsh pair end <id>                   # 끝내기(구성원)
+fsh pair revoke <id> --verify       # 끝내고, grant·lease·대기 메시지가 정리됐는지 확인할 때까지 기다림(남아 있으면 종료 코드 1)
+```
+
+`start` 옵션: `--session 이름|key`·`--dir 경로`(여러 번), `--role driver|navigator`(내 역할, 기본 driver), `--lease`(driver 가 폴더마다 write lease),
+`--elevated raw_input,session_manage,relay,…`(요청만 하고, 사람이 체크하고 재인증해야 줌), `--with 세션`(그 세션만 합류). 만들려면 웹 UI 의 사람이거나 `pair.manage` 를 가진 에이전트
+(`pair:*` 에 `request_access`)여야 합니다. 코드는 1회용 5분이고 5번 틀리면 폐기, 시작자당 시간당 10개까지 새로 만듭니다. pair 는 `end`·사람의 회수·2시간 유휴(`VT_PAIR_IDLE_MIN`)·구성원
+세션 소멸·8시간 경과로 끝납니다. 에이전트 도구는 MCP `pair_create`·`pair_join`·`pair_status`·`pair_handoff`·`pair_accept`(서버의 pair 스위치가 켜졌을 때만 보임). 규칙·역할·같은 계정 한계
+(같은 사용자의 프로세스는 권한 저장소를 고칠 수 있음)는 `docs/ref/auth.md` 「Pairs」, API 는 `API.md` 「Pairs」.
+
 ## 폴더 lease (`fsh lease`)
 
 lease 는 「이 폴더(또는 glob)는 지금 내가 쓰는 중」이라는 표시입니다. 두 에이전트가 같은 파일을 동시에 고치지 않게 하려는 것이고, unix socket 으로 서버에 묻습니다(토큰 없음).
@@ -240,6 +263,7 @@ fsh queue clear                 # 전체 비우기
 | 15 | unix socket | `~/.vt/run/fsh.sock` 상태(켜짐 / 건너뜀 / 자가 시험 실패), 권한, 최근 24시간 기계 토큰 요청 수. `VT_AUTHZ_SOCKET=0`이면 클라이언트가 소켓을 건너뛰고 토큰만 씁니다. `fsh status`에도 한 줄로 나옵니다 |
 | 16 | 공용 토큰 | `VT_AUTHZ_ENFORCE=legacy`일 때만: 최근 24시간 동안 범위 밖이라 거절된(403 `legacy_token_scope`) 기계 토큰 요청 수를 경로·user agent별로 보여 줍니다. 어느 외부 스크립트를 소켓이나 로그인으로 옮겨야 하는지 알 수 있습니다. 토큰만 있고 웹 비밀번호가 없는 서버에서는 승인이 필요한 에이전트·peer 기능이 `fsh password` 설정 전까지 꺼져 있다는 안내도 나옵니다 |
 | 17 | 폴더 lease | 활성 lease 개수, 쓰기 차단(`VT_AUTHZ_ENFORCE=lease`) 켜짐 여부, 지금 저장소의 pre-commit guard 상태(설치됨 / 기존 훅과 이어짐 / 없음), 최근 24시간 동안 서버가 안 닿아 guard 가 건너뛴 횟수(`~/.vt/authz/guard-skipped.log`), 끝나지 않은 회수 정리(saga)가 있으면 경고 |
+| 18 | pair | pair 스위치(`VT_AUTHZ_ENFORCE=pair`) 켜짐 여부, 효력 중인 pair 수와 승인 대기 수. 스위치가 꺼졌는데 저장된 pair 가 남아 있으면 경고(그 grant 는 효력이 없음) |
 
 ---
 

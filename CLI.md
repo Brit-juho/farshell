@@ -35,6 +35,7 @@ fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <n
 fsh msg [log [conv]|agents|send <[host/]session> "text" [--reply <id>]]  # agent-to-agent messages
 fsh delegate [ls|close <id>]  # agent delegations (sub-sessions); close keeps the session
 fsh authz [whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic]  # approval inbox, grants and audit (read-only; see below)
+fsh pair [start|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]]  # two sessions working one bundle as driver/navigator (see below; needs VT_AUTHZ_ENFORCE=pair)
 fsh lease [ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status]  # folder leases + optional pre-commit guard (see below)
 fsh mcp                         # MCP server (stdio) for agents: list_agents / send_message / read_messages + shared sessions (list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants / lease_acquire / lease_renew / lease_release / lease_list
 fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]  # git worktrees
@@ -171,6 +172,30 @@ fsh authz panic                   # prints that an elevated person does this in 
 `whoami`, `request_access {resource, scopes, reason?, ttl?}` and `list_my_grants` do the same from inside the session; `request_access` always
 returns «waiting for the user's approval». API and rules: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
+## Pairs (`fsh pair`)
+
+A pair lets two sessions — or a person and a session — work the same sessions/folders, one as **driver** (types, writes) and one as
+**navigator** (reads, messages). The server needs `VT_AUTHZ_ENFORCE=pair`; otherwise every subcommand says the feature is off. Talks to the server
+over the unix socket (no token). A person approves the pairing in the web/phone inbox — the terminal never approves.
+
+```bash
+fsh pair start --session reviewer --dir ~/code/app --lease --elevated raw_input   # in an agent's pane; prints a code and a two-word check phrase
+fsh pair code <id>                  # show the pending code again (same code until it expires, 5 min)
+fsh pair join ABCD-EFGH             # the other agent joins; then wait for the person's approval
+fsh pair status [<id>]              # my pairs, or one (the joiner reads the approval result here — no token needed)
+fsh pair handoff <id>               # driver offers the wheel (2 minutes)   fsh pair accept <id>   # navigator takes it; generation +1
+fsh pair end <id>                   # end it (members)
+fsh pair revoke <id> --verify       # end it and wait until grants, leases, queued messages are confirmed gone (exit 1 if not)
+```
+
+`start` options: `--session NAME|KEY` and `--dir PATH` (repeatable), `--role driver|navigator` (yours; default driver), `--lease` (the driver gets
+a write lease on each folder), `--elevated raw_input,session_manage,relay,…` (asked for, given only if the person ticks them and re-authenticates),
+`--with SESSION` (only that session may join). Creating needs a person at the web UI, or an agent holding `pair.manage` (`request_access` on
+`pair:*`). A code is single-use and valid 5 minutes; five wrong tries burn it; ten new codes an hour per creator. A pair ends on `end`, a
+person's revoke, 2 hours idle (`VT_PAIR_IDLE_MIN`), a member session disappearing or after 8 hours. The agent tools are MCP `pair_create`,
+`pair_join`, `pair_status`, `pair_handoff`, `pair_accept` (shown only while the server's pair switch is on). Rules, roles and the same-user
+caveat (a process of the same user can edit the permission store): `docs/ref/auth.md` «Pairs»; API: `API.md` «Pairs».
+
 ## Folder leases (`fsh lease`)
 
 A lease says «this folder (or glob) is mine for now» so that two agents do not edit the same files. Talks to the server over the unix
@@ -264,6 +289,7 @@ contract 5). The few that decide how you reach this Mac:
 | 15 | unix socket | `~/.vt/run/fsh.sock` state (listening / skipped / failed self-test), permissions, and machine-token requests in the last 24h. `VT_AUTHZ_SOCKET=0` makes clients skip the socket and use the token only. `fsh status` shows the same one line |
 | 16 | shared token | Only with `VT_AUTHZ_ENFORCE=legacy`: the number of machine-token requests refused as out of scope (403 `legacy_token_scope`) in the last 24h, listed per route and user agent so you can see which outside script still needs to move to the socket or a login. On a server with a token but no web password it also says that approval-needing agent/peer features are off until `fsh password` is set |
 | 17 | Folder leases | Active lease count, whether write blocking (`VT_AUTHZ_ENFORCE=lease`) is on, the pre-commit guard state of the current repository (installed / chained to an existing hook / absent), how many times the guard skipped in the last 24 h because the server was unreachable (`~/.vt/authz/guard-skipped.log`), and a warning if a revocation cleanup (saga) is unfinished |
+| 18 | Pairs | Whether the pair switch (`VT_AUTHZ_ENFORCE=pair`) is on, how many pairs are in effect and how many wait for approval; a warning if the switch is off but pairs are still stored (their grants have no effect) |
 
 ---
 

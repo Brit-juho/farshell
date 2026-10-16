@@ -146,6 +146,7 @@ _t_en_lookup() {
     'ngrok 이미 실행 중: {url}') _T_OUT='ngrok already running: {url}' ;;
     'oh-my-tmux 감지 → {path}') _T_OUT='Detected oh-my-tmux → {path}' ;;
     'package.json은 >=20 요구. 프런트 빌드가 실패할 수 있음') _T_OUT='package.json requires >=20. The frontend build may fail' ;;
+    'pair') _T_OUT='pair' ;;
     'pre-commit·pre-push 훅 켜짐') _T_OUT='pre-commit and pre-push hooks are on' ;;
     'push 알림') _T_OUT='Push alerts' ;;
     'python3 미설치. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''') _T_OUT='python3 isn'\''t installed. macOS: '\''brew install python@3.11'\'', Linux: '\''apt install python3'\''' ;;
@@ -256,7 +257,9 @@ _t_en_lookup() {
     '기존 CLAUDE.md → CLAUDE.md.bak으로 백업') _T_OUT='Backed up existing CLAUDE.md → CLAUDE.md.bak' ;;
     '기존 레포 사용: {dir}') _T_OUT='Using existing repo: {dir}' ;;
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
+    '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다') _T_OUT='The feature is off but {n} stored pair(s) remain - their permissions have no effect' ;;
     '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks') _T_OUT='Off — turn on with: git config core.hooksPath scripts/githooks' ;;
+    '꺼짐 (VT_AUTHZ_ENFORCE 에 pair 를 더하면 켜짐)') _T_OUT='Off (add pair to VT_AUTHZ_ENFORCE to turn it on)' ;;
     '꺼짐 — 비밀번호만으로 새 기기 등록 가능 (fsh otp setup)') _T_OUT='off — a password alone can register a new device (fsh otp setup)' ;;
     '끝나지 않은 정리 {n}건 — 서버가 이어서 처리합니다 (fsh restart 로 재개)') _T_OUT='{n} cleanup(s) unfinished — the server resumes them (fsh restart to resume)' ;;
     '나중에 '\''fsh install-profiles'\'' 또는 '\''fsh shell-init zsh >> ~/.zshrc'\''로 활성화 가능') _T_OUT='Enable it later with '\''fsh install-profiles'\'' or '\''fsh shell-init zsh >> ~/.zshrc'\''' ;;
@@ -364,6 +367,7 @@ _t_en_lookup() {
     '사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]') _T_OUT='Usage: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]' ;;
     '사용법: fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]') _T_OUT='Usage: fsh msg [log [conv-id]|agents|send <[host/]session> "text" [--reply <id>]]' ;;
     '사용법: fsh msg send <[호스트/]세션> "내용" [--reply <id>]') _T_OUT='Usage: fsh msg send <[host/]session> "text" [--reply <id>]' ;;
+    '사용법: fsh pair <start [--session S] [--dir D] [--role driver|navigator] [--lease] [--elevated a,b]|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]>') _T_OUT='Usage: fsh pair <start [--session S] [--dir D] [--role driver|navigator] [--lease] [--elevated a,b]|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end <id>|revoke <id> [--verify]>' ;;
     '사용법: fsh pane report [--state idle|working|waiting|done] [--agent <이름>]') _T_OUT='Usage: fsh pane report [--state idle|working|waiting|done] [--agent <name>]' ;;
     '사용법: fsh pane report [--state idle|working|waiting|done] [--agent claude|codex|...]') _T_OUT='Usage: fsh pane report [--state idle|working|waiting|done] [--agent claude|codex|...]' ;;
     '사용법: fsh queue [list|add "내용" [세션]|rm <id>|unblock <id>|clear|run|log [id]]') _T_OUT='Usage: fsh queue [list|add "text" [session]|rm <id>|unblock <id>|clear|run|log [id]]' ;;
@@ -575,6 +579,7 @@ _t_en_lookup() {
     '추가 포트는 임시 주소입니다(고정 도메인은 메인 터널이 씁니다)') _T_OUT='Extra ports get temporary URLs (the fixed domain belongs to the main tunnel)' ;;
     '치명적 문제 있음. ✗ 항목부터 해결하세요.') _T_OUT='Critical problems found. Fix the ✗ items first.' ;;
     '켜짐 (새 기기 등록 시 OTP 요구)') _T_OUT='on (OTP required to register a new device)' ;;
+    '켜짐 · 진행 중 {n}개 · 승인 대기 {w}개') _T_OUT='On / {n} in progress / {w} waiting for approval' ;;
     '코드가 맞지 않습니다. 시계 동기화를 확인하고 '\''fsh otp setup'\''을 다시 실행하세요.') _T_OUT='Wrong code. Check your clock sync and run '\''fsh otp setup'\'' again.' ;;
     '클라이언트 접속/해제 알림: 활성화됨 (VT_NOTIFY_CLIENT_EVENTS=1)') _T_OUT='Client connect/disconnect alerts: enabled (VT_NOTIFY_CLIENT_EVENTS=1)' ;;
     '클립보드 동기화') _T_OUT='Clipboard sync' ;;

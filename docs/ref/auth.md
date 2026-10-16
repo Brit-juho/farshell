@@ -301,7 +301,7 @@ derived_from, deleg, grant_id, approved_via}` in `~/.vt/authz/leases.json` (0600
 |---|---|
 | Canonical glob | The static prefix (path components before the first `*?[`) is `realpath`ed; `..` is refused; the prefix must be inside `VT_BROWSE_ROOTS` and outside the deny list and hidden-state folders (`fsguard`), literal `.git`/`.ssh`/… components and `.*` in the rest are refused. A path without glob characters means the whole folder. Not-yet-existing paths (a new worktree) are fine |
 | Overlap | Conservative: static prefixes must be ancestor-related; literal vs glob uses `fnmatch` (ancestors included); glob vs glob overlaps when their leading literal text is compatible. When unsure it conflicts. The UI-facing wording is «may overlap» |
-| Conflict | Another holder's **write × write** conflicts; write × read only when either is `exclusive`; read × read never. Same holder and same delegation lineage never conflict. The «same pair, both non-exclusive» exception exists as `leases.same_pair()` and is a stub returning False until pairs exist. 409 `lease_conflict` `{holder, expires, conflicts[]}` |
+| Conflict | Another holder's **write × write** conflicts; write × read only when either is `exclusive`; read × read never. Same holder and same delegation lineage never conflict. Two non-exclusive write leases held by members of the same active pair do not conflict (`leases.same_pair()`; only while `VT_AUTHZ_ENFORCE` has `pair`). 409 `lease_conflict` `{holder, expires, conflicts[]}` |
 | Time | Default 30 min, max 8 h (`ttl_too_long` above). Renewal re-sets the remaining time to the original ttl but never beyond `created + 8h` (not an escalation), never shrinks, and a derived lease follows its parent |
 | Ends | At expiry; when the holder's session is gone (tmux unreadable = keep, as for grants); on admin revoke (`DELETE /api/authz/leases/{id}`); when the grant that allowed it is revoked/expired (`grant_id`); when its parent lease ends |
 | Needs | `fs.write` (ops `write`) for a write lease, `fs.read` for a read lease, decided by the engine on `fs:local/<glob>` (a folder also matches `<folder>/*`). Without it: 403 `forbidden` with `need`. Humans have both by default; a pane-less `cli` has neither. System-issued delegation leases (`approved_via: system`) skip this |
@@ -322,13 +322,85 @@ If the new worktree path is already under someone else's lease the spawn fails c
 When `lease` is on, **grant revoke** (`DELETE /api/authz/grants/{id}`), **panic** and **host deny-control/deny-agent** run a saga after the
 existing revoke path (which is unchanged). Steps — each idempotent, each recorded in `~/.vt/authz/sagas.json` as it completes:
 `mark_revoking` → `close_streams` (revoke bus) → `drop_queued` → `cancel_messages` → `close_delegations` (reason `revoked`) →
-`release_leases` → `verify` (re-reads every store; anything left restarts the saga from the top) → `mark_revoked`. A server that dies midway
+`release_leases` → `pair_grants` → `pair_leases` → `pair_messages` → `pair_delegations` → `pair_verify` (the five pair steps do nothing unless the saga is for an ended pair) → `verify` (re-reads every store; anything left restarts the saga from the top) → `mark_revoked` → `pair_finalize`. A server that dies midway
 resumes at the next start and every 30 s (`lifespan` sweep); a step that keeps failing backs off and is `stuck` after 20 attempts
 (`fsh doctor` reports unfinished sagas). Later features add their own steps with `saga.register(name, fn, before="verify")`.
 
 Tests: `test_authz_leases.py` (canonical table, overlap table, conflict matrix, TTL/renew, liveness, human, routes),
 `test_authz_lease_enforce.py` (each write route flag on/off, inheritance, saga crash injection at every step), `test_lease_guard.py`
 (real `git commit` through the hook), `test_lease_cli_mcp.py`, `authz_char/test_char_leases.py`.
+
+## Pairs (`VT_AUTHZ_ENFORCE=pair`)
+
+A **pair** is two participants — two agent sessions, or one person and one agent — working on the same bundle of sessions and folders, one
+as **driver** and one as **navigator**. A pair is **not a principal**: it never authenticates anyone and holds no power of its own. It is a
+bundle of grants that a person approves once, tagged `pair_id` and removed together. The whole feature sits behind a master switch:
+**without `pair` in `VT_AUTHZ_ENFORCE` every `/api/pairs` route answers `409 pair_disabled`, pair grants (if any are left in the store) have
+no effect, and nothing else in the system changes** (responses are byte-identical; the characterization matrix and `fsh migrate-auth --verify`
+stay clean). Pair grants are honoured by the enforcement points whose own flag is on — to use a pair end to end run with
+`share,msg,lease,pair` (and `deleg` if the driver should spawn).
+
+### The ceremony
+
+1. **Create** (`POST /api/pairs`, `fsh pair start`, MCP `pair_create`). A person, or an agent that holds `pair.manage`, names the bundle —
+   sessions, folders, whether the driver gets write leases on the folders, and which *elevated* extras to ask for — and the role the creator
+   takes (the joiner gets the other one). An agent gets `pair.manage` the usual way: `request_access` on `pair:*` (this scope is requestable only
+   while the pair switch is on; an automatic-approval window can never cover it). A participant reference is `{local: <key>}` or a session name;
+   `{host, session}` for another Mac is `501 pair_remote_unsupported` for now.
+2. **Code** (`POST /api/pairs/{id}/code`). An 8-character Crockford base32 code (`ABCD-EFGH`; `O`/`I`/`L` are read as `0`/`1`/`1`) and a
+   two-word check phrase. Valid for 5 minutes, single use, at most 10 new codes per creator per hour. Asking again while a code is pending
+   returns the **same** code (idempotent, not counted); creating a pair with a *different* bundle for the same creator and target
+   immediately invalidates the creator's earlier unjoined pair and its code, so a narrow re-issue never leaves a wide old code alive.
+   A wrong code counts against every pending code, and the fifth wrong attempt burns them (the creator issues a new one).
+3. **Join** (`POST /api/pairs/join {code}`, `fsh pair join`, MCP `pair_join`). A verified agent session presents the code. The code is spent
+   and a pending approval of kind `pair` (id `pq-…`) appears in the shared inbox. There is **no bearer token**: the joiner learns the outcome
+   by calling `GET /api/pairs/{id}/status` as itself (socket peer pid chain) — a lost response never needs a re-issue.
+4. **Approval** (`POST /api/authz/approvals/{id}/decision`, people only — an agent can never approve). One screen shows the bundle in words,
+   both parties' check phrases, the preset each role gets and the elevated items asked for. Elevated items (raw key input, session
+   management, relay, browser script/sensitive) are given **only if ticked** (`elevated: ["raw_input", …]`, a subset of what was asked) and
+   ticking requires a re-authenticated session (`403 elevation_required` otherwise). `phrase` is optional; if given it must equal the check
+   phrase (3 misses reject the request). Widening a pair's permissions later is always a new approval.
+
+### Roles and handoff
+
+| Role | Grants (on the bundle) |
+|---|---|
+| navigator | the «Collaborate» preset: `session.view`, `session.read`, `msg.send`, `fs.read` |
+| driver | navigator plus `session.input` (line mode), `fs.write` (write), `deleg.spawn` from the member's own quota |
+
+The preset's `browser` part is left out in this build (there is no browser broker yet). Elevated extras attach to whoever is the driver.
+Grants are written per agent member on each bundle session (except the member's own), each bundle folder (`fs:local/<folder>/*`) and the
+other member's messaging resource; they carry `approved_via: manual`, expire at the pair's end and skip the share-policy ceiling (the role
+is the ceiling). A person member needs no grants — people already have the human defaults and can type whatever the role says, while
+agent input keeps yielding to the existing human-typing guard.
+
+**There is exactly one driver at any time.** Handoff: the driver offers (`POST …/handoff`), the navigator accepts (`POST …/handoff/accept`).
+Accepting swaps the roles and rewrites the grants in one store transaction and increments the **generation** number; an offer older than
+2 minutes, or made at an older generation, is refused and the pair stays as it was. A person who is not the current driver (a human
+navigator, or someone watching) can take the wheel at once with the same call — that is the human override. Messaging: members of one
+**active** pair may message each other without a separate approval (`VT_AUTHZ_ENFORCE=msg` relation `pair`). Leases: with `leases` the driver
+holds a write lease on each folder, moved to the new driver on handoff; two non-exclusive write leases of members of the same active pair
+never conflict (anyone else's still do).
+
+### Ending
+
+A pair ends on an explicit end (`DELETE /api/pairs/{id}`), a person's revoke (revoking any of its grants in the permissions screen, or
+`DELETE` by someone who is not a member), idle time (`VT_PAIR_IDLE_MIN`, default 120 minutes; the member sessions' own activity counts, and it
+is skipped while tmux cannot be read), a member session disappearing, the 8-hour maximum, or panic. Ending first turns the grants to
+`revoking` (the engine refuses from that instant) and releases the pair's leases, then runs the **revocation saga**: cancel queued
+messages between the members and their queue items, close delegations a member opened while the pair was in effect, verify that nothing
+is left, delete the revoked grant records. It is idempotent and resumes after a crash (`fsh pair revoke <id> --verify` waits for it).
+
+### Limits to state plainly
+
+The permission store lives in the user's home directory. **A process of the same user can read and edit it** (and call the unix socket);
+a pair does not stop that — it attributes who may do what, shuts accidents down early and makes tampering visible in the audit chain. The
+check phrase protects against the wrong agent joining, not against the same account. Pair audit lines (`pair.create/code/join/approve/
+handoff_offer/handoff/end`) carry counts, state and generation only — never session names, paths, codes or phrases.
+
+Tests: `test_authz_pairs.py` (code format/TTL/single use/burn/rate with a fake clock, idempotent reuse and invalidation, approval ticks and
+re-authentication, role presets, handoff incl. concurrent threads, relations, saga crash injection at every step, ending triggers, file
+modes under `umask 022`), `test_pair_cli_mcp.py`, `authz_char/test_pairs_http.py`, `authz_char/test_char_pairs.py`.
 
 ## Agent messages under the engine (`VT_AUTHZ_ENFORCE=msg`)
 

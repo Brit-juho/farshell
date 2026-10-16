@@ -44,4 +44,18 @@ worktree 로 띄우면 새 worktree 에 자기 lease 를 받습니다.
 - **커밋 guard(선택)**: `fsh lease guard install` — 남의 lease 가 걸린 파일이 든 커밋을 알려 주며 멈춥니다. 서버에 닿지 못하면 경고만 하고 커밋은 통과합니다. 기존 pre-commit 훅은 지우지 않고 이어서 실행합니다.
 - 사람이 lease 를 회수하는 화면은 아직 없고 API(`DELETE /api/authz/leases/{id}`)로 합니다. 권한을 회수하면 그 권한으로 잡은 lease 도 함께 사라집니다.
 
+## pair — 두 세션이 한 작업을 함께
+
+두 에이전트(또는 사람 하나와 에이전트 하나)가 같은 세션·폴더 묶음을 **driver**(입력하고 씀)와 **navigator**(읽고 메시지)로 나눠 맡는 장치입니다. 서버 설정
+`VT_AUTHZ_ENFORCE` 에 `pair` 가 있어야 켜집니다(꺼져 있으면 `fsh pair` 가 그렇게 알려 줍니다).
+
+1. 한쪽이 `fsh pair start --session 이름 --dir 폴더` (또는 MCP `pair_create`) → 코드(`ABCD-EFGH`)와 **두 단어 확인 문구**가 나옵니다. 코드는 5분·한 번만 쓸 수 있고, 5번 틀리면 폐기됩니다.
+2. 상대가 `fsh pair join <코드>` (또는 `pair_join`). 합류의 결과는 코드가 아니라 **자기 신원으로** `fsh pair status` 에서 읽습니다.
+3. 승인함에 「pair」 요청이 한 건 뜹니다 — 묶음 전체, 두 확인 문구, 역할별로 받는 권한이 **한 화면**에 나옵니다. 두 에이전트가 보고 있는 문구와 같은지 확인하세요.
+   raw 입력·세션 관리·릴레이 같은 **높은 권한**은 따로 체크한 것만 주어지고, 체크하려면 비밀번호를 다시 확인해야 합니다. 에이전트는 승인할 수 없습니다. 나중에 권한을 넓히려면 새로 승인해야 합니다.
+4. driver 는 정확히 한 명입니다. `fsh pair handoff <id>` 로 제안하고 상대가 `fsh pair accept <id>` 하면 바뀝니다(2분 안에 수락하지 않으면 원래대로). 사람은 언제나 입력할 수 있습니다.
+5. 끝: `fsh pair end <id>`, 사람이 권한 화면에서 회수, 2시간 유휴(`VT_PAIR_IDLE_MIN`), 구성원 세션 소멸, 8시간. 끝나면 권한·lease·구성원 간 대기 메시지가 정리됩니다 (`fsh pair revoke <id> --verify` 로 확인).
+
+같은 사용자 계정의 프로그램은 권한 저장소를 직접 고칠 수 있습니다 — pair 는 그것을 막는 장치가 아니라 누가 무엇을 하는지 분명히 하고 사고를 일찍 끊는 장치입니다.
+
 관련: `fsh help agent-state` (MCP 도구 `request_access`·`whoami`), `docs/ref/auth.md`.
