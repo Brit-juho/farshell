@@ -122,6 +122,20 @@ def session_pane(session_name: str) -> str | None:
     return get_locked_session_pane(session_name)
 
 
+def shell_only_sessions() -> set[str]:
+    """모든 pane의 포그라운드가 빈 셸인 tmux 세션 이름. 에이전트가 떠 있지 않은 일반 터미널이다.
+
+    화면 감지(승인 대기)는 이런 세션에서는 의미가 없다 — 셸에 찍힌 다른 CLI의 문구(종료된 claude의
+    trust 화면 등)를 질문으로 오인한 채 해제 신호 없이 굳는다."""
+    import hook_identity
+
+    shells: set[str] = set()
+    busy: set[str] = set()
+    for p in tmux_runner.get_all_panes():
+        (shells if hook_identity.is_shell(p.command or "") else busy).add(p.session)
+    return shells - busy
+
+
 def session_for_cwd(cwd: str | None) -> str | None:
     """cwd → tmux 세션 이름. Claude Code stop 훅이 어느 세션에서 왔는지 특정할 때 쓴다.
 

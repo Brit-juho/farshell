@@ -120,6 +120,11 @@ def _on_waiting_change(pty_session_id: str, waiting: bool) -> None:
     # 소유자가 있으면 소유자 하나만 받는다(agent_status 「세션 소유자」) — 옛 세션·자식
     # 프로세스의 엔트리에 화면 판정이 번지지 않는다.
     targets = [e.get("session_id") for e in agent_status._entries_for(tmux_name)]
+    if not targets and waiting:
+        # 에이전트가 없는 일반 셸 — 다른 CLI의 문구가 찍혀 있어도 질문이 아니다(자리표시를 만들지 않는다).
+        import tmux_target
+        if tmux_name in tmux_target.shell_only_sessions():
+            return
     for sid in targets or [f"pane:{tmux_name}"]:
         agent_status.on_waiting(sid, waiting, question=question, options=options, kind=kind,
                                 session=tmux_name)

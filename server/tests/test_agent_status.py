@@ -225,3 +225,21 @@ def test_report_validates_agent_through_the_same_gate_as_hooks():
     E11(길이·문자 제한)을 통과해야 한다."""
     agent_status.report("s1", agent_status.WORKING, agent="claude; rm -rf /")
     assert agent_status.get_state("s1").get("agent") is None
+
+
+def test_drop_shell_placeholders_only_removes_screen_placeholders():
+    """훅 없이 끝난 에이전트의 화면 감지 자리표시만 빈 셸 세션에서 치운다(2026-10-16 server-2 오탐)."""
+    agent_status.on_waiting("pane:sh", True, session="sh")                   # 화면 감지 자리표시
+    agent_status.report("pane:rep", "working", session="sh")                 # 자기보고 엔트리
+    agent_status.on_event("pre", {"session_id": "h1", "tool_name": "Bash"}, session="hk")  # 훅 엔트리
+    agent_status.on_waiting("pane:other", True, session="other")             # 셸이 아닌 세션
+
+    assert agent_status.drop_shell_placeholders({"sh"}) == 1
+    keys = {e["session_id"] for e in agent_status._state.values()}
+    assert keys == {"pane:rep", "h1", "pane:other"}
+
+
+def test_report_takes_over_screen_placeholder():
+    agent_status.on_waiting("pane:sh", True, session="sh")
+    agent_status.report("pane:sh", "working", session="sh")
+    assert agent_status.drop_shell_placeholders({"sh"}) == 0

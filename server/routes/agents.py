@@ -194,6 +194,12 @@ async def _agents_loop(kick: asyncio.Event) -> None:
                 {n: (v or {}).get("agent") if isinstance(v, dict) else None for n, v in cur.items()})
         except Exception as e:  # noqa: BLE001
             logger.debug(f"화면 복구 실패: {e}")
+        try:
+            # 에이전트가 훅 없이 끝나 빈 셸이 된 세션의 화면 감지 자리표시를 치운다.
+            import tmux_target
+            agent_status.drop_shell_placeholders(await asyncio.to_thread(tmux_target.shell_only_sessions))
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"셸 자리표시 정리 실패: {e}")
         if cur == _agents_last:
             continue
         _agents_last = cur
