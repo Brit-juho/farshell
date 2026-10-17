@@ -174,7 +174,8 @@ jobs:
     # 것이었고(테스트 두 개가 그 값을 썼다), 그렇게 죽은 잡은 로그가 업로드되지
     # 않아 원인이 10일 넘게 보이지 않았다. 고친 뒤에도 상한은 남겨 둔다 —
     # 같은 종류의 사고에서 45분을 버리지 않기 위해서다(로컬 실측 45~70초).
-    timeout-minutes: 12
+    # 2026-10-17 — 테스트가 1.8만 건으로 늘어(권한 엔진 특성 표) 3.11에서 8분을 넘겼다. 멈춤 감지는 그대로 두고 상한만 늘린다.
+    timeout-minutes: 18
     strategy:
       fail-fast: false
       matrix:
@@ -196,6 +197,6 @@ jobs:
       # 한 테스트가 60초를 넘기면 모든 스레드의 스택을 찍고, 바깥 `timeout`은
       # 8분에 SIGABRT로 끊어 **스텝이 스스로 끝나게** 한다 — 잡이 밖에서
       # 취소되면 GitHub이 로그를 통째로 버린다(2026-09-19 실측).
-      - run: timeout --signal=ABRT 480 python -m pytest server/tests -q -o faulthandler_timeout=60
+      - run: timeout --signal=ABRT 840 python -m pytest server/tests -q -o faulthandler_timeout=60
         env:
           PYTHONFAULTHANDLER: "1"
