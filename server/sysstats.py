@@ -1,4 +1,4 @@
-"""시스템 사용률 — CPU · RAM · 네트워크.
+"""시스템 사용률 — CPU · GPU · RAM · 네트워크.
 
 새 의존성 없이 표준 라이브러리와 OS 기본 도구만 쓴다(psutil 없음 — 터미널만 쓰는 설치가
 ~50MB를 목표로 한다). 읽는 방법이 OS마다 다르다.
@@ -6,9 +6,11 @@
   macOS   CPU  `host_statistics`(ctypes, libSystem) — 실패하면 `top -l 2`
           RAM  `sysctl hw.memsize` + `vm_stat`
           NET  `netstat -ib`(en* 인터페이스의 링크 행)
+          GPU  `ioreg -c IOAccelerator`의 `Device Utilization %`(sudo 불필요, 전용 VRAM이 없어 사용률만)
   Linux   CPU  /proc/stat 두 번의 차이
   WSL2    RAM  /proc/meminfo(MemTotal − MemAvailable)
           NET  /proc/net/dev(가상·루프백 제외)
+          GPU  `nvidia-smi`(있을 때만) → AMD `gpu_busy_percent`. GPU가 여럿이면 가장 바쁜 하나 + 개수
 
 CPU와 네트워크는 **누적 카운터의 차이 ÷ 시간**이라 값 하나가 아니라 두 번의 표본이 필요하다.
 호출이 몇 개든 계산은 하나가 되도록 `MIN_INTERVAL` 동안은 같은 결과를 돌려준다.
@@ -144,6 +146,48 @@ def parse_top_cpu(text: str) -> Optional[float]:
     return None if idle is None else max(0.0, min(100.0, 100.0 - idle))
 
 
+def parse_ioreg_gpu(text: str) -> Optional[dict]:
+    """macOS `ioreg -r -d 1 -w0 -c IOAccelerator` → 가장 바쁜 가속기 {pct, name, cores, count}."""
+    best: Optional[dict] = None
+    count = 0
+    for block in re.split(r"(?m)^\s*\+-o ", text)[1:]:
+        m = re.search(r'"Device Utilization %"\s*=\s*(\d+)', block)
+        if not m:
+            continue
+        count += 1
+        pct = float(max(0, min(100, int(m.group(1)))))
+        if best is None or pct > best["pct"]:
+            name = re.search(r'"model"\s*=\s*"([^"]+)"', block)
+            cores = re.search(r'"gpu-core-count"\s*=\s*(\d+)', block)
+            best = {"pct": pct, "name": name.group(1) if name else None,
+                    "cores": int(cores.group(1)) if cores else None}
+    if best is not None:
+        best["count"] = count
+    return best
+
+
+def parse_nvidia_smi(text: str) -> Optional[dict]:
+    """`nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits`
+    → 가장 바쁜 GPU {pct, name, mem_used, mem_total(바이트), count}."""
+    best: Optional[dict] = None
+    count = 0
+    for line in text.splitlines():
+        cols = [c.strip() for c in line.split(",")]
+        if len(cols) < 4:
+            continue
+        try:
+            pct = float(max(0, min(100, int(float(cols[1])))))
+            used, total = int(float(cols[2])) * 1024 ** 2, int(float(cols[3])) * 1024 ** 2
+        except ValueError:
+            continue    # "[N/A]" 같은 값
+        count += 1
+        if best is None or pct > best["pct"]:
+            best = {"pct": pct, "name": cols[0] or None, "mem_used": used, "mem_total": total}
+    if best is not None:
+        best["count"] = count
+    return best
+
+
 def usable_net(counters: dict[str, tuple[int, int]]) -> dict[str, tuple[int, int]]:
     return {k: v for k, v in counters.items() if not k.startswith(_NET_SKIP_PREFIXES)}
 
@@ -208,6 +252,30 @@ def read_ram() -> Optional[tuple[int, int]]:
     return parse_meminfo(text) if text else None
 
 
+def read_gpu() -> Optional[dict]:
+    if platform_utils.IS_MACOS:
+        out = _run(["ioreg", "-r", "-d", "1", "-w0", "-c", "IOAccelerator"])
+        return parse_ioreg_gpu(out) if out else None
+    out = _run(["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total",
+                "--format=csv,noheader,nounits"])
+    if out:
+        found = parse_nvidia_smi(out)
+        if found:
+            return found
+    busy: list[float] = []
+    try:
+        names = sorted(os.listdir("/sys/class/drm"))
+    except OSError:
+        names = []
+    for n in names:
+        if not re.fullmatch(r"card\d+", n):
+            continue
+        v = (_read_file(f"/sys/class/drm/{n}/device/gpu_busy_percent") or "").strip()
+        if v.isdigit():
+            busy.append(float(min(100, int(v))))
+    return {"pct": max(busy), "name": None, "count": len(busy)} if busy else None
+
+
 def read_net() -> dict[str, tuple[int, int]]:
     if platform_utils.IS_MACOS:
         out = _run(["netstat", "-ib"])
@@ -268,12 +336,14 @@ class Sampler:
             if pct is None and platform_utils.IS_MACOS and prev["cpu"] is None:
                 pct = _mac_cpu_pct_via_top()      # ctypes를 못 쓴 환경의 폴백(1초 걸린다)
             ram = read_ram()
+            gpu = read_gpu()
             rates = net_rates(prev["net"], cur["net"], dt)
 
             snap = {
                 "ok": True,
                 "platform": platform_utils.PLATFORM_NAME,
                 "cpu": None if pct is None else {"pct": round(pct, 1), "cores": os.cpu_count() or 1},
+                "gpu": None if gpu is None else {**gpu, "pct": round(gpu["pct"], 1)},
                 "ram": None if ram is None else {
                     "used": ram[0], "total": ram[1],
                     "pct": round(100.0 * ram[0] / ram[1], 1) if ram[1] else 0.0,

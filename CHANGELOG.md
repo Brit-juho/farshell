@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **시스템 패널·HUD에 GPU 사용률.** `/api/system/stats`에 `gpu`(`pct`, `name`, `count`, macOS `cores`, NVIDIA `mem_used`/`mem_total`)를 더했다. macOS `ioreg`, Linux/WSL2 `nvidia-smi` → AMD `gpu_busy_percent`로 읽고 GPU가 여럿이면 가장 바쁜 하나를 낸다. 읽지 못하면 `null`이고 칸을 숨긴다.
+
 ---
 
 ## [2.5.0] — 2026-10-18

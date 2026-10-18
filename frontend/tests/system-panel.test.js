@@ -56,3 +56,14 @@ test('renderStats — 네트워크는 받기·보내기를 따로 보이고 인�
   assert.ok(html.includes('2.0 KB/s') && html.includes('512 B/s'));
   assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt;') && !html.includes('<b>x</b>'));
 });
+
+test('renderStats — GPU 카드는 사용률·이름·개수를 보이고 없으면 그리지 않는다', async () => {
+  const { renderStats } = await load();
+  const html = renderStats({ ok: true, platform: 'macOS', cpu: null, ram: null, net: null,
+    gpu: { pct: 99, name: 'Apple M5 Pro', cores: 16, count: 1 } });
+  assert.ok(html.includes('GPU') && html.includes('99%') && html.includes('Apple M5 Pro') && html.includes('vt-sys-value err'));
+  const multi = renderStats({ ok: true, platform: 'Linux', cpu: null, ram: null, net: null,
+    gpu: { pct: 10, name: 'RTX', count: 2, mem_used: 1024 ** 3, mem_total: 8 * 1024 ** 3 } });
+  assert.ok(multi.includes('1.0 GB / 8.0 GB'));
+  assert.ok(!renderStats({ ok: true, platform: 'Linux', cpu: { pct: 1, cores: 1 }, ram: null, net: null, gpu: null }).includes('>GPU<'));
+});

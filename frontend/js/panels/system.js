@@ -1,4 +1,4 @@
-// 시스템 — 이 서버가 도는 기계의 CPU · RAM · 네트워크(GET /api/system/stats).
+// 시스템 — 이 서버가 도는 기계의 CPU · GPU · RAM · 네트워크(GET /api/system/stats).
 // 상태 줄(HUD)의 칩을 누르거나 dock의 「시스템」 탭을 열면 보인다. 값은 2초마다 갱신하고,
 // 최근 값의 흐름은 이 화면이 열려 있는 동안 브라우저에 쌓는다(서버는 기록을 들고 있지 않다).
 import { openPanel, setPanelPoll } from './panel.js';
@@ -10,7 +10,7 @@ const POLL_MS = 2000;
 const HISTORY = 60;   // 2초 × 60 = 최근 2분
 
 // 패널이 닫혔다 다시 열려도 흐름이 이어지게 모듈에 둔다.
-const _hist = { cpu: [], ram: [], rx: [], tx: [] };
+const _hist = { cpu: [], gpu: [], ram: [], rx: [], tx: [] };
 
 function _push(arr, v) {
   arr.push(typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -65,6 +65,7 @@ function _row(label, valueHtml, subHtml, pct, tone, sparkHtml) {
 export function renderStats(d) {
   if (!d || !d.ok) return `<div class="vt-vw-empty">${vtEsc(t('시스템 정보를 읽지 못했습니다.'))}</div>`;
   _push(_hist.cpu, d.cpu && d.cpu.pct);
+  _push(_hist.gpu, d.gpu && d.gpu.pct);
   _push(_hist.ram, d.ram && d.ram.pct);
   _push(_hist.rx, d.net && d.net.rx_bps);
   _push(_hist.tx, d.net && d.net.tx_bps);
@@ -72,6 +73,15 @@ export function renderStats(d) {
   if (d.cpu) {
     parts.push(_row('CPU', `${Math.round(d.cpu.pct)}%`, vtEsc(t('{n}코어', { n: d.cpu.cores })),
       d.cpu.pct, _tone(d.cpu.pct, 75, 90), _spark(_hist.cpu, 100)));
+  }
+  if (d.gpu) {
+    const sub = [];
+    if (d.gpu.name) sub.push(d.gpu.name);
+    if (d.gpu.cores) sub.push(t('{n}코어', { n: d.gpu.cores }));
+    if (d.gpu.mem_total) sub.push(`${fmtBytes(d.gpu.mem_used)} / ${fmtBytes(d.gpu.mem_total)}`);
+    if (d.gpu.count > 1) sub.push(t('{n}개 중 가장 바쁜 것', { n: d.gpu.count }));
+    parts.push(_row('GPU', `${Math.round(d.gpu.pct)}%`, vtEsc(sub.join(' · ')),
+      d.gpu.pct, _tone(d.gpu.pct, 75, 90), _spark(_hist.gpu, 100)));
   }
   if (d.ram) {
     parts.push(_row('RAM', `${Math.round(d.ram.pct)}%`,

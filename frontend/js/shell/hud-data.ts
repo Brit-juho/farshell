@@ -79,6 +79,7 @@ export interface HudInput {
 
 export interface SystemStats {
   cpu?: { pct: number; cores: number } | null;
+  gpu?: { pct: number; name?: string | null; count?: number } | null;
   ram?: { used: number; total: number; pct: number } | null;
   net?: { rx_bps: number; tx_bps: number; interfaces?: string[] } | null;
 }
@@ -159,6 +160,9 @@ function statsChips(stats: SystemStats): HudChip[] {
   });
   if (stats.cpu && Number.isFinite(stats.cpu.pct)) {
     push('stats:cpu', 'CPU', `${Math.round(stats.cpu.pct)}%`, level(stats.cpu.pct, 75, 90));
+  }
+  if (stats.gpu && Number.isFinite(stats.gpu.pct)) {
+    push('stats:gpu', 'GPU', `${Math.round(stats.gpu.pct)}%`, level(stats.gpu.pct, 75, 90), stats.gpu.name ?? undefined);
   }
   if (stats.ram && Number.isFinite(stats.ram.pct)) {
     push('stats:ram', 'RAM', `${Math.round(stats.ram.pct)}%`, level(stats.ram.pct, 80, 90));
