@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.5.0] — 2026-10-18
+
 ### Added
 
 - **브라우저 broker — 에이전트가 격리된 브라우저 탭을 연다 (`VT_AUTHZ_ENFORCE=browser`, 기본 꺼짐).** `GET /api/browser/adapters`·`POST /adapters/{name}/enable`·`POST|GET /api/browser/tabs`·`POST /tabs/{id}/navigate|snapshot|screenshot|click|type|eval|cookies|storage|network|handoff`·`DELETE /tabs/{id}`, `fsh browser adapters|enable|tabs|close`, MCP `browser_*` 11개(서버가 켠 것을 `whoami` 가 알릴 때만, `browser_eval` 은 `browser.js` 가 있을 때만 보임), 설정 > 권한의 「브라우저」 구역(어댑터 켜기/끄기·탭 소유 목록). **마스터 스위치가 꺼져 있으면 모든 라우트가 없는 라우트와 같은 404 이고 그 밖의 어떤 응답도 바뀌지 않는다**(matrix 315행 추가, 기존 행 변경 없음). 어댑터 공통 계약과 실연동 둘(`playwright`·`cdp`), 나머지 넷은 사용 불가를 알리고 모든 조작을 거부하는 자리 표시. 어댑터는 사람(또는 터미널)이 켜고 처음엔 동의를 받으며 잘못된 설정은 꺼짐으로 읽는다(N-26). **사용자 프로필(profile=user) 연결·attach·다운로드는 구현하지 않았다(후속 과제)** — 요청하면 501 `unsupported_profile`.
