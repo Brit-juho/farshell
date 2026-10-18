@@ -84,7 +84,10 @@ def test_unchanged_value_is_not_pushed_again(detected):
                 await asyncio.sleep(0.05)
             detected["value"] = {"dev": {"agent": "aider"}}
             kick.set()
-            await asyncio.sleep(0.05)
+            # 바뀐 값이 나갈 때까지 기다린다 — 고정 50ms 는 부하가 있으면(병렬 실행·느린 러너) 모자랐다.
+            deadline = asyncio.get_running_loop().time() + 2.0
+            while len(sent) < 2 and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.01)
         finally:
             agents_route._agent_event_clients.discard(ws)
             kick.set()

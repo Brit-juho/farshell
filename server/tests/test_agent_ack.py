@@ -64,8 +64,10 @@ def test_ack_session_ignores_a_peer_host_entry_with_the_same_name():
 
 
 def test_route_is_human_only_and_returns_the_count():
-    deps = [d.dependency for d in R.human_router.dependencies]
-    assert auth.require_human_session in deps, "기계 토큰(에이전트·훅)은 자기 완료를 지울 수 없다"
+    # 객체 동일성이 아니라 이름으로 본다 — 앞서 돈 테스트가 auth 를 다시 불러오면(reload) 함수 객체가 달라진다.
+    deps = [(getattr(d.dependency, "__module__", None), getattr(d.dependency, "__qualname__", None))
+            for d in R.human_router.dependencies]
+    assert ("auth", "require_human_session") in deps, "기계 토큰(에이전트·훅)은 자기 완료를 지울 수 없다"
     paths = {r.path for r in R.human_router.routes}
     assert paths == {"/api/agent/ack"}
 
