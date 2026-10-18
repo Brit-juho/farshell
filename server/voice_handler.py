@@ -143,7 +143,8 @@ def _convert_to_wav_ffmpeg(audio_bytes: bytes, input_format: str) -> bytes:
     with tempfile.NamedTemporaryFile(suffix=f".{input_format}", delete=False) as src:
         src.write(audio_bytes)
         src_path = src.name
-    dst_path = src_path.rsplit(".", 1)[0] + ".wav"
+    # 입력이 .wav 이면 확장자만 바꾼 경로가 입력과 같아져 ffmpeg 가 "입력을 덮어쓸 수 없다"며 실패하고, 변환 안 된 원본이 그대로 나갔다.
+    dst_path = src_path.rsplit(".", 1)[0] + ".out.wav"
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", src_path, "-t", str(MAX_STT_SECONDS or 60),
