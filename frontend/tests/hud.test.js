@@ -225,3 +225,12 @@ test('시스템 칩 — 임계를 넘으면 색이 바뀌고 자리가 모자랄
   const hot = chip({ cpu: { pct: 95, cores: 4 } }, 'stats:cpu').priority;
   assert.ok(hot < calm, '위험하면 우선순위 숫자가 작아진다(끝까지 남는다)');
 });
+
+test('시스템 칩 — GPU 칩은 값이 있을 때만, 임계는 CPU와 같다', async () => {
+  const { buildHudChips } = await mod();
+  const chip = (stats) => Array.from(buildHudChips({ stats }), (c) => c).find((c) => c.id === 'stats:gpu');
+  assert.strictEqual(chip({ gpu: null }), undefined);
+  assert.strictEqual(chip({ gpu: { pct: 50.4 } }).value, '50%');
+  assert.strictEqual(chip({ gpu: { pct: 80 } }).tone, 'warn');
+  assert.strictEqual(chip({ gpu: { pct: 95 } }).tone, 'err');
+});

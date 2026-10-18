@@ -454,6 +454,7 @@ window.__VT_I18N = {
   "알 수 없는 리소스입니다": "Unknown resource",
   "알 수 없는 브랜치입니다": "Unknown branch",
   "{n}코어": "{n} cores",
+  "{n}개 중 가장 바쁜 것": "busiest of {n}",
   "네트워크": "Network",
   "시스템": "System",
   "시스템 정보를 읽지 못했습니다.": "Could not read system information.",

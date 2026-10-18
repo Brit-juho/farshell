@@ -133,6 +133,34 @@ def test_top_cpu_uses_the_last_sample():
     assert S.parse_top_cpu("no cpu line") is None
 
 
+IOREG_GPU = """+-o AGXAcceleratorG17X  <class AGXAcceleratorG17X, id 0x1, registered, matched, active, busy 0 (0 ms), retain 20>
+    {
+      "IOClass" = "AGXAcceleratorG17X"
+      "model" = "Apple M5 Pro"
+      "gpu-core-count" = 16
+      "PerformanceStatistics" = {"Tiler Utilization %"=0,"Renderer Utilization %"=0,"Device Utilization %"=99,"In use system memory"=22113107968}
+    }
+"""
+
+NVIDIA_OUT = """NVIDIA GeForce RTX 4090, 12, 1024, 24564
+NVIDIA GeForce RTX 4090, 87, 20480, 24564
+"""
+
+
+def test_ioreg_gpu_reads_utilization_name_and_cores():
+    g = S.parse_ioreg_gpu(IOREG_GPU)
+    assert g == {"pct": 99.0, "name": "Apple M5 Pro", "cores": 16, "count": 1}
+    assert S.parse_ioreg_gpu("") is None
+    assert S.parse_ioreg_gpu('+-o X\n  "model" = "y"\n') is None
+
+
+def test_nvidia_smi_picks_the_busiest_gpu_and_counts():
+    g = S.parse_nvidia_smi(NVIDIA_OUT)
+    assert g["pct"] == 87.0 and g["count"] == 2 and g["mem_used"] == 20480 * 1024 ** 2
+    assert S.parse_nvidia_smi("NVIDIA X, [N/A], [N/A], [N/A]\n") is None
+    assert S.parse_nvidia_smi("") is None
+
+
 def test_snapshot_shape_and_caching(monkeypatch):
     calls = {"net": 0}
     ticks = iter([(10, 100), (20, 200), (30, 300)])
@@ -144,6 +172,7 @@ def test_snapshot_shape_and_caching(monkeypatch):
     monkeypatch.setattr(S, "read_cpu_ticks", lambda: next(ticks))
     monkeypatch.setattr(S, "read_net", fake_net)
     monkeypatch.setattr(S, "read_ram", lambda: (4 * 1024 ** 3, 16 * 1024 ** 3))
+    monkeypatch.setattr(S, "read_gpu", lambda: {"pct": 42.04, "name": "G", "count": 1})
     monkeypatch.setattr(S, "FIRST_SAMPLE_GAP", 0.0)
     s = S.Sampler()
     a = s.snapshot()
@@ -151,6 +180,7 @@ def test_snapshot_shape_and_caching(monkeypatch):
     assert a["cpu"]["pct"] == 10.0 and a["cpu"]["cores"] >= 1
     assert a["ram"] == {"used": 4 * 1024 ** 3, "total": 16 * 1024 ** 3, "pct": 25.0}
     assert a["net"]["interfaces"] == ["eth0"] and a["net"]["rx_bps"] > 0
+    assert a["gpu"] == {"pct": 42.0, "name": "G", "count": 1}
     assert s.snapshot() is a, "MIN_INTERVAL 안의 호출은 같은 결과(계산은 하나)"
     assert calls["net"] == 2
 
@@ -159,10 +189,11 @@ def test_missing_sources_become_null_not_errors(monkeypatch):
     monkeypatch.setattr(S, "read_cpu_ticks", lambda: None)
     monkeypatch.setattr(S, "read_net", lambda: {})
     monkeypatch.setattr(S, "read_ram", lambda: None)
+    monkeypatch.setattr(S, "read_gpu", lambda: None)
     monkeypatch.setattr(S, "FIRST_SAMPLE_GAP", 0.0)
     monkeypatch.setattr(platform_utils, "IS_MACOS", False)
     a = S.Sampler().snapshot()
-    assert a["ok"] is True and a["cpu"] is None and a["ram"] is None and a["net"] is None
+    assert a["ok"] is True and a["cpu"] is None and a["ram"] is None and a["net"] is None and a["gpu"] is None
 
 
 @pytest.mark.skipif(not platform_utils.IS_MACOS, reason="macOS 실측")
@@ -175,6 +206,7 @@ def test_macos_real_values_are_sane():
     assert 0.0 <= a["cpu"]["pct"] <= 100.0
     assert 0 < a["ram"]["used"] <= a["ram"]["total"] and 0 < a["ram"]["pct"] <= 100
     assert a["net"]["rx_bps"] >= 0 and a["net"]["interfaces"]
+    assert a["gpu"] is None or 0.0 <= a["gpu"]["pct"] <= 100.0
 
 
 def test_route_returns_the_snapshot(monkeypatch):
