@@ -267,7 +267,8 @@ def test_flush_session_counts_and_drops_a_raising_subscriber(loop):
     assert session.last_drop_at > 0
     assert bad not in session._subscribers
     assert good_received.append in session._subscribers
-    assert good_received == [b"hello"], "정상 구독자는 그대로 데이터를 받아야 한다"
+    # 실제 셸이 띄운 프롬프트가 먼저 버퍼에 들어올 수 있다(부하가 있으면) — 넣은 데이터가 끝에 그대로 왔는지만 본다.
+    assert len(good_received) == 1 and good_received[0].endswith(b"hello"), "정상 구독자는 그대로 데이터를 받아야 한다"
     mgr.destroy_session("test-drop")
 
 

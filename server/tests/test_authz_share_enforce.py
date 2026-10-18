@@ -78,13 +78,21 @@ def test_flag_defaults_off_and_parses_tokens(monkeypatch):
 
 
 def test_flag_off_touches_no_authz_file(web, monkeypatch):
-    """꺼져 있으면 엔진 저장소·authz 감사에 아무것도 쓰지 않는다(출하해도 아무것도 안 바뀐다)."""
+    """꺼져 있으면 엔진 저장소·authz 감사에 아무것도 쓰지 않는다(출하해도 아무것도 안 바뀐다).
+
+    shadow 는 끄고 본다 — shadow 는 플래그와 무관하게 켜져 있고 불일치·오류를 `authz/shadow.jsonl` 에 남기도록 설계됐다
+    (test_authz_shadow.py 가 따로 본다). 전체 실행에서 한 번 이 단언이 깨진 적이 있어(재현 2회 실패) 그 쓰기가 유력한 원인이다.
+    다시 깨지면 아래 메시지가 생긴 파일을 보여 준다."""
     monkeypatch.delenv("VT_AUTHZ_ENFORCE", raising=False)
+    monkeypatch.setenv("VT_AUTHZ_SHADOW", "0")
     human, agent, env = setup_pair(web, mode="readwrite")
     approve(human, aread(agent, env, "claude-a", "shell").json()["requestId"])
     assert aread(agent, env, "claude-a", "shell").status_code == 200
     import vt_paths
-    assert not (vt_paths.state_dir() / "authz").exists() and not (vt_paths.state_dir() / "audit").exists()
+    made = sorted(str(f.relative_to(vt_paths.state_dir())) for d in ("authz", "audit")
+                  for f in (vt_paths.state_dir() / d).rglob("*") if (vt_paths.state_dir() / d).exists())
+    made += [d for d in ("authz", "audit") if (vt_paths.state_dir() / d).exists() and not any(m.startswith(d) for m in made)]
+    assert not made, f"플래그가 꺼졌는데 생긴 것: {made}"
 
 
 # --- 엔진이 권한자 + dual-write -----------------------------------------------------------------
