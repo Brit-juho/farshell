@@ -1420,14 +1420,16 @@ def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
     # 기다리지 않으면 log가 0인 순간을 잡는다(실측 3회 중 1회).
-    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
-    got = page.evaluate(
-        """() => ({
-             head: document.querySelector('#vt-scm-head')?.innerText || '',
-             log: document.querySelectorAll('#vt-dock-scm .vt-vw-crow').length,
-             inDock: !!document.querySelector('#vt-dock .vt-dock-body #vt-dock-scm'),
-           })"""
-    )
+    # 기다림과 읽기를 한 번에 한다 — 행이 보인 뒤 따로 읽으면, 그 사이 패널이 목록을 다시 그리며 잠깐 비운 순간을 잡았다(CI 2026-10-19).
+    got = page.wait_for_function(
+        """() => {
+             const log = document.querySelectorAll('#vt-dock-scm .vt-vw-crow').length;
+             const head = document.querySelector('#vt-scm-head')?.innerText || '';
+             if (!log || !head.trim()) return null;
+             return { head, log, inDock: !!document.querySelector('#vt-dock .vt-dock-body #vt-dock-scm') };
+           }""",
+        timeout=15000,
+    ).json_value()
     assert got["inDock"], "소스컨트롤 패널이 dock 밖에 있다"
     assert got["log"] > 0, f"커밋 기록이 비었다: {got}"
     assert got["head"].strip(), "머리말이 비었다 — 저장소를 못 찾았다"
